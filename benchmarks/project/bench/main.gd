@@ -367,7 +367,16 @@ func _run_capture() -> void:
 	result["files"] = files
 
 
+## Temporal sequences and their ground truth must see the same exposure: auto exposure adapts per rendered
+## frame, and reference mode renders many sub-frames per output frame, so it is disabled for both modes.
+func _freeze_exposure() -> void:
+	if scene.cam_attr and scene.cam_attr.auto_exposure_enabled:
+		scene.cam_attr.auto_exposure_enabled = false
+		result["auto_exposure_disabled_for_mode"] = true
+
+
 func _run_temporal(jittered_reference: bool) -> void:
+	_freeze_exposure()
 	var files := {}
 	var stem := _file_stem()
 	var pre_roll := int(args.get("preroll", "32"))
@@ -400,6 +409,7 @@ func _run_temporal(jittered_reference: bool) -> void:
 ## (averaging is done offline by benchmarks/tools/accumulate.py). Intended with preset "reference_ssaa"
 ## (2x2 SSAA + 8x MSAA, TAA off). Scene time is frozen per output frame while jittering.
 func _run_reference() -> void:
+	_freeze_exposure()
 	var jit := int(args.get("jitter", "16"))
 	var files := {}
 	var stem := _file_stem()
