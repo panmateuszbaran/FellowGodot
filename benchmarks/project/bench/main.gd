@@ -40,14 +40,22 @@ var out_dir := ""
 var vp: Viewport
 var frame_counter := 0
 var t_start_usec := 0
+var watchdog_s := 1800.0
+var finished := false
+
+
+func _process(_delta: float) -> void:
+	if not finished and (Time.get_ticks_usec() - t_start_usec) / 1e6 > watchdog_s:
+		finished = true
+		_fail("watchdog timeout after %.0f s (wall clock)" % watchdog_s)
 
 
 func _ready() -> void:
 	t_start_usec = Time.get_ticks_usec()
 	args = _parse_args(OS.get_cmdline_user_args())
-	# Watchdog: never hang a benchmark session (e.g. an asset that fails to load mid-run).
-	var wd := float(args.get("watchdog", "1800"))
-	get_tree().create_timer(wd, true, false, true).timeout.connect(func(): _fail("watchdog timeout after %.0f s" % wd))
+	# Watchdog (wall-clock): never hang a benchmark session. SceneTree timers are not usable for this because
+	# --fixed-fps advances game time by 1/60 s per frame regardless of real time.
+	watchdog_s = float(args.get("watchdog", "1800"))
 	vp = get_viewport()
 	# Benchmark rules: no vsync, no FPS cap (both are also set in project.godot / CLI).
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
@@ -198,6 +206,8 @@ func _run_perf() -> void:
 	var last_ts_frame := -1
 	var m0 := Time.get_ticks_usec()
 	var mem_peak := _mem()
+	var has_extra: bool = scene.has_method("sample_extra")
+	var extra := {}
 	await get_tree().process_frame
 	m.reset_clock()
 	var passes := 0
@@ -207,6 +217,12 @@ func _run_perf() -> void:
 			await get_tree().process_frame
 			m.sample()
 			pass_frames.append(f)
+			if has_extra:
+				var ex: Dictionary = scene.sample_extra()
+				for k in ex.keys():
+					if not extra.has(k):
+						extra[k] = PackedFloat64Array()
+					extra[k].append(float(ex[k]))
 			if profile and rd:
 				var fr := rd.get_captured_timestamps_frame()
 				if fr != last_ts_frame:
@@ -231,6 +247,20 @@ func _run_perf() -> void:
 	result["frames"] = m.to_json_arrays()
 	result["frames"]["path_frame"] = pass_frames
 	result["memory_peak"] = mem_peak
+	if has_extra:
+		var es := {}
+		for k in extra.keys():
+			var arr: PackedFloat64Array = extra[k]
+			# Negative values mean "no timestamp available yet" (first frames): excluded.
+			var valid := PackedFloat64Array()
+			for v in arr:
+				if v >= 0.0:
+					valid.append(v)
+			es[k] = Metrics.summarize(valid)
+		result["extra_metrics"] = es
+		result["frames"]["extra"] = {}
+		for k in extra.keys():
+			result["frames"]["extra"][k] = Array(extra[k])
 	if profile:
 		var avg := {}
 		for k in gpu_passes.keys():
@@ -466,6 +496,7 @@ func _halton(i: int, b: int) -> float:
 # ---------------------------------------------------------------- output
 
 func _finish() -> void:
+	finished = true
 	result["total_runtime_s"] = (Time.get_ticks_usec() - t_start_usec) / 1e6
 	var r: Array = result.get("resolution", [0, 0])
 	var fname := "%s_%s_%s_%dx%d_run%d.json" % [result["scene"], result["mode"], result.get("tag", "x"), r[0], r[1], result["run"]]
