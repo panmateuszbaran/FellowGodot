@@ -6,6 +6,7 @@ extends CanvasLayer
 ## Per-pass timings need engine timestamps: on FellowEngine enable rendering/fellow/profiling/pass_timestamps,
 ## on stock start Godot with --gpu-profile. The same values are exported by the benchmark (no screen reading).
 ## Usage: add as an autoload (res://bench/overlay.gd) or instance it; call snapshot() to get the numbers.
+## Export: F4 (or export_json()) writes the last 60 s of samples (4 per second) to user://fellow_overlay_<time>.json.
 
 const CATEGORIES := {
 	"shadows": ["Render Directional/SpotLight Shadows", "Render OmniLight Shadows", "Render GI + Render Directional/SpotLight Shadows (Parallel)", "Setup Shadows"],
@@ -22,6 +23,8 @@ var _acc := {}
 var _frames := 0
 var _last := {}
 var _t_last := 0
+var _history: Array = []  # snapshot() dictionaries sampled at 4 Hz, last 60 s
+const HISTORY_LEN := 240
 
 
 func _ready() -> void:
@@ -39,17 +42,28 @@ func _ready() -> void:
 
 
 func _unhandled_input(e: InputEvent) -> void:
-	if e is InputEventKey and e.pressed and not e.echo and e.keycode == KEY_F3:
+	if not (e is InputEventKey and e.pressed and not e.echo):
+		return
+	if e.keycode == KEY_F3:
 		enabled = not enabled
 		label.visible = enabled
+	elif e.keycode == KEY_F4:
+		var p := export_json()
+		print("[FellowOverlay] exported %d samples to %s" % [_history.size(), ProjectSettings.globalize_path(p)])
 
 
 func _process(_d: float) -> void:
 	_accumulate_passes()
 	var now := Time.get_ticks_msec()
-	if enabled and now - _t_last > 250:
+	if now - _t_last > 250:
 		_t_last = now
-		label.text = _format(snapshot())
+		var snap := snapshot()
+		snap["t_ms"] = now
+		_history.append(snap)
+		if _history.size() > HISTORY_LEN:
+			_history.pop_front()
+		if enabled:
+			label.text = _format(snap)
 
 
 func _accumulate_passes() -> void:
@@ -92,6 +106,23 @@ func snapshot() -> Dictionary:
 		d["fluid_sim_ms"] = w.get_simulation_gpu_time_ms()
 		d["fluid_surface_ms"] = w.get_surface_gpu_time_ms()
 	return d
+
+
+## Writes the sampled history (JSON, one object per sample) and returns the user:// path.
+func export_json() -> String:
+	var path := "user://fellow_overlay_%s.json" % Time.get_datetime_string_from_system().replace(":", "-")
+	var rows := []
+	for d in _history:
+		var r := {}
+		for k in d.keys():
+			var v = d[k]
+			r[k] = [v.x, v.y] if v is Vector2 or v is Vector2i else v
+		rows.append(r)
+	var f := FileAccess.open(path, FileAccess.WRITE)
+	if f:
+		f.store_string(JSON.stringify({"engine": Engine.get_version_info(), "adapter": RenderingServer.get_video_adapter_name(), "samples": rows}, " "))
+		f.close()
+	return path
 
 
 func _format(d: Dictionary) -> String:
