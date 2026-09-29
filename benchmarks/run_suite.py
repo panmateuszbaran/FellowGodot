@@ -55,6 +55,8 @@ def main() -> int:
     ap.add_argument("--res", default="1920x1080,2560x1440")
     ap.add_argument("--runs", default="3")
     ap.add_argument("--skip", default="", help="comma list of steps to skip")
+    ap.add_argument("--baseline-tag", default="godot-4.7.2", help="ab plan: session tag holding the accumulated references")
+    ap.add_argument("--seqs", default="pbr:moving_object,pbr:camera_pan,pbr:foliage_strafe,pbr:specular_orbit,pbr:thin_dolly,sponza:sponza_pan,bistro_exterior:bistro_ext_path,bistro_interior:bistro_int_path")
     a = ap.parse_args()
     builds = a.builds or a.build
     skip = set(a.skip.split(","))
@@ -87,6 +89,20 @@ def main() -> int:
                 base = os.path.join(ROOT, "benchmarks", "results", "raw", sess, b)
                 for sc in os.listdir(base) if os.path.isdir(base) else []:
                     tool("accumulate.py", os.path.join(base, sc), "--delete-inputs")
+    if a.plan == "ab" and "analysis" not in skip and len(builds.split(",")) >= 2:
+        b0, b1 = builds.split(",")[:2]
+        out = os.path.join(ROOT, "benchmarks", "results", "raw", f"{a.tag}_temporal_analysis")
+        for item in a.seqs.split(","):
+            sc, seq = item.split(":")
+            ref = None
+            for rs in [f"{a.baseline_tag}_reference", f"{a.baseline_tag}_reference_ext"]:
+                cand = os.path.join(ROOT, "benchmarks", "results", "raw", rs, "stock", sc)
+                if os.path.isdir(cand):
+                    ref = cand
+            t0d = os.path.join(ROOT, "benchmarks", "results", "raw", f"{a.tag}_temporal", b0, sc)
+            t1d = os.path.join(ROOT, "benchmarks", "results", "raw", f"{a.tag}_temporal", b1, sc)
+            if ref and os.path.isdir(t0d) and os.path.isdir(t1d):
+                status[f"analysis_{seq}"] = tool("temporal.py", "--test", t0d, "--test2", t1d, "--labels", f"{b0},{b1}", "--ref", ref, "--seq", seq, "--out", out, "--anim")
     log(f"plan {a.plan} finished in {(time.time() - t0) / 60:.1f} min: {json.dumps(status)}")
     with open(os.path.join(ROOT, "benchmarks", "results", f"{a.tag}_suite.json"), "w", encoding="utf-8") as f:
         json.dump({"plan": a.plan, "tag": a.tag, "builds": builds, "fellow": a.fellow, "status": status, "minutes": (time.time() - t0) / 60,
