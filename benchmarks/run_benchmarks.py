@@ -293,6 +293,18 @@ def aggregate(runs: list[dict]) -> dict:
 
 # --------------------------------------------------------------------------- main
 
+def parse_build(spec: str) -> tuple[str, str, str]:
+    """'label[=dir][@k=v;k=v]' -> (label, dir under .tools/bin, fellow toggles 'k=v,k=v').
+
+    Variants of one binary can be compared in the same interleaved session, e.g.
+    --builds "stock,fellow_off=fellow@enabled=false,fellow_v2=fellow@postfx/taa_resolve_v2=true"."""
+    toggles = ""
+    if "@" in spec:
+        spec, toggles = spec.split("@", 1)
+    label, dirname = spec.split("=", 1) if "=" in spec else (spec, spec)
+    return label.strip(), dirname.strip(), toggles.replace(";", ",").strip()
+
+
 def exe_for(build: str, godot_path: str | None) -> str:
     if godot_path:
         return godot_path
@@ -301,7 +313,8 @@ def exe_for(build: str, godot_path: str | None) -> str:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--builds", default="stock", help="comma list of builds under .tools/bin/<build>/ (e.g. stock,fellow)")
+    ap.add_argument("--builds", default="stock", help="comma list of builds under .tools/bin/<build>/ (e.g. stock,fellow); "
+                    "variants: label=dir@k=v;k=v (FellowEngine toggles for that variant)")
     ap.add_argument("--godot", default=None, help="explicit Godot executable (single build)")
     ap.add_argument("--scene", default="pbr", help="scene name, comma list, or 'all'")
     ap.add_argument("--mode", default="perf", choices=["perf", "capture", "temporal", "reference"])
@@ -325,8 +338,21 @@ def main() -> int:
     ap.add_argument("--label", default="", help="free text label for the session")
     args = ap.parse_args()
 
-    builds = [b.strip() for b in args.builds.split(",") if b.strip()]
-    exes = {b: exe_for(b, args.godot) for b in builds}
+    specs = {}
+    for spec in [x.strip() for x in args.builds.split(",") if x.strip()]:
+        label, dirname, toggles = parse_build(spec)
+        specs[label] = (dirname, toggles)
+    builds = list(specs.keys())
+    exes = {b: exe_for(specs[b][0], args.godot) for b in builds}
+    off_for = args.fellow_off_for.split(",")
+
+    def toggles_for(b: str) -> str:
+        parts = []
+        if args.fellow and b not in off_for:
+            parts.append(args.fellow)
+        if specs[b][1]:
+            parts.append(specs[b][1])
+        return ",".join(parts)
     for b, e in exes.items():
         if not os.path.exists(e):
             log(f"missing executable for build '{b}': {e}")
@@ -370,15 +396,15 @@ def main() -> int:
                 while True:
                     order = builds if i % 2 == 0 else list(reversed(builds))  # ABBA interleave
                     for b in order:
-                        tag = b if not args.fellow or b in args.fellow_off_for.split(",") else f"{b}+fx"
+                        tag = b if not args.fellow or b in off_for else f"{b}+fx"
                         out_dir = os.path.join(raw_dir, b, scene)
                         os.makedirs(out_dir, exist_ok=True)
                         user = [f"--scene={scene}", f"--mode={args.mode}", f"--res={res}", f"--tag={tag}", f"--run={i}",
                                 f"--out={out_dir}", f"--warmup={args.warmup}", f"--measure={args.measure}", f"--preset={args.preset}"]
                         if args.set:
                             user.append(f"--set={args.set}")
-                        if args.fellow and b not in args.fellow_off_for.split(","):
-                            user.append(f"--fellow={args.fellow}")
+                        if toggles_for(b):
+                            user.append(f"--fellow={toggles_for(b)}")
                         if args.percam:
                             user.append(f"--percam={args.percam}")
                         if args.profile:
@@ -431,7 +457,7 @@ def main() -> int:
                 for b in builds:
                     key = f"{scene}|{res}|{b}"
                     entry = {"scene": scene, "resolution": res, "build": b, "preset": args.preset, "set": args.set,
-                             "fellow": args.fellow if b not in args.fellow_off_for.split(",") else "", "mode": args.mode}
+                             "fellow": toggles_for(b), "binary": specs[b][0], "mode": args.mode}
                     if args.mode == "perf":
                         agg = aggregate(runs_by_build[b])
                         cv = agg.get("frame_ms_run_means", {}).get("cv", 0.0)

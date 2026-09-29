@@ -38,6 +38,11 @@ def runner(*args) -> int:
     return subprocess.call(cmd, cwd=ROOT)
 
 
+def label(spec: str) -> str:
+    """Build label of a run_benchmarks.py build spec 'label[=dir][@toggles]'."""
+    return spec.split("@", 1)[0].split("=", 1)[0].strip()
+
+
 def tool(name, *args) -> int:
     cmd = [PY, "-u", os.path.join(TOOLS, name), *args]
     log(" ".join(cmd[2:]))
@@ -70,27 +75,27 @@ def main() -> int:
     if a.plan in ("baseline", "ab") and "profile" not in skip:
         steps.append(("profile", ["--scene", a.scenes, "--mode", "perf", "--res", a.res, "--runs", "1", "--max-runs", "1", "--profile", "--percam", "300", "--warmup", "5", "--measure", "10", "--heat-soak", "60", "--session", f"{a.tag}_profile"]))
     if a.plan in ("baseline", "ab", "visual") and "capture" not in skip:
-        steps.append(("capture", ["--scene", a.scenes, "--mode", "capture", "--res", a.res, "--extra", "--hdr=1", "--session", f"{a.tag}_capture"]))
-        steps.append(("capture_pbrref", ["--scene", "pbr", "--mode", "capture", "--res", "1920x1080", "--extra", "--hdr=1 --lighting=ref --export-ref=" + os.path.join(ROOT, "benchmarks", "results", "raw", f"{a.tag}_pbrref_export"), "--session", f"{a.tag}_capture_pbrref"]))
+        steps.append(("capture", ["--scene", a.scenes, "--mode", "capture", "--res", a.res, "--extra=--hdr=1", "--session", f"{a.tag}_capture"]))
+        steps.append(("capture_pbrref", ["--scene", "pbr", "--mode", "capture", "--res", "1920x1080", "--extra=--hdr=1 --lighting=ref --export-ref=" + os.path.join(ROOT, "benchmarks", "results", "raw", f"{a.tag}_pbrref_export"), "--session", f"{a.tag}_capture_pbrref"]))
     if a.plan in ("baseline", "ab", "visual") and "temporal" not in skip:
         steps.append(("temporal", ["--scene", a.scenes, "--mode", "temporal", "--res", "1920x1080", "--session", f"{a.tag}_temporal"]))
     if a.plan == "baseline" and "reference" not in skip:
         steps.append(("reference_pbr", ["--scene", "pbr", "--mode", "reference", "--res", "1920x1080", "--preset", "reference_ssaa", "--timeout", "3600",
-                                        "--extra", f"--seqs={PBR_SEQS} --jitter=16", "--session", f"{a.tag}_reference"]))
+                                        "--extra=" + f"--seqs={PBR_SEQS} --jitter=16", "--session", f"{a.tag}_reference"]))
         steps.append(("reference_ext", ["--scene", "sponza,bistro_exterior,bistro_interior", "--mode", "reference", "--res", "1920x1080", "--preset", "reference_ssaa", "--timeout", "3600",
-                                        "--extra", "--seqs=sponza_pan,bistro_ext_path,bistro_int_path --jitter=8", "--session", f"{a.tag}_reference_ext"]))
+                                        "--extra=--seqs=sponza_pan,bistro_ext_path,bistro_int_path --jitter=8", "--session", f"{a.tag}_reference_ext"]))
     status = {}
     for name, args in steps:
         rc = runner(*common, *args) if not name.startswith("reference") else runner("--builds", builds.split(",")[0], *args)
         status[name] = rc
         if name.startswith("reference") and rc == 0:
-            for b in builds.split(",")[:1]:
+            for b in [label(x) for x in builds.split(",")[:1]]:
                 sess = args[args.index("--session") + 1]
                 base = os.path.join(ROOT, "benchmarks", "results", "raw", sess, b)
                 for sc in os.listdir(base) if os.path.isdir(base) else []:
                     tool("accumulate.py", os.path.join(base, sc), "--delete-inputs")
     if a.plan == "ab" and "analysis" not in skip and len(builds.split(",")) >= 2:
-        b0, b1 = builds.split(",")[:2]
+        b0, b1 = [label(x) for x in builds.split(",")[:2]]
         out = os.path.join(ROOT, "benchmarks", "results", "raw", f"{a.tag}_temporal_analysis")
         for item in a.seqs.split(","):
             sc, seq = item.split(":")
