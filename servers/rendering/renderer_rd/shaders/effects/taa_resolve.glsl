@@ -327,12 +327,34 @@ vec3 ycocg_to_rgb(vec3 c) {
 }
 
 // Luma-weighted Reinhard (Karis 2014): keeps HDR highlights from dominating the neighbourhood statistics.
+// Non-finite or negative samples (e.g. +Inf from an RGBA16F overflow in a blended transparent) are removed
+// first: a single NaN/Inf in the 3x3 neighbourhood would otherwise poison the clip box.
 vec3 tm(vec3 c) {
+	c = mix(c, vec3(0.0), isnan(c));
+	c = clamp(c, vec3(0.0), vec3(FLT_MAX));
 	return c / (1.0 + max(c.r, max(c.g, c.b)));
 }
 
 vec3 tm_inv(vec3 c) {
-	return c / max(1.0 - max(c.r, max(c.g, c.b)), 1.0 / 65504.0);
+	return c / max(1.0 - max(c.r, max(c.g, c.b)), 0.005);
+}
+
+// Keeps a colour inside the domain of tm_inv(): the YCoCg clip box can contain points whose RGB conversion
+// leaves [0, 1) (box corners are outside the sample gamut), which would explode or go negative on inversion.
+vec3 tm_sanitize(vec3 c) {
+	c = max(c, vec3(0.0));
+	float m = max(c.r, max(c.g, c.b));
+	return m > 0.995 ? c * (0.995 / m) : c;
+}
+
+// Ray/box clip of q along the segment center -> q (center must lie inside [cmin, cmax]). Unlike clip_aabb()
+// every per-axis parameter is in [0, 1], so the result is a convex combination of center and q (never amplified,
+// stays in the gamut of the samples).
+vec3 clip_towards_center(vec3 cmin, vec3 cmax, vec3 center, vec3 q) {
+	vec3 r = q - center;
+	vec3 face = mix(cmin, cmax, greaterThan(r, vec3(0.0))) - center;
+	vec3 t3 = mix(vec3(1.0), clamp(face / r, vec3(0.0), vec3(1.0)), greaterThan(abs(r), vec3(1e-7)));
+	return center + r * min(t3.x, min(t3.y, t3.z));
 }
 
 // Variance clipping (Salvi 2016) intersected with the min/max box, in YCoCg of tonemapped colour.
@@ -353,11 +375,14 @@ vec3 clip_history_3x3_v2(uvec2 group_pos, vec3 history_tm) {
 	vec3 mean = m1 * RPC_9;
 	vec3 sigma = sqrt(max(m2 * RPC_9 - mean * mean, vec3(0.0)));
 	const float gamma = 1.25;
-	vec3 cmin = max(bmin, mean - gamma * sigma);
-	vec3 cmax = min(bmax, mean + gamma * sigma);
+	// In flat regions rounding can put the computed mean just outside [bmin, bmax]; intersecting naively then
+	// yields an inverted box (cmin > cmax) and the clip divides by ~0. Build the box around the clamped mean so
+	// that cmin <= center <= cmax holds by construction.
+	vec3 center = clamp(mean, bmin, bmax);
+	vec3 cmin = max(bmin, min(mean - gamma * sigma, center));
+	vec3 cmax = min(bmax, max(mean + gamma * sigma, center));
 	vec3 h = rgb_to_ycocg(history_tm);
-	h = clip_aabb(cmin, cmax, clamp(mean, cmin, cmax), h);
-	return ycocg_to_rgb(h);
+	return tm_sanitize(ycocg_to_rgb(clip_towards_center(cmin, cmax, center, h)));
 }
 #endif
 
@@ -411,7 +436,7 @@ vec3 temporal_antialiasing_v2(uvec2 pos_group_top_left, uvec2 pos_group, uvec2 p
 	float factor_disocclusion = get_factor_disocclusion(uv_reprojected, velocity_closest);
 	blend_factor = clamp(blend_factor + (offscreen ? 1.0 : 0.0) + factor_disocclusion, 0.0, 1.0);
 
-	vec3 resolved_tm = mix(history_tm, input_tm, blend_factor);
+	vec3 resolved_tm = tm_sanitize(mix(history_tm, input_tm, blend_factor));
 	return clamp(tm_inv(resolved_tm), vec3(0.0), vec3(FLT_MAX));
 }
 #endif
