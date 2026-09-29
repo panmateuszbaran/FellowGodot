@@ -19,6 +19,7 @@
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ///////////////////////////////////////////////////////////////////////////////////
 // File changes (yyyy-mm-dd)
+// 2026-09-30: FellowEngine: optional resolve v2 (FELLOW_TAA_V2) and fused velocity write (FELLOW_TAA_WRITE_VELOCITY)
 // 2025-11-05: Jakub Brzyski: Added dynamic variance, base variance value adjusted to reduce ghosting
 // 2022-05-06: Panos Karabelas: first commit
 // 2020-12-05: Joan Fons: convert to Vulkan and Godot
@@ -49,6 +50,11 @@ layout(rg16f, set = 0, binding = 2) uniform restrict readonly image2D velocity_b
 layout(rg16f, set = 0, binding = 3) uniform restrict readonly image2D last_velocity_buffer;
 layout(set = 0, binding = 4) uniform sampler2D history_buffer;
 layout(rgba16f, set = 0, binding = 5) uniform restrict writeonly image2D output_buffer;
+#ifdef FELLOW_TAA_WRITE_VELOCITY
+// FellowEngine history ping-pong: this frame's velocity is written for the next frame's disocclusion test,
+// replacing a separate full-resolution copy.
+layout(rg16f, set = 0, binding = 6) uniform restrict writeonly image2D velocity_out_buffer;
+#endif
 
 layout(push_constant, std430) uniform Params {
 	vec2 resolution;
@@ -150,6 +156,26 @@ void depth_test_min(uvec2 pos, inout float min_depth, inout uvec2 min_pos) {
 		min_pos = pos;
 	}
 }
+
+#ifdef FELLOW_TAA_V2
+// FellowEngine: Forward+ uses reverse-Z (depth cleared to 0.0, GREATER_OR_EQUAL test), so the closest sample
+// is the one with the LARGEST depth. The stock search below picks the smallest (= farthest) sample and fetches
+// the velocity one texel up-left of the chosen neighbour (tile coordinates are offset by kBorderSize).
+void get_closest_pixel_velocity_3x3_v2(in uvec2 group_pos, uvec2 group_top_left, out vec2 velocity) {
+	float max_depth = -1.0;
+	ivec2 best = ivec2(0);
+	for (int i = 0; i < 9; i++) {
+		float d = load_depth(uvec2(ivec2(group_pos) + kOffsets3x3[i]));
+		if (d > max_depth) {
+			max_depth = d;
+			best = kOffsets3x3[i];
+		}
+	}
+	ivec2 screen = ivec2(group_top_left) + kBorderSize + ivec2(group_pos) + best;
+	screen = clamp(screen, ivec2(0), ivec2(params.resolution) - ivec2(1));
+	velocity = imageLoad(velocity_buffer, screen).xy;
+}
+#endif
 
 // Returns velocity with closest depth (3x3 neighborhood)
 void get_closest_pixel_velocity_3x3(in uvec2 group_pos, uvec2 group_top_left, out vec2 velocity) {
@@ -291,6 +317,50 @@ vec3 clip_history_3x3(uvec2 group_pos, vec3 color_history, vec2 velocity_closest
 	return color;
 }
 
+#ifdef FELLOW_TAA_V2
+vec3 rgb_to_ycocg(vec3 c) {
+	return vec3(dot(c, vec3(0.25, 0.5, 0.25)), dot(c, vec3(0.5, 0.0, -0.5)), dot(c, vec3(-0.25, 0.5, -0.25)));
+}
+
+vec3 ycocg_to_rgb(vec3 c) {
+	return vec3(c.x + c.y - c.z, c.x + c.z, c.x - c.y - c.z);
+}
+
+// Luma-weighted Reinhard (Karis 2014): keeps HDR highlights from dominating the neighbourhood statistics.
+vec3 tm(vec3 c) {
+	return c / (1.0 + max(c.r, max(c.g, c.b)));
+}
+
+vec3 tm_inv(vec3 c) {
+	return c / max(1.0 - max(c.r, max(c.g, c.b)), 1.0 / 65504.0);
+}
+
+// Variance clipping (Salvi 2016) intersected with the min/max box, in YCoCg of tonemapped colour.
+// The clip box does NOT collapse with velocity (the stock variant shrinks it to the 3x3 mean at >= 0.02 UV/frame,
+// which replaces the history by a blurred neighbourhood average under camera motion).
+vec3 clip_history_3x3_v2(uvec2 group_pos, vec3 history_tm) {
+	vec3 m1 = vec3(0.0);
+	vec3 m2 = vec3(0.0);
+	vec3 bmin = vec3(1e9);
+	vec3 bmax = vec3(-1e9);
+	for (int i = 0; i < 9; i++) {
+		vec3 c = rgb_to_ycocg(tm(load_color(uvec2(ivec2(group_pos) + kOffsets3x3[i]))));
+		m1 += c;
+		m2 += c * c;
+		bmin = min(bmin, c);
+		bmax = max(bmax, c);
+	}
+	vec3 mean = m1 * RPC_9;
+	vec3 sigma = sqrt(max(m2 * RPC_9 - mean * mean, vec3(0.0)));
+	const float gamma = 1.25;
+	vec3 cmin = max(bmin, mean - gamma * sigma);
+	vec3 cmax = min(bmax, mean + gamma * sigma);
+	vec3 h = rgb_to_ycocg(history_tm);
+	h = clip_aabb(cmin, cmax, clamp(mean, cmin, cmax), h);
+	return ycocg_to_rgb(h);
+}
+#endif
+
 /*------------------------------------------------------------------------------
 									TAA
 ------------------------------------------------------------------------------*/
@@ -310,6 +380,41 @@ float get_factor_disocclusion(vec2 uv_reprojected, vec2 velocity) {
 	float disocclusion = length(prev_velocity_texels - velocity_texels) - params.disocclusion_threshold;
 	return clamp(disocclusion * DISOCCLUSION_SCALE, 0.0, 1.0);
 }
+
+#ifdef FELLOW_TAA_V2
+vec3 temporal_antialiasing_v2(uvec2 pos_group_top_left, uvec2 pos_group, uvec2 pos_screen, vec2 uv, sampler2D tex_history) {
+	// Dilated velocity (closest depth in 3x3) is used both to reproject the history and to detect disocclusion:
+	// silhouettes of moving objects then follow the object instead of dragging the background history.
+	vec2 velocity_closest;
+	get_closest_pixel_velocity_3x3_v2(pos_group, pos_group_top_left, velocity_closest);
+	vec2 uv_reprojected = uv + velocity_closest;
+
+	vec3 color_input = load_color(pos_group);
+	vec3 color_history = sample_catmull_rom_9(tex_history, uv_reprojected, params.resolution).rgb;
+	if (any(isnan(color_history)) || any(isinf(color_history))) {
+		color_history = color_input;
+	}
+
+	vec3 input_tm = tm(color_input);
+	vec3 history_tm = clip_history_3x3_v2(pos_group, tm(color_history));
+
+	// Feedback (history weight) between 0.88 and 0.9375 depending on how much the clipped history still
+	// disagrees with the current sample (Lottes / Playdead): large disagreement -> respond faster.
+	float lum_in = dot(input_tm, vec3(0.2126, 0.7152, 0.0722));
+	float lum_hist = dot(history_tm, vec3(0.2126, 0.7152, 0.0722));
+	float unbiased_diff = abs(lum_in - lum_hist) / max(lum_in, max(lum_hist, 0.2));
+	float w = 1.0 - unbiased_diff;
+	float feedback = mix(0.88, 0.9375, w * w);
+	float blend_factor = 1.0 - feedback;
+
+	bool offscreen = any(lessThan(uv_reprojected, vec2(0.0))) || any(greaterThan(uv_reprojected, vec2(1.0)));
+	float factor_disocclusion = get_factor_disocclusion(uv_reprojected, velocity_closest);
+	blend_factor = clamp(blend_factor + (offscreen ? 1.0 : 0.0) + factor_disocclusion, 0.0, 1.0);
+
+	vec3 resolved_tm = mix(history_tm, input_tm, blend_factor);
+	return clamp(tm_inv(resolved_tm), vec3(0.0), vec3(FLT_MAX));
+}
+#endif
 
 vec3 temporal_antialiasing(uvec2 pos_group_top_left, uvec2 pos_group, uvec2 pos_screen, vec2 uv, sampler2D tex_history) {
 	// Get the velocity of the current pixel
@@ -380,6 +485,13 @@ void main() {
 	const uvec2 pos_screen = gl_GlobalInvocationID.xy;
 	const vec2 uv = (gl_GlobalInvocationID.xy + 0.5f) / params.resolution;
 
+#ifdef FELLOW_TAA_V2
+	vec3 result = temporal_antialiasing_v2(pos_group_top_left, pos_group, pos_screen, uv, history_buffer);
+#else
 	vec3 result = temporal_antialiasing(pos_group_top_left, pos_group, pos_screen, uv, history_buffer);
+#endif
 	imageStore(output_buffer, ivec2(gl_GlobalInvocationID.xy), vec4(result, 1.0));
+#ifdef FELLOW_TAA_WRITE_VELOCITY
+	imageStore(velocity_out_buffer, ivec2(gl_GlobalInvocationID.xy), vec4(imageLoad(velocity_buffer, ivec2(pos_screen)).xy, 0.0, 0.0));
+#endif
 }

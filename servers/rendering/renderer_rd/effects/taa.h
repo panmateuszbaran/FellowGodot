@@ -50,11 +50,30 @@ private:
 		float variance_dynamic;
 	};
 
+	// Shader variants: bit 0 = FellowEngine resolve v2, bit 1 = fused velocity write (history ping-pong).
+	enum {
+		VARIANT_FELLOW_V2 = 1,
+		VARIANT_FELLOW_WRITE_VELOCITY = 2,
+		VARIANT_MAX = 4,
+	};
+
 	TaaResolveShaderRD taa_shader;
 	RID shader_version;
-	RID pipeline;
+	RID pipelines[VARIANT_MAX];
 
-	void resolve(RID p_frame, RID p_temp, RID p_depth, RID p_velocity, RID p_prev_velocity, RID p_history, Size2 p_resolution, float p_z_near, float p_z_far);
+	// Per-render-buffers state for the FellowEngine history ping-pong path.
+	class FellowPingPongState : public RenderBufferCustomDataRD {
+		GDSOFTCLASS(FellowPingPongState, RenderBufferCustomDataRD);
+
+	public:
+		uint32_t parity = 0;
+		bool valid = false;
+		virtual void configure(RenderSceneBuffersRD *p_render_buffers) override { valid = false; }
+		virtual void free_data() override { valid = false; }
+	};
+
+	void resolve(RID p_frame, RID p_temp, RID p_depth, RID p_velocity, RID p_prev_velocity, RID p_history, Size2 p_resolution, float p_z_near, float p_z_far, uint32_t p_variant = 0, RID p_velocity_out = RID());
+	void process_pingpong(Ref<RenderSceneBuffersRD> p_render_buffers, RD::DataFormat p_format, float p_z_near, float p_z_far, uint32_t p_variant);
 };
 
 } // namespace RendererRD
