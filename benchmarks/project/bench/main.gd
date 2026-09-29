@@ -471,7 +471,10 @@ func _run_reference() -> void:
 			var jy := _halton(j + 1, 3) - 0.5
 			scene.camera.set_frustum(size, Vector2(jx, jy) * (size / h), near, far)
 			scene.camera.global_transform = xf
-			for i in range(3):  # let shadows/SS effects settle on the new projection
+			# Let shadows / screen-space effects (SSIL and SSR reproject the previous frame) settle on the new
+			# projection: more frames after a pose change (first jitter), fewer between sub-pixel jitters.
+			var settle := int(args.get("ref_settle_first", "3")) if j == 0 else int(args.get("ref_settle", "3"))
+			for i in range(settle):
 				await get_tree().process_frame
 			await _post_draw()
 			var p := out_dir.path_join("%s_ref-%s_j%02d.png" % [stem, tg["name"], j])
