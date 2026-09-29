@@ -105,8 +105,18 @@ FellowShallowWater3D::FellowShallowWater3D() {
 }
 
 FellowShallowWater3D::~FellowShallowWater3D() {
-	if (gpu_ready && RS::get_singleton()) {
-		_rt_free();
+	if (RS::get_singleton() && rd) {
+		if (gpu_ready) {
+			_rt_free();
+		}
+		for (int k = 0; k < KERNEL_MAX; k++) {
+			// Freeing a shader also frees the pipelines created from it.
+			if (shaders[k].is_valid()) {
+				rd->free_rid(shaders[k]);
+				shaders[k] = RID();
+				pipelines[k] = RID();
+			}
+		}
 	}
 }
 
@@ -211,7 +221,10 @@ Ref<Image> FellowShallowWater3D::_make_terrain(int p_res) const {
 		}
 		img->convert(Image::FORMAT_RF);
 		if (img->get_width() != p_res || img->get_height() != p_res) {
-			img->resize(p_res, p_res, Image::INTERPOLATE_BILINEAR);
+			// Nearest: bilinear resampling would create intermediate bed heights around solid obstacles
+			// (thin dry "walls" that stretch the water surface). Provide the image at the grid resolution
+			// for smooth terrain.
+			img->resize(p_res, p_res, Image::INTERPOLATE_NEAREST);
 		}
 	} else {
 		img = Image::create_empty(p_res, p_res, false, Image::FORMAT_RF);

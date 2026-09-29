@@ -296,6 +296,9 @@ void main() {
 	float steep = length(vec2(ex, ez)) / (2.0 * params.dx);
 	float src = 0.6 * max(-div, 0.0) + 0.25 * max(speed - 1.5, 0.0) + 1.5 * max(steep - 0.25, 0.0);
 	float foam = s.a * exp(-params.foam_decay * params.dt) + src * params.dt * step(EPS_H * 10.0, h);
+	if (params.inflow_depth > 0.0 && c.x < params.inflow_cells + 2) {
+		foam = 0.0; // prescribed inflow boundary: no artificial foam from the imposed velocity jump
+	}
 	imageStore(state_out, c, vec4(h, u, v, clamp(foam, 0.0, 1.0)));
 }
 #endif
@@ -316,9 +319,23 @@ void main() {
 	}
 	vec4 s = S(c);
 	float b = B(c);
-	bool wet = s.r > 1e-3 && !solid(c);
+	bool is_solid = solid(c);
+	bool wet = s.r > 1e-3 && !is_solid;
 	// Dry cells: keep the surface slightly below the bed so it is hidden, avoiding shoreline cracks.
+	// Solid obstacles: sink the surface below the neighbouring water level (hidden inside the obstacle mesh)
+	// instead of raising it to the obstacle height, which would stretch the water mesh up the obstacle.
 	float e = wet ? s.r + b : b - 0.02;
+	if (is_solid) {
+		float level = -1e9;
+		for (int k = 0; k < 4; k++) {
+			ivec2 n = c + ivec2(k == 0 ? 1 : (k == 1 ? -1 : 0), k == 2 ? 1 : (k == 3 ? -1 : 0));
+			vec4 sn = S(n);
+			if (sn.r > 1e-3 && !solid(n)) {
+				level = max(level, sn.r + B(n));
+			}
+		}
+		e = (level > -1e8 ? level : 0.0) - 0.5;
+	}
 	float ex0 = eta_s(c + ivec2(-1, 0), e);
 	float ex1 = eta_s(c + ivec2(1, 0), e);
 	float ez0 = eta_s(c + ivec2(0, -1), e);
