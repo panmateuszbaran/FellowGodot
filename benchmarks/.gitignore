@@ -1,0 +1,7 @@
+# Large third-party assets and caches never go into git.
+/assets/
+/project/external/
+/project/.godot/
+/results/raw/
+/.venv/
+__pycache__/
