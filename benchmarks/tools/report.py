@@ -259,18 +259,23 @@ def image_section(out_dir, scene, pairs, uid0=0):
     return "\n".join(parts), uid
 
 
+def _lp(x, y):
+    v = iu.lpips(x, y)
+    return "" if v is None else f" / LPIPS {v:.4f}"
+
+
 def image_metrics(a, b=None, ref=None):
     ia = iu.load_rgb(a)
     m = {}
     if b:
         ib = iu.load_rgb(b)
-        m["stock vs fellow PSNR / SSIM"] = f"{iu.psnr(ia, ib):.2f} dB / {iu.ssim(ia, ib):.4f}"
+        m["stock vs fellow PSNR / SSIM"] = f"{iu.psnr(ia, ib):.2f} dB / {iu.ssim(ia, ib):.4f}{_lp(ia, ib)}"
     if ref:
         ir = iu.load_rgb(ref)
         if ir.shape == ia.shape:
-            m["stock vs ref PSNR / SSIM"] = f"{iu.psnr(ia, ir):.2f} dB / {iu.ssim(ia, ir):.4f}"
+            m["stock vs ref PSNR / SSIM"] = f"{iu.psnr(ia, ir):.2f} dB / {iu.ssim(ia, ir):.4f}{_lp(ia, ir)}"
             if b:
-                m["fellow vs ref PSNR / SSIM"] = f"{iu.psnr(ib, ir):.2f} dB / {iu.ssim(ib, ir):.4f}"
+                m["fellow vs ref PSNR / SSIM"] = f"{iu.psnr(ib, ir):.2f} dB / {iu.ssim(ib, ir):.4f}{_lp(ib, ir)}"
     return m
 
 
@@ -314,6 +319,7 @@ def main() -> int:
     ap.add_argument("--baseline", default="godot-4.7.2")
     ap.add_argument("--ab", default=None, help="tag of the stock-vs-fellow session set")
     ap.add_argument("--ab-label", default="FellowEngine")
+    ap.add_argument("--fellow-label", default="fellow", help="build/variant label of the FellowEngine configuration shown in image sections")
     ap.add_argument("--fluid", default=None, help="tag of the fluid sessions")
     ap.add_argument("--notes", default=None, help="markdown file with analysis text to embed")
     ap.add_argument("--out", default=None)
@@ -372,7 +378,7 @@ def main() -> int:
     uid = 0
     cap_base = os.path.join(RAW, f"{a.baseline}_capture", "stock")
     cap_ab_stock = os.path.join(RAW, f"{a.ab}_capture", "stock") if a.ab else None
-    cap_ab_fellow = os.path.join(RAW, f"{a.ab}_capture", "fellow") if a.ab else None
+    cap_ab_fellow = os.path.join(RAW, f"{a.ab}_capture", a.fellow_label) if a.ab else None
     ref_dirs = [os.path.join(RAW, f"{a.baseline}_reference", "stock"), os.path.join(RAW, f"{a.baseline}_reference_ext", "stock")]
     for scene in SCENE_ORDER:
         pairs = []

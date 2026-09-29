@@ -293,16 +293,21 @@ def aggregate(runs: list[dict]) -> dict:
 
 # --------------------------------------------------------------------------- main
 
-def parse_build(spec: str) -> tuple[str, str, str]:
-    """'label[=dir][@k=v;k=v]' -> (label, dir under .tools/bin, fellow toggles 'k=v,k=v').
+def parse_build(spec: str) -> tuple[str, str, str, list[str]]:
+    """'label[=dir][@k=v;k=v][#--arg=v --arg2=v]' -> (label, dir under .tools/bin, fellow toggles 'k=v,k=v', user args).
 
     Variants of one binary can be compared in the same interleaved session, e.g.
-    --builds "stock,fellow_off=fellow@enabled=false,fellow_v2=fellow@postfx/taa_resolve_v2=true"."""
+    --builds "stock,fellow_off=fellow@enabled=false,fellow_v2=fellow@postfx/taa_resolve_v2=true"
+    --builds "f256=fellow#--fluid_res=256,f256_hidden=fellow#--fluid_res=256 --water_visible=0"."""
+    extra = []
+    if "#" in spec:
+        spec, e = spec.split("#", 1)
+        extra = e.split()
     toggles = ""
     if "@" in spec:
         spec, toggles = spec.split("@", 1)
     label, dirname = spec.split("=", 1) if "=" in spec else (spec, spec)
-    return label.strip(), dirname.strip(), toggles.replace(";", ",").strip()
+    return label.strip(), dirname.strip(), toggles.replace(";", ",").strip(), extra
 
 
 def exe_for(build: str, godot_path: str | None) -> str:
@@ -336,12 +341,15 @@ def main() -> int:
     ap.add_argument("--timeout", type=float, default=900.0)
     ap.add_argument("--session", default=None, help="session name (default: timestamp)")
     ap.add_argument("--label", default="", help="free text label for the session")
+    ap.add_argument("--merge", action="store_true", help="merge into an existing results/<session>.json: re-measured "
+                    "(scene, res, build) entries replace the old ones, which are kept under 'superseded' with --supersede-note")
+    ap.add_argument("--supersede-note", default="", help="reason recorded for entries replaced by --merge")
     args = ap.parse_args()
 
     specs = {}
     for spec in [x.strip() for x in args.builds.split(",") if x.strip()]:
-        label, dirname, toggles = parse_build(spec)
-        specs[label] = (dirname, toggles)
+        label, dirname, toggles, vextra = parse_build(spec)
+        specs[label] = (dirname, toggles, vextra)
     builds = list(specs.keys())
     exes = {b: exe_for(specs[b][0], args.godot) for b in builds}
     off_for = args.fellow_off_for.split(",")
@@ -411,6 +419,7 @@ def main() -> int:
                             user.append("--profile=1")
                         if args.extra:
                             user.extend(args.extra.split())
+                        user.extend(specs[b][2])
                         gargs = ["--fixed-fps", "60", "--disable-vsync", "--resolution", res, "--position", "0,0"]
                         if args.profile:
                             gargs.append("--gpu-profile")
@@ -457,7 +466,7 @@ def main() -> int:
                 for b in builds:
                     key = f"{scene}|{res}|{b}"
                     entry = {"scene": scene, "resolution": res, "build": b, "preset": args.preset, "set": args.set,
-                             "fellow": toggles_for(b), "binary": specs[b][0], "mode": args.mode}
+                             "fellow": toggles_for(b), "binary": specs[b][0], "variant_args": specs[b][2], "mode": args.mode}
                     if args.mode == "perf":
                         agg = aggregate(runs_by_build[b])
                         cv = agg.get("frame_ms_run_means", {}).get("cv", 0.0)
@@ -476,6 +485,24 @@ def main() -> int:
     summary = {"session": session, "label": args.label, "args": vars(args), "hardware": hw, "gpu_telemetry": sampler.summary(), "heat_soak_telemetry": soak, "results": all_results}
     os.makedirs(RESULTS, exist_ok=True)
     jpath = os.path.join(RESULTS, f"{session}.json")
+    if args.merge and os.path.exists(jpath):
+        with open(jpath, encoding="utf-8") as f:
+            old = json.load(f)
+        stamp = datetime.datetime.now().isoformat(timespec="seconds")
+        superseded = old.get("superseded", {})
+        for key in all_results:
+            if key in old.get("results", {}):
+                superseded[f"{key}|{stamp}"] = {"note": args.supersede_note, "entry": old["results"][key]}
+        merged = dict(old.get("results", {}))
+        merged.update(all_results)
+        history = old.get("merge_history", [{"args": old.get("args"), "hardware": old.get("hardware"), "gpu_telemetry": old.get("gpu_telemetry"),
+                                             "heat_soak_telemetry": old.get("heat_soak_telemetry"), "keys": list(old.get("results", {}).keys())}])
+        history.append({"args": vars(args), "hardware": hw, "gpu_telemetry": summary["gpu_telemetry"], "heat_soak_telemetry": soak,
+                        "keys": list(all_results.keys()), "note": args.supersede_note, "time": stamp})
+        summary = dict(old)
+        summary.update({"results": merged, "superseded": superseded, "merge_history": history})
+        all_results = merged
+        log(f"merged {len(history[-1]['keys'])} entries into {jpath} ({len(superseded)} superseded kept)")
     with open(jpath, "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=1, default=str)
     if args.mode == "perf":
