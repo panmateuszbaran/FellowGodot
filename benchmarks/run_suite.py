@@ -26,6 +26,9 @@ RUNNER = os.path.join(ROOT, "benchmarks", "run_benchmarks.py")
 TOOLS = os.path.join(ROOT, "benchmarks", "tools")
 SCENES = "pbr,sponza,bistro_exterior,bistro_interior"
 PBR_SEQS = "moving_object,camera_pan,foliage_strafe,specular_orbit,thin_dolly"
+# Reference renders: 2x2 SSAA x 8x MSAA per jitter sample, 8 Halton jitters (>= 256 samples/pixel); 6 settle
+# frames after a pose change (SSIL/SSR reproject the previous frame), 1 between sub-pixel jitters.
+REF_SETTLE = "--ref_settle_first=6 --ref_settle=1"
 
 
 def log(m):
@@ -89,10 +92,10 @@ def main() -> int:
         steps.append(("temporal", ["--scene", a.scenes, "--mode", "temporal", "--res", "1920x1080", "--session", f"{a.tag}_temporal"]))
     if a.plan == "baseline" and "reference" not in skip and "pbr" in scene_list:
         steps.append(("reference_pbr", ["--scene", "pbr", "--mode", "reference", "--res", "1920x1080", "--preset", "reference_ssaa", "--timeout", "3600",
-                                        "--extra=" + f"--seqs={PBR_SEQS} --jitter=16", "--session", f"{a.tag}_reference"]))
+                                        "--extra=" + f"--seqs={PBR_SEQS} --jitter=8 {REF_SETTLE}", "--session", f"{a.tag}_reference"]))
     if a.plan == "baseline" and "reference" not in skip and ext_scenes:
         steps.append(("reference_ext", ["--scene", ",".join(ext_scenes), "--mode", "reference", "--res", "1920x1080", "--preset", "reference_ssaa", "--timeout", "3600",
-                                        "--extra=--seqs=" + ",".join(ext_seq[x] for x in ext_scenes) + " --jitter=8", "--session", f"{a.tag}_reference_ext"]))
+                                        "--extra=--seqs=" + ",".join(ext_seq[x] for x in ext_scenes) + f" --jitter=8 {REF_SETTLE}", "--session", f"{a.tag}_reference_ext"]))
     status = {}
     for name, args in steps:
         rc = runner(*common, *args) if not name.startswith("reference") else runner("--builds", builds.split(",")[0], *(["--merge", "--supersede-note=" + a.note] if a.merge else []), *args)
