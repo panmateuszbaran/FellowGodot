@@ -86,6 +86,8 @@ _lpips_model = None
 def lpips(a: np.ndarray, b: np.ndarray) -> float | None:
     """LPIPS (AlexNet) if available; inputs are display images 0..1. Returns None when unavailable."""
     global _lpips_model
+    # Keep downloaded AlexNet weights inside the repository (.tools/torch), not in the user profile.
+    os.environ.setdefault("TORCH_HOME", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", ".tools", "torch"))
     try:
         import lpips as _lp  # type: ignore
         import torch  # type: ignore

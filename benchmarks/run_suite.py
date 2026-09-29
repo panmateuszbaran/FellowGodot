@@ -26,6 +26,9 @@ RUNNER = os.path.join(ROOT, "benchmarks", "run_benchmarks.py")
 TOOLS = os.path.join(ROOT, "benchmarks", "tools")
 SCENES = "pbr,sponza,bistro_exterior,bistro_interior"
 PBR_SEQS = "moving_object,camera_pan,foliage_strafe,specular_orbit,thin_dolly"
+# Reference renders: 2x2 SSAA x 8x MSAA per jitter sample, 8 Halton jitters (>= 256 samples/pixel); 6 settle
+# frames after a pose change (SSIL/SSR reproject the previous frame), 1 between sub-pixel jitters.
+REF_SETTLE = "--ref_settle_first=6 --ref_settle=1"
 
 
 def log(m):
@@ -40,7 +43,7 @@ def runner(*args) -> int:
 
 def label(spec: str) -> str:
     """Build label of a run_benchmarks.py build spec 'label[=dir][@toggles]'."""
-    return spec.split("@", 1)[0].split("=", 1)[0].strip()
+    return spec.split("#", 1)[0].split("@", 1)[0].split("=", 1)[0].strip()
 
 
 def tool(name, *args) -> int:
@@ -60,6 +63,8 @@ def main() -> int:
     ap.add_argument("--res", default="1920x1080,2560x1440")
     ap.add_argument("--runs", default="3")
     ap.add_argument("--skip", default="", help="comma list of steps to skip")
+    ap.add_argument("--merge", action="store_true", help="merge results into existing sessions of the same tag (re-run of some scenes)")
+    ap.add_argument("--note", default="", help="with --merge: reason recorded for the superseded entries")
     ap.add_argument("--baseline-tag", default="godot-4.7.2", help="ab plan: session tag holding the accumulated references")
     ap.add_argument("--seqs", default="pbr:moving_object,pbr:camera_pan,pbr:foliage_strafe,pbr:specular_orbit,pbr:thin_dolly,sponza:sponza_pan,bistro_exterior:bistro_ext_path,bistro_interior:bistro_int_path")
     a = ap.parse_args()
@@ -68,6 +73,11 @@ def main() -> int:
     common = ["--builds", builds]
     if a.fellow:
         common += ["--fellow", a.fellow]
+    if a.merge:
+        common += ["--merge", "--supersede-note=" + a.note]
+    scene_list = [x.strip() for x in a.scenes.split(",")] if a.scenes != "all" else ["pbr", "sponza", "bistro_exterior", "bistro_interior"]
+    ext_seq = {"sponza": "sponza_pan", "bistro_exterior": "bistro_ext_path", "bistro_interior": "bistro_int_path"}
+    ext_scenes = [x for x in scene_list if x in ext_seq]
     t0 = time.time()
     steps = []
     if a.plan in ("baseline", "ab", "perf") and "perf" not in skip:
@@ -76,17 +86,19 @@ def main() -> int:
         steps.append(("profile", ["--scene", a.scenes, "--mode", "perf", "--res", a.res, "--runs", "1", "--max-runs", "1", "--profile", "--percam", "300", "--warmup", "5", "--measure", "10", "--heat-soak", "60", "--session", f"{a.tag}_profile"]))
     if a.plan in ("baseline", "ab", "visual") and "capture" not in skip:
         steps.append(("capture", ["--scene", a.scenes, "--mode", "capture", "--res", a.res, "--extra=--hdr=1", "--session", f"{a.tag}_capture"]))
-        steps.append(("capture_pbrref", ["--scene", "pbr", "--mode", "capture", "--res", "1920x1080", "--extra=--hdr=1 --lighting=ref --export-ref=" + os.path.join(ROOT, "benchmarks", "results", "raw", f"{a.tag}_pbrref_export"), "--session", f"{a.tag}_capture_pbrref"]))
+        if "pbr" in scene_list:
+            steps.append(("capture_pbrref", ["--scene", "pbr", "--mode", "capture", "--res", "1920x1080", "--extra=--hdr=1 --lighting=ref --export-ref=" + os.path.join(ROOT, "benchmarks", "results", "raw", f"{a.tag}_pbrref_export"), "--session", f"{a.tag}_capture_pbrref"]))
     if a.plan in ("baseline", "ab", "visual") and "temporal" not in skip:
         steps.append(("temporal", ["--scene", a.scenes, "--mode", "temporal", "--res", "1920x1080", "--session", f"{a.tag}_temporal"]))
-    if a.plan == "baseline" and "reference" not in skip:
+    if a.plan == "baseline" and "reference" not in skip and "pbr" in scene_list:
         steps.append(("reference_pbr", ["--scene", "pbr", "--mode", "reference", "--res", "1920x1080", "--preset", "reference_ssaa", "--timeout", "3600",
-                                        "--extra=" + f"--seqs={PBR_SEQS} --jitter=16", "--session", f"{a.tag}_reference"]))
-        steps.append(("reference_ext", ["--scene", "sponza,bistro_exterior,bistro_interior", "--mode", "reference", "--res", "1920x1080", "--preset", "reference_ssaa", "--timeout", "3600",
-                                        "--extra=--seqs=sponza_pan,bistro_ext_path,bistro_int_path --jitter=8", "--session", f"{a.tag}_reference_ext"]))
+                                        "--extra=" + f"--seqs={PBR_SEQS} --jitter=8 {REF_SETTLE}", "--session", f"{a.tag}_reference"]))
+    if a.plan == "baseline" and "reference" not in skip and ext_scenes:
+        steps.append(("reference_ext", ["--scene", ",".join(ext_scenes), "--mode", "reference", "--res", "1920x1080", "--preset", "reference_ssaa", "--timeout", "3600",
+                                        "--extra=--seqs=" + ",".join(ext_seq[x] for x in ext_scenes) + f" --jitter=8 {REF_SETTLE}", "--session", f"{a.tag}_reference_ext"]))
     status = {}
     for name, args in steps:
-        rc = runner(*common, *args) if not name.startswith("reference") else runner("--builds", builds.split(",")[0], *args)
+        rc = runner(*common, *args) if not name.startswith("reference") else runner("--builds", builds.split(",")[0], *(["--merge", "--supersede-note=" + a.note] if a.merge else []), *args)
         status[name] = rc
         if name.startswith("reference") and rc == 0:
             for b in [label(x) for x in builds.split(",")[:1]]:
@@ -109,7 +121,7 @@ def main() -> int:
             if ref and os.path.isdir(t0d) and os.path.isdir(t1d):
                 status[f"analysis_{seq}"] = tool("temporal.py", "--test", t0d, "--test2", t1d, "--labels", f"{b0},{b1}", "--ref", ref, "--seq", seq, "--out", out, "--anim")
     log(f"plan {a.plan} finished in {(time.time() - t0) / 60:.1f} min: {json.dumps(status)}")
-    with open(os.path.join(ROOT, "benchmarks", "results", f"{a.tag}_suite.json"), "w", encoding="utf-8") as f:
+    with open(os.path.join(ROOT, "benchmarks", "results", f"{a.tag}_suite{'_merge_' + datetime.datetime.now().strftime('%H%M') if a.merge else ''}.json"), "w", encoding="utf-8") as f:
         json.dump({"plan": a.plan, "tag": a.tag, "builds": builds, "fellow": a.fellow, "status": status, "minutes": (time.time() - t0) / 60,
                    "finished": datetime.datetime.now().isoformat()}, f, indent=1)
     return 0 if all(v == 0 for v in status.values()) else 1

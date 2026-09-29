@@ -6,7 +6,13 @@ Before that, per-texture import presets are written for Bistro so the ORCA conve
   *.tga      -> VRAM compressed with mipmaps; *_Normal.tga additionally normal_map=1 + normal_map_invert_y (DirectX)
   *.dds      -> not imported: Godot loads DDS natively (BC formats + authored mips). DirectX BC5 normal maps are
                 converted losslessly by fetch_bistro.py into external/bistro/TexturesGL/.
-Sponza (glTF 2.0) needs no presets: glTF normal maps already use the OpenGL convention.
+Sponza (glTF 2.0, external PNG textures): the editor normally switches textures used by 3D materials to VRAM
+compression + mipmaps ("detect 3D" reimport), but that only happens in an interactive editor session, NOT in a
+headless --import: the first baseline ran with all 155 Sponza textures uncompressed and without mipmaps
+(6.8 GB VRAM). fix_sponza_imports() applies exactly what the editor's detection would set:
+  compress/mode=VRAM compressed, mipmaps/generate=true, *_Normal*: compress/normal_map=1 (BC5 / RGTC);
+glTF normal maps already use the OpenGL convention (no Y flip). The .import files are edited in place (UIDs are
+kept), which makes the next --import re-import them.
 
 The same imported data is used by stock and FellowEngine runs (the importer is not modified by FellowEngine).
 
@@ -59,12 +65,40 @@ def write_bistro_presets() -> int:
     return n
 
 
+def fix_sponza_imports() -> int:
+    """Edit Sponza texture .import files in place (keeps uid); returns the number of files changed."""
+    n = 0
+    base = os.path.join(PROJECT, "external", "sponza")
+    for imp in glob.glob(os.path.join(base, "**", "*.import"), recursive=True):
+        low = imp.lower()
+        if not (low.endswith(".png.import") or low.endswith(".jpg.import") or low.endswith(".jpeg.import")):
+            continue
+        with open(imp, encoding="utf-8") as f:
+            lines = f.read().split("\n")
+        is_normal = "normal" in os.path.basename(low)
+        want = {"compress/mode": "2", "mipmaps/generate": "true", "detect_3d/compress_to": "0",
+                "compress/normal_map": "1" if is_normal else "0"}
+        out, changed = [], False
+        for line in lines:
+            k = line.split("=", 1)[0]
+            if k in want and line != f"{k}={want[k]}":
+                line = f"{k}={want[k]}"
+                changed = True
+            out.append(line)
+        if changed:
+            with open(imp, "w", encoding="utf-8", newline="\n") as f:
+                f.write("\n".join(out))
+            n += 1
+    return n
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--editor", default=DEFAULT_EDITOR)
     ap.add_argument("--timeout", type=float, default=7200)
     a = ap.parse_args()
     print(f"[import] wrote {write_bistro_presets()} Bistro texture presets", flush=True)
+    print(f"[import] updated {fix_sponza_imports()} Sponza texture import settings (VRAM compressed + mipmaps)", flush=True)
     t0 = time.time()
     cmd = [a.editor, "--headless", "--path", PROJECT, "--import"]
     print("[import] " + " ".join(cmd), flush=True)
