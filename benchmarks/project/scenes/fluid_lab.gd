@@ -32,7 +32,7 @@ func build(p_args: Dictionary) -> void:
 	sim_res = int(args.get("fluid_res", "512"))
 	_setup_common()
 	_setup_environment()
-	var terrain := _make_terrain(512)
+	var terrain := _make_terrain(sim_res)  # generated at the simulation resolution (no resampling of obstacles)
 	_build_terrain_mesh(terrain, 256)
 	_build_piers()
 
@@ -191,7 +191,10 @@ func set_time(t: float) -> void:
 	var vel := (_sphere_pos(t + 0.01) - _sphere_pos(t - 0.01)) / 0.02
 	sphere_body.global_position = p
 	water.set_collider(0, p, 1.5, vel)
-	# Deterministic drops: one impulse every 0.5 s of scene time.
+	# Deterministic drops: one impulse every 0.5 s of scene time. Large jumps in time (fixed cameras) only
+	# replay the drops of the last second, so the schedule stays deterministic without a burst of impulses.
+	if t - next_drop_t > 1.0:
+		next_drop_t = floor((t - 1.0) / 0.5) * 0.5 + 0.5
 	while t >= next_drop_t:
 		var dp := Vector3(drops_rng.randf_range(-20.0, 26.0), 0.0, drops_rng.randf_range(-12.0, 12.0))
 		water.add_impulse(dp, 0.9, 0.35)
