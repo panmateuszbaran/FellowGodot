@@ -34,6 +34,7 @@
 #include "core/os/os.h"
 #include "core/profiling/profiling.h"
 #include "servers/display/display_server.h"
+#include "servers/rendering/fellow_settings.h"
 #include "servers/rendering/renderer_canvas_cull.h"
 #include "servers/rendering/renderer_scene_cull.h"
 #include "servers/rendering/rendering_device.h"
@@ -76,6 +77,11 @@ void RenderingServerDefault::request_frame_drawn_callback(const Callable &p_call
 void RenderingServerDefault::_draw(bool p_swap_buffers, double frame_step) {
 	GodotProfileZoneGroupedFirst(_profile_zone, "rasterizer->begin_frame");
 	RSG::rasterizer->begin_frame(frame_step);
+
+	if (Fellow::pass_timestamps()) {
+		// FellowEngine: keep per-pass RENDER_TIMESTAMP markers enabled (only ever forces them on).
+		RSG::utilities->capturing_timestamps = true;
+	}
 
 	TIMESTAMP_BEGIN()
 

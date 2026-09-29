@@ -36,6 +36,7 @@
 #include "core/object/class_db.h"
 #include "core/os/os.h"
 #include "core/variant/typed_array.h"
+#include "servers/rendering/fellow_settings.h"
 #include "servers/rendering/rendering_device.h"
 #include "servers/rendering/rendering_server_types.h"
 #include "servers/rendering/shader_language.h"
@@ -3653,6 +3654,8 @@ TypedArray<StringName> RenderingServer::_global_shader_parameter_get_list() cons
 }
 
 void RenderingServer::init() {
+	Fellow::register_settings();
+
 	// These are overrides, even if they are false Godot will still
 	// import the texture formats that the host platform needs.
 	// See `const bool can_s3tc_bptc` in the resource importer.
