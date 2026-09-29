@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="FellowShallowWater3D" inherits="Node3D" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+	<brief_description>
+		FellowEngine: GPU shallow-water simulation (rivers, floods, shallow areas) with a rendered water surface.
+	</brief_description>
+	<description>
+		Simulates the 2D shallow-water equations on a staggered grid entirely with [RenderingDevice] compute shaders (no CPU readback) and renders the resulting water surface with displacement, normals, foam and screen-space refraction. Colliders and impulses are uploaded as a compact buffer each frame. Every processed frame advances exactly [member substeps] substeps of [member time_step] seconds, which makes the simulation deterministic under [code]--fixed-fps[/code].
+		Requires the Forward+ or Mobile renderer. GPU time of the simulation and of the surface-generation pass is available through [method get_simulation_gpu_time_ms] and [method get_surface_gpu_time_ms]. See [code]docs/fellow_fluid_architecture.md[/code].
+	</description>
+	<tutorials>
+	</tutorials>
+</class>
