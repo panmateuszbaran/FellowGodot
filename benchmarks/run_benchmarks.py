@@ -319,6 +319,7 @@ def main() -> int:
     ap.add_argument("--fellow-off-for", default="stock", help="builds that never receive --fellow toggles")
     ap.add_argument("--extra", default="", help="extra user args passed verbatim, space separated (e.g. --lighting=ref)")
     ap.add_argument("--cooldown", type=float, default=5.0)
+    ap.add_argument("--heat-soak", type=float, default=240.0, help="perf: seconds of discarded GPU load before the first measured run (thermal steady state)")
     ap.add_argument("--timeout", type=float, default=900.0)
     ap.add_argument("--session", default=None, help="session name (default: timestamp)")
     ap.add_argument("--label", default="", help="free text label for the session")
@@ -344,6 +345,22 @@ def main() -> int:
     sampler = GpuSampler()
     sampler.start()
     all_results: dict = {}
+    soak = {}
+    if args.mode == "perf" and args.heat_soak > 0:
+        # Laptop GPUs throttle thermally: bring the machine to a steady thermal state before measuring anything.
+        b0 = builds[0]
+        sd = os.path.join(raw_dir, "_heatsoak")
+        os.makedirs(sd, exist_ok=True)
+        log(f"heat soak {args.heat_soak:.0f} s ({scenes[0]} {resolutions[-1]} {b0}, discarded)")
+        s0 = len(sampler.samples)
+        run_godot(exes[b0], ["--fixed-fps", "60", "--disable-vsync", "--resolution", resolutions[-1], "--position", "0,0"],
+                  [f"--scene={scenes[0]}", "--mode=perf", f"--res={resolutions[-1]}", "--tag=heatsoak", f"--out={sd}",
+                   f"--warmup={args.heat_soak}", "--measure=1", f"--preset={args.preset}"], args.heat_soak + 600, os.path.join(sd, "heatsoak.log"))
+        tele = GpuSampler()
+        tele.samples = sampler.samples[s0:]
+        soak = tele.summary()
+        last = sampler.samples[-1] if sampler.samples else {}
+        log(f"heat soak done: gpu clock {last.get('clocks.gr')} MHz, {last.get('temperature.gpu')} C, {last.get('power.draw')} W, reasons {last.get('clocks_throttle_reasons.active')}")
     try:
         for scene in scenes:
             for res in resolutions:
@@ -391,6 +408,9 @@ def main() -> int:
                         if r.get("summary"):
                             s = r["summary"]
                             msg += f" frame={s['frame_ms']['mean']:.3f}ms gpu={s['gpu_ms']['mean']:.3f}ms p99={s['frame_ms']['p99']:.3f}ms"
+                        gt = r["_gpu_telemetry"]
+                        if "clocks.gr" in gt:
+                            msg += f" | gpu {gt['clocks.gr']['mean']:.0f} MHz {gt['temperature.gpu']['mean']:.0f} C {gt.get('power.draw', {}).get('mean', 0):.0f} W"
                         log(msg)
                         if args.cooldown > 0:
                             time.sleep(args.cooldown)
@@ -427,7 +447,7 @@ def main() -> int:
     finally:
         sampler.stop()
 
-    summary = {"session": session, "label": args.label, "args": vars(args), "hardware": hw, "gpu_telemetry": sampler.summary(), "results": all_results}
+    summary = {"session": session, "label": args.label, "args": vars(args), "hardware": hw, "gpu_telemetry": sampler.summary(), "heat_soak_telemetry": soak, "results": all_results}
     os.makedirs(RESULTS, exist_ok=True)
     jpath = os.path.join(RESULTS, f"{session}.json")
     with open(jpath, "w", encoding="utf-8") as f:
@@ -439,7 +459,7 @@ def main() -> int:
             w.writerow(["scene", "resolution", "build", "preset", "fellow", "runs_valid", "noisy", "avg_fps", "frame_ms_mean", "frame_ms_std", "frame_ms_cv",
                         "gpu_ms_mean", "gpu_ms_cv", "render_cpu_ms_mean", "setup_cpu_ms_mean", "p50_ms", "p90_ms", "p95_ms", "p99_ms", "p99_9_ms",
                         "fps_1pct_low", "gpu_p95_ms", "gpu_p99_ms", "draw_calls", "primitives", "objects", "stutter_frames", "frames",
-                        "pipeline_compiles_measure", "vram_peak_MB", "tex_mem_peak_MB", "proc_peak_wset_MB", "load_ms"])
+                        "pipeline_compiles_measure", "vram_peak_MB", "tex_mem_peak_MB", "proc_peak_wset_MB", "load_ms", "gpu_clock_MHz_mean", "gpu_temp_C_mean"])
             for e in all_results.values():
                 a = e.get("aggregate", {})
                 if not a.get("runs_valid"):
@@ -455,6 +475,8 @@ def main() -> int:
                     a["stutter_frames_total"], a["frames_total"], sum(a["pipeline_compilations_during_measurement"].values()),
                     round(a["video_mem_peak_bytes"] / 2**20, 1), round(a["texture_mem_peak_bytes"] / 2**20, 1), round(a["process_peak_working_set_bytes"] / 2**20, 1),
                     round(a["load_time_ms"]["mean"], 1),
+                    round(statistics.fmean([r["_gpu_telemetry"]["clocks.gr"]["mean"] for r in e["runs"] if "clocks.gr" in r.get("_gpu_telemetry", {})] or [float("nan")]), 0),
+                    round(statistics.fmean([r["_gpu_telemetry"]["temperature.gpu"]["mean"] for r in e["runs"] if "temperature.gpu" in r.get("_gpu_telemetry", {})] or [float("nan")]), 1),
                 ])
         log(f"wrote {cpath}")
     log(f"wrote {jpath}")

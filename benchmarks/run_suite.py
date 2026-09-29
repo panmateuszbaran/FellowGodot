@@ -66,7 +66,7 @@ def main() -> int:
     if a.plan in ("baseline", "ab", "perf") and "perf" not in skip:
         steps.append(("perf", ["--scene", a.scenes, "--mode", "perf", "--res", a.res, "--runs", a.runs, "--session", f"{a.tag}_perf"]))
     if a.plan in ("baseline", "ab") and "profile" not in skip:
-        steps.append(("profile", ["--scene", a.scenes, "--mode", "perf", "--res", a.res, "--runs", "1", "--max-runs", "1", "--profile", "--percam", "300", "--warmup", "5", "--measure", "10", "--session", f"{a.tag}_profile"]))
+        steps.append(("profile", ["--scene", a.scenes, "--mode", "perf", "--res", a.res, "--runs", "1", "--max-runs", "1", "--profile", "--percam", "300", "--warmup", "5", "--measure", "10", "--heat-soak", "60", "--session", f"{a.tag}_profile"]))
     if a.plan in ("baseline", "ab", "visual") and "capture" not in skip:
         steps.append(("capture", ["--scene", a.scenes, "--mode", "capture", "--res", a.res, "--extra", "--hdr=1", "--session", f"{a.tag}_capture"]))
         steps.append(("capture_pbrref", ["--scene", "pbr", "--mode", "capture", "--res", "1920x1080", "--extra", "--hdr=1 --lighting=ref --export-ref=" + os.path.join(ROOT, "benchmarks", "results", "raw", f"{a.tag}_pbrref_export"), "--session", f"{a.tag}_capture_pbrref"]))
