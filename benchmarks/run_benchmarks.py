@@ -425,6 +425,9 @@ def main() -> int:
                             gargs.append("--gpu-profile")
                         lp = os.path.join(out_dir, f"{scene}_{args.mode}_{res}_run{i}.log")
                         s0 = len(sampler.samples)
+                        ef = os.path.join(out_dir, f"error_{scene}.json")
+                        if os.path.exists(ef):
+                            os.remove(ef)  # stale failure record of an earlier run of this build (written by main.gd)
                         log(f"{scene} {res} {b} run {i} ...")
                         proc = run_godot(exes[b], gargs, user, args.timeout, lp)
                         w, h = res.split("x")
@@ -433,6 +436,9 @@ def main() -> int:
                         if os.path.exists(jf):
                             with open(jf, encoding="utf-8") as f:
                                 r = json.load(f)
+                        elif os.path.exists(ef):
+                            with open(ef, encoding="utf-8") as f:
+                                r = {k: v for k, v in json.load(f).items() if k in ("valid", "error", "engine", "adapter", "fellow")}
                         r["_proc"] = proc
                         r["_json"] = os.path.relpath(jf, ROOT)
                         tele = GpuSampler()
@@ -443,6 +449,8 @@ def main() -> int:
                         if r.get("summary"):
                             s = r["summary"]
                             msg += f" frame={s['frame_ms']['mean']:.3f}ms gpu={s['gpu_ms']['mean']:.3f}ms p99={s['frame_ms']['p99']:.3f}ms"
+                        if not r.get("valid"):
+                            msg += f" error={str(r.get('error', ''))[:120]}"
                         gt = r["_gpu_telemetry"]
                         if "clocks.gr" in gt:
                             msg += f" | gpu {gt['clocks.gr']['mean']:.0f} MHz {gt['temperature.gpu']['mean']:.0f} C {gt.get('power.draw', {}).get('mean', 0):.0f} W"
@@ -456,6 +464,9 @@ def main() -> int:
                         break
                     noisy = False
                     for b in builds:
+                        # A build that cannot run the scene at all (e.g. stock Godot on the Fluid Lab) is not retried.
+                        if all("unsupported" in str(r.get("error", "")) for r in runs_by_build[b]):
+                            continue
                         agg = aggregate(runs_by_build[b])
                         cv = agg.get("frame_ms_run_means", {}).get("cv", 0.0)
                         if agg.get("runs_valid", 0) < args.runs or cv > args.max_cv:
