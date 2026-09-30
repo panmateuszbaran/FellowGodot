@@ -252,8 +252,14 @@ def mean_std_cv(vals):
 
 def aggregate(runs: list[dict]) -> dict:
     """Aggregate valid perf runs of one configuration."""
-    ok = [r for r in runs if r.get("valid") and "summary" in r]
-    out = {"runs_total": len(runs), "runs_valid": len(ok)}
+    valid = [r for r in runs if r.get("valid") and "summary" in r]
+    ok = [r for r in valid if not r.get("hitch_frames")]
+    out = {"runs_total": len(runs), "runs_valid": len(ok), "runs_excluded_hitches": len(valid) - len(ok)}
+    if not ok and valid:
+        # No hitch-free run at all: aggregate what exists, but say so.
+        ok = valid
+        out["runs_valid"] = len(ok)
+        out["hitches_not_excluded"] = True
     if not ok:
         return out
     for field in ["frame_ms", "gpu_ms", "render_cpu_ms", "setup_cpu_ms", "process_ms", "draw_calls", "primitives", "objects", "shadow_draw_calls"]:
@@ -453,6 +459,12 @@ def main() -> int:
                         tele = GpuSampler()
                         tele.samples = sampler.samples[s0:]
                         r["_gpu_telemetry"] = tele.summary()
+                        # Hitches: frames far above the run's median (> max(100 ms, 5 x median)). These are external stalls,
+                        # not rendering cost (seen once as ~480 ms stalls every ~1 s in a thermally limited state).
+                        fms = (r.get("frames") or {}).get("frame_ms") or []
+                        if fms:
+                            med = statistics.median(fms)
+                            r["hitch_frames"] = sum(1 for x in fms if x > max(100.0, 5.0 * med))
                         runs_by_build[b].append(r)
                         msg = f"   -> rc={proc['returncode']} valid={r.get('valid')} wall={proc['wall_s']:.1f}s"
                         if r.get("summary"):
@@ -460,6 +472,8 @@ def main() -> int:
                             msg += f" frame={s['frame_ms']['mean']:.3f}ms gpu={s['gpu_ms']['mean']:.3f}ms p99={s['frame_ms']['p99']:.3f}ms"
                         if not r.get("valid"):
                             msg += f" error={str(r.get('error', ''))[:120]}"
+                        if r.get("hitch_frames"):
+                            msg += f" HITCHES={r['hitch_frames']}"
                         gt = r["_gpu_telemetry"]
                         if "clocks.gr" in gt:
                             msg += f" | gpu {gt['clocks.gr']['mean']:.0f} MHz {gt['temperature.gpu']['mean']:.0f} C {gt.get('power.draw', {}).get('mean', 0):.0f} W"
@@ -478,7 +492,8 @@ def main() -> int:
                             continue
                         agg = aggregate(runs_by_build[b])
                         cv = agg.get("frame_ms_run_means", {}).get("cv", 0.0)
-                        if agg.get("runs_valid", 0) < args.runs or cv > args.max_cv:
+                        clean = sum(1 for r in runs_by_build[b] if r.get("valid") and not r.get("hitch_frames"))
+                        if agg.get("runs_valid", 0) < args.runs or cv > args.max_cv or clean < args.runs:
                             noisy = True
                     if not noisy:
                         break
