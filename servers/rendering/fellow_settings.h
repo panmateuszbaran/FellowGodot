@@ -32,6 +32,7 @@
 #pragma once
 
 #include "core/config/project_settings.h"
+#include "core/templates/safe_refcount.h"
 
 // FellowEngine runtime feature toggles.
 //
@@ -73,5 +74,61 @@ inline bool pass_timestamps() {
 inline bool fluid_enabled() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/fluid/enabled");
 }
+
+inline bool shadows_enabled() {
+	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/shadows/enabled");
+}
+
+// Directional shadow static cache (docs/decisions/0004-directional-shadow-cache.md): static casters of every
+// cascade are rendered into a cache with a guard band and only re-rendered when the cascade leaves the guard band,
+// the light rotates or a cached caster changes; each frame the cache is copied into the atlas (depth re-based to the
+// cascade's exact stock projection) and only dynamic casters are drawn on top.
+inline bool directional_shadow_cache() {
+	return shadows_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/shadows/directional_cache");
+}
+
+// Guard band in texels on each side of a cascade (cache texture = cascade size + 2 * guard).
+inline int directional_shadow_cache_guard() {
+	return CLAMP(GLOBAL_GET_CACHED(int, "rendering/fellow/shadows/directional_cache_guard_texels"), 16, 1024);
+}
+
+// Frames an instance must stay unchanged before it is treated as static and cached.
+inline int directional_shadow_cache_static_frames() {
+	return MAX(1, GLOBAL_GET_CACHED(int, "rendering/fellow/shadows/directional_cache_static_frames"));
+}
+
+// Maximum camera travel (m) while a cascade stays cached; cached casters use a LOD chosen for a camera this much
+// closer, so the cache is never coarser than the stock per-frame LOD choice.
+inline float directional_shadow_cache_lod_travel() {
+	return MAX(0.0f, GLOBAL_GET_CACHED(float, "rendering/fellow/shadows/directional_cache_lod_travel"));
+}
+
+// Cache re-renders allowed per frame; cascades that need one beyond the budget are drawn the stock way that frame.
+inline int directional_shadow_cache_max_rebuilds() {
+	return MAX(1, GLOBAL_GET_CACHED(int, "rendering/fellow/shadows/directional_cache_max_rebuilds_per_frame"));
+}
+
+// Cumulative counters (render thread writes, scripts read through RenderingServer.fellow_get_stats()).
+struct Stats {
+	SafeNumeric<uint64_t> shadow_cache_cascades_stock;
+	SafeNumeric<uint64_t> shadow_cache_cascades_fallback;
+	SafeNumeric<uint64_t> shadow_cache_cascades_cached;
+	SafeNumeric<uint64_t> shadow_cache_cascades_rebuilt;
+	SafeNumeric<uint64_t> shadow_cache_rebuilds_forced;
+	SafeNumeric<uint64_t> shadow_cache_rebuilds_proactive;
+	SafeNumeric<uint64_t> shadow_cache_rebuilds_promotion;
+	SafeNumeric<uint64_t> shadow_cache_invalidations;
+	SafeNumeric<uint64_t> shadow_cache_dynamic_casters;
+	SafeNumeric<uint64_t> shadow_cache_rebuild_casters;
+	SafeNumeric<uint64_t> shadow_cache_frames;
+};
+
+Stats &stats();
+
+} // namespace Fellow
+
+class Dictionary;
+namespace Fellow {
+Dictionary get_stats_dictionary();
 
 } // namespace Fellow

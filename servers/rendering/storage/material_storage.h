@@ -90,6 +90,9 @@ public:
 
 	virtual bool material_is_animated(RID p_material) = 0;
 	virtual bool material_casts_shadows(RID p_material) = 0;
+	// FellowEngine directional shadow cache: false if the material's shadow can change without the instance being
+	// updated (TIME, vertex displacement, ...). The default is conservative for renderers that do not implement it.
+	virtual bool material_fellow_shadow_cacheable(RID p_material) { return !material_is_animated(p_material); }
 	virtual RSE::CullMode material_get_cull_mode(RID p_material) const = 0;
 
 	struct InstanceShaderParam {

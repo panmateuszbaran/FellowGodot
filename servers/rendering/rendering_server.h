@@ -974,6 +974,8 @@ public:
 	/* STATUS INFORMATION */
 
 	virtual uint64_t get_rendering_info(RSE::RenderingInfo p_info) = 0;
+	// FellowEngine: cumulative counters of FellowEngine rendering features (see servers/rendering/fellow_settings.h).
+	Dictionary fellow_get_stats() const;
 	virtual String get_video_adapter_name() const = 0;
 	virtual String get_video_adapter_vendor() const = 0;
 	virtual RenderingDeviceEnums::DeviceType get_video_adapter_type() const = 0;

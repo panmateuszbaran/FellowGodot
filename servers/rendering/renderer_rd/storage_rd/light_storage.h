@@ -1184,6 +1184,10 @@ public:
 		return directional_shadow.fb;
 	}
 
+	_FORCE_INLINE_ bool directional_shadow_get_use_16_bits() const {
+		return directional_shadow.use_16_bits;
+	}
+
 	_FORCE_INLINE_ void directional_shadow_increase_current_light() {
 		directional_shadow.current_light++;
 	}

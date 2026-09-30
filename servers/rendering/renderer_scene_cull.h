@@ -353,6 +353,17 @@ public:
 		PagedArray<InstanceData> instance_data;
 		VisibilityArray instance_visibility;
 
+		// FellowEngine directional shadow cache: world AABBs of shadow casters that were old enough to be cached and
+		// then changed or left the scenario. Caches built after `prev_change_frame + static_frames` must re-render.
+		struct FellowShadowInvalidation {
+			AABB aabb;
+			uint64_t seq = 0;
+			uint64_t frame = 0;
+			uint64_t prev_change_frame = 0;
+		};
+		LocalVector<FellowShadowInvalidation> fellow_shadow_invalidations;
+		uint64_t fellow_shadow_event_seq = 0;
+
 		Scenario() {
 			indexers[INDEXER_GEOMETRY].set_index(INDEXER_GEOMETRY);
 			indexers[INDEXER_VOLUMES].set_index(INDEXER_VOLUMES);
@@ -480,6 +491,9 @@ public:
 		uint64_t last_frame_pass;
 
 		uint64_t version; // changes to this, and changes to base increase version
+
+		// FellowEngine directional shadow cache: frame of the last change that can affect this instance's shadow.
+		uint64_t fellow_change_frame = 0;
 
 		InstanceBaseData *base_data = nullptr;
 
@@ -624,6 +638,7 @@ public:
 		HashSet<Instance *> lights;
 		bool can_cast_shadows;
 		bool material_is_animated;
+		bool fellow_shadow_cacheable = false; // FellowEngine: shadow depends only on transform/mesh/material state.
 		uint32_t projector_count = 0;
 		uint32_t softshadow_count = 0;
 
@@ -896,6 +911,7 @@ public:
 
 		struct DirectionalShadow {
 			PagedArray<RenderGeometryInstance *> cascade_geometry_instances[RendererSceneRender::MAX_DIRECTIONAL_LIGHT_CASCADES];
+			PagedArray<RenderGeometryInstance *> fellow_cache_instances[RendererSceneRender::MAX_DIRECTIONAL_LIGHT_CASCADES];
 		} directional_shadows[RendererSceneRender::MAX_DIRECTIONAL_LIGHTS];
 
 		PagedArray<RenderGeometryInstance *> sdfgi_region_geometry_instances[SDFGI_MAX_CASCADES * SDFGI_MAX_REGIONS_PER_CASCADE];
@@ -914,6 +930,7 @@ public:
 			for (int i = 0; i < RendererSceneRender::MAX_DIRECTIONAL_LIGHTS; i++) {
 				for (int j = 0; j < RendererSceneRender::MAX_DIRECTIONAL_LIGHT_CASCADES; j++) {
 					directional_shadows[i].cascade_geometry_instances[j].clear();
+					directional_shadows[i].fellow_cache_instances[j].clear();
 				}
 			}
 
@@ -939,6 +956,7 @@ public:
 			for (int i = 0; i < RendererSceneRender::MAX_DIRECTIONAL_LIGHTS; i++) {
 				for (int j = 0; j < RendererSceneRender::MAX_DIRECTIONAL_LIGHT_CASCADES; j++) {
 					directional_shadows[i].cascade_geometry_instances[j].reset();
+					directional_shadows[i].fellow_cache_instances[j].reset();
 				}
 			}
 
@@ -965,6 +983,7 @@ public:
 			for (int i = 0; i < RendererSceneRender::MAX_DIRECTIONAL_LIGHTS; i++) {
 				for (int j = 0; j < RendererSceneRender::MAX_DIRECTIONAL_LIGHT_CASCADES; j++) {
 					directional_shadows[i].cascade_geometry_instances[j].merge_unordered(p_cull_result.directional_shadows[i].cascade_geometry_instances[j]);
+					directional_shadows[i].fellow_cache_instances[j].merge_unordered(p_cull_result.directional_shadows[i].fellow_cache_instances[j]);
 				}
 			}
 
@@ -990,6 +1009,7 @@ public:
 			for (int i = 0; i < RendererSceneRender::MAX_DIRECTIONAL_LIGHTS; i++) {
 				for (int j = 0; j < RendererSceneRender::MAX_DIRECTIONAL_LIGHT_CASCADES; j++) {
 					directional_shadows[i].cascade_geometry_instances[j].set_page_pool(p_geometry_instance_pool);
+					directional_shadows[i].fellow_cache_instances[j].set_page_pool(p_geometry_instance_pool);
 				}
 			}
 
@@ -1081,6 +1101,82 @@ public:
 
 	void _light_instance_setup_directional_shadow(int p_shadow_index, Instance *p_instance, const Transform3D p_cam_transform, const Projection &p_cam_projection, bool p_cam_orthogonal, bool p_cam_vaspect);
 
+	/* FellowEngine directional shadow cache (docs/decisions/0004-directional-shadow-cache.md) */
+
+	enum FellowCascadeMode : uint8_t {
+		FELLOW_CASCADE_STOCK, // cache off / not applicable: stock rendering
+		FELLOW_CASCADE_FALLBACK, // cache wanted but not available this frame: stock rendering
+		FELLOW_CASCADE_CACHED, // copy the cache, draw dynamic casters on top
+		FELLOW_CASCADE_REBUILD, // re-render static casters into the cache, then as CACHED
+	};
+
+	struct FellowDirShadowCache {
+		struct Cascade {
+			bool valid = false;
+			real_t texel = 0.0; // light-space texel size (square), lattice unit
+			int64_t ix = 0; // cache origin on the texel lattice
+			int64_t iy = 0;
+			int32_t size = 0; // cache size in texels (cascade_size + 2 * guard)
+			int32_t cascade_size = 0;
+			int32_t guard = 0;
+			real_t z_near_plane = 0.0; // light-space z of the cache's near plane (towards the light)
+			real_t z_far_plane = 0.0; // light-space z of the cache's far plane
+			Basis light_basis;
+			uint32_t visible_layers = 0;
+			uint32_t caster_mask = 0;
+			Vector3 build_cam_pos;
+			real_t lod_travel = 0.0;
+			uint64_t build_frame = 0;
+			uint64_t last_event_seq = 0; // invalidation events up to this sequence number were checked
+			uint64_t last_promotion_frame = 0;
+			uint32_t promotable = 0; // from the previous frame's cull
+			float miss_ema = 0.0; // fraction of recent frames not served from the cache
+			uint32_t cooldown = 0; // frames left in stock mode after thrashing
+		};
+
+		Cascade cascades[RendererSceneRender::MAX_DIRECTIONAL_LIGHT_CASCADES];
+		int64_t cache_id = -1;
+		uint64_t last_used_frame = 0;
+		RID scenario;
+		Basis last_light_basis;
+		uint64_t light_basis_changed_frame = 0;
+	};
+
+	// viewport -> light instance -> cache
+	HashMap<RID, HashMap<RID, FellowDirShadowCache>> fellow_dir_shadow_caches;
+	int64_t fellow_dir_shadow_cache_next_id = 0;
+	int fellow_rebuild_budget = 0; // rebuilds left in the current frame
+	uint64_t fellow_budget_frame = 0;
+
+	struct FellowCascadeCandidate {
+		int shadow = -1;
+		int cascade = -1;
+		float priority = 0.0; // lower = more urgent
+		bool forced = false;
+		uint8_t kind = 0; // 0 forced, 1 proactive, 2 promotion
+	};
+
+	struct FellowCascadeWork {
+		// filled by _light_instance_setup_directional_shadow, consumed after culling
+		FellowDirShadowCache *cache = nullptr;
+		Vector3 cam_pos;
+		real_t t = 0.0;
+		int64_t ix = 0;
+		int64_t iy = 0;
+		int32_t n = 0;
+		real_t z_max = 0.0; // stock near plane (light-space z)
+		real_t z_min = 0.0; // stock far plane
+		real_t zfar = 0.0;
+		Basis basis;
+		Vector3 x_vec, y_vec, z_vec;
+	} fellow_cascade_work[RendererSceneRender::MAX_DIRECTIONAL_LIGHTS][RendererSceneRender::MAX_DIRECTIONAL_LIGHT_CASCADES];
+
+	void _fellow_shadow_instance_changed(Instance *p_instance) const;
+	bool _fellow_shadow_cache_events_hit(const Scenario *p_scenario, const FellowDirShadowCache::Cascade &p_cascade, const Vector3 &p_x, const Vector3 &p_y, const Vector3 &p_z, uint64_t p_frame) const;
+	void _fellow_shadow_cache_decide(int p_shadow_index, uint64_t p_frame, uint32_t p_visible_layers, Scenario *p_scenario);
+	void _fellow_shadow_cache_fill_render_data(int p_shadow_index, int p_cascade, RendererSceneRender::RenderShadowData &r_data, uint64_t p_frame);
+	void _fellow_shadow_cache_gc(uint64_t p_frame, bool p_free_all);
+
 	_FORCE_INLINE_ bool _light_instance_update_shadow(Instance *p_instance, const Transform3D p_cam_transform, const Projection &p_cam_projection, bool p_cam_orthogonal, bool p_cam_vaspect, RID p_shadow_atlas, Scenario *p_scenario, float p_screen_mesh_lod_threshold, uint32_t p_visible_layers = 0xFFFFFF);
 
 	RID _render_get_environment(RID p_camera, RID p_scenario);
@@ -1101,6 +1197,13 @@ public:
 				real_t bias_scale;
 				real_t range_begin;
 				Vector2 uv_scale;
+
+				// FellowEngine directional shadow cache, decided per frame before culling.
+				uint8_t fellow_mode = 0; // FellowCascadeMode
+				uint64_t fellow_build_frame = 0; // casters unchanged since before this frame are in the cache
+				Frustum fellow_cache_frustum; // cache volume (rebuild only)
+				SafeNumeric<uint32_t> fellow_promotable; // static-eligible casters still drawn per frame
+				SafeNumeric<uint32_t> fellow_dynamic; // casters drawn per frame on top of the cache
 
 			} cascades[RendererSceneRender::MAX_DIRECTIONAL_LIGHT_CASCADES]; //max 4 cascades
 			uint32_t cascade_count;

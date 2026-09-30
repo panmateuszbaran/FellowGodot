@@ -67,6 +67,7 @@ public:
 	float z_far = 0.0;
 
 	float lod_distance_multiplier = 0.0;
+	float fellow_lod_distance_bias = 0.0; // FellowEngine shadow cache: LOD as if the camera were this much closer
 	float screen_mesh_lod_threshold = 0.0;
 
 	uint32_t directional_light_count = 0;

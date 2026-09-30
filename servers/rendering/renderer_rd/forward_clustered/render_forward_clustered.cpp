@@ -1091,6 +1091,9 @@ void RenderForwardClustered::_fill_render_list(RenderListType p_render_list, con
 			Vector3 surface_distance = Vector3(0.0, 0.0, 0.0).max(aabb_min - camera_position).max(camera_position - aabb_max);
 
 			lod_distance = surface_distance.length();
+			if (p_render_data->scene_data->fellow_lod_distance_bias > 0.0) {
+				lod_distance = MAX(0.0, lod_distance - p_render_data->scene_data->fellow_lod_distance_bias);
+			}
 		}
 
 		if (unlikely(inst->transform_status != GeometryInstanceForwardClustered::TransformStatus::NONE && frame > inst->prev_transform_change_frame && inst->prev_transform_change_frame)) {
@@ -1593,7 +1596,7 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 
 		//render directional shadows
 		for (uint32_t i = 0; i < p_render_data->directional_shadows.size(); i++) {
-			_render_shadow_pass(p_render_data->render_shadows[p_render_data->directional_shadows[i]].light, p_render_data->shadow_atlas, p_render_data->render_shadows[p_render_data->directional_shadows[i]].pass, p_render_data->render_shadows[p_render_data->directional_shadows[i]].instances, lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, false, i == p_render_data->directional_shadows.size() - 1, false, p_render_data->render_info, viewport_size, p_render_data->scene_data->cam_transform);
+			_render_shadow_pass(p_render_data->render_shadows[p_render_data->directional_shadows[i]].light, p_render_data->shadow_atlas, p_render_data->render_shadows[p_render_data->directional_shadows[i]].pass, p_render_data->render_shadows[p_render_data->directional_shadows[i]].instances, lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, false, i == p_render_data->directional_shadows.size() - 1, false, p_render_data->render_info, viewport_size, p_render_data->scene_data->cam_transform, &p_render_data->render_shadows[p_render_data->directional_shadows[i]].fellow);
 		}
 		//render positional shadows
 		for (uint32_t i = 0; i < p_render_data->shadows.size(); i++) {
@@ -2602,7 +2605,7 @@ void RenderForwardClustered::_render_buffers_debug_draw(const RenderDataRD *p_re
 	}
 }
 
-void RenderForwardClustered::_render_shadow_pass(RID p_light, RID p_shadow_atlas, int p_pass, const PagedArray<RenderGeometryInstance *> &p_instances, float p_lod_distance_multiplier, float p_screen_mesh_lod_threshold, bool p_open_pass, bool p_close_pass, bool p_clear_region, RenderingServerTypes::RenderInfo *p_render_info, const Size2i &p_viewport_size, const Transform3D &p_main_cam_transform) {
+void RenderForwardClustered::_render_shadow_pass(RID p_light, RID p_shadow_atlas, int p_pass, const PagedArray<RenderGeometryInstance *> &p_instances, float p_lod_distance_multiplier, float p_screen_mesh_lod_threshold, bool p_open_pass, bool p_close_pass, bool p_clear_region, RenderingServerTypes::RenderInfo *p_render_info, const Size2i &p_viewport_size, const Transform3D &p_main_cam_transform, const RendererSceneRender::FellowShadowCacheOp *p_fellow_op) {
 	RendererRD::LightStorage *light_storage = RendererRD::LightStorage::get_singleton();
 
 	ERR_FAIL_COND(!light_storage->owns_light_instance(p_light));
@@ -2787,10 +2790,55 @@ void RenderForwardClustered::_render_shadow_pass(RID p_light, RID p_shadow_atlas
 			light_storage->light_instance_set_shadow_transform(p_light, Projection(), light_storage->light_instance_get_base_transform(p_light), zfar, 0, 0, 0);
 		}
 
+	} else if (p_fellow_op != nullptr && p_fellow_op->cache_id >= 0 && light_storage->light_get_type(base) == RSE::LIGHT_DIRECTIONAL) {
+		// FellowEngine directional shadow cache (docs/decisions/0004-directional-shadow-cache.md).
+		const bool use_16_bits = light_storage->directional_shadow_get_use_16_bits();
+		RID cache_fb = fellow_shadow_cache->get_framebuffer(p_fellow_op->cache_id, p_pass, p_fellow_op->cache_size, RendererRD::LightStorage::get_shadow_atlas_depth_format(use_16_bits), RendererRD::LightStorage::get_shadow_atlas_depth_usage_bits());
+		if (p_fellow_op->rebuild) {
+			// Static casters of the whole cache volume, same pipeline state as the cascade (only the camera differs).
+			_render_shadow_append(cache_fb, p_fellow_op->cache_instances, p_fellow_op->cache_projection, p_fellow_op->cache_transform, zfar, 0, 0, reverse_cull_face, false, false, use_pancake, p_lod_distance_multiplier, p_screen_mesh_lod_threshold, Rect2i(0, 0, p_fellow_op->cache_size, p_fellow_op->cache_size), flip_y, true, false, false, p_render_info, p_viewport_size, p_main_cam_transform, p_fellow_op->lod_distance_bias);
+			fellow_shadow_cache->set_content_valid(p_fellow_op->cache_id, p_pass);
+		}
+		RID cache_texture = fellow_shadow_cache->get_valid_texture(p_fellow_op->cache_id, p_pass);
+
+		SceneState::ShadowPass copy_pass;
+		copy_pass.fellow_copy = cache_texture.is_valid(); // content lost (atlas format changed): skip, rebuilt next frame
+		copy_pass.element_from = 0;
+		copy_pass.element_count = 0;
+		copy_pass.pass_mode = PASS_MODE_SHADOW;
+		copy_pass.lod_distance_multiplier = 0.0;
+		copy_pass.screen_mesh_lod_threshold = 0.0;
+		copy_pass.framebuffer = render_fb;
+		copy_pass.rect = atlas_rect;
+		copy_pass.clear_depth = false;
+		copy_pass.flip_cull = false;
+		copy_pass.uniform_buffer_index = 0;
+		copy_pass.fellow_source = cache_texture;
+		copy_pass.fellow_source_offset = p_fellow_op->copy_offset;
+		copy_pass.fellow_scale = p_fellow_op->remap_scale;
+		copy_pass.fellow_bias = p_fellow_op->remap_bias;
+		if (copy_pass.fellow_copy) {
+			scene_state.shadow_passes.push_back(copy_pass);
+		}
+
+		if (p_instances.size() > 0) {
+			// Dynamic casters on top, exactly like the stock pass (no clear).
+			_render_shadow_append(render_fb, p_instances, light_projection, light_transform, zfar, 0, 0, reverse_cull_face, false, false, use_pancake, p_lod_distance_multiplier, p_screen_mesh_lod_threshold, atlas_rect, flip_y, false, false, p_close_pass, p_render_info, p_viewport_size, p_main_cam_transform);
+		}
 	} else {
 		//render shadow
 		_render_shadow_append(render_fb, p_instances, light_projection, light_transform, zfar, 0, 0, reverse_cull_face, using_dual_paraboloid, using_dual_paraboloid_flip, use_pancake, p_lod_distance_multiplier, p_screen_mesh_lod_threshold, atlas_rect, flip_y, p_clear_region, p_open_pass, p_close_pass, p_render_info, p_viewport_size, p_main_cam_transform);
 	}
+}
+
+void RenderForwardClustered::fellow_directional_shadow_cache_free(int64_t p_cache_id) {
+	if (fellow_shadow_cache) {
+		fellow_shadow_cache->free_cache(p_cache_id);
+	}
+}
+
+bool RenderForwardClustered::fellow_directional_shadow_cache_take_lost(int64_t p_cache_id) {
+	return fellow_shadow_cache && fellow_shadow_cache->take_lost(p_cache_id);
 }
 
 void RenderForwardClustered::_render_shadow_begin() {
@@ -2803,7 +2851,7 @@ void RenderForwardClustered::_render_shadow_begin() {
 	// because _fill_instance_data will do that if it detects p_offset == 0u.
 }
 
-void RenderForwardClustered::_render_shadow_append(RID p_framebuffer, const PagedArray<RenderGeometryInstance *> &p_instances, const Projection &p_projection, const Transform3D &p_transform, float p_zfar, float p_bias, float p_normal_bias, bool p_reverse_cull_face, bool p_use_dp, bool p_use_dp_flip, bool p_use_pancake, float p_lod_distance_multiplier, float p_screen_mesh_lod_threshold, const Rect2i &p_rect, bool p_flip_y, bool p_clear_region, bool p_begin, bool p_end, RenderingServerTypes::RenderInfo *p_render_info, const Size2i &p_viewport_size, const Transform3D &p_main_cam_transform) {
+void RenderForwardClustered::_render_shadow_append(RID p_framebuffer, const PagedArray<RenderGeometryInstance *> &p_instances, const Projection &p_projection, const Transform3D &p_transform, float p_zfar, float p_bias, float p_normal_bias, bool p_reverse_cull_face, bool p_use_dp, bool p_use_dp_flip, bool p_use_pancake, float p_lod_distance_multiplier, float p_screen_mesh_lod_threshold, const Rect2i &p_rect, bool p_flip_y, bool p_clear_region, bool p_begin, bool p_end, RenderingServerTypes::RenderInfo *p_render_info, const Size2i &p_viewport_size, const Transform3D &p_main_cam_transform, float p_fellow_lod_distance_bias) {
 	SceneState::ShadowPass shadow_pass;
 
 	RenderSceneDataRD scene_data;
@@ -2819,6 +2867,7 @@ void RenderForwardClustered::_render_shadow_append(RID p_framebuffer, const Page
 	scene_data.time = time;
 	scene_data.time_step = time_step;
 	scene_data.main_cam_transform = p_main_cam_transform;
+	scene_data.fellow_lod_distance_bias = p_fellow_lod_distance_bias;
 	scene_data.shadow_pass = true;
 
 	RenderDataRD render_data;
@@ -2890,6 +2939,9 @@ void RenderForwardClustered::_render_shadow_process() {
 	for (uint32_t i = 0; i < scene_state.shadow_passes.size(); i++) {
 		//render passes need to be configured after instance buffer is done, since they need the latest version
 		SceneState::ShadowPass &shadow_pass = scene_state.shadow_passes[i];
+		if (shadow_pass.fellow_copy) {
+			continue;
+		}
 		shadow_pass.rp_uniform_set = _setup_render_pass_uniform_set(RENDER_LIST_SECONDARY, nullptr, RID(), RendererRD::MaterialStorage::get_singleton()->samplers_rd_get_default(), shadow_pass.uniform_buffer_index, false);
 	}
 
@@ -2899,6 +2951,10 @@ void RenderForwardClustered::_render_shadow_end() {
 	RD::get_singleton()->draw_command_begin_label("Shadow Render");
 
 	for (SceneState::ShadowPass &shadow_pass : scene_state.shadow_passes) {
+		if (shadow_pass.fellow_copy) {
+			fellow_shadow_cache->copy(shadow_pass.fellow_source, shadow_pass.framebuffer, shadow_pass.rect, shadow_pass.fellow_source_offset, shadow_pass.fellow_scale, shadow_pass.fellow_bias);
+			continue;
+		}
 		RenderListParameters render_list_parameters(render_list[RENDER_LIST_SECONDARY].elements.ptr() + shadow_pass.element_from, render_list[RENDER_LIST_SECONDARY].element_info.ptr() + shadow_pass.element_from, shadow_pass.element_count, shadow_pass.flip_cull, shadow_pass.pass_mode, 0, true, false, shadow_pass.rp_uniform_set, false, Vector2(), shadow_pass.lod_distance_multiplier, shadow_pass.screen_mesh_lod_threshold, 1, shadow_pass.element_from);
 		_render_list_with_draw_list(&render_list_parameters, shadow_pass.framebuffer, shadow_pass.clear_depth ? RD::DRAW_CLEAR_DEPTH : RD::DRAW_DEFAULT_ALL, Vector<Color>(), 0.0f, 0, shadow_pass.rect);
 	}
@@ -5239,6 +5295,7 @@ RenderForwardClustered::RenderForwardClustered() {
 	taa = memnew(RendererRD::TAA);
 	fsr2_effect = memnew(RendererRD::FSR2Effect);
 	ss_effects = memnew(RendererRD::SSEffects);
+	fellow_shadow_cache = memnew(RendererRD::FellowShadowCache);
 #ifdef METAL_MFXTEMPORAL_ENABLED
 	motion_vectors_store = memnew(RendererRD::MotionVectorsStore);
 	mfx_temporal_effect = memnew(RendererRD::MFXTemporalEffect);
@@ -5249,6 +5306,11 @@ RenderForwardClustered::~RenderForwardClustered() {
 	if (ss_effects != nullptr) {
 		memdelete(ss_effects);
 		ss_effects = nullptr;
+	}
+
+	if (fellow_shadow_cache != nullptr) {
+		memdelete(fellow_shadow_cache);
+		fellow_shadow_cache = nullptr;
 	}
 
 	if (taa != nullptr) {

@@ -35,6 +35,7 @@
 #include "core/math/geometry_3d.h"
 #include "core/object/callable_mp.h"
 #include "core/object/worker_thread_pool.h"
+#include "servers/rendering/fellow_settings.h"
 #include "servers/rendering/rendering_light_culler.h"
 #include "servers/rendering/rendering_server.h"
 #include "servers/rendering/rendering_server_default.h"
@@ -547,6 +548,7 @@ void RendererSceneCull::instance_initialize(RID p_rid) {
 	instance_owner.initialize_rid(p_rid);
 	Instance *instance = instance_owner.get_or_null(p_rid);
 	instance->self = p_rid;
+	instance->fellow_change_frame = RSG::rasterizer->get_frame_number();
 }
 
 void RendererSceneCull::_instance_update_mesh_instance(Instance *p_instance) const {
@@ -927,6 +929,7 @@ void RendererSceneCull::instance_set_layer_mask(RID p_instance, uint32_t p_mask)
 	if (instance->layer_mask == p_mask) {
 		return;
 	}
+	_fellow_shadow_instance_changed(instance);
 
 	// Particles always need to be unpaired. Geometry may need to be unpaired, but only if lights or decals use pairing.
 	// Needs to happen before layer mask changes so we can avoid attempting to unpair something that was never paired.
@@ -977,6 +980,7 @@ void RendererSceneCull::instance_geometry_set_transparency(RID p_instance, float
 	ERR_FAIL_NULL(instance);
 
 	instance->transparency = p_transparency;
+	_fellow_shadow_instance_changed(instance);
 
 	if ((1 << instance->base_type) & RSE::INSTANCE_GEOMETRY_MASK && instance->base_data) {
 		InstanceGeometryData *geom = static_cast<InstanceGeometryData *>(instance->base_data);
@@ -1245,6 +1249,7 @@ void RendererSceneCull::instance_geometry_set_flag(RID p_instance, RSE::Instance
 	ERR_FAIL_NULL(instance);
 
 	//ERR_FAIL_COND(((1 << instance->base_type) & RSE::INSTANCE_GEOMETRY_MASK));
+	_fellow_shadow_instance_changed(instance);
 
 	switch (p_flags) {
 		case RSE::INSTANCE_FLAG_USE_BAKED_LIGHT: {
@@ -1321,6 +1326,7 @@ void RendererSceneCull::instance_geometry_set_cast_shadows_setting(RID p_instanc
 	Instance *instance = instance_owner.get_or_null(p_instance);
 	ERR_FAIL_NULL(instance);
 
+	_fellow_shadow_instance_changed(instance);
 	instance->cast_shadows = p_shadow_casting_setting;
 
 	if (instance->scenario && instance->array_index >= 0) {
@@ -1555,6 +1561,7 @@ void RendererSceneCull::instance_geometry_set_lod_bias(RID p_instance, float p_l
 	ERR_FAIL_NULL(instance);
 
 	instance->lod_bias = p_lod_bias;
+	_fellow_shadow_instance_changed(instance);
 
 	if ((1 << instance->base_type) & RSE::INSTANCE_GEOMETRY_MASK && instance->base_data) {
 		InstanceGeometryData *geom = static_cast<InstanceGeometryData *>(instance->base_data);
@@ -1568,6 +1575,7 @@ void RendererSceneCull::instance_geometry_set_shader_parameter(RID p_instance, c
 	ERR_FAIL_NULL(instance);
 
 	instance->instance_uniforms.set(instance->self, p_parameter, p_value);
+	_fellow_shadow_instance_changed(instance);
 }
 
 Variant RendererSceneCull::instance_geometry_get_shader_parameter(RID p_instance, const StringName &p_parameter) const {
@@ -1604,6 +1612,7 @@ void RendererSceneCull::instance_geometry_get_shader_parameter_list(RID p_instan
 
 void RendererSceneCull::_update_instance(Instance *p_instance) const {
 	p_instance->version++;
+	_fellow_shadow_instance_changed(p_instance); // before the transformed AABB changes: log the cached position
 
 	// When not using interpolation the transform is used straight.
 	const Transform3D *instance_xform = &p_instance->transform;
@@ -1917,6 +1926,8 @@ void RendererSceneCull::_unpair_instance(Instance *p_instance) {
 	if (!p_instance->indexer_id.is_valid()) {
 		return; //nothing to do
 	}
+
+	_fellow_shadow_instance_changed(p_instance); // leaves the scenario: must disappear from shadow caches
 
 	while (p_instance->pairs.first()) {
 		InstancePair *pair = p_instance->pairs.first()->self();
@@ -2310,13 +2321,44 @@ void RendererSceneCull::_light_instance_setup_directional_shadow(int p_shadow_in
 				}
 			}
 
-			// This trick here is what stabilizes the shadow (make potential jaggies to not move)
-			// at the cost of some wasted resolution. Still, the quality increase is very well worth it.
-			const real_t unit = (radius + soft_shadow_expand) * 4.0 / texture_size;
-			x_max_cam = Math::snapped(x_vec.dot(center) + radius + soft_shadow_expand, unit);
-			x_min_cam = Math::snapped(x_vec.dot(center) - radius - soft_shadow_expand, unit);
-			y_max_cam = Math::snapped(y_vec.dot(center) + radius + soft_shadow_expand, unit);
-			y_min_cam = Math::snapped(y_vec.dot(center) - radius - soft_shadow_expand, unit);
+			FellowCascadeWork &fellow_work = fellow_cascade_work[p_shadow_index][i];
+			if (fellow_work.cache == nullptr) {
+				// This trick here is what stabilizes the shadow (make potential jaggies to not move)
+				// at the cost of some wasted resolution. Still, the quality increase is very well worth it.
+				const real_t unit = (radius + soft_shadow_expand) * 4.0 / texture_size;
+				x_max_cam = Math::snapped(x_vec.dot(center) + radius + soft_shadow_expand, unit);
+				x_min_cam = Math::snapped(x_vec.dot(center) - radius - soft_shadow_expand, unit);
+				y_max_cam = Math::snapped(y_vec.dot(center) + radius + soft_shadow_expand, unit);
+				y_min_cam = Math::snapped(y_vec.dot(center) - radius - soft_shadow_expand, unit);
+			} else {
+				// FellowEngine directional shadow cache: the cascade lives on a fixed light-space texel lattice (square
+				// texels of size t, origin snapped to whole texels, constant width of texture_size texels), so cascades
+				// of different frames and the cache differ by integer texel offsets. The texel is 2/(N-2) larger than
+				// the sphere needs (one spare texel per side after snapping), i.e. 0.1 % at N = 2048; stock snaps both
+				// edges independently to 2 texels, so its texel size varies by up to 0.1 % between frames.
+				const real_t re = radius + soft_shadow_expand;
+				real_t t = 2.0 * re / (texture_size - 2.0);
+				const FellowDirShadowCache::Cascade &cs = fellow_work.cache->cascades[i];
+				if (cs.valid && cs.cascade_size == (int32_t)texture_size && Math::abs(cs.texel - t) <= cs.texel * (real_t)1e-4) {
+					t = cs.texel; // keep the lattice of the cache through tiny floating-point changes of the radius
+				}
+				const int64_t ix = (int64_t)Math::floor((x_vec.dot(center) - re) / t);
+				const int64_t iy = (int64_t)Math::floor((y_vec.dot(center) - re) / t);
+				x_min_cam = (real_t)ix * t;
+				x_max_cam = (real_t)(ix + (int64_t)texture_size) * t;
+				y_min_cam = (real_t)iy * t;
+				y_max_cam = (real_t)(iy + (int64_t)texture_size) * t;
+
+				fellow_work.t = t;
+				fellow_work.ix = ix;
+				fellow_work.iy = iy;
+				fellow_work.n = (int32_t)texture_size;
+				fellow_work.basis = transform.basis;
+				fellow_work.x_vec = x_vec;
+				fellow_work.y_vec = y_vec;
+				fellow_work.z_vec = z_vec;
+				fellow_work.cam_pos = p_cam_transform.origin;
+			}
 		}
 
 		//now that we know all ranges, we can proceed to make the light frustum planes, for culling octree
@@ -2337,6 +2379,12 @@ void RendererSceneCull::_light_instance_setup_directional_shadow(int p_shadow_in
 		// a pre pass will need to be needed to determine the actual z-near to be used
 
 		z_max = z_vec.dot(center) + radius + pancake_size;
+
+		if (fellow_cascade_work[p_shadow_index][i].cache != nullptr) {
+			fellow_cascade_work[p_shadow_index][i].z_max = z_max;
+			fellow_cascade_work[p_shadow_index][i].z_min = z_min_cam;
+			fellow_cascade_work[p_shadow_index][i].zfar = z_max - z_min_cam;
+		}
 
 		{
 			Projection ortho_camera;
@@ -2361,6 +2409,325 @@ void RendererSceneCull::_light_instance_setup_directional_shadow(int p_shadow_in
 			cull.shadows[p_shadow_index].cascades[i].range_begin = z_max - z_vec.dot(p_cam_transform.origin);
 			cull.shadows[p_shadow_index].cascades[i].uv_scale = uv_scale;
 		}
+	}
+}
+
+/* FellowEngine directional shadow cache (docs/decisions/0004-directional-shadow-cache.md) */
+
+void RendererSceneCull::_fellow_shadow_instance_changed(Instance *p_instance) const {
+	if (!((1 << p_instance->base_type) & RSE::INSTANCE_GEOMETRY_MASK)) {
+		return;
+	}
+	const uint64_t frame = RSG::rasterizer->get_frame_number();
+	const uint64_t prev = p_instance->fellow_change_frame;
+	p_instance->fellow_change_frame = frame;
+	if (prev == frame || p_instance->scenario == nullptr || p_instance->array_index < 0 || !Fellow::directional_shadow_cache()) {
+		return;
+	}
+	if (prev + (uint64_t)Fellow::directional_shadow_cache_static_frames() > frame) {
+		return; // It was still dynamic, so no cache can contain it.
+	}
+	Scenario::FellowShadowInvalidation ev;
+	ev.aabb = p_instance->transformed_aabb;
+	ev.seq = ++p_instance->scenario->fellow_shadow_event_seq;
+	ev.frame = frame;
+	ev.prev_change_frame = prev;
+	p_instance->scenario->fellow_shadow_invalidations.push_back(ev);
+}
+
+bool RendererSceneCull::_fellow_shadow_cache_events_hit(const Scenario *p_scenario, const FellowDirShadowCache::Cascade &p_cascade, const Vector3 &p_x, const Vector3 &p_y, const Vector3 &p_z, uint64_t p_frame) const {
+	const uint64_t static_frames = (uint64_t)Fellow::directional_shadow_cache_static_frames();
+	const real_t x0 = (real_t)p_cascade.ix * p_cascade.texel;
+	const real_t x1 = (real_t)(p_cascade.ix + p_cascade.size) * p_cascade.texel;
+	const real_t y0 = (real_t)p_cascade.iy * p_cascade.texel;
+	const real_t y1 = (real_t)(p_cascade.iy + p_cascade.size) * p_cascade.texel;
+	for (const Scenario::FellowShadowInvalidation &ev : p_scenario->fellow_shadow_invalidations) {
+		if (ev.seq <= p_cascade.last_event_seq || ev.prev_change_frame + static_frames > p_cascade.build_frame) {
+			continue; // already checked, or the instance was not in this cache
+		}
+		const Vector3 c = ev.aabb.get_center();
+		const Vector3 e = ev.aabb.size * 0.5;
+		const real_t cx = p_x.dot(c), cy = p_y.dot(c), cz = p_z.dot(c);
+		const real_t ex = Math::abs(p_x.x) * e.x + Math::abs(p_x.y) * e.y + Math::abs(p_x.z) * e.z;
+		const real_t ey = Math::abs(p_y.x) * e.x + Math::abs(p_y.y) * e.y + Math::abs(p_y.z) * e.z;
+		const real_t ez = Math::abs(p_z.x) * e.x + Math::abs(p_z.y) * e.y + Math::abs(p_z.z) * e.z;
+		if (cx + ex < x0 || cx - ex > x1 || cy + ey < y0 || cy - ey > y1 || cz + ez < p_cascade.z_far_plane) {
+			continue; // outside the cache column
+		}
+		return true;
+	}
+	return false;
+}
+
+void RendererSceneCull::_fellow_shadow_cache_decide(int p_shadow_index, uint64_t p_frame, uint32_t p_visible_layers, Scenario *p_scenario) {
+	Cull::Shadow &shadow = cull.shadows[p_shadow_index];
+	FellowCascadeWork *work = fellow_cascade_work[p_shadow_index];
+	for (uint32_t k = 0; k < shadow.cascade_count; k++) {
+		shadow.cascades[k].fellow_mode = FELLOW_CASCADE_STOCK;
+		shadow.cascades[k].fellow_build_frame = 0;
+		shadow.cascades[k].fellow_promotable.set(0);
+		shadow.cascades[k].fellow_dynamic.set(0);
+	}
+	FellowDirShadowCache *cache = work[0].cache;
+	if (cache == nullptr) {
+		return;
+	}
+
+	if (fellow_budget_frame != p_frame) {
+		fellow_budget_frame = p_frame;
+		fellow_rebuild_budget = Fellow::directional_shadow_cache_max_rebuilds();
+	}
+
+	if (scene_render->fellow_directional_shadow_cache_take_lost(cache->cache_id)) {
+		for (FellowDirShadowCache::Cascade &cs : cache->cascades) {
+			cs.valid = false;
+		}
+	}
+
+	const int32_t guard = Fellow::directional_shadow_cache_guard();
+	const uint32_t static_frames = (uint32_t)Fellow::directional_shadow_cache_static_frames();
+	const real_t lod_travel = Fellow::directional_shadow_cache_lod_travel();
+	cache->last_used_frame = p_frame;
+
+	// A rotating light invalidates every cascade every frame: stay stock until it is still for two frames.
+	const Basis basis = work[0].basis;
+	if (basis != cache->last_light_basis) {
+		cache->last_light_basis = basis;
+		cache->light_basis_changed_frame = p_frame;
+	}
+	const bool light_stable = p_frame >= cache->light_basis_changed_frame + 2;
+
+	FellowCascadeCandidate candidates[RendererSceneRender::MAX_DIRECTIONAL_LIGHT_CASCADES];
+	int candidate_count = 0;
+
+	for (uint32_t k = 0; k < shadow.cascade_count; k++) {
+		FellowDirShadowCache::Cascade &cs = cache->cascades[k];
+		FellowCascadeWork &w = work[k];
+		Cull::Shadow::Cascade &c = shadow.cascades[k];
+
+		if (!light_stable || cs.cooldown > 0) {
+			if (cs.cooldown > 0) {
+				cs.cooldown--;
+			}
+			cs.valid = false;
+			c.fellow_mode = FELLOW_CASCADE_STOCK;
+			continue;
+		}
+
+		bool ok = cs.valid && cs.light_basis == basis && cs.cascade_size == w.n && cs.guard == guard && cs.texel == w.t && cs.visible_layers == p_visible_layers && cs.caster_mask == shadow.caster_mask && cs.lod_travel == lod_travel && cs.build_frame + 1 <= p_frame;
+		float margin = 0.0;
+		int64_t ox = 0, oy = 0;
+		if (ok) {
+			ox = w.ix - cs.ix;
+			oy = w.iy - cs.iy;
+			const int64_t room = cs.size - w.n;
+			ok = ox >= 0 && oy >= 0 && ox <= room && oy <= room && w.z_max <= cs.z_near_plane && w.z_min >= cs.z_far_plane;
+			real_t travel = w.cam_pos.distance_to(cs.build_cam_pos);
+			if (ok && lod_travel > 0.0 && travel > lod_travel) {
+				ok = false;
+			}
+			if (ok && _fellow_shadow_cache_events_hit(p_scenario, cs, w.x_vec, w.y_vec, w.z_vec, p_frame)) {
+				ok = false;
+				Fellow::stats().shadow_cache_invalidations.increment();
+			}
+			if (ok) {
+				const float g = (float)guard;
+				const float mx = (float)MIN(ox, room - ox) / g;
+				const float my = (float)MIN(oy, room - oy) / g;
+				const float mz = (float)(MIN(cs.z_near_plane - w.z_max, w.z_min - cs.z_far_plane) / (g * w.t));
+				const float mt = lod_travel > 0.0 ? (float)(1.0 - travel / lod_travel) : 1.0f;
+				margin = MIN(MIN(mx, my), MIN(mz, mt));
+			}
+		}
+		cs.last_event_seq = p_scenario->fellow_shadow_event_seq;
+
+		if (!ok) {
+			cs.valid = false;
+			c.fellow_mode = FELLOW_CASCADE_FALLBACK;
+			FellowCascadeCandidate &cand = candidates[candidate_count++];
+			cand.shadow = p_shadow_index;
+			cand.cascade = k;
+			cand.priority = (float)k; // nearest cascade first: it covers the most visible pixels
+			cand.forced = true;
+			cand.kind = 0;
+		} else {
+			c.fellow_mode = FELLOW_CASCADE_CACHED;
+			c.fellow_build_frame = cs.build_frame;
+			if (margin < 0.5f) {
+				FellowCascadeCandidate &cand = candidates[candidate_count++];
+				cand.shadow = p_shadow_index;
+				cand.cascade = k;
+				cand.priority = 10.0f + margin;
+				cand.kind = 1;
+			} else if (cs.promotable > 0 && p_frame >= cs.last_promotion_frame + 30) {
+				// Casters that became static after the cache was built are still drawn every frame; fold them in.
+				FellowCascadeCandidate &cand = candidates[candidate_count++];
+				cand.shadow = p_shadow_index;
+				cand.cascade = k;
+				cand.priority = 100.0f - (float)MIN(cs.promotable, 99u) * 0.01f;
+				cand.kind = 2;
+			}
+		}
+	}
+
+	// Rebuild the most urgent cascades within the per-frame budget.
+	for (int a = 0; a < candidate_count; a++) {
+		for (int b = a + 1; b < candidate_count; b++) {
+			if (candidates[b].priority < candidates[a].priority) {
+				SWAP(candidates[a], candidates[b]);
+			}
+		}
+	}
+	for (int a = 0; a < candidate_count && fellow_rebuild_budget > 0; a++) {
+		const int k = candidates[a].cascade;
+		FellowDirShadowCache::Cascade &cs = cache->cascades[k];
+		FellowCascadeWork &w = work[k];
+		Cull::Shadow::Cascade &c = shadow.cascades[k];
+		fellow_rebuild_budget--;
+
+		cs.valid = true;
+		cs.texel = w.t;
+		cs.cascade_size = w.n;
+		cs.guard = guard;
+		cs.size = w.n + 2 * guard;
+		cs.ix = w.ix - guard;
+		cs.iy = w.iy - guard;
+		cs.z_near_plane = w.z_max + (real_t)guard * w.t;
+		cs.z_far_plane = w.z_min - (real_t)guard * w.t;
+		cs.light_basis = basis;
+		cs.visible_layers = p_visible_layers;
+		cs.caster_mask = shadow.caster_mask;
+		cs.lod_travel = lod_travel;
+		cs.build_cam_pos = w.cam_pos;
+		cs.build_frame = p_frame;
+		cs.last_event_seq = p_scenario->fellow_shadow_event_seq;
+		if (candidates[a].kind == 2) {
+			cs.last_promotion_frame = p_frame;
+		}
+
+		const real_t x0 = (real_t)cs.ix * cs.texel;
+		const real_t x1 = (real_t)(cs.ix + cs.size) * cs.texel;
+		const real_t y0 = (real_t)cs.iy * cs.texel;
+		const real_t y1 = (real_t)(cs.iy + cs.size) * cs.texel;
+		Vector<Plane> planes;
+		planes.resize(6);
+		planes.write[0] = Plane(w.x_vec, x1);
+		planes.write[1] = Plane(-w.x_vec, -x0);
+		planes.write[2] = Plane(w.y_vec, y1);
+		planes.write[3] = Plane(-w.y_vec, -y0);
+		planes.write[4] = Plane(w.z_vec, cs.z_near_plane + 1e6); // every caster towards the light (pancaked)
+		planes.write[5] = Plane(-w.z_vec, -cs.z_far_plane);
+		c.fellow_cache_frustum = Frustum(planes);
+		c.fellow_mode = FELLOW_CASCADE_REBUILD;
+		c.fellow_build_frame = p_frame;
+
+		switch (candidates[a].kind) {
+			case 0:
+				Fellow::stats().shadow_cache_rebuilds_forced.increment();
+				break;
+			case 1:
+				Fellow::stats().shadow_cache_rebuilds_proactive.increment();
+				break;
+			default:
+				Fellow::stats().shadow_cache_rebuilds_promotion.increment();
+				break;
+		}
+	}
+	(void)static_frames;
+}
+
+void RendererSceneCull::_fellow_shadow_cache_fill_render_data(int p_shadow_index, int p_cascade, RendererSceneRender::RenderShadowData &r_data, uint64_t p_frame) {
+	r_data.fellow.reset();
+	Cull::Shadow::Cascade &c = cull.shadows[p_shadow_index].cascades[p_cascade];
+	FellowCascadeWork &w = fellow_cascade_work[p_shadow_index][p_cascade];
+	Fellow::Stats &st = Fellow::stats();
+
+	switch (c.fellow_mode) {
+		case FELLOW_CASCADE_STOCK:
+			st.shadow_cache_cascades_stock.increment();
+			break;
+		case FELLOW_CASCADE_FALLBACK:
+			st.shadow_cache_cascades_fallback.increment();
+			break;
+		case FELLOW_CASCADE_CACHED:
+			st.shadow_cache_cascades_cached.increment();
+			break;
+		case FELLOW_CASCADE_REBUILD:
+			st.shadow_cache_cascades_rebuilt.increment();
+			break;
+	}
+
+	if (w.cache == nullptr) {
+		return;
+	}
+	FellowDirShadowCache::Cascade &cs = w.cache->cascades[p_cascade];
+
+	// Thrash guard: if this cascade is rarely served from its cache (e.g. a camera that jumps every frame), the
+	// rebuilds cost more than they save; fall back to stock rendering for a while.
+	const bool miss = c.fellow_mode != FELLOW_CASCADE_CACHED;
+	cs.miss_ema = cs.miss_ema * (15.0f / 16.0f) + (miss ? 1.0f / 16.0f : 0.0f);
+	if (cs.miss_ema > 0.75f) {
+		cs.cooldown = 120;
+		cs.miss_ema = 0.0f;
+	}
+	cs.promotable = c.fellow_promotable.get();
+
+	if (c.fellow_mode < FELLOW_CASCADE_CACHED) {
+		return;
+	}
+	st.shadow_cache_dynamic_casters.add(c.fellow_dynamic.get());
+
+	r_data.fellow.cache_id = w.cache->cache_id;
+	r_data.fellow.rebuild = c.fellow_mode == FELLOW_CASCADE_REBUILD;
+	r_data.fellow.cache_size = cs.size;
+
+	const real_t zf_c = cs.z_near_plane - cs.z_far_plane;
+	if (r_data.fellow.rebuild) {
+		const real_t half = (real_t)cs.size * cs.texel * 0.5;
+		Projection ortho;
+		ortho.set_orthogonal(-half, half, -half, half, 0, zf_c);
+		Transform3D xform;
+		xform.basis = cs.light_basis;
+		xform.origin = w.x_vec * ((real_t)cs.ix * cs.texel + half) + w.y_vec * ((real_t)cs.iy * cs.texel + half) + w.z_vec * cs.z_near_plane;
+		r_data.fellow.cache_projection = ortho;
+		r_data.fellow.cache_transform = xform;
+		r_data.fellow.lod_distance_bias = cs.lod_travel;
+		r_data.fellow.cache_instances.merge_unordered(scene_cull_result.directional_shadows[p_shadow_index].fellow_cache_instances[p_cascade]);
+		st.shadow_cache_rebuild_casters.add(r_data.fellow.cache_instances.size());
+	}
+
+	// Texel offset of the cascade rect inside the cache (both are rendered with the same orientation: row 0 = min y).
+	r_data.fellow.copy_offset = Vector2i((int32_t)(w.ix - cs.ix), (int32_t)(w.iy - cs.iy));
+	// Stored depth is 1 - d / zfar (reverse Z) with d the distance from the near plane (towards the light).
+	// Cache near plane is delta further towards the light than the cascade's: d_atlas = d_cache - delta.
+	const real_t delta = cs.z_near_plane - w.z_max;
+	r_data.fellow.remap_scale = (float)(zf_c / w.zfar);
+	r_data.fellow.remap_bias = (float)(1.0 - (zf_c - delta) / w.zfar);
+	(void)p_frame;
+}
+
+void RendererSceneCull::_fellow_shadow_cache_gc(uint64_t p_frame, bool p_free_all) {
+	if (fellow_dir_shadow_caches.is_empty()) {
+		return;
+	}
+	LocalVector<RID> empty_viewports;
+	for (KeyValue<RID, HashMap<RID, FellowDirShadowCache>> &vp : fellow_dir_shadow_caches) {
+		LocalVector<RID> stale;
+		for (KeyValue<RID, FellowDirShadowCache> &E : vp.value) {
+			if (p_free_all || E.value.last_used_frame + 120 < p_frame) {
+				stale.push_back(E.key);
+			}
+		}
+		for (const RID &rid : stale) {
+			scene_render->fellow_directional_shadow_cache_free(vp.value[rid].cache_id);
+			vp.value.erase(rid);
+		}
+		if (vp.value.is_empty()) {
+			empty_viewports.push_back(vp.key);
+		}
+	}
+	for (const RID &rid : empty_viewports) {
+		fellow_dir_shadow_caches.erase(rid);
 	}
 }
 
@@ -2909,6 +3276,7 @@ void RendererSceneCull::_scene_cull(CullData &cull_data, InstanceCullResult &cul
 
 	Transform3D inv_cam_transform = cull_data.cam_transform.inverse();
 	float z_near = cull_data.camera_matrix->get_z_near();
+	const uint64_t fellow_static_frames = (uint64_t)Fellow::directional_shadow_cache_static_frames();
 	bool is_orthogonal = cull_data.camera_matrix->is_orthogonal();
 
 	for (uint64_t i = p_from; i < p_to; i++) {
@@ -3239,6 +3607,35 @@ void RendererSceneCull::_scene_cull(CullData &cull_data, InstanceCullResult &cul
 
 			for (uint32_t j = 0; j < cull_data.cull->shadow_count; j++) {
 				for (uint32_t k = 0; k < cull_data.cull->shadows[j].cascade_count; k++) {
+					Cull::Shadow::Cascade &cascade = cull_data.cull->shadows[j].cascades[k];
+					if (cascade.fellow_mode >= FELLOW_CASCADE_CACHED) {
+						// FellowEngine directional shadow cache: casters unchanged since the cache was built are in the
+						// cache; only the others are drawn this frame. On a rebuild, static casters of the whole cache
+						// volume are collected (no camera-dependent tight culling: the cache outlives this camera).
+						uint32_t base_type = idata.flags & InstanceData::FLAG_BASE_TYPE_MASK;
+						if (!(((1 << base_type) & RSE::INSTANCE_GEOMETRY_MASK) && (idata.flags & InstanceData::FLAG_CAST_SHADOWS) && (LAYER_CHECK & cull_data.cull->shadows[j].caster_mask))) {
+							continue;
+						}
+						const bool cacheable = idata.visibility_index == -1 && idata.parent_array_index == -1 && !idata.instance->dynamic_gi && static_cast<InstanceGeometryData *>(idata.instance->base_data)->fellow_shadow_cacheable;
+						const uint64_t change_frame = idata.instance->fellow_change_frame;
+						const bool static_now = cacheable && change_frame + fellow_static_frames <= frame_number;
+						const bool in_cache = cacheable && change_frame + fellow_static_frames <= cascade.fellow_build_frame;
+						if (cascade.fellow_mode == FELLOW_CASCADE_REBUILD && static_now && IN_FRUSTUM(cascade.fellow_cache_frustum)) {
+							cull_result.directional_shadows[j].fellow_cache_instances[k].push_back(idata.instance_geometry);
+						}
+						if (in_cache || !light_culler->cull_directional_light(cull_data.scenario->instance_aabbs[i], j, k)) {
+							continue;
+						}
+						if (IN_FRUSTUM(cascade.frustum) && VIS_CHECK) {
+							cull_result.directional_shadows[j].cascade_geometry_instances[k].push_back(idata.instance_geometry);
+							mesh_visible = true;
+							cascade.fellow_dynamic.increment();
+							if (static_now) {
+								cascade.fellow_promotable.increment();
+							}
+						}
+						continue;
+					}
 					if (!light_culler->cull_directional_light(cull_data.scenario->instance_aabbs[i], j, k)) { // pass the cascade index
 						continue;
 					}
@@ -3383,8 +3780,62 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 
 		RSG::light_storage->set_directional_shadow_count(lights_with_shadow.size());
 
+		// FellowEngine directional shadow cache: only for the main render of a viewport, one shadowed directional
+		// light (square cascade rects) and square split layouts (orthogonal or 4 splits).
+		const uint64_t fellow_frame = RSG::rasterizer->get_frame_number();
+		const bool fellow_cache_on = Fellow::directional_shadow_cache() && scene_render->fellow_directional_shadow_cache_supported() && p_reflection_probe.is_null() && p_viewport.is_valid() && lights_with_shadow.size() == 1;
+		if (!fellow_cache_on && !Fellow::directional_shadow_cache()) {
+			_fellow_shadow_cache_gc(fellow_frame, true);
+		}
+		for (int i = 0; i < lights_with_shadow.size() && i < RendererSceneRender::MAX_DIRECTIONAL_LIGHTS; i++) {
+			FellowDirShadowCache *fellow_cache = nullptr;
+			if (fellow_cache_on) {
+				RSE::LightDirectionalShadowMode smode = RSG::light_storage->light_directional_get_shadow_mode(lights_with_shadow[i]->base);
+				if (smode == RSE::LIGHT_DIRECTIONAL_SHADOW_ORTHOGONAL || smode == RSE::LIGHT_DIRECTIONAL_SHADOW_PARALLEL_4_SPLITS) {
+					InstanceLightData *light = static_cast<InstanceLightData *>(lights_with_shadow[i]->base_data);
+					HashMap<RID, FellowDirShadowCache> &vp_caches = fellow_dir_shadow_caches[p_viewport];
+					FellowDirShadowCache *existing = vp_caches.getptr(light->instance);
+					if (existing == nullptr) {
+						FellowDirShadowCache nc;
+						nc.cache_id = fellow_dir_shadow_cache_next_id++;
+						nc.scenario = p_scenario;
+						existing = &vp_caches.insert(light->instance, nc)->value;
+					}
+					if (existing->scenario != p_scenario) {
+						for (FellowDirShadowCache::Cascade &cs : existing->cascades) {
+							cs.valid = false;
+						}
+						existing->scenario = p_scenario;
+					}
+					fellow_cache = existing;
+				}
+			}
+			for (int k = 0; k < RendererSceneRender::MAX_DIRECTIONAL_LIGHT_CASCADES; k++) {
+				fellow_cascade_work[i][k].cache = fellow_cache;
+			}
+		}
+
 		for (int i = 0; i < lights_with_shadow.size(); i++) {
 			_light_instance_setup_directional_shadow(i, lights_with_shadow[i], p_camera_data->main_transform, p_camera_data->main_projection, p_camera_data->is_orthogonal, p_camera_data->vaspect);
+		}
+
+		for (int i = 0; i < lights_with_shadow.size() && i < RendererSceneRender::MAX_DIRECTIONAL_LIGHTS; i++) {
+			_fellow_shadow_cache_decide(i, fellow_frame, p_visible_layers, scenario);
+		}
+
+		if (fellow_cache_on) {
+			// Forget invalidation events no live cache can still need, and free caches of vanished lights/viewports.
+			LocalVector<Scenario::FellowShadowInvalidation> &events = scenario->fellow_shadow_invalidations;
+			if (!events.is_empty() && events[0].frame + 240 < fellow_frame) {
+				LocalVector<Scenario::FellowShadowInvalidation> kept;
+				for (const Scenario::FellowShadowInvalidation &ev : events) {
+					if (ev.frame + 240 >= fellow_frame) {
+						kept.push_back(ev);
+					}
+				}
+				events = kept;
+			}
+			_fellow_shadow_cache_gc(fellow_frame, false);
 		}
 	}
 
@@ -3488,6 +3939,7 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 				render_shadow_data[max_shadows_used].light = cull.shadows[i].light_instance;
 				render_shadow_data[max_shadows_used].pass = j;
 				render_shadow_data[max_shadows_used].instances.merge_unordered(scene_cull_result.directional_shadows[i].cascade_geometry_instances[j]);
+				_fellow_shadow_cache_fill_render_data(i, j, render_shadow_data[max_shadows_used], RSG::rasterizer->get_frame_number());
 				max_shadows_used++;
 			}
 		}
@@ -3711,6 +4163,7 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 
 	for (uint32_t i = 0; i < max_shadows_used; i++) {
 		render_shadow_data[i].instances.clear();
+		render_shadow_data[i].fellow.reset();
 	}
 	max_shadows_used = 0;
 
@@ -4327,6 +4780,36 @@ void RendererSceneCull::_update_dirty_instance(Instance *p_instance) const {
 
 			geom->material_is_animated = is_animated;
 
+			// FellowEngine directional shadow cache: the shadow may only be cached if it depends on nothing but the
+			// instance's transform, mesh and material state (all of which update the instance when they change).
+			{
+				bool cacheable = (p_instance->base_type == RSE::INSTANCE_MESH || p_instance->base_type == RSE::INSTANCE_MULTIMESH) && !p_instance->mesh_instance.is_valid() && !is_animated;
+				auto check = [&](RID p_mat) {
+					if (cacheable && p_mat.is_valid() && !RSG::material_storage->material_fellow_shadow_cacheable(p_mat)) {
+						cacheable = false;
+					}
+				};
+				if (cacheable) {
+					if (p_instance->material_override.is_valid()) {
+						check(p_instance->material_override);
+					} else if (p_instance->base_type == RSE::INSTANCE_MESH && p_instance->base.is_valid()) {
+						for (int i = 0; i < p_instance->materials.size(); i++) {
+							check(p_instance->materials[i].is_valid() ? p_instance->materials[i] : RSG::mesh_storage->mesh_surface_get_material(p_instance->base, i));
+						}
+					} else if (p_instance->base_type == RSE::INSTANCE_MULTIMESH) {
+						RID mesh = RSG::mesh_storage->multimesh_get_mesh(p_instance->base);
+						if (mesh.is_valid()) {
+							int sc = RSG::mesh_storage->mesh_get_surface_count(mesh);
+							for (int i = 0; i < sc; i++) {
+								check(RSG::mesh_storage->mesh_surface_get_material(mesh, i));
+							}
+						}
+					}
+					check(p_instance->material_overlay);
+				}
+				geom->fellow_shadow_cacheable = cacheable;
+			}
+
 			if (p_instance->instance_uniforms.materials_finish(p_instance->self)) {
 				geom->geometry_instance->set_instance_shader_uniforms_offset(p_instance->instance_uniforms.location());
 			}
@@ -4501,6 +4984,7 @@ RendererSceneCull::RendererSceneCull() {
 
 	for (uint32_t i = 0; i < MAX_UPDATE_SHADOWS; i++) {
 		render_shadow_data[i].instances.set_page_pool(&geometry_instance_cull_page_pool);
+		render_shadow_data[i].fellow.cache_instances.set_page_pool(&geometry_instance_cull_page_pool);
 	}
 	for (uint32_t i = 0; i < SDFGI_MAX_CASCADES * SDFGI_MAX_REGIONS_PER_CASCADE; i++) {
 		render_sdfgi_data[i].instances.set_page_pool(&geometry_instance_cull_page_pool);
@@ -4532,6 +5016,7 @@ RendererSceneCull::~RendererSceneCull() {
 
 	for (uint32_t i = 0; i < MAX_UPDATE_SHADOWS; i++) {
 		render_shadow_data[i].instances.reset();
+		render_shadow_data[i].fellow.cache_instances.reset();
 	}
 	for (uint32_t i = 0; i < SDFGI_MAX_CASCADES * SDFGI_MAX_REGIONS_PER_CASCADE; i++) {
 		render_sdfgi_data[i].instances.reset();

@@ -280,11 +280,41 @@ public:
 
 	virtual void voxel_gi_set_quality(RSE::VoxelGIQuality) = 0;
 
+	// FellowEngine directional shadow cache operation for one cascade (docs/decisions/0004-directional-shadow-cache.md).
+	// cache_id < 0: stock behaviour (all casters in `instances`, drawn into the atlas).
+	// cache_id >= 0: optionally render `cache_instances` (static casters) into the cache, copy the cache into the
+	// atlas rect re-basing the depth (atlas = clamp(cache * remap_scale + remap_bias, 0, 0.9999)), then draw
+	// `instances` (dynamic casters only) on top with the cascade's regular projection.
+	struct FellowShadowCacheOp {
+		int64_t cache_id = -1;
+		bool rebuild = false;
+		int cache_size = 0;
+		Projection cache_projection;
+		Transform3D cache_transform;
+		float lod_distance_bias = 0.0;
+		Vector2i copy_offset;
+		float remap_scale = 1.0;
+		float remap_bias = 0.0;
+		PagedArray<RenderGeometryInstance *> cache_instances;
+
+		void reset() {
+			cache_id = -1;
+			rebuild = false;
+			cache_instances.clear();
+		}
+	};
+
 	struct RenderShadowData {
 		RID light;
 		int pass = 0;
 		PagedArray<RenderGeometryInstance *> instances;
+		FellowShadowCacheOp fellow;
 	};
+
+	virtual bool fellow_directional_shadow_cache_supported() const { return false; }
+	virtual void fellow_directional_shadow_cache_free(int64_t p_cache_id) {}
+	// True (once) if the renderer lost a cache's content (e.g. atlas format change); all its cascades must rebuild.
+	virtual bool fellow_directional_shadow_cache_take_lost(int64_t p_cache_id) { return false; }
 
 	struct RenderSDFGIData {
 		int region = 0;

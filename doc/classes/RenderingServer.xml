@@ -1579,6 +1579,12 @@
 				Sets the resolution of the volumetric fog's froxel buffer. [param size] is modified by the screen's aspect ratio and then used to set the width and height of the buffer. While [param depth] is directly used to set the depth of the buffer.
 			</description>
 		</method>
+		<method name="fellow_get_stats" qualifiers="const">
+			<return type="Dictionary" />
+			<description>
+				FellowEngine: returns cumulative counters of FellowEngine rendering features (for example the directional shadow cache: cascades served from the cache, rebuilt or rendered the stock way). Only available in FellowEngine builds.
+			</description>
+		</method>
 		<method name="fog_volume_create">
 			<return type="RID" />
 			<description>

@@ -247,6 +247,18 @@ void SceneShaderForwardClustered::ShaderData::set_code(const String &p_code) {
 	uses_blend_alpha = blend_mode_uses_blend_alpha(BlendMode(blend_mode));
 }
 
+bool SceneShaderForwardClustered::ShaderData::fellow_shadow_cacheable() const {
+	// Conservative: anything that can move a shadow caster or change its coverage without an instance update
+	// (vertex displacement or custom matrices, time-driven alpha/discard, trails) keeps the caster dynamic.
+	if (uses_vertex || uses_position || uses_vertex_time || writes_modelview_or_projection || uses_particle_trails || uses_z_clip_scale) {
+		return false;
+	}
+	if (uses_fragment_time && (uses_discard || uses_alpha_clip || uses_alpha_antialiasing || uses_depth_prepass_alpha || uses_alpha)) {
+		return false;
+	}
+	return true;
+}
+
 bool SceneShaderForwardClustered::ShaderData::is_animated() const {
 	return (uses_fragment_time && uses_discard) || (uses_vertex_time && uses_vertex);
 }
