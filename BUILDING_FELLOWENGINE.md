@@ -94,10 +94,13 @@ runtime and per benchmark variant (`run_benchmarks.py --builds "label=fellow@key
 | `rendering/fellow/shadows/directional_cache` | false | directional shadow static cache (`docs/decisions/0004-directional-shadow-cache.md`) |
 | `rendering/fellow/shadows/directional_cache_guard_texels` | 256 | guard band per side (cache = cascade + 2 × guard texels) |
 | `rendering/fellow/shadows/directional_cache_static_frames` | 60 | frames without change before a caster is cached |
-| `rendering/fellow/shadows/directional_cache_lod_travel` | 2.0 | camera travel (m) a cache stays valid for; cache LODs chosen for a camera this much closer |
+| `rendering/fellow/shadows/directional_cache_texel_lod` | 1.0 | cache LODs from the cache's texel size: coarsest LOD with error below this many shadow-map texels (0 = camera-distance LOD) |
+| `rendering/fellow/shadows/directional_cache_lod_travel` | 0.0 | with `texel_lod` 0: camera travel (m) a cache stays valid for; cache LODs chosen for a camera this much closer |
 | `rendering/fellow/shadows/directional_cache_max_rebuilds_per_frame` | 1 | cache re-renders per frame (others render stock that frame) |
+| `rendering/fellow/shadows/directional_cache_min_cost_per_texel` | 0.125 | cost gate: cache a cascade only if its static casters cost at least this many primitive equivalents per cascade texel (0 = always cache) |
 | `rendering/fellow/shadows/directional_cache_debug_mode` | 0 | verification: 1 = never use the cache, 2 = rebuild every frame |
 | `rendering/fellow/shadows/skip_backfacing_directional` | false | no directional shadow lookup where N·L makes the light's contribution zero (image-identical) |
+| `rendering/fellow/shadows/skip_backfacing_positional` | false | omni/spot: skip the light where N·L makes its contribution zero (image-identical) |
 | `rendering/fellow/shadows/skip_unblended_cascade` | false | PCF path: second cascade only where its blend weight is non-zero (image-identical) |
 | `rendering/fellow/shadows/pcss_blend_band` | false | PCSS path: blend cascades over the last 10 % of a split instead of the whole split (look change) |
 | `rendering/fellow/profiling/pass_timestamps` | false | per-pass GPU timestamps without `--gpu-profile` (performance overlay) |
