@@ -97,16 +97,25 @@ def perf_rows(session_json, label_override=None):
             "ram_mb": a["process_peak_working_set_bytes"] / 2**20, "load_ms": a["load_time_ms"]["mean"],
             "gpu_clock": float(np.mean(clk)) if clk else None, "gpu_temp": float(np.mean(tmp)) if tmp else None,
             "gpu_passes": a.get("gpu_passes_ms"), "per_camera": a.get("per_camera"),
+            "run_means": [r["summary"]["frame_ms"]["mean"] for r in e["runs"] if r.get("valid") and r.get("summary") and not r.get("hitch_frames")],
         }
         rows.append(row)
     rows.sort(key=lambda r: (SCENE_ORDER.index(r["scene"]) if r["scene"] in SCENE_ORDER else 99, r["resolution"], r["build"]))
     return rows
 
 
+def welch_p(a, b):
+    try:
+        import ab_stats
+        return ab_stats.welch_p(a, b)
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def perf_table_html(rows, compare=True):
     head = ["Scene", "Res", "Build", "Runs", "Frame ms (CV)", "GPU ms", "Render CPU ms", "p50", "p95", "p99", "Avg FPS", "1% low", "Draw calls", "Primitives", "VRAM MB", "Stutters", "GPU MHz / °C"]
     if compare:
-        head.insert(6, "Δ frame vs stock")
+        head.insert(5, "Δ frame vs stock (p)")
     out = ["<table class='perf'><thead><tr>" + "".join(f"<th>{h}</th>" for h in head) + "</tr></thead><tbody>"]
     stock = {(r["scene"], r["resolution"]): r for r in rows if r["build"] == "stock" and r.get("valid")}
     for r in rows:
@@ -119,8 +128,10 @@ def perf_table_html(rows, compare=True):
         if compare:
             s = stock.get((r["scene"], r["resolution"]))
             d = pct_delta(r["frame_ms"], s["frame_ms"]) if s and r["build"] != "stock" else None
-            cls = "" if d is None else ("good" if d < -2 else ("bad" if d > 2 else "neutral"))
-            cells.append(f"<span class='{cls}'>{'' if d is None else f'{d:+.1f}%'}</span>")
+            pv = welch_p(r.get("run_means", []), s.get("run_means", [])) if d is not None else None
+            sig = d is not None and pv is not None and pv < 0.05 and abs(d) > 1.0
+            cls = "neutral" if not sig else ("good" if d < 0 else "bad")
+            cells.append(f"<span class='{cls}'>{'' if d is None else f'{d:+.1f}%'}{'' if pv is None else f' (p={pv:.2f})'}</span>")
         cells += [fmt(r["gpu_ms"]), fmt(r["cpu_ms"]), fmt(r["p50"]), fmt(r["p95"]), fmt(r["p99"]), fmt(r["fps"], 1), fmt(r["fps_1pct_low"], 1),
                   fmt(r["draw_calls"], 0), f"{r['primitives'] / 1e6:.2f} M", fmt(r["vram_mb"], 0), str(r["stutters"]),
                   f"{fmt(r['gpu_clock'], 0)} / {fmt(r['gpu_temp'], 0)}"]
@@ -598,6 +609,7 @@ Water rendering cost = viewport GPU time with water visible − with water hidde
 {('<div class="card">' + md_to_html(notes) + '</div>') if notes else ''}
 {spec_html}
 <h2>All variants: stock vs {html.escape(a.ab_label)} (interleaved ABBA runs)</h2>
+<p class="muted">Δ is coloured only when Welch's t-test on the per-run means gives p &lt; 0.05 and |Δ| &gt; 1 % (green = faster, red = slower); everything else is within run-to-run noise.</p>
 <div class="tablewrap">{perf_table_html(ab_rows) if ab_rows else '<p>No A/B session.</p>'}</div>
 {f'<p><img class="graph" src="graphs/{os.path.basename(g2)}"></p>' if g2 else ''}
 <h2>Immutable stock baseline (Godot 4.7.2)</h2>

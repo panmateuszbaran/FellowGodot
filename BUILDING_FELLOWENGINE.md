@@ -57,6 +57,38 @@ Outputs land in `bin\` (`godot.windows.template_release.x86_64.exe`, `godot.wind
 * `.tools\bin\stock\`  built from the untouched `4.7.2-stable` tag (branch `fellow/baseline`)
 * `.tools\bin\fellow\` built from the FellowEngine branch under test
 
+### Building FellowEngine next to the stock build (git worktree)
+
+The benchmark project (with the imported Sponza/Bistro assets and the `.godot` import cache) lives in the main
+checkout, so FellowEngine is built in a separate worktree and only the binaries are copied:
+
+```bat
+git worktree add .tools\wt-fellow fellow/gpu-fluid
+cd .tools\wt-fellow
+..\venv\Scripts\python.exe -m SCons platform=windows target=template_release production=yes disable_path_overrides=no winrt=no accesskit=no d3d12=no
+..\venv\Scripts\python.exe -m SCons platform=windows target=editor production=yes disable_path_overrides=no winrt=no accesskit=no d3d12=no
+copy /y bin\godot.windows.*.exe ..\bin\fellow\
+```
+
+(`.tools\fellow_build_job.bat` is the exact script used for the milestone-1 binaries; flags are identical to
+`build_windows.bat`, so stock and FellowEngine differ only in source.) FellowEngine binaries report their commit in
+`Engine.get_version_info()` (`hash`), which the benchmark stores in every result file.
+
+### Runtime toggles (FellowEngine only)
+
+All FellowEngine code paths are behind project settings under `rendering/fellow/*`
+(`servers/rendering/fellow_settings.cpp`), read with `GLOBAL_GET_CACHED` every frame, so they can be changed at
+runtime and per benchmark variant (`run_benchmarks.py --builds "label=fellow@key=value;key=value"`):
+
+| Setting | Default | Effect |
+|---|---|---|
+| `rendering/fellow/enabled` | true | master switch; `false` = every FellowEngine path off (null test) |
+| `rendering/fellow/postfx/enabled` | true | master switch for post-processing experiments |
+| `rendering/fellow/postfx/taa_resolve_v2` | false | TAA resolve v2 (decision record `docs/decisions/0001-taa-resolve-v2.md`) |
+| `rendering/fellow/postfx/taa_history_pingpong` | false | TAA history ping-pong instead of copies (`docs/decisions/0002-taa-history-pingpong.md`) |
+| `rendering/fellow/fluid/enabled` | true | `FellowShallowWater3D` simulation (module `modules/fellow_fluid`) |
+| `rendering/fellow/profiling/pass_timestamps` | false | per-pass GPU timestamps without `--gpu-profile` (performance overlay) |
+
 Build times on the benchmark machine (Core Ultra 9 275HX, 24 threads): template_release ~14 min, editor ~18 min
 from scratch; incremental FellowEngine rebuilds take 1-3 min.
 
@@ -67,4 +99,7 @@ FellowEngine does not modify `modules/mono`. See "Verification status" in `docs/
 
 ## Linux / cross-compilation
 
-Unchanged from upstream Godot (`scons platform=linuxbsd ...`). Not used for published results.
+Unchanged from upstream Godot (`scons platform=linuxbsd ...`). Not used for published performance results.
+During development a Linux `template_release` build was used for functional checks on a CPU Vulkan driver
+(Mesa lavapipe under Xvfb): deterministic image comparisons of the TAA variants and the Fluid Lab, and
+`glslangValidator` compiles of every shader variant. No performance number in the reports comes from it.
