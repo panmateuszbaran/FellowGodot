@@ -91,16 +91,18 @@ bool solid(ivec2 c) {
 }
 
 #ifdef MODE_ADVECT
-// Bilinear sample of one staggered component. p is in cell units (cell centres at k + 0.5).
-float sample_comp(vec2 p, vec2 origin, int ch) {
+// Bilinear sample of the state at a staggered location (the caller picks the component with a swizzle).
+// p is in cell units (cell centres at k + 0.5). Returning the whole vec4 avoids a runtime vector index
+// (OpVectorExtractDynamic), which Godot's SPIR-V specialization pass (re-spirv) does not support.
+vec4 sample_state(vec2 p, vec2 origin) {
 	vec2 q = p - origin;
 	vec2 f = floor(q);
 	vec2 t = q - f;
 	ivec2 c = ivec2(f);
-	float a = S(c)[ch];
-	float b = S(c + ivec2(1, 0))[ch];
-	float d = S(c + ivec2(0, 1))[ch];
-	float e = S(c + ivec2(1, 1))[ch];
+	vec4 a = S(c);
+	vec4 b = S(c + ivec2(1, 0));
+	vec4 d = S(c + ivec2(0, 1));
+	vec4 e = S(c + ivec2(1, 1));
 	return mix(mix(a, b, t.x), mix(d, e, t.x), t.y);
 }
 
@@ -115,17 +117,17 @@ void main() {
 	// u face at (i + 1, j + 0.5)
 	float v_at_u = 0.25 * (S(c).b + S(c + ivec2(1, 0)).b + S(c + ivec2(0, -1)).b + S(c + ivec2(1, -1)).b);
 	vec2 pu = vec2(c) + vec2(1.0, 0.5) - k * vec2(s.g, v_at_u);
-	float u_new = sample_comp(pu, vec2(1.0, 0.5), 1);
+	float u_new = sample_state(pu, vec2(1.0, 0.5)).g;
 
 	// v face at (i + 0.5, j + 1)
 	float u_at_v = 0.25 * (S(c).g + S(c + ivec2(-1, 0)).g + S(c + ivec2(0, 1)).g + S(c + ivec2(-1, 1)).g);
 	vec2 pv = vec2(c) + vec2(0.5, 1.0) - k * vec2(u_at_v, s.b);
-	float v_new = sample_comp(pv, vec2(0.5, 1.0), 2);
+	float v_new = sample_state(pv, vec2(0.5, 1.0)).b;
 
 	// foam at the centre
 	vec2 uc = vec2(0.5 * (s.g + S(c + ivec2(-1, 0)).g), 0.5 * (s.b + S(c + ivec2(0, -1)).b));
 	vec2 pc = vec2(c) + vec2(0.5) - k * uc;
-	float foam_new = sample_comp(pc, vec2(0.5), 3);
+	float foam_new = sample_state(pc, vec2(0.5)).a;
 
 	imageStore(state_out, c, vec4(s.r, u_new, v_new, foam_new));
 }
