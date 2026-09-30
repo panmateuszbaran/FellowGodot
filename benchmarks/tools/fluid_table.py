@@ -22,7 +22,7 @@ def run_extra(entry, key):
     for r in entry.get("runs", []):
         if not r.get("valid"):
             continue
-        jp = os.path.join(ROOT, r["_json"]) if r.get("_json") else None
+        jp = os.path.join(ROOT, *r["_json"].replace("\\", "/").split("/")) if r.get("_json") else None
         ex = None
         if jp and os.path.exists(jp):
             with open(jp, encoding="utf-8") as f:
