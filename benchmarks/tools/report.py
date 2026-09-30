@@ -372,12 +372,15 @@ def main() -> int:
                     "used for the vs-reference metrics when given")
     ap.add_argument("--fellow-label", default="fellow", help="build/variant label of the FellowEngine configuration shown in image sections")
     ap.add_argument("--fluid", default=None, help="tag of the fluid sessions")
+    ap.add_argument("--fluid-capture", default=None, help="capture session of the Fluid Lab (screenshots in the fluid section)")
+    ap.add_argument("--engine-commit", default=None, help="commit of the measured FellowEngine binary (shown in the header, used for the default output folder)")
     ap.add_argument("--notes", default=None, help="markdown file with analysis text to embed")
     ap.add_argument("--out", default=None)
     ap.add_argument("--res", default="1920x1080", help="resolution used for image sections")
     a = ap.parse_args()
 
-    commit = git("rev-parse", "--short=10", "HEAD") or "nocommit"
+    harness = git("rev-parse", "--short=10", "HEAD") or "nocommit"
+    commit = a.engine_commit or harness
     out = a.out or os.path.join(ROOT, "reports", f"{datetime.date.today().isoformat()}_{commit}")
     if os.path.exists(out):
         shutil.rmtree(out)
@@ -530,6 +533,14 @@ def main() -> int:
 <p class="muted">Simulation and surface-generation GPU times come from RenderingDevice timestamps inside the module; the viewport GPU time excludes them.
 Water rendering cost = viewport GPU time with water visible − with water hidden (simulation running in both).</p>
 <div class="tablewrap"><table><tr><th>Grid</th><th>Water drawn</th><th>Res</th><th>Sim GPU ms</th><th>Surface GPU ms</th><th>Viewport GPU ms</th><th>Frame ms</th><th>Sim VRAM MB</th><th>Runs</th></tr>{body}</table></div>"""
+        if a.fluid_capture:
+            figs = []
+            os.makedirs(os.path.join(out, "screenshots", "fellow"), exist_ok=True)
+            for f in sorted(glob.glob(os.path.join(RAW, a.fluid_capture, "fellow", "fluid", f"fluid_{a.res}_*.png"))):
+                rel = os.path.relpath(downscale_copy(f, os.path.join(out, "screenshots", "fellow", os.path.basename(f))), out).replace("\\", "/")
+                figs.append(f"<figure><img src='{rel}' loading='lazy'><figcaption>{html.escape(os.path.basename(f)[:-4])}</figcaption></figure>")
+            if figs:
+                fluid_html += "<div class='side'>" + "".join(figs) + "</div><p class='muted'>Fluid Lab fixed cameras (FellowEngine only; stock Godot cannot run this scene).</p>"
 
     hw_rows = ""
     try:
@@ -583,7 +594,7 @@ Water rendering cost = viewport GPU time with water visible − with water hidde
     page = f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Stock vs FellowEngine</title><style>{CSS}</style></head><body><main>
 <h1>Stock Godot 4.7.2 vs FellowEngine</h1>
-<p class="muted">Generated {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')} · commit {html.escape(commit)} · baseline <code>{html.escape(a.baseline)}</code>{' · A/B <code>' + html.escape(a.ab) + '</code>' if a.ab else ''}</p>
+<p class="muted">Generated {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')} · FellowEngine binary {html.escape(commit)} · benchmark harness {html.escape(harness)} · baseline <code>{html.escape(a.baseline)}</code>{' · A/B <code>' + html.escape(a.ab) + '</code>' if a.ab else ''}</p>
 {('<div class="card">' + md_to_html(notes) + '</div>') if notes else ''}
 {spec_html}
 <h2>All variants: stock vs {html.escape(a.ab_label)} (interleaved ABBA runs)</h2>
