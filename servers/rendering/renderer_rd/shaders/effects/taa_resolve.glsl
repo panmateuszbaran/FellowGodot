@@ -60,6 +60,11 @@ layout(push_constant, std430) uniform Params {
 	vec2 resolution;
 	float disocclusion_threshold; // 0.1 / max(params.resolution.x, params.resolution.y)
 	float variance_dynamic;
+	// FellowEngine resolve v2 tunables (rendering/fellow/postfx/taa_v2_*).
+	float fellow_gamma;
+	float fellow_feedback_min;
+	float fellow_feedback_max;
+	float fellow_antiflicker;
 }
 params;
 
@@ -360,7 +365,7 @@ vec3 clip_towards_center(vec3 cmin, vec3 cmax, vec3 center, vec3 q) {
 // Variance clipping (Salvi 2016) intersected with the min/max box, in YCoCg of tonemapped colour.
 // The clip box does NOT collapse with velocity (the stock variant shrinks it to the 3x3 mean at >= 0.02 UV/frame,
 // which replaces the history by a blurred neighbourhood average under camera motion).
-vec3 clip_history_3x3_v2(uvec2 group_pos, vec3 history_tm) {
+vec3 clip_history_3x3_v2(uvec2 group_pos, vec3 history_tm, out float r_trust) {
 	vec3 m1 = vec3(0.0);
 	vec3 m2 = vec3(0.0);
 	vec3 bmin = vec3(1e9);
@@ -374,7 +379,7 @@ vec3 clip_history_3x3_v2(uvec2 group_pos, vec3 history_tm) {
 	}
 	vec3 mean = m1 * RPC_9;
 	vec3 sigma = sqrt(max(m2 * RPC_9 - mean * mean, vec3(0.0)));
-	const float gamma = 1.25;
+	const float gamma = params.fellow_gamma;
 	// In flat regions rounding can put the computed mean just outside [bmin, bmax]; intersecting naively then
 	// yields an inverted box (cmin > cmax) and the clip divides by ~0. Build the box around the clamped mean so
 	// that cmin <= center <= cmax holds by construction.
@@ -382,7 +387,13 @@ vec3 clip_history_3x3_v2(uvec2 group_pos, vec3 history_tm) {
 	vec3 cmin = max(bmin, min(mean - gamma * sigma, center));
 	vec3 cmax = min(bmax, max(mean + gamma * sigma, center));
 	vec3 h = rgb_to_ycocg(history_tm);
-	return tm_sanitize(ycocg_to_rgb(clip_towards_center(cmin, cmax, center, h)));
+	vec3 hc = clip_towards_center(cmin, cmax, center, h);
+	// Trust in the history: 1 when the reprojected history already lies inside the neighbourhood box (the
+	// disagreement with the current sample is then sub-pixel aliasing, not a real change), falling to 0 when the
+	// clip had to move it by a sizeable fraction of the box.
+	float box = max(length(cmax - cmin), 1e-4);
+	r_trust = 1.0 - clamp(4.0 * length(h - hc) / box, 0.0, 1.0);
+	return tm_sanitize(ycocg_to_rgb(hc));
 }
 #endif
 
@@ -421,7 +432,8 @@ vec3 temporal_antialiasing_v2(uvec2 pos_group_top_left, uvec2 pos_group, uvec2 p
 	}
 
 	vec3 input_tm = tm(color_input);
-	vec3 history_tm = clip_history_3x3_v2(pos_group, tm(color_history));
+	float trust;
+	vec3 history_tm = clip_history_3x3_v2(pos_group, tm(color_history), trust);
 
 	// Feedback (history weight) between 0.88 and 0.9375 depending on how much the clipped history still
 	// disagrees with the current sample (Lottes / Playdead): large disagreement -> respond faster.
@@ -429,7 +441,9 @@ vec3 temporal_antialiasing_v2(uvec2 pos_group_top_left, uvec2 pos_group, uvec2 p
 	float lum_hist = dot(history_tm, vec3(0.2126, 0.7152, 0.0722));
 	float unbiased_diff = abs(lum_in - lum_hist) / max(lum_in, max(lum_hist, 0.2));
 	float w = 1.0 - unbiased_diff;
-	float feedback = mix(0.88, 0.9375, w * w);
+	float feedback = mix(params.fellow_feedback_min, params.fellow_feedback_max, w * w);
+	// Anti-flicker (optional): where the history is trusted, do not let a luma disagreement pull the feedback down.
+	feedback = mix(feedback, params.fellow_feedback_max, params.fellow_antiflicker * trust);
 	float blend_factor = 1.0 - feedback;
 
 	bool offscreen = any(lessThan(uv_reprojected, vec2(0.0))) || any(greaterThan(uv_reprojected, vec2(1.0)));

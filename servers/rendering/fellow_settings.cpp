@@ -38,6 +38,10 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/postfx/enabled", true);
 	GLOBAL_DEF("rendering/fellow/postfx/taa_resolve_v2", false);
 	GLOBAL_DEF("rendering/fellow/postfx/taa_history_pingpong", false);
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/postfx/taa_v2_gamma", PROPERTY_HINT_RANGE, "0.5,4,0.01"), 1.25);
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/postfx/taa_v2_feedback_min", PROPERTY_HINT_RANGE, "0.5,0.99,0.001"), 0.88);
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/postfx/taa_v2_feedback_max", PROPERTY_HINT_RANGE, "0.5,0.99,0.001"), 0.9375);
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/postfx/taa_v2_antiflicker", PROPERTY_HINT_RANGE, "0,1,0.01"), 0.0);
 	GLOBAL_DEF("rendering/fellow/fluid/enabled", true);
 	GLOBAL_DEF("rendering/fellow/profiling/pass_timestamps", false);
 	GLOBAL_DEF("rendering/fellow/shadows/enabled", true);

@@ -48,6 +48,11 @@ private:
 		float resolution_height;
 		float disocclusion_threshold;
 		float variance_dynamic;
+		// FellowEngine resolve v2 tunables (unused by the stock resolve).
+		float fellow_gamma;
+		float fellow_feedback_min;
+		float fellow_feedback_max;
+		float fellow_antiflicker;
 	};
 
 	// Shader variants: bit 0 = FellowEngine resolve v2, bit 1 = fused velocity write (history ping-pong).

@@ -76,6 +76,10 @@ void TAA::resolve(RID p_frame, RID p_temp, RID p_depth, RID p_velocity, RID p_pr
 	push_constant.resolution_height = p_resolution.height;
 	push_constant.disocclusion_threshold = 2.5f; // If velocity changes by less than this amount of texels we can retain the accumulation buffer.
 	push_constant.variance_dynamic = CLAMP(base_variance * variance_scale, base_variance_min, base_variance_max); // Variance dynamically scales based on resolution
+	push_constant.fellow_gamma = Fellow::taa_v2_gamma();
+	push_constant.fellow_feedback_min = Fellow::taa_v2_feedback_min();
+	push_constant.fellow_feedback_max = Fellow::taa_v2_feedback_max();
+	push_constant.fellow_antiflicker = Fellow::taa_v2_antiflicker();
 
 	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
 	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, pipelines[p_variant]);

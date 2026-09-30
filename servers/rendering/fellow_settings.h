@@ -58,6 +58,20 @@ inline bool taa_resolve_v2() {
 	return postfx_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/postfx/taa_resolve_v2");
 }
 
+// Resolve v2 tunables (defaults = the milestone-1 resolve v2).
+inline float taa_v2_gamma() {
+	return GLOBAL_GET_CACHED(float, "rendering/fellow/postfx/taa_v2_gamma");
+}
+inline float taa_v2_feedback_min() {
+	return GLOBAL_GET_CACHED(float, "rendering/fellow/postfx/taa_v2_feedback_min");
+}
+inline float taa_v2_feedback_max() {
+	return GLOBAL_GET_CACHED(float, "rendering/fellow/postfx/taa_v2_feedback_max");
+}
+inline float taa_v2_antiflicker() {
+	return GLOBAL_GET_CACHED(float, "rendering/fellow/postfx/taa_v2_antiflicker");
+}
+
 // TAA history ping-pong: the resolve writes the new history and next-frame velocity directly,
 // removing two full-resolution copies per frame. Output is identical to the copy-based path.
 inline bool taa_history_pingpong() {
