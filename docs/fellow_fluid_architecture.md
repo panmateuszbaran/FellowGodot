@@ -71,10 +71,19 @@ simulated gradient, refracts the opaque scene (screen texture) with Beer-Lambert
 water thickness, applies Schlick Fresnel to the refracted part and lets the engine's specular IBL / lights provide
 reflections; foam is an albedo layer with higher roughness. Shoreline cells fade with water depth.
 
-### Measured in the Fluid Lab (see the milestone report)
+### Measured in the Fluid Lab (`fellow-m1_fluid_perf`, RTX 5070 Ti Laptop, decision record 0003)
 `simulation GPU ms` and `surface generation GPU ms` from RenderingDevice timestamps inside the module;
 `water rendering GPU ms` = viewport GPU time with water visible − hidden (simulation running in both);
 `VRAM` = allocated simulation textures (exact, table above).
+
+| Grid | Simulation (2 substeps, 120 Hz) | Surface | Water rendering 1080p / 1440p | VRAM |
+|---|---:|---:|---:|---:|
+| 256² | 0.071 ms | 0.005 ms | 0.86 / 1.09 ms | 3.8 MB |
+| 512² | 0.206 ms | 0.014 ms | 1.05 / 1.34 ms | 15.0 MB |
+| 1024² | 0.744-0.790 ms | 0.048 ms | 1.10 / 1.58 ms | 60.0 MB |
+
+The simulation is well inside its budget; **rendering the water costs more than simulating it** (refraction needs a
+screen-texture copy with mips, plus the displaced grid). That is the first optimisation target of this path.
 
 ### Known limitations of the prototype
 * One tile per node, no tile streaming / LOD yet; no two-way buoyancy; no sub-grid waves (the surface is as
