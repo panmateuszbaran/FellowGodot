@@ -1,0 +1,1220 @@
+{
+ "session": "godot-4.7.2_capture",
+ "label": "",
+ "args": {
+  "builds": "stock",
+  "godot": null,
+  "scene": "pbr,sponza,bistro_exterior,bistro_interior",
+  "mode": "capture",
+  "res": "1920x1080,2560x1440",
+  "runs": 3,
+  "max_runs": 6,
+  "max_cv": 0.03,
+  "warmup": 10.0,
+  "measure": 30.0,
+  "percam": 0,
+  "profile": false,
+  "preset": "high",
+  "set": "",
+  "fellow": "",
+  "fellow_off_for": "stock",
+  "extra": "--hdr=1",
+  "cooldown": 5.0,
+  "heat_soak": 240.0,
+  "timeout": 900.0,
+  "session": "godot-4.7.2_capture",
+  "label": "",
+  "merge": false,
+  "supersede_note": ""
+ },
+ "hardware": {
+  "timestamp_local": "2026-09-30T01:24:17.882246",
+  "host": "PREDZIO",
+  "python": "3.11.0",
+  "os": {
+   "platform": "Windows-10-10.0.26200-SP0",
+   "release": "10",
+   "version": "10.0.26200"
+  },
+  "cpu": "{\"Name\":\"Intel(R) Core(TM) Ultra 9 275HX\",\"NumberOfCores\":24,\"NumberOfLogicalProcessors\":24,\"MaxClockSpeed\":2700}",
+  "ram": "{\"TotalBytes\":68112736256,\"Modules\":[{\"Capacity\":34359738368,\"Speed\":6400,\"ConfiguredClockSpeed\":6400,\"Manufacturer\":\"Micron Technology\",\"PartNumber\":\"MTC16C2085S1VC64BD1 \"},{\"Capacity\":34359738368,\"Speed\":6400,\"ConfiguredClockSpeed\":6400,\"Manufacturer\":\"Micron Technology\",\"PartNumber\":\"MTC16C2085S1VC64BD1 \"}]}",
+  "os_caption": "{\"Caption\":\"Microsoft Windows 11 Home\",\"Version\":\"10.0.26200\",\"BuildNumber\":\"26200\"}",
+  "system": "{\"Manufacturer\":\"Acer\",\"Model\":\"Predator PHN16S-71\"}",
+  "power": "{\"Battery\":{\"PowerOnline\":true,\"Charging\":false},\"Scheme\":\"Power Scheme GUID: 3b79c5ed-2baa-4957-a015-c958d3221bfc  (Acer)\"}",
+  "display": "[{\"Name\":\"Intel(R) Graphics\",\"DriverVersion\":\"32.0.101.6629\",\"CurrentHorizontalResolution\":2560,\"CurrentVerticalResolution\":1600,\"CurrentRefreshRate\":240},{\"Name\":\"NVIDIA GeForce RTX 5070 Ti Laptop GPU\",\"DriverVersion\":\"32.0.16.1714\",\"CurrentHorizontalResolution\":null,\"CurrentVerticalResolution\":null,\"CurrentRefreshRate\":null}]",
+  "gpu": [
+   {
+    "name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+    "driver_version": "617.14",
+    "memory.total": "12227",
+    "pcie.link.gen.max": "5",
+    "pcie.link.width.max": "16",
+    "clocks.max.graphics": "3090",
+    "clocks.max.memory": "14001",
+    "power.limit": "[N/A]",
+    "vbios_version": "98.05.31.00.49"
+   }
+  ],
+  "engine": {
+   "commit": "044f6b36d1f87bb4088fe4e43e236bcd85cf323f",
+   "describe": "4.7.2-stable-10-g044f6b36d1",
+   "branch": "HEAD",
+   "status_short": ""
+  },
+  "build_flags": "platform=windows target=template_release production=yes disable_path_overrides=no winrt=no accesskit=no d3d12=no (MSVC, see BUILDING_FELLOWENGINE.md)",
+  "compiler": {
+   "visual_studio": "16.11.60",
+   "msvc_toolsets": [
+    "14.29.30133"
+   ]
+  },
+  "binaries": {
+   "stock": {
+    "path": ".tools\\bin\\stock\\godot.windows.template_release.x86_64.exe",
+    "size": 68635136,
+    "sha256": "f96d22afc9238c19ce728b307382e08675ca35455cad94cae2d4c5b8f88a6604",
+    "mtime": "2026-09-29T23:08:53.520548"
+   }
+  }
+ },
+ "gpu_telemetry": {
+  "n": 178,
+  "clocks.gr": {
+   "min": 180.0,
+   "mean": 1030.8370786516855,
+   "max": 2070.0
+  },
+  "clocks.mem": {
+   "min": 405.0,
+   "mean": 9213.41011235955,
+   "max": 10821.0
+  },
+  "temperature.gpu": {
+   "min": 57.0,
+   "mean": 63.70224719101124,
+   "max": 71.0
+  },
+  "power.draw": {
+   "min": 5.19,
+   "mean": 36.96910112359549,
+   "max": 87.71
+  },
+  "utilization.gpu": {
+   "min": 0.0,
+   "mean": 39.26966292134831,
+   "max": 100.0
+  },
+  "memory.used": {
+   "min": 328.0,
+   "mean": 1861.8988764044943,
+   "max": 3708.0
+  },
+  "throttle_reasons_seen": [
+   "0x0000000000000004",
+   "0x0000000000000400"
+  ]
+ },
+ "heat_soak_telemetry": {},
+ "results": {
+  "pbr|1920x1080|stock": {
+   "scene": "pbr",
+   "resolution": "1920x1080",
+   "build": "stock",
+   "preset": "high",
+   "set": "",
+   "fellow": "",
+   "binary": "stock",
+   "variant_args": [],
+   "mode": "capture",
+   "runs": [
+    {
+     "schema": 1,
+     "scene": "pbr",
+     "mode": "capture",
+     "tag": "stock",
+     "run": 0,
+     "cmdline_user_args": [
+      "--scene=pbr",
+      "--mode=capture",
+      "--res=1920x1080",
+      "--tag=stock",
+      "--run=0",
+      "--out=C:\\Users\\matek\\Documents\\GitHub\\FellowGodot\\benchmarks\\results\\raw\\godot-4.7.2_capture\\stock\\pbr",
+      "--warmup=10.0",
+      "--measure=30.0",
+      "--preset=high",
+      "--hdr=1"
+     ],
+     "cmdline_args": [],
+     "engine": {
+      "major": 4,
+      "minor": 7,
+      "patch": 2,
+      "hex": 263938,
+      "status": "stable",
+      "build": "custom_build",
+      "hash": "ed1daf0bf001b61586d9930840f2f1394092c079",
+      "timestamp": 1786929518,
+      "string": "4.7.2-stable (custom_build)"
+     },
+     "engine_build": {
+      "debug_build": false,
+      "has_editor": false,
+      "template_release": true
+     },
+     "adapter": {
+      "name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+      "vendor": "NVIDIA",
+      "api_version": "1.4.351",
+      "type": 2,
+      "driver": [
+       "NVIDIA",
+       "32.0.16.1714"
+      ],
+      "rendering_driver": "vulkan",
+      "rendering_method": "forward_plus"
+     },
+     "os": {
+      "name": "Windows",
+      "version": "10.0.26200",
+      "cpu": "Intel(R) Core(TM) Ultra 9 275HX",
+      "cpu_count": 24
+     },
+     "fellow": {
+      "available": false,
+      "requested": {},
+      "state": {}
+     },
+     "load_time_ms": 1421.187,
+     "startup_to_first_frame_ms": 1446.507,
+     "resolution": [
+      1920,
+      1080
+     ],
+     "valid": true,
+     "files": [
+      "pbr_1920x1080_pbr_overview.png",
+      "pbr_1920x1080_pbr_spheres.png",
+      "pbr_1920x1080_pbr_grazing.png",
+      "pbr_1920x1080_pbr_dark_room.png",
+      "pbr_1920x1080_pbr_thin.png",
+      "pbr_1920x1080_pbr_emissive.png",
+      "pbr_1920x1080_pbr_specular.png",
+      "pbr_1920x1080_pbr_overview.exr",
+      "pbr_1920x1080_pbr_spheres.exr",
+      "pbr_1920x1080_pbr_grazing.exr",
+      "pbr_1920x1080_pbr_dark_room.exr",
+      "pbr_1920x1080_pbr_thin.exr",
+      "pbr_1920x1080_pbr_emissive.exr",
+      "pbr_1920x1080_pbr_specular.exr"
+     ],
+     "total_runtime_s": 11.999606,
+     "_proc": {
+      "returncode": 0,
+      "timed_out": false,
+      "wall_s": 14.719325304031372,
+      "peak_working_set": 956420096,
+      "peak_private_bytes": 1838198784
+     },
+     "_json": "benchmarks\\results\\raw\\godot-4.7.2_capture\\stock\\pbr\\pbr_capture_stock_1920x1080_run0.json",
+     "_gpu_telemetry": {
+      "n": 14,
+      "clocks.gr": {
+       "min": 180.0,
+       "mean": 974.8571428571429,
+       "max": 1785.0
+      },
+      "clocks.mem": {
+       "min": 405.0,
+       "mean": 8777.0,
+       "max": 10821.0
+      },
+      "temperature.gpu": {
+       "min": 58.0,
+       "mean": 62.0,
+       "max": 69.0
+      },
+      "power.draw": {
+       "min": 5.19,
+       "mean": 28.33642857142857,
+       "max": 66.42
+      },
+      "utilization.gpu": {
+       "min": 0.0,
+       "mean": 24.357142857142858,
+       "max": 98.0
+      },
+      "memory.used": {
+       "min": 328.0,
+       "mean": 917.0,
+       "max": 1241.0
+      },
+      "throttle_reasons_seen": [
+       "0x0000000000000004",
+       "0x0000000000000400"
+      ]
+     }
+    }
+   ]
+  },
+  "pbr|2560x1440|stock": {
+   "scene": "pbr",
+   "resolution": "2560x1440",
+   "build": "stock",
+   "preset": "high",
+   "set": "",
+   "fellow": "",
+   "binary": "stock",
+   "variant_args": [],
+   "mode": "capture",
+   "runs": [
+    {
+     "schema": 1,
+     "scene": "pbr",
+     "mode": "capture",
+     "tag": "stock",
+     "run": 0,
+     "cmdline_user_args": [
+      "--scene=pbr",
+      "--mode=capture",
+      "--res=2560x1440",
+      "--tag=stock",
+      "--run=0",
+      "--out=C:\\Users\\matek\\Documents\\GitHub\\FellowGodot\\benchmarks\\results\\raw\\godot-4.7.2_capture\\stock\\pbr",
+      "--warmup=10.0",
+      "--measure=30.0",
+      "--preset=high",
+      "--hdr=1"
+     ],
+     "cmdline_args": [],
+     "engine": {
+      "major": 4,
+      "minor": 7,
+      "patch": 2,
+      "hex": 263938,
+      "status": "stable",
+      "build": "custom_build",
+      "hash": "ed1daf0bf001b61586d9930840f2f1394092c079",
+      "timestamp": 1786929518,
+      "string": "4.7.2-stable (custom_build)"
+     },
+     "engine_build": {
+      "debug_build": false,
+      "has_editor": false,
+      "template_release": true
+     },
+     "adapter": {
+      "name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+      "vendor": "NVIDIA",
+      "api_version": "1.4.351",
+      "type": 2,
+      "driver": [
+       "NVIDIA",
+       "32.0.16.1714"
+      ],
+      "rendering_driver": "vulkan",
+      "rendering_method": "forward_plus"
+     },
+     "os": {
+      "name": "Windows",
+      "version": "10.0.26200",
+      "cpu": "Intel(R) Core(TM) Ultra 9 275HX",
+      "cpu_count": 24
+     },
+     "fellow": {
+      "available": false,
+      "requested": {},
+      "state": {}
+     },
+     "load_time_ms": 1399.002,
+     "startup_to_first_frame_ms": 1420.445,
+     "resolution": [
+      2560,
+      1440
+     ],
+     "valid": true,
+     "files": [
+      "pbr_2560x1440_pbr_overview.png",
+      "pbr_2560x1440_pbr_spheres.png",
+      "pbr_2560x1440_pbr_grazing.png",
+      "pbr_2560x1440_pbr_dark_room.png",
+      "pbr_2560x1440_pbr_thin.png",
+      "pbr_2560x1440_pbr_emissive.png",
+      "pbr_2560x1440_pbr_specular.png",
+      "pbr_2560x1440_pbr_overview.exr",
+      "pbr_2560x1440_pbr_spheres.exr",
+      "pbr_2560x1440_pbr_grazing.exr",
+      "pbr_2560x1440_pbr_dark_room.exr",
+      "pbr_2560x1440_pbr_thin.exr",
+      "pbr_2560x1440_pbr_emissive.exr",
+      "pbr_2560x1440_pbr_specular.exr"
+     ],
+     "total_runtime_s": 16.725698,
+     "_proc": {
+      "returncode": 0,
+      "timed_out": false,
+      "wall_s": 19.255799770355225,
+      "peak_working_set": 1073332224,
+      "peak_private_bytes": 1941938176
+     },
+     "_json": "benchmarks\\results\\raw\\godot-4.7.2_capture\\stock\\pbr\\pbr_capture_stock_2560x1440_run0.json",
+     "_gpu_telemetry": {
+      "n": 18,
+      "clocks.gr": {
+       "min": 180.0,
+       "mean": 1151.4444444444443,
+       "max": 1965.0
+      },
+      "clocks.mem": {
+       "min": 9001.0,
+       "mean": 9405.444444444445,
+       "max": 10821.0
+      },
+      "temperature.gpu": {
+       "min": 61.0,
+       "mean": 64.55555555555556,
+       "max": 69.0
+      },
+      "power.draw": {
+       "min": 10.68,
+       "mean": 33.86888888888889,
+       "max": 68.09
+      },
+      "utilization.gpu": {
+       "min": 0.0,
+       "mean": 36.27777777777778,
+       "max": 97.0
+      },
+      "memory.used": {
+       "min": 328.0,
+       "mean": 973.3888888888889,
+       "max": 1300.0
+      },
+      "throttle_reasons_seen": [
+       "0x0000000000000004",
+       "0x0000000000000400"
+      ]
+     }
+    }
+   ]
+  },
+  "sponza|1920x1080|stock": {
+   "scene": "sponza",
+   "resolution": "1920x1080",
+   "build": "stock",
+   "preset": "high",
+   "set": "",
+   "fellow": "",
+   "binary": "stock",
+   "variant_args": [],
+   "mode": "capture",
+   "runs": [
+    {
+     "schema": 1,
+     "scene": "sponza",
+     "mode": "capture",
+     "tag": "stock",
+     "run": 0,
+     "cmdline_user_args": [
+      "--scene=sponza",
+      "--mode=capture",
+      "--res=1920x1080",
+      "--tag=stock",
+      "--run=0",
+      "--out=C:\\Users\\matek\\Documents\\GitHub\\FellowGodot\\benchmarks\\results\\raw\\godot-4.7.2_capture\\stock\\sponza",
+      "--warmup=10.0",
+      "--measure=30.0",
+      "--preset=high",
+      "--hdr=1"
+     ],
+     "cmdline_args": [],
+     "engine": {
+      "major": 4,
+      "minor": 7,
+      "patch": 2,
+      "hex": 263938,
+      "status": "stable",
+      "build": "custom_build",
+      "hash": "ed1daf0bf001b61586d9930840f2f1394092c079",
+      "timestamp": 1786929518,
+      "string": "4.7.2-stable (custom_build)"
+     },
+     "engine_build": {
+      "debug_build": false,
+      "has_editor": false,
+      "template_release": true
+     },
+     "adapter": {
+      "name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+      "vendor": "NVIDIA",
+      "api_version": "1.4.351",
+      "type": 2,
+      "driver": [
+       "NVIDIA",
+       "32.0.16.1714"
+      ],
+      "rendering_driver": "vulkan",
+      "rendering_method": "forward_plus"
+     },
+     "os": {
+      "name": "Windows",
+      "version": "10.0.26200",
+      "cpu": "Intel(R) Core(TM) Ultra 9 275HX",
+      "cpu_count": 24
+     },
+     "fellow": {
+      "available": false,
+      "requested": {},
+      "state": {}
+     },
+     "load_time_ms": 3869.352,
+     "startup_to_first_frame_ms": 3876.71,
+     "resolution": [
+      1920,
+      1080
+     ],
+     "valid": true,
+     "files": [
+      "sponza_1920x1080_sponza_cam_01.png",
+      "sponza_1920x1080_sponza_cam_02.png",
+      "sponza_1920x1080_sponza_cam_03.png",
+      "sponza_1920x1080_sponza_cam_04.png",
+      "sponza_1920x1080_sponza_cam_05.png",
+      "sponza_1920x1080_sponza_cam_06.png",
+      "sponza_1920x1080_sponza_cam_01.exr",
+      "sponza_1920x1080_sponza_cam_02.exr",
+      "sponza_1920x1080_sponza_cam_03.exr",
+      "sponza_1920x1080_sponza_cam_04.exr",
+      "sponza_1920x1080_sponza_cam_05.exr",
+      "sponza_1920x1080_sponza_cam_06.exr"
+     ],
+     "total_runtime_s": 24.452958,
+     "_proc": {
+      "returncode": 0,
+      "timed_out": false,
+      "wall_s": 26.174154043197632,
+      "peak_working_set": 1561088000,
+      "peak_private_bytes": 4714123264
+     },
+     "_json": "benchmarks\\results\\raw\\godot-4.7.2_capture\\stock\\sponza\\sponza_capture_stock_1920x1080_run0.json",
+     "_gpu_telemetry": {
+      "n": 25,
+      "clocks.gr": {
+       "min": 180.0,
+       "mean": 1454.4,
+       "max": 1852.0
+      },
+      "clocks.mem": {
+       "min": 810.0,
+       "mean": 9364.92,
+       "max": 10821.0
+      },
+      "temperature.gpu": {
+       "min": 61.0,
+       "mean": 67.2,
+       "max": 71.0
+      },
+      "power.draw": {
+       "min": 10.5,
+       "mean": 48.925599999999996,
+       "max": 81.08
+      },
+      "utilization.gpu": {
+       "min": 0.0,
+       "mean": 64.56,
+       "max": 99.0
+      },
+      "memory.used": {
+       "min": 328.0,
+       "mean": 2859.08,
+       "max": 3393.0
+      },
+      "throttle_reasons_seen": [
+       "0x0000000000000004",
+       "0x0000000000000400"
+      ]
+     }
+    }
+   ]
+  },
+  "sponza|2560x1440|stock": {
+   "scene": "sponza",
+   "resolution": "2560x1440",
+   "build": "stock",
+   "preset": "high",
+   "set": "",
+   "fellow": "",
+   "binary": "stock",
+   "variant_args": [],
+   "mode": "capture",
+   "runs": [
+    {
+     "schema": 1,
+     "scene": "sponza",
+     "mode": "capture",
+     "tag": "stock",
+     "run": 0,
+     "cmdline_user_args": [
+      "--scene=sponza",
+      "--mode=capture",
+      "--res=2560x1440",
+      "--tag=stock",
+      "--run=0",
+      "--out=C:\\Users\\matek\\Documents\\GitHub\\FellowGodot\\benchmarks\\results\\raw\\godot-4.7.2_capture\\stock\\sponza",
+      "--warmup=10.0",
+      "--measure=30.0",
+      "--preset=high",
+      "--hdr=1"
+     ],
+     "cmdline_args": [],
+     "engine": {
+      "major": 4,
+      "minor": 7,
+      "patch": 2,
+      "hex": 263938,
+      "status": "stable",
+      "build": "custom_build",
+      "hash": "ed1daf0bf001b61586d9930840f2f1394092c079",
+      "timestamp": 1786929518,
+      "string": "4.7.2-stable (custom_build)"
+     },
+     "engine_build": {
+      "debug_build": false,
+      "has_editor": false,
+      "template_release": true
+     },
+     "adapter": {
+      "name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+      "vendor": "NVIDIA",
+      "api_version": "1.4.351",
+      "type": 2,
+      "driver": [
+       "NVIDIA",
+       "32.0.16.1714"
+      ],
+      "rendering_driver": "vulkan",
+      "rendering_method": "forward_plus"
+     },
+     "os": {
+      "name": "Windows",
+      "version": "10.0.26200",
+      "cpu": "Intel(R) Core(TM) Ultra 9 275HX",
+      "cpu_count": 24
+     },
+     "fellow": {
+      "available": false,
+      "requested": {},
+      "state": {}
+     },
+     "load_time_ms": 3725.599,
+     "startup_to_first_frame_ms": 3732.565,
+     "resolution": [
+      2560,
+      1440
+     ],
+     "valid": true,
+     "files": [
+      "sponza_2560x1440_sponza_cam_01.png",
+      "sponza_2560x1440_sponza_cam_02.png",
+      "sponza_2560x1440_sponza_cam_03.png",
+      "sponza_2560x1440_sponza_cam_04.png",
+      "sponza_2560x1440_sponza_cam_05.png",
+      "sponza_2560x1440_sponza_cam_06.png",
+      "sponza_2560x1440_sponza_cam_01.exr",
+      "sponza_2560x1440_sponza_cam_02.exr",
+      "sponza_2560x1440_sponza_cam_03.exr",
+      "sponza_2560x1440_sponza_cam_04.exr",
+      "sponza_2560x1440_sponza_cam_05.exr",
+      "sponza_2560x1440_sponza_cam_06.exr"
+     ],
+     "total_runtime_s": 34.022758,
+     "_proc": {
+      "returncode": 0,
+      "timed_out": false,
+      "wall_s": 36.01437258720398,
+      "peak_working_set": 1615458304,
+      "peak_private_bytes": 5045391360
+     },
+     "_json": "benchmarks\\results\\raw\\godot-4.7.2_capture\\stock\\sponza\\sponza_capture_stock_2560x1440_run0.json",
+     "_gpu_telemetry": {
+      "n": 34,
+      "clocks.gr": {
+       "min": 180.0,
+       "mean": 1381.764705882353,
+       "max": 1860.0
+      },
+      "clocks.mem": {
+       "min": 810.0,
+       "mean": 9161.529411764706,
+       "max": 10821.0
+      },
+      "temperature.gpu": {
+       "min": 60.0,
+       "mean": 66.61764705882354,
+       "max": 71.0
+      },
+      "power.draw": {
+       "min": 12.74,
+       "mean": 54.88941176470588,
+       "max": 87.71
+      },
+      "utilization.gpu": {
+       "min": 0.0,
+       "mean": 70.61764705882354,
+       "max": 100.0
+      },
+      "memory.used": {
+       "min": 346.0,
+       "mean": 3267.735294117647,
+       "max": 3708.0
+      },
+      "throttle_reasons_seen": [
+       "0x0000000000000004",
+       "0x0000000000000400"
+      ]
+     }
+    }
+   ]
+  },
+  "bistro_exterior|1920x1080|stock": {
+   "scene": "bistro_exterior",
+   "resolution": "1920x1080",
+   "build": "stock",
+   "preset": "high",
+   "set": "",
+   "fellow": "",
+   "binary": "stock",
+   "variant_args": [],
+   "mode": "capture",
+   "runs": [
+    {
+     "schema": 1,
+     "scene": "bistro_exterior",
+     "mode": "capture",
+     "tag": "stock",
+     "run": 0,
+     "cmdline_user_args": [
+      "--scene=bistro_exterior",
+      "--mode=capture",
+      "--res=1920x1080",
+      "--tag=stock",
+      "--run=0",
+      "--out=C:\\Users\\matek\\Documents\\GitHub\\FellowGodot\\benchmarks\\results\\raw\\godot-4.7.2_capture\\stock\\bistro_exterior",
+      "--warmup=10.0",
+      "--measure=30.0",
+      "--preset=high",
+      "--hdr=1"
+     ],
+     "cmdline_args": [],
+     "engine": {
+      "major": 4,
+      "minor": 7,
+      "patch": 2,
+      "hex": 263938,
+      "status": "stable",
+      "build": "custom_build",
+      "hash": "ed1daf0bf001b61586d9930840f2f1394092c079",
+      "timestamp": 1786929518,
+      "string": "4.7.2-stable (custom_build)"
+     },
+     "engine_build": {
+      "debug_build": false,
+      "has_editor": false,
+      "template_release": true
+     },
+     "adapter": {
+      "name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+      "vendor": "NVIDIA",
+      "api_version": "1.4.351",
+      "type": 2,
+      "driver": [
+       "NVIDIA",
+       "32.0.16.1714"
+      ],
+      "rendering_driver": "vulkan",
+      "rendering_method": "forward_plus"
+     },
+     "os": {
+      "name": "Windows",
+      "version": "10.0.26200",
+      "cpu": "Intel(R) Core(TM) Ultra 9 275HX",
+      "cpu_count": 24
+     },
+     "fellow": {
+      "available": false,
+      "requested": {},
+      "state": {}
+     },
+     "load_time_ms": 2706.371,
+     "startup_to_first_frame_ms": 2715.326,
+     "resolution": [
+      1920,
+      1080
+     ],
+     "valid": true,
+     "files": [
+      "bistro_exterior_1920x1080_bistro_ext_cam_01.png",
+      "bistro_exterior_1920x1080_bistro_ext_cam_02.png",
+      "bistro_exterior_1920x1080_bistro_ext_cam_03.png",
+      "bistro_exterior_1920x1080_bistro_ext_cam_04.png",
+      "bistro_exterior_1920x1080_bistro_ext_cam_01.exr",
+      "bistro_exterior_1920x1080_bistro_ext_cam_02.exr",
+      "bistro_exterior_1920x1080_bistro_ext_cam_03.exr",
+      "bistro_exterior_1920x1080_bistro_ext_cam_04.exr"
+     ],
+     "total_runtime_s": 9.932369,
+     "_proc": {
+      "returncode": 0,
+      "timed_out": false,
+      "wall_s": 11.757318496704102,
+      "peak_working_set": 1343193088,
+      "peak_private_bytes": 4188790784
+     },
+     "_json": "benchmarks\\results\\raw\\godot-4.7.2_capture\\stock\\bistro_exterior\\bistro_exterior_capture_stock_1920x1080_run0.json",
+     "_gpu_telemetry": {
+      "n": 11,
+      "clocks.gr": {
+       "min": 180.0,
+       "mean": 1276.1818181818182,
+       "max": 1860.0
+      },
+      "clocks.mem": {
+       "min": 810.0,
+       "mean": 8918.181818181818,
+       "max": 10821.0
+      },
+      "temperature.gpu": {
+       "min": 61.0,
+       "mean": 64.36363636363636,
+       "max": 69.0
+      },
+      "power.draw": {
+       "min": 13.11,
+       "mean": 45.656363636363636,
+       "max": 83.11
+      },
+      "utilization.gpu": {
+       "min": 0.0,
+       "mean": 54.45454545454545,
+       "max": 98.0
+      },
+      "memory.used": {
+       "min": 451.0,
+       "mean": 2431.909090909091,
+       "max": 3106.0
+      },
+      "throttle_reasons_seen": [
+       "0x0000000000000004",
+       "0x0000000000000400"
+      ]
+     }
+    }
+   ]
+  },
+  "bistro_exterior|2560x1440|stock": {
+   "scene": "bistro_exterior",
+   "resolution": "2560x1440",
+   "build": "stock",
+   "preset": "high",
+   "set": "",
+   "fellow": "",
+   "binary": "stock",
+   "variant_args": [],
+   "mode": "capture",
+   "runs": [
+    {
+     "schema": 1,
+     "scene": "bistro_exterior",
+     "mode": "capture",
+     "tag": "stock",
+     "run": 0,
+     "cmdline_user_args": [
+      "--scene=bistro_exterior",
+      "--mode=capture",
+      "--res=2560x1440",
+      "--tag=stock",
+      "--run=0",
+      "--out=C:\\Users\\matek\\Documents\\GitHub\\FellowGodot\\benchmarks\\results\\raw\\godot-4.7.2_capture\\stock\\bistro_exterior",
+      "--warmup=10.0",
+      "--measure=30.0",
+      "--preset=high",
+      "--hdr=1"
+     ],
+     "cmdline_args": [],
+     "engine": {
+      "major": 4,
+      "minor": 7,
+      "patch": 2,
+      "hex": 263938,
+      "status": "stable",
+      "build": "custom_build",
+      "hash": "ed1daf0bf001b61586d9930840f2f1394092c079",
+      "timestamp": 1786929518,
+      "string": "4.7.2-stable (custom_build)"
+     },
+     "engine_build": {
+      "debug_build": false,
+      "has_editor": false,
+      "template_release": true
+     },
+     "adapter": {
+      "name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+      "vendor": "NVIDIA",
+      "api_version": "1.4.351",
+      "type": 2,
+      "driver": [
+       "NVIDIA",
+       "32.0.16.1714"
+      ],
+      "rendering_driver": "vulkan",
+      "rendering_method": "forward_plus"
+     },
+     "os": {
+      "name": "Windows",
+      "version": "10.0.26200",
+      "cpu": "Intel(R) Core(TM) Ultra 9 275HX",
+      "cpu_count": 24
+     },
+     "fellow": {
+      "available": false,
+      "requested": {},
+      "state": {}
+     },
+     "load_time_ms": 2509.832,
+     "startup_to_first_frame_ms": 2518.87,
+     "resolution": [
+      2560,
+      1440
+     ],
+     "valid": true,
+     "files": [
+      "bistro_exterior_2560x1440_bistro_ext_cam_01.png",
+      "bistro_exterior_2560x1440_bistro_ext_cam_02.png",
+      "bistro_exterior_2560x1440_bistro_ext_cam_03.png",
+      "bistro_exterior_2560x1440_bistro_ext_cam_04.png",
+      "bistro_exterior_2560x1440_bistro_ext_cam_01.exr",
+      "bistro_exterior_2560x1440_bistro_ext_cam_02.exr",
+      "bistro_exterior_2560x1440_bistro_ext_cam_03.exr",
+      "bistro_exterior_2560x1440_bistro_ext_cam_04.exr"
+     ],
+     "total_runtime_s": 14.003119,
+     "_proc": {
+      "returncode": 0,
+      "timed_out": false,
+      "wall_s": 15.668371200561523,
+      "peak_working_set": 1397415936,
+      "peak_private_bytes": 4452134912
+     },
+     "_json": "benchmarks\\results\\raw\\godot-4.7.2_capture\\stock\\bistro_exterior\\bistro_exterior_capture_stock_2560x1440_run0.json",
+     "_gpu_telemetry": {
+      "n": 15,
+      "clocks.gr": {
+       "min": 180.0,
+       "mean": 1175.3333333333333,
+       "max": 1882.0
+      },
+      "clocks.mem": {
+       "min": 9001.0,
+       "mean": 9243.666666666666,
+       "max": 10821.0
+      },
+      "temperature.gpu": {
+       "min": 59.0,
+       "mean": 62.733333333333334,
+       "max": 68.0
+      },
+      "power.draw": {
+       "min": 12.8,
+       "mean": 39.72266666666666,
+       "max": 86.53
+      },
+      "utilization.gpu": {
+       "min": 0.0,
+       "mean": 40.6,
+       "max": 98.0
+      },
+      "memory.used": {
+       "min": 328.0,
+       "mean": 2543.133333333333,
+       "max": 3414.0
+      },
+      "throttle_reasons_seen": [
+       "0x0000000000000004",
+       "0x0000000000000400"
+      ]
+     }
+    }
+   ]
+  },
+  "bistro_interior|1920x1080|stock": {
+   "scene": "bistro_interior",
+   "resolution": "1920x1080",
+   "build": "stock",
+   "preset": "high",
+   "set": "",
+   "fellow": "",
+   "binary": "stock",
+   "variant_args": [],
+   "mode": "capture",
+   "runs": [
+    {
+     "schema": 1,
+     "scene": "bistro_interior",
+     "mode": "capture",
+     "tag": "stock",
+     "run": 0,
+     "cmdline_user_args": [
+      "--scene=bistro_interior",
+      "--mode=capture",
+      "--res=1920x1080",
+      "--tag=stock",
+      "--run=0",
+      "--out=C:\\Users\\matek\\Documents\\GitHub\\FellowGodot\\benchmarks\\results\\raw\\godot-4.7.2_capture\\stock\\bistro_interior",
+      "--warmup=10.0",
+      "--measure=30.0",
+      "--preset=high",
+      "--hdr=1"
+     ],
+     "cmdline_args": [],
+     "engine": {
+      "major": 4,
+      "minor": 7,
+      "patch": 2,
+      "hex": 263938,
+      "status": "stable",
+      "build": "custom_build",
+      "hash": "ed1daf0bf001b61586d9930840f2f1394092c079",
+      "timestamp": 1786929518,
+      "string": "4.7.2-stable (custom_build)"
+     },
+     "engine_build": {
+      "debug_build": false,
+      "has_editor": false,
+      "template_release": true
+     },
+     "adapter": {
+      "name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+      "vendor": "NVIDIA",
+      "api_version": "1.4.351",
+      "type": 2,
+      "driver": [
+       "NVIDIA",
+       "32.0.16.1714"
+      ],
+      "rendering_driver": "vulkan",
+      "rendering_method": "forward_plus"
+     },
+     "os": {
+      "name": "Windows",
+      "version": "10.0.26200",
+      "cpu": "Intel(R) Core(TM) Ultra 9 275HX",
+      "cpu_count": 24
+     },
+     "fellow": {
+      "available": false,
+      "requested": {},
+      "state": {}
+     },
+     "load_time_ms": 1643.525,
+     "startup_to_first_frame_ms": 1653.017,
+     "resolution": [
+      1920,
+      1080
+     ],
+     "valid": true,
+     "files": [
+      "bistro_interior_1920x1080_bistro_int_cam_01.png",
+      "bistro_interior_1920x1080_bistro_int_cam_02.png",
+      "bistro_interior_1920x1080_bistro_int_cam_03.png",
+      "bistro_interior_1920x1080_bistro_int_cam_04.png",
+      "bistro_interior_1920x1080_bistro_int_cam_01.exr",
+      "bistro_interior_1920x1080_bistro_int_cam_02.exr",
+      "bistro_interior_1920x1080_bistro_int_cam_03.exr",
+      "bistro_interior_1920x1080_bistro_int_cam_04.exr"
+     ],
+     "total_runtime_s": 8.083869,
+     "_proc": {
+      "returncode": 0,
+      "timed_out": false,
+      "wall_s": 9.922048568725586,
+      "peak_working_set": 1259094016,
+      "peak_private_bytes": 3003891712
+     },
+     "_json": "benchmarks\\results\\raw\\godot-4.7.2_capture\\stock\\bistro_interior\\bistro_interior_capture_stock_1920x1080_run0.json",
+     "_gpu_telemetry": {
+      "n": 10,
+      "clocks.gr": {
+       "min": 180.0,
+       "mean": 1251.7,
+       "max": 1995.0
+      },
+      "clocks.mem": {
+       "min": 9001.0,
+       "mean": 9729.0,
+       "max": 10821.0
+      },
+      "temperature.gpu": {
+       "min": 59.0,
+       "mean": 61.9,
+       "max": 66.0
+      },
+      "power.draw": {
+       "min": 12.02,
+       "mean": 44.81400000000001,
+       "max": 84.38
+      },
+      "utilization.gpu": {
+       "min": 0.0,
+       "mean": 36.4,
+       "max": 97.0
+      },
+      "memory.used": {
+       "min": 328.0,
+       "mean": 1434.4,
+       "max": 2073.0
+      },
+      "throttle_reasons_seen": [
+       "0x0000000000000004",
+       "0x0000000000000400"
+      ]
+     }
+    }
+   ]
+  },
+  "bistro_interior|2560x1440|stock": {
+   "scene": "bistro_interior",
+   "resolution": "2560x1440",
+   "build": "stock",
+   "preset": "high",
+   "set": "",
+   "fellow": "",
+   "binary": "stock",
+   "variant_args": [],
+   "mode": "capture",
+   "runs": [
+    {
+     "schema": 1,
+     "scene": "bistro_interior",
+     "mode": "capture",
+     "tag": "stock",
+     "run": 0,
+     "cmdline_user_args": [
+      "--scene=bistro_interior",
+      "--mode=capture",
+      "--res=2560x1440",
+      "--tag=stock",
+      "--run=0",
+      "--out=C:\\Users\\matek\\Documents\\GitHub\\FellowGodot\\benchmarks\\results\\raw\\godot-4.7.2_capture\\stock\\bistro_interior",
+      "--warmup=10.0",
+      "--measure=30.0",
+      "--preset=high",
+      "--hdr=1"
+     ],
+     "cmdline_args": [],
+     "engine": {
+      "major": 4,
+      "minor": 7,
+      "patch": 2,
+      "hex": 263938,
+      "status": "stable",
+      "build": "custom_build",
+      "hash": "ed1daf0bf001b61586d9930840f2f1394092c079",
+      "timestamp": 1786929518,
+      "string": "4.7.2-stable (custom_build)"
+     },
+     "engine_build": {
+      "debug_build": false,
+      "has_editor": false,
+      "template_release": true
+     },
+     "adapter": {
+      "name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+      "vendor": "NVIDIA",
+      "api_version": "1.4.351",
+      "type": 2,
+      "driver": [
+       "NVIDIA",
+       "32.0.16.1714"
+      ],
+      "rendering_driver": "vulkan",
+      "rendering_method": "forward_plus"
+     },
+     "os": {
+      "name": "Windows",
+      "version": "10.0.26200",
+      "cpu": "Intel(R) Core(TM) Ultra 9 275HX",
+      "cpu_count": 24
+     },
+     "fellow": {
+      "available": false,
+      "requested": {},
+      "state": {}
+     },
+     "load_time_ms": 1654.778,
+     "startup_to_first_frame_ms": 1663.852,
+     "resolution": [
+      2560,
+      1440
+     ],
+     "valid": true,
+     "files": [
+      "bistro_interior_2560x1440_bistro_int_cam_01.png",
+      "bistro_interior_2560x1440_bistro_int_cam_02.png",
+      "bistro_interior_2560x1440_bistro_int_cam_03.png",
+      "bistro_interior_2560x1440_bistro_int_cam_04.png",
+      "bistro_interior_2560x1440_bistro_int_cam_01.exr",
+      "bistro_interior_2560x1440_bistro_int_cam_02.exr",
+      "bistro_interior_2560x1440_bistro_int_cam_03.exr",
+      "bistro_interior_2560x1440_bistro_int_cam_04.exr"
+     ],
+     "total_runtime_s": 12.61928,
+     "_proc": {
+      "returncode": 0,
+      "timed_out": false,
+      "wall_s": 14.369009017944336,
+      "peak_working_set": 1319280640,
+      "peak_private_bytes": 3602391040
+     },
+     "_json": "benchmarks\\results\\raw\\godot-4.7.2_capture\\stock\\bistro_interior\\bistro_interior_capture_stock_2560x1440_run0.json",
+     "_gpu_telemetry": {
+      "n": 13,
+      "clocks.gr": {
+       "min": 180.0,
+       "mean": 1133.5384615384614,
+       "max": 2070.0
+      },
+      "clocks.mem": {
+       "min": 9001.0,
+       "mean": 9701.0,
+       "max": 10821.0
+      },
+      "temperature.gpu": {
+       "min": 58.0,
+       "mean": 60.92307692307692,
+       "max": 66.0
+      },
+      "power.draw": {
+       "min": 12.08,
+       "mean": 34.955384615384624,
+       "max": 87.15
+      },
+      "utilization.gpu": {
+       "min": 0.0,
+       "mean": 31.46153846153846,
+       "max": 98.0
+      },
+      "memory.used": {
+       "min": 451.0,
+       "mean": 2059.4615384615386,
+       "max": 2646.0
+      },
+      "throttle_reasons_seen": [
+       "0x0000000000000004",
+       "0x0000000000000400"
+      ]
+     }
+    }
+   ]
+  }
+ }
+}

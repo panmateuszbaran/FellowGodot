@@ -1,0 +1,68 @@
+{
+  "timestamp_local": "2026-09-30T10:10:36.911861",
+  "host": "PREDZIO",
+  "python": "3.11.0",
+  "os": {
+    "platform": "Windows-10-10.0.26200-SP0",
+    "release": "10",
+    "version": "10.0.26200"
+  },
+  "cpu": "{\"Name\":\"Intel(R) Core(TM) Ultra 9 275HX\",\"NumberOfCores\":24,\"NumberOfLogicalProcessors\":24,\"MaxClockSpeed\":2700}",
+  "ram": "{\"TotalBytes\":68112736256,\"Modules\":[{\"Capacity\":34359738368,\"Speed\":6400,\"ConfiguredClockSpeed\":6400,\"Manufacturer\":\"Micron Technology\",\"PartNumber\":\"MTC16C2085S1VC64BD1 \"},{\"Capacity\":34359738368,\"Speed\":6400,\"ConfiguredClockSpeed\":6400,\"Manufacturer\":\"Micron Technology\",\"PartNumber\":\"MTC16C2085S1VC64BD1 \"}]}",
+  "os_caption": "{\"Caption\":\"Microsoft Windows 11 Home\",\"Version\":\"10.0.26200\",\"BuildNumber\":\"26200\"}",
+  "system": "{\"Manufacturer\":\"Acer\",\"Model\":\"Predator PHN16S-71\"}",
+  "power": "{\"Battery\":{\"PowerOnline\":true,\"Charging\":false},\"Scheme\":\"Power Scheme GUID: 3b79c5ed-2baa-4957-a015-c958d3221bfc  (Acer)\"}",
+  "display": "[{\"Name\":\"Intel(R) Graphics\",\"DriverVersion\":\"32.0.101.6629\",\"CurrentHorizontalResolution\":2560,\"CurrentVerticalResolution\":1600,\"CurrentRefreshRate\":240},{\"Name\":\"NVIDIA GeForce RTX 5070 Ti Laptop GPU\",\"DriverVersion\":\"32.0.16.1714\",\"CurrentHorizontalResolution\":null,\"CurrentVerticalResolution\":null,\"CurrentRefreshRate\":null}]",
+  "gpu": [
+    {
+      "name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+      "driver_version": "617.14",
+      "memory.total": "12227",
+      "pcie.link.gen.max": "5",
+      "pcie.link.width.max": "16",
+      "clocks.max.graphics": "3090",
+      "clocks.max.memory": "14001",
+      "power.limit": "[N/A]",
+      "vbios_version": "98.05.31.00.49"
+    }
+  ],
+  "engine": {
+    "commit": "e2a897c6b4408c212f986e156947c57c498b9535",
+    "describe": "4.7.2-stable-15-ge2a897c6b4",
+    "branch": "HEAD",
+    "status_short": ""
+  },
+  "build_flags": "platform=windows target=template_release production=yes disable_path_overrides=no winrt=no accesskit=no d3d12=no (MSVC, see BUILDING_FELLOWENGINE.md)",
+  "compiler": {
+    "visual_studio": "16.11.60",
+    "msvc_toolsets": [
+      "14.29.30133"
+    ]
+  },
+  "binaries": {
+    "stock": {
+      "path": ".tools\\bin\\stock\\godot.windows.template_release.x86_64.exe",
+      "size": 68635136,
+      "sha256": "f96d22afc9238c19ce728b307382e08675ca35455cad94cae2d4c5b8f88a6604",
+      "mtime": "2026-09-29T23:08:53.520548"
+    },
+    "fellow_off": {
+      "path": ".tools\\bin\\fellow\\godot.windows.template_release.x86_64.exe",
+      "size": 68727296,
+      "sha256": "81a26a6d85491a83c963cb79ec4dfe0caefe0773001c1674f732860fda39ddf7",
+      "mtime": "2026-09-30T01:16:31.531927"
+    },
+    "fellow_pp": {
+      "path": ".tools\\bin\\fellow\\godot.windows.template_release.x86_64.exe",
+      "size": 68727296,
+      "sha256": "81a26a6d85491a83c963cb79ec4dfe0caefe0773001c1674f732860fda39ddf7",
+      "mtime": "2026-09-30T01:16:31.531927"
+    },
+    "fellow_v2": {
+      "path": ".tools\\bin\\fellow\\godot.windows.template_release.x86_64.exe",
+      "size": 68727296,
+      "sha256": "81a26a6d85491a83c963cb79ec4dfe0caefe0773001c1674f732860fda39ddf7",
+      "mtime": "2026-09-30T01:16:31.531927"
+    }
+  }
+}

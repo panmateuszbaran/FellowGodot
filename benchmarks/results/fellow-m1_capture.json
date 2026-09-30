@@ -1,0 +1,3451 @@
+{
+ "session": "fellow-m1_capture",
+ "label": "",
+ "args": {
+  "builds": "stock,fellow_pp=fellow@postfx/taa_history_pingpong=true,fellow_v2=fellow@postfx/taa_resolve_v2=true;postfx/taa_history_pingpong=true",
+  "godot": null,
+  "scene": "pbr,sponza,bistro_exterior,bistro_interior",
+  "mode": "capture",
+  "res": "1920x1080,2560x1440",
+  "runs": 3,
+  "max_runs": 6,
+  "max_cv": 0.03,
+  "warmup": 10.0,
+  "measure": 30.0,
+  "percam": 0,
+  "profile": false,
+  "preset": "high",
+  "set": "",
+  "fellow": "",
+  "fellow_off_for": "stock",
+  "extra": "",
+  "cooldown": 5.0,
+  "heat_soak": 240.0,
+  "timeout": 900.0,
+  "session": "fellow-m1_capture",
+  "label": "",
+  "no_telemetry": false,
+  "merge": false,
+  "supersede_note": ""
+ },
+ "hardware": {
+  "timestamp_local": "2026-09-30T13:13:30.911480",
+  "host": "PREDZIO",
+  "python": "3.11.0",
+  "os": {
+   "platform": "Windows-10-10.0.26200-SP0",
+   "release": "10",
+   "version": "10.0.26200"
+  },
+  "cpu": "{\"Name\":\"Intel(R) Core(TM) Ultra 9 275HX\",\"NumberOfCores\":24,\"NumberOfLogicalProcessors\":24,\"MaxClockSpeed\":2700}",
+  "ram": "{\"TotalBytes\":68112736256,\"Modules\":[{\"Capacity\":34359738368,\"Speed\":6400,\"ConfiguredClockSpeed\":6400,\"Manufacturer\":\"Micron Technology\",\"PartNumber\":\"MTC16C2085S1VC64BD1 \"},{\"Capacity\":34359738368,\"Speed\":6400,\"ConfiguredClockSpeed\":6400,\"Manufacturer\":\"Micron Technology\",\"PartNumber\":\"MTC16C2085S1VC64BD1 \"}]}",
+  "os_caption": "{\"Caption\":\"Microsoft Windows 11 Home\",\"Version\":\"10.0.26200\",\"BuildNumber\":\"26200\"}",
+  "system": "{\"Manufacturer\":\"Acer\",\"Model\":\"Predator PHN16S-71\"}",
+  "power": "{\"Battery\":{\"PowerOnline\":true,\"Charging\":false},\"Scheme\":\"Power Scheme GUID: 3b79c5ed-2baa-4957-a015-c958d3221bfc  (Acer)\"}",
+  "display": "[{\"Name\":\"Intel(R) Graphics\",\"DriverVersion\":\"32.0.101.6629\",\"CurrentHorizontalResolution\":2560,\"CurrentVerticalResolution\":1600,\"CurrentRefreshRate\":240},{\"Name\":\"NVIDIA GeForce RTX 5070 Ti Laptop GPU\",\"DriverVersion\":\"32.0.16.1714\",\"CurrentHorizontalResolution\":null,\"CurrentVerticalResolution\":null,\"CurrentRefreshRate\":null}]",
+  "gpu": [
+   {
+    "name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+    "driver_version": "617.14",
+    "memory.total": "12227",
+    "pcie.link.gen.max": "5",
+    "pcie.link.width.max": "16",
+    "clocks.max.graphics": "3090",
+    "clocks.max.memory": "14001",
+    "power.limit": "[N/A]",
+    "vbios_version": "98.05.31.00.49"
+   }
+  ],
+  "engine": {
+   "commit": "e2a897c6b4408c212f986e156947c57c498b9535",
+   "describe": "4.7.2-stable-15-ge2a897c6b4",
+   "branch": "HEAD",
+   "status_short": ""
+  },
+  "build_flags": "platform=windows target=template_release production=yes disable_path_overrides=no winrt=no accesskit=no d3d12=no (MSVC, see BUILDING_FELLOWENGINE.md)",
+  "compiler": {
+   "visual_studio": "16.11.60",
+   "msvc_toolsets": [
+    "14.29.30133"
+   ]
+  },
+  "binaries": {
+   "stock": {
+    "path": ".tools\\bin\\stock\\godot.windows.template_release.x86_64.exe",
+    "size": 68635136,
+    "sha256": "f96d22afc9238c19ce728b307382e08675ca35455cad94cae2d4c5b8f88a6604",
+    "mtime": "2026-09-29T23:08:53.520548"
+   },
+   "fellow_pp": {
+    "path": ".tools\\bin\\fellow\\godot.windows.template_release.x86_64.exe",
+    "size": 68727296,
+    "sha256": "81a26a6d85491a83c963cb79ec4dfe0caefe0773001c1674f732860fda39ddf7",
+    "mtime": "2026-09-30T01:16:31.531927"
+   },
+   "fellow_v2": {
+    "path": ".tools\\bin\\fellow\\godot.windows.template_release.x86_64.exe",
+    "size": 68727296,
+    "sha256": "81a26a6d85491a83c963cb79ec4dfe0caefe0773001c1674f732860fda39ddf7",
+    "mtime": "2026-09-30T01:16:31.531927"
+   }
+  }
+ },
+ "gpu_telemetry": {
+  "n": 408,
+  "clocks.gr": {
+   "min": 172.0,
+   "mean": 882.2769607843137,
+   "max": 2647.0
+  },
+  "clocks.mem": {
+   "min": 405.0,
+   "mean": 8420.718137254902,
+   "max": 10821.0
+  },
+  "temperature.gpu": {
+   "min": 53.0,
+   "mean": 59.068627450980394,
+   "max": 72.0
+  },
+  "power.draw": {
+   "min": 4.7,
+   "mean": 29.29906862745099,
+   "max": 93.47
+  },
+  "utilization.gpu": {
+   "min": 0.0,
+   "mean": 25.198529411764707,
+   "max": 99.0
+  },
+  "memory.used": {
+   "min": 0.0,
+   "mean": 1271.735294117647,
+   "max": 3136.0
+  },
+  "throttle_reasons_seen": [
+   "0x0000000000000004",
+   "0x0000000000000400"
+  ]
+ },
+ "heat_soak_telemetry": {},
+ "results": {
+  "pbr|1920x1080|stock": {
+   "scene": "pbr",
+   "resolution": "1920x1080",
+   "build": "stock",
+   "preset": "high",
+   "set": "",
+   "fellow": "",
+   "binary": "stock",
+   "variant_args": [],
+   "mode": "capture",
+   "runs": [
+    {
+     "schema": 1,
+     "scene": "pbr",
+     "mode": "capture",
+     "tag": "stock",
+     "run": 0,
+     "cmdline_user_args": [
+      "--scene=pbr",
+      "--mode=capture",
+      "--res=1920x1080",
+      "--tag=stock",
+      "--run=0",
+      "--out=C:\\Users\\matek\\Documents\\GitHub\\FellowGodot\\benchmarks\\results\\raw\\fellow-m1_capture\\stock\\pbr",
+      "--warmup=10.0",
+      "--measure=30.0",
+      "--preset=high"
+     ],
+     "cmdline_args": [],
+     "engine": {
+      "major": 4,
+      "minor": 7,
+      "patch": 2,
+      "hex": 263938,
+      "status": "stable",
+      "build": "custom_build",
+      "hash": "ed1daf0bf001b61586d9930840f2f1394092c079",
+      "timestamp": 1786929518,
+      "string": "4.7.2-stable (custom_build)"
+     },
+     "engine_build": {
+      "debug_build": false,
+      "has_editor": false,
+      "template_release": true
+     },
+     "adapter": {
+      "name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+      "vendor": "NVIDIA",
+      "api_version": "1.4.351",
+      "type": 2,
+      "driver": [
+       "NVIDIA",
+       "32.0.16.1714"
+      ],
+      "rendering_driver": "vulkan",
+      "rendering_method": "forward_plus"
+     },
+     "os": {
+      "name": "Windows",
+      "version": "10.0.26200",
+      "cpu": "Intel(R) Core(TM) Ultra 9 275HX",
+      "cpu_count": 24
+     },
+     "fellow": {
+      "available": false,
+      "requested": {},
+      "state": {}
+     },
+     "load_time_ms": 1218.068,
+     "startup_to_first_frame_ms": 1238.496,
+     "resolution": [
+      1920,
+      1080
+     ],
+     "valid": true,
+     "files": [
+      "pbr_1920x1080_pbr_overview.png",
+      "pbr_1920x1080_pbr_spheres.png",
+      "pbr_1920x1080_pbr_grazing.png",
+      "pbr_1920x1080_pbr_dark_room.png",
+      "pbr_1920x1080_pbr_thin.png",
+      "pbr_1920x1080_pbr_emissive.png",
+      "pbr_1920x1080_pbr_specular.png"
+     ],
+     "total_runtime_s": 8.34787,
+     "_proc": {
+      "returncode": 0,
+      "timed_out": false,
+      "wall_s": 10.35098385810852,
+      "peak_working_set": 883937280,
+      "peak_private_bytes": 1589391360
+     },
+     "_json": "benchmarks\\results\\raw\\fellow-m1_capture\\stock\\pbr\\pbr_capture_stock_1920x1080_run0.json",
+     "_gpu_telemetry": {
+      "n": 10,
+      "clocks.gr": {
+       "min": 180.0,
+       "mean": 669.7,
+       "max": 2100.0
+      },
+      "clocks.mem": {
+       "min": 405.0,
+       "mean": 8323.4,
+       "max": 10821.0
+      },
+      "temperature.gpu": {
+       "min": 64.0,
+       "mean": 64.8,
+       "max": 72.0
+      },
+      "power.draw": {
+       "min": 5.4,
+       "mean": 24.756000000000004,
+       "max": 74.73
+      },
+      "utilization.gpu": {
+       "min": 0.0,
+       "mean": 12.3,
+       "max": 71.0
+      },
+      "memory.used": {
+       "min": 0.0,
+       "mean": 506.5,
+       "max": 655.0
+      },
+      "throttle_reasons_seen": [
+       "0x0000000000000004",
+       "0x0000000000000400"
+      ]
+     }
+    }
+   ]
+  },
+  "pbr|1920x1080|fellow_pp": {
+   "scene": "pbr",
+   "resolution": "1920x1080",
+   "build": "fellow_pp",
+   "preset": "high",
+   "set": "",
+   "fellow": "postfx/taa_history_pingpong=true",
+   "binary": "fellow",
+   "variant_args": [],
+   "mode": "capture",
+   "runs": [
+    {
+     "schema": 1,
+     "scene": "pbr",
+     "mode": "capture",
+     "tag": "fellow_pp",
+     "run": 0,
+     "cmdline_user_args": [
+      "--scene=pbr",
+      "--mode=capture",
+      "--res=1920x1080",
+      "--tag=fellow_pp",
+      "--run=0",
+      "--out=C:\\Users\\matek\\Documents\\GitHub\\FellowGodot\\benchmarks\\results\\raw\\fellow-m1_capture\\fellow_pp\\pbr",
+      "--warmup=10.0",
+      "--measure=30.0",
+      "--preset=high",
+      "--fellow=postfx/taa_history_pingpong=true"
+     ],
+     "cmdline_args": [],
+     "engine": {
+      "major": 4,
+      "minor": 7,
+      "patch": 2,
+      "hex": 263938,
+      "status": "stable",
+      "build": "custom_build",
+      "hash": "7f257b56ff4bc79057d893fc0f41614b6c4ed28a",
+      "timestamp": 1790722922,
+      "string": "4.7.2-stable (custom_build)"
+     },
+     "engine_build": {
+      "debug_build": false,
+      "has_editor": false,
+      "template_release": true
+     },
+     "adapter": {
+      "name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+      "vendor": "NVIDIA",
+      "api_version": "1.4.351",
+      "type": 2,
+      "driver": [
+       "NVIDIA",
+       "32.0.16.1714"
+      ],
+      "rendering_driver": "vulkan",
+      "rendering_method": "forward_plus"
+     },
+     "os": {
+      "name": "Windows",
+      "version": "10.0.26200",
+      "cpu": "Intel(R) Core(TM) Ultra 9 275HX",
+      "cpu_count": 24
+     },
+     "fellow": {
+      "available": true,
+      "requested": {
+       "rendering/fellow/postfx/taa_history_pingpong": true
+      },
+      "state": {
+       "rendering/fellow/enabled": true,
+       "rendering/fellow/postfx/enabled": true,
+       "rendering/fellow/postfx/taa_resolve_v2": false,
+       "rendering/fellow/postfx/taa_history_pingpong": true,
+       "rendering/fellow/fluid/enabled": true,
+       "rendering/fellow/profiling/pass_timestamps": false
+      }
+     },
+     "load_time_ms": 1178.582,
+     "startup_to_first_frame_ms": 1198.315,
+     "resolution": [
+      1920,
+      1080
+     ],
+     "valid": true,
+     "files": [
+      "pbr_1920x1080_pbr_overview.png",
+      "pbr_1920x1080_pbr_spheres.png",
+      "pbr_1920x1080_pbr_grazing.png",
+      "pbr_1920x1080_pbr_dark_room.png",
+      "pbr_1920x1080_pbr_thin.png",
+      "pbr_1920x1080_pbr_emissive.png",
+      "pbr_1920x1080_pbr_specular.png"
+     ],
+     "total_runtime_s": 8.194194,
+     "_proc": {
+      "returncode": 0,
+      "timed_out": false,
+      "wall_s": 10.280252933502197,
+      "peak_working_set": 949092352,
+      "peak_private_bytes": 1620881408
+     },
+     "_json": "benchmarks\\results\\raw\\fellow-m1_capture\\fellow_pp\\pbr\\pbr_capture_fellow_pp_1920x1080_run0.json",
+     "_gpu_telemetry": {
+      "n": 9,
+      "clocks.gr": {
+       "min": 187.0,
+       "mean": 1518.888888888889,
+       "max": 2362.0
+      },
+      "clocks.mem": {
+       "min": 9001.0,
+       "mean": 9405.444444444445,
+       "max": 10821.0
+      },
+      "temperature.gpu": {
+       "min": 61.0,
+       "mean": 63.55555555555556,
+       "max": 69.0
+      },
+      "power.draw": {
+       "min": 13.26,
+       "mean": 29.259999999999998,
+       "max": 55.56
+      },
+      "utilization.gpu": {
+       "min": 0.0,
+       "mean": 8.444444444444445,
+       "max": 57.0
+      },
+      "memory.used": {
+       "min": 123.0,
+       "mean": 548.3333333333334,
+       "max": 655.0
+      },
+      "throttle_reasons_seen": [
+       "0x0000000000000004",
+       "0x0000000000000400"
+      ]
+     }
+    }
+   ]
+  },
+  "pbr|1920x1080|fellow_v2": {
+   "scene": "pbr",
+   "resolution": "1920x1080",
+   "build": "fellow_v2",
+   "preset": "high",
+   "set": "",
+   "fellow": "postfx/taa_resolve_v2=true,postfx/taa_history_pingpong=true",
+   "binary": "fellow",
+   "variant_args": [],
+   "mode": "capture",
+   "runs": [
+    {
+     "schema": 1,
+     "scene": "pbr",
+     "mode": "capture",
+     "tag": "fellow_v2",
+     "run": 0,
+     "cmdline_user_args": [
+      "--scene=pbr",
+      "--mode=capture",
+      "--res=1920x1080",
+      "--tag=fellow_v2",
+      "--run=0",
+      "--out=C:\\Users\\matek\\Documents\\GitHub\\FellowGodot\\benchmarks\\results\\raw\\fellow-m1_capture\\fellow_v2\\pbr",
+      "--warmup=10.0",
+      "--measure=30.0",
+      "--preset=high",
+      "--fellow=postfx/taa_resolve_v2=true,postfx/taa_history_pingpong=true"
+     ],
+     "cmdline_args": [],
+     "engine": {
+      "major": 4,
+      "minor": 7,
+      "patch": 2,
+      "hex": 263938,
+      "status": "stable",
+      "build": "custom_build",
+      "hash": "7f257b56ff4bc79057d893fc0f41614b6c4ed28a",
+      "timestamp": 1790722922,
+      "string": "4.7.2-stable (custom_build)"
+     },
+     "engine_build": {
+      "debug_build": false,
+      "has_editor": false,
+      "template_release": true
+     },
+     "adapter": {
+      "name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+      "vendor": "NVIDIA",
+      "api_version": "1.4.351",
+      "type": 2,
+      "driver": [
+       "NVIDIA",
+       "32.0.16.1714"
+      ],
+      "rendering_driver": "vulkan",
+      "rendering_method": "forward_plus"
+     },
+     "os": {
+      "name": "Windows",
+      "version": "10.0.26200",
+      "cpu": "Intel(R) Core(TM) Ultra 9 275HX",
+      "cpu_count": 24
+     },
+     "fellow": {
+      "available": true,
+      "requested": {
+       "rendering/fellow/postfx/taa_resolve_v2": true,
+       "rendering/fellow/postfx/taa_history_pingpong": true
+      },
+      "state": {
+       "rendering/fellow/enabled": true,
+       "rendering/fellow/postfx/enabled": true,
+       "rendering/fellow/postfx/taa_resolve_v2": true,
+       "rendering/fellow/postfx/taa_history_pingpong": true,
+       "rendering/fellow/fluid/enabled": true,
+       "rendering/fellow/profiling/pass_timestamps": false
+      }
+     },
+     "load_time_ms": 1022.963,
+     "startup_to_first_frame_ms": 1038.783,
+     "resolution": [
+      1920,
+      1080
+     ],
+     "valid": true,
+     "files": [
+      "pbr_1920x1080_pbr_overview.png",
+      "pbr_1920x1080_pbr_spheres.png",
+      "pbr_1920x1080_pbr_grazing.png",
+      "pbr_1920x1080_pbr_dark_room.png",
+      "pbr_1920x1080_pbr_thin.png",
+      "pbr_1920x1080_pbr_emissive.png",
+      "pbr_1920x1080_pbr_specular.png"
+     ],
+     "total_runtime_s": 7.690831,
+     "_proc": {
+      "returncode": 0,
+      "timed_out": false,
+      "wall_s": 9.51840615272522,
+      "peak_working_set": 882065408,
+      "peak_private_bytes": 1580269568
+     },
+     "_json": "benchmarks\\results\\raw\\fellow-m1_capture\\fellow_v2\\pbr\\pbr_capture_fellow_v2_1920x1080_run0.json",
+     "_gpu_telemetry": {
+      "n": 9,
+      "clocks.gr": {
+       "min": 180.0,
+       "mean": 732.3333333333334,
+       "max": 1627.0
+      },
+      "clocks.mem": {
+       "min": 9001.0,
+       "mean": 9203.222222222223,
+       "max": 10821.0
+      },
+      "temperature.gpu": {
+       "min": 59.0,
+       "mean": 60.0,
+       "max": 61.0
+      },
+      "power.draw": {
+       "min": 12.88,
+       "mean": 22.823333333333334,
+       "max": 45.09
+      },
+      "utilization.gpu": {
+       "min": 0.0,
+       "mean": 6.111111111111111,
+       "max": 47.0
+      },
+      "memory.used": {
+       "min": 102.0,
+       "mean": 503.3333333333333,
+       "max": 655.0
+      },
+      "throttle_reasons_seen": [
+       "0x0000000000000004",
+       "0x0000000000000400"
+      ]
+     }
+    }
+   ]
+  },
+  "pbr|2560x1440|stock": {
+   "scene": "pbr",
+   "resolution": "2560x1440",
+   "build": "stock",
+   "preset": "high",
+   "set": "",
+   "fellow": "",
+   "binary": "stock",
+   "variant_args": [],
+   "mode": "capture",
+   "runs": [
+    {
+     "schema": 1,
+     "scene": "pbr",
+     "mode": "capture",
+     "tag": "stock",
+     "run": 0,
+     "cmdline_user_args": [
+      "--scene=pbr",
+      "--mode=capture",
+      "--res=2560x1440",
+      "--tag=stock",
+      "--run=0",
+      "--out=C:\\Users\\matek\\Documents\\GitHub\\FellowGodot\\benchmarks\\results\\raw\\fellow-m1_capture\\stock\\pbr",
+      "--warmup=10.0",
+      "--measure=30.0",
+      "--preset=high"
+     ],
+     "cmdline_args": [],
+     "engine": {
+      "major": 4,
+      "minor": 7,
+      "patch": 2,
+      "hex": 263938,
+      "status": "stable",
+      "build": "custom_build",
+      "hash": "ed1daf0bf001b61586d9930840f2f1394092c079",
+      "timestamp": 1786929518,
+      "string": "4.7.2-stable (custom_build)"
+     },
+     "engine_build": {
+      "debug_build": false,
+      "has_editor": false,
+      "template_release": true
+     },
+     "adapter": {
+      "name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+      "vendor": "NVIDIA",
+      "api_version": "1.4.351",
+      "type": 2,
+      "driver": [
+       "NVIDIA",
+       "32.0.16.1714"
+      ],
+      "rendering_driver": "vulkan",
+      "rendering_method": "forward_plus"
+     },
+     "os": {
+      "name": "Windows",
+      "version": "10.0.26200",
+      "cpu": "Intel(R) Core(TM) Ultra 9 275HX",
+      "cpu_count": 24
+     },
+     "fellow": {
+      "available": false,
+      "requested": {},
+      "state": {}
+     },
+     "load_time_ms": 830.961,
+     "startup_to_first_frame_ms": 844.297,
+     "resolution": [
+      2560,
+      1440
+     ],
+     "valid": true,
+     "files": [
+      "pbr_2560x1440_pbr_overview.png",
+      "pbr_2560x1440_pbr_spheres.png",
+      "pbr_2560x1440_pbr_grazing.png",
+      "pbr_2560x1440_pbr_dark_room.png",
+      "pbr_2560x1440_pbr_thin.png",
+      "pbr_2560x1440_pbr_emissive.png",
+      "pbr_2560x1440_pbr_specular.png"
+     ],
+     "total_runtime_s": 12.185977,
+     "_proc": {
+      "returncode": 0,
+      "timed_out": false,
+      "wall_s": 13.959195375442505,
+      "peak_working_set": 982073344,
+      "peak_private_bytes": 1660071936
+     },
+     "_json": "benchmarks\\results\\raw\\fellow-m1_capture\\stock\\pbr\\pbr_capture_stock_2560x1440_run0.json",
+     "_gpu_telemetry": {
+      "n": 13,
+      "clocks.gr": {
+       "min": 180.0,
+       "mean": 849.1538461538462,
+       "max": 1980.0
+      },
+      "clocks.mem": {
+       "min": 9001.0,
+       "mean": 9281.0,
+       "max": 10821.0
+      },
+      "temperature.gpu": {
+       "min": 58.0,
+       "mean": 60.30769230769231,
+       "max": 66.0
+      },
+      "power.draw": {
+       "min": 13.23,
+       "mean": 30.481538461538467,
+       "max": 82.55
+      },
+      "utilization.gpu": {
+       "min": 0.0,
+       "mean": 21.384615384615383,
+       "max": 96.0
+      },
+      "memory.used": {
+       "min": 0.0,
+       "mean": 615.3076923076923,
+       "max": 716.0
+      },
+      "throttle_reasons_seen": [
+       "0x0000000000000004",
+       "0x0000000000000400"
+      ]
+     }
+    }
+   ]
+  },
+  "pbr|2560x1440|fellow_pp": {
+   "scene": "pbr",
+   "resolution": "2560x1440",
+   "build": "fellow_pp",
+   "preset": "high",
+   "set": "",
+   "fellow": "postfx/taa_history_pingpong=true",
+   "binary": "fellow",
+   "variant_args": [],
+   "mode": "capture",
+   "runs": [
+    {
+     "schema": 1,
+     "scene": "pbr",
+     "mode": "capture",
+     "tag": "fellow_pp",
+     "run": 0,
+     "cmdline_user_args": [
+      "--scene=pbr",
+      "--mode=capture",
+      "--res=2560x1440",
+      "--tag=fellow_pp",
+      "--run=0",
+      "--out=C:\\Users\\matek\\Documents\\GitHub\\FellowGodot\\benchmarks\\results\\raw\\fellow-m1_capture\\fellow_pp\\pbr",
+      "--warmup=10.0",
+      "--measure=30.0",
+      "--preset=high",
+      "--fellow=postfx/taa_history_pingpong=true"
+     ],
+     "cmdline_args": [],
+     "engine": {
+      "major": 4,
+      "minor": 7,
+      "patch": 2,
+      "hex": 263938,
+      "status": "stable",
+      "build": "custom_build",
+      "hash": "7f257b56ff4bc79057d893fc0f41614b6c4ed28a",
+      "timestamp": 1790722922,
+      "string": "4.7.2-stable (custom_build)"
+     },
+     "engine_build": {
+      "debug_build": false,
+      "has_editor": false,
+      "template_release": true
+     },
+     "adapter": {
+      "name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+      "vendor": "NVIDIA",
+      "api_version": "1.4.351",
+      "type": 2,
+      "driver": [
+       "NVIDIA",
+       "32.0.16.1714"
+      ],
+      "rendering_driver": "vulkan",
+      "rendering_method": "forward_plus"
+     },
+     "os": {
+      "name": "Windows",
+      "version": "10.0.26200",
+      "cpu": "Intel(R) Core(TM) Ultra 9 275HX",
+      "cpu_count": 24
+     },
+     "fellow": {
+      "available": true,
+      "requested": {
+       "rendering/fellow/postfx/taa_history_pingpong": true
+      },
+      "state": {
+       "rendering/fellow/enabled": true,
+       "rendering/fellow/postfx/enabled": true,
+       "rendering/fellow/postfx/taa_resolve_v2": false,
+       "rendering/fellow/postfx/taa_history_pingpong": true,
+       "rendering/fellow/fluid/enabled": true,
+       "rendering/fellow/profiling/pass_timestamps": false
+      }
+     },
+     "load_time_ms": 767.587,
+     "startup_to_first_frame_ms": 780.616,
+     "resolution": [
+      2560,
+      1440
+     ],
+     "valid": true,
+     "files": [
+      "pbr_2560x1440_pbr_overview.png",
+      "pbr_2560x1440_pbr_spheres.png",
+      "pbr_2560x1440_pbr_grazing.png",
+      "pbr_2560x1440_pbr_dark_room.png",
+      "pbr_2560x1440_pbr_thin.png",
+      "pbr_2560x1440_pbr_emissive.png",
+      "pbr_2560x1440_pbr_specular.png"
+     ],
+     "total_runtime_s": 11.613382,
+     "_proc": {
+      "returncode": 0,
+      "timed_out": false,
+      "wall_s": 13.206341028213501,
+      "peak_working_set": 914407424,
+      "peak_private_bytes": 1913896960
+     },
+     "_json": "benchmarks\\results\\raw\\fellow-m1_capture\\fellow_pp\\pbr\\pbr_capture_fellow_pp_2560x1440_run0.json",
+     "_gpu_telemetry": {
+      "n": 13,
+      "clocks.gr": {
+       "min": 180.0,
+       "mean": 843.8461538461538,
+       "max": 1912.0
+      },
+      "clocks.mem": {
+       "min": 405.0,
+       "mean": 8479.76923076923,
+       "max": 10821.0
+      },
+      "temperature.gpu": {
+       "min": 57.0,
+       "mean": 59.46153846153846,
+       "max": 64.0
+      },
+      "power.draw": {
+       "min": 5.11,
+       "mean": 23.621538461538456,
+       "max": 79.07
+      },
+      "utilization.gpu": {
+       "min": 0.0,
+       "mean": 16.615384615384617,
+       "max": 97.0
+      },
+      "memory.used": {
+       "min": 0.0,
+       "mean": 844.4615384615385,
+       "max": 972.0
+      },
+      "throttle_reasons_seen": [
+       "0x0000000000000004",
+       "0x0000000000000400"
+      ]
+     }
+    }
+   ]
+  },
+  "pbr|2560x1440|fellow_v2": {
+   "scene": "pbr",
+   "resolution": "2560x1440",
+   "build": "fellow_v2",
+   "preset": "high",
+   "set": "",
+   "fellow": "postfx/taa_resolve_v2=true,postfx/taa_history_pingpong=true",
+   "binary": "fellow",
+   "variant_args": [],
+   "mode": "capture",
+   "runs": [
+    {
+     "schema": 1,
+     "scene": "pbr",
+     "mode": "capture",
+     "tag": "fellow_v2",
+     "run": 0,
+     "cmdline_user_args": [
+      "--scene=pbr",
+      "--mode=capture",
+      "--res=2560x1440",
+      "--tag=fellow_v2",
+      "--run=0",
+      "--out=C:\\Users\\matek\\Documents\\GitHub\\FellowGodot\\benchmarks\\results\\raw\\fellow-m1_capture\\fellow_v2\\pbr",
+      "--warmup=10.0",
+      "--measure=30.0",
+      "--preset=high",
+      "--fellow=postfx/taa_resolve_v2=true,postfx/taa_history_pingpong=true"
+     ],
+     "cmdline_args": [],
+     "engine": {
+      "major": 4,
+      "minor": 7,
+      "patch": 2,
+      "hex": 263938,
+      "status": "stable",
+      "build": "custom_build",
+      "hash": "7f257b56ff4bc79057d893fc0f41614b6c4ed28a",
+      "timestamp": 1790722922,
+      "string": "4.7.2-stable (custom_build)"
+     },
+     "engine_build": {
+      "debug_build": false,
+      "has_editor": false,
+      "template_release": true
+     },
+     "adapter": {
+      "name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+      "vendor": "NVIDIA",
+      "api_version": "1.4.351",
+      "type": 2,
+      "driver": [
+       "NVIDIA",
+       "32.0.16.1714"
+      ],
+      "rendering_driver": "vulkan",
+      "rendering_method": "forward_plus"
+     },
+     "os": {
+      "name": "Windows",
+      "version": "10.0.26200",
+      "cpu": "Intel(R) Core(TM) Ultra 9 275HX",
+      "cpu_count": 24
+     },
+     "fellow": {
+      "available": true,
+      "requested": {
+       "rendering/fellow/postfx/taa_resolve_v2": true,
+       "rendering/fellow/postfx/taa_history_pingpong": true
+      },
+      "state": {
+       "rendering/fellow/enabled": true,
+       "rendering/fellow/postfx/enabled": true,
+       "rendering/fellow/postfx/taa_resolve_v2": true,
+       "rendering/fellow/postfx/taa_history_pingpong": true,
+       "rendering/fellow/fluid/enabled": true,
+       "rendering/fellow/profiling/pass_timestamps": false
+      }
+     },
+     "load_time_ms": 768.773,
+     "startup_to_first_frame_ms": 781.555,
+     "resolution": [
+      2560,
+      1440
+     ],
+     "valid": true,
+     "files": [
+      "pbr_2560x1440_pbr_overview.png",
+      "pbr_2560x1440_pbr_spheres.png",
+      "pbr_2560x1440_pbr_grazing.png",
+      "pbr_2560x1440_pbr_dark_room.png",
+      "pbr_2560x1440_pbr_thin.png",
+      "pbr_2560x1440_pbr_emissive.png",
+      "pbr_2560x1440_pbr_specular.png"
+     ],
+     "total_runtime_s": 11.532134,
+     "_proc": {
+      "returncode": 0,
+      "timed_out": false,
+      "wall_s": 12.957712173461914,
+      "peak_working_set": 917336064,
+      "peak_private_bytes": 1920339968
+     },
+     "_json": "benchmarks\\results\\raw\\fellow-m1_capture\\fellow_v2\\pbr\\pbr_capture_fellow_v2_2560x1440_run0.json",
+     "_gpu_telemetry": {
+      "n": 12,
+      "clocks.gr": {
+       "min": 225.0,
+       "mean": 859.25,
+       "max": 1785.0
+      },
+      "clocks.mem": {
+       "min": 9001.0,
+       "mean": 9304.333333333334,
+       "max": 10821.0
+      },
+      "temperature.gpu": {
+       "min": 57.0,
+       "mean": 59.083333333333336,
+       "max": 64.0
+      },
+      "power.draw": {
+       "min": 12.74,
+       "mean": 21.787499999999998,
+       "max": 79.21
+      },
+      "utilization.gpu": {
+       "min": 0.0,
+       "mean": 16.5,
+       "max": 97.0
+      },
+      "memory.used": {
+       "min": 44.0,
+       "mean": 837.5,
+       "max": 972.0
+      },
+      "throttle_reasons_seen": [
+       "0x0000000000000004",
+       "0x0000000000000400"
+      ]
+     }
+    }
+   ]
+  },
+  "sponza|1920x1080|stock": {
+   "scene": "sponza",
+   "resolution": "1920x1080",
+   "build": "stock",
+   "preset": "high",
+   "set": "",
+   "fellow": "",
+   "binary": "stock",
+   "variant_args": [],
+   "mode": "capture",
+   "runs": [
+    {
+     "schema": 1,
+     "scene": "sponza",
+     "mode": "capture",
+     "tag": "stock",
+     "run": 0,
+     "cmdline_user_args": [
+      "--scene=sponza",
+      "--mode=capture",
+      "--res=1920x1080",
+      "--tag=stock",
+      "--run=0",
+      "--out=C:\\Users\\matek\\Documents\\GitHub\\FellowGodot\\benchmarks\\results\\raw\\fellow-m1_capture\\stock\\sponza",
+      "--warmup=10.0",
+      "--measure=30.0",
+      "--preset=high"
+     ],
+     "cmdline_args": [],
+     "engine": {
+      "major": 4,
+      "minor": 7,
+      "patch": 2,
+      "hex": 263938,
+      "status": "stable",
+      "build": "custom_build",
+      "hash": "ed1daf0bf001b61586d9930840f2f1394092c079",
+      "timestamp": 1786929518,
+      "string": "4.7.2-stable (custom_build)"
+     },
+     "engine_build": {
+      "debug_build": false,
+      "has_editor": false,
+      "template_release": true
+     },
+     "adapter": {
+      "name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+      "vendor": "NVIDIA",
+      "api_version": "1.4.351",
+      "type": 2,
+      "driver": [
+       "NVIDIA",
+       "32.0.16.1714"
+      ],
+      "rendering_driver": "vulkan",
+      "rendering_method": "forward_plus"
+     },
+     "os": {
+      "name": "Windows",
+      "version": "10.0.26200",
+      "cpu": "Intel(R) Core(TM) Ultra 9 275HX",
+      "cpu_count": 24
+     },
+     "fellow": {
+      "available": false,
+      "requested": {},
+      "state": {}
+     },
+     "load_time_ms": 3601.825,
+     "startup_to_first_frame_ms": 3608.748,
+     "resolution": [
+      1920,
+      1080
+     ],
+     "valid": true,
+     "files": [
+      "sponza_1920x1080_sponza_cam_01.png",
+      "sponza_1920x1080_sponza_cam_02.png",
+      "sponza_1920x1080_sponza_cam_03.png",
+      "sponza_1920x1080_sponza_cam_04.png",
+      "sponza_1920x1080_sponza_cam_05.png",
+      "sponza_1920x1080_sponza_cam_06.png"
+     ],
+     "total_runtime_s": 15.254689,
+     "_proc": {
+      "returncode": 0,
+      "timed_out": false,
+      "wall_s": 16.9305100440979,
+      "peak_working_set": 1483165696,
+      "peak_private_bytes": 4452540416
+     },
+     "_json": "benchmarks\\results\\raw\\fellow-m1_capture\\stock\\sponza\\sponza_capture_stock_1920x1080_run0.json",
+     "_gpu_telemetry": {
+      "n": 16,
+      "clocks.gr": {
+       "min": 180.0,
+       "mean": 1488.6875,
+       "max": 2010.0
+      },
+      "clocks.mem": {
+       "min": 405.0,
+       "mean": 8236.125,
+       "max": 10821.0
+      },
+      "temperature.gpu": {
+       "min": 56.0,
+       "mean": 62.0,
+       "max": 67.0
+      },
+      "power.draw": {
+       "min": 5.09,
+       "mean": 53.760000000000005,
+       "max": 89.39
+      },
+      "utilization.gpu": {
+       "min": 0.0,
+       "mean": 53.25,
+       "max": 99.0
+      },
+      "memory.used": {
+       "min": 0.0,
+       "mean": 2370.3125,
+       "max": 2808.0
+      },
+      "throttle_reasons_seen": [
+       "0x0000000000000004",
+       "0x0000000000000400"
+      ]
+     }
+    }
+   ]
+  },
+  "sponza|1920x1080|fellow_pp": {
+   "scene": "sponza",
+   "resolution": "1920x1080",
+   "build": "fellow_pp",
+   "preset": "high",
+   "set": "",
+   "fellow": "postfx/taa_history_pingpong=true",
+   "binary": "fellow",
+   "variant_args": [],
+   "mode": "capture",
+   "runs": [
+    {
+     "schema": 1,
+     "scene": "sponza",
+     "mode": "capture",
+     "tag": "fellow_pp",
+     "run": 0,
+     "cmdline_user_args": [
+      "--scene=sponza",
+      "--mode=capture",
+      "--res=1920x1080",
+      "--tag=fellow_pp",
+      "--run=0",
+      "--out=C:\\Users\\matek\\Documents\\GitHub\\FellowGodot\\benchmarks\\results\\raw\\fellow-m1_capture\\fellow_pp\\sponza",
+      "--warmup=10.0",
+      "--measure=30.0",
+      "--preset=high",
+      "--fellow=postfx/taa_history_pingpong=true"
+     ],
+     "cmdline_args": [],
+     "engine": {
+      "major": 4,
+      "minor": 7,
+      "patch": 2,
+      "hex": 263938,
+      "status": "stable",
+      "build": "custom_build",
+      "hash": "7f257b56ff4bc79057d893fc0f41614b6c4ed28a",
+      "timestamp": 1790722922,
+      "string": "4.7.2-stable (custom_build)"
+     },
+     "engine_build": {
+      "debug_build": false,
+      "has_editor": false,
+      "template_release": true
+     },
+     "adapter": {
+      "name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+      "vendor": "NVIDIA",
+      "api_version": "1.4.351",
+      "type": 2,
+      "driver": [
+       "NVIDIA",
+       "32.0.16.1714"
+      ],
+      "rendering_driver": "vulkan",
+      "rendering_method": "forward_plus"
+     },
+     "os": {
+      "name": "Windows",
+      "version": "10.0.26200",
+      "cpu": "Intel(R) Core(TM) Ultra 9 275HX",
+      "cpu_count": 24
+     },
+     "fellow": {
+      "available": true,
+      "requested": {
+       "rendering/fellow/postfx/taa_history_pingpong": true
+      },
+      "state": {
+       "rendering/fellow/enabled": true,
+       "rendering/fellow/postfx/enabled": true,
+       "rendering/fellow/postfx/taa_resolve_v2": false,
+       "rendering/fellow/postfx/taa_history_pingpong": true,
+       "rendering/fellow/fluid/enabled": true,
+       "rendering/fellow/profiling/pass_timestamps": false
+      }
+     },
+     "load_time_ms": 3728.823,
+     "startup_to_first_frame_ms": 3737.172,
+     "resolution": [
+      1920,
+      1080
+     ],
+     "valid": true,
+     "files": [
+      "sponza_1920x1080_sponza_cam_01.png",
+      "sponza_1920x1080_sponza_cam_02.png",
+      "sponza_1920x1080_sponza_cam_03.png",
+      "sponza_1920x1080_sponza_cam_04.png",
+      "sponza_1920x1080_sponza_cam_05.png",
+      "sponza_1920x1080_sponza_cam_06.png"
+     ],
+     "total_runtime_s": 15.571532,
+     "_proc": {
+      "returncode": 0,
+      "timed_out": false,
+      "wall_s": 17.163095712661743,
+      "peak_working_set": 1487908864,
+      "peak_private_bytes": 4428808192
+     },
+     "_json": "benchmarks\\results\\raw\\fellow-m1_capture\\fellow_pp\\sponza\\sponza_capture_fellow_pp_1920x1080_run0.json",
+     "_gpu_telemetry": {
+      "n": 16,
+      "clocks.gr": {
+       "min": 180.0,
+       "mean": 1201.6875,
+       "max": 1942.0
+      },
+      "clocks.mem": {
+       "min": 405.0,
+       "mean": 8634.3125,
+       "max": 10821.0
+      },
+      "temperature.gpu": {
+       "min": 57.0,
+       "mean": 61.625,
+       "max": 66.0
+      },
+      "power.draw": {
+       "min": 12.0,
+       "mean": 41.808749999999996,
+       "max": 86.03
+      },
+      "utilization.gpu": {
+       "min": 0.0,
+       "mean": 55.875,
+       "max": 99.0
+      },
+      "memory.used": {
+       "min": 123.0,
+       "mean": 2428.125,
+       "max": 2808.0
+      },
+      "throttle_reasons_seen": [
+       "0x0000000000000004",
+       "0x0000000000000400"
+      ]
+     }
+    }
+   ]
+  },
+  "sponza|1920x1080|fellow_v2": {
+   "scene": "sponza",
+   "resolution": "1920x1080",
+   "build": "fellow_v2",
+   "preset": "high",
+   "set": "",
+   "fellow": "postfx/taa_resolve_v2=true,postfx/taa_history_pingpong=true",
+   "binary": "fellow",
+   "variant_args": [],
+   "mode": "capture",
+   "runs": [
+    {
+     "schema": 1,
+     "scene": "sponza",
+     "mode": "capture",
+     "tag": "fellow_v2",
+     "run": 0,
+     "cmdline_user_args": [
+      "--scene=sponza",
+      "--mode=capture",
+      "--res=1920x1080",
+      "--tag=fellow_v2",
+      "--run=0",
+      "--out=C:\\Users\\matek\\Documents\\GitHub\\FellowGodot\\benchmarks\\results\\raw\\fellow-m1_capture\\fellow_v2\\sponza",
+      "--warmup=10.0",
+      "--measure=30.0",
+      "--preset=high",
+      "--fellow=postfx/taa_resolve_v2=true,postfx/taa_history_pingpong=true"
+     ],
+     "cmdline_args": [],
+     "engine": {
+      "major": 4,
+      "minor": 7,
+      "patch": 2,
+      "hex": 263938,
+      "status": "stable",
+      "build": "custom_build",
+      "hash": "7f257b56ff4bc79057d893fc0f41614b6c4ed28a",
+      "timestamp": 1790722922,
+      "string": "4.7.2-stable (custom_build)"
+     },
+     "engine_build": {
+      "debug_build": false,
+      "has_editor": false,
+      "template_release": true
+     },
+     "adapter": {
+      "name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+      "vendor": "NVIDIA",
+      "api_version": "1.4.351",
+      "type": 2,
+      "driver": [
+       "NVIDIA",
+       "32.0.16.1714"
+      ],
+      "rendering_driver": "vulkan",
+      "rendering_method": "forward_plus"
+     },
+     "os": {
+      "name": "Windows",
+      "version": "10.0.26200",
+      "cpu": "Intel(R) Core(TM) Ultra 9 275HX",
+      "cpu_count": 24
+     },
+     "fellow": {
+      "available": true,
+      "requested": {
+       "rendering/fellow/postfx/taa_resolve_v2": true,
+       "rendering/fellow/postfx/taa_history_pingpong": true
+      },
+      "state": {
+       "rendering/fellow/enabled": true,
+       "rendering/fellow/postfx/enabled": true,
+       "rendering/fellow/postfx/taa_resolve_v2": true,
+       "rendering/fellow/postfx/taa_history_pingpong": true,
+       "rendering/fellow/fluid/enabled": true,
+       "rendering/fellow/profiling/pass_timestamps": false
+      }
+     },
+     "load_time_ms": 3436.485,
+     "startup_to_first_frame_ms": 3444.73,
+     "resolution": [
+      1920,
+      1080
+     ],
+     "valid": true,
+     "files": [
+      "sponza_1920x1080_sponza_cam_01.png",
+      "sponza_1920x1080_sponza_cam_02.png",
+      "sponza_1920x1080_sponza_cam_03.png",
+      "sponza_1920x1080_sponza_cam_04.png",
+      "sponza_1920x1080_sponza_cam_05.png",
+      "sponza_1920x1080_sponza_cam_06.png"
+     ],
+     "total_runtime_s": 14.997591,
+     "_proc": {
+      "returncode": 0,
+      "timed_out": false,
+      "wall_s": 16.650304794311523,
+      "peak_working_set": 1497690112,
+      "peak_private_bytes": 4464197632
+     },
+     "_json": "benchmarks\\results\\raw\\fellow-m1_capture\\fellow_v2\\sponza\\sponza_capture_fellow_v2_1920x1080_run0.json",
+     "_gpu_telemetry": {
+      "n": 15,
+      "clocks.gr": {
+       "min": 172.0,
+       "mean": 1395.2666666666667,
+       "max": 1995.0
+      },
+      "clocks.mem": {
+       "min": 810.0,
+       "mean": 9304.266666666666,
+       "max": 10821.0
+      },
+      "temperature.gpu": {
+       "min": 57.0,
+       "mean": 61.8,
+       "max": 68.0
+      },
+      "power.draw": {
+       "min": 12.79,
+       "mean": 44.690666666666665,
+       "max": 92.79
+      },
+      "utilization.gpu": {
+       "min": 0.0,
+       "mean": 51.6,
+       "max": 99.0
+      },
+      "memory.used": {
+       "min": 123.0,
+       "mean": 2442.8,
+       "max": 2821.0
+      },
+      "throttle_reasons_seen": [
+       "0x0000000000000004",
+       "0x0000000000000400"
+      ]
+     }
+    }
+   ]
+  },
+  "sponza|2560x1440|stock": {
+   "scene": "sponza",
+   "resolution": "2560x1440",
+   "build": "stock",
+   "preset": "high",
+   "set": "",
+   "fellow": "",
+   "binary": "stock",
+   "variant_args": [],
+   "mode": "capture",
+   "runs": [
+    {
+     "schema": 1,
+     "scene": "sponza",
+     "mode": "capture",
+     "tag": "stock",
+     "run": 0,
+     "cmdline_user_args": [
+      "--scene=sponza",
+      "--mode=capture",
+      "--res=2560x1440",
+      "--tag=stock",
+      "--run=0",
+      "--out=C:\\Users\\matek\\Documents\\GitHub\\FellowGodot\\benchmarks\\results\\raw\\fellow-m1_capture\\stock\\sponza",
+      "--warmup=10.0",
+      "--measure=30.0",
+      "--preset=high"
+     ],
+     "cmdline_args": [],
+     "engine": {
+      "major": 4,
+      "minor": 7,
+      "patch": 2,
+      "hex": 263938,
+      "status": "stable",
+      "build": "custom_build",
+      "hash": "ed1daf0bf001b61586d9930840f2f1394092c079",
+      "timestamp": 1786929518,
+      "string": "4.7.2-stable (custom_build)"
+     },
+     "engine_build": {
+      "debug_build": false,
+      "has_editor": false,
+      "template_release": true
+     },
+     "adapter": {
+      "name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+      "vendor": "NVIDIA",
+      "api_version": "1.4.351",
+      "type": 2,
+      "driver": [
+       "NVIDIA",
+       "32.0.16.1714"
+      ],
+      "rendering_driver": "vulkan",
+      "rendering_method": "forward_plus"
+     },
+     "os": {
+      "name": "Windows",
+      "version": "10.0.26200",
+      "cpu": "Intel(R) Core(TM) Ultra 9 275HX",
+      "cpu_count": 24
+     },
+     "fellow": {
+      "available": false,
+      "requested": {},
+      "state": {}
+     },
+     "load_time_ms": 3529.438,
+     "startup_to_first_frame_ms": 3536.87,
+     "resolution": [
+      2560,
+      1440
+     ],
+     "valid": true,
+     "files": [
+      "sponza_2560x1440_sponza_cam_01.png",
+      "sponza_2560x1440_sponza_cam_02.png",
+      "sponza_2560x1440_sponza_cam_03.png",
+      "sponza_2560x1440_sponza_cam_04.png",
+      "sponza_2560x1440_sponza_cam_05.png",
+      "sponza_2560x1440_sponza_cam_06.png"
+     ],
+     "total_runtime_s": 21.262085,
+     "_proc": {
+      "returncode": 0,
+      "timed_out": false,
+      "wall_s": 23.270328521728516,
+      "peak_working_set": 1508139008,
+      "peak_private_bytes": 4773572608
+     },
+     "_json": "benchmarks\\results\\raw\\fellow-m1_capture\\stock\\sponza\\sponza_capture_stock_2560x1440_run0.json",
+     "_gpu_telemetry": {
+      "n": 22,
+      "clocks.gr": {
+       "min": 180.0,
+       "mean": 1312.0454545454545,
+       "max": 2070.0
+      },
+      "clocks.mem": {
+       "min": 810.0,
+       "mean": 9207.772727272728,
+       "max": 10821.0
+      },
+      "temperature.gpu": {
+       "min": 57.0,
+       "mean": 62.54545454545455,
+       "max": 67.0
+      },
+      "power.draw": {
+       "min": 11.43,
+       "mean": 52.61954545454544,
+       "max": 90.89
+      },
+      "utilization.gpu": {
+       "min": 0.0,
+       "mean": 56.95454545454545,
+       "max": 99.0
+      },
+      "memory.used": {
+       "min": 98.0,
+       "mean": 2593.1363636363635,
+       "max": 3125.0
+      },
+      "throttle_reasons_seen": [
+       "0x0000000000000004",
+       "0x0000000000000400"
+      ]
+     }
+    }
+   ]
+  },
+  "sponza|2560x1440|fellow_pp": {
+   "scene": "sponza",
+   "resolution": "2560x1440",
+   "build": "fellow_pp",
+   "preset": "high",
+   "set": "",
+   "fellow": "postfx/taa_history_pingpong=true",
+   "binary": "fellow",
+   "variant_args": [],
+   "mode": "capture",
+   "runs": [
+    {
+     "schema": 1,
+     "scene": "sponza",
+     "mode": "capture",
+     "tag": "fellow_pp",
+     "run": 0,
+     "cmdline_user_args": [
+      "--scene=sponza",
+      "--mode=capture",
+      "--res=2560x1440",
+      "--tag=fellow_pp",
+      "--run=0",
+      "--out=C:\\Users\\matek\\Documents\\GitHub\\FellowGodot\\benchmarks\\results\\raw\\fellow-m1_capture\\fellow_pp\\sponza",
+      "--warmup=10.0",
+      "--measure=30.0",
+      "--preset=high",
+      "--fellow=postfx/taa_history_pingpong=true"
+     ],
+     "cmdline_args": [],
+     "engine": {
+      "major": 4,
+      "minor": 7,
+      "patch": 2,
+      "hex": 263938,
+      "status": "stable",
+      "build": "custom_build",
+      "hash": "7f257b56ff4bc79057d893fc0f41614b6c4ed28a",
+      "timestamp": 1790722922,
+      "string": "4.7.2-stable (custom_build)"
+     },
+     "engine_build": {
+      "debug_build": false,
+      "has_editor": false,
+      "template_release": true
+     },
+     "adapter": {
+      "name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+      "vendor": "NVIDIA",
+      "api_version": "1.4.351",
+      "type": 2,
+      "driver": [
+       "NVIDIA",
+       "32.0.16.1714"
+      ],
+      "rendering_driver": "vulkan",
+      "rendering_method": "forward_plus"
+     },
+     "os": {
+      "name": "Windows",
+      "version": "10.0.26200",
+      "cpu": "Intel(R) Core(TM) Ultra 9 275HX",
+      "cpu_count": 24
+     },
+     "fellow": {
+      "available": true,
+      "requested": {
+       "rendering/fellow/postfx/taa_history_pingpong": true
+      },
+      "state": {
+       "rendering/fellow/enabled": true,
+       "rendering/fellow/postfx/enabled": true,
+       "rendering/fellow/postfx/taa_resolve_v2": false,
+       "rendering/fellow/postfx/taa_history_pingpong": true,
+       "rendering/fellow/fluid/enabled": true,
+       "rendering/fellow/profiling/pass_timestamps": false
+      }
+     },
+     "load_time_ms": 3758.613,
+     "startup_to_first_frame_ms": 3768.82,
+     "resolution": [
+      2560,
+      1440
+     ],
+     "valid": true,
+     "files": [
+      "sponza_2560x1440_sponza_cam_01.png",
+      "sponza_2560x1440_sponza_cam_02.png",
+      "sponza_2560x1440_sponza_cam_03.png",
+      "sponza_2560x1440_sponza_cam_04.png",
+      "sponza_2560x1440_sponza_cam_05.png",
+      "sponza_2560x1440_sponza_cam_06.png"
+     ],
+     "total_runtime_s": 21.851775,
+     "_proc": {
+      "returncode": 0,
+      "timed_out": false,
+      "wall_s": 23.559373378753662,
+      "peak_working_set": 1503952896,
+      "peak_private_bytes": 4776538112
+     },
+     "_json": "benchmarks\\results\\raw\\fellow-m1_capture\\fellow_pp\\sponza\\sponza_capture_fellow_pp_2560x1440_run0.json",
+     "_gpu_telemetry": {
+      "n": 22,
+      "clocks.gr": {
+       "min": 180.0,
+       "mean": 1270.3181818181818,
+       "max": 2647.0
+      },
+      "clocks.mem": {
+       "min": 810.0,
+       "mean": 9207.772727272728,
+       "max": 10821.0
+      },
+      "temperature.gpu": {
+       "min": 57.0,
+       "mean": 62.77272727272727,
+       "max": 68.0
+      },
+      "power.draw": {
+       "min": 11.82,
+       "mean": 50.27136363636364,
+       "max": 93.47
+      },
+      "utilization.gpu": {
+       "min": 0.0,
+       "mean": 55.77272727272727,
+       "max": 99.0
+      },
+      "memory.used": {
+       "min": 0.0,
+       "mean": 2700.181818181818,
+       "max": 3123.0
+      },
+      "throttle_reasons_seen": [
+       "0x0000000000000004",
+       "0x0000000000000400"
+      ]
+     }
+    }
+   ]
+  },
+  "sponza|2560x1440|fellow_v2": {
+   "scene": "sponza",
+   "resolution": "2560x1440",
+   "build": "fellow_v2",
+   "preset": "high",
+   "set": "",
+   "fellow": "postfx/taa_resolve_v2=true,postfx/taa_history_pingpong=true",
+   "binary": "fellow",
+   "variant_args": [],
+   "mode": "capture",
+   "runs": [
+    {
+     "schema": 1,
+     "scene": "sponza",
+     "mode": "capture",
+     "tag": "fellow_v2",
+     "run": 0,
+     "cmdline_user_args": [
+      "--scene=sponza",
+      "--mode=capture",
+      "--res=2560x1440",
+      "--tag=fellow_v2",
+      "--run=0",
+      "--out=C:\\Users\\matek\\Documents\\GitHub\\FellowGodot\\benchmarks\\results\\raw\\fellow-m1_capture\\fellow_v2\\sponza",
+      "--warmup=10.0",
+      "--measure=30.0",
+      "--preset=high",
+      "--fellow=postfx/taa_resolve_v2=true,postfx/taa_history_pingpong=true"
+     ],
+     "cmdline_args": [],
+     "engine": {
+      "major": 4,
+      "minor": 7,
+      "patch": 2,
+      "hex": 263938,
+      "status": "stable",
+      "build": "custom_build",
+      "hash": "7f257b56ff4bc79057d893fc0f41614b6c4ed28a",
+      "timestamp": 1790722922,
+      "string": "4.7.2-stable (custom_build)"
+     },
+     "engine_build": {
+      "debug_build": false,
+      "has_editor": false,
+      "template_release": true
+     },
+     "adapter": {
+      "name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+      "vendor": "NVIDIA",
+      "api_version": "1.4.351",
+      "type": 2,
+      "driver": [
+       "NVIDIA",
+       "32.0.16.1714"
+      ],
+      "rendering_driver": "vulkan",
+      "rendering_method": "forward_plus"
+     },
+     "os": {
+      "name": "Windows",
+      "version": "10.0.26200",
+      "cpu": "Intel(R) Core(TM) Ultra 9 275HX",
+      "cpu_count": 24
+     },
+     "fellow": {
+      "available": true,
+      "requested": {
+       "rendering/fellow/postfx/taa_resolve_v2": true,
+       "rendering/fellow/postfx/taa_history_pingpong": true
+      },
+      "state": {
+       "rendering/fellow/enabled": true,
+       "rendering/fellow/postfx/enabled": true,
+       "rendering/fellow/postfx/taa_resolve_v2": true,
+       "rendering/fellow/postfx/taa_history_pingpong": true,
+       "rendering/fellow/fluid/enabled": true,
+       "rendering/fellow/profiling/pass_timestamps": false
+      }
+     },
+     "load_time_ms": 3836.574,
+     "startup_to_first_frame_ms": 3844.93,
+     "resolution": [
+      2560,
+      1440
+     ],
+     "valid": true,
+     "files": [
+      "sponza_2560x1440_sponza_cam_01.png",
+      "sponza_2560x1440_sponza_cam_02.png",
+      "sponza_2560x1440_sponza_cam_03.png",
+      "sponza_2560x1440_sponza_cam_04.png",
+      "sponza_2560x1440_sponza_cam_05.png",
+      "sponza_2560x1440_sponza_cam_06.png"
+     ],
+     "total_runtime_s": 21.064491,
+     "_proc": {
+      "returncode": 0,
+      "timed_out": false,
+      "wall_s": 23.029632568359375,
+      "peak_working_set": 1498955776,
+      "peak_private_bytes": 4772986880
+     },
+     "_json": "benchmarks\\results\\raw\\fellow-m1_capture\\fellow_v2\\sponza\\sponza_capture_fellow_v2_2560x1440_run0.json",
+     "_gpu_telemetry": {
+      "n": 22,
+      "clocks.gr": {
+       "min": 180.0,
+       "mean": 1156.909090909091,
+       "max": 1957.0
+      },
+      "clocks.mem": {
+       "min": 405.0,
+       "mean": 8982.5,
+       "max": 10821.0
+      },
+      "temperature.gpu": {
+       "min": 57.0,
+       "mean": 62.54545454545455,
+       "max": 68.0
+      },
+      "power.draw": {
+       "min": 11.57,
+       "mean": 51.163181818181826,
+       "max": 93.22
+      },
+      "utilization.gpu": {
+       "min": 0.0,
+       "mean": 57.5,
+       "max": 99.0
+      },
+      "memory.used": {
+       "min": 5.0,
+       "mean": 2568.5,
+       "max": 3136.0
+      },
+      "throttle_reasons_seen": [
+       "0x0000000000000004",
+       "0x0000000000000400"
+      ]
+     }
+    }
+   ]
+  },
+  "bistro_exterior|1920x1080|stock": {
+   "scene": "bistro_exterior",
+   "resolution": "1920x1080",
+   "build": "stock",
+   "preset": "high",
+   "set": "",
+   "fellow": "",
+   "binary": "stock",
+   "variant_args": [],
+   "mode": "capture",
+   "runs": [
+    {
+     "schema": 1,
+     "scene": "bistro_exterior",
+     "mode": "capture",
+     "tag": "stock",
+     "run": 0,
+     "cmdline_user_args": [
+      "--scene=bistro_exterior",
+      "--mode=capture",
+      "--res=1920x1080",
+      "--tag=stock",
+      "--run=0",
+      "--out=C:\\Users\\matek\\Documents\\GitHub\\FellowGodot\\benchmarks\\results\\raw\\fellow-m1_capture\\stock\\bistro_exterior",
+      "--warmup=10.0",
+      "--measure=30.0",
+      "--preset=high"
+     ],
+     "cmdline_args": [],
+     "engine": {
+      "major": 4,
+      "minor": 7,
+      "patch": 2,
+      "hex": 263938,
+      "status": "stable",
+      "build": "custom_build",
+      "hash": "ed1daf0bf001b61586d9930840f2f1394092c079",
+      "timestamp": 1786929518,
+      "string": "4.7.2-stable (custom_build)"
+     },
+     "engine_build": {
+      "debug_build": false,
+      "has_editor": false,
+      "template_release": true
+     },
+     "adapter": {
+      "name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+      "vendor": "NVIDIA",
+      "api_version": "1.4.351",
+      "type": 2,
+      "driver": [
+       "NVIDIA",
+       "32.0.16.1714"
+      ],
+      "rendering_driver": "vulkan",
+      "rendering_method": "forward_plus"
+     },
+     "os": {
+      "name": "Windows",
+      "version": "10.0.26200",
+      "cpu": "Intel(R) Core(TM) Ultra 9 275HX",
+      "cpu_count": 24
+     },
+     "fellow": {
+      "available": false,
+      "requested": {},
+      "state": {}
+     },
+     "load_time_ms": 2578.975,
+     "startup_to_first_frame_ms": 2587.77,
+     "resolution": [
+      1920,
+      1080
+     ],
+     "valid": true,
+     "files": [
+      "bistro_exterior_1920x1080_bistro_ext_cam_01.png",
+      "bistro_exterior_1920x1080_bistro_ext_cam_02.png",
+      "bistro_exterior_1920x1080_bistro_ext_cam_03.png",
+      "bistro_exterior_1920x1080_bistro_ext_cam_04.png"
+     ],
+     "total_runtime_s": 7.403247,
+     "_proc": {
+      "returncode": 0,
+      "timed_out": false,
+      "wall_s": 9.269374370574951,
+      "peak_working_set": 1244844032,
+      "peak_private_bytes": 3913412608
+     },
+     "_json": "benchmarks\\results\\raw\\fellow-m1_capture\\stock\\bistro_exterior\\bistro_exterior_capture_stock_1920x1080_run0.json",
+     "_gpu_telemetry": {
+      "n": 8,
+      "clocks.gr": {
+       "min": 322.0,
+       "mean": 1340.25,
+       "max": 1845.0
+      },
+      "clocks.mem": {
+       "min": 810.0,
+       "mean": 8659.625,
+       "max": 10821.0
+      },
+      "temperature.gpu": {
+       "min": 57.0,
+       "mean": 59.375,
+       "max": 62.0
+      },
+      "power.draw": {
+       "min": 12.79,
+       "mean": 23.76625,
+       "max": 56.64
+      },
+      "utilization.gpu": {
+       "min": 0.0,
+       "mean": 22.125,
+       "max": 99.0
+      },
+      "memory.used": {
+       "min": 123.0,
+       "mean": 1983.75,
+       "max": 2523.0
+      },
+      "throttle_reasons_seen": [
+       "0x0000000000000004",
+       "0x0000000000000400"
+      ]
+     }
+    }
+   ]
+  },
+  "bistro_exterior|1920x1080|fellow_pp": {
+   "scene": "bistro_exterior",
+   "resolution": "1920x1080",
+   "build": "fellow_pp",
+   "preset": "high",
+   "set": "",
+   "fellow": "postfx/taa_history_pingpong=true",
+   "binary": "fellow",
+   "variant_args": [],
+   "mode": "capture",
+   "runs": [
+    {
+     "schema": 1,
+     "scene": "bistro_exterior",
+     "mode": "capture",
+     "tag": "fellow_pp",
+     "run": 0,
+     "cmdline_user_args": [
+      "--scene=bistro_exterior",
+      "--mode=capture",
+      "--res=1920x1080",
+      "--tag=fellow_pp",
+      "--run=0",
+      "--out=C:\\Users\\matek\\Documents\\GitHub\\FellowGodot\\benchmarks\\results\\raw\\fellow-m1_capture\\fellow_pp\\bistro_exterior",
+      "--warmup=10.0",
+      "--measure=30.0",
+      "--preset=high",
+      "--fellow=postfx/taa_history_pingpong=true"
+     ],
+     "cmdline_args": [],
+     "engine": {
+      "major": 4,
+      "minor": 7,
+      "patch": 2,
+      "hex": 263938,
+      "status": "stable",
+      "build": "custom_build",
+      "hash": "7f257b56ff4bc79057d893fc0f41614b6c4ed28a",
+      "timestamp": 1790722922,
+      "string": "4.7.2-stable (custom_build)"
+     },
+     "engine_build": {
+      "debug_build": false,
+      "has_editor": false,
+      "template_release": true
+     },
+     "adapter": {
+      "name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+      "vendor": "NVIDIA",
+      "api_version": "1.4.351",
+      "type": 2,
+      "driver": [
+       "NVIDIA",
+       "32.0.16.1714"
+      ],
+      "rendering_driver": "vulkan",
+      "rendering_method": "forward_plus"
+     },
+     "os": {
+      "name": "Windows",
+      "version": "10.0.26200",
+      "cpu": "Intel(R) Core(TM) Ultra 9 275HX",
+      "cpu_count": 24
+     },
+     "fellow": {
+      "available": true,
+      "requested": {
+       "rendering/fellow/postfx/taa_history_pingpong": true
+      },
+      "state": {
+       "rendering/fellow/enabled": true,
+       "rendering/fellow/postfx/enabled": true,
+       "rendering/fellow/postfx/taa_resolve_v2": false,
+       "rendering/fellow/postfx/taa_history_pingpong": true,
+       "rendering/fellow/fluid/enabled": true,
+       "rendering/fellow/profiling/pass_timestamps": false
+      }
+     },
+     "load_time_ms": 2515.166,
+     "startup_to_first_frame_ms": 2525.821,
+     "resolution": [
+      1920,
+      1080
+     ],
+     "valid": true,
+     "files": [
+      "bistro_exterior_1920x1080_bistro_ext_cam_01.png",
+      "bistro_exterior_1920x1080_bistro_ext_cam_02.png",
+      "bistro_exterior_1920x1080_bistro_ext_cam_03.png",
+      "bistro_exterior_1920x1080_bistro_ext_cam_04.png"
+     ],
+     "total_runtime_s": 7.119614,
+     "_proc": {
+      "returncode": 0,
+      "timed_out": false,
+      "wall_s": 8.71122932434082,
+      "peak_working_set": 1240850432,
+      "peak_private_bytes": 3889979392
+     },
+     "_json": "benchmarks\\results\\raw\\fellow-m1_capture\\fellow_pp\\bistro_exterior\\bistro_exterior_capture_fellow_pp_1920x1080_run0.json",
+     "_gpu_telemetry": {
+      "n": 8,
+      "clocks.gr": {
+       "min": 180.0,
+       "mean": 1064.625,
+       "max": 1867.0
+      },
+      "clocks.mem": {
+       "min": 810.0,
+       "mean": 7977.125,
+       "max": 9001.0
+      },
+      "temperature.gpu": {
+       "min": 56.0,
+       "mean": 57.375,
+       "max": 60.0
+      },
+      "power.draw": {
+       "min": 11.64,
+       "mean": 16.422500000000003,
+       "max": 34.77
+      },
+      "utilization.gpu": {
+       "min": 0.0,
+       "mean": 11.375,
+       "max": 63.0
+      },
+      "memory.used": {
+       "min": 123.0,
+       "mean": 1948.0,
+       "max": 2513.0
+      },
+      "throttle_reasons_seen": [
+       "0x0000000000000004",
+       "0x0000000000000400"
+      ]
+     }
+    }
+   ]
+  },
+  "bistro_exterior|1920x1080|fellow_v2": {
+   "scene": "bistro_exterior",
+   "resolution": "1920x1080",
+   "build": "fellow_v2",
+   "preset": "high",
+   "set": "",
+   "fellow": "postfx/taa_resolve_v2=true,postfx/taa_history_pingpong=true",
+   "binary": "fellow",
+   "variant_args": [],
+   "mode": "capture",
+   "runs": [
+    {
+     "schema": 1,
+     "scene": "bistro_exterior",
+     "mode": "capture",
+     "tag": "fellow_v2",
+     "run": 0,
+     "cmdline_user_args": [
+      "--scene=bistro_exterior",
+      "--mode=capture",
+      "--res=1920x1080",
+      "--tag=fellow_v2",
+      "--run=0",
+      "--out=C:\\Users\\matek\\Documents\\GitHub\\FellowGodot\\benchmarks\\results\\raw\\fellow-m1_capture\\fellow_v2\\bistro_exterior",
+      "--warmup=10.0",
+      "--measure=30.0",
+      "--preset=high",
+      "--fellow=postfx/taa_resolve_v2=true,postfx/taa_history_pingpong=true"
+     ],
+     "cmdline_args": [],
+     "engine": {
+      "major": 4,
+      "minor": 7,
+      "patch": 2,
+      "hex": 263938,
+      "status": "stable",
+      "build": "custom_build",
+      "hash": "7f257b56ff4bc79057d893fc0f41614b6c4ed28a",
+      "timestamp": 1790722922,
+      "string": "4.7.2-stable (custom_build)"
+     },
+     "engine_build": {
+      "debug_build": false,
+      "has_editor": false,
+      "template_release": true
+     },
+     "adapter": {
+      "name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+      "vendor": "NVIDIA",
+      "api_version": "1.4.351",
+      "type": 2,
+      "driver": [
+       "NVIDIA",
+       "32.0.16.1714"
+      ],
+      "rendering_driver": "vulkan",
+      "rendering_method": "forward_plus"
+     },
+     "os": {
+      "name": "Windows",
+      "version": "10.0.26200",
+      "cpu": "Intel(R) Core(TM) Ultra 9 275HX",
+      "cpu_count": 24
+     },
+     "fellow": {
+      "available": true,
+      "requested": {
+       "rendering/fellow/postfx/taa_resolve_v2": true,
+       "rendering/fellow/postfx/taa_history_pingpong": true
+      },
+      "state": {
+       "rendering/fellow/enabled": true,
+       "rendering/fellow/postfx/enabled": true,
+       "rendering/fellow/postfx/taa_resolve_v2": true,
+       "rendering/fellow/postfx/taa_history_pingpong": true,
+       "rendering/fellow/fluid/enabled": true,
+       "rendering/fellow/profiling/pass_timestamps": false
+      }
+     },
+     "load_time_ms": 2584.12,
+     "startup_to_first_frame_ms": 2595.219,
+     "resolution": [
+      1920,
+      1080
+     ],
+     "valid": true,
+     "files": [
+      "bistro_exterior_1920x1080_bistro_ext_cam_01.png",
+      "bistro_exterior_1920x1080_bistro_ext_cam_02.png",
+      "bistro_exterior_1920x1080_bistro_ext_cam_03.png",
+      "bistro_exterior_1920x1080_bistro_ext_cam_04.png"
+     ],
+     "total_runtime_s": 7.262938,
+     "_proc": {
+      "returncode": 0,
+      "timed_out": false,
+      "wall_s": 8.99665379524231,
+      "peak_working_set": 1239216128,
+      "peak_private_bytes": 3909169152
+     },
+     "_json": "benchmarks\\results\\raw\\fellow-m1_capture\\fellow_v2\\bistro_exterior\\bistro_exterior_capture_fellow_v2_1920x1080_run0.json",
+     "_gpu_telemetry": {
+      "n": 8,
+      "clocks.gr": {
+       "min": 1080.0,
+       "mean": 1625.5,
+       "max": 1875.0
+      },
+      "clocks.mem": {
+       "min": 810.0,
+       "mean": 8659.625,
+       "max": 10821.0
+      },
+      "temperature.gpu": {
+       "min": 56.0,
+       "mean": 58.125,
+       "max": 64.0
+      },
+      "power.draw": {
+       "min": 12.57,
+       "mean": 29.2025,
+       "max": 83.89
+      },
+      "utilization.gpu": {
+       "min": 0.0,
+       "mean": 30.875,
+       "max": 97.0
+      },
+      "memory.used": {
+       "min": 123.0,
+       "mean": 1983.75,
+       "max": 2523.0
+      },
+      "throttle_reasons_seen": [
+       "0x0000000000000004",
+       "0x0000000000000400"
+      ]
+     }
+    }
+   ]
+  },
+  "bistro_exterior|2560x1440|stock": {
+   "scene": "bistro_exterior",
+   "resolution": "2560x1440",
+   "build": "stock",
+   "preset": "high",
+   "set": "",
+   "fellow": "",
+   "binary": "stock",
+   "variant_args": [],
+   "mode": "capture",
+   "runs": [
+    {
+     "schema": 1,
+     "scene": "bistro_exterior",
+     "mode": "capture",
+     "tag": "stock",
+     "run": 0,
+     "cmdline_user_args": [
+      "--scene=bistro_exterior",
+      "--mode=capture",
+      "--res=2560x1440",
+      "--tag=stock",
+      "--run=0",
+      "--out=C:\\Users\\matek\\Documents\\GitHub\\FellowGodot\\benchmarks\\results\\raw\\fellow-m1_capture\\stock\\bistro_exterior",
+      "--warmup=10.0",
+      "--measure=30.0",
+      "--preset=high"
+     ],
+     "cmdline_args": [],
+     "engine": {
+      "major": 4,
+      "minor": 7,
+      "patch": 2,
+      "hex": 263938,
+      "status": "stable",
+      "build": "custom_build",
+      "hash": "ed1daf0bf001b61586d9930840f2f1394092c079",
+      "timestamp": 1786929518,
+      "string": "4.7.2-stable (custom_build)"
+     },
+     "engine_build": {
+      "debug_build": false,
+      "has_editor": false,
+      "template_release": true
+     },
+     "adapter": {
+      "name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+      "vendor": "NVIDIA",
+      "api_version": "1.4.351",
+      "type": 2,
+      "driver": [
+       "NVIDIA",
+       "32.0.16.1714"
+      ],
+      "rendering_driver": "vulkan",
+      "rendering_method": "forward_plus"
+     },
+     "os": {
+      "name": "Windows",
+      "version": "10.0.26200",
+      "cpu": "Intel(R) Core(TM) Ultra 9 275HX",
+      "cpu_count": 24
+     },
+     "fellow": {
+      "available": false,
+      "requested": {},
+      "state": {}
+     },
+     "load_time_ms": 2540.785,
+     "startup_to_first_frame_ms": 2549.712,
+     "resolution": [
+      2560,
+      1440
+     ],
+     "valid": true,
+     "files": [
+      "bistro_exterior_2560x1440_bistro_ext_cam_01.png",
+      "bistro_exterior_2560x1440_bistro_ext_cam_02.png",
+      "bistro_exterior_2560x1440_bistro_ext_cam_03.png",
+      "bistro_exterior_2560x1440_bistro_ext_cam_04.png"
+     ],
+     "total_runtime_s": 10.545984,
+     "_proc": {
+      "returncode": 0,
+      "timed_out": false,
+      "wall_s": 12.462085485458374,
+      "peak_working_set": 1269600256,
+      "peak_private_bytes": 3938398208
+     },
+     "_json": "benchmarks\\results\\raw\\fellow-m1_capture\\stock\\bistro_exterior\\bistro_exterior_capture_stock_2560x1440_run0.json",
+     "_gpu_telemetry": {
+      "n": 12,
+      "clocks.gr": {
+       "min": 180.0,
+       "mean": 976.0833333333334,
+       "max": 1890.0
+      },
+      "clocks.mem": {
+       "min": 810.0,
+       "mean": 7939.166666666667,
+       "max": 10821.0
+      },
+      "temperature.gpu": {
+       "min": 55.0,
+       "mean": 57.666666666666664,
+       "max": 64.0
+      },
+      "power.draw": {
+       "min": 10.05,
+       "mean": 31.4725,
+       "max": 87.44
+      },
+      "utilization.gpu": {
+       "min": 0.0,
+       "mean": 25.5,
+       "max": 98.0
+      },
+      "memory.used": {
+       "min": 0.0,
+       "mean": 1937.5833333333333,
+       "max": 2582.0
+      },
+      "throttle_reasons_seen": [
+       "0x0000000000000004",
+       "0x0000000000000400"
+      ]
+     }
+    }
+   ]
+  },
+  "bistro_exterior|2560x1440|fellow_pp": {
+   "scene": "bistro_exterior",
+   "resolution": "2560x1440",
+   "build": "fellow_pp",
+   "preset": "high",
+   "set": "",
+   "fellow": "postfx/taa_history_pingpong=true",
+   "binary": "fellow",
+   "variant_args": [],
+   "mode": "capture",
+   "runs": [
+    {
+     "schema": 1,
+     "scene": "bistro_exterior",
+     "mode": "capture",
+     "tag": "fellow_pp",
+     "run": 0,
+     "cmdline_user_args": [
+      "--scene=bistro_exterior",
+      "--mode=capture",
+      "--res=2560x1440",
+      "--tag=fellow_pp",
+      "--run=0",
+      "--out=C:\\Users\\matek\\Documents\\GitHub\\FellowGodot\\benchmarks\\results\\raw\\fellow-m1_capture\\fellow_pp\\bistro_exterior",
+      "--warmup=10.0",
+      "--measure=30.0",
+      "--preset=high",
+      "--fellow=postfx/taa_history_pingpong=true"
+     ],
+     "cmdline_args": [],
+     "engine": {
+      "major": 4,
+      "minor": 7,
+      "patch": 2,
+      "hex": 263938,
+      "status": "stable",
+      "build": "custom_build",
+      "hash": "7f257b56ff4bc79057d893fc0f41614b6c4ed28a",
+      "timestamp": 1790722922,
+      "string": "4.7.2-stable (custom_build)"
+     },
+     "engine_build": {
+      "debug_build": false,
+      "has_editor": false,
+      "template_release": true
+     },
+     "adapter": {
+      "name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+      "vendor": "NVIDIA",
+      "api_version": "1.4.351",
+      "type": 2,
+      "driver": [
+       "NVIDIA",
+       "32.0.16.1714"
+      ],
+      "rendering_driver": "vulkan",
+      "rendering_method": "forward_plus"
+     },
+     "os": {
+      "name": "Windows",
+      "version": "10.0.26200",
+      "cpu": "Intel(R) Core(TM) Ultra 9 275HX",
+      "cpu_count": 24
+     },
+     "fellow": {
+      "available": true,
+      "requested": {
+       "rendering/fellow/postfx/taa_history_pingpong": true
+      },
+      "state": {
+       "rendering/fellow/enabled": true,
+       "rendering/fellow/postfx/enabled": true,
+       "rendering/fellow/postfx/taa_resolve_v2": false,
+       "rendering/fellow/postfx/taa_history_pingpong": true,
+       "rendering/fellow/fluid/enabled": true,
+       "rendering/fellow/profiling/pass_timestamps": false
+      }
+     },
+     "load_time_ms": 2489.895,
+     "startup_to_first_frame_ms": 2501.195,
+     "resolution": [
+      2560,
+      1440
+     ],
+     "valid": true,
+     "files": [
+      "bistro_exterior_2560x1440_bistro_ext_cam_01.png",
+      "bistro_exterior_2560x1440_bistro_ext_cam_02.png",
+      "bistro_exterior_2560x1440_bistro_ext_cam_03.png",
+      "bistro_exterior_2560x1440_bistro_ext_cam_04.png"
+     ],
+     "total_runtime_s": 10.388487,
+     "_proc": {
+      "returncode": 0,
+      "timed_out": false,
+      "wall_s": 12.425138473510742,
+      "peak_working_set": 1273618432,
+      "peak_private_bytes": 3935125504
+     },
+     "_json": "benchmarks\\results\\raw\\fellow-m1_capture\\fellow_pp\\bistro_exterior\\bistro_exterior_capture_fellow_pp_2560x1440_run0.json",
+     "_gpu_telemetry": {
+      "n": 12,
+      "clocks.gr": {
+       "min": 180.0,
+       "mean": 989.1666666666666,
+       "max": 1927.0
+      },
+      "clocks.mem": {
+       "min": 810.0,
+       "mean": 8621.75,
+       "max": 10821.0
+      },
+      "temperature.gpu": {
+       "min": 54.0,
+       "mean": 57.75,
+       "max": 63.0
+      },
+      "power.draw": {
+       "min": 9.29,
+       "mean": 37.25333333333333,
+       "max": 86.4
+      },
+      "utilization.gpu": {
+       "min": 0.0,
+       "mean": 33.5,
+       "max": 98.0
+      },
+      "memory.used": {
+       "min": 0.0,
+       "mean": 1852.4166666666667,
+       "max": 2582.0
+      },
+      "throttle_reasons_seen": [
+       "0x0000000000000004",
+       "0x0000000000000400"
+      ]
+     }
+    }
+   ]
+  },
+  "bistro_exterior|2560x1440|fellow_v2": {
+   "scene": "bistro_exterior",
+   "resolution": "2560x1440",
+   "build": "fellow_v2",
+   "preset": "high",
+   "set": "",
+   "fellow": "postfx/taa_resolve_v2=true,postfx/taa_history_pingpong=true",
+   "binary": "fellow",
+   "variant_args": [],
+   "mode": "capture",
+   "runs": [
+    {
+     "schema": 1,
+     "scene": "bistro_exterior",
+     "mode": "capture",
+     "tag": "fellow_v2",
+     "run": 0,
+     "cmdline_user_args": [
+      "--scene=bistro_exterior",
+      "--mode=capture",
+      "--res=2560x1440",
+      "--tag=fellow_v2",
+      "--run=0",
+      "--out=C:\\Users\\matek\\Documents\\GitHub\\FellowGodot\\benchmarks\\results\\raw\\fellow-m1_capture\\fellow_v2\\bistro_exterior",
+      "--warmup=10.0",
+      "--measure=30.0",
+      "--preset=high",
+      "--fellow=postfx/taa_resolve_v2=true,postfx/taa_history_pingpong=true"
+     ],
+     "cmdline_args": [],
+     "engine": {
+      "major": 4,
+      "minor": 7,
+      "patch": 2,
+      "hex": 263938,
+      "status": "stable",
+      "build": "custom_build",
+      "hash": "7f257b56ff4bc79057d893fc0f41614b6c4ed28a",
+      "timestamp": 1790722922,
+      "string": "4.7.2-stable (custom_build)"
+     },
+     "engine_build": {
+      "debug_build": false,
+      "has_editor": false,
+      "template_release": true
+     },
+     "adapter": {
+      "name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+      "vendor": "NVIDIA",
+      "api_version": "1.4.351",
+      "type": 2,
+      "driver": [
+       "NVIDIA",
+       "32.0.16.1714"
+      ],
+      "rendering_driver": "vulkan",
+      "rendering_method": "forward_plus"
+     },
+     "os": {
+      "name": "Windows",
+      "version": "10.0.26200",
+      "cpu": "Intel(R) Core(TM) Ultra 9 275HX",
+      "cpu_count": 24
+     },
+     "fellow": {
+      "available": true,
+      "requested": {
+       "rendering/fellow/postfx/taa_resolve_v2": true,
+       "rendering/fellow/postfx/taa_history_pingpong": true
+      },
+      "state": {
+       "rendering/fellow/enabled": true,
+       "rendering/fellow/postfx/enabled": true,
+       "rendering/fellow/postfx/taa_resolve_v2": true,
+       "rendering/fellow/postfx/taa_history_pingpong": true,
+       "rendering/fellow/fluid/enabled": true,
+       "rendering/fellow/profiling/pass_timestamps": false
+      }
+     },
+     "load_time_ms": 2523.792,
+     "startup_to_first_frame_ms": 2534.006,
+     "resolution": [
+      2560,
+      1440
+     ],
+     "valid": true,
+     "files": [
+      "bistro_exterior_2560x1440_bistro_ext_cam_01.png",
+      "bistro_exterior_2560x1440_bistro_ext_cam_02.png",
+      "bistro_exterior_2560x1440_bistro_ext_cam_03.png",
+      "bistro_exterior_2560x1440_bistro_ext_cam_04.png"
+     ],
+     "total_runtime_s": 10.291899,
+     "_proc": {
+      "returncode": 0,
+      "timed_out": false,
+      "wall_s": 12.182753086090088,
+      "peak_working_set": 1275850752,
+      "peak_private_bytes": 3950321664
+     },
+     "_json": "benchmarks\\results\\raw\\fellow-m1_capture\\fellow_v2\\bistro_exterior\\bistro_exterior_capture_fellow_v2_2560x1440_run0.json",
+     "_gpu_telemetry": {
+      "n": 11,
+      "clocks.gr": {
+       "min": 225.0,
+       "mean": 1283.8181818181818,
+       "max": 1845.0
+      },
+      "clocks.mem": {
+       "min": 810.0,
+       "mean": 8918.181818181818,
+       "max": 10821.0
+      },
+      "temperature.gpu": {
+       "min": 54.0,
+       "mean": 57.81818181818182,
+       "max": 64.0
+      },
+      "power.draw": {
+       "min": 12.48,
+       "mean": 37.18636363636363,
+       "max": 86.49
+      },
+      "utilization.gpu": {
+       "min": 0.0,
+       "mean": 39.81818181818182,
+       "max": 99.0
+      },
+      "memory.used": {
+       "min": 123.0,
+       "mean": 2186.4545454545455,
+       "max": 2590.0
+      },
+      "throttle_reasons_seen": [
+       "0x0000000000000004",
+       "0x0000000000000400"
+      ]
+     }
+    }
+   ]
+  },
+  "bistro_interior|1920x1080|stock": {
+   "scene": "bistro_interior",
+   "resolution": "1920x1080",
+   "build": "stock",
+   "preset": "high",
+   "set": "",
+   "fellow": "",
+   "binary": "stock",
+   "variant_args": [],
+   "mode": "capture",
+   "runs": [
+    {
+     "schema": 1,
+     "scene": "bistro_interior",
+     "mode": "capture",
+     "tag": "stock",
+     "run": 0,
+     "cmdline_user_args": [
+      "--scene=bistro_interior",
+      "--mode=capture",
+      "--res=1920x1080",
+      "--tag=stock",
+      "--run=0",
+      "--out=C:\\Users\\matek\\Documents\\GitHub\\FellowGodot\\benchmarks\\results\\raw\\fellow-m1_capture\\stock\\bistro_interior",
+      "--warmup=10.0",
+      "--measure=30.0",
+      "--preset=high"
+     ],
+     "cmdline_args": [],
+     "engine": {
+      "major": 4,
+      "minor": 7,
+      "patch": 2,
+      "hex": 263938,
+      "status": "stable",
+      "build": "custom_build",
+      "hash": "ed1daf0bf001b61586d9930840f2f1394092c079",
+      "timestamp": 1786929518,
+      "string": "4.7.2-stable (custom_build)"
+     },
+     "engine_build": {
+      "debug_build": false,
+      "has_editor": false,
+      "template_release": true
+     },
+     "adapter": {
+      "name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+      "vendor": "NVIDIA",
+      "api_version": "1.4.351",
+      "type": 2,
+      "driver": [
+       "NVIDIA",
+       "32.0.16.1714"
+      ],
+      "rendering_driver": "vulkan",
+      "rendering_method": "forward_plus"
+     },
+     "os": {
+      "name": "Windows",
+      "version": "10.0.26200",
+      "cpu": "Intel(R) Core(TM) Ultra 9 275HX",
+      "cpu_count": 24
+     },
+     "fellow": {
+      "available": false,
+      "requested": {},
+      "state": {}
+     },
+     "load_time_ms": 1645.999,
+     "startup_to_first_frame_ms": 1656.321,
+     "resolution": [
+      1920,
+      1080
+     ],
+     "valid": true,
+     "files": [
+      "bistro_interior_1920x1080_bistro_int_cam_01.png",
+      "bistro_interior_1920x1080_bistro_int_cam_02.png",
+      "bistro_interior_1920x1080_bistro_int_cam_03.png",
+      "bistro_interior_1920x1080_bistro_int_cam_04.png"
+     ],
+     "total_runtime_s": 6.412045,
+     "_proc": {
+      "returncode": 0,
+      "timed_out": false,
+      "wall_s": 8.475577592849731,
+      "peak_working_set": 1195470848,
+      "peak_private_bytes": 2761445376
+     },
+     "_json": "benchmarks\\results\\raw\\fellow-m1_capture\\stock\\bistro_interior\\bistro_interior_capture_stock_1920x1080_run0.json",
+     "_gpu_telemetry": {
+      "n": 8,
+      "clocks.gr": {
+       "min": 262.0,
+       "mean": 1374.875,
+       "max": 2092.0
+      },
+      "clocks.mem": {
+       "min": 9001.0,
+       "mean": 9456.0,
+       "max": 10821.0
+      },
+      "temperature.gpu": {
+       "min": 54.0,
+       "mean": 57.5,
+       "max": 62.0
+      },
+      "power.draw": {
+       "min": 12.42,
+       "mean": 36.91625,
+       "max": 81.5
+      },
+      "utilization.gpu": {
+       "min": 0.0,
+       "mean": 47.5,
+       "max": 97.0
+      },
+      "memory.used": {
+       "min": 0.0,
+       "mean": 1026.125,
+       "max": 1489.0
+      },
+      "throttle_reasons_seen": [
+       "0x0000000000000004",
+       "0x0000000000000400"
+      ]
+     }
+    }
+   ]
+  },
+  "bistro_interior|1920x1080|fellow_pp": {
+   "scene": "bistro_interior",
+   "resolution": "1920x1080",
+   "build": "fellow_pp",
+   "preset": "high",
+   "set": "",
+   "fellow": "postfx/taa_history_pingpong=true",
+   "binary": "fellow",
+   "variant_args": [],
+   "mode": "capture",
+   "runs": [
+    {
+     "schema": 1,
+     "scene": "bistro_interior",
+     "mode": "capture",
+     "tag": "fellow_pp",
+     "run": 0,
+     "cmdline_user_args": [
+      "--scene=bistro_interior",
+      "--mode=capture",
+      "--res=1920x1080",
+      "--tag=fellow_pp",
+      "--run=0",
+      "--out=C:\\Users\\matek\\Documents\\GitHub\\FellowGodot\\benchmarks\\results\\raw\\fellow-m1_capture\\fellow_pp\\bistro_interior",
+      "--warmup=10.0",
+      "--measure=30.0",
+      "--preset=high",
+      "--fellow=postfx/taa_history_pingpong=true"
+     ],
+     "cmdline_args": [],
+     "engine": {
+      "major": 4,
+      "minor": 7,
+      "patch": 2,
+      "hex": 263938,
+      "status": "stable",
+      "build": "custom_build",
+      "hash": "7f257b56ff4bc79057d893fc0f41614b6c4ed28a",
+      "timestamp": 1790722922,
+      "string": "4.7.2-stable (custom_build)"
+     },
+     "engine_build": {
+      "debug_build": false,
+      "has_editor": false,
+      "template_release": true
+     },
+     "adapter": {
+      "name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+      "vendor": "NVIDIA",
+      "api_version": "1.4.351",
+      "type": 2,
+      "driver": [
+       "NVIDIA",
+       "32.0.16.1714"
+      ],
+      "rendering_driver": "vulkan",
+      "rendering_method": "forward_plus"
+     },
+     "os": {
+      "name": "Windows",
+      "version": "10.0.26200",
+      "cpu": "Intel(R) Core(TM) Ultra 9 275HX",
+      "cpu_count": 24
+     },
+     "fellow": {
+      "available": true,
+      "requested": {
+       "rendering/fellow/postfx/taa_history_pingpong": true
+      },
+      "state": {
+       "rendering/fellow/enabled": true,
+       "rendering/fellow/postfx/enabled": true,
+       "rendering/fellow/postfx/taa_resolve_v2": false,
+       "rendering/fellow/postfx/taa_history_pingpong": true,
+       "rendering/fellow/fluid/enabled": true,
+       "rendering/fellow/profiling/pass_timestamps": false
+      }
+     },
+     "load_time_ms": 1640.09,
+     "startup_to_first_frame_ms": 1651.848,
+     "resolution": [
+      1920,
+      1080
+     ],
+     "valid": true,
+     "files": [
+      "bistro_interior_1920x1080_bistro_int_cam_01.png",
+      "bistro_interior_1920x1080_bistro_int_cam_02.png",
+      "bistro_interior_1920x1080_bistro_int_cam_03.png",
+      "bistro_interior_1920x1080_bistro_int_cam_04.png"
+     ],
+     "total_runtime_s": 6.284839,
+     "_proc": {
+      "returncode": 0,
+      "timed_out": false,
+      "wall_s": 8.1995689868927,
+      "peak_working_set": 1191202816,
+      "peak_private_bytes": 2761904128
+     },
+     "_json": "benchmarks\\results\\raw\\fellow-m1_capture\\fellow_pp\\bistro_interior\\bistro_interior_capture_fellow_pp_1920x1080_run0.json",
+     "_gpu_telemetry": {
+      "n": 8,
+      "clocks.gr": {
+       "min": 180.0,
+       "mean": 1082.625,
+       "max": 1642.0
+      },
+      "clocks.mem": {
+       "min": 405.0,
+       "mean": 8154.0,
+       "max": 10821.0
+      },
+      "temperature.gpu": {
+       "min": 53.0,
+       "mean": 55.0,
+       "max": 60.0
+      },
+      "power.draw": {
+       "min": 5.07,
+       "mean": 16.90875,
+       "max": 47.18
+      },
+      "utilization.gpu": {
+       "min": 0.0,
+       "mean": 13.0,
+       "max": 97.0
+      },
+      "memory.used": {
+       "min": 0.0,
+       "mean": 1097.25,
+       "max": 1489.0
+      },
+      "throttle_reasons_seen": [
+       "0x0000000000000004",
+       "0x0000000000000400"
+      ]
+     }
+    }
+   ]
+  },
+  "bistro_interior|1920x1080|fellow_v2": {
+   "scene": "bistro_interior",
+   "resolution": "1920x1080",
+   "build": "fellow_v2",
+   "preset": "high",
+   "set": "",
+   "fellow": "postfx/taa_resolve_v2=true,postfx/taa_history_pingpong=true",
+   "binary": "fellow",
+   "variant_args": [],
+   "mode": "capture",
+   "runs": [
+    {
+     "schema": 1,
+     "scene": "bistro_interior",
+     "mode": "capture",
+     "tag": "fellow_v2",
+     "run": 0,
+     "cmdline_user_args": [
+      "--scene=bistro_interior",
+      "--mode=capture",
+      "--res=1920x1080",
+      "--tag=fellow_v2",
+      "--run=0",
+      "--out=C:\\Users\\matek\\Documents\\GitHub\\FellowGodot\\benchmarks\\results\\raw\\fellow-m1_capture\\fellow_v2\\bistro_interior",
+      "--warmup=10.0",
+      "--measure=30.0",
+      "--preset=high",
+      "--fellow=postfx/taa_resolve_v2=true,postfx/taa_history_pingpong=true"
+     ],
+     "cmdline_args": [],
+     "engine": {
+      "major": 4,
+      "minor": 7,
+      "patch": 2,
+      "hex": 263938,
+      "status": "stable",
+      "build": "custom_build",
+      "hash": "7f257b56ff4bc79057d893fc0f41614b6c4ed28a",
+      "timestamp": 1790722922,
+      "string": "4.7.2-stable (custom_build)"
+     },
+     "engine_build": {
+      "debug_build": false,
+      "has_editor": false,
+      "template_release": true
+     },
+     "adapter": {
+      "name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+      "vendor": "NVIDIA",
+      "api_version": "1.4.351",
+      "type": 2,
+      "driver": [
+       "NVIDIA",
+       "32.0.16.1714"
+      ],
+      "rendering_driver": "vulkan",
+      "rendering_method": "forward_plus"
+     },
+     "os": {
+      "name": "Windows",
+      "version": "10.0.26200",
+      "cpu": "Intel(R) Core(TM) Ultra 9 275HX",
+      "cpu_count": 24
+     },
+     "fellow": {
+      "available": true,
+      "requested": {
+       "rendering/fellow/postfx/taa_resolve_v2": true,
+       "rendering/fellow/postfx/taa_history_pingpong": true
+      },
+      "state": {
+       "rendering/fellow/enabled": true,
+       "rendering/fellow/postfx/enabled": true,
+       "rendering/fellow/postfx/taa_resolve_v2": true,
+       "rendering/fellow/postfx/taa_history_pingpong": true,
+       "rendering/fellow/fluid/enabled": true,
+       "rendering/fellow/profiling/pass_timestamps": false
+      }
+     },
+     "load_time_ms": 1644.485,
+     "startup_to_first_frame_ms": 1654.494,
+     "resolution": [
+      1920,
+      1080
+     ],
+     "valid": true,
+     "files": [
+      "bistro_interior_1920x1080_bistro_int_cam_01.png",
+      "bistro_interior_1920x1080_bistro_int_cam_02.png",
+      "bistro_interior_1920x1080_bistro_int_cam_03.png",
+      "bistro_interior_1920x1080_bistro_int_cam_04.png"
+     ],
+     "total_runtime_s": 6.209979,
+     "_proc": {
+      "returncode": 0,
+      "timed_out": false,
+      "wall_s": 8.218515396118164,
+      "peak_working_set": 1185812480,
+      "peak_private_bytes": 2757984256
+     },
+     "_json": "benchmarks\\results\\raw\\fellow-m1_capture\\fellow_v2\\bistro_interior\\bistro_interior_capture_fellow_v2_1920x1080_run0.json",
+     "_gpu_telemetry": {
+      "n": 8,
+      "clocks.gr": {
+       "min": 180.0,
+       "mean": 1358.25,
+       "max": 2025.0
+      },
+      "clocks.mem": {
+       "min": 9001.0,
+       "mean": 9456.0,
+       "max": 10821.0
+      },
+      "temperature.gpu": {
+       "min": 53.0,
+       "mean": 55.75,
+       "max": 61.0
+      },
+      "power.draw": {
+       "min": 12.9,
+       "mean": 32.153749999999995,
+       "max": 85.79
+      },
+      "utilization.gpu": {
+       "min": 0.0,
+       "mean": 26.875,
+       "max": 97.0
+      },
+      "memory.used": {
+       "min": 0.0,
+       "mean": 1026.125,
+       "max": 1489.0
+      },
+      "throttle_reasons_seen": [
+       "0x0000000000000004",
+       "0x0000000000000400"
+      ]
+     }
+    }
+   ]
+  },
+  "bistro_interior|2560x1440|stock": {
+   "scene": "bistro_interior",
+   "resolution": "2560x1440",
+   "build": "stock",
+   "preset": "high",
+   "set": "",
+   "fellow": "",
+   "binary": "stock",
+   "variant_args": [],
+   "mode": "capture",
+   "runs": [
+    {
+     "schema": 1,
+     "scene": "bistro_interior",
+     "mode": "capture",
+     "tag": "stock",
+     "run": 0,
+     "cmdline_user_args": [
+      "--scene=bistro_interior",
+      "--mode=capture",
+      "--res=2560x1440",
+      "--tag=stock",
+      "--run=0",
+      "--out=C:\\Users\\matek\\Documents\\GitHub\\FellowGodot\\benchmarks\\results\\raw\\fellow-m1_capture\\stock\\bistro_interior",
+      "--warmup=10.0",
+      "--measure=30.0",
+      "--preset=high"
+     ],
+     "cmdline_args": [],
+     "engine": {
+      "major": 4,
+      "minor": 7,
+      "patch": 2,
+      "hex": 263938,
+      "status": "stable",
+      "build": "custom_build",
+      "hash": "ed1daf0bf001b61586d9930840f2f1394092c079",
+      "timestamp": 1786929518,
+      "string": "4.7.2-stable (custom_build)"
+     },
+     "engine_build": {
+      "debug_build": false,
+      "has_editor": false,
+      "template_release": true
+     },
+     "adapter": {
+      "name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+      "vendor": "NVIDIA",
+      "api_version": "1.4.351",
+      "type": 2,
+      "driver": [
+       "NVIDIA",
+       "32.0.16.1714"
+      ],
+      "rendering_driver": "vulkan",
+      "rendering_method": "forward_plus"
+     },
+     "os": {
+      "name": "Windows",
+      "version": "10.0.26200",
+      "cpu": "Intel(R) Core(TM) Ultra 9 275HX",
+      "cpu_count": 24
+     },
+     "fellow": {
+      "available": false,
+      "requested": {},
+      "state": {}
+     },
+     "load_time_ms": 1671.356,
+     "startup_to_first_frame_ms": 1680.144,
+     "resolution": [
+      2560,
+      1440
+     ],
+     "valid": true,
+     "files": [
+      "bistro_interior_2560x1440_bistro_int_cam_01.png",
+      "bistro_interior_2560x1440_bistro_int_cam_02.png",
+      "bistro_interior_2560x1440_bistro_int_cam_03.png",
+      "bistro_interior_2560x1440_bistro_int_cam_04.png"
+     ],
+     "total_runtime_s": 9.787055,
+     "_proc": {
+      "returncode": 0,
+      "timed_out": false,
+      "wall_s": 11.657428503036499,
+      "peak_working_set": 1220222976,
+      "peak_private_bytes": 3081011200
+     },
+     "_json": "benchmarks\\results\\raw\\fellow-m1_capture\\stock\\bistro_interior\\bistro_interior_capture_stock_2560x1440_run0.json",
+     "_gpu_telemetry": {
+      "n": 11,
+      "clocks.gr": {
+       "min": 180.0,
+       "mean": 996.0,
+       "max": 2077.0
+      },
+      "clocks.mem": {
+       "min": 405.0,
+       "mean": 8550.454545454546,
+       "max": 10821.0
+      },
+      "temperature.gpu": {
+       "min": 53.0,
+       "mean": 56.27272727272727,
+       "max": 62.0
+      },
+      "power.draw": {
+       "min": 4.7,
+       "mean": 30.442727272727268,
+       "max": 85.36
+      },
+      "utilization.gpu": {
+       "min": 0.0,
+       "mean": 21.636363636363637,
+       "max": 98.0
+      },
+      "memory.used": {
+       "min": 4.0,
+       "mean": 1439.6363636363637,
+       "max": 1804.0
+      },
+      "throttle_reasons_seen": [
+       "0x0000000000000004",
+       "0x0000000000000400"
+      ]
+     }
+    }
+   ]
+  },
+  "bistro_interior|2560x1440|fellow_pp": {
+   "scene": "bistro_interior",
+   "resolution": "2560x1440",
+   "build": "fellow_pp",
+   "preset": "high",
+   "set": "",
+   "fellow": "postfx/taa_history_pingpong=true",
+   "binary": "fellow",
+   "variant_args": [],
+   "mode": "capture",
+   "runs": [
+    {
+     "schema": 1,
+     "scene": "bistro_interior",
+     "mode": "capture",
+     "tag": "fellow_pp",
+     "run": 0,
+     "cmdline_user_args": [
+      "--scene=bistro_interior",
+      "--mode=capture",
+      "--res=2560x1440",
+      "--tag=fellow_pp",
+      "--run=0",
+      "--out=C:\\Users\\matek\\Documents\\GitHub\\FellowGodot\\benchmarks\\results\\raw\\fellow-m1_capture\\fellow_pp\\bistro_interior",
+      "--warmup=10.0",
+      "--measure=30.0",
+      "--preset=high",
+      "--fellow=postfx/taa_history_pingpong=true"
+     ],
+     "cmdline_args": [],
+     "engine": {
+      "major": 4,
+      "minor": 7,
+      "patch": 2,
+      "hex": 263938,
+      "status": "stable",
+      "build": "custom_build",
+      "hash": "7f257b56ff4bc79057d893fc0f41614b6c4ed28a",
+      "timestamp": 1790722922,
+      "string": "4.7.2-stable (custom_build)"
+     },
+     "engine_build": {
+      "debug_build": false,
+      "has_editor": false,
+      "template_release": true
+     },
+     "adapter": {
+      "name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+      "vendor": "NVIDIA",
+      "api_version": "1.4.351",
+      "type": 2,
+      "driver": [
+       "NVIDIA",
+       "32.0.16.1714"
+      ],
+      "rendering_driver": "vulkan",
+      "rendering_method": "forward_plus"
+     },
+     "os": {
+      "name": "Windows",
+      "version": "10.0.26200",
+      "cpu": "Intel(R) Core(TM) Ultra 9 275HX",
+      "cpu_count": 24
+     },
+     "fellow": {
+      "available": true,
+      "requested": {
+       "rendering/fellow/postfx/taa_history_pingpong": true
+      },
+      "state": {
+       "rendering/fellow/enabled": true,
+       "rendering/fellow/postfx/enabled": true,
+       "rendering/fellow/postfx/taa_resolve_v2": false,
+       "rendering/fellow/postfx/taa_history_pingpong": true,
+       "rendering/fellow/fluid/enabled": true,
+       "rendering/fellow/profiling/pass_timestamps": false
+      }
+     },
+     "load_time_ms": 1841.752,
+     "startup_to_first_frame_ms": 1854.082,
+     "resolution": [
+      2560,
+      1440
+     ],
+     "valid": true,
+     "files": [
+      "bistro_interior_2560x1440_bistro_int_cam_01.png",
+      "bistro_interior_2560x1440_bistro_int_cam_02.png",
+      "bistro_interior_2560x1440_bistro_int_cam_03.png",
+      "bistro_interior_2560x1440_bistro_int_cam_04.png"
+     ],
+     "total_runtime_s": 9.906522,
+     "_proc": {
+      "returncode": 0,
+      "timed_out": false,
+      "wall_s": 11.63759183883667,
+      "peak_working_set": 1224470528,
+      "peak_private_bytes": 3065569280
+     },
+     "_json": "benchmarks\\results\\raw\\fellow-m1_capture\\fellow_pp\\bistro_interior\\bistro_interior_capture_fellow_pp_2560x1440_run0.json",
+     "_gpu_telemetry": {
+      "n": 11,
+      "clocks.gr": {
+       "min": 225.0,
+       "mean": 966.7272727272727,
+       "max": 1995.0
+      },
+      "clocks.mem": {
+       "min": 9001.0,
+       "mean": 9166.454545454546,
+       "max": 10821.0
+      },
+      "temperature.gpu": {
+       "min": 53.0,
+       "mean": 55.81818181818182,
+       "max": 62.0
+      },
+      "power.draw": {
+       "min": 11.56,
+       "mean": 23.974545454545456,
+       "max": 81.15
+      },
+      "utilization.gpu": {
+       "min": 0.0,
+       "mean": 18.90909090909091,
+       "max": 98.0
+      },
+      "memory.used": {
+       "min": 123.0,
+       "mean": 1408.3636363636363,
+       "max": 1804.0
+      },
+      "throttle_reasons_seen": [
+       "0x0000000000000004",
+       "0x0000000000000400"
+      ]
+     }
+    }
+   ]
+  },
+  "bistro_interior|2560x1440|fellow_v2": {
+   "scene": "bistro_interior",
+   "resolution": "2560x1440",
+   "build": "fellow_v2",
+   "preset": "high",
+   "set": "",
+   "fellow": "postfx/taa_resolve_v2=true,postfx/taa_history_pingpong=true",
+   "binary": "fellow",
+   "variant_args": [],
+   "mode": "capture",
+   "runs": [
+    {
+     "schema": 1,
+     "scene": "bistro_interior",
+     "mode": "capture",
+     "tag": "fellow_v2",
+     "run": 0,
+     "cmdline_user_args": [
+      "--scene=bistro_interior",
+      "--mode=capture",
+      "--res=2560x1440",
+      "--tag=fellow_v2",
+      "--run=0",
+      "--out=C:\\Users\\matek\\Documents\\GitHub\\FellowGodot\\benchmarks\\results\\raw\\fellow-m1_capture\\fellow_v2\\bistro_interior",
+      "--warmup=10.0",
+      "--measure=30.0",
+      "--preset=high",
+      "--fellow=postfx/taa_resolve_v2=true,postfx/taa_history_pingpong=true"
+     ],
+     "cmdline_args": [],
+     "engine": {
+      "major": 4,
+      "minor": 7,
+      "patch": 2,
+      "hex": 263938,
+      "status": "stable",
+      "build": "custom_build",
+      "hash": "7f257b56ff4bc79057d893fc0f41614b6c4ed28a",
+      "timestamp": 1790722922,
+      "string": "4.7.2-stable (custom_build)"
+     },
+     "engine_build": {
+      "debug_build": false,
+      "has_editor": false,
+      "template_release": true
+     },
+     "adapter": {
+      "name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+      "vendor": "NVIDIA",
+      "api_version": "1.4.351",
+      "type": 2,
+      "driver": [
+       "NVIDIA",
+       "32.0.16.1714"
+      ],
+      "rendering_driver": "vulkan",
+      "rendering_method": "forward_plus"
+     },
+     "os": {
+      "name": "Windows",
+      "version": "10.0.26200",
+      "cpu": "Intel(R) Core(TM) Ultra 9 275HX",
+      "cpu_count": 24
+     },
+     "fellow": {
+      "available": true,
+      "requested": {
+       "rendering/fellow/postfx/taa_resolve_v2": true,
+       "rendering/fellow/postfx/taa_history_pingpong": true
+      },
+      "state": {
+       "rendering/fellow/enabled": true,
+       "rendering/fellow/postfx/enabled": true,
+       "rendering/fellow/postfx/taa_resolve_v2": true,
+       "rendering/fellow/postfx/taa_history_pingpong": true,
+       "rendering/fellow/fluid/enabled": true,
+       "rendering/fellow/profiling/pass_timestamps": false
+      }
+     },
+     "load_time_ms": 1649.07,
+     "startup_to_first_frame_ms": 1659.726,
+     "resolution": [
+      2560,
+      1440
+     ],
+     "valid": true,
+     "files": [
+      "bistro_interior_2560x1440_bistro_int_cam_01.png",
+      "bistro_interior_2560x1440_bistro_int_cam_02.png",
+      "bistro_interior_2560x1440_bistro_int_cam_03.png",
+      "bistro_interior_2560x1440_bistro_int_cam_04.png"
+     ],
+     "total_runtime_s": 9.513944,
+     "_proc": {
+      "returncode": 0,
+      "timed_out": false,
+      "wall_s": 11.373769521713257,
+      "peak_working_set": 1225179136,
+      "peak_private_bytes": 3084394496
+     },
+     "_json": "benchmarks\\results\\raw\\fellow-m1_capture\\fellow_v2\\bistro_interior\\bistro_interior_capture_fellow_v2_2560x1440_run0.json",
+     "_gpu_telemetry": {
+      "n": 10,
+      "clocks.gr": {
+       "min": 225.0,
+       "mean": 1118.1,
+       "max": 1882.0
+      },
+      "clocks.mem": {
+       "min": 9001.0,
+       "mean": 9365.0,
+       "max": 10821.0
+      },
+      "temperature.gpu": {
+       "min": 53.0,
+       "mean": 56.0,
+       "max": 62.0
+      },
+      "power.draw": {
+       "min": 12.36,
+       "mean": 31.863,
+       "max": 79.9
+      },
+      "utilization.gpu": {
+       "min": 0.0,
+       "mean": 26.2,
+       "max": 98.0
+      },
+      "memory.used": {
+       "min": 123.0,
+       "mean": 1555.5,
+       "max": 1804.0
+      },
+      "throttle_reasons_seen": [
+       "0x0000000000000004",
+       "0x0000000000000400"
+      ]
+     }
+    }
+   ]
+  }
+ }
+}

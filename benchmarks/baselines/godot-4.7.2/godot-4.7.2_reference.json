@@ -1,0 +1,3252 @@
+{
+ "session": "godot-4.7.2_reference",
+ "label": "",
+ "args": {
+  "builds": "stock",
+  "godot": null,
+  "scene": "pbr",
+  "mode": "reference",
+  "res": "1920x1080",
+  "runs": 3,
+  "max_runs": 6,
+  "max_cv": 0.03,
+  "warmup": 10.0,
+  "measure": 30.0,
+  "percam": 0,
+  "profile": false,
+  "preset": "reference_ssaa",
+  "set": "",
+  "fellow": "",
+  "fellow_off_for": "stock",
+  "extra": "--cameras=none --seqs=moving_object,camera_pan,foliage_strafe,specular_orbit,thin_dolly --jitter=8 --ref_settle_first=6 --ref_settle=1",
+  "cooldown": 5.0,
+  "heat_soak": 240.0,
+  "timeout": 7200.0,
+  "session": "godot-4.7.2_reference",
+  "label": "",
+  "merge": true,
+  "supersede_note": ""
+ },
+ "hardware": {
+  "timestamp_local": "2026-09-30T01:27:30.732183",
+  "host": "PREDZIO",
+  "python": "3.11.0",
+  "os": {
+   "platform": "Windows-10-10.0.26200-SP0",
+   "release": "10",
+   "version": "10.0.26200"
+  },
+  "cpu": "{\"Name\":\"Intel(R) Core(TM) Ultra 9 275HX\",\"NumberOfCores\":24,\"NumberOfLogicalProcessors\":24,\"MaxClockSpeed\":2700}",
+  "ram": "{\"TotalBytes\":68112736256,\"Modules\":[{\"Capacity\":34359738368,\"Speed\":6400,\"ConfiguredClockSpeed\":6400,\"Manufacturer\":\"Micron Technology\",\"PartNumber\":\"MTC16C2085S1VC64BD1 \"},{\"Capacity\":34359738368,\"Speed\":6400,\"ConfiguredClockSpeed\":6400,\"Manufacturer\":\"Micron Technology\",\"PartNumber\":\"MTC16C2085S1VC64BD1 \"}]}",
+  "os_caption": "{\"Caption\":\"Microsoft Windows 11 Home\",\"Version\":\"10.0.26200\",\"BuildNumber\":\"26200\"}",
+  "system": "{\"Manufacturer\":\"Acer\",\"Model\":\"Predator PHN16S-71\"}",
+  "power": "{\"Battery\":{\"PowerOnline\":true,\"Charging\":false},\"Scheme\":\"Power Scheme GUID: 3b79c5ed-2baa-4957-a015-c958d3221bfc  (Acer)\"}",
+  "display": "[{\"Name\":\"Intel(R) Graphics\",\"DriverVersion\":\"32.0.101.6629\",\"CurrentHorizontalResolution\":2560,\"CurrentVerticalResolution\":1600,\"CurrentRefreshRate\":240},{\"Name\":\"NVIDIA GeForce RTX 5070 Ti Laptop GPU\",\"DriverVersion\":\"32.0.16.1714\",\"CurrentHorizontalResolution\":null,\"CurrentVerticalResolution\":null,\"CurrentRefreshRate\":null}]",
+  "gpu": [
+   {
+    "name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+    "driver_version": "617.14",
+    "memory.total": "12227",
+    "pcie.link.gen.max": "5",
+    "pcie.link.width.max": "16",
+    "clocks.max.graphics": "3090",
+    "clocks.max.memory": "14001",
+    "power.limit": "[N/A]",
+    "vbios_version": "98.05.31.00.49"
+   }
+  ],
+  "engine": {
+   "commit": "044f6b36d1f87bb4088fe4e43e236bcd85cf323f",
+   "describe": "4.7.2-stable-10-g044f6b36d1",
+   "branch": "HEAD",
+   "status_short": ""
+  },
+  "build_flags": "platform=windows target=template_release production=yes disable_path_overrides=no winrt=no accesskit=no d3d12=no (MSVC, see BUILDING_FELLOWENGINE.md)",
+  "compiler": {
+   "visual_studio": "16.11.60",
+   "msvc_toolsets": [
+    "14.29.30133"
+   ]
+  },
+  "binaries": {
+   "stock": {
+    "path": ".tools\\bin\\stock\\godot.windows.template_release.x86_64.exe",
+    "size": 68635136,
+    "sha256": "f96d22afc9238c19ce728b307382e08675ca35455cad94cae2d4c5b8f88a6604",
+    "mtime": "2026-09-29T23:08:53.520548"
+   }
+  }
+ },
+ "gpu_telemetry": {
+  "n": 1545,
+  "clocks.gr": {
+   "min": 172.0,
+   "mean": 429.073786407767,
+   "max": 2752.0
+  },
+  "clocks.mem": {
+   "min": 405.0,
+   "mean": 3539.885436893204,
+   "max": 9001.0
+  },
+  "temperature.gpu": {
+   "min": 44.0,
+   "mean": 47.95728155339806,
+   "max": 60.0
+  },
+  "power.draw": {
+   "min": 4.36,
+   "mean": 14.158860841423945,
+   "max": 112.22
+  },
+  "utilization.gpu": {
+   "min": 0.0,
+   "mean": 9.247249190938511,
+   "max": 100.0
+  },
+  "memory.used": {
+   "min": 328.0,
+   "mean": 2305.631715210356,
+   "max": 2324.0
+  },
+  "throttle_reasons_seen": [
+   "0x0000000000000004",
+   "0x0000000000000400"
+  ]
+ },
+ "heat_soak_telemetry": {},
+ "results": {
+  "pbr|1920x1080|stock": {
+   "scene": "pbr",
+   "resolution": "1920x1080",
+   "build": "stock",
+   "preset": "reference_ssaa",
+   "set": "",
+   "fellow": "",
+   "binary": "stock",
+   "variant_args": [],
+   "mode": "reference",
+   "runs": [
+    {
+     "schema": 1,
+     "scene": "pbr",
+     "mode": "reference",
+     "tag": "stock",
+     "run": 0,
+     "cmdline_user_args": [
+      "--scene=pbr",
+      "--mode=reference",
+      "--res=1920x1080",
+      "--tag=stock",
+      "--run=0",
+      "--out=C:\\Users\\matek\\Documents\\GitHub\\FellowGodot\\benchmarks\\results\\raw\\godot-4.7.2_reference\\stock\\pbr",
+      "--warmup=10.0",
+      "--measure=30.0",
+      "--preset=reference_ssaa",
+      "--cameras=none",
+      "--seqs=moving_object,camera_pan,foliage_strafe,specular_orbit,thin_dolly",
+      "--jitter=8",
+      "--ref_settle_first=6",
+      "--ref_settle=1"
+     ],
+     "cmdline_args": [],
+     "engine": {
+      "major": 4,
+      "minor": 7,
+      "patch": 2,
+      "hex": 263938,
+      "status": "stable",
+      "build": "custom_build",
+      "hash": "ed1daf0bf001b61586d9930840f2f1394092c079",
+      "timestamp": 1786929518,
+      "string": "4.7.2-stable (custom_build)"
+     },
+     "engine_build": {
+      "debug_build": false,
+      "has_editor": false,
+      "template_release": true
+     },
+     "adapter": {
+      "name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+      "vendor": "NVIDIA",
+      "api_version": "1.4.351",
+      "type": 2,
+      "driver": [
+       "NVIDIA",
+       "32.0.16.1714"
+      ],
+      "rendering_driver": "vulkan",
+      "rendering_method": "forward_plus"
+     },
+     "os": {
+      "name": "Windows",
+      "version": "10.0.26200",
+      "cpu": "Intel(R) Core(TM) Ultra 9 275HX",
+      "cpu_count": 24
+     },
+     "fellow": {
+      "available": false,
+      "requested": {},
+      "state": {}
+     },
+     "load_time_ms": 410.586,
+     "startup_to_first_frame_ms": 421.797,
+     "resolution": [
+      1920,
+      1080
+     ],
+     "valid": true,
+     "files": {
+      "seq-moving_object_f000": [
+       "pbr_1920x1080_ref-seq-moving_object_f000_j00.png",
+       "pbr_1920x1080_ref-seq-moving_object_f000_j01.png",
+       "pbr_1920x1080_ref-seq-moving_object_f000_j02.png",
+       "pbr_1920x1080_ref-seq-moving_object_f000_j03.png",
+       "pbr_1920x1080_ref-seq-moving_object_f000_j04.png",
+       "pbr_1920x1080_ref-seq-moving_object_f000_j05.png",
+       "pbr_1920x1080_ref-seq-moving_object_f000_j06.png",
+       "pbr_1920x1080_ref-seq-moving_object_f000_j07.png"
+      ],
+      "seq-moving_object_f001": [
+       "pbr_1920x1080_ref-seq-moving_object_f001_j00.png",
+       "pbr_1920x1080_ref-seq-moving_object_f001_j01.png",
+       "pbr_1920x1080_ref-seq-moving_object_f001_j02.png",
+       "pbr_1920x1080_ref-seq-moving_object_f001_j03.png",
+       "pbr_1920x1080_ref-seq-moving_object_f001_j04.png",
+       "pbr_1920x1080_ref-seq-moving_object_f001_j05.png",
+       "pbr_1920x1080_ref-seq-moving_object_f001_j06.png",
+       "pbr_1920x1080_ref-seq-moving_object_f001_j07.png"
+      ],
+      "seq-moving_object_f002": [
+       "pbr_1920x1080_ref-seq-moving_object_f002_j00.png",
+       "pbr_1920x1080_ref-seq-moving_object_f002_j01.png",
+       "pbr_1920x1080_ref-seq-moving_object_f002_j02.png",
+       "pbr_1920x1080_ref-seq-moving_object_f002_j03.png",
+       "pbr_1920x1080_ref-seq-moving_object_f002_j04.png",
+       "pbr_1920x1080_ref-seq-moving_object_f002_j05.png",
+       "pbr_1920x1080_ref-seq-moving_object_f002_j06.png",
+       "pbr_1920x1080_ref-seq-moving_object_f002_j07.png"
+      ],
+      "seq-moving_object_f003": [
+       "pbr_1920x1080_ref-seq-moving_object_f003_j00.png",
+       "pbr_1920x1080_ref-seq-moving_object_f003_j01.png",
+       "pbr_1920x1080_ref-seq-moving_object_f003_j02.png",
+       "pbr_1920x1080_ref-seq-moving_object_f003_j03.png",
+       "pbr_1920x1080_ref-seq-moving_object_f003_j04.png",
+       "pbr_1920x1080_ref-seq-moving_object_f003_j05.png",
+       "pbr_1920x1080_ref-seq-moving_object_f003_j06.png",
+       "pbr_1920x1080_ref-seq-moving_object_f003_j07.png"
+      ],
+      "seq-moving_object_f004": [
+       "pbr_1920x1080_ref-seq-moving_object_f004_j00.png",
+       "pbr_1920x1080_ref-seq-moving_object_f004_j01.png",
+       "pbr_1920x1080_ref-seq-moving_object_f004_j02.png",
+       "pbr_1920x1080_ref-seq-moving_object_f004_j03.png",
+       "pbr_1920x1080_ref-seq-moving_object_f004_j04.png",
+       "pbr_1920x1080_ref-seq-moving_object_f004_j05.png",
+       "pbr_1920x1080_ref-seq-moving_object_f004_j06.png",
+       "pbr_1920x1080_ref-seq-moving_object_f004_j07.png"
+      ],
+      "seq-moving_object_f005": [
+       "pbr_1920x1080_ref-seq-moving_object_f005_j00.png",
+       "pbr_1920x1080_ref-seq-moving_object_f005_j01.png",
+       "pbr_1920x1080_ref-seq-moving_object_f005_j02.png",
+       "pbr_1920x1080_ref-seq-moving_object_f005_j03.png",
+       "pbr_1920x1080_ref-seq-moving_object_f005_j04.png",
+       "pbr_1920x1080_ref-seq-moving_object_f005_j05.png",
+       "pbr_1920x1080_ref-seq-moving_object_f005_j06.png",
+       "pbr_1920x1080_ref-seq-moving_object_f005_j07.png"
+      ],
+      "seq-moving_object_f006": [
+       "pbr_1920x1080_ref-seq-moving_object_f006_j00.png",
+       "pbr_1920x1080_ref-seq-moving_object_f006_j01.png",
+       "pbr_1920x1080_ref-seq-moving_object_f006_j02.png",
+       "pbr_1920x1080_ref-seq-moving_object_f006_j03.png",
+       "pbr_1920x1080_ref-seq-moving_object_f006_j04.png",
+       "pbr_1920x1080_ref-seq-moving_object_f006_j05.png",
+       "pbr_1920x1080_ref-seq-moving_object_f006_j06.png",
+       "pbr_1920x1080_ref-seq-moving_object_f006_j07.png"
+      ],
+      "seq-moving_object_f007": [
+       "pbr_1920x1080_ref-seq-moving_object_f007_j00.png",
+       "pbr_1920x1080_ref-seq-moving_object_f007_j01.png",
+       "pbr_1920x1080_ref-seq-moving_object_f007_j02.png",
+       "pbr_1920x1080_ref-seq-moving_object_f007_j03.png",
+       "pbr_1920x1080_ref-seq-moving_object_f007_j04.png",
+       "pbr_1920x1080_ref-seq-moving_object_f007_j05.png",
+       "pbr_1920x1080_ref-seq-moving_object_f007_j06.png",
+       "pbr_1920x1080_ref-seq-moving_object_f007_j07.png"
+      ],
+      "seq-moving_object_f008": [
+       "pbr_1920x1080_ref-seq-moving_object_f008_j00.png",
+       "pbr_1920x1080_ref-seq-moving_object_f008_j01.png",
+       "pbr_1920x1080_ref-seq-moving_object_f008_j02.png",
+       "pbr_1920x1080_ref-seq-moving_object_f008_j03.png",
+       "pbr_1920x1080_ref-seq-moving_object_f008_j04.png",
+       "pbr_1920x1080_ref-seq-moving_object_f008_j05.png",
+       "pbr_1920x1080_ref-seq-moving_object_f008_j06.png",
+       "pbr_1920x1080_ref-seq-moving_object_f008_j07.png"
+      ],
+      "seq-moving_object_f009": [
+       "pbr_1920x1080_ref-seq-moving_object_f009_j00.png",
+       "pbr_1920x1080_ref-seq-moving_object_f009_j01.png",
+       "pbr_1920x1080_ref-seq-moving_object_f009_j02.png",
+       "pbr_1920x1080_ref-seq-moving_object_f009_j03.png",
+       "pbr_1920x1080_ref-seq-moving_object_f009_j04.png",
+       "pbr_1920x1080_ref-seq-moving_object_f009_j05.png",
+       "pbr_1920x1080_ref-seq-moving_object_f009_j06.png",
+       "pbr_1920x1080_ref-seq-moving_object_f009_j07.png"
+      ],
+      "seq-moving_object_f010": [
+       "pbr_1920x1080_ref-seq-moving_object_f010_j00.png",
+       "pbr_1920x1080_ref-seq-moving_object_f010_j01.png",
+       "pbr_1920x1080_ref-seq-moving_object_f010_j02.png",
+       "pbr_1920x1080_ref-seq-moving_object_f010_j03.png",
+       "pbr_1920x1080_ref-seq-moving_object_f010_j04.png",
+       "pbr_1920x1080_ref-seq-moving_object_f010_j05.png",
+       "pbr_1920x1080_ref-seq-moving_object_f010_j06.png",
+       "pbr_1920x1080_ref-seq-moving_object_f010_j07.png"
+      ],
+      "seq-moving_object_f011": [
+       "pbr_1920x1080_ref-seq-moving_object_f011_j00.png",
+       "pbr_1920x1080_ref-seq-moving_object_f011_j01.png",
+       "pbr_1920x1080_ref-seq-moving_object_f011_j02.png",
+       "pbr_1920x1080_ref-seq-moving_object_f011_j03.png",
+       "pbr_1920x1080_ref-seq-moving_object_f011_j04.png",
+       "pbr_1920x1080_ref-seq-moving_object_f011_j05.png",
+       "pbr_1920x1080_ref-seq-moving_object_f011_j06.png",
+       "pbr_1920x1080_ref-seq-moving_object_f011_j07.png"
+      ],
+      "seq-moving_object_f012": [
+       "pbr_1920x1080_ref-seq-moving_object_f012_j00.png",
+       "pbr_1920x1080_ref-seq-moving_object_f012_j01.png",
+       "pbr_1920x1080_ref-seq-moving_object_f012_j02.png",
+       "pbr_1920x1080_ref-seq-moving_object_f012_j03.png",
+       "pbr_1920x1080_ref-seq-moving_object_f012_j04.png",
+       "pbr_1920x1080_ref-seq-moving_object_f012_j05.png",
+       "pbr_1920x1080_ref-seq-moving_object_f012_j06.png",
+       "pbr_1920x1080_ref-seq-moving_object_f012_j07.png"
+      ],
+      "seq-moving_object_f013": [
+       "pbr_1920x1080_ref-seq-moving_object_f013_j00.png",
+       "pbr_1920x1080_ref-seq-moving_object_f013_j01.png",
+       "pbr_1920x1080_ref-seq-moving_object_f013_j02.png",
+       "pbr_1920x1080_ref-seq-moving_object_f013_j03.png",
+       "pbr_1920x1080_ref-seq-moving_object_f013_j04.png",
+       "pbr_1920x1080_ref-seq-moving_object_f013_j05.png",
+       "pbr_1920x1080_ref-seq-moving_object_f013_j06.png",
+       "pbr_1920x1080_ref-seq-moving_object_f013_j07.png"
+      ],
+      "seq-moving_object_f014": [
+       "pbr_1920x1080_ref-seq-moving_object_f014_j00.png",
+       "pbr_1920x1080_ref-seq-moving_object_f014_j01.png",
+       "pbr_1920x1080_ref-seq-moving_object_f014_j02.png",
+       "pbr_1920x1080_ref-seq-moving_object_f014_j03.png",
+       "pbr_1920x1080_ref-seq-moving_object_f014_j04.png",
+       "pbr_1920x1080_ref-seq-moving_object_f014_j05.png",
+       "pbr_1920x1080_ref-seq-moving_object_f014_j06.png",
+       "pbr_1920x1080_ref-seq-moving_object_f014_j07.png"
+      ],
+      "seq-moving_object_f015": [
+       "pbr_1920x1080_ref-seq-moving_object_f015_j00.png",
+       "pbr_1920x1080_ref-seq-moving_object_f015_j01.png",
+       "pbr_1920x1080_ref-seq-moving_object_f015_j02.png",
+       "pbr_1920x1080_ref-seq-moving_object_f015_j03.png",
+       "pbr_1920x1080_ref-seq-moving_object_f015_j04.png",
+       "pbr_1920x1080_ref-seq-moving_object_f015_j05.png",
+       "pbr_1920x1080_ref-seq-moving_object_f015_j06.png",
+       "pbr_1920x1080_ref-seq-moving_object_f015_j07.png"
+      ],
+      "seq-moving_object_f016": [
+       "pbr_1920x1080_ref-seq-moving_object_f016_j00.png",
+       "pbr_1920x1080_ref-seq-moving_object_f016_j01.png",
+       "pbr_1920x1080_ref-seq-moving_object_f016_j02.png",
+       "pbr_1920x1080_ref-seq-moving_object_f016_j03.png",
+       "pbr_1920x1080_ref-seq-moving_object_f016_j04.png",
+       "pbr_1920x1080_ref-seq-moving_object_f016_j05.png",
+       "pbr_1920x1080_ref-seq-moving_object_f016_j06.png",
+       "pbr_1920x1080_ref-seq-moving_object_f016_j07.png"
+      ],
+      "seq-moving_object_f017": [
+       "pbr_1920x1080_ref-seq-moving_object_f017_j00.png",
+       "pbr_1920x1080_ref-seq-moving_object_f017_j01.png",
+       "pbr_1920x1080_ref-seq-moving_object_f017_j02.png",
+       "pbr_1920x1080_ref-seq-moving_object_f017_j03.png",
+       "pbr_1920x1080_ref-seq-moving_object_f017_j04.png",
+       "pbr_1920x1080_ref-seq-moving_object_f017_j05.png",
+       "pbr_1920x1080_ref-seq-moving_object_f017_j06.png",
+       "pbr_1920x1080_ref-seq-moving_object_f017_j07.png"
+      ],
+      "seq-moving_object_f018": [
+       "pbr_1920x1080_ref-seq-moving_object_f018_j00.png",
+       "pbr_1920x1080_ref-seq-moving_object_f018_j01.png",
+       "pbr_1920x1080_ref-seq-moving_object_f018_j02.png",
+       "pbr_1920x1080_ref-seq-moving_object_f018_j03.png",
+       "pbr_1920x1080_ref-seq-moving_object_f018_j04.png",
+       "pbr_1920x1080_ref-seq-moving_object_f018_j05.png",
+       "pbr_1920x1080_ref-seq-moving_object_f018_j06.png",
+       "pbr_1920x1080_ref-seq-moving_object_f018_j07.png"
+      ],
+      "seq-moving_object_f019": [
+       "pbr_1920x1080_ref-seq-moving_object_f019_j00.png",
+       "pbr_1920x1080_ref-seq-moving_object_f019_j01.png",
+       "pbr_1920x1080_ref-seq-moving_object_f019_j02.png",
+       "pbr_1920x1080_ref-seq-moving_object_f019_j03.png",
+       "pbr_1920x1080_ref-seq-moving_object_f019_j04.png",
+       "pbr_1920x1080_ref-seq-moving_object_f019_j05.png",
+       "pbr_1920x1080_ref-seq-moving_object_f019_j06.png",
+       "pbr_1920x1080_ref-seq-moving_object_f019_j07.png"
+      ],
+      "seq-moving_object_f020": [
+       "pbr_1920x1080_ref-seq-moving_object_f020_j00.png",
+       "pbr_1920x1080_ref-seq-moving_object_f020_j01.png",
+       "pbr_1920x1080_ref-seq-moving_object_f020_j02.png",
+       "pbr_1920x1080_ref-seq-moving_object_f020_j03.png",
+       "pbr_1920x1080_ref-seq-moving_object_f020_j04.png",
+       "pbr_1920x1080_ref-seq-moving_object_f020_j05.png",
+       "pbr_1920x1080_ref-seq-moving_object_f020_j06.png",
+       "pbr_1920x1080_ref-seq-moving_object_f020_j07.png"
+      ],
+      "seq-moving_object_f021": [
+       "pbr_1920x1080_ref-seq-moving_object_f021_j00.png",
+       "pbr_1920x1080_ref-seq-moving_object_f021_j01.png",
+       "pbr_1920x1080_ref-seq-moving_object_f021_j02.png",
+       "pbr_1920x1080_ref-seq-moving_object_f021_j03.png",
+       "pbr_1920x1080_ref-seq-moving_object_f021_j04.png",
+       "pbr_1920x1080_ref-seq-moving_object_f021_j05.png",
+       "pbr_1920x1080_ref-seq-moving_object_f021_j06.png",
+       "pbr_1920x1080_ref-seq-moving_object_f021_j07.png"
+      ],
+      "seq-moving_object_f022": [
+       "pbr_1920x1080_ref-seq-moving_object_f022_j00.png",
+       "pbr_1920x1080_ref-seq-moving_object_f022_j01.png",
+       "pbr_1920x1080_ref-seq-moving_object_f022_j02.png",
+       "pbr_1920x1080_ref-seq-moving_object_f022_j03.png",
+       "pbr_1920x1080_ref-seq-moving_object_f022_j04.png",
+       "pbr_1920x1080_ref-seq-moving_object_f022_j05.png",
+       "pbr_1920x1080_ref-seq-moving_object_f022_j06.png",
+       "pbr_1920x1080_ref-seq-moving_object_f022_j07.png"
+      ],
+      "seq-moving_object_f023": [
+       "pbr_1920x1080_ref-seq-moving_object_f023_j00.png",
+       "pbr_1920x1080_ref-seq-moving_object_f023_j01.png",
+       "pbr_1920x1080_ref-seq-moving_object_f023_j02.png",
+       "pbr_1920x1080_ref-seq-moving_object_f023_j03.png",
+       "pbr_1920x1080_ref-seq-moving_object_f023_j04.png",
+       "pbr_1920x1080_ref-seq-moving_object_f023_j05.png",
+       "pbr_1920x1080_ref-seq-moving_object_f023_j06.png",
+       "pbr_1920x1080_ref-seq-moving_object_f023_j07.png"
+      ],
+      "seq-moving_object_f024": [
+       "pbr_1920x1080_ref-seq-moving_object_f024_j00.png",
+       "pbr_1920x1080_ref-seq-moving_object_f024_j01.png",
+       "pbr_1920x1080_ref-seq-moving_object_f024_j02.png",
+       "pbr_1920x1080_ref-seq-moving_object_f024_j03.png",
+       "pbr_1920x1080_ref-seq-moving_object_f024_j04.png",
+       "pbr_1920x1080_ref-seq-moving_object_f024_j05.png",
+       "pbr_1920x1080_ref-seq-moving_object_f024_j06.png",
+       "pbr_1920x1080_ref-seq-moving_object_f024_j07.png"
+      ],
+      "seq-moving_object_f025": [
+       "pbr_1920x1080_ref-seq-moving_object_f025_j00.png",
+       "pbr_1920x1080_ref-seq-moving_object_f025_j01.png",
+       "pbr_1920x1080_ref-seq-moving_object_f025_j02.png",
+       "pbr_1920x1080_ref-seq-moving_object_f025_j03.png",
+       "pbr_1920x1080_ref-seq-moving_object_f025_j04.png",
+       "pbr_1920x1080_ref-seq-moving_object_f025_j05.png",
+       "pbr_1920x1080_ref-seq-moving_object_f025_j06.png",
+       "pbr_1920x1080_ref-seq-moving_object_f025_j07.png"
+      ],
+      "seq-moving_object_f026": [
+       "pbr_1920x1080_ref-seq-moving_object_f026_j00.png",
+       "pbr_1920x1080_ref-seq-moving_object_f026_j01.png",
+       "pbr_1920x1080_ref-seq-moving_object_f026_j02.png",
+       "pbr_1920x1080_ref-seq-moving_object_f026_j03.png",
+       "pbr_1920x1080_ref-seq-moving_object_f026_j04.png",
+       "pbr_1920x1080_ref-seq-moving_object_f026_j05.png",
+       "pbr_1920x1080_ref-seq-moving_object_f026_j06.png",
+       "pbr_1920x1080_ref-seq-moving_object_f026_j07.png"
+      ],
+      "seq-moving_object_f027": [
+       "pbr_1920x1080_ref-seq-moving_object_f027_j00.png",
+       "pbr_1920x1080_ref-seq-moving_object_f027_j01.png",
+       "pbr_1920x1080_ref-seq-moving_object_f027_j02.png",
+       "pbr_1920x1080_ref-seq-moving_object_f027_j03.png",
+       "pbr_1920x1080_ref-seq-moving_object_f027_j04.png",
+       "pbr_1920x1080_ref-seq-moving_object_f027_j05.png",
+       "pbr_1920x1080_ref-seq-moving_object_f027_j06.png",
+       "pbr_1920x1080_ref-seq-moving_object_f027_j07.png"
+      ],
+      "seq-moving_object_f028": [
+       "pbr_1920x1080_ref-seq-moving_object_f028_j00.png",
+       "pbr_1920x1080_ref-seq-moving_object_f028_j01.png",
+       "pbr_1920x1080_ref-seq-moving_object_f028_j02.png",
+       "pbr_1920x1080_ref-seq-moving_object_f028_j03.png",
+       "pbr_1920x1080_ref-seq-moving_object_f028_j04.png",
+       "pbr_1920x1080_ref-seq-moving_object_f028_j05.png",
+       "pbr_1920x1080_ref-seq-moving_object_f028_j06.png",
+       "pbr_1920x1080_ref-seq-moving_object_f028_j07.png"
+      ],
+      "seq-moving_object_f029": [
+       "pbr_1920x1080_ref-seq-moving_object_f029_j00.png",
+       "pbr_1920x1080_ref-seq-moving_object_f029_j01.png",
+       "pbr_1920x1080_ref-seq-moving_object_f029_j02.png",
+       "pbr_1920x1080_ref-seq-moving_object_f029_j03.png",
+       "pbr_1920x1080_ref-seq-moving_object_f029_j04.png",
+       "pbr_1920x1080_ref-seq-moving_object_f029_j05.png",
+       "pbr_1920x1080_ref-seq-moving_object_f029_j06.png",
+       "pbr_1920x1080_ref-seq-moving_object_f029_j07.png"
+      ],
+      "seq-moving_object_f030": [
+       "pbr_1920x1080_ref-seq-moving_object_f030_j00.png",
+       "pbr_1920x1080_ref-seq-moving_object_f030_j01.png",
+       "pbr_1920x1080_ref-seq-moving_object_f030_j02.png",
+       "pbr_1920x1080_ref-seq-moving_object_f030_j03.png",
+       "pbr_1920x1080_ref-seq-moving_object_f030_j04.png",
+       "pbr_1920x1080_ref-seq-moving_object_f030_j05.png",
+       "pbr_1920x1080_ref-seq-moving_object_f030_j06.png",
+       "pbr_1920x1080_ref-seq-moving_object_f030_j07.png"
+      ],
+      "seq-moving_object_f031": [
+       "pbr_1920x1080_ref-seq-moving_object_f031_j00.png",
+       "pbr_1920x1080_ref-seq-moving_object_f031_j01.png",
+       "pbr_1920x1080_ref-seq-moving_object_f031_j02.png",
+       "pbr_1920x1080_ref-seq-moving_object_f031_j03.png",
+       "pbr_1920x1080_ref-seq-moving_object_f031_j04.png",
+       "pbr_1920x1080_ref-seq-moving_object_f031_j05.png",
+       "pbr_1920x1080_ref-seq-moving_object_f031_j06.png",
+       "pbr_1920x1080_ref-seq-moving_object_f031_j07.png"
+      ],
+      "seq-moving_object_f032": [
+       "pbr_1920x1080_ref-seq-moving_object_f032_j00.png",
+       "pbr_1920x1080_ref-seq-moving_object_f032_j01.png",
+       "pbr_1920x1080_ref-seq-moving_object_f032_j02.png",
+       "pbr_1920x1080_ref-seq-moving_object_f032_j03.png",
+       "pbr_1920x1080_ref-seq-moving_object_f032_j04.png",
+       "pbr_1920x1080_ref-seq-moving_object_f032_j05.png",
+       "pbr_1920x1080_ref-seq-moving_object_f032_j06.png",
+       "pbr_1920x1080_ref-seq-moving_object_f032_j07.png"
+      ],
+      "seq-moving_object_f033": [
+       "pbr_1920x1080_ref-seq-moving_object_f033_j00.png",
+       "pbr_1920x1080_ref-seq-moving_object_f033_j01.png",
+       "pbr_1920x1080_ref-seq-moving_object_f033_j02.png",
+       "pbr_1920x1080_ref-seq-moving_object_f033_j03.png",
+       "pbr_1920x1080_ref-seq-moving_object_f033_j04.png",
+       "pbr_1920x1080_ref-seq-moving_object_f033_j05.png",
+       "pbr_1920x1080_ref-seq-moving_object_f033_j06.png",
+       "pbr_1920x1080_ref-seq-moving_object_f033_j07.png"
+      ],
+      "seq-moving_object_f034": [
+       "pbr_1920x1080_ref-seq-moving_object_f034_j00.png",
+       "pbr_1920x1080_ref-seq-moving_object_f034_j01.png",
+       "pbr_1920x1080_ref-seq-moving_object_f034_j02.png",
+       "pbr_1920x1080_ref-seq-moving_object_f034_j03.png",
+       "pbr_1920x1080_ref-seq-moving_object_f034_j04.png",
+       "pbr_1920x1080_ref-seq-moving_object_f034_j05.png",
+       "pbr_1920x1080_ref-seq-moving_object_f034_j06.png",
+       "pbr_1920x1080_ref-seq-moving_object_f034_j07.png"
+      ],
+      "seq-moving_object_f035": [
+       "pbr_1920x1080_ref-seq-moving_object_f035_j00.png",
+       "pbr_1920x1080_ref-seq-moving_object_f035_j01.png",
+       "pbr_1920x1080_ref-seq-moving_object_f035_j02.png",
+       "pbr_1920x1080_ref-seq-moving_object_f035_j03.png",
+       "pbr_1920x1080_ref-seq-moving_object_f035_j04.png",
+       "pbr_1920x1080_ref-seq-moving_object_f035_j05.png",
+       "pbr_1920x1080_ref-seq-moving_object_f035_j06.png",
+       "pbr_1920x1080_ref-seq-moving_object_f035_j07.png"
+      ],
+      "seq-moving_object_f036": [
+       "pbr_1920x1080_ref-seq-moving_object_f036_j00.png",
+       "pbr_1920x1080_ref-seq-moving_object_f036_j01.png",
+       "pbr_1920x1080_ref-seq-moving_object_f036_j02.png",
+       "pbr_1920x1080_ref-seq-moving_object_f036_j03.png",
+       "pbr_1920x1080_ref-seq-moving_object_f036_j04.png",
+       "pbr_1920x1080_ref-seq-moving_object_f036_j05.png",
+       "pbr_1920x1080_ref-seq-moving_object_f036_j06.png",
+       "pbr_1920x1080_ref-seq-moving_object_f036_j07.png"
+      ],
+      "seq-moving_object_f037": [
+       "pbr_1920x1080_ref-seq-moving_object_f037_j00.png",
+       "pbr_1920x1080_ref-seq-moving_object_f037_j01.png",
+       "pbr_1920x1080_ref-seq-moving_object_f037_j02.png",
+       "pbr_1920x1080_ref-seq-moving_object_f037_j03.png",
+       "pbr_1920x1080_ref-seq-moving_object_f037_j04.png",
+       "pbr_1920x1080_ref-seq-moving_object_f037_j05.png",
+       "pbr_1920x1080_ref-seq-moving_object_f037_j06.png",
+       "pbr_1920x1080_ref-seq-moving_object_f037_j07.png"
+      ],
+      "seq-moving_object_f038": [
+       "pbr_1920x1080_ref-seq-moving_object_f038_j00.png",
+       "pbr_1920x1080_ref-seq-moving_object_f038_j01.png",
+       "pbr_1920x1080_ref-seq-moving_object_f038_j02.png",
+       "pbr_1920x1080_ref-seq-moving_object_f038_j03.png",
+       "pbr_1920x1080_ref-seq-moving_object_f038_j04.png",
+       "pbr_1920x1080_ref-seq-moving_object_f038_j05.png",
+       "pbr_1920x1080_ref-seq-moving_object_f038_j06.png",
+       "pbr_1920x1080_ref-seq-moving_object_f038_j07.png"
+      ],
+      "seq-moving_object_f039": [
+       "pbr_1920x1080_ref-seq-moving_object_f039_j00.png",
+       "pbr_1920x1080_ref-seq-moving_object_f039_j01.png",
+       "pbr_1920x1080_ref-seq-moving_object_f039_j02.png",
+       "pbr_1920x1080_ref-seq-moving_object_f039_j03.png",
+       "pbr_1920x1080_ref-seq-moving_object_f039_j04.png",
+       "pbr_1920x1080_ref-seq-moving_object_f039_j05.png",
+       "pbr_1920x1080_ref-seq-moving_object_f039_j06.png",
+       "pbr_1920x1080_ref-seq-moving_object_f039_j07.png"
+      ],
+      "seq-moving_object_f040": [
+       "pbr_1920x1080_ref-seq-moving_object_f040_j00.png",
+       "pbr_1920x1080_ref-seq-moving_object_f040_j01.png",
+       "pbr_1920x1080_ref-seq-moving_object_f040_j02.png",
+       "pbr_1920x1080_ref-seq-moving_object_f040_j03.png",
+       "pbr_1920x1080_ref-seq-moving_object_f040_j04.png",
+       "pbr_1920x1080_ref-seq-moving_object_f040_j05.png",
+       "pbr_1920x1080_ref-seq-moving_object_f040_j06.png",
+       "pbr_1920x1080_ref-seq-moving_object_f040_j07.png"
+      ],
+      "seq-moving_object_f041": [
+       "pbr_1920x1080_ref-seq-moving_object_f041_j00.png",
+       "pbr_1920x1080_ref-seq-moving_object_f041_j01.png",
+       "pbr_1920x1080_ref-seq-moving_object_f041_j02.png",
+       "pbr_1920x1080_ref-seq-moving_object_f041_j03.png",
+       "pbr_1920x1080_ref-seq-moving_object_f041_j04.png",
+       "pbr_1920x1080_ref-seq-moving_object_f041_j05.png",
+       "pbr_1920x1080_ref-seq-moving_object_f041_j06.png",
+       "pbr_1920x1080_ref-seq-moving_object_f041_j07.png"
+      ],
+      "seq-moving_object_f042": [
+       "pbr_1920x1080_ref-seq-moving_object_f042_j00.png",
+       "pbr_1920x1080_ref-seq-moving_object_f042_j01.png",
+       "pbr_1920x1080_ref-seq-moving_object_f042_j02.png",
+       "pbr_1920x1080_ref-seq-moving_object_f042_j03.png",
+       "pbr_1920x1080_ref-seq-moving_object_f042_j04.png",
+       "pbr_1920x1080_ref-seq-moving_object_f042_j05.png",
+       "pbr_1920x1080_ref-seq-moving_object_f042_j06.png",
+       "pbr_1920x1080_ref-seq-moving_object_f042_j07.png"
+      ],
+      "seq-moving_object_f043": [
+       "pbr_1920x1080_ref-seq-moving_object_f043_j00.png",
+       "pbr_1920x1080_ref-seq-moving_object_f043_j01.png",
+       "pbr_1920x1080_ref-seq-moving_object_f043_j02.png",
+       "pbr_1920x1080_ref-seq-moving_object_f043_j03.png",
+       "pbr_1920x1080_ref-seq-moving_object_f043_j04.png",
+       "pbr_1920x1080_ref-seq-moving_object_f043_j05.png",
+       "pbr_1920x1080_ref-seq-moving_object_f043_j06.png",
+       "pbr_1920x1080_ref-seq-moving_object_f043_j07.png"
+      ],
+      "seq-moving_object_f044": [
+       "pbr_1920x1080_ref-seq-moving_object_f044_j00.png",
+       "pbr_1920x1080_ref-seq-moving_object_f044_j01.png",
+       "pbr_1920x1080_ref-seq-moving_object_f044_j02.png",
+       "pbr_1920x1080_ref-seq-moving_object_f044_j03.png",
+       "pbr_1920x1080_ref-seq-moving_object_f044_j04.png",
+       "pbr_1920x1080_ref-seq-moving_object_f044_j05.png",
+       "pbr_1920x1080_ref-seq-moving_object_f044_j06.png",
+       "pbr_1920x1080_ref-seq-moving_object_f044_j07.png"
+      ],
+      "seq-moving_object_f045": [
+       "pbr_1920x1080_ref-seq-moving_object_f045_j00.png",
+       "pbr_1920x1080_ref-seq-moving_object_f045_j01.png",
+       "pbr_1920x1080_ref-seq-moving_object_f045_j02.png",
+       "pbr_1920x1080_ref-seq-moving_object_f045_j03.png",
+       "pbr_1920x1080_ref-seq-moving_object_f045_j04.png",
+       "pbr_1920x1080_ref-seq-moving_object_f045_j05.png",
+       "pbr_1920x1080_ref-seq-moving_object_f045_j06.png",
+       "pbr_1920x1080_ref-seq-moving_object_f045_j07.png"
+      ],
+      "seq-moving_object_f046": [
+       "pbr_1920x1080_ref-seq-moving_object_f046_j00.png",
+       "pbr_1920x1080_ref-seq-moving_object_f046_j01.png",
+       "pbr_1920x1080_ref-seq-moving_object_f046_j02.png",
+       "pbr_1920x1080_ref-seq-moving_object_f046_j03.png",
+       "pbr_1920x1080_ref-seq-moving_object_f046_j04.png",
+       "pbr_1920x1080_ref-seq-moving_object_f046_j05.png",
+       "pbr_1920x1080_ref-seq-moving_object_f046_j06.png",
+       "pbr_1920x1080_ref-seq-moving_object_f046_j07.png"
+      ],
+      "seq-moving_object_f047": [
+       "pbr_1920x1080_ref-seq-moving_object_f047_j00.png",
+       "pbr_1920x1080_ref-seq-moving_object_f047_j01.png",
+       "pbr_1920x1080_ref-seq-moving_object_f047_j02.png",
+       "pbr_1920x1080_ref-seq-moving_object_f047_j03.png",
+       "pbr_1920x1080_ref-seq-moving_object_f047_j04.png",
+       "pbr_1920x1080_ref-seq-moving_object_f047_j05.png",
+       "pbr_1920x1080_ref-seq-moving_object_f047_j06.png",
+       "pbr_1920x1080_ref-seq-moving_object_f047_j07.png"
+      ],
+      "seq-moving_object_f048": [
+       "pbr_1920x1080_ref-seq-moving_object_f048_j00.png",
+       "pbr_1920x1080_ref-seq-moving_object_f048_j01.png",
+       "pbr_1920x1080_ref-seq-moving_object_f048_j02.png",
+       "pbr_1920x1080_ref-seq-moving_object_f048_j03.png",
+       "pbr_1920x1080_ref-seq-moving_object_f048_j04.png",
+       "pbr_1920x1080_ref-seq-moving_object_f048_j05.png",
+       "pbr_1920x1080_ref-seq-moving_object_f048_j06.png",
+       "pbr_1920x1080_ref-seq-moving_object_f048_j07.png"
+      ],
+      "seq-moving_object_f049": [
+       "pbr_1920x1080_ref-seq-moving_object_f049_j00.png",
+       "pbr_1920x1080_ref-seq-moving_object_f049_j01.png",
+       "pbr_1920x1080_ref-seq-moving_object_f049_j02.png",
+       "pbr_1920x1080_ref-seq-moving_object_f049_j03.png",
+       "pbr_1920x1080_ref-seq-moving_object_f049_j04.png",
+       "pbr_1920x1080_ref-seq-moving_object_f049_j05.png",
+       "pbr_1920x1080_ref-seq-moving_object_f049_j06.png",
+       "pbr_1920x1080_ref-seq-moving_object_f049_j07.png"
+      ],
+      "seq-moving_object_f050": [
+       "pbr_1920x1080_ref-seq-moving_object_f050_j00.png",
+       "pbr_1920x1080_ref-seq-moving_object_f050_j01.png",
+       "pbr_1920x1080_ref-seq-moving_object_f050_j02.png",
+       "pbr_1920x1080_ref-seq-moving_object_f050_j03.png",
+       "pbr_1920x1080_ref-seq-moving_object_f050_j04.png",
+       "pbr_1920x1080_ref-seq-moving_object_f050_j05.png",
+       "pbr_1920x1080_ref-seq-moving_object_f050_j06.png",
+       "pbr_1920x1080_ref-seq-moving_object_f050_j07.png"
+      ],
+      "seq-moving_object_f051": [
+       "pbr_1920x1080_ref-seq-moving_object_f051_j00.png",
+       "pbr_1920x1080_ref-seq-moving_object_f051_j01.png",
+       "pbr_1920x1080_ref-seq-moving_object_f051_j02.png",
+       "pbr_1920x1080_ref-seq-moving_object_f051_j03.png",
+       "pbr_1920x1080_ref-seq-moving_object_f051_j04.png",
+       "pbr_1920x1080_ref-seq-moving_object_f051_j05.png",
+       "pbr_1920x1080_ref-seq-moving_object_f051_j06.png",
+       "pbr_1920x1080_ref-seq-moving_object_f051_j07.png"
+      ],
+      "seq-moving_object_f052": [
+       "pbr_1920x1080_ref-seq-moving_object_f052_j00.png",
+       "pbr_1920x1080_ref-seq-moving_object_f052_j01.png",
+       "pbr_1920x1080_ref-seq-moving_object_f052_j02.png",
+       "pbr_1920x1080_ref-seq-moving_object_f052_j03.png",
+       "pbr_1920x1080_ref-seq-moving_object_f052_j04.png",
+       "pbr_1920x1080_ref-seq-moving_object_f052_j05.png",
+       "pbr_1920x1080_ref-seq-moving_object_f052_j06.png",
+       "pbr_1920x1080_ref-seq-moving_object_f052_j07.png"
+      ],
+      "seq-moving_object_f053": [
+       "pbr_1920x1080_ref-seq-moving_object_f053_j00.png",
+       "pbr_1920x1080_ref-seq-moving_object_f053_j01.png",
+       "pbr_1920x1080_ref-seq-moving_object_f053_j02.png",
+       "pbr_1920x1080_ref-seq-moving_object_f053_j03.png",
+       "pbr_1920x1080_ref-seq-moving_object_f053_j04.png",
+       "pbr_1920x1080_ref-seq-moving_object_f053_j05.png",
+       "pbr_1920x1080_ref-seq-moving_object_f053_j06.png",
+       "pbr_1920x1080_ref-seq-moving_object_f053_j07.png"
+      ],
+      "seq-moving_object_f054": [
+       "pbr_1920x1080_ref-seq-moving_object_f054_j00.png",
+       "pbr_1920x1080_ref-seq-moving_object_f054_j01.png",
+       "pbr_1920x1080_ref-seq-moving_object_f054_j02.png",
+       "pbr_1920x1080_ref-seq-moving_object_f054_j03.png",
+       "pbr_1920x1080_ref-seq-moving_object_f054_j04.png",
+       "pbr_1920x1080_ref-seq-moving_object_f054_j05.png",
+       "pbr_1920x1080_ref-seq-moving_object_f054_j06.png",
+       "pbr_1920x1080_ref-seq-moving_object_f054_j07.png"
+      ],
+      "seq-moving_object_f055": [
+       "pbr_1920x1080_ref-seq-moving_object_f055_j00.png",
+       "pbr_1920x1080_ref-seq-moving_object_f055_j01.png",
+       "pbr_1920x1080_ref-seq-moving_object_f055_j02.png",
+       "pbr_1920x1080_ref-seq-moving_object_f055_j03.png",
+       "pbr_1920x1080_ref-seq-moving_object_f055_j04.png",
+       "pbr_1920x1080_ref-seq-moving_object_f055_j05.png",
+       "pbr_1920x1080_ref-seq-moving_object_f055_j06.png",
+       "pbr_1920x1080_ref-seq-moving_object_f055_j07.png"
+      ],
+      "seq-moving_object_f056": [
+       "pbr_1920x1080_ref-seq-moving_object_f056_j00.png",
+       "pbr_1920x1080_ref-seq-moving_object_f056_j01.png",
+       "pbr_1920x1080_ref-seq-moving_object_f056_j02.png",
+       "pbr_1920x1080_ref-seq-moving_object_f056_j03.png",
+       "pbr_1920x1080_ref-seq-moving_object_f056_j04.png",
+       "pbr_1920x1080_ref-seq-moving_object_f056_j05.png",
+       "pbr_1920x1080_ref-seq-moving_object_f056_j06.png",
+       "pbr_1920x1080_ref-seq-moving_object_f056_j07.png"
+      ],
+      "seq-moving_object_f057": [
+       "pbr_1920x1080_ref-seq-moving_object_f057_j00.png",
+       "pbr_1920x1080_ref-seq-moving_object_f057_j01.png",
+       "pbr_1920x1080_ref-seq-moving_object_f057_j02.png",
+       "pbr_1920x1080_ref-seq-moving_object_f057_j03.png",
+       "pbr_1920x1080_ref-seq-moving_object_f057_j04.png",
+       "pbr_1920x1080_ref-seq-moving_object_f057_j05.png",
+       "pbr_1920x1080_ref-seq-moving_object_f057_j06.png",
+       "pbr_1920x1080_ref-seq-moving_object_f057_j07.png"
+      ],
+      "seq-moving_object_f058": [
+       "pbr_1920x1080_ref-seq-moving_object_f058_j00.png",
+       "pbr_1920x1080_ref-seq-moving_object_f058_j01.png",
+       "pbr_1920x1080_ref-seq-moving_object_f058_j02.png",
+       "pbr_1920x1080_ref-seq-moving_object_f058_j03.png",
+       "pbr_1920x1080_ref-seq-moving_object_f058_j04.png",
+       "pbr_1920x1080_ref-seq-moving_object_f058_j05.png",
+       "pbr_1920x1080_ref-seq-moving_object_f058_j06.png",
+       "pbr_1920x1080_ref-seq-moving_object_f058_j07.png"
+      ],
+      "seq-moving_object_f059": [
+       "pbr_1920x1080_ref-seq-moving_object_f059_j00.png",
+       "pbr_1920x1080_ref-seq-moving_object_f059_j01.png",
+       "pbr_1920x1080_ref-seq-moving_object_f059_j02.png",
+       "pbr_1920x1080_ref-seq-moving_object_f059_j03.png",
+       "pbr_1920x1080_ref-seq-moving_object_f059_j04.png",
+       "pbr_1920x1080_ref-seq-moving_object_f059_j05.png",
+       "pbr_1920x1080_ref-seq-moving_object_f059_j06.png",
+       "pbr_1920x1080_ref-seq-moving_object_f059_j07.png"
+      ],
+      "seq-camera_pan_f000": [
+       "pbr_1920x1080_ref-seq-camera_pan_f000_j00.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f000_j01.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f000_j02.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f000_j03.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f000_j04.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f000_j05.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f000_j06.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f000_j07.png"
+      ],
+      "seq-camera_pan_f001": [
+       "pbr_1920x1080_ref-seq-camera_pan_f001_j00.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f001_j01.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f001_j02.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f001_j03.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f001_j04.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f001_j05.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f001_j06.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f001_j07.png"
+      ],
+      "seq-camera_pan_f002": [
+       "pbr_1920x1080_ref-seq-camera_pan_f002_j00.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f002_j01.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f002_j02.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f002_j03.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f002_j04.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f002_j05.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f002_j06.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f002_j07.png"
+      ],
+      "seq-camera_pan_f003": [
+       "pbr_1920x1080_ref-seq-camera_pan_f003_j00.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f003_j01.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f003_j02.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f003_j03.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f003_j04.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f003_j05.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f003_j06.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f003_j07.png"
+      ],
+      "seq-camera_pan_f004": [
+       "pbr_1920x1080_ref-seq-camera_pan_f004_j00.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f004_j01.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f004_j02.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f004_j03.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f004_j04.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f004_j05.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f004_j06.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f004_j07.png"
+      ],
+      "seq-camera_pan_f005": [
+       "pbr_1920x1080_ref-seq-camera_pan_f005_j00.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f005_j01.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f005_j02.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f005_j03.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f005_j04.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f005_j05.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f005_j06.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f005_j07.png"
+      ],
+      "seq-camera_pan_f006": [
+       "pbr_1920x1080_ref-seq-camera_pan_f006_j00.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f006_j01.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f006_j02.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f006_j03.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f006_j04.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f006_j05.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f006_j06.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f006_j07.png"
+      ],
+      "seq-camera_pan_f007": [
+       "pbr_1920x1080_ref-seq-camera_pan_f007_j00.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f007_j01.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f007_j02.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f007_j03.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f007_j04.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f007_j05.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f007_j06.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f007_j07.png"
+      ],
+      "seq-camera_pan_f008": [
+       "pbr_1920x1080_ref-seq-camera_pan_f008_j00.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f008_j01.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f008_j02.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f008_j03.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f008_j04.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f008_j05.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f008_j06.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f008_j07.png"
+      ],
+      "seq-camera_pan_f009": [
+       "pbr_1920x1080_ref-seq-camera_pan_f009_j00.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f009_j01.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f009_j02.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f009_j03.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f009_j04.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f009_j05.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f009_j06.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f009_j07.png"
+      ],
+      "seq-camera_pan_f010": [
+       "pbr_1920x1080_ref-seq-camera_pan_f010_j00.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f010_j01.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f010_j02.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f010_j03.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f010_j04.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f010_j05.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f010_j06.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f010_j07.png"
+      ],
+      "seq-camera_pan_f011": [
+       "pbr_1920x1080_ref-seq-camera_pan_f011_j00.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f011_j01.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f011_j02.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f011_j03.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f011_j04.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f011_j05.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f011_j06.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f011_j07.png"
+      ],
+      "seq-camera_pan_f012": [
+       "pbr_1920x1080_ref-seq-camera_pan_f012_j00.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f012_j01.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f012_j02.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f012_j03.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f012_j04.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f012_j05.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f012_j06.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f012_j07.png"
+      ],
+      "seq-camera_pan_f013": [
+       "pbr_1920x1080_ref-seq-camera_pan_f013_j00.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f013_j01.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f013_j02.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f013_j03.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f013_j04.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f013_j05.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f013_j06.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f013_j07.png"
+      ],
+      "seq-camera_pan_f014": [
+       "pbr_1920x1080_ref-seq-camera_pan_f014_j00.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f014_j01.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f014_j02.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f014_j03.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f014_j04.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f014_j05.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f014_j06.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f014_j07.png"
+      ],
+      "seq-camera_pan_f015": [
+       "pbr_1920x1080_ref-seq-camera_pan_f015_j00.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f015_j01.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f015_j02.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f015_j03.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f015_j04.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f015_j05.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f015_j06.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f015_j07.png"
+      ],
+      "seq-camera_pan_f016": [
+       "pbr_1920x1080_ref-seq-camera_pan_f016_j00.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f016_j01.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f016_j02.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f016_j03.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f016_j04.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f016_j05.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f016_j06.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f016_j07.png"
+      ],
+      "seq-camera_pan_f017": [
+       "pbr_1920x1080_ref-seq-camera_pan_f017_j00.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f017_j01.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f017_j02.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f017_j03.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f017_j04.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f017_j05.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f017_j06.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f017_j07.png"
+      ],
+      "seq-camera_pan_f018": [
+       "pbr_1920x1080_ref-seq-camera_pan_f018_j00.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f018_j01.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f018_j02.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f018_j03.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f018_j04.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f018_j05.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f018_j06.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f018_j07.png"
+      ],
+      "seq-camera_pan_f019": [
+       "pbr_1920x1080_ref-seq-camera_pan_f019_j00.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f019_j01.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f019_j02.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f019_j03.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f019_j04.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f019_j05.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f019_j06.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f019_j07.png"
+      ],
+      "seq-camera_pan_f020": [
+       "pbr_1920x1080_ref-seq-camera_pan_f020_j00.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f020_j01.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f020_j02.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f020_j03.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f020_j04.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f020_j05.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f020_j06.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f020_j07.png"
+      ],
+      "seq-camera_pan_f021": [
+       "pbr_1920x1080_ref-seq-camera_pan_f021_j00.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f021_j01.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f021_j02.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f021_j03.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f021_j04.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f021_j05.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f021_j06.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f021_j07.png"
+      ],
+      "seq-camera_pan_f022": [
+       "pbr_1920x1080_ref-seq-camera_pan_f022_j00.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f022_j01.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f022_j02.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f022_j03.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f022_j04.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f022_j05.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f022_j06.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f022_j07.png"
+      ],
+      "seq-camera_pan_f023": [
+       "pbr_1920x1080_ref-seq-camera_pan_f023_j00.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f023_j01.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f023_j02.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f023_j03.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f023_j04.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f023_j05.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f023_j06.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f023_j07.png"
+      ],
+      "seq-camera_pan_f024": [
+       "pbr_1920x1080_ref-seq-camera_pan_f024_j00.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f024_j01.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f024_j02.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f024_j03.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f024_j04.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f024_j05.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f024_j06.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f024_j07.png"
+      ],
+      "seq-camera_pan_f025": [
+       "pbr_1920x1080_ref-seq-camera_pan_f025_j00.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f025_j01.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f025_j02.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f025_j03.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f025_j04.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f025_j05.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f025_j06.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f025_j07.png"
+      ],
+      "seq-camera_pan_f026": [
+       "pbr_1920x1080_ref-seq-camera_pan_f026_j00.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f026_j01.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f026_j02.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f026_j03.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f026_j04.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f026_j05.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f026_j06.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f026_j07.png"
+      ],
+      "seq-camera_pan_f027": [
+       "pbr_1920x1080_ref-seq-camera_pan_f027_j00.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f027_j01.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f027_j02.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f027_j03.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f027_j04.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f027_j05.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f027_j06.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f027_j07.png"
+      ],
+      "seq-camera_pan_f028": [
+       "pbr_1920x1080_ref-seq-camera_pan_f028_j00.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f028_j01.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f028_j02.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f028_j03.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f028_j04.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f028_j05.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f028_j06.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f028_j07.png"
+      ],
+      "seq-camera_pan_f029": [
+       "pbr_1920x1080_ref-seq-camera_pan_f029_j00.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f029_j01.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f029_j02.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f029_j03.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f029_j04.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f029_j05.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f029_j06.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f029_j07.png"
+      ],
+      "seq-camera_pan_f030": [
+       "pbr_1920x1080_ref-seq-camera_pan_f030_j00.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f030_j01.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f030_j02.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f030_j03.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f030_j04.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f030_j05.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f030_j06.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f030_j07.png"
+      ],
+      "seq-camera_pan_f031": [
+       "pbr_1920x1080_ref-seq-camera_pan_f031_j00.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f031_j01.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f031_j02.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f031_j03.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f031_j04.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f031_j05.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f031_j06.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f031_j07.png"
+      ],
+      "seq-camera_pan_f032": [
+       "pbr_1920x1080_ref-seq-camera_pan_f032_j00.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f032_j01.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f032_j02.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f032_j03.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f032_j04.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f032_j05.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f032_j06.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f032_j07.png"
+      ],
+      "seq-camera_pan_f033": [
+       "pbr_1920x1080_ref-seq-camera_pan_f033_j00.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f033_j01.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f033_j02.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f033_j03.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f033_j04.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f033_j05.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f033_j06.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f033_j07.png"
+      ],
+      "seq-camera_pan_f034": [
+       "pbr_1920x1080_ref-seq-camera_pan_f034_j00.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f034_j01.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f034_j02.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f034_j03.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f034_j04.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f034_j05.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f034_j06.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f034_j07.png"
+      ],
+      "seq-camera_pan_f035": [
+       "pbr_1920x1080_ref-seq-camera_pan_f035_j00.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f035_j01.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f035_j02.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f035_j03.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f035_j04.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f035_j05.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f035_j06.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f035_j07.png"
+      ],
+      "seq-camera_pan_f036": [
+       "pbr_1920x1080_ref-seq-camera_pan_f036_j00.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f036_j01.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f036_j02.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f036_j03.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f036_j04.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f036_j05.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f036_j06.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f036_j07.png"
+      ],
+      "seq-camera_pan_f037": [
+       "pbr_1920x1080_ref-seq-camera_pan_f037_j00.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f037_j01.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f037_j02.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f037_j03.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f037_j04.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f037_j05.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f037_j06.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f037_j07.png"
+      ],
+      "seq-camera_pan_f038": [
+       "pbr_1920x1080_ref-seq-camera_pan_f038_j00.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f038_j01.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f038_j02.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f038_j03.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f038_j04.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f038_j05.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f038_j06.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f038_j07.png"
+      ],
+      "seq-camera_pan_f039": [
+       "pbr_1920x1080_ref-seq-camera_pan_f039_j00.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f039_j01.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f039_j02.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f039_j03.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f039_j04.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f039_j05.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f039_j06.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f039_j07.png"
+      ],
+      "seq-camera_pan_f040": [
+       "pbr_1920x1080_ref-seq-camera_pan_f040_j00.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f040_j01.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f040_j02.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f040_j03.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f040_j04.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f040_j05.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f040_j06.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f040_j07.png"
+      ],
+      "seq-camera_pan_f041": [
+       "pbr_1920x1080_ref-seq-camera_pan_f041_j00.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f041_j01.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f041_j02.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f041_j03.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f041_j04.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f041_j05.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f041_j06.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f041_j07.png"
+      ],
+      "seq-camera_pan_f042": [
+       "pbr_1920x1080_ref-seq-camera_pan_f042_j00.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f042_j01.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f042_j02.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f042_j03.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f042_j04.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f042_j05.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f042_j06.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f042_j07.png"
+      ],
+      "seq-camera_pan_f043": [
+       "pbr_1920x1080_ref-seq-camera_pan_f043_j00.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f043_j01.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f043_j02.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f043_j03.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f043_j04.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f043_j05.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f043_j06.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f043_j07.png"
+      ],
+      "seq-camera_pan_f044": [
+       "pbr_1920x1080_ref-seq-camera_pan_f044_j00.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f044_j01.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f044_j02.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f044_j03.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f044_j04.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f044_j05.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f044_j06.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f044_j07.png"
+      ],
+      "seq-camera_pan_f045": [
+       "pbr_1920x1080_ref-seq-camera_pan_f045_j00.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f045_j01.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f045_j02.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f045_j03.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f045_j04.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f045_j05.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f045_j06.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f045_j07.png"
+      ],
+      "seq-camera_pan_f046": [
+       "pbr_1920x1080_ref-seq-camera_pan_f046_j00.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f046_j01.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f046_j02.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f046_j03.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f046_j04.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f046_j05.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f046_j06.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f046_j07.png"
+      ],
+      "seq-camera_pan_f047": [
+       "pbr_1920x1080_ref-seq-camera_pan_f047_j00.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f047_j01.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f047_j02.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f047_j03.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f047_j04.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f047_j05.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f047_j06.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f047_j07.png"
+      ],
+      "seq-camera_pan_f048": [
+       "pbr_1920x1080_ref-seq-camera_pan_f048_j00.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f048_j01.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f048_j02.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f048_j03.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f048_j04.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f048_j05.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f048_j06.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f048_j07.png"
+      ],
+      "seq-camera_pan_f049": [
+       "pbr_1920x1080_ref-seq-camera_pan_f049_j00.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f049_j01.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f049_j02.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f049_j03.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f049_j04.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f049_j05.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f049_j06.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f049_j07.png"
+      ],
+      "seq-camera_pan_f050": [
+       "pbr_1920x1080_ref-seq-camera_pan_f050_j00.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f050_j01.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f050_j02.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f050_j03.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f050_j04.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f050_j05.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f050_j06.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f050_j07.png"
+      ],
+      "seq-camera_pan_f051": [
+       "pbr_1920x1080_ref-seq-camera_pan_f051_j00.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f051_j01.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f051_j02.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f051_j03.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f051_j04.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f051_j05.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f051_j06.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f051_j07.png"
+      ],
+      "seq-camera_pan_f052": [
+       "pbr_1920x1080_ref-seq-camera_pan_f052_j00.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f052_j01.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f052_j02.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f052_j03.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f052_j04.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f052_j05.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f052_j06.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f052_j07.png"
+      ],
+      "seq-camera_pan_f053": [
+       "pbr_1920x1080_ref-seq-camera_pan_f053_j00.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f053_j01.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f053_j02.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f053_j03.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f053_j04.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f053_j05.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f053_j06.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f053_j07.png"
+      ],
+      "seq-camera_pan_f054": [
+       "pbr_1920x1080_ref-seq-camera_pan_f054_j00.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f054_j01.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f054_j02.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f054_j03.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f054_j04.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f054_j05.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f054_j06.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f054_j07.png"
+      ],
+      "seq-camera_pan_f055": [
+       "pbr_1920x1080_ref-seq-camera_pan_f055_j00.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f055_j01.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f055_j02.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f055_j03.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f055_j04.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f055_j05.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f055_j06.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f055_j07.png"
+      ],
+      "seq-camera_pan_f056": [
+       "pbr_1920x1080_ref-seq-camera_pan_f056_j00.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f056_j01.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f056_j02.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f056_j03.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f056_j04.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f056_j05.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f056_j06.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f056_j07.png"
+      ],
+      "seq-camera_pan_f057": [
+       "pbr_1920x1080_ref-seq-camera_pan_f057_j00.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f057_j01.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f057_j02.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f057_j03.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f057_j04.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f057_j05.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f057_j06.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f057_j07.png"
+      ],
+      "seq-camera_pan_f058": [
+       "pbr_1920x1080_ref-seq-camera_pan_f058_j00.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f058_j01.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f058_j02.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f058_j03.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f058_j04.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f058_j05.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f058_j06.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f058_j07.png"
+      ],
+      "seq-camera_pan_f059": [
+       "pbr_1920x1080_ref-seq-camera_pan_f059_j00.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f059_j01.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f059_j02.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f059_j03.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f059_j04.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f059_j05.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f059_j06.png",
+       "pbr_1920x1080_ref-seq-camera_pan_f059_j07.png"
+      ],
+      "seq-foliage_strafe_f000": [
+       "pbr_1920x1080_ref-seq-foliage_strafe_f000_j00.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f000_j01.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f000_j02.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f000_j03.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f000_j04.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f000_j05.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f000_j06.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f000_j07.png"
+      ],
+      "seq-foliage_strafe_f001": [
+       "pbr_1920x1080_ref-seq-foliage_strafe_f001_j00.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f001_j01.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f001_j02.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f001_j03.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f001_j04.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f001_j05.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f001_j06.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f001_j07.png"
+      ],
+      "seq-foliage_strafe_f002": [
+       "pbr_1920x1080_ref-seq-foliage_strafe_f002_j00.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f002_j01.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f002_j02.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f002_j03.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f002_j04.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f002_j05.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f002_j06.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f002_j07.png"
+      ],
+      "seq-foliage_strafe_f003": [
+       "pbr_1920x1080_ref-seq-foliage_strafe_f003_j00.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f003_j01.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f003_j02.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f003_j03.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f003_j04.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f003_j05.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f003_j06.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f003_j07.png"
+      ],
+      "seq-foliage_strafe_f004": [
+       "pbr_1920x1080_ref-seq-foliage_strafe_f004_j00.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f004_j01.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f004_j02.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f004_j03.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f004_j04.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f004_j05.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f004_j06.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f004_j07.png"
+      ],
+      "seq-foliage_strafe_f005": [
+       "pbr_1920x1080_ref-seq-foliage_strafe_f005_j00.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f005_j01.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f005_j02.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f005_j03.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f005_j04.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f005_j05.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f005_j06.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f005_j07.png"
+      ],
+      "seq-foliage_strafe_f006": [
+       "pbr_1920x1080_ref-seq-foliage_strafe_f006_j00.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f006_j01.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f006_j02.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f006_j03.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f006_j04.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f006_j05.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f006_j06.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f006_j07.png"
+      ],
+      "seq-foliage_strafe_f007": [
+       "pbr_1920x1080_ref-seq-foliage_strafe_f007_j00.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f007_j01.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f007_j02.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f007_j03.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f007_j04.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f007_j05.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f007_j06.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f007_j07.png"
+      ],
+      "seq-foliage_strafe_f008": [
+       "pbr_1920x1080_ref-seq-foliage_strafe_f008_j00.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f008_j01.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f008_j02.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f008_j03.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f008_j04.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f008_j05.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f008_j06.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f008_j07.png"
+      ],
+      "seq-foliage_strafe_f009": [
+       "pbr_1920x1080_ref-seq-foliage_strafe_f009_j00.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f009_j01.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f009_j02.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f009_j03.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f009_j04.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f009_j05.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f009_j06.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f009_j07.png"
+      ],
+      "seq-foliage_strafe_f010": [
+       "pbr_1920x1080_ref-seq-foliage_strafe_f010_j00.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f010_j01.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f010_j02.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f010_j03.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f010_j04.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f010_j05.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f010_j06.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f010_j07.png"
+      ],
+      "seq-foliage_strafe_f011": [
+       "pbr_1920x1080_ref-seq-foliage_strafe_f011_j00.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f011_j01.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f011_j02.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f011_j03.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f011_j04.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f011_j05.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f011_j06.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f011_j07.png"
+      ],
+      "seq-foliage_strafe_f012": [
+       "pbr_1920x1080_ref-seq-foliage_strafe_f012_j00.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f012_j01.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f012_j02.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f012_j03.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f012_j04.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f012_j05.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f012_j06.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f012_j07.png"
+      ],
+      "seq-foliage_strafe_f013": [
+       "pbr_1920x1080_ref-seq-foliage_strafe_f013_j00.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f013_j01.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f013_j02.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f013_j03.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f013_j04.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f013_j05.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f013_j06.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f013_j07.png"
+      ],
+      "seq-foliage_strafe_f014": [
+       "pbr_1920x1080_ref-seq-foliage_strafe_f014_j00.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f014_j01.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f014_j02.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f014_j03.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f014_j04.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f014_j05.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f014_j06.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f014_j07.png"
+      ],
+      "seq-foliage_strafe_f015": [
+       "pbr_1920x1080_ref-seq-foliage_strafe_f015_j00.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f015_j01.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f015_j02.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f015_j03.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f015_j04.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f015_j05.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f015_j06.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f015_j07.png"
+      ],
+      "seq-foliage_strafe_f016": [
+       "pbr_1920x1080_ref-seq-foliage_strafe_f016_j00.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f016_j01.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f016_j02.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f016_j03.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f016_j04.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f016_j05.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f016_j06.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f016_j07.png"
+      ],
+      "seq-foliage_strafe_f017": [
+       "pbr_1920x1080_ref-seq-foliage_strafe_f017_j00.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f017_j01.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f017_j02.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f017_j03.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f017_j04.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f017_j05.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f017_j06.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f017_j07.png"
+      ],
+      "seq-foliage_strafe_f018": [
+       "pbr_1920x1080_ref-seq-foliage_strafe_f018_j00.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f018_j01.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f018_j02.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f018_j03.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f018_j04.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f018_j05.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f018_j06.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f018_j07.png"
+      ],
+      "seq-foliage_strafe_f019": [
+       "pbr_1920x1080_ref-seq-foliage_strafe_f019_j00.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f019_j01.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f019_j02.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f019_j03.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f019_j04.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f019_j05.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f019_j06.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f019_j07.png"
+      ],
+      "seq-foliage_strafe_f020": [
+       "pbr_1920x1080_ref-seq-foliage_strafe_f020_j00.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f020_j01.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f020_j02.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f020_j03.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f020_j04.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f020_j05.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f020_j06.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f020_j07.png"
+      ],
+      "seq-foliage_strafe_f021": [
+       "pbr_1920x1080_ref-seq-foliage_strafe_f021_j00.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f021_j01.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f021_j02.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f021_j03.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f021_j04.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f021_j05.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f021_j06.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f021_j07.png"
+      ],
+      "seq-foliage_strafe_f022": [
+       "pbr_1920x1080_ref-seq-foliage_strafe_f022_j00.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f022_j01.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f022_j02.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f022_j03.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f022_j04.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f022_j05.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f022_j06.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f022_j07.png"
+      ],
+      "seq-foliage_strafe_f023": [
+       "pbr_1920x1080_ref-seq-foliage_strafe_f023_j00.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f023_j01.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f023_j02.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f023_j03.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f023_j04.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f023_j05.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f023_j06.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f023_j07.png"
+      ],
+      "seq-foliage_strafe_f024": [
+       "pbr_1920x1080_ref-seq-foliage_strafe_f024_j00.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f024_j01.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f024_j02.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f024_j03.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f024_j04.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f024_j05.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f024_j06.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f024_j07.png"
+      ],
+      "seq-foliage_strafe_f025": [
+       "pbr_1920x1080_ref-seq-foliage_strafe_f025_j00.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f025_j01.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f025_j02.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f025_j03.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f025_j04.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f025_j05.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f025_j06.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f025_j07.png"
+      ],
+      "seq-foliage_strafe_f026": [
+       "pbr_1920x1080_ref-seq-foliage_strafe_f026_j00.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f026_j01.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f026_j02.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f026_j03.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f026_j04.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f026_j05.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f026_j06.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f026_j07.png"
+      ],
+      "seq-foliage_strafe_f027": [
+       "pbr_1920x1080_ref-seq-foliage_strafe_f027_j00.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f027_j01.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f027_j02.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f027_j03.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f027_j04.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f027_j05.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f027_j06.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f027_j07.png"
+      ],
+      "seq-foliage_strafe_f028": [
+       "pbr_1920x1080_ref-seq-foliage_strafe_f028_j00.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f028_j01.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f028_j02.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f028_j03.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f028_j04.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f028_j05.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f028_j06.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f028_j07.png"
+      ],
+      "seq-foliage_strafe_f029": [
+       "pbr_1920x1080_ref-seq-foliage_strafe_f029_j00.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f029_j01.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f029_j02.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f029_j03.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f029_j04.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f029_j05.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f029_j06.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f029_j07.png"
+      ],
+      "seq-foliage_strafe_f030": [
+       "pbr_1920x1080_ref-seq-foliage_strafe_f030_j00.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f030_j01.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f030_j02.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f030_j03.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f030_j04.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f030_j05.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f030_j06.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f030_j07.png"
+      ],
+      "seq-foliage_strafe_f031": [
+       "pbr_1920x1080_ref-seq-foliage_strafe_f031_j00.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f031_j01.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f031_j02.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f031_j03.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f031_j04.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f031_j05.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f031_j06.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f031_j07.png"
+      ],
+      "seq-foliage_strafe_f032": [
+       "pbr_1920x1080_ref-seq-foliage_strafe_f032_j00.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f032_j01.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f032_j02.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f032_j03.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f032_j04.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f032_j05.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f032_j06.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f032_j07.png"
+      ],
+      "seq-foliage_strafe_f033": [
+       "pbr_1920x1080_ref-seq-foliage_strafe_f033_j00.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f033_j01.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f033_j02.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f033_j03.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f033_j04.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f033_j05.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f033_j06.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f033_j07.png"
+      ],
+      "seq-foliage_strafe_f034": [
+       "pbr_1920x1080_ref-seq-foliage_strafe_f034_j00.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f034_j01.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f034_j02.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f034_j03.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f034_j04.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f034_j05.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f034_j06.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f034_j07.png"
+      ],
+      "seq-foliage_strafe_f035": [
+       "pbr_1920x1080_ref-seq-foliage_strafe_f035_j00.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f035_j01.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f035_j02.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f035_j03.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f035_j04.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f035_j05.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f035_j06.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f035_j07.png"
+      ],
+      "seq-foliage_strafe_f036": [
+       "pbr_1920x1080_ref-seq-foliage_strafe_f036_j00.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f036_j01.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f036_j02.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f036_j03.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f036_j04.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f036_j05.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f036_j06.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f036_j07.png"
+      ],
+      "seq-foliage_strafe_f037": [
+       "pbr_1920x1080_ref-seq-foliage_strafe_f037_j00.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f037_j01.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f037_j02.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f037_j03.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f037_j04.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f037_j05.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f037_j06.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f037_j07.png"
+      ],
+      "seq-foliage_strafe_f038": [
+       "pbr_1920x1080_ref-seq-foliage_strafe_f038_j00.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f038_j01.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f038_j02.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f038_j03.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f038_j04.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f038_j05.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f038_j06.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f038_j07.png"
+      ],
+      "seq-foliage_strafe_f039": [
+       "pbr_1920x1080_ref-seq-foliage_strafe_f039_j00.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f039_j01.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f039_j02.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f039_j03.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f039_j04.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f039_j05.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f039_j06.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f039_j07.png"
+      ],
+      "seq-foliage_strafe_f040": [
+       "pbr_1920x1080_ref-seq-foliage_strafe_f040_j00.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f040_j01.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f040_j02.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f040_j03.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f040_j04.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f040_j05.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f040_j06.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f040_j07.png"
+      ],
+      "seq-foliage_strafe_f041": [
+       "pbr_1920x1080_ref-seq-foliage_strafe_f041_j00.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f041_j01.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f041_j02.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f041_j03.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f041_j04.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f041_j05.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f041_j06.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f041_j07.png"
+      ],
+      "seq-foliage_strafe_f042": [
+       "pbr_1920x1080_ref-seq-foliage_strafe_f042_j00.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f042_j01.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f042_j02.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f042_j03.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f042_j04.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f042_j05.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f042_j06.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f042_j07.png"
+      ],
+      "seq-foliage_strafe_f043": [
+       "pbr_1920x1080_ref-seq-foliage_strafe_f043_j00.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f043_j01.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f043_j02.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f043_j03.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f043_j04.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f043_j05.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f043_j06.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f043_j07.png"
+      ],
+      "seq-foliage_strafe_f044": [
+       "pbr_1920x1080_ref-seq-foliage_strafe_f044_j00.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f044_j01.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f044_j02.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f044_j03.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f044_j04.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f044_j05.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f044_j06.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f044_j07.png"
+      ],
+      "seq-foliage_strafe_f045": [
+       "pbr_1920x1080_ref-seq-foliage_strafe_f045_j00.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f045_j01.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f045_j02.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f045_j03.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f045_j04.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f045_j05.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f045_j06.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f045_j07.png"
+      ],
+      "seq-foliage_strafe_f046": [
+       "pbr_1920x1080_ref-seq-foliage_strafe_f046_j00.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f046_j01.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f046_j02.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f046_j03.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f046_j04.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f046_j05.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f046_j06.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f046_j07.png"
+      ],
+      "seq-foliage_strafe_f047": [
+       "pbr_1920x1080_ref-seq-foliage_strafe_f047_j00.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f047_j01.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f047_j02.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f047_j03.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f047_j04.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f047_j05.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f047_j06.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f047_j07.png"
+      ],
+      "seq-foliage_strafe_f048": [
+       "pbr_1920x1080_ref-seq-foliage_strafe_f048_j00.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f048_j01.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f048_j02.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f048_j03.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f048_j04.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f048_j05.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f048_j06.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f048_j07.png"
+      ],
+      "seq-foliage_strafe_f049": [
+       "pbr_1920x1080_ref-seq-foliage_strafe_f049_j00.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f049_j01.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f049_j02.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f049_j03.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f049_j04.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f049_j05.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f049_j06.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f049_j07.png"
+      ],
+      "seq-foliage_strafe_f050": [
+       "pbr_1920x1080_ref-seq-foliage_strafe_f050_j00.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f050_j01.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f050_j02.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f050_j03.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f050_j04.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f050_j05.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f050_j06.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f050_j07.png"
+      ],
+      "seq-foliage_strafe_f051": [
+       "pbr_1920x1080_ref-seq-foliage_strafe_f051_j00.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f051_j01.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f051_j02.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f051_j03.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f051_j04.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f051_j05.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f051_j06.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f051_j07.png"
+      ],
+      "seq-foliage_strafe_f052": [
+       "pbr_1920x1080_ref-seq-foliage_strafe_f052_j00.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f052_j01.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f052_j02.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f052_j03.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f052_j04.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f052_j05.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f052_j06.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f052_j07.png"
+      ],
+      "seq-foliage_strafe_f053": [
+       "pbr_1920x1080_ref-seq-foliage_strafe_f053_j00.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f053_j01.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f053_j02.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f053_j03.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f053_j04.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f053_j05.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f053_j06.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f053_j07.png"
+      ],
+      "seq-foliage_strafe_f054": [
+       "pbr_1920x1080_ref-seq-foliage_strafe_f054_j00.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f054_j01.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f054_j02.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f054_j03.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f054_j04.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f054_j05.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f054_j06.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f054_j07.png"
+      ],
+      "seq-foliage_strafe_f055": [
+       "pbr_1920x1080_ref-seq-foliage_strafe_f055_j00.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f055_j01.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f055_j02.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f055_j03.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f055_j04.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f055_j05.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f055_j06.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f055_j07.png"
+      ],
+      "seq-foliage_strafe_f056": [
+       "pbr_1920x1080_ref-seq-foliage_strafe_f056_j00.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f056_j01.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f056_j02.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f056_j03.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f056_j04.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f056_j05.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f056_j06.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f056_j07.png"
+      ],
+      "seq-foliage_strafe_f057": [
+       "pbr_1920x1080_ref-seq-foliage_strafe_f057_j00.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f057_j01.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f057_j02.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f057_j03.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f057_j04.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f057_j05.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f057_j06.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f057_j07.png"
+      ],
+      "seq-foliage_strafe_f058": [
+       "pbr_1920x1080_ref-seq-foliage_strafe_f058_j00.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f058_j01.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f058_j02.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f058_j03.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f058_j04.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f058_j05.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f058_j06.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f058_j07.png"
+      ],
+      "seq-foliage_strafe_f059": [
+       "pbr_1920x1080_ref-seq-foliage_strafe_f059_j00.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f059_j01.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f059_j02.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f059_j03.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f059_j04.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f059_j05.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f059_j06.png",
+       "pbr_1920x1080_ref-seq-foliage_strafe_f059_j07.png"
+      ],
+      "seq-specular_orbit_f000": [
+       "pbr_1920x1080_ref-seq-specular_orbit_f000_j00.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f000_j01.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f000_j02.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f000_j03.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f000_j04.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f000_j05.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f000_j06.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f000_j07.png"
+      ],
+      "seq-specular_orbit_f001": [
+       "pbr_1920x1080_ref-seq-specular_orbit_f001_j00.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f001_j01.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f001_j02.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f001_j03.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f001_j04.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f001_j05.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f001_j06.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f001_j07.png"
+      ],
+      "seq-specular_orbit_f002": [
+       "pbr_1920x1080_ref-seq-specular_orbit_f002_j00.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f002_j01.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f002_j02.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f002_j03.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f002_j04.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f002_j05.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f002_j06.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f002_j07.png"
+      ],
+      "seq-specular_orbit_f003": [
+       "pbr_1920x1080_ref-seq-specular_orbit_f003_j00.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f003_j01.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f003_j02.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f003_j03.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f003_j04.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f003_j05.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f003_j06.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f003_j07.png"
+      ],
+      "seq-specular_orbit_f004": [
+       "pbr_1920x1080_ref-seq-specular_orbit_f004_j00.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f004_j01.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f004_j02.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f004_j03.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f004_j04.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f004_j05.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f004_j06.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f004_j07.png"
+      ],
+      "seq-specular_orbit_f005": [
+       "pbr_1920x1080_ref-seq-specular_orbit_f005_j00.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f005_j01.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f005_j02.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f005_j03.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f005_j04.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f005_j05.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f005_j06.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f005_j07.png"
+      ],
+      "seq-specular_orbit_f006": [
+       "pbr_1920x1080_ref-seq-specular_orbit_f006_j00.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f006_j01.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f006_j02.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f006_j03.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f006_j04.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f006_j05.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f006_j06.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f006_j07.png"
+      ],
+      "seq-specular_orbit_f007": [
+       "pbr_1920x1080_ref-seq-specular_orbit_f007_j00.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f007_j01.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f007_j02.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f007_j03.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f007_j04.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f007_j05.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f007_j06.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f007_j07.png"
+      ],
+      "seq-specular_orbit_f008": [
+       "pbr_1920x1080_ref-seq-specular_orbit_f008_j00.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f008_j01.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f008_j02.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f008_j03.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f008_j04.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f008_j05.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f008_j06.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f008_j07.png"
+      ],
+      "seq-specular_orbit_f009": [
+       "pbr_1920x1080_ref-seq-specular_orbit_f009_j00.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f009_j01.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f009_j02.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f009_j03.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f009_j04.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f009_j05.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f009_j06.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f009_j07.png"
+      ],
+      "seq-specular_orbit_f010": [
+       "pbr_1920x1080_ref-seq-specular_orbit_f010_j00.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f010_j01.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f010_j02.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f010_j03.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f010_j04.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f010_j05.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f010_j06.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f010_j07.png"
+      ],
+      "seq-specular_orbit_f011": [
+       "pbr_1920x1080_ref-seq-specular_orbit_f011_j00.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f011_j01.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f011_j02.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f011_j03.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f011_j04.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f011_j05.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f011_j06.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f011_j07.png"
+      ],
+      "seq-specular_orbit_f012": [
+       "pbr_1920x1080_ref-seq-specular_orbit_f012_j00.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f012_j01.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f012_j02.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f012_j03.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f012_j04.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f012_j05.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f012_j06.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f012_j07.png"
+      ],
+      "seq-specular_orbit_f013": [
+       "pbr_1920x1080_ref-seq-specular_orbit_f013_j00.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f013_j01.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f013_j02.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f013_j03.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f013_j04.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f013_j05.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f013_j06.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f013_j07.png"
+      ],
+      "seq-specular_orbit_f014": [
+       "pbr_1920x1080_ref-seq-specular_orbit_f014_j00.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f014_j01.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f014_j02.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f014_j03.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f014_j04.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f014_j05.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f014_j06.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f014_j07.png"
+      ],
+      "seq-specular_orbit_f015": [
+       "pbr_1920x1080_ref-seq-specular_orbit_f015_j00.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f015_j01.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f015_j02.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f015_j03.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f015_j04.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f015_j05.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f015_j06.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f015_j07.png"
+      ],
+      "seq-specular_orbit_f016": [
+       "pbr_1920x1080_ref-seq-specular_orbit_f016_j00.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f016_j01.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f016_j02.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f016_j03.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f016_j04.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f016_j05.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f016_j06.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f016_j07.png"
+      ],
+      "seq-specular_orbit_f017": [
+       "pbr_1920x1080_ref-seq-specular_orbit_f017_j00.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f017_j01.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f017_j02.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f017_j03.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f017_j04.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f017_j05.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f017_j06.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f017_j07.png"
+      ],
+      "seq-specular_orbit_f018": [
+       "pbr_1920x1080_ref-seq-specular_orbit_f018_j00.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f018_j01.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f018_j02.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f018_j03.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f018_j04.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f018_j05.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f018_j06.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f018_j07.png"
+      ],
+      "seq-specular_orbit_f019": [
+       "pbr_1920x1080_ref-seq-specular_orbit_f019_j00.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f019_j01.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f019_j02.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f019_j03.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f019_j04.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f019_j05.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f019_j06.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f019_j07.png"
+      ],
+      "seq-specular_orbit_f020": [
+       "pbr_1920x1080_ref-seq-specular_orbit_f020_j00.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f020_j01.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f020_j02.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f020_j03.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f020_j04.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f020_j05.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f020_j06.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f020_j07.png"
+      ],
+      "seq-specular_orbit_f021": [
+       "pbr_1920x1080_ref-seq-specular_orbit_f021_j00.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f021_j01.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f021_j02.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f021_j03.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f021_j04.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f021_j05.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f021_j06.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f021_j07.png"
+      ],
+      "seq-specular_orbit_f022": [
+       "pbr_1920x1080_ref-seq-specular_orbit_f022_j00.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f022_j01.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f022_j02.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f022_j03.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f022_j04.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f022_j05.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f022_j06.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f022_j07.png"
+      ],
+      "seq-specular_orbit_f023": [
+       "pbr_1920x1080_ref-seq-specular_orbit_f023_j00.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f023_j01.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f023_j02.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f023_j03.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f023_j04.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f023_j05.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f023_j06.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f023_j07.png"
+      ],
+      "seq-specular_orbit_f024": [
+       "pbr_1920x1080_ref-seq-specular_orbit_f024_j00.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f024_j01.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f024_j02.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f024_j03.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f024_j04.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f024_j05.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f024_j06.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f024_j07.png"
+      ],
+      "seq-specular_orbit_f025": [
+       "pbr_1920x1080_ref-seq-specular_orbit_f025_j00.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f025_j01.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f025_j02.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f025_j03.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f025_j04.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f025_j05.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f025_j06.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f025_j07.png"
+      ],
+      "seq-specular_orbit_f026": [
+       "pbr_1920x1080_ref-seq-specular_orbit_f026_j00.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f026_j01.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f026_j02.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f026_j03.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f026_j04.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f026_j05.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f026_j06.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f026_j07.png"
+      ],
+      "seq-specular_orbit_f027": [
+       "pbr_1920x1080_ref-seq-specular_orbit_f027_j00.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f027_j01.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f027_j02.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f027_j03.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f027_j04.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f027_j05.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f027_j06.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f027_j07.png"
+      ],
+      "seq-specular_orbit_f028": [
+       "pbr_1920x1080_ref-seq-specular_orbit_f028_j00.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f028_j01.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f028_j02.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f028_j03.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f028_j04.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f028_j05.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f028_j06.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f028_j07.png"
+      ],
+      "seq-specular_orbit_f029": [
+       "pbr_1920x1080_ref-seq-specular_orbit_f029_j00.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f029_j01.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f029_j02.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f029_j03.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f029_j04.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f029_j05.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f029_j06.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f029_j07.png"
+      ],
+      "seq-specular_orbit_f030": [
+       "pbr_1920x1080_ref-seq-specular_orbit_f030_j00.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f030_j01.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f030_j02.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f030_j03.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f030_j04.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f030_j05.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f030_j06.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f030_j07.png"
+      ],
+      "seq-specular_orbit_f031": [
+       "pbr_1920x1080_ref-seq-specular_orbit_f031_j00.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f031_j01.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f031_j02.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f031_j03.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f031_j04.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f031_j05.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f031_j06.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f031_j07.png"
+      ],
+      "seq-specular_orbit_f032": [
+       "pbr_1920x1080_ref-seq-specular_orbit_f032_j00.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f032_j01.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f032_j02.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f032_j03.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f032_j04.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f032_j05.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f032_j06.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f032_j07.png"
+      ],
+      "seq-specular_orbit_f033": [
+       "pbr_1920x1080_ref-seq-specular_orbit_f033_j00.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f033_j01.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f033_j02.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f033_j03.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f033_j04.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f033_j05.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f033_j06.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f033_j07.png"
+      ],
+      "seq-specular_orbit_f034": [
+       "pbr_1920x1080_ref-seq-specular_orbit_f034_j00.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f034_j01.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f034_j02.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f034_j03.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f034_j04.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f034_j05.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f034_j06.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f034_j07.png"
+      ],
+      "seq-specular_orbit_f035": [
+       "pbr_1920x1080_ref-seq-specular_orbit_f035_j00.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f035_j01.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f035_j02.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f035_j03.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f035_j04.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f035_j05.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f035_j06.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f035_j07.png"
+      ],
+      "seq-specular_orbit_f036": [
+       "pbr_1920x1080_ref-seq-specular_orbit_f036_j00.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f036_j01.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f036_j02.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f036_j03.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f036_j04.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f036_j05.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f036_j06.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f036_j07.png"
+      ],
+      "seq-specular_orbit_f037": [
+       "pbr_1920x1080_ref-seq-specular_orbit_f037_j00.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f037_j01.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f037_j02.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f037_j03.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f037_j04.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f037_j05.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f037_j06.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f037_j07.png"
+      ],
+      "seq-specular_orbit_f038": [
+       "pbr_1920x1080_ref-seq-specular_orbit_f038_j00.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f038_j01.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f038_j02.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f038_j03.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f038_j04.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f038_j05.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f038_j06.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f038_j07.png"
+      ],
+      "seq-specular_orbit_f039": [
+       "pbr_1920x1080_ref-seq-specular_orbit_f039_j00.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f039_j01.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f039_j02.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f039_j03.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f039_j04.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f039_j05.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f039_j06.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f039_j07.png"
+      ],
+      "seq-specular_orbit_f040": [
+       "pbr_1920x1080_ref-seq-specular_orbit_f040_j00.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f040_j01.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f040_j02.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f040_j03.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f040_j04.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f040_j05.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f040_j06.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f040_j07.png"
+      ],
+      "seq-specular_orbit_f041": [
+       "pbr_1920x1080_ref-seq-specular_orbit_f041_j00.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f041_j01.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f041_j02.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f041_j03.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f041_j04.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f041_j05.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f041_j06.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f041_j07.png"
+      ],
+      "seq-specular_orbit_f042": [
+       "pbr_1920x1080_ref-seq-specular_orbit_f042_j00.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f042_j01.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f042_j02.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f042_j03.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f042_j04.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f042_j05.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f042_j06.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f042_j07.png"
+      ],
+      "seq-specular_orbit_f043": [
+       "pbr_1920x1080_ref-seq-specular_orbit_f043_j00.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f043_j01.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f043_j02.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f043_j03.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f043_j04.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f043_j05.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f043_j06.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f043_j07.png"
+      ],
+      "seq-specular_orbit_f044": [
+       "pbr_1920x1080_ref-seq-specular_orbit_f044_j00.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f044_j01.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f044_j02.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f044_j03.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f044_j04.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f044_j05.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f044_j06.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f044_j07.png"
+      ],
+      "seq-specular_orbit_f045": [
+       "pbr_1920x1080_ref-seq-specular_orbit_f045_j00.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f045_j01.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f045_j02.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f045_j03.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f045_j04.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f045_j05.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f045_j06.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f045_j07.png"
+      ],
+      "seq-specular_orbit_f046": [
+       "pbr_1920x1080_ref-seq-specular_orbit_f046_j00.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f046_j01.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f046_j02.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f046_j03.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f046_j04.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f046_j05.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f046_j06.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f046_j07.png"
+      ],
+      "seq-specular_orbit_f047": [
+       "pbr_1920x1080_ref-seq-specular_orbit_f047_j00.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f047_j01.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f047_j02.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f047_j03.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f047_j04.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f047_j05.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f047_j06.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f047_j07.png"
+      ],
+      "seq-specular_orbit_f048": [
+       "pbr_1920x1080_ref-seq-specular_orbit_f048_j00.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f048_j01.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f048_j02.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f048_j03.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f048_j04.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f048_j05.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f048_j06.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f048_j07.png"
+      ],
+      "seq-specular_orbit_f049": [
+       "pbr_1920x1080_ref-seq-specular_orbit_f049_j00.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f049_j01.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f049_j02.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f049_j03.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f049_j04.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f049_j05.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f049_j06.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f049_j07.png"
+      ],
+      "seq-specular_orbit_f050": [
+       "pbr_1920x1080_ref-seq-specular_orbit_f050_j00.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f050_j01.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f050_j02.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f050_j03.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f050_j04.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f050_j05.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f050_j06.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f050_j07.png"
+      ],
+      "seq-specular_orbit_f051": [
+       "pbr_1920x1080_ref-seq-specular_orbit_f051_j00.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f051_j01.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f051_j02.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f051_j03.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f051_j04.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f051_j05.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f051_j06.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f051_j07.png"
+      ],
+      "seq-specular_orbit_f052": [
+       "pbr_1920x1080_ref-seq-specular_orbit_f052_j00.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f052_j01.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f052_j02.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f052_j03.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f052_j04.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f052_j05.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f052_j06.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f052_j07.png"
+      ],
+      "seq-specular_orbit_f053": [
+       "pbr_1920x1080_ref-seq-specular_orbit_f053_j00.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f053_j01.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f053_j02.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f053_j03.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f053_j04.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f053_j05.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f053_j06.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f053_j07.png"
+      ],
+      "seq-specular_orbit_f054": [
+       "pbr_1920x1080_ref-seq-specular_orbit_f054_j00.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f054_j01.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f054_j02.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f054_j03.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f054_j04.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f054_j05.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f054_j06.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f054_j07.png"
+      ],
+      "seq-specular_orbit_f055": [
+       "pbr_1920x1080_ref-seq-specular_orbit_f055_j00.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f055_j01.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f055_j02.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f055_j03.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f055_j04.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f055_j05.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f055_j06.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f055_j07.png"
+      ],
+      "seq-specular_orbit_f056": [
+       "pbr_1920x1080_ref-seq-specular_orbit_f056_j00.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f056_j01.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f056_j02.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f056_j03.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f056_j04.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f056_j05.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f056_j06.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f056_j07.png"
+      ],
+      "seq-specular_orbit_f057": [
+       "pbr_1920x1080_ref-seq-specular_orbit_f057_j00.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f057_j01.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f057_j02.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f057_j03.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f057_j04.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f057_j05.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f057_j06.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f057_j07.png"
+      ],
+      "seq-specular_orbit_f058": [
+       "pbr_1920x1080_ref-seq-specular_orbit_f058_j00.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f058_j01.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f058_j02.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f058_j03.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f058_j04.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f058_j05.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f058_j06.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f058_j07.png"
+      ],
+      "seq-specular_orbit_f059": [
+       "pbr_1920x1080_ref-seq-specular_orbit_f059_j00.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f059_j01.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f059_j02.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f059_j03.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f059_j04.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f059_j05.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f059_j06.png",
+       "pbr_1920x1080_ref-seq-specular_orbit_f059_j07.png"
+      ],
+      "seq-thin_dolly_f000": [
+       "pbr_1920x1080_ref-seq-thin_dolly_f000_j00.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f000_j01.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f000_j02.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f000_j03.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f000_j04.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f000_j05.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f000_j06.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f000_j07.png"
+      ],
+      "seq-thin_dolly_f001": [
+       "pbr_1920x1080_ref-seq-thin_dolly_f001_j00.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f001_j01.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f001_j02.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f001_j03.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f001_j04.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f001_j05.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f001_j06.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f001_j07.png"
+      ],
+      "seq-thin_dolly_f002": [
+       "pbr_1920x1080_ref-seq-thin_dolly_f002_j00.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f002_j01.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f002_j02.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f002_j03.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f002_j04.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f002_j05.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f002_j06.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f002_j07.png"
+      ],
+      "seq-thin_dolly_f003": [
+       "pbr_1920x1080_ref-seq-thin_dolly_f003_j00.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f003_j01.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f003_j02.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f003_j03.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f003_j04.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f003_j05.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f003_j06.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f003_j07.png"
+      ],
+      "seq-thin_dolly_f004": [
+       "pbr_1920x1080_ref-seq-thin_dolly_f004_j00.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f004_j01.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f004_j02.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f004_j03.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f004_j04.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f004_j05.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f004_j06.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f004_j07.png"
+      ],
+      "seq-thin_dolly_f005": [
+       "pbr_1920x1080_ref-seq-thin_dolly_f005_j00.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f005_j01.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f005_j02.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f005_j03.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f005_j04.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f005_j05.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f005_j06.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f005_j07.png"
+      ],
+      "seq-thin_dolly_f006": [
+       "pbr_1920x1080_ref-seq-thin_dolly_f006_j00.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f006_j01.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f006_j02.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f006_j03.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f006_j04.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f006_j05.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f006_j06.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f006_j07.png"
+      ],
+      "seq-thin_dolly_f007": [
+       "pbr_1920x1080_ref-seq-thin_dolly_f007_j00.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f007_j01.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f007_j02.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f007_j03.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f007_j04.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f007_j05.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f007_j06.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f007_j07.png"
+      ],
+      "seq-thin_dolly_f008": [
+       "pbr_1920x1080_ref-seq-thin_dolly_f008_j00.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f008_j01.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f008_j02.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f008_j03.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f008_j04.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f008_j05.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f008_j06.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f008_j07.png"
+      ],
+      "seq-thin_dolly_f009": [
+       "pbr_1920x1080_ref-seq-thin_dolly_f009_j00.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f009_j01.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f009_j02.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f009_j03.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f009_j04.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f009_j05.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f009_j06.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f009_j07.png"
+      ],
+      "seq-thin_dolly_f010": [
+       "pbr_1920x1080_ref-seq-thin_dolly_f010_j00.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f010_j01.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f010_j02.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f010_j03.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f010_j04.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f010_j05.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f010_j06.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f010_j07.png"
+      ],
+      "seq-thin_dolly_f011": [
+       "pbr_1920x1080_ref-seq-thin_dolly_f011_j00.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f011_j01.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f011_j02.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f011_j03.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f011_j04.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f011_j05.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f011_j06.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f011_j07.png"
+      ],
+      "seq-thin_dolly_f012": [
+       "pbr_1920x1080_ref-seq-thin_dolly_f012_j00.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f012_j01.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f012_j02.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f012_j03.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f012_j04.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f012_j05.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f012_j06.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f012_j07.png"
+      ],
+      "seq-thin_dolly_f013": [
+       "pbr_1920x1080_ref-seq-thin_dolly_f013_j00.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f013_j01.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f013_j02.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f013_j03.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f013_j04.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f013_j05.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f013_j06.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f013_j07.png"
+      ],
+      "seq-thin_dolly_f014": [
+       "pbr_1920x1080_ref-seq-thin_dolly_f014_j00.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f014_j01.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f014_j02.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f014_j03.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f014_j04.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f014_j05.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f014_j06.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f014_j07.png"
+      ],
+      "seq-thin_dolly_f015": [
+       "pbr_1920x1080_ref-seq-thin_dolly_f015_j00.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f015_j01.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f015_j02.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f015_j03.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f015_j04.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f015_j05.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f015_j06.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f015_j07.png"
+      ],
+      "seq-thin_dolly_f016": [
+       "pbr_1920x1080_ref-seq-thin_dolly_f016_j00.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f016_j01.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f016_j02.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f016_j03.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f016_j04.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f016_j05.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f016_j06.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f016_j07.png"
+      ],
+      "seq-thin_dolly_f017": [
+       "pbr_1920x1080_ref-seq-thin_dolly_f017_j00.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f017_j01.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f017_j02.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f017_j03.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f017_j04.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f017_j05.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f017_j06.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f017_j07.png"
+      ],
+      "seq-thin_dolly_f018": [
+       "pbr_1920x1080_ref-seq-thin_dolly_f018_j00.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f018_j01.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f018_j02.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f018_j03.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f018_j04.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f018_j05.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f018_j06.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f018_j07.png"
+      ],
+      "seq-thin_dolly_f019": [
+       "pbr_1920x1080_ref-seq-thin_dolly_f019_j00.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f019_j01.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f019_j02.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f019_j03.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f019_j04.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f019_j05.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f019_j06.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f019_j07.png"
+      ],
+      "seq-thin_dolly_f020": [
+       "pbr_1920x1080_ref-seq-thin_dolly_f020_j00.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f020_j01.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f020_j02.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f020_j03.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f020_j04.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f020_j05.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f020_j06.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f020_j07.png"
+      ],
+      "seq-thin_dolly_f021": [
+       "pbr_1920x1080_ref-seq-thin_dolly_f021_j00.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f021_j01.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f021_j02.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f021_j03.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f021_j04.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f021_j05.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f021_j06.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f021_j07.png"
+      ],
+      "seq-thin_dolly_f022": [
+       "pbr_1920x1080_ref-seq-thin_dolly_f022_j00.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f022_j01.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f022_j02.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f022_j03.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f022_j04.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f022_j05.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f022_j06.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f022_j07.png"
+      ],
+      "seq-thin_dolly_f023": [
+       "pbr_1920x1080_ref-seq-thin_dolly_f023_j00.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f023_j01.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f023_j02.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f023_j03.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f023_j04.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f023_j05.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f023_j06.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f023_j07.png"
+      ],
+      "seq-thin_dolly_f024": [
+       "pbr_1920x1080_ref-seq-thin_dolly_f024_j00.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f024_j01.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f024_j02.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f024_j03.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f024_j04.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f024_j05.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f024_j06.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f024_j07.png"
+      ],
+      "seq-thin_dolly_f025": [
+       "pbr_1920x1080_ref-seq-thin_dolly_f025_j00.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f025_j01.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f025_j02.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f025_j03.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f025_j04.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f025_j05.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f025_j06.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f025_j07.png"
+      ],
+      "seq-thin_dolly_f026": [
+       "pbr_1920x1080_ref-seq-thin_dolly_f026_j00.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f026_j01.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f026_j02.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f026_j03.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f026_j04.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f026_j05.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f026_j06.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f026_j07.png"
+      ],
+      "seq-thin_dolly_f027": [
+       "pbr_1920x1080_ref-seq-thin_dolly_f027_j00.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f027_j01.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f027_j02.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f027_j03.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f027_j04.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f027_j05.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f027_j06.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f027_j07.png"
+      ],
+      "seq-thin_dolly_f028": [
+       "pbr_1920x1080_ref-seq-thin_dolly_f028_j00.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f028_j01.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f028_j02.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f028_j03.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f028_j04.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f028_j05.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f028_j06.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f028_j07.png"
+      ],
+      "seq-thin_dolly_f029": [
+       "pbr_1920x1080_ref-seq-thin_dolly_f029_j00.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f029_j01.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f029_j02.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f029_j03.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f029_j04.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f029_j05.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f029_j06.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f029_j07.png"
+      ],
+      "seq-thin_dolly_f030": [
+       "pbr_1920x1080_ref-seq-thin_dolly_f030_j00.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f030_j01.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f030_j02.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f030_j03.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f030_j04.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f030_j05.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f030_j06.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f030_j07.png"
+      ],
+      "seq-thin_dolly_f031": [
+       "pbr_1920x1080_ref-seq-thin_dolly_f031_j00.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f031_j01.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f031_j02.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f031_j03.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f031_j04.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f031_j05.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f031_j06.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f031_j07.png"
+      ],
+      "seq-thin_dolly_f032": [
+       "pbr_1920x1080_ref-seq-thin_dolly_f032_j00.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f032_j01.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f032_j02.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f032_j03.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f032_j04.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f032_j05.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f032_j06.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f032_j07.png"
+      ],
+      "seq-thin_dolly_f033": [
+       "pbr_1920x1080_ref-seq-thin_dolly_f033_j00.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f033_j01.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f033_j02.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f033_j03.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f033_j04.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f033_j05.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f033_j06.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f033_j07.png"
+      ],
+      "seq-thin_dolly_f034": [
+       "pbr_1920x1080_ref-seq-thin_dolly_f034_j00.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f034_j01.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f034_j02.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f034_j03.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f034_j04.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f034_j05.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f034_j06.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f034_j07.png"
+      ],
+      "seq-thin_dolly_f035": [
+       "pbr_1920x1080_ref-seq-thin_dolly_f035_j00.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f035_j01.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f035_j02.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f035_j03.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f035_j04.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f035_j05.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f035_j06.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f035_j07.png"
+      ],
+      "seq-thin_dolly_f036": [
+       "pbr_1920x1080_ref-seq-thin_dolly_f036_j00.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f036_j01.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f036_j02.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f036_j03.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f036_j04.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f036_j05.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f036_j06.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f036_j07.png"
+      ],
+      "seq-thin_dolly_f037": [
+       "pbr_1920x1080_ref-seq-thin_dolly_f037_j00.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f037_j01.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f037_j02.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f037_j03.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f037_j04.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f037_j05.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f037_j06.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f037_j07.png"
+      ],
+      "seq-thin_dolly_f038": [
+       "pbr_1920x1080_ref-seq-thin_dolly_f038_j00.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f038_j01.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f038_j02.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f038_j03.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f038_j04.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f038_j05.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f038_j06.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f038_j07.png"
+      ],
+      "seq-thin_dolly_f039": [
+       "pbr_1920x1080_ref-seq-thin_dolly_f039_j00.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f039_j01.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f039_j02.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f039_j03.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f039_j04.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f039_j05.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f039_j06.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f039_j07.png"
+      ],
+      "seq-thin_dolly_f040": [
+       "pbr_1920x1080_ref-seq-thin_dolly_f040_j00.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f040_j01.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f040_j02.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f040_j03.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f040_j04.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f040_j05.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f040_j06.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f040_j07.png"
+      ],
+      "seq-thin_dolly_f041": [
+       "pbr_1920x1080_ref-seq-thin_dolly_f041_j00.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f041_j01.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f041_j02.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f041_j03.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f041_j04.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f041_j05.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f041_j06.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f041_j07.png"
+      ],
+      "seq-thin_dolly_f042": [
+       "pbr_1920x1080_ref-seq-thin_dolly_f042_j00.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f042_j01.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f042_j02.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f042_j03.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f042_j04.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f042_j05.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f042_j06.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f042_j07.png"
+      ],
+      "seq-thin_dolly_f043": [
+       "pbr_1920x1080_ref-seq-thin_dolly_f043_j00.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f043_j01.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f043_j02.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f043_j03.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f043_j04.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f043_j05.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f043_j06.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f043_j07.png"
+      ],
+      "seq-thin_dolly_f044": [
+       "pbr_1920x1080_ref-seq-thin_dolly_f044_j00.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f044_j01.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f044_j02.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f044_j03.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f044_j04.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f044_j05.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f044_j06.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f044_j07.png"
+      ],
+      "seq-thin_dolly_f045": [
+       "pbr_1920x1080_ref-seq-thin_dolly_f045_j00.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f045_j01.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f045_j02.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f045_j03.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f045_j04.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f045_j05.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f045_j06.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f045_j07.png"
+      ],
+      "seq-thin_dolly_f046": [
+       "pbr_1920x1080_ref-seq-thin_dolly_f046_j00.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f046_j01.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f046_j02.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f046_j03.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f046_j04.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f046_j05.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f046_j06.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f046_j07.png"
+      ],
+      "seq-thin_dolly_f047": [
+       "pbr_1920x1080_ref-seq-thin_dolly_f047_j00.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f047_j01.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f047_j02.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f047_j03.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f047_j04.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f047_j05.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f047_j06.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f047_j07.png"
+      ],
+      "seq-thin_dolly_f048": [
+       "pbr_1920x1080_ref-seq-thin_dolly_f048_j00.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f048_j01.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f048_j02.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f048_j03.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f048_j04.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f048_j05.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f048_j06.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f048_j07.png"
+      ],
+      "seq-thin_dolly_f049": [
+       "pbr_1920x1080_ref-seq-thin_dolly_f049_j00.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f049_j01.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f049_j02.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f049_j03.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f049_j04.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f049_j05.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f049_j06.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f049_j07.png"
+      ],
+      "seq-thin_dolly_f050": [
+       "pbr_1920x1080_ref-seq-thin_dolly_f050_j00.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f050_j01.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f050_j02.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f050_j03.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f050_j04.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f050_j05.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f050_j06.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f050_j07.png"
+      ],
+      "seq-thin_dolly_f051": [
+       "pbr_1920x1080_ref-seq-thin_dolly_f051_j00.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f051_j01.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f051_j02.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f051_j03.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f051_j04.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f051_j05.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f051_j06.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f051_j07.png"
+      ],
+      "seq-thin_dolly_f052": [
+       "pbr_1920x1080_ref-seq-thin_dolly_f052_j00.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f052_j01.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f052_j02.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f052_j03.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f052_j04.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f052_j05.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f052_j06.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f052_j07.png"
+      ],
+      "seq-thin_dolly_f053": [
+       "pbr_1920x1080_ref-seq-thin_dolly_f053_j00.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f053_j01.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f053_j02.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f053_j03.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f053_j04.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f053_j05.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f053_j06.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f053_j07.png"
+      ],
+      "seq-thin_dolly_f054": [
+       "pbr_1920x1080_ref-seq-thin_dolly_f054_j00.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f054_j01.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f054_j02.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f054_j03.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f054_j04.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f054_j05.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f054_j06.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f054_j07.png"
+      ],
+      "seq-thin_dolly_f055": [
+       "pbr_1920x1080_ref-seq-thin_dolly_f055_j00.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f055_j01.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f055_j02.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f055_j03.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f055_j04.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f055_j05.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f055_j06.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f055_j07.png"
+      ],
+      "seq-thin_dolly_f056": [
+       "pbr_1920x1080_ref-seq-thin_dolly_f056_j00.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f056_j01.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f056_j02.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f056_j03.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f056_j04.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f056_j05.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f056_j06.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f056_j07.png"
+      ],
+      "seq-thin_dolly_f057": [
+       "pbr_1920x1080_ref-seq-thin_dolly_f057_j00.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f057_j01.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f057_j02.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f057_j03.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f057_j04.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f057_j05.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f057_j06.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f057_j07.png"
+      ],
+      "seq-thin_dolly_f058": [
+       "pbr_1920x1080_ref-seq-thin_dolly_f058_j00.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f058_j01.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f058_j02.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f058_j03.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f058_j04.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f058_j05.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f058_j06.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f058_j07.png"
+      ],
+      "seq-thin_dolly_f059": [
+       "pbr_1920x1080_ref-seq-thin_dolly_f059_j00.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f059_j01.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f059_j02.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f059_j03.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f059_j04.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f059_j05.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f059_j06.png",
+       "pbr_1920x1080_ref-seq-thin_dolly_f059_j07.png"
+      ]
+     },
+     "jitter_samples": 8,
+     "total_runtime_s": 1629.141959,
+     "_proc": {
+      "returncode": 0,
+      "timed_out": false,
+      "wall_s": 1631.004246711731,
+      "peak_working_set": 685244416,
+      "peak_private_bytes": 2794098688
+     },
+     "_json": "benchmarks\\results\\raw\\godot-4.7.2_reference\\stock\\pbr\\pbr_reference_stock_1920x1080_run0.json",
+     "_gpu_telemetry": {
+      "n": 1540,
+      "clocks.gr": {
+       "min": 172.0,
+       "mean": 429.88246753246756,
+       "max": 2752.0
+      },
+      "clocks.mem": {
+       "min": 405.0,
+       "mean": 3550.0636363636363,
+       "max": 9001.0
+      },
+      "temperature.gpu": {
+       "min": 45.0,
+       "mean": 47.96818181818182,
+       "max": 60.0
+      },
+      "power.draw": {
+       "min": 4.94,
+       "mean": 14.186941558441555,
+       "max": 112.22
+      },
+      "utilization.gpu": {
+       "min": 0.0,
+       "mean": 9.277272727272727,
+       "max": 100.0
+      },
+      "memory.used": {
+       "min": 328.0,
+       "mean": 2312.0525974025973,
+       "max": 2324.0
+      },
+      "throttle_reasons_seen": [
+       "0x0000000000000004",
+       "0x0000000000000400"
+      ]
+     }
+    }
+   ]
+  }
+ }
+}

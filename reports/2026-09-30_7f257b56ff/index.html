@@ -1,0 +1,382 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stock vs FellowEngine</title><style>
+:root { --bg:#fbfbfa; --fg:#1d1d1f; --muted:#6b6b70; --line:#e2e2e0; --card:#ffffff; --good:#1a7f37; --bad:#c62828; --warn:#a15c00; --accent:#3b5bdb; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg:#141416; --fg:#ececef; --muted:#9a9aa2; --line:#2c2c31; --card:#1c1c20; --good:#5bd07b; --bad:#ff7b72; --warn:#e3a33c; --accent:#8ea2ff; } }
+body { background:var(--bg); color:var(--fg); font:14px/1.5 -apple-system, "Segoe UI", Roboto, sans-serif; margin:0; }
+main { max-width:1480px; margin:0 auto; padding:24px 16px 64px; }
+h1 { font-size:24px; margin:0 0 4px; } h2 { font-size:19px; margin:36px 0 8px; border-bottom:1px solid var(--line); padding-bottom:4px; }
+h3 { font-size:16px; margin:24px 0 6px; } h4 { font-size:14px; margin:14px 0 6px; } small { color:var(--muted); font-weight:normal; }
+.muted { color:var(--muted); } code { font-size:12px; }
+table { border-collapse:collapse; font-variant-numeric:tabular-nums; } td, th { border-bottom:1px solid var(--line); padding:4px 8px; text-align:right; white-space:nowrap; }
+th { color:var(--muted); font-weight:600; font-size:12px; } td:first-child, th:first-child, td:nth-child(2), td:nth-child(3) { text-align:left; }
+.tablewrap { overflow-x:auto; } .good { color:var(--good); font-weight:600; } .bad { color:var(--bad); font-weight:600; } .neutral { color:var(--muted); }
+.badge { font-size:11px; padding:1px 6px; border-radius:8px; border:1px solid currentColor; } .badge.warn { color:var(--warn); }
+.card { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:12px 16px; margin:12px 0; }
+.shot { margin:18px 0; } .shotgrid { display:grid; grid-template-columns: minmax(0,3fr) minmax(0,1.3fr); gap:12px; align-items:start; }
+@media (max-width: 900px) { .shotgrid { grid-template-columns: 1fr; } }
+.side figure { margin:0 0 8px; } .side img, img.full { width:100%; display:block; border-radius:4px; } figcaption { font-size:12px; color:var(--muted); }
+.slider { position:relative; width:100%; overflow:hidden; border-radius:4px; user-select:none; }
+.slider img { display:block; width:100%; } .slider .top { position:absolute; inset:0; } .slider .top img { width:100%; }
+.slider .bar { position:absolute; top:0; bottom:0; width:2px; background:#fff; box-shadow:0 0 3px #000; pointer-events:none; }
+.slider input { position:absolute; inset:0; width:100%; height:100%; opacity:0; cursor:ew-resize; margin:0; }
+.slider .lab { position:absolute; top:6px; font-size:11px; background:rgba(0,0,0,.55); color:#fff; padding:1px 6px; border-radius:3px; pointer-events:none; }
+.slider .lab.l { left:6px; } .slider .lab.r { right:6px; }
+.metrics td { font-size:12px; } img.graph { max-width:100%; }
+</style></head><body><main>
+<h1>Stock Godot 4.7.2 vs FellowEngine</h1>
+<p class="muted">Generated 2026-09-30 14:56 · FellowEngine binary 7f257b56ff · benchmark harness 8bc56a74bd · baseline <code>godot-4.7.2</code> · A/B <code>fellow-m1</code></p>
+<div class="card"><h2>Milestone 1 — result in one paragraph</h2>
+<p>FellowEngine (Godot 4.7.2-stable + isolated, toggleable changes) was compared with untouched Godot 4.7.2 on four</p>
+<p>benchmark scenes at 1920×1080 and 2560×1440, interleaved runs on one laptop (RTX 5070 Ti Laptop, day thermal state).</p>
+<p>The first evidence-based experiment rewrote the TAA stage: <b>resolve v2</b> (reverse-Z closest-depth dilation,</p>
+<p>dilated-velocity reprojection, YCoCg variance clip that does not collapse under motion) and <b>history ping-pong</b></p>
+<p>(two fewer full-screen copies). Result: the TAA stage is 3-15 % cheaper than stock in every configuration, whole-frame</p>
+<p>time is unchanged within measurement noise, and the image is closer to an accumulated ground truth (2×2 SSAA × 8× MSAA × 8-16 jitters, TAA off) in</p>
+<p>4/4 scenes on fixed cameras (LPIPS −19 to −25 %) and in 7 of 8 motion sequences. One measured regression: slightly more</p>
+<p>shimmer on alpha-tested grass/fence during a lateral strafe. A GPU shallow-water prototype runs a 512² grid in 0.21 ms</p>
+<p>(1024² in 0.75 ms) with no readback.</p>
+<h2>The four questions</h2>
+<ul>
+<li><b>Does FellowEngine render better than stock Godot?</b> Yes, measurably but modestly, and only in the part that was</li>
+</ul>
+<p>  changed (temporal anti-aliasing): closer to the ground truth in every scene on fixed cameras and in 7/8 motion</p>
+<p>  sequences; worse in one (alpha-tested foliage strafe). Everything else renders identically to stock.</p>
+<ul>
+<li><b>Does it run faster at equivalent quality?</b> Only the TAA stage: 0.04-0.12 ms faster with ping-pong at identical</li>
+</ul>
+<p>  output (8/8 configurations, GPU timestamps). At whole-frame level this is ≤ ~1-4 % and not statistically resolvable</p>
+<p>  with 3 runs per configuration. The big costs (directional shadows in Sponza, opaque shading everywhere) are untouched.</p>
+<ul>
+<li><b>Does it produce better image quality at equivalent performance?</b> Yes: TAA v2 + ping-pong costs no more than stock</li>
+</ul>
+<p>  TAA (TAA stage 3-15 % cheaper, frame time within noise) and improves SSIM/PSNR/LPIPS against the ground truth.</p>
+<ul>
+<li><b>Can we prove those claims with reproducible measurements?</b> Yes for the claims above: deterministic frame</li>
+</ul>
+<p>  sequences, interleaved runs with CV ≤ 3 %, Welch tests, per-pass GPU timestamps, lossless captures, accumulated</p>
+<p>  ground truth and scripts to regenerate everything (<code>benchmarks/</code>). Limits: one machine, one GPU vendor, a laptop</p>
+<p>  whose thermal state changed overnight (those runs were discarded, not mixed), and 3-4 runs per configuration.</p></div>
+<h2>Summary table (1920x1080, stock vs <code>fellow_v2</code>)</h2><div class='tablewrap'><table class='perf'><thead><tr><th>Scene</th><th>Renderer</th><th>GPU ms</th><th>Render CPU ms</th><th>Frame ms</th><th>p95 ms</th><th>p99 ms</th><th>VRAM MB</th><th>SSIM vs reference</th><th>PSNR vs reference</th><th>LPIPS vs reference</th></tr></thead><tbody><tr><td>PBR Validation Lab</td><td>Stock</td><td>2.557</td><td>0.224</td><td>2.978</td><td>3.632</td><td>3.855</td><td>304</td><td>0.9860</td><td>38.70</td><td>0.0289</td></tr><tr><td>PBR Validation Lab</td><td>FellowEngine</td><td>2.636</td><td>0.224</td><td>3.045</td><td>3.695</td><td>3.886</td><td>313</td><td>0.9881</td><td>39.09</td><td>0.0219</td></tr><tr><td>Intel Sponza</td><td>Stock</td><td>13.082</td><td>0.654</td><td>13.468</td><td>19.543</td><td>20.873</td><td>2533</td><td>0.9821</td><td>40.68</td><td>0.0281</td></tr><tr><td>Intel Sponza</td><td>FellowEngine</td><td>12.718</td><td>0.673</td><td>13.103</td><td>18.634</td><td>19.478</td><td>2541</td><td>0.9840</td><td>41.06</td><td>0.0219</td></tr><tr><td>Bistro Exterior</td><td>Stock</td><td>5.214</td><td>1.457</td><td>5.583</td><td>6.193</td><td>6.291</td><td>2109</td><td>0.9719</td><td>34.37</td><td>0.0321</td></tr><tr><td>Bistro Exterior</td><td>FellowEngine</td><td>5.229</td><td>1.436</td><td>5.603</td><td>6.231</td><td>6.371</td><td>2118</td><td>0.9751</td><td>34.60</td><td>0.0252</td></tr><tr><td>Bistro Interior</td><td>Stock</td><td>3.957</td><td>0.593</td><td>4.307</td><td>4.733</td><td>4.824</td><td>1272</td><td>0.9860</td><td>38.23</td><td>0.0214</td></tr><tr><td>Bistro Interior</td><td>FellowEngine</td><td>3.948</td><td>0.589</td><td>4.307</td><td>4.732</td><td>4.830</td><td>1281</td><td>0.9875</td><td>38.48</td><td>0.0173</td></tr></tbody></table></div><p class='muted'>Image-quality columns: mean over the scene's fixed cameras, lossless capture vs. accumulated ground truth. Timing columns: interleaved ABBA runs.</p>
+<h2>All variants: stock vs FellowEngine (TAA v2 + ping-pong) (interleaved ABBA runs)</h2>
+<p class="muted">Δ is coloured only when Welch's t-test on the per-run means gives p &lt; 0.05 and |Δ| &gt; 1 % (green = faster, red = slower); everything else is within run-to-run noise.</p>
+<div class="tablewrap"><table class='perf'><thead><tr><th>Scene</th><th>Res</th><th>Build</th><th>Runs</th><th>Frame ms (CV)</th><th>Δ frame vs stock (p)</th><th>GPU ms</th><th>Render CPU ms</th><th>p50</th><th>p95</th><th>p99</th><th>Avg FPS</th><th>1% low</th><th>Draw calls</th><th>Primitives</th><th>VRAM MB</th><th>Stutters</th><th>GPU MHz / °C</th></tr></thead><tbody>
+<tr><td>PBR Validation Lab</td><td>1920x1080</td><td>fellow_off [enabled=false]</td><td>3</td><td>2.975 (0.2%)</td><td><span class='neutral'>-0.1% (p=0.89)</span></td><td>2.552</td><td>0.225</td><td>2.962</td><td>3.646</td><td>3.856</td><td>336.1</td><td>252.4</td><td>235</td><td>0.43 M</td><td>304</td><td>0</td><td>1805 / 72</td></tr>
+<tr><td>PBR Validation Lab</td><td>1920x1080</td><td>fellow_pp [postfx/taa_history_pingpong=true]</td><td>3</td><td>2.943 (0.5%)</td><td><span class='neutral'>-1.2% (p=0.14)</span></td><td>2.513</td><td>0.228</td><td>2.928</td><td>3.580</td><td>3.781</td><td>339.7</td><td>253.3</td><td>235</td><td>0.43 M</td><td>313</td><td>1</td><td>1773 / 72</td></tr>
+<tr><td>PBR Validation Lab</td><td>1920x1080</td><td>fellow_v2 [postfx/taa_resolve_v2=true,postfx/taa_history_pingpong=true]</td><td>3</td><td>3.045 (3.0%)</td><td><span class='neutral'>+2.3% (p=0.32)</span></td><td>2.636</td><td>0.224</td><td>3.031</td><td>3.695</td><td>3.886</td><td>328.6</td><td>250.8</td><td>235</td><td>0.43 M</td><td>313</td><td>0</td><td>1805 / 72</td></tr>
+<tr><td>PBR Validation Lab</td><td>1920x1080</td><td>stock</td><td>3</td><td>2.978 (0.9%)</td><td><span class='neutral'></span></td><td>2.557</td><td>0.224</td><td>2.950</td><td>3.632</td><td>3.855</td><td>335.8</td><td>249.4</td><td>235</td><td>0.43 M</td><td>304</td><td>1</td><td>1804 / 73</td></tr>
+<tr><td>PBR Validation Lab</td><td>2560x1440</td><td>fellow_off [enabled=false]</td><td>3</td><td>4.597 (0.9%)</td><td><span class='neutral'>-0.2% (p=0.77)</span></td><td>4.202</td><td>0.232</td><td>4.634</td><td>5.517</td><td>5.759</td><td>217.6</td><td>168.9</td><td>235</td><td>0.43 M</td><td>426</td><td>0</td><td>1750 / 73</td></tr>
+<tr><td>PBR Validation Lab</td><td>2560x1440</td><td>fellow_pp [postfx/taa_history_pingpong=true]</td><td>3</td><td>4.556 (0.8%)</td><td><span class='neutral'>-1.1% (p=0.16)</span></td><td>4.157</td><td>0.235</td><td>4.580</td><td>5.521</td><td>5.781</td><td>219.5</td><td>165.7</td><td>235</td><td>0.43 M</td><td>441</td><td>1</td><td>1734 / 73</td></tr>
+<tr><td>PBR Validation Lab</td><td>2560x1440</td><td>fellow_v2 [postfx/taa_resolve_v2=true,postfx/taa_history_pingpong=true]</td><td>3</td><td>4.615 (1.6%)</td><td><span class='neutral'>+0.2% (p=0.87)</span></td><td>4.217</td><td>0.233</td><td>4.649</td><td>5.535</td><td>5.767</td><td>216.7</td><td>165.3</td><td>235</td><td>0.43 M</td><td>441</td><td>3</td><td>1713 / 73</td></tr>
+<tr><td>PBR Validation Lab</td><td>2560x1440</td><td>stock</td><td>3</td><td>4.606 (0.8%)</td><td><span class='neutral'></span></td><td>4.214</td><td>0.233</td><td>4.651</td><td>5.551</td><td>5.729</td><td>217.1</td><td>169.8</td><td>235</td><td>0.43 M</td><td>426</td><td>1</td><td>1766 / 73</td></tr>
+<tr><td>Intel Sponza</td><td>1920x1080</td><td>fellow_off [enabled=false]</td><td>3</td><td>13.321 (2.5%)</td><td><span class='neutral'>-1.1% (p=0.54)</span></td><td>12.931</td><td>0.665</td><td>13.207</td><td>19.094</td><td>20.012</td><td>75.1</td><td>49.2</td><td>1104</td><td>27.02 M</td><td>2533</td><td>0</td><td>1793 / 74</td></tr>
+<tr><td>Intel Sponza</td><td>1920x1080</td><td>fellow_pp [postfx/taa_history_pingpong=true]</td><td>3</td><td>13.203 (1.2%)</td><td><span class='neutral'>-2.0% (p=0.12)</span></td><td>12.814</td><td>0.680</td><td>12.952</td><td>18.901</td><td>20.073</td><td>75.7</td><td>48.9</td><td>1104</td><td>27.02 M</td><td>2541</td><td>1</td><td>1778 / 74</td></tr>
+<tr><td>Intel Sponza</td><td>1920x1080</td><td>fellow_v2 [postfx/taa_resolve_v2=true,postfx/taa_history_pingpong=true]</td><td>3</td><td>13.103 (0.5%)</td><td><span class='neutral'>-2.7% (p=0.05)</span></td><td>12.718</td><td>0.673</td><td>12.890</td><td>18.634</td><td>19.478</td><td>76.3</td><td>50.4</td><td>1104</td><td>27.02 M</td><td>2541</td><td>0</td><td>1825 / 74</td></tr>
+<tr><td>Intel Sponza</td><td>1920x1080</td><td>stock</td><td>3</td><td>13.468 (1.3%)</td><td><span class='neutral'></span></td><td>13.082</td><td>0.654</td><td>13.219</td><td>19.543</td><td>20.873</td><td>74.3</td><td>47.0</td><td>1104</td><td>27.02 M</td><td>2533</td><td>0</td><td>1769 / 73</td></tr>
+<tr><td>Intel Sponza</td><td>2560x1440</td><td>fellow_off [enabled=false]</td><td>3</td><td>18.156 (0.4%)</td><td><span class='neutral'>-0.1% (p=0.64)</span></td><td>17.725</td><td>0.712</td><td>17.977</td><td>25.157</td><td>26.263</td><td>55.1</td><td>37.6</td><td>1104</td><td>29.26 M</td><td>2708</td><td>0</td><td>1785 / 75</td></tr>
+<tr><td>Intel Sponza</td><td>2560x1440</td><td>fellow_pp [postfx/taa_history_pingpong=true]</td><td>3</td><td>18.049 (0.2%)</td><td><span class='neutral'>-0.7% (p=0.03)</span></td><td>17.620</td><td>0.708</td><td>17.964</td><td>24.856</td><td>26.095</td><td>55.4</td><td>37.9</td><td>1104</td><td>29.26 M</td><td>2723</td><td>0</td><td>1779 / 75</td></tr>
+<tr><td>Intel Sponza</td><td>2560x1440</td><td>fellow_v2 [postfx/taa_resolve_v2=true,postfx/taa_history_pingpong=true]</td><td>3</td><td>18.077 (0.4%)</td><td><span class='neutral'>-0.6% (p=0.14)</span></td><td>17.645</td><td>0.724</td><td>17.930</td><td>25.072</td><td>25.962</td><td>55.3</td><td>38.0</td><td>1104</td><td>29.26 M</td><td>2723</td><td>0</td><td>1780 / 75</td></tr>
+<tr><td>Intel Sponza</td><td>2560x1440</td><td>stock</td><td>3</td><td>18.183 (0.3%)</td><td><span class='neutral'></span></td><td>17.754</td><td>0.732</td><td>18.052</td><td>25.329</td><td>26.558</td><td>55.0</td><td>37.2</td><td>1104</td><td>29.26 M</td><td>2708</td><td>0</td><td>1781 / 75</td></tr>
+<tr><td>Bistro Exterior</td><td>1920x1080</td><td>fellow_off [enabled=false]</td><td>3</td><td>5.561 (0.9%)</td><td><span class='neutral'>-0.4% (p=0.53)</span></td><td>5.190</td><td>1.454</td><td>5.580</td><td>6.194</td><td>6.283</td><td>179.8</td><td>155.9</td><td>2983</td><td>4.60 M</td><td>2109</td><td>1</td><td>1814 / 75</td></tr>
+<tr><td>Bistro Exterior</td><td>1920x1080</td><td>fellow_pp [postfx/taa_history_pingpong=true]</td><td>3</td><td>5.620 (0.8%)</td><td><span class='neutral'>+0.7% (p=0.30)</span></td><td>5.250</td><td>1.439</td><td>5.637</td><td>6.252</td><td>6.351</td><td>177.9</td><td>155.6</td><td>2983</td><td>4.60 M</td><td>2118</td><td>0</td><td>1829 / 75</td></tr>
+<tr><td>Bistro Exterior</td><td>1920x1080</td><td>fellow_v2 [postfx/taa_resolve_v2=true,postfx/taa_history_pingpong=true]</td><td>3</td><td>5.603 (0.5%)</td><td><span class='neutral'>+0.4% (p=0.33)</span></td><td>5.229</td><td>1.436</td><td>5.627</td><td>6.231</td><td>6.371</td><td>178.5</td><td>151.8</td><td>2983</td><td>4.60 M</td><td>2118</td><td>2</td><td>1813 / 75</td></tr>
+<tr><td>Bistro Exterior</td><td>1920x1080</td><td>stock</td><td>3</td><td>5.583 (0.3%)</td><td><span class='neutral'></span></td><td>5.214</td><td>1.457</td><td>5.602</td><td>6.193</td><td>6.291</td><td>179.1</td><td>157.5</td><td>2983</td><td>4.60 M</td><td>2109</td><td>0</td><td>1826 / 75</td></tr>
+<tr><td>Bistro Exterior</td><td>2560x1440</td><td>fellow_off [enabled=false]</td><td>4</td><td>8.914 (1.4%)</td><td><span class='neutral'>-1.9% (p=0.28)</span></td><td>8.496</td><td>1.638</td><td>8.989</td><td>9.862</td><td>10.043</td><td>112.2</td><td>98.1</td><td>2983</td><td>4.83 M</td><td>2285</td><td>1</td><td>1798 / 77</td></tr>
+<tr><td>Bistro Exterior</td><td>2560x1440</td><td>fellow_pp [postfx/taa_history_pingpong=true]</td><td>4</td><td>8.721 (2.4%)</td><td><span class='neutral'>-4.1% (p=0.07)</span></td><td>8.303</td><td>1.636</td><td>8.772</td><td>9.708</td><td>9.904</td><td>114.7</td><td>99.8</td><td>2983</td><td>4.83 M</td><td>2300</td><td>1</td><td>1792 / 77</td></tr>
+<tr><td>Bistro Exterior</td><td>2560x1440</td><td>fellow_v2 [postfx/taa_resolve_v2=true,postfx/taa_history_pingpong=true]</td><td>4</td><td>8.751 (0.7%)</td><td><span class='neutral'>-3.7% (p=0.07)</span></td><td>8.326</td><td>1.619</td><td>8.785</td><td>9.706</td><td>9.923</td><td>114.3</td><td>98.6</td><td>2983</td><td>4.83 M</td><td>2300</td><td>2</td><td>1756 / 76</td></tr>
+<tr><td>Bistro Exterior</td><td>2560x1440</td><td>stock</td><td>4</td><td>9.090 (2.8%)</td><td><span class='neutral'></span></td><td>8.668</td><td>1.626</td><td>9.143</td><td>10.224</td><td>10.549</td><td>110.1</td><td>92.4</td><td>2983</td><td>4.83 M</td><td>2285</td><td>0</td><td>1796 / 76</td></tr>
+<tr><td>Bistro Interior</td><td>1920x1080</td><td>fellow_off [enabled=false]</td><td>3</td><td>4.306 (0.1%)</td><td><span class='neutral'>-0.0% (p=0.98)</span></td><td>3.954</td><td>0.594</td><td>4.274</td><td>4.735</td><td>4.829</td><td>232.2</td><td>197.6</td><td>619</td><td>0.19 M</td><td>1272</td><td>3</td><td>1912 / 75</td></tr>
+<tr><td>Bistro Interior</td><td>1920x1080</td><td>fellow_pp [postfx/taa_history_pingpong=true]</td><td>3</td><td>4.265 (0.1%)</td><td><span class='neutral'>-1.0% (p=0.00)</span></td><td>3.914</td><td>0.598</td><td>4.235</td><td>4.688</td><td>4.782</td><td>234.5</td><td>206.2</td><td>619</td><td>0.19 M</td><td>1281</td><td>0</td><td>1907 / 75</td></tr>
+<tr><td>Bistro Interior</td><td>1920x1080</td><td>fellow_v2 [postfx/taa_resolve_v2=true,postfx/taa_history_pingpong=true]</td><td>3</td><td>4.307 (0.8%)</td><td><span class='neutral'>+0.0% (p=0.98)</span></td><td>3.948</td><td>0.589</td><td>4.279</td><td>4.732</td><td>4.830</td><td>232.2</td><td>203.1</td><td>619</td><td>0.19 M</td><td>1281</td><td>1</td><td>1836 / 75</td></tr>
+<tr><td>Bistro Interior</td><td>1920x1080</td><td>stock</td><td>3</td><td>4.307 (0.2%)</td><td><span class='neutral'></span></td><td>3.957</td><td>0.593</td><td>4.272</td><td>4.733</td><td>4.824</td><td>232.2</td><td>205.5</td><td>619</td><td>0.19 M</td><td>1272</td><td>0</td><td>1886 / 75</td></tr>
+<tr><td>Bistro Interior</td><td>2560x1440</td><td>fellow_off [enabled=false]</td><td>3</td><td>7.136 (0.5%)</td><td><span class='neutral'>+0.0% (p=0.93)</span></td><td>6.728</td><td>0.679</td><td>7.103</td><td>7.706</td><td>7.948</td><td>140.1</td><td>123.9</td><td>619</td><td>0.21 M</td><td>1448</td><td>0</td><td>1862 / 77</td></tr>
+<tr><td>Bistro Interior</td><td>2560x1440</td><td>fellow_pp [postfx/taa_history_pingpong=true]</td><td>3</td><td>6.959 (1.5%)</td><td><span class='neutral'>-2.4% (p=0.08)</span></td><td>6.545</td><td>0.677</td><td>6.939</td><td>7.518</td><td>7.741</td><td>143.7</td><td>126.4</td><td>619</td><td>0.21 M</td><td>1463</td><td>1</td><td>1808 / 77</td></tr>
+<tr><td>Bistro Interior</td><td>2560x1440</td><td>fellow_v2 [postfx/taa_resolve_v2=true,postfx/taa_history_pingpong=true]</td><td>3</td><td>7.058 (1.2%)</td><td><span class='neutral'>-1.1% (p=0.25)</span></td><td>6.643</td><td>0.680</td><td>7.024</td><td>7.637</td><td>7.885</td><td>141.7</td><td>124.4</td><td>619</td><td>0.21 M</td><td>1463</td><td>1</td><td>1798 / 77</td></tr>
+<tr><td>Bistro Interior</td><td>2560x1440</td><td>stock</td><td>3</td><td>7.133 (0.5%)</td><td><span class='neutral'></span></td><td>6.726</td><td>0.688</td><td>7.114</td><td>7.714</td><td>7.945</td><td>140.2</td><td>123.7</td><td>619</td><td>0.21 M</td><td>1448</td><td>1</td><td>1847 / 76</td></tr>
+</tbody></table></div>
+<p><img class="graph" src="graphs/ab_frametime_cdf.png"></p>
+<h2>Immutable stock baseline (Godot 4.7.2)</h2>
+<div class="tablewrap"><table class='perf'><thead><tr><th>Scene</th><th>Res</th><th>Build</th><th>Runs</th><th>Frame ms (CV)</th><th>GPU ms</th><th>Render CPU ms</th><th>p50</th><th>p95</th><th>p99</th><th>Avg FPS</th><th>1% low</th><th>Draw calls</th><th>Primitives</th><th>VRAM MB</th><th>Stutters</th><th>GPU MHz / °C</th></tr></thead><tbody>
+<tr><td>PBR Validation Lab</td><td>1920x1080</td><td>stock</td><td>3</td><td>2.957 (1.2%)</td><td>2.530</td><td>0.229</td><td>2.943</td><td>3.570</td><td>3.748</td><td>338.2</td><td>251.7</td><td>235</td><td>0.43 M</td><td>304</td><td>3</td><td>1791 / 71</td></tr>
+<tr><td>PBR Validation Lab</td><td>2560x1440</td><td>stock</td><td>3</td><td>4.580 (0.8%)</td><td>4.188</td><td>0.233</td><td>4.602</td><td>5.553</td><td>5.766</td><td>218.3</td><td>166.1</td><td>235</td><td>0.43 M</td><td>426</td><td>2</td><td>1768 / 70</td></tr>
+<tr><td>Intel Sponza</td><td>1920x1080</td><td>stock</td><td>3</td><td>13.712 (0.9%)</td><td>13.321</td><td>0.628</td><td>13.531</td><td>19.916</td><td>20.785</td><td>72.9</td><td>47.7</td><td>1104</td><td>27.02 M</td><td>2533</td><td>0</td><td>1748 / 70</td></tr>
+<tr><td>Intel Sponza</td><td>2560x1440</td><td>stock</td><td>3</td><td>18.315 (0.1%)</td><td>17.889</td><td>0.648</td><td>18.422</td><td>25.275</td><td>26.352</td><td>54.6</td><td>37.5</td><td>1104</td><td>29.26 M</td><td>2708</td><td>0</td><td>1753 / 71</td></tr>
+<tr><td>Bistro Exterior</td><td>1920x1080</td><td>stock</td><td>3</td><td>5.962 (1.8%)</td><td>5.579</td><td>1.433</td><td>5.993</td><td>6.692</td><td>6.849</td><td>167.8</td><td>144.0</td><td>2983</td><td>4.60 M</td><td>2109</td><td>0</td><td>1718 / 70</td></tr>
+<tr><td>Bistro Exterior</td><td>2560x1440</td><td>stock</td><td>3</td><td>9.139 (1.5%)</td><td>8.709</td><td>1.575</td><td>9.200</td><td>10.215</td><td>10.462</td><td>109.4</td><td>93.5</td><td>2983</td><td>4.83 M</td><td>2285</td><td>1</td><td>1691 / 71</td></tr>
+<tr><td>Bistro Interior</td><td>1920x1080</td><td>stock</td><td>3</td><td>4.529 (1.2%)</td><td>4.161</td><td>0.587</td><td>4.508</td><td>4.997</td><td>5.200</td><td>220.8</td><td>188.1</td><td>619</td><td>0.19 M</td><td>1272</td><td>0</td><td>1775 / 71</td></tr>
+<tr><td>Bistro Interior</td><td>2560x1440</td><td>stock</td><td>3</td><td>7.379 (0.0%)</td><td>6.968</td><td>0.660</td><td>7.328</td><td>8.009</td><td>8.249</td><td>135.5</td><td>118.9</td><td>619</td><td>0.21 M</td><td>1448</td><td>0</td><td>1743 / 72</td></tr>
+</tbody></table></div>
+<p><img class="graph" src="graphs/baseline_frametime_cdf.png"></p>
+<h3>Per-pass GPU timings</h3><p class="muted">Profile runs with engine timestamps enabled (timestamps serialize the render graph; totals are therefore slightly higher than normal runs).</p><p><img class="graph" src="graphs/gpu_passes.png"></p>
+<h2>Hardware &amp; configuration</h2><table><tr><td>CPU</td><td style='text-align:left;white-space:normal'>Intel(R) Core(TM) Ultra 9 275HX</td></tr><tr><td>GPU</td><td style='text-align:left;white-space:normal'>NVIDIA GeForce RTX 5070 Ti Laptop GPU (12227 MiB, driver 617.14, power limit [N/A] W)</td></tr><tr><td>OS</td><td style='text-align:left;white-space:normal'>{&quot;Caption&quot;:&quot;Microsoft Windows 11 Home&quot;,&quot;Version&quot;:&quot;10.0.26200&quot;,&quot;BuildNumber&quot;:&quot;26200&quot;}</td></tr><tr><td>Display</td><td style='text-align:left;white-space:normal'>[{&quot;Name&quot;:&quot;Intel(R) Graphics&quot;,&quot;DriverVersion&quot;:&quot;32.0.101.6629&quot;,&quot;CurrentHorizontalResolution&quot;:2560,&quot;CurrentVerticalResolution&quot;:1600,&quot;CurrentRefreshRate&quot;:240},{&quot;Name&quot;:&quot;NVIDIA GeForce RTX 5070 Ti Laptop GPU&quot;,&quot;DriverVersion&quot;:&quot;32.0.16.1714&quot;,&quot;CurrentHorizontalResolution&quot;:null,&quot;CurrentVerticalResolution&quot;:null,&quot;CurrentRefreshRate&quot;:null}]</td></tr><tr><td>Power</td><td style='text-align:left;white-space:normal'>{&quot;Battery&quot;:{&quot;PowerOnline&quot;:true,&quot;Charging&quot;:false},&quot;Scheme&quot;:&quot;Power Scheme GUID: 3b79c5ed-2baa-4957-a015-c958d3221bfc  (Acer)&quot;}</td></tr><tr><td>Engine commit</td><td style='text-align:left;white-space:normal'>4.7.2-stable-15-ge2a897c6b4 on HEAD</td></tr><tr><td>Compiler</td><td style='text-align:left;white-space:normal'>{&quot;visual_studio&quot;: &quot;16.11.60&quot;, &quot;msvc_toolsets&quot;: [&quot;14.29.30133&quot;]}</td></tr><tr><td>Build flags</td><td style='text-align:left;white-space:normal'>platform=windows target=template_release production=yes disable_path_overrides=no winrt=no accesskit=no d3d12=no (MSVC, see BUILDING_FELLOWENGINE.md)</td></tr></table>
+<p class="muted">Full hardware record: <a href="hardware.json">hardware.json</a> · every applied renderer setting: <a href="settings.json">settings.json</a> · raw numbers: <a href="performance.csv">performance.csv</a>, <a href="performance.json">performance.json</a></p>
+<h2>Fluid Lab (FellowEngine GPU shallow water)</h2>
+<p class="muted">Simulation and surface-generation GPU times come from RenderingDevice timestamps inside the module; the viewport GPU time excludes them.
+Water rendering cost = viewport GPU time with water visible − with water hidden (simulation running in both).</p>
+<div class="tablewrap"><table><tr><th>Grid</th><th>Water drawn</th><th>Res</th><th>Sim GPU ms</th><th>Surface GPU ms</th><th>Viewport GPU ms</th><th>Frame ms</th><th>Sim VRAM MB</th><th>Runs</th></tr><tr><td>?²</td><td>no</td><td>1920x1080</td><td>–</td><td>–</td><td>–</td><td>–</td><td>0.0</td><td>0</td></tr><tr><td>256²</td><td>yes</td><td>1920x1080</td><td>0.071</td><td>0.005</td><td>2.528</td><td>2.961</td><td>3.8</td><td>6</td></tr><tr><td>256²</td><td>no</td><td>1920x1080</td><td>0.070</td><td>0.005</td><td>1.668</td><td>2.291</td><td>3.8</td><td>6</td></tr><tr><td>512²</td><td>yes</td><td>1920x1080</td><td>0.206</td><td>0.014</td><td>2.775</td><td>3.354</td><td>15.0</td><td>6</td></tr><tr><td>512²</td><td>no</td><td>1920x1080</td><td>0.205</td><td>0.014</td><td>1.730</td><td>2.518</td><td>15.0</td><td>6</td></tr><tr><td>1024²</td><td>yes</td><td>1920x1080</td><td>0.744</td><td>0.048</td><td>3.012</td><td>4.170</td><td>60.0</td><td>6</td></tr><tr><td>1024²</td><td>no</td><td>1920x1080</td><td>0.712</td><td>0.046</td><td>1.914</td><td>3.018</td><td>60.0</td><td>6</td></tr><tr><td>?²</td><td>no</td><td>2560x1440</td><td>–</td><td>–</td><td>–</td><td>–</td><td>0.0</td><td>0</td></tr><tr><td>256²</td><td>yes</td><td>2560x1440</td><td>0.074</td><td>0.006</td><td>4.138</td><td>4.619</td><td>3.8</td><td>4</td></tr><tr><td>256²</td><td>no</td><td>2560x1440</td><td>0.072</td><td>0.005</td><td>3.050</td><td>3.521</td><td>3.8</td><td>4</td></tr><tr><td>512²</td><td>yes</td><td>2560x1440</td><td>0.216</td><td>0.015</td><td>4.414</td><td>5.050</td><td>15.0</td><td>4</td></tr><tr><td>512²</td><td>no</td><td>2560x1440</td><td>0.211</td><td>0.015</td><td>3.079</td><td>3.696</td><td>15.0</td><td>4</td></tr><tr><td>1024²</td><td>yes</td><td>2560x1440</td><td>0.790</td><td>0.049</td><td>4.584</td><td>5.835</td><td>60.0</td><td>4</td></tr><tr><td>1024²</td><td>no</td><td>2560x1440</td><td>0.739</td><td>0.047</td><td>3.007</td><td>4.182</td><td>60.0</td><td>4</td></tr></table></div><div class='side'><figure><img src='screenshots/fellow/fluid_1920x1080_fluid_cam_01.png' loading='lazy'><figcaption>fluid_1920x1080_fluid_cam_01</figcaption></figure><figure><img src='screenshots/fellow/fluid_1920x1080_fluid_cam_02.png' loading='lazy'><figcaption>fluid_1920x1080_fluid_cam_02</figcaption></figure><figure><img src='screenshots/fellow/fluid_1920x1080_fluid_cam_03.png' loading='lazy'><figcaption>fluid_1920x1080_fluid_cam_03</figcaption></figure></div><p class='muted'>Fluid Lab fixed cameras (FellowEngine only; stock Godot cannot run this scene).</p>
+<h2>Temporal stability (sequences vs accumulated ground truth)</h2><p class='muted'>Lower is better for all error columns. Errors are mean absolute luma differences (0..1 display scale).</p><h4>bistro_ext_path</h4><table><tr><th>build</th><th>error in motion regions</th><th>error static</th><th>flicker vs GT</th><th>PSNR</th><th>SSIM</th></tr><tr><td>stock</td><td>0.0193</td><td>0.0073</td><td>0.0218</td><td>28.8632</td><td>0.8998</td></tr><tr><td>fellow_v2</td><td>0.0178</td><td>0.0076</td><td>0.0202</td><td>30.3559</td><td>0.9202</td></tr></table>
+<p><img class="graph" src="temporal/temporal_bistro_ext_path.png"></p>
+<p><img class="graph" src="temporal/temporal_bistro_ext_path.webp"><br><span class="muted">stock | fellow | ground truth | stock error | fellow error</span></p>
+<h4>bistro_int_path</h4><table><tr><th>build</th><th>error in motion regions</th><th>error static</th><th>flicker vs GT</th><th>PSNR</th><th>SSIM</th></tr><tr><td>stock</td><td>0.0091</td><td>0.0046</td><td>0.0092</td><td>35.6047</td><td>0.9641</td></tr><tr><td>fellow_v2</td><td>0.0085</td><td>0.0047</td><td>0.0085</td><td>36.8704</td><td>0.9678</td></tr></table>
+<p><img class="graph" src="temporal/temporal_bistro_int_path.png"></p>
+<p><img class="graph" src="temporal/temporal_bistro_int_path.webp"><br><span class="muted">stock | fellow | ground truth | stock error | fellow error</span></p>
+<h4>camera_pan</h4><table><tr><th>build</th><th>error in motion regions</th><th>error static</th><th>flicker vs GT</th><th>PSNR</th><th>SSIM</th></tr><tr><td>stock</td><td>0.0081</td><td>0.0009</td><td>0.0065</td><td>36.1079</td><td>0.9749</td></tr><tr><td>fellow_v2</td><td>0.0066</td><td>0.0007</td><td>0.0052</td><td>37.9516</td><td>0.9838</td></tr></table>
+<p><img class="graph" src="temporal/temporal_camera_pan.png"></p>
+<p><img class="graph" src="temporal/temporal_camera_pan.webp"><br><span class="muted">stock | fellow | ground truth | stock error | fellow error</span></p>
+<h4>foliage_strafe</h4><table><tr><th>build</th><th>error in motion regions</th><th>error static</th><th>flicker vs GT</th><th>PSNR</th><th>SSIM</th></tr><tr><td>stock</td><td>0.0143</td><td>0.0019</td><td>0.0127</td><td>31.4997</td><td>0.9391</td></tr><tr><td>fellow_v2</td><td>0.0151</td><td>0.0017</td><td>0.0134</td><td>31.1057</td><td>0.9414</td></tr></table>
+<p><img class="graph" src="temporal/temporal_foliage_strafe.png"></p>
+<p><img class="graph" src="temporal/temporal_foliage_strafe.webp"><br><span class="muted">stock | fellow | ground truth | stock error | fellow error</span></p>
+<h4>moving_object</h4><table><tr><th>build</th><th>error in motion regions</th><th>error static</th><th>flicker vs GT</th><th>PSNR</th><th>SSIM</th></tr><tr><td>stock</td><td>0.0097</td><td>0.0028</td><td>0.0006</td><td>37.7160</td><td>0.9813</td></tr><tr><td>fellow_v2</td><td>0.0083</td><td>0.0027</td><td>0.0007</td><td>38.4010</td><td>0.9849</td></tr></table>
+<p><img class="graph" src="temporal/temporal_moving_object.png"></p>
+<p><img class="graph" src="temporal/temporal_moving_object.webp"><br><span class="muted">stock | fellow | ground truth | stock error | fellow error</span></p>
+<h4>specular_orbit</h4><table><tr><th>build</th><th>error in motion regions</th><th>error static</th><th>flicker vs GT</th><th>PSNR</th><th>SSIM</th></tr><tr><td>stock</td><td>0.0245</td><td>0.0026</td><td>0.0103</td><td>31.6153</td><td>0.9598</td></tr><tr><td>fellow_v2</td><td>0.0242</td><td>0.0026</td><td>0.0100</td><td>31.9329</td><td>0.9619</td></tr></table>
+<p><img class="graph" src="temporal/temporal_specular_orbit.png"></p>
+<p><img class="graph" src="temporal/temporal_specular_orbit.webp"><br><span class="muted">stock | fellow | ground truth | stock error | fellow error</span></p>
+<h4>sponza_pan</h4><table><tr><th>build</th><th>error in motion regions</th><th>error static</th><th>flicker vs GT</th><th>PSNR</th><th>SSIM</th></tr><tr><td>stock</td><td>0.0079</td><td>0.0067</td><td>0.0107</td><td>38.4936</td><td>0.9437</td></tr><tr><td>fellow_v2</td><td>0.0070</td><td>0.0063</td><td>0.0091</td><td>39.5852</td><td>0.9609</td></tr></table>
+<p><img class="graph" src="temporal/temporal_sponza_pan.png"></p>
+<p><img class="graph" src="temporal/temporal_sponza_pan.webp"><br><span class="muted">stock | fellow | ground truth | stock error | fellow error</span></p>
+<h4>thin_dolly</h4><table><tr><th>build</th><th>error in motion regions</th><th>error static</th><th>flicker vs GT</th><th>PSNR</th><th>SSIM</th></tr><tr><td>stock</td><td>0.0213</td><td>0.0013</td><td>0.0084</td><td>32.0931</td><td>0.9513</td></tr><tr><td>fellow_v2</td><td>0.0175</td><td>0.0013</td><td>0.0066</td><td>33.7981</td><td>0.9675</td></tr></table>
+<p><img class="graph" src="temporal/temporal_thin_dolly.png"></p>
+<p><img class="graph" src="temporal/temporal_thin_dolly.webp"><br><span class="muted">stock | fellow | ground truth | stock error | fellow error</span></p>
+<h2>Visual comparison (1920x1080)</h2>
+<p class="muted">Drag the slider: left = FellowEngine, right = Godot stock. Diff heatmaps show |stock − fellow| luma ×4 (black = identical). PNG captures are lossless; shown downscaled. Metrics against the ground truth use a second capture with auto exposure frozen (<code>fellow-m1_capture_gt</code>), because the ground truth is rendered with auto exposure off; the images shown use normal auto exposure.</p>
+<h3>PBR Validation Lab vs Cycles path-traced reference</h3><p class='muted'>Reference lighting variant (uniform sky + sun only). Expected, non-bug differences: Cycles has multi-bounce GI and emissive light transport; Godot's preset uses only sky ambient + SSAO. See benchmarks/reference/pbr_lab_cycles.py.</p><div class="shot"><h4>pbr_dark_room <small>Godot stock (linear EXR, pre-tonemap) vs Cycles, same ACES-fit display transform</small></h4>
+<div class="shotgrid"><div><div class="slider" id="s22">
+  <img src="screenshots/reference/pbr_pbr_dark_room_cycles.png" alt="Cycles" loading="lazy">
+  <div class="top" style="clip-path: inset(0 50% 0 0)"><img src="screenshots/stock/pbr_pbr_dark_room_godot_linear.png" alt="Godot stock" loading="lazy"></div>
+  <div class="bar" style="left:50%"></div>
+  <span class="lab l">Godot stock</span><span class="lab r">Cycles</span>
+  <input type="range" min="0" max="100" value="50" aria-label="before/after">
+</div></div>
+<div class="side"><figure><img src="screenshots/diff/pbr_pbr_dark_room_vs_cycles.png"><figcaption>|Godot − Cycles| ×4</figcaption></figure>
+<table class="metrics"><tr><td>PSNR / SSIM</td><td>16.75 dB / 0.9022</td></tr><tr><td>median luminance ratio Godot/Cycles</td><td>1.042</td></tr></table></div></div></div>
+<div class="shot"><h4>pbr_emissive <small>Godot stock (linear EXR, pre-tonemap) vs Cycles, same ACES-fit display transform</small></h4>
+<div class="shotgrid"><div><div class="slider" id="s23">
+  <img src="screenshots/reference/pbr_pbr_emissive_cycles.png" alt="Cycles" loading="lazy">
+  <div class="top" style="clip-path: inset(0 50% 0 0)"><img src="screenshots/stock/pbr_pbr_emissive_godot_linear.png" alt="Godot stock" loading="lazy"></div>
+  <div class="bar" style="left:50%"></div>
+  <span class="lab l">Godot stock</span><span class="lab r">Cycles</span>
+  <input type="range" min="0" max="100" value="50" aria-label="before/after">
+</div></div>
+<div class="side"><figure><img src="screenshots/diff/pbr_pbr_emissive_vs_cycles.png"><figcaption>|Godot − Cycles| ×4</figcaption></figure>
+<table class="metrics"><tr><td>PSNR / SSIM</td><td>23.58 dB / 0.9639</td></tr><tr><td>median luminance ratio Godot/Cycles</td><td>0.978</td></tr></table></div></div></div>
+<div class="shot"><h4>pbr_grazing <small>Godot stock (linear EXR, pre-tonemap) vs Cycles, same ACES-fit display transform</small></h4>
+<div class="shotgrid"><div><div class="slider" id="s24">
+  <img src="screenshots/reference/pbr_pbr_grazing_cycles.png" alt="Cycles" loading="lazy">
+  <div class="top" style="clip-path: inset(0 50% 0 0)"><img src="screenshots/stock/pbr_pbr_grazing_godot_linear.png" alt="Godot stock" loading="lazy"></div>
+  <div class="bar" style="left:50%"></div>
+  <span class="lab l">Godot stock</span><span class="lab r">Cycles</span>
+  <input type="range" min="0" max="100" value="50" aria-label="before/after">
+</div></div>
+<div class="side"><figure><img src="screenshots/diff/pbr_pbr_grazing_vs_cycles.png"><figcaption>|Godot − Cycles| ×4</figcaption></figure>
+<table class="metrics"><tr><td>PSNR / SSIM</td><td>18.42 dB / 0.9197</td></tr><tr><td>median luminance ratio Godot/Cycles</td><td>0.999</td></tr></table></div></div></div>
+<div class="shot"><h4>pbr_overview <small>Godot stock (linear EXR, pre-tonemap) vs Cycles, same ACES-fit display transform</small></h4>
+<div class="shotgrid"><div><div class="slider" id="s25">
+  <img src="screenshots/reference/pbr_pbr_overview_cycles.png" alt="Cycles" loading="lazy">
+  <div class="top" style="clip-path: inset(0 50% 0 0)"><img src="screenshots/stock/pbr_pbr_overview_godot_linear.png" alt="Godot stock" loading="lazy"></div>
+  <div class="bar" style="left:50%"></div>
+  <span class="lab l">Godot stock</span><span class="lab r">Cycles</span>
+  <input type="range" min="0" max="100" value="50" aria-label="before/after">
+</div></div>
+<div class="side"><figure><img src="screenshots/diff/pbr_pbr_overview_vs_cycles.png"><figcaption>|Godot − Cycles| ×4</figcaption></figure>
+<table class="metrics"><tr><td>PSNR / SSIM</td><td>18.27 dB / 0.8913</td></tr><tr><td>median luminance ratio Godot/Cycles</td><td>0.999</td></tr></table></div></div></div>
+<div class="shot"><h4>pbr_specular <small>Godot stock (linear EXR, pre-tonemap) vs Cycles, same ACES-fit display transform</small></h4>
+<div class="shotgrid"><div><div class="slider" id="s26">
+  <img src="screenshots/reference/pbr_pbr_specular_cycles.png" alt="Cycles" loading="lazy">
+  <div class="top" style="clip-path: inset(0 50% 0 0)"><img src="screenshots/stock/pbr_pbr_specular_godot_linear.png" alt="Godot stock" loading="lazy"></div>
+  <div class="bar" style="left:50%"></div>
+  <span class="lab l">Godot stock</span><span class="lab r">Cycles</span>
+  <input type="range" min="0" max="100" value="50" aria-label="before/after">
+</div></div>
+<div class="side"><figure><img src="screenshots/diff/pbr_pbr_specular_vs_cycles.png"><figcaption>|Godot − Cycles| ×4</figcaption></figure>
+<table class="metrics"><tr><td>PSNR / SSIM</td><td>16.74 dB / 0.8005</td></tr><tr><td>median luminance ratio Godot/Cycles</td><td>1.023</td></tr></table></div></div></div>
+<div class="shot"><h4>pbr_spheres <small>Godot stock (linear EXR, pre-tonemap) vs Cycles, same ACES-fit display transform</small></h4>
+<div class="shotgrid"><div><div class="slider" id="s27">
+  <img src="screenshots/reference/pbr_pbr_spheres_cycles.png" alt="Cycles" loading="lazy">
+  <div class="top" style="clip-path: inset(0 50% 0 0)"><img src="screenshots/stock/pbr_pbr_spheres_godot_linear.png" alt="Godot stock" loading="lazy"></div>
+  <div class="bar" style="left:50%"></div>
+  <span class="lab l">Godot stock</span><span class="lab r">Cycles</span>
+  <input type="range" min="0" max="100" value="50" aria-label="before/after">
+</div></div>
+<div class="side"><figure><img src="screenshots/diff/pbr_pbr_spheres_vs_cycles.png"><figcaption>|Godot − Cycles| ×4</figcaption></figure>
+<table class="metrics"><tr><td>PSNR / SSIM</td><td>24.71 dB / 0.9524</td></tr><tr><td>median luminance ratio Godot/Cycles</td><td>1.020</td></tr></table></div></div></div>
+<div class="shot"><h4>pbr_thin <small>Godot stock (linear EXR, pre-tonemap) vs Cycles, same ACES-fit display transform</small></h4>
+<div class="shotgrid"><div><div class="slider" id="s28">
+  <img src="screenshots/reference/pbr_pbr_thin_cycles.png" alt="Cycles" loading="lazy">
+  <div class="top" style="clip-path: inset(0 50% 0 0)"><img src="screenshots/stock/pbr_pbr_thin_godot_linear.png" alt="Godot stock" loading="lazy"></div>
+  <div class="bar" style="left:50%"></div>
+  <span class="lab l">Godot stock</span><span class="lab r">Cycles</span>
+  <input type="range" min="0" max="100" value="50" aria-label="before/after">
+</div></div>
+<div class="side"><figure><img src="screenshots/diff/pbr_pbr_thin_vs_cycles.png"><figcaption>|Godot − Cycles| ×4</figcaption></figure>
+<table class="metrics"><tr><td>PSNR / SSIM</td><td>17.45 dB / 0.7693</td></tr><tr><td>median luminance ratio Godot/Cycles</td><td>0.999</td></tr></table></div></div></div>
+<h3>PBR Validation Lab</h3><div class="shot"><h4>pbr_dark_room <small></small></h4>
+<div class="shotgrid"><div><div class="slider" id="s1">
+  <img src="screenshots/stock/pbr_pbr_dark_room.png" alt="Godot stock" loading="lazy">
+  <div class="top" style="clip-path: inset(0 50% 0 0)"><img src="screenshots/fellow/pbr_pbr_dark_room.png" alt="FellowEngine" loading="lazy"></div>
+  <div class="bar" style="left:50%"></div>
+  <span class="lab l">FellowEngine</span><span class="lab r">Godot stock</span>
+  <input type="range" min="0" max="100" value="50" aria-label="before/after">
+</div></div><div class="side"><figure><img src='screenshots/diff/pbr_pbr_dark_room_diff.png' loading='lazy'><figcaption>|stock − fellow| ×4</figcaption></figure><figure><img src='screenshots/reference/pbr_pbr_dark_room_ref.png' loading='lazy'><figcaption>accumulated ground truth (2x2 SSAA x 8x MSAA x 8-16 jittered samples)</figcaption></figure><table class="metrics"><tr><td>stock vs fellow PSNR / SSIM</td><td>49.47 dB / 0.9987 / LPIPS 0.0027</td></tr><tr><td>stock vs ref PSNR / SSIM</td><td>44.35 dB / 0.9974 / LPIPS 0.0087</td></tr><tr><td>fellow vs ref PSNR / SSIM</td><td>44.82 dB / 0.9984 / LPIPS 0.0048</td></tr></table></div></div></div>
+<div class="shot"><h4>pbr_emissive <small></small></h4>
+<div class="shotgrid"><div><div class="slider" id="s2">
+  <img src="screenshots/stock/pbr_pbr_emissive.png" alt="Godot stock" loading="lazy">
+  <div class="top" style="clip-path: inset(0 50% 0 0)"><img src="screenshots/fellow/pbr_pbr_emissive.png" alt="FellowEngine" loading="lazy"></div>
+  <div class="bar" style="left:50%"></div>
+  <span class="lab l">FellowEngine</span><span class="lab r">Godot stock</span>
+  <input type="range" min="0" max="100" value="50" aria-label="before/after">
+</div></div><div class="side"><figure><img src='screenshots/diff/pbr_pbr_emissive_diff.png' loading='lazy'><figcaption>|stock − fellow| ×4</figcaption></figure><figure><img src='screenshots/reference/pbr_pbr_emissive_ref.png' loading='lazy'><figcaption>accumulated ground truth (2x2 SSAA x 8x MSAA x 8-16 jittered samples)</figcaption></figure><table class="metrics"><tr><td>stock vs fellow PSNR / SSIM</td><td>54.45 dB / 0.9991 / LPIPS 0.0011</td></tr><tr><td>stock vs ref PSNR / SSIM</td><td>39.13 dB / 0.9976 / LPIPS 0.0070</td></tr><tr><td>fellow vs ref PSNR / SSIM</td><td>39.37 dB / 0.9973 / LPIPS 0.0061</td></tr></table></div></div></div>
+<div class="shot"><h4>pbr_grazing <small></small></h4>
+<div class="shotgrid"><div><div class="slider" id="s3">
+  <img src="screenshots/stock/pbr_pbr_grazing.png" alt="Godot stock" loading="lazy">
+  <div class="top" style="clip-path: inset(0 50% 0 0)"><img src="screenshots/fellow/pbr_pbr_grazing.png" alt="FellowEngine" loading="lazy"></div>
+  <div class="bar" style="left:50%"></div>
+  <span class="lab l">FellowEngine</span><span class="lab r">Godot stock</span>
+  <input type="range" min="0" max="100" value="50" aria-label="before/after">
+</div></div><div class="side"><figure><img src='screenshots/diff/pbr_pbr_grazing_diff.png' loading='lazy'><figcaption>|stock − fellow| ×4</figcaption></figure><figure><img src='screenshots/reference/pbr_pbr_grazing_ref.png' loading='lazy'><figcaption>accumulated ground truth (2x2 SSAA x 8x MSAA x 8-16 jittered samples)</figcaption></figure><table class="metrics"><tr><td>stock vs fellow PSNR / SSIM</td><td>46.31 dB / 0.9976 / LPIPS 0.0046</td></tr><tr><td>stock vs ref PSNR / SSIM</td><td>39.11 dB / 0.9894 / LPIPS 0.0162</td></tr><tr><td>fellow vs ref PSNR / SSIM</td><td>39.77 dB / 0.9912 / LPIPS 0.0110</td></tr></table></div></div></div>
+<div class="shot"><h4>pbr_overview <small></small></h4>
+<div class="shotgrid"><div><div class="slider" id="s4">
+  <img src="screenshots/stock/pbr_pbr_overview.png" alt="Godot stock" loading="lazy">
+  <div class="top" style="clip-path: inset(0 50% 0 0)"><img src="screenshots/fellow/pbr_pbr_overview.png" alt="FellowEngine" loading="lazy"></div>
+  <div class="bar" style="left:50%"></div>
+  <span class="lab l">FellowEngine</span><span class="lab r">Godot stock</span>
+  <input type="range" min="0" max="100" value="50" aria-label="before/after">
+</div></div><div class="side"><figure><img src='screenshots/diff/pbr_pbr_overview_diff.png' loading='lazy'><figcaption>|stock − fellow| ×4</figcaption></figure><figure><img src='screenshots/reference/pbr_pbr_overview_ref.png' loading='lazy'><figcaption>accumulated ground truth (2x2 SSAA x 8x MSAA x 8-16 jittered samples)</figcaption></figure><table class="metrics"><tr><td>stock vs fellow PSNR / SSIM</td><td>45.21 dB / 0.9962 / LPIPS 0.0107</td></tr><tr><td>stock vs ref PSNR / SSIM</td><td>37.64 dB / 0.9861 / LPIPS 0.0265</td></tr><tr><td>fellow vs ref PSNR / SSIM</td><td>38.26 dB / 0.9886 / LPIPS 0.0160</td></tr></table></div></div></div>
+<div class="shot"><h4>pbr_specular <small></small></h4>
+<div class="shotgrid"><div><div class="slider" id="s5">
+  <img src="screenshots/stock/pbr_pbr_specular.png" alt="Godot stock" loading="lazy">
+  <div class="top" style="clip-path: inset(0 50% 0 0)"><img src="screenshots/fellow/pbr_pbr_specular.png" alt="FellowEngine" loading="lazy"></div>
+  <div class="bar" style="left:50%"></div>
+  <span class="lab l">FellowEngine</span><span class="lab r">Godot stock</span>
+  <input type="range" min="0" max="100" value="50" aria-label="before/after">
+</div></div><div class="side"><figure><img src='screenshots/diff/pbr_pbr_specular_diff.png' loading='lazy'><figcaption>|stock − fellow| ×4</figcaption></figure><figure><img src='screenshots/reference/pbr_pbr_specular_ref.png' loading='lazy'><figcaption>accumulated ground truth (2x2 SSAA x 8x MSAA x 8-16 jittered samples)</figcaption></figure><table class="metrics"><tr><td>stock vs fellow PSNR / SSIM</td><td>47.85 dB / 0.9985 / LPIPS 0.0017</td></tr><tr><td>stock vs ref PSNR / SSIM</td><td>34.21 dB / 0.9701 / LPIPS 0.0485</td></tr><tr><td>fellow vs ref PSNR / SSIM</td><td>34.03 dB / 0.9692 / LPIPS 0.0499</td></tr></table></div></div></div>
+<div class="shot"><h4>pbr_spheres <small></small></h4>
+<div class="shotgrid"><div><div class="slider" id="s6">
+  <img src="screenshots/stock/pbr_pbr_spheres.png" alt="Godot stock" loading="lazy">
+  <div class="top" style="clip-path: inset(0 50% 0 0)"><img src="screenshots/fellow/pbr_pbr_spheres.png" alt="FellowEngine" loading="lazy"></div>
+  <div class="bar" style="left:50%"></div>
+  <span class="lab l">FellowEngine</span><span class="lab r">Godot stock</span>
+  <input type="range" min="0" max="100" value="50" aria-label="before/after">
+</div></div><div class="side"><figure><img src='screenshots/diff/pbr_pbr_spheres_diff.png' loading='lazy'><figcaption>|stock − fellow| ×4</figcaption></figure><figure><img src='screenshots/reference/pbr_pbr_spheres_ref.png' loading='lazy'><figcaption>accumulated ground truth (2x2 SSAA x 8x MSAA x 8-16 jittered samples)</figcaption></figure><table class="metrics"><tr><td>stock vs fellow PSNR / SSIM</td><td>47.00 dB / 0.9960 / LPIPS 0.0143</td></tr><tr><td>stock vs ref PSNR / SSIM</td><td>39.10 dB / 0.9835 / LPIPS 0.0448</td></tr><tr><td>fellow vs ref PSNR / SSIM</td><td>39.58 dB / 0.9883 / LPIPS 0.0260</td></tr></table></div></div></div>
+<div class="shot"><h4>pbr_thin <small></small></h4>
+<div class="shotgrid"><div><div class="slider" id="s7">
+  <img src="screenshots/stock/pbr_pbr_thin.png" alt="Godot stock" loading="lazy">
+  <div class="top" style="clip-path: inset(0 50% 0 0)"><img src="screenshots/fellow/pbr_pbr_thin.png" alt="FellowEngine" loading="lazy"></div>
+  <div class="bar" style="left:50%"></div>
+  <span class="lab l">FellowEngine</span><span class="lab r">Godot stock</span>
+  <input type="range" min="0" max="100" value="50" aria-label="before/after">
+</div></div><div class="side"><figure><img src='screenshots/diff/pbr_pbr_thin_diff.png' loading='lazy'><figcaption>|stock − fellow| ×4</figcaption></figure><figure><img src='screenshots/reference/pbr_pbr_thin_ref.png' loading='lazy'><figcaption>accumulated ground truth (2x2 SSAA x 8x MSAA x 8-16 jittered samples)</figcaption></figure><table class="metrics"><tr><td>stock vs fellow PSNR / SSIM</td><td>44.79 dB / 0.9950 / LPIPS 0.0188</td></tr><tr><td>stock vs ref PSNR / SSIM</td><td>37.38 dB / 0.9781 / LPIPS 0.0508</td></tr><tr><td>fellow vs ref PSNR / SSIM</td><td>37.82 dB / 0.9834 / LPIPS 0.0396</td></tr></table></div></div></div><h3>Intel Sponza</h3><div class="shot"><h4>sponza_cam_01 <small></small></h4>
+<div class="shotgrid"><div><div class="slider" id="s8">
+  <img src="screenshots/stock/sponza_sponza_cam_01.png" alt="Godot stock" loading="lazy">
+  <div class="top" style="clip-path: inset(0 50% 0 0)"><img src="screenshots/fellow/sponza_sponza_cam_01.png" alt="FellowEngine" loading="lazy"></div>
+  <div class="bar" style="left:50%"></div>
+  <span class="lab l">FellowEngine</span><span class="lab r">Godot stock</span>
+  <input type="range" min="0" max="100" value="50" aria-label="before/after">
+</div></div><div class="side"><figure><img src='screenshots/diff/sponza_sponza_cam_01_diff.png' loading='lazy'><figcaption>|stock − fellow| ×4</figcaption></figure><figure><img src='screenshots/reference/sponza_sponza_cam_01_ref.png' loading='lazy'><figcaption>accumulated ground truth (2x2 SSAA x 8x MSAA x 8-16 jittered samples)</figcaption></figure><table class="metrics"><tr><td>stock vs fellow PSNR / SSIM</td><td>44.96 dB / 0.9954 / LPIPS 0.0048</td></tr><tr><td>stock vs ref PSNR / SSIM</td><td>40.61 dB / 0.9803 / LPIPS 0.0279</td></tr><tr><td>fellow vs ref PSNR / SSIM</td><td>40.99 dB / 0.9825 / LPIPS 0.0217</td></tr></table></div></div></div>
+<div class="shot"><h4>sponza_cam_02 <small></small></h4>
+<div class="shotgrid"><div><div class="slider" id="s9">
+  <img src="screenshots/stock/sponza_sponza_cam_02.png" alt="Godot stock" loading="lazy">
+  <div class="top" style="clip-path: inset(0 50% 0 0)"><img src="screenshots/fellow/sponza_sponza_cam_02.png" alt="FellowEngine" loading="lazy"></div>
+  <div class="bar" style="left:50%"></div>
+  <span class="lab l">FellowEngine</span><span class="lab r">Godot stock</span>
+  <input type="range" min="0" max="100" value="50" aria-label="before/after">
+</div></div><div class="side"><figure><img src='screenshots/diff/sponza_sponza_cam_02_diff.png' loading='lazy'><figcaption>|stock − fellow| ×4</figcaption></figure><figure><img src='screenshots/reference/sponza_sponza_cam_02_ref.png' loading='lazy'><figcaption>accumulated ground truth (2x2 SSAA x 8x MSAA x 8-16 jittered samples)</figcaption></figure><table class="metrics"><tr><td>stock vs fellow PSNR / SSIM</td><td>46.30 dB / 0.9968 / LPIPS 0.0039</td></tr><tr><td>stock vs ref PSNR / SSIM</td><td>38.92 dB / 0.9819 / LPIPS 0.0272</td></tr><tr><td>fellow vs ref PSNR / SSIM</td><td>39.42 dB / 0.9840 / LPIPS 0.0210</td></tr></table></div></div></div>
+<div class="shot"><h4>sponza_cam_03 <small></small></h4>
+<div class="shotgrid"><div><div class="slider" id="s10">
+  <img src="screenshots/stock/sponza_sponza_cam_03.png" alt="Godot stock" loading="lazy">
+  <div class="top" style="clip-path: inset(0 50% 0 0)"><img src="screenshots/fellow/sponza_sponza_cam_03.png" alt="FellowEngine" loading="lazy"></div>
+  <div class="bar" style="left:50%"></div>
+  <span class="lab l">FellowEngine</span><span class="lab r">Godot stock</span>
+  <input type="range" min="0" max="100" value="50" aria-label="before/after">
+</div></div><div class="side"><figure><img src='screenshots/diff/sponza_sponza_cam_03_diff.png' loading='lazy'><figcaption>|stock − fellow| ×4</figcaption></figure><figure><img src='screenshots/reference/sponza_sponza_cam_03_ref.png' loading='lazy'><figcaption>accumulated ground truth (2x2 SSAA x 8x MSAA x 8-16 jittered samples)</figcaption></figure><table class="metrics"><tr><td>stock vs fellow PSNR / SSIM</td><td>47.20 dB / 0.9965 / LPIPS 0.0041</td></tr><tr><td>stock vs ref PSNR / SSIM</td><td>42.69 dB / 0.9820 / LPIPS 0.0271</td></tr><tr><td>fellow vs ref PSNR / SSIM</td><td>42.96 dB / 0.9839 / LPIPS 0.0208</td></tr></table></div></div></div>
+<div class="shot"><h4>sponza_cam_04 <small></small></h4>
+<div class="shotgrid"><div><div class="slider" id="s11">
+  <img src="screenshots/stock/sponza_sponza_cam_04.png" alt="Godot stock" loading="lazy">
+  <div class="top" style="clip-path: inset(0 50% 0 0)"><img src="screenshots/fellow/sponza_sponza_cam_04.png" alt="FellowEngine" loading="lazy"></div>
+  <div class="bar" style="left:50%"></div>
+  <span class="lab l">FellowEngine</span><span class="lab r">Godot stock</span>
+  <input type="range" min="0" max="100" value="50" aria-label="before/after">
+</div></div><div class="side"><figure><img src='screenshots/diff/sponza_sponza_cam_04_diff.png' loading='lazy'><figcaption>|stock − fellow| ×4</figcaption></figure><figure><img src='screenshots/reference/sponza_sponza_cam_04_ref.png' loading='lazy'><figcaption>accumulated ground truth (2x2 SSAA x 8x MSAA x 8-16 jittered samples)</figcaption></figure><table class="metrics"><tr><td>stock vs fellow PSNR / SSIM</td><td>48.48 dB / 0.9979 / LPIPS 0.0024</td></tr><tr><td>stock vs ref PSNR / SSIM</td><td>42.37 dB / 0.9880 / LPIPS 0.0262</td></tr><tr><td>fellow vs ref PSNR / SSIM</td><td>42.79 dB / 0.9892 / LPIPS 0.0220</td></tr></table></div></div></div>
+<div class="shot"><h4>sponza_cam_05 <small></small></h4>
+<div class="shotgrid"><div><div class="slider" id="s12">
+  <img src="screenshots/stock/sponza_sponza_cam_05.png" alt="Godot stock" loading="lazy">
+  <div class="top" style="clip-path: inset(0 50% 0 0)"><img src="screenshots/fellow/sponza_sponza_cam_05.png" alt="FellowEngine" loading="lazy"></div>
+  <div class="bar" style="left:50%"></div>
+  <span class="lab l">FellowEngine</span><span class="lab r">Godot stock</span>
+  <input type="range" min="0" max="100" value="50" aria-label="before/after">
+</div></div><div class="side"><figure><img src='screenshots/diff/sponza_sponza_cam_05_diff.png' loading='lazy'><figcaption>|stock − fellow| ×4</figcaption></figure><figure><img src='screenshots/reference/sponza_sponza_cam_05_ref.png' loading='lazy'><figcaption>accumulated ground truth (2x2 SSAA x 8x MSAA x 8-16 jittered samples)</figcaption></figure><table class="metrics"><tr><td>stock vs fellow PSNR / SSIM</td><td>45.64 dB / 0.9955 / LPIPS 0.0060</td></tr><tr><td>stock vs ref PSNR / SSIM</td><td>40.79 dB / 0.9798 / LPIPS 0.0324</td></tr><tr><td>fellow vs ref PSNR / SSIM</td><td>41.18 dB / 0.9821 / LPIPS 0.0237</td></tr></table></div></div></div>
+<div class="shot"><h4>sponza_cam_06 <small></small></h4>
+<div class="shotgrid"><div><div class="slider" id="s13">
+  <img src="screenshots/stock/sponza_sponza_cam_06.png" alt="Godot stock" loading="lazy">
+  <div class="top" style="clip-path: inset(0 50% 0 0)"><img src="screenshots/fellow/sponza_sponza_cam_06.png" alt="FellowEngine" loading="lazy"></div>
+  <div class="bar" style="left:50%"></div>
+  <span class="lab l">FellowEngine</span><span class="lab r">Godot stock</span>
+  <input type="range" min="0" max="100" value="50" aria-label="before/after">
+</div></div><div class="side"><figure><img src='screenshots/diff/sponza_sponza_cam_06_diff.png' loading='lazy'><figcaption>|stock − fellow| ×4</figcaption></figure><figure><img src='screenshots/reference/sponza_sponza_cam_06_ref.png' loading='lazy'><figcaption>accumulated ground truth (2x2 SSAA x 8x MSAA x 8-16 jittered samples)</figcaption></figure><table class="metrics"><tr><td>stock vs fellow PSNR / SSIM</td><td>47.54 dB / 0.9972 / LPIPS 0.0035</td></tr><tr><td>stock vs ref PSNR / SSIM</td><td>38.72 dB / 0.9804 / LPIPS 0.0278</td></tr><tr><td>fellow vs ref PSNR / SSIM</td><td>39.01 dB / 0.9825 / LPIPS 0.0219</td></tr></table></div></div></div><h3>Bistro Exterior</h3><div class="shot"><h4>bistro_ext_cam_01 <small></small></h4>
+<div class="shotgrid"><div><div class="slider" id="s14">
+  <img src="screenshots/stock/bistro_exterior_bistro_ext_cam_01.png" alt="Godot stock" loading="lazy">
+  <div class="top" style="clip-path: inset(0 50% 0 0)"><img src="screenshots/fellow/bistro_exterior_bistro_ext_cam_01.png" alt="FellowEngine" loading="lazy"></div>
+  <div class="bar" style="left:50%"></div>
+  <span class="lab l">FellowEngine</span><span class="lab r">Godot stock</span>
+  <input type="range" min="0" max="100" value="50" aria-label="before/after">
+</div></div><div class="side"><figure><img src='screenshots/diff/bistro_exterior_bistro_ext_cam_01_diff.png' loading='lazy'><figcaption>|stock − fellow| ×4</figcaption></figure><figure><img src='screenshots/reference/bistro_exterior_bistro_ext_cam_01_ref.png' loading='lazy'><figcaption>accumulated ground truth (2x2 SSAA x 8x MSAA x 8-16 jittered samples)</figcaption></figure><table class="metrics"><tr><td>stock vs fellow PSNR / SSIM</td><td>41.31 dB / 0.9932 / LPIPS 0.0061</td></tr><tr><td>stock vs ref PSNR / SSIM</td><td>33.70 dB / 0.9630 / LPIPS 0.0361</td></tr><tr><td>fellow vs ref PSNR / SSIM</td><td>33.94 dB / 0.9666 / LPIPS 0.0285</td></tr></table></div></div></div>
+<div class="shot"><h4>bistro_ext_cam_02 <small></small></h4>
+<div class="shotgrid"><div><div class="slider" id="s15">
+  <img src="screenshots/stock/bistro_exterior_bistro_ext_cam_02.png" alt="Godot stock" loading="lazy">
+  <div class="top" style="clip-path: inset(0 50% 0 0)"><img src="screenshots/fellow/bistro_exterior_bistro_ext_cam_02.png" alt="FellowEngine" loading="lazy"></div>
+  <div class="bar" style="left:50%"></div>
+  <span class="lab l">FellowEngine</span><span class="lab r">Godot stock</span>
+  <input type="range" min="0" max="100" value="50" aria-label="before/after">
+</div></div><div class="side"><figure><img src='screenshots/diff/bistro_exterior_bistro_ext_cam_02_diff.png' loading='lazy'><figcaption>|stock − fellow| ×4</figcaption></figure><figure><img src='screenshots/reference/bistro_exterior_bistro_ext_cam_02_ref.png' loading='lazy'><figcaption>accumulated ground truth (2x2 SSAA x 8x MSAA x 8-16 jittered samples)</figcaption></figure><table class="metrics"><tr><td>stock vs fellow PSNR / SSIM</td><td>42.15 dB / 0.9950 / LPIPS 0.0045</td></tr><tr><td>stock vs ref PSNR / SSIM</td><td>34.46 dB / 0.9741 / LPIPS 0.0293</td></tr><tr><td>fellow vs ref PSNR / SSIM</td><td>34.70 dB / 0.9769 / LPIPS 0.0231</td></tr></table></div></div></div>
+<div class="shot"><h4>bistro_ext_cam_03 <small></small></h4>
+<div class="shotgrid"><div><div class="slider" id="s16">
+  <img src="screenshots/stock/bistro_exterior_bistro_ext_cam_03.png" alt="Godot stock" loading="lazy">
+  <div class="top" style="clip-path: inset(0 50% 0 0)"><img src="screenshots/fellow/bistro_exterior_bistro_ext_cam_03.png" alt="FellowEngine" loading="lazy"></div>
+  <div class="bar" style="left:50%"></div>
+  <span class="lab l">FellowEngine</span><span class="lab r">Godot stock</span>
+  <input type="range" min="0" max="100" value="50" aria-label="before/after">
+</div></div><div class="side"><figure><img src='screenshots/diff/bistro_exterior_bistro_ext_cam_03_diff.png' loading='lazy'><figcaption>|stock − fellow| ×4</figcaption></figure><figure><img src='screenshots/reference/bistro_exterior_bistro_ext_cam_03_ref.png' loading='lazy'><figcaption>accumulated ground truth (2x2 SSAA x 8x MSAA x 8-16 jittered samples)</figcaption></figure><table class="metrics"><tr><td>stock vs fellow PSNR / SSIM</td><td>41.49 dB / 0.9951 / LPIPS 0.0047</td></tr><tr><td>stock vs ref PSNR / SSIM</td><td>34.46 dB / 0.9724 / LPIPS 0.0271</td></tr><tr><td>fellow vs ref PSNR / SSIM</td><td>35.12 dB / 0.9767 / LPIPS 0.0199</td></tr></table></div></div></div>
+<div class="shot"><h4>bistro_ext_cam_04 <small></small></h4>
+<div class="shotgrid"><div><div class="slider" id="s17">
+  <img src="screenshots/stock/bistro_exterior_bistro_ext_cam_04.png" alt="Godot stock" loading="lazy">
+  <div class="top" style="clip-path: inset(0 50% 0 0)"><img src="screenshots/fellow/bistro_exterior_bistro_ext_cam_04.png" alt="FellowEngine" loading="lazy"></div>
+  <div class="bar" style="left:50%"></div>
+  <span class="lab l">FellowEngine</span><span class="lab r">Godot stock</span>
+  <input type="range" min="0" max="100" value="50" aria-label="before/after">
+</div></div><div class="side"><figure><img src='screenshots/diff/bistro_exterior_bistro_ext_cam_04_diff.png' loading='lazy'><figcaption>|stock − fellow| ×4</figcaption></figure><figure><img src='screenshots/reference/bistro_exterior_bistro_ext_cam_04_ref.png' loading='lazy'><figcaption>accumulated ground truth (2x2 SSAA x 8x MSAA x 8-16 jittered samples)</figcaption></figure><table class="metrics"><tr><td>stock vs fellow PSNR / SSIM</td><td>41.93 dB / 0.9951 / LPIPS 0.0048</td></tr><tr><td>stock vs ref PSNR / SSIM</td><td>34.86 dB / 0.9780 / LPIPS 0.0358</td></tr><tr><td>fellow vs ref PSNR / SSIM</td><td>34.64 dB / 0.9802 / LPIPS 0.0291</td></tr></table></div></div></div><h3>Bistro Interior</h3><div class="shot"><h4>bistro_int_cam_01 <small></small></h4>
+<div class="shotgrid"><div><div class="slider" id="s18">
+  <img src="screenshots/stock/bistro_interior_bistro_int_cam_01.png" alt="Godot stock" loading="lazy">
+  <div class="top" style="clip-path: inset(0 50% 0 0)"><img src="screenshots/fellow/bistro_interior_bistro_int_cam_01.png" alt="FellowEngine" loading="lazy"></div>
+  <div class="bar" style="left:50%"></div>
+  <span class="lab l">FellowEngine</span><span class="lab r">Godot stock</span>
+  <input type="range" min="0" max="100" value="50" aria-label="before/after">
+</div></div><div class="side"><figure><img src='screenshots/diff/bistro_interior_bistro_int_cam_01_diff.png' loading='lazy'><figcaption>|stock − fellow| ×4</figcaption></figure><figure><img src='screenshots/reference/bistro_interior_bistro_int_cam_01_ref.png' loading='lazy'><figcaption>accumulated ground truth (2x2 SSAA x 8x MSAA x 8-16 jittered samples)</figcaption></figure><table class="metrics"><tr><td>stock vs fellow PSNR / SSIM</td><td>43.83 dB / 0.9965 / LPIPS 0.0033</td></tr><tr><td>stock vs ref PSNR / SSIM</td><td>32.21 dB / 0.9809 / LPIPS 0.0264</td></tr><tr><td>fellow vs ref PSNR / SSIM</td><td>32.48 dB / 0.9829 / LPIPS 0.0215</td></tr></table></div></div></div>
+<div class="shot"><h4>bistro_int_cam_02 <small></small></h4>
+<div class="shotgrid"><div><div class="slider" id="s19">
+  <img src="screenshots/stock/bistro_interior_bistro_int_cam_02.png" alt="Godot stock" loading="lazy">
+  <div class="top" style="clip-path: inset(0 50% 0 0)"><img src="screenshots/fellow/bistro_interior_bistro_int_cam_02.png" alt="FellowEngine" loading="lazy"></div>
+  <div class="bar" style="left:50%"></div>
+  <span class="lab l">FellowEngine</span><span class="lab r">Godot stock</span>
+  <input type="range" min="0" max="100" value="50" aria-label="before/after">
+</div></div><div class="side"><figure><img src='screenshots/diff/bistro_interior_bistro_int_cam_02_diff.png' loading='lazy'><figcaption>|stock − fellow| ×4</figcaption></figure><figure><img src='screenshots/reference/bistro_interior_bistro_int_cam_02_ref.png' loading='lazy'><figcaption>accumulated ground truth (2x2 SSAA x 8x MSAA x 8-16 jittered samples)</figcaption></figure><table class="metrics"><tr><td>stock vs fellow PSNR / SSIM</td><td>49.63 dB / 0.9981 / LPIPS 0.0021</td></tr><tr><td>stock vs ref PSNR / SSIM</td><td>38.18 dB / 0.9844 / LPIPS 0.0242</td></tr><tr><td>fellow vs ref PSNR / SSIM</td><td>38.35 dB / 0.9860 / LPIPS 0.0197</td></tr></table></div></div></div>
+<div class="shot"><h4>bistro_int_cam_03 <small></small></h4>
+<div class="shotgrid"><div><div class="slider" id="s20">
+  <img src="screenshots/stock/bistro_interior_bistro_int_cam_03.png" alt="Godot stock" loading="lazy">
+  <div class="top" style="clip-path: inset(0 50% 0 0)"><img src="screenshots/fellow/bistro_interior_bistro_int_cam_03.png" alt="FellowEngine" loading="lazy"></div>
+  <div class="bar" style="left:50%"></div>
+  <span class="lab l">FellowEngine</span><span class="lab r">Godot stock</span>
+  <input type="range" min="0" max="100" value="50" aria-label="before/after">
+</div></div><div class="side"><figure><img src='screenshots/diff/bistro_interior_bistro_int_cam_03_diff.png' loading='lazy'><figcaption>|stock − fellow| ×4</figcaption></figure><figure><img src='screenshots/reference/bistro_interior_bistro_int_cam_03_ref.png' loading='lazy'><figcaption>accumulated ground truth (2x2 SSAA x 8x MSAA x 8-16 jittered samples)</figcaption></figure><table class="metrics"><tr><td>stock vs fellow PSNR / SSIM</td><td>51.20 dB / 0.9984 / LPIPS 0.0020</td></tr><tr><td>stock vs ref PSNR / SSIM</td><td>44.64 dB / 0.9924 / LPIPS 0.0138</td></tr><tr><td>fellow vs ref PSNR / SSIM</td><td>44.90 dB / 0.9931 / LPIPS 0.0110</td></tr></table></div></div></div>
+<div class="shot"><h4>bistro_int_cam_04 <small></small></h4>
+<div class="shotgrid"><div><div class="slider" id="s21">
+  <img src="screenshots/stock/bistro_interior_bistro_int_cam_04.png" alt="Godot stock" loading="lazy">
+  <div class="top" style="clip-path: inset(0 50% 0 0)"><img src="screenshots/fellow/bistro_interior_bistro_int_cam_04.png" alt="FellowEngine" loading="lazy"></div>
+  <div class="bar" style="left:50%"></div>
+  <span class="lab l">FellowEngine</span><span class="lab r">Godot stock</span>
+  <input type="range" min="0" max="100" value="50" aria-label="before/after">
+</div></div><div class="side"><figure><img src='screenshots/diff/bistro_interior_bistro_int_cam_04_diff.png' loading='lazy'><figcaption>|stock − fellow| ×4</figcaption></figure><figure><img src='screenshots/reference/bistro_interior_bistro_int_cam_04_ref.png' loading='lazy'><figcaption>accumulated ground truth (2x2 SSAA x 8x MSAA x 8-16 jittered samples)</figcaption></figure><table class="metrics"><tr><td>stock vs fellow PSNR / SSIM</td><td>48.93 dB / 0.9979 / LPIPS 0.0022</td></tr><tr><td>stock vs ref PSNR / SSIM</td><td>37.88 dB / 0.9863 / LPIPS 0.0211</td></tr><tr><td>fellow vs ref PSNR / SSIM</td><td>38.18 dB / 0.9879 / LPIPS 0.0170</td></tr></table></div></div></div>
+</main><script>
+document.querySelectorAll('.slider').forEach(function(s){
+  var r = s.querySelector('input'), top = s.querySelector('.top'), bar = s.querySelector('.bar');
+  r.addEventListener('input', function(){ top.style.clipPath = 'inset(0 ' + (100 - r.value) + '% 0 0)'; bar.style.left = r.value + '%'; });
+});
+</script></body></html>
