@@ -234,6 +234,9 @@ def main():
     scene.cycles.use_adaptive_sampling = False
     scene.cycles.use_denoising = False
     scene.cycles.filter_width = 1.5
+    # Dense alpha-scissor grass: many overlapping transparent cards. Cycles' default of 8 transparent bounces
+    # terminates those paths (black grass); Godot's rasterizer has no such limit.
+    scene.cycles.transparent_max_bounces = 256
     scene.view_settings.view_transform = "Standard"
     scene.view_settings.look = "None"
     scene.view_settings.exposure = 0.0
@@ -274,7 +277,7 @@ def main():
         print(f"[cycles] {name}: {time.time() - t1:.1f} s ({SAMPLES} spp)", flush=True)
     meta = {"samples": SAMPLES, "resolution": RES, "device": DEVICE, "blender": bpy.app.version_string, "cameras": wanted,
             "total_s": time.time() - t0, "filter_width": 1.5, "max_bounces": scene.cycles.max_bounces,
-            "caustics_reflective": scene.cycles.caustics_reflective, "caustics_refractive": scene.cycles.caustics_refractive}
+            "transparent_max_bounces": scene.cycles.transparent_max_bounces, "caustics_reflective": scene.cycles.caustics_reflective, "caustics_refractive": scene.cycles.caustics_refractive}
     with open(os.path.join(OUT, "cycles_meta.json"), "w", encoding="utf-8") as f:
         json.dump(meta, f, indent=2)
 
