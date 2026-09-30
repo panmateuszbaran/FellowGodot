@@ -1164,6 +1164,7 @@ public:
 		int64_t ix = 0;
 		int64_t iy = 0;
 		int32_t n = 0;
+		bool regular = true; // rect is exactly n texels of size t
 		real_t z_max = 0.0; // stock near plane (light-space z)
 		real_t z_min = 0.0; // stock far plane
 		real_t zfar = 0.0;

@@ -2321,38 +2321,27 @@ void RendererSceneCull::_light_instance_setup_directional_shadow(int p_shadow_in
 				}
 			}
 
-			FellowCascadeWork &fellow_work = fellow_cascade_work[p_shadow_index][i];
-			if (fellow_work.cache == nullptr) {
-				// This trick here is what stabilizes the shadow (make potential jaggies to not move)
-				// at the cost of some wasted resolution. Still, the quality increase is very well worth it.
-				const real_t unit = (radius + soft_shadow_expand) * 4.0 / texture_size;
-				x_max_cam = Math::snapped(x_vec.dot(center) + radius + soft_shadow_expand, unit);
-				x_min_cam = Math::snapped(x_vec.dot(center) - radius - soft_shadow_expand, unit);
-				y_max_cam = Math::snapped(y_vec.dot(center) + radius + soft_shadow_expand, unit);
-				y_min_cam = Math::snapped(y_vec.dot(center) - radius - soft_shadow_expand, unit);
-			} else {
-				// FellowEngine directional shadow cache: the cascade lives on a fixed light-space texel lattice (square
-				// texels of size t, origin snapped to whole texels, constant width of texture_size texels), so cascades
-				// of different frames and the cache differ by integer texel offsets. The texel is 2/(N-2) larger than
-				// the sphere needs (one spare texel per side after snapping), i.e. 0.1 % at N = 2048; stock snaps both
-				// edges independently to 2 texels, so its texel size varies by up to 0.1 % between frames.
-				const real_t re = radius + soft_shadow_expand;
-				real_t t = 2.0 * re / (texture_size - 2.0);
-				const FellowDirShadowCache::Cascade &cs = fellow_work.cache->cascades[i];
-				if (cs.valid && cs.cascade_size == (int32_t)texture_size && Math::abs(cs.texel - t) <= cs.texel * (real_t)1e-4) {
-					t = cs.texel; // keep the lattice of the cache through tiny floating-point changes of the radius
-				}
-				const int64_t ix = (int64_t)Math::floor((x_vec.dot(center) - re) / t);
-				const int64_t iy = (int64_t)Math::floor((y_vec.dot(center) - re) / t);
-				x_min_cam = (real_t)ix * t;
-				x_max_cam = (real_t)(ix + (int64_t)texture_size) * t;
-				y_min_cam = (real_t)iy * t;
-				y_max_cam = (real_t)(iy + (int64_t)texture_size) * t;
+			// This trick here is what stabilizes the shadow (make potential jaggies to not move)
+			// at the cost of some wasted resolution. Still, the quality increase is very well worth it.
+			const real_t unit = (radius + soft_shadow_expand) * 4.0 / texture_size;
+			x_max_cam = Math::snapped(x_vec.dot(center) + radius + soft_shadow_expand, unit);
+			x_min_cam = Math::snapped(x_vec.dot(center) - radius - soft_shadow_expand, unit);
+			y_max_cam = Math::snapped(y_vec.dot(center) + radius + soft_shadow_expand, unit);
+			y_min_cam = Math::snapped(y_vec.dot(center) - radius - soft_shadow_expand, unit);
 
-				fellow_work.t = t;
-				fellow_work.ix = ix;
-				fellow_work.iy = iy;
+			FellowCascadeWork &fellow_work = fellow_cascade_work[p_shadow_index][i];
+			if (fellow_work.cache != nullptr) {
+				// FellowEngine directional shadow cache: the stock rect is texture_size texels of size unit / 2 (its
+				// width 2 * (radius + expand) is exactly texture_size / 2 units) with the origin on a 2-texel lattice
+				// fixed in light space. Record the lattice position: the cache lives on the same lattice, so it maps
+				// to the cascade by an integer texel offset and the cascade itself stays exactly the stock one.
+				fellow_work.t = unit * 0.5;
+				fellow_work.ix = 2 * (int64_t)Math::round(x_min_cam / unit);
+				fellow_work.iy = 2 * (int64_t)Math::round(y_min_cam / unit);
 				fellow_work.n = (int32_t)texture_size;
+				// In rare frames float rounding snaps one edge a unit off, so the rect is 2 texels wider/narrower:
+				// such a frame cannot use the cache (texels would not line up) and is rendered the stock way.
+				fellow_work.regular = Math::abs((x_max_cam - x_min_cam) - (real_t)texture_size * fellow_work.t) < fellow_work.t * 0.5 && Math::abs((y_max_cam - y_min_cam) - (real_t)texture_size * fellow_work.t) < fellow_work.t * 0.5;
 				fellow_work.basis = transform.basis;
 				fellow_work.x_vec = x_vec;
 				fellow_work.y_vec = y_vec;
@@ -2484,7 +2473,7 @@ void RendererSceneCull::_fellow_shadow_cache_decide(int p_shadow_index, uint64_t
 		}
 	}
 
-	const int32_t guard = Fellow::directional_shadow_cache_guard();
+	const int32_t guard = Fellow::directional_shadow_cache_guard() & ~1; // even: the cascade origin moves in 2-texel steps
 	const uint32_t static_frames = (uint32_t)Fellow::directional_shadow_cache_static_frames();
 	const real_t lod_travel = Fellow::directional_shadow_cache_lod_travel();
 	cache->last_used_frame = p_frame;
@@ -2513,8 +2502,14 @@ void RendererSceneCull::_fellow_shadow_cache_decide(int p_shadow_index, uint64_t
 			c.fellow_mode = FELLOW_CASCADE_STOCK;
 			continue;
 		}
+		if (!w.regular) {
+			c.fellow_mode = FELLOW_CASCADE_FALLBACK; // keep the cache, just do not use it this frame
+			continue;
+		}
 
-		bool ok = cs.valid && cs.light_basis == basis && cs.cascade_size == w.n && cs.guard == guard && cs.texel == w.t && cs.visible_layers == p_visible_layers && cs.caster_mask == shadow.caster_mask && cs.lod_travel == lod_travel && cs.build_frame + 1 <= p_frame;
+		// The texel size is recomputed every frame and can differ by float rounding (the soft-shadow expansion depends
+		// on the cascade's position): a relative 1e-5 means < 0.03 texel of drift across a 2560-texel cache.
+		bool ok = cs.valid && cs.light_basis == basis && cs.cascade_size == w.n && cs.guard == guard && Math::abs(cs.texel - w.t) <= cs.texel * (real_t)1e-5 && cs.visible_layers == p_visible_layers && cs.caster_mask == shadow.caster_mask && cs.lod_travel == lod_travel;
 		float margin = 0.0;
 		int64_t ox = 0, oy = 0;
 		if (ok) {
