@@ -348,6 +348,7 @@ def main() -> int:
     ap.add_argument("--timeout", type=float, default=900.0)
     ap.add_argument("--session", default=None, help="session name (default: timestamp)")
     ap.add_argument("--label", default="", help="free text label for the session")
+    ap.add_argument("--no-telemetry", action="store_true", help="do not sample nvidia-smi during the session (diagnostics)")
     ap.add_argument("--merge", action="store_true", help="merge into an existing results/<session>.json: re-measured "
                     "(scene, res, build) entries replace the old ones, which are kept under 'superseded' with --supersede-note")
     ap.add_argument("--supersede-note", default="", help="reason recorded for entries replaced by --merge")
@@ -384,7 +385,8 @@ def main() -> int:
     log(f"session {session}: builds={builds} scenes={scenes} res={resolutions} mode={args.mode}")
 
     sampler = GpuSampler()
-    sampler.start()
+    if not args.no_telemetry:
+        sampler.start()
     all_results: dict = {}
     soak = {}
     if args.mode == "perf" and args.heat_soak > 0:
