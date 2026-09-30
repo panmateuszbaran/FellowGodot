@@ -29,6 +29,7 @@
 /**************************************************************************/
 
 #include "render_forward_clustered.h"
+#include "servers/rendering/fellow_settings.h"
 
 #include "core/config/project_settings.h"
 #include "servers/rendering/renderer_rd/environment/fog.h"
@@ -1572,8 +1573,20 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 		if (p_render_data->directional_shadows.size()) {
 			//open the pass for directional shadows
 			light_storage->update_directional_shadow_atlas();
-			RD::get_singleton()->draw_list_begin(light_storage->direction_shadow_get_fb(), RD::DRAW_CLEAR_DEPTH, Vector<Color>(), 0.0f);
-			RD::get_singleton()->draw_list_end();
+			// FellowEngine directional shadow cache: cascades served from the cache overwrite their whole rect (or keep
+			// it, when unchanged), so the atlas only needs clearing if some cascade renders the stock way.
+			bool fellow_all_cached = true;
+			for (const int &index : p_render_data->directional_shadows) {
+				if (p_render_data->render_shadows[index].fellow.cache_id < 0) {
+					fellow_all_cached = false;
+					break;
+				}
+			}
+			if (!fellow_all_cached) {
+				RD::get_singleton()->draw_list_begin(light_storage->direction_shadow_get_fb(), RD::DRAW_CLEAR_DEPTH, Vector<Color>(), 0.0f);
+				RD::get_singleton()->draw_list_end();
+				fellow_shadow_cache->atlas_invalidate_all();
+			}
 		}
 	}
 
@@ -2826,8 +2839,19 @@ void RenderForwardClustered::_render_shadow_pass(RID p_light, RID p_shadow_atlas
 		copy_pass.fellow_source_offset = p_fellow_op->copy_offset;
 		copy_pass.fellow_scale = p_fellow_op->remap_scale;
 		copy_pass.fellow_bias = p_fellow_op->remap_bias;
-		if (copy_pass.fellow_copy) {
+		// Skip the copy if the rect still holds exactly this content (static view, no dynamic casters now or before).
+		const RID atlas_texture = light_storage->directional_shadow_get_texture();
+		const bool unchanged = copy_pass.fellow_copy && !p_fellow_op->rebuild && p_instances.size() == 0 && fellow_shadow_cache->atlas_rect_holds(atlas_texture, atlas_rect, cache_texture, copy_pass.fellow_source_offset, copy_pass.fellow_scale, copy_pass.fellow_bias);
+		if (copy_pass.fellow_copy && !unchanged) {
 			scene_state.shadow_passes.push_back(copy_pass);
+		}
+		if (unchanged) {
+			Fellow::stats().shadow_cache_copies_skipped.increment();
+		}
+		if (copy_pass.fellow_copy) {
+			fellow_shadow_cache->atlas_rect_set(atlas_texture, atlas_rect, cache_texture, copy_pass.fellow_source_offset, copy_pass.fellow_scale, copy_pass.fellow_bias, p_instances.size() > 0);
+		} else {
+			fellow_shadow_cache->atlas_rect_set(atlas_texture, atlas_rect, RID(), Vector2i(), 0.0, 0.0, true);
 		}
 
 		if (p_instances.size() > 0) {

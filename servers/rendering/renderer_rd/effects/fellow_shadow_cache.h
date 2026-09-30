@@ -62,6 +62,19 @@ class FellowShadowCache {
 	};
 	HashMap<int64_t, Entry> entries;
 
+	// What each directional-atlas rect holds since it was last written, so that an unchanged cascade (same cache
+	// content, same offset and depth remap, no dynamic casters now or last time) is neither cleared nor copied again.
+	struct AtlasRectState {
+		RID atlas;
+		Rect2i rect;
+		RID source;
+		Vector2i offset;
+		float scale = 0.0;
+		float bias = 0.0;
+		bool dynamic = false;
+	};
+	LocalVector<AtlasRectState> atlas_states;
+
 	void _free_entry(Entry &p_entry);
 
 public:
@@ -72,6 +85,11 @@ public:
 	// Returns the cache texture if it holds a rebuilt content, otherwise marks the cache lost and returns RID().
 	RID get_valid_texture(int64_t p_cache_id, int p_cascade);
 	bool take_lost(int64_t p_cache_id);
+
+	// Atlas rect bookkeeping (see AtlasRectState).
+	void atlas_invalidate_all() { atlas_states.clear(); }
+	bool atlas_rect_holds(RID p_atlas, const Rect2i &p_rect, RID p_source, const Vector2i &p_offset, float p_scale, float p_bias) const;
+	void atlas_rect_set(RID p_atlas, const Rect2i &p_rect, RID p_source, const Vector2i &p_offset, float p_scale, float p_bias, bool p_dynamic);
 	void free_cache(int64_t p_cache_id);
 	uint64_t get_vram_bytes() const;
 

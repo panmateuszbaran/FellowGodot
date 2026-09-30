@@ -77,5 +77,6 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["shadow_cache_dynamic_casters"] = s.shadow_cache_dynamic_casters.get();
 	d["shadow_cache_rebuild_casters"] = s.shadow_cache_rebuild_casters.get();
 	d["shadow_cache_frames"] = s.shadow_cache_frames.get();
+	d["shadow_cache_copies_skipped"] = s.shadow_cache_copies_skipped.get();
 	return d;
 }

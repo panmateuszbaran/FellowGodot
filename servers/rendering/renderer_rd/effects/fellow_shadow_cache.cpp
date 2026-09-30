@@ -116,6 +116,39 @@ RID FellowShadowCache::get_valid_texture(int64_t p_cache_id, int p_cascade) {
 	return RID();
 }
 
+bool FellowShadowCache::atlas_rect_holds(RID p_atlas, const Rect2i &p_rect, RID p_source, const Vector2i &p_offset, float p_scale, float p_bias) const {
+	for (const AtlasRectState &s : atlas_states) {
+		if (s.atlas == p_atlas && s.rect == p_rect) {
+			return s.source == p_source && s.offset == p_offset && s.scale == p_scale && s.bias == p_bias && !s.dynamic;
+		}
+	}
+	return false;
+}
+
+void FellowShadowCache::atlas_rect_set(RID p_atlas, const Rect2i &p_rect, RID p_source, const Vector2i &p_offset, float p_scale, float p_bias, bool p_dynamic) {
+	for (AtlasRectState &s : atlas_states) {
+		if (s.atlas == p_atlas && s.rect.intersects(p_rect)) {
+			s.atlas = RID(); // overlapped by the new content (should not happen: cascades do not overlap)
+		}
+	}
+	for (uint32_t i = 0; i < atlas_states.size();) {
+		if (atlas_states[i].atlas.is_null()) {
+			atlas_states.remove_at_unordered(i);
+		} else {
+			i++;
+		}
+	}
+	AtlasRectState s;
+	s.atlas = p_atlas;
+	s.rect = p_rect;
+	s.source = p_source;
+	s.offset = p_offset;
+	s.scale = p_scale;
+	s.bias = p_bias;
+	s.dynamic = p_dynamic;
+	atlas_states.push_back(s);
+}
+
 bool FellowShadowCache::take_lost(int64_t p_cache_id) {
 	Entry *e = entries.getptr(p_cache_id);
 	if (e && e->lost) {

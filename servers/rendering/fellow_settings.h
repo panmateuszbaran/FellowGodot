@@ -166,6 +166,7 @@ struct Stats {
 	SafeNumeric<uint64_t> shadow_cache_dynamic_casters;
 	SafeNumeric<uint64_t> shadow_cache_rebuild_casters;
 	SafeNumeric<uint64_t> shadow_cache_frames;
+	SafeNumeric<uint64_t> shadow_cache_copies_skipped;
 };
 
 Stats &stats();
