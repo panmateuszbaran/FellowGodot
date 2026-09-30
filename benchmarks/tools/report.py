@@ -271,7 +271,8 @@ def _num(x, y):
     return {"psnr": iu.psnr(x, y), "ssim": iu.ssim(x, y), "lpips": iu.lpips(x, y)}
 
 
-def image_metrics(a, b=None, ref=None, key=None):
+def image_metrics(a, b=None, ref=None, key=None, ref_a=None, ref_b=None):
+    """stock vs fellow on (a, b); vs-reference metrics on (ref_a, ref_b) when given (exposure-matched captures)."""
     ia = iu.load_rgb(a)
     m = {}
     if b:
@@ -280,6 +281,10 @@ def image_metrics(a, b=None, ref=None, key=None):
         m["stock vs fellow PSNR / SSIM"] = f"{n['psnr']:.2f} dB / {n['ssim']:.4f}" + ("" if n["lpips"] is None else f" / LPIPS {n['lpips']:.4f}")
     if ref:
         ir = iu.load_rgb(ref)
+        if ref_a:
+            ia = iu.load_rgb(ref_a)
+            b = ref_b
+            ib = iu.load_rgb(ref_b) if ref_b else None
         if ir.shape == ia.shape:
             ns = _num(ia, ir)
             m["stock vs ref PSNR / SSIM"] = f"{ns['psnr']:.2f} dB / {ns['ssim']:.4f}" + ("" if ns["lpips"] is None else f" / LPIPS {ns['lpips']:.4f}")
@@ -363,6 +368,8 @@ def main() -> int:
     ap.add_argument("--baseline", default="godot-4.7.2")
     ap.add_argument("--ab", default=None, help="tag of the stock-vs-fellow session set")
     ap.add_argument("--ab-label", default="FellowEngine")
+    ap.add_argument("--capture-gt", default=None, help="capture session taken with --freeze_exposure=1 (same exposure as the ground truth); "
+                    "used for the vs-reference metrics when given")
     ap.add_argument("--fellow-label", default="fellow", help="build/variant label of the FellowEngine configuration shown in image sections")
     ap.add_argument("--fluid", default=None, help="tag of the fluid sessions")
     ap.add_argument("--notes", default=None, help="markdown file with analysis text to embed")
@@ -442,8 +449,15 @@ def main() -> int:
             if b:
                 diffp = os.path.join(out, "screenshots", "diff", f"{scene}_{name}_fulldiff.png")
                 iu.save_rgb(diffp, iu.diff_heatmap(iu.load_rgb(f), iu.load_rgb(b), 4.0))
+            ma, mb = f, b
+            if a.capture_gt:
+                ga = os.path.join(RAW, a.capture_gt, "stock", scene, os.path.basename(f))
+                gb = os.path.join(RAW, a.capture_gt, a.fellow_label, scene, os.path.basename(f))
+                if os.path.exists(ga):
+                    ma = ga
+                    mb = gb if os.path.exists(gb) else None
             pairs.append({"name": name, "a": f, "b": b, "ref": ref, "ref_label": "accumulated ground truth (2x2 SSAA x 8x MSAA x 8-16 jittered samples)", "diff": diffp,
-                          "metrics": image_metrics(f, b, ref, key=(scene, name))})
+                          "metrics": image_metrics(f, b, ref, key=(scene, name), ref_a=ma if ma != f else None, ref_b=mb if ma != f else None)})
         if pairs:
             body, uid = image_section(out, scene, pairs, uid)
             sections.append(f"<h3>{SCENE_TITLE[scene]}</h3>{body}")
@@ -584,7 +598,7 @@ Water rendering cost = viewport GPU time with water visible − with water hidde
 {fluid_html}
 {temporal_html}
 <h2>Visual comparison ({html.escape(a.res)})</h2>
-<p class="muted">Drag the slider: left = FellowEngine, right = Godot stock. Diff heatmaps show |stock − fellow| luma ×4 (black = identical). PNG captures are lossless; shown downscaled.</p>
+<p class="muted">Drag the slider: left = FellowEngine, right = Godot stock. Diff heatmaps show |stock − fellow| luma ×4 (black = identical). PNG captures are lossless; shown downscaled.{" Metrics against the ground truth use a second capture with auto exposure frozen (<code>" + html.escape(a.capture_gt) + "</code>), because the ground truth is rendered with auto exposure off; the images shown use normal auto exposure." if a.capture_gt else ""}</p>
 {cyc_html}
 {''.join(sections)}
 </main><script>{JS}</script></body></html>"""
