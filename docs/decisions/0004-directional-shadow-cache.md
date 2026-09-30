@@ -52,14 +52,26 @@ drawn into the cascade's atlas rect (16-bit depth, reverse Z) every frame.
 5. **Invalidation.** When an instance that could be in a cache changes or leaves the scenario, its old AABB is logged;
    caches built after it became static and whose light-space column the AABB touches are rebuilt.
 6. **Rebuild policy.** A cascade is rebuilt when its rect leaves the guard band, its z range leaves the cache range,
-   the camera moved more than `lod_travel` (2 m) from the build position, the light basis / texel size / layers
-   changed, or an invalidation hits it (forced); proactively when its remaining guard margin drops below 50 %; and
-   once more when casters became static after the build (promotion). At most `max_rebuilds_per_frame` (1) rebuilds
-   per frame: cascades that need one beyond the budget render the stock way that frame (fallback), so the worst frame
-   costs about stock plus one cache render. A rotating light disables the cache until it is still for 2 frames; a
-   cascade that is served from its cache in fewer than 25 % of recent frames goes stock for 120 frames.
-7. **LOD.** Cache renders choose mesh LODs as if the camera were `lod_travel` closer than it is, so a cached caster is
-   never coarser than the LOD stock would choose for any camera position the cache stays valid for.
+   the light basis / layers changed, or an invalidation hits it (forced); proactively when its remaining guard margin
+   drops below 50 %; and once more when casters became static after the build (promotion, at most every 30 frames).
+   At most `max_rebuilds_per_frame` (1) rebuilds per frame: cascades that need one beyond the budget render the stock
+   way that frame (fallback), so the worst frame costs about stock plus one cache render.
+7. **When not to cache.** A rotating light disables the cache until it is still for 2 frames; a cascade whose texel
+   size changes (camera FOV or near/far animation) is rendered stock until it is unchanged for 2 frames (no cache can
+   match a changing lattice, and a rebuild per frame costs more than stock); a cascade that is served from its cache in
+   fewer than 25 % of recent non-stock frames goes stock for 120 frames (thrash guard). **Cost gate:** every rebuild
+   records the primitives and draws of the static casters it rendered; the cascade is served from the cache only if
+   `(primitives + 2000 × draws) × (cascade area / cache area) ≥ min_cost_per_texel × cascade texels`
+   (`directional_cache_min_cost_per_texel`, default 0.125), i.e. only if the static casters it saves cost more than
+   the per-frame copy, which writes one depth texel per cascade texel. Otherwise the cascade is rendered stock while it
+   stays in the evaluated volume, for at most 600 frames, then evaluated again.
+8. **LOD.** Cache renders choose mesh LODs from the cache's own texel size (orthographic LOD: the coarsest LOD whose
+   error is below `directional_cache_texel_lod` = 1 shadow-map texel), since detail below a texel cannot show in the
+   shadow map; stock picks shadow LODs from the camera distance. (`directional_cache_lod_travel` > 0 restores
+   camera-distance LOD, as if the camera were that much closer, with invalidation after that much camera travel.)
+9. **Unchanged cascades.** If every directional cascade is served from its cache, the per-frame clear of the atlas is
+   skipped, and a cascade whose atlas rect already holds exactly the same copy (same cache content, offset and depth
+   remap) and had no dynamic casters in this or the previous frame is neither cleared nor copied.
 
 ## Expected benefit
 
