@@ -2570,6 +2570,34 @@ void RendererSceneCull::_fellow_shadow_cache_decide(int p_shadow_index, uint64_t
 		}
 	}
 
+	const int debug_mode = Fellow::directional_shadow_cache_debug_mode();
+	if (debug_mode == 1) {
+		// Verification: same cascade lattice, but never serve from the cache.
+		for (uint32_t k = 0; k < shadow.cascade_count; k++) {
+			if (shadow.cascades[k].fellow_mode != FELLOW_CASCADE_STOCK) {
+				shadow.cascades[k].fellow_mode = FELLOW_CASCADE_FALLBACK;
+				cache->cascades[k].valid = false;
+			}
+		}
+		return;
+	}
+	if (debug_mode == 2) {
+		// Verification: rebuild every cascade every frame.
+		candidate_count = 0;
+		for (uint32_t k = 0; k < shadow.cascade_count; k++) {
+			if (shadow.cascades[k].fellow_mode == FELLOW_CASCADE_STOCK) {
+				continue;
+			}
+			FellowCascadeCandidate &cand = candidates[candidate_count++];
+			cand.shadow = p_shadow_index;
+			cand.cascade = k;
+			cand.priority = (float)k;
+			cand.forced = true;
+			cand.kind = 0;
+		}
+		fellow_rebuild_budget = candidate_count;
+	}
+
 	// Rebuild the most urgent cascades within the per-frame budget.
 	for (int a = 0; a < candidate_count; a++) {
 		for (int b = a + 1; b < candidate_count; b++) {

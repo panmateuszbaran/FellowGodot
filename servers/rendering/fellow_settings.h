@@ -108,6 +108,12 @@ inline int directional_shadow_cache_max_rebuilds() {
 	return MAX(1, GLOBAL_GET_CACHED(int, "rendering/fellow/shadows/directional_cache_max_rebuilds_per_frame"));
 }
 
+// Verification only: 0 = normal, 1 = cascade lattice without using the cache (stock rendering of every cascade),
+// 2 = rebuild every cascade every frame (exercises the cache path without any reuse).
+inline int directional_shadow_cache_debug_mode() {
+	return GLOBAL_GET_CACHED(int, "rendering/fellow/shadows/directional_cache_debug_mode");
+}
+
 // Cumulative counters (render thread writes, scripts read through RenderingServer.fellow_get_stats()).
 struct Stats {
 	SafeNumeric<uint64_t> shadow_cache_cascades_stock;

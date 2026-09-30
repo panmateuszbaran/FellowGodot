@@ -208,7 +208,10 @@ func _run_perf() -> void:
 	var mem_peak := _mem()
 	var has_extra: bool = scene.has_method("sample_extra")
 	var extra := {}
+	var fellow_frames := {}
 	await get_tree().process_frame
+	var fs0 := _fellow_stats()
+	var fs_prev := fs0
 	m.reset_clock()
 	var passes := 0
 	while true:
@@ -217,6 +220,14 @@ func _run_perf() -> void:
 			await get_tree().process_frame
 			m.sample()
 			pass_frames.append(f)
+			if not fs0.is_empty():
+				# Per-frame FellowEngine counters (e.g. shadow cache rebuilds) to correlate with frame times.
+				var fs := _fellow_stats()
+				for k in ["shadow_cache_cascades_rebuilt", "shadow_cache_cascades_fallback", "shadow_cache_cascades_cached"]:
+					if not fellow_frames.has(k):
+						fellow_frames[k] = PackedInt32Array()
+					fellow_frames[k].append(int(fs.get(k, 0)) - int(fs_prev.get(k, 0)))
+				fs_prev = fs
 			if has_extra:
 				var ex: Dictionary = scene.sample_extra()
 				for k in ex.keys():
@@ -246,6 +257,11 @@ func _run_perf() -> void:
 	result["summary"] = m.summary()
 	result["frames"] = m.to_json_arrays()
 	result["frames"]["path_frame"] = pass_frames
+	if not fs0.is_empty():
+		result["fellow_stats"] = _dict_sub(_fellow_stats(), fs0)
+		result["frames"]["fellow"] = {}
+		for k in fellow_frames.keys():
+			result["frames"]["fellow"][k] = Array(fellow_frames[k])
 	result["memory_peak"] = mem_peak
 	if has_extra:
 		var es := {}
@@ -281,6 +297,7 @@ func _run_perf() -> void:
 			var mc := Metrics.new(vp.get_viewport_rid())
 			var cam_gpu := {}
 			var cam_gpu_frames := 0
+			var cfs0 := _fellow_stats()
 			mc.reset_clock()
 			for i in range(percam):
 				await get_tree().process_frame
@@ -292,6 +309,8 @@ func _run_perf() -> void:
 						_accumulate_timestamps(rd, cam_gpu)
 						cam_gpu_frames += 1
 			var entry := {"summary": mc.summary()}
+			if not cfs0.is_empty():
+				entry["fellow_stats"] = _dict_sub(_fellow_stats(), cfs0)
 			if profile:
 				var a := {}
 				for kk in cam_gpu.keys():
@@ -312,6 +331,13 @@ func _accumulate_timestamps(rd: RenderingDevice, acc: Dictionary) -> void:
 		var dt_ms := (rd.get_captured_timestamp_gpu_time(i + 1) - rd.get_captured_timestamp_gpu_time(i)) / 1e6
 		acc[nm] = acc.get(nm, 0.0) + dt_ms
 	acc["__total__"] = acc.get("__total__", 0.0) + (rd.get_captured_timestamp_gpu_time(n - 1) - rd.get_captured_timestamp_gpu_time(0)) / 1e6
+
+
+## FellowEngine counters (RenderingServer.fellow_get_stats); empty on stock Godot.
+func _fellow_stats() -> Dictionary:
+	if RenderingServer.has_method("fellow_get_stats"):
+		return RenderingServer.call("fellow_get_stats")
+	return {}
 
 
 func _dict_sub(a: Dictionary, b: Dictionary) -> Dictionary:
