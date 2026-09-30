@@ -8,7 +8,7 @@ REM 1) export (reference lighting: uniform sky radiance + sun only)
 .tools\bin\stock\godot.windows.template_release.x86_64.console.exe --path benchmarks\project --fixed-fps 60 ^
     --resolution 1920x1080 --position 0,0 -- --scene=pbr --mode=capture --lighting=ref --hdr=1 --export-ref=<dir> --out=<dir>
 REM 2) path trace (GPU, OptiX)
-blender --background --factory-startup --python benchmarks\reference\pbr_lab_cycles.py -- ^
+blender --background --factory-startup --python-exit-code 1 --python benchmarks\reference\pbr_lab_cycles.py -- ^
     --scene <dir>\pbr_lab_scene.json --out <dir> --samples 2048 --res 1920x1080
 ```
 
