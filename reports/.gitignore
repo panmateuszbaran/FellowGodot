@@ -1,0 +1,6 @@
+# Reports are committed as text + graphs; the (large) downscaled screenshots and animated WebPs stay local.
+# Regenerate them with benchmarks/tools/report.py from benchmarks/results/raw/.
+latest/
+draft/
+*/screenshots/
+*/temporal/*.webp

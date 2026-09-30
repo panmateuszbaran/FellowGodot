@@ -102,7 +102,7 @@ def main() -> int:
     t0 = time.time()
     cmd = [a.editor, "--headless", "--path", PROJECT, "--import"]
     print("[import] " + " ".join(cmd), flush=True)
-    p = subprocess.Popen(cmd, cwd=ROOT)
+    p = subprocess.Popen(cmd, cwd=ROOT, **({"creationflags": 0x08000000} if os.name == "nt" else {}))
     try:
         rc = p.wait(timeout=a.timeout)
     except subprocess.TimeoutExpired:

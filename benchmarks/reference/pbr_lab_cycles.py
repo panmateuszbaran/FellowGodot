@@ -1,7 +1,7 @@
 """Build the PBR Validation Lab in Blender from the Godot export and render Cycles reference frames.
 
 Usage (background Blender):
-  blender --background --factory-startup --python benchmarks/reference/pbr_lab_cycles.py -- \
+  blender --background --factory-startup --python-exit-code 1 --python benchmarks/reference/pbr_lab_cycles.py -- \
       --scene <dir>/pbr_lab_scene.json --out <dir> [--samples 2048] [--res 1920x1080] [--cameras a,b] [--device OPTIX]
 
 Input is produced by the benchmark project itself (identical geometry, UVs, material parameters, textures,
@@ -42,8 +42,9 @@ def arg(name, default=None):
     return default
 
 
-SCENE_JSON = arg("scene")
-OUT = arg("out", os.path.dirname(SCENE_JSON) if SCENE_JSON else ".")
+# Absolute paths: Blender does not resolve relative image paths against the process working directory.
+SCENE_JSON = os.path.abspath(arg("scene")) if arg("scene") else None
+OUT = os.path.abspath(arg("out", os.path.dirname(SCENE_JSON) if SCENE_JSON else "."))
 SAMPLES = int(arg("samples", "2048"))
 RES = arg("res", "1920x1080")
 CAMS = arg("cameras", "")
@@ -233,6 +234,9 @@ def main():
     scene.cycles.use_adaptive_sampling = False
     scene.cycles.use_denoising = False
     scene.cycles.filter_width = 1.5
+    # Dense alpha-scissor grass: many overlapping transparent cards. Cycles' default of 8 transparent bounces
+    # terminates those paths (black grass); Godot's rasterizer has no such limit.
+    scene.cycles.transparent_max_bounces = 256
     scene.view_settings.view_transform = "Standard"
     scene.view_settings.look = "None"
     scene.view_settings.exposure = 0.0
@@ -273,7 +277,7 @@ def main():
         print(f"[cycles] {name}: {time.time() - t1:.1f} s ({SAMPLES} spp)", flush=True)
     meta = {"samples": SAMPLES, "resolution": RES, "device": DEVICE, "blender": bpy.app.version_string, "cameras": wanted,
             "total_s": time.time() - t0, "filter_width": 1.5, "max_bounces": scene.cycles.max_bounces,
-            "caustics_reflective": scene.cycles.caustics_reflective, "caustics_refractive": scene.cycles.caustics_refractive}
+            "transparent_max_bounces": scene.cycles.transparent_max_bounces, "caustics_reflective": scene.cycles.caustics_reflective, "caustics_refractive": scene.cycles.caustics_refractive}
     with open(os.path.join(OUT, "cycles_meta.json"), "w", encoding="utf-8") as f:
         json.dump(meta, f, indent=2)
 

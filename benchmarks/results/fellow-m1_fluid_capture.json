@@ -1,0 +1,257 @@
+{
+ "session": "fellow-m1_fluid_capture",
+ "label": "",
+ "args": {
+  "builds": "fellow",
+  "godot": null,
+  "scene": "fluid",
+  "mode": "capture",
+  "res": "1920x1080",
+  "runs": 3,
+  "max_runs": 6,
+  "max_cv": 0.03,
+  "warmup": 10.0,
+  "measure": 30.0,
+  "percam": 0,
+  "profile": false,
+  "preset": "high",
+  "set": "",
+  "fellow": "",
+  "fellow_off_for": "stock",
+  "extra": "",
+  "cooldown": 5.0,
+  "heat_soak": 240.0,
+  "timeout": 900.0,
+  "session": "fellow-m1_fluid_capture",
+  "label": "",
+  "no_telemetry": false,
+  "merge": false,
+  "supersede_note": ""
+ },
+ "hardware": {
+  "timestamp_local": "2026-09-30T14:32:40.334709",
+  "host": "PREDZIO",
+  "python": "3.11.0",
+  "os": {
+   "platform": "Windows-10-10.0.26200-SP0",
+   "release": "10",
+   "version": "10.0.26200"
+  },
+  "cpu": "{\"Name\":\"Intel(R) Core(TM) Ultra 9 275HX\",\"NumberOfCores\":24,\"NumberOfLogicalProcessors\":24,\"MaxClockSpeed\":2700}",
+  "ram": "{\"TotalBytes\":68112736256,\"Modules\":[{\"Capacity\":34359738368,\"Speed\":6400,\"ConfiguredClockSpeed\":6400,\"Manufacturer\":\"Micron Technology\",\"PartNumber\":\"MTC16C2085S1VC64BD1 \"},{\"Capacity\":34359738368,\"Speed\":6400,\"ConfiguredClockSpeed\":6400,\"Manufacturer\":\"Micron Technology\",\"PartNumber\":\"MTC16C2085S1VC64BD1 \"}]}",
+  "os_caption": "{\"Caption\":\"Microsoft Windows 11 Home\",\"Version\":\"10.0.26200\",\"BuildNumber\":\"26200\"}",
+  "system": "{\"Manufacturer\":\"Acer\",\"Model\":\"Predator PHN16S-71\"}",
+  "power": "{\"Battery\":{\"PowerOnline\":true,\"Charging\":false},\"Scheme\":\"Power Scheme GUID: 3b79c5ed-2baa-4957-a015-c958d3221bfc  (Acer)\"}",
+  "display": "[{\"Name\":\"Intel(R) Graphics\",\"DriverVersion\":\"32.0.101.6629\",\"CurrentHorizontalResolution\":2560,\"CurrentVerticalResolution\":1600,\"CurrentRefreshRate\":240},{\"Name\":\"NVIDIA GeForce RTX 5070 Ti Laptop GPU\",\"DriverVersion\":\"32.0.16.1714\",\"CurrentHorizontalResolution\":null,\"CurrentVerticalResolution\":null,\"CurrentRefreshRate\":null}]",
+  "gpu": [
+   {
+    "name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+    "driver_version": "617.14",
+    "memory.total": "12227",
+    "pcie.link.gen.max": "5",
+    "pcie.link.width.max": "16",
+    "clocks.max.graphics": "3090",
+    "clocks.max.memory": "14001",
+    "power.limit": "[N/A]",
+    "vbios_version": "98.05.31.00.49"
+   }
+  ],
+  "engine": {
+   "commit": "e2a897c6b4408c212f986e156947c57c498b9535",
+   "describe": "4.7.2-stable-15-ge2a897c6b4",
+   "branch": "HEAD",
+   "status_short": ""
+  },
+  "build_flags": "platform=windows target=template_release production=yes disable_path_overrides=no winrt=no accesskit=no d3d12=no (MSVC, see BUILDING_FELLOWENGINE.md)",
+  "compiler": {
+   "visual_studio": "16.11.60",
+   "msvc_toolsets": [
+    "14.29.30133"
+   ]
+  },
+  "binaries": {
+   "fellow": {
+    "path": ".tools\\bin\\fellow\\godot.windows.template_release.x86_64.exe",
+    "size": 68727296,
+    "sha256": "81a26a6d85491a83c963cb79ec4dfe0caefe0773001c1674f732860fda39ddf7",
+    "mtime": "2026-09-30T01:16:31.531927"
+   }
+  }
+ },
+ "gpu_telemetry": {
+  "n": 10,
+  "clocks.gr": {
+   "min": 180.0,
+   "mean": 768.7,
+   "max": 1740.0
+  },
+  "clocks.mem": {
+   "min": 405.0,
+   "mean": 7504.3,
+   "max": 10821.0
+  },
+  "temperature.gpu": {
+   "min": 61.0,
+   "mean": 63.4,
+   "max": 68.0
+  },
+  "power.draw": {
+   "min": 5.22,
+   "mean": 14.643,
+   "max": 26.11
+  },
+  "utilization.gpu": {
+   "min": 0.0,
+   "mean": 7.4,
+   "max": 33.0
+  },
+  "memory.used": {
+   "min": 0.0,
+   "mean": 228.0,
+   "max": 719.0
+  },
+  "throttle_reasons_seen": [
+   "0x0000000000000004",
+   "0x0000000000000400"
+  ]
+ },
+ "heat_soak_telemetry": {},
+ "results": {
+  "fluid|1920x1080|fellow": {
+   "scene": "fluid",
+   "resolution": "1920x1080",
+   "build": "fellow",
+   "preset": "high",
+   "set": "",
+   "fellow": "",
+   "binary": "fellow",
+   "variant_args": [],
+   "mode": "capture",
+   "runs": [
+    {
+     "schema": 1,
+     "scene": "fluid",
+     "mode": "capture",
+     "tag": "fellow",
+     "run": 0,
+     "cmdline_user_args": [
+      "--scene=fluid",
+      "--mode=capture",
+      "--res=1920x1080",
+      "--tag=fellow",
+      "--run=0",
+      "--out=C:\\Users\\matek\\Documents\\GitHub\\FellowGodot\\benchmarks\\results\\raw\\fellow-m1_fluid_capture\\fellow\\fluid",
+      "--warmup=10.0",
+      "--measure=30.0",
+      "--preset=high"
+     ],
+     "cmdline_args": [],
+     "engine": {
+      "major": 4,
+      "minor": 7,
+      "patch": 2,
+      "hex": 263938,
+      "status": "stable",
+      "build": "custom_build",
+      "hash": "7f257b56ff4bc79057d893fc0f41614b6c4ed28a",
+      "timestamp": 1790722922,
+      "string": "4.7.2-stable (custom_build)"
+     },
+     "engine_build": {
+      "debug_build": false,
+      "has_editor": false,
+      "template_release": true
+     },
+     "adapter": {
+      "name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+      "vendor": "NVIDIA",
+      "api_version": "1.4.351",
+      "type": 2,
+      "driver": [
+       "NVIDIA",
+       "32.0.16.1714"
+      ],
+      "rendering_driver": "vulkan",
+      "rendering_method": "forward_plus"
+     },
+     "os": {
+      "name": "Windows",
+      "version": "10.0.26200",
+      "cpu": "Intel(R) Core(TM) Ultra 9 275HX",
+      "cpu_count": 24
+     },
+     "fellow": {
+      "available": true,
+      "requested": {},
+      "state": {
+       "rendering/fellow/enabled": true,
+       "rendering/fellow/postfx/enabled": true,
+       "rendering/fellow/postfx/taa_resolve_v2": false,
+       "rendering/fellow/postfx/taa_history_pingpong": false,
+       "rendering/fellow/fluid/enabled": true,
+       "rendering/fellow/profiling/pass_timestamps": false
+      }
+     },
+     "load_time_ms": 689.19,
+     "startup_to_first_frame_ms": 696.481,
+     "resolution": [
+      1920,
+      1080
+     ],
+     "valid": true,
+     "files": [
+      "fluid_1920x1080_fluid_cam_01.png",
+      "fluid_1920x1080_fluid_cam_02.png",
+      "fluid_1920x1080_fluid_cam_03.png"
+     ],
+     "total_runtime_s": 3.624488,
+     "_proc": {
+      "returncode": 0,
+      "timed_out": false,
+      "wall_s": 5.5675060749053955,
+      "peak_working_set": 873955328,
+      "peak_private_bytes": 1628733440
+     },
+     "_json": "benchmarks\\results\\raw\\fellow-m1_fluid_capture\\fellow\\fluid\\fluid_capture_fellow_1920x1080_run0.json",
+     "_gpu_telemetry": {
+      "n": 6,
+      "clocks.gr": {
+       "min": 180.0,
+       "mean": 1161.1666666666667,
+       "max": 1740.0
+      },
+      "clocks.mem": {
+       "min": 405.0,
+       "mean": 7871.666666666667,
+       "max": 10821.0
+      },
+      "temperature.gpu": {
+       "min": 62.0,
+       "mean": 64.5,
+       "max": 68.0
+      },
+      "power.draw": {
+       "min": 5.22,
+       "mean": 16.608333333333334,
+       "max": 26.11
+      },
+      "utilization.gpu": {
+       "min": 0.0,
+       "mean": 12.333333333333334,
+       "max": 33.0
+      },
+      "memory.used": {
+       "min": 0.0,
+       "mean": 380.0,
+       "max": 719.0
+      },
+      "throttle_reasons_seen": [
+       "0x0000000000000004",
+       "0x0000000000000400"
+      ]
+     }
+    }
+   ]
+  }
+ }
+}

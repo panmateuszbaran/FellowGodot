@@ -97,16 +97,25 @@ def perf_rows(session_json, label_override=None):
             "ram_mb": a["process_peak_working_set_bytes"] / 2**20, "load_ms": a["load_time_ms"]["mean"],
             "gpu_clock": float(np.mean(clk)) if clk else None, "gpu_temp": float(np.mean(tmp)) if tmp else None,
             "gpu_passes": a.get("gpu_passes_ms"), "per_camera": a.get("per_camera"),
+            "run_means": [r["summary"]["frame_ms"]["mean"] for r in e["runs"] if r.get("valid") and r.get("summary") and not r.get("hitch_frames")],
         }
         rows.append(row)
     rows.sort(key=lambda r: (SCENE_ORDER.index(r["scene"]) if r["scene"] in SCENE_ORDER else 99, r["resolution"], r["build"]))
     return rows
 
 
+def welch_p(a, b):
+    try:
+        import ab_stats
+        return ab_stats.welch_p(a, b)
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def perf_table_html(rows, compare=True):
     head = ["Scene", "Res", "Build", "Runs", "Frame ms (CV)", "GPU ms", "Render CPU ms", "p50", "p95", "p99", "Avg FPS", "1% low", "Draw calls", "Primitives", "VRAM MB", "Stutters", "GPU MHz / °C"]
     if compare:
-        head.insert(6, "Δ frame vs stock")
+        head.insert(5, "Δ frame vs stock (p)")
     out = ["<table class='perf'><thead><tr>" + "".join(f"<th>{h}</th>" for h in head) + "</tr></thead><tbody>"]
     stock = {(r["scene"], r["resolution"]): r for r in rows if r["build"] == "stock" and r.get("valid")}
     for r in rows:
@@ -119,8 +128,10 @@ def perf_table_html(rows, compare=True):
         if compare:
             s = stock.get((r["scene"], r["resolution"]))
             d = pct_delta(r["frame_ms"], s["frame_ms"]) if s and r["build"] != "stock" else None
-            cls = "" if d is None else ("good" if d < -2 else ("bad" if d > 2 else "neutral"))
-            cells.append(f"<span class='{cls}'>{'' if d is None else f'{d:+.1f}%'}</span>")
+            pv = welch_p(r.get("run_means", []), s.get("run_means", [])) if d is not None else None
+            sig = d is not None and pv is not None and pv < 0.05 and abs(d) > 1.0
+            cls = "neutral" if not sig else ("good" if d < 0 else "bad")
+            cells.append(f"<span class='{cls}'>{'' if d is None else f'{d:+.1f}%'}{'' if pv is None else f' (p={pv:.2f})'}</span>")
         cells += [fmt(r["gpu_ms"]), fmt(r["cpu_ms"]), fmt(r["p50"]), fmt(r["p95"]), fmt(r["p99"]), fmt(r["fps"], 1), fmt(r["fps_1pct_low"], 1),
                   fmt(r["draw_calls"], 0), f"{r['primitives'] / 1e6:.2f} M", fmt(r["vram_mb"], 0), str(r["stutters"]),
                   f"{fmt(r['gpu_clock'], 0)} / {fmt(r['gpu_temp'], 0)}"]
@@ -264,19 +275,68 @@ def _lp(x, y):
     return "" if v is None else f" / LPIPS {v:.4f}"
 
 
-def image_metrics(a, b=None, ref=None):
+IMAGE_NUMS = {}  # (scene, camera) -> {"stock": {...}, "fellow": {...}} numeric metrics vs the ground truth
+
+
+def _num(x, y):
+    return {"psnr": iu.psnr(x, y), "ssim": iu.ssim(x, y), "lpips": iu.lpips(x, y)}
+
+
+def image_metrics(a, b=None, ref=None, key=None, ref_a=None, ref_b=None):
+    """stock vs fellow on (a, b); vs-reference metrics on (ref_a, ref_b) when given (exposure-matched captures)."""
     ia = iu.load_rgb(a)
     m = {}
     if b:
         ib = iu.load_rgb(b)
-        m["stock vs fellow PSNR / SSIM"] = f"{iu.psnr(ia, ib):.2f} dB / {iu.ssim(ia, ib):.4f}{_lp(ia, ib)}"
+        n = _num(ia, ib)
+        m["stock vs fellow PSNR / SSIM"] = f"{n['psnr']:.2f} dB / {n['ssim']:.4f}" + ("" if n["lpips"] is None else f" / LPIPS {n['lpips']:.4f}")
     if ref:
         ir = iu.load_rgb(ref)
+        if ref_a:
+            ia = iu.load_rgb(ref_a)
+            b = ref_b
+            ib = iu.load_rgb(ref_b) if ref_b else None
         if ir.shape == ia.shape:
-            m["stock vs ref PSNR / SSIM"] = f"{iu.psnr(ia, ir):.2f} dB / {iu.ssim(ia, ir):.4f}{_lp(ia, ir)}"
+            ns = _num(ia, ir)
+            m["stock vs ref PSNR / SSIM"] = f"{ns['psnr']:.2f} dB / {ns['ssim']:.4f}" + ("" if ns["lpips"] is None else f" / LPIPS {ns['lpips']:.4f}")
+            if key:
+                IMAGE_NUMS.setdefault(key, {})["stock"] = ns
             if b:
-                m["fellow vs ref PSNR / SSIM"] = f"{iu.psnr(ib, ir):.2f} dB / {iu.ssim(ib, ir):.4f}{_lp(ib, ir)}"
+                nf = _num(ib, ir)
+                m["fellow vs ref PSNR / SSIM"] = f"{nf['psnr']:.2f} dB / {nf['ssim']:.4f}" + ("" if nf["lpips"] is None else f" / LPIPS {nf['lpips']:.4f}")
+                if key:
+                    IMAGE_NUMS.setdefault(key, {})["fellow"] = nf
     return m
+
+
+def md_table_html(md):
+    rows = [l.strip().strip("|").split("|") for l in md.splitlines() if l.strip().startswith("|")]
+    if len(rows) < 2:
+        return ""
+    head, body = rows[0], rows[2:]
+    h = "".join(f"<th>{html.escape(c.strip())}</th>" for c in head)
+    b = "".join("<tr>" + "".join(f"<td>{html.escape(c.strip())}</td>" for c in r) + "</tr>" for r in body)
+    return f"<table class='perf'><thead><tr>{h}</tr></thead><tbody>{b}</tbody></table>"
+
+
+def spec_summary(ab_rows, fellow_label, res):
+    """The summary table of the task specification: per scene, stock vs the FellowEngine configuration at one
+    resolution, with image quality vs. the accumulated ground truth averaged over the scene's fixed cameras."""
+    head = "| Scene | Renderer | GPU ms | Render CPU ms | Frame ms | p95 ms | p99 ms | VRAM MB | SSIM vs reference | PSNR vs reference | LPIPS vs reference |"
+    lines = [head, "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|"]
+    for scene in SCENE_ORDER:
+        for lab, key in [("Stock", "stock"), ("FellowEngine", fellow_label)]:
+            r = next((x for x in ab_rows if x["scene"] == scene and x["resolution"] == res and x["build"] == key and x.get("valid")), None)
+            if not r:
+                continue
+            q = [v[("stock" if key == "stock" else "fellow")] for (sc, _), v in IMAGE_NUMS.items() if sc == scene and ("stock" if key == "stock" else "fellow") in v]
+            def avg(k):
+                vals = [x[k] for x in q if x.get(k) is not None]
+                return None if not vals else float(np.mean(vals))
+            ss, ps, lp = avg("ssim"), avg("psnr"), avg("lpips")
+            lines.append(f"| {SCENE_TITLE.get(scene, scene)} | {lab} | {fmt(r['gpu_ms'])} | {fmt(r['cpu_ms'])} | {fmt(r['frame_ms'])} | {fmt(r['p95'])} | {fmt(r['p99'])} | "
+                         f"{fmt(r['vram_mb'], 0)} | {fmt(ss, 4)} | {fmt(ps, 2)} | {fmt(lp, 4)} |")
+    return "\n".join(lines)
 
 
 CSS = """
@@ -319,14 +379,19 @@ def main() -> int:
     ap.add_argument("--baseline", default="godot-4.7.2")
     ap.add_argument("--ab", default=None, help="tag of the stock-vs-fellow session set")
     ap.add_argument("--ab-label", default="FellowEngine")
+    ap.add_argument("--capture-gt", default=None, help="capture session taken with --freeze_exposure=1 (same exposure as the ground truth); "
+                    "used for the vs-reference metrics when given")
     ap.add_argument("--fellow-label", default="fellow", help="build/variant label of the FellowEngine configuration shown in image sections")
     ap.add_argument("--fluid", default=None, help="tag of the fluid sessions")
+    ap.add_argument("--fluid-capture", default=None, help="capture session of the Fluid Lab (screenshots in the fluid section)")
+    ap.add_argument("--engine-commit", default=None, help="commit of the measured FellowEngine binary (shown in the header, used for the default output folder)")
     ap.add_argument("--notes", default=None, help="markdown file with analysis text to embed")
     ap.add_argument("--out", default=None)
     ap.add_argument("--res", default="1920x1080", help="resolution used for image sections")
     a = ap.parse_args()
 
-    commit = git("rev-parse", "--short=10", "HEAD") or "nocommit"
+    harness = git("rev-parse", "--short=10", "HEAD") or "nocommit"
+    commit = a.engine_commit or harness
     out = a.out or os.path.join(ROOT, "reports", f"{datetime.date.today().isoformat()}_{commit}")
     if os.path.exists(out):
         shutil.rmtree(out)
@@ -398,8 +463,15 @@ def main() -> int:
             if b:
                 diffp = os.path.join(out, "screenshots", "diff", f"{scene}_{name}_fulldiff.png")
                 iu.save_rgb(diffp, iu.diff_heatmap(iu.load_rgb(f), iu.load_rgb(b), 4.0))
-            pairs.append({"name": name, "a": f, "b": b, "ref": ref, "ref_label": "accumulated ground truth (2x2 SSAA + 8x MSAA + 16 jittered frames)", "diff": diffp,
-                          "metrics": image_metrics(f, b, ref)})
+            ma, mb = f, b
+            if a.capture_gt:
+                ga = os.path.join(RAW, a.capture_gt, "stock", scene, os.path.basename(f))
+                gb = os.path.join(RAW, a.capture_gt, a.fellow_label, scene, os.path.basename(f))
+                if os.path.exists(ga):
+                    ma = ga
+                    mb = gb if os.path.exists(gb) else None
+            pairs.append({"name": name, "a": f, "b": b, "ref": ref, "ref_label": "accumulated ground truth (2x2 SSAA x 8x MSAA x 8-16 jittered samples)", "diff": diffp,
+                          "metrics": image_metrics(f, b, ref, key=(scene, name), ref_a=ma if ma != f else None, ref_b=mb if ma != f else None)})
         if pairs:
             body, uid = image_section(out, scene, pairs, uid)
             sections.append(f"<h3>{SCENE_TITLE[scene]}</h3>{body}")
@@ -472,6 +544,14 @@ def main() -> int:
 <p class="muted">Simulation and surface-generation GPU times come from RenderingDevice timestamps inside the module; the viewport GPU time excludes them.
 Water rendering cost = viewport GPU time with water visible − with water hidden (simulation running in both).</p>
 <div class="tablewrap"><table><tr><th>Grid</th><th>Water drawn</th><th>Res</th><th>Sim GPU ms</th><th>Surface GPU ms</th><th>Viewport GPU ms</th><th>Frame ms</th><th>Sim VRAM MB</th><th>Runs</th></tr>{body}</table></div>"""
+        if a.fluid_capture:
+            figs = []
+            os.makedirs(os.path.join(out, "screenshots", "fellow"), exist_ok=True)
+            for f in sorted(glob.glob(os.path.join(RAW, a.fluid_capture, "fellow", "fluid", f"fluid_{a.res}_*.png"))):
+                rel = os.path.relpath(downscale_copy(f, os.path.join(out, "screenshots", "fellow", os.path.basename(f))), out).replace("\\", "/")
+                figs.append(f"<figure><img src='{rel}' loading='lazy'><figcaption>{html.escape(os.path.basename(f)[:-4])}</figcaption></figure>")
+            if figs:
+                fluid_html += "<div class='side'>" + "".join(figs) + "</div><p class='muted'>Fluid Lab fixed cameras (FellowEngine only; stock Godot cannot run this scene).</p>"
 
     hw_rows = ""
     try:
@@ -518,12 +598,18 @@ Water rendering cost = viewport GPU time with water visible − with water hidde
             outl.append("</ul>")
         return "\n".join(outl)
 
+    spec_md = spec_summary(ab_rows, a.fellow_label, a.res) if ab_rows else ""
+    spec_html = (f"<h2>Summary table ({html.escape(a.res)}, stock vs <code>{html.escape(a.fellow_label)}</code>)</h2>"
+                 f"<div class='tablewrap'>{md_table_html(spec_md)}</div><p class='muted'>Image-quality columns: mean over the scene's fixed "
+                 f"cameras, lossless capture vs. accumulated ground truth. Timing columns: interleaved ABBA runs.</p>") if spec_md else ""
     page = f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Stock vs FellowEngine</title><style>{CSS}</style></head><body><main>
 <h1>Stock Godot 4.7.2 vs FellowEngine</h1>
-<p class="muted">Generated {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')} · commit {html.escape(commit)} · baseline <code>{html.escape(a.baseline)}</code>{' · A/B <code>' + html.escape(a.ab) + '</code>' if a.ab else ''}</p>
+<p class="muted">Generated {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')} · FellowEngine binary {html.escape(commit)} · benchmark harness {html.escape(harness)} · baseline <code>{html.escape(a.baseline)}</code>{' · A/B <code>' + html.escape(a.ab) + '</code>' if a.ab else ''}</p>
 {('<div class="card">' + md_to_html(notes) + '</div>') if notes else ''}
-<h2>Summary: stock vs {html.escape(a.ab_label)} (interleaved ABBA runs)</h2>
+{spec_html}
+<h2>All variants: stock vs {html.escape(a.ab_label)} (interleaved ABBA runs)</h2>
+<p class="muted">Δ is coloured only when Welch's t-test on the per-run means gives p &lt; 0.05 and |Δ| &gt; 1 % (green = faster, red = slower); everything else is within run-to-run noise.</p>
 <div class="tablewrap">{perf_table_html(ab_rows) if ab_rows else '<p>No A/B session.</p>'}</div>
 {f'<p><img class="graph" src="graphs/{os.path.basename(g2)}"></p>' if g2 else ''}
 <h2>Immutable stock baseline (Godot 4.7.2)</h2>
@@ -535,7 +621,7 @@ Water rendering cost = viewport GPU time with water visible − with water hidde
 {fluid_html}
 {temporal_html}
 <h2>Visual comparison ({html.escape(a.res)})</h2>
-<p class="muted">Drag the slider: left = FellowEngine, right = Godot stock. Diff heatmaps show |stock − fellow| luma ×4 (black = identical). PNG captures are lossless; shown downscaled.</p>
+<p class="muted">Drag the slider: left = FellowEngine, right = Godot stock. Diff heatmaps show |stock − fellow| luma ×4 (black = identical). PNG captures are lossless; shown downscaled.{" Metrics against the ground truth use a second capture with auto exposure frozen (<code>" + html.escape(a.capture_gt) + "</code>), because the ground truth is rendered with auto exposure off; the images shown use normal auto exposure." if a.capture_gt else ""}</p>
 {cyc_html}
 {''.join(sections)}
 </main><script>{JS}</script></body></html>"""
@@ -545,7 +631,11 @@ Water rendering cost = viewport GPU time with water visible − with water hidde
     md = [f"# Stock Godot 4.7.2 vs FellowEngine — report {datetime.date.today().isoformat()} ({commit})", ""]
     if notes:
         md += [notes, ""]
-    md += ["## Stock vs FellowEngine (A/B)", "", perf_table_md(ab_rows) if ab_rows else "_no A/B session_", "", "## Immutable stock baseline", "", perf_table_md(base_rows), ""]
+    if ab_rows:
+        md += [f"## Summary ({a.res}, stock vs `{a.fellow_label}`)", "", spec_summary(ab_rows, a.fellow_label, a.res), "",
+               "Image quality columns: mean over the scene's fixed cameras of the lossless capture vs. the accumulated ground truth "
+               "(display-referred). Timing columns: interleaved ABBA runs, mean of per-run means.", ""]
+    md += ["## Stock vs FellowEngine (A/B, all variants)", "", perf_table_md(ab_rows) if ab_rows else "_no A/B session_", "", "## Immutable stock baseline", "", perf_table_md(base_rows), ""]
     if fl_rows:
         md += ["## Fluid Lab", "", "See index.html (fluid section).", ""]
     md += ["Hardware: see hardware.json. Settings: see settings.json.", ""]

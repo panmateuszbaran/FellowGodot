@@ -1,0 +1,1550 @@
+{
+ "session": "godot-4.7.2_temporal",
+ "label": "",
+ "args": {
+  "builds": "stock",
+  "godot": null,
+  "scene": "pbr,sponza,bistro_exterior,bistro_interior",
+  "mode": "temporal",
+  "res": "1920x1080",
+  "runs": 3,
+  "max_runs": 6,
+  "max_cv": 0.03,
+  "warmup": 10.0,
+  "measure": 30.0,
+  "percam": 0,
+  "profile": false,
+  "preset": "high",
+  "set": "",
+  "fellow": "",
+  "fellow_off_for": "stock",
+  "extra": "",
+  "cooldown": 5.0,
+  "heat_soak": 240.0,
+  "timeout": 900.0,
+  "session": "godot-4.7.2_temporal",
+  "label": ""
+ },
+ "hardware": {
+  "timestamp_local": "2026-09-30T00:57:50.372961",
+  "host": "PREDZIO",
+  "python": "3.11.0",
+  "os": {
+   "platform": "Windows-10-10.0.26200-SP0",
+   "release": "10",
+   "version": "10.0.26200"
+  },
+  "cpu": "{\"Name\":\"Intel(R) Core(TM) Ultra 9 275HX\",\"NumberOfCores\":24,\"NumberOfLogicalProcessors\":24,\"MaxClockSpeed\":2700}",
+  "ram": "{\"TotalBytes\":68112736256,\"Modules\":[{\"Capacity\":34359738368,\"Speed\":6400,\"ConfiguredClockSpeed\":6400,\"Manufacturer\":\"Micron Technology\",\"PartNumber\":\"MTC16C2085S1VC64BD1 \"},{\"Capacity\":34359738368,\"Speed\":6400,\"ConfiguredClockSpeed\":6400,\"Manufacturer\":\"Micron Technology\",\"PartNumber\":\"MTC16C2085S1VC64BD1 \"}]}",
+  "os_caption": "{\"Caption\":\"Microsoft Windows 11 Home\",\"Version\":\"10.0.26200\",\"BuildNumber\":\"26200\"}",
+  "system": "{\"Manufacturer\":\"Acer\",\"Model\":\"Predator PHN16S-71\"}",
+  "power": "{\"Battery\":{\"PowerOnline\":true,\"Charging\":false},\"Scheme\":\"Power Scheme GUID: 3b79c5ed-2baa-4957-a015-c958d3221bfc  (Acer)\"}",
+  "display": "[{\"Name\":\"Intel(R) Graphics\",\"DriverVersion\":\"32.0.101.6629\",\"CurrentHorizontalResolution\":2560,\"CurrentVerticalResolution\":1600,\"CurrentRefreshRate\":240},{\"Name\":\"NVIDIA GeForce RTX 5070 Ti Laptop GPU\",\"DriverVersion\":\"32.0.16.1714\",\"CurrentHorizontalResolution\":null,\"CurrentVerticalResolution\":null,\"CurrentRefreshRate\":null}]",
+  "gpu": [
+   {
+    "name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+    "driver_version": "617.14",
+    "memory.total": "12227",
+    "pcie.link.gen.max": "5",
+    "pcie.link.width.max": "16",
+    "clocks.max.graphics": "3090",
+    "clocks.max.memory": "14001",
+    "power.limit": "[N/A]",
+    "vbios_version": "98.05.31.00.49"
+   }
+  ],
+  "engine": {
+   "commit": "b9d73298d7c3e6203902565ede4e1306f60de8e7",
+   "describe": "4.7.2-stable-3-gb9d73298d7",
+   "branch": "fellow/benchmark-suite",
+   "status_short": ""
+  },
+  "build_flags": "platform=windows target=template_release production=yes disable_path_overrides=no winrt=no accesskit=no d3d12=no (MSVC, see BUILDING_FELLOWENGINE.md)",
+  "compiler": {
+   "visual_studio": "16.11.60",
+   "msvc_toolsets": [
+    "14.29.30133"
+   ]
+  },
+  "binaries": {
+   "stock": {
+    "path": ".tools\\bin\\stock\\godot.windows.template_release.x86_64.exe",
+    "size": 68635136,
+    "sha256": "f96d22afc9238c19ce728b307382e08675ca35455cad94cae2d4c5b8f88a6604",
+    "mtime": "2026-09-29T23:08:53.520548"
+   }
+  }
+ },
+ "gpu_telemetry": {
+  "n": 528,
+  "clocks.gr": {
+   "min": 172.0,
+   "mean": 280.72727272727275,
+   "max": 2122.0
+  },
+  "clocks.mem": {
+   "min": 405.0,
+   "mean": 1431.4602272727273,
+   "max": 10821.0
+  },
+  "temperature.gpu": {
+   "min": 64.0,
+   "mean": 67.75,
+   "max": 82.0
+  },
+  "power.draw": {
+   "min": 5.23,
+   "mean": 10.287405303030313,
+   "max": 82.91
+  },
+  "utilization.gpu": {
+   "min": 0.0,
+   "mean": 5.318181818181818,
+   "max": 100.0
+  },
+  "memory.used": {
+   "min": 328.0,
+   "mean": 2338.530303030303,
+   "max": 7374.0
+  },
+  "throttle_reasons_seen": [
+   "0x0000000000000004",
+   "0x0000000000000400"
+  ]
+ },
+ "heat_soak_telemetry": {},
+ "results": {
+  "pbr|1920x1080|stock": {
+   "scene": "pbr",
+   "resolution": "1920x1080",
+   "build": "stock",
+   "preset": "high",
+   "set": "",
+   "fellow": "",
+   "mode": "temporal",
+   "runs": [
+    {
+     "schema": 1,
+     "scene": "pbr",
+     "mode": "temporal",
+     "tag": "stock",
+     "run": 0,
+     "cmdline_user_args": [
+      "--scene=pbr",
+      "--mode=temporal",
+      "--res=1920x1080",
+      "--tag=stock",
+      "--run=0",
+      "--out=C:\\Users\\matek\\Documents\\GitHub\\FellowGodot\\benchmarks\\results\\raw\\godot-4.7.2_temporal\\stock\\pbr",
+      "--warmup=10.0",
+      "--measure=30.0",
+      "--preset=high"
+     ],
+     "cmdline_args": [],
+     "engine": {
+      "major": 4,
+      "minor": 7,
+      "patch": 2,
+      "hex": 263938,
+      "status": "stable",
+      "build": "custom_build",
+      "hash": "ed1daf0bf001b61586d9930840f2f1394092c079",
+      "timestamp": 1786929518,
+      "string": "4.7.2-stable (custom_build)"
+     },
+     "engine_build": {
+      "debug_build": false,
+      "has_editor": false,
+      "template_release": true
+     },
+     "adapter": {
+      "name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+      "vendor": "NVIDIA",
+      "api_version": "1.4.351",
+      "type": 2,
+      "driver": [
+       "NVIDIA",
+       "32.0.16.1714"
+      ],
+      "rendering_driver": "vulkan",
+      "rendering_method": "forward_plus"
+     },
+     "os": {
+      "name": "Windows",
+      "version": "10.0.26200",
+      "cpu": "Intel(R) Core(TM) Ultra 9 275HX",
+      "cpu_count": 24
+     },
+     "fellow": {
+      "available": false,
+      "requested": {},
+      "state": {}
+     },
+     "load_time_ms": 1294.003,
+     "startup_to_first_frame_ms": 1319.146,
+     "resolution": [
+      1920,
+      1080
+     ],
+     "valid": true,
+     "files": {
+      "moving_object": [
+       "pbr_1920x1080_seq-moving_object_f000.png",
+       "pbr_1920x1080_seq-moving_object_f001.png",
+       "pbr_1920x1080_seq-moving_object_f002.png",
+       "pbr_1920x1080_seq-moving_object_f003.png",
+       "pbr_1920x1080_seq-moving_object_f004.png",
+       "pbr_1920x1080_seq-moving_object_f005.png",
+       "pbr_1920x1080_seq-moving_object_f006.png",
+       "pbr_1920x1080_seq-moving_object_f007.png",
+       "pbr_1920x1080_seq-moving_object_f008.png",
+       "pbr_1920x1080_seq-moving_object_f009.png",
+       "pbr_1920x1080_seq-moving_object_f010.png",
+       "pbr_1920x1080_seq-moving_object_f011.png",
+       "pbr_1920x1080_seq-moving_object_f012.png",
+       "pbr_1920x1080_seq-moving_object_f013.png",
+       "pbr_1920x1080_seq-moving_object_f014.png",
+       "pbr_1920x1080_seq-moving_object_f015.png",
+       "pbr_1920x1080_seq-moving_object_f016.png",
+       "pbr_1920x1080_seq-moving_object_f017.png",
+       "pbr_1920x1080_seq-moving_object_f018.png",
+       "pbr_1920x1080_seq-moving_object_f019.png",
+       "pbr_1920x1080_seq-moving_object_f020.png",
+       "pbr_1920x1080_seq-moving_object_f021.png",
+       "pbr_1920x1080_seq-moving_object_f022.png",
+       "pbr_1920x1080_seq-moving_object_f023.png",
+       "pbr_1920x1080_seq-moving_object_f024.png",
+       "pbr_1920x1080_seq-moving_object_f025.png",
+       "pbr_1920x1080_seq-moving_object_f026.png",
+       "pbr_1920x1080_seq-moving_object_f027.png",
+       "pbr_1920x1080_seq-moving_object_f028.png",
+       "pbr_1920x1080_seq-moving_object_f029.png",
+       "pbr_1920x1080_seq-moving_object_f030.png",
+       "pbr_1920x1080_seq-moving_object_f031.png",
+       "pbr_1920x1080_seq-moving_object_f032.png",
+       "pbr_1920x1080_seq-moving_object_f033.png",
+       "pbr_1920x1080_seq-moving_object_f034.png",
+       "pbr_1920x1080_seq-moving_object_f035.png",
+       "pbr_1920x1080_seq-moving_object_f036.png",
+       "pbr_1920x1080_seq-moving_object_f037.png",
+       "pbr_1920x1080_seq-moving_object_f038.png",
+       "pbr_1920x1080_seq-moving_object_f039.png",
+       "pbr_1920x1080_seq-moving_object_f040.png",
+       "pbr_1920x1080_seq-moving_object_f041.png",
+       "pbr_1920x1080_seq-moving_object_f042.png",
+       "pbr_1920x1080_seq-moving_object_f043.png",
+       "pbr_1920x1080_seq-moving_object_f044.png",
+       "pbr_1920x1080_seq-moving_object_f045.png",
+       "pbr_1920x1080_seq-moving_object_f046.png",
+       "pbr_1920x1080_seq-moving_object_f047.png",
+       "pbr_1920x1080_seq-moving_object_f048.png",
+       "pbr_1920x1080_seq-moving_object_f049.png",
+       "pbr_1920x1080_seq-moving_object_f050.png",
+       "pbr_1920x1080_seq-moving_object_f051.png",
+       "pbr_1920x1080_seq-moving_object_f052.png",
+       "pbr_1920x1080_seq-moving_object_f053.png",
+       "pbr_1920x1080_seq-moving_object_f054.png",
+       "pbr_1920x1080_seq-moving_object_f055.png",
+       "pbr_1920x1080_seq-moving_object_f056.png",
+       "pbr_1920x1080_seq-moving_object_f057.png",
+       "pbr_1920x1080_seq-moving_object_f058.png",
+       "pbr_1920x1080_seq-moving_object_f059.png"
+      ],
+      "camera_pan": [
+       "pbr_1920x1080_seq-camera_pan_f000.png",
+       "pbr_1920x1080_seq-camera_pan_f001.png",
+       "pbr_1920x1080_seq-camera_pan_f002.png",
+       "pbr_1920x1080_seq-camera_pan_f003.png",
+       "pbr_1920x1080_seq-camera_pan_f004.png",
+       "pbr_1920x1080_seq-camera_pan_f005.png",
+       "pbr_1920x1080_seq-camera_pan_f006.png",
+       "pbr_1920x1080_seq-camera_pan_f007.png",
+       "pbr_1920x1080_seq-camera_pan_f008.png",
+       "pbr_1920x1080_seq-camera_pan_f009.png",
+       "pbr_1920x1080_seq-camera_pan_f010.png",
+       "pbr_1920x1080_seq-camera_pan_f011.png",
+       "pbr_1920x1080_seq-camera_pan_f012.png",
+       "pbr_1920x1080_seq-camera_pan_f013.png",
+       "pbr_1920x1080_seq-camera_pan_f014.png",
+       "pbr_1920x1080_seq-camera_pan_f015.png",
+       "pbr_1920x1080_seq-camera_pan_f016.png",
+       "pbr_1920x1080_seq-camera_pan_f017.png",
+       "pbr_1920x1080_seq-camera_pan_f018.png",
+       "pbr_1920x1080_seq-camera_pan_f019.png",
+       "pbr_1920x1080_seq-camera_pan_f020.png",
+       "pbr_1920x1080_seq-camera_pan_f021.png",
+       "pbr_1920x1080_seq-camera_pan_f022.png",
+       "pbr_1920x1080_seq-camera_pan_f023.png",
+       "pbr_1920x1080_seq-camera_pan_f024.png",
+       "pbr_1920x1080_seq-camera_pan_f025.png",
+       "pbr_1920x1080_seq-camera_pan_f026.png",
+       "pbr_1920x1080_seq-camera_pan_f027.png",
+       "pbr_1920x1080_seq-camera_pan_f028.png",
+       "pbr_1920x1080_seq-camera_pan_f029.png",
+       "pbr_1920x1080_seq-camera_pan_f030.png",
+       "pbr_1920x1080_seq-camera_pan_f031.png",
+       "pbr_1920x1080_seq-camera_pan_f032.png",
+       "pbr_1920x1080_seq-camera_pan_f033.png",
+       "pbr_1920x1080_seq-camera_pan_f034.png",
+       "pbr_1920x1080_seq-camera_pan_f035.png",
+       "pbr_1920x1080_seq-camera_pan_f036.png",
+       "pbr_1920x1080_seq-camera_pan_f037.png",
+       "pbr_1920x1080_seq-camera_pan_f038.png",
+       "pbr_1920x1080_seq-camera_pan_f039.png",
+       "pbr_1920x1080_seq-camera_pan_f040.png",
+       "pbr_1920x1080_seq-camera_pan_f041.png",
+       "pbr_1920x1080_seq-camera_pan_f042.png",
+       "pbr_1920x1080_seq-camera_pan_f043.png",
+       "pbr_1920x1080_seq-camera_pan_f044.png",
+       "pbr_1920x1080_seq-camera_pan_f045.png",
+       "pbr_1920x1080_seq-camera_pan_f046.png",
+       "pbr_1920x1080_seq-camera_pan_f047.png",
+       "pbr_1920x1080_seq-camera_pan_f048.png",
+       "pbr_1920x1080_seq-camera_pan_f049.png",
+       "pbr_1920x1080_seq-camera_pan_f050.png",
+       "pbr_1920x1080_seq-camera_pan_f051.png",
+       "pbr_1920x1080_seq-camera_pan_f052.png",
+       "pbr_1920x1080_seq-camera_pan_f053.png",
+       "pbr_1920x1080_seq-camera_pan_f054.png",
+       "pbr_1920x1080_seq-camera_pan_f055.png",
+       "pbr_1920x1080_seq-camera_pan_f056.png",
+       "pbr_1920x1080_seq-camera_pan_f057.png",
+       "pbr_1920x1080_seq-camera_pan_f058.png",
+       "pbr_1920x1080_seq-camera_pan_f059.png"
+      ],
+      "foliage_strafe": [
+       "pbr_1920x1080_seq-foliage_strafe_f000.png",
+       "pbr_1920x1080_seq-foliage_strafe_f001.png",
+       "pbr_1920x1080_seq-foliage_strafe_f002.png",
+       "pbr_1920x1080_seq-foliage_strafe_f003.png",
+       "pbr_1920x1080_seq-foliage_strafe_f004.png",
+       "pbr_1920x1080_seq-foliage_strafe_f005.png",
+       "pbr_1920x1080_seq-foliage_strafe_f006.png",
+       "pbr_1920x1080_seq-foliage_strafe_f007.png",
+       "pbr_1920x1080_seq-foliage_strafe_f008.png",
+       "pbr_1920x1080_seq-foliage_strafe_f009.png",
+       "pbr_1920x1080_seq-foliage_strafe_f010.png",
+       "pbr_1920x1080_seq-foliage_strafe_f011.png",
+       "pbr_1920x1080_seq-foliage_strafe_f012.png",
+       "pbr_1920x1080_seq-foliage_strafe_f013.png",
+       "pbr_1920x1080_seq-foliage_strafe_f014.png",
+       "pbr_1920x1080_seq-foliage_strafe_f015.png",
+       "pbr_1920x1080_seq-foliage_strafe_f016.png",
+       "pbr_1920x1080_seq-foliage_strafe_f017.png",
+       "pbr_1920x1080_seq-foliage_strafe_f018.png",
+       "pbr_1920x1080_seq-foliage_strafe_f019.png",
+       "pbr_1920x1080_seq-foliage_strafe_f020.png",
+       "pbr_1920x1080_seq-foliage_strafe_f021.png",
+       "pbr_1920x1080_seq-foliage_strafe_f022.png",
+       "pbr_1920x1080_seq-foliage_strafe_f023.png",
+       "pbr_1920x1080_seq-foliage_strafe_f024.png",
+       "pbr_1920x1080_seq-foliage_strafe_f025.png",
+       "pbr_1920x1080_seq-foliage_strafe_f026.png",
+       "pbr_1920x1080_seq-foliage_strafe_f027.png",
+       "pbr_1920x1080_seq-foliage_strafe_f028.png",
+       "pbr_1920x1080_seq-foliage_strafe_f029.png",
+       "pbr_1920x1080_seq-foliage_strafe_f030.png",
+       "pbr_1920x1080_seq-foliage_strafe_f031.png",
+       "pbr_1920x1080_seq-foliage_strafe_f032.png",
+       "pbr_1920x1080_seq-foliage_strafe_f033.png",
+       "pbr_1920x1080_seq-foliage_strafe_f034.png",
+       "pbr_1920x1080_seq-foliage_strafe_f035.png",
+       "pbr_1920x1080_seq-foliage_strafe_f036.png",
+       "pbr_1920x1080_seq-foliage_strafe_f037.png",
+       "pbr_1920x1080_seq-foliage_strafe_f038.png",
+       "pbr_1920x1080_seq-foliage_strafe_f039.png",
+       "pbr_1920x1080_seq-foliage_strafe_f040.png",
+       "pbr_1920x1080_seq-foliage_strafe_f041.png",
+       "pbr_1920x1080_seq-foliage_strafe_f042.png",
+       "pbr_1920x1080_seq-foliage_strafe_f043.png",
+       "pbr_1920x1080_seq-foliage_strafe_f044.png",
+       "pbr_1920x1080_seq-foliage_strafe_f045.png",
+       "pbr_1920x1080_seq-foliage_strafe_f046.png",
+       "pbr_1920x1080_seq-foliage_strafe_f047.png",
+       "pbr_1920x1080_seq-foliage_strafe_f048.png",
+       "pbr_1920x1080_seq-foliage_strafe_f049.png",
+       "pbr_1920x1080_seq-foliage_strafe_f050.png",
+       "pbr_1920x1080_seq-foliage_strafe_f051.png",
+       "pbr_1920x1080_seq-foliage_strafe_f052.png",
+       "pbr_1920x1080_seq-foliage_strafe_f053.png",
+       "pbr_1920x1080_seq-foliage_strafe_f054.png",
+       "pbr_1920x1080_seq-foliage_strafe_f055.png",
+       "pbr_1920x1080_seq-foliage_strafe_f056.png",
+       "pbr_1920x1080_seq-foliage_strafe_f057.png",
+       "pbr_1920x1080_seq-foliage_strafe_f058.png",
+       "pbr_1920x1080_seq-foliage_strafe_f059.png"
+      ],
+      "specular_orbit": [
+       "pbr_1920x1080_seq-specular_orbit_f000.png",
+       "pbr_1920x1080_seq-specular_orbit_f001.png",
+       "pbr_1920x1080_seq-specular_orbit_f002.png",
+       "pbr_1920x1080_seq-specular_orbit_f003.png",
+       "pbr_1920x1080_seq-specular_orbit_f004.png",
+       "pbr_1920x1080_seq-specular_orbit_f005.png",
+       "pbr_1920x1080_seq-specular_orbit_f006.png",
+       "pbr_1920x1080_seq-specular_orbit_f007.png",
+       "pbr_1920x1080_seq-specular_orbit_f008.png",
+       "pbr_1920x1080_seq-specular_orbit_f009.png",
+       "pbr_1920x1080_seq-specular_orbit_f010.png",
+       "pbr_1920x1080_seq-specular_orbit_f011.png",
+       "pbr_1920x1080_seq-specular_orbit_f012.png",
+       "pbr_1920x1080_seq-specular_orbit_f013.png",
+       "pbr_1920x1080_seq-specular_orbit_f014.png",
+       "pbr_1920x1080_seq-specular_orbit_f015.png",
+       "pbr_1920x1080_seq-specular_orbit_f016.png",
+       "pbr_1920x1080_seq-specular_orbit_f017.png",
+       "pbr_1920x1080_seq-specular_orbit_f018.png",
+       "pbr_1920x1080_seq-specular_orbit_f019.png",
+       "pbr_1920x1080_seq-specular_orbit_f020.png",
+       "pbr_1920x1080_seq-specular_orbit_f021.png",
+       "pbr_1920x1080_seq-specular_orbit_f022.png",
+       "pbr_1920x1080_seq-specular_orbit_f023.png",
+       "pbr_1920x1080_seq-specular_orbit_f024.png",
+       "pbr_1920x1080_seq-specular_orbit_f025.png",
+       "pbr_1920x1080_seq-specular_orbit_f026.png",
+       "pbr_1920x1080_seq-specular_orbit_f027.png",
+       "pbr_1920x1080_seq-specular_orbit_f028.png",
+       "pbr_1920x1080_seq-specular_orbit_f029.png",
+       "pbr_1920x1080_seq-specular_orbit_f030.png",
+       "pbr_1920x1080_seq-specular_orbit_f031.png",
+       "pbr_1920x1080_seq-specular_orbit_f032.png",
+       "pbr_1920x1080_seq-specular_orbit_f033.png",
+       "pbr_1920x1080_seq-specular_orbit_f034.png",
+       "pbr_1920x1080_seq-specular_orbit_f035.png",
+       "pbr_1920x1080_seq-specular_orbit_f036.png",
+       "pbr_1920x1080_seq-specular_orbit_f037.png",
+       "pbr_1920x1080_seq-specular_orbit_f038.png",
+       "pbr_1920x1080_seq-specular_orbit_f039.png",
+       "pbr_1920x1080_seq-specular_orbit_f040.png",
+       "pbr_1920x1080_seq-specular_orbit_f041.png",
+       "pbr_1920x1080_seq-specular_orbit_f042.png",
+       "pbr_1920x1080_seq-specular_orbit_f043.png",
+       "pbr_1920x1080_seq-specular_orbit_f044.png",
+       "pbr_1920x1080_seq-specular_orbit_f045.png",
+       "pbr_1920x1080_seq-specular_orbit_f046.png",
+       "pbr_1920x1080_seq-specular_orbit_f047.png",
+       "pbr_1920x1080_seq-specular_orbit_f048.png",
+       "pbr_1920x1080_seq-specular_orbit_f049.png",
+       "pbr_1920x1080_seq-specular_orbit_f050.png",
+       "pbr_1920x1080_seq-specular_orbit_f051.png",
+       "pbr_1920x1080_seq-specular_orbit_f052.png",
+       "pbr_1920x1080_seq-specular_orbit_f053.png",
+       "pbr_1920x1080_seq-specular_orbit_f054.png",
+       "pbr_1920x1080_seq-specular_orbit_f055.png",
+       "pbr_1920x1080_seq-specular_orbit_f056.png",
+       "pbr_1920x1080_seq-specular_orbit_f057.png",
+       "pbr_1920x1080_seq-specular_orbit_f058.png",
+       "pbr_1920x1080_seq-specular_orbit_f059.png"
+      ],
+      "thin_dolly": [
+       "pbr_1920x1080_seq-thin_dolly_f000.png",
+       "pbr_1920x1080_seq-thin_dolly_f001.png",
+       "pbr_1920x1080_seq-thin_dolly_f002.png",
+       "pbr_1920x1080_seq-thin_dolly_f003.png",
+       "pbr_1920x1080_seq-thin_dolly_f004.png",
+       "pbr_1920x1080_seq-thin_dolly_f005.png",
+       "pbr_1920x1080_seq-thin_dolly_f006.png",
+       "pbr_1920x1080_seq-thin_dolly_f007.png",
+       "pbr_1920x1080_seq-thin_dolly_f008.png",
+       "pbr_1920x1080_seq-thin_dolly_f009.png",
+       "pbr_1920x1080_seq-thin_dolly_f010.png",
+       "pbr_1920x1080_seq-thin_dolly_f011.png",
+       "pbr_1920x1080_seq-thin_dolly_f012.png",
+       "pbr_1920x1080_seq-thin_dolly_f013.png",
+       "pbr_1920x1080_seq-thin_dolly_f014.png",
+       "pbr_1920x1080_seq-thin_dolly_f015.png",
+       "pbr_1920x1080_seq-thin_dolly_f016.png",
+       "pbr_1920x1080_seq-thin_dolly_f017.png",
+       "pbr_1920x1080_seq-thin_dolly_f018.png",
+       "pbr_1920x1080_seq-thin_dolly_f019.png",
+       "pbr_1920x1080_seq-thin_dolly_f020.png",
+       "pbr_1920x1080_seq-thin_dolly_f021.png",
+       "pbr_1920x1080_seq-thin_dolly_f022.png",
+       "pbr_1920x1080_seq-thin_dolly_f023.png",
+       "pbr_1920x1080_seq-thin_dolly_f024.png",
+       "pbr_1920x1080_seq-thin_dolly_f025.png",
+       "pbr_1920x1080_seq-thin_dolly_f026.png",
+       "pbr_1920x1080_seq-thin_dolly_f027.png",
+       "pbr_1920x1080_seq-thin_dolly_f028.png",
+       "pbr_1920x1080_seq-thin_dolly_f029.png",
+       "pbr_1920x1080_seq-thin_dolly_f030.png",
+       "pbr_1920x1080_seq-thin_dolly_f031.png",
+       "pbr_1920x1080_seq-thin_dolly_f032.png",
+       "pbr_1920x1080_seq-thin_dolly_f033.png",
+       "pbr_1920x1080_seq-thin_dolly_f034.png",
+       "pbr_1920x1080_seq-thin_dolly_f035.png",
+       "pbr_1920x1080_seq-thin_dolly_f036.png",
+       "pbr_1920x1080_seq-thin_dolly_f037.png",
+       "pbr_1920x1080_seq-thin_dolly_f038.png",
+       "pbr_1920x1080_seq-thin_dolly_f039.png",
+       "pbr_1920x1080_seq-thin_dolly_f040.png",
+       "pbr_1920x1080_seq-thin_dolly_f041.png",
+       "pbr_1920x1080_seq-thin_dolly_f042.png",
+       "pbr_1920x1080_seq-thin_dolly_f043.png",
+       "pbr_1920x1080_seq-thin_dolly_f044.png",
+       "pbr_1920x1080_seq-thin_dolly_f045.png",
+       "pbr_1920x1080_seq-thin_dolly_f046.png",
+       "pbr_1920x1080_seq-thin_dolly_f047.png",
+       "pbr_1920x1080_seq-thin_dolly_f048.png",
+       "pbr_1920x1080_seq-thin_dolly_f049.png",
+       "pbr_1920x1080_seq-thin_dolly_f050.png",
+       "pbr_1920x1080_seq-thin_dolly_f051.png",
+       "pbr_1920x1080_seq-thin_dolly_f052.png",
+       "pbr_1920x1080_seq-thin_dolly_f053.png",
+       "pbr_1920x1080_seq-thin_dolly_f054.png",
+       "pbr_1920x1080_seq-thin_dolly_f055.png",
+       "pbr_1920x1080_seq-thin_dolly_f056.png",
+       "pbr_1920x1080_seq-thin_dolly_f057.png",
+       "pbr_1920x1080_seq-thin_dolly_f058.png",
+       "pbr_1920x1080_seq-thin_dolly_f059.png"
+      ]
+     },
+     "total_runtime_s": 228.016466,
+     "_proc": {
+      "returncode": 0,
+      "timed_out": false,
+      "wall_s": 230.3661801815033,
+      "peak_working_set": 869679104,
+      "peak_private_bytes": 1579900928
+     },
+     "_json": "benchmarks\\results\\raw\\godot-4.7.2_temporal\\stock\\pbr\\pbr_temporal_stock_1920x1080_run0.json",
+     "_gpu_telemetry": {
+      "n": 217,
+      "clocks.gr": {
+       "min": 172.0,
+       "mean": 269.1290322580645,
+       "max": 1912.0
+      },
+      "clocks.mem": {
+       "min": 405.0,
+       "mean": 893.4193548387096,
+       "max": 9001.0
+      },
+      "temperature.gpu": {
+       "min": 66.0,
+       "mean": 70.43778801843318,
+       "max": 82.0
+      },
+      "power.draw": {
+       "min": 6.8,
+       "mean": 10.008202764976957,
+       "max": 68.04
+      },
+      "utilization.gpu": {
+       "min": 0.0,
+       "mean": 3.8940092165898617,
+       "max": 98.0
+      },
+      "memory.used": {
+       "min": 328.0,
+       "mean": 967.1152073732719,
+       "max": 983.0
+      },
+      "throttle_reasons_seen": [
+       "0x0000000000000004",
+       "0x0000000000000400"
+      ]
+     }
+    }
+   ]
+  },
+  "sponza|1920x1080|stock": {
+   "scene": "sponza",
+   "resolution": "1920x1080",
+   "build": "stock",
+   "preset": "high",
+   "set": "",
+   "fellow": "",
+   "binary": "stock",
+   "variant_args": [],
+   "mode": "temporal",
+   "runs": [
+    {
+     "schema": 1,
+     "scene": "sponza",
+     "mode": "temporal",
+     "tag": "stock",
+     "run": 0,
+     "cmdline_user_args": [
+      "--scene=sponza",
+      "--mode=temporal",
+      "--res=1920x1080",
+      "--tag=stock",
+      "--run=0",
+      "--out=C:\\Users\\matek\\Documents\\GitHub\\FellowGodot\\benchmarks\\results\\raw\\godot-4.7.2_temporal\\stock\\sponza",
+      "--warmup=10.0",
+      "--measure=30.0",
+      "--preset=high"
+     ],
+     "cmdline_args": [],
+     "engine": {
+      "major": 4,
+      "minor": 7,
+      "patch": 2,
+      "hex": 263938,
+      "status": "stable",
+      "build": "custom_build",
+      "hash": "ed1daf0bf001b61586d9930840f2f1394092c079",
+      "timestamp": 1786929518,
+      "string": "4.7.2-stable (custom_build)"
+     },
+     "engine_build": {
+      "debug_build": false,
+      "has_editor": false,
+      "template_release": true
+     },
+     "adapter": {
+      "name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+      "vendor": "NVIDIA",
+      "api_version": "1.4.351",
+      "type": 2,
+      "driver": [
+       "NVIDIA",
+       "32.0.16.1714"
+      ],
+      "rendering_driver": "vulkan",
+      "rendering_method": "forward_plus"
+     },
+     "os": {
+      "name": "Windows",
+      "version": "10.0.26200",
+      "cpu": "Intel(R) Core(TM) Ultra 9 275HX",
+      "cpu_count": 24
+     },
+     "fellow": {
+      "available": false,
+      "requested": {},
+      "state": {}
+     },
+     "load_time_ms": 3451.978,
+     "startup_to_first_frame_ms": 3458.916,
+     "resolution": [
+      1920,
+      1080
+     ],
+     "valid": true,
+     "auto_exposure_disabled_for_mode": true,
+     "files": {
+      "sponza_pan": [
+       "sponza_1920x1080_seq-sponza_pan_f000.png",
+       "sponza_1920x1080_seq-sponza_pan_f001.png",
+       "sponza_1920x1080_seq-sponza_pan_f002.png",
+       "sponza_1920x1080_seq-sponza_pan_f003.png",
+       "sponza_1920x1080_seq-sponza_pan_f004.png",
+       "sponza_1920x1080_seq-sponza_pan_f005.png",
+       "sponza_1920x1080_seq-sponza_pan_f006.png",
+       "sponza_1920x1080_seq-sponza_pan_f007.png",
+       "sponza_1920x1080_seq-sponza_pan_f008.png",
+       "sponza_1920x1080_seq-sponza_pan_f009.png",
+       "sponza_1920x1080_seq-sponza_pan_f010.png",
+       "sponza_1920x1080_seq-sponza_pan_f011.png",
+       "sponza_1920x1080_seq-sponza_pan_f012.png",
+       "sponza_1920x1080_seq-sponza_pan_f013.png",
+       "sponza_1920x1080_seq-sponza_pan_f014.png",
+       "sponza_1920x1080_seq-sponza_pan_f015.png",
+       "sponza_1920x1080_seq-sponza_pan_f016.png",
+       "sponza_1920x1080_seq-sponza_pan_f017.png",
+       "sponza_1920x1080_seq-sponza_pan_f018.png",
+       "sponza_1920x1080_seq-sponza_pan_f019.png",
+       "sponza_1920x1080_seq-sponza_pan_f020.png",
+       "sponza_1920x1080_seq-sponza_pan_f021.png",
+       "sponza_1920x1080_seq-sponza_pan_f022.png",
+       "sponza_1920x1080_seq-sponza_pan_f023.png",
+       "sponza_1920x1080_seq-sponza_pan_f024.png",
+       "sponza_1920x1080_seq-sponza_pan_f025.png",
+       "sponza_1920x1080_seq-sponza_pan_f026.png",
+       "sponza_1920x1080_seq-sponza_pan_f027.png",
+       "sponza_1920x1080_seq-sponza_pan_f028.png",
+       "sponza_1920x1080_seq-sponza_pan_f029.png",
+       "sponza_1920x1080_seq-sponza_pan_f030.png",
+       "sponza_1920x1080_seq-sponza_pan_f031.png",
+       "sponza_1920x1080_seq-sponza_pan_f032.png",
+       "sponza_1920x1080_seq-sponza_pan_f033.png",
+       "sponza_1920x1080_seq-sponza_pan_f034.png",
+       "sponza_1920x1080_seq-sponza_pan_f035.png",
+       "sponza_1920x1080_seq-sponza_pan_f036.png",
+       "sponza_1920x1080_seq-sponza_pan_f037.png",
+       "sponza_1920x1080_seq-sponza_pan_f038.png",
+       "sponza_1920x1080_seq-sponza_pan_f039.png",
+       "sponza_1920x1080_seq-sponza_pan_f040.png",
+       "sponza_1920x1080_seq-sponza_pan_f041.png",
+       "sponza_1920x1080_seq-sponza_pan_f042.png",
+       "sponza_1920x1080_seq-sponza_pan_f043.png",
+       "sponza_1920x1080_seq-sponza_pan_f044.png",
+       "sponza_1920x1080_seq-sponza_pan_f045.png",
+       "sponza_1920x1080_seq-sponza_pan_f046.png",
+       "sponza_1920x1080_seq-sponza_pan_f047.png",
+       "sponza_1920x1080_seq-sponza_pan_f048.png",
+       "sponza_1920x1080_seq-sponza_pan_f049.png",
+       "sponza_1920x1080_seq-sponza_pan_f050.png",
+       "sponza_1920x1080_seq-sponza_pan_f051.png",
+       "sponza_1920x1080_seq-sponza_pan_f052.png",
+       "sponza_1920x1080_seq-sponza_pan_f053.png",
+       "sponza_1920x1080_seq-sponza_pan_f054.png",
+       "sponza_1920x1080_seq-sponza_pan_f055.png",
+       "sponza_1920x1080_seq-sponza_pan_f056.png",
+       "sponza_1920x1080_seq-sponza_pan_f057.png",
+       "sponza_1920x1080_seq-sponza_pan_f058.png",
+       "sponza_1920x1080_seq-sponza_pan_f059.png"
+      ]
+     },
+     "total_runtime_s": 53.685453,
+     "_proc": {
+      "returncode": 0,
+      "timed_out": false,
+      "wall_s": 55.53366541862488,
+      "peak_working_set": 1453264896,
+      "peak_private_bytes": 4375851008
+     },
+     "_json": "benchmarks\\results\\raw\\godot-4.7.2_temporal\\stock\\sponza\\sponza_temporal_stock_1920x1080_run0.json",
+     "_gpu_telemetry": {
+      "n": 52,
+      "clocks.gr": {
+       "min": 180.0,
+       "mean": 630.0961538461538,
+       "max": 1935.0
+      },
+      "clocks.mem": {
+       "min": 405.0,
+       "mean": 3567.4615384615386,
+       "max": 9001.0
+      },
+      "temperature.gpu": {
+       "min": 55.0,
+       "mean": 58.30769230769231,
+       "max": 68.0
+      },
+      "power.draw": {
+       "min": 5.27,
+       "mean": 18.14096153846154,
+       "max": 85.78
+      },
+      "utilization.gpu": {
+       "min": 0.0,
+       "mean": 11.846153846153847,
+       "max": 100.0
+      },
+      "memory.used": {
+       "min": 0.0,
+       "mean": 2621.519230769231,
+       "max": 2772.0
+      },
+      "throttle_reasons_seen": [
+       "0x0000000000000004",
+       "0x0000000000000400"
+      ]
+     }
+    }
+   ]
+  },
+  "bistro_exterior|1920x1080|stock": {
+   "scene": "bistro_exterior",
+   "resolution": "1920x1080",
+   "build": "stock",
+   "preset": "high",
+   "set": "",
+   "fellow": "",
+   "mode": "temporal",
+   "runs": [
+    {
+     "schema": 1,
+     "scene": "bistro_exterior",
+     "mode": "temporal",
+     "tag": "stock",
+     "run": 0,
+     "cmdline_user_args": [
+      "--scene=bistro_exterior",
+      "--mode=temporal",
+      "--res=1920x1080",
+      "--tag=stock",
+      "--run=0",
+      "--out=C:\\Users\\matek\\Documents\\GitHub\\FellowGodot\\benchmarks\\results\\raw\\godot-4.7.2_temporal\\stock\\bistro_exterior",
+      "--warmup=10.0",
+      "--measure=30.0",
+      "--preset=high"
+     ],
+     "cmdline_args": [],
+     "engine": {
+      "major": 4,
+      "minor": 7,
+      "patch": 2,
+      "hex": 263938,
+      "status": "stable",
+      "build": "custom_build",
+      "hash": "ed1daf0bf001b61586d9930840f2f1394092c079",
+      "timestamp": 1786929518,
+      "string": "4.7.2-stable (custom_build)"
+     },
+     "engine_build": {
+      "debug_build": false,
+      "has_editor": false,
+      "template_release": true
+     },
+     "adapter": {
+      "name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+      "vendor": "NVIDIA",
+      "api_version": "1.4.351",
+      "type": 2,
+      "driver": [
+       "NVIDIA",
+       "32.0.16.1714"
+      ],
+      "rendering_driver": "vulkan",
+      "rendering_method": "forward_plus"
+     },
+     "os": {
+      "name": "Windows",
+      "version": "10.0.26200",
+      "cpu": "Intel(R) Core(TM) Ultra 9 275HX",
+      "cpu_count": 24
+     },
+     "fellow": {
+      "available": false,
+      "requested": {},
+      "state": {}
+     },
+     "load_time_ms": 6718.249,
+     "startup_to_first_frame_ms": 6748.377,
+     "resolution": [
+      1920,
+      1080
+     ],
+     "valid": true,
+     "auto_exposure_disabled_for_mode": true,
+     "files": {
+      "bistro_ext_path": [
+       "bistro_exterior_1920x1080_seq-bistro_ext_path_f000.png",
+       "bistro_exterior_1920x1080_seq-bistro_ext_path_f001.png",
+       "bistro_exterior_1920x1080_seq-bistro_ext_path_f002.png",
+       "bistro_exterior_1920x1080_seq-bistro_ext_path_f003.png",
+       "bistro_exterior_1920x1080_seq-bistro_ext_path_f004.png",
+       "bistro_exterior_1920x1080_seq-bistro_ext_path_f005.png",
+       "bistro_exterior_1920x1080_seq-bistro_ext_path_f006.png",
+       "bistro_exterior_1920x1080_seq-bistro_ext_path_f007.png",
+       "bistro_exterior_1920x1080_seq-bistro_ext_path_f008.png",
+       "bistro_exterior_1920x1080_seq-bistro_ext_path_f009.png",
+       "bistro_exterior_1920x1080_seq-bistro_ext_path_f010.png",
+       "bistro_exterior_1920x1080_seq-bistro_ext_path_f011.png",
+       "bistro_exterior_1920x1080_seq-bistro_ext_path_f012.png",
+       "bistro_exterior_1920x1080_seq-bistro_ext_path_f013.png",
+       "bistro_exterior_1920x1080_seq-bistro_ext_path_f014.png",
+       "bistro_exterior_1920x1080_seq-bistro_ext_path_f015.png",
+       "bistro_exterior_1920x1080_seq-bistro_ext_path_f016.png",
+       "bistro_exterior_1920x1080_seq-bistro_ext_path_f017.png",
+       "bistro_exterior_1920x1080_seq-bistro_ext_path_f018.png",
+       "bistro_exterior_1920x1080_seq-bistro_ext_path_f019.png",
+       "bistro_exterior_1920x1080_seq-bistro_ext_path_f020.png",
+       "bistro_exterior_1920x1080_seq-bistro_ext_path_f021.png",
+       "bistro_exterior_1920x1080_seq-bistro_ext_path_f022.png",
+       "bistro_exterior_1920x1080_seq-bistro_ext_path_f023.png",
+       "bistro_exterior_1920x1080_seq-bistro_ext_path_f024.png",
+       "bistro_exterior_1920x1080_seq-bistro_ext_path_f025.png",
+       "bistro_exterior_1920x1080_seq-bistro_ext_path_f026.png",
+       "bistro_exterior_1920x1080_seq-bistro_ext_path_f027.png",
+       "bistro_exterior_1920x1080_seq-bistro_ext_path_f028.png",
+       "bistro_exterior_1920x1080_seq-bistro_ext_path_f029.png",
+       "bistro_exterior_1920x1080_seq-bistro_ext_path_f030.png",
+       "bistro_exterior_1920x1080_seq-bistro_ext_path_f031.png",
+       "bistro_exterior_1920x1080_seq-bistro_ext_path_f032.png",
+       "bistro_exterior_1920x1080_seq-bistro_ext_path_f033.png",
+       "bistro_exterior_1920x1080_seq-bistro_ext_path_f034.png",
+       "bistro_exterior_1920x1080_seq-bistro_ext_path_f035.png",
+       "bistro_exterior_1920x1080_seq-bistro_ext_path_f036.png",
+       "bistro_exterior_1920x1080_seq-bistro_ext_path_f037.png",
+       "bistro_exterior_1920x1080_seq-bistro_ext_path_f038.png",
+       "bistro_exterior_1920x1080_seq-bistro_ext_path_f039.png",
+       "bistro_exterior_1920x1080_seq-bistro_ext_path_f040.png",
+       "bistro_exterior_1920x1080_seq-bistro_ext_path_f041.png",
+       "bistro_exterior_1920x1080_seq-bistro_ext_path_f042.png",
+       "bistro_exterior_1920x1080_seq-bistro_ext_path_f043.png",
+       "bistro_exterior_1920x1080_seq-bistro_ext_path_f044.png",
+       "bistro_exterior_1920x1080_seq-bistro_ext_path_f045.png",
+       "bistro_exterior_1920x1080_seq-bistro_ext_path_f046.png",
+       "bistro_exterior_1920x1080_seq-bistro_ext_path_f047.png",
+       "bistro_exterior_1920x1080_seq-bistro_ext_path_f048.png",
+       "bistro_exterior_1920x1080_seq-bistro_ext_path_f049.png",
+       "bistro_exterior_1920x1080_seq-bistro_ext_path_f050.png",
+       "bistro_exterior_1920x1080_seq-bistro_ext_path_f051.png",
+       "bistro_exterior_1920x1080_seq-bistro_ext_path_f052.png",
+       "bistro_exterior_1920x1080_seq-bistro_ext_path_f053.png",
+       "bistro_exterior_1920x1080_seq-bistro_ext_path_f054.png",
+       "bistro_exterior_1920x1080_seq-bistro_ext_path_f055.png",
+       "bistro_exterior_1920x1080_seq-bistro_ext_path_f056.png",
+       "bistro_exterior_1920x1080_seq-bistro_ext_path_f057.png",
+       "bistro_exterior_1920x1080_seq-bistro_ext_path_f058.png",
+       "bistro_exterior_1920x1080_seq-bistro_ext_path_f059.png"
+      ]
+     },
+     "total_runtime_s": 93.46077,
+     "_proc": {
+      "returncode": 0,
+      "timed_out": false,
+      "wall_s": 96.86403131484985,
+      "peak_working_set": 1221808128,
+      "peak_private_bytes": 3851972608
+     },
+     "_json": "benchmarks\\results\\raw\\godot-4.7.2_temporal\\stock\\bistro_exterior\\bistro_exterior_temporal_stock_1920x1080_run0.json",
+     "_gpu_telemetry": {
+      "n": 89,
+      "clocks.gr": {
+       "min": 180.0,
+       "mean": 280.46067415730334,
+       "max": 1612.0
+      },
+      "clocks.mem": {
+       "min": 405.0,
+       "mean": 1287.9101123595506,
+       "max": 9001.0
+      },
+      "temperature.gpu": {
+       "min": 65.0,
+       "mean": 66.0561797752809,
+       "max": 73.0
+      },
+      "power.draw": {
+       "min": 5.43,
+       "mean": 9.924157303370789,
+       "max": 75.5
+      },
+      "utilization.gpu": {
+       "min": 0.0,
+       "mean": 4.146067415730337,
+       "max": 98.0
+      },
+      "memory.used": {
+       "min": 328.0,
+       "mean": 2695.9101123595506,
+       "max": 2841.0
+      },
+      "throttle_reasons_seen": [
+       "0x0000000000000004",
+       "0x0000000000000400"
+      ]
+     }
+    }
+   ]
+  },
+  "bistro_interior|1920x1080|stock": {
+   "scene": "bistro_interior",
+   "resolution": "1920x1080",
+   "build": "stock",
+   "preset": "high",
+   "set": "",
+   "fellow": "",
+   "mode": "temporal",
+   "runs": [
+    {
+     "schema": 1,
+     "scene": "bistro_interior",
+     "mode": "temporal",
+     "tag": "stock",
+     "run": 0,
+     "cmdline_user_args": [
+      "--scene=bistro_interior",
+      "--mode=temporal",
+      "--res=1920x1080",
+      "--tag=stock",
+      "--run=0",
+      "--out=C:\\Users\\matek\\Documents\\GitHub\\FellowGodot\\benchmarks\\results\\raw\\godot-4.7.2_temporal\\stock\\bistro_interior",
+      "--warmup=10.0",
+      "--measure=30.0",
+      "--preset=high"
+     ],
+     "cmdline_args": [],
+     "engine": {
+      "major": 4,
+      "minor": 7,
+      "patch": 2,
+      "hex": 263938,
+      "status": "stable",
+      "build": "custom_build",
+      "hash": "ed1daf0bf001b61586d9930840f2f1394092c079",
+      "timestamp": 1786929518,
+      "string": "4.7.2-stable (custom_build)"
+     },
+     "engine_build": {
+      "debug_build": false,
+      "has_editor": false,
+      "template_release": true
+     },
+     "adapter": {
+      "name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+      "vendor": "NVIDIA",
+      "api_version": "1.4.351",
+      "type": 2,
+      "driver": [
+       "NVIDIA",
+       "32.0.16.1714"
+      ],
+      "rendering_driver": "vulkan",
+      "rendering_method": "forward_plus"
+     },
+     "os": {
+      "name": "Windows",
+      "version": "10.0.26200",
+      "cpu": "Intel(R) Core(TM) Ultra 9 275HX",
+      "cpu_count": 24
+     },
+     "fellow": {
+      "available": false,
+      "requested": {},
+      "state": {}
+     },
+     "load_time_ms": 4352.17,
+     "startup_to_first_frame_ms": 4380.239,
+     "resolution": [
+      1920,
+      1080
+     ],
+     "valid": true,
+     "auto_exposure_disabled_for_mode": true,
+     "files": {
+      "bistro_int_path": [
+       "bistro_interior_1920x1080_seq-bistro_int_path_f000.png",
+       "bistro_interior_1920x1080_seq-bistro_int_path_f001.png",
+       "bistro_interior_1920x1080_seq-bistro_int_path_f002.png",
+       "bistro_interior_1920x1080_seq-bistro_int_path_f003.png",
+       "bistro_interior_1920x1080_seq-bistro_int_path_f004.png",
+       "bistro_interior_1920x1080_seq-bistro_int_path_f005.png",
+       "bistro_interior_1920x1080_seq-bistro_int_path_f006.png",
+       "bistro_interior_1920x1080_seq-bistro_int_path_f007.png",
+       "bistro_interior_1920x1080_seq-bistro_int_path_f008.png",
+       "bistro_interior_1920x1080_seq-bistro_int_path_f009.png",
+       "bistro_interior_1920x1080_seq-bistro_int_path_f010.png",
+       "bistro_interior_1920x1080_seq-bistro_int_path_f011.png",
+       "bistro_interior_1920x1080_seq-bistro_int_path_f012.png",
+       "bistro_interior_1920x1080_seq-bistro_int_path_f013.png",
+       "bistro_interior_1920x1080_seq-bistro_int_path_f014.png",
+       "bistro_interior_1920x1080_seq-bistro_int_path_f015.png",
+       "bistro_interior_1920x1080_seq-bistro_int_path_f016.png",
+       "bistro_interior_1920x1080_seq-bistro_int_path_f017.png",
+       "bistro_interior_1920x1080_seq-bistro_int_path_f018.png",
+       "bistro_interior_1920x1080_seq-bistro_int_path_f019.png",
+       "bistro_interior_1920x1080_seq-bistro_int_path_f020.png",
+       "bistro_interior_1920x1080_seq-bistro_int_path_f021.png",
+       "bistro_interior_1920x1080_seq-bistro_int_path_f022.png",
+       "bistro_interior_1920x1080_seq-bistro_int_path_f023.png",
+       "bistro_interior_1920x1080_seq-bistro_int_path_f024.png",
+       "bistro_interior_1920x1080_seq-bistro_int_path_f025.png",
+       "bistro_interior_1920x1080_seq-bistro_int_path_f026.png",
+       "bistro_interior_1920x1080_seq-bistro_int_path_f027.png",
+       "bistro_interior_1920x1080_seq-bistro_int_path_f028.png",
+       "bistro_interior_1920x1080_seq-bistro_int_path_f029.png",
+       "bistro_interior_1920x1080_seq-bistro_int_path_f030.png",
+       "bistro_interior_1920x1080_seq-bistro_int_path_f031.png",
+       "bistro_interior_1920x1080_seq-bistro_int_path_f032.png",
+       "bistro_interior_1920x1080_seq-bistro_int_path_f033.png",
+       "bistro_interior_1920x1080_seq-bistro_int_path_f034.png",
+       "bistro_interior_1920x1080_seq-bistro_int_path_f035.png",
+       "bistro_interior_1920x1080_seq-bistro_int_path_f036.png",
+       "bistro_interior_1920x1080_seq-bistro_int_path_f037.png",
+       "bistro_interior_1920x1080_seq-bistro_int_path_f038.png",
+       "bistro_interior_1920x1080_seq-bistro_int_path_f039.png",
+       "bistro_interior_1920x1080_seq-bistro_int_path_f040.png",
+       "bistro_interior_1920x1080_seq-bistro_int_path_f041.png",
+       "bistro_interior_1920x1080_seq-bistro_int_path_f042.png",
+       "bistro_interior_1920x1080_seq-bistro_int_path_f043.png",
+       "bistro_interior_1920x1080_seq-bistro_int_path_f044.png",
+       "bistro_interior_1920x1080_seq-bistro_int_path_f045.png",
+       "bistro_interior_1920x1080_seq-bistro_int_path_f046.png",
+       "bistro_interior_1920x1080_seq-bistro_int_path_f047.png",
+       "bistro_interior_1920x1080_seq-bistro_int_path_f048.png",
+       "bistro_interior_1920x1080_seq-bistro_int_path_f049.png",
+       "bistro_interior_1920x1080_seq-bistro_int_path_f050.png",
+       "bistro_interior_1920x1080_seq-bistro_int_path_f051.png",
+       "bistro_interior_1920x1080_seq-bistro_int_path_f052.png",
+       "bistro_interior_1920x1080_seq-bistro_int_path_f053.png",
+       "bistro_interior_1920x1080_seq-bistro_int_path_f054.png",
+       "bistro_interior_1920x1080_seq-bistro_int_path_f055.png",
+       "bistro_interior_1920x1080_seq-bistro_int_path_f056.png",
+       "bistro_interior_1920x1080_seq-bistro_int_path_f057.png",
+       "bistro_interior_1920x1080_seq-bistro_int_path_f058.png",
+       "bistro_interior_1920x1080_seq-bistro_int_path_f059.png"
+      ]
+     },
+     "total_runtime_s": 111.850771,
+     "_proc": {
+      "returncode": 0,
+      "timed_out": false,
+      "wall_s": 114.88002181053162,
+      "peak_working_set": 1121067008,
+      "peak_private_bytes": 2700591104
+     },
+     "_json": "benchmarks\\results\\raw\\godot-4.7.2_temporal\\stock\\bistro_interior\\bistro_interior_temporal_stock_1920x1080_run0.json",
+     "_gpu_telemetry": {
+      "n": 106,
+      "clocks.gr": {
+       "min": 180.0,
+       "mean": 266.64150943396226,
+       "max": 1620.0
+      },
+      "clocks.mem": {
+       "min": 405.0,
+       "mean": 980.3018867924528,
+       "max": 9001.0
+      },
+      "temperature.gpu": {
+       "min": 65.0,
+       "mean": 66.32075471698113,
+       "max": 69.0
+      },
+      "power.draw": {
+       "min": 5.29,
+       "mean": 9.051320754716977,
+       "max": 52.72
+      },
+      "utilization.gpu": {
+       "min": 0.0,
+       "mean": 6.320754716981132,
+       "max": 99.0
+      },
+      "memory.used": {
+       "min": 328.0,
+       "mean": 1756.066037735849,
+       "max": 1817.0
+      },
+      "throttle_reasons_seen": [
+       "0x0000000000000400"
+      ]
+     }
+    }
+   ]
+  }
+ },
+ "superseded": {
+  "sponza|1920x1080|stock|2026-09-30T10:10:36": {
+   "note": "Sponza re-captured after the texture import fix",
+   "entry": {
+    "scene": "sponza",
+    "resolution": "1920x1080",
+    "build": "stock",
+    "preset": "high",
+    "set": "",
+    "fellow": "",
+    "mode": "temporal",
+    "runs": [
+     {
+      "schema": 1,
+      "scene": "sponza",
+      "mode": "temporal",
+      "tag": "stock",
+      "run": 0,
+      "cmdline_user_args": [
+       "--scene=sponza",
+       "--mode=temporal",
+       "--res=1920x1080",
+       "--tag=stock",
+       "--run=0",
+       "--out=C:\\Users\\matek\\Documents\\GitHub\\FellowGodot\\benchmarks\\results\\raw\\godot-4.7.2_temporal\\stock\\sponza",
+       "--warmup=10.0",
+       "--measure=30.0",
+       "--preset=high"
+      ],
+      "cmdline_args": [],
+      "engine": {
+       "major": 4,
+       "minor": 7,
+       "patch": 2,
+       "hex": 263938,
+       "status": "stable",
+       "build": "custom_build",
+       "hash": "ed1daf0bf001b61586d9930840f2f1394092c079",
+       "timestamp": 1786929518,
+       "string": "4.7.2-stable (custom_build)"
+      },
+      "engine_build": {
+       "debug_build": false,
+       "has_editor": false,
+       "template_release": true
+      },
+      "adapter": {
+       "name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+       "vendor": "NVIDIA",
+       "api_version": "1.4.351",
+       "type": 2,
+       "driver": [
+        "NVIDIA",
+        "32.0.16.1714"
+       ],
+       "rendering_driver": "vulkan",
+       "rendering_method": "forward_plus"
+      },
+      "os": {
+       "name": "Windows",
+       "version": "10.0.26200",
+       "cpu": "Intel(R) Core(TM) Ultra 9 275HX",
+       "cpu_count": 24
+      },
+      "fellow": {
+       "available": false,
+       "requested": {},
+       "state": {}
+      },
+      "load_time_ms": 32909.657,
+      "startup_to_first_frame_ms": 32919.185,
+      "resolution": [
+       1920,
+       1080
+      ],
+      "valid": true,
+      "auto_exposure_disabled_for_mode": true,
+      "files": {
+       "sponza_pan": [
+        "sponza_1920x1080_seq-sponza_pan_f000.png",
+        "sponza_1920x1080_seq-sponza_pan_f001.png",
+        "sponza_1920x1080_seq-sponza_pan_f002.png",
+        "sponza_1920x1080_seq-sponza_pan_f003.png",
+        "sponza_1920x1080_seq-sponza_pan_f004.png",
+        "sponza_1920x1080_seq-sponza_pan_f005.png",
+        "sponza_1920x1080_seq-sponza_pan_f006.png",
+        "sponza_1920x1080_seq-sponza_pan_f007.png",
+        "sponza_1920x1080_seq-sponza_pan_f008.png",
+        "sponza_1920x1080_seq-sponza_pan_f009.png",
+        "sponza_1920x1080_seq-sponza_pan_f010.png",
+        "sponza_1920x1080_seq-sponza_pan_f011.png",
+        "sponza_1920x1080_seq-sponza_pan_f012.png",
+        "sponza_1920x1080_seq-sponza_pan_f013.png",
+        "sponza_1920x1080_seq-sponza_pan_f014.png",
+        "sponza_1920x1080_seq-sponza_pan_f015.png",
+        "sponza_1920x1080_seq-sponza_pan_f016.png",
+        "sponza_1920x1080_seq-sponza_pan_f017.png",
+        "sponza_1920x1080_seq-sponza_pan_f018.png",
+        "sponza_1920x1080_seq-sponza_pan_f019.png",
+        "sponza_1920x1080_seq-sponza_pan_f020.png",
+        "sponza_1920x1080_seq-sponza_pan_f021.png",
+        "sponza_1920x1080_seq-sponza_pan_f022.png",
+        "sponza_1920x1080_seq-sponza_pan_f023.png",
+        "sponza_1920x1080_seq-sponza_pan_f024.png",
+        "sponza_1920x1080_seq-sponza_pan_f025.png",
+        "sponza_1920x1080_seq-sponza_pan_f026.png",
+        "sponza_1920x1080_seq-sponza_pan_f027.png",
+        "sponza_1920x1080_seq-sponza_pan_f028.png",
+        "sponza_1920x1080_seq-sponza_pan_f029.png",
+        "sponza_1920x1080_seq-sponza_pan_f030.png",
+        "sponza_1920x1080_seq-sponza_pan_f031.png",
+        "sponza_1920x1080_seq-sponza_pan_f032.png",
+        "sponza_1920x1080_seq-sponza_pan_f033.png",
+        "sponza_1920x1080_seq-sponza_pan_f034.png",
+        "sponza_1920x1080_seq-sponza_pan_f035.png",
+        "sponza_1920x1080_seq-sponza_pan_f036.png",
+        "sponza_1920x1080_seq-sponza_pan_f037.png",
+        "sponza_1920x1080_seq-sponza_pan_f038.png",
+        "sponza_1920x1080_seq-sponza_pan_f039.png",
+        "sponza_1920x1080_seq-sponza_pan_f040.png",
+        "sponza_1920x1080_seq-sponza_pan_f041.png",
+        "sponza_1920x1080_seq-sponza_pan_f042.png",
+        "sponza_1920x1080_seq-sponza_pan_f043.png",
+        "sponza_1920x1080_seq-sponza_pan_f044.png",
+        "sponza_1920x1080_seq-sponza_pan_f045.png",
+        "sponza_1920x1080_seq-sponza_pan_f046.png",
+        "sponza_1920x1080_seq-sponza_pan_f047.png",
+        "sponza_1920x1080_seq-sponza_pan_f048.png",
+        "sponza_1920x1080_seq-sponza_pan_f049.png",
+        "sponza_1920x1080_seq-sponza_pan_f050.png",
+        "sponza_1920x1080_seq-sponza_pan_f051.png",
+        "sponza_1920x1080_seq-sponza_pan_f052.png",
+        "sponza_1920x1080_seq-sponza_pan_f053.png",
+        "sponza_1920x1080_seq-sponza_pan_f054.png",
+        "sponza_1920x1080_seq-sponza_pan_f055.png",
+        "sponza_1920x1080_seq-sponza_pan_f056.png",
+        "sponza_1920x1080_seq-sponza_pan_f057.png",
+        "sponza_1920x1080_seq-sponza_pan_f058.png",
+        "sponza_1920x1080_seq-sponza_pan_f059.png"
+       ]
+      },
+      "total_runtime_s": 103.232786,
+      "_proc": {
+       "returncode": 0,
+       "timed_out": false,
+       "wall_s": 105.38463354110718,
+       "peak_working_set": 1263648768,
+       "peak_private_bytes": 8687661056
+      },
+      "_json": "benchmarks\\results\\raw\\godot-4.7.2_temporal\\stock\\sponza\\sponza_temporal_stock_1920x1080_run0.json",
+      "_gpu_telemetry": {
+       "n": 98,
+       "clocks.gr": {
+        "min": 180.0,
+        "mean": 340.38775510204084,
+        "max": 2122.0
+       },
+       "clocks.mem": {
+        "min": 405.0,
+        "mean": 3425.591836734694,
+        "max": 10821.0
+       },
+       "temperature.gpu": {
+        "min": 64.0,
+        "mean": 65.24489795918367,
+        "max": 69.0
+       },
+       "power.draw": {
+        "min": 5.29,
+        "mean": 13.284183673469387,
+        "max": 82.91
+       },
+       "utilization.gpu": {
+        "min": 0.0,
+        "mean": 9.428571428571429,
+        "max": 100.0
+       },
+       "memory.used": {
+        "min": 328.0,
+        "mean": 6049.969387755102,
+        "max": 7374.0
+       },
+       "throttle_reasons_seen": [
+        "0x0000000000000004",
+        "0x0000000000000400"
+       ]
+      }
+     }
+    ]
+   }
+  }
+ },
+ "merge_history": [
+  {
+   "args": {
+    "builds": "stock",
+    "godot": null,
+    "scene": "pbr,sponza,bistro_exterior,bistro_interior",
+    "mode": "temporal",
+    "res": "1920x1080",
+    "runs": 3,
+    "max_runs": 6,
+    "max_cv": 0.03,
+    "warmup": 10.0,
+    "measure": 30.0,
+    "percam": 0,
+    "profile": false,
+    "preset": "high",
+    "set": "",
+    "fellow": "",
+    "fellow_off_for": "stock",
+    "extra": "",
+    "cooldown": 5.0,
+    "heat_soak": 240.0,
+    "timeout": 900.0,
+    "session": "godot-4.7.2_temporal",
+    "label": ""
+   },
+   "hardware": {
+    "timestamp_local": "2026-09-30T00:57:50.372961",
+    "host": "PREDZIO",
+    "python": "3.11.0",
+    "os": {
+     "platform": "Windows-10-10.0.26200-SP0",
+     "release": "10",
+     "version": "10.0.26200"
+    },
+    "cpu": "{\"Name\":\"Intel(R) Core(TM) Ultra 9 275HX\",\"NumberOfCores\":24,\"NumberOfLogicalProcessors\":24,\"MaxClockSpeed\":2700}",
+    "ram": "{\"TotalBytes\":68112736256,\"Modules\":[{\"Capacity\":34359738368,\"Speed\":6400,\"ConfiguredClockSpeed\":6400,\"Manufacturer\":\"Micron Technology\",\"PartNumber\":\"MTC16C2085S1VC64BD1 \"},{\"Capacity\":34359738368,\"Speed\":6400,\"ConfiguredClockSpeed\":6400,\"Manufacturer\":\"Micron Technology\",\"PartNumber\":\"MTC16C2085S1VC64BD1 \"}]}",
+    "os_caption": "{\"Caption\":\"Microsoft Windows 11 Home\",\"Version\":\"10.0.26200\",\"BuildNumber\":\"26200\"}",
+    "system": "{\"Manufacturer\":\"Acer\",\"Model\":\"Predator PHN16S-71\"}",
+    "power": "{\"Battery\":{\"PowerOnline\":true,\"Charging\":false},\"Scheme\":\"Power Scheme GUID: 3b79c5ed-2baa-4957-a015-c958d3221bfc  (Acer)\"}",
+    "display": "[{\"Name\":\"Intel(R) Graphics\",\"DriverVersion\":\"32.0.101.6629\",\"CurrentHorizontalResolution\":2560,\"CurrentVerticalResolution\":1600,\"CurrentRefreshRate\":240},{\"Name\":\"NVIDIA GeForce RTX 5070 Ti Laptop GPU\",\"DriverVersion\":\"32.0.16.1714\",\"CurrentHorizontalResolution\":null,\"CurrentVerticalResolution\":null,\"CurrentRefreshRate\":null}]",
+    "gpu": [
+     {
+      "name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+      "driver_version": "617.14",
+      "memory.total": "12227",
+      "pcie.link.gen.max": "5",
+      "pcie.link.width.max": "16",
+      "clocks.max.graphics": "3090",
+      "clocks.max.memory": "14001",
+      "power.limit": "[N/A]",
+      "vbios_version": "98.05.31.00.49"
+     }
+    ],
+    "engine": {
+     "commit": "b9d73298d7c3e6203902565ede4e1306f60de8e7",
+     "describe": "4.7.2-stable-3-gb9d73298d7",
+     "branch": "fellow/benchmark-suite",
+     "status_short": ""
+    },
+    "build_flags": "platform=windows target=template_release production=yes disable_path_overrides=no winrt=no accesskit=no d3d12=no (MSVC, see BUILDING_FELLOWENGINE.md)",
+    "compiler": {
+     "visual_studio": "16.11.60",
+     "msvc_toolsets": [
+      "14.29.30133"
+     ]
+    },
+    "binaries": {
+     "stock": {
+      "path": ".tools\\bin\\stock\\godot.windows.template_release.x86_64.exe",
+      "size": 68635136,
+      "sha256": "f96d22afc9238c19ce728b307382e08675ca35455cad94cae2d4c5b8f88a6604",
+      "mtime": "2026-09-29T23:08:53.520548"
+     }
+    }
+   },
+   "gpu_telemetry": {
+    "n": 528,
+    "clocks.gr": {
+     "min": 172.0,
+     "mean": 280.72727272727275,
+     "max": 2122.0
+    },
+    "clocks.mem": {
+     "min": 405.0,
+     "mean": 1431.4602272727273,
+     "max": 10821.0
+    },
+    "temperature.gpu": {
+     "min": 64.0,
+     "mean": 67.75,
+     "max": 82.0
+    },
+    "power.draw": {
+     "min": 5.23,
+     "mean": 10.287405303030313,
+     "max": 82.91
+    },
+    "utilization.gpu": {
+     "min": 0.0,
+     "mean": 5.318181818181818,
+     "max": 100.0
+    },
+    "memory.used": {
+     "min": 328.0,
+     "mean": 2338.530303030303,
+     "max": 7374.0
+    },
+    "throttle_reasons_seen": [
+     "0x0000000000000004",
+     "0x0000000000000400"
+    ]
+   },
+   "heat_soak_telemetry": {},
+   "keys": [
+    "pbr|1920x1080|stock",
+    "sponza|1920x1080|stock",
+    "bistro_exterior|1920x1080|stock",
+    "bistro_interior|1920x1080|stock"
+   ]
+  },
+  {
+   "args": {
+    "builds": "stock",
+    "godot": null,
+    "scene": "sponza",
+    "mode": "temporal",
+    "res": "1920x1080",
+    "runs": 3,
+    "max_runs": 6,
+    "max_cv": 0.03,
+    "warmup": 10.0,
+    "measure": 30.0,
+    "percam": 0,
+    "profile": false,
+    "preset": "high",
+    "set": "",
+    "fellow": "",
+    "fellow_off_for": "stock",
+    "extra": "",
+    "cooldown": 5.0,
+    "heat_soak": 240.0,
+    "timeout": 900.0,
+    "session": "godot-4.7.2_temporal",
+    "label": "",
+    "no_telemetry": false,
+    "merge": true,
+    "supersede_note": "Sponza re-captured after the texture import fix"
+   },
+   "hardware": {
+    "timestamp_local": "2026-09-30T10:09:33.016545",
+    "host": "PREDZIO",
+    "python": "3.11.0",
+    "os": {
+     "platform": "Windows-10-10.0.26200-SP0",
+     "release": "10",
+     "version": "10.0.26200"
+    },
+    "cpu": "{\"Name\":\"Intel(R) Core(TM) Ultra 9 275HX\",\"NumberOfCores\":24,\"NumberOfLogicalProcessors\":24,\"MaxClockSpeed\":2700}",
+    "ram": "{\"TotalBytes\":68112736256,\"Modules\":[{\"Capacity\":34359738368,\"Speed\":6400,\"ConfiguredClockSpeed\":6400,\"Manufacturer\":\"Micron Technology\",\"PartNumber\":\"MTC16C2085S1VC64BD1 \"},{\"Capacity\":34359738368,\"Speed\":6400,\"ConfiguredClockSpeed\":6400,\"Manufacturer\":\"Micron Technology\",\"PartNumber\":\"MTC16C2085S1VC64BD1 \"}]}",
+    "os_caption": "{\"Caption\":\"Microsoft Windows 11 Home\",\"Version\":\"10.0.26200\",\"BuildNumber\":\"26200\"}",
+    "system": "{\"Manufacturer\":\"Acer\",\"Model\":\"Predator PHN16S-71\"}",
+    "power": "{\"Battery\":{\"PowerOnline\":true,\"Charging\":false},\"Scheme\":\"Power Scheme GUID: 3b79c5ed-2baa-4957-a015-c958d3221bfc  (Acer)\"}",
+    "display": "[{\"Name\":\"Intel(R) Graphics\",\"DriverVersion\":\"32.0.101.6629\",\"CurrentHorizontalResolution\":2560,\"CurrentVerticalResolution\":1600,\"CurrentRefreshRate\":240},{\"Name\":\"NVIDIA GeForce RTX 5070 Ti Laptop GPU\",\"DriverVersion\":\"32.0.16.1714\",\"CurrentHorizontalResolution\":null,\"CurrentVerticalResolution\":null,\"CurrentRefreshRate\":null}]",
+    "gpu": [
+     {
+      "name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+      "driver_version": "617.14",
+      "memory.total": "12227",
+      "pcie.link.gen.max": "5",
+      "pcie.link.width.max": "16",
+      "clocks.max.graphics": "3090",
+      "clocks.max.memory": "14001",
+      "power.limit": "[N/A]",
+      "vbios_version": "98.05.31.00.49"
+     }
+    ],
+    "engine": {
+     "commit": "e2a897c6b4408c212f986e156947c57c498b9535",
+     "describe": "4.7.2-stable-15-ge2a897c6b4",
+     "branch": "HEAD",
+     "status_short": ""
+    },
+    "build_flags": "platform=windows target=template_release production=yes disable_path_overrides=no winrt=no accesskit=no d3d12=no (MSVC, see BUILDING_FELLOWENGINE.md)",
+    "compiler": {
+     "visual_studio": "16.11.60",
+     "msvc_toolsets": [
+      "14.29.30133"
+     ]
+    },
+    "binaries": {
+     "stock": {
+      "path": ".tools\\bin\\stock\\godot.windows.template_release.x86_64.exe",
+      "size": 68635136,
+      "sha256": "f96d22afc9238c19ce728b307382e08675ca35455cad94cae2d4c5b8f88a6604",
+      "mtime": "2026-09-29T23:08:53.520548"
+     }
+    }
+   },
+   "gpu_telemetry": {
+    "n": 57,
+    "clocks.gr": {
+     "min": 180.0,
+     "mean": 610.0877192982456,
+     "max": 1935.0
+    },
+    "clocks.mem": {
+     "min": 405.0,
+     "mean": 3297.157894736842,
+     "max": 9001.0
+    },
+    "temperature.gpu": {
+     "min": 54.0,
+     "mean": 57.94736842105263,
+     "max": 68.0
+    },
+    "power.draw": {
+     "min": 4.74,
+     "mean": 17.131578947368425,
+     "max": 85.78
+    },
+    "utilization.gpu": {
+     "min": 0.0,
+     "mean": 10.842105263157896,
+     "max": 100.0
+    },
+    "memory.used": {
+     "min": 0.0,
+     "mean": 2391.561403508772,
+     "max": 2772.0
+    },
+    "throttle_reasons_seen": [
+     "0x0000000000000004",
+     "0x0000000000000400"
+    ]
+   },
+   "heat_soak_telemetry": {},
+   "keys": [
+    "sponza|1920x1080|stock"
+   ],
+   "note": "Sponza re-captured after the texture import fix",
+   "time": "2026-09-30T10:10:36"
+  }
+ ]
+}

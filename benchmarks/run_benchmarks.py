@@ -49,6 +49,13 @@ except ImportError:  # pragma: no cover
     psutil = None
 
 
+# Windows: never let a child process open its own console window. When the runner itself has no console (started
+# detached, e.g. from a scheduled job), every console child (nvidia-smi once per second, the Godot console wrapper)
+# would otherwise get a new window that takes focus from the benchmark window: measured as ~480 ms stalls every
+# ~1.03 s in Sponza (session godot-4.7.2_perf re-run of 2026-09-30, discarded).
+NO_WINDOW = {"creationflags": 0x08000000} if os.name == "nt" else {}  # CREATE_NO_WINDOW
+
+
 def log(msg: str) -> None:
     print(f"[bench {datetime.datetime.now().strftime('%H:%M:%S')}] {msg}", flush=True)
 
@@ -57,7 +64,7 @@ def log(msg: str) -> None:
 
 def _run(cmd, timeout=30) -> str:
     try:
-        p = subprocess.run(cmd, shell=isinstance(cmd, str), capture_output=True, text=True, errors="replace", timeout=timeout)
+        p = subprocess.run(cmd, shell=isinstance(cmd, str), capture_output=True, text=True, errors="replace", timeout=timeout, **NO_WINDOW)
         return (p.stdout or "").strip()
     except Exception as e:  # noqa: BLE001
         return f"ERROR: {e}"
@@ -180,7 +187,7 @@ class GpuSampler(threading.Thread):
 
 def kill_tree(pid: int) -> None:
     if os.name == "nt":
-        subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True)
+        subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True, **NO_WINDOW)
     elif psutil:
         try:
             p = psutil.Process(pid)
@@ -197,7 +204,7 @@ def run_godot(exe: str, godot_args: list[str], user_args: list[str], timeout: fl
     with open(log_path, "w", encoding="utf-8", errors="replace") as lf:
         lf.write(" ".join(f'"{c}"' if " " in c else c for c in cmd) + "\n\n")
         lf.flush()
-        p = subprocess.Popen(cmd, stdout=lf, stderr=subprocess.STDOUT, cwd=ROOT)
+        p = subprocess.Popen(cmd, stdout=lf, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, cwd=ROOT, **NO_WINDOW)
         peak_wset = 0
         peak_private = 0
         timed_out = False
@@ -245,8 +252,14 @@ def mean_std_cv(vals):
 
 def aggregate(runs: list[dict]) -> dict:
     """Aggregate valid perf runs of one configuration."""
-    ok = [r for r in runs if r.get("valid") and "summary" in r]
-    out = {"runs_total": len(runs), "runs_valid": len(ok)}
+    valid = [r for r in runs if r.get("valid") and "summary" in r]
+    ok = [r for r in valid if not r.get("hitch_frames")]
+    out = {"runs_total": len(runs), "runs_valid": len(ok), "runs_excluded_hitches": len(valid) - len(ok)}
+    if not ok and valid:
+        # No hitch-free run at all: aggregate what exists, but say so.
+        ok = valid
+        out["runs_valid"] = len(ok)
+        out["hitches_not_excluded"] = True
     if not ok:
         return out
     for field in ["frame_ms", "gpu_ms", "render_cpu_ms", "setup_cpu_ms", "process_ms", "draw_calls", "primitives", "objects", "shadow_draw_calls"]:
@@ -341,6 +354,7 @@ def main() -> int:
     ap.add_argument("--timeout", type=float, default=900.0)
     ap.add_argument("--session", default=None, help="session name (default: timestamp)")
     ap.add_argument("--label", default="", help="free text label for the session")
+    ap.add_argument("--no-telemetry", action="store_true", help="do not sample nvidia-smi during the session (diagnostics)")
     ap.add_argument("--merge", action="store_true", help="merge into an existing results/<session>.json: re-measured "
                     "(scene, res, build) entries replace the old ones, which are kept under 'superseded' with --supersede-note")
     ap.add_argument("--supersede-note", default="", help="reason recorded for entries replaced by --merge")
@@ -377,7 +391,8 @@ def main() -> int:
     log(f"session {session}: builds={builds} scenes={scenes} res={resolutions} mode={args.mode}")
 
     sampler = GpuSampler()
-    sampler.start()
+    if not args.no_telemetry:
+        sampler.start()
     all_results: dict = {}
     soak = {}
     if args.mode == "perf" and args.heat_soak > 0:
@@ -444,6 +459,12 @@ def main() -> int:
                         tele = GpuSampler()
                         tele.samples = sampler.samples[s0:]
                         r["_gpu_telemetry"] = tele.summary()
+                        # Hitches: frames far above the run's median (> max(100 ms, 5 x median)). These are external stalls,
+                        # not rendering cost (seen once as ~480 ms stalls every ~1 s in a thermally limited state).
+                        fms = (r.get("frames") or {}).get("frame_ms") or []
+                        if fms:
+                            med = statistics.median(fms)
+                            r["hitch_frames"] = sum(1 for x in fms if x > max(100.0, 5.0 * med))
                         runs_by_build[b].append(r)
                         msg = f"   -> rc={proc['returncode']} valid={r.get('valid')} wall={proc['wall_s']:.1f}s"
                         if r.get("summary"):
@@ -451,6 +472,8 @@ def main() -> int:
                             msg += f" frame={s['frame_ms']['mean']:.3f}ms gpu={s['gpu_ms']['mean']:.3f}ms p99={s['frame_ms']['p99']:.3f}ms"
                         if not r.get("valid"):
                             msg += f" error={str(r.get('error', ''))[:120]}"
+                        if r.get("hitch_frames"):
+                            msg += f" HITCHES={r['hitch_frames']}"
                         gt = r["_gpu_telemetry"]
                         if "clocks.gr" in gt:
                             msg += f" | gpu {gt['clocks.gr']['mean']:.0f} MHz {gt['temperature.gpu']['mean']:.0f} C {gt.get('power.draw', {}).get('mean', 0):.0f} W"
@@ -469,7 +492,8 @@ def main() -> int:
                             continue
                         agg = aggregate(runs_by_build[b])
                         cv = agg.get("frame_ms_run_means", {}).get("cv", 0.0)
-                        if agg.get("runs_valid", 0) < args.runs or cv > args.max_cv:
+                        clean = sum(1 for r in runs_by_build[b] if r.get("valid") and not r.get("hitch_frames"))
+                        if agg.get("runs_valid", 0) < args.runs or cv > args.max_cv or clean < args.runs:
                             noisy = True
                     if not noisy:
                         break

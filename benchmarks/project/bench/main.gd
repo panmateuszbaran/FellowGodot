@@ -350,6 +350,10 @@ func _file_stem() -> String:
 
 
 func _run_capture() -> void:
+	# --freeze_exposure=1: same exposure handling as the temporal/reference modes (auto exposure off), so the captures
+	# can be compared with the accumulated ground truth. Default captures keep auto exposure (what a player sees).
+	if args.get("freeze_exposure", "0") == "1":
+		_freeze_exposure()
 	var settle := int(args.get("settle", "96"))
 	var files := []
 	var stem := _file_stem()

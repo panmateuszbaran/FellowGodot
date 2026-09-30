@@ -1,0 +1,2456 @@
+{
+ "session": "godot-4.7.2_reference_ext",
+ "label": "",
+ "args": {
+  "builds": "stock",
+  "godot": null,
+  "scene": "sponza,bistro_exterior,bistro_interior",
+  "mode": "reference",
+  "res": "1920x1080",
+  "runs": 3,
+  "max_runs": 6,
+  "max_cv": 0.03,
+  "warmup": 10.0,
+  "measure": 30.0,
+  "percam": 0,
+  "profile": false,
+  "preset": "reference_ssaa",
+  "set": "",
+  "fellow": "",
+  "fellow_off_for": "stock",
+  "extra": "--seqs=sponza_pan,bistro_ext_path,bistro_int_path --jitter=8 --ref_settle_first=6 --ref_settle=1",
+  "cooldown": 5.0,
+  "heat_soak": 240.0,
+  "timeout": 7200.0,
+  "session": "godot-4.7.2_reference_ext",
+  "label": "",
+  "merge": false,
+  "supersede_note": ""
+ },
+ "hardware": {
+  "timestamp_local": "2026-09-30T01:54:50.113001",
+  "host": "PREDZIO",
+  "python": "3.11.0",
+  "os": {
+   "platform": "Windows-10-10.0.26200-SP0",
+   "release": "10",
+   "version": "10.0.26200"
+  },
+  "cpu": "{\"Name\":\"Intel(R) Core(TM) Ultra 9 275HX\",\"NumberOfCores\":24,\"NumberOfLogicalProcessors\":24,\"MaxClockSpeed\":2700}",
+  "ram": "{\"TotalBytes\":68112736256,\"Modules\":[{\"Capacity\":34359738368,\"Speed\":6400,\"ConfiguredClockSpeed\":6400,\"Manufacturer\":\"Micron Technology\",\"PartNumber\":\"MTC16C2085S1VC64BD1 \"},{\"Capacity\":34359738368,\"Speed\":6400,\"ConfiguredClockSpeed\":6400,\"Manufacturer\":\"Micron Technology\",\"PartNumber\":\"MTC16C2085S1VC64BD1 \"}]}",
+  "os_caption": "{\"Caption\":\"Microsoft Windows 11 Home\",\"Version\":\"10.0.26200\",\"BuildNumber\":\"26200\"}",
+  "system": "{\"Manufacturer\":\"Acer\",\"Model\":\"Predator PHN16S-71\"}",
+  "power": "{\"Battery\":{\"PowerOnline\":true,\"Charging\":false},\"Scheme\":\"Power Scheme GUID: 3b79c5ed-2baa-4957-a015-c958d3221bfc  (Acer)\"}",
+  "display": "[{\"Name\":\"Intel(R) Graphics\",\"DriverVersion\":\"32.0.101.6629\",\"CurrentHorizontalResolution\":2560,\"CurrentVerticalResolution\":1600,\"CurrentRefreshRate\":240},{\"Name\":\"NVIDIA GeForce RTX 5070 Ti Laptop GPU\",\"DriverVersion\":\"32.0.16.1714\",\"CurrentHorizontalResolution\":null,\"CurrentVerticalResolution\":null,\"CurrentRefreshRate\":null}]",
+  "gpu": [
+   {
+    "name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+    "driver_version": "617.14",
+    "memory.total": "12227",
+    "pcie.link.gen.max": "5",
+    "pcie.link.width.max": "16",
+    "clocks.max.graphics": "3090",
+    "clocks.max.memory": "14001",
+    "power.limit": "[N/A]",
+    "vbios_version": "98.05.31.00.49"
+   }
+  ],
+  "engine": {
+   "commit": "044f6b36d1f87bb4088fe4e43e236bcd85cf323f",
+   "describe": "4.7.2-stable-10-g044f6b36d1",
+   "branch": "HEAD",
+   "status_short": ""
+  },
+  "build_flags": "platform=windows target=template_release production=yes disable_path_overrides=no winrt=no accesskit=no d3d12=no (MSVC, see BUILDING_FELLOWENGINE.md)",
+  "compiler": {
+   "visual_studio": "16.11.60",
+   "msvc_toolsets": [
+    "14.29.30133"
+   ]
+  },
+  "binaries": {
+   "stock": {
+    "path": ".tools\\bin\\stock\\godot.windows.template_release.x86_64.exe",
+    "size": 68635136,
+    "sha256": "f96d22afc9238c19ce728b307382e08675ca35455cad94cae2d4c5b8f88a6604",
+    "mtime": "2026-09-29T23:08:53.520548"
+   }
+  }
+ },
+ "gpu_telemetry": {
+  "n": 948,
+  "clocks.gr": {
+   "min": 172.0,
+   "mean": 368.7489451476793,
+   "max": 2752.0
+  },
+  "clocks.mem": {
+   "min": 405.0,
+   "mean": 7601.568565400844,
+   "max": 10821.0
+  },
+  "temperature.gpu": {
+   "min": 44.0,
+   "mean": 47.50949367088607,
+   "max": 56.0
+  },
+  "power.draw": {
+   "min": 4.36,
+   "mean": 17.465189873417717,
+   "max": 137.62
+  },
+  "utilization.gpu": {
+   "min": 0.0,
+   "mean": 7.602320675105485,
+   "max": 100.0
+  },
+  "memory.used": {
+   "min": 328.0,
+   "mean": 3972.9483122362867,
+   "max": 4692.0
+  },
+  "throttle_reasons_seen": [
+   "0x0000000000000004",
+   "0x0000000000000400"
+  ]
+ },
+ "heat_soak_telemetry": {},
+ "results": {
+  "sponza|1920x1080|stock": {
+   "scene": "sponza",
+   "resolution": "1920x1080",
+   "build": "stock",
+   "preset": "reference_ssaa",
+   "set": "",
+   "fellow": "",
+   "binary": "stock",
+   "variant_args": [],
+   "mode": "reference",
+   "runs": [
+    {
+     "schema": 1,
+     "scene": "sponza",
+     "mode": "reference",
+     "tag": "stock",
+     "run": 0,
+     "cmdline_user_args": [
+      "--scene=sponza",
+      "--mode=reference",
+      "--res=1920x1080",
+      "--tag=stock",
+      "--run=0",
+      "--out=C:\\Users\\matek\\Documents\\GitHub\\FellowGodot\\benchmarks\\results\\raw\\godot-4.7.2_reference_ext\\stock\\sponza",
+      "--warmup=10.0",
+      "--measure=30.0",
+      "--preset=reference_ssaa",
+      "--seqs=sponza_pan,bistro_ext_path,bistro_int_path",
+      "--jitter=8",
+      "--ref_settle_first=6",
+      "--ref_settle=1"
+     ],
+     "cmdline_args": [],
+     "engine": {
+      "major": 4,
+      "minor": 7,
+      "patch": 2,
+      "hex": 263938,
+      "status": "stable",
+      "build": "custom_build",
+      "hash": "ed1daf0bf001b61586d9930840f2f1394092c079",
+      "timestamp": 1786929518,
+      "string": "4.7.2-stable (custom_build)"
+     },
+     "engine_build": {
+      "debug_build": false,
+      "has_editor": false,
+      "template_release": true
+     },
+     "adapter": {
+      "name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+      "vendor": "NVIDIA",
+      "api_version": "1.4.351",
+      "type": 2,
+      "driver": [
+       "NVIDIA",
+       "32.0.16.1714"
+      ],
+      "rendering_driver": "vulkan",
+      "rendering_method": "forward_plus"
+     },
+     "os": {
+      "name": "Windows",
+      "version": "10.0.26200",
+      "cpu": "Intel(R) Core(TM) Ultra 9 275HX",
+      "cpu_count": 24
+     },
+     "fellow": {
+      "available": false,
+      "requested": {},
+      "state": {}
+     },
+     "load_time_ms": 2824.63,
+     "startup_to_first_frame_ms": 2831.648,
+     "resolution": [
+      1920,
+      1080
+     ],
+     "valid": true,
+     "auto_exposure_disabled_for_mode": true,
+     "files": {
+      "cam-sponza_cam_01": [
+       "sponza_1920x1080_ref-cam-sponza_cam_01_j00.png",
+       "sponza_1920x1080_ref-cam-sponza_cam_01_j01.png",
+       "sponza_1920x1080_ref-cam-sponza_cam_01_j02.png",
+       "sponza_1920x1080_ref-cam-sponza_cam_01_j03.png",
+       "sponza_1920x1080_ref-cam-sponza_cam_01_j04.png",
+       "sponza_1920x1080_ref-cam-sponza_cam_01_j05.png",
+       "sponza_1920x1080_ref-cam-sponza_cam_01_j06.png",
+       "sponza_1920x1080_ref-cam-sponza_cam_01_j07.png"
+      ],
+      "cam-sponza_cam_02": [
+       "sponza_1920x1080_ref-cam-sponza_cam_02_j00.png",
+       "sponza_1920x1080_ref-cam-sponza_cam_02_j01.png",
+       "sponza_1920x1080_ref-cam-sponza_cam_02_j02.png",
+       "sponza_1920x1080_ref-cam-sponza_cam_02_j03.png",
+       "sponza_1920x1080_ref-cam-sponza_cam_02_j04.png",
+       "sponza_1920x1080_ref-cam-sponza_cam_02_j05.png",
+       "sponza_1920x1080_ref-cam-sponza_cam_02_j06.png",
+       "sponza_1920x1080_ref-cam-sponza_cam_02_j07.png"
+      ],
+      "cam-sponza_cam_03": [
+       "sponza_1920x1080_ref-cam-sponza_cam_03_j00.png",
+       "sponza_1920x1080_ref-cam-sponza_cam_03_j01.png",
+       "sponza_1920x1080_ref-cam-sponza_cam_03_j02.png",
+       "sponza_1920x1080_ref-cam-sponza_cam_03_j03.png",
+       "sponza_1920x1080_ref-cam-sponza_cam_03_j04.png",
+       "sponza_1920x1080_ref-cam-sponza_cam_03_j05.png",
+       "sponza_1920x1080_ref-cam-sponza_cam_03_j06.png",
+       "sponza_1920x1080_ref-cam-sponza_cam_03_j07.png"
+      ],
+      "cam-sponza_cam_04": [
+       "sponza_1920x1080_ref-cam-sponza_cam_04_j00.png",
+       "sponza_1920x1080_ref-cam-sponza_cam_04_j01.png",
+       "sponza_1920x1080_ref-cam-sponza_cam_04_j02.png",
+       "sponza_1920x1080_ref-cam-sponza_cam_04_j03.png",
+       "sponza_1920x1080_ref-cam-sponza_cam_04_j04.png",
+       "sponza_1920x1080_ref-cam-sponza_cam_04_j05.png",
+       "sponza_1920x1080_ref-cam-sponza_cam_04_j06.png",
+       "sponza_1920x1080_ref-cam-sponza_cam_04_j07.png"
+      ],
+      "cam-sponza_cam_05": [
+       "sponza_1920x1080_ref-cam-sponza_cam_05_j00.png",
+       "sponza_1920x1080_ref-cam-sponza_cam_05_j01.png",
+       "sponza_1920x1080_ref-cam-sponza_cam_05_j02.png",
+       "sponza_1920x1080_ref-cam-sponza_cam_05_j03.png",
+       "sponza_1920x1080_ref-cam-sponza_cam_05_j04.png",
+       "sponza_1920x1080_ref-cam-sponza_cam_05_j05.png",
+       "sponza_1920x1080_ref-cam-sponza_cam_05_j06.png",
+       "sponza_1920x1080_ref-cam-sponza_cam_05_j07.png"
+      ],
+      "cam-sponza_cam_06": [
+       "sponza_1920x1080_ref-cam-sponza_cam_06_j00.png",
+       "sponza_1920x1080_ref-cam-sponza_cam_06_j01.png",
+       "sponza_1920x1080_ref-cam-sponza_cam_06_j02.png",
+       "sponza_1920x1080_ref-cam-sponza_cam_06_j03.png",
+       "sponza_1920x1080_ref-cam-sponza_cam_06_j04.png",
+       "sponza_1920x1080_ref-cam-sponza_cam_06_j05.png",
+       "sponza_1920x1080_ref-cam-sponza_cam_06_j06.png",
+       "sponza_1920x1080_ref-cam-sponza_cam_06_j07.png"
+      ],
+      "seq-sponza_pan_f000": [
+       "sponza_1920x1080_ref-seq-sponza_pan_f000_j00.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f000_j01.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f000_j02.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f000_j03.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f000_j04.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f000_j05.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f000_j06.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f000_j07.png"
+      ],
+      "seq-sponza_pan_f001": [
+       "sponza_1920x1080_ref-seq-sponza_pan_f001_j00.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f001_j01.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f001_j02.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f001_j03.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f001_j04.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f001_j05.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f001_j06.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f001_j07.png"
+      ],
+      "seq-sponza_pan_f002": [
+       "sponza_1920x1080_ref-seq-sponza_pan_f002_j00.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f002_j01.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f002_j02.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f002_j03.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f002_j04.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f002_j05.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f002_j06.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f002_j07.png"
+      ],
+      "seq-sponza_pan_f003": [
+       "sponza_1920x1080_ref-seq-sponza_pan_f003_j00.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f003_j01.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f003_j02.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f003_j03.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f003_j04.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f003_j05.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f003_j06.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f003_j07.png"
+      ],
+      "seq-sponza_pan_f004": [
+       "sponza_1920x1080_ref-seq-sponza_pan_f004_j00.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f004_j01.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f004_j02.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f004_j03.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f004_j04.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f004_j05.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f004_j06.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f004_j07.png"
+      ],
+      "seq-sponza_pan_f005": [
+       "sponza_1920x1080_ref-seq-sponza_pan_f005_j00.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f005_j01.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f005_j02.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f005_j03.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f005_j04.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f005_j05.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f005_j06.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f005_j07.png"
+      ],
+      "seq-sponza_pan_f006": [
+       "sponza_1920x1080_ref-seq-sponza_pan_f006_j00.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f006_j01.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f006_j02.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f006_j03.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f006_j04.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f006_j05.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f006_j06.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f006_j07.png"
+      ],
+      "seq-sponza_pan_f007": [
+       "sponza_1920x1080_ref-seq-sponza_pan_f007_j00.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f007_j01.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f007_j02.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f007_j03.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f007_j04.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f007_j05.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f007_j06.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f007_j07.png"
+      ],
+      "seq-sponza_pan_f008": [
+       "sponza_1920x1080_ref-seq-sponza_pan_f008_j00.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f008_j01.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f008_j02.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f008_j03.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f008_j04.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f008_j05.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f008_j06.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f008_j07.png"
+      ],
+      "seq-sponza_pan_f009": [
+       "sponza_1920x1080_ref-seq-sponza_pan_f009_j00.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f009_j01.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f009_j02.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f009_j03.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f009_j04.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f009_j05.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f009_j06.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f009_j07.png"
+      ],
+      "seq-sponza_pan_f010": [
+       "sponza_1920x1080_ref-seq-sponza_pan_f010_j00.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f010_j01.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f010_j02.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f010_j03.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f010_j04.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f010_j05.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f010_j06.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f010_j07.png"
+      ],
+      "seq-sponza_pan_f011": [
+       "sponza_1920x1080_ref-seq-sponza_pan_f011_j00.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f011_j01.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f011_j02.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f011_j03.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f011_j04.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f011_j05.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f011_j06.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f011_j07.png"
+      ],
+      "seq-sponza_pan_f012": [
+       "sponza_1920x1080_ref-seq-sponza_pan_f012_j00.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f012_j01.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f012_j02.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f012_j03.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f012_j04.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f012_j05.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f012_j06.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f012_j07.png"
+      ],
+      "seq-sponza_pan_f013": [
+       "sponza_1920x1080_ref-seq-sponza_pan_f013_j00.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f013_j01.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f013_j02.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f013_j03.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f013_j04.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f013_j05.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f013_j06.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f013_j07.png"
+      ],
+      "seq-sponza_pan_f014": [
+       "sponza_1920x1080_ref-seq-sponza_pan_f014_j00.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f014_j01.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f014_j02.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f014_j03.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f014_j04.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f014_j05.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f014_j06.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f014_j07.png"
+      ],
+      "seq-sponza_pan_f015": [
+       "sponza_1920x1080_ref-seq-sponza_pan_f015_j00.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f015_j01.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f015_j02.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f015_j03.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f015_j04.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f015_j05.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f015_j06.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f015_j07.png"
+      ],
+      "seq-sponza_pan_f016": [
+       "sponza_1920x1080_ref-seq-sponza_pan_f016_j00.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f016_j01.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f016_j02.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f016_j03.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f016_j04.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f016_j05.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f016_j06.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f016_j07.png"
+      ],
+      "seq-sponza_pan_f017": [
+       "sponza_1920x1080_ref-seq-sponza_pan_f017_j00.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f017_j01.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f017_j02.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f017_j03.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f017_j04.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f017_j05.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f017_j06.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f017_j07.png"
+      ],
+      "seq-sponza_pan_f018": [
+       "sponza_1920x1080_ref-seq-sponza_pan_f018_j00.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f018_j01.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f018_j02.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f018_j03.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f018_j04.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f018_j05.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f018_j06.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f018_j07.png"
+      ],
+      "seq-sponza_pan_f019": [
+       "sponza_1920x1080_ref-seq-sponza_pan_f019_j00.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f019_j01.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f019_j02.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f019_j03.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f019_j04.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f019_j05.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f019_j06.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f019_j07.png"
+      ],
+      "seq-sponza_pan_f020": [
+       "sponza_1920x1080_ref-seq-sponza_pan_f020_j00.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f020_j01.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f020_j02.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f020_j03.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f020_j04.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f020_j05.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f020_j06.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f020_j07.png"
+      ],
+      "seq-sponza_pan_f021": [
+       "sponza_1920x1080_ref-seq-sponza_pan_f021_j00.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f021_j01.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f021_j02.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f021_j03.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f021_j04.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f021_j05.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f021_j06.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f021_j07.png"
+      ],
+      "seq-sponza_pan_f022": [
+       "sponza_1920x1080_ref-seq-sponza_pan_f022_j00.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f022_j01.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f022_j02.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f022_j03.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f022_j04.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f022_j05.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f022_j06.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f022_j07.png"
+      ],
+      "seq-sponza_pan_f023": [
+       "sponza_1920x1080_ref-seq-sponza_pan_f023_j00.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f023_j01.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f023_j02.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f023_j03.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f023_j04.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f023_j05.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f023_j06.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f023_j07.png"
+      ],
+      "seq-sponza_pan_f024": [
+       "sponza_1920x1080_ref-seq-sponza_pan_f024_j00.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f024_j01.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f024_j02.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f024_j03.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f024_j04.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f024_j05.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f024_j06.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f024_j07.png"
+      ],
+      "seq-sponza_pan_f025": [
+       "sponza_1920x1080_ref-seq-sponza_pan_f025_j00.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f025_j01.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f025_j02.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f025_j03.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f025_j04.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f025_j05.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f025_j06.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f025_j07.png"
+      ],
+      "seq-sponza_pan_f026": [
+       "sponza_1920x1080_ref-seq-sponza_pan_f026_j00.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f026_j01.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f026_j02.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f026_j03.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f026_j04.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f026_j05.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f026_j06.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f026_j07.png"
+      ],
+      "seq-sponza_pan_f027": [
+       "sponza_1920x1080_ref-seq-sponza_pan_f027_j00.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f027_j01.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f027_j02.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f027_j03.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f027_j04.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f027_j05.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f027_j06.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f027_j07.png"
+      ],
+      "seq-sponza_pan_f028": [
+       "sponza_1920x1080_ref-seq-sponza_pan_f028_j00.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f028_j01.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f028_j02.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f028_j03.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f028_j04.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f028_j05.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f028_j06.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f028_j07.png"
+      ],
+      "seq-sponza_pan_f029": [
+       "sponza_1920x1080_ref-seq-sponza_pan_f029_j00.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f029_j01.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f029_j02.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f029_j03.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f029_j04.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f029_j05.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f029_j06.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f029_j07.png"
+      ],
+      "seq-sponza_pan_f030": [
+       "sponza_1920x1080_ref-seq-sponza_pan_f030_j00.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f030_j01.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f030_j02.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f030_j03.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f030_j04.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f030_j05.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f030_j06.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f030_j07.png"
+      ],
+      "seq-sponza_pan_f031": [
+       "sponza_1920x1080_ref-seq-sponza_pan_f031_j00.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f031_j01.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f031_j02.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f031_j03.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f031_j04.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f031_j05.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f031_j06.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f031_j07.png"
+      ],
+      "seq-sponza_pan_f032": [
+       "sponza_1920x1080_ref-seq-sponza_pan_f032_j00.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f032_j01.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f032_j02.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f032_j03.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f032_j04.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f032_j05.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f032_j06.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f032_j07.png"
+      ],
+      "seq-sponza_pan_f033": [
+       "sponza_1920x1080_ref-seq-sponza_pan_f033_j00.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f033_j01.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f033_j02.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f033_j03.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f033_j04.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f033_j05.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f033_j06.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f033_j07.png"
+      ],
+      "seq-sponza_pan_f034": [
+       "sponza_1920x1080_ref-seq-sponza_pan_f034_j00.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f034_j01.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f034_j02.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f034_j03.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f034_j04.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f034_j05.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f034_j06.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f034_j07.png"
+      ],
+      "seq-sponza_pan_f035": [
+       "sponza_1920x1080_ref-seq-sponza_pan_f035_j00.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f035_j01.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f035_j02.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f035_j03.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f035_j04.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f035_j05.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f035_j06.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f035_j07.png"
+      ],
+      "seq-sponza_pan_f036": [
+       "sponza_1920x1080_ref-seq-sponza_pan_f036_j00.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f036_j01.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f036_j02.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f036_j03.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f036_j04.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f036_j05.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f036_j06.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f036_j07.png"
+      ],
+      "seq-sponza_pan_f037": [
+       "sponza_1920x1080_ref-seq-sponza_pan_f037_j00.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f037_j01.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f037_j02.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f037_j03.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f037_j04.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f037_j05.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f037_j06.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f037_j07.png"
+      ],
+      "seq-sponza_pan_f038": [
+       "sponza_1920x1080_ref-seq-sponza_pan_f038_j00.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f038_j01.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f038_j02.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f038_j03.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f038_j04.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f038_j05.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f038_j06.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f038_j07.png"
+      ],
+      "seq-sponza_pan_f039": [
+       "sponza_1920x1080_ref-seq-sponza_pan_f039_j00.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f039_j01.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f039_j02.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f039_j03.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f039_j04.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f039_j05.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f039_j06.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f039_j07.png"
+      ],
+      "seq-sponza_pan_f040": [
+       "sponza_1920x1080_ref-seq-sponza_pan_f040_j00.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f040_j01.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f040_j02.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f040_j03.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f040_j04.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f040_j05.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f040_j06.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f040_j07.png"
+      ],
+      "seq-sponza_pan_f041": [
+       "sponza_1920x1080_ref-seq-sponza_pan_f041_j00.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f041_j01.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f041_j02.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f041_j03.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f041_j04.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f041_j05.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f041_j06.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f041_j07.png"
+      ],
+      "seq-sponza_pan_f042": [
+       "sponza_1920x1080_ref-seq-sponza_pan_f042_j00.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f042_j01.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f042_j02.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f042_j03.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f042_j04.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f042_j05.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f042_j06.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f042_j07.png"
+      ],
+      "seq-sponza_pan_f043": [
+       "sponza_1920x1080_ref-seq-sponza_pan_f043_j00.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f043_j01.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f043_j02.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f043_j03.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f043_j04.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f043_j05.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f043_j06.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f043_j07.png"
+      ],
+      "seq-sponza_pan_f044": [
+       "sponza_1920x1080_ref-seq-sponza_pan_f044_j00.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f044_j01.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f044_j02.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f044_j03.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f044_j04.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f044_j05.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f044_j06.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f044_j07.png"
+      ],
+      "seq-sponza_pan_f045": [
+       "sponza_1920x1080_ref-seq-sponza_pan_f045_j00.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f045_j01.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f045_j02.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f045_j03.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f045_j04.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f045_j05.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f045_j06.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f045_j07.png"
+      ],
+      "seq-sponza_pan_f046": [
+       "sponza_1920x1080_ref-seq-sponza_pan_f046_j00.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f046_j01.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f046_j02.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f046_j03.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f046_j04.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f046_j05.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f046_j06.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f046_j07.png"
+      ],
+      "seq-sponza_pan_f047": [
+       "sponza_1920x1080_ref-seq-sponza_pan_f047_j00.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f047_j01.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f047_j02.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f047_j03.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f047_j04.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f047_j05.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f047_j06.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f047_j07.png"
+      ],
+      "seq-sponza_pan_f048": [
+       "sponza_1920x1080_ref-seq-sponza_pan_f048_j00.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f048_j01.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f048_j02.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f048_j03.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f048_j04.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f048_j05.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f048_j06.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f048_j07.png"
+      ],
+      "seq-sponza_pan_f049": [
+       "sponza_1920x1080_ref-seq-sponza_pan_f049_j00.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f049_j01.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f049_j02.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f049_j03.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f049_j04.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f049_j05.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f049_j06.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f049_j07.png"
+      ],
+      "seq-sponza_pan_f050": [
+       "sponza_1920x1080_ref-seq-sponza_pan_f050_j00.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f050_j01.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f050_j02.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f050_j03.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f050_j04.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f050_j05.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f050_j06.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f050_j07.png"
+      ],
+      "seq-sponza_pan_f051": [
+       "sponza_1920x1080_ref-seq-sponza_pan_f051_j00.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f051_j01.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f051_j02.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f051_j03.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f051_j04.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f051_j05.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f051_j06.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f051_j07.png"
+      ],
+      "seq-sponza_pan_f052": [
+       "sponza_1920x1080_ref-seq-sponza_pan_f052_j00.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f052_j01.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f052_j02.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f052_j03.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f052_j04.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f052_j05.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f052_j06.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f052_j07.png"
+      ],
+      "seq-sponza_pan_f053": [
+       "sponza_1920x1080_ref-seq-sponza_pan_f053_j00.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f053_j01.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f053_j02.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f053_j03.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f053_j04.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f053_j05.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f053_j06.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f053_j07.png"
+      ],
+      "seq-sponza_pan_f054": [
+       "sponza_1920x1080_ref-seq-sponza_pan_f054_j00.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f054_j01.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f054_j02.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f054_j03.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f054_j04.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f054_j05.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f054_j06.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f054_j07.png"
+      ],
+      "seq-sponza_pan_f055": [
+       "sponza_1920x1080_ref-seq-sponza_pan_f055_j00.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f055_j01.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f055_j02.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f055_j03.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f055_j04.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f055_j05.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f055_j06.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f055_j07.png"
+      ],
+      "seq-sponza_pan_f056": [
+       "sponza_1920x1080_ref-seq-sponza_pan_f056_j00.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f056_j01.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f056_j02.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f056_j03.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f056_j04.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f056_j05.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f056_j06.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f056_j07.png"
+      ],
+      "seq-sponza_pan_f057": [
+       "sponza_1920x1080_ref-seq-sponza_pan_f057_j00.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f057_j01.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f057_j02.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f057_j03.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f057_j04.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f057_j05.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f057_j06.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f057_j07.png"
+      ],
+      "seq-sponza_pan_f058": [
+       "sponza_1920x1080_ref-seq-sponza_pan_f058_j00.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f058_j01.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f058_j02.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f058_j03.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f058_j04.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f058_j05.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f058_j06.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f058_j07.png"
+      ],
+      "seq-sponza_pan_f059": [
+       "sponza_1920x1080_ref-seq-sponza_pan_f059_j00.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f059_j01.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f059_j02.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f059_j03.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f059_j04.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f059_j05.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f059_j06.png",
+       "sponza_1920x1080_ref-seq-sponza_pan_f059_j07.png"
+      ]
+     },
+     "jitter_samples": 8,
+     "total_runtime_s": 346.808801,
+     "_proc": {
+      "returncode": 0,
+      "timed_out": false,
+      "wall_s": 348.772145986557,
+      "peak_working_set": 1300647936,
+      "peak_private_bytes": 5881888768
+     },
+     "_json": "benchmarks\\results\\raw\\godot-4.7.2_reference_ext\\stock\\sponza\\sponza_reference_stock_1920x1080_run0.json",
+     "_gpu_telemetry": {
+      "n": 330,
+      "clocks.gr": {
+       "min": 180.0,
+       "mean": 391.94848484848484,
+       "max": 1740.0
+      },
+      "clocks.mem": {
+       "min": 405.0,
+       "mean": 8997.012121212121,
+       "max": 10821.0
+      },
+      "temperature.gpu": {
+       "min": 44.0,
+       "mean": 48.6030303030303,
+       "max": 56.0
+      },
+      "power.draw": {
+       "min": 4.58,
+       "mean": 20.776727272727285,
+       "max": 126.75
+      },
+      "utilization.gpu": {
+       "min": 0.0,
+       "mean": 9.615151515151515,
+       "max": 100.0
+      },
+      "memory.used": {
+       "min": 328.0,
+       "mean": 4643.90303030303,
+       "max": 4692.0
+      },
+      "throttle_reasons_seen": [
+       "0x0000000000000004",
+       "0x0000000000000400"
+      ]
+     }
+    }
+   ]
+  },
+  "bistro_exterior|1920x1080|stock": {
+   "scene": "bistro_exterior",
+   "resolution": "1920x1080",
+   "build": "stock",
+   "preset": "reference_ssaa",
+   "set": "",
+   "fellow": "",
+   "binary": "stock",
+   "variant_args": [],
+   "mode": "reference",
+   "runs": [
+    {
+     "schema": 1,
+     "scene": "bistro_exterior",
+     "mode": "reference",
+     "tag": "stock",
+     "run": 0,
+     "cmdline_user_args": [
+      "--scene=bistro_exterior",
+      "--mode=reference",
+      "--res=1920x1080",
+      "--tag=stock",
+      "--run=0",
+      "--out=C:\\Users\\matek\\Documents\\GitHub\\FellowGodot\\benchmarks\\results\\raw\\godot-4.7.2_reference_ext\\stock\\bistro_exterior",
+      "--warmup=10.0",
+      "--measure=30.0",
+      "--preset=reference_ssaa",
+      "--seqs=sponza_pan,bistro_ext_path,bistro_int_path",
+      "--jitter=8",
+      "--ref_settle_first=6",
+      "--ref_settle=1"
+     ],
+     "cmdline_args": [],
+     "engine": {
+      "major": 4,
+      "minor": 7,
+      "patch": 2,
+      "hex": 263938,
+      "status": "stable",
+      "build": "custom_build",
+      "hash": "ed1daf0bf001b61586d9930840f2f1394092c079",
+      "timestamp": 1786929518,
+      "string": "4.7.2-stable (custom_build)"
+     },
+     "engine_build": {
+      "debug_build": false,
+      "has_editor": false,
+      "template_release": true
+     },
+     "adapter": {
+      "name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+      "vendor": "NVIDIA",
+      "api_version": "1.4.351",
+      "type": 2,
+      "driver": [
+       "NVIDIA",
+       "32.0.16.1714"
+      ],
+      "rendering_driver": "vulkan",
+      "rendering_method": "forward_plus"
+     },
+     "os": {
+      "name": "Windows",
+      "version": "10.0.26200",
+      "cpu": "Intel(R) Core(TM) Ultra 9 275HX",
+      "cpu_count": 24
+     },
+     "fellow": {
+      "available": false,
+      "requested": {},
+      "state": {}
+     },
+     "load_time_ms": 2156.308,
+     "startup_to_first_frame_ms": 2166.384,
+     "resolution": [
+      1920,
+      1080
+     ],
+     "valid": true,
+     "auto_exposure_disabled_for_mode": true,
+     "files": {
+      "cam-bistro_ext_cam_01": [
+       "bistro_exterior_1920x1080_ref-cam-bistro_ext_cam_01_j00.png",
+       "bistro_exterior_1920x1080_ref-cam-bistro_ext_cam_01_j01.png",
+       "bistro_exterior_1920x1080_ref-cam-bistro_ext_cam_01_j02.png",
+       "bistro_exterior_1920x1080_ref-cam-bistro_ext_cam_01_j03.png",
+       "bistro_exterior_1920x1080_ref-cam-bistro_ext_cam_01_j04.png",
+       "bistro_exterior_1920x1080_ref-cam-bistro_ext_cam_01_j05.png",
+       "bistro_exterior_1920x1080_ref-cam-bistro_ext_cam_01_j06.png",
+       "bistro_exterior_1920x1080_ref-cam-bistro_ext_cam_01_j07.png"
+      ],
+      "cam-bistro_ext_cam_02": [
+       "bistro_exterior_1920x1080_ref-cam-bistro_ext_cam_02_j00.png",
+       "bistro_exterior_1920x1080_ref-cam-bistro_ext_cam_02_j01.png",
+       "bistro_exterior_1920x1080_ref-cam-bistro_ext_cam_02_j02.png",
+       "bistro_exterior_1920x1080_ref-cam-bistro_ext_cam_02_j03.png",
+       "bistro_exterior_1920x1080_ref-cam-bistro_ext_cam_02_j04.png",
+       "bistro_exterior_1920x1080_ref-cam-bistro_ext_cam_02_j05.png",
+       "bistro_exterior_1920x1080_ref-cam-bistro_ext_cam_02_j06.png",
+       "bistro_exterior_1920x1080_ref-cam-bistro_ext_cam_02_j07.png"
+      ],
+      "cam-bistro_ext_cam_03": [
+       "bistro_exterior_1920x1080_ref-cam-bistro_ext_cam_03_j00.png",
+       "bistro_exterior_1920x1080_ref-cam-bistro_ext_cam_03_j01.png",
+       "bistro_exterior_1920x1080_ref-cam-bistro_ext_cam_03_j02.png",
+       "bistro_exterior_1920x1080_ref-cam-bistro_ext_cam_03_j03.png",
+       "bistro_exterior_1920x1080_ref-cam-bistro_ext_cam_03_j04.png",
+       "bistro_exterior_1920x1080_ref-cam-bistro_ext_cam_03_j05.png",
+       "bistro_exterior_1920x1080_ref-cam-bistro_ext_cam_03_j06.png",
+       "bistro_exterior_1920x1080_ref-cam-bistro_ext_cam_03_j07.png"
+      ],
+      "cam-bistro_ext_cam_04": [
+       "bistro_exterior_1920x1080_ref-cam-bistro_ext_cam_04_j00.png",
+       "bistro_exterior_1920x1080_ref-cam-bistro_ext_cam_04_j01.png",
+       "bistro_exterior_1920x1080_ref-cam-bistro_ext_cam_04_j02.png",
+       "bistro_exterior_1920x1080_ref-cam-bistro_ext_cam_04_j03.png",
+       "bistro_exterior_1920x1080_ref-cam-bistro_ext_cam_04_j04.png",
+       "bistro_exterior_1920x1080_ref-cam-bistro_ext_cam_04_j05.png",
+       "bistro_exterior_1920x1080_ref-cam-bistro_ext_cam_04_j06.png",
+       "bistro_exterior_1920x1080_ref-cam-bistro_ext_cam_04_j07.png"
+      ],
+      "seq-bistro_ext_path_f000": [
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f000_j00.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f000_j01.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f000_j02.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f000_j03.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f000_j04.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f000_j05.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f000_j06.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f000_j07.png"
+      ],
+      "seq-bistro_ext_path_f001": [
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f001_j00.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f001_j01.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f001_j02.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f001_j03.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f001_j04.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f001_j05.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f001_j06.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f001_j07.png"
+      ],
+      "seq-bistro_ext_path_f002": [
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f002_j00.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f002_j01.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f002_j02.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f002_j03.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f002_j04.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f002_j05.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f002_j06.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f002_j07.png"
+      ],
+      "seq-bistro_ext_path_f003": [
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f003_j00.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f003_j01.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f003_j02.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f003_j03.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f003_j04.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f003_j05.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f003_j06.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f003_j07.png"
+      ],
+      "seq-bistro_ext_path_f004": [
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f004_j00.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f004_j01.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f004_j02.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f004_j03.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f004_j04.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f004_j05.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f004_j06.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f004_j07.png"
+      ],
+      "seq-bistro_ext_path_f005": [
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f005_j00.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f005_j01.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f005_j02.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f005_j03.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f005_j04.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f005_j05.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f005_j06.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f005_j07.png"
+      ],
+      "seq-bistro_ext_path_f006": [
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f006_j00.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f006_j01.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f006_j02.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f006_j03.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f006_j04.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f006_j05.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f006_j06.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f006_j07.png"
+      ],
+      "seq-bistro_ext_path_f007": [
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f007_j00.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f007_j01.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f007_j02.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f007_j03.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f007_j04.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f007_j05.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f007_j06.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f007_j07.png"
+      ],
+      "seq-bistro_ext_path_f008": [
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f008_j00.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f008_j01.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f008_j02.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f008_j03.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f008_j04.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f008_j05.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f008_j06.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f008_j07.png"
+      ],
+      "seq-bistro_ext_path_f009": [
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f009_j00.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f009_j01.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f009_j02.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f009_j03.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f009_j04.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f009_j05.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f009_j06.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f009_j07.png"
+      ],
+      "seq-bistro_ext_path_f010": [
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f010_j00.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f010_j01.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f010_j02.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f010_j03.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f010_j04.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f010_j05.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f010_j06.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f010_j07.png"
+      ],
+      "seq-bistro_ext_path_f011": [
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f011_j00.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f011_j01.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f011_j02.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f011_j03.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f011_j04.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f011_j05.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f011_j06.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f011_j07.png"
+      ],
+      "seq-bistro_ext_path_f012": [
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f012_j00.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f012_j01.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f012_j02.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f012_j03.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f012_j04.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f012_j05.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f012_j06.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f012_j07.png"
+      ],
+      "seq-bistro_ext_path_f013": [
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f013_j00.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f013_j01.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f013_j02.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f013_j03.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f013_j04.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f013_j05.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f013_j06.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f013_j07.png"
+      ],
+      "seq-bistro_ext_path_f014": [
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f014_j00.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f014_j01.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f014_j02.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f014_j03.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f014_j04.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f014_j05.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f014_j06.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f014_j07.png"
+      ],
+      "seq-bistro_ext_path_f015": [
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f015_j00.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f015_j01.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f015_j02.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f015_j03.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f015_j04.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f015_j05.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f015_j06.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f015_j07.png"
+      ],
+      "seq-bistro_ext_path_f016": [
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f016_j00.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f016_j01.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f016_j02.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f016_j03.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f016_j04.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f016_j05.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f016_j06.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f016_j07.png"
+      ],
+      "seq-bistro_ext_path_f017": [
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f017_j00.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f017_j01.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f017_j02.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f017_j03.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f017_j04.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f017_j05.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f017_j06.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f017_j07.png"
+      ],
+      "seq-bistro_ext_path_f018": [
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f018_j00.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f018_j01.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f018_j02.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f018_j03.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f018_j04.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f018_j05.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f018_j06.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f018_j07.png"
+      ],
+      "seq-bistro_ext_path_f019": [
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f019_j00.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f019_j01.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f019_j02.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f019_j03.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f019_j04.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f019_j05.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f019_j06.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f019_j07.png"
+      ],
+      "seq-bistro_ext_path_f020": [
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f020_j00.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f020_j01.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f020_j02.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f020_j03.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f020_j04.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f020_j05.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f020_j06.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f020_j07.png"
+      ],
+      "seq-bistro_ext_path_f021": [
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f021_j00.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f021_j01.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f021_j02.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f021_j03.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f021_j04.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f021_j05.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f021_j06.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f021_j07.png"
+      ],
+      "seq-bistro_ext_path_f022": [
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f022_j00.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f022_j01.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f022_j02.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f022_j03.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f022_j04.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f022_j05.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f022_j06.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f022_j07.png"
+      ],
+      "seq-bistro_ext_path_f023": [
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f023_j00.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f023_j01.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f023_j02.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f023_j03.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f023_j04.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f023_j05.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f023_j06.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f023_j07.png"
+      ],
+      "seq-bistro_ext_path_f024": [
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f024_j00.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f024_j01.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f024_j02.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f024_j03.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f024_j04.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f024_j05.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f024_j06.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f024_j07.png"
+      ],
+      "seq-bistro_ext_path_f025": [
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f025_j00.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f025_j01.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f025_j02.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f025_j03.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f025_j04.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f025_j05.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f025_j06.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f025_j07.png"
+      ],
+      "seq-bistro_ext_path_f026": [
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f026_j00.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f026_j01.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f026_j02.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f026_j03.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f026_j04.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f026_j05.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f026_j06.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f026_j07.png"
+      ],
+      "seq-bistro_ext_path_f027": [
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f027_j00.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f027_j01.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f027_j02.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f027_j03.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f027_j04.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f027_j05.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f027_j06.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f027_j07.png"
+      ],
+      "seq-bistro_ext_path_f028": [
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f028_j00.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f028_j01.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f028_j02.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f028_j03.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f028_j04.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f028_j05.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f028_j06.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f028_j07.png"
+      ],
+      "seq-bistro_ext_path_f029": [
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f029_j00.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f029_j01.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f029_j02.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f029_j03.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f029_j04.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f029_j05.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f029_j06.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f029_j07.png"
+      ],
+      "seq-bistro_ext_path_f030": [
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f030_j00.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f030_j01.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f030_j02.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f030_j03.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f030_j04.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f030_j05.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f030_j06.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f030_j07.png"
+      ],
+      "seq-bistro_ext_path_f031": [
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f031_j00.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f031_j01.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f031_j02.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f031_j03.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f031_j04.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f031_j05.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f031_j06.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f031_j07.png"
+      ],
+      "seq-bistro_ext_path_f032": [
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f032_j00.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f032_j01.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f032_j02.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f032_j03.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f032_j04.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f032_j05.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f032_j06.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f032_j07.png"
+      ],
+      "seq-bistro_ext_path_f033": [
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f033_j00.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f033_j01.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f033_j02.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f033_j03.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f033_j04.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f033_j05.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f033_j06.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f033_j07.png"
+      ],
+      "seq-bistro_ext_path_f034": [
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f034_j00.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f034_j01.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f034_j02.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f034_j03.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f034_j04.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f034_j05.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f034_j06.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f034_j07.png"
+      ],
+      "seq-bistro_ext_path_f035": [
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f035_j00.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f035_j01.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f035_j02.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f035_j03.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f035_j04.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f035_j05.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f035_j06.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f035_j07.png"
+      ],
+      "seq-bistro_ext_path_f036": [
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f036_j00.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f036_j01.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f036_j02.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f036_j03.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f036_j04.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f036_j05.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f036_j06.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f036_j07.png"
+      ],
+      "seq-bistro_ext_path_f037": [
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f037_j00.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f037_j01.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f037_j02.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f037_j03.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f037_j04.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f037_j05.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f037_j06.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f037_j07.png"
+      ],
+      "seq-bistro_ext_path_f038": [
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f038_j00.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f038_j01.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f038_j02.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f038_j03.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f038_j04.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f038_j05.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f038_j06.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f038_j07.png"
+      ],
+      "seq-bistro_ext_path_f039": [
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f039_j00.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f039_j01.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f039_j02.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f039_j03.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f039_j04.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f039_j05.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f039_j06.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f039_j07.png"
+      ],
+      "seq-bistro_ext_path_f040": [
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f040_j00.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f040_j01.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f040_j02.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f040_j03.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f040_j04.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f040_j05.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f040_j06.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f040_j07.png"
+      ],
+      "seq-bistro_ext_path_f041": [
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f041_j00.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f041_j01.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f041_j02.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f041_j03.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f041_j04.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f041_j05.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f041_j06.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f041_j07.png"
+      ],
+      "seq-bistro_ext_path_f042": [
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f042_j00.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f042_j01.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f042_j02.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f042_j03.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f042_j04.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f042_j05.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f042_j06.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f042_j07.png"
+      ],
+      "seq-bistro_ext_path_f043": [
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f043_j00.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f043_j01.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f043_j02.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f043_j03.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f043_j04.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f043_j05.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f043_j06.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f043_j07.png"
+      ],
+      "seq-bistro_ext_path_f044": [
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f044_j00.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f044_j01.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f044_j02.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f044_j03.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f044_j04.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f044_j05.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f044_j06.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f044_j07.png"
+      ],
+      "seq-bistro_ext_path_f045": [
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f045_j00.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f045_j01.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f045_j02.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f045_j03.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f045_j04.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f045_j05.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f045_j06.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f045_j07.png"
+      ],
+      "seq-bistro_ext_path_f046": [
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f046_j00.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f046_j01.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f046_j02.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f046_j03.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f046_j04.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f046_j05.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f046_j06.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f046_j07.png"
+      ],
+      "seq-bistro_ext_path_f047": [
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f047_j00.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f047_j01.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f047_j02.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f047_j03.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f047_j04.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f047_j05.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f047_j06.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f047_j07.png"
+      ],
+      "seq-bistro_ext_path_f048": [
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f048_j00.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f048_j01.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f048_j02.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f048_j03.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f048_j04.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f048_j05.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f048_j06.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f048_j07.png"
+      ],
+      "seq-bistro_ext_path_f049": [
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f049_j00.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f049_j01.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f049_j02.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f049_j03.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f049_j04.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f049_j05.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f049_j06.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f049_j07.png"
+      ],
+      "seq-bistro_ext_path_f050": [
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f050_j00.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f050_j01.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f050_j02.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f050_j03.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f050_j04.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f050_j05.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f050_j06.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f050_j07.png"
+      ],
+      "seq-bistro_ext_path_f051": [
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f051_j00.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f051_j01.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f051_j02.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f051_j03.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f051_j04.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f051_j05.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f051_j06.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f051_j07.png"
+      ],
+      "seq-bistro_ext_path_f052": [
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f052_j00.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f052_j01.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f052_j02.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f052_j03.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f052_j04.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f052_j05.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f052_j06.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f052_j07.png"
+      ],
+      "seq-bistro_ext_path_f053": [
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f053_j00.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f053_j01.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f053_j02.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f053_j03.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f053_j04.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f053_j05.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f053_j06.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f053_j07.png"
+      ],
+      "seq-bistro_ext_path_f054": [
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f054_j00.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f054_j01.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f054_j02.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f054_j03.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f054_j04.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f054_j05.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f054_j06.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f054_j07.png"
+      ],
+      "seq-bistro_ext_path_f055": [
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f055_j00.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f055_j01.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f055_j02.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f055_j03.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f055_j04.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f055_j05.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f055_j06.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f055_j07.png"
+      ],
+      "seq-bistro_ext_path_f056": [
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f056_j00.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f056_j01.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f056_j02.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f056_j03.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f056_j04.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f056_j05.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f056_j06.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f056_j07.png"
+      ],
+      "seq-bistro_ext_path_f057": [
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f057_j00.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f057_j01.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f057_j02.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f057_j03.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f057_j04.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f057_j05.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f057_j06.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f057_j07.png"
+      ],
+      "seq-bistro_ext_path_f058": [
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f058_j00.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f058_j01.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f058_j02.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f058_j03.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f058_j04.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f058_j05.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f058_j06.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f058_j07.png"
+      ],
+      "seq-bistro_ext_path_f059": [
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f059_j00.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f059_j01.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f059_j02.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f059_j03.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f059_j04.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f059_j05.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f059_j06.png",
+       "bistro_exterior_1920x1080_ref-seq-bistro_ext_path_f059_j07.png"
+      ]
+     },
+     "jitter_samples": 8,
+     "total_runtime_s": 263.052706,
+     "_proc": {
+      "returncode": 0,
+      "timed_out": false,
+      "wall_s": 264.74553513526917,
+      "peak_working_set": 1052692480,
+      "peak_private_bytes": 5098287104
+     },
+     "_json": "benchmarks\\results\\raw\\godot-4.7.2_reference_ext\\stock\\bistro_exterior\\bistro_exterior_reference_stock_1920x1080_run0.json",
+     "_gpu_telemetry": {
+      "n": 251,
+      "clocks.gr": {
+       "min": 172.0,
+       "mean": 309.2828685258964,
+       "max": 1882.0
+      },
+      "clocks.mem": {
+       "min": 405.0,
+       "mean": 8671.438247011953,
+       "max": 9001.0
+      },
+      "temperature.gpu": {
+       "min": 46.0,
+       "mean": 47.569721115537845,
+       "max": 52.0
+      },
+      "power.draw": {
+       "min": 4.5,
+       "mean": 16.610318725099603,
+       "max": 137.62
+      },
+      "utilization.gpu": {
+       "min": 0.0,
+       "mean": 5.48605577689243,
+       "max": 100.0
+      },
+      "memory.used": {
+       "min": 328.0,
+       "mean": 4124.119521912351,
+       "max": 4180.0
+      },
+      "throttle_reasons_seen": [
+       "0x0000000000000004",
+       "0x0000000000000400"
+      ]
+     }
+    }
+   ]
+  },
+  "bistro_interior|1920x1080|stock": {
+   "scene": "bistro_interior",
+   "resolution": "1920x1080",
+   "build": "stock",
+   "preset": "reference_ssaa",
+   "set": "",
+   "fellow": "",
+   "binary": "stock",
+   "variant_args": [],
+   "mode": "reference",
+   "runs": [
+    {
+     "schema": 1,
+     "scene": "bistro_interior",
+     "mode": "reference",
+     "tag": "stock",
+     "run": 0,
+     "cmdline_user_args": [
+      "--scene=bistro_interior",
+      "--mode=reference",
+      "--res=1920x1080",
+      "--tag=stock",
+      "--run=0",
+      "--out=C:\\Users\\matek\\Documents\\GitHub\\FellowGodot\\benchmarks\\results\\raw\\godot-4.7.2_reference_ext\\stock\\bistro_interior",
+      "--warmup=10.0",
+      "--measure=30.0",
+      "--preset=reference_ssaa",
+      "--seqs=sponza_pan,bistro_ext_path,bistro_int_path",
+      "--jitter=8",
+      "--ref_settle_first=6",
+      "--ref_settle=1"
+     ],
+     "cmdline_args": [],
+     "engine": {
+      "major": 4,
+      "minor": 7,
+      "patch": 2,
+      "hex": 263938,
+      "status": "stable",
+      "build": "custom_build",
+      "hash": "ed1daf0bf001b61586d9930840f2f1394092c079",
+      "timestamp": 1786929518,
+      "string": "4.7.2-stable (custom_build)"
+     },
+     "engine_build": {
+      "debug_build": false,
+      "has_editor": false,
+      "template_release": true
+     },
+     "adapter": {
+      "name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+      "vendor": "NVIDIA",
+      "api_version": "1.4.351",
+      "type": 2,
+      "driver": [
+       "NVIDIA",
+       "32.0.16.1714"
+      ],
+      "rendering_driver": "vulkan",
+      "rendering_method": "forward_plus"
+     },
+     "os": {
+      "name": "Windows",
+      "version": "10.0.26200",
+      "cpu": "Intel(R) Core(TM) Ultra 9 275HX",
+      "cpu_count": 24
+     },
+     "fellow": {
+      "available": false,
+      "requested": {},
+      "state": {}
+     },
+     "load_time_ms": 1156.288,
+     "startup_to_first_frame_ms": 1165.222,
+     "resolution": [
+      1920,
+      1080
+     ],
+     "valid": true,
+     "auto_exposure_disabled_for_mode": true,
+     "files": {
+      "cam-bistro_int_cam_01": [
+       "bistro_interior_1920x1080_ref-cam-bistro_int_cam_01_j00.png",
+       "bistro_interior_1920x1080_ref-cam-bistro_int_cam_01_j01.png",
+       "bistro_interior_1920x1080_ref-cam-bistro_int_cam_01_j02.png",
+       "bistro_interior_1920x1080_ref-cam-bistro_int_cam_01_j03.png",
+       "bistro_interior_1920x1080_ref-cam-bistro_int_cam_01_j04.png",
+       "bistro_interior_1920x1080_ref-cam-bistro_int_cam_01_j05.png",
+       "bistro_interior_1920x1080_ref-cam-bistro_int_cam_01_j06.png",
+       "bistro_interior_1920x1080_ref-cam-bistro_int_cam_01_j07.png"
+      ],
+      "cam-bistro_int_cam_02": [
+       "bistro_interior_1920x1080_ref-cam-bistro_int_cam_02_j00.png",
+       "bistro_interior_1920x1080_ref-cam-bistro_int_cam_02_j01.png",
+       "bistro_interior_1920x1080_ref-cam-bistro_int_cam_02_j02.png",
+       "bistro_interior_1920x1080_ref-cam-bistro_int_cam_02_j03.png",
+       "bistro_interior_1920x1080_ref-cam-bistro_int_cam_02_j04.png",
+       "bistro_interior_1920x1080_ref-cam-bistro_int_cam_02_j05.png",
+       "bistro_interior_1920x1080_ref-cam-bistro_int_cam_02_j06.png",
+       "bistro_interior_1920x1080_ref-cam-bistro_int_cam_02_j07.png"
+      ],
+      "cam-bistro_int_cam_03": [
+       "bistro_interior_1920x1080_ref-cam-bistro_int_cam_03_j00.png",
+       "bistro_interior_1920x1080_ref-cam-bistro_int_cam_03_j01.png",
+       "bistro_interior_1920x1080_ref-cam-bistro_int_cam_03_j02.png",
+       "bistro_interior_1920x1080_ref-cam-bistro_int_cam_03_j03.png",
+       "bistro_interior_1920x1080_ref-cam-bistro_int_cam_03_j04.png",
+       "bistro_interior_1920x1080_ref-cam-bistro_int_cam_03_j05.png",
+       "bistro_interior_1920x1080_ref-cam-bistro_int_cam_03_j06.png",
+       "bistro_interior_1920x1080_ref-cam-bistro_int_cam_03_j07.png"
+      ],
+      "cam-bistro_int_cam_04": [
+       "bistro_interior_1920x1080_ref-cam-bistro_int_cam_04_j00.png",
+       "bistro_interior_1920x1080_ref-cam-bistro_int_cam_04_j01.png",
+       "bistro_interior_1920x1080_ref-cam-bistro_int_cam_04_j02.png",
+       "bistro_interior_1920x1080_ref-cam-bistro_int_cam_04_j03.png",
+       "bistro_interior_1920x1080_ref-cam-bistro_int_cam_04_j04.png",
+       "bistro_interior_1920x1080_ref-cam-bistro_int_cam_04_j05.png",
+       "bistro_interior_1920x1080_ref-cam-bistro_int_cam_04_j06.png",
+       "bistro_interior_1920x1080_ref-cam-bistro_int_cam_04_j07.png"
+      ],
+      "seq-bistro_int_path_f000": [
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f000_j00.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f000_j01.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f000_j02.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f000_j03.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f000_j04.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f000_j05.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f000_j06.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f000_j07.png"
+      ],
+      "seq-bistro_int_path_f001": [
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f001_j00.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f001_j01.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f001_j02.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f001_j03.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f001_j04.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f001_j05.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f001_j06.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f001_j07.png"
+      ],
+      "seq-bistro_int_path_f002": [
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f002_j00.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f002_j01.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f002_j02.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f002_j03.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f002_j04.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f002_j05.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f002_j06.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f002_j07.png"
+      ],
+      "seq-bistro_int_path_f003": [
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f003_j00.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f003_j01.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f003_j02.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f003_j03.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f003_j04.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f003_j05.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f003_j06.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f003_j07.png"
+      ],
+      "seq-bistro_int_path_f004": [
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f004_j00.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f004_j01.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f004_j02.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f004_j03.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f004_j04.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f004_j05.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f004_j06.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f004_j07.png"
+      ],
+      "seq-bistro_int_path_f005": [
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f005_j00.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f005_j01.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f005_j02.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f005_j03.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f005_j04.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f005_j05.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f005_j06.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f005_j07.png"
+      ],
+      "seq-bistro_int_path_f006": [
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f006_j00.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f006_j01.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f006_j02.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f006_j03.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f006_j04.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f006_j05.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f006_j06.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f006_j07.png"
+      ],
+      "seq-bistro_int_path_f007": [
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f007_j00.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f007_j01.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f007_j02.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f007_j03.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f007_j04.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f007_j05.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f007_j06.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f007_j07.png"
+      ],
+      "seq-bistro_int_path_f008": [
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f008_j00.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f008_j01.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f008_j02.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f008_j03.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f008_j04.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f008_j05.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f008_j06.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f008_j07.png"
+      ],
+      "seq-bistro_int_path_f009": [
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f009_j00.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f009_j01.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f009_j02.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f009_j03.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f009_j04.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f009_j05.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f009_j06.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f009_j07.png"
+      ],
+      "seq-bistro_int_path_f010": [
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f010_j00.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f010_j01.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f010_j02.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f010_j03.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f010_j04.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f010_j05.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f010_j06.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f010_j07.png"
+      ],
+      "seq-bistro_int_path_f011": [
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f011_j00.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f011_j01.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f011_j02.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f011_j03.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f011_j04.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f011_j05.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f011_j06.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f011_j07.png"
+      ],
+      "seq-bistro_int_path_f012": [
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f012_j00.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f012_j01.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f012_j02.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f012_j03.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f012_j04.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f012_j05.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f012_j06.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f012_j07.png"
+      ],
+      "seq-bistro_int_path_f013": [
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f013_j00.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f013_j01.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f013_j02.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f013_j03.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f013_j04.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f013_j05.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f013_j06.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f013_j07.png"
+      ],
+      "seq-bistro_int_path_f014": [
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f014_j00.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f014_j01.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f014_j02.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f014_j03.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f014_j04.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f014_j05.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f014_j06.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f014_j07.png"
+      ],
+      "seq-bistro_int_path_f015": [
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f015_j00.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f015_j01.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f015_j02.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f015_j03.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f015_j04.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f015_j05.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f015_j06.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f015_j07.png"
+      ],
+      "seq-bistro_int_path_f016": [
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f016_j00.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f016_j01.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f016_j02.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f016_j03.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f016_j04.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f016_j05.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f016_j06.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f016_j07.png"
+      ],
+      "seq-bistro_int_path_f017": [
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f017_j00.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f017_j01.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f017_j02.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f017_j03.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f017_j04.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f017_j05.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f017_j06.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f017_j07.png"
+      ],
+      "seq-bistro_int_path_f018": [
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f018_j00.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f018_j01.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f018_j02.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f018_j03.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f018_j04.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f018_j05.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f018_j06.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f018_j07.png"
+      ],
+      "seq-bistro_int_path_f019": [
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f019_j00.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f019_j01.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f019_j02.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f019_j03.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f019_j04.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f019_j05.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f019_j06.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f019_j07.png"
+      ],
+      "seq-bistro_int_path_f020": [
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f020_j00.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f020_j01.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f020_j02.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f020_j03.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f020_j04.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f020_j05.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f020_j06.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f020_j07.png"
+      ],
+      "seq-bistro_int_path_f021": [
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f021_j00.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f021_j01.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f021_j02.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f021_j03.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f021_j04.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f021_j05.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f021_j06.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f021_j07.png"
+      ],
+      "seq-bistro_int_path_f022": [
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f022_j00.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f022_j01.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f022_j02.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f022_j03.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f022_j04.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f022_j05.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f022_j06.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f022_j07.png"
+      ],
+      "seq-bistro_int_path_f023": [
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f023_j00.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f023_j01.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f023_j02.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f023_j03.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f023_j04.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f023_j05.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f023_j06.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f023_j07.png"
+      ],
+      "seq-bistro_int_path_f024": [
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f024_j00.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f024_j01.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f024_j02.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f024_j03.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f024_j04.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f024_j05.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f024_j06.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f024_j07.png"
+      ],
+      "seq-bistro_int_path_f025": [
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f025_j00.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f025_j01.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f025_j02.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f025_j03.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f025_j04.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f025_j05.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f025_j06.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f025_j07.png"
+      ],
+      "seq-bistro_int_path_f026": [
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f026_j00.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f026_j01.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f026_j02.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f026_j03.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f026_j04.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f026_j05.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f026_j06.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f026_j07.png"
+      ],
+      "seq-bistro_int_path_f027": [
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f027_j00.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f027_j01.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f027_j02.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f027_j03.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f027_j04.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f027_j05.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f027_j06.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f027_j07.png"
+      ],
+      "seq-bistro_int_path_f028": [
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f028_j00.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f028_j01.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f028_j02.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f028_j03.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f028_j04.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f028_j05.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f028_j06.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f028_j07.png"
+      ],
+      "seq-bistro_int_path_f029": [
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f029_j00.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f029_j01.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f029_j02.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f029_j03.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f029_j04.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f029_j05.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f029_j06.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f029_j07.png"
+      ],
+      "seq-bistro_int_path_f030": [
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f030_j00.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f030_j01.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f030_j02.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f030_j03.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f030_j04.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f030_j05.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f030_j06.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f030_j07.png"
+      ],
+      "seq-bistro_int_path_f031": [
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f031_j00.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f031_j01.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f031_j02.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f031_j03.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f031_j04.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f031_j05.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f031_j06.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f031_j07.png"
+      ],
+      "seq-bistro_int_path_f032": [
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f032_j00.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f032_j01.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f032_j02.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f032_j03.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f032_j04.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f032_j05.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f032_j06.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f032_j07.png"
+      ],
+      "seq-bistro_int_path_f033": [
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f033_j00.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f033_j01.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f033_j02.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f033_j03.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f033_j04.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f033_j05.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f033_j06.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f033_j07.png"
+      ],
+      "seq-bistro_int_path_f034": [
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f034_j00.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f034_j01.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f034_j02.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f034_j03.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f034_j04.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f034_j05.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f034_j06.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f034_j07.png"
+      ],
+      "seq-bistro_int_path_f035": [
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f035_j00.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f035_j01.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f035_j02.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f035_j03.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f035_j04.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f035_j05.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f035_j06.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f035_j07.png"
+      ],
+      "seq-bistro_int_path_f036": [
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f036_j00.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f036_j01.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f036_j02.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f036_j03.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f036_j04.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f036_j05.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f036_j06.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f036_j07.png"
+      ],
+      "seq-bistro_int_path_f037": [
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f037_j00.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f037_j01.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f037_j02.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f037_j03.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f037_j04.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f037_j05.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f037_j06.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f037_j07.png"
+      ],
+      "seq-bistro_int_path_f038": [
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f038_j00.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f038_j01.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f038_j02.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f038_j03.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f038_j04.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f038_j05.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f038_j06.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f038_j07.png"
+      ],
+      "seq-bistro_int_path_f039": [
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f039_j00.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f039_j01.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f039_j02.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f039_j03.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f039_j04.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f039_j05.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f039_j06.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f039_j07.png"
+      ],
+      "seq-bistro_int_path_f040": [
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f040_j00.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f040_j01.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f040_j02.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f040_j03.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f040_j04.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f040_j05.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f040_j06.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f040_j07.png"
+      ],
+      "seq-bistro_int_path_f041": [
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f041_j00.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f041_j01.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f041_j02.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f041_j03.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f041_j04.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f041_j05.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f041_j06.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f041_j07.png"
+      ],
+      "seq-bistro_int_path_f042": [
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f042_j00.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f042_j01.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f042_j02.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f042_j03.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f042_j04.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f042_j05.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f042_j06.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f042_j07.png"
+      ],
+      "seq-bistro_int_path_f043": [
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f043_j00.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f043_j01.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f043_j02.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f043_j03.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f043_j04.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f043_j05.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f043_j06.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f043_j07.png"
+      ],
+      "seq-bistro_int_path_f044": [
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f044_j00.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f044_j01.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f044_j02.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f044_j03.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f044_j04.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f044_j05.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f044_j06.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f044_j07.png"
+      ],
+      "seq-bistro_int_path_f045": [
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f045_j00.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f045_j01.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f045_j02.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f045_j03.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f045_j04.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f045_j05.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f045_j06.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f045_j07.png"
+      ],
+      "seq-bistro_int_path_f046": [
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f046_j00.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f046_j01.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f046_j02.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f046_j03.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f046_j04.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f046_j05.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f046_j06.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f046_j07.png"
+      ],
+      "seq-bistro_int_path_f047": [
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f047_j00.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f047_j01.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f047_j02.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f047_j03.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f047_j04.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f047_j05.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f047_j06.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f047_j07.png"
+      ],
+      "seq-bistro_int_path_f048": [
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f048_j00.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f048_j01.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f048_j02.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f048_j03.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f048_j04.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f048_j05.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f048_j06.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f048_j07.png"
+      ],
+      "seq-bistro_int_path_f049": [
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f049_j00.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f049_j01.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f049_j02.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f049_j03.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f049_j04.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f049_j05.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f049_j06.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f049_j07.png"
+      ],
+      "seq-bistro_int_path_f050": [
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f050_j00.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f050_j01.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f050_j02.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f050_j03.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f050_j04.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f050_j05.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f050_j06.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f050_j07.png"
+      ],
+      "seq-bistro_int_path_f051": [
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f051_j00.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f051_j01.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f051_j02.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f051_j03.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f051_j04.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f051_j05.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f051_j06.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f051_j07.png"
+      ],
+      "seq-bistro_int_path_f052": [
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f052_j00.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f052_j01.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f052_j02.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f052_j03.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f052_j04.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f052_j05.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f052_j06.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f052_j07.png"
+      ],
+      "seq-bistro_int_path_f053": [
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f053_j00.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f053_j01.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f053_j02.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f053_j03.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f053_j04.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f053_j05.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f053_j06.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f053_j07.png"
+      ],
+      "seq-bistro_int_path_f054": [
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f054_j00.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f054_j01.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f054_j02.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f054_j03.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f054_j04.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f054_j05.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f054_j06.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f054_j07.png"
+      ],
+      "seq-bistro_int_path_f055": [
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f055_j00.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f055_j01.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f055_j02.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f055_j03.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f055_j04.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f055_j05.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f055_j06.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f055_j07.png"
+      ],
+      "seq-bistro_int_path_f056": [
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f056_j00.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f056_j01.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f056_j02.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f056_j03.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f056_j04.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f056_j05.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f056_j06.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f056_j07.png"
+      ],
+      "seq-bistro_int_path_f057": [
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f057_j00.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f057_j01.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f057_j02.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f057_j03.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f057_j04.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f057_j05.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f057_j06.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f057_j07.png"
+      ],
+      "seq-bistro_int_path_f058": [
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f058_j00.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f058_j01.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f058_j02.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f058_j03.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f058_j04.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f058_j05.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f058_j06.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f058_j07.png"
+      ],
+      "seq-bistro_int_path_f059": [
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f059_j00.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f059_j01.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f059_j02.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f059_j03.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f059_j04.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f059_j05.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f059_j06.png",
+       "bistro_interior_1920x1080_ref-seq-bistro_int_path_f059_j07.png"
+      ]
+     },
+     "jitter_samples": 8,
+     "total_runtime_s": 371.366666,
+     "_proc": {
+      "returncode": 0,
+      "timed_out": false,
+      "wall_s": 373.40247082710266,
+      "peak_working_set": 1004060672,
+      "peak_private_bytes": 4254826496
+     },
+     "_json": "benchmarks\\results\\raw\\godot-4.7.2_reference_ext\\stock\\bistro_interior\\bistro_interior_reference_stock_1920x1080_run0.json",
+     "_gpu_telemetry": {
+      "n": 353,
+      "clocks.gr": {
+       "min": 172.0,
+       "mean": 396.8526912181303,
+       "max": 2752.0
+      },
+      "clocks.mem": {
+       "min": 405.0,
+       "mean": 5791.645892351275,
+       "max": 10821.0
+      },
+      "temperature.gpu": {
+       "min": 45.0,
+       "mean": 46.507082152974505,
+       "max": 53.0
+      },
+      "power.draw": {
+       "min": 4.36,
+       "mean": 15.392294617563746,
+       "max": 71.93
+      },
+      "utilization.gpu": {
+       "min": 0.0,
+       "mean": 7.526912181303116,
+       "max": 100.0
+      },
+      "memory.used": {
+       "min": 331.0,
+       "mean": 3382.7790368271953,
+       "max": 3412.0
+      },
+      "throttle_reasons_seen": [
+       "0x0000000000000004",
+       "0x0000000000000400"
+      ]
+     }
+    }
+   ]
+  }
+ }
+}

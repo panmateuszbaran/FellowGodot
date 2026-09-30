@@ -1,0 +1,1391 @@
+{
+ "session": "diag_stall_e3_runner",
+ "label": "",
+ "args": {
+  "builds": "stock",
+  "godot": null,
+  "scene": "sponza",
+  "mode": "perf",
+  "res": "1920x1080",
+  "runs": 1,
+  "max_runs": 1,
+  "max_cv": 0.03,
+  "warmup": 5.0,
+  "measure": 20.0,
+  "percam": 0,
+  "profile": false,
+  "preset": "high",
+  "set": "",
+  "fellow": "",
+  "fellow_off_for": "stock",
+  "extra": "",
+  "cooldown": 5.0,
+  "heat_soak": 0.0,
+  "timeout": 900.0,
+  "session": "diag_stall_e3_runner",
+  "label": "",
+  "merge": false,
+  "supersede_note": ""
+ },
+ "hardware": {
+  "timestamp_local": "2026-09-30T09:02:07.095932",
+  "host": "PREDZIO",
+  "python": "3.11.0",
+  "os": {
+   "platform": "Windows-10-10.0.26200-SP0",
+   "release": "10",
+   "version": "10.0.26200"
+  },
+  "cpu": "{\"Name\":\"Intel(R) Core(TM) Ultra 9 275HX\",\"NumberOfCores\":24,\"NumberOfLogicalProcessors\":24,\"MaxClockSpeed\":2700}",
+  "ram": "{\"TotalBytes\":68112736256,\"Modules\":[{\"Capacity\":34359738368,\"Speed\":6400,\"ConfiguredClockSpeed\":6400,\"Manufacturer\":\"Micron Technology\",\"PartNumber\":\"MTC16C2085S1VC64BD1 \"},{\"Capacity\":34359738368,\"Speed\":6400,\"ConfiguredClockSpeed\":6400,\"Manufacturer\":\"Micron Technology\",\"PartNumber\":\"MTC16C2085S1VC64BD1 \"}]}",
+  "os_caption": "{\"Caption\":\"Microsoft Windows 11 Home\",\"Version\":\"10.0.26200\",\"BuildNumber\":\"26200\"}",
+  "system": "{\"Manufacturer\":\"Acer\",\"Model\":\"Predator PHN16S-71\"}",
+  "power": "{\"Battery\":{\"PowerOnline\":true,\"Charging\":false},\"Scheme\":\"Power Scheme GUID: 3b79c5ed-2baa-4957-a015-c958d3221bfc  (Acer)\"}",
+  "display": "[{\"Name\":\"Intel(R) Graphics\",\"DriverVersion\":\"32.0.101.6629\",\"CurrentHorizontalResolution\":2560,\"CurrentVerticalResolution\":1600,\"CurrentRefreshRate\":240},{\"Name\":\"NVIDIA GeForce RTX 5070 Ti Laptop GPU\",\"DriverVersion\":\"32.0.16.1714\",\"CurrentHorizontalResolution\":null,\"CurrentVerticalResolution\":null,\"CurrentRefreshRate\":null}]",
+  "gpu": [
+   {
+    "name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+    "driver_version": "617.14",
+    "memory.total": "12227",
+    "pcie.link.gen.max": "5",
+    "pcie.link.width.max": "16",
+    "clocks.max.graphics": "3090",
+    "clocks.max.memory": "14001",
+    "power.limit": "[N/A]",
+    "vbios_version": "98.05.31.00.49"
+   }
+  ],
+  "engine": {
+   "commit": "75e94c2f1e2e7772127006d22783a6aa7ed1e74f",
+   "describe": "4.7.2-stable-12-g75e94c2f1e",
+   "branch": "HEAD",
+   "status_short": ""
+  },
+  "build_flags": "platform=windows target=template_release production=yes disable_path_overrides=no winrt=no accesskit=no d3d12=no (MSVC, see BUILDING_FELLOWENGINE.md)",
+  "compiler": {
+   "visual_studio": "16.11.60",
+   "msvc_toolsets": [
+    "14.29.30133"
+   ]
+  },
+  "binaries": {
+   "stock": {
+    "path": ".tools\\bin\\stock\\godot.windows.template_release.x86_64.exe",
+    "size": 68635136,
+    "sha256": "f96d22afc9238c19ce728b307382e08675ca35455cad94cae2d4c5b8f88a6604",
+    "mtime": "2026-09-29T23:08:53.520548"
+   }
+  }
+ },
+ "gpu_telemetry": {
+  "n": 76,
+  "clocks.gr": {
+   "min": 180.0,
+   "mean": 1687.2894736842106,
+   "max": 2580.0
+  },
+  "clocks.mem": {
+   "min": 405.0,
+   "mean": 9941.171052631578,
+   "max": 14001.0
+  },
+  "temperature.gpu": {
+   "min": 45.0,
+   "mean": 60.526315789473685,
+   "max": 65.0
+  },
+  "power.draw": {
+   "min": 4.39,
+   "mean": 71.6080263157895,
+   "max": 107.08
+  },
+  "utilization.gpu": {
+   "min": 0.0,
+   "mean": 86.40789473684211,
+   "max": 99.0
+  },
+  "memory.used": {
+   "min": 0.0,
+   "mean": 2517.184210526316,
+   "max": 2808.0
+  },
+  "throttle_reasons_seen": [
+   "0x0000000000000004",
+   "0x0000000000000400"
+  ]
+ },
+ "heat_soak_telemetry": {},
+ "results": {
+  "sponza|1920x1080|stock": {
+   "scene": "sponza",
+   "resolution": "1920x1080",
+   "build": "stock",
+   "preset": "high",
+   "set": "",
+   "fellow": "",
+   "binary": "stock",
+   "variant_args": [],
+   "mode": "perf",
+   "aggregate": {
+    "runs_total": 1,
+    "runs_valid": 1,
+    "frame_ms_run_means": {
+     "n": 1,
+     "mean": 13.3043078143594,
+     "std": 0.0,
+     "cv": 0.0,
+     "min": 13.3043078143594,
+     "max": 13.3043078143594
+    },
+    "frame_ms_pooled": {
+     "p50": 12.978,
+     "p90": 18.886,
+     "p95": 19.432,
+     "p99": 20.192600000000002,
+     "p99_9": 20.744320000000002,
+     "mean": 13.304307814359383,
+     "max": 20.994
+    },
+    "gpu_ms_run_means": {
+     "n": 1,
+     "mean": 12.9222217417577,
+     "std": 0.0,
+     "cv": 0.0,
+     "min": 12.9222217417577,
+     "max": 12.9222217417577
+    },
+    "gpu_ms_pooled": {
+     "p50": 12.5959997177124,
+     "p90": 18.488000869751,
+     "p95": 19.0419998168945,
+     "p99": 19.840199279785182,
+     "p99_9": 20.35880020141601,
+     "mean": 12.922221741757664,
+     "max": 20.6240005493164
+    },
+    "render_cpu_ms_run_means": {
+     "n": 1,
+     "mean": 0.650637444831322,
+     "std": 0.0,
+     "cv": 0.0,
+     "min": 0.650637444831322,
+     "max": 0.650637444831322
+    },
+    "render_cpu_ms_pooled": {
+     "p50": 0.638000011444092,
+     "p90": 0.90200001001358,
+     "p95": 1.09300005435944,
+     "p99": 1.2621999979019167,
+     "p99_9": 1.4198800182342526,
+     "mean": 0.6506374448313216,
+     "max": 1.682000041008
+    },
+    "setup_cpu_ms_run_means": {
+     "n": 1,
+     "mean": 0.0105307417691393,
+     "std": 0.0,
+     "cv": 0.0,
+     "min": 0.0105307417691393,
+     "max": 0.0105307417691393
+    },
+    "setup_cpu_ms_pooled": {
+     "p50": 0.009,
+     "p90": 0.014,
+     "p95": 0.016,
+     "p99": 0.05880000000000018,
+     "p99_9": 0.10392000000000053,
+     "mean": 0.01053074176913923,
+     "max": 0.191
+    },
+    "process_ms_run_means": {
+     "n": 1,
+     "mean": 14.5979520031735,
+     "std": 0.0,
+     "cv": 0.0,
+     "min": 14.5979520031735,
+     "max": 14.5979520031735
+    },
+    "process_ms_pooled": {
+     "p50": 14.363,
+     "p90": 19.618,
+     "p95": 19.862,
+     "p99": 20.968,
+     "p99_9": 20.968,
+     "mean": 14.597952003173344,
+     "max": 20.968
+    },
+    "draw_calls_run_means": {
+     "n": 1,
+     "mean": 1104.48393494645,
+     "std": 0.0,
+     "cv": 0.0,
+     "min": 1104.48393494645,
+     "max": 1104.48393494645
+    },
+    "draw_calls_pooled": {
+     "p50": 1247.0,
+     "p90": 1453.0,
+     "p95": 1496.0,
+     "p99": 1518.0,
+     "p99_9": 1518.0,
+     "mean": 1104.4839349464498,
+     "max": 1518.0
+    },
+    "primitives_run_means": {
+     "n": 1,
+     "mean": 27020971.5434351,
+     "std": 0.0,
+     "cv": 0.0,
+     "min": 27020971.5434351,
+     "max": 27020971.5434351
+    },
+    "primitives_pooled": {
+     "p50": 25009072.0,
+     "p90": 40533260.0,
+     "p95": 40793003.0,
+     "p99": 41006276.0,
+     "p99_9": 41095305.0,
+     "mean": 27020971.543435145,
+     "max": 41095305.0
+    },
+    "objects_run_means": {
+     "n": 1,
+     "mean": 1104.48393494645,
+     "std": 0.0,
+     "cv": 0.0,
+     "min": 1104.48393494645,
+     "max": 1104.48393494645
+    },
+    "objects_pooled": {
+     "p50": 1247.0,
+     "p90": 1453.0,
+     "p95": 1496.0,
+     "p99": 1518.0,
+     "p99_9": 1518.0,
+     "mean": 1104.4839349464498,
+     "max": 1518.0
+    },
+    "shadow_draw_calls_run_means": {
+     "n": 1,
+     "mean": 860.813962713209,
+     "std": 0.0,
+     "cv": 0.0,
+     "min": 860.813962713209,
+     "max": 860.813962713209
+    },
+    "shadow_draw_calls_pooled": {
+     "p50": 973.0,
+     "p90": 1089.0,
+     "p95": 1118.0,
+     "p99": 1137.0,
+     "p99_9": 1139.0,
+     "mean": 860.8139627132091,
+     "max": 1139.0
+    },
+    "avg_fps_run": {
+     "n": 1,
+     "mean": 75.1636247412058,
+     "std": 0.0,
+     "cv": 0.0,
+     "min": 75.1636247412058,
+     "max": 75.1636247412058
+    },
+    "fps_1pct_low_pooled": 48.63722244046617,
+    "stutter_frames_total": 0,
+    "frames_total": 2521,
+    "pipeline_compilations_during_measurement": {
+     "canvas": 0,
+     "mesh": 0,
+     "surface": 0,
+     "draw": 0,
+     "specialization": 0
+    },
+    "video_mem_peak_bytes": 2655563072,
+    "texture_mem_peak_bytes": 1643568128,
+    "buffer_mem_peak_bytes": 874537952,
+    "process_peak_working_set_bytes": 1474195456,
+    "load_time_ms": {
+     "n": 1,
+     "mean": 3502.391,
+     "std": 0.0,
+     "cv": 0.0,
+     "min": 3502.391,
+     "max": 3502.391
+    },
+    "noisy": false
+   },
+   "effective_settings": {
+    "vp.msaa_3d": 0,
+    "vp.screen_space_aa": 0,
+    "vp.use_taa": true,
+    "vp.scaling_3d_mode": 0,
+    "vp.scaling_3d_scale": 1.0,
+    "vp.fsr_sharpness": 0.200000002980232,
+    "vp.texture_mipmap_bias": 0.0,
+    "vp.mesh_lod_threshold": 1.0,
+    "vp.anisotropic_filtering_level": 4,
+    "vp.positional_shadow_atlas_size": 4096,
+    "vp.positional_shadow_atlas_16_bits": true,
+    "vp.use_debanding": true,
+    "vp.use_occlusion_culling": false,
+    "vp.use_hdr_2d": false,
+    "vp.size": [
+     1920.0,
+     1080.0
+    ],
+    "env.background_mode": 2,
+    "env.background_energy_multiplier": 1.0,
+    "env.ambient_light_source": 3,
+    "env.ambient_light_energy": 1.0,
+    "env.ambient_light_sky_contribution": 1.0,
+    "env.reflected_light_source": 2,
+    "env.tonemap_mode": 4,
+    "env.tonemap_exposure": 1.0,
+    "env.tonemap_white": 1.0,
+    "env.tonemap_agx_white": 16.2900009155273,
+    "env.tonemap_agx_contrast": 1.25,
+    "env.glow_enabled": true,
+    "env.glow_intensity": 0.300000011920929,
+    "env.glow_strength": 1.0,
+    "env.glow_mix": 0.0500000007450581,
+    "env.glow_bloom": 0.0,
+    "env.glow_blend_mode": 1,
+    "env.glow_hdr_threshold": 1.0,
+    "env.glow_hdr_scale": 2.0,
+    "env.glow_hdr_luminance_cap": 12.0,
+    "env.glow_normalized": false,
+    "env.ssao_enabled": true,
+    "env.ssao_radius": 1.0,
+    "env.ssao_intensity": 2.0,
+    "env.ssao_power": 1.5,
+    "env.ssil_enabled": true,
+    "env.ssil_radius": 5.0,
+    "env.ssr_enabled": true,
+    "env.ssr_max_steps": 64,
+    "env.sdfgi_enabled": false,
+    "env.fog_enabled": false,
+    "env.fog_density": 0.00999999977648258,
+    "env.volumetric_fog_enabled": true,
+    "env.volumetric_fog_density": 0.00600000005215406,
+    "env.adjustment_enabled": false,
+    "env.glow_levels": [
+     0.0,
+     0.800000011920929,
+     0.400000005960464,
+     0.100000001490116,
+     0.0,
+     0.0,
+     0.0
+    ],
+    "cam.exposure_multiplier": 1.0,
+    "cam.auto_exposure_enabled": true,
+    "ps.rendering/textures/default_filters/anisotropic_filtering_level": 4,
+    "ps.rendering/anti_aliasing/quality/use_taa": true,
+    "ps.rendering/lights_and_shadows/directional_shadow/size": 4096,
+    "ps.rendering/driver/threads/thread_model": 1,
+    "ps.rendering/rendering_device/driver.windows": "vulkan",
+    "ps.rendering/renderer/rendering_method": "forward_plus",
+    "ps.display/window/vsync/vsync_mode": 0,
+    "ps.application/run/max_fps": 0,
+    "vsync_mode_runtime": 0,
+    "max_fps_runtime": 0
+   },
+   "fellow_state": {
+    "available": false,
+    "requested": {},
+    "state": {}
+   },
+   "adapter": {
+    "name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+    "vendor": "NVIDIA",
+    "api_version": "1.4.351",
+    "type": 2,
+    "driver": [
+     "NVIDIA",
+     "32.0.16.1714"
+    ],
+    "rendering_driver": "vulkan",
+    "rendering_method": "forward_plus"
+   },
+   "engine": {
+    "major": 4,
+    "minor": 7,
+    "patch": 2,
+    "hex": 263938,
+    "status": "stable",
+    "build": "custom_build",
+    "hash": "ed1daf0bf001b61586d9930840f2f1394092c079",
+    "timestamp": 1786929518,
+    "string": "4.7.2-stable (custom_build)"
+   },
+   "scene_desc": {
+    "name": "sponza",
+    "info": {
+     "parts": [
+      "main",
+      "curtains",
+      "ivy",
+      "trees"
+     ],
+     "probe": {
+      "lights": [
+       {
+        "name": "HDRI_SKY",
+        "type": "OmniLight3D",
+        "energy": 0.0,
+        "pos": [
+         -0.413,
+         2.09,
+         -13.786
+        ],
+        "range": 4096.0,
+        "shadow": false
+       },
+       {
+        "name": "SUN",
+        "type": "DirectionalLight3D",
+        "energy": 0.0,
+        "pos": [
+         -21.705,
+         43.414,
+         -6.15
+        ],
+        "range": 0.0,
+        "shadow": false
+       },
+       {
+        "name": "lamp_light_1st_floor_12",
+        "type": "OmniLight3D",
+        "energy": 0.0,
+        "pos": [
+         15.619,
+         3.276,
+         -0.917
+        ],
+        "range": 4096.0,
+        "shadow": false
+       },
+       {
+        "name": "lamp_light_1st_floor_11",
+        "type": "OmniLight3D",
+        "energy": 0.0,
+        "pos": [
+         10.024,
+         4.171,
+         -4.791
+        ],
+        "range": 4096.0,
+        "shadow": false
+       },
+       {
+        "name": "lamp_light_1st_floor_10",
+        "type": "OmniLight3D",
+        "energy": 0.0,
+        "pos": [
+         6.142,
+         4.171,
+         -4.806
+        ],
+        "range": 4096.0,
+        "shadow": false
+       },
+       {
+        "name": "lamp_light_1st_floor_09",
+        "type": "OmniLight3D",
+        "energy": 0.0,
+        "pos": [
+         2.194,
+         4.171,
+         -4.806
+        ],
+        "range": 4096.0,
+        "shadow": false
+       },
+       {
+        "name": "lamp_light_1st_floor_08",
+        "type": "OmniLight3D",
+        "energy": 0.0,
+        "pos": [
+         -1.849,
+         4.171,
+         -4.806
+        ],
+        "range": 4096.0,
+        "shadow": false
+       },
+       {
+        "name": "lamp_light_1st_floor_07",
+        "type": "OmniLight3D",
+        "energy": 0.0,
+        "pos": [
+         -5.929,
+         4.171,
+         -4.806
+        ],
+        "range": 4096.0,
+        "shadow": false
+       },
+       {
+        "name": "lamp_light_1st_floor_06",
+        "type": "OmniLight3D",
+        "energy": 0.0,
+        "pos": [
+         -9.825,
+         4.171,
+         -4.806
+        ],
+        "range": 4096.0,
+        "shadow": false
+       },
+       {
+        "name": "lamp_light_1st_floor_05",
+        "type": "OmniLight3D",
+        "energy": 0.0,
+        "pos": [
+         10.024,
+         4.171,
+         4.757
+        ],
+        "range": 4096.0,
+        "shadow": false
+       },
+       {
+        "name": "lamp_light_1st_floor_04",
+        "type": "OmniLight3D",
+        "energy": 0.0,
+        "pos": [
+         6.142,
+         4.171,
+         4.742
+        ],
+        "range": 4096.0,
+        "shadow": false
+       },
+       {
+        "name": "lamp_light_1st_floor_03",
+        "type": "OmniLight3D",
+        "energy": 0.0,
+        "pos": [
+         2.194,
+         4.171,
+         4.742
+        ],
+        "range": 4096.0,
+        "shadow": false
+       },
+       {
+        "name": "lamp_light_1st_floor_02",
+        "type": "OmniLight3D",
+        "energy": 0.0,
+        "pos": [
+         -1.849,
+         4.171,
+         4.742
+        ],
+        "range": 4096.0,
+        "shadow": false
+       },
+       {
+        "name": "lamp_light_1st_floor_01",
+        "type": "OmniLight3D",
+        "energy": 0.0,
+        "pos": [
+         -5.929,
+         4.171,
+         4.742
+        ],
+        "range": 4096.0,
+        "shadow": false
+       },
+       {
+        "name": "lamp_light_1st_floor_13",
+        "type": "OmniLight3D",
+        "energy": 0.0,
+        "pos": [
+         -9.825,
+         4.171,
+         4.742
+        ],
+        "range": 4096.0,
+        "shadow": false
+       },
+       {
+        "name": "lamp_light_2nd_floor_08",
+        "type": "OmniLight3D",
+        "energy": 0.0,
+        "pos": [
+         -5.848,
+         9.285,
+         4.665
+        ],
+        "range": 4096.0,
+        "shadow": false
+       },
+       {
+        "name": "lamp_light_2nd_floor_01",
+        "type": "OmniLight3D",
+        "energy": 0.0,
+        "pos": [
+         -9.766,
+         9.285,
+         4.742
+        ],
+        "range": 4096.0,
+        "shadow": false
+       },
+       {
+        "name": "lamp_light_2nd_floor_02",
+        "type": "OmniLight3D",
+        "energy": 0.0,
+        "pos": [
+         2.161,
+         9.285,
+         4.665
+        ],
+        "range": 4096.0,
+        "shadow": false
+       },
+       {
+        "name": "lamp_light_2nd_floor_03",
+        "type": "OmniLight3D",
+        "energy": 0.0,
+        "pos": [
+         10.075,
+         9.285,
+         4.726
+        ],
+        "range": 4096.0,
+        "shadow": false
+       },
+       {
+        "name": "lamp_light_2nd_floor_04",
+        "type": "OmniLight3D",
+        "energy": 0.0,
+        "pos": [
+         10.075,
+         9.285,
+         -4.727
+        ],
+        "range": 4096.0,
+        "shadow": false
+       },
+       {
+        "name": "lamp_light_2nd_floor_05",
+        "type": "OmniLight3D",
+        "energy": 0.0,
+        "pos": [
+         2.094,
+         9.285,
+         -4.654
+        ],
+        "range": 4096.0,
+        "shadow": false
+       },
+       {
+        "name": "lamp_light_2nd_floor_06",
+        "type": "OmniLight3D",
+        "energy": 0.0,
+        "pos": [
+         -5.848,
+         9.285,
+         -4.663
+        ],
+        "range": 4096.0,
+        "shadow": false
+       },
+       {
+        "name": "lamp_light_2nd_floor_07",
+        "type": "OmniLight3D",
+        "energy": 0.0,
+        "pos": [
+         -9.751,
+         9.285,
+         -4.73
+        ],
+        "range": 4096.0,
+        "shadow": false
+       },
+       {
+        "name": "lamp_light_1st_floor_14",
+        "type": "OmniLight3D",
+        "energy": 0.0,
+        "pos": [
+         -13.59,
+         3.868,
+         0.066
+        ],
+        "range": 4096.0,
+        "shadow": false
+       }
+      ],
+      "cameras": [
+       {
+        "name": "PhysCamera001",
+        "pos": [
+         -8.807,
+         1.592,
+         -0.858
+        ],
+        "fwd": [
+         0.964,
+         0.194,
+         0.182
+        ],
+        "fov": 58.5119743347168
+       },
+       {
+        "name": "PhysCamera002",
+        "pos": [
+         10.531,
+         7.353,
+         1.528
+        ],
+        "fwd": [
+         -0.992,
+         0.022,
+         -0.125
+        ],
+        "fov": 58.6267738342285
+       },
+       {
+        "name": "PhysCamera003",
+        "pos": [
+         2.703,
+         1.355,
+         2.111
+        ],
+        "fwd": [
+         -0.939,
+         0.086,
+         -0.332
+        ],
+        "fov": 36.2545585632324
+       },
+       {
+        "name": "PhysCamera004",
+        "pos": [
+         -9.594,
+         6.921,
+         5.353
+        ],
+        "fwd": [
+         0.941,
+         -0.02,
+         -0.337
+        ],
+        "fov": 58.2393188476562
+       },
+       {
+        "name": "PhysCamera005",
+        "pos": [
+         -2.237,
+         0.744,
+         2.361
+        ],
+        "fwd": [
+         0.868,
+         0.243,
+         -0.432
+        ],
+        "fov": 37.2171440124512
+       },
+       {
+        "name": "PhysCamera006",
+        "pos": [
+         -6.595,
+         10.879,
+         -0.629
+        ],
+        "fwd": [
+         0.963,
+         -0.27,
+         0.017
+        ],
+        "fov": 37.2439117431641
+       }
+      ],
+      "animation_players": [],
+      "aabb": {
+       "position": [
+        -16.246,
+        -1.131,
+        -9.402
+       ],
+       "size": [
+        36.247,
+        19.888,
+        23.766
+       ]
+      },
+      "stats": {
+       "mesh_instances": 138,
+       "surfaces": 454,
+       "triangles": 12833689,
+       "lights": 24,
+       "multimesh_instances": 0,
+       "unique_materials": 37
+      }
+     },
+     "assets": [
+      "res://external/sponza/main/NewSponza_Main_glTF_003.gltf",
+      "res://external/sponza/curtains/NewSponza_Curtains_glTF.gltf",
+      "res://external/sponza/ivy/NewSponza_IvyGrowth_glTF.gltf",
+      "res://external/sponza/trees/NewSponza_CypressTree_glTF.gltf"
+     ],
+     "removed_zero_energy_lights": [
+      "HDRI_SKY",
+      "SUN",
+      "lamp_light_1st_floor_12",
+      "lamp_light_1st_floor_11",
+      "lamp_light_1st_floor_10",
+      "lamp_light_1st_floor_09",
+      "lamp_light_1st_floor_08",
+      "lamp_light_1st_floor_07",
+      "lamp_light_1st_floor_06",
+      "lamp_light_1st_floor_05",
+      "lamp_light_1st_floor_04",
+      "lamp_light_1st_floor_03",
+      "lamp_light_1st_floor_02",
+      "lamp_light_1st_floor_01",
+      "lamp_light_1st_floor_13",
+      "lamp_light_2nd_floor_08",
+      "lamp_light_2nd_floor_01",
+      "lamp_light_2nd_floor_02",
+      "lamp_light_2nd_floor_03",
+      "lamp_light_2nd_floor_04",
+      "lamp_light_2nd_floor_05",
+      "lamp_light_2nd_floor_06",
+      "lamp_light_2nd_floor_07",
+      "lamp_light_1st_floor_14"
+     ],
+     "camera_source": "sponza_cam_01..06 are the artist cameras PhysCamera001..006 shipped in the glTF"
+    },
+    "fixed_cameras": {
+     "sponza_cam_01": {
+      "pos": [
+       -8.80743026733398,
+       1.59221947193146,
+       -0.858257830142975
+      ],
+      "target": [
+       0.83167839050293,
+       3.5353569984436,
+       0.961581647396088
+      ],
+      "fov": 58.5119743347168,
+      "time": 0.0,
+      "purpose": "ground level, long axis: bright atrium vs dark arcades, distant geometry"
+     },
+     "sponza_cam_02": {
+      "pos": [
+       10.5311031341553,
+       7.35298490524292,
+       1.52825129032135
+      ],
+      "target": [
+       0.612272262573242,
+       7.57761764526367,
+       0.276713371276855
+      ],
+      "fov": 58.6267738342285,
+      "time": 0.0,
+      "purpose": "upper floor, looking back along the atrium: curtains, ivy, draw distance"
+     },
+     "sponza_cam_03": {
+      "pos": [
+       2.70301842689514,
+       1.35489559173584,
+       2.11138153076172
+      ],
+      "target": [
+       -6.69150161743164,
+       2.21897292137146,
+       -1.20469522476196
+      ],
+      "fov": 36.2545585632324,
+      "time": 0.0,
+      "purpose": "columns with fine carved detail, high-frequency textures (narrow FOV)"
+     },
+     "sponza_cam_04": {
+      "pos": [
+       -9.59435558319092,
+       6.92110109329224,
+       5.35277986526489
+      ],
+      "target": [
+       -0.180878639221191,
+       6.71901226043701,
+       1.98445510864258
+      ],
+      "fov": 58.2393188476562,
+      "time": 0.0,
+      "purpose": "upper gallery, shadowed corridor, cloth / alpha geometry"
+     },
+     "sponza_cam_05": {
+      "pos": [
+       -2.23713994026184,
+       0.744054615497589,
+       2.36080169677734
+      ],
+      "target": [
+       6.44673824310303,
+       3.17816066741943,
+       -1.95954418182373
+      ],
+      "fov": 37.2171440124512,
+      "time": 0.0,
+      "purpose": "low camera looking up: bright sky opening, reflective floor, specular"
+     },
+     "sponza_cam_06": {
+      "pos": [
+       -6.59548568725586,
+       10.8791217803955,
+       -0.629061281681061
+      ],
+      "target": [
+       3.03228092193604,
+       8.18177509307861,
+       -0.454606860876083
+      ],
+      "fov": 37.2439117431641,
+      "time": 0.0,
+      "purpose": "top-down view into the courtyard from the roof level"
+     }
+    },
+    "flythrough": [
+     {
+      "t": 0.0,
+      "pos": [
+       -9.0,
+       1.70000004768372,
+       0.0
+      ],
+      "target": [
+       10.0,
+       2.5,
+       0.0
+      ],
+      "fov": 60.0
+     },
+     {
+      "t": 6.0,
+      "pos": [
+       -2.0,
+       1.70000004768372,
+       1.5
+      ],
+      "target": [
+       5.0,
+       3.0,
+       -3.0
+      ],
+      "fov": 60.0
+     },
+     {
+      "t": 12.0,
+      "pos": [
+       5.0,
+       1.70000004768372,
+       -1.5
+      ],
+      "target": [
+       12.0,
+       2.0,
+       2.0
+      ],
+      "fov": 60.0
+     },
+     {
+      "t": 18.0,
+      "pos": [
+       10.0,
+       2.0,
+       0.0
+      ],
+      "target": [
+       0.0,
+       6.0,
+       0.0
+      ],
+      "fov": 60.0
+     },
+     {
+      "t": 24.0,
+      "pos": [
+       6.0,
+       5.0,
+       0.0
+      ],
+      "target": [
+       -8.0,
+       6.0,
+       3.0
+      ],
+      "fov": 60.0
+     },
+     {
+      "t": 30.0,
+      "pos": [
+       -2.0,
+       8.0,
+       0.0
+      ],
+      "target": [
+       -9.0,
+       7.0,
+       5.0
+      ],
+      "fov": 60.0
+     },
+     {
+      "t": 36.0,
+      "pos": [
+       -6.0,
+       4.0,
+       0.0
+      ],
+      "target": [
+       8.0,
+       1.0,
+       0.0
+      ],
+      "fov": 60.0
+     },
+     {
+      "t": 42.0,
+      "pos": [
+       -9.0,
+       1.70000004768372,
+       0.0
+      ],
+      "target": [
+       10.0,
+       2.5,
+       0.0
+      ],
+      "fov": 60.0
+     }
+    ],
+    "flythrough_duration_s": 42.0,
+    "temporal_sequences": {
+     "sponza_pan": {
+      "start": 0.0,
+      "frames": 60,
+      "purpose": "45 deg/s pan across columns, curtains and ivy",
+      "path": [
+       {
+        "t": 0.0,
+        "pos": [
+         -4.0,
+         1.70000004768372,
+         0.0
+        ],
+        "target": [
+         6.0,
+         2.5,
+         -8.0
+        ],
+        "fov": 60.0
+       },
+       {
+        "t": 1.0,
+        "pos": [
+         -4.0,
+         1.70000004768372,
+         0.0
+        ],
+        "target": [
+         6.0,
+         2.5,
+         8.0
+        ],
+        "fov": 60.0
+       }
+      ]
+     }
+    }
+   },
+   "runs": [
+    {
+     "schema": 1,
+     "scene": "sponza",
+     "mode": "perf",
+     "tag": "stock",
+     "run": 0,
+     "cmdline_user_args": [
+      "--scene=sponza",
+      "--mode=perf",
+      "--res=1920x1080",
+      "--tag=stock",
+      "--run=0",
+      "--out=C:\\Users\\matek\\Documents\\GitHub\\FellowGodot\\benchmarks\\results\\raw\\diag_stall_e3_runner\\stock\\sponza",
+      "--warmup=5.0",
+      "--measure=20.0",
+      "--preset=high"
+     ],
+     "cmdline_args": [],
+     "engine": {
+      "major": 4,
+      "minor": 7,
+      "patch": 2,
+      "hex": 263938,
+      "status": "stable",
+      "build": "custom_build",
+      "hash": "ed1daf0bf001b61586d9930840f2f1394092c079",
+      "timestamp": 1786929518,
+      "string": "4.7.2-stable (custom_build)"
+     },
+     "engine_build": {
+      "debug_build": false,
+      "has_editor": false,
+      "template_release": true
+     },
+     "adapter": {
+      "name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+      "vendor": "NVIDIA",
+      "api_version": "1.4.351",
+      "type": 2,
+      "driver": [
+       "NVIDIA",
+       "32.0.16.1714"
+      ],
+      "rendering_driver": "vulkan",
+      "rendering_method": "forward_plus"
+     },
+     "os": {
+      "name": "Windows",
+      "version": "10.0.26200",
+      "cpu": "Intel(R) Core(TM) Ultra 9 275HX",
+      "cpu_count": 24
+     },
+     "fellow": {
+      "available": false,
+      "requested": {},
+      "state": {}
+     },
+     "load_time_ms": 3502.391,
+     "startup_to_first_frame_ms": 3509.926,
+     "resolution": [
+      1920,
+      1080
+     ],
+     "valid": true,
+     "warmup": {
+      "seconds": 36.335264,
+      "passes": 1,
+      "pipeline_compilations": {
+       "canvas": 0,
+       "mesh": 0,
+       "surface": 0,
+       "draw": 0,
+       "specialization": 29
+      }
+     },
+     "measurement": {
+      "seconds": 33.555324,
+      "passes": 1,
+      "frames_per_pass": 2521,
+      "pipeline_compilations": {
+       "canvas": 0,
+       "mesh": 0,
+       "surface": 0,
+       "draw": 0,
+       "specialization": 0
+      },
+      "profile_timestamps": false
+     },
+     "summary": {
+      "frame_ms": {
+       "n": 2521,
+       "mean": 13.3043078143594,
+       "std": 4.04448163596096,
+       "cv": 0.303997899958068,
+       "min": 5.214,
+       "max": 20.994,
+       "p50": 12.978,
+       "p90": 18.886,
+       "p95": 19.432,
+       "p99": 20.1926,
+       "p99_9": 20.74432
+      },
+      "gpu_ms": {
+       "n": 2521,
+       "mean": 12.9222217417577,
+       "std": 4.03754983621501,
+       "cv": 0.312450127919398,
+       "min": 4.8600001335144,
+       "max": 20.6240005493164,
+       "p50": 12.5959997177124,
+       "p90": 18.488000869751,
+       "p95": 19.0419998168945,
+       "p99": 19.8401992797852,
+       "p99_9": 20.358800201416
+      },
+      "render_cpu_ms": {
+       "n": 2521,
+       "mean": 0.650637444831322,
+       "std": 0.199221105789197,
+       "cv": 0.306193729506062,
+       "min": 0.284000009298325,
+       "max": 1.682000041008,
+       "p50": 0.638000011444092,
+       "p90": 0.90200001001358,
+       "p95": 1.09300005435944,
+       "p99": 1.26219999790192,
+       "p99_9": 1.41988001823426
+      },
+      "setup_cpu_ms": {
+       "n": 2521,
+       "mean": 0.0105307417691393,
+       "std": 0.00817341479006862,
+       "cv": 0.776148059581245,
+       "min": 0.005,
+       "max": 0.191,
+       "p50": 0.009,
+       "p90": 0.014,
+       "p95": 0.016,
+       "p99": 0.0588000000000002,
+       "p99_9": 0.103920000000014
+      },
+      "process_ms": {
+       "n": 2521,
+       "mean": 14.5979520031735,
+       "std": 3.74363178808483,
+       "cv": 0.256449109249775,
+       "min": 5.799,
+       "max": 20.968,
+       "p50": 14.363,
+       "p90": 19.618,
+       "p95": 19.862,
+       "p99": 20.968,
+       "p99_9": 20.968
+      },
+      "draw_calls": {
+       "n": 2521,
+       "mean": 1104.48393494645,
+       "std": 295.825920496909,
+       "cv": 0.267840854119125,
+       "min": 445.0,
+       "max": 1518.0,
+       "p50": 1247.0,
+       "p90": 1453.0,
+       "p95": 1496.0,
+       "p99": 1518.0,
+       "p99_9": 1518.0
+      },
+      "primitives": {
+       "n": 2521,
+       "mean": 27020971.5434351,
+       "std": 11275458.5237714,
+       "cv": 0.417285459393885,
+       "min": 3721400.0,
+       "max": 41095305.0,
+       "p50": 25009072.0,
+       "p90": 40533260.0,
+       "p95": 40793003.0,
+       "p99": 41006276.0,
+       "p99_9": 41095305.0
+      },
+      "objects": {
+       "n": 2521,
+       "mean": 1104.48393494645,
+       "std": 295.825920496909,
+       "cv": 0.267840854119125,
+       "min": 445.0,
+       "max": 1518.0,
+       "p50": 1247.0,
+       "p90": 1453.0,
+       "p95": 1496.0,
+       "p99": 1518.0,
+       "p99_9": 1518.0
+      },
+      "shadow_draw_calls": {
+       "n": 2521,
+       "mean": 860.813962713209,
+       "std": 221.938536955432,
+       "cv": 0.257824043950102,
+       "min": 344.0,
+       "max": 1139.0,
+       "p50": 973.0,
+       "p90": 1089.0,
+       "p95": 1118.0,
+       "p99": 1137.0,
+       "p99_9": 1139.0
+      },
+      "vis_draw_calls": {
+       "n": 2521,
+       "mean": 243.669972233241,
+       "std": 80.1662939722497,
+       "cv": 0.328995375332971,
+       "min": 101.0,
+       "max": 381.0,
+       "p50": 256.0,
+       "p90": 364.0,
+       "p95": 378.0,
+       "p99": 381.0,
+       "p99_9": 381.0
+      },
+      "avg_fps": 75.1636247412058,
+      "fps_1pct_low": 48.6372224404662,
+      "stutter_frames": 0,
+      "stutter_threshold_ms": 25.956,
+      "measured_seconds": 33.54016
+     },
+     "memory_peak": {
+      "video_mem_used": 2655563072,
+      "texture_mem_used": 1643568128,
+      "buffer_mem_used": 874537952,
+      "static_mem": 0,
+      "static_mem_peak": 0
+     },
+     "total_runtime_s": 73.402451,
+     "_proc": {
+      "returncode": 0,
+      "timed_out": false,
+      "wall_s": 75.18201851844788,
+      "peak_working_set": 1474195456,
+      "peak_private_bytes": 4426371072
+     },
+     "_json": "benchmarks\\results\\raw\\diag_stall_e3_runner\\stock\\sponza\\sponza_perf_stock_1920x1080_run0.json",
+     "_gpu_telemetry": {
+      "n": 71,
+      "clocks.gr": {
+       "min": 180.0,
+       "mean": 1792.1690140845071,
+       "max": 2580.0
+      },
+      "clocks.mem": {
+       "min": 405.0,
+       "mean": 10007.38028169014,
+       "max": 14001.0
+      },
+      "temperature.gpu": {
+       "min": 45.0,
+       "mean": 60.88732394366197,
+       "max": 65.0
+      },
+      "power.draw": {
+       "min": 4.39,
+       "mean": 75.81873239436621,
+       "max": 107.08
+      },
+      "utilization.gpu": {
+       "min": 0.0,
+       "mean": 92.49295774647888,
+       "max": 99.0
+      },
+      "memory.used": {
+       "min": 0.0,
+       "mean": 2694.450704225352,
+       "max": 2808.0
+      },
+      "throttle_reasons_seen": [
+       "0x0000000000000004",
+       "0x0000000000000400"
+      ]
+     }
+    }
+   ]
+  }
+ }
+}
