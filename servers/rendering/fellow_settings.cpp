@@ -51,6 +51,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/shadows/directional_cache_lod_travel", PROPERTY_HINT_RANGE, "0,50,0.1,suffix:m"), 0.0);
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/shadows/directional_cache_texel_lod", PROPERTY_HINT_RANGE, "0,8,0.05"), 1.0);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/shadows/directional_cache_max_rebuilds_per_frame", PROPERTY_HINT_RANGE, "1,16,1"), 1);
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/shadows/directional_cache_min_cost_per_texel", PROPERTY_HINT_RANGE, "0,4,0.005"), 0.125);
 	GLOBAL_DEF("rendering/fellow/shadows/skip_backfacing_directional", false);
 	GLOBAL_DEF("rendering/fellow/shadows/skip_unblended_cascade", false);
 	GLOBAL_DEF("rendering/fellow/shadows/skip_backfacing_positional", false);
@@ -78,5 +79,7 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["shadow_cache_rebuild_casters"] = s.shadow_cache_rebuild_casters.get();
 	d["shadow_cache_frames"] = s.shadow_cache_frames.get();
 	d["shadow_cache_copies_skipped"] = s.shadow_cache_copies_skipped.get();
+	d["shadow_cache_cascades_uneconomic"] = s.shadow_cache_cascades_uneconomic.get();
+	d["shadow_cache_cascades_unstable"] = s.shadow_cache_cascades_unstable.get();
 	return d;
 }

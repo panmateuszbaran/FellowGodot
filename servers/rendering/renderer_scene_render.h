@@ -296,6 +296,7 @@ public:
 		Vector2i copy_offset;
 		float remap_scale = 1.0;
 		float remap_bias = 0.0;
+		uint64_t build_frame = 0; // identifies the rebuild in fellow_directional_shadow_cache_get_static_cost()
 		PagedArray<RenderGeometryInstance *> cache_instances;
 
 		void reset() {
@@ -316,6 +317,8 @@ public:
 	virtual void fellow_directional_shadow_cache_free(int64_t p_cache_id) {}
 	// True (once) if the renderer lost a cache's content (e.g. atlas format change); all its cascades must rebuild.
 	virtual bool fellow_directional_shadow_cache_take_lost(int64_t p_cache_id) { return false; }
+	// Primitives and draws of the static casters rendered by the rebuild of p_build_frame; false if not known.
+	virtual bool fellow_directional_shadow_cache_get_static_cost(int64_t p_cache_id, int p_cascade, uint64_t p_build_frame, uint64_t &r_primitives, uint32_t &r_draws) const { return false; }
 
 	struct RenderSDFGIData {
 		int region = 0;

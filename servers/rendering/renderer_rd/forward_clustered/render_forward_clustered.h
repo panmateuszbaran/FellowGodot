@@ -859,6 +859,7 @@ public:
 	virtual bool fellow_directional_shadow_cache_supported() const override { return true; }
 	virtual void fellow_directional_shadow_cache_free(int64_t p_cache_id) override;
 	virtual bool fellow_directional_shadow_cache_take_lost(int64_t p_cache_id) override;
+	virtual bool fellow_directional_shadow_cache_get_static_cost(int64_t p_cache_id, int p_cascade, uint64_t p_build_frame, uint64_t &r_primitives, uint32_t &r_draws) const override;
 
 	virtual void update() override;
 

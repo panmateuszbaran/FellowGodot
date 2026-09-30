@@ -127,6 +127,15 @@ inline int directional_shadow_cache_max_rebuilds() {
 	return MAX(1, GLOBAL_GET_CACHED(int, "rendering/fellow/shadows/directional_cache_max_rebuilds_per_frame"));
 }
 
+// Cost gate: a cascade is served from its cache only if the static casters it saves cost more than the copy.
+// Static cost is measured at each cache rebuild in primitive equivalents (primitives + 2000 per draw) and scaled to the
+// cascade area; the copy writes one depth texel per cascade texel. A cascade whose static cost per texel is below
+// this value is rendered the stock way (re-evaluated when it leaves the evaluated area, or after 600 frames).
+// 0 disables the gate.
+inline float directional_shadow_cache_min_cost() {
+	return MAX(0.0f, GLOBAL_GET_CACHED(float, "rendering/fellow/shadows/directional_cache_min_cost_per_texel"));
+}
+
 // Verification only: 0 = normal, 1 = cascade lattice without using the cache (stock rendering of every cascade),
 // 2 = rebuild every cascade every frame (exercises the cache path without any reuse).
 inline int directional_shadow_cache_debug_mode() {
@@ -167,6 +176,8 @@ struct Stats {
 	SafeNumeric<uint64_t> shadow_cache_rebuild_casters;
 	SafeNumeric<uint64_t> shadow_cache_frames;
 	SafeNumeric<uint64_t> shadow_cache_copies_skipped;
+	SafeNumeric<uint64_t> shadow_cache_cascades_uneconomic; // stock because the cache would cost more than it saves
+	SafeNumeric<uint64_t> shadow_cache_cascades_unstable; // stock because the cascade's texel size is changing (zoom)
 };
 
 Stats &stats();

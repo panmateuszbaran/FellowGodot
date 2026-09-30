@@ -2403,6 +2403,11 @@ void RendererSceneCull::_light_instance_setup_directional_shadow(int p_shadow_in
 
 /* FellowEngine directional shadow cache (docs/decisions/0004-directional-shadow-cache.md) */
 
+// Cost gate: GPU cost of one shadow draw call (state changes, front end, CPU recording) in primitives, and how long a
+// cascade found not to pay off stays stock before it is evaluated again (even if it stays in the evaluated volume).
+static constexpr double FELLOW_DRAW_PRIMITIVE_EQUIVALENT = 2000.0;
+static constexpr uint64_t FELLOW_UNECONOMIC_FRAMES = 600;
+
 void RendererSceneCull::_fellow_shadow_instance_changed(Instance *p_instance) const {
 	if (!((1 << p_instance->base_type) & RSE::INSTANCE_GEOMETRY_MASK)) {
 		return;
@@ -2476,6 +2481,8 @@ void RendererSceneCull::_fellow_shadow_cache_decide(int p_shadow_index, uint64_t
 	const int32_t guard = Fellow::directional_shadow_cache_guard() & ~1; // even: the cascade origin moves in 2-texel steps
 	const uint32_t static_frames = (uint32_t)Fellow::directional_shadow_cache_static_frames();
 	const real_t lod_travel = Fellow::directional_shadow_cache_lod_travel();
+	const int debug_mode = Fellow::directional_shadow_cache_debug_mode();
+	const float min_cost = debug_mode == 0 ? Fellow::directional_shadow_cache_min_cost() : 0.0f; // verification modes: no gate
 	cache->last_used_frame = p_frame;
 
 	// A rotating light invalidates every cascade every frame: stay stock until it is still for two frames.
@@ -2503,21 +2510,48 @@ void RendererSceneCull::_fellow_shadow_cache_decide(int p_shadow_index, uint64_t
 			c.fellow_mode = FELLOW_CASCADE_STOCK;
 			continue;
 		}
+
+		// The texel size is recomputed every frame and can differ by float rounding (the soft-shadow expansion depends
+		// on the cascade's position): a relative 1e-5 means < 0.03 texel of drift across a 2560-texel cache.
+		// A larger change means the cascade is being resized (camera FOV / near-far animation): no cache can be reused
+		// until it settles, so render it stock without rebuilding (a rebuild per frame would cost more than stock).
+		if (w.n != cs.zoom_n || Math::abs(w.t - cs.zoom_texel) > cs.zoom_texel * (real_t)1e-5) {
+			cs.zoom_n = w.n;
+			cs.zoom_texel = w.t;
+			cs.zoom_frame = p_frame;
+		}
+		if (p_frame < cs.zoom_frame + 2) {
+			cs.valid = false;
+			cs.uneconomic_until = 0;
+			c.fellow_mode = FELLOW_CASCADE_STOCK;
+			Fellow::stats().shadow_cache_cascades_unstable.increment();
+			continue;
+		}
+
+		const bool same_projection = cs.light_basis == basis && cs.cascade_size == w.n && cs.guard == guard && Math::abs(cs.texel - w.t) <= cs.texel * (real_t)1e-5 && cs.visible_layers == p_visible_layers && cs.caster_mask == shadow.caster_mask && cs.lod_travel == lod_travel;
+		const int64_t room = cs.size - w.n;
+		const int64_t ox = w.ix - cs.ix;
+		const int64_t oy = w.iy - cs.iy;
+		const bool inside = same_projection && ox >= 0 && oy >= 0 && ox <= room && oy <= room && w.z_max <= cs.z_near_plane && w.z_min >= cs.z_far_plane;
+
+		// Cost gate (see Fellow::directional_shadow_cache_min_cost()): the cache was found not to pay off in this volume.
+		if (cs.uneconomic_until > p_frame) {
+			if (inside) {
+				c.fellow_mode = FELLOW_CASCADE_STOCK;
+				Fellow::stats().shadow_cache_cascades_uneconomic.increment();
+				continue;
+			}
+			cs.uneconomic_until = 0; // left the evaluated volume: evaluate again
+		}
+
 		if (!w.regular) {
 			c.fellow_mode = FELLOW_CASCADE_FALLBACK; // keep the cache, just do not use it this frame
 			continue;
 		}
 
-		// The texel size is recomputed every frame and can differ by float rounding (the soft-shadow expansion depends
-		// on the cascade's position): a relative 1e-5 means < 0.03 texel of drift across a 2560-texel cache.
-		bool ok = cs.valid && cs.light_basis == basis && cs.cascade_size == w.n && cs.guard == guard && Math::abs(cs.texel - w.t) <= cs.texel * (real_t)1e-5 && cs.visible_layers == p_visible_layers && cs.caster_mask == shadow.caster_mask && cs.lod_travel == lod_travel;
+		bool ok = cs.valid && inside;
 		float margin = 0.0;
-		int64_t ox = 0, oy = 0;
 		if (ok) {
-			ox = w.ix - cs.ix;
-			oy = w.iy - cs.iy;
-			const int64_t room = cs.size - w.n;
-			ok = ox >= 0 && oy >= 0 && ox <= room && oy <= room && w.z_max <= cs.z_near_plane && w.z_min >= cs.z_far_plane;
 			real_t travel = w.cam_pos.distance_to(cs.build_cam_pos);
 			if (ok && lod_travel > 0.0 && travel > lod_travel) {
 				ok = false;
@@ -2536,6 +2570,26 @@ void RendererSceneCull::_fellow_shadow_cache_decide(int p_shadow_index, uint64_t
 			}
 		}
 		cs.last_event_seq = p_scenario->fellow_shadow_event_seq;
+
+		if (ok && !cs.cost_checked && min_cost > 0.0f) {
+			uint64_t primitives = 0;
+			uint32_t draws = 0;
+			if (scene_render->fellow_directional_shadow_cache_get_static_cost(cache->cache_id, k, cs.build_frame, primitives, draws)) {
+				cs.cost_checked = true;
+				// Static casters of the cache volume, scaled to the cascade's share of it, in primitive equivalents; the
+				// copy writes n * n depth texels.
+				const double area = (double)w.n * (double)w.n;
+				const double share = area / ((double)cs.size * (double)cs.size);
+				const double cost = ((double)primitives + FELLOW_DRAW_PRIMITIVE_EQUIVALENT * (double)draws) * share;
+				if (cost < (double)min_cost * area) {
+					cs.valid = false;
+					cs.uneconomic_until = p_frame + FELLOW_UNECONOMIC_FRAMES;
+					c.fellow_mode = FELLOW_CASCADE_STOCK;
+					Fellow::stats().shadow_cache_cascades_uneconomic.increment();
+					continue;
+				}
+			}
+		}
 
 		if (!ok) {
 			cs.valid = false;
@@ -2566,7 +2620,6 @@ void RendererSceneCull::_fellow_shadow_cache_decide(int p_shadow_index, uint64_t
 		}
 	}
 
-	const int debug_mode = Fellow::directional_shadow_cache_debug_mode();
 	if (debug_mode == 1) {
 		// Verification: same cascade lattice, but never serve from the cache.
 		for (uint32_t k = 0; k < shadow.cascade_count; k++) {
@@ -2624,6 +2677,8 @@ void RendererSceneCull::_fellow_shadow_cache_decide(int p_shadow_index, uint64_t
 		cs.lod_travel = lod_travel;
 		cs.build_cam_pos = w.cam_pos;
 		cs.build_frame = p_frame;
+		cs.cost_checked = false;
+		cs.uneconomic_until = 0;
 		cs.last_event_seq = p_scenario->fellow_shadow_event_seq;
 		if (candidates[a].kind == 2) {
 			cs.last_promotion_frame = p_frame;
@@ -2706,6 +2761,7 @@ void RendererSceneCull::_fellow_shadow_cache_fill_render_data(int p_shadow_index
 
 	r_data.fellow.cache_id = w.cache->cache_id;
 	r_data.fellow.rebuild = c.fellow_mode == FELLOW_CASCADE_REBUILD;
+	r_data.fellow.build_frame = cs.build_frame;
 	r_data.fellow.cache_size = cs.size;
 
 	const real_t zf_c = cs.z_near_plane - cs.z_far_plane;

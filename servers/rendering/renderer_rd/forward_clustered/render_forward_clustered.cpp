@@ -2818,7 +2818,18 @@ void RenderForwardClustered::_render_shadow_pass(RID p_light, RID p_shadow_atlas
 				cache_lod_multiplier = cache_lod_ortho_extent;
 				cache_lod_threshold = p_fellow_op->lod_texel_threshold / float(p_fellow_op->cache_size);
 			}
-			_render_shadow_append(cache_fb, p_fellow_op->cache_instances, p_fellow_op->cache_projection, p_fellow_op->cache_transform, zfar, 0, 0, reverse_cull_face, false, false, use_pancake, cache_lod_multiplier, cache_lod_threshold, Rect2i(0, 0, p_fellow_op->cache_size, p_fellow_op->cache_size), flip_y, true, false, false, p_render_info, p_viewport_size, p_main_cam_transform, p_fellow_op->lod_distance_bias, cache_lod_ortho_extent);
+			// Counted separately: the scene cull's cost gate compares the static casters' cost with the copy's.
+			RenderingServerTypes::RenderInfo cache_info;
+			_render_shadow_append(cache_fb, p_fellow_op->cache_instances, p_fellow_op->cache_projection, p_fellow_op->cache_transform, zfar, 0, 0, reverse_cull_face, false, false, use_pancake, cache_lod_multiplier, cache_lod_threshold, Rect2i(0, 0, p_fellow_op->cache_size, p_fellow_op->cache_size), flip_y, true, false, false, &cache_info, p_viewport_size, p_main_cam_transform, p_fellow_op->lod_distance_bias, cache_lod_ortho_extent);
+			if (p_render_info) {
+				for (int t = 0; t < RSE::VIEWPORT_RENDER_INFO_TYPE_MAX; t++) {
+					for (int k = 0; k < RSE::VIEWPORT_RENDER_INFO_MAX; k++) {
+						p_render_info->info[t][k] += cache_info.info[t][k];
+					}
+				}
+			}
+			const int *shadow_info = cache_info.info[RSE::VIEWPORT_RENDER_INFO_TYPE_SHADOW];
+			fellow_shadow_cache->set_static_cost(p_fellow_op->cache_id, p_pass, p_fellow_op->build_frame, (uint64_t)MAX(0, shadow_info[RSE::VIEWPORT_RENDER_INFO_PRIMITIVES_IN_FRAME]), (uint32_t)MAX(0, shadow_info[RSE::VIEWPORT_RENDER_INFO_DRAW_CALLS_IN_FRAME]));
 			fellow_shadow_cache->set_content_valid(p_fellow_op->cache_id, p_pass);
 		}
 		RID cache_texture = fellow_shadow_cache->get_valid_texture(p_fellow_op->cache_id, p_pass);
@@ -2872,6 +2883,10 @@ void RenderForwardClustered::fellow_directional_shadow_cache_free(int64_t p_cach
 
 bool RenderForwardClustered::fellow_directional_shadow_cache_take_lost(int64_t p_cache_id) {
 	return fellow_shadow_cache && fellow_shadow_cache->take_lost(p_cache_id);
+}
+
+bool RenderForwardClustered::fellow_directional_shadow_cache_get_static_cost(int64_t p_cache_id, int p_cascade, uint64_t p_build_frame, uint64_t &r_primitives, uint32_t &r_draws) const {
+	return fellow_shadow_cache && fellow_shadow_cache->get_static_cost(p_cache_id, p_cascade, p_build_frame, r_primitives, r_draws);
 }
 
 void RenderForwardClustered::_render_shadow_begin() {

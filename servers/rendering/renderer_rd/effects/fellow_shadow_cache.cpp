@@ -104,6 +104,27 @@ void FellowShadowCache::set_content_valid(int64_t p_cache_id, int p_cascade) {
 	}
 }
 
+void FellowShadowCache::set_static_cost(int64_t p_cache_id, int p_cascade, uint64_t p_build_frame, uint64_t p_primitives, uint32_t p_draws) {
+	ERR_FAIL_INDEX(p_cascade, 4);
+	Entry *e = entries.getptr(p_cache_id);
+	if (e) {
+		e->cost_build_frame[p_cascade] = p_build_frame;
+		e->cost_primitives[p_cascade] = p_primitives;
+		e->cost_draws[p_cascade] = p_draws;
+	}
+}
+
+bool FellowShadowCache::get_static_cost(int64_t p_cache_id, int p_cascade, uint64_t p_build_frame, uint64_t &r_primitives, uint32_t &r_draws) const {
+	ERR_FAIL_INDEX_V(p_cascade, 4, false);
+	const Entry *e = entries.getptr(p_cache_id);
+	if (e == nullptr || e->cost_build_frame[p_cascade] != p_build_frame) {
+		return false;
+	}
+	r_primitives = e->cost_primitives[p_cascade];
+	r_draws = e->cost_draws[p_cascade];
+	return true;
+}
+
 RID FellowShadowCache::get_valid_texture(int64_t p_cache_id, int p_cascade) {
 	ERR_FAIL_INDEX_V(p_cascade, 4, RID());
 	Entry *e = entries.getptr(p_cache_id);

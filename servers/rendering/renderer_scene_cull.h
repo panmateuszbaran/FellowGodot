@@ -1132,6 +1132,11 @@ public:
 			uint32_t promotable = 0; // from the previous frame's cull
 			float miss_ema = 0.0; // fraction of recent frames not served from the cache
 			uint32_t cooldown = 0; // frames left in stock mode after thrashing
+			real_t zoom_texel = 0.0; // cascade texel size when it last changed (zoom / FOV animation detection)
+			int32_t zoom_n = 0;
+			uint64_t zoom_frame = 0; // frame of the last texel size change
+			bool cost_checked = false; // the cost gate has evaluated the current build
+			uint64_t uneconomic_until = 0; // stock while the cascade stays in the evaluated volume, until this frame
 		};
 
 		Cascade cascades[RendererSceneRender::MAX_DIRECTIONAL_LIGHT_CASCADES];

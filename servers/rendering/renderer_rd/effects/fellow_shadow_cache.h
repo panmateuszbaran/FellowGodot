@@ -58,6 +58,10 @@ class FellowShadowCache {
 		int size[4] = { 0, 0, 0, 0 };
 		RD::DataFormat format[4] = { RD::DATA_FORMAT_MAX, RD::DATA_FORMAT_MAX, RD::DATA_FORMAT_MAX, RD::DATA_FORMAT_MAX };
 		bool content_valid[4] = { false, false, false, false };
+		// Static caster cost of the last rebuild of each cascade (read back by the scene cull's cost gate).
+		uint64_t cost_build_frame[4] = { 0, 0, 0, 0 };
+		uint64_t cost_primitives[4] = { 0, 0, 0, 0 };
+		uint32_t cost_draws[4] = { 0, 0, 0, 0 };
 		bool lost = false; // a cascade was needed but its content is gone: the scene cull must rebuild
 	};
 	HashMap<int64_t, Entry> entries;
@@ -82,6 +86,8 @@ public:
 	RID get_framebuffer(int64_t p_cache_id, int p_cascade, int p_size, RD::DataFormat p_format, uint32_t p_usage_bits);
 	RID get_texture(int64_t p_cache_id, int p_cascade) const;
 	void set_content_valid(int64_t p_cache_id, int p_cascade);
+	void set_static_cost(int64_t p_cache_id, int p_cascade, uint64_t p_build_frame, uint64_t p_primitives, uint32_t p_draws);
+	bool get_static_cost(int64_t p_cache_id, int p_cascade, uint64_t p_build_frame, uint64_t &r_primitives, uint32_t &r_draws) const;
 	// Returns the cache texture if it holds a rebuilt content, otherwise marks the cache lost and returns RID().
 	RID get_valid_texture(int64_t p_cache_id, int p_cascade);
 	bool take_lost(int64_t p_cache_id);
