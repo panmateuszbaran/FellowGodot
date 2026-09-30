@@ -2393,7 +2393,7 @@ void fragment_shader(in SceneData scene_data) {
 
 				float shadow = 1.0;
 
-#if !defined(LIGHT_CODE_USED) && !defined(LIGHT_RIM_USED) && !defined(LIGHT_BACKLIGHT_USED) && !defined(LIGHT_TRANSMITTANCE_USED) && !defined(LIGHT_CLEARCOAT_USED) && !defined(DIFFUSE_LAMBERT_WRAP) && !defined(DIFFUSE_TOON) && !defined(SPECULAR_TOON) && !defined(USE_SHADOW_TO_OPACITY) && !defined(USE_VERTEX_LIGHTING)
+#if defined(FELLOW_BACKFACING_LIGHT_SKIP_OK) && !defined(USE_VERTEX_LIGHTING)
 				// FellowEngine (rendering/fellow/shadows/skip_backfacing_directional): with N.L <= 0 (computed exactly as in
 				// light_compute) this light's diffuse and specular are multiplied by zero, so its shadow value is never used.
 				bool fellow_skip_shadow = false;

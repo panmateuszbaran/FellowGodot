@@ -98,6 +98,13 @@ hvec3 f0_Clear_Coat_To_Surface(hvec3 f0) {
 	return clamp(f0 * (f0 * (half(0.941892) - half(0.263008) * f0) + half(0.346479)) - half(0.0285998), half(0.0), half(1.0));
 }
 
+// FellowEngine: materials for which a light with N.L <= 0 (N.L as computed in light_compute) contributes exactly
+// nothing, so its shadow lookup (and, for positional lights, the whole light) can be skipped. Anything that can
+// still use the light or its attenuation behind the terminator is excluded.
+#if !defined(LIGHT_CODE_USED) && !defined(LIGHT_RIM_USED) && !defined(LIGHT_BACKLIGHT_USED) && !defined(LIGHT_TRANSMITTANCE_USED) && !defined(LIGHT_CLEARCOAT_USED) && !defined(DIFFUSE_LAMBERT_WRAP) && !defined(DIFFUSE_TOON) && !defined(SPECULAR_TOON) && !defined(USE_SHADOW_TO_OPACITY)
+#define FELLOW_BACKFACING_LIGHT_SKIP_OK
+#endif
+
 void light_compute(hvec3 N, hvec3 L, hvec3 V, half A, hvec3 light_color, bool is_directional, half attenuation, hvec3 f0, half roughness, half metallic, half specular_amount, hvec3 albedo, inout half alpha, vec2 screen_uv, hvec3 energy_compensation,
 #ifdef LIGHT_BACKLIGHT_USED
 		hvec3 backlight,
@@ -496,6 +503,13 @@ void light_process_omni(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 		size = max(half(1.0) - size, half(0.0));
 	}
 
+#ifdef FELLOW_BACKFACING_LIGHT_SKIP_OK
+	// FellowEngine (rendering/fellow/shadows/skip_backfacing_positional): N.L <= 0 -> this light adds exactly nothing.
+	if (bool(scene_data_block.data.flags & SCENE_DATA_FLAGS_FELLOW_SKIP_BACKFACING_POSITIONAL) && min(size + dot(normal, hvec3(light_rel_vec / light_length)), half(1.0)) <= half(0.0)) {
+		return;
+	}
+#endif
+
 	half shadow = half(1.0);
 #ifndef SHADOWS_DISABLED
 	// Omni light shadow.
@@ -805,6 +819,13 @@ void light_process_spot(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 		size = half(1.0) / sqrt(half(1.0) + t * t);
 		size = max(half(1.0) - size, half(0.0));
 	}
+
+#ifdef FELLOW_BACKFACING_LIGHT_SKIP_OK
+	// FellowEngine (rendering/fellow/shadows/skip_backfacing_positional): N.L <= 0 -> this light adds exactly nothing.
+	if (bool(scene_data_block.data.flags & SCENE_DATA_FLAGS_FELLOW_SKIP_BACKFACING_POSITIONAL) && min(size + dot(normal, light_rel_vec_norm), half(1.0)) <= half(0.0)) {
+		return;
+	}
+#endif
 
 	half shadow = half(1.0);
 #ifndef SHADOWS_DISABLED

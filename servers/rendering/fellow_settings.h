@@ -138,6 +138,11 @@ inline int directional_shadow_cache_debug_mode() {
 inline bool shadow_skip_backfacing() {
 	return shadows_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/shadows/skip_backfacing_directional");
 }
+// Omni/spot lights: skip the whole light (shadow lookup, projector, BRDF) where N.L makes its contribution exactly
+// zero (image-identical).
+inline bool shadow_skip_backfacing_positional() {
+	return shadows_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/shadows/skip_backfacing_positional");
+}
 // PCF path with blend splits: sample the second cascade only where its blend weight is non-zero (image-identical).
 inline bool shadow_skip_unblended_cascade() {
 	return shadows_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/shadows/skip_unblended_cascade");
