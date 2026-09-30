@@ -329,6 +329,21 @@ def exe_for(build: str, godot_path: str | None) -> str:
     return os.path.join(BIN, build, "godot.windows.template_release.x86_64.console.exe")
 
 
+def keep_awake() -> None:
+    """Ask Windows not to sleep while this process runs (a sleep in the middle of a session invalidates it).
+
+    SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED) is a per-process request, released automatically
+    when the process exits; no power setting is changed. No-op on other platforms."""
+    if os.name != "nt":
+        return
+    try:
+        import ctypes
+        ctypes.windll.kernel32.SetThreadExecutionState(0x80000000 | 0x00000001)
+        log("keep-awake requested for this session (released when the runner exits)")
+    except Exception as e:  # noqa: BLE001
+        log(f"keep-awake not available: {e}")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--builds", default="stock", help="comma list of builds under .tools/bin/<build>/ (e.g. stock,fellow); "
@@ -389,6 +404,7 @@ def main() -> int:
     with open(os.path.join(raw_dir, "hardware.json"), "w", encoding="utf-8") as f:
         json.dump(hw, f, indent=2)
     log(f"session {session}: builds={builds} scenes={scenes} res={resolutions} mode={args.mode}")
+    keep_awake()
 
     sampler = GpuSampler()
     if not args.no_telemetry:

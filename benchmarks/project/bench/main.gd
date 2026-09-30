@@ -531,6 +531,9 @@ func _halton(i: int, b: int) -> float:
 func _finish() -> void:
 	finished = true
 	result["total_runtime_s"] = (Time.get_ticks_usec() - t_start_usec) / 1e6
+	var fst := _fellow_stats()
+	if not fst.is_empty():
+		result["fellow_stats_process_total"] = fst
 	var r: Array = result.get("resolution", [0, 0])
 	var fname := "%s_%s_%s_%dx%d_run%d.json" % [result["scene"], result["mode"], result.get("tag", "x"), r[0], r[1], result["run"]]
 	var f := FileAccess.open(out_dir.path_join(fname), FileAccess.WRITE)
