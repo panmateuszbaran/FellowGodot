@@ -291,7 +291,8 @@ public:
 		int cache_size = 0;
 		Projection cache_projection;
 		Transform3D cache_transform;
-		float lod_distance_bias = 0.0;
+		float lod_distance_bias = 0.0; // camera-distance LOD: as if the camera were this much closer
+		float lod_texel_threshold = 0.0; // > 0: orthographic LOD from the cache's texel size (in texels)
 		Vector2i copy_offset;
 		float remap_scale = 1.0;
 		float remap_bias = 0.0;

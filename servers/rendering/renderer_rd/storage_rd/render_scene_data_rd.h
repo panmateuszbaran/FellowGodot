@@ -68,6 +68,7 @@ public:
 
 	float lod_distance_multiplier = 0.0;
 	float fellow_lod_distance_bias = 0.0; // FellowEngine shadow cache: LOD as if the camera were this much closer
+	float fellow_lod_ortho_extent = 0.0; // FellowEngine shadow cache: > 0 = orthographic LOD over this world-space width
 	float screen_mesh_lod_threshold = 0.0;
 
 	uint32_t directional_light_count = 0;

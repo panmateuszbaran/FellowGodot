@@ -1082,7 +1082,7 @@ void RenderForwardClustered::_fill_render_list(RenderListType p_render_list, con
 
 		float lod_distance = 0.0;
 
-		if (p_render_data->scene_data->cam_orthogonal) {
+		if (p_render_data->scene_data->cam_orthogonal || p_render_data->scene_data->fellow_lod_ortho_extent > 0.0) {
 			lod_distance = 1.0;
 		} else {
 			Vector3 aabb_min = inst->transformed_aabb.position;
@@ -2796,7 +2796,16 @@ void RenderForwardClustered::_render_shadow_pass(RID p_light, RID p_shadow_atlas
 		RID cache_fb = fellow_shadow_cache->get_framebuffer(p_fellow_op->cache_id, p_pass, p_fellow_op->cache_size, RendererRD::LightStorage::get_shadow_atlas_depth_format(use_16_bits), RendererRD::LightStorage::get_shadow_atlas_depth_usage_bits());
 		if (p_fellow_op->rebuild) {
 			// Static casters of the whole cache volume, same pipeline state as the cascade (only the camera differs).
-			_render_shadow_append(cache_fb, p_fellow_op->cache_instances, p_fellow_op->cache_projection, p_fellow_op->cache_transform, zfar, 0, 0, reverse_cull_face, false, false, use_pancake, p_lod_distance_multiplier, p_screen_mesh_lod_threshold, Rect2i(0, 0, p_fellow_op->cache_size, p_fellow_op->cache_size), flip_y, true, false, false, p_render_info, p_viewport_size, p_main_cam_transform, p_fellow_op->lod_distance_bias);
+			float cache_lod_multiplier = p_lod_distance_multiplier;
+			float cache_lod_threshold = p_screen_mesh_lod_threshold;
+			float cache_lod_ortho_extent = 0.0;
+			if (p_fellow_op->lod_texel_threshold > 0.0 && p_screen_mesh_lod_threshold > 0.0) {
+				// Orthographic LOD: "screen size" = error / cache width; accept errors below lod_texel_threshold texels.
+				cache_lod_ortho_extent = 2.0 / p_fellow_op->cache_projection.columns[0][0];
+				cache_lod_multiplier = cache_lod_ortho_extent;
+				cache_lod_threshold = p_fellow_op->lod_texel_threshold / float(p_fellow_op->cache_size);
+			}
+			_render_shadow_append(cache_fb, p_fellow_op->cache_instances, p_fellow_op->cache_projection, p_fellow_op->cache_transform, zfar, 0, 0, reverse_cull_face, false, false, use_pancake, cache_lod_multiplier, cache_lod_threshold, Rect2i(0, 0, p_fellow_op->cache_size, p_fellow_op->cache_size), flip_y, true, false, false, p_render_info, p_viewport_size, p_main_cam_transform, p_fellow_op->lod_distance_bias, cache_lod_ortho_extent);
 			fellow_shadow_cache->set_content_valid(p_fellow_op->cache_id, p_pass);
 		}
 		RID cache_texture = fellow_shadow_cache->get_valid_texture(p_fellow_op->cache_id, p_pass);
@@ -2851,7 +2860,7 @@ void RenderForwardClustered::_render_shadow_begin() {
 	// because _fill_instance_data will do that if it detects p_offset == 0u.
 }
 
-void RenderForwardClustered::_render_shadow_append(RID p_framebuffer, const PagedArray<RenderGeometryInstance *> &p_instances, const Projection &p_projection, const Transform3D &p_transform, float p_zfar, float p_bias, float p_normal_bias, bool p_reverse_cull_face, bool p_use_dp, bool p_use_dp_flip, bool p_use_pancake, float p_lod_distance_multiplier, float p_screen_mesh_lod_threshold, const Rect2i &p_rect, bool p_flip_y, bool p_clear_region, bool p_begin, bool p_end, RenderingServerTypes::RenderInfo *p_render_info, const Size2i &p_viewport_size, const Transform3D &p_main_cam_transform, float p_fellow_lod_distance_bias) {
+void RenderForwardClustered::_render_shadow_append(RID p_framebuffer, const PagedArray<RenderGeometryInstance *> &p_instances, const Projection &p_projection, const Transform3D &p_transform, float p_zfar, float p_bias, float p_normal_bias, bool p_reverse_cull_face, bool p_use_dp, bool p_use_dp_flip, bool p_use_pancake, float p_lod_distance_multiplier, float p_screen_mesh_lod_threshold, const Rect2i &p_rect, bool p_flip_y, bool p_clear_region, bool p_begin, bool p_end, RenderingServerTypes::RenderInfo *p_render_info, const Size2i &p_viewport_size, const Transform3D &p_main_cam_transform, float p_fellow_lod_distance_bias, float p_fellow_lod_ortho_extent) {
 	SceneState::ShadowPass shadow_pass;
 
 	RenderSceneDataRD scene_data;
@@ -2868,6 +2877,7 @@ void RenderForwardClustered::_render_shadow_append(RID p_framebuffer, const Page
 	scene_data.time_step = time_step;
 	scene_data.main_cam_transform = p_main_cam_transform;
 	scene_data.fellow_lod_distance_bias = p_fellow_lod_distance_bias;
+	scene_data.fellow_lod_ortho_extent = p_fellow_lod_ortho_extent;
 	scene_data.shadow_pass = true;
 
 	RenderDataRD render_data;

@@ -87,6 +87,19 @@ runtime and per benchmark variant (`run_benchmarks.py --builds "label=fellow@key
 | `rendering/fellow/postfx/taa_resolve_v2` | false | TAA resolve v2 (decision record `docs/decisions/0001-taa-resolve-v2.md`) |
 | `rendering/fellow/postfx/taa_history_pingpong` | false | TAA history ping-pong instead of copies (`docs/decisions/0002-taa-history-pingpong.md`) |
 | `rendering/fellow/fluid/enabled` | true | `FellowShallowWater3D` simulation (module `modules/fellow_fluid`) |
+| `rendering/fellow/postfx/taa_v2_gamma` | 1.25 | resolve v2 variance-clip width (σ multiplier) |
+| `rendering/fellow/postfx/taa_v2_feedback_min` / `_max` | 0.88 / 0.9375 | resolve v2 history weight range |
+| `rendering/fellow/postfx/taa_v2_antiflicker` | 0.0 | resolve v2: keep the history weight at its maximum where the history is trusted |
+| `rendering/fellow/shadows/enabled` | true | master switch for shadow experiments |
+| `rendering/fellow/shadows/directional_cache` | false | directional shadow static cache (`docs/decisions/0004-directional-shadow-cache.md`) |
+| `rendering/fellow/shadows/directional_cache_guard_texels` | 256 | guard band per side (cache = cascade + 2 × guard texels) |
+| `rendering/fellow/shadows/directional_cache_static_frames` | 60 | frames without change before a caster is cached |
+| `rendering/fellow/shadows/directional_cache_lod_travel` | 2.0 | camera travel (m) a cache stays valid for; cache LODs chosen for a camera this much closer |
+| `rendering/fellow/shadows/directional_cache_max_rebuilds_per_frame` | 1 | cache re-renders per frame (others render stock that frame) |
+| `rendering/fellow/shadows/directional_cache_debug_mode` | 0 | verification: 1 = never use the cache, 2 = rebuild every frame |
+| `rendering/fellow/shadows/skip_backfacing_directional` | false | no directional shadow lookup where N·L makes the light's contribution zero (image-identical) |
+| `rendering/fellow/shadows/skip_unblended_cascade` | false | PCF path: second cascade only where its blend weight is non-zero (image-identical) |
+| `rendering/fellow/shadows/pcss_blend_band` | false | PCSS path: blend cascades over the last 10 % of a split instead of the whole split (look change) |
 | `rendering/fellow/profiling/pass_timestamps` | false | per-pass GPU timestamps without `--gpu-profile` (performance overlay) |
 
 Build times on the benchmark machine (Core Ultra 9 275HX, 24 threads): template_release ~14 min, editor ~18 min

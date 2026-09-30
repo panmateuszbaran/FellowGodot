@@ -2497,6 +2497,7 @@ void RendererSceneCull::_fellow_shadow_cache_decide(int p_shadow_index, uint64_t
 		if (!light_stable || cs.cooldown > 0) {
 			if (cs.cooldown > 0) {
 				cs.cooldown--;
+				cs.miss_ema = 0.0f;
 			}
 			cs.valid = false;
 			c.fellow_mode = FELLOW_CASCADE_STOCK;
@@ -2686,12 +2687,15 @@ void RendererSceneCull::_fellow_shadow_cache_fill_render_data(int p_shadow_index
 	FellowDirShadowCache::Cascade &cs = w.cache->cascades[p_cascade];
 
 	// Thrash guard: if this cascade is rarely served from its cache (e.g. a camera that jumps every frame), the
-	// rebuilds cost more than they save; fall back to stock rendering for a while.
-	const bool miss = c.fellow_mode != FELLOW_CASCADE_CACHED;
-	cs.miss_ema = cs.miss_ema * (15.0f / 16.0f) + (miss ? 1.0f / 16.0f : 0.0f);
-	if (cs.miss_ema > 0.75f) {
-		cs.cooldown = 120;
-		cs.miss_ema = 0.0f;
+	// rebuilds cost more than they save; fall back to stock rendering for a while. Frames rendered stock on purpose
+	// (cooldown, rotating light) do not count.
+	if (c.fellow_mode != FELLOW_CASCADE_STOCK) {
+		const bool miss = c.fellow_mode != FELLOW_CASCADE_CACHED;
+		cs.miss_ema = cs.miss_ema * (15.0f / 16.0f) + (miss ? 1.0f / 16.0f : 0.0f);
+		if (cs.miss_ema > 0.75f) {
+			cs.cooldown = 120;
+			cs.miss_ema = 0.0f;
+		}
 	}
 	cs.promotable = c.fellow_promotable.get();
 
@@ -2715,6 +2719,7 @@ void RendererSceneCull::_fellow_shadow_cache_fill_render_data(int p_shadow_index
 		r_data.fellow.cache_projection = ortho;
 		r_data.fellow.cache_transform = xform;
 		r_data.fellow.lod_distance_bias = cs.lod_travel;
+		r_data.fellow.lod_texel_threshold = Fellow::directional_shadow_cache_texel_lod();
 		r_data.fellow.cache_instances.merge_unordered(scene_cull_result.directional_shadows[p_shadow_index].fellow_cache_instances[p_cascade]);
 		st.shadow_cache_rebuild_casters.add(r_data.fellow.cache_instances.size());
 	}

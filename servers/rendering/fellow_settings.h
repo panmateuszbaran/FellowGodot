@@ -111,8 +111,13 @@ inline int directional_shadow_cache_static_frames() {
 	return MAX(1, GLOBAL_GET_CACHED(int, "rendering/fellow/shadows/directional_cache_static_frames"));
 }
 
-// Maximum camera travel (m) while a cascade stays cached; cached casters use a LOD chosen for a camera this much
-// closer, so the cache is never coarser than the stock per-frame LOD choice.
+// Mesh LOD of cached casters. texel_lod > 0: chosen from the cascade's own texel size (the coarsest LOD whose error is
+// below texel_lod shadow-map texels; geometric detail below a texel cannot show in the shadow map). texel_lod = 0:
+// chosen like stock (camera distance at the time of the rebuild); with lod_travel > 0 as if the camera were that much
+// closer, and the cache is invalidated once the camera moved farther than that (never coarser than stock).
+inline float directional_shadow_cache_texel_lod() {
+	return MAX(0.0f, GLOBAL_GET_CACHED(float, "rendering/fellow/shadows/directional_cache_texel_lod"));
+}
 inline float directional_shadow_cache_lod_travel() {
 	return MAX(0.0f, GLOBAL_GET_CACHED(float, "rendering/fellow/shadows/directional_cache_lod_travel"));
 }
