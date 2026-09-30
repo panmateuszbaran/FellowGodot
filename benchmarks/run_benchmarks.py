@@ -330,15 +330,17 @@ def exe_for(build: str, godot_path: str | None) -> str:
 
 
 def keep_awake() -> None:
-    """Ask Windows not to sleep while this process runs (a sleep in the middle of a session invalidates it).
+    """Ask Windows to keep the system and the display on while this process runs.
 
-    SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED) is a per-process request, released automatically
-    when the process exits; no power setting is changed. No-op on other platforms."""
+    A sleep in the middle of a session invalidates it, and with the display off (and the session locked after it)
+    presentation stalls ~490 ms every ~1.03 s (measured in the milestone-1 and milestone-2 night runs).
+    SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED) is a per-process request,
+    released automatically when the process exits; no power setting is changed. No-op on other platforms."""
     if os.name != "nt":
         return
     try:
         import ctypes
-        ctypes.windll.kernel32.SetThreadExecutionState(0x80000000 | 0x00000001)
+        ctypes.windll.kernel32.SetThreadExecutionState(0x80000000 | 0x00000001 | 0x00000002)
         log("keep-awake requested for this session (released when the runner exits)")
     except Exception as e:  # noqa: BLE001
         log(f"keep-awake not available: {e}")
