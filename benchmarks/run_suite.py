@@ -38,7 +38,7 @@ def log(m):
 def runner(*args) -> int:
     cmd = [PY, "-u", RUNNER, *args]
     log(" ".join(cmd[2:]))
-    return subprocess.call(cmd, cwd=ROOT)
+    return subprocess.call(cmd, cwd=ROOT, **({"creationflags": 0x08000000} if os.name == "nt" else {}))
 
 
 def label(spec: str) -> str:
@@ -49,7 +49,7 @@ def label(spec: str) -> str:
 def tool(name, *args) -> int:
     cmd = [PY, "-u", os.path.join(TOOLS, name), *args]
     log(" ".join(cmd[2:]))
-    return subprocess.call(cmd, cwd=ROOT)
+    return subprocess.call(cmd, cwd=ROOT, **({"creationflags": 0x08000000} if os.name == "nt" else {}))
 
 
 def main() -> int:

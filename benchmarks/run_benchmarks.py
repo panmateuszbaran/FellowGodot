@@ -49,6 +49,13 @@ except ImportError:  # pragma: no cover
     psutil = None
 
 
+# Windows: never let a child process open its own console window. When the runner itself has no console (started
+# detached, e.g. from a scheduled job), every console child (nvidia-smi once per second, the Godot console wrapper)
+# would otherwise get a new window that takes focus from the benchmark window: measured as ~480 ms stalls every
+# ~1.03 s in Sponza (session godot-4.7.2_perf re-run of 2026-09-30, discarded).
+NO_WINDOW = {"creationflags": 0x08000000} if os.name == "nt" else {}  # CREATE_NO_WINDOW
+
+
 def log(msg: str) -> None:
     print(f"[bench {datetime.datetime.now().strftime('%H:%M:%S')}] {msg}", flush=True)
 
@@ -57,7 +64,7 @@ def log(msg: str) -> None:
 
 def _run(cmd, timeout=30) -> str:
     try:
-        p = subprocess.run(cmd, shell=isinstance(cmd, str), capture_output=True, text=True, errors="replace", timeout=timeout)
+        p = subprocess.run(cmd, shell=isinstance(cmd, str), capture_output=True, text=True, errors="replace", timeout=timeout, **NO_WINDOW)
         return (p.stdout or "").strip()
     except Exception as e:  # noqa: BLE001
         return f"ERROR: {e}"
@@ -180,7 +187,7 @@ class GpuSampler(threading.Thread):
 
 def kill_tree(pid: int) -> None:
     if os.name == "nt":
-        subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True)
+        subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True, **NO_WINDOW)
     elif psutil:
         try:
             p = psutil.Process(pid)
@@ -197,7 +204,7 @@ def run_godot(exe: str, godot_args: list[str], user_args: list[str], timeout: fl
     with open(log_path, "w", encoding="utf-8", errors="replace") as lf:
         lf.write(" ".join(f'"{c}"' if " " in c else c for c in cmd) + "\n\n")
         lf.flush()
-        p = subprocess.Popen(cmd, stdout=lf, stderr=subprocess.STDOUT, cwd=ROOT)
+        p = subprocess.Popen(cmd, stdout=lf, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, cwd=ROOT, **NO_WINDOW)
         peak_wset = 0
         peak_private = 0
         timed_out = False
