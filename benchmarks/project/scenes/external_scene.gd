@@ -92,6 +92,7 @@ func add_sky_and_sun(elevation_deg: float, azimuth_deg: float, sun_energy: float
 	sun.directional_shadow_max_distance = max_shadow_distance
 	sun.directional_shadow_blend_splits = true
 	sun.light_angular_distance = 0.5
+	apply_sun_overrides(sun)
 	add_child(sun)
 	return sun
 

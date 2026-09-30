@@ -112,6 +112,10 @@ private:
 		SCENE_DATA_FLAGS_USE_UV2_MATERIAL = 1 << 5,
 		SCENE_DATA_FLAGS_USE_PANCAKE_SHADOWS = 1 << 6,
 		SCENE_DATA_FLAGS_IN_SHADOW_PASS = 1 << 7, // Only used by Forward+ renderer.
+		// FellowEngine directional shadow sampling optimizations (Forward+ only, see fellow_settings.h).
+		SCENE_DATA_FLAGS_FELLOW_SKIP_BACKFACING_SHADOW = 1 << 8,
+		SCENE_DATA_FLAGS_FELLOW_SKIP_UNBLENDED_CASCADE = 1 << 9,
+		SCENE_DATA_FLAGS_FELLOW_PCSS_BLEND_BAND = 1 << 10,
 		SCENE_DATA_FLAGS_MAX
 	};
 

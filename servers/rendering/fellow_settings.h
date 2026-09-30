@@ -128,6 +128,21 @@ inline int directional_shadow_cache_debug_mode() {
 	return GLOBAL_GET_CACHED(int, "rendering/fellow/shadows/directional_cache_debug_mode");
 }
 
+// Directional shadow sampling (Forward+ scene shader, docs/decisions/0005-directional-shadow-sampling.md):
+// skip the shadow lookup of pixels whose N.L makes the light's contribution exactly zero (image-identical).
+inline bool shadow_skip_backfacing() {
+	return shadows_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/shadows/skip_backfacing_directional");
+}
+// PCF path with blend splits: sample the second cascade only where its blend weight is non-zero (image-identical).
+inline bool shadow_skip_unblended_cascade() {
+	return shadows_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/shadows/skip_unblended_cascade");
+}
+// PCSS path with blend splits: blend cascades over the last 10 % of each split (like the PCF path) instead of over
+// the whole split, sampling the second cascade only there. Changes the look (sharper: higher-resolution cascade).
+inline bool shadow_pcss_blend_band() {
+	return shadows_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/shadows/pcss_blend_band");
+}
+
 // Cumulative counters (render thread writes, scripts read through RenderingServer.fellow_get_stats()).
 struct Stats {
 	SafeNumeric<uint64_t> shadow_cache_cascades_stock;

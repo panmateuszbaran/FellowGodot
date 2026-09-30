@@ -11,6 +11,10 @@
 #define SCENE_DATA_FLAGS_USE_UV2_MATERIAL (1 << 5)
 #define SCENE_DATA_FLAGS_USE_PANCAKE_SHADOWS (1 << 6)
 #define SCENE_DATA_FLAGS_IN_SHADOW_PASS (1 << 7)
+// FellowEngine (rendering/fellow/shadows/*): directional shadow sampling optimizations.
+#define SCENE_DATA_FLAGS_FELLOW_SKIP_BACKFACING_SHADOW (1 << 8)
+#define SCENE_DATA_FLAGS_FELLOW_SKIP_UNBLENDED_CASCADE (1 << 9)
+#define SCENE_DATA_FLAGS_FELLOW_PCSS_BLEND_BAND (1 << 10)
 
 struct SceneData {
 	mat4 projection_matrix;

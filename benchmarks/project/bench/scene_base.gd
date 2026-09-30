@@ -59,6 +59,23 @@ func apply_path_sample(d: Dictionary) -> void:
 	camera.fov = d["fov"]
 
 
+## Analysis-only overrides of the benchmark sun, identical for every build and recorded in the results:
+##   --sun_blend=0|1 (cascade blending), --sun_shadow=0|1, --sun_angular=<deg> (0 = PCF instead of PCSS).
+var sun_overrides := {}
+
+
+func apply_sun_overrides(sun: DirectionalLight3D) -> void:
+	if args.has("sun_blend"):
+		sun.directional_shadow_blend_splits = str(args["sun_blend"]) == "1"
+		sun_overrides["blend_splits"] = sun.directional_shadow_blend_splits
+	if args.has("sun_shadow"):
+		sun.shadow_enabled = str(args["sun_shadow"]) == "1"
+		sun_overrides["shadow_enabled"] = sun.shadow_enabled
+	if args.has("sun_angular"):
+		sun.light_angular_distance = float(args["sun_angular"])
+		sun_overrides["angular_distance"] = sun.light_angular_distance
+
+
 func describe() -> Dictionary:
 	var cams := {}
 	for k in fixed_cameras.keys():
@@ -74,6 +91,7 @@ func describe() -> Dictionary:
 		"flythrough": flythrough.to_json() if flythrough else [],
 		"flythrough_duration_s": flythrough.duration() if flythrough else 0.0,
 		"temporal_sequences": seqs,
+		"sun_overrides": sun_overrides,
 	}
 
 

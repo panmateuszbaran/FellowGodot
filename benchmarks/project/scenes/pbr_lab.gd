@@ -405,6 +405,7 @@ func _build_lights() -> void:
 	sun.directional_shadow_max_distance = 60.0
 	sun.directional_shadow_blend_splits = true
 	sun.light_angular_distance = 0.5
+	apply_sun_overrides(sun)
 	add_child(sun)
 	var sdir := -sun.global_transform.basis.z
 	desc_lights.append({"type": "sun", "color": [SUN_COLOR.r, SUN_COLOR.g, SUN_COLOR.b], "godot_energy": SUN_ENERGY, "irradiance": PI * SUN_ENERGY, "direction": [sdir.x, sdir.y, sdir.z], "angular_distance_deg": 0.5})

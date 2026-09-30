@@ -1082,6 +1082,58 @@ layout(location = 2) out vec2 motion_vector;
 
 #include "../scene_forward_lights_inc.glsl"
 
+#ifndef SHADOWS_DISABLED
+// FellowEngine (rendering/fellow/shadows/pcss_blend_band): PCSS lookup of cascade c of directional light i, the same
+// math as the stock per-cascade blocks in fragment_shader().
+float fellow_directional_soft_cascade(uint i, uint c, vec3 vertex, vec3 base_normal_bias, float taa_frame_count) {
+	// Per-cascade values are selected with branches, not dynamic vector indexing (which the SPIR-V specializer rejects).
+	mat4 shadow_matrix;
+	vec2 uv_scale;
+	float range_begin;
+	float bias;
+	float normal_bias_scale;
+	if (c == 0u) {
+		shadow_matrix = directional_lights.data[i].shadow_matrix1;
+		uv_scale = directional_lights.data[i].uv_scale1;
+		range_begin = directional_lights.data[i].shadow_range_begin.x;
+		bias = directional_lights.data[i].shadow_bias.x;
+		normal_bias_scale = directional_lights.data[i].shadow_normal_bias.x;
+	} else if (c == 1u) {
+		shadow_matrix = directional_lights.data[i].shadow_matrix2;
+		uv_scale = directional_lights.data[i].uv_scale2;
+		range_begin = directional_lights.data[i].shadow_range_begin.y;
+		bias = directional_lights.data[i].shadow_bias.y;
+		normal_bias_scale = directional_lights.data[i].shadow_normal_bias.y;
+	} else if (c == 2u) {
+		shadow_matrix = directional_lights.data[i].shadow_matrix3;
+		uv_scale = directional_lights.data[i].uv_scale3;
+		range_begin = directional_lights.data[i].shadow_range_begin.z;
+		bias = directional_lights.data[i].shadow_bias.z;
+		normal_bias_scale = directional_lights.data[i].shadow_normal_bias.z;
+	} else {
+		shadow_matrix = directional_lights.data[i].shadow_matrix4;
+		uv_scale = directional_lights.data[i].uv_scale4;
+		range_begin = directional_lights.data[i].shadow_range_begin.w;
+		bias = directional_lights.data[i].shadow_bias.w;
+		normal_bias_scale = directional_lights.data[i].shadow_normal_bias.w;
+	}
+
+	vec3 light_dir = directional_lights.data[i].direction;
+	vec4 v = vec4(vertex, 1.0);
+	v.xyz += light_dir * bias;
+	vec3 normal_bias = base_normal_bias * normal_bias_scale;
+	normal_bias -= light_dir * dot(light_dir, normal_bias);
+	v.xyz += normal_bias;
+
+	vec4 pssm_coord = shadow_matrix * v;
+	pssm_coord /= pssm_coord.w;
+	float range_pos = dot(directional_lights.data[i].direction, v.xyz);
+	float test_radius = (range_pos - range_begin) * directional_lights.data[i].softshadow_angle;
+	vec2 tex_scale = uv_scale * test_radius;
+	return float(sample_directional_soft_shadow(directional_shadow_atlas, pssm_coord.xyz, tex_scale * directional_lights.data[i].soft_shadow_scale, taa_frame_count));
+}
+#endif // !SHADOWS_DISABLED
+
 #include "../scene_forward_gi_inc.glsl"
 
 #endif //!defined(MODE_RENDER_DEPTH) && !defined(MODE_UNSHADED)
@@ -2341,7 +2393,20 @@ void fragment_shader(in SceneData scene_data) {
 
 				float shadow = 1.0;
 
-				if (directional_lights.data[i].shadow_opacity > 0.001) {
+#if !defined(LIGHT_CODE_USED) && !defined(LIGHT_RIM_USED) && !defined(LIGHT_BACKLIGHT_USED) && !defined(LIGHT_TRANSMITTANCE_USED) && !defined(LIGHT_CLEARCOAT_USED) && !defined(DIFFUSE_LAMBERT_WRAP) && !defined(DIFFUSE_TOON) && !defined(SPECULAR_TOON) && !defined(USE_SHADOW_TO_OPACITY) && !defined(USE_VERTEX_LIGHTING)
+				// FellowEngine (rendering/fellow/shadows/skip_backfacing_directional): with N.L <= 0 (computed exactly as in
+				// light_compute) this light's diffuse and specular are multiplied by zero, so its shadow value is never used.
+				bool fellow_skip_shadow = false;
+				if (bool(scene_data.flags & SCENE_DATA_FLAGS_FELLOW_SKIP_BACKFACING_SHADOW)) {
+					half fellow_size_A = sc_use_directional_soft_shadows() ? half(directional_lights.data[i].size) : half(0.0);
+					half fellow_NdotL = min(fellow_size_A + dot(hvec3(normal), hvec3(directional_lights.data[i].direction)), half(1.0));
+					fellow_skip_shadow = fellow_NdotL <= half(0.0);
+				}
+#else
+				const bool fellow_skip_shadow = false;
+#endif
+
+				if (directional_lights.data[i].shadow_opacity > 0.001 && !fellow_skip_shadow) {
 					float depth_z = -vertex.z;
 					vec3 light_dir = directional_lights.data[i].direction;
 					vec3 base_normal_bias = geo_normal * (1.0 - max(0.0, dot(light_dir, -geo_normal)));
@@ -2353,7 +2418,21 @@ void fragment_shader(in SceneData scene_data) {
 	m_var.xyz += normal_bias;
 
 					//version with soft shadows, more expensive
-					if (sc_use_directional_soft_shadows() && directional_lights.data[i].softshadow_angle > 0) {
+					if (sc_use_directional_soft_shadows() && directional_lights.data[i].softshadow_angle > 0 && bool(scene_data.flags & SCENE_DATA_FLAGS_FELLOW_PCSS_BLEND_BAND)) {
+						// FellowEngine: sample the cascade that contains the pixel; with blend splits, blend towards the next
+						// cascade over the last 10 % of the split only (as the PCF path does) instead of over the whole split.
+						vec4 splits = directional_lights.data[i].shadow_split_offsets;
+						uint c = depth_z < splits.x ? 0u : (depth_z < splits.y ? 1u : (depth_z < splits.z ? 2u : 3u));
+						shadow = fellow_directional_soft_cascade(i, c, vertex, base_normal_bias, scene_data.taa_frame_count);
+						if (directional_lights.data[i].blend_splits && c < 3u) {
+							float split_end = c == 0u ? splits.x : (c == 1u ? splits.y : splits.z);
+							float w = smoothstep(split_end * 0.9, split_end, depth_z);
+							if (w > 0.0) {
+								float s2 = fellow_directional_soft_cascade(i, c + 1u, vertex, base_normal_bias, scene_data.taa_frame_count);
+								shadow = mix(shadow, s2, w);
+							}
+						}
+					} else if (sc_use_directional_soft_shadows() && directional_lights.data[i].softshadow_angle > 0) {
 						uint blend_count = 0;
 						const uint blend_max = directional_lights.data[i].blend_splits ? 2 : 1;
 
@@ -2518,10 +2597,13 @@ void fragment_shader(in SceneData scene_data) {
 								blur_factor2 = 1.0;
 							}
 
-							pssm_coord /= pssm_coord.w;
+							// FellowEngine (rendering/fellow/shadows/skip_unblended_cascade): mix(a, b, 0.0) == a, skip the lookup.
+							if (!bool(scene_data.flags & SCENE_DATA_FLAGS_FELLOW_SKIP_UNBLENDED_CASCADE) || pssm_blend > 0.0) {
+								pssm_coord /= pssm_coord.w;
 
-							float shadow2 = sample_directional_pcf_shadow(directional_shadow_atlas, scene_data.directional_shadow_pixel_size * directional_lights.data[i].soft_shadow_scale * (blur_factor2 + (1.0 - blur_factor2) * float(directional_lights.data[i].blend_splits)), pssm_coord, scene_data.taa_frame_count);
-							shadow = mix(shadow, shadow2, pssm_blend);
+								float shadow2 = sample_directional_pcf_shadow(directional_shadow_atlas, scene_data.directional_shadow_pixel_size * directional_lights.data[i].soft_shadow_scale * (blur_factor2 + (1.0 - blur_factor2) * float(directional_lights.data[i].blend_splits)), pssm_coord, scene_data.taa_frame_count);
+								shadow = mix(shadow, shadow2, pssm_blend);
+							}
 						}
 					}
 

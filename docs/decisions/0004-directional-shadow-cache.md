@@ -31,10 +31,11 @@ drawn into the cascade's atlas rect (16-bit depth, reverse Z) every frame.
 
 ## Proposed implementation
 
-1. **Fixed texel lattice.** With the cache on, a cascade's rect is `N` texels of size `t = 2 (r + e) / (N - 2)` whose
-   origin is snapped to whole texels of a lattice fixed in light space. Consecutive frames and the cache then differ
-   by integer texel offsets, so cached depth can be copied texel-exactly. (The texel is 0.1 % larger than the stock
-   fit at N = 2048; stock's two independently snapped edges make its texel size vary by up to 0.1 % between frames.)
+1. **Texel lattice.** Stock's cascade rect is `N` texels of size `unit / 2` (its width `2 (r + e)` is exactly `N / 2`
+   snapping units) whose origin is snapped to a 2-texel lattice fixed in light space. The cascade itself is left
+   exactly as stock computes it; the cache records its lattice position so that cache and cascade differ by an
+   integer (even) texel offset and cached depth can be copied texel-exactly. In the rare frames where float rounding
+   snaps one edge a unit off (rect 2 texels wider or narrower) the cascade is rendered the stock way.
 2. **Cache per cascade** (per viewport and light): a depth texture of `N + 2g` texels (`g` = guard band,
    default 256) holding every *static* caster of the cache column (no camera-dependent tight culling, since the
    cache outlives the camera pose), with a z range extended by `g t` on both sides.

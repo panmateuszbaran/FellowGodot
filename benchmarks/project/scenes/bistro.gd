@@ -187,6 +187,7 @@ func _setup_exterior_lighting() -> void:
 	sun.directional_shadow_max_distance = 120.0
 	sun.directional_shadow_blend_splits = true
 	sun.light_angular_distance = 0.5
+	apply_sun_overrides(sun)
 	add_child(sun)
 	default_post(true, 1.0)
 	env.volumetric_fog_enabled = true

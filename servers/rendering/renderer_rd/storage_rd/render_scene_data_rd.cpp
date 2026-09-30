@@ -30,6 +30,7 @@
 
 #include "render_scene_data_rd.h"
 
+#include "servers/rendering/fellow_settings.h"
 #include "servers/rendering/renderer_rd/renderer_scene_render_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/light_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/texture_storage.h"
@@ -155,6 +156,9 @@ void RenderSceneDataRD::update_ubo(RID p_uniform_buffer, RSE::ViewportDebugDraw 
 	ubo.opaque_prepass_threshold = opaque_prepass_threshold;
 	ubo.flags |= material_uv2_mode ? SCENE_DATA_FLAGS_USE_UV2_MATERIAL : 0;
 	ubo.flags |= shadow_pass ? SCENE_DATA_FLAGS_IN_SHADOW_PASS : 0;
+	ubo.flags |= Fellow::shadow_skip_backfacing() ? SCENE_DATA_FLAGS_FELLOW_SKIP_BACKFACING_SHADOW : 0;
+	ubo.flags |= Fellow::shadow_skip_unblended_cascade() ? SCENE_DATA_FLAGS_FELLOW_SKIP_UNBLENDED_CASCADE : 0;
+	ubo.flags |= Fellow::shadow_pcss_blend_band() ? SCENE_DATA_FLAGS_FELLOW_PCSS_BLEND_BAND : 0;
 
 	if (p_debug_mode == RSE::VIEWPORT_DEBUG_DRAW_UNSHADED) {
 		ubo.flags |= SCENE_DATA_FLAGS_USE_AMBIENT_LIGHT;
