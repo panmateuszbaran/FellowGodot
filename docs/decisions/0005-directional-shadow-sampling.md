@@ -95,9 +95,10 @@ cannot change anything there, the shadow cache, measured +0.187 ms in the same s
 * Max pyramid: first version wrong in two ways, found with lavapipe debug builds (brute-force maxima over the taps,
   the box and the chosen pyramid block, rendered as black where they disagree): (1) all levels were built in one
   compute list, so a level written as a storage image was read as a sampled texture without a layout transition
-  (fixed: one compute list per level, like the SSR Hi-Z); (2) the level was chosen with `ceil(log2(box size))` in
-  floating point, whose approximation on some drivers selects blocks one level too small, so the box spanned three
-  blocks and a blocker was missed (fixed: integer texel box and the smallest level where `hi >> k − lo >> k ≤ 1`).
+  (fixed: one compute list per level, like the SSR Hi-Z); (2) the level and the block indices were computed in floating
+  point (`ceil(log2(box size))`, scaled box corners); the debug build showed the box's largest texel outside the four
+  fetched blocks for 137 pixels — most likely an approximate `log2` choosing blocks one level too small (not isolated
+  further). Fixed by an integer texel box and the smallest level `k` where `(hi >> k) − (lo >> k) ≤ 1`.
   After both fixes: lavapipe bit-identical on 3 cameras for PCSS and PCF (0 differing pixels); RTX (first version,
   `m2_mm_temporal`) 67.8-93.8 dB vs stock, no pixel off by more than 2/255.
 
