@@ -1627,6 +1627,18 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 		_render_shadow_end();
 	}
 
+	// FellowEngine: max pyramid of the directional shadow atlas for the PCSS blocker search early-out.
+	p_render_data->scene_data->fellow_shadow_max_mip = false;
+	if (fellow_shadow_max_mip) {
+		if (Fellow::shadow_directional_max_mip() && render_shadows && p_render_data->directional_shadows.size() > 0 && light_storage->directional_shadow_get_texture().is_valid()) {
+			const int atlas_size = light_storage->directional_shadow_get_size();
+			fellow_shadow_max_mip->build(light_storage->directional_shadow_get_texture(), Size2i(atlas_size, atlas_size));
+			p_render_data->scene_data->fellow_shadow_max_mip = fellow_shadow_max_mip->is_valid();
+		} else {
+			fellow_shadow_max_mip->invalidate();
+		}
+	}
+
 	if (rb_data.is_valid() && ss_effects) {
 		// Note, in multiview we're allocating buffers for each eye/view we're rendering.
 		// This should allow most of the processing to happen in parallel even if we're doing
@@ -3866,6 +3878,15 @@ RID RenderForwardClustered::_setup_render_pass_uniform_set(RenderListType p_rend
 		u.append_id(texture);
 		uniforms.push_back(u);
 	}
+	{
+		// FellowEngine directional shadow max pyramid (sampled only when SCENE_DATA_FLAGS_FELLOW_SHADOW_MAX_MIP is set).
+		RD::Uniform u;
+		u.binding = 37;
+		u.uniform_type = RD::UNIFORM_TYPE_TEXTURE;
+		RID texture = (fellow_shadow_max_mip && fellow_shadow_max_mip->get_texture().is_valid()) ? fellow_shadow_max_mip->get_texture() : texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_WHITE);
+		u.append_id(texture);
+		uniforms.push_back(u);
+	}
 
 	return UniformSetCacheRD::get_singleton()->get_cache_vec(scene_shader.default_shader_rd, RENDER_PASS_UNIFORM_SET, uniforms);
 }
@@ -5345,6 +5366,7 @@ RenderForwardClustered::RenderForwardClustered() {
 	fsr2_effect = memnew(RendererRD::FSR2Effect);
 	ss_effects = memnew(RendererRD::SSEffects);
 	fellow_shadow_cache = memnew(RendererRD::FellowShadowCache);
+	fellow_shadow_max_mip = memnew(RendererRD::FellowShadowMaxMip);
 #ifdef METAL_MFXTEMPORAL_ENABLED
 	motion_vectors_store = memnew(RendererRD::MotionVectorsStore);
 	mfx_temporal_effect = memnew(RendererRD::MFXTemporalEffect);
@@ -5360,6 +5382,11 @@ RenderForwardClustered::~RenderForwardClustered() {
 	if (fellow_shadow_cache != nullptr) {
 		memdelete(fellow_shadow_cache);
 		fellow_shadow_cache = nullptr;
+	}
+
+	if (fellow_shadow_max_mip != nullptr) {
+		memdelete(fellow_shadow_max_mip);
+		fellow_shadow_max_mip = nullptr;
 	}
 
 	if (taa != nullptr) {

@@ -34,6 +34,7 @@
 #include "servers/rendering/multi_uma_buffer.h"
 #include "servers/rendering/renderer_rd/cluster_builder_rd.h"
 #include "servers/rendering/renderer_rd/effects/fellow_shadow_cache.h"
+#include "servers/rendering/renderer_rd/effects/fellow_shadow_max_mip.h"
 #include "servers/rendering/renderer_rd/effects/fsr2.h"
 #include "servers/rendering/renderer_rd/effects/motion_vectors_store.h"
 #include "servers/rendering/renderer_rd/effects/ss_effects.h"
@@ -754,6 +755,7 @@ private:
 	RendererRD::FSR2Effect *fsr2_effect = nullptr;
 	RendererRD::SSEffects *ss_effects = nullptr;
 	RendererRD::FellowShadowCache *fellow_shadow_cache = nullptr;
+	RendererRD::FellowShadowMaxMip *fellow_shadow_max_mip = nullptr;
 
 #ifdef METAL_MFXTEMPORAL_ENABLED
 	RendererRD::MFXTemporalEffect *mfx_temporal_effect = nullptr;

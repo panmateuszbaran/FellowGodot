@@ -183,6 +183,12 @@ inline bool shadow_pcss_blend_band() {
 	return shadows_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/shadows/pcss_blend_band");
 }
 
+// Directional PCSS blocker search early-out (exact): a max pyramid of the shadow atlas proves that the search region
+// holds no blocker, in which case stock returns 1.0 anyway.
+inline bool shadow_directional_max_mip() {
+	return shadows_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/shadows/directional_max_mip");
+}
+
 // PCSS of directional lights: penumbra radius = light angular size x (receiver - blocker distance), the parallel-light
 // formula. Stock uses the point-light formula (scaled by receiver / blocker distance from the cascade's near plane),
 // which overestimates every penumbra and grows without bound for blockers pancaked onto the near plane (casters more

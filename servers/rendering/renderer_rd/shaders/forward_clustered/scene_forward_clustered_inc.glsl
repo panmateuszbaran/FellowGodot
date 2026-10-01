@@ -480,6 +480,10 @@ layout(set = 1, binding = 35) uniform texture2D ssr_buffer;
 layout(set = 1, binding = 36) uniform texture2D ssr_mip_level_buffer;
 #endif // USE_MULTIVIEW
 
+// FellowEngine: max pyramid of the directional shadow atlas (level 0 = atlas / 2).
+layout(set = 1, binding = 37) uniform texture2D directional_shadow_max_mip;
+#define FELLOW_SHADOW_MAX_MIP
+
 #endif
 
 vec4 normal_roughness_compatibility(vec4 p_normal_roughness) {

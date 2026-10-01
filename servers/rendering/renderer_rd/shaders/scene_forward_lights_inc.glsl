@@ -415,6 +415,30 @@ half sample_omni_pcf_shadow(texture2D shadow, float blur_scale, vec2 coord, vec4
 }
 
 half sample_directional_soft_shadow(texture2D shadow, vec3 pssm_coord, vec2 tex_scale, float taa_frame_count) {
+#ifdef FELLOW_SHADOW_MAX_MIP
+	if (bool(scene_data_block.data.flags & SCENE_DATA_FLAGS_FELLOW_SHADOW_MAX_MIP)) {
+		// FellowEngine: the blocker search below takes bilinear samples inside |tex_scale| (per axis) of pssm_coord.xy.
+		// If no atlas texel in that box is closer to the light than the receiver (max pyramid, four fetches), it finds
+		// no blocker and returns 1.0: return it directly.
+		ivec2 base_size = textureSize(sampler2D(directional_shadow_max_mip, SAMPLER_NEAREST_CLAMP), 0); // atlas / 2
+		vec2 atlas_size = vec2(base_size * 2);
+		vec2 r = abs(tex_scale) * atlas_size + 1.5;
+		vec2 lo = pssm_coord.xy * atlas_size - r;
+		vec2 hi = pssm_coord.xy * atlas_size + r;
+		float extent = max(hi.x - lo.x, hi.y - lo.y);
+		// Atlas mip k (blocks of 2^k texels, stored at lod k - 1) with 2^k >= extent: the box spans at most two blocks.
+		int lod = clamp(int(ceil(log2(max(extent, 2.0)))) - 1, 0, textureQueryLevels(sampler2D(directional_shadow_max_mip, SAMPLER_NEAREST_CLAMP)) - 1);
+		ivec2 lsize = textureSize(sampler2D(directional_shadow_max_mip, SAMPLER_NEAREST_CLAMP), lod);
+		float to_level = exp2(-float(lod + 1));
+		ivec2 a = clamp(ivec2(floor(lo * to_level)), ivec2(0), lsize - 1);
+		ivec2 b = clamp(ivec2(floor(hi * to_level)), ivec2(0), lsize - 1);
+		float m = max(max(texelFetch(sampler2D(directional_shadow_max_mip, SAMPLER_NEAREST_CLAMP), a, lod).r, texelFetch(sampler2D(directional_shadow_max_mip, SAMPLER_NEAREST_CLAMP), ivec2(b.x, a.y), lod).r),
+				max(texelFetch(sampler2D(directional_shadow_max_mip, SAMPLER_NEAREST_CLAMP), ivec2(a.x, b.y), lod).r, texelFetch(sampler2D(directional_shadow_max_mip, SAMPLER_NEAREST_CLAMP), b, lod).r));
+		if (m <= pssm_coord.z) {
+			return half(1.0);
+		}
+	}
+#endif
 	//find blocker
 	float blocker_count = 0.0;
 	float blocker_average = 0.0;
