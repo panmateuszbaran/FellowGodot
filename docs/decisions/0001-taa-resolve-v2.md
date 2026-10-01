@@ -149,3 +149,47 @@ only runs at native internal resolution in this configuration).
 static cameras (LPIPS −19 to −25 %) and in 7/8 motion sequences, at no measurable frame-time cost (TAA stage 3-15 %
 cheaper than stock together with ping-pong; frame time within noise). The foliage_strafe regression is real and
 documented; it is the first item of the next TAA iteration and the reason the toggle stays available.
+
+## Milestone 2 follow-up: the `foliage_strafe` regression (2026-10-01)
+
+Three sweeps against the same accumulated ground truth (`temporal` mode, 1920×1080, all values from
+`benchmarks/results/m2_taa_sweep{,2,3}_table.md`; images are deterministic, so the night machine state does not
+matter here).
+
+1. **Parameter sweep** (`m2_taa_sweep`): anti-flicker 0.5 / 1.0, clip γ 1.5, feedback 0.95. Every variant is *worse*
+   than v2 on `foliage_strafe` (30.51-30.90 dB vs 31.11) and on every other sequence. The regression is not a tuning
+   problem of the clip box.
+2. **Structural experiments** (`m2_taa_sweep2`, new tunables in the v2 shader):
+   * `taa_v2_velocity_dilation=false` (reproject with the pixel's own velocity instead of the closest pixel's):
+     worse on foliage (30.95 dB) and on 4 of 6 sequences. Rejected.
+   * `taa_v2_motion_soften` *s* with `taa_v2_soften_contrast` *c*: under motion (velocity 0.25-1 px, smoothstep) and
+     where the 3×3 neighbourhood's relative contrast (σ/μ of luma) exceeds *c*, the clipped history is pulled towards
+     the neighbourhood mean by up to *s*. This is the targeted version of what stock does everywhere (stock's
+     collapsed clip box blurs every moving pixel). s = 0.5: foliage **32.43 dB** (stock 31.50, v2 31.11), but camera
+     pan and Sponza lose 0.7-0.9 dB against v2.
+3. **Threshold sweep** (`m2_taa_sweep3`, all 8 sequences), PSNR dB:
+
+| sequence | stock | v2 | s 0.5 c 0.3 | s 0.5 c 0.45 | s 0.5 c 0.6 | **s 0.35 c 0.45** |
+|---|---:|---:|---:|---:|---:|---:|
+| camera_pan | 36.11 | **37.95** | 37.27 | 37.31 | 37.33 | 37.57 |
+| moving_object | 37.72 | 38.40 | **38.42** | 38.41 | 38.41 | 38.41 |
+| thin_dolly | 32.09 | 33.80 | 34.04 | 33.99 | 33.93 | **34.09** |
+| specular_orbit | 31.62 | **31.93** | 31.55 | 31.62 | 31.70 | 31.73 |
+| foliage_strafe | 31.50 | 31.11 | **32.43** | 32.30 | 32.12 | 32.17 |
+| sponza_pan | 38.49 | **39.59** | 38.71 | 38.92 | 39.08 | 39.09 |
+| bistro_ext_path | 28.86 | 30.36 | 31.18 | **31.22** | 31.16 | 31.20 |
+| bistro_int_path | 35.60 | **36.87** | 35.73 | 35.86 | 36.04 | 36.17 |
+| **mean** | 34.00 | 35.00 | 34.92 | 34.95 | 34.97 | **35.05** |
+
+`s 0.35 c 0.45` is the only tested configuration that is at or above stock in PSNR **and** SSIM on all 8 sequences
+(v2 alone is below stock on `foliage_strafe` PSNR; `s 0.5 c 0.3` is below stock on `specular_orbit`), and it has
+the best mean PSNR. Against plain v2 it trades 0.2-0.7 dB on four sequences (camera pan, specular orbit, Sponza,
+Bistro interior) for +0.3 to +1.1 dB on three (thin dolly, foliage, Bistro exterior).
+
+What it does **not** fix (kept visible): in the sub-metrics it is still slightly worse than stock in the motion-
+region error of `specular_orbit` (0.02532 vs 0.02453) and `bistro_int_path` (0.00931 vs 0.00911), in the static-
+region error of both Bistro paths (+5-8 %, as v2), and in flicker on `moving_object` (0.00074 vs 0.00061, as v2).
+
+**Decision (milestone 2):** the FellowEngine TAA configuration becomes v2 + history ping-pong +
+`taa_v2_motion_soften = 0.35`, `taa_v2_soften_contrast = 0.45`. The shader cost of the soften term is one extra
+mean/σ already computed by the v2 clip (no extra fetches).
