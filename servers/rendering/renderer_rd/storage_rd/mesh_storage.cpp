@@ -439,7 +439,7 @@ void MeshStorage::mesh_add_surface(RID p_mesh, const RenderingServerTypes::Surfa
 	ERR_FAIL_COND_MSG(!new_surface.index_count && !new_surface.vertex_count, "Meshes must contain a vertex array, an index array, or both");
 
 	// FellowEngine mesh clusters (docs/decisions/0007-mesh-clusters.md): large static triangle surfaces.
-	if (Fellow::mesh_clusters() && new_surface.primitive == RSE::PRIMITIVE_TRIANGLES && new_surface.index_count >= 3 * uint32_t(Fellow::mesh_cluster_min_surface_triangles()) && !(new_surface.format & RSE::ARRAY_FORMAT_BONES) && mesh->blend_shape_count == 0) {
+	if (fellow_clusters_supported && Fellow::mesh_clusters() && new_surface.primitive == RSE::PRIMITIVE_TRIANGLES && new_surface.index_count >= 3 * uint32_t(Fellow::mesh_cluster_min_surface_triangles()) && !(new_surface.format & RSE::ARRAY_FORMAT_BONES) && mesh->blend_shape_count == 0) {
 		Vector<Vector<uint8_t>> lod_indices;
 		for (int i = 0; i < new_surface.lods.size(); i++) {
 			lod_indices.push_back(new_surface.lods[i].index_data);

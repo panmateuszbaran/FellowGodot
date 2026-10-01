@@ -37,8 +37,10 @@
 // FellowEngine runtime feature toggles.
 //
 // All FellowEngine rendering changes are gated behind project settings under rendering/fellow/*.
-// Defaults reproduce stock Godot 4.7.2 behaviour exactly (every experimental feature is off), so a
-// FellowEngine binary with default settings renders like stock and the benchmark can A/B at runtime.
+// Defaults are the FellowEngine configuration: every feature whose decision record says KEEP is on (TAA resolve v2
+// with history ping-pong and motion soften, directional shadow cache, exact shadow sampling skips, mesh clusters);
+// look changes and rejected experiments are off. rendering/fellow/enabled = false reproduces stock Godot 4.7.2
+// exactly (null test), and every toggle can be changed per project or at runtime for A/B runs.
 // Values are read through GLOBAL_GET_CACHED, i.e. they may be changed while the game is running.
 namespace Fellow {
 

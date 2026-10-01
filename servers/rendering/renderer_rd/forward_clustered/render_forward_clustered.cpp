@@ -5341,6 +5341,7 @@ void RenderForwardClustered::_update_shader_quality_settings() {
 
 RenderForwardClustered::RenderForwardClustered() {
 	singleton = this;
+	RendererRD::MeshStorage::get_singleton()->fellow_clusters_supported = true; // FellowEngine mesh clusters (decision 0007).
 
 	/* SCENE SHADER */
 

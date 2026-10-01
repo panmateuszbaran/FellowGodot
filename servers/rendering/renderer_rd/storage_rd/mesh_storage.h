@@ -500,7 +500,9 @@ public:
 		}
 	}
 
-	// FellowEngine mesh clusters (docs/decisions/0007-mesh-clusters.md).
+	// FellowEngine mesh clusters (docs/decisions/0007-mesh-clusters.md). Set by renderers that decide and draw them
+	// (Forward+); without one, surfaces are never clustered.
+	bool fellow_clusters_supported = false;
 	enum FellowClusterState {
 		FELLOW_CLUSTERS_NONE,
 		FELLOW_CLUSTERS_PENDING, // Built, index buffers still in stock order: waiting for the renderer's decision.

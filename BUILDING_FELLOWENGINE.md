@@ -76,6 +76,10 @@ copy /y bin\godot.windows.*.exe ..\bin\fellow\
 
 ### Runtime toggles (FellowEngine only)
 
+Defaults (bold = differs from stock behaviour) are the FellowEngine configuration: every experiment whose decision
+record says KEEP is on; `rendering/fellow/enabled=false` turns every FellowEngine path off and renders exactly like
+stock Godot 4.7.2 (the benchmark's null test).
+
 All FellowEngine code paths are behind project settings under `rendering/fellow/*`
 (`servers/rendering/fellow_settings.cpp`), read with `GLOBAL_GET_CACHED` every frame, so they can be changed at
 runtime and per benchmark variant (`run_benchmarks.py --builds "label=fellow@key=value;key=value"`):
@@ -84,17 +88,17 @@ runtime and per benchmark variant (`run_benchmarks.py --builds "label=fellow@key
 |---|---|---|
 | `rendering/fellow/enabled` | true | master switch; `false` = every FellowEngine path off (null test) |
 | `rendering/fellow/postfx/enabled` | true | master switch for post-processing experiments |
-| `rendering/fellow/postfx/taa_resolve_v2` | false | TAA resolve v2 (decision record `docs/decisions/0001-taa-resolve-v2.md`) |
-| `rendering/fellow/postfx/taa_history_pingpong` | false | TAA history ping-pong instead of copies (`docs/decisions/0002-taa-history-pingpong.md`) |
+| `rendering/fellow/postfx/taa_resolve_v2` | **true** | TAA resolve v2 (decision record `docs/decisions/0001-taa-resolve-v2.md`) |
+| `rendering/fellow/postfx/taa_history_pingpong` | **true** | TAA history ping-pong instead of copies (`docs/decisions/0002-taa-history-pingpong.md`) |
 | `rendering/fellow/fluid/enabled` | true | `FellowShallowWater3D` simulation (module `modules/fellow_fluid`) |
 | `rendering/fellow/postfx/taa_v2_gamma` | 1.25 | resolve v2 variance-clip width (σ multiplier) |
 | `rendering/fellow/postfx/taa_v2_feedback_min` / `_max` | 0.88 / 0.9375 | resolve v2 history weight range |
 | `rendering/fellow/postfx/taa_v2_antiflicker` | 0.0 | resolve v2: keep the history weight at its maximum where the history is trusted |
 | `rendering/fellow/postfx/taa_v2_velocity_dilation` | true | resolve v2: reproject with the closest pixel's velocity in 3×3 (false: the pixel's own, like stock) |
-| `rendering/fellow/postfx/taa_v2_motion_soften` | 0.0 | resolve v2: under motion, pull the history towards the 3×3 mean in high-contrast neighbourhoods (FellowEngine configuration: 0.35) |
-| `rendering/fellow/postfx/taa_v2_soften_contrast` | 0.3 | resolve v2: relative contrast (σ/μ) above which the soften applies (FellowEngine configuration: 0.45) |
+| `rendering/fellow/postfx/taa_v2_motion_soften` | **0.35** | resolve v2: under motion, pull the history towards the 3×3 mean in high-contrast neighbourhoods (0 = milestone-1 v2) |
+| `rendering/fellow/postfx/taa_v2_soften_contrast` | **0.45** | resolve v2: relative contrast (σ/μ) above which the soften applies |
 | `rendering/fellow/shadows/enabled` | true | master switch for shadow experiments |
-| `rendering/fellow/shadows/directional_cache` | false | directional shadow static cache (`docs/decisions/0004-directional-shadow-cache.md`) |
+| `rendering/fellow/shadows/directional_cache` | **true** | directional shadow static cache (`docs/decisions/0004-directional-shadow-cache.md`) |
 | `rendering/fellow/shadows/directional_cache_guard_texels` | 256 | guard band per side (cache = cascade + 2 × guard texels) |
 | `rendering/fellow/shadows/directional_cache_static_frames` | 60 | frames without change before a caster is cached |
 | `rendering/fellow/shadows/directional_cache_texel_lod` | 1.0 | cache LODs from the cache's texel size: coarsest LOD with error below this many shadow-map texels (0 = camera-distance LOD) |
@@ -102,15 +106,15 @@ runtime and per benchmark variant (`run_benchmarks.py --builds "label=fellow@key
 | `rendering/fellow/shadows/directional_cache_max_rebuilds_per_frame` | 1 | cache re-renders per frame (others render stock that frame) |
 | `rendering/fellow/shadows/directional_cache_min_cost_per_texel` | 0.125 | cost gate: cache a cascade only if its static casters cost at least this many primitive equivalents per cascade texel (0 = always cache) |
 | `rendering/fellow/shadows/directional_cache_debug_mode` | 0 | verification: 1 = never use the cache, 2 = rebuild every frame |
-| `rendering/fellow/shadows/skip_backfacing_directional` | false | no directional shadow lookup where N·L makes the light's contribution zero (image-identical) |
-| `rendering/fellow/shadows/skip_backfacing_positional` | false | omni/spot: skip the light where N·L makes its contribution zero (image-identical) |
-| `rendering/fellow/shadows/skip_unblended_cascade` | false | PCF path: second cascade only where its blend weight is non-zero (image-identical) |
+| `rendering/fellow/shadows/skip_backfacing_directional` | **true** | no directional shadow lookup where N·L makes the light's contribution zero (image-identical) |
+| `rendering/fellow/shadows/skip_backfacing_positional` | **true** | omni/spot: skip the light where N·L makes its contribution zero (image-identical) |
+| `rendering/fellow/shadows/skip_unblended_cascade` | **true** | PCF path: second cascade only where its blend weight is non-zero (image-identical) |
 | `rendering/fellow/shadows/pcss_blend_band` | false | PCSS path: blend cascades over the last 10 % of a split instead of the whole split (look change) |
 | `rendering/fellow/shadows/pcss_directional_penumbra` | false | directional PCSS: parallel-light penumbra formula (look change; `docs/decisions/0005-directional-shadow-sampling.md`) |
 | `rendering/fellow/shadows/directional_max_mip` | false | directional PCSS/PCF early-out from a max pyramid of the atlas (exact; rejected: no net gain) |
 | `rendering/fellow/shadows/debug_disable_caster_culling` | false | diagnostics: disable the camera-dependent tighter shadow caster culling at runtime |
 | `rendering/fellow/geometry/enabled` | true | master switch for geometry experiments |
-| `rendering/fellow/geometry/mesh_clusters` | false | mesh clusters: frustum culling of k-d clusters of large static surfaces (`docs/decisions/0007-mesh-clusters.md`); read when meshes are created and every frame |
+| `rendering/fellow/geometry/mesh_clusters` | **true** | mesh clusters: frustum culling of k-d clusters of large static surfaces (`docs/decisions/0007-mesh-clusters.md`); read when meshes are created and every frame |
 | `rendering/fellow/geometry/cluster_triangles` | 4096 | maximum triangles per cluster |
 | `rendering/fellow/geometry/cluster_min_surface_triangles` | 32768 | surfaces with fewer triangles are not clustered |
 | `rendering/fellow/profiling/pass_timestamps` | false | per-pass GPU timestamps without `--gpu-profile` (performance overlay) |
