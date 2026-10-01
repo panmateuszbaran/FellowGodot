@@ -105,30 +105,29 @@ void FellowShadowMaxMip::build(RID p_atlas_texture, const Size2i &p_atlas_size) 
 	RID shader_rd = shader.version_get_shader(shader_version, 0);
 	ERR_FAIL_COND(shader_rd.is_null());
 
-	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
+	// One compute list per level (like the SSR Hi-Z): a level written as a storage image is read as a sampled texture by
+	// the next one, and the layout transition between the two only happens between compute lists.
 	RD::get_singleton()->draw_command_begin_label("FellowEngine Shadow Max Pyramid");
-	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, pipeline);
 	Size2i src_size = p_atlas_size;
 	for (uint32_t i = 0; i < level_views.size(); i++) {
 		Size2i dst_size((src_size.x + 1) / 2, (src_size.y + 1) / 2);
 		RID src = i == 0 ? p_atlas_texture : level_views[i - 1];
 		RD::Uniform u_src(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 0, Vector<RID>({ nearest, src }));
 		RD::Uniform u_dst(RD::UNIFORM_TYPE_IMAGE, 0, Vector<RID>({ level_views[i] }));
-		RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache(shader_rd, 0, u_src), 0);
-		RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache(shader_rd, 1, u_dst), 1);
 		PushConstant pc;
 		pc.source_size[0] = src_size.x;
 		pc.source_size[1] = src_size.y;
 		pc.dest_size[0] = dst_size.x;
 		pc.dest_size[1] = dst_size.y;
+		RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
+		RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, pipeline);
+		RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache(shader_rd, 0, u_src), 0);
+		RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache(shader_rd, 1, u_dst), 1);
 		RD::get_singleton()->compute_list_set_push_constant(compute_list, &pc, sizeof(PushConstant));
 		RD::get_singleton()->compute_list_dispatch_threads(compute_list, dst_size.x, dst_size.y, 1);
-		if (i + 1 < level_views.size()) {
-			RD::get_singleton()->compute_list_add_barrier(compute_list);
-		}
+		RD::get_singleton()->compute_list_end();
 		src_size = dst_size;
 	}
 	RD::get_singleton()->draw_command_end_label();
-	RD::get_singleton()->compute_list_end();
 	valid = true;
 }
