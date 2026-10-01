@@ -42,3 +42,7 @@ Status: KEEP | REWORK | REJECT | MEASURING      Branch / commit: ...      Toggle
 | [0001](0001-taa-resolve-v2.md) | TAA resolve v2 (reverse-Z dilation, YCoCg variance clip, no clip collapse) | `postfx/taa_resolve_v2` | see record |
 | [0002](0002-taa-history-pingpong.md) | TAA history ping-pong (no history/velocity copies) | `postfx/taa_history_pingpong` | see record |
 | [0003](0003-gpu-shallow-water.md) | GPU shallow-water prototype (`FellowShallowWater3D`) | `fluid/enabled` (new feature) | see record |
+| [0004](0004-directional-shadow-cache.md) | Directional shadow static cache (guard-banded per-cascade cache, depth re-based copy, dynamic casters on top) | `shadows/directional_cache` | KEEP |
+| [0005](0005-directional-shadow-sampling.md) | Directional/positional shadow sampling: N·L skips, unblended cascade skip (exact); PCSS blend band, parallel-light penumbra (look); max-pyramid early-out | `shadows/skip_*`, `shadows/pcss_*`, `shadows/directional_max_mip` | skips KEEP; look changes optional; max pyramid REJECT |
+| 0006 (branch `fellow/ssao`) | Temporal SSAO (rotated pattern + accumulation) | `ssao/*` | REJECT / parked |
+| [0007](0007-mesh-clusters.md) | Mesh clusters: frustum culling of k-d clusters inside large static surfaces | `geometry/mesh_clusters` | KEEP |
