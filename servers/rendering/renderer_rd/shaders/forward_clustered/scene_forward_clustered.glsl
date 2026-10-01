@@ -1485,6 +1485,24 @@ void fragment_shader(in SceneData scene_data) {
 
 #endif // !USE_SHADOW_TO_OPACITY
 
+#if defined(FELLOW_ALPHA_ZERO_SKIP_OK) && !defined(MODE_RENDER_DEPTH) && !defined(MODE_RENDER_MATERIAL) && !defined(MODE_SEPARATE_SPECULAR)
+	// FellowEngine: from here on alpha is only multiplied by finite factors or lowered with min(): a mix-blended
+	// fragment whose alpha is 0 now leaves the target unchanged (src * 0 + dst * 1, alpha 0 + dst * 1), so its lighting
+	// and fog need not be computed. The test is quad-uniform: a fragment is dropped only when all four fragments of its
+	// 2x2 quad (helper invocations included) have alpha 0, read through fine derivatives, which Vulkan defines as the
+	// differences within the quad (the mixed one is (a11 - a01) - (a10 - a00), the same for the four). Dropping a
+	// single fragment would change its neighbours' derivatives (reflection and ambient LOD, roughness limiter, decal
+	// gradients, shadow dithering).
+	if (bool(scene_data.flags & SCENE_DATA_FLAGS_FELLOW_BLENDED_ALPHA_ZERO_SKIP)) {
+		float fellow_da_x = dFdxFine(alpha);
+		float fellow_da_y = dFdyFine(alpha);
+		float fellow_da_xy = dFdyFine(fellow_da_x);
+		if (alpha == 0.0 && fellow_da_x == 0.0 && fellow_da_y == 0.0 && fellow_da_xy == 0.0) {
+			discard;
+		}
+	}
+#endif
+
 #if defined(NORMAL_MAP_USED)
 	normal_map.xy = normal_map.xy * 2.0 - 1.0;
 	normal_map.z = sqrt(max(0.0, 1.0 - dot(normal_map.xy, normal_map.xy))); //always ignore Z, as it can be RG packed, Z may be pos/neg, etc.

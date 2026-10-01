@@ -231,6 +231,15 @@ void SceneShaderForwardClustered::ShaderData::set_code(const String &p_code) {
 	print_line("\n**vertex_globals:\n" + gen_code.stage_globals[ShaderCompiler::STAGE_VERTEX]);
 	print_line("\n**fragment_globals:\n" + gen_code.stage_globals[ShaderCompiler::STAGE_FRAGMENT]);
 #endif
+	// FellowEngine (rendering/fellow/shading/blended_alpha_zero_skip): materials for which a fragment with alpha exactly
+	// 0 changes nothing — mix blending; drawn only in the alpha pass (writes ALPHA without alpha scissor/hash: see
+	// uses_alpha_pass(), so never in the opaque pass, where blending is off); no depth writes there (depth_draw_always
+	// writes depth); no stencil; no alpha antialiasing (alpha to coverage); no discard of its own (the skip's quad test
+	// needs all four fragments of a quad alive).
+	if (blend_mode == BLEND_MODE_MIX && uses_alpha && !uses_alpha_clip && !uses_alpha_antialiasing && !uses_discard && depth_draw != DEPTH_DRAW_ALWAYS && !stencil_enabled && alpha_antialiasing_mode == ALPHA_ANTIALIASING_OFF) {
+		gen_code.defines.push_back("\n#define FELLOW_ALPHA_ZERO_SKIP_OK\n");
+	}
+
 	SceneShaderForwardClustered::singleton->shader.version_set_code(version, gen_code.code, gen_code.uniforms, gen_code.stage_globals[ShaderCompiler::STAGE_VERTEX], gen_code.stage_globals[ShaderCompiler::STAGE_FRAGMENT], gen_code.defines);
 
 	ubo_size = gen_code.uniform_total_size;

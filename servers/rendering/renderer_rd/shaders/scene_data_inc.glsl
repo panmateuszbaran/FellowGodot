@@ -24,6 +24,8 @@
 #define SCENE_DATA_FLAGS_FELLOW_LIGHT_ZERO_ATTENUATION_SKIP (1 << 15)
 // FellowEngine (rendering/fellow/shadows/positional_max_mip): the positional atlas's min/max pyramid is valid.
 #define SCENE_DATA_FLAGS_FELLOW_POSITIONAL_SHADOW_MAX_MIP (1 << 16)
+// FellowEngine: mix-blended fragments whose alpha is exactly 0 are discarded before lighting (they leave the target unchanged).
+#define SCENE_DATA_FLAGS_FELLOW_BLENDED_ALPHA_ZERO_SKIP (1 << 17)
 
 struct SceneData {
 	mat4 projection_matrix;

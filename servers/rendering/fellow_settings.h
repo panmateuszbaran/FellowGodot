@@ -270,6 +270,13 @@ inline bool frame_early_submit() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/frame/early_submit");
 }
 
+// Mix-blended materials (alpha pass, no depth or stencil writes, no alpha antialiasing): fragments whose final alpha is
+// exactly 0 are discarded before lighting — blending them leaves the colour target unchanged (src * 0 + dst * 1), so
+// the image is the same; stock lights and fogs them anyway. Read every frame.
+inline bool blended_alpha_zero_skip() {
+	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/shading/blended_alpha_zero_skip");
+}
+
 // Cumulative counters (render thread writes, scripts read through RenderingServer.fellow_get_stats()).
 struct Stats {
 	SafeNumeric<uint64_t> shadow_cache_cascades_stock;
