@@ -317,6 +317,10 @@ float quick_hash(vec2 pos) {
 }
 
 #ifdef FELLOW_SHADOW_MAX_MIP
+// Receivers within this of the largest depth take the stock path: a filtered fetch may convert a texel to float
+// differently (by an ulp) than the pyramid's texelFetch. 1/16 of a 16-bit depth step.
+#define FELLOW_SHADOW_MAX_MIP_EPSILON (1.0 / 1048576.0)
+
 // FellowEngine: largest directional shadow atlas depth (reverse Z: closest to the light) in the box of half size
 // p_half_uv around p_uv, widened by 1.5 texels for bilinear / 2x2 PCF footprints. Four fetches from the max pyramid
 // (level 0 = atlas / 2) at the level whose blocks are at least as large as the box, so it spans at most 2x2 blocks.
@@ -350,7 +354,7 @@ half sample_directional_pcf_shadow(texture2D shadow, vec2 shadow_pixel_size, vec
 	// FellowEngine: every tap below is a 2x2 comparison (receiver > stored depth = lit) within |shadow_pixel_size| of
 	// pos. If the receiver is closer to the light than every atlas texel there, all taps are lit: return the loop's
 	// result for that case (same arithmetic).
-	if (bool(scene_data_block.data.flags & SCENE_DATA_FLAGS_FELLOW_SHADOW_MAX_MIP) && fellow_shadow_box_max(pos, abs(shadow_pixel_size)) < depth) {
+	if (bool(scene_data_block.data.flags & SCENE_DATA_FLAGS_FELLOW_SHADOW_MAX_MIP) && fellow_shadow_box_max(pos, abs(shadow_pixel_size)) < depth - FELLOW_SHADOW_MAX_MIP_EPSILON) {
 		return half(float(sc_directional_soft_shadow_samples()) * (1.0 / float(sc_directional_soft_shadow_samples())));
 	}
 #endif
@@ -448,7 +452,7 @@ half sample_directional_soft_shadow(texture2D shadow, vec3 pssm_coord, vec2 tex_
 #ifdef FELLOW_SHADOW_MAX_MIP
 	// FellowEngine: the blocker search below takes bilinear samples inside |tex_scale| (per axis) of pssm_coord.xy. If no
 	// atlas texel there is closer to the light than the receiver, it finds no blocker and returns 1.0: return it now.
-	if (bool(scene_data_block.data.flags & SCENE_DATA_FLAGS_FELLOW_SHADOW_MAX_MIP) && fellow_shadow_box_max(pssm_coord.xy, abs(tex_scale)) <= pssm_coord.z) {
+	if (bool(scene_data_block.data.flags & SCENE_DATA_FLAGS_FELLOW_SHADOW_MAX_MIP) && fellow_shadow_box_max(pssm_coord.xy, abs(tex_scale)) < pssm_coord.z - FELLOW_SHADOW_MAX_MIP_EPSILON) {
 		return half(1.0);
 	}
 #endif
