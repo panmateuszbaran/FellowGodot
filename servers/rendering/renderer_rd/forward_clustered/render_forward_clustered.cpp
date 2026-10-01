@@ -1695,7 +1695,14 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 				if (full) {
 					fellow_dir_built.clear();
 				}
-				LocalVector<Rect2i> dirty = full ? LocalVector<Rect2i>({ Rect2i(Point2i(), size) }) : fellow_dir_atlas_dirty;
+				LocalVector<Rect2i> dirty;
+				if (full) {
+					dirty.push_back(Rect2i(Point2i(), size));
+				} else {
+					for (const Rect2i &d : fellow_dir_atlas_dirty) {
+						dirty.push_back(d);
+					}
+				}
 				LocalVector<Rect2i> valid;
 				for (const FellowDirCascade &c : fellow_dir_cascades) {
 					const Rect2i needed = _fellow_dir_needed_rect(c, p_render_data->scene_data);
