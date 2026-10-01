@@ -26,7 +26,11 @@ geometry; mean over the flythrough, lights iterated per shaded pixel):
 |---|---:|---:|---:|---:|
 | PBR Lab | 2 | 1.74 | 1.56 | 1.19 |
 | Lights Lab (new, 242 lights in a 240 m street) | 242 | 33.9 | 19.1 (−44 %) | 11.5 |
-| Bistro exterior / interior | *pending (geodump on the RTX machine)* | | | |
+| Bistro interior | 4 (shadowed omni, 15 m range) | 4.0 | 4.0 | 4.0 (every light reaches every pixel) |
+| Bistro exterior | 0 (sun only) | – | – | – |
+
+The benchmark's Bistro scenes have almost no positional lights (the imported exterior has none; the interior four that
+light the whole room), so the change can only show in the Lights Lab there; Sponza has none either.
 
 ## Change
 
@@ -64,7 +68,10 @@ contribute exactly zero (`light_compute` skips zero attenuation; the shadow look
   also used stock's signed `box_depth` for decals, which cut a decal: 3187 pixels. Both fixed before any measurement.)
 * lavapipe, PBR Lab (7 cameras) and Stress Lab (4 cameras: omni and spot shadows, a reflection probe updated every
   frame, a second viewport): **0 differing pixels**.
-* RTX 5070 Ti, identity and per-pass timing: *pending (fellow17 profile)*.
+* RTX 5070 Ti (`fellow17`, `m3_lc_temporal`, 60-frame sequences, default configuration vs + depth slices): Lights Lab
+  96.8 dB mean (min 79.5, max |d| 3/255), Bistro exterior 100.6 dB (max 1), Bistro interior 66.0-67.3 dB and PBR Lab
+  65.6-76.1 dB (≤ 0.004 % of pixels > 2/255: those scenes' own run-to-run floor, as in the null tests).
+* RTX timing: *pending* (`m3_lc_perf`, `m3_lc_profile`; a first attempt overlapped other sessions and was discarded).
 
 ## Decision
 

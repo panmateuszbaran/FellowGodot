@@ -146,6 +146,20 @@ Fixed cameras against the ground truth (`fellow-m2_capture_gt`): *pending (repor
 * An offline estimate of stock's LOD (position-only simplification) predicted far fewer triangles than the engine
   actually submits; the engine's own counters are the reference.
 * The temporal SSAO experiment found no iso-quality saving (decision 0006).
+* **Overlapping sessions (milestone 3 start).** Queued jobs waited for the text `CHAIN_DONE` in the previous queue's
+  log, but the queue script writes that text into its own log when it starts (`READY <log> CHAIN_DONE`), so four
+  queued jobs started within seconds of each other at 10:29 and ran together until 11:05: every timing taken in that
+  window (ablation profile, light-cluster and pyramid-v3 A/B) is discarded and re-run one job at a time; image-identity
+  results, the geometry dumps and the report generation from that window are unaffected. Markers now only count at the
+  start of a line. (Noticed by the user, who saw three benchmarks running at once.)
+* A re-staged job file was again delivered with its earlier content (the identity diff of `m3_lc_capture` never ran);
+  deployed job files are now checked on the machine before they are started.
+* **Headless `--import` crashed on exit** (access violation) with every FellowEngine editor build since milestone 1;
+  the import itself completed. Cause: stock's editor reloads its class-reference cache from a deferred call made by the
+  documentation thread, which can run after the editor freed itself when a headless import quits while the reference
+  is being regenerated — which happens on the first run of any build whose classes differ from the cached reference.
+  Stock crashes the same way in that situation (`f18_verify_b`: stock import after a FellowEngine editor run,
+  rc 0xC0000005); fixed in FellowEngine (the deferred calls return when the editor is gone; `f18_verify_d`: rc 0).
 
 ## 6. Exact files changed
 
