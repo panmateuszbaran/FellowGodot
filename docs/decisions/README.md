@@ -50,3 +50,4 @@ Status: KEEP | REWORK | REJECT | MEASURING      Branch / commit: ...      Toggle
 | [0009](0009-early-submit.md) | Frame/GPU gap: early submit, present from a second queue | `frame/early_submit`, `frame/separate_present_queue` | REJECT |
 | [0010](0010-blended-alpha-zero-skip.md) | Mix-blended quads with alpha 0 skip their lighting | `shading/blended_alpha_zero_skip` | in test |
 | [0011](0011-shared-memory-tiles.md) | SSAO gather and TAA v2 neighbourhoods loaded once per workgroup (shared memory) | `postfx/ssao_shared_tile` | REJECT (no measurable effect) |
+| [0012](0012-specialization-constants.md) | FellowEngine shader features as specialization constants (no code for disabled features) | (each feature's toggle) | in test |
