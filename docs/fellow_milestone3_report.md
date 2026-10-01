@@ -43,8 +43,7 @@ Consequences:
 | screen covered by sky (no geometry), flythrough mean | 2.7 % | 0.2 % | 0.5 % |
 
 Geometry costs about 0.5 ms of Bistro exterior's frame and 0.7 ms of Sponza's (coarser-LOD sizing): occlusion
-culling is worth ~0.15 ms at most in Bistro exterior and less in Sponza (12 %, most of Sponza's hidden triangles are
-already outside the clusters' frusta); not pursued for now. The sky fraction rules out skipping SSAO/SSIL work on sky
+culling is worth ~0.15 ms at most in Bistro exterior and ~0.1 ms in Sponza (12 % of 0.7 ms); not pursued for now. The sky fraction rules out skipping SSAO/SSIL work on sky
 pixels as a lever (an exact early-out, but for 0.2-2.7 % of the pixels).
 
 ## 3. Changes (decision records)
