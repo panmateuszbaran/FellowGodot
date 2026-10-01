@@ -70,8 +70,8 @@ void Fellow::register_settings() {
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/geometry/cluster_triangles", PROPERTY_HINT_RANGE, "64,65536,1"), 4096);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/geometry/cluster_min_surface_triangles", PROPERTY_HINT_RANGE, "256,1048576,1"), 32768);
 	GLOBAL_DEF("rendering/fellow/lights/enabled", true);
-	GLOBAL_DEF("rendering/fellow/lights/cluster_depth_slices", false);
-	GLOBAL_DEF("rendering/fellow/lights/zero_attenuation_skip", false);
+	GLOBAL_DEF("rendering/fellow/lights/cluster_depth_slices", true);
+	GLOBAL_DEF("rendering/fellow/lights/zero_attenuation_skip", true);
 	GLOBAL_DEF("rendering/fellow/frame/early_submit", false);
 	GLOBAL_DEF_RST("rendering/fellow/frame/separate_present_queue", false);
 }

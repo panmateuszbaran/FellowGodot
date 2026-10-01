@@ -1,7 +1,8 @@
 # 0008 — Light clusters with depth slices
 
-Status: **DRAFT (image identity in; RTX performance pending)** · Branch `fellow/geometry` · Toggle
-`rendering/fellow/lights/cluster_depth_slices` (default **off** until measured) · Code: `cluster_builder_rd.h/.cpp`
+Status: **KEEP** · Branch `fellow/geometry` · Toggles
+`rendering/fellow/lights/cluster_depth_slices`, `rendering/fellow/lights/zero_attenuation_skip` (default **on** from
+`fellow22`) · Code: `cluster_builder_rd.h/.cpp`
 (`_fellow_store_depth_range`, `begin`), `shaders/cluster_store.glsl`, `shaders/forward_clustered/scene_forward_clustered_inc.glsl`
 (`fellow_cluster_z`), `scene_forward_clustered.glsl`, `shaders/environment/volumetric_fog_process.glsl`, `environment/fog.*`,
 `shaders/cluster_debug.glsl`, scene UBO flag 14.
@@ -108,4 +109,9 @@ positional lights unchanged within the profile's ±0.1 ms.
 
 ## Decision
 
-*Pending the RTX profile (Lights Lab, Bistro exterior/interior, PBR Lab).*
+**KEEP, both** (`cluster_depth_slices`, `zero_attenuation_skip`), **on by default** from `fellow22`: image-identical
+(lavapipe bit-exact against the complete element set; RTX at every scene's run-to-run floor), −0.27 ms (−7.9 %) for
+the depth slices alone and −0.47 ms (−13.5 %) together with the shadow pyramids in the Lights Lab (`m3_f20_perf`),
+the opaque pass there −0.38 ms for each of the two; within noise in the scenes with no or few positional lights (the
+depth slices' A/B: Bistro interior +0.035 ms p 0.24, PBR Lab −0.019 ms). The cost is the cluster packing: +0.03-0.04 ms
+with 242 lights (an element near the camera covers several slices), +0.007 ms in Bistro interior.
