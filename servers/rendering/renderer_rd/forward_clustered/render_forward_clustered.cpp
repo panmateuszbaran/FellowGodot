@@ -1610,15 +1610,19 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 			// FellowEngine directional shadow cache: cascades served from the cache overwrite their whole rect (or keep
 			// it, when unchanged), so the atlas only needs clearing if some cascade renders the stock way.
 			bool fellow_all_cached = true;
+			bool fellow_any_cached = false;
 			for (const int &index : p_render_data->directional_shadows) {
 				if (p_render_data->render_shadows[index].fellow.cache_id < 0) {
 					fellow_all_cached = false;
-					break;
+				} else {
+					fellow_any_cached = true;
 				}
 			}
 			fellow_dir_clear_stock_rects = false;
 			if (!fellow_all_cached) {
-				if (Fellow::directional_shadow_cache() && light_storage->fellow_directional_shadow_grid_full()) {
+				// With no cascade from the cache there is nothing to keep: one clear of the whole atlas, as stock (a
+				// clear of the whole attachment is cheaper than clears of parts of it).
+				if (fellow_any_cached && Fellow::directional_shadow_cache() && light_storage->fellow_directional_shadow_grid_full()) {
 					// The lights' rects tile the atlas: each stock cascade clears its own rect (same content as clearing
 					// the whole atlas), the cached ones keep theirs.
 					fellow_dir_clear_stock_rects = true;
