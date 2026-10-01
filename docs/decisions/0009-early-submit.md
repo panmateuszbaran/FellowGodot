@@ -90,3 +90,14 @@ setting), so that whatever the driver does at presentation happens off the main 
 ## Decision
 
 **REJECT** (off; the code stays behind the toggle for the separate-present-queue experiment, which it complements).
+
+## Experiment 2: present from a second queue (`rendering/fellow/frame/separate_present_queue`, `fellow21`)
+
+A start-up setting (the device is created before the rendering server's settings exist: project.godot or
+override.cfg only). The Vulkan driver creates two queues per family instead of one, and `RenderingDevice` presents on
+the second queue of the main family: the main queue's submission signals the frame semaphore (Godot's existing
+separate-present path, until now used only where the main family cannot present), the present queue waits on it
+and presents. The rendering is untouched (lavapipe: identical captures with and without, the split logged at
+start-up). If the per-frame cost is something the driver serialises behind the present on the queue that presents,
+the main queue no longer waits for it. RTX: *pending* (`m3_f21_pacing`).
+

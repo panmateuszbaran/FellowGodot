@@ -73,6 +73,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/lights/cluster_depth_slices", false);
 	GLOBAL_DEF("rendering/fellow/lights/zero_attenuation_skip", false);
 	GLOBAL_DEF("rendering/fellow/frame/early_submit", false);
+	GLOBAL_DEF_RST("rendering/fellow/frame/separate_present_queue", false);
 }
 
 Fellow::Stats &Fellow::stats() {

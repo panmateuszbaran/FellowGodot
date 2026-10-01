@@ -1307,8 +1307,14 @@ Error RenderingDeviceDriverVulkan::_add_queue_create_info(LocalVector<VkDeviceQu
 	queue_families.resize(queue_family_count);
 
 	VkQueueFlags queue_flags_mask = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT;
-	const uint32_t max_queue_count_per_family = 1;
-	static const float queue_priorities[max_queue_count_per_family] = {};
+	// FellowEngine (rendering/fellow/frame/separate_present_queue, read at start-up): a second queue per family, so that
+	// presentation can be issued on its own queue instead of the main one (RenderingDevice picks it).
+	// (The device is created before the rendering server registers the FellowEngine settings: only an explicit value
+	// from project.godot / override.cfg can be present here.)
+	ProjectSettings *ps = ProjectSettings::get_singleton();
+	const bool fellow_two_queues = ps->has_setting("rendering/fellow/frame/separate_present_queue") && bool(ps->get_setting("rendering/fellow/frame/separate_present_queue")) && (!ps->has_setting("rendering/fellow/enabled") || bool(ps->get_setting("rendering/fellow/enabled")));
+	const uint32_t max_queue_count_per_family = fellow_two_queues ? 2 : 1;
+	static const float queue_priorities[2] = {};
 	for (uint32_t i = 0; i < queue_family_count; i++) {
 		if ((queue_family_properties[i].queueFlags & queue_flags_mask) == 0) {
 			// We ignore creating queues in families that don't support any of the operations we require.

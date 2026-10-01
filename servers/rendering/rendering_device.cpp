@@ -8473,6 +8473,16 @@ Error RenderingDevice::initialize(RenderingContextDriver *p_context, DisplayServ
 	transfer_queue = driver->command_queue_create(transfer_queue_family);
 	ERR_FAIL_COND_V(!transfer_queue, FAILED);
 
+	ProjectSettings *fellow_ps = ProjectSettings::get_singleton();
+	const bool fellow_separate_present_queue = fellow_ps->has_setting("rendering/fellow/frame/separate_present_queue") && bool(fellow_ps->get_setting("rendering/fellow/frame/separate_present_queue")) && (!fellow_ps->has_setting("rendering/fellow/enabled") || bool(fellow_ps->get_setting("rendering/fellow/enabled")));
+	if (!present_queue_family && main_surface != 0 && fellow_separate_present_queue) {
+		// FellowEngine (decision 0009): present on a second queue of the main family (the driver creates two per family
+		// with this setting): the main queue only signals the frame's semaphore and goes on with the next frame while
+		// the presentation engine waits on it.
+		present_queue_family = main_queue_family;
+		print_line("FellowEngine: presenting on a separate queue of the main queue family.");
+	}
+
 	if (present_queue_family) {
 		// Create the present queue.
 		present_queue = driver->command_queue_create(present_queue_family);
