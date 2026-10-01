@@ -58,7 +58,7 @@ def main():
     jpath, raster, work = sys.argv[1:4]
     out = sys.argv[4] if len(sys.argv) > 4 else None
     W, H = (int(sys.argv[5]), int(sys.argv[6])) if len(sys.argv) > 6 else (960, 540)
-    tile = max(1, round(32 * W / 1920))
+    tile = max(1, round(int(os.environ.get("TILE_PX_1080", "32")) * W / 1920))
     os.makedirs(work, exist_ok=True)
     res = json.load(open(jpath))
     g = res["geodump"]
