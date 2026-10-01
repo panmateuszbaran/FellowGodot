@@ -23,9 +23,15 @@ the frame in milestone 1).
 * **Look changes, off by default**: PCSS blend band (blend cascades over the last 10 % of a split, like PCF; opaque −0.18
   to −0.40 ms) and a parallel-light PCSS penumbra (decision 0005; stock's point-light formula dissolves the shadows of
   casters beyond the pancake distance in the first cascade).
-* **TAA foliage regression of v2** (milestone 1): the parameter sweep (anti-flicker, clip γ, feedback) did not fix it —
-  every variant is worse than v2 on `foliage_strafe`; two structural experiments are running (velocity dilation off,
-  motion soften).
+* **TAA foliage regression of v2** (milestone 1) fixed (decision 0001, follow-up): a parameter sweep (anti-flicker,
+  clip γ, feedback) could not fix it; a targeted *motion soften* (pull the clipped history towards the 3×3 mean under
+  motion where the neighbourhood's relative contrast is high) does. With soften 0.35 / contrast 0.45 the resolve is at
+  or above stock in PSNR and SSIM on all 8 temporal sequences (foliage 31.50 → 32.17 dB; v2 alone 31.11) with the best
+  mean PSNR of all variants (stock 34.00, v2 35.00, chosen 35.05 dB).
+* **Mesh clusters** (decision 0007, geometry): large static surfaces are split into k-d clusters at load and only
+  clusters intersecting the view volume are drawn in the depth pre-pass, the opaque pass and shadow passes — exact
+  (a triangle outside the frustum covers no pixel). Sponza: stock submits 8.7 M triangles per frame for the camera,
+  4.3 M of which can reach a pixel; 4096-triangle clusters cut the submission to 4.65 M (offline estimate).
 
 ## 2. Per-pass evidence (GPU timestamps, 1920×1080, `m2_profile7`, night state — relative only)
 
