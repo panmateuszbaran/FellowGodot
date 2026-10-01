@@ -72,6 +72,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/lights/enabled", true);
 	GLOBAL_DEF("rendering/fellow/lights/cluster_depth_slices", false);
 	GLOBAL_DEF("rendering/fellow/lights/zero_attenuation_skip", false);
+	GLOBAL_DEF("rendering/fellow/frame/early_submit", false);
 }
 
 Fellow::Stats &Fellow::stats() {
@@ -104,5 +105,6 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["geometry_cluster_draws"] = s.geometry_cluster_draws.get();
 	d["geometry_cluster_triangles_drawn"] = s.geometry_cluster_triangles_drawn.get();
 	d["geometry_cluster_triangles_culled"] = s.geometry_cluster_triangles_culled.get();
+	d["frame_early_submits"] = s.frame_early_submits.get();
 	return d;
 }

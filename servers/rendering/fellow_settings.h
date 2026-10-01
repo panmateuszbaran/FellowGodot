@@ -253,6 +253,16 @@ inline bool light_zero_attenuation_skip() {
 	return lights_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/lights/zero_attenuation_skip");
 }
 
+// Early submit (docs/decisions/0009-early-submit.md): when the frame reaches the blit to the screen, everything recorded
+// so far is submitted before the swap chain image is acquired; the blit and the rest of the frame go into a second
+// command buffer that waits on the acquisition and presents. Stock submits the whole frame at the end, after the
+// acquisition, and the whole submission waits on the acquired image at the colour-output stage, so the GPU cannot
+// start a frame's rendering until the presentation engine has released an image. The same commands in the same
+// order: image-identical. Vulkan only (the other drivers keep stock's single submission). Read every frame.
+inline bool frame_early_submit() {
+	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/frame/early_submit");
+}
+
 // Cumulative counters (render thread writes, scripts read through RenderingServer.fellow_get_stats()).
 struct Stats {
 	SafeNumeric<uint64_t> shadow_cache_cascades_stock;
@@ -277,6 +287,7 @@ struct Stats {
 	SafeNumeric<uint64_t> geometry_cluster_draws; // draw calls issued for clustered surfaces
 	SafeNumeric<uint64_t> geometry_cluster_triangles_drawn; // triangles of clustered surfaces drawn
 	SafeNumeric<uint64_t> geometry_cluster_triangles_culled; // triangles of clustered surfaces skipped (outside the frustum)
+	SafeNumeric<uint64_t> frame_early_submits; // frames whose rendering was submitted before the swap chain acquisition
 };
 
 Stats &stats();

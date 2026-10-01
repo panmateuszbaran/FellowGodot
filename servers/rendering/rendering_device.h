@@ -1835,6 +1835,13 @@ private:
 		// splitting the final render pass to the swapchain into its own cmd buffer.
 		RDG::CommandBufferPool command_buffer_pool;
 
+		// FellowEngine early submit (rendering/fellow/frame/early_submit): the command buffer and pool that record the
+		// rest of the frame after the work recorded before the swap chain acquisition was submitted. Swapped with
+		// command_buffer / command_buffer_pool for the rest of the frame, swapped back when the frame is reused.
+		RDD::CommandBufferID fellow_late_command_buffer;
+		RDG::CommandBufferPool fellow_late_command_buffer_pool;
+		bool fellow_early_submitted = false;
+
 		struct Timestamp {
 			String description;
 			uint64_t value = 0;
@@ -1875,6 +1882,10 @@ private:
 	uint64_t buffer_memory = 0;
 
 protected:
+	// FellowEngine early submit (see fellow_settings.h).
+	bool fellow_early_submit_supported = false;
+	void _fellow_submit_early();
+
 	void execute_chained_cmds(bool p_present_swap_chain,
 			RenderingDeviceDriver::FenceID p_draw_fence,
 			RenderingDeviceDriver::SemaphoreID p_dst_draw_semaphore_to_signal);

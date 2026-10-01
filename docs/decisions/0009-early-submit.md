@@ -1,0 +1,65 @@
+# 0009 — Early submit: the frame's rendering no longer waits for the swap chain
+
+Status: **DRAFT (lavapipe identity; RTX pending, `fellow20`)** · Branch `fellow/geometry` · Toggle
+`rendering/fellow/frame/early_submit` (default **off** until measured) · Code: `servers/rendering/rendering_device.h/.cpp`
+(`_fellow_submit_early`, `screen_prepare_for_drawing`, `_begin_frame`, frame setup/teardown), `fellow_settings.*`.
+Benchmark harness: `run_benchmarks.py` variants with engine arguments (`^`) and start-up project settings (`%`,
+written to the bench project's `override.cfg` for that run only).
+
+## Problem
+
+In every session since milestone 1 the frame time exceeds the GPU time of the rendered viewport by a nearly constant
+0.37-0.44 ms, in every scene and configuration, and nvidia-smi reports 87-92 % GPU utilisation:
+
+| session | scene, 1920×1080 | frame ms | viewport GPU ms | gap | render CPU ms |
+|---|---|---:|---:|---:|---:|
+| `godot-4.7.2_perf` (stock) | PBR Lab | 2.957 | 2.530 | 0.427 | 0.23 |
+| | Sponza | 13.712 | 13.321 | 0.391 | 0.63 |
+| | Bistro exterior | 5.962 | 5.579 | 0.383 | 1.43 |
+| | Bistro interior | 4.529 | 4.161 | 0.368 | 0.59 |
+| `m3_lc_perf` (FellowEngine) | Lights Lab | 3.379 | 3.046 | 0.333 | 0.17 |
+
+The gap does not follow the CPU's recording time (0.2 ms in the PBR Lab, 1.4 ms in Bistro exterior: same gap) and
+grows by only ~0.03-0.05 ms from 1920×1080 to 2560×1440. At 3-5 ms per frame it is 8-13 % of the frame rate.
+
+The benchmark laptop (Acer Predator PHN16S-71, RTX 5070 Ti Laptop) drives its 2560×1600 panel from the Intel iGPU
+(hybrid graphics, `hardware.display` in every session): every presented frame crosses from the NVIDIA GPU to the iGPU
+and the desktop compositor. That is the common configuration of gaming laptops.
+
+## Stock implementation
+
+`RenderingDevice` records the whole frame (`RenderingDeviceGraph`) and submits it once, at the end, in
+`swap_buffers()`. The swap chain image is acquired when the frame reaches the blit to the screen
+(`screen_prepare_for_drawing()`, after every viewport is rendered), and the Vulkan driver attaches the acquisition's
+semaphore to the **next submission**, i.e. the whole frame, with the wait at the colour-attachment-output stage
+(`command_queue_execute_and_present`). So nothing of a frame can reach the GPU before the presentation engine has
+handed out an image (if `vkAcquireNextImageKHR` blocks, the CPU waits before submitting anything), and on the GPU
+every render pass with colour attachments — the depth pre-pass (normal/roughness), the opaque pass, sky, post
+effects — waits on that semaphore. Godot already moves the screen blit into its own command buffer
+(`split_swapchain_into_its_own_cmd_buffer`, "so that the whole rendering can start early"), but both command
+buffers are submitted at the same point, after the acquisition, and the acquisition's semaphore lands on the first.
+
+## Change
+
+When the frame reaches the blit to the screen, before the image is acquired, everything recorded so far is
+submitted (`_fellow_submit_early`: the graph is recorded into the frame's command buffer, which is ended and
+submitted without a fence and without any acquisition semaphore). The rest of the frame — the blit and whatever
+follows — is recorded into a second command buffer of the same frame (same command pool), which `swap_buffers()`
+submits as before: it waits on the acquisition, signals the frame's fence (a fence signal covers every earlier
+submission to the queue) and presents. The two command buffers are swapped back when the frame slot is reused
+(after its fence). Vulkan only; the other drivers keep the single submission.
+
+## Why it is exact
+
+Same commands, same order, same queue. The render graph treats the split like a frame boundary: resource trackers
+keep their usage and the following commands get the same transitions, and a pipeline barrier's first scope includes
+every command submitted earlier to the queue. Only the time at which the GPU may start the frame changes.
+
+## Verification
+
+* lavapipe: *running*.
+* RTX 5070 Ti Laptop: identity (`m3_f20_temporal`) and timing (`m3_pacing`, `m3_f20_perf`): *pending*.
+
+## Decision
+
+*Pending.*

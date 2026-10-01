@@ -39,6 +39,7 @@
 #include "core/os/os.h"
 #include "core/profiling/profiling.h"
 #include "core/templates/fixed_vector.h"
+#include "servers/rendering/fellow_settings.h"
 #include "servers/rendering/rendering_device_binds.h"
 #include "servers/rendering/rendering_shader_container.h"
 #include "servers/rendering/shader_include_db.h"
@@ -5377,6 +5378,10 @@ Error RenderingDevice::screen_create(DisplayServerEnums::WindowID p_screen) {
 Error RenderingDevice::screen_prepare_for_drawing(DisplayServerEnums::WindowID p_screen) {
 	_THREAD_SAFE_METHOD_
 
+	if (fellow_early_submit_supported && !frames[frame].fellow_early_submitted && Fellow::frame_early_submit()) {
+		_fellow_submit_early();
+	}
+
 	// After submitting work, acquire the swapchain image(s).
 	HashMap<DisplayServerEnums::WindowID, RDD::SwapChainID>::ConstIterator it = screen_swap_chains.find(p_screen);
 	ERR_FAIL_COND_V_MSG(it == screen_swap_chains.end(), ERR_CANT_CREATE, "A swap chain was not created for the screen.");
@@ -8063,6 +8068,13 @@ void RenderingDevice::_begin_frame(bool p_presented) {
 	// Before writing to this frame, wait for it to be finished.
 	_stall_for_frame(frame);
 
+	if (frames[frame].fellow_early_submitted) {
+		// Both command buffers of the frame have finished: record into the first one again.
+		SWAP(frames[frame].command_buffer, frames[frame].fellow_late_command_buffer);
+		SWAP(frames[frame].command_buffer_pool, frames[frame].fellow_late_command_buffer_pool);
+		frames[frame].fellow_early_submitted = false;
+	}
+
 	if (command_pool_reset_enabled) {
 		GodotProfileZoneGrouped(_profile_zone, "driver->command_pool_reset");
 		bool reset = driver->command_pool_reset(frames[frame].command_pool);
@@ -8195,6 +8207,31 @@ void RenderingDevice::execute_chained_cmds(bool p_present_swap_chain, RenderingD
 	}
 
 	frames[frame].semaphores_to_wait_on.clear();
+}
+
+void RenderingDevice::_fellow_submit_early() {
+	// Submit everything recorded so far in this frame, before the swap chain image is acquired: the GPU starts on the
+	// frame's rendering while the presentation engine may still hold the images (or the CPU waits in the acquisition).
+	// Nothing in this submission waits on an acquired image. The rest of the frame (the blit to the screen and
+	// whatever follows) is recorded into the frame's second command buffer, which _execute_frame() submits as usual:
+	// it waits on the acquisition, signals the frame's fence (a fence covers every earlier submission to the queue)
+	// and presents. Recording order and commands are unchanged; the render graph treats the split like a frame
+	// boundary (resource trackers carry their usage across it and emit the same transitions).
+	if (draw_list.active || compute_list.active || raytracing_list.active) {
+		return;
+	}
+
+	Frame &f = frames[frame];
+	_end_frame();
+	execute_chained_cmds(false, RDD::FenceID(), RDD::SemaphoreID());
+
+	SWAP(f.command_buffer, f.fellow_late_command_buffer);
+	SWAP(f.command_buffer_pool, f.fellow_late_command_buffer_pool);
+	f.fellow_early_submitted = true;
+
+	driver->command_buffer_begin(f.command_buffer);
+	draw_graph.begin();
+	Fellow::stats().frame_early_submits.increment();
 }
 
 void RenderingDevice::_execute_frame(bool p_present) {
@@ -8496,6 +8533,15 @@ Error RenderingDevice::initialize(RenderingContextDriver *p_context, DisplayServ
 		// Assign the main queue family and command pool to the command buffer pool.
 		frames[i].command_buffer_pool.pool = frames[i].command_pool;
 
+		// FellowEngine early submit: second command buffer of the frame (same pool).
+		frames[i].fellow_late_command_buffer = driver->command_buffer_create(frames[i].command_pool);
+		if (!frames[i].fellow_late_command_buffer) {
+			frame_failed = true;
+			break;
+		}
+		frames[i].fellow_late_command_buffer_pool.pool = frames[i].command_pool;
+		frames[i].fellow_early_submitted = false;
+
 		// Create the semaphores for the transfer workers.
 		frames[i].transfer_worker_semaphores.resize(transfer_worker_pool_max_size);
 		for (uint32_t j = 0; j < transfer_worker_pool_max_size; j++) {
@@ -8540,6 +8586,9 @@ Error RenderingDevice::initialize(RenderingContextDriver *p_context, DisplayServ
 
 	// Create draw graph and start it initialized as well.
 	draw_graph.initialize(driver, &_render_pass_create_from_graph, frames.size(), main_queue_family, SECONDARY_COMMAND_BUFFERS_PER_FRAME);
+
+	// FellowEngine early submit: Vulkan only (per-frame segments of other drivers assume one submission per frame).
+	fellow_early_submit_supported = is_main_instance && driver->get_api_name() == "Vulkan";
 	draw_graph.begin();
 
 	for (uint32_t i = 0; i < frames.size(); i++) {
@@ -8953,6 +9002,11 @@ void RenderingDevice::finalize() {
 		RDG::CommandBufferPool &buffer_pool = frames[i].command_buffer_pool;
 		for (uint32_t j = 0; j < buffer_pool.buffers.size(); j++) {
 			driver->semaphore_free(buffer_pool.semaphores[j]);
+		}
+
+		RDG::CommandBufferPool &late_buffer_pool = frames[i].fellow_late_command_buffer_pool;
+		for (uint32_t j = 0; j < late_buffer_pool.buffers.size(); j++) {
+			driver->semaphore_free(late_buffer_pool.semaphores[j]);
 		}
 
 		for (uint32_t j = 0; j < frames[i].transfer_worker_semaphores.size(); j++) {

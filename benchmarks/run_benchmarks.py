@@ -306,12 +306,24 @@ def aggregate(runs: list[dict]) -> dict:
 
 # --------------------------------------------------------------------------- main
 
-def parse_build(spec: str) -> tuple[str, str, str, list[str]]:
-    """'label[=dir][@k=v;k=v][#--arg=v --arg2=v]' -> (label, dir under .tools/bin, fellow toggles 'k=v,k=v', user args).
+def parse_build(spec: str) -> tuple[str, str, str, list[str], list[str], list[str]]:
+    """'label[=dir][@k=v;k=v][#--arg=v --arg2=v][^--engine-arg value][%section/key=value;...]'
+    -> (label, dir under .tools/bin, fellow toggles 'k=v,k=v', user args, engine args, project setting overrides).
 
     Variants of one binary can be compared in the same interleaved session, e.g.
     --builds "stock,fellow_off=fellow@enabled=false,fellow_v2=fellow@postfx/taa_resolve_v2=true"
-    --builds "f256=fellow#--fluid_res=256,f256_hidden=fellow#--fluid_res=256 --water_visible=0"."""
+    --builds "f256=fellow#--fluid_res=256,f256_hidden=fellow#--fluid_res=256 --water_visible=0"
+    Engine command-line arguments (before '--') follow '^', e.g. "rt=fellow^--render-thread separate".
+    Project settings that are only read at startup follow '%' (written to the project's override.cfg for that run
+    only), e.g. "fq3=fellow%rendering/rendering_device/vsync/frame_queue_size=3"."""
+    overrides = []
+    if "%" in spec:
+        spec, o = spec.split("%", 1)
+        overrides = [x.strip() for x in o.split(";") if x.strip()]
+    eargs = []
+    if "^" in spec:
+        spec, e = spec.split("^", 1)
+        eargs = e.split()
     extra = []
     if "#" in spec:
         spec, e = spec.split("#", 1)
@@ -320,7 +332,36 @@ def parse_build(spec: str) -> tuple[str, str, str, list[str]]:
     if "@" in spec:
         spec, toggles = spec.split("@", 1)
     label, dirname = spec.split("=", 1) if "=" in spec else (spec, spec)
-    return label.strip(), dirname.strip(), toggles.replace(";", ",").strip(), extra
+    return label.strip(), dirname.strip(), toggles.replace(";", ",").strip(), extra, eargs, overrides
+
+
+OVERRIDE_MARKER = "; FellowBench: per-variant project setting overrides (rewritten before every run)"
+
+
+def write_override_cfg(overrides: list[str]) -> None:
+    """Write the bench project's override.cfg for one run: the variant's 'section/key=value' settings, or nothing.
+
+    Godot reads override.cfg from the project directory at startup (settings such as the frame queue size cannot be
+    changed afterwards). A file without the runner's marker is somebody else's and is never touched."""
+    path = os.path.join(PROJECT, "override.cfg")
+    if os.path.exists(path):
+        with open(path, encoding="utf-8", errors="replace") as f:
+            if not f.read().startswith(OVERRIDE_MARKER):
+                raise RuntimeError(f"{path} exists and was not written by the runner; refusing to overwrite it")
+    elif not overrides:
+        return
+    sections: dict = {}
+    for o in overrides:
+        k, v = o.split("=", 1)
+        section, key = k.strip().split("/", 1)
+        sections.setdefault(section, []).append(f"{key}={v.strip()}")
+    lines = [OVERRIDE_MARKER, ""]
+    for section, kv in sections.items():
+        lines.append(f"[{section}]")
+        lines.extend(kv)
+        lines.append("")
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
+        f.write("\n".join(lines))
 
 
 def exe_for(build: str, godot_path: str | None) -> str:
@@ -379,8 +420,8 @@ def main() -> int:
 
     specs = {}
     for spec in [x.strip() for x in args.builds.split(",") if x.strip()]:
-        label, dirname, toggles, vextra = parse_build(spec)
-        specs[label] = (dirname, toggles, vextra)
+        label, dirname, toggles, vextra, veargs, voverrides = parse_build(spec)
+        specs[label] = (dirname, toggles, vextra, veargs, voverrides)
     builds = list(specs.keys())
     exes = {b: exe_for(specs[b][0], args.godot) for b in builds}
     off_for = args.fellow_off_for.split(",")
@@ -408,6 +449,7 @@ def main() -> int:
     log(f"session {session}: builds={builds} scenes={scenes} res={resolutions} mode={args.mode}")
     keep_awake()
 
+    write_override_cfg([])  # no setting overrides left over from an interrupted session
     sampler = GpuSampler()
     if not args.no_telemetry:
         sampler.start()
@@ -456,6 +498,8 @@ def main() -> int:
                         gargs = ["--fixed-fps", "60", "--disable-vsync", "--resolution", res, "--position", "0,0"]
                         if args.profile:
                             gargs.append("--gpu-profile")
+                        gargs.extend(specs[b][3])
+                        write_override_cfg(specs[b][4])
                         lp = os.path.join(out_dir, f"{scene}_{args.mode}_{res}_run{i}.log")
                         s0 = len(sampler.samples)
                         ef = os.path.join(out_dir, f"error_{scene}.json")
@@ -520,6 +564,9 @@ def main() -> int:
                     key = f"{scene}|{res}|{b}"
                     entry = {"scene": scene, "resolution": res, "build": b, "preset": args.preset, "set": args.set,
                              "fellow": toggles_for(b), "binary": specs[b][0], "variant_args": specs[b][2], "mode": args.mode}
+                    if specs[b][3] or specs[b][4]:
+                        entry["engine_args"] = specs[b][3]
+                        entry["setting_overrides"] = specs[b][4]
                     if args.mode == "perf":
                         agg = aggregate(runs_by_build[b])
                         cv = agg.get("frame_ms_run_means", {}).get("cv", 0.0)
@@ -534,6 +581,7 @@ def main() -> int:
                     all_results[key] = entry
     finally:
         sampler.stop()
+        write_override_cfg([])
 
     summary = {"session": session, "label": args.label, "args": vars(args), "hardware": hw, "gpu_telemetry": sampler.summary(), "heat_soak_telemetry": soak, "results": all_results}
     os.makedirs(RESULTS, exist_ok=True)
