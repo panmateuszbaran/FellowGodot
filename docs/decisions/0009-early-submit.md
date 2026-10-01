@@ -1,6 +1,6 @@
 # 0009 — Early submit: the frame's rendering no longer waits for the swap chain
 
-Status: **DRAFT (lavapipe identity; RTX pending, `fellow20`)** · Branch `fellow/geometry` · Toggle
+Status: **DRAFT (lavapipe identical; RTX pending, `fellow20`)** · Branch `fellow/geometry` · Toggle
 `rendering/fellow/frame/early_submit` (default **off** until measured) · Code: `servers/rendering/rendering_device.h/.cpp`
 (`_fellow_submit_early`, `screen_prepare_for_drawing`, `_begin_frame`, frame setup/teardown), `fellow_settings.*`.
 Benchmark harness: `run_benchmarks.py` variants with engine arguments (`^`) and start-up project settings (`%`,
@@ -57,7 +57,9 @@ every command submitted earlier to the queue. Only the time at which the GPU may
 
 ## Verification
 
-* lavapipe: *running*.
+* lavapipe (960×540, the frame split active in every frame: `frame_early_submits` counts one per frame): PBR Lab
+  7 fixed cameras, Stress Lab 4 fixed cameras (second viewport, reflection probe updated every frame, omni and spot
+  shadows) and the Lights Lab 60-frame walk (TAA history, volumetric fog): **0 differing pixels** in every image.
 * RTX 5070 Ti Laptop: identity (`m3_f20_temporal`) and timing (`m3_pacing`, `m3_f20_perf`): *pending*.
 
 ## Decision
