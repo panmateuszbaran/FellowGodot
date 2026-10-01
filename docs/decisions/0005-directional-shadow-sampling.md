@@ -143,6 +143,23 @@ the Stress Lab motion sequences (moving dynamic casters, rotating sun: partial r
 pixels** against the pyramid off; RTX (`m3_mm3_temporal`): Bistro exterior 99.0 dB (max |d| 0), Sponza 72.6-75.4 dB
 (max 3/255), PBR Lab at its run-to-run floor. Timing: *pending* (`m3_mm3_profile`, `m3_mm3_perf`).
 
+**v4** (`fellow19`): overlapping windows instead of blocks — mip m holds the minimum and maximum of every atlas window
+of 2^(m+2) texels starting every 2^(m+1) texels, so any filter box of at most 2^(m+1) texels lies inside the single
+window of mip m that starts at or before it: **one fetch** instead of four (and no level search loop), which lowers the
+cost where the early-outs rarely fire (PBR Lab, +0.08 ms in v2). Same memory, same incremental rebuild (a window
+reads 4×4 atlas texels at mip 0, then the windows 2i and 2i + 2 of the previous mip).
+
+**Positional atlases** (`shadows/positional_max_mip`, `fellow19`): the same pyramid per positional shadow atlas,
+rebuilt over the slots of the lights whose shadows were re-rendered (an omni light writes two slots, its paraboloids);
+static lights cost nothing after the first frame. Early-outs in the PCF filters: spot lights (box of half size
+|filter scale| around the tap centre, as for the sun), omni and area lights (in paraboloid space the taps lie within
+|offset scale| of the centre; when |centre| + |offset| < 0.999 no tap can cross the rim and flip to the other
+paraboloid, so all taps are 2x2 comparisons inside one box of the atlas). Sizing that motivates it: Bistro interior's
+4 shadowed omni lights spend 0.59 ms of the opaque pass on PCF taps (soft → hard, `m3_sizing_profile`).
+lavapipe: identical (0 pixels) on PBR Lab, Lights Lab, Stress Lab captures and the Stress Lab motion sequences;
+a debug build returning 0.25 for "fully lit" changed 77-170 k pixels per PBR camera (positional) and 182-229 k
+(directional PCSS), i.e. both early-outs fire. RTX identity and timing: *pending (`m3_f19_*`)*.
+
 ## Decision
 
 * `skip_backfacing_directional`, `skip_backfacing_positional`, `skip_unblended_cascade`: **KEEP** (image-identical;

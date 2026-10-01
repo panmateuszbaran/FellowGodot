@@ -76,6 +76,17 @@ contribute exactly zero (`light_compute` skips zero attenuation; the shadow look
   ≤ 0.002 % of pixels > 2/255).
 * RTX timing: *pending* (`m3_lc_perf`, `m3_lc_profile`; a first attempt overlapped other sessions and was discarded).
 
+## Zero-attenuation skip (`lights/zero_attenuation_skip`, `fellow19`)
+
+With depth slices a pixel still visits elements whose sphere range contains its depth but not its position (19 visited
+vs 11.5 reaching per pixel in the Lights Lab). For those, stock computes the attenuation (a `pow()`), the light size,
+the N·L skip test and calls `light_compute()`, which then does nothing (attenuation 0). FellowEngine returns before
+the `pow()` when `distance × inv_range ≥ 1` (the attenuation is then exactly 0: the same product, `max(1 − nd⁴, 0)`),
+for spot lights also when the direction is outside the cone (the cone factor is then exactly `1 − pow(1, x) = 0`),
+and after the attenuation when it is at or below `HALF_FLT_MIN` (shadow and BRDF both do nothing then). Only for
+materials without custom light code, rim, backlight, transmittance, clearcoat, toon shading or shadow-to-opacity (the
+same exclusions as the N·L skip). lavapipe: identical on Lights Lab, PBR Lab, Stress Lab. RTX: *pending*.
+
 ## Decision
 
 *Pending the RTX profile (Lights Lab, Bistro exterior/interior, PBR Lab).*
