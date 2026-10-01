@@ -1493,7 +1493,7 @@ void fragment_shader(in SceneData scene_data) {
 	// differences within the quad (the mixed one is (a11 - a01) - (a10 - a00), the same for the four). Dropping a
 	// single fragment would change its neighbours' derivatives (reflection and ambient LOD, roughness limiter, decal
 	// gradients, shadow dithering).
-	if (bool(scene_data.flags & SCENE_DATA_FLAGS_FELLOW_BLENDED_ALPHA_ZERO_SKIP)) {
+	if (sc_fellow_blended_alpha_zero_skip() && bool(scene_data.flags & SCENE_DATA_FLAGS_FELLOW_BLENDED_ALPHA_ZERO_SKIP)) {
 		float fellow_da_x = dFdxFine(alpha);
 		float fellow_da_y = dFdyFine(alpha);
 		float fellow_da_xy = dFdyFine(fellow_da_x);
@@ -2415,7 +2415,7 @@ void fragment_shader(in SceneData scene_data) {
 				// FellowEngine (rendering/fellow/shadows/skip_backfacing_directional): with N.L <= 0 (computed exactly as in
 				// light_compute) this light's diffuse and specular are multiplied by zero, so its shadow value is never used.
 				bool fellow_skip_shadow = false;
-				if (bool(scene_data.flags & SCENE_DATA_FLAGS_FELLOW_SKIP_BACKFACING_SHADOW)) {
+				if (sc_fellow_skip_backfacing_directional() && bool(scene_data.flags & SCENE_DATA_FLAGS_FELLOW_SKIP_BACKFACING_SHADOW)) {
 					half fellow_size_A = sc_use_directional_soft_shadows() ? half(directional_lights.data[i].size) : half(0.0);
 					half fellow_NdotL = min(fellow_size_A + dot(hvec3(normal), hvec3(directional_lights.data[i].direction)), half(1.0));
 					fellow_skip_shadow = fellow_NdotL <= half(0.0);
@@ -2616,7 +2616,7 @@ void fragment_shader(in SceneData scene_data) {
 							}
 
 							// FellowEngine (rendering/fellow/shadows/skip_unblended_cascade): mix(a, b, 0.0) == a, skip the lookup.
-							if (!bool(scene_data.flags & SCENE_DATA_FLAGS_FELLOW_SKIP_UNBLENDED_CASCADE) || pssm_blend > 0.0) {
+							if (!(sc_fellow_skip_unblended_cascade() && bool(scene_data.flags & SCENE_DATA_FLAGS_FELLOW_SKIP_UNBLENDED_CASCADE)) || pssm_blend > 0.0) {
 								pssm_coord /= pssm_coord.w;
 
 								float shadow2 = sample_directional_pcf_shadow(directional_shadow_atlas, scene_data.directional_shadow_pixel_size * directional_lights.data[i].soft_shadow_scale * (blur_factor2 + (1.0 - blur_factor2) * float(directional_lights.data[i].blend_splits)), pssm_coord, scene_data.taa_frame_count);

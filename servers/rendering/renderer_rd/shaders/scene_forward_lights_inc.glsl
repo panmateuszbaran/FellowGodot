@@ -616,7 +616,7 @@ void light_process_omni(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 	// FellowEngine (rendering/fellow/lights/zero_attenuation_skip): at or beyond the range get_omni_attenuation() is
 	// exactly 0 (distance * inv_range >= 1, the same product it computes), and a light with zero attenuation adds
 	// nothing for these materials: skip it before the attenuation's pow().
-	const bool fellow_skip_zero = bool(scene_data_block.data.flags & SCENE_DATA_FLAGS_FELLOW_LIGHT_ZERO_ATTENUATION_SKIP);
+	const bool fellow_skip_zero = sc_fellow_zero_attenuation_skip() && bool(scene_data_block.data.flags & SCENE_DATA_FLAGS_FELLOW_LIGHT_ZERO_ATTENUATION_SKIP);
 	if (fellow_skip_zero && light_length * omni_lights.data[idx].inv_radius >= 1.0) {
 		return;
 	}
@@ -639,7 +639,7 @@ void light_process_omni(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 
 #ifdef FELLOW_BACKFACING_LIGHT_SKIP_OK
 	// FellowEngine (rendering/fellow/shadows/skip_backfacing_positional): N.L <= 0 -> this light adds exactly nothing.
-	if (bool(scene_data_block.data.flags & SCENE_DATA_FLAGS_FELLOW_SKIP_BACKFACING_POSITIONAL) && min(size + dot(normal, hvec3(light_rel_vec / light_length)), half(1.0)) <= half(0.0)) {
+	if (sc_fellow_skip_backfacing_positional() && bool(scene_data_block.data.flags & SCENE_DATA_FLAGS_FELLOW_SKIP_BACKFACING_POSITIONAL) && min(size + dot(normal, hvec3(light_rel_vec / light_length)), half(1.0)) <= half(0.0)) {
 		return;
 	}
 #endif
@@ -940,7 +940,7 @@ void light_process_spot(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 #ifdef FELLOW_BACKFACING_LIGHT_SKIP_OK
 	// FellowEngine (rendering/fellow/lights/zero_attenuation_skip): beyond the range or outside the cone the attenuation
 	// below is exactly 0 (range: as for omni lights; cone: scos clamps to cone_angle, spot_rim = 1, 1 - pow(1, x) = 0).
-	const bool fellow_skip_zero = bool(scene_data_block.data.flags & SCENE_DATA_FLAGS_FELLOW_LIGHT_ZERO_ATTENUATION_SKIP);
+	const bool fellow_skip_zero = sc_fellow_zero_attenuation_skip() && bool(scene_data_block.data.flags & SCENE_DATA_FLAGS_FELLOW_LIGHT_ZERO_ATTENUATION_SKIP);
 	if (fellow_skip_zero && (light_length * spot_lights.data[idx].inv_radius >= 1.0 || dot(-vec3(light_rel_vec_norm), spot_lights.data[idx].direction) <= spot_lights.data[idx].cone_angle)) {
 		return;
 	}
@@ -969,7 +969,7 @@ void light_process_spot(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 
 #ifdef FELLOW_BACKFACING_LIGHT_SKIP_OK
 	// FellowEngine (rendering/fellow/shadows/skip_backfacing_positional): N.L <= 0 -> this light adds exactly nothing.
-	if (bool(scene_data_block.data.flags & SCENE_DATA_FLAGS_FELLOW_SKIP_BACKFACING_POSITIONAL) && min(size + dot(normal, light_rel_vec_norm), half(1.0)) <= half(0.0)) {
+	if (sc_fellow_skip_backfacing_positional() && bool(scene_data_block.data.flags & SCENE_DATA_FLAGS_FELLOW_SKIP_BACKFACING_POSITIONAL) && min(size + dot(normal, light_rel_vec_norm), half(1.0)) <= half(0.0)) {
 		return;
 	}
 #endif

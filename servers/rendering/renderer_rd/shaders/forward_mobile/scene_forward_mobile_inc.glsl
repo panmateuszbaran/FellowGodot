@@ -149,6 +149,16 @@ bool sc_scene_roughness_limiter_enabled() {
 	return ((sc_packed_0() >> 18) & 1U) != 0;
 }
 
+// FellowEngine: the clustered renderer drops disabled features from specialized pipelines; the mobile renderer keeps
+// only the runtime scene flags for the code shared with it.
+bool sc_fellow_zero_attenuation_skip() {
+	return true;
+}
+
+bool sc_fellow_skip_backfacing_positional() {
+	return true;
+}
+
 uint sc_soft_shadow_samples() {
 	return (sc_packed_0() >> 20) & 63U;
 }

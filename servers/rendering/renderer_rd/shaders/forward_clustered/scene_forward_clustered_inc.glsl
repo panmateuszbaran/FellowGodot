@@ -160,6 +160,30 @@ bool sc_fellow_positional_max_mip() {
 	return ((sc_packed_1() >> 8) & 1U) != 0;
 }
 
+bool sc_fellow_zero_attenuation_skip() {
+	return ((sc_packed_1() >> 9) & 1U) != 0;
+}
+
+bool sc_fellow_skip_backfacing_positional() {
+	return ((sc_packed_1() >> 10) & 1U) != 0;
+}
+
+bool sc_fellow_skip_backfacing_directional() {
+	return ((sc_packed_1() >> 11) & 1U) != 0;
+}
+
+bool sc_fellow_skip_unblended_cascade() {
+	return ((sc_packed_1() >> 12) & 1U) != 0;
+}
+
+bool sc_fellow_cluster_log_depth() {
+	return ((sc_packed_1() >> 13) & 1U) != 0;
+}
+
+bool sc_fellow_blended_alpha_zero_skip() {
+	return ((sc_packed_1() >> 14) & 1U) != 0;
+}
+
 float sc_luminance_multiplier() {
 	// Not used in clustered renderer but we share some code with the mobile renderer that requires this.
 	return 1.0;
@@ -335,7 +359,7 @@ scene_data_block;
 // (SCENE_DATA_FLAGS_FELLOW_CLUSTER_LOG_DEPTH, cluster_builder_rd.h): 32 slices logarithmic between the near and far
 // planes, computed exactly like cluster_store.glsl; otherwise stock's 32 linear slices over [0, far].
 uint fellow_cluster_z(float p_depth, float p_z_near, float p_z_far, uint p_flags) {
-	if (bool(p_flags & SCENE_DATA_FLAGS_FELLOW_CLUSTER_LOG_DEPTH)) {
+	if (sc_fellow_cluster_log_depth() && bool(p_flags & SCENE_DATA_FLAGS_FELLOW_CLUSTER_LOG_DEPTH)) {
 		return p_depth > p_z_near ? min(uint(log2(p_depth / p_z_near) * (32.0 / log2(p_z_far / p_z_near))), 31u) : 0u;
 	}
 	return uint(clamp((p_depth / p_z_far) * 32.0, 0.0, 31.0));

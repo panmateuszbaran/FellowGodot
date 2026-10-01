@@ -2334,6 +2334,12 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	base_specialization.fellow_pcss_blend_band = Fellow::shadow_pcss_blend_band();
 	base_specialization.fellow_directional_max_mip = Fellow::shadow_directional_max_mip();
 	base_specialization.fellow_positional_max_mip = Fellow::shadow_positional_max_mip();
+	base_specialization.fellow_zero_attenuation_skip = Fellow::light_zero_attenuation_skip();
+	base_specialization.fellow_skip_backfacing_positional = Fellow::shadow_skip_backfacing_positional();
+	base_specialization.fellow_skip_backfacing_directional = Fellow::shadow_skip_backfacing();
+	base_specialization.fellow_skip_unblended_cascade = Fellow::shadow_skip_unblended_cascade();
+	base_specialization.fellow_cluster_log_depth = Fellow::light_cluster_depth_slices();
+	base_specialization.fellow_blended_alpha_zero_skip = Fellow::blended_alpha_zero_skip();
 
 	bool using_ssao = depth_pre_pass && !is_reflection_probe && p_render_data->environment.is_valid() && environment_get_ssao_enabled(p_render_data->environment);
 
@@ -5563,6 +5569,12 @@ void RenderForwardClustered::_update_shader_quality_settings() {
 	specialization.fellow_pcss_blend_band = Fellow::shadow_pcss_blend_band();
 	specialization.fellow_directional_max_mip = Fellow::shadow_directional_max_mip();
 	specialization.fellow_positional_max_mip = Fellow::shadow_positional_max_mip();
+	specialization.fellow_zero_attenuation_skip = Fellow::light_zero_attenuation_skip();
+	specialization.fellow_skip_backfacing_positional = Fellow::shadow_skip_backfacing_positional();
+	specialization.fellow_skip_backfacing_directional = Fellow::shadow_skip_backfacing();
+	specialization.fellow_skip_unblended_cascade = Fellow::shadow_skip_unblended_cascade();
+	specialization.fellow_cluster_log_depth = Fellow::light_cluster_depth_slices();
+	specialization.fellow_blended_alpha_zero_skip = Fellow::blended_alpha_zero_skip();
 	scene_shader.set_default_specialization(specialization);
 
 	base_uniforms_changed(); //also need this

@@ -132,6 +132,12 @@ public:
 				uint32_t fellow_pcss_blend_band : 1;
 				uint32_t fellow_directional_max_mip : 1;
 				uint32_t fellow_positional_max_mip : 1;
+				uint32_t fellow_zero_attenuation_skip : 1;
+				uint32_t fellow_skip_backfacing_positional : 1;
+				uint32_t fellow_skip_backfacing_directional : 1;
+				uint32_t fellow_skip_unblended_cascade : 1;
+				uint32_t fellow_cluster_log_depth : 1;
+				uint32_t fellow_blended_alpha_zero_skip : 1;
 			};
 		};
 
