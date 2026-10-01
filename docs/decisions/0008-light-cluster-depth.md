@@ -100,7 +100,11 @@ the `pow()` when `distance × inv_range ≥ 1` (the attenuation is then exactly 
 for spot lights also when the direction is outside the cone (the cone factor is then exactly `1 − pow(1, x) = 0`),
 and after the attenuation when it is at or below `HALF_FLT_MIN` (shadow and BRDF both do nothing then). Only for
 materials without custom light code, rim, backlight, transmittance, clearcoat, toon shading or shadow-to-opacity (the
-same exclusions as the N·L skip). lavapipe: identical on Lights Lab, PBR Lab, Stress Lab. RTX: *pending*.
+same exclusions as the N·L skip). lavapipe: identical on Lights Lab, PBR Lab, Stress Lab. RTX identity
+(`m3_f19_temporal`, `fellow19` vs + skip): Bistro exterior 99.0 dB (max |d| 0), Sponza 75.5 dB (max 2/255), Lights Lab
+90.9 dB (max 4), Bistro interior and PBR Lab at their run-to-run floor. Profile (`m3_f19_profile`): Lights Lab opaque
+pass 1.709 → 1.331 ms (**−0.378**, as much as the depth slices: −0.375), both together 1.151 (−0.558); scenes without
+positional lights unchanged within the profile's ±0.1 ms.
 
 ## Decision
 

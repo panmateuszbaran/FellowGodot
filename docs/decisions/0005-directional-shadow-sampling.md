@@ -141,7 +141,22 @@ rounded for a 32-bit one: minimum down, maximum up), rebuilt only over the atlas
 otherwise; everything after a full clear or an atlas change). Identity: lavapipe, PBR Lab and Stress Lab captures and
 the Stress Lab motion sequences (moving dynamic casters, rotating sun: partial rebuilds every frame), **0 differing
 pixels** against the pyramid off; RTX (`m3_mm3_temporal`): Bistro exterior 99.0 dB (max |d| 0), Sponza 72.6-75.4 dB
-(max 3/255), PBR Lab at its run-to-run floor. Timing: *pending* (`m3_mm3_profile`, `m3_mm3_perf`).
+(max 3/255), PBR Lab at its run-to-run floor. Timing (`fellow18`, `m3_mm3_profile`, one profiled run per variant;
+`m3_mm3_perf`, interleaved, 3-6 runs):
+
+| scene | shadow pass incl. pyramid | opaque | transparent | frame (perf A/B) |
+|---|---|---|---|---|
+| Sponza | 0.313 → 0.447 (+0.134) | 2.740 → 2.187 (−0.553) | 1.892 → 1.409 (−0.483) | 8.466 → **7.461 ms (−11.9 %, p 0.001)** |
+| Bistro exterior | 0.300 → 0.419 (+0.119) | 1.969 → 1.860 (−0.109) | – | 5.151 → 5.205 (+1.0 %, within noise) |
+| PBR Lab | 0.123 → 0.224 (+0.101) | 0.899 → 0.971 (+0.072) | – | 2.790 → **2.878 (+3.1 %, p 0.02)** |
+
+The rebuild is not the incremental near-zero hoped for in these benchmarks: the camera moves in every flythrough, so
+the shadow cache copies every cascade to a new position each frame and the whole atlas is rewritten (a static view
+rebuilds nothing). One run of this session (`f18_mm`, Sponza, run 2) lost the Vulkan device 3.5 s into its warm-up
+(`VK_ERROR_DEVICE_LOST`, nvlddmkm event 153 at 13:04:45); the machine logged the same event 12 times between 18 and
+22 September, before these sessions, and the pyramid's dispatch sizes cannot go negative (v3: `dst_hi > dst_lo` by
+construction); the run was discarded by the runner's timeout and replaced. Watched for in every later session: no
+recurrence in `m3_f19_temporal`, `m3_f19_profile`, `m3_f19_perf` (every run valid, 30 of them with a pyramid).
 
 **v4** (`fellow19`): overlapping windows instead of blocks — mip m holds the minimum and maximum of every atlas window
 of 2^(m+2) texels starting every 2^(m+1) texels, so any filter box of at most 2^(m+1) texels lies inside the single
@@ -158,7 +173,31 @@ paraboloid, so all taps are 2x2 comparisons inside one box of the atlas). Sizing
 4 shadowed omni lights spend 0.59 ms of the opaque pass on PCF taps (soft → hard, `m3_sizing_profile`).
 lavapipe: identical (0 pixels) on PBR Lab, Lights Lab, Stress Lab captures and the Stress Lab motion sequences;
 a debug build returning 0.25 for "fully lit" changed 77-170 k pixels per PBR camera (positional) and 182-229 k
-(directional PCSS), i.e. both early-outs fire. RTX identity and timing: *pending (`m3_f19_*`)*.
+(directional PCSS), i.e. both early-outs fire. RTX identity (`m3_f19_temporal`, 60-frame sequences, `fellow19` vs
++ positional / + directional pyramid): Bistro exterior 99.0 dB (max |d| 0), Sponza 75.5 dB (max 3/255), Lights Lab
+93.9 dB (max 3), Bistro interior and PBR Lab at their run-to-run floor (≤ 0.001 % of pixels > 2/255).
+
+Profile (`m3_f19_profile`, one run per variant, ±0.1 ms per pass between runs):
+
+| scene | `f19` sum of passes | + positional pyramid | + directional pyramid |
+|---|---:|---:|---:|
+| Lights Lab | 3.253 | 3.315 (+1.9 %) | 3.281 (+0.8 %) |
+| Bistro interior | 4.144 | **3.957 (−4.5 %**, opaque −0.198) | 4.115 (−0.7 %) |
+| Bistro exterior | 4.982 | 4.897 (−1.7 %) | **4.656 (−6.5 %**, opaque −0.226, shadows +0.105) |
+| Sponza | 7.971 | 8.073 (+1.3 %) | **6.801 (−14.7 %**, opaque −0.623, transparent −0.626, shadows +0.126) |
+| PBR Lab | 2.478 | 2.682 (+8.3 %, shadows +0.059) | 2.770 (+11.8 %, shadows +0.131) |
+
+One fetch instead of four did not change the picture: the build (+0.06 positional, +0.10-0.13 directional per frame
+in flythroughs) is what the scenes without much shadow filtering pay. Interleaved A/B of everything together
+(`m3_f19_perf`, with the light changes of 0008): Sponza −14.3 %, Lights Lab −13.0 %, Bistro interior −2.9 %, Bistro
+exterior +1.2 % (within noise), **PBR Lab +6.0 % (p < 0.001)**.
+
+**Build v5** (`fellow20`): mip 0 reads its 4×4 atlas window as four 2×2 gathers instead of 16 fetches, and the mips
+of 32×32 texels and smaller are built by one workgroup from shared memory instead of one dispatch and one barrier each
+(7 dispatches instead of 12 for a 4096² atlas); the build has its own GPU timestamp (`FellowEngine Shadow Pyramids`).
+Same values: lavapipe debug builds that mark every early-out produce identical images (gathers vs fetches on the PBR
+Lab; one workgroup vs one dispatch per mip with 256² atlases, where the small mips are the ones looked up), and the
+non-debug build is identical to the pyramids off.
 
 ## Decision
 
