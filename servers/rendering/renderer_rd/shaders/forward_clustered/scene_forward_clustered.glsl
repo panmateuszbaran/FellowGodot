@@ -2436,7 +2436,7 @@ void fragment_shader(in SceneData scene_data) {
 	m_var.xyz += normal_bias;
 
 					//version with soft shadows, more expensive
-					if (sc_use_directional_soft_shadows() && directional_lights.data[i].softshadow_angle > 0 && bool(scene_data.flags & SCENE_DATA_FLAGS_FELLOW_PCSS_BLEND_BAND)) {
+					if (sc_fellow_pcss_blend_band() && sc_use_directional_soft_shadows() && directional_lights.data[i].softshadow_angle > 0 && bool(scene_data.flags & SCENE_DATA_FLAGS_FELLOW_PCSS_BLEND_BAND)) {
 						// FellowEngine: sample the cascade that contains the pixel; with blend splits, blend towards the next
 						// cascade over the last 10 % of the split only (as the PCF path does) instead of over the whole split.
 						vec4 splits = directional_lights.data[i].shadow_split_offsets;

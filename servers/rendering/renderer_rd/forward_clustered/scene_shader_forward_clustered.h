@@ -128,6 +128,10 @@ public:
 				uint32_t multimesh_has_custom_data : 1;
 				uint32_t fog_use_legacy_blending : 1;
 				uint32_t cluster_has_area_light : 1;
+				// FellowEngine: feature code dropped from specialized pipelines when its toggle is off.
+				uint32_t fellow_pcss_blend_band : 1;
+				uint32_t fellow_directional_max_mip : 1;
+				uint32_t fellow_positional_max_mip : 1;
 			};
 		};
 

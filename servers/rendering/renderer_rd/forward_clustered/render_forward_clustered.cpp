@@ -2320,6 +2320,9 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 
 	SceneShaderForwardClustered::ShaderSpecialization base_specialization = scene_shader.default_specialization;
 	base_specialization.use_depth_fog = p_render_data->environment.is_valid() && environment_get_fog_mode(p_render_data->environment) == RSE::EnvironmentFogMode::ENV_FOG_MODE_DEPTH;
+	base_specialization.fellow_pcss_blend_band = Fellow::shadow_pcss_blend_band();
+	base_specialization.fellow_directional_max_mip = Fellow::shadow_directional_max_mip();
+	base_specialization.fellow_positional_max_mip = Fellow::shadow_positional_max_mip();
 
 	bool using_ssao = depth_pre_pass && !is_reflection_probe && p_render_data->environment.is_valid() && environment_get_ssao_enabled(p_render_data->environment);
 
@@ -5546,6 +5549,9 @@ void RenderForwardClustered::_update_shader_quality_settings() {
 	specialization.directional_penumbra_shadow_samples = directional_penumbra_shadow_samples_get();
 	specialization.use_lightmap_bicubic_filter = lightmap_filter_bicubic_get();
 	specialization.fog_use_legacy_blending = fog_use_legacy_blending_get();
+	specialization.fellow_pcss_blend_band = Fellow::shadow_pcss_blend_band();
+	specialization.fellow_directional_max_mip = Fellow::shadow_directional_max_mip();
+	specialization.fellow_positional_max_mip = Fellow::shadow_positional_max_mip();
 	scene_shader.set_default_specialization(specialization);
 
 	base_uniforms_changed(); //also need this

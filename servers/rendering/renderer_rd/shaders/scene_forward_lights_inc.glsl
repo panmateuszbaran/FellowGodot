@@ -363,7 +363,7 @@ half sample_directional_pcf_shadow(texture2D shadow, vec2 shadow_pixel_size, vec
 	// result for that case (same arithmetic).
 	// If every atlas texel there is at least as close to the light as the receiver (plus a margin), all taps compare 0:
 	// fully shadowed.
-	if (bool(scene_data_block.data.flags & SCENE_DATA_FLAGS_FELLOW_SHADOW_MAX_MIP)) {
+	if (sc_fellow_directional_max_mip() && bool(scene_data_block.data.flags & SCENE_DATA_FLAGS_FELLOW_SHADOW_MAX_MIP)) {
 		vec2 mm = fellow_shadow_box_minmax(pos, abs(shadow_pixel_size));
 		if (mm.y < depth - FELLOW_SHADOW_MAX_MIP_EPSILON) {
 			return half(float(sc_directional_soft_shadow_samples()) * (1.0 / float(sc_directional_soft_shadow_samples())));
@@ -405,7 +405,7 @@ half sample_pcf_shadow(texture2D shadow, vec2 shadow_pixel_size, vec3 coord, flo
 	// FellowEngine (rendering/fellow/shadows/positional_max_mip), spot lights: every tap below is a 2x2 comparison within
 	// |shadow_pixel_size| of pos. Receiver closer to the light than every atlas texel there: all taps lit (the loop's
 	// result for that case, same arithmetic); every texel at least as close (plus a margin): all taps shadowed.
-	if (bool(scene_data_block.data.flags & SCENE_DATA_FLAGS_FELLOW_POSITIONAL_SHADOW_MAX_MIP)) {
+	if (sc_fellow_positional_max_mip() && bool(scene_data_block.data.flags & SCENE_DATA_FLAGS_FELLOW_POSITIONAL_SHADOW_MAX_MIP)) {
 		vec2 mm = fellow_shadow_window_minmax(positional_shadow_max_mip, pos, abs(shadow_pixel_size));
 		if (mm.y < depth - FELLOW_SHADOW_MAX_MIP_EPSILON) {
 			return half(float(sc_soft_shadow_samples()) * (1.0 / float(sc_soft_shadow_samples())));
@@ -447,7 +447,7 @@ half sample_omni_pcf_shadow(texture2D shadow, float blur_scale, vec2 coord, vec4
 	// |offset_scale| (per axis, kernel inside the unit disk) of coord in paraboloid space. If no tap can cross the rim
 	// (|coord| + |offset| < 1, so none flips to the other paraboloid), all taps are 2x2 comparisons in this paraboloid's
 	// rect within that box: decide them all from the atlas's min/max pyramid as in sample_pcf_shadow().
-	if (bool(scene_data_block.data.flags & SCENE_DATA_FLAGS_FELLOW_POSITIONAL_SHADOW_MAX_MIP)) {
+	if (sc_fellow_positional_max_mip() && bool(scene_data_block.data.flags & SCENE_DATA_FLAGS_FELLOW_POSITIONAL_SHADOW_MAX_MIP)) {
 		vec2 fellow_r = abs(blur_scale * 2.0 * scene_data_block.data.shadow_atlas_pixel_size / uv_rect.zw);
 		if (length(coord) + length(fellow_r) < 0.999) {
 			vec2 center = uv_rect.xy + (coord * 0.5 + 0.5) * uv_rect.zw;
@@ -506,7 +506,7 @@ half sample_directional_soft_shadow(texture2D shadow, vec3 pssm_coord, vec2 tex_
 	// average is at most the region's largest depth, so the penumbra (monotonic in the blocker depth) and with it the
 	// filter radius are at most the ones computed from that largest depth: if every texel within that radius is closer
 	// to the light than the receiver too, every filter tap compares 0: return the filter's result, 0.
-	if (bool(scene_data_block.data.flags & SCENE_DATA_FLAGS_FELLOW_SHADOW_MAX_MIP)) {
+	if (sc_fellow_directional_max_mip() && bool(scene_data_block.data.flags & SCENE_DATA_FLAGS_FELLOW_SHADOW_MAX_MIP)) {
 		vec2 mm = fellow_shadow_box_minmax(pssm_coord.xy, abs(tex_scale));
 		if (mm.y < pssm_coord.z - FELLOW_SHADOW_MAX_MIP_EPSILON) {
 			return half(1.0);

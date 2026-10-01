@@ -146,6 +146,20 @@ bool sc_cluster_has_area_light() {
 	return ((sc_packed_1() >> 5) & 1U) != 0;
 }
 
+// FellowEngine features whose code a specialized pipeline drops when their toggle is off (the runtime scene flags
+// still decide per frame when it is on): fewer live registers in the light loops for the configurations without them.
+bool sc_fellow_pcss_blend_band() {
+	return ((sc_packed_1() >> 6) & 1U) != 0;
+}
+
+bool sc_fellow_directional_max_mip() {
+	return ((sc_packed_1() >> 7) & 1U) != 0;
+}
+
+bool sc_fellow_positional_max_mip() {
+	return ((sc_packed_1() >> 8) & 1U) != 0;
+}
+
 float sc_luminance_multiplier() {
 	// Not used in clustered renderer but we share some code with the mobile renderer that requires this.
 	return 1.0;
