@@ -91,10 +91,10 @@ with large surfaces; nothing in scenes made of small objects (instance culling a
 ## Regression risk
 
 Index memory of clustered surfaces doubles. Meshes created while the toggle is off are never clustered (the toggle
-is read at creation). Render-thread CPU per clustered element (tree walk, one draw call per visible range). A
-surface whose vertices are moved by the shader (`VERTEX` writes, wind) can leave its cluster bounds just as it can
-leave its instance AABB in stock (the same `extra_cull_margin` contract applies to the whole instance, not to
-clusters: such materials need clusters disabled — not handled yet).
+is read at creation). Render-thread CPU per clustered element (tree walk, one draw call per visible range).
+Vertices moved by the shader (`VERTEX`/`POSITION` writes, custom model-view/projection, grow, billboards, wind) could
+leave the cluster bounds, which come from the mesh data (stock covers such displacement with the instance's
+`extra_cull_margin`, which clusters do not see): elements whose shader can do that are drawn whole.
 
 ## Decision
 
