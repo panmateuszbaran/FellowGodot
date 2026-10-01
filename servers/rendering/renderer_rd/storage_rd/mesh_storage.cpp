@@ -31,6 +31,7 @@
 #include "mesh_storage.h"
 
 #include "servers/rendering/fellow_settings.h"
+#include "core/os/os.h"
 
 #include "servers/rendering/renderer_viewport.h"
 #include "servers/rendering/rendering_server.h"
@@ -576,7 +577,10 @@ void MeshStorage::_fellow_join_cluster_build(Mesh::Surface *p_surface) {
 	if (b == nullptr) {
 		return;
 	}
+	const uint64_t t0 = OS::get_singleton()->get_ticks_usec();
 	fellow_mesh_clusters_build_join(b);
+	Fellow::stats().geometry_cluster_join_wait_usec.add(OS::get_singleton()->get_ticks_usec() - t0);
+	Fellow::stats().geometry_cluster_build_usec.add(b->build_usec);
 	p_surface->fellow_clusters = b->clusters;
 	p_surface->fellow_clusters_ordered = b->ordered;
 	memdelete(b);

@@ -114,6 +114,7 @@ struct FellowMeshClusterBuild {
 
 	FellowMeshClusters *clusters = nullptr;
 	FellowMeshClusters *ordered = nullptr;
+	uint64_t build_usec = 0; // CPU time of the build (worker thread).
 	WorkerThreadPool::TaskID task = WorkerThreadPool::INVALID_TASK_ID;
 };
 

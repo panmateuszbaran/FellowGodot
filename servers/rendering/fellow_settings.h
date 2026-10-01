@@ -211,6 +211,11 @@ inline bool geometry_enabled() {
 inline bool mesh_clusters() {
 	return geometry_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/geometry/mesh_clusters");
 }
+// Surfaces drawn with blending keep their triangle order and are culled with order-preserving clusters (chunks of
+// consecutive triangles); off: drawn whole, as stock.
+inline bool mesh_clusters_blended() {
+	return GLOBAL_GET_CACHED(bool, "rendering/fellow/geometry/cluster_blended_surfaces");
+}
 // Maximum triangles per cluster (leaf of the k-d tree).
 inline int mesh_cluster_triangles() {
 	return CLAMP(GLOBAL_GET_CACHED(int, "rendering/fellow/geometry/cluster_triangles"), 64, 1 << 20);
@@ -241,6 +246,8 @@ struct Stats {
 	SafeNumeric<uint64_t> geometry_cluster_surfaces_active; // surfaces whose index buffers were put in cluster order
 	SafeNumeric<uint64_t> geometry_cluster_surfaces_dropped; // surfaces left in stock order (blending or vertex-moving material)
 	SafeNumeric<uint64_t> geometry_cluster_blended_after_activation; // clustered surfaces later set up with a blending material
+	SafeNumeric<uint64_t> geometry_cluster_build_usec; // CPU time of cluster builds (worker threads)
+	SafeNumeric<uint64_t> geometry_cluster_join_wait_usec; // time the render thread waited for unfinished builds
 	SafeNumeric<uint64_t> geometry_cluster_draws; // draw calls issued for clustered surfaces
 	SafeNumeric<uint64_t> geometry_cluster_triangles_drawn; // triangles of clustered surfaces drawn
 	SafeNumeric<uint64_t> geometry_cluster_triangles_culled; // triangles of clustered surfaces skipped (outside the frustum)

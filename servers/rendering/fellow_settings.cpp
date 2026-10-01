@@ -65,6 +65,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/shadows/directional_cache_debug_mode", PROPERTY_HINT_ENUM, "Normal,Lattice Only (No Cache),Rebuild Every Frame"), 0);
 	GLOBAL_DEF("rendering/fellow/geometry/enabled", true);
 	GLOBAL_DEF("rendering/fellow/geometry/mesh_clusters", true);
+	GLOBAL_DEF("rendering/fellow/geometry/cluster_blended_surfaces", true);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/geometry/cluster_triangles", PROPERTY_HINT_RANGE, "64,65536,1"), 4096);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/geometry/cluster_min_surface_triangles", PROPERTY_HINT_RANGE, "256,1048576,1"), 32768);
 }
@@ -96,6 +97,8 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["geometry_cluster_surfaces_active"] = s.geometry_cluster_surfaces_active.get();
 	d["geometry_cluster_surfaces_dropped"] = s.geometry_cluster_surfaces_dropped.get();
 	d["geometry_cluster_blended_after_activation"] = s.geometry_cluster_blended_after_activation.get();
+	d["geometry_cluster_build_usec"] = s.geometry_cluster_build_usec.get();
+	d["geometry_cluster_join_wait_usec"] = s.geometry_cluster_join_wait_usec.get();
 	d["geometry_cluster_draws"] = s.geometry_cluster_draws.get();
 	d["geometry_cluster_triangles_drawn"] = s.geometry_cluster_triangles_drawn.get();
 	d["geometry_cluster_triangles_culled"] = s.geometry_cluster_triangles_culled.get();

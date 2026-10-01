@@ -617,7 +617,7 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 				const bool fellow_static_vertices = !(shader->uses_vertex || shader->uses_position || shader->writes_modelview_or_projection || shader->uses_z_clip_scale || shader->uses_particle_trails);
 				if (p_params->fellow_cluster_plane_count > 0 && fellow_static_vertices && instance_count == 1 && index_array_rd.is_valid() && !surf->owner->mesh_instance.is_valid() && !(surf->owner->base_flags & (INSTANCE_DATA_FLAG_MULTIMESH | INSTANCE_DATA_FLAG_PARTICLES))) {
 					fellow_clusters = mesh_storage->fellow_mesh_surface_get_clusters(mesh_surface);
-					if (fellow_clusters && element_info.lod_index >= fellow_clusters->levels.size()) {
+					if (fellow_clusters && (element_info.lod_index >= fellow_clusters->levels.size() || (fellow_clusters->preserves_order && !Fellow::mesh_clusters_blended()))) {
 						fellow_clusters = nullptr;
 					}
 				}

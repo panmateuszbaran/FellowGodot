@@ -30,22 +30,27 @@
 
 #include "fellow_mesh_clusters.h"
 
+#include "core/os/os.h"
 #include "core/templates/sort_array.h"
 #include "servers/rendering/rendering_server_enums.h"
 
 namespace {
 
-struct CentroidLess {
-	const Vector3 *centroids = nullptr;
+// Triangles are partitioned as (centroid, id) items so that the median selection walks memory sequentially.
+struct TriItem {
+	Vector3 c;
+	uint32_t id = 0;
+};
+
+struct ItemLess {
 	int axis = 0;
-	_FORCE_INLINE_ bool operator()(uint32_t p_a, uint32_t p_b) const {
-		return centroids[p_a][axis] < centroids[p_b][axis];
+	_FORCE_INLINE_ bool operator()(const TriItem &p_a, const TriItem &p_b) const {
+		return p_a.c[axis] < p_b.c[axis];
 	}
 };
 
 struct Builder {
-	const Vector3 *centroids = nullptr;
-	uint32_t *tris = nullptr; // Triangle ids, partitioned in place (leaf order once the build is done).
+	TriItem *items = nullptr; // Partitioned in place (leaf order once the build is done).
 	uint32_t *tri_leaf = nullptr; // Leaf node of each triangle id.
 	uint32_t max_leaf = 0;
 	LocalVector<FellowMeshClusters::Node> *nodes = nullptr;
@@ -56,27 +61,25 @@ struct Builder {
 		nodes->push_back(FellowMeshClusters::Node());
 		if (p_end - p_begin <= max_leaf) {
 			for (uint32_t i = p_begin; i < p_end; i++) {
-				tri_leaf[tris[i]] = node;
+				tri_leaf[items[i].id] = node;
 			}
 			leaf_count++;
 			return;
 		}
-		Vector3 lo = centroids[tris[p_begin]];
+		Vector3 lo = items[p_begin].c;
 		Vector3 hi = lo;
 		for (uint32_t i = p_begin + 1; i < p_end; i++) {
-			const Vector3 &c = centroids[tris[i]];
-			lo = lo.min(c);
-			hi = hi.max(c);
+			lo = lo.min(items[i].c);
+			hi = hi.max(items[i].c);
 		}
 		const Vector3 ext = hi - lo;
 		const int axis = ext.x >= ext.y ? (ext.x >= ext.z ? 0 : 2) : (ext.y >= ext.z ? 1 : 2);
 		const uint32_t mid = p_begin + (p_end - p_begin) / 2;
-		SortArray<uint32_t, CentroidLess, false> sorter;
-		sorter.compare.centroids = centroids;
+		SortArray<TriItem, ItemLess, false> sorter;
 		sorter.compare.axis = axis;
-		sorter.nth_element(p_begin, p_end, mid, tris);
+		sorter.nth_element(p_begin, p_end, mid, items);
 		(*nodes)[node].axis = axis;
-		(*nodes)[node].split = centroids[tris[mid]][axis];
+		(*nodes)[node].split = items[mid].c[axis];
 		build(p_begin, mid);
 		(*nodes)[node].right = nodes->size();
 		build(mid, p_end);
@@ -89,7 +92,7 @@ _FORCE_INLINE_ uint32_t read_index(const uint8_t *p_data, bool p_16, uint32_t p_
 
 // Orders the triangles of one index buffer by leaf (p_tri_leaf: leaf node of each triangle), fills the level's node
 // ranges and bounds, and returns the leaf-ordered index data.
-Vector<uint8_t> make_level(const LocalVector<FellowMeshClusters::Node> &p_nodes, const Vector3 *p_positions, uint32_t p_vertex_count, const uint8_t *p_indices, bool p_16, uint32_t p_tri_count, const uint32_t *p_tri_leaf, LocalVector<FellowMeshClusters::Range> &r_ranges) {
+Vector<uint8_t> make_level(const LocalVector<FellowMeshClusters::Node> &p_nodes, const Vector3 *p_positions, uint32_t p_vertex_count, const uint8_t *p_indices, bool p_16, uint32_t p_tri_count, const uint32_t *p_tri_leaf, LocalVector<FellowMeshClusters::Range> &r_ranges, bool p_write = true) {
 	const uint32_t node_count = p_nodes.size();
 	r_ranges.resize(node_count);
 	LocalVector<uint32_t> start;
@@ -114,8 +117,11 @@ Vector<uint8_t> make_level(const LocalVector<FellowMeshClusters::Node> &p_nodes,
 	}
 	const uint32_t index_size = p_16 ? 2 : 4;
 	Vector<uint8_t> out;
-	out.resize(p_tri_count * 3 * index_size);
-	uint8_t *w = out.ptrw();
+	uint8_t *w = nullptr;
+	if (p_write) {
+		out.resize(p_tri_count * 3 * index_size);
+		w = out.ptrw();
+	}
 	LocalVector<bool> has_bounds;
 	has_bounds.resize(node_count);
 	for (uint32_t i = 0; i < node_count; i++) {
@@ -126,7 +132,9 @@ Vector<uint8_t> make_level(const LocalVector<FellowMeshClusters::Node> &p_nodes,
 		const uint32_t dst = cursor[leaf]++;
 		for (uint32_t k = 0; k < 3; k++) {
 			const uint32_t v = read_index(p_indices, p_16, t * 3 + k);
-			if (p_16) {
+			if (w == nullptr) {
+				// Bounds only.
+			} else if (p_16) {
 				reinterpret_cast<uint16_t *>(w)[dst * 3 + k] = uint16_t(v);
 			} else {
 				reinterpret_cast<uint32_t *>(w)[dst * 3 + k] = v;
@@ -261,35 +269,31 @@ FellowMeshClusters *fellow_mesh_clusters_build(uint64_t p_format, const Vector<u
 
 	const uint8_t *base_indices = p_index_data.ptr();
 	const uint32_t tri_count = p_index_count / 3;
-	LocalVector<Vector3> centroids;
-	centroids.resize(tri_count);
+	LocalVector<TriItem> items;
+	items.resize(tri_count);
 	for (uint32_t t = 0; t < tri_count; t++) {
 		Vector3 c;
 		for (uint32_t k = 0; k < 3; k++) {
 			const uint32_t v = read_index(base_indices, is_16, t * 3 + k);
 			c += v < p_vertex_count ? positions[v] : Vector3();
 		}
-		centroids[t] = c / 3.0;
+		items[t].c = c / 3.0;
+		items[t].id = t;
 	}
 
 	FellowMeshClusters *clusters = memnew(FellowMeshClusters);
-	LocalVector<uint32_t> tris;
-	tris.resize(tri_count);
-	for (uint32_t t = 0; t < tri_count; t++) {
-		tris[t] = t;
-	}
 	LocalVector<uint32_t> tri_leaf;
 	tri_leaf.resize(tri_count);
 	{
 		Builder b;
-		b.centroids = centroids.ptr();
-		b.tris = tris.ptr();
+		b.items = items.ptr();
 		b.tri_leaf = tri_leaf.ptr();
 		b.max_leaf = MAX(1u, p_max_leaf_triangles);
 		b.nodes = &clusters->nodes;
 		b.build(0, tri_count);
 		clusters->leaf_count = b.leaf_count;
 	}
+	items.reset();
 
 	const uint32_t level_count = 1 + p_lods.size();
 	clusters->levels.resize(level_count);
@@ -370,7 +374,7 @@ FellowMeshClusters *fellow_mesh_clusters_build(uint64_t p_format, const Vector<u
 			}
 			// Leaves in pre-order follow the chunk order, so the "reordered" data equals the input: only the ranges
 			// and bounds are kept.
-			make_level(ordered->nodes, positions.ptr(), p_vertex_count, indices, is_16, level_tris, leaf.ptr(), ordered->levels[l].nodes);
+			make_level(ordered->nodes, positions.ptr(), p_vertex_count, indices, is_16, level_tris, leaf.ptr(), ordered->levels[l].nodes, false);
 			ordered->levels[l].index_count = level_tris * 3;
 		}
 		ordered->active = true;
@@ -382,11 +386,13 @@ FellowMeshClusters *fellow_mesh_clusters_build(uint64_t p_format, const Vector<u
 
 static void _fellow_mesh_clusters_build_task(void *p_userdata) {
 	FellowMeshClusterBuild *b = static_cast<FellowMeshClusterBuild *>(p_userdata);
+	const uint64_t t0 = OS::get_singleton()->get_ticks_usec();
 	b->clusters = fellow_mesh_clusters_build(b->format, b->vertex_data, b->vertex_count, b->aabb, b->index_data, b->index_count, b->lods, b->max_leaf_triangles, &b->ordered);
 	// Release the references to the surface data as soon as possible.
 	b->vertex_data = Vector<uint8_t>();
 	b->index_data = Vector<uint8_t>();
 	b->lods.clear();
+	b->build_usec = OS::get_singleton()->get_ticks_usec() - t0;
 }
 
 FellowMeshClusterBuild *fellow_mesh_clusters_build_async(uint64_t p_format, const Vector<uint8_t> &p_vertex_data, uint32_t p_vertex_count, const AABB &p_aabb, const Vector<uint8_t> &p_index_data, uint32_t p_index_count, const Vector<Vector<uint8_t>> &p_lods, uint32_t p_max_leaf_triangles) {
