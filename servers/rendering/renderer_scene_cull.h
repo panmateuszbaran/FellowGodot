@@ -1136,6 +1136,9 @@ public:
 			int32_t zoom_n = 0;
 			uint64_t zoom_frame = 0; // frame of the last texel size change
 			bool cost_checked = false; // the cost gate has evaluated the current build
+			uint32_t cache_casters = 0; // casters rendered into the current build
+			bool stock_measured = false; // stock_casters is known for the current build
+			uint32_t stock_casters = 0; // of those, casters stock would draw (camera-dependent tight culling)
 			uint64_t uneconomic_until = 0; // stock while the cascade stays in the evaluated volume, until this frame
 		};
 
@@ -1210,6 +1213,8 @@ public:
 				Frustum fellow_cache_frustum; // cache volume (rebuild only)
 				SafeNumeric<uint32_t> fellow_promotable; // static-eligible casters still drawn per frame
 				SafeNumeric<uint32_t> fellow_dynamic; // casters drawn per frame on top of the cache
+				bool fellow_measure_stock = false; // cost gate: count the cached casters stock would draw this frame
+				SafeNumeric<uint32_t> fellow_stock_static; // that count
 
 			} cascades[RendererSceneRender::MAX_DIRECTIONAL_LIGHT_CASCADES]; //max 4 cascades
 			uint32_t cascade_count;

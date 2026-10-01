@@ -60,8 +60,9 @@ drawn into the cascade's atlas rect (16-bit depth, reverse Z) every frame.
    size changes (camera FOV or near/far animation) is rendered stock until it is unchanged for 2 frames (no cache can
    match a changing lattice, and a rebuild per frame costs more than stock); a cascade that is served from its cache in
    fewer than 25 % of recent non-stock frames goes stock for 120 frames (thrash guard). **Cost gate:** every rebuild
-   records the primitives and draws of the static casters it rendered; the cascade is served from the cache only if
-   `(primitives + 2000 × draws) × (cascade area / cache area) ≥ min_cost_per_texel × cascade texels`
+   records the primitives and draws of the static casters it rendered, and the next frame's cull counts how many of
+   those casters stock would draw (its camera-dependent tight culling); the cascade is served from the cache only if
+   `(primitives + 2000 × draws) × (stock casters / cache casters) ≥ min_cost_per_texel × cascade texels`
    (`directional_cache_min_cost_per_texel`, default 0.125), i.e. only if the static casters it saves cost more than
    the per-frame copy, which writes one depth texel per cascade texel. Otherwise the cascade is rendered stock while it
    stays in the evaluated volume, for at most 600 frames, then evaluated again.

@@ -2461,6 +2461,8 @@ void RendererSceneCull::_fellow_shadow_cache_decide(int p_shadow_index, uint64_t
 		shadow.cascades[k].fellow_build_frame = 0;
 		shadow.cascades[k].fellow_promotable.set(0);
 		shadow.cascades[k].fellow_dynamic.set(0);
+		shadow.cascades[k].fellow_measure_stock = false;
+		shadow.cascades[k].fellow_stock_static.set(0);
 	}
 	FellowDirShadowCache *cache = work[0].cache;
 	if (cache == nullptr) {
@@ -2571,16 +2573,20 @@ void RendererSceneCull::_fellow_shadow_cache_decide(int p_shadow_index, uint64_t
 		}
 		cs.last_event_seq = p_scenario->fellow_shadow_event_seq;
 
+		bool measure_stock = false;
 		if (ok && !cs.cost_checked && min_cost > 0.0f) {
 			uint64_t primitives = 0;
 			uint32_t draws = 0;
-			if (scene_render->fellow_directional_shadow_cache_get_static_cost(cache->cache_id, k, cs.build_frame, primitives, draws)) {
+			if (!cs.stock_measured) {
+				measure_stock = true; // count, in this frame's cull, the cached casters stock would draw
+			} else if (scene_render->fellow_directional_shadow_cache_get_static_cost(cache->cache_id, k, cs.build_frame, primitives, draws)) {
 				cs.cost_checked = true;
-				// Static casters of the cache volume, scaled to the cascade's share of it, in primitive equivalents; the
-				// copy writes n * n depth texels.
+				// What the cache saves per frame: the static casters stock draws (camera-dependent tight culling), estimated
+				// from the measured cost of the cache's casters (primitive equivalents) and the fraction of them stock
+				// draws. What it costs per frame: the copy, one depth texel per cascade texel.
 				const double area = (double)w.n * (double)w.n;
-				const double share = area / ((double)cs.size * (double)cs.size);
-				const double cost = ((double)primitives + FELLOW_DRAW_PRIMITIVE_EQUIVALENT * (double)draws) * share;
+				const double fraction = cs.cache_casters > 0 ? MIN(1.0, (double)cs.stock_casters / (double)cs.cache_casters) : 0.0;
+				const double cost = ((double)primitives + FELLOW_DRAW_PRIMITIVE_EQUIVALENT * (double)draws) * fraction;
 				if (cost < (double)min_cost * area) {
 					cs.valid = false;
 					cs.uneconomic_until = p_frame + FELLOW_UNECONOMIC_FRAMES;
@@ -2603,6 +2609,7 @@ void RendererSceneCull::_fellow_shadow_cache_decide(int p_shadow_index, uint64_t
 		} else {
 			c.fellow_mode = FELLOW_CASCADE_CACHED;
 			c.fellow_build_frame = cs.build_frame;
+			c.fellow_measure_stock = measure_stock;
 			if (margin < 0.5f) {
 				FellowCascadeCandidate &cand = candidates[candidate_count++];
 				cand.shadow = p_shadow_index;
@@ -2678,6 +2685,7 @@ void RendererSceneCull::_fellow_shadow_cache_decide(int p_shadow_index, uint64_t
 		cs.build_cam_pos = w.cam_pos;
 		cs.build_frame = p_frame;
 		cs.cost_checked = false;
+		cs.stock_measured = false;
 		cs.uneconomic_until = 0;
 		cs.last_event_seq = p_scenario->fellow_shadow_event_seq;
 		if (candidates[a].kind == 2) {
@@ -2753,6 +2761,10 @@ void RendererSceneCull::_fellow_shadow_cache_fill_render_data(int p_shadow_index
 		}
 	}
 	cs.promotable = c.fellow_promotable.get();
+	if (c.fellow_measure_stock && c.fellow_mode == FELLOW_CASCADE_CACHED) {
+		cs.stock_casters = c.fellow_stock_static.get();
+		cs.stock_measured = true;
+	}
 
 	if (c.fellow_mode < FELLOW_CASCADE_CACHED) {
 		return;
@@ -2778,6 +2790,7 @@ void RendererSceneCull::_fellow_shadow_cache_fill_render_data(int p_shadow_index
 		r_data.fellow.lod_texel_threshold = Fellow::directional_shadow_cache_texel_lod();
 		r_data.fellow.cache_instances.merge_unordered(scene_cull_result.directional_shadows[p_shadow_index].fellow_cache_instances[p_cascade]);
 		st.shadow_cache_rebuild_casters.add(r_data.fellow.cache_instances.size());
+		cs.cache_casters = (uint32_t)r_data.fellow.cache_instances.size();
 	}
 
 	// Texel offset of the cascade rect inside the cache (both are rendered with the same orientation: row 0 = min y).
@@ -3707,7 +3720,14 @@ void RendererSceneCull::_scene_cull(CullData &cull_data, InstanceCullResult &cul
 						if (cascade.fellow_mode == FELLOW_CASCADE_REBUILD && static_now && IN_FRUSTUM(cascade.fellow_cache_frustum)) {
 							cull_result.directional_shadows[j].fellow_cache_instances[k].push_back(idata.instance_geometry);
 						}
-						if (in_cache || !light_culler->cull_directional_light(cull_data.scenario->instance_aabbs[i], j, k)) {
+						if (in_cache) {
+							// Cost gate measurement (one frame per build): would stock have drawn this cached caster?
+							if (cascade.fellow_measure_stock && light_culler->cull_directional_light(cull_data.scenario->instance_aabbs[i], j, k) && IN_FRUSTUM(cascade.frustum) && VIS_CHECK) {
+								cascade.fellow_stock_static.increment();
+							}
+							continue;
+						}
+						if (!light_culler->cull_directional_light(cull_data.scenario->instance_aabbs[i], j, k)) {
 							continue;
 						}
 						if (IN_FRUSTUM(cascade.frustum) && VIS_CHECK) {

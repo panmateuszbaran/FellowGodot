@@ -128,10 +128,11 @@ inline int directional_shadow_cache_max_rebuilds() {
 }
 
 // Cost gate: a cascade is served from its cache only if the static casters it saves cost more than the copy.
-// Static cost is measured at each cache rebuild in primitive equivalents (primitives + 2000 per draw) and scaled to the
-// cascade area; the copy writes one depth texel per cascade texel. A cascade whose static cost per texel is below
-// this value is rendered the stock way (re-evaluated when it leaves the evaluated area, or after 600 frames).
-// 0 disables the gate.
+// Each cache rebuild measures its casters in primitive equivalents (primitives + 2000 per draw); the frame after, the
+// cull counts how many of them stock would draw (camera-dependent tight culling), which scales the measured cost to
+// what stock spends on static casters per frame. The copy writes one depth texel per cascade texel. A cascade whose
+// estimated static cost per cascade texel is below this value is rendered the stock way (re-evaluated when it leaves
+// the evaluated volume, or after 600 frames). 0 disables the gate.
 inline float directional_shadow_cache_min_cost() {
 	return MAX(0.0f, GLOBAL_GET_CACHED(float, "rendering/fellow/shadows/directional_cache_min_cost_per_texel"));
 }
