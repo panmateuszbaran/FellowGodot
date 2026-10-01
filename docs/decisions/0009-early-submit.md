@@ -1,6 +1,6 @@
 # 0009 — Early submit: the frame's rendering no longer waits for the swap chain
 
-Status: **DRAFT (lavapipe identical; RTX pending, `fellow20`)** · Branch `fellow/geometry` · Toggle
+Status: **REJECT (no effect on RTX; `m3_pacing`)** · Branch `fellow/geometry` · Toggle
 `rendering/fellow/frame/early_submit` (default **off** until measured) · Code: `servers/rendering/rendering_device.h/.cpp`
 (`_fellow_submit_early`, `screen_prepare_for_drawing`, `_begin_frame`, frame setup/teardown), `fellow_settings.*`.
 Benchmark harness: `run_benchmarks.py` variants with engine arguments (`^`) and start-up project settings (`%`,
@@ -60,8 +60,33 @@ every command submitted earlier to the queue. Only the time at which the GPU may
 * lavapipe (960×540, the frame split active in every frame: `frame_early_submits` counts one per frame): PBR Lab
   7 fixed cameras, Stress Lab 4 fixed cameras (second viewport, reflection probe updated every frame, omni and spot
   shadows) and the Lights Lab 60-frame walk (TAA history, volumetric fog): **0 differing pixels** in every image.
-* RTX 5070 Ti Laptop: identity (`m3_f20_temporal`) and timing (`m3_pacing`, `m3_f20_perf`): *pending*.
+* RTX 5070 Ti Laptop identity (`m3_f20_temporal`, 60-frame sequences, `fellow20` vs + early submit): Lights Lab
+  95.4 dB (max |d| 3), Sponza 75.5 dB (max 3), Bistro interior and PBR Lab at their run-to-run floor — the same
+  numbers as the null tests.
+
+## Result: the hypothesis is wrong
+
+`m3_pacing` (`fellow20`, 2 interleaved runs per variant; the split was active in every frame: 10-15 k early submits
+per run):
+
+| scene | variant | frame ms | viewport GPU ms | gap |
+|---|---|---:|---:|---:|
+| PBR Lab | FellowEngine defaults | 2.962 | 2.543 | 0.419 |
+| | + early submit | 2.922 | 2.487 | 0.435 |
+| | frame queue 3 | 2.943 | 2.529 | 0.414 |
+| | 4 swap chain images | 3.020 | 2.569 | 0.452 |
+| Bistro interior | FellowEngine defaults | 4.314 | 3.951 | 0.363 |
+| | + early submit | 4.360 | 3.986 | 0.374 |
+| | frame queue 3 | 4.392 | 4.020 | 0.372 |
+| | 4 swap chain images | 4.463 | 4.092 | 0.370 |
+
+Neither submitting the rendering before the acquisition, nor a third frame in flight, nor a fourth swap chain image
+changes the gap (every frame-time difference is within noise, p ≥ 0.05). Whatever costs those ~0.4 ms per frame
+does not wait on the acquisition or on the CPU running ahead: it is serial on the GPU queue after the frame
+(the presentation path of the hybrid laptop — the copy to the iGPU and its synchronisation — is the remaining
+suspect). Next experiment: present from a second queue (`rendering/fellow/frame/separate_present_queue`, a start-up
+setting), so that whatever the driver does at presentation happens off the main queue.
 
 ## Decision
 
-*Pending.*
+**REJECT** (off; the code stays behind the toggle for the separate-present-queue experiment, which it complements).

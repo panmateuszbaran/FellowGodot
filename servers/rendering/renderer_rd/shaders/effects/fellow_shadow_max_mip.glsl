@@ -125,34 +125,46 @@ void main() {
 
 #else // !MODE_TAIL
 
+// A window of this mip is the union of two neighbouring "parts" per axis, shared with the next window: mip 0, parts
+// are 2 x 2 atlas blocks (window i = blocks i and i + 1 = atlas texels [2i, 2i + 4)); mip m, parts are the texels 2p of
+// mip m - 1 (window i = texels 2i and 2i + 2). Each workgroup loads the 9 x 9 parts of its 8 x 8 windows once
+// (shared memory) instead of 4 x 4 per window: the same values, a quarter of the fetches.
+shared vec2 parts[9 * 9];
+
 void main() {
-	ivec2 pos = ivec2(gl_GlobalInvocationID.xy) + params.dest_offset;
+	ivec2 tile = ivec2(gl_WorkGroupID.xy) * 8 + params.dest_offset;
+	vec2 inv_size = 1.0 / vec2(params.source_size);
+	for (int i = int(gl_LocalInvocationIndex); i < 81; i += 64) {
+		ivec2 p = tile + ivec2(i % 9, i / 9);
+		vec2 mm;
+		if (params.source_is_pyramid == 0) {
+			// Atlas texels 2p and 2p + 1 on each axis: a gather at their shared corner (the sampler clamps to the atlas
+			// edge, like the shadow samplers).
+			vec4 d = textureGather(source, vec2(p * 2 + 1) * inv_size, 0);
+			mm = vec2(min(min(d.x, d.y), min(d.z, d.w)), max(max(d.x, d.y), max(d.z, d.w)));
+		} else {
+			mm = texelFetch(source, min(p * 2, params.source_size - 1), 0).rg;
+		}
+		parts[i] = mm;
+	}
+	memoryBarrierShared();
+	barrier();
+
+	ivec2 local = ivec2(gl_LocalInvocationID.xy);
+	ivec2 pos = tile + local;
 	if (any(greaterThanEqual(pos, params.dest_size))) {
 		return;
 	}
 	vec2 mm = vec2(1.0, 0.0);
-	if (params.source_is_pyramid == 0) {
-		// Mip 0: the 4 x 4 atlas texels [2i, 2i + 4), as four 2 x 2 gathers (the sampler clamps to the atlas edge, like
-		// the shadow samplers). A gather at the shared corner of texels 2i + 2a and 2i + 2a + 1 returns exactly those.
-		vec2 inv_size = 1.0 / vec2(params.source_size);
-		for (int y = 0; y < 2; y++) {
-			for (int x = 0; x < 2; x++) {
-				vec4 d = textureGather(source, vec2(pos * 2 + ivec2(x, y) * 2 + 1) * inv_size, 0);
-				mm = vec2(min(mm.x, min(min(d.x, d.y), min(d.z, d.w))), max(mm.y, max(max(d.x, d.y), max(d.z, d.w))));
-			}
+	for (int y = 0; y < 2; y++) {
+		for (int x = 0; x < 2; x++) {
+			vec2 v = parts[(local.y + y) * 9 + local.x + x];
+			mm = vec2(min(mm.x, v.x), max(mm.y, v.y));
 		}
-		if (params.round_mode != 0) {
-			// Conservative: a smaller minimum and a larger maximum only make the early-outs rarer, never wrong.
-			mm = vec2(floor(mm.x * 65535.0), ceil(mm.y * 65535.0)) / 65535.0;
-		}
-	} else {
-		// Mip m: the windows 2i and 2i + 2 of mip m - 1 (each half of this window), clamped to the previous mip.
-		for (int y = 0; y < 2; y++) {
-			for (int x = 0; x < 2; x++) {
-				vec2 v = texelFetch(source, min(pos * 2 + ivec2(x, y) * 2, params.source_size - 1), 0).rg;
-				mm = vec2(min(mm.x, v.x), max(mm.y, v.y));
-			}
-		}
+	}
+	if (params.source_is_pyramid == 0 && params.round_mode != 0) {
+		// Conservative: a smaller minimum and a larger maximum only make the early-outs rarer, never wrong.
+		mm = vec2(floor(mm.x * 65535.0), ceil(mm.y * 65535.0)) / 65535.0;
 	}
 	imageStore(dest, pos, vec4(mm, 0.0, 0.0));
 }
