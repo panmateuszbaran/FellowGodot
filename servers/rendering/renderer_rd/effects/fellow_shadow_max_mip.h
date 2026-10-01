@@ -65,6 +65,10 @@ class FellowShadowMaxMip {
 	RID shader_version;
 	RID pipeline_rg16;
 	RID pipeline_rg32;
+	RID pipeline_tail_rg16; // the mips of 32 x 32 texels and smaller in one workgroup
+	RID pipeline_tail_rg32;
+	static constexpr int TAIL_MAX_LEVELS = 8; // matches the shader
+	static constexpr int TAIL_MAX_SIZE = 32;
 	bool rg16_supported = false;
 
 	HashMap<RID, Target> targets; // key: the shadow atlas (RID() for the directional atlas)

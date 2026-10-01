@@ -1668,6 +1668,9 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 	p_render_data->scene_data->fellow_shadow_max_mip = false;
 	p_render_data->scene_data->fellow_positional_shadow_max_mip = false;
 	if (fellow_shadow_max_mip) {
+		if (Fellow::shadow_directional_max_mip() || Fellow::shadow_positional_max_mip()) {
+			RENDER_TIMESTAMP("FellowEngine Shadow Pyramids");
+		}
 		if (Fellow::shadow_directional_max_mip() && render_shadows && p_render_data->directional_shadows.size() > 0 && light_storage->directional_shadow_get_texture().is_valid()) {
 			const int atlas_size = light_storage->directional_shadow_get_size();
 			const Rect2i dirty = fellow_dir_atlas_dirty_all ? Rect2i(0, 0, atlas_size, atlas_size) : fellow_dir_atlas_dirty;

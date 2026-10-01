@@ -40,10 +40,13 @@ FellowShadowMaxMip::FellowShadowMaxMip() {
 	Vector<String> modes;
 	modes.push_back("\n");
 	modes.push_back("\n#define DEST_RG16\n");
+	modes.push_back("\n#define MODE_TAIL\n");
+	modes.push_back("\n#define MODE_TAIL\n#define DEST_RG16\n");
 	shader.initialize(modes);
-	// RG16 UNORM storage images are optional in Vulkan: compile that variant only where they are supported.
+	// RG16 UNORM storage images are optional in Vulkan: compile those variants only where they are supported.
 	rg16_supported = RD::get_singleton()->texture_is_format_supported_for_usage(RD::DATA_FORMAT_R16G16_UNORM, RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_STORAGE_BIT);
 	shader.set_variant_enabled(1, rg16_supported);
+	shader.set_variant_enabled(3, rg16_supported);
 	shader_version = shader.version_create();
 	// Pipelines are created on first use (the RG16 one only where RG16 storage images are supported).
 }
@@ -174,6 +177,39 @@ void FellowShadowMaxMip::build(RID p_key, RID p_atlas_texture, const Size2i &p_a
 			dst_hi.y = dst_size.y;
 		}
 		if (dst_hi.x <= dst_lo.x || dst_hi.y <= dst_lo.y) {
+			break;
+		}
+		if (i > 0 && dst_size.x <= TAIL_MAX_SIZE && dst_size.y <= TAIL_MAX_SIZE) {
+			// This mip and every smaller one, entirely, in one workgroup (from the previous mip).
+			const int tail_levels = MIN(int(level_views.size() - i), TAIL_MAX_LEVELS);
+			RID shader_tail = shader.version_get_shader(shader_version, texture_rg16 ? 3 : 2);
+			ERR_FAIL_COND(shader_tail.is_null());
+			RID &pipeline_tail = texture_rg16 ? pipeline_tail_rg16 : pipeline_tail_rg32;
+			if (pipeline_tail.is_null()) {
+				pipeline_tail = RD::get_singleton()->compute_pipeline_create(shader_tail);
+			}
+			Vector<RID> views;
+			for (int k = 0; k < TAIL_MAX_LEVELS; k++) {
+				views.push_back(level_views[i + MIN(k, tail_levels - 1)]); // unused slots repeat the last mip (never written)
+			}
+			RD::Uniform u_src(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 0, Vector<RID>({ nearest, level_views[i - 1] }));
+			RD::Uniform u_dst(RD::UNIFORM_TYPE_IMAGE, 0, views);
+			PushConstant pc;
+			pc.source_size[0] = src_size.x;
+			pc.source_size[1] = src_size.y;
+			pc.dest_size[0] = dst_size.x;
+			pc.dest_size[1] = dst_size.y;
+			pc.source_is_pyramid = 1;
+			pc.round_mode = 0;
+			pc.dest_offset[0] = tail_levels;
+			pc.dest_offset[1] = 0;
+			RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
+			RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, pipeline_tail);
+			RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache(shader_tail, 0, u_src), 0);
+			RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache(shader_tail, 1, u_dst), 1);
+			RD::get_singleton()->compute_list_set_push_constant(compute_list, &pc, sizeof(PushConstant));
+			RD::get_singleton()->compute_list_dispatch(compute_list, 1, 1, 1);
+			RD::get_singleton()->compute_list_end();
 			break;
 		}
 		RID src = i == 0 ? p_atlas_texture : level_views[i - 1];
