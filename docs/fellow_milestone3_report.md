@@ -152,18 +152,31 @@ Milestone 3 changes no pixel by design; the image-quality comparison with the gr
 * A debug shader patch was committed by `git commit -a` and taken out again; files are now staged explicitly.
 * Early submit was built on a hypothesis (the frame waits on the swap-chain acquisition) that the measurement refuted
   (0009); presenting from a second queue made frames slower.
+* `fellow25` and `fellow26` did not build on Windows (MSVC: a copy-initialised `LocalVector`, whose copy constructor
+  is explicit; GCC accepted it); both jobs stopped at the build check, no benchmark ran. Fixed in `cc2ccd5`.
 * Blended alpha-zero skip (0010): the first version dropped single fragments and changed 109-407 pixels per image by
   up to 11/255 on lavapipe (its quad neighbours' derivatives); now quad-uniform and bit-identical.
 
 ## 7. After the measured binary
 
-| Change | Commit | Status |
+| Change | Commit | Result |
 |---|---|---|
-| SSAO gather with each workgroup's depths and normals in shared memory (`postfx/ssao_shared_tile`, on) | `2be6b7c`, `4083b37` | identical; `m3_f23_perf` |
-| TAA v2: tonemapped YCoCg of each tile texel computed once | `cde4a0b` | identical; `m3_f23_perf` |
-| Pyramid rebuilt over the union of an atlas's written rects (`build_rects`) | `ee8226d` | identical; `fellow24` |
-| Blended alpha-zero skip (0010, off) | `874af3e` | lavapipe identical; `m3_f24_*` |
-| Directional pyramid computed only over the part of each cascade the camera can look up (`shadows/max_mip_visible_region`) | — | lavapipe identical; `fellow25` |
+| SSAO gather with each workgroup's depths and normals in shared memory (0011) | `2be6b7c`, `4083b37` | identical; **no measurable effect** (`m3_f23_perf`: −1.1 to +0.1 %, all p > 0.1) → REJECT, default off |
+| TAA v2: tonemapped YCoCg of each tile texel computed once (0011) | `cde4a0b` | identical; no measurable effect; kept |
+| Pyramid rebuilt over the union of an atlas's written rects (`build_rects`, 0005) | `ee8226d` | identical; build −0.02 ms in every scene with a sun (`m3_f24_profile`: Sponza 0.109 → 0.087, Bistro exterior 0.084 → 0.061, PBR Lab 0.092 → 0.072 ms) |
+| Blended alpha-zero skip (0010, off) | `874af3e` | RTX bit-identical (Blend Lab 99 dB, max \|d\| 0; other scenes at their floor); Blend Lab transparent pass **0.417 → 0.275 ms (−34 %)**; Sponza transparent −0.05 ms, frame −1.1 % (p 0.44, within noise); other scenes unchanged |
+| Directional pyramid over the part of each cascade the camera can look up (`max_mip_visible_region`, 0005) | `c63638d`, `cc2ccd5` | lavapipe identical, 36-41 % fewer texels read; RTX not yet measured (the first Windows build failed, see §6) |
+| Shadow pyramids and PCSS blend band behind specialization constants | `ead26ec` | lavapipe identical; RTX not yet measured |
+| One clear of the whole directional atlas when no cascade comes from the cache | `77c8b1a` | lavapipe identical; RTX not yet measured |
+
+**The Lights Lab M2 cost** (§1), ablation `m3_f24_ablation` (one profiled run each, opaque pass): stock 1.359 ms,
+M2 1.660, M2 without the positional back-facing skip 1.638 — none of the milestone-2 features active in that scene
+(no sun shadows, no clustered meshes) explains the +0.3 ms. Default configuration 1.094; removing one feature at a
+time: back-facing skip 1.119, zero-attenuation skip 1.311, positional pyramid 1.092, directional skips 1.093. In
+Bistro interior the positional pyramid saves 0.25 ms of the opaque pass and the back-facing skip 0.11 ms (`m3_f24_perf`:
+without the skip +3.0 %, p 0.002). Hypothesis: code present in the shader but switched off by a runtime flag still
+costs registers in the light loops; the specialization constants above remove it from the pipelines that do not use
+it. Pending measurement.
 
 ## 8. Exact files changed (milestone 3, `0ba5e35..HEAD`, generated headers excluded)
 
