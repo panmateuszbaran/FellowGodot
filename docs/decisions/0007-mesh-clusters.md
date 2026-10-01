@@ -97,7 +97,18 @@ with large surfaces; nothing in scenes made of small objects (instance culling a
 
 ## Actual visual quality
 
-*pending (`m3_cl_temporal`, RTX).*
+`m3_cl_temporal` (RTX 5070 Ti, 60-frame sequences after a 200-frame pre-roll, 1920×1080; copy version `fellow14`,
+identical culling and draws to the in-place version), `variant_diff.py`:
+
+| sequence | FellowEngine defaults vs + clusters: PSNR mean (min) | max abs. diff | pixels > 2/255 |
+|---|---|---:|---:|
+| sponza_pan (142 surfaces clustered) | 80.4 dB (74.8) | 1 | 0.000 % |
+| bistro_ext_path | 101.2 dB (99.0) | 1 | 0.000 % |
+| bistro_int_path | 69.3 dB (67.2) | 5 | 0.000 % |
+| PBR Lab sequences (no surface reaches 32768 triangles: null test of the GPU's run-to-run variation) | 67.8-82.1 dB (66.2) | 18 | 0.000 % |
+
+Image-identical within the run-to-run variation of the GPU (which the PBR null test shows to be larger than any
+difference in the clustered scenes). The in-place version is re-checked in the same way (`m3_cl16_temporal`).
 
 ## Regression risk
 
