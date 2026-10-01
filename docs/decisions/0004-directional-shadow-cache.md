@@ -1,7 +1,7 @@
 # 0004 — Directional shadow static cache
 
 Status: **KEEP** (per-pass and image evidence; frame-level day-state confirmation in the milestone-2 report) · Branch `fellow/shadows` · Toggle `rendering/fellow/shadows/directional_cache`
-(default **off**) · Code: `servers/rendering/renderer_scene_cull.cpp` (`_fellow_shadow_cache_*`),
+(default **on** since milestone 2) · Code: `servers/rendering/renderer_scene_cull.cpp` (`_fellow_shadow_cache_*`),
 `servers/rendering/renderer_rd/effects/fellow_shadow_cache.*`, `shaders/effects/fellow_shadow_cache_copy.glsl`,
 `render_forward_clustered.cpp` (`_render_shadow_pass`)
 

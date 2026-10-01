@@ -118,7 +118,7 @@ class ClusterBuilderSharedDataRD {
 			uint32_t orthogonal;
 			uint32_t max_cluster_element_count_div_32;
 
-			uint32_t pad1;
+			uint32_t fellow_log_depth; // FellowEngine: logarithmic depth slices.
 			uint32_t pad2;
 		};
 
@@ -167,8 +167,36 @@ private:
 		uint32_t original_index;
 		float transform_inv[12]; // Transposed transform for less space.
 		float scale[3];
+		// Bit 0: spot light drawn with the sphere proxy (wide angle). FellowEngine depth slices: bit 1 set when bits 8-15
+		// (first slice) and 16-23 (end slice, exclusive) hold the element's conservative depth range.
 		uint32_t has_wide_spot_angle;
 	}; // Keep aligned to 32 bytes.
+
+	// FellowEngine depth slices (fellow_settings.h, light_cluster_depth_slices): 32 slices logarithmic in view depth
+	// between the near and far planes instead of linear over [0, far].
+	bool fellow_log_depth = false;
+	float fellow_log_scale = 0.0; // Slices per doubling of the view depth.
+
+	// Slice of a view depth (the scene shaders compute the same function).
+	_FORCE_INLINE_ uint32_t _fellow_log_slice(float p_depth) const {
+		if (!(p_depth > z_near)) {
+			return 0;
+		}
+		const float s = Math::log2(p_depth / z_near) * fellow_log_scale;
+		return s >= 31.0f ? 31u : uint32_t(s);
+	}
+
+	// Stores the slices covering view depths [p_min, p_max] (a conservative range of everything the element can affect),
+	// widened by 0.1 % on each side so that the GPU's evaluation of the slice function can never put a depth inside the
+	// range into a slice outside it.
+	_FORCE_INLINE_ void _fellow_store_depth_range(RenderElementData &r_e, float p_min, float p_max) const {
+		if (!fellow_log_depth) {
+			return;
+		}
+		const uint32_t from = (p_min <= z_near || r_e.touches_near) ? 0u : _fellow_log_slice(p_min * 0.999f);
+		const uint32_t to = (p_max >= z_far || r_e.touches_far) ? 32u : _fellow_log_slice(p_max * 1.001f) + 1u;
+		r_e.has_wide_spot_angle = (r_e.has_wide_spot_angle & 1u) | 2u | (from << 8) | (to << 16);
+	}
 
 	uint32_t cluster_count_by_type[ELEMENT_TYPE_MAX] = {};
 	uint32_t max_elements_by_type = 0;
@@ -231,7 +259,12 @@ private:
 public:
 	void setup(Size2i p_screen_size, uint32_t p_max_elements, RID p_depth_buffer, RID p_depth_buffer_sampler, RID p_color_buffer);
 
-	void begin(const Transform3D &p_view_transform, const Projection &p_cam_projection, bool p_flip_y);
+	// p_fellow_log_depth: FellowEngine depth slices (applied to perspective projections only; see fellow_get_log_depth()).
+	void begin(const Transform3D &p_view_transform, const Projection &p_cam_projection, bool p_flip_y, bool p_fellow_log_depth = false);
+	// Whether the clusters of this frame use FellowEngine depth slices (the shaders must use the same slice function).
+	bool fellow_get_log_depth() const { return fellow_log_depth; }
+	// Near plane of the logarithmic slices, 0 for stock's linear slices (volumetric fog).
+	float fellow_get_log_z_near() const { return fellow_log_depth ? z_near : 0.0f; }
 
 	_FORCE_INLINE_ void add_light(LightType p_type, const Transform3D &p_transform, float p_radius, float p_spot_aperture, const Vector2 &p_area_size) {
 		if (p_type == LIGHT_TYPE_OMNI && cluster_count_by_type[ELEMENT_TYPE_OMNI_LIGHT] == max_elements_by_type) {
@@ -277,13 +310,19 @@ public:
 			e.scale[2] = radius;
 			if (p_type == LIGHT_TYPE_OMNI) {
 				e.type = ELEMENT_TYPE_OMNI_LIGHT;
+				e.has_wide_spot_angle = 0;
 				e.original_index = cluster_count_by_type[ELEMENT_TYPE_OMNI_LIGHT];
 				cluster_count_by_type[ELEMENT_TYPE_OMNI_LIGHT]++;
 			} else { // LIGHT_TYPE_SPOT with wide angle.
 				e.type = ELEMENT_TYPE_SPOT_LIGHT;
-				e.has_wide_spot_angle = true;
+				e.has_wide_spot_angle = 1;
 				e.original_index = cluster_count_by_type[ELEMENT_TYPE_SPOT_LIGHT];
 				cluster_count_by_type[ELEMENT_TYPE_SPOT_LIGHT]++;
+			}
+			if (fellow_log_depth) {
+				// The shaders attenuate with the light's range, not scaled by its transform: cover both.
+				const float r = MAX(radius, p_radius * shared->sphere_overfit);
+				_fellow_store_depth_range(e, depth - r, depth + r);
 			}
 
 			RendererRD::MaterialStorage::store_transform_transposed_3x4(xform, e.transform_inv);
@@ -325,9 +364,21 @@ public:
 			e.scale[0] = len * shared->cone_overfit;
 			e.scale[1] = len * shared->cone_overfit;
 			e.scale[2] = radius;
-			e.has_wide_spot_angle = false;
+			e.has_wide_spot_angle = 0;
 			e.type = ELEMENT_TYPE_SPOT_LIGHT;
 			e.original_index = cluster_count_by_type[ELEMENT_TYPE_SPOT_LIGHT];
+			if (fellow_log_depth) {
+				// Depth range of the proxy cone (apex and base disc), which contains the lit region (range from the apex
+				// within the spot angle; scaled up to the unscaled range if the transform shrinks it).
+				const float k = MAX(1.0f, p_radius * shared->cone_overfit / MAX(radius, 1e-6f));
+				const float h = radius * k;
+				const float rho = len * shared->cone_overfit * k;
+				const Vector3 axis = -xform.basis.get_column(Vector3::AXIS_Z).normalized();
+				const float apex_d = -xform.origin.z;
+				const float base_d = apex_d - axis.z * h;
+				const float spread = rho * Math::sqrt(MAX(0.0f, 1.0f - axis.z * axis.z));
+				_fellow_store_depth_range(e, MIN(apex_d, base_d - spread), MAX(apex_d, base_d + spread));
+			}
 
 			RendererRD::MaterialStorage::store_transform_transposed_3x4(xform, e.transform_inv);
 
@@ -358,6 +409,13 @@ public:
 			e.scale[0] = scale.x;
 			e.scale[1] = scale.y;
 			e.scale[2] = scale.z;
+			e.has_wide_spot_angle = 0;
+			if (radius >= p_radius * 0.999f) {
+				// (A transform scale below 1 shrinks the proxy box below the lit region: keep stock's range then.)
+				// View-depth extent of the proxy box (box_depth above projects the extents with signs).
+				const float fellow_box_depth = Math::abs(xform.basis.rows[2][0]) * scale.x + Math::abs(xform.basis.rows[2][1]) * scale.y + Math::abs(xform.basis.rows[2][2]) * scale.z;
+				_fellow_store_depth_range(e, depth - fellow_box_depth, depth + fellow_box_depth);
+			}
 
 			e.type = ELEMENT_TYPE_AREA_LIGHT;
 			e.original_index = cluster_count_by_type[ELEMENT_TYPE_AREA_LIGHT];
@@ -380,6 +438,10 @@ public:
 
 		RenderElementData &e = render_elements[render_element_count];
 		Transform3D xform = view_xform * p_transform;
+
+		// FellowEngine depth slices: view-depth extent of the box itself (sum of its scaled axes' depth components).
+		const float fellow_box_depth = Math::abs(xform.basis.rows[2][0]) * p_half_size.x + Math::abs(xform.basis.rows[2][1]) * p_half_size.y + Math::abs(xform.basis.rows[2][2]) * p_half_size.z;
+		const float fellow_box_center = -xform.origin.z;
 
 		// Extract scale and scale the matrix by it, makes things simpler.
 		Vector3 scale = p_half_size;
@@ -405,6 +467,9 @@ public:
 		e.scale[0] = scale.x;
 		e.scale[1] = scale.y;
 		e.scale[2] = scale.z;
+		e.has_wide_spot_angle = 0;
+		// (Not box_depth above: that projects the extents with signs and can be smaller than the box's real extent.)
+		_fellow_store_depth_range(e, fellow_box_center - fellow_box_depth, fellow_box_center + fellow_box_depth);
 
 		e.type = (p_box_type == BOX_TYPE_DECAL) ? ELEMENT_TYPE_DECAL : ELEMENT_TYPE_REFLECTION_PROBE;
 		e.original_index = cluster_count_by_type[e.type];

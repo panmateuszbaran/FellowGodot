@@ -51,7 +51,7 @@ layout(push_constant, std430) uniform Params {
 
 	bool orthogonal;
 	uint max_cluster_element_count_div_32;
-	uint pad1;
+	uint fellow_log_depth; // FellowEngine: logarithmic depth slices.
 	uint pad2;
 }
 params;
@@ -85,9 +85,14 @@ void main() {
 	} else {
 		depth = 2.0 * params.z_near * params.z_far / (params.z_far + params.z_near - depth * (params.z_far - params.z_near));
 	}
-	depth /= params.z_far;
-
-	uint slice = uint(clamp(floor(depth * 32.0), 0.0, 31.0));
+	uint slice;
+	if (params.fellow_log_depth != 0u) {
+		// FellowEngine depth slices (cluster_builder_rd.h).
+		slice = depth > params.z_near ? min(uint(log2(depth / params.z_near) * (32.0 / log2(params.z_far / params.z_near))), 31u) : 0u;
+	} else {
+		depth /= params.z_far;
+		slice = uint(clamp(floor(depth * 32.0), 0.0, 31.0));
+	}
 	uint slice_minmax = cluster_data.data[offset + params.max_cluster_element_count_div_32 + slice];
 	uint item_min = slice_minmax & 0xFFFF;
 	uint item_max = slice_minmax >> 16;

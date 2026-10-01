@@ -1,6 +1,6 @@
 # 0007 — Mesh clusters (frustum culling inside large surfaces)
 
-Status: **KEEP** · Branch `fellow/geometry` · Toggle `rendering/fellow/geometry/mesh_clusters` (default **off**)
+Status: **KEEP** · Branch `fellow/geometry` · Toggle `rendering/fellow/geometry/mesh_clusters` (default **on**)
 · Code: `servers/rendering/renderer_rd/storage_rd/fellow_mesh_clusters.*`, `mesh_storage.cpp` (`mesh_add_surface`),
 `render_forward_clustered.cpp` (`_render_list_template`, `_render_scene`, `_render_shadow_append`),
 `rendering_device.cpp` (`draw_list_draw_indexed_range`)

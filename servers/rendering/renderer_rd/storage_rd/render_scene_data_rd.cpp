@@ -162,6 +162,7 @@ void RenderSceneDataRD::update_ubo(RID p_uniform_buffer, RSE::ViewportDebugDraw 
 	ubo.flags |= Fellow::shadow_skip_backfacing_positional() ? SCENE_DATA_FLAGS_FELLOW_SKIP_BACKFACING_POSITIONAL : 0;
 	ubo.flags |= Fellow::shadow_pcss_directional_penumbra() ? SCENE_DATA_FLAGS_FELLOW_PCSS_DIRECTIONAL_PENUMBRA : 0;
 	ubo.flags |= (fellow_shadow_max_mip && Fellow::shadow_directional_max_mip()) ? SCENE_DATA_FLAGS_FELLOW_SHADOW_MAX_MIP : 0;
+	ubo.flags |= fellow_cluster_log_depth ? SCENE_DATA_FLAGS_FELLOW_CLUSTER_LOG_DEPTH : 0;
 
 	if (p_debug_mode == RSE::VIEWPORT_DEBUG_DRAW_UNSHADED) {
 		ubo.flags |= SCENE_DATA_FLAGS_USE_AMBIENT_LIGHT;

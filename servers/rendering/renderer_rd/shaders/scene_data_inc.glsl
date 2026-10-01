@@ -18,6 +18,8 @@
 #define SCENE_DATA_FLAGS_FELLOW_SKIP_BACKFACING_POSITIONAL (1 << 11)
 #define SCENE_DATA_FLAGS_FELLOW_PCSS_DIRECTIONAL_PENUMBRA (1 << 12)
 #define SCENE_DATA_FLAGS_FELLOW_SHADOW_MAX_MIP (1 << 13)
+// FellowEngine (rendering/fellow/lights/cluster_depth_slices): logarithmic depth slices of the Forward+ clusters.
+#define SCENE_DATA_FLAGS_FELLOW_CLUSTER_LOG_DEPTH (1 << 14)
 
 struct SceneData {
 	mat4 projection_matrix;

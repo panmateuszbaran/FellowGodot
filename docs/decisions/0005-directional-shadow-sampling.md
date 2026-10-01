@@ -1,9 +1,9 @@
 # 0005 — Directional shadow sampling in the Forward+ scene shader
 
-Status: **DRAFT (night-state measurements in; day-state confirmation pending)** · Branch `fellow/shadows` · Toggles
-(default **off**): `rendering/fellow/shadows/skip_backfacing_directional`, `skip_backfacing_positional`,
-`skip_unblended_cascade`, `directional_max_mip` (image-identical); `pcss_blend_band`, `pcss_directional_penumbra`
-(look changes) · Code: `shaders/forward_clustered/scene_forward_clustered.glsl` (directional shadow loop,
+Status: **DRAFT (night-state measurements in; day-state confirmation pending)** · Branch `fellow/shadows` · Toggles:
+`rendering/fellow/shadows/skip_backfacing_directional`, `skip_backfacing_positional`, `skip_unblended_cascade`
+(image-identical, default **on** since milestone 2), `directional_max_mip` (image-identical, default off);
+`pcss_blend_band`, `pcss_directional_penumbra` (look changes, default off) · Code: `shaders/forward_clustered/scene_forward_clustered.glsl` (directional shadow loop,
 `fellow_directional_soft_cascade()`), `shaders/scene_forward_lights_inc.glsl` (`sample_directional_soft_shadow`,
 omni/spot early return), `effects/fellow_shadow_max_mip.*`, scene UBO flags 8-13.
 

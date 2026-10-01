@@ -1,6 +1,6 @@
 extends Node
 ## FellowBench entry point. Behaviour is driven by user CLI args (after "--"):
-##   --scene=<pbr|sponza|bistro_exterior|bistro_interior|fluid>
+##   --scene=<pbr|sponza|bistro_exterior|bistro_interior|fluid|stress|lights>
 ##   --mode=<perf|capture|temporal|reference|list|geodump>
 ##   --out=<dir>              output directory (created if needed)
 ##   --tag=<label>            free label stored in results (e.g. stock, fellow)
@@ -30,6 +30,7 @@ const SCENES := {
 	"bistro_interior": "res://scenes/bistro.gd",
 	"fluid": "res://scenes/fluid_lab.gd",
 	"stress": "res://scenes/stress_lab.gd",
+	"lights": "res://scenes/lights_lab.gd",
 }
 const DT := 1.0 / 60.0
 

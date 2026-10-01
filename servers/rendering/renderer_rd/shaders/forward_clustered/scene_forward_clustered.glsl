@@ -550,7 +550,7 @@ void vertex_shader(vec3 vertex_input,
 	uvec2 screen_pixel = clamp(uvec2(clip_pos * vec2(screen_size)), uvec2(0), screen_size - uvec2(1));
 	uvec2 cluster_pos = screen_pixel >> implementation_data.cluster_shift;
 	uint cluster_offset = (implementation_data.cluster_width * cluster_pos.y + cluster_pos.x) * (implementation_data.max_cluster_element_count_div_32 + 32);
-	uint cluster_z = uint(clamp((-vertex_interp.z / scene_data.z_far) * 32.0, 0.0, 31.0));
+	uint cluster_z = fellow_cluster_z(-vertex_interp.z, scene_data.z_near, scene_data.z_far, scene_data.flags);
 
 	{ //omni lights
 
@@ -1595,7 +1595,7 @@ void fragment_shader(in SceneData scene_data) {
 #endif
 	uint cluster_offset = (implementation_data.cluster_width * cluster_pos.y + cluster_pos.x) * (implementation_data.max_cluster_element_count_div_32 + 32);
 
-	uint cluster_z = uint(clamp((-vertex.z / scene_data.z_far) * 32.0, 0.0, 31.0));
+	uint cluster_z = fellow_cluster_z(-vertex.z, scene_data.z_near, scene_data.z_far, scene_data.flags);
 
 	//used for interpolating anything cluster related
 	vec3 vertex_ddx = dFdx(vertex);

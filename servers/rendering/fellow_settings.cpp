@@ -68,6 +68,8 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/geometry/cluster_blended_surfaces", true);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/geometry/cluster_triangles", PROPERTY_HINT_RANGE, "64,65536,1"), 4096);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/geometry/cluster_min_surface_triangles", PROPERTY_HINT_RANGE, "256,1048576,1"), 32768);
+	GLOBAL_DEF("rendering/fellow/lights/enabled", true);
+	GLOBAL_DEF("rendering/fellow/lights/cluster_depth_slices", false);
 }
 
 Fellow::Stats &Fellow::stats() {

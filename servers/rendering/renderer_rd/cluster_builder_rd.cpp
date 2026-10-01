@@ -412,12 +412,14 @@ void ClusterBuilderRD::setup(Size2i p_screen_size, uint32_t p_max_elements, RID 
 	}
 }
 
-void ClusterBuilderRD::begin(const Transform3D &p_view_transform, const Projection &p_cam_projection, bool p_flip_y) {
+void ClusterBuilderRD::begin(const Transform3D &p_view_transform, const Projection &p_cam_projection, bool p_flip_y, bool p_fellow_log_depth) {
 	view_xform = p_view_transform.affine_inverse();
 	projection = p_cam_projection;
 	z_near = projection.get_z_near();
 	z_far = projection.get_z_far();
 	camera_orthogonal = p_cam_projection.is_orthogonal();
+	fellow_log_depth = p_fellow_log_depth && !camera_orthogonal && z_near > 0.0f && z_far > z_near * 1.01f;
+	fellow_log_scale = fellow_log_depth ? 32.0f / Math::log2(z_far / z_near) : 0.0f;
 	adjusted_projection = projection;
 	if (!camera_orthogonal) {
 		adjusted_projection.adjust_perspective_znear(0.0001);
@@ -488,7 +490,7 @@ void ClusterBuilderRD::bake_cluster() {
 						// If the spot angle is above a certain threshold, use a sphere instead of a cone for building the clusters
 						// since the cone gets too flat/large (spot angle close to 90 degrees) or
 						// can't even cover the affected area of the light (spot angle above 90 degrees).
-						if (render_elements[i].has_wide_spot_angle) {
+						if (render_elements[i].has_wide_spot_angle & 1u) {
 							RD::get_singleton()->draw_list_bind_vertex_array(draw_list, shared->sphere_vertex_array);
 							RD::get_singleton()->draw_list_bind_index_array(draw_list, shared->sphere_index_array);
 						} else {
@@ -562,6 +564,8 @@ void ClusterBuilderRD::debug(ElementType p_element) {
 	push_constant.z_far = z_far;
 	push_constant.z_near = z_near;
 	push_constant.max_cluster_element_count_div_32 = max_elements_by_type / 32;
+	push_constant.fellow_log_depth = fellow_log_depth ? 1 : 0;
+	push_constant.pad2 = 0;
 
 	RD::get_singleton()->compute_list_set_push_constant(compute_list, &push_constant, sizeof(ClusterBuilderSharedDataRD::ClusterDebug::PushConstant));
 

@@ -186,7 +186,8 @@ layout(set = 0, binding = 15, std140) uniform Params {
 	float temporal_blend;
 
 	vec2 sky_border_size;
-	vec2 pad;
+	float fellow_cluster_z_near; // FellowEngine depth slices of the clusters: near plane, 0 for stock's linear slices.
+	float pad;
 
 	mat3x4 cam_rotation;
 	mat4 to_prev_view;
@@ -362,7 +363,14 @@ void main() {
 		}
 	}
 
-	uint cluster_z = uint(clamp((abs(view_pos.z) / params.z_far) * 32.0, 0.0, 31.0));
+	uint cluster_z;
+	if (params.fellow_cluster_z_near > 0.0) {
+		// Same slice function as scene_forward_clustered_inc.glsl / cluster_store.glsl.
+		float depth = abs(view_pos.z);
+		cluster_z = depth > params.fellow_cluster_z_near ? min(uint(log2(depth / params.fellow_cluster_z_near) * (32.0 / log2(params.z_far / params.fellow_cluster_z_near))), 31u) : 0u;
+	} else {
+		cluster_z = uint(clamp((abs(view_pos.z) / params.z_far) * 32.0, 0.0, 31.0));
+	}
 
 	vec3 total_light = vec3(0.0);
 

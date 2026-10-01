@@ -14,7 +14,7 @@ import json
 import re
 import sys
 
-TITLE = {"pbr": "PBR Lab", "sponza": "Sponza", "bistro_exterior": "Bistro exterior", "bistro_interior": "Bistro interior"}
+TITLE = {"pbr": "PBR Lab", "sponza": "Sponza", "bistro_exterior": "Bistro exterior", "bistro_interior": "Bistro interior", "lights": "Lights Lab", "stress": "Stress Lab"}
 
 
 def val(x):

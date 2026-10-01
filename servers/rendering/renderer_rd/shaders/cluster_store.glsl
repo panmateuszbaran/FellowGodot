@@ -83,6 +83,16 @@ void main() {
 					to_z = 32;
 				}
 
+				uint fellow_range = render_elements.data[index].pad;
+				if ((fellow_range & 2u) != 0u) {
+					// FellowEngine depth slices (cluster_builder_rd.h): the slices are logarithmic in view depth and the
+					// element covers the slices of its conservative view-depth range (computed on the CPU), which replaces
+					// the range rasterised above: that one is sampled (it can miss depths the element reaches, which the
+					// coarse linear slices hide) and is in linear units.
+					from_z = (fellow_range >> 8) & 0xFFu;
+					to_z = (fellow_range >> 16) & 0xFFu;
+				}
+
 				// find cluster offset in the buffer used for indexing in the renderer
 				uint dst_offset = (base_offset + type * (params.cluster_screen_size.x * params.cluster_screen_size.y)) * (params.max_cluster_element_count_div_32 + 32);
 

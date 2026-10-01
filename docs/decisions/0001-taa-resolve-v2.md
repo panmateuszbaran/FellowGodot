@@ -1,7 +1,7 @@
 # 0001 — TAA resolve v2
 
 Status: **KEEP** (with one documented weakness: alpha-tested thin foliage under lateral motion) · Branch `fellow/postfx` (commits `c8a1995f0d`, fix `94f43415e7`) · Toggle
-`rendering/fellow/postfx/taa_resolve_v2` (default **off**) · Binary used for all numbers: FellowEngine `7f257b56ff`
+`rendering/fellow/postfx/taa_resolve_v2` (default **on** since milestone 2, with motion soften 0.35 / contrast 0.45) · Binary used for all numbers: FellowEngine `7f257b56ff`
 
 ## Problem
 

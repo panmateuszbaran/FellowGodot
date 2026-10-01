@@ -118,6 +118,8 @@ runtime and per benchmark variant (`run_benchmarks.py --builds "label=fellow@key
 | `rendering/fellow/geometry/cluster_triangles` | 4096 | maximum triangles per cluster |
 | `rendering/fellow/geometry/cluster_blended_surfaces` | **true** | surfaces drawn with blending keep their triangle order and are culled with order-preserving clusters (off: drawn whole) |
 | `rendering/fellow/geometry/cluster_min_surface_triangles` | 32768 | surfaces with fewer triangles are not clustered |
+| `rendering/fellow/lights/enabled` | true | master switch for light-clustering experiments |
+| `rendering/fellow/lights/cluster_depth_slices` | false | light/decal/probe clusters with logarithmic depth slices and conservative per-element depth ranges (`docs/decisions/0008-light-cluster-depth.md`); read every frame |
 | `rendering/fellow/profiling/pass_timestamps` | false | per-pass GPU timestamps without `--gpu-profile` (performance overlay) |
 
 Build times on the benchmark machine (Core Ultra 9 275HX, 24 threads): template_release ~14 min, editor ~18 min

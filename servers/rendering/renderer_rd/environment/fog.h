@@ -183,7 +183,8 @@ private:
 			float temporal_blend;
 
 			float sky_border_size[2];
-			float pad[2];
+			float fellow_cluster_z_near; // FellowEngine depth slices of the clusters: near plane, 0 for stock's slices.
+			float pad;
 
 			float cam_rotation[12];
 			float to_prev_view[16];

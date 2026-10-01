@@ -1,7 +1,7 @@
 # 0002 — TAA history ping-pong
 
 Status: **KEEP** (enable by default in FellowEngine presets; remains a toggle) · Branch `fellow/postfx` (`c8a1995f0d`) · Toggle `rendering/fellow/postfx/taa_history_pingpong`
-(default **off**) · Binary: FellowEngine `7f257b56ff`
+(default **on** since milestone 2) · Binary: FellowEngine `7f257b56ff`
 
 ## Problem
 

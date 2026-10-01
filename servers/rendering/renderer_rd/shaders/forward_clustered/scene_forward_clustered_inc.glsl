@@ -317,6 +317,16 @@ layout(set = 1, binding = 0, std140) uniform SceneDataBlock {
 }
 scene_data_block;
 
+// Depth slice of the light / decal / reflection probe clusters for a view depth. FellowEngine depth slices
+// (SCENE_DATA_FLAGS_FELLOW_CLUSTER_LOG_DEPTH, cluster_builder_rd.h): 32 slices logarithmic between the near and far
+// planes, computed exactly like cluster_store.glsl; otherwise stock's 32 linear slices over [0, far].
+uint fellow_cluster_z(float p_depth, float p_z_near, float p_z_far, uint p_flags) {
+	if (bool(p_flags & SCENE_DATA_FLAGS_FELLOW_CLUSTER_LOG_DEPTH)) {
+		return p_depth > p_z_near ? min(uint(log2(p_depth / p_z_near) * (32.0 / log2(p_z_far / p_z_near))), 31u) : 0u;
+	}
+	return uint(clamp((p_depth / p_z_far) * 32.0, 0.0, 31.0));
+}
+
 struct ImplementationData {
 	uint cluster_shift;
 	uint cluster_width;

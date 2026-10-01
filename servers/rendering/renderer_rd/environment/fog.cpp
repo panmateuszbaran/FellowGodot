@@ -1160,6 +1160,9 @@ void Fog::volumetric_fog_update(const VolumetricFogSettings &p_settings, const P
 
 		params.screen_size[0] = p_settings.rb_size.x;
 		params.screen_size[1] = p_settings.rb_size.y;
+
+		params.fellow_cluster_z_near = p_settings.cluster_builder->fellow_get_log_z_near();
+		params.pad = 0.0f;
 	}
 
 	Basis sky_transform = RendererSceneRenderRD::get_singleton()->environment_get_sky_orientation(p_settings.env);

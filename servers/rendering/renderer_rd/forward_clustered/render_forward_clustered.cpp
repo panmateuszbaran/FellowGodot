@@ -1711,7 +1711,11 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 		// This only works as we don't filter our cluster by depth buffer.
 		// If we ever make this optimization we should make it optional and only use it in mono.
 		// What we win by filtering out a few lights, we loose by having to do the work double for stereo.
-		current_cluster_builder->begin(p_render_data->scene_data->cam_transform, p_render_data->scene_data->cam_projection, !p_render_data->reflection_probe.is_valid());
+		// FellowEngine depth slices (fellow_settings.h): mono only, since the cluster depths are those of the combined
+		// (center) view.
+		const bool fellow_log_depth = Fellow::light_cluster_depth_slices() && p_render_data->scene_data->view_count == 1;
+		current_cluster_builder->begin(p_render_data->scene_data->cam_transform, p_render_data->scene_data->cam_projection, !p_render_data->reflection_probe.is_valid(), fellow_log_depth);
+		p_render_data->scene_data->fellow_cluster_log_depth = current_cluster_builder->fellow_get_log_depth();
 	}
 
 	bool using_shadows = true;

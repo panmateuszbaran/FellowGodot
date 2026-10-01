@@ -225,6 +225,21 @@ inline int mesh_cluster_min_surface_triangles() {
 	return MAX(256, GLOBAL_GET_CACHED(int, "rendering/fellow/geometry/cluster_min_surface_triangles"));
 }
 
+inline bool lights_enabled() {
+	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/lights/enabled");
+}
+
+// Light clusters with depth slices (docs/decisions/0008-light-cluster-depth.md): the 32 depth slices of the Forward+
+// light/decal/probe clusters are spaced logarithmically between the camera's near and far planes (stock: linear over
+// [0, far], 125 m each with the default far of 4000 m), and every element covers the slices of its own conservative
+// view-depth range (stock: the range its proxy mesh rasterises to in each tile, which is sampled). A pixel only loops
+// over the elements whose range contains its depth; the elements it no longer visits cannot reach it (zero
+// attenuation): image-identical except where stock's sampled ranges miss an element that reaches the pixel.
+// Perspective cameras with one view only (others: stock). Read every frame.
+inline bool light_cluster_depth_slices() {
+	return lights_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/lights/cluster_depth_slices");
+}
+
 // Cumulative counters (render thread writes, scripts read through RenderingServer.fellow_get_stats()).
 struct Stats {
 	SafeNumeric<uint64_t> shadow_cache_cascades_stock;
