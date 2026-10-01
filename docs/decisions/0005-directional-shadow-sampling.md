@@ -83,12 +83,23 @@ cannot change anything there, the shadow cache, measured +0.187 ms in the same s
   reference lighting, `m2_cyc_compare`) it is marginally closer in penumbra regions on 5 of 6 cameras (edge MAE
   −0.2 % to −4 %), equal globally. In Bistro exterior it appeared to lose a shadow near the camera: stock without
   blend splits loses it as well (34.5 dB vs stock, `m2_band_debug`), the tighter caster culling was ruled out
-  (`m2_cull_debug`: disabling it changes nothing visible, 72.5 dB); the suspected cause is item 6 (verification:
-  `m2_pen_temporal`, `m2_cyc_pen`).
-* Max pyramid: Linux functional check on Mesa lavapipe (PBR Lab, 3 cameras, 960×540): two cameras bit-identical, one
-  differs in 16 pixels of one spot (max 33/255) — pending the RTX check (`m2_mm_temporal`); lavapipe's bilinear
-  filter of depth with quantized weights can return slightly more than the largest texel, which would make stock see
-  a (false) blocker that the pyramid test rules out.
+  (`m2_cull_debug`: disabling it changes nothing visible, 72.5 dB). **Cause confirmed: item 6.** With the
+  parallel-light penumbra the shadow is back without blend splits (`m2_pen_temporal`, frame 30: stock without blend
+  splits shows the lit region with a hard edge at the split, the penumbra fix without blend splits shows the shadow,
+  like stock with blend splits). This is a stock Godot artifact that affects the *default* configuration
+  (blend splits off) whenever PCSS is used: shadows of casters beyond the pancake distance dissolve in the first
+  cascade.
+* Penumbra fix vs stock: a look change — Bistro exterior 40 dB, Sponza 60.7 dB over 60 frames; PBR Lab (casters close
+  to their receivers) 76-88 dB. Against Cycles (PBR Lab) unchanged (edge MAE within 0.2 %), as expected for that
+  geometry.
+* Max pyramid: first version wrong in two ways, found with lavapipe debug builds (brute-force maxima over the taps,
+  the box and the chosen pyramid block, rendered as black where they disagree): (1) all levels were built in one
+  compute list, so a level written as a storage image was read as a sampled texture without a layout transition
+  (fixed: one compute list per level, like the SSR Hi-Z); (2) the level was chosen with `ceil(log2(box size))` in
+  floating point, whose approximation on some drivers selects blocks one level too small, so the box spanned three
+  blocks and a blocker was missed (fixed: integer texel box and the smallest level where `hi >> k − lo >> k ≤ 1`).
+  After both fixes: lavapipe bit-identical on 3 cameras for PCSS and PCF (0 differing pixels); RTX (first version,
+  `m2_mm_temporal`) 67.8-93.8 dB vs stock, no pixel off by more than 2/255.
 
 ## Decision
 
