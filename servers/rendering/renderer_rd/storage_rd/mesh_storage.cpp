@@ -444,11 +444,8 @@ void MeshStorage::mesh_add_surface(RID p_mesh, const RenderingServerTypes::Surfa
 		for (int i = 0; i < new_surface.lods.size(); i++) {
 			lod_indices.push_back(new_surface.lods[i].index_data);
 		}
-		s->fellow_clusters = fellow_mesh_clusters_build(new_surface.format, new_surface.vertex_data, new_surface.vertex_count, new_surface.aabb, new_surface.index_data, new_surface.index_count, lod_indices, Fellow::mesh_cluster_triangles(), &s->fellow_clusters_ordered);
-		if (s->fellow_clusters) {
-			Fellow::stats().geometry_cluster_surfaces.increment();
-			Fellow::stats().geometry_cluster_pending_bytes.add(s->fellow_clusters->pending_bytes());
-		}
+		// Built on the WorkerThreadPool while loading continues; joined at the surface's first set-up for drawing.
+		s->fellow_build = fellow_mesh_clusters_build_async(new_surface.format, new_surface.vertex_data, new_surface.vertex_count, new_surface.aabb, new_surface.index_data, new_surface.index_count, lod_indices, Fellow::mesh_cluster_triangles());
 	}
 
 	s->aabb = new_surface.aabb;
@@ -560,6 +557,7 @@ void MeshStorage::_mesh_surface_clear(Mesh *p_mesh, int p_surface) {
 		RD::get_singleton()->free_rid(s.blend_shape_buffer);
 	}
 
+	_fellow_join_cluster_build(&s);
 	if (s.fellow_clusters) {
 		Fellow::stats().geometry_cluster_pending_bytes.sub(s.fellow_clusters->pending_bytes());
 		memdelete(s.fellow_clusters);
@@ -573,8 +571,25 @@ void MeshStorage::_mesh_surface_clear(Mesh *p_mesh, int p_surface) {
 	memdelete(p_mesh->surfaces[p_surface]);
 }
 
+void MeshStorage::_fellow_join_cluster_build(Mesh::Surface *p_surface) {
+	FellowMeshClusterBuild *b = p_surface->fellow_build;
+	if (b == nullptr) {
+		return;
+	}
+	fellow_mesh_clusters_build_join(b);
+	p_surface->fellow_clusters = b->clusters;
+	p_surface->fellow_clusters_ordered = b->ordered;
+	memdelete(b);
+	p_surface->fellow_build = nullptr;
+	if (p_surface->fellow_clusters) {
+		Fellow::stats().geometry_cluster_surfaces.increment();
+		Fellow::stats().geometry_cluster_pending_bytes.add(p_surface->fellow_clusters->pending_bytes());
+	}
+}
+
 void MeshStorage::fellow_mesh_surface_decide_clusters(void *p_surface, bool p_activate) {
 	Mesh::Surface *s = reinterpret_cast<Mesh::Surface *>(p_surface);
+	_fellow_join_cluster_build(s);
 	FellowMeshClusters *c = s->fellow_clusters;
 	if (c == nullptr || c->active) {
 		return;

@@ -33,6 +33,7 @@
 #include "core/math/aabb.h"
 #include "core/math/plane.h"
 #include "core/templates/local_vector.h"
+#include "core/object/worker_thread_pool.h"
 #include "core/templates/vector.h"
 
 // FellowEngine mesh clusters (docs/decisions/0007-mesh-clusters.md).
@@ -97,3 +98,25 @@ struct FellowMeshClusters {
 // triangles of each index buffer in its existing order, usable without reordering anything (for surfaces drawn with
 // blending, whose result depends on the triangle order inside a draw).
 FellowMeshClusters *fellow_mesh_clusters_build(uint64_t p_format, const Vector<uint8_t> &p_vertex_data, uint32_t p_vertex_count, const AABB &p_aabb, const Vector<uint8_t> &p_index_data, uint32_t p_index_count, const Vector<Vector<uint8_t>> &p_lods, uint32_t p_max_leaf_triangles, FellowMeshClusters **r_ordered = nullptr);
+
+// Asynchronous build on the WorkerThreadPool: the inputs (copy-on-write references to the surface data) are captured
+// when the surface is created and the clusters are built while loading continues; the renderer joins the task the
+// first time it needs the result (fellow_mesh_clusters_build_join).
+struct FellowMeshClusterBuild {
+	uint64_t format = 0;
+	Vector<uint8_t> vertex_data;
+	uint32_t vertex_count = 0;
+	AABB aabb;
+	Vector<uint8_t> index_data;
+	uint32_t index_count = 0;
+	Vector<Vector<uint8_t>> lods;
+	uint32_t max_leaf_triangles = 0;
+
+	FellowMeshClusters *clusters = nullptr;
+	FellowMeshClusters *ordered = nullptr;
+	WorkerThreadPool::TaskID task = WorkerThreadPool::INVALID_TASK_ID;
+};
+
+FellowMeshClusterBuild *fellow_mesh_clusters_build_async(uint64_t p_format, const Vector<uint8_t> &p_vertex_data, uint32_t p_vertex_count, const AABB &p_aabb, const Vector<uint8_t> &p_index_data, uint32_t p_index_count, const Vector<Vector<uint8_t>> &p_lods, uint32_t p_max_leaf_triangles);
+// Waits for the build; the results stay in clusters / ordered (owned by the caller from then on).
+void fellow_mesh_clusters_build_join(FellowMeshClusterBuild *p_build);

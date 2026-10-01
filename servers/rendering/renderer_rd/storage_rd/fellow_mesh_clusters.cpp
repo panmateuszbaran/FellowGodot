@@ -379,3 +379,33 @@ FellowMeshClusters *fellow_mesh_clusters_build(uint64_t p_format, const Vector<u
 	}
 	return clusters;
 }
+
+static void _fellow_mesh_clusters_build_task(void *p_userdata) {
+	FellowMeshClusterBuild *b = static_cast<FellowMeshClusterBuild *>(p_userdata);
+	b->clusters = fellow_mesh_clusters_build(b->format, b->vertex_data, b->vertex_count, b->aabb, b->index_data, b->index_count, b->lods, b->max_leaf_triangles, &b->ordered);
+	// Release the references to the surface data as soon as possible.
+	b->vertex_data = Vector<uint8_t>();
+	b->index_data = Vector<uint8_t>();
+	b->lods.clear();
+}
+
+FellowMeshClusterBuild *fellow_mesh_clusters_build_async(uint64_t p_format, const Vector<uint8_t> &p_vertex_data, uint32_t p_vertex_count, const AABB &p_aabb, const Vector<uint8_t> &p_index_data, uint32_t p_index_count, const Vector<Vector<uint8_t>> &p_lods, uint32_t p_max_leaf_triangles) {
+	FellowMeshClusterBuild *b = memnew(FellowMeshClusterBuild);
+	b->format = p_format;
+	b->vertex_data = p_vertex_data;
+	b->vertex_count = p_vertex_count;
+	b->aabb = p_aabb;
+	b->index_data = p_index_data;
+	b->index_count = p_index_count;
+	b->lods = p_lods;
+	b->max_leaf_triangles = p_max_leaf_triangles;
+	b->task = WorkerThreadPool::get_singleton()->add_native_task(&_fellow_mesh_clusters_build_task, b, false, "FellowEngine mesh clusters");
+	return b;
+}
+
+void fellow_mesh_clusters_build_join(FellowMeshClusterBuild *p_build) {
+	if (p_build->task != WorkerThreadPool::INVALID_TASK_ID) {
+		WorkerThreadPool::get_singleton()->wait_for_task_completion(p_build->task);
+		p_build->task = WorkerThreadPool::INVALID_TASK_ID;
+	}
+}
