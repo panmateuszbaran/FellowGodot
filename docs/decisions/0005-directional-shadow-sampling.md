@@ -102,6 +102,25 @@ cannot change anything there, the shadow cache, measured +0.187 ms in the same s
   After both fixes: lavapipe bit-identical on 3 cameras for PCSS and PCF (0 differing pixels); RTX (first version,
   `m2_mm_temporal`) 67.8-93.8 dB vs stock, no pixel off by more than 2/255.
 
+## Max pyramid: performance (`m2_mm_profile`, night state, 1080p, GPU ms)
+
+| Scene | shadow pass (incl. pyramid build) stock → max pyramid | opaque: skips → skips + max pyramid |
+|---|---|---|
+| PBR Lab | 0.107 → 0.203 (+0.096) | 0.776 → 0.791 (+0.015) |
+| Sponza | 3.404 → 3.413 | 3.031 → 2.975 (−0.056) |
+| Bistro exterior | 0.540 → 0.627 (+0.087) | 1.815 → 1.758 (−0.057) |
+
+The pyramid build (4096² atlas, ~0.09 ms) costs about what the early-out saves. The early-out rarely fires: the
+benchmark PCSS search radius spans tens of texels, and for any receiver not perpendicular to the light its own
+surface, a few texels away along the slope, is closer to the light than the biased receiver depth, so the box
+maximum exceeds the receiver depth.
+
 ## Decision
 
-(pending day-state confirmation and the RTX identity check of the max pyramid)
+* `skip_backfacing_directional`, `skip_backfacing_positional`, `skip_unblended_cascade`: **KEEP** (image-identical;
+  opaque pass −0.07 to −0.37 ms in the night-state profiles; day-state confirmation in `fellow-m2_perf`).
+* `directional_max_mip`: **REJECT** (exact, but no net gain: build cost ≈ savings). Code kept, off by default.
+* `pcss_directional_penumbra`: **KEEP as an option** — a correctness fix of stock's directional PCSS that restores
+  shadows stock loses, but a look change (sharper penumbrae), so it is not enabled silently.
+* `pcss_blend_band`: **KEEP as an option** (performance, look change); with the penumbra fix it no longer exposes the
+  first-cascade artifact.
