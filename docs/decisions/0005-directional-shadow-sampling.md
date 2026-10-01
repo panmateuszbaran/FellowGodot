@@ -197,7 +197,19 @@ of 32×32 texels and smaller are built by one workgroup from shared memory inste
 (7 dispatches instead of 12 for a 4096² atlas); the build has its own GPU timestamp (`FellowEngine Shadow Pyramids`).
 Same values: lavapipe debug builds that mark every early-out produce identical images (gathers vs fetches on the PBR
 Lab; one workgroup vs one dispatch per mip with 256² atlases, where the small mips are the ones looked up), and the
-non-debug build is identical to the pyramids off.
+non-debug build is identical to the pyramids off. RTX (`m3_f20_profile`, the build's own timestamp): directional
+0.097-0.109 ms per frame in the flythroughs, positional 0.041 ms (PBR Lab) — no better than v4's +0.10-0.13: the
+build is bound by memory traffic, not by fetch instructions or dispatches (a 4096² 16-bit atlas is 32 MB to read, the
+4-texel windows 16 MB to write and read back).
+
+**Build v6**: each workgroup loads the 9×9 "parts" of its 8×8 windows once into shared memory (a window
+is two neighbouring parts per axis, shared with the next window) instead of 2×2 parts per window.
+
+**Build v7** (`fellow21`): the 4-texel windows are not stored at all. Every looked-up box is widened by 1.5 texels on
+each side, so it is at least 3 texels wide and the lookup never used them except for boxes clamped at the atlas edge
+(those now take the 8-texel windows: still a window that contains the box, so still exact). The finest level is built
+directly from the atlas (4×4-texel parts, four gathers each): the 16 MB write and re-read are gone and the pyramid's
+memory drops from 21 MB to 5.3 MB for a 4096² atlas (RG16).
 
 ## Decision
 

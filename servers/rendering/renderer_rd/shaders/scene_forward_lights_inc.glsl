@@ -323,20 +323,20 @@ float quick_hash(vec2 pos) {
 
 // FellowEngine: smallest (.x, farthest from the light in reverse Z) and largest (.y, closest) shadow atlas depth in
 // the box of half size p_half_uv around p_uv (atlas UV), widened by 1.5 texels for bilinear / 2x2 PCF footprints, from
-// the min/max window pyramid p_pyramid (mip m: windows of 2^(m+2) texels every 2^(m+1)): the box fits in the single
-// window of the smallest mip whose stride is at least the box size, one fetch. (0, 1) when the box is too large: no
-// early-out can fire.
+// the min/max window pyramid p_pyramid (level L: windows of 2^(L+3) texels every 2^(L+2); power-of-two atlases): the
+// box fits in the single window of the smallest level whose stride is at least the box size, one fetch. (0, 1) when
+// the box is too large: no early-out can fire.
 vec2 fellow_shadow_window_minmax(texture2D p_pyramid, vec2 p_uv, vec2 p_half_uv) {
-	ivec2 atlas = textureSize(sampler2D(p_pyramid, SAMPLER_NEAREST_CLAMP), 0) * 2;
+	ivec2 atlas = textureSize(sampler2D(p_pyramid, SAMPLER_NEAREST_CLAMP), 0) * 4;
 	vec2 c = p_uv * vec2(atlas);
 	vec2 r = min(p_half_uv * vec2(atlas), vec2(atlas)) + 1.5;
 	// Integer texel box (clamped like the sampler).
 	ivec2 lo = clamp(ivec2(floor(c - r)), ivec2(0), atlas - 1);
 	ivec2 hi = clamp(ivec2(floor(c + r)), ivec2(0), atlas - 1);
 	int extent = max(hi.x - lo.x, hi.y - lo.y) + 1;
-	// Stride 2^k >= extent (k >= 1), mip k - 1.
-	int k = extent <= 2 ? 1 : findMSB(extent - 1) + 1;
-	int mip = k - 1;
+	// Stride 2^k >= extent (k >= 2: boxes of up to 4 texels use the finest stored windows), level k - 2.
+	int k = extent <= 4 ? 2 : findMSB(extent - 1) + 1;
+	int mip = k - 2;
 	if (mip >= textureQueryLevels(sampler2D(p_pyramid, SAMPLER_NEAREST_CLAMP))) {
 		return vec2(0.0, 1.0);
 	}

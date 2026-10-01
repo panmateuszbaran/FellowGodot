@@ -4,10 +4,11 @@
 
 #VERSION_DEFINES
 
-// FellowEngine shadow min/max window pyramid (docs/decisions/0005-directional-shadow-sampling.md): texel i of mip m
-// holds the minimum (.r) and maximum (.g) depth of the atlas window [i * 2^(m+1), i * 2^(m+1) + 2^(m+2)) on each axis
-// (windows twice the stride, overlapping by half), so any box of at most 2^(m+1) texels lies inside the single window
-// of mip m that starts at or before it: one fetch proves that a filter region is fully lit or fully shadowed.
+// FellowEngine shadow min/max window pyramid (docs/decisions/0005-directional-shadow-sampling.md): texel i of level L
+// holds the minimum (.r) and maximum (.g) depth of the atlas window [i * 2^(L+2), i * 2^(L+2) + 2^(L+3)) on each axis
+// (windows twice the stride, overlapping by half), so any box of at most 2^(L+2) texels lies inside the single window
+// of level L that starts at or before it: one fetch proves that a filter region is fully lit or fully shadowed.
+// (The 4-texel windows of the chain are not stored: every looked-up box is at least 3 texels wide.)
 
 #ifdef MODE_TAIL
 // The last mips (32 x 32 and smaller) in one workgroup: each mip from the previous one held in shared memory, the same
@@ -125,10 +126,10 @@ void main() {
 
 #else // !MODE_TAIL
 
-// A window of this mip is the union of two neighbouring "parts" per axis, shared with the next window: mip 0, parts
-// are 2 x 2 atlas blocks (window i = blocks i and i + 1 = atlas texels [2i, 2i + 4)); mip m, parts are the texels 2p of
-// mip m - 1 (window i = texels 2i and 2i + 2). Each workgroup loads the 9 x 9 parts of its 8 x 8 windows once
-// (shared memory) instead of 4 x 4 per window: the same values, a quarter of the fetches.
+// A window of this level is the union of two neighbouring "parts" per axis, shared with the next window: level 0,
+// parts are 4 x 4 atlas blocks (window i = blocks i and i + 1 = atlas texels [4i, 4i + 8)); level L, parts are the
+// texels 2p of level L - 1 (window i = texels 2i and 2i + 2). Each workgroup loads the 9 x 9 parts of its 8 x 8 windows
+// once (shared memory) instead of 2 x 2 parts per window.
 shared vec2 parts[9 * 9];
 
 void main() {
@@ -138,10 +139,15 @@ void main() {
 		ivec2 p = tile + ivec2(i % 9, i / 9);
 		vec2 mm;
 		if (params.source_is_pyramid == 0) {
-			// Atlas texels 2p and 2p + 1 on each axis: a gather at their shared corner (the sampler clamps to the atlas
-			// edge, like the shadow samplers).
-			vec4 d = textureGather(source, vec2(p * 2 + 1) * inv_size, 0);
-			mm = vec2(min(min(d.x, d.y), min(d.z, d.w)), max(max(d.x, d.y), max(d.z, d.w)));
+			// Atlas texels [4p, 4p + 4) on each axis: four gathers, each at the shared corner of two texel pairs (the
+			// sampler clamps to the atlas edge, like the shadow samplers).
+			mm = vec2(1.0, 0.0);
+			for (int y = 0; y < 2; y++) {
+				for (int x = 0; x < 2; x++) {
+					vec4 d = textureGather(source, vec2(p * 4 + ivec2(x, y) * 2 + 1) * inv_size, 0);
+					mm = vec2(min(mm.x, min(min(d.x, d.y), min(d.z, d.w))), max(mm.y, max(max(d.x, d.y), max(d.z, d.w))));
+				}
+			}
 		} else {
 			mm = texelFetch(source, min(p * 2, params.source_size - 1), 0).rg;
 		}

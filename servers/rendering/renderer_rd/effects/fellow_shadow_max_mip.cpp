@@ -90,7 +90,7 @@ RID FellowShadowMaxMip::get_texture(RID p_key) const {
 uint64_t FellowShadowMaxMip::get_vram_bytes() const {
 	uint64_t total = 0;
 	for (const KeyValue<RID, Target> &kv : targets) {
-		Size2i s = kv.value.atlas_size;
+		Size2i s((kv.value.atlas_size.x + 1) / 2, (kv.value.atlas_size.y + 1) / 2);
 		for (uint32_t i = 0; i < kv.value.level_views.size(); i++) {
 			s = Size2i((s.x + 1) / 2, (s.y + 1) / 2);
 			total += (uint64_t)s.x * s.y * (rg16_supported ? 4 : 8);
@@ -101,7 +101,7 @@ uint64_t FellowShadowMaxMip::get_vram_bytes() const {
 
 void FellowShadowMaxMip::build(RID p_key, RID p_atlas_texture, const Size2i &p_atlas_size, const Rect2i &p_dirty, bool p_atlas_16_bits) {
 	Target &target = targets[p_key];
-	if (p_atlas_texture.is_null() || p_atlas_size.x < 2 || p_atlas_size.y < 2) {
+	if (p_atlas_texture.is_null() || p_atlas_size.x < 4 || p_atlas_size.y < 4) {
 		target.valid = false;
 		return;
 	}
@@ -109,7 +109,9 @@ void FellowShadowMaxMip::build(RID p_key, RID p_atlas_texture, const Size2i &p_a
 		_free_target(target);
 	}
 	if (target.texture.is_null()) {
-		Size2i base((p_atlas_size.x + 1) / 2, (p_atlas_size.y + 1) / 2);
+		// The finest level holds the windows of 8 atlas texels every 4 (mip 1 of the window chain): the lookups never
+		// need smaller ones (every box is widened by 1.5 texels on each side), so the 4-texel windows are not stored.
+		Size2i base(((p_atlas_size.x + 1) / 2 + 1) / 2, ((p_atlas_size.y + 1) / 2 + 1) / 2);
 		uint32_t levels = 1;
 		for (Size2i s = base; s.x > 1 || s.y > 1; s = Size2i((s.x + 1) / 2, (s.y + 1) / 2)) {
 			levels++;
@@ -156,6 +158,7 @@ void FellowShadowMaxMip::build(RID p_key, RID p_atlas_texture, const Size2i &p_a
 
 	// Floor division (the region's lower bound minus the window overlap can be negative).
 	auto floor_div2 = [](int p_v) -> int { return p_v >= 0 ? p_v / 2 : -((-p_v + 1) / 2); };
+	auto floor_div4 = [](int p_v) -> int { return p_v >= 0 ? p_v / 4 : -((-p_v + 3) / 4); };
 
 	// One compute list per mip (like the SSR Hi-Z): a mip written as a storage image is read as a sampled texture by
 	// the next one, and the layout transition between the two only happens between compute lists.
@@ -164,12 +167,20 @@ void FellowShadowMaxMip::build(RID p_key, RID p_atlas_texture, const Size2i &p_a
 	Point2i src_lo = region.position;
 	Point2i src_hi = region.position + region.size;
 	for (uint32_t i = 0; i < level_views.size(); i++) {
-		Size2i dst_size((src_size.x + 1) / 2, (src_size.y + 1) / 2);
-		// Destination texels whose window reads the changed source texels: mip 0 window [2j, 2j + 4) of the atlas,
-		// mip m texels 2j and 2j + 2 of mip m - 1.
-		const int back = i == 0 ? 2 : 1;
-		Point2i dst_lo(MAX(0, floor_div2(src_lo.x - back)), MAX(0, floor_div2(src_lo.y - back)));
-		Point2i dst_hi(MIN(dst_size.x, floor_div2(src_hi.x - 1) + 1), MIN(dst_size.y, floor_div2(src_hi.y - 1) + 1));
+		Size2i dst_size;
+		Point2i dst_lo;
+		Point2i dst_hi;
+		if (i == 0) {
+			// Level 0 texel j: atlas window [4j, 4j + 8).
+			dst_size = Size2i(((src_size.x + 1) / 2 + 1) / 2, ((src_size.y + 1) / 2 + 1) / 2);
+			dst_lo = Point2i(MAX(0, floor_div4(src_lo.x - 4)), MAX(0, floor_div4(src_lo.y - 4)));
+			dst_hi = Point2i(MIN(dst_size.x, floor_div4(src_hi.x - 1) + 1), MIN(dst_size.y, floor_div4(src_hi.y - 1) + 1));
+		} else {
+			// Level m texel j: texels 2j and 2j + 2 of level m - 1.
+			dst_size = Size2i((src_size.x + 1) / 2, (src_size.y + 1) / 2);
+			dst_lo = Point2i(MAX(0, floor_div2(src_lo.x - 1)), MAX(0, floor_div2(src_lo.y - 1)));
+			dst_hi = Point2i(MIN(dst_size.x, floor_div2(src_hi.x - 1) + 1), MIN(dst_size.y, floor_div2(src_hi.y - 1) + 1));
+		}
 		if (src_hi.x >= src_size.x) {
 			dst_hi.x = dst_size.x; // windows clamped at the end read the last source texel
 		}
