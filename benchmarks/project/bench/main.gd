@@ -1,7 +1,7 @@
 extends Node
 ## FellowBench entry point. Behaviour is driven by user CLI args (after "--"):
 ##   --scene=<pbr|sponza|bistro_exterior|bistro_interior|fluid>
-##   --mode=<perf|capture|temporal|reference|list>
+##   --mode=<perf|capture|temporal|reference|list|geodump>
 ##   --out=<dir>              output directory (created if needed)
 ##   --tag=<label>            free label stored in results (e.g. stock, fellow)
 ##   --run=<n>                run index (stored in results)
@@ -136,6 +136,8 @@ func _ready() -> void:
 			await _run_reference()
 		"list":
 			pass
+		"geodump":
+			_run_geodump()
 		_:
 			_fail("unknown mode " + str(result["mode"]))
 			return
@@ -525,6 +527,75 @@ func _halton(i: int, b: int) -> float:
 		r += f * (i % b)
 		i = i / b
 	return r
+
+
+# ---------------------------------------------------------------- geometry dump (offline analysis)
+
+## Writes the scene's mesh geometry in world space for offline analysis (benchmarks/tools/occlusion_geodump.py):
+## <out>/<scene>_geodump_pos.f32 (float32 x, y, z per vertex, world space), _idx.u32 (int32, 3 per triangle,
+## surface-local vertex indices) and, in the result json, per instance surface: base_vertex, vertex_count,
+## first_index, triangle count, material transparency; plus the camera flythrough sampled every 0.5 s, the fixed
+## cameras and the camera's near/far. Mesh instances only (MultiMesh instances are listed with their instance count but
+## not expanded).
+func _run_geodump() -> void:
+	var pos := PackedByteArray()
+	var idx := PackedByteArray()
+	var surfaces := []
+	var multimeshes := []
+	var stack: Array = [scene]
+	while not stack.is_empty():
+		var n: Node = stack.pop_back()
+		for c in n.get_children():
+			stack.append(c)
+		if n is MultiMeshInstance3D and (n as MultiMeshInstance3D).multimesh:
+			multimeshes.append({"name": str(n.get_path()), "instances": (n as MultiMeshInstance3D).multimesh.instance_count})
+		if not (n is MeshInstance3D) or (n as MeshInstance3D).mesh == null or not (n as MeshInstance3D).is_visible_in_tree():
+			continue
+		var mi := n as MeshInstance3D
+		var xf := mi.global_transform
+		for si in mi.mesh.get_surface_count():
+			# Only ArrayMesh exposes the primitive type; PrimitiveMesh surfaces are always triangles.
+			if mi.mesh is ArrayMesh and (mi.mesh as ArrayMesh).surface_get_primitive_type(si) != Mesh.PRIMITIVE_TRIANGLES:
+				continue
+			var arrays := mi.mesh.surface_get_arrays(si)
+			var v: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+			var ind = arrays[Mesh.ARRAY_INDEX]
+			if v.is_empty():
+				continue
+			# Bulk operations only (Bistro has millions of vertices).
+			var base := pos.size() / 12
+			var first := idx.size() / 4
+			pos.append_array((xf * v).to_byte_array())
+			if ind == null or (ind as PackedInt32Array).is_empty():
+				var seq := PackedInt32Array()
+				seq.resize(v.size())
+				for k in v.size():
+					seq[k] = k
+				idx.append_array(seq.to_byte_array())
+			else:
+				idx.append_array((ind as PackedInt32Array).to_byte_array())
+			var m := mi.get_active_material(si)
+			var transparency := -1 # BaseMaterial3D.Transparency; -1: no material or not a BaseMaterial3D.
+			if m is BaseMaterial3D:
+				transparency = (m as BaseMaterial3D).transparency
+			var blend := transparency == BaseMaterial3D.TRANSPARENCY_ALPHA or transparency == BaseMaterial3D.TRANSPARENCY_ALPHA_DEPTH_PRE_PASS
+			surfaces.append({"name": str(mi.get_path()), "surface": si, "base_vertex": base, "vertex_count": v.size(), "first_index": first, "tris": (idx.size() / 4 - first) / 3, "blend": blend, "transparency": transparency, "material": m.get_class() if m else ""})
+	var stem := out_dir.path_join("%s_geodump" % result["scene"])
+	var f := FileAccess.open(stem + "_pos.f32", FileAccess.WRITE)
+	f.store_buffer(pos)
+	f.close()
+	f = FileAccess.open(stem + "_idx.u32", FileAccess.WRITE)
+	f.store_buffer(idx)
+	f.close()
+	var fly := []
+	var t := 0.0
+	while t <= scene.flythrough.duration() + 1e-6:
+		var d: Dictionary = scene.flythrough.sample(t)
+		var cx: Transform3D = d["xform"]
+		fly.append({"t": t, "origin": [cx.origin.x, cx.origin.y, cx.origin.z], "forward": [-cx.basis.z.x, -cx.basis.z.y, -cx.basis.z.z], "up": [cx.basis.y.x, cx.basis.y.y, cx.basis.y.z], "fov": d["fov"]})
+		t += 0.5
+	result["geodump"] = {"surfaces": surfaces, "multimeshes": multimeshes, "vertices": pos.size() / 12, "triangles": idx.size() / 12, "flythrough": fly, "fixed_cameras": scene.describe()["fixed_cameras"], "near": scene.camera.near, "far": scene.camera.far}
+	_log("geodump: %d surfaces, %d vertices, %d triangles" % [surfaces.size(), pos.size() / 12, idx.size() / 12])
 
 
 # ---------------------------------------------------------------- output
