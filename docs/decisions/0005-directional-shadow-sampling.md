@@ -209,7 +209,20 @@ is two neighbouring parts per axis, shared with the next window) instead of 2×2
 each side, so it is at least 3 texels wide and the lookup never used them except for boxes clamped at the atlas edge
 (those now take the 8-texel windows: still a window that contains the box, so still exact). The finest level is built
 directly from the atlas (4×4-texel parts, four gathers each): the 16 MB write and re-read are gone and the pyramid's
-memory drops from 21 MB to 5.3 MB for a 4096² atlas (RG16).
+memory drops from 21 MB to 5.3 MB for a 4096² atlas (RG16). RTX (`m3_f21_profile`): build 0.063 ms directional
+(Bistro exterior, Sponza), 0.057 + 0.029 ms directional + positional (PBR Lab) — 40 % less than v5. Interleaved A/B of
+the milestone-3 candidates with v7 (`m3_f21_perf`, `fellow21`, defaults vs + light depth slices, zero-attenuation
+skip and both pyramids, 3 runs each):
+
+| scene | defaults | + candidates | Δ | p |
+|---|---:|---:|---:|---:|
+| Sponza | 8.342 | 7.122 | **−14.6 %** | < 0.001 |
+| Lights Lab | 3.493 | 3.025 | **−13.4 %** | < 0.001 |
+| Bistro interior | 4.224 | 4.095 | **−3.1 %** | 0.002 |
+| Bistro exterior | 5.011 | 4.939 | **−1.4 %** | 0.035 |
+| PBR Lab | 2.801 | 2.824 | +0.8 % | 0.39 (within noise) |
+
+(With v4's build the same comparison gave PBR Lab +6.0 %, p < 0.001, `m3_f19_perf`.)
 
 ## Decision
 
@@ -219,8 +232,8 @@ memory drops from 21 MB to 5.3 MB for a 4096² atlas (RG16).
   windows, one fetch, no 4-texel windows, rebuilt per written rect) **KEEP, on by default from `fellow22`**: exact
   (lavapipe bit-identical, RTX at every scene's run-to-run floor), Sponza −14 to −15 %, Bistro interior −3 to −4 %
   (positional), Bistro exterior −1 %; the cost is the build, 0.06 ms per frame for a fully rewritten 4096² directional
-  atlas (0.03 ms positional), which scenes with little soft-shadow filtering pay without a matching saving (PBR Lab
-  +2 %, `m3_f21_profile`). Final numbers: milestone-3 report (`m3_final_*`).
+  atlas (0.03 ms positional), which scenes with little soft-shadow filtering pay without a matching saving; with v7 no
+  scene is slower (PBR Lab +0.8 %, within noise, `m3_f21_perf`). Final numbers: milestone-3 report (`m3_final_*`).
 * `pcss_directional_penumbra`: **KEEP as an option** — a correctness fix of stock's directional PCSS that restores
   shadows stock loses, but a look change (sharper penumbrae), so it is not enabled silently.
 * `pcss_blend_band`: **KEEP as an option** (performance, look change); with the penumbra fix it no longer exposes the

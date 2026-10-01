@@ -116,7 +116,9 @@ The wait does not go away, it moves: presenting from the second queue, Bistro in
 time (more) appears inside the frame's own GPU time — the next frame's work on the main queue now waits for the
 presentation of the previous one. Whatever the hybrid presentation path does (the copy to the iGPU and the
 compositor's synchronisation), the GPU serialises it with the rendering, on whichever queue presents. Frame times:
-+1 to +5 % (within noise with 2 runs; the A/B in `m3_f21_perf` repeats it for every scene).
++1 to +5 % (within noise with 2 runs). The interleaved A/B (`m3_f21_perf`, 3 runs each) confirms it in every
+scene: Bistro interior +4.5 % (p 0.002), PBR Lab +3.1 %, Lights Lab +2.8 %, Bistro exterior +2.2 %, Sponza +1.7 %
+(all p < 0.05, slower).
 
 **REJECT** (off). The ~0.4 ms per frame is the presentation path of this hybrid laptop, not something the engine
 waits for: it does not depend on the frame queue, the swap chain length, when the rendering is submitted, or which
