@@ -2325,6 +2325,8 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			rp_uniform_set = _setup_render_pass_uniform_set(RENDER_LIST_MOTION, p_render_data, radiance_texture, samplers, opaque_pass_uniform_buffer_index, true);
 
 			RenderListParameters render_list_params(render_list[RENDER_LIST_MOTION].elements.ptr(), render_list[RENDER_LIST_MOTION].element_info.ptr(), render_list[RENDER_LIST_MOTION].elements.size(), reverse_cull, PASS_MODE_COLOR, color_pass_flags, rb_data.is_null(), p_render_data->directional_light_soft_shadows, rp_uniform_set, get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_WIREFRAME, Vector2(), p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, p_render_data->scene_data->view_count, 0, base_specialization);
+			render_list_params.fellow_cluster_planes = fellow_cluster_planes.ptr();
+			render_list_params.fellow_cluster_plane_count = fellow_cluster_planes.size();
 			_render_list_with_draw_list(&render_list_params, color_framebuffer);
 
 			RD::get_singleton()->draw_command_end_label();
@@ -2501,6 +2503,8 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 
 		RID alpha_framebuffer = rb_data.is_valid() ? rb_data->get_color_pass_fb(transparent_color_pass_flags) : color_only_framebuffer;
 		RenderListParameters render_list_params(render_list[RENDER_LIST_ALPHA].elements.ptr(), render_list[RENDER_LIST_ALPHA].element_info.ptr(), render_list[RENDER_LIST_ALPHA].elements.size(), reverse_cull, PASS_MODE_COLOR, transparent_color_pass_flags, rb_data.is_null(), p_render_data->directional_light_soft_shadows, rp_uniform_set, get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_WIREFRAME, Vector2(), p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, p_render_data->scene_data->view_count, 0, base_specialization);
+		render_list_params.fellow_cluster_planes = fellow_cluster_planes.ptr();
+		render_list_params.fellow_cluster_plane_count = fellow_cluster_planes.size();
 		_render_list_with_draw_list(&render_list_params, alpha_framebuffer, RD::DRAW_DEFAULT_ALL, Vector<Color>(), 0.0f, 0u, p_render_data->render_region);
 	}
 
@@ -4542,7 +4546,7 @@ void RenderForwardClustered::_fellow_decide_clusters(GeometryInstanceForwardClus
 	}
 	if (state == RendererRD::MeshStorage::FELLOW_CLUSTERS_PENDING) {
 		mesh_storage->fellow_mesh_surface_decide_clusters(surface, !blends && !moves_vertices);
-	} else if (blends) {
+	} else if (blends && !mesh_storage->fellow_mesh_surface_get_clusters(surface)->preserves_order) {
 		Fellow::stats().geometry_cluster_blended_after_activation.increment();
 		WARN_PRINT_ONCE("FellowEngine mesh clusters: a mesh surface already in cluster order is now drawn with a blending material; its triangles blend in cluster order, not in the mesh's order. Assign blending materials before the mesh is first drawn, or disable rendering/fellow/geometry/mesh_clusters.");
 	}

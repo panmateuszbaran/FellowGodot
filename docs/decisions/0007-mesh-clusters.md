@@ -55,10 +55,14 @@ triangles are discarded by the GPU after vertex shading and primitive assembly.
    surface is set up for drawing): if none of its materials (material chain and overlay) blends and none moves
    vertices, the surface's own index buffers are **replaced** by the reordered ones (same format and size: no extra
    GPU memory); otherwise the clusters are dropped and the surface keeps stock's order — alpha blending inside a draw
-   depends on the triangle order, and vertex-moving shaders could leave the cluster bounds. Shadow meshes (only ever
+   depends on the triangle order, and vertex-moving shaders could leave the cluster bounds. A blending surface then
+   uses an **order-preserving variant** built at the same time: the same kind of tree over chunks of consecutive
+   triangles of each index buffer in its existing order (as many chunks as k-d leaves), so the alpha pass can cull it
+   without changing the order of anything it draws. Shadow meshes (only ever
    drawn in depth and shadow passes) are always reordered. A surface reordered earlier and later set up with a
    blending material is counted (`geometry_cluster_blended_after_activation`) and warned about once.
-3. **Draw**: the depth pre-pass and the opaque pass (camera frustum with the TAA jitter the GPU uses) and shadow passes
+3. **Draw**: the depth pre-pass, the opaque, motion-vector and transparent passes (camera frustum with the TAA jitter
+   the GPU uses) and shadow passes
    (shadow camera planes; without the near plane when casters are pancaked; not for dual-paraboloid) pass world-space
    planes to the render list. For an element with active clusters, drawn once (no instancing, no multimesh, no
    particles, no skinning, a shader that cannot move vertices), the planes are moved into the instance's local space
@@ -90,6 +94,9 @@ with large surfaces; nothing in scenes made of small objects (instance culling a
   24 surfaces clustered; 8.5 k cluster draws, 1.67 M of 20.1 M triangles skipped in the camera passes.
 * In-place version, same test: **0 differing pixels**; 23 surfaces reordered, 1 dropped (the alpha-blended glass
   sphere), same draws and culled triangles as the copy version.
+* With the order-preserving variant in the transparent pass (the glass sphere): **0 differing pixels**.
+* Offline (Sponza flythrough): the order-preserving chunks of the alpha-blended cypress leaves and ground cover cut
+  the blended triangles submitted per frame from 1.04 M to 0.62 M (chunks of the leaves span 1.5 m of a 15 m tree).
 
 ## Actual performance
 

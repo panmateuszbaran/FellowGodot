@@ -74,7 +74,8 @@ struct FellowMeshClusters {
 	// Leaf-ordered index data waiting for the draw-time decision (see above); empty once decided.
 	Vector<uint8_t> pending_base;
 	Vector<Vector<uint8_t>> pending_lods;
-	bool active = false; // The surface's index buffers are in leaf order and the clusters may be drawn.
+	bool active = false; // The clusters match the surface's index buffers and may be drawn.
+	bool preserves_order = false; // Order-preserving variant (chunks of consecutive triangles, no reordering).
 
 	uint64_t pending_bytes() const {
 		uint64_t b = pending_base.size();
@@ -92,4 +93,7 @@ struct FellowMeshClusters {
 // Builds the clusters of a triangle surface from its vertex and index data (as passed to mesh_add_surface), with the
 // leaf-ordered index data pending. p_lods: index data of each LOD. Returns nullptr when the surface cannot be
 // clustered (format without 3D positions, too few triangles).
-FellowMeshClusters *fellow_mesh_clusters_build(uint64_t p_format, const Vector<uint8_t> &p_vertex_data, uint32_t p_vertex_count, const AABB &p_aabb, const Vector<uint8_t> &p_index_data, uint32_t p_index_count, const Vector<Vector<uint8_t>> &p_lods, uint32_t p_max_leaf_triangles);
+// r_ordered (optional) receives the order-preserving variant: the same kind of tree over chunks of consecutive
+// triangles of each index buffer in its existing order, usable without reordering anything (for surfaces drawn with
+// blending, whose result depends on the triangle order inside a draw).
+FellowMeshClusters *fellow_mesh_clusters_build(uint64_t p_format, const Vector<uint8_t> &p_vertex_data, uint32_t p_vertex_count, const AABB &p_aabb, const Vector<uint8_t> &p_index_data, uint32_t p_index_count, const Vector<Vector<uint8_t>> &p_lods, uint32_t p_max_leaf_triangles, FellowMeshClusters **r_ordered = nullptr);

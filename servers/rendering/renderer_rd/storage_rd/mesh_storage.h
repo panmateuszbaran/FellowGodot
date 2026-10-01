@@ -154,6 +154,7 @@ private:
 			RID uniform_set;
 
 			FellowMeshClusters *fellow_clusters = nullptr; // FellowEngine mesh clusters (nullptr: not clustered).
+			FellowMeshClusters *fellow_clusters_ordered = nullptr; // Order-preserving alternative, used if the surface blends.
 		};
 
 		uint32_t blend_shape_count = 0;
@@ -517,8 +518,8 @@ public:
 		const FellowMeshClusters *c = reinterpret_cast<Mesh::Surface *>(p_surface)->fellow_clusters;
 		return (c && c->active) ? c : nullptr;
 	}
-	// Pending clusters: p_activate replaces the surface's index buffers by the cluster-ordered ones, otherwise the
-	// clusters are dropped and the surface keeps stock's triangle order.
+	// Pending clusters: p_activate replaces the surface's index buffers by the cluster-ordered ones; otherwise the
+	// surface keeps stock's triangle order and uses the order-preserving clusters (chunks of consecutive triangles).
 	void fellow_mesh_surface_decide_clusters(void *p_surface, bool p_activate);
 
 	_FORCE_INLINE_ RID mesh_surface_get_index_array(void *p_surface, uint32_t p_lod) const {

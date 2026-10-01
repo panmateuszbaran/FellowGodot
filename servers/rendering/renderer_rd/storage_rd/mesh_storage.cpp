@@ -444,7 +444,7 @@ void MeshStorage::mesh_add_surface(RID p_mesh, const RenderingServerTypes::Surfa
 		for (int i = 0; i < new_surface.lods.size(); i++) {
 			lod_indices.push_back(new_surface.lods[i].index_data);
 		}
-		s->fellow_clusters = fellow_mesh_clusters_build(new_surface.format, new_surface.vertex_data, new_surface.vertex_count, new_surface.aabb, new_surface.index_data, new_surface.index_count, lod_indices, Fellow::mesh_cluster_triangles());
+		s->fellow_clusters = fellow_mesh_clusters_build(new_surface.format, new_surface.vertex_data, new_surface.vertex_count, new_surface.aabb, new_surface.index_data, new_surface.index_count, lod_indices, Fellow::mesh_cluster_triangles(), &s->fellow_clusters_ordered);
 		if (s->fellow_clusters) {
 			Fellow::stats().geometry_cluster_surfaces.increment();
 			Fellow::stats().geometry_cluster_pending_bytes.add(s->fellow_clusters->pending_bytes());
@@ -565,6 +565,10 @@ void MeshStorage::_mesh_surface_clear(Mesh *p_mesh, int p_surface) {
 		memdelete(s.fellow_clusters);
 		s.fellow_clusters = nullptr;
 	}
+	if (s.fellow_clusters_ordered) {
+		memdelete(s.fellow_clusters_ordered);
+		s.fellow_clusters_ordered = nullptr;
+	}
 
 	memdelete(p_mesh->surfaces[p_surface]);
 }
@@ -578,9 +582,15 @@ void MeshStorage::fellow_mesh_surface_decide_clusters(void *p_surface, bool p_ac
 	Fellow::stats().geometry_cluster_pending_bytes.sub(c->pending_bytes());
 	if (!p_activate || c->pending_lods.size() != int(s->lod_count) || s->index_buffer.is_null()) {
 		memdelete(c);
-		s->fellow_clusters = nullptr;
+		// Keep stock's triangle order; the order-preserving clusters still allow culling.
+		s->fellow_clusters = s->fellow_clusters_ordered;
+		s->fellow_clusters_ordered = nullptr;
 		Fellow::stats().geometry_cluster_surfaces_dropped.increment();
 		return;
+	}
+	if (s->fellow_clusters_ordered) {
+		memdelete(s->fellow_clusters_ordered);
+		s->fellow_clusters_ordered = nullptr;
 	}
 	// Same format and sizes as the stock buffers; the old buffers are released when the GPU no longer uses them
 	// (freeing a buffer also frees its index arrays).

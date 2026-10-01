@@ -232,7 +232,7 @@ uint32_t FellowMeshClusters::cull(uint32_t p_level, const Plane *p_planes, int p
 	return emitted;
 }
 
-FellowMeshClusters *fellow_mesh_clusters_build(uint64_t p_format, const Vector<uint8_t> &p_vertex_data, uint32_t p_vertex_count, const AABB &p_aabb, const Vector<uint8_t> &p_index_data, uint32_t p_index_count, const Vector<Vector<uint8_t>> &p_lods, uint32_t p_max_leaf_triangles) {
+FellowMeshClusters *fellow_mesh_clusters_build(uint64_t p_format, const Vector<uint8_t> &p_vertex_data, uint32_t p_vertex_count, const AABB &p_aabb, const Vector<uint8_t> &p_index_data, uint32_t p_index_count, const Vector<Vector<uint8_t>> &p_lods, uint32_t p_max_leaf_triangles, FellowMeshClusters **r_ordered) {
 	if (!(p_format & RSE::ARRAY_FORMAT_VERTEX) || (p_format & RSE::ARRAY_FLAG_USE_2D_VERTICES) || p_vertex_count == 0 || p_index_count < 6 || p_index_count % 3 != 0) {
 		return nullptr;
 	}
@@ -330,6 +330,52 @@ FellowMeshClusters *fellow_mesh_clusters_build(uint64_t p_format, const Vector<u
 		} else {
 			clusters->pending_lods.push_back(ordered);
 		}
+	}
+
+	if (r_ordered) {
+		// Order-preserving variant: a balanced tree over chunks of consecutive triangles of each index buffer in its
+		// own order (same number of chunks in every level). Drawing ranges of it keeps the triangle order.
+		FellowMeshClusters *ordered = memnew(FellowMeshClusters);
+		const uint32_t chunks = MAX(1u, (tri_count + MAX(1u, p_max_leaf_triangles) - 1) / MAX(1u, p_max_leaf_triangles));
+		LocalVector<uint32_t> chunk_node;
+		chunk_node.resize(chunks);
+		struct Balanced {
+			LocalVector<FellowMeshClusters::Node> *nodes;
+			uint32_t *chunk_node;
+			void build(uint32_t p_lo, uint32_t p_hi) {
+				const uint32_t node = nodes->size();
+				nodes->push_back(FellowMeshClusters::Node());
+				if (p_hi - p_lo == 1) {
+					chunk_node[p_lo] = node;
+					return;
+				}
+				const uint32_t mid = (p_lo + p_hi) / 2;
+				build(p_lo, mid);
+				(*nodes)[node].right = nodes->size();
+				build(mid, p_hi);
+			}
+		} bal;
+		bal.nodes = &ordered->nodes;
+		bal.chunk_node = chunk_node.ptr();
+		bal.build(0, chunks);
+		ordered->leaf_count = chunks;
+		ordered->levels.resize(level_count);
+		for (uint32_t l = 0; l < level_count; l++) {
+			const uint8_t *indices = l == 0 ? base_indices : p_lods[l - 1].ptr();
+			const uint32_t level_tris = l == 0 ? tri_count : uint32_t(p_lods[l - 1].size() / index_size) / 3;
+			LocalVector<uint32_t> leaf;
+			leaf.resize(level_tris);
+			for (uint32_t t = 0; t < level_tris; t++) {
+				leaf[t] = chunk_node[uint32_t(uint64_t(t) * chunks / level_tris)];
+			}
+			// Leaves in pre-order follow the chunk order, so the "reordered" data equals the input: only the ranges
+			// and bounds are kept.
+			make_level(ordered->nodes, positions.ptr(), p_vertex_count, indices, is_16, level_tris, leaf.ptr(), ordered->levels[l].nodes);
+			ordered->levels[l].index_count = level_tris * 3;
+		}
+		ordered->active = true;
+		ordered->preserves_order = true;
+		*r_ordered = ordered;
 	}
 	return clusters;
 }
