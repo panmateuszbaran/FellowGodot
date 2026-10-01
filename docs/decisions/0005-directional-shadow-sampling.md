@@ -251,7 +251,26 @@ lavapipe: **0 differing pixels** with the toggle off vs on (PBR Lab 7 cameras, S
 viewport, moving sun — and its two motion sequences, Blend Lab sequence). Texels computed from the atlas (directional
 and positional together): 59 % (PBR Lab), 64 % (Stress Lab, Blend Lab). Early-outs lost (a debug build that marks
 every directional early-out, toggle off vs on): 562 of 115,597 pixels on one PBR camera, 88 of 83,013 on another,
-none on the other 5 PBR and 4 Stress Lab cameras. RTX: pending (`fellow25`).
+none on the other 5 PBR and 4 Stress Lab cameras. RTX (`fellow27`; the first build, `fellow25`, did not compile with
+MSVC): identical (`m3_f27_temporal`, toggle off vs on: Bistro exterior 99.0 dB, max |d| 0; Sponza, Lights Lab,
+Bistro interior and PBR Lab at their run-to-run floor). Build time (`m3_f27_profile`): 0.062 → 0.055 ms (Bistro
+exterior), 0.064 → 0.057 (Sponza), 0.072 → 0.067 (PBR Lab, both atlases): −0.005 to −0.007 ms, far less than the
+texels it no longer reads, so after `build_rects` the build is no longer bound by reading the atlas but by its chain
+of dependent dispatches. Frame time (`m3_f27_perf`, 3 runs): within noise in every scene (−0.8 to +1.2 %, p ≥ 0.09).
+**REJECT** (stays off): exact, no measurable gain.
+
+## One clear of the whole directional atlas when nothing is cached (`fellow27`)
+
+Since `fellow22` the stock cascades clear their own rects when the lights tile the atlas (so cached cascades keep
+their content). In a scene whose cascades are never cacheable (PBR Lab: the camera's cascades change texel size or
+fail the cost gate in 99 % of frames), that replaced stock's single clear of the whole attachment with four partial
+clears: the shadow pass took 0.135 ms instead of stock's 0.113 (`m3_final_profile`, `m3_f24_profile`). `fellow27`
+clears the whole atlas, as stock, whenever no cascade of the frame comes from the cache, and per rect only when some
+do. lavapipe: identical (PBR Lab and Stress Lab captures, which have both kinds of frames, and the Stress Lab
+sequences). RTX: PBR Lab shadow pass 0.135 → **0.114 ms** (stock 0.114, `m3_f27_profile`); frame time PBR Lab
+2.883 → 2.826 ms (−2.0 %, p 0.07; vs stock −0.2 %, within noise: the +1.8 % of `m3_final_perf` is gone).
+
+
 
 ## Decision
 
