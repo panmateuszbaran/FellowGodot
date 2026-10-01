@@ -1153,6 +1153,7 @@ public:
 	// viewport -> light instance -> cache
 	HashMap<RID, HashMap<RID, FellowDirShadowCache>> fellow_dir_shadow_caches;
 	int64_t fellow_dir_shadow_cache_next_id = 0;
+	bool fellow_tighter_caster_culling = true; // project setting at startup (diagnostic toggle can turn it off)
 	int fellow_rebuild_budget = 0; // rebuilds left in the current frame
 	uint64_t fellow_budget_frame = 0;
 

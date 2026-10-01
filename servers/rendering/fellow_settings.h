@@ -143,6 +143,12 @@ inline int directional_shadow_cache_debug_mode() {
 	return GLOBAL_GET_CACHED(int, "rendering/fellow/shadows/directional_cache_debug_mode");
 }
 
+// Diagnostics: disable the camera-dependent "tighter shadow caster culling" at runtime (stock reads
+// rendering/lights_and_shadows/tighter_shadow_caster_culling only at startup).
+inline bool shadow_debug_no_caster_culling() {
+	return shadows_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/shadows/debug_disable_caster_culling");
+}
+
 // Directional shadow sampling (Forward+ scene shader, docs/decisions/0005-directional-shadow-sampling.md):
 // skip the shadow lookup of pixels whose N.L makes the light's contribution exactly zero (image-identical).
 inline bool shadow_skip_backfacing() {

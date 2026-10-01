@@ -3799,6 +3799,9 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 	Instance *render_reflection_probe = instance_owner.get_or_null(p_reflection_probe); //if null, not rendering to it
 
 	// Prepare the light - camera volume culling system.
+	if (fellow_tighter_caster_culling) {
+		light_culler->set_caster_culling_active(!Fellow::shadow_debug_no_caster_culling());
+	}
 	light_culler->prepare_camera(p_camera_data->main_transform, p_camera_data->main_projection);
 
 	Scenario *scenario = scenario_owner.get_or_null(p_scenario);
@@ -5112,6 +5115,7 @@ RendererSceneCull::RendererSceneCull() {
 	bool tighter_caster_culling = GLOBAL_DEF("rendering/lights_and_shadows/tighter_shadow_caster_culling", true);
 	light_culler->set_caster_culling_active(tighter_caster_culling);
 	light_culler->set_light_culling_active(tighter_caster_culling);
+	fellow_tighter_caster_culling = tighter_caster_culling;
 }
 
 RendererSceneCull::~RendererSceneCull() {
