@@ -64,7 +64,7 @@ uint64_t FellowShadowMaxMip::get_vram_bytes() const {
 	Size2i s = atlas_size;
 	for (uint32_t i = 0; i < level_views.size(); i++) {
 		s = Size2i((s.x + 1) / 2, (s.y + 1) / 2);
-		total += (uint64_t)s.x * s.y * 4;
+		total += (uint64_t)s.x * s.y * 8;
 	}
 	return total;
 }
@@ -84,13 +84,13 @@ void FellowShadowMaxMip::build(RID p_atlas_texture, const Size2i &p_atlas_size) 
 			levels++;
 		}
 		RD::TextureFormat tf;
-		tf.format = RD::DATA_FORMAT_R32_SFLOAT;
+		tf.format = RD::DATA_FORMAT_R32G32_SFLOAT;
 		tf.width = base.x;
 		tf.height = base.y;
 		tf.mipmaps = levels;
 		tf.usage_bits = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_STORAGE_BIT;
 		texture = RD::get_singleton()->texture_create(tf, RD::TextureView());
-		RD::get_singleton()->set_resource_name(texture, "Fellow directional shadow max pyramid");
+		RD::get_singleton()->set_resource_name(texture, "Fellow directional shadow min/max pyramid");
 		for (uint32_t i = 0; i < levels; i++) {
 			level_views.push_back(RD::get_singleton()->texture_create_shared_from_slice(RD::TextureView(), texture, 0, i, 1, RD::TEXTURE_SLICE_2D));
 		}
@@ -107,7 +107,7 @@ void FellowShadowMaxMip::build(RID p_atlas_texture, const Size2i &p_atlas_size) 
 
 	// One compute list per level (like the SSR Hi-Z): a level written as a storage image is read as a sampled texture by
 	// the next one, and the layout transition between the two only happens between compute lists.
-	RD::get_singleton()->draw_command_begin_label("FellowEngine Shadow Max Pyramid");
+	RD::get_singleton()->draw_command_begin_label("FellowEngine Shadow Min/Max Pyramid");
 	Size2i src_size = p_atlas_size;
 	for (uint32_t i = 0; i < level_views.size(); i++) {
 		Size2i dst_size((src_size.x + 1) / 2, (src_size.y + 1) / 2);
@@ -119,6 +119,8 @@ void FellowShadowMaxMip::build(RID p_atlas_texture, const Size2i &p_atlas_size) 
 		pc.source_size[1] = src_size.y;
 		pc.dest_size[0] = dst_size.x;
 		pc.dest_size[1] = dst_size.y;
+		pc.source_is_pyramid = i == 0 ? 0 : 1;
+		pc.pad[0] = pc.pad[1] = pc.pad[2] = 0;
 		RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
 		RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, pipeline);
 		RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache(shader_rd, 0, u_src), 0);

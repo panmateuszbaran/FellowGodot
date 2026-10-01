@@ -44,6 +44,8 @@ class FellowShadowMaxMip {
 	struct PushConstant {
 		int32_t source_size[2];
 		int32_t dest_size[2];
+		int32_t source_is_pyramid;
+		int32_t pad[3];
 	};
 
 	FellowShadowMaxMipShaderRD shader;

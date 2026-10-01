@@ -321,13 +321,14 @@ float quick_hash(vec2 pos) {
 // differently (by an ulp) than the pyramid's texelFetch. 1/16 of a 16-bit depth step.
 #define FELLOW_SHADOW_MAX_MIP_EPSILON (1.0 / 1048576.0)
 
-// FellowEngine: largest directional shadow atlas depth (reverse Z: closest to the light) in the box of half size
-// p_half_uv around p_uv, widened by 1.5 texels for bilinear / 2x2 PCF footprints. Four fetches from the max pyramid
-// (level 0 = atlas / 2) at the level whose blocks are at least as large as the box, so it spans at most 2x2 blocks.
-float fellow_shadow_box_max(vec2 p_uv, vec2 p_half_uv) {
+// FellowEngine: smallest (.x, farthest from the light in reverse Z) and largest (.y, closest) directional shadow atlas
+// depth in the box of half size p_half_uv around p_uv, widened by 1.5 texels for bilinear / 2x2 PCF footprints. Four
+// fetches from the min/max pyramid (level 0 = atlas / 2) at the level whose blocks are at least as large as the box,
+// so it spans at most 2x2 blocks.
+vec2 fellow_shadow_box_minmax(vec2 p_uv, vec2 p_half_uv) {
 	ivec2 atlas = textureSize(sampler2D(directional_shadow_max_mip, SAMPLER_NEAREST_CLAMP), 0) * 2;
 	vec2 c = p_uv * vec2(atlas);
-	vec2 r = p_half_uv * vec2(atlas) + 1.5;
+	vec2 r = min(p_half_uv * vec2(atlas), vec2(atlas)) + 1.5;
 	// Integer texel box (clamped like the sampler), then the smallest level whose blocks (2^(lod+1) texels) put it in at
 	// most 2x2 blocks.
 	ivec2 lo = clamp(ivec2(floor(c - r)), ivec2(0), atlas - 1);
@@ -339,8 +340,11 @@ float fellow_shadow_box_max(vec2 p_uv, vec2 p_half_uv) {
 	}
 	ivec2 a = lo >> (lod + 1);
 	ivec2 b = hi >> (lod + 1);
-	return max(max(texelFetch(sampler2D(directional_shadow_max_mip, SAMPLER_NEAREST_CLAMP), a, lod).r, texelFetch(sampler2D(directional_shadow_max_mip, SAMPLER_NEAREST_CLAMP), ivec2(b.x, a.y), lod).r),
-			max(texelFetch(sampler2D(directional_shadow_max_mip, SAMPLER_NEAREST_CLAMP), ivec2(a.x, b.y), lod).r, texelFetch(sampler2D(directional_shadow_max_mip, SAMPLER_NEAREST_CLAMP), b, lod).r));
+	vec2 m0 = texelFetch(sampler2D(directional_shadow_max_mip, SAMPLER_NEAREST_CLAMP), a, lod).rg;
+	vec2 m1 = texelFetch(sampler2D(directional_shadow_max_mip, SAMPLER_NEAREST_CLAMP), ivec2(b.x, a.y), lod).rg;
+	vec2 m2 = texelFetch(sampler2D(directional_shadow_max_mip, SAMPLER_NEAREST_CLAMP), ivec2(a.x, b.y), lod).rg;
+	vec2 m3 = texelFetch(sampler2D(directional_shadow_max_mip, SAMPLER_NEAREST_CLAMP), b, lod).rg;
+	return vec2(min(min(m0.x, m1.x), min(m2.x, m3.x)), max(max(m0.y, m1.y), max(m2.y, m3.y)));
 }
 #endif
 
@@ -357,8 +361,16 @@ half sample_directional_pcf_shadow(texture2D shadow, vec2 shadow_pixel_size, vec
 	// FellowEngine: every tap below is a 2x2 comparison (receiver > stored depth = lit) within |shadow_pixel_size| of
 	// pos. If the receiver is closer to the light than every atlas texel there, all taps are lit: return the loop's
 	// result for that case (same arithmetic).
-	if (bool(scene_data_block.data.flags & SCENE_DATA_FLAGS_FELLOW_SHADOW_MAX_MIP) && fellow_shadow_box_max(pos, abs(shadow_pixel_size)) < depth - FELLOW_SHADOW_MAX_MIP_EPSILON) {
-		return half(float(sc_directional_soft_shadow_samples()) * (1.0 / float(sc_directional_soft_shadow_samples())));
+	// If every atlas texel there is at least as close to the light as the receiver (plus a margin), all taps compare 0:
+	// fully shadowed.
+	if (bool(scene_data_block.data.flags & SCENE_DATA_FLAGS_FELLOW_SHADOW_MAX_MIP)) {
+		vec2 mm = fellow_shadow_box_minmax(pos, abs(shadow_pixel_size));
+		if (mm.y < depth - FELLOW_SHADOW_MAX_MIP_EPSILON) {
+			return half(float(sc_directional_soft_shadow_samples()) * (1.0 / float(sc_directional_soft_shadow_samples())));
+		}
+		if (mm.x > depth + FELLOW_SHADOW_MAX_MIP_EPSILON) {
+			return half(0.0);
+		}
 	}
 #endif
 
@@ -455,8 +467,28 @@ half sample_directional_soft_shadow(texture2D shadow, vec3 pssm_coord, vec2 tex_
 #ifdef FELLOW_SHADOW_MAX_MIP
 	// FellowEngine: the blocker search below takes bilinear samples inside |tex_scale| (per axis) of pssm_coord.xy. If no
 	// atlas texel there is closer to the light than the receiver, it finds no blocker and returns 1.0: return it now.
-	if (bool(scene_data_block.data.flags & SCENE_DATA_FLAGS_FELLOW_SHADOW_MAX_MIP) && fellow_shadow_box_max(pssm_coord.xy, abs(tex_scale)) < pssm_coord.z - FELLOW_SHADOW_MAX_MIP_EPSILON) {
-		return half(1.0);
+	// If every texel there is closer to the light than the receiver, every search tap finds a blocker, the blocker
+	// average is at most the region's largest depth, so the penumbra (monotonic in the blocker depth) and with it the
+	// filter radius are at most the ones computed from that largest depth: if every texel within that radius is closer
+	// to the light than the receiver too, every filter tap compares 0: return the filter's result, 0.
+	if (bool(scene_data_block.data.flags & SCENE_DATA_FLAGS_FELLOW_SHADOW_MAX_MIP)) {
+		vec2 mm = fellow_shadow_box_minmax(pssm_coord.xy, abs(tex_scale));
+		if (mm.y < pssm_coord.z - FELLOW_SHADOW_MAX_MIP_EPSILON) {
+			return half(1.0);
+		}
+		if (mm.x > pssm_coord.z + FELLOW_SHADOW_MAX_MIP_EPSILON) {
+			float max_penumbra;
+			bool bounded = true;
+			if (bool(scene_data_block.data.flags & SCENE_DATA_FLAGS_FELLOW_PCSS_DIRECTIONAL_PENUMBRA)) {
+				max_penumbra = (-pssm_coord.z + mm.y) / max(1.0 - pssm_coord.z, 1e-6);
+			} else {
+				bounded = mm.y < 1.0 - 1e-6;
+				max_penumbra = (-pssm_coord.z + mm.y) / max(1.0 - mm.y, 1e-6);
+			}
+			if (bounded && fellow_shadow_box_minmax(pssm_coord.xy, abs(tex_scale) * max_penumbra).x > pssm_coord.z + FELLOW_SHADOW_MAX_MIP_EPSILON) {
+				return half(0.0);
+			}
+		}
 	}
 #endif
 	//find blocker
