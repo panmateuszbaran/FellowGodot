@@ -36,25 +36,40 @@ Consequences:
 
 ## 2. Offline estimates from the engine's own geometry (`--mode=geodump`)
 
-| | Bistro exterior | Bistro interior |
-|---|---:|---:|
-| camera-pass triangles hidden behind solid geometry (Hi-Z, 2×2 texels, per stock instance / FellowEngine cluster) | 30 % (exact test 39 %) | 18 % (23 %) |
-| frustum-only, smaller clusters (8192 / 2048 instead of 32768 / 4096) | −10 % (vs −5 %) | – |
+| | Bistro exterior | Bistro interior | Sponza |
+|---|---:|---:|---:|
+| camera-pass triangles hidden behind solid geometry (Hi-Z, 2×2 texels, per stock instance / FellowEngine cluster) | 30 % (exact test 39 %) | 18 % (23 %) | 12 % (22 %) |
+| frustum-only, smaller clusters (8192 / 2048 instead of 32768 / 4096) | −10 % (vs −5 %) | – | – |
+| screen covered by sky (no geometry), flythrough mean | 2.7 % | 0.2 % | 0.5 % |
 
-Geometry costs about 0.5 ms of Bistro exterior's frame (coarser-LOD sizing): occlusion culling there is worth
-~0.15 ms at most; not pursued for now.
+Geometry costs about 0.5 ms of Bistro exterior's frame and 0.7 ms of Sponza's (coarser-LOD sizing): occlusion
+culling is worth ~0.15 ms at most in Bistro exterior and less in Sponza (12 %, most of Sponza's hidden triangles are
+already outside the clusters' frusta); not pursued for now. The sky fraction rules out skipping SSAO/SSIL work on sky
+pixels as a lever (an exact early-out, but for 0.2-2.7 % of the pixels).
 
 ## 3. Changes (decision records)
 
 | | Decision | Toggle | Status |
 |---|---|---|---|
-| Light clusters with logarithmic depth slices | 0008 | `lights/cluster_depth_slices` | identity done (lavapipe bit-exact vs the complete element set; RTX); A/B running |
+| Light clusters with logarithmic depth slices | 0008 | `lights/cluster_depth_slices` | identity done (lavapipe bit-exact vs the complete element set; RTX); A/B: Lights Lab −0.27 ms (−7.9 %, p 0.002), other scenes within noise |
 | Zero-attenuation light skip | 0008 | `lights/zero_attenuation_skip` | lavapipe identical; RTX pending (`fellow19`) |
 | Shadow min/max pyramid v3 (RG16, incremental) | 0005 | `shadows/directional_max_mip` | identity done; A/B running (`fellow18`) |
 | Pyramid v4: one fetch (overlapping windows), positional atlases | 0005 | `shadows/directional_max_mip`, `shadows/positional_max_mip` | lavapipe identical; RTX pending (`fellow19`) |
 | Editor: headless `--import` no longer crashes on exit | (bug fix) | – | verified (stock crashes the same way: `f18_verify_b`) |
+| Early submit: the frame's rendering no longer waits for the swap chain | 0009 | `frame/early_submit` | lavapipe identical (PBR Lab, Stress Lab); RTX identity, pacing diagnosis and A/B queued (`fellow20`) |
 
-## 4. Mistakes (kept visible)
+## 4. The constant gap between frame time and GPU time
+
+Every session since milestone 1 has frame time = viewport GPU time + 0.37-0.44 ms, whatever the scene, the CPU
+recording time (0.2-1.5 ms) or the configuration, with 87-92 % GPU utilisation: 8-13 % of the frame rate at 3-5 ms
+per frame. The hardware record of every session shows why it is worth chasing: the laptop's panel is driven by the
+Intel iGPU, so every frame crosses from the RTX GPU to the iGPU and the compositor (hybrid graphics, the usual gaming
+laptop). Stock Godot submits the whole frame after acquiring the swap chain image, and the whole submission waits on
+the acquisition at the colour-output stage. Decision 0009 submits the rendering before the acquisition; the
+`fellow20` job measures it together with two start-up settings that would also hide such a wait (a frame queue of
+3, 4 swap chain images), using the runner's new per-variant start-up overrides.
+
+## 5. Mistakes (kept visible)
 
 * The queued jobs overlapped from 10:29 to 11:05 (a queue marker that the queue script itself prints); every timing
   of that window is discarded and re-run (milestone-2 report §5 has the details).
