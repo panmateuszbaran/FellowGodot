@@ -173,6 +173,31 @@ vec3 load_normal(ivec2 p_pos, ivec2 p_offset) {
 	return encoded_normal;
 }
 
+// FellowEngine: the depths and normals of each 8 x 8 workgroup's pixels and their 1-texel border, loaded once into
+// shared memory: every pixel reads its own and its four neighbours' (edge detection, detail AO, normal edges) from
+// there instead of two gathers and up to five normal loads per pixel. The same texels: the depths with the gathers'
+// mirrored addressing, the normals from the same full-resolution coordinates (load_normal()).
+shared float tile_depth[10][10];
+shared vec3 tile_normal[10][10];
+
+ivec2 mirror_texel(ivec2 p_texel, ivec2 p_size) {
+	return ivec2(p_texel.x < 0 ? -p_texel.x - 1 : (p_texel.x >= p_size.x ? 2 * p_size.x - p_texel.x - 1 : p_texel.x),
+			p_texel.y < 0 ? -p_texel.y - 1 : (p_texel.y >= p_size.y ? 2 * p_size.y - p_texel.y - 1 : p_texel.y));
+}
+
+void load_tile() {
+	ivec2 size = textureSize(source_depth_mipmaps, 0).xy;
+	ivec2 origin = ivec2(gl_WorkGroupID.xy) * 8 - 1;
+	for (uint i = gl_LocalInvocationIndex; i < 100u; i += 64u) {
+		ivec2 t = ivec2(int(i % 10u), int(i / 10u));
+		ivec2 p = origin + t;
+		tile_depth[t.y][t.x] = texelFetch(source_depth_mipmaps, ivec3(mirror_texel(p, size), params.pass), 0).x;
+		tile_normal[t.y][t.x] = load_normal(p * 2 * params.size_multiplier + params.pass_coord_offset);
+	}
+	memoryBarrierShared();
+	barrier();
+}
+
 // all vectors in viewspace
 float calculate_pixel_obscurance(vec3 p_pixel_normal, vec3 p_hit_delta, float p_fallof_sq) {
 	float length_sq = dot(p_hit_delta, p_hit_delta);
@@ -251,24 +276,24 @@ void generate_SSAO_shadows_internal(out float r_shadow_term, out vec4 r_edges, o
 	const int number_of_taps = (p_adaptive_base) ? (SSAO_ADAPTIVE_TAP_BASE_COUNT) : (num_taps[p_quality_level]);
 	float pix_z, pix_left_z, pix_top_z, pix_right_z, pix_bottom_z;
 
-	vec4 valuesUL = textureGather(source_depth_mipmaps, vec3(pos_rounded * params.half_screen_pixel_size, params.pass));
-	vec4 valuesBR = textureGather(source_depth_mipmaps, vec3((pos_rounded + vec2(1.0)) * params.half_screen_pixel_size, params.pass));
+	// This pixel's depth and its neighbours' (the shared tile, see load_tile(); stock: two gathers).
+	const ivec2 l = ivec2(gl_LocalInvocationID.xy) + 1;
 
 	// get this pixel's viewspace depth
-	pix_z = valuesUL.y;
+	pix_z = tile_depth[l.y][l.x];
 
 	// get left right top bottom neighboring pixels for edge detection (gets compiled out on quality_level == 0)
-	pix_left_z = valuesUL.x;
-	pix_top_z = valuesUL.z;
-	pix_right_z = valuesBR.z;
-	pix_bottom_z = valuesBR.x;
+	pix_left_z = tile_depth[l.y][l.x - 1];
+	pix_top_z = tile_depth[l.y - 1][l.x];
+	pix_right_z = tile_depth[l.y][l.x + 1];
+	pix_bottom_z = tile_depth[l.y + 1][l.x];
 
 	vec2 normalized_screen_pos = pos_rounded * params.half_screen_pixel_size + params.half_screen_pixel_size_x025;
 	vec3 pix_center_pos = NDC_to_view_space(normalized_screen_pos, pix_z);
 
 	// Load this pixel's viewspace normal
 	uvec2 full_res_coord = upos * 2 * params.size_multiplier + params.pass_coord_offset.xy;
-	vec3 pixel_normal = load_normal(ivec2(full_res_coord));
+	vec3 pixel_normal = tile_normal[l.y][l.x];
 
 	const vec2 pixel_size_at_center = NDC_to_view_space(normalized_screen_pos.xy + params.half_screen_pixel_size, pix_center_pos.z).xy - pix_center_pos.xy;
 
@@ -338,10 +363,22 @@ void generate_SSAO_shadows_internal(out float r_shadow_term, out vec4 r_edges, o
 
 	// Sharp normals also create edges - but this adds to the cost as well
 	if (!p_adaptive_base && (p_quality_level >= SSAO_NORMAL_BASED_EDGES_ENABLE_AT_QUALITY_PRESET)) {
-		vec3 neighbour_normal_left = load_normal(ivec2(full_res_coord), ivec2(-2, 0));
-		vec3 neighbour_normal_right = load_normal(ivec2(full_res_coord), ivec2(2, 0));
-		vec3 neighbour_normal_top = load_normal(ivec2(full_res_coord), ivec2(0, -2));
-		vec3 neighbour_normal_bottom = load_normal(ivec2(full_res_coord), ivec2(0, 2));
+		vec3 neighbour_normal_left;
+		vec3 neighbour_normal_right;
+		vec3 neighbour_normal_top;
+		vec3 neighbour_normal_bottom;
+		if (params.size_multiplier == 1) {
+			// Full size: the neighbours 2 full-resolution pixels away are this layer's neighbouring pixels (load_tile()).
+			neighbour_normal_left = tile_normal[l.y][l.x - 1];
+			neighbour_normal_right = tile_normal[l.y][l.x + 1];
+			neighbour_normal_top = tile_normal[l.y - 1][l.x];
+			neighbour_normal_bottom = tile_normal[l.y + 1][l.x];
+		} else {
+			neighbour_normal_left = load_normal(ivec2(full_res_coord), ivec2(-2, 0));
+			neighbour_normal_right = load_normal(ivec2(full_res_coord), ivec2(2, 0));
+			neighbour_normal_top = load_normal(ivec2(full_res_coord), ivec2(0, -2));
+			neighbour_normal_bottom = load_normal(ivec2(full_res_coord), ivec2(0, 2));
+		}
 
 		const float dot_threshold = SSAO_NORMAL_BASED_EDGES_DOT_THRESHOLD;
 
@@ -460,6 +497,7 @@ void main() {
 	float out_shadow_term;
 	float out_weight;
 	vec4 out_edges;
+	load_tile(); // every invocation takes part (barrier) before any returns
 	ivec2 ssC = ivec2(gl_GlobalInvocationID.xy);
 	if (any(greaterThanEqual(ssC, params.screen_size))) { //too large, do nothing
 		return;
