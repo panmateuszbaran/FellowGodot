@@ -1,6 +1,6 @@
 # 0004 — Directional shadow static cache
 
-Status: **DRAFT (measurement in progress)** · Branch `fellow/shadows` · Toggle `rendering/fellow/shadows/directional_cache`
+Status: **KEEP** (per-pass and image evidence; frame-level day-state confirmation in the milestone-2 report) · Branch `fellow/shadows` · Toggle `rendering/fellow/shadows/directional_cache`
 (default **off**) · Code: `servers/rendering/renderer_scene_cull.cpp` (`_fellow_shadow_cache_*`),
 `servers/rendering/renderer_rd/effects/fellow_shadow_cache.*`, `shaders/effects/fellow_shadow_cache_copy.glsl`,
 `render_forward_clustered.cpp` (`_render_shadow_pass`)
@@ -82,15 +82,38 @@ Fewer draw calls (CPU) for the same reason.
 
 ## Verification
 
-(in progress — see "Actual visual quality")
+* Verification modes `directional_cache_debug_mode` 1 (lattice only) and 2 (rebuild every frame) exercise the copy
+  path without reuse; both were compared against stock in the development sessions (`m2_verify*`).
+* Final image check `m2_verify7` (60-frame sequences after a 200-frame pre-roll, 1920×1080, RTX 5070 Ti) below.
 
 ## Actual performance
 
-(pending)
+Per-pass GPU timestamps, 1920×1080, `m2_profile7` (one run per variant, flythrough, **night state**: absolute values
+carry ±10 % machine noise, relative per-pass deltas are reliable; frame-level numbers come from the day-state session
+of the milestone-2 report). `f7_cache` = this record; `f7_nogate` = without the cost gate.
+
+| Scene | shadow pass stock → cache | sum of timestamped passes | without the gate |
+|---|---:|---:|---:|
+| PBR Lab | 0.104 → 0.106 ms (gate: stock path) | 2.327 → 2.335 (+0.4 %) | 2.482 (+6.7 %) |
+| Sponza | **3.404 → 0.276 ms** | 11.85 → **8.69 (−26.7 %)** | 9.11 (−23.1 %) |
+| Bistro exterior | **0.518 → 0.259 ms** | 5.05 → **4.76 (−5.8 %)** | 4.64 (−8.2 %) |
+| Bistro interior | no directional shadows | (+7.4 %: machine noise, the variant is identical to stock there) | |
+
+The gate does what it is for: in the light PBR Lab the copy would cost more than the casters (+0.08 ms in the shadow
+pass without the gate); in Bistro exterior the ungated cache is 0.01 ms faster in the shadow pass, within noise of the
+gated one. Render-thread CPU drops by about 40 % in Sponza and Bistro exterior (fewer shadow draw calls).
 
 ## Actual visual quality
 
-(pending)
+`m2_verify7`, stock vs cache (and cache + the sampling skips of decision 0005), PSNR per sequence over 60 frames:
+
+| | PSNR mean (min frame) | pixels differing by more than 2/255 |
+|---|---|---|
+| stock vs cache | 67.8-94.6 dB (65.5) | ≤ 0.003 % |
+| stock vs cache + sampling skips | 67.8-94.7 dB (65.6) | ≤ 0.003 % |
+
+Differences are confined to isolated texels of shadow edges (depth re-basing rounds differently from a direct render
+in 16-bit depth); no visible change.
 
 ## Regression risk
 
@@ -104,4 +127,6 @@ Fewer draw calls (CPU) for the same reason.
 
 ## Decision
 
-(pending)
+**KEEP** — part of the FellowEngine configuration: the largest per-pass saving measured so far (Sponza shadow pass
+−92 %, Bistro exterior −50 %) at image identity within 16-bit depth rounding, with a cost gate that keeps light scenes
+on the stock path. Frame-level confirmation: milestone-2 report (day-state session).
