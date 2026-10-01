@@ -113,6 +113,7 @@ runtime and per benchmark variant (`run_benchmarks.py --builds "label=fellow@key
 | `rendering/fellow/shadows/pcss_blend_band` | false | PCSS path: blend cascades over the last 10 % of a split instead of the whole split (look change) |
 | `rendering/fellow/shadows/pcss_directional_penumbra` | false | directional PCSS: parallel-light penumbra formula (look change; `docs/decisions/0005-directional-shadow-sampling.md`) |
 | `rendering/fellow/shadows/directional_max_mip` | **true** | directional PCSS/PCF early-outs (fully lit / fully shadowed) from a min/max window pyramid of the atlas (exact; decision 0005, v7) |
+| `rendering/fellow/shadows/max_mip_visible_region` | false | directional pyramid: only the windows over the part of each cascade the camera can look up are computed (others (0, 1): no early-out there; exact; decision 0005, in test) |
 | `rendering/fellow/shadows/positional_max_mip` | **true** | the same for omni/spot PCF from a pyramid per positional atlas (exact; decision 0005) |
 | `rendering/fellow/shadows/debug_disable_caster_culling` | false | diagnostics: disable the camera-dependent tighter shadow caster culling at runtime |
 | `rendering/fellow/geometry/enabled` | true | master switch for geometry experiments |

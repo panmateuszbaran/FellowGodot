@@ -224,6 +224,35 @@ skip and both pyramids, 3 runs each):
 
 (With v4's build the same comparison gave PBR Lab +6.0 %, p < 0.001, `m3_f19_perf`.)
 
+## Rebuilding per written rect, merged again (`fellow22`, `fellow24`)
+
+With the shadow cache, `fellow22` clears each stock cascade's own rect instead of the whole atlas (the cached
+cascades keep their content) and rebuilds the pyramid per written rect rather than over their union. That turned one
+dispatch chain into one per cascade: the build rose from 0.06 to 0.09 ms in Sponza and Bistro exterior
+(`m3_final_profile`), where all four cascades are written every frame the camera moves (cache copies). `build_rects`
+(`fellow24`) rebuilds the union when it is at most twice the rects' area (four cascades tiling the atlas: one
+chain), else per rect. lavapipe: identical (PBR Lab captures, Stress Lab sequences, Lights Lab walk, Blend Lab).
+
+## Only the part of each cascade the camera can look up (`shadows/max_mip_visible_region`, `fellow25`)
+
+The build reads the whole rewritten atlas (bandwidth-bound: 32 MB for a 4096² 16-bit atlas). The scene shader looks
+cascade i up only for surfaces in the camera frustum closer than the cascade's split (its own range, and the blend
+into it from the previous cascade). Projected into the cascade, the frustum from the eye to that depth covers about
+half of the cascade's square (stable cascades are fitted to a sphere around the frustum slice; an offline model gives
+44-53 % for its bounding box at sun elevations of 30-70°). With the toggle, the finest level is computed from the
+atlas only over that bounding box plus a margin (max(32, size / 16) texels, for the filter boxes near its edge and the
+windows that contain them); every other finest-level window is set to **(0, 1)**. That pair bounds any depth, so every
+window containing it proves nothing and no early-out fires there: **exact whatever region is chosen** — the region
+only decides where the early-outs are available. A cascade whose texels were not written keeps its windows unless the
+camera now needs more of it (then it is recomputed over the union); orthographic cameras and multiview compute the
+whole cascade.
+
+lavapipe: **0 differing pixels** with the toggle off vs on (PBR Lab 7 cameras, Stress Lab 4 cameras — second
+viewport, moving sun — and its two motion sequences, Blend Lab sequence). Texels computed from the atlas (directional
+and positional together): 59 % (PBR Lab), 64 % (Stress Lab, Blend Lab). Early-outs lost (a debug build that marks
+every directional early-out, toggle off vs on): 562 of 115,597 pixels on one PBR camera, 88 of 83,013 on another,
+none on the other 5 PBR and 4 Stress Lab cameras. RTX: pending (`fellow25`).
+
 ## Decision
 
 * `skip_backfacing_directional`, `skip_backfacing_positional`, `skip_unblended_cascade`: **KEEP** (image-identical;
