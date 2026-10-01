@@ -660,6 +660,24 @@ void MeshStorage::mesh_surface_update_vertex_region(RID p_mesh, int p_surface, i
 	const uint8_t *r = p_data.ptr();
 
 	RD::get_singleton()->buffer_update(mesh->surfaces[p_surface]->vertex_buffer, p_offset, data_size, r);
+
+	// FellowEngine mesh clusters: their bounds come from the vertex data at creation; once positions are updated the
+	// surface is drawn whole (its index buffers may stay in cluster order).
+	_fellow_drop_clusters(mesh->surfaces[p_surface]);
+}
+
+void MeshStorage::_fellow_drop_clusters(Mesh::Surface *p_surface) {
+	_fellow_join_cluster_build(p_surface);
+	if (p_surface->fellow_clusters) {
+		Fellow::stats().geometry_cluster_pending_bytes.sub(p_surface->fellow_clusters->pending_bytes());
+		memdelete(p_surface->fellow_clusters);
+		p_surface->fellow_clusters = nullptr;
+		Fellow::stats().geometry_cluster_surfaces_dropped.increment();
+	}
+	if (p_surface->fellow_clusters_ordered) {
+		memdelete(p_surface->fellow_clusters_ordered);
+		p_surface->fellow_clusters_ordered = nullptr;
+	}
 }
 
 void MeshStorage::mesh_surface_update_attribute_region(RID p_mesh, int p_surface, int p_offset, const Vector<uint8_t> &p_data) {

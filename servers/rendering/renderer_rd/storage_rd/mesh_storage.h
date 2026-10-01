@@ -527,6 +527,7 @@ public:
 	// surface keeps stock's triangle order and uses the order-preserving clusters (chunks of consecutive triangles).
 	void fellow_mesh_surface_decide_clusters(void *p_surface, bool p_activate);
 	void _fellow_join_cluster_build(Mesh::Surface *p_surface);
+	void _fellow_drop_clusters(Mesh::Surface *p_surface);
 
 	_FORCE_INLINE_ RID mesh_surface_get_index_array(void *p_surface, uint32_t p_lod) const {
 		Mesh::Surface *s = reinterpret_cast<Mesh::Surface *>(p_surface);

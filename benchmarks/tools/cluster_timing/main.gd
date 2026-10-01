@@ -50,4 +50,12 @@ func _ready() -> void:
 	if RenderingServer.has_method("fellow_get_stats"):
 		st = RenderingServer.call("fellow_get_stats")
 	print("TIMING tris=%d add_surface_ms=%.1f first_frame_ms=%.1f build_ms=%.1f join_wait_ms=%.1f active=%s" % [idx.size() / 3, (t1 - t0) / 1000.0, (t2 - t1) / 1000.0, st.get("geometry_cluster_build_usec", 0) / 1000.0, st.get("geometry_cluster_join_wait_usec", 0) / 1000.0, st.get("geometry_cluster_surfaces_active", -1)])
+	if "--update" in args:
+		var data := PackedByteArray()
+		data.resize(12 * 10)
+		RenderingServer.mesh_surface_update_vertex_region(mesh.get_rid(), 0, 0, data)
+		await RenderingServer.frame_post_draw
+		await RenderingServer.frame_post_draw
+		st = RenderingServer.call("fellow_get_stats")
+		print("AFTER_UPDATE dropped=%s draws=%s" % [st.get("geometry_cluster_surfaces_dropped"), st.get("geometry_cluster_draws")])
 	get_tree().quit()

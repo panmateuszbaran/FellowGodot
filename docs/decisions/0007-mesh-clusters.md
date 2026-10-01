@@ -74,9 +74,17 @@ triangles are discarded by the GPU after vertex shading and primitive assembly.
    so the image cannot change. Depth pre-pass and opaque pass may draw different subsets (the pre-pass draws the
    shadow mesh with its own clusters): every triangle that covers a pixel is drawn by both.
 
+5. **Build on worker threads.** The build runs as a WorkerThreadPool task started when the surface is created; the
+   render thread joins it at the surface's first set-up (`geometry_cluster_build_usec`, `geometry_cluster_join_wait_usec`).
+   The synchronous first version made Sponza's load 2.8 s longer (3.26 → 6.09 s, `m3_cl_profile`). One 4 M-triangle
+   surface takes 0.56 s on the Linux test machine (`benchmarks/tools/cluster_timing`: positions + centroids 73 ms, k-d
+   tree 278 ms, base level 107 ms, order-preserving variant 121 ms); surfaces build in parallel.
+6. **Vertex updates.** `mesh_surface_update_vertex_region` drops the surface's clusters (their bounds come from the
+   data at creation); the surface is drawn whole from then on.
+
 Cost: no extra GPU memory; CPU memory for the reordered index data from the creation of the surface to its first
-set-up (`geometry_cluster_pending_bytes`); one re-upload of the index buffers at the first set-up; the tree walk on the
-render thread per clustered element and pass.
+set-up (`geometry_cluster_pending_bytes`); one re-upload of the index buffers at the first set-up; the build on worker
+threads at load; the tree walk on the render thread per clustered element and pass.
 
 A first version kept the original buffers and added reordered copies: Sponza **+446 MB of VRAM** (stock peak 2.53 GB).
 It is replaced by the version above (same culling, same draws).

@@ -116,6 +116,7 @@ runtime and per benchmark variant (`run_benchmarks.py --builds "label=fellow@key
 | `rendering/fellow/geometry/enabled` | true | master switch for geometry experiments |
 | `rendering/fellow/geometry/mesh_clusters` | **true** | mesh clusters: frustum culling of k-d clusters of large static surfaces (`docs/decisions/0007-mesh-clusters.md`); read when meshes are created and every frame |
 | `rendering/fellow/geometry/cluster_triangles` | 4096 | maximum triangles per cluster |
+| `rendering/fellow/geometry/cluster_blended_surfaces` | **true** | surfaces drawn with blending keep their triangle order and are culled with order-preserving clusters (off: drawn whole) |
 | `rendering/fellow/geometry/cluster_min_surface_triangles` | 32768 | surfaces with fewer triangles are not clustered |
 | `rendering/fellow/profiling/pass_timestamps` | false | per-pass GPU timestamps without `--gpu-profile` (performance overlay) |
 
