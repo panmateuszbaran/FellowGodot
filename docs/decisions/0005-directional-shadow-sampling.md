@@ -1,9 +1,11 @@
 # 0005 — Directional shadow sampling in the Forward+ scene shader
 
-Status: **DRAFT (measurement pending)** · Branch `fellow/shadows` · Toggles (default **off**):
-`rendering/fellow/shadows/skip_backfacing_directional`, `rendering/fellow/shadows/skip_unblended_cascade`,
-`rendering/fellow/shadows/pcss_blend_band` · Code: `servers/rendering/renderer_rd/shaders/forward_clustered/scene_forward_clustered.glsl`
-(directional shadow loop, `fellow_directional_soft_cascade()`), scene UBO flags 8-10.
+Status: **DRAFT (night-state measurements in; day-state confirmation pending)** · Branch `fellow/shadows` · Toggles
+(default **off**): `rendering/fellow/shadows/skip_backfacing_directional`, `skip_backfacing_positional`,
+`skip_unblended_cascade`, `directional_max_mip` (image-identical); `pcss_blend_band`, `pcss_directional_penumbra`
+(look changes) · Code: `shaders/forward_clustered/scene_forward_clustered.glsl` (directional shadow loop,
+`fellow_directional_soft_cascade()`), `shaders/scene_forward_lights_inc.glsl` (`sample_directional_soft_shadow`,
+omni/spot early return), `effects/fellow_shadow_max_mip.*`, scene UBO flags 8-13.
 
 ## Problem
 
@@ -22,7 +24,19 @@ With the benchmark suns (PCSS: `light_angular_distance` 0.5°, soft shadow quali
 
 ## Evidence (before the change)
 
-(pending: profile with `--sun_blend=0`, `--sun_shadow=0`, `--sun_angular=0` overrides to size the lookup cost)
+Stock with the sun overrides of the benchmark project (`m2_sizing_profile`, 1080p, GPU timestamps, night state:
+relative only):
+
+| Scene | opaque pass, stock | sun shadows off | blend splits off | hard shadows (PCF) |
+|---|---:|---:|---:|---:|
+| PBR Lab | 0.837 ms | 0.436 (−48 %) | 0.643 (−23 %) | 0.667 (−20 %) |
+| Sponza | 3.059 | 2.144 (−30 %) | 2.755 (−10 %) | 2.679 (−12 %) |
+| Bistro exterior | 2.030 | 1.134 (−44 %) | 1.605 (−21 %) | 1.434 (−29 %) |
+| Bistro interior (no sun shadows) | 1.842 | 1.857 | 1.821 | 1.762 |
+
+Directional shadow *sampling* is 30-48 % of the opaque pass where the sun casts shadows; the PCSS blend over whole
+splits alone is 10-23 %. (Blend splits also enlarge every cascade's caster culling volume: Sponza's shadow-map pass
+is 0.81 ms cheaper without them.) The transparent pass shows the same pattern (Sponza −0.64 ms without sun shadows).
 
 ## Proposed implementation
 
@@ -35,7 +49,47 @@ With the benchmark suns (PCSS: `light_angular_distance` 0.5°, soft shadow quali
    is > 0 (`mix(a, b, 0.0) == a`).
 3. `pcss_blend_band` (look change): PCSS path samples the cascade containing the pixel and, with blend splits, blends
    towards the next cascade over the last 10 % of the split only — the same band as the PCF path.
+4. `skip_backfacing_positional` (image-identical): omni/spot lights return before the shadow lookup, projector and
+   BRDF where `N·L <= 0` (same material exclusions).
+5. `directional_max_mip` (image-identical by construction): a compute pass builds a max pyramid of the directional
+   atlas after the shadow passes; the PCSS blocker search first reads the 2×2 pyramid texels covering its search box
+   (radius `|tex_scale|` + 1.5 texels for bilinear taps); if none is closer to the light than the receiver, no tap can
+   find a blocker and stock returns 1.0, which is returned directly.
+6. `pcss_directional_penumbra` (look change): stock sizes the directional PCSS filter with the point-light formula
+   `search radius × (d_blocker − d_receiver) / (1 − d_blocker)` (reverse Z, distances from the cascade's near plane),
+   i.e. the physical penumbra `θ × (receiver − blocker distance)` multiplied by receiver distance / blocker distance.
+   That overestimates every penumbra, and without bound for blockers pancaked onto the near plane (casters more than
+   `shadow_pancake_size` in front of the cascade), whose shadows dissolve into the filter. The toggle uses
+   `search radius × (d_blocker − d_receiver) / (1 − d_receiver)` = `θ × (receiver − blocker distance)`, always within
+   the blocker search radius.
 
-## Actual performance / visual quality / decision
+## Actual performance (night state, `m2_profile7`, 1080p, opaque pass GPU ms; ±10 % run noise)
 
-(pending)
+| Scene | stock | sampling skips (1, 2, 4) | PCSS blend band |
+|---|---:|---:|---:|
+| PBR Lab | 0.807 | 0.739 (−0.068) | 0.629 (−0.178) |
+| Sponza | 3.186 | 2.902 (−0.284) | 2.791 (−0.394) |
+| Bistro exterior | 2.088 | 1.795 (−0.293) | 1.692 (−0.396) |
+| Bistro interior | 1.800 | 1.515 (−0.285) | 1.806 |
+
+(Bistro interior has no directional shadow pass; its −0.285 ms comes from omni/spot lights or noise — a variant that
+cannot change anything there, the shadow cache, measured +0.187 ms in the same session.)
+
+## Actual visual quality
+
+* Sampling skips: identical to stock within run-to-run noise (cache + skips vs stock, 60-frame sequences after 200
+  preroll frames: 67.8-94.7 dB, ≤ 0.003 % of pixels differ by more than 2/255; `m2_verify7`).
+* Blend band: 36-56 dB vs stock (`m2_verify4`), i.e. a visible look change. Against the Cycles reference (PBR Lab,
+  reference lighting, `m2_cyc_compare`) it is marginally closer in penumbra regions on 5 of 6 cameras (edge MAE
+  −0.2 % to −4 %), equal globally. In Bistro exterior it appeared to lose a shadow near the camera: stock without
+  blend splits loses it as well (34.5 dB vs stock, `m2_band_debug`), the tighter caster culling was ruled out
+  (`m2_cull_debug`: disabling it changes nothing visible, 72.5 dB); the suspected cause is item 6 (verification:
+  `m2_pen_temporal`, `m2_cyc_pen`).
+* Max pyramid: Linux functional check on Mesa lavapipe (PBR Lab, 3 cameras, 960×540): two cameras bit-identical, one
+  differs in 16 pixels of one spot (max 33/255) — pending the RTX check (`m2_mm_temporal`); lavapipe's bilinear
+  filter of depth with quantized weights can return slightly more than the largest texel, which would make stock see
+  a (false) blocker that the pyramid test rules out.
+
+## Decision
+
+(pending day-state confirmation and the RTX identity check of the max pyramid)
