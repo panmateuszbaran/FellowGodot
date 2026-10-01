@@ -766,15 +766,33 @@ private:
 	RendererRD::SSEffects *ss_effects = nullptr;
 	RendererRD::FellowShadowCache *fellow_shadow_cache = nullptr;
 	RendererRD::FellowShadowMaxMip *fellow_shadow_max_mip = nullptr;
-	// Directional shadow atlas texels written since the min/max pyramid was last brought up to date.
-	Rect2i fellow_dir_atlas_dirty;
+	// Directional shadow atlas rects written since the min/max pyramid was last brought up to date (one per cascade;
+	// a union would also cover the unchanged cascades between two changed ones).
+	LocalVector<Rect2i> fellow_dir_atlas_dirty;
 	bool fellow_dir_atlas_dirty_all = true;
-	void _fellow_mark_dir_atlas_dirty(const Rect2i &p_rect) { fellow_dir_atlas_dirty = fellow_dir_atlas_dirty.has_area() ? fellow_dir_atlas_dirty.merge(p_rect) : p_rect; }
+	void _fellow_mark_dir_atlas_dirty(const Rect2i &p_rect) {
+		for (const Rect2i &r : fellow_dir_atlas_dirty) {
+			if (r.encloses(p_rect)) {
+				return;
+			}
+		}
+		fellow_dir_atlas_dirty.push_back(p_rect);
+	}
+	// This frame, cascades rendered the stock way clear their own rect instead of the whole atlas being cleared (so the
+	// cached cascades keep their content and an unchanged one is neither copied again nor rebuilt in the pyramid).
+	bool fellow_dir_clear_stock_rects = false;
 	// Positional shadow atlas texels written since each atlas's min/max pyramid was last brought up to date.
 	struct FellowAtlasDirty {
-		Rect2i rect;
+		LocalVector<Rect2i> rects; // one per re-rendered slot (a union would cover the slots in between)
 		bool all = true;
-		void merge(const Rect2i &p_rect) { rect = rect.has_area() ? rect.merge(p_rect) : p_rect; }
+		void merge(const Rect2i &p_rect) {
+			for (const Rect2i &r : rects) {
+				if (r.encloses(p_rect)) {
+					return;
+				}
+			}
+			rects.push_back(p_rect);
+		}
 	};
 	HashMap<RID, FellowAtlasDirty> fellow_pos_atlas_dirty;
 

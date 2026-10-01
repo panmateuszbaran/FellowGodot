@@ -31,6 +31,7 @@
 
 #include "fellow_shadow_max_mip.h"
 
+#include "servers/rendering/fellow_settings.h"
 #include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
 #include "servers/rendering/renderer_rd/uniform_set_cache_rd.h"
 
@@ -189,6 +190,10 @@ void FellowShadowMaxMip::build(RID p_key, RID p_atlas_texture, const Size2i &p_a
 		}
 		if (dst_hi.x <= dst_lo.x || dst_hi.y <= dst_lo.y) {
 			break;
+		}
+		if (i == 0) {
+			Fellow::stats().shadow_pyramid_builds.increment();
+			Fellow::stats().shadow_pyramid_texels.add(uint64_t(dst_hi.x - dst_lo.x) * uint64_t(dst_hi.y - dst_lo.y));
 		}
 		if (i > 0 && dst_size.x <= TAIL_MAX_SIZE && dst_size.y <= TAIL_MAX_SIZE) {
 			// This mip and every smaller one, entirely, in one workgroup (from the previous mip).

@@ -1616,11 +1616,18 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 					break;
 				}
 			}
+			fellow_dir_clear_stock_rects = false;
 			if (!fellow_all_cached) {
-				RD::get_singleton()->draw_list_begin(light_storage->direction_shadow_get_fb(), RD::DRAW_CLEAR_DEPTH, Vector<Color>(), 0.0f);
-				RD::get_singleton()->draw_list_end();
-				fellow_shadow_cache->atlas_invalidate_all();
-				fellow_dir_atlas_dirty_all = true;
+				if (Fellow::directional_shadow_cache() && light_storage->fellow_directional_shadow_grid_full()) {
+					// The lights' rects tile the atlas: each stock cascade clears its own rect (same content as clearing
+					// the whole atlas), the cached ones keep theirs.
+					fellow_dir_clear_stock_rects = true;
+				} else {
+					RD::get_singleton()->draw_list_begin(light_storage->direction_shadow_get_fb(), RD::DRAW_CLEAR_DEPTH, Vector<Color>(), 0.0f);
+					RD::get_singleton()->draw_list_end();
+					fellow_shadow_cache->atlas_invalidate_all();
+					fellow_dir_atlas_dirty_all = true;
+				}
 			}
 		}
 	}
@@ -1673,8 +1680,18 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 		}
 		if (Fellow::shadow_directional_max_mip() && render_shadows && p_render_data->directional_shadows.size() > 0 && light_storage->directional_shadow_get_texture().is_valid()) {
 			const int atlas_size = light_storage->directional_shadow_get_size();
-			const Rect2i dirty = fellow_dir_atlas_dirty_all ? Rect2i(0, 0, atlas_size, atlas_size) : fellow_dir_atlas_dirty;
-			fellow_shadow_max_mip->build(RID(), light_storage->directional_shadow_get_texture(), Size2i(atlas_size, atlas_size), dirty, light_storage->directional_shadow_get_use_16_bits());
+			const RID atlas_texture = light_storage->directional_shadow_get_texture();
+			const Size2i size(atlas_size, atlas_size);
+			const bool use_16_bits = light_storage->directional_shadow_get_use_16_bits();
+			if (fellow_dir_atlas_dirty_all || !fellow_shadow_max_mip->is_valid(RID())) {
+				fellow_shadow_max_mip->build(RID(), atlas_texture, size, Rect2i(Point2i(), size), use_16_bits);
+			} else if (fellow_dir_atlas_dirty.is_empty()) {
+				fellow_shadow_max_mip->build(RID(), atlas_texture, size, Rect2i(), use_16_bits); // nothing written: keeps it
+			} else {
+				for (const Rect2i &r : fellow_dir_atlas_dirty) {
+					fellow_shadow_max_mip->build(RID(), atlas_texture, size, r, use_16_bits);
+				}
+			}
 			p_render_data->scene_data->fellow_shadow_max_mip = fellow_shadow_max_mip->is_valid(RID());
 		} else {
 			fellow_shadow_max_mip->invalidate(RID());
@@ -1686,13 +1703,22 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 			const int atlas_size = light_storage->shadow_atlas_get_size(pos_atlas);
 			const RID atlas_texture = light_storage->shadow_atlas_get_texture(pos_atlas);
 			if (Fellow::shadow_positional_max_mip() && atlas_size > 0 && atlas_texture.is_valid()) {
-				const Rect2i dirty = d.all ? Rect2i(0, 0, atlas_size, atlas_size) : d.rect;
-				fellow_shadow_max_mip->build(pos_atlas, atlas_texture, Size2i(atlas_size, atlas_size), dirty, light_storage->shadow_atlas_get_use_16_bits(pos_atlas));
+				const Size2i size(atlas_size, atlas_size);
+				const bool use_16_bits = light_storage->shadow_atlas_get_use_16_bits(pos_atlas);
+				if (d.all || !fellow_shadow_max_mip->is_valid(pos_atlas)) {
+					fellow_shadow_max_mip->build(pos_atlas, atlas_texture, size, Rect2i(Point2i(), size), use_16_bits);
+				} else if (d.rects.is_empty()) {
+					fellow_shadow_max_mip->build(pos_atlas, atlas_texture, size, Rect2i(), use_16_bits); // nothing written: keeps it
+				} else {
+					for (const Rect2i &r : d.rects) {
+						fellow_shadow_max_mip->build(pos_atlas, atlas_texture, size, r, use_16_bits);
+					}
+				}
 				p_render_data->scene_data->fellow_positional_shadow_max_mip = fellow_shadow_max_mip->is_valid(pos_atlas);
 			} else {
 				fellow_shadow_max_mip->invalidate(pos_atlas);
 			}
-			d.rect = Rect2i();
+			d.rects.clear();
 			d.all = false;
 		}
 		// Atlases that were freed (their viewports are gone).
@@ -1707,7 +1733,7 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 			fellow_pos_atlas_dirty.erase(k);
 		}
 	}
-	fellow_dir_atlas_dirty = Rect2i();
+	fellow_dir_atlas_dirty.clear();
 	fellow_dir_atlas_dirty_all = false;
 
 	if (rb_data.is_valid() && ss_effects) {
@@ -2994,11 +3020,18 @@ void RenderForwardClustered::_render_shadow_pass(RID p_light, RID p_shadow_atlas
 			_fellow_mark_dir_atlas_dirty(atlas_rect);
 		}
 	} else {
+		bool clear_region = p_clear_region;
 		if (light_storage->light_get_type(base) == RSE::LIGHT_DIRECTIONAL) {
 			_fellow_mark_dir_atlas_dirty(atlas_rect);
+			if (fellow_dir_clear_stock_rects) {
+				// The atlas was not cleared this frame: clear this cascade's rect (to the same 0) and forget what the
+				// cache had put there.
+				clear_region = true;
+				fellow_shadow_cache->atlas_rect_set(light_storage->directional_shadow_get_texture(), atlas_rect, RID(), Vector2i(), 0.0, 0.0, true);
+			}
 		}
 		//render shadow
-		_render_shadow_append(render_fb, p_instances, light_projection, light_transform, zfar, 0, 0, reverse_cull_face, using_dual_paraboloid, using_dual_paraboloid_flip, use_pancake, p_lod_distance_multiplier, p_screen_mesh_lod_threshold, atlas_rect, flip_y, p_clear_region, p_open_pass, p_close_pass, p_render_info, p_viewport_size, p_main_cam_transform);
+		_render_shadow_append(render_fb, p_instances, light_projection, light_transform, zfar, 0, 0, reverse_cull_face, using_dual_paraboloid, using_dual_paraboloid_flip, use_pancake, p_lod_distance_multiplier, p_screen_mesh_lod_threshold, atlas_rect, flip_y, clear_region, p_open_pass, p_close_pass, p_render_info, p_viewport_size, p_main_cam_transform);
 	}
 }
 

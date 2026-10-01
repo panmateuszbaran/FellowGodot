@@ -1,6 +1,6 @@
 # 0009 — Early submit: the frame's rendering no longer waits for the swap chain
 
-Status: **REJECT (no effect on RTX; `m3_pacing`)** · Branch `fellow/geometry` · Toggle
+Status: **REJECT, both experiments (`m3_pacing`, `m3_f21_pacing`)** · Branch `fellow/geometry` · Toggle
 `rendering/fellow/frame/early_submit` (default **off** until measured) · Code: `servers/rendering/rendering_device.h/.cpp`
 (`_fellow_submit_early`, `screen_prepare_for_drawing`, `_begin_frame`, frame setup/teardown), `fellow_settings.*`.
 Benchmark harness: `run_benchmarks.py` variants with engine arguments (`^`) and start-up project settings (`%`,
@@ -99,5 +99,27 @@ the second queue of the main family: the main queue's submission signals the fra
 separate-present path, until now used only where the main family cannot present), the present queue waits on it
 and presents. The rendering is untouched (lavapipe: identical captures with and without, the split logged at
 start-up). If the per-frame cost is something the driver serialises behind the present on the queue that presents,
-the main queue no longer waits for it. RTX: *pending* (`m3_f21_pacing`).
+the main queue no longer waits for it.
+
+RTX (`m3_f21_pacing`, `fellow21`, 2 interleaved runs each; "separate queue" logged at start-up in every run):
+
+| scene | variant | frame ms | viewport GPU ms | gap |
+|---|---|---:|---:|---:|
+| PBR Lab | defaults | 2.975 | 2.556 | 0.418 |
+| | present from a second queue | 3.013 | 2.577 | 0.437 |
+| | second queue + early submit | 2.998 | 2.664 | 0.335 |
+| Bistro interior | defaults | 4.413 | 4.046 | 0.368 |
+| | present from a second queue | 4.623 | **4.581** | **0.042** |
+| | second queue + early submit | 4.651 | 4.605 | 0.046 |
+
+The wait does not go away, it moves: presenting from the second queue, Bistro interior's gap vanishes and the same
+time (more) appears inside the frame's own GPU time — the next frame's work on the main queue now waits for the
+presentation of the previous one. Whatever the hybrid presentation path does (the copy to the iGPU and the
+compositor's synchronisation), the GPU serialises it with the rendering, on whichever queue presents. Frame times:
++1 to +5 % (within noise with 2 runs; the A/B in `m3_f21_perf` repeats it for every scene).
+
+**REJECT** (off). The ~0.4 ms per frame is the presentation path of this hybrid laptop, not something the engine
+waits for: it does not depend on the frame queue, the swap chain length, when the rendering is submitted, or which
+queue presents. (On such laptops the system's dGPU-only display mode, where the panel is driven by the NVIDIA GPU, is
+what removes it; that is a system setting, outside the engine and not changed here.)
 

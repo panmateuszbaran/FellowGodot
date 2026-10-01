@@ -107,5 +107,7 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["geometry_cluster_triangles_drawn"] = s.geometry_cluster_triangles_drawn.get();
 	d["geometry_cluster_triangles_culled"] = s.geometry_cluster_triangles_culled.get();
 	d["frame_early_submits"] = s.frame_early_submits.get();
+	d["shadow_pyramid_builds"] = s.shadow_pyramid_builds.get();
+	d["shadow_pyramid_texels"] = s.shadow_pyramid_texels.get();
 	return d;
 }

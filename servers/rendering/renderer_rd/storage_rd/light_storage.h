@@ -1182,6 +1182,21 @@ public:
 		return directional_shadow.depth;
 	}
 
+	// FellowEngine: true when the directional shadow rects of this frame's lights tile the whole atlas (1, 2, 4, 8...
+	// lights: no unused grid cell), so clearing each light's rects is the same as clearing the atlas.
+	bool fellow_directional_shadow_grid_full() const {
+		int split_h = 1;
+		int split_v = 1;
+		while (split_h * split_v < directional_shadow.light_count) {
+			if (split_h == split_v) {
+				split_h <<= 1;
+			} else {
+				split_v <<= 1;
+			}
+		}
+		return directional_shadow.light_count > 0 && split_h * split_v == directional_shadow.light_count;
+	}
+
 	_FORCE_INLINE_ int directional_shadow_get_size() {
 		return directional_shadow.size;
 	}
