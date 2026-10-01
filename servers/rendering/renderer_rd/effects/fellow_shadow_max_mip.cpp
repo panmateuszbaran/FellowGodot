@@ -49,40 +49,63 @@ FellowShadowMaxMip::FellowShadowMaxMip() {
 }
 
 FellowShadowMaxMip::~FellowShadowMaxMip() {
-	_free_texture();
+	for (KeyValue<RID, Target> &kv : targets) {
+		_free_target(kv.value);
+	}
+	targets.clear();
 	shader.version_free(shader_version); // also frees the pipelines (dependencies of the shader)
 }
 
-void FellowShadowMaxMip::_free_texture() {
-	if (texture.is_valid()) {
-		RD::get_singleton()->free_rid(texture); // also frees the dependent level views
+void FellowShadowMaxMip::_free_target(Target &r_target) {
+	if (r_target.texture.is_valid()) {
+		RD::get_singleton()->free_rid(r_target.texture); // also frees the dependent level views
 	}
-	texture = RID();
-	level_views.clear();
-	atlas_size = Size2i();
-	built_from = RID();
-	valid = false;
+	r_target.texture = RID();
+	r_target.level_views.clear();
+	r_target.atlas_size = Size2i();
+	r_target.built_from = RID();
+	r_target.valid = false;
+}
+
+void FellowShadowMaxMip::invalidate(RID p_key) {
+	Target *t = targets.getptr(p_key);
+	if (t) {
+		t->valid = false;
+	}
+}
+
+bool FellowShadowMaxMip::is_valid(RID p_key) const {
+	const Target *t = targets.getptr(p_key);
+	return t && t->valid;
+}
+
+RID FellowShadowMaxMip::get_texture(RID p_key) const {
+	const Target *t = targets.getptr(p_key);
+	return t ? t->texture : RID();
 }
 
 uint64_t FellowShadowMaxMip::get_vram_bytes() const {
 	uint64_t total = 0;
-	Size2i s = atlas_size;
-	for (uint32_t i = 0; i < level_views.size(); i++) {
-		s = Size2i((s.x + 1) / 2, (s.y + 1) / 2);
-		total += (uint64_t)s.x * s.y * (texture_rg16 ? 4 : 8);
+	for (const KeyValue<RID, Target> &kv : targets) {
+		Size2i s = kv.value.atlas_size;
+		for (uint32_t i = 0; i < kv.value.level_views.size(); i++) {
+			s = Size2i((s.x + 1) / 2, (s.y + 1) / 2);
+			total += (uint64_t)s.x * s.y * (rg16_supported ? 4 : 8);
+		}
 	}
 	return total;
 }
 
-void FellowShadowMaxMip::build(RID p_atlas_texture, const Size2i &p_atlas_size, const Rect2i &p_dirty, bool p_atlas_16_bits) {
+void FellowShadowMaxMip::build(RID p_key, RID p_atlas_texture, const Size2i &p_atlas_size, const Rect2i &p_dirty, bool p_atlas_16_bits) {
+	Target &target = targets[p_key];
 	if (p_atlas_texture.is_null() || p_atlas_size.x < 2 || p_atlas_size.y < 2) {
-		valid = false;
+		target.valid = false;
 		return;
 	}
-	if (texture.is_valid() && atlas_size != p_atlas_size) {
-		_free_texture();
+	if (target.texture.is_valid() && target.atlas_size != p_atlas_size) {
+		_free_target(target);
 	}
-	if (texture.is_null()) {
+	if (target.texture.is_null()) {
 		Size2i base((p_atlas_size.x + 1) / 2, (p_atlas_size.y + 1) / 2);
 		uint32_t levels = 1;
 		for (Size2i s = base; s.x > 1 || s.y > 1; s = Size2i((s.x + 1) / 2, (s.y + 1) / 2)) {
@@ -93,23 +116,25 @@ void FellowShadowMaxMip::build(RID p_atlas_texture, const Size2i &p_atlas_size, 
 		tf.height = base.y;
 		tf.mipmaps = levels;
 		tf.usage_bits = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_STORAGE_BIT;
-		texture_rg16 = rg16_supported;
-		tf.format = texture_rg16 ? RD::DATA_FORMAT_R16G16_UNORM : RD::DATA_FORMAT_R32G32_SFLOAT;
-		texture = RD::get_singleton()->texture_create(tf, RD::TextureView());
-		RD::get_singleton()->set_resource_name(texture, "Fellow directional shadow min/max pyramid");
+		tf.format = rg16_supported ? RD::DATA_FORMAT_R16G16_UNORM : RD::DATA_FORMAT_R32G32_SFLOAT;
+		target.texture = RD::get_singleton()->texture_create(tf, RD::TextureView());
+		RD::get_singleton()->set_resource_name(target.texture, "Fellow shadow min/max pyramid");
 		for (uint32_t i = 0; i < levels; i++) {
-			level_views.push_back(RD::get_singleton()->texture_create_shared_from_slice(RD::TextureView(), texture, 0, i, 1, RD::TEXTURE_SLICE_2D));
+			target.level_views.push_back(RD::get_singleton()->texture_create_shared_from_slice(RD::TextureView(), target.texture, 0, i, 1, RD::TEXTURE_SLICE_2D));
 		}
-		atlas_size = p_atlas_size;
+		target.atlas_size = p_atlas_size;
+		target.valid = false;
 	}
+	const bool texture_rg16 = rg16_supported;
+	LocalVector<RID> &level_views = target.level_views;
 
 	// Region of the atlas to rebuild (texels, end exclusive).
 	Rect2i region = p_dirty.intersection(Rect2i(Point2i(), p_atlas_size));
-	if (!valid || built_from != p_atlas_texture) {
+	if (!target.valid || target.built_from != p_atlas_texture) {
 		region = Rect2i(Point2i(), p_atlas_size);
 	}
-	built_from = p_atlas_texture;
-	valid = true;
+	target.built_from = p_atlas_texture;
+	target.valid = true;
 	if (region.size.x <= 0 || region.size.y <= 0) {
 		return; // No atlas texel changed: the pyramid still matches.
 	}
@@ -126,7 +151,10 @@ void FellowShadowMaxMip::build(RID p_atlas_texture, const Size2i &p_atlas_size, 
 		pipeline = RD::get_singleton()->compute_pipeline_create(shader_rd);
 	}
 
-	// One compute list per level (like the SSR Hi-Z): a level written as a storage image is read as a sampled texture by
+	// Floor division (the region's lower bound minus the window overlap can be negative).
+	auto floor_div2 = [](int p_v) -> int { return p_v >= 0 ? p_v / 2 : -((-p_v + 1) / 2); };
+
+	// One compute list per mip (like the SSR Hi-Z): a mip written as a storage image is read as a sampled texture by
 	// the next one, and the layout transition between the two only happens between compute lists.
 	RD::get_singleton()->draw_command_begin_label("FellowEngine Shadow Min/Max Pyramid");
 	Size2i src_size = p_atlas_size;
@@ -134,9 +162,20 @@ void FellowShadowMaxMip::build(RID p_atlas_texture, const Size2i &p_atlas_size, 
 	Point2i src_hi = region.position + region.size;
 	for (uint32_t i = 0; i < level_views.size(); i++) {
 		Size2i dst_size((src_size.x + 1) / 2, (src_size.y + 1) / 2);
-		// Blocks covering the source region.
-		Point2i dst_lo(src_lo.x / 2, src_lo.y / 2);
-		Point2i dst_hi(MIN((src_hi.x + 1) / 2, dst_size.x), MIN((src_hi.y + 1) / 2, dst_size.y));
+		// Destination texels whose window reads the changed source texels: mip 0 window [2j, 2j + 4) of the atlas,
+		// mip m texels 2j and 2j + 2 of mip m - 1.
+		const int back = i == 0 ? 2 : 1;
+		Point2i dst_lo(MAX(0, floor_div2(src_lo.x - back)), MAX(0, floor_div2(src_lo.y - back)));
+		Point2i dst_hi(MIN(dst_size.x, floor_div2(src_hi.x - 1) + 1), MIN(dst_size.y, floor_div2(src_hi.y - 1) + 1));
+		if (src_hi.x >= src_size.x) {
+			dst_hi.x = dst_size.x; // windows clamped at the end read the last source texel
+		}
+		if (src_hi.y >= src_size.y) {
+			dst_hi.y = dst_size.y;
+		}
+		if (dst_hi.x <= dst_lo.x || dst_hi.y <= dst_lo.y) {
+			break;
+		}
 		RID src = i == 0 ? p_atlas_texture : level_views[i - 1];
 		RD::Uniform u_src(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 0, Vector<RID>({ nearest, src }));
 		RD::Uniform u_dst(RD::UNIFORM_TYPE_IMAGE, 0, Vector<RID>({ level_views[i] }));

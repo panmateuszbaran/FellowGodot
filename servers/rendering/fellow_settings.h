@@ -191,6 +191,12 @@ inline bool shadow_directional_max_mip() {
 	return shadows_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/shadows/directional_max_mip");
 }
 
+// Positional (omni, spot) shadow PCF early-out (exact): a min/max window pyramid of the positional shadow atlas proves
+// that the filter region is fully lit or fully shadowed, in which case the taps are skipped (decision 0005).
+inline bool shadow_positional_max_mip() {
+	return shadows_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/shadows/positional_max_mip");
+}
+
 // PCSS of directional lights: penumbra radius = light angular size x (receiver - blocker distance), the parallel-light
 // formula. Stock uses the point-light formula (scaled by receiver / blocker distance from the cascade's near plane),
 // which overestimates every penumbra and grows without bound for blockers pancaked onto the near plane (casters more
@@ -238,6 +244,13 @@ inline bool lights_enabled() {
 // Perspective cameras with one view only (others: stock). Read every frame.
 inline bool light_cluster_depth_slices() {
 	return lights_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/lights/cluster_depth_slices");
+}
+
+// Omni and spot lights whose attenuation at the pixel is exactly zero (beyond the range, outside the spot cone) return
+// before the attenuation's pow(), the shadow and the BRDF (decision 0008). Exact for materials without custom light
+// code, rim, backlight, transmittance, clearcoat, toon shading or shadow-to-opacity (the others keep stock's path).
+inline bool light_zero_attenuation_skip() {
+	return lights_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/lights/zero_attenuation_skip");
 }
 
 // Cumulative counters (render thread writes, scripts read through RenderingServer.fellow_get_stats()).

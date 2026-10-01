@@ -35,8 +35,22 @@
 #include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/render_scene_buffers_rd.h"
 #include "servers/rendering/renderer_rd/uniform_set_cache_rd.h"
+#include "servers/rendering/rendering_server_globals.h"
+#include "servers/rendering/storage/utilities.h"
 
 using namespace RendererRD;
+
+// FellowEngine profiling: GPU timestamps between the stages of an effect recorded in one compute list (a timestamp
+// cannot be captured inside a compute list), only while timestamps are being captured (--gpu-profile). Ends the list,
+// captures the timestamp and returns a new list; otherwise returns the list unchanged.
+static RD::ComputeListID _fellow_split_for_timestamp(RD::ComputeListID p_compute_list, const char *p_name) {
+	if (!RSG::utilities->capturing_timestamps) {
+		return p_compute_list;
+	}
+	RD::get_singleton()->compute_list_end();
+	RENDER_TIMESTAMP(p_name);
+	return RD::get_singleton()->compute_list_begin();
+}
 
 SSEffects *SSEffects::singleton = nullptr;
 
@@ -925,6 +939,7 @@ void SSEffects::screen_space_indirect_lighting(Ref<RenderSceneBuffersRD> p_rende
 	}
 
 	{
+		compute_list = _fellow_split_for_timestamp(compute_list, "SSIL Blur");
 		RD::get_singleton()->draw_command_begin_label("Edge Aware Blur");
 		ssil.blur_push_constant.edge_sharpness = 1.0 - p_settings.sharpness;
 		ssil.blur_push_constant.half_screen_pixel_size[0] = 1.0 / p_ssil_buffers.buffer_width;
@@ -994,6 +1009,7 @@ void SSEffects::screen_space_indirect_lighting(Ref<RenderSceneBuffersRD> p_rende
 	}
 
 	{
+		compute_list = _fellow_split_for_timestamp(compute_list, "SSIL Interleave");
 		RD::get_singleton()->draw_command_begin_label("Interleave Buffers");
 		ssil.interleave_push_constant.inv_sharpness = 1.0 - p_settings.sharpness;
 		ssil.interleave_push_constant.pixel_size[0] = 1.0 / p_settings.full_screen_size.x;
@@ -1315,6 +1331,7 @@ void SSEffects::generate_ssao(Ref<RenderSceneBuffersRD> p_render_buffers, SSAORe
 	//	// Blur
 	//
 	{
+		compute_list = _fellow_split_for_timestamp(compute_list, "SSAO Blur");
 		RD::get_singleton()->draw_command_begin_label("Edge-Aware Blur");
 		ssao.blur_push_constant.edge_sharpness = 1.0 - p_settings.sharpness;
 		ssao.blur_push_constant.half_screen_pixel_size[0] = 1.0 / p_ssao_buffers.buffer_width;
@@ -1378,6 +1395,7 @@ void SSEffects::generate_ssao(Ref<RenderSceneBuffersRD> p_render_buffers, SSAORe
 	// Interleave buffers
 	// back to full size
 	{
+		compute_list = _fellow_split_for_timestamp(compute_list, "SSAO Interleave");
 		RD::get_singleton()->draw_command_begin_label("Interleave Buffers");
 		ssao.interleave_push_constant.inv_sharpness = 1.0 - p_settings.sharpness;
 		ssao.interleave_push_constant.pixel_size[0] = 1.0 / p_settings.full_screen_size.x;
@@ -1557,6 +1575,7 @@ void SSEffects::screen_space_reflection(Ref<RenderSceneBuffersRD> p_render_buffe
 		RD::get_singleton()->draw_command_end_label();
 	}
 
+	RENDER_TIMESTAMP("SSR Hi-Z");
 	RD::get_singleton()->draw_command_begin_label("SSR HI-Z");
 
 	for (uint32_t v = 0; v < view_count; v++) {
@@ -1608,6 +1627,7 @@ void SSEffects::screen_space_reflection(Ref<RenderSceneBuffersRD> p_render_buffe
 
 	RD::get_singleton()->draw_command_end_label();
 
+	RENDER_TIMESTAMP("SSR Main");
 	RD::get_singleton()->draw_command_begin_label("SSR Main");
 
 	RID ssr_shader = ssr.ssr_shader.version_get_shader(ssr.ssr_shader_version, 0);
@@ -1655,6 +1675,7 @@ void SSEffects::screen_space_reflection(Ref<RenderSceneBuffersRD> p_render_buffe
 
 	RD::get_singleton()->draw_command_end_label();
 
+	RENDER_TIMESTAMP("SSR Roughness Filter");
 	RD::get_singleton()->draw_command_begin_label("SSR Roughness Filter");
 
 	RID filter_shader = ssr.filter_shader.version_get_shader(ssr.filter_shader_version, 0);
@@ -1686,6 +1707,7 @@ void SSEffects::screen_space_reflection(Ref<RenderSceneBuffersRD> p_render_buffe
 	RD::get_singleton()->draw_command_end_label();
 
 	if (ssr_half_size) {
+		RENDER_TIMESTAMP("SSR Resolve");
 		RD::get_singleton()->draw_command_begin_label("SSR Resolve");
 
 		RID resolve_shader = ssr.resolve_shader.version_get_shader(ssr.resolve_shader_version, 0);

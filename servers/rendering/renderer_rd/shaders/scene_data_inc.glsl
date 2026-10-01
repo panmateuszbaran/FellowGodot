@@ -20,6 +20,10 @@
 #define SCENE_DATA_FLAGS_FELLOW_SHADOW_MAX_MIP (1 << 13)
 // FellowEngine (rendering/fellow/lights/cluster_depth_slices): logarithmic depth slices of the Forward+ clusters.
 #define SCENE_DATA_FLAGS_FELLOW_CLUSTER_LOG_DEPTH (1 << 14)
+// FellowEngine (rendering/fellow/lights/zero_attenuation_skip): positional lights with zero attenuation return early.
+#define SCENE_DATA_FLAGS_FELLOW_LIGHT_ZERO_ATTENUATION_SKIP (1 << 15)
+// FellowEngine (rendering/fellow/shadows/positional_max_mip): the positional atlas's min/max pyramid is valid.
+#define SCENE_DATA_FLAGS_FELLOW_POSITIONAL_SHADOW_MAX_MIP (1 << 16)
 
 struct SceneData {
 	mat4 projection_matrix;

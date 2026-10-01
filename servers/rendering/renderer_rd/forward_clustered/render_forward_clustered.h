@@ -770,6 +770,13 @@ private:
 	Rect2i fellow_dir_atlas_dirty;
 	bool fellow_dir_atlas_dirty_all = true;
 	void _fellow_mark_dir_atlas_dirty(const Rect2i &p_rect) { fellow_dir_atlas_dirty = fellow_dir_atlas_dirty.has_area() ? fellow_dir_atlas_dirty.merge(p_rect) : p_rect; }
+	// Positional shadow atlas texels written since each atlas's min/max pyramid was last brought up to date.
+	struct FellowAtlasDirty {
+		Rect2i rect;
+		bool all = true;
+		void merge(const Rect2i &p_rect) { rect = rect.has_area() ? rect.merge(p_rect) : p_rect; }
+	};
+	HashMap<RID, FellowAtlasDirty> fellow_pos_atlas_dirty;
 
 #ifdef METAL_MFXTEMPORAL_ENABLED
 	RendererRD::MFXTemporalEffect *mfx_temporal_effect = nullptr;

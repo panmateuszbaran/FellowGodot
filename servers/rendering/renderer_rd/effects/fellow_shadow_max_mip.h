@@ -32,17 +32,18 @@
 #pragma once
 
 #include "servers/rendering/renderer_rd/shaders/effects/fellow_shadow_max_mip.glsl.gen.h"
+#include "core/templates/hash_map.h"
 #include "servers/rendering/rendering_device.h"
 
 namespace RendererRD {
 
-// FellowEngine directional shadow min/max pyramid (docs/decisions/0005-directional-shadow-sampling.md): level k holds the
-// smallest (.r) and largest (.g) depth of every 2^(k+1) x 2^(k+1) block of the directional shadow atlas, so that the
-// Forward+ shadow filters can prove with four fetches that a region is fully lit or fully shadowed.
+// FellowEngine shadow min/max window pyramids (docs/decisions/0005-directional-shadow-sampling.md): for a shadow atlas,
+// mip m holds the smallest (.r) and largest (.g) depth of every atlas window of 2^(m+2) texels starting every
+// 2^(m+1) texels (windows overlap by half), so the Forward+ shadow filters can prove with one fetch that a filter
+// region is fully lit or fully shadowed. One pyramid per atlas (the directional atlas, each positional atlas).
 // Stored as RG16 UNORM when the GPU supports it (exact for a 16-bit atlas; for a 32-bit atlas the minimum is rounded
-// down and the maximum up, which keeps every early-out decision safe), else RG32F. Only the atlas regions written since
-// the last build are rebuilt; a frame in which no directional shadow texel changed (shadow cache, static scene) costs
-// nothing.
+// down and the maximum up, which keeps every early-out decision safe), else RG32F. Only the windows over atlas texels
+// written since the last update are rebuilt: a frame in which no shadow texel changed costs nothing.
 class FellowShadowMaxMip {
 	struct PushConstant {
 		int32_t source_size[2];
@@ -52,29 +53,46 @@ class FellowShadowMaxMip {
 		int32_t dest_offset[2];
 	};
 
+	struct Target {
+		RID texture; // (atlas size / 2) with the full mip chain
+		LocalVector<RID> level_views;
+		Size2i atlas_size;
+		RID built_from; // atlas texture of the last build
+		bool valid = false; // matches the atlas content (built from it and no atlas texel written since)
+	};
+
 	FellowShadowMaxMipShaderRD shader;
 	RID shader_version;
 	RID pipeline_rg16;
 	RID pipeline_rg32;
-
-	RID texture; // (atlas size / 2) with the full mip chain
 	bool rg16_supported = false;
-	bool texture_rg16 = false;
-	LocalVector<RID> level_views;
-	Size2i atlas_size;
-	RID built_from; // atlas texture of the last build
-	bool valid = false; // matches the atlas content (built from it and no atlas texel written since)
 
-	void _free_texture();
+	HashMap<RID, Target> targets; // key: the shadow atlas (RID() for the directional atlas)
+
+	void _free_target(Target &r_target);
 
 public:
-	// Brings the pyramid up to date with the directional shadow atlas, rebuilding the blocks over p_dirty (atlas texels
-	// written since the last call; everything when the atlas texture or its size changed or the pyramid is not valid).
+	// Brings the pyramid of p_key up to date with its atlas, rebuilding the windows over p_dirty (atlas texels written
+	// since the last call; everything when the atlas texture or its size changed or the pyramid is not valid).
 	// Call after the shadow passes of the frame.
-	void build(RID p_atlas_texture, const Size2i &p_atlas_size, const Rect2i &p_dirty, bool p_atlas_16_bits);
-	void invalidate() { valid = false; }
-	bool is_valid() const { return valid; }
-	RID get_texture() const { return texture; }
+	void build(RID p_key, RID p_atlas_texture, const Size2i &p_atlas_size, const Rect2i &p_dirty, bool p_atlas_16_bits);
+	void invalidate(RID p_key);
+	bool is_valid(RID p_key) const;
+	RID get_texture(RID p_key) const;
+	// Frees the pyramids whose key no longer satisfies p_keep (atlases that were freed).
+	template <typename F>
+	void free_unused(F p_keep) {
+		LocalVector<RID> gone;
+		for (KeyValue<RID, Target> &kv : targets) {
+			if (kv.key.is_valid() && !p_keep(kv.key)) {
+				gone.push_back(kv.key);
+			}
+		}
+		for (const RID &k : gone) {
+			_free_target(targets[k]);
+			targets.erase(k);
+		}
+	}
 	uint64_t get_vram_bytes() const;
 
 	FellowShadowMaxMip();

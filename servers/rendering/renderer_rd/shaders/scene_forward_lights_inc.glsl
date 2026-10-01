@@ -321,30 +321,30 @@ float quick_hash(vec2 pos) {
 // differently (by an ulp) than the pyramid's texelFetch. 1/16 of a 16-bit depth step.
 #define FELLOW_SHADOW_MAX_MIP_EPSILON (1.0 / 1048576.0)
 
-// FellowEngine: smallest (.x, farthest from the light in reverse Z) and largest (.y, closest) directional shadow atlas
-// depth in the box of half size p_half_uv around p_uv, widened by 1.5 texels for bilinear / 2x2 PCF footprints. Four
-// fetches from the min/max pyramid (level 0 = atlas / 2) at the level whose blocks are at least as large as the box,
-// so it spans at most 2x2 blocks.
-vec2 fellow_shadow_box_minmax(vec2 p_uv, vec2 p_half_uv) {
-	ivec2 atlas = textureSize(sampler2D(directional_shadow_max_mip, SAMPLER_NEAREST_CLAMP), 0) * 2;
+// FellowEngine: smallest (.x, farthest from the light in reverse Z) and largest (.y, closest) shadow atlas depth in
+// the box of half size p_half_uv around p_uv (atlas UV), widened by 1.5 texels for bilinear / 2x2 PCF footprints, from
+// the min/max window pyramid p_pyramid (mip m: windows of 2^(m+2) texels every 2^(m+1)): the box fits in the single
+// window of the smallest mip whose stride is at least the box size, one fetch. (0, 1) when the box is too large: no
+// early-out can fire.
+vec2 fellow_shadow_window_minmax(texture2D p_pyramid, vec2 p_uv, vec2 p_half_uv) {
+	ivec2 atlas = textureSize(sampler2D(p_pyramid, SAMPLER_NEAREST_CLAMP), 0) * 2;
 	vec2 c = p_uv * vec2(atlas);
 	vec2 r = min(p_half_uv * vec2(atlas), vec2(atlas)) + 1.5;
-	// Integer texel box (clamped like the sampler), then the smallest level whose blocks (2^(lod+1) texels) put it in at
-	// most 2x2 blocks.
+	// Integer texel box (clamped like the sampler).
 	ivec2 lo = clamp(ivec2(floor(c - r)), ivec2(0), atlas - 1);
 	ivec2 hi = clamp(ivec2(floor(c + r)), ivec2(0), atlas - 1);
-	int last = textureQueryLevels(sampler2D(directional_shadow_max_mip, SAMPLER_NEAREST_CLAMP)) - 1;
-	int lod = 0;
-	while (lod < last && any(greaterThan((hi >> (lod + 1)) - (lo >> (lod + 1)), ivec2(1)))) {
-		lod++;
+	int extent = max(hi.x - lo.x, hi.y - lo.y) + 1;
+	// Stride 2^k >= extent (k >= 1), mip k - 1.
+	int k = extent <= 2 ? 1 : findMSB(extent - 1) + 1;
+	int mip = k - 1;
+	if (mip >= textureQueryLevels(sampler2D(p_pyramid, SAMPLER_NEAREST_CLAMP))) {
+		return vec2(0.0, 1.0);
 	}
-	ivec2 a = lo >> (lod + 1);
-	ivec2 b = hi >> (lod + 1);
-	vec2 m0 = texelFetch(sampler2D(directional_shadow_max_mip, SAMPLER_NEAREST_CLAMP), a, lod).rg;
-	vec2 m1 = texelFetch(sampler2D(directional_shadow_max_mip, SAMPLER_NEAREST_CLAMP), ivec2(b.x, a.y), lod).rg;
-	vec2 m2 = texelFetch(sampler2D(directional_shadow_max_mip, SAMPLER_NEAREST_CLAMP), ivec2(a.x, b.y), lod).rg;
-	vec2 m3 = texelFetch(sampler2D(directional_shadow_max_mip, SAMPLER_NEAREST_CLAMP), b, lod).rg;
-	return vec2(min(min(m0.x, m1.x), min(m2.x, m3.x)), max(max(m0.y, m1.y), max(m2.y, m3.y)));
+	return texelFetch(sampler2D(p_pyramid, SAMPLER_NEAREST_CLAMP), lo >> k, mip).rg;
+}
+
+vec2 fellow_shadow_box_minmax(vec2 p_uv, vec2 p_half_uv) {
+	return fellow_shadow_window_minmax(directional_shadow_max_mip, p_uv, p_half_uv);
 }
 #endif
 
@@ -401,6 +401,21 @@ half sample_pcf_shadow(texture2D shadow, vec2 shadow_pixel_size, vec3 coord, flo
 		return half(textureProj(sampler2DShadow(shadow, shadow_sampler), vec4(pos, depth, 1.0)));
 	}
 
+#ifdef FELLOW_SHADOW_MAX_MIP
+	// FellowEngine (rendering/fellow/shadows/positional_max_mip), spot lights: every tap below is a 2x2 comparison within
+	// |shadow_pixel_size| of pos. Receiver closer to the light than every atlas texel there: all taps lit (the loop's
+	// result for that case, same arithmetic); every texel at least as close (plus a margin): all taps shadowed.
+	if (bool(scene_data_block.data.flags & SCENE_DATA_FLAGS_FELLOW_POSITIONAL_SHADOW_MAX_MIP)) {
+		vec2 mm = fellow_shadow_window_minmax(positional_shadow_max_mip, pos, abs(shadow_pixel_size));
+		if (mm.y < depth - FELLOW_SHADOW_MAX_MIP_EPSILON) {
+			return half(float(sc_soft_shadow_samples()) * (1.0 / float(sc_soft_shadow_samples())));
+		}
+		if (mm.x > depth + FELLOW_SHADOW_MAX_MIP_EPSILON) {
+			return half(0.0);
+		}
+	}
+#endif
+
 	mat2 disk_rotation;
 	{
 		float r = quick_hash(gl_FragCoord.xy + vec2(taa_frame_count * 5.588238)) * 2.0 * M_PI;
@@ -426,6 +441,26 @@ half sample_omni_pcf_shadow(texture2D shadow, float blur_scale, vec2 coord, vec4
 		pos = uv_rect.xy + pos * uv_rect.zw;
 		return half(textureProj(sampler2DShadow(shadow, shadow_sampler), vec4(pos, depth, 1.0)));
 	}
+
+#ifdef FELLOW_SHADOW_MAX_MIP
+	// FellowEngine (rendering/fellow/shadows/positional_max_mip), omni (and area) lights: every tap below lies within
+	// |offset_scale| (per axis, kernel inside the unit disk) of coord in paraboloid space. If no tap can cross the rim
+	// (|coord| + |offset| < 1, so none flips to the other paraboloid), all taps are 2x2 comparisons in this paraboloid's
+	// rect within that box: decide them all from the atlas's min/max pyramid as in sample_pcf_shadow().
+	if (bool(scene_data_block.data.flags & SCENE_DATA_FLAGS_FELLOW_POSITIONAL_SHADOW_MAX_MIP)) {
+		vec2 fellow_r = abs(blur_scale * 2.0 * scene_data_block.data.shadow_atlas_pixel_size / uv_rect.zw);
+		if (length(coord) + length(fellow_r) < 0.999) {
+			vec2 center = uv_rect.xy + (coord * 0.5 + 0.5) * uv_rect.zw;
+			vec2 mm = fellow_shadow_window_minmax(positional_shadow_max_mip, center, fellow_r * 0.5 * abs(uv_rect.zw));
+			if (mm.y < depth - FELLOW_SHADOW_MAX_MIP_EPSILON) {
+				return half(float(sc_soft_shadow_samples()) * (1.0 / float(sc_soft_shadow_samples())));
+			}
+			if (mm.x > depth + FELLOW_SHADOW_MAX_MIP_EPSILON) {
+				return half(0.0);
+			}
+		}
+	}
+#endif
 
 	mat2 disk_rotation;
 	{
@@ -577,7 +612,22 @@ void light_process_omni(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 	// Omni light attenuation.
 	vec3 light_rel_vec = omni_lights.data[idx].position - vertex;
 	float light_length = length(light_rel_vec);
+#ifdef FELLOW_BACKFACING_LIGHT_SKIP_OK
+	// FellowEngine (rendering/fellow/lights/zero_attenuation_skip): at or beyond the range get_omni_attenuation() is
+	// exactly 0 (distance * inv_range >= 1, the same product it computes), and a light with zero attenuation adds
+	// nothing for these materials: skip it before the attenuation's pow().
+	const bool fellow_skip_zero = bool(scene_data_block.data.flags & SCENE_DATA_FLAGS_FELLOW_LIGHT_ZERO_ATTENUATION_SKIP);
+	if (fellow_skip_zero && light_length * omni_lights.data[idx].inv_radius >= 1.0) {
+		return;
+	}
+#endif
 	half omni_attenuation = get_omni_attenuation(light_length, omni_lights.data[idx].inv_radius, omni_lights.data[idx].attenuation);
+#ifdef FELLOW_BACKFACING_LIGHT_SKIP_OK
+	// (The shadow lookup and light_compute() both do nothing at or below HALF_FLT_MIN.)
+	if (fellow_skip_zero && omni_attenuation <= HALF_FLT_MIN) {
+		return;
+	}
+#endif
 
 	// Compute size.
 	half size = half(0.0);
@@ -887,6 +937,14 @@ void light_process_spot(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 	vec3 light_rel_vec = spot_lights.data[idx].position - vertex;
 	float light_length = length(light_rel_vec);
 	hvec3 light_rel_vec_norm = hvec3(light_rel_vec / light_length);
+#ifdef FELLOW_BACKFACING_LIGHT_SKIP_OK
+	// FellowEngine (rendering/fellow/lights/zero_attenuation_skip): beyond the range or outside the cone the attenuation
+	// below is exactly 0 (range: as for omni lights; cone: scos clamps to cone_angle, spot_rim = 1, 1 - pow(1, x) = 0).
+	const bool fellow_skip_zero = bool(scene_data_block.data.flags & SCENE_DATA_FLAGS_FELLOW_LIGHT_ZERO_ATTENUATION_SKIP);
+	if (fellow_skip_zero && (light_length * spot_lights.data[idx].inv_radius >= 1.0 || dot(-vec3(light_rel_vec_norm), spot_lights.data[idx].direction) <= spot_lights.data[idx].cone_angle)) {
+		return;
+	}
+#endif
 	half spot_attenuation = get_omni_attenuation(light_length, spot_lights.data[idx].inv_radius, spot_lights.data[idx].attenuation);
 	vec3 spot_dir = spot_lights.data[idx].direction;
 	float cone_angle = spot_lights.data[idx].cone_angle;
@@ -895,6 +953,11 @@ void light_process_spot(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 	// This conversion to a highp float is crucial to prevent light leaking due to precision errors.
 	float spot_rim = max(1e-4, (1.0 - scos) / (1.0 - cone_angle));
 	spot_attenuation *= half(1.0 - pow(spot_rim, spot_lights.data[idx].cone_attenuation));
+#ifdef FELLOW_BACKFACING_LIGHT_SKIP_OK
+	if (fellow_skip_zero && spot_attenuation <= HALF_FLT_MIN) {
+		return;
+	}
+#endif
 
 	// Compute size.
 	half size = half(0.0);

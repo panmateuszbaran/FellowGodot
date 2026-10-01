@@ -69,6 +69,7 @@ public:
 	float lod_distance_multiplier = 0.0;
 	float fellow_lod_distance_bias = 0.0; // FellowEngine shadow cache: LOD as if the camera were this much closer
 	bool fellow_shadow_max_mip = false; // FellowEngine: the directional shadow max pyramid matches this frame's atlas
+	bool fellow_positional_shadow_max_mip = false; // FellowEngine: the positional atlas's pyramid matches its content
 	bool fellow_cluster_log_depth = false; // FellowEngine: the clusters of this render use logarithmic depth slices
 	float fellow_lod_ortho_extent = 0.0; // FellowEngine shadow cache: > 0 = orthographic LOD over this world-space width
 	float screen_mesh_lod_threshold = 0.0;
@@ -123,6 +124,8 @@ private:
 		SCENE_DATA_FLAGS_FELLOW_PCSS_DIRECTIONAL_PENUMBRA = 1 << 12,
 		SCENE_DATA_FLAGS_FELLOW_SHADOW_MAX_MIP = 1 << 13,
 		SCENE_DATA_FLAGS_FELLOW_CLUSTER_LOG_DEPTH = 1 << 14,
+		SCENE_DATA_FLAGS_FELLOW_LIGHT_ZERO_ATTENUATION_SKIP = 1 << 15,
+		SCENE_DATA_FLAGS_FELLOW_POSITIONAL_SHADOW_MAX_MIP = 1 << 16,
 		SCENE_DATA_FLAGS_MAX
 	};
 

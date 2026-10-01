@@ -1133,6 +1133,12 @@ public:
 		return atlas->depth;
 	}
 
+	_FORCE_INLINE_ bool shadow_atlas_get_use_16_bits(RID p_atlas) {
+		ShadowAtlas *atlas = shadow_atlas_owner.get_or_null(p_atlas);
+		ERR_FAIL_NULL_V(atlas, true);
+		return atlas->use_16_bits;
+	}
+
 	_FORCE_INLINE_ int shadow_atlas_get_size(RID p_atlas) {
 		ShadowAtlas *atlas = shadow_atlas_owner.get_or_null(p_atlas);
 		ERR_FAIL_NULL_V(atlas, 0);

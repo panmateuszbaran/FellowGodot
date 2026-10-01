@@ -1662,17 +1662,46 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 		_render_shadow_end();
 	}
 
-	// FellowEngine: min/max pyramid of the directional shadow atlas for the shadow filters' early-outs, brought up to
-	// date over the atlas texels written since its last update (none in a static view with the shadow cache).
+	// FellowEngine: min/max window pyramids of the shadow atlases for the shadow filters' early-outs, brought up to date
+	// over the atlas texels written since their last update (none in a static view with the shadow cache, none for a
+	// positional atlas whose shadows were not re-rendered).
 	p_render_data->scene_data->fellow_shadow_max_mip = false;
+	p_render_data->scene_data->fellow_positional_shadow_max_mip = false;
 	if (fellow_shadow_max_mip) {
 		if (Fellow::shadow_directional_max_mip() && render_shadows && p_render_data->directional_shadows.size() > 0 && light_storage->directional_shadow_get_texture().is_valid()) {
 			const int atlas_size = light_storage->directional_shadow_get_size();
 			const Rect2i dirty = fellow_dir_atlas_dirty_all ? Rect2i(0, 0, atlas_size, atlas_size) : fellow_dir_atlas_dirty;
-			fellow_shadow_max_mip->build(light_storage->directional_shadow_get_texture(), Size2i(atlas_size, atlas_size), dirty, light_storage->directional_shadow_get_use_16_bits());
-			p_render_data->scene_data->fellow_shadow_max_mip = fellow_shadow_max_mip->is_valid();
+			fellow_shadow_max_mip->build(RID(), light_storage->directional_shadow_get_texture(), Size2i(atlas_size, atlas_size), dirty, light_storage->directional_shadow_get_use_16_bits());
+			p_render_data->scene_data->fellow_shadow_max_mip = fellow_shadow_max_mip->is_valid(RID());
 		} else {
-			fellow_shadow_max_mip->invalidate();
+			fellow_shadow_max_mip->invalidate(RID());
+		}
+
+		const RID pos_atlas = p_render_data->shadow_atlas;
+		if (pos_atlas.is_valid() && light_storage->owns_shadow_atlas(pos_atlas)) {
+			FellowAtlasDirty &d = fellow_pos_atlas_dirty[pos_atlas];
+			const int atlas_size = light_storage->shadow_atlas_get_size(pos_atlas);
+			const RID atlas_texture = light_storage->shadow_atlas_get_texture(pos_atlas);
+			if (Fellow::shadow_positional_max_mip() && atlas_size > 0 && atlas_texture.is_valid()) {
+				const Rect2i dirty = d.all ? Rect2i(0, 0, atlas_size, atlas_size) : d.rect;
+				fellow_shadow_max_mip->build(pos_atlas, atlas_texture, Size2i(atlas_size, atlas_size), dirty, light_storage->shadow_atlas_get_use_16_bits(pos_atlas));
+				p_render_data->scene_data->fellow_positional_shadow_max_mip = fellow_shadow_max_mip->is_valid(pos_atlas);
+			} else {
+				fellow_shadow_max_mip->invalidate(pos_atlas);
+			}
+			d.rect = Rect2i();
+			d.all = false;
+		}
+		// Atlases that were freed (their viewports are gone).
+		fellow_shadow_max_mip->free_unused([&](RID p_atlas) { return light_storage->owns_shadow_atlas(p_atlas); });
+		LocalVector<RID> gone;
+		for (const KeyValue<RID, FellowAtlasDirty> &kv : fellow_pos_atlas_dirty) {
+			if (!light_storage->owns_shadow_atlas(kv.key)) {
+				gone.push_back(kv.key);
+			}
+		}
+		for (const RID &k : gone) {
+			fellow_pos_atlas_dirty.erase(k);
 		}
 	}
 	fellow_dir_atlas_dirty = Rect2i();
@@ -2799,6 +2828,18 @@ void RenderForwardClustered::_render_shadow_pass(RID p_light, RID p_shadow_atlas
 
 		atlas_rect.size.width = shadow_size;
 		atlas_rect.size.height = shadow_size;
+
+		// FellowEngine positional shadow pyramid: this light's slot is written (an omni light also writes the next slot,
+		// its second paraboloid).
+		{
+			FellowAtlasDirty &d = fellow_pos_atlas_dirty[p_shadow_atlas];
+			d.merge(atlas_rect);
+			if (light_storage->light_get_type(base) == RSE::LIGHT_OMNI) {
+				const bool wrap_dp = (shadow + 1) % subdivision == 0;
+				const Vector2i dp_offset = wrap_dp ? Vector2i(1 - subdivision, 1) : Vector2i(1, 0);
+				d.merge(Rect2i(atlas_rect.position + dp_offset * atlas_rect.size, atlas_rect.size));
+			}
+		}
 
 		zfar = light_storage->light_get_param(base, RSE::LIGHT_PARAM_RANGE);
 
@@ -3969,8 +4010,21 @@ RID RenderForwardClustered::_setup_render_pass_uniform_set(RenderListType p_rend
 		RD::Uniform u;
 		u.binding = 37;
 		u.uniform_type = RD::UNIFORM_TYPE_TEXTURE;
-		RID texture = (fellow_shadow_max_mip && fellow_shadow_max_mip->get_texture().is_valid()) ? fellow_shadow_max_mip->get_texture() : texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_WHITE);
+		RID texture = (fellow_shadow_max_mip && fellow_shadow_max_mip->get_texture(RID()).is_valid()) ? fellow_shadow_max_mip->get_texture(RID()) : texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_WHITE);
 		u.append_id(texture);
+		uniforms.push_back(u);
+	}
+	{
+		// FellowEngine positional shadow min/max pyramid of this render's shadow atlas (sampled only when
+		// SCENE_DATA_FLAGS_FELLOW_POSITIONAL_SHADOW_MAX_MIP is set).
+		RD::Uniform u;
+		u.binding = 38;
+		u.uniform_type = RD::UNIFORM_TYPE_TEXTURE;
+		RID pos_texture;
+		if (fellow_shadow_max_mip && p_render_data && p_render_data->shadow_atlas.is_valid()) {
+			pos_texture = fellow_shadow_max_mip->get_texture(p_render_data->shadow_atlas);
+		}
+		u.append_id(pos_texture.is_valid() ? pos_texture : texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_WHITE));
 		uniforms.push_back(u);
 	}
 
