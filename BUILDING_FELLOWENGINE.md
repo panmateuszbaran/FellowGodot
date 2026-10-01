@@ -97,6 +97,7 @@ runtime and per benchmark variant (`run_benchmarks.py --builds "label=fellow@key
 | `rendering/fellow/postfx/taa_v2_velocity_dilation` | true | resolve v2: reproject with the closest pixel's velocity in 3×3 (false: the pixel's own, like stock) |
 | `rendering/fellow/postfx/taa_v2_motion_soften` | **0.35** | resolve v2: under motion, pull the history towards the 3×3 mean in high-contrast neighbourhoods (0 = milestone-1 v2) |
 | `rendering/fellow/postfx/taa_v2_soften_contrast` | **0.45** | resolve v2: relative contrast (σ/μ) above which the soften applies |
+| `rendering/fellow/postfx/ssao_shared_tile` | **true** | SSAO gather: each workgroup's depths and normals loaded once into shared memory (image-identical) |
 | `rendering/fellow/shadows/enabled` | true | master switch for shadow experiments |
 | `rendering/fellow/shadows/directional_cache` | **true** | directional shadow static cache (`docs/decisions/0004-directional-shadow-cache.md`) |
 | `rendering/fellow/shadows/directional_cache_guard_texels` | 256 | guard band per side (cache = cascade + 2 × guard texels) |
@@ -111,7 +112,8 @@ runtime and per benchmark variant (`run_benchmarks.py --builds "label=fellow@key
 | `rendering/fellow/shadows/skip_unblended_cascade` | **true** | PCF path: second cascade only where its blend weight is non-zero (image-identical) |
 | `rendering/fellow/shadows/pcss_blend_band` | false | PCSS path: blend cascades over the last 10 % of a split instead of the whole split (look change) |
 | `rendering/fellow/shadows/pcss_directional_penumbra` | false | directional PCSS: parallel-light penumbra formula (look change; `docs/decisions/0005-directional-shadow-sampling.md`) |
-| `rendering/fellow/shadows/directional_max_mip` | false | directional PCSS/PCF early-out from a max pyramid of the atlas (exact; rejected: no net gain) |
+| `rendering/fellow/shadows/directional_max_mip` | **true** | directional PCSS/PCF early-outs (fully lit / fully shadowed) from a min/max window pyramid of the atlas (exact; decision 0005, v7) |
+| `rendering/fellow/shadows/positional_max_mip` | **true** | the same for omni/spot PCF from a pyramid per positional atlas (exact; decision 0005) |
 | `rendering/fellow/shadows/debug_disable_caster_culling` | false | diagnostics: disable the camera-dependent tighter shadow caster culling at runtime |
 | `rendering/fellow/geometry/enabled` | true | master switch for geometry experiments |
 | `rendering/fellow/geometry/mesh_clusters` | **true** | mesh clusters: frustum culling of k-d clusters of large static surfaces (`docs/decisions/0007-mesh-clusters.md`); read when meshes are created and every frame |
@@ -119,7 +121,10 @@ runtime and per benchmark variant (`run_benchmarks.py --builds "label=fellow@key
 | `rendering/fellow/geometry/cluster_blended_surfaces` | **true** | surfaces drawn with blending keep their triangle order and are culled with order-preserving clusters (off: drawn whole) |
 | `rendering/fellow/geometry/cluster_min_surface_triangles` | 32768 | surfaces with fewer triangles are not clustered |
 | `rendering/fellow/lights/enabled` | true | master switch for light-clustering experiments |
-| `rendering/fellow/lights/cluster_depth_slices` | false | light/decal/probe clusters with logarithmic depth slices and conservative per-element depth ranges (`docs/decisions/0008-light-cluster-depth.md`); read every frame |
+| `rendering/fellow/lights/cluster_depth_slices` | **true** | light/decal/probe clusters with logarithmic depth slices and conservative per-element depth ranges (`docs/decisions/0008-light-cluster-depth.md`); read every frame |
+| `rendering/fellow/lights/zero_attenuation_skip` | **true** | omni/spot lights with exactly zero attenuation at the pixel return before the attenuation's pow(), shadow and BRDF (exact; decision 0008) |
+| `rendering/fellow/frame/early_submit` | false | submit the frame's rendering before the swap chain acquisition (decision 0009: rejected, no effect) |
+| `rendering/fellow/frame/separate_present_queue` | false | start-up setting (project.godot / override.cfg): present from a second queue (decision 0009: rejected, slower) |
 | `rendering/fellow/profiling/pass_timestamps` | false | per-pass GPU timestamps without `--gpu-profile` (performance overlay) |
 
 Build times on the benchmark machine (Core Ultra 9 275HX, 24 threads): template_release ~14 min, editor ~18 min
