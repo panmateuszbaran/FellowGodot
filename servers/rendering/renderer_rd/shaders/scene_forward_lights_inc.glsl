@@ -440,7 +440,15 @@ half sample_directional_soft_shadow(texture2D shadow, vec3 pssm_coord, vec2 tex_
 	if (blocker_count > 0.0) {
 		//blockers found, do soft shadow
 		blocker_average /= blocker_count;
-		float penumbra = (-pssm_coord.z + blocker_average) / (1.0 - blocker_average);
+		float penumbra;
+		if (bool(scene_data_block.data.flags & SCENE_DATA_FLAGS_FELLOW_PCSS_DIRECTIONAL_PENUMBRA)) {
+			// FellowEngine: parallel light. tex_scale is the search radius, light size x receiver distance from the near
+			// plane (1 - z in reverse Z); the penumbra is light size x (receiver - blocker distance), i.e. that radius
+			// times (blocker - receiver depth) / (1 - receiver depth). Always within the search radius.
+			penumbra = (-pssm_coord.z + blocker_average) / max(1.0 - pssm_coord.z, 1e-6);
+		} else {
+			penumbra = (-pssm_coord.z + blocker_average) / (1.0 - blocker_average);
+		}
 		tex_scale *= penumbra;
 
 		float s = 0.0;

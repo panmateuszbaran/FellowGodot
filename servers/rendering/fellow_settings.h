@@ -169,6 +169,14 @@ inline bool shadow_pcss_blend_band() {
 	return shadows_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/shadows/pcss_blend_band");
 }
 
+// PCSS of directional lights: penumbra radius = light angular size x (receiver - blocker distance), the parallel-light
+// formula. Stock uses the point-light formula (scaled by receiver / blocker distance from the cascade's near plane),
+// which overestimates every penumbra and grows without bound for blockers pancaked onto the near plane (casters more
+// than "pancake size" in front of the cascade), whose shadows then dissolve. Changes the look (sharper penumbrae).
+inline bool shadow_pcss_directional_penumbra() {
+	return shadows_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/shadows/pcss_directional_penumbra");
+}
+
 // Cumulative counters (render thread writes, scripts read through RenderingServer.fellow_get_stats()).
 struct Stats {
 	SafeNumeric<uint64_t> shadow_cache_cascades_stock;
