@@ -14,7 +14,17 @@ const HDRI := "res://external/bistro/san_giuseppe_bridge_4k.hdr"
 const ALPHA_HINTS := ["leaf", "leaves", "foliage", "plant", "ivy", "grass", "flower", "bush", "tree", "hedge", "fern", "vine", "branch", "shrub", "palm", "chain", "fence", "lattice", "net", "string", "flag", "wire", "banner"]
 
 var interior := false
-var material_report := {"rebuilt": 0, "alpha_scissor": [], "emissive": [], "missing_textures": 0, "kept": 0}
+# --bistro_mat=2: material conversion v2 (fixes of v1, which stays the default so that earlier sessions reproduce):
+#   * alpha hints match whole words of the name (v1 matched substrings: "street" contains "tree", "Plantpots" "plant");
+#   * *_BLENDSHADER materials never get alpha scissor (their base-colour alpha is a layer blend mask, not opacity);
+#   * a base-colour texture of 16 x 16 texels or less is the export's placeholder for an untextured material: v2 uses
+#     the imported material's own colour instead (v1 used the placeholder, transparent black, so such surfaces with
+#     alpha scissor vanished);
+#   * only materials named "glass" become glass, as plain tinted glass (v1 also turned everything named "window" into
+#     glass and kept the texture's alpha, which is 0 everywhere for MASTER_Glass_Dirty_MASKED: invisible panes);
+#   * emission at energy 1 (v1: 4, which turns the whole emissive lamp shades into white blobs under glow).
+var mat_rev := 1
+var material_report := {"rebuilt": 0, "alpha_scissor": [], "emissive": [], "glass": [], "placeholders": [], "missing_textures": 0, "kept": 0}
 var _mat_cache := {}
 var info_path := {}
 
@@ -22,6 +32,7 @@ var info_path := {}
 func build(p_args: Dictionary) -> void:
 	args = p_args
 	interior = str(args.get("scene", "")) == "bistro_interior"
+	mat_rev = int(args.get("bistro_mat", "1"))
 	bench_name = "bistro_interior" if interior else "bistro_exterior"
 	_setup_common()
 	begin_content()
@@ -91,12 +102,17 @@ func _rebuild(m: Material) -> Material:
 	var orm := ORMMaterial3D.new()
 	orm.resource_name = m.resource_name
 	var albedo := _tex(base, "_BaseColor")
+	var placeholder := mat_rev >= 2 and albedo != null and albedo.get_width() <= 16 and albedo.get_height() <= 16
 	var spec := _tex(base, "_Specular")
 	var normal := _tex(base, "_Normal")
 	var emis := _tex(base, "_Emissive")
 	if albedo == null:
 		albedo = (m as BaseMaterial3D).albedo_texture
 	orm.albedo_texture = albedo
+	if placeholder:
+		orm.albedo_texture = null
+		orm.albedo_color = (m as BaseMaterial3D).albedo_color if m is BaseMaterial3D else Color(0.7, 0.7, 0.7)
+		material_report["placeholders"].append(base)
 	if spec:
 		orm.orm_texture = spec
 	else:
@@ -110,29 +126,62 @@ func _rebuild(m: Material) -> Material:
 		orm.emission_enabled = true
 		orm.emission_texture = emis
 		orm.emission = Color(1, 1, 1)
-		orm.emission_energy_multiplier = 4.0
+		orm.emission_energy_multiplier = 4.0 if mat_rev < 2 else 1.0
 		material_report["emissive"].append(base)
 	var lname := (base + " " + m.resource_name).to_lower()
+	var words := _words(base + " " + m.resource_name)
 	var is_alpha := false
 	for h in ALPHA_HINTS:
-		if lname.contains(h):
+		if (mat_rev < 2 and lname.contains(h)) or (mat_rev >= 2 and words.has(h)):
 			is_alpha = true
 			break
 	if m is BaseMaterial3D and (m as BaseMaterial3D).transparency != BaseMaterial3D.TRANSPARENCY_DISABLED:
 		is_alpha = true
+	if mat_rev >= 2 and (words.has("blendshader") or placeholder):
+		is_alpha = false
 	if is_alpha:
 		orm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
 		orm.alpha_scissor_threshold = 0.5
 		orm.alpha_antialiasing_mode = BaseMaterial3D.ALPHA_ANTIALIASING_OFF
 		orm.cull_mode = BaseMaterial3D.CULL_DISABLED
 		material_report["alpha_scissor"].append(base)
-	if lname.contains("glass") or lname.contains("window"):
+	if mat_rev < 2 and (lname.contains("glass") or lname.contains("window")):
 		orm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 		orm.albedo_color = Color(1, 1, 1, 0.35)
+	elif mat_rev >= 2 and words.has("glass"):
+		# Plain tinted glass: the texture's alpha is not opacity for every glass material of the export.
+		orm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		orm.albedo_texture = null
+		orm.albedo_color = Color(0.85, 0.9, 0.92, 0.18)
+		orm.alpha_antialiasing_mode = BaseMaterial3D.ALPHA_ANTIALIASING_OFF
+		orm.cull_mode = BaseMaterial3D.CULL_BACK
+		material_report["glass"].append(base)
 	orm.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
 	material_report["rebuilt"] += 1
 	_mat_cache[key] = orm
 	return orm
+
+
+## Lower-case words of a material name: split at non-letters/digits and at lower-to-upper case changes
+## ("Paris_StreetSign_01" -> paris, street, sign, 01).
+func _words(p_name: String) -> PackedStringArray:
+	var out := PackedStringArray()
+	var cur := ""
+	var prev_lower := false
+	for i in p_name.length():
+		var ch := p_name[i]
+		var is_alnum := (ch >= "a" and ch <= "z") or (ch >= "A" and ch <= "Z") or (ch >= "0" and ch <= "9")
+		var is_upper := ch >= "A" and ch <= "Z"
+		if not is_alnum or (is_upper and prev_lower):
+			if cur != "":
+				out.append(cur.to_lower())
+			cur = ""
+		if is_alnum:
+			cur += ch
+		prev_lower = ch >= "a" and ch <= "z"
+	if cur != "":
+		out.append(cur.to_lower())
+	return out
 
 
 # ------------------------------------------------------------------ lighting
