@@ -612,7 +612,10 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 				RD::get_singleton()->draw_list_draw_indirect(draw_list, index_array_rd.is_valid(), mesh_storage->_multimesh_get_command_buffer_rd_rid(surf->owner->data->base), surf->surface_index * sizeof(uint32_t) * mesh_storage->INDIRECT_MULTIMESH_COMMAND_STRIDE, 1, 0);
 			} else {
 				const FellowMeshClusters *fellow_clusters = nullptr;
-				if (p_params->fellow_cluster_plane_count > 0 && instance_count == 1 && index_array_rd.is_valid() && !surf->owner->mesh_instance.is_valid() && !(surf->owner->base_flags & (INSTANCE_DATA_FLAG_MULTIMESH | INSTANCE_DATA_FLAG_PARTICLES))) {
+				// Shaders that can move vertices (VERTEX/POSITION writes, custom matrices, grow, billboards) may leave the
+				// cluster bounds, which are computed from the mesh data: such elements are drawn whole.
+				const bool fellow_static_vertices = !(shader->uses_vertex || shader->uses_position || shader->writes_modelview_or_projection || shader->uses_z_clip_scale || shader->uses_particle_trails);
+				if (p_params->fellow_cluster_plane_count > 0 && fellow_static_vertices && instance_count == 1 && index_array_rd.is_valid() && !surf->owner->mesh_instance.is_valid() && !(surf->owner->base_flags & (INSTANCE_DATA_FLAG_MULTIMESH | INSTANCE_DATA_FLAG_PARTICLES))) {
 					fellow_clusters = mesh_storage->fellow_mesh_surface_get_clusters(mesh_surface);
 					if (fellow_clusters && (element_info.lod_index >= fellow_clusters->levels.size() || fellow_clusters->levels[element_info.lod_index].index_array.is_null())) {
 						fellow_clusters = nullptr;

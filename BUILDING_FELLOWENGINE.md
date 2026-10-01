@@ -90,6 +90,9 @@ runtime and per benchmark variant (`run_benchmarks.py --builds "label=fellow@key
 | `rendering/fellow/postfx/taa_v2_gamma` | 1.25 | resolve v2 variance-clip width (σ multiplier) |
 | `rendering/fellow/postfx/taa_v2_feedback_min` / `_max` | 0.88 / 0.9375 | resolve v2 history weight range |
 | `rendering/fellow/postfx/taa_v2_antiflicker` | 0.0 | resolve v2: keep the history weight at its maximum where the history is trusted |
+| `rendering/fellow/postfx/taa_v2_velocity_dilation` | true | resolve v2: reproject with the closest pixel's velocity in 3×3 (false: the pixel's own, like stock) |
+| `rendering/fellow/postfx/taa_v2_motion_soften` | 0.0 | resolve v2: under motion, pull the history towards the 3×3 mean in high-contrast neighbourhoods (FellowEngine configuration: 0.35) |
+| `rendering/fellow/postfx/taa_v2_soften_contrast` | 0.3 | resolve v2: relative contrast (σ/μ) above which the soften applies (FellowEngine configuration: 0.45) |
 | `rendering/fellow/shadows/enabled` | true | master switch for shadow experiments |
 | `rendering/fellow/shadows/directional_cache` | false | directional shadow static cache (`docs/decisions/0004-directional-shadow-cache.md`) |
 | `rendering/fellow/shadows/directional_cache_guard_texels` | 256 | guard band per side (cache = cascade + 2 × guard texels) |
@@ -103,6 +106,13 @@ runtime and per benchmark variant (`run_benchmarks.py --builds "label=fellow@key
 | `rendering/fellow/shadows/skip_backfacing_positional` | false | omni/spot: skip the light where N·L makes its contribution zero (image-identical) |
 | `rendering/fellow/shadows/skip_unblended_cascade` | false | PCF path: second cascade only where its blend weight is non-zero (image-identical) |
 | `rendering/fellow/shadows/pcss_blend_band` | false | PCSS path: blend cascades over the last 10 % of a split instead of the whole split (look change) |
+| `rendering/fellow/shadows/pcss_directional_penumbra` | false | directional PCSS: parallel-light penumbra formula (look change; `docs/decisions/0005-directional-shadow-sampling.md`) |
+| `rendering/fellow/shadows/directional_max_mip` | false | directional PCSS/PCF early-out from a max pyramid of the atlas (exact; rejected: no net gain) |
+| `rendering/fellow/shadows/debug_disable_caster_culling` | false | diagnostics: disable the camera-dependent tighter shadow caster culling at runtime |
+| `rendering/fellow/geometry/enabled` | true | master switch for geometry experiments |
+| `rendering/fellow/geometry/mesh_clusters` | false | mesh clusters: frustum culling of k-d clusters of large static surfaces (`docs/decisions/0007-mesh-clusters.md`); read when meshes are created and every frame |
+| `rendering/fellow/geometry/cluster_triangles` | 4096 | maximum triangles per cluster |
+| `rendering/fellow/geometry/cluster_min_surface_triangles` | 32768 | surfaces with fewer triangles are not clustered |
 | `rendering/fellow/profiling/pass_timestamps` | false | per-pass GPU timestamps without `--gpu-profile` (performance overlay) |
 
 Build times on the benchmark machine (Core Ultra 9 275HX, 24 threads): template_release ~14 min, editor ~18 min
