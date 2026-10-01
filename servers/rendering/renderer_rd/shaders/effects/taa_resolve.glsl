@@ -105,6 +105,41 @@ float get_depth(ivec2 thread_id) {
 	return texelFetch(depth_buffer, thread_id, 0).r;
 }
 
+#ifdef FELLOW_TAA_V2
+// FellowEngine: rows first ([y][x]: neighbouring threads of a row read neighbouring entries), and the tonemapped
+// YCoCg colour of every tile texel computed once when the tile is loaded instead of by each of the up to nine
+// threads whose 3x3 neighbourhood contains it.
+shared vec3 tile_color[kTileDimension][kTileDimension];
+shared vec3 tile_ycocg[kTileDimension][kTileDimension];
+shared float tile_depth[kTileDimension][kTileDimension];
+
+vec3 tm(vec3 c);
+vec3 rgb_to_ycocg(vec3 c);
+
+vec3 load_color(uvec2 group_thread_id) {
+	group_thread_id += kBorderSize;
+	return tile_color[group_thread_id.y][group_thread_id.x];
+}
+
+vec3 load_ycocg(uvec2 group_thread_id) {
+	group_thread_id += kBorderSize;
+	return tile_ycocg[group_thread_id.y][group_thread_id.x];
+}
+
+void store_color(uvec2 group_thread_id, vec3 color) {
+	tile_color[group_thread_id.y][group_thread_id.x] = color;
+	tile_ycocg[group_thread_id.y][group_thread_id.x] = rgb_to_ycocg(tm(color));
+}
+
+float load_depth(uvec2 group_thread_id) {
+	group_thread_id += kBorderSize;
+	return tile_depth[group_thread_id.y][group_thread_id.x];
+}
+
+void store_depth(uvec2 group_thread_id, float depth) {
+	tile_depth[group_thread_id.y][group_thread_id.x] = depth;
+}
+#else
 shared vec3 tile_color[kTileDimension][kTileDimension];
 shared float tile_depth[kTileDimension][kTileDimension];
 
@@ -125,6 +160,7 @@ float load_depth(uvec2 group_thread_id) {
 void store_depth(uvec2 group_thread_id, float depth) {
 	tile_depth[group_thread_id.x][group_thread_id.y] = depth;
 }
+#endif
 
 void store_color_depth(uvec2 group_thread_id, ivec2 thread_id) {
 	// out of bounds clamp
@@ -376,7 +412,7 @@ vec3 clip_history_3x3_v2(uvec2 group_pos, vec3 history_tm, out float r_trust, ou
 	vec3 bmin = vec3(1e9);
 	vec3 bmax = vec3(-1e9);
 	for (int i = 0; i < 9; i++) {
-		vec3 c = rgb_to_ycocg(tm(load_color(uvec2(ivec2(group_pos) + kOffsets3x3[i]))));
+		vec3 c = load_ycocg(uvec2(ivec2(group_pos) + kOffsets3x3[i]));
 		m1 += c;
 		m2 += c * c;
 		bmin = min(bmin, c);
