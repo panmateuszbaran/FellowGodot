@@ -54,6 +54,12 @@ inline bool postfx_enabled() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/postfx/enabled");
 }
 
+// SSAO gather with each workgroup's depths and normals loaded once into shared memory (bit-identical; stock: two
+// gathers and up to five normal loads per pixel). Read every frame.
+inline bool ssao_shared_tile() {
+	return postfx_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/postfx/ssao_shared_tile");
+}
+
 // TAA resolve v2: reverse-Z aware closest-depth dilation, history reprojection with the dilated velocity,
 // YCoCg variance clipping in a tonemapped space, feedback weighting, NaN guard. See docs/decisions/.
 inline bool taa_resolve_v2() {

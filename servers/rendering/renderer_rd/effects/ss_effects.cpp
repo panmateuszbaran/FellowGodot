@@ -30,6 +30,8 @@
 
 #include "ss_effects.h"
 
+#include "servers/rendering/fellow_settings.h"
+
 #include "core/config/project_settings.h"
 #include "servers/rendering/renderer_rd/effects/copy_effects.h"
 #include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
@@ -210,6 +212,9 @@ SSEffects::SSEffects() {
 			ssao_modes.push_back("\n");
 			ssao_modes.push_back("\n#define SSAO_BASE\n");
 			ssao_modes.push_back("\n#define ADAPTIVE\n");
+			ssao_modes.push_back("\n#define FELLOW_SHARED_TILE\n");
+			ssao_modes.push_back("\n#define SSAO_BASE\n#define FELLOW_SHARED_TILE\n");
+			ssao_modes.push_back("\n#define ADAPTIVE\n#define FELLOW_SHARED_TILE\n");
 
 			ssao.gather_shader.initialize(ssao_modes);
 
@@ -218,6 +223,9 @@ SSEffects::SSEffects() {
 			for (int i = 0; i <= SSAO_GATHER_ADAPTIVE; i++) {
 				ssao.pipelines[pipeline].create_compute_pipeline(ssao.gather_shader.version_get_shader(ssao.gather_shader_version, i));
 				pipeline++;
+			}
+			for (int i = 0; i < 3; i++) {
+				ssao.fellow_tile_gather_pipelines[i].create_compute_pipeline(ssao.gather_shader.version_get_shader(ssao.gather_shader_version, 3 + i));
 			}
 		}
 
@@ -489,6 +497,9 @@ SSEffects::~SSEffects() {
 		// Cleanup SSAO
 		for (int i = 0; i < SSAO_MAX; i++) {
 			ssao.pipelines[i].free();
+		}
+		for (int i = 0; i < 3; i++) {
+			ssao.fellow_tile_gather_pipelines[i].free();
 		}
 
 		ssao.blur_shader.version_free(ssao.blur_shader_version);
@@ -1273,7 +1284,7 @@ void SSEffects::generate_ssao(Ref<RenderSceneBuffersRD> p_render_buffers, SSAORe
 			ssao.importance_map_push_constant.power = p_settings.power;
 
 			//base pass
-			RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, ssao.pipelines[SSAO_GATHER_BASE].get_rid());
+			RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, (Fellow::ssao_shared_tile() ? ssao.fellow_tile_gather_pipelines[SSAO_GATHER_BASE - SSAO_GATHER] : ssao.pipelines[SSAO_GATHER_BASE]).get_rid());
 			gather_ssao(compute_list, ao_pong_slices, p_settings, true, gather_uniform_set, RID());
 
 			//generate importance map
@@ -1317,10 +1328,10 @@ void SSEffects::generate_ssao(Ref<RenderSceneBuffersRD> p_render_buffers, SSAORe
 			RD::get_singleton()->compute_list_dispatch_threads(compute_list, p_ssao_buffers.half_buffer_width, p_ssao_buffers.half_buffer_height, 1);
 			RD::get_singleton()->compute_list_add_barrier(compute_list);
 
-			RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, ssao.pipelines[SSAO_GATHER_ADAPTIVE].get_rid());
+			RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, (Fellow::ssao_shared_tile() ? ssao.fellow_tile_gather_pipelines[SSAO_GATHER_ADAPTIVE - SSAO_GATHER] : ssao.pipelines[SSAO_GATHER_ADAPTIVE]).get_rid());
 			RD::get_singleton()->draw_command_end_label(); // Importance Map
 		} else {
-			RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, ssao.pipelines[SSAO_GATHER].get_rid());
+			RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, (Fellow::ssao_shared_tile() ? ssao.fellow_tile_gather_pipelines[SSAO_GATHER - SSAO_GATHER] : ssao.pipelines[SSAO_GATHER]).get_rid());
 		}
 
 		gather_ssao(compute_list, ao_deinterleaved_slices, p_settings, false, gather_uniform_set, importance_map_uniform_set);

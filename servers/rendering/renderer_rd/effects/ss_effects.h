@@ -412,6 +412,9 @@ private:
 		RID interleave_shader_version;
 
 		PipelineDeferredRD pipelines[SSAO_MAX];
+		// FellowEngine (rendering/fellow/postfx/ssao_shared_tile): the gather variants with the shared depth/normal
+		// tile, same order as SSAO_GATHER .. SSAO_GATHER_ADAPTIVE (shader versions 3-5).
+		PipelineDeferredRD fellow_tile_gather_pipelines[3];
 	} ssao;
 
 	void gather_ssao(RD::ComputeListID p_compute_list, const RID *p_ao_slices, const SSAOSettings &p_settings, bool p_adaptive_base_pass, RID p_gather_uniform_set, RID p_importance_map_uniform_set);
