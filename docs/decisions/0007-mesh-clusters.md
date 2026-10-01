@@ -48,25 +48,34 @@ triangles are discarded by the GPU after vertex shading and primitive assembly.
    (32768) triangles, triangle primitive, no bones, no blend shapes. Positions are decoded from the vertex data
    (compressed or not); a k-d tree splits the triangles at the median centroid of the longest axis until a leaf holds
    ≤ `cluster_triangles` (4096). Nodes are stored in depth-first pre-order; every index buffer of the surface (base
-   and each LOD; LOD triangles are assigned to leaves by descending the split planes with their centroid) gets a
-   **copy** ordered by leaf, so every node of the tree is one contiguous index range in every copy, with its own
-   bounds per LOD (inflated by 0.1 % + 0.1 mm).
-2. **The originals stay untouched** and are still used for whole-surface draws and for every pass without a cull
-   volume, in particular the transparent pass: the result of alpha blending depends on the triangle order inside a
-   draw, so reordering it would change the image.
+   and each LOD; LOD triangles are assigned to leaves by descending the split planes with their centroid) is
+   reordered by leaf, so every node of the tree is one contiguous index range in every buffer, with its own bounds
+   per LOD (inflated by 0.1 % + 0.1 mm). The reordered index data is kept on the CPU for now ("pending").
+2. **Decision at set-up** (`RenderForwardClustered::_fellow_decide_clusters`, the first time an instance of the
+   surface is set up for drawing): if none of its materials (material chain and overlay) blends and none moves
+   vertices, the surface's own index buffers are **replaced** by the reordered ones (same format and size: no extra
+   GPU memory); otherwise the clusters are dropped and the surface keeps stock's order — alpha blending inside a draw
+   depends on the triangle order, and vertex-moving shaders could leave the cluster bounds. Shadow meshes (only ever
+   drawn in depth and shadow passes) are always reordered. A surface reordered earlier and later set up with a
+   blending material is counted (`geometry_cluster_blended_after_activation`) and warned about once.
 3. **Draw**: the depth pre-pass and the opaque pass (camera frustum with the TAA jitter the GPU uses) and shadow passes
    (shadow camera planes; without the near plane when casters are pancaked; not for dual-paraboloid) pass world-space
-   planes to the render list. For an element with clusters, drawn once (no instancing, no multimesh, no particles,
-   no skinning), the planes are moved into the instance's local space (`n' = Bᵀn`, `d' = d − n·o`) and the tree is
-   walked: nodes entirely outside one plane are skipped, nodes entirely inside all planes are emitted whole, adjacent
-   ranges are merged, and each range is drawn with `draw_list_draw_indexed_range` (new RenderingDevice call:
-   `vkCmdDrawIndexed` with a first index) from the leaf-ordered copy of the element's LOD.
+   planes to the render list. For an element with active clusters, drawn once (no instancing, no multimesh, no
+   particles, no skinning, a shader that cannot move vertices), the planes are moved into the instance's local space
+   (`n' = Bᵀn`, `d' = d − n·o`) and the tree is walked: nodes entirely outside one plane are skipped, nodes entirely
+   inside all planes are emitted whole, adjacent ranges are merged, and each range is drawn with
+   `draw_list_draw_indexed_range` (new RenderingDevice call: `vkCmdDrawIndexed` with a first index) from the element's
+   own (reordered) index buffer of its LOD. Passes without planes draw the whole buffer, as stock.
 4. A triangle whose cluster is entirely outside one frustum plane is entirely outside it too and covers no pixel,
    so the image cannot change. Depth pre-pass and opaque pass may draw different subsets (the pre-pass draws the
    shadow mesh with its own clusters): every triangle that covers a pixel is drawn by both.
 
-Cost: the leaf-ordered copies double the index memory of clustered surfaces (reported as
-`geometry_cluster_index_bytes`); the tree walk runs on the render thread per clustered element and pass.
+Cost: no extra GPU memory; CPU memory for the reordered index data from the creation of the surface to its first
+set-up (`geometry_cluster_pending_bytes`); one re-upload of the index buffers at the first set-up; the tree walk on the
+render thread per clustered element and pass.
+
+A first version kept the original buffers and added reordered copies: Sponza **+446 MB of VRAM** (stock peak 2.53 GB).
+It is replaced by the version above (same culling, same draws).
 
 ## Expected benefit
 
@@ -79,6 +88,8 @@ with large surfaces; nothing in scenes made of small objects (instance culling a
   (stress setting), 4 fixed cameras at 960×540: **0 differing pixels** against the toggle off, with clusters in the
   camera passes only, with shadow passes too, and with the directional shadow cache on (cache + clusters vs cache).
   24 surfaces clustered; 8.5 k cluster draws, 1.67 M of 20.1 M triangles skipped in the camera passes.
+* In-place version, same test: **0 differing pixels**; 23 surfaces reordered, 1 dropped (the alpha-blended glass
+  sphere), same draws and culled triangles as the copy version.
 
 ## Actual performance
 
@@ -90,8 +101,12 @@ with large surfaces; nothing in scenes made of small objects (instance culling a
 
 ## Regression risk
 
-Index memory of clustered surfaces doubles. Meshes created while the toggle is off are never clustered (the toggle
-is read at creation). Render-thread CPU per clustered element (tree walk, one draw call per visible range).
+Meshes created while the toggle is off are never clustered (the toggle is read at creation). Reading a clustered
+surface back (`ArrayMesh.surface_get_arrays`, trimesh collision from a mesh at runtime) returns the same triangles in
+cluster order. A blending material assigned after a surface was reordered blends its triangles in cluster order (an
+order that is arbitrary in stock as well — the importer's vertex-cache optimisation chose it — but different;
+counted and warned about). The first set-up re-uploads the index buffers (a one-time cost per surface, at load in
+practice). Render-thread CPU per clustered element (tree walk, one draw call per visible range).
 Vertices moved by the shader (`VERTEX`/`POSITION` writes, custom model-view/projection, grow, billboards, wind) could
 leave the cluster bounds, which come from the mesh data (stock covers such displacement with the instance's
 `extra_cull_margin`, which clusters do not see): elements whose shader can do that are drawn whole.

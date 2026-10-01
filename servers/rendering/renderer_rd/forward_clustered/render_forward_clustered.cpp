@@ -617,7 +617,7 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 				const bool fellow_static_vertices = !(shader->uses_vertex || shader->uses_position || shader->writes_modelview_or_projection || shader->uses_z_clip_scale || shader->uses_particle_trails);
 				if (p_params->fellow_cluster_plane_count > 0 && fellow_static_vertices && instance_count == 1 && index_array_rd.is_valid() && !surf->owner->mesh_instance.is_valid() && !(surf->owner->base_flags & (INSTANCE_DATA_FLAG_MULTIMESH | INSTANCE_DATA_FLAG_PARTICLES))) {
 					fellow_clusters = mesh_storage->fellow_mesh_surface_get_clusters(mesh_surface);
-					if (fellow_clusters && (element_info.lod_index >= fellow_clusters->levels.size() || fellow_clusters->levels[element_info.lod_index].index_array.is_null())) {
+					if (fellow_clusters && element_info.lod_index >= fellow_clusters->levels.size()) {
 						fellow_clusters = nullptr;
 					}
 				}
@@ -635,10 +635,7 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 					fellow_ranges.clear();
 					const uint32_t drawn = fellow_clusters->cull(element_info.lod_index, local_planes, plane_count, fellow_ranges);
 					if (fellow_ranges.size() > 0) {
-						if (prev_index_array_rd != level.index_array) {
-							RD::get_singleton()->draw_list_bind_index_array(draw_list, level.index_array);
-							prev_index_array_rd = level.index_array;
-						}
+						// The element's own index array (bound above) is in cluster order.
 						for (uint32_t r = 0; r < fellow_ranges.size(); r += 2) {
 							RD::get_singleton()->draw_list_draw_indexed_range(draw_list, fellow_ranges[r], fellow_ranges[r + 1], 1);
 						}
@@ -4505,6 +4502,52 @@ void RenderForwardClustered::_geometry_instance_add_surface_with_material_chain(
 	}
 }
 
+// FellowEngine mesh clusters (docs/decisions/0007-mesh-clusters.md): a clustered surface's index buffers are put in
+// cluster order the first time it is set up for drawing with materials that never blend it and never move its
+// vertices; with a blending material (whose result depends on the triangle order inside a draw) or a vertex-moving
+// one (the clusters would not be drawn) it keeps stock's order. Shadow meshes are only drawn in depth and shadow
+// passes and are always put in cluster order.
+void RenderForwardClustered::_fellow_decide_clusters(GeometryInstanceForwardClustered *ginstance, uint32_t p_surface, SceneShaderForwardClustered::MaterialData *p_material, RID p_mesh) {
+	RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
+	RendererRD::MaterialStorage *material_storage = RendererRD::MaterialStorage::get_singleton();
+	void *surface = mesh_storage->mesh_get_surface(p_mesh, p_surface);
+	if (surface == nullptr) {
+		return;
+	}
+	const RendererRD::MeshStorage::FellowClusterState state = mesh_storage->fellow_mesh_surface_get_cluster_state(surface);
+	RID shadow_mesh = mesh_storage->mesh_get_shadow_mesh(p_mesh);
+	void *shadow_surface = shadow_mesh.is_valid() ? mesh_storage->mesh_get_surface(shadow_mesh, p_surface) : nullptr;
+	if (shadow_surface && shadow_surface != surface && mesh_storage->fellow_mesh_surface_get_cluster_state(shadow_surface) == RendererRD::MeshStorage::FELLOW_CLUSTERS_PENDING) {
+		mesh_storage->fellow_mesh_surface_decide_clusters(shadow_surface, true);
+	}
+	if (state == RendererRD::MeshStorage::FELLOW_CLUSTERS_NONE) {
+		return;
+	}
+	bool blends = false;
+	bool moves_vertices = false;
+	auto check = [&](SceneShaderForwardClustered::MaterialData *p_mat) {
+		while (p_mat && p_mat->shader_data && p_mat->shader_data->is_valid()) {
+			const SceneShaderForwardClustered::ShaderData *sd = p_mat->shader_data;
+			blends = blends || sd->uses_alpha_pass();
+			moves_vertices = moves_vertices || sd->uses_vertex || sd->uses_position || sd->writes_modelview_or_projection || sd->uses_z_clip_scale || sd->uses_particle_trails;
+			if (p_mat->next_pass.is_null()) {
+				break;
+			}
+			p_mat = static_cast<SceneShaderForwardClustered::MaterialData *>(material_storage->material_get_data(p_mat->next_pass, RendererRD::MaterialStorage::SHADER_TYPE_3D));
+		}
+	};
+	check(p_material);
+	if (ginstance->data->material_overlay.is_valid()) {
+		check(static_cast<SceneShaderForwardClustered::MaterialData *>(material_storage->material_get_data(ginstance->data->material_overlay, RendererRD::MaterialStorage::SHADER_TYPE_3D)));
+	}
+	if (state == RendererRD::MeshStorage::FELLOW_CLUSTERS_PENDING) {
+		mesh_storage->fellow_mesh_surface_decide_clusters(surface, !blends && !moves_vertices);
+	} else if (blends) {
+		Fellow::stats().geometry_cluster_blended_after_activation.increment();
+		WARN_PRINT_ONCE("FellowEngine mesh clusters: a mesh surface already in cluster order is now drawn with a blending material; its triangles blend in cluster order, not in the mesh's order. Assign blending materials before the mesh is first drawn, or disable rendering/fellow/geometry/mesh_clusters.");
+	}
+}
+
 void RenderForwardClustered::_geometry_instance_add_surface(GeometryInstanceForwardClustered *ginstance, uint32_t p_surface, RID p_material, RID p_mesh) {
 	RendererRD::MaterialStorage *material_storage = RendererRD::MaterialStorage::get_singleton();
 	RID m_src;
@@ -4530,6 +4573,8 @@ void RenderForwardClustered::_geometry_instance_add_surface(GeometryInstanceForw
 	}
 
 	ERR_FAIL_NULL(material);
+
+	_fellow_decide_clusters(ginstance, p_surface, material, p_mesh);
 
 	_geometry_instance_add_surface_with_material_chain(ginstance, p_surface, material, m_src, p_mesh);
 

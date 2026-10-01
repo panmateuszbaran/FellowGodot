@@ -232,19 +232,6 @@ uint32_t FellowMeshClusters::cull(uint32_t p_level, const Plane *p_planes, int p
 	return emitted;
 }
 
-void FellowMeshClusters::free_rids() {
-	for (Level &l : levels) {
-		if (l.index_array.is_valid()) {
-			RD::get_singleton()->free_rid(l.index_array);
-			l.index_array = RID();
-		}
-		if (l.index_buffer.is_valid()) {
-			RD::get_singleton()->free_rid(l.index_buffer);
-			l.index_buffer = RID();
-		}
-	}
-}
-
 FellowMeshClusters *fellow_mesh_clusters_build(uint64_t p_format, const Vector<uint8_t> &p_vertex_data, uint32_t p_vertex_count, const AABB &p_aabb, const Vector<uint8_t> &p_index_data, uint32_t p_index_count, const Vector<Vector<uint8_t>> &p_lods, uint32_t p_max_leaf_triangles) {
 	if (!(p_format & RSE::ARRAY_FORMAT_VERTEX) || (p_format & RSE::ARRAY_FLAG_USE_2D_VERTICES) || p_vertex_count == 0 || p_index_count < 6 || p_index_count % 3 != 0) {
 		return nullptr;
@@ -338,12 +325,11 @@ FellowMeshClusters *fellow_mesh_clusters_build(uint64_t p_format, const Vector<u
 			index_count = lod_tris * 3;
 		}
 		level.index_count = index_count;
-		if (index_count == 0) {
-			continue;
+		if (l == 0) {
+			clusters->pending_base = ordered;
+		} else {
+			clusters->pending_lods.push_back(ordered);
 		}
-		level.index_buffer = RD::get_singleton()->index_buffer_create(index_count, is_16 ? RD::INDEX_BUFFER_FORMAT_UINT16 : RD::INDEX_BUFFER_FORMAT_UINT32, ordered, false);
-		level.index_array = RD::get_singleton()->index_array_create(level.index_buffer, 0, index_count);
-		clusters->memory_bytes += uint64_t(index_count) * index_size;
 	}
 	return clusters;
 }

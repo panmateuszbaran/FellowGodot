@@ -92,7 +92,10 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["shadow_cache_cascades_uneconomic"] = s.shadow_cache_cascades_uneconomic.get();
 	d["shadow_cache_cascades_unstable"] = s.shadow_cache_cascades_unstable.get();
 	d["geometry_cluster_surfaces"] = s.geometry_cluster_surfaces.get();
-	d["geometry_cluster_index_bytes"] = s.geometry_cluster_index_bytes.get();
+	d["geometry_cluster_pending_bytes"] = s.geometry_cluster_pending_bytes.get();
+	d["geometry_cluster_surfaces_active"] = s.geometry_cluster_surfaces_active.get();
+	d["geometry_cluster_surfaces_dropped"] = s.geometry_cluster_surfaces_dropped.get();
+	d["geometry_cluster_blended_after_activation"] = s.geometry_cluster_blended_after_activation.get();
 	d["geometry_cluster_draws"] = s.geometry_cluster_draws.get();
 	d["geometry_cluster_triangles_drawn"] = s.geometry_cluster_triangles_drawn.get();
 	d["geometry_cluster_triangles_culled"] = s.geometry_cluster_triangles_culled.get();

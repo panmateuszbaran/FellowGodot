@@ -500,9 +500,24 @@ public:
 		}
 	}
 
-	_FORCE_INLINE_ const FellowMeshClusters *fellow_mesh_surface_get_clusters(void *p_surface) const {
-		return reinterpret_cast<Mesh::Surface *>(p_surface)->fellow_clusters;
+	// FellowEngine mesh clusters (docs/decisions/0007-mesh-clusters.md).
+	enum FellowClusterState {
+		FELLOW_CLUSTERS_NONE,
+		FELLOW_CLUSTERS_PENDING, // Built, index buffers still in stock order: waiting for the renderer's decision.
+		FELLOW_CLUSTERS_ACTIVE, // Index buffers in cluster order.
+	};
+	_FORCE_INLINE_ FellowClusterState fellow_mesh_surface_get_cluster_state(void *p_surface) const {
+		const FellowMeshClusters *c = reinterpret_cast<Mesh::Surface *>(p_surface)->fellow_clusters;
+		return c == nullptr ? FELLOW_CLUSTERS_NONE : (c->active ? FELLOW_CLUSTERS_ACTIVE : FELLOW_CLUSTERS_PENDING);
 	}
+	// Clusters that may be drawn (index buffers in cluster order), or nullptr.
+	_FORCE_INLINE_ const FellowMeshClusters *fellow_mesh_surface_get_clusters(void *p_surface) const {
+		const FellowMeshClusters *c = reinterpret_cast<Mesh::Surface *>(p_surface)->fellow_clusters;
+		return (c && c->active) ? c : nullptr;
+	}
+	// Pending clusters: p_activate replaces the surface's index buffers by the cluster-ordered ones, otherwise the
+	// clusters are dropped and the surface keeps stock's triangle order.
+	void fellow_mesh_surface_decide_clusters(void *p_surface, bool p_activate);
 
 	_FORCE_INLINE_ RID mesh_surface_get_index_array(void *p_surface, uint32_t p_lod) const {
 		Mesh::Surface *s = reinterpret_cast<Mesh::Surface *>(p_surface);

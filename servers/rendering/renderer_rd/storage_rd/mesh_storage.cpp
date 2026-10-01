@@ -447,7 +447,7 @@ void MeshStorage::mesh_add_surface(RID p_mesh, const RenderingServerTypes::Surfa
 		s->fellow_clusters = fellow_mesh_clusters_build(new_surface.format, new_surface.vertex_data, new_surface.vertex_count, new_surface.aabb, new_surface.index_data, new_surface.index_count, lod_indices, Fellow::mesh_cluster_triangles());
 		if (s->fellow_clusters) {
 			Fellow::stats().geometry_cluster_surfaces.increment();
-			Fellow::stats().geometry_cluster_index_bytes.add(s->fellow_clusters->memory_bytes);
+			Fellow::stats().geometry_cluster_pending_bytes.add(s->fellow_clusters->pending_bytes());
 		}
 	}
 
@@ -561,13 +561,43 @@ void MeshStorage::_mesh_surface_clear(Mesh *p_mesh, int p_surface) {
 	}
 
 	if (s.fellow_clusters) {
-		Fellow::stats().geometry_cluster_index_bytes.sub(s.fellow_clusters->memory_bytes);
-		s.fellow_clusters->free_rids();
+		Fellow::stats().geometry_cluster_pending_bytes.sub(s.fellow_clusters->pending_bytes());
 		memdelete(s.fellow_clusters);
 		s.fellow_clusters = nullptr;
 	}
 
 	memdelete(p_mesh->surfaces[p_surface]);
+}
+
+void MeshStorage::fellow_mesh_surface_decide_clusters(void *p_surface, bool p_activate) {
+	Mesh::Surface *s = reinterpret_cast<Mesh::Surface *>(p_surface);
+	FellowMeshClusters *c = s->fellow_clusters;
+	if (c == nullptr || c->active) {
+		return;
+	}
+	Fellow::stats().geometry_cluster_pending_bytes.sub(c->pending_bytes());
+	if (!p_activate || c->pending_lods.size() != int(s->lod_count) || s->index_buffer.is_null()) {
+		memdelete(c);
+		s->fellow_clusters = nullptr;
+		Fellow::stats().geometry_cluster_surfaces_dropped.increment();
+		return;
+	}
+	// Same format and sizes as the stock buffers; the old buffers are released when the GPU no longer uses them
+	// (freeing a buffer also frees its index arrays).
+	const bool is_16 = s->vertex_count <= 65536 && s->vertex_count > 0;
+	const RD::IndexBufferFormat format = is_16 ? RD::INDEX_BUFFER_FORMAT_UINT16 : RD::INDEX_BUFFER_FORMAT_UINT32;
+	RD::get_singleton()->free_rid(s->index_buffer);
+	s->index_buffer = RD::get_singleton()->index_buffer_create(s->index_count, format, c->pending_base, false);
+	s->index_array = RD::get_singleton()->index_array_create(s->index_buffer, 0, s->index_count);
+	for (uint32_t i = 0; i < s->lod_count; i++) {
+		RD::get_singleton()->free_rid(s->lods[i].index_buffer);
+		s->lods[i].index_buffer = RD::get_singleton()->index_buffer_create(s->lods[i].index_count, format, c->pending_lods[i]);
+		s->lods[i].index_array = RD::get_singleton()->index_array_create(s->lods[i].index_buffer, 0, s->lods[i].index_count);
+	}
+	c->pending_base = Vector<uint8_t>();
+	c->pending_lods.clear();
+	c->active = true;
+	Fellow::stats().geometry_cluster_surfaces_active.increment();
 }
 
 int MeshStorage::mesh_get_blend_shape_count(RID p_mesh) const {
