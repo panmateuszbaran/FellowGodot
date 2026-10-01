@@ -325,17 +325,20 @@ float quick_hash(vec2 pos) {
 // p_half_uv around p_uv, widened by 1.5 texels for bilinear / 2x2 PCF footprints. Four fetches from the max pyramid
 // (level 0 = atlas / 2) at the level whose blocks are at least as large as the box, so it spans at most 2x2 blocks.
 float fellow_shadow_box_max(vec2 p_uv, vec2 p_half_uv) {
-	ivec2 base_size = textureSize(sampler2D(directional_shadow_max_mip, SAMPLER_NEAREST_CLAMP), 0);
-	vec2 atlas_size = vec2(base_size * 2);
-	vec2 r = p_half_uv * atlas_size + 1.5;
-	vec2 lo = p_uv * atlas_size - r;
-	vec2 hi = p_uv * atlas_size + r;
-	float extent = max(hi.x - lo.x, hi.y - lo.y);
-	int lod = clamp(int(ceil(log2(max(extent, 2.0)))) - 1, 0, textureQueryLevels(sampler2D(directional_shadow_max_mip, SAMPLER_NEAREST_CLAMP)) - 1);
-	ivec2 lsize = textureSize(sampler2D(directional_shadow_max_mip, SAMPLER_NEAREST_CLAMP), lod);
-	float to_level = exp2(-float(lod + 1));
-	ivec2 a = clamp(ivec2(floor(lo * to_level)), ivec2(0), lsize - 1);
-	ivec2 b = clamp(ivec2(floor(hi * to_level)), ivec2(0), lsize - 1);
+	ivec2 atlas = textureSize(sampler2D(directional_shadow_max_mip, SAMPLER_NEAREST_CLAMP), 0) * 2;
+	vec2 c = p_uv * vec2(atlas);
+	vec2 r = p_half_uv * vec2(atlas) + 1.5;
+	// Integer texel box (clamped like the sampler), then the smallest level whose blocks (2^(lod+1) texels) put it in at
+	// most 2x2 blocks.
+	ivec2 lo = clamp(ivec2(floor(c - r)), ivec2(0), atlas - 1);
+	ivec2 hi = clamp(ivec2(floor(c + r)), ivec2(0), atlas - 1);
+	int last = textureQueryLevels(sampler2D(directional_shadow_max_mip, SAMPLER_NEAREST_CLAMP)) - 1;
+	int lod = 0;
+	while (lod < last && any(greaterThan((hi >> (lod + 1)) - (lo >> (lod + 1)), ivec2(1)))) {
+		lod++;
+	}
+	ivec2 a = lo >> (lod + 1);
+	ivec2 b = hi >> (lod + 1);
 	return max(max(texelFetch(sampler2D(directional_shadow_max_mip, SAMPLER_NEAREST_CLAMP), a, lod).r, texelFetch(sampler2D(directional_shadow_max_mip, SAMPLER_NEAREST_CLAMP), ivec2(b.x, a.y), lod).r),
 			max(texelFetch(sampler2D(directional_shadow_max_mip, SAMPLER_NEAREST_CLAMP), ivec2(a.x, b.y), lod).r, texelFetch(sampler2D(directional_shadow_max_mip, SAMPLER_NEAREST_CLAMP), b, lod).r));
 }
