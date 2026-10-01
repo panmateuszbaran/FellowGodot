@@ -198,6 +198,13 @@ inline bool shadow_directional_max_mip() {
 	return shadows_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/shadows/directional_max_mip");
 }
 
+// Directional pyramid: only the windows over the part of each cascade the camera can look up are computed from the
+// atlas (the bounding box of the camera frustum up to the cascade's split, projected into the cascade, plus a margin);
+// the others hold (0, 1), a bound of any content, so no early-out fires there (exact either way, decision 0005).
+inline bool shadow_max_mip_visible_region() {
+	return shadow_directional_max_mip() && GLOBAL_GET_CACHED(bool, "rendering/fellow/shadows/max_mip_visible_region");
+}
+
 // Positional (omni, spot) shadow PCF early-out (exact): a min/max window pyramid of the positional shadow atlas proves
 // that the filter region is fully lit or fully shadowed, in which case the taps are skipped (decision 0005).
 inline bool shadow_positional_max_mip() {
@@ -304,6 +311,7 @@ struct Stats {
 	SafeNumeric<uint64_t> frame_early_submits; // frames whose rendering was submitted before the swap chain acquisition
 	SafeNumeric<uint64_t> shadow_pyramid_builds; // min/max pyramid updates that wrote something (directional and positional)
 	SafeNumeric<uint64_t> shadow_pyramid_texels; // finest-level pyramid texels written (each covers 4x4 new atlas texels)
+	SafeNumeric<uint64_t> shadow_pyramid_texels_needed; // of those, the ones computed from the atlas (the rest set to (0, 1))
 };
 
 Stats &stats();

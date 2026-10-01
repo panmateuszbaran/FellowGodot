@@ -100,9 +100,9 @@ uint64_t FellowShadowMaxMip::get_vram_bytes() const {
 	return total;
 }
 
-void FellowShadowMaxMip::build_rects(RID p_key, RID p_atlas_texture, const Size2i &p_atlas_size, const LocalVector<Rect2i> &p_dirty, bool p_atlas_16_bits) {
+void FellowShadowMaxMip::build_rects(RID p_key, RID p_atlas_texture, const Size2i &p_atlas_size, const LocalVector<Rect2i> &p_dirty, bool p_atlas_16_bits, const LocalVector<Rect2i> *p_valid) {
 	if (p_dirty.is_empty()) {
-		build(p_key, p_atlas_texture, p_atlas_size, Rect2i(), p_atlas_16_bits);
+		build(p_key, p_atlas_texture, p_atlas_size, Rect2i(), p_atlas_16_bits, p_valid);
 		return;
 	}
 	Rect2i merged = p_dirty[0];
@@ -112,15 +112,15 @@ void FellowShadowMaxMip::build_rects(RID p_key, RID p_atlas_texture, const Size2
 		sum += int64_t(r.size.x) * int64_t(r.size.y);
 	}
 	if (p_dirty.size() == 1 || int64_t(merged.size.x) * int64_t(merged.size.y) <= 2 * sum) {
-		build(p_key, p_atlas_texture, p_atlas_size, merged, p_atlas_16_bits);
+		build(p_key, p_atlas_texture, p_atlas_size, merged, p_atlas_16_bits, p_valid);
 	} else {
 		for (const Rect2i &r : p_dirty) {
-			build(p_key, p_atlas_texture, p_atlas_size, r, p_atlas_16_bits);
+			build(p_key, p_atlas_texture, p_atlas_size, r, p_atlas_16_bits, p_valid);
 		}
 	}
 }
 
-void FellowShadowMaxMip::build(RID p_key, RID p_atlas_texture, const Size2i &p_atlas_size, const Rect2i &p_dirty, bool p_atlas_16_bits) {
+void FellowShadowMaxMip::build(RID p_key, RID p_atlas_texture, const Size2i &p_atlas_size, const Rect2i &p_dirty, bool p_atlas_16_bits, const LocalVector<Rect2i> *p_valid) {
 	Target &target = targets[p_key];
 	if (p_atlas_texture.is_null() || p_atlas_size.x < 4 || p_atlas_size.y < 4) {
 		target.valid = false;
@@ -163,6 +163,38 @@ void FellowShadowMaxMip::build(RID p_key, RID p_atlas_texture, const Size2i &p_a
 	target.valid = true;
 	if (region.size.x <= 0 || region.size.y <= 0) {
 		return; // No atlas texel changed: the pyramid still matches.
+	}
+
+	// Rects whose windows are computed (empty: all), merged pairwise (smallest growth first) down to what the shader
+	// takes; a merged rect only computes more windows.
+	LocalVector<Rect2i> valid;
+	if (p_valid && !p_valid->is_empty()) {
+		for (const Rect2i &v : *p_valid) {
+			if (v.size.x > 0 && v.size.y > 0) {
+				valid.push_back(v);
+			}
+		}
+		if (valid.is_empty()) {
+			valid.push_back(Rect2i(-64, -64, 1, 1)); // nothing needed (a rect no atlas block touches): every window (0, 1)
+		}
+		while (valid.size() > MAX_VALID_RECTS) {
+			uint32_t best_a = 0;
+			uint32_t best_b = 1;
+			int64_t best_growth = INT64_MAX;
+			for (uint32_t a = 0; a < valid.size(); a++) {
+				for (uint32_t b = a + 1; b < valid.size(); b++) {
+					const Rect2i m = valid[a].merge(valid[b]);
+					const int64_t growth = int64_t(m.size.x) * m.size.y - int64_t(valid[a].size.x) * valid[a].size.y - int64_t(valid[b].size.x) * valid[b].size.y;
+					if (growth < best_growth) {
+						best_growth = growth;
+						best_a = a;
+						best_b = b;
+					}
+				}
+			}
+			valid[best_a] = valid[best_a].merge(valid[best_b]);
+			valid.remove_at(best_b);
+		}
 	}
 
 	UniformSetCacheRD *uniform_set_cache = UniformSetCacheRD::get_singleton();
@@ -213,7 +245,20 @@ void FellowShadowMaxMip::build(RID p_key, RID p_atlas_texture, const Size2i &p_a
 		}
 		if (i == 0) {
 			Fellow::stats().shadow_pyramid_builds.increment();
-			Fellow::stats().shadow_pyramid_texels.add(uint64_t(dst_hi.x - dst_lo.x) * uint64_t(dst_hi.y - dst_lo.y));
+			const uint64_t texels = uint64_t(dst_hi.x - dst_lo.x) * uint64_t(dst_hi.y - dst_lo.y);
+			Fellow::stats().shadow_pyramid_texels.add(texels);
+			if (valid.is_empty()) {
+				Fellow::stats().shadow_pyramid_texels_needed.add(texels);
+			} else {
+				// Approximate (rects may overlap): the region's texels within the valid rects.
+				const Rect2i rebuilt(src_lo, src_hi - src_lo);
+				uint64_t needed = 0;
+				for (const Rect2i &v : valid) {
+					const Rect2i c = v.intersection(rebuilt);
+					needed += uint64_t(MAX(0, c.size.x)) * uint64_t(MAX(0, c.size.y)) / 16;
+				}
+				Fellow::stats().shadow_pyramid_texels_needed.add(MIN(needed, texels));
+			}
 		}
 		if (i > 0 && dst_size.x <= TAIL_MAX_SIZE && dst_size.y <= TAIL_MAX_SIZE) {
 			// This mip and every smaller one, entirely, in one workgroup (from the previous mip).
@@ -230,7 +275,7 @@ void FellowShadowMaxMip::build(RID p_key, RID p_atlas_texture, const Size2i &p_a
 			}
 			RD::Uniform u_src(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 0, Vector<RID>({ nearest, level_views[i - 1] }));
 			RD::Uniform u_dst(RD::UNIFORM_TYPE_IMAGE, 0, views);
-			PushConstant pc;
+			PushConstant pc = {};
 			pc.source_size[0] = src_size.x;
 			pc.source_size[1] = src_size.y;
 			pc.dest_size[0] = dst_size.x;
@@ -251,7 +296,7 @@ void FellowShadowMaxMip::build(RID p_key, RID p_atlas_texture, const Size2i &p_a
 		RID src = i == 0 ? p_atlas_texture : level_views[i - 1];
 		RD::Uniform u_src(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 0, Vector<RID>({ nearest, src }));
 		RD::Uniform u_dst(RD::UNIFORM_TYPE_IMAGE, 0, Vector<RID>({ level_views[i] }));
-		PushConstant pc;
+		PushConstant pc = {};
 		pc.source_size[0] = src_size.x;
 		pc.source_size[1] = src_size.y;
 		pc.dest_size[0] = dst_size.x;
@@ -260,6 +305,13 @@ void FellowShadowMaxMip::build(RID p_key, RID p_atlas_texture, const Size2i &p_a
 		pc.round_mode = (i == 0 && texture_rg16 && !p_atlas_16_bits) ? 1 : 0;
 		pc.dest_offset[0] = dst_lo.x;
 		pc.dest_offset[1] = dst_lo.y;
+		pc.valid_count = i == 0 ? int32_t(valid.size()) : 0;
+		for (uint32_t k = 0; k < valid.size() && k < MAX_VALID_RECTS; k++) {
+			pc.valid_rects[k][0] = valid[k].position.x;
+			pc.valid_rects[k][1] = valid[k].position.y;
+			pc.valid_rects[k][2] = valid[k].position.x + valid[k].size.x;
+			pc.valid_rects[k][3] = valid[k].position.y + valid[k].size.y;
+		}
 		RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
 		RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, pipeline);
 		RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache(shader_rd, 0, u_src), 0);

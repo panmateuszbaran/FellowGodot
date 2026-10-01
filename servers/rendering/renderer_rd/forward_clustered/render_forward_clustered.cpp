@@ -1683,10 +1683,79 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 			const RID atlas_texture = light_storage->directional_shadow_get_texture();
 			const Size2i size(atlas_size, atlas_size);
 			const bool use_16_bits = light_storage->directional_shadow_get_use_16_bits();
-			if (fellow_dir_atlas_dirty_all || !fellow_shadow_max_mip->is_valid(RID())) {
-				fellow_shadow_max_mip->build(RID(), atlas_texture, size, Rect2i(Point2i(), size), use_16_bits);
+			const bool full = fellow_dir_atlas_dirty_all || !fellow_shadow_max_mip->is_valid(RID());
+			if (Fellow::shadow_max_mip_visible_region()) {
+				// Only the part of each cascade this camera can look up is computed from the atlas (exact for any
+				// choice: the other windows hold (0, 1), a bound of any content). A cascade whose texels were not
+				// written keeps its windows, unless this camera needs more of it than was computed.
+				if (full) {
+					fellow_dir_built.clear();
+				}
+				LocalVector<Rect2i> dirty = full ? LocalVector<Rect2i>({ Rect2i(Point2i(), size) }) : fellow_dir_atlas_dirty;
+				LocalVector<Rect2i> valid;
+				for (const FellowDirCascade &c : fellow_dir_cascades) {
+					const Rect2i needed = _fellow_dir_needed_rect(c, p_render_data->scene_data);
+					bool written = full;
+					for (const Rect2i &d : fellow_dir_atlas_dirty) {
+						written = written || d.intersects(c.rect);
+					}
+					int64_t built_index = -1;
+					for (uint32_t k = 0; k < fellow_dir_built.size(); k++) {
+						if (fellow_dir_built[k].first == c.rect) {
+							built_index = k;
+						}
+					}
+					Rect2i computed = needed;
+					if (!written) {
+						if (built_index >= 0 && fellow_dir_built[built_index].second.encloses(needed)) {
+							valid.push_back(fellow_dir_built[built_index].second); // unchanged, enough of it computed
+							continue;
+						}
+						if (built_index >= 0) {
+							computed = needed.merge(fellow_dir_built[built_index].second);
+						}
+						dirty.push_back(c.rect); // unchanged texels, but more of them needed now
+					}
+					valid.push_back(computed);
+					if (built_index >= 0) {
+						fellow_dir_built[built_index].second = computed;
+					} else {
+						fellow_dir_built.push_back(Pair<Rect2i, Rect2i>(c.rect, computed));
+					}
+				}
+				// Written texels outside every cascade of this camera (another light's or view's): computed whole.
+				for (const Rect2i &d : fellow_dir_atlas_dirty) {
+					bool covered = false;
+					for (const FellowDirCascade &c : fellow_dir_cascades) {
+						covered = covered || c.rect.encloses(d);
+					}
+					if (!covered) {
+						valid.push_back(d);
+					}
+				}
+				// Cascade rects whose pyramid an earlier camera computed and that this camera did not render: they lie
+				// inside a merged rebuild region only by chance; keep what was computed for them.
+				for (const Pair<Rect2i, Rect2i> &b : fellow_dir_built) {
+					bool listed = false;
+					for (const FellowDirCascade &c : fellow_dir_cascades) {
+						listed = listed || c.rect == b.first;
+					}
+					if (!listed) {
+						valid.push_back(b.second);
+					}
+				}
+				if (full) {
+					fellow_shadow_max_mip->build(RID(), atlas_texture, size, Rect2i(Point2i(), size), use_16_bits, &valid);
+				} else {
+					fellow_shadow_max_mip->build_rects(RID(), atlas_texture, size, dirty, use_16_bits, &valid);
+				}
 			} else {
-				fellow_shadow_max_mip->build_rects(RID(), atlas_texture, size, fellow_dir_atlas_dirty, use_16_bits);
+				fellow_dir_built.clear();
+				if (full) {
+					fellow_shadow_max_mip->build(RID(), atlas_texture, size, Rect2i(Point2i(), size), use_16_bits);
+				} else {
+					fellow_shadow_max_mip->build_rects(RID(), atlas_texture, size, fellow_dir_atlas_dirty, use_16_bits);
+				}
 			}
 			p_render_data->scene_data->fellow_shadow_max_mip = fellow_shadow_max_mip->is_valid(RID());
 		} else {
@@ -1727,6 +1796,7 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 	}
 	fellow_dir_atlas_dirty.clear();
 	fellow_dir_atlas_dirty_all = false;
+	fellow_dir_cascades.clear();
 
 	if (rb_data.is_valid() && ss_effects) {
 		// Note, in multiview we're allocating buffers for each eye/view we're rendering.
@@ -2814,6 +2884,7 @@ void RenderForwardClustered::_render_shadow_pass(RID p_light, RID p_shadow_atlas
 		atlas_rect_norm.position /= directional_shadow_size;
 		atlas_rect_norm.size /= directional_shadow_size;
 		light_storage->light_instance_set_directional_shadow_atlas_rect(p_light, p_pass, atlas_rect_norm);
+		fellow_dir_cascades.push_back({ atlas_rect, light_projection, light_transform, light_storage->light_instance_get_directional_shadow_split(p_light, p_pass) });
 
 		zfar = RSG::light_storage->light_get_param(base, RSE::LIGHT_PARAM_RANGE);
 
@@ -3025,6 +3096,44 @@ void RenderForwardClustered::_render_shadow_pass(RID p_light, RID p_shadow_atlas
 		//render shadow
 		_render_shadow_append(render_fb, p_instances, light_projection, light_transform, zfar, 0, 0, reverse_cull_face, using_dual_paraboloid, using_dual_paraboloid_flip, use_pancake, p_lod_distance_multiplier, p_screen_mesh_lod_threshold, atlas_rect, flip_y, clear_region, p_open_pass, p_close_pass, p_render_info, p_viewport_size, p_main_cam_transform);
 	}
+}
+
+Rect2i RenderForwardClustered::_fellow_dir_needed_rect(const FellowDirCascade &p_cascade, const RenderSceneDataRD *p_scene_data) const {
+	// The scene shader looks cascade i up for surfaces at view depth below its split (its own range and the blend into
+	// it from the previous cascade), within the camera frustum: the frustum from the eye to that depth, projected into
+	// the cascade (bounding box), plus a margin for the filter boxes and their windows around the edges. Orthographic
+	// cameras and multiview: the whole cascade.
+	const Rect2i whole = p_cascade.rect;
+	const Projection &cam = p_scene_data->cam_projection;
+	if (p_scene_data->view_count != 1 || cam.is_orthogonal() || p_cascade.split <= 0.0) {
+		return whole;
+	}
+	Vector3 corners[8];
+	if (!cam.get_endpoints(Transform3D(), corners)) {
+		return whole;
+	}
+	const real_t z_far = -corners[0].z;
+	if (z_far <= 0.0) {
+		return whole;
+	}
+	const Projection to_shadow = p_cascade.projection * Projection(p_cascade.transform.affine_inverse() * p_scene_data->cam_transform);
+	Vector2 lo(1e20, 1e20);
+	Vector2 hi(-1e20, -1e20);
+	for (int i = 0; i < 5; i++) {
+		// The eye and the four far corners scaled to the split depth (corners 0-3 are on the far plane).
+		const Vector3 v = i == 0 ? Vector3() : corners[i - 1] * (MIN(p_cascade.split, z_far) / z_far);
+		const Vector3 q = to_shadow.xform(v);
+		const Vector2 uv(q.x * 0.5 + 0.5, q.y * 0.5 + 0.5);
+		lo = lo.min(uv);
+		hi = hi.max(uv);
+	}
+	const int margin = MAX(32, whole.size.x / 16);
+	Rect2i r;
+	r.position = Point2i(int(Math::floor(lo.x * whole.size.x)), int(Math::floor(lo.y * whole.size.y))) + whole.position - Point2i(margin, margin);
+	const Point2i end = Point2i(int(Math::ceil(hi.x * whole.size.x)), int(Math::ceil(hi.y * whole.size.y))) + whole.position + Point2i(margin, margin);
+	r.size = end - r.position;
+	r = r.intersection(whole);
+	return r;
 }
 
 void RenderForwardClustered::fellow_directional_shadow_cache_free(int64_t p_cache_id) {

@@ -778,6 +778,17 @@ private:
 		}
 		fellow_dir_atlas_dirty.push_back(p_rect);
 	}
+	// Directional cascades of this render (atlas rect in texels, shadow camera, split distance) and, per cascade rect,
+	// the part whose pyramid windows were computed from the atlas (shadows/max_mip_visible_region; elsewhere (0, 1)).
+	struct FellowDirCascade {
+		Rect2i rect;
+		Projection projection;
+		Transform3D transform;
+		float split = 0.0;
+	};
+	LocalVector<FellowDirCascade> fellow_dir_cascades;
+	LocalVector<Pair<Rect2i, Rect2i>> fellow_dir_built;
+	Rect2i _fellow_dir_needed_rect(const FellowDirCascade &p_cascade, const RenderSceneDataRD *p_scene_data) const;
 	// This frame, cascades rendered the stock way clear their own rect instead of the whole atlas being cleared (so the
 	// cached cascades keep their content and an unchanged one is neither copied again nor rebuilt in the pyramid).
 	bool fellow_dir_clear_stock_rects = false;

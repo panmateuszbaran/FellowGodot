@@ -41,6 +41,11 @@ layout(push_constant, std430) uniform Params {
 	int source_is_pyramid; // 0: single-channel depth atlas, 1: previous (min, max) mip
 	int round_mode; // 1: round the minimum down and the maximum up to 16-bit UNORM steps (32-bit atlas into RG16)
 	ivec2 dest_offset; // first texel of the rebuilt region (MODE_TAIL: x = number of mips written)
+	int valid_count; // finest level: only the 4x4 atlas blocks touching one of these rects are read (0: all)
+	int pad0;
+	int pad1;
+	int pad2;
+	ivec4 valid_rects[4]; // atlas texels (lo.x, lo.y, hi.x, hi.y), end exclusive
 }
 params;
 
@@ -138,7 +143,21 @@ void main() {
 	for (int i = int(gl_LocalInvocationIndex); i < 81; i += 64) {
 		ivec2 p = tile + ivec2(i % 9, i / 9);
 		vec2 mm;
-		if (params.source_is_pyramid == 0) {
+		bool needed = true;
+		if (params.source_is_pyramid == 0 && params.valid_count > 0) {
+			// A block no lookup of this frame's camera can reach holds (0, 1): a bound of any depth, so every window
+			// containing it proves nothing (no early-out), whatever the atlas holds there.
+			needed = false;
+			for (int k = 0; k < params.valid_count; k++) {
+				ivec4 v = params.valid_rects[k];
+				if (all(lessThan(p * 4, v.zw)) && all(greaterThan(p * 4 + 4, v.xy))) {
+					needed = true;
+				}
+			}
+		}
+		if (!needed) {
+			mm = vec2(0.0, 1.0);
+		} else if (params.source_is_pyramid == 0) {
 			// Atlas texels [4p, 4p + 4) on each axis: four gathers, each at the shared corner of two texel pairs (the
 			// sampler clamps to the atlas edge, like the shadow samplers).
 			mm = vec2(1.0, 0.0);

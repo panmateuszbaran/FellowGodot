@@ -51,7 +51,11 @@ class FellowShadowMaxMip {
 		int32_t source_is_pyramid;
 		int32_t round_mode; // 0: store as is, 1: round the minimum down and the maximum up to 16-bit UNORM steps
 		int32_t dest_offset[2];
+		int32_t valid_count; // finest level: only atlas blocks touching these rects are read (0: all)
+		int32_t pad[3];
+		int32_t valid_rects[4][4]; // atlas texels (lo.x, lo.y, hi.x, hi.y), end exclusive
 	};
+	static constexpr int MAX_VALID_RECTS = 4; // matches the shader
 
 	struct Target {
 		RID texture; // (atlas size / 2) with the full mip chain
@@ -79,10 +83,13 @@ public:
 	// Brings the pyramid of p_key up to date with its atlas, rebuilding the windows over p_dirty (atlas texels written
 	// since the last call; everything when the atlas texture or its size changed or the pyramid is not valid).
 	// Call after the shadow passes of the frame.
-	void build(RID p_key, RID p_atlas_texture, const Size2i &p_atlas_size, const Rect2i &p_dirty, bool p_atlas_16_bits);
+	// p_valid (optional, non-empty): within the rebuilt region, only the windows over atlas texels touching one of these
+	// rects are computed from the atlas; the others are set to (0, 1), which bounds any content (no early-out there).
+	// Exact for any p_valid; it only decides where the early-outs can fire. More than 4 rects are merged.
+	void build(RID p_key, RID p_atlas_texture, const Size2i &p_atlas_size, const Rect2i &p_dirty, bool p_atlas_16_bits, const LocalVector<Rect2i> *p_valid = nullptr);
 	// The same for several written rects: one update over their union when it is not much larger than the rects
 	// together (each update has a fixed cost: a dispatch and a barrier per mip), else one update per rect.
-	void build_rects(RID p_key, RID p_atlas_texture, const Size2i &p_atlas_size, const LocalVector<Rect2i> &p_dirty, bool p_atlas_16_bits);
+	void build_rects(RID p_key, RID p_atlas_texture, const Size2i &p_atlas_size, const LocalVector<Rect2i> &p_dirty, bool p_atlas_16_bits, const LocalVector<Rect2i> *p_valid = nullptr);
 	void invalidate(RID p_key);
 	bool is_valid(RID p_key) const;
 	RID get_texture(RID p_key) const;
