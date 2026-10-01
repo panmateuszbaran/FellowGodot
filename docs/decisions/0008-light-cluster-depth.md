@@ -71,6 +71,9 @@ contribute exactly zero (`light_compute` skips zero attenuation; the shadow look
 * RTX 5070 Ti (`fellow17`, `m3_lc_temporal`, 60-frame sequences, default configuration vs + depth slices): Lights Lab
   96.8 dB mean (min 79.5, max |d| 3/255), Bistro exterior 100.6 dB (max 1), Bistro interior 66.0-67.3 dB and PBR Lab
   65.6-76.1 dB (≤ 0.004 % of pixels > 2/255: those scenes' own run-to-run floor, as in the null tests).
+* RTX 5070 Ti fixed cameras (`m3_lc_capture`, 1920×1080): Lights Lab **bit-identical** (4 cameras, max |d| 0),
+  Bistro exterior 76.8-99 dB (max 2/255), Bistro interior, PBR Lab, Sponza at their run-to-run floor (68-71 dB min,
+  ≤ 0.002 % of pixels > 2/255).
 * RTX timing: *pending* (`m3_lc_perf`, `m3_lc_profile`; a first attempt overlapped other sessions and was discarded).
 
 ## Decision
