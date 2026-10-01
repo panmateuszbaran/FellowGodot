@@ -57,7 +57,22 @@ pixels as a lever (an exact early-out, but for 0.2-2.7 % of the pixels).
 | Editor: headless `--import` no longer crashes on exit | (bug fix) | – | verified (stock crashes the same way: `f18_verify_b`) |
 | Early submit: the frame's rendering no longer waits for the swap chain | 0009 | `frame/early_submit` | lavapipe identical (PBR Lab, Stress Lab); RTX identity, pacing diagnosis and A/B queued (`fellow20`) |
 
-## 4. The constant gap between frame time and GPU time
+## 4. Screen-space effects, stage by stage (`m3_f19_profile`, `fellow19` defaults, GPU ms)
+
+| | Lights Lab | Bistro interior | Bistro exterior | Sponza |
+|---|---:|---:|---:|---:|
+| SSAO gather / blur / interleave | 0.284 / 0.056 / 0.037 | 0.324 / 0.066 / 0.042 | 0.383 / 0.052 / 0.043 | 0.368 / 0.057 / 0.062 |
+| SSIL gather / blur / interleave | – | 0.181 / 0.052 / 0.060 | 0.212 / 0.060 / 0.066 | 0.293 / 0.070 / 0.091 |
+| SSR Hi-Z / trace / roughness filter / resolve | – | 0.025 / 0.026 / 0.043 / 0.078 | 0.030 / 0.035 / 0.055 / 0.113 | 0.026 / 0.194 / 0.045 / 0.101 |
+
+The gathers dominate. The benchmark preset runs SSAO at *high* quality and full size (12 taps × 2 depth samples,
+two gathers and five normal loads per pixel at 960×540 × 4 interleaved layers: ~64 M texture reads per frame) and
+SSIL at medium, half size: these passes are bound by texture reads, as the algorithm is configured. What is exact
+and left to take is small (sharing the neighbour normals and depths of a workgroup: ~15 % of the SSAO gather's reads).
+The large levers here are the quality settings or a different algorithm, i.e. look changes with their own quality
+evaluation — not taken silently.
+
+## 5. The constant gap between frame time and GPU time
 
 Every session since milestone 1 has frame time = viewport GPU time + 0.37-0.44 ms, whatever the scene, the CPU
 recording time (0.2-1.5 ms) or the configuration, with 87-92 % GPU utilisation: 8-13 % of the frame rate at 3-5 ms
@@ -68,7 +83,7 @@ the acquisition at the colour-output stage. Decision 0009 submits the rendering 
 `fellow20` job measures it together with two start-up settings that would also hide such a wait (a frame queue of
 3, 4 swap chain images), using the runner's new per-variant start-up overrides.
 
-## 5. Mistakes (kept visible)
+## 6. Mistakes (kept visible)
 
 * The queued jobs overlapped from 10:29 to 11:05 (a queue marker that the queue script itself prints); every timing
   of that window is discarded and re-run (milestone-2 report §5 has the details).
