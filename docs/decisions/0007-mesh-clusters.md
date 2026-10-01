@@ -1,6 +1,6 @@
 # 0007 — Mesh clusters (frustum culling inside large surfaces)
 
-Status: **MEASURING** · Branch `fellow/geometry` · Toggle `rendering/fellow/geometry/mesh_clusters` (default **off**)
+Status: **KEEP** · Branch `fellow/geometry` · Toggle `rendering/fellow/geometry/mesh_clusters` (default **off**)
 · Code: `servers/rendering/renderer_rd/storage_rd/fellow_mesh_clusters.*`, `mesh_storage.cpp` (`mesh_add_surface`),
 `render_forward_clustered.cpp` (`_render_list_template`, `_render_scene`, `_render_shadow_append`),
 `rendering_device.cpp` (`draw_list_draw_indexed_range`)
@@ -93,7 +93,33 @@ with large surfaces; nothing in scenes made of small objects (instance culling a
 
 ## Actual performance
 
-*pending (`m3_cl_profile`).*
+Per-pass GPU timestamps, 1920×1080, one profiled run per variant over the flythrough (`m3_cl_profile`,
+`benchmarks/results/m3_cl_profile_table.md`), **night state** (relative only: the Bistro interior row, where no surface
+is clustered and the variant is identical to stock, moved by +3.3 %). `cl` = clusters on, `m2` = the milestone-2
+shadow configuration (cache + sampling skips).
+
+| Sponza pass (ms) | stock | + clusters | m2 | m2 + clusters |
+|---|---:|---:|---:|---:|
+| Depth pre-pass | 1.521 | **0.869 (−43 %)** | 1.544 | **0.866** |
+| Opaque pass | 3.181 | **2.494 (−22 %)** | 2.943 | **2.314** |
+| Directional shadows | 3.378 | 3.361 | 0.266 | 0.256 |
+| Transparent pass | 1.881 | 1.807 | 1.645 | 1.661 |
+| **sum of timestamped passes** | **11.84** | **10.38 (−12.3 %)** | **8.40 (−29.0 %)** | **7.20 (−39.2 %)** |
+| render-thread CPU | 0.56 | 0.62 | 0.35 | 0.39 |
+
+Per frame in Sponza (fellow counters over the 2521 measured frames): with the milestone-2 configuration the clustered
+surfaces submit **4.15 M** triangles instead of 10.9 M (62 % skipped) in 138 draw calls (depth pre-pass + opaque);
+without the shadow cache 22.7 M are drawn and 7.2 M skipped (shadow cascades see most of the scene).
+
+| Scene | effect |
+|---|---|
+| Sponza | −1.2 to −1.5 ms GPU (−12 to −14 % of the frame); +0.04-0.06 ms render-thread CPU |
+| Bistro exterior | neutral (−0.3 / +1.2 %, within noise): its large surfaces are few; 20-27 % of their triangles skipped |
+| Bistro interior, PBR Lab | no surface reaches 32768 triangles: nothing clustered (null tests) |
+
+The shadow passes gain nothing measurable on the stock path: a cascade covers nearly the whole atrium from the sun.
+
+Frame-level day-state numbers: milestone-2 report (`fellow-m2_perf`).
 
 ## Actual visual quality
 
@@ -124,7 +150,10 @@ leave the cluster bounds, which come from the mesh data (stock covers such displ
 
 ## Decision
 
-*pending.*
+**KEEP** — part of the FellowEngine configuration. Exact (image-identical within the GPU's run-to-run variation),
+no extra GPU memory in the in-place version, −1.2 ms GPU in the geometry-heavy scene and neutral elsewhere. Next
+steps measured offline above: a GPU two-phase occlusion test of the same clusters (−24 % of the remaining camera-pass
+triangles on average in Sponza, −65 % in its galleries).
 
 ## Follow-up potential (offline, same flythrough, opaque camera pass)
 
