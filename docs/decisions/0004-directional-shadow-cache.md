@@ -101,7 +101,8 @@ of the milestone-2 report). `f7_cache` = this record; `f7_nogate` = without the 
 
 The gate does what it is for: in the light PBR Lab the copy would cost more than the casters (+0.08 ms in the shadow
 pass without the gate); in Bistro exterior the ungated cache is 0.01 ms faster in the shadow pass, within noise of the
-gated one. Render-thread CPU drops by about 40 % in Sponza and Bistro exterior (fewer shadow draw calls).
+gated one. Render-thread CPU (same session): Sponza 0.58 → 0.34 ms (−42 %), Bistro exterior 1.25 → 0.72 ms (−42 %), from the
+shadow draw calls that are no longer issued.
 
 ## Actual visual quality
 
