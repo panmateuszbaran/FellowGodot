@@ -30,6 +30,8 @@
 
 #include "mesh_storage.h"
 
+#include "servers/rendering/fellow_settings.h"
+
 #include "servers/rendering/renderer_viewport.h"
 #include "servers/rendering/rendering_server.h"
 #include "servers/rendering/rendering_server_types.h"
@@ -436,6 +438,19 @@ void MeshStorage::mesh_add_surface(RID p_mesh, const RenderingServerTypes::Surfa
 
 	ERR_FAIL_COND_MSG(!new_surface.index_count && !new_surface.vertex_count, "Meshes must contain a vertex array, an index array, or both");
 
+	// FellowEngine mesh clusters (docs/decisions/0007-mesh-clusters.md): large static triangle surfaces.
+	if (Fellow::mesh_clusters() && new_surface.primitive == RSE::PRIMITIVE_TRIANGLES && new_surface.index_count >= 3 * uint32_t(Fellow::mesh_cluster_min_surface_triangles()) && !(new_surface.format & RSE::ARRAY_FORMAT_BONES) && mesh->blend_shape_count == 0) {
+		Vector<Vector<uint8_t>> lod_indices;
+		for (int i = 0; i < new_surface.lods.size(); i++) {
+			lod_indices.push_back(new_surface.lods[i].index_data);
+		}
+		s->fellow_clusters = fellow_mesh_clusters_build(new_surface.format, new_surface.vertex_data, new_surface.vertex_count, new_surface.aabb, new_surface.index_data, new_surface.index_count, lod_indices, Fellow::mesh_cluster_triangles());
+		if (s->fellow_clusters) {
+			Fellow::stats().geometry_cluster_surfaces.increment();
+			Fellow::stats().geometry_cluster_index_bytes.add(s->fellow_clusters->memory_bytes);
+		}
+	}
+
 	s->aabb = new_surface.aabb;
 	s->bone_aabbs = new_surface.bone_aabbs; //only really useful for returning them.
 	s->mesh_to_skeleton_xform = p_surface.mesh_to_skeleton_xform;
@@ -543,6 +558,13 @@ void MeshStorage::_mesh_surface_clear(Mesh *p_mesh, int p_surface) {
 
 	if (s.blend_shape_buffer.is_valid()) {
 		RD::get_singleton()->free_rid(s.blend_shape_buffer);
+	}
+
+	if (s.fellow_clusters) {
+		Fellow::stats().geometry_cluster_index_bytes.sub(s.fellow_clusters->memory_bytes);
+		s.fellow_clusters->free_rids();
+		memdelete(s.fellow_clusters);
+		s.fellow_clusters = nullptr;
 	}
 
 	memdelete(p_mesh->surfaces[p_surface]);

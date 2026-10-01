@@ -6118,7 +6118,7 @@ void RenderingDevice::draw_list_draw(DrawListID p_list, bool p_use_indices, uint
 		ERR_FAIL_COND_MSG(draw_list.validation.pipeline_uses_restart_indices != draw_list.validation.index_buffer_uses_restart_indices,
 				"The usage of restart indices in index buffer does not match the render primitive in the pipeline.");
 #endif
-		uint32_t to_draw = draw_list.validation.index_array_count;
+		uint32_t to_draw = fellow_draw_range_count ? fellow_draw_range_count : draw_list.validation.index_array_count;
 
 #ifdef DEBUG_ENABLED
 		ERR_FAIL_COND_MSG(to_draw < draw_list.validation.pipeline_primitive_minimum,
@@ -6128,7 +6128,7 @@ void RenderingDevice::draw_list_draw(DrawListID p_list, bool p_use_indices, uint
 				"Index amount (" + itos(to_draw) + ") must be a multiple of the amount of indices required by the render primitive (" + itos(draw_list.validation.pipeline_primitive_divisor) + ").");
 #endif
 
-		draw_graph.add_draw_list_draw_indexed(to_draw, p_instances, 0);
+		draw_graph.add_draw_list_draw_indexed(to_draw, p_instances, fellow_draw_range_first);
 	} else {
 		uint32_t to_draw;
 
@@ -6154,6 +6154,19 @@ void RenderingDevice::draw_list_draw(DrawListID p_list, bool p_use_indices, uint
 	}
 
 	draw_list.state.draw_count++;
+}
+
+void RenderingDevice::draw_list_draw_indexed_range(DrawListID p_list, uint32_t p_first_index, uint32_t p_index_count, uint32_t p_instances) {
+	ERR_RENDER_THREAD_GUARD();
+	ERR_FAIL_COND(!draw_list.active);
+	ERR_FAIL_COND(p_index_count == 0);
+	ERR_FAIL_COND_MSG(uint64_t(p_first_index) + p_index_count > draw_list.validation.index_array_count,
+			"Index range (" + itos(p_first_index) + " + " + itos(p_index_count) + ") exceeds the bound index array (" + itos(draw_list.validation.index_array_count) + ").");
+	fellow_draw_range_first = p_first_index;
+	fellow_draw_range_count = p_index_count;
+	draw_list_draw(p_list, true, p_instances, 0);
+	fellow_draw_range_first = 0;
+	fellow_draw_range_count = 0;
 }
 
 void RenderingDevice::draw_list_draw_indirect(DrawListID p_list, bool p_use_indices, RID p_buffer, uint32_t p_offset, uint32_t p_draw_count, uint32_t p_stride) {

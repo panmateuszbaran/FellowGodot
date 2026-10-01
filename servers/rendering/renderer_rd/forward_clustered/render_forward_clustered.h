@@ -239,6 +239,10 @@ private:
 		uint32_t element_offset = 0;
 		bool use_directional_soft_shadow = false;
 		SceneShaderForwardClustered::ShaderSpecialization base_specialization = {};
+		// FellowEngine mesh clusters: world-space planes (normals outwards) of the volume clustered surfaces are culled
+		// against; 0 planes = whole surfaces.
+		const Plane *fellow_cluster_planes = nullptr;
+		int fellow_cluster_plane_count = 0;
 
 		RenderListParameters(GeometryInstanceSurfaceDataCache **p_elements, RenderElementInfo *p_element_info, int p_element_count, bool p_reverse_cull, PassMode p_pass_mode, uint32_t p_color_pass_flags, bool p_no_gi, bool p_use_directional_soft_shadows, RID p_render_pass_uniform_set, bool p_force_wireframe = false, const Vector2 &p_uv_offset = Vector2(), float p_lod_distance_multiplier = 0.0, float p_screen_mesh_lod_threshold = 0.0, uint32_t p_view_count = 1, uint32_t p_element_offset = 0, SceneShaderForwardClustered::ShaderSpecialization p_base_specialization = {}) {
 			elements = p_elements;
@@ -447,6 +451,11 @@ private:
 			Vector2i fellow_source_offset;
 			float fellow_scale = 1.0;
 			float fellow_bias = 0.0;
+
+			// FellowEngine mesh clusters: world-space planes of the shadow camera's volume (no near plane when casters
+			// are pancaked).
+			Plane fellow_cluster_planes[6];
+			int fellow_cluster_plane_count = 0;
 		};
 
 		LocalVector<ShadowPass> shadow_passes;

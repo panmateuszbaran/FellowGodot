@@ -197,6 +197,27 @@ inline bool shadow_pcss_directional_penumbra() {
 	return shadows_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/shadows/pcss_directional_penumbra");
 }
 
+inline bool geometry_enabled() {
+	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/geometry/enabled");
+}
+
+// Mesh clusters (docs/decisions/0007-mesh-clusters.md): large static triangle surfaces get a k-d tree of triangle
+// clusters when they are created, with a copy of their index buffers (base and every LOD) ordered so that each tree
+// node is one contiguous index range. The depth pre-pass and the opaque pass draw only the clusters whose bounds
+// intersect the view frustum (a triangle entirely outside the frustum covers no pixel: image-identical). Read when a
+// mesh surface is created (clusters are built only while this is on) and every frame (off: whole surfaces).
+inline bool mesh_clusters() {
+	return geometry_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/geometry/mesh_clusters");
+}
+// Maximum triangles per cluster (leaf of the k-d tree).
+inline int mesh_cluster_triangles() {
+	return CLAMP(GLOBAL_GET_CACHED(int, "rendering/fellow/geometry/cluster_triangles"), 64, 1 << 20);
+}
+// Surfaces with fewer triangles than this are not clustered (instance culling is enough for them).
+inline int mesh_cluster_min_surface_triangles() {
+	return MAX(256, GLOBAL_GET_CACHED(int, "rendering/fellow/geometry/cluster_min_surface_triangles"));
+}
+
 // Cumulative counters (render thread writes, scripts read through RenderingServer.fellow_get_stats()).
 struct Stats {
 	SafeNumeric<uint64_t> shadow_cache_cascades_stock;
@@ -213,6 +234,11 @@ struct Stats {
 	SafeNumeric<uint64_t> shadow_cache_copies_skipped;
 	SafeNumeric<uint64_t> shadow_cache_cascades_uneconomic; // stock because the cache would cost more than it saves
 	SafeNumeric<uint64_t> shadow_cache_cascades_unstable; // stock because the cascade's texel size is changing (zoom)
+	SafeNumeric<uint64_t> geometry_cluster_surfaces; // surfaces clustered at creation
+	SafeNumeric<uint64_t> geometry_cluster_index_bytes; // GPU memory of the leaf-ordered index buffer copies (current)
+	SafeNumeric<uint64_t> geometry_cluster_draws; // draw calls issued for clustered surfaces
+	SafeNumeric<uint64_t> geometry_cluster_triangles_drawn; // triangles of clustered surfaces drawn
+	SafeNumeric<uint64_t> geometry_cluster_triangles_culled; // triangles of clustered surfaces skipped (outside the frustum)
 };
 
 Stats &stats();

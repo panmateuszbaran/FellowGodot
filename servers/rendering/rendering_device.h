@@ -1556,7 +1556,14 @@ public:
 
 	void draw_list_draw(DrawListID p_list, bool p_use_indices, uint32_t p_instances = 1, uint32_t p_procedural_vertices = 0);
 	void draw_list_draw_indirect(DrawListID p_list, bool p_use_indices, RID p_buffer, uint32_t p_offset = 0, uint32_t p_draw_count = 1, uint32_t p_stride = 0);
+	// FellowEngine: draw p_index_count indices of the bound index array starting at p_first_index (mesh clusters).
+	void draw_list_draw_indexed_range(DrawListID p_list, uint32_t p_first_index, uint32_t p_index_count, uint32_t p_instances = 1);
 
+private:
+	uint32_t fellow_draw_range_first = 0;
+	uint32_t fellow_draw_range_count = 0; // 0 = whole bound index array
+
+public:
 	void draw_list_set_viewport(DrawListID p_list, const Rect2 &p_rect);
 	void draw_list_enable_scissor(DrawListID p_list, const Rect2 &p_rect);
 	void draw_list_disable_scissor(DrawListID p_list);

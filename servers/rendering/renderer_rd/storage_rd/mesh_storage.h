@@ -34,6 +34,7 @@
 #include "core/templates/rid_owner.h"
 #include "core/templates/self_list.h"
 #include "servers/rendering/renderer_compositor.h"
+#include "servers/rendering/renderer_rd/storage_rd/fellow_mesh_clusters.h"
 #include "servers/rendering/renderer_rd/shaders/skeleton.glsl.gen.h"
 #include "servers/rendering/rendering_server_globals.h"
 #include "servers/rendering/storage/mesh_storage.h"
@@ -151,6 +152,8 @@ private:
 			uint64_t particles_render_pass = 0;
 
 			RID uniform_set;
+
+			FellowMeshClusters *fellow_clusters = nullptr; // FellowEngine mesh clusters (nullptr: not clustered).
 		};
 
 		uint32_t blend_shape_count = 0;
@@ -495,6 +498,10 @@ public:
 			r_index_count = s->lods[current_lod].index_count;
 			return current_lod + 1;
 		}
+	}
+
+	_FORCE_INLINE_ const FellowMeshClusters *fellow_mesh_surface_get_clusters(void *p_surface) const {
+		return reinterpret_cast<Mesh::Surface *>(p_surface)->fellow_clusters;
 	}
 
 	_FORCE_INLINE_ RID mesh_surface_get_index_array(void *p_surface, uint32_t p_lod) const {

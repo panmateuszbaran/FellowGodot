@@ -63,6 +63,10 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/shadows/directional_max_mip", false);
 	GLOBAL_DEF("rendering/fellow/shadows/debug_disable_caster_culling", false);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/shadows/directional_cache_debug_mode", PROPERTY_HINT_ENUM, "Normal,Lattice Only (No Cache),Rebuild Every Frame"), 0);
+	GLOBAL_DEF("rendering/fellow/geometry/enabled", true);
+	GLOBAL_DEF("rendering/fellow/geometry/mesh_clusters", false);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/geometry/cluster_triangles", PROPERTY_HINT_RANGE, "64,65536,1"), 4096);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/geometry/cluster_min_surface_triangles", PROPERTY_HINT_RANGE, "256,1048576,1"), 32768);
 }
 
 Fellow::Stats &Fellow::stats() {
@@ -87,5 +91,10 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["shadow_cache_copies_skipped"] = s.shadow_cache_copies_skipped.get();
 	d["shadow_cache_cascades_uneconomic"] = s.shadow_cache_cascades_uneconomic.get();
 	d["shadow_cache_cascades_unstable"] = s.shadow_cache_cascades_unstable.get();
+	d["geometry_cluster_surfaces"] = s.geometry_cluster_surfaces.get();
+	d["geometry_cluster_index_bytes"] = s.geometry_cluster_index_bytes.get();
+	d["geometry_cluster_draws"] = s.geometry_cluster_draws.get();
+	d["geometry_cluster_triangles_drawn"] = s.geometry_cluster_triangles_drawn.get();
+	d["geometry_cluster_triangles_culled"] = s.geometry_cluster_triangles_culled.get();
 	return d;
 }
