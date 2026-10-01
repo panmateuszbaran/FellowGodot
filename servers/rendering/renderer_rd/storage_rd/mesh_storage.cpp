@@ -191,6 +191,19 @@ MeshStorage::MeshStorage() {
 }
 
 MeshStorage::~MeshStorage() {
+	// FellowEngine mesh clusters: wait for builds still running.
+	for (FellowMeshClusterBuild *b : fellow_orphan_builds) {
+		fellow_mesh_clusters_build_wait(b);
+		memdelete(b);
+	}
+	fellow_orphan_builds.clear();
+	for (Mesh::Surface *surface : fellow_pending_surfaces) {
+		fellow_mesh_clusters_build_wait(surface->fellow_build);
+		memdelete(surface->fellow_build);
+		surface->fellow_build = nullptr;
+	}
+	fellow_pending_surfaces.clear();
+
 	//def buffers
 	for (int i = 0; i < DEFAULT_RD_BUFFER_MAX; i++) {
 		RD::get_singleton()->free_rid(mesh_default_rd_buffers[i]);
@@ -445,8 +458,9 @@ void MeshStorage::mesh_add_surface(RID p_mesh, const RenderingServerTypes::Surfa
 		for (int i = 0; i < new_surface.lods.size(); i++) {
 			lod_indices.push_back(new_surface.lods[i].index_data);
 		}
-		// Built on the WorkerThreadPool while loading continues; joined at the surface's first set-up for drawing.
-		s->fellow_build = fellow_mesh_clusters_build_async(new_surface.format, new_surface.vertex_data, new_surface.vertex_count, new_surface.aabb, new_surface.index_data, new_surface.index_count, lod_indices, Fellow::mesh_cluster_triangles());
+		// Built later on the WorkerThreadPool (fellow_update_clusters()); the render thread never waits for it.
+		s->fellow_build = fellow_mesh_clusters_build_create(new_surface.format, new_surface.vertex_data, new_surface.vertex_count, new_surface.aabb, new_surface.index_data, new_surface.index_count, lod_indices, Fellow::mesh_cluster_triangles(), RSG::rasterizer->get_frame_number());
+		fellow_pending_surfaces.push_back(s);
 	}
 
 	s->aabb = new_surface.aabb;
@@ -558,75 +572,118 @@ void MeshStorage::_mesh_surface_clear(Mesh *p_mesh, int p_surface) {
 		RD::get_singleton()->free_rid(s.blend_shape_buffer);
 	}
 
-	_fellow_join_cluster_build(&s);
+	_fellow_forget_build(&s);
 	if (s.fellow_clusters) {
-		Fellow::stats().geometry_cluster_pending_bytes.sub(s.fellow_clusters->pending_bytes());
 		memdelete(s.fellow_clusters);
 		s.fellow_clusters = nullptr;
-	}
-	if (s.fellow_clusters_ordered) {
-		memdelete(s.fellow_clusters_ordered);
-		s.fellow_clusters_ordered = nullptr;
 	}
 
 	memdelete(p_mesh->surfaces[p_surface]);
 }
 
-void MeshStorage::_fellow_join_cluster_build(Mesh::Surface *p_surface) {
+// FellowEngine mesh clusters (docs/decisions/0007-mesh-clusters.md).
+
+// Frames a surface must exist before its clusters are built: surfaces recreated every frame never pay for a build.
+static constexpr uint64_t FELLOW_CLUSTER_BUILD_DELAY_FRAMES = 30;
+
+void MeshStorage::_fellow_forget_build(Mesh::Surface *p_surface) {
 	FellowMeshClusterBuild *b = p_surface->fellow_build;
 	if (b == nullptr) {
 		return;
 	}
-	const uint64_t t0 = OS::get_singleton()->get_ticks_usec();
-	fellow_mesh_clusters_build_join(b);
-	Fellow::stats().geometry_cluster_join_wait_usec.add(OS::get_singleton()->get_ticks_usec() - t0);
-	Fellow::stats().geometry_cluster_build_usec.add(b->build_usec);
-	p_surface->fellow_clusters = b->clusters;
-	p_surface->fellow_clusters_ordered = b->ordered;
-	memdelete(b);
 	p_surface->fellow_build = nullptr;
-	if (p_surface->fellow_clusters) {
-		Fellow::stats().geometry_cluster_surfaces.increment();
-		Fellow::stats().geometry_cluster_pending_bytes.add(p_surface->fellow_clusters->pending_bytes());
+	int64_t idx = fellow_pending_surfaces.find(p_surface);
+	if (idx >= 0) {
+		fellow_pending_surfaces.remove_at_unordered(idx);
+	}
+	if (b->started && !fellow_mesh_clusters_build_try_join(b)) {
+		fellow_orphan_builds.push_back(b); // Freed by fellow_update_clusters() once the task is done.
+	} else {
+		memdelete(b);
 	}
 }
 
-void MeshStorage::fellow_mesh_surface_decide_clusters(void *p_surface, bool p_activate) {
-	Mesh::Surface *s = reinterpret_cast<Mesh::Surface *>(p_surface);
-	_fellow_join_cluster_build(s);
-	FellowMeshClusters *c = s->fellow_clusters;
-	if (c == nullptr || c->active) {
-		return;
+bool MeshStorage::_fellow_try_apply(Mesh::Surface *p_surface) {
+	FellowMeshClusterBuild *b = p_surface->fellow_build;
+	if (b == nullptr || b->decision == FellowMeshClusterBuild::UNDECIDED || !fellow_mesh_clusters_build_try_join(b)) {
+		return false;
 	}
-	Fellow::stats().geometry_cluster_pending_bytes.sub(c->pending_bytes());
-	if (!p_activate || c->pending_lods.size() != int(s->lod_count) || s->index_buffer.is_null()) {
-		memdelete(c);
-		// Keep stock's triangle order; the order-preserving clusters still allow culling.
-		s->fellow_clusters = s->fellow_clusters_ordered;
-		s->fellow_clusters_ordered = nullptr;
+	Fellow::stats().geometry_cluster_build_usec.add(b->build_usec);
+	if (b->clusters) {
+		Fellow::stats().geometry_cluster_surfaces.increment();
+	}
+	FellowMeshClusters *c = nullptr;
+	if (b->decision == FellowMeshClusterBuild::CLUSTER_ORDER && b->clusters && b->clusters->pending_lods.size() == int(p_surface->lod_count) && p_surface->index_buffer.is_valid()) {
+		c = b->clusters;
+		b->clusters = nullptr;
+		// Same format and sizes as the stock buffers; the old buffers are released when the GPU no longer uses them
+		// (freeing a buffer also frees its index arrays).
+		const bool is_16 = p_surface->vertex_count <= 65536 && p_surface->vertex_count > 0;
+		const RD::IndexBufferFormat format = is_16 ? RD::INDEX_BUFFER_FORMAT_UINT16 : RD::INDEX_BUFFER_FORMAT_UINT32;
+		RD::get_singleton()->free_rid(p_surface->index_buffer);
+		p_surface->index_buffer = RD::get_singleton()->index_buffer_create(p_surface->index_count, format, c->pending_base, false);
+		p_surface->index_array = RD::get_singleton()->index_array_create(p_surface->index_buffer, 0, p_surface->index_count);
+		for (uint32_t i = 0; i < p_surface->lod_count; i++) {
+			RD::get_singleton()->free_rid(p_surface->lods[i].index_buffer);
+			p_surface->lods[i].index_buffer = RD::get_singleton()->index_buffer_create(p_surface->lods[i].index_count, format, c->pending_lods[i]);
+			p_surface->lods[i].index_array = RD::get_singleton()->index_array_create(p_surface->lods[i].index_buffer, 0, p_surface->lods[i].index_count);
+		}
+		c->pending_base = Vector<uint8_t>();
+		c->pending_lods.clear();
+		c->active = true;
+		Fellow::stats().geometry_cluster_surfaces_active.increment();
+	} else if (b->decision == FellowMeshClusterBuild::KEEP_ORDER && b->ordered) {
+		c = b->ordered;
+		b->ordered = nullptr;
 		Fellow::stats().geometry_cluster_surfaces_dropped.increment();
+	} else if (b->clusters) {
+		Fellow::stats().geometry_cluster_surfaces_dropped.increment();
+	}
+	if (p_surface->fellow_clusters) {
+		memdelete(p_surface->fellow_clusters);
+	}
+	p_surface->fellow_clusters = c;
+	_fellow_forget_build(p_surface); // Joined: deletes the build and its unused results.
+	return true;
+}
+
+void MeshStorage::fellow_mesh_surface_decide_clusters(void *p_surface, bool p_cluster_order) {
+	Mesh::Surface *s = reinterpret_cast<Mesh::Surface *>(p_surface);
+	if (s->fellow_build == nullptr) {
 		return;
 	}
-	if (s->fellow_clusters_ordered) {
-		memdelete(s->fellow_clusters_ordered);
-		s->fellow_clusters_ordered = nullptr;
+	// Any set-up that blends (another instance, a material changed before the build was applied) keeps stock's order.
+	if (!p_cluster_order) {
+		s->fellow_build->decision = FellowMeshClusterBuild::KEEP_ORDER;
+	} else if (s->fellow_build->decision == FellowMeshClusterBuild::UNDECIDED) {
+		s->fellow_build->decision = FellowMeshClusterBuild::CLUSTER_ORDER;
 	}
-	// Same format and sizes as the stock buffers; the old buffers are released when the GPU no longer uses them
-	// (freeing a buffer also frees its index arrays).
-	const bool is_16 = s->vertex_count <= 65536 && s->vertex_count > 0;
-	const RD::IndexBufferFormat format = is_16 ? RD::INDEX_BUFFER_FORMAT_UINT16 : RD::INDEX_BUFFER_FORMAT_UINT32;
-	RD::get_singleton()->free_rid(s->index_buffer);
-	s->index_buffer = RD::get_singleton()->index_buffer_create(s->index_count, format, c->pending_base, false);
-	s->index_array = RD::get_singleton()->index_array_create(s->index_buffer, 0, s->index_count);
-	for (uint32_t i = 0; i < s->lod_count; i++) {
-		RD::get_singleton()->free_rid(s->lods[i].index_buffer);
-		s->lods[i].index_buffer = RD::get_singleton()->index_buffer_create(s->lods[i].index_count, format, c->pending_lods[i]);
-		s->lods[i].index_array = RD::get_singleton()->index_array_create(s->lods[i].index_buffer, 0, s->lods[i].index_count);
+	_fellow_try_apply(s);
+}
+
+void MeshStorage::fellow_update_clusters() {
+	const uint64_t frame = RSG::rasterizer->get_frame_number();
+	if (frame == fellow_updated_frame) {
+		return;
 	}
-	c->pending_base = Vector<uint8_t>();
-	c->pending_lods.clear();
-	c->active = true;
-	Fellow::stats().geometry_cluster_surfaces_active.increment();
+	fellow_updated_frame = frame;
+	for (int64_t i = int64_t(fellow_pending_surfaces.size()) - 1; i >= 0; i--) {
+		Mesh::Surface *s = fellow_pending_surfaces[i];
+		FellowMeshClusterBuild *b = s->fellow_build;
+		if (!b->started) {
+			if (frame >= b->created_frame + FELLOW_CLUSTER_BUILD_DELAY_FRAMES) {
+				fellow_mesh_clusters_build_start(b);
+			}
+		} else {
+			_fellow_try_apply(s); // May remove entry i (unordered removal swaps in an already visited one).
+		}
+	}
+	for (int64_t i = int64_t(fellow_orphan_builds.size()) - 1; i >= 0; i--) {
+		if (fellow_mesh_clusters_build_try_join(fellow_orphan_builds[i])) {
+			memdelete(fellow_orphan_builds[i]);
+			fellow_orphan_builds.remove_at_unordered(i);
+		}
+	}
 }
 
 int MeshStorage::mesh_get_blend_shape_count(RID p_mesh) const {
@@ -667,16 +724,14 @@ void MeshStorage::mesh_surface_update_vertex_region(RID p_mesh, int p_surface, i
 }
 
 void MeshStorage::_fellow_drop_clusters(Mesh::Surface *p_surface) {
-	_fellow_join_cluster_build(p_surface);
+	if (p_surface->fellow_build) {
+		_fellow_forget_build(p_surface);
+		Fellow::stats().geometry_cluster_surfaces_dropped.increment();
+	}
 	if (p_surface->fellow_clusters) {
-		Fellow::stats().geometry_cluster_pending_bytes.sub(p_surface->fellow_clusters->pending_bytes());
 		memdelete(p_surface->fellow_clusters);
 		p_surface->fellow_clusters = nullptr;
 		Fellow::stats().geometry_cluster_surfaces_dropped.increment();
-	}
-	if (p_surface->fellow_clusters_ordered) {
-		memdelete(p_surface->fellow_clusters_ordered);
-		p_surface->fellow_clusters_ordered = nullptr;
 	}
 }
 

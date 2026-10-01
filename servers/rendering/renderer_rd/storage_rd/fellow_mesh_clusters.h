@@ -99,10 +99,19 @@ struct FellowMeshClusters {
 // blending, whose result depends on the triangle order inside a draw).
 FellowMeshClusters *fellow_mesh_clusters_build(uint64_t p_format, const Vector<uint8_t> &p_vertex_data, uint32_t p_vertex_count, const AABB &p_aabb, const Vector<uint8_t> &p_index_data, uint32_t p_index_count, const Vector<Vector<uint8_t>> &p_lods, uint32_t p_max_leaf_triangles, FellowMeshClusters **r_ordered = nullptr);
 
-// Asynchronous build on the WorkerThreadPool: the inputs (copy-on-write references to the surface data) are captured
-// when the surface is created and the clusters are built while loading continues; the renderer joins the task the
-// first time it needs the result (fellow_mesh_clusters_build_join).
+// Deferred, asynchronous build. The inputs (copy-on-write references to the surface data) are captured when the
+// surface is created; the build task is started only once the surface has existed for a few frames (surfaces that are
+// recreated every frame never pay for it) and runs on the WorkerThreadPool; the render thread never waits for it: the
+// result is applied by the per-frame update once the task has completed and the renderer has decided how the surface
+// is drawn (cluster order, or stock order with the order-preserving variant).
 struct FellowMeshClusterBuild {
+	enum Decision {
+		UNDECIDED,
+		CLUSTER_ORDER, // Reorder the surface's index buffers (k-d clusters).
+		KEEP_ORDER, // Keep stock's order (order-preserving clusters).
+		DROP, // No clusters (vertex data was updated).
+	};
+
 	uint64_t format = 0;
 	Vector<uint8_t> vertex_data;
 	uint32_t vertex_count = 0;
@@ -112,12 +121,21 @@ struct FellowMeshClusterBuild {
 	Vector<Vector<uint8_t>> lods;
 	uint32_t max_leaf_triangles = 0;
 
+	uint64_t created_frame = 0;
+	Decision decision = UNDECIDED;
+	bool started = false;
+
 	FellowMeshClusters *clusters = nullptr;
 	FellowMeshClusters *ordered = nullptr;
 	uint64_t build_usec = 0; // CPU time of the build (worker thread).
 	WorkerThreadPool::TaskID task = WorkerThreadPool::INVALID_TASK_ID;
+
+	~FellowMeshClusterBuild();
 };
 
-FellowMeshClusterBuild *fellow_mesh_clusters_build_async(uint64_t p_format, const Vector<uint8_t> &p_vertex_data, uint32_t p_vertex_count, const AABB &p_aabb, const Vector<uint8_t> &p_index_data, uint32_t p_index_count, const Vector<Vector<uint8_t>> &p_lods, uint32_t p_max_leaf_triangles);
-// Waits for the build; the results stay in clusters / ordered (owned by the caller from then on).
-void fellow_mesh_clusters_build_join(FellowMeshClusterBuild *p_build);
+FellowMeshClusterBuild *fellow_mesh_clusters_build_create(uint64_t p_format, const Vector<uint8_t> &p_vertex_data, uint32_t p_vertex_count, const AABB &p_aabb, const Vector<uint8_t> &p_index_data, uint32_t p_index_count, const Vector<Vector<uint8_t>> &p_lods, uint32_t p_max_leaf_triangles, uint64_t p_frame);
+void fellow_mesh_clusters_build_start(FellowMeshClusterBuild *p_build);
+// True once the task finished (joins it); false while it runs or before it was started.
+bool fellow_mesh_clusters_build_try_join(FellowMeshClusterBuild *p_build);
+// Blocks until the task finished (shutdown only).
+void fellow_mesh_clusters_build_wait(FellowMeshClusterBuild *p_build);

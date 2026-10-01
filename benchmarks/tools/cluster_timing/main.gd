@@ -46,10 +46,14 @@ func _ready() -> void:
 	var t2 := Time.get_ticks_usec()
 	await RenderingServer.frame_post_draw
 	var t3 := Time.get_ticks_usec()
+	for i in 45:
+		await RenderingServer.frame_post_draw
+	var t4 := Time.get_ticks_usec()
+	print("FRAMES 45 after: %.1f ms" % ((t4 - t3) / 1000.0))
 	var st := {}
 	if RenderingServer.has_method("fellow_get_stats"):
 		st = RenderingServer.call("fellow_get_stats")
-	print("TIMING tris=%d add_surface_ms=%.1f first_frame_ms=%.1f build_ms=%.1f join_wait_ms=%.1f active=%s" % [idx.size() / 3, (t1 - t0) / 1000.0, (t2 - t1) / 1000.0, st.get("geometry_cluster_build_usec", 0) / 1000.0, st.get("geometry_cluster_join_wait_usec", 0) / 1000.0, st.get("geometry_cluster_surfaces_active", -1)])
+	print("TIMING tris=%d add_surface_ms=%.1f first_frame_ms=%.1f build_ms=%.1f active=%s" % [idx.size() / 3, (t1 - t0) / 1000.0, (t2 - t1) / 1000.0, st.get("geometry_cluster_build_usec", 0) / 1000.0, st.get("geometry_cluster_surfaces_active", -1)])
 	if "--update" in args:
 		var data := PackedByteArray()
 		data.resize(12 * 10)

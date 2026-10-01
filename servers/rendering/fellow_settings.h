@@ -242,12 +242,10 @@ struct Stats {
 	SafeNumeric<uint64_t> shadow_cache_cascades_uneconomic; // stock because the cache would cost more than it saves
 	SafeNumeric<uint64_t> shadow_cache_cascades_unstable; // stock because the cascade's texel size is changing (zoom)
 	SafeNumeric<uint64_t> geometry_cluster_surfaces; // surfaces clustered at creation
-	SafeNumeric<uint64_t> geometry_cluster_pending_bytes; // CPU memory of cluster-ordered index data awaiting the draw-time decision (current)
 	SafeNumeric<uint64_t> geometry_cluster_surfaces_active; // surfaces whose index buffers were put in cluster order
 	SafeNumeric<uint64_t> geometry_cluster_surfaces_dropped; // surfaces left in stock order (blending or vertex-moving material)
 	SafeNumeric<uint64_t> geometry_cluster_blended_after_activation; // clustered surfaces later set up with a blending material
 	SafeNumeric<uint64_t> geometry_cluster_build_usec; // CPU time of cluster builds (worker threads)
-	SafeNumeric<uint64_t> geometry_cluster_join_wait_usec; // time the render thread waited for unfinished builds
 	SafeNumeric<uint64_t> geometry_cluster_draws; // draw calls issued for clustered surfaces
 	SafeNumeric<uint64_t> geometry_cluster_triangles_drawn; // triangles of clustered surfaces drawn
 	SafeNumeric<uint64_t> geometry_cluster_triangles_culled; // triangles of clustered surfaces skipped (outside the frustum)

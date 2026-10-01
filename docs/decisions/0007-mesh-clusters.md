@@ -51,16 +51,16 @@ triangles are discarded by the GPU after vertex shading and primitive assembly.
    and each LOD; LOD triangles are assigned to leaves by descending the split planes with their centroid) is
    reordered by leaf, so every node of the tree is one contiguous index range in every buffer, with its own bounds
    per LOD (inflated by 0.1 % + 0.1 mm). The reordered index data is kept on the CPU for now ("pending").
-2. **Decision at set-up** (`RenderForwardClustered::_fellow_decide_clusters`, the first time an instance of the
-   surface is set up for drawing): if none of its materials (material chain and overlay) blends and none moves
-   vertices, the surface's own index buffers are **replaced** by the reordered ones (same format and size: no extra
-   GPU memory); otherwise the clusters are dropped and the surface keeps stock's order — alpha blending inside a draw
-   depends on the triangle order, and vertex-moving shaders could leave the cluster bounds. A blending surface then
-   uses an **order-preserving variant** built at the same time: the same kind of tree over chunks of consecutive
-   triangles of each index buffer in its existing order (as many chunks as k-d leaves), so the alpha pass can cull it
-   without changing the order of anything it draws. Shadow meshes (only ever
-   drawn in depth and shadow passes) are always reordered. A surface reordered earlier and later set up with a
-   blending material is counted (`geometry_cluster_blended_after_activation`) and warned about once.
+2. **Decision at set-up** (`RenderForwardClustered::_fellow_decide_clusters`, whenever an instance of the surface is
+   set up for drawing, recorded until the build is applied): if none of its materials (material chain and overlay)
+   blends and none moves vertices, the surface's own index buffers are **replaced** by the reordered ones (same format
+   and size: no extra GPU memory); if any set-up blends or moves vertices, the surface keeps stock's order — alpha
+   blending inside a draw depends on the triangle order, and vertex-moving shaders could leave the cluster bounds. A
+   blending surface then uses an **order-preserving variant** built at the same time: the same kind of tree over
+   chunks of consecutive triangles of each index buffer in its existing order (as many chunks as k-d leaves), so the
+   alpha pass can cull it without changing the order of anything it draws. Shadow meshes (only ever drawn in depth
+   and shadow passes) are always reordered. A surface reordered earlier and later set up with a blending material is
+   counted (`geometry_cluster_blended_after_activation`) and warned about once.
 3. **Draw**: the depth pre-pass, the opaque, motion-vector and transparent passes (camera frustum with the TAA jitter
    the GPU uses) and shadow passes
    (shadow camera planes; without the near plane when casters are pancaked; not for dual-paraboloid) pass world-space
@@ -74,11 +74,14 @@ triangles are discarded by the GPU after vertex shading and primitive assembly.
    so the image cannot change. Depth pre-pass and opaque pass may draw different subsets (the pre-pass draws the
    shadow mesh with its own clusters): every triangle that covers a pixel is drawn by both.
 
-5. **Build on worker threads.** The build runs as a WorkerThreadPool task started when the surface is created; the
-   render thread joins it at the surface's first set-up (`geometry_cluster_build_usec`, `geometry_cluster_join_wait_usec`).
-   The synchronous first version made Sponza's load 2.8 s longer (3.26 → 6.09 s, `m3_cl_profile`). One 4 M-triangle
-   surface takes 0.56 s on the Linux test machine (`benchmarks/tools/cluster_timing`: positions + centroids 73 ms, k-d
-   tree 278 ms, base level 107 ms, order-preserving variant 121 ms); surfaces build in parallel.
+5. **Deferred build on worker threads, never waited for.** The surface keeps copy-on-write references to its data; the
+   build starts once the surface has existed for 30 frames (surfaces recreated every frame — procedural meshes,
+   editing — never pay for it) as a WorkerThreadPool task, and the per-frame update applies a finished build once the
+   renderer has recorded how the surface is drawn. Until then the surface is drawn whole, as stock. A first version
+   built synchronously at creation and made Sponza's load 2.8 s longer (3.26 → 6.09 s, `m3_cl_profile`); a second one
+   joined the task at the first set-up (the render thread could still wait). One 4 M-triangle surface takes 0.56 s of
+   worker time on the Linux test machine (`benchmarks/tools/cluster_timing`: positions + centroids 73 ms, k-d tree
+   278 ms, base level 107 ms, order-preserving variant 121 ms); `geometry_cluster_build_usec` reports it.
 6. **Vertex updates.** `mesh_surface_update_vertex_region` drops the surface's clusters (their bounds come from the
    data at creation); the surface is drawn whole from then on.
 

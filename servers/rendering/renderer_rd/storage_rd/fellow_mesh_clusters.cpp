@@ -395,7 +395,16 @@ static void _fellow_mesh_clusters_build_task(void *p_userdata) {
 	b->build_usec = OS::get_singleton()->get_ticks_usec() - t0;
 }
 
-FellowMeshClusterBuild *fellow_mesh_clusters_build_async(uint64_t p_format, const Vector<uint8_t> &p_vertex_data, uint32_t p_vertex_count, const AABB &p_aabb, const Vector<uint8_t> &p_index_data, uint32_t p_index_count, const Vector<Vector<uint8_t>> &p_lods, uint32_t p_max_leaf_triangles) {
+FellowMeshClusterBuild::~FellowMeshClusterBuild() {
+	if (clusters) {
+		memdelete(clusters);
+	}
+	if (ordered) {
+		memdelete(ordered);
+	}
+}
+
+FellowMeshClusterBuild *fellow_mesh_clusters_build_create(uint64_t p_format, const Vector<uint8_t> &p_vertex_data, uint32_t p_vertex_count, const AABB &p_aabb, const Vector<uint8_t> &p_index_data, uint32_t p_index_count, const Vector<Vector<uint8_t>> &p_lods, uint32_t p_max_leaf_triangles, uint64_t p_frame) {
 	FellowMeshClusterBuild *b = memnew(FellowMeshClusterBuild);
 	b->format = p_format;
 	b->vertex_data = p_vertex_data;
@@ -405,12 +414,33 @@ FellowMeshClusterBuild *fellow_mesh_clusters_build_async(uint64_t p_format, cons
 	b->index_count = p_index_count;
 	b->lods = p_lods;
 	b->max_leaf_triangles = p_max_leaf_triangles;
-	b->task = WorkerThreadPool::get_singleton()->add_native_task(&_fellow_mesh_clusters_build_task, b, false, "FellowEngine mesh clusters");
+	b->created_frame = p_frame;
 	return b;
 }
 
-void fellow_mesh_clusters_build_join(FellowMeshClusterBuild *p_build) {
-	if (p_build->task != WorkerThreadPool::INVALID_TASK_ID) {
+void fellow_mesh_clusters_build_start(FellowMeshClusterBuild *p_build) {
+	ERR_FAIL_COND(p_build->started);
+	p_build->started = true;
+	p_build->task = WorkerThreadPool::get_singleton()->add_native_task(&_fellow_mesh_clusters_build_task, p_build, false, "FellowEngine mesh clusters");
+}
+
+bool fellow_mesh_clusters_build_try_join(FellowMeshClusterBuild *p_build) {
+	if (!p_build->started) {
+		return false;
+	}
+	if (p_build->task == WorkerThreadPool::INVALID_TASK_ID) {
+		return true;
+	}
+	if (!WorkerThreadPool::get_singleton()->is_task_completed(p_build->task)) {
+		return false;
+	}
+	WorkerThreadPool::get_singleton()->wait_for_task_completion(p_build->task);
+	p_build->task = WorkerThreadPool::INVALID_TASK_ID;
+	return true;
+}
+
+void fellow_mesh_clusters_build_wait(FellowMeshClusterBuild *p_build) {
+	if (p_build->started && p_build->task != WorkerThreadPool::INVALID_TASK_ID) {
 		WorkerThreadPool::get_singleton()->wait_for_task_completion(p_build->task);
 		p_build->task = WorkerThreadPool::INVALID_TASK_ID;
 	}

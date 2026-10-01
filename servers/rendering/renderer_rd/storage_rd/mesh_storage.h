@@ -153,9 +153,8 @@ private:
 
 			RID uniform_set;
 
-			FellowMeshClusters *fellow_clusters = nullptr; // FellowEngine mesh clusters (nullptr: not clustered).
-			FellowMeshClusters *fellow_clusters_ordered = nullptr; // Order-preserving alternative, used if the surface blends.
-			FellowMeshClusterBuild *fellow_build = nullptr; // Cluster build still running on the WorkerThreadPool.
+			FellowMeshClusters *fellow_clusters = nullptr; // FellowEngine mesh clusters in use (nullptr: none).
+			FellowMeshClusterBuild *fellow_build = nullptr; // Clusters not built or not applied yet.
 		};
 
 		uint32_t blend_shape_count = 0;
@@ -507,27 +506,37 @@ public:
 	bool fellow_clusters_supported = false;
 	enum FellowClusterState {
 		FELLOW_CLUSTERS_NONE,
-		FELLOW_CLUSTERS_PENDING, // Built, index buffers still in stock order: waiting for the renderer's decision.
+		FELLOW_CLUSTERS_PENDING, // Not built or not applied yet (index buffers in stock order).
 		FELLOW_CLUSTERS_ACTIVE, // Index buffers in cluster order.
 	};
 	_FORCE_INLINE_ FellowClusterState fellow_mesh_surface_get_cluster_state(void *p_surface) const {
 		const Mesh::Surface *surface = reinterpret_cast<Mesh::Surface *>(p_surface);
 		if (surface->fellow_build) {
-			return FELLOW_CLUSTERS_PENDING; // Build still running (or not joined yet).
+			return FELLOW_CLUSTERS_PENDING;
 		}
-		const FellowMeshClusters *c = surface->fellow_clusters;
-		return c == nullptr ? FELLOW_CLUSTERS_NONE : (c->active ? FELLOW_CLUSTERS_ACTIVE : FELLOW_CLUSTERS_PENDING);
+		return surface->fellow_clusters ? FELLOW_CLUSTERS_ACTIVE : FELLOW_CLUSTERS_NONE;
 	}
-	// Clusters that may be drawn (index buffers in cluster order), or nullptr.
+	// Clusters that may be drawn (they match the surface's index buffers), or nullptr.
 	_FORCE_INLINE_ const FellowMeshClusters *fellow_mesh_surface_get_clusters(void *p_surface) const {
-		const FellowMeshClusters *c = reinterpret_cast<Mesh::Surface *>(p_surface)->fellow_clusters;
-		return (c && c->active) ? c : nullptr;
+		return reinterpret_cast<Mesh::Surface *>(p_surface)->fellow_clusters;
 	}
-	// Pending clusters: p_activate replaces the surface's index buffers by the cluster-ordered ones; otherwise the
-	// surface keeps stock's triangle order and uses the order-preserving clusters (chunks of consecutive triangles).
-	void fellow_mesh_surface_decide_clusters(void *p_surface, bool p_activate);
-	void _fellow_join_cluster_build(Mesh::Surface *p_surface);
+	// Records how a surface with pending clusters is drawn: p_cluster_order reorders its index buffers into cluster
+	// order; otherwise it keeps stock's triangle order and uses the order-preserving clusters (chunks of consecutive
+	// triangles). Applied as soon as the build is done (possibly right away).
+	void fellow_mesh_surface_decide_clusters(void *p_surface, bool p_cluster_order);
+	// Per-frame update (render thread): starts builds of surfaces that have existed for a few frames and applies
+	// finished ones. Never waits for a build.
+	void fellow_update_clusters();
+
+private:
+	LocalVector<Mesh::Surface *> fellow_pending_surfaces;
+	LocalVector<FellowMeshClusterBuild *> fellow_orphan_builds; // Builds of freed surfaces still running.
+	uint64_t fellow_updated_frame = UINT64_MAX;
+	bool _fellow_try_apply(Mesh::Surface *p_surface);
+	void _fellow_forget_build(Mesh::Surface *p_surface);
 	void _fellow_drop_clusters(Mesh::Surface *p_surface);
+
+public:
 
 	_FORCE_INLINE_ RID mesh_surface_get_index_array(void *p_surface, uint32_t p_lod) const {
 		Mesh::Surface *s = reinterpret_cast<Mesh::Surface *>(p_surface);

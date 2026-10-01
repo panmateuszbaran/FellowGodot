@@ -1972,6 +1972,9 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	// May have changed due to the above (light buffer enlarged, as an example).
 	_update_render_base_uniform_set();
 
+	// FellowEngine mesh clusters: start deferred builds, apply finished ones (never waits; once per frame).
+	RendererRD::MeshStorage::get_singleton()->fellow_update_clusters();
+
 	// FellowEngine mesh clusters: view volume of the depth pre-pass and the opaque pass (the projection the GPU uses,
 	// TAA jitter included).
 	LocalVector<Plane> fellow_cluster_planes;
