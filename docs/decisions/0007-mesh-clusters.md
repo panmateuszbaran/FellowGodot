@@ -147,6 +147,16 @@ The shadow passes gain nothing measurable on the stock path: a cascade covers ne
 
 Frame-level day-state numbers: milestone-2 report (`fellow-m2_perf`).
 
+**Order-preserving clusters for blended surfaces** (`cluster_blended_surfaces`), day state, `fellow17`
+(`m3_mm2_profile`, Sponza, one profiled run each): on → off: depth pre-pass 0.981 → 1.103 ms, transparent pass
+1.825 → 1.940 ms, sum of passes 8.14 → 8.48 ms. The alpha-blended cypress leaves (drawn in the depth pre-pass too:
+alpha with depth pre-pass) are culled by chunk of consecutive triangles: **−0.34 ms**. Other scenes: no blended surface
+of that size (identical within noise).
+
+**Load time with the deferred build** (`fellow17`, same session, one load each): Sponza 3.70 s vs stock 3.33 s
+(`fellow16`, whose builds still joined at the first set-up: 7.64 vs 3.62 s in `fellow-m2_perf`); Bistro exterior
+2.63 vs 2.54 s; Bistro interior and PBR Lab within ±0.12 s.
+
 ## Actual visual quality
 
 `m3_cl_temporal` (RTX 5070 Ti, 60-frame sequences after a 200-frame pre-roll, 1920×1080; copy version `fellow14`,

@@ -766,6 +766,10 @@ private:
 	RendererRD::SSEffects *ss_effects = nullptr;
 	RendererRD::FellowShadowCache *fellow_shadow_cache = nullptr;
 	RendererRD::FellowShadowMaxMip *fellow_shadow_max_mip = nullptr;
+	// Directional shadow atlas texels written since the min/max pyramid was last brought up to date.
+	Rect2i fellow_dir_atlas_dirty;
+	bool fellow_dir_atlas_dirty_all = true;
+	void _fellow_mark_dir_atlas_dirty(const Rect2i &p_rect) { fellow_dir_atlas_dirty = fellow_dir_atlas_dirty.has_area() ? fellow_dir_atlas_dirty.merge(p_rect) : p_rect; }
 
 #ifdef METAL_MFXTEMPORAL_ENABLED
 	RendererRD::MFXTemporalEffect *mfx_temporal_effect = nullptr;

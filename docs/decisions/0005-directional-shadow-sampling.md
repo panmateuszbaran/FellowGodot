@@ -115,11 +115,36 @@ benchmark PCSS search radius spans tens of texels, and for any receiver not perp
 surface, a few texels away along the slope, is closer to the light than the biased receiver depth, so the box
 maximum exceeds the receiver depth.
 
+## Max pyramid v2: min/max with a fully-shadowed early-out (`fellow17`, day state, `m3_mm2_profile`, 1080p, GPU ms)
+
+v2 stores the minimum and the maximum per block and adds the second early-out: if every texel within the search
+region is closer to the light than the receiver, the PCSS blocker average is at most the region's maximum, which bounds
+the penumbra and the filter radius; if every texel within that radius is closer too, every filter tap compares 0
+(the same reasoning, one box, for PCF). Identity on RTX (`m3_mm2_temporal`, f17 vs f17 + max pyramid): Bistro
+exterior 99.0 dB (max |d| 0), Sponza 72.7-75.4 dB (max 2/255), PBR 65.7-73.4 dB (≤ 0.001 % of pixels > 2/255, the
+scene's own run-to-run floor); hard-shadow pair: Bistro 99-109 dB.
+
+| Scene | shadow pass (incl. pyramid build) | opaque pass | transparent pass | sum of passes |
+|---|---|---|---|---|
+| Sponza | 0.302 → 0.425 (+0.123) | 2.654 → **2.093 (−0.561)** | 1.825 → **1.348 (−0.477)** | 8.142 → **7.163 (−12.0 %)** |
+| Bistro exterior | 0.311 → 0.435 (+0.124) | 2.036 → 1.889 (−0.147) | 0.051 → 0.051 | 4.918 → 5.101 (+3.7 %, noise in SSAO/SSIL/SSR) |
+| PBR Lab | 0.122 → 0.229 (+0.107) | 0.895 → 0.973 (+0.078) | 0.115 → 0.106 | 2.638 → 2.791 (+5.8 %) |
+
+The fully-shadowed early-out is what pays: Sponza's courtyard and galleries are mostly in the sun's shadow (also on
+the alpha-blended cypress leaves, shaded with the same PCSS). Where the early-outs rarely fire (PBR Lab: penumbrae on
+curved receivers), the four extra fetches cost a little. In every scene the pyramid is rebuilt over the whole 4096²
+atlas every frame (+0.11-0.12 ms), even though with the shadow cache the atlas does not change in a static view.
+
+**v3** (in test): RG16 UNORM pyramid (half the memory and bandwidth; exact for the 16-bit atlas, conservatively
+rounded for a 32-bit one), rebuilt only over the atlas rects written since the last build (none in a static view
+with the shadow cache; the cascade rects with dynamic casters otherwise).
+
 ## Decision
 
 * `skip_backfacing_directional`, `skip_backfacing_positional`, `skip_unblended_cascade`: **KEEP** (image-identical;
   opaque pass −0.07 to −0.37 ms in the night-state profiles; day-state confirmation in `fellow-m2_perf`).
-* `directional_max_mip`: **REJECT** (exact, but no net gain: build cost ≈ savings). Code kept, off by default.
+* `directional_max_mip`: v1 **REJECT** (exact, no net gain: build cost ≈ savings). v2 exact and −12 % in Sponza but
+  +0.1 ms elsewhere, mostly the per-frame rebuild; decision pending v3 (incremental, RG16). Off by default.
 * `pcss_directional_penumbra`: **KEEP as an option** — a correctness fix of stock's directional PCSS that restores
   shadows stock loses, but a look change (sharper penumbrae), so it is not enabled silently.
 * `pcss_blend_band`: **KEEP as an option** (performance, look change); with the penumbra fix it no longer exposes the

@@ -1620,6 +1620,7 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 				RD::get_singleton()->draw_list_begin(light_storage->direction_shadow_get_fb(), RD::DRAW_CLEAR_DEPTH, Vector<Color>(), 0.0f);
 				RD::get_singleton()->draw_list_end();
 				fellow_shadow_cache->atlas_invalidate_all();
+				fellow_dir_atlas_dirty_all = true;
 			}
 		}
 	}
@@ -1661,17 +1662,21 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 		_render_shadow_end();
 	}
 
-	// FellowEngine: max pyramid of the directional shadow atlas for the PCSS blocker search early-out.
+	// FellowEngine: min/max pyramid of the directional shadow atlas for the shadow filters' early-outs, brought up to
+	// date over the atlas texels written since its last update (none in a static view with the shadow cache).
 	p_render_data->scene_data->fellow_shadow_max_mip = false;
 	if (fellow_shadow_max_mip) {
 		if (Fellow::shadow_directional_max_mip() && render_shadows && p_render_data->directional_shadows.size() > 0 && light_storage->directional_shadow_get_texture().is_valid()) {
 			const int atlas_size = light_storage->directional_shadow_get_size();
-			fellow_shadow_max_mip->build(light_storage->directional_shadow_get_texture(), Size2i(atlas_size, atlas_size));
+			const Rect2i dirty = fellow_dir_atlas_dirty_all ? Rect2i(0, 0, atlas_size, atlas_size) : fellow_dir_atlas_dirty;
+			fellow_shadow_max_mip->build(light_storage->directional_shadow_get_texture(), Size2i(atlas_size, atlas_size), dirty, light_storage->directional_shadow_get_use_16_bits());
 			p_render_data->scene_data->fellow_shadow_max_mip = fellow_shadow_max_mip->is_valid();
 		} else {
 			fellow_shadow_max_mip->invalidate();
 		}
 	}
+	fellow_dir_atlas_dirty = Rect2i();
+	fellow_dir_atlas_dirty_all = false;
 
 	if (rb_data.is_valid() && ss_effects) {
 		// Note, in multiview we're allocating buffers for each eye/view we're rendering.
@@ -2928,6 +2933,7 @@ void RenderForwardClustered::_render_shadow_pass(RID p_light, RID p_shadow_atlas
 		const bool unchanged = copy_pass.fellow_copy && !p_fellow_op->rebuild && p_instances.size() == 0 && fellow_shadow_cache->atlas_rect_holds(atlas_texture, atlas_rect, cache_texture, copy_pass.fellow_source_offset, copy_pass.fellow_scale, copy_pass.fellow_bias);
 		if (copy_pass.fellow_copy && !unchanged) {
 			scene_state.shadow_passes.push_back(copy_pass);
+			_fellow_mark_dir_atlas_dirty(atlas_rect);
 		}
 		if (unchanged) {
 			Fellow::stats().shadow_cache_copies_skipped.increment();
@@ -2941,8 +2947,12 @@ void RenderForwardClustered::_render_shadow_pass(RID p_light, RID p_shadow_atlas
 		if (p_instances.size() > 0) {
 			// Dynamic casters on top, exactly like the stock pass (no clear).
 			_render_shadow_append(render_fb, p_instances, light_projection, light_transform, zfar, 0, 0, reverse_cull_face, false, false, use_pancake, p_lod_distance_multiplier, p_screen_mesh_lod_threshold, atlas_rect, flip_y, false, false, p_close_pass, p_render_info, p_viewport_size, p_main_cam_transform);
+			_fellow_mark_dir_atlas_dirty(atlas_rect);
 		}
 	} else {
+		if (light_storage->light_get_type(base) == RSE::LIGHT_DIRECTIONAL) {
+			_fellow_mark_dir_atlas_dirty(atlas_rect);
+		}
 		//render shadow
 		_render_shadow_append(render_fb, p_instances, light_projection, light_transform, zfar, 0, 0, reverse_cull_face, using_dual_paraboloid, using_dual_paraboloid_flip, use_pancake, p_lod_distance_multiplier, p_screen_mesh_lod_threshold, atlas_rect, flip_y, p_clear_region, p_open_pass, p_close_pass, p_render_info, p_viewport_size, p_main_cam_transform);
 	}

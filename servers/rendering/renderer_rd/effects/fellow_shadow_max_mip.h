@@ -36,32 +36,42 @@
 
 namespace RendererRD {
 
-// FellowEngine directional shadow max pyramid (docs/decisions/0005-directional-shadow-sampling.md): mip k (k >= 1 of
-// the atlas, stored from k = 1 as level 0 of this texture) holds the maximum depth (reverse Z: the caster closest to
-// the light) of every 2^k x 2^k atlas block. The Forward+ PCSS blocker search uses it to prove that a search region
-// holds no blocker (then the result is exactly 1.0, as in the stock path) with four fetches.
+// FellowEngine directional shadow min/max pyramid (docs/decisions/0005-directional-shadow-sampling.md): level k holds the
+// smallest (.r) and largest (.g) depth of every 2^(k+1) x 2^(k+1) block of the directional shadow atlas, so that the
+// Forward+ shadow filters can prove with four fetches that a region is fully lit or fully shadowed.
+// Stored as RG16 UNORM when the GPU supports it (exact for a 16-bit atlas; for a 32-bit atlas the minimum is rounded
+// down and the maximum up, which keeps every early-out decision safe), else RG32F. Only the atlas regions written since
+// the last build are rebuilt; a frame in which no directional shadow texel changed (shadow cache, static scene) costs
+// nothing.
 class FellowShadowMaxMip {
 	struct PushConstant {
 		int32_t source_size[2];
 		int32_t dest_size[2];
 		int32_t source_is_pyramid;
-		int32_t pad[3];
+		int32_t round_mode; // 0: store as is, 1: round the minimum down and the maximum up to 16-bit UNORM steps
+		int32_t dest_offset[2];
 	};
 
 	FellowShadowMaxMipShaderRD shader;
 	RID shader_version;
-	RID pipeline;
+	RID pipeline_rg16;
+	RID pipeline_rg32;
 
-	RID texture; // R32F, (atlas size / 2) with the full mip chain
+	RID texture; // (atlas size / 2) with the full mip chain
+	bool rg16_supported = false;
+	bool texture_rg16 = false;
 	LocalVector<RID> level_views;
 	Size2i atlas_size;
-	bool valid = false; // built from the atlas content of the current frame
+	RID built_from; // atlas texture of the last build
+	bool valid = false; // matches the atlas content (built from it and no atlas texel written since)
 
 	void _free_texture();
 
 public:
-	// (Re)builds the pyramid from the directional shadow atlas. Call after the shadow passes of the frame.
-	void build(RID p_atlas_texture, const Size2i &p_atlas_size);
+	// Brings the pyramid up to date with the directional shadow atlas, rebuilding the blocks over p_dirty (atlas texels
+	// written since the last call; everything when the atlas texture or its size changed or the pyramid is not valid).
+	// Call after the shadow passes of the frame.
+	void build(RID p_atlas_texture, const Size2i &p_atlas_size, const Rect2i &p_dirty, bool p_atlas_16_bits);
 	void invalidate() { valid = false; }
 	bool is_valid() const { return valid; }
 	RID get_texture() const { return texture; }

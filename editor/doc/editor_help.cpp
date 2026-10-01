@@ -3098,6 +3098,12 @@ void EditorHelp::load_script_doc_cache() {
 		return;
 	}
 
+	// FellowEngine: this runs deferred from the documentation thread; when the editor quits before that (headless
+	// --import while the class reference is regenerated) the editor singletons are already gone.
+	if (!EditorNode::get_singleton() || !EditorFileSystem::get_singleton()) {
+		return;
+	}
+
 	if (EditorNode::is_cmdline_mode()) {
 		return;
 	}
@@ -3167,6 +3173,10 @@ static void _regenerate_script_doc_cache(bool p_changes) {
 }
 
 void EditorHelp::regenerate_script_doc_cache() {
+	// FellowEngine: also reached deferred from the documentation threads (see load_script_doc_cache()).
+	if (!EditorNode::get_singleton() || !EditorFileSystem::get_singleton()) {
+		return;
+	}
 	if (EditorFileSystem::get_singleton()->is_scanning()) {
 		// Wait until EditorFileSystem scanning is complete to use updated filesystem structure.
 		EditorFileSystem::get_singleton()->connect(SNAME("sources_changed"), callable_mp_static(_regenerate_script_doc_cache), CONNECT_ONE_SHOT);
