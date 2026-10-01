@@ -1,73 +1,100 @@
-# FellowEngine — milestone 2 report (draft)
+# FellowEngine — milestone 2 report
 
-Status: **DRAFT** — the per-pass and image results below are final for their sessions; the frame-level performance
-table needs the day-state session (`fellow-m2_perf`, laptop unlocked with the display on) and is marked *pending*.
+Status: **DRAFT** — every per-pass and image result below is final for its session; the frame-level table (§1) comes
+from the day-state session `fellow-m2_perf` (running).
 
-Base: Godot **4.7.2-stable** · Branch `fellow/shadows` · Machine: Acer Predator PHN16S-71, Core Ultra 9 275HX,
-RTX 5070 Ti Laptop 12 GB, Windows 11, Vulkan.
+Base: Godot **4.7.2-stable** · Branch `fellow/geometry` (contains `fellow/shadows`) · Measured binary `fellow16`
+(`0ba5e35`) · Machine: Acer Predator PHN16S-71, Core Ultra 9 275HX, RTX 5070 Ti Laptop 12 GB, Windows 11, Vulkan.
+
+Decision records: `docs/decisions/0001` (TAA, milestone-2 follow-up), `0004` (directional shadow cache), `0005`
+(shadow sampling), `0006` (temporal SSAO, parked, branch `fellow/ssao`), `0007` (mesh clusters).
 
 ## 1. Result
 
-Milestone 2 targeted the largest measured pass of the geometry-heavy scene: directional shadows (Sponza: 28-39 % of
-the frame in milestone 1).
+Milestone 1 named directional shadows the largest measured pass of the geometry-heavy scene and listed opaque
+shading, alpha-blended foliage and the TAA foliage regression as the next targets. Milestone 2 addressed the shadow
+maps, the shadow lookups, the geometry submitted by large meshes, and the TAA regression; every change is exact
+(image-identical within the GPU's run-to-run variation) except the TAA change, which is measured against the ground
+truth, and two optional look changes that stay off by default.
 
-* **Directional shadow static cache** (decision 0004): static casters of every cascade are rendered into a
-  guard-banded cache and copied (depth re-based to the stock projection) into the atlas each frame; only dynamic
-  casters are drawn. Sponza shadow pass **3.40 → 0.28 ms** (whole-frame GPU −27 %), Bistro exterior **0.52 → 0.26 ms**,
-  render-thread CPU −42 % in both. Output equals stock within run-to-run noise (67-95 dB, ≤ 0.005 % of pixels differ by
-  more than 2/255 over 60-frame sequences). A cost gate keeps light scenes (PBR Lab) on the stock path, where the copy
-  would cost more than the casters it saves.
-* **Shadow sampling** (decision 0005): skipping the shadow lookup where N·L makes the light's contribution zero, and
-  the second PCF cascade where its blend weight is zero — image-identical; opaque pass −0.07 to −0.29 ms (night-state
-  profile, to be confirmed in the day state).
-* **Look changes, off by default**: PCSS blend band (blend cascades over the last 10 % of a split, like PCF; opaque −0.18
-  to −0.40 ms) and a parallel-light PCSS penumbra (decision 0005; stock's point-light formula dissolves the shadows of
-  casters beyond the pancake distance in the first cascade).
-* **TAA foliage regression of v2** (milestone 1) fixed (decision 0001, follow-up): a parameter sweep (anti-flicker,
-  clip γ, feedback) could not fix it; a targeted *motion soften* (pull the clipped history towards the 3×3 mean under
-  motion where the neighbourhood's relative contrast is high) does. With soften 0.35 / contrast 0.45 the resolve is at
-  or above stock in PSNR and SSIM on all 8 temporal sequences (foliage 31.50 → 32.17 dB; v2 alone 31.11) with the best
-  mean PSNR of all variants (stock 34.00, v2 35.00, chosen 35.05 dB).
-* **Mesh clusters** (decision 0007, geometry): large static surfaces are split into k-d clusters at load and only
-  clusters intersecting the view volume are drawn in the depth pre-pass, the opaque pass and shadow passes — exact
-  (a triangle outside the frustum covers no pixel). Sponza: stock submits 8.7 M triangles per frame for the camera,
-  4.3 M of which can reach a pixel; 4096-triangle clusters cut the submission to 4.65 M (offline estimate).
-
-## 2. Per-pass evidence (GPU timestamps, 1920×1080, `m2_profile7`, night state — relative only)
-
-(see `benchmarks/results/m2_profile7_table.md`; stock / cache / cache without gate / sampling skips / band / cache+skips)
-
-## 3. Image verification
-
-| Comparison (60-frame sequences, preroll 200) | PSNR mean (min) | pixels > 2/255 |
+| Change | Decision | Effect (per-pass GPU timestamps, 1080p) |
 |---|---|---|
-| stock vs cache (`m2_verify7`) | 67.8-94.6 dB (65.5) | ≤ 0.003 % |
-| stock vs cache + sampling skips | 67.8-94.7 dB (65.6) | ≤ 0.003 % |
-| stock vs PCSS blend band (`m2_verify4`) | 36.3-56.1 dB | up to 5.7 % (look change) |
+| Directional shadow static cache (0004) | KEEP | Sponza shadow pass 3.40 → 0.28 ms; Bistro exterior 0.52 → 0.26 ms; render-thread CPU −42 % |
+| Shadow sampling skips: N·L = 0 pixels, unblended cascade (0005) | KEEP | opaque pass −0.07 to −0.29 ms |
+| Mesh clusters: frustum culling inside large surfaces (0007) | KEEP | Sponza depth pre-pass −43 %, opaque −22 % (−1.2 ms GPU) |
+| TAA v2 motion soften (0001 follow-up) | KEEP | foliage regression fixed; ≥ stock on 8/8 sequences |
+| PCSS blend band, parallel-light penumbra (0005) | optional (look) | opaque −0.18 to −0.40 ms (band); penumbra fixes dissolving cascade-0 shadows |
+| Max-pyramid early-out (0005) | REJECT (v1) | exact, no net gain; v2 with a fully-shadowed early-out under test |
+| Temporal SSAO (0006) | REJECT / parked | no iso-quality saving |
 
-## 4. Frame-level performance
+Sum of timestamped passes, stock → FellowEngine configuration (night profiles, relative): Sponza 11.8 → 7.2 ms
+(−39 %), Bistro exterior 5.0 → 4.4 ms (−12 %), Bistro interior 3.7 → 3.6 ms (−3 %), PBR Lab 2.4 → 2.3 ms (within
+noise).
 
-*pending day-state session.*
+### Frame level, day state (`fellow-m2_perf`, 1920×1080, 3 runs per variant, interleaved)
+
+*pending (session running).*
+
+## 2. The four questions
+
+*pending the day-state session.*
+
+## 3. Per-pass evidence (night profiles; ±10 % machine noise, relative per-pass deltas reliable)
+
+* Shadows: `benchmarks/results/m2_profile7_table.md` (stock / cache / cache without gate / sampling skips / blend band /
+  cache + skips) and `m2_mm_profile_table.md` (max pyramid).
+* Geometry: `benchmarks/results/m3_cl_profile_table.md` (stock / clusters / milestone-2 shadows / both) and
+  `m3_geo_sponza_table.md`, `m3_geo_bistro_table.md` (stock with coarser LOD thresholds and without scene parts —
+  the depth pre-pass, the opaque pass and the alpha-blended foliage are geometry-bound in Sponza).
+
+## 4. Image verification
+
+| Comparison | Result |
+|---|---|
+| stock vs shadow cache (`m2_verify7`, 60-frame sequences, pre-roll 200) | 67.8-94.6 dB, ≤ 0.003 % pixels > 2/255 |
+| stock vs cache + sampling skips | 67.8-94.7 dB, ≤ 0.003 % |
+| FellowEngine without vs with mesh clusters (`m3_cl_temporal`) | Sponza 80.4 dB, Bistro ext. 101.2, Bistro int. 69.3, max diff ≤ 5/255 (PBR null test: 67.8-82.1 dB) |
+| mesh clusters, every variant on lavapipe (stress setting: every surface ≥ 256 triangles in 64-triangle clusters) | 0 differing pixels |
+| PCSS blend band (`m2_verify4`) | 36.3-56.1 dB, up to 5.7 % pixels (look change) |
+| TAA motion soften vs ground truth (`m2_taa_sweep3`) | ≥ stock in PSNR and SSIM on 8/8 sequences; mean PSNR stock 34.00, v2 35.00, chosen 35.05 dB |
+
+Fixed cameras against the ground truth (`fellow-m2_capture_gt`) and motion sequences (`fellow-m2_temporal`): *pending
+analysis.*
 
 ## 5. Mistakes and dead ends (kept visible)
 
 * Cache lattice first derived independently of stock's snapping: 47-51 dB vs stock → re-derived from stock's exact
   snapping; irregular frames fall back.
 * Thrash guard counted stock frames as misses (cache stuck off) and a 2 m LOD-travel invalidation forced constant
-  rebuilds: the first PBR performance session showed the cache never active; fixed (texel LOD, guard ignores stock
-  frames).
+  rebuilds; fixed (texel LOD, guard ignores stock frames).
 * A run was killed as "hung" after 30 s because elapsed time was misjudged (the Windows clock is now the reference).
 * A bundle reused a staged file name and delivered stale content to Windows; bundles now always get new names.
-* Night state (display off, session locked): ~490 ms stalls every ~1.03 s and GPU clocks jumping 770-1770 MHz;
-  per-run GPU totals vary by up to ±10 % (a variant identical to stock — the cache in Bistro interior, which has no
-  directional shadow pass — measured +7.4 %). Night numbers are used only for relative per-pass comparisons.
-* The second version of the cost gate (`dc52a21`) was motivated by that Bistro interior +7.4 %, which was noise; the
-  change itself (estimating stock's tight-culled caster set instead of the whole cache volume) stands on its own.
-* The PCSS blend band seemed to lose a shadow near the camera in Bistro. Stock without blend splits loses it too
-  (34.5 dB vs stock); the tighter caster culling was ruled out with a diagnostic toggle (72.5 dB, no visible change);
-  suspected cause: stock's point-light PCSS formula with blockers pancaked onto the first cascade's near plane
-  (decision 0005; verification running).
+* Night state (display off, session locked): ~490 ms stalls every ~1.03 s and GPU clocks jumping 770-1770 MHz; per-run
+  GPU totals vary by up to ±10 %. Night numbers are used only for relative per-pass comparisons.
+* The second version of the cost gate was motivated by a Bistro interior +7.4 % that was noise; the change itself
+  stands on its own.
+* The PCSS blend band seemed to lose a shadow near the camera in Bistro; the cause was stock's point-light PCSS
+  formula with blockers pancaked onto the first cascade's near plane (decision 0005), not the band.
+* Max pyramid v1 was not exact at first on lavapipe: one compute list for all levels (layout transitions only happen
+  between lists) and float block math; both fixed, then exact — and rejected for no net gain.
+* TAA: a parameter sweep (anti-flicker, clip γ, feedback) could not fix the foliage regression; velocity dilation off
+  made it worse.
+* Mesh clusters v1 kept the original index buffers and added reordered copies: +446 MB of VRAM in Sponza; replaced by
+  in-place reordering decided at the first set-up. Its synchronous build made Sponza's load 2.8 s longer; moved to
+  worker threads.
+* An offline estimate of stock's LOD (position-only simplification) predicted far fewer triangles than the engine
+  actually submits; the engine's own counters are the reference.
+* The temporal SSAO experiment found no iso-quality saving (decision 0006).
 
-## 6. The four questions
+## 6. Exact files changed
 
-*pending final sessions.*
+*to be listed from `git diff` at the final commit.*
+
+## 7. Remaining high-value opportunities (measured)
+
+1. **Geometry** still dominates Sponza after clusters (depth pre-pass 0.87 ms, opaque 2.31 ms of which ~0.6 ms
+   geometry, transparent pass 1.66 ms of which ~0.9 ms is the alpha-blended cypress leaves). Offline estimates:
+   occlusion (two-phase depth pyramid on the GPU) −24 % of the remaining camera-pass triangles on average, −65 % in the
+   galleries; per-cluster LOD with locked borders at stock's 1-px rule about −25 %.
+2. **PCSS lookup**: still about a third of the opaque pass where the sun shadows a large area (Bistro exterior).
+3. **SSAO + SSIL + SSR**: 1.0-1.2 ms in every scene.
