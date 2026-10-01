@@ -53,6 +53,11 @@ private:
 		float fellow_feedback_min;
 		float fellow_feedback_max;
 		float fellow_antiflicker;
+
+		float fellow_velocity_dilation; // 1 = closest-pixel velocity (default), 0 = own velocity
+		float fellow_motion_soften;
+		float fellow_soften_contrast;
+		float fellow_pad;
 	};
 
 	// Shader variants: bit 0 = FellowEngine resolve v2, bit 1 = fused velocity write (history ping-pong).

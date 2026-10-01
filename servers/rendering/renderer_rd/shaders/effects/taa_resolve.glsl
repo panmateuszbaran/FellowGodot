@@ -65,6 +65,11 @@ layout(push_constant, std430) uniform Params {
 	float fellow_feedback_min;
 	float fellow_feedback_max;
 	float fellow_antiflicker;
+
+	float fellow_velocity_dilation;
+	float fellow_motion_soften;
+	float fellow_soften_contrast;
+	float fellow_pad;
 }
 params;
 
@@ -365,7 +370,7 @@ vec3 clip_towards_center(vec3 cmin, vec3 cmax, vec3 center, vec3 q) {
 // Variance clipping (Salvi 2016) intersected with the min/max box, in YCoCg of tonemapped colour.
 // The clip box does NOT collapse with velocity (the stock variant shrinks it to the 3x3 mean at >= 0.02 UV/frame,
 // which replaces the history by a blurred neighbourhood average under camera motion).
-vec3 clip_history_3x3_v2(uvec2 group_pos, vec3 history_tm, out float r_trust) {
+vec3 clip_history_3x3_v2(uvec2 group_pos, vec3 history_tm, out float r_trust, out vec3 r_mean_tm, out float r_contrast) {
 	vec3 m1 = vec3(0.0);
 	vec3 m2 = vec3(0.0);
 	vec3 bmin = vec3(1e9);
@@ -393,6 +398,8 @@ vec3 clip_history_3x3_v2(uvec2 group_pos, vec3 history_tm, out float r_trust) {
 	// clip had to move it by a sizeable fraction of the box.
 	float box = max(length(cmax - cmin), 1e-4);
 	r_trust = 1.0 - clamp(4.0 * length(h - hc) / box, 0.0, 1.0);
+	r_mean_tm = tm_sanitize(ycocg_to_rgb(center));
+	r_contrast = sigma.x / max(mean.x, 0.02); // relative luma deviation of the neighbourhood
 	return tm_sanitize(ycocg_to_rgb(hc));
 }
 #endif
@@ -423,6 +430,9 @@ vec3 temporal_antialiasing_v2(uvec2 pos_group_top_left, uvec2 pos_group, uvec2 p
 	// silhouettes of moving objects then follow the object instead of dragging the background history.
 	vec2 velocity_closest;
 	get_closest_pixel_velocity_3x3_v2(pos_group, pos_group_top_left, velocity_closest);
+	if (params.fellow_velocity_dilation < 0.5) {
+		velocity_closest = imageLoad(velocity_buffer, ivec2(pos_screen)).xy;
+	}
 	vec2 uv_reprojected = uv + velocity_closest;
 
 	vec3 color_input = load_color(pos_group);
@@ -433,7 +443,16 @@ vec3 temporal_antialiasing_v2(uvec2 pos_group_top_left, uvec2 pos_group, uvec2 p
 
 	vec3 input_tm = tm(color_input);
 	float trust;
-	vec3 history_tm = clip_history_3x3_v2(pos_group, tm(color_history), trust);
+	vec3 mean_tm;
+	float contrast;
+	vec3 history_tm = clip_history_3x3_v2(pos_group, tm(color_history), trust, mean_tm, contrast);
+	if (params.fellow_motion_soften > 0.0) {
+		// Under motion, high-contrast sub-pixel content (alpha-tested foliage, fences) cannot be reprojected reliably:
+		// pull the history towards the neighbourhood mean (what stock's collapsing clip box does everywhere).
+		float motion = smoothstep(0.25, 1.0, length(velocity_closest * params.resolution)); // pixels per frame
+		float high_contrast = smoothstep(0.5 * params.fellow_soften_contrast, params.fellow_soften_contrast, contrast);
+		history_tm = mix(history_tm, mean_tm, params.fellow_motion_soften * motion * high_contrast);
+	}
 
 	// Feedback (history weight) between 0.88 and 0.9375 depending on how much the clipped history still
 	// disagrees with the current sample (Lottes / Playdead): large disagreement -> respond faster.

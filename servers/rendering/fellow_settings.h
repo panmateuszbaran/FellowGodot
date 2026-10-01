@@ -71,6 +71,20 @@ inline float taa_v2_feedback_max() {
 inline float taa_v2_antiflicker() {
 	return GLOBAL_GET_CACHED(float, "rendering/fellow/postfx/taa_v2_antiflicker");
 }
+// Resolve v2: reproject the history with the velocity of the closest pixel in 3x3 (1, default: silhouettes of moving
+// objects carry their history) or with the pixel's own velocity (0, like stock: no misregistration of background
+// pixels between foliage layers moving with different parallax).
+inline bool taa_v2_velocity_dilation() {
+	return GLOBAL_GET_CACHED(bool, "rendering/fellow/postfx/taa_v2_velocity_dilation");
+}
+// Resolve v2: under motion, pull the history towards the 3x3 mean where the neighbourhood has high relative contrast
+// (sub-pixel alpha-tested content). 0 = off.
+inline float taa_v2_motion_soften() {
+	return GLOBAL_GET_CACHED(float, "rendering/fellow/postfx/taa_v2_motion_soften");
+}
+inline float taa_v2_soften_contrast() {
+	return GLOBAL_GET_CACHED(float, "rendering/fellow/postfx/taa_v2_soften_contrast");
+}
 
 // TAA history ping-pong: the resolve writes the new history and next-frame velocity directly,
 // removing two full-resolution copies per frame. Output is identical to the copy-based path.
