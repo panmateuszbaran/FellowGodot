@@ -106,6 +106,14 @@ with large surfaces; nothing in scenes made of small objects (instance culling a
 * In-place version, same test: **0 differing pixels**; 23 surfaces reordered, 1 dropped (the alpha-blended glass
   sphere), same draws and culled triangles as the copy version.
 * With the order-preserving variant in the transparent pass (the glass sphere): **0 differing pixels**.
+* Stress lab (`benchmarks/project/scenes/stress_lab.gd`: large static, blended, vertex-shader-displaced and
+  CPU-updated surfaces, a large moving mesh, moving MultiMesh boxes, a sun rotating for part of the timeline,
+  omni/spot shadows, a reflection probe updated every frame, a second viewport), FellowEngine exact features (TAA v2
+  off) vs the null test (`enabled=false`), lavapipe 960×540 / 640×360: 4 fixed cameras max diff ≤ 6/255 (3 pixels
+  > 2/255 in total); 60-frame pan 98.4 dB mean (min 80.8), 60 frames with the sun rotating 99.1 dB. The remaining
+  differences are shadow-edge texels of the directional shadow cache (decision 0004). Clusters: 3 surfaces reordered,
+  the blended one on the order-preserving variant, the vertex-shader one and the CPU-updated one drawn whole (the
+  latter never built: it was updated before its build started).
 * Offline (Sponza flythrough): the order-preserving chunks of the alpha-blended cypress leaves and ground cover cut
   the blended triangles submitted per frame from 1.04 M to 0.62 M (chunks of the leaves span 1.5 m of a 15 m tree).
 
