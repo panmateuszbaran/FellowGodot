@@ -28,6 +28,7 @@ const SCENES := {
 	"bistro_exterior": "res://scenes/bistro.gd",
 	"bistro_interior": "res://scenes/bistro.gd",
 	"fluid": "res://scenes/fluid_lab.gd",
+	"stress": "res://scenes/stress_lab.gd",
 }
 const DT := 1.0 / 60.0
 
