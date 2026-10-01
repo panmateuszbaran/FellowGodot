@@ -16,6 +16,7 @@ extends Node
 ##   --settle=<frames>        frames rendered before a still capture (default 96, fills TAA history)
 ##   --hdr=1                  capture: also write linear pre-tonemap EXR (linear tonemapper, no glow, HDR 2D)
 ##   --jitter=<n>             reference: sub-pixel jittered renders per output frame (default 16)
+##   --ablate=<a+b>           sizing only (items separated by + or ,): hide omni / spot / sun lights, probes, decals, or pos_shadows (see _ablate)
 ##   --profile=1              perf: collect per-pass GPU timestamps (run godot with --gpu-profile). Changes GPU
 ##                            scheduling (timestamps are barriers) -> reported separately from normal perf runs.
 ## Run with:  godot --path benchmarks/project --fixed-fps 60 --disable-vsync --resolution 1920x1080 --position 0,0 -- --scene=pbr --mode=perf --out=...
@@ -105,6 +106,9 @@ func _ready() -> void:
 		_fail(scene.load_error)
 		return
 	_log("scene built in %.0f ms" % ((Time.get_ticks_usec() - t_build) / 1000.0))
+	if args.has("ablate"):
+		result["ablate"] = _ablate(str(args["ablate"]).replace("+", ",").split(",", false))
+		_log("ablate: " + str(result["ablate"]))
 	preset = Presets.build(args.get("preset", "high"), Presets.parse_overrides(args.get("set", "")))
 	Presets.apply(preset, vp, scene.env, scene.cam_attr)
 	RenderingServer.viewport_set_measure_render_time(vp.get_viewport_rid(), true)
@@ -527,6 +531,31 @@ func _halton(i: int, b: int) -> float:
 		r += f * (i % b)
 		i = i / b
 	return r
+
+
+# ---------------------------------------------------------------- ablation (bottleneck sizing only)
+
+## Removes parts of the scene for a sizing profile (never used for image comparisons): "omni", "spot", "sun" hide those
+## lights, "pos_shadows" disables the shadows of omni and spot lights, "probes" hides reflection probes, "decals" hides
+## decals. Returns the number of nodes changed per item (recorded in the results).
+func _ablate(items: PackedStringArray) -> Dictionary:
+	var changed := {}
+	for it in items:
+		changed[it] = 0
+	var stack: Array = [scene]
+	while not stack.is_empty():
+		var n: Node = stack.pop_back()
+		for c in n.get_children():
+			stack.append(c)
+		if n is OmniLight3D and changed.has("omni") or n is SpotLight3D and changed.has("spot") or n is DirectionalLight3D and changed.has("sun") or n is ReflectionProbe and changed.has("probes") or n is Decal and changed.has("decals"):
+			var key := "omni" if n is OmniLight3D else "spot" if n is SpotLight3D else "sun" if n is DirectionalLight3D else "probes" if n is ReflectionProbe else "decals"
+			if (n as Node3D).visible:
+				(n as Node3D).visible = false
+				changed[key] += 1
+		elif (n is OmniLight3D or n is SpotLight3D) and changed.has("pos_shadows") and (n as Light3D).shadow_enabled:
+			(n as Light3D).shadow_enabled = false
+			changed["pos_shadows"] += 1
+	return changed
 
 
 # ---------------------------------------------------------------- geometry dump (offline analysis)
