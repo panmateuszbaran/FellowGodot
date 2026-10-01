@@ -159,10 +159,13 @@ def main() -> int:
         out = pass_table(sess, a.ref, [p.strip() for p in a.passes.split(",")])
     else:
         out, _ = perf_table(sess, a.ref, a.metric)
-    print(out)
     if a.md:
         with open(a.md, "w", encoding="utf-8") as f:
             f.write(out + "\n")
+    # Windows consoles default to a legacy code page (cp1250 here) that cannot print Δ or –.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    print(out)
     return 0
 
 

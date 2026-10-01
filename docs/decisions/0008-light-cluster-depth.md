@@ -74,7 +74,22 @@ contribute exactly zero (`light_compute` skips zero attenuation; the shadow look
 * RTX 5070 Ti fixed cameras (`m3_lc_capture`, 1920×1080): Lights Lab **bit-identical** (4 cameras, max |d| 0),
   Bistro exterior 76.8-99 dB (max 2/255), Bistro interior, PBR Lab, Sponza at their run-to-run floor (68-71 dB min,
   ≤ 0.002 % of pixels > 2/255).
-* RTX timing: *pending* (`m3_lc_perf`, `m3_lc_profile`; a first attempt overlapped other sessions and was discarded).
+* RTX timing (`fellow18`, `m3_lc_perf`: 1920×1080, day state, 3 runs per configuration and scene, 6 for the Lights
+  Lab; the default configuration vs + depth slices, sequential, nothing else running):
+
+  | scene | frame ms (default → depth slices) | Δ | p (Welch) | verdict |
+  |---|---:|---:|---:|---|
+  | Lights Lab | 3.379 → 3.111 | **−0.268 (−7.9 %)** | 0.002 | faster (the reference's CV 3.3 %) |
+  | Bistro interior | 4.276 → 4.311 | +0.035 (+0.8 %) | 0.24 | within noise |
+  | Bistro exterior | 5.060 → 5.050 | −0.010 | 0.57 | within noise |
+  | Sponza | 8.238 → 8.265 | +0.027 | 0.62 | within noise |
+  | PBR Lab | 2.831 → 2.812 | −0.019 | 0.41 | within noise |
+
+  Profile (`m3_lc_profile`, one run each): Lights Lab opaque pass 1.495 → 1.268 ms (−0.227), cluster packing
+  0.079 → 0.118 ms (+0.039: an element near the camera now covers several slices, each one a store). Bistro interior's
+  opaque pass read +0.13 ms in that single profiled run; the 3-run A/B above puts the frame at +0.035 (p 0.24), and
+  `fellow19`'s profile repeats the comparison.
+  (A first attempt overlapped other sessions and was discarded.)
 
 ## Zero-attenuation skip (`lights/zero_attenuation_skip`, `fellow19`)
 
