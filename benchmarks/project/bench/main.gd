@@ -563,14 +563,15 @@ func _ablate(items: PackedStringArray) -> Dictionary:
 ## Writes the scene's mesh geometry in world space for offline analysis (benchmarks/tools/occlusion_geodump.py):
 ## <out>/<scene>_geodump_pos.f32 (float32 x, y, z per vertex, world space), _idx.u32 (int32, 3 per triangle,
 ## surface-local vertex indices) and, in the result json, per instance surface: base_vertex, vertex_count,
-## first_index, triangle count, material transparency; plus the camera flythrough sampled every 0.5 s, the fixed
-## cameras and the camera's near/far. Mesh instances only (MultiMesh instances are listed with their instance count but
-## not expanded).
+## first_index, triangle count, material transparency; the visible omni and spot lights; the camera flythrough sampled
+## every 0.5 s, the fixed cameras and the camera's near/far. Mesh instances only (MultiMesh instances are listed with
+## their instance count but not expanded).
 func _run_geodump() -> void:
 	var pos := PackedByteArray()
 	var idx := PackedByteArray()
 	var surfaces := []
 	var multimeshes := []
+	var lights := []
 	var stack: Array = [scene]
 	while not stack.is_empty():
 		var n: Node = stack.pop_back()
@@ -578,6 +579,15 @@ func _run_geodump() -> void:
 			stack.append(c)
 		if n is MultiMeshInstance3D and (n as MultiMeshInstance3D).multimesh:
 			multimeshes.append({"name": str(n.get_path()), "instances": (n as MultiMeshInstance3D).multimesh.instance_count})
+		if (n is OmniLight3D or n is SpotLight3D) and (n as Light3D).is_visible_in_tree():
+			var lx := (n as Light3D).global_transform
+			var ld := {"name": str(n.get_path()), "type": "omni" if n is OmniLight3D else "spot", "position": [lx.origin.x, lx.origin.y, lx.origin.z], "direction": [-lx.basis.z.x, -lx.basis.z.y, -lx.basis.z.z], "energy": (n as Light3D).light_energy, "shadow": (n as Light3D).shadow_enabled, "size": (n as Light3D).light_size}
+			if n is OmniLight3D:
+				ld["range"] = (n as OmniLight3D).omni_range
+			else:
+				ld["range"] = (n as SpotLight3D).spot_range
+				ld["angle"] = (n as SpotLight3D).spot_angle
+			lights.append(ld)
 		if not (n is MeshInstance3D) or (n as MeshInstance3D).mesh == null or not (n as MeshInstance3D).is_visible_in_tree():
 			continue
 		var mi := n as MeshInstance3D
@@ -623,8 +633,8 @@ func _run_geodump() -> void:
 		var cx: Transform3D = d["xform"]
 		fly.append({"t": t, "origin": [cx.origin.x, cx.origin.y, cx.origin.z], "forward": [-cx.basis.z.x, -cx.basis.z.y, -cx.basis.z.z], "up": [cx.basis.y.x, cx.basis.y.y, cx.basis.y.z], "fov": d["fov"]})
 		t += 0.5
-	result["geodump"] = {"surfaces": surfaces, "multimeshes": multimeshes, "vertices": pos.size() / 12, "triangles": idx.size() / 12, "flythrough": fly, "fixed_cameras": scene.describe()["fixed_cameras"], "near": scene.camera.near, "far": scene.camera.far}
-	_log("geodump: %d surfaces, %d vertices, %d triangles" % [surfaces.size(), pos.size() / 12, idx.size() / 12])
+	result["geodump"] = {"surfaces": surfaces, "multimeshes": multimeshes, "vertices": pos.size() / 12, "triangles": idx.size() / 12, "flythrough": fly, "fixed_cameras": scene.describe()["fixed_cameras"], "near": scene.camera.near, "far": scene.camera.far, "lights": lights}
+	_log("geodump: %d surfaces, %d vertices, %d triangles, %d positional lights" % [surfaces.size(), pos.size() / 12, idx.size() / 12, lights.size()])
 
 
 # ---------------------------------------------------------------- output
