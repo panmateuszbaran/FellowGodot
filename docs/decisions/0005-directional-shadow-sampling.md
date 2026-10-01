@@ -1,6 +1,6 @@
 # 0005 — Directional shadow sampling in the Forward+ scene shader
 
-Status: **DRAFT (night-state measurements in; day-state confirmation pending)** · Branch `fellow/shadows` · Toggles:
+Status: **KEEP (skips, pyramids v7); REJECT (pyramid v1); options (penumbra, blend band)** · Branch `fellow/shadows` · Toggles:
 `rendering/fellow/shadows/skip_backfacing_directional`, `skip_backfacing_positional`, `skip_unblended_cascade`
 (image-identical, default **on** since milestone 2), `directional_max_mip` (image-identical, default off);
 `pcss_blend_band`, `pcss_directional_penumbra` (look changes, default off) · Code: `shaders/forward_clustered/scene_forward_clustered.glsl` (directional shadow loop,
@@ -215,8 +215,12 @@ memory drops from 21 MB to 5.3 MB for a 4096² atlas (RG16).
 
 * `skip_backfacing_directional`, `skip_backfacing_positional`, `skip_unblended_cascade`: **KEEP** (image-identical;
   opaque pass −0.07 to −0.37 ms in the night-state profiles; day-state confirmation in `fellow-m2_perf`).
-* `directional_max_mip`: v1 **REJECT** (exact, no net gain: build cost ≈ savings). v2 exact and −12 % in Sponza but
-  +0.1 ms elsewhere, mostly the per-frame rebuild; decision pending v3 (incremental, RG16). Off by default.
+* `directional_max_mip`, `positional_max_mip`: v1 **REJECT** (exact, no net gain: build cost ≈ savings). v7 (min/max
+  windows, one fetch, no 4-texel windows, rebuilt per written rect) **KEEP, on by default from `fellow22`**: exact
+  (lavapipe bit-identical, RTX at every scene's run-to-run floor), Sponza −14 to −15 %, Bistro interior −3 to −4 %
+  (positional), Bistro exterior −1 %; the cost is the build, 0.06 ms per frame for a fully rewritten 4096² directional
+  atlas (0.03 ms positional), which scenes with little soft-shadow filtering pay without a matching saving (PBR Lab
+  +2 %, `m3_f21_profile`). Final numbers: milestone-3 report (`m3_final_*`).
 * `pcss_directional_penumbra`: **KEEP as an option** — a correctness fix of stock's directional PCSS that restores
   shadows stock loses, but a look change (sharper penumbrae), so it is not enabled silently.
 * `pcss_blend_band`: **KEEP as an option** (performance, look change); with the penumbra fix it no longer exposes the

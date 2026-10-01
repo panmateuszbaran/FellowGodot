@@ -60,8 +60,8 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/shadows/skip_backfacing_positional", true);
 	GLOBAL_DEF("rendering/fellow/shadows/pcss_blend_band", false);
 	GLOBAL_DEF("rendering/fellow/shadows/pcss_directional_penumbra", false);
-	GLOBAL_DEF("rendering/fellow/shadows/directional_max_mip", false);
-	GLOBAL_DEF("rendering/fellow/shadows/positional_max_mip", false);
+	GLOBAL_DEF("rendering/fellow/shadows/directional_max_mip", true);
+	GLOBAL_DEF("rendering/fellow/shadows/positional_max_mip", true);
 	GLOBAL_DEF("rendering/fellow/shadows/debug_disable_caster_culling", false);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/shadows/directional_cache_debug_mode", PROPERTY_HINT_ENUM, "Normal,Lattice Only (No Cache),Rebuild Every Frame"), 0);
 	GLOBAL_DEF("rendering/fellow/geometry/enabled", true);

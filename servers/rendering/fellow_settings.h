@@ -185,8 +185,9 @@ inline bool shadow_pcss_blend_band() {
 	return shadows_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/shadows/pcss_blend_band");
 }
 
-// Directional PCSS blocker search early-out (exact): a max pyramid of the shadow atlas proves that the search region
-// holds no blocker, in which case stock returns 1.0 anyway.
+// Directional shadow early-outs (exact, decision 0005): a min/max window pyramid of the directional shadow atlas
+// proves that a PCSS search / PCF filter region is fully lit (stock would return 1) or fully shadowed (0), in which
+// case the taps are skipped. The pyramid is brought up to date over the atlas rects written each frame.
 inline bool shadow_directional_max_mip() {
 	return shadows_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/shadows/directional_max_mip");
 }
