@@ -114,3 +114,17 @@ leave the cluster bounds, which come from the mesh data (stock covers such displ
 ## Decision
 
 *pending.*
+
+## Follow-up potential (offline, same flythrough, opaque camera pass)
+
+* **Occlusion** (`benchmarks/tools/occlusion_potential.py` + `occlusion_raster.c`: the opaque geometry rasterised
+  per camera at 480×270, a cluster counted hidden when every depth pixel under its projected AABB is nearer than its
+  nearest point): of the triangles in frustum-visible clusters (LOD 0), **−24 % on average** are hidden behind nearer
+  geometry (4.14 M → 3.13 M per frame), up to **−65 %** in the upper gallery (artist camera 4). An exact version needs
+  a two-phase depth-pyramid test on the GPU (indirect draws).
+* **Per-cluster LOD** (`benchmarks/tools/cluster_lod_potential.py`: each cluster simplified on its own with its border
+  locked — any mix of levels stays watertight — and the coarsest level whose error projects to ≤ 1 px, stock's LOD
+  rule, chosen per cluster): 4.14 M → **0.94 M** triangles per frame at LOD 0 of the clusters. For reference, stock's
+  per-surface LOD with the same rule (whole-surface simplification, no locked borders) is estimated at 2.73 M, and
+  stock's LOD combined with these frustum clusters at about 0.8 M: most of what per-cluster LOD would save, frustum
+  culling at stock's own LOD already saves. Position-only error metric (no normal/UV term): optimistic.

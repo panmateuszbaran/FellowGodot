@@ -1,0 +1,462 @@
+{
+ "threshold_px": 1.0,
+ "clusters": 4544,
+ "triangles": 11470979,
+ "chain_reduction": 0.1372557651792406,
+ "cameras": [
+  {
+   "camera": "fly0.0",
+   "lod0": 3917630,
+   "cluster_lod": 956686
+  },
+  {
+   "camera": "fly0.5",
+   "lod0": 3834710,
+   "cluster_lod": 944665
+  },
+  {
+   "camera": "fly1.0",
+   "lod0": 3741972,
+   "cluster_lod": 944918
+  },
+  {
+   "camera": "fly1.5",
+   "lod0": 3620138,
+   "cluster_lod": 932903
+  },
+  {
+   "camera": "fly2.0",
+   "lod0": 3477613,
+   "cluster_lod": 896012
+  },
+  {
+   "camera": "fly2.5",
+   "lod0": 3363268,
+   "cluster_lod": 880705
+  },
+  {
+   "camera": "fly3.0",
+   "lod0": 3195803,
+   "cluster_lod": 862070
+  },
+  {
+   "camera": "fly3.5",
+   "lod0": 3009925,
+   "cluster_lod": 843830
+  },
+  {
+   "camera": "fly4.0",
+   "lod0": 2878681,
+   "cluster_lod": 854542
+  },
+  {
+   "camera": "fly4.5",
+   "lod0": 2692340,
+   "cluster_lod": 819139
+  },
+  {
+   "camera": "fly5.0",
+   "lod0": 2527495,
+   "cluster_lod": 781034
+  },
+  {
+   "camera": "fly5.5",
+   "lod0": 2312558,
+   "cluster_lod": 724435
+  },
+  {
+   "camera": "fly6.0",
+   "lod0": 2129654,
+   "cluster_lod": 668963
+  },
+  {
+   "camera": "fly6.5",
+   "lod0": 1982438,
+   "cluster_lod": 632677
+  },
+  {
+   "camera": "fly7.0",
+   "lod0": 1785452,
+   "cluster_lod": 573221
+  },
+  {
+   "camera": "fly7.5",
+   "lod0": 1602407,
+   "cluster_lod": 498790
+  },
+  {
+   "camera": "fly8.0",
+   "lod0": 1441666,
+   "cluster_lod": 438267
+  },
+  {
+   "camera": "fly8.5",
+   "lod0": 1295162,
+   "cluster_lod": 403175
+  },
+  {
+   "camera": "fly9.0",
+   "lod0": 1137501,
+   "cluster_lod": 336932
+  },
+  {
+   "camera": "fly9.5",
+   "lod0": 980407,
+   "cluster_lod": 286954
+  },
+  {
+   "camera": "fly10.0",
+   "lod0": 854079,
+   "cluster_lod": 262678
+  },
+  {
+   "camera": "fly10.5",
+   "lod0": 752786,
+   "cluster_lod": 234081
+  },
+  {
+   "camera": "fly11.0",
+   "lod0": 703589,
+   "cluster_lod": 222568
+  },
+  {
+   "camera": "fly11.5",
+   "lod0": 636161,
+   "cluster_lod": 191922
+  },
+  {
+   "camera": "fly12.0",
+   "lod0": 614219,
+   "cluster_lod": 191844
+  },
+  {
+   "camera": "fly12.5",
+   "lod0": 571606,
+   "cluster_lod": 177625
+  },
+  {
+   "camera": "fly13.0",
+   "lod0": 526196,
+   "cluster_lod": 165885
+  },
+  {
+   "camera": "fly13.5",
+   "lod0": 527742,
+   "cluster_lod": 171764
+  },
+  {
+   "camera": "fly14.0",
+   "lod0": 477464,
+   "cluster_lod": 158286
+  },
+  {
+   "camera": "fly14.5",
+   "lod0": 768826,
+   "cluster_lod": 208938
+  },
+  {
+   "camera": "fly15.0",
+   "lod0": 6276257,
+   "cluster_lod": 1226081
+  },
+  {
+   "camera": "fly15.5",
+   "lod0": 8724166,
+   "cluster_lod": 1641771
+  },
+  {
+   "camera": "fly16.0",
+   "lod0": 9459272,
+   "cluster_lod": 1827921
+  },
+  {
+   "camera": "fly16.5",
+   "lod0": 9770643,
+   "cluster_lod": 1896075
+  },
+  {
+   "camera": "fly17.0",
+   "lod0": 9991828,
+   "cluster_lod": 1939696
+  },
+  {
+   "camera": "fly17.5",
+   "lod0": 10076934,
+   "cluster_lod": 1958481
+  },
+  {
+   "camera": "fly18.0",
+   "lod0": 10110269,
+   "cluster_lod": 1968880
+  },
+  {
+   "camera": "fly18.5",
+   "lod0": 10109301,
+   "cluster_lod": 1971230
+  },
+  {
+   "camera": "fly19.0",
+   "lod0": 10041815,
+   "cluster_lod": 1950199
+  },
+  {
+   "camera": "fly19.5",
+   "lod0": 9946114,
+   "cluster_lod": 1931995
+  },
+  {
+   "camera": "fly20.0",
+   "lod0": 9807035,
+   "cluster_lod": 1906475
+  },
+  {
+   "camera": "fly20.5",
+   "lod0": 9629106,
+   "cluster_lod": 1860379
+  },
+  {
+   "camera": "fly21.0",
+   "lod0": 9478945,
+   "cluster_lod": 1828809
+  },
+  {
+   "camera": "fly21.5",
+   "lod0": 9213162,
+   "cluster_lod": 1765850
+  },
+  {
+   "camera": "fly22.0",
+   "lod0": 8891902,
+   "cluster_lod": 1704377
+  },
+  {
+   "camera": "fly22.5",
+   "lod0": 8070276,
+   "cluster_lod": 1570720
+  },
+  {
+   "camera": "fly23.0",
+   "lod0": 7399165,
+   "cluster_lod": 1480061
+  },
+  {
+   "camera": "fly23.5",
+   "lod0": 6860068,
+   "cluster_lod": 1405862
+  },
+  {
+   "camera": "fly24.0",
+   "lod0": 6500378,
+   "cluster_lod": 1366205
+  },
+  {
+   "camera": "fly24.5",
+   "lod0": 6168837,
+   "cluster_lod": 1317593
+  },
+  {
+   "camera": "fly25.0",
+   "lod0": 5771860,
+   "cluster_lod": 1268248
+  },
+  {
+   "camera": "fly25.5",
+   "lod0": 5379902,
+   "cluster_lod": 1190642
+  },
+  {
+   "camera": "fly26.0",
+   "lod0": 5067698,
+   "cluster_lod": 1121158
+  },
+  {
+   "camera": "fly26.5",
+   "lod0": 4698344,
+   "cluster_lod": 1020708
+  },
+  {
+   "camera": "fly27.0",
+   "lod0": 4402958,
+   "cluster_lod": 928114
+  },
+  {
+   "camera": "fly27.5",
+   "lod0": 4149122,
+   "cluster_lod": 850732
+  },
+  {
+   "camera": "fly28.0",
+   "lod0": 3834092,
+   "cluster_lod": 779604
+  },
+  {
+   "camera": "fly28.5",
+   "lod0": 3544827,
+   "cluster_lod": 704896
+  },
+  {
+   "camera": "fly29.0",
+   "lod0": 3325099,
+   "cluster_lod": 674389
+  },
+  {
+   "camera": "fly29.5",
+   "lod0": 3139238,
+   "cluster_lod": 648111
+  },
+  {
+   "camera": "fly30.0",
+   "lod0": 2883104,
+   "cluster_lod": 611830
+  },
+  {
+   "camera": "fly30.5",
+   "lod0": 2696105,
+   "cluster_lod": 588366
+  },
+  {
+   "camera": "fly31.0",
+   "lod0": 2266521,
+   "cluster_lod": 517325
+  },
+  {
+   "camera": "fly31.5",
+   "lod0": 1659051,
+   "cluster_lod": 412471
+  },
+  {
+   "camera": "fly32.0",
+   "lod0": 1403919,
+   "cluster_lod": 384473
+  },
+  {
+   "camera": "fly32.5",
+   "lod0": 1716167,
+   "cluster_lod": 577413
+  },
+  {
+   "camera": "fly33.0",
+   "lod0": 2158770,
+   "cluster_lod": 738171
+  },
+  {
+   "camera": "fly33.5",
+   "lod0": 2679844,
+   "cluster_lod": 862062
+  },
+  {
+   "camera": "fly34.0",
+   "lod0": 2801583,
+   "cluster_lod": 872877
+  },
+  {
+   "camera": "fly34.5",
+   "lod0": 2845096,
+   "cluster_lod": 870635
+  },
+  {
+   "camera": "fly35.0",
+   "lod0": 2913245,
+   "cluster_lod": 860913
+  },
+  {
+   "camera": "fly35.5",
+   "lod0": 2957005,
+   "cluster_lod": 846836
+  },
+  {
+   "camera": "fly36.0",
+   "lod0": 3008837,
+   "cluster_lod": 844970
+  },
+  {
+   "camera": "fly36.5",
+   "lod0": 3050186,
+   "cluster_lod": 831913
+  },
+  {
+   "camera": "fly37.0",
+   "lod0": 3110510,
+   "cluster_lod": 827863
+  },
+  {
+   "camera": "fly37.5",
+   "lod0": 3246230,
+   "cluster_lod": 854887
+  },
+  {
+   "camera": "fly38.0",
+   "lod0": 3334085,
+   "cluster_lod": 859696
+  },
+  {
+   "camera": "fly38.5",
+   "lod0": 3427335,
+   "cluster_lod": 885091
+  },
+  {
+   "camera": "fly39.0",
+   "lod0": 3563317,
+   "cluster_lod": 919643
+  },
+  {
+   "camera": "fly39.5",
+   "lod0": 3619675,
+   "cluster_lod": 925891
+  },
+  {
+   "camera": "fly40.0",
+   "lod0": 3668060,
+   "cluster_lod": 932244
+  },
+  {
+   "camera": "fly40.5",
+   "lod0": 3737471,
+   "cluster_lod": 934058
+  },
+  {
+   "camera": "fly41.0",
+   "lod0": 3825492,
+   "cluster_lod": 946535
+  },
+  {
+   "camera": "fly41.5",
+   "lod0": 3874411,
+   "cluster_lod": 950708
+  },
+  {
+   "camera": "PhysCamera001",
+   "lod0": 4471189,
+   "cluster_lod": 1101664
+  },
+  {
+   "camera": "PhysCamera002",
+   "lod0": 9633575,
+   "cluster_lod": 1813450
+  },
+  {
+   "camera": "PhysCamera003",
+   "lod0": 1906643,
+   "cluster_lod": 650589
+  },
+  {
+   "camera": "PhysCamera004",
+   "lod0": 5511660,
+   "cluster_lod": 1279700
+  },
+  {
+   "camera": "PhysCamera005",
+   "lod0": 1573482,
+   "cluster_lod": 586851
+  },
+  {
+   "camera": "PhysCamera006",
+   "lod0": 2240082,
+   "cluster_lod": 623977
+  }
+ ],
+ "fly_mean": {
+  "lod0": 4138620.476190476,
+  "cluster_lod": 938424.3095238095
+ }
+}

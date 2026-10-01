@@ -1,0 +1,643 @@
+{
+ "width": 480,
+ "height": 270,
+ "cluster_triangles": 4096,
+ "cameras": [
+  {
+   "camera": "fly0.0",
+   "frustum": 3917630,
+   "occlusion": 2973121,
+   "frustum_clusters": 1458,
+   "occlusion_clusters": 1066
+  },
+  {
+   "camera": "fly0.5",
+   "frustum": 3834710,
+   "occlusion": 2928711,
+   "frustum_clusters": 1427,
+   "occlusion_clusters": 1049
+  },
+  {
+   "camera": "fly1.0",
+   "frustum": 3741972,
+   "occlusion": 2863396,
+   "frustum_clusters": 1393,
+   "occlusion_clusters": 1028
+  },
+  {
+   "camera": "fly1.5",
+   "frustum": 3620138,
+   "occlusion": 2787018,
+   "frustum_clusters": 1350,
+   "occlusion_clusters": 1001
+  },
+  {
+   "camera": "fly2.0",
+   "frustum": 3477613,
+   "occlusion": 2781277,
+   "frustum_clusters": 1300,
+   "occlusion_clusters": 1000
+  },
+  {
+   "camera": "fly2.5",
+   "frustum": 3363268,
+   "occlusion": 2702699,
+   "frustum_clusters": 1255,
+   "occlusion_clusters": 979
+  },
+  {
+   "camera": "fly3.0",
+   "frustum": 3195803,
+   "occlusion": 2621986,
+   "frustum_clusters": 1185,
+   "occlusion_clusters": 947
+  },
+  {
+   "camera": "fly3.5",
+   "frustum": 3009925,
+   "occlusion": 2435997,
+   "frustum_clusters": 1116,
+   "occlusion_clusters": 880
+  },
+  {
+   "camera": "fly4.0",
+   "frustum": 2878681,
+   "occlusion": 2348664,
+   "frustum_clusters": 1064,
+   "occlusion_clusters": 846
+  },
+  {
+   "camera": "fly4.5",
+   "frustum": 2692340,
+   "occlusion": 2231289,
+   "frustum_clusters": 995,
+   "occlusion_clusters": 806
+  },
+  {
+   "camera": "fly5.0",
+   "frustum": 2527495,
+   "occlusion": 2109703,
+   "frustum_clusters": 932,
+   "occlusion_clusters": 763
+  },
+  {
+   "camera": "fly5.5",
+   "frustum": 2313595,
+   "occlusion": 1890541,
+   "frustum_clusters": 846,
+   "occlusion_clusters": 684
+  },
+  {
+   "camera": "fly6.0",
+   "frustum": 2129654,
+   "occlusion": 1823646,
+   "frustum_clusters": 778,
+   "occlusion_clusters": 654
+  },
+  {
+   "camera": "fly6.5",
+   "frustum": 1982438,
+   "occlusion": 1686467,
+   "frustum_clusters": 722,
+   "occlusion_clusters": 603
+  },
+  {
+   "camera": "fly7.0",
+   "frustum": 1785452,
+   "occlusion": 1500204,
+   "frustum_clusters": 654,
+   "occlusion_clusters": 540
+  },
+  {
+   "camera": "fly7.5",
+   "frustum": 1602407,
+   "occlusion": 1301407,
+   "frustum_clusters": 592,
+   "occlusion_clusters": 468
+  },
+  {
+   "camera": "fly8.0",
+   "frustum": 1441666,
+   "occlusion": 1238475,
+   "frustum_clusters": 533,
+   "occlusion_clusters": 445
+  },
+  {
+   "camera": "fly8.5",
+   "frustum": 1295162,
+   "occlusion": 1130388,
+   "frustum_clusters": 477,
+   "occlusion_clusters": 405
+  },
+  {
+   "camera": "fly9.0",
+   "frustum": 1137501,
+   "occlusion": 983905,
+   "frustum_clusters": 418,
+   "occlusion_clusters": 346
+  },
+  {
+   "camera": "fly9.5",
+   "frustum": 980407,
+   "occlusion": 859469,
+   "frustum_clusters": 358,
+   "occlusion_clusters": 305
+  },
+  {
+   "camera": "fly10.0",
+   "frustum": 854079,
+   "occlusion": 749537,
+   "frustum_clusters": 317,
+   "occlusion_clusters": 265
+  },
+  {
+   "camera": "fly10.5",
+   "frustum": 752786,
+   "occlusion": 661537,
+   "frustum_clusters": 285,
+   "occlusion_clusters": 238
+  },
+  {
+   "camera": "fly11.0",
+   "frustum": 703589,
+   "occlusion": 618008,
+   "frustum_clusters": 267,
+   "occlusion_clusters": 224
+  },
+  {
+   "camera": "fly11.5",
+   "frustum": 636161,
+   "occlusion": 541760,
+   "frustum_clusters": 244,
+   "occlusion_clusters": 200
+  },
+  {
+   "camera": "fly12.0",
+   "frustum": 614219,
+   "occlusion": 513781,
+   "frustum_clusters": 238,
+   "occlusion_clusters": 190
+  },
+  {
+   "camera": "fly12.5",
+   "frustum": 571606,
+   "occlusion": 474188,
+   "frustum_clusters": 225,
+   "occlusion_clusters": 178
+  },
+  {
+   "camera": "fly13.0",
+   "frustum": 526196,
+   "occlusion": 445095,
+   "frustum_clusters": 211,
+   "occlusion_clusters": 169
+  },
+  {
+   "camera": "fly13.5",
+   "frustum": 527742,
+   "occlusion": 459371,
+   "frustum_clusters": 212,
+   "occlusion_clusters": 176
+  },
+  {
+   "camera": "fly14.0",
+   "frustum": 477464,
+   "occlusion": 418658,
+   "frustum_clusters": 197,
+   "occlusion_clusters": 160
+  },
+  {
+   "camera": "fly14.5",
+   "frustum": 769057,
+   "occlusion": 580197,
+   "frustum_clusters": 302,
+   "occlusion_clusters": 224
+  },
+  {
+   "camera": "fly15.0",
+   "frustum": 6276488,
+   "occlusion": 4591605,
+   "frustum_clusters": 2512,
+   "occlusion_clusters": 1820
+  },
+  {
+   "camera": "fly15.5",
+   "frustum": 8724397,
+   "occlusion": 6278196,
+   "frustum_clusters": 3483,
+   "occlusion_clusters": 2463
+  },
+  {
+   "camera": "fly16.0",
+   "frustum": 9459547,
+   "occlusion": 6712897,
+   "frustum_clusters": 3752,
+   "occlusion_clusters": 2616
+  },
+  {
+   "camera": "fly16.5",
+   "frustum": 9770918,
+   "occlusion": 6854723,
+   "frustum_clusters": 3867,
+   "occlusion_clusters": 2661
+  },
+  {
+   "camera": "fly17.0",
+   "frustum": 9992059,
+   "occlusion": 6910772,
+   "frustum_clusters": 3950,
+   "occlusion_clusters": 2679
+  },
+  {
+   "camera": "fly17.5",
+   "frustum": 10077165,
+   "occlusion": 6896745,
+   "frustum_clusters": 3988,
+   "occlusion_clusters": 2674
+  },
+  {
+   "camera": "fly18.0",
+   "frustum": 10110500,
+   "occlusion": 6911928,
+   "frustum_clusters": 4004,
+   "occlusion_clusters": 2682
+  },
+  {
+   "camera": "fly18.5",
+   "frustum": 10109532,
+   "occlusion": 6903010,
+   "frustum_clusters": 4003,
+   "occlusion_clusters": 2681
+  },
+  {
+   "camera": "fly19.0",
+   "frustum": 10042046,
+   "occlusion": 6804433,
+   "frustum_clusters": 3979,
+   "occlusion_clusters": 2646
+  },
+  {
+   "camera": "fly19.5",
+   "frustum": 9946345,
+   "occlusion": 6764973,
+   "frustum_clusters": 3946,
+   "occlusion_clusters": 2636
+  },
+  {
+   "camera": "fly20.0",
+   "frustum": 9807266,
+   "occlusion": 6681623,
+   "frustum_clusters": 3899,
+   "occlusion_clusters": 2615
+  },
+  {
+   "camera": "fly20.5",
+   "frustum": 9629337,
+   "occlusion": 6673318,
+   "frustum_clusters": 3838,
+   "occlusion_clusters": 2617
+  },
+  {
+   "camera": "fly21.0",
+   "frustum": 9479176,
+   "occlusion": 6675193,
+   "frustum_clusters": 3785,
+   "occlusion_clusters": 2626
+  },
+  {
+   "camera": "fly21.5",
+   "frustum": 9213393,
+   "occlusion": 6596627,
+   "frustum_clusters": 3684,
+   "occlusion_clusters": 2602
+  },
+  {
+   "camera": "fly22.0",
+   "frustum": 8892133,
+   "occlusion": 6510914,
+   "frustum_clusters": 3555,
+   "occlusion_clusters": 2572
+  },
+  {
+   "camera": "fly22.5",
+   "frustum": 8070507,
+   "occlusion": 5975402,
+   "frustum_clusters": 3218,
+   "occlusion_clusters": 2352
+  },
+  {
+   "camera": "fly23.0",
+   "frustum": 7399396,
+   "occlusion": 5645114,
+   "frustum_clusters": 2943,
+   "occlusion_clusters": 2219
+  },
+  {
+   "camera": "fly23.5",
+   "frustum": 6860299,
+   "occlusion": 5293437,
+   "frustum_clusters": 2726,
+   "occlusion_clusters": 2076
+  },
+  {
+   "camera": "fly24.0",
+   "frustum": 6500609,
+   "occlusion": 5048755,
+   "frustum_clusters": 2581,
+   "occlusion_clusters": 1976
+  },
+  {
+   "camera": "fly24.5",
+   "frustum": 6169068,
+   "occlusion": 4876473,
+   "frustum_clusters": 2453,
+   "occlusion_clusters": 1913
+  },
+  {
+   "camera": "fly25.0",
+   "frustum": 5772091,
+   "occlusion": 4620533,
+   "frustum_clusters": 2296,
+   "occlusion_clusters": 1815
+  },
+  {
+   "camera": "fly25.5",
+   "frustum": 5380133,
+   "occlusion": 4360898,
+   "frustum_clusters": 2142,
+   "occlusion_clusters": 1710
+  },
+  {
+   "camera": "fly26.0",
+   "frustum": 5067929,
+   "occlusion": 4032234,
+   "frustum_clusters": 2025,
+   "occlusion_clusters": 1587
+  },
+  {
+   "camera": "fly26.5",
+   "frustum": 4698575,
+   "occlusion": 3700292,
+   "frustum_clusters": 1889,
+   "occlusion_clusters": 1469
+  },
+  {
+   "camera": "fly27.0",
+   "frustum": 4403189,
+   "occlusion": 3495700,
+   "frustum_clusters": 1781,
+   "occlusion_clusters": 1396
+  },
+  {
+   "camera": "fly27.5",
+   "frustum": 4149353,
+   "occlusion": 3208483,
+   "frustum_clusters": 1685,
+   "occlusion_clusters": 1294
+  },
+  {
+   "camera": "fly28.0",
+   "frustum": 3834323,
+   "occlusion": 2937237,
+   "frustum_clusters": 1565,
+   "occlusion_clusters": 1195
+  },
+  {
+   "camera": "fly28.5",
+   "frustum": 3545058,
+   "occlusion": 2999744,
+   "frustum_clusters": 1457,
+   "occlusion_clusters": 1227
+  },
+  {
+   "camera": "fly29.0",
+   "frustum": 3325330,
+   "occlusion": 2802744,
+   "frustum_clusters": 1371,
+   "occlusion_clusters": 1151
+  },
+  {
+   "camera": "fly29.5",
+   "frustum": 3140885,
+   "occlusion": 2603771,
+   "frustum_clusters": 1299,
+   "occlusion_clusters": 1076
+  },
+  {
+   "camera": "fly30.0",
+   "frustum": 2883335,
+   "occlusion": 2361454,
+   "frustum_clusters": 1193,
+   "occlusion_clusters": 978
+  },
+  {
+   "camera": "fly30.5",
+   "frustum": 2696336,
+   "occlusion": 2182909,
+   "frustum_clusters": 1115,
+   "occlusion_clusters": 900
+  },
+  {
+   "camera": "fly31.0",
+   "frustum": 2266752,
+   "occlusion": 1830976,
+   "frustum_clusters": 938,
+   "occlusion_clusters": 751
+  },
+  {
+   "camera": "fly31.5",
+   "frustum": 1659282,
+   "occlusion": 1392762,
+   "frustum_clusters": 683,
+   "occlusion_clusters": 561
+  },
+  {
+   "camera": "fly32.0",
+   "frustum": 1404150,
+   "occlusion": 1149676,
+   "frustum_clusters": 573,
+   "occlusion_clusters": 452
+  },
+  {
+   "camera": "fly32.5",
+   "frustum": 1716398,
+   "occlusion": 1485686,
+   "frustum_clusters": 671,
+   "occlusion_clusters": 553
+  },
+  {
+   "camera": "fly33.0",
+   "frustum": 2158770,
+   "occlusion": 1880797,
+   "frustum_clusters": 805,
+   "occlusion_clusters": 673
+  },
+  {
+   "camera": "fly33.5",
+   "frustum": 2679844,
+   "occlusion": 2248208,
+   "frustum_clusters": 994,
+   "occlusion_clusters": 810
+  },
+  {
+   "camera": "fly34.0",
+   "frustum": 2801583,
+   "occlusion": 2285134,
+   "frustum_clusters": 1041,
+   "occlusion_clusters": 825
+  },
+  {
+   "camera": "fly34.5",
+   "frustum": 2845096,
+   "occlusion": 2277797,
+   "frustum_clusters": 1057,
+   "occlusion_clusters": 823
+  },
+  {
+   "camera": "fly35.0",
+   "frustum": 2913245,
+   "occlusion": 2303431,
+   "frustum_clusters": 1081,
+   "occlusion_clusters": 832
+  },
+  {
+   "camera": "fly35.5",
+   "frustum": 2957005,
+   "occlusion": 2335439,
+   "frustum_clusters": 1095,
+   "occlusion_clusters": 839
+  },
+  {
+   "camera": "fly36.0",
+   "frustum": 3008837,
+   "occlusion": 2399317,
+   "frustum_clusters": 1115,
+   "occlusion_clusters": 860
+  },
+  {
+   "camera": "fly36.5",
+   "frustum": 3050186,
+   "occlusion": 2414011,
+   "frustum_clusters": 1136,
+   "occlusion_clusters": 872
+  },
+  {
+   "camera": "fly37.0",
+   "frustum": 3110510,
+   "occlusion": 2465603,
+   "frustum_clusters": 1161,
+   "occlusion_clusters": 891
+  },
+  {
+   "camera": "fly37.5",
+   "frustum": 3246230,
+   "occlusion": 2555455,
+   "frustum_clusters": 1208,
+   "occlusion_clusters": 919
+  },
+  {
+   "camera": "fly38.0",
+   "frustum": 3334085,
+   "occlusion": 2584076,
+   "frustum_clusters": 1239,
+   "occlusion_clusters": 925
+  },
+  {
+   "camera": "fly38.5",
+   "frustum": 3427335,
+   "occlusion": 2635701,
+   "frustum_clusters": 1278,
+   "occlusion_clusters": 944
+  },
+  {
+   "camera": "fly39.0",
+   "frustum": 3563317,
+   "occlusion": 2721618,
+   "frustum_clusters": 1329,
+   "occlusion_clusters": 977
+  },
+  {
+   "camera": "fly39.5",
+   "frustum": 3619675,
+   "occlusion": 2762099,
+   "frustum_clusters": 1351,
+   "occlusion_clusters": 992
+  },
+  {
+   "camera": "fly40.0",
+   "frustum": 3668060,
+   "occlusion": 2744318,
+   "frustum_clusters": 1368,
+   "occlusion_clusters": 983
+  },
+  {
+   "camera": "fly40.5",
+   "frustum": 3737471,
+   "occlusion": 2788899,
+   "frustum_clusters": 1395,
+   "occlusion_clusters": 998
+  },
+  {
+   "camera": "fly41.0",
+   "frustum": 3825492,
+   "occlusion": 2879824,
+   "frustum_clusters": 1424,
+   "occlusion_clusters": 1033
+  },
+  {
+   "camera": "fly41.5",
+   "frustum": 3874411,
+   "occlusion": 2982480,
+   "frustum_clusters": 1442,
+   "occlusion_clusters": 1067
+  },
+  {
+   "camera": "PhysCamera001",
+   "frustum": 4471189,
+   "occlusion": 3413682,
+   "frustum_clusters": 1680,
+   "occlusion_clusters": 1242
+  },
+  {
+   "camera": "PhysCamera002",
+   "frustum": 9633806,
+   "occlusion": 6986253,
+   "frustum_clusters": 3832,
+   "occlusion_clusters": 2740
+  },
+  {
+   "camera": "PhysCamera003",
+   "frustum": 1906874,
+   "occlusion": 1385207,
+   "frustum_clusters": 732,
+   "occlusion_clusters": 528
+  },
+  {
+   "camera": "PhysCamera004",
+   "frustum": 5511660,
+   "occlusion": 1908658,
+   "frustum_clusters": 2090,
+   "occlusion_clusters": 732
+  },
+  {
+   "camera": "PhysCamera005",
+   "frustum": 1573482,
+   "occlusion": 1330240,
+   "frustum_clusters": 573,
+   "occlusion_clusters": 474
+  },
+  {
+   "camera": "PhysCamera006",
+   "frustum": 2240082,
+   "occlusion": 1692499,
+   "frustum_clusters": 833,
+   "occlusion_clusters": 614
+  }
+ ],
+ "fly_mean": {
+  "frustum": 4138752.476190476,
+  "occlusion": 3127332.6071428573,
+  "frustum_clusters": 1615.702380952381,
+  "occlusion_clusters": 1194.5595238095239
+ }
+}
