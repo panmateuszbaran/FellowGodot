@@ -135,9 +135,13 @@ the alpha-blended cypress leaves, shaded with the same PCSS). Where the early-ou
 curved receivers), the four extra fetches cost a little. In every scene the pyramid is rebuilt over the whole 4096²
 atlas every frame (+0.11-0.12 ms), even though with the shadow cache the atlas does not change in a static view.
 
-**v3** (in test): RG16 UNORM pyramid (half the memory and bandwidth; exact for the 16-bit atlas, conservatively
-rounded for a 32-bit one), rebuilt only over the atlas rects written since the last build (none in a static view
-with the shadow cache; the cascade rects with dynamic casters otherwise).
+**v3** (`fellow18`): RG16 UNORM pyramid (half the memory and bandwidth; exact for the 16-bit atlas, conservatively
+rounded for a 32-bit one: minimum down, maximum up), rebuilt only over the atlas rects written since the last build
+(none in a static view with the shadow cache; the cascade rects with dynamic casters, cache copies or stock cascades
+otherwise; everything after a full clear or an atlas change). Identity: lavapipe, PBR Lab and Stress Lab captures and
+the Stress Lab motion sequences (moving dynamic casters, rotating sun: partial rebuilds every frame), **0 differing
+pixels** against the pyramid off; RTX (`m3_mm3_temporal`): Bistro exterior 99.0 dB (max |d| 0), Sponza 72.6-75.4 dB
+(max 3/255), PBR Lab at its run-to-run floor. Timing: *pending* (`m3_mm3_profile`, `m3_mm3_perf`).
 
 ## Decision
 
