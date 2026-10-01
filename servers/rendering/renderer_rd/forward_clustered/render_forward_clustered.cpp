@@ -1685,12 +1685,8 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 			const bool use_16_bits = light_storage->directional_shadow_get_use_16_bits();
 			if (fellow_dir_atlas_dirty_all || !fellow_shadow_max_mip->is_valid(RID())) {
 				fellow_shadow_max_mip->build(RID(), atlas_texture, size, Rect2i(Point2i(), size), use_16_bits);
-			} else if (fellow_dir_atlas_dirty.is_empty()) {
-				fellow_shadow_max_mip->build(RID(), atlas_texture, size, Rect2i(), use_16_bits); // nothing written: keeps it
 			} else {
-				for (const Rect2i &r : fellow_dir_atlas_dirty) {
-					fellow_shadow_max_mip->build(RID(), atlas_texture, size, r, use_16_bits);
-				}
+				fellow_shadow_max_mip->build_rects(RID(), atlas_texture, size, fellow_dir_atlas_dirty, use_16_bits);
 			}
 			p_render_data->scene_data->fellow_shadow_max_mip = fellow_shadow_max_mip->is_valid(RID());
 		} else {
@@ -1707,12 +1703,8 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 				const bool use_16_bits = light_storage->shadow_atlas_get_use_16_bits(pos_atlas);
 				if (d.all || !fellow_shadow_max_mip->is_valid(pos_atlas)) {
 					fellow_shadow_max_mip->build(pos_atlas, atlas_texture, size, Rect2i(Point2i(), size), use_16_bits);
-				} else if (d.rects.is_empty()) {
-					fellow_shadow_max_mip->build(pos_atlas, atlas_texture, size, Rect2i(), use_16_bits); // nothing written: keeps it
 				} else {
-					for (const Rect2i &r : d.rects) {
-						fellow_shadow_max_mip->build(pos_atlas, atlas_texture, size, r, use_16_bits);
-					}
+					fellow_shadow_max_mip->build_rects(pos_atlas, atlas_texture, size, d.rects, use_16_bits);
 				}
 				p_render_data->scene_data->fellow_positional_shadow_max_mip = fellow_shadow_max_mip->is_valid(pos_atlas);
 			} else {

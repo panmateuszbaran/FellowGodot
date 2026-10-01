@@ -100,6 +100,26 @@ uint64_t FellowShadowMaxMip::get_vram_bytes() const {
 	return total;
 }
 
+void FellowShadowMaxMip::build_rects(RID p_key, RID p_atlas_texture, const Size2i &p_atlas_size, const LocalVector<Rect2i> &p_dirty, bool p_atlas_16_bits) {
+	if (p_dirty.is_empty()) {
+		build(p_key, p_atlas_texture, p_atlas_size, Rect2i(), p_atlas_16_bits);
+		return;
+	}
+	Rect2i merged = p_dirty[0];
+	int64_t sum = 0;
+	for (const Rect2i &r : p_dirty) {
+		merged = merged.merge(r);
+		sum += int64_t(r.size.x) * int64_t(r.size.y);
+	}
+	if (p_dirty.size() == 1 || int64_t(merged.size.x) * int64_t(merged.size.y) <= 2 * sum) {
+		build(p_key, p_atlas_texture, p_atlas_size, merged, p_atlas_16_bits);
+	} else {
+		for (const Rect2i &r : p_dirty) {
+			build(p_key, p_atlas_texture, p_atlas_size, r, p_atlas_16_bits);
+		}
+	}
+}
+
 void FellowShadowMaxMip::build(RID p_key, RID p_atlas_texture, const Size2i &p_atlas_size, const Rect2i &p_dirty, bool p_atlas_16_bits) {
 	Target &target = targets[p_key];
 	if (p_atlas_texture.is_null() || p_atlas_size.x < 4 || p_atlas_size.y < 4) {

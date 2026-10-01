@@ -80,6 +80,9 @@ public:
 	// since the last call; everything when the atlas texture or its size changed or the pyramid is not valid).
 	// Call after the shadow passes of the frame.
 	void build(RID p_key, RID p_atlas_texture, const Size2i &p_atlas_size, const Rect2i &p_dirty, bool p_atlas_16_bits);
+	// The same for several written rects: one update over their union when it is not much larger than the rects
+	// together (each update has a fixed cost: a dispatch and a barrier per mip), else one update per rect.
+	void build_rects(RID p_key, RID p_atlas_texture, const Size2i &p_atlas_size, const LocalVector<Rect2i> &p_dirty, bool p_atlas_16_bits);
 	void invalidate(RID p_key);
 	bool is_valid(RID p_key) const;
 	RID get_texture(RID p_key) const;
