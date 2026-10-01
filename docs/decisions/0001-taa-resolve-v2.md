@@ -181,9 +181,10 @@ matter here).
 | bistro_int_path | 35.60 | **36.87** | 35.73 | 35.86 | 36.04 | 36.17 |
 | **mean** | 34.00 | 35.00 | 34.92 | 34.95 | 34.97 | **35.05** |
 
-`s 0.35 c 0.45` is the only tested configuration that is at or above stock in PSNR **and** SSIM on all 8 sequences
-(v2 alone is below stock on `foliage_strafe` PSNR; `s 0.5 c 0.3` is below stock on `specular_orbit`), and it has
-the best mean PSNR. Against plain v2 it trades 0.2-0.7 dB on four sequences (camera pan, specular orbit, Sponza,
+Two tested configurations are at or above stock in PSNR **and** SSIM on all 8 sequences, `s 0.5 c 0.6` and
+`s 0.35 c 0.45` (v2 alone is below stock on `foliage_strafe` PSNR; `s 0.5 c 0.3` is below stock on
+`specular_orbit`; `s 0.5 c 0.45` on `bistro_int_path` SSIM); `s 0.35 c 0.45` has the better mean PSNR (35.05 vs
+34.97) and the best of all variants. Against plain v2 it trades 0.2-0.7 dB on four sequences (camera pan, specular orbit, Sponza,
 Bistro interior) for +0.3 to +1.1 dB on three (thin dolly, foliage, Bistro exterior).
 
 What it does **not** fix (kept visible): in the sub-metrics it is still slightly worse than stock in the motion-
