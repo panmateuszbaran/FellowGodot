@@ -1,7 +1,6 @@
 # FellowEngine — milestone 2 report
 
-Status: **DRAFT** — performance final (day-state session `fellow-m2_perf`); ground-truth image metrics and the
-`fellow17` load-time check pending.
+Status: **FINAL** for the measured binary `fellow16`; load time re-checked on `fellow17`.
 
 Base: Godot **4.7.2-stable** · Branch `fellow/geometry` (contains `fellow/shadows`) · Measured binary `fellow16`
 (`0ba5e35`) · Machine: Acer Predator PHN16S-71, Core Ultra 9 275HX, RTX 5070 Ti Laptop 12 GB, Windows 11, Vulkan.
@@ -57,19 +56,20 @@ Costs: **VRAM +52 MB** where a sun casts shadows (the directional shadow cache: 
 exterior 2212 → 2273, PBR 319 → 380 incl. TAA ping-pong +9 MB); none in Bistro interior. **Load time: Sponza
 3.6 → 7.6 s** with `fellow16`, whose cluster builds still ran during loading (+2.8 s in the night measurement, +4.0 s
 here); the deferred build that never blocks the render thread (`1a7fc2e`, decision 0007) is in `fellow17` and its
-load times are measured in `m3_mm2_profile` — *pending*. Other scenes: +0.06 to +0.18 s.
+load times, measured in `m3_mm2_profile` (one load each): Sponza 3.70 s vs stock 3.33 s, Bistro exterior 2.63 vs
+2.54 s, Bistro interior and PBR Lab within ±0.12 s. With `fellow16`, other scenes: +0.06 to +0.18 s.
 
 ## 2. The four questions
 
 * **Does FellowEngine render better than stock Godot?** Yes, in anti-aliasing: closer to the ground truth in **8/8
   motion sequences** by PSNR and SSIM (+0.1 to +2.3 dB), including the alpha-tested foliage strafe that regressed in
   milestone 1. Everything else is image-identical to stock within the GPU's run-to-run variation (shadow cache,
-  sampling skips, mesh clusters: §4). Fixed cameras against the ground truth: *pending*.
+  sampling skips, mesh clusters: §4). On fixed cameras too: 4/4 scenes by PSNR, SSIM and LPIPS (LPIPS −19 to −24 %).
 * **Does it run faster at equivalent quality?** **Yes.** Frame time at 1920×1080, day state, interleaved runs:
   Sponza **−38 %** (13.9 → 8.6 ms; p99 21.4 → 12.4 ms), Bistro exterior **−14 %**, Bistro interior **−3 %**, PBR Lab
   **−3 %** (all p < 0.02); at 2560×1440 −30 %, −12 %, −5 % and −2 % (PBR not significant). Costs: +52 MB VRAM where a
   sun casts shadows; Sponza loaded 4 s slower with the measured binary (cluster builds during loading), which the
-  deferred build in `fellow17` removes — *verification pending*.
+  deferred build in `fellow17` removes (Sponza 3.70 s vs stock 3.33 s, one load each, `m3_mm2_profile`).
 * **Does it produce better image quality at equivalent performance?** Yes: the TAA improvement comes with a faster
   frame, not at a cost.
 * **Can we prove those claims with reproducible measurements?** Yes, with the limits of milestone 1 (one machine, one
@@ -120,7 +120,18 @@ there), and more flicker in `moving_object` (from a very low base). The look cha
 7/8 sequences by PSNR (equal in the eighth): they sharpen penumbrae, and the ground truth is rendered with stock's
 shadow formula, so this measures difference from stock's look rather than error.
 
-Fixed cameras against the ground truth (`fellow-m2_capture_gt`): *pending (report generator).*
+### Fixed cameras against the ground truth (`fellow-m2_capture_gt`, report `reports/2026-10-01_0ba5e35`)
+
+Mean over each scene's fixed cameras, lossless captures with the ground truth's exposure:
+
+| Scene | PSNR stock → Fellow | SSIM stock → Fellow | LPIPS stock → Fellow |
+|---|---:|---:|---:|
+| PBR Lab | 38.70 → **39.09** | 0.9860 → **0.9881** | 0.0289 → **0.0219** |
+| Sponza | 40.68 → **40.92** | 0.9821 → **0.9838** | 0.0281 → **0.0220** |
+| Bistro exterior | 34.37 → **34.43** | 0.9719 → **0.9749** | 0.0321 → **0.0253** |
+| Bistro interior | 38.23 → **38.48** | 0.9860 → **0.9875** | 0.0214 → **0.0173** |
+
+Closer to the ground truth on every metric in every scene; the perceptual metric improves most (LPIPS −19 to −24 %).
 
 ## 5. Mistakes and dead ends (kept visible)
 
@@ -163,7 +174,26 @@ Fixed cameras against the ground truth (`fellow-m2_capture_gt`): *pending (repor
 
 ## 6. Exact files changed
 
-*to be listed from `git diff` at the final commit.*
+Engine source of the measured binary `fellow16` (`0ba5e35`) against `4.7.2-stable` (`git diff --stat 4.7.2-stable
+0ba5e35`, generated shader headers, benchmarks and docs excluded); milestone 2 added the shadow, geometry and TAA
+follow-up files, milestone 1 the TAA and fluid ones:
+
+* New: `servers/rendering/fellow_settings.{h,cpp}` (toggles and counters),
+  `renderer_rd/effects/fellow_shadow_cache.{h,cpp}` + `shaders/effects/fellow_shadow_cache_copy.glsl` (0004),
+  `renderer_rd/effects/fellow_shadow_max_mip.{h,cpp}` + `shaders/effects/fellow_shadow_max_mip.glsl` (0005),
+  `renderer_rd/storage_rd/fellow_mesh_clusters.{h,cpp}` (0007), `modules/fellow_fluid/*` (0003).
+* Changed: `renderer_scene_cull.{h,cpp}` (shadow cache, caster culling), `renderer_scene_render.h`,
+  `forward_clustered/render_forward_clustered.{h,cpp}` (shadow passes, cluster draws, pyramid),
+  `forward_clustered/scene_shader_forward_clustered.{h,cpp}`, `shaders/forward_clustered/scene_forward_clustered.glsl`,
+  `scene_forward_clustered_inc.glsl`, `shaders/scene_forward_lights_inc.glsl`, `shaders/scene_data_inc.glsl`
+  (sampling skips, early-outs), `effects/taa.{h,cpp}` + `shaders/effects/taa_resolve.glsl` (0001, 0002),
+  `storage_rd/mesh_storage.{h,cpp}` (clusters), `storage_rd/render_scene_data_rd.{h,cpp}`,
+  `storage_rd/material_storage.{h,cpp}`, `storage_rd/light_storage.h`, `servers/rendering/storage/material_storage.h`,
+  `rendering_device.{h,cpp}` (`draw_list_draw_indexed_range`), `rendering_server.{h,cpp}`,
+  `rendering_server_default.cpp`, `doc/classes/RenderingServer.xml` (`fellow_get_stats`).
+
+After the measured binary (on `fellow/geometry`, in `fellow17`/`fellow18`): deferred cluster builds (`1a7fc2e`), light
+clusters with depth slices (`0cd9271`, decision 0008, off), pyramid v3 and the editor import fix (`0da72dc`).
 
 ## 7. Remaining high-value opportunities (measured) and what milestone 3 starts with
 
