@@ -164,10 +164,22 @@ Milestone 3 changes no pixel by design; the image-quality comparison with the gr
 | SSAO gather with each workgroup's depths and normals in shared memory (0011) | `2be6b7c`, `4083b37` | identical; **no measurable effect** (`m3_f23_perf`: −1.1 to +0.1 %, all p > 0.1) → REJECT, default off |
 | TAA v2: tonemapped YCoCg of each tile texel computed once (0011) | `cde4a0b` | identical; no measurable effect; kept |
 | Pyramid rebuilt over the union of an atlas's written rects (`build_rects`, 0005) | `ee8226d` | identical; build −0.02 ms in every scene with a sun (`m3_f24_profile`: Sponza 0.109 → 0.087, Bistro exterior 0.084 → 0.061, PBR Lab 0.092 → 0.072 ms) |
-| Blended alpha-zero skip (0010, off) | `874af3e` | RTX bit-identical (Blend Lab 99 dB, max \|d\| 0; other scenes at their floor); Blend Lab transparent pass **0.417 → 0.275 ms (−34 %)**; Sponza transparent −0.05 ms, frame −1.1 % (p 0.44, within noise); other scenes unchanged |
-| Directional pyramid over the part of each cascade the camera can look up (`max_mip_visible_region`, 0005) | `c63638d`, `cc2ccd5` | lavapipe identical, 36-41 % fewer texels read; RTX not yet measured (the first Windows build failed, see §6) |
-| Shadow pyramids and PCSS blend band behind specialization constants | `ead26ec` | lavapipe identical; RTX not yet measured |
-| One clear of the whole directional atlas when no cascade comes from the cache | `77c8b1a` | lavapipe identical; RTX not yet measured |
+| Blended alpha-zero skip (0010, off) | `874af3e` | RTX bit-identical (Blend Lab 99 dB, max \|d\| 0; other scenes at their floor); Blend Lab transparent pass **0.417 → 0.275 ms (−34 %)**; benchmark scenes within noise (`m3_f27_az`, 5 runs: Sponza −0.4 %, Bistro interior −0.3 %, PBR Lab +1.2 %, all p > 0.25); Blend Lab A/B: `m3_f31_blend_az` |
+| Directional pyramid over the part of each cascade the camera can look up (`max_mip_visible_region`, 0005) | `c63638d`, `cc2ccd5` | identical (lavapipe, RTX 99 dB in Bistro exterior); build −0.005 to −0.007 ms only (the build is now bound by its dependent dispatches, not by reading the atlas); frame within noise → **REJECT**, off |
+| One clear of the whole directional atlas when no cascade comes from the cache (0005) | `77c8b1a` | identical; PBR Lab shadow pass 0.135 → 0.114 ms (= stock): **the PBR Lab regression is gone** |
+| Every FellowEngine scene-shader feature behind specialization constants (0012) | `ead26ec`, `9deb4fa` | identical (lavapipe; RTX `m3_f27_temporal` at the floor); `m3_f29_*` pending |
+
+### Frame level after these changes (`m3_f27_perf`, 2026-10-02 00:27-01:38, `fellow27` defaults, 3 runs each)
+
+| Scene | stock ms | FellowEngine ms | Δ | p |
+|---|---:|---:|---:|---:|
+| Sponza | 13.331 | **7.024** | **−47.3 %** | <0.001 |
+| Bistro exterior | 5.610 | **4.931** | **−12.1 %** | <0.001 |
+| Lights Lab | 3.238 | **2.999** | **−7.4 %** | 0.011 |
+| Bistro interior | 4.259 | **4.069** | **−4.5 %** | 0.009 |
+| PBR Lab | 2.832 | 2.826 | −0.2 % | 0.85 (within noise; was +1.8 % in `m3_final_perf`) |
+
+No scene is slower than stock any more.
 
 **The Lights Lab M2 cost** (§1), ablation `m3_f24_ablation` (one profiled run each, opaque pass): stock 1.359 ms,
 M2 1.660, M2 without the positional back-facing skip 1.638 — none of the milestone-2 features active in that scene
@@ -176,7 +188,12 @@ time: back-facing skip 1.119, zero-attenuation skip 1.311, positional pyramid 1.
 Bistro interior the positional pyramid saves 0.25 ms of the opaque pass and the back-facing skip 0.11 ms (`m3_f24_perf`:
 without the skip +3.0 %, p 0.002). Hypothesis: code present in the shader but switched off by a runtime flag still
 costs registers in the light loops; the specialization constants above remove it from the pipelines that do not use
-it. Pending measurement.
+it. `m3_f27_profile` (fellow27: pyramids and blend band already behind specialization constants; the other flags not
+yet): Lights Lab opaque pass stock 1.508, null test (every FellowEngine toggle off) **1.847**, M2 1.840, default 1.197
+— the null test is as slow as M2, so the cost is not a milestone-2 feature but code that the binary carries even with
+every toggle off. `fellow29` removes all of it from the specialized pipelines (`m3_f29_profile`, `m3_f29_perf`: pending).
+If the null test then matches stock, the default configuration may still pay a similar price for the code of the
+features it uses (the early returns of the zero-attenuation and back-facing skips in the light loop): next experiment.
 
 ## 8. Exact files changed (milestone 3, `0ba5e35..HEAD`, generated headers excluded)
 
