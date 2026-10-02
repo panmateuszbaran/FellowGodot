@@ -267,6 +267,13 @@ inline bool light_cluster_depth_slices() {
 	return lights_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/lights/cluster_depth_slices");
 }
 
+// The cluster pack pass (bitmasks and per-slice index ranges of every tile, after the element proxies are rasterised)
+// with one workgroup per tile and one invocation per depth slice instead of one invocation per tile; the same words
+// are stored (decision 0014). Read every frame.
+inline bool light_cluster_pack_parallel() {
+	return lights_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/lights/cluster_pack_parallel");
+}
+
 // Omni and spot lights whose attenuation at the pixel is exactly zero (beyond the range, outside the spot cone) return
 // before the attenuation's pow(), the shadow and the BRDF (decision 0008). Exact for materials without custom light
 // code, rim, backlight, transmittance, clearcoat, toon shading or shadow-to-opacity (the others keep stock's path).

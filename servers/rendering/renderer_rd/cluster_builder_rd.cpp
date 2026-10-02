@@ -30,6 +30,7 @@
 
 #include "cluster_builder_rd.h"
 
+#include "servers/rendering/fellow_settings.h"
 #include "servers/rendering/rendering_device.h"
 #include "servers/rendering/rendering_server_globals.h" // IWYU pragma: keep. RENDER_TIMESTAMP macro uses RSG.
 
@@ -96,10 +97,12 @@ ClusterBuilderSharedDataRD::ClusterBuilderSharedDataRD() {
 	{
 		Vector<String> versions;
 		versions.push_back("");
+		versions.push_back("\n#define FELLOW_PARALLEL\n"); // FellowEngine: one workgroup per tile (decision 0014).
 		cluster_store.cluster_store_shader.initialize(versions);
 		cluster_store.shader_version = cluster_store.cluster_store_shader.version_create();
 		cluster_store.shader = cluster_store.cluster_store_shader.version_get_shader(cluster_store.shader_version, 0);
 		cluster_store.shader_pipeline = RD::get_singleton()->compute_pipeline_create(cluster_store.shader);
+		cluster_store.fellow_parallel_pipeline = RD::get_singleton()->compute_pipeline_create(cluster_store.cluster_store_shader.version_get_shader(cluster_store.shader_version, 1));
 	}
 	{
 		Vector<String> versions;
@@ -521,8 +524,9 @@ void ClusterBuilderRD::bake_cluster() {
 		RENDER_TIMESTAMP("Pack 3D Cluster Elements");
 
 		{
+			const bool fellow_parallel = Fellow::light_cluster_pack_parallel();
 			RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
-			RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, shared->cluster_store.shader_pipeline);
+			RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, fellow_parallel ? shared->cluster_store.fellow_parallel_pipeline : shared->cluster_store.shader_pipeline);
 			RD::get_singleton()->compute_list_bind_uniform_set(compute_list, cluster_store_uniform_set, 0);
 
 			ClusterBuilderSharedDataRD::ClusterStore::PushConstant push_constant;
@@ -538,7 +542,12 @@ void ClusterBuilderRD::bake_cluster() {
 
 			RD::get_singleton()->compute_list_set_push_constant(compute_list, &push_constant, sizeof(ClusterBuilderSharedDataRD::ClusterStore::PushConstant));
 
-			RD::get_singleton()->compute_list_dispatch_threads(compute_list, cluster_screen_size.x, cluster_screen_size.y, 1);
+			if (fellow_parallel) {
+				// One 32-invocation workgroup per tile (one invocation per depth slice).
+				RD::get_singleton()->compute_list_dispatch(compute_list, cluster_screen_size.x, cluster_screen_size.y, 1);
+			} else {
+				RD::get_singleton()->compute_list_dispatch_threads(compute_list, cluster_screen_size.x, cluster_screen_size.y, 1);
+			}
 
 			RD::get_singleton()->compute_list_end();
 		}

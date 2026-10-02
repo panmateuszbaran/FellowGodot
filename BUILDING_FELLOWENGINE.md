@@ -125,6 +125,7 @@ runtime and per benchmark variant (`run_benchmarks.py --builds "label=fellow@key
 | `rendering/fellow/lights/enabled` | true | master switch for light-clustering experiments |
 | `rendering/fellow/lights/cluster_depth_slices` | **true** | light/decal/probe clusters with logarithmic depth slices and conservative per-element depth ranges (`docs/decisions/0008-light-cluster-depth.md`); read every frame |
 | `rendering/fellow/lights/zero_attenuation_skip` | **true** | omni/spot lights with exactly zero attenuation at the pixel return before the attenuation's pow(), shadow and BRDF (exact; decision 0008) |
+| `rendering/fellow/lights/cluster_pack_parallel` | false | cluster pack pass with one workgroup per tile and one invocation per depth slice (same stored words; decision 0014, in test) |
 | `rendering/fellow/shading/blended_alpha_zero_skip` | **true** | mix-blended fragments whose 2×2 quad has alpha exactly 0 skip lighting, shadows and fog (exact; decision 0010: Blend Lab −8.0 % frame, transparent pass −34 %) |
 | `rendering/fellow/frame/early_submit` | false | submit the frame's rendering before the swap chain acquisition (decision 0009: rejected, no effect) |
 | `rendering/fellow/frame/separate_present_queue` | false | start-up setting (project.godot / override.cfg): present from a second queue (decision 0009: rejected, slower) |

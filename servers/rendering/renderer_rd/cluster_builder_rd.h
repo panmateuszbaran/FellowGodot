@@ -103,6 +103,7 @@ class ClusterBuilderSharedDataRD {
 		RID shader_version;
 		RID shader;
 		RID shader_pipeline;
+		RID fellow_parallel_pipeline; // FellowEngine (decision 0014).
 	} cluster_store;
 
 	struct ClusterDebug {
