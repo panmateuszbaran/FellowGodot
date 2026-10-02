@@ -51,4 +51,4 @@ Status: KEEP | REWORK | REJECT | MEASURING      Branch / commit: ...      Toggle
 | [0010](0010-blended-alpha-zero-skip.md) | Mix-blended quads with alpha 0 skip their lighting | `shading/blended_alpha_zero_skip` | KEEP |
 | [0011](0011-shared-memory-tiles.md) | SSAO gather and TAA v2 neighbourhoods loaded once per workgroup (shared memory) | `postfx/ssao_shared_tile` | REJECT (no measurable effect) |
 | [0012](0012-specialization-constants.md) | FellowEngine shader features as specialization constants (no code for disabled features) | (each feature's toggle) | KEEP |
-| [0013](0013-taa-camera-motion-vectors.md) | TAA motion vectors of static geometry from the depth buffer (upscalers' motion-pass path) | `postfx/taa_camera_motion_vectors` | in test |
+| [0013](0013-taa-camera-motion-vectors.md) | TAA motion vectors of static geometry from the depth buffer (upscalers' motion-pass path) | `postfx/taa_camera_motion_vectors` | REJECT (within noise, not bit-identical) |

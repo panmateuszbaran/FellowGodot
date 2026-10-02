@@ -1,7 +1,7 @@
 # 0013 — TAA motion vectors of static geometry from the depth buffer
 
-Status: **in test** (`fellow33`) · Branch `fellow/geometry` · Toggle `rendering/fellow/postfx/taa_camera_motion_vectors`
-(default **off** until measured) · Code: `forward_clustered/render_forward_clustered.{h,cpp}` (`fellow_taa_motion_pass`),
+Status: **REJECT** (`fellow33`; code kept behind the toggle) · Branch `fellow/geometry` · Toggle `rendering/fellow/postfx/taa_camera_motion_vectors`
+(default **off**) · Code: `forward_clustered/render_forward_clustered.{h,cpp}` (`fellow_taa_motion_pass`),
 `effects/motion_vectors_store.{h,cpp}` (`process_fellow_taa`), `shaders/effects/motion_vectors_store.glsl`,
 `fellow_settings.*`.
 
@@ -68,12 +68,38 @@ only where two surfaces have exactly the same depth.
   sampling turns the rounding differences into last-bit differences). Largest difference 12/255 (two pixels in the
   first frame of the pan). Negative control (the same pass without removing the jitter): 72.6 dB mean, 66.9 minimum,
   up to 95/255.
-* RTX (`fellow33`, `m3_f33_temporal`, toggle off vs on, six scenes): pending.
+* RTX 5070 Ti (`m3_f33_temporal`, 60-frame sequences, toggle off vs on; the run-to-run floor of each scene in brackets,
+  from `fellow29` vs `fellow33` with the toggle off in the same session): Bistro exterior 66.4 dB (99.0, bit-identical
+  run to run), Bistro interior 65.9 (67.3), Lights Lab 71.1 (94.1), PBR Lab 69.2 (73.6), Sponza 69.7 (75.5); pixels
+  off by more than 2/255: 0.000-0.005 %; Blend Lab 55.7 dB, 0.23 % of the pixels > 2/255 (its `depth_draw_always`
+  cards, the case that differs by construction). **Not bit-identical**: below the floor in every scene, with the
+  differences as small and as scattered as on lavapipe.
 
 ## Result
 
-Pending (`m3_f33_profile`, `m3_f33_perf`).
+Profile (`m3_f33_profile`, one run each, GPU ms): the opaque pass is faster by **0.15 ms in Bistro exterior** (1.890 →
+1.744) and **0.19 ms in Sponza** (2.012 → 1.818), 0.02-0.06 ms elsewhere. The new full-screen pass costs 0.03-0.05 ms
+and, in PBR Lab (moving objects), the motion pass 0.03 ms; the sums of the passes move by −0.06 to +0.09 ms (the graph
+also moves work across the timestamps, e.g. Lights Lab's sky update).
+
+Frame (`m3_f33_perf`, 3 interleaved runs, reference `fellow33` with the toggle off):
+
+| scene | toggle off ms | on ms | Δ | p |
+|---|---:|---:|---:|---:|
+| Sponza | 7.065 | 6.981 | −1.2 % | 0.33 |
+| Bistro exterior | 4.970 | 4.918 | −1.0 % | 0.23 |
+| Bistro interior | 4.054 | 4.029 | −0.6 % | 0.14 |
+| Lights Lab | 3.007 | 3.001 | −0.2 % | 0.86 |
+| PBR Lab | 2.815 | 2.855 | +1.5 % | 0.16 |
+| Blend Lab | 2.572 | 2.622 | +2.0 % | 0.24 |
+
+All within noise. The opaque-pass saving is real but small next to a 5-7 ms frame, and the extra pass (plus the
+motion pass where objects move) takes most of it back.
 
 ## Decision
 
-Pending.
+**REJECT** as a default: no measurable frame gain, and the image is not bit-identical (velocity equal up to half-float
+rounding, TAA output at 55-71 dB instead of the floor). Code kept behind `postfx/taa_camera_motion_vectors` (off). Two
+ways to make it pay, not tried: computing the velocity inside the depth downsample that SSAO/SSIL already run after
+the pre-pass (no separate pass; the pre-pass depth equals the final depth for surfaces drawn in both passes), and
+scenes with much more static geometry per pixel than these, where the vertex work saved grows.

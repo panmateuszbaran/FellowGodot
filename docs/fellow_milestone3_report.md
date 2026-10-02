@@ -1,14 +1,15 @@
 # FellowEngine — milestone 3 report
 
 Status: **FINAL for the measured binary `fellow22`** (`96f8aa5`); additions measured after it in §7 (up to
-`fellow29`, measured 2026-10-02), benchmark-scene preparation findings at the end of §7.
+`fellow33`, measured 2026-10-02), benchmark-scene preparation findings at the end of §7.
 
 Base: Godot **4.7.2-stable** · Branch `fellow/geometry` · Measured binary `fellow22` · Machine: Acer Predator
 PHN16S-71, Core Ultra 9 275HX, RTX 5070 Ti Laptop 12 GB, Windows 11, Vulkan, 1920×1080 (method: milestone-2 report).
 
 Decision records: `docs/decisions/0005` (shadow sampling: min/max pyramid v3-v7), `0008` (light clusters with depth
 slices, zero-attenuation skip), `0009` (frame/GPU gap: early submit, second present queue), `0010` (blended alpha-zero
-skip, KEEP, on from `1b86e8b`), `0011` (shared-memory tiles, REJECT), `0012` (specialization constants, KEEP).
+skip, KEEP, on from `1b86e8b`), `0011` (shared-memory tiles, REJECT), `0012` (specialization constants, KEEP),
+`0013` (TAA camera motion vectors, REJECT).
 
 ## 1. Result
 
@@ -127,7 +128,9 @@ Milestone 3 changes no pixel by design; the image-quality comparison with the gr
 * **Does it run faster at equivalent quality?** **Yes, in 4 of 5 scenes**: Sponza **−47 %** (13.5 → 7.2 ms, p99
   20.8 → 9.0 ms), Bistro exterior **−12 %**, Lights Lab **−7 %**, Bistro interior **−5 %** (all p ≤ 0.002); PBR Lab
   +1.8 % (p 0.02, the pyramids' build; after the changes in §7 within noise: −0.5 %, p 0.74, `m3_f29_perf`). Milestone 3 alone: −14 % in Sponza and the Lights Lab, −3 % in Bistro
-  interior.
+  interior. With the additions of §7 (`fellow33`, `m3_f33_perf`): Sponza −47.4 %, Bistro
+  exterior −11.5 %, Blend Lab −8.6 %, Lights Lab −5.7 %, Bistro interior −5.5 %, PBR Lab −0.5 % (within noise): **no
+  scene slower than stock**.
 * **Does it produce better image quality at equivalent performance?** Yes: the anti-aliasing improvement comes with a
   faster frame.
 * **Can we prove those claims with reproducible measurements?** Yes, within one machine and one GPU vendor: every
@@ -169,6 +172,7 @@ Milestone 3 changes no pixel by design; the image-quality comparison with the gr
 | Directional pyramid over the part of each cascade the camera can look up (`max_mip_visible_region`, 0005) | `c63638d`, `cc2ccd5` | identical (lavapipe, RTX 99 dB in Bistro exterior); build −0.005 to −0.007 ms only (the build is now bound by its dependent dispatches, not by reading the atlas); frame within noise → **REJECT**, off |
 | One clear of the whole directional atlas when no cascade comes from the cache (0005) | `77c8b1a` | identical; PBR Lab shadow pass 0.135 → 0.114 ms (= stock): **the PBR Lab regression is gone** |
 | Every FellowEngine scene-shader feature behind specialization constants (0012) | `ead26ec`, `9deb4fa` | identical (lavapipe; RTX `m3_f29_temporal` at the floor); null test = stock (Lights Lab opaque pass 1.506 vs 1.515 ms, was 1.847); defaults unchanged (`m3_f29_perf` vs `fellow27`: all within noise except Bistro exterior +1.3 %, p 0.04, 3 runs) → **KEEP** |
+| TAA motion vectors of static geometry from the depth buffer (0013, `postfx/taa_camera_motion_vectors`) | `1d21886` | velocity equal to stock's up to half-float rounding (lavapipe readback: ≤ 0.015 px), image not bit-identical (RTX 55-71 dB vs floors of 67-99 dB); opaque pass −0.15 ms (Bistro exterior) / −0.19 ms (Sponza), but frame within noise everywhere (`m3_f33_perf`: −1.2 % to +2.0 %, all p > 0.1) → **REJECT**, off |
 
 ### Frame level after these changes (`m3_f27_perf`, 2026-10-02 00:27-01:38, `fellow27` defaults, 3 runs each)
 
@@ -217,6 +221,22 @@ The same as `fellow27` within noise in four scenes; Bistro exterior +1.3 % again
 0.2-0.5 %): no cause identified, and smaller than the drift between sessions; re-measured in the next full
 session. The milestone-2 configuration
 of the same binary (`m2_29`): Lights Lab +3.4 % vs stock (p 0.047), every other scene faster than stock.
+
+### Frame level with `fellow33` (`m3_f33_perf`, 2026-10-02 07:00-08:00, defaults, 3 interleaved runs each)
+
+`fellow33` = `fellow29` + the blended alpha-zero skip on (0010) + 0013 (off). Image: bit-identical to `fellow29` in
+Bistro exterior and Blend Lab (99 dB), every other scene at its floor (`m3_f33_temporal`).
+
+| Scene | stock ms | FellowEngine ms | Δ | p | GPU ms stock → FE | p99 ms stock → FE |
+|---|---:|---:|---:|---:|---|---|
+| Sponza | 13.424 | **7.065** | **−47.4 %** | <0.001 | 13.04 → 6.69 | 20.3 → 8.9 |
+| Bistro exterior | 5.614 | **4.970** | **−11.5 %** | <0.001 | 5.24 → 4.59 | 6.4 → 5.6 |
+| Blend Lab | 2.814 | **2.572** | **−8.6 %** | 0.015 | 2.45 → 2.07 | 3.0 → 2.9 |
+| Lights Lab | 3.188 | **3.007** | **−5.7 %** | 0.001 | 2.86 → 2.66 | 3.6 → 3.4 |
+| Bistro interior | 4.289 | **4.054** | **−5.5 %** | <0.001 | 3.93 → 3.69 | 4.8 → 4.6 |
+| PBR Lab | 2.830 | 2.815 | −0.5 % | 0.49 (within noise) | 2.40 → 2.39 | 3.7 → 3.5 |
+
+Bistro exterior `fellow29` 4.994 → `fellow33` 4.970 ms: the +1.3 % against `fellow27` (above) was noise.
 
 ### Benchmark scenes: what the Bistro scenes show (questions from the user, 2026-10-01)
 
@@ -269,8 +289,8 @@ engine arguments and start-up overrides), `tools/ab_stats.py`, scenes `lights_la
 
 ## 9. Next
 
-* TAA motion vectors of static geometry from the depth buffer (audit A.3 item 5: the opaque pass transforms every
-  vertex twice and writes a velocity target for TAA): `postfx/taa_camera_motion_vectors`, decision 0013, in test.
+* TAA camera motion vectors (0013, rejected as it stands): worth retrying only with the velocity written by the depth
+  downsample SSAO/SSIL already run (no separate pass).
 * Bistro scene v2 as the benchmark default (needs a new baseline for both Bistro scenes).
 * Cache-space directional pyramid: with the shadow cache, cascades are copied into the atlas every frame the camera
   moves, so their pyramid is rebuilt every frame although the cache did not change (0.06-0.09 ms in Sponza and
