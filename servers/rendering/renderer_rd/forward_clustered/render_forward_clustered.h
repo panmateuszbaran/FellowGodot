@@ -766,6 +766,9 @@ private:
 	RendererRD::SSEffects *ss_effects = nullptr;
 	RendererRD::FellowShadowCache *fellow_shadow_cache = nullptr;
 	RendererRD::FellowShadowMaxMip *fellow_shadow_max_mip = nullptr;
+	// Decision 0013: TAA with camera motion vectors (motion pass). Instances that move keep the "dynamic" bit of the
+	// normal-roughness buffer, as in stock's TAA path (stock's upscaler motion pass drops it).
+	bool fellow_taa_motion_pass = false;
 	// Directional shadow atlas rects written since the min/max pyramid was last brought up to date (one per cascade;
 	// a union would also cover the unchanged cascades between two changed ones).
 	LocalVector<Rect2i> fellow_dir_atlas_dirty;

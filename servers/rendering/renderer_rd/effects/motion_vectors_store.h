@@ -52,5 +52,13 @@ public:
 	void process(Ref<RenderSceneBuffersRD> p_render_buffers,
 			const Projection &p_current_projection, const Transform3D &p_current_transform,
 			const Projection &p_previous_projection, const Transform3D &p_previous_transform);
+	// FellowEngine (decision 0013): the velocity the scene shader writes with TAA (jitter removed from both frames),
+	// reconstructed from the depth buffer; 0 where the depth is still cleared.
+	void process_fellow_taa(Ref<RenderSceneBuffersRD> p_render_buffers,
+			const Projection &p_current_projection, const Transform3D &p_current_transform, const Vector2 &p_current_jitter,
+			const Projection &p_previous_projection, const Transform3D &p_previous_transform);
+
+private:
+	void _dispatch(Ref<RenderSceneBuffersRD> p_render_buffers, const PushConstant &p_push_constant);
 };
 } //namespace RendererRD

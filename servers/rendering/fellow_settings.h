@@ -60,6 +60,13 @@ inline bool ssao_shared_tile() {
 	return postfx_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/postfx/ssao_shared_tile");
 }
 
+// TAA motion vectors of static geometry from the depth buffer and the camera matrices (a full-screen pass after the
+// opaque pass, as stock does for MetalFX), moving geometry in a separate motion pass; the opaque pass then draws its
+// static surfaces without the previous-frame vertex transform and the velocity target. Decision 0013.
+inline bool taa_camera_motion_vectors() {
+	return postfx_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/postfx/taa_camera_motion_vectors");
+}
+
 // TAA resolve v2: reverse-Z aware closest-depth dilation, history reprojection with the dilated velocity,
 // YCoCg variance clipping in a tonemapped space, feedback weighting, NaN guard. See docs/decisions/.
 inline bool taa_resolve_v2() {

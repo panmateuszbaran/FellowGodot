@@ -245,8 +245,12 @@ tables and the bar behind tinted glass instead of holes. Timing on v2 (3 interle
 | Bistro interior (`m3_f30_perf_v2`) | 4.302 | 4.058 | −5.7 % | 0.002 |
 | Bistro exterior with the interior (`m3_f32_perf_v2b`) | 6.763 | **5.117** | **−24.3 %** | <0.001 |
 
-With the interior loaded the exterior costs stock about 1.2 ms more per frame and FellowEngine about 0.2 ms more
-(across two sessions; which passes take it is not profiled yet). Switching the benchmark default to v2 needs a new baseline for both
+With the interior loaded, most of the difference is on the CPU: stock submits **7363 draw calls** per frame (render
+thread 3.63 ms) and its frame (6.76 ms) is no longer bound by the GPU (4.85 ms); FellowEngine's cached shadow
+cascades leave **2621 draws** (render thread 2.11 ms), GPU 4.61 ms, frame 5.12 ms. Without the interior: 2983 vs 965
+draws, render thread 1.48 vs 0.95 ms, both frames GPU-bound. The per-pass GPU profile with the interior
+(`m3_f33b_profile_v2b`, one run each) is like v1's: shadow pass 0.65 → 0.32 ms, opaque 2.41 → 1.92 ms, sum of passes
+5.85 → 5.18 ms (−11.5 %). Switching the benchmark default to v2 needs a new baseline for both
 Bistro scenes; not done yet.
 
 ## 8. Exact files changed (milestone 3, `0ba5e35..HEAD`, generated headers excluded)

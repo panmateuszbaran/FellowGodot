@@ -28,5 +28,10 @@ void main() {
 	float depth = texelFetch(depth_buffer, pos, 0).x;
 	vec2 uv = (vec2(pos) + 0.5f) / params.resolution;
 	vec2 velocity = derive_motion_vector(uv, depth, params.reprojection_matrix);
+	// FellowEngine (TAA camera motion vectors, decision 0013): where nothing was drawn (the cleared depth, 0 with
+	// reverse Z) the velocity stays 0, as the opaque pass leaves it in stock's TAA path.
+	if (params.pad[0] != 0u && depth == 0.0) {
+		velocity = vec2(0.0);
+	}
 	imageStore(velocity_buffer, pos, vec4(velocity, 0.0f, 0.0f));
 }

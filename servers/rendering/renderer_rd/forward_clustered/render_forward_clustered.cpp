@@ -1106,6 +1106,9 @@ void RenderForwardClustered::_fill_render_list(RenderListType p_render_list, con
 				bool is_dynamic = transform_changed || has_mesh_instance || uses_particles || is_multimesh_with_motion;
 				if (p_pass_mode == PASS_MODE_COLOR && p_using_motion_pass) {
 					uses_motion = is_dynamic;
+					if (is_dynamic && fellow_taa_motion_pass) {
+						flags |= INSTANCE_DATA_FLAGS_DYNAMIC;
+					}
 				} else if (is_dynamic) {
 					flags |= INSTANCE_DATA_FLAGS_DYNAMIC;
 				}
@@ -2039,7 +2042,11 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	bool using_voxelgi = false;
 	bool reverse_cull = p_render_data->scene_data->cam_transform.basis.determinant() < 0;
 	bool using_ssil = !is_reflection_probe && p_render_data->environment.is_valid() && environment_get_ssil_enabled(p_render_data->environment);
-	bool using_motion_pass = rb_data.is_valid() && using_upscaling;
+	// FellowEngine (decision 0013): TAA takes the upscalers' motion-pass path. Static surfaces are drawn without
+	// motion vectors and their velocity comes from the depth buffer (MotionVectorsStore::process_fellow_taa); surfaces
+	// that move or animate are drawn in the motion pass with the motion-vector shaders.
+	fellow_taa_motion_pass = rb_data.is_valid() && !using_upscaling && !is_reflection_probe && using_taa && rb->get_view_count() == 1 && rb->get_msaa_3d() == RSE::VIEWPORT_MSAA_DISABLED && rb->get_can_be_storage() && p_render_data->scene_data->calculate_motion_vectors && Fellow::taa_camera_motion_vectors();
+	bool using_motion_pass = rb_data.is_valid() && (using_upscaling || fellow_taa_motion_pass);
 
 	if (is_reflection_probe) {
 		uint32_t resolution = light_storage->reflection_probe_instance_get_resolution(p_render_data->reflection_probe);
@@ -2423,7 +2430,8 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	// Shadow pass can change the base uniform set samplers.
 	_update_render_base_uniform_set();
 
-	uint32_t opaque_pass_uniform_buffer_index = _setup_environment(p_render_data, is_reflection_probe, screen_size, screen_size, p_default_bg_color, true, using_motion_pass);
+	// The upscalers' motion pass also zeroes the opaque pass alpha (pass_alpha_multiplier); stock's TAA path does not.
+	uint32_t opaque_pass_uniform_buffer_index = _setup_environment(p_render_data, is_reflection_probe, screen_size, screen_size, p_default_bg_color, true, using_motion_pass && !fellow_taa_motion_pass);
 
 	RID rp_uniform_set = _setup_render_pass_uniform_set(RENDER_LIST_OPAQUE, p_render_data, radiance_texture, samplers, opaque_pass_uniform_buffer_index, true);
 
@@ -2460,6 +2468,14 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			if (scale_type == SCALE_MFX) {
 				motion_vectors_store->process(rb,
 						p_render_data->scene_data->cam_projection, p_render_data->scene_data->cam_transform,
+						p_render_data->scene_data->prev_cam_projection, p_render_data->scene_data->prev_cam_transform);
+			} else if (fellow_taa_motion_pass) {
+				RENDER_TIMESTAMP("FellowEngine Camera Motion Vectors");
+				if (motion_vectors_store == nullptr) {
+					motion_vectors_store = memnew(RendererRD::MotionVectorsStore); // Stock creates it only for MetalFX.
+				}
+				motion_vectors_store->process_fellow_taa(rb,
+						p_render_data->scene_data->cam_projection, p_render_data->scene_data->cam_transform, p_render_data->scene_data->taa_jitter,
 						p_render_data->scene_data->prev_cam_projection, p_render_data->scene_data->prev_cam_transform);
 			} else {
 				Vector<Color> motion_vector_clear_colors;
@@ -5760,11 +5776,12 @@ RenderForwardClustered::~RenderForwardClustered() {
 		mfx_temporal_effect = nullptr;
 	}
 
+#endif
+	// Also created on demand by FellowEngine's TAA camera motion vectors (decision 0013), on every platform.
 	if (motion_vectors_store) {
 		memdelete(motion_vectors_store);
 		motion_vectors_store = nullptr;
 	}
-#endif
 
 	RD::get_singleton()->free_rid(shadow_sampler);
 	RSG::light_storage->directional_shadow_atlas_set_size(0);
