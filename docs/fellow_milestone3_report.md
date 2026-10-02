@@ -1,13 +1,14 @@
 # FellowEngine — milestone 3 report
 
-Status: **FINAL for the measured binary `fellow22`** (`96f8aa5`); additions measured after it in §7.
+Status: **FINAL for the measured binary `fellow22`** (`96f8aa5`); additions measured after it in §7 (up to
+`fellow29`, measured 2026-10-02), benchmark-scene preparation findings at the end of §7.
 
 Base: Godot **4.7.2-stable** · Branch `fellow/geometry` · Measured binary `fellow22` · Machine: Acer Predator
 PHN16S-71, Core Ultra 9 275HX, RTX 5070 Ti Laptop 12 GB, Windows 11, Vulkan, 1920×1080 (method: milestone-2 report).
 
 Decision records: `docs/decisions/0005` (shadow sampling: min/max pyramid v3-v7), `0008` (light clusters with depth
 slices, zero-attenuation skip), `0009` (frame/GPU gap: early submit, second present queue), `0010` (blended alpha-zero
-skip, in test).
+skip, KEEP, on from `1b86e8b`), `0011` (shared-memory tiles, REJECT), `0012` (specialization constants, KEEP).
 
 ## 1. Result
 
@@ -125,7 +126,7 @@ Milestone 3 changes no pixel by design; the image-quality comparison with the gr
   ground truth in 8/8 motion sequences and on every fixed camera); milestone 3 changes no pixel (§4).
 * **Does it run faster at equivalent quality?** **Yes, in 4 of 5 scenes**: Sponza **−47 %** (13.5 → 7.2 ms, p99
   20.8 → 9.0 ms), Bistro exterior **−12 %**, Lights Lab **−7 %**, Bistro interior **−5 %** (all p ≤ 0.002); PBR Lab
-  +1.8 % (p 0.02, the pyramids' build, §7). Milestone 3 alone: −14 % in Sponza and the Lights Lab, −3 % in Bistro
+  +1.8 % (p 0.02, the pyramids' build; after the changes in §7 within noise: −0.5 %, p 0.74, `m3_f29_perf`). Milestone 3 alone: −14 % in Sponza and the Lights Lab, −3 % in Bistro
   interior.
 * **Does it produce better image quality at equivalent performance?** Yes: the anti-aliasing improvement comes with a
   faster frame.
@@ -164,10 +165,10 @@ Milestone 3 changes no pixel by design; the image-quality comparison with the gr
 | SSAO gather with each workgroup's depths and normals in shared memory (0011) | `2be6b7c`, `4083b37` | identical; **no measurable effect** (`m3_f23_perf`: −1.1 to +0.1 %, all p > 0.1) → REJECT, default off |
 | TAA v2: tonemapped YCoCg of each tile texel computed once (0011) | `cde4a0b` | identical; no measurable effect; kept |
 | Pyramid rebuilt over the union of an atlas's written rects (`build_rects`, 0005) | `ee8226d` | identical; build −0.02 ms in every scene with a sun (`m3_f24_profile`: Sponza 0.109 → 0.087, Bistro exterior 0.084 → 0.061, PBR Lab 0.092 → 0.072 ms) |
-| Blended alpha-zero skip (0010, off) | `874af3e` | RTX bit-identical (Blend Lab 99 dB, max \|d\| 0; other scenes at their floor); Blend Lab transparent pass **0.417 → 0.275 ms (−34 %)**; benchmark scenes within noise (`m3_f27_az`, 5 runs: Sponza −0.4 %, Bistro interior −0.3 %, PBR Lab +1.2 %, all p > 0.25); Blend Lab A/B: `m3_f31_blend_az` |
+| Blended alpha-zero skip (0010) | `874af3e`, default on from `1b86e8b` | RTX bit-identical (Blend Lab 99 dB, max \|d\| 0; other scenes at their floor); Blend Lab transparent pass **0.417 → 0.275 ms (−34 %)**, frame **2.738 → 2.519 ms (−8.0 %, p < 0.001**, `m3_f31_blend_az`, 5 runs); benchmark scenes within noise (`m3_f27_az`, 5 runs: Sponza −0.4 %, Bistro interior −0.3 %, PBR Lab +1.2 %, all p > 0.25) → **KEEP, on** |
 | Directional pyramid over the part of each cascade the camera can look up (`max_mip_visible_region`, 0005) | `c63638d`, `cc2ccd5` | identical (lavapipe, RTX 99 dB in Bistro exterior); build −0.005 to −0.007 ms only (the build is now bound by its dependent dispatches, not by reading the atlas); frame within noise → **REJECT**, off |
 | One clear of the whole directional atlas when no cascade comes from the cache (0005) | `77c8b1a` | identical; PBR Lab shadow pass 0.135 → 0.114 ms (= stock): **the PBR Lab regression is gone** |
-| Every FellowEngine scene-shader feature behind specialization constants (0012) | `ead26ec`, `9deb4fa` | identical (lavapipe; RTX `m3_f27_temporal` at the floor); `m3_f29_*` pending |
+| Every FellowEngine scene-shader feature behind specialization constants (0012) | `ead26ec`, `9deb4fa` | identical (lavapipe; RTX `m3_f29_temporal` at the floor); null test = stock (Lights Lab opaque pass 1.506 vs 1.515 ms, was 1.847); defaults unchanged (`m3_f29_perf` vs `fellow27`: all within noise except Bistro exterior +1.3 %, p 0.04, 3 runs) → **KEEP** |
 
 ### Frame level after these changes (`m3_f27_perf`, 2026-10-02 00:27-01:38, `fellow27` defaults, 3 runs each)
 
@@ -191,9 +192,57 @@ costs registers in the light loops; the specialization constants above remove it
 it. `m3_f27_profile` (fellow27: pyramids and blend band already behind specialization constants; the other flags not
 yet): Lights Lab opaque pass stock 1.508, null test (every FellowEngine toggle off) **1.847**, M2 1.840, default 1.197
 — the null test is as slow as M2, so the cost is not a milestone-2 feature but code that the binary carries even with
-every toggle off. `fellow29` removes all of it from the specialized pipelines (`m3_f29_profile`, `m3_f29_perf`: pending).
-If the null test then matches stock, the default configuration may still pay a similar price for the code of the
-features it uses (the early returns of the zero-attenuation and back-facing skips in the light loop): next experiment.
+every toggle off. `fellow29` removes all of it from the specialized pipelines: `m3_f29_profile`, Lights Lab opaque pass stock
+**1.515**, null test **1.506** (was 1.847), default 1.199, M2 1.668. The binary's disabled code no longer costs anything;
+what is left is the milestone-2 configuration itself (+0.15 ms with its features on, the zero-attenuation skip and
+the depth slices off). Which of its features, and whether the default configuration pays part of it:
+`m3_f33a_ablation` (one profiled run per variant, Lights Lab and Bistro interior).
+
+### Frame level with `fellow29` (`m3_f29_perf`, 2026-10-02 03:01-04:12, 3 interleaved runs each)
+
+| Scene | stock ms | FellowEngine ms | Δ | p |
+|---|---:|---:|---:|---:|
+| Sponza | 13.431 | **7.071** | **−47.3 %** | <0.001 |
+| Bistro exterior | 5.590 | **4.994** | **−10.7 %** | 0.005 |
+| Lights Lab | 3.197 | **2.985** | **−6.6 %** | <0.001 |
+| Bistro interior | 4.289 | **4.058** | **−5.4 %** | 0.020 |
+| PBR Lab | 2.834 | 2.820 | −0.5 % | 0.74 (within noise) |
+
+The same as `fellow27` within noise in four scenes; Bistro exterior +1.3 % against `fellow27` (p 0.04, 3 runs, CV
+0.2-0.5 %): no cause identified, and smaller than the drift between sessions; re-measured in the next full
+session. The milestone-2 configuration
+of the same binary (`m2_29`): Lights Lab +3.4 % vs stock (p 0.047), every other scene faster than stock.
+
+### Benchmark scenes: what the Bistro scenes show (questions from the user, 2026-10-01)
+
+Two things in the Bistro captures looked wrong. Both are properties of how the benchmark scene loads the asset
+(identical for stock and FellowEngine), not renderer bugs:
+
+* **Holes in the floor and walls behind the shop windows (exterior).** The Lumberyard Bistro exterior contains the
+  restaurant only as a shell: its rooms, bar and furniture are `BistroInterior.fbx`, a separate file in the same
+  coordinates (probe `bistro_probe.json`: the interior's bounds x −2.1…13.6, y 0.2…7.5, z −13.9…5.5 m contain the
+  windows the exterior cameras look through). Through the windows one saw the far side of an empty shell. Also, the
+  window glass material (`MASTER_Glass_Dirty_MASKED`) has an alpha of 0 everywhere in its texture, so the glass was
+  invisible, and 16×16 placeholder textures (table cloths, bottle labels) are transparent black.
+* **Whole lamps glowing (interior).** The asset's lamp shades are emissive (the `Paris_Ceiling_Lamp` emissive texture
+  covers the shade's UV area, not only a bulb); the scene multiplied emission by 4 and the glow made the shades bloom
+  into bright discs.
+
+Scene revision v2 (`--bistro_mat=2`, `a297438`, `3c0fb4b`; v1 stays the default so earlier sessions remain
+comparable): the exterior also loads the interior (its own lights, cameras and animations removed); glass is a
+tinted, mostly transparent material (alpha 0.18, back faces culled); placeholders use the imported albedo colour;
+emission ×1; the material-name matching fixed ("street" no longer matches "tree"). Pathshots `m3_f32_pathshots_v2b`:
+tables and the bar behind tinted glass instead of holes. Timing on v2 (3 interleaved runs each):
+
+| Scene (v2) | stock ms | FellowEngine (`fellow29`) ms | Δ | p |
+|---|---:|---:|---:|---:|
+| Bistro exterior, without the interior (`m3_f30_perf_v2`) | 5.524 | 4.889 | −11.5 % | <0.001 |
+| Bistro interior (`m3_f30_perf_v2`) | 4.302 | 4.058 | −5.7 % | 0.002 |
+| Bistro exterior with the interior (`m3_f32_perf_v2b`) | 6.763 | **5.117** | **−24.3 %** | <0.001 |
+
+With the interior loaded the exterior costs stock about 1.2 ms more per frame and FellowEngine about 0.2 ms more
+(across two sessions; which passes take it is not profiled yet). Switching the benchmark default to v2 needs a new baseline for both
+Bistro scenes; not done yet.
 
 ## 8. Exact files changed (milestone 3, `0ba5e35..HEAD`, generated headers excluded)
 
@@ -211,9 +260,13 @@ engine arguments and start-up overrides), `tools/ab_stats.py`, scenes `lights_la
 
 ## 9. Next
 
-* The Lights Lab M2 cost (§1): which milestone-2 feature, and whether the default configuration still pays part of it.
+* The Lights Lab M2 cost (§1): which milestone-2 feature, and whether the default configuration still pays part of it
+  (`m3_f33a_ablation`, running).
+* TAA motion vectors of static geometry from the depth buffer (audit A.3 item 5: the opaque pass transforms every
+  vertex twice and writes a velocity target for TAA): `postfx/taa_camera_motion_vectors`, decision 0013, in test.
+* Bistro scene v2 as the benchmark default (needs a new baseline for both Bistro scenes).
 * Cache-space directional pyramid: with the shadow cache, cascades are copied into the atlas every frame the camera
   moves, so their pyramid is rebuilt every frame although the cache did not change (0.06-0.09 ms in Sponza and
   Bistro exterior).
-* SSIL (0.2-0.3 ms gather) with the SSAO shared-tile approach; screen-space effect quality settings as an explicit,
-  evaluated look option.
+* SSIL (0.2-0.3 ms gather): the SSAO shared tile gained nothing (0011), so not with that approach; screen-space
+  effect quality settings as an explicit, evaluated look option.
