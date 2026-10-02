@@ -29,12 +29,23 @@ stored words are exactly stock's (with or without depth slices).
 * lavapipe, toggle off vs on: Lights Lab 60-frame walk, PBR Lab 7 cameras (with and without the depth slices of 0008),
   Stress Lab 4 cameras: **0 differing pixels**. Negative control (the parallel version leaving slices 0-8 unwritten):
   3613 pixels differ in PBR Lab's dark room.
-* RTX (`m3_f35_temporal`, five scenes): pending.
+* RTX (`m3_f35_temporal`, five scenes, toggle off vs on): Bistro exterior 99 dB (bit-identical); Lights Lab, Bistro
+  interior, PBR Lab and Sponza at their run-to-run floor (the same values as `fellow33` vs `fellow35` with the toggle
+  off in the same session).
 
 ## Result
 
-Pending (`m3_f35_profile`, `m3_f35_perf`).
+Profile (`m3_f35_profile`, one run each): pack pass **Lights Lab 0.119 → 0.069 ms** (stock 0.074), Bistro interior
+0.013 → 0.010 ms; Bistro exterior and Sponza have no cluster elements (the pass does not run there).
+
+Frame (`m3_f35_perf`, 3 interleaved runs, reference toggle off): Lights Lab −1.3 % (p 0.068), Bistro interior −0.8 %
+(p 0.28), PBR Lab +0.6 % (p 0.60); Bistro exterior +1.7 % (p 0.005) although the pass never runs in that scene. The A/A
+check `m3_f36_aa` (the same configuration under three labels, 3 runs each, the toggle variant between them) gives
+−1.4 % (p 0.049), −0.7 % and −0.6 % (toggle) against the first label: with 3 runs, Bistro exterior differences up to
+about 1.5 % can come out "significant" with nothing changed; the +1.7 % in a scene where the change cannot act is read
+as the same effect.
 
 ## Decision
 
-Pending.
+Pending (paused 2026-10-02 at the user's request). Exact and faster at the pass level; the frame-level gain is below
+what 3 runs resolve. Proposal: on by default, after a longer A/B in Lights Lab (5+ runs).
