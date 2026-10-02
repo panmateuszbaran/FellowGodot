@@ -195,8 +195,13 @@ yet): Lights Lab opaque pass stock 1.508, null test (every FellowEngine toggle o
 every toggle off. `fellow29` removes all of it from the specialized pipelines: `m3_f29_profile`, Lights Lab opaque pass stock
 **1.515**, null test **1.506** (was 1.847), default 1.199, M2 1.668. The binary's disabled code no longer costs anything;
 what is left is the milestone-2 configuration itself (+0.15 ms with its features on, the zero-attenuation skip and
-the depth slices off). Which of its features, and whether the default configuration pays part of it:
-`m3_f33a_ablation` (one profiled run per variant, Lights Lab and Bistro interior).
+the depth slices off). `m3_f33a_ablation` (one profiled run per variant, Lights Lab opaque pass) finds it: M2 1.666 ms, M2 without the
+positional back-facing skip 1.557 (stock 1.523), M2 without mesh clusters 1.646. Without the zero-attenuation skip
+every light of the cluster reaches the back-facing test (most only to be dropped by their attenuation later), and the
+test costs more than it saves. The default configuration does not pay it: default 1.202, default without the
+back-facing skip 1.201, without mesh clusters 1.237 (noise ±0.05). The back-facing skip should stay paired with the
+zero-attenuation skip (0005, 0008). (Bistro interior's single profiled runs differ by up to 0.3 ms between variants
+that share the relevant features, so they are not used here.)
 
 ### Frame level with `fellow29` (`m3_f29_perf`, 2026-10-02 03:01-04:12, 3 interleaved runs each)
 
@@ -260,8 +265,6 @@ engine arguments and start-up overrides), `tools/ab_stats.py`, scenes `lights_la
 
 ## 9. Next
 
-* The Lights Lab M2 cost (§1): which milestone-2 feature, and whether the default configuration still pays part of it
-  (`m3_f33a_ablation`, running).
 * TAA motion vectors of static geometry from the depth buffer (audit A.3 item 5: the opaque pass transforms every
   vertex twice and writes a velocity target for TAA): `postfx/taa_camera_motion_vectors`, decision 0013, in test.
 * Bistro scene v2 as the benchmark default (needs a new baseline for both Bistro scenes).

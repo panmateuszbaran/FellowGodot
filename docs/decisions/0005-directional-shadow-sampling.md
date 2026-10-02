@@ -276,6 +276,11 @@ sequences). RTX: PBR Lab shadow pass 0.135 → **0.114 ms** (stock 0.114, `m3_f2
 
 * `skip_backfacing_directional`, `skip_backfacing_positional`, `skip_unblended_cascade`: **KEEP** (image-identical;
   opaque pass −0.07 to −0.37 ms in the night-state profiles; day-state confirmation in `fellow-m2_perf`).
+  Caveat (`m3_f33a_ablation`, `fellow29`, Lights Lab opaque pass, one profiled run each): without the zero-attenuation
+  skip (0008) — the milestone-2 configuration — `skip_backfacing_positional` costs +0.11 ms (1.666 vs 1.557 ms; stock
+  1.523): every light of the cluster then reaches the N·L test, most of them only to be dropped later by their
+  attenuation. With the zero-attenuation skip (the default) it costs nothing there (1.202 vs 1.201 ms) and saves in
+  Bistro interior (`m3_f24_perf`: +3.0 % without it, p 0.002). It should stay paired with the zero-attenuation skip.
 * `directional_max_mip`, `positional_max_mip`: v1 **REJECT** (exact, no net gain: build cost ≈ savings). v7 (min/max
   windows, one fetch, no 4-texel windows, rebuilt per written rect) **KEEP, on by default from `fellow22`**: exact
   (lavapipe bit-identical, RTX at every scene's run-to-run floor), Sponza −14 to −15 %, Bistro interior −3 to −4 %
