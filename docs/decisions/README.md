@@ -48,6 +48,6 @@ Status: KEEP | REWORK | REJECT | MEASURING      Branch / commit: ...      Toggle
 | [0007](0007-mesh-clusters.md) | Mesh clusters: frustum culling of k-d clusters inside large static surfaces | `geometry/mesh_clusters` | KEEP |
 | [0008](0008-light-cluster-depth.md) | Light clusters with logarithmic depth slices and conservative per-element depth ranges; zero-attenuation light skip | `lights/cluster_depth_slices`, `lights/zero_attenuation_skip` | KEEP |
 | [0009](0009-early-submit.md) | Frame/GPU gap: early submit, present from a second queue | `frame/early_submit`, `frame/separate_present_queue` | REJECT |
-| [0010](0010-blended-alpha-zero-skip.md) | Mix-blended quads with alpha 0 skip their lighting | `shading/blended_alpha_zero_skip` | in test |
+| [0010](0010-blended-alpha-zero-skip.md) | Mix-blended quads with alpha 0 skip their lighting | `shading/blended_alpha_zero_skip` | KEEP |
 | [0011](0011-shared-memory-tiles.md) | SSAO gather and TAA v2 neighbourhoods loaded once per workgroup (shared memory) | `postfx/ssao_shared_tile` | REJECT (no measurable effect) |
 | [0012](0012-specialization-constants.md) | FellowEngine shader features as specialization constants (no code for disabled features) | (each feature's toggle) | KEEP |

@@ -1,7 +1,7 @@
 # 0010 — Blended fragments with alpha 0 skip their lighting
 
-Status: **in test** (`fellow24`) · Branch `fellow/geometry` · Toggle `rendering/fellow/shading/blended_alpha_zero_skip`
-(default **off** until measured) · Code: `scene_shader_forward_clustered.cpp` (`FELLOW_ALPHA_ZERO_SKIP_OK`),
+Status: **KEEP** (`fellow24`, measured again as a specialization constant in `fellow29`) · Branch `fellow/geometry` · Toggle `rendering/fellow/shading/blended_alpha_zero_skip`
+(default **on**) · Code: `scene_shader_forward_clustered.cpp` (`FELLOW_ALPHA_ZERO_SKIP_OK`),
 `shaders/forward_clustered/scene_forward_clustered.glsl`, scene UBO flag 17 (`render_scene_data_rd.*`,
 `scene_data_inc.glsl`), `fellow_settings.*`. Test scene: `benchmarks/project/scenes/blend_lab.gd` (`--scene=blend`).
 
@@ -56,8 +56,21 @@ would make the stock blend produce NaN (`inf · 0`); it is not drawn here.)
   dropped quads magenta changes 38-334 k pixels per camera (about 99 % of what a per-fragment test would drop).
   PBR Lab (7 cameras) and Stress Lab (4 cameras): 0 differing pixels (their blended glass has a constant alpha: the
   skip never fires there; same debug build: 0 pixels).
-* RTX (`fellow24`): `m3_f24_temporal`, `m3_f24_profile`, `m3_f24_perf` — pending.
+* RTX 2060 (`fellow24`, toggle off vs on, `m3_f24_temporal`): Blend Lab 99 dB, max |d| 0 (bit-identical); the other
+  scenes at their usual TAA/driver floor, as with the toggle off against itself.
+* RTX timing:
+  * Blend Lab transparent pass (`m3_f24_profile`, GPU timestamps): **0.417 → 0.275 ms (−34 %)**.
+  * Blend Lab frame (`m3_f31_blend_az`, `fellow29` with and without the toggle, 5 runs each, 1920×1080):
+    **2.738 → 2.519 ms (−8.0 %, p < 0.001)**.
+  * Benchmark scenes (`m3_f27_az`, 5 runs): Sponza −0.4 %, Bistro interior −0.3 %, PBR Lab +1.2 %, all p > 0.25 —
+    within noise. Sponza's transparent pass (its blended plants) goes 1.434 → 1.383 ms (`m3_f24_profile`, −3.5 %,
+    one profile run: not separable from noise in the frame time). Glass with a constant alpha
+    never meets the condition, and with `fellow29`'s specialization constants (0012) a material that does not qualify
+    gets no extra code at all.
 
 ## Decision
 
-Pending the RTX measurements.
+**KEEP, on by default.** Exact (bit-identical output, verified on lavapipe and RTX), a large gain where the content
+has it (alpha-blended foliage, fences, hair and particle cards with transparent regions) and no measurable cost
+elsewhere.
+
