@@ -1,6 +1,6 @@
 # 0012 — FellowEngine shader features as specialization constants
 
-Status: **in test** (`fellow27`: shadow pyramids and PCSS blend band; `fellow29`: every feature) · Branch
+Status: **KEEP** (`fellow27`: shadow pyramids and PCSS blend band; `fellow29`: every feature) · Branch
 `fellow/geometry` · No toggle of its own: each feature's existing toggle now also selects its pipelines · Code:
 `forward_clustered/scene_shader_forward_clustered.h` (`ShaderSpecialization::packed_1` bits 6-14),
 `render_forward_clustered.cpp` (`_render_scene`, `_update_shader_quality_settings`),
@@ -38,9 +38,25 @@ feature whose toggle is on runs as before.
 lavapipe: PBR Lab captures (7 cameras) and the Lights Lab walk (60 frames) bit-identical to the previous build in the
 default configuration; each toggle off vs on gives what it gave before (zero-attenuation skip and blended alpha-zero
 skip identical; depth slices: the 2 fog pixels by 1/255 that stock's sampled tile ranges miss, decision 0008); the
-PCSS blend band still changes the image when on. RTX: `m3_f27_*`, `m3_f29_*` (pending).
+PCSS blend band still changes the image when on. RTX identity: `fellow27` vs `fellow29` defaults (`m3_f29_temporal`):
+Bistro exterior 99.0 dB (max |d| 0), the other scenes at their run-to-run floor.
+
+## Result (Lights Lab opaque pass, GPU ms, one profiled run per variant)
+
+| | stock | null test (every toggle off) | milestone-2 configuration | default |
+|---|---:|---:|---:|---:|
+| `fellow24` (runtime flags only, `m3_f24_ablation`) | 1.359 | – | 1.660 | 1.094 |
+| `fellow27` (pyramids, blend band as constants, `m3_f27_profile`) | 1.508 | **1.847** | 1.840 | 1.197 |
+| `fellow29` (every feature as constants, `m3_f29_profile`) | 1.515 | **1.506** | 1.668 | 1.199 |
+
+With every feature behind a specialization constant the null test is **stock again** (1.506 vs 1.515 ms; Bistro
+interior 2.156 vs 2.220, Sponza 3.554 vs 3.570, PBR Lab 0.887 vs 0.883): the 0.34 ms that `fellow27`'s null test paid
+in the Lights Lab was the disabled light-loop code (zero-attenuation and back-facing skips behind runtime flags). The
+milestone-2 configuration keeps +0.15 ms there: the positional back-facing skip, which is on in it and, without the
+zero-attenuation skip in front of it, tests every light of the loop. The default configuration has no disabled code
+left in its light loop and is unchanged (1.197 → 1.199 ms).
 
 ## Decision
 
-Pending `m3_f29_profile` / `m3_f29_perf`: whether the milestone-2 configuration and the null test come back to stock
-in the Lights Lab, and whether the default configuration gains from dropping the PCSS blend band's code.
+**KEEP** (exact; a configuration without a feature now carries none of its code — the null test equals stock, and the
+toggles' A/Bs measure the feature, not the presence of its code). Frame-level A/B: `m3_f29_perf`.
