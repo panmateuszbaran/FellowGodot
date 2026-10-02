@@ -98,6 +98,7 @@ runtime and per benchmark variant (`run_benchmarks.py --builds "label=fellow@key
 | `rendering/fellow/postfx/taa_v2_motion_soften` | **0.35** | resolve v2: under motion, pull the history towards the 3×3 mean in high-contrast neighbourhoods (0 = milestone-1 v2) |
 | `rendering/fellow/postfx/taa_v2_soften_contrast` | **0.45** | resolve v2: relative contrast (σ/μ) above which the soften applies |
 | `rendering/fellow/postfx/ssao_shared_tile` | false | SSAO gather: each workgroup's depths and normals loaded once into shared memory (image-identical; decision 0011: no measurable effect) |
+| `rendering/fellow/postfx/taa_camera_motion_vectors` | false | TAA: static surfaces drawn without motion vectors, their velocity computed from the depth buffer after the opaque pass; moving surfaces in a motion pass (same velocity up to half-float rounding; decision 0013, in test) |
 | `rendering/fellow/shadows/enabled` | true | master switch for shadow experiments |
 | `rendering/fellow/shadows/directional_cache` | **true** | directional shadow static cache (`docs/decisions/0004-directional-shadow-cache.md`) |
 | `rendering/fellow/shadows/directional_cache_guard_texels` | 256 | guard band per side (cache = cascade + 2 × guard texels) |
