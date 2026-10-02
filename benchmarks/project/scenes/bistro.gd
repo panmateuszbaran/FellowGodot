@@ -22,7 +22,8 @@ var interior := false
 #     alpha scissor vanished);
 #   * only materials named "glass" become glass, as plain tinted glass (v1 also turned everything named "window" into
 #     glass and kept the texture's alpha, which is 0 everywhere for MASTER_Glass_Dirty_MASKED: invisible panes);
-#   * emission at energy 1 (v1: 4, which turns the whole emissive lamp shades into white blobs under glow).
+#   * emission at energy 1 (v1: 4, which turns the whole emissive lamp shades into white blobs under glow);
+#   * exterior: the restaurant interior (BistroInterior.fbx, same coordinates) is loaded too, without its lights.
 var mat_rev := 1
 var material_report := {"rebuilt": 0, "alpha_scissor": [], "emissive": [], "glass": [], "placeholders": [], "missing_textures": 0, "kept": 0}
 var _mat_cache := {}
@@ -44,6 +45,14 @@ func build(p_args: Dictionary) -> void:
 	var pr := probe()
 	take_camera()
 	_adjust_imported_lights(content_root)
+	if not interior and mat_rev >= 2:
+		# v2: the restaurant's interior is a separate file in the same coordinates (BistroInterior.fbx); without it the
+		# exterior's restaurant is an empty shell seen through its windows (walls and floor missing). Loaded after the
+		# exterior's camera and bounds are taken; its own lights, cameras and animations are removed.
+		var inner := load_part(INTERIOR)
+		if inner:
+			_strip_for_exterior(inner)
+			_fix_materials(inner)
 	if interior:
 		_setup_interior_lighting()
 	else:
@@ -160,6 +169,14 @@ func _rebuild(m: Material) -> Material:
 	material_report["rebuilt"] += 1
 	_mat_cache[key] = orm
 	return orm
+
+
+func _strip_for_exterior(n: Node) -> void:
+	for c in n.get_children():
+		_strip_for_exterior(c)
+	if n is Light3D or n is Camera3D or n is AnimationPlayer:
+		n.get_parent().remove_child(n)
+		n.queue_free()
 
 
 ## Lower-case words of a material name: split at non-letters/digits and at lower-to-upper case changes
