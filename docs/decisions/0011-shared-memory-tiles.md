@@ -28,6 +28,12 @@ previous build (SSAO), the Lights Lab walk bit-identical (TAA). RTX (`m3_f23_tem
 tile off vs on): every scene at its run-to-run floor (Lights Lab 88.0 dB, max |d| 4; Sponza 75.0 dB, max 3; Bistro
 interior 67.3 dB and PBR Lab 73.3 dB as their null tests).
 
+RTX, Bistro exterior (`m3_f29_temporal`, `fellow27` with the tile off vs on): **not bit-identical** — 81.4 dB mean
+(min 75.6), max |d| 5/255, no pixel off by more than 2/255 in any frame (the scene is bit-identical run to run, 99 dB):
+the GPU's gathers and its shared-memory loads of the same texels do not end in exactly the same AO everywhere (lavapipe
+cannot show it). Within the image-identity tolerance of the other scenes' floors, but not exact; moot, as rejected
+below.
+
 ## Result
 
 Profile (`m3_f23_profile`, one run each, GPU ms): SSAO pass with / without the tile 0.323 / 0.325 (Lights Lab),
