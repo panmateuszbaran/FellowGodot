@@ -49,11 +49,18 @@ waits on S2 — exactly the single-queue order its barriers assume — and the f
   this checks the split, the barriers across it and the moved recording), setting off vs on: PBR Lab 7 cameras, Lights
   Lab 60-frame walk, Stress Lab 4 cameras and both 60-frame sequences (moving objects, vertex-animated surface), Blend
   Lab 4 cameras: **0 differing pixels**; 92-366 async segments per session, **0 conflicts**.
-* RTX: pending (`m3_f38_temporal`).
+* RTX 5070 Ti (`m3_f38_temporal`, six scenes, setting off vs on): Bistro exterior and Blend Lab 99 dB (bit-identical),
+  the others at their run-to-run floor (the same values as `fellow35` vs `fellow38` with the setting off); 107-124
+  async segments per run, **0 conflicts**.
 
 ## Result
 
-Pending (`m3_f38_perf`, `m3_f38_profile`).
+Interim (`m3_f38_perf`, interrupted on 2026-10-04 at 20:20 at the user's request after the Sponza runs and one Bistro
+exterior run): per-run pairs, setting on minus off, Sponza −0.19, +0.22, +0.15, +0.02, +0.14 ms (one more pair, −5.1 ms,
+is a disturbed run), Bistro exterior +0.33 ms. No gain is visible: with a second queue of the main family the GPU does
+not appear to run the two parts at the same time, and the extra submissions and the wait cost a little. Next: the
+dedicated compute queue family (needs concurrent sharing or ownership transfers, and barriers restricted to compute
+stages on that queue), or stop here.
 
 ## Decision
 
