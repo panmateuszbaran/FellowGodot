@@ -8619,7 +8619,9 @@ Error RenderingDevice::initialize(RenderingContextDriver *p_context, DisplayServ
 	// that family's queues alongside the graphics queue. Every image and buffer is then created shareable by the main,
 	// compute and transfer families (concurrent sharing), so no ownership transfers are needed. With
 	// async_compute_family = 1 (or no compute family) it is a second queue of the main family; where that family has a
-	// single queue (lavapipe), the virtual queue shares it and the submissions simply run one after another.
+	// single queue (lavapipe), the virtual queue shares it and the submissions simply run one after another. With
+	// async_compute_family = 2 it is the main queue itself: the same split submissions without any concurrency (to
+	// measure what the split alone does).
 	const bool fellow_async_setting = fellow_ps->has_setting("rendering/fellow/frame/async_compute") && bool(fellow_ps->get_setting("rendering/fellow/frame/async_compute")) && (!fellow_ps->has_setting("rendering/fellow/enabled") || bool(fellow_ps->get_setting("rendering/fellow/enabled")));
 	if (fellow_async_setting && is_main_instance && driver->get_api_name() == "Vulkan") {
 		const int fellow_family_choice = fellow_ps->has_setting("rendering/fellow/frame/async_compute_family") ? int(fellow_ps->get_setting("rendering/fellow/frame/async_compute_family")) : 0;
@@ -8630,7 +8632,12 @@ Error RenderingDevice::initialize(RenderingContextDriver *p_context, DisplayServ
 				fellow_async_queue_family = compute_family;
 			}
 		}
-		fellow_async_queue = driver->command_queue_create(fellow_async_queue_family);
+		if (fellow_family_choice == 2) {
+			// Measurement variant: the main queue itself (the same submissions, no concurrency).
+			fellow_async_queue = main_queue;
+		} else {
+			fellow_async_queue = driver->command_queue_create(fellow_async_queue_family);
+		}
 		if (fellow_async_queue) {
 			if (fellow_async_queue_family != main_queue_family) {
 				RDD::CommandQueueFamilyID families[3] = { main_queue_family, fellow_async_queue_family, transfer_queue_family };
@@ -9275,6 +9282,14 @@ void RenderingDevice::finalize() {
 		}
 
 		transfer_queue = RDD::CommandQueueID();
+	}
+
+	if (fellow_async_queue) {
+		if (main_queue != fellow_async_queue) {
+			driver->command_queue_free(fellow_async_queue);
+		}
+
+		fellow_async_queue = RDD::CommandQueueID();
 	}
 
 	if (main_queue) {

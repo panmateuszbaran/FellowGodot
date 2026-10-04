@@ -80,7 +80,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/frame/early_submit", false);
 	GLOBAL_DEF_RST("rendering/fellow/frame/separate_present_queue", false);
 	GLOBAL_DEF_RST("rendering/fellow/frame/async_compute", false);
-	GLOBAL_DEF_RST(PropertyInfo(Variant::INT, "rendering/fellow/frame/async_compute_family", PROPERTY_HINT_ENUM, "Dedicated Compute Family,Main Family"), 0);
+	GLOBAL_DEF_RST(PropertyInfo(Variant::INT, "rendering/fellow/frame/async_compute_family", PROPERTY_HINT_ENUM, "Dedicated Compute Family,Main Family,Main Queue (Split Only)"), 0);
 }
 
 Fellow::Stats &Fellow::stats() {
