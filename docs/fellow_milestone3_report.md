@@ -177,7 +177,7 @@ Milestone 3 changes no pixel by design; the image-quality comparison with the gr
 | One clear of the whole directional atlas when no cascade comes from the cache (0005) | `77c8b1a` | identical; PBR Lab shadow pass 0.135 → 0.114 ms (= stock): **the PBR Lab regression is gone** |
 | Every FellowEngine scene-shader feature behind specialization constants (0012) | `ead26ec`, `9deb4fa` | identical (lavapipe; RTX `m3_f29_temporal` at the floor); null test = stock (Lights Lab opaque pass 1.506 vs 1.515 ms, was 1.847); defaults unchanged (`m3_f29_perf` vs `fellow27`: all within noise except Bistro exterior +1.3 %, p 0.04, 3 runs) → **KEEP** |
 | TAA motion vectors of static geometry from the depth buffer (0013, `postfx/taa_camera_motion_vectors`) | `1d21886` | velocity equal to stock's up to half-float rounding (lavapipe readback: ≤ 0.015 px), image not bit-identical (RTX 55-71 dB vs floors of 67-99 dB); opaque pass −0.15 ms (Bistro exterior) / −0.19 ms (Sponza), but frame within noise everywhere (`m3_f33_perf`: −1.2 % to +2.0 %, all p > 0.1) → **REJECT**, off |
-| Cluster pack pass with one workgroup per tile (0014, `lights/cluster_pack_parallel`) | `d01ce57` | bit-identical (lavapipe; RTX at the floor); pack pass Lights Lab 0.119 → 0.069 ms (stock 0.074); frame Lights Lab −1.3 % (p 0.07), others within noise → decision pending (paused), proposed on |
+| Cluster pack pass with one workgroup per tile (0014, `lights/cluster_pack_parallel`) | `d01ce57` | bit-identical (lavapipe; RTX at the floor); pack pass Lights Lab 0.119 → 0.069 ms (stock 0.074); frame (`m3_f37_pack`, paired runs) Lights Lab −2.3 % (5/5 pairs), Bistro interior −1.0 % (6/6, p 0.001) → **KEEP, on** |
 
 ### Frame level after these changes (`m3_f27_perf`, 2026-10-02 00:27-01:38, `fellow27` defaults, 3 runs each)
 
@@ -296,7 +296,6 @@ engine arguments and start-up overrides), `tools/ab_stats.py`, scenes `lights_la
 
 ## 9. Next
 
-* 0014 (cluster pack per tile): longer Lights Lab A/B, then on by default.
 * TAA camera motion vectors (0013, rejected as it stands): worth retrying only with the velocity written by the depth
   downsample SSAO/SSIL already run (no separate pass).
 * Cache-space directional pyramid: with the shadow cache, cascades are copied into the atlas every frame the camera

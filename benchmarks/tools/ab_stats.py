@@ -9,6 +9,11 @@ variation, delta vs. the reference build (ms and %), Welch's t-test on the per-r
   "faster" / "slower"  : p < 0.05 and |delta| > 1 %   (a statistically clear difference that is also practically visible)
   "within noise"       : otherwise
   "noisy"              : either side has CV > 3 % (the runner's own threshold) - treat the delta with caution.
+Paired columns (added 2026-10-04): the runner interleaves the variants ABBA inside every run, so run i of two variants
+were measured minutes apart under the same thermal and power state. "Δ paired" is the mean of the per-run differences
+and "p (paired)" a paired t-test on them; it removes drift between runs (power-state changes, which inflate the CV and
+hide real differences from Welch's test) but not effects that change within a run. Reported next to Welch's verdict,
+not instead of it.
 With --passes, reports per-pass GPU times from profile sessions instead (one profiled run per configuration: no t-test,
 per-frame spread is shown instead).
 """
@@ -72,20 +77,38 @@ def _cf(a, b, x, it=200, eps=3e-14):
 
 
 def run_means(entry, metric):
-    out = []
-    for r in entry.get("runs", []):
+    return list(run_means_by_index(entry, metric).values())
+
+
+def run_means_by_index(entry, metric):
+    out = {}
+    for i, r in enumerate(entry.get("runs", [])):
         s = r.get("summary") if isinstance(r, dict) else None
         if r.get("valid") and s and metric in s:
-            out.append(s[metric]["mean"])
+            out[r.get("run", i)] = s[metric]["mean"]
     return out
+
+
+def paired_p(diffs):
+    """Two-sided p-value of a paired t-test (one-sample t-test of the differences against 0)."""
+    n = len(diffs)
+    if n < 3:
+        return None
+    m = statistics.fmean(diffs)
+    sd = statistics.stdev(diffs)
+    if sd <= 0:
+        return 0.0 if m != 0 else 1.0
+    t = m / (sd / math.sqrt(n))
+    df = n - 1
+    return _betainc(df / 2.0, 0.5, df / (df + t * t))
 
 
 def perf_table(sess, ref, metric):
     res = sess["results"]
     keys = sorted({(e["scene"], e["resolution"]) for e in res.values()})
     builds = sorted({e["build"] for e in res.values()}, key=lambda b: (b != ref, b))
-    lines = [f"| Scene | Res | Build | {metric} mean | std | CV | Δ vs {ref} | Δ % | p (Welch) | verdict | runs |",
-             "|---|---|---|---:|---:|---:|---:|---:|---:|---|---:|"]
+    lines = [f"| Scene | Res | Build | {metric} mean | std | CV | Δ vs {ref} | Δ % | p (Welch) | verdict | runs | Δ paired % | p (paired) | pairs faster |",
+             "|---|---|---|---:|---:|---:|---:|---:|---:|---|---:|---:|---:|---:|"]
     rows = []
     for scene, resol in keys:
         base = res.get(f"{scene}|{resol}|{ref}")
@@ -102,7 +125,7 @@ def perf_table(sess, ref, metric):
             sd = statistics.stdev(m) if len(m) > 1 else 0.0
             cv = sd / mean if mean else 0.0
             if b == ref or not bm:
-                lines.append(f"| {scene} | {resol} | {b} | {mean:.3f} | {sd:.3f} | {cv * 100:.1f}% | | | | reference | {len(m)} |")
+                lines.append(f"| {scene} | {resol} | {b} | {mean:.3f} | {sd:.3f} | {cv * 100:.1f}% | | | | reference | {len(m)} | | | |")
                 continue
             bmean = statistics.fmean(bm)
             bcv = (statistics.stdev(bm) / bmean) if len(bm) > 1 and bmean else 0.0
@@ -112,9 +135,18 @@ def perf_table(sess, ref, metric):
             verdict = ("faster" if d < 0 else "slower") if (p is not None and p < 0.05 and abs(dp) > 1.0) else "within noise"
             if cv > 0.03 or bcv > 0.03:
                 verdict += " (noisy)"
-            rows.append({"scene": scene, "res": resol, "build": b, "delta_ms": d, "delta_pct": dp, "p": p, "verdict": verdict})
+            bi = run_means_by_index(base, metric)
+            mi = run_means_by_index(e, metric)
+            common = sorted(set(bi) & set(mi))
+            diffs = [mi[k] - bi[k] for k in common]
+            pp = paired_p(diffs)
+            pd = (statistics.fmean(diffs) / statistics.fmean([bi[k] for k in common]) * 100) if diffs else None
+            faster = sum(1 for x in diffs if x < 0)
+            rows.append({"scene": scene, "res": resol, "build": b, "delta_ms": d, "delta_pct": dp, "p": p, "verdict": verdict,
+                         "paired_delta_pct": pd, "paired_p": pp, "pairs": len(diffs), "pairs_faster": faster})
             lines.append(f"| {scene} | {resol} | {b} | {mean:.3f} | {sd:.3f} | {cv * 100:.1f}% | {d:+.3f} | {dp:+.1f}% | "
-                         f"{'–' if p is None else f'{p:.3f}'} | {verdict} | {len(m)} |")
+                         f"{'–' if p is None else f'{p:.3f}'} | {verdict} | {len(m)} | "
+                         f"{'–' if pd is None else f'{pd:+.1f}%'} | {'–' if pp is None else f'{pp:.3f}'} | {faster}/{len(diffs)} |")
     return "\n".join(lines), rows
 
 

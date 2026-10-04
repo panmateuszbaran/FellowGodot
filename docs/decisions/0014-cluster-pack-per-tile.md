@@ -1,7 +1,7 @@
 # 0014 — Cluster pack pass: one workgroup per tile
 
-Status: **in test** (`fellow35`) · Branch `fellow/geometry` · Toggle `rendering/fellow/lights/cluster_pack_parallel`
-(default **off** until measured) · Code: `shaders/cluster_store.glsl` (`FELLOW_PARALLEL`), `cluster_builder_rd.{h,cpp}`,
+Status: **KEEP** (`fellow35`; on by default from `fellow38`) · Branch `fellow/geometry` · Toggle `rendering/fellow/lights/cluster_pack_parallel`
+(default **on**) · Code: `shaders/cluster_store.glsl` (`FELLOW_PARALLEL`), `cluster_builder_rd.{h,cpp}`,
 `fellow_settings.*`.
 
 ## Problem
@@ -45,7 +45,16 @@ check `m3_f36_aa` (the same configuration under three labels, 3 runs each, the t
 about 1.5 % can come out "significant" with nothing changed; the +1.7 % in a scene where the change cannot act is read
 as the same effect.
 
+Longer A/B (`m3_f37_pack`, 2026-10-04, 5-6 ABBA-interleaved runs; the laptop's power draw moved between 65 and 81 W
+across runs, CV up to 4 %, so the per-run pairs are the useful comparison — `ab_stats.py` reports them since this
+session):
+
+| scene | toggle off ms | on ms | Δ (paired) | p (paired) | pairs faster |
+|---|---:|---:|---:|---:|---:|
+| Lights Lab | 3.246 | 3.172 | −2.3 % | 0.155 | 5/5 |
+| Bistro interior | 4.251 | 4.210 | −1.0 % | 0.001 | 6/6 |
+
 ## Decision
 
-Pending (paused 2026-10-02 at the user's request). Exact and faster at the pass level; the frame-level gain is below
-what 3 runs resolve. Proposal: on by default, after a longer A/B in Lights Lab (5+ runs).
+**KEEP, on by default** (from `fellow38`). Exact (bit-identical, lavapipe and RTX); the pack pass is 0.05 ms faster in
+Lights Lab and below stock's; the frame is faster in all 11 run pairs of the two scenes with cluster elements.

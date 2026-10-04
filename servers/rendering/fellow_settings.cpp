@@ -73,12 +73,13 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/lights/enabled", true);
 	GLOBAL_DEF("rendering/fellow/lights/cluster_depth_slices", true);
 	GLOBAL_DEF("rendering/fellow/lights/zero_attenuation_skip", true);
-	GLOBAL_DEF("rendering/fellow/lights/cluster_pack_parallel", false);
+	GLOBAL_DEF("rendering/fellow/lights/cluster_pack_parallel", true);
 	GLOBAL_DEF("rendering/fellow/postfx/ssao_shared_tile", false);
 	GLOBAL_DEF("rendering/fellow/postfx/taa_camera_motion_vectors", false);
 	GLOBAL_DEF("rendering/fellow/shading/blended_alpha_zero_skip", true);
 	GLOBAL_DEF("rendering/fellow/frame/early_submit", false);
 	GLOBAL_DEF_RST("rendering/fellow/frame/separate_present_queue", false);
+	GLOBAL_DEF_RST("rendering/fellow/frame/async_compute", false);
 }
 
 Fellow::Stats &Fellow::stats() {
@@ -112,6 +113,8 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["geometry_cluster_triangles_drawn"] = s.geometry_cluster_triangles_drawn.get();
 	d["geometry_cluster_triangles_culled"] = s.geometry_cluster_triangles_culled.get();
 	d["frame_early_submits"] = s.frame_early_submits.get();
+	d["frame_async_uses"] = s.frame_async_uses.get();
+	d["frame_async_conflicts"] = s.frame_async_conflicts.get();
 	d["shadow_pyramid_builds"] = s.shadow_pyramid_builds.get();
 	d["shadow_pyramid_texels"] = s.shadow_pyramid_texels.get();
 	d["shadow_pyramid_texels_needed"] = s.shadow_pyramid_texels_needed.get();
