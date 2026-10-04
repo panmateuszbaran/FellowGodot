@@ -404,6 +404,30 @@ void RenderingDeviceGraph::_add_command_to_graph(ResourceTracker **p_resource_tr
 		ResourceTracker *resource_tracker = p_resource_trackers[i];
 		DEV_ASSERT(resource_tracker != nullptr);
 
+		if (fellow_async_phase != 0) {
+			// FellowEngine async compute (decision 0015): a slice counts as its whole texture.
+			ResourceTracker *fellow_root = resource_tracker->parent != nullptr ? resource_tracker->parent : resource_tracker;
+			const ResourceUsage fellow_usage = p_resource_usages[i];
+			const bool fellow_write = _is_write_usage(fellow_usage);
+			if (fellow_async_phase == 1) {
+				for (ResourceTracker *t : { resource_tracker, fellow_root }) {
+					if (t->fellow_async_mark != fellow_async_epoch) {
+						t->fellow_async_mark = fellow_async_epoch;
+						t->fellow_async_usage = fellow_usage;
+						t->fellow_async_write = fellow_write;
+					} else {
+						t->fellow_async_write = t->fellow_async_write || fellow_write || t->fellow_async_usage != fellow_usage;
+					}
+				}
+			} else {
+				for (ResourceTracker *t : { resource_tracker, fellow_root }) {
+					if (t->fellow_async_mark == fellow_async_epoch && (fellow_write || t->fellow_async_write || t->fellow_async_usage != fellow_usage)) {
+						fellow_async_conflict = true;
+					}
+				}
+			}
+		}
+
 		resource_tracker->reset_if_outdated(tracking_frame);
 
 		const RDD::TextureSubresourceRange &subresources = resource_tracker->texture_subresources;

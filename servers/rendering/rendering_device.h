@@ -1842,6 +1842,16 @@ private:
 		RDG::CommandBufferPool fellow_late_command_buffer_pool;
 		bool fellow_early_submitted = false;
 
+		// FellowEngine async compute (rendering/fellow/frame/async_compute, decision 0015): spare command buffers that
+		// the frame switches to after each mid-frame submission (swapped with command_buffer / command_buffer_pool; all
+		// from command_pool, reset with it), and two semaphores per use (prefix done -> async segment, async segment
+		// done -> the work that reads its results).
+		LocalVector<RDD::CommandBufferID> fellow_segment_command_buffers;
+		LocalVector<RDG::CommandBufferPool> fellow_segment_command_buffer_pools;
+		uint32_t fellow_segments_used = 0;
+		LocalVector<RDD::SemaphoreID> fellow_async_semaphores;
+		uint32_t fellow_async_uses = 0;
+
 		struct Timestamp {
 			String description;
 			uint64_t value = 0;
@@ -1885,6 +1895,30 @@ protected:
 	// FellowEngine early submit (see fellow_settings.h).
 	bool fellow_early_submit_supported = false;
 	void _fellow_submit_early();
+
+	// FellowEngine async compute (decision 0015).
+	static const uint32_t FELLOW_ASYNC_MAX_USES = 4;
+	RDD::CommandQueueID fellow_async_queue;
+	bool fellow_async_distinct_queue = false;
+	uint32_t fellow_async_current_use = 0;
+	bool fellow_async_recording = false;
+	bool fellow_async_concurrent = false;
+	void _fellow_next_command_buffer();
+	bool _fellow_transfer_workers_idle();
+
+public:
+	// FellowEngine async compute (decision 0015). Between begin() and end() the caller records compute work that only
+	// needs what was recorded before begin(); between end() and join(), work that neither reads nor writes anything the
+	// async part uses (checked: a conflict makes that work wait for the async part). Work recorded after join() may
+	// read the async results. begin() submits what was recorded so far; end() submits the async part to the second
+	// queue; join() submits the concurrent part. begin() returns false (nothing to do; record as usual) when async
+	// compute is off or unavailable.
+	bool fellow_async_compute_begin();
+	void fellow_async_compute_end();
+	void fellow_async_compute_join();
+	bool fellow_async_compute_available() const { return fellow_async_queue.id != 0; }
+
+protected:
 
 	void execute_chained_cmds(bool p_present_swap_chain,
 			RenderingDeviceDriver::FenceID p_draw_fence,

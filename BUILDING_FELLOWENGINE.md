@@ -129,6 +129,7 @@ runtime and per benchmark variant (`run_benchmarks.py --builds "label=fellow@key
 | `rendering/fellow/shading/blended_alpha_zero_skip` | **true** | mix-blended fragments whose 2×2 quad has alpha exactly 0 skip lighting, shadows and fog (exact; decision 0010: Blend Lab −8.0 % frame, transparent pass −34 %) |
 | `rendering/fellow/frame/early_submit` | false | submit the frame's rendering before the swap chain acquisition (decision 0009: rejected, no effect) |
 | `rendering/fellow/frame/separate_present_queue` | false | start-up setting (project.godot / override.cfg): present from a second queue (decision 0009: rejected, slower) |
+| `rendering/fellow/frame/async_compute` | false | start-up only (project.godot / override.cfg): screen-space effects submitted to a second queue of the main family, running while the main queue renders shadows, clusters and fog (same commands, image-identical; decision 0015, in test) |
 | `rendering/fellow/profiling/pass_timestamps` | false | per-pass GPU timestamps without `--gpu-profile` (performance overlay) |
 
 Build times on the benchmark machine (Core Ultra 9 275HX, 24 threads): template_release ~14 min, editor ~18 min

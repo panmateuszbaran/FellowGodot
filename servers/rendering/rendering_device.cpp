@@ -8068,6 +8068,11 @@ void RenderingDevice::_begin_frame(bool p_presented) {
 	// Before writing to this frame, wait for it to be finished.
 	_stall_for_frame(frame);
 
+	// FellowEngine async compute: every segment of the frame has finished (the frame's last submission waited on the
+	// async parts); the command buffers are reset with the pool below.
+	frames[frame].fellow_segments_used = 0;
+	frames[frame].fellow_async_uses = 0;
+
 	if (frames[frame].fellow_early_submitted) {
 		// Both command buffers of the frame have finished: record into the first one again.
 		SWAP(frames[frame].command_buffer, frames[frame].fellow_late_command_buffer);
@@ -8232,6 +8237,111 @@ void RenderingDevice::_fellow_submit_early() {
 	driver->command_buffer_begin(f.command_buffer);
 	draw_graph.begin();
 	Fellow::stats().frame_early_submits.increment();
+}
+
+void RenderingDevice::_fellow_next_command_buffer() {
+	Frame &f = frames[frame];
+	DEV_ASSERT(f.fellow_segments_used < f.fellow_segment_command_buffers.size());
+	SWAP(f.command_buffer, f.fellow_segment_command_buffers[f.fellow_segments_used]);
+	SWAP(f.command_buffer_pool, f.fellow_segment_command_buffer_pools[f.fellow_segments_used]);
+	f.fellow_segments_used++;
+	driver->command_buffer_begin(f.command_buffer);
+	draw_graph.begin();
+}
+
+bool RenderingDevice::_fellow_transfer_workers_idle() {
+	MutexLock transfer_worker_lock(transfer_worker_pool_mutex);
+	for (uint32_t i = 0; i < transfer_worker_pool_size; i++) {
+		TransferWorker *worker = transfer_worker_pool[i];
+		MutexLock lock(worker->thread_mutex);
+		if (worker->recording) {
+			return false;
+		}
+	}
+	return true;
+}
+
+bool RenderingDevice::fellow_async_compute_begin() {
+	// The work recorded so far (the prefix) is submitted to the main queue and signals the first semaphore; the
+	// async part, recorded next, is submitted to the second queue waiting on it (ALL_COMMANDS: nothing in the async
+	// part starts before the prefix is complete, and the prefix's writes are visible to it).
+	if (!fellow_async_queue || fellow_async_recording || fellow_async_concurrent || !Fellow::frame_async_compute()) {
+		return false;
+	}
+	if (draw_list.active || compute_list.active || raytracing_list.active) {
+		return false;
+	}
+	Frame &f = frames[frame];
+	if (f.fellow_async_uses >= FELLOW_ASYNC_MAX_USES || f.fellow_segments_used + 3 > f.fellow_segment_command_buffers.size()) {
+		return false;
+	}
+	if (!_fellow_transfer_workers_idle()) {
+		// Uploads in flight: their semaphores are waited on by the next main submission, which the async part would
+		// not wait for.
+		return false;
+	}
+
+	fellow_async_current_use = f.fellow_async_uses++;
+	_end_frame();
+	execute_chained_cmds(false, RDD::FenceID(), f.fellow_async_semaphores[fellow_async_current_use * 2 + 0]);
+	_fellow_next_command_buffer();
+
+	draw_graph.fellow_async_epoch++;
+	draw_graph.fellow_async_phase = 1;
+	draw_graph.fellow_async_conflict = false;
+	fellow_async_recording = true;
+	return true;
+}
+
+void RenderingDevice::fellow_async_compute_end() {
+	ERR_FAIL_COND(!fellow_async_recording);
+	ERR_FAIL_COND(draw_list.active || compute_list.active || raytracing_list.active);
+	Frame &f = frames[frame];
+	draw_graph.fellow_async_phase = 0;
+	fellow_async_recording = false;
+
+	_end_frame();
+	// The async part waits on the prefix and on any upload submitted while it was ended (none when the transfer
+	// workers were idle at begin()).
+	thread_local LocalVector<RDD::SemaphoreID> waits;
+	waits.clear();
+	waits.push_back(f.fellow_async_semaphores[fellow_async_current_use * 2 + 0]);
+	for (RDD::SemaphoreID sem : f.semaphores_to_wait_on) {
+		waits.push_back(sem);
+	}
+	f.semaphores_to_wait_on.clear();
+	DEV_ASSERT(f.command_buffer_pool.buffers_used == 0);
+	f.command_buffer_pool.buffers_used = 0;
+	driver->command_queue_execute_and_present(fellow_async_queue, waits, f.command_buffer, f.fellow_async_semaphores[fellow_async_current_use * 2 + 1], RDD::FenceID(), {});
+	_fellow_next_command_buffer();
+
+	draw_graph.fellow_async_phase = 2;
+	fellow_async_concurrent = true;
+}
+
+void RenderingDevice::fellow_async_compute_join() {
+	ERR_FAIL_COND(!fellow_async_concurrent);
+	ERR_FAIL_COND(draw_list.active || compute_list.active || raytracing_list.active);
+	Frame &f = frames[frame];
+	draw_graph.fellow_async_phase = 0;
+	fellow_async_concurrent = false;
+	const bool conflict = draw_graph.fellow_async_conflict;
+	const RDD::SemaphoreID done = f.fellow_async_semaphores[fellow_async_current_use * 2 + 1];
+
+	_end_frame();
+	if (conflict) {
+		// The concurrent part touches something the async part uses: it waits for it (as if recorded after it on one
+		// queue, which is what its barriers assume). The work after it follows it on the main queue.
+		f.semaphores_to_wait_on.push_back(done);
+		Fellow::stats().frame_async_conflicts.increment();
+	}
+	execute_chained_cmds(false, RDD::FenceID(), RDD::SemaphoreID());
+	_fellow_next_command_buffer();
+	if (!conflict) {
+		// The next main-queue submission (the rest of this frame, or the next mid-frame one) waits on the async part.
+		f.semaphores_to_wait_on.push_back(done);
+	}
+	Fellow::stats().frame_async_uses.increment();
 }
 
 void RenderingDevice::_execute_frame(bool p_present) {
@@ -8493,6 +8603,18 @@ Error RenderingDevice::initialize(RenderingContextDriver *p_context, DisplayServ
 		present_queue_family = main_queue_family;
 	}
 
+	// FellowEngine async compute (rendering/fellow/frame/async_compute, read at start-up like the present queue: the
+	// device creates a second queue per family for it, see the Vulkan driver): a second queue of the main family, so
+	// that no resource needs a queue family ownership transfer. Where the family has a single queue (lavapipe), the
+	// virtual queue shares it and the submissions simply run one after another.
+	const bool fellow_async_setting = fellow_ps->has_setting("rendering/fellow/frame/async_compute") && bool(fellow_ps->get_setting("rendering/fellow/frame/async_compute")) && (!fellow_ps->has_setting("rendering/fellow/enabled") || bool(fellow_ps->get_setting("rendering/fellow/enabled")));
+	if (fellow_async_setting && is_main_instance && driver->get_api_name() == "Vulkan") {
+		fellow_async_queue = driver->command_queue_create(main_queue_family);
+		if (fellow_async_queue) {
+			print_verbose("FellowEngine: async compute queue created.");
+		}
+	}
+
 	// Use the processor count as the max amount of transfer workers that can be created.
 	transfer_worker_pool_max_size = OS::get_singleton()->get_processor_count();
 
@@ -8551,6 +8673,32 @@ Error RenderingDevice::initialize(RenderingContextDriver *p_context, DisplayServ
 		}
 		frames[i].fellow_late_command_buffer_pool.pool = frames[i].command_pool;
 		frames[i].fellow_early_submitted = false;
+
+		if (fellow_async_queue) {
+			// FellowEngine async compute: three switches per use (after the prefix, the async part, the concurrent part).
+			const uint32_t segment_count = FELLOW_ASYNC_MAX_USES * 3;
+			frames[i].fellow_segment_command_buffer_pools.resize(segment_count);
+			for (uint32_t j = 0; j < segment_count; j++) {
+				RDD::CommandBufferID cb = driver->command_buffer_create(frames[i].command_pool);
+				if (!cb) {
+					frame_failed = true;
+					break;
+				}
+				frames[i].fellow_segment_command_buffers.push_back(cb);
+				frames[i].fellow_segment_command_buffer_pools[j].pool = frames[i].command_pool;
+			}
+			for (uint32_t j = 0; j < FELLOW_ASYNC_MAX_USES * 2 && !frame_failed; j++) {
+				RDD::SemaphoreID sem = driver->semaphore_create();
+				if (!sem) {
+					frame_failed = true;
+					break;
+				}
+				frames[i].fellow_async_semaphores.push_back(sem);
+			}
+			if (frame_failed) {
+				break;
+			}
+		}
 
 		// Create the semaphores for the transfer workers.
 		frames[i].transfer_worker_semaphores.resize(transfer_worker_pool_max_size);
@@ -9017,6 +9165,15 @@ void RenderingDevice::finalize() {
 		RDG::CommandBufferPool &late_buffer_pool = frames[i].fellow_late_command_buffer_pool;
 		for (uint32_t j = 0; j < late_buffer_pool.buffers.size(); j++) {
 			driver->semaphore_free(late_buffer_pool.semaphores[j]);
+		}
+
+		for (RDG::CommandBufferPool &segment_pool : frames[i].fellow_segment_command_buffer_pools) {
+			for (uint32_t j = 0; j < segment_pool.buffers.size(); j++) {
+				driver->semaphore_free(segment_pool.semaphores[j]);
+			}
+		}
+		for (RDD::SemaphoreID sem : frames[i].fellow_async_semaphores) {
+			driver->semaphore_free(sem);
 		}
 
 		for (uint32_t j = 0; j < frames[i].transfer_worker_semaphores.size(); j++) {

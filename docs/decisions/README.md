@@ -53,3 +53,4 @@ Status: KEEP | REWORK | REJECT | MEASURING      Branch / commit: ...      Toggle
 | [0012](0012-specialization-constants.md) | FellowEngine shader features as specialization constants (no code for disabled features) | (each feature's toggle) | KEEP |
 | [0013](0013-taa-camera-motion-vectors.md) | TAA motion vectors of static geometry from the depth buffer (upscalers' motion-pass path) | `postfx/taa_camera_motion_vectors` | REJECT (within noise, not bit-identical) |
 | [0014](0014-cluster-pack-per-tile.md) | Cluster pack pass with one workgroup per tile | `lights/cluster_pack_parallel` | KEEP |
+| [0015](0015-async-compute.md) | Async compute: SSAO/SSIL/SSR on a second queue, concurrent with shadows, clusters and fog | `frame/async_compute` (start-up) | in test |

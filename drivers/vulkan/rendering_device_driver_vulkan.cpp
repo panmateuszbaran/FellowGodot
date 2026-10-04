@@ -1312,7 +1312,12 @@ Error RenderingDeviceDriverVulkan::_add_queue_create_info(LocalVector<VkDeviceQu
 	// (The device is created before the rendering server registers the FellowEngine settings: only an explicit value
 	// from project.godot / override.cfg can be present here.)
 	ProjectSettings *ps = ProjectSettings::get_singleton();
-	const bool fellow_two_queues = ps->has_setting("rendering/fellow/frame/separate_present_queue") && bool(ps->get_setting("rendering/fellow/frame/separate_present_queue")) && (!ps->has_setting("rendering/fellow/enabled") || bool(ps->get_setting("rendering/fellow/enabled")));
+	// Also for the async compute queue (rendering/fellow/frame/async_compute, decision 0015): a second queue of the main
+	// family.
+	const bool fellow_enabled = !ps->has_setting("rendering/fellow/enabled") || bool(ps->get_setting("rendering/fellow/enabled"));
+	const bool fellow_present_queue = ps->has_setting("rendering/fellow/frame/separate_present_queue") && bool(ps->get_setting("rendering/fellow/frame/separate_present_queue"));
+	const bool fellow_async_compute = ps->has_setting("rendering/fellow/frame/async_compute") && bool(ps->get_setting("rendering/fellow/frame/async_compute"));
+	const bool fellow_two_queues = fellow_enabled && (fellow_present_queue || fellow_async_compute);
 	const uint32_t max_queue_count_per_family = fellow_two_queues ? 2 : 1;
 	static const float queue_priorities[2] = {};
 	for (uint32_t i = 0; i < queue_family_count; i++) {

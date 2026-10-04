@@ -209,6 +209,10 @@ public:
 		bool in_parent_dirty_list = false;
 		bool write_command_list_enabled = false;
 		bool is_discardable = false;
+		// FellowEngine async compute (decision 0015): the async segment that last used this resource, and how.
+		uint32_t fellow_async_mark = 0;
+		ResourceUsage fellow_async_usage = RESOURCE_USAGE_NONE;
+		bool fellow_async_write = false;
 
 		_FORCE_INLINE_ void reset_if_outdated(int64_t new_command_frame) {
 			if (new_command_frame != command_frame) {
@@ -890,6 +894,13 @@ public:
 	void initialize(RDD *p_driver, RenderPassCreationFunction p_render_pass_creation_function, uint32_t p_frame_count, RDD::CommandQueueFamilyID p_secondary_command_queue_family, uint32_t p_secondary_command_buffers_per_frame);
 	void finalize();
 	void begin();
+
+	// FellowEngine async compute (decision 0015). Phase 1: the commands recorded mark their resources with the epoch;
+	// phase 2 (work that runs concurrently with them on another queue): a resource the async segment wrote, or uses
+	// differently, sets the conflict flag.
+	uint32_t fellow_async_epoch = 0;
+	uint8_t fellow_async_phase = 0;
+	bool fellow_async_conflict = false;
 	void add_blas_build(RDD::AccelerationStructureID p_blas, RDD::BufferID p_scratch_buffer, ResourceTracker *p_dst_tracker, VectorView<ResourceTracker *> p_src_trackers);
 	void add_tlas_build(RDD::AccelerationStructureID p_tlas, RDD::BufferID p_scratch_buffer, RDD::BufferID p_instance_buffer, uint32_t p_instance_offset, uint32_t p_instance_count, ResourceTracker *p_dst_tracker, VectorView<ResourceTracker *> p_src_trackers);
 	void add_buffer_clear(RDD::BufferID p_dst, ResourceTracker *p_dst_tracker, uint32_t p_offset, uint32_t p_size);

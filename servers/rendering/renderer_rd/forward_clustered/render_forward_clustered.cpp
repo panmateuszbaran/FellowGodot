@@ -1555,6 +1555,38 @@ void RenderForwardClustered::_copy_framebuffer_to_ss_effects(Ref<RenderSceneBuff
 	ss_effects->copy_internal_texture_to_last_frame(p_render_buffers, *copy_effects);
 }
 
+void RenderForwardClustered::_fellow_process_ss_effects(RenderDataRD *p_render_data, const Ref<RenderSceneBuffersRD> &rb, bool p_use_ssao, bool p_use_ssil, bool p_use_ssr, const RID *p_normal_roughness_slices) {
+	// Stock's screen-space effects block of _pre_opaque_render(), unchanged (moved so that async compute, decision
+	// 0015, can record it before the shadows).
+	// Note, in multiview we're allocating buffers for each eye/view we're rendering.
+	// This should allow most of the processing to happen in parallel even if we're doing
+	// drawcalls per eye/view. It will all sync up at the barrier.
+
+	if (p_use_ssil || p_use_ssr) {
+		ss_effects->allocate_last_frame_buffer(rb, p_use_ssil, p_use_ssr);
+	}
+
+	if (p_use_ssao || p_use_ssil) {
+		RENDER_TIMESTAMP("Prepare Depth for SSAO/SSIL");
+		// Convert our depth buffer data to linear data in
+		for (uint32_t v = 0; v < rb->get_view_count(); v++) {
+			ss_effects->downsample_depth(rb, v, p_render_data->scene_data->view_projection[v]);
+		}
+
+		if (p_use_ssao) {
+			_process_ssao(rb, p_render_data->environment, p_normal_roughness_slices, p_render_data->scene_data->view_projection);
+		}
+
+		if (p_use_ssil) {
+			_process_ssil(rb, p_render_data->environment, p_normal_roughness_slices, p_render_data->scene_data->view_projection, p_render_data->scene_data->cam_transform);
+		}
+	}
+
+	if (p_use_ssr) {
+		_process_ssr(rb, p_render_data->environment, p_normal_roughness_slices, p_render_data->scene_data->view_projection, p_render_data->scene_data->view_eye_offset, p_render_data->scene_data->cam_transform);
+	}
+}
+
 void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, bool p_use_ssao, bool p_use_ssil, bool p_use_ssr, bool p_use_gi, const RID *p_normal_roughness_slices, RID p_voxel_gi_buffer) {
 	// Render shadows while GI is rendering, due to how barriers are handled, this should happen at the same time
 	RendererRD::LightStorage *light_storage = RendererRD::LightStorage::get_singleton();
@@ -1566,6 +1598,16 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 		// Our forward clustered custom data buffer will only be available when we're rendering our normal view.
 		// This will not be available when rendering reflection probes.
 		rb_data = rb->get_custom_data(RB_SCOPE_FORWARD_CLUSTERED);
+	}
+
+	// FellowEngine async compute (decision 0015): the screen-space effects only need the depth pre-pass. Recorded first
+	// and submitted to the second queue, they run while the main queue renders the shadows, the light clusters and the
+	// volumetric fog; the work recorded after this function (the opaque pass reads their results) waits for them. Not
+	// with GI (it reads the same normal buffers and runs between the shadows).
+	const bool fellow_async = rb_data.is_valid() && ss_effects && (p_use_ssao || p_use_ssil || p_use_ssr) && !(rb.is_valid() && p_use_gi) && RD::get_singleton()->fellow_async_compute_begin();
+	if (fellow_async) {
+		_fellow_process_ss_effects(p_render_data, rb, p_use_ssao, p_use_ssil, p_use_ssr, p_normal_roughness_slices);
+		RD::get_singleton()->fellow_async_compute_end();
 	}
 
 	RENDER_TIMESTAMP("Setup Shadows");
@@ -1812,34 +1854,8 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 	fellow_dir_atlas_dirty_all = false;
 	fellow_dir_cascades.clear();
 
-	if (rb_data.is_valid() && ss_effects) {
-		// Note, in multiview we're allocating buffers for each eye/view we're rendering.
-		// This should allow most of the processing to happen in parallel even if we're doing
-		// drawcalls per eye/view. It will all sync up at the barrier.
-
-		if (p_use_ssil || p_use_ssr) {
-			ss_effects->allocate_last_frame_buffer(rb, p_use_ssil, p_use_ssr);
-		}
-
-		if (p_use_ssao || p_use_ssil) {
-			RENDER_TIMESTAMP("Prepare Depth for SSAO/SSIL");
-			// Convert our depth buffer data to linear data in
-			for (uint32_t v = 0; v < rb->get_view_count(); v++) {
-				ss_effects->downsample_depth(rb, v, p_render_data->scene_data->view_projection[v]);
-			}
-
-			if (p_use_ssao) {
-				_process_ssao(rb, p_render_data->environment, p_normal_roughness_slices, p_render_data->scene_data->view_projection);
-			}
-
-			if (p_use_ssil) {
-				_process_ssil(rb, p_render_data->environment, p_normal_roughness_slices, p_render_data->scene_data->view_projection, p_render_data->scene_data->cam_transform);
-			}
-		}
-
-		if (p_use_ssr) {
-			_process_ssr(rb, p_render_data->environment, p_normal_roughness_slices, p_render_data->scene_data->view_projection, p_render_data->scene_data->view_eye_offset, p_render_data->scene_data->cam_transform);
-		}
+	if (rb_data.is_valid() && ss_effects && !fellow_async) {
+		_fellow_process_ss_effects(p_render_data, rb, p_use_ssao, p_use_ssil, p_use_ssr, p_normal_roughness_slices);
 	}
 
 	RENDER_TIMESTAMP("Pre Opaque Render");
@@ -1883,6 +1899,10 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 		RENDER_TIMESTAMP("Update Volumetric Fog");
 		bool directional_shadows = RendererRD::LightStorage::get_singleton()->has_directional_shadows(directional_light_count);
 		_update_volumetric_fog(rb, p_render_data->environment, p_render_data->scene_data->cam_projection, p_render_data->scene_data->cam_transform, p_render_data->scene_data->prev_cam_transform.affine_inverse(), p_render_data->shadow_atlas, directional_light_count, directional_shadows, positional_light_count, p_render_data->voxel_gi_count, *p_render_data->fog_volumes);
+	}
+
+	if (fellow_async) {
+		RD::get_singleton()->fellow_async_compute_join();
 	}
 }
 

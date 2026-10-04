@@ -291,6 +291,15 @@ inline bool frame_early_submit() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/frame/early_submit");
 }
 
+// Async compute (docs/decisions/0015-async-compute.md): the screen-space effects that only need the depth pre-pass
+// (SSAO, SSIL, SSR and their depth downsample) are submitted to a second queue of the main family and run while the
+// main queue renders the shadows, the light clusters and the volumetric fog; the opaque pass waits for them. Requires
+// the setting at start-up (the device creates the second queue); read every frame after that. Same commands, same
+// results: image-identical.
+inline bool frame_async_compute() {
+	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/frame/async_compute");
+}
+
 // Mix-blended materials (alpha pass, no depth or stencil writes, no alpha antialiasing): fragments whose final alpha is
 // exactly 0 are discarded before lighting — blending them leaves the colour target unchanged (src * 0 + dst * 1), so
 // the image is the same; stock lights and fogs them anyway. Read every frame.
@@ -323,6 +332,8 @@ struct Stats {
 	SafeNumeric<uint64_t> geometry_cluster_triangles_drawn; // triangles of clustered surfaces drawn
 	SafeNumeric<uint64_t> geometry_cluster_triangles_culled; // triangles of clustered surfaces skipped (outside the frustum)
 	SafeNumeric<uint64_t> frame_early_submits; // frames whose rendering was submitted before the swap chain acquisition
+	SafeNumeric<uint64_t> frame_async_uses; // async compute segments (decision 0015)
+	SafeNumeric<uint64_t> frame_async_conflicts; // of which the concurrent part had to wait (shared resource)
 	SafeNumeric<uint64_t> shadow_pyramid_builds; // min/max pyramid updates that wrote something (directional and positional)
 	SafeNumeric<uint64_t> shadow_pyramid_texels; // finest-level pyramid texels written (each covers 4x4 new atlas texels)
 	SafeNumeric<uint64_t> shadow_pyramid_texels_needed; // of those, the ones computed from the atlas (the rest set to (0, 1))
