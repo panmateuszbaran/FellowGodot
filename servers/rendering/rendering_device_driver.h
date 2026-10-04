@@ -448,6 +448,9 @@ public:
 	};
 
 	virtual CommandPoolID command_pool_create(CommandQueueFamilyID p_cmd_queue_family, CommandBufferType p_cmd_buffer_type) = 0;
+	// FellowEngine async compute (decision 0015): create images and buffers shareable by these queue families
+	// (concurrent sharing) from now on. Default: nothing (exclusive sharing).
+	virtual void fellow_set_concurrent_queue_families(VectorView<CommandQueueFamilyID> p_families) {}
 	virtual bool command_pool_reset(CommandPoolID p_cmd_pool) = 0;
 	virtual void command_pool_free(CommandPoolID p_cmd_pool) = 0;
 

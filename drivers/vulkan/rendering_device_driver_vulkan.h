@@ -393,11 +393,18 @@ private:
 	struct CommandPool {
 		VkCommandPool vk_command_pool = VK_NULL_HANDLE;
 		CommandBufferType buffer_type = COMMAND_BUFFER_TYPE_PRIMARY;
+		bool fellow_compute_only = false; // Family without graphics (FellowEngine async compute).
 		LocalVector<CommandBufferInfo *> command_buffers_created;
 	};
 
 public:
 	virtual CommandPoolID command_pool_create(CommandQueueFamilyID p_cmd_queue_family, CommandBufferType p_cmd_buffer_type) override final;
+	virtual void fellow_set_concurrent_queue_families(VectorView<CommandQueueFamilyID> p_families) override final;
+
+private:
+	LocalVector<uint32_t> fellow_concurrent_families; // Unique family indices; empty = exclusive sharing.
+
+public:
 	virtual bool command_pool_reset(CommandPoolID p_cmd_pool) override final;
 	virtual void command_pool_free(CommandPoolID p_cmd_pool) override final;
 
@@ -406,6 +413,7 @@ private:
 
 	struct CommandBufferInfo {
 		VkCommandBuffer vk_command_buffer = VK_NULL_HANDLE;
+		bool fellow_compute_only = false; // Barriers restricted to the stages and accesses of a compute queue.
 		Framebuffer *active_framebuffer = nullptr;
 		RenderPassInfo *active_render_pass = nullptr;
 	};

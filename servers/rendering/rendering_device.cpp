@@ -8072,6 +8072,9 @@ void RenderingDevice::_begin_frame(bool p_presented) {
 	// async parts); the command buffers are reset with the pool below.
 	frames[frame].fellow_segments_used = 0;
 	frames[frame].fellow_async_uses = 0;
+	if (frames[frame].fellow_compute_pool && command_pool_reset_enabled) {
+		driver->command_pool_reset(frames[frame].fellow_compute_pool);
+	}
 
 	if (frames[frame].fellow_early_submitted) {
 		// Both command buffers of the frame have finished: record into the first one again.
@@ -8272,7 +8275,7 @@ bool RenderingDevice::fellow_async_compute_begin() {
 		return false;
 	}
 	Frame &f = frames[frame];
-	if (f.fellow_async_uses >= FELLOW_ASYNC_MAX_USES || f.fellow_segments_used + 3 > f.fellow_segment_command_buffers.size()) {
+	if (f.fellow_async_uses >= FELLOW_ASYNC_MAX_USES || f.fellow_segments_used + 2 > f.fellow_segment_command_buffers.size()) {
 		return false;
 	}
 	if (!_fellow_transfer_workers_idle()) {
@@ -8284,7 +8287,13 @@ bool RenderingDevice::fellow_async_compute_begin() {
 	fellow_async_current_use = f.fellow_async_uses++;
 	_end_frame();
 	execute_chained_cmds(false, RDD::FenceID(), f.fellow_async_semaphores[fellow_async_current_use * 2 + 0]);
-	_fellow_next_command_buffer();
+
+	// Record the async part into a command buffer of the async queue's family; the main buffer just submitted is
+	// put back (and switched out) at end().
+	fellow_async_stashed_command_buffer = f.command_buffer;
+	f.command_buffer = f.fellow_compute_command_buffers[fellow_async_current_use];
+	driver->command_buffer_begin(f.command_buffer);
+	draw_graph.begin();
 
 	draw_graph.fellow_async_epoch++;
 	draw_graph.fellow_async_phase = 1;
@@ -8313,6 +8322,7 @@ void RenderingDevice::fellow_async_compute_end() {
 	DEV_ASSERT(f.command_buffer_pool.buffers_used == 0);
 	f.command_buffer_pool.buffers_used = 0;
 	driver->command_queue_execute_and_present(fellow_async_queue, waits, f.command_buffer, f.fellow_async_semaphores[fellow_async_current_use * 2 + 1], RDD::FenceID(), {});
+	f.command_buffer = fellow_async_stashed_command_buffer;
 	_fellow_next_command_buffer();
 
 	draw_graph.fellow_async_phase = 2;
@@ -8604,14 +8614,29 @@ Error RenderingDevice::initialize(RenderingContextDriver *p_context, DisplayServ
 	}
 
 	// FellowEngine async compute (rendering/fellow/frame/async_compute, read at start-up like the present queue: the
-	// device creates a second queue per family for it, see the Vulkan driver): a second queue of the main family, so
-	// that no resource needs a queue family ownership transfer. Where the family has a single queue (lavapipe), the
-	// virtual queue shares it and the submissions simply run one after another.
+	// device creates a second queue per family for it, see the Vulkan driver). By default the queue comes from the
+	// dedicated compute family when the device has one (rendering/fellow/frame/async_compute_family = 0): GPUs run
+	// that family's queues alongside the graphics queue. Every image and buffer is then created shareable by the main,
+	// compute and transfer families (concurrent sharing), so no ownership transfers are needed. With
+	// async_compute_family = 1 (or no compute family) it is a second queue of the main family; where that family has a
+	// single queue (lavapipe), the virtual queue shares it and the submissions simply run one after another.
 	const bool fellow_async_setting = fellow_ps->has_setting("rendering/fellow/frame/async_compute") && bool(fellow_ps->get_setting("rendering/fellow/frame/async_compute")) && (!fellow_ps->has_setting("rendering/fellow/enabled") || bool(fellow_ps->get_setting("rendering/fellow/enabled")));
 	if (fellow_async_setting && is_main_instance && driver->get_api_name() == "Vulkan") {
-		fellow_async_queue = driver->command_queue_create(main_queue_family);
+		const int fellow_family_choice = fellow_ps->has_setting("rendering/fellow/frame/async_compute_family") ? int(fellow_ps->get_setting("rendering/fellow/frame/async_compute_family")) : 0;
+		fellow_async_queue_family = main_queue_family;
+		if (fellow_family_choice == 0) {
+			RDD::CommandQueueFamilyID compute_family = driver->command_queue_family_get(RDD::COMMAND_QUEUE_FAMILY_COMPUTE_BIT);
+			if (compute_family) {
+				fellow_async_queue_family = compute_family;
+			}
+		}
+		fellow_async_queue = driver->command_queue_create(fellow_async_queue_family);
 		if (fellow_async_queue) {
-			print_verbose("FellowEngine: async compute queue created.");
+			if (fellow_async_queue_family != main_queue_family) {
+				RDD::CommandQueueFamilyID families[3] = { main_queue_family, fellow_async_queue_family, transfer_queue_family };
+				driver->fellow_set_concurrent_queue_families(VectorView<RDD::CommandQueueFamilyID>(families, 3));
+			}
+			print_verbose(vformat("FellowEngine: async compute queue created (family %d, main family %d).", int64_t(fellow_async_queue_family.id) - 1, int64_t(main_queue_family.id) - 1));
 		}
 	}
 
@@ -8675,8 +8700,22 @@ Error RenderingDevice::initialize(RenderingContextDriver *p_context, DisplayServ
 		frames[i].fellow_early_submitted = false;
 
 		if (fellow_async_queue) {
-			// FellowEngine async compute: three switches per use (after the prefix, the async part, the concurrent part).
-			const uint32_t segment_count = FELLOW_ASYNC_MAX_USES * 3;
+			// FellowEngine async compute: the async parts are recorded into command buffers of the async queue's
+			// family; the main queue switches buffers twice per use (after the prefix and after the concurrent part).
+			frames[i].fellow_compute_pool = driver->command_pool_create(fellow_async_queue_family, RDD::COMMAND_BUFFER_TYPE_PRIMARY);
+			if (!frames[i].fellow_compute_pool) {
+				frame_failed = true;
+				break;
+			}
+			for (uint32_t j = 0; j < FELLOW_ASYNC_MAX_USES; j++) {
+				RDD::CommandBufferID cb = driver->command_buffer_create(frames[i].fellow_compute_pool);
+				if (!cb) {
+					frame_failed = true;
+					break;
+				}
+				frames[i].fellow_compute_command_buffers.push_back(cb);
+			}
+			const uint32_t segment_count = FELLOW_ASYNC_MAX_USES * 2;
 			frames[i].fellow_segment_command_buffer_pools.resize(segment_count);
 			for (uint32_t j = 0; j < segment_count; j++) {
 				RDD::CommandBufferID cb = driver->command_buffer_create(frames[i].command_pool);
@@ -9174,6 +9213,9 @@ void RenderingDevice::finalize() {
 		}
 		for (RDD::SemaphoreID sem : frames[i].fellow_async_semaphores) {
 			driver->semaphore_free(sem);
+		}
+		if (frames[i].fellow_compute_pool) {
+			driver->command_pool_free(frames[i].fellow_compute_pool);
 		}
 
 		for (uint32_t j = 0; j < frames[i].transfer_worker_semaphores.size(); j++) {

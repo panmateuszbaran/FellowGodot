@@ -1977,6 +1977,12 @@ RDD::BufferID RenderingDeviceDriverVulkan::buffer_create(uint64_t p_size, BitFie
 	create_info.size = p_size;
 	create_info.usage = p_usage & ~BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT;
 	create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+	if (fellow_concurrent_families.size() > 1) {
+		// FellowEngine async compute (decision 0015): usable by the main, async compute and transfer queue families.
+		create_info.sharingMode = VK_SHARING_MODE_CONCURRENT;
+		create_info.queueFamilyIndexCount = fellow_concurrent_families.size();
+		create_info.pQueueFamilyIndices = fellow_concurrent_families.ptr();
+	}
 
 	VmaMemoryUsage vma_usage = VMA_MEMORY_USAGE_UNKNOWN;
 	uint32_t vma_flags_to_remove = 0;
@@ -2332,6 +2338,12 @@ RDD::TextureID RenderingDeviceDriverVulkan::texture_create(const TextureFormat &
 	}
 
 	create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+	if (fellow_concurrent_families.size() > 1) {
+		// FellowEngine async compute (decision 0015).
+		create_info.sharingMode = VK_SHARING_MODE_CONCURRENT;
+		create_info.queueFamilyIndexCount = fellow_concurrent_families.size();
+		create_info.pQueueFamilyIndices = fellow_concurrent_families.ptr();
+	}
 	create_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
 	// Allocate memory.
@@ -2962,6 +2974,35 @@ void RenderingDeviceDriverVulkan::command_pipeline_barrier(
 
 	VkPipelineStageFlags src_stage_flags = _rd_to_vk_pipeline_stages(p_src_stages);
 	VkPipelineStageFlags dst_stage_flags = _rd_to_vk_pipeline_stages(p_dst_stages);
+
+	const CommandBufferInfo *fellow_cmd = (const CommandBufferInfo *)(p_cmd_buffer.id);
+	if (fellow_cmd->fellow_compute_only) {
+		// FellowEngine async compute (decision 0015): a command buffer for a queue without graphics. The render graph
+		// derives a barrier's source stages and accesses from the resource's previous use, which may be graphics work
+		// submitted to the main queue; this command buffer's submission waits (all stages) on a semaphore signalled
+		// after that work, which already orders it and makes its writes visible. So graphics stages become
+		// ALL_COMMANDS (which chains with that wait) and graphics accesses are dropped; layout transitions stay.
+		const VkPipelineStageFlags compute_stages = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT | VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT | VK_PIPELINE_STAGE_HOST_BIT | VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+		const VkAccessFlags compute_access = VK_ACCESS_INDIRECT_COMMAND_READ_BIT | VK_ACCESS_UNIFORM_READ_BIT | VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_HOST_READ_BIT | VK_ACCESS_HOST_WRITE_BIT | VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
+		if (src_stage_flags & ~compute_stages) {
+			src_stage_flags = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+		}
+		if (dst_stage_flags & ~compute_stages) {
+			dst_stage_flags = (dst_stage_flags & compute_stages) ? (dst_stage_flags & compute_stages) : VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+		}
+		for (uint32_t i = 0; i < p_memory_barriers.size(); i++) {
+			vk_memory_barriers[i].srcAccessMask &= compute_access;
+			vk_memory_barriers[i].dstAccessMask &= compute_access;
+		}
+		for (uint32_t i = 0; i < p_buffer_barriers.size(); i++) {
+			vk_buffer_barriers[i].srcAccessMask &= compute_access;
+			vk_buffer_barriers[i].dstAccessMask &= compute_access;
+		}
+		for (uint32_t i = 0; i < p_texture_barriers.size(); i++) {
+			vk_image_barriers[i].srcAccessMask &= compute_access;
+			vk_image_barriers[i].dstAccessMask &= compute_access;
+		}
+	}
 	VkPipelineStageFlags accel_src_stages = src_stage_flags;
 	VkPipelineStageFlags accel_dst_stages = dst_stage_flags;
 
@@ -3417,7 +3458,21 @@ RDD::CommandPoolID RenderingDeviceDriverVulkan::command_pool_create(CommandQueue
 	CommandPool *command_pool = memnew(CommandPool);
 	command_pool->vk_command_pool = vk_command_pool;
 	command_pool->buffer_type = p_cmd_buffer_type;
+	command_pool->fellow_compute_only = (queue_family_properties[family_index].queueFlags & VK_QUEUE_GRAPHICS_BIT) == 0;
 	return CommandPoolID(command_pool);
+}
+
+void RenderingDeviceDriverVulkan::fellow_set_concurrent_queue_families(VectorView<CommandQueueFamilyID> p_families) {
+	fellow_concurrent_families.clear();
+	for (uint32_t i = 0; i < p_families.size(); i++) {
+		if (p_families[i].id == 0) {
+			continue;
+		}
+		const uint32_t index = p_families[i].id - 1;
+		if (!fellow_concurrent_families.has(index)) {
+			fellow_concurrent_families.push_back(index);
+		}
+	}
 }
 
 bool RenderingDeviceDriverVulkan::command_pool_reset(CommandPoolID p_cmd_pool) {
@@ -3465,6 +3520,7 @@ RDD::CommandBufferID RenderingDeviceDriverVulkan::command_buffer_create(CommandP
 
 	CommandBufferInfo *command_buffer = VersatileResource::allocate<CommandBufferInfo>(resources_allocator);
 	command_buffer->vk_command_buffer = vk_command_buffer;
+	command_buffer->fellow_compute_only = command_pool->fellow_compute_only;
 	command_pool->command_buffers_created.push_back(command_buffer);
 	return CommandBufferID(command_buffer);
 }

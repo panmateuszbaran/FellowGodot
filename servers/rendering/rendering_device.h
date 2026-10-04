@@ -1851,6 +1851,8 @@ private:
 		uint32_t fellow_segments_used = 0;
 		LocalVector<RDD::SemaphoreID> fellow_async_semaphores;
 		uint32_t fellow_async_uses = 0;
+		RDD::CommandPoolID fellow_compute_pool; // Of the async queue's family.
+		LocalVector<RDD::CommandBufferID> fellow_compute_command_buffers;
 
 		struct Timestamp {
 			String description;
@@ -1899,7 +1901,8 @@ protected:
 	// FellowEngine async compute (decision 0015).
 	static const uint32_t FELLOW_ASYNC_MAX_USES = 4;
 	RDD::CommandQueueID fellow_async_queue;
-	bool fellow_async_distinct_queue = false;
+	RDD::CommandQueueFamilyID fellow_async_queue_family;
+	RDD::CommandBufferID fellow_async_stashed_command_buffer;
 	uint32_t fellow_async_current_use = 0;
 	bool fellow_async_recording = false;
 	bool fellow_async_concurrent = false;
