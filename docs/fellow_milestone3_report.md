@@ -258,8 +258,8 @@ Two things in the Bistro captures looked wrong. Both are properties of how the b
   covers the shade's UV area, not only a bulb); the scene multiplied emission by 4 and the glow made the shades bloom
   into bright discs.
 
-Scene revision v2 (`--bistro_mat=2`, `a297438`, `3c0fb4b`; v1 stays the default so earlier sessions remain
-comparable): the exterior also loads the interior (its own lights, cameras and animations removed); glass is a
+Scene revision v2 (`a297438`, `3c0fb4b`; **the default from 2026-10-04**, `--bistro_mat=1` reproduces v1 and every
+session before that date): the exterior also loads the interior (its own lights, cameras and animations removed); glass is a
 tinted, mostly transparent material (alpha 0.18, back faces culled); placeholders use the imported albedo colour;
 emission ×1; the material-name matching fixed ("street" no longer matches "tree"). Pathshots `m3_f32_pathshots_v2b`:
 tables and the bar behind tinted glass instead of holes. Timing on v2 (3 interleaved runs each):
@@ -277,8 +277,8 @@ thread 3.63 ms) and its frame (6.76 ms) is no longer bound by the GPU (4.85 ms);
 cascades leave **2621 draws** (render thread 2.11 ms), GPU 4.61 ms, frame 5.12 ms. Without the interior: 2983 vs 965
 draws, render thread 1.48 vs 0.95 ms, both frames GPU-bound. The per-pass GPU profile with the interior
 (`m3_f33b_profile_v2b`, one run each) is like v1's: shadow pass 0.65 → 0.32 ms, opaque 2.41 → 1.92 ms, sum of passes
-5.85 → 5.18 ms (−11.5 %). Switching the benchmark default to v2 needs a new baseline for both
-Bistro scenes; not done yet.
+5.85 → 5.18 ms (−11.5 %). v2 is the benchmark default from 2026-10-04 (decided by the user); its baseline is
+`m3_f34_perf_v2` above.
 
 ## 8. Exact files changed (milestone 3, `0ba5e35..HEAD`, generated headers excluded)
 
@@ -299,7 +299,6 @@ engine arguments and start-up overrides), `tools/ab_stats.py`, scenes `lights_la
 * 0014 (cluster pack per tile): longer Lights Lab A/B, then on by default.
 * TAA camera motion vectors (0013, rejected as it stands): worth retrying only with the velocity written by the depth
   downsample SSAO/SSIL already run (no separate pass).
-* Bistro scene v2 as the benchmark default (needs a new baseline for both Bistro scenes).
 * Cache-space directional pyramid: with the shadow cache, cascades are copied into the atlas every frame the camera
   moves, so their pyramid is rebuilt every frame although the cache did not change (0.06-0.09 ms in Sponza and
   Bistro exterior).

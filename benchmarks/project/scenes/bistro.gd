@@ -14,7 +14,7 @@ const HDRI := "res://external/bistro/san_giuseppe_bridge_4k.hdr"
 const ALPHA_HINTS := ["leaf", "leaves", "foliage", "plant", "ivy", "grass", "flower", "bush", "tree", "hedge", "fern", "vine", "branch", "shrub", "palm", "chain", "fence", "lattice", "net", "string", "flag", "wire", "banner"]
 
 var interior := false
-# --bistro_mat=2: material conversion v2 (fixes of v1, which stays the default so that earlier sessions reproduce):
+# Material conversion v2, the default from 2026-10-04 (--bistro_mat=1 reproduces the sessions made with v1 before that):
 #   * alpha hints match whole words of the name (v1 matched substrings: "street" contains "tree", "Plantpots" "plant");
 #   * *_BLENDSHADER materials never get alpha scissor (their base-colour alpha is a layer blend mask, not opacity);
 #   * a base-colour texture of 16 x 16 texels or less is the export's placeholder for an untextured material: v2 uses
@@ -24,7 +24,7 @@ var interior := false
 #     glass and kept the texture's alpha, which is 0 everywhere for MASTER_Glass_Dirty_MASKED: invisible panes);
 #   * emission at energy 1 (v1: 4, which turns the whole emissive lamp shades into white blobs under glow);
 #   * exterior: the restaurant interior (BistroInterior.fbx, same coordinates) is loaded too, without its lights.
-var mat_rev := 1
+var mat_rev := 2
 var material_report := {"rebuilt": 0, "alpha_scissor": [], "emissive": [], "glass": [], "placeholders": [], "missing_textures": 0, "kept": 0}
 var _mat_cache := {}
 var info_path := {}
@@ -33,7 +33,7 @@ var info_path := {}
 func build(p_args: Dictionary) -> void:
 	args = p_args
 	interior = str(args.get("scene", "")) == "bistro_interior"
-	mat_rev = int(args.get("bistro_mat", "1"))
+	mat_rev = int(args.get("bistro_mat", "2"))
 	bench_name = "bistro_interior" if interior else "bistro_exterior"
 	_setup_common()
 	begin_content()
