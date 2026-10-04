@@ -47,7 +47,8 @@ waits on S2 — exactly the single-queue order its barriers assume — and the f
 
 * lavapipe (one queue: the second queue is a virtual queue on the same Vulkan queue, so the submissions run in order;
   this checks the split, the barriers across it and the moved recording), setting off vs on: PBR Lab 7 cameras, Lights
-  Lab 60-frame walk: **0 differing pixels**; 210 and 92 async segments, **0 conflicts**. Stress Lab, Blend Lab: pending.
+  Lab 60-frame walk, Stress Lab 4 cameras and both 60-frame sequences (moving objects, vertex-animated surface), Blend
+  Lab 4 cameras: **0 differing pixels**; 92-366 async segments per session, **0 conflicts**.
 * RTX: pending (`m3_f38_temporal`).
 
 ## Result
