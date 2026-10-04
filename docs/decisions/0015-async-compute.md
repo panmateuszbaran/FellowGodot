@@ -62,6 +62,26 @@ not appear to run the two parts at the same time, and the extra submissions and 
 dedicated compute queue family (needs concurrent sharing or ownership transfers, and barriers restricted to compute
 stages on that queue), or stop here.
 
+### Dedicated compute family (`fellow39`, 2026-10-04)
+
+The async part goes to the compute-only queue family (family 2 on the RTX); every image and buffer is created with
+concurrent sharing between the main, compute and transfer families (no ownership transfers), and the barriers the
+graph records into the compute queue's command buffers are restricted to compute stages and accesses (a source stage
+of earlier graphics work becomes ALL_COMMANDS, which chains with the semaphore wait that already orders and makes
+visible that work). RTX identity (`m3_f39_temporal`): compute family and main family both at every scene's floor,
+Bistro exterior and Blend Lab bit-identical, 0 conflicts. A/B (`m3_f39_perf`, 4 ABBA runs, reference off):
+
+| scene | off ms | compute family | Δ (paired) | pairs | GPU ms off → on | render thread ms off → on | sharing only |
+|---|---:|---:|---:|---:|---|---|---:|
+| Bistro exterior | 5.135 | 4.997 | **−2.7 %** (p 0.001) | 4/4 | 4.628 → 4.603 | 2.15 → 2.87 | −0.3 % |
+| Sponza | 7.062 | 7.044 | −0.2 % (p 0.79) | 2/4 | 6.678 → 6.658 | 0.48 → 0.66 | −0.2 % |
+
+The Bistro exterior frame gets faster but the GPU time hardly moves (−0.5 %): the gain is not two queues working at
+once but the frame reaching the GPU in pieces (the pre-pass starts while the CPU still records the rest). The split
+costs render-thread time (+0.2 to +0.7 ms: four flushes and submissions instead of one). Concurrent sharing alone
+costs nothing measurable. `m3_f40_perf` separates the split from the concurrency (the same submissions on the main
+queue itself, `async_compute_family = 2`).
+
 ## Decision
 
 Pending.
