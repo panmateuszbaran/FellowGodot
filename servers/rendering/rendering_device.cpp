@@ -8615,8 +8615,8 @@ Error RenderingDevice::initialize(RenderingContextDriver *p_context, DisplayServ
 
 	// FellowEngine async compute (rendering/fellow/frame/async_compute, read at start-up like the present queue: the
 	// device creates a second queue per family for it, see the Vulkan driver). By default the queue comes from the
-	// dedicated compute family when the device has one (rendering/fellow/frame/async_compute_family = 0): GPUs run
-	// that family's queues alongside the graphics queue. Every image and buffer is then created shareable by the main,
+	// dedicated compute family (rendering/fellow/frame/async_compute_family = 0; none when the device has no such
+	// family): GPUs run that family's queues alongside the graphics queue. Every image and buffer is then created shareable by the main,
 	// compute and transfer families (concurrent sharing), so no ownership transfers are needed. With
 	// async_compute_family = 1 (or no compute family) it is a second queue of the main family; where that family has a
 	// single queue (lavapipe), the virtual queue shares it and the submissions simply run one after another. With
@@ -8626,13 +8626,21 @@ Error RenderingDevice::initialize(RenderingContextDriver *p_context, DisplayServ
 	if (fellow_async_setting && is_main_instance && driver->get_api_name() == "Vulkan") {
 		const int fellow_family_choice = fellow_ps->has_setting("rendering/fellow/frame/async_compute_family") ? int(fellow_ps->get_setting("rendering/fellow/frame/async_compute_family")) : 0;
 		fellow_async_queue_family = main_queue_family;
+		bool fellow_create = true;
 		if (fellow_family_choice == 0) {
+			// Only with a dedicated compute family: a second queue of the main family did not run concurrently on the
+			// RTX and the split submissions alone cost a little (decision 0015).
 			RDD::CommandQueueFamilyID compute_family = driver->command_queue_family_get(RDD::COMMAND_QUEUE_FAMILY_COMPUTE_BIT);
-			if (compute_family) {
+			if (compute_family && compute_family != main_queue_family) {
 				fellow_async_queue_family = compute_family;
+			} else {
+				fellow_create = false;
+				print_verbose("FellowEngine: no dedicated compute queue family, async compute off.");
 			}
 		}
-		if (fellow_family_choice == 2) {
+		if (!fellow_create) {
+			// Nothing to create.
+		} else if (fellow_family_choice == 2) {
 			// Measurement variant: the main queue itself (the same submissions, no concurrency).
 			fellow_async_queue = main_queue;
 		} else {

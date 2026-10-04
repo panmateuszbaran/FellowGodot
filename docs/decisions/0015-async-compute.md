@@ -1,6 +1,6 @@
 # 0015 — Async compute: screen-space effects on a second queue
 
-Status: **in test** (`fellow38`) · Branch `fellow/geometry` · Setting `rendering/fellow/frame/async_compute`
+Status: **KEEP as an option** (`fellow38`-`fellow40`; off by default) · Branch `fellow/geometry` · Setting `rendering/fellow/frame/async_compute`
 (start-up only, default **off**) · Code: `rendering_device.{h,cpp}` (`fellow_async_compute_begin/end/join`),
 `rendering_device_graph.{h,cpp}` (conflict tracking), `drivers/vulkan/rendering_device_driver_vulkan.cpp` (second
 queue of the family), `forward_clustered/render_forward_clustered.{h,cpp}` (`_pre_opaque_render`), `fellow_settings.*`.
@@ -82,6 +82,37 @@ costs render-thread time (+0.2 to +0.7 ms: four flushes and submissions instead 
 costs nothing measurable. `m3_f40_perf` separates the split from the concurrency (the same submissions on the main
 queue itself, `async_compute_family = 2`).
 
+### What the gain comes from (`fellow40`, `m3_f40_perf`, 2026-10-04, 4 ABBA runs, five scenes)
+
+Three variants of one binary: off; async on the compute family; and the same split submissions on the main queue
+itself (`async_compute_family = 2`: the same four submissions and semaphores, nothing concurrent).
+
+| scene | off ms | async (compute family) | pairs | split only | GPU ms off / async / split | render thread ms off / async |
+|---|---:|---:|---:|---:|---|---|
+| Bistro exterior | 5.125 | **−2.1 %** (p 0.010) | 4/4 | −0.1 % | 4.62 / 4.62 / 4.73 | 2.12 / 2.88 |
+| Bistro interior | 4.174 | **−1.3 %** (p 0.004) | 4/4 | −0.0 % | 3.80 / 3.74 / 3.80 | 0.66 / 1.01 |
+| Lights Lab | 3.016 | **−1.0 %** (p 0.050) | 4/4 | +0.5 % | 2.67 / 2.64 / 2.68 | 0.21 / 0.36 |
+| PBR Lab | 2.882 | −1.2 % (p 0.18) | 3/4 | +0.7 % | 2.47 / 2.49 / 2.49 | 0.30 / 0.50 |
+| Sponza | 7.182 | −0.9 % (p 0.31) | 3/4 | +0.3 % | 6.79 / 6.73 / 6.81 | 0.49 / 0.83 |
+
+The split alone is neutral or slightly slower (Bistro exterior: GPU time +0.11 ms, the batch boundaries leave the GPU
+briefly idle); with the compute queue running the screen-space effects alongside the shadows, clusters and fog the
+frame is faster in every scene (18 of 20 pairs). The gain is real concurrency, net of the split's cost.
+
+Costs: the render thread spends 0.15-0.76 ms more per frame (four submissions instead of one; on lavapipe the
+submissions themselves block, so the split cannot be timed there). None of these scenes is limited by the CPU, so it
+does not show in their frame times; in a CPU-bound scene it would. Concurrent sharing of every image and buffer
+(needed for the compute family) costs nothing measurable here (`m3_f39_perf`, sharing only: −0.3 % / −0.2 %).
+
 ## Decision
 
-Pending.
+**KEEP as an option, off by default.** Exact (bit-identical / at the floor on RTX in six scenes, 0 conflicts), and
+1-2 % faster in GPU-bound frames on the RTX 5070 Ti. Not on by default because (1) it is measured on one GPU vendor
+only (concurrent sharing may cost image compression on others, and the compute-only barriers are untested there),
+(2) it adds render-thread time that a CPU-bound project would pay, and (3) it is a start-up setting. Without a
+dedicated compute queue family it stays off (a second queue of the main family did not run concurrently and only
+added the split's cost: `m3_f38_perf`, `m3_f40_perf` "split only").
+
+Recommended for GPU-bound projects on NVIDIA: `rendering/fellow/frame/async_compute = true` in project.godot.
+Follow-ups: a CPU-bound scene (10 k+ draws) to measure the render-thread cost, and fewer submissions (G2 and the rest
+of the frame as two batches of one submission).
