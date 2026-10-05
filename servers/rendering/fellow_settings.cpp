@@ -77,6 +77,11 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/postfx/ssao_shared_tile", false);
 	GLOBAL_DEF("rendering/fellow/postfx/taa_camera_motion_vectors", false);
 	GLOBAL_DEF("rendering/fellow/shading/blended_alpha_zero_skip", true);
+	GLOBAL_DEF("rendering/fellow/cpu/enabled", true);
+	GLOBAL_DEF("rendering/fellow/cpu/parallel_list_fill", false);
+	GLOBAL_DEF("rendering/fellow/cpu/parallel_instance_data", false);
+	GLOBAL_DEF("rendering/fellow/cpu/compact_list_sort", false);
+	GLOBAL_DEF("rendering/fellow/cpu/parallel_list_sort", false);
 	GLOBAL_DEF("rendering/fellow/frame/early_submit", false);
 	GLOBAL_DEF_RST("rendering/fellow/frame/separate_present_queue", false);
 	GLOBAL_DEF_RST("rendering/fellow/frame/async_compute", false);

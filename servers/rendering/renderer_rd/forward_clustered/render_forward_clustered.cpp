@@ -31,6 +31,7 @@
 #include "render_forward_clustered.h"
 
 #include "core/config/project_settings.h"
+#include "core/object/worker_thread_pool.h"
 #include "servers/rendering/fellow_settings.h"
 #include "servers/rendering/renderer_rd/environment/fog.h"
 #include "servers/rendering/renderer_rd/framebuffer_cache_rd.h"
@@ -838,6 +839,50 @@ void RenderForwardClustered::SceneState::grow_instance_buffer(RenderListType p_r
 	}
 }
 
+void RenderForwardClustered::_fellow_make_instance_data(const GeometryInstanceSurfaceDataCache *surface, const GeometryInstanceForwardClustered *inst, SceneState::InstanceData &instance_data) const {
+	// Stock's per-element instance data (moved out of _fill_instance_data's loop; also used by its worker ranges).
+	if (likely(inst->store_transform_cache)) {
+		RendererRD::MaterialStorage::store_transform_transposed_3x4(inst->transform, instance_data.transform);
+		RendererRD::MaterialStorage::store_transform_transposed_3x4(inst->prev_transform, instance_data.prev_transform);
+
+#ifdef REAL_T_IS_DOUBLE
+		// Split the origin into two components, the float approximation and the missing precision.
+		// In the shader we will combine these back together to restore the lost precision.
+		RendererRD::MaterialStorage::split_double(inst->transform.origin.x, &instance_data.transform[3], &instance_data.model_precision[0]);
+		RendererRD::MaterialStorage::split_double(inst->transform.origin.y, &instance_data.transform[7], &instance_data.model_precision[1]);
+		RendererRD::MaterialStorage::split_double(inst->transform.origin.z, &instance_data.transform[11], &instance_data.model_precision[2]);
+		RendererRD::MaterialStorage::split_double(inst->prev_transform.origin.x, &instance_data.prev_transform[3], &instance_data.prev_model_precision[0]);
+		RendererRD::MaterialStorage::split_double(inst->prev_transform.origin.y, &instance_data.prev_transform[7], &instance_data.prev_model_precision[1]);
+		RendererRD::MaterialStorage::split_double(inst->prev_transform.origin.z, &instance_data.prev_transform[11], &instance_data.prev_model_precision[2]);
+#endif
+	} else {
+		RendererRD::MaterialStorage::store_transform_transposed_3x4(Transform3D(), instance_data.transform);
+		RendererRD::MaterialStorage::store_transform_transposed_3x4(Transform3D(), instance_data.prev_transform);
+#ifdef REAL_T_IS_DOUBLE
+		memset(instance_data.model_precision, 0, sizeof(instance_data.model_precision));
+		memset(instance_data.prev_model_precision, 0, sizeof(instance_data.prev_model_precision));
+#endif
+	}
+
+	instance_data.flags = inst->flags_cache;
+	instance_data.gi_offset = inst->gi_offset_cache;
+	instance_data.layer_mask = inst->layer_mask;
+	instance_data.instance_uniforms_ofs = uint32_t(inst->shader_uniforms_offset);
+	instance_data.set_lightmap_uv_scale(inst->lightmap_uv_scale);
+
+	AABB surface_aabb = AABB(Vector3(0.0, 0.0, 0.0), Vector3(1.0, 1.0, 1.0));
+	uint64_t format = RendererRD::MeshStorage::get_singleton()->mesh_surface_get_format(surface->surface);
+	Vector4 uv_scale = Vector4(0.0, 0.0, 0.0, 0.0);
+
+	if (format & RSE::ARRAY_FLAG_COMPRESS_ATTRIBUTES) {
+		surface_aabb = RendererRD::MeshStorage::get_singleton()->mesh_surface_get_aabb(surface->surface);
+		uv_scale = RendererRD::MeshStorage::get_singleton()->mesh_surface_get_uv_scale(surface->surface);
+	}
+
+	instance_data.set_compressed_aabb(surface_aabb);
+	instance_data.set_uv_scale(uv_scale);
+}
+
 void RenderForwardClustered::_fill_instance_data(RenderListType p_render_list, int *p_render_info, uint32_t p_offset, int32_t p_max_elements, bool p_update_buffer) {
 	RenderList *rl = &render_list[p_render_list];
 	uint32_t element_total = p_max_elements >= 0 ? uint32_t(p_max_elements) : rl->elements.size();
@@ -858,6 +903,47 @@ void RenderForwardClustered::_fill_instance_data(RenderListType p_render_list, i
 		p_render_info[RSE::VIEWPORT_RENDER_INFO_OBJECTS_IN_FRAME] += element_total;
 	}
 
+	if (Fellow::cpu_parallel_instance_data() && element_total >= FELLOW_PARALLEL_LIST_MIN) {
+		// Worker ranges write the instance data and each element's "same draw as the previous element" test; the run
+		// lengths (instancing repeats) and the draw count follow in one pass, as stock computes them.
+		fellow_instance_job.render_list = p_render_list;
+		fellow_instance_job.offset = p_offset;
+		fellow_instance_job.total = element_total;
+		fellow_instance_job.chunk_size = FELLOW_PARALLEL_LIST_CHUNK;
+		fellow_instance_joinable.resize(element_total);
+		const uint32_t chunk_count = (element_total + FELLOW_PARALLEL_LIST_CHUNK - 1) / FELLOW_PARALLEL_LIST_CHUNK;
+		WorkerThreadPool::GroupID group = WorkerThreadPool::get_singleton()->add_template_group_task(this, &RenderForwardClustered::_fellow_fill_instance_data_chunk, (void *)nullptr, (int)chunk_count, -1, true, SNAME("FellowFillInstanceData"));
+		WorkerThreadPool::get_singleton()->wait_for_group_task_completion(group);
+
+		const uint8_t *joinable = fellow_instance_joinable.ptr();
+		uint32_t repeats = 0;
+		for (uint32_t i = 0; i < element_total; i++) {
+			if (joinable[i] && repeats < RenderElementInfo::MAX_REPEATS) {
+				repeats++;
+			} else {
+				if (repeats > 0) {
+					for (uint32_t j = 1; j <= repeats; j++) {
+						rl->element_info[p_offset + i - j].repeat = j;
+					}
+				}
+				repeats = 1;
+				if (p_render_info) {
+					p_render_info[RSE::VIEWPORT_RENDER_INFO_DRAW_CALLS_IN_FRAME]++;
+				}
+			}
+		}
+		if (repeats > 0) {
+			for (uint32_t j = 1; j <= repeats; j++) {
+				rl->element_info[p_offset + element_total - j].repeat = j;
+			}
+		}
+
+		if (p_update_buffer && element_total > 0u) {
+			RenderingDevice::get_singleton()->buffer_flush(scene_state.instance_buffer[p_render_list]._get(0u));
+		}
+		return;
+	}
+
 	uint32_t repeats = 0;
 	GeometryInstanceSurfaceDataCache *prev_surface = nullptr;
 	for (uint32_t i = 0; i < element_total; i++) {
@@ -866,46 +952,7 @@ void RenderForwardClustered::_fill_instance_data(RenderListType p_render_list, i
 
 		SceneState::InstanceData instance_data;
 
-		if (likely(inst->store_transform_cache)) {
-			RendererRD::MaterialStorage::store_transform_transposed_3x4(inst->transform, instance_data.transform);
-			RendererRD::MaterialStorage::store_transform_transposed_3x4(inst->prev_transform, instance_data.prev_transform);
-
-#ifdef REAL_T_IS_DOUBLE
-			// Split the origin into two components, the float approximation and the missing precision.
-			// In the shader we will combine these back together to restore the lost precision.
-			RendererRD::MaterialStorage::split_double(inst->transform.origin.x, &instance_data.transform[3], &instance_data.model_precision[0]);
-			RendererRD::MaterialStorage::split_double(inst->transform.origin.y, &instance_data.transform[7], &instance_data.model_precision[1]);
-			RendererRD::MaterialStorage::split_double(inst->transform.origin.z, &instance_data.transform[11], &instance_data.model_precision[2]);
-			RendererRD::MaterialStorage::split_double(inst->prev_transform.origin.x, &instance_data.prev_transform[3], &instance_data.prev_model_precision[0]);
-			RendererRD::MaterialStorage::split_double(inst->prev_transform.origin.y, &instance_data.prev_transform[7], &instance_data.prev_model_precision[1]);
-			RendererRD::MaterialStorage::split_double(inst->prev_transform.origin.z, &instance_data.prev_transform[11], &instance_data.prev_model_precision[2]);
-#endif
-		} else {
-			RendererRD::MaterialStorage::store_transform_transposed_3x4(Transform3D(), instance_data.transform);
-			RendererRD::MaterialStorage::store_transform_transposed_3x4(Transform3D(), instance_data.prev_transform);
-#ifdef REAL_T_IS_DOUBLE
-			memset(instance_data.model_precision, 0, sizeof(instance_data.model_precision));
-			memset(instance_data.prev_model_precision, 0, sizeof(instance_data.prev_model_precision));
-#endif
-		}
-
-		instance_data.flags = inst->flags_cache;
-		instance_data.gi_offset = inst->gi_offset_cache;
-		instance_data.layer_mask = inst->layer_mask;
-		instance_data.instance_uniforms_ofs = uint32_t(inst->shader_uniforms_offset);
-		instance_data.set_lightmap_uv_scale(inst->lightmap_uv_scale);
-
-		AABB surface_aabb = AABB(Vector3(0.0, 0.0, 0.0), Vector3(1.0, 1.0, 1.0));
-		uint64_t format = RendererRD::MeshStorage::get_singleton()->mesh_surface_get_format(surface->surface);
-		Vector4 uv_scale = Vector4(0.0, 0.0, 0.0, 0.0);
-
-		if (format & RSE::ARRAY_FLAG_COMPRESS_ATTRIBUTES) {
-			surface_aabb = RendererRD::MeshStorage::get_singleton()->mesh_surface_get_aabb(surface->surface);
-			uv_scale = RendererRD::MeshStorage::get_singleton()->mesh_surface_get_uv_scale(surface->surface);
-		}
-
-		instance_data.set_compressed_aabb(surface_aabb);
-		instance_data.set_uv_scale(uv_scale);
+		_fellow_make_instance_data(surface, inst, instance_data);
 
 		scene_state.curr_gpu_ptr[p_render_list][i + p_offset] = instance_data;
 
@@ -948,13 +995,128 @@ void RenderForwardClustered::_fill_instance_data(RenderListType p_render_list, i
 	}
 }
 
+void RenderForwardClustered::_fellow_sort_by_key(RenderListType p_render_list, uint32_t p_from, uint32_t p_size) {
+	RenderList &rl = render_list[p_render_list];
+	if (!(Fellow::cpu_parallel_list_sort() && p_size >= FELLOW_PARALLEL_SORT_MIN)) {
+		rl.fellow_sort_by_key_range(p_from, p_size);
+		return;
+	}
+
+	// Stock's introsort on the records, with its independent subranges sorted by worker threads. Introsort splits a
+	// range with one partition step and then sorts the two parts separately; what it does to one part depends only on
+	// that part's elements and the depth budget it is given. The partition steps above the grain size are taken
+	// here, level by level, exactly as introsort's loop takes them; the parts left are sorted by introsort itself (one
+	// per worker), and the final insertion pass runs over the whole range, as in SortArray::sort. Same steps on the
+	// same subranges: the same order, ties included.
+	rl.fellow_sort_records.resize(p_size);
+	RenderList::FellowSortRecord *records = rl.fellow_sort_records.ptr();
+	GeometryInstanceSurfaceDataCache **e = rl.elements.ptr() + p_from;
+	for (uint32_t i = 0; i < p_size; i++) {
+		records[i].key2 = e[i]->sort.sort_key2;
+		records[i].key1 = e[i]->sort.sort_key1;
+		records[i].surface = e[i];
+	}
+
+	FellowRecordSorter sorter;
+	fellow_sort_job_records = records;
+	const int64_t grain = MAX(int64_t(FELLOW_PARALLEL_SORT_GRAIN), int64_t(p_size) / 8);
+	fellow_sort_leaves.clear();
+	fellow_sort_level.clear();
+	fellow_sort_level.push_back({ 0, int64_t(p_size), sorter.bitlog(int64_t(p_size)) * 2 });
+	while (!fellow_sort_level.is_empty()) {
+		fellow_sort_split.clear();
+		for (const FellowSortRange &r : fellow_sort_level) {
+			if (r.last - r.first < 2) {
+				continue;
+			}
+			if (r.last - r.first <= grain || r.depth == 0) {
+				fellow_sort_leaves.push_back(r); // introsort(first, last, depth) does the rest, heap sort included
+			} else {
+				fellow_sort_split.push_back(r);
+			}
+		}
+		if (fellow_sort_split.is_empty()) {
+			break;
+		}
+		fellow_sort_children.resize(fellow_sort_split.size() * 2);
+		if (fellow_sort_split.size() == 1) {
+			_fellow_sort_split_range(0, nullptr);
+		} else {
+			WorkerThreadPool::GroupID group = WorkerThreadPool::get_singleton()->add_template_group_task(this, &RenderForwardClustered::_fellow_sort_split_range, (void *)nullptr, (int)fellow_sort_split.size(), -1, true, SNAME("FellowSortSplit"));
+			WorkerThreadPool::get_singleton()->wait_for_group_task_completion(group);
+		}
+		fellow_sort_level.clear();
+		for (const FellowSortRange &r : fellow_sort_children) {
+			fellow_sort_level.push_back(r);
+		}
+	}
+	if (fellow_sort_leaves.size() == 1) {
+		_fellow_sort_leaf(0, nullptr);
+	} else if (!fellow_sort_leaves.is_empty()) {
+		WorkerThreadPool::GroupID group = WorkerThreadPool::get_singleton()->add_template_group_task(this, &RenderForwardClustered::_fellow_sort_leaf, (void *)nullptr, (int)fellow_sort_leaves.size(), -1, true, SNAME("FellowSortLeaves"));
+		WorkerThreadPool::get_singleton()->wait_for_group_task_completion(group);
+	}
+	sorter.final_insertion_sort(0, int64_t(p_size), records);
+
+	for (uint32_t i = 0; i < p_size; i++) {
+		e[i] = records[i].surface;
+	}
+}
+
+void RenderForwardClustered::_fellow_sort_split_range(uint32_t p_index, void *p_unused) {
+	// One step of SortArray::introsort's loop on this range: the right part is what it recurses into, the left part what
+	// the loop continues with, both with the decremented depth budget.
+	const FellowSortRange r = fellow_sort_split[p_index];
+	FellowRecordSorter sorter;
+	RenderList::FellowSortRecord *records = fellow_sort_job_records;
+	const int64_t depth = r.depth - 1;
+	const int64_t cut = sorter.partitioner(r.first, r.last, sorter.median_of_3_index(records, r.first, r.first + (r.last - r.first) / 2, r.last - 1), records);
+	fellow_sort_children[p_index * 2 + 0] = { cut, r.last, depth };
+	fellow_sort_children[p_index * 2 + 1] = { r.first, cut, depth };
+}
+
+void RenderForwardClustered::_fellow_sort_leaf(uint32_t p_index, void *p_unused) {
+	const FellowSortRange r = fellow_sort_leaves[p_index];
+	FellowRecordSorter sorter;
+	sorter.introsort(r.first, r.last, fellow_sort_job_records, r.depth);
+}
+
+void RenderForwardClustered::_fellow_fill_instance_data_chunk(uint32_t p_chunk, void *p_unused) {
+	const FellowInstanceDataJob &job = fellow_instance_job;
+	RenderList *rl = &render_list[job.render_list];
+	SceneState::InstanceData *gpu = scene_state.curr_gpu_ptr[job.render_list];
+	uint8_t *joinable = fellow_instance_joinable.ptr();
+	const uint32_t from = job.offset + p_chunk * job.chunk_size;
+	const uint32_t to = MIN(from + job.chunk_size, job.offset + job.total);
+	for (uint32_t i = from; i < to; i++) {
+		GeometryInstanceSurfaceDataCache *surface = rl->elements[i];
+		GeometryInstanceForwardClustered *inst = surface->owner;
+
+		SceneState::InstanceData instance_data;
+		_fellow_make_instance_data(surface, inst, instance_data);
+		gpu[i] = instance_data;
+
+		// Stock's repeat test against the previous element (none before the first element of the range filled).
+		const bool cant_repeat = instance_data.flags & INSTANCE_DATA_FLAG_MULTIMESH || inst->mesh_instance.is_valid();
+		bool join = false;
+		if (i > job.offset && !cant_repeat) {
+			const GeometryInstanceSurfaceDataCache *prev_surface = rl->elements[i - 1];
+			const GeometryInstanceForwardClustered *prev_inst = prev_surface->owner;
+			const bool prev_cant_repeat = prev_inst->flags_cache & INSTANCE_DATA_FLAG_MULTIMESH || prev_inst->mesh_instance.is_valid();
+			join = !prev_cant_repeat && prev_surface->sort.sort_key1 == surface->sort.sort_key1 && prev_surface->sort.sort_key2 == surface->sort.sort_key2 && inst->mirror == prev_inst->mirror;
+		}
+		joinable[i - job.offset] = join;
+
+		rl->element_info[i].value = uint32_t(surface->sort.sort_key1 & 0xFFF);
+	}
+}
+
 _FORCE_INLINE_ static uint32_t _indices_to_primitives(RSE::PrimitiveType p_primitive, uint32_t p_indices) {
 	static const uint32_t divisor[RSE::PRIMITIVE_MAX] = { 1, 2, 1, 3, 1 };
 	static const uint32_t subtractor[RSE::PRIMITIVE_MAX] = { 0, 0, 1, 0, 2 };
 	return (p_indices - subtractor[p_primitive]) / divisor[p_primitive];
 }
 void RenderForwardClustered::_fill_render_list(RenderListType p_render_list, const RenderDataRD *p_render_data, PassMode p_pass_mode, bool p_using_sdfgi, bool p_using_opaque_gi, bool p_using_motion_pass, bool p_append) {
-	RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
 	uint64_t frame = RSG::rasterizer->get_frame_number();
 
 	if (p_render_list == RENDER_LIST_OPAQUE) {
@@ -985,7 +1147,48 @@ void RenderForwardClustered::_fill_render_list(RenderListType p_render_list, con
 
 	//fill list
 
-	for (int i = 0; i < (int)p_render_data->instances->size(); i++) {
+	FellowFillParams params;
+	params.render_list = p_render_list;
+	params.render_data = p_render_data;
+	params.pass_mode = p_pass_mode;
+	params.using_sdfgi = p_using_sdfgi;
+	params.using_opaque_gi = p_using_opaque_gi;
+	params.using_motion_pass = p_using_motion_pass;
+	params.frame = frame;
+	params.near_plane = near_plane;
+	params.z_max = z_max;
+
+	const uint32_t instance_count = (uint32_t)p_render_data->instances->size();
+	if (!(Fellow::cpu_parallel_list_fill() && instance_count >= FELLOW_PARALLEL_LIST_MIN && _fellow_fill_render_list_parallel(params, instance_count, lightmap_captures_used))) {
+		FellowFillOutput out;
+		out.main = &rl->elements;
+		out.alpha = &render_list[RENDER_LIST_ALPHA].elements;
+		out.motion = &render_list[RENDER_LIST_MOTION].elements;
+		out.lightmap_captures_used = &lightmap_captures_used;
+		_fill_render_list_range(params, 0, instance_count, out);
+		_fellow_fill_apply_output(params, out);
+	}
+
+	if (p_render_list == RENDER_LIST_OPAQUE && lightmap_captures_used) {
+		RD::get_singleton()->buffer_update(scene_state.lightmap_capture_buffer, 0, sizeof(LightmapCaptureData) * lightmap_captures_used, scene_state.lightmap_captures);
+	}
+}
+
+void RenderForwardClustered::_fill_render_list_range(const FellowFillParams &p_params, uint32_t p_from, uint32_t p_to, FellowFillOutput &r_out) {
+	// Stock's _fill_render_list loop, for the instances [p_from, p_to). The lists, the scene flags and the primitive
+	// counter it updated directly go through r_out; the caller applies them (in list order for worker ranges).
+	RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
+	const RenderListType p_render_list = p_params.render_list;
+	const RenderDataRD *p_render_data = p_params.render_data;
+	const PassMode p_pass_mode = p_params.pass_mode;
+	const bool p_using_sdfgi = p_params.using_sdfgi;
+	const bool p_using_opaque_gi = p_params.using_opaque_gi;
+	const bool p_using_motion_pass = p_params.using_motion_pass;
+	const uint64_t frame = p_params.frame;
+	const Plane &near_plane = p_params.near_plane;
+	const float z_max = p_params.z_max;
+
+	for (uint32_t i = p_from; i < p_to; i++) {
 		GeometryInstanceForwardClustered *inst = static_cast<GeometryInstanceForwardClustered *>((*p_render_data->instances)[i]);
 
 		Vector3 center = inst->transform.origin;
@@ -1050,9 +1253,12 @@ void RenderForwardClustered::_fill_render_list(RenderListType p_render_list, con
 				}
 
 			} else if (inst->lightmap_sh) {
-				if (lightmap_captures_used < scene_state.max_lightmap_captures) {
+				if (r_out.lightmap_captures_used == nullptr) {
+					// Worker range: the capture slot depends on the instances before this one; assigned afterwards.
+					r_out.deferred_captures->push_back(inst);
+				} else if (*r_out.lightmap_captures_used < scene_state.max_lightmap_captures) {
 					const Color *src_capture = inst->lightmap_sh->sh;
-					LightmapCaptureData &lcd = scene_state.lightmap_captures[lightmap_captures_used];
+					LightmapCaptureData &lcd = scene_state.lightmap_captures[*r_out.lightmap_captures_used];
 					for (int j = 0; j < 9; j++) {
 						lcd.sh[j * 4 + 0] = src_capture[j].r;
 						lcd.sh[j * 4 + 1] = src_capture[j].g;
@@ -1060,8 +1266,8 @@ void RenderForwardClustered::_fill_render_list(RenderListType p_render_list, con
 						lcd.sh[j * 4 + 3] = src_capture[j].a;
 					}
 					flags |= INSTANCE_DATA_FLAG_USE_LIGHTMAP_CAPTURE;
-					inst->gi_offset_cache = lightmap_captures_used;
-					lightmap_captures_used++;
+					inst->gi_offset_cache = *r_out.lightmap_captures_used;
+					(*r_out.lightmap_captures_used)++;
 					uses_lightmap = true;
 				}
 
@@ -1149,11 +1355,7 @@ void RenderForwardClustered::_fill_render_list(RenderListType p_render_list, con
 				surf->sort.lod_index = mesh_storage->mesh_surface_get_lod(surf->surface, inst->lod_model_scale * inst->lod_bias, lod_distance * p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, indices);
 				if (p_render_data->render_info) {
 					indices = _indices_to_primitives(surf->primitive, indices);
-					if (p_render_list == RENDER_LIST_OPAQUE) { //opaque
-						p_render_data->render_info->info[RSE::VIEWPORT_RENDER_INFO_TYPE_VISIBLE][RSE::VIEWPORT_RENDER_INFO_PRIMITIVES_IN_FRAME] += indices;
-					} else if (p_render_list == RENDER_LIST_SECONDARY) { //shadow
-						p_render_data->render_info->info[RSE::VIEWPORT_RENDER_INFO_TYPE_SHADOW][RSE::VIEWPORT_RENDER_INFO_PRIMITIVES_IN_FRAME] += indices;
-					}
+					r_out.primitives += indices; // Added to the visible (opaque list) or shadow counter by the caller.
 				}
 			} else {
 				surf->sort.lod_index = 0;
@@ -1162,11 +1364,7 @@ void RenderForwardClustered::_fill_render_list(RenderListType p_render_list, con
 					uint32_t to_draw = mesh_storage->mesh_surface_get_vertices_drawn_count(surf->surface);
 					to_draw = _indices_to_primitives(surf->primitive, to_draw);
 					to_draw *= inst->instance_count;
-					if (p_render_list == RENDER_LIST_OPAQUE) { //opaque
-						p_render_data->render_info->info[RSE::VIEWPORT_RENDER_INFO_TYPE_VISIBLE][RSE::VIEWPORT_RENDER_INFO_PRIMITIVES_IN_FRAME] += to_draw;
-					} else if (p_render_list == RENDER_LIST_SECONDARY) { //shadow
-						p_render_data->render_info->info[RSE::VIEWPORT_RENDER_INFO_TYPE_SHADOW][RSE::VIEWPORT_RENDER_INFO_PRIMITIVES_IN_FRAME] += to_draw;
-					}
+					r_out.primitives += to_draw; // Added to the visible (opaque list) or shadow counter by the caller.
 				}
 			}
 
@@ -1183,53 +1381,53 @@ void RenderForwardClustered::_fill_render_list(RenderListType p_render_list, con
 				}
 
 				if (!force_alpha && (surf->flags & (GeometryInstanceSurfaceDataCache::FLAG_PASS_DEPTH | GeometryInstanceSurfaceDataCache::FLAG_PASS_OPAQUE))) {
-					rl->add_element(surf);
+					r_out.main->push_back(surf);
 				}
 
 				if (force_alpha || (surf->flags & GeometryInstanceSurfaceDataCache::FLAG_PASS_ALPHA)) {
 					surf->color_pass_inclusion_mask = COLOR_PASS_FLAG_TRANSPARENT;
-					render_list[RENDER_LIST_ALPHA].add_element(surf);
+					r_out.alpha->push_back(surf);
 					if (uses_gi) {
 						surf->sort.uses_forward_gi = 1;
 					}
 				} else if (p_using_motion_pass && (uses_motion || (surf->flags & GeometryInstanceSurfaceDataCache::FLAG_USES_MOTION_VECTOR))) {
 					surf->color_pass_inclusion_mask = COLOR_PASS_FLAG_MOTION_VECTORS;
-					render_list[RENDER_LIST_MOTION].add_element(surf);
+					r_out.motion->push_back(surf);
 				} else {
 					surf->color_pass_inclusion_mask = 0;
 				}
 
 				if (uses_lightmap) {
 					surf->sort.uses_lightmap = 1;
-					scene_state.used_lightmap = true;
+					r_out.used_lightmap = true;
 				}
 
 				if (surf->flags & GeometryInstanceSurfaceDataCache::FLAG_USES_SUBSURFACE_SCATTERING) {
-					scene_state.used_sss = true;
+					r_out.used_sss = true;
 				}
 				if (surf->flags & GeometryInstanceSurfaceDataCache::FLAG_USES_SCREEN_TEXTURE) {
-					scene_state.used_screen_texture = true;
+					r_out.used_screen_texture = true;
 				}
 				if (surf->flags & GeometryInstanceSurfaceDataCache::FLAG_USES_NORMAL_TEXTURE) {
-					scene_state.used_normal_texture = true;
+					r_out.used_normal_texture = true;
 				}
 				if (surf->flags & GeometryInstanceSurfaceDataCache::FLAG_USES_DEPTH_TEXTURE) {
-					scene_state.used_depth_texture = true;
+					r_out.used_depth_texture = true;
 				}
 				if ((surf->flags & GeometryInstanceSurfaceDataCache::FLAG_USES_STENCIL) && !force_alpha && (surf->flags & (GeometryInstanceSurfaceDataCache::FLAG_PASS_DEPTH | GeometryInstanceSurfaceDataCache::FLAG_PASS_OPAQUE))) {
-					scene_state.used_opaque_stencil = true;
+					r_out.used_opaque_stencil = true;
 				}
 			} else if (p_pass_mode == PASS_MODE_SHADOW || p_pass_mode == PASS_MODE_SHADOW_DP) {
 				if (surf->flags & GeometryInstanceSurfaceDataCache::FLAG_PASS_SHADOW) {
-					rl->add_element(surf);
+					r_out.main->push_back(surf);
 				}
 			} else if (p_pass_mode == PASS_MODE_DEPTH_MATERIAL) {
 				if (surf->flags & (GeometryInstanceSurfaceDataCache::FLAG_PASS_DEPTH | GeometryInstanceSurfaceDataCache::FLAG_PASS_OPAQUE | GeometryInstanceSurfaceDataCache::FLAG_PASS_ALPHA)) {
-					rl->add_element(surf);
+					r_out.main->push_back(surf);
 				}
 			} else {
 				if (surf->flags & (GeometryInstanceSurfaceDataCache::FLAG_PASS_DEPTH | GeometryInstanceSurfaceDataCache::FLAG_PASS_OPAQUE)) {
-					rl->add_element(surf);
+					r_out.main->push_back(surf);
 				}
 			}
 
@@ -1239,9 +1437,127 @@ void RenderForwardClustered::_fill_render_list(RenderListType p_render_list, con
 		}
 	}
 
-	if (p_render_list == RENDER_LIST_OPAQUE && lightmap_captures_used) {
-		RD::get_singleton()->buffer_update(scene_state.lightmap_capture_buffer, 0, sizeof(LightmapCaptureData) * lightmap_captures_used, scene_state.lightmap_captures);
+}
+
+void RenderForwardClustered::_fellow_fill_apply_output(const FellowFillParams &p_params, const FellowFillOutput &p_out) {
+	if (p_out.used_sss) {
+		scene_state.used_sss = true;
 	}
+	if (p_out.used_screen_texture) {
+		scene_state.used_screen_texture = true;
+	}
+	if (p_out.used_normal_texture) {
+		scene_state.used_normal_texture = true;
+	}
+	if (p_out.used_depth_texture) {
+		scene_state.used_depth_texture = true;
+	}
+	if (p_out.used_lightmap) {
+		scene_state.used_lightmap = true;
+	}
+	if (p_out.used_opaque_stencil) {
+		scene_state.used_opaque_stencil = true;
+	}
+	if (p_params.render_data->render_info) {
+		// Stock adds each surface's count to the int counter; the sum modulo 2^32 is the same.
+		const uint32_t primitives = uint32_t(p_out.primitives);
+		if (p_params.render_list == RENDER_LIST_OPAQUE) { //opaque
+			p_params.render_data->render_info->info[RSE::VIEWPORT_RENDER_INFO_TYPE_VISIBLE][RSE::VIEWPORT_RENDER_INFO_PRIMITIVES_IN_FRAME] += primitives;
+		} else if (p_params.render_list == RENDER_LIST_SECONDARY) { //shadow
+			p_params.render_data->render_info->info[RSE::VIEWPORT_RENDER_INFO_TYPE_SHADOW][RSE::VIEWPORT_RENDER_INFO_PRIMITIVES_IN_FRAME] += primitives;
+		}
+	}
+}
+
+template <typename T>
+static _FORCE_INLINE_ void _fellow_append_pointers(LocalVector<T *> &r_dst, const LocalVector<T *> &p_src) {
+	if (p_src.is_empty()) {
+		return;
+	}
+	const uint32_t at = r_dst.size();
+	r_dst.resize(at + p_src.size());
+	memcpy(r_dst.ptr() + at, p_src.ptr(), p_src.size() * sizeof(T *));
+}
+
+void RenderForwardClustered::_fellow_fill_render_list_chunk(uint32_t p_chunk, void *p_unused) {
+	const uint32_t from = p_chunk * fellow_fill_chunk_size;
+	const uint32_t to = MIN(from + fellow_fill_chunk_size, fellow_fill_count);
+	_fill_render_list_range(fellow_fill_params, from, to, fellow_fill_chunks[p_chunk].out);
+}
+
+bool RenderForwardClustered::_fellow_fill_render_list_parallel(const FellowFillParams &p_params, uint32_t p_count, uint32_t &r_lightmap_captures_used) {
+	// Each worker fills a contiguous range of instances into its own lists. Every instance appears once in the list
+	// being filled, and the loop body writes only to that instance and its surfaces, so the ranges are independent.
+	// Joined in range order, the lists hold the elements in stock's order.
+	const uint32_t chunk_size = FELLOW_PARALLEL_LIST_CHUNK;
+	const uint32_t chunk_count = (p_count + chunk_size - 1) / chunk_size;
+	if (fellow_fill_chunks.size() < chunk_count) {
+		fellow_fill_chunks.resize(chunk_count);
+	}
+	for (uint32_t c = 0; c < chunk_count; c++) {
+		FellowFillChunk &chunk = fellow_fill_chunks[c];
+		chunk.main.clear();
+		chunk.alpha.clear();
+		chunk.motion.clear();
+		chunk.deferred_captures.clear();
+		chunk.out = FellowFillOutput();
+		chunk.out.main = &chunk.main;
+		chunk.out.alpha = &chunk.alpha;
+		chunk.out.motion = &chunk.motion;
+		chunk.out.deferred_captures = &chunk.deferred_captures;
+	}
+	fellow_fill_params = p_params;
+	fellow_fill_count = p_count;
+	fellow_fill_chunk_size = chunk_size;
+
+	WorkerThreadPool::GroupID group = WorkerThreadPool::get_singleton()->add_template_group_task(this, &RenderForwardClustered::_fellow_fill_render_list_chunk, (void *)nullptr, (int)chunk_count, -1, true, SNAME("FellowFillRenderList"));
+	WorkerThreadPool::get_singleton()->wait_for_group_task_completion(group);
+
+	RenderList *rl = &render_list[p_params.render_list];
+	FellowFillOutput total;
+	for (uint32_t c = 0; c < chunk_count; c++) {
+		const FellowFillChunk &chunk = fellow_fill_chunks[c];
+		_fellow_append_pointers(rl->elements, chunk.main);
+		_fellow_append_pointers(render_list[RENDER_LIST_ALPHA].elements, chunk.alpha);
+		_fellow_append_pointers(render_list[RENDER_LIST_MOTION].elements, chunk.motion);
+		total.primitives += chunk.out.primitives;
+		total.used_sss = total.used_sss || chunk.out.used_sss;
+		total.used_screen_texture = total.used_screen_texture || chunk.out.used_screen_texture;
+		total.used_normal_texture = total.used_normal_texture || chunk.out.used_normal_texture;
+		total.used_depth_texture = total.used_depth_texture || chunk.out.used_depth_texture;
+		total.used_lightmap = total.used_lightmap || chunk.out.used_lightmap;
+		total.used_opaque_stencil = total.used_opaque_stencil || chunk.out.used_opaque_stencil;
+	}
+
+	// Lightmap capture slots, in list order: what stock's loop does for these instances, after the rest of their fill
+	// (it only adds the capture flag to the instance flags and marks its surfaces as lightmapped, both part of what the
+	// sort and the instance data read later).
+	for (uint32_t c = 0; c < chunk_count; c++) {
+		for (GeometryInstanceForwardClustered *inst : fellow_fill_chunks[c].deferred_captures) {
+			if (r_lightmap_captures_used < scene_state.max_lightmap_captures) {
+				const Color *src_capture = inst->lightmap_sh->sh;
+				LightmapCaptureData &lcd = scene_state.lightmap_captures[r_lightmap_captures_used];
+				for (int j = 0; j < 9; j++) {
+					lcd.sh[j * 4 + 0] = src_capture[j].r;
+					lcd.sh[j * 4 + 1] = src_capture[j].g;
+					lcd.sh[j * 4 + 2] = src_capture[j].b;
+					lcd.sh[j * 4 + 3] = src_capture[j].a;
+				}
+				inst->flags_cache |= INSTANCE_DATA_FLAG_USE_LIGHTMAP_CAPTURE;
+				inst->gi_offset_cache = r_lightmap_captures_used;
+				r_lightmap_captures_used++;
+				if (p_params.pass_mode == PASS_MODE_COLOR) {
+					for (GeometryInstanceSurfaceDataCache *surf = inst->surface_caches; surf; surf = surf->next) {
+						surf->sort.uses_lightmap = 1;
+					}
+					total.used_lightmap = true;
+				}
+			}
+		}
+	}
+
+	_fellow_fill_apply_output(p_params, total);
+	return true;
 }
 
 void RenderForwardClustered::_setup_voxelgis(const PagedArray<RID> &p_voxelgis) {
@@ -2155,8 +2471,13 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	}
 
 	_fill_render_list(RENDER_LIST_OPAQUE, p_render_data, PASS_MODE_COLOR, using_sdfgi, using_sdfgi || using_voxelgi, using_motion_pass);
-	render_list[RENDER_LIST_OPAQUE].sort_by_key();
-	render_list[RENDER_LIST_MOTION].sort_by_key();
+	if (Fellow::cpu_compact_list_sort()) {
+		_fellow_sort_by_key(RENDER_LIST_OPAQUE, 0, render_list[RENDER_LIST_OPAQUE].elements.size());
+		_fellow_sort_by_key(RENDER_LIST_MOTION, 0, render_list[RENDER_LIST_MOTION].elements.size());
+	} else {
+		render_list[RENDER_LIST_OPAQUE].sort_by_key();
+		render_list[RENDER_LIST_MOTION].sort_by_key();
+	}
 	render_list[RENDER_LIST_ALPHA].sort_by_reverse_depth_and_priority();
 
 	int *render_info = p_render_data->render_info ? p_render_data->render_info->info[RSE::VIEWPORT_RENDER_INFO_TYPE_VISIBLE] : (int *)nullptr;
@@ -3261,7 +3582,11 @@ void RenderForwardClustered::_render_shadow_append(RID p_framebuffer, const Page
 	uint32_t render_list_from = render_list[RENDER_LIST_SECONDARY].elements.size();
 	_fill_render_list(RENDER_LIST_SECONDARY, &render_data, pass_mode, false, false, false, true);
 	uint32_t render_list_size = render_list[RENDER_LIST_SECONDARY].elements.size() - render_list_from;
-	render_list[RENDER_LIST_SECONDARY].sort_by_key_range(render_list_from, render_list_size);
+	if (Fellow::cpu_compact_list_sort()) {
+		_fellow_sort_by_key(RENDER_LIST_SECONDARY, render_list_from, render_list_size);
+	} else {
+		render_list[RENDER_LIST_SECONDARY].sort_by_key_range(render_list_from, render_list_size);
+	}
 	_fill_instance_data(RENDER_LIST_SECONDARY, p_render_info ? p_render_info->info[RSE::VIEWPORT_RENDER_INFO_TYPE_SHADOW] : (int *)nullptr, render_list_from, render_list_size, false);
 
 	{

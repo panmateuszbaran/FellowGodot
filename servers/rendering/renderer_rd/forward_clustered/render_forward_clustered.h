@@ -495,6 +495,80 @@ private:
 	void _fill_instance_data(RenderListType p_render_list, int *p_render_info = nullptr, uint32_t p_offset = 0, int32_t p_max_elements = -1, bool p_update_buffer = true);
 	void _fill_render_list(RenderListType p_render_list, const RenderDataRD *p_render_data, PassMode p_pass_mode, bool p_using_sdfgi = false, bool p_using_opaque_gi = false, bool p_using_motion_pass = false, bool p_append = false);
 
+	// FellowEngine parallel render lists (docs/decisions/0016-parallel-render-lists.md). The list fill and the instance
+	// data are computed by worker threads over contiguous ranges and joined in order, so every list, key, flag and
+	// instance buffer word is the one the single-threaded loop produces.
+	class GeometryInstanceForwardClustered;
+	struct FellowFillParams {
+		RenderListType render_list = RENDER_LIST_OPAQUE;
+		const RenderDataRD *render_data = nullptr;
+		PassMode pass_mode = PASS_MODE_COLOR;
+		bool using_sdfgi = false;
+		bool using_opaque_gi = false;
+		bool using_motion_pass = false;
+		uint64_t frame = 0;
+		Plane near_plane;
+		float z_max = 0.0;
+	};
+	struct FellowFillOutput {
+		LocalVector<GeometryInstanceSurfaceDataCache *> *main = nullptr;
+		LocalVector<GeometryInstanceSurfaceDataCache *> *alpha = nullptr;
+		LocalVector<GeometryInstanceSurfaceDataCache *> *motion = nullptr;
+		// Single-threaded: the lightmap capture slots are assigned in list order through this counter. Worker ranges
+		// leave it null and collect the instances that need a slot; they are assigned afterwards, in list order.
+		uint32_t *lightmap_captures_used = nullptr;
+		LocalVector<GeometryInstanceForwardClustered *> *deferred_captures = nullptr;
+		uint64_t primitives = 0;
+		bool used_sss = false;
+		bool used_screen_texture = false;
+		bool used_normal_texture = false;
+		bool used_depth_texture = false;
+		bool used_lightmap = false;
+		bool used_opaque_stencil = false;
+	};
+	struct FellowFillChunk {
+		LocalVector<GeometryInstanceSurfaceDataCache *> main;
+		LocalVector<GeometryInstanceSurfaceDataCache *> alpha;
+		LocalVector<GeometryInstanceSurfaceDataCache *> motion;
+		LocalVector<GeometryInstanceForwardClustered *> deferred_captures;
+		FellowFillOutput out;
+	};
+	static constexpr uint32_t FELLOW_PARALLEL_LIST_MIN = 1024; // fewer instances or elements: single-threaded
+	static constexpr uint32_t FELLOW_PARALLEL_LIST_CHUNK = 256; // instances or elements per worker range
+	struct FellowInstanceDataJob {
+		RenderListType render_list = RENDER_LIST_OPAQUE;
+		uint32_t offset = 0;
+		uint32_t total = 0;
+		uint32_t chunk_size = 0;
+	};
+	LocalVector<FellowFillChunk> fellow_fill_chunks;
+	FellowFillParams fellow_fill_params;
+	uint32_t fellow_fill_count = 0;
+	uint32_t fellow_fill_chunk_size = 0;
+	FellowInstanceDataJob fellow_instance_job;
+	LocalVector<uint8_t> fellow_instance_joinable;
+	static constexpr uint32_t FELLOW_PARALLEL_SORT_MIN = 4096; // fewer elements: single-threaded sort
+	static constexpr uint32_t FELLOW_PARALLEL_SORT_GRAIN = 1024; // ranges up to this size are sorted by one worker
+	struct FellowSortRange {
+		int64_t first;
+		int64_t last;
+		int64_t depth;
+	};
+	LocalVector<FellowSortRange> fellow_sort_level;
+	LocalVector<FellowSortRange> fellow_sort_split;
+	LocalVector<FellowSortRange> fellow_sort_children;
+	LocalVector<FellowSortRange> fellow_sort_leaves;
+
+	void _fill_render_list_range(const FellowFillParams &p_params, uint32_t p_from, uint32_t p_to, FellowFillOutput &r_out);
+	void _fellow_fill_apply_output(const FellowFillParams &p_params, const FellowFillOutput &p_out);
+	bool _fellow_fill_render_list_parallel(const FellowFillParams &p_params, uint32_t p_count, uint32_t &r_lightmap_captures_used);
+	void _fellow_fill_render_list_chunk(uint32_t p_chunk, void *p_unused);
+	void _fellow_make_instance_data(const GeometryInstanceSurfaceDataCache *p_surface, const GeometryInstanceForwardClustered *p_inst, SceneState::InstanceData &r_data) const;
+	void _fellow_fill_instance_data_chunk(uint32_t p_chunk, void *p_unused);
+	void _fellow_sort_by_key(RenderListType p_render_list, uint32_t p_from, uint32_t p_size);
+	void _fellow_sort_split_range(uint32_t p_index, void *p_unused);
+	void _fellow_sort_leaf(uint32_t p_index, void *p_unused);
+
 	HashMap<Size2i, RID> sdfgi_framebuffer_size_cache;
 
 	struct GeometryInstanceData;
@@ -727,6 +801,41 @@ private:
 			sorter.sort(elements.ptr() + p_from, p_size);
 		}
 
+		// FellowEngine compact sort (docs/decisions/0016-parallel-render-lists.md): the same introsort, run on
+		// (key2, key1, element) records copied out of the surfaces. The comparisons see the same keys in the same
+		// positions, so the algorithm takes the same steps and leaves the elements in the same order (ties included),
+		// without dereferencing two scattered surfaces per comparison.
+		struct FellowSortRecord {
+			uint64_t key2;
+			uint64_t key1;
+			GeometryInstanceSurfaceDataCache *surface;
+		};
+		struct FellowSortRecordByKey {
+			_FORCE_INLINE_ bool operator()(const FellowSortRecord &A, const FellowSortRecord &B) const {
+				return (A.key2 == B.key2) ? (A.key1 < B.key1) : (A.key2 < B.key2);
+			}
+		};
+		LocalVector<FellowSortRecord> fellow_sort_records;
+
+		void fellow_sort_by_key_range(uint32_t p_from, uint32_t p_size) {
+			if (p_size < 2) {
+				return;
+			}
+			fellow_sort_records.resize(p_size);
+			FellowSortRecord *records = fellow_sort_records.ptr();
+			GeometryInstanceSurfaceDataCache **e = elements.ptr() + p_from;
+			for (uint32_t i = 0; i < p_size; i++) {
+				records[i].key2 = e[i]->sort.sort_key2;
+				records[i].key1 = e[i]->sort.sort_key1;
+				records[i].surface = e[i];
+			}
+			SortArray<FellowSortRecord, FellowSortRecordByKey> sorter;
+			sorter.sort(records, p_size);
+			for (uint32_t i = 0; i < p_size; i++) {
+				e[i] = records[i].surface;
+			}
+		}
+
 		struct SortByDepth {
 			_FORCE_INLINE_ bool operator()(const GeometryInstanceSurfaceDataCache *A, const GeometryInstanceSurfaceDataCache *B) const {
 				return (A->owner->depth < B->owner->depth);
@@ -757,6 +866,8 @@ private:
 	};
 
 	RenderList render_list[RENDER_LIST_MAX];
+	typedef SortArray<RenderList::FellowSortRecord, RenderList::FellowSortRecordByKey> FellowRecordSorter;
+	RenderList::FellowSortRecord *fellow_sort_job_records = nullptr;
 
 	virtual void _update_shader_quality_settings() override;
 

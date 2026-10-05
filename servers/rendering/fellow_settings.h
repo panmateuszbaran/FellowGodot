@@ -300,6 +300,34 @@ inline bool frame_async_compute() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/frame/async_compute");
 }
 
+// CPU work of the render thread (docs/decisions/0016-parallel-render-lists.md). Each toggle produces the same lists,
+// keys, instance data and draws as stock (bit-identical images); read every frame.
+inline bool cpu_enabled() {
+	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/cpu/enabled");
+}
+
+// Render lists (opaque, shadow passes) filled by worker threads over ranges of the culled instances, joined in order.
+inline bool cpu_parallel_list_fill() {
+	return cpu_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/cpu/parallel_list_fill");
+}
+
+// Instance data of the render lists written by worker threads over ranges of the sorted elements.
+inline bool cpu_parallel_instance_data() {
+	return cpu_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/cpu/parallel_instance_data");
+}
+
+// Render lists sorted by stock's introsort on records of the two sort keys copied out of the surfaces (same steps,
+// same order, ties included) instead of on pointers dereferenced at every comparison.
+inline bool cpu_compact_list_sort() {
+	return cpu_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/cpu/compact_list_sort");
+}
+
+// With the compact sort: large lists sorted by worker threads (introsort's independent subranges in parallel; the
+// same steps, the same order).
+inline bool cpu_parallel_list_sort() {
+	return cpu_compact_list_sort() && GLOBAL_GET_CACHED(bool, "rendering/fellow/cpu/parallel_list_sort");
+}
+
 // Mix-blended materials (alpha pass, no depth or stencil writes, no alpha antialiasing): fragments whose final alpha is
 // exactly 0 are discarded before lighting — blending them leaves the colour target unchanged (src * 0 + dst * 1), so
 // the image is the same; stock lights and fogs them anyway. Read every frame.
