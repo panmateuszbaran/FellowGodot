@@ -32,6 +32,7 @@ const SCENES := {
 	"stress": "res://scenes/stress_lab.gd",
 	"lights": "res://scenes/lights_lab.gd",
 	"blend": "res://scenes/blend_lab.gd",
+	"city": "res://scenes/city_lab.gd",
 }
 const DT := 1.0 / 60.0
 
@@ -339,7 +340,11 @@ func _accumulate_timestamps(rd: RenderingDevice, acc: Dictionary) -> void:
 			continue
 		var dt_ms := (rd.get_captured_timestamp_gpu_time(i + 1) - rd.get_captured_timestamp_gpu_time(i)) / 1e6
 		acc[nm] = acc.get(nm, 0.0) + dt_ms
+		# Render-thread CPU time between the same markers (microseconds), reported as "cpu: <marker>".
+		var cpu_ms := (rd.get_captured_timestamp_cpu_time(i + 1) - rd.get_captured_timestamp_cpu_time(i)) / 1e3
+		acc["cpu: " + nm] = acc.get("cpu: " + nm, 0.0) + cpu_ms
 	acc["__total__"] = acc.get("__total__", 0.0) + (rd.get_captured_timestamp_gpu_time(n - 1) - rd.get_captured_timestamp_gpu_time(0)) / 1e6
+	acc["cpu: __total__"] = acc.get("cpu: __total__", 0.0) + (rd.get_captured_timestamp_cpu_time(n - 1) - rd.get_captured_timestamp_cpu_time(0)) / 1e3
 
 
 ## FellowEngine counters (RenderingServer.fellow_get_stats); empty on stock Godot.
