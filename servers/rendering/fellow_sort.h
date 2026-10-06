@@ -74,7 +74,12 @@ public:
 
 	// Ranges of up to p_grain elements are sorted by one thread.
 	void run(FellowParallelFor &p_for, uint32_t p_max_helpers, int64_t p_grain, LeafDone p_leaf_done = nullptr) {
-		leaf_done = p_leaf_done;
+		run_partitions(p_for, p_max_helpers, p_grain);
+		run_leaves(p_for, p_max_helpers, p_leaf_done);
+	}
+
+	// The two halves of run() (for timestamps between them): the partition levels, then the leaves.
+	void run_partitions(FellowParallelFor &p_for, uint32_t p_max_helpers, int64_t p_grain) {
 		leaves.clear();
 		while (!level.is_empty()) {
 			split.clear();
@@ -97,6 +102,10 @@ public:
 				}
 			}
 		}
+	}
+
+	void run_leaves(FellowParallelFor &p_for, uint32_t p_max_helpers, LeafDone p_leaf_done = nullptr) {
+		leaf_done = p_leaf_done;
 		// Larger leaves first (load balance; any order gives the same result).
 		leaves.template sort_custom<LeafBySize>();
 		p_for.run(leaves.size(), &_leaf, this, p_max_helpers);

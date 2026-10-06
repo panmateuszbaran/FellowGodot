@@ -1145,7 +1145,11 @@ void RenderForwardClustered::_fellow_sort_by_key_impl(RenderListType p_render_li
 	fellow_list_sort.clear();
 	fellow_list_sort.add(records, int64_t(p_size), e);
 	fellow_parallel->set_linger_usec((uint64_t)Fellow::cpu_hot_workers_usec());
-	fellow_list_sort.run(*fellow_parallel, (uint32_t)Fellow::cpu_worker_tasks(), MAX(int64_t(FELLOW_PARALLEL_SORT_GRAIN), int64_t(p_size) / 16), &_fellow_sort_write_back);
+	fellow_list_sort.run_partitions(*fellow_parallel, (uint32_t)Fellow::cpu_worker_tasks(), MAX(int64_t(FELLOW_PARALLEL_SORT_GRAIN), int64_t(p_size) / 16));
+	if (markers) {
+		RENDER_TIMESTAMP("FellowEngine Sort Leaves");
+	}
+	fellow_list_sort.run_leaves(*fellow_parallel, (uint32_t)Fellow::cpu_worker_tasks(), &_fellow_sort_write_back);
 }
 
 void RenderForwardClustered::_fellow_sort_write_back(void *p_elements, const RenderList::FellowSortRecord *p_records, int64_t p_first, int64_t p_last) {
@@ -4043,7 +4047,11 @@ void RenderForwardClustered::_fellow_shadow_flush() {
 		}
 		const int64_t sort_total = fellow_shadow_sort.get_total();
 		fellow_parallel->set_linger_usec((uint64_t)Fellow::cpu_hot_workers_usec());
-		fellow_shadow_sort.run(*fellow_parallel, MIN(helpers, (uint32_t)Fellow::cpu_worker_tasks()), MAX(int64_t(FELLOW_PARALLEL_SORT_GRAIN), sort_total / 16));
+		fellow_shadow_sort.run_partitions(*fellow_parallel, MIN(helpers, (uint32_t)Fellow::cpu_worker_tasks()), MAX(int64_t(FELLOW_PARALLEL_SORT_GRAIN), sort_total / 16));
+		if (markers) {
+			RENDER_TIMESTAMP("FellowEngine Shadow Lists Sort Leaves");
+		}
+		fellow_shadow_sort.run_leaves(*fellow_parallel, MIN(helpers, (uint32_t)Fellow::cpu_worker_tasks()));
 	} else {
 		_fellow_parallel_for(entry_count, &_fellow_chunk_thunk<&RenderForwardClustered::_fellow_shadow_sort_entry>, helpers);
 	}
