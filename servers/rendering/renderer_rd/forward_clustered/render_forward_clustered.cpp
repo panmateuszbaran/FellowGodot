@@ -887,6 +887,76 @@ _FORCE_INLINE_ void RenderForwardClustered::_fellow_make_instance_data(const Geo
 	instance_data.set_uv_scale(uv_scale);
 }
 
+uint32_t RenderForwardClustered::_fellow_verify_sort(RenderListType p_render_list, uint32_t p_from, uint32_t p_size, LocalVector<GeometryInstanceSurfaceDataCache *> &p_unsorted) {
+	// Stock's sort of the same elements by the keys the surfaces hold, compared with the list.
+	SortArray<GeometryInstanceSurfaceDataCache *, RenderList::SortByKey> sorter;
+	sorter.sort(p_unsorted.ptr(), p_size);
+	uint32_t mismatches = 0;
+	const GeometryInstanceSurfaceDataCache *const *e = render_list[p_render_list].elements.ptr() + p_from;
+	for (uint32_t i = 0; i < p_size; i++) {
+		if (e[i] != p_unsorted[i]) {
+			mismatches++;
+		}
+	}
+	return mismatches;
+}
+
+uint32_t RenderForwardClustered::_fellow_verify_instances(RenderListType p_render_list, uint32_t p_from, uint32_t p_size, const uint32_t *p_flags) {
+	// Stock's instance data, run lengths and element values for the list range, compared with what was written. The
+	// last component of the compressed AABB position and size is never written (stock leaves it uninitialised).
+	RenderList *rl = &render_list[p_render_list];
+	const SceneState::InstanceData *gpu = scene_state.curr_gpu_ptr[p_render_list];
+	uint32_t mismatches = 0;
+	uint32_t repeats = 0;
+	const GeometryInstanceSurfaceDataCache *prev_surface = nullptr;
+	LocalVector<uint32_t> expected_repeat;
+	expected_repeat.resize(p_size);
+	for (uint32_t k = 0; k < p_size; k++) {
+		const uint32_t i = p_from + k;
+		const GeometryInstanceSurfaceDataCache *surface = rl->elements[i];
+		const GeometryInstanceForwardClustered *inst = surface->owner;
+		SceneState::InstanceData expected;
+		_fellow_make_instance_data(surface, inst, expected);
+		const uint32_t flags = p_flags ? p_flags[k] : inst->flags_cache;
+		expected.flags = flags;
+		expected.compressed_aabb_position[3] = gpu[i].compressed_aabb_position[3];
+		expected.compressed_aabb_size[3] = gpu[i].compressed_aabb_size[3];
+		if (memcmp(&expected, &gpu[i], sizeof(SceneState::InstanceData)) != 0) {
+			mismatches++;
+		}
+		if (rl->element_info[i].value != uint32_t(surface->sort.sort_key1 & 0xFFF) && p_flags == nullptr) {
+			mismatches++;
+		}
+		const bool cant_repeat = flags & INSTANCE_DATA_FLAG_MULTIMESH || inst->mesh_instance.is_valid();
+		if (prev_surface != nullptr && !cant_repeat && prev_surface->sort.sort_key1 == surface->sort.sort_key1 && prev_surface->sort.sort_key2 == surface->sort.sort_key2 && inst->mirror == prev_surface->owner->mirror && repeats < RenderElementInfo::MAX_REPEATS) {
+			repeats++;
+		} else {
+			for (uint32_t j = 1; j <= repeats; j++) {
+				expected_repeat[k - j] = j;
+			}
+			repeats = 1;
+		}
+		prev_surface = cant_repeat ? nullptr : surface;
+	}
+	for (uint32_t j = 1; j <= repeats; j++) {
+		expected_repeat[p_size - j] = j;
+	}
+	for (uint32_t k = 0; k < p_size; k++) {
+		if (rl->element_info[p_from + k].repeat != expected_repeat[k]) {
+			mismatches++;
+		}
+	}
+	return mismatches;
+}
+
+void RenderForwardClustered::_fellow_verify_count(uint32_t p_mismatches) {
+	Fellow::stats().cpu_verify_checks.increment();
+	if (p_mismatches) {
+		Fellow::stats().cpu_verify_mismatches.add(p_mismatches);
+		WARN_PRINT_ONCE(vformat("FellowEngine CPU list verification: %d mismatches against stock's results.", p_mismatches));
+	}
+}
+
 void RenderForwardClustered::_fill_instance_data(RenderListType p_render_list, int *p_render_info, uint32_t p_offset, int32_t p_max_elements, bool p_update_buffer) {
 	RenderList *rl = &render_list[p_render_list];
 	uint32_t element_total = p_max_elements >= 0 ? uint32_t(p_max_elements) : rl->elements.size();
@@ -939,6 +1009,10 @@ void RenderForwardClustered::_fill_instance_data(RenderListType p_render_list, i
 			for (uint32_t j = 1; j <= repeats; j++) {
 				rl->element_info[p_offset + element_total - j].repeat = j;
 			}
+		}
+
+		if (Fellow::cpu_verify()) {
+			_fellow_verify_count(_fellow_verify_instances(p_render_list, p_offset, element_total, nullptr));
 		}
 
 		if (p_update_buffer && element_total > 0u) {
@@ -1000,6 +1074,19 @@ void RenderForwardClustered::_fill_instance_data(RenderListType p_render_list, i
 
 void RenderForwardClustered::_fellow_sort_by_key(RenderListType p_render_list, uint32_t p_from, uint32_t p_size) {
 	RenderList &rl = render_list[p_render_list];
+	if (Fellow::cpu_verify() && p_size > 1) {
+		LocalVector<GeometryInstanceSurfaceDataCache *> unsorted;
+		unsorted.resize(p_size);
+		memcpy(unsorted.ptr(), rl.elements.ptr() + p_from, p_size * sizeof(GeometryInstanceSurfaceDataCache *));
+		_fellow_sort_by_key_impl(p_render_list, p_from, p_size);
+		_fellow_verify_count(_fellow_verify_sort(p_render_list, p_from, p_size, unsorted));
+		return;
+	}
+	_fellow_sort_by_key_impl(p_render_list, p_from, p_size);
+}
+
+void RenderForwardClustered::_fellow_sort_by_key_impl(RenderListType p_render_list, uint32_t p_from, uint32_t p_size) {
+	RenderList &rl = render_list[p_render_list];
 	if (!(Fellow::cpu_parallel_list_sort() && p_size >= FELLOW_PARALLEL_SORT_MIN)) {
 		rl.fellow_sort_by_key_range(p_from, p_size);
 		return;
@@ -1011,19 +1098,29 @@ void RenderForwardClustered::_fellow_sort_by_key(RenderListType p_render_list, u
 	// here, level by level, exactly as introsort's loop takes them; the parts left are sorted by introsort itself (one
 	// per worker), and the final insertion pass runs over the whole range, as in SortArray::sort. Same steps on the
 	// same subranges: the same order, ties included.
-	rl.fellow_sort_records.resize(p_size);
-	RenderList::FellowSortRecord *records = rl.fellow_sort_records.ptr();
-	GeometryInstanceSurfaceDataCache **e = rl.elements.ptr() + p_from;
-	const bool prefetch = Fellow::cpu_prefetch();
-	for (uint32_t i = 0; i < p_size; i++) {
-		if (prefetch && i + 2 * FELLOW_PREFETCH_DISTANCE < p_size) {
-			fellow_prefetch(e[i + 2 * FELLOW_PREFETCH_DISTANCE]);
-		}
-		records[i].key2 = e[i]->sort.sort_key2;
-		records[i].key1 = e[i]->sort.sort_key1;
-		records[i].surface = e[i];
+	const bool markers = Fellow::list_markers();
+	if (markers) {
+		RENDER_TIMESTAMP("FellowEngine Sort Gather");
 	}
+	GeometryInstanceSurfaceDataCache **e = rl.elements.ptr() + p_from;
+	if (!rl.fellow_take_fill_records(p_from, p_size)) {
+		rl.fellow_sort_records.resize(p_size);
+		RenderList::FellowSortRecord *gather = rl.fellow_sort_records.ptr();
+		const bool prefetch = Fellow::cpu_prefetch();
+		for (uint32_t i = 0; i < p_size; i++) {
+			if (prefetch && i + 2 * FELLOW_PREFETCH_DISTANCE < p_size) {
+				fellow_prefetch(e[i + 2 * FELLOW_PREFETCH_DISTANCE]);
+			}
+			gather[i].key2 = e[i]->sort.sort_key2;
+			gather[i].key1 = e[i]->sort.sort_key1;
+			gather[i].surface = e[i];
+		}
+	}
+	RenderList::FellowSortRecord *records = rl.fellow_sort_records.ptr();
 
+	if (markers) {
+		RENDER_TIMESTAMP("FellowEngine Sort Partitions");
+	}
 	FellowRecordSorter sorter;
 	fellow_sort_job_records = records;
 	const int64_t grain = MAX(int64_t(FELLOW_PARALLEL_SORT_GRAIN), int64_t(p_size) / 8);
@@ -1052,7 +1149,13 @@ void RenderForwardClustered::_fellow_sort_by_key(RenderListType p_render_list, u
 			fellow_sort_level.push_back(r);
 		}
 	}
+	if (markers) {
+		RENDER_TIMESTAMP("FellowEngine Sort Leaves");
+	}
 	_fellow_parallel_for(fellow_sort_leaves.size(), &_fellow_chunk_thunk<&RenderForwardClustered::_fellow_sort_leaf>);
+	if (markers) {
+		RENDER_TIMESTAMP("FellowEngine Sort Final");
+	}
 	sorter.final_insertion_sort(0, int64_t(p_size), records);
 
 	for (uint32_t i = 0; i < p_size; i++) {
@@ -1175,6 +1278,7 @@ void RenderForwardClustered::_fill_render_list(RenderListType p_render_list, con
 
 	RenderList *rl = &render_list[p_render_list];
 	_update_dirty_geometry_instances();
+	rl->fellow_sort_records_count = 0; // set again by the parallel fill when it takes the sort records
 
 	if (!p_append) {
 		rl->clear();
@@ -1226,6 +1330,7 @@ void RenderForwardClustered::_fill_render_list_range(const FellowFillParams &p_p
 	LocalVector<GeometryInstanceSurfaceDataCache *> &out_alpha = *r_out.alpha;
 	LocalVector<GeometryInstanceSurfaceDataCache *> &out_motion = *r_out.motion;
 	uint64_t primitives = 0;
+	LocalVector<FellowShadowRecord> *sort_records = r_out.sort_records;
 
 	const bool fellow_prefetch_on = Fellow::cpu_prefetch();
 	for (uint32_t i = p_from; i < p_to; i++) {
@@ -1452,9 +1557,8 @@ void RenderForwardClustered::_fill_render_list_range(const FellowFillParams &p_p
 				}
 
 				if (!force_alpha && (surf->flags & (GeometryInstanceSurfaceDataCache::FLAG_PASS_DEPTH | GeometryInstanceSurfaceDataCache::FLAG_PASS_OPAQUE))) {
-					if constexpr (t_records) {
-						record_add = true;
-					} else {
+					record_add = true;
+					if constexpr (!t_records) {
 						out_main.push_back(surf);
 					}
 				}
@@ -1494,25 +1598,22 @@ void RenderForwardClustered::_fill_render_list_range(const FellowFillParams &p_p
 				}
 			} else if (p_pass_mode == PASS_MODE_SHADOW || p_pass_mode == PASS_MODE_SHADOW_DP) {
 				if (surf->flags & GeometryInstanceSurfaceDataCache::FLAG_PASS_SHADOW) {
-					if constexpr (t_records) {
-						record_add = true;
-					} else {
+					record_add = true;
+					if constexpr (!t_records) {
 						out_main.push_back(surf);
 					}
 				}
 			} else if (p_pass_mode == PASS_MODE_DEPTH_MATERIAL) {
 				if (surf->flags & (GeometryInstanceSurfaceDataCache::FLAG_PASS_DEPTH | GeometryInstanceSurfaceDataCache::FLAG_PASS_OPAQUE | GeometryInstanceSurfaceDataCache::FLAG_PASS_ALPHA)) {
-					if constexpr (t_records) {
-						record_add = true;
-					} else {
+					record_add = true;
+					if constexpr (!t_records) {
 						out_main.push_back(surf);
 					}
 				}
 			} else {
 				if (surf->flags & (GeometryInstanceSurfaceDataCache::FLAG_PASS_DEPTH | GeometryInstanceSurfaceDataCache::FLAG_PASS_OPAQUE)) {
-					if constexpr (t_records) {
-						record_add = true;
-					} else {
+					record_add = true;
+					if constexpr (!t_records) {
 						out_main.push_back(surf);
 					}
 				}
@@ -1522,6 +1623,12 @@ void RenderForwardClustered::_fill_render_list_range(const FellowFillParams &p_p
 			if constexpr (t_records) {
 				if (record_add) {
 					r_out.records->push_back({ sort.sort_key2, sort.sort_key1, surf, flags });
+				}
+			} else {
+				if (record_add && sort_records) {
+					// The main list's sort keys, final for this frame, taken while the surface is in this thread's
+					// cache (the sort then needs no pass over the surfaces).
+					sort_records->push_back({ sort.sort_key2, sort.sort_key1, surf, 0 });
 				}
 			}
 
@@ -1584,6 +1691,8 @@ bool RenderForwardClustered::_fellow_fill_render_list_parallel(const FellowFillP
 	// Joined in range order, the lists hold the elements in stock's order.
 	const uint32_t chunk_size = FELLOW_PARALLEL_LIST_CHUNK;
 	const uint32_t chunk_count = (p_count + chunk_size - 1) / chunk_size;
+	// With the compact sort, the main list's sort records are taken during the fill (see _fellow_sort_by_key()).
+	const bool gather_keys = Fellow::cpu_compact_list_sort();
 	if (fellow_fill_chunks.size() < chunk_count) {
 		fellow_fill_chunks.resize(chunk_count);
 	}
@@ -1598,6 +1707,8 @@ bool RenderForwardClustered::_fellow_fill_render_list_parallel(const FellowFillP
 		chunk.out.alpha = &chunk.alpha;
 		chunk.out.motion = &chunk.motion;
 		chunk.out.deferred_captures = &chunk.deferred_captures;
+		chunk.sort_records.clear();
+		chunk.out.sort_records = gather_keys ? &chunk.sort_records : nullptr;
 	}
 	fellow_fill_params = p_params;
 	fellow_fill_count = p_count;
@@ -1606,9 +1717,12 @@ bool RenderForwardClustered::_fellow_fill_render_list_parallel(const FellowFillP
 	_fellow_parallel_for(chunk_count, &_fellow_chunk_thunk<&RenderForwardClustered::_fellow_fill_render_list_chunk>);
 
 	RenderList *rl = &render_list[p_params.render_list];
+	const uint32_t main_from = rl->elements.size();
+	bool any_deferred_captures = false;
 	FellowFillOutput total;
 	for (uint32_t c = 0; c < chunk_count; c++) {
 		const FellowFillChunk &chunk = fellow_fill_chunks[c];
+		any_deferred_captures = any_deferred_captures || !chunk.deferred_captures.is_empty();
 		_fellow_append_pointers(rl->elements, chunk.main);
 		_fellow_append_pointers(render_list[RENDER_LIST_ALPHA].elements, chunk.alpha);
 		_fellow_append_pointers(render_list[RENDER_LIST_MOTION].elements, chunk.motion);
@@ -1649,6 +1763,28 @@ bool RenderForwardClustered::_fellow_fill_render_list_parallel(const FellowFillP
 	}
 
 	_fellow_fill_apply_output(p_params, total);
+
+	// The sort records taken during the fill, in list order (not when capture slots were given out afterwards: that
+	// changes the surfaces' keys after the fill).
+	rl->fellow_sort_records_count = 0;
+	if (gather_keys && !any_deferred_captures) {
+		const uint32_t count = rl->elements.size() - main_from;
+		rl->fellow_sort_records.resize(count);
+		RenderList::FellowSortRecord *out = rl->fellow_sort_records.ptr();
+		uint32_t at = 0;
+		for (uint32_t c = 0; c < chunk_count; c++) {
+			for (const FellowShadowRecord &r : fellow_fill_chunks[c].sort_records) {
+				out[at].key2 = r.key2;
+				out[at].key1 = r.key1;
+				out[at].surface = r.surface;
+				at++;
+			}
+		}
+		if (at == count) {
+			rl->fellow_sort_records_from = main_from;
+			rl->fellow_sort_records_count = count;
+		}
+	}
 	return true;
 }
 
@@ -3716,6 +3852,11 @@ void RenderForwardClustered::_fellow_shadow_flush() {
 	Fellow::stats().cpu_shadow_batches.increment();
 	Fellow::stats().cpu_shadow_batch_passes.add(entry_count);
 
+	const bool markers = Fellow::list_markers();
+	if (markers) {
+		RENDER_TIMESTAMP("FellowEngine Shadow Lists Fill");
+	}
+
 	// Fill.
 	uint32_t chunk_count = 0;
 	for (uint32_t e = 0; e < entry_count; e++) {
@@ -3837,9 +3978,15 @@ void RenderForwardClustered::_fellow_shadow_flush() {
 	}
 
 	// Sort.
+	if (markers) {
+		RENDER_TIMESTAMP("FellowEngine Shadow Lists Sort");
+	}
 	_fellow_parallel_for(entry_count, &_fellow_chunk_thunk<&RenderForwardClustered::_fellow_shadow_sort_entry>);
 
 	// The instance buffer, grown and mapped pass by pass as stock's _fill_instance_data does it.
+	if (markers) {
+		RENDER_TIMESTAMP("FellowEngine Shadow Lists Instance Data");
+	}
 	rl->elements.resize(total);
 	rl->element_info.resize(total);
 	fellow_instance_joinable.resize(total);
@@ -3864,6 +4011,9 @@ void RenderForwardClustered::_fellow_shadow_flush() {
 	_fellow_parallel_for(fellow_shadow_items.size(), &_fellow_chunk_thunk<&RenderForwardClustered::_fellow_shadow_instance_chunk>);
 
 	// Runs and counters, per pass as stock counts them.
+	if (markers) {
+		RENDER_TIMESTAMP("FellowEngine Shadow Lists Runs");
+	}
 	const uint8_t *link = fellow_instance_joinable.ptr();
 	for (uint32_t e = 0; e < entry_count; e++) {
 		const FellowShadowEntry &entry = fellow_shadow_entries[e];
@@ -3893,6 +4043,37 @@ void RenderForwardClustered::_fellow_shadow_flush() {
 			for (uint32_t j = 1; j <= repeats; j++) {
 				rl->element_info[range_to - j].repeat = j;
 			}
+		}
+	}
+
+	if (Fellow::cpu_verify()) {
+		// Stock's lists, pass by pass: its fill (into a scratch list; it writes the instances' and surfaces' per-pass
+		// state as stock does), its sort, then instance data and runs compared with the batched results.
+		for (uint32_t e = 0; e < entry_count; e++) {
+			const FellowShadowEntry &entry = fellow_shadow_entries[e];
+			LocalVector<GeometryInstanceSurfaceDataCache *> scratch;
+			LocalVector<GeometryInstanceSurfaceDataCache *> unused;
+			FellowFillOutput out;
+			out.main = &scratch;
+			out.alpha = &unused;
+			out.motion = &unused;
+			uint32_t unused_captures = 0;
+			out.lightmap_captures_used = &unused_captures;
+			_fill_render_list_range<false>(entry.params, 0, (uint32_t)entry.params.instances->size(), out);
+			uint32_t mismatches = scratch.size() != entry.size ? 1 : 0;
+			if (mismatches == 0) {
+				mismatches += _fellow_verify_sort(RENDER_LIST_SECONDARY, entry.from, entry.size, scratch);
+				LocalVector<uint32_t> flags;
+				flags.resize(entry.size);
+				for (uint32_t k = 0; k < entry.size; k++) {
+					flags[k] = entry.records[k].flags;
+					if (flags[k] != rl->elements[entry.from + k]->owner->flags_cache || rl->element_info[entry.from + k].value != uint32_t(rl->elements[entry.from + k]->sort.sort_key1 & 0xFFF)) {
+						mismatches++; // the record's flags and key bits against what stock's fill just wrote
+					}
+				}
+				mismatches += _fellow_verify_instances(RENDER_LIST_SECONDARY, entry.from, entry.size, flags.ptr());
+			}
+			_fellow_verify_count(mismatches);
 		}
 	}
 }

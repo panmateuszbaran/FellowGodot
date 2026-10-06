@@ -351,6 +351,12 @@ inline bool cpu_prefetch() {
 	return cpu_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/cpu/prefetch");
 }
 
+// Verification: the render lists built with the CPU toggles are compared, after each build, with stock's single-threaded
+// results computed again on the side (sort order, instance data, run lengths; counters cpu_verify_*). Slow.
+inline bool cpu_verify() {
+	return cpu_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/cpu/verify");
+}
+
 // Worker tasks posted per parallel loop of the render lists, besides the render thread (0: the render thread alone).
 inline int cpu_worker_tasks() {
 	return MAX(0, GLOBAL_GET_CACHED(int, "rendering/fellow/cpu/worker_tasks"));
@@ -396,6 +402,8 @@ struct Stats {
 	SafeNumeric<uint64_t> cpu_shadow_batches; // batched shadow list builds (decision 0016)
 	SafeNumeric<uint64_t> cpu_shadow_batch_passes; // shadow passes built in them
 	SafeNumeric<uint64_t> cpu_shadow_batch_fallbacks; // of the builds, built stock's way (instance buffer replaced mid-way)
+	SafeNumeric<uint64_t> cpu_verify_checks; // lists or passes compared with stock's results (cpu/verify)
+	SafeNumeric<uint64_t> cpu_verify_mismatches; // elements or values that differed
 };
 
 Stats &stats();

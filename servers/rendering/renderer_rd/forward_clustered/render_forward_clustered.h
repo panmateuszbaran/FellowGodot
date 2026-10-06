@@ -544,6 +544,7 @@ private:
 		uint32_t *lightmap_captures_used = nullptr;
 		LocalVector<GeometryInstanceForwardClustered *> *deferred_captures = nullptr;
 		LocalVector<FellowShadowRecord> *records = nullptr; // record mode
+		LocalVector<FellowShadowRecord> *sort_records = nullptr; // optional: the main list's sort keys (flags unused)
 		LocalVector<GeometryInstanceForwardClustered *> *transform_updates = nullptr; // record mode
 		uint64_t primitives = 0;
 		bool used_sss = false;
@@ -558,6 +559,7 @@ private:
 		LocalVector<GeometryInstanceSurfaceDataCache *> alpha;
 		LocalVector<GeometryInstanceSurfaceDataCache *> motion;
 		LocalVector<GeometryInstanceForwardClustered *> deferred_captures;
+		LocalVector<FellowShadowRecord> sort_records;
 		FellowFillOutput out;
 	};
 	static constexpr uint32_t FELLOW_PARALLEL_LIST_MIN = 1024; // fewer instances or elements: single-threaded
@@ -633,6 +635,11 @@ private:
 	void _fellow_make_instance_data(const GeometryInstanceSurfaceDataCache *p_surface, const GeometryInstanceForwardClustered *p_inst, SceneState::InstanceData &r_data) const;
 	void _fellow_fill_instance_data_chunk(uint32_t p_chunk, void *p_unused);
 	void _fellow_sort_by_key(RenderListType p_render_list, uint32_t p_from, uint32_t p_size);
+	void _fellow_sort_by_key_impl(RenderListType p_render_list, uint32_t p_from, uint32_t p_size);
+	// Verification (rendering/fellow/cpu/verify): stock's results computed on the side and compared.
+	uint32_t _fellow_verify_sort(RenderListType p_render_list, uint32_t p_from, uint32_t p_size, LocalVector<GeometryInstanceSurfaceDataCache *> &p_unsorted);
+	uint32_t _fellow_verify_instances(RenderListType p_render_list, uint32_t p_from, uint32_t p_size, const uint32_t *p_flags);
+	void _fellow_verify_count(uint32_t p_mismatches);
 	// Parallel loops over chunks (decision 0016): the render thread takes chunks itself, worker tasks help if they start
 	// in time (servers/rendering/fellow_parallel.h).
 	FellowParallelFor fellow_parallel;
@@ -859,6 +866,7 @@ private:
 		void clear() {
 			elements.clear();
 			element_info.clear();
+			fellow_sort_records_count = 0;
 		}
 
 		//should eventually be replaced by radix
@@ -894,22 +902,36 @@ private:
 			}
 		};
 		LocalVector<FellowSortRecord> fellow_sort_records;
+		// Records taken by the parallel fill for elements [from, from + count) (count 0: none).
+		uint32_t fellow_sort_records_from = 0;
+		uint32_t fellow_sort_records_count = 0;
+
+		// True when fellow_sort_records already holds the keys of exactly these elements (taken during the fill).
+		bool fellow_take_fill_records(uint32_t p_from, uint32_t p_size) {
+			const bool ready = fellow_sort_records_count > 0 && fellow_sort_records_from == p_from && fellow_sort_records_count == p_size;
+			fellow_sort_records_count = 0;
+			return ready;
+		}
 
 		void fellow_sort_by_key_range(uint32_t p_from, uint32_t p_size) {
 			if (p_size < 2) {
+				fellow_sort_records_count = 0;
 				return;
 			}
-			fellow_sort_records.resize(p_size);
-			FellowSortRecord *records = fellow_sort_records.ptr();
 			GeometryInstanceSurfaceDataCache **e = elements.ptr() + p_from;
-			for (uint32_t i = 0; i < p_size; i++) {
-				if (i + 16 < p_size) {
-					fellow_prefetch(e[i + 16]); // no effect on results
+			if (!fellow_take_fill_records(p_from, p_size)) {
+				fellow_sort_records.resize(p_size);
+				FellowSortRecord *gather = fellow_sort_records.ptr();
+				for (uint32_t i = 0; i < p_size; i++) {
+					if (i + 16 < p_size) {
+						fellow_prefetch(e[i + 16]); // no effect on results
+					}
+					gather[i].key2 = e[i]->sort.sort_key2;
+					gather[i].key1 = e[i]->sort.sort_key1;
+					gather[i].surface = e[i];
 				}
-				records[i].key2 = e[i]->sort.sort_key2;
-				records[i].key1 = e[i]->sort.sort_key1;
-				records[i].surface = e[i];
 			}
+			FellowSortRecord *records = fellow_sort_records.ptr();
 			SortArray<FellowSortRecord, FellowSortRecordByKey> sorter;
 			sorter.sort(records, p_size);
 			for (uint32_t i = 0; i < p_size; i++) {
