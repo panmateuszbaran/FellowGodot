@@ -473,6 +473,12 @@ inline int cpu_hot_workers_usec() {
 	}
 	return usec;
 }
+// How an idle hot worker waits for the next loop: 0 = a pause loop (spinning), 1 = UMWAIT in C0.1, 2 = UMWAIT in C0.2
+// (x86 WAITPKG: the core waits in a low-power state until the loop's state is written; CPUs without it spin as in 0).
+// Less power for the spinning cores leaves more of a laptop's shared budget to the GPU. Never changes results.
+inline int cpu_hot_workers_wait() {
+	return CLAMP(GLOBAL_GET_CACHED(int, "rendering/fellow/cpu/hot_workers_wait"), 0, 2);
+}
 // The main RenderingDevice reports, once per frame, how long the render thread waited for an earlier frame's fence and
 // the time since the previous report (gate of the hot workers).
 void frame_gpu_wait_report(uint64_t p_wait_usec, uint64_t p_frame_usec);
@@ -550,6 +556,7 @@ struct Stats {
 	SafeNumeric<uint64_t> frame_plan_lists; // draw lists replayed from the frame plan (frame/replay_frame_plan)
 	SafeNumeric<uint64_t> frame_plan_segments; // their segments
 	SafeNumeric<uint64_t> frame_plan_wait_nsec; // time the render thread spent at those lists until their segments were done
+	SafeNumeric<uint64_t> cpu_hot_waits; // low-power waits of idle hot workers (cpu/hot_workers_wait, CPUs with WAITPKG)
 };
 
 Stats &stats();

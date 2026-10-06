@@ -49,6 +49,11 @@ _FORCE_INLINE_ void fellow_prefetch(const void *p_address) {
 #endif
 }
 
+// Low-power wait of an idle hot worker (cpu/hot_workers_wait): x86 WAITPKG (UMONITOR/UMWAIT) where the CPU has it.
+// Returns false (did not wait) if the CPU lacks it. Wakes when *p_address is written (or after ~p_max_tsc cycles).
+bool fellow_waitpkg_supported();
+bool fellow_wait_change(const void *p_address, uint64_t p_seen, bool p_deep, uint64_t p_max_tsc);
+
 // Spin-wait hint (no effect on results).
 _FORCE_INLINE_ void fellow_cpu_relax() {
 #if defined(_MSC_VER) && (defined(_M_X64) || defined(_M_IX86))
@@ -143,6 +148,8 @@ private:
 	std::atomic<uint64_t> hot_keepalive{ 0 }; // usec ticks of the last loop or prewarm
 	std::atomic<uint64_t> hot_linger{ 0 };
 	std::atomic<bool> hot_exit{ false };
+	std::atomic<int> hot_wait_mode{ 0 }; // cpu/hot_workers_wait: 0 pause loop, 1 UMWAIT C0.1, 2 UMWAIT C0.2
+	static constexpr uint64_t FELLOW_UMWAIT_TSC = 30000; // ~10 µs at 3 GHz: the longest single low-power wait
 	uint64_t hot_epoch = 0;
 	LocalVector<WorkerThreadPool::GroupID> hot_groups;
 

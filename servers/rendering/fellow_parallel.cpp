@@ -35,6 +35,67 @@
 
 #include <thread>
 
+#if defined(_MSC_VER) && defined(_M_X64)
+#include <immintrin.h>
+#include <intrin.h>
+#define FELLOW_HAS_WAITPKG_CODE 1
+#elif (defined(__GNUC__) || defined(__clang__)) && defined(__x86_64__)
+#include <cpuid.h>
+#include <immintrin.h>
+#include <x86intrin.h>
+#define FELLOW_HAS_WAITPKG_CODE 1
+#endif
+
+bool fellow_waitpkg_supported() {
+#ifdef FELLOW_HAS_WAITPKG_CODE
+	static const bool supported = []() {
+#if defined(_MSC_VER)
+		int regs[4] = {};
+		__cpuid(regs, 0);
+		if (regs[0] < 7) {
+			return false;
+		}
+		__cpuidex(regs, 7, 0);
+		return (regs[2] & (1 << 5)) != 0; // CPUID.(EAX=7,ECX=0):ECX[5] WAITPKG
+#else
+		unsigned int a = 0, b = 0, c = 0, d = 0;
+		if (!__get_cpuid_count(7, 0, &a, &b, &c, &d)) {
+			return false;
+		}
+		return (c & (1u << 5)) != 0;
+#endif
+	}();
+	return supported;
+#else
+	return false;
+#endif
+}
+
+#ifdef FELLOW_HAS_WAITPKG_CODE
+#if !defined(_MSC_VER)
+__attribute__((target("waitpkg")))
+#endif
+static bool _fellow_umwait(const void *p_address, uint64_t p_seen, bool p_deep, uint64_t p_max_tsc) {
+	// Arm the monitor first, then check the value again: a write after the check wakes the wait.
+	_umonitor(const_cast<void *>(p_address));
+	if (reinterpret_cast<const std::atomic<uint64_t> *>(p_address)->load(std::memory_order_acquire) != p_seen) {
+		return true;
+	}
+	// Control bit 0: 0 = C0.2 (lower power, slower wake), 1 = C0.1.
+	_umwait(p_deep ? 0u : 1u, __rdtsc() + p_max_tsc);
+	return true;
+}
+#endif
+
+bool fellow_wait_change(const void *p_address, uint64_t p_seen, bool p_deep, uint64_t p_max_tsc) {
+#ifdef FELLOW_HAS_WAITPKG_CODE
+	if (fellow_waitpkg_supported()) {
+		return _fellow_umwait(p_address, p_seen, p_deep, p_max_tsc);
+	}
+#endif
+	return false;
+}
+
 void FellowParallelFor::_process(Loop *p_loop, bool p_helper) {
 	uint32_t chunks = 0;
 	while (true) {
@@ -99,6 +160,7 @@ void FellowParallelFor::run(uint32_t p_count, Func p_func, void *p_userdata, uin
 
 void FellowParallelFor::_run_hot(uint32_t p_count, Func p_func, void *p_userdata, uint32_t p_max_helpers) {
 	hot_linger.store(linger_usec, std::memory_order_relaxed);
+	hot_wait_mode.store(Fellow::cpu_hot_workers_wait(), std::memory_order_relaxed);
 	hot_keepalive.store(OS::get_singleton()->get_ticks_usec(), std::memory_order_relaxed);
 	if (p_count == 1) {
 		p_func(p_userdata, 0);
@@ -160,6 +222,7 @@ void FellowParallelFor::begin_async(uint32_t p_count, Func p_func, void *p_userd
 	if (linger_usec > 0) {
 		async_hot = true;
 		hot_linger.store(linger_usec, std::memory_order_relaxed);
+		hot_wait_mode.store(Fellow::cpu_hot_workers_wait(), std::memory_order_relaxed);
 		hot_keepalive.store(OS::get_singleton()->get_ticks_usec(), std::memory_order_relaxed);
 		// Published as in _run_hot().
 		hot_count.store(p_count, std::memory_order_relaxed);
@@ -247,6 +310,7 @@ void FellowParallelFor::prewarm(uint32_t p_helpers) {
 		return;
 	}
 	hot_linger.store(linger_usec, std::memory_order_relaxed);
+	hot_wait_mode.store(Fellow::cpu_hot_workers_wait(), std::memory_order_relaxed);
 	hot_keepalive.store(OS::get_singleton()->get_ticks_usec(), std::memory_order_relaxed);
 	_hot_post(MIN(p_helpers, (uint32_t)WorkerThreadPool::get_singleton()->get_thread_count()));
 }
@@ -278,6 +342,7 @@ void FellowParallelFor::_hot_helper(void *p_self, uint32_t p_index) {
 	FellowParallelFor *self = static_cast<FellowParallelFor *>(p_self);
 	uint64_t last_work = OS::get_singleton()->get_ticks_usec();
 	uint32_t idle = 0;
+	uint64_t waits = 0;
 	while (!self->hot_exit.load(std::memory_order_acquire)) {
 		uint64_t state = self->hot_state.load(std::memory_order_acquire);
 		const uint32_t index = uint32_t(state & HOT_INDEX_MASK);
@@ -295,6 +360,13 @@ void FellowParallelFor::_hot_helper(void *p_self, uint32_t p_index) {
 			}
 			continue;
 		}
+		const int wait_mode = self->hot_wait_mode.load(std::memory_order_relaxed);
+		if (wait_mode > 0 && idle >= 16 && fellow_wait_change(&self->hot_state, state, wait_mode == 2, FELLOW_UMWAIT_TSC)) {
+			// Low-power wait (cpu/hot_workers_wait) until the state changes (a loop is published or closed) or ~10 µs
+			// pass; then the linger is checked as below.
+			waits++;
+			idle = 64;
+		}
 		if (++idle < 64) {
 			fellow_cpu_relax();
 			continue;
@@ -308,6 +380,9 @@ void FellowParallelFor::_hot_helper(void *p_self, uint32_t p_index) {
 		if (now > keepalive + self->hot_linger.load(std::memory_order_relaxed)) {
 			break;
 		}
+	}
+	if (waits > 0) {
+		Fellow::stats().cpu_hot_waits.add(waits);
 	}
 	self->hot_alive.fetch_sub(1, std::memory_order_acq_rel);
 }
