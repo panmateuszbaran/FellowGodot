@@ -160,6 +160,30 @@ into `_fill_render_list_range`/`_fellow_make_instance_data` (Setup 3D Scene off 
 code layout. With the toggles on these loops run in parallel and the difference is moot (all four: −3.1 % frame vs
 stock between processes).
 
+### Shared parallel loop, parallel cull, prefetch (`fellow45`)
+
+`FellowParallelFor` (`servers/rendering/fellow_parallel.h`) is the render-thread-first loop of the second version,
+shared by the lists and the scene cull. `cpu/parallel_cull`: stock's threaded cull (a group task with one task per
+thread, the render thread asleep until the last has run) processed the same way, same ranges, same per-range results
+merged in the same order. `cpu/prefetch`: the list loops load instances and surfaces a few iterations ahead.
+
+In one process (`m4_f45_city_ab`, 2 runs, 480 pairs, reference toggles off): four list toggles −16.6 % frame; + cull
+−15.1 %; + cull + prefetch −14.8 %; cull alone −2.6 %; prefetch alone +0.8 % (t 1.6). The cull region itself got
+slower with the cull toggle (0.449 vs 0.426 ms): 6 worker tasks for 24 ranges leave each range to fewer threads than
+stock's 24 tasks. From `fellow46` the cull posts as many tasks as stock. Prefetching does not help (the hardware
+prefetcher already follows these loops): off.
+
+Between processes (`m4_f45_city_perf`, 4 ABBA runs, CV 0.2-0.6 %):
+
+| variant | frame ms | Δ vs stock | pairs | render thread ms | Δ vs stock |
+|---|---:|---:|---:|---:|---:|
+| stock | 3.044 | | | 2.429 | |
+| FellowEngine, toggles off | 3.169 | +4.1 % | 0/4 faster | 2.509 | +0.080 |
+| FellowEngine, list toggles + cull + prefetch | **2.758** | **−9.4 %** | 4/4 | **2.069** | **−0.360** |
+
+RTX identity (`m4_f45_temporal`, off twice and all six): Bistro exterior bit-identical in every pair; City Lab at its
+floor (off vs off 108.9 dB mean, 1/255 in a few pixels; off vs on 108.8 and 101.2 dB, the same).
+
 RTX identity (`m4_f43_temporal`, six scenes, off twice and all four): every scene at its off-vs-off floor (Bistro
 exterior bit-identical; City Lab 1/255 in a few pixels per frame either way). City Lab with lightmap captures
 (`m4_f43_city_lm`, three cameras): off vs off identical; off vs all four identical except one pixel of the aerial
