@@ -222,14 +222,40 @@ func _run_perf() -> void:
 	await get_tree().process_frame
 	var fs0 := _fellow_stats()
 	var fs_prev := fs0
+	# In-process A/B of runtime FellowEngine settings (--ab=name:k=v;k=v|name2:k=v...): the configurations take turns
+	# in blocks of --ab_block frames along the path, rotating by one block per pass, so after (configurations x
+	# --ab_repeats) passes each one has run every block of the path the same number of times, in the same process
+	# (same thread placement, clocks and temperature). The first --ab_skip frames of a block are not counted (the CPU
+	# and GPU times are reported a few frames late).
+	var ab := _parse_ab(str(args.get("ab", "")))
+	var ab_block := int(args.get("ab_block", "30"))
+	var ab_skip := int(args.get("ab_skip", "4"))
+	var ab_passes := ab.size() * int(args.get("ab_repeats", "2"))
+	var ab_sums := []
+	var ab_current := -1
+	for c in ab.size():
+		ab_sums.append({})
 	m.reset_clock()
 	var passes := 0
 	while true:
 		for f in range(frames_per_pass):
+			if not ab.is_empty() and f % ab_block == 0:
+				ab_current = (f / ab_block + passes) % ab.size()
+				for k in ab[ab_current]["settings"].keys():
+					ProjectSettings.set_setting(k, ab[ab_current]["settings"][k])
 			_pose_at(f * DT)
 			await get_tree().process_frame
 			m.sample()
 			pass_frames.append(f)
+			if not ab.is_empty() and f % ab_block >= ab_skip:
+				var key := "%d:%d" % [passes, f / ab_block]
+				if not ab_sums[ab_current].has(key):
+					ab_sums[ab_current][key] = {"n": 0, "frame_ms": 0.0, "render_cpu_ms": 0.0, "gpu_ms": 0.0, "setup_cpu_ms": 0.0}
+				var acc: Dictionary = ab_sums[ab_current][key]
+				acc["n"] += 1
+				for metric in ["frame_ms", "render_cpu_ms", "gpu_ms", "setup_cpu_ms"]:
+					var arr: PackedFloat64Array = m.data[metric]
+					acc[metric] += arr[arr.size() - 1]
 			if not fs0.is_empty():
 				# Per-frame FellowEngine counters (e.g. shadow cache rebuilds) to correlate with frame times.
 				var fs := _fellow_stats()
@@ -254,9 +280,26 @@ func _run_perf() -> void:
 		var mm := _mem()
 		for k in mm.keys():
 			mem_peak[k] = max(mem_peak[k], mm[k])
-		if (Time.get_ticks_usec() - m0) / 1e6 >= measure_s:
+		if ab.is_empty() and (Time.get_ticks_usec() - m0) / 1e6 >= measure_s:
+			break
+		if not ab.is_empty() and passes >= ab_passes:
 			break
 	var pc2 := _pipeline_compilations()
+	if not ab.is_empty():
+		# Per configuration: the mean of every (pass, block) it ran, keyed "pass:block" (block = position on the path).
+		var abr := {"block": ab_block, "skip": ab_skip, "passes": passes, "configs": [], "blocks": {}}
+		for c in ab.size():
+			var name: String = ab[c]["name"]
+			abr["configs"].append({"name": name, "settings": ab[c]["settings"]})
+			var blocks := {}
+			for key in ab_sums[c].keys():
+				var acc: Dictionary = ab_sums[c][key]
+				var o := {}
+				for metric in ["frame_ms", "render_cpu_ms", "gpu_ms", "setup_cpu_ms"]:
+					o[metric] = acc[metric] / max(acc["n"], 1)
+				blocks[key] = o
+			abr["blocks"][name] = blocks
+		result["ab"] = abr
 	result["measurement"] = {
 		"seconds": (Time.get_ticks_usec() - m0) / 1e6,
 		"passes": passes,
@@ -348,6 +391,31 @@ func _accumulate_timestamps(rd: RenderingDevice, acc: Dictionary) -> void:
 
 
 ## FellowEngine counters (RenderingServer.fellow_get_stats); empty on stock Godot.
+func _parse_ab(spec: String) -> Array:
+	# "name:k=v;k=v|name2:k=v" -> [{name, settings: {rendering/fellow/k: v}}]; every configuration sets every key that
+	# any of them sets (keys a configuration does not mention get their start-up value).
+	var out := []
+	if spec.is_empty():
+		return out
+	var keys := {}
+	for part in spec.split("|", false):
+		var nv := part.split(":", true, 1)
+		var settings := {}
+		if nv.size() == 2:
+			for kv in nv[1].split(";", false):
+				var p := kv.split("=", false, 1)
+				if p.size() == 2:
+					var key := "rendering/fellow/" + p[0].strip_edges()
+					settings[key] = Presets.parse_value(p[1].strip_edges())
+					keys[key] = true
+		out.append({"name": nv[0].strip_edges(), "settings": settings})
+	for c in out:
+		for key in keys.keys():
+			if not c["settings"].has(key):
+				c["settings"][key] = ProjectSettings.get_setting(key)
+	return out
+
+
 func _fellow_stats() -> Dictionary:
 	if RenderingServer.has_method("fellow_get_stats"):
 		return RenderingServer.call("fellow_get_stats")
