@@ -8241,6 +8241,142 @@ void RenderingDevice::execute_chained_cmds(bool p_present_swap_chain, RenderingD
 	frames[frame].semaphores_to_wait_on.clear();
 }
 
+struct RenderingDevice::FellowPresentThread {
+	// FellowEngine present thread (frame/present_thread) and submit thread (frame/submit_thread): a FIFO of jobs that
+	// one thread issues in order. A job is a submission (command buffers chained by semaphores, as execute_chained_cmds()
+	// submits them), a presentation, or a submission followed by a presentation. The render thread hands the jobs over
+	// in the order it would have issued them itself and waits for the FIFO to be empty before anything that must follow
+	// them (another submission of its own, a fence wait, a swap chain operation).
+	struct Job {
+		RDD::CommandQueueID queue; // submission (none when buffers is empty)
+		LocalVector<RDD::SemaphoreID> waits; // waited on by the first command buffer
+		LocalVector<RDD::CommandBufferID> buffers;
+		LocalVector<RDD::SemaphoreID> chain; // signalled by each command buffer but the last
+		RDD::SemaphoreID signal; // signalled by the last command buffer (may be none)
+		RDD::FenceID fence; // signalled by the last command buffer (may be none)
+		RDD::CommandQueueID present_queue; // presentation (none when swap_chains is empty), after the submission
+		RDD::SemaphoreID present_semaphore;
+		LocalVector<RDD::SwapChainID> swap_chains;
+	};
+	static constexpr uint32_t JOBS = 8;
+
+	Thread thread;
+	BinaryMutex mutex;
+	ConditionVariable cv;
+	bool exit = false;
+	Job jobs[JOBS];
+	uint32_t head = 0; // oldest job not issued yet
+	uint32_t count = 0; // jobs handed over and not issued yet
+	RenderingDeviceDriver *driver = nullptr;
+
+	static void _issue(RenderingDeviceDriver *p_driver, Job &p_job) {
+		if (!p_job.buffers.is_empty()) {
+			thread_local LocalVector<RDD::SemaphoreID> waits;
+			waits = p_job.waits;
+			for (uint32_t i = 0; i < p_job.buffers.size(); i++) {
+				const bool last = i + 1 == p_job.buffers.size();
+				const RDD::SemaphoreID signal = last ? p_job.signal : p_job.chain[i];
+				p_driver->command_queue_execute_and_present(p_job.queue, waits, p_job.buffers[i], signal ? signal : VectorView<RDD::SemaphoreID>(), last ? p_job.fence : RDD::FenceID(), {});
+				waits.resize(1);
+				waits[0] = signal;
+			}
+		}
+		if (!p_job.swap_chains.is_empty()) {
+			p_driver->fellow_command_queue_present(p_job.present_queue, p_job.present_semaphore, p_job.swap_chains);
+		}
+	}
+
+	static void _run(void *p_self) {
+		FellowPresentThread *self = static_cast<FellowPresentThread *>(p_self);
+		self->driver->fellow_set_submit_thread();
+		while (true) {
+			Job *job = nullptr;
+			{
+				MutexLock lock(self->mutex);
+				while (self->count == 0 && !self->exit) {
+					self->cv.wait(lock);
+				}
+				if (self->count == 0) {
+					return; // exit
+				}
+				job = &self->jobs[self->head]; // the render thread does not touch it until it is issued
+			}
+			_issue(self->driver, *job);
+			{
+				MutexLock lock(self->mutex);
+				self->head = (self->head + 1) % JOBS;
+				self->count--;
+			}
+			self->cv.notify_all();
+		}
+	}
+
+	static FellowPresentThread *get(RenderingDevice *p_rd) {
+		if (p_rd->fellow_present == nullptr) {
+			p_rd->fellow_present = memnew(FellowPresentThread);
+			p_rd->fellow_present->driver = p_rd->driver;
+			Thread::Settings settings;
+			settings.priority = Thread::PRIORITY_HIGH;
+			p_rd->fellow_present->thread.start(&FellowPresentThread::_run, p_rd->fellow_present, settings);
+		}
+		return p_rd->fellow_present;
+	}
+
+	// Render thread: a free job (the FIFO may be full: waits for the oldest to be issued), then commit().
+	Job &begin() {
+		MutexLock lock(mutex);
+		if (count == JOBS) {
+			const uint64_t from = OS::get_singleton()->get_ticks_usec();
+			while (count == JOBS) {
+				cv.wait(lock);
+			}
+			Fellow::stats().frame_present_thread_wait_usec.add(OS::get_singleton()->get_ticks_usec() - from);
+		}
+		Job &job = jobs[(head + count) % JOBS];
+		job.buffers.clear();
+		job.chain.clear();
+		job.waits.clear();
+		job.swap_chains.clear();
+		job.signal = RDD::SemaphoreID();
+		job.fence = RDD::FenceID();
+		return job;
+	}
+
+	void commit() {
+		{
+			MutexLock lock(mutex);
+			count++;
+		}
+		cv.notify_all();
+		Fellow::stats().frame_submit_jobs.increment();
+	}
+
+	// The frame's command buffers, as execute_chained_cmds() submits them: the first waits on the frame's semaphores,
+	// each following one on the previous one's, the last signals p_signal and p_fence. The render thread flushes the
+	// pending memory writes first (as the submission would: the submit thread leaves them alone).
+	static void take_frame(RenderingDevice *p_rd, Job &r_job, RDD::CommandQueueID p_queue, RDD::SemaphoreID p_signal, RDD::FenceID p_fence) {
+		Frame &f = p_rd->frames[p_rd->frame];
+		RDG::CommandBufferPool &buffer_pool = f.command_buffer_pool;
+		p_rd->driver->fellow_flush_pending_memory();
+		r_job.queue = p_queue;
+		r_job.buffers.push_back(f.command_buffer);
+		for (uint32_t i = 0; i < buffer_pool.buffers_used; i++) {
+			r_job.buffers.push_back(buffer_pool.buffers[i]);
+			r_job.chain.push_back(buffer_pool.semaphores[i]);
+		}
+		buffer_pool.buffers_used = 0;
+		r_job.waits = f.semaphores_to_wait_on;
+		f.semaphores_to_wait_on.clear();
+		r_job.signal = p_signal;
+		r_job.fence = p_fence;
+	}
+
+	// Whether the render thread hands its submissions to the thread (submit thread on, main device, driver support).
+	static bool submits(RenderingDevice *p_rd) {
+		return p_rd->is_main_instance && Fellow::frame_submit_thread() && p_rd->driver->fellow_supports_submit_thread();
+	}
+};
+
 void RenderingDevice::_fellow_submit_early() {
 	// Submit everything recorded so far in this frame, before the swap chain image is acquired: the GPU starts on the
 	// frame's rendering while the presentation engine may still hold the images (or the CPU waits in the acquisition).
@@ -8315,8 +8451,20 @@ bool RenderingDevice::fellow_async_compute_begin() {
 	}
 
 	fellow_async_current_use = f.fellow_async_uses++;
+	const uint64_t fellow_t0 = OS::get_singleton()->get_ticks_usec();
 	_end_frame();
-	execute_chained_cmds(false, RDD::FenceID(), f.fellow_async_semaphores[fellow_async_current_use * 2 + 0]);
+	const uint64_t fellow_t1 = OS::get_singleton()->get_ticks_usec();
+	if (FellowPresentThread::submits(this)) {
+		// Submit thread: the prefix is submitted by the thread (the jobs keep the order of the submissions).
+		FellowPresentThread *thread = FellowPresentThread::get(this);
+		FellowPresentThread::Job &job = thread->begin();
+		FellowPresentThread::take_frame(this, job, main_queue, f.fellow_async_semaphores[fellow_async_current_use * 2 + 0], RDD::FenceID());
+		thread->commit();
+	} else {
+		execute_chained_cmds(false, RDD::FenceID(), f.fellow_async_semaphores[fellow_async_current_use * 2 + 0]);
+	}
+	Fellow::stats().rd_async_end_usec.add(fellow_t1 - fellow_t0);
+	Fellow::stats().rd_async_submit_usec.add(OS::get_singleton()->get_ticks_usec() - fellow_t1);
 
 	// Record the async part into a command buffer of the async queue's family; the main buffer just submitted is
 	// put back (and switched out) at end().
@@ -8339,7 +8487,9 @@ void RenderingDevice::fellow_async_compute_end() {
 	draw_graph.fellow_async_phase = 0;
 	fellow_async_recording = false;
 
+	const uint64_t fellow_t0 = OS::get_singleton()->get_ticks_usec();
 	_end_frame();
+	const uint64_t fellow_t1 = OS::get_singleton()->get_ticks_usec();
 	// The async part waits on the prefix and on any upload submitted while it was ended (none when the transfer
 	// workers were idle at begin()).
 	thread_local LocalVector<RDD::SemaphoreID> waits;
@@ -8351,8 +8501,21 @@ void RenderingDevice::fellow_async_compute_end() {
 	f.semaphores_to_wait_on.clear();
 	DEV_ASSERT(f.command_buffer_pool.buffers_used == 0);
 	f.command_buffer_pool.buffers_used = 0;
-	_fellow_present_wait();
-	driver->command_queue_execute_and_present(fellow_async_queue, waits, f.command_buffer, f.fellow_async_semaphores[fellow_async_current_use * 2 + 1], RDD::FenceID(), {});
+	if (FellowPresentThread::submits(this)) {
+		FellowPresentThread *thread = FellowPresentThread::get(this);
+		FellowPresentThread::Job &job = thread->begin();
+		driver->fellow_flush_pending_memory();
+		job.queue = fellow_async_queue;
+		job.waits = waits;
+		job.buffers.push_back(f.command_buffer);
+		job.signal = f.fellow_async_semaphores[fellow_async_current_use * 2 + 1];
+		thread->commit();
+	} else {
+		_fellow_present_wait();
+		driver->command_queue_execute_and_present(fellow_async_queue, waits, f.command_buffer, f.fellow_async_semaphores[fellow_async_current_use * 2 + 1], RDD::FenceID(), {});
+	}
+	Fellow::stats().rd_async_end_usec.add(fellow_t1 - fellow_t0);
+	Fellow::stats().rd_async_submit_usec.add(OS::get_singleton()->get_ticks_usec() - fellow_t1);
 	f.command_buffer = fellow_async_stashed_command_buffer;
 	_fellow_next_command_buffer();
 
@@ -8369,14 +8532,25 @@ void RenderingDevice::fellow_async_compute_join() {
 	const bool conflict = draw_graph.fellow_async_conflict;
 	const RDD::SemaphoreID done = f.fellow_async_semaphores[fellow_async_current_use * 2 + 1];
 
+	const uint64_t fellow_t0 = OS::get_singleton()->get_ticks_usec();
 	_end_frame();
+	const uint64_t fellow_t1 = OS::get_singleton()->get_ticks_usec();
 	if (conflict) {
 		// The concurrent part touches something the async part uses: it waits for it (as if recorded after it on one
 		// queue, which is what its barriers assume). The work after it follows it on the main queue.
 		f.semaphores_to_wait_on.push_back(done);
 		Fellow::stats().frame_async_conflicts.increment();
 	}
-	execute_chained_cmds(false, RDD::FenceID(), RDD::SemaphoreID());
+	if (FellowPresentThread::submits(this)) {
+		FellowPresentThread *thread = FellowPresentThread::get(this);
+		FellowPresentThread::Job &job = thread->begin();
+		FellowPresentThread::take_frame(this, job, main_queue, RDD::SemaphoreID(), RDD::FenceID());
+		thread->commit();
+	} else {
+		execute_chained_cmds(false, RDD::FenceID(), RDD::SemaphoreID());
+	}
+	Fellow::stats().rd_async_end_usec.add(fellow_t1 - fellow_t0);
+	Fellow::stats().rd_async_submit_usec.add(OS::get_singleton()->get_ticks_usec() - fellow_t1);
 	_fellow_next_command_buffer();
 	if (!conflict) {
 		// The next main-queue submission (the rest of this frame, or the next mid-frame one) waits on the async part.
@@ -8385,114 +8559,22 @@ void RenderingDevice::fellow_async_compute_join() {
 	Fellow::stats().frame_async_uses.increment();
 }
 
-struct RenderingDevice::FellowPresentThread {
-	Thread thread;
-	BinaryMutex mutex;
-	ConditionVariable cv;
-	bool exit = false;
-	bool pending = false; // a presentation handed over and not issued yet
-	RDD::CommandQueueID queue;
-	RDD::SemaphoreID semaphore;
-	LocalVector<RDD::SwapChainID> swap_chains;
-	// Submit thread: the frame's submissions (its command buffers chained by semaphores, as execute_chained_cmds()
-	// submits them), issued before the presentation.
-	bool submit = false;
-	RDD::CommandQueueID submit_queue;
-	LocalVector<RDD::CommandBufferID> submit_buffers;
-	LocalVector<RDD::SemaphoreID> submit_chain; // signalled by each command buffer but the last
-	LocalVector<RDD::SemaphoreID> submit_waits;
-	RDD::FenceID submit_fence;
-	RenderingDeviceDriver *driver = nullptr;
-
-	static void _run(void *p_self) {
-		FellowPresentThread *self = static_cast<FellowPresentThread *>(p_self);
-		self->driver->fellow_set_submit_thread();
-		LocalVector<RDD::SwapChainID> swap_chains;
-		LocalVector<RDD::SemaphoreID> submit_waits;
-		LocalVector<RDD::CommandBufferID> submit_buffers;
-		LocalVector<RDD::SemaphoreID> submit_chain;
-		while (true) {
-			RDD::CommandQueueID queue;
-			RDD::SemaphoreID semaphore;
-			bool submit = false;
-			RDD::CommandQueueID submit_queue;
-			RDD::FenceID submit_fence;
-			{
-				MutexLock lock(self->mutex);
-				while (!self->pending && !self->exit) {
-					self->cv.wait(lock);
-				}
-				if (!self->pending) {
-					return; // exit
-				}
-				queue = self->queue;
-				semaphore = self->semaphore;
-				swap_chains = self->swap_chains;
-				submit = self->submit;
-				submit_queue = self->submit_queue;
-				submit_buffers = self->submit_buffers;
-				submit_chain = self->submit_chain;
-				submit_waits = self->submit_waits;
-				submit_fence = self->submit_fence;
-			}
-			if (submit) {
-				for (uint32_t i = 0; i < submit_buffers.size(); i++) {
-					const bool last = i + 1 == submit_buffers.size();
-					const RDD::SemaphoreID signal = last ? semaphore : submit_chain[i];
-					self->driver->command_queue_execute_and_present(submit_queue, submit_waits, submit_buffers[i], signal, last ? submit_fence : RDD::FenceID(), {});
-					submit_waits.resize(1);
-					submit_waits[0] = signal;
-				}
-			}
-			self->driver->fellow_command_queue_present(queue, semaphore, swap_chains);
-			{
-				MutexLock lock(self->mutex);
-				self->pending = false;
-			}
-			self->cv.notify_all();
-		}
-	}
-};
-
 bool RenderingDevice::_fellow_present_async(RDD::CommandQueueID p_queue, RDD::SemaphoreID p_semaphore, const LocalVector<RDD::SwapChainID> &p_swap_chains, bool p_submit) {
-	if (fellow_present == nullptr) {
+	if (fellow_present == nullptr && !p_submit) {
 		// The driver must support it: try a presentation of nothing first.
 		if (driver->fellow_command_queue_present(p_queue, {}, {}) == ERR_UNAVAILABLE) {
 			return false;
 		}
-		fellow_present = memnew(FellowPresentThread);
-		fellow_present->driver = driver;
-		Thread::Settings settings;
-		settings.priority = Thread::PRIORITY_HIGH;
-		fellow_present->thread.start(&FellowPresentThread::_run, fellow_present, settings);
 	}
-	{
-		MutexLock lock(fellow_present->mutex);
-		DEV_ASSERT(!fellow_present->pending);
-		fellow_present->queue = p_queue;
-		fellow_present->semaphore = p_semaphore;
-		fellow_present->swap_chains = p_swap_chains;
-		fellow_present->submit = p_submit;
-		if (p_submit) {
-			// The frame's command buffers as execute_chained_cmds() submits them: the first waits on the frame's
-			// semaphores, each following one on the previous one's, the last signals the fence and the semaphore above.
-			RDG::CommandBufferPool &buffer_pool = frames[frame].command_buffer_pool;
-			fellow_present->submit_queue = main_queue;
-			fellow_present->submit_buffers.clear();
-			fellow_present->submit_chain.clear();
-			fellow_present->submit_buffers.push_back(frames[frame].command_buffer);
-			for (uint32_t i = 0; i < buffer_pool.buffers_used; i++) {
-				fellow_present->submit_buffers.push_back(buffer_pool.buffers[i]);
-				fellow_present->submit_chain.push_back(buffer_pool.semaphores[i]);
-			}
-			buffer_pool.buffers_used = 0;
-			fellow_present->submit_waits = frames[frame].semaphores_to_wait_on;
-			fellow_present->submit_fence = frames[frame].fence;
-			frames[frame].semaphores_to_wait_on.clear();
-		}
-		fellow_present->pending = true;
+	FellowPresentThread *thread = FellowPresentThread::get(this);
+	FellowPresentThread::Job &job = thread->begin();
+	if (p_submit) {
+		FellowPresentThread::take_frame(this, job, main_queue, p_semaphore, frames[frame].fence);
 	}
-	fellow_present->cv.notify_all();
+	job.present_queue = p_queue;
+	job.present_semaphore = p_semaphore;
+	job.swap_chains = p_swap_chains;
+	thread->commit();
 	Fellow::stats().frame_present_thread_uses.increment();
 	return true;
 }
@@ -8502,9 +8584,9 @@ void RenderingDevice::_fellow_present_wait() {
 		return;
 	}
 	MutexLock lock(fellow_present->mutex);
-	if (fellow_present->pending) {
+	if (fellow_present->count > 0) {
 		const uint64_t from = OS::get_singleton()->get_ticks_usec();
-		while (fellow_present->pending) {
+		while (fellow_present->count > 0) {
 			fellow_present->cv.wait(lock);
 		}
 		Fellow::stats().frame_present_thread_wait_usec.add(OS::get_singleton()->get_ticks_usec() - from);
@@ -8534,20 +8616,15 @@ void RenderingDevice::_execute_frame(bool p_present) {
 		// FellowEngine submit thread: the frame's command buffers are submitted by the present thread too (the
 		// render thread flushes the pending memory writes first, as the submission would). Same submissions in the same
 		// order: the render thread waits for the thread before any other submission or fence wait.
-		_fellow_present_wait();
-		driver->fellow_flush_pending_memory();
 		frames[frame].fence_signaled = true;
-		if (_fellow_present_async(present_queue, frames[frame].semaphore, frames[frame].swap_chains_to_present, true)) {
-			frames[frame].swap_chains_to_present.clear();
-			return;
-		}
-		frames[frame].fence_signaled = false; // not supported: submit and present here
+		_fellow_present_async(present_queue, frames[frame].semaphore, frames[frame].swap_chains_to_present, true);
+		frames[frame].swap_chains_to_present.clear();
+		return;
 	}
 
 	if (frame_can_present && is_main_instance && Fellow::frame_present_thread()) {
 		// FellowEngine present thread: the frame is submitted signalling its semaphore (as for a separate present
 		// queue) and the presentation, which waits on it, is issued by the present thread. Same commands, same images.
-		_fellow_present_wait();
 		execute_chained_cmds(false, frames[frame].fence, frames[frame].semaphore);
 		frames[frame].fence_signaled = true;
 		if (_fellow_present_async(present_queue, frames[frame].semaphore, frames[frame].swap_chains_to_present, false)) {

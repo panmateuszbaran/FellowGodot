@@ -305,9 +305,11 @@ inline bool frame_early_submit() {
 // issued by a dedicated thread instead of the render thread, which goes on with the next frame. The frame is submitted
 // signalling a semaphore the presentation waits on; the render thread waits for the presentation to have been issued
 // before it acquires, resizes or frees a swap chain. Same commands, same images. Vulkan; read every frame.
-// Submit thread (with the present thread's machinery): the frame's submission (vkQueueSubmit, ~0.1 ms on the RTX
-// laptop) is issued by the present thread too, before the presentation. The render thread flushes the pending memory
-// writes first and waits for the thread before any other submission, fence wait or swap chain operation. Same
+// Submit thread (with the present thread's machinery): the frame's submissions (vkQueueSubmit, ~0.1 ms each on the RTX
+// laptop) are issued by the present thread too: the end of the frame before its presentation, and the async compute
+// splits (0015: three more submissions per frame). The thread takes jobs from a FIFO in the order the render thread
+// would have issued them. The render thread flushes the pending memory writes before handing a submission over and
+// waits for the FIFO to be empty before any submission of its own, fence wait or swap chain operation. Same
 // submissions in the same order. Vulkan; read every frame.
 inline bool frame_submit_thread() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/frame/submit_thread");
@@ -486,6 +488,9 @@ struct Stats {
 	SafeNumeric<uint64_t> rd_graph_draw_lists; // draw lists replayed
 	SafeNumeric<uint64_t> rd_graph_draw_bytes; // their instruction bytes
 	SafeNumeric<uint64_t> cpu_hot_gate_closed_frames; // frames during which the hot workers' gate was closed (GPU-bound)
+	SafeNumeric<uint64_t> frame_submit_jobs; // jobs (submissions, presentations) handed to the present/submit thread
+	SafeNumeric<uint64_t> rd_async_end_usec; // CPU time of the render graph's replay at the async compute splits
+	SafeNumeric<uint64_t> rd_async_submit_usec; // CPU time of the async compute splits' submissions (or hand-overs)
 };
 
 Stats &stats();

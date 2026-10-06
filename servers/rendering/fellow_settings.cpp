@@ -192,5 +192,8 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["rd_graph_draw_lists"] = s.rd_graph_draw_lists.get();
 	d["rd_graph_draw_bytes"] = s.rd_graph_draw_bytes.get();
 	d["cpu_hot_gate_closed_frames"] = s.cpu_hot_gate_closed_frames.get();
+	d["frame_submit_jobs"] = s.frame_submit_jobs.get();
+	d["rd_async_end_usec"] = s.rd_async_end_usec.get();
+	d["rd_async_submit_usec"] = s.rd_async_submit_usec.get();
 	return d;
 }
