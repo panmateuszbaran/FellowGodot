@@ -74,6 +74,11 @@ The render thread waits 49 µs per frame for planned lists in the draw-heavy Cit
 goes on, it is only ordered differently. City Lab's twelve lists are too small for the plan to matter (the graph's end,
 209 µs per frame, is spread over 130 commands: barriers 51 µs, sort 14 µs, draw lists 70 µs).
 
+Minimum draws for a list to be planned (`m4_f61_dh_plan_ab`, draw-heavy City Lab, in one process): 16 / 64 / 128
+draws −2.1 / −2.3 / −2.2 % frame, GPU time +0.4 / +0.5 / +0.7 %; Bistro exterior (`m4_f61_bistro_plan_ab`, gate off,
+GPU-bound): +0.2 / +0.1 / +0.1 % frame, from the GPU time of the secondary command buffers (in real use the gate turns
+the replay off there).
+
 Between processes (`fellow59` defaults vs defaults + plan, ABBA): City Lab 2.321 vs 2.325 ms (`m4_f61_city_perf`, 5
 runs), draw-heavy City Lab 2.531 vs 2.526 ms (`m4_f61_dh_perf`, 4 runs): **no difference** (−0.2 % and +0.2 %).
 

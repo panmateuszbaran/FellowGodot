@@ -312,6 +312,13 @@ Parallel partition only for the largest ranges (`m4_f57_city_part_ab`, City Lab 
 from 16384 elements 0.0 % frame and render thread (p 0.96), from 8192 elements +0.8 % render thread (p 0.01): it stays
 off.
 
+Smaller cull ranges (`cpu/cull_ranges_per_thread`, `6241d36`: k ranges per thread instead of stock's one, their
+results merged in order; lavapipe 0 differing pixels, RTX identity at the floor in `m4_f61_temporal`):
+`m4_f61_city_cull_ab` (City Lab in one process, gate off, 2 runs): render thread +3.8 % with 2, +11.3 % with 4, +25.7 %
+with 8 ranges per thread; the cull itself 0.215 → 0.234 / 0.296 / 0.434 ms and its merge 0.029 → 0.054 / 0.101 /
+0.169 ms. The cull is not limited by the balance of its ranges but by the work per range (each range's results, their
+merge): **rejected**, the setting stays at 1 (stock's ranges, the code path unchanged).
+
 Instance data written to the GPU buffer vs to system memory (`cpu/debug_instance_scratch`, debug: wrong images;
 `m4_f57_city_scratch_ab`, City Lab in one process): the opaque list's instance data step 0.173 → 0.084 ms, the shadow
 lists' 0.136 → 0.050 ms, render thread −0.161 ms (−10.7 %, p < 10⁻²⁰⁰). The writes into the mapped GPU buffer (over
