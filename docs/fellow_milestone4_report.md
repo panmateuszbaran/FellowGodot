@@ -45,9 +45,30 @@ as large as between processes (§4). In-process A/B ranks configurations; betwee
 
 ## 4. Render lists built by the render thread and worker tasks (decision 0016)
 
-See `docs/decisions/0016-parallel-render-lists.md` (method, exactness argument, verification, all tables).
+See `docs/decisions/0016-parallel-render-lists.md` (method, exactness argument, verification, all tables). Every
+change keeps stock's lists, keys, order (ties included), instance buffer contents and draws; `cpu/verify` recomputes
+stock's results on the side and compares them after every build.
 
-(results to be completed)
+| step | what changed |
+|---|---|
+| compact sort | stock's introsort on (key2, key1, element) records instead of pointers to scattered surfaces |
+| parallel fill | worker ranges of the culled instances, joined in order; lightmap capture slots given out afterwards in list order |
+| parallel sort | introsort's independent parts on workers; several arrays at once; the final insertion pass per leaf |
+| parallel instance data | worker ranges; run lengths from per-range run starts |
+| batched shadow lists | all shadow passes of a frame filled (record mode), sorted, set up together |
+| parallel cull | stock's threaded cull with the render thread taking ranges itself |
+| hot workers | worker tasks stay awake between the render thread's loops; cold while the GPU is the limit |
+| compact shadow instances | shadow passes write the 112 of 176 instance bytes a shadow pass reads |
+
+City Lab, between processes (4 ABBA runs each, `m4_f49_city_perf`):
+
+| | frame ms | render thread ms | GPU ms |
+|---|---:|---:|---:|
+| stock 4.7.2 | 3.043 | 2.427 | 1.61 |
+| FellowEngine, CPU toggles | 2.620 (−13.9 %) | 1.873 (−22.8 %) | 1.67 |
+| FellowEngine, CPU toggles + hot workers | **2.454 (−19.4 %)** | **1.680 (−30.8 %)** | 1.73 |
+
+(further results in progress)
 
 ## 5. Image verification
 
