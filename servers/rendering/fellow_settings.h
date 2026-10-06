@@ -390,6 +390,12 @@ inline bool cpu_parallel_recording() {
 	return cpu_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/cpu/parallel_recording");
 }
 
+// Debug only (wrong images): the parallel instance data steps write to system memory instead of the GPU buffer, to
+// measure what the writes over PCIe (device-local, host-visible memory) cost.
+inline bool cpu_debug_instance_scratch() {
+	return GLOBAL_GET_CACHED(bool, "rendering/fellow/cpu/debug_instance_scratch");
+}
+
 // Segments per recording thread (the render thread and its helpers): more balance the load between performance and
 // efficiency cores; the replay joins consecutive segments again.
 inline int cpu_recording_segments_per_thread() {

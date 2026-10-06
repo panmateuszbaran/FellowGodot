@@ -1120,6 +1120,9 @@ void RenderForwardClustered::_fill_instance_data(RenderListType p_render_list, i
 			fellow_run_chunks[c].from = c * FELLOW_PARALLEL_LIST_CHUNK;
 			fellow_run_chunks[c].to = MIN(element_total, (c + 1) * FELLOW_PARALLEL_LIST_CHUNK);
 		}
+		if (Fellow::cpu_debug_instance_scratch()) {
+			fellow_debug_scratch[p_render_list].resize(p_offset + element_total);
+		}
 		_fellow_parallel_for(chunk_count, &_fellow_chunk_thunk<&RenderForwardClustered::_fellow_fill_instance_data_chunk>);
 
 		if (element_total <= RenderElementInfo::MAX_REPEATS) {
@@ -1298,7 +1301,8 @@ void RenderForwardClustered::_fellow_prefetch_element(GeometryInstanceSurfaceDat
 void RenderForwardClustered::_fellow_fill_instance_data_chunk(uint32_t p_chunk, void *p_unused) {
 	const FellowInstanceDataJob &job = fellow_instance_job;
 	RenderList *rl = &render_list[job.render_list];
-	SceneState::InstanceData *gpu = scene_state.curr_gpu_ptr[job.render_list];
+	// Debug (cpu/debug_instance_scratch): system memory instead of the GPU buffer, to measure the cost of the writes.
+	SceneState::InstanceData *gpu = Fellow::cpu_debug_instance_scratch() ? fellow_debug_scratch[job.render_list].ptr() : scene_state.curr_gpu_ptr[job.render_list];
 	uint8_t *joinable = fellow_instance_joinable.ptr();
 	const uint32_t from = job.offset + p_chunk * job.chunk_size;
 	const uint32_t to = MIN(from + job.chunk_size, job.offset + job.total);
@@ -3960,7 +3964,7 @@ void RenderForwardClustered::_fellow_shadow_instance_chunk(uint32_t p_item, void
 	const FellowShadowItem &item = fellow_shadow_items[p_item];
 	const FellowShadowEntry &entry = fellow_shadow_entries[item.entry];
 	RenderList *rl = &render_list[RENDER_LIST_SECONDARY];
-	SceneState::InstanceData *gpu = scene_state.curr_gpu_ptr[RENDER_LIST_SECONDARY];
+	SceneState::InstanceData *gpu = Fellow::cpu_debug_instance_scratch() ? fellow_debug_scratch[RENDER_LIST_SECONDARY].ptr() : scene_state.curr_gpu_ptr[RENDER_LIST_SECONDARY];
 	uint8_t *link = fellow_instance_joinable.ptr();
 	const FellowShadowRecord *records = entry.records.ptr();
 	const bool prefetch = Fellow::cpu_prefetch();
@@ -4207,6 +4211,9 @@ void RenderForwardClustered::_fellow_shadow_flush() {
 		const FellowShadowItem &item = fellow_shadow_items[k];
 		fellow_run_chunks[k].from = fellow_shadow_entries[item.entry].from + item.from;
 		fellow_run_chunks[k].to = fellow_shadow_entries[item.entry].from + item.to;
+	}
+	if (Fellow::cpu_debug_instance_scratch()) {
+		fellow_debug_scratch[RENDER_LIST_SECONDARY].resize(render_list[RENDER_LIST_SECONDARY].elements.size());
 	}
 	_fellow_parallel_for(fellow_shadow_items.size(), &_fellow_chunk_thunk<&RenderForwardClustered::_fellow_shadow_instance_chunk>, helpers);
 

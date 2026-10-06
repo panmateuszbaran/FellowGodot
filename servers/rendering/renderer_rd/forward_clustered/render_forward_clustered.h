@@ -684,6 +684,7 @@ private:
 	// Parallel loops over chunks (decision 0016): the render thread takes chunks itself, worker tasks help if they start
 	// in time (servers/rendering/fellow_parallel.h).
 	FellowParallelFor *fellow_parallel = nullptr; // shared with the scene cull (FellowParallelFor::shared_acquire())
+	LocalVector<SceneState::InstanceData> fellow_debug_scratch[RENDER_LIST_MAX]; // cpu/debug_instance_scratch
 	template <void (RenderForwardClustered::*M)(uint32_t, void *)>
 	static void _fellow_chunk_thunk(void *p_self, uint32_t p_chunk) {
 		(static_cast<RenderForwardClustered *>(p_self)->*M)(p_chunk, nullptr);
