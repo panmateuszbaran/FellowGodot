@@ -18,12 +18,23 @@ const FIELDS := ["frame_ms", "gpu_ms", "render_cpu_ms", "setup_cpu_ms", "process
 var data := {}
 var _last_usec := 0
 var vp_rid: RID
+## --rs_metrics=render_thread: the RenderingServer metrics are read by a call on the render thread instead of by the main
+## thread. With a separate render thread (--render-thread separate) the main thread's reads (viewport_get_measured_*,
+## viewport_get_render_info) each wait for the render thread to drain its queue, i.e. to finish the previous frame,
+## which serializes the two threads; the call on the render thread reads the same values (those of the last frame
+## drawn) without waiting. Without a separate render thread the call runs at once: same values as the direct reads.
+var rs_async := false
+var _rs_data := {} # written only by the render thread until merge_rs()
+const RS_FIELDS := ["gpu_ms", "render_cpu_ms", "setup_cpu_ms", "draw_calls", "primitives", "objects", "shadow_draw_calls", "vis_draw_calls"]
 
 
-func _init(p_vp_rid: RID) -> void:
+func _init(p_vp_rid: RID, p_rs_async := false) -> void:
 	vp_rid = p_vp_rid
+	rs_async = p_rs_async
 	for f in FIELDS:
 		data[f] = PackedFloat64Array()
+	for f in RS_FIELDS:
+		_rs_data[f] = PackedFloat64Array()
 
 
 func reset_clock() -> void:
@@ -35,15 +46,31 @@ func sample() -> void:
 	var dt := (now - _last_usec) / 1000.0
 	_last_usec = now
 	data["frame_ms"].append(dt)
-	data["gpu_ms"].append(RenderingServer.viewport_get_measured_render_time_gpu(vp_rid))
-	data["render_cpu_ms"].append(RenderingServer.viewport_get_measured_render_time_cpu(vp_rid))
-	data["setup_cpu_ms"].append(RenderingServer.get_frame_setup_time_cpu())
 	data["process_ms"].append(Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0)
-	data["draw_calls"].append(RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_DRAW_CALLS_IN_FRAME))
-	data["primitives"].append(RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_PRIMITIVES_IN_FRAME))
-	data["objects"].append(RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_OBJECTS_IN_FRAME))
-	data["shadow_draw_calls"].append(RenderingServer.viewport_get_render_info(vp_rid, RenderingServer.VIEWPORT_RENDER_INFO_TYPE_SHADOW, RenderingServer.VIEWPORT_RENDER_INFO_DRAW_CALLS_IN_FRAME))
-	data["vis_draw_calls"].append(RenderingServer.viewport_get_render_info(vp_rid, RenderingServer.VIEWPORT_RENDER_INFO_TYPE_VISIBLE, RenderingServer.VIEWPORT_RENDER_INFO_DRAW_CALLS_IN_FRAME))
+	if rs_async:
+		RenderingServer.call_on_render_thread(_sample_rs.bind(_rs_data))
+	else:
+		_sample_rs(data)
+
+
+func _sample_rs(p_into: Dictionary) -> void:
+	p_into["gpu_ms"].append(RenderingServer.viewport_get_measured_render_time_gpu(vp_rid))
+	p_into["render_cpu_ms"].append(RenderingServer.viewport_get_measured_render_time_cpu(vp_rid))
+	p_into["setup_cpu_ms"].append(RenderingServer.get_frame_setup_time_cpu())
+	p_into["draw_calls"].append(RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_DRAW_CALLS_IN_FRAME))
+	p_into["primitives"].append(RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_PRIMITIVES_IN_FRAME))
+	p_into["objects"].append(RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_OBJECTS_IN_FRAME))
+	p_into["shadow_draw_calls"].append(RenderingServer.viewport_get_render_info(vp_rid, RenderingServer.VIEWPORT_RENDER_INFO_TYPE_SHADOW, RenderingServer.VIEWPORT_RENDER_INFO_DRAW_CALLS_IN_FRAME))
+	p_into["vis_draw_calls"].append(RenderingServer.viewport_get_render_info(vp_rid, RenderingServer.VIEWPORT_RENDER_INFO_TYPE_VISIBLE, RenderingServer.VIEWPORT_RENDER_INFO_DRAW_CALLS_IN_FRAME))
+
+
+## rs_async: waits for the render thread's pending calls, then moves their values into data (call before summary()).
+func merge_rs() -> void:
+	if not rs_async:
+		return
+	RenderingServer.force_sync()
+	for f in RS_FIELDS:
+		data[f] = _rs_data[f]
 
 
 func count() -> int:

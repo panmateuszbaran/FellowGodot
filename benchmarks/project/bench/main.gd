@@ -183,6 +183,9 @@ func _run_perf() -> void:
 	var measure_s := float(args.get("measure", "30"))
 	var dur: float = scene.flythrough.duration()
 	var frames_per_pass := int(ceil(dur / DT)) + 1
+	if args.has("pass_frames"):
+		# Functional tests on slow devices (lavapipe) only: the first N frames of the path per pass.
+		frames_per_pass = mini(frames_per_pass, int(args["pass_frames"]))
 	var profile: bool = args.get("profile", "0") == "1"
 	var rd := RenderingServer.get_rendering_device()
 
@@ -208,7 +211,9 @@ func _run_perf() -> void:
 	result["warmup"] = {"seconds": (Time.get_ticks_usec() - w0) / 1e6, "passes": warm_passes, "pipeline_compilations": _dict_sub(pc1, pc0)}
 
 	# 2) Measurement: whole passes until >= measure_s.
-	var m := Metrics.new(vp.get_viewport_rid())
+	# --rs_metrics=render_thread: see metrics.gd (for --render-thread separate; not with --ab, whose blocks read the
+	# metrics of the frame just sampled).
+	var m := Metrics.new(vp.get_viewport_rid(), str(args.get("rs_metrics", "")) == "render_thread")
 	var pass_list := []
 	var pass_frames := []
 	var gpu_passes := {}
@@ -325,6 +330,8 @@ func _run_perf() -> void:
 		"pipeline_compilations": _dict_sub(pc2, pc1),
 		"profile_timestamps": profile,
 	}
+	m.merge_rs()
+	result["rs_metrics"] = "render_thread" if m.rs_async else "main_thread"
 	result["summary"] = m.summary()
 	result["frames"] = m.to_json_arrays()
 	result["frames"]["path_frame"] = pass_frames
