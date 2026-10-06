@@ -84,9 +84,21 @@ same presentation of the same image; only which thread calls the driver, and whe
   with them off.
 * RTX: `m4_f51_verify`, `m4_f51_temporal` (pending).
 
+* RTX (`m4_f52_verify_*`, `m4_f53_verify_*`, present thread and parallel replay on, `fellow53` also the submit thread):
+  0 mismatches of the CPU verification in every scene; identity (`m4_f52_temporal`, `m4_f53_temporal`): Bistro
+  exterior bit-identical, the other scenes at their floor, also under async compute.
+
 ## Result
 
-(pending: `m4_f51_city_ab`, `m4_f51_city_perf`, `m4_f51_drawheavy_*`, `m4_f51_gpu_ab`)
+* Parallel replay in GPU-bound frames (`m4_f51_gpu_ab`): +1.6 % GPU time in Bistro exterior (the secondary command
+  buffers), so from `7ce0a59` it runs only while the hot workers' gate is open (CPU-bound frames).
+* Submit thread, first version (`fellow53`): in one process no gain (`m4_f53_city_ab`: −0.1 %, p 0.79): the render
+  thread waited for the whole FIFO at the start of every frame (`_stall_for_frame()`), i.e. for the submission and
+  presentation of the frame it had just handed over. Between processes `m4_f53_city_perf`: −16.6 % vs stock against
+  the candidate's −14.8 % (the presentation alone was already off the render thread). Under async compute it did
+  help in one process (`m4_f53_city_ab_async`: −2.9 % frame, −3.9 % render thread: three more submissions per frame
+  left the render thread). From `0354ca1` the stall waits only for the job that submits the fence of the frame slot
+  it reuses (handed over a frame or more ago); `fellow54` measures it.
 
 ## Decision
 

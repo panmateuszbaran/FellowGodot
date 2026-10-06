@@ -272,6 +272,42 @@ Lab the CPU is the limit and the frame is still 6 % shorter; where the GPU is th
 `fellow50` the hot workers have a gate (`cpu/hot_workers_gate`, on): they go cold while the render thread waits for the
 GPU (frame fence waits above 10 % of the frame; open again below 3 %).
 
+### Candidate defaults, worker count, parallel partition (`fellow50`-`fellow53`)
+
+The candidate set: the six toggles, hot workers 300 µs with the gate, compact shadow instances, 10 worker tasks, with
+the present thread and parallel replay of decision 0017.
+
+RTX verification with the candidate and the gate off (`m4_f52_verify_*`, `m4_f53_verify_*`): City Lab temporal (751
+checks), captures (1735), lightmap captures (1736), draw-heavy captures (1377), Lights, Stress (7205), PBR, Blend Lab,
+Bistro exterior under async compute: **0 mismatches**. Identity (`m4_f52_temporal`, six scenes, FellowEngine off twice vs
+the candidate): Bistro exterior bit-identical (99 dB), every other scene at its run-to-run floor (City Lab 1/255 in a
+few pixels, the same as off vs off).
+
+In one process, City Lab (`m4_f52_city_ab`, 2 runs, 480 pairs, reference 6 workers):
+
+| configuration | frame | render thread | partition steps ms | shadow sort ms |
+|---|---:|---:|---:|---:|
+| 6 workers | 2.687 ms | 1.750 ms | 0.218 | 0.176 |
+| 6 workers, no parallel partition | −0.5 % (p 0.34) | −2.2 % | 0.178 | 0.149 |
+| 8 workers | −1.0 % | −1.8 % | | |
+| 10 workers | −2.5 % | −3.9 % | | |
+| 12 workers | −3.1 % | −5.4 % | | |
+
+The parallel partition (`fellow_sort.h`, exact) costs more than it saves at City Lab's list sizes (10-20 k elements):
+its two extra parallel loops per step take longer than the serial step. It is off by default since `8155689`.
+
+Between processes:
+
+| session | scene | candidate vs stock, frame | render thread | pairs |
+|---|---|---:|---:|---:|
+| `m4_f50b_city_perf` | City Lab | −19.4 % | −31.6 % | 4/4 |
+| `m4_f52_city_perf` | City Lab | **−19.2 %** (3.067 → 2.479 ms) | **−30.6 %** | 4/4 |
+| `m4_f52_dh_perf` | City Lab, draw-heavy | **−17.0 %** (4.192 → 3.477 ms) | **−22.4 %** | 3/3 |
+| `m4_f53_city_perf` (5 variants) | City Lab | −14.8 % (3.004 → 2.559 ms) | −31.4 % | 4/4 |
+
+(`m4_f53_city_perf` interleaves five variants; its candidate frame is 3 % slower than in `m4_f52` at the same render
+thread time: between sessions the frame varies by that much on this laptop.)
+
 ## Decision
 
 (pending)

@@ -104,6 +104,15 @@ submissions themselves block, so the split cannot be timed there). None of these
 does not show in their frame times; in a CPU-bound scene it would. Concurrent sharing of every image and buffer
 (needed for the compute family) costs nothing measurable here (`m3_f39_perf`, sharing only: −0.3 % / −0.2 %).
 
+### In a CPU-bound scene, with the submit thread (`fellow53`)
+
+City Lab (CPU-bound: render thread 1.6-2.0 ms, GPU 1.8 ms), between processes (`m4_f53_city_perf`, 4 ABBA runs, vs
+stock): candidate of 0016/0017 −14.8 %, + async compute −11.4 %, + submit thread −16.6 %, + both −14.2 %. In one
+process (`m4_f53_city_ab_async`, under async compute): the submit thread takes the splits' submissions off the render
+thread, −2.9 % frame. Async compute costs a CPU-bound frame about 3 % even then: the splits' graph replay
+(`rd_async_end_usec`, 0.3 ms per frame in City Lab) moves into the 3D rendering, and each split adds command buffers
+and barriers.
+
 ## Decision
 
 **KEEP as an option, off by default.** Exact (bit-identical / at the floor on RTX in six scenes, 0 conflicts), and
