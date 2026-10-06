@@ -1,6 +1,6 @@
 # 0016 — Render lists built by worker threads
 
-Status: **MEASURING** (`fellow42`) · Branch `fellow/geometry` · Toggles `rendering/fellow/cpu/parallel_list_fill`,
+Status: **MEASURING** (`fellow42`-`fellow50`) · Branch `fellow/geometry` · Toggles `rendering/fellow/cpu/parallel_list_fill`,
 `cpu/parallel_instance_data`, `cpu/compact_list_sort`, `cpu/parallel_list_sort` (umbrella `cpu/enabled`) · Code:
 `forward_clustered/render_forward_clustered.{h,cpp}` (`_fill_render_list_range`, `_fellow_fill_render_list_parallel`,
 `_fellow_make_instance_data`, `_fellow_fill_instance_data_chunk`, `_fellow_sort_by_key`, `RenderList::fellow_sort_by_key_range`),
@@ -188,6 +188,89 @@ RTX identity (`m4_f43_temporal`, six scenes, off twice and all four): every scen
 exterior bit-identical; City Lab 1/255 in a few pixels per frame either way). City Lab with lightmap captures
 (`m4_f43_city_lm`, three cameras): off vs off identical; off vs all four identical except one pixel of the aerial
 camera, by 3/255 (followed up in `m4_f46_city_lm`: three off and two on runs).
+
+### Batched shadow lists (`fellow46`)
+
+`cpu/batched_shadow_lists`: stock builds each shadow pass's list when the pass is appended (fill, sort, instance data,
+one pass after the other, three short loops each). The passes appended between `_render_shadow_begin()` and
+`_render_shadow_process()` are now built together: all passes' instances filled by worker ranges in **record mode**
+(each element gets the keys and flags its pass gives it in a record; the instances and surfaces are not written, so
+passes sharing instances can be filled at once; the "previous transform" resets the fill does are applied afterwards,
+the same values), sorted per pass by stock's introsort on the records, appended to the secondary list in pass order,
+instance data and run lengths by worker ranges. The instance buffer is grown pass by pass as stock grows it; when
+stock would have to replace the buffer in the middle of the passes (first frames, or lists outgrowing it: stock then
+rewrites everything from element 0 with the keys the instances hold by then) the passes are built stock's way.
+
+In one process (`m4_f46_city_ab`, 2 runs, 480 pairs): four list toggles −16.4 % frame, + batched shadows −18.1 %,
++ batched shadows + cull −19.0 %. Between processes (`m4_f46_city_perf`, 4 ABBA runs): four + batched + cull
+**−8.9 % frame, −15.8 % render thread** vs stock (3.044 → 2.773 ms; 2.428 → 2.044 ms).
+
+GPU-bound scenes in one process (`m4_f46_gpu_ab`, off vs all): frame and GPU time unchanged (±0.3 %); render thread
+Bistro interior −18 %, Bistro exterior −1 %, Sponza and Lights Lab 0, **PBR Lab +31 % (0.30 → 0.39 ms)**: posting
+and waking worker tasks for a few hundred instances costs more than it saves. From `fellow49` the batched passes use
+worker tasks only from 1024 instances between them (PBR Lab, Lights Lab, Blend Lab, Stress Lab: 0 worker chunks).
+
+Identity (`m4_f46_temporal`, `m4_f46_city_lm`): every scene at its off-vs-off floor; City Lab with lightmap captures:
+of five runs (three off, two on), two off runs are identical, the third differs from them by up to 3/255 in a few
+pixels, and both on runs are identical to that third off run: the 3/255 of `m4_f43_city_lm` is City Lab's own
+run-to-run variation, not the toggles.
+
+### Verification mode, fill-time sort records (`b2fc91e`, first measured in `fellow49`)
+
+`cpu/verify` computes stock's results on the side after every list build and compares (sort order element by element,
+instance buffer words, run lengths; for the batched shadow passes stock's fill per pass, its sort and its instance
+data): counters `cpu_verify_checks` and `cpu_verify_mismatches`. The parallel fill also takes the opaque list's sort
+records while the surfaces are in its cache, so the sort no longer gathers keys from 17 000 scattered surfaces.
+
+### One sort for all shadow passes, hot workers (`fellow49`)
+
+* `FellowParallelSort` (`servers/rendering/fellow_sort.h`): the level-by-level introsort of the parallel sort, for
+  several arrays at once (the batched shadow passes: a large cascade is split over the workers instead of one worker
+  sorting it), and SortArray::sort()'s final insertion pass run per leaf on the workers. A partition step leaves no
+  element of its right part less than an element of its left part, so that pass never moves an element across a leaf
+  boundary: per leaf it does what the pass over the whole array does. Checked against `SortArray::sort()` on 40 000
+  random arrays (many ties, sorted and reversed input, exhausted depth budgets) and in the engine with `cpu/verify`.
+* **Hot workers** (`cpu/hot_workers_usec`): the profile showed the cores barely helping (each parallel step 1.5-2×
+  faster with seven threads): every loop posted its worker tasks and the workers fell asleep after it, and on this
+  laptop a sleeping worker takes longer to wake than many of the loops take. The render thread's loops (cull and
+  lists) now share one `FellowParallelFor` whose worker tasks stay after their last chunk, spinning, for the given time
+  after the last loop, and are posted ahead when the cull starts. A loop is published by an epoch-tagged state claimed
+  with a compare-and-swap, so a worker that read a finished loop can never claim a chunk of the next one with stale
+  parameters. Which thread runs a chunk changes, what a chunk does does not.
+
+RTX verification (`m4_f49_verify_*`, hot workers on): City Lab temporal (751 checks), capture (1735), lightmap
+captures (1736), Lights, Stress, PBR, Blend Lab: **0 mismatches**; City Lab with hot workers: 79 % of the chunks run by
+workers. Identity (`m4_f49_temporal`): Bistro exterior bit-identical; City Lab off vs off 1/255 in a few pixels, hot
+vs one of the off runs bit-identical.
+
+In one process (`m4_f49_city_ab`, 2 runs, 480 pairs, reference toggles off):
+
+| configuration | frame ms | Δ frame | render thread ms | Δ render thread | GPU ms |
+|---|---:|---:|---:|---:|---:|
+| toggles off | 3.653 | | 2.806 | | 1.671 |
+| all six | 2.735 | −25.1 % | 1.885 | −32.8 % | 1.649 |
+| + hot workers 300 µs | 2.512 | −31.2 % | 1.621 | −42.2 % | 1.750 (+4.8 %) |
+| + hot workers 1000 µs | 2.525 | −30.9 % | 1.624 | −42.1 % | 1.790 (+7.1 %) |
+| + hot workers 300 µs, 10 workers | 2.474 | −32.3 % | 1.566 | −44.2 % | 1.780 (+6.5 %) |
+
+Render-thread regions (ms, all six → + hot 300 µs): opaque fill 0.186 → 0.158, opaque sort 0.257 → 0.195 (single-threaded
+0.449), opaque instance data 0.203 → 0.181, shadow lists fill 0.104 → 0.058, sort 0.267 → 0.194, instance data
+0.176 → 0.168, runs 0.018 → 0.016, scene cull 0.363 → 0.357. The instance data steps barely gain from more threads:
+the instance buffer is written over PCIe (device-local, host-visible memory), about 17 GB/s in total.
+
+Between processes (`m4_f49_city_perf`, 4 ABBA runs, CV 0.3-1.3 %):
+
+| variant | frame ms | Δ vs stock | pairs | render thread ms | Δ vs stock | GPU ms |
+|---|---:|---:|---:|---:|---:|---:|
+| stock | 3.043 | | | 2.427 | | 1.61 |
+| FellowEngine, toggles off | 3.190 | +4.8 % | 0/4 faster | 2.524 | +4.0 % | |
+| all six | **2.620** | **−13.9 %** | 4/4 | **1.873** | **−22.8 %** | 1.67 |
+| all six + hot workers 300 µs | **2.454** | **−19.4 %** | 4/4 | **1.680** | **−30.8 %** | 1.73 |
+
+The spinning workers cost the GPU 5-7 % (lower GPU clocks: this laptop's CPU and GPU share one power budget). In City
+Lab the CPU is the limit and the frame is still 6 % shorter; where the GPU is the limit that would be a loss. From
+`fellow50` the hot workers have a gate (`cpu/hot_workers_gate`, on): they go cold while the render thread waits for the
+GPU (frame fence waits above 10 % of the frame; open again below 3 %).
 
 ## Decision
 
