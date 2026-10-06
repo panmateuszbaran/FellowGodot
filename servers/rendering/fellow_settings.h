@@ -316,8 +316,11 @@ inline int frame_replay_max_segments() {
 	return GLOBAL_GET_CACHED(int, "rendering/fellow/frame/replay_max_segments");
 }
 
+bool cpu_hot_workers_gate_open();
 inline bool frame_submit_thread() {
-	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/frame/submit_thread");
+	// Only while the frame is CPU-bound (cpu/hot_workers_gate), like the parallel replay: where the GPU is the limit the
+	// render thread waits for it anyway, and the thread's submissions cost Sponza 2 % GPU time (m4_f54_gpu_perf).
+	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/frame/submit_thread") && (!GLOBAL_GET_CACHED(bool, "rendering/fellow/cpu/hot_workers_gate") || cpu_hot_workers_gate_open());
 }
 
 inline bool frame_present_thread() {
