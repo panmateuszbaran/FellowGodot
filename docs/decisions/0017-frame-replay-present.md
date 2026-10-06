@@ -104,4 +104,8 @@ same presentation of the same image; only which thread calls the driver, and whe
 
 ## Decision
 
-(pending)
+**KEEP, on by default since `fellow56`**: parallel replay and the submit thread only while the frame is CPU-bound (the
+hot workers' gate: the replay cost Bistro exterior 1.6 % GPU time, the submit thread Sponza 2.2 % GPU time in
+`m4_f54_gpu_perf`), the present thread always. Exact (same commands, same submissions in the same order); in CPU-bound
+frames the submissions (0.1 ms per frame on the RTX laptop, more with async compute) and the replay of large lists
+leave the render thread.

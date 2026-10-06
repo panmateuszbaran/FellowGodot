@@ -310,4 +310,10 @@ thread time: between sessions the frame varies by that much on this laptop.)
 
 ## Decision
 
-(pending)
+**KEEP, on by default since `fellow56`** (`73f6f60`): the six toggles, compact shadow instances, hot workers 300 µs
+with the gate, 10 worker tasks; the parallel partition stays off (`cpu/parallel_partition`, measured slower at City
+Lab's sizes; `cpu/parallel_partition_min` for further measurement). Exact by construction and by verification (stock's
+results recomputed and compared in every scene: 0 mismatches), −19 % frame and −31 % render thread in City Lab,
+−17 % / −22 % in its draw-heavy variant (with decision 0017's end of the frame; decision 0018 takes the draw-heavy
+variant further). Costs: worker threads spin for up to 300 µs after the render thread's loops while the frame is
+CPU-bound (cold when the GPU is the limit). `fellow56` re-measures the defaults against stock in every scene.

@@ -101,4 +101,8 @@ stay serial (lavapipe: City Lab 1 list recorded, draw-heavy 281).
 
 ## Decision
 
-(pending)
+**KEEP, on by default since `fellow56`** (lists of 384 draws or more): draw-heavy City Lab −29 % frame and −40 % render
+thread vs stock (`m4_f54_dh_perf`, by elements; the draw count threshold keeps City Lab's instanced lists serial),
+Bistro exterior's render thread −36 % (GPU-bound: frame unchanged), identical images (bit-identical in Bistro
+exterior, at every scene's floor elsewhere; lavapipe 0 differing pixels). `fellow56` measures the granularity
+(`cpu/recording_segments_per_thread`, `frame/replay_max_segments`) and re-measures the defaults against stock.
