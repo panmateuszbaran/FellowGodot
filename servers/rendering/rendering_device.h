@@ -88,6 +88,8 @@ private:
 
 	bool local_device_processing = false;
 	bool is_main_instance = false;
+	uint64_t fellow_last_stall_usec = 0; // FellowEngine: when the last frame fence wait ended (hot workers' gate)
+	uint64_t fellow_stall_wait_usec = 0; // FellowEngine: fence wait of the frame being begun
 
 protected:
 	static void _bind_methods();

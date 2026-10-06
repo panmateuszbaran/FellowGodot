@@ -4033,6 +4033,9 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 				WorkerThreadPool::get_singleton()->wait_for_group_task_completion(group_task);
 			}
 
+			if (Fellow::list_markers()) {
+				RENDER_TIMESTAMP("FellowEngine Scene Cull Merge");
+			}
 			for (InstanceCullResult &thread : scene_cull_result_threads) {
 				scene_cull_result.append_from(thread);
 			}

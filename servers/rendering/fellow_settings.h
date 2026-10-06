@@ -366,9 +366,24 @@ inline int cpu_worker_tasks() {
 // microseconds after their last chunk, spinning, ready for the next loop; the frame's first loop has them posted ahead
 // (when the cull starts). 0: each loop posts its tasks and they leave when it ends (a sleeping worker can take
 // hundreds of microseconds to wake). Changes which thread runs a chunk, never what a chunk does.
+//
+// Only while the frame is CPU-bound (cpu/hot_workers_gate): on a laptop the spinning cores take power the GPU could use
+// (m4_f49_city_ab: GPU time +5-7 %), so when the render thread waits for the GPU (frame fences: the GPU is the limit),
+// the workers go cold until the waits stop.
+bool cpu_hot_workers_gate_open();
 inline int cpu_hot_workers_usec() {
-	return cpu_enabled() ? MAX(0, GLOBAL_GET_CACHED(int, "rendering/fellow/cpu/hot_workers_usec")) : 0;
+	if (!cpu_enabled()) {
+		return 0;
+	}
+	const int usec = MAX(0, GLOBAL_GET_CACHED(int, "rendering/fellow/cpu/hot_workers_usec"));
+	if (usec == 0 || (GLOBAL_GET_CACHED(bool, "rendering/fellow/cpu/hot_workers_gate") && !cpu_hot_workers_gate_open())) {
+		return 0;
+	}
+	return usec;
 }
+// The main RenderingDevice reports, once per frame, how long the render thread waited for an earlier frame's fence and
+// the time since the previous report (gate of the hot workers).
+void frame_gpu_wait_report(uint64_t p_wait_usec, uint64_t p_frame_usec);
 
 // Mix-blended materials (alpha pass, no depth or stencil writes, no alpha antialiasing): fragments whose final alpha is
 // exactly 0 are discarded before lighting — blending them leaves the colour target unchanged (src * 0 + dst * 1), so
@@ -418,6 +433,8 @@ struct Stats {
 	SafeNumeric<uint64_t> rd_frames; // RenderingDevice frames ended (main device)
 	SafeNumeric<uint64_t> rd_graph_end_usec; // CPU time of the render graph's replay into the command buffer (_end_frame)
 	SafeNumeric<uint64_t> rd_execute_usec; // CPU time of the frame's submission and presentation (_execute_frame)
+	SafeNumeric<uint64_t> rd_fence_wait_usec; // time the render thread waited for frame fences (GPU behind the CPU)
+	SafeNumeric<uint64_t> cpu_hot_gate_closed_frames; // frames during which the hot workers' gate was closed (GPU-bound)
 };
 
 Stats &stats();

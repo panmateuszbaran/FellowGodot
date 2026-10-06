@@ -8074,7 +8074,14 @@ uint64_t RenderingDevice::get_memory_usage(MemoryType p_type) const {
 void RenderingDevice::_begin_frame(bool p_presented) {
 	GodotProfileZoneGroupedFirst(_profile_zone, "_stall_for_frame");
 	// Before writing to this frame, wait for it to be finished.
+	fellow_stall_wait_usec = 0;
 	_stall_for_frame(frame);
+	if (is_main_instance && p_presented) {
+		// FellowEngine: how long the render thread waited for the GPU this frame (gate of the hot workers).
+		const uint64_t now = OS::get_singleton()->get_ticks_usec();
+		Fellow::frame_gpu_wait_report(fellow_stall_wait_usec, fellow_last_stall_usec ? now - fellow_last_stall_usec : 0);
+		fellow_last_stall_usec = now;
+	}
 
 	// FellowEngine async compute: every segment of the frame has finished (the frame's last submission waited on the
 	// async parts); the command buffers are reset with the pool below.
@@ -8400,8 +8407,10 @@ void RenderingDevice::_stall_for_frame(uint32_t p_frame) {
 
 	if (frames[p_frame].fence_signaled) {
 		GodotProfileZoneGroupedFirst(_profile_zone, "driver->fence_wait");
+		const uint64_t fellow_wait_from = OS::get_singleton()->get_ticks_usec();
 		driver->fence_wait(frames[p_frame].fence);
 		frames[p_frame].fence_signaled = false;
+		fellow_stall_wait_usec += OS::get_singleton()->get_ticks_usec() - fellow_wait_from;
 
 		// Flush any pending requests for asynchronous buffer downloads.
 		if (!frames[p_frame].download_buffer_get_data_requests.is_empty()) {

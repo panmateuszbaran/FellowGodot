@@ -33,6 +33,8 @@
 
 #include "core/variant/dictionary.h"
 
+#include <atomic>
+
 void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/enabled", true);
 	GLOBAL_DEF("rendering/fellow/postfx/enabled", true);
@@ -89,10 +91,38 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/cpu/verify", false);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/cpu/worker_tasks", PROPERTY_HINT_RANGE, "0,32,1"), 6);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/cpu/hot_workers_usec", PROPERTY_HINT_RANGE, "0,5000,1,suffix:us"), 0);
+	GLOBAL_DEF("rendering/fellow/cpu/hot_workers_gate", true);
 	GLOBAL_DEF("rendering/fellow/frame/early_submit", false);
 	GLOBAL_DEF_RST("rendering/fellow/frame/separate_present_queue", false);
 	GLOBAL_DEF_RST("rendering/fellow/frame/async_compute", false);
 	GLOBAL_DEF_RST(PropertyInfo(Variant::INT, "rendering/fellow/frame/async_compute_family", PROPERTY_HINT_ENUM, "Dedicated Compute Family,Main Family,Main Queue (Split Only)"), 0);
+}
+
+// Hot workers' gate (render thread only): exponential averages of the fence wait and the frame interval; the gate
+// closes when the waits exceed 10 % of the frame and opens again below 3 % (hysteresis: a frame that just turned
+// CPU-bound by going hot does not flip back and forth).
+static double fellow_gate_wait_avg = 0.0;
+static double fellow_gate_frame_avg = 0.0;
+static std::atomic<bool> fellow_gate_open{ true };
+
+bool Fellow::cpu_hot_workers_gate_open() {
+	return fellow_gate_open.load(std::memory_order_relaxed);
+}
+
+void Fellow::frame_gpu_wait_report(uint64_t p_wait_usec, uint64_t p_frame_usec) {
+	stats().rd_fence_wait_usec.add(p_wait_usec);
+	const double a = 1.0 / 16.0;
+	fellow_gate_wait_avg += (double(p_wait_usec) - fellow_gate_wait_avg) * a;
+	fellow_gate_frame_avg += (double(MIN(p_frame_usec, uint64_t(1000000))) - fellow_gate_frame_avg) * a;
+	const bool open = fellow_gate_open.load(std::memory_order_relaxed);
+	if (open && fellow_gate_wait_avg > 0.10 * fellow_gate_frame_avg) {
+		fellow_gate_open.store(false, std::memory_order_relaxed);
+	} else if (!open && fellow_gate_wait_avg < 0.03 * fellow_gate_frame_avg) {
+		fellow_gate_open.store(true, std::memory_order_relaxed);
+	}
+	if (!fellow_gate_open.load(std::memory_order_relaxed)) {
+		stats().cpu_hot_gate_closed_frames.increment();
+	}
 }
 
 Fellow::Stats &Fellow::stats() {
@@ -142,5 +172,7 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["rd_frames"] = s.rd_frames.get();
 	d["rd_graph_end_usec"] = s.rd_graph_end_usec.get();
 	d["rd_execute_usec"] = s.rd_execute_usec.get();
+	d["rd_fence_wait_usec"] = s.rd_fence_wait_usec.get();
+	d["cpu_hot_gate_closed_frames"] = s.cpu_hot_gate_closed_frames.get();
 	return d;
 }
