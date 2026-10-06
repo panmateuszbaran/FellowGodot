@@ -334,6 +334,13 @@ inline bool cpu_parallel_cull() {
 	return cpu_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/cpu/parallel_cull");
 }
 
+// The shadow passes' lists (directional cascades, positional and cube faces) built together after the last pass is
+// set up: filled by worker ranges without writing the instances (each element gets the keys and flags of its pass in a
+// record), sorted per pass, instance data in parallel. Same lists, keys, order and instance data as stock.
+inline bool cpu_batched_shadow_lists() {
+	return cpu_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/cpu/batched_shadow_lists");
+}
+
 // Render list loops (fill, instance data, sort gather) prefetch the instances and surfaces a few iterations ahead.
 inline bool cpu_prefetch() {
 	return cpu_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/cpu/prefetch");
@@ -381,6 +388,9 @@ struct Stats {
 	SafeNumeric<uint64_t> shadow_pyramid_builds; // min/max pyramid updates that wrote something (directional and positional)
 	SafeNumeric<uint64_t> shadow_pyramid_texels; // finest-level pyramid texels written (each covers 4x4 new atlas texels)
 	SafeNumeric<uint64_t> shadow_pyramid_texels_needed; // of those, the ones computed from the atlas (the rest set to (0, 1))
+	SafeNumeric<uint64_t> cpu_shadow_batches; // batched shadow list builds (decision 0016)
+	SafeNumeric<uint64_t> cpu_shadow_batch_passes; // shadow passes built in them
+	SafeNumeric<uint64_t> cpu_shadow_batch_fallbacks; // of the builds, built stock's way (instance buffer replaced mid-way)
 };
 
 Stats &stats();

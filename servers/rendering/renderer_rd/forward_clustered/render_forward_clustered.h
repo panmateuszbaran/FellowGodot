@@ -510,6 +510,30 @@ private:
 		uint64_t frame = 0;
 		Plane near_plane;
 		float z_max = 0.0;
+		// What the loop reads from the render data (copied, so shadow passes can be filled after their render data is
+		// gone).
+		const PagedArray<RenderGeometryInstance *> *instances = nullptr;
+		bool cam_orthogonal = false;
+		Vector3 cam_origin;
+		Vector3 main_cam_origin;
+		float lod_distance_multiplier = 0.0;
+		float fellow_lod_distance_bias = 0.0;
+		float fellow_lod_ortho_extent = 0.0;
+		float screen_mesh_lod_threshold = 0.0;
+		bool count_primitives = false;
+		RenderingServerTypes::RenderInfo *render_info = nullptr;
+	};
+	// One element of a shadow pass filled in record mode: the sort keys and instance flags the pass gives it.
+	struct FellowShadowRecord {
+		uint64_t key2;
+		uint64_t key1;
+		GeometryInstanceSurfaceDataCache *surface;
+		uint32_t flags;
+	};
+	struct FellowShadowRecordByKey {
+		_FORCE_INLINE_ bool operator()(const FellowShadowRecord &A, const FellowShadowRecord &B) const {
+			return (A.key2 == B.key2) ? (A.key1 < B.key1) : (A.key2 < B.key2);
+		}
 	};
 	struct FellowFillOutput {
 		LocalVector<GeometryInstanceSurfaceDataCache *> *main = nullptr;
@@ -519,6 +543,8 @@ private:
 		// leave it null and collect the instances that need a slot; they are assigned afterwards, in list order.
 		uint32_t *lightmap_captures_used = nullptr;
 		LocalVector<GeometryInstanceForwardClustered *> *deferred_captures = nullptr;
+		LocalVector<FellowShadowRecord> *records = nullptr; // record mode
+		LocalVector<GeometryInstanceForwardClustered *> *transform_updates = nullptr; // record mode
 		uint64_t primitives = 0;
 		bool used_sss = false;
 		bool used_screen_texture = false;
@@ -560,8 +586,48 @@ private:
 	LocalVector<FellowSortRange> fellow_sort_children;
 	LocalVector<FellowSortRange> fellow_sort_leaves;
 
+	template <bool t_records>
 	void _fill_render_list_range(const FellowFillParams &p_params, uint32_t p_from, uint32_t p_to, FellowFillOutput &r_out);
+	FellowFillParams _fellow_fill_params(RenderListType p_render_list, const RenderDataRD *p_render_data, PassMode p_pass_mode, bool p_using_sdfgi, bool p_using_opaque_gi, bool p_using_motion_pass, uint64_t p_frame);
 	void _fellow_fill_apply_output(const FellowFillParams &p_params, const FellowFillOutput &p_out);
+
+	// Batched shadow lists (decision 0016): the shadow passes appended between _render_shadow_begin() and
+	// _render_shadow_process() are filled, sorted and turned into instance data together (_fellow_shadow_flush()).
+	struct FellowShadowEntry {
+		FellowFillParams params;
+		RenderingServerTypes::RenderInfo *render_info = nullptr;
+		uint32_t shadow_pass = 0; // index in scene_state.shadow_passes
+		uint32_t chunk_first = 0;
+		uint32_t chunk_count = 0;
+		uint32_t from = 0; // in the secondary list
+		uint32_t size = 0;
+		uint64_t primitives = 0;
+		LocalVector<FellowShadowRecord> records;
+	};
+	struct FellowShadowChunk {
+		uint32_t entry = 0;
+		uint32_t from = 0;
+		uint32_t to = 0;
+		uint64_t primitives = 0;
+		LocalVector<FellowShadowRecord> records;
+		LocalVector<GeometryInstanceForwardClustered *> transform_updates;
+		LocalVector<GeometryInstanceSurfaceDataCache *> unused; // the lists the record mode does not use
+	};
+	struct FellowShadowItem {
+		uint32_t entry;
+		uint32_t from;
+		uint32_t to;
+	};
+	LocalVector<FellowShadowEntry> fellow_shadow_entries;
+	uint32_t fellow_shadow_entry_count = 0;
+	LocalVector<FellowShadowChunk> fellow_shadow_chunks;
+	LocalVector<FellowShadowItem> fellow_shadow_items;
+	bool fellow_shadow_batching = false;
+	int fellow_shadow_hold = 0; // > 0: appends are built at once (their counters are read right after)
+	void _fellow_shadow_flush();
+	void _fellow_shadow_fill_chunk(uint32_t p_chunk, void *p_unused);
+	void _fellow_shadow_sort_entry(uint32_t p_entry, void *p_unused);
+	void _fellow_shadow_instance_chunk(uint32_t p_item, void *p_unused);
 	bool _fellow_fill_render_list_parallel(const FellowFillParams &p_params, uint32_t p_count, uint32_t &r_lightmap_captures_used);
 	void _fellow_fill_render_list_chunk(uint32_t p_chunk, void *p_unused);
 	void _fellow_make_instance_data(const GeometryInstanceSurfaceDataCache *p_surface, const GeometryInstanceForwardClustered *p_inst, SceneState::InstanceData &r_data) const;

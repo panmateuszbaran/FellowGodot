@@ -1132,6 +1132,34 @@ _FORCE_INLINE_ static uint32_t _indices_to_primitives(RSE::PrimitiveType p_primi
 	static const uint32_t subtractor[RSE::PRIMITIVE_MAX] = { 0, 0, 1, 0, 2 };
 	return (p_indices - subtractor[p_primitive]) / divisor[p_primitive];
 }
+RenderForwardClustered::FellowFillParams RenderForwardClustered::_fellow_fill_params(RenderListType p_render_list, const RenderDataRD *p_render_data, PassMode p_pass_mode, bool p_using_sdfgi, bool p_using_opaque_gi, bool p_using_motion_pass, uint64_t p_frame) {
+	// What stock's _fill_render_list computes before its loop and what the loop reads from the render data.
+	FellowFillParams params;
+	Plane near_plane = Plane(-p_render_data->scene_data->cam_transform.basis.get_column(Vector3::AXIS_Z), p_render_data->scene_data->cam_transform.origin);
+	near_plane.d += p_render_data->scene_data->cam_projection.get_z_near();
+	float z_max = p_render_data->scene_data->cam_projection.get_z_far() - p_render_data->scene_data->cam_projection.get_z_near();
+	params.render_list = p_render_list;
+	params.render_data = p_render_data;
+	params.pass_mode = p_pass_mode;
+	params.using_sdfgi = p_using_sdfgi;
+	params.using_opaque_gi = p_using_opaque_gi;
+	params.using_motion_pass = p_using_motion_pass;
+	params.frame = p_frame;
+	params.near_plane = near_plane;
+	params.z_max = z_max;
+	params.instances = p_render_data->instances;
+	params.cam_orthogonal = p_render_data->scene_data->cam_orthogonal;
+	params.cam_origin = p_render_data->scene_data->cam_transform.origin;
+	params.main_cam_origin = p_render_data->scene_data->main_cam_transform.origin;
+	params.lod_distance_multiplier = p_render_data->scene_data->lod_distance_multiplier;
+	params.fellow_lod_distance_bias = p_render_data->scene_data->fellow_lod_distance_bias;
+	params.fellow_lod_ortho_extent = p_render_data->scene_data->fellow_lod_ortho_extent;
+	params.screen_mesh_lod_threshold = p_render_data->scene_data->screen_mesh_lod_threshold;
+	params.count_primitives = p_render_data->render_info != nullptr;
+	params.render_info = p_render_data->render_info;
+	return params;
+}
+
 void RenderForwardClustered::_fill_render_list(RenderListType p_render_list, const RenderDataRD *p_render_data, PassMode p_pass_mode, bool p_using_sdfgi, bool p_using_opaque_gi, bool p_using_motion_pass, bool p_append) {
 	uint64_t frame = RSG::rasterizer->get_frame_number();
 
@@ -1144,10 +1172,6 @@ void RenderForwardClustered::_fill_render_list(RenderListType p_render_list, con
 		scene_state.used_opaque_stencil = false;
 	}
 	uint32_t lightmap_captures_used = 0;
-
-	Plane near_plane = Plane(-p_render_data->scene_data->cam_transform.basis.get_column(Vector3::AXIS_Z), p_render_data->scene_data->cam_transform.origin);
-	near_plane.d += p_render_data->scene_data->cam_projection.get_z_near();
-	float z_max = p_render_data->scene_data->cam_projection.get_z_far() - p_render_data->scene_data->cam_projection.get_z_near();
 
 	RenderList *rl = &render_list[p_render_list];
 	_update_dirty_geometry_instances();
@@ -1163,16 +1187,7 @@ void RenderForwardClustered::_fill_render_list(RenderListType p_render_list, con
 
 	//fill list
 
-	FellowFillParams params;
-	params.render_list = p_render_list;
-	params.render_data = p_render_data;
-	params.pass_mode = p_pass_mode;
-	params.using_sdfgi = p_using_sdfgi;
-	params.using_opaque_gi = p_using_opaque_gi;
-	params.using_motion_pass = p_using_motion_pass;
-	params.frame = frame;
-	params.near_plane = near_plane;
-	params.z_max = z_max;
+	const FellowFillParams params = _fellow_fill_params(p_render_list, p_render_data, p_pass_mode, p_using_sdfgi, p_using_opaque_gi, p_using_motion_pass, frame);
 
 	const uint32_t instance_count = (uint32_t)p_render_data->instances->size();
 	if (!(Fellow::cpu_parallel_list_fill() && instance_count >= FELLOW_PARALLEL_LIST_MIN && _fellow_fill_render_list_parallel(params, instance_count, lightmap_captures_used))) {
@@ -1181,7 +1196,7 @@ void RenderForwardClustered::_fill_render_list(RenderListType p_render_list, con
 		out.alpha = &render_list[RENDER_LIST_ALPHA].elements;
 		out.motion = &render_list[RENDER_LIST_MOTION].elements;
 		out.lightmap_captures_used = &lightmap_captures_used;
-		_fill_render_list_range(params, 0, instance_count, out);
+		_fill_render_list_range<false>(params, 0, instance_count, out);
 		_fellow_fill_apply_output(params, out);
 	}
 
@@ -1190,12 +1205,15 @@ void RenderForwardClustered::_fill_render_list(RenderListType p_render_list, con
 	}
 }
 
+template <bool t_records>
 void RenderForwardClustered::_fill_render_list_range(const FellowFillParams &p_params, uint32_t p_from, uint32_t p_to, FellowFillOutput &r_out) {
 	// Stock's _fill_render_list loop, for the instances [p_from, p_to). The lists, the scene flags and the primitive
 	// counter it updated directly go through r_out; the caller applies them (in list order for worker ranges).
+	// t_records (shadow passes only, decision 0016's batched shadow lists): the instances and surfaces are not written;
+	// each element becomes a record of the sort keys and instance flags this pass gives it, and the instances whose
+	// previous transform must be reset are listed (the same values, kept per pass so passes can be filled at once).
 	RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
 	const RenderListType p_render_list = p_params.render_list;
-	const RenderDataRD *p_render_data = p_params.render_data;
 	const PassMode p_pass_mode = p_params.pass_mode;
 	const bool p_using_sdfgi = p_params.using_sdfgi;
 	const bool p_using_opaque_gi = p_params.using_opaque_gi;
@@ -1211,17 +1229,17 @@ void RenderForwardClustered::_fill_render_list_range(const FellowFillParams &p_p
 
 	const bool fellow_prefetch_on = Fellow::cpu_prefetch();
 	for (uint32_t i = p_from; i < p_to; i++) {
-		GeometryInstanceForwardClustered *inst = static_cast<GeometryInstanceForwardClustered *>((*p_render_data->instances)[i]);
+		GeometryInstanceForwardClustered *inst = static_cast<GeometryInstanceForwardClustered *>((*p_params.instances)[i]);
 		if (fellow_prefetch_on) {
 			// FellowEngine (decision 0016): load the instances a few iterations ahead (no effect on results).
 			if (i + FELLOW_PREFETCH_DISTANCE < p_to) {
-				const uint8_t *ahead = reinterpret_cast<const uint8_t *>((*p_render_data->instances)[i + FELLOW_PREFETCH_DISTANCE]);
+				const uint8_t *ahead = reinterpret_cast<const uint8_t *>((*p_params.instances)[i + FELLOW_PREFETCH_DISTANCE]);
 				for (uint32_t line = 0; line < FELLOW_PREFETCH_INSTANCE_LINES; line++) {
 					fellow_prefetch(ahead + line * 64);
 				}
 			}
 			if (i + FELLOW_PREFETCH_DISTANCE / 2 < p_to) {
-				const GeometryInstanceForwardClustered *soon = static_cast<const GeometryInstanceForwardClustered *>((*p_render_data->instances)[i + FELLOW_PREFETCH_DISTANCE / 2]);
+				const GeometryInstanceForwardClustered *soon = static_cast<const GeometryInstanceForwardClustered *>((*p_params.instances)[i + FELLOW_PREFETCH_DISTANCE / 2]);
 				if (soon->surface_caches) {
 					fellow_prefetch(soon->surface_caches);
 				}
@@ -1229,18 +1247,22 @@ void RenderForwardClustered::_fill_render_list_range(const FellowFillParams &p_p
 		}
 
 		Vector3 center = inst->transform.origin;
-		if (p_render_data->scene_data->cam_orthogonal) {
+		float inst_depth;
+		if (p_params.cam_orthogonal) {
 			if (inst->use_aabb_center) {
 				center = inst->transformed_aabb.get_support(-near_plane.normal);
 			}
-			inst->depth = near_plane.distance_to(center) - inst->sorting_offset;
+			inst_depth = near_plane.distance_to(center) - inst->sorting_offset;
 		} else {
 			if (inst->use_aabb_center) {
 				center = inst->transformed_aabb.position + (inst->transformed_aabb.size * 0.5);
 			}
-			inst->depth = p_render_data->scene_data->cam_transform.origin.distance_to(center) - inst->sorting_offset;
+			inst_depth = p_params.cam_origin.distance_to(center) - inst->sorting_offset;
 		}
-		uint32_t depth_layer = CLAMP(int(inst->depth * 16 / z_max), 0, 15);
+		if constexpr (!t_records) {
+			inst->depth = inst_depth;
+		}
+		uint32_t depth_layer = CLAMP(int(inst_depth * 16 / z_max), 0, 15);
 
 		uint32_t flags = inst->base_flags; //fill flags if appropriate
 
@@ -1253,7 +1275,7 @@ void RenderForwardClustered::_fill_render_list_range(const FellowFillParams &p_p
 		float fade_alpha = 1.0;
 
 		if (inst->fade_near || inst->fade_far) {
-			float fade_dist = inst->transformed_aabb.get_center().distance_to(p_render_data->scene_data->cam_transform.origin);
+			float fade_dist = inst->transformed_aabb.get_center().distance_to(p_params.cam_origin);
 			// Use `smoothstep()` to make opacity changes more gradual and less noticeable to the player.
 			if (inst->fade_far && fade_dist > inst->fade_far_begin) {
 				fade_alpha = Math::smoothstep(0.0f, 1.0f, 1.0f - (fade_dist - inst->fade_far_begin) / (inst->fade_far_end - inst->fade_far_begin));
@@ -1357,46 +1379,58 @@ void RenderForwardClustered::_fill_render_list_range(const FellowFillParams &p_p
 				}
 			}
 		}
-		inst->flags_cache = flags;
+		if constexpr (!t_records) {
+			inst->flags_cache = flags;
+		}
 
 		GeometryInstanceSurfaceDataCache *surf = inst->surface_caches;
 
 		float lod_distance = 0.0;
 
-		if (p_render_data->scene_data->cam_orthogonal || p_render_data->scene_data->fellow_lod_ortho_extent > 0.0) {
+		if (p_params.cam_orthogonal || p_params.fellow_lod_ortho_extent > 0.0) {
 			lod_distance = 1.0;
 		} else {
 			Vector3 aabb_min = inst->transformed_aabb.position;
 			Vector3 aabb_max = inst->transformed_aabb.position + inst->transformed_aabb.size;
-			Vector3 camera_position = p_render_data->scene_data->main_cam_transform.origin;
+			Vector3 camera_position = p_params.main_cam_origin;
 			Vector3 surface_distance = Vector3(0.0, 0.0, 0.0).max(aabb_min - camera_position).max(camera_position - aabb_max);
 
 			lod_distance = surface_distance.length();
-			if (p_render_data->scene_data->fellow_lod_distance_bias > 0.0) {
-				lod_distance = MAX(0.0, lod_distance - p_render_data->scene_data->fellow_lod_distance_bias);
+			if (p_params.fellow_lod_distance_bias > 0.0) {
+				lod_distance = MAX(0.0, lod_distance - p_params.fellow_lod_distance_bias);
 			}
 		}
 
 		if (unlikely(inst->transform_status != GeometryInstanceForwardClustered::TransformStatus::NONE && frame > inst->prev_transform_change_frame && inst->prev_transform_change_frame)) {
-			inst->prev_transform = inst->transform;
-			inst->transform_status = GeometryInstanceForwardClustered::TransformStatus::NONE;
+			if constexpr (t_records) {
+				r_out.transform_updates->push_back(inst);
+			} else {
+				inst->prev_transform = inst->transform;
+				inst->transform_status = GeometryInstanceForwardClustered::TransformStatus::NONE;
+			}
 		}
 
 		while (surf) {
-			surf->sort.uses_forward_gi = 0;
-			surf->sort.uses_lightmap = 0;
+			decltype(surf->sort) record_sort;
+			if constexpr (t_records) {
+				record_sort = surf->sort;
+			}
+			decltype(surf->sort) &sort = t_records ? record_sort : surf->sort;
+			bool record_add = false;
+			sort.uses_forward_gi = 0;
+			sort.uses_lightmap = 0;
 
 			// LOD
-			if (p_render_data->scene_data->screen_mesh_lod_threshold > 0.0 && mesh_storage->mesh_surface_has_lod(surf->surface)) {
+			if (p_params.screen_mesh_lod_threshold > 0.0 && mesh_storage->mesh_surface_has_lod(surf->surface)) {
 				uint32_t indices = 0;
-				surf->sort.lod_index = mesh_storage->mesh_surface_get_lod(surf->surface, inst->lod_model_scale * inst->lod_bias, lod_distance * p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, indices);
-				if (p_render_data->render_info) {
+				sort.lod_index = mesh_storage->mesh_surface_get_lod(surf->surface, inst->lod_model_scale * inst->lod_bias, lod_distance * p_params.lod_distance_multiplier, p_params.screen_mesh_lod_threshold, indices);
+				if (p_params.count_primitives) {
 					indices = _indices_to_primitives(surf->primitive, indices);
 					primitives += indices; // Added to the visible (opaque list) or shadow counter by the caller.
 				}
 			} else {
-				surf->sort.lod_index = 0;
-				if (p_render_data->render_info) {
+				sort.lod_index = 0;
+				if (p_params.count_primitives) {
 					// This does not include primitives rendered via indirect draw calls.
 					uint32_t to_draw = mesh_storage->mesh_surface_get_vertices_drawn_count(surf->surface);
 					to_draw = _indices_to_primitives(surf->primitive, to_draw);
@@ -1418,14 +1452,18 @@ void RenderForwardClustered::_fill_render_list_range(const FellowFillParams &p_p
 				}
 
 				if (!force_alpha && (surf->flags & (GeometryInstanceSurfaceDataCache::FLAG_PASS_DEPTH | GeometryInstanceSurfaceDataCache::FLAG_PASS_OPAQUE))) {
-					out_main.push_back(surf);
+					if constexpr (t_records) {
+						record_add = true;
+					} else {
+						out_main.push_back(surf);
+					}
 				}
 
 				if (force_alpha || (surf->flags & GeometryInstanceSurfaceDataCache::FLAG_PASS_ALPHA)) {
 					surf->color_pass_inclusion_mask = COLOR_PASS_FLAG_TRANSPARENT;
 					out_alpha.push_back(surf);
 					if (uses_gi) {
-						surf->sort.uses_forward_gi = 1;
+						sort.uses_forward_gi = 1;
 					}
 				} else if (p_using_motion_pass && (uses_motion || (surf->flags & GeometryInstanceSurfaceDataCache::FLAG_USES_MOTION_VECTOR))) {
 					surf->color_pass_inclusion_mask = COLOR_PASS_FLAG_MOTION_VECTORS;
@@ -1435,7 +1473,7 @@ void RenderForwardClustered::_fill_render_list_range(const FellowFillParams &p_p
 				}
 
 				if (uses_lightmap) {
-					surf->sort.uses_lightmap = 1;
+					sort.uses_lightmap = 1;
 					r_out.used_lightmap = true;
 				}
 
@@ -1456,19 +1494,36 @@ void RenderForwardClustered::_fill_render_list_range(const FellowFillParams &p_p
 				}
 			} else if (p_pass_mode == PASS_MODE_SHADOW || p_pass_mode == PASS_MODE_SHADOW_DP) {
 				if (surf->flags & GeometryInstanceSurfaceDataCache::FLAG_PASS_SHADOW) {
-					out_main.push_back(surf);
+					if constexpr (t_records) {
+						record_add = true;
+					} else {
+						out_main.push_back(surf);
+					}
 				}
 			} else if (p_pass_mode == PASS_MODE_DEPTH_MATERIAL) {
 				if (surf->flags & (GeometryInstanceSurfaceDataCache::FLAG_PASS_DEPTH | GeometryInstanceSurfaceDataCache::FLAG_PASS_OPAQUE | GeometryInstanceSurfaceDataCache::FLAG_PASS_ALPHA)) {
-					out_main.push_back(surf);
+					if constexpr (t_records) {
+						record_add = true;
+					} else {
+						out_main.push_back(surf);
+					}
 				}
 			} else {
 				if (surf->flags & (GeometryInstanceSurfaceDataCache::FLAG_PASS_DEPTH | GeometryInstanceSurfaceDataCache::FLAG_PASS_OPAQUE)) {
-					out_main.push_back(surf);
+					if constexpr (t_records) {
+						record_add = true;
+					} else {
+						out_main.push_back(surf);
+					}
 				}
 			}
 
-			surf->sort.depth_layer = depth_layer;
+			sort.depth_layer = depth_layer;
+			if constexpr (t_records) {
+				if (record_add) {
+					r_out.records->push_back({ sort.sort_key2, sort.sort_key1, surf, flags });
+				}
+			}
 
 			surf = surf->next;
 		}
@@ -1496,13 +1551,13 @@ void RenderForwardClustered::_fellow_fill_apply_output(const FellowFillParams &p
 	if (p_out.used_opaque_stencil) {
 		scene_state.used_opaque_stencil = true;
 	}
-	if (p_params.render_data->render_info) {
+	if (p_params.render_info) {
 		// Stock adds each surface's count to the int counter; the sum modulo 2^32 is the same.
 		const uint32_t primitives = uint32_t(p_out.primitives);
 		if (p_params.render_list == RENDER_LIST_OPAQUE) { //opaque
-			p_params.render_data->render_info->info[RSE::VIEWPORT_RENDER_INFO_TYPE_VISIBLE][RSE::VIEWPORT_RENDER_INFO_PRIMITIVES_IN_FRAME] += primitives;
+			p_params.render_info->info[RSE::VIEWPORT_RENDER_INFO_TYPE_VISIBLE][RSE::VIEWPORT_RENDER_INFO_PRIMITIVES_IN_FRAME] += primitives;
 		} else if (p_params.render_list == RENDER_LIST_SECONDARY) { //shadow
-			p_params.render_data->render_info->info[RSE::VIEWPORT_RENDER_INFO_TYPE_SHADOW][RSE::VIEWPORT_RENDER_INFO_PRIMITIVES_IN_FRAME] += primitives;
+			p_params.render_info->info[RSE::VIEWPORT_RENDER_INFO_TYPE_SHADOW][RSE::VIEWPORT_RENDER_INFO_PRIMITIVES_IN_FRAME] += primitives;
 		}
 	}
 }
@@ -1520,7 +1575,7 @@ static _FORCE_INLINE_ void _fellow_append_pointers(LocalVector<T *> &r_dst, cons
 void RenderForwardClustered::_fellow_fill_render_list_chunk(uint32_t p_chunk, void *p_unused) {
 	const uint32_t from = p_chunk * fellow_fill_chunk_size;
 	const uint32_t to = MIN(from + fellow_fill_chunk_size, fellow_fill_count);
-	_fill_render_list_range(fellow_fill_params, from, to, fellow_fill_chunks[p_chunk].out);
+	_fill_render_list_range<false>(fellow_fill_params, from, to, fellow_fill_chunks[p_chunk].out);
 }
 
 bool RenderForwardClustered::_fellow_fill_render_list_parallel(const FellowFillParams &p_params, uint32_t p_count, uint32_t &r_lightmap_captures_used) {
@@ -3445,7 +3500,11 @@ void RenderForwardClustered::_render_shadow_pass(RID p_light, RID p_shadow_atlas
 			}
 			// Counted separately: the scene cull's cost gate compares the static casters' cost with the copy's.
 			RenderingServerTypes::RenderInfo cache_info;
+			// Its counters are read right after the append: built at once (after the passes batched before it).
+			_fellow_shadow_flush();
+			fellow_shadow_hold++;
 			_render_shadow_append(cache_fb, p_fellow_op->cache_instances, p_fellow_op->cache_projection, p_fellow_op->cache_transform, zfar, 0, 0, reverse_cull_face, false, false, use_pancake, cache_lod_multiplier, cache_lod_threshold, Rect2i(0, 0, p_fellow_op->cache_size, p_fellow_op->cache_size), flip_y, true, false, false, &cache_info, p_viewport_size, p_main_cam_transform, p_fellow_op->lod_distance_bias, cache_lod_ortho_extent);
+			fellow_shadow_hold--;
 			if (p_render_info) {
 				for (int t = 0; t < RSE::VIEWPORT_RENDER_INFO_TYPE_MAX; t++) {
 					for (int k = 0; k < RSE::VIEWPORT_RENDER_INFO_MAX; k++) {
@@ -3564,8 +3623,271 @@ bool RenderForwardClustered::fellow_directional_shadow_cache_get_static_cost(int
 	return fellow_shadow_cache && fellow_shadow_cache->get_static_cost(p_cache_id, p_cascade, p_build_frame, r_primitives, r_draws);
 }
 
+void RenderForwardClustered::_fellow_shadow_fill_chunk(uint32_t p_chunk, void *p_unused) {
+	FellowShadowChunk &chunk = fellow_shadow_chunks[p_chunk];
+	FellowFillOutput out;
+	out.main = &chunk.unused;
+	out.alpha = &chunk.unused;
+	out.motion = &chunk.unused;
+	out.records = &chunk.records;
+	out.transform_updates = &chunk.transform_updates;
+	_fill_render_list_range<true>(fellow_shadow_entries[chunk.entry].params, chunk.from, chunk.to, out);
+	chunk.primitives = out.primitives;
+}
+
+void RenderForwardClustered::_fellow_shadow_sort_entry(uint32_t p_entry, void *p_unused) {
+	// Stock sorts the pass's elements by the keys its fill gave them: the same introsort on the same keys.
+	FellowShadowEntry &entry = fellow_shadow_entries[p_entry];
+	SortArray<FellowShadowRecord, FellowShadowRecordByKey> sorter;
+	sorter.sort(entry.records.ptr(), entry.size);
+}
+
+void RenderForwardClustered::_fellow_shadow_instance_chunk(uint32_t p_item, void *p_unused) {
+	const FellowShadowItem &item = fellow_shadow_items[p_item];
+	const FellowShadowEntry &entry = fellow_shadow_entries[item.entry];
+	RenderList *rl = &render_list[RENDER_LIST_SECONDARY];
+	SceneState::InstanceData *gpu = scene_state.curr_gpu_ptr[RENDER_LIST_SECONDARY];
+	uint8_t *link = fellow_instance_joinable.ptr();
+	const FellowShadowRecord *records = entry.records.ptr();
+	const bool prefetch = Fellow::cpu_prefetch();
+	for (uint32_t r = item.from; r < item.to; r++) {
+		const FellowShadowRecord &rec = records[r];
+		GeometryInstanceSurfaceDataCache *surface = rec.surface;
+		GeometryInstanceForwardClustered *inst = surface->owner;
+		if (prefetch && r + FELLOW_PREFETCH_DISTANCE < item.to) {
+			const uint8_t *ahead = reinterpret_cast<const uint8_t *>(records[r + FELLOW_PREFETCH_DISTANCE].surface->owner);
+			for (uint32_t line = 0; line < FELLOW_PREFETCH_INSTANCE_LINES; line++) {
+				fellow_prefetch(ahead + line * 64);
+			}
+			fellow_prefetch(records[r + FELLOW_PREFETCH_DISTANCE].surface->surface);
+		}
+		const uint32_t i = entry.from + r;
+		rl->elements[i] = surface;
+
+		// Stock's instance data, with the flags this pass gave the instance (stock reads them back from the instance).
+		SceneState::InstanceData instance_data;
+		_fellow_make_instance_data(surface, inst, instance_data);
+		instance_data.flags = rec.flags;
+		gpu[i] = instance_data;
+		rl->element_info[i].value = uint32_t(rec.key1 & 0xFFF);
+
+		// Stock's repeat test against the element before it (a pass's first element starts a run).
+		const bool cant_repeat = rec.flags & INSTANCE_DATA_FLAG_MULTIMESH || inst->mesh_instance.is_valid();
+		bool join = false;
+		if (r > 0 && !cant_repeat) {
+			const FellowShadowRecord &prev = records[r - 1];
+			const GeometryInstanceForwardClustered *prev_inst = prev.surface->owner;
+			const bool prev_cant_repeat = prev.flags & INSTANCE_DATA_FLAG_MULTIMESH || prev_inst->mesh_instance.is_valid();
+			join = !prev_cant_repeat && prev.key1 == rec.key1 && prev.key2 == rec.key2 && inst->mirror == prev_inst->mirror;
+		}
+		link[i] = join;
+	}
+}
+
+void RenderForwardClustered::_fellow_shadow_flush() {
+	// Batched shadow lists (docs/decisions/0016-parallel-render-lists.md). The passes appended since the last flush are
+	// built together, as stock builds them one after the other: each pass's instances are filled (record mode: the keys
+	// and flags the pass gives each element, without writing the instances and surfaces, so passes sharing instances
+	// can be filled at once), sorted by stock's introsort, appended to the secondary list in pass order, and turned into
+	// instance data. The instance buffer is grown pass by pass as stock grows it. When stock would have to replace the
+	// buffer in the middle of the passes (it then rewrites and re-counts everything from element 0 with the keys and
+	// flags the instances hold by then; first frames, or when the shadow lists outgrow the buffer), the passes are built
+	// stock's way, one after the other.
+	const uint32_t entry_count = fellow_shadow_entry_count;
+	fellow_shadow_entry_count = 0;
+	if (entry_count == 0) {
+		return;
+	}
+	_update_dirty_geometry_instances();
+	RenderList *rl = &render_list[RENDER_LIST_SECONDARY];
+	Fellow::stats().cpu_shadow_batches.increment();
+	Fellow::stats().cpu_shadow_batch_passes.add(entry_count);
+
+	// Fill.
+	uint32_t chunk_count = 0;
+	for (uint32_t e = 0; e < entry_count; e++) {
+		FellowShadowEntry &entry = fellow_shadow_entries[e];
+		const uint32_t n = (uint32_t)entry.params.instances->size();
+		entry.chunk_first = chunk_count;
+		entry.chunk_count = (n + FELLOW_PARALLEL_LIST_CHUNK - 1) / FELLOW_PARALLEL_LIST_CHUNK;
+		chunk_count += entry.chunk_count;
+		if (fellow_shadow_chunks.size() < chunk_count) {
+			fellow_shadow_chunks.resize(chunk_count);
+		}
+		for (uint32_t c = 0; c < entry.chunk_count; c++) {
+			FellowShadowChunk &chunk = fellow_shadow_chunks[entry.chunk_first + c];
+			chunk.entry = e;
+			chunk.from = c * FELLOW_PARALLEL_LIST_CHUNK;
+			chunk.to = MIN(n, chunk.from + FELLOW_PARALLEL_LIST_CHUNK);
+			chunk.records.clear();
+			chunk.transform_updates.clear();
+			chunk.primitives = 0;
+		}
+	}
+	_fellow_parallel_for(chunk_count, &_fellow_chunk_thunk<&RenderForwardClustered::_fellow_shadow_fill_chunk>);
+
+	// Each pass's elements in fill order, its place in the secondary list, its primitive count.
+	uint32_t total = rl->elements.size();
+	for (uint32_t e = 0; e < entry_count; e++) {
+		FellowShadowEntry &entry = fellow_shadow_entries[e];
+		uint32_t size = 0;
+		entry.primitives = 0;
+		for (uint32_t c = 0; c < entry.chunk_count; c++) {
+			size += fellow_shadow_chunks[entry.chunk_first + c].records.size();
+			entry.primitives += fellow_shadow_chunks[entry.chunk_first + c].primitives;
+		}
+		entry.from = total;
+		entry.size = size;
+		total += size;
+	}
+
+	// Would stock replace the instance buffer in the middle (a pass after the first growing it)?
+	{
+		// Stock's _fill_instance_data per pass: grow_instance_buffer (replaced if too small; remapped when the pass
+		// starts the list), then, with no mapping and elements to write, it maps the buffer and, if the pass does not
+		// start the list, rewrites everything from element 0.
+		const uint64_t stride = sizeof(SceneState::InstanceData);
+		uint64_t capacity = scene_state.instance_buffer[RENDER_LIST_SECONDARY].get_size(0u) / stride;
+		bool mapped = scene_state.curr_gpu_ptr[RENDER_LIST_SECONDARY] != nullptr;
+		bool restart = false;
+		for (uint32_t e = 0; e < entry_count && !restart; e++) {
+			const FellowShadowEntry &entry = fellow_shadow_entries[e];
+			const uint64_t required = uint64_t(entry.from) + entry.size;
+			if (required > 0) {
+				if (capacity < required) {
+					capacity = Math::nearest_power_of_2_templated(MAX(uint64_t(INSTANCE_DATA_BUFFER_MIN_SIZE), required));
+					mapped = false;
+				}
+				if (entry.from == 0u) {
+					mapped = false; // prepare_for_map(false) always asks for a new mapping
+				}
+			}
+			if (!mapped && entry.size > 0u) {
+				restart = entry.from != 0u;
+				mapped = true;
+			}
+		}
+		if (restart) {
+			Fellow::stats().cpu_shadow_batch_fallbacks.increment();
+			for (uint32_t e = 0; e < entry_count; e++) {
+				FellowShadowEntry &entry = fellow_shadow_entries[e];
+				FellowFillOutput out;
+				out.main = &rl->elements;
+				out.alpha = &render_list[RENDER_LIST_ALPHA].elements;
+				out.motion = &render_list[RENDER_LIST_MOTION].elements;
+				uint32_t unused_captures = 0;
+				out.lightmap_captures_used = &unused_captures;
+				const uint32_t from = rl->elements.size();
+				_fill_render_list_range<false>(entry.params, 0, (uint32_t)entry.params.instances->size(), out);
+				_fellow_fill_apply_output(entry.params, out);
+				const uint32_t size = rl->elements.size() - from;
+				if (Fellow::cpu_compact_list_sort()) {
+					_fellow_sort_by_key(RENDER_LIST_SECONDARY, from, size);
+				} else {
+					rl->sort_by_key_range(from, size);
+				}
+				_fill_instance_data(RENDER_LIST_SECONDARY, entry.render_info ? entry.render_info->info[RSE::VIEWPORT_RENDER_INFO_TYPE_SHADOW] : (int *)nullptr, from, size, false);
+				scene_state.shadow_passes[entry.shadow_pass].element_from = from;
+				scene_state.shadow_passes[entry.shadow_pass].element_count = size;
+			}
+			return;
+		}
+	}
+
+	// Previous transforms reset by the fill (stock: by the first pass whose fill meets the instance; the same values).
+	const uint64_t frame = RSG::rasterizer->get_frame_number();
+	for (uint32_t c = 0; c < chunk_count; c++) {
+		for (GeometryInstanceForwardClustered *inst : fellow_shadow_chunks[c].transform_updates) {
+			if (inst->transform_status != GeometryInstanceForwardClustered::TransformStatus::NONE && frame > inst->prev_transform_change_frame && inst->prev_transform_change_frame) {
+				inst->prev_transform = inst->transform;
+				inst->transform_status = GeometryInstanceForwardClustered::TransformStatus::NONE;
+			}
+		}
+	}
+
+	for (uint32_t e = 0; e < entry_count; e++) {
+		FellowShadowEntry &entry = fellow_shadow_entries[e];
+		entry.records.resize(entry.size);
+		uint32_t at = 0;
+		for (uint32_t c = 0; c < entry.chunk_count; c++) {
+			const LocalVector<FellowShadowRecord> &cr = fellow_shadow_chunks[entry.chunk_first + c].records;
+			if (!cr.is_empty()) {
+				memcpy(entry.records.ptr() + at, cr.ptr(), cr.size() * sizeof(FellowShadowRecord));
+				at += cr.size();
+			}
+		}
+		if (entry.render_info) {
+			entry.render_info->info[RSE::VIEWPORT_RENDER_INFO_TYPE_SHADOW][RSE::VIEWPORT_RENDER_INFO_PRIMITIVES_IN_FRAME] += uint32_t(entry.primitives);
+		}
+		scene_state.shadow_passes[entry.shadow_pass].element_from = entry.from;
+		scene_state.shadow_passes[entry.shadow_pass].element_count = entry.size;
+	}
+
+	// Sort.
+	_fellow_parallel_for(entry_count, &_fellow_chunk_thunk<&RenderForwardClustered::_fellow_shadow_sort_entry>);
+
+	// The instance buffer, grown and mapped pass by pass as stock's _fill_instance_data does it.
+	rl->elements.resize(total);
+	rl->element_info.resize(total);
+	fellow_instance_joinable.resize(total);
+	for (uint32_t e = 0; e < entry_count; e++) {
+		const FellowShadowEntry &entry = fellow_shadow_entries[e];
+		scene_state.grow_instance_buffer(RENDER_LIST_SECONDARY, entry.from + entry.size, entry.from != 0u);
+		if (!scene_state.curr_gpu_ptr[RENDER_LIST_SECONDARY] && entry.size > 0u) {
+			// Only a pass starting the list (from 0) can get here (the check above); stock maps the buffer here.
+			DEV_ASSERT(entry.from == 0u);
+			scene_state.curr_gpu_ptr[RENDER_LIST_SECONDARY] = reinterpret_cast<SceneState::InstanceData *>(scene_state.instance_buffer[RENDER_LIST_SECONDARY].map_raw_for_upload(0u));
+		}
+	}
+
+	// Instance data.
+	fellow_shadow_items.clear();
+	for (uint32_t e = 0; e < entry_count; e++) {
+		const FellowShadowEntry &entry = fellow_shadow_entries[e];
+		for (uint32_t from = 0; from < entry.size; from += FELLOW_PARALLEL_LIST_CHUNK) {
+			fellow_shadow_items.push_back({ e, from, MIN(entry.size, from + FELLOW_PARALLEL_LIST_CHUNK) });
+		}
+	}
+	_fellow_parallel_for(fellow_shadow_items.size(), &_fellow_chunk_thunk<&RenderForwardClustered::_fellow_shadow_instance_chunk>);
+
+	// Runs and counters, per pass as stock counts them.
+	const uint8_t *link = fellow_instance_joinable.ptr();
+	for (uint32_t e = 0; e < entry_count; e++) {
+		const FellowShadowEntry &entry = fellow_shadow_entries[e];
+		int *info = entry.render_info ? entry.render_info->info[RSE::VIEWPORT_RENDER_INFO_TYPE_SHADOW] : (int *)nullptr;
+		const uint32_t range_from = entry.from;
+		const uint32_t range_to = entry.from + entry.size;
+		if (info) {
+			info[RSE::VIEWPORT_RENDER_INFO_OBJECTS_IN_FRAME] += range_to - range_from;
+		}
+		uint32_t repeats = 0;
+		for (uint32_t i = range_from; i < range_to; i++) {
+			if (i > range_from && link[i] && repeats < RenderElementInfo::MAX_REPEATS) {
+				repeats++;
+			} else {
+				if (repeats > 0) {
+					for (uint32_t j = 1; j <= repeats; j++) {
+						rl->element_info[i - j].repeat = j;
+					}
+				}
+				repeats = 1;
+				if (info) {
+					info[RSE::VIEWPORT_RENDER_INFO_DRAW_CALLS_IN_FRAME]++;
+				}
+			}
+		}
+		if (repeats > 0) {
+			for (uint32_t j = 1; j <= repeats; j++) {
+				rl->element_info[range_to - j].repeat = j;
+			}
+		}
+	}
+}
+
 void RenderForwardClustered::_render_shadow_begin() {
 	scene_state.shadow_passes.clear();
+	fellow_shadow_entry_count = 0;
+	fellow_shadow_batching = Fellow::cpu_batched_shadow_lists();
 	RD::get_singleton()->draw_command_begin_label("Shadow Setup");
 	_update_render_base_uniform_set();
 
@@ -3616,15 +3938,30 @@ void RenderForwardClustered::_render_shadow_append(RID p_framebuffer, const Page
 
 	PassMode pass_mode = p_use_dp ? PASS_MODE_SHADOW_DP : PASS_MODE_SHADOW;
 
-	uint32_t render_list_from = render_list[RENDER_LIST_SECONDARY].elements.size();
-	_fill_render_list(RENDER_LIST_SECONDARY, &render_data, pass_mode, false, false, false, true);
-	uint32_t render_list_size = render_list[RENDER_LIST_SECONDARY].elements.size() - render_list_from;
-	if (Fellow::cpu_compact_list_sort()) {
-		_fellow_sort_by_key(RENDER_LIST_SECONDARY, render_list_from, render_list_size);
+	uint32_t render_list_from = 0;
+	uint32_t render_list_size = 0;
+	int fellow_entry = -1;
+	if (fellow_shadow_batching && fellow_shadow_hold == 0) {
+		// Batched shadow lists (decision 0016): this pass's list is built with the others in _fellow_shadow_flush().
+		if (fellow_shadow_entries.size() <= fellow_shadow_entry_count) {
+			fellow_shadow_entries.resize(fellow_shadow_entry_count + 1);
+		}
+		fellow_entry = (int)fellow_shadow_entry_count++;
+		FellowShadowEntry &entry = fellow_shadow_entries[fellow_entry];
+		entry.params = _fellow_fill_params(RENDER_LIST_SECONDARY, &render_data, pass_mode, false, false, false, RSG::rasterizer->get_frame_number());
+		entry.params.render_data = nullptr; // not used in record mode (gone by the flush)
+		entry.render_info = p_render_info;
 	} else {
-		render_list[RENDER_LIST_SECONDARY].sort_by_key_range(render_list_from, render_list_size);
+		render_list_from = render_list[RENDER_LIST_SECONDARY].elements.size();
+		_fill_render_list(RENDER_LIST_SECONDARY, &render_data, pass_mode, false, false, false, true);
+		render_list_size = render_list[RENDER_LIST_SECONDARY].elements.size() - render_list_from;
+		if (Fellow::cpu_compact_list_sort()) {
+			_fellow_sort_by_key(RENDER_LIST_SECONDARY, render_list_from, render_list_size);
+		} else {
+			render_list[RENDER_LIST_SECONDARY].sort_by_key_range(render_list_from, render_list_size);
+		}
+		_fill_instance_data(RENDER_LIST_SECONDARY, p_render_info ? p_render_info->info[RSE::VIEWPORT_RENDER_INFO_TYPE_SHADOW] : (int *)nullptr, render_list_from, render_list_size, false);
 	}
-	_fill_instance_data(RENDER_LIST_SECONDARY, p_render_info ? p_render_info->info[RSE::VIEWPORT_RENDER_INFO_TYPE_SHADOW] : (int *)nullptr, render_list_from, render_list_size, false);
 
 	{
 		//regular forward for now
@@ -3665,11 +4002,16 @@ void RenderForwardClustered::_render_shadow_append(RID p_framebuffer, const Page
 			}
 		}
 
+		if (fellow_entry >= 0) {
+			fellow_shadow_entries[fellow_entry].shadow_pass = scene_state.shadow_passes.size();
+		}
 		scene_state.shadow_passes.push_back(shadow_pass);
 	}
 }
 
 void RenderForwardClustered::_render_shadow_process() {
+	_fellow_shadow_flush();
+	fellow_shadow_batching = false;
 	RenderingDevice *rd = RenderingDevice::get_singleton();
 	if (scene_state.instance_buffer[RENDER_LIST_SECONDARY].get_size(0u) > 0u) {
 		rd->buffer_flush(scene_state.instance_buffer[RENDER_LIST_SECONDARY]._get(0u));
