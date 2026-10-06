@@ -328,6 +328,12 @@ inline bool cpu_parallel_list_sort() {
 	return cpu_compact_list_sort() && GLOBAL_GET_CACHED(bool, "rendering/fellow/cpu/parallel_list_sort");
 }
 
+// Scene cull: the same ranges and per-range results as stock's threaded cull, but processed by the render thread with
+// worker tasks helping, instead of a group task the render thread sleeps on until its last thread has run.
+inline bool cpu_parallel_cull() {
+	return cpu_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/cpu/parallel_cull");
+}
+
 // Worker tasks posted per parallel loop of the render lists, besides the render thread (0: the render thread alone).
 inline int cpu_worker_tasks() {
 	return MAX(0, GLOBAL_GET_CACHED(int, "rendering/fellow/cpu/worker_tasks"));

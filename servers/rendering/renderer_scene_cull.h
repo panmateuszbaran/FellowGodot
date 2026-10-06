@@ -39,6 +39,7 @@
 #include "core/templates/pass_func.h"
 #include "core/templates/rid_owner.h"
 #include "core/templates/self_list.h"
+#include "servers/rendering/fellow_parallel.h"
 #include "servers/rendering/instance_uniforms.h"
 #include "servers/rendering/renderer_scene_occlusion_cull.h"
 #include "servers/rendering/renderer_scene_render.h"
@@ -1266,6 +1267,10 @@ public:
 	};
 
 	void _scene_cull_threaded(uint32_t p_thread, CullData *cull_data);
+	// FellowEngine (decision 0016): cull ranges processed by the render thread with worker tasks helping.
+	FellowParallelFor fellow_cull_parallel;
+	CullData *fellow_cull_data = nullptr;
+	static void _fellow_scene_cull_range(void *p_self, uint32_t p_range);
 	void _scene_cull(CullData &cull_data, InstanceCullResult &cull_result, uint64_t p_from, uint64_t p_to);
 	static void _scene_particles_set_view_axis(RID p_particles, const Vector3 &p_axis, const Vector3 &p_up_axis);
 	_FORCE_INLINE_ bool _visibility_parent_check(const CullData &p_cull_data, const InstanceData &p_instance_data);

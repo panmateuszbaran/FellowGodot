@@ -3344,6 +3344,11 @@ bool RendererSceneCull::_visibility_parent_check(const CullData &p_cull_data, co
 	return ((parent_flags & InstanceData::FLAG_VISIBILITY_DEPENDENCY_NEEDS_CHECK) == InstanceData::FLAG_VISIBILITY_DEPENDENCY_HIDDEN_CLOSE_RANGE) || (parent_flags & InstanceData::FLAG_VISIBILITY_DEPENDENCY_FADE_CHILDREN);
 }
 
+void RendererSceneCull::_fellow_scene_cull_range(void *p_self, uint32_t p_range) {
+	RendererSceneCull *self = static_cast<RendererSceneCull *>(p_self);
+	self->_scene_cull_threaded(p_range, self->fellow_cull_data);
+}
+
 void RendererSceneCull::_scene_cull_threaded(uint32_t p_thread, CullData *cull_data) {
 	uint32_t cull_total = cull_data->scenario->instance_data.size();
 	uint32_t total_threads = WorkerThreadPool::get_singleton()->get_thread_count();
@@ -3999,8 +4004,15 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 				thread.clear();
 			}
 
-			WorkerThreadPool::GroupID group_task = WorkerThreadPool::get_singleton()->add_template_group_task(this, &RendererSceneCull::_scene_cull_threaded, &cull_data, scene_cull_result_threads.size(), -1, true, SNAME("RenderCullInstances"));
-			WorkerThreadPool::get_singleton()->wait_for_group_task_completion(group_task);
+			if (Fellow::cpu_parallel_cull()) {
+				// FellowEngine (decision 0016): the same ranges and per-range results, but the render thread culls ranges
+				// itself and never waits for a worker to wake up.
+				fellow_cull_data = &cull_data;
+				fellow_cull_parallel.run(scene_cull_result_threads.size(), &RendererSceneCull::_fellow_scene_cull_range, this, (uint32_t)Fellow::cpu_worker_tasks());
+			} else {
+				WorkerThreadPool::GroupID group_task = WorkerThreadPool::get_singleton()->add_template_group_task(this, &RendererSceneCull::_scene_cull_threaded, &cull_data, scene_cull_result_threads.size(), -1, true, SNAME("RenderCullInstances"));
+				WorkerThreadPool::get_singleton()->wait_for_group_task_completion(group_task);
+			}
 
 			for (InstanceCullResult &thread : scene_cull_result_threads) {
 				scene_cull_result.append_from(thread);
