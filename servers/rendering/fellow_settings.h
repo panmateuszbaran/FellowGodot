@@ -362,7 +362,8 @@ inline bool cpu_parallel_list_sort() {
 }
 
 // With the parallel sort: partition steps of large ranges spread over the workers too (exact parallel Hoare
-// partition, see fellow_sort.h).
+// partition, see fellow_sort.h). Off by default: in City Lab (lists of ~10-20 k elements) its two extra parallel loops
+// per step cost more than they save (m4_f52_city_ab: the partition steps 0.218 ms with it, 0.178 ms without).
 inline bool cpu_parallel_partition() {
 	return cpu_parallel_list_sort() && GLOBAL_GET_CACHED(bool, "rendering/fellow/cpu/parallel_partition");
 }
