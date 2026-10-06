@@ -600,6 +600,7 @@ private:
 	void _fellow_runs_chunk(uint32_t p_chunk, void *p_unused);
 	static constexpr uint32_t FELLOW_PARALLEL_SORT_MIN = 4096; // fewer elements: single-threaded sort
 	static constexpr uint32_t FELLOW_PARALLEL_SORT_GRAIN = 1024; // ranges up to this size are sorted by one worker
+	static constexpr int64_t FELLOW_PARALLEL_PARTITION_MIN = 4096; // ranges this large have their partition step spread over the workers
 
 	template <bool t_records>
 	void _fill_render_list_range(const FellowFillParams &p_params, uint32_t p_from, uint32_t p_to, FellowFillOutput &r_out);
