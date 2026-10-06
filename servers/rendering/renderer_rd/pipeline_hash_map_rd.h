@@ -175,6 +175,18 @@ public:
 		}
 	}
 
+	// FellowEngine parallel recording (decision 0018): a lookup of the map alone, for the threads recording a forked draw
+	// list (nothing writes the map meanwhile: get_pipeline() is the render thread's, and it records a segment too).
+	// False if the pipeline is not in the map; the list is then recorded again serially, with get_pipeline().
+	bool fellow_find_pipeline(uint32_t p_key_hash, RID &r_pipeline) const {
+		const typename RBMap<uint32_t, RID>::Element *e = hash_map.find(p_key_hash);
+		if (e == nullptr) {
+			return false;
+		}
+		r_pipeline = e->value();
+		return true;
+	}
+
 	// Retrieve a pipeline. It'll return an empty pipeline if it's not available yet, but it'll be guaranteed to succeed if 'wait for compilation' is true and stall as necessary. Source is just an optional number to aid debugging.
 	RID get_pipeline(const Key &p_key, uint32_t p_key_hash, bool p_wait_for_compilation, RSE::PipelineSource p_source) {
 		RBMap<uint32_t, RID>::Element *e = hash_map.find(p_key_hash);

@@ -492,6 +492,18 @@ private:
 	template <PassMode p_pass_mode, uint32_t p_color_pass_flags = 0>
 	_FORCE_INLINE_ void _render_list_template(RenderingDevice::DrawListID p_draw_list, RenderingDevice::FramebufferFormatID p_framebuffer_Format, RenderListParameters *p_params, uint32_t p_from_element, uint32_t p_to_element);
 	void _render_list(RenderingDevice::DrawListID p_draw_list, RenderingDevice::FramebufferFormatID p_framebuffer_Format, RenderListParameters *p_params, uint32_t p_from_element, uint32_t p_to_element);
+	void _render_list_serial(RenderingDevice::DrawListID p_draw_list, RenderingDevice::FramebufferFormatID p_framebuffer_Format, RenderListParameters *p_params, uint32_t p_from_element, uint32_t p_to_element);
+	// FellowEngine parallel recording (rendering/fellow/cpu/parallel_recording, decision 0018).
+	struct FellowRecordJob {
+		RenderingDevice::DrawListID draw_list = 0;
+		RenderingDevice::FramebufferFormatID framebuffer_format = 0;
+		RenderListParameters *params = nullptr;
+		LocalVector<uint32_t> starts; // segment i records the elements [starts[i], starts[i + 1])
+		std::atomic<bool> redraw{ false }; // a shader uses TIME (RenderingServerDefault::redraw_request() at the join)
+		std::atomic<bool> abort{ false }; // a pipeline is not in its map yet: the list is recorded again serially
+	} fellow_record;
+	bool _fellow_render_list_parallel(RenderingDevice::DrawListID p_draw_list, RenderingDevice::FramebufferFormatID p_framebuffer_Format, RenderListParameters *p_params, uint32_t p_from_element, uint32_t p_to_element);
+	static void _fellow_record_chunk(void *p_self, uint32_t p_index);
 	void _render_list_with_draw_list(RenderListParameters *p_params, RID p_framebuffer, BitField<RD::DrawFlags> p_draw_flags = RD::DRAW_DEFAULT_ALL, const Vector<Color> &p_clear_color_values = Vector<Color>(), float p_clear_depth_value = 0.0, uint32_t p_clear_stencil_value = 0, const Rect2 &p_region = Rect2());
 
 	void _fill_instance_data(RenderListType p_render_list, int *p_render_info = nullptr, uint32_t p_offset = 0, int32_t p_max_elements = -1, bool p_update_buffer = true);

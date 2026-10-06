@@ -86,6 +86,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/cpu/compact_list_sort", false);
 	GLOBAL_DEF("rendering/fellow/cpu/parallel_list_sort", false);
 	GLOBAL_DEF("rendering/fellow/cpu/parallel_partition", false);
+	GLOBAL_DEF("rendering/fellow/cpu/parallel_recording", false);
 	GLOBAL_DEF("rendering/fellow/cpu/parallel_cull", false);
 	GLOBAL_DEF("rendering/fellow/cpu/prefetch", false);
 	GLOBAL_DEF("rendering/fellow/cpu/batched_shadow_lists", false);
@@ -195,5 +196,8 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["frame_submit_jobs"] = s.frame_submit_jobs.get();
 	d["rd_async_end_usec"] = s.rd_async_end_usec.get();
 	d["rd_async_submit_usec"] = s.rd_async_submit_usec.get();
+	d["cpu_record_lists"] = s.cpu_record_lists.get();
+	d["cpu_record_segments"] = s.cpu_record_segments.get();
+	d["cpu_record_fallbacks"] = s.cpu_record_fallbacks.get();
 	return d;
 }

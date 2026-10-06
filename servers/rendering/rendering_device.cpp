@@ -5690,18 +5690,77 @@ Error RenderingDevice::draw_list_begin_split(RID p_framebuffer, uint32_t p_split
 }
 #endif
 
-void RenderingDevice::draw_list_set_blend_constants(DrawListID p_list, const Color &p_color) {
-	ERR_RENDER_THREAD_GUARD();
+// FellowEngine parallel recording (decision 0018): a segment of a forked draw list, recorded by one thread.
+struct RenderingDevice::FellowDrawSegment {
+	DrawList list; // the segment's own state, starting with nothing bound
+	RDG::FellowDrawSegment graph; // its instructions and usages
+	// Work that touches shared state, done by the render thread at the join (in serial recording it happens at the
+	// bind or draw that needs it, while the draw list is open; either way before the draw list's command is added).
+	LocalVector<UniformSet *> deferred_uniform_sets; // shared textures to update, pending clears
+	LocalVector<VertexArray *> deferred_vertex_arrays; // uploads by transfer workers to wait for
+	LocalVector<IndexArray *> deferred_index_arrays;
+	LocalVector<Buffer *> deferred_buffers;
+};
 
-	ERR_FAIL_COND(!draw_list.active);
+// The segment the calling thread records, if any (a RenderingDevice::FellowDrawSegment).
+static thread_local void *fellow_tl_segment = nullptr;
+// draw_list_draw_indexed_range(): the range for the draw_list_draw() it calls (0 = the whole bound index array).
+static thread_local uint32_t fellow_tl_range_first = 0;
+static thread_local uint32_t fellow_tl_range_count = 0;
+
+#define FELLOW_SEGMENT (static_cast<FellowDrawSegment *>(fellow_tl_segment))
+#define FELLOW_DL (fellow_tl_segment != nullptr ? FELLOW_SEGMENT->list : draw_list)
+// The draw list functions run on the render thread, or on a thread recording a segment of a forked draw list (and then
+// only on those threads until the join).
+#define ERR_DRAW_LIST_THREAD_GUARD() ERR_FAIL_COND_MSG(fellow_tl_segment == nullptr && (render_thread_id != Thread::get_caller_id() || fellow_draw_forked), ERR_RENDER_THREAD_MSG)
+#define FELLOW_UNIFORM_SET_UPDATE(m_set)                                                                            \
+	if (fellow_tl_segment != nullptr) {                                                                             \
+		if (!(m_set)->shared_textures_to_update.is_empty() || !(m_set)->pending_clear_textures.is_empty()) {        \
+			FELLOW_SEGMENT->deferred_uniform_sets.push_back(m_set);                                                 \
+		}                                                                                                           \
+	} else {                                                                                                        \
+		_uniform_set_update_shared(m_set);                                                                          \
+		_uniform_set_update_clears(m_set);                                                                          \
+	}
+#define FELLOW_CHECK_TRANSFER_VERTEX_ARRAY(m_va)                       \
+	if (fellow_tl_segment != nullptr) {                                \
+		if (!(m_va)->transfer_worker_indices.is_empty()) {             \
+			FELLOW_SEGMENT->deferred_vertex_arrays.push_back(m_va);    \
+		}                                                              \
+	} else {                                                           \
+		_check_transfer_worker_vertex_array(m_va);                     \
+	}
+#define FELLOW_CHECK_TRANSFER_INDEX_ARRAY(m_ia)                        \
+	if (fellow_tl_segment != nullptr) {                                \
+		if ((m_ia)->transfer_worker_index >= 0) {                      \
+			FELLOW_SEGMENT->deferred_index_arrays.push_back(m_ia);     \
+		}                                                              \
+	} else {                                                           \
+		_check_transfer_worker_index_array(m_ia);                      \
+	}
+#define FELLOW_CHECK_TRANSFER_BUFFER(m_buffer)                         \
+	if (fellow_tl_segment != nullptr) {                                \
+		if ((m_buffer)->transfer_worker_index >= 0) {                  \
+			FELLOW_SEGMENT->deferred_buffers.push_back(m_buffer);      \
+		}                                                              \
+	} else {                                                           \
+		_check_transfer_worker_buffer(m_buffer);                       \
+	}
+
+void RenderingDevice::draw_list_set_blend_constants(DrawListID p_list, const Color &p_color) {
+	ERR_DRAW_LIST_THREAD_GUARD();
+	DrawList &dl = FELLOW_DL;
+
+	ERR_FAIL_COND(!dl.active);
 
 	draw_graph.add_draw_list_set_blend_constants(p_color);
 }
 
 void RenderingDevice::draw_list_bind_render_pipeline(DrawListID p_list, RID p_render_pipeline) {
-	ERR_RENDER_THREAD_GUARD();
+	ERR_DRAW_LIST_THREAD_GUARD();
+	DrawList &dl = FELLOW_DL;
 
-	ERR_FAIL_COND(!draw_list.active);
+	ERR_FAIL_COND(!dl.active);
 
 	const RenderPipeline *pipeline = render_pipeline_owner.get_or_null(p_render_pipeline);
 	ERR_FAIL_NULL(pipeline);
@@ -5709,25 +5768,25 @@ void RenderingDevice::draw_list_bind_render_pipeline(DrawListID p_list, RID p_re
 	ERR_FAIL_COND(pipeline->validation.framebuffer_format != draw_list_framebuffer_format && pipeline->validation.render_pass != draw_list_current_subpass);
 #endif
 
-	if (p_render_pipeline == draw_list.state.pipeline) {
+	if (p_render_pipeline == dl.state.pipeline) {
 		return; // Redundant state, return.
 	}
 
-	draw_list.state.pipeline = p_render_pipeline;
+	dl.state.pipeline = p_render_pipeline;
 
 	draw_graph.add_draw_list_bind_pipeline(pipeline->driver_id, pipeline->stage_bits);
 
-	if (draw_list.state.pipeline_shader != pipeline->shader) {
+	if (dl.state.pipeline_shader != pipeline->shader) {
 		// Shader changed, so descriptor sets may become incompatible.
 
 		uint32_t pcount = pipeline->set_formats.size(); // Formats count in this pipeline.
-		draw_list.state.set_count = MAX(draw_list.state.set_count, pcount);
+		dl.state.set_count = MAX(dl.state.set_count, pcount);
 		const uint32_t *pformats = pipeline->set_formats.ptr(); // Pipeline set formats.
 
 		uint32_t first_invalid_set = UINT32_MAX; // All valid by default.
-		if (pipeline->push_constant_size != draw_list.state.pipeline_push_constant_size) {
+		if (pipeline->push_constant_size != dl.state.pipeline_push_constant_size) {
 			// All sets must be invalidated as the pipeline layout is not compatible if the push constant range is different.
-			draw_list.state.pipeline_push_constant_size = pipeline->push_constant_size;
+			dl.state.pipeline_push_constant_size = pipeline->push_constant_size;
 			first_invalid_set = 0;
 		} else {
 			switch (driver->api_trait_get(RDD::API_TRAIT_SHADER_CHANGE_INVALIDATION)) {
@@ -5736,14 +5795,14 @@ void RenderingDevice::draw_list_bind_render_pipeline(DrawListID p_list, RID p_re
 				} break;
 				case RDD::SHADER_CHANGE_INVALIDATION_INCOMPATIBLE_SETS_PLUS_CASCADE: {
 					for (uint32_t i = 0; i < pcount; i++) {
-						if (draw_list.state.sets[i].pipeline_expected_format != pformats[i]) {
+						if (dl.state.sets[i].pipeline_expected_format != pformats[i]) {
 							first_invalid_set = i;
 							break;
 						}
 					}
 				} break;
 				case RDD::SHADER_CHANGE_INVALIDATION_ALL_OR_NONE_ACCORDING_TO_LAYOUT_HASH: {
-					if (draw_list.state.pipeline_shader_layout_hash != pipeline->shader_layout_hash) {
+					if (dl.state.pipeline_shader_layout_hash != pipeline->shader_layout_hash) {
 						first_invalid_set = 0;
 					}
 				} break;
@@ -5752,60 +5811,61 @@ void RenderingDevice::draw_list_bind_render_pipeline(DrawListID p_list, RID p_re
 
 		if (pipeline->push_constant_size) {
 #ifdef DEBUG_ENABLED
-			draw_list.validation.pipeline_push_constant_supplied = false;
+			dl.validation.pipeline_push_constant_supplied = false;
 #endif
 		}
 
 		for (uint32_t i = 0; i < pcount; i++) {
-			draw_list.state.sets[i].bound = draw_list.state.sets[i].bound && i < first_invalid_set;
-			draw_list.state.sets[i].pipeline_expected_format = pformats[i];
+			dl.state.sets[i].bound = dl.state.sets[i].bound && i < first_invalid_set;
+			dl.state.sets[i].pipeline_expected_format = pformats[i];
 		}
 
-		for (uint32_t i = pcount; i < draw_list.state.set_count; i++) {
+		for (uint32_t i = pcount; i < dl.state.set_count; i++) {
 			// Unbind the ones above (not used) if exist.
-			draw_list.state.sets[i].bound = false;
+			dl.state.sets[i].bound = false;
 		}
 
-		draw_list.state.set_count = pcount; // Update set count.
+		dl.state.set_count = pcount; // Update set count.
 
-		draw_list.state.pipeline_shader = pipeline->shader;
-		draw_list.state.pipeline_shader_driver_id = pipeline->shader_driver_id;
-		draw_list.state.pipeline_shader_layout_hash = pipeline->shader_layout_hash;
+		dl.state.pipeline_shader = pipeline->shader;
+		dl.state.pipeline_shader_driver_id = pipeline->shader_driver_id;
+		dl.state.pipeline_shader_layout_hash = pipeline->shader_layout_hash;
 	}
 
 #ifdef DEBUG_ENABLED
 	// Update render pass pipeline info.
-	draw_list.validation.pipeline_active = true;
-	draw_list.validation.pipeline_dynamic_state = pipeline->validation.dynamic_state;
-	draw_list.validation.pipeline_vertex_format = pipeline->validation.vertex_format;
-	draw_list.validation.pipeline_uses_restart_indices = pipeline->validation.uses_restart_indices;
-	draw_list.validation.pipeline_primitive_divisor = pipeline->validation.primitive_divisor;
-	draw_list.validation.pipeline_primitive_minimum = pipeline->validation.primitive_minimum;
-	draw_list.validation.pipeline_push_constant_size = pipeline->push_constant_size;
+	dl.validation.pipeline_active = true;
+	dl.validation.pipeline_dynamic_state = pipeline->validation.dynamic_state;
+	dl.validation.pipeline_vertex_format = pipeline->validation.vertex_format;
+	dl.validation.pipeline_uses_restart_indices = pipeline->validation.uses_restart_indices;
+	dl.validation.pipeline_primitive_divisor = pipeline->validation.primitive_divisor;
+	dl.validation.pipeline_primitive_minimum = pipeline->validation.primitive_minimum;
+	dl.validation.pipeline_push_constant_size = pipeline->push_constant_size;
 #endif
 }
 
 void RenderingDevice::draw_list_bind_uniform_set(DrawListID p_list, RID p_uniform_set, uint32_t p_index) {
-	ERR_RENDER_THREAD_GUARD();
+	ERR_DRAW_LIST_THREAD_GUARD();
+	DrawList &dl = FELLOW_DL;
 
 #ifdef DEBUG_ENABLED
 	ERR_FAIL_COND_MSG(p_index >= driver->limit_get(LIMIT_MAX_BOUND_UNIFORM_SETS) || p_index >= MAX_UNIFORM_SETS,
 			"Attempting to bind a descriptor set (" + itos(p_index) + ") greater than what the hardware supports (" + itos(driver->limit_get(LIMIT_MAX_BOUND_UNIFORM_SETS)) + ").");
 #endif
 
-	ERR_FAIL_COND(!draw_list.active);
+	ERR_FAIL_COND(!dl.active);
 
 	const UniformSet *uniform_set = uniform_set_owner.get_or_null(p_uniform_set);
 	ERR_FAIL_NULL(uniform_set);
 
-	if (p_index > draw_list.state.set_count) {
-		draw_list.state.set_count = p_index;
+	if (p_index > dl.state.set_count) {
+		dl.state.set_count = p_index;
 	}
 
-	draw_list.state.sets[p_index].uniform_set_driver_id = uniform_set->driver_id; // Update set pointer.
-	draw_list.state.sets[p_index].bound = false; // Needs rebind.
-	draw_list.state.sets[p_index].uniform_set_format = uniform_set->format;
-	draw_list.state.sets[p_index].uniform_set = p_uniform_set;
+	dl.state.sets[p_index].uniform_set_driver_id = uniform_set->driver_id; // Update set pointer.
+	dl.state.sets[p_index].bound = false; // Needs rebind.
+	dl.state.sets[p_index].uniform_set_format = uniform_set->format;
+	dl.state.sets[p_index].uniform_set = p_uniform_set;
 
 #ifdef DEBUG_ENABLED
 	{ // Validate that textures bound are not attached as framebuffer bindings.
@@ -5824,26 +5884,27 @@ void RenderingDevice::draw_list_bind_uniform_set(DrawListID p_list, RID p_unifor
 }
 
 void RenderingDevice::draw_list_bind_vertex_array(DrawListID p_list, RID p_vertex_array) {
-	ERR_RENDER_THREAD_GUARD();
+	ERR_DRAW_LIST_THREAD_GUARD();
+	DrawList &dl = FELLOW_DL;
 
-	ERR_FAIL_COND(!draw_list.active);
+	ERR_FAIL_COND(!dl.active);
 
 	VertexArray *vertex_array = vertex_array_owner.get_or_null(p_vertex_array);
 	ERR_FAIL_NULL(vertex_array);
 
-	if (draw_list.state.vertex_array == p_vertex_array) {
+	if (dl.state.vertex_array == p_vertex_array) {
 		return; // Already set.
 	}
 
-	_check_transfer_worker_vertex_array(vertex_array);
+	FELLOW_CHECK_TRANSFER_VERTEX_ARRAY(vertex_array);
 
-	draw_list.state.vertex_array = p_vertex_array;
+	dl.state.vertex_array = p_vertex_array;
 
 #ifdef DEBUG_ENABLED
-	draw_list.validation.vertex_format = vertex_array->description;
-	draw_list.validation.vertex_max_instances_allowed = vertex_array->max_instances_allowed;
+	dl.validation.vertex_format = vertex_array->description;
+	dl.validation.vertex_max_instances_allowed = vertex_array->max_instances_allowed;
 #endif
-	draw_list.validation.vertex_array_size = vertex_array->vertex_count;
+	dl.validation.vertex_array_size = vertex_array->vertex_count;
 
 	draw_graph.add_draw_list_bind_vertex_buffers(vertex_array->buffers, vertex_array->offsets);
 
@@ -5853,9 +5914,10 @@ void RenderingDevice::draw_list_bind_vertex_array(DrawListID p_list, RID p_verte
 }
 
 void RenderingDevice::draw_list_bind_vertex_buffers_format(DrawListID p_list, VertexFormatID p_vertex_format, uint32_t p_vertex_count, const Span<RID> &p_vertex_buffers, const Span<uint64_t> &p_offsets) {
-	ERR_RENDER_THREAD_GUARD();
+	ERR_DRAW_LIST_THREAD_GUARD();
+	DrawList &dl = FELLOW_DL;
 
-	ERR_FAIL_COND(!draw_list.active);
+	ERR_FAIL_COND(!dl.active);
 
 	const VertexDescriptionCache *vertex_description;
 	{
@@ -5894,7 +5956,7 @@ void RenderingDevice::draw_list_bind_vertex_buffers_format(DrawListID p_list, Ve
 		Buffer *buffer = vertex_buffer_owner.get_or_null(buffer_rid);
 		ERR_FAIL_NULL(buffer);
 
-		_check_transfer_worker_buffer(buffer);
+		FELLOW_CHECK_TRANSFER_BUFFER(buffer);
 
 #if DEBUG_ENABLED
 		uint64_t binding_offset = offsets_span[i];
@@ -5936,7 +5998,7 @@ void RenderingDevice::draw_list_bind_vertex_buffers_format(DrawListID p_list, Ve
 		}
 	}
 
-	draw_list.state.vertex_array = RID();
+	dl.state.vertex_array = RID();
 
 	draw_graph.add_draw_list_bind_vertex_buffers(driver_buffers, offsets_span);
 
@@ -5944,33 +6006,34 @@ void RenderingDevice::draw_list_bind_vertex_buffers_format(DrawListID p_list, Ve
 		draw_graph.add_draw_list_usage(tracker, RDG::RESOURCE_USAGE_VERTEX_BUFFER_READ);
 	}
 
-	draw_list.validation.vertex_array_size = p_vertex_count;
+	dl.validation.vertex_array_size = p_vertex_count;
 
 #ifdef DEBUG_ENABLED
-	draw_list.validation.vertex_format = p_vertex_format;
-	draw_list.validation.vertex_max_instances_allowed = max_instances_allowed;
+	dl.validation.vertex_format = p_vertex_format;
+	dl.validation.vertex_max_instances_allowed = max_instances_allowed;
 #endif
 }
 
 void RenderingDevice::draw_list_bind_index_array(DrawListID p_list, RID p_index_array) {
-	ERR_RENDER_THREAD_GUARD();
+	ERR_DRAW_LIST_THREAD_GUARD();
+	DrawList &dl = FELLOW_DL;
 
-	ERR_FAIL_COND(!draw_list.active);
+	ERR_FAIL_COND(!dl.active);
 
 	IndexArray *index_array = index_array_owner.get_or_null(p_index_array);
 	ERR_FAIL_NULL(index_array);
 
-	if (draw_list.state.index_array == p_index_array) {
+	if (dl.state.index_array == p_index_array) {
 		return; // Already set.
 	}
 
-	_check_transfer_worker_index_array(index_array);
+	FELLOW_CHECK_TRANSFER_INDEX_ARRAY(index_array);
 
-	draw_list.state.index_array = p_index_array;
+	dl.state.index_array = p_index_array;
 #ifdef DEBUG_ENABLED
-	draw_list.validation.index_array_max_index = index_array->max_index;
+	dl.validation.index_array_max_index = index_array->max_index;
 #endif
-	draw_list.validation.index_array_count = index_array->indices;
+	dl.validation.index_array_count = index_array->indices;
 
 	const uint64_t offset_bytes = index_array->offset * (index_array->format == INDEX_BUFFER_FORMAT_UINT16 ? sizeof(uint16_t) : sizeof(uint32_t));
 	draw_graph.add_draw_list_bind_index_buffer(index_array->driver_id, index_array->format, offset_bytes);
@@ -5981,142 +6044,144 @@ void RenderingDevice::draw_list_bind_index_array(DrawListID p_list, RID p_index_
 }
 
 void RenderingDevice::draw_list_set_line_width(DrawListID p_list, float p_width) {
-	ERR_RENDER_THREAD_GUARD();
+	ERR_DRAW_LIST_THREAD_GUARD();
+	DrawList &dl = FELLOW_DL;
 
-	ERR_FAIL_COND(!draw_list.active);
+	ERR_FAIL_COND(!dl.active);
 
 	draw_graph.add_draw_list_set_line_width(p_width);
 }
 
 void RenderingDevice::draw_list_set_push_constant(DrawListID p_list, const void *p_data, uint32_t p_data_size) {
-	ERR_RENDER_THREAD_GUARD();
+	ERR_DRAW_LIST_THREAD_GUARD();
+	DrawList &dl = FELLOW_DL;
 
-	ERR_FAIL_COND(!draw_list.active);
+	ERR_FAIL_COND(!dl.active);
 
 #ifdef DEBUG_ENABLED
-	ERR_FAIL_COND_MSG(p_data_size != draw_list.validation.pipeline_push_constant_size,
-			"This render pipeline requires (" + itos(draw_list.validation.pipeline_push_constant_size) + ") bytes of push constant data, supplied: (" + itos(p_data_size) + ")");
+	ERR_FAIL_COND_MSG(p_data_size != dl.validation.pipeline_push_constant_size,
+			"This render pipeline requires (" + itos(dl.validation.pipeline_push_constant_size) + ") bytes of push constant data, supplied: (" + itos(p_data_size) + ")");
 #endif
 
-	draw_graph.add_draw_list_set_push_constant(draw_list.state.pipeline_shader_driver_id, p_data, p_data_size);
+	draw_graph.add_draw_list_set_push_constant(dl.state.pipeline_shader_driver_id, p_data, p_data_size);
 
 #ifdef DEBUG_ENABLED
-	draw_list.validation.pipeline_push_constant_supplied = true;
+	dl.validation.pipeline_push_constant_supplied = true;
 #endif
 }
 
 void RenderingDevice::draw_list_draw(DrawListID p_list, bool p_use_indices, uint32_t p_instances, uint32_t p_procedural_vertices) {
-	ERR_RENDER_THREAD_GUARD();
+	ERR_DRAW_LIST_THREAD_GUARD();
+	DrawList &dl = FELLOW_DL;
 
-	ERR_FAIL_COND(!draw_list.active);
+	ERR_FAIL_COND(!dl.active);
 
 #ifdef DEBUG_ENABLED
-	ERR_FAIL_COND_MSG(!draw_list.validation.pipeline_active,
+	ERR_FAIL_COND_MSG(!dl.validation.pipeline_active,
 			"No render pipeline was set before attempting to draw.");
-	if (draw_list.validation.pipeline_vertex_format != INVALID_ID) {
+	if (dl.validation.pipeline_vertex_format != INVALID_ID) {
 		// Pipeline uses vertices, validate format.
-		ERR_FAIL_COND_MSG(draw_list.validation.vertex_format == INVALID_ID,
+		ERR_FAIL_COND_MSG(dl.validation.vertex_format == INVALID_ID,
 				"No vertex array was bound, and render pipeline expects vertices.");
 		// Make sure format is right.
-		ERR_FAIL_COND_MSG(draw_list.validation.pipeline_vertex_format != draw_list.validation.vertex_format,
+		ERR_FAIL_COND_MSG(dl.validation.pipeline_vertex_format != dl.validation.vertex_format,
 				"The vertex format used to create the pipeline does not match the vertex format bound.");
 		// Make sure number of instances is valid.
-		ERR_FAIL_COND_MSG(p_instances > draw_list.validation.vertex_max_instances_allowed,
-				"Number of instances requested (" + itos(p_instances) + " is larger than the maximum number supported by the bound vertex array (" + itos(draw_list.validation.vertex_max_instances_allowed) + ").");
+		ERR_FAIL_COND_MSG(p_instances > dl.validation.vertex_max_instances_allowed,
+				"Number of instances requested (" + itos(p_instances) + " is larger than the maximum number supported by the bound vertex array (" + itos(dl.validation.vertex_max_instances_allowed) + ").");
 	}
 
-	if (draw_list.validation.pipeline_push_constant_size > 0) {
+	if (dl.validation.pipeline_push_constant_size > 0) {
 		// Using push constants, check that they were supplied.
-		ERR_FAIL_COND_MSG(!draw_list.validation.pipeline_push_constant_supplied,
+		ERR_FAIL_COND_MSG(!dl.validation.pipeline_push_constant_supplied,
 				"The shader in this pipeline requires a push constant to be set before drawing, but it's not present.");
 	}
 
 #endif
 
 #ifdef DEBUG_ENABLED
-	for (uint32_t i = 0; i < draw_list.state.set_count; i++) {
-		if (draw_list.state.sets[i].pipeline_expected_format == 0) {
+	for (uint32_t i = 0; i < dl.state.set_count; i++) {
+		if (dl.state.sets[i].pipeline_expected_format == 0) {
 			// Nothing expected by this pipeline.
 			continue;
 		}
 
-		if (draw_list.state.sets[i].pipeline_expected_format != draw_list.state.sets[i].uniform_set_format) {
-			if (draw_list.state.sets[i].uniform_set_format == 0) {
+		if (dl.state.sets[i].pipeline_expected_format != dl.state.sets[i].uniform_set_format) {
+			if (dl.state.sets[i].uniform_set_format == 0) {
 				ERR_FAIL_MSG(vformat("Uniforms were never supplied for set (%d) at the time of drawing, which are required by the pipeline.", i));
-			} else if (uniform_set_owner.owns(draw_list.state.sets[i].uniform_set)) {
-				UniformSet *us = uniform_set_owner.get_or_null(draw_list.state.sets[i].uniform_set);
+			} else if (uniform_set_owner.owns(dl.state.sets[i].uniform_set)) {
+				UniformSet *us = uniform_set_owner.get_or_null(dl.state.sets[i].uniform_set);
 				const String us_info = us ? vformat("(%d):\n%s\n", i, _shader_uniform_debug(us->shader_id, us->shader_set)) : vformat("(%d, which was just freed) ", i);
-				ERR_FAIL_MSG(vformat("Uniforms supplied for set %sare not the same format as required by the pipeline shader. Pipeline shader requires the following bindings:\n%s", us_info, _shader_uniform_debug(draw_list.state.pipeline_shader)));
+				ERR_FAIL_MSG(vformat("Uniforms supplied for set %sare not the same format as required by the pipeline shader. Pipeline shader requires the following bindings:\n%s", us_info, _shader_uniform_debug(dl.state.pipeline_shader)));
 			} else {
-				ERR_FAIL_MSG(vformat("Uniforms supplied for set (%d, which was just freed) are not the same format as required by the pipeline shader. Pipeline shader requires the following bindings:\n%s", i, _shader_uniform_debug(draw_list.state.pipeline_shader)));
+				ERR_FAIL_MSG(vformat("Uniforms supplied for set (%d, which was just freed) are not the same format as required by the pipeline shader. Pipeline shader requires the following bindings:\n%s", i, _shader_uniform_debug(dl.state.pipeline_shader)));
 			}
 		}
 	}
 #endif
 	thread_local LocalVector<RDD::UniformSetID> valid_descriptor_ids;
 	valid_descriptor_ids.clear();
-	valid_descriptor_ids.resize(draw_list.state.set_count);
+	valid_descriptor_ids.resize(dl.state.set_count);
 	uint32_t valid_set_count = 0;
 	uint32_t first_set_index = 0;
 	uint32_t last_set_index = 0;
 	bool found_first_set = false;
 
-	for (uint32_t i = 0; i < draw_list.state.set_count; i++) {
-		if (draw_list.state.sets[i].pipeline_expected_format == 0) {
+	for (uint32_t i = 0; i < dl.state.set_count; i++) {
+		if (dl.state.sets[i].pipeline_expected_format == 0) {
 			continue; // Nothing expected by this pipeline.
 		}
 
-		if (!draw_list.state.sets[i].bound && !found_first_set) {
+		if (!dl.state.sets[i].bound && !found_first_set) {
 			first_set_index = i;
 			found_first_set = true;
 		}
 		// Prepare descriptor sets if the API doesn't use pipeline barriers.
 		if (!driver->api_trait_get(RDD::API_TRAIT_HONORS_PIPELINE_BARRIERS)) {
-			draw_graph.add_draw_list_uniform_set_prepare_for_use(draw_list.state.pipeline_shader_driver_id, draw_list.state.sets[i].uniform_set_driver_id, i);
+			draw_graph.add_draw_list_uniform_set_prepare_for_use(dl.state.pipeline_shader_driver_id, dl.state.sets[i].uniform_set_driver_id, i);
 		}
 	}
 
 	// Bind descriptor sets.
-	for (uint32_t i = first_set_index; i < draw_list.state.set_count; i++) {
-		if (draw_list.state.sets[i].pipeline_expected_format == 0) {
+	for (uint32_t i = first_set_index; i < dl.state.set_count; i++) {
+		if (dl.state.sets[i].pipeline_expected_format == 0) {
 			continue; // Nothing expected by this pipeline.
 		}
 
-		if (!draw_list.state.sets[i].bound) {
+		if (!dl.state.sets[i].bound) {
 			// Batch contiguous descriptor sets in a single call.
 			if (descriptor_set_batching) {
 				// All good, see if this requires re-binding.
 				if (i - last_set_index > 1) {
 					// If the descriptor sets are not contiguous, bind the previous ones and start a new batch.
-					draw_graph.add_draw_list_bind_uniform_sets(draw_list.state.pipeline_shader_driver_id, valid_descriptor_ids, first_set_index, valid_set_count);
+					draw_graph.add_draw_list_bind_uniform_sets(dl.state.pipeline_shader_driver_id, valid_descriptor_ids, first_set_index, valid_set_count);
 
 					first_set_index = i;
 					valid_set_count = 1;
-					valid_descriptor_ids[0] = draw_list.state.sets[i].uniform_set_driver_id;
+					valid_descriptor_ids[0] = dl.state.sets[i].uniform_set_driver_id;
 				} else {
 					// Otherwise, keep storing in the current batch.
-					valid_descriptor_ids[valid_set_count] = draw_list.state.sets[i].uniform_set_driver_id;
+					valid_descriptor_ids[valid_set_count] = dl.state.sets[i].uniform_set_driver_id;
 					valid_set_count++;
 				}
 
-				UniformSet *uniform_set = uniform_set_owner.get_or_null(draw_list.state.sets[i].uniform_set);
+				UniformSet *uniform_set = uniform_set_owner.get_or_null(dl.state.sets[i].uniform_set);
 				ERR_FAIL_NULL(uniform_set);
-				_uniform_set_update_shared(uniform_set);
-				_uniform_set_update_clears(uniform_set);
+				FELLOW_UNIFORM_SET_UPDATE(uniform_set);
 
 				draw_graph.add_draw_list_usages(uniform_set->draw_trackers, uniform_set->draw_trackers_usage);
-				draw_list.state.sets[i].bound = true;
+				dl.state.sets[i].bound = true;
 
 				last_set_index = i;
 			} else {
-				draw_graph.add_draw_list_bind_uniform_set(draw_list.state.pipeline_shader_driver_id, draw_list.state.sets[i].uniform_set_driver_id, i);
+				draw_graph.add_draw_list_bind_uniform_set(dl.state.pipeline_shader_driver_id, dl.state.sets[i].uniform_set_driver_id, i);
 			}
 		}
 	}
 
 	// Bind the remaining batch.
 	if (descriptor_set_batching && valid_set_count > 0) {
-		draw_graph.add_draw_list_bind_uniform_sets(draw_list.state.pipeline_shader_driver_id, valid_descriptor_ids, first_set_index, valid_set_count);
+		draw_graph.add_draw_list_bind_uniform_sets(dl.state.pipeline_shader_driver_id, valid_descriptor_ids, first_set_index, valid_set_count);
 	}
 
 	if (p_use_indices) {
@@ -6124,23 +6189,23 @@ void RenderingDevice::draw_list_draw(DrawListID p_list, bool p_use_indices, uint
 		ERR_FAIL_COND_MSG(p_procedural_vertices > 0,
 				"Procedural vertices can't be used together with indices.");
 
-		ERR_FAIL_COND_MSG(!draw_list.validation.index_array_count,
+		ERR_FAIL_COND_MSG(!dl.validation.index_array_count,
 				"Draw command requested indices, but no index buffer was set.");
 
-		ERR_FAIL_COND_MSG(draw_list.validation.pipeline_uses_restart_indices != draw_list.validation.index_buffer_uses_restart_indices,
+		ERR_FAIL_COND_MSG(dl.validation.pipeline_uses_restart_indices != dl.validation.index_buffer_uses_restart_indices,
 				"The usage of restart indices in index buffer does not match the render primitive in the pipeline.");
 #endif
-		uint32_t to_draw = fellow_draw_range_count ? fellow_draw_range_count : draw_list.validation.index_array_count;
+		uint32_t to_draw = fellow_tl_range_count ? fellow_tl_range_count : dl.validation.index_array_count;
 
 #ifdef DEBUG_ENABLED
-		ERR_FAIL_COND_MSG(to_draw < draw_list.validation.pipeline_primitive_minimum,
-				"Too few indices (" + itos(to_draw) + ") for the render primitive set in the render pipeline (" + itos(draw_list.validation.pipeline_primitive_minimum) + ").");
+		ERR_FAIL_COND_MSG(to_draw < dl.validation.pipeline_primitive_minimum,
+				"Too few indices (" + itos(to_draw) + ") for the render primitive set in the render pipeline (" + itos(dl.validation.pipeline_primitive_minimum) + ").");
 
-		ERR_FAIL_COND_MSG((to_draw % draw_list.validation.pipeline_primitive_divisor) != 0,
-				"Index amount (" + itos(to_draw) + ") must be a multiple of the amount of indices required by the render primitive (" + itos(draw_list.validation.pipeline_primitive_divisor) + ").");
+		ERR_FAIL_COND_MSG((to_draw % dl.validation.pipeline_primitive_divisor) != 0,
+				"Index amount (" + itos(to_draw) + ") must be a multiple of the amount of indices required by the render primitive (" + itos(dl.validation.pipeline_primitive_divisor) + ").");
 #endif
 
-		draw_graph.add_draw_list_draw_indexed(to_draw, p_instances, fellow_draw_range_first);
+		draw_graph.add_draw_list_draw_indexed(to_draw, p_instances, fellow_tl_range_first);
 	} else {
 		uint32_t to_draw;
 
@@ -6148,43 +6213,45 @@ void RenderingDevice::draw_list_draw(DrawListID p_list, bool p_use_indices, uint
 			to_draw = p_procedural_vertices;
 		} else {
 #ifdef DEBUG_ENABLED
-			ERR_FAIL_COND_MSG(draw_list.validation.pipeline_vertex_format == INVALID_ID,
+			ERR_FAIL_COND_MSG(dl.validation.pipeline_vertex_format == INVALID_ID,
 					"Draw command lacks indices, but pipeline format does not use vertices.");
 #endif
-			to_draw = draw_list.validation.vertex_array_size;
+			to_draw = dl.validation.vertex_array_size;
 		}
 
 #ifdef DEBUG_ENABLED
-		ERR_FAIL_COND_MSG(to_draw < draw_list.validation.pipeline_primitive_minimum,
-				"Too few vertices (" + itos(to_draw) + ") for the render primitive set in the render pipeline (" + itos(draw_list.validation.pipeline_primitive_minimum) + ").");
+		ERR_FAIL_COND_MSG(to_draw < dl.validation.pipeline_primitive_minimum,
+				"Too few vertices (" + itos(to_draw) + ") for the render primitive set in the render pipeline (" + itos(dl.validation.pipeline_primitive_minimum) + ").");
 
-		ERR_FAIL_COND_MSG((to_draw % draw_list.validation.pipeline_primitive_divisor) != 0,
-				"Vertex amount (" + itos(to_draw) + ") must be a multiple of the amount of vertices required by the render primitive (" + itos(draw_list.validation.pipeline_primitive_divisor) + ").");
+		ERR_FAIL_COND_MSG((to_draw % dl.validation.pipeline_primitive_divisor) != 0,
+				"Vertex amount (" + itos(to_draw) + ") must be a multiple of the amount of vertices required by the render primitive (" + itos(dl.validation.pipeline_primitive_divisor) + ").");
 #endif
 
 		draw_graph.add_draw_list_draw(to_draw, p_instances);
 	}
 
-	draw_list.state.draw_count++;
+	dl.state.draw_count++;
 }
 
 void RenderingDevice::draw_list_draw_indexed_range(DrawListID p_list, uint32_t p_first_index, uint32_t p_index_count, uint32_t p_instances) {
-	ERR_RENDER_THREAD_GUARD();
-	ERR_FAIL_COND(!draw_list.active);
+	ERR_DRAW_LIST_THREAD_GUARD();
+	DrawList &dl = FELLOW_DL;
+	ERR_FAIL_COND(!dl.active);
 	ERR_FAIL_COND(p_index_count == 0);
-	ERR_FAIL_COND_MSG(uint64_t(p_first_index) + p_index_count > draw_list.validation.index_array_count,
-			"Index range (" + itos(p_first_index) + " + " + itos(p_index_count) + ") exceeds the bound index array (" + itos(draw_list.validation.index_array_count) + ").");
-	fellow_draw_range_first = p_first_index;
-	fellow_draw_range_count = p_index_count;
+	ERR_FAIL_COND_MSG(uint64_t(p_first_index) + p_index_count > dl.validation.index_array_count,
+			"Index range (" + itos(p_first_index) + " + " + itos(p_index_count) + ") exceeds the bound index array (" + itos(dl.validation.index_array_count) + ").");
+	fellow_tl_range_first = p_first_index;
+	fellow_tl_range_count = p_index_count;
 	draw_list_draw(p_list, true, p_instances, 0);
-	fellow_draw_range_first = 0;
-	fellow_draw_range_count = 0;
+	fellow_tl_range_first = 0;
+	fellow_tl_range_count = 0;
 }
 
 void RenderingDevice::draw_list_draw_indirect(DrawListID p_list, bool p_use_indices, RID p_buffer, uint32_t p_offset, uint32_t p_draw_count, uint32_t p_stride) {
-	ERR_RENDER_THREAD_GUARD();
+	ERR_DRAW_LIST_THREAD_GUARD();
+	DrawList &dl = FELLOW_DL;
 
-	ERR_FAIL_COND(!draw_list.active);
+	ERR_FAIL_COND(!dl.active);
 
 	Buffer *buffer = storage_buffer_owner.get_or_null(p_buffer);
 	ERR_FAIL_NULL(buffer);
@@ -6192,40 +6259,40 @@ void RenderingDevice::draw_list_draw_indirect(DrawListID p_list, bool p_use_indi
 	ERR_FAIL_COND_MSG(!buffer->usage.has_flag(RDD::BUFFER_USAGE_INDIRECT_BIT), "Buffer provided was not created to do indirect dispatch.");
 
 #ifdef DEBUG_ENABLED
-	ERR_FAIL_COND_MSG(!draw_list.validation.pipeline_active,
+	ERR_FAIL_COND_MSG(!dl.validation.pipeline_active,
 			"No render pipeline was set before attempting to draw.");
-	if (draw_list.validation.pipeline_vertex_format != INVALID_ID) {
+	if (dl.validation.pipeline_vertex_format != INVALID_ID) {
 		// Pipeline uses vertices, validate format.
-		ERR_FAIL_COND_MSG(draw_list.validation.vertex_format == INVALID_ID,
+		ERR_FAIL_COND_MSG(dl.validation.vertex_format == INVALID_ID,
 				"No vertex array was bound, and render pipeline expects vertices.");
 		// Make sure format is right.
-		ERR_FAIL_COND_MSG(draw_list.validation.pipeline_vertex_format != draw_list.validation.vertex_format,
+		ERR_FAIL_COND_MSG(dl.validation.pipeline_vertex_format != dl.validation.vertex_format,
 				"The vertex format used to create the pipeline does not match the vertex format bound.");
 	}
 
-	if (draw_list.validation.pipeline_push_constant_size > 0) {
+	if (dl.validation.pipeline_push_constant_size > 0) {
 		// Using push constants, check that they were supplied.
-		ERR_FAIL_COND_MSG(!draw_list.validation.pipeline_push_constant_supplied,
+		ERR_FAIL_COND_MSG(!dl.validation.pipeline_push_constant_supplied,
 				"The shader in this pipeline requires a push constant to be set before drawing, but it's not present.");
 	}
 #endif
 
 #ifdef DEBUG_ENABLED
-	for (uint32_t i = 0; i < draw_list.state.set_count; i++) {
-		if (draw_list.state.sets[i].pipeline_expected_format == 0) {
+	for (uint32_t i = 0; i < dl.state.set_count; i++) {
+		if (dl.state.sets[i].pipeline_expected_format == 0) {
 			// Nothing expected by this pipeline.
 			continue;
 		}
 
-		if (draw_list.state.sets[i].pipeline_expected_format != draw_list.state.sets[i].uniform_set_format) {
-			if (draw_list.state.sets[i].uniform_set_format == 0) {
+		if (dl.state.sets[i].pipeline_expected_format != dl.state.sets[i].uniform_set_format) {
+			if (dl.state.sets[i].uniform_set_format == 0) {
 				ERR_FAIL_MSG(vformat("Uniforms were never supplied for set (%d) at the time of drawing, which are required by the pipeline.", i));
-			} else if (uniform_set_owner.owns(draw_list.state.sets[i].uniform_set)) {
-				UniformSet *us = uniform_set_owner.get_or_null(draw_list.state.sets[i].uniform_set);
+			} else if (uniform_set_owner.owns(dl.state.sets[i].uniform_set)) {
+				UniformSet *us = uniform_set_owner.get_or_null(dl.state.sets[i].uniform_set);
 				const String us_info = us ? vformat("(%d):\n%s\n", i, _shader_uniform_debug(us->shader_id, us->shader_set)) : vformat("(%d, which was just freed) ", i);
-				ERR_FAIL_MSG(vformat("Uniforms supplied for set %sare not the same format as required by the pipeline shader. Pipeline shader requires the following bindings:\n%s", us_info, _shader_uniform_debug(draw_list.state.pipeline_shader)));
+				ERR_FAIL_MSG(vformat("Uniforms supplied for set %sare not the same format as required by the pipeline shader. Pipeline shader requires the following bindings:\n%s", us_info, _shader_uniform_debug(dl.state.pipeline_shader)));
 			} else {
-				ERR_FAIL_MSG(vformat("Uniforms supplied for set (%d, which was just freed) are not the same format as required by the pipeline shader. Pipeline shader requires the following bindings:\n%s", i, _shader_uniform_debug(draw_list.state.pipeline_shader)));
+				ERR_FAIL_MSG(vformat("Uniforms supplied for set (%d, which was just freed) are not the same format as required by the pipeline shader. Pipeline shader requires the following bindings:\n%s", i, _shader_uniform_debug(dl.state.pipeline_shader)));
 			}
 		}
 	}
@@ -6233,42 +6300,41 @@ void RenderingDevice::draw_list_draw_indirect(DrawListID p_list, bool p_use_indi
 
 	// Prepare descriptor sets if the API doesn't use pipeline barriers.
 	if (!driver->api_trait_get(RDD::API_TRAIT_HONORS_PIPELINE_BARRIERS)) {
-		for (uint32_t i = 0; i < draw_list.state.set_count; i++) {
-			if (draw_list.state.sets[i].pipeline_expected_format == 0) {
+		for (uint32_t i = 0; i < dl.state.set_count; i++) {
+			if (dl.state.sets[i].pipeline_expected_format == 0) {
 				// Nothing expected by this pipeline.
 				continue;
 			}
 
-			draw_graph.add_draw_list_uniform_set_prepare_for_use(draw_list.state.pipeline_shader_driver_id, draw_list.state.sets[i].uniform_set_driver_id, i);
+			draw_graph.add_draw_list_uniform_set_prepare_for_use(dl.state.pipeline_shader_driver_id, dl.state.sets[i].uniform_set_driver_id, i);
 		}
 	}
 
 	// Bind descriptor sets.
-	for (uint32_t i = 0; i < draw_list.state.set_count; i++) {
-		if (draw_list.state.sets[i].pipeline_expected_format == 0) {
+	for (uint32_t i = 0; i < dl.state.set_count; i++) {
+		if (dl.state.sets[i].pipeline_expected_format == 0) {
 			continue; // Nothing expected by this pipeline.
 		}
-		if (!draw_list.state.sets[i].bound) {
+		if (!dl.state.sets[i].bound) {
 			// All good, see if this requires re-binding.
-			draw_graph.add_draw_list_bind_uniform_set(draw_list.state.pipeline_shader_driver_id, draw_list.state.sets[i].uniform_set_driver_id, i);
+			draw_graph.add_draw_list_bind_uniform_set(dl.state.pipeline_shader_driver_id, dl.state.sets[i].uniform_set_driver_id, i);
 
-			UniformSet *uniform_set = uniform_set_owner.get_or_null(draw_list.state.sets[i].uniform_set);
+			UniformSet *uniform_set = uniform_set_owner.get_or_null(dl.state.sets[i].uniform_set);
 			ERR_FAIL_NULL(uniform_set);
-			_uniform_set_update_shared(uniform_set);
-			_uniform_set_update_clears(uniform_set);
+			FELLOW_UNIFORM_SET_UPDATE(uniform_set);
 
 			draw_graph.add_draw_list_usages(uniform_set->draw_trackers, uniform_set->draw_trackers_usage);
 
-			draw_list.state.sets[i].bound = true;
+			dl.state.sets[i].bound = true;
 		}
 	}
 
 	if (p_use_indices) {
 #ifdef DEBUG_ENABLED
-		ERR_FAIL_COND_MSG(!draw_list.validation.index_array_count,
+		ERR_FAIL_COND_MSG(!dl.validation.index_array_count,
 				"Draw command requested indices, but no index buffer was set.");
 
-		ERR_FAIL_COND_MSG(draw_list.validation.pipeline_uses_restart_indices != draw_list.validation.index_buffer_uses_restart_indices,
+		ERR_FAIL_COND_MSG(dl.validation.pipeline_uses_restart_indices != dl.validation.index_buffer_uses_restart_indices,
 				"The usage of restart indices in index buffer does not match the render primitive in the pipeline.");
 #endif
 
@@ -6281,35 +6347,37 @@ void RenderingDevice::draw_list_draw_indirect(DrawListID p_list, bool p_use_indi
 		draw_graph.add_draw_list_draw_indirect(buffer->driver_id, p_offset, p_draw_count, p_stride);
 	}
 
-	draw_list.state.draw_count++;
+	dl.state.draw_count++;
 
 	if (buffer->draw_tracker != nullptr) {
 		draw_graph.add_draw_list_usage(buffer->draw_tracker, RDG::RESOURCE_USAGE_INDIRECT_BUFFER_READ);
 	}
 
-	_check_transfer_worker_buffer(buffer);
+	FELLOW_CHECK_TRANSFER_BUFFER(buffer);
 }
 
 void RenderingDevice::draw_list_set_viewport(DrawListID p_list, const Rect2 &p_rect) {
-	ERR_FAIL_COND(!draw_list.active);
+	DrawList &dl = FELLOW_DL;
+	ERR_FAIL_COND(!dl.active);
 
 	if (p_rect.get_area() == 0) {
 		return;
 	}
 
-	draw_list.viewport = p_rect;
+	dl.viewport = p_rect;
 	draw_graph.add_draw_list_set_viewport(p_rect);
 }
 
 void RenderingDevice::draw_list_enable_scissor(DrawListID p_list, const Rect2 &p_rect) {
-	ERR_RENDER_THREAD_GUARD();
+	ERR_DRAW_LIST_THREAD_GUARD();
+	DrawList &dl = FELLOW_DL;
 
-	ERR_FAIL_COND(!draw_list.active);
+	ERR_FAIL_COND(!dl.active);
 
 	Rect2i rect = p_rect;
-	rect.position += draw_list.viewport.position;
+	rect.position += dl.viewport.position;
 
-	rect = draw_list.viewport.intersection(rect);
+	rect = dl.viewport.intersection(rect);
 
 	if (rect.get_area() == 0) {
 		return;
@@ -6319,11 +6387,12 @@ void RenderingDevice::draw_list_enable_scissor(DrawListID p_list, const Rect2 &p
 }
 
 void RenderingDevice::draw_list_disable_scissor(DrawListID p_list) {
-	ERR_RENDER_THREAD_GUARD();
+	ERR_DRAW_LIST_THREAD_GUARD();
+	DrawList &dl = FELLOW_DL;
 
-	ERR_FAIL_COND(!draw_list.active);
+	ERR_FAIL_COND(!dl.active);
 
-	draw_graph.add_draw_list_set_scissor(draw_list.viewport);
+	draw_graph.add_draw_list_set_scissor(dl.viewport);
 }
 
 uint32_t RenderingDevice::draw_list_get_current_pass() {
@@ -6373,6 +6442,7 @@ void RenderingDevice::draw_list_end() {
 	ERR_RENDER_THREAD_GUARD();
 
 	ERR_FAIL_COND_MSG(!draw_list.active, "Immediate draw list is already inactive.");
+	ERR_FAIL_COND_MSG(fellow_draw_forked, "The draw list's segments were not joined.");
 
 	draw_graph.add_draw_list_end();
 
@@ -6393,6 +6463,123 @@ void RenderingDevice::draw_list_end() {
 	}
 
 	draw_list_bound_textures.clear();
+}
+
+bool RenderingDevice::fellow_draw_list_fork(DrawListID p_list, uint32_t p_segments) {
+	ERR_RENDER_THREAD_GUARD_V(false);
+	ERR_FAIL_COND_V(!draw_list.active || fellow_draw_forked || fellow_tl_segment != nullptr, false);
+	if (p_segments < 2) {
+		return false;
+	}
+	while (fellow_draw_segments.size() < p_segments) {
+		fellow_draw_segments.push_back(memnew(FellowDrawSegment));
+	}
+	for (uint32_t i = 0; i < p_segments; i++) {
+		FellowDrawSegment &segment = *fellow_draw_segments[i];
+		segment.list = DrawList();
+		segment.list.active = true;
+		segment.list.viewport = draw_list.viewport;
+#ifdef DEBUG_ENABLED
+		segment.list.validation = draw_list.validation;
+#endif
+		segment.graph.clear();
+		segment.deferred_uniform_sets.clear();
+		segment.deferred_vertex_arrays.clear();
+		segment.deferred_index_arrays.clear();
+		segment.deferred_buffers.clear();
+	}
+	fellow_draw_segment_count = p_segments;
+	fellow_draw_forked = true;
+	return true;
+}
+
+void RenderingDevice::fellow_draw_list_segment_begin(uint32_t p_segment) {
+	ERR_FAIL_COND(!fellow_draw_forked || p_segment >= fellow_draw_segment_count || fellow_tl_segment != nullptr);
+	FellowDrawSegment *segment = fellow_draw_segments[p_segment];
+	fellow_tl_segment = segment;
+	RDG::fellow_draw_segment_set(&segment->graph);
+}
+
+void RenderingDevice::fellow_draw_list_segment_end() {
+	fellow_tl_segment = nullptr;
+	RDG::fellow_draw_segment_set(nullptr);
+}
+
+void RenderingDevice::fellow_draw_list_join(bool p_discard) {
+	ERR_RENDER_THREAD_GUARD();
+	ERR_FAIL_COND(!fellow_draw_forked || fellow_tl_segment != nullptr);
+	fellow_draw_forked = false;
+	const uint32_t count = fellow_draw_segment_count;
+	fellow_draw_segment_count = 0;
+	if (p_discard) {
+		return; // Nothing of the segments reached the draw list or the device's state.
+	}
+
+	uint32_t draw_count = draw_list.state.draw_count;
+	for (uint32_t i = 0; i < count; i++) {
+		FellowDrawSegment &segment = *fellow_draw_segments[i];
+		for (UniformSet *uniform_set : segment.deferred_uniform_sets) {
+			_uniform_set_update_shared(uniform_set);
+			_uniform_set_update_clears(uniform_set);
+		}
+		for (VertexArray *vertex_array : segment.deferred_vertex_arrays) {
+			_check_transfer_worker_vertex_array(vertex_array);
+		}
+		for (IndexArray *index_array : segment.deferred_index_arrays) {
+			_check_transfer_worker_index_array(index_array);
+		}
+		for (Buffer *buffer : segment.deferred_buffers) {
+			_check_transfer_worker_buffer(buffer);
+		}
+		draw_graph.fellow_draw_segment_append(segment.graph);
+		draw_count += segment.list.state.draw_count;
+	}
+
+	// The state after the segments: what the last segment to set each part of it set (the pipeline, each uniform set,
+	// the vertex and index arrays), over the state before the fork. Every uniform set is marked for binding again (a
+	// segment may have assigned one without drawing).
+	DrawList::State &state = draw_list.state;
+	for (uint32_t i = 0; i < count; i++) {
+		const DrawList &list = fellow_draw_segments[i]->list;
+		const DrawList::State &seg = list.state;
+		if (seg.pipeline.is_valid()) {
+			state.pipeline = seg.pipeline;
+			state.pipeline_shader = seg.pipeline_shader;
+			state.pipeline_shader_driver_id = seg.pipeline_shader_driver_id;
+			state.pipeline_shader_layout_hash = seg.pipeline_shader_layout_hash;
+			state.pipeline_push_constant_size = seg.pipeline_push_constant_size;
+			state.set_count = seg.set_count;
+			for (uint32_t j = 0; j < MAX_UNIFORM_SETS; j++) {
+				state.sets[j].pipeline_expected_format = seg.sets[j].pipeline_expected_format;
+			}
+		}
+		for (uint32_t j = 0; j < MAX_UNIFORM_SETS; j++) {
+			if (seg.sets[j].uniform_set.is_valid()) {
+				state.sets[j].uniform_set = seg.sets[j].uniform_set;
+				state.sets[j].uniform_set_driver_id = seg.sets[j].uniform_set_driver_id;
+				state.sets[j].uniform_set_format = seg.sets[j].uniform_set_format;
+				if (j > state.set_count) {
+					state.set_count = j; // as draw_list_bind_uniform_set() does
+				}
+			}
+		}
+		if (seg.vertex_array.is_valid()) {
+			state.vertex_array = seg.vertex_array;
+			draw_list.validation.vertex_array_size = list.validation.vertex_array_size;
+		}
+		if (seg.index_array.is_valid()) {
+			state.index_array = seg.index_array;
+			draw_list.validation.index_array_count = list.validation.index_array_count;
+		}
+	}
+	for (uint32_t j = 0; j < MAX_UNIFORM_SETS; j++) {
+		state.sets[j].bound = false;
+	}
+	state.draw_count = draw_count;
+}
+
+bool RenderingDevice::fellow_uniform_set_is_valid_unlocked(RID p_uniform_set) {
+	return uniform_set_owner.get_or_null(p_uniform_set) != nullptr;
 }
 
 /***************************/
@@ -9423,6 +9610,10 @@ void RenderingDevice::finalize() {
 		_flush_and_stall_for_all_frames(false);
 	}
 	_fellow_present_stop();
+	for (FellowDrawSegment *segment : fellow_draw_segments) {
+		memdelete(segment);
+	}
+	fellow_draw_segments.clear();
 
 	// Wait for transfer workers to finish.
 	_submit_transfer_workers();

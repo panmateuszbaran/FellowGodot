@@ -368,6 +368,15 @@ inline bool cpu_parallel_partition() {
 	return cpu_parallel_list_sort() && GLOBAL_GET_CACHED(bool, "rendering/fellow/cpu/parallel_partition");
 }
 
+// Parallel recording (docs/decisions/0018-parallel-recording.md): a large render list's draws are recorded into its draw
+// list by worker threads, each into a segment of the list (its own state tracking and instruction buffer, starting
+// with nothing bound, from a run start: the elements the serial loop visits); the segments are joined in order. Same
+// draws in the same order with the same state (a segment binds again what the previous one left bound). A list that
+// needs a pipeline not compiled yet is recorded again serially (pipeline requests and waits stay the render thread's).
+inline bool cpu_parallel_recording() {
+	return cpu_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/cpu/parallel_recording");
+}
+
 // Scene cull: the same ranges and per-range results as stock's threaded cull, but processed by the render thread with
 // worker tasks helping, instead of a group task the render thread sleeps on until its last thread has run.
 inline bool cpu_parallel_cull() {
@@ -492,6 +501,9 @@ struct Stats {
 	SafeNumeric<uint64_t> frame_submit_jobs; // jobs (submissions, presentations) handed to the present/submit thread
 	SafeNumeric<uint64_t> rd_async_end_usec; // CPU time of the render graph's replay at the async compute splits
 	SafeNumeric<uint64_t> rd_async_submit_usec; // CPU time of the async compute splits' submissions (or hand-overs)
+	SafeNumeric<uint64_t> cpu_record_lists; // render lists recorded by worker threads (parallel recording)
+	SafeNumeric<uint64_t> cpu_record_segments; // their segments
+	SafeNumeric<uint64_t> cpu_record_fallbacks; // lists recorded again serially (a pipeline not compiled yet)
 };
 
 Stats &stats();

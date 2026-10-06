@@ -303,6 +303,10 @@ void RenderForwardClustered::update() {
 
 /// RENDERING ///
 
+// FellowEngine parallel recording (decision 0018): the job of the segment the calling thread records, if any
+// (a RenderForwardClustered::FellowRecordJob).
+static thread_local void *fellow_tl_record = nullptr;
+
 template <RenderForwardClustered::PassMode p_pass_mode, uint32_t p_color_pass_flags>
 void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p_draw_list, RenderingDevice::FramebufferFormatID p_framebuffer_Format, RenderListParameters *p_params, uint32_t p_from_element, uint32_t p_to_element) {
 	RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
@@ -340,7 +344,19 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 
 	bool should_request_redraw = false;
 
+	// FellowEngine parallel recording: set while this thread records a segment of a forked draw list.
+	FellowRecordJob *const fellow_record = static_cast<FellowRecordJob *>(fellow_tl_record);
+	void *fellow_va_surface = nullptr; // the last mesh surface's vertex array lookup (segments: no lock per draw)
+	uint64_t fellow_va_input_mask = 0;
+	bool fellow_va_motion_vectors = false;
+	bool fellow_va_point_size = false;
+	RID fellow_va_rd;
+	RD::VertexFormatID fellow_va_format = 0;
+
 	for (uint32_t i = p_from_element; i < p_to_element; i++) {
+		if (fellow_record != nullptr && fellow_record->abort.load(std::memory_order_relaxed)) {
+			return; // Another segment needs a pipeline that is not compiled yet: the list is recorded again serially.
+		}
 		const GeometryInstanceSurfaceDataCache *surf = p_params->elements[i];
 		const RenderElementInfo &element_info = p_params->element_info[i];
 
@@ -504,6 +520,18 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 			uint64_t input_mask = shader->get_vertex_input_mask(pipeline_key.version, pipeline_key.color_pass_flags, pipeline_key.ubershader);
 			if (surf->owner->mesh_instance.is_valid()) {
 				mesh_storage->mesh_instance_surface_get_vertex_arrays_and_format(surf->owner->mesh_instance, surf->surface_index, input_mask, pipeline_motion_vectors, emulate_point_size, vertex_array_rd, vertex_format);
+			} else if (fellow_record != nullptr) {
+				// Same result as the lookup (the surface's versions do not change while lists are recorded), without its
+				// lock when consecutive elements use the same surface.
+				if (mesh_surface != fellow_va_surface || input_mask != fellow_va_input_mask || pipeline_motion_vectors != fellow_va_motion_vectors || emulate_point_size != fellow_va_point_size) {
+					mesh_storage->mesh_surface_get_vertex_arrays_and_format(mesh_surface, input_mask, pipeline_motion_vectors, emulate_point_size, fellow_va_rd, fellow_va_format);
+					fellow_va_surface = mesh_surface;
+					fellow_va_input_mask = input_mask;
+					fellow_va_motion_vectors = pipeline_motion_vectors;
+					fellow_va_point_size = emulate_point_size;
+				}
+				vertex_array_rd = fellow_va_rd;
+				vertex_format = fellow_va_format;
 			} else {
 				mesh_storage->mesh_surface_get_vertex_arrays_and_format(mesh_surface, input_mask, pipeline_motion_vectors, emulate_point_size, vertex_array_rd, vertex_format);
 			}
@@ -522,7 +550,16 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 
 			if (shader != prev_shader || pipeline_hash != prev_pipeline_hash) {
 				RSE::PipelineSource pipeline_source = pipeline_key.ubershader ? RSE::PIPELINE_SOURCE_DRAW : RSE::PIPELINE_SOURCE_SPECIALIZATION;
-				pipeline_rd = shader->pipeline_hash_map.get_pipeline(pipeline_key, pipeline_hash, pipeline_key.ubershader, pipeline_source);
+				if (fellow_record != nullptr) {
+					// Parallel recording: pipelines already in the map only. Otherwise the list is recorded again serially,
+					// which requests (and for the ubershader, waits for) the compilation as stock does.
+					if (!shader->pipeline_hash_map.fellow_find_pipeline(pipeline_hash, pipeline_rd)) {
+						fellow_record->abort.store(true, std::memory_order_relaxed);
+						return;
+					}
+				} else {
+					pipeline_rd = shader->pipeline_hash_map.get_pipeline(pipeline_key, pipeline_hash, pipeline_key.ubershader, pipeline_source);
+				}
 
 				if (pipeline_rd.is_valid()) {
 					pipeline_valid = true;
@@ -569,7 +606,7 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 
 			if (material_uniform_set != prev_material_uniform_set) {
 				// Update uniform set.
-				if (material_uniform_set.is_valid() && RD::get_singleton()->uniform_set_is_valid(material_uniform_set)) { // Material may not have a uniform set.
+				if (material_uniform_set.is_valid() && (fellow_record != nullptr ? RD::get_singleton()->fellow_uniform_set_is_valid_unlocked(material_uniform_set) : RD::get_singleton()->uniform_set_is_valid(material_uniform_set))) { // Material may not have a uniform set.
 					RD::get_singleton()->draw_list_bind_uniform_set(draw_list, material_uniform_set, MATERIAL_UNIFORM_SET);
 				}
 
@@ -655,11 +692,88 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 
 	// Make the actual redraw request
 	if (should_request_redraw) {
-		RenderingServerDefault::redraw_request();
+		if (fellow_record != nullptr) {
+			fellow_record->redraw.store(true, std::memory_order_relaxed); // requested by the render thread at the join
+		} else {
+			RenderingServerDefault::redraw_request();
+		}
 	}
 }
 
 void RenderForwardClustered::_render_list(RenderingDevice::DrawListID p_draw_list, RenderingDevice::FramebufferFormatID p_framebuffer_Format, RenderListParameters *p_params, uint32_t p_from_element, uint32_t p_to_element) {
+	if (Fellow::cpu_parallel_recording() && _fellow_render_list_parallel(p_draw_list, p_framebuffer_Format, p_params, p_from_element, p_to_element)) {
+		return;
+	}
+	_render_list_serial(p_draw_list, p_framebuffer_Format, p_params, p_from_element, p_to_element);
+}
+
+// Parallel recording: lists from this many elements, at least this many elements per segment.
+static constexpr uint32_t FELLOW_RECORD_MIN_ELEMENTS = 384;
+static constexpr uint32_t FELLOW_RECORD_SEGMENT_ELEMENTS = 128;
+
+bool RenderForwardClustered::_fellow_render_list_parallel(RenderingDevice::DrawListID p_draw_list, RenderingDevice::FramebufferFormatID p_framebuffer_Format, RenderListParameters *p_params, uint32_t p_from_element, uint32_t p_to_element) {
+	if (p_to_element <= p_from_element || p_to_element - p_from_element < FELLOW_RECORD_MIN_ELEMENTS || fellow_parallel == nullptr || p_params->element_info == nullptr) {
+		return false;
+	}
+	const uint32_t count = p_to_element - p_from_element;
+	const uint32_t max_segments = MIN(count / FELLOW_RECORD_SEGMENT_ELEMENTS, MIN((uint32_t)Fellow::cpu_worker_tasks(), (uint32_t)WorkerThreadPool::get_singleton()->get_thread_count()) + 1);
+	if (max_segments < 2) {
+		return false;
+	}
+
+	// Segments start at run starts (the element before ends its run: repeat 1). The serial loop visits every run start
+	// (from inside a run it either draws the rest of the run or steps to the next element), so each segment records
+	// exactly the draws the serial loop records for its elements.
+	FellowRecordJob &job = fellow_record;
+	job.starts.clear();
+	job.starts.push_back(p_from_element);
+	for (uint32_t k = 1; k < max_segments; k++) {
+		uint32_t start = p_from_element + uint32_t(uint64_t(count) * k / max_segments);
+		start = MAX(start, job.starts[job.starts.size() - 1] + 1);
+		while (start < p_to_element && p_params->element_info[start - 1].repeat != 1) {
+			start++;
+		}
+		if (start >= p_to_element) {
+			break;
+		}
+		job.starts.push_back(start);
+	}
+	job.starts.push_back(p_to_element);
+	const uint32_t segments = job.starts.size() - 1;
+	if (segments < 2 || !RD::get_singleton()->fellow_draw_list_fork(p_draw_list, segments)) {
+		return false;
+	}
+	job.draw_list = p_draw_list;
+	job.framebuffer_format = p_framebuffer_Format;
+	job.params = p_params;
+	job.redraw.store(false, std::memory_order_relaxed);
+	job.abort.store(false, std::memory_order_relaxed);
+	_fellow_parallel_for(segments, &RenderForwardClustered::_fellow_record_chunk);
+	const bool abort = job.abort.load(std::memory_order_relaxed);
+	RD::get_singleton()->fellow_draw_list_join(abort);
+	if (abort) {
+		Fellow::stats().cpu_record_fallbacks.increment();
+		return false; // Recorded again serially by the caller.
+	}
+	if (job.redraw.load(std::memory_order_relaxed)) {
+		RenderingServerDefault::redraw_request();
+	}
+	Fellow::stats().cpu_record_lists.increment();
+	Fellow::stats().cpu_record_segments.add(segments);
+	return true;
+}
+
+void RenderForwardClustered::_fellow_record_chunk(void *p_self, uint32_t p_index) {
+	RenderForwardClustered *self = static_cast<RenderForwardClustered *>(p_self);
+	FellowRecordJob &job = self->fellow_record;
+	RD::get_singleton()->fellow_draw_list_segment_begin(p_index);
+	fellow_tl_record = &job;
+	self->_render_list_serial(job.draw_list, job.framebuffer_format, job.params, job.starts[p_index], job.starts[p_index + 1]);
+	fellow_tl_record = nullptr;
+	RD::get_singleton()->fellow_draw_list_segment_end();
+}
+
+void RenderForwardClustered::_render_list_serial(RenderingDevice::DrawListID p_draw_list, RenderingDevice::FramebufferFormatID p_framebuffer_Format, RenderListParameters *p_params, uint32_t p_from_element, uint32_t p_to_element) {
 	//use template for faster performance (pass mode comparisons are inlined)
 
 	switch (p_params->pass_mode) {

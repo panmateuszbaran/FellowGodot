@@ -999,6 +999,26 @@ public:
 	// FellowEngine parallel replay: the frame slot whose fence the render thread just waited for (its secondary command
 	// buffers can be reused).
 	void fellow_frame_begin(uint32_t p_frame_slot);
+
+	// FellowEngine parallel recording (rendering/fellow/cpu/parallel_recording, decision 0018): while a thread has a
+	// segment set, the add_draw_list_* calls it makes write into that segment instead of the open draw list. The render
+	// thread then appends the segments to the draw list in order: the same instruction stream as if one thread had
+	// recorded them one after the other (usages are deduplicated when appended).
+	struct FellowDrawSegment {
+		LocalVector<uint8_t> data;
+		BitField<RDD::PipelineStageBits> stages = {};
+		LocalVector<ResourceTracker *> trackers;
+		LocalVector<ResourceUsage> usages;
+
+		void clear() {
+			data.clear();
+			stages.clear();
+			trackers.clear();
+			usages.clear();
+		}
+	};
+	static void fellow_draw_segment_set(FellowDrawSegment *p_segment); // the calling thread's target (nullptr: the draw list)
+	void fellow_draw_segment_append(const FellowDrawSegment &p_segment);
 	static ResourceTracker *resource_tracker_create();
 	static void resource_tracker_free(ResourceTracker *p_tracker);
 	static FramebufferCache *framebuffer_cache_create();

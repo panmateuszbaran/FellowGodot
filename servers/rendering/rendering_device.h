@@ -1561,9 +1561,23 @@ public:
 	// FellowEngine: draw p_index_count indices of the bound index array starting at p_first_index (mesh clusters).
 	void draw_list_draw_indexed_range(DrawListID p_list, uint32_t p_first_index, uint32_t p_index_count, uint32_t p_instances = 1);
 
+	// FellowEngine parallel recording (rendering/fellow/cpu/parallel_recording, decision 0018). The render thread forks
+	// the open draw list into p_segments segments; each segment is then recorded by one thread, between
+	// fellow_draw_list_segment_begin(i) and fellow_draw_list_segment_end(), with the usual draw_list_* calls (state
+	// tracked per segment, starting with nothing bound); the render thread joins them into the draw list in segment
+	// order (or discards them all). Nothing else is recorded into the draw list between the fork and the join.
+	bool fellow_draw_list_fork(DrawListID p_list, uint32_t p_segments);
+	void fellow_draw_list_segment_begin(uint32_t p_segment);
+	void fellow_draw_list_segment_end();
+	void fellow_draw_list_join(bool p_discard = false);
+	// uniform_set_is_valid() without the device's lock (for the threads recording segments).
+	bool fellow_uniform_set_is_valid_unlocked(RID p_uniform_set);
+
 private:
-	uint32_t fellow_draw_range_first = 0;
-	uint32_t fellow_draw_range_count = 0; // 0 = whole bound index array
+	struct FellowDrawSegment;
+	LocalVector<FellowDrawSegment *> fellow_draw_segments;
+	uint32_t fellow_draw_segment_count = 0;
+	bool fellow_draw_forked = false;
 
 public:
 	void draw_list_set_viewport(DrawListID p_list, const Rect2 &p_rect);

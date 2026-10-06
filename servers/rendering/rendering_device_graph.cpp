@@ -320,11 +320,35 @@ RenderingDeviceGraph::RecordedCommand *RenderingDeviceGraph::_allocate_command(u
 	return new_command;
 }
 
+// FellowEngine parallel recording: the calling thread's segment, if any (see fellow_draw_segment_set()).
+static thread_local RenderingDeviceGraph::FellowDrawSegment *fellow_tl_draw_segment = nullptr;
+#define FELLOW_DRAW_STAGES (fellow_tl_draw_segment != nullptr ? fellow_tl_draw_segment->stages : draw_instruction_list.stages)
+
 RenderingDeviceGraph::DrawListInstruction *RenderingDeviceGraph::_allocate_draw_list_instruction(uint32_t p_instruction_size) {
-	uint32_t draw_list_data_offset = draw_instruction_list.data.size();
+	LocalVector<uint8_t> &data = fellow_tl_draw_segment != nullptr ? fellow_tl_draw_segment->data : draw_instruction_list.data;
+	uint32_t draw_list_data_offset = data.size();
 	draw_list_data_offset = GRAPH_ALIGN(draw_list_data_offset);
-	draw_instruction_list.data.resize(draw_list_data_offset + p_instruction_size);
-	return reinterpret_cast<DrawListInstruction *>(&draw_instruction_list.data[draw_list_data_offset]);
+	data.resize(draw_list_data_offset + p_instruction_size);
+	return reinterpret_cast<DrawListInstruction *>(&data[draw_list_data_offset]);
+}
+
+void RenderingDeviceGraph::fellow_draw_segment_set(FellowDrawSegment *p_segment) {
+	fellow_tl_draw_segment = p_segment;
+}
+
+void RenderingDeviceGraph::fellow_draw_segment_append(const FellowDrawSegment &p_segment) {
+	DEV_ASSERT(fellow_tl_draw_segment == nullptr);
+	if (!p_segment.data.is_empty()) {
+		// Instructions start at aligned offsets relative to the segment's start; the segment starts at an aligned offset
+		// of the draw list's data, as its first instruction would have.
+		const uint32_t offset = GRAPH_ALIGN(draw_instruction_list.data.size());
+		draw_instruction_list.data.resize(offset + p_segment.data.size());
+		memcpy(&draw_instruction_list.data[offset], p_segment.data.ptr(), p_segment.data.size());
+	}
+	draw_instruction_list.stages = draw_instruction_list.stages | p_segment.stages;
+	for (uint32_t i = 0; i < p_segment.trackers.size(); i++) {
+		add_draw_list_usage(p_segment.trackers[i], p_segment.usages[i]);
+	}
 }
 
 RenderingDeviceGraph::ComputeListInstruction *RenderingDeviceGraph::_allocate_compute_list_instruction(uint32_t p_instruction_size) {
@@ -2200,7 +2224,7 @@ void RenderingDeviceGraph::add_draw_list_bind_index_buffer(RDD::BufferID p_buffe
 	instruction->offset = p_offset;
 
 	if (instruction->buffer.id != 0) {
-		draw_instruction_list.stages.set_flag(RDD::PIPELINE_STAGE_VERTEX_INPUT_BIT);
+		FELLOW_DRAW_STAGES.set_flag(RDD::PIPELINE_STAGE_VERTEX_INPUT_BIT);
 	}
 }
 
@@ -2208,7 +2232,7 @@ void RenderingDeviceGraph::add_draw_list_bind_pipeline(RDD::PipelineID p_pipelin
 	DrawListBindPipelineInstruction *instruction = reinterpret_cast<DrawListBindPipelineInstruction *>(_allocate_draw_list_instruction(sizeof(DrawListBindPipelineInstruction)));
 	instruction->type = DrawListInstruction::TYPE_BIND_PIPELINE;
 	instruction->pipeline = p_pipeline;
-	draw_instruction_list.stages = draw_instruction_list.stages | p_pipeline_stage_bits;
+	FELLOW_DRAW_STAGES = FELLOW_DRAW_STAGES | p_pipeline_stage_bits;
 }
 
 void RenderingDeviceGraph::add_draw_list_bind_uniform_set(RDD::ShaderID p_shader, RDD::UniformSetID p_uniform_set, uint32_t set_index) {
@@ -2248,7 +2272,7 @@ void RenderingDeviceGraph::add_draw_list_bind_vertex_buffers(Span<RDD::BufferID>
 	}
 
 	if (instruction->vertex_buffers_count > 0) {
-		draw_instruction_list.stages.set_flag(RDD::PIPELINE_STAGE_VERTEX_INPUT_BIT);
+		FELLOW_DRAW_STAGES.set_flag(RDD::PIPELINE_STAGE_VERTEX_INPUT_BIT);
 	}
 }
 
@@ -2292,7 +2316,7 @@ void RenderingDeviceGraph::add_draw_list_draw_indirect(RDD::BufferID p_buffer, u
 	instruction->offset = p_offset;
 	instruction->draw_count = p_draw_count;
 	instruction->stride = p_stride;
-	draw_instruction_list.stages.set_flag(RDD::PIPELINE_STAGE_DRAW_INDIRECT_BIT);
+	FELLOW_DRAW_STAGES.set_flag(RDD::PIPELINE_STAGE_DRAW_INDIRECT_BIT);
 }
 
 void RenderingDeviceGraph::add_draw_list_draw_indexed_indirect(RDD::BufferID p_buffer, uint32_t p_offset, uint32_t p_draw_count, uint32_t p_stride) {
@@ -2302,7 +2326,7 @@ void RenderingDeviceGraph::add_draw_list_draw_indexed_indirect(RDD::BufferID p_b
 	instruction->offset = p_offset;
 	instruction->draw_count = p_draw_count;
 	instruction->stride = p_stride;
-	draw_instruction_list.stages.set_flag(RDD::PIPELINE_STAGE_DRAW_INDIRECT_BIT);
+	FELLOW_DRAW_STAGES.set_flag(RDD::PIPELINE_STAGE_DRAW_INDIRECT_BIT);
 }
 
 void RenderingDeviceGraph::add_draw_list_execute_commands(RDD::CommandBufferID p_command_buffer) {
@@ -2359,6 +2383,15 @@ void RenderingDeviceGraph::add_draw_list_uniform_set_prepare_for_use(RDD::Shader
 }
 
 void RenderingDeviceGraph::add_draw_list_usage(ResourceTracker *p_tracker, ResourceUsage p_usage) {
+	if (fellow_tl_draw_segment != nullptr) {
+		// Parallel recording: the usage is added to the draw list (and the tracker touched) when the segment is appended.
+		FellowDrawSegment *segment = fellow_tl_draw_segment;
+		if (segment->trackers.is_empty() || segment->trackers[segment->trackers.size() - 1] != p_tracker) {
+			segment->trackers.push_back(p_tracker);
+			segment->usages.push_back(p_usage);
+		}
+		return;
+	}
 	p_tracker->reset_if_outdated(tracking_frame);
 
 	if (p_tracker->draw_list_index != draw_instruction_list.index) {
