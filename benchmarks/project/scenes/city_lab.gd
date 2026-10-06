@@ -19,6 +19,7 @@ var cart_speed: PackedFloat32Array = PackedFloat32Array()
 var cart_axis: PackedByteArray = PackedByteArray()
 var _meshes := {}
 var _mats: Array[StandardMaterial3D] = []
+var _unique: Array[StandardMaterial3D] = [] # --city_materials=N: building walls get one of N materials (draw-heavy variant)
 var _count := 0
 
 
@@ -78,6 +79,12 @@ func _make_resources() -> void:
 	_mats.append(_mat(Color(0.25, 0.45, 0.2), 0.8)) # 9: foliage
 	_mats.append(_mat(Color(0.4, 0.3, 0.2), 0.9)) # 10: wood
 	_mats.append(_mat(Color(0.5, 0.15, 0.12), 0.7)) # 11: roof
+	# Draw-heavy variant (--city_materials=N, N > 0): the walls of each lot use one of N materials, so the lists hold
+	# thousands of different materials and few elements can be drawn instanced (draw submission dominates instead of
+	# per-object work). Same objects and transforms as the default city.
+	var unique := int(args.get("city_materials", "0"))
+	for i in unique:
+		_unique.append(_mat(Color.from_hsv(fposmod(0.618034 * i, 1.0), 0.2 + 0.3 * float(i % 5) / 4.0, 0.45 + 0.4 * float(i % 7) / 6.0), 0.5 + 0.4 * float(i % 11) / 10.0))
 
 
 func _add(mesh_key: String, mat: Material, pos: Vector3, size: Vector3, rot_y := 0.0) -> MeshInstance3D:
@@ -108,12 +115,17 @@ func _build_city() -> void:
 			var d := LOT - STREET - rng.randf_range(0.0, 1.5)
 			var h := rng.randf_range(4.0, 14.0) * (1.6 if (ix + iz) % 9 == 0 else 1.0)
 			var m := _mats[rng.randi_range(0, 7)]
+			if not _unique.is_empty():
+				m = _unique[(ix * LOTS + iz) % _unique.size()]
 			_add("box", m, Vector3(cx, h * 0.5, cz), Vector3(w, h, d))
 			var parts := rng.randi_range(1, 3)
 			if parts >= 1:
 				_add("prism", _mats[11], Vector3(cx, h + 1.2, cz), Vector3(w, 2.4, d), 90.0 if rng.randf() < 0.5 else 0.0)
 			if parts >= 2:
-				_add("box", _mats[rng.randi_range(0, 7)], Vector3(cx + w * 0.25, h * 0.3, cz - d * 0.5 - 0.6), Vector3(w * 0.4, h * 0.6, 1.2))
+				var m2 := _mats[rng.randi_range(0, 7)]
+				if not _unique.is_empty():
+					m2 = _unique[(ix * LOTS + iz + 1) % _unique.size()]
+				_add("box", m2, Vector3(cx + w * 0.25, h * 0.3, cz - d * 0.5 - 0.6), Vector3(w * 0.4, h * 0.6, 1.2))
 			if parts >= 3:
 				_add("cyl", _mats[8], Vector3(cx - w * 0.3, h + 1.6, cz + d * 0.2), Vector3(0.6, 3.2, 0.6))
 			# Street furniture on the lot's corner: a lamp post (pole + head), a tree (trunk + crown) or crates.
