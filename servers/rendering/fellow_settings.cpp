@@ -105,6 +105,8 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/frame/submit_thread", true);
 	GLOBAL_DEF("rendering/fellow/frame/parallel_replay", true);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/frame/replay_max_segments", PROPERTY_HINT_RANGE, "2,64,1"), 12);
+	GLOBAL_DEF("rendering/fellow/frame/replay_frame_plan", false);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/frame/replay_plan_min_draws", PROPERTY_HINT_RANGE, "1,4096,1"), 16);
 	GLOBAL_DEF_RST("rendering/fellow/frame/separate_present_queue", false);
 	GLOBAL_DEF_RST("rendering/fellow/frame/async_compute", false);
 	GLOBAL_DEF_RST(PropertyInfo(Variant::INT, "rendering/fellow/frame/async_compute_family", PROPERTY_HINT_ENUM, "Dedicated Compute Family,Main Family,Main Queue (Split Only)"), 0);
@@ -206,5 +208,8 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["cpu_record_segments"] = s.cpu_record_segments.get();
 	d["cpu_record_fallbacks"] = s.cpu_record_fallbacks.get();
 	d["frame_replay_recorded_lists"] = s.frame_replay_recorded_lists.get();
+	d["frame_plan_lists"] = s.frame_plan_lists.get();
+	d["frame_plan_segments"] = s.frame_plan_segments.get();
+	d["frame_plan_wait_nsec"] = s.frame_plan_wait_nsec.get();
 	return d;
 }

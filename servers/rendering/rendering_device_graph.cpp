@@ -1252,8 +1252,12 @@ void RenderingDeviceGraph::_run_render_commands(int32_t p_level, const RecordedC
 				const uint64_t fellow_draw_from = _fellow_nsec();
 				Fellow::stats().rd_graph_draw_lists.increment();
 				Fellow::stats().rd_graph_draw_bytes.add(draw_list_command->instruction_data_size);
-				if (framebuffer && render_pass) {
-					if (!(draw_list_command->command_buffer_type == RDD::COMMAND_BUFFER_TYPE_PRIMARY && Fellow::frame_parallel_replay() && fellow_replay_parallel != nullptr && _fellow_run_draw_list_parallel(r_command_buffer, draw_list_command, render_pass, framebuffer, clear_values))) {
+				const int32_t fellow_plan_list = fellow_plan_active ? fellow_plan_of_command[command_index] : -1;
+				if (framebuffer && render_pass && fellow_plan_list >= 0) {
+					_fellow_plan_execute(r_command_buffer, draw_list_command, uint32_t(fellow_plan_list), render_pass, framebuffer, clear_values);
+				} else if (framebuffer && render_pass) {
+					// While a frame plan runs, the lists it left out are replayed inline (its segments are in use).
+					if (!(!fellow_plan_active && draw_list_command->command_buffer_type == RDD::COMMAND_BUFFER_TYPE_PRIMARY && Fellow::frame_parallel_replay() && fellow_replay_parallel != nullptr && _fellow_run_draw_list_parallel(r_command_buffer, draw_list_command, render_pass, framebuffer, clear_values))) {
 						driver->command_begin_render_pass(r_command_buffer, render_pass, framebuffer, draw_list_command->command_buffer_type, draw_list_command->region, clear_values);
 						_run_draw_list_command(r_command_buffer, draw_list_command->instruction_data(), draw_list_command->instruction_data_size);
 						driver->command_end_render_pass(r_command_buffer);
@@ -2865,6 +2869,7 @@ void RenderingDeviceGraph::end(bool p_reorder_commands, bool p_full_barriers, RD
 
 			commands_sorted.sort();
 			Fellow::stats().rd_graph_sort_nsec.add(_fellow_nsec() - fellow_end_from);
+			_fellow_plan_replay(commands_sorted.ptr(), command_count);
 
 #if PRINT_RENDER_GRAPH
 			print_line("AFTER SORT");
@@ -2900,6 +2905,7 @@ void RenderingDeviceGraph::end(bool p_reorder_commands, bool p_full_barriers, RD
 			print_line("COMMANDS", command_count, "LEVELS", current_level + 1);
 #endif
 		} else {
+			_fellow_plan_replay(commands_sorted.ptr(), command_count);
 			for (uint32_t i = 0; i < command_count; i++) {
 				_group_barriers_for_render_commands(r_command_buffer, &commands_sorted[i], 1, p_full_barriers);
 				_run_render_commands(i, &commands_sorted[i], 1, r_command_buffer, r_command_buffer_pool, current_label_index, current_label_level);
@@ -2907,6 +2913,12 @@ void RenderingDeviceGraph::end(bool p_reorder_commands, bool p_full_barriers, RD
 		}
 
 		_run_label_command_change(r_command_buffer, -1, -1, false, false, nullptr, 0, current_label_index, current_label_level);
+
+		if (fellow_plan_active) {
+			// Every planned list has been executed, so its segments are done; this closes the loop.
+			fellow_replay_parallel->finish();
+			fellow_plan_active = false;
+		}
 
 #if PRINT_DRAW_LIST_STATS
 		print_line(vformat("Draw list %d bytes", draw_list_total_size));
@@ -3027,9 +3039,8 @@ bool RenderingDeviceGraph::_fellow_replay_recorded_segments(const RecordedDrawLi
 
 	// Consecutive recorded segments are replayed together (at most frame/replay_max_segments secondary command buffers):
 	// a run of them is as self-contained as its first.
+	// The segments are appended to fellow_replay_segments.
 	const uint32_t groups = MIN(count, (uint32_t)CLAMP(Fellow::frame_replay_max_segments(), 2, 64));
-	fellow_replay_segments.clear();
-	fellow_replay_state.clear();
 	for (uint32_t g = 0; g < groups; g++) {
 		const uint32_t k = uint32_t(uint64_t(count) * g / groups);
 		const uint32_t k_next = uint32_t(uint64_t(count) * (g + 1) / groups);
@@ -3050,10 +3061,14 @@ bool RenderingDeviceGraph::_fellow_replay_recorded_segments(const RecordedDrawLi
 	return true;
 }
 
-bool RenderingDeviceGraph::_fellow_run_draw_list_parallel(RDD::CommandBufferID p_command_buffer, const RecordedDrawListCommand *p_command, RDD::RenderPassID p_render_pass, RDD::FramebufferID p_framebuffer, VectorView<RDD::RenderPassClearValue> p_clear_values) {
+uint32_t RenderingDeviceGraph::_fellow_split_draw_list(const RecordedDrawListCommand *p_command, uint32_t p_whole_min_draws) {
+	// Appends the segments p_command is replayed in to fellow_replay_segments (and the state instructions they replay
+	// first to fellow_replay_state). Returns how many: 0 if the list is replayed inline.
+	const uint32_t segments_from = fellow_replay_segments.size();
+	const uint32_t state_from = fellow_replay_state.size();
 	if (p_command->fellow_starts_count > 0 && _fellow_replay_recorded_segments(p_command)) {
 		Fellow::stats().frame_replay_recorded_lists.increment();
-		return _fellow_replay_run(p_command_buffer, p_command, p_render_pass, p_framebuffer, p_clear_values);
+		return fellow_replay_segments.size() - segments_from;
 	}
 	const uint8_t *data = p_command->instruction_data();
 	const uint32_t size = p_command->instruction_data_size;
@@ -3063,23 +3078,30 @@ bool RenderingDeviceGraph::_fellow_run_draw_list_parallel(RDD::CommandBufferID p
 	for (uint32_t cursor = 0; cursor < size;) {
 		const DrawListInstruction::Type type = reinterpret_cast<const DrawListInstruction *>(data + cursor)->type;
 		if (type == DrawListInstruction::TYPE_EXECUTE_COMMANDS || type == DrawListInstruction::TYPE_NEXT_SUBPASS) {
-			return false;
+			return 0;
 		}
 		if (type == DrawListInstruction::TYPE_DRAW || type == DrawListInstruction::TYPE_DRAW_INDEXED || type == DrawListInstruction::TYPE_DRAW_INDIRECT || type == DrawListInstruction::TYPE_DRAW_INDEXED_INDIRECT) {
 			draws++;
 		}
 		const uint32_t instruction_size = _fellow_draw_instruction_size(data + cursor);
 		if (instruction_size == 0) {
-			return false; // unknown instruction
+			return 0; // unknown instruction
 		}
 		cursor = GRAPH_ALIGN(cursor + instruction_size);
 	}
-	if (draws < FELLOW_REPLAY_MIN_DRAWS) {
-		return false;
-	}
-	const uint32_t segment_count = MIN((uint32_t)CLAMP(Fellow::frame_replay_max_segments(), 2, 64), draws / FELLOW_REPLAY_DRAWS_PER_SEGMENT);
+	const uint32_t segment_count = draws < FELLOW_REPLAY_MIN_DRAWS ? 1 : MIN((uint32_t)CLAMP(Fellow::frame_replay_max_segments(), 2, 64), draws / FELLOW_REPLAY_DRAWS_PER_SEGMENT);
 	if (segment_count < 2) {
-		return false;
+		if (p_whole_min_draws == 0 || draws < p_whole_min_draws) {
+			return 0;
+		}
+		// The whole list in one secondary command buffer: it sets all of its state itself.
+		FellowReplaySegment segment;
+		segment.from = 0;
+		segment.to = size;
+		segment.state_first = state_from;
+		segment.state_count = 0;
+		fellow_replay_segments.push_back(segment);
+		return 1;
 	}
 	const uint32_t draws_per_segment = (draws + segment_count - 1) / segment_count;
 
@@ -3093,9 +3115,8 @@ bool RenderingDeviceGraph::_fellow_run_draw_list_parallel(RDD::CommandBufferID p
 	for (uint32_t &s : set_owner) {
 		s = UINT32_MAX;
 	}
-	fellow_replay_segments.clear();
-	fellow_replay_state.clear();
 	FellowReplaySegment segment;
+	segment.state_first = state_from;
 	uint32_t segment_draws = 0;
 	for (uint32_t cursor = 0; cursor < size;) {
 		const DrawListInstruction *instruction = reinterpret_cast<const DrawListInstruction *>(data + cursor);
@@ -3105,7 +3126,7 @@ bool RenderingDeviceGraph::_fellow_run_draw_list_parallel(RDD::CommandBufferID p
 			segment = FellowReplaySegment();
 			segment.from = cursor;
 			segment.state_first = fellow_replay_state.size();
-			const uint32_t state_from = fellow_replay_state.size();
+			const uint32_t segment_state_from = fellow_replay_state.size();
 			const DrawListInstruction::Type kinds[] = { DrawListInstruction::TYPE_BIND_PIPELINE, DrawListInstruction::TYPE_BIND_VERTEX_BUFFERS, DrawListInstruction::TYPE_BIND_INDEX_BUFFER, DrawListInstruction::TYPE_SET_VIEWPORT, DrawListInstruction::TYPE_SET_SCISSOR, DrawListInstruction::TYPE_SET_BLEND_CONSTANTS, DrawListInstruction::TYPE_SET_LINE_WIDTH, DrawListInstruction::TYPE_SET_PUSH_CONSTANT };
 			for (const DrawListInstruction::Type kind : kinds) {
 				if (last[kind] != UINT32_MAX) {
@@ -3115,7 +3136,7 @@ bool RenderingDeviceGraph::_fellow_run_draw_list_parallel(RDD::CommandBufferID p
 			for (uint32_t s = 0; s < FELLOW_REPLAY_MAX_SETS; s++) {
 				if (set_owner[s] != UINT32_MAX) {
 					bool seen = false;
-					for (uint32_t k = state_from; k < fellow_replay_state.size(); k++) {
+					for (uint32_t k = segment_state_from; k < fellow_replay_state.size(); k++) {
 						seen = seen || fellow_replay_state[k] == set_owner[s];
 					}
 					if (!seen) {
@@ -3123,16 +3144,18 @@ bool RenderingDeviceGraph::_fellow_run_draw_list_parallel(RDD::CommandBufferID p
 					}
 				}
 			}
-			segment.state_count = fellow_replay_state.size() - state_from;
+			segment.state_count = fellow_replay_state.size() - segment_state_from;
 			SortArray<uint32_t> sorter; // this segment's state instructions in their original order
-			sorter.sort(fellow_replay_state.ptr() + state_from, segment.state_count);
+			sorter.sort(fellow_replay_state.ptr() + segment_state_from, segment.state_count);
 			segment_draws = 0;
 		}
 		switch (instruction->type) {
 			case DrawListInstruction::TYPE_BIND_UNIFORM_SETS: {
 				const DrawListBindUniformSetsInstruction *sets = reinterpret_cast<const DrawListBindUniformSetsInstruction *>(instruction);
 				if (sets->first_set_index + sets->set_count > FELLOW_REPLAY_MAX_SETS) {
-					return false;
+					fellow_replay_segments.resize(segments_from);
+					fellow_replay_state.resize(state_from);
+					return 0;
 				}
 				for (uint32_t s = 0; s < sets->set_count; s++) {
 					set_owner[sets->first_set_index + s] = cursor;
@@ -3152,35 +3175,54 @@ bool RenderingDeviceGraph::_fellow_run_draw_list_parallel(RDD::CommandBufferID p
 	}
 	segment.to = size;
 	fellow_replay_segments.push_back(segment);
-	return _fellow_replay_run(p_command_buffer, p_command, p_render_pass, p_framebuffer, p_clear_values);
+	return fellow_replay_segments.size() - segments_from;
 }
 
-bool RenderingDeviceGraph::_fellow_replay_run(RDD::CommandBufferID p_command_buffer, const RecordedDrawListCommand *p_command, RDD::RenderPassID p_render_pass, RDD::FramebufferID p_framebuffer, VectorView<RDD::RenderPassClearValue> p_clear_values) {
-	const uint8_t *data = p_command->instruction_data();
-
-	// Secondary command buffers of this frame slot (one pool each: recorded on different threads).
+bool RenderingDeviceGraph::_fellow_assign_secondaries(uint32_t p_first_segment) {
+	// Secondary command buffers of this frame slot (one pool each: recorded on different threads) for the segments from
+	// p_first_segment on.
 	if (fellow_replay_slot >= fellow_replay_slots.size()) {
 		return false;
 	}
 	FellowReplaySlot &slot = fellow_replay_slots[fellow_replay_slot];
-	fellow_replay_buffers.resize(fellow_replay_segments.size());
-	for (uint32_t i = 0; i < fellow_replay_segments.size(); i++) {
+	for (uint32_t i = p_first_segment; i < fellow_replay_segments.size(); i++) {
 		if (slot.used == slot.secondaries.size()) {
 			FellowReplaySecondary secondary;
 			secondary.pool = driver->command_pool_create(fellow_replay_family, RDD::COMMAND_BUFFER_TYPE_SECONDARY);
 			secondary.buffer = driver->command_buffer_create(secondary.pool);
 			slot.secondaries.push_back(secondary);
 		}
+		fellow_replay_segments[i].pool = slot.secondaries[slot.used].pool;
 		fellow_replay_segments[i].buffer = slot.secondaries[slot.used].buffer;
-		fellow_replay_buffers[i] = slot.secondaries[slot.used].buffer;
 		slot.used++;
 	}
-	fellow_replay_first_secondary = slot.used - fellow_replay_segments.size();
+	return true;
+}
+
+bool RenderingDeviceGraph::_fellow_run_draw_list_parallel(RDD::CommandBufferID p_command_buffer, const RecordedDrawListCommand *p_command, RDD::RenderPassID p_render_pass, RDD::FramebufferID p_framebuffer, VectorView<RDD::RenderPassClearValue> p_clear_values) {
+	fellow_replay_segments.clear();
+	fellow_replay_state.clear();
+	if (_fellow_split_draw_list(p_command, 0) < 2) {
+		return false;
+	}
+	return _fellow_replay_run(p_command_buffer, p_command, p_render_pass, p_framebuffer, p_clear_values);
+}
+
+bool RenderingDeviceGraph::_fellow_replay_run(RDD::CommandBufferID p_command_buffer, const RecordedDrawListCommand *p_command, RDD::RenderPassID p_render_pass, RDD::FramebufferID p_framebuffer, VectorView<RDD::RenderPassClearValue> p_clear_values) {
+	if (!_fellow_assign_secondaries(0)) {
+		return false;
+	}
+	fellow_replay_buffers.resize(fellow_replay_segments.size());
+	for (uint32_t i = 0; i < fellow_replay_segments.size(); i++) {
+		FellowReplaySegment &segment = fellow_replay_segments[i];
+		segment.data = p_command->instruction_data();
+		segment.render_pass = p_render_pass;
+		segment.framebuffer = p_framebuffer;
+		segment.plan_list = UINT32_MAX;
+		fellow_replay_buffers[i] = segment.buffer;
+	}
 
 	driver->command_begin_render_pass(p_command_buffer, p_render_pass, p_framebuffer, RDD::COMMAND_BUFFER_TYPE_SECONDARY, p_command->region, p_clear_values);
-	fellow_replay_data = data;
-	fellow_replay_render_pass = p_render_pass;
-	fellow_replay_framebuffer = p_framebuffer;
 	fellow_replay_parallel->set_linger_usec((uint64_t)Fellow::cpu_hot_workers_usec());
 	fellow_replay_parallel->run(fellow_replay_segments.size(), &RenderingDeviceGraph::_fellow_replay_segment, this, (uint32_t)Fellow::cpu_worker_tasks());
 	driver->command_buffer_execute_secondary(p_command_buffer, fellow_replay_buffers);
@@ -3193,16 +3235,107 @@ bool RenderingDeviceGraph::_fellow_replay_run(RDD::CommandBufferID p_command_buf
 void RenderingDeviceGraph::_fellow_replay_segment(void *p_self, uint32_t p_index) {
 	RenderingDeviceGraph *self = static_cast<RenderingDeviceGraph *>(p_self);
 	const FellowReplaySegment &segment = self->fellow_replay_segments[p_index];
-	const FellowReplaySecondary &secondary = self->fellow_replay_slots[self->fellow_replay_slot].secondaries[self->fellow_replay_first_secondary + p_index];
 	// The frame slot's fence has been waited for: its buffers are no longer in use.
-	self->driver->command_pool_reset(secondary.pool);
-	self->driver->command_buffer_begin_secondary(segment.buffer, self->fellow_replay_render_pass, 0, self->fellow_replay_framebuffer);
+	self->driver->command_pool_reset(segment.pool);
+	self->driver->command_buffer_begin_secondary(segment.buffer, segment.render_pass, 0, segment.framebuffer);
 	for (uint32_t k = 0; k < segment.state_count; k++) {
 		const uint32_t offset = self->fellow_replay_state[segment.state_first + k];
-		self->_run_draw_list_command(segment.buffer, self->fellow_replay_data + offset, _fellow_draw_instruction_size(self->fellow_replay_data + offset));
+		self->_run_draw_list_command(segment.buffer, segment.data + offset, _fellow_draw_instruction_size(segment.data + offset));
 	}
-	self->_run_draw_list_command(segment.buffer, self->fellow_replay_data + segment.from, segment.to - segment.from);
+	self->_run_draw_list_command(segment.buffer, segment.data + segment.from, segment.to - segment.from);
 	self->driver->command_buffer_end(segment.buffer);
+	if (segment.plan_list != UINT32_MAX) {
+		self->fellow_plan_done[segment.plan_list].increment(); // the render thread may execute the list's buffers once all are done
+	}
+}
+
+void RenderingDeviceGraph::_fellow_plan_replay(const RecordedCommandSort *p_sorted_commands, uint32_t p_sorted_commands_count) {
+	// Called by end() once the commands are sorted, before the primary command buffer is recorded.
+	fellow_plan_active = false;
+	if (fellow_replay_parallel == nullptr || !Fellow::frame_parallel_replay() || !Fellow::frame_replay_frame_plan() || driver_workarounds.avoid_compute_after_draw || fellow_replay_slot >= fellow_replay_slots.size()) {
+		return;
+	}
+	fellow_replay_segments.clear();
+	fellow_replay_state.clear();
+	fellow_plan_lists.clear();
+	fellow_plan_of_command.resize(command_count);
+	for (int32_t &plan : fellow_plan_of_command) {
+		plan = -1;
+	}
+	const uint32_t whole_min_draws = (uint32_t)MAX(1, Fellow::frame_replay_plan_min_draws());
+	for (uint32_t i = 0; i < p_sorted_commands_count && fellow_plan_lists.size() < FELLOW_PLAN_MAX_LISTS; i++) {
+		const uint32_t command_index = p_sorted_commands[i].index;
+		const RecordedCommand *command = reinterpret_cast<const RecordedCommand *>(&command_data[command_data_offsets[command_index]]);
+		if (command->type != RecordedCommand::TYPE_DRAW_LIST) {
+			continue;
+		}
+		const RecordedDrawListCommand *draw_list_command = reinterpret_cast<const RecordedDrawListCommand *>(command);
+		if (draw_list_command->command_buffer_type != RDD::COMMAND_BUFFER_TYPE_PRIMARY || draw_list_command->split_cmd_buffer) {
+			continue;
+		}
+		RDD::RenderPassID render_pass;
+		RDD::FramebufferID framebuffer;
+		if (draw_list_command->framebuffer_cache != nullptr) {
+			_get_draw_list_render_pass_and_framebuffer(draw_list_command, render_pass, framebuffer);
+		} else {
+			render_pass = draw_list_command->render_pass;
+			framebuffer = draw_list_command->framebuffer;
+		}
+		if (!render_pass || !framebuffer) {
+			continue;
+		}
+		const uint32_t first = fellow_replay_segments.size();
+		const uint32_t count = _fellow_split_draw_list(draw_list_command, whole_min_draws);
+		if (count == 0) {
+			continue;
+		}
+		const uint32_t plan_list = fellow_plan_lists.size();
+		for (uint32_t k = first; k < first + count; k++) {
+			FellowReplaySegment &segment = fellow_replay_segments[k];
+			segment.data = draw_list_command->instruction_data();
+			segment.render_pass = render_pass;
+			segment.framebuffer = framebuffer;
+			segment.plan_list = plan_list;
+		}
+		FellowPlanList list;
+		list.segment_first = first;
+		list.segment_count = count;
+		fellow_plan_lists.push_back(list);
+		fellow_plan_done[plan_list].set(0);
+		fellow_plan_of_command[command_index] = int32_t(plan_list);
+	}
+	if (fellow_plan_lists.is_empty() || !_fellow_assign_secondaries(0)) {
+		fellow_replay_segments.clear();
+		fellow_plan_lists.clear();
+		return;
+	}
+	// The segments are claimed in the order the lists are recorded into the primary command buffer.
+	fellow_replay_parallel->set_linger_usec((uint64_t)Fellow::cpu_hot_workers_usec());
+	fellow_replay_parallel->begin_async(fellow_replay_segments.size(), &RenderingDeviceGraph::_fellow_replay_segment, this, (uint32_t)Fellow::cpu_worker_tasks());
+	fellow_plan_active = true;
+	Fellow::stats().frame_plan_lists.add(fellow_plan_lists.size());
+	Fellow::stats().frame_plan_segments.add(fellow_replay_segments.size());
+}
+
+void RenderingDeviceGraph::_fellow_plan_execute(RDD::CommandBufferID p_command_buffer, const RecordedDrawListCommand *p_command, uint32_t p_plan_list, RDD::RenderPassID p_render_pass, RDD::FramebufferID p_framebuffer, VectorView<RDD::RenderPassClearValue> p_clear_values) {
+	const FellowPlanList &list = fellow_plan_lists[p_plan_list];
+	driver->command_begin_render_pass(p_command_buffer, p_render_pass, p_framebuffer, RDD::COMMAND_BUFFER_TYPE_SECONDARY, p_command->region, p_clear_values);
+	const uint64_t wait_from = _fellow_nsec();
+	while (fellow_plan_done[p_plan_list].get() < list.segment_count) {
+		// Segments nobody has taken yet (this list's or a later one's) are run here; otherwise wait for the workers.
+		if (!fellow_replay_parallel->help()) {
+			fellow_cpu_relax();
+		}
+	}
+	Fellow::stats().frame_plan_wait_nsec.add(_fellow_nsec() - wait_from);
+	fellow_replay_buffers.resize(list.segment_count);
+	for (uint32_t k = 0; k < list.segment_count; k++) {
+		fellow_replay_buffers[k] = fellow_replay_segments[list.segment_first + k].buffer;
+	}
+	driver->command_buffer_execute_secondary(p_command_buffer, fellow_replay_buffers);
+	driver->command_end_render_pass(p_command_buffer);
+	Fellow::stats().frame_replay_lists.increment();
+	Fellow::stats().frame_replay_segments.add(list.segment_count);
 }
 
 #if PRINT_RESOURCE_TRACKER_TOTAL

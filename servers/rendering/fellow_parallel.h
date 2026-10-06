@@ -87,6 +87,15 @@ public:
 	void run(uint32_t p_count, Func p_func, void *p_userdata, uint32_t p_max_helpers);
 	// Hot workers: posts the missing helpers now, so that they are awake when the next loop starts.
 	void prewarm(uint32_t p_helpers);
+
+	// Asynchronous loop: begin_async() publishes the chunks and returns at once; helpers take them as in run(). The
+	// caller goes on with other work, runs chunks itself with help() while it waits for some of them (through
+	// completion flags of its own), and calls finish() (runs the chunks left and waits for all) before any other loop of
+	// this instance. A run() while an asynchronous loop is open runs its chunks on the caller alone.
+	void begin_async(uint32_t p_count, Func p_func, void *p_userdata, uint32_t p_max_helpers);
+	bool help(); // runs one chunk nobody has claimed yet; false when none is left
+	void finish();
+	bool is_async_open() const { return async_open; }
 	void release();
 
 	~FellowParallelFor() { release(); }
@@ -136,6 +145,15 @@ private:
 	std::atomic<bool> hot_exit{ false };
 	uint64_t hot_epoch = 0;
 	LocalVector<WorkerThreadPool::GroupID> hot_groups;
+
+	// Asynchronous loop (caller's side).
+	bool async_open = false;
+	bool async_hot = false;
+	uint32_t async_count = 0;
+	Func async_func = nullptr;
+	void *async_userdata = nullptr;
+	uint64_t async_base = 0; // hot: the loop's epoch
+	Loop *async_loop = nullptr; // linger 0
 
 	void _run_hot(uint32_t p_count, Func p_func, void *p_userdata, uint32_t p_max_helpers);
 	void _hot_post(uint32_t p_helpers);

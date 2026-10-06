@@ -913,8 +913,28 @@ private:
 		uint32_t to = 0;
 		uint32_t state_first = 0; // in fellow_replay_state: offsets of the instructions that set the state at 'from'
 		uint32_t state_count = 0;
+		const uint8_t *data = nullptr; // the draw list's instructions
+		RDD::RenderPassID render_pass;
+		RDD::FramebufferID framebuffer;
+		RDD::CommandPoolID pool;
 		RDD::CommandBufferID buffer;
+		uint32_t plan_list = UINT32_MAX; // frame plan: the list it belongs to
 	};
+	// Frame plan (frame/replay_frame_plan): the frame's draw lists replayed by the workers while the render thread
+	// records the primary command buffer.
+	struct FellowPlanList {
+		uint32_t segment_first = 0;
+		uint32_t segment_count = 0;
+	};
+	static constexpr uint32_t FELLOW_PLAN_MAX_LISTS = 256;
+	LocalVector<FellowPlanList> fellow_plan_lists;
+	LocalVector<int32_t> fellow_plan_of_command; // per command index: its plan list, or -1
+	SafeNumeric<uint32_t> fellow_plan_done[FELLOW_PLAN_MAX_LISTS]; // per plan list: segments finished
+	bool fellow_plan_active = false;
+	void _fellow_plan_replay(const RecordedCommandSort *p_sorted_commands, uint32_t p_sorted_commands_count);
+	void _fellow_plan_execute(RDD::CommandBufferID p_command_buffer, const RecordedDrawListCommand *p_command, uint32_t p_plan_list, RDD::RenderPassID p_render_pass, RDD::FramebufferID p_framebuffer, VectorView<RDD::RenderPassClearValue> p_clear_values);
+	uint32_t _fellow_split_draw_list(const RecordedDrawListCommand *p_command, uint32_t p_whole_min_draws);
+	bool _fellow_assign_secondaries(uint32_t p_first_segment);
 	LocalVector<FellowReplaySlot> fellow_replay_slots;
 	uint32_t fellow_replay_slot = 0;
 	RDD::CommandQueueFamilyID fellow_replay_family;
@@ -924,10 +944,6 @@ private:
 	bool _fellow_replay_run(RDD::CommandBufferID p_command_buffer, const RecordedDrawListCommand *p_command, RDD::RenderPassID p_render_pass, RDD::FramebufferID p_framebuffer, VectorView<RDD::RenderPassClearValue> p_clear_values);
 	LocalVector<uint32_t> fellow_replay_state;
 	LocalVector<RDD::CommandBufferID> fellow_replay_buffers;
-	uint32_t fellow_replay_first_secondary = 0;
-	const uint8_t *fellow_replay_data = nullptr;
-	RDD::RenderPassID fellow_replay_render_pass;
-	RDD::FramebufferID fellow_replay_framebuffer;
 	class FellowParallelFor *fellow_replay_parallel = nullptr;
 	static uint32_t _fellow_draw_instruction_size(const uint8_t *p_instruction);
 	bool _fellow_run_draw_list_parallel(RDD::CommandBufferID p_command_buffer, const RecordedDrawListCommand *p_command, RDD::RenderPassID p_render_pass, RDD::FramebufferID p_framebuffer, VectorView<RDD::RenderPassClearValue> p_clear_values);

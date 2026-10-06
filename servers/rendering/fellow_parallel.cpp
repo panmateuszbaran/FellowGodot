@@ -59,6 +59,13 @@ void FellowParallelFor::run(uint32_t p_count, Func p_func, void *p_userdata, uin
 	if (p_count == 0) {
 		return;
 	}
+	if (async_open) {
+		DEV_ASSERT(false && "FellowParallelFor::run() while an asynchronous loop is open.");
+		for (uint32_t i = 0; i < p_count; i++) {
+			p_func(p_userdata, i);
+		}
+		return;
+	}
 	if (linger_usec > 0) {
 		_run_hot(p_count, p_func, p_userdata, p_max_helpers);
 		return;
@@ -133,6 +140,106 @@ void FellowParallelFor::_run_hot(uint32_t p_count, Func p_func, void *p_userdata
 	}
 	hot_state.store(base | HOT_CLOSED, std::memory_order_release);
 	hot_keepalive.store(OS::get_singleton()->get_ticks_usec(), std::memory_order_relaxed);
+}
+
+void FellowParallelFor::begin_async(uint32_t p_count, Func p_func, void *p_userdata, uint32_t p_max_helpers) {
+	ERR_FAIL_COND(async_open);
+	async_open = true;
+	async_count = p_count;
+	async_func = p_func;
+	async_userdata = p_userdata;
+	if (p_count == 0) {
+		async_hot = false;
+		async_loop = nullptr;
+		return;
+	}
+	Fellow::stats().cpu_loops.increment();
+	Fellow::stats().cpu_loop_chunks.add(p_count);
+	// The caller has other work to do: every chunk may go to a helper.
+	const uint32_t helpers = are_helpers_enabled() ? MIN(p_count, MIN(p_max_helpers, (uint32_t)WorkerThreadPool::get_singleton()->get_thread_count())) : 0;
+	if (linger_usec > 0) {
+		async_hot = true;
+		hot_linger.store(linger_usec, std::memory_order_relaxed);
+		hot_keepalive.store(OS::get_singleton()->get_ticks_usec(), std::memory_order_relaxed);
+		// Published as in _run_hot().
+		hot_count.store(p_count, std::memory_order_relaxed);
+		hot_func.store(p_func, std::memory_order_relaxed);
+		hot_userdata.store(p_userdata, std::memory_order_relaxed);
+		hot_done.store(0, std::memory_order_relaxed);
+		hot_epoch = (hot_epoch + 1) & 0xFFFFFFFFull;
+		async_base = hot_epoch << 32;
+		hot_state.store(async_base, std::memory_order_release);
+		if (helpers > 0) {
+			_hot_post(helpers);
+		}
+		return;
+	}
+	async_hot = false;
+	Loop *loop = &loops[slot];
+	slot = (slot + 1) % SLOTS;
+	if (loop->group != WorkerThreadPool::INVALID_TASK_ID) {
+		WorkerThreadPool::get_singleton()->wait_for_group_task_completion(loop->group);
+		loop->group = WorkerThreadPool::INVALID_TASK_ID;
+	}
+	loop->count = p_count;
+	loop->func = p_func;
+	loop->userdata = p_userdata;
+	loop->done.set(0);
+	loop->next.set(0);
+	if (helpers > 0) {
+		loop->group = WorkerThreadPool::get_singleton()->add_native_group_task(&FellowParallelFor::_worker, loop, (int)helpers, (int)helpers, true, SNAME("FellowParallelFor"));
+	}
+	async_loop = loop;
+}
+
+bool FellowParallelFor::help() {
+	if (!async_open || async_count == 0) {
+		return false;
+	}
+	if (async_hot) {
+		while (true) {
+			uint64_t state = hot_state.load(std::memory_order_acquire);
+			const uint32_t index = uint32_t(state & HOT_INDEX_MASK);
+			if (index >= async_count) {
+				return false;
+			}
+			if (hot_state.compare_exchange_weak(state, state + 1, std::memory_order_acq_rel, std::memory_order_acquire)) {
+				async_func(async_userdata, index);
+				hot_done.fetch_add(1, std::memory_order_release);
+				return true;
+			}
+		}
+	}
+	const uint32_t chunk = async_loop->next.postincrement();
+	if (chunk >= async_loop->count) {
+		return false;
+	}
+	async_func(async_userdata, chunk);
+	async_loop->done.increment();
+	return true;
+}
+
+void FellowParallelFor::finish() {
+	if (!async_open) {
+		return;
+	}
+	while (help()) {
+	}
+	if (async_count > 0) {
+		if (async_hot) {
+			while (hot_done.load(std::memory_order_acquire) < async_count) {
+				fellow_cpu_relax();
+			}
+			hot_state.store(async_base | HOT_CLOSED, std::memory_order_release);
+			hot_keepalive.store(OS::get_singleton()->get_ticks_usec(), std::memory_order_relaxed);
+		} else {
+			while (async_loop->done.get() < async_count) {
+				std::this_thread::yield();
+			}
+		}
+	}
+	async_open = false;
+	async_loop = nullptr;
 }
 
 void FellowParallelFor::prewarm(uint32_t p_helpers) {

@@ -337,6 +337,18 @@ inline bool frame_parallel_replay() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/frame/parallel_replay") && (!GLOBAL_GET_CACHED(bool, "rendering/fellow/cpu/hot_workers_gate") || cpu_hot_workers_gate_open());
 }
 
+// Frame plan (with the parallel replay): before the frame's primary command buffer is recorded, every draw list worth
+// replaying in secondary command buffers is split (the large ones as above, the others with at least
+// frame/replay_plan_min_draws draws as one segment) and the worker threads replay all of them at once, while the render
+// thread records the rest of the frame (barriers, compute lists, copies); at each such draw list it executes its
+// secondary command buffers, running segments not taken yet itself while it waits. Same commands in the same order.
+inline bool frame_replay_frame_plan() {
+	return GLOBAL_GET_CACHED(bool, "rendering/fellow/frame/replay_frame_plan");
+}
+inline int frame_replay_plan_min_draws() {
+	return GLOBAL_GET_CACHED(int, "rendering/fellow/frame/replay_plan_min_draws");
+}
+
 inline bool frame_async_compute() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/frame/async_compute");
 }
@@ -530,6 +542,9 @@ struct Stats {
 	SafeNumeric<uint64_t> cpu_record_segments; // their segments
 	SafeNumeric<uint64_t> cpu_record_fallbacks; // lists recorded again serially (a pipeline not compiled yet)
 	SafeNumeric<uint64_t> frame_replay_recorded_lists; // of the lists replayed in parallel, split where they were recorded
+	SafeNumeric<uint64_t> frame_plan_lists; // draw lists replayed from the frame plan (frame/replay_frame_plan)
+	SafeNumeric<uint64_t> frame_plan_segments; // their segments
+	SafeNumeric<uint64_t> frame_plan_wait_nsec; // time the render thread spent at those lists until their segments were done
 };
 
 Stats &stats();
