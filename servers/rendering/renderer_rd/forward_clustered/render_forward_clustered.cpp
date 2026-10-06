@@ -708,9 +708,9 @@ void RenderForwardClustered::_render_list(RenderingDevice::DrawListID p_draw_lis
 }
 
 // Parallel recording: lists from this many draws (runs of repeated elements count once), at least this many draws
-// per segment. City Lab's instanced lists have thousands of elements in a few hundred draws: they stay serial.
+// per segment (and at most cpu/recording_segments_per_thread segments per thread). City Lab's instanced lists have thousands of elements in a few hundred draws: they stay serial.
 static constexpr uint32_t FELLOW_RECORD_MIN_DRAWS = 384;
-static constexpr uint32_t FELLOW_RECORD_SEGMENT_DRAWS = 128;
+static constexpr uint32_t FELLOW_RECORD_SEGMENT_DRAWS = 64;
 
 bool RenderForwardClustered::_fellow_render_list_parallel(RenderingDevice::DrawListID p_draw_list, RenderingDevice::FramebufferFormatID p_framebuffer_Format, RenderListParameters *p_params, uint32_t p_from_element, uint32_t p_to_element) {
 	if (p_to_element <= p_from_element || p_to_element - p_from_element < FELLOW_RECORD_MIN_DRAWS || fellow_parallel == nullptr || p_params->element_info == nullptr) {
@@ -735,7 +735,10 @@ bool RenderForwardClustered::_fellow_render_list_parallel(RenderingDevice::DrawL
 	if (draws < FELLOW_RECORD_MIN_DRAWS) {
 		return false;
 	}
-	const uint32_t segments = MIN(draws / FELLOW_RECORD_SEGMENT_DRAWS, helpers + 1);
+	// More segments than threads balance the load (the threads take segments as they finish theirs: an efficiency core
+	// records slower than a performance core); the replay joins consecutive segments again.
+	const uint32_t per_thread = (uint32_t)CLAMP(Fellow::cpu_recording_segments_per_thread(), 1, 8);
+	const uint32_t segments = MIN(draws / FELLOW_RECORD_SEGMENT_DRAWS, (helpers + 1) * per_thread);
 	if (segments < 2) {
 		return false;
 	}

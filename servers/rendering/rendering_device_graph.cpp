@@ -3024,12 +3024,17 @@ bool RenderingDeviceGraph::_fellow_replay_recorded_segments(const RecordedDrawLi
 	SortArray<uint32_t> sorter;
 	sorter.sort(dynamic_state, 4); // their original order (unset ones, UINT32_MAX, last)
 
+	// Consecutive recorded segments are replayed together (at most FELLOW_REPLAY_MAX_SEGMENTS secondary command
+	// buffers): a run of them is as self-contained as its first.
+	const uint32_t groups = MIN(count, FELLOW_REPLAY_MAX_SEGMENTS);
 	fellow_replay_segments.clear();
 	fellow_replay_state.clear();
-	for (uint32_t k = 0; k < count; k++) {
+	for (uint32_t g = 0; g < groups; g++) {
+		const uint32_t k = uint32_t(uint64_t(count) * g / groups);
+		const uint32_t k_next = uint32_t(uint64_t(count) * (g + 1) / groups);
 		FellowReplaySegment segment;
 		segment.from = k == 0 ? 0 : starts[k]; // the first segment also replays what came before it
-		segment.to = k + 1 < count ? starts[k + 1] : size;
+		segment.to = k_next < count ? starts[k_next] : size;
 		segment.state_first = fellow_replay_state.size();
 		if (k > 0) {
 			for (uint32_t offset : dynamic_state) {

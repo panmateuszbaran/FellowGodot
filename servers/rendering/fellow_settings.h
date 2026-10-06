@@ -377,6 +377,12 @@ inline bool cpu_parallel_recording() {
 	return cpu_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/cpu/parallel_recording");
 }
 
+// Segments per recording thread (the render thread and its helpers): more balance the load between performance and
+// efficiency cores; the replay joins consecutive segments again.
+inline int cpu_recording_segments_per_thread() {
+	return GLOBAL_GET_CACHED(int, "rendering/fellow/cpu/recording_segments_per_thread");
+}
+
 // Scene cull: the same ranges and per-range results as stock's threaded cull, but processed by the render thread with
 // worker tasks helping, instead of a group task the render thread sleeps on until its last thread has run.
 inline bool cpu_parallel_cull() {

@@ -89,6 +89,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/cpu/parallel_list_sort", true);
 	GLOBAL_DEF("rendering/fellow/cpu/parallel_partition", false);
 	GLOBAL_DEF("rendering/fellow/cpu/parallel_recording", true);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/cpu/recording_segments_per_thread", PROPERTY_HINT_RANGE, "1,8,1"), 1);
 	GLOBAL_DEF("rendering/fellow/cpu/parallel_cull", true);
 	GLOBAL_DEF("rendering/fellow/cpu/prefetch", false);
 	GLOBAL_DEF("rendering/fellow/cpu/batched_shadow_lists", true);
