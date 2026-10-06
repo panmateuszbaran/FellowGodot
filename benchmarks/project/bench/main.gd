@@ -230,7 +230,9 @@ func _run_perf() -> void:
 	var ab := _parse_ab(str(args.get("ab", "")))
 	var ab_block := int(args.get("ab_block", "30"))
 	var ab_skip := int(args.get("ab_skip", "4"))
-	var ab_passes := ab.size() * int(args.get("ab_repeats", "2"))
+	# --ab_warm=1: one unmeasured rotation first (configurations that change shaders compile their pipelines there).
+	var ab_warm_passes := ab.size() * int(args.get("ab_warm", "0"))
+	var ab_passes := ab.size() * int(args.get("ab_repeats", "2")) + ab_warm_passes
 	var ab_sums := []
 	var ab_current := -1
 	for c in ab.size():
@@ -247,8 +249,8 @@ func _run_perf() -> void:
 			await get_tree().process_frame
 			m.sample()
 			pass_frames.append(f)
-			if not ab.is_empty() and f % ab_block >= ab_skip:
-				var key := "%d:%d" % [passes, f / ab_block]
+			if not ab.is_empty() and f % ab_block >= ab_skip and passes >= ab_warm_passes:
+				var key := "%d:%d" % [passes - ab_warm_passes, f / ab_block]
 				if not ab_sums[ab_current].has(key):
 					ab_sums[ab_current][key] = {"n": 0, "frame_ms": 0.0, "render_cpu_ms": 0.0, "gpu_ms": 0.0, "setup_cpu_ms": 0.0}
 				var acc: Dictionary = ab_sums[ab_current][key]
@@ -287,7 +289,7 @@ func _run_perf() -> void:
 	var pc2 := _pipeline_compilations()
 	if not ab.is_empty():
 		# Per configuration: the mean of every (pass, block) it ran, keyed "pass:block" (block = position on the path).
-		var abr := {"block": ab_block, "skip": ab_skip, "passes": passes, "configs": [], "blocks": {}}
+		var abr := {"block": ab_block, "skip": ab_skip, "passes": passes - ab_warm_passes, "warm_passes": ab_warm_passes, "configs": [], "blocks": {}}
 		for c in ab.size():
 			var name: String = ab[c]["name"]
 			abr["configs"].append({"name": name, "settings": ab[c]["settings"]})
