@@ -159,7 +159,9 @@ static func apply_fellow(spec: String) -> Dictionary:
 			var parts := kv.split("=", false, 1)
 			if parts.size() != 2:
 				continue
-			var key := "rendering/fellow/" + parts[0].strip_edges()
+			# Keys are relative to rendering/fellow/; a full path (rendering/...) is taken as is.
+			var k := parts[0].strip_edges()
+			var key := k if k.begins_with("rendering/") else "rendering/fellow/" + k
 			var val = parse_value(parts[1].strip_edges())
 			if available:
 				ProjectSettings.set_setting(key, val)

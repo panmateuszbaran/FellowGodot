@@ -423,7 +423,9 @@ func _parse_ab(spec: String) -> Array:
 			for kv in nv[1].split(";", false):
 				var p := kv.split("=", false, 1)
 				if p.size() == 2:
-					var key := "rendering/fellow/" + p[0].strip_edges()
+					# Keys are relative to rendering/fellow/; a full path (rendering/...) is taken as is.
+					var k := p[0].strip_edges()
+					var key := k if k.begins_with("rendering/") else "rendering/fellow/" + k
 					settings[key] = Presets.parse_value(p[1].strip_edges())
 					keys[key] = true
 		out.append({"name": nv[0].strip_edges(), "settings": settings})
