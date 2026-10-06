@@ -562,6 +562,11 @@ private:
 		LocalVector<GeometryInstanceForwardClustered *> deferred_captures;
 		LocalVector<FellowShadowRecord> sort_records;
 		FellowFillOutput out;
+		// Where the join copies this chunk's elements (and sort records) in the lists.
+		uint32_t main_at = 0;
+		uint32_t alpha_at = 0;
+		uint32_t motion_at = 0;
+		uint32_t record_at = 0;
 	};
 	static constexpr uint32_t FELLOW_PARALLEL_LIST_MIN = 1024; // fewer instances or elements: single-threaded
 	static constexpr uint32_t FELLOW_PARALLEL_LIST_CHUNK = 256; // instances or elements per worker range
@@ -626,6 +631,9 @@ private:
 	void _fellow_shadow_instance_chunk(uint32_t p_item, void *p_unused);
 	bool _fellow_fill_render_list_parallel(const FellowFillParams &p_params, uint32_t p_count, uint32_t &r_lightmap_captures_used);
 	void _fellow_fill_render_list_chunk(uint32_t p_chunk, void *p_unused);
+	void _fellow_fill_join_chunk(uint32_t p_chunk, void *p_unused);
+	RenderListType fellow_join_list = RENDER_LIST_OPAQUE;
+	bool fellow_join_records = false;
 	void _fellow_make_instance_data(const GeometryInstanceSurfaceDataCache *p_surface, const GeometryInstanceForwardClustered *p_inst, SceneState::InstanceData &r_data) const;
 	void _fellow_fill_instance_data_chunk(uint32_t p_chunk, void *p_unused);
 	void _fellow_sort_by_key(RenderListType p_render_list, uint32_t p_from, uint32_t p_size);

@@ -1620,16 +1620,6 @@ void RenderForwardClustered::_fellow_fill_apply_output(const FellowFillParams &p
 	}
 }
 
-template <typename T>
-static _FORCE_INLINE_ void _fellow_append_pointers(LocalVector<T *> &r_dst, const LocalVector<T *> &p_src) {
-	if (p_src.is_empty()) {
-		return;
-	}
-	const uint32_t at = r_dst.size();
-	r_dst.resize(at + p_src.size());
-	memcpy(r_dst.ptr() + at, p_src.ptr(), p_src.size() * sizeof(T *));
-}
-
 void RenderForwardClustered::_fellow_fill_render_list_chunk(uint32_t p_chunk, void *p_unused) {
 	const uint32_t from = p_chunk * fellow_fill_chunk_size;
 	const uint32_t to = MIN(from + fellow_fill_chunk_size, fellow_fill_count);
@@ -1667,16 +1657,26 @@ bool RenderForwardClustered::_fellow_fill_render_list_parallel(const FellowFillP
 
 	_fellow_parallel_for(chunk_count, &_fellow_chunk_thunk<&RenderForwardClustered::_fellow_fill_render_list_chunk>);
 
+	// Join: each chunk's elements copied to their place in range order (by worker tasks), counters summed.
 	RenderList *rl = &render_list[p_params.render_list];
 	const uint32_t main_from = rl->elements.size();
 	bool any_deferred_captures = false;
 	FellowFillOutput total;
+	uint32_t main_at = main_from;
+	uint32_t alpha_at = render_list[RENDER_LIST_ALPHA].elements.size();
+	uint32_t motion_at = render_list[RENDER_LIST_MOTION].elements.size();
+	uint32_t record_at = 0;
 	for (uint32_t c = 0; c < chunk_count; c++) {
-		const FellowFillChunk &chunk = fellow_fill_chunks[c];
+		FellowFillChunk &chunk = fellow_fill_chunks[c];
 		any_deferred_captures = any_deferred_captures || !chunk.deferred_captures.is_empty();
-		_fellow_append_pointers(rl->elements, chunk.main);
-		_fellow_append_pointers(render_list[RENDER_LIST_ALPHA].elements, chunk.alpha);
-		_fellow_append_pointers(render_list[RENDER_LIST_MOTION].elements, chunk.motion);
+		chunk.main_at = main_at;
+		chunk.alpha_at = alpha_at;
+		chunk.motion_at = motion_at;
+		chunk.record_at = record_at;
+		main_at += chunk.main.size();
+		alpha_at += chunk.alpha.size();
+		motion_at += chunk.motion.size();
+		record_at += chunk.sort_records.size();
 		total.primitives += chunk.out.primitives;
 		total.used_sss = total.used_sss || chunk.out.used_sss;
 		total.used_screen_texture = total.used_screen_texture || chunk.out.used_screen_texture;
@@ -1684,6 +1684,22 @@ bool RenderForwardClustered::_fellow_fill_render_list_parallel(const FellowFillP
 		total.used_depth_texture = total.used_depth_texture || chunk.out.used_depth_texture;
 		total.used_lightmap = total.used_lightmap || chunk.out.used_lightmap;
 		total.used_opaque_stencil = total.used_opaque_stencil || chunk.out.used_opaque_stencil;
+	}
+	rl->elements.resize(main_at);
+	render_list[RENDER_LIST_ALPHA].elements.resize(alpha_at);
+	render_list[RENDER_LIST_MOTION].elements.resize(motion_at);
+	// The sort records taken during the fill, in list order (not when capture slots are given out afterwards: that
+	// changes the surfaces' keys after the fill).
+	rl->fellow_sort_records_count = 0;
+	fellow_join_records = gather_keys && !any_deferred_captures && record_at == main_at - main_from;
+	if (fellow_join_records) {
+		rl->fellow_sort_records.resize(record_at);
+	}
+	fellow_join_list = p_params.render_list;
+	_fellow_parallel_for(chunk_count, &_fellow_chunk_thunk<&RenderForwardClustered::_fellow_fill_join_chunk>);
+	if (fellow_join_records) {
+		rl->fellow_sort_records_from = main_from;
+		rl->fellow_sort_records_count = record_at;
 	}
 
 	// Lightmap capture slots, in list order: what stock's loop does for these instances, after the rest of their fill
@@ -1714,29 +1730,30 @@ bool RenderForwardClustered::_fellow_fill_render_list_parallel(const FellowFillP
 	}
 
 	_fellow_fill_apply_output(p_params, total);
+	return true;
+}
 
-	// The sort records taken during the fill, in list order (not when capture slots were given out afterwards: that
-	// changes the surfaces' keys after the fill).
-	rl->fellow_sort_records_count = 0;
-	if (gather_keys && !any_deferred_captures) {
-		const uint32_t count = rl->elements.size() - main_from;
-		rl->fellow_sort_records.resize(count);
-		RenderList::FellowSortRecord *out = rl->fellow_sort_records.ptr();
-		uint32_t at = 0;
-		for (uint32_t c = 0; c < chunk_count; c++) {
-			for (const FellowShadowRecord &r : fellow_fill_chunks[c].sort_records) {
-				out[at].key2 = r.key2;
-				out[at].key1 = r.key1;
-				out[at].surface = r.surface;
-				at++;
-			}
-		}
-		if (at == count) {
-			rl->fellow_sort_records_from = main_from;
-			rl->fellow_sort_records_count = count;
+void RenderForwardClustered::_fellow_fill_join_chunk(uint32_t p_chunk, void *p_unused) {
+	const FellowFillChunk &chunk = fellow_fill_chunks[p_chunk];
+	RenderList *rl = &render_list[fellow_join_list];
+	if (!chunk.main.is_empty()) {
+		memcpy(rl->elements.ptr() + chunk.main_at, chunk.main.ptr(), chunk.main.size() * sizeof(GeometryInstanceSurfaceDataCache *));
+	}
+	if (!chunk.alpha.is_empty()) {
+		memcpy(render_list[RENDER_LIST_ALPHA].elements.ptr() + chunk.alpha_at, chunk.alpha.ptr(), chunk.alpha.size() * sizeof(GeometryInstanceSurfaceDataCache *));
+	}
+	if (!chunk.motion.is_empty()) {
+		memcpy(render_list[RENDER_LIST_MOTION].elements.ptr() + chunk.motion_at, chunk.motion.ptr(), chunk.motion.size() * sizeof(GeometryInstanceSurfaceDataCache *));
+	}
+	if (fellow_join_records) {
+		RenderList::FellowSortRecord *out = rl->fellow_sort_records.ptr() + chunk.record_at;
+		const FellowShadowRecord *in = chunk.sort_records.ptr();
+		for (uint32_t i = 0; i < chunk.sort_records.size(); i++) {
+			out[i].key2 = in[i].key2;
+			out[i].key1 = in[i].key1;
+			out[i].surface = in[i].surface;
 		}
 	}
-	return true;
 }
 
 void RenderForwardClustered::_setup_voxelgis(const PagedArray<RID> &p_voxelgis) {
