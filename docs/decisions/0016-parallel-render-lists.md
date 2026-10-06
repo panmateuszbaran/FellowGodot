@@ -123,10 +123,47 @@ render thread and the workers land on P- or E-cores, clocks); within a process t
 | all four, 2 worker tasks | 3.013 | −9.9 % | 2.323 | −0.319 ms | −9.8, −10.1 % |
 | all four, 12 worker tasks | 2.846 | −14.9 % | 2.142 | −0.500 ms | −14.9, −14.9 % |
 
-GPU time unchanged (−0.1 %). With all four the frame is 0.53 ms (16 %) shorter. One of the parallel loops alone is
+GPU time unchanged (−0.1 %). With all four the frame is 0.53 ms (16 %) shorter in this measurement. One of the parallel loops alone is
 slower: the data a parallel step writes (surface keys, instance flags) is then read by a single-threaded step from the
 other cores' caches, and the reverse; with every step parallel the lists are built where the data already is. The
 render thread alone (0 worker tasks) costs nothing over the single-threaded code (−1.2 %, the compact sort's gain).
+
+Between processes (`m4_f43_city_perf`, 4 ABBA runs, CV 0.4-1.3 %), which is what a game running one configuration
+sees:
+
+| variant | frame ms | Δ vs toggles off | pairs | render thread ms |
+|---|---:|---:|---:|---:|
+| stock | 3.052 | −4.2 % | 4/4 | 2.435 |
+| FellowEngine, toggles off | 3.187 | | | 2.528 |
+| FellowEngine, all four | **2.957** | **−7.2 %** | 4/4 | **2.235** (−0.29 ms) |
+
+Half of the in-process gain: in one process the configurations share the CPU's clock and power state, so the
+single-threaded blocks run at the lower all-core clock the parallel blocks set and the parallel blocks at a higher one
+than they would get alone (this laptop's CPU and GPU share one power and cooling budget). The in-process A/B ranks
+configurations of similar CPU use well; the size of a gain from using more cores is measured between processes.
+
+Profile (`m4_f43_city_profile`, one run each, render-thread ms between markers): Setup 3D Scene (the opaque lists)
+0.971 → 0.739, the shadow passes 0.947 → 0.904 (four small cascade lists, each built by three short parallel loops),
+the cull 0.407 → 0.368.
+
+In one process with the regions timed per configuration (`m4_f44_city_cpu_ab`, 2 runs, 480 block pairs): frame
+−14.0 %, render thread −0.475 ms; Setup 3D Scene 1.041 → 0.733 ms, shadow passes 0.998 → 0.884 ms, cull 0.418 → 0.366
+ms (the cull itself is unchanged: its data is warmer).
+
+**FellowEngine's own render-thread cost.** Toggles off, FellowEngine's render thread is 0.09-0.15 ms slower than
+stock's in City Lab between processes (`m4_f41`, `m4_f42`, `m4_f43`, 4/4 to 6/6 pairs). In one process
+(`m4_f44_city_fellow_ab`, profiled, 2 runs): FellowEngine on vs `rendering/fellow/enabled = false` (stock's code
+paths in the same binary) +0.032 ms (t 1.1), and none of the groups (shadows, geometry, lights, post effects) alone
+accounts for more than 0.04 ms. The difference to the stock binary lies in the code both share: the list loops moved
+into `_fill_render_list_range`/`_fellow_make_instance_data` (Setup 3D Scene off 0.971 ms vs stock 0.929 ms in
+`m4_f43_city_profile`; the loops' outputs went through pointers the compiler had to reload, fixed in `eaded5f`) and
+code layout. With the toggles on these loops run in parallel and the difference is moot (all four: −3.1 % frame vs
+stock between processes).
+
+RTX identity (`m4_f43_temporal`, six scenes, off twice and all four): every scene at its off-vs-off floor (Bistro
+exterior bit-identical; City Lab 1/255 in a few pixels per frame either way). City Lab with lightmap captures
+(`m4_f43_city_lm`, three cameras): off vs off identical; off vs all four identical except one pixel of the aerial
+camera, by 3/255 (followed up in `m4_f46_city_lm`: three off and two on runs).
 
 ## Decision
 

@@ -47,6 +47,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/postfx/taa_v2_soften_contrast", PROPERTY_HINT_RANGE, "0.01,2,0.01"), 0.45);
 	GLOBAL_DEF("rendering/fellow/fluid/enabled", true);
 	GLOBAL_DEF("rendering/fellow/profiling/pass_timestamps", false);
+	GLOBAL_DEF("rendering/fellow/profiling/list_markers", false);
 	GLOBAL_DEF("rendering/fellow/shadows/enabled", true);
 	GLOBAL_DEF("rendering/fellow/shadows/directional_cache", true);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/shadows/directional_cache_guard_texels", PROPERTY_HINT_RANGE, "16,1024,16"), 256);

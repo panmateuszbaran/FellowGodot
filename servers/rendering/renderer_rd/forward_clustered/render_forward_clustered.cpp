@@ -2562,7 +2562,14 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		}
 	}
 
+	const bool fellow_markers = Fellow::list_markers();
+	if (fellow_markers) {
+		RENDER_TIMESTAMP("FellowEngine Opaque List Fill");
+	}
 	_fill_render_list(RENDER_LIST_OPAQUE, p_render_data, PASS_MODE_COLOR, using_sdfgi, using_sdfgi || using_voxelgi, using_motion_pass);
+	if (fellow_markers) {
+		RENDER_TIMESTAMP("FellowEngine Opaque List Sort");
+	}
 	if (Fellow::cpu_compact_list_sort()) {
 		_fellow_sort_by_key(RENDER_LIST_OPAQUE, 0, render_list[RENDER_LIST_OPAQUE].elements.size());
 		_fellow_sort_by_key(RENDER_LIST_MOTION, 0, render_list[RENDER_LIST_MOTION].elements.size());
@@ -2573,9 +2580,15 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	render_list[RENDER_LIST_ALPHA].sort_by_reverse_depth_and_priority();
 
 	int *render_info = p_render_data->render_info ? p_render_data->render_info->info[RSE::VIEWPORT_RENDER_INFO_TYPE_VISIBLE] : (int *)nullptr;
+	if (fellow_markers) {
+		RENDER_TIMESTAMP("FellowEngine Opaque Instance Data");
+	}
 	_fill_instance_data(RENDER_LIST_OPAQUE, render_info);
 	_fill_instance_data(RENDER_LIST_MOTION, render_info);
 	_fill_instance_data(RENDER_LIST_ALPHA, render_info);
+	if (fellow_markers) {
+		RENDER_TIMESTAMP("FellowEngine Setup 3D Scene (rest)");
+	}
 
 	RD::get_singleton()->draw_command_end_label();
 
@@ -4010,7 +4023,13 @@ void RenderForwardClustered::_render_shadow_append(RID p_framebuffer, const Page
 }
 
 void RenderForwardClustered::_render_shadow_process() {
+	if (fellow_shadow_entry_count > 0 && Fellow::list_markers()) {
+		RENDER_TIMESTAMP("FellowEngine Shadow Lists");
+	}
 	_fellow_shadow_flush();
+	if (Fellow::list_markers()) {
+		RENDER_TIMESTAMP("FellowEngine Shadow Process");
+	}
 	fellow_shadow_batching = false;
 	RenderingDevice *rd = RenderingDevice::get_singleton();
 	if (scene_state.instance_buffer[RENDER_LIST_SECONDARY].get_size(0u) > 0u) {

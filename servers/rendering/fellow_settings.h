@@ -114,6 +114,11 @@ inline bool pass_timestamps() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/profiling/pass_timestamps");
 }
 
+// Extra timestamp markers inside the render-list and cull steps (profiling only: they split stock's regions).
+inline bool list_markers() {
+	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/profiling/list_markers");
+}
+
 inline bool fluid_enabled() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/fluid/enabled");
 }

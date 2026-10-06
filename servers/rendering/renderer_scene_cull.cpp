@@ -3998,6 +3998,9 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 		uint64_t time_from = OS::get_singleton()->get_ticks_usec();
 #endif
 
+		if (Fellow::list_markers()) {
+			RENDER_TIMESTAMP("FellowEngine Scene Cull");
+		}
 		if (cull_to > thread_cull_threshold) {
 			//multiple threads
 			for (InstanceCullResult &thread : scene_cull_result_threads) {
@@ -4031,6 +4034,9 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 		print_line("time taken: " + rtos(time_avg / time_count));
 #endif
 
+		if (Fellow::list_markers()) {
+			RENDER_TIMESTAMP("FellowEngine Scene Cull (after)");
+		}
 		if (scene_cull_result.mesh_instances.size()) {
 			for (uint64_t i = 0; i < scene_cull_result.mesh_instances.size(); i++) {
 				RSG::mesh_storage->mesh_instance_check_for_update(scene_cull_result.mesh_instances[i]);
