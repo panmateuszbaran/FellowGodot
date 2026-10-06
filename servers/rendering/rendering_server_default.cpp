@@ -313,6 +313,13 @@ void RenderingServerDefault::finish() {
 			server_task_id = WorkerThreadPool::INVALID_TASK_ID;
 		}
 		server_thread = Thread::MAIN_ID;
+		// FellowEngine fix: the render thread has exited, and the main RenderingDevice is finalized by this thread (the
+		// DisplayServer's cleanup); without this its render-thread guard fails there ("can only be called from the
+		// render thread") and the device's resources and worker groups are never released (stock 4.7.2 as well).
+		RenderingDevice *rd = RenderingDevice::get_singleton();
+		if (rd) {
+			rd->make_current();
+		}
 	} else {
 		_finish();
 	}
