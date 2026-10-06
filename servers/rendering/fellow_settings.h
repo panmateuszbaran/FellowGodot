@@ -504,6 +504,7 @@ struct Stats {
 	SafeNumeric<uint64_t> cpu_record_lists; // render lists recorded by worker threads (parallel recording)
 	SafeNumeric<uint64_t> cpu_record_segments; // their segments
 	SafeNumeric<uint64_t> cpu_record_fallbacks; // lists recorded again serially (a pipeline not compiled yet)
+	SafeNumeric<uint64_t> frame_replay_recorded_lists; // of the lists replayed in parallel, split where they were recorded
 };
 
 Stats &stats();

@@ -297,6 +297,11 @@ private:
 	};
 
 	struct DrawInstructionList : InstructionList {
+		// FellowEngine parallel recording: where the appended segments start (each binds what its draws use before its
+		// first draw), so the replay can split the list there (see fellow_draw_segment_append()).
+		LocalVector<uint32_t> fellow_starts;
+		uint32_t fellow_group_end = 0; // data size after the last segment appended
+		bool fellow_starts_valid = true;
 		FramebufferCache *framebuffer_cache = nullptr;
 		RDD::RenderPassID render_pass;
 		RDD::FramebufferID framebuffer;
@@ -434,6 +439,9 @@ private:
 		uint32_t breadcrumb = 0;
 #endif
 		bool split_cmd_buffer = false;
+		// FellowEngine parallel recording: the segment starts in fellow_recorded_starts (count 0: none recorded).
+		uint32_t fellow_starts_first = 0;
+		uint32_t fellow_starts_count = 0;
 
 		_FORCE_INLINE_ RDD::RenderPassClearValue *clear_values() {
 			return reinterpret_cast<RDD::RenderPassClearValue *>(&this[1]);
@@ -911,6 +919,9 @@ private:
 	uint32_t fellow_replay_slot = 0;
 	RDD::CommandQueueFamilyID fellow_replay_family;
 	LocalVector<FellowReplaySegment> fellow_replay_segments;
+	LocalVector<uint32_t> fellow_recorded_starts; // segment starts of the recorded draw lists (parallel recording)
+	bool _fellow_replay_recorded_segments(const RecordedDrawListCommand *p_command);
+	bool _fellow_replay_run(RDD::CommandBufferID p_command_buffer, const RecordedDrawListCommand *p_command, RDD::RenderPassID p_render_pass, RDD::FramebufferID p_framebuffer, VectorView<RDD::RenderPassClearValue> p_clear_values);
 	LocalVector<uint32_t> fellow_replay_state;
 	LocalVector<RDD::CommandBufferID> fellow_replay_buffers;
 	uint32_t fellow_replay_first_secondary = 0;
@@ -1010,11 +1021,14 @@ public:
 		LocalVector<ResourceTracker *> trackers;
 		LocalVector<ResourceUsage> usages;
 
+		bool dynamic_state = false; // sets viewport, scissor, blend constants or line width, or changes subpass
+
 		void clear() {
 			data.clear();
 			stages.clear();
 			trackers.clear();
 			usages.clear();
+			dynamic_state = false;
 		}
 	};
 	static void fellow_draw_segment_set(FellowDrawSegment *p_segment); // the calling thread's target (nullptr: the draw list)

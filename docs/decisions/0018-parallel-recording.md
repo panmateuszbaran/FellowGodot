@@ -46,6 +46,14 @@ tasks of FellowEngine's shared loop (decision 0016) at once:
   surface's vertex array lookup (a spin lock per draw) is reused while consecutive elements use the same surface;
   `redraw_request()` is called by the render thread after the join.
 
+* **Replay in the recorded segments** (with parallel replay, decision 0017): the graph keeps where the appended
+  segments start. A list recorded in parallel, with nothing recorded after its segments, is replayed into secondary
+  command buffers split at those starts: each segment already binds what its draws use, so only the dynamic state set
+  before the first segment (viewport, scissor, blend constants, line width) is replayed at the start of the others.
+  The replay's two passes over the whole list (counting the draws, finding the state in effect at each split) are
+  skipped (`frame_replay_recorded_lists`). A segment that sets dynamic state itself, or instructions recorded between
+  two forks or after the last one, send the list back to the usual replay.
+
 ## Why it is exact
 
 Each segment starts with nothing bound, so before its first draw it binds the pipeline, the uniform sets, the vertex

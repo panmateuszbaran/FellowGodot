@@ -341,9 +341,16 @@ void RenderingDeviceGraph::fellow_draw_segment_append(const FellowDrawSegment &p
 	if (!p_segment.data.is_empty()) {
 		// Instructions start at aligned offsets relative to the segment's start; the segment starts at an aligned offset
 		// of the draw list's data, as its first instruction would have.
-		const uint32_t offset = GRAPH_ALIGN(draw_instruction_list.data.size());
-		draw_instruction_list.data.resize(offset + p_segment.data.size());
-		memcpy(&draw_instruction_list.data[offset], p_segment.data.ptr(), p_segment.data.size());
+		DrawInstructionList &list = draw_instruction_list;
+		if (!list.fellow_starts.is_empty() && list.data.size() != list.fellow_group_end) {
+			list.fellow_starts_valid = false; // instructions recorded between two forks (they may use a segment's state)
+		}
+		list.fellow_starts_valid = list.fellow_starts_valid && !p_segment.dynamic_state;
+		const uint32_t offset = GRAPH_ALIGN(list.data.size());
+		list.data.resize(offset + p_segment.data.size());
+		memcpy(&list.data[offset], p_segment.data.ptr(), p_segment.data.size());
+		list.fellow_starts.push_back(offset);
+		list.fellow_group_end = list.data.size();
 	}
 	draw_instruction_list.stages = draw_instruction_list.stages | p_segment.stages;
 	for (uint32_t i = 0; i < p_segment.trackers.size(); i++) {
@@ -1096,6 +1103,9 @@ void RenderingDeviceGraph::_add_draw_list_begin(FramebufferCache *p_framebuffer_
 
 	draw_instruction_list.clear();
 	draw_instruction_list.index++;
+	draw_instruction_list.fellow_starts.clear();
+	draw_instruction_list.fellow_group_end = 0;
+	draw_instruction_list.fellow_starts_valid = true;
 	draw_instruction_list.framebuffer_cache = p_framebuffer_cache;
 	draw_instruction_list.render_pass = p_render_pass;
 	draw_instruction_list.framebuffer = p_framebuffer;
@@ -1861,6 +1871,7 @@ void RenderingDeviceGraph::begin() {
 	frames[frame].secondary_command_buffers_used = 0;
 	draw_instruction_list.index = 0;
 	compute_instruction_list.index = 0;
+	fellow_recorded_starts.clear();
 	tracking_frame++;
 
 #ifdef DEV_ENABLED
@@ -2330,24 +2341,36 @@ void RenderingDeviceGraph::add_draw_list_draw_indexed_indirect(RDD::BufferID p_b
 }
 
 void RenderingDeviceGraph::add_draw_list_execute_commands(RDD::CommandBufferID p_command_buffer) {
+	if (fellow_tl_draw_segment != nullptr) {
+		fellow_tl_draw_segment->dynamic_state = true;
+	}
 	DrawListExecuteCommandsInstruction *instruction = reinterpret_cast<DrawListExecuteCommandsInstruction *>(_allocate_draw_list_instruction(sizeof(DrawListExecuteCommandsInstruction)));
 	instruction->type = DrawListInstruction::TYPE_EXECUTE_COMMANDS;
 	instruction->command_buffer = p_command_buffer;
 }
 
 void RenderingDeviceGraph::add_draw_list_next_subpass(RDD::CommandBufferType p_command_buffer_type) {
+	if (fellow_tl_draw_segment != nullptr) {
+		fellow_tl_draw_segment->dynamic_state = true;
+	}
 	DrawListNextSubpassInstruction *instruction = reinterpret_cast<DrawListNextSubpassInstruction *>(_allocate_draw_list_instruction(sizeof(DrawListNextSubpassInstruction)));
 	instruction->type = DrawListInstruction::TYPE_NEXT_SUBPASS;
 	instruction->command_buffer_type = p_command_buffer_type;
 }
 
 void RenderingDeviceGraph::add_draw_list_set_blend_constants(const Color &p_color) {
+	if (fellow_tl_draw_segment != nullptr) {
+		fellow_tl_draw_segment->dynamic_state = true;
+	}
 	DrawListSetBlendConstantsInstruction *instruction = reinterpret_cast<DrawListSetBlendConstantsInstruction *>(_allocate_draw_list_instruction(sizeof(DrawListSetBlendConstantsInstruction)));
 	instruction->type = DrawListInstruction::TYPE_SET_BLEND_CONSTANTS;
 	instruction->color = p_color;
 }
 
 void RenderingDeviceGraph::add_draw_list_set_line_width(float p_width) {
+	if (fellow_tl_draw_segment != nullptr) {
+		fellow_tl_draw_segment->dynamic_state = true;
+	}
 	DrawListSetLineWidthInstruction *instruction = reinterpret_cast<DrawListSetLineWidthInstruction *>(_allocate_draw_list_instruction(sizeof(DrawListSetLineWidthInstruction)));
 	instruction->type = DrawListInstruction::TYPE_SET_LINE_WIDTH;
 	instruction->width = p_width;
@@ -2363,12 +2386,18 @@ void RenderingDeviceGraph::add_draw_list_set_push_constant(RDD::ShaderID p_shade
 }
 
 void RenderingDeviceGraph::add_draw_list_set_scissor(Rect2i p_rect) {
+	if (fellow_tl_draw_segment != nullptr) {
+		fellow_tl_draw_segment->dynamic_state = true;
+	}
 	DrawListSetScissorInstruction *instruction = reinterpret_cast<DrawListSetScissorInstruction *>(_allocate_draw_list_instruction(sizeof(DrawListSetScissorInstruction)));
 	instruction->type = DrawListInstruction::TYPE_SET_SCISSOR;
 	instruction->rect = p_rect;
 }
 
 void RenderingDeviceGraph::add_draw_list_set_viewport(Rect2i p_rect) {
+	if (fellow_tl_draw_segment != nullptr) {
+		fellow_tl_draw_segment->dynamic_state = true;
+	}
 	DrawListSetViewportInstruction *instruction = reinterpret_cast<DrawListSetViewportInstruction *>(_allocate_draw_list_instruction(sizeof(DrawListSetViewportInstruction)));
 	instruction->type = DrawListInstruction::TYPE_SET_VIEWPORT;
 	instruction->rect = p_rect;
@@ -2436,6 +2465,16 @@ void RenderingDeviceGraph::add_draw_list_end() {
 	command->breadcrumb = draw_instruction_list.breadcrumb;
 #endif
 	command->split_cmd_buffer = draw_instruction_list.split_cmd_buffer;
+	command->fellow_starts_first = 0;
+	command->fellow_starts_count = 0;
+	if (!draw_instruction_list.fellow_starts.is_empty() && draw_instruction_list.fellow_starts_valid && draw_instruction_list.data.size() == draw_instruction_list.fellow_group_end) {
+		// Parallel recording: the replay can split the list where its segments start (nothing recorded after them).
+		command->fellow_starts_first = fellow_recorded_starts.size();
+		command->fellow_starts_count = draw_instruction_list.fellow_starts.size();
+		for (uint32_t start : draw_instruction_list.fellow_starts) {
+			fellow_recorded_starts.push_back(start);
+		}
+	}
 	command->clear_values_count = draw_instruction_list.attachment_clear_values.size();
 	command->trackers_count = trackers_count;
 
@@ -2943,7 +2982,73 @@ uint32_t RenderingDeviceGraph::_fellow_draw_instruction_size(const uint8_t *p_in
 	}
 }
 
+bool RenderingDeviceGraph::_fellow_replay_recorded_segments(const RecordedDrawListCommand *p_command) {
+	// A list recorded in parallel (cpu/parallel_recording) is replayed in the segments it was recorded in: each binds the
+	// pipeline, uniform sets, vertex and index buffers and push constant its draws use before its first draw, so only
+	// the dynamic state set before the first segment (viewport, scissor, blend constants, line width; the segments set
+	// none) is replayed at the start of the others. No pass over the whole list is needed.
+	const uint8_t *data = p_command->instruction_data();
+	const uint32_t size = p_command->instruction_data_size;
+	const uint32_t count = p_command->fellow_starts_count;
+	if (count < 2) {
+		return false;
+	}
+	const uint32_t *starts = &fellow_recorded_starts[p_command->fellow_starts_first];
+	uint32_t dynamic_state[4] = { UINT32_MAX, UINT32_MAX, UINT32_MAX, UINT32_MAX };
+	for (uint32_t cursor = 0; cursor < starts[0];) {
+		switch (reinterpret_cast<const DrawListInstruction *>(data + cursor)->type) {
+			case DrawListInstruction::TYPE_EXECUTE_COMMANDS:
+			case DrawListInstruction::TYPE_NEXT_SUBPASS:
+				return false;
+			case DrawListInstruction::TYPE_SET_VIEWPORT:
+				dynamic_state[0] = cursor;
+				break;
+			case DrawListInstruction::TYPE_SET_SCISSOR:
+				dynamic_state[1] = cursor;
+				break;
+			case DrawListInstruction::TYPE_SET_BLEND_CONSTANTS:
+				dynamic_state[2] = cursor;
+				break;
+			case DrawListInstruction::TYPE_SET_LINE_WIDTH:
+				dynamic_state[3] = cursor;
+				break;
+			default:
+				break;
+		}
+		const uint32_t instruction_size = _fellow_draw_instruction_size(data + cursor);
+		if (instruction_size == 0) {
+			return false; // unknown instruction
+		}
+		cursor = GRAPH_ALIGN(cursor + instruction_size);
+	}
+	SortArray<uint32_t> sorter;
+	sorter.sort(dynamic_state, 4); // their original order (unset ones, UINT32_MAX, last)
+
+	fellow_replay_segments.clear();
+	fellow_replay_state.clear();
+	for (uint32_t k = 0; k < count; k++) {
+		FellowReplaySegment segment;
+		segment.from = k == 0 ? 0 : starts[k]; // the first segment also replays what came before it
+		segment.to = k + 1 < count ? starts[k + 1] : size;
+		segment.state_first = fellow_replay_state.size();
+		if (k > 0) {
+			for (uint32_t offset : dynamic_state) {
+				if (offset != UINT32_MAX) {
+					fellow_replay_state.push_back(offset);
+				}
+			}
+		}
+		segment.state_count = fellow_replay_state.size() - segment.state_first;
+		fellow_replay_segments.push_back(segment);
+	}
+	return true;
+}
+
 bool RenderingDeviceGraph::_fellow_run_draw_list_parallel(RDD::CommandBufferID p_command_buffer, const RecordedDrawListCommand *p_command, RDD::RenderPassID p_render_pass, RDD::FramebufferID p_framebuffer, VectorView<RDD::RenderPassClearValue> p_clear_values) {
+	if (p_command->fellow_starts_count > 0 && _fellow_replay_recorded_segments(p_command)) {
+		Fellow::stats().frame_replay_recorded_lists.increment();
+		return _fellow_replay_run(p_command_buffer, p_command, p_render_pass, p_framebuffer, p_clear_values);
+	}
 	const uint8_t *data = p_command->instruction_data();
 	const uint32_t size = p_command->instruction_data_size;
 
@@ -3041,6 +3146,11 @@ bool RenderingDeviceGraph::_fellow_run_draw_list_parallel(RDD::CommandBufferID p
 	}
 	segment.to = size;
 	fellow_replay_segments.push_back(segment);
+	return _fellow_replay_run(p_command_buffer, p_command, p_render_pass, p_framebuffer, p_clear_values);
+}
+
+bool RenderingDeviceGraph::_fellow_replay_run(RDD::CommandBufferID p_command_buffer, const RecordedDrawListCommand *p_command, RDD::RenderPassID p_render_pass, RDD::FramebufferID p_framebuffer, VectorView<RDD::RenderPassClearValue> p_clear_values) {
+	const uint8_t *data = p_command->instruction_data();
 
 	// Secondary command buffers of this frame slot (one pool each: recorded on different threads).
 	if (fellow_replay_slot >= fellow_replay_slots.size()) {

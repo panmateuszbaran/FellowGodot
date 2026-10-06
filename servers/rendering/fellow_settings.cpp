@@ -199,5 +199,6 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["cpu_record_lists"] = s.cpu_record_lists.get();
 	d["cpu_record_segments"] = s.cpu_record_segments.get();
 	d["cpu_record_fallbacks"] = s.cpu_record_fallbacks.get();
+	d["frame_replay_recorded_lists"] = s.frame_replay_recorded_lists.get();
 	return d;
 }
