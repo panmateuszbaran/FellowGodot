@@ -7887,10 +7887,18 @@ void RenderingDevice::swap_buffers(bool p_present) {
 	ERR_RENDER_THREAD_GUARD();
 
 	GodotProfileZoneGroupedFirst(_profile_zone, "_end_frame");
+	const uint64_t fellow_t0 = OS::get_singleton()->get_ticks_usec();
 	_end_frame();
+	const uint64_t fellow_t1 = OS::get_singleton()->get_ticks_usec();
 
 	GodotProfileZoneGrouped(_profile_zone, "_execute_frame");
 	_execute_frame(p_present);
+	if (is_main_instance) {
+		// FellowEngine counters: where the render thread's time goes after the frame is recorded.
+		Fellow::stats().rd_frames.increment();
+		Fellow::stats().rd_graph_end_usec.add(fellow_t1 - fellow_t0);
+		Fellow::stats().rd_execute_usec.add(OS::get_singleton()->get_ticks_usec() - fellow_t1);
+	}
 
 	// Advance to the next frame and begin recording again.
 	frame = (frame + 1) % frames.size();
@@ -8230,8 +8238,14 @@ void RenderingDevice::_fellow_submit_early() {
 	}
 
 	Frame &f = frames[frame];
+	const uint64_t fellow_t0 = OS::get_singleton()->get_ticks_usec();
 	_end_frame();
+	const uint64_t fellow_t1 = OS::get_singleton()->get_ticks_usec();
 	execute_chained_cmds(false, RDD::FenceID(), RDD::SemaphoreID());
+	if (is_main_instance) {
+		Fellow::stats().rd_graph_end_usec.add(fellow_t1 - fellow_t0);
+		Fellow::stats().rd_execute_usec.add(OS::get_singleton()->get_ticks_usec() - fellow_t1);
+	}
 
 	SWAP(f.command_buffer, f.fellow_late_command_buffer);
 	SWAP(f.command_buffer_pool, f.fellow_late_command_buffer_pool);

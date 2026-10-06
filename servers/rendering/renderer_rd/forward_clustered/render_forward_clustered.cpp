@@ -987,28 +987,44 @@ void RenderForwardClustered::_fill_instance_data(RenderListType p_render_list, i
 		fellow_instance_job.chunk_size = FELLOW_PARALLEL_LIST_CHUNK;
 		fellow_instance_joinable.resize(element_total);
 		const uint32_t chunk_count = (element_total + FELLOW_PARALLEL_LIST_CHUNK - 1) / FELLOW_PARALLEL_LIST_CHUNK;
+		fellow_run_chunks.resize(chunk_count);
+		for (uint32_t c = 0; c < chunk_count; c++) {
+			fellow_run_chunks[c].from = c * FELLOW_PARALLEL_LIST_CHUNK;
+			fellow_run_chunks[c].to = MIN(element_total, (c + 1) * FELLOW_PARALLEL_LIST_CHUNK);
+		}
 		_fellow_parallel_for(chunk_count, &_fellow_chunk_thunk<&RenderForwardClustered::_fellow_fill_instance_data_chunk>);
 
-		const uint8_t *joinable = fellow_instance_joinable.ptr();
-		uint32_t repeats = 0;
-		for (uint32_t i = 0; i < element_total; i++) {
-			if (joinable[i] && repeats < RenderElementInfo::MAX_REPEATS) {
-				repeats++;
-			} else {
-				if (repeats > 0) {
-					for (uint32_t j = 1; j <= repeats; j++) {
-						rl->element_info[p_offset + i - j].repeat = j;
-					}
-				}
-				repeats = 1;
-				if (p_render_info) {
-					p_render_info[RSE::VIEWPORT_RENDER_INFO_DRAW_CALLS_IN_FRAME]++;
+		if (element_total <= RenderElementInfo::MAX_REPEATS) {
+			fellow_run_info = rl->element_info.ptr() + p_offset;
+			_fellow_runs(element_total, UINT32_MAX);
+			if (p_render_info) {
+				for (uint32_t c = 0; c < chunk_count; c++) {
+					p_render_info[RSE::VIEWPORT_RENDER_INFO_DRAW_CALLS_IN_FRAME] += fellow_run_chunks[c].starts;
 				}
 			}
-		}
-		if (repeats > 0) {
-			for (uint32_t j = 1; j <= repeats; j++) {
-				rl->element_info[p_offset + element_total - j].repeat = j;
+		} else {
+			// Runs can reach MAX_REPEATS: stock's counting loop.
+			const uint8_t *joinable = fellow_instance_joinable.ptr();
+			uint32_t repeats = 0;
+			for (uint32_t i = 0; i < element_total; i++) {
+				if (joinable[i] && repeats < RenderElementInfo::MAX_REPEATS) {
+					repeats++;
+				} else {
+					if (repeats > 0) {
+						for (uint32_t j = 1; j <= repeats; j++) {
+							rl->element_info[p_offset + i - j].repeat = j;
+						}
+					}
+					repeats = 1;
+					if (p_render_info) {
+						p_render_info[RSE::VIEWPORT_RENDER_INFO_DRAW_CALLS_IN_FRAME]++;
+					}
+				}
+			}
+			if (repeats > 0) {
+				for (uint32_t j = 1; j <= repeats; j++) {
+					rl->element_info[p_offset + element_total - j].repeat = j;
+				}
 			}
 		}
 
@@ -1178,6 +1194,48 @@ void RenderForwardClustered::_fellow_fill_instance_data_chunk(uint32_t p_chunk, 
 		joinable[i - job.offset] = join;
 
 		rl->element_info[i].value = uint32_t(surface->sort.sort_key1 & 0xFFF);
+	}
+	_fellow_run_scan(p_chunk);
+}
+
+void RenderForwardClustered::_fellow_run_scan(uint32_t p_chunk) {
+	FellowRunChunk &chunk = fellow_run_chunks[p_chunk];
+	const uint8_t *link = fellow_instance_joinable.ptr();
+	chunk.first_start = UINT32_MAX;
+	chunk.starts = 0;
+	for (uint32_t k = chunk.from; k < chunk.to; k++) {
+		if (!link[k]) {
+			if (chunk.first_start == UINT32_MAX) {
+				chunk.first_start = k;
+			}
+			chunk.starts++;
+		}
+	}
+}
+
+void RenderForwardClustered::_fellow_runs(uint32_t p_end, uint32_t p_max_helpers) {
+	// The end of the run each range ends in: the first run start after the range (ranges are in list order).
+	uint32_t next = p_end;
+	for (int64_t c = int64_t(fellow_run_chunks.size()) - 1; c >= 0; c--) {
+		FellowRunChunk &chunk = fellow_run_chunks[c];
+		chunk.next = next;
+		if (chunk.first_start != UINT32_MAX) {
+			next = chunk.first_start;
+		}
+	}
+	_fellow_parallel_for(fellow_run_chunks.size(), &_fellow_chunk_thunk<&RenderForwardClustered::_fellow_runs_chunk>, p_max_helpers);
+}
+
+void RenderForwardClustered::_fellow_runs_chunk(uint32_t p_chunk, void *p_unused) {
+	const FellowRunChunk &chunk = fellow_run_chunks[p_chunk];
+	const uint8_t *link = fellow_instance_joinable.ptr();
+	RenderElementInfo *info = fellow_run_info;
+	uint32_t end = chunk.next;
+	for (int64_t k = int64_t(chunk.to) - 1; k >= int64_t(chunk.from); k--) {
+		info[k].repeat = end - uint32_t(k);
+		if (!link[k]) {
+			end = uint32_t(k);
+		}
 	}
 }
 
@@ -3806,6 +3864,7 @@ void RenderForwardClustered::_fellow_shadow_instance_chunk(uint32_t p_item, void
 		}
 		link[i] = join;
 	}
+	_fellow_run_scan(p_item);
 }
 
 void RenderForwardClustered::_fellow_shadow_flush() {
@@ -4001,40 +4060,63 @@ void RenderForwardClustered::_fellow_shadow_flush() {
 			fellow_shadow_items.push_back({ e, from, MIN(entry.size, from + FELLOW_PARALLEL_LIST_CHUNK) });
 		}
 	}
+	fellow_run_chunks.resize(fellow_shadow_items.size());
+	for (uint32_t k = 0; k < fellow_shadow_items.size(); k++) {
+		const FellowShadowItem &item = fellow_shadow_items[k];
+		fellow_run_chunks[k].from = fellow_shadow_entries[item.entry].from + item.from;
+		fellow_run_chunks[k].to = fellow_shadow_entries[item.entry].from + item.to;
+	}
 	_fellow_parallel_for(fellow_shadow_items.size(), &_fellow_chunk_thunk<&RenderForwardClustered::_fellow_shadow_instance_chunk>, helpers);
 
-	// Runs and counters, per pass as stock counts them.
+	// Runs and counters, per pass as stock counts them (a pass's first element always starts a run).
 	if (markers) {
 		RENDER_TIMESTAMP("FellowEngine Shadow Lists Runs");
 	}
-	const uint8_t *link = fellow_instance_joinable.ptr();
-	for (uint32_t e = 0; e < entry_count; e++) {
-		const FellowShadowEntry &entry = fellow_shadow_entries[e];
-		int *info = entry.render_info ? entry.render_info->info[RSE::VIEWPORT_RENDER_INFO_TYPE_SHADOW] : (int *)nullptr;
-		const uint32_t range_from = entry.from;
-		const uint32_t range_to = entry.from + entry.size;
-		if (info) {
-			info[RSE::VIEWPORT_RENDER_INFO_OBJECTS_IN_FRAME] += range_to - range_from;
-		}
-		uint32_t repeats = 0;
-		for (uint32_t i = range_from; i < range_to; i++) {
-			if (i > range_from && link[i] && repeats < RenderElementInfo::MAX_REPEATS) {
-				repeats++;
-			} else {
-				if (repeats > 0) {
-					for (uint32_t j = 1; j <= repeats; j++) {
-						rl->element_info[i - j].repeat = j;
-					}
-				}
-				repeats = 1;
-				if (info) {
-					info[RSE::VIEWPORT_RENDER_INFO_DRAW_CALLS_IN_FRAME]++;
-				}
+	if (total - fellow_shadow_entries[0].from <= RenderElementInfo::MAX_REPEATS) {
+		fellow_run_info = rl->element_info.ptr();
+		_fellow_runs(total, helpers);
+		for (uint32_t k = 0; k < fellow_shadow_items.size(); k++) {
+			const FellowShadowEntry &entry = fellow_shadow_entries[fellow_shadow_items[k].entry];
+			if (entry.render_info) {
+				entry.render_info->info[RSE::VIEWPORT_RENDER_INFO_TYPE_SHADOW][RSE::VIEWPORT_RENDER_INFO_DRAW_CALLS_IN_FRAME] += fellow_run_chunks[k].starts;
 			}
 		}
-		if (repeats > 0) {
-			for (uint32_t j = 1; j <= repeats; j++) {
-				rl->element_info[range_to - j].repeat = j;
+		for (uint32_t e = 0; e < entry_count; e++) {
+			const FellowShadowEntry &entry = fellow_shadow_entries[e];
+			if (entry.render_info) {
+				entry.render_info->info[RSE::VIEWPORT_RENDER_INFO_TYPE_SHADOW][RSE::VIEWPORT_RENDER_INFO_OBJECTS_IN_FRAME] += entry.size;
+			}
+		}
+	} else {
+		const uint8_t *link = fellow_instance_joinable.ptr();
+		for (uint32_t e = 0; e < entry_count; e++) {
+			const FellowShadowEntry &entry = fellow_shadow_entries[e];
+			int *info = entry.render_info ? entry.render_info->info[RSE::VIEWPORT_RENDER_INFO_TYPE_SHADOW] : (int *)nullptr;
+			const uint32_t range_from = entry.from;
+			const uint32_t range_to = entry.from + entry.size;
+			if (info) {
+				info[RSE::VIEWPORT_RENDER_INFO_OBJECTS_IN_FRAME] += range_to - range_from;
+			}
+			uint32_t repeats = 0;
+			for (uint32_t i = range_from; i < range_to; i++) {
+				if (i > range_from && link[i] && repeats < RenderElementInfo::MAX_REPEATS) {
+					repeats++;
+				} else {
+					if (repeats > 0) {
+						for (uint32_t j = 1; j <= repeats; j++) {
+							rl->element_info[i - j].repeat = j;
+						}
+					}
+					repeats = 1;
+					if (info) {
+						info[RSE::VIEWPORT_RENDER_INFO_DRAW_CALLS_IN_FRAME]++;
+					}
+				}
+			}
+			if (repeats > 0) {
+				for (uint32_t j = 1; j <= repeats; j++) {
+					rl->element_info[range_to - j].repeat = j;
+				}
 			}
 		}
 	}

@@ -139,5 +139,8 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["cpu_loops"] = s.cpu_loops.get();
 	d["cpu_loop_chunks"] = s.cpu_loop_chunks.get();
 	d["cpu_helper_chunks"] = s.cpu_helper_chunks.get();
+	d["rd_frames"] = s.rd_frames.get();
+	d["rd_graph_end_usec"] = s.rd_graph_end_usec.get();
+	d["rd_execute_usec"] = s.rd_execute_usec.get();
 	return d;
 }

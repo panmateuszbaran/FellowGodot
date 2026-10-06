@@ -415,6 +415,9 @@ struct Stats {
 	SafeNumeric<uint64_t> cpu_loops; // parallel loops of the render thread (FellowParallelFor) with 2 or more chunks
 	SafeNumeric<uint64_t> cpu_loop_chunks; // their chunks
 	SafeNumeric<uint64_t> cpu_helper_chunks; // of those, chunks run by worker tasks (the others: by the render thread)
+	SafeNumeric<uint64_t> rd_frames; // RenderingDevice frames ended (main device)
+	SafeNumeric<uint64_t> rd_graph_end_usec; // CPU time of the render graph's replay into the command buffer (_end_frame)
+	SafeNumeric<uint64_t> rd_execute_usec; // CPU time of the frame's submission and presentation (_execute_frame)
 };
 
 Stats &stats();

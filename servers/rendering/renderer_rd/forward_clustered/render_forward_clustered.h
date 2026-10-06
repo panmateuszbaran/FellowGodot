@@ -582,6 +582,22 @@ private:
 	uint32_t fellow_fill_chunk_size = 0;
 	FellowInstanceDataJob fellow_instance_job;
 	LocalVector<uint8_t> fellow_instance_joinable;
+	// Run lengths (instancing repeats) from the "joins the previous element" bytes, by worker ranges: an element's repeat
+	// is the distance to the end of its run (the next element that does not join, or the end of the list), as stock's
+	// counting loop gives it while no run reaches MAX_REPEATS (lists shorter than that). Each range finds its first
+	// run start (in the instance data pass); the end of the run a range ends in is the next range's first start.
+	struct FellowRunChunk {
+		uint32_t from = 0; // positions in the join bytes
+		uint32_t to = 0;
+		uint32_t first_start = UINT32_MAX;
+		uint32_t starts = 0; // runs starting in the range (draws)
+		uint32_t next = 0; // the end of the run the range ends in
+	};
+	LocalVector<FellowRunChunk> fellow_run_chunks;
+	RenderElementInfo *fellow_run_info = nullptr; // element info of join byte 0
+	void _fellow_run_scan(uint32_t p_chunk); // first start and starts of a range (after its join bytes are written)
+	void _fellow_runs(uint32_t p_end, uint32_t p_max_helpers); // run ends, then the repeats by worker ranges
+	void _fellow_runs_chunk(uint32_t p_chunk, void *p_unused);
 	static constexpr uint32_t FELLOW_PARALLEL_SORT_MIN = 4096; // fewer elements: single-threaded sort
 	static constexpr uint32_t FELLOW_PARALLEL_SORT_GRAIN = 1024; // ranges up to this size are sorted by one worker
 
