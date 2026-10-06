@@ -3112,6 +3112,7 @@ Error RenderingDeviceDriverVulkan::fence_wait(FenceID p_fence) {
 	ERR_FAIL_COND_V_MSG(err != VK_SUCCESS, FAILED, vformat("Couldn't reset Vulkan fence (VkResult error %d).", err));
 
 	if (fence->queue_signaled_from != nullptr) {
+		MutexLock fellow_lock(fence->queue_signaled_from->fellow_mutex);
 		// Release all semaphores that the command queue associated to the fence waited on the last time it was submitted.
 		LocalVector<Pair<Fence *, uint32_t>> &pairs = fence->queue_signaled_from->image_semaphores_for_fences;
 		uint32_t i = 0;
@@ -3267,6 +3268,7 @@ Error RenderingDeviceDriverVulkan::command_queue_execute_and_present(CommandQueu
 	wait_semaphores.clear();
 	wait_semaphores_stages.clear();
 
+	command_queue->fellow_mutex.lock();
 	if (!command_queue->pending_semaphores_for_execute.is_empty()) {
 		for (uint32_t i = 0; i < command_queue->pending_semaphores_for_execute.size(); i++) {
 			VkSemaphore wait_semaphore = command_queue->image_semaphores[command_queue->pending_semaphores_for_execute[i]];
@@ -3276,6 +3278,7 @@ Error RenderingDeviceDriverVulkan::command_queue_execute_and_present(CommandQueu
 
 		command_queue->pending_semaphores_for_execute.clear();
 	}
+	command_queue->fellow_mutex.unlock();
 
 	for (uint32_t i = 0; i < p_wait_semaphores.size(); i++) {
 		// FIXME: Allow specifying the stage mask in more detail.
@@ -3341,6 +3344,7 @@ Error RenderingDeviceDriverVulkan::command_queue_execute_and_present(CommandQueu
 		}
 		ERR_FAIL_COND_V_MSG(err != VK_SUCCESS, FAILED, vformat("Couldn't submit to Vulkan queue (VkResult error %d).", err));
 
+		command_queue->fellow_mutex.lock();
 		if (fence != nullptr && !command_queue->pending_semaphores_for_fence.is_empty()) {
 			fence->queue_signaled_from = command_queue;
 
@@ -3351,6 +3355,7 @@ Error RenderingDeviceDriverVulkan::command_queue_execute_and_present(CommandQueu
 
 			command_queue->pending_semaphores_for_fence.clear();
 		}
+		command_queue->fellow_mutex.unlock();
 
 		if (!present_semaphores.is_empty()) {
 			// If command buffers were executed, swap chains must wait on the present semaphore used by the command queue.
@@ -4187,8 +4192,11 @@ RDD::FramebufferID RenderingDeviceDriverVulkan::swap_chain_acquire_framebuffer(C
 
 	// Indicate the command queue should wait on these semaphores on the next submission and that it should
 	// indicate they're free again on the next fence.
-	command_queue->pending_semaphores_for_execute.push_back(semaphore_index);
-	command_queue->pending_semaphores_for_fence.push_back(semaphore_index);
+	{
+		MutexLock fellow_lock(command_queue->fellow_mutex);
+		command_queue->pending_semaphores_for_execute.push_back(semaphore_index);
+		command_queue->pending_semaphores_for_fence.push_back(semaphore_index);
+	}
 
 	// Return the corresponding framebuffer to the new current image.
 	FramebufferID framebuffer_id = swap_chain->framebuffers[swap_chain->image_index];

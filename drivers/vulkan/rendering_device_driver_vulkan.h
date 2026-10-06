@@ -380,6 +380,9 @@ private:
 		LocalVector<Pair<Fence *, uint32_t>> image_semaphores_for_fences;
 		uint32_t queue_family = 0;
 		uint32_t queue_index = 0;
+		// FellowEngine submit thread: the image semaphore lists above are touched by submissions (that thread) and by
+		// fence waits and acquisitions (the render thread), which may now overlap.
+		BinaryMutex fellow_mutex;
 	};
 
 public:

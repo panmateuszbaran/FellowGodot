@@ -8454,6 +8454,10 @@ struct RenderingDevice::FellowPresentThread {
 	Job jobs[JOBS];
 	uint32_t head = 0; // oldest job not issued yet
 	uint32_t count = 0; // jobs handed over and not issued yet
+	uint64_t committed = 0; // jobs handed over in total (a job's ticket: this count after it)
+	uint64_t issued = 0; // jobs issued in total
+	static constexpr uint32_t MAX_FRAME_SLOTS = 16;
+	uint64_t frame_tickets[MAX_FRAME_SLOTS] = {}; // per frame slot: the job that submits its fence
 	RenderingDeviceDriver *driver = nullptr;
 
 	static void _issue(RenderingDeviceDriver *p_driver, Job &p_job) {
@@ -8493,6 +8497,7 @@ struct RenderingDevice::FellowPresentThread {
 				MutexLock lock(self->mutex);
 				self->head = (self->head + 1) % JOBS;
 				self->count--;
+				self->issued++;
 			}
 			self->cv.notify_all();
 		}
@@ -8529,13 +8534,28 @@ struct RenderingDevice::FellowPresentThread {
 		return job;
 	}
 
-	void commit() {
+	uint64_t commit() {
+		uint64_t ticket;
 		{
 			MutexLock lock(mutex);
 			count++;
+			ticket = ++committed;
 		}
 		cv.notify_all();
 		Fellow::stats().frame_submit_jobs.increment();
+		return ticket;
+	}
+
+	// Render thread: until the job with this ticket (and every job before it) has been issued.
+	void wait_issued(uint64_t p_ticket) {
+		MutexLock lock(mutex);
+		if (issued < p_ticket) {
+			const uint64_t from = OS::get_singleton()->get_ticks_usec();
+			while (issued < p_ticket) {
+				cv.wait(lock);
+			}
+			Fellow::stats().frame_present_thread_wait_usec.add(OS::get_singleton()->get_ticks_usec() - from);
+		}
 	}
 
 	// The frame's command buffers, as execute_chained_cmds() submits them: the first waits on the frame's semaphores,
@@ -8761,7 +8781,10 @@ bool RenderingDevice::_fellow_present_async(RDD::CommandQueueID p_queue, RDD::Se
 	job.present_queue = p_queue;
 	job.present_semaphore = p_semaphore;
 	job.swap_chains = p_swap_chains;
-	thread->commit();
+	const uint64_t ticket = thread->commit();
+	if (p_submit && frame < FellowPresentThread::MAX_FRAME_SLOTS) {
+		thread->frame_tickets[frame] = ticket; // _stall_for_frame() waits for this one only
+	}
 	Fellow::stats().frame_present_thread_uses.increment();
 	return true;
 }
@@ -8849,7 +8872,16 @@ void RenderingDevice::_execute_frame(bool p_present) {
 
 void RenderingDevice::_stall_for_frame(uint32_t p_frame) {
 	thread_local PackedByteArray packed_byte_array;
-	_fellow_present_wait(); // FellowEngine submit thread: the fence must have been submitted
+	// FellowEngine present/submit thread: the frame's fence must have been submitted. Only the job that submits it is
+	// waited for (handed over a frame or more ago, normally issued long since); the jobs after it may still be in flight
+	// (the driver guards what fence waits and submissions share). Without a ticket for this slot, the whole FIFO.
+	if (fellow_present != nullptr) {
+		if (p_frame < FellowPresentThread::MAX_FRAME_SLOTS && frames[p_frame].fence_signaled) {
+			fellow_present->wait_issued(fellow_present->frame_tickets[p_frame]);
+		} else {
+			_fellow_present_wait();
+		}
+	}
 
 	if (frames[p_frame].fence_signaled) {
 		GodotProfileZoneGroupedFirst(_profile_zone, "driver->fence_wait");
