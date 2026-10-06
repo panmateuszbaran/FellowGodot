@@ -1,6 +1,6 @@
 # 0019 — Frame plan for the parallel replay
 
-Status: **MEASURING** · Branch `fellow/geometry` · Toggles `rendering/fellow/frame/replay_frame_plan` (runtime, default
+Status: **KEEP as an option (off)** · Branch `fellow/geometry` · Toggles `rendering/fellow/frame/replay_frame_plan` (runtime, default
 off until measured), `rendering/fellow/frame/replay_plan_min_draws` (16) · Code:
 `servers/rendering/rendering_device_graph.{h,cpp}` (`_fellow_plan_replay`, `_fellow_plan_execute`,
 `_fellow_split_draw_list`, `_fellow_assign_secondaries`), `servers/rendering/fellow_parallel.{h,cpp}`
@@ -53,12 +53,32 @@ buffer while the workers record; a segment's completion is published (acquire/re
 
 * lavapipe, frame plan off vs on (defaults otherwise; lavapipe's gate never closes): City Lab captures (545 of 1103
   draw lists from the plan), draw-heavy City Lab captures (498 lists, 281 of them recorded in parallel), Lights Lab
-  walk (60 frames), PBR Lab (7 cameras): **0 differing pixels**. (Further results below as they come.)
+  walk (60 frames), PBR Lab (7 cameras), Blend Lab (4 cameras), Stress Lab temporal (120 frames), and under async
+  compute the Lights Lab walk and draw-heavy City Lab captures: **0 differing pixels**.
+* RTX (`fellow57`, gate off, plan on): `cpu/verify` 0 mismatches in every scene (City Lab temporal 839 planned lists,
+  Bistro exterior captures 2033 lists in 13286 segments, draw-heavy City Lab captures 1371 lists in 8530 segments).
+  Identity plan vs off (`m4_f57_temporal`, six scenes, draw-heavy `city_pan`, captures): Bistro exterior bit-identical
+  (99 dB, max |d| 0), every other scene at its floor (the same values as off vs off).
 
 ## Result
 
-(to be measured: `fellow57`)
+In one process (gate off, so every frame uses it; 2 runs, 480 block pairs per configuration, reference: plan off):
+
+| session | min draws 4 | 16 | 64 |
+|---|---:|---:|---:|
+| `m4_f57_dh_plan_ab`, draw-heavy City Lab, frame | −2.4 % (p 0.04) | **−2.7 %** (p 0.01) | −2.3 % (p 0.04) |
+| `m4_f57_city_plan_ab`, City Lab, frame | +0.3 % | 0.0 % | −0.2 % |
+| `m4_f57_city_plan_ab`, City Lab, GPU time | +0.3 % (p 0.04) | +0.4 % (p 0.02) | +0.1 % |
+
+The render thread waits 49 µs per frame for planned lists in the draw-heavy City Lab (4 µs in City Lab): its replay
+goes on, it is only ordered differently. City Lab's twelve lists are too small for the plan to matter (the graph's end,
+209 µs per frame, is spread over 130 commands: barriers 51 µs, sort 14 µs, draw lists 70 µs).
+
+Between processes (`fellow59` defaults vs defaults + plan, ABBA): City Lab 2.321 vs 2.325 ms (`m4_f61_city_perf`, 5
+runs), draw-heavy City Lab 2.531 vs 2.526 ms (`m4_f61_dh_perf`, 4 runs): **no difference** (−0.2 % and +0.2 %).
 
 ## Decision
 
-(pending)
+**KEEP as an option, off** (`frame/replay_frame_plan`): exact and verified, but the −2.7 % it gives the draw-heavy City
+Lab in one process does not show between processes, and in City Lab it adds a little GPU time (more render passes made
+of secondary command buffers). The asynchronous loop of `FellowParallelFor` stays (no cost when unused).

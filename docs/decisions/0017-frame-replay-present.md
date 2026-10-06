@@ -1,7 +1,7 @@
 # 0017 — The end of the frame: parallel replay of draw lists, present thread
 
-Status: **MEASURING** (`fellow51`) · Branch `fellow/geometry` · Toggles `rendering/fellow/frame/parallel_replay`,
-`rendering/fellow/frame/present_thread` (runtime, default off until measured) · Code:
+Status: **KEEP, on by default since `fellow56`** (measured `fellow51`-`fellow59`) · Branch `fellow/geometry` · Toggles `rendering/fellow/frame/parallel_replay`,
+`rendering/fellow/frame/present_thread`, `rendering/fellow/frame/submit_thread` (runtime, default on) · Code:
 `servers/rendering/rendering_device_graph.{h,cpp}` (`_fellow_run_draw_list_parallel`, `_fellow_replay_segment`),
 `servers/rendering/rendering_device.{h,cpp}` (`FellowPresentThread`, `_fellow_present_async`, `_fellow_present_wait`),
 `servers/rendering/rendering_device_driver.h` and `drivers/vulkan/rendering_device_driver_vulkan.{h,cpp}`

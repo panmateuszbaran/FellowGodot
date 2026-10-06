@@ -1,7 +1,7 @@
 # 0018 — Parallel recording of draw lists
 
-Status: **MEASURING** · Branch `fellow/geometry` · Toggle `rendering/fellow/cpu/parallel_recording` (runtime, default
-off until measured) · Code: `servers/rendering/rendering_device.{h,cpp}` (`fellow_draw_list_fork`,
+Status: **KEEP (on by default since `fellow56`)** · Branch `fellow/geometry` · Toggle `rendering/fellow/cpu/parallel_recording` (runtime, default
+on) · Code: `servers/rendering/rendering_device.{h,cpp}` (`fellow_draw_list_fork`,
 `fellow_draw_list_segment_begin/end`, `fellow_draw_list_join`, `FellowDrawSegment`),
 `servers/rendering/rendering_device_graph.{h,cpp}` (`RenderingDeviceGraph::FellowDrawSegment`,
 `fellow_draw_segment_set`, `fellow_draw_segment_append`), `servers/rendering/renderer_rd/pipeline_hash_map_rd.h`
@@ -99,10 +99,33 @@ recorded in parallel too, for nothing: +3.0 % frame in one process (`m4_f54_city
 stock between processes (`m4_f54_city_perf`). From `936b789` the threshold counts draws (runs): lists under 384 draws
 stay serial (lavapipe: City Lab 1 list recorded, draw-heavy 281).
 
+Granularity (`m4_f57_dh_seg_ab`, draw-heavy City Lab in one process, gate off, 2 runs, 480 block pairs; reference: 1
+recording segment per thread, at most 12 replay segments per list, the defaults):
+
+| recording segments per thread / replay segments | frame | render thread | GPU time (sum of passes) |
+|---|---:|---:|---:|
+| 2 / 12 | +0.4 % (p 0.24) | +0.5 % | +0.003 ms |
+| 3 / 12 | +0.6 % (p 0.11) | +0.9 % (p 0.04) | −0.002 ms |
+| 3 / 24 | +1.3 % (p < 0.001) | +1.0 % | +0.025 ms |
+| 3 / 36 | +1.4 % (p < 0.001) | +1.2 % | +0.027 ms |
+
+More segments only add work (more re-binds, more secondary command buffers for the GPU); the defaults stay.
+
+The defaults against stock 4.7.2 between processes (`m4_f61_*_perf`, `fellow59`, ABBA, 2026-10-06 22:28-23:08):
+
+| scene | stock frame | FellowEngine frame | Δ | render thread Δ | pairs |
+|---|---:|---:|---:|---:|---:|
+| draw-heavy City Lab (4 runs) | 3.832 ms | **2.531 ms** | **−34.0 %** | **−42.9 %** | 4/4 |
+| City Lab (5 runs) | 2.777 ms | **2.321 ms** | **−16.4 %** | **−28.5 %** | 5/5 |
+
+(City Lab's lists stay serial, by design; its frame now sits close to GPU time + 0.4 ms, the presentation path of this
+laptop: decision 0009.)
+
 ## Decision
 
-**KEEP, on by default since `fellow56`** (lists of 384 draws or more): draw-heavy City Lab −29 % frame and −40 % render
-thread vs stock (`m4_f54_dh_perf`, by elements; the draw count threshold keeps City Lab's instanced lists serial),
+**KEEP, on by default since `fellow56`** (lists of 384 draws or more): draw-heavy City Lab −34 % frame and −43 % render
+thread vs stock with every default (`m4_f61_dh_perf`; −29 % / −40 % in `m4_f54_dh_perf`; the draw count threshold keeps
+City Lab's instanced lists serial),
 Bistro exterior's render thread −36 % (GPU-bound: frame unchanged), identical images (bit-identical in Bistro
-exterior, at every scene's floor elsewhere; lavapipe 0 differing pixels). `fellow56` measures the granularity
-(`cpu/recording_segments_per_thread`, `frame/replay_max_segments`) and re-measures the defaults against stock.
+exterior, at every scene's floor elsewhere; lavapipe 0 differing pixels). Granularity measured (`m4_f57_dh_seg_ab`):
+one recording segment per thread and at most 12 replay segments per list remain the defaults.

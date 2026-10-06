@@ -1,6 +1,6 @@
 # 0016 — Render lists built by worker threads
 
-Status: **MEASURING** (`fellow42`-`fellow50`) · Branch `fellow/geometry` · Toggles `rendering/fellow/cpu/parallel_list_fill`,
+Status: **KEEP, on by default since `fellow56`** (measured `fellow42`-`fellow59`) · Branch `fellow/geometry` · Toggles `rendering/fellow/cpu/parallel_list_fill`,
 `cpu/parallel_instance_data`, `cpu/compact_list_sort`, `cpu/parallel_list_sort` (umbrella `cpu/enabled`) · Code:
 `forward_clustered/render_forward_clustered.{h,cpp}` (`_fill_render_list_range`, `_fellow_fill_render_list_parallel`,
 `_fellow_make_instance_data`, `_fellow_fill_instance_data_chunk`, `_fellow_sort_by_key`, `RenderList::fellow_sort_by_key_range`),
@@ -308,12 +308,29 @@ Between processes:
 (`m4_f53_city_perf` interleaves five variants; its candidate frame is 3 % slower than in `m4_f52` at the same render
 thread time: between sessions the frame varies by that much on this laptop.)
 
+Parallel partition only for the largest ranges (`m4_f57_city_part_ab`, City Lab in one process, gate off, 2 runs):
+from 16384 elements 0.0 % frame and render thread (p 0.96), from 8192 elements +0.8 % render thread (p 0.01): it stays
+off.
+
+Instance data written to the GPU buffer vs to system memory (`cpu/debug_instance_scratch`, debug: wrong images;
+`m4_f57_city_scratch_ab`, City Lab in one process): the opaque list's instance data step 0.173 → 0.084 ms, the shadow
+lists' 0.136 → 0.050 ms, render thread −0.161 ms (−10.7 %, p < 10⁻²⁰⁰). The writes into the mapped GPU buffer (over
+PCIe on this laptop) are half of those steps' time: what a persistent instance buffer (only changed instances written)
+could save.
+
+The defaults against stock 4.7.2 between processes (`m4_f61_city_perf`, `fellow59`, 5 ABBA runs): City Lab **−16.4 %**
+frame (2.777 → 2.321 ms), **−28.5 %** render thread, 5/5 pairs. FellowEngine with `enabled=false` against stock:
++3.2 % (p 0.11; +1.8 % without stock's first run, an outlier at 2.635 ms): what the disabled engine still costs (code
+size, the refactored list fill), kept visible; the benchmark's per-frame FellowEngine counters, a main-thread cost
+only FellowEngine builds paid, are off from `b2ef5b1`.
+
 ## Decision
 
 **KEEP, on by default since `fellow56`** (`73f6f60`): the six toggles, compact shadow instances, hot workers 300 µs
-with the gate, 10 worker tasks; the parallel partition stays off (`cpu/parallel_partition`, measured slower at City
-Lab's sizes; `cpu/parallel_partition_min` for further measurement). Exact by construction and by verification (stock's
+with the gate, 10 worker tasks; the parallel partition stays off (`cpu/parallel_partition`: no gain from 16384
+elements, slower from 8192, `m4_f57_city_part_ab`). Exact by construction and by verification (stock's
 results recomputed and compared in every scene: 0 mismatches), −19 % frame and −31 % render thread in City Lab,
 −17 % / −22 % in its draw-heavy variant (with decision 0017's end of the frame; decision 0018 takes the draw-heavy
 variant further). Costs: worker threads spin for up to 300 µs after the render thread's loops while the frame is
-CPU-bound (cold when the GPU is the limit). `fellow56` re-measures the defaults against stock in every scene.
+CPU-bound (cold when the GPU is the limit). Re-measured with every default (`m4_f61_city_perf`): −16.4 % frame, −28.5 %
+render thread in City Lab.
