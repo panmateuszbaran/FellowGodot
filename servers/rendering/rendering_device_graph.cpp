@@ -2648,6 +2648,14 @@ void RenderingDeviceGraph::end(bool p_reorder_commands, bool p_full_barriers, RD
 	}
 	const uint64_t fellow_end_from = _fellow_nsec();
 	Fellow::stats().rd_graph_commands.add(command_count);
+	if (fellow_replay_parallel != nullptr && Fellow::frame_parallel_replay()) {
+		// Hot workers posted now wake up while the commands are sorted (the frame's list loops ended a while ago).
+		const uint64_t linger = (uint64_t)Fellow::cpu_hot_workers_usec();
+		if (linger > 0) {
+			fellow_replay_parallel->set_linger_usec(linger);
+			fellow_replay_parallel->prewarm((uint32_t)Fellow::cpu_worker_tasks());
+		}
+	}
 
 	thread_local LocalVector<RecordedCommandSort> commands_sorted;
 	if (p_reorder_commands) {
