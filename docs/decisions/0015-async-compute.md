@@ -109,9 +109,13 @@ does not show in their frame times; in a CPU-bound scene it would. Concurrent sh
 City Lab (CPU-bound: render thread 1.6-2.0 ms, GPU 1.8 ms), between processes (`m4_f53_city_perf`, 4 ABBA runs, vs
 stock): candidate of 0016/0017 −14.8 %, + async compute −11.4 %, + submit thread −16.6 %, + both −14.2 %. In one
 process (`m4_f53_city_ab_async`, under async compute): the submit thread takes the splits' submissions off the render
-thread, −2.9 % frame. Async compute costs a CPU-bound frame about 3 % even then: the splits' graph replay
-(`rd_async_end_usec`, 0.3 ms per frame in City Lab) moves into the 3D rendering, and each split adds command buffers
-and barriers.
+thread, −2.9 % frame. Async compute costs a CPU-bound frame about 3 % even then. Not in the graph replay: per frame in
+City Lab the splits replay 0.18 ms and the frame's end 0.075 ms instead of 0.215 ms (+0.04 ms in total); their
+submissions take 0.08 ms of the render thread, 0.016 ms with the submit thread (`m4_f53_city_perf` counters).
+
+GPU-bound scenes (`m4_f53_gpu_perf`, 2 runs, frame vs the candidate without async compute): Bistro exterior −1.9 %,
+PBR Lab −1.5 %, Sponza −0.8 %, Bistro interior −0.4 %, Lights Lab 0.0 %; the render thread +0.1 to +0.3 ms (hidden
+there).
 
 ## Decision
 
