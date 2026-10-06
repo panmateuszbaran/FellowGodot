@@ -88,6 +88,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/cpu/batched_shadow_lists", false);
 	GLOBAL_DEF("rendering/fellow/cpu/verify", false);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/cpu/worker_tasks", PROPERTY_HINT_RANGE, "0,32,1"), 6);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/cpu/hot_workers_usec", PROPERTY_HINT_RANGE, "0,5000,1,suffix:us"), 0);
 	GLOBAL_DEF("rendering/fellow/frame/early_submit", false);
 	GLOBAL_DEF_RST("rendering/fellow/frame/separate_present_queue", false);
 	GLOBAL_DEF_RST("rendering/fellow/frame/async_compute", false);
@@ -135,5 +136,8 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["cpu_shadow_batch_fallbacks"] = s.cpu_shadow_batch_fallbacks.get();
 	d["cpu_verify_checks"] = s.cpu_verify_checks.get();
 	d["cpu_verify_mismatches"] = s.cpu_verify_mismatches.get();
+	d["cpu_loops"] = s.cpu_loops.get();
+	d["cpu_loop_chunks"] = s.cpu_loop_chunks.get();
+	d["cpu_helper_chunks"] = s.cpu_helper_chunks.get();
 	return d;
 }

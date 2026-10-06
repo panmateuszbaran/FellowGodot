@@ -3801,6 +3801,14 @@ void RendererSceneCull::_scene_particles_set_view_axis(RID p_particles, const Ve
 }
 
 void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_camera_data, const Ref<RenderSceneBuffers> &p_render_buffers, RID p_environment, RID p_force_camera_attributes, RID p_compositor, uint32_t p_visible_layers, RID p_scenario, RID p_viewport, RID p_shadow_atlas, RID p_reflection_probe, int p_reflection_probe_pass, float p_screen_mesh_lod_threshold, float p_window_output_max_value, bool p_using_shadows, RenderingServerTypes::RenderInfo *r_render_info) {
+	{
+		// FellowEngine hot workers (decision 0016): posted now, awake by the time the cull and the render lists need them.
+		const uint64_t linger = (uint64_t)Fellow::cpu_hot_workers_usec();
+		if (linger > 0) {
+			fellow_cull_parallel->set_linger_usec(linger);
+			fellow_cull_parallel->prewarm((uint32_t)Fellow::cpu_worker_tasks());
+		}
+	}
 	Instance *render_reflection_probe = instance_owner.get_or_null(p_reflection_probe); //if null, not rendering to it
 
 	// Prepare the light - camera volume culling system.
@@ -4012,8 +4020,12 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 				// itself and never waits for a worker to wake up.
 				fellow_cull_data = &cull_data;
 				// As many worker tasks as stock (one per range but the render thread's): fewer would leave ranges for
-				// fewer threads (m4_f45_city_ab: with 6 the cull took longer than stock's).
-				fellow_cull_parallel.run(scene_cull_result_threads.size(), &RendererSceneCull::_fellow_scene_cull_range, this, scene_cull_result_threads.size() - 1);
+				// fewer threads (m4_f45_city_ab: with 6 the cull took longer than stock's). With hot workers (already
+				// awake, posted when this function started), the render lists' worker count.
+				const uint32_t ranges = scene_cull_result_threads.size();
+				const uint64_t linger = (uint64_t)Fellow::cpu_hot_workers_usec();
+				fellow_cull_parallel->set_linger_usec(linger);
+				fellow_cull_parallel->run(ranges, &RendererSceneCull::_fellow_scene_cull_range, this, linger > 0 ? (uint32_t)Fellow::cpu_worker_tasks() : ranges - 1);
 			} else {
 				WorkerThreadPool::GroupID group_task = WorkerThreadPool::get_singleton()->add_template_group_task(this, &RendererSceneCull::_scene_cull_threaded, &cull_data, scene_cull_result_threads.size(), -1, true, SNAME("RenderCullInstances"));
 				WorkerThreadPool::get_singleton()->wait_for_group_task_completion(group_task);
@@ -5103,6 +5115,7 @@ void RendererSceneCull::set_physics_interpolation_enabled(bool p_enabled) {
 }
 
 RendererSceneCull::RendererSceneCull() {
+	fellow_cull_parallel = FellowParallelFor::shared_acquire();
 	render_pass = 1;
 	singleton = this;
 
@@ -5139,6 +5152,8 @@ RendererSceneCull::RendererSceneCull() {
 }
 
 RendererSceneCull::~RendererSceneCull() {
+	FellowParallelFor::shared_release();
+	fellow_cull_parallel = nullptr;
 	instance_cull_result.reset();
 	instance_shadow_cull_result.reset();
 

@@ -1268,7 +1268,7 @@ public:
 
 	void _scene_cull_threaded(uint32_t p_thread, CullData *cull_data);
 	// FellowEngine (decision 0016): cull ranges processed by the render thread with worker tasks helping.
-	FellowParallelFor fellow_cull_parallel;
+	FellowParallelFor *fellow_cull_parallel = nullptr; // shared with the render lists (FellowParallelFor::shared_acquire())
 	CullData *fellow_cull_data = nullptr;
 	static void _fellow_scene_cull_range(void *p_self, uint32_t p_range);
 	void _scene_cull(CullData &cull_data, InstanceCullResult &cull_result, uint64_t p_from, uint64_t p_to);

@@ -840,7 +840,8 @@ void RenderForwardClustered::SceneState::grow_instance_buffer(RenderListType p_r
 }
 
 void RenderForwardClustered::_fellow_parallel_for(uint32_t p_count, FellowParallelFor::Func p_func) {
-	fellow_parallel.run(p_count, p_func, this, (uint32_t)Fellow::cpu_worker_tasks());
+	fellow_parallel->set_linger_usec((uint64_t)Fellow::cpu_hot_workers_usec());
+	fellow_parallel->run(p_count, p_func, this, (uint32_t)Fellow::cpu_worker_tasks());
 }
 
 _FORCE_INLINE_ void RenderForwardClustered::_fellow_make_instance_data(const GeometryInstanceSurfaceDataCache *surface, const GeometryInstanceForwardClustered *inst, SceneState::InstanceData &instance_data) const {
@@ -1120,7 +1121,8 @@ void RenderForwardClustered::_fellow_sort_by_key_impl(RenderListType p_render_li
 	// Each finished leaf writes its part of the list (while its records are in the cache).
 	fellow_list_sort.clear();
 	fellow_list_sort.add(records, int64_t(p_size), e);
-	fellow_list_sort.run(fellow_parallel, (uint32_t)Fellow::cpu_worker_tasks(), MAX(int64_t(FELLOW_PARALLEL_SORT_GRAIN), int64_t(p_size) / 16), &_fellow_sort_write_back);
+	fellow_parallel->set_linger_usec((uint64_t)Fellow::cpu_hot_workers_usec());
+	fellow_list_sort.run(*fellow_parallel, (uint32_t)Fellow::cpu_worker_tasks(), MAX(int64_t(FELLOW_PARALLEL_SORT_GRAIN), int64_t(p_size) / 16), &_fellow_sort_write_back);
 }
 
 void RenderForwardClustered::_fellow_sort_write_back(void *p_elements, const RenderList::FellowSortRecord *p_records, int64_t p_first, int64_t p_last) {
@@ -3945,7 +3947,8 @@ void RenderForwardClustered::_fellow_shadow_flush() {
 			fellow_shadow_sort.add(fellow_shadow_entries[e].records.ptr(), int64_t(fellow_shadow_entries[e].size));
 		}
 		const int64_t sort_total = fellow_shadow_sort.get_total();
-		fellow_shadow_sort.run(fellow_parallel, (uint32_t)Fellow::cpu_worker_tasks(), MAX(int64_t(FELLOW_PARALLEL_SORT_GRAIN), sort_total / 16));
+		fellow_parallel->set_linger_usec((uint64_t)Fellow::cpu_hot_workers_usec());
+		fellow_shadow_sort.run(*fellow_parallel, (uint32_t)Fellow::cpu_worker_tasks(), MAX(int64_t(FELLOW_PARALLEL_SORT_GRAIN), sort_total / 16));
 	} else {
 		_fellow_parallel_for(entry_count, &_fellow_chunk_thunk<&RenderForwardClustered::_fellow_shadow_sort_entry>);
 	}
@@ -6488,6 +6491,7 @@ void RenderForwardClustered::_update_shader_quality_settings() {
 }
 
 RenderForwardClustered::RenderForwardClustered() {
+	fellow_parallel = FellowParallelFor::shared_acquire();
 	singleton = this;
 	RendererRD::MeshStorage::get_singleton()->fellow_clusters_supported = true; // FellowEngine mesh clusters (decision 0007).
 
@@ -6636,7 +6640,8 @@ RenderForwardClustered::RenderForwardClustered() {
 }
 
 RenderForwardClustered::~RenderForwardClustered() {
-	fellow_parallel.release();
+	FellowParallelFor::shared_release();
+	fellow_parallel = nullptr;
 	if (ss_effects != nullptr) {
 		memdelete(ss_effects);
 		ss_effects = nullptr;

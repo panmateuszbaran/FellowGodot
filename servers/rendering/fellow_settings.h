@@ -362,6 +362,14 @@ inline int cpu_worker_tasks() {
 	return MAX(0, GLOBAL_GET_CACHED(int, "rendering/fellow/cpu/worker_tasks"));
 }
 
+// Hot worker tasks: the worker tasks of the render thread's parallel loops (cull, render lists) stay for this many
+// microseconds after their last chunk, spinning, ready for the next loop; the frame's first loop has them posted ahead
+// (when the cull starts). 0: each loop posts its tasks and they leave when it ends (a sleeping worker can take
+// hundreds of microseconds to wake). Changes which thread runs a chunk, never what a chunk does.
+inline int cpu_hot_workers_usec() {
+	return cpu_enabled() ? MAX(0, GLOBAL_GET_CACHED(int, "rendering/fellow/cpu/hot_workers_usec")) : 0;
+}
+
 // Mix-blended materials (alpha pass, no depth or stencil writes, no alpha antialiasing): fragments whose final alpha is
 // exactly 0 are discarded before lighting — blending them leaves the colour target unchanged (src * 0 + dst * 1), so
 // the image is the same; stock lights and fogs them anyway. Read every frame.
@@ -404,6 +412,9 @@ struct Stats {
 	SafeNumeric<uint64_t> cpu_shadow_batch_fallbacks; // of the builds, built stock's way (instance buffer replaced mid-way)
 	SafeNumeric<uint64_t> cpu_verify_checks; // lists or passes compared with stock's results (cpu/verify)
 	SafeNumeric<uint64_t> cpu_verify_mismatches; // elements or values that differed
+	SafeNumeric<uint64_t> cpu_loops; // parallel loops of the render thread (FellowParallelFor) with 2 or more chunks
+	SafeNumeric<uint64_t> cpu_loop_chunks; // their chunks
+	SafeNumeric<uint64_t> cpu_helper_chunks; // of those, chunks run by worker tasks (the others: by the render thread)
 };
 
 Stats &stats();
