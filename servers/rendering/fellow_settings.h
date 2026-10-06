@@ -334,6 +334,11 @@ inline bool cpu_parallel_cull() {
 	return cpu_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/cpu/parallel_cull");
 }
 
+// Render list loops (fill, instance data, sort gather) prefetch the instances and surfaces a few iterations ahead.
+inline bool cpu_prefetch() {
+	return cpu_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/cpu/prefetch");
+}
+
 // Worker tasks posted per parallel loop of the render lists, besides the render thread (0: the render thread alone).
 inline int cpu_worker_tasks() {
 	return MAX(0, GLOBAL_GET_CACHED(int, "rendering/fellow/cpu/worker_tasks"));

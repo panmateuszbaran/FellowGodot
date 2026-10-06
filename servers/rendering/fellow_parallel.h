@@ -33,6 +33,19 @@
 #include "core/object/worker_thread_pool.h"
 #include "core/templates/safe_refcount.h"
 
+#if defined(_MSC_VER) && (defined(_M_X64) || defined(_M_IX86))
+#include <xmmintrin.h>
+#endif
+
+// Hint to load the cache line holding p_address (no effect on results).
+_FORCE_INLINE_ void fellow_prefetch(const void *p_address) {
+#if defined(__GNUC__) || defined(__clang__)
+	__builtin_prefetch(p_address);
+#elif defined(_MSC_VER) && (defined(_M_X64) || defined(_M_IX86))
+	_mm_prefetch(static_cast<const char *>(p_address), _MM_HINT_T0);
+#endif
+}
+
 // FellowEngine parallel loops for the render thread (docs/decisions/0016-parallel-render-lists.md).
 //
 // run() processes p_count chunks: the calling thread claims chunks itself, and up to p_max_helpers WorkerThreadPool

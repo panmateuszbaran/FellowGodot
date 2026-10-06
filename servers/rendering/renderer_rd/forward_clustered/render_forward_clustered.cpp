@@ -1014,7 +1014,11 @@ void RenderForwardClustered::_fellow_sort_by_key(RenderListType p_render_list, u
 	rl.fellow_sort_records.resize(p_size);
 	RenderList::FellowSortRecord *records = rl.fellow_sort_records.ptr();
 	GeometryInstanceSurfaceDataCache **e = rl.elements.ptr() + p_from;
+	const bool prefetch = Fellow::cpu_prefetch();
 	for (uint32_t i = 0; i < p_size; i++) {
+		if (prefetch && i + 2 * FELLOW_PREFETCH_DISTANCE < p_size) {
+			fellow_prefetch(e[i + 2 * FELLOW_PREFETCH_DISTANCE]);
+		}
 		records[i].key2 = e[i]->sort.sort_key2;
 		records[i].key1 = e[i]->sort.sort_key1;
 		records[i].surface = e[i];
@@ -1074,6 +1078,21 @@ void RenderForwardClustered::_fellow_sort_leaf(uint32_t p_index, void *p_unused)
 	sorter.introsort(r.first, r.last, fellow_sort_job_records, r.depth);
 }
 
+void RenderForwardClustered::_fellow_prefetch_element(GeometryInstanceSurfaceDataCache *const *p_elements, uint32_t p_index, uint32_t p_end) {
+	// Surface caches two distances ahead, their instances and mesh surfaces one distance ahead (no effect on results).
+	if (p_index + 2 * FELLOW_PREFETCH_DISTANCE < p_end) {
+		fellow_prefetch(p_elements[p_index + 2 * FELLOW_PREFETCH_DISTANCE]);
+	}
+	if (p_index + FELLOW_PREFETCH_DISTANCE < p_end) {
+		const GeometryInstanceSurfaceDataCache *s = p_elements[p_index + FELLOW_PREFETCH_DISTANCE];
+		const uint8_t *inst = reinterpret_cast<const uint8_t *>(s->owner);
+		for (uint32_t line = 0; line < FELLOW_PREFETCH_INSTANCE_LINES; line++) {
+			fellow_prefetch(inst + line * 64);
+		}
+		fellow_prefetch(s->surface);
+	}
+}
+
 void RenderForwardClustered::_fellow_fill_instance_data_chunk(uint32_t p_chunk, void *p_unused) {
 	const FellowInstanceDataJob &job = fellow_instance_job;
 	RenderList *rl = &render_list[job.render_list];
@@ -1081,9 +1100,13 @@ void RenderForwardClustered::_fellow_fill_instance_data_chunk(uint32_t p_chunk, 
 	uint8_t *joinable = fellow_instance_joinable.ptr();
 	const uint32_t from = job.offset + p_chunk * job.chunk_size;
 	const uint32_t to = MIN(from + job.chunk_size, job.offset + job.total);
+	const bool prefetch = Fellow::cpu_prefetch();
 	for (uint32_t i = from; i < to; i++) {
 		GeometryInstanceSurfaceDataCache *surface = rl->elements[i];
 		GeometryInstanceForwardClustered *inst = surface->owner;
+		if (prefetch) {
+			_fellow_prefetch_element(rl->elements.ptr(), i, to);
+		}
 
 		SceneState::InstanceData instance_data;
 		_fellow_make_instance_data(surface, inst, instance_data);
@@ -1181,8 +1204,24 @@ void RenderForwardClustered::_fill_render_list_range(const FellowFillParams &p_p
 	const Plane &near_plane = p_params.near_plane;
 	const float z_max = p_params.z_max;
 
+	const bool fellow_prefetch_on = Fellow::cpu_prefetch();
 	for (uint32_t i = p_from; i < p_to; i++) {
 		GeometryInstanceForwardClustered *inst = static_cast<GeometryInstanceForwardClustered *>((*p_render_data->instances)[i]);
+		if (fellow_prefetch_on) {
+			// FellowEngine (decision 0016): load the instances a few iterations ahead (no effect on results).
+			if (i + FELLOW_PREFETCH_DISTANCE < p_to) {
+				const uint8_t *ahead = reinterpret_cast<const uint8_t *>((*p_render_data->instances)[i + FELLOW_PREFETCH_DISTANCE]);
+				for (uint32_t line = 0; line < FELLOW_PREFETCH_INSTANCE_LINES; line++) {
+					fellow_prefetch(ahead + line * 64);
+				}
+			}
+			if (i + FELLOW_PREFETCH_DISTANCE / 2 < p_to) {
+				const GeometryInstanceForwardClustered *soon = static_cast<const GeometryInstanceForwardClustered *>((*p_render_data->instances)[i + FELLOW_PREFETCH_DISTANCE / 2]);
+				if (soon->surface_caches) {
+					fellow_prefetch(soon->surface_caches);
+				}
+			}
+		}
 
 		Vector3 center = inst->transform.origin;
 		if (p_render_data->scene_data->cam_orthogonal) {

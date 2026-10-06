@@ -575,6 +575,9 @@ private:
 		(static_cast<RenderForwardClustered *>(p_self)->*M)(p_chunk, nullptr);
 	}
 	void _fellow_parallel_for(uint32_t p_count, FellowParallelFor::Func p_func);
+	static constexpr uint32_t FELLOW_PREFETCH_DISTANCE = 8; // elements or instances ahead
+	static constexpr uint32_t FELLOW_PREFETCH_INSTANCE_LINES = 6; // 64-byte lines of an instance (its fields used per frame)
+	static void _fellow_prefetch_element(GeometryInstanceSurfaceDataCache *const *p_elements, uint32_t p_index, uint32_t p_end);
 	void _fellow_sort_split_range(uint32_t p_index, void *p_unused);
 	void _fellow_sort_leaf(uint32_t p_index, void *p_unused);
 
@@ -834,6 +837,9 @@ private:
 			FellowSortRecord *records = fellow_sort_records.ptr();
 			GeometryInstanceSurfaceDataCache **e = elements.ptr() + p_from;
 			for (uint32_t i = 0; i < p_size; i++) {
+				if (i + 16 < p_size) {
+					fellow_prefetch(e[i + 16]); // no effect on results
+				}
 				records[i].key2 = e[i]->sort.sort_key2;
 				records[i].key1 = e[i]->sort.sort_key1;
 				records[i].surface = e[i];
