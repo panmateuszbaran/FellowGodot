@@ -5709,12 +5709,15 @@ static thread_local uint32_t fellow_tl_range_first = 0;
 static thread_local uint32_t fellow_tl_range_count = 0;
 
 #define FELLOW_SEGMENT (static_cast<FellowDrawSegment *>(fellow_tl_segment))
-#define FELLOW_DL (fellow_tl_segment != nullptr ? FELLOW_SEGMENT->list : draw_list)
+// The thread-local is only read while a draw list is forked (the member flag, set before the segments' threads start
+// and cleared after they finish, keeps the serial path free of thread-local reads).
+#define FELLOW_IN_SEGMENT (fellow_draw_forked && fellow_tl_segment != nullptr)
+#define FELLOW_DL (FELLOW_IN_SEGMENT ? FELLOW_SEGMENT->list : draw_list)
 // The draw list functions run on the render thread, or on a thread recording a segment of a forked draw list (and then
 // only on those threads until the join).
-#define ERR_DRAW_LIST_THREAD_GUARD() ERR_FAIL_COND_MSG(fellow_tl_segment == nullptr && (render_thread_id != Thread::get_caller_id() || fellow_draw_forked), ERR_RENDER_THREAD_MSG)
+#define ERR_DRAW_LIST_THREAD_GUARD() ERR_FAIL_COND_MSG(!FELLOW_IN_SEGMENT && (render_thread_id != Thread::get_caller_id() || fellow_draw_forked), ERR_RENDER_THREAD_MSG)
 #define FELLOW_UNIFORM_SET_UPDATE(m_set)                                                                            \
-	if (fellow_tl_segment != nullptr) {                                                                             \
+	if (FELLOW_IN_SEGMENT) {                                                                             \
 		if (!(m_set)->shared_textures_to_update.is_empty() || !(m_set)->pending_clear_textures.is_empty()) {        \
 			FELLOW_SEGMENT->deferred_uniform_sets.push_back(m_set);                                                 \
 		}                                                                                                           \
@@ -5723,7 +5726,7 @@ static thread_local uint32_t fellow_tl_range_count = 0;
 		_uniform_set_update_clears(m_set);                                                                          \
 	}
 #define FELLOW_CHECK_TRANSFER_VERTEX_ARRAY(m_va)                       \
-	if (fellow_tl_segment != nullptr) {                                \
+	if (FELLOW_IN_SEGMENT) {                                \
 		if (!(m_va)->transfer_worker_indices.is_empty()) {             \
 			FELLOW_SEGMENT->deferred_vertex_arrays.push_back(m_va);    \
 		}                                                              \
@@ -5731,7 +5734,7 @@ static thread_local uint32_t fellow_tl_range_count = 0;
 		_check_transfer_worker_vertex_array(m_va);                     \
 	}
 #define FELLOW_CHECK_TRANSFER_INDEX_ARRAY(m_ia)                        \
-	if (fellow_tl_segment != nullptr) {                                \
+	if (FELLOW_IN_SEGMENT) {                                \
 		if ((m_ia)->transfer_worker_index >= 0) {                      \
 			FELLOW_SEGMENT->deferred_index_arrays.push_back(m_ia);     \
 		}                                                              \
@@ -5739,7 +5742,7 @@ static thread_local uint32_t fellow_tl_range_count = 0;
 		_check_transfer_worker_index_array(m_ia);                      \
 	}
 #define FELLOW_CHECK_TRANSFER_BUFFER(m_buffer)                         \
-	if (fellow_tl_segment != nullptr) {                                \
+	if (FELLOW_IN_SEGMENT) {                                \
 		if ((m_buffer)->transfer_worker_index >= 0) {                  \
 			FELLOW_SEGMENT->deferred_buffers.push_back(m_buffer);      \
 		}                                                              \
@@ -6490,6 +6493,7 @@ bool RenderingDevice::fellow_draw_list_fork(DrawListID p_list, uint32_t p_segmen
 	}
 	fellow_draw_segment_count = p_segments;
 	fellow_draw_forked = true;
+	draw_graph.fellow_segments_active = true;
 	return true;
 }
 
@@ -6509,6 +6513,7 @@ void RenderingDevice::fellow_draw_list_join(bool p_discard) {
 	ERR_RENDER_THREAD_GUARD();
 	ERR_FAIL_COND(!fellow_draw_forked || fellow_tl_segment != nullptr);
 	fellow_draw_forked = false;
+	draw_graph.fellow_segments_active = false;
 	const uint32_t count = fellow_draw_segment_count;
 	fellow_draw_segment_count = 0;
 	if (p_discard) {

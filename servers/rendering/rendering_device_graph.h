@@ -1032,6 +1032,7 @@ public:
 		}
 	};
 	static void fellow_draw_segment_set(FellowDrawSegment *p_segment); // the calling thread's target (nullptr: the draw list)
+	bool fellow_segments_active = false; // set by the device while a draw list is forked (the thread-local is read only then)
 	void fellow_draw_segment_append(const FellowDrawSegment &p_segment);
 	static ResourceTracker *resource_tracker_create();
 	static void resource_tracker_free(ResourceTracker *p_tracker);

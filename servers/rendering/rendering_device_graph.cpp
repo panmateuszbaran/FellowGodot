@@ -322,10 +322,12 @@ RenderingDeviceGraph::RecordedCommand *RenderingDeviceGraph::_allocate_command(u
 
 // FellowEngine parallel recording: the calling thread's segment, if any (see fellow_draw_segment_set()).
 static thread_local RenderingDeviceGraph::FellowDrawSegment *fellow_tl_draw_segment = nullptr;
-#define FELLOW_DRAW_STAGES (fellow_tl_draw_segment != nullptr ? fellow_tl_draw_segment->stages : draw_instruction_list.stages)
+#define FELLOW_TL_SEGMENT (fellow_segments_active ? fellow_tl_draw_segment : nullptr)
+#define FELLOW_DRAW_STAGES (FELLOW_TL_SEGMENT != nullptr ? fellow_tl_draw_segment->stages : draw_instruction_list.stages)
 
 RenderingDeviceGraph::DrawListInstruction *RenderingDeviceGraph::_allocate_draw_list_instruction(uint32_t p_instruction_size) {
-	LocalVector<uint8_t> &data = fellow_tl_draw_segment != nullptr ? fellow_tl_draw_segment->data : draw_instruction_list.data;
+	FellowDrawSegment *segment = FELLOW_TL_SEGMENT;
+	LocalVector<uint8_t> &data = segment != nullptr ? segment->data : draw_instruction_list.data;
 	uint32_t draw_list_data_offset = data.size();
 	draw_list_data_offset = GRAPH_ALIGN(draw_list_data_offset);
 	data.resize(draw_list_data_offset + p_instruction_size);
@@ -2341,7 +2343,7 @@ void RenderingDeviceGraph::add_draw_list_draw_indexed_indirect(RDD::BufferID p_b
 }
 
 void RenderingDeviceGraph::add_draw_list_execute_commands(RDD::CommandBufferID p_command_buffer) {
-	if (fellow_tl_draw_segment != nullptr) {
+	if (FELLOW_TL_SEGMENT != nullptr) {
 		fellow_tl_draw_segment->dynamic_state = true;
 	}
 	DrawListExecuteCommandsInstruction *instruction = reinterpret_cast<DrawListExecuteCommandsInstruction *>(_allocate_draw_list_instruction(sizeof(DrawListExecuteCommandsInstruction)));
@@ -2350,7 +2352,7 @@ void RenderingDeviceGraph::add_draw_list_execute_commands(RDD::CommandBufferID p
 }
 
 void RenderingDeviceGraph::add_draw_list_next_subpass(RDD::CommandBufferType p_command_buffer_type) {
-	if (fellow_tl_draw_segment != nullptr) {
+	if (FELLOW_TL_SEGMENT != nullptr) {
 		fellow_tl_draw_segment->dynamic_state = true;
 	}
 	DrawListNextSubpassInstruction *instruction = reinterpret_cast<DrawListNextSubpassInstruction *>(_allocate_draw_list_instruction(sizeof(DrawListNextSubpassInstruction)));
@@ -2359,7 +2361,7 @@ void RenderingDeviceGraph::add_draw_list_next_subpass(RDD::CommandBufferType p_c
 }
 
 void RenderingDeviceGraph::add_draw_list_set_blend_constants(const Color &p_color) {
-	if (fellow_tl_draw_segment != nullptr) {
+	if (FELLOW_TL_SEGMENT != nullptr) {
 		fellow_tl_draw_segment->dynamic_state = true;
 	}
 	DrawListSetBlendConstantsInstruction *instruction = reinterpret_cast<DrawListSetBlendConstantsInstruction *>(_allocate_draw_list_instruction(sizeof(DrawListSetBlendConstantsInstruction)));
@@ -2368,7 +2370,7 @@ void RenderingDeviceGraph::add_draw_list_set_blend_constants(const Color &p_colo
 }
 
 void RenderingDeviceGraph::add_draw_list_set_line_width(float p_width) {
-	if (fellow_tl_draw_segment != nullptr) {
+	if (FELLOW_TL_SEGMENT != nullptr) {
 		fellow_tl_draw_segment->dynamic_state = true;
 	}
 	DrawListSetLineWidthInstruction *instruction = reinterpret_cast<DrawListSetLineWidthInstruction *>(_allocate_draw_list_instruction(sizeof(DrawListSetLineWidthInstruction)));
@@ -2386,7 +2388,7 @@ void RenderingDeviceGraph::add_draw_list_set_push_constant(RDD::ShaderID p_shade
 }
 
 void RenderingDeviceGraph::add_draw_list_set_scissor(Rect2i p_rect) {
-	if (fellow_tl_draw_segment != nullptr) {
+	if (FELLOW_TL_SEGMENT != nullptr) {
 		fellow_tl_draw_segment->dynamic_state = true;
 	}
 	DrawListSetScissorInstruction *instruction = reinterpret_cast<DrawListSetScissorInstruction *>(_allocate_draw_list_instruction(sizeof(DrawListSetScissorInstruction)));
@@ -2395,7 +2397,7 @@ void RenderingDeviceGraph::add_draw_list_set_scissor(Rect2i p_rect) {
 }
 
 void RenderingDeviceGraph::add_draw_list_set_viewport(Rect2i p_rect) {
-	if (fellow_tl_draw_segment != nullptr) {
+	if (FELLOW_TL_SEGMENT != nullptr) {
 		fellow_tl_draw_segment->dynamic_state = true;
 	}
 	DrawListSetViewportInstruction *instruction = reinterpret_cast<DrawListSetViewportInstruction *>(_allocate_draw_list_instruction(sizeof(DrawListSetViewportInstruction)));
@@ -2412,7 +2414,7 @@ void RenderingDeviceGraph::add_draw_list_uniform_set_prepare_for_use(RDD::Shader
 }
 
 void RenderingDeviceGraph::add_draw_list_usage(ResourceTracker *p_tracker, ResourceUsage p_usage) {
-	if (fellow_tl_draw_segment != nullptr) {
+	if (FELLOW_TL_SEGMENT != nullptr) {
 		// Parallel recording: the usage is added to the draw list (and the tracker touched) when the segment is appended.
 		FellowDrawSegment *segment = fellow_tl_draw_segment;
 		if (segment->trackers.is_empty() || segment->trackers[segment->trackers.size() - 1] != p_tracker) {
