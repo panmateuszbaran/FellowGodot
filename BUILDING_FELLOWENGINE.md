@@ -127,6 +127,13 @@ runtime and per benchmark variant (`run_benchmarks.py --builds "label=fellow@key
 | `rendering/fellow/lights/zero_attenuation_skip` | **true** | omni/spot lights with exactly zero attenuation at the pixel return before the attenuation's pow(), shadow and BRDF (exact; decision 0008) |
 | `rendering/fellow/lights/cluster_pack_parallel` | **true** | cluster pack pass with one workgroup per tile and one invocation per depth slice (same stored words; decision 0014: Lights Lab pack pass 0.119 → 0.069 ms) |
 | `rendering/fellow/shading/blended_alpha_zero_skip` | **true** | mix-blended fragments whose 2×2 quad has alpha exactly 0 skip lighting, shadows and fog (exact; decision 0010: Blend Lab −8.0 % frame, transparent pass −34 %) |
+| `rendering/fellow/cpu/enabled` | true | master switch for render-thread CPU changes |
+| `rendering/fellow/cpu/parallel_list_fill` | false | render lists (opaque, shadow passes) filled by the render thread and worker tasks over ranges of the culled instances, joined in order (same lists; decision 0016) |
+| `rendering/fellow/cpu/parallel_instance_data` | false | instance data of the sorted lists written over ranges in parallel; run lengths and draw counts as stock (decision 0016) |
+| `rendering/fellow/cpu/compact_list_sort` | false | stock's introsort on (key, key, element) records copied out of the surfaces: same order, ties included (decision 0016) |
+| `rendering/fellow/cpu/parallel_list_sort` | false | with the compact sort, lists of 4096+ elements: introsort's independent subranges sorted in parallel, same steps (decision 0016) |
+| `rendering/fellow/cpu/parallel_cull` | false | stock's threaded scene cull ranges processed by the render thread with worker tasks helping, instead of a group task it sleeps on (same results; decision 0016) |
+| `rendering/fellow/cpu/worker_tasks` | 6 | worker tasks posted per parallel loop besides the render thread (0: the render thread alone) |
 | `rendering/fellow/frame/early_submit` | false | submit the frame's rendering before the swap chain acquisition (decision 0009: rejected, no effect) |
 | `rendering/fellow/frame/separate_present_queue` | false | start-up setting (project.godot / override.cfg): present from a second queue (decision 0009: rejected, slower) |
 | `rendering/fellow/frame/async_compute` | false | start-up only (project.godot / override.cfg): SSAO/SSIL/SSR submitted to the dedicated compute queue family, running while the main queue renders shadows, clusters and fog (image-identical; decision 0015: −1 to −2 % in GPU-bound frames on RTX, +0.2-0.8 ms render-thread time; inactive without a compute family) |
