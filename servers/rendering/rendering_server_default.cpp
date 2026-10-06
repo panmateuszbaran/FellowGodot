@@ -100,16 +100,26 @@ void RenderingServerDefault::_draw(bool p_swap_buffers, double frame_step) {
 
 	GodotProfileZoneGrouped(_profile_zone, "scene->update");
 	RSG::scene->update(); //update scenes stuff before updating instances
+	if (Fellow::list_markers()) {
+		RENDER_TIMESTAMP("FellowEngine Canvas Update");
+	}
 	GodotProfileZoneGrouped(_profile_zone, "canvas->update");
 	RSG::canvas->update();
 
 	frame_setup_time = double(OS::get_singleton()->get_ticks_usec() - time_usec) / 1000.0;
 
+	if (Fellow::list_markers()) {
+		RENDER_TIMESTAMP("FellowEngine Particles and Probes");
+	}
 	GodotProfileZoneGrouped(_profile_zone, "particles_storage->update_particles");
 	RSG::particles_storage->update_particles(); //need to be done after instances are updated (colliders and particle transforms), and colliders are rendered
 
 	GodotProfileZoneGrouped(_profile_zone, "scene->render_probes");
 	RSG::scene->render_probes();
+
+	if (Fellow::list_markers()) {
+		RENDER_TIMESTAMP("FellowEngine Draw Viewports");
+	}
 
 	GodotProfileZoneGrouped(_profile_zone, "viewport->draw_viewports");
 	RSG::viewport->draw_viewports(p_swap_buffers);
