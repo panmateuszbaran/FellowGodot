@@ -312,8 +312,11 @@ inline bool frame_present_thread() {
 // Parallel replay: large draw lists (192+ draws) are replayed into secondary command buffers by worker threads at the
 // end of the frame (render graph), each segment starting with the state the instructions before it set; the render
 // pass executes them in order. Same commands in the same order: same images. Vulkan; read every frame.
+bool cpu_hot_workers_gate_open();
 inline bool frame_parallel_replay() {
-	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/frame/parallel_replay");
+	// Like the hot workers, only while the frame is CPU-bound (cpu/hot_workers_gate): a render pass made of secondary
+	// command buffers costs the GPU a little (m4_f51_gpu_ab, Bistro exterior: +1.6 % GPU time).
+	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/frame/parallel_replay") && (!GLOBAL_GET_CACHED(bool, "rendering/fellow/cpu/hot_workers_gate") || cpu_hot_workers_gate_open());
 }
 
 inline bool frame_async_compute() {
