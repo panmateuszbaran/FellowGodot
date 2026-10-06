@@ -844,11 +844,14 @@ void RenderForwardClustered::_fellow_parallel_for(uint32_t p_count, FellowParall
 	fellow_parallel->run(p_count, p_func, this, MIN(p_max_helpers, (uint32_t)Fellow::cpu_worker_tasks()));
 }
 
-_FORCE_INLINE_ void RenderForwardClustered::_fellow_make_instance_data(const GeometryInstanceSurfaceDataCache *surface, const GeometryInstanceForwardClustered *inst, SceneState::InstanceData &instance_data) const {
+_FORCE_INLINE_ void RenderForwardClustered::_fellow_make_instance_data(const GeometryInstanceSurfaceDataCache *surface, const GeometryInstanceForwardClustered *inst, SceneState::InstanceData &instance_data, bool p_full) const {
 	// Stock's per-element instance data (moved out of _fill_instance_data's loop; also used by its worker ranges).
+	// p_full false: only the fields before prev_transform (FELLOW_SHADOW_INSTANCE_BYTES; see cpu_compact_shadow_instances()).
 	if (likely(inst->store_transform_cache)) {
 		RendererRD::MaterialStorage::store_transform_transposed_3x4(inst->transform, instance_data.transform);
-		RendererRD::MaterialStorage::store_transform_transposed_3x4(inst->prev_transform, instance_data.prev_transform);
+		if (p_full) {
+			RendererRD::MaterialStorage::store_transform_transposed_3x4(inst->prev_transform, instance_data.prev_transform);
+		}
 
 #ifdef REAL_T_IS_DOUBLE
 		// Split the origin into two components, the float approximation and the missing precision.
@@ -862,7 +865,9 @@ _FORCE_INLINE_ void RenderForwardClustered::_fellow_make_instance_data(const Geo
 #endif
 	} else {
 		RendererRD::MaterialStorage::store_transform_transposed_3x4(Transform3D(), instance_data.transform);
-		RendererRD::MaterialStorage::store_transform_transposed_3x4(Transform3D(), instance_data.prev_transform);
+		if (p_full) {
+			RendererRD::MaterialStorage::store_transform_transposed_3x4(Transform3D(), instance_data.prev_transform);
+		}
 #ifdef REAL_T_IS_DOUBLE
 		memset(instance_data.model_precision, 0, sizeof(instance_data.model_precision));
 		memset(instance_data.prev_model_precision, 0, sizeof(instance_data.prev_model_precision));
@@ -873,7 +878,9 @@ _FORCE_INLINE_ void RenderForwardClustered::_fellow_make_instance_data(const Geo
 	instance_data.gi_offset = inst->gi_offset_cache;
 	instance_data.layer_mask = inst->layer_mask;
 	instance_data.instance_uniforms_ofs = uint32_t(inst->shader_uniforms_offset);
-	instance_data.set_lightmap_uv_scale(inst->lightmap_uv_scale);
+	if (p_full) {
+		instance_data.set_lightmap_uv_scale(inst->lightmap_uv_scale);
+	}
 
 	AABB surface_aabb = AABB(Vector3(0.0, 0.0, 0.0), Vector3(1.0, 1.0, 1.0));
 	uint64_t format = RendererRD::MeshStorage::get_singleton()->mesh_surface_get_format(surface->surface);
@@ -902,7 +909,7 @@ uint32_t RenderForwardClustered::_fellow_verify_sort(RenderListType p_render_lis
 	return mismatches;
 }
 
-uint32_t RenderForwardClustered::_fellow_verify_instances(RenderListType p_render_list, uint32_t p_from, uint32_t p_size, const uint32_t *p_flags) {
+uint32_t RenderForwardClustered::_fellow_verify_instances(RenderListType p_render_list, uint32_t p_from, uint32_t p_size, const uint32_t *p_flags, bool p_compact) {
 	// Stock's instance data, run lengths and element values for the list range, compared with what was written. The
 	// last component of the compressed AABB position and size is never written (stock leaves it uninitialised).
 	RenderList *rl = &render_list[p_render_list];
@@ -917,12 +924,12 @@ uint32_t RenderForwardClustered::_fellow_verify_instances(RenderListType p_rende
 		const GeometryInstanceSurfaceDataCache *surface = rl->elements[i];
 		const GeometryInstanceForwardClustered *inst = surface->owner;
 		SceneState::InstanceData expected;
-		_fellow_make_instance_data(surface, inst, expected);
+		_fellow_make_instance_data(surface, inst, expected, true);
 		const uint32_t flags = p_flags ? p_flags[k] : inst->flags_cache;
 		expected.flags = flags;
 		expected.compressed_aabb_position[3] = gpu[i].compressed_aabb_position[3];
 		expected.compressed_aabb_size[3] = gpu[i].compressed_aabb_size[3];
-		if (memcmp(&expected, &gpu[i], sizeof(SceneState::InstanceData)) != 0) {
+		if (memcmp(&expected, &gpu[i], p_compact ? FELLOW_SHADOW_INSTANCE_BYTES : sizeof(SceneState::InstanceData)) != 0) {
 			mismatches++;
 		}
 		if (rl->element_info[i].value != uint32_t(surface->sort.sort_key1 & 0xFFF) && p_flags == nullptr) {
@@ -1029,7 +1036,7 @@ void RenderForwardClustered::_fill_instance_data(RenderListType p_render_list, i
 		}
 
 		if (Fellow::cpu_verify()) {
-			_fellow_verify_count(_fellow_verify_instances(p_render_list, p_offset, element_total, nullptr));
+			_fellow_verify_count(_fellow_verify_instances(p_render_list, p_offset, element_total, nullptr, false));
 		}
 
 		if (p_update_buffer && element_total > 0u) {
@@ -1046,7 +1053,7 @@ void RenderForwardClustered::_fill_instance_data(RenderListType p_render_list, i
 
 		SceneState::InstanceData instance_data;
 
-		_fellow_make_instance_data(surface, inst, instance_data);
+		_fellow_make_instance_data(surface, inst, instance_data, true);
 
 		scene_state.curr_gpu_ptr[p_render_list][i + p_offset] = instance_data;
 
@@ -1179,7 +1186,7 @@ void RenderForwardClustered::_fellow_fill_instance_data_chunk(uint32_t p_chunk, 
 		}
 
 		SceneState::InstanceData instance_data;
-		_fellow_make_instance_data(surface, inst, instance_data);
+		_fellow_make_instance_data(surface, inst, instance_data, true);
 		gpu[i] = instance_data;
 
 		// Stock's repeat test against the previous element (none before the first element of the range filled).
@@ -3832,6 +3839,7 @@ void RenderForwardClustered::_fellow_shadow_instance_chunk(uint32_t p_item, void
 	uint8_t *link = fellow_instance_joinable.ptr();
 	const FellowShadowRecord *records = entry.records.ptr();
 	const bool prefetch = Fellow::cpu_prefetch();
+	const bool compact = fellow_shadow_compact;
 	for (uint32_t r = item.from; r < item.to; r++) {
 		const FellowShadowRecord &rec = records[r];
 		GeometryInstanceSurfaceDataCache *surface = rec.surface;
@@ -3848,9 +3856,13 @@ void RenderForwardClustered::_fellow_shadow_instance_chunk(uint32_t p_item, void
 
 		// Stock's instance data, with the flags this pass gave the instance (stock reads them back from the instance).
 		SceneState::InstanceData instance_data;
-		_fellow_make_instance_data(surface, inst, instance_data);
+		_fellow_make_instance_data(surface, inst, instance_data, !compact);
 		instance_data.flags = rec.flags;
-		gpu[i] = instance_data;
+		if (compact) {
+			memcpy(&gpu[i], &instance_data, FELLOW_SHADOW_INSTANCE_BYTES);
+		} else {
+			gpu[i] = instance_data;
+		}
 		rl->element_info[i].value = uint32_t(rec.key1 & 0xFFF);
 
 		// Stock's repeat test against the element before it (a pass's first element starts a run).
@@ -3898,6 +3910,7 @@ void RenderForwardClustered::_fellow_shadow_flush() {
 		total_instances += (uint32_t)fellow_shadow_entries[e].params.instances->size();
 	}
 	const uint32_t helpers = total_instances >= FELLOW_PARALLEL_LIST_MIN ? UINT32_MAX : 0;
+	fellow_shadow_compact = Fellow::cpu_compact_shadow_instances();
 	uint32_t chunk_count = 0;
 	for (uint32_t e = 0; e < entry_count; e++) {
 		FellowShadowEntry &entry = fellow_shadow_entries[e];
@@ -4146,7 +4159,7 @@ void RenderForwardClustered::_fellow_shadow_flush() {
 						mismatches++; // the record's flags and key bits against what stock's fill just wrote
 					}
 				}
-				mismatches += _fellow_verify_instances(RENDER_LIST_SECONDARY, entry.from, entry.size, flags.ptr());
+				mismatches += _fellow_verify_instances(RENDER_LIST_SECONDARY, entry.from, entry.size, flags.ptr(), fellow_shadow_compact);
 			}
 			_fellow_verify_count(mismatches);
 		}

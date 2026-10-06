@@ -88,6 +88,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/cpu/parallel_cull", false);
 	GLOBAL_DEF("rendering/fellow/cpu/prefetch", false);
 	GLOBAL_DEF("rendering/fellow/cpu/batched_shadow_lists", false);
+	GLOBAL_DEF("rendering/fellow/cpu/compact_shadow_instances", false);
 	GLOBAL_DEF("rendering/fellow/cpu/verify", false);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/cpu/worker_tasks", PROPERTY_HINT_RANGE, "0,32,1"), 6);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/cpu/hot_workers_usec", PROPERTY_HINT_RANGE, "0,5000,1,suffix:us"), 0);

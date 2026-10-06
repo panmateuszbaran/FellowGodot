@@ -346,6 +346,12 @@ inline bool cpu_batched_shadow_lists() {
 	return cpu_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/cpu/batched_shadow_lists");
 }
 
+// Batched shadow lists write, per element, only the instance data a shadow pass reads (not prev_transform and
+// lightmap_uv_scale, which only motion-vector and lit passes read): 112 of 176 bytes. Same images.
+inline bool cpu_compact_shadow_instances() {
+	return cpu_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/cpu/compact_shadow_instances");
+}
+
 // Render list loops (fill, instance data, sort gather) prefetch the instances and surfaces a few iterations ahead.
 inline bool cpu_prefetch() {
 	return cpu_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/cpu/prefetch");

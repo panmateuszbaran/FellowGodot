@@ -650,13 +650,23 @@ private:
 	void _fellow_fill_join_chunk(uint32_t p_chunk, void *p_unused);
 	RenderListType fellow_join_list = RENDER_LIST_OPAQUE;
 	bool fellow_join_records = false;
-	void _fellow_make_instance_data(const GeometryInstanceSurfaceDataCache *p_surface, const GeometryInstanceForwardClustered *p_inst, SceneState::InstanceData &r_data) const;
+	void _fellow_make_instance_data(const GeometryInstanceSurfaceDataCache *p_surface, const GeometryInstanceForwardClustered *p_inst, SceneState::InstanceData &r_data, bool p_full) const;
+	// Shadow passes (depth only, no motion vectors) never read an instance's prev_transform or lightmap_uv_scale, the
+	// last fields of InstanceData: with cpu/compact_shadow_instances the batched shadow lists write only the bytes before
+	// them (the buffer is written over PCIe on discrete GPUs).
+#ifdef REAL_T_IS_DOUBLE
+	static constexpr uint32_t FELLOW_SHADOW_INSTANCE_BYTES = sizeof(SceneState::InstanceData);
+#else
+	static constexpr uint32_t FELLOW_SHADOW_INSTANCE_BYTES = offsetof(SceneState::InstanceData, prev_transform);
+	static_assert(offsetof(SceneState::InstanceData, lightmap_uv_scale) == FELLOW_SHADOW_INSTANCE_BYTES + sizeof(float) * 12 && sizeof(SceneState::InstanceData) == offsetof(SceneState::InstanceData, lightmap_uv_scale) + sizeof(float) * 4, "prev_transform and lightmap_uv_scale must be InstanceData's last fields");
+#endif
+	bool fellow_shadow_compact = false;
 	void _fellow_fill_instance_data_chunk(uint32_t p_chunk, void *p_unused);
 	void _fellow_sort_by_key(RenderListType p_render_list, uint32_t p_from, uint32_t p_size);
 	void _fellow_sort_by_key_impl(RenderListType p_render_list, uint32_t p_from, uint32_t p_size);
 	// Verification (rendering/fellow/cpu/verify): stock's results computed on the side and compared.
 	uint32_t _fellow_verify_sort(RenderListType p_render_list, uint32_t p_from, uint32_t p_size, LocalVector<GeometryInstanceSurfaceDataCache *> &p_unsorted);
-	uint32_t _fellow_verify_instances(RenderListType p_render_list, uint32_t p_from, uint32_t p_size, const uint32_t *p_flags);
+	uint32_t _fellow_verify_instances(RenderListType p_render_list, uint32_t p_from, uint32_t p_size, const uint32_t *p_flags, bool p_compact);
 	void _fellow_verify_count(uint32_t p_mismatches);
 	// Parallel loops over chunks (decision 0016): the render thread takes chunks itself, worker tasks help if they start
 	// in time (servers/rendering/fellow_parallel.h).
