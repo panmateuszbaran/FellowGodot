@@ -332,8 +332,29 @@ private:
 		const SwapTask &task = self->swap_tasks[p_index];
 		const BigRange &br = self->big_ranges[task.big];
 		T *a = self->split[br.split_index].array;
+		// The task's first left and right stops by search, the following ones by walking the chunks' stop lists.
+		uint32_t lc = br.chunk_first;
+		while (lc + 1 < br.chunk_first + br.chunk_count && self->scan_chunks[lc + 1].left_before <= task.from) {
+			lc++;
+		}
+		int64_t li = task.from - self->scan_chunks[lc].left_before;
+		uint32_t rc = br.chunk_first + br.chunk_count - 1;
+		while (rc > br.chunk_first && self->scan_chunks[rc - 1].right_after <= task.from) {
+			rc--;
+		}
+		int64_t ri = task.from - self->scan_chunks[rc].right_after;
 		for (int64_t k = task.from; k < task.to; k++) {
-			SWAP(a[self->_left_stop(br, k)], a[self->_right_stop(br, k)]);
+			while (li >= int64_t(self->scan_chunks[lc].left.size())) {
+				li -= self->scan_chunks[lc].left.size();
+				lc++;
+			}
+			while (ri >= int64_t(self->scan_chunks[rc].right.size())) {
+				ri -= self->scan_chunks[rc].right.size();
+				rc--;
+			}
+			SWAP(a[self->scan_chunks[lc].left[li]], a[self->scan_chunks[rc].right[ri]]);
+			li++;
+			ri++;
 		}
 	}
 
