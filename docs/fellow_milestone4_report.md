@@ -60,20 +60,52 @@ stock's results on the side and compares them after every build.
 | hot workers | worker tasks stay awake between the render thread's loops; cold while the GPU is the limit |
 | compact shadow instances | shadow passes write the 112 of 176 instance bytes a shadow pass reads |
 
-City Lab, between processes (4 ABBA runs each, `m4_f49_city_perf`):
+City Lab, between processes (ABBA runs):
 
-| | frame ms | render thread ms | GPU ms |
-|---|---:|---:|---:|
-| stock 4.7.2 | 3.043 | 2.427 | 1.61 |
-| FellowEngine, CPU toggles | 2.620 (−13.9 %) | 1.873 (−22.8 %) | 1.67 |
-| FellowEngine, CPU toggles + hot workers | **2.454 (−19.4 %)** | **1.680 (−30.8 %)** | 1.73 |
+| session | | frame ms | render thread ms | GPU ms |
+|---|---|---:|---:|---:|
+| `m4_f49_city_perf` (4 runs) | stock 4.7.2 | 3.043 | 2.427 | 1.61 |
+| | CPU toggles | 2.620 (−13.9 %) | 1.873 (−22.8 %) | 1.67 |
+| | CPU toggles + hot workers | 2.454 (−19.4 %) | 1.680 (−30.8 %) | 1.73 |
+| `m4_f52_city_perf` (4 runs) | stock 4.7.2 | 3.067 | 2.442 | |
+| | candidate (+ present thread, parallel replay, 10 workers) | **2.479 (−19.2 %)** | **1.695 (−30.6 %)** | |
+| `m4_f52_dh_perf` (3 runs, draw-heavy: 3000 materials) | stock 4.7.2 | 4.192 | 3.168 | |
+| | candidate | **3.477 (−17.0 %)** | **2.457 (−22.4 %)** | |
 
-(further results in progress)
+## 5. The end of the frame (decision 0017)
 
-## 5. Image verification
+After the scene is recorded the render thread replays the render graph into the command buffer, submits and
+presents (0.2 ms per frame in City Lab, 0.5 ms in the draw-heavy variant, 1.4 ms in Bistro exterior).
 
-(to be completed)
+* **Parallel replay**: large draw lists are replayed into secondary command buffers by the workers, each segment
+  starting with the state in effect at its start. Only while the frame is CPU-bound (it cost Bistro exterior 1.6 % GPU
+  time).
+* **Present thread / submit thread**: `vkQueuePresentKHR`, and with the submit thread every `vkQueueSubmit` of the
+  frame (a FIFO of jobs, also async compute's three extra submissions), issued by a dedicated thread. Its first version
+  gave nothing in one process: the render thread waited for the whole FIFO at the start of the next frame; it now waits
+  only for the submission of the frame slot it reuses (`fellow54`).
 
-## 6. Next
+## 6. Recording on several threads (decision 0018)
+
+The draw recording of a large list (`_render_list_template()`: the pipeline, uniform sets, buffers, push constant and
+draw of every element) was the largest single step left on the render thread in the draw-heavy City Lab (depth pre-pass
+0.49 ms, opaque pass 0.41 ms in one process). The draw list is forked into segments, each recorded by a worker with its
+own state tracking and instruction buffer from a run start, and joined in order; the replay then splits the list where
+it was recorded. `fellow54` measures it.
+
+## 7. Async compute in a CPU-bound frame (decision 0015)
+
+In City Lab async compute costs about 3 % of the frame even with the submit thread (`m4_f53_city_perf`); in the
+GPU-bound scenes it gains 0-2 %. It stays an option, off by default.
+
+## 8. Image verification
+
+Every build of this milestone ran with `cpu/verify` (stock's lists and instance data recomputed on the side and
+compared): 0 mismatches in City Lab (plain, draw-heavy, lightmap captures), Lights, Stress, PBR, Blend Lab and Bistro
+exterior, also under async compute. Identity against FellowEngine with the toggles off (temporal sequences of six
+scenes, `m4_f52_temporal`, `m4_f53_temporal`, `m4_f54_temporal`): Bistro exterior bit-identical, the other scenes at
+their run-to-run floor. lavapipe (CPU rasterizer, deterministic): 0 differing pixels for every step.
+
+## 9. Next
 
 (to be completed)
