@@ -970,6 +970,62 @@ public:
 			}
 		}
 
+		// FellowEngine (decision 0016): append_from() array by array, so that worker tasks can merge different arrays at
+		// once; each array still receives the sources in the same order (the same pages, the same elements).
+		static constexpr uint32_t FELLOW_MERGE_SIMPLE = 9;
+		static constexpr uint32_t FELLOW_MERGE_DIRECTIONAL = RendererSceneRender::MAX_DIRECTIONAL_LIGHTS * RendererSceneRender::MAX_DIRECTIONAL_LIGHT_CASCADES;
+		static constexpr uint32_t FELLOW_MERGE_KINDS = FELLOW_MERGE_SIMPLE + FELLOW_MERGE_DIRECTIONAL * 2 + SDFGI_MAX_CASCADES * SDFGI_MAX_REGIONS_PER_CASCADE + SDFGI_MAX_CASCADES;
+		void fellow_merge_kind(uint32_t p_kind, InstanceCullResult *p_sources, uint32_t p_source_count) {
+#define FELLOW_MERGE(m_member)                                    \
+	for (uint32_t s = 0; s < p_source_count; s++) {             \
+		m_member.merge_unordered(p_sources[s].m_member);         \
+	}                                                            \
+	return;
+			switch (p_kind) {
+				case 0:
+					FELLOW_MERGE(geometry_instances)
+				case 1:
+					FELLOW_MERGE(lights)
+				case 2:
+					FELLOW_MERGE(light_instances)
+				case 3:
+					FELLOW_MERGE(lightmaps)
+				case 4:
+					FELLOW_MERGE(reflections)
+				case 5:
+					FELLOW_MERGE(decals)
+				case 6:
+					FELLOW_MERGE(voxel_gi_instances)
+				case 7:
+					FELLOW_MERGE(mesh_instances)
+				case 8:
+					FELLOW_MERGE(fog_volumes)
+				default:
+					break;
+			}
+			uint32_t k = p_kind - FELLOW_MERGE_SIMPLE;
+			if (k < FELLOW_MERGE_DIRECTIONAL) {
+				const uint32_t i = k / RendererSceneRender::MAX_DIRECTIONAL_LIGHT_CASCADES;
+				const uint32_t j = k % RendererSceneRender::MAX_DIRECTIONAL_LIGHT_CASCADES;
+				FELLOW_MERGE(directional_shadows[i].cascade_geometry_instances[j])
+			}
+			k -= FELLOW_MERGE_DIRECTIONAL;
+			if (k < FELLOW_MERGE_DIRECTIONAL) {
+				const uint32_t i = k / RendererSceneRender::MAX_DIRECTIONAL_LIGHT_CASCADES;
+				const uint32_t j = k % RendererSceneRender::MAX_DIRECTIONAL_LIGHT_CASCADES;
+				FELLOW_MERGE(directional_shadows[i].fellow_cache_instances[j])
+			}
+			k -= FELLOW_MERGE_DIRECTIONAL;
+			if (k < SDFGI_MAX_CASCADES * SDFGI_MAX_REGIONS_PER_CASCADE) {
+				FELLOW_MERGE(sdfgi_region_geometry_instances[k])
+			}
+			k -= SDFGI_MAX_CASCADES * SDFGI_MAX_REGIONS_PER_CASCADE;
+			if (k < SDFGI_MAX_CASCADES) {
+				FELLOW_MERGE(sdfgi_cascade_lights[k])
+			}
+#undef FELLOW_MERGE
+		}
+
 		void append_from(InstanceCullResult &p_cull_result) {
 			geometry_instances.merge_unordered(p_cull_result.geometry_instances);
 			lights.merge_unordered(p_cull_result.lights);
@@ -1271,6 +1327,7 @@ public:
 	FellowParallelFor *fellow_cull_parallel = nullptr; // shared with the render lists (FellowParallelFor::shared_acquire())
 	CullData *fellow_cull_data = nullptr;
 	static void _fellow_scene_cull_range(void *p_self, uint32_t p_range);
+	static void _fellow_scene_cull_merge(void *p_self, uint32_t p_kind);
 	void _scene_cull(CullData &cull_data, InstanceCullResult &cull_result, uint64_t p_from, uint64_t p_to);
 	static void _scene_particles_set_view_axis(RID p_particles, const Vector3 &p_axis, const Vector3 &p_up_axis);
 	_FORCE_INLINE_ bool _visibility_parent_check(const CullData &p_cull_data, const InstanceData &p_instance_data);

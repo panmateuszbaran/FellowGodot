@@ -3344,6 +3344,11 @@ bool RendererSceneCull::_visibility_parent_check(const CullData &p_cull_data, co
 	return ((parent_flags & InstanceData::FLAG_VISIBILITY_DEPENDENCY_NEEDS_CHECK) == InstanceData::FLAG_VISIBILITY_DEPENDENCY_HIDDEN_CLOSE_RANGE) || (parent_flags & InstanceData::FLAG_VISIBILITY_DEPENDENCY_FADE_CHILDREN);
 }
 
+void RendererSceneCull::_fellow_scene_cull_merge(void *p_self, uint32_t p_kind) {
+	RendererSceneCull *self = static_cast<RendererSceneCull *>(p_self);
+	self->scene_cull_result.fellow_merge_kind(p_kind, self->scene_cull_result_threads.ptr(), self->scene_cull_result_threads.size());
+}
+
 void RendererSceneCull::_fellow_scene_cull_range(void *p_self, uint32_t p_range) {
 	RendererSceneCull *self = static_cast<RendererSceneCull *>(p_self);
 	self->_scene_cull_threaded(p_range, self->fellow_cull_data);
@@ -4036,8 +4041,13 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 			if (Fellow::list_markers()) {
 				RENDER_TIMESTAMP("FellowEngine Scene Cull Merge");
 			}
-			for (InstanceCullResult &thread : scene_cull_result_threads) {
-				scene_cull_result.append_from(thread);
+			if (Fellow::cpu_parallel_cull()) {
+				// Array by array on worker tasks (each array gets the ranges' results in order, as below).
+				fellow_cull_parallel->run(InstanceCullResult::FELLOW_MERGE_KINDS, &RendererSceneCull::_fellow_scene_cull_merge, this, (uint32_t)Fellow::cpu_worker_tasks());
+			} else {
+				for (InstanceCullResult &thread : scene_cull_result_threads) {
+					scene_cull_result.append_from(thread);
+				}
 			}
 
 		} else {
