@@ -234,9 +234,13 @@ func _run_perf() -> void:
 	var ab_warm_passes := ab.size() * int(args.get("ab_warm", "0"))
 	var ab_passes := ab.size() * int(args.get("ab_repeats", "2")) + ab_warm_passes
 	var ab_sums := []
+	var ab_ts := []
+	var ab_ts_frames := []
 	var ab_current := -1
 	for c in ab.size():
 		ab_sums.append({})
+		ab_ts.append({})
+		ab_ts_frames.append(0)
 	m.reset_clock()
 	var passes := 0
 	while true:
@@ -276,8 +280,13 @@ func _run_perf() -> void:
 				var fr := rd.get_captured_timestamps_frame()
 				if fr != last_ts_frame:
 					last_ts_frame = fr
-					_accumulate_timestamps(rd, gpu_passes)
-					gpu_pass_frames += 1
+					if ab.is_empty():
+						_accumulate_timestamps(rd, gpu_passes)
+						gpu_pass_frames += 1
+					elif f % ab_block >= ab_skip and passes >= ab_warm_passes:
+						# Per configuration (the captured frame is a few frames old: inside the block after the skip).
+						_accumulate_timestamps(rd, ab_ts[ab_current])
+						ab_ts_frames[ab_current] += 1
 		passes += 1
 		var mm := _mem()
 		for k in mm.keys():
@@ -301,6 +310,13 @@ func _run_perf() -> void:
 					o[metric] = acc[metric] / max(acc["n"], 1)
 				blocks[key] = o
 			abr["blocks"][name] = blocks
+			if profile:
+				var avg := {}
+				for k in ab_ts[c].keys():
+					avg[k] = ab_ts[c][k] / max(ab_ts_frames[c], 1)
+				if not abr.has("passes_ms"):
+					abr["passes_ms"] = {}
+				abr["passes_ms"][name] = avg
 		result["ab"] = abr
 	result["measurement"] = {
 		"seconds": (Time.get_ticks_usec() - m0) / 1e6,

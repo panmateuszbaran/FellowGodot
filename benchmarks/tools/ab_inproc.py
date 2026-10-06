@@ -83,6 +83,28 @@ def main():
                 lines.append(f"| {name} | {mean:.3f} | {md:+.3f} | {100.0 * md / refmean:+.1f} % | {t:.1f} | {p:.3g} | "
                              f"{len(diffs)} | {', '.join(f'{x:+.1f}' for x in per_run)} |")
             lines.append("")
+        # Profile runs: timestamped regions (GPU ms, and render-thread CPU ms as "cpu: ...") per configuration.
+        if all("passes_ms" in r["ab"] for r in runs):
+            regions = {}
+            for r in runs:
+                for name in names:
+                    for k, v in r["ab"]["passes_ms"].get(name, {}).items():
+                        regions.setdefault(k, {}).setdefault(name, []).append(v)
+            lines.append(f"**regions (ms per frame, mean of {len(runs)} run(s))**")
+            lines.append("")
+            lines.append("| region | " + " | ".join(names) + " |")
+            lines.append("|---|" + "---:|" * len(names))
+            keys = sorted(regions, key=lambda k: (not k.startswith("cpu:"), k))
+            for k in keys:
+                if k.startswith("vp_") or k.startswith("cpu: vp_"):
+                    continue
+                vals = [statistics.fmean(regions[k][n]) if n in regions[k] else float("nan") for n in names]
+                if max(abs(v) for v in vals if v == v) < 0.002:
+                    continue
+                ref_v = vals[names.index(ref)]
+                cells = [f"{v:.3f}" if n == ref else f"{v:.3f} ({v - ref_v:+.3f})" for n, v in zip(names, vals)]
+                lines.append(f"| {k} | " + " | ".join(cells) + " |")
+            lines.append("")
     text = "\n".join(lines)
     print(text)
     if args.md:
