@@ -447,6 +447,12 @@ public:
 	// secondary command buffers of different pools from several threads at once, and a render pass whose contents are
 	// secondary command buffers needs no other state than what each of them sets.
 	virtual bool fellow_supports_parallel_replay() const { return false; }
+	// FellowEngine submit thread (rendering/fellow/frame/submit_thread): the calling thread's submissions skip the
+	// pending memory flushes (the render thread flushes them with fellow_flush_pending_memory() before handing a
+	// submission over). Default: unsupported.
+	virtual bool fellow_supports_submit_thread() const { return false; }
+	virtual void fellow_set_submit_thread() {}
+	virtual void fellow_flush_pending_memory() {}
 	virtual void command_queue_free(CommandQueueID p_cmd_queue) = 0;
 
 	// ----- POOL -----

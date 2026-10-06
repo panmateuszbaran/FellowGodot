@@ -387,6 +387,9 @@ public:
 	virtual Error command_queue_execute_and_present(CommandQueueID p_cmd_queue, VectorView<SemaphoreID> p_wait_semaphores, VectorView<CommandBufferID> p_cmd_buffers, VectorView<SemaphoreID> p_cmd_semaphores, FenceID p_cmd_fence, VectorView<SwapChainID> p_swap_chains) override final;
 	virtual Error fellow_command_queue_present(CommandQueueID p_cmd_queue, VectorView<SemaphoreID> p_wait_semaphores, VectorView<SwapChainID> p_swap_chains) override final;
 	virtual bool fellow_supports_parallel_replay() const override final { return true; }
+	virtual bool fellow_supports_submit_thread() const override final { return true; }
+	virtual void fellow_set_submit_thread() override final;
+	virtual void fellow_flush_pending_memory() override final;
 	virtual void command_queue_free(CommandQueueID p_cmd_queue) override final;
 
 private:

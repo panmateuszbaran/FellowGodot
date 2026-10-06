@@ -3236,6 +3236,23 @@ RDD::CommandQueueID RenderingDeviceDriverVulkan::command_queue_create(CommandQue
 	return CommandQueueID(command_queue);
 }
 
+// FellowEngine submit thread: submissions from that thread leave the pending memory flushes to the render thread.
+static thread_local bool fellow_on_submit_thread = false;
+
+void RenderingDeviceDriverVulkan::fellow_set_submit_thread() {
+	fellow_on_submit_thread = true;
+}
+
+void RenderingDeviceDriverVulkan::fellow_flush_pending_memory() {
+	if (!pending_flushes.allocations.is_empty()) {
+		const VkResult err = vmaFlushAllocations(allocator, pending_flushes.allocations.size(), pending_flushes.allocations.ptr(), pending_flushes.offsets.ptr(), pending_flushes.sizes.ptr());
+		pending_flushes.allocations.clear();
+		pending_flushes.offsets.clear();
+		pending_flushes.sizes.clear();
+		ERR_FAIL_COND_MSG(err != VK_SUCCESS, vformat("Couldn't flush Vulkan memory allocations (VkResult error %d).", err));
+	}
+}
+
 Error RenderingDeviceDriverVulkan::command_queue_execute_and_present(CommandQueueID p_cmd_queue, VectorView<SemaphoreID> p_wait_semaphores, VectorView<CommandBufferID> p_cmd_buffers, VectorView<SemaphoreID> p_cmd_semaphores, FenceID p_cmd_fence, VectorView<SwapChainID> p_swap_chains) {
 	DEV_ASSERT(p_cmd_queue.id != 0);
 
@@ -3266,7 +3283,7 @@ Error RenderingDeviceDriverVulkan::command_queue_execute_and_present(CommandQueu
 		wait_semaphores_stages.push_back(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT);
 	}
 
-	if (!pending_flushes.allocations.is_empty()) {
+	if (!fellow_on_submit_thread && !pending_flushes.allocations.is_empty()) {
 		// We must do this now, even if p_cmd_buffers is empty; because afterwards pending_flushes.allocations
 		// could become dangling. We cannot delay this call for the next frame(s).
 		err = vmaFlushAllocations(allocator, pending_flushes.allocations.size(),

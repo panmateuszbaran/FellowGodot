@@ -1902,7 +1902,7 @@ protected:
 	// FellowEngine present thread (rendering/fellow/frame/present_thread): vkQueuePresentKHR off the render thread.
 	struct FellowPresentThread;
 	FellowPresentThread *fellow_present = nullptr;
-	bool _fellow_present_async(RDD::CommandQueueID p_queue, RDD::SemaphoreID p_semaphore, const LocalVector<RDD::SwapChainID> &p_swap_chains);
+	bool _fellow_present_async(RDD::CommandQueueID p_queue, RDD::SemaphoreID p_semaphore, const LocalVector<RDD::SwapChainID> &p_swap_chains, bool p_submit);
 	void _fellow_present_wait(); // until the presentation handed to the thread has been issued
 	void _fellow_present_stop();
 

@@ -96,6 +96,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/cpu/hot_workers_gate", true);
 	GLOBAL_DEF("rendering/fellow/frame/early_submit", false);
 	GLOBAL_DEF("rendering/fellow/frame/present_thread", false);
+	GLOBAL_DEF("rendering/fellow/frame/submit_thread", false);
 	GLOBAL_DEF("rendering/fellow/frame/parallel_replay", false);
 	GLOBAL_DEF_RST("rendering/fellow/frame/separate_present_queue", false);
 	GLOBAL_DEF_RST("rendering/fellow/frame/async_compute", false);
