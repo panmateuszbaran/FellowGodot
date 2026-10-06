@@ -3801,14 +3801,6 @@ void RendererSceneCull::_scene_particles_set_view_axis(RID p_particles, const Ve
 }
 
 void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_camera_data, const Ref<RenderSceneBuffers> &p_render_buffers, RID p_environment, RID p_force_camera_attributes, RID p_compositor, uint32_t p_visible_layers, RID p_scenario, RID p_viewport, RID p_shadow_atlas, RID p_reflection_probe, int p_reflection_probe_pass, float p_screen_mesh_lod_threshold, float p_window_output_max_value, bool p_using_shadows, RenderingServerTypes::RenderInfo *r_render_info) {
-	{
-		// FellowEngine hot workers (decision 0016): posted now, awake by the time the cull and the render lists need them.
-		const uint64_t linger = (uint64_t)Fellow::cpu_hot_workers_usec();
-		if (linger > 0) {
-			fellow_cull_parallel->set_linger_usec(linger);
-			fellow_cull_parallel->prewarm((uint32_t)Fellow::cpu_worker_tasks());
-		}
-	}
 	Instance *render_reflection_probe = instance_owner.get_or_null(p_reflection_probe); //if null, not rendering to it
 
 	// Prepare the light - camera volume culling system.
@@ -3819,6 +3811,16 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 
 	Scenario *scenario = scenario_owner.get_or_null(p_scenario);
 	Vector3 camera_position = p_camera_data->main_transform.origin;
+
+	if (scenario && scenario->instance_data.size() > thread_cull_threshold) {
+		// FellowEngine hot workers (decision 0016): posted now, awake by the time the cull and the render lists need
+		// them (scenes large enough for stock's threaded cull).
+		const uint64_t linger = (uint64_t)Fellow::cpu_hot_workers_usec();
+		if (linger > 0) {
+			fellow_cull_parallel->set_linger_usec(linger);
+			fellow_cull_parallel->prewarm((uint32_t)Fellow::cpu_worker_tasks());
+		}
+	}
 
 	ERR_FAIL_COND(p_render_buffers.is_null());
 

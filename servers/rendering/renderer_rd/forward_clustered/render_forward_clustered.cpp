@@ -839,9 +839,9 @@ void RenderForwardClustered::SceneState::grow_instance_buffer(RenderListType p_r
 	}
 }
 
-void RenderForwardClustered::_fellow_parallel_for(uint32_t p_count, FellowParallelFor::Func p_func) {
+void RenderForwardClustered::_fellow_parallel_for(uint32_t p_count, FellowParallelFor::Func p_func, uint32_t p_max_helpers) {
 	fellow_parallel->set_linger_usec((uint64_t)Fellow::cpu_hot_workers_usec());
-	fellow_parallel->run(p_count, p_func, this, (uint32_t)Fellow::cpu_worker_tasks());
+	fellow_parallel->run(p_count, p_func, this, MIN(p_max_helpers, (uint32_t)Fellow::cpu_worker_tasks()));
 }
 
 _FORCE_INLINE_ void RenderForwardClustered::_fellow_make_instance_data(const GeometryInstanceSurfaceDataCache *surface, const GeometryInstanceForwardClustered *inst, SceneState::InstanceData &instance_data) const {
@@ -3815,7 +3815,13 @@ void RenderForwardClustered::_fellow_shadow_flush() {
 		RENDER_TIMESTAMP("FellowEngine Shadow Lists Fill");
 	}
 
-	// Fill.
+	// Fill. Worker tasks only when the passes have enough instances between them (posting and waking workers costs more
+	// than a few hundred instances' lists: m4_f46_gpu_ab, PBR Lab).
+	uint32_t total_instances = 0;
+	for (uint32_t e = 0; e < entry_count; e++) {
+		total_instances += (uint32_t)fellow_shadow_entries[e].params.instances->size();
+	}
+	const uint32_t helpers = total_instances >= FELLOW_PARALLEL_LIST_MIN ? UINT32_MAX : 0;
 	uint32_t chunk_count = 0;
 	for (uint32_t e = 0; e < entry_count; e++) {
 		FellowShadowEntry &entry = fellow_shadow_entries[e];
@@ -3836,7 +3842,7 @@ void RenderForwardClustered::_fellow_shadow_flush() {
 			chunk.primitives = 0;
 		}
 	}
-	_fellow_parallel_for(chunk_count, &_fellow_chunk_thunk<&RenderForwardClustered::_fellow_shadow_fill_chunk>);
+	_fellow_parallel_for(chunk_count, &_fellow_chunk_thunk<&RenderForwardClustered::_fellow_shadow_fill_chunk>, helpers);
 
 	// Each pass's elements in fill order, its place in the secondary list, its primitive count.
 	uint32_t total = rl->elements.size();
@@ -3934,7 +3940,7 @@ void RenderForwardClustered::_fellow_shadow_flush() {
 	}
 
 	// Each pass's records in fill order (chunks copied in parallel).
-	_fellow_parallel_for(chunk_count, &_fellow_chunk_thunk<&RenderForwardClustered::_fellow_shadow_gather_chunk>);
+	_fellow_parallel_for(chunk_count, &_fellow_chunk_thunk<&RenderForwardClustered::_fellow_shadow_gather_chunk>, helpers);
 
 	// Sort.
 	if (markers) {
@@ -3948,9 +3954,9 @@ void RenderForwardClustered::_fellow_shadow_flush() {
 		}
 		const int64_t sort_total = fellow_shadow_sort.get_total();
 		fellow_parallel->set_linger_usec((uint64_t)Fellow::cpu_hot_workers_usec());
-		fellow_shadow_sort.run(*fellow_parallel, (uint32_t)Fellow::cpu_worker_tasks(), MAX(int64_t(FELLOW_PARALLEL_SORT_GRAIN), sort_total / 16));
+		fellow_shadow_sort.run(*fellow_parallel, MIN(helpers, (uint32_t)Fellow::cpu_worker_tasks()), MAX(int64_t(FELLOW_PARALLEL_SORT_GRAIN), sort_total / 16));
 	} else {
-		_fellow_parallel_for(entry_count, &_fellow_chunk_thunk<&RenderForwardClustered::_fellow_shadow_sort_entry>);
+		_fellow_parallel_for(entry_count, &_fellow_chunk_thunk<&RenderForwardClustered::_fellow_shadow_sort_entry>, helpers);
 	}
 
 	// The instance buffer, grown and mapped pass by pass as stock's _fill_instance_data does it.
@@ -3978,7 +3984,7 @@ void RenderForwardClustered::_fellow_shadow_flush() {
 			fellow_shadow_items.push_back({ e, from, MIN(entry.size, from + FELLOW_PARALLEL_LIST_CHUNK) });
 		}
 	}
-	_fellow_parallel_for(fellow_shadow_items.size(), &_fellow_chunk_thunk<&RenderForwardClustered::_fellow_shadow_instance_chunk>);
+	_fellow_parallel_for(fellow_shadow_items.size(), &_fellow_chunk_thunk<&RenderForwardClustered::_fellow_shadow_instance_chunk>, helpers);
 
 	// Runs and counters, per pass as stock counts them.
 	if (markers) {

@@ -641,7 +641,7 @@ private:
 	static void _fellow_chunk_thunk(void *p_self, uint32_t p_chunk) {
 		(static_cast<RenderForwardClustered *>(p_self)->*M)(p_chunk, nullptr);
 	}
-	void _fellow_parallel_for(uint32_t p_count, FellowParallelFor::Func p_func);
+	void _fellow_parallel_for(uint32_t p_count, FellowParallelFor::Func p_func, uint32_t p_max_helpers = UINT32_MAX);
 	static constexpr uint32_t FELLOW_PREFETCH_DISTANCE = 8; // elements or instances ahead
 	static constexpr uint32_t FELLOW_PREFETCH_INSTANCE_LINES = 6; // 64-byte lines of an instance (its fields used per frame)
 	static void _fellow_prefetch_element(GeometryInstanceSurfaceDataCache *const *p_elements, uint32_t p_index, uint32_t p_end);
