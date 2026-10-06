@@ -55,7 +55,13 @@ re-binds of values already bound; every draw sees the same state, in the same or
 
 ## Verification
 
-(pending)
+* lavapipe (2 worker threads: 3 segments per list), all CPU toggles off vs + parallel recording: draw-heavy City Lab
+  3 cameras (312 lists in 936 segments, 6 lists recorded again serially in the first frames while pipelines compiled),
+  Lights Lab, Stress Lab, PBR Lab: **0 differing pixels**. With the whole candidate (0016's toggles, hot workers with
+  the gate off, present and submit threads, parallel replay) + parallel recording vs the CPU toggles off: draw-heavy
+  City Lab `city_pan` (60 frames; 371 lists recorded, 374 replayed in parallel) and, under async compute, the Lights
+  Lab walk: **0 differing pixels**.
+* RTX: `m4_f54_verify_*`, `m4_f54_temporal*` (pending).
 
 ## Result
 

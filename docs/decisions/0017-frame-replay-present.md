@@ -46,6 +46,20 @@ the GPU is the limit (Bistro) this is hidden; in a CPU-bound draw-heavy scene it
   it acquires, resizes or frees a swap chain (Vulkan synchronizes swap chains externally) and before it hands over the
   next one.
 
+* **Submit thread** (`frame/submit_thread`, `fellow53`): the frame's submissions are issued by the same thread, before
+  the presentation. The thread takes jobs from a FIFO (up to 8): a job is a submission (the frame's command buffers
+  chained by semaphores, as `execute_chained_cmds()` submits them), a presentation, or both. The render thread hands
+  them over in the order it would have issued them, flushes the pending memory writes before handing a submission over
+  (the driver skips that on the submit thread), and waits for the FIFO to be empty before any submission of its own,
+  fence wait or swap chain operation. With async compute (decision 0015) its three extra submissions per frame (the
+  prefix, the async part on the second queue, the concurrent part) become jobs too, so all of the frame's
+  `vkQueueSubmit` calls leave the render thread.
+* **Shutdown** (`6e40a76`): `Main::cleanup()` stops the worker pool from running new tasks
+  (`exit_languages_threads()`) before the renderer is finalized, and a task posted after that blocks its poster until
+  the pool exits; the renderer still flushes frames while it is finalized, and with hot workers the graph's `end()`
+  prewarmed helpers there: the process hung at exit (lavapipe, Lights Lab, with the submit thread's timing).
+  `FellowParallelFor`'s helpers are optional now: `Main::cleanup()` disables them first, and loops run on the caller.
+
 ## Why it is exact
 
 Parallel replay: every draw sees the same pipeline, descriptor sets, buffers, dynamic state and push constants as
@@ -55,6 +69,13 @@ are executed in the same order within the same render pass instance. Present thr
 same presentation of the same image; only which thread calls the driver, and when, changes.
 
 ## Verification
+
+* Submit thread, lavapipe (all CPU toggles of 0016, present thread, parallel replay, hot workers with the gate off, against
+  the CPU toggles alone): Lights Lab, Stress Lab captures, draw-heavy City Lab `city_pan` (60 frames): **0 differing
+  pixels**; the processes exit normally. With async compute on (main family) and the submit thread, against async
+  compute without it: Lights Lab walk (92 async segments, 369 jobs), Stress Lab, PBR Lab (210 async segments, 841
+  jobs): **0 differing pixels**, 0 conflicts. On lavapipe the async splits' submissions cost the render thread 1.6-9.9 s
+  per session (lavapipe executes in `vkQueueSubmit`) and 8 ms with the submit thread.
 
 * lavapipe: City Lab draw-heavy variant (`--city_materials=3000`: the walls of each lot use one of 3000 materials;
   245 draw lists replayed in parallel over a capture run, 9.4 segments each) three cameras and the 60-frame `city_pan`
