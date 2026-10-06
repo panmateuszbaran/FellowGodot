@@ -348,6 +348,12 @@ inline bool cpu_parallel_list_sort() {
 	return cpu_compact_list_sort() && GLOBAL_GET_CACHED(bool, "rendering/fellow/cpu/parallel_list_sort");
 }
 
+// With the parallel sort: partition steps of large ranges spread over the workers too (exact parallel Hoare
+// partition, see fellow_sort.h).
+inline bool cpu_parallel_partition() {
+	return cpu_parallel_list_sort() && GLOBAL_GET_CACHED(bool, "rendering/fellow/cpu/parallel_partition");
+}
+
 // Scene cull: the same ranges and per-range results as stock's threaded cull, but processed by the render thread with
 // worker tasks helping, instead of a group task the render thread sleeps on until its last thread has run.
 inline bool cpu_parallel_cull() {
