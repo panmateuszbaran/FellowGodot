@@ -22,14 +22,14 @@ with the render graph, which records every draw list instruction into one buffer
 
 ## Change
 
-A large render list (384 elements or more, at least 128 per segment) is recorded by the render thread and the worker
+A large render list (384 draws or more, at least 128 draws per segment; a run of instanced repeats counts as one draw) is recorded by the render thread and the worker
 tasks of FellowEngine's shared loop (decision 0016) at once:
 
 * **Fork** (`RenderingDevice::fellow_draw_list_fork`): the open draw list gets N segments. Each has its own draw list
   state (pipeline, uniform sets, vertex and index arrays, all starting as nothing bound) and its own instruction buffer
   and usage list in the render graph.
-* **Segments**: segment *i* records the elements `[start_i, start_i+1)` with the stock template, on whichever thread
-  takes it; the `draw_list_*` functions and the graph's `add_draw_list_*` functions write to the calling thread's
+* **Segments**: segment *i* records the elements `[start_i, start_i+1)` (equal numbers of runs) with the stock template,
+  on whichever thread takes it; the `draw_list_*` functions and the graph's `add_draw_list_*` functions write to the calling thread's
   segment (thread-local). Segment starts are run starts (the element before ends its run of instanced repeats): the
   serial loop visits every run start, so a segment records exactly the draws the serial loop records for its elements.
 * **Join** (render thread, in segment order): the segments' instructions are appended to the draw list, their usages

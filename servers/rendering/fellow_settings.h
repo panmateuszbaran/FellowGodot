@@ -368,7 +368,7 @@ inline bool cpu_parallel_partition() {
 	return cpu_parallel_list_sort() && GLOBAL_GET_CACHED(bool, "rendering/fellow/cpu/parallel_partition");
 }
 
-// Parallel recording (docs/decisions/0018-parallel-recording.md): a large render list's draws are recorded into its draw
+// Parallel recording (docs/decisions/0018-parallel-recording.md): a large render list's draws (384 or more) are recorded into its draw
 // list by worker threads, each into a segment of the list (its own state tracking and instruction buffer, starting
 // with nothing bound, from a run start: the elements the serial loop visits); the segments are joined in order. Same
 // draws in the same order with the same state (a segment binds again what the previous one left bound). A list that

@@ -707,40 +707,44 @@ void RenderForwardClustered::_render_list(RenderingDevice::DrawListID p_draw_lis
 	_render_list_serial(p_draw_list, p_framebuffer_Format, p_params, p_from_element, p_to_element);
 }
 
-// Parallel recording: lists from this many elements, at least this many elements per segment.
-static constexpr uint32_t FELLOW_RECORD_MIN_ELEMENTS = 384;
-static constexpr uint32_t FELLOW_RECORD_SEGMENT_ELEMENTS = 128;
+// Parallel recording: lists from this many draws (runs of repeated elements count once), at least this many draws
+// per segment. City Lab's instanced lists have thousands of elements in a few hundred draws: they stay serial.
+static constexpr uint32_t FELLOW_RECORD_MIN_DRAWS = 384;
+static constexpr uint32_t FELLOW_RECORD_SEGMENT_DRAWS = 128;
 
 bool RenderForwardClustered::_fellow_render_list_parallel(RenderingDevice::DrawListID p_draw_list, RenderingDevice::FramebufferFormatID p_framebuffer_Format, RenderListParameters *p_params, uint32_t p_from_element, uint32_t p_to_element) {
-	if (p_to_element <= p_from_element || p_to_element - p_from_element < FELLOW_RECORD_MIN_ELEMENTS || fellow_parallel == nullptr || p_params->element_info == nullptr) {
+	if (p_to_element <= p_from_element || p_to_element - p_from_element < FELLOW_RECORD_MIN_DRAWS || fellow_parallel == nullptr || p_params->element_info == nullptr) {
 		return false;
 	}
-	const uint32_t count = p_to_element - p_from_element;
-	const uint32_t max_segments = MIN(count / FELLOW_RECORD_SEGMENT_ELEMENTS, MIN((uint32_t)Fellow::cpu_worker_tasks(), (uint32_t)WorkerThreadPool::get_singleton()->get_thread_count()) + 1);
-	if (max_segments < 2) {
+	const uint32_t helpers = MIN((uint32_t)Fellow::cpu_worker_tasks(), (uint32_t)WorkerThreadPool::get_singleton()->get_thread_count());
+	if (helpers == 0) {
 		return false;
 	}
 
-	// Segments start at run starts (the element before ends its run: repeat 1). The serial loop visits every run start
-	// (from inside a run it either draws the rest of the run or steps to the next element), so each segment records
-	// exactly the draws the serial loop records for its elements.
+	// The runs (the serial loop draws a run of repeated elements at once). Segments start at run starts: the serial loop
+	// visits every run start (from inside a run it either draws the rest of the run or steps to the next element), so
+	// each segment records exactly the draws the serial loop records for its elements.
 	FellowRecordJob &job = fellow_record;
+	LocalVector<uint32_t> &runs = job.runs;
+	runs.clear();
+	const RenderElementInfo *element_info = p_params->element_info;
+	for (uint32_t i = p_from_element; i < p_to_element; i += MAX(1u, uint32_t(element_info[i].repeat))) {
+		runs.push_back(i);
+	}
+	const uint32_t draws = runs.size();
+	if (draws < FELLOW_RECORD_MIN_DRAWS) {
+		return false;
+	}
+	const uint32_t segments = MIN(draws / FELLOW_RECORD_SEGMENT_DRAWS, helpers + 1);
+	if (segments < 2) {
+		return false;
+	}
 	job.starts.clear();
-	job.starts.push_back(p_from_element);
-	for (uint32_t k = 1; k < max_segments; k++) {
-		uint32_t start = p_from_element + uint32_t(uint64_t(count) * k / max_segments);
-		start = MAX(start, job.starts[job.starts.size() - 1] + 1);
-		while (start < p_to_element && p_params->element_info[start - 1].repeat != 1) {
-			start++;
-		}
-		if (start >= p_to_element) {
-			break;
-		}
-		job.starts.push_back(start);
+	for (uint32_t k = 0; k < segments; k++) {
+		job.starts.push_back(runs[uint32_t(uint64_t(draws) * k / segments)]);
 	}
 	job.starts.push_back(p_to_element);
-	const uint32_t segments = job.starts.size() - 1;
-	if (segments < 2 || !RD::get_singleton()->fellow_draw_list_fork(p_draw_list, segments)) {
+	if (!RD::get_singleton()->fellow_draw_list_fork(p_draw_list, segments)) {
 		return false;
 	}
 	job.draw_list = p_draw_list;

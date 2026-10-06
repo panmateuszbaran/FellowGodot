@@ -498,6 +498,7 @@ private:
 		RenderingDevice::DrawListID draw_list = 0;
 		RenderingDevice::FramebufferFormatID framebuffer_format = 0;
 		RenderListParameters *params = nullptr;
+		LocalVector<uint32_t> runs; // the list's run starts (one draw each)
 		LocalVector<uint32_t> starts; // segment i records the elements [starts[i], starts[i + 1])
 		std::atomic<bool> redraw{ false }; // a shader uses TIME (RenderingServerDefault::redraw_request() at the join)
 		std::atomic<bool> abort{ false }; // a pipeline is not in its map yet: the list is recorded again serially
