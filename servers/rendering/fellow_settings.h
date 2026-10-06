@@ -419,6 +419,11 @@ inline int cpu_recording_segments_per_thread() {
 inline bool cpu_parallel_cull() {
 	return cpu_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/cpu/parallel_cull");
 }
+// With the parallel cull: this many ranges per thread instead of stock's one (smaller ranges balance better; their results
+// are merged in order, the same lists).
+inline int cpu_cull_ranges_per_thread() {
+	return GLOBAL_GET_CACHED(int, "rendering/fellow/cpu/cull_ranges_per_thread");
+}
 
 // The shadow passes' lists (directional cascades, positional and cube faces) built together after the last pass is
 // set up: filled by worker ranges without writing the instances (each element gets the keys and flags of its pass in a

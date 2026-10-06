@@ -3346,11 +3346,25 @@ bool RendererSceneCull::_visibility_parent_check(const CullData &p_cull_data, co
 
 void RendererSceneCull::_fellow_scene_cull_merge(void *p_self, uint32_t p_kind) {
 	RendererSceneCull *self = static_cast<RendererSceneCull *>(p_self);
-	self->scene_cull_result.fellow_merge_kind(p_kind, self->scene_cull_result_threads.ptr(), self->scene_cull_result_threads.size());
+	if (self->fellow_cull_range_count > 0) {
+		self->scene_cull_result.fellow_merge_kind(p_kind, self->fellow_cull_ranges.ptr(), self->fellow_cull_range_count);
+	} else {
+		self->scene_cull_result.fellow_merge_kind(p_kind, self->scene_cull_result_threads.ptr(), self->scene_cull_result_threads.size());
+	}
 }
 
 void RendererSceneCull::_fellow_scene_cull_range(void *p_self, uint32_t p_range) {
 	RendererSceneCull *self = static_cast<RendererSceneCull *>(p_self);
+	if (self->fellow_cull_range_count > 0) {
+		// Stock's bounds with more ranges: consecutive, in order, covering every instance once.
+		CullData *cull_data = self->fellow_cull_data;
+		const uint64_t cull_total = cull_data->scenario->instance_data.size();
+		const uint64_t ranges = self->fellow_cull_range_count;
+		const uint64_t cull_from = p_range * cull_total / ranges;
+		const uint64_t cull_to = (p_range + 1 == ranges) ? cull_total : ((p_range + 1) * cull_total / ranges);
+		self->_scene_cull(*cull_data, self->fellow_cull_ranges[p_range], cull_from, cull_to);
+		return;
+	}
 	self->_scene_cull_threaded(p_range, self->fellow_cull_data);
 }
 
@@ -4026,10 +4040,27 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 				// FellowEngine (decision 0016): the same ranges and per-range results, but the render thread culls ranges
 				// itself and never waits for a worker to wake up.
 				fellow_cull_data = &cull_data;
+				// cpu/cull_ranges_per_thread > 1: smaller ranges (their own results).
+				const uint32_t per_thread = (uint32_t)CLAMP(Fellow::cpu_cull_ranges_per_thread(), 1, 16);
+				fellow_cull_range_count = 0;
+				if (per_thread > 1) {
+					const uint32_t count = scene_cull_result_threads.size() * per_thread;
+					if (fellow_cull_ranges.size() < count) {
+						const uint32_t from = fellow_cull_ranges.size();
+						fellow_cull_ranges.resize(count);
+						for (uint32_t r = from; r < count; r++) {
+							fellow_cull_ranges[r].init(&rid_cull_page_pool, &geometry_instance_cull_page_pool, &instance_cull_page_pool);
+						}
+					}
+					for (uint32_t r = 0; r < count; r++) {
+						fellow_cull_ranges[r].clear();
+					}
+					fellow_cull_range_count = count;
+				}
 				// As many worker tasks as stock (one per range but the render thread's): fewer would leave ranges for
 				// fewer threads (m4_f45_city_ab: with 6 the cull took longer than stock's). With hot workers (already
 				// awake, posted when this function started), the render lists' worker count.
-				const uint32_t ranges = scene_cull_result_threads.size();
+				const uint32_t ranges = fellow_cull_range_count > 0 ? fellow_cull_range_count : scene_cull_result_threads.size();
 				const uint64_t linger = (uint64_t)Fellow::cpu_hot_workers_usec();
 				fellow_cull_parallel->set_linger_usec(linger);
 				fellow_cull_parallel->run(ranges, &RendererSceneCull::_fellow_scene_cull_range, this, linger > 0 ? (uint32_t)Fellow::cpu_worker_tasks() : ranges - 1);
@@ -5185,6 +5216,10 @@ RendererSceneCull::~RendererSceneCull() {
 		thread.reset();
 	}
 	scene_cull_result_threads.clear();
+	for (InstanceCullResult &range : fellow_cull_ranges) {
+		range.reset();
+	}
+	fellow_cull_ranges.clear();
 
 	if (dummy_occlusion_culling) {
 		memdelete(dummy_occlusion_culling);

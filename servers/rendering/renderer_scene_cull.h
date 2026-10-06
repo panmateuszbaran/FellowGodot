@@ -1326,6 +1326,11 @@ public:
 	// FellowEngine (decision 0016): cull ranges processed by the render thread with worker tasks helping.
 	FellowParallelFor *fellow_cull_parallel = nullptr; // shared with the render lists (FellowParallelFor::shared_acquire())
 	CullData *fellow_cull_data = nullptr;
+	// cpu/cull_ranges_per_thread: the instances are culled in this many more (smaller) ranges than stock's one per
+	// thread, for a better balance (visible instances cost more than the others, and instances are stored by creation
+	// order, often spatially); the ranges' results are merged in order, as stock merges its ranges'.
+	LocalVector<InstanceCullResult> fellow_cull_ranges;
+	uint32_t fellow_cull_range_count = 0;
 	static void _fellow_scene_cull_range(void *p_self, uint32_t p_range);
 	static void _fellow_scene_cull_merge(void *p_self, uint32_t p_kind);
 	void _scene_cull(CullData &cull_data, InstanceCullResult &cull_result, uint64_t p_from, uint64_t p_to);
