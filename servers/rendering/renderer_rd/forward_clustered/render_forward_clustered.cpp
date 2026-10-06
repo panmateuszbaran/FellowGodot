@@ -1266,7 +1266,7 @@ void RenderForwardClustered::_fellow_sort_by_key_impl(RenderListType p_render_li
 	fellow_list_sort.clear();
 	fellow_list_sort.add(records, int64_t(p_size), e);
 	fellow_parallel->set_linger_usec((uint64_t)Fellow::cpu_hot_workers_usec());
-	fellow_list_sort.run_partitions(*fellow_parallel, (uint32_t)Fellow::cpu_worker_tasks(), MAX(int64_t(FELLOW_PARALLEL_SORT_GRAIN), int64_t(p_size) / 16), Fellow::cpu_parallel_partition() ? FELLOW_PARALLEL_PARTITION_MIN : 0);
+	fellow_list_sort.run_partitions(*fellow_parallel, (uint32_t)Fellow::cpu_worker_tasks(), MAX(int64_t(FELLOW_PARALLEL_SORT_GRAIN), int64_t(p_size) / 16), Fellow::cpu_parallel_partition() ? (int64_t)MAX(1024, Fellow::cpu_parallel_partition_min()) : 0);
 	if (markers) {
 		RENDER_TIMESTAMP("FellowEngine Sort Leaves");
 	}
@@ -4168,7 +4168,7 @@ void RenderForwardClustered::_fellow_shadow_flush() {
 		}
 		const int64_t sort_total = fellow_shadow_sort.get_total();
 		fellow_parallel->set_linger_usec((uint64_t)Fellow::cpu_hot_workers_usec());
-		fellow_shadow_sort.run_partitions(*fellow_parallel, MIN(helpers, (uint32_t)Fellow::cpu_worker_tasks()), MAX(int64_t(FELLOW_PARALLEL_SORT_GRAIN), sort_total / 16), Fellow::cpu_parallel_partition() ? FELLOW_PARALLEL_PARTITION_MIN : 0);
+		fellow_shadow_sort.run_partitions(*fellow_parallel, MIN(helpers, (uint32_t)Fellow::cpu_worker_tasks()), MAX(int64_t(FELLOW_PARALLEL_SORT_GRAIN), sort_total / 16), Fellow::cpu_parallel_partition() ? (int64_t)MAX(1024, Fellow::cpu_parallel_partition_min()) : 0);
 		if (markers) {
 			RENDER_TIMESTAMP("FellowEngine Shadow Lists Sort Leaves");
 		}
