@@ -69,11 +69,35 @@ re-binds of values already bound; every draw sees the same state, in the same or
   the gate off, present and submit threads, parallel replay) + parallel recording vs the CPU toggles off: draw-heavy
   City Lab `city_pan` (60 frames; 371 lists recorded, 374 replayed in parallel) and, under async compute, the Lights
   Lab walk: **0 differing pixels**.
-* RTX: `m4_f54_verify_*`, `m4_f54_temporal*` (pending).
+* RTX (`fellow54`, recording by elements, with the submit thread): `cpu/verify` 0 mismatches (City Lab temporal: 502
+  lists recorded in 5487 segments, all replayed in their segments; draw-heavy captures 793 lists; Bistro exterior
+  captures 1169 lists). Identity (`m4_f54_temporal`, six scenes, and the draw-heavy `city_pan`): Bistro exterior
+  bit-identical, the others at their floor (the same values as off vs off).
 
 ## Result
 
-(pending)
+Draw-heavy City Lab, in one process (`m4_f54_dh_ab`, 2 runs, 480 pairs, reference: the candidate of 0016/0017):
+
+| configuration | frame | render thread | depth pre-pass ms | opaque pass ms | shadows ms |
+|---|---:|---:|---:|---:|---:|
+| candidate | 3.625 ms | 2.427 ms | 0.454 | 0.396 | 0.171 |
+| + parallel recording | **−15.5 %** | **−23.0 %** | 0.211 | 0.178 | 0.102 |
+| + parallel recording + submit thread | **−17.0 %** | −22.9 % | 0.211 | 0.180 | 0.103 |
+
+Between processes, draw-heavy City Lab (`m4_f54_dh_perf`, 4 ABBA runs, vs stock 4.7.2):
+
+| variant | frame ms | Δ | render thread ms | Δ | pairs |
+|---|---:|---:|---:|---:|---:|
+| stock | 4.239 | | 3.198 | | |
+| candidate | 3.495 | −17.5 % | 2.439 | −23.7 % | 4/4 |
+| + parallel recording | **3.008** | **−29.0 %** | **1.933** | **−39.5 %** | 4/4 |
+| + recording + submit thread | 3.019 | −28.8 % | 1.988 | −37.8 % | 4/4 |
+| + recording + submit thread + async compute | 3.031 | −28.5 % | 2.342 | −26.8 % | 4/4 |
+
+City Lab (instanced: ~310 draws, but lists of thousands of elements): `fellow54` counted elements, so its lists were
+recorded in parallel too, for nothing: +3.0 % frame in one process (`m4_f54_city_ab`), −17.1 % instead of −19.6 % vs
+stock between processes (`m4_f54_city_perf`). From `936b789` the threshold counts draws (runs): lists under 384 draws
+stay serial (lavapipe: City Lab 1 list recorded, draw-heavy 281).
 
 ## Decision
 

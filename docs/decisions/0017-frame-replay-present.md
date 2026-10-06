@@ -98,7 +98,9 @@ same presentation of the same image; only which thread calls the driver, and whe
   the candidate's −14.8 % (the presentation alone was already off the render thread). Under async compute it did
   help in one process (`m4_f53_city_ab_async`: −2.9 % frame, −3.9 % render thread: three more submissions per frame
   left the render thread). From `0354ca1` the stall waits only for the job that submits the fence of the frame slot
-  it reuses (handed over a frame or more ago); `fellow54` measures it.
+  it reuses (handed over a frame or more ago); the render thread's waits for the thread dropped from 0.6 to 0.1 ms per
+  frame in the City Lab verification runs. With it (`fellow54`, in one process, vs parallel recording alone): City Lab
+  −2.8 %, draw-heavy City Lab −1.8 %, City Lab under async compute −4.6 % (`m4_f54_*_ab`).
 
 ## Decision
 
