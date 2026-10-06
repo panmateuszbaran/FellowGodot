@@ -2924,7 +2924,6 @@ void RenderingDeviceGraph::end(bool p_reorder_commands, bool p_full_barriers, RD
 
 static constexpr uint32_t FELLOW_REPLAY_MIN_DRAWS = 192; // fewer draws: replayed inline
 static constexpr uint32_t FELLOW_REPLAY_DRAWS_PER_SEGMENT = 96;
-static constexpr uint32_t FELLOW_REPLAY_MAX_SEGMENTS = 12;
 static constexpr uint32_t FELLOW_REPLAY_MAX_SETS = 32;
 
 void RenderingDeviceGraph::fellow_frame_begin(uint32_t p_frame_slot) {
@@ -3024,9 +3023,9 @@ bool RenderingDeviceGraph::_fellow_replay_recorded_segments(const RecordedDrawLi
 	SortArray<uint32_t> sorter;
 	sorter.sort(dynamic_state, 4); // their original order (unset ones, UINT32_MAX, last)
 
-	// Consecutive recorded segments are replayed together (at most FELLOW_REPLAY_MAX_SEGMENTS secondary command
-	// buffers): a run of them is as self-contained as its first.
-	const uint32_t groups = MIN(count, FELLOW_REPLAY_MAX_SEGMENTS);
+	// Consecutive recorded segments are replayed together (at most frame/replay_max_segments secondary command buffers):
+	// a run of them is as self-contained as its first.
+	const uint32_t groups = MIN(count, (uint32_t)CLAMP(Fellow::frame_replay_max_segments(), 2, 64));
 	fellow_replay_segments.clear();
 	fellow_replay_state.clear();
 	for (uint32_t g = 0; g < groups; g++) {
@@ -3076,7 +3075,7 @@ bool RenderingDeviceGraph::_fellow_run_draw_list_parallel(RDD::CommandBufferID p
 	if (draws < FELLOW_REPLAY_MIN_DRAWS) {
 		return false;
 	}
-	const uint32_t segment_count = MIN(FELLOW_REPLAY_MAX_SEGMENTS, draws / FELLOW_REPLAY_DRAWS_PER_SEGMENT);
+	const uint32_t segment_count = MIN((uint32_t)CLAMP(Fellow::frame_replay_max_segments(), 2, 64), draws / FELLOW_REPLAY_DRAWS_PER_SEGMENT);
 	if (segment_count < 2) {
 		return false;
 	}

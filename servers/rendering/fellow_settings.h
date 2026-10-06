@@ -311,6 +311,11 @@ inline bool frame_early_submit() {
 // would have issued them. The render thread flushes the pending memory writes before handing a submission over and
 // waits for the FIFO to be empty before any submission of its own, fence wait or swap chain operation. Same
 // submissions in the same order. Vulkan; read every frame.
+// Parallel replay: at most this many secondary command buffers per draw list (12 by default).
+inline int frame_replay_max_segments() {
+	return GLOBAL_GET_CACHED(int, "rendering/fellow/frame/replay_max_segments");
+}
+
 inline bool frame_submit_thread() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/frame/submit_thread");
 }
