@@ -31,6 +31,8 @@ func build(p_args: Dictionary) -> void:
 	_build_city()
 	_build_carts()
 	_build_lights()
+	if args.get("city_lightmap", "0") == "1":
+		_build_lightmap_capture()
 	_define_cameras()
 	set_time(0.0)
 	info = {"stats": scene_stats(self), "nodes": _count, "notes": "CPU-bound city: ~17k separate objects, 300 moving carts, sun with 4 cascades."}
@@ -164,6 +166,29 @@ func _build_lights() -> void:
 		o.light_energy = 2.0
 		o.light_color = Color(1.0, 0.8, 0.55)
 		add_child(o)
+
+
+func _build_lightmap_capture() -> void:
+	# Verification option (--city_lightmap=1): a LightmapGI whose probe data is one large tetrahedron with different SH
+	# at its corners, and every object in "dynamic" GI mode, so each instance in it gets its own lightmap capture
+	# (the renderer gives out up to 2048 capture slots per frame, in list order). No baked lightmap texture.
+	var lm := LightmapGI.new()
+	var data := LightmapGIData.new()
+	var pts := PackedVector3Array([Vector3(-2000, -100, -2000), Vector3(2000, -100, -2000), Vector3(0, -100, 2000), Vector3(0, 3000, 0)])
+	var sh := PackedColorArray()
+	for c in 4:
+		for j in 9:
+			sh.append(Color(0.2 + 0.2 * c, 0.1 + 0.05 * j, 0.6 - 0.1 * c, 1.0) * (1.0 if j == 0 else 0.3))
+	# One BSP node (plane 0x + 0y + 0z = -1e9: every point is "over") whose both sides are tetrahedron 0 (leaf -1).
+	var plane := PackedFloat32Array([0.0, 1.0, 0.0, -1.0e9]).to_byte_array().to_int32_array()
+	var bsp := PackedInt32Array([plane[0], plane[1], plane[2], plane[3], -1, -1])
+	data.set("probe_data", {"bounds": AABB(Vector3(-LOTS * LOT * 0.5 - 30, -10, -LOTS * LOT * 0.5 - 30), Vector3(LOTS * LOT + 60, 80, LOTS * LOT + 60)),
+		"points": pts, "tetrahedra": PackedInt32Array([0, 1, 2, 3]), "bsp": bsp, "sh": sh, "interior": false, "baked_exposure": 1.0})
+	lm.light_data = data
+	add_child(lm)
+	for n in get_children():
+		if n is GeometryInstance3D:
+			(n as GeometryInstance3D).gi_mode = GeometryInstance3D.GI_MODE_DYNAMIC
 
 
 func _define_cameras() -> void:
