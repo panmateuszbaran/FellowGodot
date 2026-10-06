@@ -75,7 +75,7 @@ void FellowParallelFor::run(uint32_t p_count, Func p_func, void *p_userdata, uin
 	loop->userdata = p_userdata;
 	loop->done.set(0);
 	loop->next.set(0);
-	const uint32_t helpers = MIN(p_count - 1, MIN(p_max_helpers, (uint32_t)WorkerThreadPool::get_singleton()->get_thread_count()));
+	const uint32_t helpers = are_helpers_enabled() ? MIN(p_count - 1, MIN(p_max_helpers, (uint32_t)WorkerThreadPool::get_singleton()->get_thread_count())) : 0;
 	if (helpers > 0) {
 		loop->group = WorkerThreadPool::get_singleton()->add_native_group_task(&FellowParallelFor::_worker, loop, (int)helpers, (int)helpers, true, SNAME("FellowParallelFor"));
 	}
@@ -145,6 +145,9 @@ void FellowParallelFor::prewarm(uint32_t p_helpers) {
 }
 
 void FellowParallelFor::_hot_post(uint32_t p_helpers) {
+	if (!are_helpers_enabled()) {
+		return; // The caller claims every chunk itself (helpers that are still alive may take some).
+	}
 	WorkerThreadPool *pool = WorkerThreadPool::get_singleton();
 	// Free the groups whose helpers have all left.
 	for (uint32_t i = 0; i < hot_groups.size();) {

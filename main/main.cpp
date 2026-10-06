@@ -77,6 +77,7 @@
 #include "servers/display/display_server.h"
 #include "servers/movie_writer/movie_writer.h"
 #include "servers/register_server_types.h"
+#include "servers/rendering/fellow_parallel.h"
 #include "servers/rendering/rendering_device.h"
 #include "servers/rendering/rendering_server.h"
 #include "servers/rendering/rendering_server_default.h"
@@ -5265,6 +5266,8 @@ void Main::cleanup(bool p_force) {
 
 	ResourceLoader::clear_translation_remaps();
 
+	// FellowEngine: the renderer's parallel loops post no more helper tasks (posting after the next call would block).
+	FellowParallelFor::set_helpers_enabled(false);
 	WorkerThreadPool::get_singleton()->exit_languages_threads();
 
 	ScriptServer::finish_languages();

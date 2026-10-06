@@ -95,7 +95,15 @@ public:
 	static FellowParallelFor *shared_acquire();
 	static void shared_release();
 
+	// Helpers are optional: when disabled, every loop runs on its caller alone. Main::cleanup() disables them before the
+	// WorkerThreadPool stops running new tasks (exit_languages_threads()): a task posted after that would block its
+	// poster until the pool exits, and the renderer still records and flushes frames while it is finalized.
+	static void set_helpers_enabled(bool p_enabled) { helpers_enabled.store(p_enabled, std::memory_order_release); }
+	static bool are_helpers_enabled() { return helpers_enabled.load(std::memory_order_acquire); }
+
 private:
+	static inline std::atomic<bool> helpers_enabled{ true };
+
 	uint64_t linger_usec = 0;
 
 	// linger 0
