@@ -888,6 +888,40 @@ private:
 	void _print_compute_list(const uint8_t *p_instruction_data, uint32_t p_instruction_data_size);
 	void _print_raytracing_list(const uint8_t *p_instruction_data, uint32_t p_instruction_data_size);
 
+	// FellowEngine parallel replay (rendering/fellow/frame/parallel_replay): a large draw list is replayed into
+	// secondary command buffers by worker threads, each segment starting with the state the instructions before it
+	// set (the last pipeline, uniform sets, vertex and index buffers, viewport, scissor, push constant...), and the
+	// render pass executes them in order. Same commands in the same order: same images.
+	struct FellowReplaySecondary {
+		RDD::CommandPoolID pool;
+		RDD::CommandBufferID buffer;
+	};
+	struct FellowReplaySlot {
+		LocalVector<FellowReplaySecondary> secondaries;
+		uint32_t used = 0;
+	};
+	struct FellowReplaySegment {
+		uint32_t from = 0; // instruction data offsets
+		uint32_t to = 0;
+		uint32_t state_first = 0; // in fellow_replay_state: offsets of the instructions that set the state at 'from'
+		uint32_t state_count = 0;
+		RDD::CommandBufferID buffer;
+	};
+	LocalVector<FellowReplaySlot> fellow_replay_slots;
+	uint32_t fellow_replay_slot = 0;
+	RDD::CommandQueueFamilyID fellow_replay_family;
+	LocalVector<FellowReplaySegment> fellow_replay_segments;
+	LocalVector<uint32_t> fellow_replay_state;
+	LocalVector<RDD::CommandBufferID> fellow_replay_buffers;
+	uint32_t fellow_replay_first_secondary = 0;
+	const uint8_t *fellow_replay_data = nullptr;
+	RDD::RenderPassID fellow_replay_render_pass;
+	RDD::FramebufferID fellow_replay_framebuffer;
+	class FellowParallelFor *fellow_replay_parallel = nullptr;
+	static uint32_t _fellow_draw_instruction_size(const uint8_t *p_instruction);
+	bool _fellow_run_draw_list_parallel(RDD::CommandBufferID p_command_buffer, const RecordedDrawListCommand *p_command, RDD::RenderPassID p_render_pass, RDD::FramebufferID p_framebuffer, VectorView<RDD::RenderPassClearValue> p_clear_values);
+	static void _fellow_replay_segment(void *p_self, uint32_t p_index);
+
 public:
 	RenderingDeviceGraph();
 	~RenderingDeviceGraph();
@@ -962,6 +996,9 @@ public:
 	void begin_label(const Span<char> &p_label_name, const Color &p_color);
 	void end_label();
 	void end(bool p_reorder_commands, bool p_full_barriers, RDD::CommandBufferID &r_command_buffer, CommandBufferPool &r_command_buffer_pool);
+	// FellowEngine parallel replay: the frame slot whose fence the render thread just waited for (its secondary command
+	// buffers can be reused).
+	void fellow_frame_begin(uint32_t p_frame_slot);
 	static ResourceTracker *resource_tracker_create();
 	static void resource_tracker_free(ResourceTracker *p_tracker);
 	static FramebufferCache *framebuffer_cache_create();

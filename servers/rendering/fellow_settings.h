@@ -309,6 +309,13 @@ inline bool frame_present_thread() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/frame/present_thread");
 }
 
+// Parallel replay: large draw lists (192+ draws) are replayed into secondary command buffers by worker threads at the
+// end of the frame (render graph), each segment starting with the state the instructions before it set; the render
+// pass executes them in order. Same commands in the same order: same images. Vulkan; read every frame.
+inline bool frame_parallel_replay() {
+	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/frame/parallel_replay");
+}
+
 inline bool frame_async_compute() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/frame/async_compute");
 }
@@ -453,6 +460,8 @@ struct Stats {
 	SafeNumeric<uint64_t> rd_vk_presents; // Vulkan: presentations
 	SafeNumeric<uint64_t> frame_present_thread_uses; // presentations handed to the present thread
 	SafeNumeric<uint64_t> frame_present_thread_wait_usec; // time the render thread waited for the present thread
+	SafeNumeric<uint64_t> frame_replay_lists; // draw lists replayed by worker threads (parallel replay)
+	SafeNumeric<uint64_t> frame_replay_segments; // their segments (secondary command buffers)
 	SafeNumeric<uint64_t> cpu_hot_gate_closed_frames; // frames during which the hot workers' gate was closed (GPU-bound)
 };
 

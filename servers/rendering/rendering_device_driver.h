@@ -443,6 +443,10 @@ public:
 	// acquisition semaphores). Callable from another thread while the render thread records and submits, as long as the
 	// swap chains are not acquired, resized or freed meanwhile. ERR_UNAVAILABLE: not supported by this driver.
 	virtual Error fellow_command_queue_present(CommandQueueID p_cmd_queue, VectorView<SemaphoreID> p_wait_semaphores, VectorView<SwapChainID> p_swap_chains) { return ERR_UNAVAILABLE; }
+	// FellowEngine parallel replay (rendering/fellow/frame/parallel_replay): the driver records draw commands into
+	// secondary command buffers of different pools from several threads at once, and a render pass whose contents are
+	// secondary command buffers needs no other state than what each of them sets.
+	virtual bool fellow_supports_parallel_replay() const { return false; }
 	virtual void command_queue_free(CommandQueueID p_cmd_queue) = 0;
 
 	// ----- POOL -----

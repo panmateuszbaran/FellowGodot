@@ -30,6 +30,9 @@
 
 #include "rendering_device_graph.h"
 
+#include "servers/rendering/fellow_parallel.h"
+#include "servers/rendering/fellow_settings.h"
+
 #define PRINT_RENDER_GRAPH 0
 #define FORCE_FULL_ACCESS_BITS 0
 #define PRINT_RESOURCE_TRACKER_TOTAL 0
@@ -1203,9 +1206,11 @@ void RenderingDeviceGraph::_run_render_commands(int32_t p_level, const RecordedC
 				}
 
 				if (framebuffer && render_pass) {
-					driver->command_begin_render_pass(r_command_buffer, render_pass, framebuffer, draw_list_command->command_buffer_type, draw_list_command->region, clear_values);
-					_run_draw_list_command(r_command_buffer, draw_list_command->instruction_data(), draw_list_command->instruction_data_size);
-					driver->command_end_render_pass(r_command_buffer);
+					if (!(draw_list_command->command_buffer_type == RDD::COMMAND_BUFFER_TYPE_PRIMARY && Fellow::frame_parallel_replay() && fellow_replay_parallel != nullptr && _fellow_run_draw_list_parallel(r_command_buffer, draw_list_command, render_pass, framebuffer, clear_values))) {
+						driver->command_begin_render_pass(r_command_buffer, render_pass, framebuffer, draw_list_command->command_buffer_type, draw_list_command->region, clear_values);
+						_run_draw_list_command(r_command_buffer, draw_list_command->instruction_data(), draw_list_command->instruction_data_size);
+						driver->command_end_render_pass(r_command_buffer);
+					}
 				}
 			} break;
 			case RecordedCommand::TYPE_TEXTURE_CLEAR_COLOR: {
@@ -1757,6 +1762,11 @@ void RenderingDeviceGraph::initialize(RDD *p_driver, RenderPassCreationFunction 
 		}
 	}
 
+	fellow_replay_family = p_secondary_command_queue_family;
+	if (driver->fellow_supports_parallel_replay()) {
+		fellow_replay_parallel = FellowParallelFor::shared_acquire();
+	}
+
 	driver_honors_barriers = driver->api_trait_get(RDD::API_TRAIT_HONORS_PIPELINE_BARRIERS);
 	driver_clears_with_copy_engine = driver->api_trait_get(RDD::API_TRAIT_CLEARS_WITH_COPY_ENGINE);
 	driver_buffers_require_transitions = driver->api_trait_get(RDD::API_TRAIT_BUFFERS_REQUIRE_TRANSITIONS);
@@ -1773,6 +1783,17 @@ void RenderingDeviceGraph::finalize() {
 				driver->command_pool_free(secondary.command_pool);
 			}
 		}
+	}
+
+	for (FellowReplaySlot &slot : fellow_replay_slots) {
+		for (FellowReplaySecondary &secondary : slot.secondaries) {
+			driver->command_pool_free(secondary.pool);
+		}
+	}
+	fellow_replay_slots.clear();
+	if (fellow_replay_parallel != nullptr) {
+		FellowParallelFor::shared_release();
+		fellow_replay_parallel = nullptr;
 	}
 
 	frames.clear();
@@ -2796,6 +2817,214 @@ void RenderingDeviceGraph::end(bool p_reorder_commands, bool p_full_barriers, RD
 
 	// Advance the frame counter. It's not necessary to do this if no commands are recorded because that means no secondary command buffers were used.
 	frame = (frame + 1) % frames.size();
+}
+
+/* FellowEngine parallel replay */
+
+static constexpr uint32_t FELLOW_REPLAY_MIN_DRAWS = 192; // fewer draws: replayed inline
+static constexpr uint32_t FELLOW_REPLAY_DRAWS_PER_SEGMENT = 96;
+static constexpr uint32_t FELLOW_REPLAY_MAX_SEGMENTS = 12;
+static constexpr uint32_t FELLOW_REPLAY_MAX_SETS = 32;
+
+void RenderingDeviceGraph::fellow_frame_begin(uint32_t p_frame_slot) {
+	if (fellow_replay_slots.size() <= p_frame_slot) {
+		fellow_replay_slots.resize(p_frame_slot + 1);
+	}
+	fellow_replay_slot = p_frame_slot;
+	fellow_replay_slots[p_frame_slot].used = 0;
+}
+
+uint32_t RenderingDeviceGraph::_fellow_draw_instruction_size(const uint8_t *p_instruction) {
+	// The size _run_draw_list_command() steps over for each instruction type (before alignment).
+	const DrawListInstruction *instruction = reinterpret_cast<const DrawListInstruction *>(p_instruction);
+	switch (instruction->type) {
+		case DrawListInstruction::TYPE_BIND_INDEX_BUFFER:
+			return sizeof(DrawListBindIndexBufferInstruction);
+		case DrawListInstruction::TYPE_BIND_PIPELINE:
+			return sizeof(DrawListBindPipelineInstruction);
+		case DrawListInstruction::TYPE_BIND_UNIFORM_SETS:
+			return sizeof(DrawListBindUniformSetsInstruction) + sizeof(RDD::UniformSetID) * reinterpret_cast<const DrawListBindUniformSetsInstruction *>(instruction)->set_count;
+		case DrawListInstruction::TYPE_BIND_VERTEX_BUFFERS: {
+			const uint32_t count = reinterpret_cast<const DrawListBindVertexBuffersInstruction *>(instruction)->vertex_buffers_count;
+			return sizeof(DrawListBindVertexBuffersInstruction) + sizeof(RDD::BufferID) * count + sizeof(uint64_t) * count;
+		}
+		case DrawListInstruction::TYPE_CLEAR_ATTACHMENTS: {
+			const DrawListClearAttachmentsInstruction *clear = reinterpret_cast<const DrawListClearAttachmentsInstruction *>(instruction);
+			return sizeof(DrawListClearAttachmentsInstruction) + sizeof(RDD::AttachmentClear) * clear->attachments_clear_count + sizeof(Rect2i) * clear->attachments_clear_rect_count;
+		}
+		case DrawListInstruction::TYPE_DRAW:
+			return sizeof(DrawListDrawInstruction);
+		case DrawListInstruction::TYPE_DRAW_INDEXED:
+			return sizeof(DrawListDrawIndexedInstruction);
+		case DrawListInstruction::TYPE_DRAW_INDIRECT:
+			return sizeof(DrawListDrawIndirectInstruction);
+		case DrawListInstruction::TYPE_DRAW_INDEXED_INDIRECT:
+			return sizeof(DrawListDrawIndexedIndirectInstruction);
+		case DrawListInstruction::TYPE_EXECUTE_COMMANDS:
+			return sizeof(DrawListExecuteCommandsInstruction);
+		case DrawListInstruction::TYPE_NEXT_SUBPASS:
+			return sizeof(DrawListNextSubpassInstruction);
+		case DrawListInstruction::TYPE_SET_BLEND_CONSTANTS:
+			return sizeof(DrawListSetBlendConstantsInstruction);
+		case DrawListInstruction::TYPE_SET_LINE_WIDTH:
+			return sizeof(DrawListSetLineWidthInstruction);
+		case DrawListInstruction::TYPE_SET_PUSH_CONSTANT:
+			return sizeof(DrawListSetPushConstantInstruction) + reinterpret_cast<const DrawListSetPushConstantInstruction *>(instruction)->size;
+		case DrawListInstruction::TYPE_SET_SCISSOR:
+			return sizeof(DrawListSetScissorInstruction);
+		case DrawListInstruction::TYPE_SET_VIEWPORT:
+			return sizeof(DrawListSetViewportInstruction);
+		case DrawListInstruction::TYPE_UNIFORM_SET_PREPARE_FOR_USE:
+			return sizeof(DrawListUniformSetPrepareForUseInstruction);
+		default:
+			return 0;
+	}
+}
+
+bool RenderingDeviceGraph::_fellow_run_draw_list_parallel(RDD::CommandBufferID p_command_buffer, const RecordedDrawListCommand *p_command, RDD::RenderPassID p_render_pass, RDD::FramebufferID p_framebuffer, VectorView<RDD::RenderPassClearValue> p_clear_values) {
+	const uint8_t *data = p_command->instruction_data();
+	const uint32_t size = p_command->instruction_data_size;
+
+	// Pass 1: count the draws; lists with subpasses or secondary command buffers of their own stay inline.
+	uint32_t draws = 0;
+	for (uint32_t cursor = 0; cursor < size;) {
+		const DrawListInstruction::Type type = reinterpret_cast<const DrawListInstruction *>(data + cursor)->type;
+		if (type == DrawListInstruction::TYPE_EXECUTE_COMMANDS || type == DrawListInstruction::TYPE_NEXT_SUBPASS) {
+			return false;
+		}
+		if (type == DrawListInstruction::TYPE_DRAW || type == DrawListInstruction::TYPE_DRAW_INDEXED || type == DrawListInstruction::TYPE_DRAW_INDIRECT || type == DrawListInstruction::TYPE_DRAW_INDEXED_INDIRECT) {
+			draws++;
+		}
+		const uint32_t instruction_size = _fellow_draw_instruction_size(data + cursor);
+		if (instruction_size == 0) {
+			return false; // unknown instruction
+		}
+		cursor = GRAPH_ALIGN(cursor + instruction_size);
+	}
+	if (draws < FELLOW_REPLAY_MIN_DRAWS) {
+		return false;
+	}
+	const uint32_t segment_count = MIN(FELLOW_REPLAY_MAX_SEGMENTS, draws / FELLOW_REPLAY_DRAWS_PER_SEGMENT);
+	if (segment_count < 2) {
+		return false;
+	}
+	const uint32_t draws_per_segment = (draws + segment_count - 1) / segment_count;
+
+	// Pass 2: segments, each starting after the last draw of the one before, with the instructions that set the state
+	// at its start (the last of each kind; for uniform sets the last binder of each set index), in their original order.
+	uint32_t last[DrawListInstruction::TYPE_UNIFORM_SET_PREPARE_FOR_USE + 1];
+	for (uint32_t &l : last) {
+		l = UINT32_MAX;
+	}
+	uint32_t set_owner[FELLOW_REPLAY_MAX_SETS];
+	for (uint32_t &s : set_owner) {
+		s = UINT32_MAX;
+	}
+	fellow_replay_segments.clear();
+	fellow_replay_state.clear();
+	FellowReplaySegment segment;
+	uint32_t segment_draws = 0;
+	for (uint32_t cursor = 0; cursor < size;) {
+		const DrawListInstruction *instruction = reinterpret_cast<const DrawListInstruction *>(data + cursor);
+		if (segment_draws == draws_per_segment) {
+			segment.to = cursor;
+			fellow_replay_segments.push_back(segment);
+			segment = FellowReplaySegment();
+			segment.from = cursor;
+			segment.state_first = fellow_replay_state.size();
+			const uint32_t state_from = fellow_replay_state.size();
+			const DrawListInstruction::Type kinds[] = { DrawListInstruction::TYPE_BIND_PIPELINE, DrawListInstruction::TYPE_BIND_VERTEX_BUFFERS, DrawListInstruction::TYPE_BIND_INDEX_BUFFER, DrawListInstruction::TYPE_SET_VIEWPORT, DrawListInstruction::TYPE_SET_SCISSOR, DrawListInstruction::TYPE_SET_BLEND_CONSTANTS, DrawListInstruction::TYPE_SET_LINE_WIDTH, DrawListInstruction::TYPE_SET_PUSH_CONSTANT };
+			for (const DrawListInstruction::Type kind : kinds) {
+				if (last[kind] != UINT32_MAX) {
+					fellow_replay_state.push_back(last[kind]);
+				}
+			}
+			for (uint32_t s = 0; s < FELLOW_REPLAY_MAX_SETS; s++) {
+				if (set_owner[s] != UINT32_MAX) {
+					bool seen = false;
+					for (uint32_t k = state_from; k < fellow_replay_state.size(); k++) {
+						seen = seen || fellow_replay_state[k] == set_owner[s];
+					}
+					if (!seen) {
+						fellow_replay_state.push_back(set_owner[s]);
+					}
+				}
+			}
+			segment.state_count = fellow_replay_state.size() - state_from;
+			SortArray<uint32_t> sorter; // this segment's state instructions in their original order
+			sorter.sort(fellow_replay_state.ptr() + state_from, segment.state_count);
+			segment_draws = 0;
+		}
+		switch (instruction->type) {
+			case DrawListInstruction::TYPE_BIND_UNIFORM_SETS: {
+				const DrawListBindUniformSetsInstruction *sets = reinterpret_cast<const DrawListBindUniformSetsInstruction *>(instruction);
+				if (sets->first_set_index + sets->set_count > FELLOW_REPLAY_MAX_SETS) {
+					return false;
+				}
+				for (uint32_t s = 0; s < sets->set_count; s++) {
+					set_owner[sets->first_set_index + s] = cursor;
+				}
+			} break;
+			case DrawListInstruction::TYPE_DRAW:
+			case DrawListInstruction::TYPE_DRAW_INDEXED:
+			case DrawListInstruction::TYPE_DRAW_INDIRECT:
+			case DrawListInstruction::TYPE_DRAW_INDEXED_INDIRECT:
+				segment_draws++;
+				break;
+			default:
+				last[instruction->type] = cursor;
+				break;
+		}
+		cursor = GRAPH_ALIGN(cursor + _fellow_draw_instruction_size(data + cursor));
+	}
+	segment.to = size;
+	fellow_replay_segments.push_back(segment);
+
+	// Secondary command buffers of this frame slot (one pool each: recorded on different threads).
+	if (fellow_replay_slot >= fellow_replay_slots.size()) {
+		return false;
+	}
+	FellowReplaySlot &slot = fellow_replay_slots[fellow_replay_slot];
+	fellow_replay_buffers.resize(fellow_replay_segments.size());
+	for (uint32_t i = 0; i < fellow_replay_segments.size(); i++) {
+		if (slot.used == slot.secondaries.size()) {
+			FellowReplaySecondary secondary;
+			secondary.pool = driver->command_pool_create(fellow_replay_family, RDD::COMMAND_BUFFER_TYPE_SECONDARY);
+			secondary.buffer = driver->command_buffer_create(secondary.pool);
+			slot.secondaries.push_back(secondary);
+		}
+		fellow_replay_segments[i].buffer = slot.secondaries[slot.used].buffer;
+		fellow_replay_buffers[i] = slot.secondaries[slot.used].buffer;
+		slot.used++;
+	}
+	fellow_replay_first_secondary = slot.used - fellow_replay_segments.size();
+
+	driver->command_begin_render_pass(p_command_buffer, p_render_pass, p_framebuffer, RDD::COMMAND_BUFFER_TYPE_SECONDARY, p_command->region, p_clear_values);
+	fellow_replay_data = data;
+	fellow_replay_render_pass = p_render_pass;
+	fellow_replay_framebuffer = p_framebuffer;
+	fellow_replay_parallel->set_linger_usec((uint64_t)Fellow::cpu_hot_workers_usec());
+	fellow_replay_parallel->run(fellow_replay_segments.size(), &RenderingDeviceGraph::_fellow_replay_segment, this, (uint32_t)Fellow::cpu_worker_tasks());
+	driver->command_buffer_execute_secondary(p_command_buffer, fellow_replay_buffers);
+	driver->command_end_render_pass(p_command_buffer);
+	Fellow::stats().frame_replay_lists.increment();
+	Fellow::stats().frame_replay_segments.add(fellow_replay_segments.size());
+	return true;
+}
+
+void RenderingDeviceGraph::_fellow_replay_segment(void *p_self, uint32_t p_index) {
+	RenderingDeviceGraph *self = static_cast<RenderingDeviceGraph *>(p_self);
+	const FellowReplaySegment &segment = self->fellow_replay_segments[p_index];
+	const FellowReplaySecondary &secondary = self->fellow_replay_slots[self->fellow_replay_slot].secondaries[self->fellow_replay_first_secondary + p_index];
+	// The frame slot's fence has been waited for: its buffers are no longer in use.
+	self->driver->command_pool_reset(secondary.pool);
+	self->driver->command_buffer_begin_secondary(segment.buffer, self->fellow_replay_render_pass, 0, self->fellow_replay_framebuffer);
+	for (uint32_t k = 0; k < segment.state_count; k++) {
+		const uint32_t offset = self->fellow_replay_state[segment.state_first + k];
+		self->_run_draw_list_command(segment.buffer, self->fellow_replay_data + offset, _fellow_draw_instruction_size(self->fellow_replay_data + offset));
+	}
+	self->_run_draw_list_command(segment.buffer, self->fellow_replay_data + segment.from, segment.to - segment.from);
+	self->driver->command_buffer_end(segment.buffer);
 }
 
 #if PRINT_RESOURCE_TRACKER_TOTAL

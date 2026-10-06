@@ -8083,6 +8083,7 @@ void RenderingDevice::_begin_frame(bool p_presented) {
 	// Before writing to this frame, wait for it to be finished.
 	fellow_stall_wait_usec = 0;
 	_stall_for_frame(frame);
+	draw_graph.fellow_frame_begin(frame); // its secondary command buffers are free again
 	if (is_main_instance && p_presented) {
 		// FellowEngine: how long the render thread waited for the GPU this frame (gate of the hot workers).
 		const uint64_t now = OS::get_singleton()->get_ticks_usec();
