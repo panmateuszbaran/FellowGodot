@@ -301,6 +301,14 @@ inline bool frame_early_submit() {
 // main queue renders the shadows, the light clusters and the volumetric fog; the opaque pass waits for them. Requires
 // the setting at start-up (the device creates the second queue); read every frame after that. Same commands, same
 // results: image-identical.
+// Present thread: the frame's presentation (vkQueuePresentKHR, which on a hybrid laptop crosses to the display GPU) is
+// issued by a dedicated thread instead of the render thread, which goes on with the next frame. The frame is submitted
+// signalling a semaphore the presentation waits on; the render thread waits for the presentation to have been issued
+// before it acquires, resizes or frees a swap chain. Same commands, same images. Vulkan; read every frame.
+inline bool frame_present_thread() {
+	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/frame/present_thread");
+}
+
 inline bool frame_async_compute() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/frame/async_compute");
 }
@@ -440,6 +448,11 @@ struct Stats {
 	SafeNumeric<uint64_t> rd_graph_end_usec; // CPU time of the render graph's replay into the command buffer (_end_frame)
 	SafeNumeric<uint64_t> rd_execute_usec; // CPU time of the frame's submission and presentation (_execute_frame)
 	SafeNumeric<uint64_t> rd_fence_wait_usec; // time the render thread waited for frame fences (GPU behind the CPU)
+	SafeNumeric<uint64_t> rd_vk_submit_usec; // Vulkan: time in vkQueueSubmit (frame submissions)
+	SafeNumeric<uint64_t> rd_vk_present_usec; // Vulkan: time in vkQueuePresentKHR
+	SafeNumeric<uint64_t> rd_vk_presents; // Vulkan: presentations
+	SafeNumeric<uint64_t> frame_present_thread_uses; // presentations handed to the present thread
+	SafeNumeric<uint64_t> frame_present_thread_wait_usec; // time the render thread waited for the present thread
 	SafeNumeric<uint64_t> cpu_hot_gate_closed_frames; // frames during which the hot workers' gate was closed (GPU-bound)
 };
 

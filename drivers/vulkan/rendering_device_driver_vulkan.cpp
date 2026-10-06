@@ -35,6 +35,7 @@
 #include "core/os/os.h"
 #include "core/templates/fixed_vector.h"
 #include "drivers/vulkan/vulkan_hooks.h"
+#include "servers/rendering/fellow_settings.h"
 
 #include <thirdparty/misc/smolv.h>
 
@@ -3311,9 +3312,11 @@ Error RenderingDeviceDriverVulkan::command_queue_execute_and_present(CommandQueu
 		submit_info.signalSemaphoreCount = signal_semaphores.size();
 		submit_info.pSignalSemaphores = signal_semaphores.ptr();
 
+		const uint64_t fellow_submit_from = OS::get_singleton()->get_ticks_usec();
 		device_queue.submit_mutex.lock();
 		err = vkQueueSubmit(device_queue.queue, 1, &submit_info, vk_fence);
 		device_queue.submit_mutex.unlock();
+		Fellow::stats().rd_vk_submit_usec.add(OS::get_singleton()->get_ticks_usec() - fellow_submit_from);
 
 		if (err == VK_ERROR_DEVICE_LOST) {
 			print_lost_device_info();
@@ -3363,6 +3366,7 @@ Error RenderingDeviceDriverVulkan::command_queue_execute_and_present(CommandQueu
 		present_info.pImageIndices = image_indices.ptr();
 		present_info.pResults = results.ptr();
 
+		const uint64_t fellow_present_from = OS::get_singleton()->get_ticks_usec();
 		device_queue.submit_mutex.lock();
 #if defined(SWAPPY_FRAME_PACING_ENABLED)
 		if (swappy_frame_pacer_enable) {
@@ -3375,6 +3379,8 @@ Error RenderingDeviceDriverVulkan::command_queue_execute_and_present(CommandQueu
 #endif
 
 		device_queue.submit_mutex.unlock();
+		Fellow::stats().rd_vk_present_usec.add(OS::get_singleton()->get_ticks_usec() - fellow_present_from);
+		Fellow::stats().rd_vk_presents.increment();
 
 		// Set the index to an invalid value. If any of the swap chains returned out of date, indicate it should be resized the next time it's acquired.
 		bool any_result_is_out_of_date = false;
@@ -3411,6 +3417,63 @@ Error RenderingDeviceDriverVulkan::command_queue_execute_and_present(CommandQueu
 				"Couldn't present to Vulkan queue (VkResult error " + get_vulkan_result(err) + ").");
 	}
 
+	return OK;
+}
+
+Error RenderingDeviceDriverVulkan::fellow_command_queue_present(CommandQueueID p_cmd_queue, VectorView<SemaphoreID> p_wait_semaphores, VectorView<SwapChainID> p_swap_chains) {
+	// The presentation part of command_queue_execute_and_present() (FellowEngine present thread): its own arrays, no
+	// pending flushes, no acquisition semaphores (those belong to the render thread's next submission).
+	DEV_ASSERT(p_cmd_queue.id != 0);
+	if (p_swap_chains.size() == 0) {
+		return OK;
+	}
+	CommandQueue *command_queue = (CommandQueue *)(p_cmd_queue.id);
+	Queue &device_queue = queue_families[command_queue->queue_family][command_queue->queue_index];
+
+	LocalVector<VkSemaphore> wait_semaphores;
+	for (uint32_t i = 0; i < p_wait_semaphores.size(); i++) {
+		wait_semaphores.push_back(VkSemaphore(p_wait_semaphores[i].id));
+	}
+	LocalVector<VkSwapchainKHR> swapchains;
+	LocalVector<uint32_t> image_indices;
+	LocalVector<VkResult> results;
+	for (uint32_t i = 0; i < p_swap_chains.size(); i++) {
+		SwapChain *swap_chain = (SwapChain *)(p_swap_chains[i].id);
+		swapchains.push_back(swap_chain->vk_swapchain);
+		DEV_ASSERT(swap_chain->image_index < swap_chain->images.size());
+		image_indices.push_back(swap_chain->image_index);
+	}
+	results.resize(swapchains.size());
+
+	VkPresentInfoKHR present_info = {};
+	present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+	present_info.waitSemaphoreCount = wait_semaphores.size();
+	present_info.pWaitSemaphores = wait_semaphores.ptr();
+	present_info.swapchainCount = swapchains.size();
+	present_info.pSwapchains = swapchains.ptr();
+	present_info.pImageIndices = image_indices.ptr();
+	present_info.pResults = results.ptr();
+
+	const uint64_t fellow_present_from = OS::get_singleton()->get_ticks_usec();
+	device_queue.submit_mutex.lock();
+	VkResult err = device_functions.QueuePresentKHR(device_queue.queue, &present_info);
+	device_queue.submit_mutex.unlock();
+	Fellow::stats().rd_vk_present_usec.add(OS::get_singleton()->get_ticks_usec() - fellow_present_from);
+	Fellow::stats().rd_vk_presents.increment();
+
+	bool any_result_is_out_of_date = false;
+	for (uint32_t i = 0; i < p_swap_chains.size(); i++) {
+		SwapChain *swap_chain = (SwapChain *)(p_swap_chains[i].id);
+		swap_chain->image_index = UINT_MAX;
+		if (results[i] == VK_ERROR_OUT_OF_DATE_KHR) {
+			context_driver->surface_set_needs_resize(swap_chain->surface, true);
+			any_result_is_out_of_date = true;
+		}
+	}
+	if (any_result_is_out_of_date || err == VK_ERROR_OUT_OF_DATE_KHR) {
+		return FAILED; // silent, as in command_queue_execute_and_present()
+	}
+	ERR_FAIL_COND_V_MSG(err != VK_SUCCESS && err != VK_SUBOPTIMAL_KHR, FAILED, "Couldn't present to Vulkan queue (VkResult error " + get_vulkan_result(err) + ").");
 	return OK;
 }
 

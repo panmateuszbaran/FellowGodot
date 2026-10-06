@@ -94,6 +94,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/cpu/hot_workers_usec", PROPERTY_HINT_RANGE, "0,5000,1,suffix:us"), 0);
 	GLOBAL_DEF("rendering/fellow/cpu/hot_workers_gate", true);
 	GLOBAL_DEF("rendering/fellow/frame/early_submit", false);
+	GLOBAL_DEF("rendering/fellow/frame/present_thread", false);
 	GLOBAL_DEF_RST("rendering/fellow/frame/separate_present_queue", false);
 	GLOBAL_DEF_RST("rendering/fellow/frame/async_compute", false);
 	GLOBAL_DEF_RST(PropertyInfo(Variant::INT, "rendering/fellow/frame/async_compute_family", PROPERTY_HINT_ENUM, "Dedicated Compute Family,Main Family,Main Queue (Split Only)"), 0);
@@ -174,6 +175,11 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["rd_graph_end_usec"] = s.rd_graph_end_usec.get();
 	d["rd_execute_usec"] = s.rd_execute_usec.get();
 	d["rd_fence_wait_usec"] = s.rd_fence_wait_usec.get();
+	d["rd_vk_submit_usec"] = s.rd_vk_submit_usec.get();
+	d["rd_vk_present_usec"] = s.rd_vk_present_usec.get();
+	d["rd_vk_presents"] = s.rd_vk_presents.get();
+	d["frame_present_thread_uses"] = s.frame_present_thread_uses.get();
+	d["frame_present_thread_wait_usec"] = s.frame_present_thread_wait_usec.get();
 	d["cpu_hot_gate_closed_frames"] = s.cpu_hot_gate_closed_frames.get();
 	return d;
 }

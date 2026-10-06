@@ -438,6 +438,11 @@ public:
 
 	virtual CommandQueueID command_queue_create(CommandQueueFamilyID p_cmd_queue_family, bool p_identify_as_main_queue = false) = 0;
 	virtual Error command_queue_execute_and_present(CommandQueueID p_cmd_queue, VectorView<SemaphoreID> p_wait_semaphores, VectorView<CommandBufferID> p_cmd_buffers, VectorView<SemaphoreID> p_cmd_semaphores, FenceID p_cmd_fence, VectorView<SwapChainID> p_swap_chains) = 0;
+	// FellowEngine present thread (rendering/fellow/frame/present_thread): presents the swap chains' acquired images after
+	// the semaphores, touching nothing else the render thread may use meanwhile (no pending memory flushes, no
+	// acquisition semaphores). Callable from another thread while the render thread records and submits, as long as the
+	// swap chains are not acquired, resized or freed meanwhile. ERR_UNAVAILABLE: not supported by this driver.
+	virtual Error fellow_command_queue_present(CommandQueueID p_cmd_queue, VectorView<SemaphoreID> p_wait_semaphores, VectorView<SwapChainID> p_swap_chains) { return ERR_UNAVAILABLE; }
 	virtual void command_queue_free(CommandQueueID p_cmd_queue) = 0;
 
 	// ----- POOL -----

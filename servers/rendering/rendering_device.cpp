@@ -36,7 +36,9 @@
 #include "core/io/dir_access.h"
 #include "core/io/file_access.h"
 #include "core/object/class_db.h"
+#include "core/os/condition_variable.h"
 #include "core/os/os.h"
+#include "core/os/thread.h"
 #include "core/profiling/profiling.h"
 #include "core/templates/fixed_vector.h"
 #include "servers/rendering/fellow_settings.h"
@@ -5386,6 +5388,10 @@ Error RenderingDevice::screen_prepare_for_drawing(DisplayServerEnums::WindowID p
 	HashMap<DisplayServerEnums::WindowID, RDD::SwapChainID>::ConstIterator it = screen_swap_chains.find(p_screen);
 	ERR_FAIL_COND_V_MSG(it == screen_swap_chains.end(), ERR_CANT_CREATE, "A swap chain was not created for the screen.");
 
+	// FellowEngine present thread: the previous presentation must have been issued before acquiring (Vulkan: the swap
+	// chain is externally synchronized).
+	_fellow_present_wait();
+
 	// Erase the framebuffer corresponding to this screen from the map in case any of the operations fail.
 	screen_framebuffers.erase(p_screen);
 
@@ -5500,6 +5506,7 @@ Error RenderingDevice::screen_free(DisplayServerEnums::WindowID p_screen) {
 
 	// Flush everything so nothing can be using the swap chain before erasing it.
 	_flush_and_stall_for_all_frames();
+	_fellow_present_wait();
 
 	const DisplayServerEnums::WindowID screen = it->key;
 	const RDD::SwapChainID swap_chain = it->value;
@@ -8375,10 +8382,119 @@ void RenderingDevice::fellow_async_compute_join() {
 	Fellow::stats().frame_async_uses.increment();
 }
 
+struct RenderingDevice::FellowPresentThread {
+	Thread thread;
+	BinaryMutex mutex;
+	ConditionVariable cv;
+	bool exit = false;
+	bool pending = false; // a presentation handed over and not issued yet
+	RDD::CommandQueueID queue;
+	RDD::SemaphoreID semaphore;
+	LocalVector<RDD::SwapChainID> swap_chains;
+	RenderingDeviceDriver *driver = nullptr;
+
+	static void _run(void *p_self) {
+		FellowPresentThread *self = static_cast<FellowPresentThread *>(p_self);
+		LocalVector<RDD::SwapChainID> swap_chains;
+		while (true) {
+			RDD::CommandQueueID queue;
+			RDD::SemaphoreID semaphore;
+			{
+				MutexLock lock(self->mutex);
+				while (!self->pending && !self->exit) {
+					self->cv.wait(lock);
+				}
+				if (!self->pending) {
+					return; // exit
+				}
+				queue = self->queue;
+				semaphore = self->semaphore;
+				swap_chains = self->swap_chains;
+			}
+			self->driver->fellow_command_queue_present(queue, semaphore, swap_chains);
+			{
+				MutexLock lock(self->mutex);
+				self->pending = false;
+			}
+			self->cv.notify_all();
+		}
+	}
+};
+
+bool RenderingDevice::_fellow_present_async(RDD::CommandQueueID p_queue, RDD::SemaphoreID p_semaphore, const LocalVector<RDD::SwapChainID> &p_swap_chains) {
+	if (fellow_present == nullptr) {
+		// The driver must support it: try a presentation of nothing first.
+		if (driver->fellow_command_queue_present(p_queue, {}, {}) == ERR_UNAVAILABLE) {
+			return false;
+		}
+		fellow_present = memnew(FellowPresentThread);
+		fellow_present->driver = driver;
+		Thread::Settings settings;
+		settings.priority = Thread::PRIORITY_HIGH;
+		fellow_present->thread.start(&FellowPresentThread::_run, fellow_present, settings);
+	}
+	{
+		MutexLock lock(fellow_present->mutex);
+		DEV_ASSERT(!fellow_present->pending);
+		fellow_present->queue = p_queue;
+		fellow_present->semaphore = p_semaphore;
+		fellow_present->swap_chains = p_swap_chains;
+		fellow_present->pending = true;
+	}
+	fellow_present->cv.notify_all();
+	Fellow::stats().frame_present_thread_uses.increment();
+	return true;
+}
+
+void RenderingDevice::_fellow_present_wait() {
+	if (fellow_present == nullptr) {
+		return;
+	}
+	MutexLock lock(fellow_present->mutex);
+	if (fellow_present->pending) {
+		const uint64_t from = OS::get_singleton()->get_ticks_usec();
+		while (fellow_present->pending) {
+			fellow_present->cv.wait(lock);
+		}
+		Fellow::stats().frame_present_thread_wait_usec.add(OS::get_singleton()->get_ticks_usec() - from);
+	}
+}
+
+void RenderingDevice::_fellow_present_stop() {
+	if (fellow_present == nullptr) {
+		return;
+	}
+	{
+		MutexLock lock(fellow_present->mutex);
+		fellow_present->exit = true;
+	}
+	fellow_present->cv.notify_all();
+	fellow_present->thread.wait_to_finish();
+	memdelete(fellow_present);
+	fellow_present = nullptr;
+}
+
 void RenderingDevice::_execute_frame(bool p_present) {
 	// Check whether this frame should present the swap chains and in which queue.
 	const bool frame_can_present = p_present && !frames[frame].swap_chains_to_present.is_empty();
 	const bool separate_present_queue = main_queue != present_queue;
+
+	if (frame_can_present && is_main_instance && Fellow::frame_present_thread()) {
+		// FellowEngine present thread: the frame is submitted signalling its semaphore (as for a separate present
+		// queue) and the presentation, which waits on it, is issued by the present thread. Same commands, same images.
+		_fellow_present_wait();
+		execute_chained_cmds(false, frames[frame].fence, frames[frame].semaphore);
+		frames[frame].fence_signaled = true;
+		if (_fellow_present_async(present_queue, frames[frame].semaphore, frames[frame].swap_chains_to_present)) {
+			frames[frame].swap_chains_to_present.clear();
+			return;
+		}
+		// Not supported by the driver: present here.
+		driver->command_queue_execute_and_present(present_queue, frames[frame].semaphore, {}, {}, {}, frames[frame].swap_chains_to_present);
+		frames[frame].swap_chains_to_present.clear();
+		return;
+	}
+	_fellow_present_wait();
 
 	// The semaphore is required if the frame can be presented and a separate present queue is used;
 	// since the separate queue will wait for that semaphore before presenting.
@@ -8499,6 +8615,7 @@ void RenderingDevice::_stall_for_previous_frames() {
 }
 
 void RenderingDevice::_flush_and_stall_for_all_frames(bool p_begin_frame) {
+	_fellow_present_wait();
 	_stall_for_previous_frames();
 	_end_frame();
 	_execute_frame(false);
@@ -9162,6 +9279,7 @@ void RenderingDevice::finalize() {
 		// Wait for all frames to have finished rendering.
 		_flush_and_stall_for_all_frames(false);
 	}
+	_fellow_present_stop();
 
 	// Wait for transfer workers to finish.
 	_submit_transfer_workers();

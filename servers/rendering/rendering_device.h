@@ -1899,6 +1899,12 @@ protected:
 	// FellowEngine early submit (see fellow_settings.h).
 	bool fellow_early_submit_supported = false;
 	void _fellow_submit_early();
+	// FellowEngine present thread (rendering/fellow/frame/present_thread): vkQueuePresentKHR off the render thread.
+	struct FellowPresentThread;
+	FellowPresentThread *fellow_present = nullptr;
+	bool _fellow_present_async(RDD::CommandQueueID p_queue, RDD::SemaphoreID p_semaphore, const LocalVector<RDD::SwapChainID> &p_swap_chains);
+	void _fellow_present_wait(); // until the presentation handed to the thread has been issued
+	void _fellow_present_stop();
 
 	// FellowEngine async compute (decision 0015).
 	static const uint32_t FELLOW_ASYNC_MAX_USES = 4;
