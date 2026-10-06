@@ -843,7 +843,7 @@ void RenderForwardClustered::_fellow_parallel_for(uint32_t p_count, FellowParall
 	fellow_parallel.run(p_count, p_func, this, (uint32_t)Fellow::cpu_worker_tasks());
 }
 
-void RenderForwardClustered::_fellow_make_instance_data(const GeometryInstanceSurfaceDataCache *surface, const GeometryInstanceForwardClustered *inst, SceneState::InstanceData &instance_data) const {
+_FORCE_INLINE_ void RenderForwardClustered::_fellow_make_instance_data(const GeometryInstanceSurfaceDataCache *surface, const GeometryInstanceForwardClustered *inst, SceneState::InstanceData &instance_data) const {
 	// Stock's per-element instance data (moved out of _fill_instance_data's loop; also used by its worker ranges).
 	if (likely(inst->store_transform_cache)) {
 		RendererRD::MaterialStorage::store_transform_transposed_3x4(inst->transform, instance_data.transform);
@@ -1203,6 +1203,11 @@ void RenderForwardClustered::_fill_render_list_range(const FellowFillParams &p_p
 	const uint64_t frame = p_params.frame;
 	const Plane &near_plane = p_params.near_plane;
 	const float z_max = p_params.z_max;
+	// Locals the compiler can keep in registers (the loop writes surfaces through pointers it cannot tell apart).
+	LocalVector<GeometryInstanceSurfaceDataCache *> &out_main = *r_out.main;
+	LocalVector<GeometryInstanceSurfaceDataCache *> &out_alpha = *r_out.alpha;
+	LocalVector<GeometryInstanceSurfaceDataCache *> &out_motion = *r_out.motion;
+	uint64_t primitives = 0;
 
 	const bool fellow_prefetch_on = Fellow::cpu_prefetch();
 	for (uint32_t i = p_from; i < p_to; i++) {
@@ -1387,7 +1392,7 @@ void RenderForwardClustered::_fill_render_list_range(const FellowFillParams &p_p
 				surf->sort.lod_index = mesh_storage->mesh_surface_get_lod(surf->surface, inst->lod_model_scale * inst->lod_bias, lod_distance * p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, indices);
 				if (p_render_data->render_info) {
 					indices = _indices_to_primitives(surf->primitive, indices);
-					r_out.primitives += indices; // Added to the visible (opaque list) or shadow counter by the caller.
+					primitives += indices; // Added to the visible (opaque list) or shadow counter by the caller.
 				}
 			} else {
 				surf->sort.lod_index = 0;
@@ -1396,7 +1401,7 @@ void RenderForwardClustered::_fill_render_list_range(const FellowFillParams &p_p
 					uint32_t to_draw = mesh_storage->mesh_surface_get_vertices_drawn_count(surf->surface);
 					to_draw = _indices_to_primitives(surf->primitive, to_draw);
 					to_draw *= inst->instance_count;
-					r_out.primitives += to_draw; // Added to the visible (opaque list) or shadow counter by the caller.
+					primitives += to_draw; // Added to the visible (opaque list) or shadow counter by the caller.
 				}
 			}
 
@@ -1413,18 +1418,18 @@ void RenderForwardClustered::_fill_render_list_range(const FellowFillParams &p_p
 				}
 
 				if (!force_alpha && (surf->flags & (GeometryInstanceSurfaceDataCache::FLAG_PASS_DEPTH | GeometryInstanceSurfaceDataCache::FLAG_PASS_OPAQUE))) {
-					r_out.main->push_back(surf);
+					out_main.push_back(surf);
 				}
 
 				if (force_alpha || (surf->flags & GeometryInstanceSurfaceDataCache::FLAG_PASS_ALPHA)) {
 					surf->color_pass_inclusion_mask = COLOR_PASS_FLAG_TRANSPARENT;
-					r_out.alpha->push_back(surf);
+					out_alpha.push_back(surf);
 					if (uses_gi) {
 						surf->sort.uses_forward_gi = 1;
 					}
 				} else if (p_using_motion_pass && (uses_motion || (surf->flags & GeometryInstanceSurfaceDataCache::FLAG_USES_MOTION_VECTOR))) {
 					surf->color_pass_inclusion_mask = COLOR_PASS_FLAG_MOTION_VECTORS;
-					r_out.motion->push_back(surf);
+					out_motion.push_back(surf);
 				} else {
 					surf->color_pass_inclusion_mask = 0;
 				}
@@ -1451,15 +1456,15 @@ void RenderForwardClustered::_fill_render_list_range(const FellowFillParams &p_p
 				}
 			} else if (p_pass_mode == PASS_MODE_SHADOW || p_pass_mode == PASS_MODE_SHADOW_DP) {
 				if (surf->flags & GeometryInstanceSurfaceDataCache::FLAG_PASS_SHADOW) {
-					r_out.main->push_back(surf);
+					out_main.push_back(surf);
 				}
 			} else if (p_pass_mode == PASS_MODE_DEPTH_MATERIAL) {
 				if (surf->flags & (GeometryInstanceSurfaceDataCache::FLAG_PASS_DEPTH | GeometryInstanceSurfaceDataCache::FLAG_PASS_OPAQUE | GeometryInstanceSurfaceDataCache::FLAG_PASS_ALPHA)) {
-					r_out.main->push_back(surf);
+					out_main.push_back(surf);
 				}
 			} else {
 				if (surf->flags & (GeometryInstanceSurfaceDataCache::FLAG_PASS_DEPTH | GeometryInstanceSurfaceDataCache::FLAG_PASS_OPAQUE)) {
-					r_out.main->push_back(surf);
+					out_main.push_back(surf);
 				}
 			}
 
@@ -1469,6 +1474,7 @@ void RenderForwardClustered::_fill_render_list_range(const FellowFillParams &p_p
 		}
 	}
 
+	r_out.primitives += primitives;
 }
 
 void RenderForwardClustered::_fellow_fill_apply_output(const FellowFillParams &p_params, const FellowFillOutput &p_out) {
