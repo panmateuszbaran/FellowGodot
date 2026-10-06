@@ -30,7 +30,9 @@
 
 #pragma once
 
+#include "core/object/worker_thread_pool.h"
 #include "core/templates/paged_allocator.h"
+#include "core/templates/safe_refcount.h"
 #include "servers/rendering/multi_uma_buffer.h"
 #include "servers/rendering/renderer_rd/cluster_builder_rd.h"
 #include "servers/rendering/renderer_rd/effects/fellow_shadow_cache.h"
@@ -566,6 +568,25 @@ private:
 	void _fellow_make_instance_data(const GeometryInstanceSurfaceDataCache *p_surface, const GeometryInstanceForwardClustered *p_inst, SceneState::InstanceData &r_data) const;
 	void _fellow_fill_instance_data_chunk(uint32_t p_chunk, void *p_unused);
 	void _fellow_sort_by_key(RenderListType p_render_list, uint32_t p_from, uint32_t p_size);
+	// Parallel loops over chunks (decision 0016). The render thread processes chunks itself; a few worker tasks posted
+	// alongside take chunks if they start in time. The render thread waits only for chunks a worker is processing,
+	// never for a worker to wake up (on Windows a group task's last thread can take hundreds of microseconds to start);
+	// a loop's worker tasks are released when its slot is reused (they find no chunk left).
+	typedef void (RenderForwardClustered::*FellowChunkFunc)(uint32_t, void *);
+	struct FellowParallelLoop {
+		SafeNumeric<uint32_t> next; // next chunk to claim
+		SafeNumeric<uint32_t> done; // chunks finished
+		uint32_t count = 0;
+		FellowChunkFunc func = nullptr;
+		WorkerThreadPool::GroupID group = WorkerThreadPool::INVALID_TASK_ID;
+	};
+	static constexpr uint32_t FELLOW_LOOP_SLOTS = 32;
+	FellowParallelLoop fellow_loops[FELLOW_LOOP_SLOTS];
+	uint32_t fellow_loop_slot = 0;
+	void _fellow_parallel_for(uint32_t p_count, FellowChunkFunc p_func);
+	void _fellow_loop_run(FellowParallelLoop *p_loop);
+	void _fellow_loop_worker(uint32_t p_index, FellowParallelLoop *p_loop);
+	void _fellow_loops_release();
 	void _fellow_sort_split_range(uint32_t p_index, void *p_unused);
 	void _fellow_sort_leaf(uint32_t p_index, void *p_unused);
 

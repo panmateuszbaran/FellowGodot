@@ -82,6 +82,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/cpu/parallel_instance_data", false);
 	GLOBAL_DEF("rendering/fellow/cpu/compact_list_sort", false);
 	GLOBAL_DEF("rendering/fellow/cpu/parallel_list_sort", false);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/cpu/worker_tasks", PROPERTY_HINT_RANGE, "0,32,1"), 6);
 	GLOBAL_DEF("rendering/fellow/frame/early_submit", false);
 	GLOBAL_DEF_RST("rendering/fellow/frame/separate_present_queue", false);
 	GLOBAL_DEF_RST("rendering/fellow/frame/async_compute", false);

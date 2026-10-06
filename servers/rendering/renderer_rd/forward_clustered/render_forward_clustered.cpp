@@ -44,6 +44,8 @@
 #include "servers/rendering/rendering_server_default.h"
 #include "servers/rendering/storage/ltc_lut.gen.h"
 
+#include <thread>
+
 using namespace RendererSceneRenderImplementation;
 
 #define PRELOAD_PIPELINES_ON_SURFACE_CACHE_CONSTRUCTION 1
@@ -839,6 +841,56 @@ void RenderForwardClustered::SceneState::grow_instance_buffer(RenderListType p_r
 	}
 }
 
+void RenderForwardClustered::_fellow_loop_run(FellowParallelLoop *p_loop) {
+	while (true) {
+		const uint32_t chunk = p_loop->next.postincrement();
+		if (chunk >= p_loop->count) {
+			return;
+		}
+		(this->*p_loop->func)(chunk, nullptr);
+		p_loop->done.increment();
+	}
+}
+
+void RenderForwardClustered::_fellow_loop_worker(uint32_t p_index, FellowParallelLoop *p_loop) {
+	_fellow_loop_run(p_loop);
+}
+
+void RenderForwardClustered::_fellow_parallel_for(uint32_t p_count, FellowChunkFunc p_func) {
+	if (p_count == 0) {
+		return;
+	}
+	FellowParallelLoop *loop = &fellow_loops[fellow_loop_slot];
+	fellow_loop_slot = (fellow_loop_slot + 1) % FELLOW_LOOP_SLOTS;
+	if (loop->group != WorkerThreadPool::INVALID_TASK_ID) {
+		// The worker tasks of this slot's previous loop (normally long finished: they found no chunk left).
+		WorkerThreadPool::get_singleton()->wait_for_group_task_completion(loop->group);
+		loop->group = WorkerThreadPool::INVALID_TASK_ID;
+	}
+	loop->count = p_count;
+	loop->func = p_func;
+	loop->done.set(0);
+	loop->next.set(0);
+	const uint32_t helpers = MIN(p_count - 1, MIN((uint32_t)Fellow::cpu_worker_tasks(), (uint32_t)WorkerThreadPool::get_singleton()->get_thread_count()));
+	if (helpers > 0) {
+		loop->group = WorkerThreadPool::get_singleton()->add_template_group_task(this, &RenderForwardClustered::_fellow_loop_worker, loop, (int)helpers, (int)helpers, true, SNAME("FellowRenderLists"));
+	}
+	_fellow_loop_run(loop);
+	// Chunks claimed by workers may still be in progress (one chunk each at most).
+	while (loop->done.get() < p_count) {
+		std::this_thread::yield();
+	}
+}
+
+void RenderForwardClustered::_fellow_loops_release() {
+	for (FellowParallelLoop &loop : fellow_loops) {
+		if (loop.group != WorkerThreadPool::INVALID_TASK_ID) {
+			WorkerThreadPool::get_singleton()->wait_for_group_task_completion(loop.group);
+			loop.group = WorkerThreadPool::INVALID_TASK_ID;
+		}
+	}
+}
+
 void RenderForwardClustered::_fellow_make_instance_data(const GeometryInstanceSurfaceDataCache *surface, const GeometryInstanceForwardClustered *inst, SceneState::InstanceData &instance_data) const {
 	// Stock's per-element instance data (moved out of _fill_instance_data's loop; also used by its worker ranges).
 	if (likely(inst->store_transform_cache)) {
@@ -912,8 +964,7 @@ void RenderForwardClustered::_fill_instance_data(RenderListType p_render_list, i
 		fellow_instance_job.chunk_size = FELLOW_PARALLEL_LIST_CHUNK;
 		fellow_instance_joinable.resize(element_total);
 		const uint32_t chunk_count = (element_total + FELLOW_PARALLEL_LIST_CHUNK - 1) / FELLOW_PARALLEL_LIST_CHUNK;
-		WorkerThreadPool::GroupID group = WorkerThreadPool::get_singleton()->add_template_group_task(this, &RenderForwardClustered::_fellow_fill_instance_data_chunk, (void *)nullptr, (int)chunk_count, -1, true, SNAME("FellowFillInstanceData"));
-		WorkerThreadPool::get_singleton()->wait_for_group_task_completion(group);
+		_fellow_parallel_for(chunk_count, &RenderForwardClustered::_fellow_fill_instance_data_chunk);
 
 		const uint8_t *joinable = fellow_instance_joinable.ptr();
 		uint32_t repeats = 0;
@@ -1039,23 +1090,13 @@ void RenderForwardClustered::_fellow_sort_by_key(RenderListType p_render_list, u
 			break;
 		}
 		fellow_sort_children.resize(fellow_sort_split.size() * 2);
-		if (fellow_sort_split.size() == 1) {
-			_fellow_sort_split_range(0, nullptr);
-		} else {
-			WorkerThreadPool::GroupID group = WorkerThreadPool::get_singleton()->add_template_group_task(this, &RenderForwardClustered::_fellow_sort_split_range, (void *)nullptr, (int)fellow_sort_split.size(), -1, true, SNAME("FellowSortSplit"));
-			WorkerThreadPool::get_singleton()->wait_for_group_task_completion(group);
-		}
+		_fellow_parallel_for(fellow_sort_split.size(), &RenderForwardClustered::_fellow_sort_split_range);
 		fellow_sort_level.clear();
 		for (const FellowSortRange &r : fellow_sort_children) {
 			fellow_sort_level.push_back(r);
 		}
 	}
-	if (fellow_sort_leaves.size() == 1) {
-		_fellow_sort_leaf(0, nullptr);
-	} else if (!fellow_sort_leaves.is_empty()) {
-		WorkerThreadPool::GroupID group = WorkerThreadPool::get_singleton()->add_template_group_task(this, &RenderForwardClustered::_fellow_sort_leaf, (void *)nullptr, (int)fellow_sort_leaves.size(), -1, true, SNAME("FellowSortLeaves"));
-		WorkerThreadPool::get_singleton()->wait_for_group_task_completion(group);
-	}
+	_fellow_parallel_for(fellow_sort_leaves.size(), &RenderForwardClustered::_fellow_sort_leaf);
 	sorter.final_insertion_sort(0, int64_t(p_size), records);
 
 	for (uint32_t i = 0; i < p_size; i++) {
@@ -1510,8 +1551,7 @@ bool RenderForwardClustered::_fellow_fill_render_list_parallel(const FellowFillP
 	fellow_fill_count = p_count;
 	fellow_fill_chunk_size = chunk_size;
 
-	WorkerThreadPool::GroupID group = WorkerThreadPool::get_singleton()->add_template_group_task(this, &RenderForwardClustered::_fellow_fill_render_list_chunk, (void *)nullptr, (int)chunk_count, -1, true, SNAME("FellowFillRenderList"));
-	WorkerThreadPool::get_singleton()->wait_for_group_task_completion(group);
+	_fellow_parallel_for(chunk_count, &RenderForwardClustered::_fellow_fill_render_list_chunk);
 
 	RenderList *rl = &render_list[p_params.render_list];
 	FellowFillOutput total;
@@ -6090,6 +6130,7 @@ RenderForwardClustered::RenderForwardClustered() {
 }
 
 RenderForwardClustered::~RenderForwardClustered() {
+	_fellow_loops_release();
 	if (ss_effects != nullptr) {
 		memdelete(ss_effects);
 		ss_effects = nullptr;

@@ -328,6 +328,11 @@ inline bool cpu_parallel_list_sort() {
 	return cpu_compact_list_sort() && GLOBAL_GET_CACHED(bool, "rendering/fellow/cpu/parallel_list_sort");
 }
 
+// Worker tasks posted per parallel loop of the render lists, besides the render thread (0: the render thread alone).
+inline int cpu_worker_tasks() {
+	return MAX(0, GLOBAL_GET_CACHED(int, "rendering/fellow/cpu/worker_tasks"));
+}
+
 // Mix-blended materials (alpha pass, no depth or stencil writes, no alpha antialiasing): fragments whose final alpha is
 // exactly 0 are discarded before lighting — blending them leaves the colour target unchanged (src * 0 + dst * 1), so
 // the image is the same; stock lights and fogs them anyway. Read every frame.
