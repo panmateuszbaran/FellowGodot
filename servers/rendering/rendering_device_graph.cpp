@@ -33,6 +33,14 @@
 #include "servers/rendering/fellow_parallel.h"
 #include "servers/rendering/fellow_settings.h"
 
+#include <chrono>
+
+// FellowEngine counters of the replay (where RenderingDevice::_end_frame()'s time goes).
+static _FORCE_INLINE_ uint64_t _fellow_nsec() {
+	return (uint64_t)std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+
+
 #define PRINT_RENDER_GRAPH 0
 #define FORCE_FULL_ACCESS_BITS 0
 #define PRINT_RESOURCE_TRACKER_TOTAL 0
@@ -1205,6 +1213,9 @@ void RenderingDeviceGraph::_run_render_commands(int32_t p_level, const RecordedC
 					framebuffer = draw_list_command->framebuffer;
 				}
 
+				const uint64_t fellow_draw_from = _fellow_nsec();
+				Fellow::stats().rd_graph_draw_lists.increment();
+				Fellow::stats().rd_graph_draw_bytes.add(draw_list_command->instruction_data_size);
 				if (framebuffer && render_pass) {
 					if (!(draw_list_command->command_buffer_type == RDD::COMMAND_BUFFER_TYPE_PRIMARY && Fellow::frame_parallel_replay() && fellow_replay_parallel != nullptr && _fellow_run_draw_list_parallel(r_command_buffer, draw_list_command, render_pass, framebuffer, clear_values))) {
 						driver->command_begin_render_pass(r_command_buffer, render_pass, framebuffer, draw_list_command->command_buffer_type, draw_list_command->region, clear_values);
@@ -1212,6 +1223,7 @@ void RenderingDeviceGraph::_run_render_commands(int32_t p_level, const RecordedC
 						driver->command_end_render_pass(r_command_buffer);
 					}
 				}
+				Fellow::stats().rd_graph_draw_nsec.add(_fellow_nsec() - fellow_draw_from);
 			} break;
 			case RecordedCommand::TYPE_TEXTURE_CLEAR_COLOR: {
 				const RecordedTextureClearColorCommand *texture_clear_color_command = reinterpret_cast<const RecordedTextureClearColorCommand *>(command);
@@ -1382,6 +1394,10 @@ void RenderingDeviceGraph::_boost_priority_for_render_commands(RecordedCommandSo
 }
 
 void RenderingDeviceGraph::_group_barriers_for_render_commands(RDD::CommandBufferID p_command_buffer, const RecordedCommandSort *p_sorted_commands, uint32_t p_sorted_commands_count, bool p_full_memory_barrier) {
+	struct FellowTimer {
+		uint64_t from = _fellow_nsec();
+		~FellowTimer() { Fellow::stats().rd_graph_barriers_nsec.add(_fellow_nsec() - from); }
+	} fellow_timer;
 	if (!driver_honors_barriers) {
 		return;
 	}
@@ -2630,6 +2646,8 @@ void RenderingDeviceGraph::end(bool p_reorder_commands, bool p_full_barriers, RD
 		// No commands have been logged, do nothing.
 		return;
 	}
+	const uint64_t fellow_end_from = _fellow_nsec();
+	Fellow::stats().rd_graph_commands.add(command_count);
 
 	thread_local LocalVector<RecordedCommandSort> commands_sorted;
 	if (p_reorder_commands) {
@@ -2764,6 +2782,7 @@ void RenderingDeviceGraph::end(bool p_reorder_commands, bool p_full_barriers, RD
 #endif
 
 			commands_sorted.sort();
+			Fellow::stats().rd_graph_sort_nsec.add(_fellow_nsec() - fellow_end_from);
 
 #if PRINT_RENDER_GRAPH
 			print_line("AFTER SORT");
@@ -2818,6 +2837,8 @@ void RenderingDeviceGraph::end(bool p_reorder_commands, bool p_full_barriers, RD
 	// Advance the frame counter. It's not necessary to do this if no commands are recorded because that means no secondary command buffers were used.
 	frame = (frame + 1) % frames.size();
 }
+
+/* FellowEngine counters of the replay (where RenderingDevice::_end_frame()'s time goes) */
 
 /* FellowEngine parallel replay */
 

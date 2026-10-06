@@ -462,6 +462,12 @@ struct Stats {
 	SafeNumeric<uint64_t> frame_present_thread_wait_usec; // time the render thread waited for the present thread
 	SafeNumeric<uint64_t> frame_replay_lists; // draw lists replayed by worker threads (parallel replay)
 	SafeNumeric<uint64_t> frame_replay_segments; // their segments (secondary command buffers)
+	SafeNumeric<uint64_t> rd_graph_commands; // render graph commands replayed
+	SafeNumeric<uint64_t> rd_graph_sort_nsec; // the graph's dependency sort before the replay
+	SafeNumeric<uint64_t> rd_graph_barriers_nsec; // barriers grouped and recorded
+	SafeNumeric<uint64_t> rd_graph_draw_nsec; // draw lists replayed (vkCmd* calls)
+	SafeNumeric<uint64_t> rd_graph_draw_lists; // draw lists replayed
+	SafeNumeric<uint64_t> rd_graph_draw_bytes; // their instruction bytes
 	SafeNumeric<uint64_t> cpu_hot_gate_closed_frames; // frames during which the hot workers' gate was closed (GPU-bound)
 };
 

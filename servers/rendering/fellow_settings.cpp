@@ -183,6 +183,12 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["frame_present_thread_wait_usec"] = s.frame_present_thread_wait_usec.get();
 	d["frame_replay_lists"] = s.frame_replay_lists.get();
 	d["frame_replay_segments"] = s.frame_replay_segments.get();
+	d["rd_graph_commands"] = s.rd_graph_commands.get();
+	d["rd_graph_sort_nsec"] = s.rd_graph_sort_nsec.get();
+	d["rd_graph_barriers_nsec"] = s.rd_graph_barriers_nsec.get();
+	d["rd_graph_draw_nsec"] = s.rd_graph_draw_nsec.get();
+	d["rd_graph_draw_lists"] = s.rd_graph_draw_lists.get();
+	d["rd_graph_draw_bytes"] = s.rd_graph_draw_bytes.get();
 	d["cpu_hot_gate_closed_frames"] = s.cpu_hot_gate_closed_frames.get();
 	return d;
 }
