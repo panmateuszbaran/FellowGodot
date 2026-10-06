@@ -32,6 +32,7 @@
 
 #include "core/templates/paged_allocator.h"
 #include "servers/rendering/fellow_parallel.h"
+#include "servers/rendering/fellow_sort.h"
 #include "servers/rendering/multi_uma_buffer.h"
 #include "servers/rendering/renderer_rd/cluster_builder_rd.h"
 #include "servers/rendering/renderer_rd/effects/fellow_shadow_cache.h"
@@ -578,15 +579,6 @@ private:
 	LocalVector<uint8_t> fellow_instance_joinable;
 	static constexpr uint32_t FELLOW_PARALLEL_SORT_MIN = 4096; // fewer elements: single-threaded sort
 	static constexpr uint32_t FELLOW_PARALLEL_SORT_GRAIN = 1024; // ranges up to this size are sorted by one worker
-	struct FellowSortRange {
-		int64_t first;
-		int64_t last;
-		int64_t depth;
-	};
-	LocalVector<FellowSortRange> fellow_sort_level;
-	LocalVector<FellowSortRange> fellow_sort_split;
-	LocalVector<FellowSortRange> fellow_sort_children;
-	LocalVector<FellowSortRange> fellow_sort_leaves;
 
 	template <bool t_records>
 	void _fill_render_list_range(const FellowFillParams &p_params, uint32_t p_from, uint32_t p_to, FellowFillOutput &r_out);
@@ -610,6 +602,7 @@ private:
 		uint32_t entry = 0;
 		uint32_t from = 0;
 		uint32_t to = 0;
+		uint32_t offset = 0; // of its records in the pass's records
 		uint64_t primitives = 0;
 		LocalVector<FellowShadowRecord> records;
 		LocalVector<GeometryInstanceForwardClustered *> transform_updates;
@@ -629,6 +622,7 @@ private:
 	void _fellow_shadow_flush();
 	void _fellow_shadow_fill_chunk(uint32_t p_chunk, void *p_unused);
 	void _fellow_shadow_sort_entry(uint32_t p_entry, void *p_unused);
+	void _fellow_shadow_gather_chunk(uint32_t p_chunk, void *p_unused);
 	void _fellow_shadow_instance_chunk(uint32_t p_item, void *p_unused);
 	bool _fellow_fill_render_list_parallel(const FellowFillParams &p_params, uint32_t p_count, uint32_t &r_lightmap_captures_used);
 	void _fellow_fill_render_list_chunk(uint32_t p_chunk, void *p_unused);
@@ -651,8 +645,6 @@ private:
 	static constexpr uint32_t FELLOW_PREFETCH_DISTANCE = 8; // elements or instances ahead
 	static constexpr uint32_t FELLOW_PREFETCH_INSTANCE_LINES = 6; // 64-byte lines of an instance (its fields used per frame)
 	static void _fellow_prefetch_element(GeometryInstanceSurfaceDataCache *const *p_elements, uint32_t p_index, uint32_t p_end);
-	void _fellow_sort_split_range(uint32_t p_index, void *p_unused);
-	void _fellow_sort_leaf(uint32_t p_index, void *p_unused);
 
 	HashMap<Size2i, RID> sdfgi_framebuffer_size_cache;
 
@@ -969,8 +961,10 @@ private:
 	};
 
 	RenderList render_list[RENDER_LIST_MAX];
-	typedef SortArray<RenderList::FellowSortRecord, RenderList::FellowSortRecordByKey> FellowRecordSorter;
-	RenderList::FellowSortRecord *fellow_sort_job_records = nullptr;
+	// Parallel sorts (servers/rendering/fellow_sort.h): stock's introsort, its independent parts on worker threads.
+	FellowParallelSort<RenderList::FellowSortRecord, RenderList::FellowSortRecordByKey> fellow_list_sort;
+	FellowParallelSort<FellowShadowRecord, FellowShadowRecordByKey> fellow_shadow_sort;
+	static void _fellow_sort_write_back(void *p_elements, const RenderList::FellowSortRecord *p_records, int64_t p_first, int64_t p_last);
 
 	virtual void _update_shader_quality_settings() override;
 

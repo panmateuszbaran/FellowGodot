@@ -1092,12 +1092,8 @@ void RenderForwardClustered::_fellow_sort_by_key_impl(RenderListType p_render_li
 		return;
 	}
 
-	// Stock's introsort on the records, with its independent subranges sorted by worker threads. Introsort splits a
-	// range with one partition step and then sorts the two parts separately; what it does to one part depends only on
-	// that part's elements and the depth budget it is given. The partition steps above the grain size are taken
-	// here, level by level, exactly as introsort's loop takes them; the parts left are sorted by introsort itself (one
-	// per worker), and the final insertion pass runs over the whole range, as in SortArray::sort. Same steps on the
-	// same subranges: the same order, ties included.
+	// Stock's introsort on the records, with its independent parts sorted by worker threads (FellowParallelSort,
+	// servers/rendering/fellow_sort.h): the same steps on the same subranges, the same order, ties included.
 	const bool markers = Fellow::list_markers();
 	if (markers) {
 		RENDER_TIMESTAMP("FellowEngine Sort Gather");
@@ -1121,64 +1117,17 @@ void RenderForwardClustered::_fellow_sort_by_key_impl(RenderListType p_render_li
 	if (markers) {
 		RENDER_TIMESTAMP("FellowEngine Sort Partitions");
 	}
-	FellowRecordSorter sorter;
-	fellow_sort_job_records = records;
-	const int64_t grain = MAX(int64_t(FELLOW_PARALLEL_SORT_GRAIN), int64_t(p_size) / 8);
-	fellow_sort_leaves.clear();
-	fellow_sort_level.clear();
-	fellow_sort_level.push_back({ 0, int64_t(p_size), sorter.bitlog(int64_t(p_size)) * 2 });
-	while (!fellow_sort_level.is_empty()) {
-		fellow_sort_split.clear();
-		for (const FellowSortRange &r : fellow_sort_level) {
-			if (r.last - r.first < 2) {
-				continue;
-			}
-			if (r.last - r.first <= grain || r.depth == 0) {
-				fellow_sort_leaves.push_back(r); // introsort(first, last, depth) does the rest, heap sort included
-			} else {
-				fellow_sort_split.push_back(r);
-			}
-		}
-		if (fellow_sort_split.is_empty()) {
-			break;
-		}
-		fellow_sort_children.resize(fellow_sort_split.size() * 2);
-		_fellow_parallel_for(fellow_sort_split.size(), &_fellow_chunk_thunk<&RenderForwardClustered::_fellow_sort_split_range>);
-		fellow_sort_level.clear();
-		for (const FellowSortRange &r : fellow_sort_children) {
-			fellow_sort_level.push_back(r);
-		}
-	}
-	if (markers) {
-		RENDER_TIMESTAMP("FellowEngine Sort Leaves");
-	}
-	_fellow_parallel_for(fellow_sort_leaves.size(), &_fellow_chunk_thunk<&RenderForwardClustered::_fellow_sort_leaf>);
-	if (markers) {
-		RENDER_TIMESTAMP("FellowEngine Sort Final");
-	}
-	sorter.final_insertion_sort(0, int64_t(p_size), records);
-
-	for (uint32_t i = 0; i < p_size; i++) {
-		e[i] = records[i].surface;
-	}
+	// Each finished leaf writes its part of the list (while its records are in the cache).
+	fellow_list_sort.clear();
+	fellow_list_sort.add(records, int64_t(p_size), e);
+	fellow_list_sort.run(fellow_parallel, (uint32_t)Fellow::cpu_worker_tasks(), MAX(int64_t(FELLOW_PARALLEL_SORT_GRAIN), int64_t(p_size) / 16), &_fellow_sort_write_back);
 }
 
-void RenderForwardClustered::_fellow_sort_split_range(uint32_t p_index, void *p_unused) {
-	// One step of SortArray::introsort's loop on this range: the right part is what it recurses into, the left part what
-	// the loop continues with, both with the decremented depth budget.
-	const FellowSortRange r = fellow_sort_split[p_index];
-	FellowRecordSorter sorter;
-	RenderList::FellowSortRecord *records = fellow_sort_job_records;
-	const int64_t depth = r.depth - 1;
-	const int64_t cut = sorter.partitioner(r.first, r.last, sorter.median_of_3_index(records, r.first, r.first + (r.last - r.first) / 2, r.last - 1), records);
-	fellow_sort_children[p_index * 2 + 0] = { cut, r.last, depth };
-	fellow_sort_children[p_index * 2 + 1] = { r.first, cut, depth };
-}
-
-void RenderForwardClustered::_fellow_sort_leaf(uint32_t p_index, void *p_unused) {
-	const FellowSortRange r = fellow_sort_leaves[p_index];
-	FellowRecordSorter sorter;
-	sorter.introsort(r.first, r.last, fellow_sort_job_records, r.depth);
+void RenderForwardClustered::_fellow_sort_write_back(void *p_elements, const RenderList::FellowSortRecord *p_records, int64_t p_first, int64_t p_last) {
+	GeometryInstanceSurfaceDataCache **e = static_cast<GeometryInstanceSurfaceDataCache **>(p_elements);
+	for (int64_t i = p_first; i < p_last; i++) {
+		e[i] = p_records[i].surface;
+	}
 }
 
 void RenderForwardClustered::_fellow_prefetch_element(GeometryInstanceSurfaceDataCache *const *p_elements, uint32_t p_index, uint32_t p_end) {
@@ -3784,6 +3733,13 @@ void RenderForwardClustered::_fellow_shadow_fill_chunk(uint32_t p_chunk, void *p
 	chunk.primitives = out.primitives;
 }
 
+void RenderForwardClustered::_fellow_shadow_gather_chunk(uint32_t p_chunk, void *p_unused) {
+	const FellowShadowChunk &chunk = fellow_shadow_chunks[p_chunk];
+	if (!chunk.records.is_empty()) {
+		memcpy(fellow_shadow_entries[chunk.entry].records.ptr() + chunk.offset, chunk.records.ptr(), chunk.records.size() * sizeof(FellowShadowRecord));
+	}
+}
+
 void RenderForwardClustered::_fellow_shadow_sort_entry(uint32_t p_entry, void *p_unused) {
 	// Stock sorts the pass's elements by the keys its fill gave them: the same introsort on the same keys.
 	FellowShadowEntry &entry = fellow_shadow_entries[p_entry];
@@ -3964,11 +3920,9 @@ void RenderForwardClustered::_fellow_shadow_flush() {
 		entry.records.resize(entry.size);
 		uint32_t at = 0;
 		for (uint32_t c = 0; c < entry.chunk_count; c++) {
-			const LocalVector<FellowShadowRecord> &cr = fellow_shadow_chunks[entry.chunk_first + c].records;
-			if (!cr.is_empty()) {
-				memcpy(entry.records.ptr() + at, cr.ptr(), cr.size() * sizeof(FellowShadowRecord));
-				at += cr.size();
-			}
+			FellowShadowChunk &chunk = fellow_shadow_chunks[entry.chunk_first + c];
+			chunk.offset = at;
+			at += chunk.records.size();
 		}
 		if (entry.render_info) {
 			entry.render_info->info[RSE::VIEWPORT_RENDER_INFO_TYPE_SHADOW][RSE::VIEWPORT_RENDER_INFO_PRIMITIVES_IN_FRAME] += uint32_t(entry.primitives);
@@ -3977,11 +3931,24 @@ void RenderForwardClustered::_fellow_shadow_flush() {
 		scene_state.shadow_passes[entry.shadow_pass].element_count = entry.size;
 	}
 
+	// Each pass's records in fill order (chunks copied in parallel).
+	_fellow_parallel_for(chunk_count, &_fellow_chunk_thunk<&RenderForwardClustered::_fellow_shadow_gather_chunk>);
+
 	// Sort.
 	if (markers) {
 		RENDER_TIMESTAMP("FellowEngine Shadow Lists Sort");
 	}
-	_fellow_parallel_for(entry_count, &_fellow_chunk_thunk<&RenderForwardClustered::_fellow_shadow_sort_entry>);
+	if (Fellow::cpu_parallel_list_sort()) {
+		// All passes' records in one parallel sort (a large cascade is split across the workers).
+		fellow_shadow_sort.clear();
+		for (uint32_t e = 0; e < entry_count; e++) {
+			fellow_shadow_sort.add(fellow_shadow_entries[e].records.ptr(), int64_t(fellow_shadow_entries[e].size));
+		}
+		const int64_t sort_total = fellow_shadow_sort.get_total();
+		fellow_shadow_sort.run(fellow_parallel, (uint32_t)Fellow::cpu_worker_tasks(), MAX(int64_t(FELLOW_PARALLEL_SORT_GRAIN), sort_total / 16));
+	} else {
+		_fellow_parallel_for(entry_count, &_fellow_chunk_thunk<&RenderForwardClustered::_fellow_shadow_sort_entry>);
+	}
 
 	// The instance buffer, grown and mapped pass by pass as stock's _fill_instance_data does it.
 	if (markers) {
