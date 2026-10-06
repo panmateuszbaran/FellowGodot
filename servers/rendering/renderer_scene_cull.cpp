@@ -4011,7 +4011,9 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 				// FellowEngine (decision 0016): the same ranges and per-range results, but the render thread culls ranges
 				// itself and never waits for a worker to wake up.
 				fellow_cull_data = &cull_data;
-				fellow_cull_parallel.run(scene_cull_result_threads.size(), &RendererSceneCull::_fellow_scene_cull_range, this, (uint32_t)Fellow::cpu_worker_tasks());
+				// As many worker tasks as stock (one per range but the render thread's): fewer would leave ranges for
+				// fewer threads (m4_f45_city_ab: with 6 the cull took longer than stock's).
+				fellow_cull_parallel.run(scene_cull_result_threads.size(), &RendererSceneCull::_fellow_scene_cull_range, this, scene_cull_result_threads.size() - 1);
 			} else {
 				WorkerThreadPool::GroupID group_task = WorkerThreadPool::get_singleton()->add_template_group_task(this, &RendererSceneCull::_scene_cull_threaded, &cull_data, scene_cull_result_threads.size(), -1, true, SNAME("RenderCullInstances"));
 				WorkerThreadPool::get_singleton()->wait_for_group_task_completion(group_task);
