@@ -2,7 +2,7 @@
 
 Status: **MEASURING** · Branch `fellow/geometry` · Toggles `rendering/fellow/autotune/enabled` (runtime, default off
 until measured), `autotune/block_frames` (16), `autotune/interval_frames` (600), `autotune/min_gain_percent` (0.5),
-`autotune/max_interval_sec` (30) ·
+`autotune/max_interval_sec` (30), `autotune/max_duty_percent` (20) ·
 Code: `servers/rendering/fellow_autotune.{h,cpp}`, `rendering_server_default.cpp` (`_draw`: the frame hooks and the
 timestamps read back), `fellow_settings.h` (`shadow_directional_max_mip()` asks the tuner).
 
@@ -72,6 +72,14 @@ since; at most 36 pairs, older ones weighed down beyond that), and the decision 
 standard error. In the draw-heavy City Lab async compute costs about 3 % of the frame, close to what six pairs of
 16-frame blocks of a noisy CPU-bound frame can resolve: `m5_f70_dh_cand` ran with async compute in 2028, 6282 and
 10 195 of 10 868 frames in its three runs (frame 2.480, 2.551, 2.569 ms; the defaults' runs 2.553 ms on average).
+
+`fellow68` against the same settings without autotune (`m5_f70_gpu_cand`, Sponza, 3 ABBA runs): +2.9 % frame (p 0.02),
++2.5 % GPU time, with no choice changed in two of the runs: the cost of the evaluations themselves. 24-26 evaluations
+per 57-second run (four tunables, each evaluated after its interval, after 30 seconds and after a change of the frame
+time), 192 frames each (96 with a tunable off): evaluations took about 60 % of the frames, and in Sponza an evaluation
+of the directional pyramid runs its "off" blocks 14 % slower. Since `fellow70` the evaluations of all tunables together
+take at most `autotune/max_duty_percent` (20) of the frames: after an evaluation of L frames the next one waits
+4 L frames.
 
 ## Why it is exact
 

@@ -117,6 +117,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/autotune/min_gain_percent", PROPERTY_HINT_RANGE, "0,10,0.1"), 0.5);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/autotune/interval_frames", PROPERTY_HINT_RANGE, "20,100000,1"), 600);
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/autotune/max_interval_sec", PROPERTY_HINT_RANGE, "1,600,0.1,suffix:s"), 30.0);
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/autotune/max_duty_percent", PROPERTY_HINT_RANGE, "1,100,1"), 20.0);
 	GLOBAL_DEF("rendering/fellow/frame/replay_frame_plan", false);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/frame/replay_plan_min_draws", PROPERTY_HINT_RANGE, "1,4096,1"), 16);
 	GLOBAL_DEF_RST("rendering/fellow/frame/separate_present_queue", false);

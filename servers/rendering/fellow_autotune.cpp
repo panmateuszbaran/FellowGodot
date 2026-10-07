@@ -107,6 +107,9 @@ uint64_t last_begin_usec = 0;
 // than when it was made (the view or the scene changed), and at least every autotune/max_interval_sec.
 double frame_ms_avg = 0.0;
 bool last_frame_evaluating = false; // the previous frame ran a tunable's evaluation (not counted in the average)
+// autotune/max_duty_percent: after an evaluation of L frames the next one (of any tunable) waits L * (100 / duty - 1)
+// frames, so that evaluations (half of whose frames run a tunable the other way) take at most that share of the frames.
+uint64_t next_eval_allowed = 0;
 constexpr double AUTOTUNE_AVG_ALPHA = 1.0 / 32.0;
 constexpr double AUTOTUNE_CHANGE = 0.2;
 constexpr uint32_t AUTOTUNE_CHANGE_DELAY = 30; // frames before the evaluation such a change brings forward
@@ -238,6 +241,8 @@ void finish(TuneState &s, bool p_new_choice, const Analysis &p_analysis, bool p_
 	s.choice = p_new_choice;
 	s.evaluating = false;
 	s.next_eval = frame_id + s.interval;
+	const double duty = CLAMP((double)GLOBAL_GET_CACHED(float, "rendering/fellow/autotune/max_duty_percent"), 1.0, 100.0);
+	next_eval_allowed = frame_id + uint64_t(double(frame_id - s.eval_start) * (100.0 / duty - 1.0));
 	s.decided_usec = OS::get_singleton()->get_ticks_usec();
 	s.decided_frame = frame_id;
 	s.decided_frame_ms = frame_ms_avg;
@@ -367,7 +372,7 @@ void autotune_frame_begin() {
 			evaluating = t;
 		}
 	}
-	if (evaluating < 0) {
+	if (evaluating < 0 && frame_id >= next_eval_allowed) {
 		// One tunable at a time: the most overdue.
 		int due = -1;
 		for (int t = 0; t < TUNE_MAX; t++) {
