@@ -46,9 +46,36 @@ following frames the camera's opaque and motion lists leave out the elements las
 elements are kept). The images are wrong (an element that becomes visible appears a few frames late), but the GPU and
 CPU time with the hidden elements left out, net of the pyramid and the test, sizes what an exact culling could gain.
 
-## Result
+RTX (`fellow75`, `m6_f77_occ_ab*`, in one process, blocks of 30 frames; o0: off, o1: the hidden elements left out):
 
-(pending: `m6_f77_occ_ab*`)
+| scene | frame | GPU time | render thread | depth pre-pass GPU | opaque pass GPU |
+|---|---:|---:|---:|---:|---:|
+| Bistro exterior | **−4.3 %** | **−4.7 %** (−0.215 ms) | **−20.4 %** (−0.44 ms) | −0.066 ms | −0.145 ms |
+| draw-heavy City Lab | +2.3 % | **−4.0 %** (−0.076 ms) | +4.4 % | +0.006 ms | −0.063 ms |
+| City Lab | −1.2 % | −1.5 % (−0.031 ms) | +10.1 % | +0.015 ms | −0.045 ms |
+| Bistro interior | +1.1 % | +1.2 % | −1.4 % | +0.051 ms | −0.012 ms |
+| Sponza | +0.4 % | +0.5 % | +1.6 % | +0.048 ms | −0.012 ms |
+
+What it costs here: the pyramid and the test (~0.05 ms of GPU time inside the pre-pass region: Bistro interior and
+Sponza, which hide little) and, on the render thread, building and uploading every element's AABB (+0.09 to +0.11 ms
+in City Lab). What it saves: the opaque pass's work for hidden elements (all scenes that hide much), their pre-pass
+work (Bistro exterior) and, in this debug mode only, their recording on the render thread.
+
+## Plan
+
+An exact version cannot leave elements out on the CPU (an element that becomes visible must be drawn in the same
+frame), so it keeps recording every draw and lets the GPU set the instance counts:
+
+1. **The opaque pass** (exact): after the full pre-pass, the elements hidden by its depth pyramid can have no fragment
+   that passes the opaque pass's depth test (their nearest point is strictly behind the depth buffer everywhere they
+   cover), so leaving them out changes nothing. Per run of instanced elements, the visible ones are compacted (in
+   order) into the elements the shaders read (persistent instance data's 16-byte elements) and the draw becomes indirect
+   with that count. Bistro exterior's −0.145 ms, City Lab's −0.045 ms, draw-heavy's −0.063 ms of opaque pass, less the
+   pyramid and the test.
+2. A cheaper pyramid (one dispatch for several levels, level 0 not padded to a power of two), and the AABBs kept on the
+   GPU per surface slot, rewritten only when their instance changes (as persistent instance data's entries).
+3. Later, the pre-pass in two phases (previous frame's visible elements, pyramid, the newly visible ones): its draw
+   order changes, so coplanar ties can resolve differently; to be measured as such.
 
 ## Decision
 
