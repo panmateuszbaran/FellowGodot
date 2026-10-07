@@ -98,6 +98,29 @@ where the pyramid stays on is its evaluations: 5-6 % of a 30-second run's frames
 evaluations come early and the interval only grows to 9600 frames), +0.4 to +1.0 % in Bistro and the Lights Lab, none
 of it significant in three runs. The early end of an evaluation (`f3ea954`) shortens exactly those evaluations.
 
+`fellow62` (`4577fc0`: async compute and the frame plan as tunables, the most overdue tunable evaluated next; no
+re-evaluation on change yet), ABBA between processes (`m4_f65_*_auto`, 2026-10-07 06:40-07:59; reference: the defaults,
+async compute off, autotune off; `async` = async compute created at start-up and always used; `auto` = async compute
+created at start-up + autotune):
+
+| scene | async compute | async compute + autotune | autotune's choices |
+|---|---:|---:|---|
+| City Lab (4 runs) | −0.9 % (n.s., 1/4) | **−3.7 %** (4/4, p 0.06) | directional pyramid off, async compute off |
+| draw-heavy City Lab (4 runs) | **+1.2 %** (0/4, p 0.05) | **−1.4 %** (4/4, p 0.02) | async compute off most of the time (2-4 flips per run) |
+| Bistro exterior (3 runs) | **−2.4 %** (3/3) | **−1.9 %** (3/3, p 0.11) | everything kept on (one flip in one run) |
+| Bistro interior (3 runs) | +0.2 % (n.s.) | +0.6 % (n.s., 0/3, p 0.19) | everything kept on; 1113 of 14478 frames with one tunable off |
+| Lights Lab (3 runs) | −1.1 % (3/3) | −1.2 % (3/3, p 0.08) | kept on |
+| Sponza (3 runs) | −0.9 % (3/3) | −1.0 % (3/3) | kept on |
+
+GPU time follows the frame time in the GPU-bound scenes (Bistro exterior −2.1 %, Lights −0.9 %, Sponza −1.0 %, Bistro
+interior +0.5 %). Verification of `fellow62` with async compute and frequent evaluations (`m4_f65_verify_*`): 0
+`cpu/verify` mismatches, 0 async conflicts; identity against async compute alone (`m4_f65_temporal`, six scenes): at the
+floor everywhere, City Lab and Bistro exterior bit-identical.
+
+Async compute in Sponza ran in only 118-135 of 7685 frames in five of the six runs with it (7335-7345 in the other
+two): `fellow_async_compute_begin()` skips the frame while any transfer worker is recording, and an upload nothing draws
+yet keeps a worker recording (see 0015).
+
 ## Decision
 
-(pending)
+(pending: async compute + autotune as the defaults, measured in all scenes with the re-evaluation of `6ea366a`)
