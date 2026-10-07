@@ -411,6 +411,14 @@ inline int cpu_instance_buffer_memory() {
 	return cpu_enabled() ? CLAMP(GLOBAL_GET_CACHED(int, "rendering/fellow/cpu/instance_buffer_memory"), 0, 2) : 0;
 }
 
+// Persistent instance data (docs/decisions/0022-persistent-instance-data.md): each surface's instance data is kept in a
+// buffer from frame to frame and rewritten only when it changes; per frame each list element is 16 bytes (the surface's
+// entry, the flags and GI offset of its pass) instead of the whole 176. Runtime; the frame's choice is taken when its
+// first list is filled.
+inline bool cpu_persistent_instances() {
+	return cpu_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/cpu/persistent_instances");
+}
+
 // Debug only (wrong images): the parallel instance data steps write to system memory instead of the GPU buffer, to
 // measure what the writes over PCIe (device-local, host-visible memory) cost.
 inline bool cpu_debug_instance_scratch() {
@@ -527,6 +535,9 @@ struct Stats {
 	SafeNumeric<uint64_t> frame_async_uses; // async compute segments (decision 0015)
 	SafeNumeric<uint64_t> frame_async_conflicts; // of which the concurrent part had to wait (shared resource)
 	SafeNumeric<uint64_t> frame_async_transfers; // async parts that used an upload submitted with them
+	SafeNumeric<uint64_t> cpu_persistent_elements; // list elements written as 16-byte elements (decision 0022)
+	SafeNumeric<uint64_t> cpu_persistent_uploads; // surface entries rewritten (changed, or first used)
+	SafeNumeric<uint64_t> cpu_persistent_flushes; // upload dispatches
 	SafeNumeric<uint64_t> shadow_pyramid_builds; // min/max pyramid updates that wrote something (directional and positional)
 	SafeNumeric<uint64_t> shadow_pyramid_texels; // finest-level pyramid texels written (each covers 4x4 new atlas texels)
 	SafeNumeric<uint64_t> shadow_pyramid_texels_needed; // of those, the ones computed from the atlas (the rest set to (0, 1))

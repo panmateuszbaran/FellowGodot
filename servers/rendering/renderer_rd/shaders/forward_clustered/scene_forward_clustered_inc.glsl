@@ -184,6 +184,10 @@ bool sc_fellow_blended_alpha_zero_skip() {
 	return ((sc_packed_1() >> 14) & 1U) != 0;
 }
 
+bool sc_fellow_persistent_instances() {
+	return ((sc_packed_1() >> 15) & 1U) != 0;
+}
+
 float sc_luminance_multiplier() {
 	// Not used in clustered renderer but we share some code with the mobile renderer that requires this.
 	return 1.0;
@@ -418,6 +422,41 @@ layout(set = 1, binding = 2, std430) buffer restrict readonly InstanceDataBuffer
 	InstanceData data[];
 }
 instances;
+
+// FellowEngine persistent instance data (cpu/persistent_instances, docs/decisions/0022-persistent-instance-data.md):
+// the per-frame buffer then holds one 16-byte element per list element (the surface's slot, the flags and the GI offset
+// its pass gave it); the rest of the instance data is in a buffer kept from frame to frame, one entry per surface and
+// rewritten only when it changes. Both bindings are always provided.
+layout(set = 1, binding = 39, std430) buffer restrict readonly FellowElementBuffer {
+	uvec4 data[];
+}
+fellow_elements;
+
+layout(set = 1, binding = 40, std430) buffer restrict readonly FellowSlotBuffer {
+	InstanceData data[];
+}
+fellow_slots;
+
+// The list element's instance data: entry, flags and GI offset (set by fellow_element_init() at the start of the
+// vertex and fragment stages).
+uint fellow_slot;
+uint fellow_flags;
+uint fellow_gi_offset;
+
+#define FELLOW_INSTANCE(m_field) (sc_fellow_persistent_instances() ? fellow_slots.data[fellow_slot].m_field : instances.data[fellow_slot].m_field)
+
+void fellow_element_init(uint p_element) {
+	if (sc_fellow_persistent_instances()) {
+		uvec4 element = fellow_elements.data[p_element];
+		fellow_slot = element.x;
+		fellow_flags = element.y;
+		fellow_gi_offset = element.z;
+	} else {
+		fellow_slot = p_element;
+		fellow_flags = instances.data[p_element].flags;
+		fellow_gi_offset = instances.data[p_element].gi_offset;
+	}
+}
 
 #ifdef USE_RADIANCE_OCTMAP_ARRAY
 

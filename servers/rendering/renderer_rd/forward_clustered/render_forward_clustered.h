@@ -43,6 +43,7 @@
 #include "servers/rendering/renderer_rd/effects/taa.h"
 #include "servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.h"
 #include "servers/rendering/renderer_rd/renderer_scene_render_rd.h"
+#include "servers/rendering/renderer_rd/shaders/effects/fellow_instance_scatter.glsl.gen.h"
 #include "servers/rendering/renderer_rd/shaders/forward_clustered/best_fit_normal.glsl.gen.h"
 #include "servers/rendering/renderer_rd/shaders/forward_clustered/integrate_dfg.glsl.gen.h"
 
@@ -690,6 +691,44 @@ private:
 		(static_cast<RenderForwardClustered *>(p_self)->*M)(p_chunk, nullptr);
 	}
 	void _fellow_parallel_for(uint32_t p_count, FellowParallelFor::Func p_func, uint32_t p_max_helpers = UINT32_MAX);
+
+	// Persistent instance data (cpu/persistent_instances, docs/decisions/0022-persistent-instance-data.md). Each surface
+	// cache has an entry (slot) in a GPU buffer kept from frame to frame, holding stock's InstanceData without the
+	// fields a pass sets (flags, GI offset); the per-frame instance buffers then hold one FellowElement per list
+	// element. The first element of a frame that uses a surface checks its entry against a copy kept on the CPU; a
+	// changed entry is queued and uploaded (a scatter dispatch) before the list's draws are recorded.
+	struct FellowElement {
+		uint32_t slot;
+		uint32_t flags;
+		uint32_t gi_offset;
+		uint32_t pad;
+	};
+	struct FellowPersistent {
+		bool active = false; // this frame's choice
+		uint64_t frame = UINT64_MAX;
+		RID buffer; // device-local, capacity entries
+		uint32_t capacity = 0;
+		LocalVector<SceneState::InstanceData> mirror; // what each entry holds (valid ones)
+		LocalVector<uint8_t> valid;
+		LocalVector<uint32_t> free_slots;
+		uint32_t slot_count = 0; // slots handed out (high water)
+		LocalVector<uint32_t> dirty; // entries to upload (capacity)
+		std::atomic<uint32_t> dirty_count{ 0 };
+		LocalVector<uint32_t> records; // upload staging: 48 words per entry
+		RID record_buffer;
+		uint32_t record_capacity = 0; // entries
+		FellowInstanceScatterShaderRD shader;
+		RID shader_version;
+		RID pipeline;
+	} fellow_persistent;
+	uint32_t _fellow_slot_alloc();
+	void _fellow_slot_free(uint32_t p_slot);
+	bool _fellow_persistent_begin(); // this frame's choice (taken by the frame's first list fill)
+	void _fellow_persistent_check(GeometryInstanceSurfaceDataCache *p_surface, const GeometryInstanceForwardClustered *p_inst, uint64_t p_frame);
+	void _fellow_persistent_reserve();
+	void _fellow_persistent_flush();
+	void _fellow_persistent_free();
+	uint32_t _fellow_verify_elements(RenderListType p_render_list, uint32_t p_from, uint32_t p_size, const uint32_t *p_flags);
 	static constexpr uint32_t FELLOW_PREFETCH_DISTANCE = 8; // elements or instances ahead
 	static constexpr uint32_t FELLOW_PREFETCH_INSTANCE_LINES = 6; // 64-byte lines of an instance (its fields used per frame)
 	static void _fellow_prefetch_element(GeometryInstanceSurfaceDataCache *const *p_elements, uint32_t p_index, uint32_t p_end);
@@ -764,6 +803,10 @@ private:
 
 		GeometryInstanceSurfaceDataCache *next = nullptr;
 		GeometryInstanceForwardClustered *owner = nullptr;
+		// FellowEngine persistent instance data (decision 0022): this surface's entry in the persistent buffer, and the
+		// last frame it was checked (the first list element of a frame checks it).
+		uint32_t fellow_slot = UINT32_MAX;
+		std::atomic<uint64_t> fellow_checked_frame{ 0 };
 		SelfList<GeometryInstanceSurfaceDataCache> compilation_dirty_element;
 		SelfList<GeometryInstanceSurfaceDataCache> compilation_all_element;
 

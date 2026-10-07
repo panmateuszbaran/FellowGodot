@@ -253,7 +253,7 @@ void vertex_shader(vec3 vertex_input,
 #endif
 
 	mat3 model_normal_matrix;
-	if (bool(instances.data[instance_index].flags & INSTANCE_FLAGS_NON_UNIFORM_SCALE)) {
+	if (bool(fellow_flags & INSTANCE_FLAGS_NON_UNIFORM_SCALE)) {
 		model_normal_matrix = transpose(inverse(mat3(model_matrix)));
 	} else {
 		model_normal_matrix = mat3(model_matrix);
@@ -266,7 +266,7 @@ void vertex_shader(vec3 vertex_input,
 		//multimesh, instances are for it
 
 #ifdef USE_PARTICLE_TRAILS
-		uint trail_size = (instances.data[instance_index].flags >> INSTANCE_FLAGS_PARTICLE_TRAIL_SHIFT) & INSTANCE_FLAGS_PARTICLE_TRAIL_MASK;
+		uint trail_size = (fellow_flags >> INSTANCE_FLAGS_PARTICLE_TRAIL_SHIFT) & INSTANCE_FLAGS_PARTICLE_TRAIL_MASK;
 		uint stride = 3 + 1 + 1; //particles always uses this format
 
 		uint offset = trail_size * stride * INSTANCE_INDEX;
@@ -364,7 +364,7 @@ void vertex_shader(vec3 vertex_input,
 	uv2_interp = uv2_attrib;
 #endif
 
-	vec4 uv_scale = instances.data[instance_index].uv_scale;
+	vec4 uv_scale = FELLOW_INSTANCE(uv_scale);
 
 	if (uv_scale != vec4(0.0)) { // Compression enabled
 #ifdef UV_USED
@@ -573,11 +573,11 @@ void vertex_shader(vec3 vertex_input,
 				merged_mask &= ~(1u << bit);
 				uint light_index = 32 * i + bit;
 
-				if (!bool(omni_lights.data[light_index].mask & instances.data[instance_index].layer_mask)) {
+				if (!bool(omni_lights.data[light_index].mask & FELLOW_INSTANCE(layer_mask))) {
 					continue; //not masked
 				}
 
-				if (omni_lights.data[light_index].bake_mode == LIGHT_BAKE_STATIC && bool(instances.data[instance_index].flags & INSTANCE_FLAGS_USE_LIGHTMAP)) {
+				if (omni_lights.data[light_index].bake_mode == LIGHT_BAKE_STATIC && bool(fellow_flags & INSTANCE_FLAGS_USE_LIGHTMAP)) {
 					continue; // Statically baked light and object uses lightmap, skip
 				}
 
@@ -608,11 +608,11 @@ void vertex_shader(vec3 vertex_input,
 
 				uint light_index = 32 * i + bit;
 
-				if (!bool(spot_lights.data[light_index].mask & instances.data[instance_index].layer_mask)) {
+				if (!bool(spot_lights.data[light_index].mask & FELLOW_INSTANCE(layer_mask))) {
 					continue; //not masked
 				}
 
-				if (spot_lights.data[light_index].bake_mode == LIGHT_BAKE_STATIC && bool(instances.data[instance_index].flags & INSTANCE_FLAGS_USE_LIGHTMAP)) {
+				if (spot_lights.data[light_index].bake_mode == LIGHT_BAKE_STATIC && bool(fellow_flags & INSTANCE_FLAGS_USE_LIGHTMAP)) {
 					continue; // Statically baked light and object uses lightmap, skip
 				}
 
@@ -629,11 +629,11 @@ void vertex_shader(vec3 vertex_input,
 		vec3 directional_specular = vec3(0.0);
 
 		for (uint i = 0; i < scene_data.directional_light_count; i++) {
-			if (!bool(directional_lights.data[i].mask & instances.data[instance_index].layer_mask)) {
+			if (!bool(directional_lights.data[i].mask & FELLOW_INSTANCE(layer_mask))) {
 				continue; // Not masked, skip.
 			}
 
-			if (directional_lights.data[i].bake_mode == LIGHT_BAKE_STATIC && bool(instances.data[instance_index].flags & INSTANCE_FLAGS_USE_LIGHTMAP)) {
+			if (directional_lights.data[i].bake_mode == LIGHT_BAKE_STATIC && bool(fellow_flags & INSTANCE_FLAGS_USE_LIGHTMAP)) {
 				continue; // Statically baked light and object uses lightmap, skip.
 			}
 			if (i == 0) {
@@ -773,6 +773,7 @@ void main() {
 	}
 
 	instance_index_interp = instance_index;
+	fellow_element_init(instance_index);
 
 #ifdef MOTION_VECTORS
 	// Previous vertex.
@@ -787,8 +788,8 @@ void main() {
 
 	_unpack_vertex_attributes(
 			previous_vertex_attrib,
-			instances.data[instance_index].compressed_aabb_position_pad.xyz,
-			instances.data[instance_index].compressed_aabb_size_pad.xyz,
+			FELLOW_INSTANCE(compressed_aabb_position_pad).xyz,
+			FELLOW_INSTANCE(compressed_aabb_size_pad).xyz,
 
 #if defined(NORMAL_USED) || defined(TANGENT_USED)
 			previous_normal_attrib,
@@ -809,9 +810,9 @@ void main() {
 			prev_tangent,
 			prev_binormal,
 #endif
-			instance_index, draw_call.multimesh_motion_vectors_previous_offset, scene_data_block.prev_data, instances.data[instance_index].prev_transform,
+			instance_index, draw_call.multimesh_motion_vectors_previous_offset, scene_data_block.prev_data, FELLOW_INSTANCE(prev_transform),
 #ifdef USE_DOUBLE_PRECISION
-			instances.data[instance_index].prev_model_precision.xyz,
+			FELLOW_INSTANCE(prev_model_precision).xyz,
 #endif
 			prev_screen_position);
 #else
@@ -830,8 +831,8 @@ void main() {
 
 	_unpack_vertex_attributes(
 			vertex_angle_attrib,
-			instances.data[instance_index].compressed_aabb_position_pad.xyz,
-			instances.data[instance_index].compressed_aabb_size_pad.xyz,
+			FELLOW_INSTANCE(compressed_aabb_position_pad).xyz,
+			FELLOW_INSTANCE(compressed_aabb_size_pad).xyz,
 #if defined(NORMAL_USED) || defined(TANGENT_USED)
 			axis_tangent_attrib,
 #ifdef NORMAL_USED
@@ -852,9 +853,9 @@ void main() {
 			tangent,
 			binormal,
 #endif
-			instance_index, draw_call.multimesh_motion_vectors_current_offset, scene_data_block.data, instances.data[instance_index].transform,
+			instance_index, draw_call.multimesh_motion_vectors_current_offset, scene_data_block.data, FELLOW_INSTANCE(transform),
 #ifdef USE_DOUBLE_PRECISION
-			instances.data[instance_index].model_precision.xyz,
+			FELLOW_INSTANCE(model_precision).xyz,
 #endif
 
 			screen_position);
@@ -1256,6 +1257,7 @@ vec3 encode24(vec3 v) {
 
 void fragment_shader(in SceneData scene_data) {
 	uint instance_index = instance_index_interp;
+	fellow_element_init(instance_index);
 
 #ifdef PREMUL_ALPHA_USED
 	float premul_alpha = 1.0;
@@ -1300,7 +1302,7 @@ void fragment_shader(in SceneData scene_data) {
 	float ao = 1.0;
 	float ao_light_affect = 0.0;
 
-	float alpha_highp = float(instances.data[instance_index].flags >> INSTANCE_FLAGS_FADE_SHIFT) / float(255.0);
+	float alpha_highp = float(fellow_flags >> INSTANCE_FLAGS_FADE_SHIFT) / float(255.0);
 
 #ifdef TANGENT_USED
 	vec3 binormal = binormal_interp;
@@ -1364,9 +1366,9 @@ void fragment_shader(in SceneData scene_data) {
 			scene_data.inv_view_matrix[1],
 			scene_data.inv_view_matrix[2],
 			vec4(0.0, 0.0, 0.0, 1.0)));
-	mat4 read_model_matrix = transpose(mat4(instances.data[instance_index].transform[0],
-			instances.data[instance_index].transform[1],
-			instances.data[instance_index].transform[2],
+	mat4 read_model_matrix = transpose(mat4(FELLOW_INSTANCE(transform)[0],
+			FELLOW_INSTANCE(transform)[1],
+			FELLOW_INSTANCE(transform)[2],
 			vec4(0.0, 0.0, 0.0, 1.0)));
 
 #ifdef LIGHT_VERTEX_USED
@@ -1374,7 +1376,7 @@ void fragment_shader(in SceneData scene_data) {
 #endif //LIGHT_VERTEX_USED
 
 	mat3 model_normal_matrix;
-	if (bool(instances.data[instance_index].flags & INSTANCE_FLAGS_NON_UNIFORM_SCALE)) {
+	if (bool(fellow_flags & INSTANCE_FLAGS_NON_UNIFORM_SCALE)) {
 		model_normal_matrix = transpose(inverse(mat3(read_model_matrix)));
 	} else {
 		model_normal_matrix = mat3(read_model_matrix);
@@ -1648,7 +1650,7 @@ void fragment_shader(in SceneData scene_data) {
 
 				uint decal_index = 32 * i + bit;
 
-				if (!bool(decals.data[decal_index].mask & instances.data[instance_index].layer_mask)) {
+				if (!bool(decals.data[decal_index].mask & FELLOW_INSTANCE(layer_mask))) {
 					continue; //not masked
 				}
 
@@ -1871,8 +1873,8 @@ void fragment_shader(in SceneData scene_data) {
 #ifdef USE_LIGHTMAP
 
 	//lightmap
-	if (bool(instances.data[instance_index].flags & INSTANCE_FLAGS_USE_LIGHTMAP_CAPTURE)) { //has lightmap capture
-		uint index = instances.data[instance_index].gi_offset;
+	if (bool(fellow_flags & INSTANCE_FLAGS_USE_LIGHTMAP_CAPTURE)) { //has lightmap capture
+		uint index = fellow_gi_offset;
 
 		// The world normal.
 		vec3 wnormal = mat3(inv_view_matrix) * indirect_normal;
@@ -1897,12 +1899,12 @@ void fragment_shader(in SceneData scene_data) {
 								 c[4] * lightmap_captures.data[index].sh[8].rgb * (wnormal.x * wnormal.x - wnormal.y * wnormal.y)) *
 				scene_data.IBL_exposure_normalization;
 
-	} else if (bool(instances.data[instance_index].flags & INSTANCE_FLAGS_USE_LIGHTMAP)) { // has actual lightmap
-		bool uses_sh = bool(instances.data[instance_index].flags & INSTANCE_FLAGS_USE_SH_LIGHTMAP);
-		uint ofs = instances.data[instance_index].gi_offset & 0xFFFF;
-		uint slice = instances.data[instance_index].gi_offset >> 16;
+	} else if (bool(fellow_flags & INSTANCE_FLAGS_USE_LIGHTMAP)) { // has actual lightmap
+		bool uses_sh = bool(fellow_flags & INSTANCE_FLAGS_USE_SH_LIGHTMAP);
+		uint ofs = fellow_gi_offset & 0xFFFF;
+		uint slice = fellow_gi_offset >> 16;
 		vec3 uvw;
-		uvw.xy = uv2 * instances.data[instance_index].lightmap_uv_scale.zw + instances.data[instance_index].lightmap_uv_scale.xy;
+		uvw.xy = uv2 * FELLOW_INSTANCE(lightmap_uv_scale).zw + FELLOW_INSTANCE(lightmap_uv_scale).xy;
 		uvw.z = float(slice);
 
 		if (uses_sh) {
@@ -1942,7 +1944,7 @@ void fragment_shader(in SceneData scene_data) {
 	}
 #else
 
-	if (sc_use_forward_gi() && bool(instances.data[instance_index].flags & INSTANCE_FLAGS_USE_SDFGI)) { //has lightmap capture
+	if (sc_use_forward_gi() && bool(fellow_flags & INSTANCE_FLAGS_USE_SDFGI)) { //has lightmap capture
 
 		//make vertex orientation the world one, but still align to camera
 		vec3 cam_pos = mat3(inv_view_matrix) * vertex;
@@ -2014,8 +2016,8 @@ void fragment_shader(in SceneData scene_data) {
 		}
 	}
 
-	if (sc_use_forward_gi() && bool(instances.data[instance_index].flags & INSTANCE_FLAGS_USE_VOXEL_GI)) { // process voxel_gi_instances
-		uint index1 = instances.data[instance_index].gi_offset & 0xFFFF;
+	if (sc_use_forward_gi() && bool(fellow_flags & INSTANCE_FLAGS_USE_VOXEL_GI)) { // process voxel_gi_instances
+		uint index1 = fellow_gi_offset & 0xFFFF;
 		// Make vertex orientation the world one, but still align to camera.
 		vec3 cam_pos = mat3(inv_view_matrix) * vertex;
 		vec3 cam_normal = mat3(inv_view_matrix) * indirect_normal;
@@ -2031,7 +2033,7 @@ void fragment_shader(in SceneData scene_data) {
 		vec4 spec_accum = vec4(0.0);
 		voxel_gi_compute(index1, cam_pos, cam_normal, ref_vec, normal_mat, roughness * roughness, ambient_light, indirect_specular_light, spec_accum, amb_accum);
 
-		uint index2 = instances.data[instance_index].gi_offset >> 16;
+		uint index2 = fellow_gi_offset >> 16;
 
 		if (index2 != 0xFFFF) {
 			voxel_gi_compute(index2, cam_pos, cam_normal, ref_vec, normal_mat, roughness * roughness, ambient_light, indirect_specular_light, spec_accum, amb_accum);
@@ -2049,7 +2051,7 @@ void fragment_shader(in SceneData scene_data) {
 		ambient_light = amb_accum.rgb;
 	}
 
-	if (!sc_use_forward_gi() && bool(instances.data[instance_index].flags & INSTANCE_FLAGS_USE_GI_BUFFERS)) { //use GI buffers
+	if (!sc_use_forward_gi() && bool(fellow_flags & INSTANCE_FLAGS_USE_GI_BUFFERS)) { //use GI buffers
 
 		vec2 coord;
 
@@ -2153,7 +2155,7 @@ void fragment_shader(in SceneData scene_data) {
 
 				uint reflection_index = 32 * i + bit;
 
-				if (!bool(reflections.data[reflection_index].mask & instances.data[instance_index].layer_mask)) {
+				if (!bool(reflections.data[reflection_index].mask & FELLOW_INSTANCE(layer_mask))) {
 					continue; //not masked
 				}
 
@@ -2371,13 +2373,13 @@ void fragment_shader(in SceneData scene_data) {
 #ifdef USE_LIGHTMAP
 		uint shadowmask_mode = LIGHTMAP_SHADOWMASK_MODE_NONE;
 
-		if (bool(instances.data[instance_index].flags & INSTANCE_FLAGS_USE_LIGHTMAP)) {
-			const uint ofs = instances.data[instance_index].gi_offset & 0xFFFF;
+		if (bool(fellow_flags & INSTANCE_FLAGS_USE_LIGHTMAP)) {
+			const uint ofs = fellow_gi_offset & 0xFFFF;
 			shadowmask_mode = lightmaps.data[ofs].flags;
 
 			if (shadowmask_mode != LIGHTMAP_SHADOWMASK_MODE_NONE) {
-				const uint slice = instances.data[instance_index].gi_offset >> 16;
-				const vec2 scaled_uv = uv2 * instances.data[instance_index].lightmap_uv_scale.zw + instances.data[instance_index].lightmap_uv_scale.xy;
+				const uint slice = fellow_gi_offset >> 16;
+				const vec2 scaled_uv = uv2 * FELLOW_INSTANCE(lightmap_uv_scale).zw + FELLOW_INSTANCE(lightmap_uv_scale).xy;
 				const vec3 uvw = vec3(scaled_uv, float(slice));
 
 				if (sc_use_lightmap_bicubic_filter()) {
@@ -2401,11 +2403,11 @@ void fragment_shader(in SceneData scene_data) {
 			}
 #endif
 
-				if (!bool(directional_lights.data[i].mask & instances.data[instance_index].layer_mask)) {
+				if (!bool(directional_lights.data[i].mask & FELLOW_INSTANCE(layer_mask))) {
 					continue; //not masked
 				}
 
-				if (directional_lights.data[i].bake_mode == LIGHT_BAKE_STATIC && bool(instances.data[instance_index].flags & INSTANCE_FLAGS_USE_LIGHTMAP)) {
+				if (directional_lights.data[i].bake_mode == LIGHT_BAKE_STATIC && bool(fellow_flags & INSTANCE_FLAGS_USE_LIGHTMAP)) {
 					continue; // Statically baked light and object uses lightmap, skip
 				}
 
@@ -2673,11 +2675,11 @@ void fragment_shader(in SceneData scene_data) {
 				break;
 			}
 
-			if (!bool(directional_lights.data[i].mask & instances.data[instance_index].layer_mask)) {
+			if (!bool(directional_lights.data[i].mask & FELLOW_INSTANCE(layer_mask))) {
 				continue; //not masked
 			}
 
-			if (directional_lights.data[i].bake_mode == LIGHT_BAKE_STATIC && bool(instances.data[instance_index].flags & INSTANCE_FLAGS_USE_LIGHTMAP)) {
+			if (directional_lights.data[i].bake_mode == LIGHT_BAKE_STATIC && bool(fellow_flags & INSTANCE_FLAGS_USE_LIGHTMAP)) {
 				continue; // Statically baked light and object uses lightmap, skip
 			}
 
@@ -2824,11 +2826,11 @@ void fragment_shader(in SceneData scene_data) {
 
 				uint light_index = 32 * i + bit;
 
-				if (!bool(omni_lights.data[light_index].mask & instances.data[instance_index].layer_mask)) {
+				if (!bool(omni_lights.data[light_index].mask & FELLOW_INSTANCE(layer_mask))) {
 					continue; //not masked
 				}
 
-				if (omni_lights.data[light_index].bake_mode == LIGHT_BAKE_STATIC && bool(instances.data[instance_index].flags & INSTANCE_FLAGS_USE_LIGHTMAP)) {
+				if (omni_lights.data[light_index].bake_mode == LIGHT_BAKE_STATIC && bool(fellow_flags & INSTANCE_FLAGS_USE_LIGHTMAP)) {
 					continue; // Statically baked light and object uses lightmap, skip
 				}
 
@@ -2885,11 +2887,11 @@ void fragment_shader(in SceneData scene_data) {
 
 				uint light_index = 32 * i + bit;
 
-				if (!bool(spot_lights.data[light_index].mask & instances.data[instance_index].layer_mask)) {
+				if (!bool(spot_lights.data[light_index].mask & FELLOW_INSTANCE(layer_mask))) {
 					continue; //not masked
 				}
 
-				if (spot_lights.data[light_index].bake_mode == LIGHT_BAKE_STATIC && bool(instances.data[instance_index].flags & INSTANCE_FLAGS_USE_LIGHTMAP)) {
+				if (spot_lights.data[light_index].bake_mode == LIGHT_BAKE_STATIC && bool(fellow_flags & INSTANCE_FLAGS_USE_LIGHTMAP)) {
 					continue; // Statically baked light and object uses lightmap, skip
 				}
 
@@ -2946,11 +2948,11 @@ void fragment_shader(in SceneData scene_data) {
 
 				uint light_index = 32 * i + bit;
 
-				if (!bool(area_lights.data[light_index].mask & instances.data[instance_index].layer_mask)) {
+				if (!bool(area_lights.data[light_index].mask & FELLOW_INSTANCE(layer_mask))) {
 					continue; //not masked
 				}
 
-				if (area_lights.data[light_index].bake_mode == LIGHT_BAKE_STATIC && bool(instances.data[instance_index].flags & INSTANCE_FLAGS_USE_LIGHTMAP)) {
+				if (area_lights.data[light_index].bake_mode == LIGHT_BAKE_STATIC && bool(fellow_flags & INSTANCE_FLAGS_USE_LIGHTMAP)) {
 					continue; // Statically baked light and object uses lightmap, skip
 				}
 
@@ -3122,15 +3124,15 @@ void fragment_shader(in SceneData scene_data) {
 	// We encode the dynamic static into roughness.
 	// Values over 0.5 are dynamic, under 0.5 are static.
 	normal_roughness_output_buffer.w = normal_roughness_output_buffer.w * (127.0 / 255.0);
-	if (bool(instances.data[instance_index].flags & INSTANCE_FLAGS_DYNAMIC)) {
+	if (bool(fellow_flags & INSTANCE_FLAGS_DYNAMIC)) {
 		normal_roughness_output_buffer.w = 1.0 - normal_roughness_output_buffer.w;
 	}
 	normal_roughness_output_buffer.w = normal_roughness_output_buffer.w;
 
 #ifdef MODE_RENDER_VOXEL_GI
-	if (bool(instances.data[instance_index].flags & INSTANCE_FLAGS_USE_VOXEL_GI)) { // process voxel_gi_instances
-		uint index1 = instances.data[instance_index].gi_offset & 0xFFFF;
-		uint index2 = instances.data[instance_index].gi_offset >> 16;
+	if (bool(fellow_flags & INSTANCE_FLAGS_USE_VOXEL_GI)) { // process voxel_gi_instances
+		uint index1 = fellow_gi_offset & 0xFFFF;
+		uint index2 = fellow_gi_offset >> 16;
 		voxel_gi_buffer.x = index1 & 0xFFu;
 		voxel_gi_buffer.y = index2 & 0xFFu;
 	} else {

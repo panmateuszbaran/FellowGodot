@@ -437,6 +437,7 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 		RID xforms_uniform_set = surf->owner->transforms_uniform_set;
 
 		SceneShaderForwardClustered::ShaderSpecialization pipeline_specialization = p_params->base_specialization;
+		pipeline_specialization.fellow_persistent_instances = fellow_persistent.active; // the lists' format this frame (decision 0022)
 		pipeline_specialization.multimesh = bool(surf->owner->base_flags & INSTANCE_DATA_FLAG_MULTIMESH);
 		pipeline_specialization.multimesh_format_2d = bool(surf->owner->base_flags & INSTANCE_DATA_FLAG_MULTIMESH_FORMAT_2D);
 		pipeline_specialization.multimesh_has_color = bool(surf->owner->base_flags & INSTANCE_DATA_FLAG_MULTIMESH_HAS_COLOR);
@@ -1021,6 +1022,195 @@ _FORCE_INLINE_ void RenderForwardClustered::_fellow_make_instance_data(const Geo
 	instance_data.set_uv_scale(uv_scale);
 }
 
+// Persistent instance data (decision 0022).
+
+uint32_t RenderForwardClustered::_fellow_slot_alloc() {
+	FellowPersistent &p = fellow_persistent;
+	uint32_t slot;
+	if (!p.free_slots.is_empty()) {
+		slot = p.free_slots[p.free_slots.size() - 1];
+		p.free_slots.resize(p.free_slots.size() - 1);
+	} else {
+		slot = p.slot_count++;
+	}
+	if (slot < p.valid.size()) {
+		p.valid[slot] = 0;
+	}
+	return slot;
+}
+
+void RenderForwardClustered::_fellow_slot_free(uint32_t p_slot) {
+	FellowPersistent &p = fellow_persistent;
+	if (p_slot == UINT32_MAX) {
+		return;
+	}
+	if (p_slot < p.valid.size()) {
+		p.valid[p_slot] = 0;
+	}
+	p.free_slots.push_back(p_slot);
+}
+
+bool RenderForwardClustered::_fellow_persistent_begin() {
+	FellowPersistent &p = fellow_persistent;
+	const uint64_t frame = RSG::rasterizer->get_frame_number();
+	if (frame != p.frame) {
+		p.frame = frame;
+		p.active = Fellow::cpu_persistent_instances();
+	}
+	if (p.active) {
+		_fellow_persistent_reserve();
+	}
+	return p.active;
+}
+
+void RenderForwardClustered::_fellow_persistent_reserve() {
+	// Render thread, before a list's instance data is written: room for every slot handed out so far.
+	FellowPersistent &p = fellow_persistent;
+	if (p.shader_version.is_null()) {
+		Vector<String> modes;
+		modes.push_back("\n");
+		p.shader.initialize(modes);
+		p.shader_version = p.shader.version_create();
+		p.pipeline = RD::get_singleton()->compute_pipeline_create(p.shader.version_get_shader(p.shader_version, 0));
+	}
+	const uint32_t needed = MAX(p.slot_count, 1024u);
+	if (p.buffer.is_valid() && p.capacity >= needed) {
+		return;
+	}
+	const uint32_t capacity = Math::next_power_of_2(needed);
+	RID buffer = RD::get_singleton()->storage_buffer_create(capacity * sizeof(SceneState::InstanceData));
+	if (p.buffer.is_valid()) {
+		// The entries written so far keep their content (the copy is ordered after the uploads recorded before).
+		RD::get_singleton()->buffer_copy(p.buffer, buffer, 0, 0, p.capacity * sizeof(SceneState::InstanceData));
+		RD::get_singleton()->free_rid(p.buffer);
+	}
+	p.buffer = buffer;
+	p.capacity = capacity;
+	const uint32_t old_size = p.valid.size();
+	p.mirror.resize(capacity);
+	p.valid.resize(capacity);
+	for (uint32_t i = old_size; i < capacity; i++) {
+		p.valid[i] = 0;
+	}
+	p.dirty.resize(capacity);
+}
+
+void RenderForwardClustered::_fellow_persistent_check(GeometryInstanceSurfaceDataCache *p_surface, const GeometryInstanceForwardClustered *p_inst, uint64_t p_frame) {
+	// Any thread; the first element of the frame that uses the surface compares its entry with what the GPU holds.
+	if (p_surface->fellow_checked_frame.exchange(p_frame, std::memory_order_relaxed) == p_frame) {
+		return;
+	}
+	FellowPersistent &p = fellow_persistent;
+	const uint32_t slot = p_surface->fellow_slot;
+	SceneState::InstanceData data;
+	_fellow_make_instance_data(p_surface, p_inst, data, true);
+	// Set per element, not kept in the entry (the shader reads them from the element).
+	data.flags = 0;
+	data.gi_offset = 0;
+	// Stock leaves these uninitialised (never read).
+	data.compressed_aabb_position[3] = 0.0f;
+	data.compressed_aabb_size[3] = 0.0f;
+	if (p.valid[slot] && memcmp(&p.mirror[slot], &data, sizeof(SceneState::InstanceData)) == 0) {
+		return;
+	}
+	p.mirror[slot] = data;
+	p.valid[slot] = 1;
+	p.dirty[p.dirty_count.fetch_add(1, std::memory_order_relaxed)] = slot;
+}
+
+void RenderForwardClustered::_fellow_persistent_flush() {
+	// Render thread: the entries queued since the last flush are copied into the persistent buffer (one dispatch),
+	// before the draws that read them are recorded.
+	FellowPersistent &p = fellow_persistent;
+	const uint32_t count = p.dirty_count.load(std::memory_order_relaxed);
+	if (count == 0) {
+		return;
+	}
+	p.dirty_count.store(0, std::memory_order_relaxed);
+	static_assert(sizeof(SceneState::InstanceData) == 44 * sizeof(uint32_t), "matches ENTRY_WORDS in fellow_instance_scatter.glsl");
+	constexpr uint32_t RECORD_WORDS = 48;
+	p.records.resize(count * RECORD_WORDS);
+	uint32_t *records = p.records.ptr();
+	for (uint32_t i = 0; i < count; i++) {
+		const uint32_t slot = p.dirty[i];
+		uint32_t *rec = records + i * RECORD_WORDS;
+		rec[0] = slot;
+		rec[1] = 0;
+		rec[2] = 0;
+		rec[3] = 0;
+		memcpy(rec + 4, &p.mirror[slot], sizeof(SceneState::InstanceData));
+	}
+	RenderingDevice *rd = RD::get_singleton();
+	if (p.record_capacity < count) {
+		if (p.record_buffer.is_valid()) {
+			rd->free_rid(p.record_buffer);
+		}
+		p.record_capacity = Math::next_power_of_2(MAX(count, 256u));
+		p.record_buffer = rd->storage_buffer_create(p.record_capacity * RECORD_WORDS * sizeof(uint32_t));
+	}
+	rd->buffer_update(p.record_buffer, 0, count * RECORD_WORDS * sizeof(uint32_t), records);
+
+	RID shader = p.shader.version_get_shader(p.shader_version, 0);
+	RD::Uniform u_records(RD::UNIFORM_TYPE_STORAGE_BUFFER, 0, p.record_buffer);
+	RD::Uniform u_slots(RD::UNIFORM_TYPE_STORAGE_BUFFER, 1, p.buffer);
+	RID uniform_set = UniformSetCacheRD::get_singleton()->get_cache(shader, 0, u_records, u_slots);
+	uint32_t push_constant[4] = { count, 0, 0, 0 };
+	RD::ComputeListID compute_list = rd->compute_list_begin();
+	rd->compute_list_bind_compute_pipeline(compute_list, p.pipeline);
+	rd->compute_list_bind_uniform_set(compute_list, uniform_set, 0);
+	rd->compute_list_set_push_constant(compute_list, push_constant, sizeof(push_constant));
+	rd->compute_list_dispatch_threads(compute_list, count * 44, 1, 1);
+	rd->compute_list_end();
+	Fellow::stats().cpu_persistent_uploads.add(count);
+	Fellow::stats().cpu_persistent_flushes.increment();
+}
+
+void RenderForwardClustered::_fellow_persistent_free() {
+	FellowPersistent &p = fellow_persistent;
+	if (p.record_buffer.is_valid()) {
+		RD::get_singleton()->free_rid(p.record_buffer);
+		p.record_buffer = RID();
+	}
+	if (p.buffer.is_valid()) {
+		RD::get_singleton()->free_rid(p.buffer);
+		p.buffer = RID();
+	}
+	if (p.shader_version.is_valid()) {
+		p.shader.version_free(p.shader_version); // also frees the pipeline (a dependency of the shader)
+		p.shader_version = RID();
+	}
+}
+
+uint32_t RenderForwardClustered::_fellow_verify_elements(RenderListType p_render_list, uint32_t p_from, uint32_t p_size, const uint32_t *p_flags) {
+	// Persistent instance data: stock's instance data of each element, compared with its entry and its element.
+	RenderList *rl = &render_list[p_render_list];
+	const FellowElement *elements = reinterpret_cast<const FellowElement *>(scene_state.curr_gpu_ptr[p_render_list]);
+	const FellowPersistent &p = fellow_persistent;
+	uint32_t mismatches = 0;
+	for (uint32_t k = 0; k < p_size; k++) {
+		const uint32_t i = p_from + k;
+		const GeometryInstanceSurfaceDataCache *surface = rl->elements[i];
+		const GeometryInstanceForwardClustered *inst = surface->owner;
+		SceneState::InstanceData expected;
+		_fellow_make_instance_data(surface, inst, expected, true);
+		expected.flags = p_flags ? p_flags[k] : inst->flags_cache;
+		expected.compressed_aabb_position[3] = 0.0f;
+		expected.compressed_aabb_size[3] = 0.0f;
+		const FellowElement element = elements[i];
+		if (element.slot != surface->fellow_slot || element.slot >= p.capacity || !p.valid[element.slot]) {
+			mismatches++;
+			continue;
+		}
+		SceneState::InstanceData actual = p.mirror[element.slot];
+		actual.flags = element.flags;
+		actual.gi_offset = element.gi_offset;
+		if (memcmp(&expected, &actual, sizeof(SceneState::InstanceData)) != 0) {
+			mismatches++;
+		}
+	}
+	return mismatches;
+}
+
 uint32_t RenderForwardClustered::_fellow_verify_sort(RenderListType p_render_list, uint32_t p_from, uint32_t p_size, LocalVector<GeometryInstanceSurfaceDataCache *> &p_unsorted) {
 	// Stock's sort of the same elements by the keys the surfaces hold, compared with the list.
 	SortArray<GeometryInstanceSurfaceDataCache *, RenderList::SortByKey> sorter;
@@ -1111,6 +1301,13 @@ void RenderForwardClustered::_fill_instance_data(RenderListType p_render_list, i
 		p_render_info[RSE::VIEWPORT_RENDER_INFO_OBJECTS_IN_FRAME] += element_total;
 	}
 
+	// Persistent instance data (decision 0022): 16-byte elements, the surfaces' entries checked and the changed ones
+	// uploaded before the list's draws are recorded.
+	const bool persistent = _fellow_persistent_begin();
+	if (persistent) {
+		Fellow::stats().cpu_persistent_elements.add(element_total);
+	}
+
 	if (Fellow::cpu_parallel_instance_data() && element_total >= FELLOW_PARALLEL_LIST_MIN) {
 		// Worker ranges write the instance data and each element's "same draw as the previous element" test; the run
 		// lengths (instancing repeats) and the draw count follow in one pass, as stock computes them.
@@ -1165,7 +1362,10 @@ void RenderForwardClustered::_fill_instance_data(RenderListType p_render_list, i
 		}
 
 		if (Fellow::cpu_verify()) {
-			_fellow_verify_count(_fellow_verify_instances(p_render_list, p_offset, element_total, nullptr, false));
+			_fellow_verify_count(persistent ? _fellow_verify_elements(p_render_list, p_offset, element_total, nullptr) : _fellow_verify_instances(p_render_list, p_offset, element_total, nullptr, false));
+		}
+		if (persistent) {
+			_fellow_persistent_flush();
 		}
 
 		if (p_update_buffer && element_total > 0u) {
@@ -1180,13 +1380,22 @@ void RenderForwardClustered::_fill_instance_data(RenderListType p_render_list, i
 		GeometryInstanceSurfaceDataCache *surface = rl->elements[i + p_offset];
 		GeometryInstanceForwardClustered *inst = surface->owner;
 
-		SceneState::InstanceData instance_data;
+		uint32_t element_flags;
+		if (persistent) {
+			_fellow_persistent_check(surface, inst, fellow_persistent.frame);
+			FellowElement &element = reinterpret_cast<FellowElement *>(scene_state.curr_gpu_ptr[p_render_list])[i + p_offset];
+			element = { surface->fellow_slot, inst->flags_cache, inst->gi_offset_cache, 0 };
+			element_flags = inst->flags_cache;
+		} else {
+			SceneState::InstanceData instance_data;
 
-		_fellow_make_instance_data(surface, inst, instance_data, true);
+			_fellow_make_instance_data(surface, inst, instance_data, true);
 
-		scene_state.curr_gpu_ptr[p_render_list][i + p_offset] = instance_data;
+			scene_state.curr_gpu_ptr[p_render_list][i + p_offset] = instance_data;
+			element_flags = instance_data.flags;
+		}
 
-		const bool cant_repeat = instance_data.flags & INSTANCE_DATA_FLAG_MULTIMESH || inst->mesh_instance.is_valid();
+		const bool cant_repeat = element_flags & INSTANCE_DATA_FLAG_MULTIMESH || inst->mesh_instance.is_valid();
 
 		if (prev_surface != nullptr && !cant_repeat && prev_surface->sort.sort_key1 == surface->sort.sort_key1 && prev_surface->sort.sort_key2 == surface->sort.sort_key2 && inst->mirror == prev_surface->owner->mirror && repeats < RenderElementInfo::MAX_REPEATS) {
 			//this element is the same as the previous one, count repeats to draw it using instancing
@@ -1218,6 +1427,10 @@ void RenderForwardClustered::_fill_instance_data(RenderListType p_render_list, i
 		for (uint32_t j = 1; j <= repeats; j++) {
 			rl->element_info[p_offset + element_total - j].repeat = j;
 		}
+	}
+
+	if (persistent) {
+		_fellow_persistent_flush();
 	}
 
 	if (p_update_buffer && element_total > 0u) {
@@ -1307,7 +1520,10 @@ void RenderForwardClustered::_fellow_fill_instance_data_chunk(uint32_t p_chunk, 
 	const FellowInstanceDataJob &job = fellow_instance_job;
 	RenderList *rl = &render_list[job.render_list];
 	// Debug (cpu/debug_instance_scratch): system memory instead of the GPU buffer, to measure the cost of the writes.
-	SceneState::InstanceData *gpu = Fellow::cpu_debug_instance_scratch() ? fellow_debug_scratch[job.render_list].ptr() : scene_state.curr_gpu_ptr[job.render_list];
+	SceneState::InstanceData *gpu = Fellow::cpu_debug_instance_scratch() && !fellow_persistent.active ? fellow_debug_scratch[job.render_list].ptr() : scene_state.curr_gpu_ptr[job.render_list];
+	FellowElement *elements = reinterpret_cast<FellowElement *>(scene_state.curr_gpu_ptr[job.render_list]);
+	const bool persistent = fellow_persistent.active;
+	const uint64_t frame = fellow_persistent.frame;
 	uint8_t *joinable = fellow_instance_joinable.ptr();
 	const uint32_t from = job.offset + p_chunk * job.chunk_size;
 	const uint32_t to = MIN(from + job.chunk_size, job.offset + job.total);
@@ -1319,12 +1535,20 @@ void RenderForwardClustered::_fellow_fill_instance_data_chunk(uint32_t p_chunk, 
 			_fellow_prefetch_element(rl->elements.ptr(), i, to);
 		}
 
-		SceneState::InstanceData instance_data;
-		_fellow_make_instance_data(surface, inst, instance_data, true);
-		gpu[i] = instance_data;
+		uint32_t element_flags;
+		if (persistent) {
+			_fellow_persistent_check(surface, inst, frame);
+			elements[i] = { surface->fellow_slot, inst->flags_cache, inst->gi_offset_cache, 0 };
+			element_flags = inst->flags_cache;
+		} else {
+			SceneState::InstanceData instance_data;
+			_fellow_make_instance_data(surface, inst, instance_data, true);
+			gpu[i] = instance_data;
+			element_flags = instance_data.flags;
+		}
 
 		// Stock's repeat test against the previous element (none before the first element of the range filled).
-		const bool cant_repeat = instance_data.flags & INSTANCE_DATA_FLAG_MULTIMESH || inst->mesh_instance.is_valid();
+		const bool cant_repeat = element_flags & INSTANCE_DATA_FLAG_MULTIMESH || inst->mesh_instance.is_valid();
 		bool join = false;
 		if (i > job.offset && !cant_repeat) {
 			const GeometryInstanceSurfaceDataCache *prev_surface = rl->elements[i - 1];
@@ -3969,7 +4193,10 @@ void RenderForwardClustered::_fellow_shadow_instance_chunk(uint32_t p_item, void
 	const FellowShadowItem &item = fellow_shadow_items[p_item];
 	const FellowShadowEntry &entry = fellow_shadow_entries[item.entry];
 	RenderList *rl = &render_list[RENDER_LIST_SECONDARY];
-	SceneState::InstanceData *gpu = Fellow::cpu_debug_instance_scratch() ? fellow_debug_scratch[RENDER_LIST_SECONDARY].ptr() : scene_state.curr_gpu_ptr[RENDER_LIST_SECONDARY];
+	SceneState::InstanceData *gpu = Fellow::cpu_debug_instance_scratch() && !fellow_persistent.active ? fellow_debug_scratch[RENDER_LIST_SECONDARY].ptr() : scene_state.curr_gpu_ptr[RENDER_LIST_SECONDARY];
+	FellowElement *elements = reinterpret_cast<FellowElement *>(scene_state.curr_gpu_ptr[RENDER_LIST_SECONDARY]);
+	const bool persistent = fellow_persistent.active;
+	const uint64_t frame = fellow_persistent.frame;
 	uint8_t *link = fellow_instance_joinable.ptr();
 	const FellowShadowRecord *records = entry.records.ptr();
 	const bool prefetch = Fellow::cpu_prefetch();
@@ -3989,13 +4216,18 @@ void RenderForwardClustered::_fellow_shadow_instance_chunk(uint32_t p_item, void
 		rl->elements[i] = surface;
 
 		// Stock's instance data, with the flags this pass gave the instance (stock reads them back from the instance).
-		SceneState::InstanceData instance_data;
-		_fellow_make_instance_data(surface, inst, instance_data, !compact);
-		instance_data.flags = rec.flags;
-		if (compact) {
-			memcpy(&gpu[i], &instance_data, FELLOW_SHADOW_INSTANCE_BYTES);
+		if (persistent) {
+			_fellow_persistent_check(surface, inst, frame);
+			elements[i] = { surface->fellow_slot, rec.flags, inst->gi_offset_cache, 0 };
 		} else {
-			gpu[i] = instance_data;
+			SceneState::InstanceData instance_data;
+			_fellow_make_instance_data(surface, inst, instance_data, !compact);
+			instance_data.flags = rec.flags;
+			if (compact) {
+				memcpy(&gpu[i], &instance_data, FELLOW_SHADOW_INSTANCE_BYTES);
+			} else {
+				gpu[i] = instance_data;
+			}
 		}
 		rl->element_info[i].value = uint32_t(rec.key1 & 0xFFF);
 
@@ -4203,7 +4435,11 @@ void RenderForwardClustered::_fellow_shadow_flush() {
 		}
 	}
 
-	// Instance data.
+	// Instance data (persistent instance data, decision 0022: 16-byte elements, the surfaces' entries checked).
+	const bool persistent = _fellow_persistent_begin();
+	if (persistent) {
+		Fellow::stats().cpu_persistent_elements.add(total - fellow_shadow_entries[0].from);
+	}
 	fellow_shadow_items.clear();
 	for (uint32_t e = 0; e < entry_count; e++) {
 		const FellowShadowEntry &entry = fellow_shadow_entries[e];
@@ -4275,6 +4511,10 @@ void RenderForwardClustered::_fellow_shadow_flush() {
 		}
 	}
 
+	if (persistent) {
+		_fellow_persistent_flush();
+	}
+
 	if (Fellow::cpu_verify()) {
 		// Stock's lists, pass by pass: its fill (into a scratch list; it writes the instances' and surfaces' per-pass
 		// state as stock does), its sort, then instance data and runs compared with the batched results.
@@ -4300,7 +4540,7 @@ void RenderForwardClustered::_fellow_shadow_flush() {
 						mismatches++; // the record's flags and key bits against what stock's fill just wrote
 					}
 				}
-				mismatches += _fellow_verify_instances(RENDER_LIST_SECONDARY, entry.from, entry.size, flags.ptr(), fellow_shadow_compact);
+				mismatches += persistent ? _fellow_verify_elements(RENDER_LIST_SECONDARY, entry.from, entry.size, flags.ptr()) : _fellow_verify_instances(RENDER_LIST_SECONDARY, entry.from, entry.size, flags.ptr(), fellow_shadow_compact);
 			}
 			_fellow_verify_count(mismatches);
 		}
@@ -5000,6 +5240,22 @@ RID RenderForwardClustered::_setup_render_pass_uniform_set(RenderListType p_rend
 		uniforms.push_back(u);
 	}
 	{
+		// FellowEngine persistent instance data (decision 0022): the list elements (the same per-frame buffer) and the
+		// surfaces' entries; read only with persistent instance data.
+		RD::Uniform u;
+		u.binding = 39;
+		u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER_DYNAMIC;
+		u.append_id(scene_state.instance_buffer[p_render_list]._get(0u));
+		uniforms.push_back(u);
+	}
+	{
+		RD::Uniform u;
+		u.binding = 40;
+		u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
+		u.append_id(fellow_persistent.buffer.is_valid() ? fellow_persistent.buffer : scene_shader.default_vec4_xform_buffer);
+		uniforms.push_back(u);
+	}
+	{
 		RID radiance_texture;
 		if (p_radiance_texture.is_valid()) {
 			radiance_texture = p_radiance_texture;
@@ -5391,6 +5647,22 @@ RID RenderForwardClustered::_setup_sdfgi_render_pass_uniform_set(RID p_albedo_te
 		uniforms.push_back(u);
 	}
 	{
+		// FellowEngine persistent instance data (decision 0022): the list elements (the same per-frame buffer) and the
+		// surfaces' entries; read only with persistent instance data.
+		RD::Uniform u;
+		u.binding = 39;
+		u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER_DYNAMIC;
+		u.append_id(scene_state.instance_buffer[RENDER_LIST_SECONDARY]._get(0u));
+		uniforms.push_back(u);
+	}
+	{
+		RD::Uniform u;
+		u.binding = 40;
+		u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
+		u.append_id(fellow_persistent.buffer.is_valid() ? fellow_persistent.buffer : scene_shader.default_vec4_xform_buffer);
+		uniforms.push_back(u);
+	}
+	{
 		// No radiance texture.
 		RID radiance_texture = texture_storage->texture_rd_get_default(is_using_radiance_octmap_array() ? RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_2D_ARRAY_BLACK : RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_BLACK);
 		RD::Uniform u;
@@ -5724,6 +5996,7 @@ void RenderForwardClustered::GeometryInstanceForwardClustered::_mark_dirty() {
 
 	while (surf) {
 		GeometryInstanceSurfaceDataCache *next = surf->next;
+		RenderForwardClustered::get_singleton()->_fellow_slot_free(surf->fellow_slot);
 		RenderForwardClustered::get_singleton()->geometry_instance_surface_alloc.free(surf);
 		surf = next;
 	}
@@ -5828,6 +6101,8 @@ void RenderForwardClustered::_geometry_instance_add_surface_with_material(Geomet
 	GeometryInstanceSurfaceDataCache *sdcache = geometry_instance_surface_alloc.alloc();
 
 	sdcache->flags = flags;
+	sdcache->fellow_slot = _fellow_slot_alloc();
+	sdcache->fellow_checked_frame.store(0, std::memory_order_relaxed);
 
 	sdcache->shader = p_material->shader_data;
 	sdcache->material = p_material;
@@ -6608,6 +6883,7 @@ void RenderForwardClustered::geometry_instance_free(RenderGeometryInstance *p_ge
 	GeometryInstanceSurfaceDataCache *surf = ginstance->surface_caches;
 	while (surf) {
 		GeometryInstanceSurfaceDataCache *next = surf->next;
+		_fellow_slot_free(surf->fellow_slot);
 		geometry_instance_surface_alloc.free(surf);
 		surf = next;
 	}
@@ -6969,6 +7245,7 @@ RenderForwardClustered::~RenderForwardClustered() {
 		for (uint32_t i = 0; i < RENDER_LIST_MAX; i++) {
 			scene_state.instance_buffer[i].uninit();
 		}
+		_fellow_persistent_free();
 		memdelete_arr(scene_state.lightmap_captures);
 	}
 

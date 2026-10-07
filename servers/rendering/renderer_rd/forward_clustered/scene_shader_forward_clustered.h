@@ -138,6 +138,7 @@ public:
 				uint32_t fellow_skip_unblended_cascade : 1;
 				uint32_t fellow_cluster_log_depth : 1;
 				uint32_t fellow_blended_alpha_zero_skip : 1;
+				uint32_t fellow_persistent_instances : 1; // decision 0022: instance data read through the list elements
 			};
 		};
 

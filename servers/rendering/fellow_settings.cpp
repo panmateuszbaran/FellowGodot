@@ -100,6 +100,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/cpu/verify", false);
 	GLOBAL_DEF("rendering/fellow/cpu/debug_instance_scratch", false);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/cpu/instance_buffer_memory", PROPERTY_HINT_ENUM, "Device (Stock),System Memory,System Memory Cached"), 0);
+	GLOBAL_DEF("rendering/fellow/cpu/persistent_instances", false);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/cpu/worker_tasks", PROPERTY_HINT_RANGE, "0,32,1"), 10);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/cpu/hot_workers_usec", PROPERTY_HINT_RANGE, "0,5000,1,suffix:us"), 300);
 	GLOBAL_DEF("rendering/fellow/cpu/hot_workers_gate", true);
@@ -182,6 +183,9 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["frame_async_uses"] = s.frame_async_uses.get();
 	d["frame_async_conflicts"] = s.frame_async_conflicts.get();
 	d["frame_async_transfers"] = s.frame_async_transfers.get();
+	d["cpu_persistent_elements"] = s.cpu_persistent_elements.get();
+	d["cpu_persistent_uploads"] = s.cpu_persistent_uploads.get();
+	d["cpu_persistent_flushes"] = s.cpu_persistent_flushes.get();
 	d["shadow_pyramid_builds"] = s.shadow_pyramid_builds.get();
 	d["shadow_pyramid_texels"] = s.shadow_pyramid_texels.get();
 	d["shadow_pyramid_texels_needed"] = s.shadow_pyramid_texels_needed.get();
