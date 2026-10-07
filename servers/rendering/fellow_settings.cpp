@@ -103,7 +103,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/cpu/verify", false);
 	GLOBAL_DEF("rendering/fellow/cpu/debug_instance_scratch", false);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/cpu/instance_buffer_memory", PROPERTY_HINT_ENUM, "Device (Stock),System Memory,System Memory Cached"), 0);
-	GLOBAL_DEF("rendering/fellow/cpu/persistent_instances", false);
+	GLOBAL_DEF("rendering/fellow/cpu/persistent_instances", true);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/cpu/worker_tasks", PROPERTY_HINT_RANGE, "0,32,1"), 10);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/cpu/hot_workers_usec", PROPERTY_HINT_RANGE, "0,5000,1,suffix:us"), 300);
 	GLOBAL_DEF("rendering/fellow/cpu/hot_workers_gate", true);
@@ -113,7 +113,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/frame/submit_thread", true);
 	GLOBAL_DEF("rendering/fellow/frame/parallel_replay", true);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/frame/replay_max_segments", PROPERTY_HINT_RANGE, "2,64,1"), 12);
-	GLOBAL_DEF("rendering/fellow/autotune/enabled", false);
+	GLOBAL_DEF("rendering/fellow/autotune/enabled", true);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/autotune/block_frames", PROPERTY_HINT_RANGE, "8,120,1"), 16);
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/autotune/min_gain_percent", PROPERTY_HINT_RANGE, "0,10,0.1"), 0.5);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/autotune/interval_frames", PROPERTY_HINT_RANGE, "20,100000,1"), 600);
@@ -122,7 +122,9 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/frame/replay_frame_plan", false);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/frame/replay_plan_min_draws", PROPERTY_HINT_RANGE, "1,4096,1"), 16);
 	GLOBAL_DEF_RST("rendering/fellow/frame/separate_present_queue", false);
-	GLOBAL_DEF_RST("rendering/fellow/frame/async_compute", false);
+	// 0 off, 1 on, 2 on NVIDIA GPUs (decision 0015; read when the device is created, so only a value set in project.godot or
+	// override.cfg counts, and 2 when there is none).
+	GLOBAL_DEF_RST(PropertyInfo(Variant::INT, "rendering/fellow/frame/async_compute", PROPERTY_HINT_ENUM, "Off,On,NVIDIA GPUs"), 2);
 	GLOBAL_DEF_RST(PropertyInfo(Variant::INT, "rendering/fellow/frame/async_compute_family", PROPERTY_HINT_ENUM, "Dedicated Compute Family,Main Family,Main Queue (Split Only)"), 0);
 }
 

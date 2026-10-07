@@ -1317,7 +1317,9 @@ Error RenderingDeviceDriverVulkan::_add_queue_create_info(LocalVector<VkDeviceQu
 	// family.
 	const bool fellow_enabled = !ps->has_setting("rendering/fellow/enabled") || bool(ps->get_setting("rendering/fellow/enabled"));
 	const bool fellow_present_queue = ps->has_setting("rendering/fellow/frame/separate_present_queue") && bool(ps->get_setting("rendering/fellow/frame/separate_present_queue"));
-	const bool fellow_async_compute = ps->has_setting("rendering/fellow/frame/async_compute") && bool(ps->get_setting("rendering/fellow/frame/async_compute"));
+	// 0 off, 1 on, 2 (the default, also when not set) on NVIDIA GPUs; RenderingDevice decides the same way.
+	const int fellow_async_mode = ps->has_setting("rendering/fellow/frame/async_compute") ? int(ps->get_setting("rendering/fellow/frame/async_compute")) : 2;
+	const bool fellow_async_compute = fellow_async_mode == 1 || (fellow_async_mode == 2 && physical_device_properties.vendorID == RenderingContextDriver::Vendor::VENDOR_NVIDIA);
 	const bool fellow_two_queues = fellow_enabled && (fellow_present_queue || fellow_async_compute);
 	const uint32_t max_queue_count_per_family = fellow_two_queues ? 2 : 1;
 	static const float queue_priorities[2] = {};

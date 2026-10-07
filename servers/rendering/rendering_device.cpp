@@ -9151,7 +9151,10 @@ Error RenderingDevice::initialize(RenderingContextDriver *p_context, DisplayServ
 	// single queue (lavapipe), the virtual queue shares it and the submissions simply run one after another. With
 	// async_compute_family = 2 it is the main queue itself: the same split submissions without any concurrency (to
 	// measure what the split alone does).
-	const bool fellow_async_setting = fellow_ps->has_setting("rendering/fellow/frame/async_compute") && bool(fellow_ps->get_setting("rendering/fellow/frame/async_compute")) && (!fellow_ps->has_setting("rendering/fellow/enabled") || bool(fellow_ps->get_setting("rendering/fellow/enabled")));
+	// 0 off, 1 on, 2 (the default; also when the project does not set it: the device is created before the setting is
+	// registered) on NVIDIA GPUs, the only ones it was measured on (decision 0015).
+	const int fellow_async_mode = fellow_ps->has_setting("rendering/fellow/frame/async_compute") ? int(fellow_ps->get_setting("rendering/fellow/frame/async_compute")) : 2;
+	const bool fellow_async_setting = (fellow_async_mode == 1 || (fellow_async_mode == 2 && device.vendor == RenderingContextDriver::Vendor::VENDOR_NVIDIA)) && (!fellow_ps->has_setting("rendering/fellow/enabled") || bool(fellow_ps->get_setting("rendering/fellow/enabled")));
 	if (fellow_async_setting && is_main_instance && driver->get_api_name() == "Vulkan") {
 		const int fellow_family_choice = fellow_ps->has_setting("rendering/fellow/frame/async_compute_family") ? int(fellow_ps->get_setting("rendering/fellow/frame/async_compute_family")) : 0;
 		fellow_async_queue_family = main_queue_family;

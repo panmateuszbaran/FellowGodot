@@ -130,7 +130,8 @@ bool tunable_applies(Tunable p_tunable) {
 		case TUNE_POSITIONAL_PYRAMID:
 			return shadows_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/shadows/positional_max_mip");
 		case TUNE_ASYNC_COMPUTE:
-			return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/frame/async_compute");
+			// Only where the device created the async queue at start-up (decision 0015).
+			return enabled() && GLOBAL_GET_CACHED(int, "rendering/fellow/frame/async_compute") != 0 && RD::get_singleton()->fellow_async_compute_available();
 		case TUNE_FRAME_PLAN:
 			return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/frame/replay_frame_plan") && GLOBAL_GET_CACHED(bool, "rendering/fellow/frame/parallel_replay");
 		case TUNE_PERSISTENT_INSTANCES:

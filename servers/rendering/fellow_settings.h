@@ -368,7 +368,7 @@ inline int frame_replay_plan_min_draws() {
 }
 
 inline bool frame_async_compute() {
-	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/frame/async_compute") && autotune_allows(TUNE_ASYNC_COMPUTE);
+	return enabled() && GLOBAL_GET_CACHED(int, "rendering/fellow/frame/async_compute") != 0 && autotune_allows(TUNE_ASYNC_COMPUTE);
 }
 
 // CPU work of the render thread (docs/decisions/0016-parallel-render-lists.md). Each toggle produces the same lists,
