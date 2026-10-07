@@ -56,7 +56,8 @@ pixel-identical whatever the tuner chooses.
   off across the compared frames; 45-223 frames per run with a pyramid off): Lights Lab walk (60 frames, both
   pyramids), PBR Lab (7 cameras), Stress Lab temporal (120 frames), City Lab (3 cameras): **0 differing pixels**. With
   async compute created at start-up and the frame plan on, all four tunables evaluated: Lights Lab walk, draw-heavy City
-  Lab captures, PBR Lab: **0 differing pixels**.
+  Lab captures, PBR Lab: **0 differing pixels**; with the pyramids off (so that async compute is the one evaluated:
+  47 of the 90 frames' async submissions left out): Lights Lab walk, draw-heavy City Lab: **0 differing pixels**.
 * lavapipe with the Khronos validation layer (`--gpu-validation`), frame plan, parallel recording and autotune with
   frequent evaluations: draw-heavy City Lab captures, and under async compute the Lights Lab walk: no validation
   message.
