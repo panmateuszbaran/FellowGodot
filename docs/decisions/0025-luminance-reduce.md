@@ -32,6 +32,9 @@ addition is commutative, so only the grouping matters, and it is the tree's.
   fixed frame step (`--fixed-fps 60`: the exposure adapts by the frame's time step, so without it two runs of the same
   build already differ by 1/255 in tens of thousands of pixels): off vs off 0 differing pixels, **off vs on 0 differing
   pixels**.
+* Debug check `postfx/verify_luminance_reduce`: every frame stock's chain runs, every level is read back, then the fast
+  chain runs on the same inputs and every level is compared bit for bit. lavapipe, PBR Lab captures with auto exposure:
+  1 721 971 texels compared, **0 mismatches**.
 
 ## Result
 

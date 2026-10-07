@@ -81,6 +81,24 @@ of the directional pyramid runs its "off" blocks 14 % slower. Since `fellow70` t
 take at most `autotune/max_duty_percent` (20) of the frames: after an evaluation of L frames the next one waits
 4 L frames.
 
+`fellow70` (pooling and the 20 % cap), 3 ABBA runs of 20 s (`m5_f72_*`); reference: `fellow70`'s defaults (persistent
+instance data, async compute and autotune off); "cand" = persistent instance data + async compute (start-up) +
+autotune; "pa" = the same without autotune:
+
+| scene | cand | pa | evaluations per run (cand) | tunable-frames off / frames |
+|---|---:|---:|---:|---|
+| City Lab | **−4.1 %** (3/3, p 0.002) | | 13-14 | 9032-11 469 / 12 669 (the directional pyramid off) |
+| draw-heavy City Lab | **−4.7 %** (3/3, p 0.03) | | 11 | 7270-7743 / 10 868 |
+| PBR Lab | **−2.8 %** (3/3, p 0.04) | −1.5 % (n.s.) | 9 | 5357-5599 / 9147 |
+| Lights Lab | **−1.7 %** (3/3, p 0.05) | | 10-11 | 4808-6880 / 9087 |
+| Bistro interior | −0.5 % (3/3, p 0.24) | | 12-13 | ~1090 / 10 879 |
+| Bistro exterior | −0.4 % (2/3, n.s.) | −0.9 % (3/3, n.s.) | 13 | 1170-2276 / 12 084 |
+| Sponza | −0.4 % (n.s.; CV 6-7 %) | −0.6 % (n.s.) | 6-8 | 537-750 / 7685 |
+
+No scene is slower than the defaults any more; where autotune keeps an optimization off (City Lab: the directional
+pyramid; PBR Lab: probably the same, as `m4_f64_*_auto` found) the candidate gains more than the same settings without
+it.
+
 ## Why it is exact
 
 Each tunable is exact on its own (decision 0005: the pyramid only skips work whose result it proves; verified per

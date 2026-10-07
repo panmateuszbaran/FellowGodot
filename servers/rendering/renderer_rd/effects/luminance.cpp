@@ -108,7 +108,8 @@ void Luminance::LuminanceBuffers::configure(RenderSceneBuffersRD *p_render_buffe
 		if (prefer_raster_effects) {
 			tf.usage_bits = RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | RD::TEXTURE_USAGE_SAMPLING_BIT;
 		} else {
-			tf.usage_bits = RD::TEXTURE_USAGE_STORAGE_BIT;
+			// FellowEngine: also readable (postfx/verify_luminance_reduce, decision 0025).
+			tf.usage_bits = RD::TEXTURE_USAGE_STORAGE_BIT | RD::TEXTURE_USAGE_CAN_COPY_FROM_BIT;
 		}
 
 		if (final) {
@@ -207,57 +208,90 @@ void Luminance::luminance_reduction(RID p_source_texture, const Size2i p_source_
 			RD::get_singleton()->draw_list_end();
 		}
 	} else {
-		LuminanceReducePushConstant push_constant;
-		memset(&push_constant, 0, sizeof(LuminanceReducePushConstant));
+		// The chain of reductions, with stock's or the fast pipelines (decision 0025).
+		auto record_chain = [&](bool p_fast) {
+			LuminanceReducePushConstant push_constant;
+			memset(&push_constant, 0, sizeof(LuminanceReducePushConstant));
 
-		push_constant.source_size[0] = p_source_size.x;
-		push_constant.source_size[1] = p_source_size.y;
-		push_constant.max_luminance = p_max_luminance;
-		push_constant.min_luminance = p_min_luminance;
-		push_constant.exposure_adjust = p_adjust;
+			push_constant.source_size[0] = p_source_size.x;
+			push_constant.source_size[1] = p_source_size.y;
+			push_constant.max_luminance = p_max_luminance;
+			push_constant.min_luminance = p_min_luminance;
+			push_constant.exposure_adjust = p_adjust;
 
-		RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
-		const bool fellow_fast = Fellow::fast_luminance_reduce(); // decision 0025
+			const RID *pipelines = p_fast ? luminance_reduce.fellow_fast_pipelines : luminance_reduce.pipelines;
+			RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
 
-		for (int i = 0; i < p_luminance_buffers->reduce.size(); i++) {
-			RID shader;
+			for (int i = 0; i < p_luminance_buffers->reduce.size(); i++) {
+				RID shader;
 
-			if (i == 0) {
-				shader = luminance_reduce.shader.version_get_shader(luminance_reduce.shader_version, LUMINANCE_REDUCE_READ);
-				RD::Uniform u_source_texture(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 0, Vector<RID>({ default_sampler, p_source_texture }));
+				if (i == 0) {
+					shader = luminance_reduce.shader.version_get_shader(luminance_reduce.shader_version, LUMINANCE_REDUCE_READ);
+					RD::Uniform u_source_texture(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 0, Vector<RID>({ default_sampler, p_source_texture }));
 
-				RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, (fellow_fast ? luminance_reduce.fellow_fast_pipelines : luminance_reduce.pipelines)[LUMINANCE_REDUCE_READ]);
-				RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache(shader, 0, u_source_texture), 0);
-			} else {
-				RD::get_singleton()->compute_list_add_barrier(compute_list); //needs barrier, wait until previous is done
-
-				if (i == p_luminance_buffers->reduce.size() - 1 && !p_set) {
-					shader = luminance_reduce.shader.version_get_shader(luminance_reduce.shader_version, LUMINANCE_REDUCE_WRITE);
-					RD::Uniform u_current_texture(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 0, Vector<RID>({ default_sampler, p_luminance_buffers->current }));
-
-					RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, (fellow_fast ? luminance_reduce.fellow_fast_pipelines : luminance_reduce.pipelines)[LUMINANCE_REDUCE_WRITE]);
-					RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache(shader, 2, u_current_texture), 2);
+					RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, pipelines[LUMINANCE_REDUCE_READ]);
+					RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache(shader, 0, u_source_texture), 0);
 				} else {
-					shader = luminance_reduce.shader.version_get_shader(luminance_reduce.shader_version, LUMINANCE_REDUCE);
-					RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, (fellow_fast ? luminance_reduce.fellow_fast_pipelines : luminance_reduce.pipelines)[LUMINANCE_REDUCE]);
+					RD::get_singleton()->compute_list_add_barrier(compute_list); //needs barrier, wait until previous is done
+
+					if (i == p_luminance_buffers->reduce.size() - 1 && !p_set) {
+						shader = luminance_reduce.shader.version_get_shader(luminance_reduce.shader_version, LUMINANCE_REDUCE_WRITE);
+						RD::Uniform u_current_texture(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 0, Vector<RID>({ default_sampler, p_luminance_buffers->current }));
+
+						RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, pipelines[LUMINANCE_REDUCE_WRITE]);
+						RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache(shader, 2, u_current_texture), 2);
+					} else {
+						shader = luminance_reduce.shader.version_get_shader(luminance_reduce.shader_version, LUMINANCE_REDUCE);
+						RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, pipelines[LUMINANCE_REDUCE]);
+					}
+
+					RD::Uniform u_source_texture(RD::UNIFORM_TYPE_IMAGE, 0, p_luminance_buffers->reduce[i - 1]);
+					RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache(shader, 0, u_source_texture), 0);
 				}
 
-				RD::Uniform u_source_texture(RD::UNIFORM_TYPE_IMAGE, 0, p_luminance_buffers->reduce[i - 1]);
-				RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache(shader, 0, u_source_texture), 0);
+				RD::Uniform u_reduce_texture(RD::UNIFORM_TYPE_IMAGE, 0, p_luminance_buffers->reduce[i]);
+				RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache(shader, 1, u_reduce_texture), 1);
+
+				RD::get_singleton()->compute_list_set_push_constant(compute_list, &push_constant, sizeof(LuminanceReducePushConstant));
+
+				RD::get_singleton()->compute_list_dispatch_threads(compute_list, push_constant.source_size[0], push_constant.source_size[1], 1);
+
+				push_constant.source_size[0] = MAX(push_constant.source_size[0] / 8, 1);
+				push_constant.source_size[1] = MAX(push_constant.source_size[1] / 8, 1);
 			}
 
-			RD::Uniform u_reduce_texture(RD::UNIFORM_TYPE_IMAGE, 0, p_luminance_buffers->reduce[i]);
-			RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache(shader, 1, u_reduce_texture), 1);
+			RD::get_singleton()->compute_list_end();
+		};
 
-			RD::get_singleton()->compute_list_set_push_constant(compute_list, &push_constant, sizeof(LuminanceReducePushConstant));
-
-			RD::get_singleton()->compute_list_dispatch_threads(compute_list, push_constant.source_size[0], push_constant.source_size[1], 1);
-
-			push_constant.source_size[0] = MAX(push_constant.source_size[0] / 8, 1);
-			push_constant.source_size[1] = MAX(push_constant.source_size[1] / 8, 1);
+		if (Fellow::verify_luminance_reduce()) {
+			// Debug (decision 0025): stock's chain, every level read back, then the fast chain on the same inputs (the
+			// source and the previous exposure, which neither chain writes) and every level compared bit for bit.
+			record_chain(false);
+			LocalVector<Vector<uint8_t>> stock_levels;
+			for (int i = 0; i < p_luminance_buffers->reduce.size(); i++) {
+				stock_levels.push_back(RD::get_singleton()->texture_get_data(p_luminance_buffers->reduce[i], 0));
+			}
+			record_chain(true);
+			uint64_t texels = 0;
+			uint64_t mismatches = 0;
+			for (int i = 0; i < p_luminance_buffers->reduce.size(); i++) {
+				const Vector<uint8_t> fast = RD::get_singleton()->texture_get_data(p_luminance_buffers->reduce[i], 0);
+				const int n = MIN(fast.size(), stock_levels[i].size()) / 4;
+				const uint32_t *a = reinterpret_cast<const uint32_t *>(stock_levels[i].ptr());
+				const uint32_t *b = reinterpret_cast<const uint32_t *>(fast.ptr());
+				for (int k = 0; k < n; k++) {
+					mismatches += a[k] != b[k] ? 1 : 0;
+				}
+				texels += n;
+				if (fast.size() != stock_levels[i].size()) {
+					mismatches++;
+				}
+			}
+			Fellow::stats().postfx_luminance_verify_texels.add(texels);
+			Fellow::stats().postfx_luminance_verify_mismatches.add(mismatches);
+		} else {
+			record_chain(Fellow::fast_luminance_reduce()); // decision 0025
 		}
-
-		RD::get_singleton()->compute_list_end();
 	}
 
 	SWAP(p_luminance_buffers->current, p_luminance_buffers->reduce.write[p_luminance_buffers->reduce.size() - 1]);
