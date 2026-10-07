@@ -312,6 +312,12 @@ Parallel partition only for the largest ranges (`m4_f57_city_part_ab`, City Lab 
 from 16384 elements 0.0 % frame and render thread (p 0.96), from 8192 elements +0.8 % render thread (p 0.01): it stays
 off.
 
+Idle hot workers in a low-power wait (`cpu/hot_workers_wait`, `5702851`: UMWAIT on the loop state's cache line, x86
+WAITPKG, which this laptop's CPU has) instead of a pause loop, between processes (`m4_f63_*_wait`, 4 ABBA runs): City
+Lab −0.8 % (C0.1, n.s.) / −1.1 % (C0.2, 4/4), draw-heavy City Lab −0.5 % (n.s.) / +1.7 % (0/4; the deeper state wakes
+later); GPU time within ±0.5 %. Also `m4_f62_*_power`: linger 100 µs instead of 300 and 6 workers instead of 10 are
+slower in the draw-heavy City Lab (+2.8 %, +1.0 %) and no faster in City Lab. The option stays off; the defaults stay.
+
 Smaller cull ranges (`cpu/cull_ranges_per_thread`, `6241d36`: k ranges per thread instead of stock's one, their
 results merged in order; lavapipe 0 differing pixels, RTX identity at the floor in `m4_f61_temporal`):
 `m4_f61_city_cull_ab` (City Lab in one process, gate off, 2 runs): render thread +3.8 % with 2, +11.3 % with 4, +25.7 %
