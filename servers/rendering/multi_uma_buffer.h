@@ -287,6 +287,9 @@ class MultiUmaBuffer : public MultiUmaBufferBase {
 		MultiUmaBufferType type = MultiUmaBufferType::UNIFORM;
 	};
 	BufferInfo buffer_info[NUM_BUFFERS];
+	// FellowEngine (cpu/instance_buffer_memory, decision 0021): storage buffers in system memory (1 write-combined,
+	// 2 cached) instead of the device-local memory preferred for them (0).
+	uint8_t fellow_memory = 0;
 #ifdef DEV_ENABLED
 	bool can_upload[NUM_BUFFERS] = {};
 #endif
@@ -297,9 +300,15 @@ class MultiUmaBuffer : public MultiUmaBufferBase {
 			const BufferInfo &info = buffer_info[i];
 			RID buffer;
 			switch (info.type) {
-				case MultiUmaBufferType::STORAGE:
-					buffer = rd->storage_buffer_create(info.size_bytes, Vector<uint8_t>(), BitField<RenderingDevice::StorageBufferUsage>(), RD::BUFFER_CREATION_DYNAMIC_PERSISTENT_BIT);
-					break;
+				case MultiUmaBufferType::STORAGE: {
+					BitField<RD::BufferCreationBits> creation = RD::BUFFER_CREATION_DYNAMIC_PERSISTENT_BIT;
+					if (fellow_memory == 1) {
+						creation.set_flag(RD::BUFFER_CREATION_FELLOW_HOST_MEMORY_BIT);
+					} else if (fellow_memory == 2) {
+						creation.set_flag(RD::BUFFER_CREATION_FELLOW_HOST_CACHED_BIT);
+					}
+					buffer = rd->storage_buffer_create(info.size_bytes, Vector<uint8_t>(), BitField<RenderingDevice::StorageBufferUsage>(), creation);
+				} break;
 				case MultiUmaBufferType::VERTEX:
 					buffer = rd->vertex_buffer_create(info.size_bytes, Vector<uint8_t>(), RD::BUFFER_CREATION_DYNAMIC_PERSISTENT_BIT);
 					break;
@@ -343,6 +352,19 @@ public:
 	}
 
 	uint32_t get_size(uint32_t p_idx) const { return buffer_info[p_idx].size_bytes; }
+
+	// FellowEngine: where the storage buffers are created. A change frees them (they are created again, with the same
+	// sizes, at the next prepare_for_map(), as after set_size()); returns true then.
+	bool fellow_set_memory(uint8_t p_memory) {
+		if (p_memory == fellow_memory) {
+			return false;
+		}
+		uninit();
+		fellow_memory = p_memory;
+		curr_idx = UINT32_MAX;
+		last_frame_mapped = UINT64_MAX;
+		return true;
+	}
 
 	// Gets the raw buffer. Use with care.
 	// If you call this function, make sure to have called prepare_for_upload() first.

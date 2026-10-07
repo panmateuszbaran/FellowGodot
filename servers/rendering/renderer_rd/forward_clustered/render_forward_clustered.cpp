@@ -946,6 +946,11 @@ uint32_t RenderForwardClustered::_setup_environment(const RenderDataRD *p_render
 
 void RenderForwardClustered::SceneState::grow_instance_buffer(RenderListType p_render_list, uint32_t p_req_element_count, bool p_append) {
 	if (p_req_element_count > 0) {
+		if (!p_append && instance_buffer[p_render_list].fellow_set_memory((uint8_t)Fellow::cpu_instance_buffer_memory())) {
+			// FellowEngine (cpu/instance_buffer_memory, decision 0021): the buffers are created again in the other memory
+			// (only where the list starts over, as when they grow).
+			curr_gpu_ptr[p_render_list] = nullptr;
+		}
 		if (instance_buffer[p_render_list].get_size(0u) < p_req_element_count * sizeof(SceneState::InstanceData)) {
 			instance_buffer[p_render_list].uninit();
 			uint32_t new_size = Math::nearest_power_of_2_templated(MAX(uint64_t(INSTANCE_DATA_BUFFER_MIN_SIZE), p_req_element_count));

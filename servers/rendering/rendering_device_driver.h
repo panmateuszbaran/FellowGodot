@@ -177,6 +177,10 @@ public:
 		BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT = (1 << 19),
 		BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT = (1 << 20),
 		// There are no Vulkan-equivalent. Try to use unused/unclaimed bits.
+		// FellowEngine (cpu/instance_buffer_memory): a dynamic persistent buffer in system memory (write-combined, or
+		// cached) instead of the device-local memory preferred for it.
+		BUFFER_USAGE_FELLOW_HOST_MEMORY_BIT = (1 << 29),
+		BUFFER_USAGE_FELLOW_HOST_CACHED_BIT = (1 << 30),
 		BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT = (1 << 31),
 	};
 

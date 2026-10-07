@@ -1976,7 +1976,10 @@ RDD::BufferID RenderingDeviceDriverVulkan::buffer_create(uint64_t p_size, BitFie
 	VkBufferCreateInfo create_info = {};
 	create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 	create_info.size = p_size;
-	create_info.usage = p_usage & ~BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT;
+	create_info.usage = p_usage & ~(BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT | BUFFER_USAGE_FELLOW_HOST_MEMORY_BIT | BUFFER_USAGE_FELLOW_HOST_CACHED_BIT);
+	// FellowEngine (cpu/instance_buffer_memory, decision 0021): a dynamic persistent buffer in system memory.
+	const bool fellow_host = p_usage.has_flag(BUFFER_USAGE_DYNAMIC_PERSISTENT_BIT) && (p_usage.has_flag(BUFFER_USAGE_FELLOW_HOST_MEMORY_BIT) || p_usage.has_flag(BUFFER_USAGE_FELLOW_HOST_CACHED_BIT));
+	const bool fellow_host_cached = fellow_host && p_usage.has_flag(BUFFER_USAGE_FELLOW_HOST_CACHED_BIT);
 	create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 	if (fellow_concurrent_families.size() > 1) {
 		// FellowEngine async compute (decision 0015): usable by the main, async compute and transfer queue families.
@@ -2009,6 +2012,18 @@ RDD::BufferID RenderingDeviceDriverVulkan::buffer_create(uint64_t p_size, BitFie
 			alloc_create_info.requiredFlags = (VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
 		} break;
 		case MEMORY_ALLOCATION_TYPE_GPU: {
+			if (fellow_host) {
+				// Written by the CPU every frame and read by the GPU over the bus: system memory, write-combined
+				// (sequential writes) or cached.
+				vma_usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
+				alloc_create_info.flags = fellow_host_cached ? VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT : VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
+				alloc_create_info.requiredFlags = (VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+				if (fellow_host_cached) {
+					alloc_create_info.preferredFlags |= VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+				}
+				vma_flags_to_remove |= VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+				break;
+			}
 			vma_usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
 			if (!Engine::get_singleton()->is_extra_gpu_memory_tracking_enabled()) {
 				// We must set it right now or else vmaFindMemoryTypeIndexForBufferInfo will use wrong parameters.
@@ -2042,6 +2057,12 @@ RDD::BufferID RenderingDeviceDriverVulkan::buffer_create(uint64_t p_size, BitFie
 		ERR_FAIL_COND_V_MSG(err, BufferID(), vformat("Can't allocate memory for buffer of size: %d (VkResult error %d).", p_size, err));
 		err = vmaBindBufferMemory2(allocator, allocation, 0, vk_buffer, nullptr);
 		ERR_FAIL_COND_V_MSG(err, BufferID(), vformat("Can't bind memory to buffer of size: %d (VkResult error %d).", p_size, err));
+	}
+
+	if (fellow_host && is_print_verbose_enabled()) {
+		VkMemoryPropertyFlags memory_flags = 0;
+		vmaGetMemoryTypeProperties(allocator, alloc_info.memoryType, &memory_flags);
+		print_line(vformat("FellowEngine: dynamic buffer of %d bytes in system memory (memory type %d, property flags 0x%x).", (int64_t)p_size, (int)alloc_info.memoryType, (int)memory_flags));
 	}
 
 	// Bookkeep.

@@ -860,6 +860,9 @@ public:
 		BUFFER_CREATION_AS_STORAGE_BIT = (1 << 1),
 		BUFFER_CREATION_DYNAMIC_PERSISTENT_BIT = (1 << 2),
 		BUFFER_CREATION_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT = (1 << 3),
+		// FellowEngine (not exposed): a dynamic persistent buffer in system memory, write-combined or cached.
+		BUFFER_CREATION_FELLOW_HOST_MEMORY_BIT = (1 << 29),
+		BUFFER_CREATION_FELLOW_HOST_CACHED_BIT = (1 << 30),
 	};
 
 	enum StorageBufferUsage {

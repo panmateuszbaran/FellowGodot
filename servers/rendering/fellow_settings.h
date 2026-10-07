@@ -403,6 +403,14 @@ inline bool cpu_parallel_recording() {
 	return cpu_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/cpu/parallel_recording");
 }
 
+// Where the per-frame instance data buffers of the forward renderer live (docs/decisions/0021-instance-buffer-memory.md):
+// 0 stock (device-local memory the CPU writes over PCIe where the GPU has it host-visible), 1 system memory
+// (write-combined; the GPU reads it over PCIe), 2 system memory, cached. Same data either way; the buffers are created
+// again when it changes.
+inline int cpu_instance_buffer_memory() {
+	return cpu_enabled() ? CLAMP(GLOBAL_GET_CACHED(int, "rendering/fellow/cpu/instance_buffer_memory"), 0, 2) : 0;
+}
+
 // Debug only (wrong images): the parallel instance data steps write to system memory instead of the GPU buffer, to
 // measure what the writes over PCIe (device-local, host-visible memory) cost.
 inline bool cpu_debug_instance_scratch() {

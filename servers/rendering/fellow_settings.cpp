@@ -99,6 +99,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/cpu/compact_shadow_instances", true);
 	GLOBAL_DEF("rendering/fellow/cpu/verify", false);
 	GLOBAL_DEF("rendering/fellow/cpu/debug_instance_scratch", false);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/cpu/instance_buffer_memory", PROPERTY_HINT_ENUM, "Device (Stock),System Memory,System Memory Cached"), 0);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/cpu/worker_tasks", PROPERTY_HINT_RANGE, "0,32,1"), 10);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/cpu/hot_workers_usec", PROPERTY_HINT_RANGE, "0,5000,1,suffix:us"), 300);
 	GLOBAL_DEF("rendering/fellow/cpu/hot_workers_gate", true);

@@ -1462,6 +1462,12 @@ RID RenderingDevice::storage_buffer_create(uint32_t p_size_bytes, Span<uint8_t> 
 		// same time. It's probably fine (since CPU always advances the pointer before writing) but let's
 		// stick to the known/intended use cases and scream if we deviate from it.
 		buffer.usage.clear_flag(RDD::BUFFER_USAGE_TRANSFER_TO_BIT);
+		if (p_creation_bits.has_flag(BUFFER_CREATION_FELLOW_HOST_MEMORY_BIT)) {
+			buffer.usage.set_flag(RDD::BUFFER_USAGE_FELLOW_HOST_MEMORY_BIT);
+		}
+		if (p_creation_bits.has_flag(BUFFER_CREATION_FELLOW_HOST_CACHED_BIT)) {
+			buffer.usage.set_flag(RDD::BUFFER_USAGE_FELLOW_HOST_CACHED_BIT);
+		}
 	}
 	if (p_usage.has_flag(STORAGE_BUFFER_USAGE_DISPATCH_INDIRECT)) {
 		buffer.usage.set_flag(RDD::BUFFER_USAGE_INDIRECT_BIT);
