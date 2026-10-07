@@ -1,7 +1,8 @@
 # 0020 — Autotune: exact optimizations chosen by measurement
 
 Status: **MEASURING** · Branch `fellow/geometry` · Toggles `rendering/fellow/autotune/enabled` (runtime, default off
-until measured), `autotune/block_frames` (16), `autotune/interval_frames` (600), `autotune/min_gain_percent` (0.5) ·
+until measured), `autotune/block_frames` (16), `autotune/interval_frames` (600), `autotune/min_gain_percent` (0.5),
+`autotune/max_interval_sec` (30) ·
 Code: `servers/rendering/fellow_autotune.{h,cpp}`, `rendering_server_default.cpp` (`_draw`: the frame hooks and the
 timestamps read back), `fellow_settings.h` (`shadow_directional_max_mip()` asks the tuner).
 
@@ -40,7 +41,14 @@ Tunables, each only when its setting is on, one evaluated at a time (the most ov
   and the frame plan (`frame/replay_frame_plan`, decision 0019).
 
 An evaluation also ends after 3 pairs when the difference is clear (3 % of the time and 4 standard errors): fewer
-frames run the slower way where the optimization matters most. The tuner only switches an
+frames run the slower way where the optimization matters most.
+
+A choice is evaluated again before its interval is over when the scene or the view changed: when the frames' wall time
+(a moving average over ~32 frames, in which one frame counts at most twice the average, so a compilation stall does not
+move it) differs by 20 % from what it was at the decision, and at least every `autotune/max_interval_sec` seconds (the
+interval's growth to 16 times 600 frames is otherwise up to minutes at low frame rates). Not sooner than half the base
+interval after the decision (a moving view changes the frame time all the time); the interval then grows again from the
+base. The tuner only switches an
 optimization off for a frame; with the setting off it is never turned on.
 
 ## Why it is exact

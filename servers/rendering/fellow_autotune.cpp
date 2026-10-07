@@ -66,6 +66,9 @@ struct TuneState {
 	uint64_t next_eval = 0;
 	uint32_t interval = 0;
 	uint64_t eval_start = 0;
+	uint64_t decided_usec = 0; // wall time of the last decision
+	uint64_t decided_frame = 0;
+	double decided_frame_ms = 0.0; // the frames' wall time (moving average) then
 	uint32_t block_frames = 16;
 	double block_sum[AUTOTUNE_BLOCKS] = {};
 	uint32_t block_n[AUTOTUNE_BLOCKS] = {};
@@ -85,6 +88,12 @@ FrameRecord ring[AUTOTUNE_RING];
 uint64_t frame_id = 0;
 bool capturing = false; // timestamps captured for this frame
 uint64_t last_begin_usec = 0;
+// Moving average of the frames' wall time: a choice is evaluated again soon after the frames got 20 % faster or slower
+// than when it was made (the view or the scene changed), and at least every autotune/max_interval_sec.
+double frame_ms_avg = 0.0;
+constexpr double AUTOTUNE_AVG_ALPHA = 1.0 / 32.0;
+constexpr double AUTOTUNE_CHANGE = 0.2;
+constexpr uint32_t AUTOTUNE_CHANGE_DELAY = 30; // frames before the evaluation such a change brings forward
 
 bool block_on(uint32_t p_block) {
 	const uint32_t r = p_block % 4;
@@ -130,10 +139,10 @@ Analysis analyze(const TuneState &s, uint32_t p_pairs) {
 		}
 		const double mean_a = s.block_sum[a] / s.block_n[a];
 		const double mean_b = s.block_sum[b] / s.block_n[b];
-		const double on = block_on(a) ? mean_a : mean_b;
-		const double off = block_on(a) ? mean_b : mean_a;
-		diffs[r.pairs++] = off - on;
-		on_sum += on;
+		const double on_ms = block_on(a) ? mean_a : mean_b;
+		const double off_ms = block_on(a) ? mean_b : mean_a;
+		diffs[r.pairs++] = off_ms - on_ms;
+		on_sum += on_ms;
 	}
 	if (r.pairs == 0) {
 		return r;
@@ -169,6 +178,9 @@ void finish(TuneState &s, bool p_new_choice, const Analysis &p_analysis, bool p_
 	s.choice = p_new_choice;
 	s.evaluating = false;
 	s.next_eval = frame_id + s.interval;
+	s.decided_usec = OS::get_singleton()->get_ticks_usec();
+	s.decided_frame = frame_id;
+	s.decided_frame_ms = frame_ms_avg;
 }
 
 void decide(TuneState &s) {
@@ -229,6 +241,11 @@ void autotune_frame_begin() {
 			prev.tunable = -1;
 		}
 	}
+	if (last_begin_usec > 0) {
+		// A hitch (a compilation, a stall) moves the average by at most 1/32 of it.
+		const double ms = double(now_usec - last_begin_usec) / 1000.0;
+		frame_ms_avg = frame_ms_avg <= 0.0 ? ms : frame_ms_avg + (CLAMP(ms, frame_ms_avg * 0.5, frame_ms_avg * 2.0) - frame_ms_avg) * AUTOTUNE_AVG_ALPHA;
+	}
 	last_begin_usec = now_usec;
 	frame_id++;
 	capturing = false;
@@ -259,6 +276,20 @@ void autotune_frame_begin() {
 			s.interval = (uint32_t)MAX(1, GLOBAL_GET_CACHED(int, "rendering/fellow/autotune/interval_frames"));
 			s.next_eval = frame_id + s.interval * 2 / 5;
 		}
+		if (!s.evaluating && s.decided_usec > 0 && frame_id + AUTOTUNE_CHANGE_DELAY < s.next_eval) {
+			const uint64_t max_usec = (uint64_t)MAX(1.0, (double)GLOBAL_GET_CACHED(float, "rendering/fellow/autotune/max_interval_sec")) * 1000000;
+			const bool changed = s.decided_frame_ms > 0.0 && std::fabs(frame_ms_avg - s.decided_frame_ms) > AUTOTUNE_CHANGE * s.decided_frame_ms;
+			if (changed || now_usec > s.decided_usec + max_usec) {
+				// Evaluate again soon (but not within half the base interval of the last decision: a moving view changes the
+				// frame time all the time), and from the base interval.
+				const uint32_t base = (uint32_t)MAX(1, GLOBAL_GET_CACHED(int, "rendering/fellow/autotune/interval_frames"));
+				s.next_eval = MAX(frame_id + AUTOTUNE_CHANGE_DELAY, s.decided_frame + base / 2);
+				s.interval = base / 2;
+				s.decided_usec = 0;
+				stats().autotune_rechecks.increment();
+				print_verbose(vformat("FellowEngine autotune: tunable %d evaluated again from frame %d (frames %.3f ms, %.3f ms at the decision%s)", t, (int64_t)s.next_eval, frame_ms_avg, s.decided_frame_ms, changed ? "" : "; time limit"));
+			}
+		}
 		if (s.evaluating && frame_id > s.eval_start + AUTOTUNE_BLOCKS * s.block_frames + AUTOTUNE_LATENCY) {
 			decide(s);
 		} else if (s.evaluating) {
@@ -280,7 +311,7 @@ void autotune_frame_begin() {
 			TuneState &s = states[due];
 			s.evaluating = true;
 			s.eval_start = frame_id;
-			s.block_frames = (uint32_t)CLAMP(GLOBAL_GET_CACHED(int, "rendering/fellow/autotune/block_frames"), AUTOTUNE_SKIP + 4, 120);
+			s.block_frames = (uint32_t)CLAMP(GLOBAL_GET_CACHED(int, "rendering/fellow/autotune/block_frames"), (int)AUTOTUNE_SKIP + 4, 120);
 			for (uint32_t b = 0; b < AUTOTUNE_BLOCKS; b++) {
 				s.block_sum[b] = 0.0;
 				s.block_n[b] = 0;
