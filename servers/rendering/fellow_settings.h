@@ -344,14 +344,14 @@ inline bool frame_parallel_replay() {
 // thread records the rest of the frame (barriers, compute lists, copies); at each such draw list it executes its
 // secondary command buffers, running segments not taken yet itself while it waits. Same commands in the same order.
 inline bool frame_replay_frame_plan() {
-	return GLOBAL_GET_CACHED(bool, "rendering/fellow/frame/replay_frame_plan");
+	return GLOBAL_GET_CACHED(bool, "rendering/fellow/frame/replay_frame_plan") && autotune_allows(TUNE_FRAME_PLAN);
 }
 inline int frame_replay_plan_min_draws() {
 	return GLOBAL_GET_CACHED(int, "rendering/fellow/frame/replay_plan_min_draws");
 }
 
 inline bool frame_async_compute() {
-	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/frame/async_compute");
+	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/frame/async_compute") && autotune_allows(TUNE_ASYNC_COMPUTE);
 }
 
 // CPU work of the render thread (docs/decisions/0016-parallel-render-lists.md). Each toggle produces the same lists,

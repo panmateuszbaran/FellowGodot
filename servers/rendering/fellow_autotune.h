@@ -36,12 +36,16 @@
 // FellowEngine autotune (docs/decisions/0020-autotune.md): exact optimizations whose cost and benefit depend on the
 // scene are chosen by measurement. Such a toggle changes no pixel whichever way it is set, so the render thread can
 // run it on and off in alternating blocks of frames, compare the GPU time of those frames (two timestamps around the
-// frame's viewports) and keep the faster choice, checking again now and then. Render thread only.
+// frame's viewports) or, for optimizations that move work between the render thread and the GPU, the frames' wall time,
+// and keep the faster choice, checking again now and then. Render thread only.
 namespace Fellow {
 
 enum Tunable {
 	TUNE_DIRECTIONAL_PYRAMID, // shadows/directional_max_mip (decision 0005)
 	TUNE_POSITIONAL_PYRAMID, // shadows/positional_max_mip (decision 0005)
+	// Measured by the frame's wall time instead (they trade render-thread time against GPU time):
+	TUNE_ASYNC_COMPUTE, // frame/async_compute (decision 0015; the device created its second queue at start-up)
+	TUNE_FRAME_PLAN, // frame/replay_frame_plan (decision 0019)
 	TUNE_MAX,
 };
 

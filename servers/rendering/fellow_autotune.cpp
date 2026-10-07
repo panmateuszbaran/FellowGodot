@@ -30,6 +30,7 @@
 
 #include "fellow_autotune.h"
 
+#include "core/os/os.h"
 #include "servers/rendering/fellow_settings.h"
 #include "servers/rendering/rendering_device.h"
 #include "servers/rendering/rendering_server_globals.h"
@@ -83,10 +84,15 @@ bool off[TUNE_MAX] = {}; // the tunable does not run in this frame
 FrameRecord ring[AUTOTUNE_RING];
 uint64_t frame_id = 0;
 bool capturing = false; // timestamps captured for this frame
+uint64_t last_begin_usec = 0;
 
 bool block_on(uint32_t p_block) {
 	const uint32_t r = p_block % 4;
 	return r == 0 || r == 3;
+}
+
+bool uses_frame_time(int p_tunable) {
+	return p_tunable == TUNE_ASYNC_COMPUTE || p_tunable == TUNE_FRAME_PLAN;
 }
 
 bool tunable_applies(Tunable p_tunable) {
@@ -95,6 +101,10 @@ bool tunable_applies(Tunable p_tunable) {
 			return shadows_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/shadows/directional_max_mip");
 		case TUNE_POSITIONAL_PYRAMID:
 			return shadows_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/shadows/positional_max_mip");
+		case TUNE_ASYNC_COMPUTE:
+			return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/frame/async_compute");
+		case TUNE_FRAME_PLAN:
+			return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/frame/replay_frame_plan") && GLOBAL_GET_CACHED(bool, "rendering/fellow/frame/parallel_replay");
 		default:
 			return false;
 	}
@@ -200,7 +210,26 @@ bool autotune_allows(Tunable p_tunable) {
 	return !off[p_tunable];
 }
 
+static void add_sample(int p_tunable, uint64_t p_id, uint8_t p_block, double p_ms) {
+	TuneState &s = states[p_tunable];
+	if (!s.evaluating || p_id < s.eval_start || p_block >= AUTOTUNE_BLOCKS) {
+		return;
+	}
+	s.block_sum[p_block] += p_ms;
+	s.block_n[p_block]++;
+}
+
 void autotune_frame_begin() {
+	// The previous frame's wall time (render thread, from this call to this call), for the tunables measured by it.
+	const uint64_t now_usec = OS::get_singleton()->get_ticks_usec();
+	if (frame_id > 0 && last_begin_usec > 0) {
+		FrameRecord &prev = ring[frame_id % AUTOTUNE_RING];
+		if (prev.id == frame_id && prev.tunable >= 0 && uses_frame_time(prev.tunable)) {
+			add_sample(prev.tunable, prev.id, prev.block, double(now_usec - last_begin_usec) / 1000.0);
+			prev.tunable = -1;
+		}
+	}
+	last_begin_usec = now_usec;
 	frame_id++;
 	capturing = false;
 	const bool active = enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/autotune/enabled") && RD::get_singleton() != nullptr;
@@ -240,21 +269,24 @@ void autotune_frame_begin() {
 		}
 	}
 	if (evaluating < 0) {
-		// One tunable at a time.
+		// One tunable at a time: the most overdue.
+		int due = -1;
 		for (int t = 0; t < TUNE_MAX; t++) {
-			TuneState &s = states[t];
-			if (tunable_applies(Tunable(t)) && frame_id >= s.next_eval) {
-				s.evaluating = true;
-				s.eval_start = frame_id;
-				s.block_frames = (uint32_t)CLAMP(GLOBAL_GET_CACHED(int, "rendering/fellow/autotune/block_frames"), AUTOTUNE_SKIP + 4, 120);
-				for (uint32_t b = 0; b < AUTOTUNE_BLOCKS; b++) {
-					s.block_sum[b] = 0.0;
-					s.block_n[b] = 0;
-				}
-				evaluating = t;
-				print_verbose(vformat("FellowEngine autotune: tunable %d evaluated from frame %d, blocks of %d", t, (int64_t)frame_id, (int)s.block_frames));
-				break;
+			if (tunable_applies(Tunable(t)) && frame_id >= states[t].next_eval && (due < 0 || states[t].next_eval < states[due].next_eval)) {
+				due = t;
 			}
+		}
+		if (due >= 0) {
+			TuneState &s = states[due];
+			s.evaluating = true;
+			s.eval_start = frame_id;
+			s.block_frames = (uint32_t)CLAMP(GLOBAL_GET_CACHED(int, "rendering/fellow/autotune/block_frames"), AUTOTUNE_SKIP + 4, 120);
+			for (uint32_t b = 0; b < AUTOTUNE_BLOCKS; b++) {
+				s.block_sum[b] = 0.0;
+				s.block_n[b] = 0;
+			}
+			evaluating = due;
+			print_verbose(vformat("FellowEngine autotune: tunable %d evaluated from frame %d, blocks of %d", due, (int64_t)frame_id, (int)s.block_frames));
 		}
 	}
 
@@ -287,7 +319,7 @@ void autotune_frame_begin() {
 
 	// Timestamps around the frame's viewports while a tunable is evaluated (names starting with '<' and '>' are skipped
 	// by the profilers' region lists).
-	if (rec.tunable >= 0) {
+	if (rec.tunable >= 0 && !uses_frame_time(rec.tunable)) {
 		RSG::utilities->capture_timestamp("<FellowTune:" + itos(frame_id));
 		capturing = true;
 	}
@@ -315,15 +347,10 @@ void autotune_timestamp(const String &p_name, uint64_t p_gpu_time) {
 		rec.has_begin = true;
 		return;
 	}
-	if (!rec.has_begin || rec.tunable < 0 || p_gpu_time <= rec.begin) {
+	if (!rec.has_begin || rec.tunable < 0 || uses_frame_time(rec.tunable) || p_gpu_time <= rec.begin) {
 		return;
 	}
-	TuneState &s = states[rec.tunable];
-	if (!s.evaluating || id < s.eval_start || rec.block >= AUTOTUNE_BLOCKS) {
-		return;
-	}
-	s.block_sum[rec.block] += double(p_gpu_time - rec.begin) / 1e6;
-	s.block_n[rec.block]++;
+	add_sample(rec.tunable, id, rec.block, double(p_gpu_time - rec.begin) / 1e6);
 	rec.tunable = -1;
 }
 

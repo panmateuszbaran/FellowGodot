@@ -30,8 +30,17 @@ while the choice holds, up to 16 times; back to the base interval when it change
   `autotune/min_gain_percent` of the frame's GPU time and 2.5 standard errors of the pairs' differences; otherwise the
   choice stays.
 
-Tunables: the directional and the positional shadow pyramids (`shadows/directional_max_mip`,
-`shadows/positional_max_mip`, each when it is on), one evaluated at a time. The tuner only switches an
+Tunables, each only when its setting is on, one evaluated at a time (the most overdue):
+
+* by GPU time: the directional and the positional shadow pyramids (`shadows/directional_max_mip`,
+  `shadows/positional_max_mip`);
+* by the frame's wall time (the render thread's time from one frame's viewports to the next frame's: they move work
+  between the render thread and the GPU): async compute (`frame/async_compute`, decision 0015: it gains 1-3 % where
+  the GPU is the limit and costs 3 % in CPU-bound frames; the device must have created its second queue at start-up)
+  and the frame plan (`frame/replay_frame_plan`, decision 0019).
+
+An evaluation also ends after 3 pairs when the difference is clear (3 % of the time and 4 standard errors): fewer
+frames run the slower way where the optimization matters most. The tuner only switches an
 optimization off for a frame; with the setting off it is never turned on.
 
 ## Why it is exact
@@ -45,7 +54,16 @@ pixel-identical whatever the tuner chooses.
 
 * lavapipe, autotune off vs on with evaluations every 20-80 frames in blocks of 8 (so the pyramids are switched on and
   off across the compared frames; 45-223 frames per run with a pyramid off): Lights Lab walk (60 frames, both
-  pyramids), PBR Lab (7 cameras), Stress Lab temporal (120 frames), City Lab (3 cameras): **0 differing pixels**.
+  pyramids), PBR Lab (7 cameras), Stress Lab temporal (120 frames), City Lab (3 cameras): **0 differing pixels**. With
+  async compute created at start-up and the frame plan on, all four tunables evaluated: Lights Lab walk, draw-heavy City
+  Lab captures, PBR Lab: **0 differing pixels**.
+* lavapipe with the Khronos validation layer (`--gpu-validation`), frame plan, parallel recording and autotune with
+  frequent evaluations: draw-heavy City Lab captures, and under async compute the Lights Lab walk: no validation
+  message.
+* RTX (`fellow61`, pyramids only): `cpu/verify` 0 mismatches with evaluations every 40-640 frames (City Lab, Lights,
+  Stress temporal; City, PBR, Blend, Bistro exterior captures; 48-342 frames with a pyramid off per run). Identity
+  autotune vs off (`m4_f64_temporal`, six scenes and the draw-heavy `city_pan`, 48 frames per sequence with the
+  pyramid off): Bistro exterior bit-identical (99 dB), every other scene at its floor.
 
 ## Result
 
