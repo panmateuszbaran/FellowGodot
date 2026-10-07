@@ -5044,6 +5044,10 @@ void RendererSceneCull::update_dirty_instances() const {
 void RendererSceneCull::update() {
 	//optimize bvhs
 
+	const bool fellow_markers = Fellow::list_markers(); // FellowEngine profiling: the parts of the scene update
+	if (fellow_markers) {
+		RENDER_TIMESTAMP("FellowEngine Scene BVH Optimize");
+	}
 	uint32_t rid_count = scenario_owner.get_rid_count();
 	RID *rids = (RID *)alloca(sizeof(RID) * rid_count);
 	scenario_owner.fill_owned_buffer(rids);
@@ -5052,8 +5056,17 @@ void RendererSceneCull::update() {
 		s->indexers[Scenario::INDEXER_GEOMETRY].optimize_incremental(indexer_update_iterations);
 		s->indexers[Scenario::INDEXER_VOLUMES].optimize_incremental(indexer_update_iterations);
 	}
+	if (fellow_markers) {
+		RENDER_TIMESTAMP("FellowEngine Scene Render Update");
+	}
 	scene_render->update();
+	if (fellow_markers) {
+		RENDER_TIMESTAMP("FellowEngine Dirty Instances");
+	}
 	update_dirty_instances();
+	if (fellow_markers) {
+		RENDER_TIMESTAMP("FellowEngine Particle Colliders");
+	}
 	render_particle_colliders();
 }
 
