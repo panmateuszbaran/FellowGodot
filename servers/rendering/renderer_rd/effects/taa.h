@@ -64,7 +64,8 @@ private:
 	enum {
 		VARIANT_FELLOW_V2 = 1,
 		VARIANT_FELLOW_WRITE_VELOCITY = 2,
-		VARIANT_MAX = 4,
+		VARIANT_FELLOW_TILE16 = 4, // postfx/taa_tile16: 16 x 16 workgroups, every thread loading the tile (same results)
+		VARIANT_MAX = 8,
 	};
 
 	TaaResolveShaderRD taa_shader;

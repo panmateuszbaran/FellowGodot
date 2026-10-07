@@ -34,7 +34,9 @@
 // Based on Spartan Engine's TAA implementation (without TAA upscale).
 // <https://github.com/PanosK92/SpartanEngine/blob/a8338d0609b85dc32f3732a5c27fb4463816a3b9/Data/shaders/temporal_antialiasing.hlsl>
 
+#ifndef GROUP_SIZE
 #define GROUP_SIZE 8
+#endif
 #define FLT_MIN 0.00000001
 #define FLT_MAX 32767.0
 #define RPC_9 0.11111111111
@@ -173,7 +175,17 @@ void store_color_depth(uvec2 group_thread_id, ivec2 thread_id) {
 void populate_group_shared_memory(uvec2 group_id, uint group_index) {
 	// Populate group shared memory
 	ivec2 group_top_left = ivec2(group_id) * kGroupSize - kBorderSize;
+#ifdef FELLOW_TAA_STRIDED_LOAD
+	// FellowEngine (postfx/taa_tile16): every thread of the group loads tile entries in turn (the same entries, the same
+	// values; with 16 x 16 groups the 1-texel border is a smaller share of the tile).
+	for (uint i = group_index; i < uint(kTileDimension2); i += uint(kGroupSize * kGroupSize)) {
+		ivec2 group_thread_id = ivec2(i % kTileDimension, i / kTileDimension);
+		store_color_depth(group_thread_id, group_top_left + group_thread_id);
+	}
+	if (false) {
+#else
 	if (group_index < (kTileDimension2 >> 2)) {
+#endif
 		ivec2 group_thread_id_1 = ivec2(group_index % kTileDimension, group_index / kTileDimension);
 		ivec2 group_thread_id_2 = ivec2((group_index + (kTileDimension2 >> 2)) % kTileDimension, (group_index + (kTileDimension2 >> 2)) / kTileDimension);
 		ivec2 group_thread_id_3 = ivec2((group_index + (kTileDimension2 >> 1)) % kTileDimension, (group_index + (kTileDimension2 >> 1)) / kTileDimension);

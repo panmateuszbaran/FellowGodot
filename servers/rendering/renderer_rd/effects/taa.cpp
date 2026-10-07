@@ -43,6 +43,9 @@ TAA::TAA() {
 	taa_modes.push_back("\n#define MODE_TAA_RESOLVE\n#define FELLOW_TAA_V2\n"); // FellowEngine resolve v2.
 	taa_modes.push_back("\n#define MODE_TAA_RESOLVE\n#define FELLOW_TAA_WRITE_VELOCITY\n"); // Stock resolve, ping-pong.
 	taa_modes.push_back("\n#define MODE_TAA_RESOLVE\n#define FELLOW_TAA_V2\n#define FELLOW_TAA_WRITE_VELOCITY\n");
+	for (int i = 0; i < 4; i++) {
+		taa_modes.push_back(taa_modes[i] + "\n#define GROUP_SIZE 16\n#define FELLOW_TAA_STRIDED_LOAD\n");
+	}
 	taa_shader.initialize(taa_modes);
 	shader_version = taa_shader.version_create();
 	for (int i = 0; i < VARIANT_MAX; i++) {
@@ -109,6 +112,9 @@ void TAA::process(Ref<RenderSceneBuffersRD> p_render_buffers, RD::DataFormat p_f
 	CopyEffects *copy_effects = CopyEffects::get_singleton();
 
 	uint32_t variant = Fellow::taa_resolve_v2() ? VARIANT_FELLOW_V2 : 0;
+	if (Fellow::taa_tile16()) {
+		variant |= VARIANT_FELLOW_TILE16;
+	}
 	if (Fellow::taa_history_pingpong()) {
 		process_pingpong(p_render_buffers, p_format, p_z_near, p_z_far, variant | VARIANT_FELLOW_WRITE_VELOCITY);
 		return;

@@ -75,6 +75,10 @@ inline bool taa_resolve_v2() {
 }
 
 // Resolve v2 tunables (defaults = the milestone-1 resolve v2).
+// TAA resolve in 16 x 16 workgroups, every thread loading the shared tile (exact: the same neighbourhood values per pixel).
+inline bool taa_tile16() {
+	return postfx_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/postfx/taa_tile16");
+}
 inline float taa_v2_gamma() {
 	return GLOBAL_GET_CACHED(float, "rendering/fellow/postfx/taa_v2_gamma");
 }
