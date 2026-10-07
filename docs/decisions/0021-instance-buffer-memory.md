@@ -34,9 +34,25 @@ differs. Both memories are host-coherent (no flush needed; stock's `buffer_flush
   0 vs 2, Lights Lab walk (60 frames): **0 differing pixels**. Modes switched at run time (0, 1, 2 in blocks in one
   process, City Lab) under the Khronos validation layer: buffers created again in the new memory, no validation message.
 
+RTX (`fellow64`): `cpu/verify` 0 mismatches in both modes (`m4_f67_verify_*`: City Lab, Lights, Stress temporal; City,
+PBR, Bistro exterior captures); identity against mode 0 (`m4_f67_temporal`, six scenes): City Lab and Bistro exterior
+bit-identical, the others at their floor.
+
 ## Result
 
-(pending)
+In one process (`m4_f67_*_mem_ab`, blocks of 30 frames, 480 block pairs per mode, reference: mode 0):
+
+| | City Lab, 1 / 2 | draw-heavy City Lab, 1 / 2 |
+|---|---:|---:|
+| render thread | **−4.3 % / −4.6 %** | **−7.1 % / −6.6 %** |
+| GPU time | **+2.6 % / +2.4 %** (pre-pass +0.022 ms, opaque +0.015 ms) | **+3.4 % / +3.3 %** |
+| frame | +0.9 % / +0.7 % | −2.2 % / −1.8 % |
+| instance data writers (opaque, shadow lists) | 0.177 → 0.094 ms, 0.138 → 0.060 ms | 0.179 → 0.092 ms, 0.106 → 0.043 ms |
+
+The writes get twice as fast in system memory, but the GPU reads the instance data over PCIe in every pass that draws
+(the vertex shaders of the depth pre-pass and the opaque pass read an element's data for each of its draws), and that
+costs the GPU about as much as the render thread saves. The data has to stay in device memory and be written less:
+decision 0022 (persistent instance data).
 
 ## Decision
 
