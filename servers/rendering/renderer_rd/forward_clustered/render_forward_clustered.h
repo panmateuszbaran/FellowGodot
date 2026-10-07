@@ -43,6 +43,8 @@
 #include "servers/rendering/renderer_rd/effects/taa.h"
 #include "servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.h"
 #include "servers/rendering/renderer_rd/renderer_scene_render_rd.h"
+#include "servers/rendering/renderer_rd/shaders/effects/fellow_hzb.glsl.gen.h"
+#include "servers/rendering/renderer_rd/shaders/effects/fellow_occlusion_test.glsl.gen.h"
 #include "servers/rendering/renderer_rd/shaders/forward_clustered/best_fit_normal.glsl.gen.h"
 #include "servers/rendering/renderer_rd/shaders/forward_clustered/integrate_dfg.glsl.gen.h"
 
@@ -725,6 +727,27 @@ private:
 		uint32_t region_count = 0;
 		bool needs_flush = false;
 	} fellow_persistent;
+	// Occlusion statistics (debug/occlusion_stats, docs/decisions/0026-occlusion-culling.md): after the depth pre-pass, a
+	// depth pyramid is built and every opaque list element's AABB tested against it; how many (and how many indices)
+	// would be hidden is counted. Measurement only: nothing is culled.
+	struct FellowOcclusion {
+		FellowHzbShaderRD hzb_shader;
+		RID hzb_version;
+		RID hzb_pipelines[2]; // from the depth buffer, from the previous level
+		FellowOcclusionTestShaderRD test_shader;
+		RID test_version;
+		RID test_pipeline;
+		RID hzb; // R32F, ceil(size / 2), every level
+		LocalVector<RID> hzb_levels; // a view per level
+		Size2i hzb_size;
+		RID element_buffer;
+		uint32_t element_capacity = 0;
+		RID counters;
+		LocalVector<float> elements;
+	} fellow_occlusion;
+	void _fellow_occlusion_stats(RenderDataRD *p_render_data);
+	void _fellow_occlusion_free();
+
 	uint32_t _fellow_slot_alloc();
 	void _fellow_slot_free(uint32_t p_slot);
 	bool _fellow_persistent_begin(); // this frame's choice (taken by the frame's first list fill)

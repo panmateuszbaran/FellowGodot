@@ -73,6 +73,12 @@ inline bool ss_coherent_gather() {
 inline bool fast_luminance_reduce() {
 	return postfx_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/postfx/fast_luminance_reduce");
 }
+// Debug (docs/decisions/0026-occlusion-culling.md): after the depth pre-pass, count the opaque list elements a depth
+// pyramid of this frame's pre-pass would hide (measurement only; a GPU sync per frame).
+inline bool debug_occlusion_stats() {
+	return GLOBAL_GET_CACHED(bool, "rendering/fellow/debug/occlusion_stats");
+}
+
 // Debug: both reductions every frame on the same inputs, every level read back and compared (slow: a GPU sync per frame).
 inline bool verify_luminance_reduce() {
 	return GLOBAL_GET_CACHED(bool, "rendering/fellow/postfx/verify_luminance_reduce");
@@ -560,6 +566,10 @@ struct Stats {
 	SafeNumeric<uint64_t> postfx_coherent_gathers; // SSAO/SSIL gather dispatches with one sample rotation per workgroup (decision 0024)
 	SafeNumeric<uint64_t> postfx_luminance_verify_texels; // luminance reduction texels compared (decision 0025, debug)
 	SafeNumeric<uint64_t> postfx_luminance_verify_mismatches;
+	SafeNumeric<uint64_t> occlusion_tested; // opaque list elements tested (debug/occlusion_stats)
+	SafeNumeric<uint64_t> occlusion_weight; // their surfaces' indices (full detail)
+	SafeNumeric<uint64_t> occlusion_hidden; // elements the pyramid hides
+	SafeNumeric<uint64_t> occlusion_hidden_weight;
 	SafeNumeric<uint64_t> cpu_persistent_elements; // list elements written as 16-byte elements (decision 0022)
 	SafeNumeric<uint64_t> cpu_persistent_uploads; // surface entries rewritten by a list element (changed, or first used)
 	SafeNumeric<uint64_t> cpu_persistent_maps; // regions of the persistent buffer mapped (one per frame using it)

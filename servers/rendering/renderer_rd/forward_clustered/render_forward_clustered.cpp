@@ -1206,6 +1206,187 @@ void RenderForwardClustered::_fellow_persistent_free() {
 	p.region = nullptr;
 }
 
+// Occlusion statistics (decision 0026).
+
+void RenderForwardClustered::_fellow_occlusion_free() {
+	FellowOcclusion &o = fellow_occlusion;
+	RenderingDevice *rd = RD::get_singleton();
+	for (RID &level : o.hzb_levels) {
+		if (level.is_valid()) {
+			rd->free_rid(level);
+		}
+	}
+	o.hzb_levels.clear();
+	if (o.hzb.is_valid()) {
+		rd->free_rid(o.hzb);
+		o.hzb = RID();
+	}
+	if (o.element_buffer.is_valid()) {
+		rd->free_rid(o.element_buffer);
+		o.element_buffer = RID();
+	}
+	if (o.counters.is_valid()) {
+		rd->free_rid(o.counters);
+		o.counters = RID();
+	}
+	if (o.hzb_version.is_valid()) {
+		o.hzb_shader.version_free(o.hzb_version);
+		o.hzb_version = RID();
+	}
+	if (o.test_version.is_valid()) {
+		o.test_shader.version_free(o.test_version);
+		o.test_version = RID();
+	}
+}
+
+void RenderForwardClustered::_fellow_occlusion_stats(RenderDataRD *p_render_data) {
+	FellowOcclusion &o = fellow_occlusion;
+	RenderingDevice *rd = RD::get_singleton();
+	Ref<RenderSceneBuffersRD> rb = p_render_data->render_buffers;
+	if (rb.is_null()) {
+		return;
+	}
+	const RenderList &rl = render_list[RENDER_LIST_OPAQUE];
+	const uint32_t count = rl.elements.size();
+	if (count == 0) {
+		return;
+	}
+	if (o.hzb_version.is_null()) {
+		Vector<String> modes;
+		modes.push_back("\n#define MODE_FROM_DEPTH\n");
+		modes.push_back("\n");
+		o.hzb_shader.initialize(modes);
+		o.hzb_version = o.hzb_shader.version_create();
+		for (int i = 0; i < 2; i++) {
+			o.hzb_pipelines[i] = rd->compute_pipeline_create(o.hzb_shader.version_get_shader(o.hzb_version, i));
+		}
+		Vector<String> test_modes;
+		test_modes.push_back("\n");
+		o.test_shader.initialize(test_modes);
+		o.test_version = o.test_shader.version_create();
+		o.test_pipeline = rd->compute_pipeline_create(o.test_shader.version_get_shader(o.test_version, 0));
+		o.counters = rd->storage_buffer_create(16);
+	}
+	const Size2i screen = rb->get_internal_size();
+	// Level 0 covers 2 x 2 pixels per texel and has power-of-two sides, so that every level is exactly half the previous
+	// one (texture levels round down); texels past the screen repeat its edge (the pyramid takes the minimum, so they change
+	// nothing).
+	const Size2i size0(Math::next_power_of_2((uint32_t)(screen.x + 1) / 2), Math::next_power_of_2((uint32_t)(screen.y + 1) / 2));
+	if (o.hzb.is_null() || o.hzb_size != size0) {
+		for (RID &level : o.hzb_levels) {
+			rd->free_rid(level);
+		}
+		o.hzb_levels.clear();
+		if (o.hzb.is_valid()) {
+			rd->free_rid(o.hzb);
+		}
+		uint32_t levels = 1;
+		for (int d = MAX(size0.x, size0.y); d > 1; d /= 2) {
+			levels++;
+		}
+		RD::TextureFormat tf;
+		tf.format = RD::DATA_FORMAT_R32_SFLOAT;
+		tf.width = size0.x;
+		tf.height = size0.y;
+		tf.mipmaps = levels;
+		tf.usage_bits = RD::TEXTURE_USAGE_STORAGE_BIT | RD::TEXTURE_USAGE_SAMPLING_BIT;
+		o.hzb = rd->texture_create(tf, RD::TextureView());
+		for (uint32_t m = 0; m < levels; m++) {
+			o.hzb_levels.push_back(rd->texture_create_shared_from_slice(RD::TextureView(), o.hzb, 0, m));
+		}
+		o.hzb_size = size0;
+	}
+
+	// The pyramid.
+	RID sampler = RendererRD::MaterialStorage::get_singleton()->sampler_rd_get_default(RSE::CANVAS_ITEM_TEXTURE_FILTER_NEAREST, RSE::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
+	UniformSetCacheRD *cache = UniformSetCacheRD::get_singleton();
+	RD::ComputeListID list = rd->compute_list_begin();
+	Size2i source = screen;
+	for (uint32_t m = 0; m < o.hzb_levels.size(); m++) {
+		const Size2i dest = m == 0 ? size0 : Size2i(MAX(1, source.x / 2), MAX(1, source.y / 2));
+		const int mode = m == 0 ? 0 : 1;
+		RID shader = o.hzb_shader.version_get_shader(o.hzb_version, mode);
+		rd->compute_list_bind_compute_pipeline(list, o.hzb_pipelines[mode]);
+		if (m == 0) {
+			RD::Uniform u_depth(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 0, Vector<RID>({ sampler, rb->get_depth_texture(0) }));
+			rd->compute_list_bind_uniform_set(list, cache->get_cache(shader, 0, u_depth), 0);
+		} else {
+			RD::Uniform u_source(RD::UNIFORM_TYPE_IMAGE, 0, o.hzb_levels[m - 1]);
+			rd->compute_list_bind_uniform_set(list, cache->get_cache(shader, 0, u_source), 0);
+		}
+		RD::Uniform u_dest(RD::UNIFORM_TYPE_IMAGE, 0, o.hzb_levels[m]);
+		rd->compute_list_bind_uniform_set(list, cache->get_cache(shader, 1, u_dest), 1);
+		int32_t push[4] = { source.x, source.y, dest.x, dest.y };
+		rd->compute_list_set_push_constant(list, push, sizeof(push));
+		rd->compute_list_dispatch_threads(list, dest.x, dest.y, 1);
+		rd->compute_list_add_barrier(list);
+		source = dest;
+	}
+	rd->compute_list_end();
+
+	// The elements: world AABB (the instance's) and how many indices their surface draws at its full detail.
+	o.elements.resize(count * 8);
+	float *e = o.elements.ptr();
+	RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
+	for (uint32_t i = 0; i < count; i++) {
+		const GeometryInstanceSurfaceDataCache *surface = rl.elements[i];
+		const AABB &aabb = surface->owner->transformed_aabb;
+		const uint32_t weight = mesh_storage->mesh_surface_get_vertices_drawn_count(surface->surface);
+		float *f = e + i * 8;
+		f[0] = aabb.position.x;
+		f[1] = aabb.position.y;
+		f[2] = aabb.position.z;
+		memcpy(&f[3], &weight, sizeof(uint32_t));
+		f[4] = aabb.position.x + aabb.size.x;
+		f[5] = aabb.position.y + aabb.size.y;
+		f[6] = aabb.position.z + aabb.size.z;
+		f[7] = 0.0f;
+	}
+	if (o.element_capacity < count) {
+		if (o.element_buffer.is_valid()) {
+			rd->free_rid(o.element_buffer);
+		}
+		o.element_capacity = Math::next_power_of_2(MAX(count, 1024u));
+		o.element_buffer = rd->storage_buffer_create(o.element_capacity * 8 * sizeof(float));
+	}
+	rd->buffer_update(o.element_buffer, 0, count * 8 * sizeof(float), e);
+	const uint32_t zeros[4] = {};
+	rd->buffer_update(o.counters, 0, sizeof(zeros), zeros);
+
+	struct {
+		float view_projection[16];
+		uint32_t screen_size[2];
+		uint32_t count;
+		uint32_t levels;
+	} push;
+	const Projection view_projection = p_render_data->scene_data->get_cam_projection() * Projection(p_render_data->scene_data->cam_transform.affine_inverse());
+	RendererRD::MaterialStorage::store_camera(view_projection, push.view_projection);
+	push.screen_size[0] = screen.x;
+	push.screen_size[1] = screen.y;
+	push.count = count;
+	push.levels = o.hzb_levels.size();
+	RID shader = o.test_shader.version_get_shader(o.test_version, 0);
+	RD::Uniform u_hzb(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 0, Vector<RID>({ sampler, o.hzb }));
+	RD::Uniform u_elements(RD::UNIFORM_TYPE_STORAGE_BUFFER, 1, o.element_buffer);
+	RD::Uniform u_counters(RD::UNIFORM_TYPE_STORAGE_BUFFER, 2, o.counters);
+	list = rd->compute_list_begin();
+	rd->compute_list_bind_compute_pipeline(list, o.test_pipeline);
+	rd->compute_list_bind_uniform_set(list, cache->get_cache(shader, 0, u_hzb, u_elements, u_counters), 0);
+	rd->compute_list_set_push_constant(list, &push, sizeof(push));
+	rd->compute_list_dispatch_threads(list, count, 1, 1);
+	rd->compute_list_end();
+
+	// Read back (debug: waits for the GPU).
+	const Vector<uint8_t> result = rd->buffer_get_data(o.counters);
+	if (result.size() >= 16) {
+		const uint32_t *c = reinterpret_cast<const uint32_t *>(result.ptr());
+		Fellow::stats().occlusion_tested.add(c[0]);
+		Fellow::stats().occlusion_weight.add(c[1]);
+		Fellow::stats().occlusion_hidden.add(c[2]);
+		Fellow::stats().occlusion_hidden_weight.add(c[3]);
+	}
+}
+
 uint32_t RenderForwardClustered::_fellow_verify_elements(RenderListType p_render_list, uint32_t p_from, uint32_t p_size, const uint32_t *p_flags) {
 	// Persistent instance data: stock's instance data of each element, compared with its entry as the GPU reads it (in
 	// this frame's region of the persistent buffer) and its element.
@@ -3384,6 +3565,10 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			}
 			RD::get_singleton()->draw_command_end_label();
 		}
+	}
+
+	if (depth_pre_pass && Fellow::debug_occlusion_stats() && !is_reflection_probe) {
+		_fellow_occlusion_stats(p_render_data);
 	}
 
 	{
@@ -7278,6 +7463,7 @@ RenderForwardClustered::~RenderForwardClustered() {
 			scene_state.instance_buffer[i].uninit();
 		}
 		_fellow_persistent_free();
+		_fellow_occlusion_free();
 		memdelete_arr(scene_state.lightmap_captures);
 	}
 
