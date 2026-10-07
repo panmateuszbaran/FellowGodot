@@ -69,6 +69,10 @@ struct TuneState {
 	uint64_t decided_usec = 0; // wall time of the last decision
 	uint64_t decided_frame = 0;
 	double decided_frame_ms = 0.0; // the frames' wall time (moving average) then
+	// Frames after a decision before a change of the frame time may bring the next evaluation forward: from half the base
+	// interval, doubled each time such an evaluation keeps the choice (up to 16 base intervals), back when it changes it.
+	uint32_t recheck_spacing = 0;
+	bool recheck = false; // this evaluation was brought forward by a change of the frame time
 	uint32_t block_frames = 16;
 	double block_sum[AUTOTUNE_BLOCKS] = {};
 	uint32_t block_n[AUTOTUNE_BLOCKS] = {};
@@ -91,6 +95,7 @@ uint64_t last_begin_usec = 0;
 // Moving average of the frames' wall time: a choice is evaluated again soon after the frames got 20 % faster or slower
 // than when it was made (the view or the scene changed), and at least every autotune/max_interval_sec.
 double frame_ms_avg = 0.0;
+bool last_frame_evaluating = false; // the previous frame ran a tunable's evaluation (not counted in the average)
 constexpr double AUTOTUNE_AVG_ALPHA = 1.0 / 32.0;
 constexpr double AUTOTUNE_CHANGE = 0.2;
 constexpr uint32_t AUTOTUNE_CHANGE_DELAY = 30; // frames before the evaluation such a change brings forward
@@ -101,7 +106,7 @@ bool block_on(uint32_t p_block) {
 }
 
 bool uses_frame_time(int p_tunable) {
-	return p_tunable == TUNE_ASYNC_COMPUTE || p_tunable == TUNE_FRAME_PLAN;
+	return p_tunable == TUNE_ASYNC_COMPUTE || p_tunable == TUNE_FRAME_PLAN || p_tunable == TUNE_PERSISTENT_INSTANCES;
 }
 
 bool tunable_applies(Tunable p_tunable) {
@@ -114,6 +119,8 @@ bool tunable_applies(Tunable p_tunable) {
 			return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/frame/async_compute");
 		case TUNE_FRAME_PLAN:
 			return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/frame/replay_frame_plan") && GLOBAL_GET_CACHED(bool, "rendering/fellow/frame/parallel_replay");
+		case TUNE_PERSISTENT_INSTANCES:
+			return cpu_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/cpu/persistent_instances");
 		default:
 			return false;
 	}
@@ -174,6 +181,12 @@ void finish(TuneState &s, bool p_new_choice, const Analysis &p_analysis, bool p_
 		s.interval = base;
 	} else {
 		s.interval = MIN(MAX(s.interval, base) * 2, base * AUTOTUNE_INTERVAL_GROWTH);
+	}
+	if (s.recheck) {
+		// A view whose frame time keeps changing (a camera path through rooms of different cost) would otherwise bring
+		// every tunable's evaluation forward again and again, each running the slower way half the time.
+		s.recheck_spacing = p_new_choice != s.choice ? MAX(1u, base / 2) : MIN(MAX(s.recheck_spacing, MAX(1u, base / 2)) * 2, base * AUTOTUNE_INTERVAL_GROWTH);
+		s.recheck = false;
 	}
 	s.choice = p_new_choice;
 	s.evaluating = false;
@@ -241,8 +254,9 @@ void autotune_frame_begin() {
 			prev.tunable = -1;
 		}
 	}
-	if (last_begin_usec > 0) {
-		// A hitch (a compilation, a stall) moves the average by at most 1/32 of it.
+	if (last_begin_usec > 0 && !last_frame_evaluating) {
+		// A hitch (a compilation, a stall) moves the average by at most 1/32 of it. Frames of an evaluation are not
+		// counted (half of them run the slower way: the average after it would differ from the frames that follow).
 		const double ms = double(now_usec - last_begin_usec) / 1000.0;
 		frame_ms_avg = frame_ms_avg <= 0.0 ? ms : frame_ms_avg + (CLAMP(ms, frame_ms_avg * 0.5, frame_ms_avg * 2.0) - frame_ms_avg) * AUTOTUNE_AVG_ALPHA;
 	}
@@ -257,6 +271,7 @@ void autotune_frame_begin() {
 		for (TuneState &s : states) {
 			s.evaluating = false;
 		}
+		last_frame_evaluating = false;
 		return;
 	}
 
@@ -275,17 +290,21 @@ void autotune_frame_begin() {
 			s.started = true;
 			s.interval = (uint32_t)MAX(1, GLOBAL_GET_CACHED(int, "rendering/fellow/autotune/interval_frames"));
 			s.next_eval = frame_id + s.interval * 2 / 5;
+			s.recheck_spacing = MAX(1u, s.interval / 2);
 		}
 		if (!s.evaluating && s.decided_usec > 0 && frame_id + AUTOTUNE_CHANGE_DELAY < s.next_eval) {
 			const uint64_t max_usec = (uint64_t)MAX(1.0, (double)GLOBAL_GET_CACHED(float, "rendering/fellow/autotune/max_interval_sec")) * 1000000;
-			const bool changed = s.decided_frame_ms > 0.0 && std::fabs(frame_ms_avg - s.decided_frame_ms) > AUTOTUNE_CHANGE * s.decided_frame_ms;
-			if (changed || now_usec > s.decided_usec + max_usec) {
+			const bool changed = s.decided_frame_ms > 0.0 && std::fabs(frame_ms_avg - s.decided_frame_ms) > AUTOTUNE_CHANGE * s.decided_frame_ms && frame_id >= s.decided_frame + s.recheck_spacing;
+			const bool timed_out = now_usec > s.decided_usec + max_usec;
+			if (changed || timed_out) {
 				// Evaluate again soon (but not within half the base interval of the last decision: a moving view changes the
-				// frame time all the time), and from the base interval.
+				// frame time all the time; for a change of the frame time, not within the tunable's recheck spacing), and
+				// from the base interval.
 				const uint32_t base = (uint32_t)MAX(1, GLOBAL_GET_CACHED(int, "rendering/fellow/autotune/interval_frames"));
 				s.next_eval = MAX(frame_id + AUTOTUNE_CHANGE_DELAY, s.decided_frame + base / 2);
 				s.interval = base / 2;
 				s.decided_usec = 0;
+				s.recheck = !timed_out;
 				stats().autotune_rechecks.increment();
 				print_verbose(vformat("FellowEngine autotune: tunable %d evaluated again from frame %d (frames %.3f ms, %.3f ms at the decision%s)", t, (int64_t)s.next_eval, frame_ms_avg, s.decided_frame_ms, changed ? "" : "; time limit"));
 			}
@@ -321,6 +340,7 @@ void autotune_frame_begin() {
 		}
 	}
 
+	last_frame_evaluating = evaluating >= 0;
 	FrameRecord &rec = ring[frame_id % AUTOTUNE_RING];
 	rec.id = frame_id;
 	rec.tunable = -1;

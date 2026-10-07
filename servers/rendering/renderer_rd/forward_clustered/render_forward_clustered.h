@@ -43,7 +43,6 @@
 #include "servers/rendering/renderer_rd/effects/taa.h"
 #include "servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.h"
 #include "servers/rendering/renderer_rd/renderer_scene_render_rd.h"
-#include "servers/rendering/renderer_rd/shaders/effects/fellow_instance_scatter.glsl.gen.h"
 #include "servers/rendering/renderer_rd/shaders/forward_clustered/best_fit_normal.glsl.gen.h"
 #include "servers/rendering/renderer_rd/shaders/forward_clustered/integrate_dfg.glsl.gen.h"
 
@@ -695,8 +694,10 @@ private:
 	// Persistent instance data (cpu/persistent_instances, docs/decisions/0022-persistent-instance-data.md). Each surface
 	// cache has an entry (slot) in a GPU buffer kept from frame to frame, holding stock's InstanceData without the
 	// fields a pass sets (flags, GI offset); the per-frame instance buffers then hold one FellowElement per list
-	// element. The first element of a frame that uses a surface checks its entry against a copy kept on the CPU; a
-	// changed entry is queued and uploaded (a scatter dispatch) before the list's draws are recorded.
+	// element. The buffer has one region per frame in flight (a dynamic persistent buffer, as stock's per-frame
+	// buffers); the frame's first list fill maps the next region and writes into it the entries that changed since that
+	// region was last mapped. A list element whose entry is out of date (its instance's data version changed) rebuilds
+	// it, compares it with a copy kept on the CPU and, if it changed, writes it into the frame's region.
 	struct FellowElement {
 		uint32_t slot;
 		uint32_t flags;
@@ -704,28 +705,32 @@ private:
 		uint32_t pad;
 	};
 	struct FellowPersistent {
+		static constexpr uint32_t MAPS = 4; // maps whose written entries are kept (more than the frames in flight)
 		bool active = false; // this frame's choice
 		uint64_t frame = UINT64_MAX;
-		RID buffer; // device-local, capacity entries
+		RID buffer; // dynamic persistent: one region of capacity entries per frame in flight
 		uint32_t capacity = 0;
+		uint8_t *region = nullptr; // this frame's region (host-visible)
 		LocalVector<SceneState::InstanceData> mirror; // what each entry holds (valid ones)
 		LocalVector<uint8_t> valid;
 		LocalVector<uint32_t> free_slots;
 		uint32_t slot_count = 0; // slots handed out (high water)
-		LocalVector<uint32_t> dirty; // entries to upload (capacity)
-		std::atomic<uint32_t> dirty_count{ 0 };
-		LocalVector<uint32_t> records; // upload staging: 48 words per entry
-		RID record_buffer;
-		uint32_t record_capacity = 0; // entries
-		FellowInstanceScatterShaderRD shader;
-		RID shader_version;
-		RID pipeline;
+		// Per map of the buffer (the last MAPS): the entries written into its region, so that a region mapped again gets
+		// them too.
+		LocalVector<uint32_t> written[MAPS];
+		std::atomic<uint32_t> written_count[MAPS] = {};
+		uint64_t map_seq = 0; // maps of the buffer so far (the current one is map_seq - 1)
+		uint8_t *region_ptr[MAPS] = {}; // the buffer's regions seen so far, and the map at which each was last mapped
+		uint64_t region_map[MAPS] = {};
+		uint32_t region_count = 0;
+		bool needs_flush = false;
 	} fellow_persistent;
 	uint32_t _fellow_slot_alloc();
 	void _fellow_slot_free(uint32_t p_slot);
 	bool _fellow_persistent_begin(); // this frame's choice (taken by the frame's first list fill)
 	void _fellow_persistent_check(GeometryInstanceSurfaceDataCache *p_surface, const GeometryInstanceForwardClustered *p_inst, uint64_t p_frame);
-	void _fellow_persistent_reserve();
+	bool _fellow_persistent_reserve(); // true: a new buffer (mapped)
+	void _fellow_persistent_map();
 	void _fellow_persistent_flush();
 	void _fellow_persistent_free();
 	uint32_t _fellow_verify_elements(RenderListType p_render_list, uint32_t p_from, uint32_t p_size, const uint32_t *p_flags);

@@ -1051,40 +1051,36 @@ void RenderForwardClustered::_fellow_slot_free(uint32_t p_slot) {
 }
 
 bool RenderForwardClustered::_fellow_persistent_begin() {
+	// Render thread, before a list's instance data is written (no list's workers running).
 	FellowPersistent &p = fellow_persistent;
 	const uint64_t frame = RSG::rasterizer->get_frame_number();
-	if (frame != p.frame) {
+	const bool new_frame = frame != p.frame;
+	if (new_frame) {
 		p.frame = frame;
 		p.active = Fellow::cpu_persistent_instances();
 	}
 	if (p.active) {
-		_fellow_persistent_reserve();
+		// A new buffer (slots handed out since the last list) is mapped by _fellow_persistent_reserve().
+		if (!_fellow_persistent_reserve() && new_frame) {
+			_fellow_persistent_map();
+		}
 	}
 	return p.active;
 }
 
-void RenderForwardClustered::_fellow_persistent_reserve() {
-	// Render thread, before a list's instance data is written: room for every slot handed out so far.
+bool RenderForwardClustered::_fellow_persistent_reserve() {
+	// Room for every slot handed out so far; true if a new buffer was created (and mapped).
 	FellowPersistent &p = fellow_persistent;
-	if (p.shader_version.is_null()) {
-		Vector<String> modes;
-		modes.push_back("\n");
-		p.shader.initialize(modes);
-		p.shader_version = p.shader.version_create();
-		p.pipeline = RD::get_singleton()->compute_pipeline_create(p.shader.version_get_shader(p.shader_version, 0));
-	}
 	const uint32_t needed = MAX(p.slot_count, 1024u);
 	if (p.buffer.is_valid() && p.capacity >= needed) {
-		return;
+		return false;
 	}
 	const uint32_t capacity = Math::next_power_of_2(needed);
-	RID buffer = RD::get_singleton()->storage_buffer_create(capacity * sizeof(SceneState::InstanceData));
+	RenderingDevice *rd = RD::get_singleton();
 	if (p.buffer.is_valid()) {
-		// The entries written so far keep their content (the copy is ordered after the uploads recorded before).
-		RD::get_singleton()->buffer_copy(p.buffer, buffer, 0, 0, p.capacity * sizeof(SceneState::InstanceData));
-		RD::get_singleton()->free_rid(p.buffer);
+		rd->free_rid(p.buffer); // freed once the frames using it are done
 	}
-	p.buffer = buffer;
+	p.buffer = rd->storage_buffer_create(capacity * sizeof(SceneState::InstanceData), Vector<uint8_t>(), BitField<RD::StorageBufferUsage>(), RD::BUFFER_CREATION_DYNAMIC_PERSISTENT_BIT);
 	p.capacity = capacity;
 	const uint32_t old_size = p.valid.size();
 	p.mirror.resize(capacity);
@@ -1092,7 +1088,67 @@ void RenderForwardClustered::_fellow_persistent_reserve() {
 	for (uint32_t i = old_size; i < capacity; i++) {
 		p.valid[i] = 0;
 	}
-	p.dirty.resize(capacity);
+	for (uint32_t m = 0; m < FellowPersistent::MAPS; m++) {
+		p.written[m].resize(capacity);
+		p.written_count[m].store(0, std::memory_order_relaxed);
+		p.region_ptr[m] = nullptr;
+		p.region_map[m] = 0;
+	}
+	p.region_count = 0;
+	p.map_seq = 0;
+	// Its regions are new: each gets every valid entry when first mapped.
+	_fellow_persistent_map();
+	return true;
+}
+
+void RenderForwardClustered::_fellow_persistent_map() {
+	// Render thread, once per frame (and when a new buffer is created): the frame's region of the buffer, brought up to
+	// date. The region was last mapped some maps ago (as many as there are frames in flight); the entries written since
+	// then are written into it from the CPU copy. A region not seen before gets every valid entry.
+	FellowPersistent &p = fellow_persistent;
+	p.region = RD::get_singleton()->buffer_persistent_map_advance(p.buffer);
+	const uint64_t map = p.map_seq++;
+	int r = -1;
+	for (uint32_t i = 0; i < p.region_count; i++) {
+		if (p.region_ptr[i] == p.region) {
+			r = int(i);
+			break;
+		}
+	}
+	const SceneState::InstanceData *mirror = p.mirror.ptr();
+	SceneState::InstanceData *dst = reinterpret_cast<SceneState::InstanceData *>(p.region);
+	uint32_t count = 0;
+	if (r < 0 || map - p.region_map[r] > FellowPersistent::MAPS) {
+		if (r < 0) {
+			ERR_FAIL_COND_MSG(p.region_count >= FellowPersistent::MAPS, "FellowEngine persistent instance data: more regions than expected.");
+			r = int(p.region_count++);
+			p.region_ptr[r] = p.region;
+		}
+		for (uint32_t slot = 0; slot < p.slot_count; slot++) {
+			if (p.valid[slot]) {
+				dst[slot] = mirror[slot];
+				count++;
+			}
+		}
+	} else {
+		for (uint64_t m = p.region_map[r] + 1; m < map; m++) {
+			const uint32_t list = uint32_t(m % FellowPersistent::MAPS);
+			const uint32_t n = p.written_count[list].load(std::memory_order_relaxed);
+			const uint32_t *slots = p.written[list].ptr();
+			for (uint32_t i = 0; i < n; i++) {
+				const uint32_t slot = slots[i];
+				if (p.valid[slot]) {
+					dst[slot] = mirror[slot];
+					count++;
+				}
+			}
+		}
+	}
+	p.region_map[r] = map;
+	p.written_count[map % FellowPersistent::MAPS].store(0, std::memory_order_relaxed);
+	p.needs_flush = count > 0;
+	Fellow::stats().cpu_persistent_catchup.add(count);
+	Fellow::stats().cpu_persistent_maps.increment();
 }
 
 void RenderForwardClustered::_fellow_persistent_check(GeometryInstanceSurfaceDataCache *p_surface, const GeometryInstanceForwardClustered *p_inst, uint64_t p_frame) {
@@ -1123,74 +1179,36 @@ void RenderForwardClustered::_fellow_persistent_check(GeometryInstanceSurfaceDat
 	}
 	p.mirror[slot] = data;
 	p.valid[slot] = 1;
-	p.dirty[p.dirty_count.fetch_add(1, std::memory_order_relaxed)] = slot;
+	// Into this frame's region (the GPU reads it when the frame's draws run), and noted for the regions of the next
+	// frames.
+	memcpy(p.region + size_t(slot) * sizeof(SceneState::InstanceData), &data, sizeof(SceneState::InstanceData));
+	const uint32_t list = uint32_t((p.map_seq - 1) % FellowPersistent::MAPS);
+	p.written[list][p.written_count[list].fetch_add(1, std::memory_order_relaxed)] = slot;
+	Fellow::stats().cpu_persistent_uploads.increment();
 }
 
 void RenderForwardClustered::_fellow_persistent_flush() {
-	// Render thread: the entries queued since the last flush are copied into the persistent buffer (one dispatch),
-	// before the draws that read them are recorded.
+	// Render thread, before draws that read the entries are recorded: non-coherent memory is flushed (a no-op where the
+	// memory is coherent, as stock's buffer_flush()).
 	FellowPersistent &p = fellow_persistent;
-	const uint32_t count = p.dirty_count.load(std::memory_order_relaxed);
-	if (count == 0) {
-		return;
+	if (p.needs_flush || p.written_count[(p.map_seq - 1) % FellowPersistent::MAPS].load(std::memory_order_relaxed) > 0) {
+		RD::get_singleton()->buffer_flush(p.buffer);
+		p.needs_flush = false;
 	}
-	p.dirty_count.store(0, std::memory_order_relaxed);
-	static_assert(sizeof(SceneState::InstanceData) == 44 * sizeof(uint32_t), "matches ENTRY_WORDS in fellow_instance_scatter.glsl");
-	constexpr uint32_t RECORD_WORDS = 48;
-	p.records.resize(count * RECORD_WORDS);
-	uint32_t *records = p.records.ptr();
-	for (uint32_t i = 0; i < count; i++) {
-		const uint32_t slot = p.dirty[i];
-		uint32_t *rec = records + i * RECORD_WORDS;
-		rec[0] = slot;
-		rec[1] = 0;
-		rec[2] = 0;
-		rec[3] = 0;
-		memcpy(rec + 4, &p.mirror[slot], sizeof(SceneState::InstanceData));
-	}
-	RenderingDevice *rd = RD::get_singleton();
-	if (p.record_capacity < count) {
-		if (p.record_buffer.is_valid()) {
-			rd->free_rid(p.record_buffer);
-		}
-		p.record_capacity = Math::next_power_of_2(MAX(count, 256u));
-		p.record_buffer = rd->storage_buffer_create(p.record_capacity * RECORD_WORDS * sizeof(uint32_t));
-	}
-	rd->buffer_update(p.record_buffer, 0, count * RECORD_WORDS * sizeof(uint32_t), records);
-
-	RID shader = p.shader.version_get_shader(p.shader_version, 0);
-	RD::Uniform u_records(RD::UNIFORM_TYPE_STORAGE_BUFFER, 0, p.record_buffer);
-	RD::Uniform u_slots(RD::UNIFORM_TYPE_STORAGE_BUFFER, 1, p.buffer);
-	RID uniform_set = UniformSetCacheRD::get_singleton()->get_cache(shader, 0, u_records, u_slots);
-	uint32_t push_constant[4] = { count, 0, 0, 0 };
-	RD::ComputeListID compute_list = rd->compute_list_begin();
-	rd->compute_list_bind_compute_pipeline(compute_list, p.pipeline);
-	rd->compute_list_bind_uniform_set(compute_list, uniform_set, 0);
-	rd->compute_list_set_push_constant(compute_list, push_constant, sizeof(push_constant));
-	rd->compute_list_dispatch_threads(compute_list, count * 44, 1, 1);
-	rd->compute_list_end();
-	Fellow::stats().cpu_persistent_uploads.add(count);
-	Fellow::stats().cpu_persistent_flushes.increment();
 }
 
 void RenderForwardClustered::_fellow_persistent_free() {
 	FellowPersistent &p = fellow_persistent;
-	if (p.record_buffer.is_valid()) {
-		RD::get_singleton()->free_rid(p.record_buffer);
-		p.record_buffer = RID();
-	}
 	if (p.buffer.is_valid()) {
 		RD::get_singleton()->free_rid(p.buffer);
 		p.buffer = RID();
 	}
-	if (p.shader_version.is_valid()) {
-		p.shader.version_free(p.shader_version); // also frees the pipeline (a dependency of the shader)
-		p.shader_version = RID();
-	}
+	p.region = nullptr;
 }
 
 uint32_t RenderForwardClustered::_fellow_verify_elements(RenderListType p_render_list, uint32_t p_from, uint32_t p_size, const uint32_t *p_flags) {
-	// Persistent instance data: stock's instance data of each element, compared with its entry and its element.
+	// Persistent instance data: stock's instance data of each element, compared with its entry as the GPU reads it (in
+	// this frame's region of the persistent buffer) and its element.
 	RenderList *rl = &render_list[p_render_list];
 	const FellowElement *elements = reinterpret_cast<const FellowElement *>(scene_state.curr_gpu_ptr[p_render_list]);
 	const FellowPersistent &p = fellow_persistent;
@@ -1209,7 +1227,8 @@ uint32_t RenderForwardClustered::_fellow_verify_elements(RenderListType p_render
 			mismatches++;
 			continue;
 		}
-		SceneState::InstanceData actual = p.mirror[element.slot];
+		SceneState::InstanceData actual;
+		memcpy(&actual, p.region + size_t(element.slot) * sizeof(SceneState::InstanceData), sizeof(SceneState::InstanceData));
 		actual.flags = element.flags;
 		actual.gi_offset = element.gi_offset;
 		if (memcmp(&expected, &actual, sizeof(SceneState::InstanceData)) != 0) {
@@ -5253,10 +5272,12 @@ RID RenderForwardClustered::_setup_render_pass_uniform_set(RenderListType p_rend
 		uniforms.push_back(u);
 	}
 	{
+		// The persistent buffer's region for this frame (a dynamic buffer, as the per-frame ones); any dynamic buffer
+		// when there is none (not read).
 		RD::Uniform u;
 		u.binding = 40;
-		u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
-		u.append_id(fellow_persistent.buffer.is_valid() ? fellow_persistent.buffer : scene_shader.default_vec4_xform_buffer);
+		u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER_DYNAMIC;
+		u.append_id(fellow_persistent.buffer.is_valid() ? fellow_persistent.buffer : scene_state.instance_buffer[p_render_list]._get(0u));
 		uniforms.push_back(u);
 	}
 	{
@@ -5665,8 +5686,8 @@ RID RenderForwardClustered::_setup_sdfgi_render_pass_uniform_set(RID p_albedo_te
 	{
 		RD::Uniform u;
 		u.binding = 40;
-		u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
-		u.append_id(fellow_persistent.buffer.is_valid() ? fellow_persistent.buffer : scene_shader.default_vec4_xform_buffer);
+		u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER_DYNAMIC;
+		u.append_id(fellow_persistent.buffer.is_valid() ? fellow_persistent.buffer : scene_state.instance_buffer[RENDER_LIST_SECONDARY]._get(0u));
 		uniforms.push_back(u);
 	}
 	{

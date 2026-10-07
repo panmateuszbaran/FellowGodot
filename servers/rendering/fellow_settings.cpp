@@ -186,7 +186,8 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["frame_async_transfers"] = s.frame_async_transfers.get();
 	d["cpu_persistent_elements"] = s.cpu_persistent_elements.get();
 	d["cpu_persistent_uploads"] = s.cpu_persistent_uploads.get();
-	d["cpu_persistent_flushes"] = s.cpu_persistent_flushes.get();
+	d["cpu_persistent_maps"] = s.cpu_persistent_maps.get();
+	d["cpu_persistent_catchup"] = s.cpu_persistent_catchup.get();
 	d["shadow_pyramid_builds"] = s.shadow_pyramid_builds.get();
 	d["shadow_pyramid_texels"] = s.shadow_pyramid_texels.get();
 	d["shadow_pyramid_texels_needed"] = s.shadow_pyramid_texels_needed.get();

@@ -37,8 +37,10 @@ Tunables, each only when its setting is on, one evaluated at a time (the most ov
   `shadows/positional_max_mip`);
 * by the frame's wall time (the render thread's time from one frame's viewports to the next frame's: they move work
   between the render thread and the GPU): async compute (`frame/async_compute`, decision 0015: it gains 1-3 % where
-  the GPU is the limit and costs 3 % in CPU-bound frames; the device must have created its second queue at start-up)
-  and the frame plan (`frame/replay_frame_plan`, decision 0019).
+  the GPU is the limit and costs 3 % in CPU-bound frames; the device must have created its second queue at start-up),
+  the frame plan (`frame/replay_frame_plan`, decision 0019) and persistent instance data (`cpu/persistent_instances`,
+  decision 0022, since `fellow68`: the render thread writes 16 bytes per list element instead of 176, and the shaders
+  read the rest through the element's slot).
 
 Not a tunable: the directional shadow cache (decision 0004). Its renders choose mesh LODs by the cache's texel size, not
 by the camera distance as stock does, so its shadow maps can differ from stock's by a LOD (lavapipe, City Lab walk: cache
@@ -54,6 +56,15 @@ interval's growth to 16 times 600 frames is otherwise up to minutes at low frame
 interval after the decision (a moving view changes the frame time all the time); the interval then grows again from the
 base. The tuner only switches an
 optimization off for a frame; with the setting off it is never turned on.
+
+Since `fellow68`: a change of the frame time brings a tunable's evaluation forward only after its recheck spacing (from
+half the base interval, doubled each time such an evaluation keeps the choice, up to 16 base intervals; back to half the
+base when it changes the choice), and the frames of an evaluation are left out of the moving average. In Sponza's camera
+path the frame time kept changing by more than 20 %: 27-28 evaluations brought forward per run, every tunable each
+time, none of which changed a choice, and 2529-2589 times per run of 7685 frames a tunable ran off in a frame (the
+directional pyramid saves 14 % there). The candidate defaults (persistent instance data, async compute, autotune) were
+1.2 % slower than `fellow67`'s defaults there (`m5_f69_gpu_cand`, 0/3 runs faster, GPU time +1.2 %), where async compute
+alone gains 0.9 % and persistent instance data has 290 list elements per frame: most likely the evaluations' cost.
 
 ## Why it is exact
 

@@ -46,6 +46,7 @@ enum Tunable {
 	// Measured by the frame's wall time instead (they trade render-thread time against GPU time):
 	TUNE_ASYNC_COMPUTE, // frame/async_compute (decision 0015; the device created its second queue at start-up)
 	TUNE_FRAME_PLAN, // frame/replay_frame_plan (decision 0019)
+	TUNE_PERSISTENT_INSTANCES, // cpu/persistent_instances (decision 0022)
 	TUNE_MAX,
 };
 

@@ -418,9 +418,10 @@ inline int cpu_instance_buffer_memory() {
 // Persistent instance data (docs/decisions/0022-persistent-instance-data.md): each surface's instance data is kept in a
 // buffer from frame to frame and rewritten only when it changes; per frame each list element is 16 bytes (the surface's
 // entry, the flags and GI offset of its pass) instead of the whole 176. Runtime; the frame's choice is taken when its
-// first list is filled.
+// first list is filled. A tunable of autotune (it moves work from the render thread to the GPU: the shaders read each
+// element's entry through its slot).
 inline bool cpu_persistent_instances() {
-	return cpu_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/cpu/persistent_instances");
+	return cpu_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/cpu/persistent_instances") && autotune_allows(TUNE_PERSISTENT_INSTANCES);
 }
 
 // Debug only (wrong images): the parallel instance data steps write to system memory instead of the GPU buffer, to
@@ -540,8 +541,9 @@ struct Stats {
 	SafeNumeric<uint64_t> frame_async_conflicts; // of which the concurrent part had to wait (shared resource)
 	SafeNumeric<uint64_t> frame_async_transfers; // async parts that used an upload submitted with them
 	SafeNumeric<uint64_t> cpu_persistent_elements; // list elements written as 16-byte elements (decision 0022)
-	SafeNumeric<uint64_t> cpu_persistent_uploads; // surface entries rewritten (changed, or first used)
-	SafeNumeric<uint64_t> cpu_persistent_flushes; // upload dispatches
+	SafeNumeric<uint64_t> cpu_persistent_uploads; // surface entries rewritten by a list element (changed, or first used)
+	SafeNumeric<uint64_t> cpu_persistent_maps; // regions of the persistent buffer mapped (one per frame using it)
+	SafeNumeric<uint64_t> cpu_persistent_catchup; // entries written into a region when it was mapped (written since its last map)
 	SafeNumeric<uint64_t> shadow_pyramid_builds; // min/max pyramid updates that wrote something (directional and positional)
 	SafeNumeric<uint64_t> shadow_pyramid_texels; // finest-level pyramid texels written (each covers 4x4 new atlas texels)
 	SafeNumeric<uint64_t> shadow_pyramid_texels_needed; // of those, the ones computed from the atlas (the rest set to (0, 1))

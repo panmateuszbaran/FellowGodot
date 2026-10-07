@@ -27,25 +27,31 @@ PCIe: in one process, City Lab render thread −4.3 %, GPU time +2.6 % (pre-pass
   the CPU.
 * The per-frame instance buffers hold one 16-byte element per list element instead: the slot, the flags and the GI
   offset that element's pass gave it (exactly what stock would write there).
+* The persistent buffer has one region per frame in flight (a dynamic persistent buffer, like stock's per-frame
+  buffers: the CPU writes the region of the frame being recorded while the GPU may still read the others). The frame's
+  first list fill maps the next region and writes into it the entries written since that region was last mapped (the
+  entries written by each of the last four maps are noted); a region not seen before (a new buffer) gets every valid
+  entry.
 * Every list element checks its surface's entry (any thread). The instance carries a version (`fellow_data_version`,
   changed by every setter of a field the entry holds and by the frame's update of the previous transform); if the entry
   was built from the current version it is current, and the check only reads (the surface's cache line stays shared
   between the threads of the different lists). Otherwise the first element of the frame that meets it (an atomic
   exchange of the frame number on the surface) builds the entry as stock builds the element's data and compares it
-  with the CPU copy; a changed entry is copied and queued. (A new mesh, material or other change that makes new
-  surface caches gives them new entries.) The queued entries are uploaded when the next render pass uniform set is set
-  up, i.e. before any draw that reads them is recorded, all lists filled since the last upload in one dispatch.
-* First RTX measurement (`fellow66`, `m4_f68_*_pi_ab`, in one process): with an exchange of the frame number for every
-  surface on its first element of the frame (a write of every surface's cache line, which the shadow lists' threads
-  had just read), the opaque list's step got slower (0.18 → 0.25-0.27 ms) while the shadow lists' halved (0.14 → 0.07
-  ms): City Lab frame +1.5 %, draw-heavy +1.3 %; and one upload per list (two dispatches per frame, +0.017 ms GPU). Hence
-  the read-only check and the single upload above. Before a list's draws are recorded, the queued entries are uploaded (one buffer update and one
-  scatter dispatch, 44 words per entry); the render graph orders the dispatch after the previous frame's reads.
+  with the CPU copy; a changed entry is copied and written into the frame's region (and noted for the next regions).
+  (A new mesh, material or other change that makes new surface caches gives them new entries.)
 * The scene shader (behind a specialization bit, so pipelines without it are unchanged) reads the element in the vertex
   and fragment stages (`fellow_element_init()`), then every other field from the entry (`FELLOW_INSTANCE()`); the flags
   and GI offset come from the element. Without the bit it reads the per-frame buffer as stock does.
-* The buffer grows by doubling (the old content copied on the GPU). Slots are handed out when a surface cache is
-  created and returned when it is freed.
+* The buffer grows by doubling (a new buffer; its regions get every valid entry when first mapped). Slots are handed
+  out when a surface cache is created and returned when it is freed.
+* A tunable of autotune (decision 0020), measured by the frames' wall time: it moves work from the render thread to the
+  GPU (the shaders read each element's entry through its slot), so it pays where the render thread is the limit.
+
+History: the first version (`fellow66`) exchanged the frame number on every surface's first element of a frame (a write
+of every surface's cache line, which the shadow lists' threads had just read) and uploaded the changed entries with a
+buffer update and a scatter dispatch per list; the second (`fellow67`) only read in the common case and uploaded once
+per frame (one dispatch before the first draws). The third (`fellow68`, above) writes the entries directly: no upload,
+no dispatch, no barrier.
 
 ## Why it is exact
 
@@ -53,7 +59,8 @@ For every element the shader reads the same values stock writes into that elemen
 for the same surface in the same frame (the fields it holds do not change between the lists of a frame: transforms are
 set before rendering, the previous transform is updated by the frame's first list fill, before any instance data is
 built), and the flags and GI offset are the element's own. `cpu/verify` rebuilds stock's data for every element and
-compares it with the entry and the element (`_fellow_verify_elements`).
+compares it with the entry as the GPU will read it (in the frame's region of the persistent buffer) and with the element
+(`_fellow_verify_elements`).
 
 ## Verification
 
@@ -69,7 +76,24 @@ compares it with the entry and the element (`_fellow_verify_elements`).
 
 ## Result
 
-(pending)
+In one process, off vs on (blocks of 30 frames, 480 block pairs in City Lab, 1600 in Bistro exterior):
+
+| | City Lab | draw-heavy City Lab | Bistro exterior |
+|---|---:|---:|---:|
+| v1 (`m4_f68_*_pi_ab`): render thread | +1.3 % | +2.1 % | +9.2 % (opaque instance data 0.088 → 0.205 ms) |
+| v1: GPU time | +0.9 % | +1.3 % | +0.6 % (pre-pass +0.019 ms) |
+| v1: frame | +1.5 % | +1.3 % | +0.6 % |
+| v2 (`m5_f69_*_pi_ab`): render thread | **−6.0 %** (−0.094 ms) | **−7.2 %** (−0.124 ms) | |
+| v2: GPU time | +1.3 % (+0.024 ms: pre-pass +0.010) | +1.5 % (+0.028 ms: pre-pass +0.013) | |
+| v2: frame | +0.2 % (n.s.) | **−2.4 %** | |
+
+v2's steps (City Lab): opaque instance data 0.178 → 0.081 ms, shadow lists' instance data 0.138 → 0.049 ms. What the
+GPU pays is the slot's indirection in the vertex shaders (the depth pre-pass, the shadow passes) and, until v3, the
+upload: one buffer update, one dispatch and the barriers before the first draws.
+
+Candidate defaults (persistent instance data v2 + async compute + autotune) against `fellow67`'s defaults, between
+processes (`m5_f69_*_cand`, 3 ABBA runs of 20 s): City Lab **−4.1 %** (3/3, p 0.015), draw-heavy City Lab **−4.6 %**
+(3/3, p 0.024).
 
 ## Decision
 
