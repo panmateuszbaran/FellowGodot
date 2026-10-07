@@ -1931,8 +1931,9 @@ protected:
 	uint32_t fellow_async_current_use = 0;
 	bool fellow_async_recording = false;
 	bool fellow_async_concurrent = false;
+	bool fellow_skip_transfers = false; // _end_frame() of the async part: transfers left to the main queue's next submission
 	void _fellow_next_command_buffer();
-	bool _fellow_transfer_workers_idle();
+	bool _fellow_transfers_needed();
 
 public:
 	// FellowEngine async compute (decision 0015). Between begin() and end() the caller records compute work that only

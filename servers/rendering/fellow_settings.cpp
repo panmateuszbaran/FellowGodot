@@ -181,6 +181,7 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["frame_early_submits"] = s.frame_early_submits.get();
 	d["frame_async_uses"] = s.frame_async_uses.get();
 	d["frame_async_conflicts"] = s.frame_async_conflicts.get();
+	d["frame_async_transfers"] = s.frame_async_transfers.get();
 	d["shadow_pyramid_builds"] = s.shadow_pyramid_builds.get();
 	d["shadow_pyramid_texels"] = s.shadow_pyramid_texels.get();
 	d["shadow_pyramid_texels_needed"] = s.shadow_pyramid_texels_needed.get();

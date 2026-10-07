@@ -8368,10 +8368,12 @@ void RenderingDevice::_end_frame() {
 
 	// The command buffer must be copied into a stack variable as the driver workarounds can change the command buffer in use.
 	RDD::CommandBufferID command_buffer = frames[frame].command_buffer;
-	GodotProfileZoneGroupedFirst(_profile_zone, "_submit_transfer_workers");
-	_submit_transfer_workers(command_buffer);
-	GodotProfileZoneGrouped(_profile_zone, "_submit_transfer_barriers");
-	_submit_transfer_barriers(command_buffer);
+	if (!fellow_skip_transfers) {
+		GodotProfileZoneGroupedFirst(_profile_zone, "_submit_transfer_workers");
+		_submit_transfer_workers(command_buffer);
+		GodotProfileZoneGrouped(_profile_zone, "_submit_transfer_barriers");
+		_submit_transfer_barriers(command_buffer);
+	}
 
 	GodotProfileZoneGrouped(_profile_zone, "draw_graph.end");
 	draw_graph.end(RENDER_GRAPH_REORDER == 1, RENDER_GRAPH_FULL_BARRIERS == 1, command_buffer, frames[frame].command_buffer_pool);
@@ -8636,16 +8638,24 @@ void RenderingDevice::_fellow_next_command_buffer() {
 	draw_graph.begin();
 }
 
-bool RenderingDevice::_fellow_transfer_workers_idle() {
+bool RenderingDevice::_fellow_transfers_needed() {
+	// Whether the commands recorded since the last submission use an upload a transfer worker has not submitted yet,
+	// or texture barriers of finished uploads are waiting to be recorded.
+	{
+		MutexLock barriers_lock(transfer_worker_pool_texture_barriers_mutex);
+		if (!transfer_worker_pool_texture_barriers.is_empty()) {
+			return true;
+		}
+	}
 	MutexLock transfer_worker_lock(transfer_worker_pool_mutex);
 	for (uint32_t i = 0; i < transfer_worker_pool_size; i++) {
 		TransferWorker *worker = transfer_worker_pool[i];
-		MutexLock lock(worker->thread_mutex);
-		if (worker->recording) {
-			return false;
+		MutexLock lock(worker->operations_mutex);
+		if (worker->operations_submitted < transfer_worker_operation_used_by_draw[worker->index]) {
+			return true;
 		}
 	}
-	return true;
+	return false;
 }
 
 bool RenderingDevice::fellow_async_compute_begin() {
@@ -8662,11 +8672,9 @@ bool RenderingDevice::fellow_async_compute_begin() {
 	if (f.fellow_async_uses >= FELLOW_ASYNC_MAX_USES || f.fellow_segments_used + 2 > f.fellow_segment_command_buffers.size()) {
 		return false;
 	}
-	if (!_fellow_transfer_workers_idle()) {
-		// Uploads in flight: their semaphores are waited on by the next main submission, which the async part would
-		// not wait for.
-		return false;
-	}
+	// Uploads: the prefix's submission below (_end_frame()) submits the transfer workers whose uploads what was recorded
+	// so far uses, and waits on them; the async part waits on the prefix. An upload nothing uses yet (a worker can keep
+	// one recording for many frames) is left to the main queue (see fellow_async_compute_end()).
 
 	fellow_async_current_use = f.fellow_async_uses++;
 	const uint64_t fellow_t0 = OS::get_singleton()->get_ticks_usec();
@@ -8705,8 +8713,16 @@ void RenderingDevice::fellow_async_compute_end() {
 	draw_graph.fellow_async_phase = 0;
 	fellow_async_recording = false;
 
+	// Transfer workers and their texture barriers are submitted and recorded with the main queue's next submission
+	// (the concurrent part), unless the async part itself uses an upload not submitted yet: then here, waited on by the
+	// async part (its barriers in its command buffer; a resource it uses is a conflict for the concurrent part).
+	fellow_skip_transfers = !_fellow_transfers_needed();
+	if (!fellow_skip_transfers) {
+		Fellow::stats().frame_async_transfers.increment();
+	}
 	const uint64_t fellow_t0 = OS::get_singleton()->get_ticks_usec();
 	_end_frame();
+	fellow_skip_transfers = false;
 	const uint64_t fellow_t1 = OS::get_singleton()->get_ticks_usec();
 	// The async part waits on the prefix and on any upload submitted while it was ended (none when the transfer
 	// workers were idle at begin()).

@@ -34,8 +34,13 @@ transfers: exclusive sharing is per family), while the main queue renders the re
 
 Each submission is a render-graph flush (as in early submit, 0009): resource trackers carry their state across, so the
 barriers and layout transitions are the ones a single submission would have, split at those points. Not used with
-SDFGI/VoxelGI (they read the same normal buffer between the shadows), for reflection probes, or when a transfer worker
-has uploads in flight.
+SDFGI/VoxelGI (they read the same normal buffer between the shadows), or for reflection probes. Uploads (transfer
+workers): the prefix's submission submits and waits on those the work recorded so far uses, and the async part waits on
+the prefix; the async part's own submission leaves the transfer workers and their texture barriers to the main queue's
+next submission, unless the async part itself uses an upload not submitted yet or barriers of finished uploads are
+pending (then they go with the async part, as before; `frame_async_transfers`). Until milestone 5 a frame did not use
+async compute at all while any transfer worker was recording, and an upload nothing draws yet can keep one recording for
+the rest of a run: in Sponza async compute ran in ~1.6 % of the frames of most runs (`m4_f65_gpu_auto`).
 
 **Conflict check.** The concurrent part (step 3) runs at the same time as the async part, so it must not touch what the
 async part uses. The render graph marks every resource the async part uses (with how); in step 3 a resource the async
@@ -52,6 +57,10 @@ waits on S2 — exactly the single-queue order its barriers assume — and the f
 * RTX 5070 Ti (`m3_f38_temporal`, six scenes, setting off vs on): Bistro exterior and Blend Lab 99 dB (bit-identical),
   the others at their run-to-run floor (the same values as `fellow35` vs `fellow38` with the setting off); 107-124
   async segments per run, **0 conflicts**.
+* Milestone 5 (transfer workers left to the main queue): lavapipe with the Khronos validation layer, async compute
+  (dedicated family) off vs on: Lights Lab walk (93 of 94 frames with an async part), Stress Lab temporal (120 frames,
+  370 async parts), City Lab captures: **0 differing pixels**, 0 conflicts, no new validation message (Stress Lab
+  shows stock's `srcAccessMask-02815` barrier message with the setting off as well).
 
 ## Result
 
