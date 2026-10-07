@@ -73,6 +73,13 @@ compares it with the entry as the GPU will read it (in the frame's region of the
   **0 differing pixels, 0 mismatches**.
 * lavapipe with the Khronos validation layer, async compute created at start-up, persistent instance data and autotune
   evaluating every 20 frames: City Lab captures: 0 differing pixels against async compute off, no validation message.
+* v3 (`fellow68`), lavapipe, off vs on with `cpu/verify` (which now reads each entry from the frame's region, as the GPU
+  does): City Lab walk (60 frames; 34 421 entries written by elements, 26 074 by the maps' catch-up, 93 maps, 559
+  checks), Stress Lab temporal (120 frames, 5349 checks): **0 differing pixels, 0 mismatches**. With autotune switching
+  persistent instance data on and off (the only tunable; evaluations every 20 frames in blocks of 8): City Lab walk (45
+  of 93 frames off, 48 maps), Stress Lab temporal (64 frames off): **0 differing pixels, 0 mismatches**. With the
+  Khronos validation layer, async compute, persistent instance data and autotune: Lights Lab walk, 0 differing pixels,
+  no validation message.
 
 ## Result
 
