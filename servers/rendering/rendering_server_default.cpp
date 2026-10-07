@@ -122,7 +122,9 @@ void RenderingServerDefault::_draw(bool p_swap_buffers, double frame_step) {
 	}
 
 	GodotProfileZoneGrouped(_profile_zone, "viewport->draw_viewports");
+	Fellow::autotune_frame_begin();
 	RSG::viewport->draw_viewports(p_swap_buffers);
+	Fellow::autotune_frame_end();
 
 	GodotProfileZoneGrouped(_profile_zone, "canvas_render->update");
 	RSG::canvas_render->update();
@@ -166,6 +168,8 @@ void RenderingServerDefault::_draw(bool p_swap_buffers, double frame_step) {
 
 			if (name.begins_with("vp_")) {
 				RSG::viewport->handle_timestamp(name, time_cpu, time_gpu);
+			} else if (name.begins_with("<") || name.begins_with(">")) {
+				Fellow::autotune_timestamp(name, time_gpu);
 			}
 
 			if (RSG::utilities->capturing_timestamps) {

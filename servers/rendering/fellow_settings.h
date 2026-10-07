@@ -33,6 +33,7 @@
 
 #include "core/config/project_settings.h"
 #include "core/templates/safe_refcount.h"
+#include "servers/rendering/fellow_autotune.h"
 
 // FellowEngine runtime feature toggles.
 //
@@ -207,7 +208,7 @@ inline bool shadow_pcss_blend_band() {
 // proves that a PCSS search / PCF filter region is fully lit (stock would return 1) or fully shadowed (0), in which
 // case the taps are skipped. The pyramid is brought up to date over the atlas rects written each frame.
 inline bool shadow_directional_max_mip() {
-	return shadows_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/shadows/directional_max_mip");
+	return shadows_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/shadows/directional_max_mip") && autotune_allows(TUNE_DIRECTIONAL_PYRAMID);
 }
 
 // Directional pyramid: only the windows over the part of each cascade the camera can look up are computed from the
@@ -220,7 +221,7 @@ inline bool shadow_max_mip_visible_region() {
 // Positional (omni, spot) shadow PCF early-out (exact): a min/max window pyramid of the positional shadow atlas proves
 // that the filter region is fully lit or fully shadowed, in which case the taps are skipped (decision 0005).
 inline bool shadow_positional_max_mip() {
-	return shadows_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/shadows/positional_max_mip");
+	return shadows_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/shadows/positional_max_mip") && autotune_allows(TUNE_POSITIONAL_PYRAMID);
 }
 
 // PCSS of directional lights: penumbra radius = light angular size x (receiver - blocker distance), the parallel-light
@@ -556,6 +557,9 @@ struct Stats {
 	SafeNumeric<uint64_t> frame_plan_lists; // draw lists replayed from the frame plan (frame/replay_frame_plan)
 	SafeNumeric<uint64_t> frame_plan_segments; // their segments
 	SafeNumeric<uint64_t> frame_plan_wait_nsec; // time the render thread spent at those lists until their segments were done
+	SafeNumeric<uint64_t> autotune_evals; // autotune evaluations finished (decision 0020)
+	SafeNumeric<uint64_t> autotune_flips; // evaluations that changed a choice
+	SafeNumeric<uint64_t> autotune_off_frames; // frames x tunables that ran with the optimization off
 	SafeNumeric<uint64_t> cpu_hot_waits; // low-power waits of idle hot workers (cpu/hot_workers_wait, CPUs with WAITPKG)
 };
 

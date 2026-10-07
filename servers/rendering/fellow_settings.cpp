@@ -108,6 +108,10 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/frame/submit_thread", true);
 	GLOBAL_DEF("rendering/fellow/frame/parallel_replay", true);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/frame/replay_max_segments", PROPERTY_HINT_RANGE, "2,64,1"), 12);
+	GLOBAL_DEF("rendering/fellow/autotune/enabled", false);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/autotune/block_frames", PROPERTY_HINT_RANGE, "8,120,1"), 16);
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/autotune/min_gain_percent", PROPERTY_HINT_RANGE, "0,10,0.1"), 0.5);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/autotune/interval_frames", PROPERTY_HINT_RANGE, "20,100000,1"), 600);
 	GLOBAL_DEF("rendering/fellow/frame/replay_frame_plan", false);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/frame/replay_plan_min_draws", PROPERTY_HINT_RANGE, "1,4096,1"), 16);
 	GLOBAL_DEF_RST("rendering/fellow/frame/separate_present_queue", false);
@@ -214,6 +218,9 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["frame_plan_lists"] = s.frame_plan_lists.get();
 	d["frame_plan_segments"] = s.frame_plan_segments.get();
 	d["frame_plan_wait_nsec"] = s.frame_plan_wait_nsec.get();
+	d["autotune_evals"] = s.autotune_evals.get();
+	d["autotune_flips"] = s.autotune_flips.get();
+	d["autotune_off_frames"] = s.autotune_off_frames.get();
 	d["cpu_hot_waits"] = s.cpu_hot_waits.get();
 	d["cpu_waitpkg"] = fellow_waitpkg_supported() ? 1 : 0;
 	return d;
