@@ -1,6 +1,6 @@
 # 0021 — Instance data buffers in system memory
 
-Status: **MEASURING** · Branch `fellow/geometry` · Toggle `rendering/fellow/cpu/instance_buffer_memory` (runtime: 0
+Status: **REJECT** (option kept, off) · Branch `fellow/geometry` · Toggle `rendering/fellow/cpu/instance_buffer_memory` (runtime: 0
 stock, 1 system memory, 2 system memory cached; default 0 until measured) · Code: `multi_uma_buffer.h`
 (`fellow_set_memory`), `rendering_device.{h,cpp}` and `rendering_device_driver.h` (creation and usage bits),
 `drivers/vulkan/rendering_device_driver_vulkan.cpp` (`buffer_create`), `render_forward_clustered.cpp`
@@ -54,6 +54,18 @@ The writes get twice as fast in system memory, but the GPU reads the instance da
 costs the GPU about as much as the render thread saves. The data has to stay in device memory and be written less:
 decision 0022 (persistent instance data).
 
+Between processes (`fellow64`, ABBA, `m4_f67_*_mem`, 2026-10-07 09:42-10:50; reference: mode 0):
+
+| scene | 1 (system memory) | 2 (cached) |
+|---|---:|---:|
+| City Lab (4 runs) | +0.3 % (n.s.) | +1.0 % (n.s., 0/4) |
+| draw-heavy City Lab (4 runs) | −1.9 % (p 0.09, 3/4) | −0.8 % (n.s.) |
+| Bistro exterior (3 runs) | +1.4 % (n.s., 0/3; GPU +1.6 %) | +1.1 % (n.s.; GPU +1.2 %) |
+| Bistro interior (3 runs) | +0.3 % (n.s.) | −0.3 % (n.s.) |
+| Sponza (3 runs) | +0.5 % (n.s.) | −1.1 % (n.s., 3/3) |
+
 ## Decision
 
-(pending)
+**REJECT (kept as an option, off)**: exact, but what the render thread saves the GPU spends reading the data over PCIe;
+only the CPU-bound draw-heavy City Lab gains (−1.9 %), the GPU-bound scenes lose up to 1.4 %. The way forward is to write
+less (decision 0022, persistent instance data, which keeps the data in device memory).
