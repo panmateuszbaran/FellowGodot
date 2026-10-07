@@ -68,7 +68,23 @@ pixel-identical whatever the tuner chooses.
 
 ## Result
 
-(to be measured: `fellow61`)
+`fellow61` (the two pyramids only; no early end of evaluations yet), between processes (ABBA; `m4_f64_*_auto`,
+2026-10-07 05:00-06:10; reference: the defaults, autotune off):
+
+| scene | autotune | directional pyramid off | autotune's choice (evaluations, frames with a pyramid off / all) |
+|---|---:|---:|---|
+| City Lab (4 runs) | **−4.4 %** frame (4/4), −5.1 % GPU | −4.5 % | pyramid off after the second evaluation (11 evaluations, 18 318 / 19 873) |
+| draw-heavy City Lab (4 runs) | **−2.9 %** (p 0.01, 4/4), −3.4 % GPU | −2.6 % | off (9 evaluations, 17 726 / 18 072) |
+| Sponza (3 runs) | −0.1 % (n.s.) | (+14 %, milestone 3) | kept on (6 evaluations, 576 / 7 685) |
+| Bistro exterior (3 runs) | +0.5 % (n.s., 1/3) | | kept on (8 evaluations, 768 / 12 084) |
+| Bistro interior (3 runs) | +0.4 % (n.s., 1/3) | | kept on (768 / 14 478) |
+| Lights Lab (3 runs) | +1.0 % (n.s., 0/3) | | kept on (768 / 14 490) |
+| PBR Lab (3 runs) | −1.2 % (n.s., 2/3) | | off (10 394-14 700 / 14 550-16 351) |
+
+Autotune reaches the better static choice in both City Lab variants and keeps the pyramid where it pays. What it costs
+where the pyramid stays on is its evaluations: 5-6 % of a 30-second run's frames ran with a pyramid off (the first
+evaluations come early and the interval only grows to 9600 frames), +0.4 to +1.0 % in Bistro and the Lights Lab, none
+of it significant in three runs. The early end of an evaluation (`f3ea954`) shortens exactly those evaluations.
 
 ## Decision
 
