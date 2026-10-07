@@ -30,6 +30,8 @@
 
 #include "luminance.h"
 
+#include "servers/rendering/fellow_settings.h"
+
 #include "servers/rendering/renderer_rd/framebuffer_cache_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
 #include "servers/rendering/renderer_rd/uniform_set_cache_rd.h"
@@ -57,12 +59,16 @@ Luminance::Luminance(bool p_prefer_raster_effects) {
 		luminance_reduce_modes.push_back("\n#define READ_TEXTURE\n");
 		luminance_reduce_modes.push_back("\n");
 		luminance_reduce_modes.push_back("\n#define WRITE_LUMINANCE\n");
+		luminance_reduce_modes.push_back("\n#define READ_TEXTURE\n#define FELLOW_FAST_REDUCE\n");
+		luminance_reduce_modes.push_back("\n#define FELLOW_FAST_REDUCE\n");
+		luminance_reduce_modes.push_back("\n#define WRITE_LUMINANCE\n#define FELLOW_FAST_REDUCE\n");
 
 		luminance_reduce.shader.initialize(luminance_reduce_modes);
 		luminance_reduce.shader_version = luminance_reduce.shader.version_create();
 
 		for (int i = 0; i < LUMINANCE_REDUCE_MAX; i++) {
 			luminance_reduce.pipelines[i] = RD::get_singleton()->compute_pipeline_create(luminance_reduce.shader.version_get_shader(luminance_reduce.shader_version, i));
+			luminance_reduce.fellow_fast_pipelines[i] = RD::get_singleton()->compute_pipeline_create(luminance_reduce.shader.version_get_shader(luminance_reduce.shader_version, LUMINANCE_REDUCE_MAX + i));
 		}
 
 		for (int i = 0; i < LUMINANCE_REDUCE_FRAGMENT_MAX; i++) {
@@ -211,6 +217,7 @@ void Luminance::luminance_reduction(RID p_source_texture, const Size2i p_source_
 		push_constant.exposure_adjust = p_adjust;
 
 		RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
+		const bool fellow_fast = Fellow::fast_luminance_reduce(); // decision 0025
 
 		for (int i = 0; i < p_luminance_buffers->reduce.size(); i++) {
 			RID shader;
@@ -219,7 +226,7 @@ void Luminance::luminance_reduction(RID p_source_texture, const Size2i p_source_
 				shader = luminance_reduce.shader.version_get_shader(luminance_reduce.shader_version, LUMINANCE_REDUCE_READ);
 				RD::Uniform u_source_texture(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 0, Vector<RID>({ default_sampler, p_source_texture }));
 
-				RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, luminance_reduce.pipelines[LUMINANCE_REDUCE_READ]);
+				RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, (fellow_fast ? luminance_reduce.fellow_fast_pipelines : luminance_reduce.pipelines)[LUMINANCE_REDUCE_READ]);
 				RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache(shader, 0, u_source_texture), 0);
 			} else {
 				RD::get_singleton()->compute_list_add_barrier(compute_list); //needs barrier, wait until previous is done
@@ -228,11 +235,11 @@ void Luminance::luminance_reduction(RID p_source_texture, const Size2i p_source_
 					shader = luminance_reduce.shader.version_get_shader(luminance_reduce.shader_version, LUMINANCE_REDUCE_WRITE);
 					RD::Uniform u_current_texture(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 0, Vector<RID>({ default_sampler, p_luminance_buffers->current }));
 
-					RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, luminance_reduce.pipelines[LUMINANCE_REDUCE_WRITE]);
+					RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, (fellow_fast ? luminance_reduce.fellow_fast_pipelines : luminance_reduce.pipelines)[LUMINANCE_REDUCE_WRITE]);
 					RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache(shader, 2, u_current_texture), 2);
 				} else {
 					shader = luminance_reduce.shader.version_get_shader(luminance_reduce.shader_version, LUMINANCE_REDUCE);
-					RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, luminance_reduce.pipelines[LUMINANCE_REDUCE]);
+					RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, (fellow_fast ? luminance_reduce.fellow_fast_pipelines : luminance_reduce.pipelines)[LUMINANCE_REDUCE]);
 				}
 
 				RD::Uniform u_source_texture(RD::UNIFORM_TYPE_IMAGE, 0, p_luminance_buffers->reduce[i - 1]);

@@ -9,6 +9,9 @@
 layout(local_size_x = BLOCK_SIZE, local_size_y = BLOCK_SIZE, local_size_z = 1) in;
 
 shared float tmp_data[BLOCK_SIZE * BLOCK_SIZE];
+#ifdef FELLOW_FAST_REDUCE
+shared float fellow_partial[8];
+#endif
 
 #ifdef READ_TEXTURE
 
@@ -55,6 +58,22 @@ void main() {
 	groupMemoryBarrier();
 	barrier();
 
+#ifdef FELLOW_FAST_REDUCE
+	// FellowEngine (postfx/fast_luminance_reduce, docs/decisions/0025-luminance-reduce.md): the tree below (index t
+	// += index t + size, size 32, 16, ..., 1), the same additions on the same operands, with two barriers instead of
+	// six: eight threads compute what the tree holds at indices 0-7 after its steps 32, 16 and 8, the first thread its
+	// steps 4, 2 and 1.
+	if (t < 8u) {
+		const float lo = (tmp_data[t] + tmp_data[t + 32u]) + (tmp_data[t + 16u] + tmp_data[t + 48u]);
+		const float hi = (tmp_data[t + 8u] + tmp_data[t + 40u]) + (tmp_data[t + 24u] + tmp_data[t + 56u]);
+		fellow_partial[t] = lo + hi;
+	}
+	groupMemoryBarrier();
+	barrier();
+	if (t == 0) {
+		tmp_data[0] = ((fellow_partial[0] + fellow_partial[4]) + (fellow_partial[2] + fellow_partial[6])) + ((fellow_partial[1] + fellow_partial[5]) + (fellow_partial[3] + fellow_partial[7]));
+	}
+#else
 	uint size = (BLOCK_SIZE * BLOCK_SIZE) >> 1;
 
 	do {
@@ -66,6 +85,7 @@ void main() {
 
 		size >>= 1;
 	} while (size >= 1);
+#endif
 
 	if (t == 0) {
 		//compute rect size

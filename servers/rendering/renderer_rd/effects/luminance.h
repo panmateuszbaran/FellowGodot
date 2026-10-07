@@ -62,6 +62,7 @@ private:
 		LuminanceReduceShaderRD shader;
 		RID shader_version;
 		RID pipelines[LUMINANCE_REDUCE_MAX];
+		RID fellow_fast_pipelines[LUMINANCE_REDUCE_MAX]; // FellowEngine postfx/fast_luminance_reduce (shader versions 3-5)
 	} luminance_reduce;
 
 	enum LuminanceReduceRasterMode {

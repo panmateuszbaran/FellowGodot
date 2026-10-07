@@ -9,7 +9,7 @@ gathers' dispatch), `fellow_settings.*`.
 
 SSAO is the most expensive screen-space effect in every benchmark scene: removing it saves 0.50-0.72 ms of GPU time
 per frame at 1080p (`m5_f69_sizing`: Bistro exterior 0.50, Sponza 0.54, Bistro interior 0.62, City Lab 0.62, Lights
-Lab 0.68, PBR Lab 0.72 ms; 19-35 % of the GPU frame in the labs and City Lab), most of it the gather ("Process SSAO",
+Lab 0.68, PBR Lab 0.72 ms; 25-35 % of the GPU frame in the labs and City Lab), most of it the gather ("Process SSAO",
 0.32-0.46 ms). SSIL, where it is on, costs 0.32-0.49 ms (Bistro, Sponza).
 
 The gather (Intel's ASSAO, as stock ports it) works on four deinterleaved layers; each pixel takes 12 pairs of depth

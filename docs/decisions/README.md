@@ -63,3 +63,4 @@ Status: KEEP | REWORK | REJECT | MEASURING      Branch / commit: ...      Toggle
 | [0022](0022-persistent-instance-data.md) | Persistent instance data: one entry per surface kept in device memory and rewritten only when its instance changed; 16-byte list elements per frame | `cpu/persistent_instances` | MEASURING |
 | [0023](0023-taa-tile16.md) | TAA resolve in 16 × 16 workgroups, every thread loading the shared tile | `postfx/taa_tile16` | REJECT (option, off: TAA pass +0.006 to +0.021 ms) |
 | [0024](0024-coherent-gather.md) | SSAO and SSIL gathers with one sample rotation per workgroup (threads remapped, every pixel computed as before) | `postfx/ss_coherent_gather` | REJECT (option, off: SSAO gather +0.016 to +0.066 ms) |
+| [0025](0025-luminance-reduce.md) | Auto exposure: the luminance reduction with two barriers per workgroup instead of seven (the same additions) | `postfx/fast_luminance_reduce` | MEASURING |

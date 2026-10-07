@@ -68,6 +68,12 @@ inline bool ss_coherent_gather() {
 	return postfx_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/postfx/ss_coherent_gather");
 }
 
+// The auto exposure's luminance reduction with two barriers per workgroup instead of seven (the same additions in the
+// same order; docs/decisions/0025-luminance-reduce.md). Read every frame.
+inline bool fast_luminance_reduce() {
+	return postfx_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/postfx/fast_luminance_reduce");
+}
+
 // TAA motion vectors of static geometry from the depth buffer and the camera matrices (a full-screen pass after the
 // opaque pass, as stock does for MetalFX), moving geometry in a separate motion pass; the opaque pass then draws its
 // static surfaces without the previous-frame vertex transform and the velocity target. Decision 0013.
