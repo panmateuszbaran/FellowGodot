@@ -1,6 +1,6 @@
 # 0024 — SSAO and SSIL gathers with one sample rotation per workgroup
 
-Status: **MEASURING** · Branch `fellow/postfx` · Toggle `rendering/fellow/postfx/ss_coherent_gather` (runtime, default
+Status: **REJECT** (option kept, off) · Branch `fellow/postfx` · Toggle `rendering/fellow/postfx/ss_coherent_gather` (runtime, default
 off until measured) · Code: `shaders/effects/ssao.glsl`, `shaders/effects/ssil.glsl` (`FELLOW_COHERENT_GATHER`),
 `effects/ss_effects.{h,cpp}` (gather variants, `_fellow_ssao_gather_pipeline()`, `_fellow_ssil_gather_pipeline()`, the
 gathers' dispatch), `fellow_settings.*`.
@@ -43,10 +43,25 @@ written exactly once, as before. (The shared tile of decision 0011 maps threads 
   (SSAO low, half size; SSIL high, full size): **0 differing pixels**; 728, 1488 and 1688 coherent gather dispatches
   (`postfx_coherent_gathers`).
 
+RTX (`fellow69`, `m5_f71_temporal`, off vs on): Bistro exterior bit-identical (99 dB), City Lab, Lights Lab and Sponza
+at their run-to-run floor (max |d| 1, 2, 3; no pixel above 2); 500-1000 coherent dispatches per sequence.
+
 ## Result
 
-(pending)
+In one process (`m5_f71_cg_ab`, blocks of 30 frames; GPU time of the passes, off → on):
+
+| scene | Process SSAO | Process SSIL | GPU time | frame |
+|---|---:|---:|---:|---:|
+| City Lab | 0.372 → 0.388 ms (+0.016) | | +1.8 % | +1.2 % |
+| Lights Lab | 0.344 → 0.370 ms (+0.026) | | +1.4 % | +1.3 % |
+| Bistro exterior | 0.347 → 0.344 ms (−0.003) | 0.202 → 0.196 ms (−0.006) | −0.4 % | −0.4 % |
+| Sponza | 0.384 → 0.450 ms (+0.066) | 0.284 → 0.277 ms (−0.006) | +1.0 % | +0.9 % |
+
+The SSAO gather gets slower, up to 17 % (Sponza), SSIL's a little faster: the taps' spread over five rotations is not
+what limits the gather. Probably (not measured) the wider footprint costs more than the taps gain: each warp's pixels
+now span 20 × 8 pixels of the layer instead of 8 × 4, so its own depths and normal loads (five full-resolution normal
+texels per pixel) touch more cache lines.
 
 ## Decision
 
-(pending)
+**REJECT (kept as an option, off).** Exact, but slower for SSAO in three of four scenes.
