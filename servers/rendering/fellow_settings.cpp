@@ -220,6 +220,7 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["frame_plan_wait_nsec"] = s.frame_plan_wait_nsec.get();
 	d["autotune_evals"] = s.autotune_evals.get();
 	d["autotune_flips"] = s.autotune_flips.get();
+	d["autotune_early"] = s.autotune_early.get();
 	d["autotune_off_frames"] = s.autotune_off_frames.get();
 	d["cpu_hot_waits"] = s.cpu_hot_waits.get();
 	d["cpu_waitpkg"] = fellow_waitpkg_supported() ? 1 : 0;

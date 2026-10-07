@@ -54,6 +54,9 @@ constexpr uint32_t AUTOTUNE_LATENCY = 8; // frames after an evaluation's last fr
 // evaluation after 40 % of it (start-up compilations, caches).
 constexpr uint32_t AUTOTUNE_INTERVAL_GROWTH = 16;
 constexpr double AUTOTUNE_T = 2.5; // the pairs' differences must be this many standard errors from zero
+constexpr uint32_t AUTOTUNE_EARLY_PAIRS = 3; // an evaluation may end after this many pairs if the difference is clear:
+constexpr double AUTOTUNE_EARLY_GAIN = 0.03; // at least 3 % of the GPU time
+constexpr double AUTOTUNE_EARLY_T = 4.0; // and 4 standard errors
 
 struct TuneState {
 	bool choice = true; // the decision outside evaluations
@@ -97,14 +100,20 @@ bool tunable_applies(Tunable p_tunable) {
 	}
 }
 
-void decide(TuneState &s) {
-	// Per pair: GPU time with the tunable off minus on (positive: it saves time).
+struct Analysis {
+	uint32_t pairs = 0;
+	double mean = 0.0; // GPU ms, off minus on (positive: the optimization saves time)
+	double se = 0.0;
+	double base = 0.0; // GPU ms with the optimization on
+};
+
+Analysis analyze(const TuneState &s, uint32_t p_pairs) {
+	// Per pair: GPU time with the tunable off minus on.
 	double diffs[AUTOTUNE_PAIRS];
-	uint32_t m = 0;
+	Analysis r;
 	double on_sum = 0.0;
-	uint32_t on_n = 0;
 	const uint32_t min_n = s.block_frames > AUTOTUNE_SKIP + 2 ? s.block_frames - AUTOTUNE_SKIP - 2 : 1;
-	for (uint32_t p = 0; p < AUTOTUNE_PAIRS; p++) {
+	for (uint32_t p = 0; p < p_pairs; p++) {
 		const uint32_t a = 2 * p, b = 2 * p + 1;
 		if (s.block_n[a] < min_n || s.block_n[b] < min_n) {
 			continue;
@@ -113,41 +122,76 @@ void decide(TuneState &s) {
 		const double mean_b = s.block_sum[b] / s.block_n[b];
 		const double on = block_on(a) ? mean_a : mean_b;
 		const double off = block_on(a) ? mean_b : mean_a;
-		diffs[m++] = off - on;
+		diffs[r.pairs++] = off - on;
 		on_sum += on;
-		on_n++;
 	}
-	bool new_choice = s.choice;
-	if (m >= AUTOTUNE_PAIRS - 1 && on_n > 0) {
-		double mean = 0.0;
-		for (uint32_t i = 0; i < m; i++) {
-			mean += diffs[i];
-		}
-		mean /= m;
+	if (r.pairs == 0) {
+		return r;
+	}
+	for (uint32_t i = 0; i < r.pairs; i++) {
+		r.mean += diffs[i];
+	}
+	r.mean /= r.pairs;
+	if (r.pairs > 1) {
 		double var = 0.0;
-		for (uint32_t i = 0; i < m; i++) {
-			var += (diffs[i] - mean) * (diffs[i] - mean);
+		for (uint32_t i = 0; i < r.pairs; i++) {
+			var += (diffs[i] - r.mean) * (diffs[i] - r.mean);
 		}
-		var /= (m - 1);
-		const double se = std::sqrt(var / m);
-		const double base = on_sum / on_n;
-		const double min_gain = MAX(0.0, (double)GLOBAL_GET_CACHED(float, "rendering/fellow/autotune/min_gain_percent")) * 0.01 * base;
-		if (std::fabs(mean) > min_gain && (se <= 0.0 || std::fabs(mean) >= AUTOTUNE_T * se)) {
-			new_choice = mean > 0.0;
-		}
+		r.se = std::sqrt(var / (r.pairs - 1) / r.pairs);
 	}
-	print_verbose(vformat("FellowEngine autotune: decide frame %d start %d block %d pairs %d choice %d->%d n0 %d n1 %d", (int64_t)frame_id, (int64_t)s.eval_start, (int)s.block_frames, (int)m, (int)s.choice, (int)new_choice, (int)s.block_n[0], (int)s.block_n[1]));
+	r.base = on_sum / r.pairs;
+	return r;
+}
+
+void finish(TuneState &s, bool p_new_choice, const Analysis &p_analysis, bool p_early) {
+	print_verbose(vformat("FellowEngine autotune: evaluation from frame %d ends at frame %d%s: %d pairs, on %.3f ms, off - on %.4f ms (se %.4f), choice %s -> %s", (int64_t)s.eval_start, (int64_t)frame_id, p_early ? " (early)" : "", (int)p_analysis.pairs, p_analysis.base, p_analysis.mean, p_analysis.se, s.choice ? "on" : "off", p_new_choice ? "on" : "off"));
 	stats().autotune_evals.increment();
+	if (p_early) {
+		stats().autotune_early.increment();
+	}
 	const uint32_t base = (uint32_t)MAX(1, GLOBAL_GET_CACHED(int, "rendering/fellow/autotune/interval_frames"));
-	if (new_choice != s.choice) {
+	if (p_new_choice != s.choice) {
 		stats().autotune_flips.increment();
 		s.interval = base;
 	} else {
 		s.interval = MIN(MAX(s.interval, base) * 2, base * AUTOTUNE_INTERVAL_GROWTH);
 	}
-	s.choice = new_choice;
+	s.choice = p_new_choice;
 	s.evaluating = false;
 	s.next_eval = frame_id + s.interval;
+}
+
+void decide(TuneState &s) {
+	const Analysis r = analyze(s, AUTOTUNE_PAIRS);
+	bool new_choice = s.choice;
+	if (r.pairs >= AUTOTUNE_PAIRS - 1) {
+		const double min_gain = MAX(0.0, (double)GLOBAL_GET_CACHED(float, "rendering/fellow/autotune/min_gain_percent")) * 0.01 * r.base;
+		if (std::fabs(r.mean) > min_gain && (r.se <= 0.0 || std::fabs(r.mean) >= AUTOTUNE_T * r.se)) {
+			new_choice = r.mean > 0.0;
+		}
+	}
+	finish(s, new_choice, r, false);
+}
+
+bool try_decide_early(TuneState &s) {
+	// A clear difference ends the evaluation after AUTOTUNE_EARLY_PAIRS pairs (fewer frames run the slower way when the
+	// optimization matters most).
+	uint32_t ready = 0;
+	while (ready < AUTOTUNE_PAIRS && frame_id > s.eval_start + (2 * ready + 2) * s.block_frames + AUTOTUNE_LATENCY) {
+		ready++;
+	}
+	if (ready < AUTOTUNE_EARLY_PAIRS || ready >= AUTOTUNE_PAIRS) {
+		return false;
+	}
+	const Analysis r = analyze(s, ready);
+	if (r.pairs < AUTOTUNE_EARLY_PAIRS || r.base <= 0.0) {
+		return false;
+	}
+	if (std::fabs(r.mean) >= AUTOTUNE_EARLY_GAIN * r.base && r.se > 0.0 && std::fabs(r.mean) >= AUTOTUNE_EARLY_T * r.se) {
+		finish(s, r.mean > 0.0, r, true);
+		return true;
+	}
+	return false;
 }
 
 } // namespace
@@ -188,6 +232,8 @@ void autotune_frame_begin() {
 		}
 		if (s.evaluating && frame_id > s.eval_start + AUTOTUNE_BLOCKS * s.block_frames + AUTOTUNE_LATENCY) {
 			decide(s);
+		} else if (s.evaluating) {
+			try_decide_early(s);
 		}
 		if (s.evaluating) {
 			evaluating = t;

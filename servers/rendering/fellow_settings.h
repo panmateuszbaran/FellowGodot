@@ -559,6 +559,7 @@ struct Stats {
 	SafeNumeric<uint64_t> frame_plan_wait_nsec; // time the render thread spent at those lists until their segments were done
 	SafeNumeric<uint64_t> autotune_evals; // autotune evaluations finished (decision 0020)
 	SafeNumeric<uint64_t> autotune_flips; // evaluations that changed a choice
+	SafeNumeric<uint64_t> autotune_early; // evaluations ended early (a clear difference after 3 pairs)
 	SafeNumeric<uint64_t> autotune_off_frames; // frames x tunables that ran with the optimization off
 	SafeNumeric<uint64_t> cpu_hot_waits; // low-power waits of idle hot workers (cpu/hot_workers_wait, CPUs with WAITPKG)
 };
