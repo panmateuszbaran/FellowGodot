@@ -1096,19 +1096,20 @@ void RenderForwardClustered::_fellow_persistent_reserve() {
 }
 
 void RenderForwardClustered::_fellow_persistent_check(GeometryInstanceSurfaceDataCache *p_surface, const GeometryInstanceForwardClustered *p_inst, uint64_t p_frame) {
-	// Any thread; the first element of the frame that uses the surface compares its entry with what the GPU holds (a
-	// read first: the later elements of the frame, often in other threads' shadow passes, do not write the line).
-	if (p_surface->fellow_checked_frame.load(std::memory_order_relaxed) == p_frame || p_surface->fellow_checked_frame.exchange(p_frame, std::memory_order_relaxed) == p_frame) {
-		return;
-	}
+	// Any thread. The entry is current if it was built from the instance's current version (the instance's setters and
+	// the previous transform's update change the version; a new mesh or material makes new surface caches, with new
+	// entries): the common case only reads, so the surface's cache line stays shared between the threads that use it.
 	FellowPersistent &p = fellow_persistent;
 	const uint32_t slot = p_surface->fellow_slot;
-	// Unchanged since its entry was last built (the instance's setters and the previous transform's update change the
-	// version; a new mesh or material makes new surface caches, with new entries).
-	if (p.valid[slot] && p_surface->fellow_seen_version == p_inst->fellow_data_version) {
+	const uint64_t version = p_inst->fellow_data_version;
+	if (p_surface->fellow_seen_version.load(std::memory_order_relaxed) == version && p.valid[slot]) {
 		return;
 	}
-	p_surface->fellow_seen_version = p_inst->fellow_data_version;
+	// Changed: the first element of the frame that meets it rebuilds the entry (an exchange of the frame number).
+	if (p_surface->fellow_checked_frame.exchange(p_frame, std::memory_order_relaxed) == p_frame) {
+		return;
+	}
+	p_surface->fellow_seen_version.store(version, std::memory_order_relaxed);
 	SceneState::InstanceData data;
 	_fellow_make_instance_data(p_surface, p_inst, data, true);
 	// Set per element, not kept in the entry (the shader reads them from the element).
@@ -1371,10 +1372,6 @@ void RenderForwardClustered::_fill_instance_data(RenderListType p_render_list, i
 		if (Fellow::cpu_verify()) {
 			_fellow_verify_count(persistent ? _fellow_verify_elements(p_render_list, p_offset, element_total, nullptr) : _fellow_verify_instances(p_render_list, p_offset, element_total, nullptr, false));
 		}
-		if (persistent) {
-			_fellow_persistent_flush();
-		}
-
 		if (p_update_buffer && element_total > 0u) {
 			RenderingDevice::get_singleton()->buffer_flush(scene_state.instance_buffer[p_render_list]._get(0u));
 		}
@@ -1434,10 +1431,6 @@ void RenderForwardClustered::_fill_instance_data(RenderListType p_render_list, i
 		for (uint32_t j = 1; j <= repeats; j++) {
 			rl->element_info[p_offset + element_total - j].repeat = j;
 		}
-	}
-
-	if (persistent) {
-		_fellow_persistent_flush();
 	}
 
 	if (p_update_buffer && element_total > 0u) {
@@ -4520,10 +4513,6 @@ void RenderForwardClustered::_fellow_shadow_flush() {
 		}
 	}
 
-	if (persistent) {
-		_fellow_persistent_flush();
-	}
-
 	if (Fellow::cpu_verify()) {
 		// Stock's lists, pass by pass: its fill (into a scratch list; it writes the instances' and surfaces' per-pass
 		// state as stock does), its sort, then instance data and runs compared with the batched results.
@@ -5217,6 +5206,12 @@ RID RenderForwardClustered::_setup_render_pass_uniform_set(RenderListType p_rend
 
 	//default render buffer and scene state uniform set
 
+	// Persistent instance data (decision 0022): the entries queued by the lists filled since the last flush are uploaded
+	// before the draws that use this uniform set are recorded (one dispatch for all of them).
+	if (fellow_persistent.active) {
+		_fellow_persistent_flush();
+	}
+
 	thread_local LocalVector<RD::Uniform> uniforms;
 	uniforms.clear();
 
@@ -5624,6 +5619,9 @@ RID RenderForwardClustered::_setup_render_pass_uniform_set(RenderListType p_rend
 
 RID RenderForwardClustered::_setup_sdfgi_render_pass_uniform_set(RID p_albedo_texture, RID p_emission_texture, RID p_emission_aniso_texture, RID p_geom_facing_texture, const RendererRD::MaterialStorage::Samplers &p_samplers, uint32_t p_uniform_buffer_index) {
 	RendererRD::TextureStorage *texture_storage = RendererRD::TextureStorage::get_singleton();
+	if (fellow_persistent.active) {
+		_fellow_persistent_flush(); // see _setup_render_pass_uniform_set()
+	}
 	thread_local LocalVector<RD::Uniform> uniforms;
 	uniforms.clear();
 
@@ -6111,7 +6109,7 @@ void RenderForwardClustered::_geometry_instance_add_surface_with_material(Geomet
 
 	sdcache->flags = flags;
 	sdcache->fellow_slot = _fellow_slot_alloc();
-	sdcache->fellow_seen_version = 0;
+	sdcache->fellow_seen_version.store(0, std::memory_order_relaxed);
 	sdcache->fellow_checked_frame.store(0, std::memory_order_relaxed);
 
 	sdcache->shader = p_material->shader_data;
