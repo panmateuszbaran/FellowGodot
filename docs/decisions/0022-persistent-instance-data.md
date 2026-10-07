@@ -28,8 +28,11 @@ PCIe: in one process, City Lab render thread −4.3 %, GPU time +2.6 % (pre-pass
 * The per-frame instance buffers hold one 16-byte element per list element instead: the slot, the flags and the GI
   offset that element's pass gave it (exactly what stock would write there).
 * The first list element of a frame that uses a surface (any thread; an atomic exchange of the frame number on the
-  surface) builds the entry as stock builds the element's data and compares it with the CPU copy; a changed entry is
-  copied and queued. Before a list's draws are recorded, the queued entries are uploaded (one buffer update and one
+  surface, after a plain read so that later elements do not write the line) checks its entry. The instance carries a
+  version (`fellow_data_version`, changed by every setter of a field the entry holds and by the frame's update of the
+  previous transform); if the entry was built from the current version it is current. Otherwise the entry is built as
+  stock builds the element's data and compared with the CPU copy; a changed entry is copied and queued. (A new mesh,
+  material or other change that makes new surface caches gives them new entries.) Before a list's draws are recorded, the queued entries are uploaded (one buffer update and one
   scatter dispatch, 44 words per entry); the render graph orders the dispatch after the previous frame's reads.
 * The scene shader (behind a specialization bit, so pipelines without it are unchanged) reads the element in the vertex
   and fragment stages (`fellow_element_init()`), then every other field from the entry (`FELLOW_INSTANCE()`); the flags
@@ -52,6 +55,8 @@ compares it with the entry and the element (`_fellow_verify_elements`).
 * lavapipe, off vs on with `cpu/verify` on the "on" side: City Lab captures (1.5 million elements, 26 887 entries
   uploaded, 548 checks), Lights Lab walk (60 frames), Stress Lab temporal (120 frames: moving instances, a
   vertex-animated surface; 5349 checks), PBR Lab (7 cameras): **0 differing pixels, 0 mismatches**.
+* lavapipe, with the version check: City Lab walk (60 frames, the carts moving; 34 421 entries uploaded, 559 checks):
+  **0 differing pixels, 0 mismatches**.
 * lavapipe with the Khronos validation layer, async compute created at start-up, persistent instance data and autotune
   evaluating every 20 frames: City Lab captures: 0 differing pixels against async compute off, no validation message.
 

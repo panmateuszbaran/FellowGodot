@@ -110,6 +110,10 @@ public:
 	float force_alpha = 1.0;
 
 	int32_t shader_uniforms_offset = -1;
+	// FellowEngine persistent instance data (decision 0022): changed whenever a field of the instance data kept per
+	// surface from frame to frame may have changed (transform, previous transform, layer mask, lightmap UV scale,
+	// instance uniforms offset, transform storage).
+	uint64_t fellow_data_version = 1;
 
 	struct Data {
 		//data used less often goes into regular heap

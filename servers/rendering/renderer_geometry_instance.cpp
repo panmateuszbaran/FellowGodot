@@ -66,6 +66,7 @@ void RenderGeometryInstanceBase::set_mesh_instance(RID p_mesh_instance) {
 
 void RenderGeometryInstanceBase::set_transform(const Transform3D &p_transform, const AABB &p_aabb, const AABB &p_transformed_aabb) {
 	transform = p_transform;
+	fellow_data_version++;
 	mirror = p_transform.basis.determinant() < 0;
 	data->aabb = p_aabb;
 	transformed_aabb = p_transformed_aabb;
@@ -91,6 +92,7 @@ void RenderGeometryInstanceBase::set_lod_bias(float p_lod_bias) {
 
 void RenderGeometryInstanceBase::set_layer_mask(uint32_t p_layer_mask) {
 	layer_mask = p_layer_mask;
+	fellow_data_version++;
 }
 
 void RenderGeometryInstanceBase::set_fade_range(bool p_enable_near, float p_near_begin, float p_near_end, bool p_enable_far, float p_far_begin, float p_far_end) {
@@ -124,6 +126,7 @@ void RenderGeometryInstanceBase::set_use_dynamic_gi(bool p_enable) {
 
 void RenderGeometryInstanceBase::set_instance_shader_uniforms_offset(int32_t p_offset) {
 	shader_uniforms_offset = p_offset;
+	fellow_data_version++;
 
 	_mark_dirty();
 }

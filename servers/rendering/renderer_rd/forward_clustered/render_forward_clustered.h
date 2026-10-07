@@ -807,6 +807,7 @@ private:
 		// last frame it was checked (the first list element of a frame checks it).
 		uint32_t fellow_slot = UINT32_MAX;
 		std::atomic<uint64_t> fellow_checked_frame{ 0 };
+		uint64_t fellow_seen_version = 0; // the instance's fellow_data_version the entry was last built from
 		SelfList<GeometryInstanceSurfaceDataCache> compilation_dirty_element;
 		SelfList<GeometryInstanceSurfaceDataCache> compilation_all_element;
 

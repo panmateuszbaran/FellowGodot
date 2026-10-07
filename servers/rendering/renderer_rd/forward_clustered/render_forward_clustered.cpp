@@ -1096,12 +1096,19 @@ void RenderForwardClustered::_fellow_persistent_reserve() {
 }
 
 void RenderForwardClustered::_fellow_persistent_check(GeometryInstanceSurfaceDataCache *p_surface, const GeometryInstanceForwardClustered *p_inst, uint64_t p_frame) {
-	// Any thread; the first element of the frame that uses the surface compares its entry with what the GPU holds.
-	if (p_surface->fellow_checked_frame.exchange(p_frame, std::memory_order_relaxed) == p_frame) {
+	// Any thread; the first element of the frame that uses the surface compares its entry with what the GPU holds (a
+	// read first: the later elements of the frame, often in other threads' shadow passes, do not write the line).
+	if (p_surface->fellow_checked_frame.load(std::memory_order_relaxed) == p_frame || p_surface->fellow_checked_frame.exchange(p_frame, std::memory_order_relaxed) == p_frame) {
 		return;
 	}
 	FellowPersistent &p = fellow_persistent;
 	const uint32_t slot = p_surface->fellow_slot;
+	// Unchanged since its entry was last built (the instance's setters and the previous transform's update change the
+	// version; a new mesh or material makes new surface caches, with new entries).
+	if (p.valid[slot] && p_surface->fellow_seen_version == p_inst->fellow_data_version) {
+		return;
+	}
+	p_surface->fellow_seen_version = p_inst->fellow_data_version;
 	SceneState::InstanceData data;
 	_fellow_make_instance_data(p_surface, p_inst, data, true);
 	// Set per element, not kept in the entry (the shader reads them from the element).
@@ -1885,6 +1892,7 @@ void RenderForwardClustered::_fill_render_list_range(const FellowFillParams &p_p
 				r_out.transform_updates->push_back(inst);
 			} else {
 				inst->prev_transform = inst->transform;
+				inst->fellow_data_version++;
 				inst->transform_status = GeometryInstanceForwardClustered::TransformStatus::NONE;
 			}
 		}
@@ -4373,6 +4381,7 @@ void RenderForwardClustered::_fellow_shadow_flush() {
 		for (GeometryInstanceForwardClustered *inst : fellow_shadow_chunks[c].transform_updates) {
 			if (inst->transform_status != GeometryInstanceForwardClustered::TransformStatus::NONE && frame > inst->prev_transform_change_frame && inst->prev_transform_change_frame) {
 				inst->prev_transform = inst->transform;
+				inst->fellow_data_version++;
 				inst->transform_status = GeometryInstanceForwardClustered::TransformStatus::NONE;
 			}
 		}
@@ -6102,6 +6111,7 @@ void RenderForwardClustered::_geometry_instance_add_surface_with_material(Geomet
 
 	sdcache->flags = flags;
 	sdcache->fellow_slot = _fellow_slot_alloc();
+	sdcache->fellow_seen_version = 0;
 	sdcache->fellow_checked_frame.store(0, std::memory_order_relaxed);
 
 	sdcache->shader = p_material->shader_data;
@@ -6412,6 +6422,7 @@ void RenderForwardClustered::_geometry_instance_update(RenderGeometryInstance *p
 	}
 
 	ginstance->store_transform_cache = store_transform;
+	ginstance->fellow_data_version++;
 	ginstance->can_sdfgi = false;
 
 	if (!RendererRD::LightStorage::get_singleton()->lightmap_instance_is_valid(ginstance->lightmap_instance)) {
@@ -6847,6 +6858,7 @@ void RenderForwardClustered::GeometryInstanceForwardClustered::set_transform(con
 
 void RenderForwardClustered::GeometryInstanceForwardClustered::reset_motion_vectors() {
 	prev_transform = transform;
+	fellow_data_version++;
 	transform_status = TransformStatus::TELEPORTED;
 }
 
@@ -6854,6 +6866,7 @@ void RenderForwardClustered::GeometryInstanceForwardClustered::set_use_lightmap(
 	lightmap_instance = p_lightmap_instance;
 	lightmap_uv_scale = p_lightmap_uv_scale;
 	lightmap_slice_index = p_lightmap_slice_index;
+	fellow_data_version++;
 
 	_mark_dirty();
 }
