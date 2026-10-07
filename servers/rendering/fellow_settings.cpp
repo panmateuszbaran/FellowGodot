@@ -80,6 +80,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/lights/zero_attenuation_skip", true);
 	GLOBAL_DEF("rendering/fellow/lights/cluster_pack_parallel", true);
 	GLOBAL_DEF("rendering/fellow/postfx/ssao_shared_tile", false);
+	GLOBAL_DEF("rendering/fellow/postfx/ss_coherent_gather", false);
 	GLOBAL_DEF("rendering/fellow/postfx/taa_camera_motion_vectors", false);
 	GLOBAL_DEF("rendering/fellow/shading/blended_alpha_zero_skip", true);
 	// Render-thread CPU (decisions 0016-0018): on by default since fellow56 (exact: same lists, instance data, draws and
@@ -184,6 +185,7 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["frame_async_uses"] = s.frame_async_uses.get();
 	d["frame_async_conflicts"] = s.frame_async_conflicts.get();
 	d["frame_async_transfers"] = s.frame_async_transfers.get();
+	d["postfx_coherent_gathers"] = s.postfx_coherent_gathers.get();
 	d["cpu_persistent_elements"] = s.cpu_persistent_elements.get();
 	d["cpu_persistent_uploads"] = s.cpu_persistent_uploads.get();
 	d["cpu_persistent_maps"] = s.cpu_persistent_maps.get();

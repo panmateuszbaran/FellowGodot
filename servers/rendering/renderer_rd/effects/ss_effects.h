@@ -318,7 +318,12 @@ private:
 		RID interleave_shader_version;
 
 		PipelineDeferredRD pipelines[SSIL_MAX];
+		// FellowEngine (rendering/fellow/postfx/ss_coherent_gather): the gather variants with one sample rotation per
+		// workgroup, same order as SSIL_GATHER .. SSIL_GATHER_ADAPTIVE (shader versions 3-5).
+		PipelineDeferredRD fellow_coherent_gather_pipelines[3];
+		bool fellow_coherent = false; // the gather pipeline bound for this frame's gathers is the coherent one
 	} ssil;
+	RID _fellow_ssil_gather_pipeline(int p_mode);
 
 	void gather_ssil(RD::ComputeListID p_compute_list, const RID *p_ssil_slices, const RID *p_edges_slices, const SSILSettings &p_settings, bool p_adaptive_base_pass, RID p_gather_uniform_set, RID p_importance_map_uniform_set, RID p_projection_uniform_set);
 
@@ -415,7 +420,11 @@ private:
 		// FellowEngine (rendering/fellow/postfx/ssao_shared_tile): the gather variants with the shared depth/normal
 		// tile, same order as SSAO_GATHER .. SSAO_GATHER_ADAPTIVE (shader versions 3-5).
 		PipelineDeferredRD fellow_tile_gather_pipelines[3];
+		// FellowEngine (rendering/fellow/postfx/ss_coherent_gather): one sample rotation per workgroup (shader versions 6-8).
+		PipelineDeferredRD fellow_coherent_gather_pipelines[3];
+		bool fellow_coherent = false; // the gather pipeline bound for this frame's gathers is the coherent one
 	} ssao;
+	RID _fellow_ssao_gather_pipeline(int p_mode);
 
 	void gather_ssao(RD::ComputeListID p_compute_list, const RID *p_ao_slices, const SSAOSettings &p_settings, bool p_adaptive_base_pass, RID p_gather_uniform_set, RID p_importance_map_uniform_set);
 

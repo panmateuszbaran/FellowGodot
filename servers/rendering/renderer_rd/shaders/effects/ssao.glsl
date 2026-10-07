@@ -523,22 +523,35 @@ void main() {
 #ifdef FELLOW_SHARED_TILE
 	load_tile(); // every invocation takes part (barrier) before any returns
 #endif
+#ifdef FELLOW_COHERENT_GATHER
+	// FellowEngine (postfx/ss_coherent_gather, docs/decisions/0024-coherent-gather.md): each workgroup computes the
+	// pixels of one sample rotation (pseudo_random_index = (2y + x) % 5) in a 40 x 8 tile, eight per row (every fifth
+	// pixel), so that the threads' taps fall at nearly the same offsets from their pixels; each half of the group (a
+	// warp of 32) takes four of them in each row (a 20 x 8 footprint). Every pixel is computed as before.
+	const uint fellow_t = gl_LocalInvocationIndex;
+	const uint fellow_k = (fellow_t & 3u) | ((fellow_t >> 5u) << 2u); // 0..7: which of the row's eight pixels
+	const uint fellow_rotation = gl_WorkGroupID.x % 5u;
+	const uint fellow_y = gl_WorkGroupID.y * 8u + ((fellow_t >> 2u) & 7u);
+	const uint fellow_first = (fellow_rotation + 10u - (2u * fellow_y) % 5u) % 5u;
+	ivec2 ssC = ivec2((gl_WorkGroupID.x / 5u) * 40u + fellow_first + 5u * fellow_k, fellow_y);
+#else
 	ivec2 ssC = ivec2(gl_GlobalInvocationID.xy);
+#endif
 	if (any(greaterThanEqual(ssC, params.screen_size))) { //too large, do nothing
 		return;
 	}
 
-	vec2 uv = vec2(gl_GlobalInvocationID) + vec2(0.5);
+	vec2 uv = vec2(ssC) + vec2(0.5);
 #ifdef SSAO_BASE
 	generate_SSAO_shadows_internal(out_shadow_term, out_edges, out_weight, uv, params.quality, true);
 
-	imageStore(dest_image, ivec2(gl_GlobalInvocationID.xy), vec4(out_shadow_term, out_weight / (float(SSAO_ADAPTIVE_TAP_BASE_COUNT) * 4.0), 0.0, 0.0));
+	imageStore(dest_image, ssC, vec4(out_shadow_term, out_weight / (float(SSAO_ADAPTIVE_TAP_BASE_COUNT) * 4.0), 0.0, 0.0));
 #else
 	generate_SSAO_shadows_internal(out_shadow_term, out_edges, out_weight, uv, params.quality, false); // pass in quality levels
 	if (params.quality == 0) {
 		out_edges = vec4(1.0);
 	}
 
-	imageStore(dest_image, ivec2(gl_GlobalInvocationID.xy), vec4(out_shadow_term, pack_edges(out_edges), 0.0, 0.0));
+	imageStore(dest_image, ssC, vec4(out_shadow_term, pack_edges(out_edges), 0.0, 0.0));
 #endif
 }

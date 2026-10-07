@@ -61,6 +61,13 @@ inline bool ssao_shared_tile() {
 	return postfx_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/postfx/ssao_shared_tile");
 }
 
+// SSAO and SSIL gathers with each workgroup computing the pixels of one sample rotation in a 40 x 8 tile, so that its
+// threads sample at nearly the same offsets from their pixels (docs/decisions/0024-coherent-gather.md; every pixel is
+// computed as stock computes it). Read every frame.
+inline bool ss_coherent_gather() {
+	return postfx_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/postfx/ss_coherent_gather");
+}
+
 // TAA motion vectors of static geometry from the depth buffer and the camera matrices (a full-screen pass after the
 // opaque pass, as stock does for MetalFX), moving geometry in a separate motion pass; the opaque pass then draws its
 // static surfaces without the previous-frame vertex transform and the velocity target. Decision 0013.
@@ -540,6 +547,7 @@ struct Stats {
 	SafeNumeric<uint64_t> frame_async_uses; // async compute segments (decision 0015)
 	SafeNumeric<uint64_t> frame_async_conflicts; // of which the concurrent part had to wait (shared resource)
 	SafeNumeric<uint64_t> frame_async_transfers; // async parts that used an upload submitted with them
+	SafeNumeric<uint64_t> postfx_coherent_gathers; // SSAO/SSIL gather dispatches with one sample rotation per workgroup (decision 0024)
 	SafeNumeric<uint64_t> cpu_persistent_elements; // list elements written as 16-byte elements (decision 0022)
 	SafeNumeric<uint64_t> cpu_persistent_uploads; // surface entries rewritten by a list element (changed, or first used)
 	SafeNumeric<uint64_t> cpu_persistent_maps; // regions of the persistent buffer mapped (one per frame using it)
