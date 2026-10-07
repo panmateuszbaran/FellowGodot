@@ -66,6 +66,13 @@ directional pyramid saves 14 % there). The candidate defaults (persistent instan
 1.2 % slower than `fellow67`'s defaults there (`m5_f69_gpu_cand`, 0/3 runs faster, GPU time +1.2 %), where async compute
 alone gains 0.9 % and persistent instance data has 290 list elements per frame: most likely the evaluations' cost.
 
+Since `fellow70`: each evaluation's pairs are pooled with those of the tunable's earlier evaluations in the same
+conditions (frames within 20 % of the time they had when the pool started, and no other tunable's choice changed
+since; at most 36 pairs, older ones weighed down beyond that), and the decision is taken on the pooled mean and
+standard error. In the draw-heavy City Lab async compute costs about 3 % of the frame, close to what six pairs of
+16-frame blocks of a noisy CPU-bound frame can resolve: `m5_f70_dh_cand` ran with async compute in 2028, 6282 and
+10 195 of 10 868 frames in its three runs (frame 2.480, 2.551, 2.569 ms; the defaults' runs 2.553 ms on average).
+
 ## Why it is exact
 
 Each tunable is exact on its own (decision 0005: the pyramid only skips work whose result it proves; verified per

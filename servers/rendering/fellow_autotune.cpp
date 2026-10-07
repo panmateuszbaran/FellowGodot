@@ -58,6 +58,9 @@ constexpr double AUTOTUNE_T = 2.5; // the pairs' differences must be this many s
 constexpr uint32_t AUTOTUNE_EARLY_PAIRS = 3; // an evaluation may end after this many pairs if the difference is clear:
 constexpr double AUTOTUNE_EARLY_GAIN = 0.03; // at least 3 % of the GPU time
 constexpr double AUTOTUNE_EARLY_T = 4.0; // and 4 standard errors
+// Pairs kept from earlier evaluations of a tunable in the same conditions (see TuneState::pool_*): at most this many,
+// older ones weighed down proportionally beyond it.
+constexpr double AUTOTUNE_POOL_MAX = 36.0;
 
 struct TuneState {
 	bool choice = true; // the decision outside evaluations
@@ -73,6 +76,14 @@ struct TuneState {
 	// interval, doubled each time such an evaluation keeps the choice (up to 16 base intervals), back when it changes it.
 	uint32_t recheck_spacing = 0;
 	bool recheck = false; // this evaluation was brought forward by a change of the frame time
+	// The pairs (off minus on) of the evaluations since the conditions last changed (frames 20 % faster or slower, or
+	// another tunable's choice changed), pooled with each new evaluation's for the decision: a small difference (a
+	// tunable measured by the frames' wall time in a noisy CPU-bound frame) becomes clear over a few evaluations instead
+	// of being decided by each one's six pairs alone.
+	double pool_sum = 0.0;
+	double pool_sq = 0.0;
+	double pool_n = 0.0;
+	double pool_frame_ms = 0.0;
 	uint32_t block_frames = 16;
 	double block_sum[AUTOTUNE_BLOCKS] = {};
 	uint32_t block_n[AUTOTUNE_BLOCKS] = {};
@@ -131,6 +142,8 @@ struct Analysis {
 	double mean = 0.0; // GPU ms, off minus on (positive: the optimization saves time)
 	double se = 0.0;
 	double base = 0.0; // GPU ms with the optimization on
+	double sum = 0.0; // of the pairs' differences
+	double sq = 0.0; // of their squares
 };
 
 Analysis analyze(const TuneState &s, uint32_t p_pairs) {
@@ -155,9 +168,10 @@ Analysis analyze(const TuneState &s, uint32_t p_pairs) {
 		return r;
 	}
 	for (uint32_t i = 0; i < r.pairs; i++) {
-		r.mean += diffs[i];
+		r.sum += diffs[i];
+		r.sq += diffs[i] * diffs[i];
 	}
-	r.mean /= r.pairs;
+	r.mean = r.sum / r.pairs;
 	if (r.pairs > 1) {
 		double var = 0.0;
 		for (uint32_t i = 0; i < r.pairs; i++) {
@@ -169,8 +183,35 @@ Analysis analyze(const TuneState &s, uint32_t p_pairs) {
 	return r;
 }
 
+// Adds an evaluation's pairs to the tunable's pool (started afresh when the conditions changed) and returns the pooled
+// analysis (mean and standard error over every pooled pair; base: this evaluation's).
+Analysis pool(TuneState &s, const Analysis &p_analysis) {
+	if (s.pool_n <= 0.0 || std::fabs(frame_ms_avg - s.pool_frame_ms) > AUTOTUNE_CHANGE * s.pool_frame_ms) {
+		s.pool_sum = 0.0;
+		s.pool_sq = 0.0;
+		s.pool_n = 0.0;
+		s.pool_frame_ms = frame_ms_avg;
+	}
+	s.pool_sum += p_analysis.sum;
+	s.pool_sq += p_analysis.sq;
+	s.pool_n += p_analysis.pairs;
+	if (s.pool_n > AUTOTUNE_POOL_MAX) {
+		const double k = AUTOTUNE_POOL_MAX / s.pool_n;
+		s.pool_sum *= k;
+		s.pool_sq *= k;
+		s.pool_n = AUTOTUNE_POOL_MAX;
+	}
+	Analysis r = p_analysis;
+	if (s.pool_n >= 2.0) {
+		r.mean = s.pool_sum / s.pool_n;
+		const double var = MAX(0.0, (s.pool_sq - s.pool_n * r.mean * r.mean) / (s.pool_n - 1.0));
+		r.se = std::sqrt(var / s.pool_n);
+	}
+	return r;
+}
+
 void finish(TuneState &s, bool p_new_choice, const Analysis &p_analysis, bool p_early) {
-	print_verbose(vformat("FellowEngine autotune: evaluation from frame %d ends at frame %d%s: %d pairs, on %.3f ms, off - on %.4f ms (se %.4f), choice %s -> %s", (int64_t)s.eval_start, (int64_t)frame_id, p_early ? " (early)" : "", (int)p_analysis.pairs, p_analysis.base, p_analysis.mean, p_analysis.se, s.choice ? "on" : "off", p_new_choice ? "on" : "off"));
+	print_verbose(vformat("FellowEngine autotune: evaluation from frame %d ends at frame %d%s: %d pairs (%.1f pooled), on %.3f ms, off - on %.4f ms (se %.4f), choice %s -> %s", (int64_t)s.eval_start, (int64_t)frame_id, p_early ? " (early)" : "", (int)p_analysis.pairs, s.pool_n, p_analysis.base, p_analysis.mean, p_analysis.se, s.choice ? "on" : "off", p_new_choice ? "on" : "off"));
 	stats().autotune_evals.increment();
 	if (p_early) {
 		stats().autotune_early.increment();
@@ -179,6 +220,12 @@ void finish(TuneState &s, bool p_new_choice, const Analysis &p_analysis, bool p_
 	if (p_new_choice != s.choice) {
 		stats().autotune_flips.increment();
 		s.interval = base;
+		// The other tunables' pooled pairs were measured with this one the other way.
+		for (TuneState &other : states) {
+			if (&other != &s) {
+				other.pool_n = 0.0;
+			}
+		}
 	} else {
 		s.interval = MIN(MAX(s.interval, base) * 2, base * AUTOTUNE_INTERVAL_GROWTH);
 	}
@@ -197,7 +244,8 @@ void finish(TuneState &s, bool p_new_choice, const Analysis &p_analysis, bool p_
 }
 
 void decide(TuneState &s) {
-	const Analysis r = analyze(s, AUTOTUNE_PAIRS);
+	const Analysis e = analyze(s, AUTOTUNE_PAIRS);
+	const Analysis r = e.pairs >= AUTOTUNE_PAIRS - 1 ? pool(s, e) : e;
 	bool new_choice = s.choice;
 	if (r.pairs >= AUTOTUNE_PAIRS - 1) {
 		const double min_gain = MAX(0.0, (double)GLOBAL_GET_CACHED(float, "rendering/fellow/autotune/min_gain_percent")) * 0.01 * r.base;
@@ -223,6 +271,7 @@ bool try_decide_early(TuneState &s) {
 		return false;
 	}
 	if (std::fabs(r.mean) >= AUTOTUNE_EARLY_GAIN * r.base && r.se > 0.0 && std::fabs(r.mean) >= AUTOTUNE_EARLY_T * r.se) {
+		pool(s, r);
 		finish(s, r.mean > 0.0, r, true);
 		return true;
 	}

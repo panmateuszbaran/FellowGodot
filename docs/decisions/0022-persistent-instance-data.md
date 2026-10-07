@@ -93,10 +93,17 @@ In one process, off vs on (blocks of 30 frames, 480 block pairs in City Lab, 160
 | v2 (`m5_f69_*_pi_ab`): render thread | **−6.0 %** (−0.094 ms) | **−7.2 %** (−0.124 ms) | |
 | v2: GPU time | +1.3 % (+0.024 ms: pre-pass +0.010) | +1.5 % (+0.028 ms: pre-pass +0.013) | |
 | v2: frame | +0.2 % (n.s.) | **−2.4 %** | |
+| v3 (`m5_f70_*_pi_ab`): render thread | **−13.5 %** (−0.184 ms) | **−4.1 %** (−0.066 ms) | −0.6 % (−0.008 ms) |
+| v3: GPU time | +0.4 % (+0.008 ms, p 0.07) | +0.9 % (+0.019 ms: pre-pass +0.009) | +0.2 % (+0.010 ms: pre-pass +0.017) |
+| v3: frame | +0.2 % (n.s.) | +0.4 % (n.s.) | +0.2 % |
 
 v2's steps (City Lab): opaque instance data 0.178 → 0.081 ms, shadow lists' instance data 0.138 → 0.049 ms. What the
 GPU pays is the slot's indirection in the vertex shaders (the depth pre-pass, the shadow passes) and, until v3, the
-upload: one buffer update, one dispatch and the barriers before the first draws.
+upload: one buffer update, one dispatch and the barriers before the first draws. v3 (no upload) costs the GPU a third
+to two thirds of v2's time, and the render thread's saving in City Lab doubles (v2 spent part of it on the upload and in
+the steps around it). In `m5_f70` the GPU ran slower than in `m5_f69` (City Lab 2.22 against 1.83 ms of GPU time per
+frame, draw-heavy 2.06 against 1.89 ms): both City Lab variants were bound by the GPU there, so the frame does not show
+the render thread's saving; whether a scene gains depends on which of the two limits it (hence the autotune tunable).
 
 Candidate defaults (persistent instance data v2 + async compute + autotune) against `fellow67`'s defaults, between
 processes (`m5_f69_*_cand`, 3 ABBA runs of 20 s): City Lab **−4.1 %** (3/3, p 0.015), draw-heavy City Lab **−4.6 %**
