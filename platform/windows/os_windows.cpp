@@ -265,8 +265,72 @@ static void _error_handler(void *p_self, const char *p_func, const char *p_file,
 }
 #endif
 
+#if defined(_M_X64)
+// FellowEngine: a report of crashes in any thread, in every build. The engine's crash handler only covers the main thread
+// (and only in debug builds); a crash in a worker, render or driver thread ended the process silently. On an unhandled
+// exception: its code, the faulting address, the thread, and the stack (each frame as module + offset, unwound with the
+// modules' unwind tables, so no symbols are needed; the offsets map to functions with the linker's map file). Then the
+// process ends as before.
+static LONG WINAPI fellow_unhandled_exception(EXCEPTION_POINTERS *p_ep) {
+	static volatile LONG reported = 0;
+	if (InterlockedExchange(&reported, 1) != 0) {
+		return EXCEPTION_CONTINUE_SEARCH;
+	}
+	auto module_of = [](DWORD64 p_address, char *r_name, DWORD p_size) -> DWORD64 {
+		HMODULE module = nullptr;
+		r_name[0] = 0;
+		if (!GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCSTR)p_address, &module) || !module) {
+			return 0;
+		}
+		char path[MAX_PATH];
+		const DWORD len = GetModuleFileNameA(module, path, MAX_PATH);
+		const char *base = path;
+		for (DWORD i = 0; i < len; i++) {
+			if (path[i] == '\\' || path[i] == '/') {
+				base = path + i + 1;
+			}
+		}
+		strncpy_s(r_name, p_size, base, _TRUNCATE);
+		return (DWORD64)module;
+	};
+	const EXCEPTION_RECORD *rec = p_ep->ExceptionRecord;
+	char name[MAX_PATH];
+	DWORD64 module = module_of((DWORD64)rec->ExceptionAddress, name, MAX_PATH);
+	fprintf(stderr, "\nFellowEngine crash report: exception 0x%08lX at 0x%llX (%s+0x%llX), thread %lu", (unsigned long)rec->ExceptionCode, (unsigned long long)(DWORD64)rec->ExceptionAddress, name, (unsigned long long)((DWORD64)rec->ExceptionAddress - module), (unsigned long)GetCurrentThreadId());
+	if (rec->ExceptionCode == EXCEPTION_ACCESS_VIOLATION && rec->NumberParameters >= 2) {
+		fprintf(stderr, ", %s 0x%llX", rec->ExceptionInformation[0] == 0 ? "read of" : (rec->ExceptionInformation[0] == 1 ? "write to" : "execution at"), (unsigned long long)rec->ExceptionInformation[1]);
+	}
+	fprintf(stderr, "\n");
+	CONTEXT context = *p_ep->ContextRecord;
+	for (int frame = 0; frame < 64 && context.Rip != 0; frame++) {
+		module = module_of(context.Rip, name, MAX_PATH);
+		fprintf(stderr, "  [%d] %s+0x%llX\n", frame, module ? name : "?", (unsigned long long)(context.Rip - module));
+		DWORD64 image_base = 0;
+		PRUNTIME_FUNCTION function = RtlLookupFunctionEntry(context.Rip, &image_base, nullptr);
+		if (function) {
+			PVOID handler_data = nullptr;
+			DWORD64 establisher_frame = 0;
+			RtlVirtualUnwind(UNW_FLAG_NHANDLER, image_base, context.Rip, function, &context, &handler_data, &establisher_frame, nullptr);
+		} else {
+			// A leaf function: the return address is on top of the stack.
+			if (IsBadReadPtr((const void *)context.Rsp, sizeof(DWORD64))) {
+				break;
+			}
+			context.Rip = *(const DWORD64 *)context.Rsp;
+			context.Rsp += sizeof(DWORD64);
+		}
+	}
+	fprintf(stderr, "FellowEngine crash report: end\n");
+	fflush(stderr);
+	return EXCEPTION_CONTINUE_SEARCH;
+}
+#endif
+
 void OS_Windows::initialize() {
 	crash_handler.initialize();
+#if defined(_M_X64)
+	SetUnhandledExceptionFilter(fellow_unhandled_exception);
+#endif
 
 #ifdef WINDOWS_DEBUG_OUTPUT_ENABLED
 	error_handlers.errfunc = _error_handler;
