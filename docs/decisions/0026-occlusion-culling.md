@@ -24,9 +24,31 @@ This frame's own depth is the ideal case; a real culling pass has to work from t
 lavapipe, City Lab captures (aerial, street, roofs; 960 × 540, settling frames included): **64 % of the opaque elements
 and 70 % of their indices hidden.**
 
+RTX (`fellow74`, `m6_f76_occlusion_stats*`, the perf camera paths, every frame tested):
+
+| scene | elements hidden | indices hidden |
+|---|---:|---:|
+| City Lab | 70.1 % | 78.8 % |
+| draw-heavy City Lab | 70.1 % | 78.8 % |
+| Bistro exterior | 70.3 % | 44.8 % |
+| Bistro interior | 28.1 % | 18.5 % |
+| Sponza | 13.2 % | 1.4 % |
+| Lights Lab | 6.2 % | 6.2 % |
+| PBR Lab | 0.2 % | 0.4 % |
+
+City Lab and Bistro exterior hide most of their elements (streets between buildings); Sponza's large meshes are
+almost all partly visible.
+
+## Step 2: what culling would save (debug, wrong images)
+
+`debug/occlusion_cull_approx`: the test also writes each surface slot's visibility, read back asynchronously; in the
+following frames the camera's opaque and motion lists leave out the elements last found hidden (multimesh and particle
+elements are kept). The images are wrong (an element that becomes visible appears a few frames late), but the GPU and
+CPU time with the hidden elements left out, net of the pyramid and the test, sizes what an exact culling could gain.
+
 ## Result
 
-(pending: RTX, all scenes)
+(pending: `m6_f77_occ_ab*`)
 
 ## Decision
 
