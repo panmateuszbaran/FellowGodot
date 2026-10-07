@@ -1,7 +1,6 @@
 # 0020 — Autotune: exact optimizations chosen by measurement
 
-Status: **MEASURING** · Branch `fellow/geometry` · Toggles `rendering/fellow/autotune/enabled` (runtime, default off
-until measured), `autotune/block_frames` (16), `autotune/interval_frames` (600), `autotune/min_gain_percent` (0.5),
+Status: **KEEP**, on by default from `fellow71` · Branch `fellow/geometry` · Toggles `rendering/fellow/autotune/enabled` (runtime), `autotune/block_frames` (16), `autotune/interval_frames` (600), `autotune/min_gain_percent` (0.5),
 `autotune/max_interval_sec` (30), `autotune/max_duty_percent` (20) ·
 Code: `servers/rendering/fellow_autotune.{h,cpp}`, `rendering_server_default.cpp` (`_draw`: the frame hooks and the
 timestamps read back), `fellow_settings.h` (`shadow_directional_max_mip()` asks the tuner).
@@ -165,6 +164,22 @@ Async compute in Sponza ran in only 118-135 of 7685 frames in five of the six ru
 two): `fellow_async_compute_begin()` skips the frame while any transfer worker is recording, and an upload nothing draws
 yet keeps a worker recording (see 0015).
 
+`fellow71`, the new defaults (persistent instance data, autotune, async compute on NVIDIA) against milestone 4's
+(all three off), 3 ABBA runs of 20 s (`m5_f73_defaults`, `m5_f73_dh_defaults`):
+
+| scene | frame | pairs faster | GPU time |
+|---|---:|---:|---:|
+| City Lab | **−4.1 %** (p 0.03) | 3/3 | +3.4 % (n.s.) |
+| draw-heavy City Lab | **−4.6 %** (p 0.005) | 3/3 | |
+| PBR Lab | **−4.0 %** (p 0.000) | 3/3 | −2.1 % |
+| Lights Lab | **−1.5 %** (p 0.02) | 3/3 | −1.4 % |
+| Bistro exterior | −0.7 % (p 0.17) | 3/3 | −0.8 % |
+| Bistro interior | +0.2 % (n.s.) | 0/3 | +0.3 % (p 0.02) |
+| Sponza | +0.2 % (n.s., 2 pairs: one run crashed, see the milestone 5 report) | 1/2 | +0.2 % |
+
 ## Decision
 
-(pending: async compute + autotune as the defaults, measured in all scenes with the re-evaluation of `6ea366a`)
+**KEEP, on by default from `fellow71`.** Exact (every tunable changes no pixel whichever way it is set; verified with
+frequent evaluations on lavapipe and RTX), and with the evaluation cap and the pooled pairs no scene is measurably slower
+than without it. What it costs is bounded (at most 20 % of the frames under evaluation, half of them with a tunable the
+other way).

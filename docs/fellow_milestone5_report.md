@@ -1,14 +1,41 @@
 # FellowEngine — milestone 5 report (scene-dependent choices, persistent instance data)
 
-Status: **DRAFT** (`fellow70`, `0583844`, measured 2026-10-07). Branch `fellow/geometry`. Benchmark machine as in
+Status: **FINAL for `fellow71`/`fellow74`** (measured 2026-10-07). Branch `fellow/geometry`. Benchmark machine as in
 milestone 4: Acer Predator PHN16S-71, Intel Core Ultra 9 275HX, RTX 5070 Ti Laptop GPU (driver 617.14), Windows 11,
 1920×1080, the "high" preset. Decision records: `docs/decisions/0015` (async compute, updated), `0020` (autotune),
 `0021` (instance buffers in system memory, rejected), `0022` (persistent instance data), `0023` (TAA in 16 × 16 groups,
-rejected), `0024` (SSAO/SSIL gathers by rotation, rejected).
+rejected), `0024` (SSAO/SSIL gathers by rotation, rejected), `0025` (auto exposure's reduction).
 
 ## 0. Result
 
-@@RESULT@@
+New defaults from `fellow71`: **persistent instance data** (0022), **autotune** (0020) and **async compute on NVIDIA
+GPUs** (0015); from `fellow74` also the **two-barrier luminance reduction** (0025). Against milestone 4's defaults (all
+three off), between processes (`m5_f73_defaults`, `fellow71`, 3 ABBA runs of 20 s each; frame = wall time per frame):
+
+| scene | milestone 4 defaults | new defaults | Δ frame | pairs faster | Δ GPU time |
+|---|---:|---:|---:|---:|---:|
+| City Lab | 2.396 ms | **2.299 ms** | **−4.1 %** (p 0.03) | 3/3 | +3.4 % (n.s.) |
+| City Lab, draw-heavy | 2.624 ms | **2.504 ms** | **−4.6 %** (p 0.005) | 3/3 | |
+| PBR Lab | 2.883 ms | **2.766 ms** | **−4.0 %** (p 0.000) | 3/3 | −2.1 % |
+| Lights Lab | 2.989 ms | **2.943 ms** | **−1.5 %** (p 0.02) | 3/3 | −1.4 % |
+| Bistro exterior | 5.087 ms | 5.049 ms | −0.7 % (p 0.17) | 3/3 | −0.8 % |
+| Bistro interior | 4.092 ms | 4.100 ms | +0.2 % (n.s.) | 0/3 | +0.3 % |
+| Sponza | 7.355 ms | 7.374 ms | +0.2 % (n.s.) | 1/2 | +0.2 % |
+
+Plus the luminance reduction (0025, in one process, `m5_f73_lum_ab`): Bistro exterior −0.7 %, Bistro interior −0.8 %,
+Sponza −0.4 % (the auto exposure pass 43 % faster; only scenes with auto exposure). The render thread gains more than the
+frames show: persistent instance data alone takes 13.5 % off City Lab's render thread (`m5_f70_city_pi_ab`), but on this
+laptop City Lab runs at the GPU's limit plus the hybrid-graphics presentation (milestone 4, §9).
+
+Every change is exact: the same pixels whichever way each is set (lavapipe: 0 differing pixels; RTX: bit-identical in
+Bistro exterior and City Lab, at the run-to-run floor elsewhere), `cpu/verify` 0 mismatches, the luminance reduction
+compared bit for bit on the GPU (0 mismatches over 44 million texels). Three experiments were measured and rejected
+(0021, 0023, 0024; §5).
+
+One run in about 80 with the new code (Sponza, `m5_f73_defaults`) ended in an access violation without any output: the
+engine's crash handler covers only the main thread, and only in debug builds. Windows builds now report a crash in any
+thread (exception, address, thread, stack as module + offsets; the build keeps the linker's map). 20 more runs of 60 s
+(`m5_f75_crash_*`: Sponza ×12, Bistro exterior ×4, City Lab ×4) did not crash again: open, watched in every run.
 
 ## 1. Why this milestone
 
@@ -69,9 +96,10 @@ floor elsewhere (RTX), 0 differing pixels on lavapipe.
 
 ## 4. Async compute in CPU-bound frames (decision 0015)
 
-Unchanged in this milestone except where uploads go (transfer workers left to the main queue, so the async part runs in
-Sponza: before, 1.6 % of its frames used it) and that autotune now decides per scene. Alone it gains 1-2 % in the
-GPU-bound scenes and costs ~3 % in the draw-heavy City Lab.
+Two changes: uploads (transfer workers) are left to the main queue, so the async part runs in Sponza (before, 1.6 % of
+its frames used it), and autotune decides per scene. Alone it gains 1-2 % in the GPU-bound scenes and costs ~3 % in the
+draw-heavy City Lab, which autotune now avoids. On by default on NVIDIA GPUs (the setting is 0 off, 1 on, 2 NVIDIA, the
+default): concurrent sharing of every image is fixed at start-up, and other vendors were not measured.
 
 ## 5. Rejected
 
@@ -80,6 +108,14 @@ GPU-bound scenes and costs ~3 % in the draw-heavy City Lab.
 * **TAA resolve in 16 × 16 groups (0023).** Fewer tile loads per pixel, but the pass got 0.006-0.021 ms slower.
 * **SSAO/SSIL gathers by rotation (0024).** Each workgroup took the pixels of one sample rotation so its taps would be
   coherent; the SSAO gather got 0.016-0.066 ms slower (SSIL's 0.006 ms faster).
+
+## 5b. Auto exposure's reduction (decision 0025)
+
+The luminance reduction summed each workgroup's 64 values by a tree of six steps with a barrier after each. Eight threads
+now compute what the tree holds at indices 0-7 after its first three steps, and one thread the last three: the same
+additions on the same operands, two barriers instead of seven. The pass went from 0.106 to 0.060 ms in Bistro and
+Sponza. Auto exposure adapts by the frame's time step, so images of two runs differ even for the same build (by 1/255 in
+tens of thousands of pixels on lavapipe); the reduction itself was compared on the GPU (§8).
 
 ## 6. Where the GPU time goes now (`m5_f69_sizing`)
 
@@ -107,7 +143,19 @@ went from ~3 hours to ~1 hour; the next job is built and verified on lavapipe wh
 
 ## 8. Verification
 
-@@VERIFY@@
+* `cpu/verify` (stock's lists and instance data recomputed and compared; for persistent instance data each element's
+  entry read from the frame's region as the GPU reads it) on RTX: 0 mismatches in City Lab, Lights, Stress temporal and
+  City, PBR, Bistro exterior captures, with async compute and with autotune switching persistent instance data and the
+  other tunables every few frames (`m5_f70_verify_*`, `m5_f73_verify_*`: the new defaults); 0 async conflicts.
+* Identity, milestone 4's defaults vs the new ones (`m5_f73_temporal`, 60-frame sequences): Bistro exterior and City Lab
+  bit-identical, Lights Lab and Sponza at their run-to-run floor (max |d| 2 and 3, no pixel above 2).
+* lavapipe: persistent instance data off vs on with `cpu/verify` (City Lab walk, Stress Lab temporal; also with
+  autotune switching it on and off), the coherent gather (City Lab, Lights Lab with ultra SSAO/SSIL, PBR Lab), the
+  luminance reduction (PBR Lab with auto exposure and a fixed frame step), the new defaults against the old: 0 differing
+  pixels, 0 mismatches; with the Khronos validation layer (async compute, persistent instance data, autotune): no
+  message.
+* The luminance reduction on RTX: `postfx/verify_luminance_reduce` runs both reductions on the same inputs every frame
+  and compares every level bit for bit: 0 mismatches in 44 298 789 texels (Bistro exterior, Bistro interior, Sponza).
 
 ## 9. Measurement notes
 
@@ -119,4 +167,13 @@ went from ~3 hours to ~1 hour; the next job is built and verified on lavapipe wh
 
 ## 10. Next
 
-@@NEXT@@
+* **GPU occlusion culling (two-phase).** The remaining GPU time is mostly the passes that draw geometry (Sponza: depth
+  pre-pass 0.98 ms, opaque 2.08 ms, transparent 1.27 ms; Bistro exterior: 0.53 and 1.81 ms) and SSAO. Drawing first
+  what was visible in the previous frame, building a depth pyramid from it, testing everything else against it and
+  drawing what is newly visible removes the vertex work of hidden geometry (and the fragment work of hidden alpha-tested
+  foliage, which early depth testing does not cull). Conservative; the per-surface slots of persistent instance data
+  give stable identities for the visibility history. Not bit-exact where coplanar surfaces tie in depth (the drawing
+  order changes): images expected at the floor, measured as such.
+* **The open crash** (§0): watched in every run with the new crash report.
+* Smaller exact steps between benchmark jobs: SSAO's blur and interleave passes, the glow chain, the copy of the final
+  framebuffer for SSIL/SSR.

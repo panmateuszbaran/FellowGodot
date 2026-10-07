@@ -1,7 +1,6 @@
 # 0022 — Persistent instance data
 
-Status: **MEASURING** · Branch `fellow/geometry` · Toggle `rendering/fellow/cpu/persistent_instances` (runtime, default
-off until measured) · Code: `render_forward_clustered.{h,cpp}` (`FellowPersistent`, `_fellow_persistent_*`,
+Status: **KEEP**, on by default from `fellow71` · Branch `fellow/geometry` · Toggle `rendering/fellow/cpu/persistent_instances` (runtime) · Code: `render_forward_clustered.{h,cpp}` (`FellowPersistent`, `_fellow_persistent_*`,
 `_fellow_slot_*`, the three instance data writers, `_setup_render_pass_uniform_set`), `scene_shader_forward_clustered.*`
 (specialization bit `fellow_persistent_instances`, binding 39 dynamic), `shaders/forward_clustered/scene_forward_clustered*.glsl`
 (`fellow_element_init()`, `FELLOW_INSTANCE()`), `shaders/effects/fellow_instance_scatter.glsl`, `fellow_settings.*`.
@@ -109,6 +108,12 @@ Candidate defaults (persistent instance data v2 + async compute + autotune) agai
 processes (`m5_f69_*_cand`, 3 ABBA runs of 20 s): City Lab **−4.1 %** (3/3, p 0.015), draw-heavy City Lab **−4.6 %**
 (3/3, p 0.024).
 
+As part of the new defaults (`m5_f73_defaults`, against milestone 4's): City Lab −4.1 %, draw-heavy −4.6 %, PBR Lab
+−4.0 %, Lights Lab −1.5 %, Bistro exterior −0.7 %, Bistro interior +0.2 % (n.s.), Sponza +0.2 % (n.s.); see decision 0020.
+
 ## Decision
 
-(pending)
+**KEEP, on by default from `fellow71`** (v3), as an autotune tunable: exact (`cpu/verify` reads every element's entry
+as the GPU does, 0 mismatches; images bit-identical or at the floor), the render thread 4-14 % faster where it has many
+instances, and where the slot's indirection in the vertex shaders costs the GPU more than the render thread saves,
+autotune turns it off.

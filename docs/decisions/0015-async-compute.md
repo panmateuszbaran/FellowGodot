@@ -1,7 +1,7 @@
 # 0015 — Async compute: screen-space effects on a second queue
 
-Status: **KEEP as an option** (`fellow38`-`fellow40`; off by default) · Branch `fellow/geometry` · Setting `rendering/fellow/frame/async_compute`
-(start-up only, default **off**) · Code: `rendering_device.{h,cpp}` (`fellow_async_compute_begin/end/join`),
+Status: **KEEP**, on by default on NVIDIA GPUs from `fellow71` (`fellow38`-`fellow40`; an option, off, until milestone 5) · Branch `fellow/geometry` · Setting `rendering/fellow/frame/async_compute`
+(start-up only: 0 off, 1 on, 2 NVIDIA GPUs, the default) · Code: `rendering_device.{h,cpp}` (`fellow_async_compute_begin/end/join`),
 `rendering_device_graph.{h,cpp}` (conflict tracking), `drivers/vulkan/rendering_device_driver_vulkan.cpp` (second
 queue of the family), `forward_clustered/render_forward_clustered.{h,cpp}` (`_pre_opaque_render`), `fellow_settings.*`.
 
@@ -138,3 +138,10 @@ added the split's cost: `m3_f38_perf`, `m3_f40_perf` "split only").
 Recommended for GPU-bound projects on NVIDIA: `rendering/fellow/frame/async_compute = true` in project.godot.
 Follow-ups: a CPU-bound scene (10 k+ draws) to measure the render-thread cost, and fewer submissions (G2 and the rest
 of the frame as two batches of one submission).
+
+**Milestone 5 (`fellow71`): on by default on NVIDIA GPUs.** The setting became 0 (off), 1 (on) or 2 (the default: on
+when the GPU is NVIDIA's, the only vendor it was measured on; read when the device is created, so 2 also when a project
+does not set it). Reasons (2) and (3) above no longer hold against it: autotune (decision 0020) runs it on and off in
+blocks of frames per scene and keeps it off where the render thread pays more than the GPU gains (the draw-heavy City
+Lab, `m5_f72_dh_cand`). Reason (1) is why other vendors keep it off: concurrent sharing applies to every image from
+start-up, whatever autotune chooses per frame. Measured as part of the new defaults (`m5_f73_defaults`, decision 0020).

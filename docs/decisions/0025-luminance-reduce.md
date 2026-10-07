@@ -1,7 +1,7 @@
 # 0025 — Auto exposure: the luminance reduction with two barriers per workgroup
 
-Status: **MEASURING** · Branch `fellow/postfx` · Toggle `rendering/fellow/postfx/fast_luminance_reduce` (runtime, default
-off until measured) · Code: `shaders/effects/luminance_reduce.glsl` (`FELLOW_FAST_REDUCE`), `effects/luminance.{h,cpp}`
+Status: **KEEP** (on by default from `fellow74`) · Branch `fellow/postfx` · Toggle `rendering/fellow/postfx/fast_luminance_reduce`
+(runtime) · Code: `shaders/effects/luminance_reduce.glsl` (`FELLOW_FAST_REDUCE`), `effects/luminance.{h,cpp}`
 (three more variants), `fellow_settings.*`.
 
 ## Problem
@@ -36,10 +36,22 @@ addition is commutative, so only the grouping matters, and it is the tree's.
   chain runs on the same inputs and every level is compared bit for bit. lavapipe, PBR Lab captures with auto exposure:
   1 721 971 texels compared, **0 mismatches**.
 
+* RTX (`fellow72`, `m5_f74_lum_verify`, captures with the debug check): Bistro exterior and interior 12 661 495 texels
+  each, Sponza 18 975 799: **0 mismatches**. (Image comparisons with auto exposure are at each scene's floor at best on
+  RTX, even with a fixed frame step: `m5_f73_lum_capture`, off vs on, Bistro exterior 93 dB, Bistro interior 71 dB,
+  Sponza 73 dB; the check above compares the reduction itself.)
+
 ## Result
 
-(pending)
+In one process (`m5_f73_lum_ab`, `fellow71`, blocks of 30 frames):
+
+| scene | Auto exposure pass | GPU time | frame | block pairs |
+|---|---:|---:|---:|---:|
+| Bistro exterior | 0.106 → 0.060 ms (−0.046) | −0.7 % | **−0.7 %** | 1600 |
+| Sponza | 0.106 → 0.060 ms (−0.046) | −0.5 % | **−0.4 %** | 672 |
+| Bistro interior | 0.100 → 0.056 ms (−0.043) | −0.9 % | **−0.8 %** | 960 |
 
 ## Decision
 
-(pending)
+**KEEP**, on by default from `fellow74`: exact (the same additions; 0 mismatches over 44 million texels on RTX), the
+pass 43 % faster.
