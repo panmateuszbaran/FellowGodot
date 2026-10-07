@@ -744,8 +744,17 @@ private:
 		uint32_t element_capacity = 0;
 		RID counters;
 		LocalVector<float> elements;
+		// Debug (debug/occlusion_cull_approx, wrong images): elements the test hid are left out of the camera's opaque
+		// lists in the following frames (visibility read back asynchronously), to size what culling would save.
+		RID visible_by_slot;
+		uint32_t visible_capacity = 0;
+		LocalVector<uint8_t> visible_cpu; // per slot, from a readback 1-3 frames old
+		LocalVector<GeometryInstanceSurfaceDataCache *> candidates; // the unfiltered opaque list (tested)
+		bool filtered = false;
 	} fellow_occlusion;
 	void _fellow_occlusion_stats(RenderDataRD *p_render_data);
+	void _fellow_occlusion_filter(RenderListType p_list);
+	static void _fellow_occlusion_readback(const Vector<uint8_t> &p_data);
 	void _fellow_occlusion_free();
 
 	uint32_t _fellow_slot_alloc();

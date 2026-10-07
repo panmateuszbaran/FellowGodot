@@ -30,6 +30,8 @@
 
 #include "render_forward_clustered.h"
 
+#include "core/object/callable_mp.h"
+
 #include "core/config/project_settings.h"
 #include "servers/rendering/fellow_settings.h"
 #include "servers/rendering/renderer_rd/environment/fog.h"
@@ -1229,6 +1231,10 @@ void RenderForwardClustered::_fellow_occlusion_free() {
 		rd->free_rid(o.counters);
 		o.counters = RID();
 	}
+	if (o.visible_by_slot.is_valid()) {
+		rd->free_rid(o.visible_by_slot);
+		o.visible_by_slot = RID();
+	}
 	if (o.hzb_version.is_valid()) {
 		o.hzb_shader.version_free(o.hzb_version);
 		o.hzb_version = RID();
@@ -1239,6 +1245,43 @@ void RenderForwardClustered::_fellow_occlusion_free() {
 	}
 }
 
+void RenderForwardClustered::_fellow_occlusion_readback(const Vector<uint8_t> &p_data) {
+	RenderForwardClustered *self = get_singleton();
+	if (self == nullptr) {
+		return;
+	}
+	FellowOcclusion &o = self->fellow_occlusion;
+	const uint32_t n = p_data.size() / sizeof(uint32_t);
+	const uint32_t *v = reinterpret_cast<const uint32_t *>(p_data.ptr());
+	o.visible_cpu.resize(n);
+	for (uint32_t i = 0; i < n; i++) {
+		o.visible_cpu[i] = v[i] != 0 ? 1 : 0;
+	}
+}
+
+void RenderForwardClustered::_fellow_occlusion_filter(RenderListType p_list) {
+	// Debug (wrong images): leave out the elements the last readback found hidden.
+	FellowOcclusion &o = fellow_occlusion;
+	RenderList &rl = render_list[p_list];
+	if (p_list == RENDER_LIST_OPAQUE) {
+		o.candidates = rl.elements;
+		o.filtered = true;
+	}
+	const uint32_t n = o.visible_cpu.size();
+	uint32_t kept = 0;
+	for (uint32_t i = 0; i < rl.elements.size(); i++) {
+		GeometryInstanceSurfaceDataCache *surface = rl.elements[i];
+		const uint32_t slot = surface->fellow_slot;
+		const bool multi = surface->owner->base_flags & (INSTANCE_DATA_FLAG_MULTIMESH | INSTANCE_DATA_FLAG_PARTICLES);
+		if (multi || slot >= n || o.visible_cpu[slot]) {
+			rl.elements[kept++] = surface;
+		}
+	}
+	Fellow::stats().occlusion_culled.add(rl.elements.size() - kept);
+	rl.elements.resize(kept);
+	rl.element_info.resize(kept);
+}
+
 void RenderForwardClustered::_fellow_occlusion_stats(RenderDataRD *p_render_data) {
 	FellowOcclusion &o = fellow_occlusion;
 	RenderingDevice *rd = RD::get_singleton();
@@ -1246,8 +1289,9 @@ void RenderForwardClustered::_fellow_occlusion_stats(RenderDataRD *p_render_data
 	if (rb.is_null()) {
 		return;
 	}
-	const RenderList &rl = render_list[RENDER_LIST_OPAQUE];
-	const uint32_t count = rl.elements.size();
+	const bool approx = o.filtered; // the opaque list was filtered this frame: test the unfiltered one
+	const LocalVector<GeometryInstanceSurfaceDataCache *> &tested = approx ? o.candidates : render_list[RENDER_LIST_OPAQUE].elements;
+	const uint32_t count = tested.size();
 	if (count == 0) {
 		return;
 	}
@@ -1328,8 +1372,9 @@ void RenderForwardClustered::_fellow_occlusion_stats(RenderDataRD *p_render_data
 	o.elements.resize(count * 8);
 	float *e = o.elements.ptr();
 	RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
+	uint32_t max_slot = 0;
 	for (uint32_t i = 0; i < count; i++) {
-		const GeometryInstanceSurfaceDataCache *surface = rl.elements[i];
+		const GeometryInstanceSurfaceDataCache *surface = tested[i];
 		const AABB &aabb = surface->owner->transformed_aabb;
 		const uint32_t weight = mesh_storage->mesh_surface_get_vertices_drawn_count(surface->surface);
 		float *f = e + i * 8;
@@ -1340,7 +1385,21 @@ void RenderForwardClustered::_fellow_occlusion_stats(RenderDataRD *p_render_data
 		f[4] = aabb.position.x + aabb.size.x;
 		f[5] = aabb.position.y + aabb.size.y;
 		f[6] = aabb.position.z + aabb.size.z;
-		f[7] = 0.0f;
+		const uint32_t slot = surface->fellow_slot;
+		memcpy(&f[7], &slot, sizeof(uint32_t));
+		max_slot = MAX(max_slot, slot);
+	}
+	if (o.visible_capacity <= max_slot) {
+		if (o.visible_by_slot.is_valid()) {
+			rd->free_rid(o.visible_by_slot);
+		}
+		o.visible_capacity = Math::next_power_of_2(MAX(max_slot + 1, 1024u));
+		LocalVector<uint32_t> ones;
+		ones.resize(o.visible_capacity);
+		for (uint32_t &v : ones) {
+			v = 1;
+		}
+		o.visible_by_slot = rd->storage_buffer_create(o.visible_capacity * sizeof(uint32_t), Span<uint8_t>((const uint8_t *)ones.ptr(), o.visible_capacity * sizeof(uint32_t)));
 	}
 	if (o.element_capacity < count) {
 		if (o.element_buffer.is_valid()) {
@@ -1369,12 +1428,19 @@ void RenderForwardClustered::_fellow_occlusion_stats(RenderDataRD *p_render_data
 	RD::Uniform u_hzb(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 0, Vector<RID>({ sampler, o.hzb }));
 	RD::Uniform u_elements(RD::UNIFORM_TYPE_STORAGE_BUFFER, 1, o.element_buffer);
 	RD::Uniform u_counters(RD::UNIFORM_TYPE_STORAGE_BUFFER, 2, o.counters);
+	RD::Uniform u_visible(RD::UNIFORM_TYPE_STORAGE_BUFFER, 3, o.visible_by_slot);
 	list = rd->compute_list_begin();
 	rd->compute_list_bind_compute_pipeline(list, o.test_pipeline);
-	rd->compute_list_bind_uniform_set(list, cache->get_cache(shader, 0, u_hzb, u_elements, u_counters), 0);
+	rd->compute_list_bind_uniform_set(list, cache->get_cache(shader, 0, u_hzb, u_elements, u_counters, u_visible), 0);
 	rd->compute_list_set_push_constant(list, &push, sizeof(push));
 	rd->compute_list_dispatch_threads(list, count, 1, 1);
 	rd->compute_list_end();
+
+	if (approx) {
+		// No wait: the visibility comes back in a later frame (and is applied to the frames after that).
+		rd->buffer_get_data_async(o.visible_by_slot, callable_mp_static(&RenderForwardClustered::_fellow_occlusion_readback), 0, (max_slot + 1) * sizeof(uint32_t));
+		return;
+	}
 
 	// Read back (debug: waits for the GPU).
 	const Vector<uint8_t> result = rd->buffer_get_data(o.counters);
@@ -3307,6 +3373,12 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	}
 	render_list[RENDER_LIST_ALPHA].sort_by_reverse_depth_and_priority();
 
+	fellow_occlusion.filtered = false;
+	if (Fellow::debug_occlusion_cull_approx() && !is_reflection_probe && p_render_data->render_buffers.is_valid()) {
+		_fellow_occlusion_filter(RENDER_LIST_OPAQUE);
+		_fellow_occlusion_filter(RENDER_LIST_MOTION);
+	}
+
 	int *render_info = p_render_data->render_info ? p_render_data->render_info->info[RSE::VIEWPORT_RENDER_INFO_TYPE_VISIBLE] : (int *)nullptr;
 	if (fellow_markers) {
 		RENDER_TIMESTAMP("FellowEngine Opaque Instance Data");
@@ -3567,7 +3639,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		}
 	}
 
-	if (depth_pre_pass && Fellow::debug_occlusion_stats() && !is_reflection_probe) {
+	if (depth_pre_pass && (Fellow::debug_occlusion_stats() || fellow_occlusion.filtered) && !is_reflection_probe) {
 		_fellow_occlusion_stats(p_render_data);
 	}
 

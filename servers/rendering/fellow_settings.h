@@ -78,6 +78,11 @@ inline bool fast_luminance_reduce() {
 inline bool debug_occlusion_stats() {
 	return GLOBAL_GET_CACHED(bool, "rendering/fellow/debug/occlusion_stats");
 }
+// Debug, wrong images: opaque list elements the test found hidden are left out in the following frames (to size what
+// culling would save; decision 0026).
+inline bool debug_occlusion_cull_approx() {
+	return GLOBAL_GET_CACHED(bool, "rendering/fellow/debug/occlusion_cull_approx");
+}
 
 // Debug: both reductions every frame on the same inputs, every level read back and compared (slow: a GPU sync per frame).
 inline bool verify_luminance_reduce() {
@@ -570,6 +575,7 @@ struct Stats {
 	SafeNumeric<uint64_t> occlusion_weight; // their surfaces' indices (full detail)
 	SafeNumeric<uint64_t> occlusion_hidden; // elements the pyramid hides
 	SafeNumeric<uint64_t> occlusion_hidden_weight;
+	SafeNumeric<uint64_t> occlusion_culled; // elements left out (debug/occlusion_cull_approx)
 	SafeNumeric<uint64_t> cpu_persistent_elements; // list elements written as 16-byte elements (decision 0022)
 	SafeNumeric<uint64_t> cpu_persistent_uploads; // surface entries rewritten by a list element (changed, or first used)
 	SafeNumeric<uint64_t> cpu_persistent_maps; // regions of the persistent buffer mapped (one per frame using it)

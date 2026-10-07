@@ -22,6 +22,10 @@ layout(set = 0, binding = 2, std430) buffer restrict Counters {
 	uint hidden_weight;
 }
 counters;
+layout(set = 0, binding = 3, std430) buffer restrict writeonly VisibleBySlot {
+	uint data[];
+}
+visible_by_slot; // per surface slot: 1 visible, 0 hidden (elements off screen are not written)
 
 layout(push_constant, std430) uniform Params {
 	mat4 view_projection;
@@ -39,6 +43,7 @@ void main() {
 	vec4 a = elements.data[i * 2];
 	vec4 b = elements.data[i * 2 + 1];
 	uint weight = floatBitsToUint(a.w);
+	uint slot = floatBitsToUint(b.w);
 	atomicAdd(counters.tested, 1);
 	atomicAdd(counters.total_weight, weight);
 
@@ -49,7 +54,8 @@ void main() {
 		vec3 p = vec3((k & 1u) != 0 ? b.x : a.x, (k & 2u) != 0 ? b.y : a.y, (k & 4u) != 0 ? b.z : a.z);
 		vec4 clip = params.view_projection * vec4(p, 1.0);
 		if (clip.w <= 1e-5) {
-			return; // crosses the camera plane: visible
+			visible_by_slot.data[slot] = 1; // crosses the camera plane: visible
+			return;
 		}
 		vec3 ndc = clip.xyz / clip.w;
 		nearest = max(nearest, ndc.z);
@@ -72,7 +78,8 @@ void main() {
 	ivec2 t0 = p0 >> (level + 1);
 	ivec2 t1 = p1 >> (level + 1);
 	if (any(greaterThan(t1 - t0, ivec2(2)))) {
-		return; // larger than the coarsest level can bound with 3 x 3 texels: visible
+		visible_by_slot.data[slot] = 1; // larger than the coarsest level can bound with 3 x 3 texels: visible
+		return;
 	}
 	float farthest = 1.0;
 	for (int y = t0.y; y <= t1.y; y++) {
@@ -83,5 +90,8 @@ void main() {
 	if (nearest < farthest) {
 		atomicAdd(counters.hidden, 1);
 		atomicAdd(counters.hidden_weight, weight);
+		visible_by_slot.data[slot] = 0;
+	} else {
+		visible_by_slot.data[slot] = 1;
 	}
 }

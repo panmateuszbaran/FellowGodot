@@ -84,6 +84,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/postfx/fast_luminance_reduce", true);
 	GLOBAL_DEF("rendering/fellow/postfx/verify_luminance_reduce", false);
 	GLOBAL_DEF("rendering/fellow/debug/occlusion_stats", false);
+	GLOBAL_DEF("rendering/fellow/debug/occlusion_cull_approx", false);
 	GLOBAL_DEF("rendering/fellow/postfx/taa_camera_motion_vectors", false);
 	GLOBAL_DEF("rendering/fellow/shading/blended_alpha_zero_skip", true);
 	// Render-thread CPU (decisions 0016-0018): on by default since fellow56 (exact: same lists, instance data, draws and
@@ -198,6 +199,7 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["occlusion_weight"] = s.occlusion_weight.get();
 	d["occlusion_hidden"] = s.occlusion_hidden.get();
 	d["occlusion_hidden_weight"] = s.occlusion_hidden_weight.get();
+	d["occlusion_culled"] = s.occlusion_culled.get();
 	d["cpu_persistent_elements"] = s.cpu_persistent_elements.get();
 	d["cpu_persistent_uploads"] = s.cpu_persistent_uploads.get();
 	d["cpu_persistent_maps"] = s.cpu_persistent_maps.get();
