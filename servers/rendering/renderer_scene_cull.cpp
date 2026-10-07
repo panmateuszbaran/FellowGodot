@@ -2563,6 +2563,16 @@ void RendererSceneCull::_fellow_shadow_cache_decide(int p_shadow_index, uint64_t
 				Fellow::stats().shadow_cache_invalidations.increment();
 			}
 			if (ok) {
+				// Invalidation events are kept for 240 frames: a cache not checked against them since (a cascade kept
+				// but not used for that long: irregular cascade) may have missed some; it is built again then.
+				const LocalVector<Scenario::FellowShadowInvalidation> &events = p_scenario->fellow_shadow_invalidations;
+				const uint64_t first_kept = events.is_empty() ? p_scenario->fellow_shadow_event_seq + 1 : events[0].seq;
+				if (first_kept > cs.last_event_seq + 1) {
+					ok = false;
+					Fellow::stats().shadow_cache_invalidations.increment();
+				}
+			}
+			if (ok) {
 				const float g = (float)guard;
 				const float mx = (float)MIN(ox, room - ox) / g;
 				const float my = (float)MIN(oy, room - oy) / g;

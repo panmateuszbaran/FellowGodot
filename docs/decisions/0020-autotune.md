@@ -40,6 +40,10 @@ Tunables, each only when its setting is on, one evaluated at a time (the most ov
   the GPU is the limit and costs 3 % in CPU-bound frames; the device must have created its second queue at start-up)
   and the frame plan (`frame/replay_frame_plan`, decision 0019).
 
+Not a tunable: the directional shadow cache (decision 0004). Its renders choose mesh LODs by the cache's texel size, not
+by the camera distance as stock does, so its shadow maps can differ from stock's by a LOD (lavapipe, City Lab walk: cache
+on vs off differ by up to 5/255 in a few dozen pixels for ten frames); switching it between frames would show that.
+
 An evaluation also ends after 3 pairs when the difference is clear (3 % of the time and 4 standard errors): fewer
 frames run the slower way where the optimization matters most.
 

@@ -50,7 +50,9 @@ drawn into the cascade's atlas rect (16-bit depth, reverse Z) every frame.
    all materials pass `material_fellow_shadow_cacheable()` (no `VERTEX`/`POSITION` writes, no custom matrices, no
    `TIME` in vertex, no `TIME` with discard/alpha, no trails).
 5. **Invalidation.** When an instance that could be in a cache changes or leaves the scenario, its old AABB is logged;
-   caches built after it became static and whose light-space column the AABB touches are rebuilt.
+   caches built after it became static and whose light-space column the AABB touches are rebuilt. The log keeps 240
+   frames: a cache last checked against it before the oldest entry kept (a cascade kept but unused that long, e.g.
+   irregular) is rebuilt too (milestone 5: before, such a cache could miss the dropped entries).
 6. **Rebuild policy.** A cascade is rebuilt when its rect leaves the guard band, its z range leaves the cache range,
    the light basis / layers changed, or an invalidation hits it (forced); proactively when its remaining guard margin
    drops below 50 %; and once more when casters became static after the build (promotion, at most every 30 frames).
