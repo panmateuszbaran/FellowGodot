@@ -70,3 +70,4 @@ Status: KEEP | REWORK | REJECT | MEASURING      Branch / commit: ...      Toggle
 | [0029](0029-prepass-order.md) | Depth pre-pass with the shared-depth-material elements first | `geometry/prepass_simple_first` | REJECT (option, off: no change in the pre-pass, render thread +2.5 % in Bistro exterior) |
 | [0030](0030-temporal-ssil.md) | Temporal SSIL: half the taps per frame (as 0028; also half-size SSAO/SSIL) | `postfx/ssil_temporal` | MEASURING |
 | [0031](0031-fog-half-rate.md) | Volumetric fog: half the froxels lit per frame (checkerboard), the others reprojected | `postfx/fog_half_rate` | MEASURING |
+| [0032](0032-shadow-temporal-taps.md) | Soft shadow filters with half their taps per frame under TAA | `shadows/temporal_taps` | REJECT (not merged: PBR Lab thin penumbrae 47 dB, max \|d\| 75) |
