@@ -68,3 +68,40 @@ v2 (`90c69e9`): a tile is shaded coarsely only if its largest neighbour step (ti
 stays under `adaptive_vrs_max_step` (0.02); every tile at full rate one frame in 8 (`adaptive_vrs_refresh`), so that
 texture detail lost to coarse shading is seen again; counters fixed (they were cleared inside the compute list).
 Measured in `m6_f82_vrs_*`.
+
+v3 (`32cb3b9`, `fellow80`): gloss guard (`adaptive_vrs_gloss_guard`, on): a tile with at least 2 pixels where a glossy
+surface's normal varies between neighbours (roughness < 0.5, 1 − dot > 0.5 roughness², from the pre-pass's
+normal/roughness buffer) keeps full rate (PBR Lab's specular streaks).
+
+## v2 measured (`fellow79`, `m6_f83_*`)
+
+In one process (`m6_f83_all_ab`, threshold 0 vs 0.006, attachment in every block):
+
+| scene | frame | opaque pass | estimate (in the Tonemap region) |
+|---|---:|---:|---:|
+| Lights Lab | **−22.8 %** | 1.263 → 0.539 ms | +0.121 ms |
+| PBR Lab | **−6.0 %** | 0.920 → 0.676 ms | +0.138 ms |
+| Bistro interior | **−3.3 %** | 1.547 → 1.292 ms | +0.181 ms |
+| City Lab | +2.8 % | 0.620 → 0.533 ms | +0.158 ms |
+| Sponza | +1.2 % | 2.239 → 2.218 ms | +0.139 ms |
+| Bistro exterior | +1.2 % | 1.874 → 1.799 ms | +0.153 ms |
+
+The estimate cost 0.12-0.18 ms: each tile's 64 threads left one thread to sum 64 × 8 partial results from shared
+memory, ~900 dependent loads per tile (8160 tiles at 1080p).
+
+Quality v3 (`m6_f84_capture`, `m6_f84_temporal`, against no attachment): captures 54-69 dB mean (Bistro interior
+52.8 dB min, PBR Lab 63.5 dB min: the gloss guard fixed the streaks), temporal Lights Lab 59.8 dB, City Lab 61.5 dB,
+Bistro exterior 55.6 dB (1.6 % of pixels above 2 levels), Sponza 48.6 dB (7.0 % above 2 levels): in motion the rates
+come from where the content was a frame earlier; at 45°/s the image moves ~24 pixels a frame, more than the 3 × 3-tile
+dilation covers.
+
+v3 fast (`54c381a`, `fellow81`): the workgroup sums by a shared-memory tree (6 steps), pair counts computed, counters
+per workgroup. Measured in `m6_f85_*`.
+
+v4 (`fellow82`): two passes. The estimate (after the final image) only computes each tile's rates from the luma. Before
+the next frame's opaque pass (after its depth pre-pass), an apply pass gives each tile the finest rate of the estimated
+tiles around where its content was: five of its pixels (corners, centre) are reprojected with this frame's depth and
+the camera motion into the estimated frame, and the tiles they fall in plus one on every side are read (the old 3 × 3
+dilation when the view is still); content that was off screen, or spread over more than 7 tiles, gets full rate. The
+gloss guard moves there and uses this frame's normals instead of the previous frame's. Counters spread over 64 slots.
+Needs the depth pre-pass and no MSAA (otherwise full rate).

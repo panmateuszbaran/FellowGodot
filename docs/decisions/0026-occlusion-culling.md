@@ -1,6 +1,6 @@
 # 0026 — Occlusion culling against a depth pyramid
 
-Status: **MEASURING** (step 1 implemented, `fellow76`) · Branch `fellow/geometry` · Toggle
+Status: **REJECT** (step 1, v2; left in, off) · Branch `fellow/geometry` · Toggle
 `rendering/fellow/geometry/occlusion_culling` (runtime, off) · Debug `rendering/fellow/debug/occlusion_stats`,
 `debug/occlusion_cull_approx` · Code: `shaders/effects/fellow_hzb.glsl`, `fellow_occlusion_test.glsl`,
 `fellow_occlusion_cull.glsl`, `render_forward_clustered.{h,cpp}` (`_fellow_occlusion_*`), scene shader binding 41,
@@ -128,6 +128,30 @@ v2 (`fellow78`, `d43a07c`): pyramid in two dispatches (levels 0-5 per 64 × 64-p
 padded only to multiples of 64 (960 × 576 at 1080p); the test a thread per list element; runs drawn in chunks of up to
 64 elements (one indirect draw per chunk, in order), compacted a thread per chunk. Measured in `m6_f82_occ_ab`.
 
+## v2 measured (`fellow79`, `m6_f83_*`)
+
+In one process (`m6_f83_all_ab`, blocks of 30 frames, 4 rotations, with the other features off; the culling pass has its
+own region, 0.021-0.054 ms of GPU time):
+
+| scene | frame | opaque pass | culling pass |
+|---|---:|---:|---:|
+| Lights Lab | +1.7 % | +0.008 ms | 0.035 ms |
+| PBR Lab | +1.8 % | +0.009 ms | 0.026 ms |
+| City Lab | +2.4 % | −0.027 ms | 0.054 ms |
+| City Lab, draw-heavy (`m6_f83_occ_ab_dh`) | **+5.6 %** | −0.024 ms | 0.055 ms |
+| Sponza | +0.1 % | −0.014 ms | 0.037 ms |
+| Bistro exterior | −1.0 % | −0.086 ms | 0.037 ms |
+| Bistro interior | +0.6 % | −0.006 ms | 0.021 ms |
+
+Hidden indices (all configurations of the run): City Lab 77 %, Bistro exterior 29 %, Bistro interior 16 %, Sponza 2 %,
+PBR Lab 0.4 %, Lights Lab 6 %.
+
 ## Decision
 
-(pending: `m6_f82_*`)
+REJECT (left in the code, off). Behind a full depth pre-pass the opaque pass already rejects hidden fragments by its
+depth test (EQUAL), so culling it saves only vertex work, and on this GPU that is small: 77 % of City Lab's opaque
+indices culled save 0.027 ms, less than the pyramid and test cost (0.054 ms) plus the indirect draws on the render
+thread. Only Bistro exterior gains (1 %). What would pay is culling the depth pre-pass and the shadow passes too
+(two-phase culling with the previous frame's visibility), and only in scenes where much of the geometry is hidden; in
+the benchmark scenes the remaining geometry cost is Sponza's 12.8 million triangles, 98 % of which are in visible
+surfaces (cluster ranges of large meshes), so that is not pursued now.

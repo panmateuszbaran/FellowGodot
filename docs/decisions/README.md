@@ -64,5 +64,8 @@ Status: KEEP | REWORK | REJECT | MEASURING      Branch / commit: ...      Toggle
 | [0023](0023-taa-tile16.md) | TAA resolve in 16 × 16 workgroups, every thread loading the shared tile | `postfx/taa_tile16` | REJECT (option, off: TAA pass +0.006 to +0.021 ms) |
 | [0024](0024-coherent-gather.md) | SSAO and SSIL gathers with one sample rotation per workgroup (threads remapped, every pixel computed as before) | `postfx/ss_coherent_gather` | REJECT (option, off: SSAO gather +0.016 to +0.066 ms) |
 | [0025](0025-luminance-reduce.md) | Auto exposure: the luminance reduction with two barriers per workgroup instead of seven (the same additions) | `postfx/fast_luminance_reduce` | KEEP, on by default from `fellow74` (auto exposure pass −43 %, frame −0.4 to −0.8 %) |
-| [0026](0026-occlusion-culling.md) | Occlusion culling against a depth pyramid (step 1: the opaque colour pass, exact; GPU-tested runs drawn indirectly) | `geometry/occlusion_culling` | MEASURING |
+| [0026](0026-occlusion-culling.md) | Occlusion culling against a depth pyramid (step 1: the opaque colour pass, exact; GPU-tested runs drawn indirectly) | `geometry/occlusion_culling` | REJECT (option, off: frame +0.1 to +5.6 %, Bistro exterior −1.0 %) |
 | [0027](0027-adaptive-shading-rate.md) | Adaptive shading rate from the previous frame's image (visually lossless) | `shading/adaptive_vrs` | MEASURING |
+| [0028](0028-temporal-ssao.md) | Temporal SSAO: half the taps per frame, the other half from the previous frame's history (visually lossless) | `postfx/ssao_temporal` | MEASURING |
+| [0029](0029-prepass-order.md) | Depth pre-pass with the shared-depth-material elements first | `geometry/prepass_simple_first` | REJECT (option, off: no change in the pre-pass, render thread +2.5 % in Bistro exterior) |
+| [0030](0030-temporal-ssil.md) | Temporal SSIL: half the taps per frame (as 0028; also half-size SSAO/SSIL) | `postfx/ssil_temporal` | MEASURING |
