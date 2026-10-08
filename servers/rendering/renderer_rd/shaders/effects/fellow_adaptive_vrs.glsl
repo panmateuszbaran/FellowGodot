@@ -28,6 +28,10 @@ layout(set = 0, binding = 4) uniform sampler2D normal_roughness;
 #endif
 
 #ifdef MODE_DILATE
+shared uint s_tiles;
+shared uint s_coarse_tiles;
+shared uint s_pixels;
+shared uint s_fragments;
 layout(r8ui, set = 0, binding = 1) uniform restrict readonly uimage2D tile_rates;
 layout(r8ui, set = 0, binding = 2) uniform restrict writeonly uimage2D shading_rates;
 layout(set = 0, binding = 3, std430) buffer restrict Counters {
@@ -64,9 +68,10 @@ params;
 
 #ifdef MODE_ESTIMATE
 shared float s_luma[32 * 32];
-shared float s_sums[6][64];
-shared uint s_counts[6][64];
-shared float s_max[2][64];
+// The tile's partial results, reduced over the workgroup: squared differences at strides 1, 2, 4 along x and stride 1
+// along y (a); strides 2, 4 along y and the largest neighbour differences along x and y (b).
+shared vec4 s_reduce_a[64];
+shared vec4 s_reduce_b[64];
 shared uint s_gloss_risk;
 
 vec4 load_normal_roughness(ivec2 p_pixel) {
@@ -97,15 +102,17 @@ void main() {
 #ifdef MODE_ESTIMATE
 	ivec2 tile = ivec2(gl_WorkGroupID.xy);
 	uint lid = gl_LocalInvocationID.x;
-	ivec2 ts = params.tile_size;
+	ivec2 ts = params.tile_size; // powers of two (Vulkan's shading rate texel sizes)
+	int width_log2 = findMSB(ts.x);
 	int n = ts.x * ts.y;
 	ivec2 origin = tile * ts;
 	if (lid == 0u) {
 		s_gloss_risk = 0u;
 	}
 	barrier();
+	uint gloss_risk = 0u;
 	for (int i = int(lid); i < n; i += 64) {
-		ivec2 pixel = origin + ivec2(i % ts.x, i / ts.x);
+		ivec2 pixel = origin + ivec2(i & (ts.x - 1), i >> width_log2);
 		s_luma[i] = load_luma(pixel);
 		if (params.use_normals != 0u) {
 			vec4 c = load_normal_roughness(pixel);
@@ -114,61 +121,63 @@ void main() {
 				vec3 nx = load_normal_roughness(pixel + ivec2(1, 0)).xyz;
 				vec3 ny = load_normal_roughness(pixel + ivec2(0, 1)).xyz;
 				if (1.0 - dot(c.xyz, nx) > limit || 1.0 - dot(c.xyz, ny) > limit) {
-					atomicAdd(s_gloss_risk, 1u);
+					gloss_risk++;
 				}
 			}
 		}
 	}
+	if (gloss_risk != 0u) {
+		atomicAdd(s_gloss_risk, gloss_risk);
+	}
 	barrier();
 	// Squared differences at strides 1, 2, 4 along x (sums 0-2) and y (3-5).
 	float sums[6] = float[](0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
-	uint counts[6] = uint[](0u, 0u, 0u, 0u, 0u, 0u);
 	float maxima[2] = float[](0.0, 0.0); // the largest difference between neighbours along x and y
 
 	for (int i = int(lid); i < n; i += 64) {
-		int x = i % ts.x;
-		int y = i / ts.x;
+		int x = i & (ts.x - 1);
+		int y = i >> width_log2;
 		float l = s_luma[i];
 		for (int k = 0; k < 3; k++) {
 			int s = 1 << k;
 			if (x + s < ts.x) {
 				float d = s_luma[i + s] - l;
 				sums[k] += d * d;
-				counts[k]++;
 				maxima[0] = max(maxima[0], abs(d) / float(s));
 			}
 			if (y + s < ts.y) {
 				float d = s_luma[i + s * ts.x] - l;
 				sums[3 + k] += d * d;
-				counts[3 + k]++;
 				maxima[1] = max(maxima[1], abs(d) / float(s));
 			}
 		}
 	}
-	for (int k = 0; k < 6; k++) {
-		s_sums[k][lid] = sums[k];
-		s_counts[k][lid] = counts[k];
-	}
-	s_max[0][lid] = maxima[0];
-	s_max[1][lid] = maxima[1];
+	s_reduce_a[lid] = vec4(sums[0], sums[1], sums[2], sums[3]);
+	s_reduce_b[lid] = vec4(sums[4], sums[5], maxima[0], maxima[1]);
 	barrier();
-	if (lid == 0u) {
-		float g[2] = float[](0.0, 0.0);
-		float m[2] = float[](0.0, 0.0);
-		for (int t = 0; t < 64; t++) {
-			m[0] = max(m[0], s_max[0][t]);
-			m[1] = max(m[1], s_max[1][t]);
+	for (uint k = 32u; k > 0u; k >>= 1u) {
+		if (lid < k) {
+			vec4 a = s_reduce_a[lid + k];
+			vec4 b = s_reduce_b[lid + k];
+			vec4 own_b = s_reduce_b[lid];
+			s_reduce_a[lid] += a;
+			s_reduce_b[lid] = vec4(own_b.xy + b.xy, max(own_b.zw, b.zw));
 		}
+		barrier();
+	}
+	if (lid == 0u) {
+		vec4 a = s_reduce_a[0];
+		vec4 b = s_reduce_b[0];
+		float total[6] = float[](a.x, a.y, a.z, a.w, b.x, b.y);
+		float m[2] = float[](b.z, b.w);
+		float g[2] = float[](0.0, 0.0);
 		for (int axis = 0; axis < 2; axis++) {
+			int along = axis == 0 ? ts.x : ts.y;
+			int across = axis == 0 ? ts.y : ts.x;
 			for (int k = 0; k < 3; k++) {
-				float sum = 0.0;
-				uint count = 0u;
-				for (int t = 0; t < 64; t++) {
-					sum += s_sums[axis * 3 + k][t];
-					count += s_counts[axis * 3 + k][t];
-				}
-				if (count > 0u) {
-					g[axis] = max(g[axis], sqrt(sum / float(count)) / float(1 << k));
+				int count = max(along - (1 << k), 0) * across; // pairs of pixels at this stride
+				if (count > 0) {
+					g[axis] = max(g[axis], sqrt(total[axis * 3 + k] / float(count)) / float(1 << k));
 				}
 			}
 		}
@@ -191,10 +200,17 @@ void main() {
 
 #ifdef MODE_DILATE
 	ivec2 t = ivec2(gl_GlobalInvocationID.xy);
-	bool inside = all(lessThan(t, params.tiles));
-	uint lx = 3u;
-	uint ly = 3u;
-	if (inside) {
+	uint lid = gl_LocalInvocationIndex;
+	if (lid == 0u) {
+		s_tiles = 0u;
+		s_coarse_tiles = 0u;
+		s_pixels = 0u;
+		s_fragments = 0u;
+	}
+	barrier();
+	if (all(lessThan(t, params.tiles))) {
+		uint lx = 3u;
+		uint ly = 3u;
 		for (int y = -1; y <= 1; y++) {
 			for (int x = -1; x <= 1; x++) {
 				ivec2 q = clamp(t + ivec2(x, y), ivec2(0), params.tiles - 1);
@@ -213,12 +229,19 @@ void main() {
 		lx = rate >> 2u;
 		ly = rate & 3u;
 		uint pixels = uint(params.tile_size.x * params.tile_size.y);
-		atomicAdd(counters.tiles, 1u);
+		atomicAdd(s_tiles, 1u);
 		if (rate != 0u) {
-			atomicAdd(counters.coarse_tiles, 1u);
+			atomicAdd(s_coarse_tiles, 1u);
 		}
-		atomicAdd(counters.pixels, pixels);
-		atomicAdd(counters.fragments, pixels >> (lx + ly));
+		atomicAdd(s_pixels, pixels);
+		atomicAdd(s_fragments, pixels >> (lx + ly));
+	}
+	barrier();
+	if (lid == 0u && s_tiles != 0u) {
+		atomicAdd(counters.tiles, s_tiles);
+		atomicAdd(counters.coarse_tiles, s_coarse_tiles);
+		atomicAdd(counters.pixels, s_pixels);
+		atomicAdd(counters.fragments, s_fragments);
 	}
 #endif
 
