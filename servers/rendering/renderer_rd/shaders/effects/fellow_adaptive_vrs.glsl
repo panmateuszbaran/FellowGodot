@@ -50,7 +50,7 @@ layout(push_constant, std430) uniform Params {
 	uint linear_source; // the source holds linear values (HDR 2D)
 	uint frame;
 	uint refresh_period; // 0: none; otherwise each tile is shaded at full rate one frame in this many
-	uint pad2;
+	float max_step; // largest error allowed at any pixel (the largest neighbour difference times 0.5 or 1.5)
 }
 params;
 
@@ -58,6 +58,7 @@ params;
 shared float s_luma[32 * 32];
 shared float s_sums[6][64];
 shared uint s_counts[6][64];
+shared float s_max[2][64];
 
 float load_luma(ivec2 p_pixel) {
 	ivec2 p = clamp(p_pixel, ivec2(0), params.screen_size - 1);
@@ -91,6 +92,8 @@ void main() {
 	// Squared differences at strides 1, 2, 4 along x (sums 0-2) and y (3-5).
 	float sums[6] = float[](0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
 	uint counts[6] = uint[](0u, 0u, 0u, 0u, 0u, 0u);
+	float maxima[2] = float[](0.0, 0.0); // the largest difference between neighbours along x and y
+
 	for (int i = int(lid); i < n; i += 64) {
 		int x = i % ts.x;
 		int y = i / ts.x;
@@ -101,11 +104,13 @@ void main() {
 				float d = s_luma[i + s] - l;
 				sums[k] += d * d;
 				counts[k]++;
+				maxima[0] = max(maxima[0], abs(d) / float(s));
 			}
 			if (y + s < ts.y) {
 				float d = s_luma[i + s * ts.x] - l;
 				sums[3 + k] += d * d;
 				counts[3 + k]++;
+				maxima[1] = max(maxima[1], abs(d) / float(s));
 			}
 		}
 	}
@@ -113,9 +118,16 @@ void main() {
 		s_sums[k][lid] = sums[k];
 		s_counts[k][lid] = counts[k];
 	}
+	s_max[0][lid] = maxima[0];
+	s_max[1][lid] = maxima[1];
 	barrier();
 	if (lid == 0u) {
 		float g[2] = float[](0.0, 0.0);
+		float m[2] = float[](0.0, 0.0);
+		for (int t = 0; t < 64; t++) {
+			m[0] = max(m[0], s_max[0][t]);
+			m[1] = max(m[1], s_max[1][t]);
+		}
 		for (int axis = 0; axis < 2; axis++) {
 			for (int k = 0; k < 3; k++) {
 				float sum = 0.0;
@@ -132,10 +144,12 @@ void main() {
 		uint l[2];
 		for (int axis = 0; axis < 2; axis++) {
 			l[axis] = 0u;
+			// Both the tile's RMS error and its largest local step must stay small: a few thin bright features (specular
+			// streaks, wires) in a dark tile have a small RMS but would turn into visible blocks.
 			if (params.threshold > 0.0) {
-				if (params.max_log2 >= 2u && 1.12 * g[axis] < params.threshold) {
+				if (params.max_log2 >= 2u && 1.12 * g[axis] < params.threshold && 1.5 * m[axis] < params.max_step) {
 					l[axis] = 2u;
-				} else if (0.5 * g[axis] < params.threshold) {
+				} else if (0.5 * g[axis] < params.threshold && 0.5 * m[axis] < params.max_step) {
 					l[axis] = 1u;
 				}
 			}

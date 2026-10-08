@@ -1689,7 +1689,7 @@ void RenderForwardClustered::_fellow_adaptive_vrs_dispatch(const Ref<RenderScene
 		uint32_t linear_source;
 		uint32_t frame;
 		uint32_t refresh_period;
-		uint32_t pad;
+		float max_step;
 	} push = {};
 	push.tile_size[0] = texel.x;
 	push.tile_size[1] = texel.y;
@@ -1701,8 +1701,12 @@ void RenderForwardClustered::_fellow_adaptive_vrs_dispatch(const Ref<RenderScene
 	push.max_log2 = Fellow::adaptive_vrs_max_rate() >= 1 ? 2 : 1;
 	push.frame = uint32_t(RSG::rasterizer->get_frame_number());
 	push.refresh_period = uint32_t(MAX(0, Fellow::adaptive_vrs_refresh()));
+	push.max_step = Fellow::adaptive_vrs_max_step();
 	UniformSetCacheRD *cache = UniformSetCacheRD::get_singleton();
 	RD::Uniform u_rates_out(RD::UNIFORM_TYPE_IMAGE, 2, shading_rates);
+	if (p_mode == 0) {
+		rd->buffer_clear(v.counters, 0, 16); // a transfer: before the compute list
+	}
 	RD::ComputeListID list = rd->compute_list_begin();
 	if (p_mode == 2) {
 		RID shader = v.shader.version_get_shader(v.version, 2);
@@ -1733,7 +1737,6 @@ void RenderForwardClustered::_fellow_adaptive_vrs_dispatch(const Ref<RenderScene
 	RD::Uniform u_source(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 0, Vector<RID>({ sampler, source }));
 	RD::Uniform u_tile_rates(RD::UNIFORM_TYPE_IMAGE, 1, tile_rates);
 	RD::Uniform u_counters(RD::UNIFORM_TYPE_STORAGE_BUFFER, 3, v.counters);
-	rd->buffer_clear(v.counters, 0, 16);
 	RID shader = v.shader.version_get_shader(v.version, 0);
 	rd->compute_list_bind_compute_pipeline(list, v.pipelines[0]);
 	rd->compute_list_bind_uniform_set(list, cache->get_cache(shader, 0, u_source, u_tile_rates), 0);

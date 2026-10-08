@@ -566,6 +566,10 @@ inline int adaptive_vrs_max_rate() {
 inline int adaptive_vrs_refresh() {
 	return GLOBAL_GET_CACHED(int, "rendering/fellow/shading/adaptive_vrs_refresh");
 }
+// Largest error allowed at any pixel of a coarsely shaded tile (luma 0-1), besides the RMS threshold.
+inline float adaptive_vrs_max_step() {
+	return GLOBAL_GET_CACHED(float, "rendering/fellow/shading/adaptive_vrs_max_step");
+}
 
 // Cumulative counters (render thread writes, scripts read through RenderingServer.fellow_get_stats()).
 struct Stats {
