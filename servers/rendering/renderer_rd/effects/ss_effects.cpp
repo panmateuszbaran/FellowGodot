@@ -126,6 +126,7 @@ SSEffects::SSEffects() {
 		ssil_modes.push_back("\n#define FELLOW_COHERENT_GATHER\n");
 		ssil_modes.push_back("\n#define SSIL_BASE\n#define FELLOW_COHERENT_GATHER\n");
 		ssil_modes.push_back("\n#define ADAPTIVE\n#define FELLOW_COHERENT_GATHER\n");
+		ssil_modes.push_back("\n#define FELLOW_TEMPORAL\n");
 
 		ssil.gather_shader.initialize(ssil_modes);
 
@@ -136,6 +137,8 @@ SSEffects::SSEffects() {
 			ssil.fellow_coherent_gather_pipelines[i - SSIL_GATHER].create_compute_pipeline(ssil.gather_shader.version_get_shader(ssil.gather_shader_version, 3 + i - SSIL_GATHER));
 		}
 		ssil.projection_uniform_buffer = RD::get_singleton()->uniform_buffer_create(sizeof(SSILProjectionUniforms));
+		ssil.fellow_temporal_gather_pipeline.create_compute_pipeline(ssil.gather_shader.version_get_shader(ssil.gather_shader_version, 6));
+		ssil.fellow_temporal_ubo = RD::get_singleton()->uniform_buffer_create(80);
 	}
 
 	{
@@ -497,6 +500,11 @@ SSEffects::~SSEffects() {
 		for (int i = 0; i < 3; i++) {
 			ssil.fellow_coherent_gather_pipelines[i].free();
 		}
+		ssil.fellow_temporal_gather_pipeline.free();
+		if (ssil.fellow_temporal_ubo.is_valid()) {
+			RD::get_singleton()->free_rid(ssil.fellow_temporal_ubo);
+			ssil.fellow_temporal_ubo = RID();
+		}
 
 		ssil.blur_shader.version_free(ssil.blur_shader_version);
 		ssil.gather_shader.version_free(ssil.gather_shader_version);
@@ -772,6 +780,18 @@ void SSEffects::ssil_allocate_buffers(Ref<RenderSceneBuffersRD> p_render_buffers
 	p_render_buffers->create_texture(RB_SCOPE_SSIL, RB_EDGES, RD::DATA_FORMAT_R8_UNORM, RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_STORAGE_BIT, RD::TEXTURE_SAMPLES_1, full_size, 4 * view_count);
 	p_render_buffers->create_texture(RB_SCOPE_SSIL, RB_IMPORTANCE_MAP, RD::DATA_FORMAT_R8_UNORM, RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_STORAGE_BIT, RD::TEXTURE_SAMPLES_1, half_size);
 	p_render_buffers->create_texture(RB_SCOPE_SSIL, RB_IMPORTANCE_PONG, RD::DATA_FORMAT_R8_UNORM, RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_STORAGE_BIT, RD::TEXTURE_SAMPLES_1, half_size);
+
+	// FellowEngine temporal SSIL: two pairs of histories (written in alternate frames), per deinterleaved slice: the
+	// half's colour and obscurance sums; its weight sum (negative for the odd half) and the view depth.
+	if (p_settings.fellow_temporal) {
+		if (!p_render_buffers->has_texture(RB_SCOPE_SSIL, SNAME("fellow_history_color_0"))) {
+			p_ssil_buffers.fellow_has_history = false;
+		}
+		for (int i = 0; i < 2; i++) {
+			p_render_buffers->create_texture(RB_SCOPE_SSIL, i ? SNAME("fellow_history_color_1") : SNAME("fellow_history_color_0"), RD::DATA_FORMAT_R16G16B16A16_SFLOAT, RD::TEXTURE_USAGE_STORAGE_BIT, RD::TEXTURE_SAMPLES_1, full_size, 4 * view_count);
+			p_render_buffers->create_texture(RB_SCOPE_SSIL, i ? SNAME("fellow_history_weight_1") : SNAME("fellow_history_weight_0"), RD::DATA_FORMAT_R16G16_SFLOAT, RD::TEXTURE_USAGE_STORAGE_BIT, RD::TEXTURE_SAMPLES_1, full_size, 4 * view_count);
+		}
+	}
 }
 
 void SSEffects::screen_space_indirect_lighting(Ref<RenderSceneBuffersRD> p_render_buffers, SSILRenderBuffers &p_ssil_buffers, uint32_t p_view, RID p_normal_buffer, const Projection &p_projection, const Projection &p_last_projection, const SSILSettings &p_settings) {
@@ -805,11 +825,41 @@ void SSEffects::screen_space_indirect_lighting(Ref<RenderSceneBuffersRD> p_rende
 
 	RD::get_singleton()->buffer_update(ssil.projection_uniform_buffer, 0, sizeof(SSILProjectionUniforms), &projection_uniforms);
 
+
 	memset(&ssil.gather_push_constant, 0, sizeof(SSILGatherPushConstant));
 
 	RID shader = ssil.gather_shader.version_get_shader(ssil.gather_shader_version, SSIL_GATHER);
 	RID default_sampler = material_storage->sampler_rd_get_default(RSE::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RSE::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
 	RID default_mipmap_sampler = material_storage->sampler_rd_get_default(RSE::CANVAS_ITEM_TEXTURE_FILTER_LINEAR_WITH_MIPMAPS, RSE::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
+
+	// FellowEngine temporal SSIL (low to high quality, full or half size, one view): its uniform buffer (before the compute list)
+	// and the temporal gather's set 3 (the stock bindings, the histories, the uniform buffer).
+	const bool fellow_temporal = p_settings.fellow_temporal && fellow_ssil_temporal_supported(p_projection) && p_view == 0 && p_render_buffers->get_view_count() == 1;
+	RID fellow_temporal_set;
+	if (fellow_temporal) {
+		struct {
+			float reprojection[16];
+			float screen_size[2];
+			uint32_t parity;
+			uint32_t history_valid;
+		} ubo;
+		MaterialStorage::store_camera(p_settings.fellow_reprojection, ubo.reprojection);
+		ubo.screen_size[0] = p_settings.full_screen_size.x;
+		ubo.screen_size[1] = p_settings.full_screen_size.y;
+		ubo.parity = p_settings.fellow_parity;
+		ubo.history_valid = p_settings.fellow_history_valid ? 1 : 0;
+		RD::get_singleton()->buffer_update(ssil.fellow_temporal_ubo, 0, sizeof(ubo), &ubo);
+		const bool odd = p_settings.fellow_parity != 0;
+		RD::Uniform u_last_frame(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 0, Vector<RID>({ default_mipmap_sampler, last_frame }));
+		RD::Uniform u_projection(RD::UNIFORM_TYPE_UNIFORM_BUFFER, 1, ssil.projection_uniform_buffer);
+		RD::Uniform u_color_in(RD::UNIFORM_TYPE_IMAGE, 2, p_render_buffers->get_texture(RB_SCOPE_SSIL, odd ? SNAME("fellow_history_color_0") : SNAME("fellow_history_color_1")));
+		RD::Uniform u_color_out(RD::UNIFORM_TYPE_IMAGE, 3, p_render_buffers->get_texture(RB_SCOPE_SSIL, odd ? SNAME("fellow_history_color_1") : SNAME("fellow_history_color_0")));
+		RD::Uniform u_weight_in(RD::UNIFORM_TYPE_IMAGE, 4, p_render_buffers->get_texture(RB_SCOPE_SSIL, odd ? SNAME("fellow_history_weight_0") : SNAME("fellow_history_weight_1")));
+		RD::Uniform u_weight_out(RD::UNIFORM_TYPE_IMAGE, 5, p_render_buffers->get_texture(RB_SCOPE_SSIL, odd ? SNAME("fellow_history_weight_1") : SNAME("fellow_history_weight_0")));
+		RD::Uniform u_ubo(RD::UNIFORM_TYPE_UNIFORM_BUFFER, 6, ssil.fellow_temporal_ubo);
+		fellow_temporal_set = uniform_set_cache->get_cache(ssil.gather_shader.version_get_shader(ssil.gather_shader_version, 6), 3, u_last_frame, u_projection, u_color_in, u_color_out, u_weight_in, u_weight_out, u_ubo);
+		Fellow::stats().postfx_ssil_temporal_frames.increment();
+	}
 
 	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
 	{
@@ -876,6 +926,10 @@ void SSEffects::screen_space_indirect_lighting(Ref<RenderSceneBuffersRD> p_rende
 			u_projection.append_id(ssil.projection_uniform_buffer);
 
 			projection_uniform_set = uniform_set_cache->get_cache(shader, 3, u_last_frame, u_projection);
+
+			if (fellow_temporal) {
+				projection_uniform_set = fellow_temporal_set;
+			}
 		}
 
 		RID gather_uniform_set;
@@ -972,6 +1026,9 @@ void SSEffects::screen_space_indirect_lighting(Ref<RenderSceneBuffersRD> p_rende
 			RD::get_singleton()->draw_command_end_label(); // Importance Map
 
 			RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, _fellow_ssil_gather_pipeline(SSIL_GATHER_ADAPTIVE));
+		} else if (fellow_temporal) {
+			ssil.fellow_coherent = false; // stock's thread mapping
+			RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, ssil.fellow_temporal_gather_pipeline.get_rid());
 		} else {
 			RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, _fellow_ssil_gather_pipeline(SSIL_GATHER));
 		}
@@ -1228,8 +1285,9 @@ void SSEffects::generate_ssao(Ref<RenderSceneBuffersRD> p_render_buffers, SSAORe
 		ao_pong_slices[i] = p_render_buffers->get_texture_slice(RB_SCOPE_SSAO, RB_DEINTERLEAVED_PONG, p_view * 4 + i, 0);
 	}
 
-	// FellowEngine temporal SSAO (high quality and below, full size, one view): the uniform buffer before the compute list.
-	const bool fellow_temporal = p_settings.fellow_temporal && ssao_quality < RSE::ENV_SSAO_QUALITY_ULTRA && !ssao_half_size && p_view == 0 && p_render_buffers->get_view_count() == 1 && !p_projection.is_orthogonal();
+	// FellowEngine temporal SSAO (low to high quality, full or half size, one view): the uniform buffer before the compute
+	// list.
+	const bool fellow_temporal = p_settings.fellow_temporal && fellow_ssao_temporal_supported(p_projection) && p_view == 0 && p_render_buffers->get_view_count() == 1;
 	RID fellow_temporal_set;
 	if (fellow_temporal) {
 		struct {

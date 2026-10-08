@@ -4,15 +4,26 @@
 
 #VERSION_DEFINES
 
-// FellowEngine adaptive shading rate (decision 0027). From the previous frame's final image, each shading rate tile
-// gets the coarsest rate (per axis: 1, 2 or 4 pixels per fragment) whose estimated error stays under the threshold:
-// the luma's gradient along the axis is estimated from differences at strides 1, 2 and 4 (the largest is kept, so
-// that a tile shaded coarsely in the previous frame, flat inside its fragments, is not mistaken for flat content), and
-// a fragment covering n pixels misses about 0.5 (n = 2) or 1.12 (n = 4) gradients per pixel. The rates are then
-// dilated over 3 x 3 tiles (the finest per axis), for content moving between frames, and every tile is shaded at full
-// rate one frame in refresh_period (its next estimate then sees the content's full detail).
+// FellowEngine adaptive shading rate (decision 0027).
+//
+// MODE_ESTIMATE (after a frame's final image): each shading rate tile of that image gets the coarsest rate (per axis:
+// 1, 2 or 4 pixels per fragment) whose estimated error stays under the threshold: the luma's gradient along the axis is
+// estimated from differences at strides 1, 2 and 4 (the largest is kept, so that a tile shaded coarsely in that frame,
+// flat inside its fragments, is not mistaken for flat content), and a fragment covering n pixels misses about 0.5
+// (n = 2) or 1.12 (n = 4) gradients per pixel; the largest step between neighbours must stay small too.
+//
+// MODE_APPLY (the next frame, after its depth pre-pass, before its opaque pass): each tile takes the finest rate (per
+// axis) of the estimated tiles around where its content was in the estimated frame: five of its pixels (corners and
+// centre) are reprojected with this frame's depth and the camera motion, and the tiles their positions fall in, one
+// more on every side (moving objects, rounding), are read. A tile whose content was not on screen, or spread over too
+// many tiles, gets full rate. Then two checks on this frame's own content: glossy surfaces whose normals vary between
+// neighbouring pixels (their highlights alias when shaded coarsely, which the previous image cannot predict) keep full
+// rate, and every tile is shaded at full rate one frame in refresh_period (its next estimate then sees the content's
+// full detail).
+//
+// MODE_CLEAR: every tile at full rate.
 
-#if defined(MODE_ESTIMATE)
+#if defined(MODE_ESTIMATE) || defined(MODE_APPLY)
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 #else
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
@@ -21,26 +32,23 @@ layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 #ifdef MODE_ESTIMATE
 layout(set = 0, binding = 0) uniform sampler2D source_image;
 layout(r8ui, set = 0, binding = 1) uniform restrict writeonly uimage2D tile_rates;
-// The depth pre-pass's normals and roughness (internal size): glossy surfaces whose normals vary between neighbouring
-// pixels alias their highlights when shaded coarsely (a coarse fragment can land on a peak the full-rate image only
-// shows as faint sub-pixel streaks), which the previous frame's image cannot predict.
-layout(set = 0, binding = 4) uniform sampler2D normal_roughness;
 #endif
 
-#ifdef MODE_DILATE
-shared uint s_tiles;
-shared uint s_coarse_tiles;
-shared uint s_pixels;
-shared uint s_fragments;
+#ifdef MODE_APPLY
 layout(r8ui, set = 0, binding = 1) uniform restrict readonly uimage2D tile_rates;
 layout(r8ui, set = 0, binding = 2) uniform restrict writeonly uimage2D shading_rates;
+// Spread over 64 slots (tile index modulo 64) so that the tiles' atomics rarely meet: coarse tiles, fragments saved.
 layout(set = 0, binding = 3, std430) buffer restrict Counters {
-	uint tiles;
-	uint coarse_tiles;
-	uint pixels;
-	uint fragments;
+	uvec2 slots[64];
 }
 counters;
+// This frame's depth pre-pass: normals and roughness, depth (internal size).
+layout(set = 0, binding = 4) uniform sampler2D normal_roughness;
+layout(set = 0, binding = 5) uniform sampler2D depth_buffer;
+layout(set = 0, binding = 6, std140) uniform Reprojection {
+	mat4 matrix; // this frame's NDC (pixel centres, depth buffer value) to the estimated frame's clip space
+}
+reprojection;
 #endif
 
 #ifdef MODE_CLEAR
@@ -48,7 +56,7 @@ layout(r8ui, set = 0, binding = 2) uniform restrict writeonly uimage2D shading_r
 #endif
 
 layout(push_constant, std430) uniform Params {
-	ivec2 tile_size; // pixels per shading rate texel
+	ivec2 tile_size; // pixels per shading rate texel (powers of two)
 	ivec2 tiles; // shading rate texels
 	ivec2 screen_size; // internal size (pixels)
 	vec2 source_scale; // source pixels per internal pixel
@@ -66,19 +74,19 @@ layout(push_constant, std430) uniform Params {
 }
 params;
 
+uint encode_rate(uint p_lx, uint p_ly) {
+	// No 1 x 4 or 4 x 1.
+	p_lx = min(p_lx, p_ly + 1u);
+	p_ly = min(p_ly, p_lx + 1u);
+	return (p_lx << 2u) | p_ly;
+}
+
 #ifdef MODE_ESTIMATE
 shared float s_luma[32 * 32];
 // The tile's partial results, reduced over the workgroup: squared differences at strides 1, 2, 4 along x and stride 1
 // along y (a); strides 2, 4 along y and the largest neighbour differences along x and y (b).
 shared vec4 s_reduce_a[64];
 shared vec4 s_reduce_b[64];
-shared uint s_gloss_risk;
-
-vec4 load_normal_roughness(ivec2 p_pixel) {
-	vec4 nr = texelFetch(normal_roughness, clamp(p_pixel, ivec2(0), params.screen_size - 1), 0);
-	float r = nr.w > 0.5 ? 1.0 - nr.w : nr.w; // over 0.5: dynamic objects (stored inverted)
-	return vec4(normalize(nr.xyz * 2.0 - 1.0), r * (255.0 / 127.0));
-}
 
 float load_luma(ivec2 p_pixel) {
 	ivec2 p = clamp(p_pixel, ivec2(0), params.screen_size - 1);
@@ -89,45 +97,16 @@ float load_luma(ivec2 p_pixel) {
 	}
 	return dot(c, vec3(0.2126, 0.7152, 0.0722));
 }
-#endif
-
-uint encode_rate(uint p_lx, uint p_ly) {
-	// No 1 x 4 or 4 x 1.
-	p_lx = min(p_lx, p_ly + 1u);
-	p_ly = min(p_ly, p_lx + 1u);
-	return (p_lx << 2u) | p_ly;
-}
 
 void main() {
-#ifdef MODE_ESTIMATE
 	ivec2 tile = ivec2(gl_WorkGroupID.xy);
 	uint lid = gl_LocalInvocationID.x;
-	ivec2 ts = params.tile_size; // powers of two (Vulkan's shading rate texel sizes)
+	ivec2 ts = params.tile_size;
 	int width_log2 = findMSB(ts.x);
 	int n = ts.x * ts.y;
 	ivec2 origin = tile * ts;
-	if (lid == 0u) {
-		s_gloss_risk = 0u;
-	}
-	barrier();
-	uint gloss_risk = 0u;
 	for (int i = int(lid); i < n; i += 64) {
-		ivec2 pixel = origin + ivec2(i & (ts.x - 1), i >> width_log2);
-		s_luma[i] = load_luma(pixel);
-		if (params.use_normals != 0u) {
-			vec4 c = load_normal_roughness(pixel);
-			if (c.w < 0.5) {
-				float limit = params.gloss_factor * c.w * c.w;
-				vec3 nx = load_normal_roughness(pixel + ivec2(1, 0)).xyz;
-				vec3 ny = load_normal_roughness(pixel + ivec2(0, 1)).xyz;
-				if (1.0 - dot(c.xyz, nx) > limit || 1.0 - dot(c.xyz, ny) > limit) {
-					gloss_risk++;
-				}
-			}
-		}
-	}
-	if (gloss_risk != 0u) {
-		atomicAdd(s_gloss_risk, gloss_risk);
+		s_luma[i] = load_luma(origin + ivec2(i & (ts.x - 1), i >> width_log2));
 	}
 	barrier();
 	// Squared differences at strides 1, 2, 4 along x (sums 0-2) and y (3-5).
@@ -186,7 +165,7 @@ void main() {
 			l[axis] = 0u;
 			// Both the tile's RMS error and its largest local step must stay small: a few thin bright features (specular
 			// streaks, wires) in a dark tile have a small RMS but would turn into visible blocks.
-			if (params.threshold > 0.0 && s_gloss_risk < params.gloss_pixels) {
+			if (params.threshold > 0.0) {
 				if (params.max_log2 >= 2u && 1.12 * g[axis] < params.threshold && 1.5 * m[axis] < params.max_step) {
 					l[axis] = 2u;
 				} else if (0.5 * g[axis] < params.threshold && 0.5 * m[axis] < params.max_step) {
@@ -196,59 +175,111 @@ void main() {
 		}
 		imageStore(tile_rates, tile, uvec4(encode_rate(l[0], l[1])));
 	}
+}
 #endif
 
-#ifdef MODE_DILATE
-	ivec2 t = ivec2(gl_GlobalInvocationID.xy);
-	uint lid = gl_LocalInvocationIndex;
+#ifdef MODE_APPLY
+shared uint s_gloss_risk;
+shared int s_box[4]; // estimated tiles reached: min x, min y, max x, max y
+shared uint s_unknown; // a sampled point was off the estimated frame's screen
+
+vec4 load_normal_roughness(ivec2 p_pixel) {
+	vec4 nr = texelFetch(normal_roughness, clamp(p_pixel, ivec2(0), params.screen_size - 1), 0);
+	float r = nr.w > 0.5 ? 1.0 - nr.w : nr.w; // over 0.5: dynamic objects (stored inverted)
+	return vec4(normalize(nr.xyz * 2.0 - 1.0), r * (255.0 / 127.0));
+}
+
+void main() {
+	ivec2 tile = ivec2(gl_WorkGroupID.xy);
+	uint lid = gl_LocalInvocationID.x;
+	ivec2 ts = params.tile_size;
+	int width_log2 = findMSB(ts.x);
+	int n = ts.x * ts.y;
+	ivec2 origin = tile * ts;
 	if (lid == 0u) {
-		s_tiles = 0u;
-		s_coarse_tiles = 0u;
-		s_pixels = 0u;
-		s_fragments = 0u;
+		s_gloss_risk = 0u;
+		s_box[0] = 0x7FFFFFFF;
+		s_box[1] = 0x7FFFFFFF;
+		s_box[2] = -0x7FFFFFFF;
+		s_box[3] = -0x7FFFFFFF;
+		s_unknown = 0u;
 	}
 	barrier();
-	if (all(lessThan(t, params.tiles))) {
-		uint lx = 3u;
-		uint ly = 3u;
-		for (int y = -1; y <= 1; y++) {
-			for (int x = -1; x <= 1; x++) {
-				ivec2 q = clamp(t + ivec2(x, y), ivec2(0), params.tiles - 1);
-				uint r = imageLoad(tile_rates, q).r;
-				lx = min(lx, r >> 2u);
-				ly = min(ly, r & 3u);
+	if (params.use_normals != 0u) {
+		uint gloss_risk = 0u;
+		for (int i = int(lid); i < n; i += 64) {
+			ivec2 pixel = origin + ivec2(i & (ts.x - 1), i >> width_log2);
+			vec4 c = load_normal_roughness(pixel);
+			if (c.w < 0.5) {
+				float limit = params.gloss_factor * c.w * c.w;
+				vec3 nx = load_normal_roughness(pixel + ivec2(1, 0)).xyz;
+				vec3 ny = load_normal_roughness(pixel + ivec2(0, 1)).xyz;
+				if (1.0 - dot(c.xyz, nx) > limit || 1.0 - dot(c.xyz, ny) > limit) {
+					gloss_risk++;
+				}
 			}
 		}
-		uint rate = encode_rate(lx, ly);
-		if (params.refresh_period > 0u && (uint(t.x) + 3u * uint(t.y) + params.frame) % params.refresh_period == 0u) {
+		if (gloss_risk != 0u) {
+			atomicAdd(s_gloss_risk, gloss_risk);
+		}
+	}
+	if (lid < 5u) {
+		ivec2 corner = ivec2(lid & 1u, lid >> 1u) * (ts - 1);
+		ivec2 pixel = min(origin + (lid == 4u ? ts / 2 : corner), params.screen_size - 1);
+		float depth = texelFetch(depth_buffer, pixel, 0).r;
+		vec2 ndc = (vec2(pixel) + 0.5) / vec2(params.screen_size) * 2.0 - 1.0;
+		vec4 clip = reprojection.matrix * vec4(ndc, depth, 1.0);
+		vec2 previous = (clip.xy / clip.w * 0.5 + 0.5) * vec2(params.screen_size);
+		if (!(clip.w > 1e-6) || any(lessThan(previous, vec2(0.0))) || any(greaterThanEqual(previous, vec2(params.screen_size)))) {
+			atomicOr(s_unknown, 1u);
+		} else {
+			ivec2 t = ivec2(previous) / ts;
+			atomicMin(s_box[0], t.x);
+			atomicMin(s_box[1], t.y);
+			atomicMax(s_box[2], t.x);
+			atomicMax(s_box[3], t.y);
+		}
+	}
+	barrier();
+	if (lid == 0u) {
+		uint rate = 0u;
+		ivec2 lo = ivec2(s_box[0], s_box[1]) - 1;
+		ivec2 hi = ivec2(s_box[2], s_box[3]) + 1;
+		if (s_unknown == 0u && all(lessThanEqual(hi - lo, ivec2(6))) && s_gloss_risk < params.gloss_pixels) {
+			lo = max(lo, ivec2(0));
+			hi = min(hi, params.tiles - 1);
+			uint lx = 3u;
+			uint ly = 3u;
+			for (int y = lo.y; y <= hi.y; y++) {
+				for (int x = lo.x; x <= hi.x; x++) {
+					uint r = imageLoad(tile_rates, ivec2(x, y)).r;
+					lx = min(lx, r >> 2u);
+					ly = min(ly, r & 3u);
+				}
+			}
+			rate = encode_rate(lx, ly);
+		}
+		if (params.refresh_period > 0u && (uint(tile.x) + 3u * uint(tile.y) + params.frame) % params.refresh_period == 0u) {
 			// Full rate now and then: a tile shaded coarsely looks flatter than its content (fine texture detail is
 			// lost), so its estimate is renewed from a full-rate image.
 			rate = 0u;
 		}
-		imageStore(shading_rates, t, uvec4(rate));
-		lx = rate >> 2u;
-		ly = rate & 3u;
-		uint pixels = uint(params.tile_size.x * params.tile_size.y);
-		atomicAdd(s_tiles, 1u);
+		imageStore(shading_rates, tile, uvec4(rate));
 		if (rate != 0u) {
-			atomicAdd(s_coarse_tiles, 1u);
+			uint pixels = uint(n);
+			uint slot = (uint(tile.x) + uint(tile.y) * uint(params.tiles.x)) & 63u;
+			atomicAdd(counters.slots[slot].x, 1u);
+			atomicAdd(counters.slots[slot].y, pixels - (pixels >> ((rate >> 2u) + (rate & 3u))));
 		}
-		atomicAdd(s_pixels, pixels);
-		atomicAdd(s_fragments, pixels >> (lx + ly));
 	}
-	barrier();
-	if (lid == 0u && s_tiles != 0u) {
-		atomicAdd(counters.tiles, s_tiles);
-		atomicAdd(counters.coarse_tiles, s_coarse_tiles);
-		atomicAdd(counters.pixels, s_pixels);
-		atomicAdd(counters.fragments, s_fragments);
-	}
+}
 #endif
 
 #ifdef MODE_CLEAR
+void main() {
 	ivec2 t = ivec2(gl_GlobalInvocationID.xy);
 	if (all(lessThan(t, params.tiles))) {
 		imageStore(shading_rates, t, uvec4(0u));
 	}
-#endif
 }
+#endif

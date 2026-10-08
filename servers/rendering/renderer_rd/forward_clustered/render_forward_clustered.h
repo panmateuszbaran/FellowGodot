@@ -111,6 +111,11 @@ public:
 	public:
 		ClusterBuilderRD *cluster_builder = nullptr;
 
+		// FellowEngine adaptive shading rate (decision 0027): the camera of the frame whose final image was last
+		// estimated (tile_rates), without TAA jitter.
+		Projection fellow_vrs_estimated_view_projection;
+		bool fellow_vrs_has_estimate = false;
+
 		struct SSEffectsData {
 			Projection ssil_last_frame_projections[RendererSceneRender::MAX_RENDER_VIEWS];
 			Transform3D ssil_last_frame_transform;
@@ -791,13 +796,16 @@ private:
 	struct FellowVRS {
 		FellowAdaptiveVrsShaderRD shader;
 		RID version;
-		RID pipelines[3]; // estimate, dilate, clear
-		RID counters;
+		RID pipelines[3]; // estimate, apply, clear
+		RID counters; // 64 slots: coarse tiles, fragments saved
+		RID reprojection; // uniform buffer: this frame's NDC to the estimated frame's clip space
+		uint32_t frame_tiles = 0; // tiles and pixels of the last applied frame (the counters' totals)
+		uint32_t frame_pixels = 0;
 	} fellow_vrs;
 	bool _fellow_adaptive_vrs_target(const Ref<RenderSceneBuffersRD> &p_render_buffers) const;
-	void _fellow_adaptive_vrs_begin(const Ref<RenderSceneBuffersRD> &p_render_buffers);
-	void _fellow_adaptive_vrs_update(const Ref<RenderSceneBuffersRD> &p_render_buffers);
-	void _fellow_adaptive_vrs_dispatch(const Ref<RenderSceneBuffersRD> &p_render_buffers, int p_mode);
+	void _fellow_adaptive_vrs_init();
+	void _fellow_adaptive_vrs_estimate(const Ref<RenderSceneBuffersRD> &p_render_buffers, const RenderSceneDataRD *p_scene_data);
+	void _fellow_adaptive_vrs_apply(const Ref<RenderSceneBuffersRD> &p_render_buffers, const RenderSceneDataRD *p_scene_data, bool p_depth_ready);
 	static void _fellow_adaptive_vrs_readback(const Vector<uint8_t> &p_data);
 	void _fellow_occlusion_init();
 	bool _fellow_occlusion_pyramid(const Ref<RenderSceneBuffersRD> &p_render_buffers);

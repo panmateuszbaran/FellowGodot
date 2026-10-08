@@ -88,6 +88,24 @@ layout(set = 3, binding = 1) uniform ProjectionConstants {
 }
 projection_constants;
 
+#ifdef FELLOW_TEMPORAL
+// FellowEngine temporal SSIL (rendering/fellow/postfx/ssil_temporal, docs/decisions/0030-temporal-ssil.md): each frame
+// takes every other tap (alternating halves); the half taken in the previous frame is read back from the histories (per
+// deinterleaved slice: its colour and obscurance sums; its weight sum, negative for the odd half, and view depth) at the
+// pixel this pixel's point was in the previous frame, so that a still view sums all the taps of the stock gather.
+layout(rgba16f, set = 3, binding = 2) uniform restrict readonly image2DArray history_color_in;
+layout(rgba16f, set = 3, binding = 3) uniform restrict writeonly image2DArray history_color_out;
+layout(rg16f, set = 3, binding = 4) uniform restrict readonly image2DArray history_weight_in;
+layout(rg16f, set = 3, binding = 5) uniform restrict writeonly image2DArray history_weight_out;
+layout(set = 3, binding = 6, std140) uniform FellowTemporal {
+	mat4 reprojection; // current view space (Godot convention) to the previous frame's clip space
+	vec2 screen_size;
+	uint parity; // this frame's half: taps parity, parity + 2, ...
+	uint history_valid;
+}
+fellow_temporal;
+#endif
+
 layout(push_constant, std430) uniform Params {
 	ivec2 screen_size;
 	int pass;
@@ -255,6 +273,41 @@ void SSILTap(const int p_quality_level, inout vec3 r_color_sum, inout float r_ob
 	SSIL_tap_inner(p_quality_level, r_color_sum, r_obscurance_sum, r_weight_sum, sampling_mirrored_uv, mip_level, p_pix_center_pos, p_pixel_normal, p_fallof_sq, p_weight_mod);
 }
 
+#ifdef FELLOW_TEMPORAL
+bool fellow_history_taps(uvec2 p_gather_coord, float p_view_depth, out vec4 r_color_obscurance, out float r_weight) {
+	// The other half of the taps, from the previous frame, if this pixel's point was seen there at the same depth.
+	r_color_obscurance = vec4(0.0);
+	r_weight = 0.0;
+	if (fellow_temporal.history_valid == 0u) {
+		return false;
+	}
+	// p_gather_coord: this pixel in the gather's grid (full or half resolution: a deinterleaved texel's slice is its
+	// offset in a 2 x 2 block of that grid).
+	float grid_scale = float(params.size_multiplier);
+	vec2 uv = (vec2(p_gather_coord) + 0.5) * grid_scale / fellow_temporal.screen_size;
+	vec3 view_assao = NDC_to_view_space(uv, p_view_depth);
+	vec4 clip = fellow_temporal.reprojection * vec4(view_assao.x, view_assao.y, -view_assao.z, 1.0);
+	if (clip.w <= 1e-4) {
+		return false;
+	}
+	vec2 prev_uv = clip.xy / clip.w * 0.5 + 0.5;
+	ivec2 q = ivec2(floor(prev_uv * fellow_temporal.screen_size / grid_scale));
+	if (any(lessThan(q, ivec2(0))) || any(greaterThanEqual(q, imageSize(history_weight_in).xy * 2))) {
+		return false;
+	}
+	ivec3 texel = ivec3(q >> 1, (q.x & 1) + 2 * (q.y & 1));
+	vec2 h = imageLoad(history_weight_in, texel).xy;
+	// The other half (the weight sum is positive for the even half, negative for the odd), the same surface.
+	bool other_half = fellow_temporal.parity == 0u ? h.x < 0.0 : h.x > 0.0;
+	if (!other_half || abs(h.y - clip.w) > 0.02 * clip.w) {
+		return false;
+	}
+	r_color_obscurance = imageLoad(history_color_in, texel);
+	r_weight = abs(h.x);
+	return true;
+}
+#endif
+
 void generate_SSIL(out vec3 r_color, out vec4 r_edges, out float r_obscurance, out float r_weight, const vec2 p_pos, int p_quality_level, bool p_adaptive_base) {
 	vec2 pos_rounded = trunc(p_pos);
 	uvec2 upos = uvec2(pos_rounded);
@@ -276,6 +329,9 @@ void generate_SSIL(out vec3 r_color, out vec4 r_edges, out float r_obscurance, o
 
 	vec2 normalized_screen_pos = pos_rounded * params.half_screen_pixel_size + params.half_screen_pixel_size_x025;
 	vec3 pix_center_pos = NDC_to_view_space(normalized_screen_pos, pix_z);
+#ifdef FELLOW_TEMPORAL
+	const float fellow_view_depth = pix_z;
+#endif
 
 	// Load this pixel's viewspace normal
 	uvec2 full_res_coord = upos * 2 * params.size_multiplier + params.pass_coord_offset.xy;
@@ -336,9 +392,32 @@ void generate_SSIL(out vec3 r_color, out vec4 r_edges, out float r_obscurance, o
 
 	// standard, non-adaptive approach
 	if ((p_quality_level != 3) || p_adaptive_base) {
+#ifdef FELLOW_TEMPORAL
+		// This frame's half of the taps; the other half from the previous frame (or this half twice).
+		vec3 taps_color = vec3(0.0);
+		float taps_obscurance = 0.0;
+		float taps_weight = 0.0;
+		for (int i = int(fellow_temporal.parity); i < number_of_taps; i += 2) {
+			SSILTap(p_quality_level, taps_color, taps_obscurance, taps_weight, i, rot_scale_matrix, pix_center_pos, pixel_normal, normalized_screen_pos, mip_offset, fallof_sq, 1.0, norm_xy, norm_xy_length);
+		}
+		vec4 other_color_obscurance;
+		float other_weight;
+		if (fellow_history_taps(upos * 2u + uvec2(params.pass_coord_offset), fellow_view_depth, other_color_obscurance, other_weight)) {
+			color_sum += taps_color + other_color_obscurance.rgb;
+			obscurance_sum += taps_obscurance + other_color_obscurance.a;
+			weight_sum += taps_weight + other_weight;
+		} else {
+			color_sum += 2.0 * taps_color;
+			obscurance_sum += 2.0 * taps_obscurance;
+			weight_sum += 2.0 * taps_weight;
+		}
+		imageStore(history_color_out, ivec3(ivec2(upos), params.pass), vec4(taps_color, taps_obscurance));
+		imageStore(history_weight_out, ivec3(ivec2(upos), params.pass), vec4(fellow_temporal.parity == 0u ? taps_weight : -taps_weight, fellow_view_depth, 0.0, 0.0));
+#else
 		for (int i = 0; i < number_of_taps; i++) {
 			SSILTap(p_quality_level, color_sum, obscurance_sum, weight_sum, i, rot_scale_matrix, pix_center_pos, pixel_normal, normalized_screen_pos, mip_offset, fallof_sq, 1.0, norm_xy, norm_xy_length);
 		}
+#endif
 	}
 #ifdef ADAPTIVE
 	else {

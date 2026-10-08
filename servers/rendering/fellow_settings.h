@@ -76,6 +76,12 @@ inline bool ssao_temporal() {
 	return postfx_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/postfx/ssao_temporal");
 }
 
+// SSIL gather with alternating halves of its taps, the other half from the previous frame (as ssao_temporal; LOW to
+// HIGH quality, full size, one view; docs/decisions/0030-temporal-ssil.md). Not exact: measured. Read every frame.
+inline bool ssil_temporal() {
+	return postfx_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/postfx/ssil_temporal");
+}
+
 // The auto exposure's luminance reduction with two barriers per workgroup instead of seven (the same additions in the
 // same order; docs/decisions/0025-luminance-reduce.md). Read every frame.
 inline bool fast_luminance_reduce() {
@@ -621,6 +627,7 @@ struct Stats {
 	SafeNumeric<uint64_t> postfx_luminance_verify_texels; // luminance reduction texels compared (decision 0025, debug)
 	SafeNumeric<uint64_t> postfx_luminance_verify_mismatches;
 	SafeNumeric<uint64_t> postfx_ssao_temporal_frames; // SSAO gathers with half the taps plus the history (decision 0028)
+	SafeNumeric<uint64_t> postfx_ssil_temporal_frames; // SSIL gathers with half the taps plus the history (decision 0030)
 	SafeNumeric<uint64_t> occlusion_tested; // opaque list elements tested (debug/occlusion_stats)
 	SafeNumeric<uint64_t> occlusion_weight; // their surfaces' indices (full detail)
 	SafeNumeric<uint64_t> occlusion_hidden; // elements the pyramid hides

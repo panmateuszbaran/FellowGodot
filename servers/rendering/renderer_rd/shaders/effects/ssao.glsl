@@ -289,20 +289,23 @@ void SSAOTap(const int p_quality_level, inout float r_obscurance_sum, inout floa
 }
 
 #ifdef FELLOW_TEMPORAL
-bool fellow_history_taps(uvec2 p_full_res_coord, float p_view_depth, out vec2 r_taps) {
+bool fellow_history_taps(uvec2 p_gather_coord, float p_view_depth, out vec2 r_taps) {
 	// The other half of the taps, from the previous frame, if this pixel's point was seen there at the same depth.
 	if (fellow_temporal.history_valid == 0u) {
 		return false;
 	}
-	vec2 uv = (vec2(p_full_res_coord) + 0.5) / fellow_temporal.screen_size;
+	// p_gather_coord: this pixel in the gather's grid (full or half resolution: a deinterleaved texel's slice is its
+	// offset in a 2 x 2 block of that grid).
+	float grid_scale = float(params.size_multiplier);
+	vec2 uv = (vec2(p_gather_coord) + 0.5) * grid_scale / fellow_temporal.screen_size;
 	vec3 view_assao = NDC_to_view_space(uv, p_view_depth);
 	vec4 clip = fellow_temporal.reprojection * vec4(view_assao.x, view_assao.y, -view_assao.z, 1.0);
 	if (clip.w <= 1e-4) {
 		return false;
 	}
 	vec2 prev_uv = clip.xy / clip.w * 0.5 + 0.5;
-	ivec2 q = ivec2(floor(prev_uv * fellow_temporal.screen_size));
-	if (any(lessThan(q, ivec2(0))) || any(greaterThanEqual(q, ivec2(fellow_temporal.screen_size)))) {
+	ivec2 q = ivec2(floor(prev_uv * fellow_temporal.screen_size / grid_scale));
+	if (any(lessThan(q, ivec2(0))) || any(greaterThanEqual(q, imageSize(history_in).xy * 2))) {
 		return false;
 	}
 	vec4 h = imageLoad(history_in, ivec3(q >> 1, (q.x & 1) + 2 * (q.y & 1)));
@@ -481,7 +484,7 @@ void generate_SSAO_shadows_internal(out float r_shadow_term, out vec4 r_edges, o
 			SSAOTap(p_quality_level, taps_obscurance, taps_weight, i, rot_scale_matrix, pix_center_pos, pixel_normal, normalized_screen_pos, mip_offset, fallof_sq, 1.0, norm_xy, norm_xy_length);
 		}
 		vec2 other_taps;
-		if (fellow_history_taps(full_res_coord, fellow_view_depth, other_taps)) {
+		if (fellow_history_taps(upos * 2u + uvec2(params.pass_coord_offset), fellow_view_depth, other_taps)) {
 			obscurance_sum += taps_obscurance + other_taps.x;
 			weight_sum += taps_weight + other_taps.y;
 		} else {
