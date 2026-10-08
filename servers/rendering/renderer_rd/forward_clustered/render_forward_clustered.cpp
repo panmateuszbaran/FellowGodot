@@ -1690,6 +1690,10 @@ void RenderForwardClustered::_fellow_adaptive_vrs_dispatch(const Ref<RenderScene
 		uint32_t frame;
 		uint32_t refresh_period;
 		float max_step;
+		uint32_t use_normals;
+		float gloss_factor;
+		uint32_t gloss_pixels;
+		uint32_t pad3;
 	} push = {};
 	push.tile_size[0] = texel.x;
 	push.tile_size[1] = texel.y;
@@ -1702,6 +1706,8 @@ void RenderForwardClustered::_fellow_adaptive_vrs_dispatch(const Ref<RenderScene
 	push.frame = uint32_t(RSG::rasterizer->get_frame_number());
 	push.refresh_period = uint32_t(MAX(0, Fellow::adaptive_vrs_refresh()));
 	push.max_step = Fellow::adaptive_vrs_max_step();
+	push.gloss_factor = 0.5f;
+	push.gloss_pixels = 2;
 	UniformSetCacheRD *cache = UniformSetCacheRD::get_singleton();
 	RD::Uniform u_rates_out(RD::UNIFORM_TYPE_IMAGE, 2, shading_rates);
 	if (p_mode == 0) {
@@ -1736,10 +1742,17 @@ void RenderForwardClustered::_fellow_adaptive_vrs_dispatch(const Ref<RenderScene
 	RID sampler = RendererRD::MaterialStorage::get_singleton()->sampler_rd_get_default(RSE::CANVAS_ITEM_TEXTURE_FILTER_NEAREST, RSE::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
 	RD::Uniform u_source(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 0, Vector<RID>({ sampler, source }));
 	RD::Uniform u_tile_rates(RD::UNIFORM_TYPE_IMAGE, 1, tile_rates);
+	// This frame's normals and roughness, if the pre-pass wrote them (glossy surfaces with varying normals keep full rate).
+	RID normal_roughness = p_render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS) ? p_render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS) : RID();
+	push.use_normals = normal_roughness.is_valid() && Fellow::adaptive_vrs_gloss_guard() ? 1 : 0;
+	if (normal_roughness.is_null()) {
+		normal_roughness = texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_WHITE);
+	}
+	RD::Uniform u_normal_roughness(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 4, Vector<RID>({ sampler, normal_roughness }));
 	RD::Uniform u_counters(RD::UNIFORM_TYPE_STORAGE_BUFFER, 3, v.counters);
 	RID shader = v.shader.version_get_shader(v.version, 0);
 	rd->compute_list_bind_compute_pipeline(list, v.pipelines[0]);
-	rd->compute_list_bind_uniform_set(list, cache->get_cache(shader, 0, u_source, u_tile_rates), 0);
+	rd->compute_list_bind_uniform_set(list, cache->get_cache(shader, 0, u_source, u_tile_rates, u_normal_roughness), 0);
 	rd->compute_list_set_push_constant(list, &push, sizeof(push));
 	rd->compute_list_dispatch(list, tiles.x, tiles.y, 1);
 	rd->compute_list_add_barrier(list);

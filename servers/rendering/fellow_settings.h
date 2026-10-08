@@ -578,6 +578,11 @@ inline int adaptive_vrs_refresh() {
 inline float adaptive_vrs_max_step() {
 	return GLOBAL_GET_CACHED(float, "rendering/fellow/shading/adaptive_vrs_max_step");
 }
+// Tiles where glossy surfaces have varying normals (from the pre-pass's normals and roughness) keep full rate: their
+// highlights alias when shaded coarsely.
+inline bool adaptive_vrs_gloss_guard() {
+	return GLOBAL_GET_CACHED(bool, "rendering/fellow/shading/adaptive_vrs_gloss_guard");
+}
 
 // Cumulative counters (render thread writes, scripts read through RenderingServer.fellow_get_stats()).
 struct Stats {

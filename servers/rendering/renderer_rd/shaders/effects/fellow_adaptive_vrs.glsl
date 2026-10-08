@@ -21,6 +21,10 @@ layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 #ifdef MODE_ESTIMATE
 layout(set = 0, binding = 0) uniform sampler2D source_image;
 layout(r8ui, set = 0, binding = 1) uniform restrict writeonly uimage2D tile_rates;
+// The depth pre-pass's normals and roughness (internal size): glossy surfaces whose normals vary between neighbouring
+// pixels alias their highlights when shaded coarsely (a coarse fragment can land on a peak the full-rate image only
+// shows as faint sub-pixel streaks), which the previous frame's image cannot predict.
+layout(set = 0, binding = 4) uniform sampler2D normal_roughness;
 #endif
 
 #ifdef MODE_DILATE
@@ -51,6 +55,10 @@ layout(push_constant, std430) uniform Params {
 	uint frame;
 	uint refresh_period; // 0: none; otherwise each tile is shaded at full rate one frame in this many
 	float max_step; // largest error allowed at any pixel (the largest neighbour difference times 0.5 or 1.5)
+	uint use_normals; // normal_roughness holds this frame's normals and roughness
+	float gloss_factor; // a pixel is at risk if 1 - dot(n, neighbour) > gloss_factor * roughness^2
+	uint gloss_pixels; // a tile with at least this many pixels at risk keeps full rate
+	uint pad3;
 }
 params;
 
@@ -59,6 +67,13 @@ shared float s_luma[32 * 32];
 shared float s_sums[6][64];
 shared uint s_counts[6][64];
 shared float s_max[2][64];
+shared uint s_gloss_risk;
+
+vec4 load_normal_roughness(ivec2 p_pixel) {
+	vec4 nr = texelFetch(normal_roughness, clamp(p_pixel, ivec2(0), params.screen_size - 1), 0);
+	float r = nr.w > 0.5 ? 1.0 - nr.w : nr.w; // over 0.5: dynamic objects (stored inverted)
+	return vec4(normalize(nr.xyz * 2.0 - 1.0), r * (255.0 / 127.0));
+}
 
 float load_luma(ivec2 p_pixel) {
 	ivec2 p = clamp(p_pixel, ivec2(0), params.screen_size - 1);
@@ -85,8 +100,24 @@ void main() {
 	ivec2 ts = params.tile_size;
 	int n = ts.x * ts.y;
 	ivec2 origin = tile * ts;
+	if (lid == 0u) {
+		s_gloss_risk = 0u;
+	}
+	barrier();
 	for (int i = int(lid); i < n; i += 64) {
-		s_luma[i] = load_luma(origin + ivec2(i % ts.x, i / ts.x));
+		ivec2 pixel = origin + ivec2(i % ts.x, i / ts.x);
+		s_luma[i] = load_luma(pixel);
+		if (params.use_normals != 0u) {
+			vec4 c = load_normal_roughness(pixel);
+			if (c.w < 0.5) {
+				float limit = params.gloss_factor * c.w * c.w;
+				vec3 nx = load_normal_roughness(pixel + ivec2(1, 0)).xyz;
+				vec3 ny = load_normal_roughness(pixel + ivec2(0, 1)).xyz;
+				if (1.0 - dot(c.xyz, nx) > limit || 1.0 - dot(c.xyz, ny) > limit) {
+					atomicAdd(s_gloss_risk, 1u);
+				}
+			}
+		}
 	}
 	barrier();
 	// Squared differences at strides 1, 2, 4 along x (sums 0-2) and y (3-5).
@@ -146,7 +177,7 @@ void main() {
 			l[axis] = 0u;
 			// Both the tile's RMS error and its largest local step must stay small: a few thin bright features (specular
 			// streaks, wires) in a dark tile have a small RMS but would turn into visible blocks.
-			if (params.threshold > 0.0) {
+			if (params.threshold > 0.0 && s_gloss_risk < params.gloss_pixels) {
 				if (params.max_log2 >= 2u && 1.12 * g[axis] < params.threshold && 1.5 * m[axis] < params.max_step) {
 					l[axis] = 2u;
 				} else if (0.5 * g[axis] < params.threshold && 0.5 * m[axis] < params.max_step) {
