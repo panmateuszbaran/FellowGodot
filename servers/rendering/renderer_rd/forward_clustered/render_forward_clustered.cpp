@@ -372,6 +372,13 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 			continue;
 		}
 
+		if constexpr (p_pass_mode != PASS_MODE_COLOR) {
+			if (p_params->fellow_depth_filter != 0 && (p_params->fellow_depth_filter == 1) != bool(surf->flags & GeometryInstanceSurfaceDataCache::FLAG_USES_SHARED_SHADOW_MATERIAL)) {
+				i += element_info.repeat - 1; // the whole run (its elements share the material)
+				continue;
+			}
+		}
+
 		push_constant.base_index = i + p_params->element_offset;
 
 		RID material_uniform_set;
@@ -870,7 +877,18 @@ void RenderForwardClustered::_render_list_with_draw_list(RenderListParameters *p
 	p_params->framebuffer_format = fb_format;
 
 	RD::DrawListID draw_list = RD::get_singleton()->draw_list_begin(p_framebuffer, p_draw_flags, p_clear_color_values, p_clear_depth_value, p_clear_stencil_value, p_region);
-	_render_list(draw_list, fb_format, p_params, 0, p_params->element_count);
+	if (p_params->fellow_depth_filter != 0) {
+		// FellowEngine geometry/prepass_simple_first: the depth pre-pass draws the elements with the shared depth material
+		// first, then the alpha-tested and vertex-moving ones, which then find more of their hidden fragments rejected
+		// by the early depth test. The depth buffer is the same (the nearest fragment of each pixel, whatever the
+		// order); only coplanar ties between the two groups can leave a different normal/roughness.
+		p_params->fellow_depth_filter = 1;
+		_render_list(draw_list, fb_format, p_params, 0, p_params->element_count);
+		p_params->fellow_depth_filter = 2;
+		_render_list(draw_list, fb_format, p_params, 0, p_params->element_count);
+	} else {
+		_render_list(draw_list, fb_format, p_params, 0, p_params->element_count);
+	}
 	RD::get_singleton()->draw_list_end();
 }
 
@@ -4082,6 +4100,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		RenderListParameters render_list_params(render_list[RENDER_LIST_OPAQUE].elements.ptr(), render_list[RENDER_LIST_OPAQUE].element_info.ptr(), render_list[RENDER_LIST_OPAQUE].elements.size(), reverse_cull, depth_pass_mode, 0, rb_data.is_null(), p_render_data->directional_light_soft_shadows, rp_uniform_set, get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_WIREFRAME, Vector2(), p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, p_render_data->scene_data->view_count, 0, base_specialization);
 		render_list_params.fellow_cluster_planes = fellow_cluster_planes.ptr();
 		render_list_params.fellow_cluster_plane_count = fellow_cluster_planes.size();
+		render_list_params.fellow_depth_filter = Fellow::prepass_simple_first() ? 1 : 0;
 		_render_list_with_draw_list(&render_list_params, depth_framebuffer, RD::DrawFlags(needs_pre_resolve ? RD::DRAW_DEFAULT_ALL : RD::DRAW_CLEAR_ALL), depth_pass_clear, 0.0f, 0u, p_render_data->render_region);
 
 		RD::get_singleton()->draw_command_end_label();

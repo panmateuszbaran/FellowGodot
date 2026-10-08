@@ -296,6 +296,11 @@ inline bool mesh_clusters_blended() {
 inline bool occlusion_culling() {
 	return geometry_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/geometry/occlusion_culling");
 }
+// The depth pre-pass draws the elements with the shared depth material first, then the alpha-tested and vertex-moving
+// ones (docs/decisions/0029-prepass-order.md): the same depth buffer; read every frame.
+inline bool prepass_simple_first() {
+	return geometry_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/geometry/prepass_simple_first");
+}
 // Maximum triangles per cluster (leaf of the k-d tree).
 inline int mesh_cluster_triangles() {
 	return CLAMP(GLOBAL_GET_CACHED(int, "rendering/fellow/geometry/cluster_triangles"), 64, 1 << 20);

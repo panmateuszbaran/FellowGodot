@@ -85,6 +85,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/postfx/ssao_temporal", false);
 	GLOBAL_DEF("rendering/fellow/postfx/verify_luminance_reduce", false);
 	GLOBAL_DEF("rendering/fellow/geometry/occlusion_culling", false);
+	GLOBAL_DEF("rendering/fellow/geometry/prepass_simple_first", false);
 	GLOBAL_DEF("rendering/fellow/debug/occlusion_stats", false);
 	GLOBAL_DEF("rendering/fellow/debug/occlusion_cull_approx", false);
 	GLOBAL_DEF("rendering/fellow/postfx/taa_camera_motion_vectors", false);
