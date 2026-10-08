@@ -817,6 +817,9 @@ public:
 		float depth_bias_slope_factor = 0.0f;
 		float line_width = 1.0f;
 		uint32_t patch_control_points = 1;
+		// FellowEngine adaptive shading (rendering/fellow/shading/adaptive_vrs): draws of this pipeline are shaded once
+		// per pixel whatever a shading rate attachment says (materials that discard or write depth).
+		bool fellow_full_rate_shading = false;
 	};
 
 	struct PipelineMultisampleState {

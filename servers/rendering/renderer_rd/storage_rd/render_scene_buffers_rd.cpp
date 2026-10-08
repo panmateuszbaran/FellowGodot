@@ -32,6 +32,7 @@
 #include "render_scene_buffers_rd.compat.inc"
 
 #include "core/object/class_db.h"
+#include "servers/rendering/fellow_settings.h"
 #include "servers/rendering/renderer_rd/storage_rd/texture_storage.h"
 #include "servers/rendering/rendering_device_binds.h"
 #include "servers/rendering/rendering_server.h" // IWYU pragma: keep // Needed to bind RSE enums.
@@ -202,7 +203,10 @@ void RenderSceneBuffersRD::configure(const RenderSceneBuffersConfiguration *p_co
 
 	// VRS (note, our vrs object will only be set if VRS is supported)
 	RID vrs_texture;
-	if (vrs && vrs_mode != RSE::VIEWPORT_VRS_DISABLED) {
+	// FellowEngine adaptive shading rate (decision 0027): the attachment also for viewports without a VRS mode, its rates
+	// set by the renderer from each frame's final image.
+	const bool fellow_adaptive_vrs = Fellow::adaptive_vrs() && view_count == 1 && RD::get_singleton()->vrs_get_format() == RD::DATA_FORMAT_R8_UINT;
+	if (vrs && (vrs_mode != RSE::VIEWPORT_VRS_DISABLED || fellow_adaptive_vrs)) {
 		vrs_texture = create_texture(RB_SCOPE_VRS, RB_TEXTURE, get_vrs_format(), get_vrs_usage_bits(), RD::TEXTURE_SAMPLES_1, vrs->get_vrs_texture_size(internal_size));
 	}
 

@@ -43,6 +43,7 @@
 #include "servers/rendering/renderer_rd/effects/taa.h"
 #include "servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.h"
 #include "servers/rendering/renderer_rd/renderer_scene_render_rd.h"
+#include "servers/rendering/renderer_rd/shaders/effects/fellow_adaptive_vrs.glsl.gen.h"
 #include "servers/rendering/renderer_rd/shaders/effects/fellow_hzb.glsl.gen.h"
 #include "servers/rendering/renderer_rd/shaders/effects/fellow_occlusion_cull.glsl.gen.h"
 #include "servers/rendering/renderer_rd/shaders/effects/fellow_occlusion_test.glsl.gen.h"
@@ -779,6 +780,18 @@ private:
 		RID cull_counters;
 		bool pass_active = false; // the opaque colour pass being set up draws culled runs (binding 41: compacted)
 	} fellow_occlusion;
+	// Adaptive shading rate (shading/adaptive_vrs, docs/decisions/0027-adaptive-shading-rate.md).
+	struct FellowVRS {
+		FellowAdaptiveVrsShaderRD shader;
+		RID version;
+		RID pipelines[3]; // estimate, dilate, clear
+		RID counters;
+	} fellow_vrs;
+	bool _fellow_adaptive_vrs_target(const Ref<RenderSceneBuffersRD> &p_render_buffers) const;
+	void _fellow_adaptive_vrs_begin(const Ref<RenderSceneBuffersRD> &p_render_buffers);
+	void _fellow_adaptive_vrs_update(const Ref<RenderSceneBuffersRD> &p_render_buffers);
+	void _fellow_adaptive_vrs_dispatch(const Ref<RenderSceneBuffersRD> &p_render_buffers, int p_mode);
+	static void _fellow_adaptive_vrs_readback(const Vector<uint8_t> &p_data);
 	void _fellow_occlusion_init();
 	bool _fellow_occlusion_pyramid(const Ref<RenderSceneBuffersRD> &p_render_buffers);
 	bool _fellow_occlusion_cull(RenderDataRD *p_render_data, uint32_t p_color_pass_flags);

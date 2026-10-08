@@ -547,6 +547,22 @@ inline bool blended_alpha_zero_skip() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/shading/blended_alpha_zero_skip");
 }
 
+// Adaptive shading rate (docs/decisions/0027-adaptive-shading-rate.md; visually lossless, not bit-exact): the 3D
+// viewports get a shading rate attachment, set every frame from the previous frame's final image: tiles whose content
+// varies less than adaptive_vrs_threshold (luma, 0-1) at half or quarter resolution are shaded coarsely in the opaque and
+// transparent passes. Materials that discard or write depth keep full rate. The attachment is created with the render
+// buffers (read then); the threshold is read every frame (0: every tile at full rate).
+inline bool adaptive_vrs() {
+	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/shading/adaptive_vrs");
+}
+inline float adaptive_vrs_threshold() {
+	return GLOBAL_GET_CACHED(float, "rendering/fellow/shading/adaptive_vrs_threshold");
+}
+// Coarsest rate: 0 = 2 x 2, 1 = 4 x 4.
+inline int adaptive_vrs_max_rate() {
+	return GLOBAL_GET_CACHED(int, "rendering/fellow/shading/adaptive_vrs_max_rate");
+}
+
 // Cumulative counters (render thread writes, scripts read through RenderingServer.fellow_get_stats()).
 struct Stats {
 	SafeNumeric<uint64_t> shadow_cache_cascades_stock;
@@ -591,6 +607,11 @@ struct Stats {
 	SafeNumeric<uint64_t> occlusion_cull_hidden_indices; // of which hidden
 	SafeNumeric<uint64_t> occlusion_cull_indirect_draws; // draws recorded indirect
 	SafeNumeric<uint64_t> occlusion_cull_slot_uploads; // surface bounding boxes uploaded
+	SafeNumeric<uint64_t> vrs_frames; // frames whose shading rates were set adaptively
+	SafeNumeric<uint64_t> vrs_tiles; // shading rate tiles set (read back asynchronously)
+	SafeNumeric<uint64_t> vrs_tiles_coarse; // of which coarser than 1 x 1
+	SafeNumeric<uint64_t> vrs_pixels; // pixels of those tiles
+	SafeNumeric<uint64_t> vrs_fragments; // fragments they shade at their rates (pixels / rate area)
 	SafeNumeric<uint64_t> cpu_persistent_elements; // list elements written as 16-byte elements (decision 0022)
 	SafeNumeric<uint64_t> cpu_persistent_uploads; // surface entries rewritten by a list element (changed, or first used)
 	SafeNumeric<uint64_t> cpu_persistent_maps; // regions of the persistent buffer mapped (one per frame using it)

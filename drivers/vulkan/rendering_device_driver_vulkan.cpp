@@ -6266,6 +6266,11 @@ RDD::PipelineID RenderingDeviceDriverVulkan::render_pipeline_create(
 		fsr_create_info->fragmentSize = { 4, 4 };
 		fsr_create_info->combinerOps[0] = VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR; // We don't use pipeline/primitive FSR so this really doesn't matter.
 		fsr_create_info->combinerOps[1] = VK_FRAGMENT_SHADING_RATE_COMBINER_OP_REPLACE_KHR; // Always use the outcome of attachment FSR if enabled.
+		if (p_rasterization_state.fellow_full_rate_shading) {
+			// FellowEngine: the pipeline's own rate (one fragment per pixel), whatever the attachment says.
+			fsr_create_info->fragmentSize = { 1, 1 };
+			fsr_create_info->combinerOps[1] = VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR;
+		}
 
 		graphics_pipeline_nextptr = fsr_create_info;
 	}

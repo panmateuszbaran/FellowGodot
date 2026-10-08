@@ -452,6 +452,10 @@ void SceneShaderForwardClustered::ShaderData::_create_pipeline(PipelineKey p_pip
 	RD::PipelineRasterizationState raster_state;
 	raster_state.cull_mode = p_pipeline_key.cull_mode;
 	raster_state.wireframe = wireframe || p_pipeline_key.wireframe;
+	// FellowEngine adaptive shading: a coarse fragment that discards would remove every pixel it covers (holes where the
+	// full-rate pre-pass kept some), and one writing DEPTH would give them one depth: such materials keep one fragment
+	// per pixel.
+	raster_state.fellow_full_rate_shading = uses_discard || uses_alpha_clip || uses_alpha_antialiasing || fellow_writes_depth || uses_point_size;
 
 	RD::PipelineMultisampleState multisample_state;
 	multisample_state.sample_count = RD::get_singleton()->framebuffer_format_get_texture_samples(p_pipeline_key.framebuffer_format_id, 0);

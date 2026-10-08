@@ -88,6 +88,9 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/debug/occlusion_cull_approx", false);
 	GLOBAL_DEF("rendering/fellow/postfx/taa_camera_motion_vectors", false);
 	GLOBAL_DEF("rendering/fellow/shading/blended_alpha_zero_skip", true);
+	GLOBAL_DEF_RST("rendering/fellow/shading/adaptive_vrs", false);
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/shading/adaptive_vrs_threshold", PROPERTY_HINT_RANGE, "0,0.1,0.0005"), 0.006);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/shading/adaptive_vrs_max_rate", PROPERTY_HINT_ENUM, "2x2,4x4"), 1);
 	// Render-thread CPU (decisions 0016-0018): on by default since fellow56 (exact: same lists, instance data, draws and
 	// commands as stock; measured in City Lab, its draw-heavy variant and the GPU-bound scenes).
 	GLOBAL_DEF("rendering/fellow/cpu/enabled", true);
@@ -209,6 +212,11 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["occlusion_cull_hidden_indices"] = s.occlusion_cull_hidden_indices.get();
 	d["occlusion_cull_indirect_draws"] = s.occlusion_cull_indirect_draws.get();
 	d["occlusion_cull_slot_uploads"] = s.occlusion_cull_slot_uploads.get();
+	d["vrs_frames"] = s.vrs_frames.get();
+	d["vrs_tiles"] = s.vrs_tiles.get();
+	d["vrs_tiles_coarse"] = s.vrs_tiles_coarse.get();
+	d["vrs_pixels"] = s.vrs_pixels.get();
+	d["vrs_fragments"] = s.vrs_fragments.get();
 	d["cpu_persistent_elements"] = s.cpu_persistent_elements.get();
 	d["cpu_persistent_uploads"] = s.cpu_persistent_uploads.get();
 	d["cpu_persistent_maps"] = s.cpu_persistent_maps.get();
