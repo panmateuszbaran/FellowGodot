@@ -30,6 +30,8 @@
 
 #include "fog.h"
 
+#include "servers/rendering/fellow_settings.h"
+
 #include "servers/rendering/renderer_rd/cluster_builder_rd.h"
 #include "servers/rendering/renderer_rd/renderer_scene_render_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
@@ -1162,7 +1164,9 @@ void Fog::volumetric_fog_update(const VolumetricFogSettings &p_settings, const P
 		params.screen_size[1] = p_settings.rb_size.y;
 
 		params.fellow_cluster_z_near = p_settings.cluster_builder->fellow_get_log_z_near();
-		params.pad = 0.0f;
+		// FellowEngine (postfx/fog_half_rate, decision 0031): half the froxels' lighting per frame, with temporal
+		// reprojection only.
+		params.fellow_half_rate = Fellow::fog_half_rate() && params.use_temporal_reprojection ? (0x100u | uint32_t(RSG::rasterizer->get_frame_number() & 31)) : 0u;
 	}
 
 	Basis sky_transform = RendererSceneRenderRD::get_singleton()->environment_get_sky_orientation(p_settings.env);

@@ -69,3 +69,4 @@ Status: KEEP | REWORK | REJECT | MEASURING      Branch / commit: ...      Toggle
 | [0028](0028-temporal-ssao.md) | Temporal SSAO: half the taps per frame, the other half from the previous frame's history (visually lossless) | `postfx/ssao_temporal` | MEASURING |
 | [0029](0029-prepass-order.md) | Depth pre-pass with the shared-depth-material elements first | `geometry/prepass_simple_first` | REJECT (option, off: no change in the pre-pass, render thread +2.5 % in Bistro exterior) |
 | [0030](0030-temporal-ssil.md) | Temporal SSIL: half the taps per frame (as 0028; also half-size SSAO/SSIL) | `postfx/ssil_temporal` | MEASURING |
+| [0031](0031-fog-half-rate.md) | Volumetric fog: half the froxels lit per frame (checkerboard), the others reprojected | `postfx/fog_half_rate` | MEASURING |

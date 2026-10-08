@@ -187,7 +187,7 @@ layout(set = 0, binding = 15, std140) uniform Params {
 
 	vec2 sky_border_size;
 	float fellow_cluster_z_near; // FellowEngine depth slices of the clusters: near plane, 0 for stock's linear slices.
-	float pad;
+	uint fellow_half_rate; // FellowEngine (postfx/fog_half_rate, decision 0031): 0 off, else 0x100 | (frame & 31).
 
 	mat3x4 cam_rotation;
 	mat4 to_prev_view;
@@ -344,11 +344,36 @@ void main() {
 
 			reprojected_density = textureLod(sampler3D(prev_density_texture, linear_sampler), prev_view, 0.0);
 			reproject_amount = params.temporal_blend;
+			uint halton_index = params.temporal_frame;
+
+			if (params.fellow_half_rate != 0u) {
+				// FellowEngine half rate: the froxels of one checkerboard parity are lit in even frames, the others in odd
+				// frames; a froxel not lit this frame keeps its reprojected value, one lit blends it in as stock does over
+				// two frames (history weight squared). Its jitter steps through the whole Halton table across its own
+				// updates (frames two apart).
+				uint frame = params.fellow_half_rate & 31u;
+				if (((uint(pos.x + pos.y + pos.z) + frame) & 1u) != 0u) {
+					bool invalid = any(isnan(reprojected_density)) || any(isinf(reprojected_density));
+					imageStore(density_map, pos, clamp(invalid ? vec4(0.0) : reprojected_density, vec4(0.0), vec4(65504.0)));
+#ifdef NO_IMAGE_ATOMICS
+					density_only_map[lpos] = 0;
+					light_only_map[lpos] = 0;
+					emissive_only_map[lpos] = 0;
+#else
+					imageStore(density_only_map, pos, uvec4(0));
+					imageStore(light_only_map, pos, uvec4(0));
+					imageStore(emissive_only_map, pos, uvec4(0));
+#endif
+					return;
+				}
+				reproject_amount = params.temporal_blend * params.temporal_blend;
+				halton_index = (frame >> 1u) & 15u;
+			}
 
 			// Since we can reproject, now we must jitter the current view pos.
 			// This is done here because cells that can't reproject should not jitter.
 
-			fog_unit_pos = posf * fog_cell_size + fog_cell_size * halton_map[params.temporal_frame]; //center of voxels, offset by halton table
+			fog_unit_pos = posf * fog_cell_size + fog_cell_size * halton_map[halton_index]; //center of voxels, offset by halton table
 
 			screen_pos = uvec2(fog_unit_pos.xy * params.screen_size);
 			cluster_pos = screen_pos >> params.cluster_shift;

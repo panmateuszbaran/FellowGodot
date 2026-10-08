@@ -82,6 +82,12 @@ inline bool ssil_temporal() {
 	return postfx_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/postfx/ssil_temporal");
 }
 
+// Volumetric fog with half its froxels lit per frame (checkerboard, alternating), the others reprojected; only with
+// the environment's temporal reprojection (docs/decisions/0031-fog-half-rate.md). Not exact: measured. Read every frame.
+inline bool fog_half_rate() {
+	return postfx_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/postfx/fog_half_rate");
+}
+
 // The auto exposure's luminance reduction with two barriers per workgroup instead of seven (the same additions in the
 // same order; docs/decisions/0025-luminance-reduce.md). Read every frame.
 inline bool fast_luminance_reduce() {
