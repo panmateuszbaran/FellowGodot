@@ -104,6 +104,30 @@ covering its pixels (with the margins), so each of its fragments fails the colou
 pre-pass, or greater-or-equal; the buffer only gets nearer); the visible ones are drawn in the same order with the same
 instance data. Same images expected bit for bit.
 
+## Step 1 measured (`fellow76`, `m6_f79_*`)
+
+Counters (RTX, perf paths, culling on): City Lab 68 % of the tested elements hidden (77 % of their indices), Bistro
+exterior 71 % (34 %), Bistro interior 33 % (16 %), Sponza 31 % (2 %: its large meshes are drawn by cluster ranges and
+stay visible), Lights Lab 6 %, PBR Lab 0.3 %.
+
+Identity, culling off against on:
+
+* lavapipe (deterministic): City Lab captures 0 differing pixels (59 % of the elements hidden), the 60-frame `city_pan`
+  sequence 0 differing pixels.
+* RTX temporal sequences (60 frames): Bistro exterior bit-identical (99 dB, max |d| 0), City Lab max |d| 1, Sponza max
+  |d| 3 (its run-to-run floor); captures at each scene's floor (scattered 1-3 level noise, no object missing; PBR Lab,
+  which hides almost nothing, shows the same noise).
+
+Performance, in one process (`m6_f79_occ_ab`, blocks of 30 frames; the culling's own GPU work counted in the opaque
+pass's region): Bistro exterior frame −0.9 % (opaque pass −0.038 ms), City Lab **+4.2 %** (+0.092 ms), Bistro interior
++0.2 %, Sponza +0.4 %; render thread +0.09 ms in Bistro exterior (indirect draws record more slowly). The culling's
+GPU cost (pyramid in 11 dispatches from a 1024 × 1024 level 0; long instanced runs compacted by one workgroup each,
+serially) was larger than what it saved.
+
+v2 (`fellow78`, `d43a07c`): pyramid in two dispatches (levels 0-5 per 64 × 64-pixel block, then level 6) from a level 0
+padded only to multiples of 64 (960 × 576 at 1080p); the test a thread per list element; runs drawn in chunks of up to
+64 elements (one indirect draw per chunk, in order), compacted a thread per chunk. Measured in `m6_f82_occ_ab`.
+
 ## Decision
 
-(pending: `m6_f79_*`)
+(pending: `m6_f82_*`)
