@@ -40,3 +40,31 @@ pixels the full-rate pre-pass kept.
 * Threshold 0 (attachment present, every tile 1 × 1) against no attachment: same images bit for bit.
 * Captures and temporal sequences (motion) at thresholds 0.006 and 0.012 against full rate: PSNR, largest difference.
 * In-process A/B (threshold 0 / 0.006 / 0.012): frame and pass GPU times; counters (fraction of fragments shaded).
+
+## v1 measured (`fellow77`, `m6_f80_*`)
+
+In one process (`m6_f80_vrs_ab`, blocks of 30 frames, attachment present in every block; threshold 0 = every tile at
+full rate):
+
+| scene | 0.006: frame | 0.012: frame | opaque pass (0 → 0.006 → 0.012) |
+|---|---:|---:|---|
+| Lights Lab | **−26.7 %** | **−29.7 %** | 1.23 → 0.40 → 0.34 ms |
+| PBR Lab | **−9.0 %** | **−12.6 %** | |
+| Bistro interior | **−7.1 %** | **−14.5 %** | 1.50 → 1.15 → 0.90 ms |
+| Sponza | +0.5 % (n.s.) | −4.1 % | 2.37 → 2.33 → 2.11 ms |
+| Bistro exterior | 0.0 % | −4.2 % | 1.86 → 1.75 → 1.55 ms |
+| City Lab | +2.9 % | +0.9 % | 0.52 → 0.43 → 0.39 ms (the estimate's own cost is larger) |
+
+Image differences against no attachment (`m6_f80_vrs_capture`, `m6_f80_vrs_temporal`):
+
+* Threshold 0 (attachment, every tile 1 × 1): each scene's floor (Lights Lab bit-identical).
+* 0.006: captures 50-62 dB mean; temporal Lights Lab 58.7 dB (max |d| 17, 0.008 % of pixels above 2 levels), City Lab
+  57.1 dB, Bistro exterior 52.3 dB (2.7 % above 2), Sponza 45.8 dB (12.5 % above 2; its auto exposure also follows the
+  image). PBR Lab's specular capture 44.4 dB: thin bright reflection streaks on a dark sphere turned into blocks (a dark
+  tile with a few bright lines has a small RMS gradient).
+* 0.012: 38-57 dB; not visually lossless in Sponza and Bistro.
+
+v2 (`90c69e9`): a tile is shaded coarsely only if its largest neighbour step (times 0.5 for 2 pixels, 1.5 for 4) also
+stays under `adaptive_vrs_max_step` (0.02); every tile at full rate one frame in 8 (`adaptive_vrs_refresh`), so that
+texture detail lost to coarse shading is seen again; counters fixed (they were cleared inside the compute list).
+Measured in `m6_f82_vrs_*`.
