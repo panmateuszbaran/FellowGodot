@@ -1699,7 +1699,7 @@ void RenderForwardClustered::_fellow_adaptive_vrs_init() {
 		v.pipelines[i] = rd->compute_pipeline_create(v.shader.version_get_shader(v.version, i));
 	}
 	v.counters = rd->storage_buffer_create(64 * 8 + 8);
-	v.reprojection = rd->uniform_buffer_create(64);
+	v.reprojection = rd->uniform_buffer_create(80);
 	v.estimate_data = rd->uniform_buffer_create(32);
 }
 
@@ -1719,6 +1719,8 @@ struct FellowVRSPush {
 	float gloss_factor;
 	uint32_t gloss_pixels;
 	uint32_t use_depth;
+	uint32_t count_stats;
+	uint32_t pad0;
 };
 
 static FellowVRSPush fellow_vrs_push(const Size2i &p_texel, const Size2i &p_tiles, const Size2i &p_internal_size) {
@@ -1843,12 +1845,21 @@ void RenderForwardClustered::_fellow_adaptive_vrs_apply(const Ref<RenderSceneBuf
 
 	// This frame's NDC (with its TAA jitter: the depth buffer's) to the estimated frame's clip space.
 	const Projection current = p_scene_data->get_cam_projection() * Projection(p_scene_data->cam_transform.affine_inverse());
-	float matrix[16];
-	RendererRD::MaterialStorage::store_camera(rb_data->fellow_vrs_estimated_view_projection * current.inverse(), matrix);
-	rd->buffer_update(v.reprojection, 0, sizeof(matrix), matrix);
-	uint32_t totals[2] = { uint32_t(tiles.x * tiles.y), uint32_t(tiles.x * tiles.y * texel.x * texel.y) };
-	rd->buffer_clear(v.counters, 0, 64 * 8); // transfers: before the compute list
-	rd->buffer_update(v.counters, 64 * 8, sizeof(totals), totals);
+	const Projection current_inverse = current.inverse();
+	float data[20];
+	RendererRD::MaterialStorage::store_camera(rb_data->fellow_vrs_estimated_view_projection * current_inverse, data);
+	for (int c = 0; c < 4; c++) {
+		data[16 + c] = current_inverse.columns[c][3]; // row 3: the unprojected point's homogeneous w
+	}
+	rd->buffer_update(v.reprojection, 0, sizeof(data), data);
+	// Counters (coarse tiles, fragments saved) one frame in 16: their clear, upload and read-back are transfers that
+	// would otherwise sit between this frame's compute and draw work every frame.
+	push.count_stats = (push.frame & 15) == 0 ? 1 : 0;
+	if (push.count_stats) {
+		uint32_t totals[2] = { uint32_t(tiles.x * tiles.y), uint32_t(tiles.x * tiles.y * texel.x * texel.y) };
+		rd->buffer_clear(v.counters, 0, 64 * 8); // transfers: before the compute list
+		rd->buffer_update(v.counters, 64 * 8, sizeof(totals), totals);
+	}
 
 	RID normal_roughness = p_render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS) ? p_render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS) : RID();
 	push.use_normals = normal_roughness.is_valid() && Fellow::adaptive_vrs_gloss_guard() ? 1 : 0;
@@ -1870,7 +1881,9 @@ void RenderForwardClustered::_fellow_adaptive_vrs_apply(const Ref<RenderSceneBuf
 	rd->compute_list_set_push_constant(list, &push, sizeof(push));
 	rd->compute_list_dispatch(list, tiles.x, tiles.y, 1);
 	rd->compute_list_end();
-	rd->buffer_get_data_async(v.counters, callable_mp_static(&RenderForwardClustered::_fellow_adaptive_vrs_readback), 0, 64 * 8 + 8);
+	if (push.count_stats) {
+		rd->buffer_get_data_async(v.counters, callable_mp_static(&RenderForwardClustered::_fellow_adaptive_vrs_readback), 0, 64 * 8 + 8);
+	}
 }
 
 void RenderForwardClustered::_fellow_occlusion_stats(RenderDataRD *p_render_data) {

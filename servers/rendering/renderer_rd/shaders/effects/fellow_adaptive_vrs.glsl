@@ -58,6 +58,7 @@ layout(set = 0, binding = 4) uniform sampler2D normal_roughness;
 layout(set = 0, binding = 5) uniform sampler2D depth_buffer;
 layout(set = 0, binding = 6, std140) uniform Reprojection {
 	mat4 matrix; // this frame's NDC (pixel centres, depth buffer value) to the estimated frame's clip space
+	vec4 world_w; // row 3 of this frame's inverse view-projection: the homogeneous scale of the point the NDC unproject to
 }
 reprojection;
 layout(rg16f, set = 0, binding = 7) uniform restrict readonly image2D tile_depths;
@@ -83,6 +84,8 @@ layout(push_constant, std430) uniform Params {
 	float gloss_factor; // a pixel is at risk if 1 - dot(n, neighbour) > gloss_factor * roughness^2
 	uint gloss_pixels; // a tile with at least this many pixels at risk keeps full rate
 	uint use_depth; // perspective: the tiles' depth ranges are kept and checked (disocclusion)
+	uint count_stats; // this frame's apply pass adds its tiles to the counters (one frame in 16)
+	uint pad0;
 }
 params;
 
@@ -257,6 +260,8 @@ void main() {
 		float depth = texelFetch(depth_buffer, pixel, 0).r;
 		vec2 ndc = (vec2(pixel) + 0.5) / vec2(params.screen_size) * 2.0 - 1.0;
 		vec4 clip = reprojection.matrix * vec4(ndc, depth, 1.0);
+		// The point's depth in the estimated frame: clip.w for the unprojected point with w = 1.
+		float estimated_depth = clip.w / dot(reprojection.world_w, vec4(ndc, depth, 1.0));
 		vec2 previous = (clip.xy / clip.w * 0.5 + 0.5) * vec2(params.screen_size);
 		if (!(clip.w > 1e-6) || any(lessThan(previous, vec2(0.0))) || any(greaterThanEqual(previous, vec2(params.screen_size)))) {
 			atomicOr(s_unknown, 1u);
@@ -265,7 +270,7 @@ void main() {
 			if (params.use_depth != 0u) {
 				// Disocclusion: this point's depth in the estimated frame against what its tile showed there.
 				vec2 range = imageLoad(tile_depths, t).xy;
-				if (clip.w < range.x * 0.95 || clip.w > range.y * 1.05) {
+				if (estimated_depth < range.x * 0.95 || estimated_depth > range.y * 1.05) {
 					atomicOr(s_unknown, 1u);
 				}
 			}
@@ -300,7 +305,7 @@ void main() {
 			rate = 0u;
 		}
 		imageStore(shading_rates, tile, uvec4(rate));
-		if (rate != 0u) {
+		if (rate != 0u && params.count_stats != 0u) {
 			uint pixels = uint(n);
 			uint slot = (uint(tile.x) + uint(tile.y) * uint(params.tiles.x)) & 63u;
 			atomicAdd(counters.slots[slot].x, 1u);

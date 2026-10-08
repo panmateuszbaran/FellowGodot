@@ -110,3 +110,9 @@ v4.1 (`fellow83`): disocclusion test. The estimate also keeps each tile's neares
 estimated frame's depth buffer and inverse projection; RG16F per tile); in the apply pass a reprojected point whose
 depth in the estimated frame lies outside its tile's range by more than 5 % (it was hidden there, has come in front,
 or belongs to a moving object) makes its tile full rate. Perspective only (orthographic views skip the test).
+
+v4.1 fix (`fellow84`): the disocclusion test compared the reprojected point's homogeneous clip w (scaled by
+1 / its current depth, ~1 for a still view) with the tiles' view depths, so every tile failed it and v4.1 shaded at
+full rate everywhere (`m6_f87_capture`: 93-101 dB against off where v4 gave 54-74 dB). The point's depth in the
+estimated frame is now clip.w divided by the unprojected point's homogeneous w. Also: the counters are cleared,
+filled and read back one frame in 16 (their transfers no longer sit between compute and draw work every frame).
