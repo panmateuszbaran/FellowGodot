@@ -3090,7 +3090,7 @@ void RenderForwardClustered::setup_added_decal(const Transform3D &p_transform, c
 
 /* Render scene */
 
-void RenderForwardClustered::_process_ssao(Ref<RenderSceneBuffersRD> p_render_buffers, RID p_environment, const RID *p_normal_buffers, const Projection *p_projections) {
+void RenderForwardClustered::_process_ssao(Ref<RenderSceneBuffersRD> p_render_buffers, RID p_environment, const RID *p_normal_buffers, const Projection *p_projections, const Transform3D &p_transform) {
 	ERR_FAIL_NULL(ss_effects);
 	ERR_FAIL_COND(p_render_buffers.is_null());
 	ERR_FAIL_COND(p_environment.is_null());
@@ -3109,11 +3109,32 @@ void RenderForwardClustered::_process_ssao(Ref<RenderSceneBuffersRD> p_render_bu
 	settings.sharpness = environment_get_ssao_sharpness(p_environment);
 	settings.full_screen_size = p_render_buffers->get_internal_size();
 
-	ss_effects->ssao_allocate_buffers(p_render_buffers, rb_data->ss_effects_data.ssao, settings);
+	// FellowEngine temporal SSAO (decision 0028): this frame's half of the taps, and the reprojection of this frame's view
+	// space into the previous frame's clip space (no TAA jitter: a still view maps each pixel onto itself).
+	RendererRD::SSEffects::SSAORenderBuffers &ssao_buffers = rb_data->ss_effects_data.ssao;
+	settings.fellow_temporal = Fellow::ssao_temporal() && p_render_buffers->get_view_count() == 1 && ss_effects->fellow_ssao_temporal_supported(p_projections[0]);
+	Projection correction;
+	correction.set_depth_correction(true);
+	const Projection projection = correction * p_projections[0];
+	if (settings.fellow_temporal) {
+		settings.fellow_parity = uint32_t(ssao_buffers.fellow_frame & 1);
+		settings.fellow_history_valid = ssao_buffers.fellow_has_history;
+		settings.fellow_reprojection = ssao_buffers.fellow_last_projection * Projection(ssao_buffers.fellow_last_transform.affine_inverse() * p_transform);
+	}
+
+	ss_effects->ssao_allocate_buffers(p_render_buffers, ssao_buffers, settings);
+	if (settings.fellow_temporal && !ssao_buffers.fellow_has_history) {
+		settings.fellow_history_valid = false; // the histories were (re)created
+	}
 
 	for (uint32_t v = 0; v < p_render_buffers->get_view_count(); v++) {
-		ss_effects->generate_ssao(p_render_buffers, rb_data->ss_effects_data.ssao, v, p_normal_buffers[v], p_projections[v], settings);
+		ss_effects->generate_ssao(p_render_buffers, ssao_buffers, v, p_normal_buffers[v], p_projections[v], settings);
 	}
+
+	ssao_buffers.fellow_has_history = settings.fellow_temporal;
+	ssao_buffers.fellow_frame++;
+	ssao_buffers.fellow_last_transform = p_transform;
+	ssao_buffers.fellow_last_projection = projection;
 }
 
 void RenderForwardClustered::_process_ssil(Ref<RenderSceneBuffersRD> p_render_buffers, RID p_environment, const RID *p_normal_buffers, const Projection *p_projections, const Transform3D &p_transform) {
@@ -3204,7 +3225,7 @@ void RenderForwardClustered::_fellow_process_ss_effects(RenderDataRD *p_render_d
 		}
 
 		if (p_use_ssao) {
-			_process_ssao(rb, p_render_data->environment, p_normal_roughness_slices, p_render_data->scene_data->view_projection);
+			_process_ssao(rb, p_render_data->environment, p_normal_roughness_slices, p_render_data->scene_data->view_projection, p_render_data->scene_data->cam_transform);
 		}
 
 		if (p_use_ssil) {

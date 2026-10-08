@@ -82,6 +82,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/postfx/ssao_shared_tile", false);
 	GLOBAL_DEF("rendering/fellow/postfx/ss_coherent_gather", false);
 	GLOBAL_DEF("rendering/fellow/postfx/fast_luminance_reduce", true);
+	GLOBAL_DEF("rendering/fellow/postfx/ssao_temporal", false);
 	GLOBAL_DEF("rendering/fellow/postfx/verify_luminance_reduce", false);
 	GLOBAL_DEF("rendering/fellow/geometry/occlusion_culling", false);
 	GLOBAL_DEF("rendering/fellow/debug/occlusion_stats", false);
@@ -201,6 +202,7 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["postfx_coherent_gathers"] = s.postfx_coherent_gathers.get();
 	d["postfx_luminance_verify_texels"] = s.postfx_luminance_verify_texels.get();
 	d["postfx_luminance_verify_mismatches"] = s.postfx_luminance_verify_mismatches.get();
+	d["postfx_ssao_temporal_frames"] = s.postfx_ssao_temporal_frames.get();
 	d["occlusion_tested"] = s.occlusion_tested.get();
 	d["occlusion_weight"] = s.occlusion_weight.get();
 	d["occlusion_hidden"] = s.occlusion_hidden.get();

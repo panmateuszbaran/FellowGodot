@@ -87,6 +87,23 @@ counter;
 
 layout(rg8, set = 2, binding = 0) uniform restrict writeonly image2D dest_image;
 
+#ifdef FELLOW_TEMPORAL
+// FellowEngine temporal SSAO (rendering/fellow/postfx/ssao_temporal, docs/decisions/0028-temporal-ssao.md): each frame
+// takes every other tap (alternating halves); the half taken in the previous frame is read back from a history
+// (per deinterleaved slice: its tap sums, weight sums, view depth and which half) at the pixel this pixel's point was
+// in the previous frame, so that a still view sums all the taps of the stock gather.
+layout(rgba16f, set = 3, binding = 0) uniform restrict readonly image2DArray history_in;
+layout(rgba16f, set = 3, binding = 1) uniform restrict writeonly image2DArray history_out;
+layout(set = 3, binding = 2, std140) uniform FellowTemporal {
+	mat4 reprojection; // current view space (Godot convention) to the previous frame's clip space
+	vec2 screen_size;
+	uint parity; // this frame's half: taps parity, parity + 2, ...
+	uint history_valid;
+}
+fellow_temporal;
+
+#endif
+
 // This push_constant is full - 128 bytes - if you need to add more data, consider adding to the uniform buffer instead
 layout(push_constant, std430) uniform Params {
 	ivec2 screen_size;
@@ -271,6 +288,33 @@ void SSAOTap(const int p_quality_level, inout float r_obscurance_sum, inout floa
 	SSAO_tap_inner(p_quality_level, r_obscurance_sum, r_weight_sum, sampling_mirrored_uv, mip_level, p_pix_center_pos, p_pixel_normal, p_fallof_sq, p_weight_mod);
 }
 
+#ifdef FELLOW_TEMPORAL
+bool fellow_history_taps(uvec2 p_full_res_coord, float p_view_depth, out vec2 r_taps) {
+	// The other half of the taps, from the previous frame, if this pixel's point was seen there at the same depth.
+	if (fellow_temporal.history_valid == 0u) {
+		return false;
+	}
+	vec2 uv = (vec2(p_full_res_coord) + 0.5) / fellow_temporal.screen_size;
+	vec3 view_assao = NDC_to_view_space(uv, p_view_depth);
+	vec4 clip = fellow_temporal.reprojection * vec4(view_assao.x, view_assao.y, -view_assao.z, 1.0);
+	if (clip.w <= 1e-4) {
+		return false;
+	}
+	vec2 prev_uv = clip.xy / clip.w * 0.5 + 0.5;
+	ivec2 q = ivec2(floor(prev_uv * fellow_temporal.screen_size));
+	if (any(lessThan(q, ivec2(0))) || any(greaterThanEqual(q, ivec2(fellow_temporal.screen_size)))) {
+		return false;
+	}
+	vec4 h = imageLoad(history_in, ivec3(q >> 1, (q.x & 1) + 2 * (q.y & 1)));
+	// The other half (a texel written two frames ago, or by a disabled frame, holds the same half), the same surface.
+	if (uint(h.w + 0.5) == fellow_temporal.parity || h.y <= 0.0 || abs(h.z - clip.w) > 0.02 * clip.w) {
+		return false;
+	}
+	r_taps = h.xy;
+	return true;
+}
+#endif
+
 void generate_SSAO_shadows_internal(out float r_shadow_term, out vec4 r_edges, out float r_weight, const vec2 p_pos, int p_quality_level, bool p_adaptive_base) {
 	vec2 pos_rounded = trunc(p_pos);
 	uvec2 upos = uvec2(pos_rounded);
@@ -306,6 +350,9 @@ void generate_SSAO_shadows_internal(out float r_shadow_term, out vec4 r_edges, o
 
 	vec2 normalized_screen_pos = pos_rounded * params.half_screen_pixel_size + params.half_screen_pixel_size_x025;
 	vec3 pix_center_pos = NDC_to_view_space(normalized_screen_pos, pix_z);
+#ifdef FELLOW_TEMPORAL
+	const float fellow_view_depth = pix_z;
+#endif
 
 	// Load this pixel's viewspace normal
 	uvec2 full_res_coord = upos * 2 * params.size_multiplier + params.pass_coord_offset.xy;
@@ -426,9 +473,27 @@ void generate_SSAO_shadows_internal(out float r_shadow_term, out vec4 r_edges, o
 
 	// standard, non-adaptive approach
 	if ((p_quality_level != 3) || p_adaptive_base) {
+#ifdef FELLOW_TEMPORAL
+		// This frame's half of the taps; the other half from the previous frame (or this half twice).
+		float taps_obscurance = 0.0;
+		float taps_weight = 0.0;
+		for (int i = int(fellow_temporal.parity); i < number_of_taps; i += 2) {
+			SSAOTap(p_quality_level, taps_obscurance, taps_weight, i, rot_scale_matrix, pix_center_pos, pixel_normal, normalized_screen_pos, mip_offset, fallof_sq, 1.0, norm_xy, norm_xy_length);
+		}
+		vec2 other_taps;
+		if (fellow_history_taps(full_res_coord, fellow_view_depth, other_taps)) {
+			obscurance_sum += taps_obscurance + other_taps.x;
+			weight_sum += taps_weight + other_taps.y;
+		} else {
+			obscurance_sum += 2.0 * taps_obscurance;
+			weight_sum += 2.0 * taps_weight;
+		}
+		imageStore(history_out, ivec3(ivec2(upos), params.pass), vec4(taps_obscurance, taps_weight, fellow_view_depth, float(fellow_temporal.parity)));
+#else
 		for (int i = 0; i < number_of_taps; i++) {
 			SSAOTap(p_quality_level, obscurance_sum, weight_sum, i, rot_scale_matrix, pix_center_pos, pixel_normal, normalized_screen_pos, mip_offset, fallof_sq, 1.0, norm_xy, norm_xy_length);
 		}
+#endif
 	}
 #ifdef ADAPTIVE
 	else {

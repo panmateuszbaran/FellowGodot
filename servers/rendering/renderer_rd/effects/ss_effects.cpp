@@ -222,6 +222,7 @@ SSEffects::SSEffects() {
 			ssao_modes.push_back("\n#define FELLOW_COHERENT_GATHER\n");
 			ssao_modes.push_back("\n#define SSAO_BASE\n#define FELLOW_COHERENT_GATHER\n");
 			ssao_modes.push_back("\n#define ADAPTIVE\n#define FELLOW_COHERENT_GATHER\n");
+			ssao_modes.push_back("\n#define FELLOW_TEMPORAL\n");
 
 			ssao.gather_shader.initialize(ssao_modes);
 
@@ -235,6 +236,8 @@ SSEffects::SSEffects() {
 				ssao.fellow_tile_gather_pipelines[i].create_compute_pipeline(ssao.gather_shader.version_get_shader(ssao.gather_shader_version, 3 + i));
 				ssao.fellow_coherent_gather_pipelines[i].create_compute_pipeline(ssao.gather_shader.version_get_shader(ssao.gather_shader_version, 6 + i));
 			}
+			ssao.fellow_temporal_gather_pipeline.create_compute_pipeline(ssao.gather_shader.version_get_shader(ssao.gather_shader_version, 9));
+			ssao.fellow_temporal_ubo = RD::get_singleton()->uniform_buffer_create(80);
 		}
 
 		{
@@ -512,6 +515,11 @@ SSEffects::~SSEffects() {
 		for (int i = 0; i < 3; i++) {
 			ssao.fellow_tile_gather_pipelines[i].free();
 			ssao.fellow_coherent_gather_pipelines[i].free();
+		}
+		ssao.fellow_temporal_gather_pipeline.free();
+		if (ssao.fellow_temporal_ubo.is_valid()) {
+			RD::get_singleton()->free_rid(ssao.fellow_temporal_ubo);
+			ssao.fellow_temporal_ubo = RID();
 		}
 
 		ssao.blur_shader.version_free(ssao.blur_shader_version);
@@ -1188,6 +1196,16 @@ void SSEffects::ssao_allocate_buffers(Ref<RenderSceneBuffersRD> p_render_buffers
 	p_render_buffers->create_texture(RB_SCOPE_SSAO, RB_IMPORTANCE_MAP, RD::DATA_FORMAT_R8_UNORM, RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_STORAGE_BIT, RD::TEXTURE_SAMPLES_1, half_size);
 	p_render_buffers->create_texture(RB_SCOPE_SSAO, RB_IMPORTANCE_PONG, RD::DATA_FORMAT_R8_UNORM, RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_STORAGE_BIT, RD::TEXTURE_SAMPLES_1, half_size);
 	p_render_buffers->create_texture(RB_SCOPE_SSAO, RB_FINAL, RD::DATA_FORMAT_R8_UNORM, RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_STORAGE_BIT, RD::TEXTURE_SAMPLES_1);
+
+	// FellowEngine temporal SSAO: two histories (written in alternate frames), per deinterleaved slice: the half's tap
+	// sums, weight sums, view depth, which half.
+	if (p_settings.fellow_temporal) {
+		if (!p_render_buffers->has_texture(RB_SCOPE_SSAO, SNAME("fellow_history_0"))) {
+			p_ssao_buffers.fellow_has_history = false;
+		}
+		p_render_buffers->create_texture(RB_SCOPE_SSAO, SNAME("fellow_history_0"), RD::DATA_FORMAT_R16G16B16A16_SFLOAT, RD::TEXTURE_USAGE_STORAGE_BIT, RD::TEXTURE_SAMPLES_1, full_size, 4 * view_count);
+		p_render_buffers->create_texture(RB_SCOPE_SSAO, SNAME("fellow_history_1"), RD::DATA_FORMAT_R16G16B16A16_SFLOAT, RD::TEXTURE_USAGE_STORAGE_BIT, RD::TEXTURE_SAMPLES_1, full_size, 4 * view_count);
+	}
 }
 
 void SSEffects::generate_ssao(Ref<RenderSceneBuffersRD> p_render_buffers, SSAORenderBuffers &p_ssao_buffers, uint32_t p_view, RID p_normal_buffer, const Projection &p_projection, const SSAOSettings &p_settings) {
@@ -1208,6 +1226,31 @@ void SSEffects::generate_ssao(Ref<RenderSceneBuffersRD> p_render_buffers, SSAORe
 	for (uint32_t i = 0; i < 4; i++) {
 		ao_deinterleaved_slices[i] = p_render_buffers->get_texture_slice(RB_SCOPE_SSAO, RB_DEINTERLEAVED, p_view * 4 + i, 0);
 		ao_pong_slices[i] = p_render_buffers->get_texture_slice(RB_SCOPE_SSAO, RB_DEINTERLEAVED_PONG, p_view * 4 + i, 0);
+	}
+
+	// FellowEngine temporal SSAO (high quality and below, full size, one view): the uniform buffer before the compute list.
+	const bool fellow_temporal = p_settings.fellow_temporal && ssao_quality < RSE::ENV_SSAO_QUALITY_ULTRA && !ssao_half_size && p_view == 0 && p_render_buffers->get_view_count() == 1 && !p_projection.is_orthogonal();
+	RID fellow_temporal_set;
+	if (fellow_temporal) {
+		struct {
+			float reprojection[16];
+			float screen_size[2];
+			uint32_t parity;
+			uint32_t history_valid;
+		} ubo;
+		MaterialStorage::store_camera(p_settings.fellow_reprojection, ubo.reprojection);
+		ubo.screen_size[0] = p_settings.full_screen_size.x;
+		ubo.screen_size[1] = p_settings.full_screen_size.y;
+		ubo.parity = p_settings.fellow_parity;
+		ubo.history_valid = p_settings.fellow_history_valid ? 1 : 0;
+		RD::get_singleton()->buffer_update(ssao.fellow_temporal_ubo, 0, sizeof(ubo), &ubo);
+		RID history_in = p_render_buffers->get_texture(RB_SCOPE_SSAO, p_settings.fellow_parity ? SNAME("fellow_history_0") : SNAME("fellow_history_1"));
+		RID history_out = p_render_buffers->get_texture(RB_SCOPE_SSAO, p_settings.fellow_parity ? SNAME("fellow_history_1") : SNAME("fellow_history_0"));
+		RD::Uniform u_in(RD::UNIFORM_TYPE_IMAGE, 0, history_in);
+		RD::Uniform u_out(RD::UNIFORM_TYPE_IMAGE, 1, history_out);
+		RD::Uniform u_ubo(RD::UNIFORM_TYPE_UNIFORM_BUFFER, 2, ssao.fellow_temporal_ubo);
+		fellow_temporal_set = uniform_set_cache->get_cache(ssao.gather_shader.version_get_shader(ssao.gather_shader_version, 9), 3, u_in, u_out, u_ubo);
+		Fellow::stats().postfx_ssao_temporal_frames.increment();
 	}
 
 	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
@@ -1369,6 +1412,10 @@ void SSEffects::generate_ssao(Ref<RenderSceneBuffersRD> p_render_buffers, SSAORe
 
 			RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, _fellow_ssao_gather_pipeline(SSAO_GATHER_ADAPTIVE));
 			RD::get_singleton()->draw_command_end_label(); // Importance Map
+		} else if (fellow_temporal) {
+			ssao.fellow_coherent = false; // stock's thread mapping
+			RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, ssao.fellow_temporal_gather_pipeline.get_rid());
+			RD::get_singleton()->compute_list_bind_uniform_set(compute_list, fellow_temporal_set, 3);
 		} else {
 			RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, _fellow_ssao_gather_pipeline(SSAO_GATHER));
 		}

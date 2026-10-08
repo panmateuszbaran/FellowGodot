@@ -68,6 +68,14 @@ inline bool ss_coherent_gather() {
 	return postfx_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/postfx/ss_coherent_gather");
 }
 
+// Temporal SSAO (docs/decisions/0028-temporal-ssao.md; visually lossless, not bit-exact): the gather takes every other
+// tap, alternating halves between frames, and adds the other half from the previous frame where the same surface was
+// seen at the reprojected pixel (a still view sums every tap of the stock gather). High quality and below, full size.
+// Read every frame.
+inline bool ssao_temporal() {
+	return postfx_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/postfx/ssao_temporal");
+}
+
 // The auto exposure's luminance reduction with two barriers per workgroup instead of seven (the same additions in the
 // same order; docs/decisions/0025-luminance-reduce.md). Read every frame.
 inline bool fast_luminance_reduce() {
@@ -602,6 +610,7 @@ struct Stats {
 	SafeNumeric<uint64_t> postfx_coherent_gathers; // SSAO/SSIL gather dispatches with one sample rotation per workgroup (decision 0024)
 	SafeNumeric<uint64_t> postfx_luminance_verify_texels; // luminance reduction texels compared (decision 0025, debug)
 	SafeNumeric<uint64_t> postfx_luminance_verify_mismatches;
+	SafeNumeric<uint64_t> postfx_ssao_temporal_frames; // SSAO gathers with half the taps plus the history (decision 0028)
 	SafeNumeric<uint64_t> occlusion_tested; // opaque list elements tested (debug/occlusion_stats)
 	SafeNumeric<uint64_t> occlusion_weight; // their surfaces' indices (full detail)
 	SafeNumeric<uint64_t> occlusion_hidden; // elements the pyramid hides

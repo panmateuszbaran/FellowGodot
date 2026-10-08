@@ -124,6 +124,12 @@ public:
 		int buffer_height;
 		int half_buffer_width;
 		int half_buffer_height;
+		// FellowEngine temporal SSAO (postfx/ssao_temporal): the previous frame's camera, and whether its gather wrote
+		// a history (fellow_frame & 1 selects the history written this frame).
+		Transform3D fellow_last_transform;
+		Projection fellow_last_projection;
+		bool fellow_has_history = false;
+		uint64_t fellow_frame = 0;
 	};
 
 	struct SSAOSettings {
@@ -135,8 +141,18 @@ public:
 		float sharpness = 0.98;
 
 		Size2i full_screen_size;
+
+		// FellowEngine temporal SSAO: half the taps per frame, the other half from the previous frame's history.
+		bool fellow_temporal = false;
+		Projection fellow_reprojection; // current view space to the previous frame's clip space
+		bool fellow_history_valid = false;
+		uint32_t fellow_parity = 0;
 	};
 
+	// FellowEngine temporal SSAO: the quality settings it supports (high and below, full size, perspective).
+	bool fellow_ssao_temporal_supported(const Projection &p_projection) const {
+		return ssao_quality < RSE::ENV_SSAO_QUALITY_ULTRA && !ssao_half_size && !p_projection.is_orthogonal();
+	}
 	void ssao_allocate_buffers(Ref<RenderSceneBuffersRD> p_render_buffers, SSAORenderBuffers &p_ssao_buffers, const SSAOSettings &p_settings);
 	void generate_ssao(Ref<RenderSceneBuffersRD> p_render_buffers, SSAORenderBuffers &p_ssao_buffers, uint32_t p_view, RID p_normal_buffer, const Projection &p_projection, const SSAOSettings &p_settings);
 
@@ -423,6 +439,10 @@ private:
 		// FellowEngine (rendering/fellow/postfx/ss_coherent_gather): one sample rotation per workgroup (shader versions 6-8).
 		PipelineDeferredRD fellow_coherent_gather_pipelines[3];
 		bool fellow_coherent = false; // the gather pipeline bound for this frame's gathers is the coherent one
+		// FellowEngine (rendering/fellow/postfx/ssao_temporal): the gather with alternating halves of the taps (shader
+		// version 9) and its uniform buffer (reprojection, screen size, parity, history validity).
+		PipelineDeferredRD fellow_temporal_gather_pipeline;
+		RID fellow_temporal_ubo;
 	} ssao;
 	RID _fellow_ssao_gather_pipeline(int p_mode);
 
