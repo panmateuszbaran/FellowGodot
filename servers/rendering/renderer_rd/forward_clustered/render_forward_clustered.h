@@ -44,6 +44,7 @@
 #include "servers/rendering/renderer_rd/forward_clustered/scene_shader_forward_clustered.h"
 #include "servers/rendering/renderer_rd/renderer_scene_render_rd.h"
 #include "servers/rendering/renderer_rd/shaders/effects/fellow_hzb.glsl.gen.h"
+#include "servers/rendering/renderer_rd/shaders/effects/fellow_occlusion_cull.glsl.gen.h"
 #include "servers/rendering/renderer_rd/shaders/effects/fellow_occlusion_test.glsl.gen.h"
 #include "servers/rendering/renderer_rd/shaders/forward_clustered/best_fit_normal.glsl.gen.h"
 #include "servers/rendering/renderer_rd/shaders/forward_clustered/integrate_dfg.glsl.gen.h"
@@ -247,6 +248,10 @@ private:
 		// against; 0 planes = whole surfaces.
 		const Plane *fellow_cluster_planes = nullptr;
 		int fellow_cluster_plane_count = 0;
+		// FellowEngine occlusion culling (opaque colour pass): per list element, the index of the culled run it starts
+		// (its draw is then indirect, reading the compacted elements) or UINT32_MAX.
+		const uint32_t *fellow_occlusion_runs = nullptr;
+		RID fellow_occlusion_args;
 
 		RenderListParameters(GeometryInstanceSurfaceDataCache **p_elements, RenderElementInfo *p_element_info, int p_element_count, bool p_reverse_cull, PassMode p_pass_mode, uint32_t p_color_pass_flags, bool p_no_gi, bool p_use_directional_soft_shadows, RID p_render_pass_uniform_set, bool p_force_wireframe = false, const Vector2 &p_uv_offset = Vector2(), float p_lod_distance_multiplier = 0.0, float p_screen_mesh_lod_threshold = 0.0, uint32_t p_view_count = 1, uint32_t p_element_offset = 0, SceneShaderForwardClustered::ShaderSpecialization p_base_specialization = {}) {
 			elements = p_elements;
@@ -751,7 +756,34 @@ private:
 		LocalVector<uint8_t> visible_cpu; // per slot, from a readback 1-3 frames old
 		LocalVector<GeometryInstanceSurfaceDataCache *> candidates; // the unfiltered opaque list (tested)
 		bool filtered = false;
+
+		// Culling (geometry/occlusion_culling): per surface slot its surface's local bounding box (8 floats: minimum,
+		// 1 if known, maximum, 0), written when the slot is given to a surface; the runs of this frame's opaque pass
+		// tested by the GPU, their indirect draw arguments and the compacted elements.
+		FellowOcclusionCullShaderRD cull_shader;
+		RID cull_version;
+		RID cull_pipelines[2]; // thread per run, workgroup per run
+		LocalVector<float> slot_bounds_cpu;
+		RID slot_bounds;
+		uint32_t slot_bounds_capacity = 0; // slots
+		uint32_t bounds_dirty_from = UINT32_MAX; // slots written since the last upload
+		uint32_t bounds_dirty_to = 0;
+		LocalVector<uint32_t> run_data; // per run: first element, count, indices per draw, 0
+		LocalVector<uint32_t> long_runs; // first elements of the long runs (workgroup per run)
+		LocalVector<uint32_t> run_of_element; // per opaque list element (see RenderListParameters::fellow_occlusion_runs)
+		RID runs;
+		RID args;
+		uint32_t run_capacity = 0;
+		RID compacted;
+		uint32_t compacted_capacity = 0; // elements
+		RID cull_counters;
+		bool pass_active = false; // the opaque colour pass being set up draws culled runs (binding 41: compacted)
 	} fellow_occlusion;
+	void _fellow_occlusion_init();
+	bool _fellow_occlusion_pyramid(const Ref<RenderSceneBuffersRD> &p_render_buffers);
+	bool _fellow_occlusion_cull(RenderDataRD *p_render_data, uint32_t p_color_pass_flags);
+	void _fellow_occlusion_set_slot_bounds(uint32_t p_slot, void *p_mesh_surface);
+	static void _fellow_occlusion_cull_readback(const Vector<uint8_t> &p_data);
 	void _fellow_occlusion_stats(RenderDataRD *p_render_data);
 	void _fellow_occlusion_filter(RenderListType p_list);
 	static void _fellow_occlusion_readback(const Vector<uint8_t> &p_data);

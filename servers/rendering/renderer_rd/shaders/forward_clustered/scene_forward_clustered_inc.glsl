@@ -437,6 +437,14 @@ layout(set = 1, binding = 40, std430) buffer restrict readonly FellowSlotBuffer 
 }
 fellow_slots;
 
+// FellowEngine occlusion culling (docs/decisions/0026-occlusion-culling.md): the opaque pass's elements of the runs the
+// GPU culled, the visible ones of each run compacted in order from its first element. A draw whose element index has
+// its top bit set reads its elements here.
+layout(set = 1, binding = 41, std430) buffer restrict readonly FellowCompactedElementBuffer {
+	uvec4 data[];
+}
+fellow_compacted_elements;
+
 // The list element's instance data: entry, flags and GI offset (set by fellow_element_init() at the start of the
 // vertex and fragment stages).
 uint fellow_slot;
@@ -447,7 +455,7 @@ uint fellow_gi_offset;
 
 void fellow_element_init(uint p_element) {
 	if (sc_fellow_persistent_instances()) {
-		uvec4 element = fellow_elements.data[p_element];
+		uvec4 element = (p_element & 0x80000000u) != 0u ? fellow_compacted_elements.data[p_element & 0x7FFFFFFFu] : fellow_elements.data[p_element];
 		fellow_slot = element.x;
 		fellow_flags = element.y;
 		fellow_gi_offset = element.z;

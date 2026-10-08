@@ -281,6 +281,13 @@ inline bool mesh_clusters() {
 inline bool mesh_clusters_blended() {
 	return GLOBAL_GET_CACHED(bool, "rendering/fellow/geometry/cluster_blended_surfaces");
 }
+// Occlusion culling of the opaque pass (docs/decisions/0026-occlusion-culling.md): after the full depth pre-pass, the
+// elements whose surface's bounding box lies behind the depth buffer everywhere it covers are left out of the opaque
+// pass by the GPU (per run of instanced elements, the visible ones compacted in order and drawn indirectly). Exact: such
+// elements have no fragment that passes the opaque pass's depth test. Needs persistent instance data; read every frame.
+inline bool occlusion_culling() {
+	return geometry_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/geometry/occlusion_culling");
+}
 // Maximum triangles per cluster (leaf of the k-d tree).
 inline int mesh_cluster_triangles() {
 	return CLAMP(GLOBAL_GET_CACHED(int, "rendering/fellow/geometry/cluster_triangles"), 64, 1 << 20);
@@ -576,6 +583,14 @@ struct Stats {
 	SafeNumeric<uint64_t> occlusion_hidden; // elements the pyramid hides
 	SafeNumeric<uint64_t> occlusion_hidden_weight;
 	SafeNumeric<uint64_t> occlusion_culled; // elements left out (debug/occlusion_cull_approx)
+	SafeNumeric<uint64_t> occlusion_cull_passes; // opaque passes culled on the GPU (geometry/occlusion_culling)
+	SafeNumeric<uint64_t> occlusion_cull_runs; // runs of elements tested (their draws indirect)
+	SafeNumeric<uint64_t> occlusion_cull_elements; // elements tested (read back asynchronously)
+	SafeNumeric<uint64_t> occlusion_cull_hidden; // of which hidden (left out of the opaque pass)
+	SafeNumeric<uint64_t> occlusion_cull_indices; // indices of the tested elements (at their detail level)
+	SafeNumeric<uint64_t> occlusion_cull_hidden_indices; // of which hidden
+	SafeNumeric<uint64_t> occlusion_cull_indirect_draws; // draws recorded indirect
+	SafeNumeric<uint64_t> occlusion_cull_slot_uploads; // surface bounding boxes uploaded
 	SafeNumeric<uint64_t> cpu_persistent_elements; // list elements written as 16-byte elements (decision 0022)
 	SafeNumeric<uint64_t> cpu_persistent_uploads; // surface entries rewritten by a list element (changed, or first used)
 	SafeNumeric<uint64_t> cpu_persistent_maps; // regions of the persistent buffer mapped (one per frame using it)

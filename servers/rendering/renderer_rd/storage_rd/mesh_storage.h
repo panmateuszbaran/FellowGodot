@@ -548,6 +548,13 @@ public:
 		}
 	}
 
+	// FellowEngine occlusion culling (decision 0026): the indices a draw of the level's index array draws (its arrays
+	// start at 0 and hold the level's indices).
+	_FORCE_INLINE_ uint32_t fellow_mesh_surface_get_index_count(void *p_surface, uint32_t p_lod) const {
+		Mesh::Surface *s = reinterpret_cast<Mesh::Surface *>(p_surface);
+		return p_lod == 0 ? s->index_count : s->lods[p_lod - 1].index_count;
+	}
+
 	_FORCE_INLINE_ void mesh_surface_get_vertex_arrays_and_format(void *p_surface, uint64_t p_input_mask, bool p_input_motion_vectors, bool p_point_size_emulated, RID &r_vertex_array_rd, RD::VertexFormatID &r_vertex_format) {
 		Mesh::Surface *s = reinterpret_cast<Mesh::Surface *>(p_surface);
 

@@ -280,6 +280,11 @@ public:
 		bool uses_world_coordinates = false;
 		bool uses_screen_texture_mipmaps = false;
 		bool uses_z_clip_scale = false;
+		// FellowEngine occlusion culling (decision 0026): materials whose fragments can be nearer than their surface's
+		// bounding box (DEPTH written) or whose output depends on the instance's index in its draw (INSTANCE_ID) are
+		// never culled.
+		bool fellow_writes_depth = false;
+		bool fellow_uses_instance_id = false;
 		RSE::CullMode cull_mode = RSE::CULL_MODE_DISABLED;
 
 		bool stencil_enabled = false;
