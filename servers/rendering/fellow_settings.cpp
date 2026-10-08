@@ -91,6 +91,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF_RST("rendering/fellow/shading/adaptive_vrs", false);
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/shading/adaptive_vrs_threshold", PROPERTY_HINT_RANGE, "0,0.1,0.0005"), 0.006);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/shading/adaptive_vrs_max_rate", PROPERTY_HINT_ENUM, "2x2,4x4"), 1);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/shading/adaptive_vrs_refresh", PROPERTY_HINT_RANGE, "0,64,1"), 8);
 	// Render-thread CPU (decisions 0016-0018): on by default since fellow56 (exact: same lists, instance data, draws and
 	// commands as stock; measured in City Lab, its draw-heavy variant and the GPU-bound scenes).
 	GLOBAL_DEF("rendering/fellow/cpu/enabled", true);

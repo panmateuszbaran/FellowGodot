@@ -562,6 +562,10 @@ inline float adaptive_vrs_threshold() {
 inline int adaptive_vrs_max_rate() {
 	return GLOBAL_GET_CACHED(int, "rendering/fellow/shading/adaptive_vrs_max_rate");
 }
+// Each tile is shaded at full rate one frame in this many (0: never), so that detail lost to coarse shading is seen again.
+inline int adaptive_vrs_refresh() {
+	return GLOBAL_GET_CACHED(int, "rendering/fellow/shading/adaptive_vrs_refresh");
+}
 
 // Cumulative counters (render thread writes, scripts read through RenderingServer.fellow_get_stats()).
 struct Stats {

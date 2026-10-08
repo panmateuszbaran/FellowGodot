@@ -9,7 +9,8 @@
 // the luma's gradient along the axis is estimated from differences at strides 1, 2 and 4 (the largest is kept, so
 // that a tile shaded coarsely in the previous frame, flat inside its fragments, is not mistaken for flat content), and
 // a fragment covering n pixels misses about 0.5 (n = 2) or 1.12 (n = 4) gradients per pixel. The rates are then
-// dilated over 3 x 3 tiles (the finest per axis), for content moving between frames.
+// dilated over 3 x 3 tiles (the finest per axis), for content moving between frames, and every tile is shaded at full
+// rate one frame in refresh_period (its next estimate then sees the content's full detail).
 
 #if defined(MODE_ESTIMATE)
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
@@ -47,8 +48,8 @@ layout(push_constant, std430) uniform Params {
 	float threshold;
 	uint max_log2; // 1: up to 2 x 2, 2: up to 4 x 4
 	uint linear_source; // the source holds linear values (HDR 2D)
-	uint pad0;
-	uint pad1;
+	uint frame;
+	uint refresh_period; // 0: none; otherwise each tile is shaded at full rate one frame in this many
 	uint pad2;
 }
 params;
@@ -158,6 +159,11 @@ void main() {
 			}
 		}
 		uint rate = encode_rate(lx, ly);
+		if (params.refresh_period > 0u && (uint(t.x) + 3u * uint(t.y) + params.frame) % params.refresh_period == 0u) {
+			// Full rate now and then: a tile shaded coarsely looks flatter than its content (fine texture detail is
+			// lost), so its estimate is renewed from a full-rate image.
+			rate = 0u;
+		}
 		imageStore(shading_rates, t, uvec4(rate));
 		lx = rate >> 2u;
 		ly = rate & 3u;

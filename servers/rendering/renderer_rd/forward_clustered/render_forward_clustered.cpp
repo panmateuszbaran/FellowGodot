@@ -1692,7 +1692,9 @@ void RenderForwardClustered::_fellow_adaptive_vrs_dispatch(const Ref<RenderScene
 		float threshold;
 		uint32_t max_log2;
 		uint32_t linear_source;
-		uint32_t pad[3];
+		uint32_t frame;
+		uint32_t refresh_period;
+		uint32_t pad;
 	} push = {};
 	push.tile_size[0] = texel.x;
 	push.tile_size[1] = texel.y;
@@ -1702,6 +1704,8 @@ void RenderForwardClustered::_fellow_adaptive_vrs_dispatch(const Ref<RenderScene
 	push.screen_size[1] = internal_size.y;
 	push.threshold = Fellow::adaptive_vrs_threshold();
 	push.max_log2 = Fellow::adaptive_vrs_max_rate() >= 1 ? 2 : 1;
+	push.frame = uint32_t(RSG::rasterizer->get_frame_number());
+	push.refresh_period = uint32_t(MAX(0, Fellow::adaptive_vrs_refresh()));
 	UniformSetCacheRD *cache = UniformSetCacheRD::get_singleton();
 	RD::Uniform u_rates_out(RD::UNIFORM_TYPE_IMAGE, 2, shading_rates);
 	RD::ComputeListID list = rd->compute_list_begin();
