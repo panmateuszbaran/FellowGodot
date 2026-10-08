@@ -676,8 +676,17 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 			} else if (indirect) {
 				RD::get_singleton()->draw_list_draw_indirect(draw_list, index_array_rd.is_valid(), mesh_storage->_multimesh_get_command_buffer_rd_rid(surf->owner->data->base), surf->surface_index * sizeof(uint32_t) * mesh_storage->INDIRECT_MULTIMESH_COMMAND_STRIDE, 1, 0);
 			} else if (fellow_occlusion_run != UINT32_MAX) {
-				RD::get_singleton()->draw_list_draw_indirect(draw_list, true, p_params->fellow_occlusion_args, fellow_occlusion_run * 5 * sizeof(uint32_t), 1, 5 * sizeof(uint32_t));
-				Fellow::stats().occlusion_cull_indirect_draws.increment();
+				// One indirect draw per chunk of the run, in order (each chunk's visible elements are compacted from its
+				// first element).
+				const uint32_t chunks = (uint32_t(element_info.repeat) + FellowOcclusion::CHUNK - 1) / FellowOcclusion::CHUNK;
+				for (uint32_t c = 0; c < chunks; c++) {
+					if (c > 0) {
+						push_constant.base_index = (i + c * FellowOcclusion::CHUNK + p_params->element_offset) | 0x80000000u;
+						RD::get_singleton()->draw_list_set_push_constant(draw_list, &push_constant, push_constant_size);
+					}
+					RD::get_singleton()->draw_list_draw_indirect(draw_list, true, p_params->fellow_occlusion_args, (fellow_occlusion_run + c) * 5 * sizeof(uint32_t), 1, 5 * sizeof(uint32_t));
+				}
+				Fellow::stats().occlusion_cull_indirect_draws.add(chunks);
 			} else {
 				if (fellow_clusters) {
 					// Draw only the clusters that intersect the view volume (planes moved into the surface's local space).
@@ -1260,7 +1269,7 @@ void RenderForwardClustered::_fellow_occlusion_free() {
 		o.test_shader.version_free(o.test_version);
 		o.test_version = RID();
 	}
-	for (RID *buffer : { &o.slot_bounds, &o.runs, &o.args, &o.compacted, &o.cull_counters }) {
+	for (RID *buffer : { &o.slot_bounds, &o.runs, &o.args, &o.compacted, &o.visibility, &o.cull_counters }) {
 		if (buffer->is_valid()) {
 			rd->free_rid(*buffer);
 			*buffer = RID();
@@ -1324,7 +1333,7 @@ void RenderForwardClustered::_fellow_occlusion_init() {
 	}
 	RenderingDevice *rd = RD::get_singleton();
 	Vector<String> modes;
-	modes.push_back("\n#define MODE_FROM_DEPTH\n");
+	modes.push_back("\n#define MODE_LEVELS_0_5\n");
 	modes.push_back("\n");
 	o.hzb_shader.initialize(modes);
 	o.hzb_version = o.hzb_shader.version_create();
@@ -1340,7 +1349,7 @@ void RenderForwardClustered::_fellow_occlusion_init() {
 	// Culling: the list elements and the persistent instance data entries are read from the frame's region of their
 	// dynamic buffers.
 	Vector<String> cull_modes;
-	cull_modes.push_back("\n#define MODE_THREAD_PER_RUN\n");
+	cull_modes.push_back("\n#define MODE_TEST\n");
 	cull_modes.push_back("\n");
 	Vector<uint64_t> dynamic_buffers;
 	dynamic_buffers.push_back(ShaderRD::DynamicBuffer::encode(0, 2));
@@ -1362,10 +1371,10 @@ bool RenderForwardClustered::_fellow_occlusion_pyramid(const Ref<RenderSceneBuff
 	if (screen.x <= 0 || screen.y <= 0) {
 		return false;
 	}
-	// Level 0 covers 2 x 2 pixels per texel and has power-of-two sides, so that every level is exactly half the previous
-	// one (texture levels round down); texels past the screen repeat its edge (the pyramid takes the minimum, so they change
-	// nothing).
-	const Size2i size0(Math::next_power_of_2((uint32_t)(screen.x + 1) / 2), Math::next_power_of_2((uint32_t)(screen.y + 1) / 2));
+	// Level 0 covers 2 x 2 pixels per texel; its sides are multiples of 64, so that the 7 levels halve exactly (texture
+	// levels round down). Texels past the screen repeat its edge (the pyramid takes the minimum: a lower bound still).
+	static constexpr uint32_t LEVELS = 7;
+	const Size2i size0(((screen.x + 1) / 2 + 63) / 64 * 64, ((screen.y + 1) / 2 + 63) / 64 * 64);
 	if (o.hzb.is_null() || o.hzb_size != size0) {
 		for (RID &level : o.hzb_levels) {
 			rd->free_rid(level);
@@ -1374,46 +1383,50 @@ bool RenderForwardClustered::_fellow_occlusion_pyramid(const Ref<RenderSceneBuff
 		if (o.hzb.is_valid()) {
 			rd->free_rid(o.hzb);
 		}
-		uint32_t levels = 1;
-		for (int d = MAX(size0.x, size0.y); d > 1; d /= 2) {
-			levels++;
-		}
 		RD::TextureFormat tf;
 		tf.format = RD::DATA_FORMAT_R32_SFLOAT;
 		tf.width = size0.x;
 		tf.height = size0.y;
-		tf.mipmaps = levels;
+		tf.mipmaps = LEVELS;
 		tf.usage_bits = RD::TEXTURE_USAGE_STORAGE_BIT | RD::TEXTURE_USAGE_SAMPLING_BIT;
 		o.hzb = rd->texture_create(tf, RD::TextureView());
-		for (uint32_t m = 0; m < levels; m++) {
+		for (uint32_t m = 0; m < LEVELS; m++) {
 			o.hzb_levels.push_back(rd->texture_create_shared_from_slice(RD::TextureView(), o.hzb, 0, m));
 		}
 		o.hzb_size = size0;
 	}
 
+	// Levels 0-5 in one dispatch (a workgroup per 32 x 32 texels of level 0), level 6 from level 5.
 	RID sampler = RendererRD::MaterialStorage::get_singleton()->sampler_rd_get_default(RSE::CANVAS_ITEM_TEXTURE_FILTER_NEAREST, RSE::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
 	UniformSetCacheRD *cache = UniformSetCacheRD::get_singleton();
 	RD::ComputeListID list = rd->compute_list_begin();
-	Size2i source = screen;
-	for (uint32_t m = 0; m < o.hzb_levels.size(); m++) {
-		const Size2i dest = m == 0 ? size0 : Size2i(MAX(1, source.x / 2), MAX(1, source.y / 2));
-		const int mode = m == 0 ? 0 : 1;
-		RID shader = o.hzb_shader.version_get_shader(o.hzb_version, mode);
-		rd->compute_list_bind_compute_pipeline(list, o.hzb_pipelines[mode]);
-		if (m == 0) {
-			RD::Uniform u_depth(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 0, Vector<RID>({ sampler, p_render_buffers->get_depth_texture(0) }));
-			rd->compute_list_bind_uniform_set(list, cache->get_cache(shader, 0, u_depth), 0);
-		} else {
-			RD::Uniform u_source(RD::UNIFORM_TYPE_IMAGE, 0, o.hzb_levels[m - 1]);
-			rd->compute_list_bind_uniform_set(list, cache->get_cache(shader, 0, u_source), 0);
+	{
+		RID shader = o.hzb_shader.version_get_shader(o.hzb_version, 0);
+		rd->compute_list_bind_compute_pipeline(list, o.hzb_pipelines[0]);
+		RD::Uniform u_depth(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 0, Vector<RID>({ sampler, p_render_buffers->get_depth_texture(0) }));
+		rd->compute_list_bind_uniform_set(list, cache->get_cache(shader, 0, u_depth), 0);
+		RD::Uniform u_levels[6];
+		for (int m = 0; m < 6; m++) {
+			u_levels[m] = RD::Uniform(RD::UNIFORM_TYPE_IMAGE, m, o.hzb_levels[m]);
 		}
-		RD::Uniform u_dest(RD::UNIFORM_TYPE_IMAGE, 0, o.hzb_levels[m]);
+		rd->compute_list_bind_uniform_set(list, cache->get_cache(shader, 1, u_levels[0], u_levels[1], u_levels[2], u_levels[3], u_levels[4], u_levels[5]), 1);
+		int32_t push[4] = { screen.x, screen.y, size0.x, size0.y };
+		rd->compute_list_set_push_constant(list, push, sizeof(push));
+		rd->compute_list_dispatch(list, size0.x / 32, size0.y / 32, 1);
+		rd->compute_list_add_barrier(list);
+	}
+	{
+		const Size2i source(size0.x >> 5, size0.y >> 5);
+		const Size2i dest(size0.x >> 6, size0.y >> 6);
+		RID shader = o.hzb_shader.version_get_shader(o.hzb_version, 1);
+		rd->compute_list_bind_compute_pipeline(list, o.hzb_pipelines[1]);
+		RD::Uniform u_source(RD::UNIFORM_TYPE_IMAGE, 0, o.hzb_levels[5]);
+		rd->compute_list_bind_uniform_set(list, cache->get_cache(shader, 0, u_source), 0);
+		RD::Uniform u_dest(RD::UNIFORM_TYPE_IMAGE, 0, o.hzb_levels[6]);
 		rd->compute_list_bind_uniform_set(list, cache->get_cache(shader, 1, u_dest), 1);
 		int32_t push[4] = { source.x, source.y, dest.x, dest.y };
 		rd->compute_list_set_push_constant(list, push, sizeof(push));
 		rd->compute_list_dispatch_threads(list, dest.x, dest.y, 1);
-		rd->compute_list_add_barrier(list);
-		source = dest;
 	}
 	rd->compute_list_end();
 	return true;
@@ -1478,12 +1491,9 @@ bool RenderForwardClustered::_fellow_occlusion_cull(RenderDataRD *p_render_data,
 	// The runs the colour pass draws (as _render_list_template() walks the list), tested where every element can be
 	// bounded by its surface's box under its instance's transform and nothing but the depth test decides its pixels.
 	o.run_data.clear();
-	o.long_runs.clear();
 	o.run_of_element.resize(count);
 	memset(o.run_of_element.ptr(), 0xFF, count * sizeof(uint32_t));
-	static constexpr uint32_t LONG_RUN = 16; // elements; longer runs get a workgroup each
 	const uint64_t uncullable_owner = INSTANCE_DATA_FLAG_MULTIMESH | INSTANCE_DATA_FLAG_PARTICLES;
-	uint32_t short_count = 0;
 	for (uint32_t i = 0; i < count;) {
 		const GeometryInstanceSurfaceDataCache *surf = rl.elements[i];
 		const RenderElementInfo &info = rl.element_info[i];
@@ -1503,27 +1513,16 @@ bool RenderForwardClustered::_fellow_occlusion_cull(RenderDataRD *p_render_data,
 			cullable = index_count > 0;
 		}
 		if (cullable) {
-			if (n > LONG_RUN) {
-				o.run_of_element[i] = 0x80000000u | o.long_runs.size(); // fixed below
-				o.long_runs.push_back(i);
-			} else {
-				o.run_of_element[i] = short_count++;
-				o.run_data.push_back(i);
-				o.run_data.push_back(n);
+			// The run's chunks, consecutive from its index.
+			o.run_of_element[i] = o.run_data.size() / 4;
+			for (uint32_t c = 0; c < n; c += FellowOcclusion::CHUNK) {
+				o.run_data.push_back(i + c);
+				o.run_data.push_back(MIN(FellowOcclusion::CHUNK, n - c));
 				o.run_data.push_back(index_count);
 				o.run_data.push_back(0);
 			}
 		}
 		i += n;
-	}
-	for (uint32_t k = 0; k < o.long_runs.size(); k++) {
-		const uint32_t i = o.long_runs[k];
-		const RenderElementInfo &info = rl.element_info[i];
-		o.run_of_element[i] = short_count + k;
-		o.run_data.push_back(i);
-		o.run_data.push_back(MAX(1u, uint32_t(info.repeat)));
-		o.run_data.push_back(mesh_storage->fellow_mesh_surface_get_index_count(rl.elements[i]->surface, info.lod_index));
-		o.run_data.push_back(0);
 	}
 	const uint32_t run_count = o.run_data.size() / 4;
 	if (run_count == 0) {
@@ -1547,11 +1546,14 @@ bool RenderForwardClustered::_fellow_occlusion_cull(RenderDataRD *p_render_data,
 		o.args = rd->storage_buffer_create(o.run_capacity * 5 * sizeof(uint32_t), Span<uint8_t>(), RD::STORAGE_BUFFER_USAGE_DISPATCH_INDIRECT);
 	}
 	if (o.compacted_capacity < count) {
-		if (o.compacted.is_valid()) {
-			rd->free_rid(o.compacted);
+		for (RID *buffer : { &o.compacted, &o.visibility }) {
+			if (buffer->is_valid()) {
+				rd->free_rid(*buffer);
+			}
 		}
 		o.compacted_capacity = Math::next_power_of_2(MAX(count, 1024u));
 		o.compacted = rd->storage_buffer_create(o.compacted_capacity * 4 * sizeof(uint32_t));
+		o.visibility = rd->storage_buffer_create(o.compacted_capacity * sizeof(uint32_t));
 	}
 	const uint32_t slot_capacity = o.slot_bounds_cpu.size() / 8;
 	if (o.slot_bounds_capacity < slot_capacity || o.slot_bounds.is_null()) {
@@ -1579,17 +1581,15 @@ bool RenderForwardClustered::_fellow_occlusion_cull(RenderDataRD *p_render_data,
 	rd->buffer_update(o.runs, 0, run_count * 4 * sizeof(uint32_t), o.run_data.ptr());
 	rd->buffer_clear(o.cull_counters, 0, 16);
 
-	// The test and the compaction.
+	// The test (a thread per list element) and the compaction (a thread per chunk).
 	struct {
 		float view_projection[16];
 		float screen_size[2];
 		uint32_t levels;
-		uint32_t run_count;
-		uint32_t run_offset;
-		uint32_t dispatch_width;
+		uint32_t count;
 		uint32_t slot_vec4s;
-		uint32_t pad;
-	} push;
+		uint32_t pad[3];
+	} push = {};
 	const Projection view_projection = p_render_data->scene_data->get_cam_projection() * Projection(p_render_data->scene_data->cam_transform.affine_inverse());
 	RendererRD::MaterialStorage::store_camera(view_projection, push.view_projection);
 	const Size2i screen = rb->get_internal_size();
@@ -1597,7 +1597,6 @@ bool RenderForwardClustered::_fellow_occlusion_cull(RenderDataRD *p_render_data,
 	push.screen_size[1] = screen.y;
 	push.levels = o.hzb_levels.size();
 	push.slot_vec4s = sizeof(SceneState::InstanceData) / 16;
-	push.pad = 0;
 	RID sampler = RendererRD::MaterialStorage::get_singleton()->sampler_rd_get_default(RSE::CANVAS_ITEM_TEXTURE_FILTER_NEAREST, RSE::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
 	RD::Uniform u_hzb(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 0, Vector<RID>({ sampler, o.hzb }));
 	RD::Uniform u_runs(RD::UNIFORM_TYPE_STORAGE_BUFFER, 1, o.runs);
@@ -1607,29 +1606,25 @@ bool RenderForwardClustered::_fellow_occlusion_cull(RenderDataRD *p_render_data,
 	RD::Uniform u_compacted(RD::UNIFORM_TYPE_STORAGE_BUFFER, 5, o.compacted);
 	RD::Uniform u_args(RD::UNIFORM_TYPE_STORAGE_BUFFER, 6, o.args);
 	RD::Uniform u_counters(RD::UNIFORM_TYPE_STORAGE_BUFFER, 7, o.cull_counters);
+	RD::Uniform u_visibility(RD::UNIFORM_TYPE_STORAGE_BUFFER, 8, o.visibility);
 	UniformSetCacheRD *cache = UniformSetCacheRD::get_singleton();
 	RD::ComputeListID list = rd->compute_list_begin();
-	const uint32_t long_count = o.long_runs.size();
-	for (int mode = 0; mode < 2; mode++) {
-		const uint32_t mode_runs = mode == 0 ? short_count : long_count;
-		if (mode_runs == 0) {
-			continue;
-		}
-		RID shader = o.cull_shader.version_get_shader(o.cull_version, mode);
-		rd->compute_list_bind_compute_pipeline(list, o.cull_pipelines[mode]);
-		rd->compute_list_bind_uniform_set(list, cache->get_cache(shader, 0, u_hzb, u_runs, u_source, u_slots, u_bounds, u_compacted, u_args, u_counters), 0);
-		push.run_count = mode_runs;
-		push.run_offset = mode == 0 ? 0 : short_count;
-		if (mode == 0) {
-			push.dispatch_width = 0;
-			rd->compute_list_set_push_constant(list, &push, sizeof(push));
-			rd->compute_list_dispatch_threads(list, mode_runs, 1, 1);
-		} else {
-			const uint32_t width = MIN(mode_runs, 65535u);
-			push.dispatch_width = width;
-			rd->compute_list_set_push_constant(list, &push, sizeof(push));
-			rd->compute_list_dispatch(list, width, (mode_runs + width - 1) / width, 1);
-		}
+	{
+		RID shader = o.cull_shader.version_get_shader(o.cull_version, 0);
+		rd->compute_list_bind_compute_pipeline(list, o.cull_pipelines[0]);
+		rd->compute_list_bind_uniform_set(list, cache->get_cache(shader, 0, u_hzb, u_runs, u_source, u_slots, u_bounds, u_compacted, u_args, u_counters, u_visibility), 0);
+		push.count = count;
+		rd->compute_list_set_push_constant(list, &push, sizeof(push));
+		rd->compute_list_dispatch_threads(list, count, 1, 1);
+		rd->compute_list_add_barrier(list);
+	}
+	{
+		RID shader = o.cull_shader.version_get_shader(o.cull_version, 1);
+		rd->compute_list_bind_compute_pipeline(list, o.cull_pipelines[1]);
+		rd->compute_list_bind_uniform_set(list, cache->get_cache(shader, 0, u_hzb, u_runs, u_source, u_slots, u_bounds, u_compacted, u_args, u_counters, u_visibility), 0);
+		push.count = run_count;
+		rd->compute_list_set_push_constant(list, &push, sizeof(push));
+		rd->compute_list_dispatch_threads(list, run_count, 1, 1);
 	}
 	rd->compute_list_end();
 	rd->buffer_get_data_async(o.cull_counters, callable_mp_static(&RenderForwardClustered::_fellow_occlusion_cull_readback), 0, 16);
@@ -4101,6 +4096,15 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		base_specialization.cluster_has_area_light = current_cluster_builder->get_cluster_count_by_type(ClusterBuilderRD::ELEMENT_TYPE_AREA_LIGHT) != 0;
 	}
 
+	// FellowEngine occlusion culling (decision 0026): the opaque colour pass's runs tested against the full pre-pass's depth.
+	bool fellow_occlusion_culled = false;
+	if (Fellow::occlusion_culling() && depth_pre_pass && !use_msaa && !is_reflection_probe && rb->get_view_count() == 1 && get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_DISABLED && !fellow_occlusion.filtered) {
+		RENDER_TIMESTAMP("FellowEngine Occlusion Culling");
+		RD::get_singleton()->draw_command_begin_label("FellowEngine Occlusion Culling");
+		fellow_occlusion_culled = _fellow_occlusion_cull(p_render_data, using_motion_pass ? (color_pass_flags & ~uint32_t(COLOR_PASS_FLAG_MOTION_VECTORS)) : color_pass_flags);
+		RD::get_singleton()->draw_command_end_label();
+	}
+
 	RENDER_TIMESTAMP("Render Opaque Pass");
 
 	RD::get_singleton()->draw_command_begin_label("Render Opaque Pass");
@@ -4114,11 +4118,6 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	// The upscalers' motion pass also zeroes the opaque pass alpha (pass_alpha_multiplier); stock's TAA path does not.
 	uint32_t opaque_pass_uniform_buffer_index = _setup_environment(p_render_data, is_reflection_probe, screen_size, screen_size, p_default_bg_color, true, using_motion_pass && !fellow_taa_motion_pass);
 
-	// FellowEngine occlusion culling (decision 0026): the opaque colour pass's runs tested against the full pre-pass's depth.
-	bool fellow_occlusion_culled = false;
-	if (Fellow::occlusion_culling() && depth_pre_pass && !use_msaa && !is_reflection_probe && rb->get_view_count() == 1 && get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_DISABLED && !fellow_occlusion.filtered) {
-		fellow_occlusion_culled = _fellow_occlusion_cull(p_render_data, using_motion_pass ? (color_pass_flags & ~uint32_t(COLOR_PASS_FLAG_MOTION_VECTORS)) : color_pass_flags);
-	}
 	fellow_occlusion.pass_active = fellow_occlusion_culled;
 	RID rp_uniform_set = _setup_render_pass_uniform_set(RENDER_LIST_OPAQUE, p_render_data, radiance_texture, samplers, opaque_pass_uniform_buffer_index, true);
 	fellow_occlusion.pass_active = false;

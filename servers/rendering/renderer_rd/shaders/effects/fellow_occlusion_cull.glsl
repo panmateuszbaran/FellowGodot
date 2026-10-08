@@ -6,22 +6,23 @@
 
 // FellowEngine occlusion culling of the opaque pass (decision 0026). Runs after the full depth pre-pass, with a depth
 // pyramid of its depth buffer (each texel the farthest depth, reverse Z the smallest value, of the pixels it covers).
-// Each run of the opaque list (elements the opaque pass draws with one instanced draw) is tested element by element:
-// the element's surface bounding box (local space, per surface slot) is transformed by the instance's transform (its
-// persistent instance data entry) and projected; the element is hidden when its nearest point is behind the farthest
-// depth of the pyramid texels covering its projection, or when its projection covers no pixel. A hidden element has no
-// fragment that can pass the opaque pass's depth test (equal, or greater or equal, against a depth buffer that only gets
-// nearer), so leaving it out changes nothing. The visible elements of each run are copied in order to the same position
-// in the compacted element buffer, and the run's indirect draw gets their count.
 //
-// MODE_THREAD_PER_RUN: one thread per short run. Otherwise one workgroup per run (long runs).
+// MODE_TEST (a thread per list element): the element's surface bounding box (local space, per surface slot) is
+// transformed by the instance's transform (its persistent instance data entry) and projected; the element is hidden when
+// its nearest point is behind the farthest depth of the pyramid texels covering its projection, or when its projection
+// covers no pixel. A hidden element has no fragment that can pass the opaque pass's depth test (equal, or greater or
+// equal, against a depth buffer that only gets nearer), so leaving it out changes nothing.
+//
+// MODE_COMPACT (a thread per chunk: up to 64 consecutive elements of a run, drawn by one indirect draw): the chunk's
+// visible elements are copied in order to the same positions of the compacted element buffer, and the chunk's draw gets
+// their count.
 
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
 layout(set = 0, binding = 0) uniform sampler2D hzb; // level m: one texel per 2^(m+1) x 2^(m+1) pixels
 
 layout(set = 0, binding = 1, std430) buffer restrict readonly Runs {
-	uvec4 data[]; // first element, element count, indices per draw, unused
+	uvec4 data[]; // per chunk: first element, element count (at most 64), indices per draw, unused
 }
 runs;
 
@@ -31,7 +32,7 @@ layout(set = 0, binding = 2, std430) buffer restrict readonly SourceElements {
 source_elements;
 
 layout(set = 0, binding = 3, std430) buffer restrict readonly Slots {
-	vec4 data[]; // persistent instance data entries, SLOT_VEC4S each; the first three hold the transform's rows
+	vec4 data[]; // persistent instance data entries, slot_vec4s each; the first three hold the transform's rows
 }
 slots;
 
@@ -46,7 +47,7 @@ layout(set = 0, binding = 5, std430) buffer restrict writeonly CompactedElements
 compacted_elements;
 
 layout(set = 0, binding = 6, std430) buffer restrict writeonly DrawArgs {
-	uint data[]; // per run: index count, instance count, first index, vertex offset, first instance
+	uint data[]; // per chunk: index count, instance count, first index, vertex offset, first instance
 }
 draw_args;
 
@@ -58,20 +59,24 @@ layout(set = 0, binding = 7, std430) buffer restrict Counters {
 }
 counters;
 
+layout(set = 0, binding = 8, std430) buffer restrict Visibility {
+	uint data[]; // per list element: 1 visible, 0 hidden
+}
+visibility;
+
 layout(push_constant, std430) uniform Params {
 	mat4 view_projection;
 	vec2 screen_size;
 	uint levels;
-	uint run_count; // runs of this dispatch
-	uint run_offset; // index of its first run
-	uint dispatch_width; // workgroups per row (workgroup per run)
+	uint count; // list elements (test) or chunks (compact)
 	uint slot_vec4s;
-	uint pad;
+	uint pad0;
+	uint pad1;
+	uint pad2;
 }
 params;
 
-shared uint s_counts[4];
-shared uint s_visible[64];
+#ifdef MODE_TEST
 
 bool element_visible(uint p_slot) {
 	vec4 bmin = slot_bounds.data[p_slot * 2u];
@@ -130,6 +135,17 @@ bool element_visible(uint p_slot) {
 }
 
 void main() {
+	uint i = gl_GlobalInvocationID.x;
+	if (i < params.count) {
+		visibility.data[i] = element_visible(source_elements.data[i].x) ? 1u : 0u;
+	}
+}
+
+#else // MODE_COMPACT
+
+shared uint s_counts[4];
+
+void main() {
 	uint lid = gl_LocalInvocationID.x;
 	if (lid == 0u) {
 		s_counts[0] = 0u;
@@ -138,17 +154,13 @@ void main() {
 		s_counts[3] = 0u;
 	}
 	barrier();
-
-#ifdef MODE_THREAD_PER_RUN
 	uint r = gl_GlobalInvocationID.x;
-	if (r < params.run_count) {
-		r += params.run_offset;
+	if (r < params.count) {
 		uvec4 run = runs.data[r];
 		uint written = 0u;
 		for (uint j = 0u; j < run.y; j++) {
-			uvec4 e = source_elements.data[run.x + j];
-			if (element_visible(e.x)) {
-				compacted_elements.data[run.x + written] = e;
+			if (visibility.data[run.x + j] != 0u) {
+				compacted_elements.data[run.x + written] = source_elements.data[run.x + j];
 				written++;
 			}
 		}
@@ -162,50 +174,6 @@ void main() {
 		atomicAdd(s_counts[2], run.y * run.z);
 		atomicAdd(s_counts[3], (run.y - written) * run.z);
 	}
-#else
-	uint r = gl_WorkGroupID.y * params.dispatch_width + gl_WorkGroupID.x;
-	bool run_valid = r < params.run_count;
-	uvec4 run = uvec4(0u);
-	if (run_valid) {
-		r += params.run_offset;
-		run = runs.data[r];
-	}
-	uint written = 0u;
-	for (uint base = 0u; base < run.y; base += 64u) {
-		uint j = base + lid;
-		uvec4 e = uvec4(0u);
-		bool visible = false;
-		if (j < run.y) {
-			e = source_elements.data[run.x + j];
-			visible = element_visible(e.x);
-		}
-		s_visible[lid] = visible ? 1u : 0u;
-		barrier();
-		uint before = 0u;
-		uint total = 0u;
-		for (uint i = 0u; i < 64u; i++) {
-			uint v = s_visible[i];
-			before += i < lid ? v : 0u;
-			total += v;
-		}
-		if (visible) {
-			compacted_elements.data[run.x + written + before] = e;
-		}
-		written += total;
-		barrier();
-	}
-	if (run_valid && lid == 0u) {
-		draw_args.data[r * 5u + 0u] = run.z;
-		draw_args.data[r * 5u + 1u] = written;
-		draw_args.data[r * 5u + 2u] = 0u;
-		draw_args.data[r * 5u + 3u] = 0u;
-		draw_args.data[r * 5u + 4u] = 0u;
-		s_counts[0] = run.y;
-		s_counts[1] = run.y - written;
-		s_counts[2] = run.y * run.z;
-		s_counts[3] = (run.y - written) * run.z;
-	}
-#endif
 	barrier();
 	if (lid == 0u && s_counts[0] != 0u) {
 		atomicAdd(counters.elements, s_counts[0]);
@@ -214,3 +182,5 @@ void main() {
 		atomicAdd(counters.hidden_indices, s_counts[3]);
 	}
 }
+
+#endif

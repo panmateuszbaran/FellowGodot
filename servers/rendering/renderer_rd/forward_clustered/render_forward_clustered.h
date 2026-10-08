@@ -250,7 +250,8 @@ private:
 		const Plane *fellow_cluster_planes = nullptr;
 		int fellow_cluster_plane_count = 0;
 		// FellowEngine occlusion culling (opaque colour pass): per list element, the index of the culled run it starts
-		// (its draw is then indirect, reading the compacted elements) or UINT32_MAX.
+		// (its draw is then indirect, reading the compacted elements: one draw per chunk of 64 elements, the run's chunks
+		// consecutive from that index) or UINT32_MAX.
 		const uint32_t *fellow_occlusion_runs = nullptr;
 		RID fellow_occlusion_args;
 
@@ -739,11 +740,11 @@ private:
 	struct FellowOcclusion {
 		FellowHzbShaderRD hzb_shader;
 		RID hzb_version;
-		RID hzb_pipelines[2]; // from the depth buffer, from the previous level
+		RID hzb_pipelines[2]; // levels 0-5 from the depth buffer, a level from the previous one
 		FellowOcclusionTestShaderRD test_shader;
 		RID test_version;
 		RID test_pipeline;
-		RID hzb; // R32F, ceil(size / 2), every level
+		RID hzb; // R32F, level 0 covers 2 x 2 pixels (sides multiples of 64), 7 levels
 		LocalVector<RID> hzb_levels; // a view per level
 		Size2i hzb_size;
 		RID element_buffer;
@@ -763,15 +764,18 @@ private:
 		// tested by the GPU, their indirect draw arguments and the compacted elements.
 		FellowOcclusionCullShaderRD cull_shader;
 		RID cull_version;
-		RID cull_pipelines[2]; // thread per run, workgroup per run
+		RID cull_pipelines[2]; // test (a thread per element), compact (a thread per chunk)
 		LocalVector<float> slot_bounds_cpu;
 		RID slot_bounds;
 		uint32_t slot_bounds_capacity = 0; // slots
 		uint32_t bounds_dirty_from = UINT32_MAX; // slots written since the last upload
 		uint32_t bounds_dirty_to = 0;
-		LocalVector<uint32_t> run_data; // per run: first element, count, indices per draw, 0
-		LocalVector<uint32_t> long_runs; // first elements of the long runs (workgroup per run)
+		// Each tested run is drawn in chunks of up to CHUNK elements (one indirect draw each, in order).
+		static constexpr uint32_t CHUNK = 64;
+		LocalVector<uint32_t> run_data; // per chunk: first element, count, indices per draw, 0
 		LocalVector<uint32_t> run_of_element; // per opaque list element (see RenderListParameters::fellow_occlusion_runs)
+		RID visibility; // per list element
+		uint32_t visibility_capacity = 0;
 		RID runs;
 		RID args;
 		uint32_t run_capacity = 0;
