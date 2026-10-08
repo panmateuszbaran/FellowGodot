@@ -105,3 +105,8 @@ the camera motion into the estimated frame, and the tiles they fall in plus one 
 dilation when the view is still); content that was off screen, or spread over more than 7 tiles, gets full rate. The
 gloss guard moves there and uses this frame's normals instead of the previous frame's. Counters spread over 64 slots.
 Needs the depth pre-pass and no MSAA (otherwise full rate).
+
+v4.1 (`fellow83`): disocclusion test. The estimate also keeps each tile's nearest and farthest view depth (from the
+estimated frame's depth buffer and inverse projection; RG16F per tile); in the apply pass a reprojected point whose
+depth in the estimated frame lies outside its tile's range by more than 5 % (it was hidden there, has come in front,
+or belongs to a moving object) makes its tile full rate. Perspective only (orthographic views skip the test).

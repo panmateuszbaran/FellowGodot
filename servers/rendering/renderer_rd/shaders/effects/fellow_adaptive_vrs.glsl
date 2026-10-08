@@ -21,6 +21,10 @@
 // rate, and every tile is shaded at full rate one frame in refresh_period (its next estimate then sees the content's
 // full detail).
 //
+// Disocclusion: the estimate also keeps each tile's range of view depths; a reprojected point whose depth in the
+// estimated frame falls outside the range of the tile it lands in (by more than 5 %) was not what that tile showed
+// (hidden behind something, newly in front, or moving): its tile gets full rate.
+//
 // MODE_CLEAR: every tile at full rate.
 
 #if defined(MODE_ESTIMATE) || defined(MODE_APPLY)
@@ -32,6 +36,13 @@ layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 #ifdef MODE_ESTIMATE
 layout(set = 0, binding = 0) uniform sampler2D source_image;
 layout(r8ui, set = 0, binding = 1) uniform restrict writeonly uimage2D tile_rates;
+layout(set = 0, binding = 5) uniform sampler2D depth_buffer; // the estimated frame's depth (internal size)
+layout(set = 0, binding = 6, std140) uniform EstimateData {
+	vec4 inv_projection_z; // rows 2 and 3 of the estimated frame's inverse projection: view z and w from NDC
+	vec4 inv_projection_w;
+}
+estimate_data;
+layout(rg16f, set = 0, binding = 7) uniform restrict writeonly image2D tile_depths; // nearest, farthest view depth
 #endif
 
 #ifdef MODE_APPLY
@@ -49,6 +60,7 @@ layout(set = 0, binding = 6, std140) uniform Reprojection {
 	mat4 matrix; // this frame's NDC (pixel centres, depth buffer value) to the estimated frame's clip space
 }
 reprojection;
+layout(rg16f, set = 0, binding = 7) uniform restrict readonly image2D tile_depths;
 #endif
 
 #ifdef MODE_CLEAR
@@ -70,7 +82,7 @@ layout(push_constant, std430) uniform Params {
 	uint use_normals; // normal_roughness holds this frame's normals and roughness
 	float gloss_factor; // a pixel is at risk if 1 - dot(n, neighbour) > gloss_factor * roughness^2
 	uint gloss_pixels; // a tile with at least this many pixels at risk keeps full rate
-	uint pad3;
+	uint use_depth; // perspective: the tiles' depth ranges are kept and checked (disocclusion)
 }
 params;
 
@@ -87,6 +99,7 @@ shared float s_luma[32 * 32];
 // along y (a); strides 2, 4 along y and the largest neighbour differences along x and y (b).
 shared vec4 s_reduce_a[64];
 shared vec4 s_reduce_b[64];
+shared vec2 s_reduce_depth[64]; // nearest, farthest view depth
 
 float load_luma(ivec2 p_pixel) {
 	ivec2 p = clamp(p_pixel, ivec2(0), params.screen_size - 1);
@@ -105,9 +118,18 @@ void main() {
 	int width_log2 = findMSB(ts.x);
 	int n = ts.x * ts.y;
 	ivec2 origin = tile * ts;
+	vec2 depth_range = vec2(1e30, 0.0);
 	for (int i = int(lid); i < n; i += 64) {
-		s_luma[i] = load_luma(origin + ivec2(i & (ts.x - 1), i >> width_log2));
+		ivec2 pixel = origin + ivec2(i & (ts.x - 1), i >> width_log2);
+		s_luma[i] = load_luma(pixel);
+		if (params.use_depth != 0u) {
+			ivec2 p = min(pixel, params.screen_size - 1);
+			vec4 ndc = vec4((vec2(p) + 0.5) / vec2(params.screen_size) * 2.0 - 1.0, texelFetch(depth_buffer, p, 0).r, 1.0);
+			float view_depth = -dot(estimate_data.inv_projection_z, ndc) / dot(estimate_data.inv_projection_w, ndc);
+			depth_range = vec2(min(depth_range.x, view_depth), max(depth_range.y, view_depth));
+		}
 	}
+	s_reduce_depth[lid] = depth_range;
 	barrier();
 	// Squared differences at strides 1, 2, 4 along x (sums 0-2) and y (3-5).
 	float sums[6] = float[](0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
@@ -139,12 +161,18 @@ void main() {
 			vec4 a = s_reduce_a[lid + k];
 			vec4 b = s_reduce_b[lid + k];
 			vec4 own_b = s_reduce_b[lid];
+			vec2 d = s_reduce_depth[lid + k];
+			vec2 own_d = s_reduce_depth[lid];
 			s_reduce_a[lid] += a;
 			s_reduce_b[lid] = vec4(own_b.xy + b.xy, max(own_b.zw, b.zw));
+			s_reduce_depth[lid] = vec2(min(own_d.x, d.x), max(own_d.y, d.y));
 		}
 		barrier();
 	}
 	if (lid == 0u) {
+		if (params.use_depth != 0u) {
+			imageStore(tile_depths, tile, vec4(s_reduce_depth[0], 0.0, 0.0));
+		}
 		vec4 a = s_reduce_a[0];
 		vec4 b = s_reduce_b[0];
 		float total[6] = float[](a.x, a.y, a.z, a.w, b.x, b.y);
@@ -234,6 +262,13 @@ void main() {
 			atomicOr(s_unknown, 1u);
 		} else {
 			ivec2 t = ivec2(previous) / ts;
+			if (params.use_depth != 0u) {
+				// Disocclusion: this point's depth in the estimated frame against what its tile showed there.
+				vec2 range = imageLoad(tile_depths, t).xy;
+				if (clip.w < range.x * 0.95 || clip.w > range.y * 1.05) {
+					atomicOr(s_unknown, 1u);
+				}
+			}
 			atomicMin(s_box[0], t.x);
 			atomicMin(s_box[1], t.y);
 			atomicMax(s_box[2], t.x);

@@ -1297,7 +1297,7 @@ void RenderForwardClustered::_fellow_occlusion_free() {
 		o.cull_shader.version_free(o.cull_version);
 		o.cull_version = RID();
 	}
-	for (RID *buffer : { &fellow_vrs.counters, &fellow_vrs.reprojection }) {
+	for (RID *buffer : { &fellow_vrs.counters, &fellow_vrs.reprojection, &fellow_vrs.estimate_data }) {
 		if (buffer->is_valid()) {
 			rd->free_rid(*buffer);
 			*buffer = RID();
@@ -1700,6 +1700,7 @@ void RenderForwardClustered::_fellow_adaptive_vrs_init() {
 	}
 	v.counters = rd->storage_buffer_create(64 * 8 + 8);
 	v.reprojection = rd->uniform_buffer_create(64);
+	v.estimate_data = rd->uniform_buffer_create(32);
 }
 
 struct FellowVRSPush {
@@ -1717,7 +1718,7 @@ struct FellowVRSPush {
 	uint32_t use_normals;
 	float gloss_factor;
 	uint32_t gloss_pixels;
-	uint32_t pad3;
+	uint32_t use_depth;
 };
 
 static FellowVRSPush fellow_vrs_push(const Size2i &p_texel, const Size2i &p_tiles, const Size2i &p_internal_size) {
@@ -1768,15 +1769,32 @@ void RenderForwardClustered::_fellow_adaptive_vrs_estimate(const Ref<RenderScene
 	push.linear_source = texture_storage->render_target_is_using_hdr(render_target) ? 1 : 0;
 	if (!p_render_buffers->has_texture(SNAME("fellow_vrs"), SNAME("tile_rates"))) {
 		p_render_buffers->create_texture(SNAME("fellow_vrs"), SNAME("tile_rates"), RD::DATA_FORMAT_R8_UINT, RD::TEXTURE_USAGE_STORAGE_BIT, RD::TEXTURE_SAMPLES_1, tiles);
+		p_render_buffers->create_texture(SNAME("fellow_vrs"), SNAME("tile_depths"), RD::DATA_FORMAT_R16G16_SFLOAT, RD::TEXTURE_USAGE_STORAGE_BIT, RD::TEXTURE_SAMPLES_1, tiles);
+	}
+	// The tiles' view depth ranges (disocclusion test of the next frame's reprojection), perspective only: rows 2 and 3
+	// of the inverse projection the depth buffer was rendered with (TAA jitter included).
+	const Projection projection = p_scene_data->get_cam_projection();
+	push.use_depth = projection.is_orthogonal() ? 0 : 1;
+	{
+		const Projection inverse = projection.inverse();
+		float rows[8];
+		for (int c = 0; c < 4; c++) {
+			rows[c] = inverse.columns[c][2];
+			rows[4 + c] = inverse.columns[c][3];
+		}
+		rd->buffer_update(v.estimate_data, 0, sizeof(rows), rows);
 	}
 	RID tile_rates = p_render_buffers->get_texture(SNAME("fellow_vrs"), SNAME("tile_rates"));
 	RID sampler = RendererRD::MaterialStorage::get_singleton()->sampler_rd_get_default(RSE::CANVAS_ITEM_TEXTURE_FILTER_NEAREST, RSE::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
 	RD::Uniform u_source(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 0, Vector<RID>({ sampler, source }));
 	RD::Uniform u_tile_rates(RD::UNIFORM_TYPE_IMAGE, 1, tile_rates);
+	RD::Uniform u_depth(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 5, Vector<RID>({ sampler, p_render_buffers->get_depth_texture() }));
+	RD::Uniform u_estimate_data(RD::UNIFORM_TYPE_UNIFORM_BUFFER, 6, v.estimate_data);
+	RD::Uniform u_tile_depths(RD::UNIFORM_TYPE_IMAGE, 7, p_render_buffers->get_texture(SNAME("fellow_vrs"), SNAME("tile_depths")));
 	RID shader = v.shader.version_get_shader(v.version, 0);
 	RD::ComputeListID list = rd->compute_list_begin();
 	rd->compute_list_bind_compute_pipeline(list, v.pipelines[0]);
-	rd->compute_list_bind_uniform_set(list, UniformSetCacheRD::get_singleton()->get_cache(shader, 0, u_source, u_tile_rates), 0);
+	rd->compute_list_bind_uniform_set(list, UniformSetCacheRD::get_singleton()->get_cache(shader, 0, u_source, u_tile_rates, u_depth, u_estimate_data, u_tile_depths), 0);
 	rd->compute_list_set_push_constant(list, &push, sizeof(push));
 	rd->compute_list_dispatch(list, tiles.x, tiles.y, 1);
 	rd->compute_list_end();
@@ -1786,6 +1804,7 @@ void RenderForwardClustered::_fellow_adaptive_vrs_estimate(const Ref<RenderScene
 	correction.set_depth_correction(true);
 	rb_data->fellow_vrs_estimated_view_projection = correction * p_scene_data->cam_projection * Projection(p_scene_data->cam_transform.affine_inverse());
 	rb_data->fellow_vrs_has_estimate = true;
+	rb_data->fellow_vrs_estimate_has_depth = push.use_depth != 0;
 	Fellow::stats().vrs_frames.increment();
 }
 
@@ -1842,10 +1861,12 @@ void RenderForwardClustered::_fellow_adaptive_vrs_apply(const Ref<RenderSceneBuf
 	RD::Uniform u_normal_roughness(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 4, Vector<RID>({ sampler, normal_roughness }));
 	RD::Uniform u_depth(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 5, Vector<RID>({ sampler, p_render_buffers->get_depth_texture() }));
 	RD::Uniform u_reprojection(RD::UNIFORM_TYPE_UNIFORM_BUFFER, 6, v.reprojection);
+	RD::Uniform u_tile_depths(RD::UNIFORM_TYPE_IMAGE, 7, p_render_buffers->get_texture(SNAME("fellow_vrs"), SNAME("tile_depths")));
+	push.use_depth = rb_data->fellow_vrs_estimate_has_depth && !p_scene_data->cam_projection.is_orthogonal() ? 1 : 0;
 	RID shader = v.shader.version_get_shader(v.version, 1);
 	RD::ComputeListID list = rd->compute_list_begin();
 	rd->compute_list_bind_compute_pipeline(list, v.pipelines[1]);
-	rd->compute_list_bind_uniform_set(list, cache->get_cache(shader, 0, u_tile_rates, u_rates_out, u_counters, u_normal_roughness, u_depth, u_reprojection), 0);
+	rd->compute_list_bind_uniform_set(list, cache->get_cache(shader, 0, u_tile_rates, u_rates_out, u_counters, u_normal_roughness, u_depth, u_reprojection, u_tile_depths), 0);
 	rd->compute_list_set_push_constant(list, &push, sizeof(push));
 	rd->compute_list_dispatch(list, tiles.x, tiles.y, 1);
 	rd->compute_list_end();

@@ -115,6 +115,7 @@ public:
 		// estimated (tile_rates), without TAA jitter.
 		Projection fellow_vrs_estimated_view_projection;
 		bool fellow_vrs_has_estimate = false;
+		bool fellow_vrs_estimate_has_depth = false; // the estimate kept the tiles' depth ranges
 
 		struct SSEffectsData {
 			Projection ssil_last_frame_projections[RendererSceneRender::MAX_RENDER_VIEWS];
@@ -799,6 +800,7 @@ private:
 		RID pipelines[3]; // estimate, apply, clear
 		RID counters; // 64 slots: coarse tiles, fragments saved
 		RID reprojection; // uniform buffer: this frame's NDC to the estimated frame's clip space
+		RID estimate_data; // uniform buffer: the estimated frame's inverse projection (view z, w rows)
 		uint32_t frame_tiles = 0; // tiles and pixels of the last applied frame (the counters' totals)
 		uint32_t frame_pixels = 0;
 	} fellow_vrs;
