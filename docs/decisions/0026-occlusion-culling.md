@@ -1,8 +1,10 @@
 # 0026 — Occlusion culling against a depth pyramid
 
-Status: **MEASURING** (statistics only) · Branch `fellow/geometry` · Debug setting `rendering/fellow/debug/occlusion_stats`
-· Code: `shaders/effects/fellow_hzb.glsl`, `shaders/effects/fellow_occlusion_test.glsl`, `render_forward_clustered.{h,cpp}`
-(`_fellow_occlusion_stats`), `fellow_settings.*`.
+Status: **MEASURING** (step 1 implemented, `fellow76`) · Branch `fellow/geometry` · Toggle
+`rendering/fellow/geometry/occlusion_culling` (runtime, off) · Debug `rendering/fellow/debug/occlusion_stats`,
+`debug/occlusion_cull_approx` · Code: `shaders/effects/fellow_hzb.glsl`, `fellow_occlusion_test.glsl`,
+`fellow_occlusion_cull.glsl`, `render_forward_clustered.{h,cpp}` (`_fellow_occlusion_*`), scene shader binding 41,
+`fellow_settings.*`.
 
 ## Problem
 
@@ -77,6 +79,31 @@ frame), so it keeps recording every draw and lets the GPU set the instance count
 3. Later, the pre-pass in two phases (previous frame's visible elements, pyramid, the newly visible ones): its draw
    order changes, so coplanar ties can resolve differently; to be measured as such.
 
+## Step 1 implemented (`fellow76`, `17e4d43`)
+
+Before the opaque colour pass (after the pre-opaque effects, so the depth buffer is the one the pass tests against):
+
+* The CPU walks the opaque list's runs as the colour pass will and marks the cullable ones: no multimesh, particles,
+  skinning or blend shapes; a material that does not move vertices (VERTEX, POSITION, matrices, Z clip scale, trails,
+  world coordinates), write DEPTH, read INSTANCE_ID, use stencil or a depth test other than the standard one; an index
+  array. Only with persistent instance data (the shaders read the 16-byte elements), a single view, no MSAA, no debug
+  draw mode.
+* Per surface slot, the surface's local bounding box is kept in a GPU buffer (written when a slot is given to a surface,
+  uploaded with the next culled frame). The GPU tests each element of a marked run: the box's 8 corners under the
+  instance's transform (read from its persistent instance data entry, the one the vertex shader uses) and the camera's
+  view-projection (with TAA jitter), against the depth pyramid. Margins: depth 2^-10 relative + 2^-20 absolute (the
+  difference between this transform and the vertex shader's, 24-bit depth), one pixel on every side of the projection.
+* Visible elements are copied in order to the same positions of a compacted element buffer (scene shader binding 41;
+  an element index with its top bit set reads there), the run's indirect draw gets their count. Runs of up to 16
+  elements: a thread per run; longer runs: a workgroup per run (prefix sums in shared memory).
+* The colour pass draws marked runs with `draw_list_draw_indirect` (clustered surfaces, point size emulation and
+  multimesh indirect keep their own paths).
+
+Exactness: an element left out has every corner's depth (reverse Z) below the farthest depth of the pyramid texels
+covering its pixels (with the margins), so each of its fragments fails the colour pass's depth test (equal after the
+pre-pass, or greater-or-equal; the buffer only gets nearer); the visible ones are drawn in the same order with the same
+instance data. Same images expected bit for bit.
+
 ## Decision
 
-(pending)
+(pending: `m6_f79_*`)
