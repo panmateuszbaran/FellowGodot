@@ -31,6 +31,8 @@
 #include "taa.h"
 
 #include "servers/rendering/fellow_settings.h"
+#include "servers/rendering/renderer_compositor.h"
+#include "servers/rendering/rendering_server_globals.h"
 #include "servers/rendering/renderer_rd/effects/copy_effects.h"
 #include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
 #include "servers/rendering/renderer_rd/uniform_set_cache_rd.h"
@@ -108,7 +110,7 @@ void TAA::resolve(RID p_frame, RID p_temp, RID p_depth, RID p_velocity, RID p_pr
 	RD::get_singleton()->compute_list_end();
 }
 
-void TAA::process(Ref<RenderSceneBuffersRD> p_render_buffers, RD::DataFormat p_format, float p_z_near, float p_z_far) {
+void TAA::process(Ref<RenderSceneBuffersRD> p_render_buffers, RD::DataFormat p_format, float p_z_near, float p_z_far, bool p_direct_output) {
 	CopyEffects *copy_effects = CopyEffects::get_singleton();
 
 	uint32_t variant = Fellow::taa_resolve_v2() ? VARIANT_FELLOW_V2 : 0;
@@ -116,7 +118,7 @@ void TAA::process(Ref<RenderSceneBuffersRD> p_render_buffers, RD::DataFormat p_f
 		variant |= VARIANT_FELLOW_TILE16;
 	}
 	if (Fellow::taa_history_pingpong()) {
-		process_pingpong(p_render_buffers, p_format, p_z_near, p_z_far, variant | VARIANT_FELLOW_WRITE_VELOCITY);
+		process_pingpong(p_render_buffers, p_format, p_z_near, p_z_far, variant | VARIANT_FELLOW_WRITE_VELOCITY, p_direct_output && p_render_buffers->get_view_count() == 1);
 		return;
 	}
 
@@ -163,7 +165,7 @@ void TAA::process(Ref<RenderSceneBuffersRD> p_render_buffers, RD::DataFormat p_f
 // internal -> history and velocity -> prev_velocity (3 full-resolution copies). Here the resolve writes the
 // new history and next frame's velocity directly into the "other" half of a ping-pong pair, leaving a single
 // copy (history -> internal) that the rest of the post-processing chain needs.
-void TAA::process_pingpong(Ref<RenderSceneBuffersRD> p_render_buffers, RD::DataFormat p_format, float p_z_near, float p_z_far, uint32_t p_variant) {
+void TAA::process_pingpong(Ref<RenderSceneBuffersRD> p_render_buffers, RD::DataFormat p_format, float p_z_near, float p_z_far, uint32_t p_variant, bool p_direct_output) {
 	CopyEffects *copy_effects = CopyEffects::get_singleton();
 
 	uint32_t view_count = p_render_buffers->get_view_count();
@@ -205,7 +207,13 @@ void TAA::process_pingpong(Ref<RenderSceneBuffersRD> p_render_buffers, RD::DataF
 		if (state->valid) {
 			RID depth_texture = p_render_buffers->get_depth_texture(v);
 			resolve(internal_texture, hist_write, depth_texture, velocity_buffer, vel_read, hist_read, Size2(internal_size.x, internal_size.y), p_z_near, p_z_far, p_variant, vel_write);
-			copy_effects->copy_to_rect(hist_write, internal_texture, Rect2(0, 0, internal_size.x, internal_size.y));
+			if (p_direct_output) {
+				// FellowEngine postfx/taa_direct_output: the post-processing chain reads hist_write itself.
+				p_render_buffers->fellow_post_source = hist_write;
+				p_render_buffers->fellow_post_source_frame = RSG::rasterizer->get_frame_number();
+			} else {
+				copy_effects->copy_to_rect(hist_write, internal_texture, Rect2(0, 0, internal_size.x, internal_size.y));
+			}
 		} else {
 			// First frame after (re)allocation: seed history and velocity like the stock path does.
 			copy_effects->copy_to_rect(internal_texture, hist_write, Rect2(0, 0, internal_size.x, internal_size.y));

@@ -42,6 +42,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/postfx/taa_resolve_v2", true);
 	GLOBAL_DEF("rendering/fellow/postfx/taa_tile16", false);
 	GLOBAL_DEF("rendering/fellow/postfx/taa_history_pingpong", true);
+	GLOBAL_DEF("rendering/fellow/postfx/taa_direct_output", false);
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/postfx/taa_v2_gamma", PROPERTY_HINT_RANGE, "0.5,4,0.01"), 1.25);
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/postfx/taa_v2_feedback_min", PROPERTY_HINT_RANGE, "0.5,0.99,0.001"), 0.88);
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/postfx/taa_v2_feedback_max", PROPERTY_HINT_RANGE, "0.5,0.99,0.001"), 0.9375);
@@ -210,6 +211,7 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["postfx_luminance_verify_mismatches"] = s.postfx_luminance_verify_mismatches.get();
 	d["postfx_ssao_temporal_frames"] = s.postfx_ssao_temporal_frames.get();
 	d["postfx_ssil_temporal_frames"] = s.postfx_ssil_temporal_frames.get();
+	d["postfx_taa_direct_frames"] = s.postfx_taa_direct_frames.get();
 	d["occlusion_tested"] = s.occlusion_tested.get();
 	d["occlusion_weight"] = s.occlusion_weight.get();
 	d["occlusion_hidden"] = s.occlusion_hidden.get();

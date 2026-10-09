@@ -160,6 +160,14 @@ inline bool taa_history_pingpong() {
 	return postfx_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/postfx/taa_history_pingpong");
 }
 
+// TAA direct output: with the history ping-pong, the post-processing chain (auto exposure, glow, tone mapping) reads the
+// resolve's output texture (this frame's history) instead of a copy of it in the internal colour texture: one
+// full-resolution copy less per frame, the same texels read. Single view, no depth of field and no debug draw mode
+// (those modify or show the internal texture: the copy is made then).
+inline bool taa_direct_output() {
+	return postfx_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/postfx/taa_direct_output");
+}
+
 // Captures the engine's RENDER_TIMESTAMP markers every frame (like --gpu-profile, without printing), so that
 // per-pass GPU timings are available to scripts (RenderingDevice.get_captured_timestamp_*) and the overlay.
 // Timestamps act as ordering fences in the render graph: keep this off for performance measurements.
@@ -641,6 +649,7 @@ struct Stats {
 	SafeNumeric<uint64_t> postfx_luminance_verify_mismatches;
 	SafeNumeric<uint64_t> postfx_ssao_temporal_frames; // SSAO gathers with half the taps plus the history (decision 0028)
 	SafeNumeric<uint64_t> postfx_ssil_temporal_frames; // SSIL gathers with half the taps plus the history (decision 0030)
+	SafeNumeric<uint64_t> postfx_taa_direct_frames; // TAA outputs read by the post-processing chain where the resolve wrote them
 	SafeNumeric<uint64_t> occlusion_tested; // opaque list elements tested (debug/occlusion_stats)
 	SafeNumeric<uint64_t> occlusion_weight; // their surfaces' indices (full detail)
 	SafeNumeric<uint64_t> occlusion_hidden; // elements the pyramid hides

@@ -42,6 +42,7 @@
 #include "servers/rendering/rendering_server_default.h"
 #include "servers/rendering/rendering_server_enums.h"
 #include "servers/rendering/shader_include_db.h"
+#include "servers/rendering/fellow_settings.h"
 #include "servers/rendering/storage/camera_attributes_storage.h"
 
 void get_vogel_disk(float *r_kernel, int p_sample_count) {
@@ -491,6 +492,23 @@ void RendererSceneRenderRD::_render_buffers_post_process_and_tonemap(const Rende
 	RID color_texture = use_upscaled_texture ? rb->get_upscaled_texture() : rb->get_internal_texture();
 	Size2i color_size = use_upscaled_texture ? target_size : rb->get_internal_size();
 
+	// FellowEngine postfx/taa_direct_output: this frame's TAA output is in its history texture (not copied into the
+	// internal texture); the chain reads it there. Where it cannot (depth of field modifies its source in place, more
+	// than one view, an upscaler's output), the copy the TAA skipped is made here.
+	RID fellow_post_source;
+	if (rb->fellow_post_source.is_valid() && rb->fellow_post_source_frame == RSG::rasterizer->get_frame_number()) {
+		fellow_post_source = rb->fellow_post_source;
+		const bool fellow_dof = RSG::camera_attributes->camera_attributes_uses_dof(p_render_data->camera_attributes) && !p_render_data->transparent_bg;
+		if (fellow_dof || rb->get_view_count() != 1 || use_upscaled_texture) {
+			copy_effects->copy_to_rect(fellow_post_source, rb->get_internal_texture(0), Rect2i(Point2i(), rb->get_internal_size()));
+			fellow_post_source = RID();
+		} else {
+			color_texture = fellow_post_source;
+			Fellow::stats().postfx_taa_direct_frames.increment();
+		}
+		rb->fellow_post_source = RID();
+	}
+
 	bool dest_is_msaa_2d = rb->get_view_count() == 1 && texture_storage->render_target_get_msaa(render_target) != RSE::VIEWPORT_MSAA_DISABLED;
 
 	bool using_dof = RSG::camera_attributes->camera_attributes_uses_dof(p_render_data->camera_attributes);
@@ -567,7 +585,7 @@ void RendererSceneRenderRD::_render_buffers_post_process_and_tonemap(const Rende
 		double step = RSG::camera_attributes->camera_attributes_get_auto_exposure_adjust_speed(p_render_data->camera_attributes) * time_step;
 		float auto_exposure_min_sensitivity = RSG::camera_attributes->camera_attributes_get_auto_exposure_min_sensitivity(p_render_data->camera_attributes);
 		float auto_exposure_max_sensitivity = RSG::camera_attributes->camera_attributes_get_auto_exposure_max_sensitivity(p_render_data->camera_attributes);
-		luminance->luminance_reduction(rb->get_internal_texture(), rb->get_internal_size(), luminance_buffers, auto_exposure_min_sensitivity, auto_exposure_max_sensitivity, step, set_immediate);
+		luminance->luminance_reduction(fellow_post_source.is_valid() ? fellow_post_source : rb->get_internal_texture(), rb->get_internal_size(), luminance_buffers, auto_exposure_min_sensitivity, auto_exposure_max_sensitivity, step, set_immediate);
 
 		// Swap final reduce with prev luminance.
 
@@ -606,7 +624,7 @@ void RendererSceneRenderRD::_render_buffers_post_process_and_tonemap(const Rende
 			}
 			for (uint32_t l = 0; l < rb->get_view_count(); l++) {
 				Size2i vp_size = rb->get_texture_slice_size(RB_SCOPE_BUFFERS, RB_TEX_BLUR_1, 0);
-				RID source = rb->get_internal_texture(l);
+				RID source = fellow_post_source.is_valid() ? fellow_post_source : rb->get_internal_texture(l);
 				RID dest = rb->get_texture_slice(RB_SCOPE_BUFFERS, RB_TEX_BLUR_1, l, 0);
 				copy_effects->gaussian_glow(source, dest, vp_size, environment_get_glow_strength(p_render_data->environment), true, environment_get_glow_hdr_luminance_cap(p_render_data->environment), environment_get_exposure(p_render_data->environment), environment_get_glow_bloom(p_render_data->environment), environment_get_glow_hdr_bleed_threshold(p_render_data->environment), environment_get_glow_hdr_bleed_scale(p_render_data->environment), luminance_texture, auto_exposure_scale);
 
@@ -631,7 +649,7 @@ void RendererSceneRenderRD::_render_buffers_post_process_and_tonemap(const Rende
 
 				Size2i source_size = rb->get_texture_slice_size(RB_SCOPE_BUFFERS, RB_TEX_COLOR, 0);
 
-				source = rb->get_internal_texture(l);
+				source = fellow_post_source.is_valid() ? fellow_post_source : rb->get_internal_texture(l);
 				dest = rb->get_texture_slice(RB_SCOPE_BUFFERS, RB_TEX_BLUR_1, l, 1); // Level 1 is quarter res.
 
 				copy_effects->gaussian_glow_downsample_raster(source, dest, luminance_multiplier, source_size, environment_get_glow_strength(p_render_data->environment), true, environment_get_glow_hdr_luminance_cap(p_render_data->environment), environment_get_exposure(p_render_data->environment), environment_get_glow_bloom(p_render_data->environment), environment_get_glow_hdr_bleed_threshold(p_render_data->environment), environment_get_glow_hdr_bleed_scale(p_render_data->environment));

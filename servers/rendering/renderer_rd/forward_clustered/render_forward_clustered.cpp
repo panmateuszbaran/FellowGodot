@@ -4656,7 +4656,11 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		} else if (using_taa) {
 			RD::get_singleton()->draw_command_begin_label("TAA");
 			RENDER_TIMESTAMP("TAA");
-			taa->process(rb, rb->get_base_data_format(), p_render_data->scene_data->z_near, p_render_data->scene_data->z_far);
+			// FellowEngine postfx/taa_direct_output: the post-processing chain may read the TAA output where the resolve wrote
+			// it (not with depth of field, which modifies its source in place, or a debug draw mode, which shows or draws
+			// into the internal texture).
+			const bool fellow_taa_direct = Fellow::taa_direct_output() && get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_DISABLED && !RSG::camera_attributes->camera_attributes_uses_dof(p_render_data->camera_attributes);
+			taa->process(rb, rb->get_base_data_format(), p_render_data->scene_data->z_near, p_render_data->scene_data->z_far, fellow_taa_direct);
 			RD::get_singleton()->draw_command_end_label();
 		}
 	}

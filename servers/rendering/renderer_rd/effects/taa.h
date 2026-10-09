@@ -40,7 +40,10 @@ public:
 	TAA();
 	~TAA();
 
-	void process(Ref<RenderSceneBuffersRD> p_render_buffers, RD::DataFormat p_format, float p_z_near, float p_z_far);
+	// p_direct_output: FellowEngine postfx/taa_direct_output allowed for this frame (single view, no depth of field, no
+	// debug draw): with the history ping-pong, the output stays in the history texture (RenderSceneBuffersRD::
+	// fellow_post_source) instead of being copied into the internal texture.
+	void process(Ref<RenderSceneBuffersRD> p_render_buffers, RD::DataFormat p_format, float p_z_near, float p_z_far, bool p_direct_output = false);
 
 private:
 	struct TAAResolvePushConstant {
@@ -84,7 +87,7 @@ private:
 	};
 
 	void resolve(RID p_frame, RID p_temp, RID p_depth, RID p_velocity, RID p_prev_velocity, RID p_history, Size2 p_resolution, float p_z_near, float p_z_far, uint32_t p_variant = 0, RID p_velocity_out = RID());
-	void process_pingpong(Ref<RenderSceneBuffersRD> p_render_buffers, RD::DataFormat p_format, float p_z_near, float p_z_far, uint32_t p_variant);
+	void process_pingpong(Ref<RenderSceneBuffersRD> p_render_buffers, RD::DataFormat p_format, float p_z_near, float p_z_far, uint32_t p_variant, bool p_direct_output);
 };
 
 } // namespace RendererRD

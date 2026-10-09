@@ -257,6 +257,12 @@ public:
 	_FORCE_INLINE_ RID get_internal_texture() const {
 		return get_texture(RB_SCOPE_BUFFERS, RB_TEX_COLOR);
 	}
+
+	// FellowEngine (postfx/taa_direct_output): this frame's TAA output when TAA left it in its history texture instead of
+	// copying it into the internal texture; the post-processing chain reads it from there. Set by the TAA, reset with
+	// every frame (fellow_post_source_frame) and by fellow_resolve_post_source().
+	RID fellow_post_source;
+	uint64_t fellow_post_source_frame = UINT64_MAX;
 	_FORCE_INLINE_ RID get_internal_texture(const uint32_t p_layer) {
 		return get_texture_slice(RB_SCOPE_BUFFERS, RB_TEX_COLOR, p_layer, 0);
 	}
