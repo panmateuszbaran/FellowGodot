@@ -146,3 +146,37 @@ compute it runs on the second queue while the main queue renders the shadows; it
 workgroup's threads in parallel (one thread read up to 49 texels before); the counters are read back after the
 frame's main work. Motion guard (`adaptive_vrs_motion_px`, off): a tile whose centre moved more than N pixels since
 the estimated frame shades at most 2 × 2, more than 2N at full rate.
+
+## What drives the loss in motion (`m6_f91_vrs_motion`, `m6_f92b_*`)
+
+Fast pans against off (`fellow84`/`fellow86`; Sponza pan 45°/s, Bistro exterior path):
+
+| variant | Sponza pan | Bistro exterior path |
+|---|---|---|
+| defaults (threshold 0.006, max step 0.02, refresh 8, up to 4 × 4) | 49.8 dB, 5.3 % > 2 | 56.9 dB, 1.2 % > 2 |
+| threshold 0.003 | 62.0 dB, 0.30 % > 2 | 76.5 dB, 0.006 % > 2 |
+| max step 0.01 | 62.6 dB, 0.29 % > 2 | 82.1 dB, 0.000 % > 2 |
+| no refresh | 49.1 dB, 6.1 % > 2 | 56.2 dB, 1.4 % > 2 |
+| at most 2 × 2 | 49.9 dB, 5.1 % > 2 | 56.9 dB |
+| motion guard 8 px | 62.2 dB, 0.53 % > 2 (City Lab 84.6, Lights Lab 62.0) | 56.9 dB (slow path: no tile over 8 px) |
+| motion guard 16 px | 52.1 dB, 3.0 % > 2 | 56.9 dB |
+
+In a still view TAA averages the coarse fragments over its 16 jittered frames (each coarse fragment is shaded at a
+different sample position every frame), which hides most of the coarse shading; in motion it cannot. What loses
+detail are tiles with moderate texture contrast that the criteria let through: the largest-step limit decides it
+(0.01 instead of 0.02 keeps both pans above 62 dB), the 4 × 4 rate and the refresh period hardly matter. Speed of the
+tighter settings: `m6_f93_step_ab`.
+
+## Cost against benefit, per scene (`m6_f92b_all_ab`, `fellow86`)
+
+With the apply pass on the async queue: Lights Lab −21.1 %, PBR Lab −5.2 %, Bistro interior −2.8 %, City Lab +1.4 %,
+Sponza +0.9 %, Bistro exterior +1.0 %. The passes cost ~0.1 ms wherever they run (the estimate 0.05-0.07 ms on the main
+queue; the apply pass lengthens the async queue, which is the critical path in PBR Lab, City Lab and Bistro interior),
+and where little of the screen can be shaded coarsely (Sponza 5 % of the tiles, Bistro exterior 12 %) or the opaque
+pass is cheap (City Lab: 43 % of the fragments saved, 0.05 ms) that is more than it saves. The motion guard at 8 px
+costs much of the gain where the camera moves (Lights Lab −12.6 % instead of −21.1 %).
+
+`fellow87`: adaptive shading is an autotune tunable (decision 0020; `shading/adaptive_vrs_autotune`, on): the engine
+runs it on and off in alternating blocks of frames, compares the GPU time and keeps the faster way per scene,
+re-checking now and then. Both ways look the same within the measured limits, so the switching is not visible; where
+it does not pay it costs only its evaluations.

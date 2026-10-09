@@ -129,6 +129,8 @@ bool tunable_applies(Tunable p_tunable) {
 			return shadows_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/shadows/directional_max_mip");
 		case TUNE_POSITIONAL_PYRAMID:
 			return shadows_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/shadows/positional_max_mip");
+		case TUNE_ADAPTIVE_VRS:
+			return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/shading/adaptive_vrs") && GLOBAL_GET_CACHED(bool, "rendering/fellow/shading/adaptive_vrs_autotune") && GLOBAL_GET_CACHED(float, "rendering/fellow/shading/adaptive_vrs_threshold") > 0.0f;
 		case TUNE_ASYNC_COMPUTE:
 			// Only where the device created the async queue at start-up (decision 0015).
 			return enabled() && GLOBAL_GET_CACHED(int, "rendering/fellow/frame/async_compute") != 0 && RD::get_singleton()->fellow_async_compute_available();

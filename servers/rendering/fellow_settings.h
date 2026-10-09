@@ -581,7 +581,8 @@ inline bool adaptive_vrs() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/shading/adaptive_vrs");
 }
 inline float adaptive_vrs_threshold() {
-	return GLOBAL_GET_CACHED(float, "rendering/fellow/shading/adaptive_vrs_threshold");
+	// 0 (every tile at full rate, the estimate skipped) while autotune runs the frame without it (decision 0020).
+	return autotune_allows(TUNE_ADAPTIVE_VRS) ? GLOBAL_GET_CACHED(float, "rendering/fellow/shading/adaptive_vrs_threshold") : 0.0f;
 }
 // Coarsest rate: 0 = 2 x 2, 1 = 4 x 4.
 inline int adaptive_vrs_max_rate() {

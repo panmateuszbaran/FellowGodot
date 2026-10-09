@@ -43,6 +43,9 @@ namespace Fellow {
 enum Tunable {
 	TUNE_DIRECTIONAL_PYRAMID, // shadows/directional_max_mip (decision 0005)
 	TUNE_POSITIONAL_PYRAMID, // shadows/positional_max_mip (decision 0005)
+	// Not exact, but visually lossless (decision 0027): adaptive shading rate pays only where its shading savings exceed
+	// its passes' cost; switched like the exact ones (both ways look the same within the measured limits).
+	TUNE_ADAPTIVE_VRS, // shading/adaptive_vrs_threshold > 0 (the attachment is created at start-up)
 	// Measured by the frame's wall time instead (they trade render-thread time against GPU time):
 	TUNE_ASYNC_COMPUTE, // frame/async_compute (decision 0015; the device created its second queue at start-up)
 	TUNE_FRAME_PLAN, // frame/replay_frame_plan (decision 0019)

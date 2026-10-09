@@ -183,3 +183,10 @@ yet keeps a worker recording (see 0015).
 frequent evaluations on lavapipe and RTX), and with the evaluation cap and the pooled pairs no scene is measurably slower
 than without it. What it costs is bounded (at most 20 % of the frames under evaluation, half of them with a tunable the
 other way).
+
+## Adaptive shading rate as a tunable (`fellow87`, milestone 6)
+
+`TUNE_ADAPTIVE_VRS` (GPU time): while it is off for a frame, the attachment is cleared (every tile at full rate) and
+the estimate is skipped, and the next frame starts again at full rate. It is the first tunable that is not exact; it
+is visually lossless (decision 0027), so frames with and without it look the same within the measured limits.
+`shading/adaptive_vrs_autotune` (on) lets a project keep it always on instead.

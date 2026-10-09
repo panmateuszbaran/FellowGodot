@@ -1748,10 +1748,16 @@ void RenderForwardClustered::_fellow_adaptive_vrs_estimate(const Ref<RenderScene
 		RD::get_singleton()->buffer_get_data_async(fellow_vrs.counters, callable_mp_static(&RenderForwardClustered::_fellow_adaptive_vrs_readback), 0, 64 * 8 + 8);
 		fellow_vrs_readback_pending = false;
 	}
-	if (!_fellow_adaptive_vrs_target(p_render_buffers) || !(Fellow::adaptive_vrs_threshold() > 0.0f) || !p_render_buffers->has_custom_data(RB_SCOPE_FORWARD_CLUSTERED)) {
+	if (!_fellow_adaptive_vrs_target(p_render_buffers) || !p_render_buffers->has_custom_data(RB_SCOPE_FORWARD_CLUSTERED)) {
 		return;
 	}
 	Ref<RenderBufferDataForwardClustered> rb_data = p_render_buffers->get_custom_data(RB_SCOPE_FORWARD_CLUSTERED);
+	if (!(Fellow::adaptive_vrs_threshold() > 0.0f)) {
+		// Off this frame (threshold 0, or autotune running it without): the next frame starts again at full rate rather
+		// than from an old estimate.
+		rb_data->fellow_vrs_has_estimate = false;
+		return;
+	}
 	_fellow_adaptive_vrs_init();
 	FellowVRS &v = fellow_vrs;
 	RenderingDevice *rd = RD::get_singleton();
