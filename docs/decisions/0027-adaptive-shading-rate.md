@@ -180,3 +180,18 @@ costs much of the gain where the camera moves (Lights Lab −12.6 % instead of �
 runs it on and off in alternating blocks of frames, compares the GPU time and keeps the faster way per scene,
 re-checking now and then. Both ways look the same within the measured limits, so the switching is not visible; where
 it does not pay it costs only its evaluations.
+
+## Tighter limits: quality against speed (`m6_f93_*`, `fellow86`)
+
+| setting | Sponza pan | Bistro ext. path | captures (min) | Lights | PBR | Bistro int. | City | Sponza | Bistro ext. |
+|---|---|---|---|---:|---:|---:|---:|---:|---:|
+| defaults (max step 0.02) | 49.8 dB | 56.9 dB | 52.8-64.9 dB | −20.1 % | −5.1 % | −2.8 % | +1.2 % | +1.4 % | +0.9 % |
+| max step 0.01 | 62.6 dB | 82.1 dB | 57.9-69.3 dB | −18.3 % | −4.4 % | +0.1 % | +0.9 % | +1.3 % | +1.4 % |
+| threshold 0.003 | 62.0 dB | 76.5 dB | | −18.4 % | −4.8 % | −0.4 % | +0.3 % | +1.4 % | +1.3 % |
+| max step 0.01 + motion guard 8 px | 70.9 dB | 82.1 dB | | −10.5 % | −3.5 % | +0.4 % | +1.3 % | +1.5 % | +1.4 % |
+
+(frame time in one process against threshold 0; pans: PSNR mean against off.) The tighter limits make every scene
+visually lossless in motion as well, but take Bistro interior's gain away; Lights Lab and PBR Lab keep most of theirs.
+Defaults stay at 0.02 with autotune (`fellow87`): the scenes where adaptive shading does not pay, which are also the
+ones that lose detail in fast pans (Sponza, Bistro exterior), run it off. A project that wants the stricter look sets
+`adaptive_vrs_max_step` to 0.01.
