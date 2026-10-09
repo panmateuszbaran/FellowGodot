@@ -195,3 +195,17 @@ visually lossless in motion as well, but take Bistro interior's gain away; Light
 Defaults stay at 0.02 with autotune (`fellow87`): the scenes where adaptive shading does not pay, which are also the
 ones that lose detail in fast pans (Sponza, Bistro exterior), run it off. A project that wants the stricter look sets
 `adaptive_vrs_max_step` to 0.01.
+
+## With autotune between processes (`m6_f94_final`, `fellow87`)
+
+The visually lossless options together (adaptive shading under autotune, temporal SSAO and SSIL, fog at half rate)
+against the FellowEngine defaults, 3 runs each, 20 s per run: Lights Lab **−24.9 %**, Bistro interior **−9.0 %**, PBR
+Lab −7.0 % (noisy, p 0.09), Bistro exterior −3.4 %, Sponza −3.4 % (p 0.13), City Lab −3.2 % (p 0.07). Frames shaded
+with adaptive rates (`vrs_frames` of the first run): City Lab 144 and Bistro exterior 192 (autotune turned it off),
+Lights Lab, PBR Lab and Bistro interior nearly every frame, **Sponza 4946**: there the difference is within the noise
+(+0.9 % in one process), and autotune kept the default choice, on. That left adaptive shading running in the scene
+whose fast pan loses the most (49.8 dB).
+
+`fellow89`: an undecided evaluation (a difference below `autotune/min_gain_percent` or within 2.5 standard errors)
+switches an image-changing tunable **off**, and it starts off: adaptive shading runs only where it is measured faster.
+The exact tunables keep their rule (undecided keeps the current choice). Measured in `m6_f96`.

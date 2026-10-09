@@ -14,15 +14,21 @@ Every option has a decision record in `docs/decisions/` with its measurements.
 
 ## Visually lossless options (off by default)
 
-| setting | what it does | where it pays | image cost | record |
+| setting | what it does | measured gain (frame, RTX 5070 Ti Laptop, 1080p) | image cost against stock | record |
 |---|---|---|---|---|
-| `shading/adaptive_vrs` (start-up) | Variable rate shading per 16 × 16 tile, chosen from the previous frame's image and reprojected with the current depth; glossy surfaces, discarding and depth-writing materials keep full rate | scenes where much of the screen is smooth or dark (lights, flat walls, sky-lit interiors) | (f89/f90) | 0027 |
-| `postfx/ssao_temporal` | SSAO takes half its taps per frame, the other half from the previous frame (reprojected, depth-checked) | every scene with SSAO (low to high quality, full or half size) | (f89) | 0028 |
-| `postfx/ssil_temporal` | the same for SSIL | scenes with SSIL | (f89) | 0030 |
-| `postfx/fog_half_rate` | volumetric fog lights half its froxels per frame (checkerboard), the rest is reprojected | scenes with volumetric fog and temporal reprojection | (f89) | 0031 |
+| `shading/adaptive_vrs` (start-up) | Variable rate shading per 16 × 16 tile, chosen from the previous frame's image and reprojected with the current depth; glossy surfaces, discarding and depth-writing materials keep full rate; autotune keeps it only where it saves time | Lights Lab −21 %, PBR Lab −5 %, Bistro interior −3 % (City Lab, Sponza, Bistro exterior: its passes cost more than it saves, autotune turns it off) | stills 52.8-74.1 dB (≤ 1.5 % of pixels > 2 levels); sequences 56.9-75.1 dB, a fast pan in Sponza 49.8 dB (5.3 % > 2) | 0027 |
+| `postfx/ssao_temporal` | SSAO takes half its taps per frame, the other half from the previous frame (reprojected, depth-checked) | −1.5 to −3.1 % where SSAO is the longer async queue | stills 59.3-82.3 dB (min 57.5); sequences 58.3-75.3 dB (min 50.6, 0.37 % > 2) | 0028 |
+| `postfx/ssil_temporal` | the same for SSIL | −1.0 to −1.5 % where SSIL is used | stills 58.6-62.9 dB (min 57.8); sequences 57.7-58.7 dB (min 52.1) | 0030 |
+| `postfx/fog_half_rate` | volumetric fog lights half its froxels per frame (checkerboard of 4 × 4 × 4 blocks), the rest is reprojected | Lights Lab −1.7 %, elsewhere −0.1 % | stills 61.4-71.3 dB; sequences 60.1-72.2 dB (min 56.5, max \|d\| 10) | 0031 |
+
+For scale: stock's own half-size SSAO against full size is 46-47 dB.
 
 `shading/adaptive_vrs_threshold` (0.006, luma 0-1) is the per-tile error budget; 0 keeps the attachment with every
-tile at full rate. `shading/adaptive_vrs_max_rate` limits the coarsest rate (2 × 2 or 4 × 4).
+tile at full rate. `shading/adaptive_vrs_max_step` (0.02) limits the largest step between neighbouring pixels a coarse
+tile may have; **0.01 is the strict setting**: every fast pan stays above 62 dB, at the cost of Bistro interior's gain.
+`shading/adaptive_vrs_motion_px` (0, off) keeps tiles moving faster than that many pixels per frame at finer rates.
+`shading/adaptive_vrs_autotune` (on) lets autotune (0020) switch adaptive shading off in scenes where it does not save
+GPU time. `shading/adaptive_vrs_max_rate` limits the coarsest rate (2 × 2 or 4 × 4).
 `shading/adaptive_vrs_refresh` shades every tile at full rate one frame in N so that detail lost to coarse shading is
 seen again. `shading/adaptive_vrs_gloss_guard` keeps glossy, curved surfaces at full rate. Adaptive shading needs a
 GPU with fragment shading rate attachments (Vulkan `VK_KHR_fragment_shading_rate`), a single view, the depth pre-pass

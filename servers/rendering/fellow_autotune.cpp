@@ -251,6 +251,12 @@ void finish(TuneState &s, bool p_new_choice, const Analysis &p_analysis, bool p_
 	s.decided_frame_ms = frame_ms_avg;
 }
 
+// Tunables that change the image (the visually lossless options): kept only where they are measured faster. Undecided
+// (a difference within the noise or below autotune/min_gain_percent), they are switched off, and they start off.
+bool changes_image(int p_tunable) {
+	return p_tunable == TUNE_ADAPTIVE_VRS;
+}
+
 void decide(TuneState &s) {
 	const Analysis e = analyze(s, AUTOTUNE_PAIRS);
 	const Analysis r = e.pairs >= AUTOTUNE_PAIRS - 1 ? pool(s, e) : e;
@@ -259,6 +265,8 @@ void decide(TuneState &s) {
 		const double min_gain = MAX(0.0, (double)GLOBAL_GET_CACHED(float, "rendering/fellow/autotune/min_gain_percent")) * 0.01 * r.base;
 		if (std::fabs(r.mean) > min_gain && (r.se <= 0.0 || std::fabs(r.mean) >= AUTOTUNE_T * r.se)) {
 			new_choice = r.mean > 0.0;
+		} else if (changes_image(int(&s - states))) {
+			new_choice = false;
 		}
 	}
 	finish(s, new_choice, r, false);
@@ -345,6 +353,7 @@ void autotune_frame_begin() {
 		}
 		if (!s.started) {
 			s.started = true;
+			s.choice = !changes_image(t);
 			s.interval = (uint32_t)MAX(1, GLOBAL_GET_CACHED(int, "rendering/fellow/autotune/interval_frames"));
 			s.next_eval = frame_id + s.interval * 2 / 5;
 			s.recheck_spacing = MAX(1u, s.interval / 2);
