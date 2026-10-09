@@ -135,3 +135,14 @@ Reprojection removed City Lab's worst pixels (a building edge shaded with a neig
 loss in the pans; the disocclusion test changes nothing in these camera paths (no object appears from behind
 another). Sponza's fast pan still loses texture detail in 5 % of the pixels (by 3-21 levels): measured in `m6_f91`
 (threshold, refresh, 2 × 2 limit, max step).
+
+v4.1 in one process (`m6_f89_all_ab`, `fellow84`): the estimate costs 0.052-0.067 ms (Tonemap region) and the apply
+pass 0.036-0.046 ms (its own region); frame Lights Lab −20.1 %, PBR Lab −5.6 %, Bistro interior −2.8 %, City Lab
++1.8 %, Sponza +0.9 %, Bistro exterior +1.0 %: more overhead than v3 fast (`m6_f85`, one pass of ~0.06 ms), and smaller
+opaque savings in Bistro interior (−0.194 against −0.245 ms; the reprojected rates follow the motion of the path).
+
+`fellow86`: the apply pass is recorded with the screen-space effects (it needs only the depth pre-pass), so with async
+compute it runs on the second queue while the main queue renders the shadows; its 7 × 7 tile window is read by the
+workgroup's threads in parallel (one thread read up to 49 texels before); the counters are read back after the
+frame's main work. Motion guard (`adaptive_vrs_motion_px`, off): a tile whose centre moved more than N pixels since
+the estimated frame shades at most 2 × 2, more than 2N at full rate.

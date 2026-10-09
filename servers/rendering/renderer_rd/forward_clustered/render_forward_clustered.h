@@ -804,6 +804,8 @@ private:
 		uint32_t frame_tiles = 0; // tiles and pixels of the last applied frame (the counters' totals)
 		uint32_t frame_pixels = 0;
 	} fellow_vrs;
+	bool fellow_vrs_depth_ready = false; // this frame has a (non-MSAA) depth pre-pass for the apply pass
+	bool fellow_vrs_readback_pending = false; // the apply pass filled the counters this frame
 	bool _fellow_adaptive_vrs_target(const Ref<RenderSceneBuffersRD> &p_render_buffers) const;
 	void _fellow_adaptive_vrs_init();
 	void _fellow_adaptive_vrs_estimate(const Ref<RenderSceneBuffersRD> &p_render_buffers, const RenderSceneDataRD *p_scene_data);

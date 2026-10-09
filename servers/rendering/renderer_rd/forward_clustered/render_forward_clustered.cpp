@@ -1744,6 +1744,10 @@ static FellowVRSPush fellow_vrs_push(const Size2i &p_texel, const Size2i &p_tile
 
 void RenderForwardClustered::_fellow_adaptive_vrs_estimate(const Ref<RenderSceneBuffersRD> &p_render_buffers, const RenderSceneDataRD *p_scene_data) {
 	// After the frame's final image: its tiles' rates (tile_rates), applied to the next frame (_fellow_adaptive_vrs_apply).
+	if (fellow_vrs_readback_pending && fellow_vrs.counters.is_valid()) {
+		RD::get_singleton()->buffer_get_data_async(fellow_vrs.counters, callable_mp_static(&RenderForwardClustered::_fellow_adaptive_vrs_readback), 0, 64 * 8 + 8);
+		fellow_vrs_readback_pending = false;
+	}
 	if (!_fellow_adaptive_vrs_target(p_render_buffers) || !(Fellow::adaptive_vrs_threshold() > 0.0f) || !p_render_buffers->has_custom_data(RB_SCOPE_FORWARD_CLUSTERED)) {
 		return;
 	}
@@ -1882,9 +1886,9 @@ void RenderForwardClustered::_fellow_adaptive_vrs_apply(const Ref<RenderSceneBuf
 	rd->compute_list_set_push_constant(list, &push, sizeof(push));
 	rd->compute_list_dispatch(list, tiles.x, tiles.y, 1);
 	rd->compute_list_end();
-	if (push.count_stats) {
-		rd->buffer_get_data_async(v.counters, callable_mp_static(&RenderForwardClustered::_fellow_adaptive_vrs_readback), 0, 64 * 8 + 8);
-	}
+	// Read back after the frame's main work (from the estimate): the apply pass may have been recorded for the async
+	// compute queue.
+	fellow_vrs_readback_pending = push.count_stats != 0;
 }
 
 void RenderForwardClustered::_fellow_occlusion_stats(RenderDataRD *p_render_data) {
@@ -3369,6 +3373,16 @@ void RenderForwardClustered::_fellow_process_ss_effects(RenderDataRD *p_render_d
 	if (p_use_ssr) {
 		_process_ssr(rb, p_render_data->environment, p_normal_roughness_slices, p_render_data->scene_data->view_projection, p_render_data->scene_data->view_eye_offset, p_render_data->scene_data->cam_transform);
 	}
+
+	// FellowEngine adaptive shading rate (decision 0027): this frame's attachment from the last estimate, recorded with
+	// the screen-space effects (it needs only the depth pre-pass), so that with async compute it runs on the second
+	// queue while the main queue renders the shadows.
+	if (Fellow::adaptive_vrs() && _fellow_adaptive_vrs_target(rb)) {
+		RENDER_TIMESTAMP("FellowEngine Adaptive Shading Rate");
+		RD::get_singleton()->draw_command_begin_label("FellowEngine Adaptive Shading Rate");
+		_fellow_adaptive_vrs_apply(rb, p_render_data->scene_data, fellow_vrs_depth_ready);
+		RD::get_singleton()->draw_command_end_label();
+	}
 }
 
 void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, bool p_use_ssao, bool p_use_ssil, bool p_use_ssr, bool p_use_gi, const RID *p_normal_roughness_slices, RID p_voxel_gi_buffer) {
@@ -4247,6 +4261,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			normal_roughness_views[v] = rb_data->get_normal_roughness(v);
 		}
 	}
+	fellow_vrs_depth_ready = depth_pre_pass && !use_msaa; // adaptive shading rate's apply pass (recorded with the SS effects)
 	_pre_opaque_render(p_render_data, using_ssao, using_ssil, using_ssr, using_sdfgi || using_voxelgi, normal_roughness_views, rb_data.is_valid() && rb_data->has_voxelgi() ? rb_data->get_voxelgi() : RID());
 
 	if (current_cluster_builder) {
@@ -4259,14 +4274,6 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		RENDER_TIMESTAMP("FellowEngine Occlusion Culling");
 		RD::get_singleton()->draw_command_begin_label("FellowEngine Occlusion Culling");
 		fellow_occlusion_culled = _fellow_occlusion_cull(p_render_data, using_motion_pass ? (color_pass_flags & ~uint32_t(COLOR_PASS_FLAG_MOTION_VECTORS)) : color_pass_flags);
-		RD::get_singleton()->draw_command_end_label();
-	}
-
-	// FellowEngine adaptive shading rate (decision 0027): this frame's attachment from the last estimate.
-	if (rb_data.is_valid() && Fellow::adaptive_vrs() && _fellow_adaptive_vrs_target(rb)) {
-		RENDER_TIMESTAMP("FellowEngine Adaptive Shading Rate");
-		RD::get_singleton()->draw_command_begin_label("FellowEngine Adaptive Shading Rate");
-		_fellow_adaptive_vrs_apply(rb, p_render_data->scene_data, depth_pre_pass && !use_msaa);
 		RD::get_singleton()->draw_command_end_label();
 	}
 

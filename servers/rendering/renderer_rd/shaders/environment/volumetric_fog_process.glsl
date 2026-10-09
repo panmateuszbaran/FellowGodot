@@ -347,12 +347,13 @@ void main() {
 			uint halton_index = params.temporal_frame;
 
 			if (params.fellow_half_rate != 0u) {
-				// FellowEngine half rate: the froxels of one checkerboard parity are lit in even frames, the others in odd
-				// frames; a froxel not lit this frame keeps its reprojected value, one lit blends it in as stock does over
-				// two frames (history weight squared). Its jitter steps through the whole Halton table across its own
-				// updates (frames two apart).
+				// FellowEngine half rate: the froxels of one checkerboard parity of 4 x 4 x 4 blocks (whole workgroups, so
+				// that the skipped half costs nothing: a per-froxel checkerboard leaves every warp half busy for the full
+				// time) are lit in even frames, the others in odd frames; a froxel not lit this frame keeps its
+				// reprojected value, one lit blends it in as stock does over two frames (history weight squared). Its
+				// jitter steps through the whole Halton table across its own updates (frames two apart).
 				uint frame = params.fellow_half_rate & 31u;
-				if (((uint(pos.x + pos.y + pos.z) + frame) & 1u) != 0u) {
+				if (((gl_WorkGroupID.x + gl_WorkGroupID.y + gl_WorkGroupID.z + frame) & 1u) != 0u) {
 					bool invalid = any(isnan(reprojected_density)) || any(isinf(reprojected_density));
 					imageStore(density_map, pos, clamp(invalid ? vec4(0.0) : reprojected_density, vec4(0.0), vec4(65504.0)));
 #ifdef NO_IMAGE_ATOMICS

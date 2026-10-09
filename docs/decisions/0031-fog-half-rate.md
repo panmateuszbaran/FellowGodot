@@ -43,3 +43,9 @@ jitter sequence).
 Captures (`m6_f87_capture`): Bistro exterior 63.6 dB mean (61.1 min), Lights Lab 61.4 (58.0), Sponza 66.8 (62.6),
 scenes without fog at their floor. Temporal sequences (`m6_f89_temporal`): Bistro exterior 60.1 dB (58.9 min), Lights
 Lab 60.1 (56.6 min, max |d| 29, 0.001 % > 2), Sponza 72.3 (71.3).
+
+In one process (`m6_f89_all_ab`, `fellow84`) the fog pass did **not** get cheaper (Lights Lab 0.237 → 0.242 ms,
+Sponza and Bistro exterior +0.012 ms): the checkerboard was per froxel, so every 32-thread warp of a 4 × 4 × 4
+workgroup kept half its threads busy for the full lighting time. `fellow86`: the parity is per workgroup (a 3D
+checkerboard of 4 × 4 × 4 blocks), so half the workgroups return at once. lavapipe Lights Lab captures unchanged
+(58.4-65.4 dB).

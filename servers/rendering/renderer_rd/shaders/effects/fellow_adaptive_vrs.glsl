@@ -215,6 +215,8 @@ shared uint s_gloss_risk;
 shared int s_box[4]; // estimated tiles reached: min x, min y, max x, max y
 shared uint s_unknown; // a sampled point was off the estimated frame's screen
 shared float s_motion; // the tile centre's displacement since the estimated frame (pixels)
+shared uint s_lx; // the finest rates (log2 per axis) among the estimated tiles reached
+shared uint s_ly;
 
 vec4 load_normal_roughness(ivec2 p_pixel) {
 	vec4 nr = texelFetch(normal_roughness, clamp(p_pixel, ivec2(0), params.screen_size - 1), 0);
@@ -237,6 +239,8 @@ void main() {
 		s_box[3] = -0x7FFFFFFF;
 		s_unknown = 0u;
 		s_motion = 0.0;
+		s_lx = 3u;
+		s_ly = 3u;
 	}
 	barrier();
 	if (params.use_normals != 0u) {
@@ -287,22 +291,26 @@ void main() {
 		}
 	}
 	barrier();
+	// The estimated tiles reached, one more on every side (at most 7 x 7): read by the workgroup's threads in parallel.
+	ivec2 lo = ivec2(s_box[0], s_box[1]) - 1;
+	ivec2 hi = ivec2(s_box[2], s_box[3]) + 1;
+	bool usable = s_unknown == 0u && all(lessThanEqual(hi - lo, ivec2(6))) && s_gloss_risk < params.gloss_pixels;
+	if (usable) {
+		lo = max(lo, ivec2(0));
+		hi = min(hi, params.tiles - 1);
+		ivec2 box = hi - lo + 1;
+		if (int(lid) < box.x * box.y) {
+			uint r = imageLoad(tile_rates, lo + ivec2(int(lid) % box.x, int(lid) / box.x)).r;
+			atomicMin(s_lx, r >> 2u);
+			atomicMin(s_ly, r & 3u);
+		}
+	}
+	barrier();
 	if (lid == 0u) {
 		uint rate = 0u;
-		ivec2 lo = ivec2(s_box[0], s_box[1]) - 1;
-		ivec2 hi = ivec2(s_box[2], s_box[3]) + 1;
-		if (s_unknown == 0u && all(lessThanEqual(hi - lo, ivec2(6))) && s_gloss_risk < params.gloss_pixels) {
-			lo = max(lo, ivec2(0));
-			hi = min(hi, params.tiles - 1);
-			uint lx = 3u;
-			uint ly = 3u;
-			for (int y = lo.y; y <= hi.y; y++) {
-				for (int x = lo.x; x <= hi.x; x++) {
-					uint r = imageLoad(tile_rates, ivec2(x, y)).r;
-					lx = min(lx, r >> 2u);
-					ly = min(ly, r & 3u);
-				}
-			}
+		if (usable) {
+			uint lx = s_lx;
+			uint ly = s_ly;
 			if (params.motion_px > 0.0) {
 				uint allowed = s_motion > 2.0 * params.motion_px ? 0u : (s_motion > params.motion_px ? 1u : 3u);
 				lx = min(lx, allowed);
