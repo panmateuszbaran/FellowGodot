@@ -595,6 +595,12 @@ inline int adaptive_vrs_refresh() {
 inline float adaptive_vrs_max_step() {
 	return GLOBAL_GET_CACHED(float, "rendering/fellow/shading/adaptive_vrs_max_step");
 }
+// Motion guard: a tile whose content moved more than this many pixels since the estimated frame shades at most 2 x 2,
+// more than twice this at full rate (TAA averages coarse shading over its jittered frames only where content stays).
+// 0: off.
+inline float adaptive_vrs_motion_px() {
+	return GLOBAL_GET_CACHED(float, "rendering/fellow/shading/adaptive_vrs_motion_px");
+}
 // Tiles where glossy surfaces have varying normals (from the pre-pass's normals and roughness) keep full rate: their
 // highlights alias when shaded coarsely.
 inline bool adaptive_vrs_gloss_guard() {

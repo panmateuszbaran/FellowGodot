@@ -85,7 +85,8 @@ layout(push_constant, std430) uniform Params {
 	uint gloss_pixels; // a tile with at least this many pixels at risk keeps full rate
 	uint use_depth; // perspective: the tiles' depth ranges are kept and checked (disocclusion)
 	uint count_stats; // this frame's apply pass adds its tiles to the counters (one frame in 16)
-	uint pad0;
+	float motion_px; // > 0: a tile whose content moved more than this (pixels per frame) shades at most 2 x 2, more than
+	// twice this at full rate (TAA, which averages coarse shading over its jittered frames, cannot when content moves)
 }
 params;
 
@@ -213,6 +214,7 @@ void main() {
 shared uint s_gloss_risk;
 shared int s_box[4]; // estimated tiles reached: min x, min y, max x, max y
 shared uint s_unknown; // a sampled point was off the estimated frame's screen
+shared float s_motion; // the tile centre's displacement since the estimated frame (pixels)
 
 vec4 load_normal_roughness(ivec2 p_pixel) {
 	vec4 nr = texelFetch(normal_roughness, clamp(p_pixel, ivec2(0), params.screen_size - 1), 0);
@@ -234,6 +236,7 @@ void main() {
 		s_box[2] = -0x7FFFFFFF;
 		s_box[3] = -0x7FFFFFFF;
 		s_unknown = 0u;
+		s_motion = 0.0;
 	}
 	barrier();
 	if (params.use_normals != 0u) {
@@ -267,6 +270,9 @@ void main() {
 			atomicOr(s_unknown, 1u);
 		} else {
 			ivec2 t = ivec2(previous) / ts;
+			if (lid == 4u) {
+				s_motion = length(previous - (vec2(pixel) + 0.5));
+			}
 			if (params.use_depth != 0u) {
 				// Disocclusion: this point's depth in the estimated frame against what its tile showed there.
 				vec2 range = imageLoad(tile_depths, t).xy;
@@ -296,6 +302,11 @@ void main() {
 					lx = min(lx, r >> 2u);
 					ly = min(ly, r & 3u);
 				}
+			}
+			if (params.motion_px > 0.0) {
+				uint allowed = s_motion > 2.0 * params.motion_px ? 0u : (s_motion > params.motion_px ? 1u : 3u);
+				lx = min(lx, allowed);
+				ly = min(ly, allowed);
 			}
 			rate = encode_rate(lx, ly);
 		}

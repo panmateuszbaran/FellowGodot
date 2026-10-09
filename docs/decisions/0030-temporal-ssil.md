@@ -44,3 +44,9 @@ carries the indirect light, so the two halves of a still view see slightly diffe
 jitter); the differences are spread thin (9 % of the pixels differ, almost all by 1-3 levels).
 
 RTX: captures, temporal sequences and in-process A/B in the next job.
+
+## Measured on RTX (`fellow82`/`fellow84`, half size as in the preset)
+
+Captures against stock (`m6_f86_capture`): Bistro exterior 58.6 dB mean (57.8 min), Bistro interior 62.9 (59.3),
+Sponza 59.7 (58.4); the other scenes have no SSIL (identical). Temporal sequences (`m6_f89_temporal`): Bistro exterior
+57.7 dB (56.7 min, 0.18 % > 2), Sponza 58.7 (52.1 min, 0.19 % > 2).

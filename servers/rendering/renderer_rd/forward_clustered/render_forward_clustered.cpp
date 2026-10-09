@@ -1720,7 +1720,7 @@ struct FellowVRSPush {
 	uint32_t gloss_pixels;
 	uint32_t use_depth;
 	uint32_t count_stats;
-	uint32_t pad0;
+	float motion_px;
 };
 
 static FellowVRSPush fellow_vrs_push(const Size2i &p_texel, const Size2i &p_tiles, const Size2i &p_internal_size) {
@@ -1738,6 +1738,7 @@ static FellowVRSPush fellow_vrs_push(const Size2i &p_texel, const Size2i &p_tile
 	push.max_step = Fellow::adaptive_vrs_max_step();
 	push.gloss_factor = 0.5f;
 	push.gloss_pixels = 2;
+	push.motion_px = Fellow::adaptive_vrs_motion_px();
 	return push;
 }
 

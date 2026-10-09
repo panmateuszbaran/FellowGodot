@@ -116,3 +116,22 @@ v4.1 fix (`fellow84`): the disocclusion test compared the reprojected point's ho
 full rate everywhere (`m6_f87_capture`: 93-101 dB against off where v4 gave 54-74 dB). The point's depth in the
 estimated frame is now clip.w divided by the unprojected point's homogeneous w. Also: the counters are cleared,
 filled and read back one frame in 16 (their transfers no longer sit between compute and draw work every frame).
+
+## v4 / v4.1 measured (`fellow82`, `fellow84`; `m6_f89_*`)
+
+Captures against off (`m6_f89_capture`, v4.1): unchanged from v3 (still views): Bistro exterior 60.8 dB mean (53.8 min),
+Bistro interior 54.3 (52.8), City Lab 74.1 (64.9), Lights Lab 60.3 (57.9), PBR Lab 65.0 (62.1), Sponza 66.6 (59.8).
+
+Temporal sequences against off (60 frames, `m6_f89_temporal`):
+
+| sequence | v3 (`m6_f84`) | v4 (reprojected rates) | v4.1 (+ disocclusion) |
+|---|---|---|---|
+| Bistro exterior path | 55.6 dB, 1.6 % > 2 | 56.9 dB, 1.2 % > 2 | 56.9 dB, 1.2 % > 2 |
+| City Lab pan | 61.5 dB, max \|d\| 101 | 74.9 dB, max \|d\| 20 | 75.1 dB, max \|d\| 20 |
+| Lights Lab walk | 59.8 dB | 60.1 dB | 60.1 dB |
+| Sponza pan (45°/s) | 48.6 dB, 7.0 % > 2 | 49.8 dB, 5.3 % > 2 | 49.8 dB, 5.3 % > 2 |
+
+Reprojection removed City Lab's worst pixels (a building edge shaded with a neighbour's coarse rate) and part of the
+loss in the pans; the disocclusion test changes nothing in these camera paths (no object appears from behind
+another). Sponza's fast pan still loses texture detail in 5 % of the pixels (by 3-21 levels): measured in `m6_f91`
+(threshold, refresh, 2 × 2 limit, max step).

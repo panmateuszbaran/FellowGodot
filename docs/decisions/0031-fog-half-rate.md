@@ -37,3 +37,9 @@ Lights Lab (volumetric fog, many shadowed lights), 960 × 540, off vs on: still 
 (max |d| 11; the far, low and street views 63-65 dB, looking up into the fog 58 dB); the 60-frame walk 60.7 dB mean,
 57.0 dB min, max |d| 8 (16 % of the pixels differ, by 1-3 levels: the fog's own temporal noise follows a different
 jitter sequence).
+
+## Measured on RTX (`fellow83`/`fellow84`)
+
+Captures (`m6_f87_capture`): Bistro exterior 63.6 dB mean (61.1 min), Lights Lab 61.4 (58.0), Sponza 66.8 (62.6),
+scenes without fog at their floor. Temporal sequences (`m6_f89_temporal`): Bistro exterior 60.1 dB (58.9 min), Lights
+Lab 60.1 (56.6 min, max |d| 29, 0.001 % > 2), Sponza 72.3 (71.3).
