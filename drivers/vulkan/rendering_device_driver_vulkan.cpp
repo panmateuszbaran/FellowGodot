@@ -32,6 +32,7 @@
 
 #include "core/config/engine.h"
 #include "core/config/project_settings.h"
+#include "core/io/file_access.h"
 #include "core/os/os.h"
 #include "core/templates/fixed_vector.h"
 #include "drivers/vulkan/vulkan_hooks.h"
@@ -618,6 +619,12 @@ Error RenderingDeviceDriverVulkan::_initialize_device_extensions() {
 
 	_register_requested_device_extension(VK_KHR_DRIVER_PROPERTIES_EXTENSION_NAME, false);
 
+	// FellowEngine: pipeline statistics dump (diagnostics), only when FELLOW_PIPELINE_STATS names a file.
+	fellow_pipeline_stats_path = OS::get_singleton()->get_environment("FELLOW_PIPELINE_STATS");
+	if (!fellow_pipeline_stats_path.is_empty()) {
+		_register_requested_device_extension(VK_KHR_PIPELINE_EXECUTABLE_PROPERTIES_EXTENSION_NAME, false);
+	}
+
 	uint32_t device_extension_count = 0;
 	VkResult err = vkEnumerateDeviceExtensionProperties(physical_device, nullptr, &device_extension_count, nullptr);
 	ERR_FAIL_COND_V_MSG(err != VK_SUCCESS, ERR_CANT_CREATE, vformat("Couldn't get Vulkan device extension count (VkResult error %d).", err));
@@ -917,6 +924,7 @@ Error RenderingDeviceDriverVulkan::_check_device_capabilities() {
 		VkPhysicalDeviceRayTracingPipelineFeaturesKHR raytracing_pipeline_features = {};
 		VkPhysicalDeviceSynchronization2FeaturesKHR sync_2_features = {};
 		VkPhysicalDeviceRayTracingValidationFeaturesNV raytracing_validation_features = {};
+		VkPhysicalDevicePipelineExecutablePropertiesFeaturesKHR fellow_pipeline_executable_features = {};
 
 		const bool use_1_2_features = physical_device_properties.apiVersion >= VK_API_VERSION_1_2;
 		if (use_1_2_features) {
@@ -1007,6 +1015,12 @@ Error RenderingDeviceDriverVulkan::_check_device_capabilities() {
 			next_features = &sync_2_features;
 		}
 
+		if (enabled_device_extension_names.has(VK_KHR_PIPELINE_EXECUTABLE_PROPERTIES_EXTENSION_NAME)) {
+			fellow_pipeline_executable_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_EXECUTABLE_PROPERTIES_FEATURES_KHR;
+			fellow_pipeline_executable_features.pNext = next_features;
+			next_features = &fellow_pipeline_executable_features;
+		}
+
 		VkPhysicalDeviceFeatures2 device_features_2 = {};
 		device_features_2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
 		device_features_2.pNext = next_features;
@@ -1080,6 +1094,10 @@ Error RenderingDeviceDriverVulkan::_check_device_capabilities() {
 
 		if (enabled_device_extension_names.has(VK_EXT_DEVICE_FAULT_EXTENSION_NAME)) {
 			device_fault_support = true;
+		}
+
+		if (enabled_device_extension_names.has(VK_KHR_PIPELINE_EXECUTABLE_PROPERTIES_EXTENSION_NAME)) {
+			fellow_pipeline_stats_support = fellow_pipeline_executable_features.pipelineExecutableInfo;
 		}
 #if defined(VK_TRACK_DEVICE_MEMORY)
 		if (enabled_device_extension_names.has(VK_EXT_DEVICE_MEMORY_REPORT_EXTENSION_NAME)) {
@@ -1385,6 +1403,14 @@ Error RenderingDeviceDriverVulkan::_initialize_device(const LocalVector<VkDevice
 		create_info_next = &fsr_features;
 	}
 
+	VkPhysicalDevicePipelineExecutablePropertiesFeaturesKHR fellow_pipeline_executable_features = {};
+	if (fellow_pipeline_stats_support) {
+		fellow_pipeline_executable_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_EXECUTABLE_PROPERTIES_FEATURES_KHR;
+		fellow_pipeline_executable_features.pNext = create_info_next;
+		fellow_pipeline_executable_features.pipelineExecutableInfo = VK_TRUE;
+		create_info_next = &fellow_pipeline_executable_features;
+	}
+
 	VkPhysicalDeviceFragmentDensityMapFeaturesEXT fdm_features = {};
 	if (fdm_capabilities.attachment_supported || fdm_capabilities.dynamic_attachment_supported || fdm_capabilities.non_subsampled_images_supported) {
 		fdm_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_DENSITY_MAP_FEATURES_EXT;
@@ -1539,6 +1565,16 @@ Error RenderingDeviceDriverVulkan::_initialize_device(const LocalVector<VkDevice
 			device_functions.CmdDebugMarkerEndEXT = (PFN_vkCmdDebugMarkerEndEXT)functions.GetDeviceProcAddr(vk_device, "vkCmdDebugMarkerEndEXT");
 			device_functions.CmdDebugMarkerInsertEXT = (PFN_vkCmdDebugMarkerInsertEXT)functions.GetDeviceProcAddr(vk_device, "vkCmdDebugMarkerInsertEXT");
 			device_functions.DebugMarkerSetObjectNameEXT = (PFN_vkDebugMarkerSetObjectNameEXT)functions.GetDeviceProcAddr(vk_device, "vkDebugMarkerSetObjectNameEXT");
+		}
+
+		if (fellow_pipeline_stats_support) {
+			fellow_get_pipeline_executable_properties = (PFN_vkGetPipelineExecutablePropertiesKHR)functions.GetDeviceProcAddr(vk_device, "vkGetPipelineExecutablePropertiesKHR");
+			fellow_get_pipeline_executable_statistics = (PFN_vkGetPipelineExecutableStatisticsKHR)functions.GetDeviceProcAddr(vk_device, "vkGetPipelineExecutableStatisticsKHR");
+			if (fellow_get_pipeline_executable_properties == nullptr || fellow_get_pipeline_executable_statistics == nullptr) {
+				fellow_pipeline_stats_support = false;
+			} else {
+				print_line(vformat("FellowEngine: pipeline statistics dumped to %s", fellow_pipeline_stats_path));
+			}
 		}
 
 		// Debug device fault extension.
@@ -6409,8 +6445,15 @@ RDD::PipelineID RenderingDeviceDriverVulkan::render_pipeline_create(
 	uint64_t pipeline_start_time = OS::get_singleton()->get_ticks_usec();
 #endif
 
+	if (fellow_pipeline_stats_support) {
+		pipeline_create_info.flags |= VK_PIPELINE_CREATE_CAPTURE_STATISTICS_BIT_KHR;
+	}
+
 	VkPipeline vk_pipeline = VK_NULL_HANDLE;
-	VkResult err = vkCreateGraphicsPipelines(vk_device, pipelines_cache.vk_cache, 1, &pipeline_create_info, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_PIPELINE), &vk_pipeline);
+	VkResult err = vkCreateGraphicsPipelines(vk_device, fellow_pipeline_stats_support ? VK_NULL_HANDLE : pipelines_cache.vk_cache, 1, &pipeline_create_info, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_PIPELINE), &vk_pipeline);
+	if (fellow_pipeline_stats_support && err == VK_SUCCESS) {
+		_fellow_dump_pipeline_stats(vk_pipeline, shader_info, p_specialization_constants, "render");
+	}
 
 	// Don't print error for VK_ERROR_UNKNOWN on Adreno 660.
 	if (unlikely(err == VK_ERROR_UNKNOWN && driver_workarounds.dont_print_on_render_pipeline_creation_failure)) {
@@ -6920,11 +6963,103 @@ RDD::PipelineID RenderingDeviceDriverVulkan::compute_pipeline_create(ShaderID p_
 		pipeline_create_info.stage.pSpecializationInfo = specialization_info;
 	}
 
+	if (fellow_pipeline_stats_support) {
+		pipeline_create_info.flags |= VK_PIPELINE_CREATE_CAPTURE_STATISTICS_BIT_KHR;
+	}
+
 	VkPipeline vk_pipeline = VK_NULL_HANDLE;
-	VkResult err = vkCreateComputePipelines(vk_device, pipelines_cache.vk_cache, 1, &pipeline_create_info, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_PIPELINE), &vk_pipeline);
+	VkResult err = vkCreateComputePipelines(vk_device, fellow_pipeline_stats_support ? VK_NULL_HANDLE : pipelines_cache.vk_cache, 1, &pipeline_create_info, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_PIPELINE), &vk_pipeline);
 	ERR_FAIL_COND_V_MSG(err, PipelineID(), vformat("Couldn't create Vulkan compute pipelines (VkResult error %d).", err));
+	if (fellow_pipeline_stats_support) {
+		_fellow_dump_pipeline_stats(vk_pipeline, shader_info, p_specialization_constants, "compute");
+	}
 
 	return PipelineID(vk_pipeline);
+}
+
+// FellowEngine: one line per pipeline executable (shader stage after compilation): kind, shader name, a hash of each
+// stage's SPIR-V, the specialization constants, the executable's name and the driver's statistics (on NVIDIA: register
+// count, instruction count, local and shared memory, ...). Tab-separated, appended.
+void RenderingDeviceDriverVulkan::_fellow_dump_pipeline_stats(VkPipeline p_pipeline, const ShaderInfo *p_shader_info, VectorView<PipelineSpecializationConstant> p_specialization_constants, const char *p_kind) {
+	VkPipelineInfoKHR pipeline_info = {};
+	pipeline_info.sType = VK_STRUCTURE_TYPE_PIPELINE_INFO_KHR;
+	pipeline_info.pipeline = p_pipeline;
+	uint32_t executable_count = 0;
+	if (fellow_get_pipeline_executable_properties(vk_device, &pipeline_info, &executable_count, nullptr) != VK_SUCCESS || executable_count == 0) {
+		return;
+	}
+	LocalVector<VkPipelineExecutablePropertiesKHR> executables;
+	executables.resize(executable_count);
+	for (VkPipelineExecutablePropertiesKHR &e : executables) {
+		e = {};
+		e.sType = VK_STRUCTURE_TYPE_PIPELINE_EXECUTABLE_PROPERTIES_KHR;
+	}
+	if (fellow_get_pipeline_executable_properties(vk_device, &pipeline_info, &executable_count, executables.ptr()) != VK_SUCCESS) {
+		return;
+	}
+
+	String hashes;
+	for (uint32_t i = 0; i < p_shader_info->spirv_stage_bytes.size(); i++) {
+		hashes += (i ? "," : "") + String::num_uint64(hash_murmur3_buffer(p_shader_info->spirv_stage_bytes[i].ptr(), p_shader_info->spirv_stage_bytes[i].size()), 16);
+	}
+	String spec;
+	for (uint32_t i = 0; i < p_specialization_constants.size(); i++) {
+		spec += (i ? "," : "") + itos(p_specialization_constants[i].constant_id) + ":" + String::num_uint64(p_specialization_constants[i].int_value, 16);
+	}
+
+	String lines;
+	for (uint32_t x = 0; x < executable_count; x++) {
+		VkPipelineExecutableInfoKHR executable_info = {};
+		executable_info.sType = VK_STRUCTURE_TYPE_PIPELINE_EXECUTABLE_INFO_KHR;
+		executable_info.pipeline = p_pipeline;
+		executable_info.executableIndex = x;
+		uint32_t statistic_count = 0;
+		if (fellow_get_pipeline_executable_statistics(vk_device, &executable_info, &statistic_count, nullptr) != VK_SUCCESS) {
+			continue;
+		}
+		LocalVector<VkPipelineExecutableStatisticKHR> statistics;
+		statistics.resize(statistic_count);
+		for (VkPipelineExecutableStatisticKHR &st : statistics) {
+			st = {};
+			st.sType = VK_STRUCTURE_TYPE_PIPELINE_EXECUTABLE_STATISTIC_KHR;
+		}
+		if (statistic_count > 0 && fellow_get_pipeline_executable_statistics(vk_device, &executable_info, &statistic_count, statistics.ptr()) != VK_SUCCESS) {
+			continue;
+		}
+		String line = vformat("%s\t%s\t%s\t%s\t%d\t%s\t%x\t%d", p_kind, p_shader_info->name, hashes, spec, x, String::utf8(executables[x].name), uint64_t(executables[x].stages), executables[x].subgroupSize);
+		for (uint32_t k = 0; k < statistic_count; k++) {
+			const VkPipelineExecutableStatisticKHR &st = statistics[k];
+			String value;
+			switch (st.format) {
+				case VK_PIPELINE_EXECUTABLE_STATISTIC_FORMAT_BOOL32_KHR:
+					value = st.value.b32 ? "true" : "false";
+					break;
+				case VK_PIPELINE_EXECUTABLE_STATISTIC_FORMAT_INT64_KHR:
+					value = itos(st.value.i64);
+					break;
+				case VK_PIPELINE_EXECUTABLE_STATISTIC_FORMAT_UINT64_KHR:
+					value = String::num_uint64(st.value.u64);
+					break;
+				case VK_PIPELINE_EXECUTABLE_STATISTIC_FORMAT_FLOAT64_KHR:
+					value = rtos(st.value.f64);
+					break;
+				default:
+					break;
+			}
+			line += "\t" + String::utf8(st.name) + "=" + value;
+		}
+		lines += line + "\n";
+	}
+
+	MutexLock lock(fellow_pipeline_stats_mutex);
+	Ref<FileAccess> f = FileAccess::open(fellow_pipeline_stats_path, FileAccess::READ_WRITE);
+	if (f.is_null()) {
+		f = FileAccess::open(fellow_pipeline_stats_path, FileAccess::WRITE);
+	}
+	if (f.is_valid()) {
+		f->seek_end();
+		f->store_string(lines);
+	}
 }
 
 /*****************/

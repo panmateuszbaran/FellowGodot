@@ -167,6 +167,15 @@ class RenderingDeviceDriverVulkan : public RenderingDeviceDriver {
 	RaytracingCapabilities raytracing_capabilities;
 	bool pipeline_cache_control_support = false;
 	bool device_fault_support = false;
+	// FellowEngine: pipeline statistics (VK_KHR_pipeline_executable_properties: registers, instructions, ...) of every
+	// pipeline created, appended to the file named by the environment variable FELLOW_PIPELINE_STATS. Diagnostics only.
+	String fellow_pipeline_stats_path;
+	bool fellow_pipeline_stats_support = false;
+	PFN_vkGetPipelineExecutablePropertiesKHR fellow_get_pipeline_executable_properties = nullptr;
+	PFN_vkGetPipelineExecutableStatisticsKHR fellow_get_pipeline_executable_statistics = nullptr;
+	Mutex fellow_pipeline_stats_mutex;
+	struct ShaderInfo;
+	void _fellow_dump_pipeline_stats(VkPipeline p_pipeline, const ShaderInfo *p_shader_info, VectorView<PipelineSpecializationConstant> p_specialization_constants, const char *p_kind);
 	bool framebuffer_depth_resolve = false;
 #if defined(VK_TRACK_DEVICE_MEMORY)
 	bool device_memory_report_support = false;
