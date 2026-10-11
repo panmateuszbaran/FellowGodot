@@ -39,7 +39,7 @@ func build(p_args: Dictionary) -> void:
 	_build_lights()
 	_define_cameras()
 	set_time(0.0)
-	info = {"stats": scene_stats(self), "layout": layout, "counts": _counts,
+	info = {"stats": scene_stats(self), "layout": layout, "counts": _counts, "lods": str(args.get("foliage_lods", "0")) == "1",
 		"notes": "Open-world vegetation with MultiMesh instancing (%s layout); sun with 4 cascades." % layout}
 
 
@@ -216,6 +216,18 @@ func _place(x: float, z: float, yaw: float, s: float, sink := 0.0) -> Transform3
 
 
 ## Instances (transform, colour) per type, then grouped into MultiMeshes by layout.
+## --foliage_lods=1: the vegetation meshes get LOD levels the way the importer makes them for imported scenes
+## (ImporterMesh.generate_lods, meshoptimizer), so that Godot's mesh LOD (1-pixel error rule) can coarsen them.
+func _with_lods(p_mesh: ArrayMesh) -> ArrayMesh:
+	if str(args.get("foliage_lods", "0")) != "1":
+		return p_mesh
+	var im := ImporterMesh.new()
+	for i in p_mesh.get_surface_count():
+		im.add_surface(p_mesh.surface_get_primitive_type(i), p_mesh.surface_get_arrays(i), [], {}, p_mesh.surface_get_material(i), "s%d" % i)
+	im.generate_lods(25.0, 60.0, [])
+	return im.get_mesh()
+
+
 func _build_vegetation() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 2026
@@ -254,19 +266,19 @@ func _build_vegetation() -> void:
 		var z := rng.randf_range(-half + 4.0, half - 4.0)
 		rocks.append([_place(x, z, rng.randf() * TAU, rng.randf_range(0.5, 2.0), 0.15), Color(1, 1, 1)])
 	_counts = {"grass": grass.size(), "trees": trees.size(), "bushes": bushes.size(), "rocks": rocks.size()}
-	var grass_mesh := _grass_mesh()
+	var grass_mesh := _with_lods(_grass_mesh())
 	if layout == "single":
 		_add_multimesh("grass", grass_mesh, grass, false, 0.0)
-		_add_multimesh("trees", _tree_mesh(), trees, false, 0.0)
-		_add_multimesh("bushes", _bush_mesh(), bushes, false, 0.0)
-		_add_multimesh("rocks", _rock_mesh(), rocks, false, 0.0)
+		_add_multimesh("trees", _with_lods(_tree_mesh()), trees, false, 0.0)
+		_add_multimesh("bushes", _with_lods(_bush_mesh()), bushes, false, 0.0)
+		_add_multimesh("rocks", _with_lods(_rock_mesh()), rocks, false, 0.0)
 	else:
 		# Grass in 16 m chunks with a visibility range (fades out by distance, as projects usually do); trees, bushes and
 		# rocks in 64 m blocks.
 		_add_chunked("grass", grass_mesh, grass, CHUNK, false, 90.0)
-		_add_chunked("trees", _tree_mesh(), trees, 64.0, false, 0.0)
-		_add_chunked("bushes", _bush_mesh(), bushes, 64.0, false, 0.0)
-		_add_chunked("rocks", _rock_mesh(), rocks, 64.0, false, 0.0)
+		_add_chunked("trees", _with_lods(_tree_mesh()), trees, 64.0, false, 0.0)
+		_add_chunked("bushes", _with_lods(_bush_mesh()), bushes, 64.0, false, 0.0)
+		_add_chunked("rocks", _with_lods(_rock_mesh()), rocks, 64.0, false, 0.0)
 
 
 func _add_chunked(p_name: String, p_mesh: Mesh, p_items: Array, p_chunk: float, p_colors: bool, p_range: float) -> void:

@@ -323,6 +323,13 @@ inline bool occlusion_culling() {
 inline bool multimesh_culling() {
 	return geometry_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/geometry/multimesh_culling");
 }
+// Per-instance LOD for culled MultiMeshes (docs/decisions/0035-multimesh-instance-lod.md): in the camera's passes each
+// instance gets the detail level stock's mesh LOD rule gives a node of its own (instead of the level of the MultiMesh's
+// whole box), as if each instance were a node of its own. Changes the image (coarser far instances, at the error the
+// project's mesh LOD threshold allows); off by default.
+inline bool multimesh_instance_lod() {
+	return geometry_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/geometry/multimesh_instance_lod");
+}
 inline int multimesh_cull_min_instances() {
 	return GLOBAL_GET_CACHED(int, "rendering/fellow/geometry/multimesh_cull_min_instances");
 }
@@ -678,6 +685,7 @@ struct Stats {
 	SafeNumeric<uint64_t> geometry_multimesh_cull_draws; // draws recorded indirect with the visible instances
 	SafeNumeric<uint64_t> geometry_multimesh_instances_tested; // instances tested (read back asynchronously)
 	SafeNumeric<uint64_t> geometry_multimesh_instances_visible; // of which drawn
+	SafeNumeric<uint64_t> geometry_multimesh_instances_coarse; // of which at a coarser level than 0 (per-instance LOD)
 	SafeNumeric<uint64_t> geometry_multimesh_pool_copies; // MultiMesh data copied into the pool
 	SafeNumeric<uint64_t> geometry_multimesh_pool_grows;
 	SafeNumeric<uint64_t> vrs_frames; // frames whose shading rates were set adaptively

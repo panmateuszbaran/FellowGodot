@@ -196,3 +196,14 @@ evaluation that measures them faster; after that the exact tunables' rule applie
 `m6_f94_final` (`fellow87`, starting on) adaptive shading had stayed on in Sponza, where it costs about what it saves;
 `fellow89` also switched it off whenever an evaluation was undecided, which cost PBR Lab +4.4 % (`m6_f96`, decision
 0027), so `fellow91` keeps only the start off.
+
+`fellow92`: an image-changing tunable that an undecided evaluation leaves off is evaluated again at the base interval
+(its pairs pooled) instead of at a doubling one, until an evaluation decides. In `m7_f100` (`fellow91`) adaptive shading
+was on in PBR Lab for only 5 320, 5 320 and 487 of about 8 850 frames per run: once off and undecided, its next
+evaluations came ever later.
+
+## MultiMesh culling as a tunable (`fellow92`, milestone 7)
+
+`TUNE_MULTIMESH_CULLING` (GPU time; decision 0034): applies while `geometry/multimesh_culling` is on and the frame's
+lists had MultiMesh elements it can take within the last 120 frames. Exact, so it follows the exact tunables' rule
+(starts on, undecided keeps).

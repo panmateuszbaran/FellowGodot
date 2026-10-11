@@ -269,6 +269,7 @@ private:
 		// UINT32_MAX.
 		const uint32_t *fellow_mm_slots = nullptr;
 		const uint32_t *fellow_mm_offsets = nullptr;
+		const uint32_t *fellow_mm_levels = nullptr; // per slot: levels drawn (per-instance LOD: one draw per level)
 		RID fellow_mm_args;
 		RID fellow_mm_xforms;
 
@@ -850,15 +851,24 @@ private:
 			uint32_t out_offset;
 			uint32_t first_block;
 			uint32_t block_count;
+			float lod_camera[4]; // camera position, mesh LOD threshold
+			float lod_params[4]; // LOD distance multiplier, LOD bias
+			uint32_t lod_count; // levels after level 0 (0: no per-instance LOD)
+			uint32_t pad[3];
+			float lod_edges[8];
 		};
-		static_assert(sizeof(Job) == 112);
+		static_assert(sizeof(Job) == 192);
+		static constexpr uint32_t BUCKETS = 8;
+		static constexpr uint32_t BLOCK_UINTS = 32;
+		static constexpr uint32_t DRAW_INFO_UINTS = 10;
 		struct Set {
 			LocalVector<Job> jobs;
 			LocalVector<RID> job_multimesh; // per job, to resolve its pool offset again (see dispatch)
 			LocalVector<uint32_t> blocks; // per block: job, first instance
 			LocalVector<float> planes;
-			LocalVector<uint32_t> draw_info; // per draw: job, index or vertex count
+			LocalVector<uint32_t> draw_info; // per draw: job, levels drawn, index (or vertex) count per level (8)
 			LocalVector<uint32_t> draw_offsets; // per draw: its job's region (instances)
+			LocalVector<uint32_t> draw_levels; // per draw: 1, or the levels of a per-instance LOD job
 			uint64_t compacted_floats = 0;
 			RID jobs_buffer, blocks_buffer, planes_buffer, block_data, job_visible, compacted, draw_info_buffer, args, counters;
 			uint32_t cap_jobs = 0, cap_blocks = 0, cap_planes = 0, cap_draws = 0;
@@ -872,7 +882,13 @@ private:
 	void _fellow_multimesh_cull_init();
 	void _fellow_multimesh_cull_free();
 	void _fellow_multimesh_cull_begin(uint32_t p_set);
-	void _fellow_multimesh_cull_collect(uint32_t p_set, RenderListType p_list, uint32_t p_from, uint32_t p_to, const Plane *p_planes, int p_plane_count, bool p_shadow);
+	struct FellowMultimeshLod {
+		bool active = false; // per-instance LOD in this pass
+		Vector3 camera;
+		float threshold = 0.0;
+		float distance_multiplier = 1.0;
+	};
+	void _fellow_multimesh_cull_collect(uint32_t p_set, RenderListType p_list, uint32_t p_from, uint32_t p_to, const Plane *p_planes, int p_plane_count, bool p_shadow, const FellowMultimeshLod &p_lod);
 	void _fellow_multimesh_cull_dispatch(uint32_t p_set);
 	void _fellow_multimesh_cull_params(uint32_t p_set, RenderListType p_list, uint32_t p_element_from, RenderListParameters &r_params);
 	static void _fellow_multimesh_cull_readback(const Vector<uint8_t> &p_data);

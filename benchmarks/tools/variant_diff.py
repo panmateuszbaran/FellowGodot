@@ -43,8 +43,14 @@ def main() -> int:
         if not (os.path.isdir(da) and os.path.isdir(db)):
             continue
         # file names start with <scene>_<WxH>_<build>..., strip the build label for matching
+        # (only that component: a short label such as "a" also occurs inside scene and sequence names)
         def key(p, label):
-            return os.path.basename(p).replace("_" + label + "_", "_").replace(label, "")
+            name = os.path.basename(p)
+            for sep in ("_", "."):
+                tag = "_" + label + sep
+                if tag in name:
+                    return name.replace(tag, sep, 1)
+            return name
         ka = {key(p, args.a): p for p in glob.glob(os.path.join(da, "*.png"))}
         kb = {key(p, args.b): p for p in glob.glob(os.path.join(db, "*.png"))}
         common = sorted(set(ka) & set(kb))

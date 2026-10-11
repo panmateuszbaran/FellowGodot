@@ -123,8 +123,12 @@ bool uses_frame_time(int p_tunable) {
 	return p_tunable == TUNE_ASYNC_COMPUTE || p_tunable == TUNE_FRAME_PLAN || p_tunable == TUNE_PERSISTENT_INSTANCES;
 }
 
+uint64_t multimesh_candidates_frame = 0; // the last frame whose lists had MultiMesh elements to cull
+
 bool tunable_applies(Tunable p_tunable) {
 	switch (p_tunable) {
+		case TUNE_MULTIMESH_CULLING:
+			return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/geometry/multimesh_culling") && multimesh_candidates_frame > 0 && frame_id <= multimesh_candidates_frame + 120;
 		case TUNE_DIRECTIONAL_PYRAMID:
 			return shadows_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/shadows/directional_max_mip");
 		case TUNE_POSITIONAL_PYRAMID:
@@ -216,7 +220,7 @@ Analysis pool(TuneState &s, const Analysis &p_analysis) {
 	return r;
 }
 
-void finish(TuneState &s, bool p_new_choice, const Analysis &p_analysis, bool p_early) {
+void finish(TuneState &s, bool p_new_choice, const Analysis &p_analysis, bool p_early, bool p_undecided_off = false) {
 	print_verbose(vformat("FellowEngine autotune: evaluation from frame %d ends at frame %d%s: %d pairs (%.1f pooled), on %.3f ms, off - on %.4f ms (se %.4f), choice %s -> %s", (int64_t)s.eval_start, (int64_t)frame_id, p_early ? " (early)" : "", (int)p_analysis.pairs, s.pool_n, p_analysis.base, p_analysis.mean, p_analysis.se, s.choice ? "on" : "off", p_new_choice ? "on" : "off"));
 	stats().autotune_evals.increment();
 	if (p_early) {
@@ -232,6 +236,10 @@ void finish(TuneState &s, bool p_new_choice, const Analysis &p_analysis, bool p_
 				other.pool_n = 0.0;
 			}
 		}
+	} else if (p_undecided_off) {
+		// An image-changing tunable left off by an undecided evaluation is evaluated again at the base interval, its pairs
+		// pooled, until the difference is clear (m7_f100: PBR Lab's adaptive shading stayed off for most of a run).
+		s.interval = base;
 	} else {
 		s.interval = MIN(MAX(s.interval, base) * 2, base * AUTOTUNE_INTERVAL_GROWTH);
 	}
@@ -262,13 +270,15 @@ void decide(TuneState &s) {
 	const Analysis e = analyze(s, AUTOTUNE_PAIRS);
 	const Analysis r = e.pairs >= AUTOTUNE_PAIRS - 1 ? pool(s, e) : e;
 	bool new_choice = s.choice;
+	bool decided = false;
 	if (r.pairs >= AUTOTUNE_PAIRS - 1) {
 		const double min_gain = MAX(0.0, (double)GLOBAL_GET_CACHED(float, "rendering/fellow/autotune/min_gain_percent")) * 0.01 * r.base;
 		if (std::fabs(r.mean) > min_gain && (r.se <= 0.0 || std::fabs(r.mean) >= AUTOTUNE_T * r.se)) {
 			new_choice = r.mean > 0.0;
+			decided = true;
 		}
 	}
-	finish(s, new_choice, r, false);
+	finish(s, new_choice, r, false, !decided && !new_choice && changes_image(int(&s - states)));
 }
 
 bool try_decide_early(TuneState &s) {
@@ -297,6 +307,10 @@ bool try_decide_early(TuneState &s) {
 
 bool autotune_allows(Tunable p_tunable) {
 	return !off[p_tunable];
+}
+
+void autotune_note_multimesh_candidates() {
+	multimesh_candidates_frame = frame_id;
 }
 
 static void add_sample(int p_tunable, uint64_t p_id, uint8_t p_block, double p_ms) {

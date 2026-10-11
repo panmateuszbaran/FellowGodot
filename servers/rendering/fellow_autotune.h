@@ -43,6 +43,7 @@ namespace Fellow {
 enum Tunable {
 	TUNE_DIRECTIONAL_PYRAMID, // shadows/directional_max_mip (decision 0005)
 	TUNE_POSITIONAL_PYRAMID, // shadows/positional_max_mip (decision 0005)
+	TUNE_MULTIMESH_CULLING, // geometry/multimesh_culling (decision 0034), while MultiMeshes it can cull are drawn
 	// Not exact, but visually lossless (decision 0027): adaptive shading rate pays only where its shading savings exceed
 	// its passes' cost; switched like the exact ones (both ways look the same within the measured limits).
 	TUNE_ADAPTIVE_VRS, // shading/adaptive_vrs_threshold > 0 (the attachment is created at start-up)
@@ -55,6 +56,10 @@ enum Tunable {
 
 // The choice for the frame being rendered (true: the optimization runs). Always true while autotune is off.
 bool autotune_allows(Tunable p_tunable);
+
+// The renderer found MultiMesh elements MultiMesh culling can take in this frame (TUNE_MULTIMESH_CULLING applies only
+// while it does).
+void autotune_note_multimesh_candidates();
 
 // Called by RenderingServerDefault::_draw: before the viewports are drawn (decides this frame's choices and captures
 // the start timestamp), after them (end timestamp), and for each captured timestamp read back.

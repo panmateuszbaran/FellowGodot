@@ -89,6 +89,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/postfx/verify_luminance_reduce", false);
 	GLOBAL_DEF("rendering/fellow/geometry/occlusion_culling", false);
 	GLOBAL_DEF("rendering/fellow/geometry/multimesh_culling", false);
+	GLOBAL_DEF("rendering/fellow/geometry/multimesh_instance_lod", false);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/geometry/multimesh_cull_min_instances", PROPERTY_HINT_RANGE, "1,65536,1"), 64);
 	GLOBAL_DEF("rendering/fellow/geometry/prepass_simple_first", false);
 	GLOBAL_DEF("rendering/fellow/debug/occlusion_stats", false);
@@ -232,6 +233,7 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["geometry_multimesh_cull_draws"] = s.geometry_multimesh_cull_draws.get();
 	d["geometry_multimesh_instances_tested"] = s.geometry_multimesh_instances_tested.get();
 	d["geometry_multimesh_instances_visible"] = s.geometry_multimesh_instances_visible.get();
+	d["geometry_multimesh_instances_coarse"] = s.geometry_multimesh_instances_coarse.get();
 	d["geometry_multimesh_pool_copies"] = s.geometry_multimesh_pool_copies.get();
 	d["geometry_multimesh_pool_grows"] = s.geometry_multimesh_pool_grows.get();
 	d["vrs_frames"] = s.vrs_frames.get();

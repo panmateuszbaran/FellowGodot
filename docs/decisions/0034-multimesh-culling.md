@@ -37,7 +37,8 @@ becomes a job: its node transform, its mesh's AABB, its pass's planes.
 * **Test** (a workgroup of 64 per block of 64 instances): the mesh's AABB under the instance's and the node's transform
   (center and half extents) against the planes, with a margin for the rounding of this transform against the vertex
   shader's (1e-4 relative, 1e-3 m absolute). An instance wholly outside one plane has no vertex in the volume.
-* **Scan** (a thread per job): the blocks' output positions, in order, and the job's visible count.
+* **Scan** (a workgroup per job; from `fellow92`, before a thread per job): the blocks' output positions, in order
+  (each thread sums a share of the job's blocks, then a prefix sum over the 64 shares), and the job's visible count.
 * **Compact** (a workgroup per block): the visible instances' data copied in their order to the job's region of a
   compacted buffer; each draw's indirect arguments get the job's visible count.
 * **Draw:** the element binds the compacted buffer as its transforms (the same layout; its region through the
@@ -57,5 +58,46 @@ lavapipe, Foliage Lab captures (960 × 540, 30 settling frames), off against on:
 * one MultiMesh per type, TAA off: 0 differing pixels; 48 % culled.
 * one MultiMesh per type, TAA on, first version: 25 115 differing pixels (52.6 dB) — the same with every instance
   visible (planes removed), so not the test: when the pool grew in the middle of a collection, the jobs collected before
-  read stale offsets for a frame, and TAA kept that frame in its history. Fixed (offsets resolved after collection):
-  see below.
+  read stale offsets for a frame, and TAA kept that frame in its history. Fixed (offsets resolved after collection).
+* `fellow91`, TAA on: one MultiMesh per type 0 differing pixels (48 % of 47.8 M tested instances culled over the
+  captures), chunks 0 differing pixels.
+
+RTX 5070 Ti Laptop (`fellow91`, `m7_f99_*`), 1080p, off against on:
+
+| | frames | PSNR mean / min | max \|d\| | pixels > 2 |
+|---|---:|---:|---:|---:|
+| one MultiMesh per type, `foliage_walk` (TAA) | 60 | 78.25 / 74.93 dB | 12 | 0.000 % |
+| chunks, `foliage_walk` | 60 | 78.20 / 74.75 dB | 11 | 0.000 % |
+| one MultiMesh per type, three captures | 3 | 84.03 / 74.48 dB | 13 | 0.002 % |
+
+lavapipe renders these bit for bit the same; on RTX two runs of one build also differ (shadow and TAA work with
+unordered GPU writes), so these numbers are only meaningful against that floor. `m7_f100`'s null test (the same build
+twice) produced no report (its labels `a`/`b` also occur inside the file names, which `variant_diff.py` stripped;
+fixed in `fellow92`), so the floor is measured again in `m7_f101`.
+
+## Performance
+
+In one process (`m7_f99_*_ab`, blocks of frames alternating off / on, per-pass GPU timings):
+
+| layout | frame | where |
+|---|---:|---|
+| one MultiMesh per type | **−36.7 %** | depth pre-pass −1.48 ms, opaque −1.41 ms, shadows −0.96 ms; the camera's cull 0.295 ms |
+| chunks | −3.9 % | the culls 0.032 ms; render thread +0.034 ms |
+
+Between processes (`m7_f100`, 3 runs each, 1080p, frame ms):
+
+| scene | stock | FellowEngine, culling off | culling on |
+|---|---:|---:|---:|
+| Foliage Lab, one MultiMesh per type | 11.62 | 9.39 (−19.2 %) | **5.87 (−49.5 %)** |
+| Foliage Lab, chunks | 3.74 | 3.45 (−7.9 %) | 3.29 (−12.1 %) |
+| PBR Lab (a few small MultiMeshes) | 2.66 | 2.64 (−1.1 %) | 2.69 (+1.1 %, within noise) |
+
+Where the MultiMeshes are already split into chunks the gain is small and a scene with only a few small ones can lose
+the culls' cost, so from `fellow92`:
+
+* **Parallel scan.** One thread per job walked all of a job's blocks in turn (about 2 300 for the ~150 k grass
+  clumps), a serial chain likely to be most of the camera's 0.295 ms. A workgroup per job now does it; `m7_f101`
+  measures the cull again.
+* **Autotune tunable** (`TUNE_MULTIMESH_CULLING`, 0020): while culling is on and the lists have MultiMesh elements it
+  can take (within the last 120 frames), autotune measures the frame with and without it and keeps the faster way. It
+  is exact, so it is switched like the other exact tunables.

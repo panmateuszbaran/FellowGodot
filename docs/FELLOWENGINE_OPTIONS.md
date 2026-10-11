@@ -37,12 +37,19 @@ seen again. `shading/adaptive_vrs_gloss_guard` keeps glossy, curved surfaces at 
 GPU with fragment shading rate attachments (Vulkan `VK_KHR_fragment_shading_rate`), a single view, the depth pre-pass
 and no MSAA; otherwise every tile is shaded at full rate.
 
+## Options that change the image (off by default)
+
+| setting | what it does | image cost | record |
+|---|---|---|---|
+| `geometry/multimesh_instance_lod` (with `geometry/multimesh_culling`) | each MultiMesh instance gets the mesh LOD level stock gives a node of its own (distance to its box, the project's `mesh_lod_threshold`), instead of the level of the MultiMesh's whole box | not visually lossless where many far instances coarsen together: Foliage Lab from above 33.2 dB (far grass clumps lose blades); at ground level 48.2-64.6 dB | 0035 |
+
 ## Exact options (on by default unless noted)
 
 | area | settings | record |
 |---|---|---|
 | Shadows | `shadows/directional_cache`, `shadows/skip_*`, `shadows/directional_max_mip`, `shadows/positional_max_mip` | 0004, 0005 |
 | Geometry | `geometry/mesh_clusters` (frustum culling inside large static surfaces) | 0007 |
+| Geometry (off, measuring) | `geometry/multimesh_culling` (MultiMesh instances culled per pass on the GPU; an autotune tunable), `geometry/multimesh_cull_min_instances` | 0034 |
 | Lights | `lights/cluster_depth_slices`, `lights/zero_attenuation_skip`, `lights/cluster_pack_parallel` | 0008, 0014 |
 | Shading | `shading/blended_alpha_zero_skip` | 0010 |
 | Post | `postfx/fast_luminance_reduce`, `postfx/taa_history_pingpong`, `postfx/taa_direct_output` | 0025, 0002, 0033 |

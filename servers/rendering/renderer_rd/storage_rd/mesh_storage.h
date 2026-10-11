@@ -580,6 +580,17 @@ public:
 		}
 	}
 
+	// FellowEngine MultiMesh per-instance LOD (decision 0035): the surface's levels after level 0 (edge length each, as
+	// mesh_surface_get_lod() compares them), at most p_max; returns how many.
+	_FORCE_INLINE_ uint32_t fellow_mesh_surface_get_lod_edges(void *p_surface, float *r_edge_lengths, uint32_t p_max) const {
+		Mesh::Surface *s = reinterpret_cast<Mesh::Surface *>(p_surface);
+		const uint32_t n = MIN(s->lod_count, p_max);
+		for (uint32_t i = 0; i < n; i++) {
+			r_edge_lengths[i] = s->lods[i].edge_length;
+		}
+		return n;
+	}
+
 	// FellowEngine occlusion culling (decision 0026): the indices a draw of the level's index array draws (its arrays
 	// start at 0 and hold the level's indices).
 	_FORCE_INLINE_ uint32_t fellow_mesh_surface_get_index_count(void *p_surface, uint32_t p_lod) const {
