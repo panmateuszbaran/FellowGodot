@@ -1,6 +1,6 @@
 # 0031 — Volumetric fog: half the froxels lit per frame (visually lossless)
 
-Status: **MEASURING** · Branch `fellow/geometry` · Toggle `rendering/fellow/postfx/fog_half_rate` (runtime, off) · Code:
+Status: **KEEP as an option** (off by default) · Branch `fellow/geometry` · Toggle `rendering/fellow/postfx/fog_half_rate` (runtime, off) · Code:
 `shaders/environment/volumetric_fog_process.glsl` (`MODE_DENSITY`), `environment/fog.{h,cpp}`, `fellow_settings.*`.
 
 "Visually identical, measured" track (as 0027, 0028, 0030).
@@ -49,3 +49,14 @@ Sponza and Bistro exterior +0.012 ms): the checkerboard was per froxel, so every
 workgroup kept half its threads busy for the full lighting time. `fellow86`: the parity is per workgroup (a 3D
 checkerboard of 4 × 4 × 4 blocks), so half the workgroups return at once. lavapipe Lights Lab captures unchanged
 (58.4-65.4 dB).
+
+## Between processes, with the other visually lossless options (`m6_f94_final`, `fellow87`)
+
+Adaptive shading (autotune), temporal SSAO, temporal SSIL and fog at half rate together, against the FellowEngine
+defaults, 3 runs each: Lights Lab −24.9 %, Bistro interior −9.0 %, PBR Lab −7.0 % (p 0.09), Bistro exterior −3.4 %,
+Sponza −3.4 % (p 0.13), City Lab −3.2 % (p 0.07).
+
+## Decision
+
+**KEEP as an option, off by default** (`postfx/fog_half_rate`): visually lossless within the limits above, never slower in one process
+beyond its noise. A project turns it on deliberately (`docs/FELLOWENGINE_OPTIONS.md`).

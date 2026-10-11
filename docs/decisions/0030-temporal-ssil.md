@@ -1,6 +1,6 @@
 # 0030 — Temporal SSIL: half the taps per frame (visually lossless)
 
-Status: **MEASURING** · Branch `fellow/geometry` · Toggle `rendering/fellow/postfx/ssil_temporal` (runtime, off) · Code:
+Status: **KEEP as an option** (off by default) · Branch `fellow/geometry` · Toggle `rendering/fellow/postfx/ssil_temporal` (runtime, off) · Code:
 `shaders/effects/ssil.glsl` (`FELLOW_TEMPORAL`), `effects/ss_effects.{h,cpp}`, `render_forward_clustered.cpp`
 (`_process_ssil`), `fellow_settings.*`.
 
@@ -50,3 +50,14 @@ RTX: captures, temporal sequences and in-process A/B in the next job.
 Captures against stock (`m6_f86_capture`): Bistro exterior 58.6 dB mean (57.8 min), Bistro interior 62.9 (59.3),
 Sponza 59.7 (58.4); the other scenes have no SSIL (identical). Temporal sequences (`m6_f89_temporal`): Bistro exterior
 57.7 dB (56.7 min, 0.18 % > 2), Sponza 58.7 (52.1 min, 0.19 % > 2).
+
+## Between processes, with the other visually lossless options (`m6_f94_final`, `fellow87`)
+
+Adaptive shading (autotune), temporal SSAO, temporal SSIL and fog at half rate together, against the FellowEngine
+defaults, 3 runs each: Lights Lab −24.9 %, Bistro interior −9.0 %, PBR Lab −7.0 % (p 0.09), Bistro exterior −3.4 %,
+Sponza −3.4 % (p 0.13), City Lab −3.2 % (p 0.07).
+
+## Decision
+
+**KEEP as an option, off by default** (`postfx/ssil_temporal`): visually lossless within the limits above, never slower in one process
+beyond its noise. A project turns it on deliberately (`docs/FELLOWENGINE_OPTIONS.md`).

@@ -1,6 +1,6 @@
 # 0028 — Temporal SSAO: half the taps per frame (visually lossless)
 
-Status: **MEASURING** · Branch `fellow/geometry` · Toggle `rendering/fellow/postfx/ssao_temporal` (runtime, off) · Code:
+Status: **KEEP as an option** (off by default) · Branch `fellow/geometry` · Toggle `rendering/fellow/postfx/ssao_temporal` (runtime, off) · Code:
 `shaders/effects/ssao.glsl` (`FELLOW_TEMPORAL`), `effects/ss_effects.{h,cpp}`, `render_forward_clustered.cpp`
 (`_process_ssao`), `fellow_settings.*`.
 
@@ -41,3 +41,14 @@ Lights Lab 75.3, Sponza 58.3 (50.6 min; 0.37 % > 2). For scale, stock's own half
 In one process (`m6_f85_all_ab`, `fellow81`): frame −1.9 % Lights Lab, −0.9 % PBR Lab, −5.2 % City Lab, −2.1 % Sponza,
 −2.4 % Bistro exterior, −2.2 % Bistro interior. With async compute (the default on NVIDIA) the gain shows where the
 screen-space effects are the async queue's critical path.
+
+## Between processes, with the other visually lossless options (`m6_f94_final`, `fellow87`)
+
+Adaptive shading (autotune), temporal SSAO, temporal SSIL and fog at half rate together, against the FellowEngine
+defaults, 3 runs each: Lights Lab −24.9 %, Bistro interior −9.0 %, PBR Lab −7.0 % (p 0.09), Bistro exterior −3.4 %,
+Sponza −3.4 % (p 0.13), City Lab −3.2 % (p 0.07).
+
+## Decision
+
+**KEEP as an option, off by default** (`postfx/ssao_temporal`): visually lossless within the limits above, never slower in one process
+beyond its noise. A project turns it on deliberately (`docs/FELLOWENGINE_OPTIONS.md`).

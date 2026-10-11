@@ -251,8 +251,9 @@ void finish(TuneState &s, bool p_new_choice, const Analysis &p_analysis, bool p_
 	s.decided_frame_ms = frame_ms_avg;
 }
 
-// Tunables that change the image (the visually lossless options): kept only where they are measured faster. Undecided
-// (a difference within the noise or below autotune/min_gain_percent), they are switched off, and they start off.
+// Tunables that change the image (the visually lossless options) start off and are switched on only by an evaluation
+// that measures them faster; like the exact tunables, an undecided evaluation keeps the current choice (m6_f96: switching
+// them off when undecided lost PBR Lab's gain on the parts of its path where the difference is small).
 bool changes_image(int p_tunable) {
 	return p_tunable == TUNE_ADAPTIVE_VRS;
 }
@@ -265,8 +266,6 @@ void decide(TuneState &s) {
 		const double min_gain = MAX(0.0, (double)GLOBAL_GET_CACHED(float, "rendering/fellow/autotune/min_gain_percent")) * 0.01 * r.base;
 		if (std::fabs(r.mean) > min_gain && (r.se <= 0.0 || std::fabs(r.mean) >= AUTOTUNE_T * r.se)) {
 			new_choice = r.mean > 0.0;
-		} else if (changes_image(int(&s - states))) {
-			new_choice = false;
 		}
 	}
 	finish(s, new_choice, r, false);

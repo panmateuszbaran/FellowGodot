@@ -1751,6 +1751,7 @@ void MeshStorage::_multimesh_allocate_data(RID p_multimesh, int p_instances, RSE
 		uint32_t buffer_size = multimesh->instances * multimesh->stride_cache * sizeof(float);
 		multimesh->buffer = RD::get_singleton()->storage_buffer_create(buffer_size);
 	}
+	multimesh->fellow_data_version++;
 
 	multimesh->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_MULTIMESH);
 }
@@ -1789,6 +1790,7 @@ void MeshStorage::_multimesh_enable_motion_vectors(MultiMesh *multimesh) {
 	}
 
 	multimesh->buffer = new_buffer;
+	multimesh->fellow_data_version++;
 	multimesh->uniform_set_3d = RID(); // Cleared by dependency.
 
 	// Invalidate any references to the buffer that was released and the uniform set that was pointing to it.
@@ -2287,6 +2289,7 @@ void MeshStorage::_multimesh_set_buffer(RID p_multimesh, const Vector<float> &p_
 			RD::get_singleton()->buffer_update(multimesh->buffer, multimesh->motion_vectors_previous_offset * multimesh->stride_cache * sizeof(float), p_buffer.size() * sizeof(float), r);
 		}
 		multimesh->buffer_set = true;
+		multimesh->fellow_data_version++;
 	}
 
 	if (multimesh->data_cache.size()) {
@@ -2439,6 +2442,7 @@ void MeshStorage::_update_dirty_multimeshes() {
 					}
 				}
 
+				multimesh->fellow_data_version++;
 				memcpy(multimesh->previous_data_cache_dirty_regions, multimesh->data_cache_dirty_regions, data_cache_dirty_region_count * sizeof(bool));
 				memset(multimesh->data_cache_dirty_regions, 0, data_cache_dirty_region_count * sizeof(bool));
 
@@ -2667,4 +2671,58 @@ void MeshStorage::skeleton_update_dependency(RID p_skeleton, DependencyTracker *
 	ERR_FAIL_NULL(skeleton);
 
 	p_instance->update_dependency(&skeleton->dependency);
+}
+
+// FellowEngine MultiMesh culling (decision 0034).
+void MeshStorage::_fellow_multimesh_pool_grow(uint64_t p_needed) {
+	// A new buffer large enough for every live member and the request; members get new slots and are copied again from
+	// their own buffers (regions of freed or resized MultiMeshes are dropped here).
+	uint64_t live = 0;
+	LocalVector<RID> alive;
+	for (const RID &rid : fellow_mm_pool.members) {
+		MultiMesh *mm = multimesh_owner.get_or_null(rid);
+		if (mm && mm->fellow_pool_offset >= 0) {
+			live += (mm->fellow_pool_floats + 3) & ~3u;
+			alive.push_back(rid);
+		}
+	}
+	const uint64_t capacity = MAX(uint64_t(1) << 20, (live + p_needed) * 2);
+	if (fellow_mm_pool.buffer.is_valid()) {
+		RD::get_singleton()->free_rid(fellow_mm_pool.buffer);
+	}
+	fellow_mm_pool.buffer = RD::get_singleton()->storage_buffer_create(capacity * sizeof(float));
+	fellow_mm_pool.capacity = capacity;
+	fellow_mm_pool.used = 0;
+	fellow_mm_pool.generation++;
+	fellow_mm_pool.members.clear();
+	for (const RID &rid : alive) {
+		MultiMesh *mm = multimesh_owner.get_or_null(rid);
+		mm->fellow_pool_offset = -1;
+		mm->fellow_pool_version = 0;
+	}
+	Fellow::stats().geometry_multimesh_pool_grows.increment();
+}
+
+int64_t MeshStorage::fellow_multimesh_pool_prepare(RID p_multimesh) {
+	MultiMesh *mm = multimesh_owner.get_or_null(p_multimesh);
+	if (mm == nullptr || mm->buffer.is_null() || mm->instances <= 0 || mm->stride_cache == 0 || (mm->stride_cache & 3) != 0) {
+		return -1;
+	}
+	const uint32_t floats = uint32_t(mm->instances) * mm->stride_cache;
+	if (mm->fellow_pool_offset < 0 || mm->fellow_pool_floats != floats) {
+		if (fellow_mm_pool.buffer.is_null() || fellow_mm_pool.used + floats > fellow_mm_pool.capacity) {
+			_fellow_multimesh_pool_grow(floats);
+		}
+		mm->fellow_pool_offset = int64_t(fellow_mm_pool.used);
+		mm->fellow_pool_floats = floats;
+		mm->fellow_pool_version = 0;
+		fellow_mm_pool.used += (floats + 3) & ~3u;
+		fellow_mm_pool.members.push_back(p_multimesh);
+	}
+	if (mm->fellow_pool_version != mm->fellow_data_version) {
+		RD::get_singleton()->buffer_copy(mm->buffer, fellow_mm_pool.buffer, uint64_t(mm->motion_vectors_current_offset) * mm->stride_cache * sizeof(float), uint64_t(mm->fellow_pool_offset) * sizeof(float), uint64_t(floats) * sizeof(float));
+		mm->fellow_pool_version = mm->fellow_data_version;
+		Fellow::stats().geometry_multimesh_pool_copies.increment();
+	}
+	return mm->fellow_pool_offset;
 }

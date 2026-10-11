@@ -191,6 +191,8 @@ the estimate is skipped, and the next frame starts again at full rate. It is the
 is visually lossless (decision 0027), so frames with and without it look the same within the measured limits.
 `shading/adaptive_vrs_autotune` (on) lets a project keep it always on instead.
 
-`fellow89`: image-changing tunables (so far only `TUNE_ADAPTIVE_VRS`) start off, and an undecided evaluation (within the
-noise or below `autotune/min_gain_percent`) switches them off: they run only where they are measured faster. In
-`m6_f94_final` (`fellow87`) adaptive shading had stayed on in Sponza, where it costs about what it saves (decision 0027).
+`fellow89`/`fellow91`: image-changing tunables (so far only `TUNE_ADAPTIVE_VRS`) start off and are switched on only by an
+evaluation that measures them faster; after that the exact tunables' rule applies (undecided keeps the choice). In
+`m6_f94_final` (`fellow87`, starting on) adaptive shading had stayed on in Sponza, where it costs about what it saves;
+`fellow89` also switched it off whenever an evaluation was undecided, which cost PBR Lab +4.4 % (`m6_f96`, decision
+0027), so `fellow91` keeps only the start off.

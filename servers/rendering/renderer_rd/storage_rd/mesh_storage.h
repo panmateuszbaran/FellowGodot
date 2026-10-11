@@ -266,10 +266,27 @@ private:
 
 		RendererMeshStorage::MultiMeshInterpolator interpolator;
 
+		// FellowEngine MultiMesh culling (decision 0034): the current instance data's copy in the pool.
+		uint64_t fellow_data_version = 1; // incremented whenever the GPU buffer's data changes
+		uint64_t fellow_pool_version = 0;
+		int64_t fellow_pool_offset = -1; // first float in the pool
+		uint32_t fellow_pool_floats = 0;
+
 		Dependency dependency;
 	};
 
 	mutable RID_Owner<MultiMesh, true> multimesh_owner;
+
+	// FellowEngine MultiMesh culling (decision 0034): one buffer holding a copy of the current instance data of every
+	// MultiMesh the culling has used (copied on the GPU when the data changes), so that one dispatch tests all of them.
+	struct FellowMultimeshPool {
+		RID buffer;
+		uint64_t capacity = 0; // floats
+		uint64_t used = 0;
+		LocalVector<RID> members;
+		uint64_t generation = 0; // incremented when the buffer is replaced (every slot moves)
+	} fellow_mm_pool;
+	void _fellow_multimesh_pool_grow(uint64_t p_needed);
 
 	MultiMesh *multimesh_dirty_list = nullptr;
 
@@ -527,6 +544,21 @@ public:
 	// Per-frame update (render thread): starts builds of surfaces that have existed for a few frames and applies
 	// finished ones. Never waits for a build.
 	void fellow_update_clusters();
+
+	// FellowEngine MultiMesh culling (decision 0034): makes sure the MultiMesh's current instance data is in the pool
+	// (a GPU copy when it changed) and returns its first float there, or -1.
+	int64_t fellow_multimesh_pool_prepare(RID p_multimesh);
+	RID fellow_multimesh_pool_buffer() const { return fellow_mm_pool.buffer; }
+	// Changes when the pool's buffer is replaced: offsets returned before are then stale.
+	uint64_t fellow_multimesh_pool_generation() const { return fellow_mm_pool.generation; }
+	_FORCE_INLINE_ uint32_t fellow_multimesh_get_stride(RID p_multimesh) const {
+		MultiMesh *multimesh = multimesh_owner.get_or_null(p_multimesh);
+		return multimesh ? multimesh->stride_cache : 0;
+	}
+	_FORCE_INLINE_ RSE::MultimeshTransformFormat fellow_multimesh_get_transform_format(RID p_multimesh) const {
+		MultiMesh *multimesh = multimesh_owner.get_or_null(p_multimesh);
+		return multimesh ? multimesh->xform_format : RSE::MULTIMESH_TRANSFORM_2D;
+	}
 
 private:
 	LocalVector<Mesh::Surface *> fellow_pending_surfaces;

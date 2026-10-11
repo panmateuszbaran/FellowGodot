@@ -42,7 +42,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/postfx/taa_resolve_v2", true);
 	GLOBAL_DEF("rendering/fellow/postfx/taa_tile16", false);
 	GLOBAL_DEF("rendering/fellow/postfx/taa_history_pingpong", true);
-	GLOBAL_DEF("rendering/fellow/postfx/taa_direct_output", false);
+	GLOBAL_DEF("rendering/fellow/postfx/taa_direct_output", true);
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/postfx/taa_v2_gamma", PROPERTY_HINT_RANGE, "0.5,4,0.01"), 1.25);
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/postfx/taa_v2_feedback_min", PROPERTY_HINT_RANGE, "0.5,0.99,0.001"), 0.88);
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/postfx/taa_v2_feedback_max", PROPERTY_HINT_RANGE, "0.5,0.99,0.001"), 0.9375);
@@ -88,6 +88,8 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/postfx/fog_half_rate", false);
 	GLOBAL_DEF("rendering/fellow/postfx/verify_luminance_reduce", false);
 	GLOBAL_DEF("rendering/fellow/geometry/occlusion_culling", false);
+	GLOBAL_DEF("rendering/fellow/geometry/multimesh_culling", false);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/geometry/multimesh_cull_min_instances", PROPERTY_HINT_RANGE, "1,65536,1"), 64);
 	GLOBAL_DEF("rendering/fellow/geometry/prepass_simple_first", false);
 	GLOBAL_DEF("rendering/fellow/debug/occlusion_stats", false);
 	GLOBAL_DEF("rendering/fellow/debug/occlusion_cull_approx", false);
@@ -225,6 +227,13 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["occlusion_cull_hidden_indices"] = s.occlusion_cull_hidden_indices.get();
 	d["occlusion_cull_indirect_draws"] = s.occlusion_cull_indirect_draws.get();
 	d["occlusion_cull_slot_uploads"] = s.occlusion_cull_slot_uploads.get();
+	d["geometry_multimesh_cull_passes"] = s.geometry_multimesh_cull_passes.get();
+	d["geometry_multimesh_cull_jobs"] = s.geometry_multimesh_cull_jobs.get();
+	d["geometry_multimesh_cull_draws"] = s.geometry_multimesh_cull_draws.get();
+	d["geometry_multimesh_instances_tested"] = s.geometry_multimesh_instances_tested.get();
+	d["geometry_multimesh_instances_visible"] = s.geometry_multimesh_instances_visible.get();
+	d["geometry_multimesh_pool_copies"] = s.geometry_multimesh_pool_copies.get();
+	d["geometry_multimesh_pool_grows"] = s.geometry_multimesh_pool_grows.get();
 	d["vrs_frames"] = s.vrs_frames.get();
 	d["vrs_tiles"] = s.vrs_tiles.get();
 	d["vrs_tiles_coarse"] = s.vrs_tiles_coarse.get();

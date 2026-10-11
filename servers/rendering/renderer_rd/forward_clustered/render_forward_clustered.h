@@ -45,6 +45,7 @@
 #include "servers/rendering/renderer_rd/renderer_scene_render_rd.h"
 #include "servers/rendering/renderer_rd/shaders/effects/fellow_adaptive_vrs.glsl.gen.h"
 #include "servers/rendering/renderer_rd/shaders/effects/fellow_hzb.glsl.gen.h"
+#include "servers/rendering/renderer_rd/shaders/effects/fellow_multimesh_cull.glsl.gen.h"
 #include "servers/rendering/renderer_rd/shaders/effects/fellow_occlusion_cull.glsl.gen.h"
 #include "servers/rendering/renderer_rd/shaders/effects/fellow_occlusion_test.glsl.gen.h"
 #include "servers/rendering/renderer_rd/shaders/forward_clustered/best_fit_normal.glsl.gen.h"
@@ -263,6 +264,13 @@ private:
 		// FellowEngine geometry/prepass_simple_first: 0 every element; 1 only elements drawn with the shared depth
 		// material (no discard, no vertex changes); 2 only the others.
 		uint32_t fellow_depth_filter = 0;
+		// FellowEngine MultiMesh culling (decision 0034): per list element, the draw slot of a MultiMesh element whose
+		// visible instances the GPU compacted (drawn indirectly from fellow_mm_xforms at fellow_mm_offsets[slot]) or
+		// UINT32_MAX.
+		const uint32_t *fellow_mm_slots = nullptr;
+		const uint32_t *fellow_mm_offsets = nullptr;
+		RID fellow_mm_args;
+		RID fellow_mm_xforms;
 
 		RenderListParameters(GeometryInstanceSurfaceDataCache **p_elements, RenderElementInfo *p_element_info, int p_element_count, bool p_reverse_cull, PassMode p_pass_mode, uint32_t p_color_pass_flags, bool p_no_gi, bool p_use_directional_soft_shadows, RID p_render_pass_uniform_set, bool p_force_wireframe = false, const Vector2 &p_uv_offset = Vector2(), float p_lod_distance_multiplier = 0.0, float p_screen_mesh_lod_threshold = 0.0, uint32_t p_view_count = 1, uint32_t p_element_offset = 0, SceneShaderForwardClustered::ShaderSpecialization p_base_specialization = {}) {
 			elements = p_elements;
@@ -476,6 +484,9 @@ private:
 			// are pancaked).
 			Plane fellow_cluster_planes[6];
 			int fellow_cluster_plane_count = 0;
+			// FellowEngine MultiMesh culling (decision 0034): the pass's view volume (as the clusters', also without them).
+			Plane fellow_mm_planes[6];
+			int fellow_mm_plane_count = 0;
 		};
 
 		LocalVector<ShadowPass> shadow_passes;
@@ -820,6 +831,51 @@ private:
 	void _fellow_occlusion_filter(RenderListType p_list);
 	static void _fellow_occlusion_readback(const Vector<uint8_t> &p_data);
 	void _fellow_occlusion_free();
+
+	// MultiMesh instance culling (geometry/multimesh_culling, docs/decisions/0034-multimesh-culling.md). Two sets of
+	// buffers: the camera's passes (prepass, opaque, transparent) and the shadow passes, both alive in a frame.
+	struct FellowMultimeshCull {
+		FellowMultimeshCullShaderRD shader;
+		RID version;
+		RID pipelines[3]; // test, scan, compact
+		struct Job {
+			float xform[12];
+			float aabb_center[4];
+			float aabb_half[4];
+			uint32_t pool_offset;
+			uint32_t stride;
+			uint32_t count;
+			uint32_t planes_offset;
+			uint32_t plane_count;
+			uint32_t out_offset;
+			uint32_t first_block;
+			uint32_t block_count;
+		};
+		static_assert(sizeof(Job) == 112);
+		struct Set {
+			LocalVector<Job> jobs;
+			LocalVector<RID> job_multimesh; // per job, to resolve its pool offset again (see dispatch)
+			LocalVector<uint32_t> blocks; // per block: job, first instance
+			LocalVector<float> planes;
+			LocalVector<uint32_t> draw_info; // per draw: job, index or vertex count
+			LocalVector<uint32_t> draw_offsets; // per draw: its job's region (instances)
+			uint64_t compacted_floats = 0;
+			RID jobs_buffer, blocks_buffer, planes_buffer, block_data, job_visible, compacted, draw_info_buffer, args, counters;
+			uint32_t cap_jobs = 0, cap_blocks = 0, cap_planes = 0, cap_draws = 0;
+			uint64_t cap_compacted = 0; // floats
+			RID xforms_uniform_set;
+			bool active = false; // this frame's draws of the set's lists use it
+		} sets[2];
+		LocalVector<uint32_t> slots[RENDER_LIST_MAX]; // per list element: draw slot or UINT32_MAX
+		HashMap<const void *, uint32_t> job_of_owner; // within one pass
+	} fellow_mm;
+	void _fellow_multimesh_cull_init();
+	void _fellow_multimesh_cull_free();
+	void _fellow_multimesh_cull_begin(uint32_t p_set);
+	void _fellow_multimesh_cull_collect(uint32_t p_set, RenderListType p_list, uint32_t p_from, uint32_t p_to, const Plane *p_planes, int p_plane_count, bool p_shadow);
+	void _fellow_multimesh_cull_dispatch(uint32_t p_set);
+	void _fellow_multimesh_cull_params(uint32_t p_set, RenderListType p_list, uint32_t p_element_from, RenderListParameters &r_params);
+	static void _fellow_multimesh_cull_readback(const Vector<uint8_t> &p_data);
 
 	uint32_t _fellow_slot_alloc();
 	void _fellow_slot_free(uint32_t p_slot);

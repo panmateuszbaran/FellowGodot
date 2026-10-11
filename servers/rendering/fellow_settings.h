@@ -316,6 +316,16 @@ inline bool mesh_clusters_blended() {
 inline bool occlusion_culling() {
 	return geometry_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/geometry/occlusion_culling");
 }
+// MultiMesh instance culling (docs/decisions/0034-multimesh-culling.md): the instances of a MultiMeshInstance3D are tested
+// one by one against each pass's view volume (camera, every shadow pass) on the GPU, and only the visible ones are drawn
+// (compacted in order, indirect draws). Exact for materials that do not move vertices or read INSTANCE_ID (others are
+// drawn whole); MultiMeshes with at least geometry/multimesh_cull_min_instances instances. Read every frame.
+inline bool multimesh_culling() {
+	return geometry_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/geometry/multimesh_culling");
+}
+inline int multimesh_cull_min_instances() {
+	return GLOBAL_GET_CACHED(int, "rendering/fellow/geometry/multimesh_cull_min_instances");
+}
 // The depth pre-pass draws the elements with the shared depth material first, then the alpha-tested and vertex-moving
 // ones (docs/decisions/0029-prepass-order.md): the same depth buffer; read every frame.
 inline bool prepass_simple_first() {
@@ -663,6 +673,13 @@ struct Stats {
 	SafeNumeric<uint64_t> occlusion_cull_hidden_indices; // of which hidden
 	SafeNumeric<uint64_t> occlusion_cull_indirect_draws; // draws recorded indirect
 	SafeNumeric<uint64_t> occlusion_cull_slot_uploads; // surface bounding boxes uploaded
+	SafeNumeric<uint64_t> geometry_multimesh_cull_passes; // culling dispatches (camera passes, shadow passes)
+	SafeNumeric<uint64_t> geometry_multimesh_cull_jobs; // MultiMesh instances x passes tested
+	SafeNumeric<uint64_t> geometry_multimesh_cull_draws; // draws recorded indirect with the visible instances
+	SafeNumeric<uint64_t> geometry_multimesh_instances_tested; // instances tested (read back asynchronously)
+	SafeNumeric<uint64_t> geometry_multimesh_instances_visible; // of which drawn
+	SafeNumeric<uint64_t> geometry_multimesh_pool_copies; // MultiMesh data copied into the pool
+	SafeNumeric<uint64_t> geometry_multimesh_pool_grows;
 	SafeNumeric<uint64_t> vrs_frames; // frames whose shading rates were set adaptively
 	SafeNumeric<uint64_t> vrs_tiles; // shading rate tiles set (read back asynchronously)
 	SafeNumeric<uint64_t> vrs_tiles_coarse; // of which coarser than 1 x 1

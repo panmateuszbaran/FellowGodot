@@ -33,6 +33,7 @@
 #include "core/object/callable_mp.h"
 
 #include "core/config/project_settings.h"
+#include "core/os/os.h"
 #include "servers/rendering/fellow_settings.h"
 #include "servers/rendering/renderer_rd/environment/fog.h"
 #include "servers/rendering/renderer_rd/framebuffer_cache_rd.h"
@@ -444,6 +445,14 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 		pipeline_key.primitive_type = surf->primitive;
 
 		RID xforms_uniform_set = surf->owner->transforms_uniform_set;
+		// FellowEngine MultiMesh culling (decision 0034): the element's visible instances, compacted by the GPU.
+		uint32_t fellow_mm_slot = UINT32_MAX;
+		if (p_params->fellow_mm_slots != nullptr) {
+			fellow_mm_slot = p_params->fellow_mm_slots[i];
+			if (fellow_mm_slot != UINT32_MAX) {
+				xforms_uniform_set = p_params->fellow_mm_xforms;
+			}
+		}
 
 		SceneShaderForwardClustered::ShaderSpecialization pipeline_specialization = p_params->base_specialization;
 		pipeline_specialization.fellow_persistent_instances = fellow_persistent.active; // the lists' format this frame (decision 0022)
@@ -627,6 +636,11 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 				particles_storage->particles_get_instance_buffer_motion_vectors_offsets(surf->owner->data->base, push_constant.multimesh_motion_vectors_current_offset, push_constant.multimesh_motion_vectors_previous_offset);
 			} else if (surf->owner->base_flags & INSTANCE_DATA_FLAG_MULTIMESH) {
 				mesh_storage->_multimesh_get_motion_vectors_offsets(surf->owner->data->base, push_constant.multimesh_motion_vectors_current_offset, push_constant.multimesh_motion_vectors_previous_offset);
+				if (fellow_mm_slot != UINT32_MAX) {
+					// The compacted instances (culled MultiMeshes have no motion this frame: previous = current).
+					push_constant.multimesh_motion_vectors_current_offset = p_params->fellow_mm_offsets[fellow_mm_slot];
+					push_constant.multimesh_motion_vectors_previous_offset = p_params->fellow_mm_offsets[fellow_mm_slot];
+				}
 			} else {
 				push_constant.multimesh_motion_vectors_current_offset = 0;
 				push_constant.multimesh_motion_vectors_previous_offset = 0;
@@ -682,6 +696,9 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 				RD::get_singleton()->draw_list_draw(draw_list, false, mesh_storage->mesh_surface_get_vertex_count(mesh_surface), instance_count * 6);
 			} else if (indirect) {
 				RD::get_singleton()->draw_list_draw_indirect(draw_list, index_array_rd.is_valid(), mesh_storage->_multimesh_get_command_buffer_rd_rid(surf->owner->data->base), surf->surface_index * sizeof(uint32_t) * mesh_storage->INDIRECT_MULTIMESH_COMMAND_STRIDE, 1, 0);
+			} else if (fellow_mm_slot != UINT32_MAX) {
+				RD::get_singleton()->draw_list_draw_indirect(draw_list, index_array_rd.is_valid(), p_params->fellow_mm_args, fellow_mm_slot * 5 * sizeof(uint32_t), 1, 0);
+				Fellow::stats().geometry_multimesh_cull_draws.increment();
 			} else if (fellow_occlusion_run != UINT32_MAX) {
 				// One indirect draw per chunk of the run, in order (each chunk's visible elements are compacted from its
 				// first element).
@@ -1652,6 +1669,334 @@ bool RenderForwardClustered::_fellow_occlusion_cull(RenderDataRD *p_render_data,
 	Fellow::stats().occlusion_cull_passes.increment();
 	Fellow::stats().occlusion_cull_runs.add(run_count);
 	return true;
+}
+
+// MultiMesh instance culling (decision 0034).
+
+void RenderForwardClustered::_fellow_multimesh_cull_init() {
+	FellowMultimeshCull &m = fellow_mm;
+	if (m.version.is_valid()) {
+		return;
+	}
+	RenderingDevice *rd = RD::get_singleton();
+	Vector<String> modes;
+	modes.push_back("\n#define MODE_TEST\n");
+	modes.push_back("\n#define MODE_SCAN\n");
+	modes.push_back("\n#define MODE_COMPACT\n");
+	m.shader.initialize(modes);
+	m.version = m.shader.version_create();
+	for (int i = 0; i < 3; i++) {
+		m.pipelines[i] = rd->compute_pipeline_create(m.shader.version_get_shader(m.version, i));
+	}
+	for (FellowMultimeshCull::Set &set : m.sets) {
+		set.counters = rd->storage_buffer_create(16);
+	}
+}
+
+void RenderForwardClustered::_fellow_multimesh_cull_free() {
+	FellowMultimeshCull &m = fellow_mm;
+	RenderingDevice *rd = RD::get_singleton();
+	for (FellowMultimeshCull::Set &set : m.sets) {
+		for (RID *buffer : { &set.jobs_buffer, &set.blocks_buffer, &set.planes_buffer, &set.block_data, &set.job_visible, &set.compacted, &set.draw_info_buffer, &set.args, &set.counters }) {
+			if (buffer->is_valid()) {
+				rd->free_rid(*buffer);
+				*buffer = RID();
+			}
+		}
+		set.xforms_uniform_set = RID(); // freed with its buffer
+	}
+	if (m.version.is_valid()) {
+		m.shader.version_free(m.version);
+		m.version = RID();
+	}
+}
+
+void RenderForwardClustered::_fellow_multimesh_cull_begin(uint32_t p_set) {
+	_fellow_multimesh_cull_init();
+	FellowMultimeshCull &m = fellow_mm;
+	FellowMultimeshCull::Set &set = m.sets[p_set];
+	set.jobs.clear();
+	set.job_multimesh.clear();
+	set.blocks.clear();
+	set.planes.clear();
+	set.draw_info.clear();
+	set.draw_offsets.clear();
+	set.compacted_floats = 0;
+	set.active = false;
+	m.job_of_owner.clear();
+	const RenderListType lists[2] = { p_set == 0 ? RENDER_LIST_OPAQUE : RENDER_LIST_SECONDARY, p_set == 0 ? RENDER_LIST_ALPHA : RENDER_LIST_MAX };
+	for (RenderListType l : lists) {
+		if (l == RENDER_LIST_MAX) {
+			continue;
+		}
+		const uint32_t n = render_list[l].elements.size();
+		m.slots[l].resize(n);
+		if (n > 0) {
+			memset(m.slots[l].ptr(), 0xFF, n * sizeof(uint32_t));
+		}
+	}
+}
+
+void RenderForwardClustered::_fellow_multimesh_cull_collect(uint32_t p_set, RenderListType p_list, uint32_t p_from, uint32_t p_to, const Plane *p_planes, int p_plane_count, bool p_shadow) {
+	// The pass's MultiMesh elements that can be culled exactly: their materials neither move vertices nor read
+	// INSTANCE_ID, their data does not change this frame (no motion vectors between two buffers), 3D transforms.
+	if (p_plane_count <= 0) {
+		return;
+	}
+	FellowMultimeshCull &m = fellow_mm;
+	FellowMultimeshCull::Set &set = m.sets[p_set];
+	RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
+	const RenderList &rl = render_list[p_list];
+	const uint32_t min_instances = uint32_t(MAX(1, Fellow::multimesh_cull_min_instances()));
+	const uint64_t excluded = INSTANCE_DATA_FLAG_PARTICLES | INSTANCE_DATA_FLAG_MULTIMESH_INDIRECT | INSTANCE_DATA_FLAG_MULTIMESH_FORMAT_2D;
+	uint32_t planes_offset = UINT32_MAX;
+	const uint32_t to = MIN(p_to, rl.elements.size());
+	for (uint32_t i = p_from; i < to; i++) {
+		const GeometryInstanceSurfaceDataCache *surf = rl.elements[i];
+		const RenderElementInfo &info = rl.element_info[i];
+		const GeometryInstanceForwardClustered *inst = surf->owner;
+		if (!(inst->base_flags & INSTANCE_DATA_FLAG_MULTIMESH) || (inst->base_flags & excluded) || inst->instance_count < min_instances || info.repeat > 1) {
+			continue;
+		}
+		const SceneShaderForwardClustered::ShaderData *shaders[2] = { surf->shader, surf->shader_shadow };
+		bool moves = false;
+		for (const SceneShaderForwardClustered::ShaderData *sh : shaders) {
+			if (sh == nullptr || sh->uses_vertex || sh->uses_position || sh->writes_modelview_or_projection || sh->uses_z_clip_scale || sh->uses_particle_trails || sh->uses_point_size || sh->fellow_uses_instance_id) {
+				moves = true;
+			}
+		}
+		if (moves || (!p_shadow && surf->surface != surf->surface_shadow)) {
+			continue; // (the camera's depth pre-pass may draw the shadow surface, its colour passes the other)
+		}
+		void *mesh_surface = p_shadow ? surf->surface_shadow : surf->surface;
+		if (mesh_surface == nullptr) {
+			continue;
+		}
+		const bool indexed = mesh_storage->mesh_surface_get_index_array(mesh_surface, info.lod_index).is_valid();
+		const uint32_t draw_count = indexed ? mesh_storage->fellow_mesh_surface_get_index_count(mesh_surface, info.lod_index) : mesh_storage->mesh_surface_get_vertex_count(mesh_surface);
+		if (draw_count == 0) {
+			continue;
+		}
+		uint32_t job = UINT32_MAX;
+		HashMap<const void *, uint32_t>::Iterator it = m.job_of_owner.find(inst);
+		if (it != m.job_of_owner.end()) {
+			job = it->value;
+		} else {
+			const RID base = inst->data->base;
+			if (!mesh_storage->_multimesh_uses_motion_vectors_offsets(base) && mesh_storage->fellow_multimesh_get_transform_format(base) == RSE::MULTIMESH_TRANSFORM_3D) {
+				const int64_t pool_offset = mesh_storage->fellow_multimesh_pool_prepare(base);
+				const uint32_t stride = mesh_storage->fellow_multimesh_get_stride(base);
+				const RID mesh = mesh_storage->multimesh_get_mesh(base);
+				if (pool_offset >= 0 && stride >= 12 && mesh.is_valid()) {
+					if (planes_offset == UINT32_MAX) {
+						planes_offset = set.planes.size() / 4;
+						for (int p = 0; p < p_plane_count; p++) {
+							set.planes.push_back(p_planes[p].normal.x);
+							set.planes.push_back(p_planes[p].normal.y);
+							set.planes.push_back(p_planes[p].normal.z);
+							set.planes.push_back(p_planes[p].d);
+						}
+					}
+					const AABB aabb = mesh_storage->mesh_get_aabb(mesh, RID());
+					const Transform3D &xf = inst->transform;
+					FellowMultimeshCull::Job j = {};
+					for (int r = 0; r < 3; r++) {
+						j.xform[r * 4 + 0] = xf.basis.rows[r].x;
+						j.xform[r * 4 + 1] = xf.basis.rows[r].y;
+						j.xform[r * 4 + 2] = xf.basis.rows[r].z;
+						j.xform[r * 4 + 3] = xf.origin[r];
+					}
+					const Vector3 center = aabb.get_center();
+					const Vector3 half = aabb.size * 0.5;
+					j.aabb_center[0] = center.x;
+					j.aabb_center[1] = center.y;
+					j.aabb_center[2] = center.z;
+					j.aabb_half[0] = half.x;
+					j.aabb_half[1] = half.y;
+					j.aabb_half[2] = half.z;
+					j.aabb_half[3] = 1e-3f; // absolute margin (world units)
+					j.pool_offset = uint32_t(pool_offset);
+					j.stride = stride;
+					j.count = inst->instance_count;
+					j.planes_offset = planes_offset;
+					j.plane_count = uint32_t(MIN(p_plane_count, 8));
+					j.out_offset = uint32_t((set.compacted_floats + stride - 1) / stride);
+					set.compacted_floats = (uint64_t(j.out_offset) + j.count) * stride;
+					j.first_block = set.blocks.size() / 2;
+					j.block_count = (j.count + 63) / 64;
+					for (uint32_t b = 0; b < j.block_count; b++) {
+						set.blocks.push_back(set.jobs.size());
+						set.blocks.push_back(b * 64);
+					}
+					job = set.jobs.size();
+					set.jobs.push_back(j);
+					set.job_multimesh.push_back(base);
+				}
+			}
+			m.job_of_owner.insert(inst, job);
+		}
+		if (job == UINT32_MAX) {
+			continue;
+		}
+		m.slots[p_list][i] = set.draw_info.size() / 2;
+		set.draw_info.push_back(job);
+		set.draw_info.push_back(draw_count);
+		set.draw_offsets.push_back(set.jobs[job].out_offset);
+	}
+}
+
+void RenderForwardClustered::_fellow_multimesh_cull_dispatch(uint32_t p_set) {
+	FellowMultimeshCull &m = fellow_mm;
+	FellowMultimeshCull::Set &set = m.sets[p_set];
+	const uint32_t job_count = set.jobs.size();
+	const uint32_t block_count = set.blocks.size() / 2;
+	const uint32_t draw_count = set.draw_info.size() / 2;
+	if (job_count == 0 || draw_count == 0) {
+		return;
+	}
+	// A pool slot handed out early in the collection moves if a later MultiMesh made the pool grow (a new buffer): every
+	// job's offset is resolved again until no growth happens in between (the pool doubles, so at most a few rounds).
+	RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
+	for (int round = 0; round < 8; round++) {
+		const uint64_t generation = mesh_storage->fellow_multimesh_pool_generation();
+		bool valid = true;
+		for (uint32_t j = 0; j < job_count; j++) {
+			const int64_t offset = mesh_storage->fellow_multimesh_pool_prepare(set.job_multimesh[j]);
+			if (offset < 0) {
+				valid = false;
+				break;
+			}
+			set.jobs[j].pool_offset = uint32_t(offset);
+		}
+		if (!valid) {
+			return; // (a MultiMesh lost its buffer since it was collected: drawn the stock way this frame)
+		}
+		if (mesh_storage->fellow_multimesh_pool_generation() == generation) {
+			break;
+		}
+	}
+
+	RenderingDevice *rd = RD::get_singleton();
+	auto grow = [rd](RID &r_buffer, uint32_t &r_capacity, uint32_t p_needed, uint32_t p_bytes_each, BitField<RD::StorageBufferUsage> p_usage = 0) {
+		if (r_capacity >= p_needed && r_buffer.is_valid()) {
+			return false;
+		}
+		if (r_buffer.is_valid()) {
+			rd->free_rid(r_buffer);
+		}
+		r_capacity = Math::next_power_of_2(MAX(p_needed, 256u));
+		r_buffer = rd->storage_buffer_create(uint64_t(r_capacity) * p_bytes_each, Span<uint8_t>(), p_usage);
+		return true;
+	};
+	if (grow(set.jobs_buffer, set.cap_jobs, job_count, sizeof(FellowMultimeshCull::Job)) || set.job_visible.is_null()) {
+		if (set.job_visible.is_valid()) {
+			rd->free_rid(set.job_visible);
+		}
+		set.job_visible = rd->storage_buffer_create(uint64_t(set.cap_jobs) * 4);
+	}
+	const uint32_t old_cap_blocks = set.cap_blocks;
+	grow(set.blocks_buffer, set.cap_blocks, block_count, 8);
+	if (set.cap_blocks != old_cap_blocks || set.block_data.is_null()) {
+		if (set.block_data.is_valid()) {
+			rd->free_rid(set.block_data);
+		}
+		set.block_data = rd->storage_buffer_create(uint64_t(set.cap_blocks) * 16);
+	}
+	grow(set.planes_buffer, set.cap_planes, set.planes.size() / 4, 16);
+	const uint32_t old_cap_draws = set.cap_draws;
+	grow(set.draw_info_buffer, set.cap_draws, draw_count, 8);
+	if (set.cap_draws != old_cap_draws || set.args.is_null()) {
+		if (set.args.is_valid()) {
+			rd->free_rid(set.args);
+		}
+		set.args = rd->storage_buffer_create(uint64_t(set.cap_draws) * 5 * sizeof(uint32_t), Span<uint8_t>(), RD::STORAGE_BUFFER_USAGE_DISPATCH_INDIRECT);
+	}
+	const uint64_t compacted_floats = MAX(set.compacted_floats, uint64_t(4));
+	if (set.cap_compacted < compacted_floats || set.compacted.is_null()) {
+		if (set.compacted.is_valid()) {
+			rd->free_rid(set.compacted);
+		}
+		set.cap_compacted = MAX(Math::next_power_of_2(compacted_floats), uint64_t(1) << 16);
+		set.compacted = rd->storage_buffer_create(set.cap_compacted * sizeof(float));
+		set.xforms_uniform_set = RID();
+	}
+	if (set.xforms_uniform_set.is_null() || !rd->uniform_set_is_valid(set.xforms_uniform_set)) {
+		Vector<RD::Uniform> uniforms;
+		RD::Uniform u;
+		u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
+		u.binding = 0;
+		u.append_id(set.compacted);
+		uniforms.push_back(u);
+		set.xforms_uniform_set = rd->uniform_set_create(uniforms, scene_shader.default_shader_rd, TRANSFORMS_UNIFORM_SET);
+	}
+
+	rd->buffer_update(set.jobs_buffer, 0, job_count * sizeof(FellowMultimeshCull::Job), set.jobs.ptr());
+	rd->buffer_update(set.blocks_buffer, 0, block_count * 8, set.blocks.ptr());
+	rd->buffer_update(set.planes_buffer, 0, set.planes.size() * sizeof(float), set.planes.ptr());
+	rd->buffer_update(set.draw_info_buffer, 0, draw_count * 8, set.draw_info.ptr());
+	rd->buffer_clear(set.counters, 0, 16);
+
+	struct {
+		uint32_t block_count;
+		uint32_t job_count;
+		uint32_t draw_count;
+		uint32_t pad;
+	} push = { block_count, job_count, draw_count, 0 };
+	RD::Uniform u_jobs(RD::UNIFORM_TYPE_STORAGE_BUFFER, 0, set.jobs_buffer);
+	RD::Uniform u_blocks(RD::UNIFORM_TYPE_STORAGE_BUFFER, 1, set.blocks_buffer);
+	RD::Uniform u_planes(RD::UNIFORM_TYPE_STORAGE_BUFFER, 2, set.planes_buffer);
+	RD::Uniform u_pool(RD::UNIFORM_TYPE_STORAGE_BUFFER, 3, RendererRD::MeshStorage::get_singleton()->fellow_multimesh_pool_buffer());
+	RD::Uniform u_block_data(RD::UNIFORM_TYPE_STORAGE_BUFFER, 4, set.block_data);
+	RD::Uniform u_job_visible(RD::UNIFORM_TYPE_STORAGE_BUFFER, 5, set.job_visible);
+	RD::Uniform u_compacted(RD::UNIFORM_TYPE_STORAGE_BUFFER, 6, set.compacted);
+	RD::Uniform u_draw_info(RD::UNIFORM_TYPE_STORAGE_BUFFER, 7, set.draw_info_buffer);
+	RD::Uniform u_args(RD::UNIFORM_TYPE_STORAGE_BUFFER, 8, set.args);
+	RD::Uniform u_counters(RD::UNIFORM_TYPE_STORAGE_BUFFER, 9, set.counters);
+	UniformSetCacheRD *cache = UniformSetCacheRD::get_singleton();
+	RID shader = m.shader.version_get_shader(m.version, 0);
+	RID uniform_set = cache->get_cache(shader, 0, u_jobs, u_blocks, u_planes, u_pool, u_block_data, u_job_visible, u_compacted, u_draw_info, u_args, u_counters);
+	RD::ComputeListID list = rd->compute_list_begin();
+	rd->compute_list_bind_compute_pipeline(list, m.pipelines[0]);
+	rd->compute_list_bind_uniform_set(list, uniform_set, 0);
+	rd->compute_list_set_push_constant(list, &push, sizeof(push));
+	rd->compute_list_dispatch(list, block_count, 1, 1);
+	rd->compute_list_add_barrier(list);
+	rd->compute_list_bind_compute_pipeline(list, m.pipelines[1]);
+	rd->compute_list_bind_uniform_set(list, uniform_set, 0);
+	rd->compute_list_set_push_constant(list, &push, sizeof(push));
+	rd->compute_list_dispatch(list, (job_count + 63) / 64, 1, 1);
+	rd->compute_list_add_barrier(list);
+	rd->compute_list_bind_compute_pipeline(list, m.pipelines[2]);
+	rd->compute_list_bind_uniform_set(list, uniform_set, 0);
+	rd->compute_list_set_push_constant(list, &push, sizeof(push));
+	rd->compute_list_dispatch(list, block_count + (draw_count + 63) / 64, 1, 1);
+	rd->compute_list_end();
+	rd->buffer_get_data_async(set.counters, callable_mp_static(&RenderForwardClustered::_fellow_multimesh_cull_readback), 0, 16);
+
+	set.active = true;
+	Fellow::stats().geometry_multimesh_cull_passes.increment();
+	Fellow::stats().geometry_multimesh_cull_jobs.add(job_count);
+}
+
+void RenderForwardClustered::_fellow_multimesh_cull_readback(const Vector<uint8_t> &p_data) {
+	if (p_data.size() < 8) {
+		return;
+	}
+	const uint32_t *c = reinterpret_cast<const uint32_t *>(p_data.ptr());
+	Fellow::stats().geometry_multimesh_instances_tested.add(c[0]);
+	Fellow::stats().geometry_multimesh_instances_visible.add(c[1]);
+}
+
+void RenderForwardClustered::_fellow_multimesh_cull_params(uint32_t p_set, RenderListType p_list, uint32_t p_element_from, RenderListParameters &r_params) {
+	FellowMultimeshCull &m = fellow_mm;
+	const FellowMultimeshCull::Set &set = m.sets[p_set];
+	if (!set.active || m.slots[p_list].size() < p_element_from || set.xforms_uniform_set.is_null()) {
+		return;
+	}
+	r_params.fellow_mm_slots = m.slots[p_list].ptr() + p_element_from;
+	r_params.fellow_mm_offsets = set.draw_offsets.ptr();
+	r_params.fellow_mm_args = set.args;
+	r_params.fellow_mm_xforms = set.xforms_uniform_set;
 }
 
 bool RenderForwardClustered::_fellow_adaptive_vrs_target(const Ref<RenderSceneBuffersRD> &p_render_buffers) const {
@@ -3951,7 +4296,10 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	LocalVector<Plane> fellow_cluster_planes;
 	if (Fellow::mesh_clusters() && p_render_data->scene_data->view_count == 1) {
 		Projection jitter;
-		jitter.add_jitter_offset(p_render_data->scene_data->taa_jitter);
+		// The GPU's projection is depth_correction(flip_y) with the jitter added after it (get_cam_projection()): before
+		// the y flip the jitter's y has the other sign.
+		const Vector2 fellow_jitter = p_render_data->scene_data->taa_jitter;
+		jitter.add_jitter_offset(Vector2(fellow_jitter.x, p_render_data->scene_data->flip_y ? -fellow_jitter.y : fellow_jitter.y));
 		const Vector<Plane> planes = (jitter * p_render_data->scene_data->cam_projection).get_projection_planes(p_render_data->scene_data->cam_transform);
 		for (const Plane &plane : planes) {
 			fellow_cluster_planes.push_back(plane);
@@ -3988,6 +4336,25 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	_fill_instance_data(RENDER_LIST_OPAQUE, render_info);
 	_fill_instance_data(RENDER_LIST_MOTION, render_info);
 	_fill_instance_data(RENDER_LIST_ALPHA, render_info);
+
+	// FellowEngine MultiMesh culling (decision 0034): the camera's passes (the projection the GPU uses, TAA jitter
+	// included).
+	fellow_mm.sets[0].active = false;
+	if (Fellow::multimesh_culling() && p_render_data->scene_data->view_count == 1) {
+		Projection jitter;
+		// The GPU's projection is depth_correction(flip_y) with the jitter added after it (get_cam_projection()): before
+		// the y flip the jitter's y has the other sign.
+		const Vector2 fellow_jitter = p_render_data->scene_data->taa_jitter;
+		jitter.add_jitter_offset(Vector2(fellow_jitter.x, p_render_data->scene_data->flip_y ? -fellow_jitter.y : fellow_jitter.y));
+		const Vector<Plane> planes = (jitter * p_render_data->scene_data->cam_projection).get_projection_planes(p_render_data->scene_data->cam_transform);
+		if (fellow_markers) {
+			RENDER_TIMESTAMP("FellowEngine MultiMesh Culling");
+		}
+		_fellow_multimesh_cull_begin(0);
+		_fellow_multimesh_cull_collect(0, RENDER_LIST_OPAQUE, 0, render_list[RENDER_LIST_OPAQUE].elements.size(), planes.ptr(), planes.size(), false);
+		_fellow_multimesh_cull_collect(0, RENDER_LIST_ALPHA, 0, render_list[RENDER_LIST_ALPHA].elements.size(), planes.ptr(), planes.size(), false);
+		_fellow_multimesh_cull_dispatch(0);
+	}
 	if (fellow_markers) {
 		RENDER_TIMESTAMP("FellowEngine Setup 3D Scene (rest)");
 	}
@@ -4222,6 +4589,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		render_list_params.fellow_cluster_planes = fellow_cluster_planes.ptr();
 		render_list_params.fellow_cluster_plane_count = fellow_cluster_planes.size();
 		render_list_params.fellow_depth_filter = Fellow::prepass_simple_first() ? 1 : 0;
+		_fellow_multimesh_cull_params(0, RENDER_LIST_OPAQUE, 0, render_list_params);
 		_render_list_with_draw_list(&render_list_params, depth_framebuffer, RD::DrawFlags(needs_pre_resolve ? RD::DRAW_DEFAULT_ALL : RD::DRAW_CLEAR_ALL), depth_pass_clear, 0.0f, 0u, p_render_data->render_region);
 
 		RD::get_singleton()->draw_command_end_label();
@@ -4328,6 +4696,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 				render_list_params.fellow_occlusion_runs = fellow_occlusion.run_of_element.ptr();
 				render_list_params.fellow_occlusion_args = fellow_occlusion.args;
 			}
+			_fellow_multimesh_cull_params(0, RENDER_LIST_OPAQUE, 0, render_list_params);
 			_render_list_with_draw_list(&render_list_params, opaque_framebuffer, RD::DrawFlags(load_color ? RD::DRAW_DEFAULT_ALL : RD::DRAW_CLEAR_COLOR_ALL) | (depth_pre_pass ? RD::DRAW_DEFAULT_ALL : RD::DRAW_CLEAR_DEPTH), c, 0.0f, 0u, p_render_data->render_region);
 		}
 
@@ -4542,6 +4911,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		RenderListParameters render_list_params(render_list[RENDER_LIST_ALPHA].elements.ptr(), render_list[RENDER_LIST_ALPHA].element_info.ptr(), render_list[RENDER_LIST_ALPHA].elements.size(), reverse_cull, PASS_MODE_COLOR, transparent_color_pass_flags, rb_data.is_null(), p_render_data->directional_light_soft_shadows, rp_uniform_set, get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_WIREFRAME, Vector2(), p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, p_render_data->scene_data->view_count, 0, base_specialization);
 		render_list_params.fellow_cluster_planes = fellow_cluster_planes.ptr();
 		render_list_params.fellow_cluster_plane_count = fellow_cluster_planes.size();
+		_fellow_multimesh_cull_params(0, RENDER_LIST_ALPHA, 0, render_list_params);
 		_render_list_with_draw_list(&render_list_params, alpha_framebuffer, RD::DRAW_DEFAULT_ALL, Vector<Color>(), 0.0f, 0u, p_render_data->render_region);
 	}
 
@@ -5552,7 +5922,8 @@ void RenderForwardClustered::_render_shadow_append(RID p_framebuffer, const Page
 		shadow_pass.uniform_buffer_index = uniform_buffer_index;
 
 		shadow_pass.fellow_cluster_plane_count = 0;
-		if (Fellow::mesh_clusters() && !p_use_dp) {
+		shadow_pass.fellow_mm_plane_count = 0;
+		if ((Fellow::mesh_clusters() || Fellow::multimesh_culling()) && !p_use_dp) {
 			// Casters in front of a pancaked shadow camera are flattened onto its near plane, not clipped: keep the near
 			// plane out of the cluster cull then.
 			const Vector<Plane> planes = p_projection.get_projection_planes(p_transform);
@@ -5560,7 +5931,10 @@ void RenderForwardClustered::_render_shadow_append(RID p_framebuffer, const Page
 				if (i == Projection::PLANE_NEAR && p_use_pancake) {
 					continue;
 				}
-				shadow_pass.fellow_cluster_planes[shadow_pass.fellow_cluster_plane_count++] = planes[i];
+				if (Fellow::mesh_clusters()) {
+					shadow_pass.fellow_cluster_planes[shadow_pass.fellow_cluster_plane_count++] = planes[i];
+				}
+				shadow_pass.fellow_mm_planes[shadow_pass.fellow_mm_plane_count++] = planes[i];
 			}
 		}
 
@@ -5583,6 +5957,19 @@ void RenderForwardClustered::_render_shadow_process() {
 	RenderingDevice *rd = RenderingDevice::get_singleton();
 	if (scene_state.instance_buffer[RENDER_LIST_SECONDARY].get_size(0u) > 0u) {
 		rd->buffer_flush(scene_state.instance_buffer[RENDER_LIST_SECONDARY]._get(0u));
+	}
+
+	// FellowEngine MultiMesh culling (decision 0034): every shadow pass's MultiMesh instances, in one dispatch.
+	fellow_mm.sets[1].active = false;
+	if (Fellow::multimesh_culling() && !scene_state.shadow_passes.is_empty()) {
+		_fellow_multimesh_cull_begin(1);
+		for (const SceneState::ShadowPass &shadow_pass : scene_state.shadow_passes) {
+			if (!shadow_pass.fellow_copy && shadow_pass.fellow_mm_plane_count > 0) {
+				fellow_mm.job_of_owner.clear();
+				_fellow_multimesh_cull_collect(1, RENDER_LIST_SECONDARY, shadow_pass.element_from, shadow_pass.element_from + shadow_pass.element_count, shadow_pass.fellow_mm_planes, shadow_pass.fellow_mm_plane_count, true);
+			}
+		}
+		_fellow_multimesh_cull_dispatch(1);
 	}
 
 	//render shadows one after the other, so this can be done un-barriered and the driver can optimize (as well as allow us to run compute at the same time)
@@ -5609,6 +5996,7 @@ void RenderForwardClustered::_render_shadow_end() {
 		RenderListParameters render_list_parameters(render_list[RENDER_LIST_SECONDARY].elements.ptr() + shadow_pass.element_from, render_list[RENDER_LIST_SECONDARY].element_info.ptr() + shadow_pass.element_from, shadow_pass.element_count, shadow_pass.flip_cull, shadow_pass.pass_mode, 0, true, false, shadow_pass.rp_uniform_set, false, Vector2(), shadow_pass.lod_distance_multiplier, shadow_pass.screen_mesh_lod_threshold, 1, shadow_pass.element_from);
 		render_list_parameters.fellow_cluster_planes = shadow_pass.fellow_cluster_planes;
 		render_list_parameters.fellow_cluster_plane_count = shadow_pass.fellow_cluster_plane_count;
+		_fellow_multimesh_cull_params(1, RENDER_LIST_SECONDARY, shadow_pass.element_from, render_list_parameters);
 		_render_list_with_draw_list(&render_list_parameters, shadow_pass.framebuffer, shadow_pass.clear_depth ? RD::DRAW_CLEAR_DEPTH : RD::DRAW_DEFAULT_ALL, Vector<Color>(), 0.0f, 0, shadow_pass.rect);
 	}
 
@@ -8178,6 +8566,7 @@ RenderForwardClustered::~RenderForwardClustered() {
 		}
 		_fellow_persistent_free();
 		_fellow_occlusion_free();
+		_fellow_multimesh_cull_free();
 		memdelete_arr(scene_state.lightmap_captures);
 	}
 

@@ -1,6 +1,6 @@
 # 0027 — Adaptive shading rate (visually lossless)
 
-Status: **MEASURING** (`fellow77`) · Branch `fellow/geometry` · Toggle `rendering/fellow/shading/adaptive_vrs` (creates
+Status: **KEEP as an option** (off by default; autotune from `fellow87`, rule `fellow91`) · Branch `fellow/geometry` · Toggle `rendering/fellow/shading/adaptive_vrs` (creates
 the attachment with the render buffers), `shading/adaptive_vrs_threshold` (runtime; 0 = full rate everywhere),
 `shading/adaptive_vrs_max_rate` (2 × 2 or 4 × 4) · Code: `shaders/effects/fellow_adaptive_vrs.glsl`,
 `render_forward_clustered.cpp` (`_fellow_adaptive_vrs_*`), `render_scene_buffers_rd.cpp`, pipeline flag
@@ -208,4 +208,30 @@ whose fast pan loses the most (49.8 dB).
 
 `fellow89`: an undecided evaluation (a difference below `autotune/min_gain_percent` or within 2.5 standard errors)
 switches an image-changing tunable **off**, and it starts off: adaptive shading runs only where it is measured faster.
-The exact tunables keep their rule (undecided keeps the current choice). Measured in `m6_f96`.
+The exact tunables keep their rule (undecided keeps the current choice).
+
+## The autotune rule between processes (`m6_f96_vrs_autotune`, `fellow88` against `fellow89`)
+
+All visually lossless options on, 3 runs each, frames with adaptive rates per run:
+
+| scene | `fellow88` (starts on, undecided keeps) | `fellow89` (starts off, undecided → off) | frame |
+|---|---|---|---:|
+| Sponza | 2521-4946 | **96** (the evaluations only) | −2.3 % (noisy, p 0.25) |
+| City Lab | 3756-10653 | 176-630 | −1.5 % (n.s.) |
+| Bistro exterior | 192-914 | 192 | +0.5 % (n.s.) |
+| Bistro interior | 7045-7102 | 7045-7141 | +0.5 % (n.s.) |
+| Lights Lab | 10692 | 10267-10692 | +1.3 % (n.s.) |
+| PBR Lab | 8852-8859 | **487-4113** | **+4.4 %** (p 0.03) |
+
+Sponza and City Lab now run without adaptive shading as intended, but PBR Lab lost much of its gain: along its path the
+difference is small in places, an undecided evaluation there switched adaptive shading off, and its next evaluation came
+only after the (doubled) interval. `fellow91` keeps the start off but drops the switch-off: an image-changing tunable
+turns on only when an evaluation measures it faster and then stays on unless one measures it slower (the exact
+tunables' rule). Sponza, where no evaluation finds a gain, stays off.
+
+## Decision
+
+**KEEP as an option, off by default** (`shading/adaptive_vrs`, start-up). Visually lossless within the measured limits
+(stills 52.8-74.1 dB; motion 56.9-75.1 dB in the scenes where autotune keeps it; `adaptive_vrs_max_step` 0.01 for the
+strict look), Lights Lab −21 %, PBR Lab −5 %, Bistro interior −3 % (in one process), and under autotune not slower in
+the scenes where it does not pay.
