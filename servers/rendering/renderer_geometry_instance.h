@@ -74,6 +74,10 @@ public:
 	virtual void pair_voxel_gi_instances(const RID *p_voxel_gi_instances, uint32_t p_voxel_gi_instance_count) = 0;
 
 	virtual void set_softshadow_projector_pairing(bool p_softshadow, bool p_projector) = 0;
+
+	// FellowEngine MultiMesh culling (decision 0036): the node's extra cull margin (GeometryInstance3D.extra_cull_margin),
+	// which the renderers that cull instances one by one add to each instance's box. No-op elsewhere.
+	virtual void set_fellow_extra_margin(float p_margin) {}
 };
 
 // Base implementation of RenderGeometryInstance shared by internal renderers.
@@ -94,6 +98,7 @@ public:
 	bool non_uniform_scale = false;
 	float lod_model_scale = 1.0;
 	float lod_bias = 0.0;
+	float fellow_extra_margin = 0.0; // the node's extra cull margin, in its own space (decision 0036)
 	float sorting_offset = 0.0;
 	bool use_aabb_center = true;
 
@@ -152,6 +157,7 @@ public:
 	virtual void set_use_dynamic_gi(bool p_enable) override;
 	virtual void set_instance_shader_uniforms_offset(int32_t p_offset) override;
 	virtual void set_cast_double_sided_shadows(bool p_enable) override;
+	virtual void set_fellow_extra_margin(float p_margin) override;
 
 	virtual void reset_motion_vectors() override;
 

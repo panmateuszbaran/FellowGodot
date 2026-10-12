@@ -1,6 +1,6 @@
 # 0035 — Per-instance mesh LOD for culled MultiMeshes
 
-Status: **MEASURING** (an option that changes the image, off) · Branch `fellow/geometry` · Toggle
+Status: **KEEP as an option** (changes the image, off) · Branch `fellow/geometry` · Toggle
 `rendering/fellow/geometry/multimesh_instance_lod` (runtime, off; works with `geometry/multimesh_culling`, 0034) ·
 Code: `shaders/effects/fellow_multimesh_cull.glsl` (buckets per level), `render_forward_clustered.{h,cpp}`
 (`_fellow_multimesh_cull_collect`: a job per surface; the draw loop: a draw per level), `storage_rd/mesh_storage.h`
@@ -59,6 +59,26 @@ So it is **not** visually lossless (FellowEngine's bar is ≥ 50 dB on stills). 
 applied per instance as stock applies it to separate nodes, and is offered as such: off by default, controlled by the
 project's `mesh_lod_threshold`.
 
-## Pending
+## Measured on RTX (`fellow92`)
 
-RTX: the frame time against culling alone and the image on the GPU (`m7_f101`).
+Image (`m7_f101_lod_capture`, 1080p, culling against culling with per-instance LOD, three captures): PSNR mean
+60.1 dB, min 39.9 dB (aerial), max |d| 114, 1.8 % of the pixels off by more than two levels — the same picture as on
+lavapipe.
+
+Frame time, Foliage Lab with LOD meshes and one MultiMesh per type (1080p):
+
+| | frame | against culling alone |
+|---|---:|---:|
+| stock (`m7_f102_foliage_lods`, 3 runs) | 10.99 ms | |
+| FellowEngine, culling | 6.29 ms (−42.7 %) | |
+| FellowEngine, culling and per-instance LOD | 6.14 ms (−44.1 %) | −2.4 % |
+| in one process (`m7_f102_lod_ab`, autotune off, 240 block pairs) | | **−2.2 %** (−0.138 ms GPU: pre-pass −0.07, opaque −0.06 ms) |
+
+The bench's meshes are light (a grass clump has 24 triangles, a tree 420), so coarser levels save little; vegetation
+of thousands of triangles per instance would save more, and look as much coarser.
+
+## Decision
+
+**KEEP as an option, off by default.** It changes the image (the project's LOD error applied per instance, aerial
+views 33-40 dB) for −2.2 % in the bench; a project that wants stock's LOD for every instance of a MultiMesh, as it
+would get for separate nodes, can turn it on.

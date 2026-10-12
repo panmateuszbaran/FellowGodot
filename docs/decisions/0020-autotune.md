@@ -200,7 +200,9 @@ evaluation that measures them faster; after that the exact tunables' rule applie
 `fellow92`: an image-changing tunable that an undecided evaluation leaves off is evaluated again at the base interval
 (its pairs pooled) instead of at a doubling one, until an evaluation decides. In `m7_f100` (`fellow91`) adaptive shading
 was on in PBR Lab for only 5 320, 5 320 and 487 of about 8 850 frames per run: once off and undecided, its next
-evaluations came ever later.
+evaluations came ever later. `m7_f102` (`fellow92`, the four visually lossless options against the defaults): PBR Lab
+5 320 frames with adaptive shading in all three runs (−5.5 %, p 0.002), Lights Lab −24.9 %, City Lab −6.0 %, Sponza
+−1.6 % (within noise; adaptive shading on for 96 frames).
 
 ## MultiMesh culling as a tunable (`fellow92`, milestone 7)
 

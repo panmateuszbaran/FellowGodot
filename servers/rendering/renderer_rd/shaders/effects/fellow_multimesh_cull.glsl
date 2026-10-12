@@ -30,7 +30,7 @@ layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
 struct Job {
 	vec4 xform[3]; // the node's transform, rows (world from the MultiMesh's space)
-	vec4 aabb_center; // the mesh's box in its own space (xyz), w unused
+	vec4 aabb_center; // the mesh's box in its own space (xyz), w: the node's extra cull margin (in the node's space)
 	vec4 aabb_half; // half extents (xyz), w: margin added to every plane distance
 	uint pool_offset; // first float of the MultiMesh's data in the pool
 	uint stride; // floats per instance
@@ -155,7 +155,8 @@ void main() {
 		const vec3 it = vec3(r0.w, r1.w, r2.w);
 		const mat3 wb = nb * ib; // world basis
 		const vec3 center = nb * (ib * job.aabb_center.xyz + it) + nt;
-		const vec3 half_extents = abs(wb[0]) * job.aabb_half.x + abs(wb[1]) * job.aabb_half.y + abs(wb[2]) * job.aabb_half.z;
+		// The instance's box in the node's space grown by the node's margin on every axis, then in world space.
+		const vec3 half_extents = abs(wb[0]) * job.aabb_half.x + abs(wb[1]) * job.aabb_half.y + abs(wb[2]) * job.aabb_half.z + (abs(nb[0]) + abs(nb[1]) + abs(nb[2])) * job.aabb_center.w;
 		bool visible = true;
 		for (uint p = 0; p < job.plane_count; p++) {
 			const vec4 plane = planes.data[job.planes_offset + p];

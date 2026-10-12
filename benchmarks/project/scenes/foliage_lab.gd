@@ -12,7 +12,9 @@ extends "res://bench/scene_base.gd"
 ##   * bushes (~6 k, 160 triangles) and rocks (~4 k, 80 triangles)
 ##   * trees: trunk + three crown lobes (~420 triangles), ~6 k instances, mostly in a forest ring around the meadow
 ##   * sun with four PCSS cascades (200 m), sky light, SSAO, glow
-## No vertex animation (wind): the materials do not move vertices.
+## No vertex animation by default. --foliage_wind=1: grass, bushes and tree crowns sway in the wind (a vertex shader
+## driven by TIME, the way vegetation shaders usually are), each MultiMeshInstance3D with an extra cull margin that
+## bounds the displacement (decision 0036).
 
 const SIZE := 512.0
 const GRID := 2.0
@@ -25,13 +27,45 @@ const ROCKS := 4000
 
 var sun: DirectionalLight3D
 var layout := "chunks"
+var wind := false
 var _counts := {}
+
+# Wind sway: VERTEX moves by up to strength * 1.25^2 * sqrt(1 + 0.6^2) = 1.82 * strength (mesh space) above y0;
+# the node's extra cull margin bounds it in the node's space (instance scales up to 1.25 / 1.3 / 1.4).
+const WIND_SHADER := """
+shader_type spatial;
+render_mode cull_%s;
+uniform vec3 albedo : source_color;
+uniform float rough = 0.85;
+uniform float strength = 0.1;
+uniform float y0 = 0.0;
+uniform float y1 = 1.0;
+void vertex() {
+	vec3 o = MODEL_MATRIX[3].xyz;
+	float k = clamp((VERTEX.y - y0) / (y1 - y0), 0.0, 1.25);
+	k *= k;
+	float t = TIME * 1.3 + o.x * 0.11 + o.z * 0.07;
+	VERTEX.x += sin(t) * strength * k;
+	VERTEX.z += sin(t * 0.77 + 1.3) * strength * 0.6 * k;
+}
+void fragment() {
+	ALBEDO = albedo;
+	ROUGHNESS = rough;
+}
+"""
+const WIND := {
+	# name: [strength, y0, y1, margin]
+	"grass": [0.06, 0.0, 0.6, 0.2],
+	"bushes": [0.04, 0.0, 1.0, 0.15],
+	"trees": [0.15, 3.0, 8.0, 0.5],
+}
 
 
 func build(p_args: Dictionary) -> void:
 	args = p_args
 	bench_name = "foliage"
 	layout = str(args.get("foliage_layout", "chunks"))
+	wind = str(args.get("foliage_wind", "0")) == "1"
 	_setup_common()
 	_setup_environment()
 	_build_terrain()
@@ -40,7 +74,7 @@ func build(p_args: Dictionary) -> void:
 	_define_cameras()
 	set_time(0.0)
 	info = {"stats": scene_stats(self), "layout": layout, "counts": _counts, "lods": str(args.get("foliage_lods", "0")) == "1",
-		"notes": "Open-world vegetation with MultiMesh instancing (%s layout); sun with 4 cascades." % layout}
+		"wind": wind, "notes": "Open-world vegetation with MultiMesh instancing (%s layout); sun with 4 cascades." % layout}
 
 
 func _setup_environment() -> void:
@@ -215,6 +249,27 @@ func _place(x: float, z: float, yaw: float, s: float, sink := 0.0) -> Transform3
 	return Transform3D(b, Vector3(x, height(x, z) - sink, z))
 
 
+## --foliage_wind=1: the mesh's surfaces get the wind shader with their StandardMaterial3D's colour, roughness and culling.
+func _with_wind(p_mesh: ArrayMesh, p_type: String) -> ArrayMesh:
+	if not wind or not WIND.has(p_type):
+		return p_mesh
+	var w: Array = WIND[p_type]
+	for i in p_mesh.get_surface_count():
+		var sm := p_mesh.surface_get_material(i) as StandardMaterial3D
+		var sh := Shader.new()
+		sh.code = WIND_SHADER % ("disabled" if sm.cull_mode == BaseMaterial3D.CULL_DISABLED else "back")
+		var m := ShaderMaterial.new()
+		m.shader = sh
+		m.set_shader_parameter("albedo", Color(sm.albedo_color.r, sm.albedo_color.g, sm.albedo_color.b))
+		m.set_shader_parameter("rough", sm.roughness)
+		# --foliage_wind_strength=<scale> (default 1): stronger sway, e.g. to show what too small a margin loses.
+		m.set_shader_parameter("strength", w[0] * float(args.get("foliage_wind_strength", "1")))
+		m.set_shader_parameter("y0", w[1])
+		m.set_shader_parameter("y1", w[2])
+		p_mesh.surface_set_material(i, m)
+	return p_mesh
+
+
 ## Instances (transform, colour) per type, then grouped into MultiMeshes by layout.
 ## --foliage_lods=1: the vegetation meshes get LOD levels the way the importer makes them for imported scenes
 ## (ImporterMesh.generate_lods, meshoptimizer), so that Godot's mesh LOD (1-pixel error rule) can coarsen them.
@@ -266,19 +321,22 @@ func _build_vegetation() -> void:
 		var z := rng.randf_range(-half + 4.0, half - 4.0)
 		rocks.append([_place(x, z, rng.randf() * TAU, rng.randf_range(0.5, 2.0), 0.15), Color(1, 1, 1)])
 	_counts = {"grass": grass.size(), "trees": trees.size(), "bushes": bushes.size(), "rocks": rocks.size()}
-	var grass_mesh := _with_lods(_grass_mesh())
+	var grass_mesh := _with_wind(_with_lods(_grass_mesh()), "grass")
+	var tree_mesh := _with_wind(_with_lods(_tree_mesh()), "trees")
+	var bush_mesh := _with_wind(_with_lods(_bush_mesh()), "bushes")
+	var rock_mesh := _with_lods(_rock_mesh())
 	if layout == "single":
 		_add_multimesh("grass", grass_mesh, grass, false, 0.0)
-		_add_multimesh("trees", _with_lods(_tree_mesh()), trees, false, 0.0)
-		_add_multimesh("bushes", _with_lods(_bush_mesh()), bushes, false, 0.0)
-		_add_multimesh("rocks", _with_lods(_rock_mesh()), rocks, false, 0.0)
+		_add_multimesh("trees", tree_mesh, trees, false, 0.0)
+		_add_multimesh("bushes", bush_mesh, bushes, false, 0.0)
+		_add_multimesh("rocks", rock_mesh, rocks, false, 0.0)
 	else:
 		# Grass in 16 m chunks with a visibility range (fades out by distance, as projects usually do); trees, bushes and
 		# rocks in 64 m blocks.
 		_add_chunked("grass", grass_mesh, grass, CHUNK, false, 90.0)
-		_add_chunked("trees", _with_lods(_tree_mesh()), trees, 64.0, false, 0.0)
-		_add_chunked("bushes", _with_lods(_bush_mesh()), bushes, 64.0, false, 0.0)
-		_add_chunked("rocks", _with_lods(_rock_mesh()), rocks, 64.0, false, 0.0)
+		_add_chunked("trees", tree_mesh, trees, 64.0, false, 0.0)
+		_add_chunked("bushes", bush_mesh, bushes, 64.0, false, 0.0)
+		_add_chunked("rocks", rock_mesh, rocks, 64.0, false, 0.0)
 
 
 func _add_chunked(p_name: String, p_mesh: Mesh, p_items: Array, p_chunk: float, p_colors: bool, p_range: float) -> void:
@@ -330,6 +388,11 @@ func _add_multimesh(p_name: String, p_mesh: Mesh, p_items: Array, p_colors: bool
 	var mmi := MultiMeshInstance3D.new()
 	mmi.name = p_name
 	mmi.multimesh = mm
+	var type := p_name.get_slice("_", 0)
+	if wind and WIND.has(type):
+		# --foliage_wind_margin=<scale> (default 1): the margins scaled, e.g. to show that culling with too small a margin
+		# loses swaying instances at the edges of the view.
+		mmi.extra_cull_margin = WIND[type][3] * float(args.get("foliage_wind_margin", "1"))
 	if p_range > 0.0:
 		mmi.visibility_range_end = p_range
 		mmi.visibility_range_end_margin = 10.0

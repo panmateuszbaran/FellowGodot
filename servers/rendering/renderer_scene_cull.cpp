@@ -735,6 +735,7 @@ void RendererSceneCull::instance_set_base(RID p_instance, RID p_base) {
 				geom->geometry_instance->set_layer_mask(instance->layer_mask);
 				geom->geometry_instance->set_pivot_data(instance->sorting_offset, instance->use_aabb_center);
 				geom->geometry_instance->set_lod_bias(instance->lod_bias);
+				geom->geometry_instance->set_fellow_extra_margin(instance->extra_margin);
 				geom->geometry_instance->set_transparency(instance->transparency);
 				geom->geometry_instance->set_use_baked_light(instance->baked_light);
 				geom->geometry_instance->set_use_dynamic_gi(instance->dynamic_gi);
@@ -944,7 +945,7 @@ void RendererSceneCull::instance_set_layer_mask(RID p_instance, uint32_t p_mask)
 		instance->scenario->instance_data[instance->array_index].layer_mask = p_mask;
 	}
 
-	if ((1 << instance->base_type) & RSE::INSTANCE_GEOMETRY_MASK && instance->base_data) {
+	if (((1 << instance->base_type) & RSE::INSTANCE_GEOMETRY_MASK) && instance->base_data) {
 		InstanceGeometryData *geom = static_cast<InstanceGeometryData *>(instance->base_data);
 		ERR_FAIL_NULL(geom->geometry_instance);
 		geom->geometry_instance->set_layer_mask(p_mask);
@@ -965,7 +966,7 @@ void RendererSceneCull::instance_set_pivot_data(RID p_instance, float p_sorting_
 	instance->sorting_offset = p_sorting_offset;
 	instance->use_aabb_center = p_use_aabb_center;
 
-	if ((1 << instance->base_type) & RSE::INSTANCE_GEOMETRY_MASK && instance->base_data) {
+	if (((1 << instance->base_type) & RSE::INSTANCE_GEOMETRY_MASK) && instance->base_data) {
 		InstanceGeometryData *geom = static_cast<InstanceGeometryData *>(instance->base_data);
 		ERR_FAIL_NULL(geom->geometry_instance);
 		geom->geometry_instance->set_pivot_data(p_sorting_offset, p_use_aabb_center);
@@ -982,7 +983,7 @@ void RendererSceneCull::instance_geometry_set_transparency(RID p_instance, float
 	instance->transparency = p_transparency;
 	_fellow_shadow_instance_changed(instance);
 
-	if ((1 << instance->base_type) & RSE::INSTANCE_GEOMETRY_MASK && instance->base_data) {
+	if (((1 << instance->base_type) & RSE::INSTANCE_GEOMETRY_MASK) && instance->base_data) {
 		InstanceGeometryData *geom = static_cast<InstanceGeometryData *>(instance->base_data);
 		ERR_FAIL_NULL(geom->geometry_instance);
 		geom->geometry_instance->set_transparency(p_transparency);
@@ -1140,7 +1141,7 @@ void RendererSceneCull::instance_attach_skeleton(RID p_instance, RID p_skeleton)
 
 	_instance_queue_update(instance, true, true);
 
-	if ((1 << instance->base_type) & RSE::INSTANCE_GEOMETRY_MASK && instance->base_data) {
+	if (((1 << instance->base_type) & RSE::INSTANCE_GEOMETRY_MASK) && instance->base_data) {
 		_instance_update_mesh_instance(instance);
 
 		InstanceGeometryData *geom = static_cast<InstanceGeometryData *>(instance->base_data);
@@ -1155,6 +1156,12 @@ void RendererSceneCull::instance_set_extra_visibility_margin(RID p_instance, rea
 
 	instance->extra_margin = p_margin;
 	_instance_queue_update(instance, true, false);
+	if (((1 << instance->base_type) & RSE::INSTANCE_GEOMETRY_MASK) && instance->base_data) {
+		InstanceGeometryData *geom = static_cast<InstanceGeometryData *>(instance->base_data);
+		if (geom->geometry_instance) {
+			geom->geometry_instance->set_fellow_extra_margin(p_margin);
+		}
+	}
 }
 
 void RendererSceneCull::instance_set_ignore_culling(RID p_instance, bool p_enabled) {
@@ -1264,7 +1271,7 @@ void RendererSceneCull::instance_geometry_set_flag(RID p_instance, RSE::Instance
 				}
 			}
 
-			if ((1 << instance->base_type) & RSE::INSTANCE_GEOMETRY_MASK && instance->base_data) {
+			if (((1 << instance->base_type) & RSE::INSTANCE_GEOMETRY_MASK) && instance->base_data) {
 				InstanceGeometryData *geom = static_cast<InstanceGeometryData *>(instance->base_data);
 				ERR_FAIL_NULL(geom->geometry_instance);
 				geom->geometry_instance->set_use_baked_light(p_enabled);
@@ -1285,7 +1292,7 @@ void RendererSceneCull::instance_geometry_set_flag(RID p_instance, RSE::Instance
 			//once out of octree, can be changed
 			instance->dynamic_gi = p_enabled;
 
-			if ((1 << instance->base_type) & RSE::INSTANCE_GEOMETRY_MASK && instance->base_data) {
+			if (((1 << instance->base_type) & RSE::INSTANCE_GEOMETRY_MASK) && instance->base_data) {
 				InstanceGeometryData *geom = static_cast<InstanceGeometryData *>(instance->base_data);
 				ERR_FAIL_NULL(geom->geometry_instance);
 				geom->geometry_instance->set_use_dynamic_gi(p_enabled);
@@ -1345,7 +1352,7 @@ void RendererSceneCull::instance_geometry_set_cast_shadows_setting(RID p_instanc
 		}
 	}
 
-	if ((1 << instance->base_type) & RSE::INSTANCE_GEOMETRY_MASK && instance->base_data) {
+	if (((1 << instance->base_type) & RSE::INSTANCE_GEOMETRY_MASK) && instance->base_data) {
 		InstanceGeometryData *geom = static_cast<InstanceGeometryData *>(instance->base_data);
 		ERR_FAIL_NULL(geom->geometry_instance);
 
@@ -1362,7 +1369,7 @@ void RendererSceneCull::instance_geometry_set_material_override(RID p_instance, 
 	instance->material_override = p_material;
 	_instance_queue_update(instance, false, true);
 
-	if ((1 << instance->base_type) & RSE::INSTANCE_GEOMETRY_MASK && instance->base_data) {
+	if (((1 << instance->base_type) & RSE::INSTANCE_GEOMETRY_MASK) && instance->base_data) {
 		InstanceGeometryData *geom = static_cast<InstanceGeometryData *>(instance->base_data);
 		ERR_FAIL_NULL(geom->geometry_instance);
 		geom->geometry_instance->set_material_override(p_material);
@@ -1376,7 +1383,7 @@ void RendererSceneCull::instance_geometry_set_material_overlay(RID p_instance, R
 	instance->material_overlay = p_material;
 	_instance_queue_update(instance, false, true);
 
-	if ((1 << instance->base_type) & RSE::INSTANCE_GEOMETRY_MASK && instance->base_data) {
+	if (((1 << instance->base_type) & RSE::INSTANCE_GEOMETRY_MASK) && instance->base_data) {
 		InstanceGeometryData *geom = static_cast<InstanceGeometryData *>(instance->base_data);
 		ERR_FAIL_NULL(geom->geometry_instance);
 		geom->geometry_instance->set_material_overlay(p_material);
@@ -1549,7 +1556,7 @@ void RendererSceneCull::instance_geometry_set_lightmap(RID p_instance, RID p_lig
 		lightmap_instance_rid = lightmap_data->instance;
 	}
 
-	if ((1 << instance->base_type) & RSE::INSTANCE_GEOMETRY_MASK && instance->base_data) {
+	if (((1 << instance->base_type) & RSE::INSTANCE_GEOMETRY_MASK) && instance->base_data) {
 		InstanceGeometryData *geom = static_cast<InstanceGeometryData *>(instance->base_data);
 		ERR_FAIL_NULL(geom->geometry_instance);
 		geom->geometry_instance->set_use_lightmap(lightmap_instance_rid, p_lightmap_uv_scale, p_slice_index);
@@ -1563,7 +1570,7 @@ void RendererSceneCull::instance_geometry_set_lod_bias(RID p_instance, float p_l
 	instance->lod_bias = p_lod_bias;
 	_fellow_shadow_instance_changed(instance);
 
-	if ((1 << instance->base_type) & RSE::INSTANCE_GEOMETRY_MASK && instance->base_data) {
+	if (((1 << instance->base_type) & RSE::INSTANCE_GEOMETRY_MASK) && instance->base_data) {
 		InstanceGeometryData *geom = static_cast<InstanceGeometryData *>(instance->base_data);
 		ERR_FAIL_NULL(geom->geometry_instance);
 		geom->geometry_instance->set_lod_bias(p_lod_bias);

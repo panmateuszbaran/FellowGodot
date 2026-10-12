@@ -90,6 +90,10 @@ void RenderGeometryInstanceBase::set_lod_bias(float p_lod_bias) {
 	lod_bias = p_lod_bias;
 }
 
+void RenderGeometryInstanceBase::set_fellow_extra_margin(float p_margin) {
+	fellow_extra_margin = p_margin;
+}
+
 void RenderGeometryInstanceBase::set_layer_mask(uint32_t p_layer_mask) {
 	layer_mask = p_layer_mask;
 	fellow_data_version++;

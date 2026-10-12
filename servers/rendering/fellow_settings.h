@@ -98,6 +98,10 @@ inline bool fast_luminance_reduce() {
 inline bool debug_occlusion_stats() {
 	return GLOBAL_GET_CACHED(bool, "rendering/fellow/debug/occlusion_stats");
 }
+// MultiMesh culling's instance counters (tested, drawn, coarse) read back from the GPU every frame (decision 0034).
+inline bool debug_multimesh_stats() {
+	return GLOBAL_GET_CACHED(bool, "rendering/fellow/debug/multimesh_stats");
+}
 // Debug, wrong images: opaque list elements the test found hidden are left out in the following frames (to size what
 // culling would save; decision 0026).
 inline bool debug_occlusion_cull_approx() {
@@ -329,6 +333,12 @@ inline bool multimesh_culling() {
 // project's mesh LOD threshold allows); off by default.
 inline bool multimesh_instance_lod() {
 	return geometry_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/geometry/multimesh_instance_lod");
+}
+// MultiMesh culling of materials that move vertices (docs/decisions/0036-multimesh-cull-vertex-motion.md): on nodes
+// with an extra cull margin, the margin is taken as the bound of the vertices' displacement (in the node's space) and
+// added to each instance's box. Exact when the material keeps within it (what stock assumes of the whole node); off.
+inline bool multimesh_cull_vertex_motion() {
+	return GLOBAL_GET_CACHED(bool, "rendering/fellow/geometry/multimesh_cull_vertex_motion");
 }
 inline int multimesh_cull_min_instances() {
 	return GLOBAL_GET_CACHED(int, "rendering/fellow/geometry/multimesh_cull_min_instances");
@@ -683,9 +693,10 @@ struct Stats {
 	SafeNumeric<uint64_t> geometry_multimesh_cull_passes; // culling dispatches (camera passes, shadow passes)
 	SafeNumeric<uint64_t> geometry_multimesh_cull_jobs; // MultiMesh instances x passes tested
 	SafeNumeric<uint64_t> geometry_multimesh_cull_draws; // draws recorded indirect with the visible instances
-	SafeNumeric<uint64_t> geometry_multimesh_instances_tested; // instances tested (read back asynchronously)
+	SafeNumeric<uint64_t> geometry_multimesh_instances_tested; // instances tested (read back asynchronously with debug/multimesh_stats)
 	SafeNumeric<uint64_t> geometry_multimesh_instances_visible; // of which drawn
 	SafeNumeric<uint64_t> geometry_multimesh_instances_coarse; // of which at a coarser level than 0 (per-instance LOD)
+	SafeNumeric<uint64_t> geometry_multimesh_jobs_inside; // MultiMeshes left whole: their box inside the pass's volume
 	SafeNumeric<uint64_t> geometry_multimesh_pool_copies; // MultiMesh data copied into the pool
 	SafeNumeric<uint64_t> geometry_multimesh_pool_grows;
 	SafeNumeric<uint64_t> vrs_frames; // frames whose shading rates were set adaptively

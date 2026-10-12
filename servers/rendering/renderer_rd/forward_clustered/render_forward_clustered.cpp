@@ -1774,9 +1774,12 @@ void RenderForwardClustered::_fellow_multimesh_cull_collect(uint32_t p_set, Rend
 			continue;
 		}
 		const SceneShaderForwardClustered::ShaderData *shaders[2] = { surf->shader, surf->shader_shadow };
+		// VERTEX written by the material: culled only under decision 0036, with the node's extra cull margin as the
+		// displacement's bound.
+		const bool bounded_vertex_motion = inst->fellow_extra_margin > 0.0f && Fellow::multimesh_cull_vertex_motion();
 		bool moves = false;
 		for (const SceneShaderForwardClustered::ShaderData *sh : shaders) {
-			if (sh == nullptr || sh->uses_vertex || sh->uses_position || sh->writes_modelview_or_projection || sh->uses_z_clip_scale || sh->uses_particle_trails || sh->uses_point_size || sh->fellow_uses_instance_id) {
+			if (sh == nullptr || (sh->uses_vertex && !bounded_vertex_motion) || sh->uses_position || sh->writes_modelview_or_projection || sh->uses_z_clip_scale || sh->uses_particle_trails || sh->uses_point_size || sh->fellow_uses_instance_id) {
 				moves = true;
 			}
 		}
@@ -1806,7 +1809,21 @@ void RenderForwardClustered::_fellow_multimesh_cull_collect(uint32_t p_set, Rend
 			job = it->value;
 		} else {
 			const RID base = inst->data->base;
-			if (!mesh_storage->_multimesh_uses_motion_vectors_offsets(base) && mesh_storage->fellow_multimesh_get_transform_format(base) == RSE::MULTIMESH_TRANSFORM_3D) {
+			// A node whose whole box (stock's, with its margin) lies inside the volume has nothing to cull: drawn whole, as
+			// stock draws it, without a job (unless per-instance LOD needs one).
+			bool inside = lod_count == 0;
+			if (inside) {
+				const Vector3 c = inst->transformed_aabb.get_center();
+				const Vector3 h = inst->transformed_aabb.size * 0.5;
+				for (int p = 0; p < p_plane_count && inside; p++) {
+					const Vector3 &n = p_planes[p].normal;
+					inside = n.dot(c) + Math::abs(n.x) * h.x + Math::abs(n.y) * h.y + Math::abs(n.z) * h.z < p_planes[p].d;
+				}
+				if (inside) {
+					Fellow::stats().geometry_multimesh_jobs_inside.increment();
+				}
+			}
+			if (!inside && !mesh_storage->_multimesh_uses_motion_vectors_offsets(base) && mesh_storage->fellow_multimesh_get_transform_format(base) == RSE::MULTIMESH_TRANSFORM_3D) {
 				const int64_t pool_offset = mesh_storage->fellow_multimesh_pool_prepare(base);
 				const uint32_t stride = mesh_storage->fellow_multimesh_get_stride(base);
 				const RID mesh = mesh_storage->multimesh_get_mesh(base);
@@ -1834,6 +1851,9 @@ void RenderForwardClustered::_fellow_multimesh_cull_collect(uint32_t p_set, Rend
 					j.aabb_center[0] = center.x;
 					j.aabb_center[1] = center.y;
 					j.aabb_center[2] = center.z;
+					// The node's extra cull margin (in its space), added to every instance's box as stock adds it to the
+					// node's box: never fewer pixels covered, so exact whatever the material.
+					j.aabb_center[3] = MAX(0.0f, inst->fellow_extra_margin);
 					j.aabb_half[0] = half.x;
 					j.aabb_half[1] = half.y;
 					j.aabb_half[2] = half.z;
@@ -2017,7 +2037,9 @@ void RenderForwardClustered::_fellow_multimesh_cull_dispatch(uint32_t p_set) {
 	rd->compute_list_set_push_constant(list, &push, sizeof(push));
 	rd->compute_list_dispatch(list, block_count + (draw_count + 63) / 64, 1, 1);
 	rd->compute_list_end();
-	rd->buffer_get_data_async(set.counters, callable_mp_static(&RenderForwardClustered::_fellow_multimesh_cull_readback), 0, 16);
+	if (Fellow::debug_multimesh_stats()) {
+		rd->buffer_get_data_async(set.counters, callable_mp_static(&RenderForwardClustered::_fellow_multimesh_cull_readback), 0, 16);
+	}
 
 	set.active = true;
 	Fellow::stats().geometry_multimesh_cull_passes.increment();

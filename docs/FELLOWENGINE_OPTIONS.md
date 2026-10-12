@@ -41,7 +41,8 @@ and no MSAA; otherwise every tile is shaded at full rate.
 
 | setting | what it does | image cost | record |
 |---|---|---|---|
-| `geometry/multimesh_instance_lod` (with `geometry/multimesh_culling`) | each MultiMesh instance gets the mesh LOD level stock gives a node of its own (distance to its box, the project's `mesh_lod_threshold`), instead of the level of the MultiMesh's whole box | not visually lossless where many far instances coarsen together: Foliage Lab from above 33.2 dB (far grass clumps lose blades); at ground level 48.2-64.6 dB | 0035 |
+| `geometry/multimesh_instance_lod` (with `geometry/multimesh_culling`) | each MultiMesh instance gets the mesh LOD level stock gives a node of its own (distance to its box, the project's `mesh_lod_threshold`), instead of the level of the MultiMesh's whole box | not visually lossless where many far instances coarsen together: Foliage Lab from above 33-40 dB (far grass clumps lose blades); at ground level 48.2-64.6 dB; −2.2 % with the bench's light LOD meshes | 0035 |
+| `geometry/multimesh_cull_vertex_motion` (with `geometry/multimesh_culling`) | MultiMeshes whose material moves vertices (wind) are culled too when their node has an extra cull margin: the margin is taken as how far the vertices move | none while the material keeps within the node's margin (Foliage Lab with wind: 0 differing pixels); beyond it, instances near the view's edges can be lost | 0036 |
 
 ## Exact options (on by default unless noted)
 
@@ -49,7 +50,7 @@ and no MSAA; otherwise every tile is shaded at full rate.
 |---|---|---|
 | Shadows | `shadows/directional_cache`, `shadows/skip_*`, `shadows/directional_max_mip`, `shadows/positional_max_mip` | 0004, 0005 |
 | Geometry | `geometry/mesh_clusters` (frustum culling inside large static surfaces) | 0007 |
-| Geometry (off, measuring) | `geometry/multimesh_culling` (MultiMesh instances culled per pass on the GPU; an autotune tunable), `geometry/multimesh_cull_min_instances` | 0034 |
+| Geometry | `geometry/multimesh_culling` (from `fellow93`: MultiMesh instances culled one by one per pass on the GPU; an autotune tunable), `geometry/multimesh_cull_min_instances` | 0034 |
 | Lights | `lights/cluster_depth_slices`, `lights/zero_attenuation_skip`, `lights/cluster_pack_parallel` | 0008, 0014 |
 | Shading | `shading/blended_alpha_zero_skip` | 0010 |
 | Post | `postfx/fast_luminance_reduce`, `postfx/taa_history_pingpong`, `postfx/taa_direct_output` | 0025, 0002, 0033 |

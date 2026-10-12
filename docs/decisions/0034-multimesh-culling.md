@@ -1,6 +1,7 @@
 # 0034 — MultiMesh instance culling on the GPU
 
-Status: **MEASURING** · Branch `fellow/geometry` · Toggle `rendering/fellow/geometry/multimesh_culling` (runtime, off),
+Status: **MEASURING** (on by default in `fellow93`, measured in `m7_f103`) · Branch `fellow/geometry` · Toggle
+`rendering/fellow/geometry/multimesh_culling` (runtime; off until `fellow92`),
 `geometry/multimesh_cull_min_instances` (64) · Code: `shaders/effects/fellow_multimesh_cull.glsl`,
 `render_forward_clustered.{h,cpp}` (`_fellow_multimesh_cull_*`), `storage_rd/mesh_storage.{h,cpp}` (the instance pool),
 `fellow_settings.*`.
@@ -75,6 +76,16 @@ unordered GPU writes), so these numbers are only meaningful against that floor. 
 twice) produced no report (its labels `a`/`b` also occur inside the file names, which `variant_diff.py` stripped;
 fixed in `fellow92`), so the floor is measured again in `m7_f101`.
 
+`m7_f101` (`fellow92`, one MultiMesh per type, `foliage_walk`, 60 frames, TAA), one session of three processes:
+
+| | PSNR mean / min | max \|d\| | pixels > 2 |
+|---|---:|---:|---:|
+| culling on against culling on (the floor) | 78.27 / 74.93 dB | 11 | 0.000 % |
+| culling off against on (first run) | 78.21 / 74.65 dB | 11 | 0.000 % |
+| culling off against on (second run) | 78.21 / 74.72 dB | 12 | 0.000 % |
+
+The difference is the floor's: on RTX too the culling leaves the image as it is.
+
 ## Performance
 
 In one process (`m7_f99_*_ab`, blocks of frames alternating off / on, per-pass GPU timings):
@@ -90,7 +101,7 @@ Between processes (`m7_f100`, 3 runs each, 1080p, frame ms):
 |---|---:|---:|---:|
 | Foliage Lab, one MultiMesh per type | 11.62 | 9.39 (−19.2 %) | **5.87 (−49.5 %)** |
 | Foliage Lab, chunks | 3.74 | 3.45 (−7.9 %) | 3.29 (−12.1 %) |
-| PBR Lab (a few small MultiMeshes) | 2.66 | 2.64 (−1.1 %) | 2.69 (+1.1 %, within noise) |
+| PBR Lab (one MultiMesh: 600 grass cards in a patch) | 2.66 | 2.64 (−1.1 %) | 2.69 (+1.1 %, within noise) |
 
 Where the MultiMeshes are already split into chunks the gain is small and a scene with only a few small ones can lose
 the culls' cost, so from `fellow92`:
@@ -101,3 +112,32 @@ the culls' cost, so from `fellow92`:
 * **Autotune tunable** (`TUNE_MULTIMESH_CULLING`, 0020): while culling is on and the lists have MultiMesh elements it
   can take (within the last 120 frames), autotune measures the frame with and without it and keeps the faster way. It
   is exact, so it is switched like the other exact tunables.
+
+### `fellow92` measured (`m7_f102`, 1080p)
+
+Between processes, 3 runs each, frame ms (culling on: autotuned):
+
+| scene | stock | culling off | culling on | on against stock |
+|---|---:|---:|---:|---:|
+| Foliage Lab, one MultiMesh per type | 10.94 | 8.98 | **5.34** | **−51.2 %** (p < 0.001, 3/3) |
+| Foliage Lab, chunks | 3.84 | 3.66 | 3.50 | −8.9 % (p 0.001, 3/3) |
+| PBR Lab | 2.64 | 2.62 | 2.69 | +1.9 % (within noise, p 0.63) |
+| Stress Lab (400 moving boxes: new data every frame, so not culled under TAA's motion vectors) | 5.16 | 5.12 | 5.11 | −0.9 % (within noise) |
+
+In one process (autotune off, blocks alternating off / on, 240 block pairs):
+
+| scene | frame | GPU | render thread | where |
+|---|---:|---:|---:|---|
+| Foliage Lab, one MultiMesh per type | −39.7 % (−3.35 ms) | −3.36 ms | +0.021 ms | camera's cull **0.092 ms** (was 0.295: the parallel scan); depth pre-pass −1.26, opaque −1.29, shadows −0.94 ms |
+| Foliage Lab, chunks | −3.8 % | −0.131 ms | +0.037 ms | culls 0.029 ms; pre-pass −0.09, opaque −0.08, shadows +0.03 ms |
+| PBR Lab | +0.8 % (+0.020 ms) | +0.020 ms | +0.036 ms | camera's cull 0.013 ms, shadow passes +0.062 ms, nothing culled worth it |
+
+PBR Lab's patch is small and mostly in view: the culls cost more than they save, and 0.02 ms is below what autotune
+can tell apart (undecided keeps the choice). From `fellow93`:
+
+* **Nothing to cull, no job.** A MultiMesh whose whole box (stock's box, with the node's margin) lies inside the pass's
+  volume is drawn whole, as stock draws it, without a job. A set without jobs dispatches nothing. Exact (drawing an
+  instance can never lose a pixel).
+* **Counters only for diagnostics.** The instance counters (tested, drawn, coarse) are read back from the GPU only with
+  `debug/multimesh_stats` (the benchmark captures turn it on).
+
