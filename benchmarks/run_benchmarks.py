@@ -315,23 +315,21 @@ def parse_build(spec: str) -> tuple[str, str, str, list[str], list[str], list[st
     --builds "f256=fellow#--fluid_res=256,f256_hidden=fellow#--fluid_res=256 --water_visible=0"
     Engine command-line arguments (before '--') follow '^', e.g. "rt=fellow^--render-thread separate".
     Project settings that are only read at startup follow '%' (written to the project's override.cfg for that run
-    only), e.g. "fq3=fellow%rendering/rendering_device/vsync/frame_queue_size=3"."""
-    overrides = []
-    if "%" in spec:
-        spec, o = spec.split("%", 1)
-        overrides = [x.strip() for x in o.split(";") if x.strip()]
-    eargs = []
-    if "^" in spec:
-        spec, e = spec.split("^", 1)
-        eargs = e.split()
-    extra = []
-    if "#" in spec:
-        spec, e = spec.split("#", 1)
-        extra = e.split()
-    toggles = ""
-    if "@" in spec:
-        spec, toggles = spec.split("@", 1)
-    label, dirname = spec.split("=", 1) if "=" in spec else (spec, spec)
+    only), e.g. "fq3=fellow%rendering/rendering_device/vsync/frame_queue_size=3". The parts may come in any order
+    ("x=fellow%a/b=1#--arg=v" is "x=fellow#--arg=v%a/b=1"; until m8_f107 a '#' after '%' was read as part of the
+    override)."""
+    # The parts after the label may come in any order: each runs from its marker to the next marker.
+    parts = {}
+    marks = sorted((spec.index(m), m) for m in "@#^%" if m in spec)
+    head = spec[: marks[0][0]] if marks else spec
+    for n, (pos, m) in enumerate(marks):
+        end = marks[n + 1][0] if n + 1 < len(marks) else len(spec)
+        parts[m] = spec[pos + 1 : end]
+    overrides = [x.strip() for x in parts.get("%", "").split(";") if x.strip()]
+    eargs = parts.get("^", "").split()
+    extra = parts.get("#", "").split()
+    toggles = parts.get("@", "")
+    label, dirname = head.split("=", 1) if "=" in head else (head, head)
     return label.strip(), dirname.strip(), toggles.replace(";", ",").strip(), extra, eargs, overrides
 
 
