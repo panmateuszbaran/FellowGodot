@@ -1255,6 +1255,22 @@ vec3 encode24(vec3 v) {
 }
 #endif // MODE_RENDER_NORMAL_ROUGHNESS
 
+#if defined(FELLOW_EXP_BIT3) && !defined(MODE_RENDER_DEPTH) && !defined(MODE_UNSHADED)
+// Diagnostics: shares of the shadow filter calls (positional with bit 3 alone, directional with bit 4 as well): red, the
+// max-mip early-outs; green, the full path with every tap the same; blue, the full path with a partial result.
+vec3 fellow_dbg_color() {
+#ifdef FELLOW_EXP_BIT4
+	// Directional soft shadows (PCSS): red, decided before the blocker search; green, decided by the search alone (no
+	// blocker) or after it without the filter loop; blue, the filter loop ran.
+	float calls = float(max(fellow_dbg_dir_call, 1u));
+	return vec3(float(fellow_dbg_dir_call - fellow_dbg_dir_full), float(fellow_dbg_dir_full - fellow_dbg_dir_pcf), float(fellow_dbg_dir_pcf)) / calls;
+#else
+	float calls = float(max(fellow_dbg_pos_call, 1u));
+	return vec3(float(fellow_dbg_pos_call - fellow_dbg_pos_full), float(fellow_dbg_pos_uniform), float(fellow_dbg_pos_full - fellow_dbg_pos_uniform)) / calls;
+#endif
+}
+#endif
+
 void fragment_shader(in SceneData scene_data) {
 	uint instance_index = instance_index_interp;
 	fellow_element_init(instance_index);
@@ -3238,6 +3254,11 @@ void fragment_shader(in SceneData scene_data) {
 	specular_buffer.rgb = specular_buffer.rgb * fog.a;
 #endif //!FOG_DISABLED
 
+#if defined(FELLOW_EXP_BIT3) && !defined(MODE_UNSHADED)
+	diffuse_buffer.rgb = fellow_dbg_color();
+	specular_buffer.rgb = vec3(0.0);
+#endif
+
 #else //MODE_SEPARATE_SPECULAR
 
 	alpha *= scene_data.pass_alpha_multiplier;
@@ -3252,6 +3273,11 @@ void fragment_shader(in SceneData scene_data) {
 #ifndef FOG_DISABLED
 	frag_color.rgb = frag_color.rgb * fog.a + fog.rgb;
 #endif //!FOG_DISABLED
+
+#if defined(FELLOW_EXP_BIT3) && !defined(MODE_UNSHADED)
+	// Diagnostics (see fellow_dbg_color()).
+	frag_color.rgb = fellow_dbg_color();
+#endif
 
 #if defined(PREMUL_ALPHA_USED) && !defined(MODE_RENDER_DEPTH)
 	frag_color.rgb *= premul_alpha;

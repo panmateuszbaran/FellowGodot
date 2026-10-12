@@ -18,6 +18,29 @@
 #define SPEC_CONSTANT_LOOP_ANNOTATION
 #endif
 
+#ifdef FELLOW_EXP_BIT3
+// FellowEngine diagnostics (debug/scene_shader_experiments bit 8): how often the shadow filters run their taps or take
+// the max-mip early-outs; the colour pass writes the counts instead of the lit colour (see scene_forward_clustered.glsl).
+uint fellow_dbg_dir_call = 0u;
+uint fellow_dbg_dir_full = 0u;
+uint fellow_dbg_dir_uniform = 0u; // full path, every tap the same (result exactly 0 or 1)
+uint fellow_dbg_dir_pcf = 0u; // PCSS: the filter loop ran (after the blocker search)
+uint fellow_dbg_pos_call = 0u;
+uint fellow_dbg_pos_full = 0u;
+uint fellow_dbg_pos_uniform = 0u;
+#define FELLOW_DBG_INC(m_var) m_var++
+half fellow_dbg_result(inout uint r_counter, half p_value) {
+	if (p_value == half(0.0) || p_value == half(1.0)) {
+		r_counter++;
+	}
+	return p_value;
+}
+#define FELLOW_DBG_RESULT(m_var, m_value) fellow_dbg_result(m_var, m_value)
+#else
+#define FELLOW_DBG_INC(m_var)
+#define FELLOW_DBG_RESULT(m_var, m_value) (m_value)
+#endif
+
 half D_GGX(half NoH, half roughness, hvec3 n, hvec3 h) {
 	half a = NoH * roughness;
 #ifdef EXPLICIT_FP16
@@ -339,11 +362,36 @@ vec2 fellow_shadow_window_minmax(texture2D p_pyramid, vec2 p_uv, vec2 p_half_uv)
 	int extent = max(hi.x - lo.x, hi.y - lo.y) + 1;
 	// Stride 2^k >= extent (k >= 2: boxes of up to 4 texels use the finest stored windows), level k - 2.
 	int k = extent <= 4 ? 2 : findMSB(extent - 1) + 1;
+#if defined(FELLOW_EXP_BIT5) || defined(FELLOW_EXP_BIT6)
+	// Experiment (debug/scene_shader_experiments 32: one level finer, 64: two levels finer): windows of a finer level,
+	// as many as cover the box (each covers two cells of its stride: cells c, c + 2, ... up to the box's last cell), so
+	// the union overshoots the box by at most one stride on each side instead of up to the box's size.
+#ifdef FELLOW_EXP_BIT6
+	int kf = max(2, k - 2);
+#else
+	int kf = max(2, k - 1);
+#endif
+	int mipf = kf - 2;
+	if (mipf >= textureQueryLevels(sampler2D(p_pyramid, SAMPLER_NEAREST_CLAMP))) {
+		return vec2(0.0, 1.0);
+	}
+	ivec2 c0 = lo >> kf;
+	ivec2 c1 = hi >> kf;
+	vec2 mmf = vec2(1.0, 0.0);
+	for (int y = c0.y; y <= c1.y; y += 2) {
+		for (int x = c0.x; x <= c1.x; x += 2) {
+			vec2 w = texelFetch(sampler2D(p_pyramid, SAMPLER_NEAREST_CLAMP), ivec2(x, y), mipf).rg;
+			mmf = vec2(min(mmf.x, w.x), max(mmf.y, w.y));
+		}
+	}
+	return mmf;
+#else
 	int mip = k - 2;
 	if (mip >= textureQueryLevels(sampler2D(p_pyramid, SAMPLER_NEAREST_CLAMP))) {
 		return vec2(0.0, 1.0);
 	}
 	return texelFetch(sampler2D(p_pyramid, SAMPLER_NEAREST_CLAMP), lo >> k, mip).rg;
+#endif
 }
 
 vec2 fellow_shadow_box_minmax(vec2 p_uv, vec2 p_half_uv) {
@@ -354,6 +402,7 @@ vec2 fellow_shadow_box_minmax(vec2 p_uv, vec2 p_half_uv) {
 half sample_directional_pcf_shadow(texture2D shadow, vec2 shadow_pixel_size, vec4 coord, float taa_frame_count) {
 	vec2 pos = coord.xy;
 	float depth = coord.z;
+	FELLOW_DBG_INC(fellow_dbg_dir_call);
 
 	//if only one sample is taken, take it from the center
 	if (sc_directional_soft_shadow_samples() == 0) {
@@ -377,6 +426,7 @@ half sample_directional_pcf_shadow(texture2D shadow, vec2 shadow_pixel_size, vec
 	}
 #endif
 
+	FELLOW_DBG_INC(fellow_dbg_dir_full);
 	mat2 disk_rotation;
 	{
 		float r = quick_hash(gl_FragCoord.xy + vec2(taa_frame_count * 5.588238)) * 2.0 * M_PI;
@@ -392,12 +442,13 @@ half sample_directional_pcf_shadow(texture2D shadow, vec2 shadow_pixel_size, vec
 		avg += textureProj(sampler2DShadow(shadow, shadow_sampler), vec4(pos + shadow_pixel_size * (disk_rotation * scene_data_block.data.directional_soft_shadow_kernel[i].xy), depth, 1.0));
 	}
 
-	return half(avg * (1.0 / float(sc_directional_soft_shadow_samples())));
+	return FELLOW_DBG_RESULT(fellow_dbg_dir_uniform, half(avg * (1.0 / float(sc_directional_soft_shadow_samples()))));
 }
 
 half sample_pcf_shadow(texture2D shadow, vec2 shadow_pixel_size, vec3 coord, float taa_frame_count) {
 	vec2 pos = coord.xy;
 	float depth = coord.z;
+	FELLOW_DBG_INC(fellow_dbg_pos_call);
 
 	//if only one sample is taken, take it from the center
 	if (sc_soft_shadow_samples() == 0) {
@@ -419,6 +470,7 @@ half sample_pcf_shadow(texture2D shadow, vec2 shadow_pixel_size, vec3 coord, flo
 	}
 #endif
 
+	FELLOW_DBG_INC(fellow_dbg_pos_full);
 	mat2 disk_rotation;
 	{
 		float r = quick_hash(gl_FragCoord.xy + vec2(taa_frame_count * 5.588238)) * 2.0 * M_PI;
@@ -434,10 +486,11 @@ half sample_pcf_shadow(texture2D shadow, vec2 shadow_pixel_size, vec3 coord, flo
 		avg += textureProj(sampler2DShadow(shadow, shadow_sampler), vec4(pos + shadow_pixel_size * (disk_rotation * scene_data_block.data.soft_shadow_kernel[i].xy), depth, 1.0));
 	}
 
-	return half(avg * (1.0 / float(sc_soft_shadow_samples())));
+	return FELLOW_DBG_RESULT(fellow_dbg_pos_uniform, half(avg * (1.0 / float(sc_soft_shadow_samples()))));
 }
 
 half sample_omni_pcf_shadow(texture2D shadow, float blur_scale, vec2 coord, vec4 uv_rect, vec2 flip_offset, float depth, float taa_frame_count) {
+	FELLOW_DBG_INC(fellow_dbg_pos_call);
 	//if only one sample is taken, take it from the center
 	if (sc_soft_shadow_samples() == 0) {
 		vec2 pos = coord * 0.5 + 0.5;
@@ -465,6 +518,7 @@ half sample_omni_pcf_shadow(texture2D shadow, float blur_scale, vec2 coord, vec4
 	}
 #endif
 
+	FELLOW_DBG_INC(fellow_dbg_pos_full);
 	mat2 disk_rotation;
 	{
 		float r = quick_hash(gl_FragCoord.xy + vec2(taa_frame_count * 5.588238)) * 2.0 * M_PI;
@@ -498,10 +552,11 @@ half sample_omni_pcf_shadow(texture2D shadow, float blur_scale, vec2 coord, vec4
 		avg += textureProj(sampler2DShadow(shadow, shadow_sampler), vec4(sample_coord, depth, 1.0));
 	}
 
-	return half(avg * (1.0 / float(sc_soft_shadow_samples())));
+	return FELLOW_DBG_RESULT(fellow_dbg_pos_uniform, half(avg * (1.0 / float(sc_soft_shadow_samples()))));
 }
 
 half sample_directional_soft_shadow(texture2D shadow, vec3 pssm_coord, vec2 tex_scale, float taa_frame_count) {
+	FELLOW_DBG_INC(fellow_dbg_dir_call);
 #ifdef FELLOW_SHADOW_MAX_MIP
 	// FellowEngine: the blocker search below takes bilinear samples inside |tex_scale| (per axis) of pssm_coord.xy. If no
 	// atlas texel there is closer to the light than the receiver, it finds no blocker and returns 1.0: return it now.
@@ -533,6 +588,7 @@ half sample_directional_soft_shadow(texture2D shadow, vec3 pssm_coord, vec2 tex_
 	float blocker_count = 0.0;
 	float blocker_average = 0.0;
 
+	FELLOW_DBG_INC(fellow_dbg_dir_full);
 	mat2 disk_rotation;
 	{
 		float r = quick_hash(gl_FragCoord.xy + vec2(taa_frame_count * 5.588238)) * 2.0 * M_PI;
@@ -565,6 +621,22 @@ half sample_directional_soft_shadow(texture2D shadow, vec3 pssm_coord, vec2 tex_
 		}
 		tex_scale *= penumbra;
 
+#if defined(FELLOW_SHADOW_MAX_MIP) && defined(FELLOW_EXP_BIT7)
+		// FellowEngine experiment (debug/scene_shader_experiments 128): the filter below takes 2x2 comparisons within
+		// |tex_scale| (per axis) of pssm_coord.xy. Every atlas texel there farther from the light than the receiver: all
+		// taps lit, the loop's result is 1.0; every texel there closer (plus the margin): 0.0. (The early-outs above decide
+		// from the search radius before the search; this one from the penumbra after it.)
+		if (sc_fellow_directional_max_mip() && bool(scene_data_block.data.flags & SCENE_DATA_FLAGS_FELLOW_SHADOW_MAX_MIP)) {
+			vec2 mm = fellow_shadow_box_minmax(pssm_coord.xy, abs(tex_scale));
+			if (mm.y < pssm_coord.z - FELLOW_SHADOW_MAX_MIP_EPSILON) {
+				return FELLOW_DBG_RESULT(fellow_dbg_dir_uniform, half(1.0));
+			}
+			if (mm.x > pssm_coord.z + FELLOW_SHADOW_MAX_MIP_EPSILON) {
+				return FELLOW_DBG_RESULT(fellow_dbg_dir_uniform, half(0.0));
+			}
+		}
+#endif
+		FELLOW_DBG_INC(fellow_dbg_dir_pcf);
 		float s = 0.0;
 
 		SPEC_CONSTANT_LOOP_ANNOTATION
@@ -573,11 +645,11 @@ half sample_directional_soft_shadow(texture2D shadow, vec3 pssm_coord, vec2 tex_
 			s += textureProj(sampler2DShadow(shadow, shadow_sampler), vec4(suv, pssm_coord.z, 1.0));
 		}
 
-		return half(s / float(sc_directional_penumbra_shadow_samples()));
+		return FELLOW_DBG_RESULT(fellow_dbg_dir_uniform, half(s / float(sc_directional_penumbra_shadow_samples())));
 
 	} else {
 		//no blockers found, so no shadow
-		return half(1.0);
+		return FELLOW_DBG_RESULT(fellow_dbg_dir_uniform, half(1.0));
 	}
 }
 
