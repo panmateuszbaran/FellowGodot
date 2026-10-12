@@ -29,6 +29,7 @@
 /**************************************************************************/
 
 #include "cluster_builder_rd.h"
+#include "core/config/project_settings.h"
 
 #include "servers/rendering/fellow_settings.h"
 #include "servers/rendering/rendering_device.h"
@@ -289,6 +290,15 @@ void ClusterBuilderRD::setup(Size2i p_screen_size, uint32_t p_max_elements, RID 
 	_clear();
 
 	screen_size = p_screen_size;
+	{
+		// FellowEngine diagnostics (rendering/fellow/debug/cluster_size, read when the buffers are set up): the light
+		// cluster tile's side in pixels (stock 32).
+		const int fellow_size = GLOBAL_GET("rendering/fellow/debug/cluster_size");
+		cluster_size = (fellow_size == 8 || fellow_size == 16 || fellow_size == 64) ? uint32_t(fellow_size) : 32u;
+		if (cluster_size != 32u) {
+			print_verbose(vformat("FellowEngine: light cluster tiles of %d px (debug/cluster_size), %d x %d tiles.", cluster_size, Math::division_round_up((uint32_t)p_screen_size.width, cluster_size), Math::division_round_up((uint32_t)p_screen_size.height, cluster_size)));
+		}
+	}
 
 	cluster_screen_size.width = Math::division_round_up((uint32_t)p_screen_size.width, cluster_size);
 	cluster_screen_size.height = Math::division_round_up((uint32_t)p_screen_size.height, cluster_size);
