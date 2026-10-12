@@ -7,9 +7,12 @@
 // This annotation macro must be placed before any loops that rely on specialization constants as their upper bound.
 // Drivers may choose to unroll these loops based on the possible range of the value that can be deduced from the
 // spec constant, which can lead to their code generation taking a much longer time than desired.
-#ifdef UBERSHADER
-// Prefer to not unroll loops on the ubershader to reduce code size as much as possible.
+#if defined(UBERSHADER) || defined(FELLOW_EXP_DONT_UNROLL)
+// Prefer to not unroll loops on the ubershader to reduce code size as much as possible. (FELLOW_EXP_DONT_UNROLL:
+// FellowEngine register-pressure experiment, rendering/fellow/debug/scene_shader_experiments.)
 #define SPEC_CONSTANT_LOOP_ANNOTATION [[dont_unroll]]
+#elif defined(FELLOW_EXP_UNROLL)
+#define SPEC_CONSTANT_LOOP_ANNOTATION [[unroll]]
 #else
 // Don't make an explicit hint on specialized shaders.
 #define SPEC_CONSTANT_LOOP_ANNOTATION

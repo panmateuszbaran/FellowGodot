@@ -96,6 +96,10 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/geometry/prepass_simple_first", false);
 	GLOBAL_DEF("rendering/fellow/debug/occlusion_stats", false);
 	GLOBAL_DEF("rendering/fellow/debug/multimesh_stats", false);
+	// Diagnostics: experiments on the compiled scene shaders (e.g. their register counts with FELLOW_PIPELINE_STATS), bits
+	// read at start-up: 1 FELLOW_EXP_DONT_UNROLL (loops bounded by specialization constants not unrolled), 2
+	// FELLOW_EXP_UNROLL (unrolled), 4-128 FELLOW_EXP_BIT2-7. 0: none (the shipped shaders).
+	GLOBAL_DEF_RST(PropertyInfo(Variant::INT, "rendering/fellow/debug/scene_shader_experiments", PROPERTY_HINT_RANGE, "0,255,1"), 0);
 	GLOBAL_DEF("rendering/fellow/debug/occlusion_cull_approx", false);
 	GLOBAL_DEF("rendering/fellow/postfx/taa_camera_motion_vectors", false);
 	GLOBAL_DEF("rendering/fellow/shading/blended_alpha_zero_skip", true);
