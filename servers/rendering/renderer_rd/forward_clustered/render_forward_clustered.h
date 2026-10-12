@@ -269,6 +269,7 @@ private:
 		// UINT32_MAX.
 		const uint32_t *fellow_mm_slots = nullptr;
 		const uint32_t *fellow_mm_offsets = nullptr;
+		const uint32_t *fellow_mm_prev_offsets = nullptr;
 		const uint32_t *fellow_mm_levels = nullptr; // per slot: levels drawn (per-instance LOD: one draw per level)
 		RID fellow_mm_args;
 		RID fellow_mm_xforms;
@@ -854,7 +855,9 @@ private:
 			float lod_camera[4]; // camera position, mesh LOD threshold
 			float lod_params[4]; // LOD distance multiplier, LOD bias
 			uint32_t lod_count; // levels after level 0 (0: no per-instance LOD)
-			uint32_t pad[3];
+			uint32_t prev_pool_offset; // motion vectors: the previous frame's data in the pool
+			uint32_t out_prev_offset; // and its compacted region (instances)
+			uint32_t has_previous;
 			float lod_edges[8];
 		};
 		static_assert(sizeof(Job) == 192);
@@ -868,6 +871,7 @@ private:
 			LocalVector<float> planes;
 			LocalVector<uint32_t> draw_info; // per draw: job, levels drawn, index (or vertex) count per level (8)
 			LocalVector<uint32_t> draw_offsets; // per draw: its job's region (instances)
+			LocalVector<uint32_t> draw_prev_offsets; // per draw: the region of its previous-frame data (= draw_offsets without)
 			LocalVector<uint32_t> draw_levels; // per draw: 1, or the levels of a per-instance LOD job
 			uint64_t compacted_floats = 0;
 			RID jobs_buffer, blocks_buffer, planes_buffer, block_data, job_visible, compacted, draw_info_buffer, args, counters;

@@ -2703,26 +2703,36 @@ void MeshStorage::_fellow_multimesh_pool_grow(uint64_t p_needed) {
 	Fellow::stats().geometry_multimesh_pool_grows.increment();
 }
 
-int64_t MeshStorage::fellow_multimesh_pool_prepare(RID p_multimesh) {
+int64_t MeshStorage::fellow_multimesh_pool_prepare(RID p_multimesh, bool p_with_previous, int64_t &r_previous_offset) {
 	MultiMesh *mm = multimesh_owner.get_or_null(p_multimesh);
 	if (mm == nullptr || mm->buffer.is_null() || mm->instances <= 0 || mm->stride_cache == 0 || (mm->stride_cache & 3) != 0) {
 		return -1;
 	}
 	const uint32_t floats = uint32_t(mm->instances) * mm->stride_cache;
-	if (mm->fellow_pool_offset < 0 || mm->fellow_pool_floats != floats) {
-		if (fellow_mm_pool.buffer.is_null() || fellow_mm_pool.used + floats > fellow_mm_pool.capacity) {
-			_fellow_multimesh_pool_grow(floats);
+	const uint32_t slot_floats = p_with_previous ? floats * 2 : floats;
+	if (mm->fellow_pool_offset < 0 || mm->fellow_pool_floats != slot_floats) {
+		if (fellow_mm_pool.buffer.is_null() || fellow_mm_pool.used + slot_floats > fellow_mm_pool.capacity) {
+			_fellow_multimesh_pool_grow(slot_floats);
 		}
 		mm->fellow_pool_offset = int64_t(fellow_mm_pool.used);
-		mm->fellow_pool_floats = floats;
+		mm->fellow_pool_floats = slot_floats;
 		mm->fellow_pool_version = 0;
-		fellow_mm_pool.used += (floats + 3) & ~3u;
+		fellow_mm_pool.used += (slot_floats + 3) & ~3u;
 		fellow_mm_pool.members.push_back(p_multimesh);
 	}
-	if (mm->fellow_pool_version != mm->fellow_data_version) {
-		RD::get_singleton()->buffer_copy(mm->buffer, fellow_mm_pool.buffer, uint64_t(mm->motion_vectors_current_offset) * mm->stride_cache * sizeof(float), uint64_t(mm->fellow_pool_offset) * sizeof(float), uint64_t(floats) * sizeof(float));
+	// The halves the draw would read this frame (stock: _multimesh_get_motion_vectors_offsets).
+	const uint32_t current = mm->motion_vectors_current_offset;
+	const uint32_t previous = p_with_previous ? mm->motion_vectors_previous_offset : current;
+	if (mm->fellow_pool_version != mm->fellow_data_version || mm->fellow_pool_current != current || mm->fellow_pool_previous != previous) {
+		RD::get_singleton()->buffer_copy(mm->buffer, fellow_mm_pool.buffer, uint64_t(current) * mm->stride_cache * sizeof(float), uint64_t(mm->fellow_pool_offset) * sizeof(float), uint64_t(floats) * sizeof(float));
+		if (p_with_previous) {
+			RD::get_singleton()->buffer_copy(mm->buffer, fellow_mm_pool.buffer, uint64_t(previous) * mm->stride_cache * sizeof(float), uint64_t(mm->fellow_pool_offset + floats) * sizeof(float), uint64_t(floats) * sizeof(float));
+		}
 		mm->fellow_pool_version = mm->fellow_data_version;
+		mm->fellow_pool_current = current;
+		mm->fellow_pool_previous = previous;
 		Fellow::stats().geometry_multimesh_pool_copies.increment();
 	}
+	r_previous_offset = p_with_previous ? mm->fellow_pool_offset + floats : mm->fellow_pool_offset;
 	return mm->fellow_pool_offset;
 }

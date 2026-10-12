@@ -141,3 +141,17 @@ can tell apart (undecided keeps the choice). From `fellow93`:
 * **Counters only for diagnostics.** The instance counters (tested, drawn, coarse) are read back from the GPU only with
   `debug/multimesh_stats` (the benchmark captures turn it on).
 
+### MultiMeshes whose data changes (`fellow94`)
+
+Until `fellow93` a MultiMesh whose data changed this frame or the last was left out: with motion vectors (TAA) its
+draws read two halves of its buffer, the current data and the previous frame's. From `fellow94` such a MultiMesh's
+pool slot holds both halves (the current data, then the previous), and the compaction copies each visible instance's
+previous data to the same position of a second region, which the draw's previous-offset push constant names. An
+instance is tested at its current transform (where it is drawn); its previous transform only feeds its motion vector,
+as in stock. A MultiMesh updated every frame (crowds, debris, Stress Lab's 400 moving boxes) is culled like a static
+one.
+
+lavapipe, Stress Lab (the boxes move every frame; TAA), `stress_pan` and `stress_sun`, 120 frames: culling off against
+on **0 differing pixels**, with 1.79 M of the boxes tested and 0.47 M drawn (73 % culled, most of them in the shadow
+passes). Foliage Lab one MultiMesh per type, captures: 0 differing pixels.
+

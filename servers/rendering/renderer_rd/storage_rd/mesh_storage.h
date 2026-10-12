@@ -270,7 +270,9 @@ private:
 		uint64_t fellow_data_version = 1; // incremented whenever the GPU buffer's data changes
 		uint64_t fellow_pool_version = 0;
 		int64_t fellow_pool_offset = -1; // first float in the pool
-		uint32_t fellow_pool_floats = 0;
+		uint32_t fellow_pool_floats = 0; // the slot's size: the instances' data, twice with the previous frame's
+		uint32_t fellow_pool_current = 0; // the buffer halves the slot holds (motion vectors: current, previous)
+		uint32_t fellow_pool_previous = 0;
 
 		Dependency dependency;
 	};
@@ -547,7 +549,10 @@ public:
 
 	// FellowEngine MultiMesh culling (decision 0034): makes sure the MultiMesh's current instance data is in the pool
 	// (a GPU copy when it changed) and returns its first float there, or -1.
-	int64_t fellow_multimesh_pool_prepare(RID p_multimesh);
+	// p_with_previous: the slot also holds the previous frame's data (the MultiMesh's motion vectors use two halves of
+	// its buffer this frame), right after the current data; r_previous_offset is where (the current data's offset
+	// otherwise).
+	int64_t fellow_multimesh_pool_prepare(RID p_multimesh, bool p_with_previous, int64_t &r_previous_offset);
 	RID fellow_multimesh_pool_buffer() const { return fellow_mm_pool.buffer; }
 	// Changes when the pool's buffer is replaced: offsets returned before are then stale.
 	uint64_t fellow_multimesh_pool_generation() const { return fellow_mm_pool.generation; }

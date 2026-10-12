@@ -639,7 +639,7 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 				if (fellow_mm_slot != UINT32_MAX) {
 					// The compacted instances (culled MultiMeshes have no motion this frame: previous = current).
 					push_constant.multimesh_motion_vectors_current_offset = p_params->fellow_mm_offsets[fellow_mm_slot];
-					push_constant.multimesh_motion_vectors_previous_offset = p_params->fellow_mm_offsets[fellow_mm_slot];
+					push_constant.multimesh_motion_vectors_previous_offset = p_params->fellow_mm_prev_offsets[fellow_mm_slot];
 				}
 			} else {
 				push_constant.multimesh_motion_vectors_current_offset = 0;
@@ -1735,6 +1735,7 @@ void RenderForwardClustered::_fellow_multimesh_cull_begin(uint32_t p_set) {
 	set.planes.clear();
 	set.draw_info.clear();
 	set.draw_offsets.clear();
+	set.draw_prev_offsets.clear();
 	set.draw_levels.clear();
 	set.compacted_floats = 0;
 	set.active = false;
@@ -1754,7 +1755,7 @@ void RenderForwardClustered::_fellow_multimesh_cull_begin(uint32_t p_set) {
 
 void RenderForwardClustered::_fellow_multimesh_cull_collect(uint32_t p_set, RenderListType p_list, uint32_t p_from, uint32_t p_to, const Plane *p_planes, int p_plane_count, bool p_shadow, const FellowMultimeshLod &p_lod) {
 	// The pass's MultiMesh elements that can be culled exactly: their materials neither move vertices nor read
-	// INSTANCE_ID, their data does not change this frame (no motion vectors between two buffers), 3D transforms.
+	// INSTANCE_ID, 3D transforms (data changed this frame or the last: its previous-frame half too, for motion vectors).
 	if (p_plane_count <= 0) {
 		return;
 	}
@@ -1823,8 +1824,12 @@ void RenderForwardClustered::_fellow_multimesh_cull_collect(uint32_t p_set, Rend
 					Fellow::stats().geometry_multimesh_jobs_inside.increment();
 				}
 			}
-			if (!inside && !mesh_storage->_multimesh_uses_motion_vectors_offsets(base) && mesh_storage->fellow_multimesh_get_transform_format(base) == RSE::MULTIMESH_TRANSFORM_3D) {
-				const int64_t pool_offset = mesh_storage->fellow_multimesh_pool_prepare(base);
+			// MultiMeshes whose data changed this frame or the last (motion vectors read two halves of their buffer) are
+			// taken with their previous data: compacted alongside, for the same instances.
+			const bool with_previous = mesh_storage->_multimesh_uses_motion_vectors_offsets(base);
+			if (!inside && mesh_storage->fellow_multimesh_get_transform_format(base) == RSE::MULTIMESH_TRANSFORM_3D) {
+				int64_t prev_pool_offset = -1;
+				const int64_t pool_offset = mesh_storage->fellow_multimesh_pool_prepare(base, with_previous, prev_pool_offset);
 				const uint32_t stride = mesh_storage->fellow_multimesh_get_stride(base);
 				const RID mesh = mesh_storage->multimesh_get_mesh(base);
 				if (pool_offset >= 0 && stride >= 12 && mesh.is_valid()) {
@@ -1865,6 +1870,12 @@ void RenderForwardClustered::_fellow_multimesh_cull_collect(uint32_t p_set, Rend
 					j.plane_count = uint32_t(MIN(p_plane_count, 8));
 					j.out_offset = uint32_t((set.compacted_floats + stride - 1) / stride);
 					set.compacted_floats = (uint64_t(j.out_offset) + j.count) * stride;
+					if (with_previous) {
+						j.has_previous = 1;
+						j.prev_pool_offset = uint32_t(prev_pool_offset);
+						j.out_prev_offset = j.out_offset + j.count;
+						set.compacted_floats = (uint64_t(j.out_prev_offset) + j.count) * stride;
+					}
 					j.first_block = set.blocks.size() / 2;
 					j.block_count = (j.count + 63) / 64;
 					if (lod_count > 0) {
@@ -1902,6 +1913,7 @@ void RenderForwardClustered::_fellow_multimesh_cull_collect(uint32_t p_set, Rend
 			set.draw_info.push_back(levels > 1 ? (l < levels ? mesh_storage->fellow_mesh_surface_get_index_count(mesh_surface, l) : 0) : (l == 0 ? draw_count : 0));
 		}
 		set.draw_offsets.push_back(set.jobs[job].out_offset);
+		set.draw_prev_offsets.push_back(set.jobs[job].has_previous ? set.jobs[job].out_prev_offset : set.jobs[job].out_offset);
 		set.draw_levels.push_back(levels);
 	}
 }
@@ -1927,12 +1939,14 @@ void RenderForwardClustered::_fellow_multimesh_cull_dispatch(uint32_t p_set) {
 		const uint64_t generation = mesh_storage->fellow_multimesh_pool_generation();
 		bool valid = true;
 		for (uint32_t j = 0; j < job_count; j++) {
-			const int64_t offset = mesh_storage->fellow_multimesh_pool_prepare(set.job_multimesh[j]);
+			int64_t prev_offset = -1;
+			const int64_t offset = mesh_storage->fellow_multimesh_pool_prepare(set.job_multimesh[j], set.jobs[j].has_previous != 0, prev_offset);
 			if (offset < 0) {
 				valid = false;
 				break;
 			}
 			set.jobs[j].pool_offset = uint32_t(offset);
+			set.jobs[j].prev_pool_offset = uint32_t(prev_offset);
 		}
 		if (!valid) {
 			return; // (a MultiMesh lost its buffer since it was collected: drawn the stock way this frame)
@@ -2066,6 +2080,7 @@ void RenderForwardClustered::_fellow_multimesh_cull_params(uint32_t p_set, Rende
 	}
 	r_params.fellow_mm_slots = m.slots[p_list].ptr() + p_element_from;
 	r_params.fellow_mm_offsets = set.draw_offsets.ptr();
+	r_params.fellow_mm_prev_offsets = set.draw_prev_offsets.ptr();
 	r_params.fellow_mm_levels = set.draw_levels.ptr();
 	r_params.fellow_mm_args = set.args;
 	r_params.fellow_mm_xforms = set.xforms_uniform_set;

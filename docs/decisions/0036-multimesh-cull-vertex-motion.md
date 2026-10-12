@@ -50,4 +50,16 @@ The swaying MultiMeshes are culled: 56.8 M instances tested and 29.1 M drawn ove
 
 What the margin is for: with the margins scaled to 1 % (0.002-0.005 m) only 0.05 M more instances were culled over
 the captures (27.77 M against 27.72 M; the boxes are mostly the meshes' own), still without a differing pixel. A
-stronger sway is needed to show what too small a margin loses (below).
+stronger sway is needed to show what too small a margin loses:
+
+| sway (`--foliage_wind_strength`) | margins (`--foliage_wind_margin`) | differing pixels |
+|---|---|---:|
+| × 8 (grass up to 1.1 m, trees 2.8 m in the node's space) | × 0.01 | **1 591** (meadow, 55.4 dB, max \|d\| 72) |
+| × 8 | × 8 | 0 |
+
+The lost pixels are swaying grass at the view's left and right edges and shadows of instances culled from the
+cascades: the test sees what a margin that does not cover the sway loses, and a margin that does loses nothing.
+
+RTX (`m7_f103_wind_temporal`, `fellow93`, 1080p, `foliage_walk`, 60 frames, TAA): culling off against culling with the
+option 78.14 dB mean, 74.54 min, max |d| 12, 0.000 % of pixels > 2 — the floor of these sequences (78.27 / 74.93 in
+`m7_f101`).

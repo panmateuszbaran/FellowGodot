@@ -43,9 +43,9 @@ struct Job {
 	vec4 lod_camera; // xyz: the camera's position; w: the mesh LOD threshold
 	vec4 lod_params; // x: the LOD distance multiplier, y: the node's LOD bias
 	uint lod_count; // levels after level 0 (0: no per-instance LOD)
-	uint pad0;
-	uint pad1;
-	uint pad2;
+	uint prev_pool_offset; // first float of the MultiMesh's previous-frame data in the pool (motion vectors)
+	uint out_prev_offset; // the job's region for the previous-frame data, in instances of this job's stride
+	uint has_previous; // 1: the MultiMesh's motion vectors read two halves this frame; the previous one is compacted too
 	vec4 lod_edges[2]; // edge length of levels 1..7
 };
 
@@ -287,10 +287,20 @@ void main() {
 		}
 		const uvec2 blk = blocks.data[b];
 		const Job job = jobs.data[blk.x];
+		const uint position = block_data.data[b * BLOCK_UINTS + 24 + bucket] + rank;
 		const uint src = (job.pool_offset + (blk.y + lid) * job.stride) / 4;
-		const uint dst = ((job.out_offset + block_data.data[b * BLOCK_UINTS + 24 + bucket] + rank) * job.stride) / 4;
+		const uint dst = ((job.out_offset + position) * job.stride) / 4;
 		for (uint k = 0; k < job.stride / 4; k++) {
 			compacted.data[dst + k] = pool.data[src + k];
+		}
+		if (job.has_previous != 0) {
+			// The same instance's previous-frame data at the same position of the previous region (the vertex shader
+			// reads it for motion vectors at the same instance index).
+			const uint psrc = (job.prev_pool_offset + (blk.y + lid) * job.stride) / 4;
+			const uint pdst = ((job.out_prev_offset + position) * job.stride) / 4;
+			for (uint k = 0; k < job.stride / 4; k++) {
+				compacted.data[pdst + k] = pool.data[psrc + k];
+			}
 		}
 	} else {
 		const uint d = (b - params.block_count) * 64 + lid;
