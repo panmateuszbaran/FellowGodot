@@ -1738,6 +1738,7 @@ void RenderForwardClustered::_fellow_multimesh_cull_begin(uint32_t p_set) {
 	set.draw_prev_offsets.clear();
 	set.draw_levels.clear();
 	set.compacted_floats = 0;
+	set.potential_indices = 0;
 	set.active = false;
 	m.job_of_owner.clear();
 	const RenderListType lists[2] = { p_set == 0 ? RENDER_LIST_OPAQUE : RENDER_LIST_SECONDARY, p_set == 0 ? RENDER_LIST_ALPHA : RENDER_LIST_MAX };
@@ -1915,6 +1916,7 @@ void RenderForwardClustered::_fellow_multimesh_cull_collect(uint32_t p_set, Rend
 		set.draw_offsets.push_back(set.jobs[job].out_offset);
 		set.draw_prev_offsets.push_back(set.jobs[job].has_previous ? set.jobs[job].out_prev_offset : set.jobs[job].out_offset);
 		set.draw_levels.push_back(levels);
+		set.potential_indices += uint64_t(set.jobs[job].count) * draw_count;
 	}
 }
 
@@ -1925,6 +1927,12 @@ void RenderForwardClustered::_fellow_multimesh_cull_dispatch(uint32_t p_set) {
 	const uint32_t block_count = set.blocks.size() / 2;
 	const uint32_t draw_count = set.draw_offsets.size();
 	if (job_count == 0 || draw_count == 0) {
+		return;
+	}
+	// Too little to save: the set's draws together draw fewer indices than geometry/multimesh_cull_min_indices with
+	// every instance, about what the dispatches and their barriers cost. Drawn the stock way (exact either way).
+	if (set.potential_indices < uint64_t(MAX(0, Fellow::multimesh_cull_min_indices()))) {
+		Fellow::stats().geometry_multimesh_sets_small.increment();
 		return;
 	}
 	// Autotune (decision 0020) measures the culling against drawing the MultiMeshes whole while there are any to cull.

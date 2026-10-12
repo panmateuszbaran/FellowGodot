@@ -340,6 +340,11 @@ inline bool multimesh_instance_lod() {
 inline bool multimesh_cull_vertex_motion() {
 	return GLOBAL_GET_CACHED(bool, "rendering/fellow/geometry/multimesh_cull_vertex_motion");
 }
+// A pass group's (camera or shadows) culling runs only when its MultiMesh draws, with every instance, would draw at
+// least this many indices: below it the dispatches cost about what they could save (decision 0034).
+inline int multimesh_cull_min_indices() {
+	return GLOBAL_GET_CACHED(int, "rendering/fellow/geometry/multimesh_cull_min_indices");
+}
 inline int multimesh_cull_min_instances() {
 	return GLOBAL_GET_CACHED(int, "rendering/fellow/geometry/multimesh_cull_min_instances");
 }
@@ -697,6 +702,7 @@ struct Stats {
 	SafeNumeric<uint64_t> geometry_multimesh_instances_visible; // of which drawn
 	SafeNumeric<uint64_t> geometry_multimesh_instances_coarse; // of which at a coarser level than 0 (per-instance LOD)
 	SafeNumeric<uint64_t> geometry_multimesh_jobs_inside; // MultiMeshes left whole: their box inside the pass's volume
+	SafeNumeric<uint64_t> geometry_multimesh_sets_small; // pass groups left whole: too few indices to save
 	SafeNumeric<uint64_t> geometry_multimesh_pool_copies; // MultiMesh data copied into the pool
 	SafeNumeric<uint64_t> geometry_multimesh_pool_grows;
 	SafeNumeric<uint64_t> vrs_frames; // frames whose shading rates were set adaptively

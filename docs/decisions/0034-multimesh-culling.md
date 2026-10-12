@@ -155,3 +155,15 @@ lavapipe, Stress Lab (the boxes move every frame; TAA), `stress_pan` and `stress
 on **0 differing pixels**, with 1.79 M of the boxes tested and 0.47 M drawn (73 % culled, most of them in the shadow
 passes). Foliage Lab one MultiMesh per type, captures: 0 differing pixels.
 
+RTX (`m7_f104_stress_temporal`, `fellow94`, 120 frames of Stress Lab with TAA): against `fellow93` (which drew the
+boxes whole) and against culling off, **bit for bit the same** (99 dB, max |d| 0).
+
+### Too little to save (`fellow95`)
+
+With the "nothing to cull" rule PBR Lab still lost 0.6 % in one process (`m7_f103_mm_ab`: the camera's cull 0.011 ms,
+shadow passes +0.029 ms; render thread +0.031 ms): its 600 grass cards are 7 200 indices a draw, less than the
+dispatches and their barriers cost. From `fellow95` a pass group (the camera's passes, or the shadow passes) is culled
+only when its MultiMesh draws would draw at least `geometry/multimesh_cull_min_indices` (300 000, about 100 k
+triangles) with every instance; below that they are drawn the stock way. lavapipe: PBR Lab every group below
+(0 culls, 7 captures identical), Foliage Lab chunks none below (identical).
+

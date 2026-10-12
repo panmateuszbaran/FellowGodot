@@ -874,6 +874,7 @@ private:
 			LocalVector<uint32_t> draw_prev_offsets; // per draw: the region of its previous-frame data (= draw_offsets without)
 			LocalVector<uint32_t> draw_levels; // per draw: 1, or the levels of a per-instance LOD job
 			uint64_t compacted_floats = 0;
+			uint64_t potential_indices = 0; // per draw: instances x indices (or vertices), summed (what culling could save)
 			RID jobs_buffer, blocks_buffer, planes_buffer, block_data, job_visible, compacted, draw_info_buffer, args, counters;
 			uint32_t cap_jobs = 0, cap_blocks = 0, cap_planes = 0, cap_draws = 0;
 			uint64_t cap_compacted = 0; // floats
