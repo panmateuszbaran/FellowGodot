@@ -1,6 +1,6 @@
 # 0034 — MultiMesh instance culling on the GPU
 
-Status: **MEASURING** (on by default in `fellow93`, measured in `m7_f103`) · Branch `fellow/geometry` · Toggle
+Status: **KEEP**, on by default from `fellow93` · Branch `fellow/geometry` · Toggle
 `rendering/fellow/geometry/multimesh_culling` (runtime; off until `fellow92`),
 `geometry/multimesh_cull_min_instances` (64) · Code: `shaders/effects/fellow_multimesh_cull.glsl`,
 `render_forward_clustered.{h,cpp}` (`_fellow_multimesh_cull_*`), `storage_rd/mesh_storage.{h,cpp}` (the instance pool),
@@ -166,4 +166,13 @@ dispatches and their barriers cost. From `fellow95` a pass group (the camera's p
 only when its MultiMesh draws would draw at least `geometry/multimesh_cull_min_indices` (300 000, about 100 k
 triangles) with every instance; below that they are drawn the stock way. lavapipe: PBR Lab every group below
 (0 culls, 7 captures identical), Foliage Lab chunks none below (identical).
+
+## Decision
+
+**KEEP, on by default from `fellow93`** (with the rules of `fellow93`-`fellow95`). Exact: lavapipe bit for bit in every
+test (Foliage Lab both layouts, with LOD meshes and with wind, PBR Lab, Stress Lab with moving boxes), RTX at the
+run-to-run floor (`m7_f101` null test) or bit for bit (Stress Lab). `m7_f105_final` (`fellow95`, 3 runs, against stock):
+Foliage Lab one MultiMesh per type **10.89 → 5.13 ms (−52.9 %)**, chunks 3.61 → 3.27 ms (−9.5 %); PBR Lab −3.8 % and
+Stress Lab −1.3 % (their culling skipped as too small), the scenes without MultiMeshes unchanged against `fellow92`
+(`m7_f103_defaults_vs_f92`: −0.7 to +0.1 %, within noise).
 

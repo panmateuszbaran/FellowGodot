@@ -14,8 +14,9 @@ Every option has a decision record in `docs/decisions/` with its measurements.
 
 ## Visually lossless options (off by default)
 
-All four together, against the defaults between processes (`m6_f94_final`): Lights Lab −24.9 %, Bistro interior −9.0 %,
-PBR Lab −7.0 %, Bistro exterior, Sponza and City Lab −3.2 to −3.4 %.
+All four together, against the defaults between processes (`m7_f105_final`, `fellow95`): Lights Lab −25.2 %, Bistro
+interior −8.4 %, PBR Lab −7.5 %, Bistro exterior −3.7 %, City Lab −3.5 %, Sponza −1.9 %, Stress Lab −1.5 %, Foliage Lab
++0.3 % (the last four within noise). (`m6_f94_final`: Lights Lab −24.9 %, Bistro interior −9.0 %, PBR Lab −7.0 %.)
 
 | setting | what it does | measured gain (frame, RTX 5070 Ti Laptop, 1080p) | image cost against stock | record |
 |---|---|---|---|---|

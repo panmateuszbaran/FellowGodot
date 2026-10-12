@@ -1,13 +1,33 @@
 # FellowEngine — milestone 7 report (vegetation: MultiMesh instances culled one by one)
 
-Status: **DRAFT** (`fellow91`-`fellow95`, measured 2026-10-11/12). Branch `fellow/geometry`. Benchmark machine as in
+Status: **FINAL** (`fellow91`-`fellow95`, measured 2026-10-11/12; `fellow95` carries the decisions below). Branch `fellow/geometry`. Benchmark machine as in
 milestone 6 (Acer Predator PHN16S-71, Core Ultra 9 275HX, RTX 5070 Ti Laptop GPU, NVIDIA GPU only, Windows 11,
 1920×1080, "high" preset). Decision records `docs/decisions/0034`-`0036`; user-facing summary
 `docs/FELLOWENGINE_OPTIONS.md`.
 
 ## 0. Result
 
-<!-- final table: m7_f105 -->
+FellowEngine `fellow95` against stock Godot 4.7.2, between processes (`m7_f105_final`: 3 interleaved runs of 20 s per
+build and scene, 5 s warm-up, 30 s heat soak), frame time at 1920 × 1080:
+
+| scene | stock 4.7.2 | FellowEngine defaults (exact) | + visually lossless options |
+|---|---:|---:|---:|
+| Sponza | 13.67 ms | **7.48 ms (−45.3 %)** | **7.33 ms (−46.4 %)** |
+| Bistro exterior | 6.59 ms | **4.90 ms (−25.6 %)** | **4.72 ms (−28.3 %)** |
+| City Lab | 2.82 ms | **2.20 ms (−22.1 %)** | **2.12 ms (−24.8 %)** |
+| Bistro interior | 4.19 ms (CV 3.2 %) | 3.91 ms (−6.6 %, p 0.07) | 3.58 ms (−14.5 %, p 0.01) |
+| Lights Lab | 3.04 ms | 2.79 ms (−8.2 %, p 0.02) | **2.09 ms (−31.3 %)** |
+| PBR Lab | 2.63 ms | 2.53 ms (−3.8 %, p 0.02) | **2.34 ms (−11.0 %)** |
+| **Foliage Lab, chunks** (new) | 3.61 ms | **3.27 ms (−9.5 %)** | 3.28 ms (−9.3 %) |
+| **Foliage Lab, one MultiMesh per type** (`m7_f105_foliage_single`) | 10.89 ms | **5.13 ms (−52.9 %)** | |
+| Stress Lab | 5.00 ms | 4.94 ms (−1.3 %, within noise) | 4.86 ms (−2.8 %, p 0.02) |
+
+(bold: p < 0.01, every pair of runs faster.) The defaults change no pixel against stock. New in this milestone and on by
+default: **MultiMesh culling** (§2): every instance of a MultiMesh tested against every pass's view volume on the GPU,
+only the visible ones drawn — Foliage Lab with its vegetation in one MultiMesh per type −52.9 % (it was −21 % with
+milestone 6's defaults, all of it the shadow cache), in chunks −9.5 %. Two options, off by default: culling of
+**swaying vegetation** within the node's cull margin (§4: Foliage Lab with wind 10.73 → 6.29 ms, −41.4 %, against
+−4.7 % with the defaults, which draw swaying MultiMeshes whole), and **per-instance LOD** (§3, changes the image).
 
 ## 1. The problem: Godot culls a MultiMesh as a whole
 
@@ -120,4 +140,12 @@ Foliage Lab with wind, one MultiMesh per type (`m7_f103_wind_single`): stock 10.
 
 ## 8. Next
 
-<!-- to be written with the final results -->
+* **The scene shader's register pressure.** The opaque pass is the largest pass in every scene (Sponza 2.55 ms,
+  Bistro exterior 1.92, Bistro interior 1.48, Lights Lab 1.35 ms in `m6_f97`); its specialized fragment shaders use 80
+  registers with spills (96 without the directional shadow pyramid). `fellow96`/`fellow97` add start-up experiment bits
+  (`debug/scene_shader_experiments`): the shadow filters' loops not unrolled, or forced unrolled, and the directional
+  soft shadow cascades in one loop (one inlined filter instead of four). Job f106 dumps every pipeline's registers for
+  each and compares the images; the promising ones get measured.
+* **Volumetric fog** costs 1.06 ms in Bistro interior (`m6_f97`), its light loop with a shadow fetch per light and froxel;
+  only the visually lossless half rate (0031) touches it so far.
+* `INSTANCE_ID` in a MultiMesh's material still keeps it out of culling (the compacted index differs).

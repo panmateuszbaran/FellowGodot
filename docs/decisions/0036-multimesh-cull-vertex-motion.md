@@ -1,6 +1,6 @@
 # 0036 — MultiMesh culling for materials that move vertices (wind), within the node's cull margin
 
-Status: **MEASURING** (option, off) · Branch `fellow/geometry` · Toggle
+Status: **KEEP as an option** (off) · Branch `fellow/geometry` · Toggle
 `rendering/fellow/geometry/multimesh_cull_vertex_motion` (runtime, off; works with `geometry/multimesh_culling`, 0034) ·
 Code: `render_forward_clustered.cpp` (`_fellow_multimesh_cull_collect`), `shaders/effects/fellow_multimesh_cull.glsl`
 (the margin), `renderer_geometry_instance.{h,cpp}` and `renderer_scene_cull.cpp` (the node's extra cull margin passed to
@@ -63,3 +63,15 @@ cascades: the test sees what a margin that does not cover the sway loses, and a 
 RTX (`m7_f103_wind_temporal`, `fellow93`, 1080p, `foliage_walk`, 60 frames, TAA): culling off against culling with the
 option 78.14 dB mean, 74.54 min, max |d| 12, 0.000 % of pixels > 2 — the floor of these sequences (78.27 / 74.93 in
 `m7_f101`).
+
+## Performance and decision
+
+Foliage Lab with wind, one MultiMesh per type, between processes (`m7_f105_foliage_single`, `fellow95`, 3 runs):
+stock 10.73 ms, FellowEngine defaults 10.22 ms (−4.7 %: the swaying MultiMeshes drawn whole, their shadows not cached),
+with the option **6.29 ms (−41.4 %)**. In one process (`m7_f103_wind_single_ab`): −39.9 % (shadows −1.99, depth pre-pass
+−1.16, opaque −1.11 ms); chunks with wind −4.3 % (`m7_f103_wind_chunks_ab`).
+
+**KEEP as an option, off by default**: it relies on the project's margin covering how far its materials move vertices
+from each instance, which stock does not need; where that holds the image is the same (verified above), and swaying
+vegetation in one MultiMesh is drawn in 59 % of the time.
+
