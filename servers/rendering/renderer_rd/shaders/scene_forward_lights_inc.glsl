@@ -346,6 +346,7 @@ float quick_hash(vec2 pos) {
 // Receivers within this of the largest depth take the stock path: a filtered fetch may convert a texel to float
 // differently (by an ulp) than the pyramid's texelFetch. 1/16 of a 16-bit depth step.
 #define FELLOW_SHADOW_MAX_MIP_EPSILON (1.0 / 1048576.0)
+#define FELLOW_SHADOW_MAX_MIP_FILTER_EPSILON (1.0 / 32768.0)
 
 // FellowEngine: smallest (.x, farthest from the light in reverse Z) and largest (.y, closest) shadow atlas depth in
 // the box of half size p_half_uv around p_uv (atlas UV), widened by 1.5 texels for bilinear / 2x2 PCF footprints, from
@@ -627,11 +628,14 @@ half sample_directional_soft_shadow(texture2D shadow, vec3 pssm_coord, vec2 tex_
 		// taps lit, the loop's result is 1.0; every texel there closer (plus the margin): 0.0. (The early-outs above decide
 		// from the search radius before the search; this one from the penumbra after it.)
 		if (sc_fellow_directional_max_mip() && bool(scene_data_block.data.flags & SCENE_DATA_FLAGS_FELLOW_SHADOW_MAX_MIP)) {
+			// A wider margin than the early-outs above (m8_f112: with theirs, RTX differed from the filter in Foliage Lab
+			// and Bistro exterior): the filter's small radius puts the receiver's own texels within a hair of the
+			// reference, and the comparison sampler may compare at the 16-bit atlas's precision; two 16-bit steps.
 			vec2 mm = fellow_shadow_box_minmax(pssm_coord.xy, abs(tex_scale));
-			if (mm.y < pssm_coord.z - FELLOW_SHADOW_MAX_MIP_EPSILON) {
+			if (mm.y < pssm_coord.z - FELLOW_SHADOW_MAX_MIP_FILTER_EPSILON) {
 				return FELLOW_DBG_RESULT(fellow_dbg_dir_uniform, half(1.0));
 			}
-			if (mm.x > pssm_coord.z + FELLOW_SHADOW_MAX_MIP_EPSILON) {
+			if (mm.x > pssm_coord.z + FELLOW_SHADOW_MAX_MIP_FILTER_EPSILON) {
 				return FELLOW_DBG_RESULT(fellow_dbg_dir_uniform, half(0.0));
 			}
 		}
