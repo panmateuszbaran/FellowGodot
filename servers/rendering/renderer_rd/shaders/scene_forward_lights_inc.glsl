@@ -1062,7 +1062,13 @@ void light_process_omni(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 	half shadow = half(1.0);
 #ifndef SHADOWS_DISABLED
 	// Omni light shadow.
-	if (omni_attenuation > HALF_FLT_MIN && omni_lights.data[idx].shadow_opacity > 0.001) {
+#ifdef FELLOW_EXP_BIT17
+	// Diagnostics (debug/scene_shader_experiments 131072; the image changes): no positional shadow lookups, code kept.
+	const bool fellow_dbg_no_shadow = taa_frame_count >= 0.0;
+#else
+	const bool fellow_dbg_no_shadow = false;
+#endif
+	if (omni_attenuation > HALF_FLT_MIN && omni_lights.data[idx].shadow_opacity > 0.001 && !fellow_dbg_no_shadow) {
 		// there is a shadowmap
 		vec2 texel_size = scene_data_block.data.shadow_atlas_pixel_size;
 		vec4 base_uv_rect = omni_lights.data[idx].atlas_rect;
@@ -1356,6 +1362,14 @@ void light_process_omni(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 	}
 
 	vec3 light_rel_vec_norm = light_rel_vec / light_length;
+#ifdef FELLOW_EXP_BIT16
+	// Diagnostics (debug/scene_shader_experiments 65536; the image changes): no light_compute() for positional lights;
+	// their attenuation and shadow still feed the result.
+	if (taa_frame_count >= 0.0) {
+		diffuse_light += hvec3(omni_attenuation * shadow * half(0.001));
+		return;
+	}
+#endif
 	light_compute(normal, hvec3(light_rel_vec_norm), eye_vec, size, hvec3(color), false, omni_attenuation * shadow, f0, roughness, metallic, half(omni_lights.data[idx].specular_amount), albedo, alpha, screen_uv, energy_compensation,
 #ifdef LIGHT_BACKLIGHT_USED
 			backlight,
@@ -1456,7 +1470,13 @@ void light_process_spot(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 	half shadow = half(1.0);
 #ifndef SHADOWS_DISABLED
 	// Spot light shadow.
-	if (spot_attenuation > HALF_FLT_MIN && spot_lights.data[idx].shadow_opacity > 0.001) {
+#ifdef FELLOW_EXP_BIT17
+	// Diagnostics (debug/scene_shader_experiments 131072; the image changes): no positional shadow lookups, code kept.
+	const bool fellow_dbg_no_shadow = taa_frame_count >= 0.0;
+#else
+	const bool fellow_dbg_no_shadow = false;
+#endif
+	if (spot_attenuation > HALF_FLT_MIN && spot_lights.data[idx].shadow_opacity > 0.001 && !fellow_dbg_no_shadow) {
 		vec3 normal_bias = vec3(normal) * light_length * spot_lights.data[idx].shadow_normal_bias * (1.0 - abs(dot(normal, light_rel_vec_norm)));
 
 		//there is a shadowmap
@@ -1611,6 +1631,14 @@ void light_process_spot(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 		}
 	}
 
+#ifdef FELLOW_EXP_BIT16
+	// Diagnostics (debug/scene_shader_experiments 65536; the image changes): no light_compute() for positional lights;
+	// their attenuation and shadow still feed the result.
+	if (taa_frame_count >= 0.0) {
+		diffuse_light += hvec3(spot_attenuation * shadow * half(0.001));
+		return;
+	}
+#endif
 	light_compute(normal, hvec3(light_rel_vec_norm), eye_vec, size, hvec3(color), false, spot_attenuation * shadow, f0, roughness, metallic, half(spot_lights.data[idx].specular_amount), albedo, alpha, screen_uv, energy_compensation,
 #ifdef LIGHT_BACKLIGHT_USED
 			backlight,
