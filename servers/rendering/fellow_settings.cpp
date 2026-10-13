@@ -45,8 +45,8 @@ void Fellow::register_settings() {
 	// TAA resolve v2: each tile texel's velocity loaded into shared memory with its colour and depth (the closest
 	// neighbour's velocity then read from there), and the previous velocity fetched as soon as the reprojection is known
 	// (exact; start-up; decision 0044).
-	GLOBAL_DEF_RST("rendering/fellow/postfx/taa_shared_velocity", false);
-	GLOBAL_DEF("rendering/fellow/postfx/ss_last_frame_direct", false);
+	GLOBAL_DEF_RST("rendering/fellow/postfx/taa_shared_velocity", true);
+	GLOBAL_DEF("rendering/fellow/postfx/ss_last_frame_direct", true);
 	GLOBAL_DEF("rendering/fellow/postfx/taa_direct_output", true);
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/postfx/taa_v2_gamma", PROPERTY_HINT_RANGE, "0.5,4,0.01"), 1.25);
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/postfx/taa_v2_feedback_min", PROPERTY_HINT_RANGE, "0.5,0.99,0.001"), 0.88);

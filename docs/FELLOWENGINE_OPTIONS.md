@@ -55,7 +55,7 @@ and no MSAA; otherwise every tile is shaded at full rate.
 | Geometry | `geometry/multimesh_culling` (from `fellow93`: MultiMesh instances culled one by one per pass on the GPU; an autotune tunable), `geometry/multimesh_cull_min_instances`, `geometry/multimesh_cull_min_indices` | 0034 |
 | Lights | `lights/cluster_depth_slices`, `lights/zero_attenuation_skip`, `lights/cluster_pack_parallel` | 0008, 0014 |
 | Shading | `shading/blended_alpha_zero_skip` | 0010 |
-| Post | `postfx/fast_luminance_reduce`, `postfx/taa_history_pingpong`, `postfx/taa_direct_output` | 0025, 0002, 0033 |
+| Post | `postfx/fast_luminance_reduce`, `postfx/taa_history_pingpong`, `postfx/taa_direct_output`, `postfx/taa_shared_velocity` (start-up), `postfx/ss_last_frame_direct` | 0025, 0002, 0033, 0044 |
 | Render thread | `cpu/parallel_*`, `cpu/batched_shadow_lists`, `cpu/compact_shadow_instances`, `cpu/persistent_instances` | 0016, 0018, 0022 |
 | Frame | `frame/parallel_replay`, `frame/present_thread`, `frame/submit_thread`, `frame/async_compute` (NVIDIA) | 0015, 0017 |
 | Autotune | `autotune/enabled` (chooses the scene-dependent exact options by measurement) | 0020 |
