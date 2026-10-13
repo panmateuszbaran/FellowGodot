@@ -86,7 +86,8 @@ public:
 	/* Last Frame */
 
 	void allocate_last_frame_buffer(Ref<RenderSceneBuffersRD> p_render_buffers, bool p_use_ssil, bool p_use_ssr);
-	void copy_internal_texture_to_last_frame(Ref<RenderSceneBuffersRD> p_render_buffers, CopyEffects &p_copy_effects);
+	void copy_internal_texture_to_last_frame(Ref<RenderSceneBuffersRD> p_render_buffers, CopyEffects &p_copy_effects, bool p_skip_full_size = false);
+	bool get_ssr_half_size() const { return ssr_half_size; }
 
 	/* SS Downsampler */
 

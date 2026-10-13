@@ -949,7 +949,7 @@ void CopyEffects::gaussian_glow_upsample_raster(RID p_source_rd_texture, RID p_d
 	RD::get_singleton()->draw_list_end();
 }
 
-void CopyEffects::make_mipmap(RID p_source_rd_texture, RID p_dest_texture, const Size2i &p_size) {
+void CopyEffects::make_mipmap(RID p_source_rd_texture, RID p_dest_texture, const Size2i &p_size, bool p_sanitize_source) {
 	ERR_FAIL_COND_MSG(raster_effects.has_flag(RASTER_EFFECT_COPY), "Can't use the compute version of the make_mipmap shader.");
 
 	UniformSetCacheRD *uniform_set_cache = UniformSetCacheRD::get_singleton();
@@ -963,6 +963,9 @@ void CopyEffects::make_mipmap(RID p_source_rd_texture, RID p_dest_texture, const
 	copy.push_constant.section[1] = 0;
 	copy.push_constant.section[2] = p_size.width;
 	copy.push_constant.section[3] = p_size.height;
+	// FellowEngine (postfx/ss_last_frame_direct, decision 0044): the source's texels sanitized as copy_to_rect() with
+	// p_sanitize_inf_nan sanitizes them, before they are averaged (a mipmap of the sanitized copy without the copy).
+	copy.push_constant.flags = p_sanitize_source ? COPY_FLAG_SANITIZE_INF_NAN : 0;
 
 	// setup our uniforms
 	RID default_sampler = material_storage->sampler_rd_get_default(RSE::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RSE::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);

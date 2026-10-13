@@ -133,6 +133,14 @@ inline bool taa_resolve_v2() {
 
 // Resolve v2 tunables (defaults = the milestone-1 resolve v2).
 // TAA resolve in 16 x 16 workgroups, every thread loading the shared tile (exact: the same neighbourhood values per pixel).
+// SSIL's copy of the last frame: its full-size level skipped where nothing reads it, level 1 made from the internal
+// texture directly (exact; runtime; decision 0044).
+inline bool ss_last_frame_direct() {
+	return postfx_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/postfx/ss_last_frame_direct");
+}
+inline bool taa_shared_velocity() {
+	return postfx_enabled() && bool(GLOBAL_GET("rendering/fellow/postfx/taa_shared_velocity"));
+}
 inline bool taa_tile16() {
 	return postfx_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/postfx/taa_tile16");
 }

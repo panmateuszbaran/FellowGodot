@@ -48,7 +48,7 @@ TAA::TAA() {
 	for (int i = 0; i < 4; i++) {
 		taa_modes.push_back(taa_modes[i] + "\n#define GROUP_SIZE 16\n#define FELLOW_TAA_STRIDED_LOAD\n");
 	}
-	taa_shader.initialize(taa_modes);
+	taa_shader.initialize(taa_modes, Fellow::taa_shared_velocity() ? "\n#define FELLOW_TAA_SHARED_VELOCITY\n" : "");
 	shader_version = taa_shader.version_create();
 	for (int i = 0; i < VARIANT_MAX; i++) {
 		pipelines[i] = RD::get_singleton()->compute_pipeline_create(taa_shader.version_get_shader(shader_version, i));

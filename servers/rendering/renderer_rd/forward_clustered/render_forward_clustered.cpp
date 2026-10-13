@@ -3786,7 +3786,8 @@ void RenderForwardClustered::_copy_framebuffer_to_ss_effects(Ref<RenderSceneBuff
 	ERR_FAIL_NULL(ss_effects);
 	ERR_FAIL_COND(p_render_buffers.is_null());
 
-	ss_effects->copy_internal_texture_to_last_frame(p_render_buffers, *copy_effects);
+	// FellowEngine (postfx/ss_last_frame_direct, decision 0044): the full-size level is only read by full-size SSR.
+	ss_effects->copy_internal_texture_to_last_frame(p_render_buffers, *copy_effects, Fellow::ss_last_frame_direct() && p_use_ssil && (!p_use_ssr || ss_effects->get_ssr_half_size()));
 }
 
 void RenderForwardClustered::_fellow_process_ss_effects(RenderDataRD *p_render_data, const Ref<RenderSceneBuffersRD> &rb, bool p_use_ssao, bool p_use_ssil, bool p_use_ssr, const RID *p_normal_roughness_slices) {

@@ -114,6 +114,12 @@ float get_depth(ivec2 thread_id) {
 shared vec3 tile_color[kTileDimension][kTileDimension];
 shared vec3 tile_ycocg[kTileDimension][kTileDimension];
 shared float tile_depth[kTileDimension][kTileDimension];
+#ifdef FELLOW_TAA_SHARED_VELOCITY
+// FellowEngine (postfx/taa_shared_velocity, decision 0044): the velocity of every tile texel, loaded with its colour and
+// depth, so that the closest neighbour's velocity (and the pixel's own) is read from shared memory instead of by a
+// global load that waits for the depth search.
+shared vec2 tile_velocity[kTileDimension][kTileDimension];
+#endif
 
 vec3 tm(vec3 c);
 vec3 rgb_to_ycocg(vec3 c);
@@ -170,6 +176,9 @@ void store_color_depth(uvec2 group_thread_id, ivec2 thread_id) {
 
 	store_color(group_thread_id, imageLoad(color_buffer, thread_id).rgb);
 	store_depth(group_thread_id, get_depth(thread_id));
+#if defined(FELLOW_TAA_V2) && defined(FELLOW_TAA_SHARED_VELOCITY)
+	tile_velocity[group_thread_id.y][group_thread_id.x] = imageLoad(velocity_buffer, thread_id).xy;
+#endif
 }
 
 void populate_group_shared_memory(uvec2 group_id, uint group_index) {
@@ -229,9 +238,16 @@ void get_closest_pixel_velocity_3x3_v2(in uvec2 group_pos, uvec2 group_top_left,
 			best = kOffsets3x3[i];
 		}
 	}
+#ifdef FELLOW_TAA_SHARED_VELOCITY
+	// The tile texel at group_pos + kBorderSize + best holds the velocity at that screen position, clamped to the screen
+	// as below.
+	uvec2 t = uvec2(ivec2(group_pos) + kBorderSize + best);
+	velocity = tile_velocity[t.y][t.x];
+#else
 	ivec2 screen = ivec2(group_top_left) + kBorderSize + ivec2(group_pos) + best;
 	screen = clamp(screen, ivec2(0), ivec2(params.resolution) - ivec2(1));
 	velocity = imageLoad(velocity_buffer, screen).xy;
+#endif
 }
 #endif
 
@@ -479,9 +495,18 @@ vec3 temporal_antialiasing_v2(uvec2 pos_group_top_left, uvec2 pos_group, uvec2 p
 	vec2 velocity_closest;
 	get_closest_pixel_velocity_3x3_v2(pos_group, pos_group_top_left, velocity_closest);
 	if (params.fellow_velocity_dilation < 0.5) {
+#ifdef FELLOW_TAA_SHARED_VELOCITY
+		velocity_closest = tile_velocity[pos_group.y + kBorderSize][pos_group.x + kBorderSize];
+#else
 		velocity_closest = imageLoad(velocity_buffer, ivec2(pos_screen)).xy;
+#endif
 	}
 	vec2 uv_reprojected = uv + velocity_closest;
+#ifdef FELLOW_TAA_SHARED_VELOCITY
+	// The previous frame's velocity at the reprojected position (get_factor_disocclusion()), fetched now so that it is in
+	// flight with the history's fetches.
+	vec2 fellow_velocity_previous = imageLoad(last_velocity_buffer, ivec2(uv_reprojected * params.resolution)).xy;
+#endif
 
 	vec3 color_input = load_color(pos_group);
 	vec3 color_history = sample_catmull_rom_9(tex_history, uv_reprojected, params.resolution).rgb;
@@ -514,7 +539,18 @@ vec3 temporal_antialiasing_v2(uvec2 pos_group_top_left, uvec2 pos_group, uvec2 p
 	float blend_factor = 1.0 - feedback;
 
 	bool offscreen = any(lessThan(uv_reprojected, vec2(0.0))) || any(greaterThan(uv_reprojected, vec2(1.0)));
+#ifdef FELLOW_TAA_SHARED_VELOCITY
+	float factor_disocclusion;
+	{
+		// get_factor_disocclusion() with the previous velocity fetched above.
+		vec2 velocity_texels = velocity_closest * params.resolution;
+		vec2 prev_velocity_texels = fellow_velocity_previous * params.resolution;
+		float disocclusion = length(prev_velocity_texels - velocity_texels) - params.disocclusion_threshold;
+		factor_disocclusion = clamp(disocclusion * DISOCCLUSION_SCALE, 0.0, 1.0);
+	}
+#else
 	float factor_disocclusion = get_factor_disocclusion(uv_reprojected, velocity_closest);
+#endif
 	blend_factor = clamp(blend_factor + (offscreen ? 1.0 : 0.0) + factor_disocclusion, 0.0, 1.0);
 
 	vec3 resolved_tm = tm_sanitize(mix(history_tm, input_tm, blend_factor));
@@ -598,6 +634,10 @@ void main() {
 #endif
 	imageStore(output_buffer, ivec2(gl_GlobalInvocationID.xy), vec4(result, 1.0));
 #ifdef FELLOW_TAA_WRITE_VELOCITY
+#if defined(FELLOW_TAA_V2) && defined(FELLOW_TAA_SHARED_VELOCITY)
+	imageStore(velocity_out_buffer, ivec2(gl_GlobalInvocationID.xy), vec4(tile_velocity[pos_group.y + kBorderSize][pos_group.x + kBorderSize], 0.0, 0.0));
+#else
 	imageStore(velocity_out_buffer, ivec2(gl_GlobalInvocationID.xy), vec4(imageLoad(velocity_buffer, ivec2(pos_screen)).xy, 0.0, 0.0));
+#endif
 #endif
 }

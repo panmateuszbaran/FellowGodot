@@ -82,10 +82,33 @@ void main() {
 #ifdef MODE_MIPMAP
 
 	ivec2 base_pos = (pos + params.section.xy) << 1;
-	vec4 color = texelFetch(source_color, base_pos, 0);
-	color += texelFetch(source_color, base_pos + ivec2(0, 1), 0);
-	color += texelFetch(source_color, base_pos + ivec2(1, 0), 0);
-	color += texelFetch(source_color, base_pos + ivec2(1, 1), 0);
+	vec4 color;
+	if (bool(params.flags & FLAG_SANITIZE_INF_NAN)) {
+		// FellowEngine (postfx/ss_last_frame_direct, decision 0044): the mipmap of the sanitized copy (MODE_SIMPLE_COPY with
+		// FLAG_SANITIZE_INF_NAN) of the source, without the copy: each texel sanitized as the copy sanitizes it, then the
+		// same sum.
+		vec4 c0 = texelFetch(source_color, base_pos, 0);
+		vec4 c1 = texelFetch(source_color, base_pos + ivec2(0, 1), 0);
+		vec4 c2 = texelFetch(source_color, base_pos + ivec2(1, 0), 0);
+		vec4 c3 = texelFetch(source_color, base_pos + ivec2(1, 1), 0);
+		c0 = mix(c0, vec4(100.0, 100.0, 100.0, 1.0), isinf(c0));
+		c0 = mix(c0, vec4(100.0, 100.0, 100.0, 1.0), isnan(c0));
+		c1 = mix(c1, vec4(100.0, 100.0, 100.0, 1.0), isinf(c1));
+		c1 = mix(c1, vec4(100.0, 100.0, 100.0, 1.0), isnan(c1));
+		c2 = mix(c2, vec4(100.0, 100.0, 100.0, 1.0), isinf(c2));
+		c2 = mix(c2, vec4(100.0, 100.0, 100.0, 1.0), isnan(c2));
+		c3 = mix(c3, vec4(100.0, 100.0, 100.0, 1.0), isinf(c3));
+		c3 = mix(c3, vec4(100.0, 100.0, 100.0, 1.0), isnan(c3));
+		color = c0;
+		color += c1;
+		color += c2;
+		color += c3;
+	} else {
+		color = texelFetch(source_color, base_pos, 0);
+		color += texelFetch(source_color, base_pos + ivec2(0, 1), 0);
+		color += texelFetch(source_color, base_pos + ivec2(1, 0), 0);
+		color += texelFetch(source_color, base_pos + ivec2(1, 1), 0);
+	}
 	color /= 4.0;
 	color = mix(color, vec4(100.0, 100.0, 100.0, 1.0), isinf(color));
 	color = mix(color, vec4(100.0, 100.0, 100.0, 1.0), isnan(color));

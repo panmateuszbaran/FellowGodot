@@ -431,10 +431,22 @@ void SSEffects::allocate_last_frame_buffer(Ref<RenderSceneBuffersRD> p_render_bu
 	}
 }
 
-void SSEffects::copy_internal_texture_to_last_frame(Ref<RenderSceneBuffersRD> p_render_buffers, CopyEffects &p_copy_effects) {
+void SSEffects::copy_internal_texture_to_last_frame(Ref<RenderSceneBuffersRD> p_render_buffers, CopyEffects &p_copy_effects, bool p_skip_full_size) {
 	uint32_t mipmaps = p_render_buffers->get_texture_format(RB_SCOPE_SSLF, RB_LAST_FRAME).mipmaps;
+	// FellowEngine (postfx/ss_last_frame_direct, decision 0044): with p_skip_full_size, level 0 is not written (nothing
+	// reads it: SSIL reads level 5, half-size SSR level 1) and level 1 is made from the internal texture directly, each
+	// texel sanitized as the level-0 copy sanitizes it.
+	const bool skip_full = p_skip_full_size && mipmaps > 1 && RD::get_singleton()->texture_size(p_render_buffers->get_internal_texture(0)) == RD::get_singleton()->texture_size(p_render_buffers->get_texture_slice(RB_SCOPE_SSLF, RB_LAST_FRAME, 0, 0));
 	for (uint32_t v = 0; v < p_render_buffers->get_view_count(); v++) {
 		for (uint32_t m = 0; m < mipmaps; m++) {
+			if (skip_full && m == 0) {
+				continue;
+			}
+			if (skip_full && m == 1) {
+				RID dest = p_render_buffers->get_texture_slice(RB_SCOPE_SSLF, RB_LAST_FRAME, v, 1);
+				p_copy_effects.make_mipmap(p_render_buffers->get_internal_texture(v), dest, RD::get_singleton()->texture_size(dest), true);
+				continue;
+			}
 			RID source;
 			if (m == 0) {
 				source = p_render_buffers->get_internal_texture(v);
