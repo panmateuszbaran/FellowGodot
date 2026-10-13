@@ -1,6 +1,6 @@
 # 0039 — Soft shadow filters: how often they run their taps, and a PCSS early-out after the blocker search
 
-Status: **MEASURING** · Branch `fellow/geometry` · Toggle `rendering/fellow/shadows/pcss_filter_early_out` (runtime,
+Status: **REJECT** (exact, no measurable gain; left in, off) · Branch `fellow/geometry` · Toggle `rendering/fellow/shadows/pcss_filter_early_out` (runtime,
 off; needs `shadows/directional_max_mip`) · Diagnostics `debug/scene_shader_experiments` bits 8/16 (path shares as the
 colour), 32 (finer pyramid windows), 128 (forces the early-out) · Code: `scene_forward_lights_inc.glsl`
 (`sample_directional_soft_shadow`, `fellow_shadow_window_minmax`), specialization bit 16 of `sc_packed_1`.
@@ -58,4 +58,23 @@ float comparison a hair away. With a margin of two 16-bit steps (2^-15) (`m8_f11
 for bit equal (99 dB, max |d| 0), Foliage Lab 78.29 / Sponza 75.44 dB at their floors (78.26 / 75.47).
 
 Between processes (`m8_f113_pcss`, 4 runs, start-up bit): Sponza −2.7 % (4/4 pairs, p 0.09), Foliage Lab −1.2 %,
-Bistro exterior −0.9 %, City Lab +0.2 % — within noise. In-process measurement with the runtime toggle: pending.
+Bistro exterior −0.9 %, City Lab +0.2 % — within noise.
+
+The runtime toggle (`fellow101`, `m8_f114`): images against off — Bistro exterior bit for bit, City Lab 101.2 dB (max |d|
+1), Foliage Lab 78.2 dB (its floor). In one process (autotune off, profiled):
+
+| scene | frame | opaque pass |
+|---|---:|---:|
+| Bistro exterior | −0.1 % | −0.018 ms |
+| City Lab | +1.2 % (n.s.) | +0.009 ms |
+| Foliage Lab, chunks | +0.3 % | +0.020 ms |
+| Foliage Lab, one MultiMesh per type | −0.3 % | −0.012 ms |
+| Blend Lab | −7.8 % (n.s., 80 block pairs) | −0.015 ms |
+| Sponza | −0.8 % (p < 0.001) | +0.069 ms |
+
+Skipping the filter loop in most calls changes the opaque pass by hundredths of a millisecond: its twelve hardware
+comparison taps are not where the time goes.
+
+## Decision
+
+**REJECT** (left in, off): exact, but no measurable gain. The share maps stay as a diagnostic.
