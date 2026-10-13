@@ -102,7 +102,14 @@ positional PCF's 8 taps (12 % 6 = 0 but 8 % 6 ≠ 0) to stock's loop. Four is ke
 | `sponza_pan` | 75.5 / 72.6 | 2 | 0 | 75.5 (0039) |
 | `bistro_int_path` | 67.1 / 65.9 | 11 | 0.001 % | 67.1 (0038) |
 
-Bit for bit where the scene's two runs are (Bistro exterior), at the run-to-run floor elsewhere.
+Bistro exterior bit for bit; Lights Lab, Foliage Lab, PBR Lab, Sponza and Bistro interior at their run-to-run
+floors (a null test of `fellow105`, `m8_f118_ss_temporal`, two runs of the same shaders: Bistro exterior and City Lab
+bit for bit, Bistro interior 67.1, Lights Lab 94.3, PBR Lab 76.4, Sponza 75.5 dB). **City Lab is not bit for bit**:
+in some frames a few pixels differ by one level (mean 101.2 dB, min 99.0 = identical frames; no pixel off by more
+than 1), where its null test is. The arithmetic is the same expressions in the same order, and lavapipe renders it bit
+for bit; NVIDIA's compiler may contract a multiply-add of a tap coordinate differently in the batched loop (SPIR-V
+allows contraction), which moves a tap across a texel boundary in rare pixels. The same signature as 0039's runtime
+toggle in City Lab (101.2 dB, max |d| 1).
 
 ### Performance (`fellow104`, `m8_f117_batch_ab`: one process, defaults with autotune off, blocks of 30 frames, off
 and on alternating, 800 block pairs per scene)
@@ -121,6 +128,7 @@ All p < 10^-20 except City Lab (its frame is bound elsewhere; its opaque pass is
 
 ## Decision
 
-**KEEP, on by default** (`fellow104`): exact (lavapipe bit for bit, RTX at the floor), frame −2 to −5 % in every scene
-with soft shadows. The lesson for the rest of the renderer: loops that are not unrolled and feed each fetch's result
+**KEEP, on by default** (`fellow104`): the same arithmetic as stock (lavapipe bit for bit; RTX bit for bit or at the
+floor, except a handful of pixels one level off in some City Lab frames from the driver's rounding), frame −2 to −5 %
+in every scene with soft shadows. The lesson for the rest of the renderer: loops that are not unrolled and feed each fetch's result
 into a running sum pay one fetch latency per iteration; SSAO and SSIL gathers have the same shape (decision 0041).
