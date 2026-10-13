@@ -24,6 +24,8 @@
 
 #VERSION_DEFINES
 
+#extension GL_EXT_control_flow_attributes : require
+
 #define SSIL_MAIN_DISK_SAMPLE_COUNT (32)
 const vec4 sample_pattern[SSIL_MAIN_DISK_SAMPLE_COUNT] = {
 	vec4(0.78488064, 0.56661671, 1.500000, -0.126083), vec4(0.26022232, -0.29575172, 1.500000, -1.064030), vec4(0.10459357, 0.08372527, 1.110000, -2.730563), vec4(-0.68286800, 0.04963045, 1.090000, -0.498827),
@@ -200,17 +202,15 @@ float calculate_pixel_obscurance(vec3 p_pixel_normal, vec3 p_hit_delta, float p_
 	return max(0, NdotD - 0.05) * falloff_mult;
 }
 
-void SSIL_tap_inner(const int p_quality_level, inout vec3 r_color_sum, inout float r_obscurance_sum, inout float r_weight_sum, const vec2 p_sampling_uv, const float p_mip_level, const vec3 p_pix_center_pos, vec3 p_pixel_normal, const float p_fallof_sq, const float p_weight_mod) {
-	// get depth at sample
-	float viewspace_sample_z = textureLod(source_depth_mipmaps, vec3(p_sampling_uv, params.pass), p_mip_level).x;
-	vec3 sample_normal = load_normal(ivec2(p_sampling_uv * vec2(params.screen_size)));
-
+// FellowEngine: SSIL_tap_inner split in three (its fetches, the sample's geometry, its colour's contribution), so that
+// the batched taps (FELLOW_SS_TAP_BATCH) run the same expressions.
+void SSIL_tap_geometry(const int p_quality_level, const vec2 p_sampling_uv, const float viewspace_sample_z, const vec3 p_pix_center_pos, vec3 p_pixel_normal, const float p_fallof_sq, const float p_weight_mod, out float obscurance, out float weight, out vec3 hit_delta, out vec2 reprojected_sampling_uv) {
 	// convert to viewspace
 	vec3 hit_pos = NDC_to_view_space(p_sampling_uv.xy, viewspace_sample_z);
-	vec3 hit_delta = hit_pos - p_pix_center_pos;
+	hit_delta = hit_pos - p_pix_center_pos;
 
-	float obscurance = calculate_pixel_obscurance(p_pixel_normal, hit_delta, p_fallof_sq);
-	float weight = 1.0;
+	obscurance = calculate_pixel_obscurance(p_pixel_normal, hit_delta, p_fallof_sq);
+	weight = 1.0;
 
 	if (p_quality_level >= SSIL_HALOING_REDUCTION_ENABLE_AT_QUALITY_PRESET) {
 		float reduce = max(0, -hit_delta.z);
@@ -220,20 +220,37 @@ void SSIL_tap_inner(const int p_quality_level, inout vec3 r_color_sum, inout flo
 
 	// Translate sampling_uv to last screen's coordinates
 	const vec4 sample_pos = projection_constants.reprojection * vec4(p_sampling_uv * 2.0 - 1.0, (viewspace_sample_z - params.z_near) / (params.z_far - params.z_near) * 2.0 - 1.0, 1.0);
-	vec2 reprojected_sampling_uv = (sample_pos.xy / sample_pos.w) * 0.5 + 0.5;
+	reprojected_sampling_uv = (sample_pos.xy / sample_pos.w) * 0.5 + 0.5;
 
 	weight *= p_weight_mod;
+}
+
+vec3 SSIL_tap_color(vec3 sample_color, const float obscurance, const float weight, const vec3 sample_normal, const vec3 hit_delta) {
+	// Reduce impact of fireflies by tonemapping before averaging: http://graphicrants.blogspot.com/2013/12/tone-mapping.html
+	sample_color /= (1.0 + dot(sample_color, vec3(0.299, 0.587, 0.114)));
+	return sample_color * obscurance * weight * mix(1.0, smoothstep(0.0, 0.1, -dot(sample_normal, normalize(hit_delta))), params.normal_rejection_amount);
+}
+
+void SSIL_tap_inner(const int p_quality_level, inout vec3 r_color_sum, inout float r_obscurance_sum, inout float r_weight_sum, const vec2 p_sampling_uv, const float p_mip_level, const vec3 p_pix_center_pos, vec3 p_pixel_normal, const float p_fallof_sq, const float p_weight_mod) {
+	// get depth at sample
+	float viewspace_sample_z = textureLod(source_depth_mipmaps, vec3(p_sampling_uv, params.pass), p_mip_level).x;
+	vec3 sample_normal = load_normal(ivec2(p_sampling_uv * vec2(params.screen_size)));
+
+	float obscurance;
+	float weight;
+	vec3 hit_delta;
+	vec2 reprojected_sampling_uv;
+	SSIL_tap_geometry(p_quality_level, p_sampling_uv, viewspace_sample_z, p_pix_center_pos, p_pixel_normal, p_fallof_sq, p_weight_mod, obscurance, weight, hit_delta, reprojected_sampling_uv);
 
 	r_obscurance_sum += obscurance * weight;
 
 	vec3 sample_color = textureLod(last_frame, reprojected_sampling_uv, 5.0).rgb;
-	// Reduce impact of fireflies by tonemapping before averaging: http://graphicrants.blogspot.com/2013/12/tone-mapping.html
-	sample_color /= (1.0 + dot(sample_color, vec3(0.299, 0.587, 0.114)));
-	r_color_sum += sample_color * obscurance * weight * mix(1.0, smoothstep(0.0, 0.1, -dot(sample_normal, normalize(hit_delta))), params.normal_rejection_amount);
+	r_color_sum += SSIL_tap_color(sample_color, obscurance, weight, sample_normal, hit_delta);
 	r_weight_sum += weight;
 }
 
-void SSILTap(const int p_quality_level, inout vec3 r_color_sum, inout float r_obscurance_sum, inout float r_weight_sum, const int p_tap_index, const mat2 p_rot_scale, const vec3 p_pix_center_pos, vec3 p_pixel_normal, const vec2 p_normalized_screen_pos, const float p_mip_offset, const float p_fallof_sq, float p_weight_mod, vec2 p_norm_xy, float p_norm_xy_length) {
+// A tap's two sampling coordinates (the second mirrored), its mip level and weight (FellowEngine: split out of SSILTap).
+void SSIL_tap_coords(const int p_quality_level, const int p_tap_index, const mat2 p_rot_scale, const vec2 p_normalized_screen_pos, const float p_mip_offset, inout float p_weight_mod, vec2 p_norm_xy, float p_norm_xy_length, out vec2 sampling_uv, out vec2 sampling_mirrored_uv, out float mip_level) {
 	vec2 sample_offset;
 	float sample_pow_2_len;
 
@@ -250,11 +267,9 @@ void SSILTap(const int p_quality_level, inout vec3 r_color_sum, inout float r_ob
 
 	// calculate MIP based on the sample distance from the center, similar to as described
 	// in http://graphics.cs.williams.edu/papers/SAOHPG12/.
-	float mip_level = (p_quality_level < SSIL_DEPTH_MIPS_ENABLE_AT_QUALITY_PRESET) ? (0) : (sample_pow_2_len + p_mip_offset);
+	mip_level = (p_quality_level < SSIL_DEPTH_MIPS_ENABLE_AT_QUALITY_PRESET) ? (0) : (sample_pow_2_len + p_mip_offset);
 
-	vec2 sampling_uv = sample_offset * params.half_screen_pixel_size + p_normalized_screen_pos;
-
-	SSIL_tap_inner(p_quality_level, r_color_sum, r_obscurance_sum, r_weight_sum, sampling_uv, mip_level, p_pix_center_pos, p_pixel_normal, p_fallof_sq, p_weight_mod);
+	sampling_uv = sample_offset * params.half_screen_pixel_size + p_normalized_screen_pos;
 
 	// for the second tap, just use the mirrored offset
 	vec2 sample_offset_mirrored_uv = -sample_offset;
@@ -268,9 +283,62 @@ void SSILTap(const int p_quality_level, inout vec3 r_color_sum, inout float r_ob
 	}
 
 	// snap to pixel center (more correct obscurance math, avoids artifacts)
-	vec2 sampling_mirrored_uv = sample_offset_mirrored_uv * params.half_screen_pixel_size + p_normalized_screen_pos;
+	sampling_mirrored_uv = sample_offset_mirrored_uv * params.half_screen_pixel_size + p_normalized_screen_pos;
+}
+
+void SSILTap(const int p_quality_level, inout vec3 r_color_sum, inout float r_obscurance_sum, inout float r_weight_sum, const int p_tap_index, const mat2 p_rot_scale, const vec3 p_pix_center_pos, vec3 p_pixel_normal, const vec2 p_normalized_screen_pos, const float p_mip_offset, const float p_fallof_sq, float p_weight_mod, vec2 p_norm_xy, float p_norm_xy_length) {
+	vec2 sampling_uv;
+	vec2 sampling_mirrored_uv;
+	float mip_level;
+	SSIL_tap_coords(p_quality_level, p_tap_index, p_rot_scale, p_normalized_screen_pos, p_mip_offset, p_weight_mod, p_norm_xy, p_norm_xy_length, sampling_uv, sampling_mirrored_uv, mip_level);
+
+	SSIL_tap_inner(p_quality_level, r_color_sum, r_obscurance_sum, r_weight_sum, sampling_uv, mip_level, p_pix_center_pos, p_pixel_normal, p_fallof_sq, p_weight_mod);
 
 	SSIL_tap_inner(p_quality_level, r_color_sum, r_obscurance_sum, r_weight_sum, sampling_mirrored_uv, mip_level, p_pix_center_pos, p_pixel_normal, p_fallof_sq, p_weight_mod);
+}
+
+// Taps p_first, p_first + p_step, ... below p_end (weight 1), in that order.
+void SSIL_taps(const int p_quality_level, inout vec3 r_color_sum, inout float r_obscurance_sum, inout float r_weight_sum, const int p_first, const int p_step, const int p_end, const mat2 p_rot_scale, const vec3 p_pix_center_pos, vec3 p_pixel_normal, const vec2 p_normalized_screen_pos, const float p_mip_offset, const float p_fallof_sq, vec2 p_norm_xy, float p_norm_xy_length) {
+	int i = p_first;
+#ifdef FELLOW_SS_TAP_BATCH
+	// FellowEngine (rendering/fellow/postfx/ss_tap_batch, decision 0041): FELLOW_SS_TAP_BATCH taps' depth and normal
+	// samples fetched together, then their colour samples together; every sum takes its terms in the same order with
+	// the same expressions as the loop below (the tap count is a push constant, so the loop is not unrolled).
+	for (; i + (FELLOW_SS_TAP_BATCH - 1) * p_step < p_end; i += FELLOW_SS_TAP_BATCH * p_step) {
+		vec2 uv[2 * FELLOW_SS_TAP_BATCH];
+		float mip[FELLOW_SS_TAP_BATCH];
+		float weight_mod[FELLOW_SS_TAP_BATCH];
+		float z[2 * FELLOW_SS_TAP_BATCH];
+		vec3 sample_normal[2 * FELLOW_SS_TAP_BATCH];
+		float obscurance[2 * FELLOW_SS_TAP_BATCH];
+		float weight[2 * FELLOW_SS_TAP_BATCH];
+		vec3 hit_delta[2 * FELLOW_SS_TAP_BATCH];
+		vec2 reprojected_uv[2 * FELLOW_SS_TAP_BATCH];
+		vec3 sample_color[2 * FELLOW_SS_TAP_BATCH];
+		[[unroll]] for (int j = 0; j < FELLOW_SS_TAP_BATCH; j++) {
+			weight_mod[j] = 1.0;
+			SSIL_tap_coords(p_quality_level, i + j * p_step, p_rot_scale, p_normalized_screen_pos, p_mip_offset, weight_mod[j], p_norm_xy, p_norm_xy_length, uv[2 * j], uv[2 * j + 1], mip[j]);
+		}
+		[[unroll]] for (int k = 0; k < 2 * FELLOW_SS_TAP_BATCH; k++) {
+			z[k] = textureLod(source_depth_mipmaps, vec3(uv[k], params.pass), mip[k / 2]).x;
+			sample_normal[k] = load_normal(ivec2(uv[k] * vec2(params.screen_size)));
+		}
+		[[unroll]] for (int k = 0; k < 2 * FELLOW_SS_TAP_BATCH; k++) {
+			SSIL_tap_geometry(p_quality_level, uv[k], z[k], p_pix_center_pos, p_pixel_normal, p_fallof_sq, weight_mod[k / 2], obscurance[k], weight[k], hit_delta[k], reprojected_uv[k]);
+			r_obscurance_sum += obscurance[k] * weight[k];
+		}
+		[[unroll]] for (int k = 0; k < 2 * FELLOW_SS_TAP_BATCH; k++) {
+			sample_color[k] = textureLod(last_frame, reprojected_uv[k], 5.0).rgb;
+		}
+		[[unroll]] for (int k = 0; k < 2 * FELLOW_SS_TAP_BATCH; k++) {
+			r_color_sum += SSIL_tap_color(sample_color[k], obscurance[k], weight[k], sample_normal[k], hit_delta[k]);
+			r_weight_sum += weight[k];
+		}
+	}
+#endif
+	for (; i < p_end; i += p_step) {
+		SSILTap(p_quality_level, r_color_sum, r_obscurance_sum, r_weight_sum, i, p_rot_scale, p_pix_center_pos, p_pixel_normal, p_normalized_screen_pos, p_mip_offset, p_fallof_sq, 1.0, p_norm_xy, p_norm_xy_length);
+	}
 }
 
 #ifdef FELLOW_TEMPORAL
@@ -397,9 +465,7 @@ void generate_SSIL(out vec3 r_color, out vec4 r_edges, out float r_obscurance, o
 		vec3 taps_color = vec3(0.0);
 		float taps_obscurance = 0.0;
 		float taps_weight = 0.0;
-		for (int i = int(fellow_temporal.parity); i < number_of_taps; i += 2) {
-			SSILTap(p_quality_level, taps_color, taps_obscurance, taps_weight, i, rot_scale_matrix, pix_center_pos, pixel_normal, normalized_screen_pos, mip_offset, fallof_sq, 1.0, norm_xy, norm_xy_length);
-		}
+		SSIL_taps(p_quality_level, taps_color, taps_obscurance, taps_weight, int(fellow_temporal.parity), 2, number_of_taps, rot_scale_matrix, pix_center_pos, pixel_normal, normalized_screen_pos, mip_offset, fallof_sq, norm_xy, norm_xy_length);
 		vec4 other_color_obscurance;
 		float other_weight;
 		if (fellow_history_taps(upos * 2u + uvec2(params.pass_coord_offset), fellow_view_depth, other_color_obscurance, other_weight)) {
@@ -414,9 +480,7 @@ void generate_SSIL(out vec3 r_color, out vec4 r_edges, out float r_obscurance, o
 		imageStore(history_color_out, ivec3(ivec2(upos), params.pass), vec4(taps_color, taps_obscurance));
 		imageStore(history_weight_out, ivec3(ivec2(upos), params.pass), vec4(fellow_temporal.parity == 0u ? taps_weight : -taps_weight, fellow_view_depth, 0.0, 0.0));
 #else
-		for (int i = 0; i < number_of_taps; i++) {
-			SSILTap(p_quality_level, color_sum, obscurance_sum, weight_sum, i, rot_scale_matrix, pix_center_pos, pixel_normal, normalized_screen_pos, mip_offset, fallof_sq, 1.0, norm_xy, norm_xy_length);
-		}
+		SSIL_taps(p_quality_level, color_sum, obscurance_sum, weight_sum, 0, 1, number_of_taps, rot_scale_matrix, pix_center_pos, pixel_normal, normalized_screen_pos, mip_offset, fallof_sq, norm_xy, norm_xy_length);
 #endif
 	}
 #ifdef ADAPTIVE

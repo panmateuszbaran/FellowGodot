@@ -64,6 +64,11 @@ inline bool ssao_shared_tile() {
 // SSAO and SSIL gathers with each workgroup computing the pixels of one sample rotation in a 40 x 8 tile, so that its
 // threads sample at nearly the same offsets from their pixels (docs/decisions/0024-coherent-gather.md; every pixel is
 // computed as stock computes it). Read every frame.
+// SSAO/SSIL gathers: this many taps' fetches issued together, then used in stock's order with stock's arithmetic (exact;
+// docs/decisions/0041-ss-tap-batch.md). Start-up; 0 or 1: stock's loop.
+inline int ss_tap_batch() {
+	return postfx_enabled() ? CLAMP(int(GLOBAL_GET("rendering/fellow/postfx/ss_tap_batch")), 0, 8) : 0;
+}
 inline bool ss_coherent_gather() {
 	return postfx_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/postfx/ss_coherent_gather");
 }

@@ -23,6 +23,8 @@
 
 #VERSION_DEFINES
 
+#extension GL_EXT_control_flow_attributes : require
+
 #define INTELSSAO_MAIN_DISK_SAMPLE_COUNT (32)
 const vec4 sample_pattern[INTELSSAO_MAIN_DISK_SAMPLE_COUNT] = {
 	vec4(0.78488064, 0.56661671, 1.500000, -0.126083), vec4(0.26022232, -0.29575172, 1.500000, -1.064030), vec4(0.10459357, 0.08372527, 1.110000, -2.730563), vec4(-0.68286800, 0.04963045, 1.090000, -0.498827),
@@ -227,10 +229,7 @@ float calculate_pixel_obscurance(vec3 p_pixel_normal, vec3 p_hit_delta, float p_
 	return max(0, NdotD - params.horizon_angle_threshold) * falloff_mult;
 }
 
-void SSAO_tap_inner(const int p_quality_level, inout float r_obscurance_sum, inout float r_weight_sum, const vec2 p_sampling_uv, const float p_mip_level, const vec3 p_pix_center_pos, vec3 p_pixel_normal, const float p_fallof_sq, const float p_weight_mod) {
-	// get depth at sample
-	float viewspace_sample_z = textureLod(source_depth_mipmaps, vec3(p_sampling_uv, params.pass), p_mip_level).x;
-
+void SSAO_tap_math(const int p_quality_level, inout float r_obscurance_sum, inout float r_weight_sum, const vec2 p_sampling_uv, const float viewspace_sample_z, const vec3 p_pix_center_pos, vec3 p_pixel_normal, const float p_fallof_sq, const float p_weight_mod) {
 	// convert to viewspace
 	vec3 hit_pos = NDC_to_view_space(p_sampling_uv.xy, viewspace_sample_z).xyz;
 	vec3 hit_delta = hit_pos - p_pix_center_pos;
@@ -248,7 +247,14 @@ void SSAO_tap_inner(const int p_quality_level, inout float r_obscurance_sum, ino
 	r_weight_sum += weight;
 }
 
-void SSAOTap(const int p_quality_level, inout float r_obscurance_sum, inout float r_weight_sum, const int p_tap_index, const mat2 p_rot_scale, const vec3 p_pix_center_pos, vec3 p_pixel_normal, const vec2 p_normalized_screen_pos, const float p_mip_offset, const float p_fallof_sq, float p_weight_mod, vec2 p_norm_xy, float p_norm_xy_length) {
+void SSAO_tap_inner(const int p_quality_level, inout float r_obscurance_sum, inout float r_weight_sum, const vec2 p_sampling_uv, const float p_mip_level, const vec3 p_pix_center_pos, vec3 p_pixel_normal, const float p_fallof_sq, const float p_weight_mod) {
+	// get depth at sample
+	float viewspace_sample_z = textureLod(source_depth_mipmaps, vec3(p_sampling_uv, params.pass), p_mip_level).x;
+	SSAO_tap_math(p_quality_level, r_obscurance_sum, r_weight_sum, p_sampling_uv, viewspace_sample_z, p_pix_center_pos, p_pixel_normal, p_fallof_sq, p_weight_mod);
+}
+
+// A tap's two sampling coordinates (the second mirrored), its mip level and weight (FellowEngine: split out of SSAOTap).
+void SSAO_tap_coords(const int p_quality_level, const int p_tap_index, const mat2 p_rot_scale, const vec2 p_normalized_screen_pos, const float p_mip_offset, inout float p_weight_mod, vec2 p_norm_xy, float p_norm_xy_length, out vec2 sampling_uv, out vec2 sampling_mirrored_uv, out float mip_level) {
 	vec2 sample_offset;
 	float sample_pow_2_len;
 
@@ -265,11 +271,9 @@ void SSAOTap(const int p_quality_level, inout float r_obscurance_sum, inout floa
 
 	// calculate MIP based on the sample distance from the center, similar to as described
 	// in http://graphics.cs.williams.edu/papers/SAOHPG12/.
-	float mip_level = (p_quality_level < SSAO_DEPTH_MIPS_ENABLE_AT_QUALITY_PRESET) ? (0) : (sample_pow_2_len + p_mip_offset);
+	mip_level = (p_quality_level < SSAO_DEPTH_MIPS_ENABLE_AT_QUALITY_PRESET) ? (0) : (sample_pow_2_len + p_mip_offset);
 
-	vec2 sampling_uv = sample_offset * params.half_screen_pixel_size + p_normalized_screen_pos;
-
-	SSAO_tap_inner(p_quality_level, r_obscurance_sum, r_weight_sum, sampling_uv, mip_level, p_pix_center_pos, p_pixel_normal, p_fallof_sq, p_weight_mod);
+	sampling_uv = sample_offset * params.half_screen_pixel_size + p_normalized_screen_pos;
 
 	// for the second tap, just use the mirrored offset
 	vec2 sample_offset_mirrored_uv = -sample_offset;
@@ -283,9 +287,47 @@ void SSAOTap(const int p_quality_level, inout float r_obscurance_sum, inout floa
 	}
 
 	// snap to pixel center (more correct obscurance math, avoids artifacts)
-	vec2 sampling_mirrored_uv = sample_offset_mirrored_uv * params.half_screen_pixel_size + p_normalized_screen_pos;
+	sampling_mirrored_uv = sample_offset_mirrored_uv * params.half_screen_pixel_size + p_normalized_screen_pos;
+}
+
+void SSAOTap(const int p_quality_level, inout float r_obscurance_sum, inout float r_weight_sum, const int p_tap_index, const mat2 p_rot_scale, const vec3 p_pix_center_pos, vec3 p_pixel_normal, const vec2 p_normalized_screen_pos, const float p_mip_offset, const float p_fallof_sq, float p_weight_mod, vec2 p_norm_xy, float p_norm_xy_length) {
+	vec2 sampling_uv;
+	vec2 sampling_mirrored_uv;
+	float mip_level;
+	SSAO_tap_coords(p_quality_level, p_tap_index, p_rot_scale, p_normalized_screen_pos, p_mip_offset, p_weight_mod, p_norm_xy, p_norm_xy_length, sampling_uv, sampling_mirrored_uv, mip_level);
+
+	SSAO_tap_inner(p_quality_level, r_obscurance_sum, r_weight_sum, sampling_uv, mip_level, p_pix_center_pos, p_pixel_normal, p_fallof_sq, p_weight_mod);
 
 	SSAO_tap_inner(p_quality_level, r_obscurance_sum, r_weight_sum, sampling_mirrored_uv, mip_level, p_pix_center_pos, p_pixel_normal, p_fallof_sq, p_weight_mod);
+}
+
+// Taps p_first, p_first + p_step, ... below p_end (weight 1), in that order.
+void SSAO_taps(const int p_quality_level, inout float r_obscurance_sum, inout float r_weight_sum, const int p_first, const int p_step, const int p_end, const mat2 p_rot_scale, const vec3 p_pix_center_pos, vec3 p_pixel_normal, const vec2 p_normalized_screen_pos, const float p_mip_offset, const float p_fallof_sq, vec2 p_norm_xy, float p_norm_xy_length) {
+	int i = p_first;
+#ifdef FELLOW_SS_TAP_BATCH
+	// FellowEngine (rendering/fellow/postfx/ss_tap_batch, decision 0041): FELLOW_SS_TAP_BATCH taps' depth samples fetched
+	// together, then used in the same order with the same arithmetic as the loop below, in which each sample waits for
+	// the previous tap's math (the tap count is a push constant, so the loop is not unrolled).
+	for (; i + (FELLOW_SS_TAP_BATCH - 1) * p_step < p_end; i += FELLOW_SS_TAP_BATCH * p_step) {
+		vec2 uv[2 * FELLOW_SS_TAP_BATCH];
+		float mip[FELLOW_SS_TAP_BATCH];
+		float weight_mod[FELLOW_SS_TAP_BATCH];
+		float z[2 * FELLOW_SS_TAP_BATCH];
+		[[unroll]] for (int j = 0; j < FELLOW_SS_TAP_BATCH; j++) {
+			weight_mod[j] = 1.0;
+			SSAO_tap_coords(p_quality_level, i + j * p_step, p_rot_scale, p_normalized_screen_pos, p_mip_offset, weight_mod[j], p_norm_xy, p_norm_xy_length, uv[2 * j], uv[2 * j + 1], mip[j]);
+		}
+		[[unroll]] for (int k = 0; k < 2 * FELLOW_SS_TAP_BATCH; k++) {
+			z[k] = textureLod(source_depth_mipmaps, vec3(uv[k], params.pass), mip[k / 2]).x;
+		}
+		[[unroll]] for (int k = 0; k < 2 * FELLOW_SS_TAP_BATCH; k++) {
+			SSAO_tap_math(p_quality_level, r_obscurance_sum, r_weight_sum, uv[k], z[k], p_pix_center_pos, p_pixel_normal, p_fallof_sq, weight_mod[k / 2]);
+		}
+	}
+#endif
+	for (; i < p_end; i += p_step) {
+		SSAOTap(p_quality_level, r_obscurance_sum, r_weight_sum, i, p_rot_scale, p_pix_center_pos, p_pixel_normal, p_normalized_screen_pos, p_mip_offset, p_fallof_sq, 1.0, p_norm_xy, p_norm_xy_length);
+	}
 }
 
 #ifdef FELLOW_TEMPORAL
@@ -480,9 +522,7 @@ void generate_SSAO_shadows_internal(out float r_shadow_term, out vec4 r_edges, o
 		// This frame's half of the taps; the other half from the previous frame (or this half twice).
 		float taps_obscurance = 0.0;
 		float taps_weight = 0.0;
-		for (int i = int(fellow_temporal.parity); i < number_of_taps; i += 2) {
-			SSAOTap(p_quality_level, taps_obscurance, taps_weight, i, rot_scale_matrix, pix_center_pos, pixel_normal, normalized_screen_pos, mip_offset, fallof_sq, 1.0, norm_xy, norm_xy_length);
-		}
+		SSAO_taps(p_quality_level, taps_obscurance, taps_weight, int(fellow_temporal.parity), 2, number_of_taps, rot_scale_matrix, pix_center_pos, pixel_normal, normalized_screen_pos, mip_offset, fallof_sq, norm_xy, norm_xy_length);
 		vec2 other_taps;
 		if (fellow_history_taps(upos * 2u + uvec2(params.pass_coord_offset), fellow_view_depth, other_taps)) {
 			obscurance_sum += taps_obscurance + other_taps.x;
@@ -493,9 +533,7 @@ void generate_SSAO_shadows_internal(out float r_shadow_term, out vec4 r_edges, o
 		}
 		imageStore(history_out, ivec3(ivec2(upos), params.pass), vec4(taps_obscurance, taps_weight, fellow_view_depth, float(fellow_temporal.parity)));
 #else
-		for (int i = 0; i < number_of_taps; i++) {
-			SSAOTap(p_quality_level, obscurance_sum, weight_sum, i, rot_scale_matrix, pix_center_pos, pixel_normal, normalized_screen_pos, mip_offset, fallof_sq, 1.0, norm_xy, norm_xy_length);
-		}
+		SSAO_taps(p_quality_level, obscurance_sum, weight_sum, 0, 1, number_of_taps, rot_scale_matrix, pix_center_pos, pixel_normal, normalized_screen_pos, mip_offset, fallof_sq, norm_xy, norm_xy_length);
 #endif
 	}
 #ifdef ADAPTIVE

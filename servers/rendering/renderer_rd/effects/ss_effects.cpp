@@ -128,7 +128,7 @@ SSEffects::SSEffects() {
 		ssil_modes.push_back("\n#define ADAPTIVE\n#define FELLOW_COHERENT_GATHER\n");
 		ssil_modes.push_back("\n#define FELLOW_TEMPORAL\n");
 
-		ssil.gather_shader.initialize(ssil_modes);
+		ssil.gather_shader.initialize(ssil_modes, Fellow::ss_tap_batch() >= 2 ? "\n#define FELLOW_SS_TAP_BATCH " + itos(Fellow::ss_tap_batch()) + "\n" : String());
 
 		ssil.gather_shader_version = ssil.gather_shader.version_create();
 
@@ -227,7 +227,7 @@ SSEffects::SSEffects() {
 			ssao_modes.push_back("\n#define ADAPTIVE\n#define FELLOW_COHERENT_GATHER\n");
 			ssao_modes.push_back("\n#define FELLOW_TEMPORAL\n");
 
-			ssao.gather_shader.initialize(ssao_modes);
+			ssao.gather_shader.initialize(ssao_modes, Fellow::ss_tap_batch() >= 2 ? "\n#define FELLOW_SS_TAP_BATCH " + itos(Fellow::ss_tap_batch()) + "\n" : String());
 
 			ssao.gather_shader_version = ssao.gather_shader.version_create();
 

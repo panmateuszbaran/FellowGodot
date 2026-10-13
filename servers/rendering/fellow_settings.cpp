@@ -87,6 +87,8 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/postfx/fast_luminance_reduce", true);
 	GLOBAL_DEF("rendering/fellow/postfx/ssao_temporal", false);
 	GLOBAL_DEF("rendering/fellow/postfx/ssil_temporal", false);
+	// SSAO/SSIL gathers: taps whose texture fetches are issued together (decision 0041; 0 or 1 = stock's loop). Start-up.
+	GLOBAL_DEF_RST(PropertyInfo(Variant::INT, "rendering/fellow/postfx/ss_tap_batch", PROPERTY_HINT_RANGE, "0,8,1"), 0);
 	GLOBAL_DEF("rendering/fellow/postfx/fog_half_rate", false);
 	GLOBAL_DEF("rendering/fellow/postfx/verify_luminance_reduce", false);
 	GLOBAL_DEF("rendering/fellow/geometry/occlusion_culling", false);
