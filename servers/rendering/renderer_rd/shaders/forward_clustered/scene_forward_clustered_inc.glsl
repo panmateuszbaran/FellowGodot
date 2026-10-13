@@ -192,6 +192,11 @@ bool sc_fellow_pcss_filter_early_out() {
 	return ((sc_packed_1() >> 16) & 1U) != 0;
 }
 
+bool sc_fellow_shadow_tap_batch() {
+	return ((sc_packed_1() >> 17) & 1U) != 0;
+}
+#define FELLOW_HAS_SHADOW_TAP_BATCH
+
 float sc_luminance_multiplier() {
 	// Not used in clustered renderer but we share some code with the mobile renderer that requires this.
 	return 1.0;

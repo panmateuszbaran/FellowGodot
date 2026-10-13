@@ -4663,6 +4663,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	base_specialization.fellow_cluster_log_depth = Fellow::light_cluster_depth_slices();
 	base_specialization.fellow_blended_alpha_zero_skip = Fellow::blended_alpha_zero_skip();
 	base_specialization.fellow_pcss_filter_early_out = Fellow::shadow_pcss_filter_early_out();
+	base_specialization.fellow_shadow_tap_batch = Fellow::shadow_batched_taps();
 
 	bool using_ssao = depth_pre_pass && !is_reflection_probe && p_render_data->environment.is_valid() && environment_get_ssao_enabled(p_render_data->environment);
 
@@ -8441,6 +8442,7 @@ void RenderForwardClustered::_update_shader_quality_settings() {
 	specialization.fellow_cluster_log_depth = Fellow::light_cluster_depth_slices();
 	specialization.fellow_blended_alpha_zero_skip = Fellow::blended_alpha_zero_skip();
 	specialization.fellow_pcss_filter_early_out = Fellow::shadow_pcss_filter_early_out();
+	specialization.fellow_shadow_tap_batch = Fellow::shadow_batched_taps();
 	scene_shader.set_default_specialization(specialization);
 
 	base_uniforms_changed(); //also need this

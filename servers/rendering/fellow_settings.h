@@ -276,6 +276,12 @@ inline bool shadow_pcss_blend_band() {
 inline bool shadow_pcss_filter_early_out() {
 	return shadows_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/shadows/pcss_filter_early_out");
 }
+// Soft shadow filter taps (PCF, PCSS blocker search and filter; directional and positional) fetched a few at a time
+// and their results used afterwards in the same order: the same arithmetic, the fetches in flight together
+// (docs/decisions/0040-batched-shadow-taps.md). Specialization constant, runtime.
+inline bool shadow_batched_taps() {
+	return shadows_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/shadows/batched_taps");
+}
 inline bool shadow_directional_max_mip() {
 	return shadows_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/shadows/directional_max_mip") && autotune_allows(TUNE_DIRECTIONAL_PYRAMID);
 }

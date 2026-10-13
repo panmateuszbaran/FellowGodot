@@ -68,6 +68,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/shadows/pcss_directional_penumbra", false);
 	GLOBAL_DEF("rendering/fellow/shadows/directional_max_mip", true);
 	GLOBAL_DEF("rendering/fellow/shadows/pcss_filter_early_out", false);
+	GLOBAL_DEF("rendering/fellow/shadows/batched_taps", true);
 	GLOBAL_DEF("rendering/fellow/shadows/max_mip_visible_region", false);
 	GLOBAL_DEF("rendering/fellow/shadows/positional_max_mip", true);
 	GLOBAL_DEF("rendering/fellow/shadows/debug_disable_caster_culling", false);

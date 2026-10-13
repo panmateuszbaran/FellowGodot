@@ -140,6 +140,7 @@ public:
 				uint32_t fellow_blended_alpha_zero_skip : 1;
 				uint32_t fellow_persistent_instances : 1; // decision 0022: instance data read through the list elements
 				uint32_t fellow_pcss_filter_early_out : 1; // decision 0039: directional PCSS decided after the blocker search
+				uint32_t fellow_shadow_tap_batch : 1; // decision 0040: shadow filter taps fetched a few at a time
 			};
 		};
 
