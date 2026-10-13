@@ -1,17 +1,48 @@
 # FellowEngine — milestone 8 report (the opaque pass: what its time is spent on)
 
-Status: **DRAFT** (`fellow96`-`fellow110`, measured 2026-10-12/13). Branch `fellow/geometry`. Benchmark machine as in
+Status: **FINAL** (`fellow96`-`fellow110`, measured 2026-10-12/14; `fellow110` carries the decisions below). Branch `fellow/geometry`. Benchmark machine as in
 milestone 7 (Acer Predator PHN16S-71, Core Ultra 9 275HX, RTX 5070 Ti Laptop GPU, NVIDIA GPU only, Windows 11,
 1920×1080, "high" preset). Decision records `docs/decisions/0037`-`0044`; user-facing summary
 `docs/FELLOWENGINE_OPTIONS.md`.
 
 ## 0. Result
 
-<!-- m8_f125_final: stock vs fellow110 defaults vs + visually lossless options -->
-TBD (`m8_f125_final`).
+FellowEngine `fellow110` against stock Godot 4.7.2, between processes (`m8_f125_final`: 3 interleaved runs of 20 s per
+build and scene, 5 s warm-up, 30 s heat soak), frame time at 1920 × 1080:
+
+| scene | stock 4.7.2 | FellowEngine defaults (exact) | + visually lossless options |
+|---|---:|---:|---:|
+| Sponza | 13.67 ms | **6.92 ms (−49.3 %)** | **6.77 ms (−50.5 %)** |
+| Bistro exterior | 6.15 ms | **4.93 ms (−19.8 %)** | **4.64 ms (−24.5 %)** |
+| City Lab | 2.45 ms | **2.03 ms (−17.1 %)** | **1.94 ms (−20.8 %)** |
+| Bistro interior | 4.12 ms | **3.61 ms (−12.5 %)** | **3.38 ms (−18.0 %)** |
+| Lights Lab | 2.98 ms | **2.68 ms (−10.3 %)** | **2.05 ms (−31.4 %)** |
+| Foliage Lab, chunks | 3.53 ms | 3.17 ms (−10.2 %, p 0.02) | **3.11 ms (−12.1 %)** |
+| PBR Lab | 2.55 ms | 2.42 ms (−4.9 %, p 0.03) | 2.22 ms (−12.8 %, p 0.03) |
+| Foliage Lab, one MultiMesh per type (`m8_f125_foliage_single`) | 10.24 ms | **4.97 ms (−51.5 %)** | |
+| Stress Lab | 5.11 ms | 4.84 ms (−5.3 %, within noise) | 4.36 ms (−14.8 %, p 0.02) |
+
+(bold: p < 0.01, every pair of runs faster.) The defaults change no pixel against milestone 7's build beyond the
+run-to-run floor (`m8_f125_defaults_temporal`, `fellow95` against `fellow110`, 60-frame sequences: Bistro exterior,
+City Lab and Stress Lab bit for bit; Bistro interior 67.1 dB, Foliage Lab 78.3, Lights Lab 94.3, PBR Lab 76.3, Sponza
+75.5 dB, their floors).
+
+Milestone 7's final build against this milestone's in one session (`m8_f126_m7_vs_m8`, defaults, 3 runs; stock's own
+times moved between `m7_f105` and `m8_f125`, so the milestones' tables are not to be subtracted):
+
+| scene | `fellow95` (m7) | `fellow110` (m8) |
+|---|---:|---:|
+| PBR Lab | 2.50 ms | **2.33 ms (−6.8 %)** |
+| Sponza | 7.69 ms | 7.18 ms (−6.7 %, noisy, 3/3 pairs) |
+| Bistro exterior | 4.86 ms | 4.56 ms (−6.3 %, p 0.02) |
+| Bistro interior | 3.89 ms | **3.65 ms (−6.3 %)** |
+| Foliage Lab | 3.25 ms | **3.11 ms (−4.4 %)** |
+| Lights Lab | 2.73 ms | 2.64 ms (−3.6 %, 3/3 pairs) |
+| City Lab | 2.18 ms | 2.11 ms (−3.1 %, 3/3 pairs) |
 
 New in this milestone and on by default, all exact: **soft shadow filter taps fetched four at a time** (§3, 0040),
-**TAA velocities in shared memory** and **SSIL's last frame without its unread full-size level** (§6, 0044).
+**TAA velocities in shared memory** and **SSIL's last frame without its unread full-size level** (§5, 0044). Seven
+other ideas (six decision records) were measured and rejected (§2, §4).
 
 ## 1. The question
 
@@ -102,4 +133,12 @@ clustered renderer: directional PCF and PCSS (search, filter), spot and omni PCF
 
 ## 8. Next
 
-TBD.
+* **The positional lights that reach a pixel.** They are 61-76 % of the opaque pass in Lights Lab and Bistro interior
+  (0043): their shading and their shadows, not the loop around them. Candidates: the omni shadow lookup (dual
+  paraboloid, eight PCF taps behind a pyramid test), and the light data's layout (one light's fields are read in
+  several dependent rounds).
+* **Directional PCSS** still costs 0.5 ms of Bistro exterior's opaque pass after 0040: the texture work of the search
+  and filter of two cascades for nearly every pixel (stock blends over the whole split). The look-changing blend band
+  (`shadows/pcss_blend_band`, off) halves it; no exact lever found.
+* **Sponza's geometry**: about 2 million triangles per pass, 98 % of them in visible surfaces (0026), and a transparent
+  pass of 1.5 ms (blended cypress leaves).
