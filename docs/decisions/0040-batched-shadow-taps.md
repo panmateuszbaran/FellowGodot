@@ -105,14 +105,15 @@ positional PCF's 8 taps (12 % 6 = 0 but 8 % 6 ≠ 0) to stock's loop. Four is ke
 
 Bistro exterior bit for bit; Lights Lab, Foliage Lab, PBR Lab, Sponza and Bistro interior at their run-to-run
 floors (a null test of `fellow105`, `m8_f118_ss_temporal`, two runs of the same shaders: Bistro exterior and City Lab
-bit for bit, Bistro interior 67.1, Lights Lab 94.3, PBR Lab 76.4, Sponza 75.5 dB). **City Lab is not bit for bit**:
-in some frames a few pixels differ by one level (mean 101.2 dB, min 99.0 = identical frames; no pixel off by more
-than 1), where its null test is. The arithmetic is the same expressions in the same order, and lavapipe renders it bit
-for bit; NVIDIA's compiler may contract a multiply-add of a tap coordinate differently in the batched loop (SPIR-V
-allows contraction), which moves a tap across a texel boundary in rare pixels. The same signature as 0039's runtime
-toggle in City Lab (101.2 dB, max |d| 1).
-It is deterministic (`m8_f119_city_temporal`, `fellow106`): off against on 101.18 dB, on against a second run of on
-bit for bit, off against that second run 101.18 dB again.
+bit for bit, Bistro interior 67.1, Lights Lab 94.3, PBR Lab 76.4, Sponza 75.5 dB). **City Lab**: in some frames a few
+pixels differ by one level between the toggle's off and on (mean 101.2 dB, min 99.0 = identical frames; no pixel off
+by more than 1), deterministically (`m8_f119_city_temporal`, `fellow106`: on against a second run of on bit for bit,
+off against it 101.18 dB again). It is the toggle's *off* path that differs: against milestone 7's build, which has
+no batching code at all, the defaults with batched taps are **bit for bit** in City Lab (`m8_f125_defaults_temporal`,
+`fellow95` against `fellow110`: Bistro exterior, City Lab and Stress Lab 99 dB, the others at their floors). NVIDIA's
+compiler builds stock's loop differently inside a shader that also holds the batched one (SPIR-V allows a
+multiply-add of a tap coordinate to be contracted or not), which moves a tap across a texel boundary in rare pixels;
+lavapipe renders every combination bit for bit. The same signature as 0039's runtime toggle in City Lab.
 
 ### Performance (`fellow104`, `m8_f117_batch_ab`: one process, defaults with autotune off, blocks of 30 frames, off
 and on alternating, 800 block pairs per scene)
@@ -147,7 +148,6 @@ diagnostic (specialization bits 17 and 18).
 
 ## Decision
 
-**KEEP, on by default** (`fellow104`): the same arithmetic as stock (lavapipe bit for bit; RTX bit for bit or at the
-floor, except a handful of pixels one level off in some City Lab frames from the driver's rounding), frame −2 to −5 %
-in every scene with soft shadows. The lesson for the rest of the renderer: loops that are not unrolled and feed each fetch's result
+**KEEP, on by default** (`fellow104`): the same arithmetic as stock (lavapipe bit for bit; RTX against milestone 7's
+build bit for bit or at the floor in every sequence), frame −2 to −5 % in every scene with soft shadows. The lesson for the rest of the renderer: loops that are not unrolled and feed each fetch's result
 into a running sum pay one fetch latency per iteration; SSAO and SSIL gathers have the same shape (decision 0041).
