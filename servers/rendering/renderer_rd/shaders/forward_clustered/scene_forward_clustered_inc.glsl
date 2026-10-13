@@ -205,6 +205,11 @@ bool sc_fellow_pcss_quad_search() {
 	return ((sc_packed_1() >> 19) & 1U) != 0;
 }
 #define FELLOW_HAS_PCSS_QUAD_SEARCH
+
+bool sc_fellow_light_fields_early() {
+	return ((sc_packed_1() >> 20) & 1U) != 0;
+}
+#define FELLOW_HAS_LIGHT_FIELDS_EARLY
 #define FELLOW_HAS_SHADOW_TAP_BATCH
 
 float sc_luminance_multiplier() {

@@ -4667,6 +4667,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	base_specialization.fellow_shadow_tap_batch = Fellow::shadow_batched_taps_directional();
 	base_specialization.fellow_shadow_tap_batch_positional = Fellow::shadow_batched_taps_positional();
 	base_specialization.fellow_pcss_quad_search = fellow_subgroup_quad_fragment && Fellow::shadow_pcss_quad_search();
+	base_specialization.fellow_light_fields_early = Fellow::light_fields_early();
 
 	bool using_ssao = depth_pre_pass && !is_reflection_probe && p_render_data->environment.is_valid() && environment_get_ssao_enabled(p_render_data->environment);
 
@@ -8453,6 +8454,7 @@ void RenderForwardClustered::_update_shader_quality_settings() {
 		fellow_subgroup_quad_fragment = (rd->limit_get(RD::LIMIT_SUBGROUP_OPERATIONS) & RD::SUBGROUP_QUAD_BIT) && (rd->limit_get(RD::LIMIT_SUBGROUP_IN_SHADERS) & RD::SHADER_STAGE_FRAGMENT_BIT) && (rd->limit_get(RD::LIMIT_SUBGROUP_OPERATIONS) & RD::SUBGROUP_BALLOT_BIT);
 	}
 	specialization.fellow_pcss_quad_search = fellow_subgroup_quad_fragment && Fellow::shadow_pcss_quad_search();
+	specialization.fellow_light_fields_early = Fellow::light_fields_early();
 	scene_shader.set_default_specialization(specialization);
 
 	base_uniforms_changed(); //also need this

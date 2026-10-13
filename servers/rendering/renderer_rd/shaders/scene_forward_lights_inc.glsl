@@ -1029,9 +1029,9 @@ void light_process_omni(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 		hvec3 binormal, hvec3 tangent, half anisotropy,
 #endif
 		inout hvec3 diffuse_light, inout hvec3 specular_light) {
-#ifdef FELLOW_EXP_BIT19
-	// Experiment (debug/scene_shader_experiments 524288): the fields of the light's tests and shading read at the start,
-	// together (the same values; otherwise each is read where it is used, after the tests before it).
+#ifdef FELLOW_HAS_LIGHT_FIELDS_EARLY
+	// FellowEngine (rendering/fellow/lights/fields_early, decision 0045): the fields of the light's tests and shading read
+	// together here (the same values) instead of each where it is used, after the tests before it.
 	vec3 fellow_l_position = omni_lights.data[idx].position;
 	float fellow_l_inv_radius = omni_lights.data[idx].inv_radius;
 	float fellow_l_attenuation = omni_lights.data[idx].attenuation;
@@ -1039,7 +1039,7 @@ void light_process_omni(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 	float fellow_l_size = omni_lights.data[idx].size;
 	float fellow_l_specular_amount = omni_lights.data[idx].specular_amount;
 	float fellow_l_shadow_opacity = omni_lights.data[idx].shadow_opacity;
-#define FELLOW_LO(m_field) fellow_l_##m_field
+#define FELLOW_LO(m_field) (sc_fellow_light_fields_early() ? fellow_l_##m_field : omni_lights.data[idx].m_field)
 #else
 #define FELLOW_LO(m_field) omni_lights.data[idx].m_field
 #endif
@@ -1448,9 +1448,9 @@ void light_process_spot(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 #endif
 		inout hvec3 diffuse_light,
 		inout hvec3 specular_light) {
-#ifdef FELLOW_EXP_BIT19
-	// Experiment (debug/scene_shader_experiments 524288): the fields of the light's tests and shading read at the start,
-	// together (the same values; otherwise each is read where it is used, after the tests before it).
+#ifdef FELLOW_HAS_LIGHT_FIELDS_EARLY
+	// FellowEngine (rendering/fellow/lights/fields_early, decision 0045): the fields of the light's tests and shading read
+	// together here (the same values) instead of each where it is used, after the tests before it.
 	vec3 fellow_l_position = spot_lights.data[idx].position;
 	float fellow_l_inv_radius = spot_lights.data[idx].inv_radius;
 	float fellow_l_attenuation = spot_lights.data[idx].attenuation;
@@ -1461,7 +1461,7 @@ void light_process_spot(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 	vec3 fellow_l_direction = spot_lights.data[idx].direction;
 	float fellow_l_cone_angle = spot_lights.data[idx].cone_angle;
 	float fellow_l_cone_attenuation = spot_lights.data[idx].cone_attenuation;
-#define FELLOW_LS(m_field) fellow_l_##m_field
+#define FELLOW_LS(m_field) (sc_fellow_light_fields_early() ? fellow_l_##m_field : spot_lights.data[idx].m_field)
 #else
 #define FELLOW_LS(m_field) spot_lights.data[idx].m_field
 #endif
