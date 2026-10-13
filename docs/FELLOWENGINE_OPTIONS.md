@@ -65,6 +65,6 @@ clipping, decision 0001).
 
 ## Measured and rejected (left in, off)
 
-Occlusion culling of the opaque pass (0026), the depth pre-pass in two orders (0029), SSAO/SSIL coherent gathers
+SSAO/SSIL gather taps fetched in batches (0041), occlusion culling of the opaque pass (0026), the depth pre-pass in two orders (0029), SSAO/SSIL coherent gathers
 (0024), TAA in 16 × 16 groups (0023), instance buffers in system memory (0021), early submit (0009), TAA camera motion
 vectors (0013), shared-memory SSAO tiles (0011). Not merged: soft shadows with half their taps under TAA (0032).
