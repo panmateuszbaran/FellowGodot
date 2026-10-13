@@ -1259,7 +1259,16 @@ vec3 encode24(vec3 v) {
 // Diagnostics: shares of the shadow filter calls (positional with bit 3 alone, directional with bit 4 as well): red, the
 // max-mip early-outs; green, the full path with every tap the same; blue, the full path with a partial result.
 vec3 fellow_dbg_color() {
-#ifdef FELLOW_EXP_BIT4
+#if defined(FELLOW_EXP_BIT18)
+	// Diagnostics (bits 8 + 262144): red, the omni/spot loop's iterations / 128; green, lights in the pixel's own mask / 128;
+	// blue, lights shaded / 32. (Lights within range: fellow_dbg_light_range, unused here.)
+#ifdef FELLOW_EXP_BIT5
+	// With bit 32 as well: green, lights within range / 128.
+	return vec3(float(fellow_dbg_light_iter) / 128.0, float(fellow_dbg_light_range) / 128.0, float(fellow_dbg_light_brdf) / 32.0);
+#else
+	return vec3(float(fellow_dbg_light_iter) / 128.0, float(fellow_dbg_light_own) / 128.0, float(fellow_dbg_light_brdf) / 32.0);
+#endif
+#elif defined(FELLOW_EXP_BIT4)
 	// Directional soft shadows (PCSS): red, decided before the blocker search; green, decided by the search alone (no
 	// blocker) or after it without the filter loop; blue, the filter loop ran.
 	float calls = float(max(fellow_dbg_dir_call, 1u));
@@ -3056,11 +3065,13 @@ void fragment_shader(in SceneData scene_data) {
 			while (merged_mask != 0) {
 				uint bit = findMSB(merged_mask);
 				merged_mask &= ~(1u << bit);
+				FELLOW_DBG_INC(fellow_dbg_light_iter);
 
 				if (((1u << bit) & mask) == 0) { //do not process if not originally here
 					continue;
 				}
 
+				FELLOW_DBG_INC(fellow_dbg_light_own);
 				uint light_index = 32 * i + bit;
 
 				if (!bool(omni_lights.data[light_index].mask & FELLOW_INSTANCE(layer_mask))) {
@@ -3126,11 +3137,13 @@ void fragment_shader(in SceneData scene_data) {
 			while (merged_mask != 0) {
 				uint bit = findMSB(merged_mask);
 				merged_mask &= ~(1u << bit);
+				FELLOW_DBG_INC(fellow_dbg_light_iter);
 
 				if (((1u << bit) & mask) == 0) { //do not process if not originally here
 					continue;
 				}
 
+				FELLOW_DBG_INC(fellow_dbg_light_own);
 				uint light_index = 32 * i + bit;
 
 				if (!bool(spot_lights.data[light_index].mask & FELLOW_INSTANCE(layer_mask))) {

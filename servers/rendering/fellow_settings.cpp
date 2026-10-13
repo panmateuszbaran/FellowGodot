@@ -117,8 +117,9 @@ void Fellow::register_settings() {
 	// omni/spot lights and 8192 no decals/reflection probes in the colour pass (code kept; images change), 16384 the
 	// quad-shared PCSS search only within a small light-space depth range, 32768 omni/spot lights that cannot reach the
 	// pixel dropped from each cluster word first, four at a time, 65536 no light_compute() for omni/spot lights, 131072 no
-	// omni/spot shadow lookups (code kept; images change). 0: none (the shipped shaders).
-	GLOBAL_DEF_RST(PropertyInfo(Variant::INT, "rendering/fellow/debug/scene_shader_experiments", PROPERTY_HINT_RANGE, "0,262143,1"), 0);
+	// omni/spot shadow lookups (code kept; images change), 262144 with 8 light counts as the colour (with 32: lights within
+	// range), 524288 omni/spot light fields read together at the start. 0: none (the shipped shaders).
+	GLOBAL_DEF_RST(PropertyInfo(Variant::INT, "rendering/fellow/debug/scene_shader_experiments", PROPERTY_HINT_RANGE, "0,1048575,1"), 0);
 	// Diagnostics: the light cluster tile's side in pixels (8, 16, 32 = stock, 64), when the render buffers are set up.
 	GLOBAL_DEF_RST(PropertyInfo(Variant::INT, "rendering/fellow/debug/cluster_size", PROPERTY_HINT_ENUM, "8:8,16:16,32:32,64:64"), 32);
 	GLOBAL_DEF("rendering/fellow/debug/occlusion_cull_approx", false);
