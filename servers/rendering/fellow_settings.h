@@ -287,6 +287,12 @@ inline bool shadow_pcss_filter_early_out() {
 inline bool shadow_batched_taps() {
 	return shadows_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/shadows/batched_taps");
 }
+// Directional PCSS blocker search shared by each 2 x 2 pixel quad: each pixel takes a quarter of the search taps and the
+// quad sums them (visually lossless, changes the image; docs/decisions/0042-pcss-quad-search.md). Specialization
+// constant, runtime; needs subgroup quad operations in fragment shaders.
+inline bool shadow_pcss_quad_search() {
+	return shadows_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/shadows/pcss_quad_search");
+}
 // Diagnostics: which kinds of lights' filters batch their taps (1 directional, 2 positional, 3 both).
 inline bool shadow_batched_taps_directional() {
 	return shadow_batched_taps() && (int(GLOBAL_GET_CACHED(int, "rendering/fellow/debug/batched_taps_kinds")) & 1);

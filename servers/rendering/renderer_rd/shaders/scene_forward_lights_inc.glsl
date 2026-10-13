@@ -636,7 +636,7 @@ half sample_omni_pcf_shadow(texture2D shadow, float blur_scale, vec2 coord, vec4
 	return FELLOW_DBG_RESULT(fellow_dbg_pos_uniform, half(avg * (1.0 / float(sc_soft_shadow_samples()))));
 }
 
-half sample_directional_soft_shadow(texture2D shadow, vec3 pssm_coord, vec2 tex_scale, float taa_frame_count) {
+half sample_directional_soft_shadow(texture2D shadow, vec3 pssm_coord, vec2 tex_scale, float taa_frame_count, uint p_cascade) {
 	FELLOW_DBG_INC(fellow_dbg_dir_call);
 #ifdef FELLOW_EXP_BIT6
 	// Diagnostics (debug/scene_shader_experiments 64; the image changes): the filter's code stays in the shader (the
@@ -686,6 +686,50 @@ half sample_directional_soft_shadow(texture2D shadow, vec3 pssm_coord, vec2 tex_
 		disk_rotation = mat2(vec2(cr, -sr), vec2(sr, cr));
 	}
 
+#ifdef FELLOW_HAS_PCSS_QUAD_SEARCH
+	// FellowEngine (rendering/fellow/shadows/pcss_quad_search, decision 0042; visually lossless, off by default): the
+	// pixels of a 2 x 2 quad that are all here, in the same cascade, share the blocker search: each takes the kernel's
+	// taps i with i % 4 == its place in the quad (around its own coordinate, with its own rotation) and the quad sums
+	// the four partial sums. The filter below stays per pixel.
+	bool fellow_quad = false;
+	if (sc_fellow_pcss_quad_search()) {
+		uvec4 fellow_ballot = subgroupBallot(true);
+		uint fellow_lane = gl_SubgroupInvocationID;
+		bool fellow_full = subgroupBallotBitExtract(fellow_ballot, fellow_lane ^ 1u) && subgroupBallotBitExtract(fellow_ballot, fellow_lane ^ 2u) && subgroupBallotBitExtract(fellow_ballot, fellow_lane ^ 3u);
+		uint fellow_h = subgroupQuadSwapHorizontal(p_cascade);
+		uint fellow_v = subgroupQuadSwapVertical(p_cascade);
+		uint fellow_d = subgroupQuadSwapDiagonal(p_cascade);
+		fellow_quad = fellow_full && fellow_h == p_cascade && fellow_v == p_cascade && fellow_d == p_cascade && (sc_directional_penumbra_shadow_samples() & 3u) == 0u;
+#ifdef FELLOW_EXP_BIT14
+		// Experiment (debug/scene_shader_experiments 16384): only where the quad's receivers lie within a small range of
+		// light-space depth (not across a depth discontinuity, where their blockers differ). The quad's range, the same in
+		// its four pixels.
+		float fellow_zh = subgroupQuadSwapHorizontal(pssm_coord.z);
+		float fellow_zv = subgroupQuadSwapVertical(pssm_coord.z);
+		float fellow_zd = subgroupQuadSwapDiagonal(pssm_coord.z);
+		float fellow_zspread = max(max(pssm_coord.z, fellow_zh), max(fellow_zv, fellow_zd)) - min(min(pssm_coord.z, fellow_zh), min(fellow_zv, fellow_zd));
+		fellow_quad = fellow_quad && fellow_zspread < (1.0 / 8192.0);
+#endif
+	}
+	if (fellow_quad) {
+		uint fellow_q = gl_SubgroupInvocationID & 3u;
+		float d[8];
+		[[unroll]] for (uint j = 0u; j < sc_directional_penumbra_shadow_samples() / 4u; j++) {
+			vec2 suv = pssm_coord.xy + (disk_rotation * scene_data_block.data.directional_penumbra_shadow_kernel[4u * j + fellow_q].xy) * tex_scale;
+			d[j] = textureLod(sampler2D(shadow, SAMPLER_LINEAR_CLAMP), suv, 0.0).r;
+		}
+		[[unroll]] for (uint j = 0u; j < sc_directional_penumbra_shadow_samples() / 4u; j++) {
+			if (d[j] > pssm_coord.z) {
+				blocker_average += d[j];
+				blocker_count += 1.0;
+			}
+		}
+		blocker_average += subgroupQuadSwapHorizontal(blocker_average);
+		blocker_count += subgroupQuadSwapHorizontal(blocker_count);
+		blocker_average += subgroupQuadSwapVertical(blocker_average);
+		blocker_count += subgroupQuadSwapVertical(blocker_count);
+	} else
+#endif
 	if (FELLOW_BATCH_TAPS_DIR(sc_directional_penumbra_shadow_samples())) {
 		SPEC_CONSTANT_LOOP_ANNOTATION
 		for (uint i = 0; i < sc_directional_penumbra_shadow_samples(); i += FELLOW_TAP_BATCH) {

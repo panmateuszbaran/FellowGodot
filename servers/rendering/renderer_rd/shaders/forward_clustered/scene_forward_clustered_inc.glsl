@@ -7,6 +7,7 @@
 
 #extension GL_KHR_shader_subgroup_ballot : enable
 #extension GL_KHR_shader_subgroup_arithmetic : enable
+#extension GL_KHR_shader_subgroup_quad : enable
 
 #include "../cluster_data_inc.glsl"
 #include "../decal_data_inc.glsl"
@@ -199,6 +200,11 @@ bool sc_fellow_shadow_tap_batch() {
 bool sc_fellow_shadow_tap_batch_positional() {
 	return ((sc_packed_1() >> 18) & 1U) != 0;
 }
+
+bool sc_fellow_pcss_quad_search() {
+	return ((sc_packed_1() >> 19) & 1U) != 0;
+}
+#define FELLOW_HAS_PCSS_QUAD_SEARCH
 #define FELLOW_HAS_SHADOW_TAP_BATCH
 
 float sc_luminance_multiplier() {

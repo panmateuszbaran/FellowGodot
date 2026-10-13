@@ -1131,7 +1131,7 @@ float fellow_directional_soft_cascade(uint i, uint c, vec3 vertex, vec3 base_nor
 	float range_pos = dot(directional_lights.data[i].direction, v.xyz);
 	float test_radius = (range_pos - range_begin) * directional_lights.data[i].softshadow_angle;
 	vec2 tex_scale = uv_scale * test_radius;
-	return float(sample_directional_soft_shadow(directional_shadow_atlas, pssm_coord.xyz, tex_scale * directional_lights.data[i].soft_shadow_scale, taa_frame_count));
+	return float(sample_directional_soft_shadow(directional_shadow_atlas, pssm_coord.xyz, tex_scale * directional_lights.data[i].soft_shadow_scale, taa_frame_count, c));
 }
 #endif // !SHADOWS_DISABLED
 
@@ -1268,6 +1268,97 @@ vec3 fellow_dbg_color() {
 	float calls = float(max(fellow_dbg_pos_call, 1u));
 	return vec3(float(fellow_dbg_pos_call - fellow_dbg_pos_full), float(fellow_dbg_pos_uniform), float(fellow_dbg_pos_full - fellow_dbg_pos_uniform)) / calls;
 #endif
+}
+#endif
+
+#if defined(FELLOW_EXP_BIT15) && defined(FELLOW_BACKFACING_LIGHT_SKIP_OK) && !defined(MODE_RENDER_DEPTH) && !defined(MODE_UNSHADED) && !defined(USE_VERTEX_LIGHTING)
+#define FELLOW_LIGHT_PREFILTER
+// Experiment (debug/scene_shader_experiments 32768): before a cluster word's lights are processed, the ones that
+// cannot add anything to this pixel are dropped from its mask, four lights at a time with their loads together: the
+// tests of the light loop (layer mask, static bake with a lightmap) and the first zero-attenuation tests of
+// light_process_omni() / light_process_spot() (out of range; spot: outside the cone), the same expressions. The loop
+// then processes the remaining lights in the same order.
+#define FELLOW_LIGHT_BATCH 4u
+uint fellow_light_next(inout uint r_todo, uint p_first) {
+	if (r_todo == 0u) {
+		return p_first;
+	}
+	uint b = findMSB(r_todo);
+	r_todo &= ~(1u << b);
+	return b;
+}
+
+uint fellow_omni_reach(uint p_word, uint p_mask, vec3 p_vertex, uint p_layer_mask, bool p_lightmap) {
+	const bool skip_zero = sc_fellow_zero_attenuation_skip() && bool(scene_data_block.data.flags & SCENE_DATA_FLAGS_FELLOW_LIGHT_ZERO_ATTENUATION_SKIP);
+	uint todo = subgroupBroadcastFirst(subgroupOr(p_mask));
+	uint reach = 0u;
+	while (todo != 0u) {
+		uint b[FELLOW_LIGHT_BATCH];
+		b[0] = findMSB(todo);
+		todo &= ~(1u << b[0]);
+		[[unroll]] for (uint k = 1u; k < FELLOW_LIGHT_BATCH; k++) {
+			b[k] = fellow_light_next(todo, b[0]);
+		}
+		vec4 pr[FELLOW_LIGHT_BATCH];
+		uint lm[FELLOW_LIGHT_BATCH];
+		uint bm[FELLOW_LIGHT_BATCH];
+		[[unroll]] for (uint k = 0u; k < FELLOW_LIGHT_BATCH; k++) {
+			uint li = 32u * p_word + b[k];
+			pr[k] = vec4(omni_lights.data[li].position, omni_lights.data[li].inv_radius);
+			lm[k] = omni_lights.data[li].mask;
+			bm[k] = omni_lights.data[li].bake_mode;
+		}
+		[[unroll]] for (uint k = 0u; k < FELLOW_LIGHT_BATCH; k++) {
+			bool ok = ((1u << b[k]) & p_mask) != 0u && bool(lm[k] & p_layer_mask) && !(bm[k] == LIGHT_BAKE_STATIC && p_lightmap);
+			if (ok && skip_zero) {
+				vec3 light_rel_vec = pr[k].xyz - p_vertex;
+				float light_length = length(light_rel_vec);
+				ok = !(light_length * pr[k].w >= 1.0);
+			}
+			if (ok) {
+				reach |= 1u << b[k];
+			}
+		}
+	}
+	return reach;
+}
+
+uint fellow_spot_reach(uint p_word, uint p_mask, vec3 p_vertex, uint p_layer_mask, bool p_lightmap) {
+	const bool skip_zero = sc_fellow_zero_attenuation_skip() && bool(scene_data_block.data.flags & SCENE_DATA_FLAGS_FELLOW_LIGHT_ZERO_ATTENUATION_SKIP);
+	uint todo = subgroupBroadcastFirst(subgroupOr(p_mask));
+	uint reach = 0u;
+	while (todo != 0u) {
+		uint b[FELLOW_LIGHT_BATCH];
+		b[0] = findMSB(todo);
+		todo &= ~(1u << b[0]);
+		[[unroll]] for (uint k = 1u; k < FELLOW_LIGHT_BATCH; k++) {
+			b[k] = fellow_light_next(todo, b[0]);
+		}
+		vec4 pr[FELLOW_LIGHT_BATCH];
+		vec4 dc[FELLOW_LIGHT_BATCH];
+		uint lm[FELLOW_LIGHT_BATCH];
+		uint bm[FELLOW_LIGHT_BATCH];
+		[[unroll]] for (uint k = 0u; k < FELLOW_LIGHT_BATCH; k++) {
+			uint li = 32u * p_word + b[k];
+			pr[k] = vec4(spot_lights.data[li].position, spot_lights.data[li].inv_radius);
+			dc[k] = vec4(spot_lights.data[li].direction, spot_lights.data[li].cone_angle);
+			lm[k] = spot_lights.data[li].mask;
+			bm[k] = spot_lights.data[li].bake_mode;
+		}
+		[[unroll]] for (uint k = 0u; k < FELLOW_LIGHT_BATCH; k++) {
+			bool ok = ((1u << b[k]) & p_mask) != 0u && bool(lm[k] & p_layer_mask) && !(bm[k] == LIGHT_BAKE_STATIC && p_lightmap);
+			if (ok && skip_zero) {
+				vec3 light_rel_vec = pr[k].xyz - p_vertex;
+				float light_length = length(light_rel_vec);
+				hvec3 light_rel_vec_norm = hvec3(light_rel_vec / light_length);
+				ok = !(light_length * pr[k].w >= 1.0 || dot(-vec3(light_rel_vec_norm), dc[k].xyz) <= dc[k].w);
+			}
+			if (ok) {
+				reach |= 1u << b[k];
+			}
+		}
+	}
+	return reach;
 }
 #endif
 
@@ -2532,7 +2623,7 @@ void fragment_shader(in SceneData scene_data) {
 							shadow = s2.x;
 							shadow = mix(shadow, float(s2.y), blend);
 						} else {
-							shadow = sample_directional_soft_shadow(directional_shadow_atlas, fellow_coord[0], fellow_scale[0], scene_data.taa_frame_count);
+							shadow = sample_directional_soft_shadow(directional_shadow_atlas, fellow_coord[0], fellow_scale[0], scene_data.taa_frame_count, fellow_c0);
 						}
 #elif defined(FELLOW_EXP_BIT2)
 						// FellowEngine register-pressure experiment (debug/scene_shader_experiments bit 2): the cascades in a
@@ -2577,7 +2668,7 @@ void fragment_shader(in SceneData scene_data) {
 							float range_pos = dot(directional_lights.data[i].direction, v.xyz);
 							float test_radius = (range_pos - range_begin) * directional_lights.data[i].softshadow_angle;
 							vec2 tex_scale = uv_scale * test_radius;
-							float s = sample_directional_soft_shadow(directional_shadow_atlas, pssm_coord.xyz, tex_scale * directional_lights.data[i].soft_shadow_scale, scene_data.taa_frame_count);
+							float s = sample_directional_soft_shadow(directional_shadow_atlas, pssm_coord.xyz, tex_scale * directional_lights.data[i].soft_shadow_scale, scene_data.taa_frame_count, c);
 
 							if (blend_count == 0) {
 								shadow = s;
@@ -2605,7 +2696,7 @@ void fragment_shader(in SceneData scene_data) {
 							float range_begin = directional_lights.data[i].shadow_range_begin.x;
 							float test_radius = (range_pos - range_begin) * directional_lights.data[i].softshadow_angle;
 							vec2 tex_scale = directional_lights.data[i].uv_scale1 * test_radius;
-							shadow = sample_directional_soft_shadow(directional_shadow_atlas, pssm_coord.xyz, tex_scale * directional_lights.data[i].soft_shadow_scale, scene_data.taa_frame_count);
+							shadow = sample_directional_soft_shadow(directional_shadow_atlas, pssm_coord.xyz, tex_scale * directional_lights.data[i].soft_shadow_scale, scene_data.taa_frame_count, 0u);
 							blend_count++;
 						}
 
@@ -2621,7 +2712,7 @@ void fragment_shader(in SceneData scene_data) {
 							float range_begin = directional_lights.data[i].shadow_range_begin.y;
 							float test_radius = (range_pos - range_begin) * directional_lights.data[i].softshadow_angle;
 							vec2 tex_scale = directional_lights.data[i].uv_scale2 * test_radius;
-							float s = sample_directional_soft_shadow(directional_shadow_atlas, pssm_coord.xyz, tex_scale * directional_lights.data[i].soft_shadow_scale, scene_data.taa_frame_count);
+							float s = sample_directional_soft_shadow(directional_shadow_atlas, pssm_coord.xyz, tex_scale * directional_lights.data[i].soft_shadow_scale, scene_data.taa_frame_count, 1u);
 
 							if (blend_count == 0) {
 								shadow = s;
@@ -2646,7 +2737,7 @@ void fragment_shader(in SceneData scene_data) {
 							float range_begin = directional_lights.data[i].shadow_range_begin.z;
 							float test_radius = (range_pos - range_begin) * directional_lights.data[i].softshadow_angle;
 							vec2 tex_scale = directional_lights.data[i].uv_scale3 * test_radius;
-							float s = sample_directional_soft_shadow(directional_shadow_atlas, pssm_coord.xyz, tex_scale * directional_lights.data[i].soft_shadow_scale, scene_data.taa_frame_count);
+							float s = sample_directional_soft_shadow(directional_shadow_atlas, pssm_coord.xyz, tex_scale * directional_lights.data[i].soft_shadow_scale, scene_data.taa_frame_count, 2u);
 
 							if (blend_count == 0) {
 								shadow = s;
@@ -2671,7 +2762,7 @@ void fragment_shader(in SceneData scene_data) {
 							float range_begin = directional_lights.data[i].shadow_range_begin.w;
 							float test_radius = (range_pos - range_begin) * directional_lights.data[i].softshadow_angle;
 							vec2 tex_scale = directional_lights.data[i].uv_scale4 * test_radius;
-							float s = sample_directional_soft_shadow(directional_shadow_atlas, pssm_coord.xyz, tex_scale * directional_lights.data[i].soft_shadow_scale, scene_data.taa_frame_count);
+							float s = sample_directional_soft_shadow(directional_shadow_atlas, pssm_coord.xyz, tex_scale * directional_lights.data[i].soft_shadow_scale, scene_data.taa_frame_count, 3u);
 
 							if (blend_count == 0) {
 								shadow = s;
@@ -2957,6 +3048,9 @@ void fragment_shader(in SceneData scene_data) {
 		for (uint i = item_from; i < item_to; i++) {
 			uint mask = cluster_buffer.data[cluster_omni_offset + i];
 			mask &= cluster_get_range_clip_mask(i, item_min, item_max);
+#ifdef FELLOW_LIGHT_PREFILTER
+			mask = fellow_omni_reach(i, mask, vertex, FELLOW_INSTANCE(layer_mask), bool(fellow_flags & INSTANCE_FLAGS_USE_LIGHTMAP));
+#endif
 
 			uint merged_mask = subgroupBroadcastFirst(subgroupOr(mask));
 			while (merged_mask != 0) {
@@ -3024,6 +3118,9 @@ void fragment_shader(in SceneData scene_data) {
 		for (uint i = item_from; i < item_to; i++) {
 			uint mask = cluster_buffer.data[cluster_spot_offset + i];
 			mask &= cluster_get_range_clip_mask(i, item_min, item_max);
+#ifdef FELLOW_LIGHT_PREFILTER
+			mask = fellow_spot_reach(i, mask, vertex, FELLOW_INSTANCE(layer_mask), bool(fellow_flags & INSTANCE_FLAGS_USE_LIGHTMAP));
+#endif
 
 			uint merged_mask = subgroupBroadcastFirst(subgroupOr(mask));
 			while (merged_mask != 0) {

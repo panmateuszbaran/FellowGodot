@@ -1,7 +1,8 @@
 # 0040 — Soft shadow filter taps fetched four at a time
 
 Status: **KEEP, on by default** (exact) · Branch `fellow/geometry` · Toggle `rendering/fellow/shadows/batched_taps`
-(runtime, specialization bit 17 of `sc_packed_1`; on) · Diagnostics `debug/scene_shader_experiments` 256 (batches of 2),
+(runtime, specialization bits 17 (directional) and 18 (positional) of `sc_packed_1`; on; diagnostics
+`debug/batched_taps_kinds`) · Diagnostics `debug/scene_shader_experiments` 256 (batches of 2),
 512 (batches of 6), 1024 (directional PCSS loops unrolled, with the toggle off) · Code: `scene_forward_lights_inc.glsl`
 (`FELLOW_TAP_BATCH`, `FELLOW_BATCH_TAPS`; `sample_directional_pcf_shadow`, `sample_pcf_shadow`, `sample_omni_pcf_shadow`,
 `sample_directional_soft_shadow`, the omni and spot PCSS in `light_process_omni` / `light_process_spot`),
@@ -127,6 +128,22 @@ and on alternating, 800 block pairs per scene)
 | City Lab | −0.9 % (p 0.31) | | 0.535 → 0.481 (−0.054) |
 
 All p < 10^-20 except City Lab (its frame is bound elsewhere; its opaque pass is 10 % shorter).
+
+Directional and positional loops separately (`fellow107`, `m8_f120_kinds_ab`: one process, four configurations taking
+turns, `debug/batched_taps_kinds`; pipeline statistics: directional batches alone keep Bistro exterior's main variants at
+80 registers, positional batches take them to 96), frame against off:
+
+| scene | both (default) | directional only | positional only |
+|---|---:|---:|---:|
+| Bistro exterior | **−4.4 %** | −2.5 % | −0.8 % |
+| PBR Lab | **−4.4 %** | −3.2 % | +0.4 % |
+| Foliage Lab | **−4.2 %** | −2.2 % | −1.9 % |
+| Bistro interior | **−3.5 %** | +0.1 % | −3.5 % |
+| Sponza | **−2.5 %** | −0.6 % | −1.5 % |
+| Lights Lab | **−1.7 %** | −0.1 % | −1.7 % |
+
+Both kinds together are the fastest everywhere, the 96 registers included; `debug/batched_taps_kinds` stays as a
+diagnostic (specialization bits 17 and 18).
 
 ## Decision
 

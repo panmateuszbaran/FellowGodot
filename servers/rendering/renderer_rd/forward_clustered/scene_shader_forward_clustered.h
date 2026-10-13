@@ -142,6 +142,7 @@ public:
 				uint32_t fellow_pcss_filter_early_out : 1; // decision 0039: directional PCSS decided after the blocker search
 				uint32_t fellow_shadow_tap_batch : 1; // decision 0040: shadow filter taps fetched a few at a time (directional)
 				uint32_t fellow_shadow_tap_batch_positional : 1; // decision 0040: the same for positional lights
+				uint32_t fellow_pcss_quad_search : 1; // decision 0042: directional PCSS blocker search shared by pixel quads
 			};
 		};
 
