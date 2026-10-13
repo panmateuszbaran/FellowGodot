@@ -780,6 +780,173 @@ half sample_directional_soft_shadow(texture2D shadow, vec3 pssm_coord, vec2 tex_
 	}
 }
 
+#if defined(FELLOW_EXP_BIT11) && !defined(FELLOW_EXP_BIT3) && !defined(FELLOW_EXP_BIT6)
+#define FELLOW_PCSS_PAIR
+// Experiment (debug/scene_shader_experiments 2048): a blended pixel's two cascades through one PCSS whose taps of both
+// cascades are fetched together (search with search, filter with filter); per cascade the same arithmetic as
+// sample_directional_soft_shadow().
+hvec2 sample_directional_soft_shadow_pair(texture2D shadow, vec3 p_coord0, vec2 p_scale0, vec3 p_coord1, vec2 p_scale1, float taa_frame_count) {
+	vec3 pssm_coord[2] = vec3[2](p_coord0, p_coord1);
+	vec2 tex_scale[2] = vec2[2](p_scale0, p_scale1);
+	half result[2] = half[2](half(1.0), half(1.0));
+	bool fellow_active[2] = bool[2](true, true);
+#ifdef FELLOW_SHADOW_MAX_MIP
+	if (sc_fellow_directional_max_mip() && bool(scene_data_block.data.flags & SCENE_DATA_FLAGS_FELLOW_SHADOW_MAX_MIP)) {
+		[[unroll]] for (uint k = 0u; k < 2u; k++) {
+			vec2 mm = fellow_shadow_box_minmax(pssm_coord[k].xy, abs(tex_scale[k]));
+			if (mm.y < pssm_coord[k].z - FELLOW_SHADOW_MAX_MIP_EPSILON) {
+				result[k] = half(1.0);
+				fellow_active[k] = false;
+			} else if (mm.x > pssm_coord[k].z + FELLOW_SHADOW_MAX_MIP_EPSILON) {
+				float max_penumbra;
+				bool bounded = true;
+				if (bool(scene_data_block.data.flags & SCENE_DATA_FLAGS_FELLOW_PCSS_DIRECTIONAL_PENUMBRA)) {
+					max_penumbra = (-pssm_coord[k].z + mm.y) / max(1.0 - pssm_coord[k].z, 1e-6);
+				} else {
+					bounded = mm.y < 1.0 - 1e-6;
+					max_penumbra = (-pssm_coord[k].z + mm.y) / max(1.0 - mm.y, 1e-6);
+				}
+				if (bounded && fellow_shadow_box_minmax(pssm_coord[k].xy, abs(tex_scale[k]) * max_penumbra).x > pssm_coord[k].z + FELLOW_SHADOW_MAX_MIP_EPSILON) {
+					result[k] = half(0.0);
+					fellow_active[k] = false;
+				}
+			}
+		}
+	}
+#endif
+	if (!fellow_active[0] && !fellow_active[1]) {
+		return hvec2(result[0], result[1]);
+	}
+
+	mat2 disk_rotation;
+	{
+		float r = quick_hash(gl_FragCoord.xy + vec2(taa_frame_count * 5.588238)) * 2.0 * M_PI;
+		float sr = sin(r);
+		float cr = cos(r);
+		disk_rotation = mat2(vec2(cr, -sr), vec2(sr, cr));
+	}
+
+	float blocker_count[2] = float[2](0.0, 0.0);
+	float blocker_average[2] = float[2](0.0, 0.0);
+	if (FELLOW_BATCH_TAPS(sc_directional_penumbra_shadow_samples())) {
+		SPEC_CONSTANT_LOOP_ANNOTATION
+		for (uint i = 0; i < sc_directional_penumbra_shadow_samples(); i += FELLOW_TAP_BATCH) {
+			float d[2 * FELLOW_TAP_BATCH];
+			[[unroll]] for (uint k = 0u; k < 2u; k++) {
+				if (fellow_active[k]) {
+					[[unroll]] for (uint j = 0u; j < FELLOW_TAP_BATCH; j++) {
+						vec2 suv = pssm_coord[k].xy + (disk_rotation * scene_data_block.data.directional_penumbra_shadow_kernel[i + j].xy) * tex_scale[k];
+						d[k * FELLOW_TAP_BATCH + j] = textureLod(sampler2D(shadow, SAMPLER_LINEAR_CLAMP), suv, 0.0).r;
+					}
+				}
+			}
+			[[unroll]] for (uint k = 0u; k < 2u; k++) {
+				if (fellow_active[k]) {
+					[[unroll]] for (uint j = 0u; j < FELLOW_TAP_BATCH; j++) {
+						if (d[k * FELLOW_TAP_BATCH + j] > pssm_coord[k].z) {
+							blocker_average[k] += d[k * FELLOW_TAP_BATCH + j];
+							blocker_count[k] += 1.0;
+						}
+					}
+				}
+			}
+		}
+	} else {
+		SPEC_CONSTANT_LOOP_ANNOTATION
+		for (uint i = 0; i < sc_directional_penumbra_shadow_samples(); i++) {
+			[[unroll]] for (uint k = 0u; k < 2u; k++) {
+				if (fellow_active[k]) {
+					vec2 suv = pssm_coord[k].xy + (disk_rotation * scene_data_block.data.directional_penumbra_shadow_kernel[i].xy) * tex_scale[k];
+					float d = textureLod(sampler2D(shadow, SAMPLER_LINEAR_CLAMP), suv, 0.0).r;
+					if (d > pssm_coord[k].z) {
+						blocker_average[k] += d;
+						blocker_count[k] += 1.0;
+					}
+				}
+			}
+		}
+	}
+
+	[[unroll]] for (uint k = 0u; k < 2u; k++) {
+		if (fellow_active[k]) {
+			if (blocker_count[k] > 0.0) {
+				blocker_average[k] /= blocker_count[k];
+				float penumbra;
+				if (bool(scene_data_block.data.flags & SCENE_DATA_FLAGS_FELLOW_PCSS_DIRECTIONAL_PENUMBRA)) {
+					penumbra = (-pssm_coord[k].z + blocker_average[k]) / max(1.0 - pssm_coord[k].z, 1e-6);
+				} else {
+					penumbra = (-pssm_coord[k].z + blocker_average[k]) / (1.0 - blocker_average[k]);
+				}
+				tex_scale[k] *= penumbra;
+#ifdef FELLOW_SHADOW_MAX_MIP
+#ifdef FELLOW_EXP_BIT7
+				bool fellow_filter_early_out = true;
+#else
+				bool fellow_filter_early_out = sc_fellow_pcss_filter_early_out();
+#endif
+				if (fellow_filter_early_out && sc_fellow_directional_max_mip() && bool(scene_data_block.data.flags & SCENE_DATA_FLAGS_FELLOW_SHADOW_MAX_MIP)) {
+					vec2 mm = fellow_shadow_box_minmax(pssm_coord[k].xy, abs(tex_scale[k]));
+					if (mm.y < pssm_coord[k].z - FELLOW_SHADOW_MAX_MIP_FILTER_EPSILON) {
+						result[k] = half(1.0);
+						fellow_active[k] = false;
+					} else if (mm.x > pssm_coord[k].z + FELLOW_SHADOW_MAX_MIP_FILTER_EPSILON) {
+						result[k] = half(0.0);
+						fellow_active[k] = false;
+					}
+				}
+#endif
+			} else {
+				//no blockers found, so no shadow
+				result[k] = half(1.0);
+				fellow_active[k] = false;
+			}
+		}
+	}
+	if (!fellow_active[0] && !fellow_active[1]) {
+		return hvec2(result[0], result[1]);
+	}
+
+	float s[2] = float[2](0.0, 0.0);
+	if (FELLOW_BATCH_TAPS(sc_directional_penumbra_shadow_samples())) {
+		SPEC_CONSTANT_LOOP_ANNOTATION
+		for (uint i = 0; i < sc_directional_penumbra_shadow_samples(); i += FELLOW_TAP_BATCH) {
+			float t[2 * FELLOW_TAP_BATCH];
+			[[unroll]] for (uint k = 0u; k < 2u; k++) {
+				if (fellow_active[k]) {
+					[[unroll]] for (uint j = 0u; j < FELLOW_TAP_BATCH; j++) {
+						vec2 suv = pssm_coord[k].xy + (disk_rotation * scene_data_block.data.directional_penumbra_shadow_kernel[i + j].xy) * tex_scale[k];
+						t[k * FELLOW_TAP_BATCH + j] = textureProj(sampler2DShadow(shadow, shadow_sampler), vec4(suv, pssm_coord[k].z, 1.0));
+					}
+				}
+			}
+			[[unroll]] for (uint k = 0u; k < 2u; k++) {
+				if (fellow_active[k]) {
+					[[unroll]] for (uint j = 0u; j < FELLOW_TAP_BATCH; j++) {
+						s[k] += t[k * FELLOW_TAP_BATCH + j];
+					}
+				}
+			}
+		}
+	} else {
+		SPEC_CONSTANT_LOOP_ANNOTATION
+		for (uint i = 0; i < sc_directional_penumbra_shadow_samples(); i++) {
+			[[unroll]] for (uint k = 0u; k < 2u; k++) {
+				if (fellow_active[k]) {
+					vec2 suv = pssm_coord[k].xy + (disk_rotation * scene_data_block.data.directional_penumbra_shadow_kernel[i].xy) * tex_scale[k];
+					s[k] += textureProj(sampler2DShadow(shadow, shadow_sampler), vec4(suv, pssm_coord[k].z, 1.0));
+				}
+			}
+		}
+	}
+	[[unroll]] for (uint k = 0u; k < 2u; k++) {
+		if (fellow_active[k]) {
+			result[k] = half(s[k] / float(sc_directional_penumbra_shadow_samples()));
+		}
+	}
+	return hvec2(result[0], result[1]);
+}
+#endif
+
 #endif // SHADOWS_DISABLED
 
 half get_omni_attenuation(float distance, float inv_range, float decay) {

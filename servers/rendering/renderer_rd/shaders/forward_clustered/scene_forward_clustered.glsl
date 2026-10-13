@@ -2469,7 +2469,60 @@ void fragment_shader(in SceneData scene_data) {
 							}
 						}
 					} else if (sc_use_directional_soft_shadows() && directional_lights.data[i].softshadow_angle > 0) {
-#ifdef FELLOW_EXP_BIT2
+#if defined(FELLOW_PCSS_PAIR)
+						// FellowEngine experiment (debug/scene_shader_experiments 2048): with blend splits, the pixel's
+						// cascade and the next through one PCSS that fetches both cascades' taps together. The same
+						// cascades, coordinates, blend and per-cascade arithmetic as the code below.
+						const vec4 fellow_splits = directional_lights.data[i].shadow_split_offsets;
+						uint fellow_c0 = depth_z < fellow_splits.x ? 0u : (depth_z < fellow_splits.y ? 1u : (depth_z < fellow_splits.z ? 2u : 3u));
+						bool fellow_two = directional_lights.data[i].blend_splits && fellow_c0 < 3u;
+						vec3 fellow_coord[2];
+						vec2 fellow_scale[2];
+						[[unroll]] for (uint k = 0u; k < 2u; k++) {
+							if (k == 0u || fellow_two) {
+								uint c = fellow_c0 + k;
+								vec4 v = vec4(vertex, 1.0);
+
+								BIAS_FUNC(v, c)
+
+								vec4 pssm_coord;
+								float range_begin;
+								vec2 uv_scale;
+								if (c == 0u) {
+									pssm_coord = (directional_lights.data[i].shadow_matrix1 * v);
+									range_begin = directional_lights.data[i].shadow_range_begin.x;
+									uv_scale = directional_lights.data[i].uv_scale1;
+								} else if (c == 1u) {
+									pssm_coord = (directional_lights.data[i].shadow_matrix2 * v);
+									range_begin = directional_lights.data[i].shadow_range_begin.y;
+									uv_scale = directional_lights.data[i].uv_scale2;
+								} else if (c == 2u) {
+									pssm_coord = (directional_lights.data[i].shadow_matrix3 * v);
+									range_begin = directional_lights.data[i].shadow_range_begin.z;
+									uv_scale = directional_lights.data[i].uv_scale3;
+								} else {
+									pssm_coord = (directional_lights.data[i].shadow_matrix4 * v);
+									range_begin = directional_lights.data[i].shadow_range_begin.w;
+									uv_scale = directional_lights.data[i].uv_scale4;
+								}
+								pssm_coord /= pssm_coord.w;
+
+								float range_pos = dot(directional_lights.data[i].direction, v.xyz);
+								float test_radius = (range_pos - range_begin) * directional_lights.data[i].softshadow_angle;
+								vec2 tex_scale = uv_scale * test_radius;
+								fellow_coord[k] = pssm_coord.xyz;
+								fellow_scale[k] = tex_scale * directional_lights.data[i].soft_shadow_scale;
+							}
+						}
+						if (fellow_two) {
+							hvec2 s2 = sample_directional_soft_shadow_pair(directional_shadow_atlas, fellow_coord[0], fellow_scale[0], fellow_coord[1], fellow_scale[1], scene_data.taa_frame_count);
+							float blend = fellow_c0 == 0u ? smoothstep(0.0, fellow_splits.x, depth_z) : (fellow_c0 == 1u ? smoothstep(fellow_splits.x, fellow_splits.y, depth_z) : smoothstep(fellow_splits.y, fellow_splits.z, depth_z));
+							shadow = s2.x;
+							shadow = mix(shadow, float(s2.y), blend);
+						} else {
+							shadow = sample_directional_soft_shadow(directional_shadow_atlas, fellow_coord[0], fellow_scale[0], scene_data.taa_frame_count);
+						}
+#elif defined(FELLOW_EXP_BIT2)
 						// FellowEngine register-pressure experiment (debug/scene_shader_experiments bit 2): the cascades in a
 						// loop that is not unrolled, so the soft shadow filter is inlined once instead of four times. The same
 						// cascades, the same operations in the same order as the code below.

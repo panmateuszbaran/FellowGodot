@@ -105,8 +105,9 @@ void Fellow::register_settings() {
 	// FELLOW_EXP_UNROLL (unrolled), 4 directional soft shadow cascades in one loop, 8 shadow filter path shares written as
 	// the colour (positional; with 16 directional), 32 shadow pyramid windows one level finer, 64 directional PCSS returns
 	// lit at once with its code kept (images change), 128 directional PCSS early-out after the blocker search, 256
-	// directional shadow filter taps fetched four at a time (512 positional), 1024 only the directional PCSS loops
-	// unrolled. 0: none (the shipped shaders).
+	// tap batches of 2 instead of 4 (decision 0040; 512 batches of 6), 1024 the directional PCSS loops unrolled
+	// (with shadows/batched_taps off), 2048 a blended pixel's two PCSS cascades with their taps fetched together. 0: none
+	// (the shipped shaders).
 	GLOBAL_DEF_RST(PropertyInfo(Variant::INT, "rendering/fellow/debug/scene_shader_experiments", PROPERTY_HINT_RANGE, "0,65535,1"), 0);
 	// Diagnostics: the light cluster tile's side in pixels (8, 16, 32 = stock, 64), when the render buffers are set up.
 	GLOBAL_DEF_RST(PropertyInfo(Variant::INT, "rendering/fellow/debug/cluster_size", PROPERTY_HINT_ENUM, "8:8,16:16,32:32,64:64"), 32);
