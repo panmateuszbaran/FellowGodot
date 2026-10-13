@@ -237,6 +237,7 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["frame_async_conflicts"] = s.frame_async_conflicts.get();
 	d["frame_async_transfers"] = s.frame_async_transfers.get();
 	d["postfx_coherent_gathers"] = s.postfx_coherent_gathers.get();
+	d["postfx_last_frame_direct"] = s.postfx_last_frame_direct.get();
 	d["postfx_luminance_verify_texels"] = s.postfx_luminance_verify_texels.get();
 	d["postfx_luminance_verify_mismatches"] = s.postfx_luminance_verify_mismatches.get();
 	d["postfx_ssao_temporal_frames"] = s.postfx_ssao_temporal_frames.get();

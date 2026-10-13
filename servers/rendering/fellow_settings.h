@@ -714,6 +714,7 @@ struct Stats {
 	SafeNumeric<uint64_t> frame_async_conflicts; // of which the concurrent part had to wait (shared resource)
 	SafeNumeric<uint64_t> frame_async_transfers; // async parts that used an upload submitted with them
 	SafeNumeric<uint64_t> postfx_coherent_gathers; // SSAO/SSIL gather dispatches with one sample rotation per workgroup (decision 0024)
+	SafeNumeric<uint64_t> postfx_last_frame_direct; // last-frame copies without the full-size level (decision 0044)
 	SafeNumeric<uint64_t> postfx_luminance_verify_texels; // luminance reduction texels compared (decision 0025, debug)
 	SafeNumeric<uint64_t> postfx_luminance_verify_mismatches;
 	SafeNumeric<uint64_t> postfx_ssao_temporal_frames; // SSAO gathers with half the taps plus the history (decision 0028)

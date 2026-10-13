@@ -437,6 +437,9 @@ void SSEffects::copy_internal_texture_to_last_frame(Ref<RenderSceneBuffersRD> p_
 	// reads it: SSIL reads level 5, half-size SSR level 1) and level 1 is made from the internal texture directly, each
 	// texel sanitized as the level-0 copy sanitizes it.
 	const bool skip_full = p_skip_full_size && mipmaps > 1 && RD::get_singleton()->texture_size(p_render_buffers->get_internal_texture(0)) == RD::get_singleton()->texture_size(p_render_buffers->get_texture_slice(RB_SCOPE_SSLF, RB_LAST_FRAME, 0, 0));
+	if (skip_full) {
+		Fellow::stats().postfx_last_frame_direct.increment();
+	}
 	for (uint32_t v = 0; v < p_render_buffers->get_view_count(); v++) {
 		for (uint32_t m = 0; m < mipmaps; m++) {
 			if (skip_full && m == 0) {
