@@ -100,8 +100,9 @@ void Fellow::register_settings() {
 	// Diagnostics: experiments on the compiled scene shaders (e.g. their register counts with FELLOW_PIPELINE_STATS), bits
 	// read at start-up: 1 FELLOW_EXP_DONT_UNROLL (loops bounded by specialization constants not unrolled), 2
 	// FELLOW_EXP_UNROLL (unrolled), 4 directional soft shadow cascades in one loop, 8 shadow filter path shares written as
-	// the colour (positional; with 16 directional), 32 shadow pyramid windows one level finer, 128 directional PCSS
-	// early-out after the blocker search. 0: none (the shipped shaders).
+	// the colour (positional; with 16 directional), 32 shadow pyramid windows one level finer, 64 directional PCSS returns
+	// lit at once with its code kept (images change), 128 directional PCSS early-out after the blocker search. 0: none
+	// (the shipped shaders).
 	GLOBAL_DEF_RST(PropertyInfo(Variant::INT, "rendering/fellow/debug/scene_shader_experiments", PROPERTY_HINT_RANGE, "0,255,1"), 0);
 	// Diagnostics: the light cluster tile's side in pixels (8, 16, 32 = stock, 64), when the render buffers are set up.
 	GLOBAL_DEF_RST(PropertyInfo(Variant::INT, "rendering/fellow/debug/cluster_size", PROPERTY_HINT_ENUM, "8:8,16:16,32:32,64:64"), 32);

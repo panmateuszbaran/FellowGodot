@@ -363,15 +363,11 @@ vec2 fellow_shadow_window_minmax(texture2D p_pyramid, vec2 p_uv, vec2 p_half_uv)
 	int extent = max(hi.x - lo.x, hi.y - lo.y) + 1;
 	// Stride 2^k >= extent (k >= 2: boxes of up to 4 texels use the finest stored windows), level k - 2.
 	int k = extent <= 4 ? 2 : findMSB(extent - 1) + 1;
-#if defined(FELLOW_EXP_BIT5) || defined(FELLOW_EXP_BIT6)
-	// Experiment (debug/scene_shader_experiments 32: one level finer, 64: two levels finer): windows of a finer level,
+#ifdef FELLOW_EXP_BIT5
+	// Experiment (debug/scene_shader_experiments 32): windows of a level one finer,
 	// as many as cover the box (each covers two cells of its stride: cells c, c + 2, ... up to the box's last cell), so
 	// the union overshoots the box by at most one stride on each side instead of up to the box's size.
-#ifdef FELLOW_EXP_BIT6
-	int kf = max(2, k - 2);
-#else
 	int kf = max(2, k - 1);
-#endif
 	int mipf = kf - 2;
 	if (mipf >= textureQueryLevels(sampler2D(p_pyramid, SAMPLER_NEAREST_CLAMP))) {
 		return vec2(0.0, 1.0);
@@ -558,6 +554,14 @@ half sample_omni_pcf_shadow(texture2D shadow, float blur_scale, vec2 coord, vec4
 
 half sample_directional_soft_shadow(texture2D shadow, vec3 pssm_coord, vec2 tex_scale, float taa_frame_count) {
 	FELLOW_DBG_INC(fellow_dbg_dir_call);
+#ifdef FELLOW_EXP_BIT6
+	// Diagnostics (debug/scene_shader_experiments 64; the image changes): the filter's code stays in the shader (the
+	// condition is not known when it is compiled) but returns lit at once, separating the cost of its work from the cost
+	// of its registers.
+	if (taa_frame_count >= 0.0) {
+		return half(1.0);
+	}
+#endif
 #ifdef FELLOW_SHADOW_MAX_MIP
 	// FellowEngine: the blocker search below takes bilinear samples inside |tex_scale| (per axis) of pssm_coord.xy. If no
 	// atlas texel there is closer to the light than the receiver, it finds no blocker and returns 1.0: return it now.
