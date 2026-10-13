@@ -1650,6 +1650,12 @@ void fragment_shader(in SceneData scene_data) {
 
 		item_from = subgroupBroadcastFirst(subgroupMin(item_from));
 		item_to = subgroupBroadcastFirst(subgroupMax(item_to));
+#ifdef FELLOW_EXP_BIT13
+		// Diagnostics (debug/scene_shader_experiments 8192; the image changes): no decals and reflection probes, their code kept.
+		if (scene_data.taa_frame_count >= 0.0) {
+			item_to = item_from;
+		}
+#endif
 
 		for (uint i = item_from; i < item_to; i++) {
 			uint mask = cluster_buffer.data[cluster_decal_offset + i];
@@ -2142,6 +2148,12 @@ void fragment_shader(in SceneData scene_data) {
 
 		item_from = subgroupBroadcastFirst(subgroupMin(item_from));
 		item_to = subgroupBroadcastFirst(subgroupMax(item_to));
+#ifdef FELLOW_EXP_BIT13
+		// Diagnostics (debug/scene_shader_experiments 8192; the image changes): no decals and reflection probes, their code kept.
+		if (scene_data.taa_frame_count >= 0.0) {
+			item_to = item_from;
+		}
+#endif
 
 #ifdef LIGHT_ANISOTROPY_USED
 		// https://google.github.io/filament/Filament.html#lighting/imagebasedlights/anisotropy
@@ -2935,6 +2947,12 @@ void fragment_shader(in SceneData scene_data) {
 
 		item_from = subgroupBroadcastFirst(subgroupMin(item_from));
 		item_to = subgroupBroadcastFirst(subgroupMax(item_to));
+#ifdef FELLOW_EXP_BIT12
+		// Diagnostics (debug/scene_shader_experiments 4096; the image changes): no omni and spot lights, their code kept.
+		if (scene_data.taa_frame_count >= 0.0) {
+			item_to = item_from;
+		}
+#endif
 
 		for (uint i = item_from; i < item_to; i++) {
 			uint mask = cluster_buffer.data[cluster_omni_offset + i];
@@ -2996,6 +3014,12 @@ void fragment_shader(in SceneData scene_data) {
 
 		item_from = subgroupBroadcastFirst(subgroupMin(item_from));
 		item_to = subgroupBroadcastFirst(subgroupMax(item_to));
+#ifdef FELLOW_EXP_BIT12
+		// Diagnostics (debug/scene_shader_experiments 4096; the image changes): no omni and spot lights, their code kept.
+		if (scene_data.taa_frame_count >= 0.0) {
+			item_to = item_from;
+		}
+#endif
 
 		for (uint i = item_from; i < item_to; i++) {
 			uint mask = cluster_buffer.data[cluster_spot_offset + i];

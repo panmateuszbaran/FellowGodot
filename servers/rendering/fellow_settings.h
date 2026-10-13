@@ -287,6 +287,13 @@ inline bool shadow_pcss_filter_early_out() {
 inline bool shadow_batched_taps() {
 	return shadows_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/shadows/batched_taps");
 }
+// Diagnostics: which kinds of lights' filters batch their taps (1 directional, 2 positional, 3 both).
+inline bool shadow_batched_taps_directional() {
+	return shadow_batched_taps() && (int(GLOBAL_GET_CACHED(int, "rendering/fellow/debug/batched_taps_kinds")) & 1);
+}
+inline bool shadow_batched_taps_positional() {
+	return shadow_batched_taps() && (int(GLOBAL_GET_CACHED(int, "rendering/fellow/debug/batched_taps_kinds")) & 2);
+}
 inline bool shadow_directional_max_mip() {
 	return shadows_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/shadows/directional_max_mip") && autotune_allows(TUNE_DIRECTIONAL_PYRAMID);
 }

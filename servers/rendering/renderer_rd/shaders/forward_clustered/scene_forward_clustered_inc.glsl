@@ -195,6 +195,10 @@ bool sc_fellow_pcss_filter_early_out() {
 bool sc_fellow_shadow_tap_batch() {
 	return ((sc_packed_1() >> 17) & 1U) != 0;
 }
+
+bool sc_fellow_shadow_tap_batch_positional() {
+	return ((sc_packed_1() >> 18) & 1U) != 0;
+}
 #define FELLOW_HAS_SHADOW_TAP_BATCH
 
 float sc_luminance_multiplier() {

@@ -69,6 +69,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/shadows/directional_max_mip", true);
 	GLOBAL_DEF("rendering/fellow/shadows/pcss_filter_early_out", false);
 	GLOBAL_DEF("rendering/fellow/shadows/batched_taps", true);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/debug/batched_taps_kinds", PROPERTY_HINT_FLAGS, "Directional,Positional"), 3);
 	GLOBAL_DEF("rendering/fellow/shadows/max_mip_visible_region", false);
 	GLOBAL_DEF("rendering/fellow/shadows/positional_max_mip", true);
 	GLOBAL_DEF("rendering/fellow/shadows/debug_disable_caster_culling", false);
@@ -106,8 +107,9 @@ void Fellow::register_settings() {
 	// the colour (positional; with 16 directional), 32 shadow pyramid windows one level finer, 64 directional PCSS returns
 	// lit at once with its code kept (images change), 128 directional PCSS early-out after the blocker search, 256
 	// tap batches of 2 instead of 4 (decision 0040; 512 batches of 6), 1024 the directional PCSS loops unrolled
-	// (with shadows/batched_taps off), 2048 a blended pixel's two PCSS cascades with their taps fetched together. 0: none
-	// (the shipped shaders).
+	// (with shadows/batched_taps off), 2048 a blended pixel's two PCSS cascades with their taps fetched together, 4096 no
+	// omni/spot lights and 8192 no decals/reflection probes in the colour pass (code kept; images change). 0: none (the
+	// shipped shaders).
 	GLOBAL_DEF_RST(PropertyInfo(Variant::INT, "rendering/fellow/debug/scene_shader_experiments", PROPERTY_HINT_RANGE, "0,65535,1"), 0);
 	// Diagnostics: the light cluster tile's side in pixels (8, 16, 32 = stock, 64), when the render buffers are set up.
 	GLOBAL_DEF_RST(PropertyInfo(Variant::INT, "rendering/fellow/debug/cluster_size", PROPERTY_HINT_ENUM, "8:8,16:16,32:32,64:64"), 32);

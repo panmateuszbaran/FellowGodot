@@ -31,9 +31,11 @@
 #define FELLOW_TAP_BATCH 4u
 #endif
 #ifdef FELLOW_HAS_SHADOW_TAP_BATCH
-#define FELLOW_BATCH_TAPS(m_count) (sc_fellow_shadow_tap_batch() && ((m_count) % FELLOW_TAP_BATCH) == 0u)
+#define FELLOW_BATCH_TAPS_DIR(m_count) (sc_fellow_shadow_tap_batch() && ((m_count) % FELLOW_TAP_BATCH) == 0u)
+#define FELLOW_BATCH_TAPS_POS(m_count) (sc_fellow_shadow_tap_batch_positional() && ((m_count) % FELLOW_TAP_BATCH) == 0u)
 #else
-#define FELLOW_BATCH_TAPS(m_count) false
+#define FELLOW_BATCH_TAPS_DIR(m_count) false
+#define FELLOW_BATCH_TAPS_POS(m_count) false
 #endif
 
 #ifdef FELLOW_EXP_BIT10
@@ -460,7 +462,7 @@ half sample_directional_pcf_shadow(texture2D shadow, vec2 shadow_pixel_size, vec
 
 	float avg = 0.0;
 
-	if (FELLOW_BATCH_TAPS(sc_directional_soft_shadow_samples())) {
+	if (FELLOW_BATCH_TAPS_DIR(sc_directional_soft_shadow_samples())) {
 		SPEC_CONSTANT_LOOP_ANNOTATION
 		for (uint i = 0; i < sc_directional_soft_shadow_samples(); i += FELLOW_TAP_BATCH) {
 			float t[FELLOW_TAP_BATCH];
@@ -517,7 +519,7 @@ half sample_pcf_shadow(texture2D shadow, vec2 shadow_pixel_size, vec3 coord, flo
 
 	float avg = 0.0;
 
-	if (FELLOW_BATCH_TAPS(sc_soft_shadow_samples())) {
+	if (FELLOW_BATCH_TAPS_POS(sc_soft_shadow_samples())) {
 		SPEC_CONSTANT_LOOP_ANNOTATION
 		for (uint i = 0; i < sc_soft_shadow_samples(); i += FELLOW_TAP_BATCH) {
 			float t[FELLOW_TAP_BATCH];
@@ -579,7 +581,7 @@ half sample_omni_pcf_shadow(texture2D shadow, float blur_scale, vec2 coord, vec4
 	float avg = 0.0;
 	vec2 offset_scale = blur_scale * 2.0 * scene_data_block.data.shadow_atlas_pixel_size / uv_rect.zw;
 
-	if (FELLOW_BATCH_TAPS(sc_soft_shadow_samples())) {
+	if (FELLOW_BATCH_TAPS_POS(sc_soft_shadow_samples())) {
 		SPEC_CONSTANT_LOOP_ANNOTATION
 		for (uint i = 0; i < sc_soft_shadow_samples(); i += FELLOW_TAP_BATCH) {
 			float t[FELLOW_TAP_BATCH];
@@ -684,7 +686,7 @@ half sample_directional_soft_shadow(texture2D shadow, vec3 pssm_coord, vec2 tex_
 		disk_rotation = mat2(vec2(cr, -sr), vec2(sr, cr));
 	}
 
-	if (FELLOW_BATCH_TAPS(sc_directional_penumbra_shadow_samples())) {
+	if (FELLOW_BATCH_TAPS_DIR(sc_directional_penumbra_shadow_samples())) {
 		SPEC_CONSTANT_LOOP_ANNOTATION
 		for (uint i = 0; i < sc_directional_penumbra_shadow_samples(); i += FELLOW_TAP_BATCH) {
 			float d[FELLOW_TAP_BATCH];
@@ -752,7 +754,7 @@ half sample_directional_soft_shadow(texture2D shadow, vec3 pssm_coord, vec2 tex_
 		FELLOW_DBG_INC(fellow_dbg_dir_pcf);
 		float s = 0.0;
 
-		if (FELLOW_BATCH_TAPS(sc_directional_penumbra_shadow_samples())) {
+		if (FELLOW_BATCH_TAPS_DIR(sc_directional_penumbra_shadow_samples())) {
 			SPEC_CONSTANT_LOOP_ANNOTATION
 			for (uint i = 0; i < sc_directional_penumbra_shadow_samples(); i += FELLOW_TAP_BATCH) {
 				float t[FELLOW_TAP_BATCH];
@@ -828,7 +830,7 @@ hvec2 sample_directional_soft_shadow_pair(texture2D shadow, vec3 p_coord0, vec2 
 
 	float blocker_count[2] = float[2](0.0, 0.0);
 	float blocker_average[2] = float[2](0.0, 0.0);
-	if (FELLOW_BATCH_TAPS(sc_directional_penumbra_shadow_samples())) {
+	if (FELLOW_BATCH_TAPS_DIR(sc_directional_penumbra_shadow_samples())) {
 		SPEC_CONSTANT_LOOP_ANNOTATION
 		for (uint i = 0; i < sc_directional_penumbra_shadow_samples(); i += FELLOW_TAP_BATCH) {
 			float d[2 * FELLOW_TAP_BATCH];
@@ -907,7 +909,7 @@ hvec2 sample_directional_soft_shadow_pair(texture2D shadow, vec3 p_coord0, vec2 
 	}
 
 	float s[2] = float[2](0.0, 0.0);
-	if (FELLOW_BATCH_TAPS(sc_directional_penumbra_shadow_samples())) {
+	if (FELLOW_BATCH_TAPS_DIR(sc_directional_penumbra_shadow_samples())) {
 		SPEC_CONSTANT_LOOP_ANNOTATION
 		for (uint i = 0; i < sc_directional_penumbra_shadow_samples(); i += FELLOW_TAP_BATCH) {
 			float t[2 * FELLOW_TAP_BATCH];
@@ -1059,7 +1061,7 @@ void light_process_omni(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 			tangent *= omni_lights.data[idx].soft_shadow_size * omni_lights.data[idx].soft_shadow_scale;
 			bitangent *= omni_lights.data[idx].soft_shadow_size * omni_lights.data[idx].soft_shadow_scale;
 
-			if (FELLOW_BATCH_TAPS(sc_penumbra_shadow_samples())) {
+			if (FELLOW_BATCH_TAPS_POS(sc_penumbra_shadow_samples())) {
 				SPEC_CONSTANT_LOOP_ANNOTATION
 				for (uint i = 0; i < sc_penumbra_shadow_samples(); i += FELLOW_TAP_BATCH) {
 					float d[FELLOW_TAP_BATCH];
@@ -1131,7 +1133,7 @@ void light_process_omni(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 
 				shadow = half(0.0);
 
-				if (FELLOW_BATCH_TAPS(sc_penumbra_shadow_samples())) {
+				if (FELLOW_BATCH_TAPS_POS(sc_penumbra_shadow_samples())) {
 					SPEC_CONSTANT_LOOP_ANNOTATION
 					for (uint i = 0; i < sc_penumbra_shadow_samples(); i += FELLOW_TAP_BATCH) {
 						float t[FELLOW_TAP_BATCH];
@@ -1442,7 +1444,7 @@ void light_process_spot(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 			float uv_size = spot_lights.data[idx].soft_shadow_size * z_norm * spot_lights.data[idx].soft_shadow_scale;
 			vec2 clamp_max = spot_lights.data[idx].atlas_rect.xy + spot_lights.data[idx].atlas_rect.zw;
 
-			if (FELLOW_BATCH_TAPS(sc_penumbra_shadow_samples())) {
+			if (FELLOW_BATCH_TAPS_POS(sc_penumbra_shadow_samples())) {
 				SPEC_CONSTANT_LOOP_ANNOTATION
 				for (uint i = 0; i < sc_penumbra_shadow_samples(); i += FELLOW_TAP_BATCH) {
 					float d[FELLOW_TAP_BATCH];
@@ -1479,7 +1481,7 @@ void light_process_spot(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 
 				shadow = half(0.0);
 
-				if (FELLOW_BATCH_TAPS(sc_penumbra_shadow_samples())) {
+				if (FELLOW_BATCH_TAPS_POS(sc_penumbra_shadow_samples())) {
 					SPEC_CONSTANT_LOOP_ANNOTATION
 					for (uint i = 0; i < sc_penumbra_shadow_samples(); i += FELLOW_TAP_BATCH) {
 						float t[FELLOW_TAP_BATCH];

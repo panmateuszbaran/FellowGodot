@@ -110,6 +110,8 @@ than 1), where its null test is. The arithmetic is the same expressions in the s
 for bit; NVIDIA's compiler may contract a multiply-add of a tap coordinate differently in the batched loop (SPIR-V
 allows contraction), which moves a tap across a texel boundary in rare pixels. The same signature as 0039's runtime
 toggle in City Lab (101.2 dB, max |d| 1).
+It is deterministic (`m8_f119_city_temporal`, `fellow106`): off against on 101.18 dB, on against a second run of on
+bit for bit, off against that second run 101.18 dB again.
 
 ### Performance (`fellow104`, `m8_f117_batch_ab`: one process, defaults with autotune off, blocks of 30 frames, off
 and on alternating, 800 block pairs per scene)
