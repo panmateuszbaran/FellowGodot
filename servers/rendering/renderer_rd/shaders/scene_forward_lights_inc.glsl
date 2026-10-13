@@ -622,12 +622,18 @@ half sample_directional_soft_shadow(texture2D shadow, vec3 pssm_coord, vec2 tex_
 		}
 		tex_scale *= penumbra;
 
-#if defined(FELLOW_SHADOW_MAX_MIP) && defined(FELLOW_EXP_BIT7)
-		// FellowEngine experiment (debug/scene_shader_experiments 128): the filter below takes 2x2 comparisons within
-		// |tex_scale| (per axis) of pssm_coord.xy. Every atlas texel there farther from the light than the receiver: all
-		// taps lit, the loop's result is 1.0; every texel there closer (plus the margin): 0.0. (The early-outs above decide
-		// from the search radius before the search; this one from the penumbra after it.)
-		if (sc_fellow_directional_max_mip() && bool(scene_data_block.data.flags & SCENE_DATA_FLAGS_FELLOW_SHADOW_MAX_MIP)) {
+#ifdef FELLOW_SHADOW_MAX_MIP
+		// FellowEngine (rendering/fellow/shadows/pcss_filter_early_out, decision 0039; experiment bit 128 forces it): the
+		// filter below takes 2x2 comparisons within |tex_scale| (per axis) of pssm_coord.xy. Every atlas texel there
+		// farther from the light than the receiver: all taps lit, the loop's result is 1.0; every texel there closer (plus
+		// the margin): 0.0. (The early-outs above decide from the search radius before the search; this one from the
+		// penumbra after it.)
+#ifdef FELLOW_EXP_BIT7
+		bool fellow_filter_early_out = true;
+#else
+		bool fellow_filter_early_out = sc_fellow_pcss_filter_early_out();
+#endif
+		if (fellow_filter_early_out && sc_fellow_directional_max_mip() && bool(scene_data_block.data.flags & SCENE_DATA_FLAGS_FELLOW_SHADOW_MAX_MIP)) {
 			// A wider margin than the early-outs above (m8_f112: with theirs, RTX differed from the filter in Foliage Lab
 			// and Bistro exterior): the filter's small radius puts the receiver's own texels within a hair of the
 			// reference, and the comparison sampler may compare at the 16-bit atlas's precision; two 16-bit steps.
