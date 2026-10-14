@@ -90,7 +90,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/lights/zero_attenuation_skip", true);
 	GLOBAL_DEF("rendering/fellow/lights/cluster_pack_parallel", true);
 	GLOBAL_DEF("rendering/fellow/lights/fields_early", true);
-	GLOBAL_DEF("rendering/fellow/lights/tile_cull", false);
+	GLOBAL_DEF("rendering/fellow/lights/tile_cull", true); // under autotune: off until measured faster (decision 0049)
 	// Diagnostics: light tile culling keeps every candidate (the opaque colour pass's code path, without its effect).
 	GLOBAL_DEF("rendering/fellow/debug/tile_cull_passthrough", false);
 	// Diagnostics: light tile culling's pass runs, but the opaque colour pass does not read its masks.

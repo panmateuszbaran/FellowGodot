@@ -1,7 +1,8 @@
 # 0049 — Light tile culling: the lights that can reach an 8 × 8 tile's geometry
 
-Status: **under test** (`fellow119`, job `m9_f136`) · Branch `fellow/geometry` · Toggle `rendering/fellow/lights/tile_cull`
-(runtime; specialization bit 26 of the opaque colour pass only) · Code: `shaders/effects/fellow_light_tile_cull.glsl`,
+Status: **KEEP, on by default from `fellow127` under autotune** (exact; switched on per scene only where measured faster:
+Lights Lab −5.6 %, elsewhere off) · Branch `fellow/geometry` · Toggle `rendering/fellow/lights/tile_cull` (runtime;
+specialization bit 26 of the opaque colour pass only; autotune `TUNE_LIGHT_TILE_CULL`, starts off) · Code: `shaders/effects/fellow_light_tile_cull.glsl`,
 `render_forward_clustered.*` (`_fellow_light_tile_cull`, binding 42 of the render pass set,
 `ImplementationData::fellow_tile_cull_width`), `scene_forward_clustered.glsl` (`fellow_tile_mask`, the omni and spot
 loops), `scene_forward_clustered_inc.glsl`, `scene_shader_forward_clustered.*` (`FELLOW_WRITES_DEPTH`),
@@ -118,4 +119,28 @@ cost outside the shader's code, measured but not explained.
 The cost and the benefit depend on the scene (lights per pixel and how much of them the tiles cut). Both choices are
 exact, so the toggle is an autotune tunable (`TUNE_LIGHT_TILE_CULL`, decision 0020): while the pass can run (the
 conditions above, omni or spot lights in view), autotune compares blocks of frames with and without it and keeps the
-faster. Measured between processes with autotune on: pending (`m9_f141`).
+faster.
+
+Between processes with autotune on (the defaults otherwise; 3 interleaved runs of 20 s per build and scene; stat
+`lights_tile_cull_frames`: the frames of a run that used the pass, of about 7 000):
+
+* `m9_f143` (`fellow125`, the tunable starting on): Lights Lab **−5.6 %** (p 0.009 paired, 3/3 pairs; the pass on in
+  8 852-8 884 frames); but undecided evaluations kept it on in Bistro interior (781-7 006 frames), PBR Lab (192-8 400)
+  and City Lab (837-10 535), where it costs: +0.3 %, +2.4 %, +1.2 % (all within noise).
+* From `fellow126` the tunable starts off and is switched on only by an evaluation that measures it faster, as the
+  visually lossless tunables (undecided evaluations repeated at the base interval, pooled). `m9_f144`: on in Lights Lab
+  (5 192-6 993 frames), only its evaluations' frames elsewhere (Bistro interior 144-192, PBR Lab 192, City Lab 288;
+  Bistro exterior: no omni/spot light in view, 0). Frame times in that session were noisy (Bistro interior's first
+  reference run 4.37 ms against 3.45-3.52 for the others; Lights Lab's last pair +3 % with both runs slow): Lights Lab
+  −1.8 % (two pairs −4.8 % and −4.0 %, the third +3.1 %), the others within noise (Bistro interior −4.1 % from the
+  outlier, City Lab −0.9 %, PBR Lab +1.4 %, Bistro exterior +0.8 %).
+
+## Decision
+
+**KEEP, on by default from `fellow127` under autotune** (starts off; on per scene once measured faster). Exact either
+way. Where many lights overlap (Lights Lab) the light loops visit half the lights and the frame is 5-6 % faster; in the
+other scenes autotune leaves it off after its first evaluations.
+
+Not explained: in Bistro interior the frame gets slower with the masks in use, in every pass, although the light loops
+visit a subset of their lights (v3-v5 above). With autotune it does not matter for the defaults; a future change of
+the pass or its placement should look at it again (`debug/tile_cull_passthrough`, `debug/tile_cull_pass_only`).
