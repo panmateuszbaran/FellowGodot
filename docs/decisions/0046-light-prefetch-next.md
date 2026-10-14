@@ -1,6 +1,7 @@
 # 0046 — The light loop reads the next light while it processes the current one
 
-Status: **under test** (`fellow118`, job `m9_f135`) · Branch `fellow/geometry` · Toggle
+Status: **REJECT** (`fellow118`, `m9_f135`: exact, but 2-11 % slower; off, code kept for the record) · Branch
+`fellow/geometry` · Toggle
 `rendering/fellow/lights/prefetch_next` (runtime; 0 off, 1 the range test's fields, 2 all the hot fields, 3 and 4 the same
 and the next cluster word; specialization bits 21-23; with `lights/fields_early`) · Code: `scene_forward_clustered.glsl`
 (the omni and spot loops: `fellow_nx_*`, `fellow_wn_*`), `scene_forward_clustered_inc.glsl`
@@ -43,6 +44,30 @@ checks: the prefetched colour scaled by 1/4 changes 1.4 million pixels of Lights
 values are the ones used); the next word's first light taken from the lowest bit instead of the highest changes 56 342
 pixels (the cross-word path runs: Lights Lab has 192 omni lights, six cluster words).
 
-## Measured
+## Measured (`fellow118`, `m9_f135`)
 
-Pending (`m9_f135`: pipeline statistics, images against 0, in-process A/B of 0-4).
+* Images (`m9_f135_temporal`, 60-frame sequences, 2 and 4 against 0): Bistro interior 67.1 dB, Lights Lab 91.4-97.3 dB
+  (their floors), City Lab bit for bit with 2, 101.18 dB (a few pixels one level off) with 4.
+* Registers (`FELLOW_PIPELINE_STATS`, Bistro interior's and Lights Lab's main colour variants): 0 has **96 registers
+  and 48-64 bytes of local memory**; every mode, even 1 (six values carried over the iteration), has **124-127
+  registers and none**. The driver stops spilling and allocates more registers, which leaves fewer warps per SM (a
+  scene shader that waits on memory).
+* In one process (`m9_f135_pf_ab`, autotune off, blocks of 30 frames, five configurations taking turns):
+
+| scene | 1 | 2 | 3 | 4 | opaque pass 0 → 4 |
+|---|---:|---:|---:|---:|---:|
+| Lights Lab | +5.6 % | +8.9 % | +5.6 % | +10.7 % | 1.065 → 1.379 ms |
+| Bistro interior | +2.3 % | +3.8 % | +2.0 % | +4.7 % | 1.417 → 1.594 |
+| PBR Lab | +1.7 % | +4.4 % | +0.8 % | +4.9 % | 0.756 → 0.875 |
+| City Lab | −0.6 % | −1.3 % | −1.3 % | −1.0 % (all n.s.) | 0.469 → 0.539 |
+| Bistro exterior | 0.0 % | 0.0 % | +0.1 % | +0.1 % (n.s.) | 1.576 → 1.574 |
+
+(all p < 10^-9 except City Lab and Bistro exterior.) The opaque pass is slower in every scene with positional lights,
+most where the loop is longest.
+
+## Decision
+
+**REJECT** (off; the code stays as the record of the measurement). Hiding the light data's latency costs more in
+occupancy than it hides: the loads are not what the loop waits for once the registers that carry them cost a fifth of
+the warps. Decision 0048 collects what this and the other `m9_f135` experiments say about the scene shader's register
+budget.
