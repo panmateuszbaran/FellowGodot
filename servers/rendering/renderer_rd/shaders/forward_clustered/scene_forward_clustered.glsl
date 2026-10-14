@@ -1091,9 +1091,10 @@ layout(location = 2) out vec2 motion_vector;
 #if defined(FELLOW_HAS_LIGHT_TILE_CULL) && defined(FELLOW_BACKFACING_LIGHT_SKIP_OK) && !defined(LIGHT_VERTEX_USED) && !defined(FELLOW_WRITES_DEPTH) && !defined(USE_MULTIVIEW) && !defined(USE_VERTEX_LIGHTING)
 #define FELLOW_TILE_CULL_OK
 uint fellow_tile_mask(uint p_type, uint p_word) {
+	// Word-major: the same word of neighbouring tiles is adjacent (the tiles of a row of warps share cache lines).
 	uvec2 tile = uvec2(gl_FragCoord.xy) >> 3;
 	uint words = implementation_data.max_cluster_element_count_div_32;
-	return fellow_light_tile_masks.data[((tile.y * implementation_data.fellow_tile_cull_width + tile.x) * 2u + p_type) * words + p_word];
+	return fellow_light_tile_masks.data[(p_type * words + p_word) * implementation_data.fellow_tile_cull_count + tile.y * implementation_data.fellow_tile_cull_width + tile.x];
 }
 #endif
 
@@ -3095,7 +3096,7 @@ void fragment_shader(in SceneData scene_data) {
 			fellow_wn_mask = cluster_buffer.data[cluster_omni_offset + item_from];
 			fellow_wn_mask &= cluster_get_range_clip_mask(item_from, item_min, item_max);
 #ifdef FELLOW_TILE_CULL_OK
-			if (sc_fellow_light_tile_cull()) {
+			if (sc_fellow_light_tile_cull() && fellow_wn_mask != 0u) {
 				fellow_wn_mask &= fellow_tile_mask(0u, item_from);
 			}
 #endif
@@ -3115,7 +3116,7 @@ void fragment_shader(in SceneData scene_data) {
 					fellow_wn_mask = cluster_buffer.data[cluster_omni_offset + i + 1];
 					fellow_wn_mask &= cluster_get_range_clip_mask(i + 1, item_min, item_max);
 #ifdef FELLOW_TILE_CULL_OK
-					if (sc_fellow_light_tile_cull()) {
+					if (sc_fellow_light_tile_cull() && fellow_wn_mask != 0u) {
 						fellow_wn_mask &= fellow_tile_mask(0u, i + 1);
 					}
 #endif
@@ -3125,7 +3126,7 @@ void fragment_shader(in SceneData scene_data) {
 				mask = cluster_buffer.data[cluster_omni_offset + i];
 				mask &= cluster_get_range_clip_mask(i, item_min, item_max);
 #ifdef FELLOW_TILE_CULL_OK
-				if (sc_fellow_light_tile_cull()) {
+				if (sc_fellow_light_tile_cull() && mask != 0u) {
 					mask &= fellow_tile_mask(0u, i); // light tile culling (decision 0049)
 				}
 #endif
@@ -3165,7 +3166,7 @@ void fragment_shader(in SceneData scene_data) {
 			uint mask = cluster_buffer.data[cluster_omni_offset + i];
 			mask &= cluster_get_range_clip_mask(i, item_min, item_max);
 #ifdef FELLOW_TILE_CULL_OK
-			if (sc_fellow_light_tile_cull()) {
+			if (sc_fellow_light_tile_cull() && mask != 0u) {
 				mask &= fellow_tile_mask(0u, i);
 			}
 #endif
@@ -3345,7 +3346,7 @@ void fragment_shader(in SceneData scene_data) {
 			fellow_wn_mask = cluster_buffer.data[cluster_spot_offset + item_from];
 			fellow_wn_mask &= cluster_get_range_clip_mask(item_from, item_min, item_max);
 #ifdef FELLOW_TILE_CULL_OK
-			if (sc_fellow_light_tile_cull()) {
+			if (sc_fellow_light_tile_cull() && fellow_wn_mask != 0u) {
 				fellow_wn_mask &= fellow_tile_mask(1u, item_from);
 			}
 #endif
@@ -3365,7 +3366,7 @@ void fragment_shader(in SceneData scene_data) {
 					fellow_wn_mask = cluster_buffer.data[cluster_spot_offset + i + 1];
 					fellow_wn_mask &= cluster_get_range_clip_mask(i + 1, item_min, item_max);
 #ifdef FELLOW_TILE_CULL_OK
-					if (sc_fellow_light_tile_cull()) {
+					if (sc_fellow_light_tile_cull() && fellow_wn_mask != 0u) {
 						fellow_wn_mask &= fellow_tile_mask(1u, i + 1);
 					}
 #endif
@@ -3375,7 +3376,7 @@ void fragment_shader(in SceneData scene_data) {
 				mask = cluster_buffer.data[cluster_spot_offset + i];
 				mask &= cluster_get_range_clip_mask(i, item_min, item_max);
 #ifdef FELLOW_TILE_CULL_OK
-				if (sc_fellow_light_tile_cull()) {
+				if (sc_fellow_light_tile_cull() && mask != 0u) {
 					mask &= fellow_tile_mask(1u, i); // light tile culling (decision 0049)
 				}
 #endif
@@ -3418,7 +3419,7 @@ void fragment_shader(in SceneData scene_data) {
 			uint mask = cluster_buffer.data[cluster_spot_offset + i];
 			mask &= cluster_get_range_clip_mask(i, item_min, item_max);
 #ifdef FELLOW_TILE_CULL_OK
-			if (sc_fellow_light_tile_cull()) {
+			if (sc_fellow_light_tile_cull() && mask != 0u) {
 				mask &= fellow_tile_mask(1u, i);
 			}
 #endif

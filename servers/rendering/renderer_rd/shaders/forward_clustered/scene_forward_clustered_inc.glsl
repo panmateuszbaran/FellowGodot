@@ -475,7 +475,7 @@ struct ImplementationData {
 	mat4 sdf_to_bounds;
 
 	ivec3 sdf_offset;
-	uint pad2;
+	uint fellow_tile_cull_count; // FellowEngine light tile culling (decision 0049): tiles in all
 
 	ivec3 sdf_size;
 	bool gi_upscale_for_msaa;

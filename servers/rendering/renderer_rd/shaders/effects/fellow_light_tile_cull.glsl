@@ -15,7 +15,8 @@
 // tile's (the candidates come from it), so they replace its words.
 //
 // A workgroup takes a 16 x 16 pixel block (four tiles; the block lies in one cluster tile: cluster tiles of 16 pixels or
-// more). Output, per tile: 2 x words masks (omni lights, then spot lights), words = the cluster's words per element type.
+// more). Output: for each of the 2 x words masks (omni lights, then spot lights; words = the cluster's words per
+// element type), that word of every tile, row by row.
 
 #include "../light_data_inc.glsl"
 
@@ -180,7 +181,8 @@ void main() {
 		uint t = i / total_words;
 		uvec2 tile_pos = block * 2u + uvec2(t & 1u, t >> 1u);
 		if (tile_pos.x < params.tiles_x && tile_pos.y < params.tiles_y) {
-			tile_masks.data[(tile_pos.y * params.tiles_x + tile_pos.x) * total_words + (i - t * total_words)] = s_mask[i];
+			// Word-major (the fragment reads the same word of neighbouring tiles together).
+			tile_masks.data[(i - t * total_words) * (params.tiles_x * params.tiles_y) + tile_pos.y * params.tiles_x + tile_pos.x] = s_mask[i];
 		}
 	}
 }

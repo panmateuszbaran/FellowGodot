@@ -950,6 +950,7 @@ uint32_t RenderForwardClustered::_setup_environment(const RenderDataRD *p_render
 
 	scene_state.ubo.cluster_shift = Math::get_shift_from_power_of_2(p_render_data->cluster_size);
 	scene_state.ubo.fellow_tile_cull_width = (uint32_t(p_screen_size.width) + 7) / 8; // light tile culling's tiles per row (decision 0049)
+	scene_state.ubo.fellow_tile_cull_count = scene_state.ubo.fellow_tile_cull_width * ((uint32_t(p_screen_size.height) + 7) / 8);
 	scene_state.ubo.max_cluster_element_count_div_32 = p_render_data->cluster_max_elements / 32;
 	{
 		uint32_t cluster_screen_width = Math::division_round_up((uint32_t)p_screen_size.width, p_render_data->cluster_size);

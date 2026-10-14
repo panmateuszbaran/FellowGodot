@@ -66,4 +66,34 @@ The loop visits half as many lights; the lights shaded are the same.
 
 ## Measured
 
-Pending (`m9_f136`: pipeline statistics, images on against off, in-process A/B).
+### v1 (`fellow119`, `m9_f136`): a workgroup per tile; the fragment ANDs the tile's word with the cluster's
+
+* Registers: 96 with 64 bytes of local memory, as off (`m9_f136_pstats_*`).
+* Images (`m9_f136_tc_temporal`, on against off): Bistro exterior bit for bit, City Lab 101.18 dB (one level, a few
+  pixels), Bistro interior 67.1, Lights Lab 96.9, PBR Lab 76.3 dB (their floors). lavapipe: Lights Lab, PBR Lab, City
+  Lab, Stress Lab 0 differing pixels.
+* In one process (`m9_f136_tc_ab`): the culling pass **0.15-0.23 ms**; Lights Lab's opaque pass −0.209 ms (1.160 →
+  0.951), frame −1.0 %; Bistro interior opaque pass +0.067 ms, frame +8.9 %; PBR Lab +6.1 %, City Lab +6.9 % (the
+  pass alone); Bistro exterior (no omni or spot light in view, no pass) 0.0 %.
+
+### v2 (`fellow120`, `m9_f137`): a workgroup per 16 × 16 pixels; the tile's word replaces the cluster's
+
+The pass reads the cluster tile's words once and builds the four boxes once: **0.034-0.049 ms**. In one process
+(`m9_f137_tc_ab`):
+
+| scene | frame | opaque pass | culling pass |
+|---|---:|---:|---:|
+| Lights Lab | **−3.3 %** (p 10^-39) | 1.108 → 0.980 ms (−0.128) | 0.049 |
+| Bistro interior | **+3.8 %** (p 10^-71) | 1.305 → 1.423 (+0.117) | 0.046 |
+| PBR Lab (2 positional lights) | +1.9 % | 0.813 → 0.817 | 0.045 |
+| City Lab (48 lights, sparse) | +1.8 % (n.s.) | 0.473 → 0.458 | 0.034 |
+
+Images at the floor again (`m9_f137_tc_temporal`). Bistro interior's opaque pass is slower although its light loops
+visit a subset of the lights they visited before, and v2's fragment code (a choice between the two words) did worse
+than v1's (an AND) in both Lights Lab (−0.128 against −0.209 ms) and Bistro interior (+0.117 against +0.067): the
+driver's code for the colour pass changes with the shape of the change (0048).
+
+### v3 (`fellow121`, `m9_f138`)
+
+The AND of v1, gated by the specialization bit alone; `debug/tile_cull_passthrough` keeps every candidate (the code path
+without its effect). Pending.

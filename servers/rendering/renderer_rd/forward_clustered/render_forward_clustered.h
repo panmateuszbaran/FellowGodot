@@ -344,7 +344,7 @@ private:
 			float sdf_to_bounds[16];
 
 			int32_t sdf_offset[3];
-			uint32_t pad2;
+			uint32_t fellow_tile_cull_count; // was pad2: light tile culling's tiles (decision 0049)
 
 			int32_t sdf_size[3];
 			uint32_t gi_upscale_for_msaa;
