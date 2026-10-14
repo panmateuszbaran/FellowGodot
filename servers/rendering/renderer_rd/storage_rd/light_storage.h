@@ -191,6 +191,38 @@ private:
 	RID spot_light_buffer;
 	RID area_light_buffer;
 
+	// FellowEngine (rendering/fellow/lights/hot_fields_buffer, decision 0047): the fields the clustered light loop reads
+	// for every omni/spot light it visits, copied from LightData into a compact 80-byte record (one cache line instead
+	// of the three a 240-byte LightData's mask and fields touch), as a storage buffer (1) or a uniform buffer (2, read
+	// through the constant cache: the loop's index is the same for the whole warp). The same bits as LightData's.
+public:
+	struct FellowLightHot {
+		float position[3];
+		float inv_radius;
+		float color[3];
+		float attenuation;
+		float direction[3];
+		float cone_angle;
+		float size;
+		float specular_amount;
+		float shadow_opacity;
+		float cone_attenuation;
+		uint32_t mask;
+		uint32_t bake_mode;
+		uint32_t pad[2];
+	};
+	static_assert(sizeof(FellowLightHot) == 80);
+
+private:
+	FellowLightHot *fellow_omni_hot = nullptr;
+	FellowLightHot *fellow_spot_hot = nullptr;
+	RID fellow_omni_hot_ssbo;
+	RID fellow_spot_hot_ssbo;
+	RID fellow_omni_hot_ubo;
+	RID fellow_spot_hot_ubo;
+	uint32_t fellow_hot_ubo_size = 1; // records in each uniform buffer: max_lights if they fit the device's limit, else 1
+	void _fellow_update_hot_buffers();
+
 	ForwardIDType _light_type_to_forward_id_type(RSE::LightType p_type);
 
 	/* DIRECTIONAL LIGHT DATA */
@@ -831,6 +863,13 @@ public:
 	void set_max_lights(const uint32_t p_max_lights);
 	RID get_omni_light_buffer() { return omni_light_buffer; }
 	RID get_spot_light_buffer() { return spot_light_buffer; }
+	RID fellow_get_omni_hot_ssbo() { return fellow_omni_hot_ssbo; }
+	RID fellow_get_spot_hot_ssbo() { return fellow_spot_hot_ssbo; }
+	RID fellow_get_omni_hot_ubo() { return fellow_omni_hot_ubo; }
+	RID fellow_get_spot_hot_ubo() { return fellow_spot_hot_ubo; }
+	// The number of records the uniform buffers hold (the shaders' array size): every light, or 1 when they do not fit.
+	static uint32_t fellow_hot_ubo_records(uint32_t p_max_lights);
+	bool fellow_hot_ubo_supported() const { return fellow_hot_ubo_size >= max_lights; }
 	RID get_area_light_buffer() { return area_light_buffer; }
 	RID get_directional_light_buffer() { return directional_light_buffer; }
 	uint32_t get_max_directional_lights() { return max_directional_lights; }

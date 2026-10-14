@@ -147,6 +147,8 @@ public:
 				uint32_t fellow_light_prefetch_next : 1; // decision 0046: the next omni/spot light's test fields read one light ahead
 				uint32_t fellow_light_prefetch_all : 1; // decision 0046: and its other hot fields
 				uint32_t fellow_light_prefetch_words : 1; // decision 0046: the next cluster word's mask read one word ahead
+				uint32_t fellow_light_hot : 1; // decision 0047: the light loop's fields from the compact copy
+				uint32_t fellow_light_hot_ubo : 1; // decision 0047: the compact copy is the uniform buffer
 			};
 		};
 

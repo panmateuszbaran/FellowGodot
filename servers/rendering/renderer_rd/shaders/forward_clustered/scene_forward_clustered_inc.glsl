@@ -222,6 +222,16 @@ bool sc_fellow_light_prefetch_all() {
 bool sc_fellow_light_prefetch_words() {
 	return ((sc_packed_1() >> 23) & 1U) != 0;
 }
+
+bool sc_fellow_light_hot() {
+	return ((sc_packed_1() >> 24) & 1U) != 0;
+}
+
+bool sc_fellow_light_hot_ubo() {
+	return ((sc_packed_1() >> 25) & 1U) != 0;
+}
+#define FELLOW_OMNI_HOT(m_idx, m_field) (sc_fellow_light_hot() ? (sc_fellow_light_hot_ubo() ? fellow_omni_hot_ubo.data[m_idx].m_field : fellow_omni_hot_ssbo.data[m_idx].m_field) : omni_lights.data[m_idx].m_field)
+#define FELLOW_SPOT_HOT(m_idx, m_field) (sc_fellow_light_hot() ? (sc_fellow_light_hot_ubo() ? fellow_spot_hot_ubo.data[m_idx].m_field : fellow_spot_hot_ssbo.data[m_idx].m_field) : spot_lights.data[m_idx].m_field)
 #define FELLOW_HAS_LIGHT_PREFETCH_NEXT
 #define FELLOW_HAS_SHADOW_TAP_BATCH
 
@@ -287,6 +297,46 @@ layout(set = 0, binding = 5, std430) restrict readonly buffer AreaLights {
 	LightData data[];
 }
 area_lights;
+
+// FellowEngine (rendering/fellow/lights/hot_fields_buffer, decision 0047): compact copies of the fields the clustered
+// light loop reads for every omni/spot light it visits (the same bits as LightData's), in storage buffers (1) or uniform
+// buffers (2; the loop's light index is the same for the whole subgroup).
+struct FellowLightHot {
+	vec3 position;
+	float inv_radius;
+	vec3 color;
+	float attenuation;
+	vec3 direction;
+	float cone_angle;
+	float size;
+	float specular_amount;
+	float shadow_opacity;
+	float cone_attenuation;
+	uint mask;
+	uint bake_mode;
+	uint pad0;
+	uint pad1;
+};
+
+layout(set = 0, binding = 21, std430) restrict readonly buffer FellowOmniHot {
+	FellowLightHot data[];
+}
+fellow_omni_hot_ssbo;
+
+layout(set = 0, binding = 22, std430) restrict readonly buffer FellowSpotHot {
+	FellowLightHot data[];
+}
+fellow_spot_hot_ssbo;
+
+layout(set = 0, binding = 23, std140) uniform FellowOmniHotU {
+	FellowLightHot data[FELLOW_LIGHT_HOT_UBO_SIZE];
+}
+fellow_omni_hot_ubo;
+
+layout(set = 0, binding = 24, std140) uniform FellowSpotHotU {
+	FellowLightHot data[FELLOW_LIGHT_HOT_UBO_SIZE];
+}
+fellow_spot_hot_ubo;
 
 layout(set = 0, binding = 6, std430) restrict readonly buffer ReflectionProbeData {
 	ReflectionData data[];

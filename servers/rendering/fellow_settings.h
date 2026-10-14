@@ -308,6 +308,12 @@ inline bool light_fields_early() {
 // read while the current light is processed; 3 and 4 also read the next cluster word's mask (and its first light) while
 // the current word's lights are processed (with lights/fields_early; the same values;
 // docs/decisions/0046-light-prefetch-next.md). Specialization constants, runtime.
+// Omni/spot lights: the fields the light loop reads for every light it visits, read from a compact copy (80 bytes per
+// light) in a storage buffer (1) or a uniform buffer (2) instead of the 240-byte LightData (with lights/fields_early;
+// the same values; docs/decisions/0047-light-hot-fields-buffer.md). Specialization constants, runtime.
+inline int light_hot_fields_buffer() {
+	return light_fields_early() ? CLAMP(GLOBAL_GET_CACHED(int, "rendering/fellow/lights/hot_fields_buffer"), 0, 2) : 0;
+}
 inline int light_prefetch_next() {
 	return light_fields_early() ? CLAMP(GLOBAL_GET_CACHED(int, "rendering/fellow/lights/prefetch_next"), 0, 4) : 0;
 }

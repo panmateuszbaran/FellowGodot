@@ -3118,16 +3118,16 @@ void fragment_shader(in SceneData scene_data) {
 					fellow_nx_any = true;
 				}
 				if (fellow_nx_any) {
-					fellow_nx_mask = omni_lights.data[fellow_nx_index].mask;
-					fellow_nx_bake = omni_lights.data[fellow_nx_index].bake_mode;
-					fellow_nx_position = omni_lights.data[fellow_nx_index].position;
-					fellow_nx_inv_radius = omni_lights.data[fellow_nx_index].inv_radius;
+					fellow_nx_mask = FELLOW_OMNI_HOT(fellow_nx_index, mask);
+					fellow_nx_bake = FELLOW_OMNI_HOT(fellow_nx_index, bake_mode);
+					fellow_nx_position = FELLOW_OMNI_HOT(fellow_nx_index, position);
+					fellow_nx_inv_radius = FELLOW_OMNI_HOT(fellow_nx_index, inv_radius);
 					if (sc_fellow_light_prefetch_all()) {
-						fellow_nx_attenuation = omni_lights.data[fellow_nx_index].attenuation;
-						fellow_nx_color = omni_lights.data[fellow_nx_index].color;
-						fellow_nx_size = omni_lights.data[fellow_nx_index].size;
-						fellow_nx_specular_amount = omni_lights.data[fellow_nx_index].specular_amount;
-						fellow_nx_shadow_opacity = omni_lights.data[fellow_nx_index].shadow_opacity;
+						fellow_nx_attenuation = FELLOW_OMNI_HOT(fellow_nx_index, attenuation);
+						fellow_nx_color = FELLOW_OMNI_HOT(fellow_nx_index, color);
+						fellow_nx_size = FELLOW_OMNI_HOT(fellow_nx_index, size);
+						fellow_nx_specular_amount = FELLOW_OMNI_HOT(fellow_nx_index, specular_amount);
+						fellow_nx_shadow_opacity = FELLOW_OMNI_HOT(fellow_nx_index, shadow_opacity);
 					}
 				}
 				fellow_nx_valid = fellow_words && fellow_nx_any;
@@ -3167,16 +3167,16 @@ void fragment_shader(in SceneData scene_data) {
 						fellow_nx_any = true;
 					}
 					if (fellow_nx_any) {
-						fellow_nx_mask = omni_lights.data[fellow_nx_index].mask;
-						fellow_nx_bake = omni_lights.data[fellow_nx_index].bake_mode;
-						fellow_nx_position = omni_lights.data[fellow_nx_index].position;
-						fellow_nx_inv_radius = omni_lights.data[fellow_nx_index].inv_radius;
+						fellow_nx_mask = FELLOW_OMNI_HOT(fellow_nx_index, mask);
+						fellow_nx_bake = FELLOW_OMNI_HOT(fellow_nx_index, bake_mode);
+						fellow_nx_position = FELLOW_OMNI_HOT(fellow_nx_index, position);
+						fellow_nx_inv_radius = FELLOW_OMNI_HOT(fellow_nx_index, inv_radius);
 						if (sc_fellow_light_prefetch_all()) {
-							fellow_nx_attenuation = omni_lights.data[fellow_nx_index].attenuation;
-							fellow_nx_color = omni_lights.data[fellow_nx_index].color;
-							fellow_nx_size = omni_lights.data[fellow_nx_index].size;
-							fellow_nx_specular_amount = omni_lights.data[fellow_nx_index].specular_amount;
-							fellow_nx_shadow_opacity = omni_lights.data[fellow_nx_index].shadow_opacity;
+							fellow_nx_attenuation = FELLOW_OMNI_HOT(fellow_nx_index, attenuation);
+							fellow_nx_color = FELLOW_OMNI_HOT(fellow_nx_index, color);
+							fellow_nx_size = FELLOW_OMNI_HOT(fellow_nx_index, size);
+							fellow_nx_specular_amount = FELLOW_OMNI_HOT(fellow_nx_index, specular_amount);
+							fellow_nx_shadow_opacity = FELLOW_OMNI_HOT(fellow_nx_index, shadow_opacity);
 						}
 					}
 					fellow_nx_valid = fellow_words && fellow_nx_any;
@@ -3202,31 +3202,31 @@ void fragment_shader(in SceneData scene_data) {
 					fellow_light_mask = fellow_pf_mask;
 					fellow_light_bake = fellow_pf_bake;
 					if (!sc_fellow_light_prefetch_all()) {
-						fellow_lpf_attenuation = omni_lights.data[light_index].attenuation;
-						fellow_lpf_color = omni_lights.data[light_index].color;
-						fellow_lpf_size = omni_lights.data[light_index].size;
-						fellow_lpf_specular_amount = omni_lights.data[light_index].specular_amount;
-						fellow_lpf_shadow_opacity = omni_lights.data[light_index].shadow_opacity;
+						fellow_lpf_attenuation = FELLOW_OMNI_HOT(light_index, attenuation);
+						fellow_lpf_color = FELLOW_OMNI_HOT(light_index, color);
+						fellow_lpf_size = FELLOW_OMNI_HOT(light_index, size);
+						fellow_lpf_specular_amount = FELLOW_OMNI_HOT(light_index, specular_amount);
+						fellow_lpf_shadow_opacity = FELLOW_OMNI_HOT(light_index, shadow_opacity);
 					}
 				} else
 #endif
 				if (sc_fellow_light_fields_early()) {
-					fellow_light_mask = omni_lights.data[light_index].mask;
-					fellow_light_bake = omni_lights.data[light_index].bake_mode;
-					fellow_lpf_position = omni_lights.data[light_index].position;
-					fellow_lpf_inv_radius = omni_lights.data[light_index].inv_radius;
-					fellow_lpf_attenuation = omni_lights.data[light_index].attenuation;
-					fellow_lpf_color = omni_lights.data[light_index].color;
-					fellow_lpf_size = omni_lights.data[light_index].size;
-					fellow_lpf_specular_amount = omni_lights.data[light_index].specular_amount;
-					fellow_lpf_shadow_opacity = omni_lights.data[light_index].shadow_opacity;
+					fellow_light_mask = FELLOW_OMNI_HOT(light_index, mask);
+					fellow_light_bake = FELLOW_OMNI_HOT(light_index, bake_mode);
+					fellow_lpf_position = FELLOW_OMNI_HOT(light_index, position);
+					fellow_lpf_inv_radius = FELLOW_OMNI_HOT(light_index, inv_radius);
+					fellow_lpf_attenuation = FELLOW_OMNI_HOT(light_index, attenuation);
+					fellow_lpf_color = FELLOW_OMNI_HOT(light_index, color);
+					fellow_lpf_size = FELLOW_OMNI_HOT(light_index, size);
+					fellow_lpf_specular_amount = FELLOW_OMNI_HOT(light_index, specular_amount);
+					fellow_lpf_shadow_opacity = FELLOW_OMNI_HOT(light_index, shadow_opacity);
 				} else {
-					fellow_light_mask = omni_lights.data[light_index].mask;
-					fellow_light_bake = omni_lights.data[light_index].bake_mode;
+					fellow_light_mask = FELLOW_OMNI_HOT(light_index, mask);
+					fellow_light_bake = FELLOW_OMNI_HOT(light_index, bake_mode);
 				}
 #else
-				uint fellow_light_mask = omni_lights.data[light_index].mask;
-				uint fellow_light_bake = omni_lights.data[light_index].bake_mode;
+				uint fellow_light_mask = FELLOW_OMNI_HOT(light_index, mask);
+				uint fellow_light_bake = FELLOW_OMNI_HOT(light_index, bake_mode);
 #endif
 
 				if (!bool(fellow_light_mask & FELLOW_INSTANCE(layer_mask))) {
@@ -3348,19 +3348,19 @@ void fragment_shader(in SceneData scene_data) {
 					fellow_nx_any = true;
 				}
 				if (fellow_nx_any) {
-					fellow_nx_mask = spot_lights.data[fellow_nx_index].mask;
-					fellow_nx_bake = spot_lights.data[fellow_nx_index].bake_mode;
-					fellow_nx_position = spot_lights.data[fellow_nx_index].position;
-					fellow_nx_inv_radius = spot_lights.data[fellow_nx_index].inv_radius;
-					fellow_nx_direction = spot_lights.data[fellow_nx_index].direction;
-					fellow_nx_cone_angle = spot_lights.data[fellow_nx_index].cone_angle;
+					fellow_nx_mask = FELLOW_SPOT_HOT(fellow_nx_index, mask);
+					fellow_nx_bake = FELLOW_SPOT_HOT(fellow_nx_index, bake_mode);
+					fellow_nx_position = FELLOW_SPOT_HOT(fellow_nx_index, position);
+					fellow_nx_inv_radius = FELLOW_SPOT_HOT(fellow_nx_index, inv_radius);
+					fellow_nx_direction = FELLOW_SPOT_HOT(fellow_nx_index, direction);
+					fellow_nx_cone_angle = FELLOW_SPOT_HOT(fellow_nx_index, cone_angle);
 					if (sc_fellow_light_prefetch_all()) {
-						fellow_nx_attenuation = spot_lights.data[fellow_nx_index].attenuation;
-						fellow_nx_color = spot_lights.data[fellow_nx_index].color;
-						fellow_nx_size = spot_lights.data[fellow_nx_index].size;
-						fellow_nx_specular_amount = spot_lights.data[fellow_nx_index].specular_amount;
-						fellow_nx_shadow_opacity = spot_lights.data[fellow_nx_index].shadow_opacity;
-						fellow_nx_cone_attenuation = spot_lights.data[fellow_nx_index].cone_attenuation;
+						fellow_nx_attenuation = FELLOW_SPOT_HOT(fellow_nx_index, attenuation);
+						fellow_nx_color = FELLOW_SPOT_HOT(fellow_nx_index, color);
+						fellow_nx_size = FELLOW_SPOT_HOT(fellow_nx_index, size);
+						fellow_nx_specular_amount = FELLOW_SPOT_HOT(fellow_nx_index, specular_amount);
+						fellow_nx_shadow_opacity = FELLOW_SPOT_HOT(fellow_nx_index, shadow_opacity);
+						fellow_nx_cone_attenuation = FELLOW_SPOT_HOT(fellow_nx_index, cone_attenuation);
 					}
 				}
 				fellow_nx_valid = fellow_words && fellow_nx_any;
@@ -3403,19 +3403,19 @@ void fragment_shader(in SceneData scene_data) {
 						fellow_nx_any = true;
 					}
 					if (fellow_nx_any) {
-						fellow_nx_mask = spot_lights.data[fellow_nx_index].mask;
-						fellow_nx_bake = spot_lights.data[fellow_nx_index].bake_mode;
-						fellow_nx_position = spot_lights.data[fellow_nx_index].position;
-						fellow_nx_inv_radius = spot_lights.data[fellow_nx_index].inv_radius;
-						fellow_nx_direction = spot_lights.data[fellow_nx_index].direction;
-						fellow_nx_cone_angle = spot_lights.data[fellow_nx_index].cone_angle;
+						fellow_nx_mask = FELLOW_SPOT_HOT(fellow_nx_index, mask);
+						fellow_nx_bake = FELLOW_SPOT_HOT(fellow_nx_index, bake_mode);
+						fellow_nx_position = FELLOW_SPOT_HOT(fellow_nx_index, position);
+						fellow_nx_inv_radius = FELLOW_SPOT_HOT(fellow_nx_index, inv_radius);
+						fellow_nx_direction = FELLOW_SPOT_HOT(fellow_nx_index, direction);
+						fellow_nx_cone_angle = FELLOW_SPOT_HOT(fellow_nx_index, cone_angle);
 						if (sc_fellow_light_prefetch_all()) {
-							fellow_nx_attenuation = spot_lights.data[fellow_nx_index].attenuation;
-							fellow_nx_color = spot_lights.data[fellow_nx_index].color;
-							fellow_nx_size = spot_lights.data[fellow_nx_index].size;
-							fellow_nx_specular_amount = spot_lights.data[fellow_nx_index].specular_amount;
-							fellow_nx_shadow_opacity = spot_lights.data[fellow_nx_index].shadow_opacity;
-							fellow_nx_cone_attenuation = spot_lights.data[fellow_nx_index].cone_attenuation;
+							fellow_nx_attenuation = FELLOW_SPOT_HOT(fellow_nx_index, attenuation);
+							fellow_nx_color = FELLOW_SPOT_HOT(fellow_nx_index, color);
+							fellow_nx_size = FELLOW_SPOT_HOT(fellow_nx_index, size);
+							fellow_nx_specular_amount = FELLOW_SPOT_HOT(fellow_nx_index, specular_amount);
+							fellow_nx_shadow_opacity = FELLOW_SPOT_HOT(fellow_nx_index, shadow_opacity);
+							fellow_nx_cone_attenuation = FELLOW_SPOT_HOT(fellow_nx_index, cone_attenuation);
 						}
 					}
 					fellow_nx_valid = fellow_words && fellow_nx_any;
@@ -3441,35 +3441,35 @@ void fragment_shader(in SceneData scene_data) {
 					fellow_light_mask = fellow_pf_mask;
 					fellow_light_bake = fellow_pf_bake;
 					if (!sc_fellow_light_prefetch_all()) {
-						fellow_lpf_attenuation = spot_lights.data[light_index].attenuation;
-						fellow_lpf_color = spot_lights.data[light_index].color;
-						fellow_lpf_size = spot_lights.data[light_index].size;
-						fellow_lpf_specular_amount = spot_lights.data[light_index].specular_amount;
-						fellow_lpf_shadow_opacity = spot_lights.data[light_index].shadow_opacity;
-						fellow_lpf_cone_attenuation = spot_lights.data[light_index].cone_attenuation;
+						fellow_lpf_attenuation = FELLOW_SPOT_HOT(light_index, attenuation);
+						fellow_lpf_color = FELLOW_SPOT_HOT(light_index, color);
+						fellow_lpf_size = FELLOW_SPOT_HOT(light_index, size);
+						fellow_lpf_specular_amount = FELLOW_SPOT_HOT(light_index, specular_amount);
+						fellow_lpf_shadow_opacity = FELLOW_SPOT_HOT(light_index, shadow_opacity);
+						fellow_lpf_cone_attenuation = FELLOW_SPOT_HOT(light_index, cone_attenuation);
 					}
 				} else
 #endif
 				if (sc_fellow_light_fields_early()) {
-					fellow_light_mask = spot_lights.data[light_index].mask;
-					fellow_light_bake = spot_lights.data[light_index].bake_mode;
-					fellow_lpf_position = spot_lights.data[light_index].position;
-					fellow_lpf_inv_radius = spot_lights.data[light_index].inv_radius;
-					fellow_lpf_attenuation = spot_lights.data[light_index].attenuation;
-					fellow_lpf_color = spot_lights.data[light_index].color;
-					fellow_lpf_size = spot_lights.data[light_index].size;
-					fellow_lpf_specular_amount = spot_lights.data[light_index].specular_amount;
-					fellow_lpf_shadow_opacity = spot_lights.data[light_index].shadow_opacity;
-					fellow_lpf_direction = spot_lights.data[light_index].direction;
-					fellow_lpf_cone_angle = spot_lights.data[light_index].cone_angle;
-					fellow_lpf_cone_attenuation = spot_lights.data[light_index].cone_attenuation;
+					fellow_light_mask = FELLOW_SPOT_HOT(light_index, mask);
+					fellow_light_bake = FELLOW_SPOT_HOT(light_index, bake_mode);
+					fellow_lpf_position = FELLOW_SPOT_HOT(light_index, position);
+					fellow_lpf_inv_radius = FELLOW_SPOT_HOT(light_index, inv_radius);
+					fellow_lpf_attenuation = FELLOW_SPOT_HOT(light_index, attenuation);
+					fellow_lpf_color = FELLOW_SPOT_HOT(light_index, color);
+					fellow_lpf_size = FELLOW_SPOT_HOT(light_index, size);
+					fellow_lpf_specular_amount = FELLOW_SPOT_HOT(light_index, specular_amount);
+					fellow_lpf_shadow_opacity = FELLOW_SPOT_HOT(light_index, shadow_opacity);
+					fellow_lpf_direction = FELLOW_SPOT_HOT(light_index, direction);
+					fellow_lpf_cone_angle = FELLOW_SPOT_HOT(light_index, cone_angle);
+					fellow_lpf_cone_attenuation = FELLOW_SPOT_HOT(light_index, cone_attenuation);
 				} else {
-					fellow_light_mask = spot_lights.data[light_index].mask;
-					fellow_light_bake = spot_lights.data[light_index].bake_mode;
+					fellow_light_mask = FELLOW_SPOT_HOT(light_index, mask);
+					fellow_light_bake = FELLOW_SPOT_HOT(light_index, bake_mode);
 				}
 #else
-				uint fellow_light_mask = spot_lights.data[light_index].mask;
-				uint fellow_light_bake = spot_lights.data[light_index].bake_mode;
+				uint fellow_light_mask = FELLOW_SPOT_HOT(light_index, mask);
+				uint fellow_light_bake = FELLOW_SPOT_HOT(light_index, bake_mode);
 #endif
 
 				if (!bool(fellow_light_mask & FELLOW_INSTANCE(layer_mask))) {

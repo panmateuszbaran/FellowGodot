@@ -30,12 +30,21 @@
 #else
 #define FELLOW_TAP_BATCH 4u
 #endif
+// Experiment 1048576: the positional lights' PCF loops (omni and spot, 8 taps at soft medium) in batches of 8, in one
+// batch (the other loops as above).
+#if defined(FELLOW_EXP_BIT20)
+#define FELLOW_TAP_BATCH_PCF 8u
+#else
+#define FELLOW_TAP_BATCH_PCF FELLOW_TAP_BATCH
+#endif
 #ifdef FELLOW_HAS_SHADOW_TAP_BATCH
 #define FELLOW_BATCH_TAPS_DIR(m_count) (sc_fellow_shadow_tap_batch() && ((m_count) % FELLOW_TAP_BATCH) == 0u)
 #define FELLOW_BATCH_TAPS_POS(m_count) (sc_fellow_shadow_tap_batch_positional() && ((m_count) % FELLOW_TAP_BATCH) == 0u)
+#define FELLOW_BATCH_TAPS_PCF(m_count) (sc_fellow_shadow_tap_batch_positional() && ((m_count) % FELLOW_TAP_BATCH_PCF) == 0u)
 #else
 #define FELLOW_BATCH_TAPS_DIR(m_count) false
 #define FELLOW_BATCH_TAPS_POS(m_count) false
+#define FELLOW_BATCH_TAPS_PCF(m_count) false
 #endif
 
 #ifdef FELLOW_EXP_BIT10
@@ -525,14 +534,14 @@ half sample_pcf_shadow(texture2D shadow, vec2 shadow_pixel_size, vec3 coord, flo
 
 	float avg = 0.0;
 
-	if (FELLOW_BATCH_TAPS_POS(sc_soft_shadow_samples())) {
+	if (FELLOW_BATCH_TAPS_PCF(sc_soft_shadow_samples())) {
 		SPEC_CONSTANT_LOOP_ANNOTATION
-		for (uint i = 0; i < sc_soft_shadow_samples(); i += FELLOW_TAP_BATCH) {
-			float t[FELLOW_TAP_BATCH];
-			[[unroll]] for (uint j = 0u; j < FELLOW_TAP_BATCH; j++) {
+		for (uint i = 0; i < sc_soft_shadow_samples(); i += FELLOW_TAP_BATCH_PCF) {
+			float t[FELLOW_TAP_BATCH_PCF];
+			[[unroll]] for (uint j = 0u; j < FELLOW_TAP_BATCH_PCF; j++) {
 				t[j] = textureProj(sampler2DShadow(shadow, shadow_sampler), vec4(pos + shadow_pixel_size * (disk_rotation * scene_data_block.data.soft_shadow_kernel[i + j].xy), depth, 1.0));
 			}
-			[[unroll]] for (uint j = 0u; j < FELLOW_TAP_BATCH; j++) {
+			[[unroll]] for (uint j = 0u; j < FELLOW_TAP_BATCH_PCF; j++) {
 				avg += t[j];
 			}
 		}
@@ -587,11 +596,11 @@ half sample_omni_pcf_shadow(texture2D shadow, float blur_scale, vec2 coord, vec4
 	float avg = 0.0;
 	vec2 offset_scale = blur_scale * 2.0 * scene_data_block.data.shadow_atlas_pixel_size / uv_rect.zw;
 
-	if (FELLOW_BATCH_TAPS_POS(sc_soft_shadow_samples())) {
+	if (FELLOW_BATCH_TAPS_PCF(sc_soft_shadow_samples())) {
 		SPEC_CONSTANT_LOOP_ANNOTATION
-		for (uint i = 0; i < sc_soft_shadow_samples(); i += FELLOW_TAP_BATCH) {
-			float t[FELLOW_TAP_BATCH];
-			[[unroll]] for (uint j = 0u; j < FELLOW_TAP_BATCH; j++) {
+		for (uint i = 0; i < sc_soft_shadow_samples(); i += FELLOW_TAP_BATCH_PCF) {
+			float t[FELLOW_TAP_BATCH_PCF];
+			[[unroll]] for (uint j = 0u; j < FELLOW_TAP_BATCH_PCF; j++) {
 				vec2 offset = offset_scale * (disk_rotation * scene_data_block.data.soft_shadow_kernel[i + j].xy);
 				vec2 sample_coord = coord + offset;
 
@@ -611,7 +620,7 @@ half sample_omni_pcf_shadow(texture2D shadow, float blur_scale, vec2 coord, vec4
 				}
 				t[j] = textureProj(sampler2DShadow(shadow, shadow_sampler), vec4(sample_coord, depth, 1.0));
 			}
-			[[unroll]] for (uint j = 0u; j < FELLOW_TAP_BATCH; j++) {
+			[[unroll]] for (uint j = 0u; j < FELLOW_TAP_BATCH_PCF; j++) {
 				avg += t[j];
 			}
 		}

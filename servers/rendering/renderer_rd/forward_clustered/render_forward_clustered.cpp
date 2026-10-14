@@ -4672,6 +4672,8 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	base_specialization.fellow_light_prefetch_next = false;
 	base_specialization.fellow_light_prefetch_all = false;
 	base_specialization.fellow_light_prefetch_words = false;
+	base_specialization.fellow_light_hot = false;
+	base_specialization.fellow_light_hot_ubo = false;
 
 	bool using_ssao = depth_pre_pass && !is_reflection_probe && p_render_data->environment.is_valid() && environment_get_ssao_enabled(p_render_data->environment);
 
@@ -4756,6 +4758,13 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		base_specialization.fellow_light_prefetch_next = fellow_pf >= 1;
 		base_specialization.fellow_light_prefetch_all = fellow_pf == 2 || fellow_pf == 4;
 		base_specialization.fellow_light_prefetch_words = fellow_pf >= 3;
+		// lights/hot_fields_buffer (decision 0047): 1 the storage buffer, 2 the uniform buffer (if every light fits).
+		int fellow_hot = fellow_positional_light_count > 0 ? Fellow::light_hot_fields_buffer() : 0;
+		if (fellow_hot == 2 && !RendererRD::LightStorage::get_singleton()->fellow_hot_ubo_supported()) {
+			fellow_hot = 0;
+		}
+		base_specialization.fellow_light_hot = fellow_hot != 0;
+		base_specialization.fellow_light_hot_ubo = fellow_hot == 2;
 	}
 
 	if (current_cluster_builder) {
@@ -6442,6 +6451,19 @@ void RenderForwardClustered::_update_render_base_uniform_set() {
 			u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
 			u.append_id(RendererRD::LightStorage::get_singleton()->get_area_light_buffer());
 			uniforms.push_back(u);
+		}
+		{
+			// FellowEngine (lights/hot_fields_buffer, decision 0047): the compact copies of the omni and spot lights'
+			// loop fields.
+			RendererRD::LightStorage *fellow_ls = RendererRD::LightStorage::get_singleton();
+			const RID fellow_bufs[4] = { fellow_ls->fellow_get_omni_hot_ssbo(), fellow_ls->fellow_get_spot_hot_ssbo(), fellow_ls->fellow_get_omni_hot_ubo(), fellow_ls->fellow_get_spot_hot_ubo() };
+			for (int b = 0; b < 4; b++) {
+				RD::Uniform u;
+				u.binding = 21 + b;
+				u.uniform_type = b < 2 ? RD::UNIFORM_TYPE_STORAGE_BUFFER : RD::UNIFORM_TYPE_UNIFORM_BUFFER;
+				u.append_id(fellow_bufs[b]);
+				uniforms.push_back(u);
+			}
 		}
 
 		{
@@ -8472,6 +8494,8 @@ void RenderForwardClustered::_update_shader_quality_settings() {
 	specialization.fellow_light_prefetch_next = Fellow::light_prefetch_next() >= 1;
 	specialization.fellow_light_prefetch_all = Fellow::light_prefetch_next() == 2 || Fellow::light_prefetch_next() == 4;
 	specialization.fellow_light_prefetch_words = Fellow::light_prefetch_next() >= 3;
+	specialization.fellow_light_hot = Fellow::light_hot_fields_buffer() != 0;
+	specialization.fellow_light_hot_ubo = Fellow::light_hot_fields_buffer() == 2;
 	scene_shader.set_default_specialization(specialization);
 
 	base_uniforms_changed(); //also need this
@@ -8492,6 +8516,8 @@ RenderForwardClustered::RenderForwardClustered() {
 		}
 		defines += "\n#define SDFGI_OCT_SIZE " + itos(gi.sdfgi_get_lightprobe_octahedron_size()) + "\n";
 		defines += "\n#define MAX_DIRECTIONAL_LIGHT_DATA_STRUCTS " + itos(MAX_DIRECTIONAL_LIGHTS) + "\n";
+		// FellowEngine (lights/hot_fields_buffer, decision 0047): the uniform buffers' array size (LightStorage's).
+		defines += "\n#define FELLOW_LIGHT_HOT_UBO_SIZE " + itos(RendererRD::LightStorage::fellow_hot_ubo_records(GLOBAL_GET("rendering/limits/cluster_builder/max_clustered_elements"))) + "\n";
 
 		bool force_vertex_shading = GLOBAL_GET("rendering/shading/overrides/force_vertex_shading");
 		if (force_vertex_shading) {
@@ -8528,10 +8554,10 @@ RenderForwardClustered::RenderForwardClustered() {
 		{
 			// FellowEngine diagnostics (rendering/fellow/debug/scene_shader_experiments): experiment defines.
 			const int experiments = GLOBAL_GET("rendering/fellow/debug/scene_shader_experiments");
-			static const char *names[20] = { "FELLOW_EXP_DONT_UNROLL", "FELLOW_EXP_UNROLL", "FELLOW_EXP_BIT2", "FELLOW_EXP_BIT3", "FELLOW_EXP_BIT4", "FELLOW_EXP_BIT5", "FELLOW_EXP_BIT6", "FELLOW_EXP_BIT7",
+			static const char *names[21] = { "FELLOW_EXP_DONT_UNROLL", "FELLOW_EXP_UNROLL", "FELLOW_EXP_BIT2", "FELLOW_EXP_BIT3", "FELLOW_EXP_BIT4", "FELLOW_EXP_BIT5", "FELLOW_EXP_BIT6", "FELLOW_EXP_BIT7",
 				"FELLOW_EXP_BIT8", "FELLOW_EXP_BIT9", "FELLOW_EXP_BIT10", "FELLOW_EXP_BIT11", "FELLOW_EXP_BIT12", "FELLOW_EXP_BIT13", "FELLOW_EXP_BIT14", "FELLOW_EXP_BIT15",
-				"FELLOW_EXP_BIT16", "FELLOW_EXP_BIT17", "FELLOW_EXP_BIT18", "FELLOW_EXP_BIT19" };
-			for (int b = 0; b < 20; b++) {
+				"FELLOW_EXP_BIT16", "FELLOW_EXP_BIT17", "FELLOW_EXP_BIT18", "FELLOW_EXP_BIT19", "FELLOW_EXP_BIT20" };
+			for (int b = 0; b < 21; b++) {
 				if (experiments & (1 << b)) {
 					defines += "\n#define " + String(names[b]) + "\n";
 				}

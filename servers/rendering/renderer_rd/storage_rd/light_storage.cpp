@@ -33,6 +33,7 @@
 #include "core/config/project_settings.h"
 #include "core/math/geometry_3d.h"
 #include "core/os/os.h"
+#include "servers/rendering/fellow_settings.h"
 #include "servers/rendering/renderer_rd/renderer_scene_render_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/texture_storage.h"
 #include "servers/rendering/rendering_server_globals.h"
@@ -653,6 +654,21 @@ void LightStorage::free_light_data() {
 		area_light_buffer = RID();
 	}
 
+	for (RID *fellow_rid : { &fellow_omni_hot_ssbo, &fellow_spot_hot_ssbo, &fellow_omni_hot_ubo, &fellow_spot_hot_ubo }) {
+		if (fellow_rid->is_valid()) {
+			RD::get_singleton()->free_rid(*fellow_rid);
+			*fellow_rid = RID();
+		}
+	}
+	if (fellow_omni_hot != nullptr) {
+		memdelete_arr(fellow_omni_hot);
+		fellow_omni_hot = nullptr;
+	}
+	if (fellow_spot_hot != nullptr) {
+		memdelete_arr(fellow_spot_hot);
+		fellow_spot_hot = nullptr;
+	}
+
 	if (directional_lights != nullptr) {
 		memdelete_arr(directional_lights);
 		directional_lights = nullptr;
@@ -689,6 +705,52 @@ void LightStorage::free_light_data() {
 	}
 }
 
+uint32_t LightStorage::fellow_hot_ubo_records(uint32_t p_max_lights) {
+	const uint64_t limit = RD::get_singleton()->limit_get(RD::LIMIT_MAX_UNIFORM_BUFFER_SIZE);
+	return uint64_t(p_max_lights) * sizeof(FellowLightHot) <= limit ? p_max_lights : 1;
+}
+
+void LightStorage::_fellow_update_hot_buffers() {
+	const int mode = Fellow::light_hot_fields_buffer();
+	if (mode == 0 || (mode == 2 && !fellow_hot_ubo_supported())) {
+		return;
+	}
+	const bool ubo = mode == 2;
+	struct Kind {
+		const LightData *src;
+		FellowLightHot *dst;
+		uint32_t count;
+		RID buffer;
+	};
+	const Kind kinds[2] = {
+		{ omni_lights, fellow_omni_hot, omni_light_count, ubo ? fellow_omni_hot_ubo : fellow_omni_hot_ssbo },
+		{ spot_lights, fellow_spot_hot, spot_light_count, ubo ? fellow_spot_hot_ubo : fellow_spot_hot_ssbo },
+	};
+	for (const Kind &k : kinds) {
+		if (k.count == 0) {
+			continue;
+		}
+		for (uint32_t i = 0; i < k.count; i++) {
+			const LightData &s = k.src[i];
+			FellowLightHot &d = k.dst[i];
+			// Copies of the same floats (memcpy keeps their bits).
+			memcpy(d.position, s.position, sizeof(d.position));
+			d.inv_radius = s.inv_radius;
+			memcpy(d.color, s.color, sizeof(d.color));
+			d.attenuation = s.attenuation;
+			memcpy(d.direction, s.direction, sizeof(d.direction));
+			d.cone_angle = s.cos_spot_angle;
+			d.size = s.size;
+			d.specular_amount = s.specular_amount;
+			d.shadow_opacity = s.shadow_opacity;
+			d.cone_attenuation = s.inv_spot_attenuation;
+			d.mask = s.mask;
+			d.bake_mode = s.bake_mode;
+		}
+		RD::get_singleton()->buffer_update(k.buffer, 0, sizeof(FellowLightHot) * k.count, k.dst);
+	}
+}
+
 void LightStorage::set_max_lights(const uint32_t p_max_lights) {
 	max_lights = p_max_lights;
 
@@ -704,6 +766,17 @@ void LightStorage::set_max_lights(const uint32_t p_max_lights) {
 	area_lights = memnew_arr(LightData, max_lights);
 	area_light_buffer = RD::get_singleton()->storage_buffer_create(light_buffer_size);
 	area_light_sort = memnew_arr(LightInstanceDepthSort, max_lights);
+
+	// FellowEngine (lights/hot_fields_buffer, decision 0047).
+	fellow_omni_hot = memnew_arr(FellowLightHot, max_lights);
+	fellow_spot_hot = memnew_arr(FellowLightHot, max_lights);
+	memset(fellow_omni_hot, 0, sizeof(FellowLightHot) * max_lights);
+	memset(fellow_spot_hot, 0, sizeof(FellowLightHot) * max_lights);
+	fellow_omni_hot_ssbo = RD::get_singleton()->storage_buffer_create(max_lights * sizeof(FellowLightHot));
+	fellow_spot_hot_ssbo = RD::get_singleton()->storage_buffer_create(max_lights * sizeof(FellowLightHot));
+	fellow_hot_ubo_size = fellow_hot_ubo_records(max_lights);
+	fellow_omni_hot_ubo = RD::get_singleton()->uniform_buffer_create(fellow_hot_ubo_size * sizeof(FellowLightHot));
+	fellow_spot_hot_ubo = RD::get_singleton()->uniform_buffer_create(fellow_hot_ubo_size * sizeof(FellowLightHot));
 
 	max_directional_lights = RendererSceneRender::MAX_DIRECTIONAL_LIGHTS;
 	uint32_t directional_light_buffer_size = max_directional_lights * sizeof(DirectionalLightData);
@@ -1250,6 +1323,9 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 
 	if (spot_light_count) {
 		RD::get_singleton()->buffer_update(spot_light_buffer, 0, sizeof(LightData) * spot_light_count, spot_lights);
+	}
+	{
+		_fellow_update_hot_buffers();
 	}
 
 	if (area_light_count) {
