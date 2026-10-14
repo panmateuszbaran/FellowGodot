@@ -3095,13 +3095,12 @@ void fragment_shader(in SceneData scene_data) {
 		uint fellow_wn_mask = 0u;
 		uint fellow_wn_merged = 0u;
 		if (fellow_words && item_from < item_to) {
-			fellow_wn_mask = cluster_buffer.data[cluster_omni_offset + item_from];
-			fellow_wn_mask &= cluster_get_range_clip_mask(item_from, item_min, item_max);
 #ifdef FELLOW_TILE_CULL_OK
-			if (fellow_tile_cull) {
-				fellow_wn_mask &= fellow_tile_mask(0u, item_from);
-			}
+			fellow_wn_mask = fellow_tile_cull ? fellow_tile_mask(0u, item_from) : cluster_buffer.data[cluster_omni_offset + item_from];
+#else
+			fellow_wn_mask = cluster_buffer.data[cluster_omni_offset + item_from];
 #endif
+			fellow_wn_mask &= cluster_get_range_clip_mask(item_from, item_min, item_max);
 			fellow_wn_merged = subgroupBroadcastFirst(subgroupOr(fellow_wn_mask));
 		}
 #endif
@@ -3115,25 +3114,24 @@ void fragment_shader(in SceneData scene_data) {
 				fellow_wn_mask = 0u;
 				fellow_wn_merged = 0u;
 				if (i + 1 < item_to) {
-					fellow_wn_mask = cluster_buffer.data[cluster_omni_offset + i + 1];
-					fellow_wn_mask &= cluster_get_range_clip_mask(i + 1, item_min, item_max);
 #ifdef FELLOW_TILE_CULL_OK
-					if (fellow_tile_cull) {
-						fellow_wn_mask &= fellow_tile_mask(0u, i + 1);
-					}
+					fellow_wn_mask = fellow_tile_cull ? fellow_tile_mask(0u, i + 1) : cluster_buffer.data[cluster_omni_offset + i + 1];
+#else
+					fellow_wn_mask = cluster_buffer.data[cluster_omni_offset + i + 1];
 #endif
+					fellow_wn_mask &= cluster_get_range_clip_mask(i + 1, item_min, item_max);
 					fellow_wn_merged = subgroupBroadcastFirst(subgroupOr(fellow_wn_mask));
 				}
 			} else {
+#ifdef FELLOW_TILE_CULL_OK
+				// Light tile culling (decision 0049): the tile's mask, a subset of the cluster tile's word.
+				mask = fellow_tile_cull ? fellow_tile_mask(0u, i) : cluster_buffer.data[cluster_omni_offset + i];
+#else
 				mask = cluster_buffer.data[cluster_omni_offset + i];
+#endif
 				mask &= cluster_get_range_clip_mask(i, item_min, item_max);
 #ifdef FELLOW_LIGHT_PREFILTER
 				mask = fellow_omni_reach(i, mask, vertex, FELLOW_INSTANCE(layer_mask), bool(fellow_flags & INSTANCE_FLAGS_USE_LIGHTMAP));
-#endif
-#ifdef FELLOW_TILE_CULL_OK
-				if (fellow_tile_cull) {
-					mask &= fellow_tile_mask(0u, i); // decision 0049
-				}
 #endif
 				merged_mask = subgroupBroadcastFirst(subgroupOr(mask));
 			}
@@ -3165,15 +3163,14 @@ void fragment_shader(in SceneData scene_data) {
 				fellow_nx_valid = fellow_words && fellow_nx_any;
 			}
 #else
+#ifdef FELLOW_TILE_CULL_OK
+			uint mask = fellow_tile_cull ? fellow_tile_mask(0u, i) : cluster_buffer.data[cluster_omni_offset + i];
+#else
 			uint mask = cluster_buffer.data[cluster_omni_offset + i];
+#endif
 			mask &= cluster_get_range_clip_mask(i, item_min, item_max);
 #ifdef FELLOW_LIGHT_PREFILTER
 			mask = fellow_omni_reach(i, mask, vertex, FELLOW_INSTANCE(layer_mask), bool(fellow_flags & INSTANCE_FLAGS_USE_LIGHTMAP));
-#endif
-#ifdef FELLOW_TILE_CULL_OK
-			if (fellow_tile_cull) {
-				mask &= fellow_tile_mask(0u, i);
-			}
 #endif
 
 			uint merged_mask = subgroupBroadcastFirst(subgroupOr(mask));
@@ -3345,13 +3342,12 @@ void fragment_shader(in SceneData scene_data) {
 		uint fellow_wn_mask = 0u;
 		uint fellow_wn_merged = 0u;
 		if (fellow_words && item_from < item_to) {
-			fellow_wn_mask = cluster_buffer.data[cluster_spot_offset + item_from];
-			fellow_wn_mask &= cluster_get_range_clip_mask(item_from, item_min, item_max);
 #ifdef FELLOW_TILE_CULL_OK
-			if (fellow_tile_cull) {
-				fellow_wn_mask &= fellow_tile_mask(1u, item_from);
-			}
+			fellow_wn_mask = fellow_tile_cull ? fellow_tile_mask(1u, item_from) : cluster_buffer.data[cluster_spot_offset + item_from];
+#else
+			fellow_wn_mask = cluster_buffer.data[cluster_spot_offset + item_from];
 #endif
+			fellow_wn_mask &= cluster_get_range_clip_mask(item_from, item_min, item_max);
 			fellow_wn_merged = subgroupBroadcastFirst(subgroupOr(fellow_wn_mask));
 		}
 #endif
@@ -3365,25 +3361,24 @@ void fragment_shader(in SceneData scene_data) {
 				fellow_wn_mask = 0u;
 				fellow_wn_merged = 0u;
 				if (i + 1 < item_to) {
-					fellow_wn_mask = cluster_buffer.data[cluster_spot_offset + i + 1];
-					fellow_wn_mask &= cluster_get_range_clip_mask(i + 1, item_min, item_max);
 #ifdef FELLOW_TILE_CULL_OK
-					if (fellow_tile_cull) {
-						fellow_wn_mask &= fellow_tile_mask(1u, i + 1);
-					}
+					fellow_wn_mask = fellow_tile_cull ? fellow_tile_mask(1u, i + 1) : cluster_buffer.data[cluster_spot_offset + i + 1];
+#else
+					fellow_wn_mask = cluster_buffer.data[cluster_spot_offset + i + 1];
 #endif
+					fellow_wn_mask &= cluster_get_range_clip_mask(i + 1, item_min, item_max);
 					fellow_wn_merged = subgroupBroadcastFirst(subgroupOr(fellow_wn_mask));
 				}
 			} else {
+#ifdef FELLOW_TILE_CULL_OK
+				// Light tile culling (decision 0049): the tile's mask, a subset of the cluster tile's word.
+				mask = fellow_tile_cull ? fellow_tile_mask(1u, i) : cluster_buffer.data[cluster_spot_offset + i];
+#else
 				mask = cluster_buffer.data[cluster_spot_offset + i];
+#endif
 				mask &= cluster_get_range_clip_mask(i, item_min, item_max);
 #ifdef FELLOW_LIGHT_PREFILTER
 				mask = fellow_spot_reach(i, mask, vertex, FELLOW_INSTANCE(layer_mask), bool(fellow_flags & INSTANCE_FLAGS_USE_LIGHTMAP));
-#endif
-#ifdef FELLOW_TILE_CULL_OK
-				if (fellow_tile_cull) {
-					mask &= fellow_tile_mask(1u, i); // decision 0049
-				}
 #endif
 				merged_mask = subgroupBroadcastFirst(subgroupOr(mask));
 			}
@@ -3418,15 +3413,14 @@ void fragment_shader(in SceneData scene_data) {
 				fellow_nx_valid = fellow_words && fellow_nx_any;
 			}
 #else
+#ifdef FELLOW_TILE_CULL_OK
+			uint mask = fellow_tile_cull ? fellow_tile_mask(1u, i) : cluster_buffer.data[cluster_spot_offset + i];
+#else
 			uint mask = cluster_buffer.data[cluster_spot_offset + i];
+#endif
 			mask &= cluster_get_range_clip_mask(i, item_min, item_max);
 #ifdef FELLOW_LIGHT_PREFILTER
 			mask = fellow_spot_reach(i, mask, vertex, FELLOW_INSTANCE(layer_mask), bool(fellow_flags & INSTANCE_FLAGS_USE_LIGHTMAP));
-#endif
-#ifdef FELLOW_TILE_CULL_OK
-			if (fellow_tile_cull) {
-				mask &= fellow_tile_mask(1u, i);
-			}
 #endif
 
 			uint merged_mask = subgroupBroadcastFirst(subgroupOr(mask));

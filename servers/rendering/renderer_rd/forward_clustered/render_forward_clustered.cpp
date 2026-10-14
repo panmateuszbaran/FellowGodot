@@ -1435,7 +1435,7 @@ bool RenderForwardClustered::_fellow_light_tile_cull(const RenderDataRD *p_rende
 	RenderingDevice *rd = RD::get_singleton();
 	Ref<RenderSceneBuffersRD> rb = p_render_data->render_buffers;
 	const Size2i screen = rb->get_internal_size();
-	if (screen.x <= 0 || screen.y <= 0 || p_words == 0 || p_words > 128 || current_cluster_builder == nullptr || current_cluster_builder->get_cluster_size() < 8) {
+	if (screen.x <= 0 || screen.y <= 0 || p_words == 0 || p_words > 32 || current_cluster_builder == nullptr || current_cluster_builder->get_cluster_size() < 16) {
 		return false;
 	}
 	if (t.version.is_null()) {
@@ -1465,7 +1465,7 @@ bool RenderForwardClustered::_fellow_light_tile_cull(const RenderDataRD *p_rende
 		uint32_t cluster_shift;
 		uint32_t cluster_width;
 		uint32_t cluster_type_size;
-		uint32_t pad;
+		uint32_t tiles_y;
 	} push;
 	static_assert(sizeof(Push) == 96);
 	// The colour pass's projection (with the depth correction and this frame's jitter), inverted.
@@ -1480,7 +1480,7 @@ bool RenderForwardClustered::_fellow_light_tile_cull(const RenderDataRD *p_rende
 	const uint32_t cluster_height = Math::division_round_up((uint32_t)screen.y, cluster_size);
 	push.cluster_width = cluster_width;
 	push.cluster_type_size = cluster_width * cluster_height * (p_words + 32);
-	push.pad = 0;
+	push.tiles_y = tiles_y;
 
 	RID sampler = RendererRD::MaterialStorage::get_singleton()->sampler_rd_get_default(RSE::CANVAS_ITEM_TEXTURE_FILTER_NEAREST, RSE::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
 	RendererRD::LightStorage *ls = RendererRD::LightStorage::get_singleton();
@@ -1494,7 +1494,7 @@ bool RenderForwardClustered::_fellow_light_tile_cull(const RenderDataRD *p_rende
 	rd->compute_list_bind_compute_pipeline(list, t.pipeline);
 	rd->compute_list_bind_uniform_set(list, UniformSetCacheRD::get_singleton()->get_cache(shader, 0, u_depth, u_cluster, u_omni, u_spot, u_masks), 0);
 	rd->compute_list_set_push_constant(list, &push, sizeof(Push));
-	rd->compute_list_dispatch(list, tiles_x, tiles_y, 1);
+	rd->compute_list_dispatch(list, (tiles_x + 1) / 2, (tiles_y + 1) / 2, 1); // a workgroup per 16 x 16 pixels
 	rd->compute_list_end();
 	Fellow::stats().lights_tile_cull_frames.increment();
 	return true;
