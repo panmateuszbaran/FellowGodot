@@ -5562,6 +5562,13 @@ size_t RenderingDeviceDriverVulkan::pipeline_cache_query_size() {
 Vector<uint8_t> RenderingDeviceDriverVulkan::pipeline_cache_serialize() {
 	DEV_ASSERT(pipelines_cache.vk_cache);
 
+	// FellowEngine (decision 0050): the checksum below takes an int length; a cache past that is not saved (a crash
+	// otherwise). The cache keeps working in memory.
+	if (pipelines_cache.current_size + sizeof(PipelineCacheHeader) > size_t(INT32_MAX)) {
+		WARN_PRINT_ONCE("FellowEngine: the Vulkan pipeline cache is too large to be saved (2 GiB).");
+		return Vector<uint8_t>();
+	}
+
 	pipelines_cache.buffer.resize(pipelines_cache.current_size + sizeof(PipelineCacheHeader));
 
 	VkResult err = vkGetPipelineCacheData(vk_device, pipelines_cache.vk_cache, &pipelines_cache.current_size, pipelines_cache.buffer.ptrw() + sizeof(PipelineCacheHeader));

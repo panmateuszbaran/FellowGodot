@@ -9412,6 +9412,16 @@ Vector<uint8_t> RenderingDevice::_load_pipeline_cache() {
 	DirAccess::make_dir_recursive_absolute(pipeline_cache_file_path.get_base_dir());
 
 	if (FileAccess::exists(pipeline_cache_file_path)) {
+		// FellowEngine (decision 0050): stock never evicts from the cache, which grows with every engine build's
+		// shaders; past 2 GiB the save's checksum (an int length) overflows. A file over the limit is ignored: the cache
+		// starts empty and the next save replaces the file.
+		{
+			Ref<FileAccess> f = FileAccess::open(pipeline_cache_file_path, FileAccess::READ);
+			if (f.is_valid() && f->get_length() > Fellow::pipeline_cache_max_bytes()) {
+				print_line(vformat("FellowEngine: the pipeline cache (%.1f MiB) is over rendering/fellow/frame/pipeline_cache_max_mb; starting a new one.", f->get_length() / (1024.0 * 1024.0)));
+				return Vector<uint8_t>();
+			}
+		}
 		Error file_error;
 		Vector<uint8_t> file_data = FileAccess::get_file_as_bytes(pipeline_cache_file_path, &file_error);
 		return file_data;

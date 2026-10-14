@@ -304,6 +304,10 @@ inline bool shadow_batched_taps() {
 // Omni/spot lights: after the depth pre-pass, per 8 x 8 pixel tile, the lights that can reach its geometry; the opaque
 // colour pass's light loops visit only those (exact: the others fail the range test of every fragment there;
 // docs/decisions/0049-light-tile-cull.md). Runtime; with lights/zero_attenuation_skip, without MSAA, multiview or VRS.
+// The largest pipeline cache file loaded at start-up, in bytes (decision 0050).
+inline uint64_t pipeline_cache_max_bytes() {
+	return uint64_t(CLAMP(int(GLOBAL_GET("rendering/fellow/frame/pipeline_cache_max_mb")), 64, 2000)) * 1024 * 1024;
+}
 inline bool light_tile_cull_setting() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/lights/enabled") && GLOBAL_GET_CACHED(bool, "rendering/fellow/lights/tile_cull");
 }
