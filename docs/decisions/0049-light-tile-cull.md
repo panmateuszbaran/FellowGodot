@@ -155,3 +155,21 @@ the pass or its placement should look at it again (`debug/tile_cull_passthrough`
 The slowdown of every pass in Bistro interior (`m9_f138`-`m9_f140`) does not recur in the same configuration: there the
 culling now takes 0.08 ms off the opaque pass when async compute is on (the async queue's SSAO and SSIL run beside it)
 and nothing when it is off; why is not known. Read as session-dependent; autotune measures it per scene either way.
+
+## v6: split around the async compute part (`fellow132`, measuring)
+
+With async compute (on by default on NVIDIA, 0015) the screen-space effects run on the second queue beside the shadows,
+the light clusters and the volumetric fog, and the main queue waits for them before the opaque pass. Light tile
+culling ran after that wait, on the critical path, although it needs only the depth pre-pass and the clusters. Its
+light tests can run beside the async part, but its depth reads cannot simply move there: the async part samples the
+depth buffer too, and the render graph records the depth buffer's layout transition in whichever part uses it first,
+which the other queue would not wait for.
+
+So the pass is split (`debug/tile_cull_split`: 0 when async compute runs, the default; 1 always; 2 never): the tiles'
+nearest and farthest depths (`MODE_DEPTH_BOUNDS`, 8 bytes per tile) are recorded before the async part, which leaves the
+depth buffer in its sampled layout for both queues; the rest (`MODE_FROM_BOUNDS`) reads those bounds and runs after the
+light clusters, beside the async part. The same values, the same masks.
+
+* lavapipe (autotune off): Lights Lab captures, split against whole 0 differing pixels (121 frames split); PBR Lab
+  captures, split against culling off 0 differing pixels (211 frames split).
+
