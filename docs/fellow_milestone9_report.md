@@ -36,6 +36,14 @@ milestone's changes did not show it (0045 v2: PBR Lab −0.4 %); `m10_f148` comp
 defaults against each change switched off. Until it is explained, this milestone's gains are Lights Lab and Bistro
 interior, and the defaults cost up to 2.6 % elsewhere.
 
+**Follow-up** (milestone 10, `m10_f148`, `m10_f150`): in one process, `fellow129` with `lights/fields_early` off is as
+fast as with it on in PBR Lab (+0.0 %), and with `lights/tile_cull` off 0.5 % faster (its autotune evaluations); City
+Lab and Stress Lab show neither. Between processes, nine builds from `fellow110` to `fellow130` in PBR Lab (3 runs each)
+differ by −1.4 to +1.8 % from `fellow110` at the same clocks, without a step at any change (`fellow123` −1.4 %,
+`fellow127` +1.3 %, nothing between them but autotune's tunable and the pipeline cache limit): build-to-build variation
+of about ±2 %, which `m9_f145`'s +2.6 % does not clearly exceed. Milestone 10's `fellow130` is 1.7 % faster than
+`fellow110` there (3/3 pairs).
+
 Images, `fellow127`'s defaults against `fellow110`'s (`m9_f145_defaults_temporal`, 60-frame sequences): Bistro
 exterior, City Lab and Stress Lab bit for bit; Lights Lab 100.0 dB mean (max |d| 2); Bistro interior 67.1, Foliage Lab
 78.3, PBR Lab 76.4, Sponza 75.5 dB, their run-to-run floors.
