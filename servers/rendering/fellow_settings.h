@@ -301,7 +301,7 @@ inline bool shadow_batched_taps() {
 // Omni/spot lights: the fields of a light's tests and shading read together at the start of its function instead of
 // each where it is used (the same values; docs/decisions/0045-light-fields-early.md). Specialization constant, runtime.
 inline bool light_fields_early() {
-	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/lights/enabled") && GLOBAL_GET_CACHED(bool, "rendering/fellow/lights/fields_early");
+	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/lights/enabled") && GLOBAL_GET_CACHED(bool, "rendering/fellow/lights/fields_early") && autotune_allows(TUNE_LIGHT_FIELDS_EARLY);
 }
 inline bool shadow_pcss_quad_search() {
 	return shadows_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/shadows/pcss_quad_search");

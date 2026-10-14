@@ -89,7 +89,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/lights/cluster_depth_slices", true);
 	GLOBAL_DEF("rendering/fellow/lights/zero_attenuation_skip", true);
 	GLOBAL_DEF("rendering/fellow/lights/cluster_pack_parallel", true);
-	GLOBAL_DEF("rendering/fellow/lights/fields_early", false);
+	GLOBAL_DEF("rendering/fellow/lights/fields_early", true);
 	GLOBAL_DEF("rendering/fellow/postfx/ssao_shared_tile", false);
 	GLOBAL_DEF("rendering/fellow/postfx/ss_coherent_gather", false);
 	GLOBAL_DEF("rendering/fellow/postfx/fast_luminance_reduce", true);

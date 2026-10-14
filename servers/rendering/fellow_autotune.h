@@ -44,6 +44,7 @@ enum Tunable {
 	TUNE_DIRECTIONAL_PYRAMID, // shadows/directional_max_mip (decision 0005)
 	TUNE_POSITIONAL_PYRAMID, // shadows/positional_max_mip (decision 0005)
 	TUNE_MULTIMESH_CULLING, // geometry/multimesh_culling (decision 0034), while MultiMeshes it can cull are drawn
+	TUNE_LIGHT_FIELDS_EARLY, // lights/fields_early (decision 0045)
 	// Not exact, but visually lossless (decision 0027): adaptive shading rate pays only where its shading savings exceed
 	// its passes' cost; switched like the exact ones (both ways look the same within the measured limits).
 	TUNE_ADAPTIVE_VRS, // shading/adaptive_vrs_threshold > 0 (the attachment is created at start-up)
