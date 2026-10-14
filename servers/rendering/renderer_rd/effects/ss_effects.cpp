@@ -360,11 +360,13 @@ SSEffects::SSEffects() {
 		{
 			Vector<String> ssr_filter_modes;
 			ssr_filter_modes.push_back("\n");
+			ssr_filter_modes.push_back("\n#define FELLOW_PAD\n"); // FellowEngine (decision 0052): no bank conflicts.
 
 			ssr.filter_shader.initialize(ssr_filter_modes);
 			ssr.filter_shader_version = ssr.filter_shader.version_create();
 
 			ssr.filter_pipeline.create_compute_pipeline(ssr.filter_shader.version_get_shader(ssr.filter_shader_version, 0));
+			ssr.fellow_filter_pad_pipeline.create_compute_pipeline(ssr.filter_shader.version_get_shader(ssr.filter_shader_version, 1));
 		}
 
 		{
@@ -482,6 +484,7 @@ SSEffects::~SSEffects() {
 		}
 		ssr.ssr_pipeline.free();
 		ssr.filter_pipeline.free();
+		ssr.fellow_filter_pad_pipeline.free();
 		ssr.resolve_pipeline.free();
 
 		ssr.downsample_shader.version_free(ssr.downsample_shader_version);
@@ -1848,7 +1851,8 @@ void SSEffects::screen_space_reflection(Ref<RenderSceneBuffersRD> p_render_buffe
 	RENDER_TIMESTAMP("SSR Roughness Filter");
 	RD::get_singleton()->draw_command_begin_label("SSR Roughness Filter");
 
-	RID filter_shader = ssr.filter_shader.version_get_shader(ssr.filter_shader_version, 0);
+	const bool fellow_filter_pad = Fellow::ssr_filter_padded(); // decision 0052
+	RID filter_shader = ssr.filter_shader.version_get_shader(ssr.filter_shader_version, fellow_filter_pad ? 1 : 0);
 
 	for (uint32_t v = 0; v < view_count; v++) {
 		for (uint32_t m = 1; m < p_ssr_buffers.mipmaps; m++) {
@@ -1865,7 +1869,7 @@ void SSEffects::screen_space_reflection(Ref<RenderSceneBuffersRD> p_render_buffe
 
 			RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
 
-			RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, ssr.filter_pipeline.get_rid());
+			RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, fellow_filter_pad ? ssr.fellow_filter_pad_pipeline.get_rid() : ssr.filter_pipeline.get_rid());
 			RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache(filter_shader, 0, u_source, u_dest), 0);
 			RD::get_singleton()->compute_list_set_push_constant(compute_list, &push_constant, sizeof(push_constant));
 			RD::get_singleton()->compute_list_dispatch_threads(compute_list, push_constant.screen_size[0], push_constant.screen_size[1], 1);

@@ -64,6 +64,12 @@ inline int glow_blur() {
 	return postfx_enabled() ? CLAMP(GLOBAL_GET_CACHED(int, "rendering/fellow/postfx/glow_blur"), 0, 2) : 0;
 }
 
+// SSR's roughness filter (a blur per mip of the reflection) with its shared-memory arrays padded so that neither pass
+// has bank conflicts; the same values, the same sums (decision 0052). Read every frame.
+inline bool ssr_filter_padded() {
+	return postfx_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/postfx/ssr_filter_padded");
+}
+
 inline bool ssao_shared_tile() {
 	return postfx_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/postfx/ssao_shared_tile");
 }

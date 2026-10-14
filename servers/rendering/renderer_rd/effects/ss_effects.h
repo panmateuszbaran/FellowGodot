@@ -546,6 +546,7 @@ private:
 		ScreenSpaceReflectionFilterShaderRD filter_shader;
 		RID filter_shader_version;
 		PipelineDeferredRD filter_pipeline;
+		PipelineDeferredRD fellow_filter_pad_pipeline; // FellowEngine (decision 0052).
 
 		ScreenSpaceReflectionResolveShaderRD resolve_shader;
 		RID resolve_shader_version;

@@ -16,7 +16,14 @@ layout(push_constant, std430) uniform Params {
 }
 params;
 
+#ifdef FELLOW_PAD
+// FellowEngine (rendering/fellow/postfx/ssr_filter_padded, decision 0052): the inner dimension padded to 17 entries. With
+// 16, the eight invocations of a quarter warp (eight columns, one row) access entries 16 vec4 apart, all in the same
+// four banks of shared memory: every access of both passes is an 8-way bank conflict. The same values, the same sums.
+shared vec4 cache[16][17];
+#else
 shared vec4 cache[16][16];
+#endif
 
 const float WEIGHTS[7] = float[7](
 		0.07130343198685299,
@@ -65,7 +72,11 @@ vec4 apply_gaus_horz(ivec2 local) {
 	return c;
 }
 
+#ifdef FELLOW_PAD
+shared vec4 temp_cache[8][17];
+#else
 shared vec4 temp_cache[8][16];
+#endif
 
 vec4 apply_gaus_vert(ivec2 local) {
 	vec4 c0 = temp_cache[local.x][local.y - 3];
