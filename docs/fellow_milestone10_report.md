@@ -1,13 +1,36 @@
 # FellowEngine — milestone 10 report (stock's inefficiencies: the cluster build, glow's blur)
 
-Status: **DRAFT** (`fellow128`-`fellow131`, measured 2026-10-14; final numbers from `m10_f152` pending). Branch
+Status: **FINAL** (`fellow128`-`fellow131`, measured 2026-10-14). Branch
 `fellow/geometry`. Benchmark machine as before (Acer Predator PHN16S-71, Core Ultra 9 275HX, RTX 5070 Ti Laptop GPU,
 NVIDIA GPU only, Windows 11, 1920×1080, "high" preset). Decision records `docs/decisions/0051`, `0052`; user-facing
 summary `docs/FELLOWENGINE_OPTIONS.md`.
 
 ## 0. Result
 
-RESULT_PLACEHOLDER
+Frame time, `m10_f152_final` (3 interleaved runs per build and scene, 20 s each after a 30 s heat soak; paired
+statistics): stock Godot 4.7.2, milestone 9's final build (`fellow127`), this milestone's (`fellow131`) with its
+defaults, and with the visually lossless options (`postfx/ssao_temporal`, `postfx/ssil_temporal`,
+`postfx/fog_half_rate`, `shading/adaptive_vrs`).
+
+| scene | stock ms | m9 defaults | **m10 defaults** | m10 vs stock | m10 vs m9 (pairs faster) | m10 lossless | vs stock |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Sponza | 13.715 | 7.032 | 6.766 | **−50.7 %** | −3.8 % (3/3; noisy, CV 3-5 %) | 6.513 | −52.5 % |
+| Bistro exterior | 6.754 | 4.540 | 4.451 | **−34.1 %** | −2.0 % (3/3, p 0.06) | 4.315 | −36.1 % |
+| City Lab | 2.954 | 2.085 | 2.070 | **−29.9 %** | −0.7 % (3/3, n.s.) | 2.102 | −28.9 % |
+| Lights Lab | 3.044 | 2.573 | 2.352 | **−22.7 %** | **−8.6 %** (3/3, p 0.05) | 1.860 | −38.9 % |
+| Foliage Lab | 3.652 | 3.138 | 3.015 | **−17.5 %** | −3.9 % (3/3, p 0.08) | 3.035 | −16.9 % |
+| Bistro interior | 4.183 | 3.508 | 3.458 | **−17.3 %** | −1.4 % (3/3, p 0.12) | 3.148 | −24.7 % |
+| PBR Lab | 2.558 | 2.350 | 2.293 | **−10.4 %** | −2.4 % (2/3; noisy, one slow run) | 2.034 | −20.5 % |
+| Stress Lab | 4.928 | 4.742 | 4.776 | −3.1 % (p 0.07) | +0.7 % (1/3, n.s.) | 4.478 | −9.1 % |
+
+Foliage Lab with its vegetation in one MultiMesh per type (`m10_f152_foliage_single`): stock 10.750 ms, `fellow131`
+5.018 ms (**−53.3 %**, 3/3 pairs).
+
+Every scene except Stress Lab (a robustness scene, bound by its scripted mesh updates) is faster than with milestone 9's
+defaults in every pair of runs; the in-process A/Bs of the two changes (§2, §3) give −1.1 to −6.1 % of GPU time per
+scene. Images, `fellow130`'s defaults against `fellow127`'s (`m10_f149_defaults_temporal`, 60-frame sequences): Bistro
+exterior, City Lab and Stress Lab bit for bit; Bistro interior 67.1, Foliage Lab 78.2, Lights Lab 94.2, PBR Lab 76.3,
+Sponza 75.5 dB, their run-to-run floors. (`fellow131` differs from `fellow130` by the SSR filter option, off.)
 
 New in this milestone and on by default, both exact: **the light cluster build without its 21.5 MB clear per frame,
 with instanced proxy draws and a pack pass per element** (0051), and **glow's blur without shared-memory bank
