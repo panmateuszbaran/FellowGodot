@@ -105,6 +105,9 @@ pack takes their bit as the proof: half the atomics and no depth merge for them.
 reads the depth words; `debug/cluster_keep_depth_words` restores v1). lavapipe, `debug/cluster_verify`: Lights Lab and
 City Lab 0 mismatches (negative control 26 470), instanced draws alone and element pack alone 0, Stress Lab 0.
 
+lavapipe, more configurations (`fellow131`, defaults, Lights Lab): `max_clustered_elements` 32 (the lights capped, 1 word
+per type) and 2048, and the scene with 4× MSAA: 0 mismatches.
+
 RTX (`m10_f149`, `fellow130`, the defaults): `debug/cluster_verify` **0 mismatches** in Lights Lab, Bistro interior,
 City Lab and PBR Lab (10.6-21.1 billion words each); negative control Lights Lab 5 786 126, City Lab 78 892. In one
 process against v1 (`m10_f149_cl2_ab`, GPU): Lights Lab **−0.9 %** (p 0.0009; render region 0.093 → 0.075 ms), PBR Lab
