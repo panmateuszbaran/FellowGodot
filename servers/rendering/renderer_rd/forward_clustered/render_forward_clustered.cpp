@@ -1466,8 +1466,10 @@ bool RenderForwardClustered::_fellow_light_tile_cull(const RenderDataRD *p_rende
 		uint32_t cluster_width;
 		uint32_t cluster_type_size;
 		uint32_t tiles_y;
+		uint32_t flags;
+		uint32_t pad[3];
 	} push;
-	static_assert(sizeof(Push) == 96);
+	static_assert(sizeof(Push) == 112);
 	// The colour pass's projection (with the depth correction and this frame's jitter), inverted.
 	RendererRD::MaterialStorage::store_camera(p_render_data->scene_data->get_cam_projection().inverse(), push.inv_projection);
 	push.screen_size[0] = screen.x;
@@ -1481,6 +1483,8 @@ bool RenderForwardClustered::_fellow_light_tile_cull(const RenderDataRD *p_rende
 	push.cluster_width = cluster_width;
 	push.cluster_type_size = cluster_width * cluster_height * (p_words + 32);
 	push.tiles_y = tiles_y;
+	push.flags = Fellow::light_tile_cull_passthrough() ? 1 : 0;
+	push.pad[0] = push.pad[1] = push.pad[2] = 0;
 
 	RID sampler = RendererRD::MaterialStorage::get_singleton()->sampler_rd_get_default(RSE::CANVAS_ITEM_TEXTURE_FILTER_NEAREST, RSE::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
 	RendererRD::LightStorage *ls = RendererRD::LightStorage::get_singleton();

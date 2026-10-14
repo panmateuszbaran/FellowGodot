@@ -52,6 +52,10 @@ layout(push_constant, std430) uniform Params {
 	uint cluster_width;
 	uint cluster_type_size;
 	uint tiles_y;
+	uint flags; // 1: diagnostics (debug/tile_cull_passthrough): every candidate kept (the masks equal the cluster tile's)
+	uint pad0;
+	uint pad1;
+	uint pad2;
 }
 params;
 
@@ -165,7 +169,7 @@ void main() {
 				continue; // no geometry in this tile
 			}
 			vec3 d = position - clamp(position, s_box_min[t], s_box_max[t]);
-			if (dot(d, d) <= reach2) {
+			if (dot(d, d) <= reach2 || (params.flags & 1u) != 0u) {
 				atomicOr(s_mask[t * total_words + w], 1u << bit);
 			}
 		}

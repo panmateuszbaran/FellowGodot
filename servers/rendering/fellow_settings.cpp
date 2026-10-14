@@ -91,6 +91,8 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/lights/cluster_pack_parallel", true);
 	GLOBAL_DEF("rendering/fellow/lights/fields_early", true);
 	GLOBAL_DEF("rendering/fellow/lights/tile_cull", false);
+	// Diagnostics: light tile culling keeps every candidate (the opaque colour pass's code path, without its effect).
+	GLOBAL_DEF("rendering/fellow/debug/tile_cull_passthrough", false);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/lights/hot_fields_buffer", PROPERTY_HINT_ENUM, "Off,Storage Buffer,Uniform Buffer"), 0);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/lights/prefetch_next", PROPERTY_HINT_ENUM, "Off,Range Test Fields,All Hot Fields,Range Test Fields And Words,All Hot Fields And Words"), 0);
 	GLOBAL_DEF("rendering/fellow/postfx/ssao_shared_tile", false);
