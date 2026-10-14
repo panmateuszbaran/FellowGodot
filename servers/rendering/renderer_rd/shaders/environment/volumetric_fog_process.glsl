@@ -8,10 +8,18 @@
 #pragma use_vulkan_memory_model
 #endif
 
-#ifdef MODE_DENSITY
+#if defined(MODE_DENSITY) && defined(FELLOW_FOG_SHAPE)
+// FellowEngine (rendering/fellow/postfx/fog_light_loop 2-3, decision 0053): 2 x 2 x 16 froxels per workgroup (a warp:
+// 2 x 2 x 8), whose screen area is about one cluster tile, instead of 4 x 4 x 4 (a warp: 4 x 4 x 2, four to five tiles).
+layout(local_size_x = 2, local_size_y = 2, local_size_z = 16) in;
+#elif defined(MODE_DENSITY)
 layout(local_size_x = 4, local_size_y = 4, local_size_z = 4) in;
 #else
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+#endif
+
+#ifdef FELLOW_FOG_MERGE
+#extension GL_KHR_shader_subgroup_arithmetic : enable
 #endif
 
 #include "../cluster_data_inc.glsl"
@@ -353,7 +361,8 @@ void main() {
 				// reprojected value, one lit blends it in as stock does over two frames (history weight squared). Its
 				// jitter steps through the whole Halton table across its own updates (frames two apart).
 				uint frame = params.fellow_half_rate & 31u;
-				if (((gl_WorkGroupID.x + gl_WorkGroupID.y + gl_WorkGroupID.z + frame) & 1u) != 0u) {
+				uvec3 fellow_block = uvec3(pos) >> 2u; // the 4 x 4 x 4 block (stock's workgroup)
+				if (((fellow_block.x + fellow_block.y + fellow_block.z + frame) & 1u) != 0u) {
 					bool invalid = any(isnan(reprojected_density)) || any(isinf(reprojected_density));
 					imageStore(density_map, pos, clamp(invalid ? vec4(0.0) : reprojected_density, vec4(0.0), vec4(65504.0)));
 #ifdef NO_IMAGE_ATOMICS
@@ -507,6 +516,26 @@ void main() {
 
 			cluster_get_item_range(cluster_omni_offset + params.max_cluster_element_count_div_32 + cluster_z, item_min, item_max, item_from, item_to);
 
+#ifdef FELLOW_FOG_MERGE
+			// FellowEngine (decision 0053): the subgroup walks the union of its froxels' lights (the same light for every
+			// invocation at a time: coherent loads, uniform branches); each froxel takes only its own, in stock's order.
+			const uint fellow_from = subgroupMin(item_from);
+			const uint fellow_to = subgroupMax(item_to);
+			for (uint i = fellow_from; i < fellow_to; i++) {
+				uint mask = 0u;
+				if (i >= item_from && i < item_to) {
+					mask = cluster_buffer.data[cluster_omni_offset + i];
+					mask &= cluster_get_range_clip_mask(i, item_min, item_max);
+				}
+				uint merged_mask = subgroupOr(mask);
+
+				while (merged_mask != 0) {
+					uint bit = findMSB(merged_mask);
+					merged_mask &= ~(1 << bit);
+					if ((mask & (1u << bit)) == 0u) {
+						continue;
+					}
+#else
 			for (uint i = item_from; i < item_to; i++) {
 				uint mask = cluster_buffer.data[cluster_omni_offset + i];
 				mask &= cluster_get_range_clip_mask(i, item_min, item_max);
@@ -515,6 +544,7 @@ void main() {
 				while (merged_mask != 0) {
 					uint bit = findMSB(merged_mask);
 					merged_mask &= ~(1 << bit);
+#endif
 
 					uint light_index = 32 * i + bit;
 
@@ -574,6 +604,26 @@ void main() {
 
 			cluster_get_item_range(cluster_spot_offset + params.max_cluster_element_count_div_32 + cluster_z, item_min, item_max, item_from, item_to);
 
+#ifdef FELLOW_FOG_MERGE
+			// FellowEngine (decision 0053): the subgroup walks the union of its froxels' lights (the same light for every
+			// invocation at a time: coherent loads, uniform branches); each froxel takes only its own, in stock's order.
+			const uint fellow_from = subgroupMin(item_from);
+			const uint fellow_to = subgroupMax(item_to);
+			for (uint i = fellow_from; i < fellow_to; i++) {
+				uint mask = 0u;
+				if (i >= item_from && i < item_to) {
+					mask = cluster_buffer.data[cluster_spot_offset + i];
+					mask &= cluster_get_range_clip_mask(i, item_min, item_max);
+				}
+				uint merged_mask = subgroupOr(mask);
+
+				while (merged_mask != 0) {
+					uint bit = findMSB(merged_mask);
+					merged_mask &= ~(1 << bit);
+					if ((mask & (1u << bit)) == 0u) {
+						continue;
+					}
+#else
 			for (uint i = item_from; i < item_to; i++) {
 				uint mask = cluster_buffer.data[cluster_spot_offset + i];
 				mask &= cluster_get_range_clip_mask(i, item_min, item_max);
@@ -582,6 +632,7 @@ void main() {
 				while (merged_mask != 0) {
 					uint bit = findMSB(merged_mask);
 					merged_mask &= ~(1 << bit);
+#endif
 
 					//if (!bool(omni_lights.data[light_index].mask & draw_call.layer_mask)) {
 					//	continue; //not masked
@@ -639,6 +690,26 @@ void main() {
 
 			cluster_get_item_range(cluster_area_offset + params.max_cluster_element_count_div_32 + cluster_z, item_min, item_max, item_from, item_to);
 
+#ifdef FELLOW_FOG_MERGE
+			// FellowEngine (decision 0053): the subgroup walks the union of its froxels' lights (the same light for every
+			// invocation at a time: coherent loads, uniform branches); each froxel takes only its own, in stock's order.
+			const uint fellow_from = subgroupMin(item_from);
+			const uint fellow_to = subgroupMax(item_to);
+			for (uint i = fellow_from; i < fellow_to; i++) {
+				uint mask = 0u;
+				if (i >= item_from && i < item_to) {
+					mask = cluster_buffer.data[cluster_area_offset + i];
+					mask &= cluster_get_range_clip_mask(i, item_min, item_max);
+				}
+				uint merged_mask = subgroupOr(mask);
+
+				while (merged_mask != 0) {
+					uint bit = findMSB(merged_mask);
+					merged_mask &= ~(1 << bit);
+					if ((mask & (1u << bit)) == 0u) {
+						continue;
+					}
+#else
 			for (uint i = item_from; i < item_to; i++) {
 				uint mask = cluster_buffer.data[cluster_area_offset + i];
 				mask &= cluster_get_range_clip_mask(i, item_min, item_max);
@@ -647,6 +718,7 @@ void main() {
 				while (merged_mask != 0) {
 					uint bit = findMSB(merged_mask);
 					merged_mask &= ~(1 << bit);
+#endif
 
 					uint light_index = 32 * i + bit;
 					float shadow_attenuation = 1.0;

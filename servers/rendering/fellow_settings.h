@@ -70,6 +70,13 @@ inline bool ssr_filter_padded() {
 	return postfx_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/postfx/ssr_filter_padded");
 }
 
+// Volumetric fog's density pass (decision 0053): 0 stock; 1 its omni/spot/area light loops walked by the subgroup over
+// the union of its froxels' lights (each froxel takes only its own, in stock's order); 2 the same with workgroups of 2 x 2
+// x 16 froxels (a warp's froxels about one cluster tile); 3 those workgroups with stock's loops. Read every frame.
+inline int fog_light_loop() {
+	return postfx_enabled() ? CLAMP(GLOBAL_GET_CACHED(int, "rendering/fellow/postfx/fog_light_loop"), 0, 3) : 0;
+}
+
 inline bool ssao_shared_tile() {
 	return postfx_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/postfx/ssao_shared_tile");
 }

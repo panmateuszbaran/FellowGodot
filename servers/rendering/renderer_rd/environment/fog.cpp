@@ -319,6 +319,9 @@ ALBEDO = vec3(1.0);
 				volumetric_fog_modes.push_back(ShaderRD::VariantDefine(shader_group, base_define + "\n#define MODE_FILTER\n", false));
 				volumetric_fog_modes.push_back(ShaderRD::VariantDefine(shader_group, base_define + "\n#define MODE_FOG\n", false));
 				volumetric_fog_modes.push_back(ShaderRD::VariantDefine(shader_group, base_define + "\n#define MODE_COPY\n", false));
+				volumetric_fog_modes.push_back(ShaderRD::VariantDefine(shader_group, base_define + "\n#define MODE_DENSITY\n#define FELLOW_FOG_MERGE\n", false));
+				volumetric_fog_modes.push_back(ShaderRD::VariantDefine(shader_group, base_define + "\n#define MODE_DENSITY\n#define FELLOW_FOG_MERGE\n#define FELLOW_FOG_SHAPE\n", false));
+				volumetric_fog_modes.push_back(ShaderRD::VariantDefine(shader_group, base_define + "\n#define MODE_DENSITY\n#define FELLOW_FOG_SHAPE\n", false));
 				shader_group++;
 			}
 		}
@@ -1180,7 +1183,19 @@ void Fog::volumetric_fog_update(const VolumetricFogSettings &p_settings, const P
 
 	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
 
-	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, volumetric_fog.process_pipelines[using_sdfgi ? VolumetricFogShader::VOLUMETRIC_FOG_PROCESS_SHADER_DENSITY_WITH_SDFGI : VolumetricFogShader::VOLUMETRIC_FOG_PROCESS_SHADER_DENSITY].get_rid());
+	int fellow_density_mode = using_sdfgi ? VolumetricFogShader::VOLUMETRIC_FOG_PROCESS_SHADER_DENSITY_WITH_SDFGI : VolumetricFogShader::VOLUMETRIC_FOG_PROCESS_SHADER_DENSITY;
+	if (!using_sdfgi) {
+		// FellowEngine (postfx/fog_light_loop, decision 0053).
+		const int fellow_loop = Fellow::fog_light_loop();
+		if (fellow_loop == 1) {
+			fellow_density_mode = VolumetricFogShader::VOLUMETRIC_FOG_PROCESS_SHADER_DENSITY_FELLOW_MERGE;
+		} else if (fellow_loop == 2) {
+			fellow_density_mode = VolumetricFogShader::VOLUMETRIC_FOG_PROCESS_SHADER_DENSITY_FELLOW_MERGE_SHAPE;
+		} else if (fellow_loop == 3) {
+			fellow_density_mode = VolumetricFogShader::VOLUMETRIC_FOG_PROCESS_SHADER_DENSITY_FELLOW_SHAPE;
+		}
+	}
+	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, volumetric_fog.process_pipelines[fellow_density_mode].get_rid());
 
 	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, fog->gi_dependent_sets.process_uniform_set_density, 0);
 

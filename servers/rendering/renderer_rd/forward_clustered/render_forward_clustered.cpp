@@ -3983,7 +3983,7 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 	// the light clusters, beside the async part; otherwise the whole pass runs before the opaque pass.
 	fellow_tile_cull.split = false;
 	const int fellow_split_mode = Fellow::light_tile_cull_split(); // 0: with async compute, 1: always (tests), 2: never
-	if (fellow_tile_cull.frame_on && p_render_data->lights != nullptr && (fellow_split_mode == 1 || (fellow_split_mode == 0 && fellow_async_wanted && Fellow::frame_async_compute()))) {
+	if (fellow_tile_cull.frame_on && p_render_data->lights != nullptr && (fellow_split_mode == 1 || (fellow_split_mode == 0 && fellow_async_wanted && Fellow::frame_async_compute() && RD::get_singleton()->fellow_async_compute_available()))) {
 		bool positional = false;
 		for (uint32_t i = 0; i < (uint32_t)p_render_data->lights->size() && !positional; i++) {
 			const RSE::LightType type = light_storage->light_get_type(light_storage->light_instance_get_base_light((*p_render_data->lights)[i]));
