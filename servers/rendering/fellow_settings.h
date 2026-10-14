@@ -460,6 +460,27 @@ inline bool light_cluster_pack_parallel() {
 	return lights_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/lights/cluster_pack_parallel");
 }
 
+// The cluster pack pass with one invocation per element (64 at a time) instead of a walk of the tile's elements, and the
+// cluster render buffer (21 MB at 1080p with 512 elements per type) left cleared by it instead of cleared before every
+// build; the same words are stored (decision 0051). Read every frame.
+inline bool light_cluster_pack_elements() {
+	return lights_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/lights/cluster_pack_elements");
+}
+
+// The cluster build's render pass draws consecutive elements with the same proxy mesh (and a conservative depth range)
+// as one instanced draw instead of one draw per element; the same tiles are marked (decision 0051). Read every frame.
+inline bool light_cluster_instanced_draws() {
+	return lights_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/lights/cluster_instanced_draws");
+}
+
+// Debug (decision 0051): every light cluster build with cluster_pack_elements or cluster_instanced_draws is repeated with
+// one draw per element and the pack of decision 0014 (or stock's), and both results are read back and compared word for
+// word (stats lights_cluster_verify_*); after the element pack, the render buffer is checked to be all zero. Slow.
+// 2: the same with a deliberate error in the element pack (bit 31 of every word dropped), the negative control.
+inline int light_cluster_verify() {
+	return GLOBAL_GET_CACHED(int, "rendering/fellow/debug/cluster_verify");
+}
+
 // Omni and spot lights whose attenuation at the pixel is exactly zero (beyond the range, outside the spot cone) return
 // before the attenuation's pow(), the shadow and the BRDF (decision 0008). Exact for materials without custom light
 // code, rim, backlight, transmittance, clearcoat, toon shading or shadow-to-opacity (the others keep stock's path).
@@ -755,6 +776,10 @@ struct Stats {
 	SafeNumeric<uint64_t> postfx_coherent_gathers; // SSAO/SSIL gather dispatches with one sample rotation per workgroup (decision 0024)
 	SafeNumeric<uint64_t> postfx_last_frame_direct; // last-frame copies without the full-size level (decision 0044)
 	SafeNumeric<uint64_t> lights_tile_cull_frames; // frames whose opaque colour pass used light tile masks (decision 0049)
+	SafeNumeric<uint64_t> lights_cluster_draws; // draws of the light cluster build's render pass (decision 0051)
+	SafeNumeric<uint64_t> lights_cluster_elements; // elements (lights, decals, probes) they drew
+	SafeNumeric<uint64_t> lights_cluster_verify_words; // debug/cluster_verify: words compared (decision 0051)
+	SafeNumeric<uint64_t> lights_cluster_verify_mismatches;
 	SafeNumeric<uint64_t> postfx_luminance_verify_texels; // luminance reduction texels compared (decision 0025, debug)
 	SafeNumeric<uint64_t> postfx_luminance_verify_mismatches;
 	SafeNumeric<uint64_t> postfx_ssao_temporal_frames; // SSAO gathers with half the taps plus the history (decision 0028)

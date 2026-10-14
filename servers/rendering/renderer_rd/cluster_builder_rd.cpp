@@ -60,6 +60,9 @@ ClusterBuilderSharedDataRD::ClusterBuilderSharedDataRD() {
 		Vector<String> variants;
 		variants.push_back("");
 		variants.push_back("\n#define USE_ATTACHMENT\n");
+		// FellowEngine (decision 0051): instanced draws of consecutive elements with the same proxy mesh.
+		variants.push_back("\n#define FELLOW_INSTANCED\n");
+		variants.push_back("\n#define USE_ATTACHMENT\n#define FELLOW_INSTANCED\n");
 
 		ClusterRender::ShaderVariant shader_variant;
 		RenderingDevice *rd = RD::get_singleton();
@@ -94,16 +97,23 @@ ClusterBuilderSharedDataRD::ClusterBuilderSharedDataRD() {
 		}
 #endif
 		cluster_render.shader_pipelines[ClusterRender::PIPELINE_MSAA] = RD::get_singleton()->render_pipeline_create(cluster_render.shader, fb_format, vertex_format, RD::RENDER_PRIMITIVE_TRIANGLES, rasterization_state, ms, RD::PipelineDepthStencilState(), blend_state, 0, 0, specialization_constants);
+
+		// FellowEngine (decision 0051): the same pipelines with the instanced variant of the shader.
+		RID fellow_shader = cluster_render.cluster_render_shader.version_get_shader(cluster_render.shader_version, shader_variant + 2);
+		cluster_render.fellow_instanced_pipelines[ClusterRender::PIPELINE_NORMAL] = RD::get_singleton()->render_pipeline_create(fellow_shader, fb_format, vertex_format, RD::RENDER_PRIMITIVE_TRIANGLES, rasterization_state, RD::PipelineMultisampleState(), RD::PipelineDepthStencilState(), blend_state, 0);
+		cluster_render.fellow_instanced_pipelines[ClusterRender::PIPELINE_MSAA] = RD::get_singleton()->render_pipeline_create(fellow_shader, fb_format, vertex_format, RD::RENDER_PRIMITIVE_TRIANGLES, rasterization_state, ms, RD::PipelineDepthStencilState(), blend_state, 0, 0, specialization_constants);
 	}
 	{
 		Vector<String> versions;
 		versions.push_back("");
 		versions.push_back("\n#define FELLOW_PARALLEL\n"); // FellowEngine: one workgroup per tile (decision 0014).
+		versions.push_back("\n#define FELLOW_PACK_ELEMENTS\n"); // FellowEngine: one invocation per element (decision 0051).
 		cluster_store.cluster_store_shader.initialize(versions);
 		cluster_store.shader_version = cluster_store.cluster_store_shader.version_create();
 		cluster_store.shader = cluster_store.cluster_store_shader.version_get_shader(cluster_store.shader_version, 0);
 		cluster_store.shader_pipeline = RD::get_singleton()->compute_pipeline_create(cluster_store.shader);
 		cluster_store.fellow_parallel_pipeline = RD::get_singleton()->compute_pipeline_create(cluster_store.cluster_store_shader.version_get_shader(cluster_store.shader_version, 1));
+		cluster_store.fellow_pack_elements_pipeline = RD::get_singleton()->compute_pipeline_create(cluster_store.cluster_store_shader.version_get_shader(cluster_store.shader_version, 2));
 	}
 	{
 		Vector<String> versions;
@@ -319,6 +329,7 @@ void ClusterBuilderRD::setup(Size2i p_screen_size, uint32_t p_max_elements, RID 
 
 	cluster_render_buffer = RD::get_singleton()->storage_buffer_create(cluster_render_buffer_size);
 	cluster_buffer = RD::get_singleton()->storage_buffer_create(cluster_buffer_size);
+	fellow_render_buffer_clear = false; // New contents: cleared before its first use.
 
 	render_elements = static_cast<RenderElementData *>(memalloc(sizeof(RenderElementData) * render_element_max));
 	render_element_count = 0;
@@ -450,6 +461,100 @@ void ClusterBuilderRD::begin(const Transform3D &p_view_transform, const Projecti
 	}
 }
 
+void ClusterBuilderRD::_fellow_render_elements(bool p_instanced) {
+	{
+		RD::DrawListID draw_list = RD::get_singleton()->draw_list_begin(framebuffer);
+		ClusterBuilderSharedDataRD::ClusterRender::PushConstant push_constant = {};
+
+		const ClusterBuilderSharedDataRD::ClusterRender::PipelineVersion pipeline_version = use_msaa ? ClusterBuilderSharedDataRD::ClusterRender::PIPELINE_MSAA : ClusterBuilderSharedDataRD::ClusterRender::PIPELINE_NORMAL;
+		RD::get_singleton()->draw_list_bind_render_pipeline(draw_list, p_instanced ? shared->cluster_render.fellow_instanced_pipelines[pipeline_version] : shared->cluster_render.shader_pipelines[pipeline_version]);
+		uint32_t fellow_draws = 0;
+		RD::get_singleton()->draw_list_bind_uniform_set(draw_list, cluster_render_uniform_set, 0);
+
+		for (uint32_t i = 0; i < render_element_count;) {
+			push_constant.base_index = i;
+			switch (render_elements[i].type) {
+				case ELEMENT_TYPE_OMNI_LIGHT: {
+					RD::get_singleton()->draw_list_bind_vertex_array(draw_list, shared->sphere_vertex_array);
+					RD::get_singleton()->draw_list_bind_index_array(draw_list, shared->sphere_index_array);
+				} break;
+				case ELEMENT_TYPE_SPOT_LIGHT: {
+					// If the spot angle is above a certain threshold, use a sphere instead of a cone for building the clusters
+					// since the cone gets too flat/large (spot angle close to 90 degrees) or
+					// can't even cover the affected area of the light (spot angle above 90 degrees).
+					if (render_elements[i].has_wide_spot_angle & 1u) {
+						RD::get_singleton()->draw_list_bind_vertex_array(draw_list, shared->sphere_vertex_array);
+						RD::get_singleton()->draw_list_bind_index_array(draw_list, shared->sphere_index_array);
+					} else {
+						RD::get_singleton()->draw_list_bind_vertex_array(draw_list, shared->cone_vertex_array);
+						RD::get_singleton()->draw_list_bind_index_array(draw_list, shared->cone_index_array);
+					}
+				} break;
+				case ELEMENT_TYPE_AREA_LIGHT: {
+					RD::get_singleton()->draw_list_bind_vertex_array(draw_list, shared->box_vertex_array);
+					RD::get_singleton()->draw_list_bind_index_array(draw_list, shared->box_index_array);
+				} break;
+				case ELEMENT_TYPE_DECAL:
+				case ELEMENT_TYPE_REFLECTION_PROBE: {
+					RD::get_singleton()->draw_list_bind_vertex_array(draw_list, shared->box_vertex_array);
+					RD::get_singleton()->draw_list_bind_index_array(draw_list, shared->box_index_array);
+				} break;
+			}
+
+			RD::get_singleton()->draw_list_set_push_constant(draw_list, &push_constant, sizeof(ClusterBuilderSharedDataRD::ClusterRender::PushConstant));
+
+			uint32_t instances = 1;
+			if (p_instanced && (render_elements[i].has_wide_spot_angle & 2u)) {
+				// FellowEngine (decision 0051): the following elements drawn with the same mesh, in one instanced draw.
+				// Only elements whose depth slices come from their conservative range (bit 1): for those, the pack
+				// pass uses the rasterised depth bits only to know that the element reached the tile, which does
+				// not depend on how the fragments are grouped into subgroups.
+				const uint32_t mesh = _fellow_proxy_mesh(render_elements[i]);
+				while (i + instances < render_element_count && (render_elements[i + instances].has_wide_spot_angle & 2u) && _fellow_proxy_mesh(render_elements[i + instances]) == mesh) {
+					instances++;
+				}
+			}
+			RD::get_singleton()->draw_list_draw(draw_list, true, instances);
+			i += instances;
+			fellow_draws++;
+		}
+		RD::get_singleton()->draw_list_end();
+		Fellow::stats().lights_cluster_draws.add(fellow_draws);
+		Fellow::stats().lights_cluster_elements.add(render_element_count);
+	}
+}
+
+void ClusterBuilderRD::_fellow_pack(FellowPackMode p_mode) {
+	{
+		RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
+		RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, p_mode == FELLOW_PACK_ELEMENTS ? shared->cluster_store.fellow_pack_elements_pipeline : (p_mode == FELLOW_PACK_PARALLEL ? shared->cluster_store.fellow_parallel_pipeline : shared->cluster_store.shader_pipeline));
+		RD::get_singleton()->compute_list_bind_uniform_set(compute_list, cluster_store_uniform_set, 0);
+
+		ClusterBuilderSharedDataRD::ClusterStore::PushConstant push_constant;
+		push_constant.cluster_render_data_size = render_element_max / 32 + render_element_max;
+		push_constant.max_render_element_count_div_32 = render_element_max / 32;
+		push_constant.cluster_screen_size[0] = cluster_screen_size.x;
+		push_constant.cluster_screen_size[1] = cluster_screen_size.y;
+
+		push_constant.render_element_count_div_32 = Math::division_round_up(render_element_count, 32U);
+		push_constant.max_cluster_element_count_div_32 = max_elements_by_type / 32;
+		push_constant.pad1 = (p_mode == FELLOW_PACK_ELEMENTS && Fellow::light_cluster_verify() == 2) ? 1 : 0;
+		push_constant.pad2 = 0;
+
+		RD::get_singleton()->compute_list_set_push_constant(compute_list, &push_constant, sizeof(ClusterBuilderSharedDataRD::ClusterStore::PushConstant));
+
+		if (p_mode != FELLOW_PACK_STOCK) {
+			// One workgroup per tile (64 invocations: one per element of a chunk, then per depth slice; or 32: one
+			// per depth slice).
+			RD::get_singleton()->compute_list_dispatch(compute_list, cluster_screen_size.x, cluster_screen_size.y, 1);
+		} else {
+			RD::get_singleton()->compute_list_dispatch_threads(compute_list, cluster_screen_size.x, cluster_screen_size.y, 1);
+		}
+
+		RD::get_singleton()->compute_list_end();
+	}
+}
+
 void ClusterBuilderRD::bake_cluster() {
 	RENDER_TIMESTAMP("> Bake 3D Cluster");
 
@@ -458,10 +563,13 @@ void ClusterBuilderRD::bake_cluster() {
 	// Clear cluster buffer.
 	RD::get_singleton()->buffer_clear(cluster_buffer, 0, cluster_buffer_size);
 
-	if (render_element_count > 0) {
-		// Clear render buffer.
-		RD::get_singleton()->buffer_clear(cluster_render_buffer, 0, cluster_render_buffer_size);
+	// FellowEngine (decision 0051): the element pack pass leaves the render buffer cleared (it reads every word the
+	// render pass sets and zeroes it), so the buffer is cleared only after a frame packed otherwise, or when new.
+	const bool fellow_pack_elements = Fellow::light_cluster_pack_elements();
+	const bool fellow_instanced = Fellow::light_cluster_instanced_draws();
+	const bool fellow_verify = Fellow::light_cluster_verify() != 0 && (fellow_pack_elements || fellow_instanced);
 
+	if (render_element_count > 0) {
 		{ // Fill state uniform.
 
 			StateUniform state;
@@ -482,84 +590,54 @@ void ClusterBuilderRD::bake_cluster() {
 
 		RD::get_singleton()->buffer_update(element_buffer, 0, sizeof(RenderElementData) * render_element_count, render_elements);
 
-		RENDER_TIMESTAMP("Render 3D Cluster Elements");
-
-		// Render elements.
-		{
-			RD::DrawListID draw_list = RD::get_singleton()->draw_list_begin(framebuffer);
-			ClusterBuilderSharedDataRD::ClusterRender::PushConstant push_constant = {};
-
-			RD::get_singleton()->draw_list_bind_render_pipeline(draw_list, shared->cluster_render.shader_pipelines[use_msaa ? ClusterBuilderSharedDataRD::ClusterRender::PIPELINE_MSAA : ClusterBuilderSharedDataRD::ClusterRender::PIPELINE_NORMAL]);
-			RD::get_singleton()->draw_list_bind_uniform_set(draw_list, cluster_render_uniform_set, 0);
-
-			for (uint32_t i = 0; i < render_element_count;) {
-				push_constant.base_index = i;
-				switch (render_elements[i].type) {
-					case ELEMENT_TYPE_OMNI_LIGHT: {
-						RD::get_singleton()->draw_list_bind_vertex_array(draw_list, shared->sphere_vertex_array);
-						RD::get_singleton()->draw_list_bind_index_array(draw_list, shared->sphere_index_array);
-					} break;
-					case ELEMENT_TYPE_SPOT_LIGHT: {
-						// If the spot angle is above a certain threshold, use a sphere instead of a cone for building the clusters
-						// since the cone gets too flat/large (spot angle close to 90 degrees) or
-						// can't even cover the affected area of the light (spot angle above 90 degrees).
-						if (render_elements[i].has_wide_spot_angle & 1u) {
-							RD::get_singleton()->draw_list_bind_vertex_array(draw_list, shared->sphere_vertex_array);
-							RD::get_singleton()->draw_list_bind_index_array(draw_list, shared->sphere_index_array);
-						} else {
-							RD::get_singleton()->draw_list_bind_vertex_array(draw_list, shared->cone_vertex_array);
-							RD::get_singleton()->draw_list_bind_index_array(draw_list, shared->cone_index_array);
-						}
-					} break;
-					case ELEMENT_TYPE_AREA_LIGHT: {
-						RD::get_singleton()->draw_list_bind_vertex_array(draw_list, shared->box_vertex_array);
-						RD::get_singleton()->draw_list_bind_index_array(draw_list, shared->box_index_array);
-					} break;
-					case ELEMENT_TYPE_DECAL:
-					case ELEMENT_TYPE_REFLECTION_PROBE: {
-						RD::get_singleton()->draw_list_bind_vertex_array(draw_list, shared->box_vertex_array);
-						RD::get_singleton()->draw_list_bind_index_array(draw_list, shared->box_index_array);
-					} break;
-				}
-
-				RD::get_singleton()->draw_list_set_push_constant(draw_list, &push_constant, sizeof(ClusterBuilderSharedDataRD::ClusterRender::PushConstant));
-
-				uint32_t instances = 1;
-				RD::get_singleton()->draw_list_draw(draw_list, true, instances);
-				i += instances;
-			}
-			RD::get_singleton()->draw_list_end();
+		// Clear render buffer.
+		if (!(fellow_pack_elements && fellow_render_buffer_clear)) {
+			RD::get_singleton()->buffer_clear(cluster_render_buffer, 0, cluster_render_buffer_size);
 		}
+
+		RENDER_TIMESTAMP("Render 3D Cluster Elements");
+		_fellow_render_elements(fellow_instanced);
+
 		// Store elements.
 		RENDER_TIMESTAMP("Pack 3D Cluster Elements");
+		const FellowPackMode pack_mode = fellow_pack_elements ? FELLOW_PACK_ELEMENTS : (Fellow::light_cluster_pack_parallel() ? FELLOW_PACK_PARALLEL : FELLOW_PACK_STOCK);
+		_fellow_pack(pack_mode);
+		fellow_render_buffer_clear = pack_mode == FELLOW_PACK_ELEMENTS;
 
-		{
-			const bool fellow_parallel = Fellow::light_cluster_pack_parallel();
-			RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
-			RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, fellow_parallel ? shared->cluster_store.fellow_parallel_pipeline : shared->cluster_store.shader_pipeline);
-			RD::get_singleton()->compute_list_bind_uniform_set(compute_list, cluster_store_uniform_set, 0);
-
-			ClusterBuilderSharedDataRD::ClusterStore::PushConstant push_constant;
-			push_constant.cluster_render_data_size = render_element_max / 32 + render_element_max;
-			push_constant.max_render_element_count_div_32 = render_element_max / 32;
-			push_constant.cluster_screen_size[0] = cluster_screen_size.x;
-			push_constant.cluster_screen_size[1] = cluster_screen_size.y;
-
-			push_constant.render_element_count_div_32 = Math::division_round_up(render_element_count, 32U);
-			push_constant.max_cluster_element_count_div_32 = max_elements_by_type / 32;
-			push_constant.pad1 = 0;
-			push_constant.pad2 = 0;
-
-			RD::get_singleton()->compute_list_set_push_constant(compute_list, &push_constant, sizeof(ClusterBuilderSharedDataRD::ClusterStore::PushConstant));
-
-			if (fellow_parallel) {
-				// One 32-invocation workgroup per tile (one invocation per depth slice).
-				RD::get_singleton()->compute_list_dispatch(compute_list, cluster_screen_size.x, cluster_screen_size.y, 1);
-			} else {
-				RD::get_singleton()->compute_list_dispatch_threads(compute_list, cluster_screen_size.x, cluster_screen_size.y, 1);
+		if (fellow_verify) {
+			// Debug (decision 0051): the build above read back, the render buffer checked to be all zero after the element
+			// pack, then the build again with one draw per element and the pack of decision 0014 (or stock's), read back
+			// and compared word for word. The second build's result is the one used.
+			const Vector<uint8_t> fellow_data = RD::get_singleton()->buffer_get_data(cluster_buffer);
+			uint64_t mismatches = 0;
+			uint64_t words = 0;
+			if (fellow_render_buffer_clear) {
+				const Vector<uint8_t> render_data = RD::get_singleton()->buffer_get_data(cluster_render_buffer);
+				const uint32_t *r = reinterpret_cast<const uint32_t *>(render_data.ptr());
+				const int64_t n = render_data.size() / 4;
+				for (int64_t k = 0; k < n; k++) {
+					mismatches += r[k] != 0 ? 1 : 0;
+				}
+				words += n;
 			}
-
-			RD::get_singleton()->compute_list_end();
+			RD::get_singleton()->buffer_clear(cluster_buffer, 0, cluster_buffer_size);
+			RD::get_singleton()->buffer_clear(cluster_render_buffer, 0, cluster_render_buffer_size);
+			_fellow_render_elements(false);
+			_fellow_pack(Fellow::light_cluster_pack_parallel() ? FELLOW_PACK_PARALLEL : FELLOW_PACK_STOCK);
+			fellow_render_buffer_clear = false;
+			const Vector<uint8_t> reference_data = RD::get_singleton()->buffer_get_data(cluster_buffer);
+			const uint32_t *x = reinterpret_cast<const uint32_t *>(fellow_data.ptr());
+			const uint32_t *y = reinterpret_cast<const uint32_t *>(reference_data.ptr());
+			const int64_t n = MIN(fellow_data.size(), reference_data.size()) / 4;
+			for (int64_t k = 0; k < n; k++) {
+				mismatches += x[k] != y[k] ? 1 : 0;
+			}
+			words += n;
+			if (fellow_data.size() != reference_data.size()) {
+				mismatches++;
+			}
+			Fellow::stats().lights_cluster_verify_words.add(words);
+			Fellow::stats().lights_cluster_verify_mismatches.add(mismatches);
 		}
 	}
 	RENDER_TIMESTAMP("< Bake 3D Cluster");

@@ -117,12 +117,30 @@ void main() {
 
 	uint aux = 0;
 
+#ifdef FELLOW_INSTANCED
+	// FellowEngine (rendering/fellow/lights/cluster_instanced_draws, decision 0051): consecutive elements drawn with the
+	// same proxy mesh are one instanced draw, so a subgroup can hold fragments of several elements. Its invocations are
+	// grouped by cluster and element (the depth word's offset is unique to both) instead of by cluster alone, and the
+	// depth bits are merged over the invocations of the same element (stock: over the subgroup, one element per draw).
+	// With one element per subgroup both are stock's.
+	uint z_write_offset = cluster_offset + state.cluster_depth_offset + element_index;
+#endif
+
 	uint cluster_thread_group_index;
 	if (!sc_use_helper_check || !gl_HelperInvocation) {
 		//https://advances.realtimerendering.com/s2017/2017_Sig_Improved_Culling_final.pdf
 
 		uvec4 mask;
 
+#ifdef FELLOW_INSTANCED
+		while (true) {
+			uint first = subgroupBroadcastFirst(z_write_offset);
+			mask = subgroupBallot(first == z_write_offset);
+			if (first == z_write_offset) {
+				break;
+			}
+		}
+#else
 		while (true) {
 			// find the cluster offset of the first active thread
 			// threads that did break; go inactive and no longer count
@@ -135,6 +153,7 @@ void main() {
 				break;
 			}
 		}
+#endif
 
 		cluster_thread_group_index = subgroupBallotExclusiveBitCount(mask);
 
@@ -148,11 +167,25 @@ void main() {
 
 	uint z_bit = clamp(uint(floor(unit_depth * 32.0)), 0, 31);
 
+#ifndef FELLOW_INSTANCED
 	uint z_write_offset = cluster_offset + state.cluster_depth_offset + element_index;
+#endif
 	uint z_write_bit = 1 << z_bit;
 
 	if (!sc_use_helper_check || !gl_HelperInvocation) {
+#ifdef FELLOW_INSTANCED
+		uint merged_bits = 0;
+		while (true) {
+			uint first_element = subgroupBroadcastFirst(element_index);
+			if (first_element == element_index) {
+				merged_bits = subgroupOr(z_write_bit); // merge the Zs of this element
+				break;
+			}
+		}
+		z_write_bit = merged_bits;
+#else
 		z_write_bit = subgroupOr(z_write_bit); //merge all Zs
+#endif
 		if (cluster_thread_group_index == 0) {
 			aux = atomicOr(cluster_render.data[z_write_offset], z_write_bit);
 		}

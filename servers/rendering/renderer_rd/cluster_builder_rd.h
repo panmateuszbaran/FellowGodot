@@ -85,6 +85,7 @@ class ClusterBuilderSharedDataRD {
 		};
 
 		RID shader_pipelines[PIPELINE_MAX];
+		RID fellow_instanced_pipelines[PIPELINE_MAX]; // FellowEngine (decision 0051).
 	} cluster_render;
 
 	struct ClusterStore {
@@ -104,6 +105,7 @@ class ClusterBuilderSharedDataRD {
 		RID shader;
 		RID shader_pipeline;
 		RID fellow_parallel_pipeline; // FellowEngine (decision 0014).
+		RID fellow_pack_elements_pipeline; // FellowEngine (decision 0051).
 	} cluster_store;
 
 	struct ClusterDebug {
@@ -197,6 +199,31 @@ private:
 		const uint32_t from = (p_min <= z_near || r_e.touches_near) ? 0u : _fellow_log_slice(p_min * 0.999f);
 		const uint32_t to = (p_max >= z_far || r_e.touches_far) ? 32u : _fellow_log_slice(p_max * 1.001f) + 1u;
 		r_e.has_wide_spot_angle = (r_e.has_wide_spot_angle & 1u) | 2u | (from << 8) | (to << 16);
+	}
+
+	// FellowEngine (decision 0051): the render buffer is all zero (the element pack pass cleared what it read).
+	bool fellow_render_buffer_clear = false;
+
+	// FellowEngine (decision 0051): the render pass (one draw per element, or instanced runs of the same proxy mesh) and
+	// the pack pass (stock's, decision 0014's or decision 0051's), split out of bake_cluster() for its verification.
+	enum FellowPackMode {
+		FELLOW_PACK_STOCK,
+		FELLOW_PACK_PARALLEL,
+		FELLOW_PACK_ELEMENTS,
+	};
+	void _fellow_render_elements(bool p_instanced);
+	void _fellow_pack(FellowPackMode p_mode);
+
+	// FellowEngine (decision 0051): the proxy mesh an element is drawn with (0 sphere, 1 cone, 2 box).
+	static _FORCE_INLINE_ uint32_t _fellow_proxy_mesh(const RenderElementData &p_e) {
+		switch (p_e.type) {
+			case ELEMENT_TYPE_OMNI_LIGHT:
+				return 0;
+			case ELEMENT_TYPE_SPOT_LIGHT:
+				return (p_e.has_wide_spot_angle & 1u) ? 0 : 1;
+			default:
+				return 2;
+		}
 	}
 
 	uint32_t cluster_count_by_type[ELEMENT_TYPE_MAX] = {};

@@ -89,6 +89,9 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/lights/cluster_depth_slices", true);
 	GLOBAL_DEF("rendering/fellow/lights/zero_attenuation_skip", true);
 	GLOBAL_DEF("rendering/fellow/lights/cluster_pack_parallel", true);
+	GLOBAL_DEF("rendering/fellow/lights/cluster_pack_elements", false);
+	GLOBAL_DEF("rendering/fellow/lights/cluster_instanced_draws", false);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/debug/cluster_verify", PROPERTY_HINT_ENUM, "Off,Verify,Verify With Negative Control"), 0);
 	GLOBAL_DEF("rendering/fellow/lights/fields_early", true);
 	GLOBAL_DEF("rendering/fellow/lights/tile_cull", true); // under autotune: off until measured faster (decision 0049)
 	// Diagnostics: light tile culling keeps every candidate (the opaque colour pass's code path, without its effect).
@@ -253,6 +256,10 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["postfx_coherent_gathers"] = s.postfx_coherent_gathers.get();
 	d["postfx_last_frame_direct"] = s.postfx_last_frame_direct.get();
 	d["lights_tile_cull_frames"] = s.lights_tile_cull_frames.get();
+	d["lights_cluster_draws"] = s.lights_cluster_draws.get();
+	d["lights_cluster_elements"] = s.lights_cluster_elements.get();
+	d["lights_cluster_verify_words"] = s.lights_cluster_verify_words.get();
+	d["lights_cluster_verify_mismatches"] = s.lights_cluster_verify_mismatches.get();
 	d["postfx_luminance_verify_texels"] = s.postfx_luminance_verify_texels.get();
 	d["postfx_luminance_verify_mismatches"] = s.postfx_luminance_verify_mismatches.get();
 	d["postfx_ssao_temporal_frames"] = s.postfx_ssao_temporal_frames.get();
