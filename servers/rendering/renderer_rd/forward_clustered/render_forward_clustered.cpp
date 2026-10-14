@@ -8554,10 +8554,10 @@ RenderForwardClustered::RenderForwardClustered() {
 		{
 			// FellowEngine diagnostics (rendering/fellow/debug/scene_shader_experiments): experiment defines.
 			const int experiments = GLOBAL_GET("rendering/fellow/debug/scene_shader_experiments");
-			static const char *names[21] = { "FELLOW_EXP_DONT_UNROLL", "FELLOW_EXP_UNROLL", "FELLOW_EXP_BIT2", "FELLOW_EXP_BIT3", "FELLOW_EXP_BIT4", "FELLOW_EXP_BIT5", "FELLOW_EXP_BIT6", "FELLOW_EXP_BIT7",
+			static const char *names[22] = { "FELLOW_EXP_DONT_UNROLL", "FELLOW_EXP_UNROLL", "FELLOW_EXP_BIT2", "FELLOW_EXP_BIT3", "FELLOW_EXP_BIT4", "FELLOW_EXP_BIT5", "FELLOW_EXP_BIT6", "FELLOW_EXP_BIT7",
 				"FELLOW_EXP_BIT8", "FELLOW_EXP_BIT9", "FELLOW_EXP_BIT10", "FELLOW_EXP_BIT11", "FELLOW_EXP_BIT12", "FELLOW_EXP_BIT13", "FELLOW_EXP_BIT14", "FELLOW_EXP_BIT15",
-				"FELLOW_EXP_BIT16", "FELLOW_EXP_BIT17", "FELLOW_EXP_BIT18", "FELLOW_EXP_BIT19", "FELLOW_EXP_BIT20" };
-			for (int b = 0; b < 21; b++) {
+				"FELLOW_EXP_BIT16", "FELLOW_EXP_BIT17", "FELLOW_EXP_BIT18", "FELLOW_EXP_BIT19", "FELLOW_EXP_BIT20", "FELLOW_EXP_BIT21" };
+			for (int b = 0; b < 22; b++) {
 				if (experiments & (1 << b)) {
 					defines += "\n#define " + String(names[b]) + "\n";
 				}

@@ -1089,6 +1089,20 @@ void light_process_omni(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 		return;
 	}
 #endif
+#ifdef FELLOW_EXP_BIT21
+	// Experiment 2097152: the shadow's fields read after the range test, before the attenuation and the tests that
+	// follow it, instead of where the shadow lookup uses them (the same values).
+	vec4 fellow_s_atlas_rect = omni_lights.data[idx].atlas_rect;
+	vec3 fellow_s_direction = omni_lights.data[idx].direction;
+	mat4 fellow_s_shadow_matrix = omni_lights.data[idx].shadow_matrix;
+	float fellow_s_shadow_normal_bias = omni_lights.data[idx].shadow_normal_bias;
+	float fellow_s_soft_shadow_size = omni_lights.data[idx].soft_shadow_size;
+	float fellow_s_soft_shadow_scale = omni_lights.data[idx].soft_shadow_scale;
+	float fellow_s_shadow_bias = omni_lights.data[idx].shadow_bias;
+#define FELLOW_SHO(m_field) fellow_s_##m_field
+#else
+#define FELLOW_SHO(m_field) omni_lights.data[idx].m_field
+#endif
 	half omni_attenuation = get_omni_attenuation(light_length, FELLOW_LO(inv_radius), FELLOW_LO(attenuation));
 #ifdef FELLOW_BACKFACING_LIGHT_SKIP_OK
 	// (The shadow lookup and light_compute() both do nothing at or below HALF_FLT_MIN.)
@@ -1124,22 +1138,22 @@ void light_process_omni(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 	if (omni_attenuation > HALF_FLT_MIN && FELLOW_LO(shadow_opacity) > 0.001 && !fellow_dbg_no_shadow) {
 		// there is a shadowmap
 		vec2 texel_size = scene_data_block.data.shadow_atlas_pixel_size;
-		vec4 base_uv_rect = omni_lights.data[idx].atlas_rect;
+		vec4 base_uv_rect = FELLOW_SHO(atlas_rect);
 		base_uv_rect.xy += texel_size;
 		base_uv_rect.zw -= texel_size * 2.0;
 
 		// Omni lights use direction.xy to store to store the offset between the two paraboloid regions
-		vec2 flip_offset = omni_lights.data[idx].direction.xy;
+		vec2 flip_offset = FELLOW_SHO(direction).xy;
 
-		vec3 local_vert = (omni_lights.data[idx].shadow_matrix * vec4(vertex, 1.0)).xyz;
+		vec3 local_vert = (FELLOW_SHO(shadow_matrix) * vec4(vertex, 1.0)).xyz;
 
 		float shadow_len = length(local_vert); //need to remember shadow len from here
 		vec3 shadow_dir = normalize(local_vert);
 
-		vec3 local_normal = normalize(mat3(omni_lights.data[idx].shadow_matrix) * vec3(normal));
-		vec3 normal_bias = local_normal * omni_lights.data[idx].shadow_normal_bias * (1.0 - abs(dot(local_normal, shadow_dir)));
+		vec3 local_normal = normalize(mat3(FELLOW_SHO(shadow_matrix)) * vec3(normal));
+		vec3 normal_bias = local_normal * FELLOW_SHO(shadow_normal_bias) * (1.0 - abs(dot(local_normal, shadow_dir)));
 
-		if (sc_use_light_soft_shadows() && omni_lights.data[idx].soft_shadow_size > 0.0) {
+		if (sc_use_light_soft_shadows() && FELLOW_SHO(soft_shadow_size) > 0.0) {
 			//soft shadow
 
 			//find blocker
@@ -1161,8 +1175,8 @@ void light_process_omni(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 			vec3 bitangent = normalize(cross(tangent, basis_normal));
 			float z_norm = 1.0 - shadow_len * FELLOW_LO(inv_radius);
 
-			tangent *= omni_lights.data[idx].soft_shadow_size * omni_lights.data[idx].soft_shadow_scale;
-			bitangent *= omni_lights.data[idx].soft_shadow_size * omni_lights.data[idx].soft_shadow_scale;
+			tangent *= FELLOW_SHO(soft_shadow_size) * FELLOW_SHO(soft_shadow_scale);
+			bitangent *= FELLOW_SHO(soft_shadow_size) * FELLOW_SHO(soft_shadow_scale);
 
 			if (FELLOW_BATCH_TAPS_POS(sc_penumbra_shadow_samples())) {
 				SPEC_CONSTANT_LOOP_ANNOTATION
@@ -1232,7 +1246,7 @@ void light_process_omni(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 				tangent *= penumbra;
 				bitangent *= penumbra;
 
-				z_norm += FELLOW_LO(inv_radius) * omni_lights.data[idx].shadow_bias;
+				z_norm += FELLOW_LO(inv_radius) * FELLOW_SHO(shadow_bias);
 
 				shadow = half(0.0);
 
@@ -1306,10 +1320,10 @@ void light_process_omni(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 
 			shadow_sample.z = 1.0 + abs(shadow_sample.z);
 			vec2 pos = shadow_sample.xy / shadow_sample.z;
-			float depth = shadow_len - omni_lights.data[idx].shadow_bias;
+			float depth = shadow_len - FELLOW_SHO(shadow_bias);
 			depth *= FELLOW_LO(inv_radius);
 			depth = 1.0 - depth;
-			shadow = mix(half(1.0), sample_omni_pcf_shadow(shadow_atlas, omni_lights.data[idx].soft_shadow_scale / shadow_sample.z, pos, uv_rect, flip_offset, depth, taa_frame_count), half(FELLOW_LO(shadow_opacity)));
+			shadow = mix(half(1.0), sample_omni_pcf_shadow(shadow_atlas, FELLOW_SHO(soft_shadow_scale) / shadow_sample.z, pos, uv_rect, flip_offset, depth, taa_frame_count), half(FELLOW_LO(shadow_opacity)));
 		}
 	}
 #endif
@@ -1447,6 +1461,7 @@ void light_process_omni(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 			specular_light);
 }
 #undef FELLOW_LO
+#undef FELLOW_SHO
 
 vec2 normal_to_panorama(vec3 n) {
 	n = normalize(n);
@@ -1519,6 +1534,19 @@ void light_process_spot(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 		return;
 	}
 #endif
+#ifdef FELLOW_EXP_BIT21
+	// Experiment 2097152: the shadow's fields read after the range test, before the attenuation and the tests that
+	// follow it, instead of where the shadow lookup uses them (the same values).
+	vec4 fellow_s_atlas_rect = spot_lights.data[idx].atlas_rect;
+	mat4 fellow_s_shadow_matrix = spot_lights.data[idx].shadow_matrix;
+	float fellow_s_shadow_normal_bias = spot_lights.data[idx].shadow_normal_bias;
+	float fellow_s_soft_shadow_size = spot_lights.data[idx].soft_shadow_size;
+	float fellow_s_soft_shadow_scale = spot_lights.data[idx].soft_shadow_scale;
+	float fellow_s_shadow_bias = spot_lights.data[idx].shadow_bias;
+#define FELLOW_SHS(m_field) fellow_s_##m_field
+#else
+#define FELLOW_SHS(m_field) spot_lights.data[idx].m_field
+#endif
 	half spot_attenuation = get_omni_attenuation(light_length, FELLOW_LS(inv_radius), FELLOW_LS(attenuation));
 	vec3 spot_dir = FELLOW_LS(direction);
 	float cone_angle = FELLOW_LS(cone_angle);
@@ -1558,22 +1586,22 @@ void light_process_spot(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 	const bool fellow_dbg_no_shadow = false;
 #endif
 	if (spot_attenuation > HALF_FLT_MIN && FELLOW_LS(shadow_opacity) > 0.001 && !fellow_dbg_no_shadow) {
-		vec3 normal_bias = vec3(normal) * light_length * spot_lights.data[idx].shadow_normal_bias * (1.0 - abs(dot(normal, light_rel_vec_norm)));
+		vec3 normal_bias = vec3(normal) * light_length * FELLOW_SHS(shadow_normal_bias) * (1.0 - abs(dot(normal, light_rel_vec_norm)));
 
 		//there is a shadowmap
 		vec4 v = vec4(vertex + normal_bias, 1.0);
 
-		vec4 splane = (spot_lights.data[idx].shadow_matrix * v);
-		splane.z += spot_lights.data[idx].shadow_bias;
+		vec4 splane = (FELLOW_SHS(shadow_matrix) * v);
+		splane.z += FELLOW_SHS(shadow_bias);
 		splane /= splane.w;
 
-		if (sc_use_light_soft_shadows() && spot_lights.data[idx].soft_shadow_size > 0.0) {
+		if (sc_use_light_soft_shadows() && FELLOW_SHS(soft_shadow_size) > 0.0) {
 			//soft shadow
 
 			//find blocker
 			float z_norm = dot(spot_dir, -light_rel_vec) * FELLOW_LS(inv_radius);
 
-			vec2 shadow_uv = splane.xy * spot_lights.data[idx].atlas_rect.zw + spot_lights.data[idx].atlas_rect.xy;
+			vec2 shadow_uv = splane.xy * FELLOW_SHS(atlas_rect).zw + FELLOW_SHS(atlas_rect).xy;
 
 			float blocker_count = 0.0;
 			float blocker_average = 0.0;
@@ -1586,8 +1614,8 @@ void light_process_spot(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 				disk_rotation = mat2(vec2(cr, -sr), vec2(sr, cr));
 			}
 
-			float uv_size = spot_lights.data[idx].soft_shadow_size * z_norm * spot_lights.data[idx].soft_shadow_scale;
-			vec2 clamp_max = spot_lights.data[idx].atlas_rect.xy + spot_lights.data[idx].atlas_rect.zw;
+			float uv_size = FELLOW_SHS(soft_shadow_size) * z_norm * FELLOW_SHS(soft_shadow_scale);
+			vec2 clamp_max = FELLOW_SHS(atlas_rect).xy + FELLOW_SHS(atlas_rect).zw;
 
 			if (FELLOW_BATCH_TAPS_POS(sc_penumbra_shadow_samples())) {
 				SPEC_CONSTANT_LOOP_ANNOTATION
@@ -1595,7 +1623,7 @@ void light_process_spot(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 					float d[FELLOW_TAP_BATCH];
 					[[unroll]] for (uint j = 0u; j < FELLOW_TAP_BATCH; j++) {
 						vec2 suv = shadow_uv + (disk_rotation * scene_data_block.data.penumbra_shadow_kernel[i + j].xy) * uv_size;
-						suv = clamp(suv, spot_lights.data[idx].atlas_rect.xy, clamp_max);
+						suv = clamp(suv, FELLOW_SHS(atlas_rect).xy, clamp_max);
 						d[j] = textureLod(sampler2D(shadow_atlas, SAMPLER_LINEAR_CLAMP), suv, 0.0).r;
 					}
 					[[unroll]] for (uint j = 0u; j < FELLOW_TAP_BATCH; j++) {
@@ -1609,7 +1637,7 @@ void light_process_spot(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 				SPEC_CONSTANT_LOOP_ANNOTATION
 				for (uint i = 0; i < sc_penumbra_shadow_samples(); i++) {
 					vec2 suv = shadow_uv + (disk_rotation * scene_data_block.data.penumbra_shadow_kernel[i].xy) * uv_size;
-					suv = clamp(suv, spot_lights.data[idx].atlas_rect.xy, clamp_max);
+					suv = clamp(suv, FELLOW_SHS(atlas_rect).xy, clamp_max);
 					float d = textureLod(sampler2D(shadow_atlas, SAMPLER_LINEAR_CLAMP), suv, 0.0).r;
 					if (d > splane.z) {
 						blocker_average += d;
@@ -1632,7 +1660,7 @@ void light_process_spot(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 						float t[FELLOW_TAP_BATCH];
 						[[unroll]] for (uint j = 0u; j < FELLOW_TAP_BATCH; j++) {
 							vec2 suv = shadow_uv + (disk_rotation * scene_data_block.data.penumbra_shadow_kernel[i + j].xy) * uv_size;
-							suv = clamp(suv, spot_lights.data[idx].atlas_rect.xy, clamp_max);
+							suv = clamp(suv, FELLOW_SHS(atlas_rect).xy, clamp_max);
 							t[j] = textureProj(sampler2DShadow(shadow_atlas, shadow_sampler), vec4(suv, splane.z, 1.0));
 						}
 						[[unroll]] for (uint j = 0u; j < FELLOW_TAP_BATCH; j++) {
@@ -1643,7 +1671,7 @@ void light_process_spot(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 					SPEC_CONSTANT_LOOP_ANNOTATION
 					for (uint i = 0; i < sc_penumbra_shadow_samples(); i++) {
 						vec2 suv = shadow_uv + (disk_rotation * scene_data_block.data.penumbra_shadow_kernel[i].xy) * uv_size;
-						suv = clamp(suv, spot_lights.data[idx].atlas_rect.xy, clamp_max);
+						suv = clamp(suv, FELLOW_SHS(atlas_rect).xy, clamp_max);
 						shadow += half(textureProj(sampler2DShadow(shadow_atlas, shadow_sampler), vec4(suv, splane.z, 1.0)));
 					}
 				}
@@ -1657,8 +1685,8 @@ void light_process_spot(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 			}
 		} else {
 			//hard shadow
-			vec3 shadow_uv = vec3(splane.xy * spot_lights.data[idx].atlas_rect.zw + spot_lights.data[idx].atlas_rect.xy, splane.z);
-			shadow = mix(half(1.0), sample_pcf_shadow(shadow_atlas, spot_lights.data[idx].soft_shadow_scale * scene_data_block.data.shadow_atlas_pixel_size, shadow_uv, taa_frame_count), half(FELLOW_LS(shadow_opacity)));
+			vec3 shadow_uv = vec3(splane.xy * FELLOW_SHS(atlas_rect).zw + FELLOW_SHS(atlas_rect).xy, splane.z);
+			shadow = mix(half(1.0), sample_pcf_shadow(shadow_atlas, FELLOW_SHS(soft_shadow_scale) * scene_data_block.data.shadow_atlas_pixel_size, shadow_uv, taa_frame_count), half(FELLOW_LS(shadow_opacity)));
 		}
 	}
 #endif // SHADOWS_DISABLED
@@ -1744,6 +1772,7 @@ void light_process_spot(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 			diffuse_light, specular_light);
 }
 #undef FELLOW_LS
+#undef FELLOW_SHS
 
 // implementation of area lights with Linearly Transformed Cosines (LTC): https://eheitzresearch.wordpress.com/415-2/
 void light_process_area(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3 vertex_ddx, vec3 vertex_ddy, hvec3 f0, half roughness, half metallic, float taa_frame_count, hvec3 albedo, inout half alpha, vec2 screen_uv, hvec3 energy_compensation,
