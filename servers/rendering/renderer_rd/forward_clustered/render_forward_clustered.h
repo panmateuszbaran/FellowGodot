@@ -45,6 +45,7 @@
 #include "servers/rendering/renderer_rd/renderer_scene_render_rd.h"
 #include "servers/rendering/renderer_rd/shaders/effects/fellow_adaptive_vrs.glsl.gen.h"
 #include "servers/rendering/renderer_rd/shaders/effects/fellow_hzb.glsl.gen.h"
+#include "servers/rendering/renderer_rd/shaders/effects/fellow_light_tile_cull.glsl.gen.h"
 #include "servers/rendering/renderer_rd/shaders/effects/fellow_multimesh_cull.glsl.gen.h"
 #include "servers/rendering/renderer_rd/shaders/effects/fellow_occlusion_cull.glsl.gen.h"
 #include "servers/rendering/renderer_rd/shaders/effects/fellow_occlusion_test.glsl.gen.h"
@@ -338,7 +339,7 @@ private:
 			uint32_t ss_effects_flags;
 			float ssao_light_affect;
 			float ssao_ao_affect;
-			uint32_t pad1;
+			uint32_t fellow_tile_cull_width; // was pad1: light tile culling's 8 x 8 tiles per row (decision 0049)
 
 			float sdf_to_bounds[16];
 
@@ -820,6 +821,19 @@ private:
 		uint32_t frame_pixels = 0;
 	} fellow_vrs;
 	bool fellow_vrs_depth_ready = false; // this frame has a (non-MSAA) depth pre-pass for the apply pass
+	// Light tile culling (lights/tile_cull, docs/decisions/0049-light-tile-cull.md): after the depth pre-pass, per 8 x 8
+	// pixel tile, the omni/spot lights that can reach its geometry; the opaque colour pass's light loops visit only those.
+	struct FellowTileCull {
+		FellowLightTileCullShaderRD shader;
+		RID version;
+		RID pipeline;
+		RID masks; // per tile: omni words, then spot words
+		uint32_t masks_size = 0; // bytes
+		uint32_t tiles_x = 0;
+		bool pass_active = false; // this frame's opaque colour pass reads the masks (binding 42)
+	} fellow_tile_cull;
+	bool _fellow_light_tile_cull(const RenderDataRD *p_render_data, uint32_t p_words);
+	void _fellow_light_tile_cull_free();
 	bool fellow_vrs_readback_pending = false; // the apply pass filled the counters this frame
 	bool _fellow_adaptive_vrs_target(const Ref<RenderSceneBuffersRD> &p_render_buffers) const;
 	void _fellow_adaptive_vrs_init();

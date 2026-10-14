@@ -949,6 +949,7 @@ uint32_t RenderForwardClustered::_setup_environment(const RenderDataRD *p_render
 	// now do implementation UBO
 
 	scene_state.ubo.cluster_shift = Math::get_shift_from_power_of_2(p_render_data->cluster_size);
+	scene_state.ubo.fellow_tile_cull_width = (uint32_t(p_screen_size.width) + 7) / 8; // light tile culling's tiles per row (decision 0049)
 	scene_state.ubo.max_cluster_element_count_div_32 = p_render_data->cluster_max_elements / 32;
 	{
 		uint32_t cluster_screen_width = Math::division_round_up((uint32_t)p_screen_size.width, p_render_data->cluster_size);
@@ -1411,6 +1412,92 @@ void RenderForwardClustered::_fellow_occlusion_init() {
 		o.cull_pipelines[i] = rd->compute_pipeline_create(o.cull_shader.version_get_shader(o.cull_version, i));
 	}
 	o.cull_counters = rd->storage_buffer_create(16);
+}
+
+void RenderForwardClustered::_fellow_light_tile_cull_free() {
+	FellowTileCull &t = fellow_tile_cull;
+	RenderingDevice *rd = RD::get_singleton();
+	if (t.masks.is_valid()) {
+		rd->free_rid(t.masks);
+		t.masks = RID();
+		t.masks_size = 0;
+	}
+	if (t.version.is_valid()) {
+		t.shader.version_free(t.version);
+		t.version = RID();
+	}
+}
+
+bool RenderForwardClustered::_fellow_light_tile_cull(const RenderDataRD *p_render_data, uint32_t p_words) {
+	// Light tile culling (lights/tile_cull, decision 0049): a workgroup per 8 x 8 pixel tile of the depth buffer as the
+	// depth pre-pass left it.
+	FellowTileCull &t = fellow_tile_cull;
+	RenderingDevice *rd = RD::get_singleton();
+	Ref<RenderSceneBuffersRD> rb = p_render_data->render_buffers;
+	const Size2i screen = rb->get_internal_size();
+	if (screen.x <= 0 || screen.y <= 0 || p_words == 0 || p_words > 128 || current_cluster_builder == nullptr || current_cluster_builder->get_cluster_size() < 8) {
+		return false;
+	}
+	if (t.version.is_null()) {
+		Vector<String> modes;
+		modes.push_back("\n");
+		t.shader.initialize(modes);
+		t.version = t.shader.version_create();
+		t.pipeline = rd->compute_pipeline_create(t.shader.version_get_shader(t.version, 0));
+	}
+	const uint32_t tiles_x = (screen.x + 7) / 8;
+	const uint32_t tiles_y = (screen.y + 7) / 8;
+	const uint32_t size = tiles_x * tiles_y * 2 * p_words * 4;
+	if (t.masks.is_null() || t.masks_size < size) {
+		if (t.masks.is_valid()) {
+			rd->free_rid(t.masks);
+		}
+		t.masks = rd->storage_buffer_create(size);
+		t.masks_size = size;
+	}
+	t.tiles_x = tiles_x;
+
+	struct Push {
+		float inv_projection[16];
+		uint32_t screen_size[2];
+		uint32_t tiles_x;
+		uint32_t words;
+		uint32_t cluster_shift;
+		uint32_t cluster_width;
+		uint32_t cluster_type_size;
+		uint32_t pad;
+	} push;
+	static_assert(sizeof(Push) == 96);
+	// The colour pass's projection (with the depth correction and this frame's jitter), inverted.
+	RendererRD::MaterialStorage::store_camera(p_render_data->scene_data->get_cam_projection().inverse(), push.inv_projection);
+	push.screen_size[0] = screen.x;
+	push.screen_size[1] = screen.y;
+	push.tiles_x = tiles_x;
+	push.words = p_words;
+	const uint32_t cluster_size = current_cluster_builder->get_cluster_size();
+	push.cluster_shift = Math::get_shift_from_power_of_2(cluster_size);
+	const uint32_t cluster_width = Math::division_round_up((uint32_t)screen.x, cluster_size);
+	const uint32_t cluster_height = Math::division_round_up((uint32_t)screen.y, cluster_size);
+	push.cluster_width = cluster_width;
+	push.cluster_type_size = cluster_width * cluster_height * (p_words + 32);
+	push.pad = 0;
+
+	RID sampler = RendererRD::MaterialStorage::get_singleton()->sampler_rd_get_default(RSE::CANVAS_ITEM_TEXTURE_FILTER_NEAREST, RSE::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
+	RendererRD::LightStorage *ls = RendererRD::LightStorage::get_singleton();
+	RID shader = t.shader.version_get_shader(t.version, 0);
+	RD::Uniform u_depth(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 0, Vector<RID>({ sampler, rb->get_depth_texture(0) }));
+	RD::Uniform u_cluster(RD::UNIFORM_TYPE_STORAGE_BUFFER, 1, current_cluster_builder->get_cluster_buffer());
+	RD::Uniform u_omni(RD::UNIFORM_TYPE_STORAGE_BUFFER, 2, ls->get_omni_light_buffer());
+	RD::Uniform u_spot(RD::UNIFORM_TYPE_STORAGE_BUFFER, 3, ls->get_spot_light_buffer());
+	RD::Uniform u_masks(RD::UNIFORM_TYPE_STORAGE_BUFFER, 4, t.masks);
+	RD::ComputeListID list = rd->compute_list_begin();
+	rd->compute_list_bind_compute_pipeline(list, t.pipeline);
+	rd->compute_list_bind_uniform_set(list, UniformSetCacheRD::get_singleton()->get_cache(shader, 0, u_depth, u_cluster, u_omni, u_spot, u_masks), 0);
+	rd->compute_list_set_push_constant(list, &push, sizeof(Push));
+	rd->compute_list_dispatch(list, tiles_x, tiles_y, 1);
+	rd->compute_list_end();
+	Fellow::stats().lights_tile_cull_frames.increment();
+	return true;
 }
 
 bool RenderForwardClustered::_fellow_occlusion_pyramid(const Ref<RenderSceneBuffersRD> &p_render_buffers) {
@@ -4674,6 +4761,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	base_specialization.fellow_light_prefetch_words = false;
 	base_specialization.fellow_light_hot = false;
 	base_specialization.fellow_light_hot_ubo = false;
+	base_specialization.fellow_light_tile_cull = false; // the opaque colour pass's own copy (decision 0049)
 
 	bool using_ssao = depth_pre_pass && !is_reflection_probe && p_render_data->environment.is_valid() && environment_get_ssao_enabled(p_render_data->environment);
 
@@ -4780,6 +4868,16 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		RD::get_singleton()->draw_command_end_label();
 	}
 
+	// FellowEngine light tile culling (lights/tile_cull, decision 0049): the opaque colour pass's fragments are at the
+	// depth pre-pass's depths (equal depth test) only without MSAA, multiview and variable rate shading.
+	fellow_tile_cull.pass_active = false;
+	if (Fellow::light_tile_cull() && Fellow::light_zero_attenuation_skip() && depth_pre_pass && !use_msaa && !is_reflection_probe && rb.is_valid() && rb->get_view_count() == 1 && fellow_positional_light_count > 0 && !rb->has_texture(RB_SCOPE_VRS, RB_TEXTURE) && get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_DISABLED) {
+		RENDER_TIMESTAMP("FellowEngine Light Tile Culling");
+		RD::get_singleton()->draw_command_begin_label("FellowEngine Light Tile Culling");
+		fellow_tile_cull.pass_active = _fellow_light_tile_cull(p_render_data, p_render_data->cluster_max_elements / 32);
+		RD::get_singleton()->draw_command_end_label();
+	}
+
 	RENDER_TIMESTAMP("Render Opaque Pass");
 
 	RD::get_singleton()->draw_command_begin_label("Render Opaque Pass");
@@ -4818,7 +4916,10 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 
 			uint32_t opaque_color_pass_flags = using_motion_pass ? (color_pass_flags & ~uint32_t(COLOR_PASS_FLAG_MOTION_VECTORS)) : color_pass_flags;
 			RID opaque_framebuffer = using_motion_pass ? rb_data->get_color_pass_fb(opaque_color_pass_flags) : color_framebuffer;
-			RenderListParameters render_list_params(render_list[RENDER_LIST_OPAQUE].elements.ptr(), render_list[RENDER_LIST_OPAQUE].element_info.ptr(), render_list[RENDER_LIST_OPAQUE].elements.size(), reverse_cull, PASS_MODE_COLOR, opaque_color_pass_flags, rb_data.is_null(), p_render_data->directional_light_soft_shadows, rp_uniform_set, get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_WIREFRAME, Vector2(), p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, p_render_data->scene_data->view_count, 0, base_specialization);
+			// Light tile culling (decision 0049): only this pass's pipelines read the masks.
+			SceneShaderForwardClustered::ShaderSpecialization fellow_opaque_specialization = base_specialization;
+			fellow_opaque_specialization.fellow_light_tile_cull = fellow_tile_cull.pass_active;
+			RenderListParameters render_list_params(render_list[RENDER_LIST_OPAQUE].elements.ptr(), render_list[RENDER_LIST_OPAQUE].element_info.ptr(), render_list[RENDER_LIST_OPAQUE].elements.size(), reverse_cull, PASS_MODE_COLOR, opaque_color_pass_flags, rb_data.is_null(), p_render_data->directional_light_soft_shadows, rp_uniform_set, get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_WIREFRAME, Vector2(), p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, p_render_data->scene_data->view_count, 0, fellow_opaque_specialization);
 			render_list_params.fellow_cluster_planes = fellow_cluster_planes.ptr();
 			render_list_params.fellow_cluster_plane_count = fellow_cluster_planes.size();
 			if (fellow_occlusion_culled) {
@@ -6702,6 +6803,14 @@ RID RenderForwardClustered::_setup_render_pass_uniform_set(RenderListType p_rend
 		uniforms.push_back(u);
 	}
 	{
+		// Light tile culling (decision 0049): the opaque colour pass's tile masks; any storage buffer otherwise (not read).
+		RD::Uniform u;
+		u.binding = 42;
+		u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
+		u.append_id(p_render_list == RENDER_LIST_OPAQUE && fellow_tile_cull.pass_active ? fellow_tile_cull.masks : scene_shader.default_vec4_xform_buffer);
+		uniforms.push_back(u);
+	}
+	{
 		RID radiance_texture;
 		if (p_radiance_texture.is_valid()) {
 			radiance_texture = p_radiance_texture;
@@ -7114,6 +7223,14 @@ RID RenderForwardClustered::_setup_sdfgi_render_pass_uniform_set(RID p_albedo_te
 	{
 		RD::Uniform u;
 		u.binding = 41;
+		u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
+		u.append_id(scene_shader.default_vec4_xform_buffer);
+		uniforms.push_back(u);
+	}
+	{
+		// Light tile culling (decision 0049): not read here.
+		RD::Uniform u;
+		u.binding = 42;
 		u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
 		u.append_id(scene_shader.default_vec4_xform_buffer);
 		uniforms.push_back(u);
@@ -8737,6 +8854,7 @@ RenderForwardClustered::~RenderForwardClustered() {
 		}
 		_fellow_persistent_free();
 		_fellow_occlusion_free();
+		_fellow_light_tile_cull_free();
 		_fellow_multimesh_cull_free();
 		memdelete_arr(scene_state.lightmap_captures);
 	}

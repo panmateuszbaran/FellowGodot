@@ -149,6 +149,7 @@ public:
 				uint32_t fellow_light_prefetch_words : 1; // decision 0046: the next cluster word's mask read one word ahead
 				uint32_t fellow_light_hot : 1; // decision 0047: the light loop's fields from the compact copy
 				uint32_t fellow_light_hot_ubo : 1; // decision 0047: the compact copy is the uniform buffer
+				uint32_t fellow_light_tile_cull : 1; // decision 0049: the opaque colour pass's light loops use the tile masks
 			};
 		};
 

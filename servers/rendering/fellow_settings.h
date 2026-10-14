@@ -301,6 +301,12 @@ inline bool shadow_batched_taps() {
 // Omni/spot lights: the fields of a light's tests and shading read together at the start of its function instead of
 // each where it is used (the same values; docs/decisions/0045-light-fields-early.md). Specialization constant, runtime;
 // used in frames with omni or spot lights in view (in a scene without them it only changes the shader's code).
+// Omni/spot lights: after the depth pre-pass, per 8 x 8 pixel tile, the lights that can reach its geometry; the opaque
+// colour pass's light loops visit only those (exact: the others fail the range test of every fragment there;
+// docs/decisions/0049-light-tile-cull.md). Runtime; with lights/zero_attenuation_skip, without MSAA, multiview or VRS.
+inline bool light_tile_cull() {
+	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/lights/enabled") && GLOBAL_GET_CACHED(bool, "rendering/fellow/lights/tile_cull");
+}
 inline bool light_fields_early() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/lights/enabled") && GLOBAL_GET_CACHED(bool, "rendering/fellow/lights/fields_early");
 }
@@ -734,6 +740,7 @@ struct Stats {
 	SafeNumeric<uint64_t> frame_async_transfers; // async parts that used an upload submitted with them
 	SafeNumeric<uint64_t> postfx_coherent_gathers; // SSAO/SSIL gather dispatches with one sample rotation per workgroup (decision 0024)
 	SafeNumeric<uint64_t> postfx_last_frame_direct; // last-frame copies without the full-size level (decision 0044)
+	SafeNumeric<uint64_t> lights_tile_cull_frames; // frames whose opaque colour pass used light tile masks (decision 0049)
 	SafeNumeric<uint64_t> postfx_luminance_verify_texels; // luminance reduction texels compared (decision 0025, debug)
 	SafeNumeric<uint64_t> postfx_luminance_verify_mismatches;
 	SafeNumeric<uint64_t> postfx_ssao_temporal_frames; // SSAO gathers with half the taps plus the history (decision 0028)

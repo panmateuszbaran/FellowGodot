@@ -230,6 +230,11 @@ bool sc_fellow_light_hot() {
 bool sc_fellow_light_hot_ubo() {
 	return ((sc_packed_1() >> 25) & 1U) != 0;
 }
+
+bool sc_fellow_light_tile_cull() {
+	return ((sc_packed_1() >> 26) & 1U) != 0;
+}
+#define FELLOW_HAS_LIGHT_TILE_CULL
 #define FELLOW_OMNI_HOT(m_idx, m_field) (sc_fellow_light_hot() ? (sc_fellow_light_hot_ubo() ? fellow_omni_hot_ubo.data[m_idx].m_field : fellow_omni_hot_ssbo.data[m_idx].m_field) : omni_lights.data[m_idx].m_field)
 #define FELLOW_SPOT_HOT(m_idx, m_field) (sc_fellow_light_hot() ? (sc_fellow_light_hot_ubo() ? fellow_spot_hot_ubo.data[m_idx].m_field : fellow_spot_hot_ssbo.data[m_idx].m_field) : spot_lights.data[m_idx].m_field)
 #define FELLOW_HAS_LIGHT_PREFETCH_NEXT
@@ -465,7 +470,7 @@ struct ImplementationData {
 	uint ss_effects_flags;
 	float ssao_light_affect;
 	float ssao_ao_affect;
-	uint pad1;
+	uint fellow_tile_cull_width; // FellowEngine light tile culling (decision 0049): 8 x 8 tiles per row
 
 	mat4 sdf_to_bounds;
 
@@ -527,6 +532,13 @@ fellow_slots;
 // FellowEngine occlusion culling (docs/decisions/0026-occlusion-culling.md): the opaque pass's elements of the runs the
 // GPU culled, the visible ones of each run compacted in order from its first element. A draw whose element index has
 // its top bit set reads its elements here.
+// FellowEngine light tile culling (rendering/fellow/lights/tile_cull, decision 0049): per 8 x 8 pixel tile, the omni
+// then the spot lights (max_cluster_element_count_div_32 words each) that can reach the tile's geometry.
+layout(set = 1, binding = 42, std430) buffer restrict readonly FellowLightTileMasks {
+	uint data[];
+}
+fellow_light_tile_masks;
+
 layout(set = 1, binding = 41, std430) buffer restrict readonly FellowCompactedElementBuffer {
 	uvec4 data[];
 }

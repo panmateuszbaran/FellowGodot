@@ -90,6 +90,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/lights/zero_attenuation_skip", true);
 	GLOBAL_DEF("rendering/fellow/lights/cluster_pack_parallel", true);
 	GLOBAL_DEF("rendering/fellow/lights/fields_early", true);
+	GLOBAL_DEF("rendering/fellow/lights/tile_cull", false);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/lights/hot_fields_buffer", PROPERTY_HINT_ENUM, "Off,Storage Buffer,Uniform Buffer"), 0);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/lights/prefetch_next", PROPERTY_HINT_ENUM, "Off,Range Test Fields,All Hot Fields,Range Test Fields And Words,All Hot Fields And Words"), 0);
 	GLOBAL_DEF("rendering/fellow/postfx/ssao_shared_tile", false);
@@ -244,6 +245,7 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["frame_async_transfers"] = s.frame_async_transfers.get();
 	d["postfx_coherent_gathers"] = s.postfx_coherent_gathers.get();
 	d["postfx_last_frame_direct"] = s.postfx_last_frame_direct.get();
+	d["lights_tile_cull_frames"] = s.lights_tile_cull_frames.get();
 	d["postfx_luminance_verify_texels"] = s.postfx_luminance_verify_texels.get();
 	d["postfx_luminance_verify_mismatches"] = s.postfx_luminance_verify_mismatches.get();
 	d["postfx_ssao_temporal_frames"] = s.postfx_ssao_temporal_frames.get();

@@ -244,6 +244,11 @@ void SceneShaderForwardClustered::ShaderData::set_code(const String &p_code) {
 		gen_code.defines.push_back("\n#define FELLOW_ALPHA_ZERO_SKIP_OK\n");
 	}
 
+	if (fellow_writes_depth) {
+		// Light tile culling (decision 0049) assumes a fragment shades the position its depth was tested at.
+		gen_code.defines.push_back("\n#define FELLOW_WRITES_DEPTH\n");
+	}
+
 	SceneShaderForwardClustered::singleton->shader.version_set_code(version, gen_code.code, gen_code.uniforms, gen_code.stage_globals[ShaderCompiler::STAGE_VERTEX], gen_code.stage_globals[ShaderCompiler::STAGE_FRAGMENT], gen_code.defines);
 
 	ubo_size = gen_code.uniform_total_size;
