@@ -4132,6 +4132,7 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 	uint32_t directional_light_count = 0;
 	uint32_t positional_light_count = 0;
 	light_storage->update_light_buffers(p_render_data, *p_render_data->lights, p_render_data->scene_data->cam_transform, p_render_data->shadow_atlas, using_shadows, directional_light_count, positional_light_count, p_render_data->directional_light_soft_shadows);
+	fellow_positional_light_count = positional_light_count;
 	texture_storage->update_decal_buffer(*p_render_data->decals, p_render_data->scene_data->cam_transform);
 
 	p_render_data->directional_light_count = directional_light_count;
@@ -4667,7 +4668,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	base_specialization.fellow_shadow_tap_batch = Fellow::shadow_batched_taps_directional();
 	base_specialization.fellow_shadow_tap_batch_positional = Fellow::shadow_batched_taps_positional();
 	base_specialization.fellow_pcss_quad_search = fellow_subgroup_quad_fragment && Fellow::shadow_pcss_quad_search();
-	base_specialization.fellow_light_fields_early = Fellow::light_fields_early();
+	base_specialization.fellow_light_fields_early = false; // set after the lights are set up (below)
 
 	bool using_ssao = depth_pre_pass && !is_reflection_probe && p_render_data->environment.is_valid() && environment_get_ssao_enabled(p_render_data->environment);
 
@@ -4743,6 +4744,9 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	}
 	fellow_vrs_depth_ready = depth_pre_pass && !use_msaa; // adaptive shading rate's apply pass (recorded with the SS effects)
 	_pre_opaque_render(p_render_data, using_ssao, using_ssil, using_ssr, using_sdfgi || using_voxelgi, normal_roughness_views, rb_data.is_valid() && rb_data->has_voxelgi() ? rb_data->get_voxelgi() : RID());
+	// FellowEngine (lights/fields_early, decision 0045): only where omni or spot lights are in view (the colour passes
+	// below; the depth pre-pass above does not light).
+	base_specialization.fellow_light_fields_early = Fellow::light_fields_early() && fellow_positional_light_count > 0;
 
 	if (current_cluster_builder) {
 		base_specialization.cluster_has_area_light = current_cluster_builder->get_cluster_count_by_type(ClusterBuilderRD::ELEMENT_TYPE_AREA_LIGHT) != 0;

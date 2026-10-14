@@ -684,6 +684,7 @@ private:
 	LocalVector<FellowShadowItem> fellow_shadow_items;
 	bool fellow_shadow_batching = false;
 	bool fellow_subgroup_quad_fragment = false; // shadows/pcss_quad_search can be used (decision 0042)
+	uint32_t fellow_positional_light_count = 0; // this frame's omni and spot lights in view (decision 0045)
 	int fellow_shadow_hold = 0; // > 0: appends are built at once (their counters are read right after)
 	void _fellow_shadow_flush();
 	void _fellow_shadow_fill_chunk(uint32_t p_chunk, void *p_unused);

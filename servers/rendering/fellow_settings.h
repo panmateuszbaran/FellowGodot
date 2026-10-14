@@ -299,9 +299,10 @@ inline bool shadow_batched_taps() {
 // quad sums them (visually lossless, changes the image; docs/decisions/0042-pcss-quad-search.md). Specialization
 // constant, runtime; needs subgroup quad operations in fragment shaders.
 // Omni/spot lights: the fields of a light's tests and shading read together at the start of its function instead of
-// each where it is used (the same values; docs/decisions/0045-light-fields-early.md). Specialization constant, runtime.
+// each where it is used (the same values; docs/decisions/0045-light-fields-early.md). Specialization constant, runtime;
+// used in frames with omni or spot lights in view (in a scene without them it only changes the shader's code).
 inline bool light_fields_early() {
-	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/lights/enabled") && GLOBAL_GET_CACHED(bool, "rendering/fellow/lights/fields_early") && autotune_allows(TUNE_LIGHT_FIELDS_EARLY);
+	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/lights/enabled") && GLOBAL_GET_CACHED(bool, "rendering/fellow/lights/fields_early");
 }
 inline bool shadow_pcss_quad_search() {
 	return shadows_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/shadows/pcss_quad_search");
