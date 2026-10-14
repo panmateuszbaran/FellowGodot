@@ -4669,6 +4669,9 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	base_specialization.fellow_shadow_tap_batch_positional = Fellow::shadow_batched_taps_positional();
 	base_specialization.fellow_pcss_quad_search = fellow_subgroup_quad_fragment && Fellow::shadow_pcss_quad_search();
 	base_specialization.fellow_light_fields_early = false; // set after the lights are set up (below)
+	base_specialization.fellow_light_prefetch_next = false;
+	base_specialization.fellow_light_prefetch_all = false;
+	base_specialization.fellow_light_prefetch_words = false;
 
 	bool using_ssao = depth_pre_pass && !is_reflection_probe && p_render_data->environment.is_valid() && environment_get_ssao_enabled(p_render_data->environment);
 
@@ -4747,6 +4750,13 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	// FellowEngine (lights/fields_early, decision 0045): only where omni or spot lights are in view (the colour passes
 	// below; the depth pre-pass above does not light).
 	base_specialization.fellow_light_fields_early = Fellow::light_fields_early() && fellow_positional_light_count > 0;
+	{
+		// lights/prefetch_next (decision 0046): 1 range test fields, 2 all hot fields, 3 and 4 the same with the words.
+		const int fellow_pf = fellow_positional_light_count > 0 ? Fellow::light_prefetch_next() : 0;
+		base_specialization.fellow_light_prefetch_next = fellow_pf >= 1;
+		base_specialization.fellow_light_prefetch_all = fellow_pf == 2 || fellow_pf == 4;
+		base_specialization.fellow_light_prefetch_words = fellow_pf >= 3;
+	}
 
 	if (current_cluster_builder) {
 		base_specialization.cluster_has_area_light = current_cluster_builder->get_cluster_count_by_type(ClusterBuilderRD::ELEMENT_TYPE_AREA_LIGHT) != 0;
@@ -8459,6 +8469,9 @@ void RenderForwardClustered::_update_shader_quality_settings() {
 	}
 	specialization.fellow_pcss_quad_search = fellow_subgroup_quad_fragment && Fellow::shadow_pcss_quad_search();
 	specialization.fellow_light_fields_early = Fellow::light_fields_early();
+	specialization.fellow_light_prefetch_next = Fellow::light_prefetch_next() >= 1;
+	specialization.fellow_light_prefetch_all = Fellow::light_prefetch_next() == 2 || Fellow::light_prefetch_next() == 4;
+	specialization.fellow_light_prefetch_words = Fellow::light_prefetch_next() >= 3;
 	scene_shader.set_default_specialization(specialization);
 
 	base_uniforms_changed(); //also need this

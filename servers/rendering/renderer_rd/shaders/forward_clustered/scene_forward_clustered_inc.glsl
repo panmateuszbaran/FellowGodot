@@ -210,6 +210,19 @@ bool sc_fellow_light_fields_early() {
 	return ((sc_packed_1() >> 20) & 1U) != 0;
 }
 #define FELLOW_HAS_LIGHT_FIELDS_EARLY
+
+bool sc_fellow_light_prefetch_next() {
+	return ((sc_packed_1() >> 21) & 1U) != 0;
+}
+
+bool sc_fellow_light_prefetch_all() {
+	return ((sc_packed_1() >> 22) & 1U) != 0;
+}
+
+bool sc_fellow_light_prefetch_words() {
+	return ((sc_packed_1() >> 23) & 1U) != 0;
+}
+#define FELLOW_HAS_LIGHT_PREFETCH_NEXT
 #define FELLOW_HAS_SHADOW_TAP_BATCH
 
 float sc_luminance_multiplier() {

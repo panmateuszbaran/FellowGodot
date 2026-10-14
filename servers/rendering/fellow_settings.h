@@ -304,6 +304,13 @@ inline bool shadow_batched_taps() {
 inline bool light_fields_early() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/lights/enabled") && GLOBAL_GET_CACHED(bool, "rendering/fellow/lights/fields_early");
 }
+// Omni/spot lights: the next light's layer mask, bake mode and range test fields (1, 3), or all its hot fields (2, 4),
+// read while the current light is processed; 3 and 4 also read the next cluster word's mask (and its first light) while
+// the current word's lights are processed (with lights/fields_early; the same values;
+// docs/decisions/0046-light-prefetch-next.md). Specialization constants, runtime.
+inline int light_prefetch_next() {
+	return light_fields_early() ? CLAMP(GLOBAL_GET_CACHED(int, "rendering/fellow/lights/prefetch_next"), 0, 4) : 0;
+}
 inline bool shadow_pcss_quad_search() {
 	return shadows_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/shadows/pcss_quad_search");
 }

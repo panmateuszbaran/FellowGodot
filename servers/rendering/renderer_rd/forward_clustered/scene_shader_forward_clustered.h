@@ -144,6 +144,9 @@ public:
 				uint32_t fellow_shadow_tap_batch_positional : 1; // decision 0040: the same for positional lights
 				uint32_t fellow_pcss_quad_search : 1; // decision 0042: directional PCSS blocker search shared by pixel quads
 				uint32_t fellow_light_fields_early : 1; // decision 0045: omni/spot light fields read together at the start
+				uint32_t fellow_light_prefetch_next : 1; // decision 0046: the next omni/spot light's test fields read one light ahead
+				uint32_t fellow_light_prefetch_all : 1; // decision 0046: and its other hot fields
+				uint32_t fellow_light_prefetch_words : 1; // decision 0046: the next cluster word's mask read one word ahead
 			};
 		};
 

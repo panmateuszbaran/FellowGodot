@@ -3054,7 +3054,85 @@ void fragment_shader(in SceneData scene_data) {
 		}
 #endif
 
+#ifdef FELLOW_HAS_LIGHT_PREFETCH_NEXT
+		// FellowEngine (lights/prefetch_next, decision 0046): the next light's layer mask, bake mode and range test fields
+		// (2: and the other hot fields) are read while the current light is processed. The order of the lights is the
+		// warp's (merged_mask), the same for every pixel of the warp; the same values reach the same expressions.
+		// With 3 and 4 the next cluster word's mask and its first light are read while the current word's lights are
+		// processed, too.
+#ifndef FELLOW_LIGHT_PREFILTER
+		bool fellow_words = sc_fellow_light_prefetch_words();
+#else
+		const bool fellow_words = false;
+#endif
+		uint fellow_nx_mask = 0u;
+		uint fellow_nx_bake = 0u;
+		vec3 fellow_nx_position = vec3(0.0);
+		float fellow_nx_inv_radius = 0.0;
+		float fellow_nx_attenuation = 0.0;
+		vec3 fellow_nx_color = vec3(0.0);
+		float fellow_nx_size = 0.0;
+		float fellow_nx_specular_amount = 0.0;
+		float fellow_nx_shadow_opacity = 0.0;
+		bool fellow_nx_valid = false;
+		uint fellow_wn_mask = 0u;
+		uint fellow_wn_merged = 0u;
+		if (fellow_words && item_from < item_to) {
+			fellow_wn_mask = cluster_buffer.data[cluster_omni_offset + item_from];
+			fellow_wn_mask &= cluster_get_range_clip_mask(item_from, item_min, item_max);
+			fellow_wn_merged = subgroupBroadcastFirst(subgroupOr(fellow_wn_mask));
+		}
+#endif
 		for (uint i = item_from; i < item_to; i++) {
+#ifdef FELLOW_HAS_LIGHT_PREFETCH_NEXT
+			uint mask;
+			uint merged_mask;
+			if (fellow_words) {
+				mask = fellow_wn_mask;
+				merged_mask = fellow_wn_merged;
+				fellow_wn_mask = 0u;
+				fellow_wn_merged = 0u;
+				if (i + 1 < item_to) {
+					fellow_wn_mask = cluster_buffer.data[cluster_omni_offset + i + 1];
+					fellow_wn_mask &= cluster_get_range_clip_mask(i + 1, item_min, item_max);
+					fellow_wn_merged = subgroupBroadcastFirst(subgroupOr(fellow_wn_mask));
+				}
+			} else {
+				mask = cluster_buffer.data[cluster_omni_offset + i];
+				mask &= cluster_get_range_clip_mask(i, item_min, item_max);
+#ifdef FELLOW_LIGHT_PREFILTER
+				mask = fellow_omni_reach(i, mask, vertex, FELLOW_INSTANCE(layer_mask), bool(fellow_flags & INSTANCE_FLAGS_USE_LIGHTMAP));
+#endif
+				merged_mask = subgroupBroadcastFirst(subgroupOr(mask));
+			}
+			if (sc_fellow_light_prefetch_next() && !fellow_nx_valid) {
+				// The word's first light (with the words: unless the previous word read it; if this word has none, the
+				// next word's first light).
+				uint fellow_nx_index = 0u;
+				bool fellow_nx_any = false;
+				if (merged_mask != 0) {
+					fellow_nx_index = 32 * i + findMSB(merged_mask);
+					fellow_nx_any = true;
+				} else if (fellow_words && fellow_wn_merged != 0) {
+					fellow_nx_index = 32 * (i + 1) + findMSB(fellow_wn_merged);
+					fellow_nx_any = true;
+				}
+				if (fellow_nx_any) {
+					fellow_nx_mask = omni_lights.data[fellow_nx_index].mask;
+					fellow_nx_bake = omni_lights.data[fellow_nx_index].bake_mode;
+					fellow_nx_position = omni_lights.data[fellow_nx_index].position;
+					fellow_nx_inv_radius = omni_lights.data[fellow_nx_index].inv_radius;
+					if (sc_fellow_light_prefetch_all()) {
+						fellow_nx_attenuation = omni_lights.data[fellow_nx_index].attenuation;
+						fellow_nx_color = omni_lights.data[fellow_nx_index].color;
+						fellow_nx_size = omni_lights.data[fellow_nx_index].size;
+						fellow_nx_specular_amount = omni_lights.data[fellow_nx_index].specular_amount;
+						fellow_nx_shadow_opacity = omni_lights.data[fellow_nx_index].shadow_opacity;
+					}
+				}
+				fellow_nx_valid = fellow_words && fellow_nx_any;
+			}
+#else
 			uint mask = cluster_buffer.data[cluster_omni_offset + i];
 			mask &= cluster_get_range_clip_mask(i, item_min, item_max);
 #ifdef FELLOW_LIGHT_PREFILTER
@@ -3062,9 +3140,48 @@ void fragment_shader(in SceneData scene_data) {
 #endif
 
 			uint merged_mask = subgroupBroadcastFirst(subgroupOr(mask));
+#endif
 			while (merged_mask != 0) {
 				uint bit = findMSB(merged_mask);
 				merged_mask &= ~(1u << bit);
+#ifdef FELLOW_HAS_LIGHT_PREFETCH_NEXT
+				uint fellow_pf_mask = fellow_nx_mask;
+				uint fellow_pf_bake = fellow_nx_bake;
+				if (sc_fellow_light_prefetch_next()) {
+					fellow_lpf_position = fellow_nx_position;
+					fellow_lpf_inv_radius = fellow_nx_inv_radius;
+					if (sc_fellow_light_prefetch_all()) {
+						fellow_lpf_attenuation = fellow_nx_attenuation;
+						fellow_lpf_color = fellow_nx_color;
+						fellow_lpf_size = fellow_nx_size;
+						fellow_lpf_specular_amount = fellow_nx_specular_amount;
+						fellow_lpf_shadow_opacity = fellow_nx_shadow_opacity;
+					}
+					uint fellow_nx_index = 0u;
+					bool fellow_nx_any = false;
+					if (merged_mask != 0) {
+						fellow_nx_index = 32 * i + findMSB(merged_mask);
+						fellow_nx_any = true;
+					} else if (fellow_words && fellow_wn_merged != 0) {
+						fellow_nx_index = 32 * (i + 1) + findMSB(fellow_wn_merged); // the next word's first light
+						fellow_nx_any = true;
+					}
+					if (fellow_nx_any) {
+						fellow_nx_mask = omni_lights.data[fellow_nx_index].mask;
+						fellow_nx_bake = omni_lights.data[fellow_nx_index].bake_mode;
+						fellow_nx_position = omni_lights.data[fellow_nx_index].position;
+						fellow_nx_inv_radius = omni_lights.data[fellow_nx_index].inv_radius;
+						if (sc_fellow_light_prefetch_all()) {
+							fellow_nx_attenuation = omni_lights.data[fellow_nx_index].attenuation;
+							fellow_nx_color = omni_lights.data[fellow_nx_index].color;
+							fellow_nx_size = omni_lights.data[fellow_nx_index].size;
+							fellow_nx_specular_amount = omni_lights.data[fellow_nx_index].specular_amount;
+							fellow_nx_shadow_opacity = omni_lights.data[fellow_nx_index].shadow_opacity;
+						}
+					}
+					fellow_nx_valid = fellow_words && fellow_nx_any;
+				}
+#endif
 				FELLOW_DBG_INC(fellow_dbg_light_iter);
 
 				if (((1u << bit) & mask) == 0) { //do not process if not originally here
@@ -3079,6 +3196,20 @@ void fragment_shader(in SceneData scene_data) {
 				// tests and shading read together, before the tests (the same values).
 				uint fellow_light_mask;
 				uint fellow_light_bake;
+#ifdef FELLOW_HAS_LIGHT_PREFETCH_NEXT
+				if (sc_fellow_light_prefetch_next()) {
+					// Read one light ahead (above); the other hot fields here, as without the prefetch, unless they were too.
+					fellow_light_mask = fellow_pf_mask;
+					fellow_light_bake = fellow_pf_bake;
+					if (!sc_fellow_light_prefetch_all()) {
+						fellow_lpf_attenuation = omni_lights.data[light_index].attenuation;
+						fellow_lpf_color = omni_lights.data[light_index].color;
+						fellow_lpf_size = omni_lights.data[light_index].size;
+						fellow_lpf_specular_amount = omni_lights.data[light_index].specular_amount;
+						fellow_lpf_shadow_opacity = omni_lights.data[light_index].shadow_opacity;
+					}
+				} else
+#endif
 				if (sc_fellow_light_fields_early()) {
 					fellow_light_mask = omni_lights.data[light_index].mask;
 					fellow_light_bake = omni_lights.data[light_index].bake_mode;
@@ -3150,7 +3281,91 @@ void fragment_shader(in SceneData scene_data) {
 		}
 #endif
 
+#ifdef FELLOW_HAS_LIGHT_PREFETCH_NEXT
+		// FellowEngine (lights/prefetch_next, decision 0046): the next light's layer mask, bake mode and range test fields
+		// (2: and the other hot fields) are read while the current light is processed. The order of the lights is the
+		// warp's (merged_mask), the same for every pixel of the warp; the same values reach the same expressions.
+		// With 3 and 4 the next cluster word's mask and its first light are read while the current word's lights are
+		// processed, too.
+#ifndef FELLOW_LIGHT_PREFILTER
+		bool fellow_words = sc_fellow_light_prefetch_words();
+#else
+		const bool fellow_words = false;
+#endif
+		uint fellow_nx_mask = 0u;
+		uint fellow_nx_bake = 0u;
+		vec3 fellow_nx_position = vec3(0.0);
+		float fellow_nx_inv_radius = 0.0;
+		vec3 fellow_nx_direction = vec3(0.0);
+		float fellow_nx_cone_angle = 0.0;
+		float fellow_nx_attenuation = 0.0;
+		vec3 fellow_nx_color = vec3(0.0);
+		float fellow_nx_size = 0.0;
+		float fellow_nx_specular_amount = 0.0;
+		float fellow_nx_shadow_opacity = 0.0;
+		float fellow_nx_cone_attenuation = 0.0;
+		bool fellow_nx_valid = false;
+		uint fellow_wn_mask = 0u;
+		uint fellow_wn_merged = 0u;
+		if (fellow_words && item_from < item_to) {
+			fellow_wn_mask = cluster_buffer.data[cluster_spot_offset + item_from];
+			fellow_wn_mask &= cluster_get_range_clip_mask(item_from, item_min, item_max);
+			fellow_wn_merged = subgroupBroadcastFirst(subgroupOr(fellow_wn_mask));
+		}
+#endif
 		for (uint i = item_from; i < item_to; i++) {
+#ifdef FELLOW_HAS_LIGHT_PREFETCH_NEXT
+			uint mask;
+			uint merged_mask;
+			if (fellow_words) {
+				mask = fellow_wn_mask;
+				merged_mask = fellow_wn_merged;
+				fellow_wn_mask = 0u;
+				fellow_wn_merged = 0u;
+				if (i + 1 < item_to) {
+					fellow_wn_mask = cluster_buffer.data[cluster_spot_offset + i + 1];
+					fellow_wn_mask &= cluster_get_range_clip_mask(i + 1, item_min, item_max);
+					fellow_wn_merged = subgroupBroadcastFirst(subgroupOr(fellow_wn_mask));
+				}
+			} else {
+				mask = cluster_buffer.data[cluster_spot_offset + i];
+				mask &= cluster_get_range_clip_mask(i, item_min, item_max);
+#ifdef FELLOW_LIGHT_PREFILTER
+				mask = fellow_spot_reach(i, mask, vertex, FELLOW_INSTANCE(layer_mask), bool(fellow_flags & INSTANCE_FLAGS_USE_LIGHTMAP));
+#endif
+				merged_mask = subgroupBroadcastFirst(subgroupOr(mask));
+			}
+			if (sc_fellow_light_prefetch_next() && !fellow_nx_valid) {
+				// The word's first light (with the words: unless the previous word read it; if this word has none, the
+				// next word's first light).
+				uint fellow_nx_index = 0u;
+				bool fellow_nx_any = false;
+				if (merged_mask != 0) {
+					fellow_nx_index = 32 * i + findMSB(merged_mask);
+					fellow_nx_any = true;
+				} else if (fellow_words && fellow_wn_merged != 0) {
+					fellow_nx_index = 32 * (i + 1) + findMSB(fellow_wn_merged);
+					fellow_nx_any = true;
+				}
+				if (fellow_nx_any) {
+					fellow_nx_mask = spot_lights.data[fellow_nx_index].mask;
+					fellow_nx_bake = spot_lights.data[fellow_nx_index].bake_mode;
+					fellow_nx_position = spot_lights.data[fellow_nx_index].position;
+					fellow_nx_inv_radius = spot_lights.data[fellow_nx_index].inv_radius;
+					fellow_nx_direction = spot_lights.data[fellow_nx_index].direction;
+					fellow_nx_cone_angle = spot_lights.data[fellow_nx_index].cone_angle;
+					if (sc_fellow_light_prefetch_all()) {
+						fellow_nx_attenuation = spot_lights.data[fellow_nx_index].attenuation;
+						fellow_nx_color = spot_lights.data[fellow_nx_index].color;
+						fellow_nx_size = spot_lights.data[fellow_nx_index].size;
+						fellow_nx_specular_amount = spot_lights.data[fellow_nx_index].specular_amount;
+						fellow_nx_shadow_opacity = spot_lights.data[fellow_nx_index].shadow_opacity;
+						fellow_nx_cone_attenuation = spot_lights.data[fellow_nx_index].cone_attenuation;
+					}
+				}
+				fellow_nx_valid = fellow_words && fellow_nx_any;
+			}
+#else
 			uint mask = cluster_buffer.data[cluster_spot_offset + i];
 			mask &= cluster_get_range_clip_mask(i, item_min, item_max);
 #ifdef FELLOW_LIGHT_PREFILTER
@@ -3158,9 +3373,54 @@ void fragment_shader(in SceneData scene_data) {
 #endif
 
 			uint merged_mask = subgroupBroadcastFirst(subgroupOr(mask));
+#endif
 			while (merged_mask != 0) {
 				uint bit = findMSB(merged_mask);
 				merged_mask &= ~(1u << bit);
+#ifdef FELLOW_HAS_LIGHT_PREFETCH_NEXT
+				uint fellow_pf_mask = fellow_nx_mask;
+				uint fellow_pf_bake = fellow_nx_bake;
+				if (sc_fellow_light_prefetch_next()) {
+					fellow_lpf_position = fellow_nx_position;
+					fellow_lpf_inv_radius = fellow_nx_inv_radius;
+					fellow_lpf_direction = fellow_nx_direction;
+					fellow_lpf_cone_angle = fellow_nx_cone_angle;
+					if (sc_fellow_light_prefetch_all()) {
+						fellow_lpf_attenuation = fellow_nx_attenuation;
+						fellow_lpf_color = fellow_nx_color;
+						fellow_lpf_size = fellow_nx_size;
+						fellow_lpf_specular_amount = fellow_nx_specular_amount;
+						fellow_lpf_shadow_opacity = fellow_nx_shadow_opacity;
+						fellow_lpf_cone_attenuation = fellow_nx_cone_attenuation;
+					}
+					uint fellow_nx_index = 0u;
+					bool fellow_nx_any = false;
+					if (merged_mask != 0) {
+						fellow_nx_index = 32 * i + findMSB(merged_mask);
+						fellow_nx_any = true;
+					} else if (fellow_words && fellow_wn_merged != 0) {
+						fellow_nx_index = 32 * (i + 1) + findMSB(fellow_wn_merged); // the next word's first light
+						fellow_nx_any = true;
+					}
+					if (fellow_nx_any) {
+						fellow_nx_mask = spot_lights.data[fellow_nx_index].mask;
+						fellow_nx_bake = spot_lights.data[fellow_nx_index].bake_mode;
+						fellow_nx_position = spot_lights.data[fellow_nx_index].position;
+						fellow_nx_inv_radius = spot_lights.data[fellow_nx_index].inv_radius;
+						fellow_nx_direction = spot_lights.data[fellow_nx_index].direction;
+						fellow_nx_cone_angle = spot_lights.data[fellow_nx_index].cone_angle;
+						if (sc_fellow_light_prefetch_all()) {
+							fellow_nx_attenuation = spot_lights.data[fellow_nx_index].attenuation;
+							fellow_nx_color = spot_lights.data[fellow_nx_index].color;
+							fellow_nx_size = spot_lights.data[fellow_nx_index].size;
+							fellow_nx_specular_amount = spot_lights.data[fellow_nx_index].specular_amount;
+							fellow_nx_shadow_opacity = spot_lights.data[fellow_nx_index].shadow_opacity;
+							fellow_nx_cone_attenuation = spot_lights.data[fellow_nx_index].cone_attenuation;
+						}
+					}
+					fellow_nx_valid = fellow_words && fellow_nx_any;
+				}
+#endif
 				FELLOW_DBG_INC(fellow_dbg_light_iter);
 
 				if (((1u << bit) & mask) == 0) { //do not process if not originally here
@@ -3175,6 +3435,21 @@ void fragment_shader(in SceneData scene_data) {
 				// tests and shading read together, before the tests (the same values).
 				uint fellow_light_mask;
 				uint fellow_light_bake;
+#ifdef FELLOW_HAS_LIGHT_PREFETCH_NEXT
+				if (sc_fellow_light_prefetch_next()) {
+					// Read one light ahead (above); the other hot fields here, as without the prefetch, unless they were too.
+					fellow_light_mask = fellow_pf_mask;
+					fellow_light_bake = fellow_pf_bake;
+					if (!sc_fellow_light_prefetch_all()) {
+						fellow_lpf_attenuation = spot_lights.data[light_index].attenuation;
+						fellow_lpf_color = spot_lights.data[light_index].color;
+						fellow_lpf_size = spot_lights.data[light_index].size;
+						fellow_lpf_specular_amount = spot_lights.data[light_index].specular_amount;
+						fellow_lpf_shadow_opacity = spot_lights.data[light_index].shadow_opacity;
+						fellow_lpf_cone_attenuation = spot_lights.data[light_index].cone_attenuation;
+					}
+				} else
+#endif
 				if (sc_fellow_light_fields_early()) {
 					fellow_light_mask = spot_lights.data[light_index].mask;
 					fellow_light_bake = spot_lights.data[light_index].bake_mode;
