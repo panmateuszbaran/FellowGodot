@@ -331,6 +331,12 @@ inline bool light_tile_cull() {
 inline bool light_tile_cull_passthrough() {
 	return GLOBAL_GET_CACHED(bool, "rendering/fellow/debug/tile_cull_passthrough");
 }
+// Light tile culling v6 (decision 0049): the pass split around the async compute part (its depth bounds before it, the
+// rest beside it). 0: when async compute runs, 1: always (also without async compute: tests), 2: never. Read every frame.
+inline int light_tile_cull_split() {
+	return GLOBAL_GET_CACHED(int, "rendering/fellow/debug/tile_cull_split");
+}
+
 inline bool light_tile_cull_pass_only() {
 	return GLOBAL_GET_CACHED(bool, "rendering/fellow/debug/tile_cull_pass_only");
 }
@@ -795,6 +801,7 @@ struct Stats {
 	SafeNumeric<uint64_t> postfx_coherent_gathers; // SSAO/SSIL gather dispatches with one sample rotation per workgroup (decision 0024)
 	SafeNumeric<uint64_t> postfx_last_frame_direct; // last-frame copies without the full-size level (decision 0044)
 	SafeNumeric<uint64_t> lights_tile_cull_frames; // frames whose opaque colour pass used light tile masks (decision 0049)
+	SafeNumeric<uint64_t> lights_tile_cull_split_frames; // of which the pass ran split around the async compute part (v6)
 	SafeNumeric<uint64_t> lights_cluster_draws; // draws of the light cluster build's render pass (decision 0051)
 	SafeNumeric<uint64_t> lights_cluster_elements; // elements (lights, decals, probes) they drew
 	SafeNumeric<uint64_t> lights_cluster_verify_words; // debug/cluster_verify: words compared (decision 0051)

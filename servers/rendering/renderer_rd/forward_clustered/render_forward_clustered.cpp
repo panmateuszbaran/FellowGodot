@@ -1423,15 +1423,21 @@ void RenderForwardClustered::_fellow_light_tile_cull_free() {
 		t.masks = RID();
 		t.masks_size = 0;
 	}
+	if (t.bounds.is_valid()) {
+		rd->free_rid(t.bounds);
+		t.bounds = RID();
+		t.bounds_size = 0;
+	}
 	if (t.version.is_valid()) {
 		t.shader.version_free(t.version);
 		t.version = RID();
 	}
 }
 
-bool RenderForwardClustered::_fellow_light_tile_cull(const RenderDataRD *p_render_data, uint32_t p_words) {
+bool RenderForwardClustered::_fellow_light_tile_cull(const RenderDataRD *p_render_data, uint32_t p_words, FellowTileCullMode p_mode) {
 	// Light tile culling (lights/tile_cull, decision 0049): a workgroup per 8 x 8 pixel tile of the depth buffer as the
-	// depth pre-pass left it.
+	// depth pre-pass left it. v6: the tiles' depth bounds can be recorded before the async compute part and the rest
+	// beside it (the async part samples the depth buffer too: both queues read it in the layout the first part left).
 	FellowTileCull &t = fellow_tile_cull;
 	RenderingDevice *rd = RD::get_singleton();
 	Ref<RenderSceneBuffersRD> rb = p_render_data->render_buffers;
@@ -1442,19 +1448,34 @@ bool RenderForwardClustered::_fellow_light_tile_cull(const RenderDataRD *p_rende
 	if (t.version.is_null()) {
 		Vector<String> modes;
 		modes.push_back("\n");
+		modes.push_back("\n#define MODE_DEPTH_BOUNDS\n");
+		modes.push_back("\n#define MODE_FROM_BOUNDS\n");
 		t.shader.initialize(modes);
 		t.version = t.shader.version_create();
-		t.pipeline = rd->compute_pipeline_create(t.shader.version_get_shader(t.version, 0));
+		for (int i = 0; i < 3; i++) {
+			t.pipelines[i] = rd->compute_pipeline_create(t.shader.version_get_shader(t.version, i));
+		}
 	}
 	const uint32_t tiles_x = (screen.x + 7) / 8;
 	const uint32_t tiles_y = (screen.y + 7) / 8;
 	const uint32_t size = tiles_x * tiles_y * 2 * p_words * 4;
-	if (t.masks.is_null() || t.masks_size < size) {
+	if (p_mode != FELLOW_TILE_CULL_DEPTH_BOUNDS && (t.masks.is_null() || t.masks_size < size)) {
 		if (t.masks.is_valid()) {
 			rd->free_rid(t.masks);
 		}
 		t.masks = rd->storage_buffer_create(size);
 		t.masks_size = size;
+	}
+	const uint32_t bounds_size = tiles_x * tiles_y * 2 * 4;
+	if (p_mode != FELLOW_TILE_CULL_WHOLE && (t.bounds.is_null() || t.bounds_size < bounds_size)) {
+		if (p_mode == FELLOW_TILE_CULL_FROM_BOUNDS) {
+			return false; // (the bounds pass did not run at this size)
+		}
+		if (t.bounds.is_valid()) {
+			rd->free_rid(t.bounds);
+		}
+		t.bounds = rd->storage_buffer_create(bounds_size);
+		t.bounds_size = bounds_size;
 	}
 	t.tiles_x = tiles_x;
 
@@ -1489,19 +1510,33 @@ bool RenderForwardClustered::_fellow_light_tile_cull(const RenderDataRD *p_rende
 
 	RID sampler = RendererRD::MaterialStorage::get_singleton()->sampler_rd_get_default(RSE::CANVAS_ITEM_TEXTURE_FILTER_NEAREST, RSE::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
 	RendererRD::LightStorage *ls = RendererRD::LightStorage::get_singleton();
-	RID shader = t.shader.version_get_shader(t.version, 0);
+	RID shader = t.shader.version_get_shader(t.version, p_mode);
 	RD::Uniform u_depth(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 0, Vector<RID>({ sampler, rb->get_depth_texture(0) }));
 	RD::Uniform u_cluster(RD::UNIFORM_TYPE_STORAGE_BUFFER, 1, current_cluster_builder->get_cluster_buffer());
 	RD::Uniform u_omni(RD::UNIFORM_TYPE_STORAGE_BUFFER, 2, ls->get_omni_light_buffer());
 	RD::Uniform u_spot(RD::UNIFORM_TYPE_STORAGE_BUFFER, 3, ls->get_spot_light_buffer());
 	RD::Uniform u_masks(RD::UNIFORM_TYPE_STORAGE_BUFFER, 4, t.masks);
+	RD::Uniform u_bounds(RD::UNIFORM_TYPE_STORAGE_BUFFER, 5, t.bounds);
+	RID uniform_set;
+	if (p_mode == FELLOW_TILE_CULL_DEPTH_BOUNDS) {
+		uniform_set = UniformSetCacheRD::get_singleton()->get_cache(shader, 0, u_depth, u_bounds);
+	} else if (p_mode == FELLOW_TILE_CULL_FROM_BOUNDS) {
+		uniform_set = UniformSetCacheRD::get_singleton()->get_cache(shader, 0, u_cluster, u_omni, u_spot, u_masks, u_bounds);
+	} else {
+		uniform_set = UniformSetCacheRD::get_singleton()->get_cache(shader, 0, u_depth, u_cluster, u_omni, u_spot, u_masks);
+	}
 	RD::ComputeListID list = rd->compute_list_begin();
-	rd->compute_list_bind_compute_pipeline(list, t.pipeline);
-	rd->compute_list_bind_uniform_set(list, UniformSetCacheRD::get_singleton()->get_cache(shader, 0, u_depth, u_cluster, u_omni, u_spot, u_masks), 0);
+	rd->compute_list_bind_compute_pipeline(list, t.pipelines[p_mode]);
+	rd->compute_list_bind_uniform_set(list, uniform_set, 0);
 	rd->compute_list_set_push_constant(list, &push, sizeof(Push));
 	rd->compute_list_dispatch(list, (tiles_x + 1) / 2, (tiles_y + 1) / 2, 1); // a workgroup per 16 x 16 pixels
 	rd->compute_list_end();
-	Fellow::stats().lights_tile_cull_frames.increment();
+	if (p_mode != FELLOW_TILE_CULL_DEPTH_BOUNDS) {
+		Fellow::stats().lights_tile_cull_frames.increment();
+	}
+	if (p_mode == FELLOW_TILE_CULL_FROM_BOUNDS) {
+		Fellow::stats().lights_tile_cull_split_frames.increment();
+	}
 	return true;
 }
 
@@ -3941,7 +3976,26 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 	// and submitted to the second queue, they run while the main queue renders the shadows, the light clusters and the
 	// volumetric fog; the work recorded after this function (the opaque pass reads their results) waits for them. Not
 	// with GI (it reads the same normal buffers and runs between the shadows).
-	const bool fellow_async = rb_data.is_valid() && ss_effects && (p_use_ssao || p_use_ssil || p_use_ssr) && !(rb.is_valid() && p_use_gi) && RD::get_singleton()->fellow_async_compute_begin();
+	const bool fellow_async_wanted = rb_data.is_valid() && ss_effects && (p_use_ssao || p_use_ssil || p_use_ssr) && !(rb.is_valid() && p_use_gi);
+
+	// FellowEngine light tile culling v6 (decision 0049): with async compute, the tiles' depth bounds are recorded here,
+	// before the async part (so that the depth buffer is left in the layout both queues read it in), and the rest after
+	// the light clusters, beside the async part; otherwise the whole pass runs before the opaque pass.
+	fellow_tile_cull.split = false;
+	const int fellow_split_mode = Fellow::light_tile_cull_split(); // 0: with async compute, 1: always (tests), 2: never
+	if (fellow_tile_cull.frame_on && p_render_data->lights != nullptr && (fellow_split_mode == 1 || (fellow_split_mode == 0 && fellow_async_wanted && Fellow::frame_async_compute()))) {
+		bool positional = false;
+		for (uint32_t i = 0; i < (uint32_t)p_render_data->lights->size() && !positional; i++) {
+			const RSE::LightType type = light_storage->light_get_type(light_storage->light_instance_get_base_light((*p_render_data->lights)[i]));
+			positional = type == RSE::LIGHT_OMNI || type == RSE::LIGHT_SPOT;
+		}
+		if (positional) {
+			RENDER_TIMESTAMP("FellowEngine Light Tile Depth Bounds");
+			fellow_tile_cull.split = _fellow_light_tile_cull(p_render_data, p_render_data->cluster_max_elements / 32, FELLOW_TILE_CULL_DEPTH_BOUNDS);
+		}
+	}
+
+	const bool fellow_async = fellow_async_wanted && RD::get_singleton()->fellow_async_compute_begin();
 	if (fellow_async) {
 		_fellow_process_ss_effects(p_render_data, rb, p_use_ssao, p_use_ssil, p_use_ssr, p_normal_roughness_slices);
 		RD::get_singleton()->fellow_async_compute_end();
@@ -4231,6 +4285,16 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 
 	if (current_cluster_builder) {
 		current_cluster_builder->bake_cluster();
+	}
+
+	if (fellow_tile_cull.split) {
+		// The rest of light tile culling, beside the async part (it reads the depth bounds, not the depth buffer).
+		fellow_tile_cull.split = false;
+		if (positional_light_count > 0) {
+			RENDER_TIMESTAMP("FellowEngine Light Tile Culling");
+			fellow_tile_cull.split = _fellow_light_tile_cull(p_render_data, p_render_data->cluster_max_elements / 32, FELLOW_TILE_CULL_FROM_BOUNDS);
+			fellow_tile_cull.pass_active = fellow_tile_cull.split && !Fellow::light_tile_cull_pass_only();
+		}
 	}
 
 	if (rb_data.is_valid()) {
@@ -4841,6 +4905,12 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		}
 	}
 	fellow_vrs_depth_ready = depth_pre_pass && !use_msaa; // adaptive shading rate's apply pass (recorded with the SS effects)
+	// FellowEngine light tile culling (decision 0049): this frame's conditions, before _pre_opaque_render (v6 may record
+	// part of the pass there); the positional lights in view are counted in it.
+	fellow_tile_cull.pass_active = false;
+	fellow_tile_cull.split = false;
+	fellow_tile_cull.frame_ok = Fellow::light_tile_cull_setting() && Fellow::light_zero_attenuation_skip() && depth_pre_pass && !use_msaa && !is_reflection_probe && rb.is_valid() && rb->get_view_count() == 1 && !rb->has_texture(RB_SCOPE_VRS, RB_TEXTURE) && get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_DISABLED;
+	fellow_tile_cull.frame_on = fellow_tile_cull.frame_ok && Fellow::light_tile_cull();
 	_pre_opaque_render(p_render_data, using_ssao, using_ssil, using_ssr, using_sdfgi || using_voxelgi, normal_roughness_views, rb_data.is_valid() && rb_data->has_voxelgi() ? rb_data->get_voxelgi() : RID());
 	// FellowEngine (lights/fields_early, decision 0045): only where omni or spot lights are in view (the colour passes
 	// below; the depth pre-pass above does not light).
@@ -4874,13 +4944,13 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	}
 
 	// FellowEngine light tile culling (lights/tile_cull, decision 0049): the opaque colour pass's fragments are at the
-	// depth pre-pass's depths (equal depth test) only without MSAA, multiview and variable rate shading.
-	fellow_tile_cull.pass_active = false;
-	const bool fellow_tile_cull_possible = Fellow::light_tile_cull_setting() && Fellow::light_zero_attenuation_skip() && depth_pre_pass && !use_msaa && !is_reflection_probe && rb.is_valid() && rb->get_view_count() == 1 && fellow_positional_light_count > 0 && !rb->has_texture(RB_SCOPE_VRS, RB_TEXTURE) && get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_DISABLED;
+	// depth pre-pass's depths (equal depth test) only without MSAA, multiview and variable rate shading. (v6: with async
+	// compute it ran in _pre_opaque_render, split around the async part.)
+	const bool fellow_tile_cull_possible = fellow_tile_cull.frame_ok && fellow_positional_light_count > 0;
 	if (fellow_tile_cull_possible) {
 		Fellow::autotune_note_light_tile_cull_candidates(); // autotune measures it while it can run (decision 0049)
 	}
-	if (fellow_tile_cull_possible && Fellow::light_tile_cull()) {
+	if (fellow_tile_cull_possible && fellow_tile_cull.frame_on && !fellow_tile_cull.split) {
 		RENDER_TIMESTAMP("FellowEngine Light Tile Culling");
 		RD::get_singleton()->draw_command_begin_label("FellowEngine Light Tile Culling");
 		fellow_tile_cull.pass_active = _fellow_light_tile_cull(p_render_data, p_render_data->cluster_max_elements / 32) && !Fellow::light_tile_cull_pass_only();

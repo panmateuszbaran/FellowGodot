@@ -826,13 +826,23 @@ private:
 	struct FellowTileCull {
 		FellowLightTileCullShaderRD shader;
 		RID version;
-		RID pipeline;
+		RID pipelines[3]; // FellowTileCullMode
 		RID masks; // per tile: omni words, then spot words
 		uint32_t masks_size = 0; // bytes
+		RID bounds; // per tile: nearest and farthest depth (bits), for the split pass (v6)
+		uint32_t bounds_size = 0; // bytes
 		uint32_t tiles_x = 0;
+		bool frame_ok = false; // this frame's static conditions hold (render_scene, before _pre_opaque_render)
+		bool frame_on = false; // and the setting (under autotune) is on
+		bool split = false; // the depth bounds were recorded before the async part; the rest goes beside it
 		bool pass_active = false; // this frame's opaque colour pass reads the masks (binding 42)
 	} fellow_tile_cull;
-	bool _fellow_light_tile_cull(const RenderDataRD *p_render_data, uint32_t p_words);
+	enum FellowTileCullMode {
+		FELLOW_TILE_CULL_WHOLE,
+		FELLOW_TILE_CULL_DEPTH_BOUNDS,
+		FELLOW_TILE_CULL_FROM_BOUNDS,
+	};
+	bool _fellow_light_tile_cull(const RenderDataRD *p_render_data, uint32_t p_words, FellowTileCullMode p_mode = FELLOW_TILE_CULL_WHOLE);
 	void _fellow_light_tile_cull_free();
 	bool fellow_vrs_readback_pending = false; // the apply pass filled the counters this frame
 	bool _fellow_adaptive_vrs_target(const Ref<RenderSceneBuffersRD> &p_render_buffers) const;

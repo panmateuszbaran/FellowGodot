@@ -99,6 +99,8 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/debug/tile_cull_passthrough", false);
 	// Diagnostics: light tile culling's pass runs, but the opaque colour pass does not read its masks.
 	GLOBAL_DEF("rendering/fellow/debug/tile_cull_pass_only", false);
+	// Diagnostics: light tile culling split around the async compute part (0 when async compute runs, 1 always, 2 never).
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/debug/tile_cull_split", PROPERTY_HINT_ENUM, "With Async Compute,Always,Never"), 0);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/lights/hot_fields_buffer", PROPERTY_HINT_ENUM, "Off,Storage Buffer,Uniform Buffer"), 0);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/lights/prefetch_next", PROPERTY_HINT_ENUM, "Off,Range Test Fields,All Hot Fields,Range Test Fields And Words,All Hot Fields And Words"), 0);
 	GLOBAL_DEF("rendering/fellow/postfx/ssao_shared_tile", false);
@@ -259,6 +261,7 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["postfx_coherent_gathers"] = s.postfx_coherent_gathers.get();
 	d["postfx_last_frame_direct"] = s.postfx_last_frame_direct.get();
 	d["lights_tile_cull_frames"] = s.lights_tile_cull_frames.get();
+	d["lights_tile_cull_split_frames"] = s.lights_tile_cull_split_frames.get();
 	d["lights_cluster_draws"] = s.lights_cluster_draws.get();
 	d["lights_cluster_elements"] = s.lights_cluster_elements.get();
 	d["lights_cluster_verify_words"] = s.lights_cluster_verify_words.get();

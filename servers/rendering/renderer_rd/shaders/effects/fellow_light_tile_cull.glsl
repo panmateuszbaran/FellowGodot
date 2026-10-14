@@ -23,8 +23,26 @@
 
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
+// Variants (decision 0049, v6): the whole pass (default); MODE_DEPTH_BOUNDS, only the tiles' depth bounds (recorded
+// before the async compute part, so that the depth buffer is in its sampled layout when both queues read it); and
+// MODE_FROM_BOUNDS, the rest from those bounds (recorded beside the async part: it does not read the depth buffer).
+#ifndef MODE_FROM_BOUNDS
 layout(set = 0, binding = 0) uniform sampler2D depth_buffer;
+#endif
 
+#if defined(MODE_DEPTH_BOUNDS)
+layout(set = 0, binding = 5, std430) restrict writeonly buffer TileDepthBounds {
+	uint data[];
+}
+tile_bounds;
+#elif defined(MODE_FROM_BOUNDS)
+layout(set = 0, binding = 5, std430) restrict readonly buffer TileDepthBounds {
+	uint data[];
+}
+tile_bounds;
+#endif
+
+#ifndef MODE_DEPTH_BOUNDS
 layout(set = 0, binding = 1, std430) restrict readonly buffer ClusterData {
 	uint data[];
 }
@@ -44,6 +62,7 @@ layout(set = 0, binding = 4, std430) restrict writeonly buffer TileMasks {
 	uint data[];
 }
 tile_masks;
+#endif
 
 layout(push_constant, std430) uniform Params {
 	mat4 inv_projection; // NDC (x, y in -1..1, depth as stored) to view space, as the colour pass projects
@@ -78,10 +97,26 @@ void main() {
 	uvec2 cluster_pos = (block * 16u) >> params.cluster_shift;
 	uint cluster_offset = (params.cluster_width * cluster_pos.y + cluster_pos.x) * (params.words + 32u);
 
+#ifdef MODE_FROM_BOUNDS
+	if (lid < 4u) {
+		uvec2 t_pos = block * 2u + uvec2(lid & 1u, lid >> 1u);
+		uint min_bits = 0x7F800000u; // as the depth pass leaves a tile outside the screen: no geometry
+		uint max_bits = 0u;
+		if (t_pos.x < params.tiles_x && t_pos.y < params.tiles_y) {
+			uint b = (t_pos.y * params.tiles_x + t_pos.x) * 2u;
+			min_bits = tile_bounds.data[b];
+			max_bits = tile_bounds.data[b + 1u];
+		}
+		s_depth_min[lid] = min_bits;
+		s_depth_max[lid] = max_bits;
+	}
+#else
 	if (lid < 4u) {
 		s_depth_min[lid] = 0x7F800000u; // +infinity
 		s_depth_max[lid] = 0u;
 	}
+#endif
+#ifndef MODE_DEPTH_BOUNDS
 	for (uint w = lid; w < total_words; w += 64u) {
 		uint type = w / params.words;
 		s_cluster[w] = cluster.data[cluster_offset + type * params.cluster_type_size + (w - type * params.words)];
@@ -89,8 +124,10 @@ void main() {
 	for (uint w = lid; w < 4u * total_words; w += 64u) {
 		s_mask[w] = 0u;
 	}
+#endif
 	barrier();
 
+#ifndef MODE_FROM_BOUNDS
 	// Depths: thread lid takes 2 x 2 pixels of tile lid / 16 (non-negative floats: their bits order as the values).
 	uint tile = lid >> 4u;
 	uvec2 tile_offset = uvec2(tile & 1u, tile >> 1u) * 8u;
@@ -113,6 +150,18 @@ void main() {
 		atomicMax(s_depth_max[tile], floatBitsToUint(local_max));
 	}
 	barrier();
+#endif
+
+#ifdef MODE_DEPTH_BOUNDS
+	if (lid < 4u) {
+		uvec2 t_pos = block * 2u + uvec2(lid & 1u, lid >> 1u);
+		if (t_pos.x < params.tiles_x && t_pos.y < params.tiles_y) {
+			uint b = (t_pos.y * params.tiles_x + t_pos.x) * 2u;
+			tile_bounds.data[b] = s_depth_min[lid];
+			tile_bounds.data[b + 1u] = s_depth_max[lid];
+		}
+	}
+#else
 
 	// The corners of each tile's frustum between its depths (threads 0-31: tile lid / 8, corner lid % 8).
 	if (lid < 32u) {
@@ -185,4 +234,5 @@ void main() {
 			tile_masks.data[(tile_pos.y * params.tiles_x + tile_pos.x) * total_words + (i - t * total_words)] = s_mask[i];
 		}
 	}
+#endif // !MODE_DEPTH_BOUNDS
 }
