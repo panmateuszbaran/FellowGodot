@@ -53,7 +53,7 @@ and no MSAA; otherwise every tile is shaded at full rate.
 | Shadows | `shadows/batched_taps` (from `fellow104`: soft shadow filter taps fetched four at a time, stock's arithmetic; frame −2 to −5 %) | 0040 |
 | Geometry | `geometry/mesh_clusters` (frustum culling inside large static surfaces) | 0007 |
 | Geometry | `geometry/multimesh_culling` (from `fellow93`: MultiMesh instances culled one by one per pass on the GPU; an autotune tunable), `geometry/multimesh_cull_min_instances`, `geometry/multimesh_cull_min_indices` | 0034 |
-| Lights | `lights/cluster_depth_slices`, `lights/zero_attenuation_skip`, `lights/cluster_pack_parallel` | 0008, 0014 |
+| Lights | `lights/cluster_depth_slices`, `lights/zero_attenuation_skip`, `lights/cluster_pack_parallel`, `lights/fields_early` (from `fellow115`; on RTX City Lab one level off in a few pixels, the driver's rounding) | 0008, 0014, 0045 |
 | Shading | `shading/blended_alpha_zero_skip` | 0010 |
 | Post | `postfx/fast_luminance_reduce`, `postfx/taa_history_pingpong`, `postfx/taa_direct_output`, `postfx/taa_shared_velocity` (start-up), `postfx/ss_last_frame_direct` | 0025, 0002, 0033, 0044 |
 | Render thread | `cpu/parallel_*`, `cpu/batched_shadow_lists`, `cpu/compact_shadow_instances`, `cpu/persistent_instances` | 0016, 0018, 0022 |
