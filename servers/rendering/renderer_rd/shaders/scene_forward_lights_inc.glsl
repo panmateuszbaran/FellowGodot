@@ -1057,6 +1057,14 @@ void light_process_omni(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 	}
 #endif
 	FELLOW_DBG_INC(fellow_dbg_light_range);
+#ifdef FELLOW_EXP_BIT19
+	// Diagnostics (debug/scene_shader_experiments 524288; the image changes): the light stops after its range test (the
+	// loop and the range tests kept, nothing after them).
+	if (taa_frame_count >= 0.0) {
+		diffuse_light += hvec3(half(light_length * 1e-3));
+		return;
+	}
+#endif
 	half omni_attenuation = get_omni_attenuation(light_length, FELLOW_LO(inv_radius), FELLOW_LO(attenuation));
 #ifdef FELLOW_BACKFACING_LIGHT_SKIP_OK
 	// (The shadow lookup and light_compute() both do nothing at or below HALF_FLT_MIN.)
@@ -1479,6 +1487,14 @@ void light_process_spot(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 	}
 #endif
 	FELLOW_DBG_INC(fellow_dbg_light_range);
+#ifdef FELLOW_EXP_BIT19
+	// Diagnostics (debug/scene_shader_experiments 524288; the image changes): the light stops after its range test (the
+	// loop and the range tests kept, nothing after them).
+	if (taa_frame_count >= 0.0) {
+		diffuse_light += hvec3(half(light_length * 1e-3));
+		return;
+	}
+#endif
 	half spot_attenuation = get_omni_attenuation(light_length, FELLOW_LS(inv_radius), FELLOW_LS(attenuation));
 	vec3 spot_dir = FELLOW_LS(direction);
 	float cone_angle = FELLOW_LS(cone_angle);
