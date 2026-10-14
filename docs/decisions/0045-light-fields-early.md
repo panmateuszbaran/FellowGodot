@@ -6,8 +6,8 @@ Diagnostics `debug/scene_shader_experiments` 65536 (no `light_compute()` for omn
 shadow lookups), 262144 with 8 (light counts as the colour; with 32 lights within range), 524288 (lights stop after
 their range test) · Code:
 `scene_forward_lights_inc.glsl` (`light_process_omni`, `light_process_spot`: `FELLOW_LO`, `FELLOW_LS`),
-`scene_forward_clustered.glsl` (the counts), `scene_forward_clustered_inc.glsl`, `render_forward_clustered.cpp`,
-`fellow_autotune.*`, `fellow_settings.*`.
+`scene_forward_clustered.glsl` (the counts), `scene_forward_clustered_inc.glsl`, `render_forward_clustered.cpp` (the bit
+set after the lights are set up), `fellow_settings.*`.
 
 ## Where the time goes
 
