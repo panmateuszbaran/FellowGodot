@@ -3074,11 +3074,35 @@ void fragment_shader(in SceneData scene_data) {
 				FELLOW_DBG_INC(fellow_dbg_light_own);
 				uint light_index = 32 * i + bit;
 
-				if (!bool(omni_lights.data[light_index].mask & FELLOW_INSTANCE(layer_mask))) {
+#ifdef FELLOW_HAS_LIGHT_FIELDS_EARLY
+				// FellowEngine (lights/fields_early, decision 0045): the light's layer mask, bake mode and the fields of its
+				// tests and shading read together, before the tests (the same values).
+				uint fellow_light_mask;
+				uint fellow_light_bake;
+				if (sc_fellow_light_fields_early()) {
+					fellow_light_mask = omni_lights.data[light_index].mask;
+					fellow_light_bake = omni_lights.data[light_index].bake_mode;
+					fellow_lpf_position = omni_lights.data[light_index].position;
+					fellow_lpf_inv_radius = omni_lights.data[light_index].inv_radius;
+					fellow_lpf_attenuation = omni_lights.data[light_index].attenuation;
+					fellow_lpf_color = omni_lights.data[light_index].color;
+					fellow_lpf_size = omni_lights.data[light_index].size;
+					fellow_lpf_specular_amount = omni_lights.data[light_index].specular_amount;
+					fellow_lpf_shadow_opacity = omni_lights.data[light_index].shadow_opacity;
+				} else {
+					fellow_light_mask = omni_lights.data[light_index].mask;
+					fellow_light_bake = omni_lights.data[light_index].bake_mode;
+				}
+#else
+				uint fellow_light_mask = omni_lights.data[light_index].mask;
+				uint fellow_light_bake = omni_lights.data[light_index].bake_mode;
+#endif
+
+				if (!bool(fellow_light_mask & FELLOW_INSTANCE(layer_mask))) {
 					continue; //not masked
 				}
 
-				if (omni_lights.data[light_index].bake_mode == LIGHT_BAKE_STATIC && bool(fellow_flags & INSTANCE_FLAGS_USE_LIGHTMAP)) {
+				if (fellow_light_bake == LIGHT_BAKE_STATIC && bool(fellow_flags & INSTANCE_FLAGS_USE_LIGHTMAP)) {
 					continue; // Statically baked light and object uses lightmap, skip
 				}
 
@@ -3146,11 +3170,38 @@ void fragment_shader(in SceneData scene_data) {
 				FELLOW_DBG_INC(fellow_dbg_light_own);
 				uint light_index = 32 * i + bit;
 
-				if (!bool(spot_lights.data[light_index].mask & FELLOW_INSTANCE(layer_mask))) {
+#ifdef FELLOW_HAS_LIGHT_FIELDS_EARLY
+				// FellowEngine (lights/fields_early, decision 0045): the light's layer mask, bake mode and the fields of its
+				// tests and shading read together, before the tests (the same values).
+				uint fellow_light_mask;
+				uint fellow_light_bake;
+				if (sc_fellow_light_fields_early()) {
+					fellow_light_mask = spot_lights.data[light_index].mask;
+					fellow_light_bake = spot_lights.data[light_index].bake_mode;
+					fellow_lpf_position = spot_lights.data[light_index].position;
+					fellow_lpf_inv_radius = spot_lights.data[light_index].inv_radius;
+					fellow_lpf_attenuation = spot_lights.data[light_index].attenuation;
+					fellow_lpf_color = spot_lights.data[light_index].color;
+					fellow_lpf_size = spot_lights.data[light_index].size;
+					fellow_lpf_specular_amount = spot_lights.data[light_index].specular_amount;
+					fellow_lpf_shadow_opacity = spot_lights.data[light_index].shadow_opacity;
+					fellow_lpf_direction = spot_lights.data[light_index].direction;
+					fellow_lpf_cone_angle = spot_lights.data[light_index].cone_angle;
+					fellow_lpf_cone_attenuation = spot_lights.data[light_index].cone_attenuation;
+				} else {
+					fellow_light_mask = spot_lights.data[light_index].mask;
+					fellow_light_bake = spot_lights.data[light_index].bake_mode;
+				}
+#else
+				uint fellow_light_mask = spot_lights.data[light_index].mask;
+				uint fellow_light_bake = spot_lights.data[light_index].bake_mode;
+#endif
+
+				if (!bool(fellow_light_mask & FELLOW_INSTANCE(layer_mask))) {
 					continue; //not masked
 				}
 
-				if (spot_lights.data[light_index].bake_mode == LIGHT_BAKE_STATIC && bool(fellow_flags & INSTANCE_FLAGS_USE_LIGHTMAP)) {
+				if (fellow_light_bake == LIGHT_BAKE_STATIC && bool(fellow_flags & INSTANCE_FLAGS_USE_LIGHTMAP)) {
 					continue; // Statically baked light and object uses lightmap, skip
 				}
 

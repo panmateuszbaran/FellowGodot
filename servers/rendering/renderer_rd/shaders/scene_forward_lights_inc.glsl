@@ -1010,6 +1010,21 @@ half get_omni_attenuation(float distance, float inv_range, float decay) {
 	return half(nd * pow(max(distance, 0.0001), -decay));
 }
 
+#ifdef FELLOW_HAS_LIGHT_FIELDS_EARLY
+// FellowEngine (rendering/fellow/lights/fields_early, decision 0045): the fields of the light being processed, read by
+// the clustered light loop together with its layer mask and bake mode, before the tests of either.
+vec3 fellow_lpf_position;
+float fellow_lpf_inv_radius;
+float fellow_lpf_attenuation;
+vec3 fellow_lpf_color;
+float fellow_lpf_size;
+float fellow_lpf_specular_amount;
+float fellow_lpf_shadow_opacity;
+vec3 fellow_lpf_direction;
+float fellow_lpf_cone_angle;
+float fellow_lpf_cone_attenuation;
+#endif
+
 void light_process_omni(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3 vertex_ddx, vec3 vertex_ddy, hvec3 f0, half roughness, half metallic, float taa_frame_count, hvec3 albedo, inout half alpha, vec2 screen_uv, hvec3 energy_compensation,
 #ifdef LIGHT_BACKLIGHT_USED
 		hvec3 backlight,
@@ -1030,15 +1045,15 @@ void light_process_omni(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 #endif
 		inout hvec3 diffuse_light, inout hvec3 specular_light) {
 #ifdef FELLOW_HAS_LIGHT_FIELDS_EARLY
-	// FellowEngine (rendering/fellow/lights/fields_early, decision 0045): the fields of the light's tests and shading read
-	// together here (the same values) instead of each where it is used, after the tests before it.
-	vec3 fellow_l_position = omni_lights.data[idx].position;
-	float fellow_l_inv_radius = omni_lights.data[idx].inv_radius;
-	float fellow_l_attenuation = omni_lights.data[idx].attenuation;
-	vec3 fellow_l_color = omni_lights.data[idx].color;
-	float fellow_l_size = omni_lights.data[idx].size;
-	float fellow_l_specular_amount = omni_lights.data[idx].specular_amount;
-	float fellow_l_shadow_opacity = omni_lights.data[idx].shadow_opacity;
+	// FellowEngine (rendering/fellow/lights/fields_early, decision 0045): the fields of the light's tests and shading, read
+	// by the light loop before its first test (fellow_lpf_*), instead of each where it is used, after the tests before it.
+	vec3 fellow_l_position = fellow_lpf_position;
+	float fellow_l_inv_radius = fellow_lpf_inv_radius;
+	float fellow_l_attenuation = fellow_lpf_attenuation;
+	vec3 fellow_l_color = fellow_lpf_color;
+	float fellow_l_size = fellow_lpf_size;
+	float fellow_l_specular_amount = fellow_lpf_specular_amount;
+	float fellow_l_shadow_opacity = fellow_lpf_shadow_opacity;
 #define FELLOW_LO(m_field) (sc_fellow_light_fields_early() ? fellow_l_##m_field : omni_lights.data[idx].m_field)
 #else
 #define FELLOW_LO(m_field) omni_lights.data[idx].m_field
@@ -1457,18 +1472,18 @@ void light_process_spot(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 		inout hvec3 diffuse_light,
 		inout hvec3 specular_light) {
 #ifdef FELLOW_HAS_LIGHT_FIELDS_EARLY
-	// FellowEngine (rendering/fellow/lights/fields_early, decision 0045): the fields of the light's tests and shading read
-	// together here (the same values) instead of each where it is used, after the tests before it.
-	vec3 fellow_l_position = spot_lights.data[idx].position;
-	float fellow_l_inv_radius = spot_lights.data[idx].inv_radius;
-	float fellow_l_attenuation = spot_lights.data[idx].attenuation;
-	vec3 fellow_l_color = spot_lights.data[idx].color;
-	float fellow_l_size = spot_lights.data[idx].size;
-	float fellow_l_specular_amount = spot_lights.data[idx].specular_amount;
-	float fellow_l_shadow_opacity = spot_lights.data[idx].shadow_opacity;
-	vec3 fellow_l_direction = spot_lights.data[idx].direction;
-	float fellow_l_cone_angle = spot_lights.data[idx].cone_angle;
-	float fellow_l_cone_attenuation = spot_lights.data[idx].cone_attenuation;
+	// FellowEngine (rendering/fellow/lights/fields_early, decision 0045): the fields of the light's tests and shading, read
+	// by the light loop before its first test (fellow_lpf_*), instead of each where it is used, after the tests before it.
+	vec3 fellow_l_position = fellow_lpf_position;
+	float fellow_l_inv_radius = fellow_lpf_inv_radius;
+	float fellow_l_attenuation = fellow_lpf_attenuation;
+	vec3 fellow_l_color = fellow_lpf_color;
+	float fellow_l_size = fellow_lpf_size;
+	float fellow_l_specular_amount = fellow_lpf_specular_amount;
+	float fellow_l_shadow_opacity = fellow_lpf_shadow_opacity;
+	vec3 fellow_l_direction = fellow_lpf_direction;
+	float fellow_l_cone_angle = fellow_lpf_cone_angle;
+	float fellow_l_cone_attenuation = fellow_lpf_cone_attenuation;
 #define FELLOW_LS(m_field) (sc_fellow_light_fields_early() ? fellow_l_##m_field : spot_lights.data[idx].m_field)
 #else
 #define FELLOW_LS(m_field) spot_lights.data[idx].m_field
