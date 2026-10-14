@@ -103,6 +103,8 @@ CopyEffects::CopyEffects(BitField<RasterEffects> p_raster_effects) {
 		copy_modes.push_back("\n#define MODE_OCTMAP_ARRAY_TO_PANORAMA\n");
 		copy_modes.push_back("\n#define MODE_GAUSSIAN_BLUR\n#define MODE_GLOW\n#define FELLOW_BLUR_PAD\n");
 		copy_modes.push_back("\n#define MODE_GAUSSIAN_BLUR\n#define MODE_GLOW\n#define GLOW_USE_AUTO_EXPOSURE\n#define FELLOW_BLUR_PAD\n");
+		copy_modes.push_back("\n#define MODE_GAUSSIAN_BLUR\n#define MODE_GLOW\n#define FELLOW_GLOW_TILE16\n");
+		copy_modes.push_back("\n#define MODE_GAUSSIAN_BLUR\n#define MODE_GLOW\n#define GLOW_USE_AUTO_EXPOSURE\n#define FELLOW_GLOW_TILE16\n");
 
 		copy.shader.initialize(copy_modes);
 		memset(&copy.push_constant, 0, sizeof(CopyPushConstant));
@@ -825,9 +827,13 @@ void CopyEffects::gaussian_glow(RID p_source_rd_texture, RID p_back_texture, con
 	memset(&copy.push_constant, 0, sizeof(CopyPushConstant));
 
 	CopyMode copy_mode = p_first_pass && p_auto_exposure.is_valid() ? COPY_MODE_GAUSSIAN_GLOW_AUTO_EXPOSURE : COPY_MODE_GAUSSIAN_GLOW;
-	if (Fellow::glow_padded_blur()) {
+	const int fellow_glow_blur = Fellow::glow_blur();
+	if (fellow_glow_blur == 1) {
 		// FellowEngine (decision 0052): the same blur with a shared-memory layout free of bank conflicts.
 		copy_mode = copy_mode == COPY_MODE_GAUSSIAN_GLOW_AUTO_EXPOSURE ? COPY_MODE_GAUSSIAN_GLOW_AUTO_EXPOSURE_FELLOW_PAD : COPY_MODE_GAUSSIAN_GLOW_FELLOW_PAD;
+	} else if (fellow_glow_blur == 2) {
+		// FellowEngine (decision 0052): the same blur in 16 x 16 tiles (fewer samples per output), also without conflicts.
+		copy_mode = copy_mode == COPY_MODE_GAUSSIAN_GLOW_AUTO_EXPOSURE ? COPY_MODE_GAUSSIAN_GLOW_AUTO_EXPOSURE_FELLOW_TILE16 : COPY_MODE_GAUSSIAN_GLOW_FELLOW_TILE16;
 	}
 	uint32_t base_flags = 0;
 

@@ -6,7 +6,12 @@
 
 #include "../oct_inc.glsl"
 
+#ifdef FELLOW_GLOW_TILE16
+// FellowEngine (rendering/fellow/postfx/glow_blur 2, decision 0052): the Gaussian blur in 16 x 16 tiles.
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+#else
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+#endif
 
 #define FLAG_HORIZONTAL (1 << 0)
 #define FLAG_USE_BLUR_SECTION (1 << 1)
@@ -64,10 +69,15 @@ layout(rgba8, set = 3, binding = 0) uniform restrict writeonly image2D dest_buff
 layout(rgba16f, set = 3, binding = 0) uniform restrict writeonly image2D dest_buffer;
 #endif
 
-#ifdef MODE_GAUSSIAN_BLUR
+#if defined(MODE_GAUSSIAN_BLUR) && defined(FELLOW_GLOW_TILE16)
+// 24 x 24 bilinear samples (the 16 x 16 outputs and a border of 4), and the horizontal pass's 24 rows x 16 columns
+// stored by column with a stride of 25 entries (no bank conflicts in either pass).
+shared vec4 local_cache[24 * 24];
+shared vec4 temp_cache[16 * 25];
+#elif defined(MODE_GAUSSIAN_BLUR)
 shared vec4 local_cache[256];
 #ifdef FELLOW_BLUR_PAD
-// FellowEngine (rendering/fellow/postfx/glow_padded_blur, decision 0052): the horizontal pass's results stored with a
+// FellowEngine (rendering/fellow/postfx/glow_blur 1, decision 0052): the horizontal pass's results stored with a
 // column stride of 17 entries instead of 16. With 16, the eight invocations of a quarter warp (eight columns, one row)
 // access entries 16 vec4 apart, all in the same four banks of shared memory: every access of the vertical pass (and
 // the two stores before it) is an 8-way bank conflict. With 17 they fall in eight different groups of banks. The same
@@ -127,7 +137,116 @@ void main() {
 	imageStore(dest_buffer, pos + params.target, color);
 #endif
 
-#ifdef MODE_GAUSSIAN_BLUR
+#if defined(MODE_GAUSSIAN_BLUR) && defined(FELLOW_GLOW_TILE16)
+
+	// FellowEngine (decision 0052): stock's blur for 16 x 16 outputs per workgroup instead of 8 x 8, which takes 2.25
+	// bilinear samples per output instead of 4. Every sample is taken where stock takes it: stock's thread for the quad
+	// of an even dest pixel computes its UV (clamped), and the odd neighbours add one texel to it; here the UV of a sample
+	// is computed from its even neighbour's in the same way. The horizontal and vertical sums take the same operands in
+	// the same order.
+	uint lid = gl_LocalInvocationIndex;
+	ivec2 tile_origin = ivec2(gl_WorkGroupID.xy) * 16 - 4; // dest pixel of sample (0, 0)
+	for (uint e = lid; e < 24u * 24u; e += 256u) {
+		ivec2 c = ivec2(int(e % 24u), int(e / 24u));
+		ivec2 p = tile_origin + c;
+		ivec2 odd = p & 1;
+		// Stock: vec2(section.xy + gl_GlobalInvocationID.xy + gl_LocalInvocationID.xy - 3.5), where the two IDs sum to
+		// (even dest pixel + 4) for the quad's thread.
+		uvec2 even_plus_4 = uvec2(p - odd + 4);
+		vec2 quad_center_uv = clamp(vec2(params.section.xy + even_plus_4 - 3.5) / params.section.zw, vec2(0.5 / params.section.zw), vec2(1.0 - 1.5 / params.section.zw));
+		vec2 uv = quad_center_uv;
+		if (odd.x != 0 && odd.y != 0) {
+			uv = quad_center_uv + vec2(1.0 / params.section.zw);
+		} else if (odd.x != 0) {
+			uv = quad_center_uv + vec2(1.0 / params.section.z, 0.0);
+		} else if (odd.y != 0) {
+			uv = quad_center_uv + vec2(0.0, 1.0 / params.section.w);
+		}
+		vec4 sample_color = textureLod(source_color, uv, 0);
+#ifdef MODE_GLOW
+		if (bool(params.flags & FLAG_GLOW_FIRST_PASS)) {
+			// Tonemap initial samples to reduce weight of fireflies: https://graphicrants.blogspot.com/2013/12/tone-mapping.html
+			vec3 tonemap_col = vec3(0.299, 0.587, 0.114) / max(params.glow_luminance_cap, 6.0);
+			sample_color /= 1.0 + dot(sample_color.rgb, tonemap_col);
+		}
+#endif
+		local_cache[e] = sample_color;
+	}
+#ifdef MODE_GLOW
+	const float kernel[5] = { 0.2024, 0.1790, 0.1240, 0.0672, 0.0285 };
+#else
+	const float kernel[4] = { 0.214607, 0.189879, 0.131514, 0.071303 };
+#endif
+	memoryBarrierShared();
+	barrier();
+
+	// Horizontal pass: 24 rows x 16 columns.
+	for (uint h = lid; h < 24u * 16u; h += 256u) {
+		uint row = h / 16u;
+		uint col = h % 16u;
+		uint read_index = row * 24u + col + 4u;
+		vec4 color_h = vec4(0.0);
+		color_h += local_cache[read_index] * kernel[0];
+		color_h += local_cache[read_index + 1] * kernel[1];
+		color_h += local_cache[read_index + 2] * kernel[2];
+		color_h += local_cache[read_index + 3] * kernel[3];
+		color_h += local_cache[read_index - 1] * kernel[1];
+		color_h += local_cache[read_index - 2] * kernel[2];
+		color_h += local_cache[read_index - 3] * kernel[3];
+#ifdef MODE_GLOW
+		color_h += local_cache[read_index + 4] * kernel[4];
+		color_h += local_cache[read_index - 4] * kernel[4];
+#endif
+		temp_cache[row + col * 25u] = color_h;
+	}
+
+	memoryBarrierShared();
+	barrier();
+
+	if (any(greaterThanEqual(pos, params.section.zw))) {
+		return;
+	}
+
+	// Vertical pass.
+	uint index = gl_LocalInvocationID.y + gl_LocalInvocationID.x * 25u + 4u;
+	vec4 color = vec4(0.0);
+
+	color += temp_cache[index] * kernel[0];
+	color += temp_cache[index + 1] * kernel[1];
+	color += temp_cache[index + 2] * kernel[2];
+	color += temp_cache[index + 3] * kernel[3];
+	color += temp_cache[index - 1] * kernel[1];
+	color += temp_cache[index - 2] * kernel[2];
+	color += temp_cache[index - 3] * kernel[3];
+#ifdef MODE_GLOW
+	color += temp_cache[index + 4] * kernel[4];
+	color += temp_cache[index - 4] * kernel[4];
+#endif // MODE_GLOW
+
+#ifdef MODE_GLOW
+	if (bool(params.flags & FLAG_GLOW_FIRST_PASS)) {
+		// Undo tonemap to restore range: https://graphicrants.blogspot.com/2013/12/tone-mapping.html
+		color /= 1.0 - dot(color.rgb, vec3(0.299, 0.587, 0.114) / max(params.glow_luminance_cap, 6.0));
+	}
+
+	color *= params.glow_strength;
+
+	if (bool(params.flags & FLAG_GLOW_FIRST_PASS)) {
+#ifdef GLOW_USE_AUTO_EXPOSURE
+
+		color /= texelFetch(source_auto_exposure, ivec2(0, 0), 0).r / params.glow_auto_exposure_scale;
+#endif
+		color *= params.glow_exposure;
+
+		float luminance = max(color.r, max(color.g, color.b));
+		float feedback = max(smoothstep(params.glow_hdr_threshold, params.glow_hdr_threshold + params.glow_hdr_scale, luminance), params.glow_bloom);
+
+		color = min(color * feedback, vec4(params.glow_luminance_cap));
+	}
+#endif // MODE_GLOW
+	imageStore(dest_buffer, pos + params.target, color);
+
+#elif defined(MODE_GAUSSIAN_BLUR)
 
 	// First pass copy texture into 16x16 local memory for every 8x8 thread block
 	vec2 quad_center_uv = clamp(vec2(params.section.xy + gl_GlobalInvocationID.xy + gl_LocalInvocationID.xy - 3.5) / params.section.zw, vec2(0.5 / params.section.zw), vec2(1.0 - 1.5 / params.section.zw));
