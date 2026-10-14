@@ -93,7 +93,29 @@ visit a subset of the lights they visited before, and v2's fragment code (a choi
 than v1's (an AND) in both Lights Lab (−0.128 against −0.209 ms) and Bistro interior (+0.117 against +0.067): the
 driver's code for the colour pass changes with the shape of the change (0048).
 
-### v3 (`fellow121`, `m9_f138`)
+### v3-v5: separating the pass, the code path and the culling (`m9_f138`-`m9_f140`)
 
-The AND of v1, gated by the specialization bit alone; `debug/tile_cull_passthrough` keeps every candidate (the code path
-without its effect). Pending.
+v3 (`fellow121`): the AND of v1, gated by the specialization bit alone. Diagnostics: `debug/tile_cull_passthrough` keeps
+every candidate (the code path without its effect), `debug/tile_cull_pass_only` (from v5) runs the pass without the
+colour pass reading it. v4 (`fellow122`): the masks word-major (made the pass slower: 0.05-0.07 ms, no gain in the colour
+pass; dropped in v5) and read only for non-empty cluster words (kept). v5 (`fellow123`, `m9_f140_tc_ab`), frame against
+off:
+
+| scene | on | passthrough | pass only | opaque pass: on / passthrough / pass only |
+|---|---:|---:|---:|---:|
+| Lights Lab | **−5.8 %** | +2.5 % | +1.6 % | −0.210 / +0.015 / −0.009 ms |
+| Bistro interior | **+4.9 %** | +5.8 % | +2.6 % | +0.055 / +0.066 / +0.015 |
+| City Lab | +0.6 % (n.s.) | +1.3 % (n.s.) | +2.2 % | −0.008 / +0.004 / +0.001 |
+
+(v3, `m9_f138`: Lights Lab −6.1 %, Bistro interior +3.5 %, PBR Lab +3.9 %, City Lab +0.7 %; v4: PBR Lab's opaque pass
++0.005 ms instead of +0.047 with the conditional reads.) The pass costs 0.034-0.054 ms; in Lights Lab culling takes
+0.2 ms off the opaque pass. In Bistro interior the culling itself saves nothing (on ≈ passthrough), and with the masks
+in use every pass of the frame is 2-6 % slower (glow, SSAO, TAA, tonemap alike), as if the GPU ran at a lower clock: a
+cost outside the shader's code, measured but not explained.
+
+## Per scene: autotune
+
+The cost and the benefit depend on the scene (lights per pixel and how much of them the tiles cut). Both choices are
+exact, so the toggle is an autotune tunable (`TUNE_LIGHT_TILE_CULL`, decision 0020): while the pass can run (the
+conditions above, omni or spot lights in view), autotune compares blocks of frames with and without it and keeps the
+faster. Measured between processes with autotune on: pending (`m9_f141`).

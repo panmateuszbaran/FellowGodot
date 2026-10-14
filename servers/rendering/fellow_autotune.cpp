@@ -269,6 +269,14 @@ bool changes_image(int p_tunable) {
 	return p_tunable == TUNE_ADAPTIVE_VRS;
 }
 
+// Tunables that start off and are switched on only by an evaluation that measures them faster (undecided evaluations
+// repeated at the base interval, pooled): the image-changing ones, and light tile culling (decision 0049: 6 % faster
+// where many lights overlap, up to 5 % slower elsewhere; m9_f143: started on, undecided evaluations kept it on in Bistro
+// interior and PBR Lab, where it costs).
+bool starts_off(int p_tunable) {
+	return changes_image(p_tunable) || p_tunable == TUNE_LIGHT_TILE_CULL;
+}
+
 void decide(TuneState &s) {
 	const Analysis e = analyze(s, AUTOTUNE_PAIRS);
 	const Analysis r = e.pairs >= AUTOTUNE_PAIRS - 1 ? pool(s, e) : e;
@@ -281,7 +289,7 @@ void decide(TuneState &s) {
 			decided = true;
 		}
 	}
-	finish(s, new_choice, r, false, !decided && !new_choice && changes_image(int(&s - states)));
+	finish(s, new_choice, r, false, !decided && !new_choice && starts_off(int(&s - states)));
 }
 
 bool try_decide_early(TuneState &s) {
@@ -373,7 +381,7 @@ void autotune_frame_begin() {
 		}
 		if (!s.started) {
 			s.started = true;
-			s.choice = !changes_image(t);
+			s.choice = !starts_off(t);
 			s.interval = (uint32_t)MAX(1, GLOBAL_GET_CACHED(int, "rendering/fellow/autotune/interval_frames"));
 			s.next_eval = frame_id + s.interval * 2 / 5;
 			s.recheck_spacing = MAX(1u, s.interval / 2);
