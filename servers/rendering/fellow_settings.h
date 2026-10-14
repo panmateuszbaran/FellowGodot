@@ -480,6 +480,12 @@ inline bool light_cluster_instanced_draws() {
 	return lights_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/lights/cluster_instanced_draws");
 }
 
+// Diagnostics (decision 0051): with cluster_pack_elements and cluster_instanced_draws, the render pass still sets the
+// depth words of elements whose slices come from their range (v1 of the decision). Read every frame.
+inline bool light_cluster_keep_depth_words() {
+	return GLOBAL_GET_CACHED(bool, "rendering/fellow/debug/cluster_keep_depth_words");
+}
+
 // Debug (decision 0051): every light cluster build with cluster_pack_elements or cluster_instanced_draws is repeated with
 // one draw per element and the pack of decision 0014 (or stock's), and both results are read back and compared word for
 // word (stats lights_cluster_verify_*); after the element pack, the render buffer is checked to be all zero. Slow.

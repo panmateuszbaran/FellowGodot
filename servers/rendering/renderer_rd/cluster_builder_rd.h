@@ -211,8 +211,8 @@ private:
 		FELLOW_PACK_PARALLEL,
 		FELLOW_PACK_ELEMENTS,
 	};
-	void _fellow_render_elements(bool p_instanced);
-	void _fellow_pack(FellowPackMode p_mode);
+	void _fellow_render_elements(bool p_instanced, bool p_skip_range_depth);
+	void _fellow_pack(FellowPackMode p_mode, bool p_range_depth_skipped);
 
 	// FellowEngine (decision 0051): the proxy mesh an element is drawn with (0 sphere, 1 cone, 2 box).
 	static _FORCE_INLINE_ uint32_t _fellow_proxy_mesh(const RenderElementData &p_e) {

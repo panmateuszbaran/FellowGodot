@@ -8,10 +8,13 @@ layout(location = 0) in vec3 vertex_attrib;
 
 layout(location = 0) out float depth_interp;
 layout(location = 1) out flat uint element_index;
+#ifdef FELLOW_INSTANCED
+layout(location = 2) out flat uint fellow_skip_depth;
+#endif
 
 layout(push_constant, std430) uniform Params {
 	uint base_index;
-	uint pad0;
+	uint pad0; // FellowEngine (FELLOW_INSTANCED): 1 when the pack pass takes range elements' slices from their range alone
 	uint pad1;
 	uint pad2;
 }
@@ -49,6 +52,12 @@ render_elements;
 
 void main() {
 	element_index = params.base_index + gl_InstanceIndex;
+#ifdef FELLOW_INSTANCED
+	// FellowEngine (decision 0051): an element whose depth slices come from its conservative range (bit 1) needs no
+	// depth bits when the element pack pass runs (it takes the slices from the range and the element's bit as the
+	// proof that the element reached the tile, which the depth word only repeats).
+	fellow_skip_depth = (params.pad0 != 0u && (render_elements.data[element_index].pad & 2u) != 0u) ? 1u : 0u;
+#endif
 
 	vec3 vertex = vertex_attrib;
 	vertex *= render_elements.data[element_index].scale;
@@ -75,6 +84,9 @@ layout(constant_id = 0) const bool sc_use_helper_check = true;
 
 layout(location = 0) in float depth_interp;
 layout(location = 1) in flat uint element_index;
+#ifdef FELLOW_INSTANCED
+layout(location = 2) in flat uint fellow_skip_depth;
+#endif
 
 layout(set = 0, binding = 1, std140) uniform State {
 	mat4 projection;
@@ -172,8 +184,8 @@ void main() {
 #endif
 	uint z_write_bit = 1 << z_bit;
 
-	if (!sc_use_helper_check || !gl_HelperInvocation) {
 #ifdef FELLOW_INSTANCED
+	if (fellow_skip_depth == 0u && (!sc_use_helper_check || !gl_HelperInvocation)) {
 		uint merged_bits = 0;
 		while (true) {
 			uint first_element = subgroupBroadcastFirst(element_index);
@@ -184,6 +196,7 @@ void main() {
 		}
 		z_write_bit = merged_bits;
 #else
+	if (!sc_use_helper_check || !gl_HelperInvocation) {
 		z_write_bit = subgroupOr(z_write_bit); //merge all Zs
 #endif
 		if (cluster_thread_group_index == 0) {

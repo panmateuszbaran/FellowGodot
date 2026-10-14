@@ -89,9 +89,10 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/lights/cluster_depth_slices", true);
 	GLOBAL_DEF("rendering/fellow/lights/zero_attenuation_skip", true);
 	GLOBAL_DEF("rendering/fellow/lights/cluster_pack_parallel", true);
-	GLOBAL_DEF("rendering/fellow/lights/cluster_pack_elements", false);
-	GLOBAL_DEF("rendering/fellow/lights/cluster_instanced_draws", false);
+	GLOBAL_DEF("rendering/fellow/lights/cluster_pack_elements", true);
+	GLOBAL_DEF("rendering/fellow/lights/cluster_instanced_draws", true);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/debug/cluster_verify", PROPERTY_HINT_ENUM, "Off,Verify,Verify With Negative Control"), 0);
+	GLOBAL_DEF("rendering/fellow/debug/cluster_keep_depth_words", false);
 	GLOBAL_DEF("rendering/fellow/lights/fields_early", true);
 	GLOBAL_DEF("rendering/fellow/lights/tile_cull", true); // under autotune: off until measured faster (decision 0049)
 	// Diagnostics: light tile culling keeps every candidate (the opaque colour pass's code path, without its effect).
@@ -101,7 +102,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/lights/hot_fields_buffer", PROPERTY_HINT_ENUM, "Off,Storage Buffer,Uniform Buffer"), 0);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/lights/prefetch_next", PROPERTY_HINT_ENUM, "Off,Range Test Fields,All Hot Fields,Range Test Fields And Words,All Hot Fields And Words"), 0);
 	GLOBAL_DEF("rendering/fellow/postfx/ssao_shared_tile", false);
-	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/postfx/glow_blur", PROPERTY_HINT_ENUM, "Stock,Padded,Tiles 16x16"), 0);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/postfx/glow_blur", PROPERTY_HINT_ENUM, "Stock,Padded,Tiles 16x16"), 2); // decision 0052
 	GLOBAL_DEF("rendering/fellow/postfx/ss_coherent_gather", false);
 	GLOBAL_DEF("rendering/fellow/postfx/fast_luminance_reduce", true);
 	GLOBAL_DEF("rendering/fellow/postfx/ssao_temporal", false);

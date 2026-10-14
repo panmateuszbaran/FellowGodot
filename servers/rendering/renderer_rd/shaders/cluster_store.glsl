@@ -24,7 +24,7 @@ layout(push_constant, std430) uniform Params {
 	uint render_element_count_div_32; //divided by 32
 
 	uint max_cluster_element_count_div_32; //divided by 32
-	uint pad1; // FellowEngine: bit 0, the negative control of debug/cluster_verify (FELLOW_PACK_ELEMENTS)
+	uint pad1; // FellowEngine (FELLOW_PACK_ELEMENTS): bit 0, the negative control of debug/cluster_verify; bit 1, range elements drawn without depth words
 	uint pad2;
 }
 params;
@@ -108,9 +108,17 @@ void main() {
 		}
 		if ((bits & (1u << lane)) != 0u) {
 			uint index = w * 32u + lane;
-			uint z_range_offset = src_offset + params.max_render_element_count_div_32 + index;
-			uint z_range = cluster_render.data[z_range_offset];
-			cluster_render.data[z_range_offset] = 0u; // Only this invocation reads this word.
+			uint fellow_range = render_elements.data[index].pad;
+			uint z_range;
+			if ((params.pad1 & 2u) != 0u && (fellow_range & 2u) != 0u) {
+				// The render pass set the element's bit but not its depth word (it was drawn with fellow_skip_depth): the
+				// bit is set where the depth word would be non-zero, and the slices come from the range below.
+				z_range = 1u;
+			} else {
+				uint z_range_offset = src_offset + params.max_render_element_count_div_32 + index;
+				z_range = cluster_render.data[z_range_offset];
+				cluster_render.data[z_range_offset] = 0u; // Only this invocation reads this word.
+			}
 
 			if (z_range != 0u) {
 				uint type = render_elements.data[index].type;
@@ -125,7 +133,6 @@ void main() {
 					to_z = 32;
 				}
 
-				uint fellow_range = render_elements.data[index].pad;
 				if ((fellow_range & 2u) != 0u) {
 					from_z = (fellow_range >> 8) & 0xFFu;
 					to_z = (fellow_range >> 16) & 0xFFu;

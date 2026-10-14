@@ -461,10 +461,11 @@ void ClusterBuilderRD::begin(const Transform3D &p_view_transform, const Projecti
 	}
 }
 
-void ClusterBuilderRD::_fellow_render_elements(bool p_instanced) {
+void ClusterBuilderRD::_fellow_render_elements(bool p_instanced, bool p_skip_range_depth) {
 	{
 		RD::DrawListID draw_list = RD::get_singleton()->draw_list_begin(framebuffer);
 		ClusterBuilderSharedDataRD::ClusterRender::PushConstant push_constant = {};
+		push_constant.pad0 = (p_instanced && p_skip_range_depth) ? 1 : 0; // FELLOW_INSTANCED: no depth words for range elements.
 
 		const ClusterBuilderSharedDataRD::ClusterRender::PipelineVersion pipeline_version = use_msaa ? ClusterBuilderSharedDataRD::ClusterRender::PIPELINE_MSAA : ClusterBuilderSharedDataRD::ClusterRender::PIPELINE_NORMAL;
 		RD::get_singleton()->draw_list_bind_render_pipeline(draw_list, p_instanced ? shared->cluster_render.fellow_instanced_pipelines[pipeline_version] : shared->cluster_render.shader_pipelines[pipeline_version]);
@@ -524,7 +525,7 @@ void ClusterBuilderRD::_fellow_render_elements(bool p_instanced) {
 	}
 }
 
-void ClusterBuilderRD::_fellow_pack(FellowPackMode p_mode) {
+void ClusterBuilderRD::_fellow_pack(FellowPackMode p_mode, bool p_range_depth_skipped) {
 	{
 		RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
 		RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, p_mode == FELLOW_PACK_ELEMENTS ? shared->cluster_store.fellow_pack_elements_pipeline : (p_mode == FELLOW_PACK_PARALLEL ? shared->cluster_store.fellow_parallel_pipeline : shared->cluster_store.shader_pipeline));
@@ -538,7 +539,11 @@ void ClusterBuilderRD::_fellow_pack(FellowPackMode p_mode) {
 
 		push_constant.render_element_count_div_32 = Math::division_round_up(render_element_count, 32U);
 		push_constant.max_cluster_element_count_div_32 = max_elements_by_type / 32;
-		push_constant.pad1 = (p_mode == FELLOW_PACK_ELEMENTS && Fellow::light_cluster_verify() == 2) ? 1 : 0;
+		push_constant.pad1 = 0;
+		if (p_mode == FELLOW_PACK_ELEMENTS) {
+			push_constant.pad1 |= Fellow::light_cluster_verify() == 2 ? 1 : 0; // Negative control.
+			push_constant.pad1 |= p_range_depth_skipped ? 2 : 0;
+		}
 		push_constant.pad2 = 0;
 
 		RD::get_singleton()->compute_list_set_push_constant(compute_list, &push_constant, sizeof(ClusterBuilderSharedDataRD::ClusterStore::PushConstant));
@@ -595,13 +600,16 @@ void ClusterBuilderRD::bake_cluster() {
 			RD::get_singleton()->buffer_clear(cluster_render_buffer, 0, cluster_render_buffer_size);
 		}
 
+		// With both, range elements are drawn without their depth words, which only the element pack can do without.
+		const bool fellow_skip_range_depth = fellow_instanced && fellow_pack_elements && !Fellow::light_cluster_keep_depth_words();
+
 		RENDER_TIMESTAMP("Render 3D Cluster Elements");
-		_fellow_render_elements(fellow_instanced);
+		_fellow_render_elements(fellow_instanced, fellow_skip_range_depth);
 
 		// Store elements.
 		RENDER_TIMESTAMP("Pack 3D Cluster Elements");
 		const FellowPackMode pack_mode = fellow_pack_elements ? FELLOW_PACK_ELEMENTS : (Fellow::light_cluster_pack_parallel() ? FELLOW_PACK_PARALLEL : FELLOW_PACK_STOCK);
-		_fellow_pack(pack_mode);
+		_fellow_pack(pack_mode, fellow_skip_range_depth);
 		fellow_render_buffer_clear = pack_mode == FELLOW_PACK_ELEMENTS;
 
 		if (fellow_verify) {
@@ -622,8 +630,8 @@ void ClusterBuilderRD::bake_cluster() {
 			}
 			RD::get_singleton()->buffer_clear(cluster_buffer, 0, cluster_buffer_size);
 			RD::get_singleton()->buffer_clear(cluster_render_buffer, 0, cluster_render_buffer_size);
-			_fellow_render_elements(false);
-			_fellow_pack(Fellow::light_cluster_pack_parallel() ? FELLOW_PACK_PARALLEL : FELLOW_PACK_STOCK);
+			_fellow_render_elements(false, false);
+			_fellow_pack(Fellow::light_cluster_pack_parallel() ? FELLOW_PACK_PARALLEL : FELLOW_PACK_STOCK, false);
 			fellow_render_buffer_clear = false;
 			const Vector<uint8_t> reference_data = RD::get_singleton()->buffer_get_data(cluster_buffer);
 			const uint32_t *x = reinterpret_cast<const uint32_t *>(fellow_data.ptr());

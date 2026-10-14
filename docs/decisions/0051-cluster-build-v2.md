@@ -1,8 +1,8 @@
 # 0051 — The light cluster build: instanced proxy draws, a pack pass per element, no 21 MB clear
 
-Status: **measuring** (`fellow128`) · Branch `fellow/geometry` · Toggles `rendering/fellow/lights/cluster_pack_elements`,
+Status: **KEEP, on by default from `fellow130`** (exact; v2 below being measured in `m10_f149`) · Branch `fellow/geometry` · Toggles `rendering/fellow/lights/cluster_pack_elements`,
 `rendering/fellow/lights/cluster_instanced_draws` (runtime) · Diagnostics `rendering/fellow/debug/cluster_verify`
-(1 verify, 2 verify with a negative control), stats `lights_cluster_draws`, `lights_cluster_elements`,
+(1 verify, 2 verify with a negative control), `rendering/fellow/debug/cluster_keep_depth_words` (v1), stats `lights_cluster_draws`, `lights_cluster_elements`,
 `lights_cluster_verify_words`, `lights_cluster_verify_mismatches` · Code: `cluster_builder_rd.{h,cpp}`
 (`_fellow_render_elements`, `_fellow_pack`, `fellow_render_buffer_clear`), `shaders/cluster_store.glsl`
 (`FELLOW_PACK_ELEMENTS`), `shaders/cluster_render.glsl` (`FELLOW_INSTANCED`), `fellow_settings.*`.
@@ -65,9 +65,49 @@ lavapipe (480 × 270, capture mode, both toggles on):
 
 Images, both toggles on against off (lavapipe, Lights Lab captures): **0 differing pixels**.
 
-lavapipe never puts fragments of two primitives in one subgroup, so the instanced fragment path is verified on the RTX
-(`m10_f146_cv`), where it can.
+lavapipe never puts fragments of two primitives in one subgroup, so the instanced fragment path is verified on the RTX,
+where it can.
+
+RTX (`m10_f146_cv`, `fellow128`, 1080p, both toggles on, every frame of a 4-second measurement and its warm-up):
+
+| scene | words compared | mismatches | negative control | draws / elements (the build under test) |
+|---|---:|---:|---:|---:|
+| Lights Lab | 10 581 235 200 | **0** | 7 360 674 | 37 337 / 336 310 (one draw per 9 elements) |
+| Bistro interior | 21 144 844 800 | **0** | 0 (no tile holds 32 elements of a word) | |
+| City Lab | 10 581 235 200 | **0** | 115 665 | 1 801 / 74 165 (one draw per frame) |
+| PBR Lab | 10 581 235 200 | **0** | 0 | no batching (meshes alternate) |
+
+Images, both on against off (`m10_f146_cl_temporal`, 60-frame sequences): City Lab bit for bit; Bistro interior 67.1,
+Lights Lab 94.3, PBR Lab 76.3 dB, their run-to-run floors.
 
 ## Measured
 
-Pending (`m10_f146`).
+In one process (`m10_f146_cl_ab`, `fellow128`, autotune off, blocks of 30 frames, 4 repeats of the path), GPU time
+against both off:
+
+| scene | element pack | instanced draws | both | pack region | render region |
+|---|---:|---:|---:|---:|---:|
+| Lights Lab | **−1.6 %** (p 10^-7) | −0.3 % | **−2.3 %** (p 10^-17) | 0.093 → 0.039 ms | 0.102 → 0.088 |
+| PBR Lab | **−1.0 %** (p 10^-8) | −0.1 % | **−1.1 %** (p 10^-9) | 0.018 → 0.024 | 0.038 → 0.040 |
+| City Lab | −0.6 % | +0.1 % | −0.9 % (p 0.02) | 0.011 → 0.012 | 0.018 → 0.016 |
+| Bistro interior | −0.2 % | +0.1 % | −0.1 % (n.s.) | 0.013 → 0.009 | 0.014 → 0.012 |
+
+In PBR Lab the element pack's own pass is slower (0.006 ms: few elements, the chunk's barriers) and the frame faster by
+0.025 ms: the 21.5 MB clear it saves, which no region reports. Instancing saves render-thread time (Lights Lab −3.0 %,
+p 0.0003) more than GPU time: the render region's cost is its fragments' atomics, not the draws.
+
+### v2: range elements without depth words (`fellow130`)
+
+For an element whose slices come from its conservative range, the depth word the render pass sets is only read to
+know that it is non-zero, which the element's bit already says (the same invocation sets both). With both toggles on,
+the render pass sets no depth word for those elements (`fellow_skip_depth`, from the vertex shader) and the element
+pack takes their bit as the proof: half the atomics and no depth merge for them. Only with both (0014's pack still
+reads the depth words; `debug/cluster_keep_depth_words` restores v1). lavapipe, `debug/cluster_verify`: Lights Lab and
+City Lab 0 mismatches (negative control 26 470), instanced draws alone and element pack alone 0, Stress Lab 0.
+
+## Decision
+
+**KEEP, both on by default** (`fellow130`, with v2). Exact: the cluster buffer the scene shaders and the volumetric fog
+read is word for word the one stock's build and 0014's pack produce (RTX, four scenes, every frame of the runs), and
+the images are at their floors or bit for bit. The frame is faster wherever lights, decals or probes are in view, most
+where there are many (Lights Lab −2.3 %); the clear it saves costs every such scene.
