@@ -304,8 +304,12 @@ inline bool shadow_batched_taps() {
 // Omni/spot lights: after the depth pre-pass, per 8 x 8 pixel tile, the lights that can reach its geometry; the opaque
 // colour pass's light loops visit only those (exact: the others fail the range test of every fragment there;
 // docs/decisions/0049-light-tile-cull.md). Runtime; with lights/zero_attenuation_skip, without MSAA, multiview or VRS.
-inline bool light_tile_cull() {
+inline bool light_tile_cull_setting() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/lights/enabled") && GLOBAL_GET_CACHED(bool, "rendering/fellow/lights/tile_cull");
+}
+// The setting, as autotune allows it in this frame (it measures the pass and its use against neither, per scene).
+inline bool light_tile_cull() {
+	return light_tile_cull_setting() && autotune_allows(TUNE_LIGHT_TILE_CULL);
 }
 inline bool light_tile_cull_passthrough() {
 	return GLOBAL_GET_CACHED(bool, "rendering/fellow/debug/tile_cull_passthrough");

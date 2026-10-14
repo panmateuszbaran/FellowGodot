@@ -47,6 +47,7 @@ enum Tunable {
 	// Not exact, but visually lossless (decision 0027): adaptive shading rate pays only where its shading savings exceed
 	// its passes' cost; switched like the exact ones (both ways look the same within the measured limits).
 	TUNE_ADAPTIVE_VRS, // shading/adaptive_vrs_threshold > 0 (the attachment is created at start-up)
+	TUNE_LIGHT_TILE_CULL, // lights/tile_cull (decision 0049), while the opaque colour pass can use it
 	// Measured by the frame's wall time instead (they trade render-thread time against GPU time):
 	TUNE_ASYNC_COMPUTE, // frame/async_compute (decision 0015; the device created its second queue at start-up)
 	TUNE_FRAME_PLAN, // frame/replay_frame_plan (decision 0019)
@@ -60,6 +61,10 @@ bool autotune_allows(Tunable p_tunable);
 // The renderer found MultiMesh elements MultiMesh culling can take in this frame (TUNE_MULTIMESH_CULLING applies only
 // while it does).
 void autotune_note_multimesh_candidates();
+
+// The renderer could run light tile culling in this frame (omni/spot lights in view, a depth pre-pass, ...):
+// TUNE_LIGHT_TILE_CULL applies only while it can.
+void autotune_note_light_tile_cull_candidates();
 
 // Called by RenderingServerDefault::_draw: before the viewports are drawn (decides this frame's choices and captures
 // the start timestamp), after them (end timestamp), and for each captured timestamp read back.

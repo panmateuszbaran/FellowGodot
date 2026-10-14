@@ -124,11 +124,14 @@ bool uses_frame_time(int p_tunable) {
 }
 
 uint64_t multimesh_candidates_frame = 0; // the last frame whose lists had MultiMesh elements to cull
+uint64_t light_tile_cull_frame = 0; // the last frame that could run light tile culling
 
 bool tunable_applies(Tunable p_tunable) {
 	switch (p_tunable) {
 		case TUNE_MULTIMESH_CULLING:
 			return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/geometry/multimesh_culling") && multimesh_candidates_frame > 0 && frame_id <= multimesh_candidates_frame + 120;
+		case TUNE_LIGHT_TILE_CULL:
+			return light_tile_cull_setting() && light_tile_cull_frame > 0 && frame_id <= light_tile_cull_frame + 120;
 		case TUNE_DIRECTIONAL_PYRAMID:
 			return shadows_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/shadows/directional_max_mip");
 		case TUNE_POSITIONAL_PYRAMID:
@@ -311,6 +314,10 @@ bool autotune_allows(Tunable p_tunable) {
 
 void autotune_note_multimesh_candidates() {
 	multimesh_candidates_frame = frame_id;
+}
+
+void autotune_note_light_tile_cull_candidates() {
+	light_tile_cull_frame = frame_id;
 }
 
 static void add_sample(int p_tunable, uint64_t p_id, uint8_t p_block, double p_ms) {

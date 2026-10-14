@@ -4876,7 +4876,11 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	// FellowEngine light tile culling (lights/tile_cull, decision 0049): the opaque colour pass's fragments are at the
 	// depth pre-pass's depths (equal depth test) only without MSAA, multiview and variable rate shading.
 	fellow_tile_cull.pass_active = false;
-	if (Fellow::light_tile_cull() && Fellow::light_zero_attenuation_skip() && depth_pre_pass && !use_msaa && !is_reflection_probe && rb.is_valid() && rb->get_view_count() == 1 && fellow_positional_light_count > 0 && !rb->has_texture(RB_SCOPE_VRS, RB_TEXTURE) && get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_DISABLED) {
+	const bool fellow_tile_cull_possible = Fellow::light_tile_cull_setting() && Fellow::light_zero_attenuation_skip() && depth_pre_pass && !use_msaa && !is_reflection_probe && rb.is_valid() && rb->get_view_count() == 1 && fellow_positional_light_count > 0 && !rb->has_texture(RB_SCOPE_VRS, RB_TEXTURE) && get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_DISABLED;
+	if (fellow_tile_cull_possible) {
+		Fellow::autotune_note_light_tile_cull_candidates(); // autotune measures it while it can run (decision 0049)
+	}
+	if (fellow_tile_cull_possible && Fellow::light_tile_cull()) {
 		RENDER_TIMESTAMP("FellowEngine Light Tile Culling");
 		RD::get_singleton()->draw_command_begin_label("FellowEngine Light Tile Culling");
 		fellow_tile_cull.pass_active = _fellow_light_tile_cull(p_render_data, p_render_data->cluster_max_elements / 32) && !Fellow::light_tile_cull_pass_only();
