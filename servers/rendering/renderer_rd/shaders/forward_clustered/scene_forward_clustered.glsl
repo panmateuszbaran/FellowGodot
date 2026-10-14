@@ -1091,10 +1091,9 @@ layout(location = 2) out vec2 motion_vector;
 #if defined(FELLOW_HAS_LIGHT_TILE_CULL) && defined(FELLOW_BACKFACING_LIGHT_SKIP_OK) && !defined(LIGHT_VERTEX_USED) && !defined(FELLOW_WRITES_DEPTH) && !defined(USE_MULTIVIEW) && !defined(USE_VERTEX_LIGHTING)
 #define FELLOW_TILE_CULL_OK
 uint fellow_tile_mask(uint p_type, uint p_word) {
-	// Word-major: the same word of neighbouring tiles is adjacent (the tiles of a row of warps share cache lines).
 	uvec2 tile = uvec2(gl_FragCoord.xy) >> 3;
 	uint words = implementation_data.max_cluster_element_count_div_32;
-	return fellow_light_tile_masks.data[(p_type * words + p_word) * implementation_data.fellow_tile_cull_count + tile.y * implementation_data.fellow_tile_cull_width + tile.x];
+	return fellow_light_tile_masks.data[((tile.y * implementation_data.fellow_tile_cull_width + tile.x) * 2u + p_type) * words + p_word];
 }
 #endif
 

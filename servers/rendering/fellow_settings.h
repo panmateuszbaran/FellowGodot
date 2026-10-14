@@ -310,6 +310,9 @@ inline bool light_tile_cull() {
 inline bool light_tile_cull_passthrough() {
 	return GLOBAL_GET_CACHED(bool, "rendering/fellow/debug/tile_cull_passthrough");
 }
+inline bool light_tile_cull_pass_only() {
+	return GLOBAL_GET_CACHED(bool, "rendering/fellow/debug/tile_cull_pass_only");
+}
 inline bool light_fields_early() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/lights/enabled") && GLOBAL_GET_CACHED(bool, "rendering/fellow/lights/fields_early");
 }
