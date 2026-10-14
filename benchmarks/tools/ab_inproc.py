@@ -72,7 +72,7 @@ def main():
                     diffs += rd
                     vals += [a[k][metric] for k in a]
                     rm = statistics.fmean(b[k][metric] for k in common) if common else float("nan")
-                    per_run.append(100.0 * statistics.fmean(rd) / rm if rd else float("nan"))
+                    per_run.append(100.0 * statistics.fmean(rd) / rm if rd and rm else float("nan"))
                 mean = statistics.fmean(vals) if vals else float("nan")
                 if name == ref:
                     lines.append(f"| {name} | {mean:.3f} | | | | | | |")
@@ -80,7 +80,8 @@ def main():
                 md = statistics.fmean(diffs) if diffs else float("nan")
                 refmean = mean - md
                 t, p = t_p(diffs)
-                lines.append(f"| {name} | {mean:.3f} | {md:+.3f} | {100.0 * md / refmean:+.1f} % | {t:.1f} | {p:.3g} | "
+                rel = 100.0 * md / refmean if refmean else float("nan")  # (a metric the run did not record is all zero)
+                lines.append(f"| {name} | {mean:.3f} | {md:+.3f} | {rel:+.1f} % | {t:.1f} | {p:.3g} | "
                              f"{len(diffs)} | {', '.join(f'{x:+.1f}' for x in per_run)} |")
             lines.append("")
         # Profile runs: timestamped regions (GPU ms, and render-thread CPU ms as "cpu: ...") per configuration.

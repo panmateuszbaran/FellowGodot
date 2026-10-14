@@ -144,3 +144,14 @@ other scenes autotune leaves it off after its first evaluations.
 Not explained: in Bistro interior the frame gets slower with the masks in use, in every pass, although the light loops
 visit a subset of their lights (v3-v5 above). With autotune it does not matter for the defaults; a future change of
 the pass or its placement should look at it again (`debug/tile_cull_passthrough`, `debug/tile_cull_pass_only`).
+
+### Again, with and without async compute (`m10_f148`, `fellow129`, autotune off)
+
+| scene | async compute on (default) | opaque pass | async compute off | opaque pass |
+|---|---:|---:|---:|---:|
+| Bistro interior | **−0.4 %** (p 0.0001) | 1.348 → 1.266 ms | +1.3 % (the pass, 0.045 ms) | 1.337 → 1.338 |
+| Lights Lab | **−5.6 %** | 1.068 → 0.886 | **−6.0 %** | 1.096 → 0.898 |
+
+The slowdown of every pass in Bistro interior (`m9_f138`-`m9_f140`) does not recur in the same configuration: there the
+culling now takes 0.08 ms off the opaque pass when async compute is on (the async queue's SSAO and SSIL run beside it)
+and nothing when it is off; why is not known. Read as session-dependent; autotune measures it per scene either way.
