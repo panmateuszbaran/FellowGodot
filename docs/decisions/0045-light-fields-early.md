@@ -1,6 +1,7 @@
 # 0045 — Positional lights: where their time goes, and their fields read together
 
-Status: **KEEP, on by default from `fellow115`** (the same arithmetic; used in frames with omni or spot lights in view) ·
+Status: **KEEP, on by default from `fellow115`, v2 from `fellow117`** (exact; used in frames with omni or spot lights in
+view) ·
 Branch `fellow/geometry` · Toggle `rendering/fellow/lights/fields_early` (runtime, specialization bit 20) ·
 Diagnostics `debug/scene_shader_experiments` 65536 (no `light_compute()` for omni/spot lights), 131072 (no omni/spot
 shadow lookups), 262144 with 8 (light counts as the colour; with 32 lights within range), 524288 (lights stop after
@@ -73,11 +74,29 @@ pixels one level off in some frames** (101.18 dB, max |d| 1), where `fellow95` a
 (`m8_f125`). The same signature as 0040's off path: the same values in the same expressions, compiled by the driver with
 a different contraction of some multiply-add; lavapipe identical.
 
+## v2: the light loop reads them, with the layer mask and the bake mode (`fellow117`)
+
+The light loop tests a light's layer mask and its bake mode before calling the light's function, each read waiting
+for the light's index and the first test, so v1's reads at the function's start still waited behind two of them. From
+`fellow117` the loop reads the layer mask, the bake mode and the hot fields of the light together right after its index
+(when the option is on; the function then uses those values). The same values in the same expressions.
+
+* Images (`m9_f133_fe_temporal`, on against off): **City Lab bit for bit** (v1's one-level differences are gone),
+  Bistro interior 67.1, Lights Lab 95.1, PBR Lab 76.4 dB, their floors; lavapipe identical (Lights Lab, PBR Lab).
+* In one process (`m9_f133_fe_ab`):
+
+| scene | frame | opaque pass |
+|---|---:|---:|
+| Bistro interior | **−3.1 %** (p < 10^-79) | 1.477 → 1.347 ms |
+| Lights Lab | **−3.0 %** (p < 10^-35) | 1.250 → 1.162 |
+| PBR Lab | −0.4 % (p 0.09) | 0.824 → 0.816 |
+| City Lab | −0.3 % (n.s.) | 0.463 → 0.461 |
+| Bistro exterior | 0.0 % | 1.680 → 1.680 |
+
 ## Decision
 
-**KEEP, on by default** (`fellow115`, in frames with omni or spot lights): Bistro interior −2.1 %, Lights Lab −0.8 %,
-nothing measurable elsewhere. The arithmetic is stock's; on RTX City Lab differs from the previous defaults by one level
-in a few pixels of some frames (the driver's rounding), which this record states rather than calling it bit for bit.
+**KEEP, on by default** (v2 from `fellow117`, in frames with omni or spot lights): Bistro interior −3.1 %, Lights Lab
+−3.0 %, nothing measurable elsewhere; RTX bit for bit or at the floor against off in every sequence measured.
 
-Where the positional lights' time goes in Lights Lab (neither their shading, nor their shadows, nor the reads of their
-fields) is measured next (`m9_f132_loop_sizing`).
+What is left of the light loop in Lights Lab (`m9_f132_loop_sizing`, before v2: the loop and the range tests 0.63 ms of
+the lights' 0.92 ms; shading 0.12, shadow lookups 0.15) is the next target.
