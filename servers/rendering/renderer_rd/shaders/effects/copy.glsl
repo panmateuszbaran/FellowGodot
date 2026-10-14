@@ -66,7 +66,18 @@ layout(rgba16f, set = 3, binding = 0) uniform restrict writeonly image2D dest_bu
 
 #ifdef MODE_GAUSSIAN_BLUR
 shared vec4 local_cache[256];
+#ifdef FELLOW_BLUR_PAD
+// FellowEngine (rendering/fellow/postfx/glow_padded_blur, decision 0052): the horizontal pass's results stored with a
+// column stride of 17 entries instead of 16. With 16, the eight invocations of a quarter warp (eight columns, one row)
+// access entries 16 vec4 apart, all in the same four banks of shared memory: every access of the vertical pass (and
+// the two stores before it) is an 8-way bank conflict. With 17 they fall in eight different groups of banks. The same
+// values, summed in the same order.
+#define FELLOW_TEMP_STRIDE 17
+shared vec4 temp_cache[8 * 17];
+#else
+#define FELLOW_TEMP_STRIDE 16
 shared vec4 temp_cache[128];
+#endif
 #endif
 
 void main() {
@@ -173,7 +184,7 @@ void main() {
 #endif // MODE_GLOW
 
 	// rotate samples to take advantage of cache coherency
-	uint write_index = gl_LocalInvocationID.y * 2 + gl_LocalInvocationID.x * 16;
+	uint write_index = gl_LocalInvocationID.y * 2 + gl_LocalInvocationID.x * FELLOW_TEMP_STRIDE;
 
 	temp_cache[write_index] = color_top;
 	temp_cache[write_index + 1] = color_bottom;
@@ -187,7 +198,7 @@ void main() {
 	}
 
 	// Vertical pass
-	uint index = gl_LocalInvocationID.y + gl_LocalInvocationID.x * 16 + 4;
+	uint index = gl_LocalInvocationID.y + gl_LocalInvocationID.x * FELLOW_TEMP_STRIDE + 4;
 	vec4 color = vec4(0.0);
 
 	color += temp_cache[index] * kernel[0];

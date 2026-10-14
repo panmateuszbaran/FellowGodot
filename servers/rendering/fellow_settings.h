@@ -57,6 +57,12 @@ inline bool postfx_enabled() {
 
 // SSAO gather with each workgroup's depths and normals loaded once into shared memory (bit-identical; stock: two
 // gathers and up to five normal loads per pixel). Read every frame.
+// Glow's Gaussian blur (every level of the chain) with its shared-memory layout padded so that the vertical pass is free
+// of bank conflicts; the same values, summed in the same order (decision 0052). Read every frame.
+inline bool glow_padded_blur() {
+	return postfx_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/postfx/glow_padded_blur");
+}
+
 inline bool ssao_shared_tile() {
 	return postfx_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/postfx/ssao_shared_tile");
 }
