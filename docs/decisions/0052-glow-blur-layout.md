@@ -64,3 +64,13 @@ bit where the sequences are deterministic, the floor elsewhere; lavapipe identic
 
 Stock's `gaussian_blur` (the screen texture's and the canvas back buffer's mipmaps) has the same layout; no benchmark
 scene uses it, so it is unchanged here.
+
+## The same in SSR's roughness filter (`postfx/ssr_filter_padded`, `fellow131`): REJECT
+
+`screen_space_reflection_filter.glsl` stores its 16 × 16 samples and its horizontal results as `[column][row]` with 16
+rows: every access of both passes is an 8-way bank conflict too. Padded to 17 rows (`FELLOW_PAD`): lavapipe City Lab
+and PBR Lab captures with SSR 0 differing pixels; RTX (`m10_f151_ssr_temporal`) Bistro exterior bit for bit, Bistro
+interior and Sponza at their floors. In one process (`m10_f151_ssr_ab`): the filter region 0.047-0.050 ms either way,
+the frame ±0.1 % (n.s.) in Bistro interior, Bistro exterior and Sponza. The filter works on the reflection's mips of
+half resolution and below, a few thousand workgroups at most: its time is the dispatches, not shared memory. Left in,
+off.

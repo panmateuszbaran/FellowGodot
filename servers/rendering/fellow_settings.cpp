@@ -103,7 +103,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/lights/prefetch_next", PROPERTY_HINT_ENUM, "Off,Range Test Fields,All Hot Fields,Range Test Fields And Words,All Hot Fields And Words"), 0);
 	GLOBAL_DEF("rendering/fellow/postfx/ssao_shared_tile", false);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/postfx/glow_blur", PROPERTY_HINT_ENUM, "Stock,Padded,Tiles 16x16"), 2); // decision 0052
-	GLOBAL_DEF("rendering/fellow/postfx/ssr_filter_padded", false); // decision 0052 (measuring)
+	GLOBAL_DEF("rendering/fellow/postfx/ssr_filter_padded", false); // decision 0052: no gain (m10_f151)
 	GLOBAL_DEF("rendering/fellow/postfx/ss_coherent_gather", false);
 	GLOBAL_DEF("rendering/fellow/postfx/fast_luminance_reduce", true);
 	GLOBAL_DEF("rendering/fellow/postfx/ssao_temporal", false);
