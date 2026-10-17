@@ -156,7 +156,7 @@ The slowdown of every pass in Bistro interior (`m9_f138`-`m9_f140`) does not rec
 culling now takes 0.08 ms off the opaque pass when async compute is on (the async queue's SSAO and SSIL run beside it)
 and nothing when it is off; why is not known. Read as session-dependent; autotune measures it per scene either way.
 
-## v6: split around the async compute part (`fellow132`, measuring)
+## v6: split around the async compute part (`fellow132`; KEEP, the default)
 
 With async compute (on by default on NVIDIA, 0015) the screen-space effects run on the second queue beside the shadows,
 the light clusters and the volumetric fog, and the main queue waits for them before the opaque pass. Light tile
@@ -172,4 +172,18 @@ light clusters, beside the async part. The same values, the same masks.
 
 * lavapipe (autotune off): Lights Lab captures, split against whole 0 differing pixels (121 frames split); PBR Lab
   captures, split against culling off 0 differing pixels (211 frames split).
+* RTX, in-process A/B (`m11_f153_tcs_ab`, autotune off, against culling off; GPU):
+
+  | scene | whole pass | split |
+  |---|---|---|
+  | Lights Lab | −6.5 % | **−6.9 %** |
+  | Bistro interior | −0.2 % (n.s.) | **−1.9 %** (p 1e-24) |
+  | PBR Lab | +2.4 % | +2.7 % |
+  | City Lab | +1.5 % | +1.6 % |
+
+  The split takes the culling off the critical path where the async part is long enough to hide it (Bistro interior's
+  SSAO and SSIL); where culling itself costs more than it saves (PBR Lab, City Lab), autotune keeps it off as before.
+* RTX images: split against whole and against culling off at the run-to-run floors; one City Lab run in ten differs
+  from the others by 1 level in a few pixels, whichever configuration (split, whole, with or without barriers between
+  the command buffers): decision 0054, which also closes the synchronization gap the split exposed.
 
