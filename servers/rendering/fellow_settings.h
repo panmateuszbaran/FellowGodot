@@ -344,6 +344,13 @@ inline int light_tile_cull_split() {
 	return GLOBAL_GET_CACHED(int, "rendering/fellow/debug/tile_cull_split");
 }
 
+// Render graph: 1, a barrier for a resource written in an earlier graph (command buffer) of the same frame (see
+// RenderingDeviceGraph::fellow_frame_first_graph); 2, also a full barrier at the start of every main queue command
+// buffer after the first of the frame (diagnostics); 0, neither. Read every frame.
+inline int segment_barriers() {
+	return GLOBAL_GET_CACHED(int, "rendering/fellow/debug/segment_barriers");
+}
+
 inline bool light_tile_cull_pass_only() {
 	return GLOBAL_GET_CACHED(bool, "rendering/fellow/debug/tile_cull_pass_only");
 }
@@ -875,6 +882,8 @@ struct Stats {
 	SafeNumeric<uint64_t> rd_graph_commands; // render graph commands replayed
 	SafeNumeric<uint64_t> rd_graph_sort_nsec; // the graph's dependency sort before the replay
 	SafeNumeric<uint64_t> rd_graph_barriers_nsec; // barriers grouped and recorded
+	SafeNumeric<uint64_t> rd_segment_full_barriers; // debug/segment_barriers 2: full barriers at the start of command buffers
+	SafeNumeric<uint64_t> rd_graph_segment_hazards; // uses of a resource written in an earlier graph of the frame, with its usage unchanged (no barrier from the usage tracking)
 	SafeNumeric<uint64_t> rd_graph_draw_nsec; // draw lists replayed (vkCmd* calls)
 	SafeNumeric<uint64_t> rd_graph_draw_lists; // draw lists replayed
 	SafeNumeric<uint64_t> rd_graph_draw_bytes; // their instruction bytes

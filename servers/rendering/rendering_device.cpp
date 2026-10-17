@@ -8325,6 +8325,12 @@ void RenderingDevice::_begin_frame(bool p_presented) {
 	// Reset the graph.
 	GodotProfileZoneGrouped(_profile_zone, "draw_graph.begin");
 	draw_graph.begin();
+	draw_graph.fellow_begin_frame();
+	{
+		const int fellow_sb = is_main_instance ? Fellow::segment_barriers() : 1;
+		draw_graph.fellow_segment_barriers = fellow_sb >= 1;
+		fellow_segment_full_barriers = fellow_sb >= 2;
+	}
 
 	// Erase pending resources.
 	GodotProfileZoneGrouped(_profile_zone, "_free_pending_resources");
@@ -8624,6 +8630,7 @@ void RenderingDevice::_fellow_submit_early() {
 	f.fellow_early_submitted = true;
 
 	driver->command_buffer_begin(f.command_buffer);
+	_fellow_segment_full_barrier();
 	draw_graph.begin();
 	Fellow::stats().frame_early_submits.increment();
 }
@@ -8635,7 +8642,21 @@ void RenderingDevice::_fellow_next_command_buffer() {
 	SWAP(f.command_buffer_pool, f.fellow_segment_command_buffer_pools[f.fellow_segments_used]);
 	f.fellow_segments_used++;
 	driver->command_buffer_begin(f.command_buffer);
+	_fellow_segment_full_barrier();
 	draw_graph.begin();
+}
+
+void RenderingDevice::_fellow_segment_full_barrier() {
+	// debug/segment_barriers 2: everything submitted before this main queue command buffer completes, and its writes are
+	// visible, before anything in it starts.
+	if (!fellow_segment_full_barriers) {
+		return;
+	}
+	RDD::MemoryAccessBarrier mb;
+	mb.src_access = RDD::BARRIER_ACCESS_MEMORY_READ_BIT | RDD::BARRIER_ACCESS_MEMORY_WRITE_BIT;
+	mb.dst_access = RDD::BARRIER_ACCESS_MEMORY_READ_BIT | RDD::BARRIER_ACCESS_MEMORY_WRITE_BIT;
+	driver->command_pipeline_barrier(frames[frame].command_buffer, RDD::PIPELINE_STAGE_ALL_COMMANDS_BIT, RDD::PIPELINE_STAGE_ALL_COMMANDS_BIT, mb, {}, {}, {});
+	Fellow::stats().rd_segment_full_barriers.increment();
 }
 
 bool RenderingDevice::_fellow_transfers_needed() {
@@ -9334,6 +9355,8 @@ Error RenderingDevice::initialize(RenderingContextDriver *p_context, DisplayServ
 	// FellowEngine early submit: Vulkan only (per-frame segments of other drivers assume one submission per frame).
 	fellow_early_submit_supported = is_main_instance && driver->get_api_name() == "Vulkan";
 	draw_graph.begin();
+	draw_graph.fellow_begin_frame();
+	draw_graph.fellow_segment_log = OS::get_singleton()->has_environment("FELLOW_SEGMENT_LOG");
 
 	for (uint32_t i = 0; i < frames.size(); i++) {
 		// Reset all queries in a query pool before doing any operations with them..

@@ -213,6 +213,10 @@ public:
 		uint32_t fellow_async_mark = 0;
 		ResourceUsage fellow_async_usage = RESOURCE_USAGE_NONE;
 		bool fellow_async_write = false;
+		// FellowEngine segments: the graph (tracking frame) in which a command last wrote this resource (a layout
+		// transition counts), and the stages of the commands that wrote it there.
+		int64_t fellow_write_frame = -1;
+		BitField<RDD::PipelineStageBits> fellow_write_stages = {};
 
 		_FORCE_INLINE_ void reset_if_outdated(int64_t new_command_frame) {
 			if (new_command_frame != command_frame) {
@@ -962,6 +966,16 @@ public:
 	uint32_t fellow_async_epoch = 0;
 	uint8_t fellow_async_phase = 0;
 	bool fellow_async_conflict = false;
+
+	// FellowEngine segments: a frame recorded as several graphs (async compute, early submission) is submitted as
+	// several command buffers on one queue, and a graph begins with no record of the commands of the previous one. A
+	// resource used again with the same usage gets no barrier from the usage tracking (the previous frame boundary's
+	// assumption); with segment barriers on, a command using a resource written in an earlier graph of the same frame
+	// gets a memory barrier from the stages that wrote it. fellow_frame_first_graph: the first graph of the frame.
+	int64_t fellow_frame_first_graph = 0;
+	bool fellow_segment_barriers = true;
+	bool fellow_segment_log = false;
+	void fellow_begin_frame() { fellow_frame_first_graph = tracking_frame; }
 	void add_blas_build(RDD::AccelerationStructureID p_blas, RDD::BufferID p_scratch_buffer, ResourceTracker *p_dst_tracker, VectorView<ResourceTracker *> p_src_trackers);
 	void add_tlas_build(RDD::AccelerationStructureID p_tlas, RDD::BufferID p_scratch_buffer, RDD::BufferID p_instance_buffer, uint32_t p_instance_offset, uint32_t p_instance_count, ResourceTracker *p_dst_tracker, VectorView<ResourceTracker *> p_src_trackers);
 	void add_buffer_clear(RDD::BufferID p_dst, ResourceTracker *p_dst_tracker, uint32_t p_offset, uint32_t p_size);

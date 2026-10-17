@@ -631,6 +631,24 @@ void RenderingDeviceGraph::_add_command_to_graph(ResourceTracker **p_resource_tr
 		ResourceTracker *search_tracker = resource_has_parent ? resource_tracker->parent : resource_tracker;
 		bool different_usage = resource_tracker->usage != new_resource_usage;
 		bool write_usage_after_write = (write_usage && search_tracker->write_command_or_list_index >= 0);
+
+		if (search_tracker->fellow_write_frame >= fellow_frame_first_graph && search_tracker->fellow_write_frame < tracking_frame) {
+			// FellowEngine segments: written in an earlier graph of this frame (another command buffer, submitted before
+			// this one on this queue, or waited on through a semaphore).
+			if (!different_usage && !write_usage_after_write) {
+				if (fellow_segment_log) {
+					const String label = command_label_index >= 0 ? String(&command_label_chars[command_label_offsets[command_label_index]]) : String("-");
+					print_line(vformat("FellowEngine segment hazard: graph +%d (frame graph %d), usage %d, %s, size %s, write %s, label %s", tracking_frame - search_tracker->fellow_write_frame, tracking_frame - fellow_frame_first_graph, int(new_resource_usage), search_tracker->buffer_driver_id.id != 0 ? "buffer" : "texture", search_tracker->texture_size, write_usage ? "yes" : "no", label));
+				}
+				Fellow::stats().rd_graph_segment_hazards.increment();
+			}
+			if (fellow_segment_barriers && fellow_async_phase != 1) {
+				// (Not in the async part: its submission waits on a semaphore signalled after the earlier graphs.)
+				r_command->memory_barrier.src_access = r_command->memory_barrier.src_access | RDD::BARRIER_ACCESS_MEMORY_WRITE_BIT;
+				r_command->memory_barrier.dst_access = r_command->memory_barrier.dst_access | (new_usage_access.is_empty() ? BitField<RDD::BarrierAccessBits>(RDD::BARRIER_ACCESS_MEMORY_READ_BIT) : new_usage_access);
+				r_command->previous_stages = r_command->previous_stages | search_tracker->fellow_write_stages;
+			}
+		}
 		if (different_usage || write_usage_after_write) {
 			// A barrier must be pushed if the usage is different of it's a write usage and there was already a command that wrote to this resource previously.
 			if (resource_tracker->texture_driver_id.id != 0) {
@@ -675,6 +693,16 @@ void RenderingDeviceGraph::_add_command_to_graph(ResourceTracker **p_resource_tr
 			// In the case of buffers however, this is not exactly necessary if the driver does not consider different buffer usages as different states.
 			write_usage = write_usage || bool(resource_tracker->texture_driver_id) || driver_buffers_require_transitions;
 			resource_tracker->usage = new_resource_usage;
+		}
+
+		if (write_usage) {
+			// FellowEngine segments (see fellow_frame_first_graph).
+			if (search_tracker->fellow_write_frame != tracking_frame) {
+				search_tracker->fellow_write_frame = tracking_frame;
+				search_tracker->fellow_write_stages = r_command->self_stages;
+			} else {
+				search_tracker->fellow_write_stages = search_tracker->fellow_write_stages | r_command->self_stages;
+			}
 		}
 
 		bool write_usage_has_partial_coverage = !different_usage && _check_command_partial_coverage(resource_tracker, p_command_index);

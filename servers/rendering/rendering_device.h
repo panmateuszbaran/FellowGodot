@@ -1933,6 +1933,9 @@ protected:
 	bool fellow_async_concurrent = false;
 	bool fellow_skip_transfers = false; // _end_frame() of the async part: transfers left to the main queue's next submission
 	void _fellow_next_command_buffer();
+	// debug/segment_barriers 2 (see RenderingDeviceGraph::fellow_frame_first_graph).
+	bool fellow_segment_full_barriers = false;
+	void _fellow_segment_full_barrier();
 	bool _fellow_transfers_needed();
 
 public:

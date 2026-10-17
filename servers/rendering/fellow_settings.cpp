@@ -101,6 +101,10 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/debug/tile_cull_pass_only", false);
 	// Diagnostics: light tile culling split around the async compute part (0 when async compute runs, 1 always, 2 never).
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/debug/tile_cull_split", PROPERTY_HINT_ENUM, "With Async Compute,Always,Never"), 0);
+	// Render graph: a memory barrier for a resource used again, with the same usage, after a graph (command buffer)
+	// of the same frame that wrote it (async compute and early submission record a frame as several graphs).
+	// (2: also a full barrier at the start of each such command buffer on the main queue: diagnostics.)
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/debug/segment_barriers", PROPERTY_HINT_ENUM, "Off,Resources,Resources And Full"), 1);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/lights/hot_fields_buffer", PROPERTY_HINT_ENUM, "Off,Storage Buffer,Uniform Buffer"), 0);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/lights/prefetch_next", PROPERTY_HINT_ENUM, "Off,Range Test Fields,All Hot Fields,Range Test Fields And Words,All Hot Fields And Words"), 0);
 	GLOBAL_DEF("rendering/fellow/postfx/ssao_shared_tile", false);
@@ -329,6 +333,8 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["rd_graph_commands"] = s.rd_graph_commands.get();
 	d["rd_graph_sort_nsec"] = s.rd_graph_sort_nsec.get();
 	d["rd_graph_barriers_nsec"] = s.rd_graph_barriers_nsec.get();
+	d["rd_graph_segment_hazards"] = s.rd_graph_segment_hazards.get();
+	d["rd_segment_full_barriers"] = s.rd_segment_full_barriers.get();
 	d["rd_graph_draw_nsec"] = s.rd_graph_draw_nsec.get();
 	d["rd_graph_draw_lists"] = s.rd_graph_draw_lists.get();
 	d["rd_graph_draw_bytes"] = s.rd_graph_draw_bytes.get();
