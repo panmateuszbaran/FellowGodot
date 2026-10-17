@@ -1334,9 +1334,12 @@ void light_process_omni(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 			shadow = mix(half(1.0), sample_omni_pcf_shadow(shadow_atlas, FELLOW_SHO(soft_shadow_scale) / shadow_sample.z, pos, uv_rect, flip_offset, depth, taa_frame_count), half(FELLOW_LO(shadow_opacity)));
 		}
 	}
-#ifdef FELLOW_HAS_NO_POSITIONAL_SHADOWS
+#if defined(FELLOW_HAS_NO_POSITIONAL_SHADOWS) && (defined(USE_SHADOW_TO_OPACITY) || defined(LIGHT_CODE_USED))
 	else if (!FELLOW_POSITIONAL_SHADOWS_ON) {
-		shadow = fellow_keep(shadow); // decision 0057: as through the branch's phi in stock's pipeline
+		// Decision 0057: as through the branch's phi in stock's pipeline. The shadow factor only multiplies the light's
+		// attenuation, and a product by 1.0 rounds to the same value, unless something adds to the product (1.0 minus
+		// it with shadow to opacity, a light function).
+		shadow = fellow_keep(shadow);
 	}
 #endif
 #endif
@@ -1707,9 +1710,12 @@ void light_process_spot(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 			shadow = mix(half(1.0), sample_pcf_shadow(shadow_atlas, FELLOW_SHS(soft_shadow_scale) * scene_data_block.data.shadow_atlas_pixel_size, shadow_uv, taa_frame_count), half(FELLOW_LS(shadow_opacity)));
 		}
 	}
-#ifdef FELLOW_HAS_NO_POSITIONAL_SHADOWS
+#if defined(FELLOW_HAS_NO_POSITIONAL_SHADOWS) && (defined(USE_SHADOW_TO_OPACITY) || defined(LIGHT_CODE_USED))
 	else if (!FELLOW_POSITIONAL_SHADOWS_ON) {
-		shadow = fellow_keep(shadow); // decision 0057: as through the branch's phi in stock's pipeline
+		// Decision 0057: as through the branch's phi in stock's pipeline. The shadow factor only multiplies the light's
+		// attenuation, and a product by 1.0 rounds to the same value, unless something adds to the product (1.0 minus
+		// it with shadow to opacity, a light function).
+		shadow = fellow_keep(shadow);
 	}
 #endif
 #endif // SHADOWS_DISABLED

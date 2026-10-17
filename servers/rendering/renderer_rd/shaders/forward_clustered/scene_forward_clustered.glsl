@@ -3070,9 +3070,12 @@ void fragment_shader(in SceneData scene_data) {
 		}
 #endif // USE_VERTEX_LIGHTING
 	} else {
-		// FellowEngine decision 0057: what the light loop could have changed (fellow_keep).
+		// FellowEngine decision 0057: what the light loop could have changed (fellow_keep). The light sums are 0 or
+		// sums when they reach the loop, never a product that a later add could fuse with, except with vertex lighting.
+#ifdef USE_VERTEX_LIGHTING
 		diffuse_light = fellow_keep(diffuse_light);
 		direct_specular_light = fellow_keep(direct_specular_light);
+#endif
 #ifdef USE_SHADOW_TO_OPACITY
 		alpha = fellow_keep(alpha);
 #endif
@@ -3325,9 +3328,12 @@ void fragment_shader(in SceneData scene_data) {
 			}
 		}
 	} else {
-		// FellowEngine decision 0057: what the light loop could have changed (fellow_keep).
+		// FellowEngine decision 0057: what the light loop could have changed (fellow_keep). The light sums are 0 or
+		// sums when they reach the loop, never a product that a later add could fuse with, except with vertex lighting.
+#ifdef USE_VERTEX_LIGHTING
 		diffuse_light = fellow_keep(diffuse_light);
 		direct_specular_light = fellow_keep(direct_specular_light);
+#endif
 #ifdef USE_SHADOW_TO_OPACITY
 		alpha = fellow_keep(alpha);
 #endif
@@ -3595,9 +3601,12 @@ void fragment_shader(in SceneData scene_data) {
 			}
 		}
 	} else {
-		// FellowEngine decision 0057: what the light loop could have changed (fellow_keep).
+		// FellowEngine decision 0057: what the light loop could have changed (fellow_keep). The light sums are 0 or
+		// sums when they reach the loop, never a product that a later add could fuse with, except with vertex lighting.
+#ifdef USE_VERTEX_LIGHTING
 		diffuse_light = fellow_keep(diffuse_light);
 		direct_specular_light = fellow_keep(direct_specular_light);
+#endif
 #ifdef USE_SHADOW_TO_OPACITY
 		alpha = fellow_keep(alpha);
 #endif
