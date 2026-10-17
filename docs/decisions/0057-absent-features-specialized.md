@@ -86,7 +86,15 @@ RTX, v2 (`fellow138`, `m11_f162`, warm sequences, 63 against the defaults, two r
 Bistro interior 67.1, Lights Lab 94.4-95.0, Foliage Lab 78.2 (floors: 75.5, 67.1, 95.0, 78.2); City Lab **98.4 dB** (min
 92.7, at most 1 level) and Bistro exterior **93.8 dB** (min 86.4, at most 2 levels), both bit for bit between two runs;
 PBR Lab 75.6-75.7 against 76.3. Closer than v1 (City Lab 95.6), not exact: what the NVIDIA compiler does differently
-when the blocks are left out is not only the fusion at their boundaries. `m11_f164` looks for the bit.
+when the blocks are left out is not only the fusion at their boundaries. v3 (`fellow139`, `m11_f163b`, `fellow_keep`
+only where a value can be a product): the same images as v2, to the pixel (City Lab 98.42 dB, Bistro exterior 93.79),
+with the same registers: the keeps v3 drops were not needed on the RTX either.
+
+**The probe bit** (`m11_f164`, `fellow139`, each bit alone, warm sequences): City Lab with 1, 16 or 32 alone **bit for
+bit**, with 2 (no reflection probes) 103.3 dB, with 63 98.4; Bistro exterior with 1, 8, 16 or 32 alone **bit for bit**,
+with 2 93.9 dB, with 63 93.8. With `discard` as demote on both sides Bistro exterior stays at 93.8 (not the derivatives
+after `discard`). Leaving out the decal, omni, spot and positional shadow code is exact on the RTX; leaving out the probe
+loop is not, although its accumulators pass `fellow_keep`.
 
 ## Measured
 
@@ -122,4 +130,7 @@ Every p < 0.001. Stress Lab records no GPU time with this profile (frame −0.6 
 v2 (`m11_f162_keep_ab`, `fellow138`, 63 against 0): Sponza −9.2 %, Bistro exterior −6.4 %, Bistro interior −5.9 %,
 City Lab −4.7 %, Foliage Lab −4.5 %, PBR Lab −3.4 %, Lights Lab −1.3 % (every p < 1e-6): `fellow_keep` costs up to a
 point in City Lab and Bistro interior (their tile-culled variants at 96 registers instead of 80; v3 keeps fewer values).
+
+v3 (`m11_f163b_keep3_ab`, `fellow139`): Sponza −8.3 %, Bistro interior −6.0 %, Bistro exterior −5.8 %, City Lab −4.9 %,
+Foliage Lab −4.4 %, PBR Lab −3.9 %, Lights Lab −1.1 %.
 
