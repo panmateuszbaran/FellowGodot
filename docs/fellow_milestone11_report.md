@@ -68,7 +68,24 @@ million). RTX sequences: City Lab bit for bit, the others at their floors. The p
 
 ## 5. The colour passes without absent features (0057)
 
-Pending (`m11_f159`).
+The largest pass of every scene, the opaque colour pass, compiles the decal loop, the reflection probe loop, the
+directional lights' block, the omni and spot loops and the positional shadow lookups whether or not the frame has any;
+0048 found its main variants at 96 registers with spills. 0057 leaves out each that the frame's light cluster and
+light counts say cannot run (six bits of the colour pipelines' specialization constants; stock already does this for
+area lights). The main variants drop to 72-80 registers (Sponza, Bistro interior, City Lab, Foliage Lab), the code to a
+third or two thirds of its size.
+
+**The largest gain of the milestone** (`m11_f159_abs_ab`, in one process): GPU Sponza **−9.2 %** (opaque pass −18 %,
+transparent pass −26 %), Bistro interior −6.7 %, Bistro exterior −6.0 %, City Lab −5.7 % (its frame is limited by the
+CPU), Foliage Lab −4.4 %, PBR Lab −3.5 %, Lights Lab −1.0 % (its main variant keeps omni, spot and shadow code and its 96
+registers).
+
+The first version was not exact: lavapipe found 1-2 isolated pixels of one level in three scenes, and the RTX City Lab
+sequence 95.6 dB where two runs are bit for bit. The cause: leaving a block out lets the compiler fuse a multiply before
+it with an add after it (one rounding instead of two), which stock's compiler cannot do across the block's phi. v2
+passes the values the block could have changed through `fellow_keep`, an identity the compiler cannot see through (an
+XOR with a zero from a UBO): lavapipe then gives **0 differing pixels** in every scene and configuration tested
+(derivatives after `discard`, undefined in Vulkan, aside). RTX: `m11_f162`.
 
 ## 6. Tooling
 
