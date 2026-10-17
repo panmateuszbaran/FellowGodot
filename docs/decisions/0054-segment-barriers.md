@@ -54,11 +54,12 @@ command buffers) −0.9 to +0.2 %, also none significant. The barriers are free 
 one already had one, or the GPU had nothing to overlap there.
 
 **Determinism** (`m11_f156_aa`, City Lab and Lights Lab 60-frame sequences, ten runs: whole pass ×2, split with 1 ×2,
-with 2 ×2, with 0 ×2, split without async compute ×2): in City Lab nine runs are identical bit for bit, **including the
-two split runs without segment barriers**, and one run of the whole pass (`w1`) differs from all the others, by one
-level in 1-6 pixels in 27 of 60 frames, at the same pixels as `m11_f154`'s deviating split run (e.g. (403, 248)).
+with 2 ×2, with 0 ×2, split without async compute ×2): in City Lab the two runs of each split configuration are
+identical bit for bit, **including the two without segment barriers**, while the two runs of the whole pass differ:
+`w1` differs from `w2`, `s1`, `f1`, `a1` by the same pixels (105.51 dB; from `n1` 105.48), one level in 1-6 pixels in
+27 of 60 frames, at the same places as `m11_f154`'s deviating split run (e.g. (403, 248)).
 Lights Lab: every pair at its usual floor (91.8-100.5 dB). The deviation of `m11_f154` was not the split's, then, nor
-the missing barriers': one run in several of any configuration deviates at the same places. The likely cause is
+the missing barriers': a run of any configuration can deviate, at the same places. The likely cause is
 outside the frame's synchronization: a pipeline compiled while the sequence is drawn (Godot draws with the ubershader
 until a specialized pipeline is ready, and a sequence's camera brings new light and material combinations into view);
 on lavapipe one specialization compiles during City Lab's sequence (pre-roll 8). `--temporal_warm=1` (the sequence run
