@@ -1,7 +1,7 @@
 # 0055 — Tone mapping: the frame's paths as specialization constants
 
-Status: **measuring** (`fellow135`) · Branch `fellow/geometry` · Setting `rendering/fellow/postfx/tonemap_specialized`
-(runtime, off until measured) · Code: `shaders/effects/tonemap.glsl` (`sc_fellow`, `FELLOW_FLAG`, ...),
+Status: **KEEP, on by default from `fellow138`** (exact; measured with `fellow135`) · Branch `fellow/geometry` · Setting `rendering/fellow/postfx/tonemap_specialized`
+(runtime) · Code: `shaders/effects/tonemap.glsl` (`sc_fellow`, `FELLOW_FLAG`, ...),
 `effects/tone_mapper.cpp` (`ToneMapper::tonemapper`), `fellow_settings.*`.
 
 ## Problem
@@ -47,3 +47,5 @@ In-process A/B (`m11_f156_tm_ab`, every scene, 4 × 4 blocks per configuration, 
 work either way). GPU: Bistro exterior −0.5 % (p 2e-10), Bistro interior −0.5 % (p 0.003), Lights Lab −0.6 %
 (p 0.008), Foliage Lab −0.4 % (p 0.02), City Lab −1.1 % (p 0.02), Sponza −0.3 % (n.s.), PBR Lab −0.2 % (n.s.); Stress
 Lab records no GPU time with this profile (frame −0.1 %, n.s.).
+
+KEEP, on by default: the same image, a pass 12-14 % shorter, one pipeline per combination of the frame's settings.

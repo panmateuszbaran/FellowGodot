@@ -1,7 +1,7 @@
 # 0056 — Volumetric fog: the density pass without the loops a frame does not run
 
 Status: **KEEP, on by default from `fellow138`** (exact; measured with `fellow136`) · Branch `fellow/geometry` · Setting `rendering/fellow/postfx/fog_specialized`
-(runtime, off until measured) · Code: `shaders/environment/volumetric_fog_process.glsl` (`sc_fellow_no_area_lights`,
+(runtime) · Code: `shaders/environment/volumetric_fog_process.glsl` (`sc_fellow_no_area_lights`,
 `sc_fellow_no_voxel_gi`), `environment/fog.{h,cpp}` (`fellow_spec_pipelines`), `fellow_settings.*`;
 `benchmarks/project/scenes/lights_lab.gd` (`--area_lights=N`, for the tests).
 
