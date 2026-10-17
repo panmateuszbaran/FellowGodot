@@ -44,6 +44,7 @@ lavapipe, 960 × 540, captures against stock's pipelines:
   **0**.
 * City Lab (directional and omni lights present: the decal, probe and spot bits apply), 7 and 31: 2 pixels, 1 level
   each (110 dB).
+* Blend Lab (blended and alpha-hash materials, volumetric fog), 31, with demote: 1 pixel, 2 levels (102 dB).
 * PBR Lab, 7: 105 219 pixels, up to 38 levels, all on the alpha-scissor fence and grass and next to them. Bit 2 (probes)
   alone: 0; bit 1 (decals) alone: the same differences. With the screen-space roughness limiter off: 9 426 pixels, up to
   7 levels. The limiter takes `dFdx(normal)`/`dFdy(normal)` after the alpha scissor's `discard`: in a quad where a
@@ -53,7 +54,7 @@ lavapipe, 960 × 540, captures against stock's pipelines:
   helper invocation (diagnostics bit 4194304, both sides), where the derivatives are defined: **9 pixels of 1 level** in
   the seven captures (3.6 million pixels), isolated, on the spheres.
 
-The remaining 1-level pixels (City Lab 2, PBR Lab 9) are isolated and of the size the compiler's fusion of multiplies
+The remaining pixels (City Lab 2, PBR Lab 9, Blend Lab 1) are isolated and of the size the compiler's fusion of multiplies
 into multiply-adds produces when the code around a value changes (NIR fuses `a * b + c` when the product has a single
 use, and removing the decal and probe code removes uses): the likely cause, not checked further. Not bit-exact on
 lavapipe, then: the RTX sequences decide whether it stays at the run-to-run floors there.
