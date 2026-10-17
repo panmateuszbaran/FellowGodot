@@ -35,6 +35,15 @@ Lights Lab (4), City Lab (3), PBR Lab (7) **0 differing pixels**. Negative contr
 debanding constant cleared): Lights Lab 1 121 213 differing pixels (1 level, every capture): the specialized pipeline
 is the one that draws.
 
+RTX (`m11_f156_tm_temporal`, 60-frame sequences, specialized against stock's pipeline in the same build): City Lab
+**bit for bit**; Bistro interior 67.13 dB, Lights Lab 91.74 dB, Sponza 75.48 dB: their run-to-run floors (two runs of
+one configuration: 67.1, 91.8-100.5, 75.5 dB). `m11_f160` repeats them with each sequence run once before it is
+captured (no pipeline compiling while it is drawn).
+
 ## Measured
 
-Pending.
+In-process A/B (`m11_f156_tm_ab`, every scene, 4 × 4 blocks per configuration, profiled): the tone mapping pass
+**0.115-0.147 → 0.101-0.127 ms (−12 to −14 %)** in six scenes; PBR Lab 0.120 → 0.120 (its tone mapping does the same
+work either way). GPU: Bistro exterior −0.5 % (p 2e-10), Bistro interior −0.5 % (p 0.003), Lights Lab −0.6 %
+(p 0.008), Foliage Lab −0.4 % (p 0.02), City Lab −1.1 % (p 0.02), Sponza −0.3 % (n.s.), PBR Lab −0.2 % (n.s.); Stress
+Lab records no GPU time with this profile (frame −0.1 %, n.s.).

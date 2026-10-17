@@ -1,6 +1,6 @@
 # 0053 — Volumetric fog: the density pass's light loops, walked by the subgroup
 
-Status: **measuring** (`fellow133`) · Branch `fellow/geometry` · Setting `rendering/fellow/postfx/fog_light_loop`
+Status: **REJECT** (left in, off; measured with `fellow135`) · Branch `fellow/geometry` · Setting `rendering/fellow/postfx/fog_light_loop`
 (runtime: 0 stock, 1 subgroup, 2 subgroup in 2 × 2 × 16 workgroups, 3 stock loops in 2 × 2 × 16 workgroups) · Code:
 `shaders/environment/volumetric_fog_process.glsl` (`FELLOW_FOG_MERGE`, `FELLOW_FOG_SHAPE`),
 `environment/fog.{h,cpp}` (`VOLUMETRIC_FOG_PROCESS_SHADER_DENSITY_FELLOW_*`), `fellow_settings.*`.
@@ -46,4 +46,15 @@ separate check confirms that cause.
 
 ## Measured
 
-Pending: the in-process A/B of `m11_f155` was interrupted (the laptop was needed); queued again.
+In-process A/B (`m11_f156_fog_ab`, 4 × 4 blocks per configuration, profiled; the density pass is the region "Render
+Fog", recorded beside the async compute part, so its time includes what runs concurrently):
+
+| scene | GPU 1 / 2 / 3 against 0 | density pass 0 → 1 / 2 / 3 (ms) |
+|---|---|---|
+| Lights Lab | +0.2 % / +0.3 % / **+0.7 %** (p 0.001) | 0.201 → 0.191 / 0.188 / 0.206 |
+| Sponza | +0.0 % / +0.2 % (p 0.02) / +0.2 % | 0.099 → 0.111 / 0.114 / 0.106 |
+| Bistro exterior | **+0.3 %** (p 0.004) / **+0.5 %** (p 3e-5) / **+0.5 %** (p 1e-5) | 0.126 → 0.125 / 0.131 / 0.127 |
+
+The subgroup walk shortens Lights Lab's density pass by 5-6 %, which the frame does not show, and lengthens it in
+Sponza and Bistro exterior, where a froxel's cell has few lights and the merged walk adds subgroup operations to every
+word; the 2 × 2 × 16 shape is slower everywhere. **REJECT**: the options stay, off (`postfx/fog_light_loop` 0).
