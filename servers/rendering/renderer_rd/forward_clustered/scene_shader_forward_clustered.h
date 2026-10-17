@@ -158,7 +158,15 @@ public:
 			};
 		};
 
-		uint32_t packed_2;
+		union {
+			uint32_t packed_2;
+
+			struct {
+				// FellowEngine (decision 0057): no omni or spot light of the frame has a shadow (their shadow lookups are
+				// not compiled).
+				uint32_t fellow_no_positional_shadows : 1;
+			};
+		};
 	};
 
 	struct UbershaderConstants {

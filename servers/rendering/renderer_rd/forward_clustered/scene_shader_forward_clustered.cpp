@@ -527,6 +527,12 @@ void SceneShaderForwardClustered::ShaderData::_create_pipeline(PipelineKey p_pip
 	sc.type = RD::PIPELINE_SPECIALIZATION_CONSTANT_TYPE_INT;
 	specialization_constants.push_back(sc);
 
+	// FellowEngine (decision 0057): the third word (stock leaves it unused).
+	sc.constant_id = 3;
+	sc.int_value = p_pipeline_key.shader_specialization.packed_2;
+	sc.type = RD::PIPELINE_SPECIALIZATION_CONSTANT_TYPE_INT;
+	specialization_constants.push_back(sc);
+
 	sc = {}; // Sanitize value bits. "bool_value" only assigns 8 bits and keeps the remaining bits intact.
 	sc.constant_id = 2;
 	sc.bool_value = emulate_point_size_flag;

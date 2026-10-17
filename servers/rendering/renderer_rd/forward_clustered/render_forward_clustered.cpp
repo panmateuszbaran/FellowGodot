@@ -4937,12 +4937,13 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		// FellowEngine (shading/absent_features_specialized, decision 0057): the colour passes' pipelines without the
 		// decal, reflection probe, omni and spot light loops when the light cluster holds none of the kind, and without
 		// the directional lights' block when the frame has none (each would run no iteration).
-		const int fellow_absent = Fellow::absent_features_specialized(); // bits: 1 decals, 2 reflection probes, 4 directional lights, 8 omni lights, 16 spot lights
+		const int fellow_absent = Fellow::absent_features_specialized(); // bits: 1 decals, 2 reflection probes, 4 directional lights, 8 omni lights, 16 spot lights, 32 positional shadows
 		base_specialization.fellow_no_decals = (fellow_absent & 1) && current_cluster_builder != nullptr && current_cluster_builder->get_cluster_count_by_type(ClusterBuilderRD::ELEMENT_TYPE_DECAL) == 0;
 		base_specialization.fellow_no_reflection_probes = (fellow_absent & 2) && current_cluster_builder != nullptr && current_cluster_builder->get_cluster_count_by_type(ClusterBuilderRD::ELEMENT_TYPE_REFLECTION_PROBE) == 0;
 		base_specialization.fellow_no_directional_lights = (fellow_absent & 4) && p_render_data->directional_light_count == 0;
 		base_specialization.fellow_no_omni_lights = (fellow_absent & 8) && current_cluster_builder != nullptr && current_cluster_builder->get_cluster_count_by_type(ClusterBuilderRD::ELEMENT_TYPE_OMNI_LIGHT) == 0;
 		base_specialization.fellow_no_spot_lights = (fellow_absent & 16) && current_cluster_builder != nullptr && current_cluster_builder->get_cluster_count_by_type(ClusterBuilderRD::ELEMENT_TYPE_SPOT_LIGHT) == 0;
+		base_specialization.fellow_no_positional_shadows = (fellow_absent & 32) && RendererRD::LightStorage::get_singleton()->fellow_get_positional_shadowed() == 0;
 	}
 
 	// FellowEngine occlusion culling (decision 0026): the opaque colour pass's runs tested against the full pre-pass's depth.

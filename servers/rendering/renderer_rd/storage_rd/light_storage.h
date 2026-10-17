@@ -870,6 +870,9 @@ public:
 	// The number of records the uniform buffers hold (the shaders' array size): every light, or 1 when they do not fit.
 	static uint32_t fellow_hot_ubo_records(uint32_t p_max_lights);
 	bool fellow_hot_ubo_supported() const { return fellow_hot_ubo_size >= max_lights; }
+	// FellowEngine (decision 0057): omni and spot lights of the last update_light_buffers() with a nonzero shadow opacity.
+	uint32_t fellow_positional_shadowed = 0;
+	uint32_t fellow_get_positional_shadowed() const { return fellow_positional_shadowed; }
 	RID get_area_light_buffer() { return area_light_buffer; }
 	RID get_directional_light_buffer() { return directional_light_buffer; }
 	uint32_t get_max_directional_lights() { return max_directional_lights; }

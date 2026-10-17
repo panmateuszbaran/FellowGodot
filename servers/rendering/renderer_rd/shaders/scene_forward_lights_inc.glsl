@@ -1019,6 +1019,14 @@ half get_omni_attenuation(float distance, float inv_range, float decay) {
 	return half(nd * pow(max(distance, 0.0001), -decay));
 }
 
+// FellowEngine (shading/absent_features_specialized 32, decision 0057): no omni or spot light of the frame has a shadow,
+// and their shadow lookups are not compiled (the clustered renderer's specialization; elsewhere always compiled).
+#ifdef FELLOW_HAS_NO_POSITIONAL_SHADOWS
+#define FELLOW_POSITIONAL_SHADOWS_ON (!sc_fellow_no_positional_shadows())
+#else
+#define FELLOW_POSITIONAL_SHADOWS_ON true
+#endif
+
 #ifdef FELLOW_HAS_LIGHT_FIELDS_EARLY
 // FellowEngine (rendering/fellow/lights/fields_early, decision 0045): the fields of the light being processed, read by
 // the clustered light loop together with its layer mask and bake mode, before the tests of either.
@@ -1135,7 +1143,7 @@ void light_process_omni(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 #else
 	const bool fellow_dbg_no_shadow = false;
 #endif
-	if (omni_attenuation > HALF_FLT_MIN && FELLOW_LO(shadow_opacity) > 0.001 && !fellow_dbg_no_shadow) {
+	if (FELLOW_POSITIONAL_SHADOWS_ON && omni_attenuation > HALF_FLT_MIN && FELLOW_LO(shadow_opacity) > 0.001 && !fellow_dbg_no_shadow) {
 		// there is a shadowmap
 		vec2 texel_size = scene_data_block.data.shadow_atlas_pixel_size;
 		vec4 base_uv_rect = FELLOW_SHO(atlas_rect);
@@ -1334,7 +1342,7 @@ void light_process_omni(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 	half transmittance_z = transmittance_depth; //no transmittance by default
 	transmittance_color.a *= omni_attenuation;
 #ifndef SHADOWS_DISABLED
-	if (FELLOW_LO(shadow_opacity) > 0.001) {
+	if (FELLOW_POSITIONAL_SHADOWS_ON && FELLOW_LO(shadow_opacity) > 0.001) {
 		// Redo shadowmapping, but shrink the model a bit to avoid artifacts.
 		vec2 texel_size = scene_data_block.data.shadow_atlas_pixel_size;
 		vec4 uv_rect = omni_lights.data[idx].atlas_rect;
@@ -1585,7 +1593,7 @@ void light_process_spot(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 #else
 	const bool fellow_dbg_no_shadow = false;
 #endif
-	if (spot_attenuation > HALF_FLT_MIN && FELLOW_LS(shadow_opacity) > 0.001 && !fellow_dbg_no_shadow) {
+	if (FELLOW_POSITIONAL_SHADOWS_ON && spot_attenuation > HALF_FLT_MIN && FELLOW_LS(shadow_opacity) > 0.001 && !fellow_dbg_no_shadow) {
 		vec3 normal_bias = vec3(normal) * light_length * FELLOW_SHS(shadow_normal_bias) * (1.0 - abs(dot(normal, light_rel_vec_norm)));
 
 		//there is a shadowmap
@@ -1697,7 +1705,7 @@ void light_process_spot(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 	half transmittance_z = transmittance_depth;
 	transmittance_color.a *= spot_attenuation;
 #ifndef SHADOWS_DISABLED
-	if (FELLOW_LS(shadow_opacity) > 0.001) {
+	if (FELLOW_POSITIONAL_SHADOWS_ON && FELLOW_LS(shadow_opacity) > 0.001) {
 		vec4 splane = (spot_lights.data[idx].shadow_matrix * vec4(vertex - vec3(normal) * spot_lights.data[idx].transmittance_bias, 1.0));
 		splane /= splane.w;
 

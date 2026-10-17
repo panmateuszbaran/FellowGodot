@@ -2,8 +2,10 @@
 
 Status: **measuring** (`fellow137`) · Branch `fellow/geometry` · Setting
 `rendering/fellow/shading/absent_features_specialized` (runtime bits: 1 decals, 2 reflection probes, 4 directional
-lights, 8 omni lights, 16 spot lights; 0, off, until measured) · Diagnostics `debug/scene_shader_experiments` 4194304 (discard as demote) · Code:
-`forward_clustered/scene_shader_forward_clustered.h` (`ShaderSpecialization::packed_1` bits 27-31),
+lights, 8 omni lights, 16 spot lights, 32 positional shadows; 0, off, until measured) · Diagnostics `debug/scene_shader_experiments` 4194304 (discard as demote) · Code:
+`forward_clustered/scene_shader_forward_clustered.h` (`ShaderSpecialization::packed_1` bits 27-31, `packed_2` bit 0,
+a third specialization constant), `scene_shader_forward_clustered.cpp`, `shaders/scene_forward_lights_inc.glsl`
+(`FELLOW_POSITIONAL_SHADOWS_ON`), `storage_rd/light_storage.*` (`fellow_positional_shadowed`),
 `shaders/forward_clustered/scene_forward_clustered_inc.glsl` (`sc_fellow_no_*`), `scene_forward_clustered.glsl`,
 `render_forward_clustered.cpp` (`render_scene`), `fellow_settings.*`.
 
@@ -20,30 +22,35 @@ three are compiled whether or not the frame has any: six of the eight benchmark 
 reflection probe (Lights Lab and Stress Lab have both); Lights Lab and Bistro interior, the scenes with the most
 positional lights, have no directional light; Sponza and Foliage Lab have no omni or spot light, and City Lab no spot
 light, while the omni and spot loops (shadows, PCSS, projectors, the FellowEngine prefetch and tile culling paths) are
-the largest code of the shader.
+the largest code of the shader; City Lab's 48 omni lights have no shadows, and the omni and spot shadow lookups (PCF,
+PCSS, the pyramids' early-outs, transmittance) are compiled in all the same.
 
 ## Change
 
-Five bits of the colour pipelines' specialization constants (`packed_1` 27-31; 0 is stock's shader): no decals (the
+Six bits of the colour pipelines' specialization constants (`packed_1` 27-31 and `packed_2` 0, which stock leaves
+unused and which becomes a third specialization constant; 0 is stock's shader): no decals (the
 decal block is not compiled), no reflection probes (the probe loop is not compiled; the blending of the accumulated
 probes with the ambient and sky light after it is unchanged, and with no probe it takes the same values), no
 directional lights (the directional block, shadows and lighting, is not compiled), no omni lights, no spot lights (their
-blocks are not compiled). They are set per frame from the light cluster (`get_cluster_count_by_type` of
+blocks are not compiled), no shadowed positional light (the omni and spot shadow lookups, and the transmittance's,
+are not compiled). They are set per frame from the light cluster (`get_cluster_count_by_type` of
 `ELEMENT_TYPE_DECAL`, `_REFLECTION_PROBE`, `_OMNI_LIGHT`, `_SPOT_LIGHT` equal to 0: every word of every cell is zero,
-the loops have no iteration) and the frame's directional light count (0: the loops' bound).
+the loops have no iteration), the frame's directional light count (0: the loops' bound) and the number of omni and
+spot lights whose shadow opacity the light buffers hold nonzero (0: every shadow test, `> 0.001`, is false).
 The ubershader reads the same bits from its push constants. Every path that runs is unchanged.
 
 ## Verification
 
 lavapipe, 960 × 540, captures against stock's pipelines:
 
-* Lights Lab (decals, probes, omni and spot lights present: only the directional bit applies), 7 and 31: **0 differing
-  pixels**. Negative control (the omni bit set although the cluster holds omni lights): 1 443 433 pixels, up to 223
-  levels.
+* Lights Lab (decals, probes, omni and spot lights, shadowed ones among them, present: only the directional bit
+  applies), 7, 31 and 63: **0 differing pixels**. Negative controls: the omni bit set although the cluster holds omni
+  lights, 1 443 433 pixels, up to 223 levels; the positional shadow bit set although lights are shadowed, 25 576
+  pixels, up to 19 levels.
 * Foliage Lab (no positional light, decal or probe; alpha-scissor foliage), 31, with `discard` as demote (below):
   **0**.
-* City Lab (directional and omni lights present: the decal, probe and spot bits apply), 7 and 31: 2 pixels, 1 level
-  each (110 dB).
+* City Lab (directional and unshadowed omni lights: the decal, probe, spot and positional shadow bits apply), 7, 31 and
+  63: 2 pixels, 1 level each (110 dB), the same two.
 * Blend Lab (blended and alpha-hash materials, volumetric fog), 31, with demote: 1 pixel, 2 levels (102 dB).
 * PBR Lab, 7: 105 219 pixels, up to 38 levels, all on the alpha-scissor fence and grass and next to them. Bit 2 (probes)
   alone: 0; bit 1 (decals) alone: the same differences. With the screen-space roughness limiter off: 9 426 pixels, up to

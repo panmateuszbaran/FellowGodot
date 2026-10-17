@@ -792,6 +792,7 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 
 	r_directional_light_count = 0;
 	r_positional_light_count = 0;
+	fellow_positional_shadowed = 0;
 
 	omni_light_count = 0;
 	spot_light_count = 0;
@@ -1306,6 +1307,9 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 			}
 		} else {
 			light_data.shadow_opacity = 0.0;
+		}
+		if ((type == RSE::LIGHT_OMNI || type == RSE::LIGHT_SPOT) && light_data.shadow_opacity != 0.0f) {
+			fellow_positional_shadowed++; // decision 0057 (any nonzero opacity: the shader tests > 0.001)
 		}
 
 		light_instance->cull_mask = light->cull_mask;

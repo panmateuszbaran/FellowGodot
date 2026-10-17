@@ -366,10 +366,10 @@ inline int segment_barriers() {
 }
 
 // The colour passes' pipelines specialized for what the frame does not have (bits): 1 no decal, 2 no reflection probe,
-// 8 no omni light, 16 no spot light in the light cluster, 4 no directional light (their code is not compiled; it would
-// run no iteration; decision 0057). Read every frame.
+// 8 no omni light, 16 no spot light in the light cluster, 4 no directional light, 32 no shadowed omni or spot light
+// (their code is not compiled; it would not run; decision 0057). Read every frame.
 inline int absent_features_specialized() {
-	return enabled() ? (GLOBAL_GET_CACHED(int, "rendering/fellow/shading/absent_features_specialized") & 31) : 0;
+	return enabled() ? (GLOBAL_GET_CACHED(int, "rendering/fellow/shading/absent_features_specialized") & 63) : 0;
 }
 
 inline bool light_tile_cull_pass_only() {

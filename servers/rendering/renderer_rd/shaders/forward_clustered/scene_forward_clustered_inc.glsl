@@ -55,6 +55,10 @@ uint sc_packed_1() {
 	return draw_call.sc_packed_1;
 }
 
+uint sc_packed_2() {
+	return draw_call.sc_packed_2;
+}
+
 uint uc_cull_mode() {
 	return (draw_call.uc_packed_0 >> 0) & 3U;
 }
@@ -64,6 +68,7 @@ uint uc_cull_mode() {
 // Pull the constants from the pipeline's specialization constants.
 layout(constant_id = 0) const uint pso_sc_packed_0 = 0;
 layout(constant_id = 1) const uint pso_sc_packed_1 = 0;
+layout(constant_id = 3) const uint pso_sc_packed_2 = 0;
 
 uint sc_packed_0() {
 	return pso_sc_packed_0;
@@ -71,6 +76,10 @@ uint sc_packed_0() {
 
 uint sc_packed_1() {
 	return pso_sc_packed_1;
+}
+
+uint sc_packed_2() {
+	return pso_sc_packed_2;
 }
 
 #endif
@@ -257,6 +266,11 @@ bool sc_fellow_no_omni_lights() {
 bool sc_fellow_no_spot_lights() {
 	return ((sc_packed_1() >> 31) & 1U) != 0;
 }
+
+bool sc_fellow_no_positional_shadows() {
+	return ((sc_packed_2() >> 0) & 1U) != 0;
+}
+#define FELLOW_HAS_NO_POSITIONAL_SHADOWS
 #define FELLOW_OMNI_HOT(m_idx, m_field) (sc_fellow_light_hot() ? (sc_fellow_light_hot_ubo() ? fellow_omni_hot_ubo.data[m_idx].m_field : fellow_omni_hot_ssbo.data[m_idx].m_field) : omni_lights.data[m_idx].m_field)
 #define FELLOW_SPOT_HOT(m_idx, m_field) (sc_fellow_light_hot() ? (sc_fellow_light_hot_ubo() ? fellow_spot_hot_ubo.data[m_idx].m_field : fellow_spot_hot_ssbo.data[m_idx].m_field) : spot_lights.data[m_idx].m_field)
 #define FELLOW_HAS_LIGHT_PREFETCH_NEXT
