@@ -36,8 +36,8 @@ lavapipe, Lights Lab (fog density 0.01 and 0.05), against stock's loop: captures
 differing pixels, up to 14 levels: the fog's light contributions are visible in these images.
 
 RTX (`m11_f155_fog_temporal`, 60-frame sequences, 1920 × 1080, each option against stock's loop in the same build):
-Sponza 75.5 dB for 1, 2 and 3 (its run-to-run floor, `m10_f149`); Bistro exterior bit for bit in the frames recorded
-(part of its runs were interrupted). Lights Lab: 3 at its floor (94.2 dB; two runs of one configuration give 94.2-100.5
+Sponza 75.5 dB for 1, 2 and 3 (its run-to-run floor, `m10_f149`); Bistro exterior **bit for bit** for 1, 2 and 3
+(`m11_f156_fog_bistro`, 60 frames). Lights Lab: 3 at its floor (94.2 dB; two runs of one configuration give 94.2-100.5
 dB), 1 and 2 a little below it, 90.9 and 91.0 dB, at most 4 levels off (the floor: 2) and a share of pixels off by more
 than 2 that rounds to 0.000 %. lavapipe computes the same values for 1 and 2 as for stock's loop, bit for bit; the RTX's
 compiler arithmetic for the two shaders may differ (contracted multiply-adds), which would explain differences of this
