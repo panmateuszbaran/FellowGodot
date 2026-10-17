@@ -28,6 +28,13 @@ layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 
 #include "../area_lights_inc.glsl"
 
+// FellowEngine (postfx/fog_specialized, decision 0056): frames whose light cluster holds no area light, that inject no
+// VoxelGI, or that have no directional light use a pipeline without those loops (they would run no iteration); stock's
+// pipeline sets none of these constants.
+layout(constant_id = 0) const bool sc_fellow_no_area_lights = false;
+layout(constant_id = 1) const bool sc_fellow_no_voxel_gi = false;
+layout(constant_id = 2) const bool sc_fellow_no_directional_lights = false;
+
 #define M_TAU 6.28318530718
 #define M_PI 3.14159265359
 
@@ -439,7 +446,7 @@ void main() {
 	//compute directional lights
 
 	if (total_density > 0.00005) {
-		for (uint i = 0; i < params.directional_light_count; i++) {
+		for (uint i = 0; i < (sc_fellow_no_directional_lights ? 0u : params.directional_light_count); i++) {
 			if (directional_lights.data[i].volumetric_fog_energy > 0.001) {
 				vec3 shadow_attenuation = vec3(1.0);
 
@@ -679,7 +686,7 @@ void main() {
 			}
 		}
 
-		{ //area lights
+		if (!sc_fellow_no_area_lights) { //area lights
 
 			uint cluster_area_offset = cluster_offset + params.cluster_type_size * 2;
 
@@ -808,7 +815,7 @@ void main() {
 
 		vec3 world_pos = mat3(params.cam_rotation) * view_pos;
 
-		for (uint i = 0; i < params.max_voxel_gi_instances; i++) {
+		for (uint i = 0; i < (sc_fellow_no_voxel_gi ? 0u : params.max_voxel_gi_instances); i++) {
 			vec3 position = (voxel_gi_instances.data[i].xform * vec4(world_pos, 1.0)).xyz;
 
 			//this causes corrupted pixels, i have no idea why..

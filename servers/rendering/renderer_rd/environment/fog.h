@@ -200,6 +200,9 @@ private:
 
 		RID process_shader_version;
 		PipelineDeferredRD process_pipelines[VOLUMETRIC_FOG_PROCESS_SHADER_MAX];
+		// FellowEngine (postfx/fog_specialized, decision 0056): the density variants with specialization constants
+		// (bit 0: no area lights, bit 1: no VoxelGI, bit 2: no directional lights), created when first used.
+		RID fellow_spec_pipelines[VOLUMETRIC_FOG_PROCESS_SHADER_MAX][8];
 
 	} volumetric_fog;
 

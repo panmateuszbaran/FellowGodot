@@ -341,6 +341,12 @@ void Fog::free_fog_shader() {
 	MaterialStorage *material_storage = MaterialStorage::get_singleton();
 	for (int i = 0; i < VolumetricFogShader::VOLUMETRIC_FOG_PROCESS_SHADER_MAX; i++) {
 		volumetric_fog.process_pipelines[i].free();
+		for (int j = 0; j < 8; j++) {
+			if (volumetric_fog.fellow_spec_pipelines[i][j].is_valid()) {
+				RD::get_singleton()->free_rid(volumetric_fog.fellow_spec_pipelines[i][j]);
+				volumetric_fog.fellow_spec_pipelines[i][j] = RID();
+			}
+		}
 	}
 	if (volumetric_fog.process_shader_version.is_valid()) {
 		volumetric_fog.process_shader.version_free(volumetric_fog.process_shader_version);
@@ -1195,7 +1201,37 @@ void Fog::volumetric_fog_update(const VolumetricFogSettings &p_settings, const P
 			fellow_density_mode = VolumetricFogShader::VOLUMETRIC_FOG_PROCESS_SHADER_DENSITY_FELLOW_SHAPE;
 		}
 	}
-	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, volumetric_fog.process_pipelines[fellow_density_mode].get_rid());
+	RID fellow_density_pipeline = volumetric_fog.process_pipelines[fellow_density_mode].get_rid();
+	if (Fellow::fog_specialized()) {
+		// FellowEngine (decision 0056): without the loops that would run no iteration this frame (no area light in the
+		// light cluster; no VoxelGI injected; no directional light).
+		uint32_t fellow_sc = 0;
+		if (p_settings.cluster_builder != nullptr && p_settings.cluster_builder->get_cluster_count_by_type(ClusterBuilderRD::ELEMENT_TYPE_AREA_LIGHT) == 0) {
+			fellow_sc |= 1u;
+		}
+		if (params.max_voxel_gi_instances == 0) {
+			fellow_sc |= 2u;
+		}
+		if (params.directional_light_count == 0) {
+			fellow_sc |= 4u;
+		}
+		if (fellow_sc != 0) {
+			RID &spec_pipeline = volumetric_fog.fellow_spec_pipelines[fellow_density_mode][fellow_sc];
+			if (spec_pipeline.is_null()) {
+				Vector<RD::PipelineSpecializationConstant> constants;
+				for (uint32_t b = 0; b < 3; b++) {
+					RD::PipelineSpecializationConstant c;
+					c.constant_id = b;
+					c.type = RD::PIPELINE_SPECIALIZATION_CONSTANT_TYPE_BOOL;
+					c.bool_value = (fellow_sc & (1u << b)) != 0;
+					constants.push_back(c);
+				}
+				spec_pipeline = RD::get_singleton()->compute_pipeline_create(volumetric_fog.process_shader.version_get_shader(volumetric_fog.process_shader_version, _get_fog_process_variant(fellow_density_mode)), constants);
+			}
+			fellow_density_pipeline = spec_pipeline;
+		}
+	}
+	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, fellow_density_pipeline);
 
 	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, fog->gi_dependent_sets.process_uniform_set_density, 0);
 

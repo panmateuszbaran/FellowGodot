@@ -111,6 +111,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/postfx/glow_blur", PROPERTY_HINT_ENUM, "Stock,Padded,Tiles 16x16"), 2); // decision 0052
 	GLOBAL_DEF("rendering/fellow/postfx/ssr_filter_padded", false); // decision 0052: no gain (m10_f151)
 	GLOBAL_DEF("rendering/fellow/postfx/tonemap_specialized", false); // decision 0055 (measuring)
+	GLOBAL_DEF("rendering/fellow/postfx/fog_specialized", false); // decision 0056 (measuring)
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/postfx/fog_light_loop", PROPERTY_HINT_ENUM, "Stock,Subgroup,Subgroup 2x2x16,Stock 2x2x16"), 0); // decision 0053 (measuring)
 	GLOBAL_DEF("rendering/fellow/postfx/ss_coherent_gather", false);
 	GLOBAL_DEF("rendering/fellow/postfx/fast_luminance_reduce", true);

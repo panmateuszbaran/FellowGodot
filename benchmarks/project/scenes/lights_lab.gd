@@ -141,6 +141,20 @@ func _build_lights() -> void:
 	around.omni_range = 12.0
 	around.light_energy = 0.8
 	add_child(around)
+	# Optional (--area_lights=N, default 0, not in the benchmark): area lights over the street (tests of the paths
+	# that depend on area lights being present, e.g. volumetric fog's specialized density pass, decision 0056).
+	var area_count := int(args.get("area_lights", "0"))
+	for k in area_count:
+		var a := AreaLight3D.new()
+		a.name = "area_%d" % k
+		a.position = Vector3((float(k % 3) - 1.0) * 4.0, 4.5, 6.0 - float(k) * 9.0)
+		a.rotation_degrees = Vector3(-90.0 + float(k % 2) * 30.0, 0.0, 0.0)
+		a.set_area_size(Vector2(2.0 + float(k % 2), 1.0))
+		a.light_energy = 4.0
+		a.area_range = 10.0
+		a.light_color = Color.from_hsv(fmod(float(k) * 0.37, 1.0), 0.5, 1.0)
+		a.shadow_enabled = k % 2 == 0
+		add_child(a)
 
 
 func _build_decals_and_probes() -> void:

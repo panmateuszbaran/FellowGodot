@@ -73,6 +73,13 @@ inline bool ssr_filter_padded() {
 // Forward+ tone mapping with the push constants' decisions (flags, tone mapper, glow mode, glow levels, glow map) also
 // as specialization constants: the driver compiles only the paths taken; the same arithmetic (decision 0055). Read
 // every frame.
+// Volumetric fog's density pass without its area light loop when the light cluster holds no area light, and without
+// its VoxelGI loop when none is injected (specialization constants; the loops would run no iteration; decision 0056).
+// Read every frame.
+inline bool fog_specialized() {
+	return postfx_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/postfx/fog_specialized");
+}
+
 inline bool tonemap_specialized() {
 	return postfx_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/postfx/tonemap_specialized");
 }
