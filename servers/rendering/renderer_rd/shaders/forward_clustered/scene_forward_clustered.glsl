@@ -3057,7 +3057,7 @@ void fragment_shader(in SceneData scene_data) {
 	}
 
 #ifndef USE_VERTEX_LIGHTING
-	{ //omni lights
+	if (!sc_fellow_no_omni_lights()) { //omni lights (FellowEngine decision 0057: not compiled without omni lights)
 
 		uint cluster_omni_offset = cluster_offset;
 
@@ -3304,7 +3304,7 @@ void fragment_shader(in SceneData scene_data) {
 		}
 	}
 
-	{ //spot lights
+	if (!sc_fellow_no_spot_lights()) { //spot lights (FellowEngine decision 0057: not compiled without spot lights)
 
 		uint cluster_spot_offset = cluster_offset + implementation_data.cluster_type_size;
 

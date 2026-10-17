@@ -153,6 +153,8 @@ public:
 				uint32_t fellow_no_decals : 1; // decision 0057: the light cluster holds no decal (the loop is not compiled)
 				uint32_t fellow_no_reflection_probes : 1; // decision 0057: no reflection probe (likewise)
 				uint32_t fellow_no_directional_lights : 1; // decision 0057: no directional light (the loops are not compiled)
+				uint32_t fellow_no_omni_lights : 1; // decision 0057: the light cluster holds no omni light
+				uint32_t fellow_no_spot_lights : 1; // decision 0057: no spot light
 			};
 		};
 
