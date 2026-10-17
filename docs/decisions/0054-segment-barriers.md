@@ -1,6 +1,6 @@
 # 0054 — Render graph: barriers between a frame's command buffers
 
-Status: **measuring** (`fellow134`) · Branch `fellow/geometry` · Setting `rendering/fellow/debug/segment_barriers`
+Status: **KEEP, on by default (1) from `fellow134`** (synchronization; no measurable cost) · Branch `fellow/geometry` · Setting `rendering/fellow/debug/segment_barriers`
 (runtime: 0 off, 1 resources (default), 2 also a full barrier per command buffer) · Code:
 `servers/rendering/rendering_device_graph.{h,cpp}` (`fellow_frame_first_graph`, `fellow_write_frame`),
 `servers/rendering/rendering_device.{h,cpp}` (`_fellow_segment_full_barrier`), `fellow_settings.*`.
@@ -48,5 +48,21 @@ lavapipe with synchronization validation, Lights Lab captures, async compute emu
 
 ## Measured
 
-Pending (`m11_f156`): A/A sequences of City Lab and Lights Lab for the whole pass, split with 0, 1 and 2, split without
-async compute; in-process A/B of 0 / 1 / 2 in every scene.
+**Cost** (`m11_f156_sb_ab`, in-process A/B, every scene, autotune off, light tile culling on): 1 against 0, frame
+−0.4 to +0.2 %, GPU −0.4 to +0.2 %, none significant (p ≥ 0.16); 2 (a full barrier at the start of the two later
+command buffers) −0.9 to +0.2 %, also none significant. The barriers are free at this granularity: the levels that get
+one already had one, or the GPU had nothing to overlap there.
+
+**Determinism** (`m11_f156_aa`, City Lab and Lights Lab 60-frame sequences, ten runs: whole pass ×2, split with 1 ×2,
+with 2 ×2, with 0 ×2, split without async compute ×2): in City Lab nine runs are identical bit for bit, **including the
+two split runs without segment barriers**, and one run of the whole pass (`w1`) differs from all the others, by one
+level in 1-6 pixels in 27 of 60 frames, at the same pixels as `m11_f154`'s deviating split run (e.g. (403, 248)).
+Lights Lab: every pair at its usual floor (91.8-100.5 dB). The deviation of `m11_f154` was not the split's, then, nor
+the missing barriers': one run in several of any configuration deviates at the same places. The likely cause is
+outside the frame's synchronization: a pipeline compiled while the sequence is drawn (Godot draws with the ubershader
+until a specialized pipeline is ready, and a sequence's camera brings new light and material combinations into view);
+on lavapipe one specialization compiles during City Lab's sequence (pre-roll 8). `--temporal_warm=1` (the sequence run
+once before it is captured) removes that; `m11_f160` measures the A/A pairs with it.
+
+KEEP: the barriers close a real gap in the render graph (a command buffer could start reading what an earlier one of
+the same frame was still writing, with nothing ordering them), at no measurable cost; 0 stays available.
