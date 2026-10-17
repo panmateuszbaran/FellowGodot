@@ -38,7 +38,8 @@ would show.
 
 RTX (`m11_f158_fogsc_temporal`, 60-frame sequences, specialized against stock's pipeline): Bistro exterior **bit for
 bit**; Lights Lab 102.4 dB, Sponza 75.5 dB, their run-to-run floors (Sponza compiles 23 pipelines during its sequence,
-Lights Lab 3, Bistro exterior none: decision 0054).
+Lights Lab 3, Bistro exterior none: decision 0054). With each sequence run once before it is captured (`m11_f160`):
+Lights Lab 102.8 dB, Sponza 75.2 dB against 101.0 and 75.2 for two runs of the defaults.
 
 ## Measured
 

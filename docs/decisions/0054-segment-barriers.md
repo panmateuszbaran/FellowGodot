@@ -63,7 +63,10 @@ the missing barriers': a run of any configuration can deviate, at the same place
 outside the frame's synchronization: a pipeline compiled while the sequence is drawn (Godot draws with the ubershader
 until a specialized pipeline is ready, and a sequence's camera brings new light and material combinations into view);
 on lavapipe one specialization compiles during City Lab's sequence (pre-roll 8). `--temporal_warm=1` (the sequence run
-once before it is captured) removes that; `m11_f160` measures the A/A pairs with it.
+once before it is captured) removes that. `m11_f160` (`fellow137`, warm sequences): City Lab's two runs of the
+defaults, and split against the whole pass, **bit for bit** (d1-d2, d1-w1, d2-w1); in Lights Lab, Bistro interior, PBR
+Lab and Sponza the warm runs keep their floors (96.6-101.1, 67.1, 76.2-76.3, 75.2-75.5 dB, every pair alike): those
+come from something else than the pipelines compiled during the sequence.
 
 KEEP: the barriers close a real gap in the render graph (a command buffer could start reading what an earlier one of
 the same frame was still writing, with nothing ordering them), at no measurable cost; 0 stays available.

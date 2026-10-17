@@ -37,8 +37,9 @@ is the one that draws.
 
 RTX (`m11_f156_tm_temporal`, 60-frame sequences, specialized against stock's pipeline in the same build): City Lab
 **bit for bit**; Bistro interior 67.13 dB, Lights Lab 91.74 dB, Sponza 75.48 dB: their run-to-run floors (two runs of
-one configuration: 67.1, 91.8-100.5, 75.5 dB). `m11_f160` repeats them with each sequence run once before it is
-captured (no pipeline compiling while it is drawn).
+one configuration: 67.1, 91.8-100.5, 75.5 dB). With each sequence run once before it is captured (`m11_f160`, no
+pipeline compiling while it is drawn): City Lab bit for bit, Lights Lab 101.5 dB, Bistro interior 67.1, PBR Lab 76.3,
+Sponza 75.2, each as two runs of the defaults (101.0, 67.1, 76.2, 75.2).
 
 ## Measured
 
