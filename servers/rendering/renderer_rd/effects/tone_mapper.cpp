@@ -34,6 +34,8 @@
 #include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
 #include "servers/rendering/renderer_rd/uniform_set_cache_rd.h"
 
+#include "servers/rendering/fellow_settings.h"
+
 using namespace RendererRD;
 
 ToneMapper::ToneMapper(bool p_use_mobile_version) {
@@ -208,8 +210,31 @@ void ToneMapper::tonemapper(RID p_source_color, RID p_dst_framebuffer, const Ton
 	RID shader = tonemap.shader.version_get_shader(tonemap.shader_version, mode);
 	ERR_FAIL_COND(shader.is_null());
 
+	// FellowEngine (postfx/tonemap_specialized, decision 0055): the decisions the shader makes from the push constants,
+	// as specialization constants (the same tests on the same values), so that the pipeline holds only this frame's paths.
+	uint32_t fellow_spec = 0;
+	if (Fellow::tonemap_specialized()) {
+		const TonemapPushConstant &pc = tonemap.push_constant;
+		fellow_spec = 1u << 0;
+		const uint32_t flag_bits[7] = { TONEMAP_FLAG_USE_BCS, TONEMAP_FLAG_USE_GLOW, TONEMAP_FLAG_USE_AUTO_EXPOSURE, TONEMAP_FLAG_USE_COLOR_CORRECTION, TONEMAP_FLAG_USE_FXAA, TONEMAP_FLAG_USE_8_BIT_DEBANDING, TONEMAP_FLAG_CONVERT_TO_SRGB };
+		for (uint32_t i = 0; i < 7; i++) {
+			fellow_spec |= (pc.flags & flag_bits[i]) ? (1u << (1 + i)) : 0u;
+		}
+		// Tone mappers 0-3 (linear, Reinhard, filmic, ACES); AgX (and any other value) is the shader's last branch.
+		fellow_spec |= pc.tonemapper < 4 ? (1u << (8 + pc.tonemapper)) : 0u;
+		// Glow modes: add, screen, soft light, mix (replace is the last branch).
+		fellow_spec |= pc.glow_mode == RSE::ENV_GLOW_BLEND_MODE_ADDITIVE ? (1u << 12) : 0u;
+		fellow_spec |= pc.glow_mode == RSE::ENV_GLOW_BLEND_MODE_SCREEN ? (1u << 13) : 0u;
+		fellow_spec |= pc.glow_mode == RSE::ENV_GLOW_BLEND_MODE_SOFTLIGHT ? (1u << 14) : 0u;
+		fellow_spec |= pc.glow_mode == RSE::ENV_GLOW_BLEND_MODE_MIX ? (1u << 15) : 0u;
+		for (uint32_t i = 0; i < 7; i++) {
+			fellow_spec |= pc.glow_levels[i] > 0.0001f ? (1u << (16 + i)) : 0u;
+		}
+		fellow_spec |= pc.glow_map_strength > 0.001f ? (1u << 23) : 0u;
+	}
+
 	RD::DrawListID draw_list = RD::get_singleton()->draw_list_begin(p_dst_framebuffer);
-	RD::get_singleton()->draw_list_bind_render_pipeline(draw_list, tonemap.pipelines[mode].get_render_pipeline(RD::INVALID_ID, RD::get_singleton()->framebuffer_get_format(p_dst_framebuffer), false, RD::get_singleton()->draw_list_get_current_pass()));
+	RD::get_singleton()->draw_list_bind_render_pipeline(draw_list, tonemap.pipelines[mode].get_render_pipeline(RD::INVALID_ID, RD::get_singleton()->framebuffer_get_format(p_dst_framebuffer), false, RD::get_singleton()->draw_list_get_current_pass(), fellow_spec));
 	RD::get_singleton()->draw_list_bind_uniform_set(draw_list, uniform_set_cache->get_cache(shader, 0, u_source_color), 0);
 	RD::get_singleton()->draw_list_bind_uniform_set(draw_list, uniform_set_cache->get_cache(shader, 1, u_exposure_texture), 1);
 	RD::get_singleton()->draw_list_bind_uniform_set(draw_list, uniform_set_cache->get_cache(shader, 2, u_glow_texture, u_glow_map), 2);

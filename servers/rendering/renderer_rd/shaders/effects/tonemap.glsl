@@ -63,6 +63,41 @@ layout(set = 3, binding = 0) uniform sampler3D source_color_correction;
 #define FLAG_USE_8_BIT_DEBANDING (1 << 5)
 #define FLAG_CONVERT_TO_SRGB (1 << 6)
 
+// FellowEngine (postfx/tonemap_specialized, decision 0055): the pipeline's specialization constants carry the same
+// decisions as the push constants (sc_fellow true), so that the driver compiles only the paths this frame takes; with
+// sc_fellow false (stock's pipeline) every test reads the push constants as before. The arithmetic of a path taken is
+// the same either way.
+layout(constant_id = 0) const bool sc_fellow = false;
+layout(constant_id = 1) const bool sc_use_bcs = false;
+layout(constant_id = 2) const bool sc_use_glow = false;
+layout(constant_id = 3) const bool sc_use_auto_exposure = false;
+layout(constant_id = 4) const bool sc_use_color_correction = false;
+layout(constant_id = 5) const bool sc_use_fxaa = false;
+layout(constant_id = 6) const bool sc_use_8_bit_debanding = false;
+layout(constant_id = 7) const bool sc_convert_to_srgb = false;
+layout(constant_id = 8) const bool sc_tonemapper_linear = false;
+layout(constant_id = 9) const bool sc_tonemapper_reinhard = false;
+layout(constant_id = 10) const bool sc_tonemapper_filmic = false;
+layout(constant_id = 11) const bool sc_tonemapper_aces = false;
+layout(constant_id = 12) const bool sc_glow_mode_add = false;
+layout(constant_id = 13) const bool sc_glow_mode_screen = false;
+layout(constant_id = 14) const bool sc_glow_mode_softlight = false;
+layout(constant_id = 15) const bool sc_glow_mode_mix = false;
+layout(constant_id = 16) const bool sc_glow_level_0 = false;
+layout(constant_id = 17) const bool sc_glow_level_1 = false;
+layout(constant_id = 18) const bool sc_glow_level_2 = false;
+layout(constant_id = 19) const bool sc_glow_level_3 = false;
+layout(constant_id = 20) const bool sc_glow_level_4 = false;
+layout(constant_id = 21) const bool sc_glow_level_5 = false;
+layout(constant_id = 22) const bool sc_glow_level_6 = false;
+layout(constant_id = 23) const bool sc_glow_map = false;
+
+#define FELLOW_FLAG(m_flag, m_sc) (sc_fellow ? (m_sc) : bool(params.flags & (m_flag)))
+#define FELLOW_TONEMAPPER(m_mode, m_sc) (sc_fellow ? (m_sc) : params.tonemapper == (m_mode))
+#define FELLOW_GLOW_MODE(m_mode, m_sc) (sc_fellow ? (m_sc) : params.glow_mode == (m_mode))
+#define FELLOW_GLOW_LEVEL(m_level, m_sc) (sc_fellow ? (m_sc) : params.glow_levels[m_level] > 0.0001)
+#define FELLOW_GLOW_MAP (sc_fellow ? sc_glow_map : params.glow_map_strength > 0.001)
+
 layout(push_constant, std430) uniform Params {
 	vec3 bcs;
 	uint flags;
@@ -244,7 +279,7 @@ vec3 srgb_to_linear(vec3 color) {
 #define TONEMAPPER_AGX 4
 
 vec3 apply_tonemapping(vec3 color) { // inputs are LINEAR
-	if (params.tonemapper == TONEMAPPER_LINEAR) {
+	if (FELLOW_TONEMAPPER(TONEMAPPER_LINEAR, sc_tonemapper_linear)) {
 		return color;
 	}
 
@@ -252,11 +287,11 @@ vec3 apply_tonemapping(vec3 color) { // inputs are LINEAR
 	// They can be negative in the case of negative lights, which leads to undesired behavior.
 	color = max(vec3(0.0), color);
 
-	if (params.tonemapper == TONEMAPPER_REINHARD) {
+	if (FELLOW_TONEMAPPER(TONEMAPPER_REINHARD, sc_tonemapper_reinhard)) {
 		return tonemap_reinhard(color);
-	} else if (params.tonemapper == TONEMAPPER_FILMIC) {
+	} else if (FELLOW_TONEMAPPER(TONEMAPPER_FILMIC, sc_tonemapper_filmic)) {
 		return tonemap_filmic(color);
-	} else if (params.tonemapper == TONEMAPPER_ACES) {
+	} else if (FELLOW_TONEMAPPER(TONEMAPPER_ACES, sc_tonemapper_aces)) {
 		return tonemap_aces(color);
 	} else { // TONEMAPPER_AGX
 		return tonemap_agx(color);
@@ -372,31 +407,31 @@ vec3 gather_glow(SAMPLER_FORMAT tex, vec2 uv) { // sample all selected glow leve
 
 	vec3 glow = vec3(0.0f);
 
-	if (params.glow_levels[0] > 0.0001) {
+	if (FELLOW_GLOW_LEVEL(0, sc_glow_level_0)) {
 		glow += GLOW_TEXTURE_SAMPLE(tex, uv, 0).rgb * params.glow_levels[0];
 	}
 
-	if (params.glow_levels[1] > 0.0001) {
+	if (FELLOW_GLOW_LEVEL(1, sc_glow_level_1)) {
 		glow += GLOW_TEXTURE_SAMPLE(tex, uv, 1).rgb * params.glow_levels[1];
 	}
 
-	if (params.glow_levels[2] > 0.0001) {
+	if (FELLOW_GLOW_LEVEL(2, sc_glow_level_2)) {
 		glow += GLOW_TEXTURE_SAMPLE(tex, uv, 2).rgb * params.glow_levels[2];
 	}
 
-	if (params.glow_levels[3] > 0.0001) {
+	if (FELLOW_GLOW_LEVEL(3, sc_glow_level_3)) {
 		glow += GLOW_TEXTURE_SAMPLE(tex, uv, 3).rgb * params.glow_levels[3];
 	}
 
-	if (params.glow_levels[4] > 0.0001) {
+	if (FELLOW_GLOW_LEVEL(4, sc_glow_level_4)) {
 		glow += GLOW_TEXTURE_SAMPLE(tex, uv, 4).rgb * params.glow_levels[4];
 	}
 
-	if (params.glow_levels[5] > 0.0001) {
+	if (FELLOW_GLOW_LEVEL(5, sc_glow_level_5)) {
 		glow += GLOW_TEXTURE_SAMPLE(tex, uv, 5).rgb * params.glow_levels[5];
 	}
 
-	if (params.glow_levels[6] > 0.0001) {
+	if (FELLOW_GLOW_LEVEL(6, sc_glow_level_6)) {
 		glow += GLOW_TEXTURE_SAMPLE(tex, uv, 6).rgb * params.glow_levels[6];
 	}
 
@@ -413,9 +448,9 @@ vec3 gather_glow(SAMPLER_FORMAT tex, vec2 uv) { // sample all selected glow leve
 
 // Applies glow using the selected blending mode. Does not handle the mix blend mode.
 vec3 apply_glow(vec3 color, vec3 glow, float white) {
-	if (params.glow_mode == GLOW_MODE_ADD) {
+	if (FELLOW_GLOW_MODE(GLOW_MODE_ADD, sc_glow_mode_add)) {
 		return color + glow;
-	} else if (params.glow_mode == GLOW_MODE_SCREEN) {
+	} else if (FELLOW_GLOW_MODE(GLOW_MODE_SCREEN, sc_glow_mode_screen)) {
 		// Glow cannot be above 1.0 after normalizing and should be non-negative
 		// to produce expected results. It is possible that glow can be negative
 		// if negative lights were used in the scene.
@@ -434,7 +469,7 @@ vec3 apply_glow(vec3 color, vec3 glow, float white) {
 		color.rgb = color.rgb + glow.rgb - (color.rgb * glow.rgb / white);
 
 		return color;
-	} else if (params.glow_mode == GLOW_MODE_SOFTLIGHT) {
+	} else if (FELLOW_GLOW_MODE(GLOW_MODE_SOFTLIGHT, sc_glow_mode_softlight)) {
 		// Glow cannot be above 1.0 should be non-negative to produce
 		// expected results. It is possible that glow can be negative
 		// if negative lights were used in the scene.
@@ -863,25 +898,25 @@ void main() {
 
 	float exposure = params.exposure;
 
-	if (bool(params.flags & FLAG_USE_AUTO_EXPOSURE)) {
+	if (FELLOW_FLAG(FLAG_USE_AUTO_EXPOSURE, sc_use_auto_exposure)) {
 		exposure *= 1.0 / (texelFetch(source_auto_exposure, ivec2(0, 0), 0).r * params.luminance_multiplier / params.auto_exposure_scale);
 	}
 
 	color.rgb *= exposure;
 
 	// Single-pass FXAA and pre-tonemap glow.
-	if (bool(params.flags & FLAG_USE_FXAA)) {
+	if (FELLOW_FLAG(FLAG_USE_FXAA, sc_use_fxaa)) {
 		// FXAA must be performed before glow to preserve the "bleed" effect of glow.
 		color.rgb = do_fxaa(color.rgb, exposure, uv_interp);
 	}
 
-	if (bool(params.flags & FLAG_USE_GLOW) && params.glow_mode != GLOW_MODE_SOFTLIGHT) {
+	if (FELLOW_FLAG(FLAG_USE_GLOW, sc_use_glow) && !FELLOW_GLOW_MODE(GLOW_MODE_SOFTLIGHT, sc_glow_mode_softlight)) {
 		vec3 glow = gather_glow(source_glow, uv_interp) * params.glow_intensity;
-		if (params.glow_map_strength > 0.001) {
+		if (FELLOW_GLOW_MAP) {
 			glow = mix(glow, texture(glow_map, uv_interp).rgb * glow, params.glow_map_strength);
 		}
 
-		if (params.glow_mode == GLOW_MODE_MIX) {
+		if (FELLOW_GLOW_MODE(GLOW_MODE_MIX, sc_glow_mode_mix)) {
 			color.rgb = color.rgb * (1.0 - params.glow_intensity) + glow;
 		} else {
 			color.rgb = apply_glow(color.rgb, glow, params.white);
@@ -894,12 +929,12 @@ void main() {
 
 	// Post-tonemap glow.
 
-	if (bool(params.flags & FLAG_USE_GLOW) && params.glow_mode == GLOW_MODE_SOFTLIGHT) {
+	if (FELLOW_FLAG(FLAG_USE_GLOW, sc_use_glow) && FELLOW_GLOW_MODE(GLOW_MODE_SOFTLIGHT, sc_glow_mode_softlight)) {
 		// Apply soft light after tonemapping to mitigate the issue of discontinuity
 		// at 1.0 and higher. This makes the issue only appear with HDR output that
 		// can exceed a 1.0 output value.
 		vec3 glow = gather_glow(source_glow, uv_interp) * params.glow_intensity;
-		if (params.glow_map_strength > 0.001) {
+		if (FELLOW_GLOW_MAP) {
 			glow = mix(glow, texture(glow_map, uv_interp).rgb * glow, params.glow_map_strength);
 		}
 		glow = apply_tonemapping(glow);
@@ -908,7 +943,7 @@ void main() {
 
 	// Additional effects.
 
-	if (bool(params.flags & FLAG_USE_BCS)) {
+	if (FELLOW_FLAG(FLAG_USE_BCS, sc_use_bcs)) {
 		// Apply brightness:
 		// Apply to relative luminance. This ensures that the hue and saturation of
 		// colors is not affected by the adjustment, but requires the multiplication
@@ -930,23 +965,23 @@ void main() {
 		// maintains compatibility with existing projects.
 		color.rgb = mix(vec3(dot(vec3(1.0), color.rgb) * (1.0 / 3.0)), color.rgb, params.bcs.z);
 
-		if (bool(params.flags & FLAG_USE_COLOR_CORRECTION)) {
+		if (FELLOW_FLAG(FLAG_USE_COLOR_CORRECTION, sc_use_color_correction)) {
 			color.rgb = clamp(color.rgb, vec3(0.0), vec3(1.0));
 			color.rgb = apply_color_correction(color.rgb);
 			// When using color correction and  FLAG_CONVERT_TO_SRGB is false, there
 			// is no need to convert back to linear because the color correction
 			// texture sampling does this for us.
-		} else if (!bool(params.flags & FLAG_CONVERT_TO_SRGB)) {
+		} else if (!FELLOW_FLAG(FLAG_CONVERT_TO_SRGB, sc_convert_to_srgb)) {
 			color.rgb = srgb_to_linear(color.rgb);
 		}
-	} else if (bool(params.flags & FLAG_CONVERT_TO_SRGB)) {
+	} else if (FELLOW_FLAG(FLAG_CONVERT_TO_SRGB, sc_convert_to_srgb)) {
 		color.rgb = linear_to_srgb(color.rgb);
 	}
 
 	// Debanding should be done at the end of tonemapping, but before writing to the LDR buffer.
 	// Otherwise, we're adding noise to an already-quantized image.
 
-	if (bool(params.flags & FLAG_USE_8_BIT_DEBANDING)) {
+	if (FELLOW_FLAG(FLAG_USE_8_BIT_DEBANDING, sc_use_8_bit_debanding)) {
 		// Divide by 255 to align to 8-bit quantization.
 		color.rgb += screen_space_dither(gl_FragCoord.xy, 255.0);
 	}

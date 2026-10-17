@@ -70,6 +70,13 @@ inline bool ssr_filter_padded() {
 	return postfx_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/postfx/ssr_filter_padded");
 }
 
+// Forward+ tone mapping with the push constants' decisions (flags, tone mapper, glow mode, glow levels, glow map) also
+// as specialization constants: the driver compiles only the paths taken; the same arithmetic (decision 0055). Read
+// every frame.
+inline bool tonemap_specialized() {
+	return postfx_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/postfx/tonemap_specialized");
+}
+
 // Volumetric fog's density pass (decision 0053): 0 stock; 1 its omni/spot/area light loops walked by the subgroup over
 // the union of its froxels' lights (each froxel takes only its own, in stock's order); 2 the same with workgroups of 2 x 2
 // x 16 froxels (a warp's froxels about one cluster tile); 3 those workgroups with stock's loops. Read every frame.
