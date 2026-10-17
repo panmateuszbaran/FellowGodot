@@ -2297,7 +2297,13 @@ void fragment_shader(in SceneData scene_data) {
 		// Interpolate between mirror and rough reflection by using linear_roughness * linear_roughness.
 		ref_vec = mix(ref_vec, bent_normal, roughness * roughness * roughness * roughness);
 
+#ifdef FELLOW_EXP_PROBE_LOOP
+		// Diagnostics (debug/scene_shader_experiments 33554432): the probe loop compiled whatever the specialization says
+		// (the stock code; a control for the experiments below).
+		if (true) {
+#else
 		if (!sc_fellow_no_reflection_probes()) { // FellowEngine decision 0057: not compiled without reflection probes
+#endif
 			for (uint i = item_from; i < item_to; i++) {
 				uint mask = cluster_buffer.data[cluster_reflection_offset + i];
 				mask &= cluster_get_range_clip_mask(i, item_min, item_max);
@@ -2340,6 +2346,15 @@ void fragment_shader(in SceneData scene_data) {
 			reflection_accum = fellow_keep(reflection_accum);
 #ifdef LIGHT_CLEARCOAT_USED
 			cc_reflection_accum = fellow_keep(cc_reflection_accum);
+#endif
+#ifdef FELLOW_EXP_PROBE_REFVEC
+			// Diagnostics (debug/scene_shader_experiments 8388608): the loop's reflection vector still computed, and
+			// used (through an AND with the zero) as the loop would use it.
+			reflection_accum.x = uintBitsToFloat(floatBitsToUint(reflection_accum.x) ^ ((floatBitsToUint(ref_vec.x) ^ floatBitsToUint(ref_vec.y) ^ floatBitsToUint(ref_vec.z)) & implementation_data.fellow_zero));
+#endif
+#ifdef FELLOW_EXP_PROBE_INPUTS
+			// Diagnostics (debug/scene_shader_experiments 16777216): the loop's other inputs used likewise.
+			ambient_accum.x = uintBitsToFloat(floatBitsToUint(ambient_accum.x) ^ ((floatBitsToUint(vertex.x) ^ floatBitsToUint(vertex.y) ^ floatBitsToUint(vertex.z) ^ floatBitsToUint(normal.x) ^ floatBitsToUint(normal.y) ^ floatBitsToUint(normal.z) ^ floatBitsToUint(roughness) ^ floatBitsToUint(ambient_light.x) ^ floatBitsToUint(ambient_light.y) ^ floatBitsToUint(ambient_light.z)) & implementation_data.fellow_zero));
 #endif
 		}
 
