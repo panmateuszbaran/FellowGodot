@@ -14,6 +14,12 @@ extends Node
 ##   --cameras=<a,b>          restrict capture/reference to these fixed cameras
 ##   --seqs=<a,b>             restrict temporal sequences
 ##   --settle=<frames>        frames rendered before a still capture (default 96, fills TAA history)
+##   --pipeline_settle=<n>    temporal: before each sequence, render its first pose until n consecutive frames compile
+##                            no pipeline (default 0: off; at most 20 s). The ubershader draws while a specialized
+##                            pipeline compiles, so a sequence started earlier can depend on the compile threads' timing.
+##   --temporal_warm=1        temporal: run each sequence once (pre-roll and frames, nothing saved) before the captured
+##                            run, so that the pipelines its frames need (new lights or materials coming into view) are
+##                            compiled before it, not while it is drawn with the ubershader
 ##   --hdr=1                  capture: also write linear pre-tonemap EXR (linear tonemapper, no glow, HDR 2D)
 ##   --jitter=<n>             reference: sub-pixel jittered renders per output frame (default 16)
 ##   --ablate=<a+b>           sizing only (items separated by + or ,): hide omni / spot / sun lights, probes, decals, or pos_shadows (see _ablate)
@@ -553,12 +559,45 @@ func _run_temporal(jittered_reference: bool) -> void:
 	var files := {}
 	var stem := _file_stem()
 	var pre_roll := int(args.get("preroll", "32"))
+	var pipeline_settle := int(args.get("pipeline_settle", "0"))
+	var compile_info := {}
 	for sname in _selected(scene.temporal_seqs.keys(), "seqs"):
 		var s: Dictionary = scene.temporal_seqs[sname]
 		var path = s["path"]
 		var start: float = s["start"]
 		var nframes: int = s["frames"]
 		var lst := []
+		var settle_frames := 0
+		if pipeline_settle > 0:
+			# Render the sequence's first pose until no pipeline has compiled for pipeline_settle frames.
+			var t0 := start - pre_roll * DT
+			scene.set_time(t0)
+			scene.apply_path_sample(path.sample(t0 - start))
+			var quiet := 0
+			var last := _pipeline_compilations()
+			var deadline := Time.get_ticks_msec() + 20000
+			while quiet < pipeline_settle and Time.get_ticks_msec() < deadline:
+				await get_tree().process_frame
+				settle_frames += 1
+				var now := _pipeline_compilations()
+				quiet = quiet + 1 if now == last else 0
+				last = now
+		if args.get("temporal_warm", "0") == "1":
+			for i in range(pre_roll + nframes):
+				var tw := start + (i - pre_roll) * DT
+				scene.set_time(tw)
+				scene.apply_path_sample(path.sample(tw - start))
+				await get_tree().process_frame
+			# Let the last compilations finish before the captured run.
+			var quiet_w := 0
+			var last_w := _pipeline_compilations()
+			var deadline_w := Time.get_ticks_msec() + 20000
+			while quiet_w < 30 and Time.get_ticks_msec() < deadline_w:
+				await get_tree().process_frame
+				var now_w := _pipeline_compilations()
+				quiet_w = quiet_w + 1 if now_w == last_w else 0
+				last_w = now_w
+		var pc_start := _pipeline_compilations()
 		# Pre-roll: run the sequence backwards in time so TAA history is "in motion" when capture starts.
 		for i in range(pre_roll):
 			var t := start + (i - pre_roll) * DT
@@ -575,7 +614,9 @@ func _run_temporal(jittered_reference: bool) -> void:
 			_save_frame(p)
 			lst.append(p.get_file())
 		files[sname] = lst
+		compile_info[sname] = {"settle_frames": settle_frames, "during_sequence": _dict_sub(_pipeline_compilations(), pc_start)}
 	result["files"] = files
+	result["temporal_pipeline_compilations"] = compile_info
 
 
 ## Ground-truth-style reference: every output frame = average of N sub-pixel jittered renders
