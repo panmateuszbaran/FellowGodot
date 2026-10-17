@@ -1,6 +1,6 @@
 # 0057 — The colour passes without the code of what the frame does not have
 
-Status: **measuring** (v1 `fellow137`, v2 `fellow138`) · Branch `fellow/geometry` · Setting
+Status: **measuring** (v1 `fellow137`, v2 `fellow138`, v3 `fellow139`, v4 `fellow141`) · Branch `fellow/geometry` · Setting
 `rendering/fellow/shading/absent_features_specialized` (runtime bits: 1 decals, 2 reflection probes, 4 directional
 lights, 8 omni lights, 16 spot lights, 32 positional shadows; 0, off, until measured) · Diagnostics `debug/scene_shader_experiments` 4194304 (discard as demote) · Code:
 `forward_clustered/scene_shader_forward_clustered.h` (`ShaderSpecialization::packed_1` bits 27-31, `packed_2` bit 0,
@@ -95,6 +95,15 @@ bit**, with 2 (no reflection probes) 103.3 dB, with 63 98.4; Bistro exterior wit
 with 2 93.9 dB, with 63 93.8. With `discard` as demote on both sides Bistro exterior stays at 93.8 (not the derivatives
 after `discard`). Leaving out the decal, omni, spot and positional shadow code is exact on the RTX; leaving out the probe
 loop is not, although its accumulators pass `fellow_keep`.
+
+**v4** (`fellow141`). Diagnostics (`m11_f165`, probe bit, City Lab and Bistro exterior): with the loop's reflection
+vector still computed and used through the zero, **bit for bit** in both; with the loop's other inputs (position,
+normal, roughness, ambient light) used likewise, unchanged (98.4, 93.8 dB); with the loop compiled whatever the bit (the
+control), bit for bit. The reflection vector (`normalize(reflect(-view, normal))`, mixed toward the normal by
+roughness⁴) shares its subexpressions with the sky reflection's (`reflect(-view, normal)`, mixed by roughness²): without
+the probe loop's use of them, the RTX's compiler arranges the sky reflection's arithmetic differently. v4 keeps computing
+it and folds it into a probe accumulator through `& fellow_zero` (about twenty operations, nothing kept live past that
+point). lavapipe: City Lab 63, Lights Lab 63, PBR Lab 7 with demote 0 differing pixels. RTX: `m11_f167`.
 
 ## Measured
 
