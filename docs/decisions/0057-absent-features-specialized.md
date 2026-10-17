@@ -80,8 +80,13 @@ these derivatives the same value whatever the code around them is for its sequen
 RTX, v1 (`fellow137`): `m11_f159_abs_temporal` (63 against 0, 60-frame sequences) Sponza 75.4 dB, Bistro interior 67.1,
 Lights Lab 91.5, Foliage Lab 78.2, PBR Lab 76.1, City Lab **94.8** (min 86.0, at most 9 levels); with each sequence run
 once before it is captured (`m11_f160`): City Lab **95.6 dB** (at most 3 levels) where two runs of the defaults are bit
-for bit, PBR Lab 75.6 against its 76.2-76.3, the others at their floors. v1 is not exact on the RTX either. v2:
-`m11_f162`.
+for bit, PBR Lab 75.6 against its 76.2-76.3, the others at their floors. v1 is not exact on the RTX either.
+
+RTX, v2 (`fellow138`, `m11_f162`, warm sequences, 63 against the defaults, two runs of each): Sponza 75.4-75.5 dB,
+Bistro interior 67.1, Lights Lab 94.4-95.0, Foliage Lab 78.2 (floors: 75.5, 67.1, 95.0, 78.2); City Lab **98.4 dB** (min
+92.7, at most 1 level) and Bistro exterior **93.8 dB** (min 86.4, at most 2 levels), both bit for bit between two runs;
+PBR Lab 75.6-75.7 against 76.3. Closer than v1 (City Lab 95.6), not exact: what the NVIDIA compiler does differently
+when the blocks are left out is not only the fusion at their boundaries. `m11_f164` looks for the bit.
 
 ## Measured
 
@@ -113,4 +118,8 @@ directional; 63: all six):
 | Lights Lab | −1.1 % | **−1.0 %** | 0.899 → 0.876 (−3 %) | |
 
 Every p < 0.001. Stress Lab records no GPU time with this profile (frame −0.6 %, n.s.).
+
+v2 (`m11_f162_keep_ab`, `fellow138`, 63 against 0): Sponza −9.2 %, Bistro exterior −6.4 %, Bistro interior −5.9 %,
+City Lab −4.7 %, Foliage Lab −4.5 %, PBR Lab −3.4 %, Lights Lab −1.3 % (every p < 1e-6): `fellow_keep` costs up to a
+point in City Lab and Bistro interior (their tile-culled variants at 96 registers instead of 80; v3 keeps fewer values).
 
