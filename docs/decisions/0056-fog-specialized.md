@@ -1,6 +1,6 @@
 # 0056 — Volumetric fog: the density pass without the loops a frame does not run
 
-Status: **measuring** (`fellow136`) · Branch `fellow/geometry` · Setting `rendering/fellow/postfx/fog_specialized`
+Status: **KEEP, on by default from `fellow138`** (exact; measured with `fellow136`) · Branch `fellow/geometry` · Setting `rendering/fellow/postfx/fog_specialized`
 (runtime, off until measured) · Code: `shaders/environment/volumetric_fog_process.glsl` (`sc_fellow_no_area_lights`,
 `sc_fellow_no_voxel_gi`), `environment/fog.{h,cpp}` (`fellow_spec_pipelines`), `fellow_settings.*`;
 `benchmarks/project/scenes/lights_lab.gd` (`--area_lights=N`, for the tests).
@@ -36,6 +36,21 @@ shadowed: the area constant not set): **0**. Negative control (the area loop rem
 present): 713 549 differing pixels, up to 20 levels: the area lights' fog is in these images, and a wrong condition
 would show.
 
+RTX (`m11_f158_fogsc_temporal`, 60-frame sequences, specialized against stock's pipeline): Bistro exterior **bit for
+bit**; Lights Lab 102.4 dB, Sponza 75.5 dB, their run-to-run floors (Sponza compiles 23 pipelines during its sequence,
+Lights Lab 3, Bistro exterior none: decision 0054).
+
 ## Measured
 
-Pending.
+In-process A/B (`m11_f158b_fogsc_ab`, 4 × 4 blocks per configuration, profiled; the density pass is "Render Fog"):
+
+| scene | constants that apply | density pass (ms) | GPU |
+|---|---|---|---|
+| Lights Lab | area, VoxelGI, directional | 0.200 → **0.159 (−21 %)** | **−0.9 %** (p 0.001) |
+| Sponza | area, VoxelGI | 0.100 → **0.073 (−27 %)** | −0.1 % (n.s.) |
+| Bistro exterior | area, VoxelGI | 0.140 → **0.104 (−26 %)** | +0.1 % (n.s.) |
+
+The area light path alone (Sponza, Bistro exterior: they have a directional light) costs a quarter of the pass. The
+pass runs beside async compute's part, so a shorter pass shows in the frame only where it was the longer queue (Lights
+Lab). With 0053's subgroup loop on top: Lights Lab's pass 0.151 ms (−25 %) but the same frame (−0.9 %), Sponza and
+Bistro exterior slower than without it. KEEP, on by default; 0053 stays off.
