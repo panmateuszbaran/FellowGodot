@@ -365,6 +365,13 @@ inline int segment_barriers() {
 	return GLOBAL_GET_CACHED(int, "rendering/fellow/debug/segment_barriers");
 }
 
+// The colour passes' pipelines specialized for what the frame does not have: no decal or reflection probe in the light
+// cluster, no directional light (their code is not compiled; it would run no iteration; decision 0057). Read every
+// frame.
+inline int absent_features_specialized() {
+	return enabled() ? (GLOBAL_GET_CACHED(int, "rendering/fellow/shading/absent_features_specialized") & 7) : 0;
+}
+
 inline bool light_tile_cull_pass_only() {
 	return GLOBAL_GET_CACHED(bool, "rendering/fellow/debug/tile_cull_pass_only");
 }

@@ -150,6 +150,9 @@ public:
 				uint32_t fellow_light_hot : 1; // decision 0047: the light loop's fields from the compact copy
 				uint32_t fellow_light_hot_ubo : 1; // decision 0047: the compact copy is the uniform buffer
 				uint32_t fellow_light_tile_cull : 1; // decision 0049: the opaque colour pass's light loops use the tile masks
+				uint32_t fellow_no_decals : 1; // decision 0057: the light cluster holds no decal (the loop is not compiled)
+				uint32_t fellow_no_reflection_probes : 1; // decision 0057: no reflection probe (likewise)
+				uint32_t fellow_no_directional_lights : 1; // decision 0057: no directional light (the loops are not compiled)
 			};
 		};
 

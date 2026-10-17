@@ -235,6 +235,20 @@ bool sc_fellow_light_tile_cull() {
 	return ((sc_packed_1() >> 26) & 1U) != 0;
 }
 #define FELLOW_HAS_LIGHT_TILE_CULL
+
+// FellowEngine (shading/absent_features_specialized, decision 0057): what this frame's colour passes do not have, as
+// specialization constants: their loops would run no iteration, and are not compiled.
+bool sc_fellow_no_decals() {
+	return ((sc_packed_1() >> 27) & 1U) != 0;
+}
+
+bool sc_fellow_no_reflection_probes() {
+	return ((sc_packed_1() >> 28) & 1U) != 0;
+}
+
+bool sc_fellow_no_directional_lights() {
+	return ((sc_packed_1() >> 29) & 1U) != 0;
+}
 #define FELLOW_OMNI_HOT(m_idx, m_field) (sc_fellow_light_hot() ? (sc_fellow_light_hot_ubo() ? fellow_omni_hot_ubo.data[m_idx].m_field : fellow_omni_hot_ssbo.data[m_idx].m_field) : omni_lights.data[m_idx].m_field)
 #define FELLOW_SPOT_HOT(m_idx, m_field) (sc_fellow_light_hot() ? (sc_fellow_light_hot_ubo() ? fellow_spot_hot_ubo.data[m_idx].m_field : fellow_spot_hot_ssbo.data[m_idx].m_field) : spot_lights.data[m_idx].m_field)
 #define FELLOW_HAS_LIGHT_PREFETCH_NEXT

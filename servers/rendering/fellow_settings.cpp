@@ -112,6 +112,8 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/postfx/ssr_filter_padded", false); // decision 0052: no gain (m10_f151)
 	GLOBAL_DEF("rendering/fellow/postfx/tonemap_specialized", false); // decision 0055 (measuring)
 	GLOBAL_DEF("rendering/fellow/postfx/fog_specialized", false); // decision 0056 (measuring)
+	// Bits: 1 no decals, 2 no reflection probes, 4 no directional lights (7: all three; decision 0057, measuring).
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/shading/absent_features_specialized", PROPERTY_HINT_FLAGS, "Decals,Reflection Probes,Directional Lights"), 0);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/postfx/fog_light_loop", PROPERTY_HINT_ENUM, "Stock,Subgroup,Subgroup 2x2x16,Stock 2x2x16"), 0); // decision 0053 (measuring)
 	GLOBAL_DEF("rendering/fellow/postfx/ss_coherent_gather", false);
 	GLOBAL_DEF("rendering/fellow/postfx/fast_luminance_reduce", true);
@@ -142,8 +144,9 @@ void Fellow::register_settings() {
 	// pixel dropped from each cluster word first, four at a time, 65536 no light_compute() for omni/spot lights, 131072 no
 	// omni/spot shadow lookups (code kept; images change), 262144 with 8 light counts as the colour (with 32: lights within
 	// range), 524288 omni/spot lights stop after their range test, 1048576 the positional lights' PCF loops in one batch
-	// of 8, 2097152 omni/spot shadow fields read after the range test. 0: none (the shipped shaders).
-	GLOBAL_DEF_RST(PropertyInfo(Variant::INT, "rendering/fellow/debug/scene_shader_experiments", PROPERTY_HINT_RANGE, "0,4194303,1"), 0);
+	// of 8, 2097152 omni/spot shadow fields read after the range test, 4194304 discard as demote to helper (derivatives
+	// of quads with discarded invocations defined: for image tests on lavapipe). 0: none (the shipped shaders).
+	GLOBAL_DEF_RST(PropertyInfo(Variant::INT, "rendering/fellow/debug/scene_shader_experiments", PROPERTY_HINT_RANGE, "0,8388607,1"), 0);
 	// Diagnostics: the light cluster tile's side in pixels (8, 16, 32 = stock, 64), when the render buffers are set up.
 	GLOBAL_DEF_RST(PropertyInfo(Variant::INT, "rendering/fellow/debug/cluster_size", PROPERTY_HINT_ENUM, "8:8,16:16,32:32,64:64"), 32);
 	GLOBAL_DEF("rendering/fellow/debug/occlusion_cull_approx", false);

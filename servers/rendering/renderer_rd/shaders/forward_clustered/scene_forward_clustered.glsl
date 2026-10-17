@@ -867,6 +867,13 @@ void main() {
 
 #VERSION_DEFINES
 
+#ifdef FELLOW_EXP_DEMOTE
+// Diagnostics (debug/scene_shader_experiments 4194304; for image tests on drivers that leave derivatives of quads with
+// discarded invocations to chance): discard demotes the invocation to a helper, so that derivatives stay defined.
+#extension GL_EXT_demote_to_helper_invocation : require
+#define discard demote
+#endif
+
 #define SHADER_IS_SRGB false
 #define SHADER_SPACE_FAR 0.0
 
@@ -1751,7 +1758,7 @@ void fragment_shader(in SceneData scene_data) {
 	vec3 vertex_ddx = dFdx(vertex);
 	vec3 vertex_ddy = dFdy(vertex);
 
-	{ // process decals
+	if (!sc_fellow_no_decals()) { // process decals (FellowEngine decision 0057: not compiled without decals)
 
 		uint cluster_decal_offset = cluster_offset + implementation_data.cluster_type_size * 3;
 
@@ -2282,40 +2289,42 @@ void fragment_shader(in SceneData scene_data) {
 		// Interpolate between mirror and rough reflection by using linear_roughness * linear_roughness.
 		ref_vec = mix(ref_vec, bent_normal, roughness * roughness * roughness * roughness);
 
-		for (uint i = item_from; i < item_to; i++) {
-			uint mask = cluster_buffer.data[cluster_reflection_offset + i];
-			mask &= cluster_get_range_clip_mask(i, item_min, item_max);
+		if (!sc_fellow_no_reflection_probes()) { // FellowEngine decision 0057: not compiled without reflection probes
+			for (uint i = item_from; i < item_to; i++) {
+				uint mask = cluster_buffer.data[cluster_reflection_offset + i];
+				mask &= cluster_get_range_clip_mask(i, item_min, item_max);
 
-			uint merged_mask = subgroupBroadcastFirst(subgroupOr(mask));
-			while (merged_mask != 0) {
-				uint bit = findMSB(merged_mask);
-				merged_mask &= ~(1u << bit);
+				uint merged_mask = subgroupBroadcastFirst(subgroupOr(mask));
+				while (merged_mask != 0) {
+					uint bit = findMSB(merged_mask);
+					merged_mask &= ~(1u << bit);
 
-				if (((1u << bit) & mask) == 0) { //do not process if not originally here
-					continue;
-				}
+					if (((1u << bit) & mask) == 0) { //do not process if not originally here
+						continue;
+					}
 
-				uint reflection_index = 32 * i + bit;
+					uint reflection_index = 32 * i + bit;
 
-				if (!bool(reflections.data[reflection_index].mask & FELLOW_INSTANCE(layer_mask))) {
-					continue; //not masked
-				}
+					if (!bool(reflections.data[reflection_index].mask & FELLOW_INSTANCE(layer_mask))) {
+						continue; //not masked
+					}
 
 #ifndef LIGHT_CLEARCOAT_USED
-				if (reflection_accum.a >= 1.0 && ambient_accum.a >= 1.0) {
-					break;
-				}
+					if (reflection_accum.a >= 1.0 && ambient_accum.a >= 1.0) {
+						break;
+					}
 #else
-				if (reflection_accum.a >= 1.0 && cc_reflection_accum.a >= 1.0 && ambient_accum.a >= 1.0) {
-					break;
-				}
+					if (reflection_accum.a >= 1.0 && cc_reflection_accum.a >= 1.0 && ambient_accum.a >= 1.0) {
+						break;
+					}
 #endif // LIGHT_CLEARCOAT_USED
 
-				reflection_process(reflection_index, vertex, ref_vec, normal, roughness, ambient_light,
+					reflection_process(reflection_index, vertex, ref_vec, normal, roughness, ambient_light,
 #ifdef LIGHT_CLEARCOAT_USED
-						cc_ref_vec, mix(0.001, 0.1, clearcoat_roughness), cc_reflection_accum,
+							cc_ref_vec, mix(0.001, 0.1, clearcoat_roughness), cc_reflection_accum,
 #endif
-						ambient_accum, reflection_accum);
+							ambient_accum, reflection_accum);
+				}
 			}
 		}
 
@@ -2503,7 +2512,7 @@ void fragment_shader(in SceneData scene_data) {
 	direct_specular_light += specular_light_interp.rgb * f0;
 #endif
 
-	{ // Directional light.
+	if (!sc_fellow_no_directional_lights()) { // Directional light. (FellowEngine decision 0057: not compiled without directional lights)
 
 		// Do shadow and lighting in two passes to reduce register pressure.
 #ifndef SHADOWS_DISABLED

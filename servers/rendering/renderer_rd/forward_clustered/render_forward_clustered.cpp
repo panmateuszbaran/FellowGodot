@@ -4933,6 +4933,15 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	if (current_cluster_builder) {
 		base_specialization.cluster_has_area_light = current_cluster_builder->get_cluster_count_by_type(ClusterBuilderRD::ELEMENT_TYPE_AREA_LIGHT) != 0;
 	}
+	{
+		// FellowEngine (shading/absent_features_specialized, decision 0057): the colour passes' pipelines without the
+		// decal and reflection probe loops when the light cluster holds none, and without the directional lights' block
+		// when the frame has none (each would run no iteration).
+		const int fellow_absent = Fellow::absent_features_specialized(); // bits: 1 decals, 2 reflection probes, 4 directional lights
+		base_specialization.fellow_no_decals = (fellow_absent & 1) && current_cluster_builder != nullptr && current_cluster_builder->get_cluster_count_by_type(ClusterBuilderRD::ELEMENT_TYPE_DECAL) == 0;
+		base_specialization.fellow_no_reflection_probes = (fellow_absent & 2) && current_cluster_builder != nullptr && current_cluster_builder->get_cluster_count_by_type(ClusterBuilderRD::ELEMENT_TYPE_REFLECTION_PROBE) == 0;
+		base_specialization.fellow_no_directional_lights = (fellow_absent & 4) && p_render_data->directional_light_count == 0;
+	}
 
 	// FellowEngine occlusion culling (decision 0026): the opaque colour pass's runs tested against the full pre-pass's depth.
 	bool fellow_occlusion_culled = false;
@@ -8750,10 +8759,10 @@ RenderForwardClustered::RenderForwardClustered() {
 		{
 			// FellowEngine diagnostics (rendering/fellow/debug/scene_shader_experiments): experiment defines.
 			const int experiments = GLOBAL_GET("rendering/fellow/debug/scene_shader_experiments");
-			static const char *names[22] = { "FELLOW_EXP_DONT_UNROLL", "FELLOW_EXP_UNROLL", "FELLOW_EXP_BIT2", "FELLOW_EXP_BIT3", "FELLOW_EXP_BIT4", "FELLOW_EXP_BIT5", "FELLOW_EXP_BIT6", "FELLOW_EXP_BIT7",
+			static const char *names[23] = { "FELLOW_EXP_DONT_UNROLL", "FELLOW_EXP_UNROLL", "FELLOW_EXP_BIT2", "FELLOW_EXP_BIT3", "FELLOW_EXP_BIT4", "FELLOW_EXP_BIT5", "FELLOW_EXP_BIT6", "FELLOW_EXP_BIT7",
 				"FELLOW_EXP_BIT8", "FELLOW_EXP_BIT9", "FELLOW_EXP_BIT10", "FELLOW_EXP_BIT11", "FELLOW_EXP_BIT12", "FELLOW_EXP_BIT13", "FELLOW_EXP_BIT14", "FELLOW_EXP_BIT15",
-				"FELLOW_EXP_BIT16", "FELLOW_EXP_BIT17", "FELLOW_EXP_BIT18", "FELLOW_EXP_BIT19", "FELLOW_EXP_BIT20", "FELLOW_EXP_BIT21" };
-			for (int b = 0; b < 22; b++) {
+				"FELLOW_EXP_BIT16", "FELLOW_EXP_BIT17", "FELLOW_EXP_BIT18", "FELLOW_EXP_BIT19", "FELLOW_EXP_BIT20", "FELLOW_EXP_BIT21", "FELLOW_EXP_DEMOTE" };
+			for (int b = 0; b < 23; b++) {
 				if (experiments & (1 << b)) {
 					defines += "\n#define " + String(names[b]) + "\n";
 				}
