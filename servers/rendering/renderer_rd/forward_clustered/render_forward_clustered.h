@@ -352,7 +352,7 @@ private:
 			uint32_t volumetric_fog_enabled;
 			float volumetric_fog_inv_length;
 			float volumetric_fog_detail_spread;
-			uint32_t volumetric_fog_pad;
+			uint32_t fellow_zero; // was volumetric_fog_pad: always 0, the scene shader's fellow_keep (decision 0057)
 		};
 
 		struct PushConstantUbershader {

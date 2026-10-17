@@ -1334,6 +1334,11 @@ void light_process_omni(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 			shadow = mix(half(1.0), sample_omni_pcf_shadow(shadow_atlas, FELLOW_SHO(soft_shadow_scale) / shadow_sample.z, pos, uv_rect, flip_offset, depth, taa_frame_count), half(FELLOW_LO(shadow_opacity)));
 		}
 	}
+#ifdef FELLOW_HAS_NO_POSITIONAL_SHADOWS
+	else if (!FELLOW_POSITIONAL_SHADOWS_ON) {
+		shadow = fellow_keep(shadow); // decision 0057: as through the branch's phi in stock's pipeline
+	}
+#endif
 #endif
 
 	vec3 color = FELLOW_LO(color);
@@ -1372,6 +1377,11 @@ void light_process_omni(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 		float shadow_z = textureLod(sampler2D(shadow_atlas, SAMPLER_LINEAR_CLAMP), pos, 0.0).r;
 		transmittance_z = half((depth - shadow_z) / FELLOW_LO(inv_radius));
 	}
+#ifdef FELLOW_HAS_NO_POSITIONAL_SHADOWS
+	else if (!FELLOW_POSITIONAL_SHADOWS_ON) {
+		transmittance_z = fellow_keep(transmittance_z); // decision 0057: as through the branch's phi in stock's pipeline
+	}
+#endif
 #endif // !SHADOWS_DISABLED
 #endif // LIGHT_TRANSMITTANCE_USED
 
@@ -1697,6 +1707,11 @@ void light_process_spot(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 			shadow = mix(half(1.0), sample_pcf_shadow(shadow_atlas, FELLOW_SHS(soft_shadow_scale) * scene_data_block.data.shadow_atlas_pixel_size, shadow_uv, taa_frame_count), half(FELLOW_LS(shadow_opacity)));
 		}
 	}
+#ifdef FELLOW_HAS_NO_POSITIONAL_SHADOWS
+	else if (!FELLOW_POSITIONAL_SHADOWS_ON) {
+		shadow = fellow_keep(shadow); // decision 0057: as through the branch's phi in stock's pipeline
+	}
+#endif
 #endif // SHADOWS_DISABLED
 
 	vec3 color = FELLOW_LS(color);
@@ -1721,6 +1736,11 @@ void light_process_spot(uint idx, vec3 vertex, hvec3 eye_vec, hvec3 normal, vec3
 		float z = dot(spot_dir, -light_rel_vec);
 		transmittance_z = half(z - shadow_z);
 	}
+#ifdef FELLOW_HAS_NO_POSITIONAL_SHADOWS
+	else if (!FELLOW_POSITIONAL_SHADOWS_ON) {
+		transmittance_z = fellow_keep(transmittance_z); // decision 0057: as through the branch's phi in stock's pipeline
+	}
+#endif
 #endif // !SHADOWS_DISABLED
 #endif // LIGHT_TRANSMITTANCE_USED
 

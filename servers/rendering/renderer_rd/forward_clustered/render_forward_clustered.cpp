@@ -960,6 +960,7 @@ uint32_t RenderForwardClustered::_setup_environment(const RenderDataRD *p_render
 	}
 
 	scene_state.ubo.gi_upscale_for_msaa = false;
+	scene_state.ubo.fellow_zero = 0; // the scene shader's fellow_keep XORs with it (decision 0057)
 	scene_state.ubo.volumetric_fog_enabled = false;
 
 	if (rd.is_valid()) {

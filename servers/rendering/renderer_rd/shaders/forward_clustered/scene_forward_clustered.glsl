@@ -1862,6 +1862,14 @@ void fragment_shader(in SceneData scene_data) {
 				}
 			}
 		}
+	} else {
+		// FellowEngine decision 0057: what the decal loop could have changed (fellow_keep).
+		albedo = fellow_keep(albedo);
+		normal = fellow_keep(normal);
+		ao = fellow_keep(ao);
+		roughness = fellow_keep(roughness);
+		metallic = fellow_keep(metallic);
+		emission = fellow_keep(emission);
 	}
 
 	//pack albedo until needed again, saves 2 VGPRs in the meantime
@@ -2326,6 +2334,13 @@ void fragment_shader(in SceneData scene_data) {
 							ambient_accum, reflection_accum);
 				}
 			}
+		} else {
+			// FellowEngine decision 0057: what the probe loop could have changed (fellow_keep).
+			ambient_accum = fellow_keep(ambient_accum);
+			reflection_accum = fellow_keep(reflection_accum);
+#ifdef LIGHT_CLEARCOAT_USED
+			cc_reflection_accum = fellow_keep(cc_reflection_accum);
+#endif
 		}
 
 		if (ambient_accum.a < 1.0) {
@@ -3054,6 +3069,13 @@ void fragment_shader(in SceneData scene_data) {
 					direct_specular_light);
 		}
 #endif // USE_VERTEX_LIGHTING
+	} else {
+		// FellowEngine decision 0057: what the light loop could have changed (fellow_keep).
+		diffuse_light = fellow_keep(diffuse_light);
+		direct_specular_light = fellow_keep(direct_specular_light);
+#ifdef USE_SHADOW_TO_OPACITY
+		alpha = fellow_keep(alpha);
+#endif
 	}
 
 #ifndef USE_VERTEX_LIGHTING
@@ -3302,6 +3324,13 @@ void fragment_shader(in SceneData scene_data) {
 						diffuse_light, direct_specular_light);
 			}
 		}
+	} else {
+		// FellowEngine decision 0057: what the light loop could have changed (fellow_keep).
+		diffuse_light = fellow_keep(diffuse_light);
+		direct_specular_light = fellow_keep(direct_specular_light);
+#ifdef USE_SHADOW_TO_OPACITY
+		alpha = fellow_keep(alpha);
+#endif
 	}
 
 	if (!sc_fellow_no_spot_lights()) { //spot lights (FellowEngine decision 0057: not compiled without spot lights)
@@ -3565,6 +3594,13 @@ void fragment_shader(in SceneData scene_data) {
 						diffuse_light, direct_specular_light);
 			}
 		}
+	} else {
+		// FellowEngine decision 0057: what the light loop could have changed (fellow_keep).
+		diffuse_light = fellow_keep(diffuse_light);
+		direct_specular_light = fellow_keep(direct_specular_light);
+#ifdef USE_SHADOW_TO_OPACITY
+		alpha = fellow_keep(alpha);
+#endif
 	}
 
 	if (sc_cluster_has_area_light()) { // area lights

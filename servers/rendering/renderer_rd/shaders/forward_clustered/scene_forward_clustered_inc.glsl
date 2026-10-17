@@ -519,7 +519,7 @@ struct ImplementationData {
 	bool volumetric_fog_enabled;
 	float volumetric_fog_inv_length;
 	float volumetric_fog_detail_spread;
-	uint volumetric_fog_pad;
+	uint fellow_zero; // was volumetric_fog_pad: always 0 (decision 0057, fellow_keep)
 };
 
 layout(set = 1, binding = 1, std140) uniform ImplementationDataBlock {
@@ -528,6 +528,29 @@ layout(set = 1, binding = 1, std140) uniform ImplementationDataBlock {
 implementation_data_block;
 
 #define implementation_data implementation_data_block.data
+
+// FellowEngine decision 0057: where a specialization constant leaves out a block of code, the values that block could
+// have changed are passed through this identity (an XOR with a zero the compiler cannot see), as they pass through the
+// block's phi in stock's pipeline. The compiler then cannot fuse the multiply that computed such a value with the add
+// that uses it after the block (a contracted multiply-add rounds once instead of twice), where stock's compiler could
+// not either: the values that reach the code after the block are computed with stock's rounding.
+float fellow_keep(float v) {
+	return uintBitsToFloat(floatBitsToUint(v) ^ implementation_data.fellow_zero);
+}
+vec3 fellow_keep(vec3 v) {
+	return uintBitsToFloat(floatBitsToUint(v) ^ uvec3(implementation_data.fellow_zero));
+}
+vec4 fellow_keep(vec4 v) {
+	return uintBitsToFloat(floatBitsToUint(v) ^ uvec4(implementation_data.fellow_zero));
+}
+#ifdef EXPLICIT_FP16
+float16_t fellow_keep(float16_t v) {
+	return float16_t(fellow_keep(float(v)));
+}
+f16vec3 fellow_keep(f16vec3 v) {
+	return f16vec3(fellow_keep(vec3(v)));
+}
+#endif
 
 struct InstanceData {
 	mat3x4 transform;
