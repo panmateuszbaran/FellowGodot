@@ -192,6 +192,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/frame/early_submit", false);
 	GLOBAL_DEF("rendering/fellow/frame/present_thread", true);
 	GLOBAL_DEF("rendering/fellow/frame/parallel_shader_create", true); // decision 0061
+	GLOBAL_DEF("rendering/fellow/frame/lazy_shader_variants", true); // decision 0061
 	GLOBAL_DEF("rendering/fellow/frame/submit_thread", true);
 	GLOBAL_DEF("rendering/fellow/frame/parallel_replay", true);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/frame/replay_max_segments", PROPERTY_HINT_RANGE, "2,64,1"), 12);
@@ -286,6 +287,7 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["cost_shader_variant_usec"] = s.cost_shader_variant_usec.get();
 	d["cost_shader_variants"] = s.cost_shader_variants.get();
 	d["cost_shader_cache_loads"] = s.cost_shader_cache_loads.get();
+	d["cost_shader_lazy_creates"] = s.cost_shader_lazy_creates.get();
 	d["cost_shader_create_usec"] = s.cost_shader_create_usec.get();
 	d["cost_shader_creates"] = s.cost_shader_creates.get();
 	d["cost_pipeline_sync_usec"] = s.cost_pipeline_sync_usec.get();

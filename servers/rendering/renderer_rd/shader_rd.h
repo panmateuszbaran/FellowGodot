@@ -85,6 +85,9 @@ private:
 
 		Vector<Vector<uint8_t>> variant_data;
 		Vector<RID> variants;
+		// FellowEngine (decision 0061): variants read from the shader cache whose shader is created when first asked for.
+		LocalVector<uint8_t> fellow_lazy;
+		uint32_t fellow_lazy_count = 0;
 
 		bool valid;
 		bool dirty;
@@ -109,6 +112,7 @@ private:
 		RID *created = nullptr; // one per variant id in variant_ids
 	};
 	static void _fellow_create_cached_variant(void *p_data, uint32_t p_index);
+	void _fellow_create_lazy(Version *p_version, int p_variant);
 
 	void _initialize_version(Version *p_version);
 	void _clear_version(Version *p_version);
@@ -232,6 +236,10 @@ public:
 
 		if (!version->valid) {
 			return RID();
+		}
+
+		if (unlikely(version->fellow_lazy_count > 0) && version->fellow_lazy[p_variant]) {
+			_fellow_create_lazy(version, p_variant);
 		}
 
 		return version->variants[p_variant];

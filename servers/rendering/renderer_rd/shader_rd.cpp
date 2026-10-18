@@ -259,6 +259,8 @@ void ShaderRD::_initialize_version(Version *p_version) {
 
 	p_version->variants.resize_initialized(variant_defines.size());
 	p_version->variant_data.resize(variant_defines.size());
+	p_version->fellow_lazy.resize_initialized(variant_defines.size());
+	p_version->fellow_lazy_count = 0;
 	p_version->group_compilation_tasks.resize_initialized(group_enabled.size());
 }
 
@@ -276,6 +278,8 @@ void ShaderRD::_clear_version(Version *p_version) {
 		p_version->variants.clear();
 		p_version->variant_data.clear();
 	}
+	p_version->fellow_lazy.clear();
+	p_version->fellow_lazy_count = 0;
 }
 
 void ShaderRD::_build_variant_code(StringBuilder &builder, uint32_t p_variant, const Version *p_version, const StageTemplate &p_template) {
@@ -624,6 +628,17 @@ void ShaderRD::_fellow_create_cached_variant(void *p_data, uint32_t p_index) {
 	data->created[p_index] = RD::get_singleton()->shader_create_from_bytecode_with_samplers(data->version->variant_data[variant_id], data->placeholders[variant_id], data->shader->immutable_samplers);
 }
 
+void ShaderRD::_fellow_create_lazy(Version *p_version, int p_variant) {
+	// Called by version_get_shader() with the version's mutex held.
+	p_version->fellow_lazy[p_variant] = 0;
+	p_version->fellow_lazy_count--;
+	Fellow::stats().cost_shader_lazy_creates.increment();
+	// A placeholder (the variant's RID while its group was disabled) is filled and keeps its RID.
+	RID shader = RD::get_singleton()->shader_create_from_bytecode_with_samplers(p_version->variant_data[p_variant], p_version->variants[p_variant], immutable_samplers);
+	ERR_FAIL_COND_MSG(shader.is_null(), vformat("Failed to create variant %d of shader %s from the shader cache.", p_variant, name));
+	p_version->variants.write[p_variant] = shader;
+}
+
 void ShaderRD::fellow_finalize() {
 	MutexLock lock(fellow_cache_create_mutex);
 	if (fellow_cache_create_parallel != nullptr) {
@@ -682,6 +697,25 @@ bool ShaderRD::_load_from_cache(Version *p_version, int p_group) {
 		ERR_FAIL_COND_V(br != variant_size, false);
 
 		p_version->variant_data.write[variant_id] = variant_bytes;
+	}
+
+	if (Fellow::frame_lazy_shader_variants() && p_version->fellow_lazy.size() == (uint32_t)variant_defines.size()) {
+		// FellowEngine (decision 0061): each variant's shader is created when version_get_shader() first asks for it (from
+		// the bytes just read, kept in variant_data as stock keeps them).
+		for (uint32_t i = 0; i < variant_count; i++) {
+			int variant_id = group_to_variant_map[p_group][i];
+			if (!variants_enabled[variant_id]) {
+				p_version->variants.write[variant_id] = RID();
+				continue;
+			}
+			if (!p_version->fellow_lazy[variant_id]) {
+				p_version->fellow_lazy[variant_id] = 1;
+				p_version->fellow_lazy_count++;
+			}
+		}
+		p_version->valid = true;
+		Fellow::stats().cost_shader_cache_loads.increment();
+		return true;
 	}
 
 	if (Fellow::frame_parallel_shader_create()) {
