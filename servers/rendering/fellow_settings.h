@@ -366,7 +366,8 @@ inline int segment_barriers() {
 
 // The colour passes' pipelines specialized for what the frame does not have (bits): 1 no decal, 2 no reflection probe,
 // 8 no omni light, 16 no spot light in the light cluster, 4 no directional light, 32 no shadowed omni or spot light
-// (their code is not compiled; it would not run; decision 0057). Read every frame.
+// (their code is not compiled; it would not run; the values it could have changed pass fellow_keep; decision 0057, all
+// six on by default). Read every frame.
 inline int absent_features_specialized() {
 	return enabled() ? (GLOBAL_GET_CACHED(int, "rendering/fellow/shading/absent_features_specialized") & 63) : 0;
 }

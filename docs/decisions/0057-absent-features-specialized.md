@@ -1,8 +1,8 @@
 # 0057 — The colour passes without the code of what the frame does not have
 
-Status: **measuring** (v1 `fellow137`, v2 `fellow138`, v3 `fellow139`, v4 `fellow141`) · Branch `fellow/geometry` · Setting
+Status: **KEEP, all six bits on by default from `fellow142`** (v4: exact; GPU −1.0 to −9.3 %; v1 `fellow137`, v2 `fellow138`, v3 `fellow139`, v4 `fellow141`) · Branch `fellow/geometry` · Setting
 `rendering/fellow/shading/absent_features_specialized` (runtime bits: 1 decals, 2 reflection probes, 4 directional
-lights, 8 omni lights, 16 spot lights, 32 positional shadows; 0, off, until measured) · Diagnostics `debug/scene_shader_experiments` 4194304 (discard as demote) · Code:
+lights, 8 omni lights, 16 spot lights, 32 positional shadows; 63 by default) · Diagnostics `debug/scene_shader_experiments` 4194304 (discard as demote) · Code:
 `forward_clustered/scene_shader_forward_clustered.h` (`ShaderSpecialization::packed_1` bits 27-31, `packed_2` bit 0,
 a third specialization constant), `scene_shader_forward_clustered.cpp`, `shaders/scene_forward_lights_inc.glsl`
 (`FELLOW_POSITIONAL_SHADOWS_ON`), `storage_rd/light_storage.*` (`fellow_positional_shadowed`),
@@ -103,7 +103,10 @@ control), bit for bit. The reflection vector (`normalize(reflect(-view, normal))
 roughness⁴) shares its subexpressions with the sky reflection's (`reflect(-view, normal)`, mixed by roughness²): without
 the probe loop's use of them, the RTX's compiler arranges the sky reflection's arithmetic differently. v4 keeps computing
 it and folds it into a probe accumulator through `& fellow_zero` (about twenty operations, nothing kept live past that
-point). lavapipe: City Lab 63, Lights Lab 63, PBR Lab 7 with demote 0 differing pixels. RTX: `m11_f167`.
+point). lavapipe: City Lab 63, Lights Lab 63, PBR Lab 7 with demote 0 differing pixels. RTX (`m11_f167`, `fellow141`,
+warm sequences, 63 twice against the defaults twice, every pair): City Lab and Bistro exterior **bit for bit**; Bistro
+interior 67.1 dB, Foliage Lab 78.2-78.3, Lights Lab 97.6-101.9, PBR Lab 76.2-76.3, Sponza 75.5, each as two runs of the
+defaults (67.1, 78.2, 98.4, 76.3, 75.5). **Exact.**
 
 ## Measured
 
@@ -147,4 +150,12 @@ Without the probe bit (61, `m11_f166_abs61_ab`, `fellow140`, against 0, with 63 
 Bistro interior −5.1 % (−5.3 %), Bistro exterior −4.8 % (−6.0 %), Foliage Lab −4.2 % (−4.5 %), City Lab −3.2 % (−5.5 %),
 PBR Lab −2.4 % (−3.6 %), Lights Lab −1.2 % (−1.0 %). Its sequences (`m11_f166`, warm, two runs against the defaults):
 City Lab and Bistro exterior **bit for bit**, the others at their floors.
+
+## Decision
+
+KEEP v4, all six bits on by default (`fellow142`): the same image as stock's pipelines (lavapipe bit for bit in every
+scene tested with defined derivatives; RTX bit for bit where two runs are, at the run-to-run floor elsewhere) and the
+largest gain of the milestone (GPU −9 % in Sponza, −5 to −6 % in both Bistros and City Lab). Each combination of the
+six bits in use is a pipeline of its own, compiled when first needed (the ubershader draws meanwhile, stock's mechanism):
+a decal, probe or light type coming into view for the first time can cost a compilation, as a new material does.
 
