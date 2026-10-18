@@ -143,3 +143,8 @@ point in City Lab and Bistro interior (their tile-culled variants at 96 register
 v3 (`m11_f163b_keep3_ab`, `fellow139`): Sponza −8.3 %, Bistro interior −6.0 %, Bistro exterior −5.8 %, City Lab −4.9 %,
 Foliage Lab −4.4 %, PBR Lab −3.9 %, Lights Lab −1.1 %.
 
+Without the probe bit (61, `m11_f166_abs61_ab`, `fellow140`, against 0, with 63 beside it): Sponza −8.2 % (63: −9.3 %),
+Bistro interior −5.1 % (−5.3 %), Bistro exterior −4.8 % (−6.0 %), Foliage Lab −4.2 % (−4.5 %), City Lab −3.2 % (−5.5 %),
+PBR Lab −2.4 % (−3.6 %), Lights Lab −1.2 % (−1.0 %). Its sequences (`m11_f166`, warm, two runs against the defaults):
+City Lab and Bistro exterior **bit for bit**, the others at their floors.
+
