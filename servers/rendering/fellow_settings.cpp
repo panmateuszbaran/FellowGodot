@@ -84,7 +84,8 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/geometry/mesh_clusters", true);
 	GLOBAL_DEF("rendering/fellow/geometry/cluster_blended_surfaces", true);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/geometry/cluster_triangles", PROPERTY_HINT_RANGE, "64,65536,1"), 4096);
-	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/geometry/cluster_front_to_back", PROPERTY_HINT_RANGE, "0,1048576,1"), 0); // decision 0058 (measuring)
+	GLOBAL_DEF("rendering/fellow/frame/pipeline_fallback", false); // decision 0059 (measuring)
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/geometry/cluster_front_to_back", PROPERTY_HINT_RANGE, "0,1048576,1"), 0); // decision 0058 (rejected, off)
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/geometry/cluster_min_surface_triangles", PROPERTY_HINT_RANGE, "256,1048576,1"), 32768);
 	GLOBAL_DEF("rendering/fellow/lights/enabled", true);
 	GLOBAL_DEF("rendering/fellow/lights/cluster_depth_slices", true);
@@ -264,6 +265,8 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["geometry_cluster_blended_after_activation"] = s.geometry_cluster_blended_after_activation.get();
 	d["geometry_cluster_build_usec"] = s.geometry_cluster_build_usec.get();
 	d["geometry_cluster_draws"] = s.geometry_cluster_draws.get();
+	d["pipeline_fallback_draws"] = s.pipeline_fallback_draws.get();
+	d["pipeline_ubershader_draws"] = s.pipeline_ubershader_draws.get();
 	d["geometry_cluster_triangles_drawn"] = s.geometry_cluster_triangles_drawn.get();
 	d["geometry_cluster_triangles_culled"] = s.geometry_cluster_triangles_culled.get();
 	d["frame_early_submits"] = s.frame_early_submits.get();

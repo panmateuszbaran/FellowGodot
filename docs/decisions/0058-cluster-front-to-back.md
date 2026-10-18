@@ -1,6 +1,6 @@
 # 0058 — Large surfaces' clusters drawn front to back
 
-Status: **measuring** (`fellow143`) · Branch `fellow/geometry` · Setting `rendering/fellow/geometry/cluster_front_to_back`
+Status: **REJECT** (left in, off; measured with `fellow143`) · Branch `fellow/geometry` · Setting `rendering/fellow/geometry/cluster_front_to_back`
 (runtime, triangles per ordered range; 0, off, until measured) · Code: `storage_rd/fellow_mesh_clusters.*`
 (`cull_ordered`), `render_forward_clustered.*` (`fellow_cluster_eye`, `fellow_cluster_f2b`), `fellow_settings.*`.
 
@@ -32,4 +32,19 @@ pixels**; 3.7 times the cluster draws.
 
 ## Measured
 
-Pending (`m12_f169_f2b_ab`).
+In-process A/B (`m12_f169_f2b_ab`, autotune off, 4 × 4 blocks, profiled), 4096 and 16 384 triangles per ordered range
+against the tree's order:
+
+| scene | depth pre-pass (ms) | opaque pass (ms) | GPU |
+|---|---|---|---|
+| Sponza | 1.090 → 1.069 / 1.074 | 1.640 → 1.651 / 1.647 | −0.2 % / −0.2 % (n.s.) |
+| Bistro exterior | 0.584 → 0.583 / 0.583 | 1.408 → 1.406 / 1.406 | −0.1 % / −0.0 % (n.s.) |
+| Foliage Lab | 0.502 → 0.501 / 0.501 | 0.823 → 0.826 / 0.825 | +0.0 % (n.s.) |
+| PBR Lab | 0.106 → 0.106 / 0.106 | 0.686 → 0.686 / 0.686 | −0.1 % (n.s.) |
+
+## Decision
+
+REJECT (left in, off). Front to back takes 2 % off Sponza's pre-pass and nothing off the frame: the pre-pass is not
+spent on fragments that a nearer part of the same surface covers later. What it is spent on is the next question: its
+millions of small triangles (the curtains' 2 million, the ivy's 4.9 million, the trees' bark), each covering a few
+pixels or less, cost raster and quad work whatever their order.
