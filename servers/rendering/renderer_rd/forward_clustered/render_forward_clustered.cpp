@@ -310,8 +310,30 @@ void RenderForwardClustered::update() {
 // (a RenderForwardClustered::FellowRecordJob).
 static thread_local void *fellow_tl_record = nullptr;
 
+// Decision 0059: the specialization a draw falls back on while its own pipeline compiles: FellowEngine's per-frame bits
+// at the defaults the load-time compilation used. 0057's bits only leave out code that would not run (clear: the code is
+// there and runs no iteration); light tile culling off visits every light of the cell (0049: the same lights reach the
+// same expressions); the light loop's fields early and prefetch choose code shapes with the same results (0045, 0046).
+static _FORCE_INLINE_ SceneShaderForwardClustered::ShaderSpecialization fellow_fallback_specialization(SceneShaderForwardClustered::ShaderSpecialization p_spec, const SceneShaderForwardClustered::ShaderSpecialization &p_default) {
+	p_spec.fellow_light_fields_early = p_default.fellow_light_fields_early;
+	p_spec.fellow_light_prefetch_next = p_default.fellow_light_prefetch_next;
+	p_spec.fellow_light_prefetch_all = p_default.fellow_light_prefetch_all;
+	p_spec.fellow_light_prefetch_words = p_default.fellow_light_prefetch_words;
+	p_spec.fellow_light_hot = p_default.fellow_light_hot;
+	p_spec.fellow_light_hot_ubo = p_default.fellow_light_hot_ubo;
+	p_spec.fellow_light_tile_cull = 0;
+	p_spec.fellow_no_decals = 0;
+	p_spec.fellow_no_reflection_probes = 0;
+	p_spec.fellow_no_directional_lights = 0;
+	p_spec.fellow_no_omni_lights = 0;
+	p_spec.fellow_no_spot_lights = 0;
+	p_spec.fellow_no_positional_shadows = 0;
+	return p_spec;
+}
+
 template <RenderForwardClustered::PassMode p_pass_mode, uint32_t p_color_pass_flags>
 void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p_draw_list, RenderingDevice::FramebufferFormatID p_framebuffer_Format, RenderListParameters *p_params, uint32_t p_from_element, uint32_t p_to_element) {
+	const bool fellow_pipeline_fallback = Fellow::pipeline_fallback(); // decision 0059
 	RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
 	RendererRD::ParticlesStorage *particles_storage = RendererRD::ParticlesStorage::get_singleton();
 	RD::DrawListID draw_list = p_draw_list;
@@ -584,7 +606,27 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 					pipeline_valid = true;
 					prev_shader = shader;
 					prev_pipeline_hash = pipeline_hash;
+					if (pipeline_key.ubershader) {
+						Fellow::stats().pipeline_ubershader_draws.increment();
+					}
 					break;
+				} else if (!pipeline_key.ubershader && fellow_pipeline_fallback) {
+					// Decision 0059: while this pipeline compiles (requested above), the one with FellowEngine's per-frame
+					// specialization bits at their defaults, if compiled (usually when the mesh was loaded). Those bits
+					// only leave out code that would not run or choose between code shapes with the same results.
+					SceneShaderForwardClustered::ShaderData::PipelineKey fellow_fb_key = pipeline_key;
+					fellow_fb_key.shader_specialization = fellow_fallback_specialization(pipeline_specialization, scene_shader.default_specialization);
+					const uint32_t fellow_fb_hash = fellow_fb_key.hash();
+					RID fellow_fb_rd;
+					if (fellow_fb_hash != pipeline_hash && shader->pipeline_hash_map.fellow_find_pipeline(fellow_fb_hash, fellow_fb_rd) && fellow_fb_rd.is_valid()) {
+						pipeline_rd = fellow_fb_rd;
+						pipeline_valid = true;
+						prev_shader = shader;
+						prev_pipeline_hash = pipeline_hash; // the next elements asking for the same pipeline keep the fallback bound
+						Fellow::stats().pipeline_fallback_draws.increment();
+						break;
+					}
+					pipeline_key.ubershader++;
 				} else {
 					pipeline_key.ubershader++;
 				}

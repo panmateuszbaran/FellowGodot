@@ -488,6 +488,13 @@ inline bool prepass_simple_first() {
 inline int cluster_front_to_back() {
 	return geometry_enabled() ? MAX(0, GLOBAL_GET_CACHED(int, "rendering/fellow/geometry/cluster_front_to_back")) : 0;
 }
+// A draw whose specialized pipeline is still compiling uses, when compiled, the pipeline with FellowEngine's per-frame
+// specialization bits at their defaults (the one compiled when the mesh was loaded: 0057's bits clear, light tile
+// culling off, the light loop's code shape as set) instead of the ubershader; the same image (decision 0059). Read
+// every frame.
+inline bool pipeline_fallback() {
+	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/frame/pipeline_fallback");
+}
 // Maximum triangles per cluster (leaf of the k-d tree).
 inline int mesh_cluster_triangles() {
 	return CLAMP(GLOBAL_GET_CACHED(int, "rendering/fellow/geometry/cluster_triangles"), 64, 1 << 20);
@@ -832,6 +839,8 @@ struct Stats {
 	SafeNumeric<uint64_t> geometry_cluster_blended_after_activation; // clustered surfaces later set up with a blending material
 	SafeNumeric<uint64_t> geometry_cluster_build_usec; // CPU time of cluster builds (worker threads)
 	SafeNumeric<uint64_t> geometry_cluster_draws; // draw calls issued for clustered surfaces
+	SafeNumeric<uint64_t> pipeline_fallback_draws; // draws with the defaults' pipeline while theirs compiled (decision 0059)
+	SafeNumeric<uint64_t> pipeline_ubershader_draws; // draws with the ubershader while theirs compiled (stock's fallback)
 	SafeNumeric<uint64_t> geometry_cluster_triangles_drawn; // triangles of clustered surfaces drawn
 	SafeNumeric<uint64_t> geometry_cluster_triangles_culled; // triangles of clustered surfaces skipped (outside the frustum)
 	SafeNumeric<uint64_t> frame_early_submits; // frames whose rendering was submitted before the swap chain acquisition
