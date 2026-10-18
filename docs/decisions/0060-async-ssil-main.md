@@ -1,7 +1,7 @@
 # 0060 — SSIL on the main queue beside the async SSAO and SSR
 
-Status: **measuring** (`fellow145`) · Branch `fellow/geometry` · Setting `rendering/fellow/frame/async_ssil_main`
-(runtime, off until measured) · Code: `render_forward_clustered.*` (`_fellow_process_ss_effects` parts,
+Status: **measuring** (`fellow145`, `fellow146`) · Branch `fellow/geometry` · Setting `rendering/fellow/frame/async_ss_split`
+(runtime: 0 stock's layout, 1 SSIL on the main queue, the default from `fellow146`, 2 SSIL and SSR on the main queue) · Code: `render_forward_clustered.*` (`_fellow_process_ss_effects` parts,
 `_pre_opaque_render`), `effects/ss_effects.*`, `shaders/effects/ssao.glsl`, `ssil.glsl` (the normal buffer sampled),
 `rendering_device_graph.cpp` (the async conflict check), `fellow_settings.*`.
 
@@ -36,6 +36,19 @@ Two things made this possible:
 lavapipe, async compute emulated on the main queue, City Lab with SSIL and SSR (container test argument): on against
 off **0 differing pixels**, 0 async conflicts, 0 synchronization hazards (Vulkan synchronization validation).
 
+RTX (`m12_f171_ssil_warm`, warm sequences): `fellow144` (imageLoad) against `fellow145` (texelFetch), and SSIL on the main
+queue against off: City Lab and Bistro exterior **bit for bit**, Bistro interior 67.1 dB and Sponza 75.5 dB (their
+floors). 0 async conflicts in every A/B run.
+
 ## Measured
 
-Pending (`m12_f171`).
+In-process A/B (`m12_f171_ssil_ab`, `fellow145`, autotune off, profiled), SSIL on the main queue against off:
+
+| scene | GPU | the main queue's wait region | SSAO (ms) | SSIL (ms) |
+|---|---|---|---|---|
+| Bistro interior | **−1.5 %** (p 8e-15) | 1.114 → 0.533 ms | 0.400 → 0.699 | 0.211 → 0.270 |
+| Bistro exterior | **−0.8 %** (p 1e-5) | | 0.591 → 0.797 | 0.238 → 0.302 |
+| Sponza | **−0.4 %** (p 3e-4) | | 0.516 → 0.714 | 0.228 → 0.299 |
+
+Run beside each other the two effects each take longer (they share the GPU), but together less: the gaps of one chain
+(its barriers between dependent dispatches) are filled by the other. Mode 2 (SSIL and SSR on the main queue): `m12_f172`.
