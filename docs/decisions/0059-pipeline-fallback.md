@@ -1,6 +1,6 @@
 # 0059 — While a specialization compiles: a compiled sibling instead of the ubershader
 
-Status: **measuring** (`fellow144`) · Branch `fellow/geometry` · Setting `rendering/fellow/frame/pipeline_fallback`
+Status: **REJECT** (left in, off; measured with `fellow144`) · Branch `fellow/geometry` · Setting `rendering/fellow/frame/pipeline_fallback`
 (runtime, off until measured) · Code: `render_forward_clustered.cpp` (`fellow_fallback_specializations`,
 `_render_list_template`), `fellow_settings.*` (stats `pipeline_fallback_draws`, `pipeline_ubershader_draws`);
 `FELLOW_PIPELINE_LOG` lists the misses.
@@ -39,4 +39,26 @@ fallbacks after its first compilations.
 
 ## Measured
 
-Pending (`m12_f170_fallback`).
+`m12_f170_fallback` (defaults with autotune on, Godot's pipeline cache off so that every run compiles; off / on, two
+runs each, between processes):
+
+| scene | ubershader binds off → on | fallback binds | compilations during measurement off → on | frame off → on (ms) |
+|---|---|---|---|---|
+| PBR Lab | 134, 217 → 0, 14 | 850, 65 | 40, 31 → 53, 52 | 2.19, 2.30 → 2.23, 2.22 |
+| Lights Lab | 69, 6 → 0, 0 | 9, 11 | 8, 3 → 6, 6 | 2.16, 2.28 → 2.17, 2.17 |
+| Bistro interior | 1, 1 → 0, 0 | 1, 1 | 1 → 1 | 3.01, 3.06 → 3.01, 3.08 |
+| Foliage Lab | 16, 32 → 13, 17 | 18-19 | 9, 21 → 30, 30 | 2.82, 2.74 → 2.84, 2.79 |
+| Sponza | 275, 282 → **3357**, 287 | 4 | 69 → **134** | 6.00, 5.94 → **6.37**, 6.01 |
+| Stress Lab | 137, 97 → **2069**, 112 | 10-72 | 40-64 → 70-94 | 4.57, 4.52 → 4.60, 4.32 |
+
+Where the bits change after their pipelines were compiled (PBR Lab, Lights Lab) the fallback replaces the ubershader
+entirely. In Sponza and Stress Lab the draws that miss are new materials and passes coming into view, for which nothing
+is compiled yet; the all-defaults pipeline the fallback then asks for doubles their compilations and delays the ones
+they need (Sponza's first run: 3357 ubershader binds against 275).
+
+## Decision
+
+REJECT (left in, off). The frames it saves are few, and asking for the extra pipelines costs more where materials are
+compiled for the first time. Compiling the right specializations earlier (at load time, with the bits the frame will
+use) is what would remove those frames; the bench's runs with a warm pipeline cache (every measurement since milestone
+2) do not show them as a cost.
