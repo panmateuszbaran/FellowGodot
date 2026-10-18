@@ -19,6 +19,7 @@ config/custom_user_dir_name="FellowBench"
 
 [debug]
 
+settings/profiler/max_timestamp_query_elements=2048
 gdscript/warnings/untyped_declaration=0
 gdscript/warnings/inference_on_variant=1
 gdscript/warnings/integer_division=0
