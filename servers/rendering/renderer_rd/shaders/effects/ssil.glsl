@@ -66,7 +66,15 @@ const int num_taps[5] = { 3, 5, 12, 0, 0 };
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 
 layout(set = 0, binding = 0) uniform sampler2DArray source_depth_mipmaps;
-layout(rgba8, set = 0, binding = 1) uniform restrict readonly image2D source_normal;
+// FellowEngine (decision 0060): the normal-roughness buffer sampled (texelFetch, the same values as imageLoad, and zero
+// outside the image as imageLoad gives), as SSR samples it: no layout transition between the three effects, which can
+// then run on either queue at the same time.
+layout(set = 0, binding = 1) uniform sampler2D source_normal;
+
+vec4 fellow_load_normal_texel(ivec2 p_pos) {
+	const ivec2 size = textureSize(source_normal, 0);
+	return (any(lessThan(p_pos, ivec2(0))) || any(greaterThanEqual(p_pos, size))) ? vec4(0.0) : texelFetch(source_normal, p_pos, 0);
+}
 layout(set = 0, binding = 2) uniform Constants { //get into a lower set
 	vec4 rotation_matrices[20];
 }
@@ -181,13 +189,13 @@ vec4 calculate_edges(const float p_center_z, const float p_left_z, const float p
 }
 
 vec3 load_normal(ivec2 p_pos) {
-	vec3 encoded_normal = normalize(imageLoad(source_normal, p_pos).xyz * 2.0 - 1.0);
+	vec3 encoded_normal = normalize(fellow_load_normal_texel(p_pos).xyz * 2.0 - 1.0);
 	encoded_normal.z = -encoded_normal.z;
 	return encoded_normal;
 }
 
 vec3 load_normal(ivec2 p_pos, ivec2 p_offset) {
-	vec3 encoded_normal = normalize(imageLoad(source_normal, p_pos + p_offset).xyz * 2.0 - 1.0);
+	vec3 encoded_normal = normalize(fellow_load_normal_texel(p_pos + p_offset).xyz * 2.0 - 1.0);
 	encoded_normal.z = -encoded_normal.z;
 	return encoded_normal;
 }

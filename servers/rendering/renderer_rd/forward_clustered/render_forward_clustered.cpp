@@ -4012,41 +4012,44 @@ void RenderForwardClustered::_copy_framebuffer_to_ss_effects(Ref<RenderSceneBuff
 	ss_effects->copy_internal_texture_to_last_frame(p_render_buffers, *copy_effects, Fellow::ss_last_frame_direct() && p_use_ssil && (!p_use_ssr || ss_effects->get_ssr_half_size()));
 }
 
-void RenderForwardClustered::_fellow_process_ss_effects(RenderDataRD *p_render_data, const Ref<RenderSceneBuffersRD> &rb, bool p_use_ssao, bool p_use_ssil, bool p_use_ssr, const RID *p_normal_roughness_slices) {
+void RenderForwardClustered::_fellow_process_ss_effects(RenderDataRD *p_render_data, const Ref<RenderSceneBuffersRD> &rb, bool p_use_ssao, bool p_use_ssil, bool p_use_ssr, const RID *p_normal_roughness_slices, uint32_t p_parts) {
+	// p_parts (decision 0060): which parts of the block to record, in stock's order (FELLOW_SS_ALL: all of them).
 	// Stock's screen-space effects block of _pre_opaque_render(), unchanged (moved so that async compute, decision
 	// 0015, can record it before the shadows).
 	// Note, in multiview we're allocating buffers for each eye/view we're rendering.
 	// This should allow most of the processing to happen in parallel even if we're doing
 	// drawcalls per eye/view. It will all sync up at the barrier.
 
-	if (p_use_ssil || p_use_ssr) {
+	if ((p_parts & FELLOW_SS_PREPARE) && (p_use_ssil || p_use_ssr)) {
 		ss_effects->allocate_last_frame_buffer(rb, p_use_ssil, p_use_ssr);
 	}
 
 	if (p_use_ssao || p_use_ssil) {
-		RENDER_TIMESTAMP("Prepare Depth for SSAO/SSIL");
-		// Convert our depth buffer data to linear data in
-		for (uint32_t v = 0; v < rb->get_view_count(); v++) {
-			ss_effects->downsample_depth(rb, v, p_render_data->scene_data->view_projection[v]);
+		if (p_parts & FELLOW_SS_PREPARE) {
+			RENDER_TIMESTAMP("Prepare Depth for SSAO/SSIL");
+			// Convert our depth buffer data to linear data in
+			for (uint32_t v = 0; v < rb->get_view_count(); v++) {
+				ss_effects->downsample_depth(rb, v, p_render_data->scene_data->view_projection[v]);
+			}
 		}
 
-		if (p_use_ssao) {
+		if (p_use_ssao && (p_parts & FELLOW_SS_SSAO)) {
 			_process_ssao(rb, p_render_data->environment, p_normal_roughness_slices, p_render_data->scene_data->view_projection, p_render_data->scene_data->cam_transform);
 		}
 
-		if (p_use_ssil) {
+		if (p_use_ssil && (p_parts & FELLOW_SS_SSIL)) {
 			_process_ssil(rb, p_render_data->environment, p_normal_roughness_slices, p_render_data->scene_data->view_projection, p_render_data->scene_data->cam_transform);
 		}
 	}
 
-	if (p_use_ssr) {
+	if (p_use_ssr && (p_parts & FELLOW_SS_SSR)) {
 		_process_ssr(rb, p_render_data->environment, p_normal_roughness_slices, p_render_data->scene_data->view_projection, p_render_data->scene_data->view_eye_offset, p_render_data->scene_data->cam_transform);
 	}
 
 	// FellowEngine adaptive shading rate (decision 0027): this frame's attachment from the last estimate, recorded with
 	// the screen-space effects (it needs only the depth pre-pass), so that with async compute it runs on the second
 	// queue while the main queue renders the shadows.
-	if (Fellow::adaptive_vrs() && _fellow_adaptive_vrs_target(rb)) {
+	if ((p_parts & FELLOW_SS_SSR) && Fellow::adaptive_vrs() && _fellow_adaptive_vrs_target(rb)) {
 		RENDER_TIMESTAMP("FellowEngine Adaptive Shading Rate");
 		RD::get_singleton()->draw_command_begin_label("FellowEngine Adaptive Shading Rate");
 		_fellow_adaptive_vrs_apply(rb, p_render_data->scene_data, fellow_vrs_depth_ready);
@@ -4090,10 +4093,50 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 		}
 	}
 
+	// FellowEngine (frame/async_ssil_main, decision 0060): the depth preparation before the async part and SSIL on the
+	// main queue beside it (both read the prepared depth and the normal buffer the same way, which the conflict check
+	// allows), SSAO and SSR on the second queue: two chains of compute instead of one.
+	const bool fellow_ssil_main = fellow_async_wanted && p_use_ssil && Fellow::frame_async_ssil_main() && RD::get_singleton()->fellow_async_compute_available();
+	if (fellow_ssil_main) {
+		_fellow_process_ss_effects(p_render_data, rb, p_use_ssao, p_use_ssil, p_use_ssr, p_normal_roughness_slices, FELLOW_SS_PREPARE);
+		// The layouts both queues read the shared images in (the prepared depth's views, the normal buffer), set here:
+		// the render graph records a transition where a resource is first used, which on the second queue the main
+		// queue's SSIL would not wait for (the async conflict check counts such a transition as a write).
+		LocalVector<RD::CallbackResource> fellow_res;
+		for (uint32_t v = 0; v < rb->get_view_count(); v++) {
+			RID slices[2] = { rb->get_texture_slice(RB_SCOPE_SSDS, RB_LINEAR_DEPTH, v * 4, ss_effects->get_ssao_half_size() ? 1 : 0, 4, 4), rb->get_texture_slice(RB_SCOPE_SSDS, RB_LINEAR_DEPTH, v * 4, ss_effects->get_ssil_half_size() ? 1 : 0, 4, 4) };
+			for (int k = 0; k < (p_use_ssao ? 2 : 1); k++) {
+				const RID slice = slices[p_use_ssao ? k : 1];
+				bool dup = false;
+				for (const RD::CallbackResource &r : fellow_res) {
+					dup = dup || r.rid == slice;
+				}
+				if (!dup) {
+					RD::CallbackResource r;
+					r.rid = slice;
+					r.type = RD::CALLBACK_RESOURCE_TYPE_TEXTURE;
+					r.usage = RD::CALLBACK_RESOURCE_USAGE_TEXTURE_SAMPLE;
+					fellow_res.push_back(r);
+				}
+			}
+			RD::CallbackResource n;
+			n.rid = p_normal_roughness_slices[v];
+			n.type = RD::CALLBACK_RESOURCE_TYPE_TEXTURE;
+			n.usage = RD::CALLBACK_RESOURCE_USAGE_TEXTURE_SAMPLE;
+			fellow_res.push_back(n);
+		}
+		for (const RD::CallbackResource &r : fellow_res) {
+			// One command each: overlapping views of one texture cannot share a command.
+			RD::get_singleton()->driver_callback_add([](RenderingDeviceDriver *, RenderingDeviceDriver::CommandBufferID, void *) {}, nullptr, VectorView<RD::CallbackResource>(&r, 1));
+		}
+	}
 	const bool fellow_async = fellow_async_wanted && RD::get_singleton()->fellow_async_compute_begin();
 	if (fellow_async) {
-		_fellow_process_ss_effects(p_render_data, rb, p_use_ssao, p_use_ssil, p_use_ssr, p_normal_roughness_slices);
+		_fellow_process_ss_effects(p_render_data, rb, p_use_ssao, p_use_ssil, p_use_ssr, p_normal_roughness_slices, fellow_ssil_main ? (FELLOW_SS_SSAO | FELLOW_SS_SSR) : FELLOW_SS_ALL);
 		RD::get_singleton()->fellow_async_compute_end();
+		if (fellow_ssil_main) {
+			_fellow_process_ss_effects(p_render_data, rb, p_use_ssao, p_use_ssil, p_use_ssr, p_normal_roughness_slices, FELLOW_SS_SSIL);
+		}
 	}
 
 	RENDER_TIMESTAMP("Setup Shadows");
@@ -4341,7 +4384,8 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 	fellow_dir_cascades.clear();
 
 	if (rb_data.is_valid() && ss_effects && !fellow_async) {
-		_fellow_process_ss_effects(p_render_data, rb, p_use_ssao, p_use_ssil, p_use_ssr, p_normal_roughness_slices);
+		// (Without the async part, the rest of the block; its depth preparation is done if decision 0060 recorded it.)
+		_fellow_process_ss_effects(p_render_data, rb, p_use_ssao, p_use_ssil, p_use_ssr, p_normal_roughness_slices, fellow_ssil_main ? (FELLOW_SS_SSAO | FELLOW_SS_SSIL | FELLOW_SS_SSR) : FELLOW_SS_ALL);
 	}
 
 	RENDER_TIMESTAMP("Pre Opaque Render");

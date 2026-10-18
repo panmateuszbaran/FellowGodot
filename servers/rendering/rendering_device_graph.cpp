@@ -452,7 +452,10 @@ void RenderingDeviceGraph::_add_command_to_graph(ResourceTracker **p_resource_tr
 			// FellowEngine async compute (decision 0015): a slice counts as its whole texture.
 			ResourceTracker *fellow_root = resource_tracker->parent != nullptr ? resource_tracker->parent : resource_tracker;
 			const ResourceUsage fellow_usage = p_resource_usages[i];
-			const bool fellow_write = _is_write_usage(fellow_usage);
+			// A layout transition (a usage that differs from the one the work before left) is recorded where the
+			// resource is first used: in the async part, the main queue's concurrent work would not wait for it, so
+			// it counts as a write there (decision 0060).
+			const bool fellow_write = _is_write_usage(fellow_usage) || (fellow_async_phase == 1 && fellow_root->texture_driver_id.id != 0 && resource_tracker->usage != RESOURCE_USAGE_NONE && resource_tracker->usage != fellow_usage);
 			if (fellow_async_phase == 1) {
 				for (ResourceTracker *t : { resource_tracker, fellow_root }) {
 					if (t->fellow_async_mark != fellow_async_epoch) {
@@ -466,6 +469,9 @@ void RenderingDeviceGraph::_add_command_to_graph(ResourceTracker **p_resource_tr
 			} else {
 				for (ResourceTracker *t : { resource_tracker, fellow_root }) {
 					if (t->fellow_async_mark == fellow_async_epoch && (fellow_write || t->fellow_async_write || t->fellow_async_usage != fellow_usage)) {
+						if (fellow_segment_log && !fellow_async_conflict) {
+							print_line(vformat("FellowEngine async conflict: %s size %s, usage %d (async part: %d, write %s), write %s", t->buffer_driver_id.id != 0 ? "buffer" : "texture", t->texture_size, int(fellow_usage), int(t->fellow_async_usage), t->fellow_async_write ? "yes" : "no", fellow_write ? "yes" : "no"));
+						}
 						fellow_async_conflict = true;
 					}
 				}

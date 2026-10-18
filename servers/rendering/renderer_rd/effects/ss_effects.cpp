@@ -961,8 +961,9 @@ void SSEffects::screen_space_indirect_lighting(Ref<RenderSceneBuffersRD> p_rende
 			u_depth_texture_view.append_id(depth_texture_view);
 
 			RD::Uniform u_normal_buffer;
-			u_normal_buffer.uniform_type = RD::UNIFORM_TYPE_IMAGE;
+			u_normal_buffer.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE; // FellowEngine (decision 0060): sampled, read with texelFetch
 			u_normal_buffer.binding = 1;
+			u_normal_buffer.append_id(ss_effects.mirror_sampler);
 			u_normal_buffer.append_id(p_normal_buffer);
 
 			RD::Uniform u_gather_constants_buffer;
@@ -1400,8 +1401,9 @@ void SSEffects::generate_ssao(Ref<RenderSceneBuffersRD> p_render_buffers, SSAORe
 			u_depth_texture_view.append_id(depth_texture_view);
 
 			RD::Uniform u_normal_buffer;
-			u_normal_buffer.uniform_type = RD::UNIFORM_TYPE_IMAGE;
+			u_normal_buffer.uniform_type = RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE; // FellowEngine (decision 0060): sampled, read with texelFetch
 			u_normal_buffer.binding = 1;
+			u_normal_buffer.append_id(ss_effects.mirror_sampler);
 			u_normal_buffer.append_id(p_normal_buffer);
 
 			RD::Uniform u_gather_constants_buffer;
