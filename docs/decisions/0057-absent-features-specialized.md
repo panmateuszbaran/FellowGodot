@@ -146,6 +146,20 @@ point in City Lab and Bistro interior (their tile-culled variants at 96 register
 v3 (`m11_f163b_keep3_ab`, `fellow139`): Sponza −8.3 %, Bistro interior −6.0 %, Bistro exterior −5.8 %, City Lab −4.9 %,
 Foliage Lab −4.4 %, PBR Lab −3.9 %, Lights Lab −1.1 %.
 
+**v4** (`m11_f167_v4_ab`, `fellow141`, 63 against 0), the version on by default:
+
+| scene | GPU | frame | opaque pass (ms) | transparent pass (ms) |
+|---|---|---|---|---|
+| Sponza | **−9.5 %** | −9.3 % | 1.985 → 1.636 | 1.255 → 0.924 |
+| Bistro exterior | **−6.2 %** | −6.1 % | 1.704 → 1.415 | 0.061 → 0.053 |
+| Bistro interior | **−6.0 %** | −5.9 % | 1.266 → 1.088 | 0.195 → 0.168 |
+| Foliage Lab | **−4.7 %** | −4.6 % | | |
+| City Lab | **−4.2 %** | +2.3 % (n.s.; limited by the CPU) | 0.434 → 0.355 | |
+| PBR Lab | **−3.4 %** | −3.3 % | | |
+| Lights Lab | **−0.8 %** | −0.8 % | | |
+
+Every GPU p < 2e-6. Stress Lab: frame −0.4 % (n.s.).
+
 Without the probe bit (61, `m11_f166_abs61_ab`, `fellow140`, against 0, with 63 beside it): Sponza −8.2 % (63: −9.3 %),
 Bistro interior −5.1 % (−5.3 %), Bistro exterior −4.8 % (−6.0 %), Foliage Lab −4.2 % (−4.5 %), City Lab −3.2 % (−5.5 %),
 PBR Lab −2.4 % (−3.6 %), Lights Lab −1.2 % (−1.0 %). Its sequences (`m11_f166`, warm, two runs against the defaults):
