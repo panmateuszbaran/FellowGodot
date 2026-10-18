@@ -1,6 +1,6 @@
 # 0062 — Render graph: a barrier for a read from a stage the last write was not made visible to
 
-Status: **measuring** (`fellow151`) · Branch `fellow/geometry` · Setting `rendering/fellow/debug/visibility_barriers` (on;
+Status: **KEEP**, on (`fellow151`) · Branch `fellow/geometry` · Setting `rendering/fellow/debug/visibility_barriers` (on;
 off with FellowEngine disabled) · Code: `rendering_device_graph.{h,cpp}` (`_add_command_to_graph`,
 `ResourceTracker::fellow_visible_stages`), `fellow_settings.*` (stat `rd_graph_visibility_barriers`).
 
@@ -31,4 +31,15 @@ Lights Lab capture run of 82 frames, 378 in City Lab's 62.
 
 ## Measured
 
-`m12_f177_vb_ab`, `m12_f177_vb_warm` (pending).
+In-process A/B (`m12_f177_vb_ab`, off against on, autotune off, every scene): GPU −0.2 to +0.2 %, none significant
+(p ≥ 0.18). The barriers order nothing the graph had not already ordered (the read depended on the write); they add
+the access masks.
+
+Warm sequences (`m12_f177_vb_warm`): on against on, off against off and off against on all at the same floors (Bistro
+interior 67.1 dB, Lights Lab 99.6-102.0 dB, PBR Lab 73.4-73.5 dB, Sponza 75.5 dB): the read was not what made Lights
+Lab's runs differ from one another, and the barriers change no image on the RTX.
+
+## Decision
+
+KEEP, on (`fellow151`): a correctness fix without measurable cost. The run-to-run floors of Lights Lab, PBR Lab,
+Bistro interior and Sponza remain unexplained.
