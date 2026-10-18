@@ -97,10 +97,13 @@ func describe() -> Dictionary:
 
 ## Utility: count scene statistics (meshes, surfaces, triangles, materials, lights).
 func scene_stats(root: Node) -> Dictionary:
-	var st := {"mesh_instances": 0, "surfaces": 0, "triangles": 0, "materials": {}, "lights": 0, "multimesh_instances": 0}
+	# "tri_cache": the triangles of each mesh surface, counted once per mesh: a PrimitiveMesh's arrays are read back from
+	# the GPU (a flush and wait each), which for City Lab's 17 000 instances was most of its build time (m12_f174).
+	var st := {"mesh_instances": 0, "surfaces": 0, "triangles": 0, "materials": {}, "lights": 0, "multimesh_instances": 0, "tri_cache": {}}
 	_stat_rec(root, st)
 	st["unique_materials"] = st["materials"].size()
 	st.erase("materials")
+	st.erase("tri_cache")
 	return st
 
 
@@ -114,12 +117,17 @@ func _stat_rec(n: Node, st: Dictionary) -> void:
 				var il: int = m.surface_get_array_index_len(i)
 				st["triangles"] += (il if il > 0 else m.surface_get_array_len(i)) / 3
 			else:
-				var arr := m.surface_get_arrays(i)
-				var idx = arr[Mesh.ARRAY_INDEX]
-				if idx:
-					st["triangles"] += idx.size() / 3
-				elif arr[Mesh.ARRAY_VERTEX]:
-					st["triangles"] += arr[Mesh.ARRAY_VERTEX].size() / 3
+				var key := "%d:%d" % [m.get_instance_id(), i]
+				if not st["tri_cache"].has(key):
+					var arr := m.surface_get_arrays(i)
+					var idx = arr[Mesh.ARRAY_INDEX]
+					var t := 0
+					if idx:
+						t = idx.size() / 3
+					elif arr[Mesh.ARRAY_VERTEX]:
+						t = arr[Mesh.ARRAY_VERTEX].size() / 3
+					st["tri_cache"][key] = t
+				st["triangles"] += st["tri_cache"][key]
 			var mat = n.get_active_material(i)
 			if mat:
 				st["materials"][mat.get_instance_id()] = true
