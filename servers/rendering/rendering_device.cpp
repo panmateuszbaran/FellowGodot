@@ -1290,6 +1290,7 @@ Error RenderingDevice::buffer_clear(RID p_buffer, uint32_t p_offset, uint32_t p_
 
 Vector<uint8_t> RenderingDevice::buffer_get_data(RID p_buffer, uint32_t p_offset, uint32_t p_size) {
 	ERR_RENDER_THREAD_GUARD_V(Vector<uint8_t>());
+	Fellow::CostScope fellow_cost(Fellow::stats().cost_readback_usec, Fellow::stats().cost_readbacks);
 
 	Buffer *buffer = _get_buffer_from_owner(p_buffer);
 	if (!buffer) {
@@ -1555,6 +1556,7 @@ RID RenderingDevice::texture_buffer_create(uint32_t p_size_elements, DataFormat 
 /*****************/
 
 RID RenderingDevice::texture_create(const TextureFormat &p_format, const TextureView &p_view, const Vector<Vector<uint8_t>> &p_data) {
+	Fellow::CostScope fellow_cost(Fellow::stats().cost_texture_create_usec, Fellow::stats().cost_texture_creates);
 	// Some adjustments will happen.
 	TextureFormat format = p_format;
 
@@ -2681,6 +2683,7 @@ void RenderingDevice::_texture_clear_depth_stencil(RID p_texture_rid, Texture *p
 
 Vector<uint8_t> RenderingDevice::texture_get_data(RID p_texture, uint32_t p_layer) {
 	ERR_RENDER_THREAD_GUARD_V(Vector<uint8_t>());
+	Fellow::CostScope fellow_cost(Fellow::stats().cost_readback_usec, Fellow::stats().cost_readbacks);
 
 	Texture *tex = texture_owner.get_or_null(p_texture);
 	ERR_FAIL_NULL_V(tex, Vector<uint8_t>());
@@ -4180,6 +4183,7 @@ RID RenderingDevice::shader_create_from_bytecode(const Vector<uint8_t> &p_shader
 
 RID RenderingDevice::shader_create_from_bytecode_with_samplers(const Vector<uint8_t> &p_shader_binary, RID p_placeholder, const Vector<PipelineImmutableSampler> &p_immutable_samplers) {
 	_THREAD_SAFE_METHOD_
+	Fellow::CostScope fellow_cost(Fellow::stats().cost_shader_create_usec, Fellow::stats().cost_shader_creates);
 
 	Ref<RenderingShaderContainer> shader_container = driver->get_shader_container_format().create_container();
 	ERR_FAIL_COND_V(shader_container.is_null(), RID());
@@ -4829,6 +4833,8 @@ bool RenderingDevice::uniform_sets_have_linear_pools() const {
 /*******************/
 
 RID RenderingDevice::render_pipeline_create(RID p_shader, FramebufferFormatID p_framebuffer_format, VertexFormatID p_vertex_format, RenderPrimitive p_render_primitive, const PipelineRasterizationState &p_rasterization_state, const PipelineMultisampleState &p_multisample_state, const PipelineDepthStencilState &p_depth_stencil_state, const PipelineColorBlendState &p_blend_state, BitField<PipelineDynamicStateFlags> p_dynamic_state_flags, uint32_t p_for_render_pass, const Vector<PipelineSpecializationConstant> &p_specialization_constants) {
+	const bool fellow_sync = render_thread_id == Thread::get_caller_id();
+	Fellow::CostScope fellow_cost(fellow_sync ? Fellow::stats().cost_pipeline_sync_usec : Fellow::stats().cost_pipeline_async_usec, fellow_sync ? Fellow::stats().cost_pipelines_sync : Fellow::stats().cost_pipelines_async);
 	// Needs a shader.
 	Shader *shader = shader_owner.get_or_null(p_shader);
 	ERR_FAIL_NULL_V(shader, RID());
@@ -5028,6 +5034,8 @@ bool RenderingDevice::render_pipeline_is_valid(RID p_pipeline) {
 }
 
 RID RenderingDevice::compute_pipeline_create(RID p_shader, const Vector<PipelineSpecializationConstant> &p_specialization_constants) {
+	const bool fellow_sync = render_thread_id == Thread::get_caller_id();
+	Fellow::CostScope fellow_cost(fellow_sync ? Fellow::stats().cost_pipeline_sync_usec : Fellow::stats().cost_pipeline_async_usec, fellow_sync ? Fellow::stats().cost_pipelines_sync : Fellow::stats().cost_pipelines_async);
 	Shader *shader;
 
 	{

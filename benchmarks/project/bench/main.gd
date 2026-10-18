@@ -116,6 +116,10 @@ func _ready() -> void:
 		_fail(scene.load_error)
 		return
 	_log("scene built in %.0f ms" % ((Time.get_ticks_usec() - t_build) / 1000.0))
+	result["scene_built_ms"] = (Time.get_ticks_usec() - t_build) / 1000.0
+	var fs_built := _fellow_stats()
+	if not fs_built.is_empty():
+		result["fellow_stats_scene_built"] = fs_built
 	if args.has("ablate"):
 		result["ablate"] = _ablate(str(args["ablate"]).replace("+", ",").split(",", false))
 		_log("ablate: " + str(result["ablate"]))
@@ -126,6 +130,10 @@ func _ready() -> void:
 	await _post_draw()
 	result["load_time_ms"] = (Time.get_ticks_usec() - t_build) / 1000.0
 	result["startup_to_first_frame_ms"] = (Time.get_ticks_usec() - t_start_usec) / 1000.0
+	var fs_first := _fellow_stats()
+	if not fs_first.is_empty():
+		# Process totals after the first frame (the cost_* counters: where loading spent its time).
+		result["fellow_stats_first_frame"] = fs_first
 	result["preset"] = preset
 	result["effective_settings"] = Presets.effective(vp, scene.env, scene.cam_attr)
 	result["scene_desc"] = scene.describe()

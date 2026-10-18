@@ -38,6 +38,7 @@
 #include "core/templates/rb_set.h"
 #include "core/templates/rid.h"
 #include "core/templates/vector.h"
+#include "servers/rendering/fellow_settings.h"
 #include "servers/rendering/rendering_device.h"
 #include "servers/rendering/rendering_server_enums.h"
 
@@ -171,6 +172,7 @@ public:
 		}
 
 		if (task_id_to_wait != WorkerThreadPool::INVALID_TASK_ID) {
+			Fellow::CostScope fellow_cost(Fellow::stats().cost_pipeline_wait_usec, Fellow::stats().cost_pipeline_waits);
 			WorkerThreadPool::get_singleton()->wait_for_task_completion(task_id_to_wait);
 		}
 	}

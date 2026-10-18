@@ -852,6 +852,31 @@ struct Stats {
 	SafeNumeric<uint64_t> geometry_cluster_draws; // draw calls issued for clustered surfaces
 	SafeNumeric<uint64_t> pipeline_fallback_draws; // draws with the defaults' pipeline while theirs compiled (decision 0059)
 	SafeNumeric<uint64_t> pipeline_ubershader_draws; // draws with the ubershader while theirs compiled (stock's fallback)
+	// Where loading spends its time (process totals, every build: the bench snapshots them when its scene is built and
+	// after the first frame). Shader versions: the calling thread's start (cache reads, task posting) and wait, the
+	// variants compiled on the workers (from source where not cached), the shader objects created from their SPIR-V.
+	SafeNumeric<uint64_t> cost_shader_start_usec;
+	SafeNumeric<uint64_t> cost_shader_starts;
+	SafeNumeric<uint64_t> cost_shader_wait_usec;
+	SafeNumeric<uint64_t> cost_shader_waits;
+	SafeNumeric<uint64_t> cost_shader_variant_usec;
+	SafeNumeric<uint64_t> cost_shader_variants;
+	SafeNumeric<uint64_t> cost_shader_cache_loads; // shader version groups read from the shader cache
+	SafeNumeric<uint64_t> cost_shader_create_usec;
+	SafeNumeric<uint64_t> cost_shader_creates;
+	// Pipelines created on the render thread (it waits for them) and on other threads, and the render thread's waits for
+	// pipelines being compiled elsewhere.
+	SafeNumeric<uint64_t> cost_pipeline_sync_usec;
+	SafeNumeric<uint64_t> cost_pipelines_sync;
+	SafeNumeric<uint64_t> cost_pipeline_async_usec;
+	SafeNumeric<uint64_t> cost_pipelines_async;
+	SafeNumeric<uint64_t> cost_pipeline_wait_usec;
+	SafeNumeric<uint64_t> cost_pipeline_waits;
+	// Reads of GPU data (each flushes the frame and waits for the GPU) and texture creation (with its initial data).
+	SafeNumeric<uint64_t> cost_readback_usec;
+	SafeNumeric<uint64_t> cost_readbacks;
+	SafeNumeric<uint64_t> cost_texture_create_usec;
+	SafeNumeric<uint64_t> cost_texture_creates;
 	SafeNumeric<uint64_t> geometry_cluster_triangles_drawn; // triangles of clustered surfaces drawn
 	SafeNumeric<uint64_t> geometry_cluster_triangles_culled; // triangles of clustered surfaces skipped (outside the frustum)
 	SafeNumeric<uint64_t> frame_early_submits; // frames whose rendering was submitted before the swap chain acquisition
@@ -953,6 +978,14 @@ struct Stats {
 };
 
 Stats &stats();
+
+// Adds the time of its scope to a cost counter of stats() (and counts the scope).
+struct CostScope {
+	SafeNumeric<uint64_t> &usec;
+	const uint64_t from;
+	CostScope(SafeNumeric<uint64_t> &p_usec, SafeNumeric<uint64_t> &p_count);
+	~CostScope();
+};
 
 } // namespace Fellow
 

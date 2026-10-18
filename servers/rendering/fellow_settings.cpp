@@ -31,6 +31,7 @@
 
 #include "fellow_settings.h"
 
+#include "core/os/os.h"
 #include "core/variant/dictionary.h"
 #include "servers/rendering/fellow_parallel.h"
 
@@ -243,6 +244,15 @@ Fellow::Stats &Fellow::stats() {
 	return s;
 }
 
+Fellow::CostScope::CostScope(SafeNumeric<uint64_t> &p_usec, SafeNumeric<uint64_t> &p_count) :
+		usec(p_usec), from(OS::get_singleton()->get_ticks_usec()) {
+	p_count.increment();
+}
+
+Fellow::CostScope::~CostScope() {
+	usec.add(OS::get_singleton()->get_ticks_usec() - from);
+}
+
 Dictionary Fellow::get_stats_dictionary() {
 	Stats &s = stats();
 	Dictionary d;
@@ -268,6 +278,25 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["geometry_cluster_draws"] = s.geometry_cluster_draws.get();
 	d["pipeline_fallback_draws"] = s.pipeline_fallback_draws.get();
 	d["pipeline_ubershader_draws"] = s.pipeline_ubershader_draws.get();
+	d["cost_shader_start_usec"] = s.cost_shader_start_usec.get();
+	d["cost_shader_starts"] = s.cost_shader_starts.get();
+	d["cost_shader_wait_usec"] = s.cost_shader_wait_usec.get();
+	d["cost_shader_waits"] = s.cost_shader_waits.get();
+	d["cost_shader_variant_usec"] = s.cost_shader_variant_usec.get();
+	d["cost_shader_variants"] = s.cost_shader_variants.get();
+	d["cost_shader_cache_loads"] = s.cost_shader_cache_loads.get();
+	d["cost_shader_create_usec"] = s.cost_shader_create_usec.get();
+	d["cost_shader_creates"] = s.cost_shader_creates.get();
+	d["cost_pipeline_sync_usec"] = s.cost_pipeline_sync_usec.get();
+	d["cost_pipelines_sync"] = s.cost_pipelines_sync.get();
+	d["cost_pipeline_async_usec"] = s.cost_pipeline_async_usec.get();
+	d["cost_pipelines_async"] = s.cost_pipelines_async.get();
+	d["cost_pipeline_wait_usec"] = s.cost_pipeline_wait_usec.get();
+	d["cost_pipeline_waits"] = s.cost_pipeline_waits.get();
+	d["cost_readback_usec"] = s.cost_readback_usec.get();
+	d["cost_readbacks"] = s.cost_readbacks.get();
+	d["cost_texture_create_usec"] = s.cost_texture_create_usec.get();
+	d["cost_texture_creates"] = s.cost_texture_creates.get();
 	d["geometry_cluster_triangles_drawn"] = s.geometry_cluster_triangles_drawn.get();
 	d["geometry_cluster_triangles_culled"] = s.geometry_cluster_triangles_culled.get();
 	d["frame_early_submits"] = s.frame_early_submits.get();

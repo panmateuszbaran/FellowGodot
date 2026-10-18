@@ -37,6 +37,7 @@
 #include "core/os/os.h"
 #include "core/string/string_builder.h"
 #include "core/version.h"
+#include "servers/rendering/fellow_settings.h"
 #include "servers/rendering/shader_include_db.h"
 
 #define ENABLE_SHADER_CACHE 1
@@ -408,6 +409,7 @@ void ShaderRD::_compile_variant(uint32_t p_variant, CompileData p_data) {
 	if (!variants_enabled[variant]) {
 		return; // Variant is disabled, return.
 	}
+	Fellow::CostScope fellow_cost(Fellow::stats().cost_shader_variant_usec, Fellow::stats().cost_shader_variants);
 
 	Vector<String> variant_stage_sources = _build_variant_stage_sources(variant, p_data);
 	Vector<RD::ShaderStageSPIRVData> variant_stages = compile_stages(variant_stage_sources, dynamic_buffers);
@@ -685,6 +687,7 @@ bool ShaderRD::_load_from_cache(Version *p_version, int p_group) {
 	}
 
 	p_version->valid = true;
+	Fellow::stats().cost_shader_cache_loads.increment();
 	return true;
 }
 
@@ -717,6 +720,7 @@ void ShaderRD::_compile_version_start(Version *p_version, int p_group) {
 	if (!group_enabled[p_group]) {
 		return;
 	}
+	Fellow::CostScope fellow_cost(Fellow::stats().cost_shader_start_usec, Fellow::stats().cost_shader_starts);
 
 	p_version->dirty = false;
 
@@ -741,7 +745,10 @@ void ShaderRD::_compile_version_end(Version *p_version, int p_group) {
 		return;
 	}
 	WorkerThreadPool::GroupID group_task = p_version->group_compilation_tasks[p_group];
-	WorkerThreadPool::get_singleton()->wait_for_group_task_completion(group_task);
+	{
+		Fellow::CostScope fellow_cost(Fellow::stats().cost_shader_wait_usec, Fellow::stats().cost_shader_waits);
+		WorkerThreadPool::get_singleton()->wait_for_group_task_completion(group_task);
+	}
 	p_version->group_compilation_tasks.write[p_group] = 0;
 
 	bool all_valid = true;
