@@ -1,13 +1,42 @@
 # FellowEngine — milestone 11 report (specialized passes, synchronization between command buffers)
 
-Status: **DRAFT** (`fellow132`-`fellow137`; RTX measurements queued: `m11_f156`-`f159`). Branch `fellow/geometry`.
+Status: **FINAL** (`fellow132`-`fellow142`; final measurement `m11_f168_final`, 2026-10-18). Branch `fellow/geometry`.
 Benchmark machine as before (Acer Predator PHN16S-71, Core Ultra 9 275HX, RTX 5070 Ti Laptop GPU, NVIDIA GPU only,
-Windows 11, 1920×1080, "high" preset). Decision records `docs/decisions/0049` (v6), `0053`-`0057`; user-facing summary
+Windows 11, 1920×1080, "high" preset). Decision records `docs/decisions/0049` (v6), `0053`-`0057` (`0058` started); user-facing summary
 `docs/FELLOWENGINE_OPTIONS.md`.
 
 ## 0. Result
 
-Pending.
+Between processes (`m11_f168_final`, 3 runs per build, frame time, 1080p "high"; `fellow131` is milestone 10's final
+build, `fellow142` this one's, both with their defaults):
+
+| scene | stock (ms) | m10 | **m11** | m11 against m10 | m11 with the visually lossless options |
+|---|---:|---:|---:|---:|---:|
+| Sponza | 13.32 | 6.54 (−50.9 %) | **5.89 (−55.8 %)** | **−9.9 %** | 5.66 (−57.5 %) |
+| Bistro exterior | 5.90 | 4.31 (−27.1 %) | **4.09 (−30.8 %)** | **−5.1 %** | 3.83 (−35.1 %) |
+| Bistro interior | 4.06 | 3.26 (−19.6 %) | **3.05 (−25.0 %)** | **−6.6 %** | 2.89 (−28.8 %) |
+| City Lab | 2.82 | 2.10 (−25.5 %) | **2.04 (−27.6 %)** | −2.9 % (n.s.) | 2.15 (−23.9 %) |
+| Lights Lab | 2.88 | 2.29 (−20.5 %) | **2.21 (−23.3 %)** | −3.6 % (n.s.) | 1.81 (−37.2 %) |
+| Foliage Lab | 3.44 | 2.91 (−15.5 %) | **2.75 (−20.0 %)** | **−5.3 %** | 2.78 (−19.2 %) |
+| PBR Lab | 2.48 | 2.17 (−12.5 %) | **2.17 (−12.2 %)** | +0.3 % (n.s.) | 1.92 (−22.6 %) |
+| Stress Lab | 4.82 | 4.48 (−7.1 %) | **4.48 (−7.2 %)** | −0.1 % (n.s.) | 4.36 (−9.6 %) |
+
+Foliage Lab with one MultiMesh per type: 10.24 → 4.61 ms (−55.0 %, `m11_f168_foliage_single`).
+
+GPU time, m11 against m10: Sponza −10.0 %, City Lab −12.6 % (its frame is limited by the CPU), Bistro interior −6.8 %,
+Foliage Lab −5.4 %, Bistro exterior −5.2 %, Lights Lab −3.6 %, PBR Lab −0.1 %, Stress Lab +7.7 % (a robustness scene; its
+frame unchanged). PBR Lab's first run of the new build was slower than the other two (2.36 against 2.07-2.09 ms: the
+pipeline cache was cold for the new build, 47 compilations during its warm-up against 38); without it the scene gains
+about 3 % on m10, as the in-process measurements say (0055 tone mapping −0.2 %, 0057 −3.4 %). Stress Lab compiles more
+pipelines during its measurement with 0057 (40-88 against 40; its reflection probe and second viewport bring other
+combinations of the six bits), drawn with the ubershader meanwhile (section 8).
+
+Everything on by default is exact: lavapipe bit for bit, and on the RTX bit for bit where two runs of one build are
+(City Lab, Bistro exterior), at the run-to-run floor elsewhere.
+
+What made the difference: the colour passes without the code a frame cannot run (0057, GPU −0.8 to −9.5 % in one
+process), tone mapping and the fog density pass specialized likewise (0055, 0056), light tile culling beside async
+compute (0049 v6, Bistro interior −1.9 %).
 
 ## 1. The question
 
@@ -129,4 +158,15 @@ when first needed (stock's ubershader draws meanwhile), as with a new material.
 
 ## 8. Next
 
-Pending.
+* **Pipelines compiled while the game runs.** Stock compiles nothing during the measured flythroughs; FellowEngine's
+  builds compile 20-130 specializations there (milestone 10's too: Sponza 69-77, PBR Lab 20-33), drawn with the
+  168-register ubershader until ready: options whose specialization bits change with the view (0057's six, light tile
+  culling) and autotune's evaluations. A specialization that only leaves code out has an exact, often compiled fallback
+  (the same pipeline with those bits cleared) better than the ubershader; asking for it, and compiling it ahead, should
+  remove most of those frames.
+* **City Lab's 99th percentile** is 12-14 ms in two of three runs with milestone 10's build and this one, 3.7 ms with
+  stock: hitches to find.
+* **Sponza's depth pre-pass** (1.17 ms; the curtains and the trees' bark the largest growth): 0058, the large surfaces'
+  clusters drawn front to back, is being measured.
+* Lights Lab's main colour variant keeps its 96 registers (omni, spot and shadow code are all used there); SSAO costs
+  0.32-0.41 ms in every scene.
