@@ -70,22 +70,36 @@ million). RTX sequences: City Lab bit for bit, the others at their floors. The p
 
 The largest pass of every scene, the opaque colour pass, compiles the decal loop, the reflection probe loop, the
 directional lights' block, the omni and spot loops and the positional shadow lookups whether or not the frame has any;
-0048 found its main variants at 96 registers with spills. 0057 leaves out each that the frame's light cluster and
-light counts say cannot run (six bits of the colour pipelines' specialization constants; stock already does this for
-area lights). The main variants drop to 72-80 registers (Sponza, Bistro interior, City Lab, Foliage Lab), the code to a
-third or two thirds of its size.
+0048 found its main variants at 96 registers with spills. 0057 leaves out each that the frame's light cluster and light
+counts say cannot run (six bits of the colour pipelines' specialization constants; stock already does this for area
+lights). The main variants drop to 72-80 registers in Sponza, Bistro interior and Foliage Lab, the code to a third or two
+thirds of its size.
 
-**The largest gain of the milestone** (`m11_f159_abs_ab`, in one process): GPU Sponza **−9.2 %** (opaque pass −18 %,
-transparent pass −26 %), Bistro interior −6.7 %, Bistro exterior −6.0 %, City Lab −5.7 % (its frame is limited by the
-CPU), Foliage Lab −4.4 %, PBR Lab −3.5 %, Lights Lab −1.0 % (its main variant keeps omni, spot and shadow code and its 96
-registers).
+**The largest gain of the milestone** (`m11_f167_v4_ab`, in one process, GPU): Sponza **−9.5 %** (opaque pass −18 %,
+transparent pass −26 %), Bistro exterior −6.2 %, Bistro interior −6.0 %, Foliage Lab −4.7 %, City Lab −4.2 % (its frame
+is limited by the CPU), PBR Lab −3.4 %, Lights Lab −0.8 % (its main variant keeps omni, spot and shadow code).
 
-The first version was not exact: lavapipe found 1-2 isolated pixels of one level in three scenes, and the RTX City Lab
-sequence 95.6 dB where two runs are bit for bit. The cause: leaving a block out lets the compiler fuse a multiply before
-it with an add after it (one rounding instead of two), which stock's compiler cannot do across the block's phi. v2
-passes the values the block could have changed through `fellow_keep`, an identity the compiler cannot see through (an
-XOR with a zero from a UBO): lavapipe then gives **0 differing pixels** in every scene and configuration tested
-(derivatives after `discard`, undefined in Vulkan, aside). RTX: `m11_f162`.
+Making it exact took four versions:
+
+| version | what passes a left-out block | lavapipe | RTX (warm sequences against the defaults) |
+|---|---|---|---|
+| v1 (`fellow137`) | nothing | 1-2 px of 1 level in City, PBR (demote), Blend Lab | City Lab 95.6 dB (floor: bit for bit) |
+| v2 (`fellow138`) | `fellow_keep` on every value a block can change | **0** everywhere | City Lab 98.4, Bistro exterior 93.8 dB (floors: bit for bit) |
+| v3 (`fellow139`) | `fellow_keep` only where the value can be a product | **0** | the same images as v2 |
+| v4 (`fellow141`) | v3, and the probe loop's reflection vector still computed | **0** | **bit for bit** in City Lab and Bistro exterior, the floors elsewhere |
+
+* v1: leaving a block out lets the compiler fuse a multiply before it with an add after it (one rounding instead of
+  two), which stock's compiler cannot do across the block's phi.
+* v2: `fellow_keep`, an XOR with a zero read from a UBO, gives back the barrier the phi was. lavapipe becomes exact; the
+  RTX does not.
+* The bisection (`m11_f164`, each bit alone on the RTX): decals, omni, spot and positional shadows alone are bit for bit;
+  the probe bit alone is not.
+* The diagnostics (`m11_f165`): keeping the loop's reflection vector computed (and used through the zero) makes it bit
+  for bit. That vector shares its subexpressions with the sky reflection's, and without the probe loop's use of them
+  the NVIDIA compiler arranges the sky reflection's arithmetic differently. v4 keeps it, about twenty operations.
+
+On by default (all six bits) from `fellow142`. Each combination of the bits in use is a pipeline of its own, compiled
+when first needed (stock's ubershader draws meanwhile), as with a new material.
 
 ## 6. Tooling
 
@@ -96,9 +110,19 @@ XOR with a zero from a UBO): lavapipe then gives **0 differing pixels** in every
 * Lights Lab `--area_lights=N` (tests of paths that depend on area lights).
 * lavapipe with Vulkan synchronization validation (`VK_LAYER_SETTINGS_PATH`); async compute emulated on the main queue
   (`frame/async_compute=1`, `frame/async_compute_family=2`).
+* The bench's temporal mode records the pipelines compiled during each sequence and can run each sequence once before
+  capturing it (`--temporal_warm=1`); `--pipeline_settle=N`. With warm runs City Lab's and Bistro exterior's A/A pairs
+  are bit for bit; the other scenes keep their floors (not caused by compilation).
+* `FELLOW_PIPELINE_STATS` registers and local memory of every pipeline, per scene and configuration (`m11_f159`,
+  `f162`, `f163`, `f167`).
+* Sponza by parts (`m11_f161`, `--parts=`): the cypress trees' blended leaves are the transparent pass (+1.06 ms), the
+  curtains and the trees' bark the depth pre-pass's growth (+0.30, +0.32 ms).
 
 ## 7. Incidents
 
+* `m11_f163` was stopped during its sequences on 2026-10-17 at 20:48 (a pause asked for by the user); its sequences and
+  A/B were run again as `m11_f163b`. An earlier start of the queue was held by the STOP file twice (13:38, 17:37); the
+  user restarted it.
 * `m11_f155` (fog) was paused by the user on 2026-10-14 at 22:47: its images in Lights Lab and Sponza were complete,
   three of Bistro exterior's four runs and the in-process A/B were cut short when the processes were closed (the job
   still ended with `rc=0`). Queued again in `m11_f156`. The queue then stayed stopped while the machine was in use.
