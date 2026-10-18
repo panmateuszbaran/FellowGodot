@@ -38,3 +38,13 @@ layout.)
 **REJECT**: no loop-level change moves the main variants below 80 registers, and the smaller binary of bit 4 gains
 nothing measurable. Bringing the pressure down would mean restructuring the lighting code itself (fewer live values
 across the light loops), which is a project of its own. The bits stay as diagnostics.
+
+## Later: the indirect light after the light loops (milestone 12, not kept)
+
+The values the light loops keep live include the indirect light computed before them (`ambient_light`,
+`indirect_specular_light`, six registers). Moving the indirect light's code (sky, GI, SSAO, probes, SSIL, SSR) after the
+loops, with the lights' energy compensation computed first, was tried on lavapipe: the ambient light came out black.
+That code takes derivatives (SSAO's `texture()` with an implicit level, the radiance level from `dFdx(ref_vec)`), and
+after loops whose invocations leave at different iterations, without maximal reconvergence, those are undefined.
+Stock's order (derivatives before the loops) is what makes them defined; computing them early would keep their values
+live across the loops instead. Not pursued.
