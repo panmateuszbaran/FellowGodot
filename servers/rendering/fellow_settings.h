@@ -495,6 +495,13 @@ inline bool prepass_simple_first() {
 inline int cluster_front_to_back() {
 	return geometry_enabled() ? MAX(0, GLOBAL_GET_CACHED(int, "rendering/fellow/geometry/cluster_front_to_back")) : 0;
 }
+
+// Large static surfaces' clusters each at their own mesh LOD: the level stock would choose for the cluster if it were an
+// instance of its own (Godot's screen-space edge length against the LOD threshold, from the main camera's distance to
+// it), never finer than the instance's level. Changes the image (as LOD does): off until measured (decision 0063).
+inline bool cluster_lod() {
+	return mesh_clusters() && GLOBAL_GET_CACHED(bool, "rendering/fellow/geometry/cluster_lod");
+}
 // A draw whose specialized pipeline is still compiling uses an already compiled pipeline that differs only in
 // FellowEngine's per-frame specialization bits whose other value gives the same image (0057's bits clear, light tile
 // culling or the shadow pyramids off, the light fields early either way) instead of stock's ubershader (decision 0059).
@@ -902,6 +909,7 @@ struct Stats {
 	SafeNumeric<uint64_t> cost_texture_creates;
 	SafeNumeric<uint64_t> geometry_cluster_triangles_drawn; // triangles of clustered surfaces drawn
 	SafeNumeric<uint64_t> geometry_cluster_triangles_culled; // triangles of clustered surfaces skipped (outside the frustum)
+	SafeNumeric<uint64_t> geometry_cluster_lod_coarser_ranges; // geometry/cluster_lod: ranges drawn at a coarser level than the instance's (decision 0063)
 	SafeNumeric<uint64_t> frame_early_submits; // frames whose rendering was submitted before the swap chain acquisition
 	SafeNumeric<uint64_t> frame_async_uses; // async compute segments (decision 0015)
 	SafeNumeric<uint64_t> frame_async_conflicts; // of which the concurrent part had to wait (shared resource)

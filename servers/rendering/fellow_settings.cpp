@@ -88,6 +88,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/frame/pipeline_fallback", false); // decision 0059 (rejected, off)
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/frame/async_ss_split", PROPERTY_HINT_ENUM, "Stock,SSIL On Main Queue,SSIL And SSR On Main Queue,Autotune"), 3); // decision 0060 (3 from fellow147)
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/geometry/cluster_front_to_back", PROPERTY_HINT_RANGE, "0,1048576,1"), 0); // decision 0058 (rejected, off)
+	GLOBAL_DEF("rendering/fellow/geometry/cluster_lod", false); // decision 0063 (changes the image; off until measured)
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/geometry/cluster_min_surface_triangles", PROPERTY_HINT_RANGE, "256,1048576,1"), 32768);
 	GLOBAL_DEF("rendering/fellow/lights/enabled", true);
 	GLOBAL_DEF("rendering/fellow/lights/cluster_depth_slices", true);
@@ -303,6 +304,7 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["cost_texture_creates"] = s.cost_texture_creates.get();
 	d["geometry_cluster_triangles_drawn"] = s.geometry_cluster_triangles_drawn.get();
 	d["geometry_cluster_triangles_culled"] = s.geometry_cluster_triangles_culled.get();
+	d["geometry_cluster_lod_coarser_ranges"] = s.geometry_cluster_lod_coarser_ranges.get();
 	d["frame_early_submits"] = s.frame_early_submits.get();
 	d["frame_async_uses"] = s.frame_async_uses.get();
 	d["frame_async_conflicts"] = s.frame_async_conflicts.get();

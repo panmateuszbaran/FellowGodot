@@ -261,6 +261,11 @@ private:
 		// 0: stock's cluster order.
 		Vector3 fellow_cluster_eye;
 		uint32_t fellow_cluster_f2b = 0;
+		// geometry/cluster_lod (decision 0063): large surfaces' clusters each at their own LOD, from their distance to
+		// fellow_lod_eye (the main camera, as stock's LOD selection).
+		bool fellow_cluster_lod = false;
+		Vector3 fellow_lod_eye;
+		float fellow_lod_distance_bias = 0.0;
 		// FellowEngine occlusion culling (opaque colour pass): per list element, the index of the culled run it starts
 		// (its draw is then indirect, reading the compacted elements: one draw per chunk of 64 elements, the run's chunks
 		// consecutive from that index) or UINT32_MAX.
@@ -491,6 +496,9 @@ private:
 			// are pancaked).
 			Plane fellow_cluster_planes[6];
 			int fellow_cluster_plane_count = 0;
+			bool fellow_cluster_lod = false; // decision 0063
+			Vector3 fellow_lod_eye;
+			float fellow_lod_distance_bias = 0.0;
 			// FellowEngine MultiMesh culling (decision 0034): the pass's view volume (as the clusters', also without them).
 			Plane fellow_mm_planes[6];
 			int fellow_mm_plane_count = 0;

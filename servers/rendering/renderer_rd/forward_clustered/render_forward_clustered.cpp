@@ -827,6 +827,51 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 					thread_local LocalVector<uint32_t> fellow_ranges;
 					fellow_ranges.clear();
 					uint32_t drawn;
+					const uint32_t fellow_level_count = fellow_clusters->levels.size();
+					if (p_params->fellow_cluster_lod && !fellow_clusters->preserves_order && fellow_level_count > 1 && fellow_level_count <= 9 && !fellow_clusters->neighbor_offsets.is_empty() && p_params->screen_mesh_lod_threshold > 0.0) {
+						// geometry/cluster_lod (decision 0063): each cluster at its own level, each level's ranges drawn from
+						// that level's index array (also in cluster order).
+						float edges[8];
+						FellowMeshClusters::LodParams lp;
+						lp.eye = xf.affine_inverse().xform(p_params->fellow_lod_eye);
+						lp.min_scale = MIN(xf.basis.get_column(0).length(), MIN(xf.basis.get_column(1).length(), xf.basis.get_column(2).length()));
+						lp.lod_count = mesh_storage->fellow_mesh_surface_get_lod_edges(mesh_surface, edges, fellow_level_count - 1);
+						lp.edges = edges;
+						lp.model_scale = surf->owner->lod_model_scale * surf->owner->lod_bias;
+						lp.distance_multiplier = p_params->lod_distance_multiplier;
+						lp.distance_bias = p_params->fellow_lod_distance_bias;
+						lp.threshold = p_params->screen_mesh_lod_threshold;
+						lp.min_level = element_info.lod_index;
+						thread_local LocalVector<uint32_t> fellow_level_ranges[9];
+						for (uint32_t l = 0; l < fellow_level_count; l++) {
+							fellow_level_ranges[l].clear();
+						}
+						drawn = fellow_clusters->cull_lod(local_planes, plane_count, lp, fellow_level_ranges);
+						uint32_t draws = 0;
+						for (uint32_t l = 0; l < fellow_level_count; l++) {
+							const LocalVector<uint32_t> &lr = fellow_level_ranges[l];
+							if (lr.is_empty()) {
+								continue;
+							}
+							const RID level_indices = mesh_storage->mesh_surface_get_index_array(mesh_surface, l);
+							if (level_indices != prev_index_array_rd) {
+								RD::get_singleton()->draw_list_bind_index_array(draw_list, level_indices);
+								prev_index_array_rd = level_indices;
+							}
+							for (uint32_t r = 0; r < lr.size(); r += 2) {
+								RD::get_singleton()->draw_list_draw_indexed_range(draw_list, lr[r], lr[r + 1], 1);
+							}
+							draws += lr.size() / 2;
+							if (l > element_info.lod_index) {
+								Fellow::stats().geometry_cluster_lod_coarser_ranges.add(lr.size() / 2);
+							}
+						}
+						Fellow::stats().geometry_cluster_draws.add(draws);
+						Fellow::stats().geometry_cluster_triangles_drawn.add(drawn / 3);
+						Fellow::stats().geometry_cluster_triangles_culled.add((level.index_count > drawn ? level.index_count - drawn : 0) / 3);
+						i += element_info.repeat - 1;
+						continue;
+					}
 					if (p_params->fellow_cluster_f2b != 0 && !fellow_clusters->preserves_order) {
 						// geometry/cluster_front_to_back (decision 0058): the clusters nearest the camera first.
 						drawn = fellow_clusters->cull_ordered(element_info.lod_index, local_planes, plane_count, xf.affine_inverse().xform(p_params->fellow_cluster_eye), p_params->fellow_cluster_f2b, fellow_ranges);
@@ -4706,6 +4751,10 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	// (perspective views only: the nearest side of a split is the camera position's).
 	const Vector3 fellow_cluster_eye = p_render_data->scene_data->cam_transform.origin;
 	const uint32_t fellow_cluster_f2b = (fellow_cluster_planes.size() > 0 && !p_render_data->scene_data->cam_orthogonal) ? uint32_t(Fellow::cluster_front_to_back()) * 3 : 0;
+	// geometry/cluster_lod (decision 0063): with stock's LOD selection (main camera, perspective).
+	const bool fellow_cluster_lod = fellow_cluster_planes.size() > 0 && Fellow::cluster_lod() && !p_render_data->scene_data->cam_orthogonal && p_render_data->scene_data->fellow_lod_ortho_extent <= 0.0;
+	const Vector3 fellow_lod_eye = p_render_data->scene_data->main_cam_transform.origin;
+	const float fellow_lod_distance_bias = p_render_data->scene_data->fellow_lod_distance_bias;
 
 	const bool fellow_markers = Fellow::list_markers();
 	if (fellow_markers) {
@@ -5008,6 +5057,9 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		render_list_params.fellow_depth_filter = Fellow::prepass_simple_first() ? 1 : 0;
 		render_list_params.fellow_cluster_eye = fellow_cluster_eye;
 		render_list_params.fellow_cluster_f2b = fellow_cluster_f2b;
+		render_list_params.fellow_cluster_lod = fellow_cluster_lod;
+		render_list_params.fellow_lod_eye = fellow_lod_eye;
+		render_list_params.fellow_lod_distance_bias = fellow_lod_distance_bias;
 		_fellow_multimesh_cull_params(0, RENDER_LIST_OPAQUE, 0, render_list_params);
 		_render_list_with_draw_list(&render_list_params, depth_framebuffer, RD::DrawFlags(needs_pre_resolve ? RD::DRAW_DEFAULT_ALL : RD::DRAW_CLEAR_ALL), depth_pass_clear, 0.0f, 0u, p_render_data->render_region);
 
@@ -5165,6 +5217,9 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			render_list_params.fellow_cluster_plane_count = fellow_cluster_planes.size();
 			render_list_params.fellow_cluster_eye = fellow_cluster_eye;
 			render_list_params.fellow_cluster_f2b = fellow_cluster_f2b;
+			render_list_params.fellow_cluster_lod = fellow_cluster_lod;
+			render_list_params.fellow_lod_eye = fellow_lod_eye;
+			render_list_params.fellow_lod_distance_bias = fellow_lod_distance_bias;
 			if (fellow_occlusion_culled) {
 				render_list_params.fellow_occlusion_runs = fellow_occlusion.run_of_element.ptr();
 				render_list_params.fellow_occlusion_args = fellow_occlusion.args;
@@ -5208,6 +5263,9 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			render_list_params.fellow_cluster_plane_count = fellow_cluster_planes.size();
 			render_list_params.fellow_cluster_eye = fellow_cluster_eye;
 			render_list_params.fellow_cluster_f2b = fellow_cluster_f2b;
+			render_list_params.fellow_cluster_lod = fellow_cluster_lod;
+			render_list_params.fellow_lod_eye = fellow_lod_eye;
+			render_list_params.fellow_lod_distance_bias = fellow_lod_distance_bias;
 			_render_list_with_draw_list(&render_list_params, color_framebuffer);
 
 			RD::get_singleton()->draw_command_end_label();
@@ -6398,6 +6456,11 @@ void RenderForwardClustered::_render_shadow_append(RID p_framebuffer, const Page
 
 		shadow_pass.fellow_cluster_plane_count = 0;
 		shadow_pass.fellow_mm_plane_count = 0;
+		// geometry/cluster_lod (decision 0063): stock's LOD for a shadow pass is from the main camera's distance, except
+		// in orthogonal shadow cameras (a constant distance).
+		shadow_pass.fellow_cluster_lod = Fellow::cluster_lod() && !p_projection.is_orthogonal() && p_fellow_lod_ortho_extent <= 0.0;
+		shadow_pass.fellow_lod_eye = p_main_cam_transform.origin;
+		shadow_pass.fellow_lod_distance_bias = p_fellow_lod_distance_bias;
 		if ((Fellow::mesh_clusters() || Fellow::multimesh_culling()) && !p_use_dp) {
 			// Casters in front of a pancaked shadow camera are flattened onto its near plane, not clipped: keep the near
 			// plane out of the cluster cull then.
@@ -6471,6 +6534,9 @@ void RenderForwardClustered::_render_shadow_end() {
 		RenderListParameters render_list_parameters(render_list[RENDER_LIST_SECONDARY].elements.ptr() + shadow_pass.element_from, render_list[RENDER_LIST_SECONDARY].element_info.ptr() + shadow_pass.element_from, shadow_pass.element_count, shadow_pass.flip_cull, shadow_pass.pass_mode, 0, true, false, shadow_pass.rp_uniform_set, false, Vector2(), shadow_pass.lod_distance_multiplier, shadow_pass.screen_mesh_lod_threshold, 1, shadow_pass.element_from);
 		render_list_parameters.fellow_cluster_planes = shadow_pass.fellow_cluster_planes;
 		render_list_parameters.fellow_cluster_plane_count = shadow_pass.fellow_cluster_plane_count;
+		render_list_parameters.fellow_cluster_lod = shadow_pass.fellow_cluster_lod;
+		render_list_parameters.fellow_lod_eye = shadow_pass.fellow_lod_eye;
+		render_list_parameters.fellow_lod_distance_bias = shadow_pass.fellow_lod_distance_bias;
 		_fellow_multimesh_cull_params(1, RENDER_LIST_SECONDARY, shadow_pass.element_from, render_list_parameters);
 		_render_list_with_draw_list(&render_list_parameters, shadow_pass.framebuffer, shadow_pass.clear_depth ? RD::DRAW_CLEAR_DEPTH : RD::DRAW_DEFAULT_ALL, Vector<Color>(), 0.0f, 0, shadow_pass.rect);
 	}

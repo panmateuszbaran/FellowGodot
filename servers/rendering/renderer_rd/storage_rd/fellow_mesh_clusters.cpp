@@ -241,6 +241,130 @@ uint32_t FellowMeshClusters::cull_ordered(uint32_t p_level, const Plane *p_plane
 	return emitted;
 }
 
+uint32_t FellowMeshClusters::lod_level_for_distance(real_t p_local_distance, const LodParams &p_lod) const {
+	// As MeshStorage::mesh_surface_get_lod() with stock's distance (see RenderForwardClustered::_fill_render_list()).
+	real_t d = p_local_distance * p_lod.min_scale;
+	if (p_lod.distance_bias > 0.0) {
+		d = MAX(0.0, d - p_lod.distance_bias);
+	}
+	d *= p_lod.distance_multiplier;
+	uint32_t level = 0;
+	for (uint32_t i = 0; i < p_lod.lod_count; i++) {
+		const float screen_size = p_lod.edges[i] * p_lod.model_scale / float(d);
+		if (!(screen_size <= p_lod.threshold)) { // (d == 0: infinite, the base level)
+			break;
+		}
+		level = i + 1;
+	}
+	return MIN(MAX(level, p_lod.min_level), levels.size() - 1);
+}
+
+uint32_t FellowMeshClusters::cull_lod(const Plane *p_planes, int p_plane_count, const LodParams &p_lod, LocalVector<uint32_t> *r_level_ranges) const {
+	ERR_FAIL_COND_V(levels.is_empty() || union_bounds.size() != nodes.size() || max_level.size() != nodes.size() || neighbor_offsets.size() != nodes.size() + 1, 0);
+	// Each leaf's level, computed once per call (stamped, so the scratch is not cleared).
+	thread_local LocalVector<uint32_t> level_stamp;
+	thread_local LocalVector<uint8_t> level_of;
+	thread_local uint32_t stamp = 0;
+	if (level_stamp.size() < nodes.size()) {
+		level_stamp.resize_initialized(nodes.size());
+		level_of.resize(nodes.size());
+	}
+	stamp++;
+	if (stamp == 0) {
+		for (uint32_t &x : level_stamp) {
+			x = 0;
+		}
+		stamp = 1;
+	}
+	auto leaf_level = [&](uint32_t p_node) -> uint32_t {
+		if (level_stamp[p_node] != stamp) {
+			const AABB &b = union_bounds[p_node];
+			const Vector3 nearest = p_lod.eye.clamp(b.position, b.position + b.size);
+			level_of[p_node] = uint8_t(MIN(lod_level_for_distance(nearest.distance_to(p_lod.eye), p_lod), MAX(uint32_t(max_level[p_node]), p_lod.min_level)));
+			level_stamp[p_node] = stamp;
+		}
+		return level_of[p_node];
+	};
+
+	uint32_t emitted = 0;
+	uint32_t stack_node[64];
+	uint32_t stack_mask[64];
+	int sp = 0;
+	stack_node[sp] = 0;
+	stack_mask[sp] = (1u << p_plane_count) - 1;
+	sp++;
+	while (sp > 0) {
+		sp--;
+		const uint32_t n = stack_node[sp];
+		uint32_t mask = stack_mask[sp];
+		const AABB &box = union_bounds[n];
+		if (box.size == Vector3()) {
+			continue; // no triangles in any level
+		}
+		const Vector3 c = box.get_center();
+		const Vector3 e = box.size * 0.5;
+		bool outside = false;
+		for (int i = 0; i < p_plane_count; i++) {
+			if (!(mask & (1u << i))) {
+				continue;
+			}
+			const Plane &p = p_planes[i];
+			const real_t dist = p.normal.dot(c) - p.d;
+			const real_t radius = Math::abs(p.normal.x) * e.x + Math::abs(p.normal.y) * e.y + Math::abs(p.normal.z) * e.z;
+			if (dist - radius > 0) {
+				outside = true;
+				break;
+			}
+			if (dist + radius <= 0) {
+				mask &= ~(1u << i);
+			}
+		}
+		if (outside) {
+			continue;
+		}
+		const Node &node = nodes[n];
+		if (node.right != 0 && sp + 2 <= 64) {
+			stack_node[sp] = node.right;
+			stack_mask[sp] = mask;
+			sp++;
+			stack_node[sp] = n + 1;
+			stack_mask[sp] = mask;
+			sp++;
+			continue;
+		}
+		// A leaf (or, at the stack's limit, a node: at the instance's own level, as stock draws it).
+		const uint32_t own = node.right == 0 ? leaf_level(n) : p_lod.min_level;
+		uint32_t level_mask = 1u << own;
+		if (node.right == 0) {
+			for (uint32_t k = neighbor_offsets[n]; k < neighbor_offsets[n + 1]; k++) {
+				const uint32_t l = leaf_level(neighbors[k]);
+				if (l < own) {
+					level_mask |= 1u << l;
+				}
+			}
+		}
+		for (uint32_t level = 0; level_mask != 0; level++, level_mask >>= 1) {
+			if (!(level_mask & 1u)) {
+				continue;
+			}
+			const Range &r = levels[level].nodes[n];
+			if (r.count == 0) {
+				continue;
+			}
+			LocalVector<uint32_t> &out = r_level_ranges[level];
+			const uint32_t rs = out.size();
+			if (rs >= 2 && out[rs - 2] + out[rs - 1] == r.first) {
+				out[rs - 1] += r.count;
+			} else {
+				out.push_back(r.first);
+				out.push_back(r.count);
+			}
+			emitted += r.count;
+		}
+	}
+	return emitted;
+}
+
 uint32_t FellowMeshClusters::cull(uint32_t p_level, const Plane *p_planes, int p_plane_count, LocalVector<uint32_t> &r_ranges) const {
 	ERR_FAIL_UNSIGNED_INDEX_V(p_level, levels.size(), 0);
 	const LocalVector<Range> &ranges = levels[p_level].nodes;
@@ -396,6 +520,85 @@ FellowMeshClusters *fellow_mesh_clusters_build(uint64_t p_format, const Vector<u
 			clusters->pending_base = ordered;
 		} else {
 			clusters->pending_lods.push_back(ordered);
+		}
+	}
+
+	if (level_count > 1) {
+		// geometry/cluster_lod (decision 0063): each node's bounds over all levels, and the leaves' neighbours (sweep
+		// over the bounds' x, then a full intersection test, the bounds grown by a thousandth of the surface's size so
+		// that touching leaves count).
+		const uint32_t node_count = clusters->nodes.size();
+		clusters->union_bounds.resize(node_count);
+		clusters->max_level.resize(node_count);
+		LocalVector<uint32_t> leaves;
+		for (uint32_t n = 0; n < node_count; n++) {
+			// Usable levels: while the level's triangles stay within the base bounds grown by a quarter of their size.
+			const AABB &base = clusters->levels[0].nodes[n].aabb;
+			const AABB limit = base.grow(MAX(base.get_longest_axis_size() * 0.25, real_t(1e-6)));
+			uint32_t max_level = 0;
+			for (uint32_t l = 1; l < level_count; l++) {
+				const FellowMeshClusters::Range &r = clusters->levels[l].nodes[n];
+				if (r.count > 0 && !limit.encloses(r.aabb)) {
+					break;
+				}
+				max_level = l;
+			}
+			clusters->max_level[n] = uint8_t(MIN(max_level, 255u));
+			bool any = false;
+			AABB box;
+			for (uint32_t l = 0; l <= max_level; l++) {
+				const FellowMeshClusters::Range &r = clusters->levels[l].nodes[n];
+				if (r.count == 0) {
+					continue;
+				}
+				if (!any) {
+					box = r.aabb;
+					any = true;
+				} else {
+					box.merge_with(r.aabb);
+				}
+			}
+			clusters->union_bounds[n] = box;
+			if (any && clusters->nodes[n].right == 0) {
+				leaves.push_back(n);
+			}
+		}
+		const real_t grow = p_aabb.get_longest_axis_size() * 0.001;
+		const AABB *ub = clusters->union_bounds.ptr();
+		struct ByX {
+			const AABB *b = nullptr;
+			bool operator()(uint32_t p_a, uint32_t p_b) const { return b[p_a].position.x < b[p_b].position.x; }
+		};
+		SortArray<uint32_t, ByX> sorter;
+		sorter.compare.b = ub;
+		sorter.sort(leaves.ptr(), leaves.size());
+		LocalVector<LocalVector<uint32_t>> adj;
+		adj.resize(node_count);
+		for (uint32_t i = 0; i < leaves.size(); i++) {
+			const AABB a = ub[leaves[i]].grow(grow);
+			for (uint32_t j = i + 1; j < leaves.size(); j++) {
+				const AABB &b = ub[leaves[j]];
+				if (b.position.x > a.position.x + a.size.x) {
+					break;
+				}
+				if (a.intersects(b)) {
+					adj[leaves[i]].push_back(leaves[j]);
+					adj[leaves[j]].push_back(leaves[i]);
+				}
+			}
+		}
+		clusters->neighbor_offsets.resize(node_count + 1);
+		uint32_t total = 0;
+		for (uint32_t n = 0; n < node_count; n++) {
+			clusters->neighbor_offsets[n] = total;
+			total += adj[n].size();
+		}
+		clusters->neighbor_offsets[node_count] = total;
+		clusters->neighbors.resize(total);
+		for (uint32_t n = 0; n < node_count; n++) {
+			for (uint32_t k = 0; k < adj[n].size(); k++) {
+				clusters->neighbors[clusters->neighbor_offsets[n] + k] = adj[n][k];
+			}
 		}
 	}
 

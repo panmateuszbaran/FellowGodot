@@ -72,6 +72,17 @@ struct FellowMeshClusters {
 	LocalVector<Level> levels; // [0]: base index buffer, [1 + i]: LOD i.
 	uint32_t leaf_count = 0;
 
+	// geometry/cluster_lod (decision 0063), surfaces with LODs only: each node's bounds over all levels, and each leaf's
+	// neighbours (leaves whose such bounds intersect its own), by node index (neighbors[neighbor_offsets[n]] to
+	// neighbors[neighbor_offsets[n + 1]]).
+	// A leaf's coarsest usable level: its triangles stay near the leaf's own (base) bounds in every level up to it.
+	// The last LODs Godot generates have triangles that span much of the surface; a leaf holding one of them would
+	// neighbour every other leaf.
+	LocalVector<AABB> union_bounds;
+	LocalVector<uint8_t> max_level;
+	LocalVector<uint32_t> neighbor_offsets;
+	LocalVector<uint32_t> neighbors;
+
 	// Leaf-ordered index data waiting for the draw-time decision (see above); empty once decided.
 	Vector<uint8_t> pending_base;
 	Vector<Vector<uint8_t>> pending_lods;
@@ -94,6 +105,27 @@ struct FellowMeshClusters {
 	// the eye's side of the split comes first, and nodes entirely inside the volume are split further while they hold
 	// more than p_max_indices indices (geometry/cluster_front_to_back, decision 0058). Adjacent ranges are merged.
 	uint32_t cull_ordered(uint32_t p_level, const Plane *p_planes, int p_plane_count, const Vector3 &p_eye, uint32_t p_max_indices, LocalVector<uint32_t> &r_ranges) const;
+
+	// geometry/cluster_lod (decision 0063): each node at its own mesh LOD, chosen as stock chooses a surface's LOD for an
+	// instance (Godot's screen-space edge length against the threshold) but from the node's distance to the camera
+	// instead of the whole instance's. Never finer than p_lod.min_level (the instance's own level).
+	struct LodParams {
+		Vector3 eye; // the camera, in the surface's local space
+		real_t min_scale = 1.0; // the instance's smallest axis scale (local distances times it bound world distances from below)
+		const float *edges = nullptr; // each LOD's edge length (local units)
+		uint32_t lod_count = 0;
+		float model_scale = 1.0; // the instance's LOD model scale times its LOD bias
+		float distance_multiplier = 1.0;
+		float distance_bias = 0.0;
+		float threshold = 1.0;
+		uint32_t min_level = 0;
+	};
+	// Appends to r_level_ranges[level] the (first index, index count) ranges drawn at each level (levels.size() lists);
+	// returns the indices emitted. Each leaf in view is drawn at its own level and at every finer level of its
+	// neighbours: a point of the surface is then covered by the finest level of the leaves around it (adjacent leaves at
+	// different levels would leave cracks between their triangles, which each level's mesh does not).
+	uint32_t cull_lod(const Plane *p_planes, int p_plane_count, const LodParams &p_lod, LocalVector<uint32_t> *r_level_ranges) const;
+	uint32_t lod_level_for_distance(real_t p_local_distance, const LodParams &p_lod) const;
 };
 
 // Builds the clusters of a triangle surface from its vertex and index data (as passed to mesh_add_surface), with the
