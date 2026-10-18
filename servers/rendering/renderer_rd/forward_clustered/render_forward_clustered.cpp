@@ -4099,6 +4099,9 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 	const int fellow_ss_split = Fellow::frame_async_ss_split();
 	const bool fellow_ssil_main = fellow_async_wanted && p_use_ssil && fellow_ss_split >= 1 && RD::get_singleton()->fellow_async_compute_available();
 	const uint32_t fellow_main_parts = fellow_ss_split >= 2 ? (FELLOW_SS_SSIL | FELLOW_SS_SSR) : FELLOW_SS_SSIL;
+	if (fellow_ssil_main && p_use_ssr) {
+		Fellow::autotune_note_ss_split_candidates(); // autotune measures SSR's queue while it can choose (decision 0060)
+	}
 	if (fellow_ssil_main) {
 		_fellow_process_ss_effects(p_render_data, rb, p_use_ssao, p_use_ssil, p_use_ssr, p_normal_roughness_slices, FELLOW_SS_PREPARE);
 		// The layouts both queues read the shared images in (the prepared depth's views, the normal buffer), set here:

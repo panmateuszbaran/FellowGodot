@@ -497,9 +497,14 @@ inline bool pipeline_fallback() {
 }
 // With async compute, SSIL (and SSR) run on the main queue beside the second queue's SSAO (the depth preparation before
 // both), instead of after SSAO on the second queue (decision 0060). Read every frame.
-// 0: stock's layout (every effect on the second queue); 1: SSIL on the main queue; 2: SSIL and SSR on the main queue.
+// 0: stock's layout (every effect on the second queue); 1: SSIL on the main queue; 2: SSIL and SSR on the main queue;
+// 3: SSIL on the main queue, SSR too where autotune measures it faster (TUNE_SSR_MAIN). The mode for this frame.
 inline int frame_async_ss_split() {
-	return enabled() ? GLOBAL_GET_CACHED(int, "rendering/fellow/frame/async_ss_split") : 0;
+	if (!enabled()) {
+		return 0;
+	}
+	const int mode = GLOBAL_GET_CACHED(int, "rendering/fellow/frame/async_ss_split");
+	return mode == 3 ? (autotune_allows(TUNE_SSR_MAIN) ? 2 : 1) : mode;
 }
 // Maximum triangles per cluster (leaf of the k-d tree).
 inline int mesh_cluster_triangles() {

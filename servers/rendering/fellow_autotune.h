@@ -48,6 +48,7 @@ enum Tunable {
 	// its passes' cost; switched like the exact ones (both ways look the same within the measured limits).
 	TUNE_ADAPTIVE_VRS, // shading/adaptive_vrs_threshold > 0 (the attachment is created at start-up)
 	TUNE_LIGHT_TILE_CULL, // lights/tile_cull (decision 0049), while the opaque colour pass can use it
+	TUNE_SSR_MAIN, // frame/async_ss_split 3: SSR on the main queue beside the async SSAO too (decision 0060), while SSIL and SSR run with async compute
 	// Measured by the frame's wall time instead (they trade render-thread time against GPU time):
 	TUNE_ASYNC_COMPUTE, // frame/async_compute (decision 0015; the device created its second queue at start-up)
 	TUNE_FRAME_PLAN, // frame/replay_frame_plan (decision 0019)
@@ -65,6 +66,10 @@ void autotune_note_multimesh_candidates();
 // The renderer could run light tile culling in this frame (omni/spot lights in view, a depth pre-pass, ...):
 // TUNE_LIGHT_TILE_CULL applies only while it can.
 void autotune_note_light_tile_cull_candidates();
+
+// The screen-space effects ran split between the queues with SSIL and SSR in this frame: TUNE_SSR_MAIN applies only
+// while they do (decision 0060).
+void autotune_note_ss_split_candidates();
 
 // Called by RenderingServerDefault::_draw: before the viewports are drawn (decides this frame's choices and captures
 // the start timestamp), after them (end timestamp), and for each captured timestamp read back.
