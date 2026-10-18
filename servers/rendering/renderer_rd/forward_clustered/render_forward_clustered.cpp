@@ -4093,10 +4093,12 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 		}
 	}
 
-	// FellowEngine (frame/async_ssil_main, decision 0060): the depth preparation before the async part and SSIL on the
-	// main queue beside it (both read the prepared depth and the normal buffer the same way, which the conflict check
-	// allows), SSAO and SSR on the second queue: two chains of compute instead of one.
-	const bool fellow_ssil_main = fellow_async_wanted && p_use_ssil && Fellow::frame_async_ssil_main() && RD::get_singleton()->fellow_async_compute_available();
+	// FellowEngine (frame/async_ss_split, decision 0060): the depth preparation before the async part and SSIL (2: and
+	// SSR) on the main queue beside it (they read the prepared depth and the normal buffer the same way, which the
+	// conflict check allows), SSAO (and SSR) on the second queue: two chains of compute instead of one.
+	const int fellow_ss_split = Fellow::frame_async_ss_split();
+	const bool fellow_ssil_main = fellow_async_wanted && p_use_ssil && fellow_ss_split >= 1 && RD::get_singleton()->fellow_async_compute_available();
+	const uint32_t fellow_main_parts = fellow_ss_split >= 2 ? (FELLOW_SS_SSIL | FELLOW_SS_SSR) : FELLOW_SS_SSIL;
 	if (fellow_ssil_main) {
 		_fellow_process_ss_effects(p_render_data, rb, p_use_ssao, p_use_ssil, p_use_ssr, p_normal_roughness_slices, FELLOW_SS_PREPARE);
 		// The layouts both queues read the shared images in (the prepared depth's views, the normal buffer), set here:
@@ -4132,10 +4134,10 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 	}
 	const bool fellow_async = fellow_async_wanted && RD::get_singleton()->fellow_async_compute_begin();
 	if (fellow_async) {
-		_fellow_process_ss_effects(p_render_data, rb, p_use_ssao, p_use_ssil, p_use_ssr, p_normal_roughness_slices, fellow_ssil_main ? (FELLOW_SS_SSAO | FELLOW_SS_SSR) : FELLOW_SS_ALL);
+		_fellow_process_ss_effects(p_render_data, rb, p_use_ssao, p_use_ssil, p_use_ssr, p_normal_roughness_slices, fellow_ssil_main ? ((FELLOW_SS_SSAO | FELLOW_SS_SSR) & ~fellow_main_parts) : FELLOW_SS_ALL);
 		RD::get_singleton()->fellow_async_compute_end();
 		if (fellow_ssil_main) {
-			_fellow_process_ss_effects(p_render_data, rb, p_use_ssao, p_use_ssil, p_use_ssr, p_normal_roughness_slices, FELLOW_SS_SSIL);
+			_fellow_process_ss_effects(p_render_data, rb, p_use_ssao, p_use_ssil, p_use_ssr, p_normal_roughness_slices, fellow_main_parts);
 		}
 	}
 

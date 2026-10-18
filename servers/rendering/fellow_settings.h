@@ -495,10 +495,11 @@ inline int cluster_front_to_back() {
 inline bool pipeline_fallback() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/frame/pipeline_fallback");
 }
-// With async compute, SSIL runs on the main queue beside the second queue's SSAO and SSR (the depth preparation before
+// With async compute, SSIL (and SSR) run on the main queue beside the second queue's SSAO (the depth preparation before
 // both), instead of after SSAO on the second queue (decision 0060). Read every frame.
-inline bool frame_async_ssil_main() {
-	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/frame/async_ssil_main");
+// 0: stock's layout (every effect on the second queue); 1: SSIL on the main queue; 2: SSIL and SSR on the main queue.
+inline int frame_async_ss_split() {
+	return enabled() ? GLOBAL_GET_CACHED(int, "rendering/fellow/frame/async_ss_split") : 0;
 }
 // Maximum triangles per cluster (leaf of the k-d tree).
 inline int mesh_cluster_triangles() {
