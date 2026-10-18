@@ -191,6 +191,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/cpu/hot_workers_wait", PROPERTY_HINT_ENUM, "Pause Loop,UMWAIT C0.1,UMWAIT C0.2"), 0);
 	GLOBAL_DEF("rendering/fellow/frame/early_submit", false);
 	GLOBAL_DEF("rendering/fellow/frame/present_thread", true);
+	GLOBAL_DEF("rendering/fellow/frame/parallel_shader_create", true); // decision 0061
 	GLOBAL_DEF("rendering/fellow/frame/submit_thread", true);
 	GLOBAL_DEF("rendering/fellow/frame/parallel_replay", true);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/frame/replay_max_segments", PROPERTY_HINT_RANGE, "2,64,1"), 12);

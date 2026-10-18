@@ -171,6 +171,7 @@ void RendererCompositorRD::initialize() {
 uint64_t RendererCompositorRD::frame = 1;
 
 void RendererCompositorRD::finalize() {
+	ShaderRD::fellow_finalize();
 	texture_storage->_tex_blit_shader_free();
 	memdelete(scene);
 	memdelete(canvas);

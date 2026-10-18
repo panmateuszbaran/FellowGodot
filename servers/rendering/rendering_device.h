@@ -1915,6 +1915,7 @@ private:
 protected:
 	// FellowEngine early submit (see fellow_settings.h).
 	bool fellow_early_submit_supported = false;
+	bool fellow_shader_create_unlocked = false; // the driver creates shaders safely without the device's lock (decision 0061)
 	void _fellow_submit_early();
 	// FellowEngine present thread (rendering/fellow/frame/present_thread): vkQueuePresentKHR off the render thread.
 	struct FellowPresentThread;

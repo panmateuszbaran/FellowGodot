@@ -100,6 +100,16 @@ private:
 	// Vector will have the size of SHADER_STAGE_MAX and unused stages will have empty strings.
 	void _compile_variant(uint32_t p_variant, CompileData p_data);
 
+	// FellowEngine (decision 0061): a version's variants read from the shader cache, created on the worker threads.
+	struct FellowCacheCreate {
+		ShaderRD *shader = nullptr;
+		Version *version = nullptr;
+		const int *variant_ids = nullptr;
+		const RID *placeholders = nullptr;
+		RID *created = nullptr; // one per variant id in variant_ids
+	};
+	static void _fellow_create_cached_variant(void *p_data, uint32_t p_index);
+
 	void _initialize_version(Version *p_version);
 	void _clear_version(Version *p_version);
 	void _compile_version_start(Version *p_version, int p_group);
@@ -252,6 +262,7 @@ public:
 	static void shaders_embedded_set_unlock();
 
 	static void set_shader_cache_user_dir(const String &p_dir);
+	static void fellow_finalize(); // FellowEngine (decision 0061): releases the helpers of the parallel cache loads
 	static const String &get_shader_cache_user_dir();
 	static void set_shader_cache_res_dir(const String &p_dir);
 	static const String &get_shader_cache_res_dir();

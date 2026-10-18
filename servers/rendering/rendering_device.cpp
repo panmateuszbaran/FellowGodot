@@ -4182,7 +4182,27 @@ RID RenderingDevice::shader_create_from_bytecode(const Vector<uint8_t> &p_shader
 }
 
 RID RenderingDevice::shader_create_from_bytecode_with_samplers(const Vector<uint8_t> &p_shader_binary, RID p_placeholder, const Vector<PipelineImmutableSampler> &p_immutable_samplers) {
-	_THREAD_SAFE_METHOD_
+	// FellowEngine (decision 0061): with frame/parallel_shader_create the container's parsing and the driver's creation run
+	// without the device's lock (they touch no state of the device; the Vulkan driver's are thread-safe), so that shaders
+	// created on several threads are created at once; the device's lock is taken to register the shader.
+	struct FellowLock {
+		Mutex &mutex;
+		bool held = false;
+		void lock() {
+			if (!held) {
+				mutex.lock();
+				held = true;
+			}
+		}
+		~FellowLock() {
+			if (held) {
+				mutex.unlock();
+			}
+		}
+	} fellow_lock{ _thread_safe_ };
+	if (!(fellow_shader_create_unlocked && Fellow::frame_parallel_shader_create())) {
+		fellow_lock.lock();
+	}
 	Fellow::CostScope fellow_cost(Fellow::stats().cost_shader_create_usec, Fellow::stats().cost_shader_creates);
 
 	Ref<RenderingShaderContainer> shader_container = driver->get_shader_container_format().create_container();
@@ -4207,6 +4227,8 @@ RID RenderingDevice::shader_create_from_bytecode_with_samplers(const Vector<uint
 
 	RDD::ShaderID shader_id = driver->shader_create_from_container(shader_container, driver_immutable_samplers);
 	ERR_FAIL_COND_V(!shader_id, RID());
+
+	fellow_lock.lock();
 
 	// All good, let's create modules.
 
@@ -9059,6 +9081,7 @@ Error RenderingDevice::initialize(RenderingContextDriver *p_context, DisplayServ
 
 	context = p_context;
 	driver = context->driver_create();
+	fellow_shader_create_unlocked = String(driver->get_api_name()) == "Vulkan";
 
 	print_verbose("Devices:");
 	int32_t device_index = Engine::get_singleton()->get_gpu_index();

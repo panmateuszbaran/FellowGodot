@@ -37,6 +37,7 @@
 #include "core/os/os.h"
 #include "core/string/string_builder.h"
 #include "core/version.h"
+#include "servers/rendering/fellow_parallel.h"
 #include "servers/rendering/fellow_settings.h"
 #include "servers/rendering/shader_include_db.h"
 
@@ -613,6 +614,24 @@ String ShaderRD::_get_cache_file_path(Version *p_version, int p_group, const Str
 	return shader_cache_dir.path_join(relative_path);
 }
 
+static Mutex fellow_cache_create_mutex;
+static FellowParallelFor *fellow_cache_create_parallel = nullptr;
+
+void ShaderRD::_fellow_create_cached_variant(void *p_data, uint32_t p_index) {
+	FellowCacheCreate *data = static_cast<FellowCacheCreate *>(p_data);
+	const int variant_id = data->variant_ids[p_index];
+	// The placeholder is the variant's RID: on success the same RID comes back.
+	data->created[p_index] = RD::get_singleton()->shader_create_from_bytecode_with_samplers(data->version->variant_data[variant_id], data->placeholders[variant_id], data->shader->immutable_samplers);
+}
+
+void ShaderRD::fellow_finalize() {
+	MutexLock lock(fellow_cache_create_mutex);
+	if (fellow_cache_create_parallel != nullptr) {
+		memdelete(fellow_cache_create_parallel); // waits for its helpers
+		fellow_cache_create_parallel = nullptr;
+	}
+}
+
 bool ShaderRD::_load_from_cache(Version *p_version, int p_group) {
 	String api_safe_name = String(RD::get_singleton()->get_device_api_name()).validate_filename().to_lower();
 	Ref<FileAccess> f;
@@ -663,6 +682,60 @@ bool ShaderRD::_load_from_cache(Version *p_version, int p_group) {
 		ERR_FAIL_COND_V(br != variant_size, false);
 
 		p_version->variant_data.write[variant_id] = variant_bytes;
+	}
+
+	if (Fellow::frame_parallel_shader_create()) {
+		// FellowEngine (decision 0061): every variant at once on the worker threads, each into its own slot.
+		LocalVector<int> todo;
+		for (uint32_t i = 0; i < variant_count; i++) {
+			int variant_id = group_to_variant_map[p_group][i];
+			if (!variants_enabled[variant_id]) {
+				p_version->variants.write[variant_id] = RID();
+				continue;
+			}
+			todo.push_back(variant_id);
+		}
+		LocalVector<RID> created;
+		created.resize(todo.size());
+		FellowCacheCreate data;
+		data.shader = this;
+		data.version = p_version;
+		data.variant_ids = todo.ptr();
+		data.placeholders = p_version->variants.ptr();
+		data.created = created.ptr();
+		// The calling thread creates variants itself and worker threads that start in time take the others: it never
+		// waits for a worker to become free (they may be busy compiling pipelines), only for variants being created. One
+		// load at a time uses the helpers; a concurrent one (another thread's) creates its variants alone.
+		if (todo.size() > 1 && fellow_cache_create_mutex.try_lock()) {
+			if (fellow_cache_create_parallel == nullptr) {
+				fellow_cache_create_parallel = memnew(FellowParallelFor);
+			}
+			fellow_cache_create_parallel->run(todo.size(), &ShaderRD::_fellow_create_cached_variant, &data, todo.size() - 1);
+			fellow_cache_create_mutex.unlock();
+		} else {
+			for (uint32_t i = 0; i < todo.size(); i++) {
+				_fellow_create_cached_variant(&data, i);
+			}
+		}
+		bool failed = false;
+		for (const RID &rid : created) {
+			failed = failed || rid.is_null();
+		}
+		if (failed) {
+			// As stock's serial path: the variants created are freed and the version is compiled from its source.
+			for (const RID &rid : created) {
+				if (rid.is_valid()) {
+					RD::get_singleton()->free_rid(rid);
+				}
+			}
+			ERR_FAIL_V_MSG(false, vformat("Failed to create shader %s from the shader cache.", name));
+		}
+		for (uint32_t i = 0; i < todo.size(); i++) {
+			p_version->variants.write[todo[i]] = created[i];
+		}
+		p_version->valid = true;
+		Fellow::stats().cost_shader_cache_loads.increment();
+		return true;
 	}
 
 	for (uint32_t i = 0; i < variant_count; i++) {

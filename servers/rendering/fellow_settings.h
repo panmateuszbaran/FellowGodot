@@ -612,6 +612,14 @@ inline bool frame_present_thread() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/frame/present_thread");
 }
 
+// Shaders read from the shader cache: a version's variants are created on worker threads at once instead of one after
+// the other on the thread that needs them, and the driver's part of creating a shader (decoding the SPIR-V, the shader
+// modules, the layouts) runs outside the device's lock where the driver allows it (Vulkan). The same shaders; the first
+// frame of a scene waited about a second for them (decision 0061).
+inline bool frame_parallel_shader_create() {
+	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/frame/parallel_shader_create");
+}
+
 // Parallel replay: large draw lists (192+ draws) are replayed into secondary command buffers by worker threads at the
 // end of the frame (render graph), each segment starting with the state the instructions before it set; the render
 // pass executes them in order. Same commands in the same order: same images. Vulkan; read every frame.
