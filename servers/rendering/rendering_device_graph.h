@@ -217,6 +217,8 @@ public:
 		// transition counts), and the stages of the commands that wrote it there.
 		int64_t fellow_write_frame = -1;
 		BitField<RDD::PipelineStageBits> fellow_write_stages = {};
+		// FellowEngine: the stages a barrier made this graph's last write visible to (see _add_command_to_graph()).
+		BitField<RDD::PipelineStageBits> fellow_visible_stages = {};
 
 		_FORCE_INLINE_ void reset_if_outdated(int64_t new_command_frame) {
 			if (new_command_frame != command_frame) {

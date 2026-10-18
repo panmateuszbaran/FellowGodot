@@ -364,6 +364,13 @@ inline int segment_barriers() {
 	return GLOBAL_GET_CACHED(int, "rendering/fellow/debug/segment_barriers");
 }
 
+// Render graph (decision 0062): a read with the usage a resource already has, from a pipeline stage the barrier after
+// the graph's last write did not cover, gets a memory barrier (stock's usage tracking assumes the earlier barrier
+// made the write visible to every later reader of that usage). Off with FellowEngine disabled (stock).
+inline bool graph_visibility_barriers() {
+	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/debug/visibility_barriers");
+}
+
 // The colour passes' pipelines specialized for what the frame does not have (bits): 1 no decal, 2 no reflection probe,
 // 8 no omni light, 16 no spot light in the light cluster, 4 no directional light, 32 no shadowed omni or spot light
 // (their code is not compiled; it would not run; the values it could have changed pass fellow_keep; decision 0057, all
@@ -971,6 +978,7 @@ struct Stats {
 	SafeNumeric<uint64_t> rd_graph_barriers_nsec; // barriers grouped and recorded
 	SafeNumeric<uint64_t> rd_segment_full_barriers; // debug/segment_barriers 2: full barriers at the start of command buffers
 	SafeNumeric<uint64_t> rd_graph_segment_hazards; // uses of a resource written in an earlier graph of the frame, with its usage unchanged (no barrier from the usage tracking)
+	SafeNumeric<uint64_t> rd_graph_visibility_barriers; // reads given a memory barrier for a stage the last write was not made visible to (decision 0062)
 	SafeNumeric<uint64_t> rd_graph_draw_nsec; // draw lists replayed (vkCmd* calls)
 	SafeNumeric<uint64_t> rd_graph_draw_lists; // draw lists replayed
 	SafeNumeric<uint64_t> rd_graph_draw_bytes; // their instruction bytes

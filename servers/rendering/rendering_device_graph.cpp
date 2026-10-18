@@ -655,8 +655,21 @@ void RenderingDeviceGraph::_add_command_to_graph(ResourceTracker **p_resource_tr
 				r_command->previous_stages = r_command->previous_stages | search_tracker->fellow_write_stages;
 			}
 		}
+		// FellowEngine: a read with the usage the resource already has needs no barrier of stock's kind, but the barrier
+		// that made this graph's last write visible covered only the stages of the commands that followed the write with
+		// a new usage. A read from another stage (the light buffers, written by a copy and read by the cluster pass's
+		// shaders, then by light tile culling's compute shader, decision 0049) gets a memory barrier of its own
+		// (Vulkan synchronization validation: SYNC-HAZARD-READ-AFTER-WRITE before).
+		const bool fellow_unseen_read = !different_usage && !write_usage && search_tracker->write_command_or_list_index >= 0 && Fellow::graph_visibility_barriers() && !r_command->self_stages.is_empty() && (r_command->self_stages & ~search_tracker->fellow_visible_stages) != 0;
+		if (fellow_unseen_read) {
+			r_command->memory_barrier.src_access = r_command->memory_barrier.src_access | RDD::BARRIER_ACCESS_MEMORY_WRITE_BIT;
+			r_command->memory_barrier.dst_access = r_command->memory_barrier.dst_access | (new_usage_access.is_empty() ? BitField<RDD::BarrierAccessBits>(RDD::BARRIER_ACCESS_MEMORY_READ_BIT) : new_usage_access);
+			search_tracker->fellow_visible_stages = search_tracker->fellow_visible_stages | r_command->self_stages;
+			Fellow::stats().rd_graph_visibility_barriers.increment();
+		}
 		if (different_usage || write_usage_after_write) {
 			// A barrier must be pushed if the usage is different of it's a write usage and there was already a command that wrote to this resource previously.
+			search_tracker->fellow_visible_stages = search_tracker->fellow_visible_stages | r_command->self_stages;
 			if (resource_tracker->texture_driver_id.id != 0) {
 				if (resource_tracker->usage_access.is_empty()) {
 					// FIXME: If the tracker does not know the previous type of usage, assume the generic memory write one.
@@ -702,6 +715,7 @@ void RenderingDeviceGraph::_add_command_to_graph(ResourceTracker **p_resource_tr
 		}
 
 		if (write_usage) {
+			search_tracker->fellow_visible_stages.clear(); // made visible to no stage yet
 			// FellowEngine segments (see fellow_frame_first_graph).
 			if (search_tracker->fellow_write_frame != tracking_frame) {
 				search_tracker->fellow_write_frame = tracking_frame;
