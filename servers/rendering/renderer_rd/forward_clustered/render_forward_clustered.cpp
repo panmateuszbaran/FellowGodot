@@ -310,25 +310,51 @@ void RenderForwardClustered::update() {
 // (a RenderForwardClustered::FellowRecordJob).
 static thread_local void *fellow_tl_record = nullptr;
 
-// Decision 0059: the specialization a draw falls back on while its own pipeline compiles: FellowEngine's per-frame bits
-// at the defaults the load-time compilation used. 0057's bits only leave out code that would not run (clear: the code is
-// there and runs no iteration); light tile culling off visits every light of the cell (0049: the same lights reach the
-// same expressions); the light loop's fields early and prefetch choose code shapes with the same results (0045, 0046).
-static _FORCE_INLINE_ SceneShaderForwardClustered::ShaderSpecialization fellow_fallback_specialization(SceneShaderForwardClustered::ShaderSpecialization p_spec, const SceneShaderForwardClustered::ShaderSpecialization &p_default) {
-	p_spec.fellow_light_fields_early = p_default.fellow_light_fields_early;
-	p_spec.fellow_light_prefetch_next = p_default.fellow_light_prefetch_next;
-	p_spec.fellow_light_prefetch_all = p_default.fellow_light_prefetch_all;
-	p_spec.fellow_light_prefetch_words = p_default.fellow_light_prefetch_words;
-	p_spec.fellow_light_hot = p_default.fellow_light_hot;
-	p_spec.fellow_light_hot_ubo = p_default.fellow_light_hot_ubo;
-	p_spec.fellow_light_tile_cull = 0;
-	p_spec.fellow_no_decals = 0;
-	p_spec.fellow_no_reflection_probes = 0;
-	p_spec.fellow_no_directional_lights = 0;
-	p_spec.fellow_no_omni_lights = 0;
-	p_spec.fellow_no_spot_lights = 0;
-	p_spec.fellow_no_positional_shadows = 0;
-	return p_spec;
+// Decision 0059: the specializations a draw may fall back on while its own pipeline compiles, the likeliest compiled
+// first. Each differs from the requested one only in FellowEngine bits whose other value gives the same image in any
+// frame: 0057's bits clear (the code is there and runs no iteration); light tile culling off (every light of the cell is
+// visited, 0049); the shadow pyramids' early-outs off (0005); the light loop's fields early either way (0045). Not the
+// bits that change what the CPU writes for the shader (persistent instances) or that need data a frame may not have
+// (the pyramids or tile masks on).
+static uint32_t fellow_fallback_specializations(const SceneShaderForwardClustered::ShaderSpecialization &p_spec, const SceneShaderForwardClustered::ShaderSpecialization &p_default, SceneShaderForwardClustered::ShaderSpecialization *r_out) {
+	uint32_t n = 0;
+	SceneShaderForwardClustered::ShaderSpecialization s = p_spec;
+	// 0057's bits clear.
+	s.fellow_no_decals = 0;
+	s.fellow_no_reflection_probes = 0;
+	s.fellow_no_directional_lights = 0;
+	s.fellow_no_omni_lights = 0;
+	s.fellow_no_spot_lights = 0;
+	s.fellow_no_positional_shadows = 0;
+	r_out[n++] = s;
+	// Light tile culling off (alone, then with 0057's bits clear).
+	s = p_spec;
+	s.fellow_light_tile_cull = 0;
+	r_out[n++] = s;
+	s = r_out[0];
+	s.fellow_light_tile_cull = 0;
+	r_out[n++] = s;
+	// The fields early the other way (autotune and the frame's light count switch them).
+	s = p_spec;
+	s.fellow_light_fields_early = !p_spec.fellow_light_fields_early;
+	r_out[n++] = s;
+	// The shadow pyramids' early-outs off.
+	s = p_spec;
+	s.fellow_directional_max_mip = 0;
+	s.fellow_positional_max_mip = 0;
+	r_out[n++] = s;
+	// Everything per-frame at the defaults (0057 clear, tile culling and pyramids off).
+	s = r_out[2];
+	s.fellow_directional_max_mip = 0;
+	s.fellow_positional_max_mip = 0;
+	s.fellow_light_fields_early = p_default.fellow_light_fields_early;
+	s.fellow_light_prefetch_next = p_default.fellow_light_prefetch_next;
+	s.fellow_light_prefetch_all = p_default.fellow_light_prefetch_all;
+	s.fellow_light_prefetch_words = p_default.fellow_light_prefetch_words;
+	s.fellow_light_hot = p_default.fellow_light_hot;
+	s.fellow_light_hot_ubo = p_default.fellow_light_hot_ubo;
+	r_out[n++] = s;
+	return n;
 }
 
 template <RenderForwardClustered::PassMode p_pass_mode, uint32_t p_color_pass_flags>
@@ -611,15 +637,35 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 					}
 					break;
 				} else if (!pipeline_key.ubershader && fellow_pipeline_fallback) {
-					// Decision 0059: while this pipeline compiles (requested above), the one with FellowEngine's per-frame
-					// specialization bits at their defaults, if compiled (usually when the mesh was loaded). Those bits
-					// only leave out code that would not run or choose between code shapes with the same results.
+					// Decision 0059: while this pipeline compiles (requested above), an already compiled one that differs
+					// only in FellowEngine bits whose other value gives the same image (fellow_fallback_specializations).
+					SceneShaderForwardClustered::ShaderSpecialization fellow_fb_specs[8];
+					const uint32_t fellow_fb_count = fellow_fallback_specializations(pipeline_specialization, scene_shader.default_specialization, fellow_fb_specs);
 					SceneShaderForwardClustered::ShaderData::PipelineKey fellow_fb_key = pipeline_key;
-					fellow_fb_key.shader_specialization = fellow_fallback_specialization(pipeline_specialization, scene_shader.default_specialization);
-					const uint32_t fellow_fb_hash = fellow_fb_key.hash();
-					RID fellow_fb_rd;
-					if (fellow_fb_hash != pipeline_hash && shader->pipeline_hash_map.fellow_find_pipeline(fellow_fb_hash, fellow_fb_rd) && fellow_fb_rd.is_valid()) {
-						pipeline_rd = fellow_fb_rd;
+					bool fellow_fb_found = false;
+					for (uint32_t f = 0; f < fellow_fb_count && !fellow_fb_found; f++) {
+						fellow_fb_key.shader_specialization = fellow_fb_specs[f];
+						const uint32_t fellow_fb_hash = fellow_fb_key.hash();
+						RID fellow_fb_rd;
+						if (fellow_fb_hash != pipeline_hash && shader->pipeline_hash_map.fellow_find_pipeline(fellow_fb_hash, fellow_fb_rd) && fellow_fb_rd.is_valid()) {
+							pipeline_rd = fellow_fb_rd;
+							fellow_fb_found = true;
+						}
+					}
+					if (!fellow_fb_found && fellow_fb_count > 0) {
+						// None compiled yet: ask for the last one (every per-frame bit at its default, valid in any frame),
+						// so that later changes of the bits find it.
+						fellow_fb_key.shader_specialization = fellow_fb_specs[fellow_fb_count - 1];
+						const uint32_t fellow_fb_hash = fellow_fb_key.hash();
+						if (fellow_fb_hash != pipeline_hash) {
+							shader->pipeline_hash_map.get_pipeline(fellow_fb_key, fellow_fb_hash, false, RSE::PIPELINE_SOURCE_SPECIALIZATION);
+						}
+					}
+					static const bool fellow_fb_log = OS::get_singleton()->has_environment("FELLOW_PIPELINE_LOG");
+					if (fellow_fb_log) {
+						print_line(vformat("FellowEngine pipeline missing: shader %d version %d flags %d spec %x %x %x -> %s", int64_t(uint64_t(uintptr_t(shader)) & 0xFFFFFF), int(pipeline_key.version), int(pipeline_key.color_pass_flags), pipeline_specialization.packed_0, pipeline_specialization.packed_1, pipeline_specialization.packed_2, fellow_fb_found ? "fallback" : "ubershader"));
+					}
+					if (fellow_fb_found) {
 						pipeline_valid = true;
 						prev_shader = shader;
 						prev_pipeline_hash = pipeline_hash; // the next elements asking for the same pipeline keep the fallback bound

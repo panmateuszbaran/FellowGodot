@@ -488,10 +488,10 @@ inline bool prepass_simple_first() {
 inline int cluster_front_to_back() {
 	return geometry_enabled() ? MAX(0, GLOBAL_GET_CACHED(int, "rendering/fellow/geometry/cluster_front_to_back")) : 0;
 }
-// A draw whose specialized pipeline is still compiling uses, when compiled, the pipeline with FellowEngine's per-frame
-// specialization bits at their defaults (the one compiled when the mesh was loaded: 0057's bits clear, light tile
-// culling off, the light loop's code shape as set) instead of the ubershader; the same image (decision 0059). Read
-// every frame.
+// A draw whose specialized pipeline is still compiling uses an already compiled pipeline that differs only in
+// FellowEngine's per-frame specialization bits whose other value gives the same image (0057's bits clear, light tile
+// culling or the shadow pyramids off, the light fields early either way) instead of stock's ubershader (decision 0059).
+// Read every frame.
 inline bool pipeline_fallback() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/frame/pipeline_fallback");
 }
