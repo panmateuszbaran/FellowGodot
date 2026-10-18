@@ -31,6 +31,9 @@ about 3 % on m10, as the in-process measurements say (0055 tone mapping −0.2 %
 pipelines during its measurement with 0057 (40-88 against 40; its reflection probe and second viewport bring other
 combinations of the six bits), drawn with the ubershader meanwhile (section 8).
 
+City Lab's mean frame is affected by hitches in this session (section 8): its 99th percentile is 12-14 ms for both
+FellowEngine builds and 3.7 ms for stock, so its mean compares less well than its GPU time.
+
 Everything on by default is exact: lavapipe bit for bit, and on the RTX bit for bit where two runs of one build are
 (City Lab, Bistro exterior), at the run-to-run floor elsewhere.
 
@@ -164,8 +167,11 @@ when first needed (stock's ubershader draws meanwhile), as with a new material.
   culling) and autotune's evaluations. A specialization that only leaves code out has an exact, often compiled fallback
   (the same pipeline with those bits cleared) better than the ubershader; asking for it, and compiling it ahead, should
   remove most of those frames.
-* **City Lab's 99th percentile** is 12-14 ms in two of three runs with milestone 10's build and this one, 3.7 ms with
-  stock: hitches to find.
+* **City Lab's 99th percentile** is 12-14 ms (maxima 40-51 ms) in five of six runs of milestone 10's build and this
+  one in `m11_f168`, 3.6-3.8 ms with stock in the same session. Milestone 10's build had 3.1-3.4 ms (maxima 12-16) in
+  its own final (`m10_f152`): the build did not change, the machine's load did (it is in use alongside). Stock, which
+  renders on one thread, is not affected; FellowEngine's worker threads (parallel lists and recording, present and
+  submit threads) are. To measure with a controlled background load, and to make the frame robust to it.
 * **Sponza's depth pre-pass** (1.17 ms; the curtains and the trees' bark the largest growth): 0058, the large surfaces'
   clusters drawn front to back, is being measured.
 * Lights Lab's main colour variant keeps its 96 registers (omni, spot and shadow code are all used there); SSAO costs
