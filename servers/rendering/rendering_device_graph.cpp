@@ -2063,6 +2063,32 @@ void RenderingDeviceGraph::add_driver_callback(RDD::DriverCallback p_callback, v
 	command->type = RecordedCommand::TYPE_DRIVER_CALLBACK;
 	command->callback = p_callback;
 	command->userdata = p_userdata;
+	// FellowEngine: the stages a callback's resources are used on. Without them the layout transitions before it got
+	// BOTTOM_OF_PIPE as their destination stage, which no later command waits on, and later readers of the same usage
+	// get no barrier of their own (the screen-space effects' transitions before async compute, decision 0060; stock
+	// records callbacks only for MetalFX, whose driver ignores barriers). Shader accesses are given every shader stage
+	// they can come from, copies the copy stage, anything else every stage.
+	for (uint32_t i = 0; i < p_usages.size(); i++) {
+		switch (p_usages[i]) {
+			case RESOURCE_USAGE_COPY_FROM:
+			case RESOURCE_USAGE_COPY_TO:
+				command->self_stages = command->self_stages | RDD::PIPELINE_STAGE_COPY_BIT;
+				break;
+			case RESOURCE_USAGE_UNIFORM_BUFFER_READ:
+			case RESOURCE_USAGE_TEXTURE_BUFFER_READ:
+			case RESOURCE_USAGE_TEXTURE_BUFFER_READ_WRITE:
+			case RESOURCE_USAGE_STORAGE_BUFFER_READ:
+			case RESOURCE_USAGE_STORAGE_BUFFER_READ_WRITE:
+			case RESOURCE_USAGE_TEXTURE_SAMPLE:
+			case RESOURCE_USAGE_STORAGE_IMAGE_READ:
+			case RESOURCE_USAGE_STORAGE_IMAGE_READ_WRITE:
+				command->self_stages = command->self_stages | RDD::PIPELINE_STAGE_VERTEX_SHADER_BIT | RDD::PIPELINE_STAGE_FRAGMENT_SHADER_BIT | RDD::PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+				break;
+			default:
+				command->self_stages = command->self_stages | RDD::PIPELINE_STAGE_ALL_COMMANDS_BIT;
+				break;
+		}
+	}
 	_add_command_to_graph((ResourceTracker **)p_trackers.ptr(), (ResourceUsage *)p_usages.ptr(), p_trackers.size(), command_index, command);
 }
 
