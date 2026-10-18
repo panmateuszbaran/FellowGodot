@@ -103,4 +103,15 @@ the run-to-run floors are unchanged (`m12_f177_vb_warm`). On.
 
 ## 9. Next
 
-(pending)
+* **Large surfaces at the LOD of their parts (0063, started).** Godot chooses a mesh LOD per instance; a large surface
+  the camera stands in (Sponza's ivy and curtains, a terrain) is drawn at full detail to its far end. The mesh clusters
+  already hold every LOD's ranges per node: each cluster can take the level stock would give it as an instance of its
+  own, drawn crack-free by also drawing the finer levels of its neighbours (lavapipe terrain: 86 % fewer triangles,
+  differences only at the horizon's silhouette). It changes the image as LOD does: an option, measured on the RTX in
+  `m13_f179`.
+* **The run-to-run floors** (Bistro interior 67 dB, PBR Lab 73 dB, Sponza 75 dB, Lights Lab 100 dB) limit how finely an
+  exact change can be verified; `m13_f180` compares A/A pairs of stock, of the defaults and without async compute.
+* **Frame times under background load** (City Lab's 99th percentile in `m11_f168`): `m13_f181` measures stock and
+  FellowEngine with 12 processes spinning beside them.
+* The post-processing chain (TAA, tone mapping, glow, auto exposure: 0.5 ms of Bistro interior's 3.2 ms) and SSIL's
+  blur and interleave passes, now on the main queue.
