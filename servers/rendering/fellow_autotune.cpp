@@ -227,7 +227,7 @@ Analysis pool(TuneState &s, const Analysis &p_analysis) {
 }
 
 void finish(TuneState &s, bool p_new_choice, const Analysis &p_analysis, bool p_early, bool p_undecided_off = false) {
-	print_verbose(vformat("FellowEngine autotune: evaluation from frame %d ends at frame %d%s: %d pairs (%.1f pooled), on %.3f ms, off - on %.4f ms (se %.4f), choice %s -> %s", (int64_t)s.eval_start, (int64_t)frame_id, p_early ? " (early)" : "", (int)p_analysis.pairs, s.pool_n, p_analysis.base, p_analysis.mean, p_analysis.se, s.choice ? "on" : "off", p_new_choice ? "on" : "off"));
+	print_verbose(vformat("FellowEngine autotune: tunable %d: evaluation from frame %d ends at frame %d%s: %d pairs (%.1f pooled), on %.3f ms, off - on %.4f ms (se %.4f), choice %s -> %s", (int)(&s - states), (int64_t)s.eval_start, (int64_t)frame_id, p_early ? " (early)" : "", (int)p_analysis.pairs, s.pool_n, p_analysis.base, p_analysis.mean, p_analysis.se, s.choice ? "on" : "off", p_new_choice ? "on" : "off"));
 	stats().autotune_evals.increment();
 	if (p_early) {
 		stats().autotune_early.increment();
