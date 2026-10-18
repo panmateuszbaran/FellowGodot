@@ -257,6 +257,10 @@ private:
 		// against; 0 planes = whole surfaces.
 		const Plane *fellow_cluster_planes = nullptr;
 		int fellow_cluster_plane_count = 0;
+		// geometry/cluster_front_to_back (decision 0058): the camera's position and the largest ordered range (indices);
+		// 0: stock's cluster order.
+		Vector3 fellow_cluster_eye;
+		uint32_t fellow_cluster_f2b = 0;
 		// FellowEngine occlusion culling (opaque colour pass): per list element, the index of the culled run it starts
 		// (its draw is then indirect, reading the compacted elements: one draw per chunk of 64 elements, the run's chunks
 		// consecutive from that index) or UINT32_MAX.

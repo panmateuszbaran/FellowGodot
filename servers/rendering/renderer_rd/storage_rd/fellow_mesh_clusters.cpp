@@ -178,6 +178,69 @@ Vector<uint8_t> make_level(const LocalVector<FellowMeshClusters::Node> &p_nodes,
 
 } // namespace
 
+uint32_t FellowMeshClusters::cull_ordered(uint32_t p_level, const Plane *p_planes, int p_plane_count, const Vector3 &p_eye, uint32_t p_max_indices, LocalVector<uint32_t> &r_ranges) const {
+	ERR_FAIL_UNSIGNED_INDEX_V(p_level, levels.size(), 0);
+	const LocalVector<Range> &ranges = levels[p_level].nodes;
+	uint32_t emitted = 0;
+	// Depth-first, the eye's side of each split first (the stack pops the near child before the far one).
+	uint32_t stack_node[64];
+	uint32_t stack_mask[64];
+	int sp = 0;
+	stack_node[sp] = 0;
+	stack_mask[sp] = (1u << p_plane_count) - 1;
+	sp++;
+	while (sp > 0) {
+		sp--;
+		const uint32_t n = stack_node[sp];
+		uint32_t mask = stack_mask[sp];
+		const Range &r = ranges[n];
+		if (r.count == 0) {
+			continue;
+		}
+		const Vector3 c = r.aabb.get_center();
+		const Vector3 e = r.aabb.size * 0.5;
+		bool outside = false;
+		for (int i = 0; i < p_plane_count; i++) {
+			if (!(mask & (1u << i))) {
+				continue;
+			}
+			const Plane &p = p_planes[i];
+			const real_t dist = p.normal.dot(c) - p.d;
+			const real_t radius = Math::abs(p.normal.x) * e.x + Math::abs(p.normal.y) * e.y + Math::abs(p.normal.z) * e.z;
+			if (dist - radius > 0) {
+				outside = true;
+				break;
+			}
+			if (dist + radius <= 0) {
+				mask &= ~(1u << i);
+			}
+		}
+		if (outside) {
+			continue;
+		}
+		const Node &node = nodes[n];
+		if (node.right == 0 || (mask == 0 && r.count <= p_max_indices) || sp + 2 > 64) {
+			const uint32_t rs = r_ranges.size();
+			if (rs >= 2 && r_ranges[rs - 2] + r_ranges[rs - 1] == r.first) {
+				r_ranges[rs - 1] += r.count;
+			} else {
+				r_ranges.push_back(r.first);
+				r_ranges.push_back(r.count);
+			}
+			emitted += r.count;
+			continue;
+		}
+		const bool eye_left = p_eye[node.axis] < node.split;
+		stack_node[sp] = eye_left ? node.right : n + 1;
+		stack_mask[sp] = mask;
+		sp++;
+		stack_node[sp] = eye_left ? n + 1 : node.right;
+		stack_mask[sp] = mask;
+		sp++;
+	}
+	return emitted;
+}
+
 uint32_t FellowMeshClusters::cull(uint32_t p_level, const Plane *p_planes, int p_plane_count, LocalVector<uint32_t> &r_ranges) const {
 	ERR_FAIL_UNSIGNED_INDEX_V(p_level, levels.size(), 0);
 	const LocalVector<Range> &ranges = levels[p_level].nodes;

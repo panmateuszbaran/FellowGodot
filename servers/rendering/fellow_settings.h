@@ -483,6 +483,11 @@ inline int multimesh_cull_min_instances() {
 inline bool prepass_simple_first() {
 	return geometry_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/geometry/prepass_simple_first");
 }
+// The camera passes draw a large surface's clusters in front-to-back order (decision 0058): nodes entirely in view are
+// split further while they hold more than this many triangles; 0, stock's (the tree's) order. Read every frame.
+inline int cluster_front_to_back() {
+	return geometry_enabled() ? MAX(0, GLOBAL_GET_CACHED(int, "rendering/fellow/geometry/cluster_front_to_back")) : 0;
+}
 // Maximum triangles per cluster (leaf of the k-d tree).
 inline int mesh_cluster_triangles() {
 	return CLAMP(GLOBAL_GET_CACHED(int, "rendering/fellow/geometry/cluster_triangles"), 64, 1 << 20);

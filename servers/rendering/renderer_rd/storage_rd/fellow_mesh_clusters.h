@@ -89,6 +89,11 @@ struct FellowMeshClusters {
 	// Appends (first index, index count) ranges of p_level that intersect the convex volume bounded by p_planes
 	// (local space, normals pointing outwards). Returns the number of indices emitted.
 	uint32_t cull(uint32_t p_level, const Plane *p_planes, int p_plane_count, LocalVector<uint32_t> &r_ranges) const;
+
+	// The same ranges, ordered from the node nearest to p_eye (local space) to the farthest: at every node the child on
+	// the eye's side of the split comes first, and nodes entirely inside the volume are split further while they hold
+	// more than p_max_indices indices (geometry/cluster_front_to_back, decision 0058). Adjacent ranges are merged.
+	uint32_t cull_ordered(uint32_t p_level, const Plane *p_planes, int p_plane_count, const Vector3 &p_eye, uint32_t p_max_indices, LocalVector<uint32_t> &r_ranges) const;
 };
 
 // Builds the clusters of a triangle surface from its vertex and index data (as passed to mesh_add_surface), with the
