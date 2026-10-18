@@ -45,13 +45,40 @@ Testing mode 3 with Vulkan validation found that the images' layouts, set before
 callbacks, used BOTTOM_OF_PIPE as the barrier's destination stage (callbacks had no stages): every frame, and the main
 queue's SSIL did not wait for the transition. A callback's command now has its resources' stages (`fellow147`).
 
-## 5. Loading (0061)
+## 5. Loading (0061, KEEP)
 
-(pending `m12_f176_load`)
+Every final since milestone 4 recorded the time from the start of a scene's build to its first frame, and FellowEngine's
+was 0.1-1.0 s longer than stock's in every scene; nobody had looked. Counters of where loading spends its time
+(`fellow148`, `m12_f174_load`) put it in the first frame: the render thread creating shader objects from the shader
+cache one after another, 80-247 of them at 4-5 ms each, because the first frame enables the scene shader's advanced
+group (motion vectors, for TAA) and Godot then creates the group's 17 variants for every material, of which a frame uses
+one or two. FellowEngine disabled took as long: its code is in the shaders whatever its settings.
 
-## 6. A read the last write was not made visible to (0062)
+0061 creates a version's variants read from the cache in parallel (the calling thread and the workers that start in
+time; the driver's part outside the device's lock on Vulkan) and only when first asked for. The same shader modules.
 
-(pending `m12_f177`)
+| scene | stock | before (0061 off) | **now** | now against stock |
+|---|---:|---:|---:|---:|
+| Bistro exterior | 3.78 s | 4.27 | **3.08** | **−18 %** |
+| Bistro interior | 1.81 | 2.39 | **1.27** | **−30 %** |
+| Sponza | 3.78 | 4.53 | **3.31** | **−12 %** |
+| Foliage Lab | 0.91 | 1.06 | **0.66** | **−27 %** |
+| PBR Lab | 0.86 | 1.21 | **0.51** | **−41 %** |
+| Stress Lab | 0.53 | 0.80 | **0.24** | **−55 %** |
+| City Lab | 0.48 | 0.63 | **0.32** | **−34 %** |
+| Lights Lab | 0.28 | 0.46 | **0.11** | **−62 %** |
+
+(`m12_f176_load`, build to first frame, three runs each after a pass that filled the shader caches.) The first frame
+itself: 0.07-0.28 s, against stock's 0.24-0.79 s.
+
+## 6. A read the last write was not made visible to (0062, KEEP)
+
+Vulkan synchronization validation on Lights Lab (lavapipe) reported light tile culling's compute shader (0049) reading
+the light buffers after the copy that updated them without a memory barrier. Stock's usage tracking adds a barrier only
+when a resource's usage changes; the cluster pass's shaders had read the buffers first with the same usage, and the
+barrier before them covered only their stages. 0062 records the stages each write was made visible to, and gives a read
+from another stage a memory barrier. No measurable cost (`m12_f177_vb_ab`, every scene, p ≥ 0.18); the RTX images and
+the run-to-run floors are unchanged (`m12_f177_vb_warm`). On.
 
 ## 7. Tooling
 
