@@ -818,6 +818,11 @@ inline int cpu_hot_workers_wait() {
 inline bool cpu_hot_workers_yield() {
 	return GLOBAL_GET_CACHED(bool, "rendering/fellow/cpu/hot_workers_yield");
 }
+// An idle hot worker spins at the lowest thread priority and returns to normal before it claims a chunk (decision 0065;
+// Windows): any thread of normal priority that becomes ready preempts a spinning worker on whichever core it spins.
+inline bool cpu_hot_workers_idle_priority() {
+	return GLOBAL_GET_CACHED(bool, "rendering/fellow/cpu/hot_workers_idle_priority");
+}
 // The main RenderingDevice reports, once per frame, how long the render thread waited for an earlier frame's fence and
 // the time since the previous report (gate of the hot workers).
 void frame_gpu_wait_report(uint64_t p_wait_usec, uint64_t p_frame_usec);
@@ -1017,6 +1022,7 @@ struct Stats {
 	SafeNumeric<uint64_t> autotune_tainted_frames; // evaluation frames not counted: a pipeline or shader was still being created
 	SafeNumeric<uint64_t> cpu_hot_waits; // low-power waits of idle hot workers (cpu/hot_workers_wait, CPUs with WAITPKG)
 	SafeNumeric<uint64_t> cpu_hot_yields; // idle hot workers' yields of their core (cpu/hot_workers_yield)
+	SafeNumeric<uint64_t> cpu_hot_lowered; // idle hot workers' drops to the lowest priority (cpu/hot_workers_idle_priority)
 };
 
 Stats &stats();

@@ -150,6 +150,7 @@ private:
 	std::atomic<bool> hot_exit{ false };
 	std::atomic<int> hot_wait_mode{ 0 }; // cpu/hot_workers_wait: 0 pause loop, 1 UMWAIT C0.1, 2 UMWAIT C0.2
 	std::atomic<bool> hot_yield{ true }; // cpu/hot_workers_yield (decision 0065)
+	std::atomic<bool> hot_idle_priority{ false }; // cpu/hot_workers_idle_priority (decision 0065)
 	static constexpr uint64_t FELLOW_UMWAIT_TSC = 30000; // ~10 µs at 3 GHz: the longest single low-power wait
 	uint64_t hot_epoch = 0;
 	LocalVector<WorkerThreadPool::GroupID> hot_groups;

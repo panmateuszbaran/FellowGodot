@@ -192,6 +192,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/cpu/hot_workers_gate", true);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/cpu/hot_workers_wait", PROPERTY_HINT_ENUM, "Pause Loop,UMWAIT C0.1,UMWAIT C0.2"), 0);
 	GLOBAL_DEF("rendering/fellow/cpu/hot_workers_yield", true); // decision 0065
+	GLOBAL_DEF("rendering/fellow/cpu/hot_workers_idle_priority", false); // decision 0065
 	GLOBAL_DEF("rendering/fellow/frame/early_submit", false);
 	GLOBAL_DEF("rendering/fellow/frame/present_thread", true);
 	GLOBAL_DEF("rendering/fellow/frame/parallel_shader_create", true); // decision 0061
@@ -407,6 +408,7 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["autotune_tainted_frames"] = s.autotune_tainted_frames.get();
 	d["cpu_hot_waits"] = s.cpu_hot_waits.get();
 	d["cpu_hot_yields"] = s.cpu_hot_yields.get();
+	d["cpu_hot_lowered"] = s.cpu_hot_lowered.get();
 	d["cpu_waitpkg"] = fellow_waitpkg_supported() ? 1 : 0;
 	return d;
 }

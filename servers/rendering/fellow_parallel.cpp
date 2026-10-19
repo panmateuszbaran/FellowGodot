@@ -46,6 +46,24 @@
 #define FELLOW_HAS_WAITPKG_CODE 1
 #endif
 
+#ifdef _WIN32
+// The thread priority calls without <windows.h> (its macros collide with the engine's names).
+extern "C" __declspec(dllimport) void *__stdcall GetCurrentThread();
+extern "C" __declspec(dllimport) int __stdcall SetThreadPriority(void *hThread, int nPriority);
+#endif
+
+// cpu/hot_workers_idle_priority (decision 0065): an idle hot worker spins at the lowest priority, so that any thread of
+// normal priority that becomes ready preempts it at once on whichever core it spins (a yield only lets the threads
+// queued on its own core run). Back to normal before it claims a chunk (never preempted holding one by a thread that
+// would not have preempted it before). Windows only (elsewhere a thread cannot raise its priority back unprivileged).
+static void fellow_hot_priority(bool p_low) {
+#ifdef _WIN32
+	SetThreadPriority(GetCurrentThread(), p_low ? -2 : 0); // THREAD_PRIORITY_LOWEST : THREAD_PRIORITY_NORMAL
+#else
+	(void)p_low;
+#endif
+}
+
 bool fellow_waitpkg_supported() {
 #ifdef FELLOW_HAS_WAITPKG_CODE
 	static const bool supported = []() {
@@ -162,6 +180,7 @@ void FellowParallelFor::_run_hot(uint32_t p_count, Func p_func, void *p_userdata
 	hot_linger.store(linger_usec, std::memory_order_relaxed);
 	hot_wait_mode.store(Fellow::cpu_hot_workers_wait(), std::memory_order_relaxed);
 	hot_yield.store(Fellow::cpu_hot_workers_yield(), std::memory_order_relaxed);
+	hot_idle_priority.store(Fellow::cpu_hot_workers_idle_priority(), std::memory_order_relaxed);
 	hot_keepalive.store(OS::get_singleton()->get_ticks_usec(), std::memory_order_relaxed);
 	if (p_count == 1) {
 		p_func(p_userdata, 0);
@@ -225,6 +244,7 @@ void FellowParallelFor::begin_async(uint32_t p_count, Func p_func, void *p_userd
 		hot_linger.store(linger_usec, std::memory_order_relaxed);
 		hot_wait_mode.store(Fellow::cpu_hot_workers_wait(), std::memory_order_relaxed);
 		hot_yield.store(Fellow::cpu_hot_workers_yield(), std::memory_order_relaxed);
+		hot_idle_priority.store(Fellow::cpu_hot_workers_idle_priority(), std::memory_order_relaxed);
 		hot_keepalive.store(OS::get_singleton()->get_ticks_usec(), std::memory_order_relaxed);
 		// Published as in _run_hot().
 		hot_count.store(p_count, std::memory_order_relaxed);
@@ -314,6 +334,7 @@ void FellowParallelFor::prewarm(uint32_t p_helpers) {
 	hot_linger.store(linger_usec, std::memory_order_relaxed);
 	hot_wait_mode.store(Fellow::cpu_hot_workers_wait(), std::memory_order_relaxed);
 	hot_yield.store(Fellow::cpu_hot_workers_yield(), std::memory_order_relaxed);
+	hot_idle_priority.store(Fellow::cpu_hot_workers_idle_priority(), std::memory_order_relaxed);
 	hot_keepalive.store(OS::get_singleton()->get_ticks_usec(), std::memory_order_relaxed);
 	_hot_post(MIN(p_helpers, (uint32_t)WorkerThreadPool::get_singleton()->get_thread_count()));
 }
@@ -347,10 +368,17 @@ void FellowParallelFor::_hot_helper(void *p_self, uint32_t p_index) {
 	uint32_t idle = 0;
 	uint64_t waits = 0;
 	uint64_t yields = 0;
+	bool low = false;
+	uint32_t idle_checks = 0; // idle checks (every 64 pauses) since the last chunk
 	while (!self->hot_exit.load(std::memory_order_acquire)) {
 		uint64_t state = self->hot_state.load(std::memory_order_acquire);
 		const uint32_t index = uint32_t(state & HOT_INDEX_MASK);
 		if (index != HOT_CLOSED && index < self->hot_count.load(std::memory_order_relaxed)) {
+			if (low) {
+				fellow_hot_priority(false);
+				low = false;
+				continue; // the state may have moved meanwhile
+			}
 			// The parameters read here belong to this state's loop if the compare-and-swap succeeds (the state cannot
 			// have changed in between, and the parameters only change after the state is closed).
 			const Func func = self->hot_func.load(std::memory_order_relaxed);
@@ -360,6 +388,7 @@ void FellowParallelFor::_hot_helper(void *p_self, uint32_t p_index) {
 				self->hot_done.fetch_add(1, std::memory_order_release);
 				Fellow::stats().cpu_helper_chunks.increment();
 				idle = 0;
+				idle_checks = 0;
 				last_work = 0; // read the clock at the next idle check
 			}
 			continue;
@@ -376,6 +405,12 @@ void FellowParallelFor::_hot_helper(void *p_self, uint32_t p_index) {
 			continue;
 		}
 		idle = 0;
+		// Lowered after about 10-20 µs without work: the loops of a frame follow each other within microseconds.
+		if (!low && ++idle_checks >= 4 && self->hot_idle_priority.load(std::memory_order_relaxed)) {
+			fellow_hot_priority(true);
+			low = true;
+			Fellow::stats().cpu_hot_lowered.increment();
+		}
 		if (self->hot_yield.load(std::memory_order_relaxed)) {
 			// cpu/hot_workers_yield (decision 0065): a thread waiting for this core runs now, not after a quantum.
 			std::this_thread::yield();
@@ -389,6 +424,9 @@ void FellowParallelFor::_hot_helper(void *p_self, uint32_t p_index) {
 		if (now > keepalive + self->hot_linger.load(std::memory_order_relaxed)) {
 			break;
 		}
+	}
+	if (low) {
+		fellow_hot_priority(false); // a pool thread: other tasks run on it next
 	}
 	if (waits > 0) {
 		Fellow::stats().cpu_hot_waits.add(waits);
