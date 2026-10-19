@@ -128,10 +128,12 @@ the current one while a MultiMesh's motion vectors are not in use) from every re
 no difference (every other read of that offset follows a change of the motion vectors, which sets it); it now returns
 the same offsets without storing (`c006f10`).
 
-On lavapipe, Foliage Lab's warm sequence is not the same between runs of one build (31-39 dB, the whole frame): the
-bench waits after the warm pass until 30 frames have compiled nothing, so the number of frames before the captured run
-(and with it TAA's jitter phase) depends on when the last compilation ends. On the RTX the compilations end within the
-warm pass (the floors are 67-82 dB, not 31-39): not a source of them.
+On lavapipe, Foliage Lab's warm sequence was not the same between runs of one build (31-39 dB, the whole frame): the
+bench waits after the warm pass until 30 frames have compiled nothing, so the frames before the captured run depend on
+when the last compilation ends (114 or 115 in three runs), and with them TAA's jitter phase. The bench now adds frames
+until the frame number is a multiple of 16 before the pre-roll (`460c752`; three runs bit for bit). On the RTX the
+compilations end within the warm pass (the floors are 67-82 dB, not 31-39): not a source of them, but the jobs from
+`f193f` use the aligned bench.
 
 ## 6. Fewer compilations while running (0068, 0069, measuring)
 
@@ -156,18 +158,21 @@ the colour passes: lavapipe 0 differing pixels in four labs; Stress Lab over a r
 * Debug hooks (environment variables of the FellowEngine build, off otherwise): `FELLOW_DEBUG_CLEAR_TEXTURES=a:b`
   (the textures created without data with a creation index in [a, b) cleared when created: bisects a read of memory
   never written, with lavapipe's `LVP_POISON_MEMORY=1`), `FELLOW_DEBUG_TEXTURE_LOG=1`, `FELLOW_DEBUG_FORCE_UBERSHADER=1`.
+* `benchmarks/tools/lavapipe/`: captures A/B, reads of memory never written, consecutive frames of a static view (bench
+  mode `repeat`), ThreadSanitizer summaries. Temporal mode aligns TAA's jitter phase before its pre-roll
+  (`--align_jitter`, on) and records `frames_drawn_at_preroll`.
 
 ## 8. Next
 
-Measured on the RTX when the machine is free (staged: `f193e` builds `fellow158` from `cc56e03`; then `f194`, `f195b`,
+Measured on the RTX when the machine is free (staged: `f193f` builds `fellow158` from `460c752`; then `f194`, `f195b`,
 `f199`):
 
-* `m13_f193e_floor_0067`: two runs of stock, of `fellow158` and of `fellow158` without 0067 against each other on the
+* `m13_f193f_floor_0067`: two runs of stock, of `fellow158` and of `fellow158` without 0067 against each other on the
   warm sequences (do the floors rise without the racing stores and the unwritten column?), and what 0067 changes against
   stock at 1920 × 1080.
-* `m13_f193e_prepare`: Stress Lab, Lights Lab and PBR Lab with autotune on — 0068 and 0069 on, 0068 off, 0069 off:
+* `m13_f193f_prepare`: Stress Lab, Lights Lab and PBR Lab with autotune on — 0068 and 0069 on, 0068 off, 0069 off:
   pipelines compiled and draws on the ubershader during the measurement, frame time.
-* `m13_f193e_clod_ab`: cluster LOD with one walk per camera render (0063): the render thread's cost in Sponza.
+* `m13_f193f_clod_ab`: cluster LOD with one walk per camera render (0063): the render thread's cost in Sponza.
 * `m13_f194`: where the GPU time goes (Sponza's transparent pass at three resolutions and without the trees).
 * `m13_f195b`: two runs against each other with each area of FellowEngine off (the floors' source).
 * `m13_f199_final`: stock, `fellow153` (m12), `fellow158`, `fellow158` with the visually lossless options.
