@@ -10,13 +10,14 @@ Status: **MEASURING** · Branch `fellow/geometry` · Setting `rendering/fellow/a
 
 Four of autotune's tunables are specialization constants of pipelines: the directional and the positional shadow
 pyramids' early-outs (0005) and light tile culling (0049) in the colour passes, persistent instance data (0022: the
-lists' format) in every pass. An evaluation switches one of them in blocks of frames; the first frame of a block that uses the other value with a material, a vertex format and the frame's
-other bits compiles that pipeline, and its draws use the ubershader until it is ready. Stress Lab compiles 40-88
-specialization pipelines during every final's 20 s measurement after a warm-up that compiled 70 (stock none), with
-129-3964 draws on the ubershader; warm sequences compile 2-50 during their 60 captured frames with autotune on, none with
-it off (milestone 13, section 4). 0064 leaves such frames out of the evaluation's measurement; they are still slower
-frames and, on lavapipe, other images (0057: an alpha-scissor material's ubershader and its specialized pipeline differ
-where derivatives after `discard` are undefined).
+lists' format) in every pass. An evaluation switches one of them in blocks of frames; the first frame of a block that
+uses the other value with a material, a vertex format and the frame's other bits compiles that pipeline, and its draws
+use the ubershader until it is ready. Stress Lab compiles 40-88 specialization pipelines during every final's 20 s
+measurement after a warm-up that compiled 70 (stock none), with 129-3964 draws on the ubershader; warm sequences
+compile 2-50 during their 60 captured frames with autotune on, none with it off (milestone 13, section 4). 0064 leaves
+such frames out of the evaluation's measurement; they are still slower frames and, on lavapipe, other images (0057: an
+alpha-scissor material's ubershader and its specialized pipeline differ where derivatives after `discard` are
+undefined).
 
 Compiling the other value of every pipeline ahead whenever one compiles (0066) was removed: up to four pipelines for
 one wherever autotune never switches the bits, at low priority a hang at exit on lavapipe, at normal priority
@@ -27,11 +28,11 @@ competition with the compilations the frame needs.
 `autotune/prepare_pipelines`: when the evaluation due is one of those four tunables, it is prepared first. In the
 frames of the preparation the passes that use the bit (the opaque pass for light tile culling, where it can run; the
 opaque, motion and transparent passes for the pyramids; every pass for persistent instance data) note, for each
-pipeline they bind, the one with the tunable's bit the other way, if the pipeline map does not hold it (a read of the map, safe while lists are recorded in parallel); after
-the passes the render thread requests the missing ones at high priority and reports how many are still compiling. The
-evaluation starts at the first frame after one that found them all compiled, or after 240 frames. Outside
-preparations nothing changes; the pipelines requested are those the evaluation's blocks would compile on their first
-frames, for the materials in view.
+pipeline they bind, the one with the tunable's bit the other way, if the pipeline map does not hold it (a read of the
+map, safe while lists are recorded in parallel); after the passes the render thread requests the missing ones at high
+priority and reports how many are still compiling. The evaluation starts at the first frame after one that found them
+all compiled, or after 240 frames. Outside preparations nothing changes; the pipelines requested are those the
+evaluation's blocks would compile on their first frames, for the materials in view.
 
 Nothing changes in what is drawn: preparation frames draw as the frames before them.
 

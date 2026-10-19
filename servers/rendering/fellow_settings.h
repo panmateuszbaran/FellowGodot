@@ -516,6 +516,12 @@ inline bool cluster_lod() {
 // FellowEngine's per-frame specialization bits whose other value gives the same image (0057's bits clear, light tile
 // culling or the shadow pyramids off, the light fields early either way) instead of stock's ubershader (decision 0059).
 // Read every frame.
+// frame/depth_pipeline_keys (decision 0069): the depth passes' pipeline keys without the colour passes' FellowEngine
+// bits, which their code does not read.
+inline bool depth_pipeline_keys() {
+	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/frame/depth_pipeline_keys");
+}
+
 inline bool pipeline_fallback() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/frame/pipeline_fallback");
 }

@@ -32,6 +32,7 @@
 
 #include "core/object/callable_mp.h"
 
+#include "core/config/engine.h"
 #include "core/config/project_settings.h"
 #include "core/os/os.h"
 #include "servers/rendering/fellow_settings.h"
@@ -316,6 +317,10 @@ static thread_local void *fellow_tl_record = nullptr;
 // visited, 0049); the shadow pyramids' early-outs off (0005); the light loop's fields early either way (0045). Not the
 // bits that change what the CPU writes for the shader (persistent instances) or that need data a frame may not have
 // (the pyramids or tile masks on).
+// Decision 0069: the bits of packed_1 a depth variant's code reads: stock's six (MultiMesh format, legacy fog blending,
+// area lights) and the lists' format (fellow_persistent_instances, decision 0022).
+static constexpr uint32_t FELLOW_SPEC1_DEPTH_BITS = 0x3Fu | (1u << 15);
+
 static uint32_t fellow_fallback_specializations(const SceneShaderForwardClustered::ShaderSpecialization &p_spec, const SceneShaderForwardClustered::ShaderSpecialization &p_default, SceneShaderForwardClustered::ShaderSpecialization *r_out) {
 	uint32_t n = 0;
 	SceneShaderForwardClustered::ShaderSpecialization s = p_spec;
@@ -360,6 +365,7 @@ static uint32_t fellow_fallback_specializations(const SceneShaderForwardClustere
 template <RenderForwardClustered::PassMode p_pass_mode, uint32_t p_color_pass_flags>
 void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p_draw_list, RenderingDevice::FramebufferFormatID p_framebuffer_Format, RenderListParameters *p_params, uint32_t p_from_element, uint32_t p_to_element) {
 	const bool fellow_pipeline_fallback = Fellow::pipeline_fallback(); // decision 0059
+	const bool fellow_depth_keys = Fellow::depth_pipeline_keys(); // decision 0069
 	RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
 	RendererRD::ParticlesStorage *particles_storage = RendererRD::ParticlesStorage::get_singleton();
 	RD::DrawListID draw_list = p_draw_list;
@@ -513,6 +519,12 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 			pipeline_specialization.use_light_soft_shadows = element_info.uses_softshadow;
 			pipeline_specialization.use_light_projector = element_info.uses_projector;
 			pipeline_specialization.use_directional_soft_shadows = p_params->use_directional_soft_shadow;
+		} else if (fellow_depth_keys) {
+			// FellowEngine (frame/depth_pipeline_keys, decision 0069): the colour passes' FellowEngine bits are code the depth
+			// variants (MODE_RENDER_DEPTH) do not compile; cleared, their values (autotune's evaluations, the frame's absent
+			// features) no longer make distinct pipelines of the same code. Stock's bits and the lists' format stay.
+			pipeline_specialization.packed_1 &= FELLOW_SPEC1_DEPTH_BITS;
+			pipeline_specialization.fellow_no_positional_shadows = 0;
 		}
 
 		pipeline_key.color_pass_flags = 0;
@@ -668,7 +680,7 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 					}
 					static const bool fellow_fb_log = OS::get_singleton()->has_environment("FELLOW_PIPELINE_LOG");
 					if (fellow_fb_log) {
-						print_line(vformat("FellowEngine pipeline missing: shader %d version %d flags %d spec %x %x %x -> %s", int64_t(uint64_t(uintptr_t(shader)) & 0xFFFFFF), int(pipeline_key.version), int(pipeline_key.color_pass_flags), pipeline_specialization.packed_0, pipeline_specialization.packed_1, pipeline_specialization.packed_2, fellow_fb_found ? "fallback" : "ubershader"));
+						print_line(vformat("FellowEngine pipeline missing: frame %d shader %d version %d flags %d spec %x %x %x -> %s", (int64_t)Engine::get_singleton()->get_frames_drawn(), int64_t(uint64_t(uintptr_t(shader)) & 0xFFFFFF), int(pipeline_key.version), int(pipeline_key.color_pass_flags), pipeline_specialization.packed_0, pipeline_specialization.packed_1, pipeline_specialization.packed_2, fellow_fb_found ? "fallback" : "ubershader"));
 					}
 					if (fellow_fb_found) {
 						pipeline_valid = true;
