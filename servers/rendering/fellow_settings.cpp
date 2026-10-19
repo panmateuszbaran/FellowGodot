@@ -188,10 +188,12 @@ void Fellow::register_settings() {
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/cpu/instance_buffer_memory", PROPERTY_HINT_ENUM, "Device (Stock),System Memory,System Memory Cached"), 0);
 	GLOBAL_DEF("rendering/fellow/cpu/persistent_instances", true);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/cpu/worker_tasks", PROPERTY_HINT_RANGE, "0,32,1"), 10);
-	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/cpu/hot_workers_usec", PROPERTY_HINT_RANGE, "0,5000,1,suffix:us"), 300);
+	// 30 us from fellow156 (decision 0065; was 300): with 300 a CPU-bound frame's hot workers spin through the whole frame
+	// and presentation stalls for a scheduler quantum (City Lab: 16-45 ms frames).
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/cpu/hot_workers_usec", PROPERTY_HINT_RANGE, "0,5000,1,suffix:us"), 30);
 	GLOBAL_DEF("rendering/fellow/cpu/hot_workers_gate", true);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/cpu/hot_workers_wait", PROPERTY_HINT_ENUM, "Pause Loop,UMWAIT C0.1,UMWAIT C0.2"), 0);
-	GLOBAL_DEF("rendering/fellow/cpu/hot_workers_yield", true); // decision 0065
+	GLOBAL_DEF("rendering/fellow/cpu/hot_workers_yield", false); // decision 0065 (experiment: City Lab +7.9 %, spikes left)
 	GLOBAL_DEF("rendering/fellow/cpu/hot_workers_idle_priority", false); // decision 0065
 	GLOBAL_DEF("rendering/fellow/frame/early_submit", false);
 	GLOBAL_DEF("rendering/fellow/frame/present_thread", true);

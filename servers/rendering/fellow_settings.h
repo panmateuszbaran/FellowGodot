@@ -787,7 +787,8 @@ inline int cpu_worker_tasks() {
 
 // Hot worker tasks: the worker tasks of the render thread's parallel loops (cull, render lists) stay for this many
 // microseconds after their last chunk, spinning, ready for the next loop; the frame's first loop has them posted ahead
-// (when the cull starts). 0: each loop posts its tasks and they leave when it ends (a sleeping worker can take
+// (when the cull starts). 30 by default (decision 0065: with 300 they spun through a whole CPU-bound frame and the
+// presentation waited a scheduler quantum now and then; the loops of a burst still follow each other within 30 µs). 0: each loop posts its tasks and they leave when it ends (a sleeping worker can take
 // hundreds of microseconds to wake). Changes which thread runs a chunk, never what a chunk does.
 //
 // Only while the frame is CPU-bound (cpu/hot_workers_gate): on a laptop the spinning cores take power the GPU could use
@@ -810,11 +811,10 @@ inline int cpu_hot_workers_usec() {
 inline int cpu_hot_workers_wait() {
 	return CLAMP(GLOBAL_GET_CACHED(int, "rendering/fellow/cpu/hot_workers_wait"), 0, 2);
 }
-// An idle hot worker gives its core to any other thread ready to run on it (SwitchToThread / sched_yield) every 64
-// pauses (about every 2-5 µs; decision 0065). Without it, in a CPU-bound frame of 2 ms the ten hot workers spin through
-// the whole frame and a thread that the presentation needs can wait a scheduler quantum for a core: City Lab's frames
-// of 16-45 ms (m13_f186, m13_f188: each one vkQueuePresentKHR call; none with the hot workers not spinning). Never
-// changes results.
+// Experiment (decision 0065, off): an idle hot worker gives its core to any other thread ready to run on it
+// (SwitchToThread / sched_yield) every 64 pauses (about every 2-5 µs). Meant for City Lab's frames of 16-45 ms (each one
+// vkQueuePresentKHR call waiting while the hot workers spin through a CPU-bound frame); it left them (m13_f189) and cost
+// 7.9 % of the frame; the shorter linger (cpu/hot_workers_usec 30) removes them. Never changes results.
 inline bool cpu_hot_workers_yield() {
 	return GLOBAL_GET_CACHED(bool, "rendering/fellow/cpu/hot_workers_yield");
 }
