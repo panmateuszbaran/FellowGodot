@@ -181,5 +181,6 @@ Open (reads of memory never written, lavapipe, both in stock's code and both sma
 * a positional shadow lookup outside the atlas texels written (one pixel of 1 level at a shadow's tip in PBR Lab);
 * the reflection probes' octahedral atlas (Godot 4.7's `reflection_atlas`, 768 × 768 × 64 layers, 8 mips): Lights Lab
   at 1366 × 768 after 200 frames, 11 pixels of 1 level with FellowEngine disabled, 258 pixels of up to 6 levels with it
-  (why more with it is not known yet); bisected to that texture (clearing it at creation
+  (FellowEngine's post-processing off: 11 pixels again — its TAA, a look change since milestone 1, carries the
+  difference into more pixels); bisected to that texture (clearing it at creation
   removes it), not yet to a pass. Fresh allocations are zero on most GPUs; a reused one would show its content there.
