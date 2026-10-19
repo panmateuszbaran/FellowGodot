@@ -112,11 +112,23 @@ Vulkan synchronization validation (lavapipe, 480 × 270, captures) with `fellow1
 on a second queue family and cluster LOD on: Lights Lab, PBR Lab, City Lab (SSIL and SSR on), Foliage Lab, Stress Lab
 and Blend Lab, 0 hazards.
 
+ThreadSanitizer (a TSAN build of `fellow157`'s code on lavapipe, async compute emulated): City Lab captures and a
+short City Lab perf run (the render lists recorded in parallel, the hot workers, the present and submit threads),
+Lights Lab captures, a short Foliage Lab perf run (MultiMesh culling). Every report but two is inside lavapipe (concurrent pipeline creation, which Vulkan allows, and
+llvmpipe's own threads). The two in the engine are benign: stock's `GLOBAL_GET_CACHED` reads its version outside its
+spinlock (the value itself under it), and 0022's persistent instance check reads an entry's valid flag while the thread
+that won the frame's rebuild of that entry sets it (the reader either returns, relying on an entry the winner finishes
+in the same parallel section, or loses the exchange and returns). Stress Lab does not fit in the container's memory
+under TSAN.
+
 ## 6. Tooling
 
 * The bench: `--fellow_frames_keys` chooses the FellowEngine counters recorded per frame (with `--fellow_frames=1`);
   `--max_fps` paces the main thread (diagnostics only: the runner's `--fixed-fps` disables the engine's own cap).
 * `.tools/scripts/spikes.py`, `spikes_frames.py`.
+* Debug hooks (environment variables of the FellowEngine build, off otherwise): `FELLOW_DEBUG_CLEAR_TEXTURES=a:b`
+  (the textures created without data with a creation index in [a, b) cleared when created: bisects a read of memory
+  never written, with lavapipe's `LVP_POISON_MEMORY=1`), `FELLOW_DEBUG_TEXTURE_LOG=1`, `FELLOW_DEBUG_FORCE_UBERSHADER=1`.
 
 ## 7. Next
 

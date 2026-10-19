@@ -61,9 +61,9 @@ undefined derivatives after `discard`) and 60 frames of settle (no ubershader dr
 * Memory never written (normal against `LVP_POISON_MEMORY=1`), every lab's cameras at 480 × 270: PBR Lab's last
   column no longer changes (before: every camera, up to 20 levels, spread by TAA and glow over the right 15 % of the
   image). What remains is small and elsewhere: PBR Lab `pbr_emissive` 3-8 pixels of at most 2 levels at the tip of a
-  shadow seen through the glass (bisected to the positional shadow atlas; not with FellowEngine disabled; not from the
-  shadows', lights', geometry or render thread areas, the positional pyramid, the batched taps or the back-facing skip:
-  open), Lights Lab 26 pixels, Blend Lab 6, Stress Lab 1, each of 1 level; City Lab, Foliage Lab and Fluid Lab none.
+  shadow seen through the glass (bisected to the positional shadow atlas: a shadow lookup outside the texels written;
+  stock's too — without TAA one pixel of 1 level with FellowEngine and with it disabled; FellowEngine's TAA keeps it
+  over a few more pixels), Lights Lab 26 pixels, Blend Lab 6, Stress Lab 1, each of 1 level; City Lab, Foliage Lab and Fluid Lab none.
 * The images against both settings off (stock's code), 480 × 270: only the last columns change where SSAO or SSIL is
   on — PBR Lab 174-1 109 pixels per camera, up to 155 levels (stock's column holds the zeros lavapipe's allocation
   had: no light there), Lights Lab 40-226 pixels of 1-2 levels, City Lab 203-316 pixels of up to 71 levels.
