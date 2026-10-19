@@ -210,7 +210,6 @@ void Fellow::register_settings() {
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/autotune/max_duty_percent", PROPERTY_HINT_RANGE, "1,100,1"), 20.0);
 	GLOBAL_DEF("rendering/fellow/autotune/skip_creation_frames", true); // decision 0064
 	GLOBAL_DEF("rendering/fellow/autotune/continue_undecided", true); // decision 0064
-	GLOBAL_DEF("rendering/fellow/frame/pipeline_prefetch_tunables", false); // decision 0066 (experiment)
 	GLOBAL_DEF("rendering/fellow/frame/replay_frame_plan", false);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/frame/replay_plan_min_draws", PROPERTY_HINT_RANGE, "1,4096,1"), 16);
 	GLOBAL_DEF_RST("rendering/fellow/frame/separate_present_queue", false);
@@ -289,7 +288,6 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["geometry_cluster_draws"] = s.geometry_cluster_draws.get();
 	d["pipeline_fallback_draws"] = s.pipeline_fallback_draws.get();
 	d["pipeline_ubershader_draws"] = s.pipeline_ubershader_draws.get();
-	d["pipeline_prefetch_requests"] = s.pipeline_prefetch_requests.get();
 	d["cost_shader_start_usec"] = s.cost_shader_start_usec.get();
 	d["cost_shader_starts"] = s.cost_shader_starts.get();
 	d["cost_shader_wait_usec"] = s.cost_shader_wait_usec.get();

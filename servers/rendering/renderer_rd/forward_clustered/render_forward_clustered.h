@@ -263,10 +263,6 @@ private:
 		uint32_t fellow_cluster_f2b = 0;
 		// geometry/cluster_lod (decision 0063): large surfaces' clusters each at their own LOD, from their distance to
 		// fellow_lod_eye (the main camera, as stock's LOD selection).
-		// frame/pipeline_prefetch_tunables (decision 0066): the specialization bits autotune may switch in this pass (1 the
-		// directional pyramid, 2 the positional pyramid, 4 light tile culling); a pipeline compiled for one value of them
-		// asks for the other values' too, at low priority.
-		uint32_t fellow_prefetch_flips = 0;
 		bool fellow_cluster_lod = false;
 		Vector3 fellow_lod_eye;
 		float fellow_lod_distance_bias = 0.0;

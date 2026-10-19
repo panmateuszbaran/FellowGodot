@@ -626,27 +626,6 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 					}
 				} else {
 					pipeline_rd = shader->pipeline_hash_map.get_pipeline(pipeline_key, pipeline_hash, pipeline_key.ubershader, pipeline_source);
-					if (unlikely(p_params->fellow_prefetch_flips != 0) && !pipeline_key.ubershader && pipeline_rd.is_null()) {
-						// Decision 0066: this specialization is being compiled; so are its counterparts with the bits autotune
-						// switches the other way (an evaluation that switches one finds its pipelines ready, no ubershader).
-						SceneShaderForwardClustered::ShaderData::PipelineKey fellow_pf = pipeline_key;
-						if (p_params->fellow_prefetch_flips & 1) {
-							fellow_pf.shader_specialization = pipeline_key.shader_specialization;
-							fellow_pf.shader_specialization.fellow_directional_max_mip = !pipeline_key.shader_specialization.fellow_directional_max_mip;
-							shader->pipeline_hash_map.compile_pipeline(fellow_pf, fellow_pf.hash(), RSE::PIPELINE_SOURCE_SPECIALIZATION, false);
-						}
-						if (p_params->fellow_prefetch_flips & 2) {
-							fellow_pf.shader_specialization = pipeline_key.shader_specialization;
-							fellow_pf.shader_specialization.fellow_positional_max_mip = !pipeline_key.shader_specialization.fellow_positional_max_mip;
-							shader->pipeline_hash_map.compile_pipeline(fellow_pf, fellow_pf.hash(), RSE::PIPELINE_SOURCE_SPECIALIZATION, false);
-						}
-						if (p_params->fellow_prefetch_flips & 4) {
-							fellow_pf.shader_specialization = pipeline_key.shader_specialization;
-							fellow_pf.shader_specialization.fellow_light_tile_cull = !pipeline_key.shader_specialization.fellow_light_tile_cull;
-							shader->pipeline_hash_map.compile_pipeline(fellow_pf, fellow_pf.hash(), RSE::PIPELINE_SOURCE_SPECIALIZATION, false);
-						}
-						Fellow::stats().pipeline_prefetch_requests.increment();
-					}
 				}
 
 				if (pipeline_rd.is_valid()) {
@@ -5032,7 +5011,6 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	base_specialization.fellow_pcss_blend_band = Fellow::shadow_pcss_blend_band();
 	base_specialization.fellow_directional_max_mip = Fellow::shadow_directional_max_mip();
 	base_specialization.fellow_positional_max_mip = Fellow::shadow_positional_max_mip();
-	const uint32_t fellow_prefetch_flips = Fellow::pipeline_prefetch_pyramid_flips(); // decision 0066
 	base_specialization.fellow_zero_attenuation_skip = Fellow::light_zero_attenuation_skip();
 	base_specialization.fellow_skip_backfacing_positional = Fellow::shadow_skip_backfacing_positional();
 	base_specialization.fellow_skip_backfacing_directional = Fellow::shadow_skip_backfacing();
@@ -5235,7 +5213,6 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			SceneShaderForwardClustered::ShaderSpecialization fellow_opaque_specialization = base_specialization;
 			fellow_opaque_specialization.fellow_light_tile_cull = fellow_tile_cull.pass_active;
 			RenderListParameters render_list_params(render_list[RENDER_LIST_OPAQUE].elements.ptr(), render_list[RENDER_LIST_OPAQUE].element_info.ptr(), render_list[RENDER_LIST_OPAQUE].elements.size(), reverse_cull, PASS_MODE_COLOR, opaque_color_pass_flags, rb_data.is_null(), p_render_data->directional_light_soft_shadows, rp_uniform_set, get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_WIREFRAME, Vector2(), p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, p_render_data->scene_data->view_count, 0, fellow_opaque_specialization);
-			render_list_params.fellow_prefetch_flips = fellow_prefetch_flips | (fellow_tile_cull_possible && Fellow::pipeline_prefetch_tunables() ? 4u : 0u);
 			render_list_params.fellow_cluster_planes = fellow_cluster_planes.ptr();
 			render_list_params.fellow_cluster_plane_count = fellow_cluster_planes.size();
 			render_list_params.fellow_cluster_eye = fellow_cluster_eye;
@@ -5282,7 +5259,6 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			rp_uniform_set = _setup_render_pass_uniform_set(RENDER_LIST_MOTION, p_render_data, radiance_texture, samplers, opaque_pass_uniform_buffer_index, true);
 
 			RenderListParameters render_list_params(render_list[RENDER_LIST_MOTION].elements.ptr(), render_list[RENDER_LIST_MOTION].element_info.ptr(), render_list[RENDER_LIST_MOTION].elements.size(), reverse_cull, PASS_MODE_COLOR, color_pass_flags, rb_data.is_null(), p_render_data->directional_light_soft_shadows, rp_uniform_set, get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_WIREFRAME, Vector2(), p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, p_render_data->scene_data->view_count, 0, base_specialization);
-			render_list_params.fellow_prefetch_flips = fellow_prefetch_flips;
 			render_list_params.fellow_cluster_planes = fellow_cluster_planes.ptr();
 			render_list_params.fellow_cluster_plane_count = fellow_cluster_planes.size();
 			render_list_params.fellow_cluster_eye = fellow_cluster_eye;
@@ -5466,7 +5442,6 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 
 		RID alpha_framebuffer = rb_data.is_valid() ? rb_data->get_color_pass_fb(transparent_color_pass_flags) : color_only_framebuffer;
 		RenderListParameters render_list_params(render_list[RENDER_LIST_ALPHA].elements.ptr(), render_list[RENDER_LIST_ALPHA].element_info.ptr(), render_list[RENDER_LIST_ALPHA].elements.size(), reverse_cull, PASS_MODE_COLOR, transparent_color_pass_flags, rb_data.is_null(), p_render_data->directional_light_soft_shadows, rp_uniform_set, get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_WIREFRAME, Vector2(), p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, p_render_data->scene_data->view_count, 0, base_specialization);
-		render_list_params.fellow_prefetch_flips = fellow_prefetch_flips;
 		render_list_params.fellow_cluster_planes = fellow_cluster_planes.ptr();
 		render_list_params.fellow_cluster_plane_count = fellow_cluster_planes.size();
 		_fellow_multimesh_cull_params(0, RENDER_LIST_ALPHA, 0, render_list_params);
