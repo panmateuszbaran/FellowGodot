@@ -50,7 +50,11 @@ vec4 unpack_edges(float p_packed_val) {
 
 void main() {
 	ivec2 ssC = ivec2(gl_GlobalInvocationID.xy);
-	if (any(greaterThanEqual(ssC, ivec2(1.0 / params.pixel_size)))) { //too large, do nothing
+	// FellowEngine (decision 0067, postfx/ss_interleave_exact_bounds, bit 16 of size_modifier): the bound is the output
+	// image's size. Stock's 1.0 / pixel_size is 1919.9999 for a width of 1920 in single precision (also 480, 960, 1680,
+	// 3840): truncated, the last column is never written and the scene reads what the memory held.
+	const ivec2 fellow_bound = (params.size_modifier & 0x10000u) != 0u ? imageSize(dest_image) : ivec2(1.0 / params.pixel_size);
+	if (any(greaterThanEqual(ssC, fellow_bound))) { //too large, do nothing
 		return;
 	}
 
@@ -66,9 +70,9 @@ void main() {
 	int index_vertical = mx + (1 - my) * 2; // neighboring, vertical
 	int index_diagonal = (1 - mx) + (1 - my) * 2; // diagonal
 
-	vec4 color = texelFetch(source_texture, ivec3(pix_pos / uvec2(params.size_modifier), index_center), 0);
+	vec4 color = texelFetch(source_texture, ivec3(pix_pos / uvec2(params.size_modifier & 0xFFFFu), index_center), 0);
 
-	vec4 edgesLRTB = unpack_edges(imageLoad(source_edges, ivec3(pix_pos / uvec2(params.size_modifier), index_center)).r);
+	vec4 edgesLRTB = unpack_edges(imageLoad(source_edges, ivec3(pix_pos / uvec2(params.size_modifier & 0xFFFFu), index_center)).r);
 
 	// convert index shifts to sampling offsets
 	float fmx = float(mx);

@@ -124,6 +124,11 @@ void Fellow::register_settings() {
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/postfx/fog_light_loop", PROPERTY_HINT_ENUM, "Stock,Subgroup,Subgroup 2x2x16,Stock 2x2x16"), 0); // decision 0053 (rejected, off)
 	GLOBAL_DEF("rendering/fellow/postfx/ss_coherent_gather", false);
 	GLOBAL_DEF("rendering/fellow/postfx/fast_luminance_reduce", true);
+	// SSAO/SSIL interleave: the output image's size as the bound (decision 0067; stock leaves the last column unwritten at
+	// widths such as 1920).
+	GLOBAL_DEF("rendering/fellow/postfx/ss_interleave_exact_bounds", true);
+	// SSAO/SSIL depth mipmaps: one store per texel of the last two levels (decision 0067; stock races).
+	GLOBAL_DEF("rendering/fellow/postfx/ss_depth_mips_exact", true);
 	GLOBAL_DEF("rendering/fellow/postfx/ssao_temporal", false);
 	GLOBAL_DEF("rendering/fellow/postfx/ssil_temporal", false);
 	// SSAO/SSIL gathers: taps whose texture fetches are issued together (decision 0041; 0 or 1 = stock's loop). Start-up.

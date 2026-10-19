@@ -1709,6 +1709,37 @@ RID RenderingDevice::texture_create(const TextureFormat &p_format, const Texture
 
 	// Create.
 
+	// FellowEngine debug (reads of memory never written, decision 0067): FELLOW_DEBUG_CLEAR_TEXTURES=<from>:<to> clears
+	// the textures created without initial data whose creation index is in [from, to) to zero when they are created;
+	// FELLOW_DEBUG_TEXTURE_LOG=1 prints every creation with its index. Off unless the environment variables are set.
+	struct FellowTextureDebug {
+		int64_t from = -1;
+		int64_t to = -1;
+		bool log = false;
+		FellowTextureDebug() {
+			const String range = OS::get_singleton()->get_environment("FELLOW_DEBUG_CLEAR_TEXTURES");
+			if (!range.is_empty()) {
+				from = range.get_slicec(':', 0).to_int();
+				to = range.get_slice_count(":") > 1 ? range.get_slicec(':', 1).to_int() : INT64_MAX;
+			}
+			log = OS::get_singleton()->get_environment("FELLOW_DEBUG_TEXTURE_LOG") == "1";
+		}
+	};
+	static const FellowTextureDebug fellow_dbg;
+	static std::atomic<uint64_t> fellow_dbg_counter{ 0 };
+	const int64_t fellow_dbg_index = int64_t(fellow_dbg_counter.fetch_add(1, std::memory_order_relaxed));
+	bool fellow_dbg_clear = false;
+	if (fellow_dbg.from >= 0 && fellow_dbg_index >= fellow_dbg.from && fellow_dbg_index < fellow_dbg.to && data.is_empty()) {
+		BitField<RDD::TextureUsageBits> supported_usage = driver->texture_get_usages_supported_by_format(format.format, false);
+		if (supported_usage.has_flag(TEXTURE_USAGE_CAN_COPY_TO_BIT)) {
+			format.usage_bits |= TEXTURE_USAGE_CAN_COPY_TO_BIT;
+			fellow_dbg_clear = true;
+		}
+	}
+	if (fellow_dbg.log) {
+		print_line(vformat("[fellow texture] #%d %dx%dx%d layers %d mips %d samples %d format %s usage 0x%x%s", fellow_dbg_index, format.width, format.height, format.depth, format.array_layers, format.mipmaps, int(format.samples), FORMAT_NAMES[format.format], uint64_t(format.usage_bits), fellow_dbg_clear ? " (cleared)" : ""));
+	}
+
 	Texture texture;
 	format.usage_bits |= forced_usage_bits;
 	texture.driver_id = driver->texture_create(format, tv);
@@ -1760,6 +1791,15 @@ RID RenderingDevice::texture_create(const TextureFormat &p_format, const Texture
 #ifdef DEV_ENABLED
 	set_resource_name(id, "RID:" + itos(id.get_id()));
 #endif
+
+	if (fellow_dbg_clear && render_thread_id == Thread::get_caller_id()) {
+		Texture *dbg_texture = texture_owner.get_or_null(id);
+		if (dbg_texture->usage_flags & TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) {
+			_texture_clear_depth_stencil(id, dbg_texture, 0.0f, 0, 0, dbg_texture->mipmaps, 0, dbg_texture->layers);
+		} else {
+			_texture_clear_color(id, dbg_texture, Color(), 0, dbg_texture->mipmaps, 0, dbg_texture->layers);
+		}
+	}
 
 	if (data.size()) {
 		const bool use_general_in_copy_queues = driver->api_trait_get(RDD::API_TRAIT_USE_GENERAL_IN_COPY_QUEUES);

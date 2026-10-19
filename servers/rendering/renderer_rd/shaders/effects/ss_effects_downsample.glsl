@@ -139,7 +139,12 @@ void prepare_depths_and_mips(vec4 p_samples, uvec2 p_output_coord, uvec2 p_gtid)
 		depth_buffer[depth_array_index][buffer_coord.x][buffer_coord.y] = avg;
 	}
 
-	still_alive = p_gtid.x % 8 == depth_array_offset.x && depth_array_offset.y % 8 == depth_array_offset.y;
+	// FellowEngine (decision 0067, postfx/ss_depth_mips_exact, params.pad.x): one invocation per texel of this level, as
+	// for the level above. Stock's condition compares depth_array_offset.y with itself: four invocations of a workgroup
+	// (y = 0, 2, 4, 6) store into each texel of this level, two of them averaging shared memory past the end of their
+	// column, and on a GPU which store lands last changes from run to run.
+	const bool fellow_exact = params.pad.x != 0u;
+	still_alive = p_gtid.x % 8 == depth_array_offset.x && (fellow_exact ? p_gtid.y % 8 : depth_array_offset.y % 8) == depth_array_offset.y;
 
 	p_output_coord /= 2;
 	groupMemoryBarrier();
@@ -158,7 +163,11 @@ void prepare_depths_and_mips(vec4 p_samples, uvec2 p_output_coord, uvec2 p_gtid)
 #else
 		depth_buffer[depth_array_index][buffer_coord.x][buffer_coord.y] = avg;
 	}
-	still_alive = p_gtid.x % 16 == depth_array_offset.x && depth_array_offset.y % 16 == depth_array_offset.y;
+	still_alive = p_gtid.x % 16 == depth_array_offset.x && (fellow_exact ? p_gtid.y % 16 : depth_array_offset.y % 16) == depth_array_offset.y;
+	if (fellow_exact) {
+		// Four workgroups cover each texel of this level: the one at even coordinates stores it (stock: any of them).
+		still_alive = still_alive && all(equal(gl_WorkGroupID.xy % 2u, uvec2(0u)));
+	}
 
 	p_output_coord /= 2;
 

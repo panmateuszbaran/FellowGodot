@@ -131,6 +131,16 @@ inline bool fog_half_rate() {
 inline bool fast_luminance_reduce() {
 	return postfx_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/postfx/fast_luminance_reduce");
 }
+
+// SSAO/SSIL interleave passes bounded by the output image's size (decision 0067).
+inline bool ss_interleave_exact_bounds() {
+	return postfx_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/postfx/ss_interleave_exact_bounds");
+}
+
+// SSAO/SSIL depth mipmaps without stock's racing stores (decision 0067).
+inline bool ss_depth_mips_exact() {
+	return postfx_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/postfx/ss_depth_mips_exact");
+}
 // Debug (docs/decisions/0026-occlusion-culling.md): after the depth pre-pass, count the opaque list elements a depth
 // pyramid of this frame's pre-pass would hide (measurement only; a GPU sync per frame).
 inline bool debug_occlusion_stats() {

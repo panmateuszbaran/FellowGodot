@@ -86,6 +86,26 @@ combine them with, and those frames draw with the ubershader. Compiling the othe
 removed: its low-priority tasks hung the engine's exit on lavapipe, and at normal priority they compete with the
 compilations the frame needs. For exactness checks, autotune off.
 
+**What lavapipe can say about them.** Two runs of FellowEngine on lavapipe are bit for bit (PBR Lab's warm sequence,
+60 frames): what differs between runs on the GPU is what lavapipe makes deterministic — the contents of memory no pass
+wrote and the order of racing stores. With new allocations filled with a constant (`LVP_POISON_MEMORY=1`) instead of
+zeros, a read of memory never written changes the image. Two such reads found, both in stock's code (0067):
+
+* SSAO's output is never written in its last column at a width of 1920 (also 480, 960, 1680, 3840): the interleave
+  pass bounds its invocations with `ivec2(1.0 / pixel_size)`, 1919.9999 in single precision. The opaque pass reads that
+  column as it was in memory. Found by clearing the textures created without data at creation, bisected to the SSAO
+  output (debug hook `FELLOW_DEBUG_CLEAR_TEXTURES`). SSIL's interleave has the same bound (its output is cleared when
+  created: no indirect light in that column).
+* The depth mipmaps of SSAO and SSIL at quality high: four invocations of each workgroup store into each texel of the
+  third level (a condition compares a value with itself), two of them averaging shared memory past the end of their
+  column. On a GPU the store that lands last changes from run to run.
+
+Not a source of the floors, but of lavapipe A/A differences in capture mode: a draw's ubershader and its specialized
+pipeline do not give the same alpha-scissor foliage on lavapipe (the roughness limiter's derivatives after `discard`,
+0057), so a capture differs between runs when a pipeline finishes compiling around the captured frame. Exactness
+checks on lavapipe use the demote diagnostics (`debug/scene_shader_experiments` 4194304) and a settle long enough for
+no ubershader draw (`FELLOW_DEBUG_FORCE_UBERSHADER=1` draws everything with the ubershader, for comparisons).
+
 ## 5. Synchronization
 
 Vulkan synchronization validation (lavapipe, 480 × 270, captures) with `fellow157`'s defaults, async compute emulated

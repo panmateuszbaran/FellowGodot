@@ -570,7 +570,10 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 
 		pipeline_key.framebuffer_format_id = framebuffer_format;
 		pipeline_key.wireframe = p_params->force_wireframe;
-		pipeline_key.ubershader = 0;
+		// FellowEngine debug (FELLOW_DEBUG_FORCE_UBERSHADER=1): every draw with the ubershader, to compare its images with
+		// the specialized pipelines'.
+		static const bool fellow_force_ubershader = OS::get_singleton()->get_environment("FELLOW_DEBUG_FORCE_UBERSHADER") == "1";
+		pipeline_key.ubershader = fellow_force_ubershader ? 1 : 0;
 
 		bool emulate_point_size = shader->uses_point_size && scene_shader.emulate_point_size;
 

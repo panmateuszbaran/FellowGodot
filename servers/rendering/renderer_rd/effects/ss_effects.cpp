@@ -664,6 +664,7 @@ void SSEffects::downsample_depth(Ref<RenderSceneBuffersRD> p_render_buffers, uin
 	ss_effects.downsample_push_constant.pixel_size[0] = 1.0 / full_screen_size.x;
 	ss_effects.downsample_push_constant.pixel_size[1] = 1.0 / full_screen_size.y;
 	ss_effects.downsample_push_constant.radius_sq = 1.0;
+	ss_effects.downsample_push_constant.pad[0] = Fellow::ss_depth_mips_exact() ? 1 : 0; // decision 0067
 
 	RID default_sampler = material_storage->sampler_rd_get_default(RSE::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RSE::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
 
@@ -1132,7 +1133,7 @@ void SSEffects::screen_space_indirect_lighting(Ref<RenderSceneBuffersRD> p_rende
 		ssil.interleave_push_constant.inv_sharpness = 1.0 - p_settings.sharpness;
 		ssil.interleave_push_constant.pixel_size[0] = 1.0 / p_settings.full_screen_size.x;
 		ssil.interleave_push_constant.pixel_size[1] = 1.0 / p_settings.full_screen_size.y;
-		ssil.interleave_push_constant.size_modifier = uint32_t(ssil_half_size ? 4 : 2);
+		ssil.interleave_push_constant.size_modifier = uint32_t(ssil_half_size ? 4 : 2) | (Fellow::ss_interleave_exact_bounds() ? 0x10000u : 0u);
 
 		int interleave_pipeline = SSIL_INTERLEAVE_HALF;
 		if (ssil_quality == RSE::ENV_SSIL_QUALITY_LOW) {
@@ -1575,7 +1576,7 @@ void SSEffects::generate_ssao(Ref<RenderSceneBuffersRD> p_render_buffers, SSAORe
 		ssao.interleave_push_constant.inv_sharpness = 1.0 - p_settings.sharpness;
 		ssao.interleave_push_constant.pixel_size[0] = 1.0 / p_settings.full_screen_size.x;
 		ssao.interleave_push_constant.pixel_size[1] = 1.0 / p_settings.full_screen_size.y;
-		ssao.interleave_push_constant.size_modifier = uint32_t(ssao_half_size ? 4 : 2);
+		ssao.interleave_push_constant.size_modifier = uint32_t(ssao_half_size ? 4 : 2) | (Fellow::ss_interleave_exact_bounds() ? 0x10000u : 0u);
 
 		shader = ssao.interleave_shader.version_get_shader(ssao.interleave_shader_version, 0);
 
