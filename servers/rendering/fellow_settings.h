@@ -1006,6 +1006,7 @@ struct Stats {
 	SafeNumeric<uint64_t> autotune_early; // evaluations ended early (a clear difference after 3 pairs)
 	SafeNumeric<uint64_t> autotune_rechecks; // evaluations brought forward (the frames' time changed by 20 %, or 30 s passed)
 	SafeNumeric<uint64_t> autotune_off_frames; // frames x tunables that ran with the optimization off
+	SafeNumeric<uint64_t> autotune_tainted_frames; // evaluation frames not counted: a pipeline or shader was still being created
 	SafeNumeric<uint64_t> cpu_hot_waits; // low-power waits of idle hot workers (cpu/hot_workers_wait, CPUs with WAITPKG)
 };
 

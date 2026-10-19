@@ -61,6 +61,7 @@ constexpr double AUTOTUNE_EARLY_T = 4.0; // and 4 standard errors
 // Pairs kept from earlier evaluations of a tunable in the same conditions (see TuneState::pool_*): at most this many,
 // older ones weighed down proportionally beyond it.
 constexpr double AUTOTUNE_POOL_MAX = 36.0;
+constexpr uint32_t AUTOTUNE_CONTINUE_MAX = 3; // undecided evaluations continued in a row (decision 0064)
 
 struct TuneState {
 	bool choice = true; // the decision outside evaluations
@@ -76,6 +77,11 @@ struct TuneState {
 	// interval, doubled each time such an evaluation keeps the choice (up to 16 base intervals), back when it changes it.
 	uint32_t recheck_spacing = 0;
 	bool recheck = false; // this evaluation was brought forward by a change of the frame time
+	// autotune/continue_undecided (decision 0064): a tunable that starts off, left off by an undecided evaluation whose
+	// pooled pairs favour it, is evaluated again next (as soon as the duty limit allows, before the others' scheduled
+	// evaluations), until decided or its pool is full, at most AUTOTUNE_CONTINUE_MAX times in a row.
+	bool continue_next = false;
+	uint32_t continued = 0;
 	// The pairs (off minus on) of the evaluations since the conditions last changed (frames 20 % faster or slower, or
 	// another tunable's choice changed), pooled with each new evaluation's for the decision: a small difference (a
 	// tunable measured by the frames' wall time in a noisy CPU-bound frame) becomes clear over a few evaluations instead
@@ -96,6 +102,16 @@ struct FrameRecord {
 	bool has_begin = false;
 	uint64_t begin = 0;
 };
+
+// autotune/skip_creation_frames (decision 0064): a frame in which a draw used the ubershader (or 0059's fallback) because
+// its pipeline was still compiling, or the render thread created a pipeline or a shader or waited for one, measures that
+// and not the tunable, and is not counted. AUTOTUNE_SKIP frames per block are not enough where a specialization the
+// block uses for the first time compiles for longer.
+uint64_t creation_count() {
+	Stats &st = stats();
+	return st.pipeline_ubershader_draws.get() + st.pipeline_fallback_draws.get() + st.cost_pipelines_sync.get() + st.cost_pipeline_waits.get() + st.cost_shader_lazy_creates.get() + st.cost_shader_creates.get();
+}
+uint64_t creations_at_begin = 0;
 
 TuneState states[TUNE_MAX];
 bool off[TUNE_MAX] = {}; // the tunable does not run in this frame
@@ -258,6 +274,17 @@ void finish(TuneState &s, bool p_new_choice, const Analysis &p_analysis, bool p_
 	s.choice = p_new_choice;
 	s.evaluating = false;
 	s.next_eval = frame_id + s.interval;
+	// Light tile culling's first evaluation in Lights Lab measures it 0.09 ms faster with a standard error of 0.03-0.04 ms
+	// (m12_f183): undecided in some runs, after which four other tunables' evaluations came first and it stayed off for
+	// 5000 frames more. The next evaluation pools six more pairs (only after one that added its pairs to the pool: frames
+	// not counted could otherwise keep it from ever filling).
+	s.continue_next = p_undecided_off && p_analysis.mean > 0.0 && p_analysis.pairs >= AUTOTUNE_PAIRS - 1 && s.pool_n < AUTOTUNE_POOL_MAX && s.continued < AUTOTUNE_CONTINUE_MAX && GLOBAL_GET_CACHED(bool, "rendering/fellow/autotune/continue_undecided");
+	if (s.continue_next) {
+		s.next_eval = frame_id;
+		s.continued++;
+	} else {
+		s.continued = 0;
+	}
 	const double duty = CLAMP((double)GLOBAL_GET_CACHED(float, "rendering/fellow/autotune/max_duty_percent"), 1.0, 100.0);
 	next_eval_allowed = frame_id + uint64_t(double(frame_id - s.eval_start) * (100.0 / duty - 1.0));
 	s.decided_usec = OS::get_singleton()->get_ticks_usec();
@@ -420,16 +447,26 @@ void autotune_frame_begin() {
 		}
 	}
 	if (evaluating < 0 && frame_id >= next_eval_allowed) {
-		// One tunable at a time: the most overdue.
+		// One tunable at a time: one whose undecided evaluation is continued, else the most overdue.
 		int due = -1;
 		for (int t = 0; t < TUNE_MAX; t++) {
-			if (tunable_applies(Tunable(t)) && frame_id >= states[t].next_eval && (due < 0 || states[t].next_eval < states[due].next_eval)) {
+			if (tunable_applies(Tunable(t)) && states[t].continue_next) {
 				due = t;
+				break;
+			}
+		}
+		if (due < 0) {
+			for (int t = 0; t < TUNE_MAX; t++) {
+				if (tunable_applies(Tunable(t)) && frame_id >= states[t].next_eval && (due < 0 || states[t].next_eval < states[due].next_eval)) {
+					due = t;
+				}
 			}
 		}
 		if (due >= 0) {
 			TuneState &s = states[due];
 			s.evaluating = true;
+			const bool continued = s.continue_next;
+			s.continue_next = false;
 			s.eval_start = frame_id;
 			s.block_frames = (uint32_t)CLAMP(GLOBAL_GET_CACHED(int, "rendering/fellow/autotune/block_frames"), (int)AUTOTUNE_SKIP + 4, 120);
 			for (uint32_t b = 0; b < AUTOTUNE_BLOCKS; b++) {
@@ -437,11 +474,12 @@ void autotune_frame_begin() {
 				s.block_n[b] = 0;
 			}
 			evaluating = due;
-			print_verbose(vformat("FellowEngine autotune: tunable %d evaluated from frame %d, blocks of %d", due, (int64_t)frame_id, (int)s.block_frames));
+			print_verbose(vformat("FellowEngine autotune: tunable %d evaluated from frame %d, blocks of %d%s", due, (int64_t)frame_id, (int)s.block_frames, continued ? " (continued)" : ""));
 		}
 	}
 
 	last_frame_evaluating = evaluating >= 0;
+	creations_at_begin = creation_count();
 	FrameRecord &rec = ring[frame_id % AUTOTUNE_RING];
 	rec.id = frame_id;
 	rec.tunable = -1;
@@ -481,6 +519,11 @@ void autotune_frame_end() {
 	if (capturing) {
 		RSG::utilities->capture_timestamp(">FellowTune:" + itos(frame_id));
 		capturing = false;
+	}
+	FrameRecord &rec = ring[frame_id % AUTOTUNE_RING];
+	if (rec.id == frame_id && rec.tunable >= 0 && creation_count() != creations_at_begin && GLOBAL_GET_CACHED(bool, "rendering/fellow/autotune/skip_creation_frames")) {
+		rec.tunable = -1; // neither its GPU time (when the timestamps come back) nor its wall time (next frame) is a sample
+		stats().autotune_tainted_frames.increment();
 	}
 }
 
