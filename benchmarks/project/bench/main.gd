@@ -659,7 +659,14 @@ func _run_temporal(jittered_reference: bool) -> void:
 				var now_w := _pipeline_compilations()
 				quiet_w = quiet_w + 1 if now_w == last_w else 0
 				last_w = now_w
+		# TAA's jitter phase (the frame number modulo 16) aligned before the pre-roll: the waits above end after a number of
+		# frames that depends on when compilations finish, and two runs would otherwise capture with different jitter.
+		# --align_jitter=0: off.
+		if args.get("align_jitter", "1") == "1":
+			while Engine.get_frames_drawn() % 16 != 0:
+				await get_tree().process_frame
 		var pc_start := _pipeline_compilations()
+		var frames_at_preroll := Engine.get_frames_drawn()
 		# Pre-roll: run the sequence backwards in time so TAA history is "in motion" when capture starts.
 		for i in range(pre_roll):
 			var t := start + (i - pre_roll) * DT
@@ -676,7 +683,7 @@ func _run_temporal(jittered_reference: bool) -> void:
 			_save_frame(p)
 			lst.append(p.get_file())
 		files[sname] = lst
-		compile_info[sname] = {"settle_frames": settle_frames, "during_sequence": _dict_sub(_pipeline_compilations(), pc_start)}
+		compile_info[sname] = {"settle_frames": settle_frames, "frames_drawn_at_preroll": frames_at_preroll, "during_sequence": _dict_sub(_pipeline_compilations(), pc_start)}
 	result["files"] = files
 	result["temporal_pipeline_compilations"] = compile_info
 
