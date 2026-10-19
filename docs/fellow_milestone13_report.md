@@ -68,8 +68,9 @@ In one process (`m13_f189_ab`, autotune off) the yield costs City Lab 7.9 % of i
 | Sponza | 80.3 dB (1) | 75.5 dB (4) | 75.5 dB (4) |
 | Lights Lab | 98.4 dB (1) | 101.8 dB (1) | 103.1 dB (1) |
 
-Stock is not bit for bit between runs either; FellowEngine's floors are lower and not from async compute. (in progress:
-`m13_f187` — autotune off)
+Stock is not bit for bit between runs either; FellowEngine's floors are lower, and not from async compute nor from
+autotune (`m13_f187_floor_noat`, autotune off: 67.1 / 73.5 / 75.5 / 100.2 dB, max |d| 13 / 25 / 3 / 1). (in progress:
+`m13_f195` — A/A pairs with each area of FellowEngine off)
 
 ## 5. Tooling
 
