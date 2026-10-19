@@ -12,13 +12,20 @@ Ultra 9 275HX, RTX 5070 Ti Laptop GPU, NVIDIA GPU only, Windows 11, 1920×1080, 
 
 Milestone 12's final measured the frame rate of every scene where milestone 11 had left it and found what averages
 hide: City Lab's runs with FellowEngine have had frames of 16-39 ms since milestone 10 (1 % low 54-197 fps against
-stock's 214-239), with the GPU and the render thread idle-normal in those frames. This milestone asks where those frames
+stock's 214-239), while the GPU's and the render thread's times of those frames were normal. This milestone asks where those frames
 go, what the run-to-run floors that limit exactness checks are made of, and measures the per-cluster LOD started in
 milestone 12 (0063).
 
 ## 2. Large surfaces at the LOD of their parts (0063, KEEP as an option)
 
-(see the decision record: Sponza GPU −3.1 %, render thread +0.21 ms, 63.6 dB on a moving sequence; no effect elsewhere)
+In one process (`m13_f179_clod_ab`, autotune off): Sponza GPU −3.1 % (6.311 → 6.113 ms), its render thread +0.21 ms (the
+walk of each large surface's cluster tree in every camera and perspective shadow pass); Bistro exterior, Bistro
+interior and Foliage Lab unchanged (no surface large enough reaches a coarser level on their paths). The image changes
+as LOD changes it: Sponza 63.6 dB on a warm 60-frame sequence (59.3 dB at its worst frame), stills 52.9-56.8 dB, the
+differences at the silhouettes of distant arches and in the ivy. An option, off.
+
+`fellow157`: one walk per camera render — the depth pre-pass stores a surface's per-level ranges, the colour and
+motion passes of the same render reuse them (lavapipe terrain: bit for bit, the same triangles drawn).
 
 ## 3. City Lab's spikes
 
@@ -69,8 +76,15 @@ In one process (`m13_f189_ab`, autotune off) the yield costs City Lab 7.9 % of i
 | Lights Lab | 98.4 dB (1) | 101.8 dB (1) | 103.1 dB (1) |
 
 Stock is not bit for bit between runs either; FellowEngine's floors are lower, and not from async compute nor from
-autotune (`m13_f187_floor_noat`, autotune off: 67.1 / 73.5 / 75.5 / 100.2 dB, max |d| 13 / 25 / 3 / 1). (in progress:
+autotune (`m13_f187_floor_noat`, autotune off: 67.1 / 73.5 / 75.5 / 100.2 dB, max |d| 13 / 25 / 3 / 1). (to measure:
 `m13_f195` — A/A pairs with each area of FellowEngine off)
+
+With autotune on, the captured sequences compile pipelines although each was run once before: Sponza 50, PBR Lab 9,
+Bistro interior 7, Lights Lab 2 specializations during the 60 frames (stock none; none with autotune off). Autotune's
+evaluations switch pipeline bits (the shadow pyramids, light tile culling) in scene states the warm pass did not
+combine them with, and those frames draw with the ubershader. Compiling the other choices ahead (0066) was tried and
+removed: its low-priority tasks hung the engine's exit on lavapipe, and at normal priority they compete with the
+compilations the frame needs. For exactness checks, autotune off.
 
 ## 5. Tooling
 
