@@ -71,6 +71,15 @@ void autotune_note_light_tile_cull_candidates();
 // while they do (decision 0060).
 void autotune_note_ss_split_candidates();
 
+// autotune/prepare_pipelines (decision 0068): before an evaluation of a tunable that is a specialization bit of the colour
+// passes, frames in which the renderer requests, for the pipelines its draws use, the ones with that bit the other way:
+// the bits to flip in this frame (1 the directional pyramid, 2 the positional pyramid, 4 light tile culling, 8 persistent
+// instance data: every pass), 0 outside
+// such frames. The evaluation starts once a frame's draws find all of them compiled.
+uint32_t autotune_prepare_flips();
+// The renderer, after a frame's passes: how many of those pipelines its draws need, how many are not compiled yet.
+void autotune_prepare_report(uint32_t p_needed, uint32_t p_not_ready);
+
 // Called by RenderingServerDefault::_draw: before the viewports are drawn (decides this frame's choices and captures
 // the start timestamp), after them (end timestamp), and for each captured timestamp read back.
 void autotune_frame_begin();

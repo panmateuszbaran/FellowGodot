@@ -139,6 +139,36 @@ bool uses_frame_time(int p_tunable) {
 	return p_tunable == TUNE_ASYNC_COMPUTE || p_tunable == TUNE_FRAME_PLAN || p_tunable == TUNE_PERSISTENT_INSTANCES;
 }
 
+// autotune/prepare_pipelines (decision 0068): an evaluation of a tunable that is a specialization bit of the colour passes
+// is preceded by frames in which the renderer requests the pipelines its draws use with that bit the other way (the ones
+// the evaluation's blocks will draw with); it starts once a frame finds them all compiled, or after
+// AUTOTUNE_PREPARE_MAX frames. Without it the first frames of those blocks draw with the ubershader (0064 leaves them
+// out of the measurement; they are still slower frames and other images).
+constexpr uint32_t AUTOTUNE_PREPARE_MAX = 240;
+int preparing = -1;
+uint64_t prepare_start = 0;
+bool prepare_reported = false; // the renderer reported for the frame being rendered
+uint32_t prepare_needed = 0;
+uint32_t prepare_not_ready = 0;
+bool last_prepare_reported = false; // the same for the previous frame
+uint32_t last_prepare_needed = 0;
+uint32_t last_prepare_not_ready = 0;
+
+uint32_t prepare_flip(int p_tunable) {
+	switch (p_tunable) {
+		case TUNE_DIRECTIONAL_PYRAMID:
+			return 1;
+		case TUNE_POSITIONAL_PYRAMID:
+			return 2;
+		case TUNE_LIGHT_TILE_CULL:
+			return 4;
+		case TUNE_PERSISTENT_INSTANCES:
+			return 8; // the lists' format (decision 0022): a bit of every pass's pipelines
+		default:
+			return 0;
+	}
+}
+
 uint64_t multimesh_candidates_frame = 0; // the last frame whose lists had MultiMesh elements to cull
 uint64_t light_tile_cull_frame = 0; // the last frame that could run light tile culling
 uint64_t ss_split_frame = 0; // the last frame whose screen-space effects were split with SSIL and SSR (decision 0060)
@@ -362,6 +392,16 @@ void autotune_note_ss_split_candidates() {
 	ss_split_frame = frame_id;
 }
 
+uint32_t autotune_prepare_flips() {
+	return preparing >= 0 ? prepare_flip(preparing) : 0;
+}
+
+void autotune_prepare_report(uint32_t p_needed, uint32_t p_not_ready) {
+	prepare_reported = true;
+	prepare_needed += p_needed;
+	prepare_not_ready += p_not_ready;
+}
+
 static void add_sample(int p_tunable, uint64_t p_id, uint8_t p_block, double p_ms) {
 	TuneState &s = states[p_tunable];
 	if (!s.evaluating || p_id < s.eval_start || p_block >= AUTOTUNE_BLOCKS) {
@@ -390,6 +430,12 @@ void autotune_frame_begin() {
 	last_begin_usec = now_usec;
 	frame_id++;
 	capturing = false;
+	last_prepare_reported = prepare_reported;
+	last_prepare_needed = prepare_needed;
+	last_prepare_not_ready = prepare_not_ready;
+	prepare_reported = false;
+	prepare_needed = 0;
+	prepare_not_ready = 0;
 	const bool active = enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/autotune/enabled") && RD::get_singleton() != nullptr;
 	if (!active) {
 		for (bool &o : off) {
@@ -399,6 +445,7 @@ void autotune_frame_begin() {
 			s.evaluating = false;
 		}
 		last_frame_evaluating = false;
+		preparing = -1;
 		return;
 	}
 
@@ -411,6 +458,9 @@ void autotune_frame_begin() {
 			}
 			s.evaluating = false;
 			off[t] = false;
+			if (preparing == t) {
+				preparing = -1;
+			}
 			continue;
 		}
 		if (!s.started) {
@@ -461,6 +511,32 @@ void autotune_frame_begin() {
 					due = t;
 				}
 			}
+		}
+		if (due >= 0 && prepare_flip(due) != 0 && GLOBAL_GET_CACHED(bool, "rendering/fellow/autotune/prepare_pipelines")) {
+			if (preparing != due) {
+				// This frame's draws request the pipelines with the tunable's bit the other way (decision 0068).
+				preparing = due;
+				prepare_start = frame_id;
+				print_verbose(vformat("FellowEngine autotune: tunable %d, its pipelines prepared from frame %d", due, (int64_t)frame_id));
+				due = -1;
+			} else {
+				const bool ready = last_prepare_reported && last_prepare_not_ready == 0;
+				const bool timed_out = frame_id >= prepare_start + AUTOTUNE_PREPARE_MAX;
+				if (ready || timed_out) {
+					if (!ready) {
+						stats().autotune_prepare_timeouts.increment();
+					}
+					print_verbose(vformat("FellowEngine autotune: tunable %d prepared in %d frames (%d pipelines needed, %d not compiled)", due, (int64_t)(frame_id - prepare_start), (int)last_prepare_needed, (int)last_prepare_not_ready));
+					preparing = -1;
+				} else {
+					due = -1;
+				}
+			}
+		} else if (due >= 0) {
+			preparing = -1;
+		}
+		if (preparing >= 0) {
+			stats().autotune_prepare_frames.increment();
 		}
 		if (due >= 0) {
 			TuneState &s = states[due];

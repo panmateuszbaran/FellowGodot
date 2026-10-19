@@ -267,6 +267,9 @@ private:
 		// The camera render these camera passes belong to (geometry/cluster_lod: the per-level ranges a surface's walk
 		// found in the first of them are reused by the others; 0: not shared, as the shadow passes).
 		uint64_t fellow_lod_epoch = 0;
+		// autotune/prepare_pipelines (decision 0068): while autotune prepares an evaluation, the specialization bits to request
+		// the other way for this pass's pipelines (1 the directional pyramid, 2 the positional pyramid, 4 light tile culling).
+		uint32_t fellow_prepare_flips = 0;
 		Vector3 fellow_lod_eye;
 		float fellow_lod_distance_bias = 0.0;
 		// FellowEngine occlusion culling (opaque colour pass): per list element, the index of the culled run it starts
@@ -853,6 +856,19 @@ private:
 		bool pass_active = false; // this frame's opaque colour pass reads the masks (binding 42)
 	} fellow_tile_cull;
 	uint64_t fellow_lod_epoch_counter = 0; // camera renders with geometry/cluster_lod (decision 0063)
+	// Decision 0068: pipelines with a tunable's bit flipped that this frame's draws need and the map did not hold, noted by the
+	// threads recording the lists, requested by the render thread after the passes.
+	struct FellowPrepareRequest {
+		SceneShaderForwardClustered::ShaderData *shader = nullptr;
+		SceneShaderForwardClustered::ShaderData::PipelineKey key;
+		uint32_t hash = 0;
+	};
+	BinaryMutex fellow_prepare_mutex;
+	LocalVector<FellowPrepareRequest> fellow_prepare_requests;
+	uint32_t fellow_prepare_needed = 0; // flipped pipelines the frame's draws asked for (found or not)
+	uint32_t fellow_prepare_all_passes = 0; // bits of every pass's pipelines to prepare in this render (8: persistent instances)
+	void _fellow_prepare_flipped(SceneShaderForwardClustered::ShaderData *p_shader, const SceneShaderForwardClustered::ShaderData::PipelineKey &p_key, uint32_t p_flips);
+	void _fellow_prepare_request();
 	enum FellowTileCullMode {
 		FELLOW_TILE_CULL_WHOLE,
 		FELLOW_TILE_CULL_DEPTH_BOUNDS,

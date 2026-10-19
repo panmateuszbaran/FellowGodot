@@ -1031,6 +1031,9 @@ struct Stats {
 	SafeNumeric<uint64_t> autotune_rechecks; // evaluations brought forward (the frames' time changed by 20 %, or 30 s passed)
 	SafeNumeric<uint64_t> autotune_off_frames; // frames x tunables that ran with the optimization off
 	SafeNumeric<uint64_t> autotune_tainted_frames; // evaluation frames not counted: a pipeline or shader was still being created
+	SafeNumeric<uint64_t> autotune_prepare_frames; // frames before an evaluation spent compiling its pipelines (decision 0068)
+	SafeNumeric<uint64_t> autotune_prepare_requests; // pipelines requested for an evaluation before it starts (decision 0068)
+	SafeNumeric<uint64_t> autotune_prepare_timeouts; // evaluations started before their pipelines were all compiled (decision 0068)
 	SafeNumeric<uint64_t> cpu_hot_waits; // low-power waits of idle hot workers (cpu/hot_workers_wait, CPUs with WAITPKG)
 	SafeNumeric<uint64_t> cpu_hot_yields; // idle hot workers' yields of their core (cpu/hot_workers_yield)
 	SafeNumeric<uint64_t> cpu_hot_lowered; // idle hot workers' drops to the lowest priority (cpu/hot_workers_idle_priority)

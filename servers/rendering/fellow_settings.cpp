@@ -215,6 +215,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/autotune/max_duty_percent", PROPERTY_HINT_RANGE, "1,100,1"), 20.0);
 	GLOBAL_DEF("rendering/fellow/autotune/skip_creation_frames", true); // decision 0064
 	GLOBAL_DEF("rendering/fellow/autotune/continue_undecided", true); // decision 0064
+	GLOBAL_DEF("rendering/fellow/autotune/prepare_pipelines", true); // decision 0068
 	GLOBAL_DEF("rendering/fellow/frame/replay_frame_plan", false);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/frame/replay_plan_min_draws", PROPERTY_HINT_RANGE, "1,4096,1"), 16);
 	GLOBAL_DEF_RST("rendering/fellow/frame/separate_present_queue", false);
@@ -414,6 +415,9 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["autotune_rechecks"] = s.autotune_rechecks.get();
 	d["autotune_off_frames"] = s.autotune_off_frames.get();
 	d["autotune_tainted_frames"] = s.autotune_tainted_frames.get();
+	d["autotune_prepare_frames"] = s.autotune_prepare_frames.get();
+	d["autotune_prepare_requests"] = s.autotune_prepare_requests.get();
+	d["autotune_prepare_timeouts"] = s.autotune_prepare_timeouts.get();
 	d["cpu_hot_waits"] = s.cpu_hot_waits.get();
 	d["cpu_hot_yields"] = s.cpu_hot_yields.get();
 	d["cpu_hot_lowered"] = s.cpu_hot_lowered.get();

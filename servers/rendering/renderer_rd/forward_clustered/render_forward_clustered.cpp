@@ -637,6 +637,8 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 					prev_pipeline_hash = pipeline_hash;
 					if (pipeline_key.ubershader) {
 						Fellow::stats().pipeline_ubershader_draws.increment();
+					} else if (unlikely((p_params->fellow_prepare_flips | fellow_prepare_all_passes) != 0)) {
+						_fellow_prepare_flipped(shader, pipeline_key, p_params->fellow_prepare_flips | fellow_prepare_all_passes); // decision 0068
 					}
 					break;
 				} else if (!pipeline_key.ubershader && fellow_pipeline_fallback) {
@@ -1397,6 +1399,56 @@ void RenderForwardClustered::_fellow_persistent_map() {
 	p.needs_flush = count > 0;
 	Fellow::stats().cpu_persistent_catchup.add(count);
 	Fellow::stats().cpu_persistent_maps.increment();
+}
+
+// Decision 0068 (autotune/prepare_pipelines). Any thread recording a list: the pipeline map is only read (nothing writes
+// it while lists are recorded); what is missing is requested by the render thread after the passes.
+void RenderForwardClustered::_fellow_prepare_flipped(SceneShaderForwardClustered::ShaderData *p_shader, const SceneShaderForwardClustered::ShaderData::PipelineKey &p_key, uint32_t p_flips) {
+	for (uint32_t bit = 1; bit <= 8; bit <<= 1) {
+		if (!(p_flips & bit)) {
+			continue;
+		}
+		SceneShaderForwardClustered::ShaderData::PipelineKey key = p_key;
+		if (bit == 1) {
+			key.shader_specialization.fellow_directional_max_mip = !p_key.shader_specialization.fellow_directional_max_mip;
+		} else if (bit == 2) {
+			key.shader_specialization.fellow_positional_max_mip = !p_key.shader_specialization.fellow_positional_max_mip;
+		} else if (bit == 4) {
+			key.shader_specialization.fellow_light_tile_cull = !p_key.shader_specialization.fellow_light_tile_cull;
+		} else {
+			key.shader_specialization.fellow_persistent_instances = !p_key.shader_specialization.fellow_persistent_instances;
+		}
+		const uint32_t hash = key.hash();
+		RID rid;
+		const bool found = p_shader->pipeline_hash_map.fellow_find_pipeline(hash, rid);
+		MutexLock lock(fellow_prepare_mutex);
+		fellow_prepare_needed++;
+		if (!found) {
+			fellow_prepare_requests.push_back({ p_shader, key, hash });
+		}
+	}
+}
+
+// Render thread, after a render's colour passes while autotune prepares an evaluation: the missing pipelines requested
+// (at high priority: at most the pipelines of the materials in view, once per evaluation), and reported.
+void RenderForwardClustered::_fellow_prepare_request() {
+	uint32_t not_ready = 0;
+	HashSet<uint64_t> seen;
+	for (const FellowPrepareRequest &r : fellow_prepare_requests) {
+		const uint64_t id = (uint64_t(uintptr_t(r.shader)) * 0x9E3779B97F4A7C15ull) ^ r.hash;
+		if (seen.has(id)) {
+			continue;
+		}
+		seen.insert(id);
+		r.shader->pipeline_hash_map.compile_pipeline(r.key, r.hash, RSE::PIPELINE_SOURCE_SPECIALIZATION, true);
+		if (r.shader->pipeline_hash_map.get_pipeline(r.key, r.hash, false, RSE::PIPELINE_SOURCE_SPECIALIZATION).is_null()) {
+			not_ready++;
+		}
+	}
+	Fellow::stats().autotune_prepare_requests.add(not_ready);
+	Fellow::autotune_prepare_report(fellow_prepare_needed, not_ready);
+	fellow_prepare_requests.clear();
+	fellow_prepare_needed = 0;
 }
 
 void RenderForwardClustered::_fellow_persistent_check(GeometryInstanceSurfaceDataCache *p_surface, const GeometryInstanceForwardClustered *p_inst, uint64_t p_frame) {
@@ -4783,6 +4835,8 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	// geometry/cluster_lod (decision 0063): with stock's LOD selection (main camera, perspective).
 	const bool fellow_cluster_lod = fellow_cluster_planes.size() > 0 && Fellow::cluster_lod() && !p_render_data->scene_data->cam_orthogonal && p_render_data->scene_data->fellow_lod_ortho_extent <= 0.0;
 	const uint64_t fellow_lod_epoch = fellow_cluster_lod ? ++fellow_lod_epoch_counter : 0; // this render's camera passes share the walks
+	const uint32_t fellow_prepare_flips = Fellow::autotune_prepare_flips(); // decision 0068
+	fellow_prepare_all_passes = fellow_prepare_flips & 8u;
 	const Vector3 fellow_lod_eye = p_render_data->scene_data->main_cam_transform.origin;
 	const float fellow_lod_distance_bias = p_render_data->scene_data->fellow_lod_distance_bias;
 
@@ -5244,6 +5298,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			SceneShaderForwardClustered::ShaderSpecialization fellow_opaque_specialization = base_specialization;
 			fellow_opaque_specialization.fellow_light_tile_cull = fellow_tile_cull.pass_active;
 			RenderListParameters render_list_params(render_list[RENDER_LIST_OPAQUE].elements.ptr(), render_list[RENDER_LIST_OPAQUE].element_info.ptr(), render_list[RENDER_LIST_OPAQUE].elements.size(), reverse_cull, PASS_MODE_COLOR, opaque_color_pass_flags, rb_data.is_null(), p_render_data->directional_light_soft_shadows, rp_uniform_set, get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_WIREFRAME, Vector2(), p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, p_render_data->scene_data->view_count, 0, fellow_opaque_specialization);
+			render_list_params.fellow_prepare_flips = fellow_prepare_flips & (fellow_tile_cull_possible ? 7u : 3u); // tile culling: this pass only
 			render_list_params.fellow_cluster_planes = fellow_cluster_planes.ptr();
 			render_list_params.fellow_cluster_plane_count = fellow_cluster_planes.size();
 			render_list_params.fellow_cluster_eye = fellow_cluster_eye;
@@ -5291,6 +5346,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			rp_uniform_set = _setup_render_pass_uniform_set(RENDER_LIST_MOTION, p_render_data, radiance_texture, samplers, opaque_pass_uniform_buffer_index, true);
 
 			RenderListParameters render_list_params(render_list[RENDER_LIST_MOTION].elements.ptr(), render_list[RENDER_LIST_MOTION].element_info.ptr(), render_list[RENDER_LIST_MOTION].elements.size(), reverse_cull, PASS_MODE_COLOR, color_pass_flags, rb_data.is_null(), p_render_data->directional_light_soft_shadows, rp_uniform_set, get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_WIREFRAME, Vector2(), p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, p_render_data->scene_data->view_count, 0, base_specialization);
+			render_list_params.fellow_prepare_flips = fellow_prepare_flips & 3u;
 			render_list_params.fellow_cluster_planes = fellow_cluster_planes.ptr();
 			render_list_params.fellow_cluster_plane_count = fellow_cluster_planes.size();
 			render_list_params.fellow_cluster_eye = fellow_cluster_eye;
@@ -5477,8 +5533,12 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		RenderListParameters render_list_params(render_list[RENDER_LIST_ALPHA].elements.ptr(), render_list[RENDER_LIST_ALPHA].element_info.ptr(), render_list[RENDER_LIST_ALPHA].elements.size(), reverse_cull, PASS_MODE_COLOR, transparent_color_pass_flags, rb_data.is_null(), p_render_data->directional_light_soft_shadows, rp_uniform_set, get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_WIREFRAME, Vector2(), p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, p_render_data->scene_data->view_count, 0, base_specialization);
 		render_list_params.fellow_cluster_planes = fellow_cluster_planes.ptr();
 		render_list_params.fellow_cluster_plane_count = fellow_cluster_planes.size();
+		render_list_params.fellow_prepare_flips = fellow_prepare_flips & 3u;
 		_fellow_multimesh_cull_params(0, RENDER_LIST_ALPHA, 0, render_list_params);
 		_render_list_with_draw_list(&render_list_params, alpha_framebuffer, RD::DRAW_DEFAULT_ALL, Vector<Color>(), 0.0f, 0u, p_render_data->render_region);
+	}
+	if (fellow_prepare_flips != 0) {
+		_fellow_prepare_request(); // decision 0068
 	}
 
 	RD::get_singleton()->draw_command_end_label();
