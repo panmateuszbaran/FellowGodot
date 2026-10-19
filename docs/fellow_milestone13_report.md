@@ -147,4 +147,17 @@ the colour passes: lavapipe 0 differing pixels in four labs; Stress Lab over a r
 
 ## 8. Next
 
-(pending)
+Measured on the RTX when the machine is free (staged: `f193e` builds `fellow158` from `cc56e03`; then `f194`, `f195b`,
+`f199`):
+
+* `m13_f193e_floor_0067`: two runs of stock, of `fellow158` and of `fellow158` without 0067 against each other on the
+  warm sequences (do the floors rise without the racing stores and the unwritten column?), and what 0067 changes against
+  stock at 1920 × 1080.
+* `m13_f193e_prepare`: Stress Lab, Lights Lab and PBR Lab with autotune on — 0068 and 0069 on, 0068 off, 0069 off:
+  pipelines compiled and draws on the ubershader during the measurement, frame time.
+* `m13_f193e_clod_ab`: cluster LOD with one walk per camera render (0063): the render thread's cost in Sponza.
+* `m13_f194`: where the GPU time goes (Sponza's transparent pass at three resolutions and without the trees).
+* `m13_f195b`: two runs against each other with each area of FellowEngine off (the floors' source).
+* `m13_f199_final`: stock, `fellow153` (m12), `fellow158`, `fellow158` with the visually lossless options.
+
+Open: a positional shadow lookup outside the atlas texels written (stock's; one pixel at a shadow's tip in PBR Lab).
