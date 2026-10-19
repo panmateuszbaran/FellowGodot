@@ -245,6 +245,11 @@ func _run_perf() -> void:
 	# Per-frame FellowEngine counters only with --fellow_frames=1: reading them builds a dictionary of ~80 counters on
 	# the main thread every frame, a cost stock builds (no counters) never pay.
 	var per_frame_fellow: bool = not fs0.is_empty() and str(args.get("fellow_frames", "0")) == "1"
+	# --fellow_frames_keys=a,b,... (or a+b+..., inside the runner's comma-separated --builds): the counters recorded per
+	# frame (their increase in the frame); the shadow cache's by default.
+	var per_frame_keys := PackedStringArray(["shadow_cache_cascades_rebuilt", "shadow_cache_cascades_fallback", "shadow_cache_cascades_cached"])
+	if args.has("fellow_frames_keys"):
+		per_frame_keys = str(args["fellow_frames_keys"]).replace("+", ",").split(",", false)
 	# In-process A/B of runtime FellowEngine settings (--ab=name:k=v;k=v|name2:k=v...): the configurations take turns
 	# in blocks of --ab_block frames along the path, rotating by one block per pass, so after (configurations x
 	# --ab_repeats) passes each one has run every block of the path the same number of times, in the same process
@@ -288,7 +293,7 @@ func _run_perf() -> void:
 			if per_frame_fellow:
 				# Per-frame FellowEngine counters (e.g. shadow cache rebuilds) to correlate with frame times.
 				var fs := _fellow_stats()
-				for k in ["shadow_cache_cascades_rebuilt", "shadow_cache_cascades_fallback", "shadow_cache_cascades_cached"]:
+				for k in per_frame_keys:
 					if not fellow_frames.has(k):
 						fellow_frames[k] = PackedInt32Array()
 					fellow_frames[k].append(int(fs.get(k, 0)) - int(fs_prev.get(k, 0)))
