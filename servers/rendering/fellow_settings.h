@@ -818,6 +818,18 @@ inline int cpu_hot_workers_wait() {
 inline bool cpu_hot_workers_yield() {
 	return GLOBAL_GET_CACHED(bool, "rendering/fellow/cpu/hot_workers_yield");
 }
+// frame/pipeline_prefetch_tunables (decision 0066, experiment): a colour pass's pipeline compiled for one value of the bits
+// autotune switches (the shadow pyramids, light tile culling) asks for its counterparts with the other values too, at
+// low priority, so that an evaluation finds them compiled instead of drawing with the ubershader. Never changes results.
+inline bool pipeline_prefetch_tunables() {
+	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/frame/pipeline_prefetch_tunables") && GLOBAL_GET_CACHED(bool, "rendering/fellow/autotune/enabled");
+}
+inline uint32_t pipeline_prefetch_pyramid_flips() {
+	if (!pipeline_prefetch_tunables() || !shadows_enabled()) {
+		return 0;
+	}
+	return (GLOBAL_GET_CACHED(bool, "rendering/fellow/shadows/directional_max_mip") ? 1u : 0u) | (GLOBAL_GET_CACHED(bool, "rendering/fellow/shadows/positional_max_mip") ? 2u : 0u);
+}
 // An idle hot worker spins at the lowest thread priority and returns to normal before it claims a chunk (decision 0065;
 // Windows): any thread of normal priority that becomes ready preempts a spinning worker on whichever core it spins.
 inline bool cpu_hot_workers_idle_priority() {
@@ -894,6 +906,7 @@ struct Stats {
 	SafeNumeric<uint64_t> geometry_cluster_draws; // draw calls issued for clustered surfaces
 	SafeNumeric<uint64_t> pipeline_fallback_draws; // draws with the defaults' pipeline while theirs compiled (decision 0059)
 	SafeNumeric<uint64_t> pipeline_ubershader_draws; // draws with the ubershader while theirs compiled (stock's fallback)
+	SafeNumeric<uint64_t> pipeline_prefetch_requests; // missing pipelines whose autotune counterparts were requested (0066)
 	// Where loading spends its time (process totals, every build: the bench snapshots them when its scene is built and
 	// after the first frame). Shader versions: the calling thread's start (cache reads, task posting) and wait, the
 	// variants compiled on the workers (from source where not cached), the shader objects created from their SPIR-V.
