@@ -177,4 +177,9 @@ Measured on the RTX when the machine is free (staged: `f193f` builds `fellow158`
 * `m13_f195b`: two runs against each other with each area of FellowEngine off (the floors' source).
 * `m13_f199_final`: stock, `fellow153` (m12), `fellow158`, `fellow158` with the visually lossless options.
 
-Open: a positional shadow lookup outside the atlas texels written (stock's; one pixel at a shadow's tip in PBR Lab).
+Open (reads of memory never written, lavapipe, both in stock's code and both small):
+* a positional shadow lookup outside the atlas texels written (one pixel of 1 level at a shadow's tip in PBR Lab);
+* the reflection probes' octahedral atlas (Godot 4.7's `reflection_atlas`, 768 × 768 × 64 layers, 8 mips): Lights Lab
+  at 1366 × 768 after 200 frames, 11 pixels of 1 level with FellowEngine disabled, 258 pixels of up to 6 levels with it
+  (why more with it is not known yet); bisected to that texture (clearing it at creation
+  removes it), not yet to a pass. Fresh allocations are zero on most GPUs; a reused one would show its content there.
