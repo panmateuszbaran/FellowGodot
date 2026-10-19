@@ -69,3 +69,11 @@ indistinguishable; the differences are where LOD puts them).
 large surface without chunks and no CPU to spare it saves what LOD saves there (Sponza 3 %, the lavapipe terrain 86 %
 of its triangles). The walk's CPU cost could be cut (once per frame for all the camera passes instead of per pass);
 not done while the bench has no scene where it matters.
+
+## Later: one walk per camera render (`fellow157`)
+
+The depth pre-pass stores each surface's per-level ranges with the surface (with the render's epoch); the colour and
+motion passes of the same render reuse them instead of walking the tree again (stat `geometry_cluster_lod_reused`).
+lavapipe terrain: the same image bit for bit and the same triangles drawn as the walk per pass (11 531 374), 89 walks
+reused in 120 frames. The render thread's cost on the RTX: to be measured (it was +0.21 ms in Sponza with a walk in
+each of the pre-pass, the colour pass and the perspective shadow passes).

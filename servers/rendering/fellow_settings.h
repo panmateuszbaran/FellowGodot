@@ -923,6 +923,7 @@ struct Stats {
 	SafeNumeric<uint64_t> geometry_cluster_triangles_drawn; // triangles of clustered surfaces drawn
 	SafeNumeric<uint64_t> geometry_cluster_triangles_culled; // triangles of clustered surfaces skipped (outside the frustum)
 	SafeNumeric<uint64_t> geometry_cluster_lod_coarser_ranges; // geometry/cluster_lod: ranges drawn at a coarser level than the instance's (decision 0063)
+	SafeNumeric<uint64_t> geometry_cluster_lod_reused; // cluster LOD walks reused by a later camera pass of the same render
 	SafeNumeric<uint64_t> frame_early_submits; // frames whose rendering was submitted before the swap chain acquisition
 	SafeNumeric<uint64_t> frame_async_uses; // async compute segments (decision 0015)
 	SafeNumeric<uint64_t> frame_async_conflicts; // of which the concurrent part had to wait (shared resource)

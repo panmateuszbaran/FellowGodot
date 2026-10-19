@@ -311,6 +311,7 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["geometry_cluster_triangles_drawn"] = s.geometry_cluster_triangles_drawn.get();
 	d["geometry_cluster_triangles_culled"] = s.geometry_cluster_triangles_culled.get();
 	d["geometry_cluster_lod_coarser_ranges"] = s.geometry_cluster_lod_coarser_ranges.get();
+	d["geometry_cluster_lod_reused"] = s.geometry_cluster_lod_reused.get();
 	d["frame_early_submits"] = s.frame_early_submits.get();
 	d["frame_async_uses"] = s.frame_async_uses.get();
 	d["frame_async_conflicts"] = s.frame_async_conflicts.get();

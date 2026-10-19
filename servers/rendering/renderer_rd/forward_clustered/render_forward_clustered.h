@@ -264,6 +264,9 @@ private:
 		// geometry/cluster_lod (decision 0063): large surfaces' clusters each at their own LOD, from their distance to
 		// fellow_lod_eye (the main camera, as stock's LOD selection).
 		bool fellow_cluster_lod = false;
+		// The camera render these camera passes belong to (geometry/cluster_lod: the per-level ranges a surface's walk
+		// found in the first of them are reused by the others; 0: not shared, as the shadow passes).
+		uint64_t fellow_lod_epoch = 0;
 		Vector3 fellow_lod_eye;
 		float fellow_lod_distance_bias = 0.0;
 		// FellowEngine occlusion culling (opaque colour pass): per list element, the index of the culled run it starts
@@ -849,6 +852,7 @@ private:
 		bool split = false; // the depth bounds were recorded before the async part; the rest goes beside it
 		bool pass_active = false; // this frame's opaque colour pass reads the masks (binding 42)
 	} fellow_tile_cull;
+	uint64_t fellow_lod_epoch_counter = 0; // camera renders with geometry/cluster_lod (decision 0063)
 	enum FellowTileCullMode {
 		FELLOW_TILE_CULL_WHOLE,
 		FELLOW_TILE_CULL_DEPTH_BOUNDS,
@@ -960,6 +964,18 @@ private:
 
 	// Cached data for drawing surfaces
 	struct GeometryInstanceSurfaceDataCache {
+		// geometry/cluster_lod (decision 0063): the per-level ranges of the last camera render's walk of this surface's
+		// clusters, reused by that render's later passes (the colour and motion passes after the depth pre-pass). Created
+		// on first use, freed with the surface.
+		struct FellowLodCache {
+			uint64_t epoch = 0;
+			uint32_t min_level = 0;
+			uint32_t level_count = 0;
+			uint32_t drawn = 0;
+			LocalVector<uint32_t> ranges[9];
+		};
+		mutable FellowLodCache *fellow_lod_cache = nullptr;
+
 		enum {
 			FLAG_PASS_DEPTH = 1,
 			FLAG_PASS_OPAQUE = 2,

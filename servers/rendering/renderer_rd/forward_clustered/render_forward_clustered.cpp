@@ -831,25 +831,51 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 					if (p_params->fellow_cluster_lod && !fellow_clusters->preserves_order && fellow_level_count > 1 && fellow_level_count <= 9 && !fellow_clusters->neighbor_offsets.is_empty() && p_params->screen_mesh_lod_threshold > 0.0) {
 						// geometry/cluster_lod (decision 0063): each cluster at its own level, each level's ranges drawn from
 						// that level's index array (also in cluster order).
-						float edges[8];
-						FellowMeshClusters::LodParams lp;
-						lp.eye = xf.affine_inverse().xform(p_params->fellow_lod_eye);
-						lp.min_scale = MIN(xf.basis.get_column(0).length(), MIN(xf.basis.get_column(1).length(), xf.basis.get_column(2).length()));
-						lp.lod_count = mesh_storage->fellow_mesh_surface_get_lod_edges(mesh_surface, edges, fellow_level_count - 1);
-						lp.edges = edges;
-						lp.model_scale = surf->owner->lod_model_scale * surf->owner->lod_bias;
-						lp.distance_multiplier = p_params->lod_distance_multiplier;
-						lp.distance_bias = p_params->fellow_lod_distance_bias;
-						lp.threshold = p_params->screen_mesh_lod_threshold;
-						lp.min_level = element_info.lod_index;
-						thread_local LocalVector<uint32_t> fellow_level_ranges[9];
-						for (uint32_t l = 0; l < fellow_level_count; l++) {
-							fellow_level_ranges[l].clear();
+						// The camera passes of one render (the depth pre-pass, then the colour and motion passes) walk the same
+						// tree with the same planes and eye: the first stores its ranges with the surface, the others reuse them.
+						GeometryInstanceSurfaceDataCache::FellowLodCache *fellow_lc = surf->fellow_lod_cache;
+						LocalVector<uint32_t> *fellow_level_ranges_used;
+						if (p_params->fellow_lod_epoch != 0 && fellow_lc != nullptr && fellow_lc->epoch == p_params->fellow_lod_epoch && fellow_lc->min_level == uint32_t(element_info.lod_index) && fellow_lc->level_count == fellow_level_count) {
+							fellow_level_ranges_used = fellow_lc->ranges;
+							drawn = fellow_lc->drawn;
+							Fellow::stats().geometry_cluster_lod_reused.increment();
+						} else {
+							float edges[8];
+							FellowMeshClusters::LodParams lp;
+							lp.eye = xf.affine_inverse().xform(p_params->fellow_lod_eye);
+							lp.min_scale = MIN(xf.basis.get_column(0).length(), MIN(xf.basis.get_column(1).length(), xf.basis.get_column(2).length()));
+							lp.lod_count = mesh_storage->fellow_mesh_surface_get_lod_edges(mesh_surface, edges, fellow_level_count - 1);
+							lp.edges = edges;
+							lp.model_scale = surf->owner->lod_model_scale * surf->owner->lod_bias;
+							lp.distance_multiplier = p_params->lod_distance_multiplier;
+							lp.distance_bias = p_params->fellow_lod_distance_bias;
+							lp.threshold = p_params->screen_mesh_lod_threshold;
+							lp.min_level = element_info.lod_index;
+							thread_local LocalVector<uint32_t> fellow_level_ranges[9];
+							if (p_params->fellow_lod_epoch != 0) {
+								// One thread records a surface's element in a pass; the later passes read it after the join.
+								if (fellow_lc == nullptr) {
+									fellow_lc = memnew(GeometryInstanceSurfaceDataCache::FellowLodCache);
+									surf->fellow_lod_cache = fellow_lc;
+								}
+								fellow_level_ranges_used = fellow_lc->ranges;
+							} else {
+								fellow_level_ranges_used = fellow_level_ranges;
+							}
+							for (uint32_t l = 0; l < fellow_level_count; l++) {
+								fellow_level_ranges_used[l].clear();
+							}
+							drawn = fellow_clusters->cull_lod(local_planes, plane_count, lp, fellow_level_ranges_used);
+							if (fellow_lc != nullptr && p_params->fellow_lod_epoch != 0) {
+								fellow_lc->epoch = p_params->fellow_lod_epoch;
+								fellow_lc->min_level = element_info.lod_index;
+								fellow_lc->level_count = fellow_level_count;
+								fellow_lc->drawn = drawn;
+							}
 						}
-						drawn = fellow_clusters->cull_lod(local_planes, plane_count, lp, fellow_level_ranges);
 						uint32_t draws = 0;
 						for (uint32_t l = 0; l < fellow_level_count; l++) {
-							const LocalVector<uint32_t> &lr = fellow_level_ranges[l];
+							const LocalVector<uint32_t> &lr = fellow_level_ranges_used[l];
 							if (lr.is_empty()) {
 								continue;
 							}
@@ -4753,6 +4779,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	const uint32_t fellow_cluster_f2b = (fellow_cluster_planes.size() > 0 && !p_render_data->scene_data->cam_orthogonal) ? uint32_t(Fellow::cluster_front_to_back()) * 3 : 0;
 	// geometry/cluster_lod (decision 0063): with stock's LOD selection (main camera, perspective).
 	const bool fellow_cluster_lod = fellow_cluster_planes.size() > 0 && Fellow::cluster_lod() && !p_render_data->scene_data->cam_orthogonal && p_render_data->scene_data->fellow_lod_ortho_extent <= 0.0;
+	const uint64_t fellow_lod_epoch = fellow_cluster_lod ? ++fellow_lod_epoch_counter : 0; // this render's camera passes share the walks
 	const Vector3 fellow_lod_eye = p_render_data->scene_data->main_cam_transform.origin;
 	const float fellow_lod_distance_bias = p_render_data->scene_data->fellow_lod_distance_bias;
 
@@ -5058,6 +5085,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		render_list_params.fellow_cluster_eye = fellow_cluster_eye;
 		render_list_params.fellow_cluster_f2b = fellow_cluster_f2b;
 		render_list_params.fellow_cluster_lod = fellow_cluster_lod;
+		render_list_params.fellow_lod_epoch = fellow_lod_epoch;
 		render_list_params.fellow_lod_eye = fellow_lod_eye;
 		render_list_params.fellow_lod_distance_bias = fellow_lod_distance_bias;
 		_fellow_multimesh_cull_params(0, RENDER_LIST_OPAQUE, 0, render_list_params);
@@ -5218,6 +5246,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			render_list_params.fellow_cluster_eye = fellow_cluster_eye;
 			render_list_params.fellow_cluster_f2b = fellow_cluster_f2b;
 			render_list_params.fellow_cluster_lod = fellow_cluster_lod;
+			render_list_params.fellow_lod_epoch = fellow_lod_epoch;
 			render_list_params.fellow_lod_eye = fellow_lod_eye;
 			render_list_params.fellow_lod_distance_bias = fellow_lod_distance_bias;
 			if (fellow_occlusion_culled) {
@@ -5264,6 +5293,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			render_list_params.fellow_cluster_eye = fellow_cluster_eye;
 			render_list_params.fellow_cluster_f2b = fellow_cluster_f2b;
 			render_list_params.fellow_cluster_lod = fellow_cluster_lod;
+			render_list_params.fellow_lod_epoch = fellow_lod_epoch;
 			render_list_params.fellow_lod_eye = fellow_lod_eye;
 			render_list_params.fellow_lod_distance_bias = fellow_lod_distance_bias;
 			_render_list_with_draw_list(&render_list_params, color_framebuffer);
@@ -7881,6 +7911,9 @@ void RenderForwardClustered::GeometryInstanceForwardClustered::_mark_dirty() {
 	while (surf) {
 		GeometryInstanceSurfaceDataCache *next = surf->next;
 		RenderForwardClustered::get_singleton()->_fellow_slot_free(surf->fellow_slot);
+		if (surf->fellow_lod_cache != nullptr) {
+			memdelete(surf->fellow_lod_cache);
+		}
 		RenderForwardClustered::get_singleton()->geometry_instance_surface_alloc.free(surf);
 		surf = next;
 	}
@@ -8773,6 +8806,9 @@ void RenderForwardClustered::geometry_instance_free(RenderGeometryInstance *p_ge
 	while (surf) {
 		GeometryInstanceSurfaceDataCache *next = surf->next;
 		_fellow_slot_free(surf->fellow_slot);
+		if (surf->fellow_lod_cache != nullptr) {
+			memdelete(surf->fellow_lod_cache);
+		}
 		geometry_instance_surface_alloc.free(surf);
 		surf = next;
 	}
