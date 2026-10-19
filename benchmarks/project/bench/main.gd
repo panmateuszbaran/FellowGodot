@@ -71,7 +71,8 @@ func _ready() -> void:
 	vp = get_viewport()
 	# Benchmark rules: no vsync, no FPS cap (both are also set in project.godot / CLI).
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
-	Engine.max_fps = 0
+	# --max_fps=N: a frame rate cap for diagnostics only (presentation at a given rate); never in a measurement.
+	Engine.max_fps = int(args.get("max_fps", "0"))
 	out_dir = args.get("out", OS.get_user_data_dir().path_join("results"))
 	DirAccess.make_dir_recursive_absolute(out_dir)
 	var scene_key: String = args.get("scene", "pbr")
