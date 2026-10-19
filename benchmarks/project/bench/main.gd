@@ -56,10 +56,22 @@ var watchdog_s := 1800.0
 var finished := false
 
 
+var pace_usec := 0 # --max_fps with --fixed-fps (where Engine.max_fps does nothing): the main thread waits here
+var pace_next := 0
+
+
 func _process(_delta: float) -> void:
 	if not finished and (Time.get_ticks_usec() - t_start_usec) / 1e6 > watchdog_s:
 		finished = true
 		_fail("watchdog timeout after %.0f s (wall clock)" % watchdog_s)
+	if pace_usec > 0:
+		var now := Time.get_ticks_usec()
+		if pace_next > now:
+			while Time.get_ticks_usec() < pace_next:
+				pass
+			pace_next += pace_usec
+		else:
+			pace_next = now + pace_usec
 
 
 func _ready() -> void:
@@ -71,8 +83,11 @@ func _ready() -> void:
 	vp = get_viewport()
 	# Benchmark rules: no vsync, no FPS cap (both are also set in project.godot / CLI).
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
-	# --max_fps=N: a frame rate cap for diagnostics only (presentation at a given rate); never in a measurement.
-	Engine.max_fps = int(args.get("max_fps", "0"))
+	# --max_fps=N: a frame rate cap for diagnostics only (presentation at a given rate); never in a measurement. The
+	# runner passes --fixed-fps, with which the engine's own cap does nothing: the main thread waits in _process().
+	Engine.max_fps = 0
+	var cap_fps := int(args.get("max_fps", "0"))
+	pace_usec = 1000000 / cap_fps if cap_fps > 0 else 0
 	out_dir = args.get("out", OS.get_user_data_dir().path_join("results"))
 	DirAccess.make_dir_recursive_absolute(out_dir)
 	var scene_key: String = args.get("scene", "pbr")
