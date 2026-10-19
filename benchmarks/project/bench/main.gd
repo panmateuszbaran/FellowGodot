@@ -168,6 +168,8 @@ func _ready() -> void:
 			await _run_perf()
 		"capture":
 			await _run_capture()
+		"repeat":
+			await _run_repeat()
 		"temporal":
 			await _run_temporal(false)
 		"reference":
@@ -521,6 +523,37 @@ func _save_frame(path: String, hdr: bool = false) -> void:
 func _file_stem() -> String:
 	var r: Array = result["resolution"]
 	return "%s_%dx%d" % [result["scene"], r[0], r[1]]
+
+
+## Diagnostic (lavapipe determinism): one fixed camera, then --repeat frames saved one after another.
+func _run_repeat() -> void:
+	var settle := int(args.get("settle", "30"))
+	var n := int(args.get("repeat", "8"))
+	var stem := _file_stem()
+	var k: String = _selected(scene.fixed_cameras.keys(), "cameras")[0]
+	var c: Dictionary = scene.fixed_cameras[k]
+	scene.set_time(c.get("time", 0.0))
+	scene.set_camera_pose(c["pos"], c["target"], c.get("fov", 60.0))
+	for i in range(settle):
+		await get_tree().process_frame
+	var files := []
+	var per_frame := []
+	var keys := str(args.get("keys", "pipeline_ubershader_draws")).split("+", false)
+	var prev := _fellow_stats()
+	for r in range(n):
+		await get_tree().process_frame
+		await _post_draw()
+		var p := out_dir.path_join("%s_%s_r%02d.png" % [stem, k, r])
+		_save_frame(p)
+		files.append(p.get_file())
+		var now := _fellow_stats()
+		var row := []
+		for key in keys:
+			row.append(now.get(key, 0) - prev.get(key, 0))
+		per_frame.append(row)
+		prev = now
+	print("[repeat] keys ", keys, " per frame ", per_frame)
+	result["files"] = files
 
 
 func _run_capture() -> void:
