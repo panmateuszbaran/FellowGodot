@@ -121,7 +121,7 @@ that won the frame's rebuild of that entry sets it (the reader either returns, r
 in the same parallel section, or loses the exchange and returns). Stress Lab does not fit in the container's memory
 under TSAN.
 
-## 6. Autotune without ubershader frames in its evaluations (0068, measuring)
+## 6. Fewer compilations while running (0068, 0069, measuring)
 
 An evaluation of a tunable that is a pipeline bit (the shadow pyramids, light tile culling, persistent instance data)
 is now prepared: for a few frames the passes request, for each pipeline they bind, the one with that bit the other way,
@@ -130,6 +130,11 @@ with the ubershader during the measurement PBR Lab 73 → 13, Lights Lab 10 → 
 0064 had to leave out 8 → 2 (PBR Lab); 2-9 frames of preparation, no timeout; the same images. What remains are
 materials that come into view during an evaluation. (to measure on the RTX: Stress Lab's compilations during the
 finals' measurement)
+
+**Depth pipeline keys (0069, measuring).** The depth passes' pipeline keys held FellowEngine's bits for the colour
+passes, which the depth variants do not compile: each evaluation of a shadow pyramid compiled duplicate depth pipelines
+(drawn with the ubershader meanwhile, after 0068 had prepared the colour passes). They are cleared in every pass but
+the colour passes: lavapipe 0 differing pixels in four labs; Stress Lab over a run 783 → 427 draws on the ubershader.
 
 ## 7. Tooling
 
