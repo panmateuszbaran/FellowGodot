@@ -1,6 +1,6 @@
 # 0067 — SSAO and SSIL: the last column written, one store per texel of the depth mipmaps
 
-Status: **MEASURING** (both on in `fellow158`) · Branch `fellow/geometry` · Settings
+Status: **KEEP** (both on from `fellow158`) · Branch `fellow/geometry` · Settings
 `rendering/fellow/postfx/ss_interleave_exact_bounds`, `rendering/fellow/postfx/ss_depth_mips_exact` (both on) · Code:
 `shaders/effects/ssao_interleave.glsl`, `ssil_interleave.glsl`, `ss_effects_downsample.glsl`, `effects/ss_effects.cpp`,
 `fellow_settings.*`; debug (environment variables, off otherwise): `rendering_device.cpp`
@@ -74,9 +74,22 @@ undefined derivatives after `discard`) and 60 frames of settle (no ubershader dr
   close-up's SSAO taps read the third level, whose texels stock took from whichever of its four stores lavapipe ran
   last.
 
-RTX: (to measure — two runs of each against each other on the warm sequences of `m13_f180`, and the last column against
-stock at 1920 × 1080)
+RTX (`m13_f193f_floor_0067`, autotune off, `m13_f180`'s warm 60-frame sequences at 1920 × 1080, two runs of each
+build against each other):
+
+| scene | stock A/A | `fellow158` A/A | `fellow158`, both off, A/A |
+|---|---|---|---|
+| Bistro interior | 69.2 dB (max \|d\| 4) | **bit for bit** | 67.1 dB (16) |
+| PBR Lab | 82.0 dB (4) | **bit for bit** | 73.6 dB (24) |
+| Sponza | 80.3 dB (1) | **bit for bit** | 75.5 dB (2) |
+| Lights Lab | 98.5 dB (1) | 102.5 dB (3) | 103.8 dB (2) |
+
+With both on, FellowEngine's runs are the same bit for bit in Bistro interior, PBR Lab and Sponza; stock's are not.
+Lights Lab's few pixels are a read of the reflection probes' atlas where no pass wrote (0070). Both on against both off
+in one build: 53.7-60.2 dB on the sequences, max |d| 74-174 in 0.04-0.18 % of the pixels (the last column, SSAO close
+up). Against stock FellowEngine stays at milestone 1's TAA look change (39.6-49.4 dB with or without them).
 
 ## Decision
 
-(pending the RTX measurement)
+**KEEP, both on.** They make the screen-space effects' output defined: no texel read that no pass wrote, no texel
+written by racing stores. The cost is a comparison per invocation (the frame times of the final, milestone 13).

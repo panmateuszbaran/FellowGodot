@@ -1,6 +1,6 @@
 # 0069 — Depth passes' pipeline keys without the colour passes' FellowEngine bits
 
-Status: **MEASURING** · Branch `fellow/geometry` · Setting `rendering/fellow/frame/depth_pipeline_keys` (on) · Code:
+Status: **KEEP** · Branch `fellow/geometry` · Setting `rendering/fellow/frame/depth_pipeline_keys` (on) · Code:
 `render_forward_clustered.cpp` (`_render_list_template`, `FELLOW_SPEC1_DEPTH_BITS`), `fellow_settings.*`.
 
 ## Problem
@@ -34,8 +34,12 @@ Stress Lab, perf mode (100-frame passes, autotune on with a shortened schedule, 
 the whole process: draws with the ubershader **427** against 783, pipelines compiled 289 against 297 (startup to the
 first frame 224 against 223); the two evaluations prepared in the same 12-14 frames.
 
-RTX: (to measure — pipelines compiled per scene and the draws on the ubershader in the finals' runs)
+RTX (`m13_f193f_prepare`, `fellow158`, autotune on, three runs each, the setting off against on): PBR Lab compiles
+295-299 pipelines over a run against 267-281 and draws 42-112 draws with the ubershader during the measurement against
+17-49; Stress Lab and Lights Lab within a few (their evaluations rarely switch a shadow pyramid). Frame time within the
+spread (off: Stress Lab −0.7 %, Lights Lab +3.0 %, PBR Lab +2.8 %, p ≥ 0.09).
 
 ## Decision
 
-(pending)
+**KEEP, on.** Exact (the same shader code with the same constants); fewer depth pipelines compiled while autotune
+evaluates a shadow pyramid (PBR Lab ~20 of ~290 over a run, half the ubershader draws during the measurement).

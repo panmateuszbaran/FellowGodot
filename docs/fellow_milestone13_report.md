@@ -25,7 +25,10 @@ as LOD changes it: Sponza 63.6 dB on a warm 60-frame sequence (59.3 dB at its wo
 differences at the silhouettes of distant arches and in the ivy. An option, off.
 
 `fellow157`: one walk per camera render — the depth pre-pass stores a surface's per-level ranges, the colour and
-motion passes of the same render reuse them (lavapipe terrain: bit for bit, the same triangles drawn).
+motion passes of the same render reuse them (lavapipe terrain: bit for bit, the same triangles drawn). In one process
+with `fellow158` (`m13_f193f_clod_ab`, autotune off, 336 block pairs): Sponza GPU −2.8 % (6.649 → 6.461 ms, frame
+6.721 → 6.533 ms, p 1e-12), the render thread +0.101 ms (the depth pre-pass's recording +0.106 ms), half of
+`fellow156`'s +0.21 ms. Still an option, off: it changes the image.
 
 ## 3. City Lab's spikes
 
@@ -106,6 +109,23 @@ pipeline do not give the same alpha-scissor foliage on lavapipe (the roughness l
 checks on lavapipe use the demote diagnostics (`debug/scene_shader_experiments` 4194304) and a settle long enough for
 no ubershader draw (`FELLOW_DEBUG_FORCE_UBERSHADER=1` draws everything with the ubershader, for comparisons).
 
+**On the RTX, with 0067 (`m13_f193f_floor_0067`, `fellow158`, autotune off, the same warm 60-frame sequences, two runs
+of each build against each other):**
+
+| scene | stock A/A | `fellow158` A/A | `fellow158`, 0067 off, A/A |
+|---|---|---|---|
+| Bistro interior | 69.2 dB (max \|d\| 4) | **bit for bit** | 67.1 dB (16) |
+| PBR Lab | 82.0 dB (4) | **bit for bit** | 73.6 dB (24) |
+| Sponza | 80.3 dB (1) | **bit for bit** | 75.5 dB (2) |
+| Lights Lab | 98.5 dB (1) | 102.5 dB (3) | 103.8 dB (2) |
+
+The floors were 0067's two reads: with the interleave's last column written and one store per depth-mip texel, two
+runs of FellowEngine give the same 60 frames bit for bit in three of the four scenes, where stock's own runs differ
+(69-82 dB). Lights Lab keeps a few pixels (its reflection probes' atlas is read where no pass wrote, see section 8 and
+0070). What 0067 changes at 1920 × 1080 against the same build without it: 53.7-60.2 dB on the sequences (max |d| 74-174
+in 0.04-0.18 % of the pixels: the last column and SSAO close up); against stock FellowEngine stays at its milestone-1
+look change (TAA v2: 39.6-49.4 dB, with or without 0067).
+
 ## 5. Synchronization
 
 Vulkan synchronization validation (lavapipe, 480 × 270, captures) with `fellow157`'s defaults, async compute emulated
@@ -142,8 +162,21 @@ is now prepared: for a few frames the passes request, for each pipeline they bin
 and the evaluation starts once a frame finds them all compiled. lavapipe, perf runs with a shortened schedule: draws
 with the ubershader during the measurement PBR Lab 73 → 13, Lights Lab 10 → 1, City Lab 4 → 1; the evaluation frames
 0064 had to leave out 8 → 2 (PBR Lab); 2-9 frames of preparation, no timeout; the same images. What remains are
-materials that come into view during an evaluation. (to measure on the RTX: Stress Lab's compilations during the
-finals' measurement)
+materials that come into view during an evaluation.
+
+RTX (`m13_f193f_prepare`, `fellow158`, autotune on, three runs each, draws with the ubershader during the 20-second
+measurement / over the whole process):
+
+| scene | 0068 and 0069 on | 0068 off | 0069 off |
+|---|---|---|---|
+| Stress Lab | 1, 1, 1 / 65-119 | 118-289 / 230-462 | 0-1 / 91-124 |
+| Lights Lab | 0, 0, 0 / 36-53 | 15-19 / 63-66 | 0-4 / 44-55 |
+| PBR Lab | 17-49 / 65-138 | 57-174 / 131-327 | 42-112 / 97-225 |
+
+Evaluations started after 6-46 frames of preparation, none timed out; the evaluation frames 0064 leaves out fell from
+0-70 to 0-20 per run. 0069 saves PBR Lab ~20 of ~290 pipelines over a run (267-281 against 295-299 compiled) and draws
+there about half as many ubershader draws. The frame times are within the runs' spread (0068 off against on: Stress Lab
+−1.6 %, Lights Lab 0.0 %, PBR Lab +0.9 %; 0069 off: −0.7 / +3.0 / +2.8 %, p ≥ 0.09).
 
 **Depth pipeline keys (0069, measuring).** The depth passes' pipeline keys held FellowEngine's bits for the colour
 passes, which the depth variants do not compile: each evaluation of a shadow pyramid compiled duplicate depth pipelines

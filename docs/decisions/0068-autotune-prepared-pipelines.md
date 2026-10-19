@@ -1,6 +1,6 @@
 # 0068 — Autotune: an evaluation that switches a pipeline bit starts once its pipelines are compiled
 
-Status: **MEASURING** · Branch `fellow/geometry` · Setting `rendering/fellow/autotune/prepare_pipelines` (on) · Code:
+Status: **KEEP** · Branch `fellow/geometry` · Setting `rendering/fellow/autotune/prepare_pipelines` (on) · Code:
 `fellow_autotune.*` (`preparing`, `autotune_prepare_flips()`, `autotune_prepare_report()`),
 `render_forward_clustered.*` (`_fellow_prepare_flipped()`, `_fellow_prepare_request()`,
 `RenderListParameters::fellow_prepare_flips`), `fellow_settings.*` (stats `autotune_prepare_frames`,
@@ -53,9 +53,13 @@ compilations during the measurement are the same in number (PBR Lab 11 / 11): th
 blocks instead of in their first frames. What remains drawn with the ubershader are materials that come into view
 during an evaluation with the bit the other way (the camera moves; a preparation covers what is in view).
 
-RTX: (to measure — Stress Lab, autotune on, the setting on against off: compilations and ubershader draws during the
-measurement, frame time)
+RTX (`m13_f193f_prepare`, `fellow158`, autotune on, three runs each, the setting on against off; draws with the
+ubershader during the 20-second measurement / over the whole process): Stress Lab 1, 1, 1 / 65-119 against 118-289 /
+230-462; Lights Lab 0, 0, 0 / 36-53 against 15-19 / 63-66; PBR Lab 17-49 / 65-138 against 57-174 / 131-327. Evaluations
+started after 6-46 frames of preparation, no timeout; the evaluation frames 0064 leaves out 0-20 per run against 0-70.
+Frame time within the runs' spread (off against on: Stress Lab +1.6 %, Lights Lab 0.0 %, PBR Lab −0.9 %, p ≥ 0.27).
 
 ## Decision
 
-(pending the RTX measurement)
+**KEEP, on.** Exact; autotune's evaluations of pipeline bits no longer draw with the ubershader while they measure
+(Stress Lab 118-289 → 1 draw per measurement, Lights Lab 15-19 → 0), and fewer of their frames are left out.
