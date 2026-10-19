@@ -121,7 +121,17 @@ that won the frame's rebuild of that entry sets it (the reader either returns, r
 in the same parallel section, or loses the exchange and returns). Stress Lab does not fit in the container's memory
 under TSAN.
 
-## 6. Tooling
+## 6. Autotune without ubershader frames in its evaluations (0068, measuring)
+
+An evaluation of a tunable that is a pipeline bit (the shadow pyramids, light tile culling, persistent instance data)
+is now prepared: for a few frames the passes request, for each pipeline they bind, the one with that bit the other way,
+and the evaluation starts once a frame finds them all compiled. lavapipe, perf runs with a shortened schedule: draws
+with the ubershader during the measurement PBR Lab 73 → 13, Lights Lab 10 → 1, City Lab 4 → 1; the evaluation frames
+0064 had to leave out 8 → 2 (PBR Lab); 2-9 frames of preparation, no timeout; the same images. What remains are
+materials that come into view during an evaluation. (to measure on the RTX: Stress Lab's compilations during the
+finals' measurement)
+
+## 7. Tooling
 
 * The bench: `--fellow_frames_keys` chooses the FellowEngine counters recorded per frame (with `--fellow_frames=1`);
   `--max_fps` paces the main thread (diagnostics only: the runner's `--fixed-fps` disables the engine's own cap).
@@ -130,6 +140,6 @@ under TSAN.
   (the textures created without data with a creation index in [a, b) cleared when created: bisects a read of memory
   never written, with lavapipe's `LVP_POISON_MEMORY=1`), `FELLOW_DEBUG_TEXTURE_LOG=1`, `FELLOW_DEBUG_FORCE_UBERSHADER=1`.
 
-## 7. Next
+## 8. Next
 
 (pending)
