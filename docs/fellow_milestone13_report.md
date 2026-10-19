@@ -121,6 +121,18 @@ that won the frame's rebuild of that entry sets it (the reader either returns, r
 in the same parallel section, or loses the exchange and returns). Stress Lab does not fit in the container's memory
 under TSAN.
 
+A second TSAN build records the labs' lists in parallel too (the thresholds lowered under `TSAN_ENABLED` only: City Lab
+458 lists in 1374 segments, PBR Lab 670, Foliage Lab 474), with cluster LOD and async compute emulated. One more race
+in the engine, in stock's code: `MeshStorage::_multimesh_get_motion_vectors_offsets` stored the previous offset (equal to
+the current one while a MultiMesh's motion vectors are not in use) from every recording thread at once. The store made
+no difference (every other read of that offset follows a change of the motion vectors, which sets it); it now returns
+the same offsets without storing (`c006f10`).
+
+On lavapipe, Foliage Lab's warm sequence is not the same between runs of one build (31-39 dB, the whole frame): the
+bench waits after the warm pass until 30 frames have compiled nothing, so the number of frames before the captured run
+(and with it TAA's jitter phase) depends on when the last compilation ends. On the RTX the compilations end within the
+warm pass (the floors are 67-82 dB, not 31-39): not a source of them.
+
 ## 6. Fewer compilations while running (0068, 0069, measuring)
 
 An evaluation of a tunable that is a pipeline bit (the shadow pyramids, light tile culling, persistent instance data)
