@@ -86,12 +86,18 @@ combine them with, and those frames draw with the ubershader. Compiling the othe
 removed: its low-priority tasks hung the engine's exit on lavapipe, and at normal priority they compete with the
 compilations the frame needs. For exactness checks, autotune off.
 
-## 5. Tooling
+## 5. Synchronization
+
+Vulkan synchronization validation (lavapipe, 480 × 270, captures) with `fellow157`'s defaults, async compute emulated
+on a second queue family and cluster LOD on: Lights Lab, PBR Lab, City Lab (SSIL and SSR on), Foliage Lab, Stress Lab
+and Blend Lab, 0 hazards.
+
+## 6. Tooling
 
 * The bench: `--fellow_frames_keys` chooses the FellowEngine counters recorded per frame (with `--fellow_frames=1`);
   `--max_fps` paces the main thread (diagnostics only: the runner's `--fixed-fps` disables the engine's own cap).
 * `.tools/scripts/spikes.py`, `spikes_frames.py`.
 
-## 6. Next
+## 7. Next
 
 (pending)
