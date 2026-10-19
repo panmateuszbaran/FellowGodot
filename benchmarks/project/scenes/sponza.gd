@@ -17,7 +17,8 @@ func build(p_args: Dictionary) -> void:
 	bench_name = "sponza"
 	_setup_common()
 	begin_content()
-	var parts: PackedStringArray = str(args.get("parts", "main,curtains,ivy,trees")).split(",", false)
+	# --parts=a,b or a+b (the runner's --builds list is comma-separated)
+	var parts: PackedStringArray = str(args.get("parts", "main,curtains,ivy,trees")).replace("+", ",").split(",", false)
 	for p in parts:
 		if PARTS.has(p):
 			load_part(PARTS[p])
