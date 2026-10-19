@@ -631,7 +631,11 @@ private:
 		uint32_t motion_at = 0;
 		uint32_t record_at = 0;
 	};
+#ifdef TSAN_ENABLED
+	static constexpr uint32_t FELLOW_PARALLEL_LIST_MIN = 64; // ThreadSanitizer builds: the labs' small lists in parallel too
+#else
 	static constexpr uint32_t FELLOW_PARALLEL_LIST_MIN = 1024; // fewer instances or elements: single-threaded
+#endif
 	static constexpr uint32_t FELLOW_PARALLEL_LIST_CHUNK = 256; // instances or elements per worker range
 	struct FellowInstanceDataJob {
 		RenderListType render_list = RENDER_LIST_OPAQUE;
@@ -661,7 +665,11 @@ private:
 	void _fellow_run_scan(uint32_t p_chunk); // first start and starts of a range (after its join bytes are written)
 	void _fellow_runs(uint32_t p_end, uint32_t p_max_helpers); // run ends, then the repeats by worker ranges
 	void _fellow_runs_chunk(uint32_t p_chunk, void *p_unused);
+#ifdef TSAN_ENABLED
+	static constexpr uint32_t FELLOW_PARALLEL_SORT_MIN = 256; // ThreadSanitizer builds
+#else
 	static constexpr uint32_t FELLOW_PARALLEL_SORT_MIN = 4096; // fewer elements: single-threaded sort
+#endif
 	static constexpr uint32_t FELLOW_PARALLEL_SORT_GRAIN = 1024; // ranges up to this size are sorted by one worker
 
 	template <bool t_records>

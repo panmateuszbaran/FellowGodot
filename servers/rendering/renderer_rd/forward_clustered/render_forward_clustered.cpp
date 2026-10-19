@@ -958,8 +958,14 @@ void RenderForwardClustered::_render_list(RenderingDevice::DrawListID p_draw_lis
 
 // Parallel recording: lists from this many draws (runs of repeated elements count once), at least this many draws
 // per segment (and at most cpu/recording_segments_per_thread segments per thread). City Lab's instanced lists have thousands of elements in a few hundred draws: they stay serial.
+#ifdef TSAN_ENABLED
+// ThreadSanitizer builds: the labs' lists recorded in parallel too.
+static constexpr uint32_t FELLOW_RECORD_MIN_DRAWS = 32;
+static constexpr uint32_t FELLOW_RECORD_SEGMENT_DRAWS = 8;
+#else
 static constexpr uint32_t FELLOW_RECORD_MIN_DRAWS = 384;
 static constexpr uint32_t FELLOW_RECORD_SEGMENT_DRAWS = 64;
+#endif
 
 bool RenderForwardClustered::_fellow_render_list_parallel(RenderingDevice::DrawListID p_draw_list, RenderingDevice::FramebufferFormatID p_framebuffer_Format, RenderListParameters *p_params, uint32_t p_from_element, uint32_t p_to_element) {
 	if (p_to_element <= p_from_element || p_to_element - p_from_element < FELLOW_RECORD_MIN_DRAWS || fellow_parallel == nullptr || p_params->element_info == nullptr) {
