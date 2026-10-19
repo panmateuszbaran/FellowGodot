@@ -161,6 +161,7 @@ void FellowParallelFor::run(uint32_t p_count, Func p_func, void *p_userdata, uin
 void FellowParallelFor::_run_hot(uint32_t p_count, Func p_func, void *p_userdata, uint32_t p_max_helpers) {
 	hot_linger.store(linger_usec, std::memory_order_relaxed);
 	hot_wait_mode.store(Fellow::cpu_hot_workers_wait(), std::memory_order_relaxed);
+	hot_yield.store(Fellow::cpu_hot_workers_yield(), std::memory_order_relaxed);
 	hot_keepalive.store(OS::get_singleton()->get_ticks_usec(), std::memory_order_relaxed);
 	if (p_count == 1) {
 		p_func(p_userdata, 0);
@@ -223,6 +224,7 @@ void FellowParallelFor::begin_async(uint32_t p_count, Func p_func, void *p_userd
 		async_hot = true;
 		hot_linger.store(linger_usec, std::memory_order_relaxed);
 		hot_wait_mode.store(Fellow::cpu_hot_workers_wait(), std::memory_order_relaxed);
+		hot_yield.store(Fellow::cpu_hot_workers_yield(), std::memory_order_relaxed);
 		hot_keepalive.store(OS::get_singleton()->get_ticks_usec(), std::memory_order_relaxed);
 		// Published as in _run_hot().
 		hot_count.store(p_count, std::memory_order_relaxed);
@@ -311,6 +313,7 @@ void FellowParallelFor::prewarm(uint32_t p_helpers) {
 	}
 	hot_linger.store(linger_usec, std::memory_order_relaxed);
 	hot_wait_mode.store(Fellow::cpu_hot_workers_wait(), std::memory_order_relaxed);
+	hot_yield.store(Fellow::cpu_hot_workers_yield(), std::memory_order_relaxed);
 	hot_keepalive.store(OS::get_singleton()->get_ticks_usec(), std::memory_order_relaxed);
 	_hot_post(MIN(p_helpers, (uint32_t)WorkerThreadPool::get_singleton()->get_thread_count()));
 }
@@ -343,6 +346,7 @@ void FellowParallelFor::_hot_helper(void *p_self, uint32_t p_index) {
 	uint64_t last_work = OS::get_singleton()->get_ticks_usec();
 	uint32_t idle = 0;
 	uint64_t waits = 0;
+	uint64_t yields = 0;
 	while (!self->hot_exit.load(std::memory_order_acquire)) {
 		uint64_t state = self->hot_state.load(std::memory_order_acquire);
 		const uint32_t index = uint32_t(state & HOT_INDEX_MASK);
@@ -372,6 +376,11 @@ void FellowParallelFor::_hot_helper(void *p_self, uint32_t p_index) {
 			continue;
 		}
 		idle = 0;
+		if (self->hot_yield.load(std::memory_order_relaxed)) {
+			// cpu/hot_workers_yield (decision 0065): a thread waiting for this core runs now, not after a quantum.
+			std::this_thread::yield();
+			yields++;
+		}
 		const uint64_t now = OS::get_singleton()->get_ticks_usec();
 		if (last_work == 0) {
 			last_work = now;
@@ -383,6 +392,9 @@ void FellowParallelFor::_hot_helper(void *p_self, uint32_t p_index) {
 	}
 	if (waits > 0) {
 		Fellow::stats().cpu_hot_waits.add(waits);
+	}
+	if (yields > 0) {
+		Fellow::stats().cpu_hot_yields.add(yields);
 	}
 	self->hot_alive.fetch_sub(1, std::memory_order_acq_rel);
 }

@@ -810,6 +810,14 @@ inline int cpu_hot_workers_usec() {
 inline int cpu_hot_workers_wait() {
 	return CLAMP(GLOBAL_GET_CACHED(int, "rendering/fellow/cpu/hot_workers_wait"), 0, 2);
 }
+// An idle hot worker gives its core to any other thread ready to run on it (SwitchToThread / sched_yield) every 64
+// pauses (about every 2-5 µs; decision 0065). Without it, in a CPU-bound frame of 2 ms the ten hot workers spin through
+// the whole frame and a thread that the presentation needs can wait a scheduler quantum for a core: City Lab's frames
+// of 16-45 ms (m13_f186, m13_f188: each one vkQueuePresentKHR call; none with the hot workers not spinning). Never
+// changes results.
+inline bool cpu_hot_workers_yield() {
+	return GLOBAL_GET_CACHED(bool, "rendering/fellow/cpu/hot_workers_yield");
+}
 // The main RenderingDevice reports, once per frame, how long the render thread waited for an earlier frame's fence and
 // the time since the previous report (gate of the hot workers).
 void frame_gpu_wait_report(uint64_t p_wait_usec, uint64_t p_frame_usec);
@@ -1008,6 +1016,7 @@ struct Stats {
 	SafeNumeric<uint64_t> autotune_off_frames; // frames x tunables that ran with the optimization off
 	SafeNumeric<uint64_t> autotune_tainted_frames; // evaluation frames not counted: a pipeline or shader was still being created
 	SafeNumeric<uint64_t> cpu_hot_waits; // low-power waits of idle hot workers (cpu/hot_workers_wait, CPUs with WAITPKG)
+	SafeNumeric<uint64_t> cpu_hot_yields; // idle hot workers' yields of their core (cpu/hot_workers_yield)
 };
 
 Stats &stats();
