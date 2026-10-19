@@ -1801,10 +1801,10 @@ void MeshStorage::_multimesh_get_motion_vectors_offsets(RID p_multimesh, uint32_
 	MultiMesh *multimesh = multimesh_owner.get_or_null(p_multimesh);
 	ERR_FAIL_NULL(multimesh);
 	r_current_offset = multimesh->motion_vectors_current_offset;
-	if (!_multimesh_uses_motion_vectors(multimesh)) {
-		multimesh->motion_vectors_previous_offset = multimesh->motion_vectors_current_offset;
-	}
-	r_prev_offset = multimesh->motion_vectors_previous_offset;
+	// FellowEngine: the same offsets, read only. Stock stored previous = current here while the motion vectors are not in
+	// use; every other read of the previous offset follows a change of the motion vectors, which sets it, so the store
+	// made no difference. The render lists recorded in parallel (decision 0018) call this from several threads at once.
+	r_prev_offset = _multimesh_uses_motion_vectors(multimesh) ? multimesh->motion_vectors_previous_offset : multimesh->motion_vectors_current_offset;
 }
 
 bool MeshStorage::_multimesh_uses_motion_vectors_offsets(RID p_multimesh) {
