@@ -94,7 +94,9 @@ as often (stock has no counters; its frame times show 0-1 such frames per run).
 render thread 5, 0, 0, 0, 0; no hot workers 1, 0, 0, 1, 0; stock 1, 0, 1, 0, 1. The few left fall in the first run
 after the heat soak (the one whose render thread waited on the GPU for 1.3-2.0 s) in every FellowEngine variant, and
 stock has as many: not FellowEngine's. 1 % low 292-333 fps (defaults) against stock's 209-226. Presenting on the render
-thread was faster between processes (−2.9 %, 5 of 5 pairs, p 0.054): measured in one process next (`m14_f208`).
+thread was faster between processes (−2.9 %, 5 of 5 pairs, p 0.054); in one process (`m14_f208_present_ab`, blocks of
+30 frames, autotune off) it is not: City Lab +0.7 % (p 0.008, 240 block pairs), Bistro exterior, Lights Lab and Sponza
+0.0 / 0.0 / −0.1 % (n.s.). The present thread stays on.
 
 ## 6. Next
 
