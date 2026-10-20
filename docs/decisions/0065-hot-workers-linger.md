@@ -68,4 +68,5 @@ Which thread runs a chunk changes, never what a chunk does: exact.
 
 **KEEP: linger 30 µs by default.** City Lab's 1 % low goes from 56-254 to 325-358 fps (stock 212-239) with its mean
 frame between processes unchanged (in one process +7 %); Stress Lab −5 %; nothing changes where the GPU is the limit.
-Confirmed in the milestone 13 final (`m13_f193`).
+Confirmed in the milestone 13 final (`m13_f199_final`): City Lab 1 % low 340-382 fps (milestone 12's build 44-46,
+stock 244-260), no frame over 6 ms, mean frame −10.4 % against milestone 12.

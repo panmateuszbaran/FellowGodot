@@ -92,4 +92,5 @@ up). Against stock FellowEngine stays at milestone 1's TAA look change (39.6-49.
 ## Decision
 
 **KEEP, both on.** They make the screen-space effects' output defined: no texel read that no pass wrote, no texel
-written by racing stores. The cost is a comparison per invocation (the frame times of the final, milestone 13).
+written by racing stores. The cost is a comparison per invocation: in milestone 13's final (`m13_f199_final`) the GPU-bound scenes are within
+their spread of milestone 12's build (Sponza +0.3 %, Bistro exterior −0.1 %, Bistro interior 0.0 %, n.s.).

@@ -1,12 +1,47 @@
 # FellowEngine — milestone 13 report (frame pacing, LOD of large surfaces, run-to-run floors)
 
-Status: **DRAFT** (`fellow152`-). Branch `fellow/geometry`. Benchmark machine as before (Acer Predator PHN16S-71, Core
-Ultra 9 275HX, RTX 5070 Ti Laptop GPU, NVIDIA GPU only, Windows 11, 1920×1080, "high" preset). Decision records
-`docs/decisions/0063`-; user-facing summary `docs/FELLOWENGINE_OPTIONS.md`.
+Status: **FINAL** (`fellow152`-`fellow158`; final measurement `m13_f199_final`, 2026-10-20). Branch `fellow/geometry`.
+Benchmark machine as before (Acer Predator PHN16S-71, Core Ultra 9 275HX, RTX 5070 Ti Laptop GPU, NVIDIA GPU only,
+Windows 11, 1920×1080, "high" preset). Decision records `docs/decisions/0063`-`0069` (`0070` started); user-facing
+summary `docs/FELLOWENGINE_OPTIONS.md`.
 
 ## 0. Result
 
-(pending)
+Between processes (`m13_f199_final`, 3 runs per build, frame time, 1080p "high"; `fellow153` is milestone 12's final
+build, `fellow158` this one's, both with their defaults):
+
+| scene | stock (ms) | m12 | **m13** | m13 against m12 | m13 with the visually lossless options |
+|---|---:|---:|---:|---:|---:|
+| Sponza | 13.61 | 6.37 (−53.2 %) | **6.39 (−53.1 %)** | +0.3 % (n.s.) | 6.13 (−54.9 %) |
+| Bistro exterior | 6.55 | 4.46 (−31.9 %) | **4.45 (−32.0 %)** | −0.1 % (n.s.) | 4.24 (−35.3 %) |
+| City Lab | 2.84 | 2.16 (−23.9 %) | **1.94 (−31.8 %)** | **−10.4 %** (p 0.014) | 1.98 (−30.1 %) |
+| Lights Lab | 3.09 | 2.37 (−23.3 %) | **2.34 (−24.0 %)** | −1.0 % (n.s.) | 1.85 (−40.1 %) |
+| Bistro interior | 4.32 | 3.36 (−22.3 %) | **3.36 (−22.3 %)** | 0.0 % (n.s.) | 3.13 (−27.7 %) |
+| PBR Lab | 2.65 | 2.21 (−16.6 %) | **2.17 (−18.1 %)** | −1.8 % (n.s.) | 2.00 (−24.6 %) |
+| Foliage Lab | 3.66 | 3.01 (−17.6 %) | **3.03 (−17.2 %)** | +0.5 % (n.s.) | 2.99 (−18.4 %) |
+| Stress Lab | 5.07 | 4.68 (−7.7 %) | **4.50 (−11.1 %)** | −3.7 % (n.s.) | 4.36 (−13.9 %) |
+
+Foliage Lab with one MultiMesh per type: 10.54 → 4.91 ms (−53.4 %, `m13_f199_foliage_single`).
+
+What this milestone changed is not the mean frame of the GPU-bound scenes but three things around it:
+
+* **Frame pacing (0065).** City Lab's frames of 16-52 ms are gone: 1 % low 340-382 fps against milestone 12's 44-46
+  (198-222 frames over 6 ms per run, now 0) and stock's 244-260; its mean frame −10.4 % against m12. The hot workers
+  no longer spin through a CPU-bound frame (section 3). Stress Lab 1 % low 130-154 fps (m12 80-147, stock 143-152).
+* **Bit-for-bit runs (0067).** Two runs of FellowEngine give the same 60-frame sequences bit for bit in Bistro
+  interior, PBR Lab and Sponza; two runs of stock differ at 69-82 dB (section 4). The floors were two reads in stock's
+  SSAO/SSIL code: a column never written at widths such as 1920 and texels written by racing stores. Every default is
+  exact on lavapipe against its absence (151 comparisons, the three documented differences only; section 5).
+* **No ubershader during autotune's evaluations (0068, 0069).** Stress Lab 118-289 draws on the ubershader per
+  measurement → 1, Lights Lab 15-19 → 0, PBR Lab 57-174 → 17-49 (section 6).
+
+Load to the first frame against stock (the same runs): Lights Lab 264 → 86 ms (−67 %), Stress Lab 478 → 200 (−58 %),
+PBR Lab 754 → 418 (−45 %), Bistro interior 1820 → 1179 (−35 %), City Lab 450 → 308 (−32 %), Foliage Lab 776 → 620
+(−20 %), Bistro exterior 3652 → 3110 (−15 %), Sponza 3622 → 3240 (−11 %); the first frame 59-244 ms against stock's
+228-801.
+
+Large surfaces at the LOD of their parts (0063, an option, off: it changes the image as LOD does) now cost Sponza's
+render thread 0.10 ms for −2.8 % of GPU time (section 2).
 
 ## 1. The question
 
@@ -126,7 +161,7 @@ of each build against each other):**
 
 The floors were 0067's two reads: with the interleave's last column written and one store per depth-mip texel, two
 runs of FellowEngine give the same 60 frames bit for bit in three of the four scenes, where stock's own runs differ
-(69-82 dB). Lights Lab keeps a few pixels (its reflection probes' atlas is read where no pass wrote, see section 8 and
+(69-82 dB). Lights Lab keeps a few pixels (its reflection probes' atlas is read where no pass wrote, see section 9 and
 0070). What 0067 changes at 1920 × 1080 against the same build without it: 53.7-60.2 dB on the sequences (max |d| 74-174
 in 0.04-0.18 % of the pixels: the last column and SSAO close up); against stock FellowEngine stays at its milestone-1
 look change (TAA v2: 39.6-49.4 dB, with or without 0067).
@@ -187,7 +222,7 @@ max |d| 5; City Lab 1 pixel, 2 — the cached cascade's 16-bit depth rounded onc
 `lights/cluster_depth_slices` (Lights Lab 1 pixel, 1 — 0008). `taa_resolve_v2` (the look change of milestone 1) and
 the options that are off are not part of it.
 
-## 6. Fewer compilations while running (0068, 0069, measuring)
+## 6. Fewer compilations while running (0068, 0069, KEEP)
 
 An evaluation of a tunable that is a pipeline bit (the shadow pyramids, light tile culling, persistent instance data)
 is now prepared: for a few frames the passes request, for each pipeline they bind, the one with that bit the other way,
@@ -227,25 +262,37 @@ the colour passes: lavapipe 0 differing pixels in four labs; Stress Lab over a r
   mode `repeat`), ThreadSanitizer summaries. Temporal mode aligns TAA's jitter phase before its pre-roll
   (`--align_jitter`, on) and records `frames_drawn_at_preroll`.
 
-## 8. Next
+## 8. Where the GPU time goes now (`m13_f194`, `fellow158`)
 
-Measured on the RTX when the machine is free (staged: `f193f` builds `fellow158` from `460c752`; then `f194`, `f195b`,
-`f199`):
+Pass timestamps, autotune and async compute off (the passes one after another), one run per scene at 1920 × 1080:
 
-* `m13_f193f_floor_0067`: two runs of stock, of `fellow158` and of `fellow158` without 0067 against each other on the
-  warm sequences (do the floors rise without the racing stores and the unwritten column?), and what 0067 changes against
-  stock at 1920 × 1080.
-* `m13_f193f_prepare`: Stress Lab, Lights Lab and PBR Lab with autotune on — 0068 and 0069 on, 0068 off, 0069 off:
-  pipelines compiled and draws on the ubershader during the measurement, frame time.
-* `m13_f193f_clod_ab`: cluster LOD with one walk per camera render (0063): the render thread's cost in Sponza.
-* `m13_f194`: where the GPU time goes (Sponza's transparent pass at three resolutions and without the trees).
-* `m13_f195b`: two runs against each other with each area of FellowEngine off (the floors' source).
-* `m13_f199_final`: stock, `fellow153` (m12), `fellow158`, `fellow158` with the visually lossless options.
+| scene | GPU | opaque | depth pre-pass | transparent | SSAO | shadows | TAA | tone mapping |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Sponza | 6.40 | 1.70 | 1.31 | 0.92 | 0.40 | 0.34 | 0.24 | 0.13 |
+| Bistro exterior | 4.53 | 1.48 | 0.75 | — | 0.39 | 0.35 | 0.24 | 0.12 |
+| Stress Lab | 4.63 | 1.45 | 0.22 | 0.25 | 0.40 | 0.86 | 0.22 | 0.13 |
+| Foliage Lab | 3.29 | 0.87 | 0.54 | — | 0.35 | 0.77 | 0.24 | 0.12 |
+| Bistro interior | 3.23 | 1.17 | 0.17 | 0.17 | 0.37 | — | 0.24 | 0.13 |
+| PBR Lab | 2.36 | 0.75 | 0.11 | 0.08 | 0.34 | 0.25 | 0.24 | 0.11 |
+| Lights Lab | 2.25 | 0.89 | 0.04 | — | 0.37 | — | 0.24 | 0.12 |
+| City Lab | 1.60 | 0.38 | 0.12 | — | 0.33 | 0.09 | 0.20 | 0.11 |
 
-Open (reads of memory never written, lavapipe, both in stock's code and both small):
-* a positional shadow lookup outside the atlas texels written (one pixel of 1 level at a shadow's tip in PBR Lab);
-* the reflection probes' octahedral atlas (Godot 4.7's `reflection_atlas`, 768 × 768 × 64 layers, 8 mips): Lights Lab
-  at 1366 × 768 after 200 frames, 11 pixels of 1 level with FellowEngine disabled, 258 pixels of up to 6 levels with it
-  (FellowEngine's post-processing off: 11 pixels again — its TAA, a look change since milestone 1, carries the
-  difference into more pixels); bisected to that texture (clearing it at creation
-  removes it), not yet to a pass. Fresh allocations are zero on most GPUs; a reused one would show its content there.
+(ms; "shadows" is FellowEngine's shadow region, "—" under 0.03 ms.) Sponza at 960 × 540 / 2560 × 1440: 2.82 / 9.60 ms,
+the depth pre-pass 0.58 / 1.82 ms and the transparent pass 0.39 / 1.43 ms — both scale with the pixels, not only with
+the triangles. Without its cypress trees Sponza takes 5.08 ms: the trees cost 1.33 ms (transparent pass 0.92 → 0.11,
+pre-pass 1.31 → 0.94, opaque 1.70 → 1.51). Their leaves are alpha-blended (1.35 million triangles) and, like the ivy
+and the curtains, double-sided (the glTF materials): culling clusters that face away would not reach them. SSAO
+(0.33-0.40 ms) and TAA (0.20-0.24 ms) are a fixed cost in every scene, a fifth of City Lab's GPU frame.
+
+## 9. Next
+
+* **0070, textures cleared before their first use** (`fellow159`, off while measured; `m13_f200` queued): the last two
+  reads of memory no pass wrote that lavapipe finds in the labs, both in stock's code — the reflection probes' atlas
+  (Lights Lab at 1366 × 768: 743 summed levels with poisoned allocations) and the positional shadow atlas at a shadow's
+  tip (PBR Lab) — read zero with it; no capture changes with poisoned allocations at 480 × 270, 1366 × 768 or
+  1920 × 1080; on against off without poison bit for bit. To measure: Lights Lab's floor (102.5 dB) with it, the load
+  and frame times.
+* The opaque pass remains the largest pass everywhere; SSAO, TAA and tone mapping are the fixed cost of the light
+  scenes; Sponza's trees are a fifth of its frame.
+* City Lab is limited by the CPU: the bench runs Godot's default thread model ("Safe"), so the scene's update (300
+  carts moved by script) and the rendering are one thread's frame.
