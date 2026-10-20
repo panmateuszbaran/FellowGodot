@@ -66,4 +66,16 @@ work.
 
 ## 5. Next
 
-(pending)
+What milestone 13's breakdown (`m13_f194`) leaves, and what each direction would take:
+
+* **The opaque pass** is the largest pass in every scene (0.38-1.70 ms); in the light scenes the positional lights are
+  61-76 % of it (0043). The exact levers tried on the light loop since milestone 8 (prefetching, hot fields, register
+  budgets) cost registers and lost; light tile culling (0049) is what worked. Next exact candidates need the shaders'
+  own profile (which instructions stall), not more blind variants.
+* **The geometry passes** of Sponza (depth pre-pass 1.31 ms, transparent 0.92 ms): its heavy meshes (ivy, curtains,
+  trees) are double-sided, so back-facing clusters cannot be culled; per-cluster LOD (0063) is the lever and changes
+  the image (an option).
+* **The fixed post-processing cost** (SSAO 0.33-0.40 ms, TAA 0.20-0.24, tone mapping 0.11-0.13): exact work on SSAO
+  found nothing in milestones 5-9; the visually lossless options (temporal SSAO/SSIL) already halve it where a project
+  turns them on.
+* **The main thread**: the separate render thread (section 4) where a project's main thread works.
