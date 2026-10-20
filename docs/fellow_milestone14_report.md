@@ -70,7 +70,18 @@ both with the separate thread: City Lab and PBR Lab **0 differing pixels**. Safe
 whole frame (PBR Lab 48-57 dB, max |d| 92), and the same with FellowEngine disabled (max |d| 101): the thread model's
 (likely which frame the bench's capture reads; not investigated further), not FellowEngine's.
 
-## 5. Next
+## 5. City Lab's frames over 6 ms, again (`m14_f205`)
+
+`m13_f199_final` had none in three runs of `fellow158`; `m14_f204` had 67 in one of three of `fellow160`. Five runs of
+`fellow160` with per-frame counters (`m14_f205_city_spikes`): 3, 1, 16, 0, 0 frames over 6 ms (1 % low 315, 362, 189,
+330, 334 fps); five of stock: 0, 0, 0, 1, 0 (209-242 fps). Every one is a single `vkQueuePresentKHR` of 5-31 ms on the
+present thread, which the render thread then waits for — the same call as milestone 13's, but now in the runs whose
+render thread waited on the GPU's fences for 1.0-1.7 s (runs limited by the GPU at times), not in the runs limited by
+the CPU (fence waits 0.06 s: none). Open: why the presentation of this hybrid laptop (the panel on the integrated GPU)
+blocks in those runs — whether the hot workers or the present thread play a part, and whether stock's present blocks
+as often (stock has no counters; its frame times show 0-1 such frames per run).
+
+## 6. Next
 
 What milestone 13's breakdown (`m13_f194`) leaves, and what each direction would take:
 
