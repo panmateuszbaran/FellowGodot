@@ -1,6 +1,6 @@
 # 0071 — The positional shadow atlas's reallocation tolerance in simulated time at a fixed frame rate
 
-Status: **MEASURING** (on in `fellow160`) · Branch `fellow/geometry` · Setting
+Status: **KEEP** (on from `fellow160`) · Branch `fellow/geometry` · Setting
 `rendering/fellow/shadows/atlas_simulated_time` (on) · Code: `light_storage.cpp` (`shadow_atlas_update_light`),
 `fellow_settings.*` (`shadow_atlas_tick_msec`), `core/config/engine.h`, `main/main.cpp`.
 
@@ -36,9 +36,20 @@ simulated rate (a game at 60 fps with `--fixed-fps 60`); where they are drawn fa
 
 ## Verification
 
-(to measure — lavapipe: no difference at a free frame rate; RTX: Lights Lab's warm sequence, three runs, bit for bit
-with it and not without it; the other floors unchanged)
+RTX (`m14_f203_floor_0071`, `fellow160`, autotune off, `m13_f180`'s warm sequences at 1920 × 1080):
+
+| | Bistro interior | PBR Lab | Sponza | Lights Lab |
+|---|---|---|---|---|
+| three runs with it, in pairs | bit for bit (3 of 3) | bit for bit (3 of 3) | bit for bit (3 of 3) | **bit for bit (3 of 3)** |
+| two runs without it | bit for bit | bit for bit | bit for bit | max \|d\| 3 |
+| without against with | bit for bit | bit for bit | bit for bit | max \|d\| 3 (95.0 dB worst frame) |
+| `fellow158` (milestone 13) against `fellow160` | bit for bit | bit for bit | bit for bit | max \|d\| 2 |
+
+With 0067, 0070 and 0071 two runs of FellowEngine render the same frames bit for bit in all four scenes; stock's two
+runs differ at 69-98 dB (`m13_f193f_floor_0067`). What changes against milestone 13's build is the run-dependent part
+only (Lights Lab's few pixels).
 
 ## Decision
 
-(pending)
+**KEEP, on.** At a fixed frame rate the shadow atlas's decisions follow the scene's time, as every other part of
+the frame does; at a free frame rate nothing changes.
