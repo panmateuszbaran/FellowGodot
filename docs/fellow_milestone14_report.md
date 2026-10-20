@@ -90,6 +90,12 @@ the CPU (fence waits 0.06 s: none). Open: why the presentation of this hybrid la
 blocks in those runs — whether the hot workers or the present thread play a part, and whether stock's present blocks
 as often (stock has no counters; its frame times show 0-1 such frames per run).
 
+`m14_f207_city_present` (five runs each, interleaved): the defaults 2, 0, 0, 0, 0 frames over 6 ms; presenting on the
+render thread 5, 0, 0, 0, 0; no hot workers 1, 0, 0, 1, 0; stock 1, 0, 1, 0, 1. The few left fall in the first run
+after the heat soak (the one whose render thread waited on the GPU for 1.3-2.0 s) in every FellowEngine variant, and
+stock has as many: not FellowEngine's. 1 % low 292-333 fps (defaults) against stock's 209-226. Presenting on the render
+thread was faster between processes (−2.9 %, 5 of 5 pairs, p 0.054): measured in one process next (`m14_f208`).
+
 ## 6. Next
 
 What milestone 13's breakdown (`m13_f194`) leaves, and what each direction would take:
