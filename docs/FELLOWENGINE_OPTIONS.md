@@ -12,8 +12,9 @@ kinds of options:
 
 Every option has a decision record in `docs/decisions/` with its measurements.
 
-**Determinism.** With the defaults, two runs of a scene at a fixed frame rate (`--fixed-fps`, Movie Maker mode) render
-the same frames bit for bit on the benchmark's RTX (0067, 0070, 0071; milestone 14), where stock's runs differ.
+**Determinism.** With the defaults and autotune off, two runs of a scene at a fixed frame rate (`--fixed-fps`, Movie
+Maker mode) render the same frames bit for bit on the benchmark's RTX (0067, 0070, 0071; milestone 14), where stock's
+runs differ. (With autotune on: measured in `m14_f206`.)
 
 **Godot's own setting worth measuring: the separate render thread** (`rendering/driver/threads/thread_model` =
 Separate, or `--render-thread separate`; experimental in Godot). With FellowEngine it shortens the frame where the main
