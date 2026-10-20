@@ -365,6 +365,7 @@ static uint32_t fellow_fallback_specializations(const SceneShaderForwardClustere
 template <RenderForwardClustered::PassMode p_pass_mode, uint32_t p_color_pass_flags>
 void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p_draw_list, RenderingDevice::FramebufferFormatID p_framebuffer_Format, RenderListParameters *p_params, uint32_t p_from_element, uint32_t p_to_element) {
 	const bool fellow_pipeline_fallback = Fellow::pipeline_fallback(); // decision 0059
+	const bool fellow_wait_pipelines = Fellow::frame_movie_wait_pipelines(); // decision 0072
 	const bool fellow_depth_keys = Fellow::depth_pipeline_keys(); // decision 0069
 	RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
 	RendererRD::ParticlesStorage *particles_storage = RendererRD::ParticlesStorage::get_singleton();
@@ -640,7 +641,9 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 						return;
 					}
 				} else {
-					pipeline_rd = shader->pipeline_hash_map.get_pipeline(pipeline_key, pipeline_hash, pipeline_key.ubershader, pipeline_source);
+					// Decision 0072: while Movie Maker writes, a draw waits for its specialized pipeline instead of drawing with the
+					// ubershader (the frames do not depend on the compile threads' timing).
+					pipeline_rd = shader->pipeline_hash_map.get_pipeline(pipeline_key, pipeline_hash, pipeline_key.ubershader || fellow_wait_pipelines, pipeline_source);
 				}
 
 				if (pipeline_rd.is_valid()) {

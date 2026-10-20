@@ -254,6 +254,10 @@ inline bool shadows_enabled() {
 // tolerance counts the simulated time (the renderer's frames at the fixed rate). At a free frame rate: the wall clock,
 // as stock.
 uint64_t shadow_atlas_tick_msec();
+// frame/movie_wait_pipelines (decision 0072): while Movie Maker mode writes a video (--write-movie), a 3D draw whose
+// specialized pipeline is not compiled yet waits for it instead of drawing with the ubershader, as the 2D renderer
+// always does. The recorded frames are drawn by the same pipelines on every run. Read every frame.
+bool frame_movie_wait_pipelines();
 
 // Directional shadow static cache (docs/decisions/0004-directional-shadow-cache.md): static casters of every
 // cascade are rendered into a cache with a guard band and only re-rendered when the cascade leaves the guard band,

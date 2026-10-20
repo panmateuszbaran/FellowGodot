@@ -55,6 +55,12 @@ machine: a draw whose pipeline is still compiling uses the ubershader, whose out
 is in the same position whenever a material is drawn for the first time. Not investigated further (the frames were
 deleted with the job's raw data).
 
+**Movie Maker mode (0072, KEEP).** A recording is a fixed frame rate too, and there the remaining timing-dependent
+part (a draw on the ubershader while its pipeline compiles) costs nothing to remove: Movie Maker mode does not run in
+real time. While a movie is written, a 3D draw now waits for its specialized pipeline, as Godot's 2D renderer always
+does. lavapipe, PBR Lab with pipelines still compiling: 0 draws on the ubershader (34 without), two recordings bit for
+bit in every frame.
+
 ## 4. The separate render thread, measured again (`m14_f204`)
 
 Godot's thread model "separate" (`--render-thread separate`, marked experimental) runs the scene's frame on the main
