@@ -64,6 +64,12 @@ rewritten in GDScript every frame), which now overlaps the rendering. A project 
 recorded in `docs/FELLOWENGINE_OPTIONS.md` as a measured recommendation for projects whose main thread does real
 work.
 
+lavapipe (captures, defaults, autotune off, demote diagnostics): two runs with the separate thread bit for bit (City
+Lab); FellowEngine's render-thread work (`cpu/*`, the present and submit threads, the parallel replay) off against on,
+both with the separate thread: City Lab and PBR Lab **0 differing pixels**. Safe against separate differs over the
+whole frame (PBR Lab 48-57 dB, max |d| 92), and the same with FellowEngine disabled (max |d| 101): the thread model's
+(likely which frame the bench's capture reads; not investigated further), not FellowEngine's.
+
 ## 5. Next
 
 What milestone 13's breakdown (`m13_f194`) leaves, and what each direction would take:
