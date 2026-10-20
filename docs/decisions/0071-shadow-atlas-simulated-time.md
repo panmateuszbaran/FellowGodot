@@ -45,6 +45,11 @@ RTX (`m14_f203_floor_0071`, `fellow160`, autotune off, `m13_f180`'s warm sequenc
 | without against with | bit for bit | bit for bit | bit for bit | max \|d\| 3 (95.0 dB worst frame) |
 | `fellow158` (milestone 13) against `fellow160` | bit for bit | bit for bit | bit for bit | max \|d\| 2 |
 
+lavapipe (480 × 270, the frames drawn far slower than 60 per second, so the wall clock lets a light change size
+after a few frames, the simulated time after 30), off against on: captures after 60 frames of settle PBR Lab and City
+Lab bit for bit, Lights Lab 2 pixels of 1 level (a shadow's size changed at another frame of the settle, TAA's
+history keeps a trace); Lights Lab's walk (60 frames) at most 1 level.
+
 With 0067, 0070 and 0071 two runs of FellowEngine render the same frames bit for bit in all four scenes; stock's two
 runs differ at 69-98 dB (`m13_f193f_floor_0067`). What changes against milestone 13's build is the run-dependent part
 only (Lights Lab's few pixels).
