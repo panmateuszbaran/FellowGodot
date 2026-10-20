@@ -46,6 +46,15 @@ milestone 13's `fellow158`: the three other scenes bit for bit, Lights Lab max |
 | FellowEngine, milestone 13 (`fellow158`) | bit for bit | bit for bit | bit for bit | 102.5 dB (3) |
 | **FellowEngine `fellow160`** | **bit for bit** | **bit for bit** | **bit for bit** | **bit for bit** |
 
+**With autotune on** (`m14_f206_floor_autotune`, the defaults, three runs in pairs): Bistro interior, PBR Lab and Lights
+Lab bit for bit in all three pairs; Sponza bit for bit in one pair, and its first run against the other two 80.7 dB
+(max |d| 3, every frame of the sequence) — the other two equal to the run with autotune off. In these runs autotune
+switched nothing (no evaluation started), but it prepared one (0068): 25 pipelines compiled during Sponza's captured
+sequence (6 in PBR Lab, none with autotune off). Compilation is the one part of the frame whose timing comes from the
+machine: a draw whose pipeline is still compiling uses the ubershader, whose output can differ in the last bits. Stock
+is in the same position whenever a material is drawn for the first time. Not investigated further (the frames were
+deleted with the job's raw data).
+
 ## 4. The separate render thread, measured again (`m14_f204`)
 
 Godot's thread model "separate" (`--render-thread separate`, marked experimental) runs the scene's frame on the main

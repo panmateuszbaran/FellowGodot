@@ -14,7 +14,9 @@ Every option has a decision record in `docs/decisions/` with its measurements.
 
 **Determinism.** With the defaults and autotune off, two runs of a scene at a fixed frame rate (`--fixed-fps`, Movie
 Maker mode) render the same frames bit for bit on the benchmark's RTX (0067, 0070, 0071; milestone 14), where stock's
-runs differ. (With autotune on: measured in `m14_f206`.)
+runs differ. With autotune on as well, except where a pipeline compiles while the frames are drawn (autotune prepares
+its evaluations by compiling pipelines): a draw on the ubershader then depends on the compile threads' timing, as in
+stock when a material is first drawn (`m14_f206`: 3 of 4 scenes bit for bit in every pair, Sponza in one of three).
 
 **Godot's own setting worth measuring: the separate render thread** (`rendering/driver/threads/thread_model` =
 Separate, or `--render-thread separate`; experimental in Godot). With FellowEngine it shortens the frame where the main
