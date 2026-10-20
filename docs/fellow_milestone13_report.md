@@ -65,7 +65,12 @@ What removes them (City Lab, four runs each unless noted):
 In one process (`m13_f189_ab`, autotune off) the yield costs City Lab 7.9 % of its mean frame and the hot workers off
 17.2 % (the spikes included); Bistro exterior and interior, limited by the GPU (the hot workers gated off), unchanged.
 
-(in progress: `m13_f191` — idle hot workers at the lowest thread priority; `m13_f192` — the linger in one process)
+Then (`m13_f191`, `m13_f192`, decision 0065): idle hot workers at the lowest thread priority 0-49 frames over 6 ms
+per run (1 % low 107-370 fps); a linger of 60 µs 0-112; **a linger of 30 µs 0-1 in eight runs (1 % low 325-358 fps)**.
+In one process (autotune off) 30 µs costs City Lab 7.0 % of its mean frame against 300 µs (the spikes counted in the
+means), no hot workers 13.4 %; Stress Lab, whose frame is limited by its script on the main thread, −5.3 %. Between
+processes City Lab's mean frame is unchanged (1.94-2.11 ms against 1.97-2.18). `cpu/hot_workers_usec` is 30 from
+`fellow156` (0065, KEEP).
 
 ## 4. The run-to-run floors
 
@@ -126,6 +131,22 @@ runs of FellowEngine give the same 60 frames bit for bit in three of the four sc
 in 0.04-0.18 % of the pixels: the last column and SSAO close up); against stock FellowEngine stays at its milestone-1
 look change (TAA v2: 39.6-49.4 dB, with or without 0067).
 
+Each area of FellowEngine off in turn (`m13_f195_floor_areas`, `fellow158`, autotune off, two runs against each other):
+
+| area off | Bistro interior | PBR Lab | Sponza |
+|---|---|---|---|
+| shadows | bit for bit | bit for bit | bit for bit |
+| geometry | bit for bit | bit for bit | bit for bit |
+| lights | bit for bit | bit for bit | 82.4 dB (max \|d\| 2) |
+| post-processing (0067 with it) | 69.2 dB (3) | 82.1 dB (3) | 80.3 dB (1) |
+| render-thread parallelism | bit for bit | bit for bit | bit for bit |
+
+With post-processing off the floors are stock's again; with the render thread's parallel work off nothing changes (it
+was never a source). Sponza with FellowEngine's light changes off is not bit for bit either (a few pixels of 1-2
+levels): stock's light path has a source of its own there that FellowEngine's (the cluster build of 0014 and 0051, the
+tile culling, the fields read early) does not — not identified further. Stress Lab with autotune on (`m13_f195_stress_compiles`):
+40-56 pipelines compiled during the measurement (0068's preparations) and one draw on the ubershader per run.
+
 ## 5. Synchronization
 
 Vulkan synchronization validation (lavapipe, 480 × 270, captures) with `fellow157`'s defaults, async compute emulated
@@ -154,6 +175,17 @@ when the last compilation ends (114 or 115 in three runs), and with them TAA's j
 until the frame number is a multiple of 16 before the pre-roll (`460c752`; three runs bit for bit). On the RTX the
 compilations end within the warm pass (the floors are 67-82 dB, not 31-39): not a source of them, but the jobs from
 `f193f` use the aligned bench.
+
+**Every default against its absence (lavapipe).** Each option on by default set to stock's value, one at a time,
+against the defaults (`fellow158`'s code, autotune off, the demote diagnostics, 480 × 270, 40 frames of settle, every
+fixed camera): PBR Lab (7), Lights Lab (4), City Lab (3) for 45 options — the shadow, geometry, light,
+post-processing, shading, render-thread and frame options, `glow_blur`, `absent_features_specialized`,
+`segment_barriers`, `hot_workers_usec`; Blend Lab (4) for the six that touch blended surfaces, fog and tone mapping;
+PBR Lab and City Lab with SSR, SSIL and auto exposure on for the five that touch them. Of 151 comparisons 148 are bit
+for bit; the three others are the two documented with their decisions: `shadows/directional_cache` (PBR Lab 5 pixels,
+max |d| 5; City Lab 1 pixel, 2 — the cached cascade's 16-bit depth rounded once more, 0004) and
+`lights/cluster_depth_slices` (Lights Lab 1 pixel, 1 — 0008). `taa_resolve_v2` (the look change of milestone 1) and
+the options that are off are not part of it.
 
 ## 6. Fewer compilations while running (0068, 0069, measuring)
 
