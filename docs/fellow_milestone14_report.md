@@ -87,6 +87,12 @@ whole frame (PBR Lab 48-57 dB, max |d| 92), and the same with FellowEngine disab
 three runs with the separate thread, autotune off): Bistro interior, PBR Lab, Sponza and Lights Lab **bit for bit in
 all three pairs**.
 
+ThreadSanitizer with the separate thread (a TSAN build of `fellow161`'s code on lavapipe: City Lab and Lights Lab
+captures, a short City Lab perf run): besides lavapipe's own reports, milestone 13's benign persistent-instance check
+(0022), two in stock (`redraw_request()`'s flag; `Engine::frames_drawn`, read by the render thread's culling while
+the main thread increments it) and one in 0071: the main thread wrote the fixed frame rate to `Engine` every
+iteration while the render thread read it; it is written only when it changes now (`1f6e2b4`).
+
 ## 5. City Lab's frames over 6 ms, again (`m14_f205`)
 
 `m13_f199_final` had none in three runs of `fellow158`; `m14_f204` had 67 in one of three of `fellow160`. Five runs of
