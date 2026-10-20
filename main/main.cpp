@@ -4928,6 +4928,7 @@ bool Main::iteration() {
 	Engine::get_singleton()->_frame_ticks = ticks;
 	main_timer_sync.set_cpu_ticks_usec(ticks);
 	main_timer_sync.set_fixed_fps(fixed_fps);
+	Engine::get_singleton()->_fellow_fixed_fps = fixed_fps; // FellowEngine (decision 0071)
 
 	const uint64_t ticks_elapsed = ticks - last_ticks;
 

@@ -247,6 +247,13 @@ inline bool fluid_enabled() {
 inline bool shadows_enabled() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/shadows/enabled");
 }
+// shadows/atlas_simulated_time (decision 0071): the positional shadow atlas moves a light to a quadrant of another
+// size only 500 ms after its last allocation (stock's shadow_atlas_realloc_tolerance_msec), measured on the wall clock.
+// When the main loop simulates a fixed frame rate (--fixed-fps, Movie Maker mode) the frames are not drawn at that
+// rate, so which frame reallocates depended on how fast the machine drew the frames before it; with this setting the
+// tolerance counts the simulated time (the renderer's frames at the fixed rate). At a free frame rate: the wall clock,
+// as stock.
+uint64_t shadow_atlas_tick_msec();
 
 // Directional shadow static cache (docs/decisions/0004-directional-shadow-cache.md): static casters of every
 // cascade are rendered into a cache with a guard band and only re-rendered when the cascade leaves the guard band,

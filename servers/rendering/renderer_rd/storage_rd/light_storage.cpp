@@ -2711,7 +2711,8 @@ bool LightStorage::shadow_atlas_update_light(RID p_atlas, RID p_light_instance, 
 
 	ERR_FAIL_COND_V(valid_quadrant_count == 0, false);
 
-	uint64_t tick = OS::get_singleton()->get_ticks_msec();
+	// FellowEngine (decision 0071): at a fixed frame rate the reallocation tolerance counts the simulated time.
+	uint64_t tick = Fellow::shadow_atlas_tick_msec();
 
 	uint32_t old_key = SHADOW_INVALID;
 	uint32_t old_quadrant = SHADOW_INVALID;

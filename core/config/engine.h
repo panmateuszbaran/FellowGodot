@@ -60,6 +60,7 @@ private:
 	uint32_t _frame_delay = 0;
 	uint64_t _frame_ticks = 0;
 	double _process_step = 0;
+	int _fellow_fixed_fps = -1; // FellowEngine: the main loop's fixed frame rate (--fixed-fps, Movie Maker), -1 if none
 
 	int ips = 60;
 	int user_ips = 60;
@@ -140,6 +141,9 @@ public:
 	bool is_in_physics_frame() const { return _in_physics; }
 	uint64_t get_frame_ticks() const { return _frame_ticks; }
 	double get_process_step() const { return _process_step; }
+	// FellowEngine (decision 0071): the frame rate the main loop simulates when it is fixed (--fixed-fps, Movie Maker
+	// mode), -1 otherwise. Set by Main before each iteration.
+	int fellow_get_fixed_fps() const { return _fellow_fixed_fps; }
 	double get_physics_interpolation_fraction() const { return _physics_interpolation_fraction; }
 
 	void set_time_scale(double p_scale);

@@ -31,9 +31,12 @@
 
 #include "fellow_settings.h"
 
+#include "core/config/engine.h"
 #include "core/os/os.h"
 #include "core/variant/dictionary.h"
 #include "servers/rendering/fellow_parallel.h"
+#include "servers/rendering/renderer_compositor.h"
+#include "servers/rendering/rendering_server_globals.h"
 
 #include <atomic>
 
@@ -73,6 +76,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/shadows/pcss_blend_band", false);
 	GLOBAL_DEF("rendering/fellow/shadows/pcss_directional_penumbra", false);
 	GLOBAL_DEF("rendering/fellow/shadows/directional_max_mip", true);
+	GLOBAL_DEF("rendering/fellow/shadows/atlas_simulated_time", true); // decision 0071
 	GLOBAL_DEF("rendering/fellow/shadows/pcss_filter_early_out", false);
 	GLOBAL_DEF("rendering/fellow/shadows/batched_taps", true);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/debug/batched_taps_kinds", PROPERTY_HINT_FLAGS, "Directional,Positional"), 3);
@@ -255,6 +259,14 @@ void Fellow::frame_gpu_wait_report(uint64_t p_wait_usec, uint64_t p_frame_usec) 
 	if (!fellow_gate_open.load(std::memory_order_relaxed)) {
 		stats().cpu_hot_gate_closed_frames.increment();
 	}
+}
+
+uint64_t Fellow::shadow_atlas_tick_msec() {
+	const int fps = Engine::get_singleton()->fellow_get_fixed_fps();
+	if (fps > 0 && shadows_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/shadows/atlas_simulated_time") && RSG::rasterizer) {
+		return RSG::rasterizer->get_frame_number() * 1000 / uint64_t(fps);
+	}
+	return OS::get_singleton()->get_ticks_msec();
 }
 
 Fellow::Stats &Fellow::stats() {
