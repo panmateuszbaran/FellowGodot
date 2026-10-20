@@ -1709,6 +1709,20 @@ RID RenderingDevice::texture_create(const TextureFormat &p_format, const Texture
 
 	// Create.
 
+	// FellowEngine (decision 0070, frame/clear_new_textures): a texture created without data that a pass can write is
+	// cleared to zero before its first use, as stock does where the driver requires it (Direct3D 12's
+	// API_TRAIT_TEXTURE_OUTPUTS_REQUIRE_CLEARS), so that a read of texels no pass wrote reads zero, not what the memory
+	// held. Vulkan's clear needs the transfer destination usage: added for the driver only, like the forced bits.
+	bool fellow_clear_first_use = false;
+	if (data.is_empty() && (format.usage_bits & (TEXTURE_USAGE_STORAGE_BIT | TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)) && !(format.usage_bits & TEXTURE_USAGE_TRANSIENT_BIT) && !driver->api_trait_get(RDD::API_TRAIT_TEXTURE_OUTPUTS_REQUIRE_CLEARS) && Fellow::clear_new_textures()) {
+		if (format.usage_bits & TEXTURE_USAGE_CAN_COPY_TO_BIT) {
+			fellow_clear_first_use = true;
+		} else if (driver->texture_get_usages_supported_by_format(format.format, false).has_flag(TEXTURE_USAGE_CAN_COPY_TO_BIT)) {
+			forced_usage_bits |= TEXTURE_USAGE_CAN_COPY_TO_BIT;
+			fellow_clear_first_use = true;
+		}
+	}
+
 	// FellowEngine debug (reads of memory never written, decision 0067): FELLOW_DEBUG_CLEAR_TEXTURES=<from>:<to> clears
 	// the textures created without initial data whose creation index is in [from, to) to zero when they are created;
 	// FELLOW_DEBUG_TEXTURE_LOG=1 prints every creation with its index. Off unless the environment variables are set.
@@ -1764,6 +1778,8 @@ RID RenderingDevice::texture_create(const TextureFormat &p_format, const Texture
 	if (driver->api_trait_get(RDD::API_TRAIT_TEXTURE_OUTPUTS_REQUIRE_CLEARS)) {
 		// Check if a clear for this texture must be performed the first time it's used if the driver requires explicit clears after initialization.
 		texture.pending_clear = !texture.has_initial_data && (format.usage_bits & (TEXTURE_USAGE_STORAGE_BIT | TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT));
+	} else if (fellow_clear_first_use) {
+		texture.pending_clear = true;
 	}
 
 	if ((format.usage_bits & (TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | TEXTURE_USAGE_DEPTH_RESOLVE_ATTACHMENT_BIT))) {
@@ -2665,6 +2681,8 @@ void RenderingDevice::_texture_check_pending_clear(RID p_texture_rid, Texture *p
 	}
 
 	if (p_texture != nullptr && clear) {
+		Fellow::stats().frame_textures_cleared.increment();
+		Fellow::stats().frame_textures_cleared_bytes.add(driver->texture_get_allocation_size(p_texture->driver_id));
 		if (p_texture->usage_flags & TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) {
 			_texture_clear_depth_stencil(p_texture_rid, p_texture, 0.0f, 0, 0, p_texture->mipmaps, 0, p_texture->layers);
 		} else {

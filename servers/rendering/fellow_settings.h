@@ -512,16 +512,21 @@ inline int cluster_front_to_back() {
 inline bool cluster_lod() {
 	return mesh_clusters() && GLOBAL_GET_CACHED(bool, "rendering/fellow/geometry/cluster_lod");
 }
-// A draw whose specialized pipeline is still compiling uses an already compiled pipeline that differs only in
-// FellowEngine's per-frame specialization bits whose other value gives the same image (0057's bits clear, light tile
-// culling or the shadow pyramids off, the light fields early either way) instead of stock's ubershader (decision 0059).
-// Read every frame.
 // frame/depth_pipeline_keys (decision 0069): the depth passes' pipeline keys without the colour passes' FellowEngine
 // bits, which their code does not read.
 inline bool depth_pipeline_keys() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/frame/depth_pipeline_keys");
 }
-
+// frame/clear_new_textures (decision 0070): a texture created without data that a pass can write (storage, colour or
+// depth attachment) is cleared to zero before its first use, as stock does on Direct3D 12. A read of texels no pass
+// wrote reads zero, not what the memory held before. Read when a texture is created.
+inline bool clear_new_textures() {
+	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/frame/clear_new_textures");
+}
+// A draw whose specialized pipeline is still compiling uses an already compiled pipeline that differs only in
+// FellowEngine's per-frame specialization bits whose other value gives the same image (0057's bits clear, light tile
+// culling or the shadow pyramids off, the light fields early either way) instead of stock's ubershader (decision 0059).
+// Read every frame.
 inline bool pipeline_fallback() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/frame/pipeline_fallback");
 }
@@ -1040,6 +1045,8 @@ struct Stats {
 	SafeNumeric<uint64_t> autotune_prepare_frames; // frames before an evaluation spent compiling its pipelines (decision 0068)
 	SafeNumeric<uint64_t> autotune_prepare_requests; // pipelines requested for an evaluation before it starts (decision 0068)
 	SafeNumeric<uint64_t> autotune_prepare_timeouts; // evaluations started before their pipelines were all compiled (decision 0068)
+	SafeNumeric<uint64_t> frame_textures_cleared; // textures cleared before their first use (frame/clear_new_textures, decision 0070)
+	SafeNumeric<uint64_t> frame_textures_cleared_bytes; // their memory
 	SafeNumeric<uint64_t> cpu_hot_waits; // low-power waits of idle hot workers (cpu/hot_workers_wait, CPUs with WAITPKG)
 	SafeNumeric<uint64_t> cpu_hot_yields; // idle hot workers' yields of their core (cpu/hot_workers_yield)
 	SafeNumeric<uint64_t> cpu_hot_lowered; // idle hot workers' drops to the lowest priority (cpu/hot_workers_idle_priority)
