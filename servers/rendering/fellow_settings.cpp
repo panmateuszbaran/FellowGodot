@@ -87,7 +87,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/geometry/cluster_triangles", PROPERTY_HINT_RANGE, "64,65536,1"), 4096);
 	GLOBAL_DEF("rendering/fellow/frame/pipeline_fallback", false); // decision 0059 (rejected, off)
 	GLOBAL_DEF("rendering/fellow/frame/depth_pipeline_keys", true); // decision 0069
-	GLOBAL_DEF("rendering/fellow/frame/clear_new_textures", false); // decision 0070 (measuring)
+	GLOBAL_DEF("rendering/fellow/frame/clear_new_textures", true); // decision 0070
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/frame/async_ss_split", PROPERTY_HINT_ENUM, "Stock,SSIL On Main Queue,SSIL And SSR On Main Queue,Autotune"), 3); // decision 0060 (3 from fellow147)
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/geometry/cluster_front_to_back", PROPERTY_HINT_RANGE, "0,1048576,1"), 0); // decision 0058 (rejected, off)
 	GLOBAL_DEF("rendering/fellow/geometry/cluster_lod", false); // decision 0063 (changes the image; off until measured)

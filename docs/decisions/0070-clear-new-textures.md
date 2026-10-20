@@ -1,7 +1,7 @@
 # 0070 — Textures cleared before their first use
 
-Status: **MEASURING** · Branch `fellow/geometry` · Setting `rendering/fellow/frame/clear_new_textures` (off while
-measured) · Code: `rendering_device.cpp` (`texture_create`, `_texture_check_pending_clear`), `fellow_settings.*`.
+Status: **KEEP** (on from `fellow160`) · Branch `fellow/geometry` · Setting `rendering/fellow/frame/clear_new_textures`
+(on) · Code: `rendering_device.cpp` (`texture_create`, `_texture_check_pending_clear`), `fellow_settings.*`.
 
 ## Problem
 
@@ -52,8 +52,22 @@ PBR Lab, Lights Lab, City Lab **0 differing pixels** — where every read texel 
 Cleared: 4 textures (1.1 MiB) while a scene is built, 22-29 textures (63-167 MiB) by the end of the first frame (the
 render buffers, the shadow atlases); the reflection atlas when a probe first renders.
 
-RTX: (to measure, `m13_f200` — the run-to-run floors with the setting on, load time and frame time on against off)
+In perf runs with autotune on (lavapipe, 480 × 270, the setting on): no texture cleared during the measurement in
+Lights Lab, PBR Lab and City Lab (39, 32 and 29 textures over the whole process: 459, 175 and 132 MiB, Lights Lab's
+including the reflection atlas).
+
+RTX (`fellow159`, `m13_f200`):
+
+* Two runs against each other (autotune off, `m13_f180`'s warm sequences): Bistro interior, PBR Lab, Sponza bit for
+  bit with the setting off and on, and on against off; Lights Lab max |d| 3 off, 1 on (a few pixels: their source is
+  not memory no pass wrote, see `m14_f201`, `m14_f202`).
+* Frame time, on against off between processes (`m13_f200_clear_perf`, three runs each): within the runs' spread in
+  every scene (Bistro exterior −0.2 %, Bistro interior −0.9 %, City Lab −1.6 %, Foliage Lab +0.7 %, Lights Lab −2.4 %,
+  PBR Lab +4.1 % (noisy, 1 of 3 pairs slower), Sponza −1.2 %, Stress Lab −1.9 %; p ≥ 0.09).
+* Load to the first frame: within the runs' spread (Bistro exterior 2791 → 2653 ms, Sponza 2701 → 2728, Lights Lab
+  107 → 88, PBR Lab 412 → 438).
 
 ## Decision
 
-(pending)
+**KEEP, on.** No capture depends on what memory held any more, at no measurable cost; the images are those of a
+fresh allocation, which is what stock gives on most drivers (and always on Direct3D 12).
