@@ -48,7 +48,21 @@ milestone 13's `fellow158`: the three other scenes bit for bit, Lights Lab max |
 
 ## 4. The separate render thread, measured again (`m14_f204`)
 
-(in progress)
+Godot's thread model "separate" (`--render-thread separate`, marked experimental) runs the scene's frame on the main
+thread while the previous frame renders. Milestone 4 found nothing in it for FellowEngine (City Lab −0.2 %). With
+`fellow160`, three runs each, every variant reading the render metrics on the render thread:
+
+| scene | stock | stock, separate | `fellow160` | `fellow160`, separate | separate against default |
+|---|---:|---:|---:|---:|---:|
+| Stress Lab | 4.99 ms | 4.92 | 4.52 | **4.22** | **−6.7 %** (p 0.009) |
+| City Lab | 2.79 | 2.64 | 1.96 | 1.87 | −4.5 % (n.s.; one default run with 67 frames over 6 ms) |
+| Bistro exterior | 6.06 | 6.00 | 4.38 | 4.31 | −1.6 % (p 0.03) |
+| Foliage Lab | 3.72 | 3.68 | 3.02 | 3.00 | −0.4 % (n.s.) |
+
+Stress Lab's frame is limited by its script on the main thread (400 MultiMesh transforms and a 25 600-vertex surface
+rewritten in GDScript every frame), which now overlaps the rendering. A project setting, not changed by FellowEngine;
+recorded in `docs/FELLOWENGINE_OPTIONS.md` as a measured recommendation for projects whose main thread does real
+work.
 
 ## 5. Next
 

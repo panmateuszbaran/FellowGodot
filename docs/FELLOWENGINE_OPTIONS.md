@@ -12,6 +12,14 @@ kinds of options:
 
 Every option has a decision record in `docs/decisions/` with its measurements.
 
+**Determinism.** With the defaults, two runs of a scene at a fixed frame rate (`--fixed-fps`, Movie Maker mode) render
+the same frames bit for bit on the benchmark's RTX (0067, 0070, 0071; milestone 14), where stock's runs differ.
+
+**Godot's own setting worth measuring: the separate render thread** (`rendering/driver/threads/thread_model` =
+Separate, or `--render-thread separate`; experimental in Godot). With FellowEngine it shortens the frame where the main
+thread does real work: Stress Lab −6.7 %, City Lab −4.5 %, Bistro exterior −1.6 % (`m14_f204`). FellowEngine does not
+change it.
+
 ## Visually lossless options (off by default)
 
 All four together, against the defaults between processes (`m7_f105_final`, `fellow95`): Lights Lab −25.2 %, Bistro
