@@ -1,0 +1,55 @@
+# FellowEngine — milestone 14 report (the same frames on every run)
+
+Status: **DRAFT** (`fellow159`-). Branch `fellow/geometry`. Benchmark machine as before (Acer Predator PHN16S-71, Core
+Ultra 9 275HX, RTX 5070 Ti Laptop GPU, NVIDIA GPU only, Windows 11, 1920×1080, "high" preset). Decision records
+`docs/decisions/0070`-; user-facing summary `docs/FELLOWENGINE_OPTIONS.md`.
+
+## 0. Result
+
+(pending)
+
+## 1. The question
+
+Milestone 13 found where the run-to-run floors came from (two reads in stock's SSAO/SSIL code, 0067) and left
+FellowEngine's runs bit for bit in three of the four scenes it measures them in; Lights Lab kept a few pixels, and
+lavapipe still found two reads of memory no pass wrote (the reflection probes' atlas, the positional shadow atlas at a
+shadow's tip). This milestone closes both and asks what a rendering engine needs to give the same frames on every run.
+
+## 2. Textures cleared before their first use (0070, KEEP, on from `fellow160`)
+
+Stock clears a texture a pass can write, created without data, at its first use where the driver requires it (Direct3D
+12); on Vulkan it holds what its memory held. With 0070 the same on Vulkan (the transfer destination usage added for
+the driver only). lavapipe with poisoned allocations: no capture changes any more (PBR Lab, Lights Lab, City Lab at
+480 × 270; Lights Lab and PBR Lab at 1366 × 768, where the reflection atlas and the positional shadow atlas had shown;
+PBR Lab at 1920 × 1080); on against off without poison: 0 differing pixels. Cleared: 22-29 textures by the first frame,
+none per frame afterwards (perf runs with autotune on). RTX (`m13_f200`): no measurable cost on frame or load time in
+any scene; the images unchanged (three floor scenes bit for bit on against off).
+
+## 3. The wall clock in the shadow atlas (0071, KEEP, on from `fellow160`)
+
+Lights Lab's last pixels did not come from memory (0070 on: still max |d| 1-3). Two runs against each other with one
+part of the scene off at a time (`m14_f201`, `m14_f202`, three runs each): bit for bit without positional shadows or
+without SSAO, not without async compute, fog, probes or decals. Stock's positional shadow atlas gives a light a shadow
+of another size only 500 ms after its last allocation, measured with the wall clock; the benchmark (like Movie Maker
+mode) simulates 60 frames per second while the GPU draws ~430, so the frame at which a light changed resolution moved
+from run to run (without SSAO the frames were faster and the decisions fell with more margin). With 0071 the tolerance
+counts the simulated time when the frame rate is fixed; at a free frame rate nothing changes.
+
+RTX (`m14_f203_floor_0071`, `fellow160`, autotune off, the warm 60-frame sequences, three runs in pairs): **Bistro
+interior, PBR Lab, Sponza and Lights Lab bit for bit, 3 of 3 pairs each**; without 0071 Lights Lab max |d| 3. Against
+milestone 13's `fellow158`: the three other scenes bit for bit, Lights Lab max |d| 2 (the run-dependent part).
+
+| two runs of one build | Bistro interior | PBR Lab | Sponza | Lights Lab |
+|---|---|---|---|---|
+| stock 4.7.2 (`m13_f193f`) | 69.2 dB (max \|d\| 4) | 82.0 dB (4) | 80.3 dB (1) | 98.5 dB (1) |
+| FellowEngine, milestone 12 (`m13_f180`) | 67.1 dB (21) | 73.5 dB (17) | 75.5 dB (4) | 101.8 dB (1) |
+| FellowEngine, milestone 13 (`fellow158`) | bit for bit | bit for bit | bit for bit | 102.5 dB (3) |
+| **FellowEngine `fellow160`** | **bit for bit** | **bit for bit** | **bit for bit** | **bit for bit** |
+
+## 4. The separate render thread, measured again (`m14_f204`)
+
+(in progress)
+
+## 5. Next
+
+(pending)
