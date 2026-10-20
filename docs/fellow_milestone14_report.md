@@ -83,7 +83,9 @@ lavapipe (captures, defaults, autotune off, demote diagnostics): two runs with t
 Lab); FellowEngine's render-thread work (`cpu/*`, the present and submit threads, the parallel replay) off against on,
 both with the separate thread: City Lab and PBR Lab **0 differing pixels**. Safe against separate differs over the
 whole frame (PBR Lab 48-57 dB, max |d| 92), and the same with FellowEngine disabled (max |d| 101): the thread model's
-(likely which frame the bench's capture reads; not investigated further), not FellowEngine's.
+(likely which frame the bench's capture reads; not investigated further), not FellowEngine's. On the RTX (`m14_f210_floor_rt`, `fellow161`,
+three runs with the separate thread, autotune off): Bistro interior, PBR Lab, Sponza and Lights Lab **bit for bit in
+all three pairs**.
 
 ## 5. City Lab's frames over 6 ms, again (`m14_f205`)
 
