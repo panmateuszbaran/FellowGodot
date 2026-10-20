@@ -31,6 +31,13 @@ frame), autotune off:
 | setting off (stock's behaviour) | 34 | 2 | — |
 | on against off | | | 13 of 14 frames differ, max \|d\| 34 |
 
+RTX (`m14_f211`, `fellow161`, Movie Maker mode at 1920 × 1080 from the scene's first frame, 62 frames each): Lights
+Lab's street camera and Sponza's upper floor, two recordings with the setting **bit for bit**, and the same as the
+recording without it: with warm shader and pipeline caches, Godot's load-time pipeline compilation evidently had the
+pipelines ready before they were drawn (the first attempt, `m14_f209`, wrote no frame with a relative `--write-movie`
+path; with an absolute one it does). The setting matters where a pipeline is still compiling when a
+material is first drawn: cold caches, or materials that come into view later.
+
 ## Decision
 
 **KEEP, on.** Recordings are drawn with the scene's own pipelines from the first frame and are the same on every run;
