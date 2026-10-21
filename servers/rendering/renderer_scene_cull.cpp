@@ -4256,7 +4256,10 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 
 			// We can detect whether multiple cameras are hitting this light, whether or not the shadow is dirty,
 			// so that we can turn off tighter caster culling.
-			light->detect_light_intersects_multiple_cameras(Engine::get_singleton()->get_frames_drawn());
+			// FellowEngine: the renderer's own frame number (the render thread's). Engine's frames_drawn is incremented by the
+			// main thread, so with the separate render thread two cameras of one frame could read different values (a data
+			// race ThreadSanitizer reports) and the light would not be seen as shared, keeping the tighter caster culling.
+			light->detect_light_intersects_multiple_cameras(uint32_t(RSG::rasterizer->get_frame_number()));
 
 			if (light->is_shadow_dirty()) {
 				// Dirty shadows have no need to be drawn if

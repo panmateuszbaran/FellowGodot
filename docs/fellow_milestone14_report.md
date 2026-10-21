@@ -91,7 +91,13 @@ ThreadSanitizer with the separate thread (a TSAN build of `fellow161`'s code on 
 captures, a short City Lab perf run): besides lavapipe's own reports, milestone 13's benign persistent-instance check
 (0022), two in stock (`redraw_request()`'s flag; `Engine::frames_drawn`, read by the render thread's culling while
 the main thread increments it) and one in 0071: the main thread wrote the fixed frame rate to `Engine` every
-iteration while the render thread read it; it is written only when it changes now (`1f6e2b4`).
+iteration while the render thread read it; it is written only when it changes now (`1f6e2b4`). The stock one in the
+culling is more than a report: the scene's culling detects a light seen by several cameras in one frame (to turn off
+the tighter shadow caster culling, whose shadow would be wrong for the second camera) by comparing `frames_drawn`
+values, and with the separate thread two cameras of one frame could read two values. It now compares the renderer's
+own frame number (the render thread's); lavapipe, Stress Lab (two viewports) and City Lab, before against after with
+the default thread model: 0 differing pixels. A second ThreadSanitizer run with `1f6e2b4` (City Lab captures): only
+lavapipe's reports and 0022's benign check.
 
 ## 5. City Lab's frames over 6 ms, again (`m14_f205`)
 
