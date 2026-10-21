@@ -96,8 +96,8 @@ culling is more than a report: the scene's culling detects a light seen by sever
 the tighter shadow caster culling, whose shadow would be wrong for the second camera) by comparing `frames_drawn`
 values, and with the separate thread two cameras of one frame could read two values. It now compares the renderer's
 own frame number (the render thread's); lavapipe, Stress Lab (two viewports) and City Lab, before against after with
-the default thread model: 0 differing pixels. A second ThreadSanitizer run with `1f6e2b4` (City Lab captures): only
-lavapipe's reports and 0022's benign check.
+the default thread model: 0 differing pixels. Again with both fixes (City Lab captures; a City Lab perf run with
+`30a0856`): only lavapipe's reports and 0022's benign check.
 
 ## 5. City Lab's frames over 6 ms, again (`m14_f205`)
 
