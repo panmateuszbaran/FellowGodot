@@ -77,7 +77,11 @@ In one process (blocks of 30 frames, autotune off), Crowd Lab's frame (limited b
 Between processes (3 runs each): stock 5.99 ms, `fellow167` (off) 6.11, `fellow167` with the three on **5.10**
 (1 % low 111 / 116 / **131** fps). The render thread and the GPU do not change.
 
+`fellow168` (with the simulator's count and the skeleton looked up once; `m15_f226`): in one process all off against
+all on **−19.6 %** (5.458 → 4.386 ms, p 3e-222); the warm `crowd_pan` sequence off against on **bit for bit** (99 dB,
+max |d| 0); between processes stock 5.25 ms against `fellow168` **4.60** (−12.3 %; 1 % low 117 → 132 fps).
+
 ## Decision
 
-**KEEP, on by default from `fellow168`.** Exact (the same bone poses bit for bit; captures unchanged), Crowd Lab's main
-thread 16 % faster. Scenes without skeletal animation do not run this code.
+**KEEP, on by default from `fellow168`.** Exact (the same bone poses bit for bit; captures and the RTX sequence unchanged),
+Crowd Lab's frame 16-20 % faster. Scenes without skeletal animation do not run this code.

@@ -77,7 +77,9 @@ and 1; each track searches for its last key and passes its value through a scrip
 shortcuts give the same bone poses bit for bit (every bone of every character hashed every 25 frames; lavapipe
 captures 0 differing pixels). RTX, in one process: Crowd Lab's frame −4.9, −5.0 and −6.0 % each, **−15.8 %**
 together (5.49 → 4.62 ms); between processes 6.11 → 5.10 ms (stock 5.99), 1 % low 116 → 131 fps. On from
-`fellow168`.
+`fellow168`, which also keeps the simulator's count of physical bones and looks each skeleton up once per run of its
+tracks (`m15_f226`): −19.6 % in one process (5.46 → 4.39 ms), the warm sequence bit for bit on the RTX, and against
+stock between processes 5.25 → **4.60 ms** (−12.3 %; 1 % low 117 → 132 fps).
 
 ## 7. Next
 
