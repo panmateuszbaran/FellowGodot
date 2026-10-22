@@ -40,6 +40,7 @@ const SCENES := {
 	"blend": "res://scenes/blend_lab.gd",
 	"city": "res://scenes/city_lab.gd",
 	"foliage": "res://scenes/foliage_lab.gd",
+	"crowd": "res://scenes/crowd_lab.gd",
 }
 const DT := 1.0 / 60.0
 
