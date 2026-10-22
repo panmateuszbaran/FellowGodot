@@ -1,12 +1,47 @@
 # FellowEngine — milestone 14 report (the same frames on every run)
 
-Status: **DRAFT** (`fellow159`-). Branch `fellow/geometry`. Benchmark machine as before (Acer Predator PHN16S-71, Core
+Status: **FINAL** (`fellow159`-`fellow162`; final measurement `m14_f213_final`, 2026-10-22). Branch `fellow/geometry`. Benchmark machine as before (Acer Predator PHN16S-71, Core
 Ultra 9 275HX, RTX 5070 Ti Laptop GPU, NVIDIA GPU only, Windows 11, 1920×1080, "high" preset). Decision records
-`docs/decisions/0070`-; user-facing summary `docs/FELLOWENGINE_OPTIONS.md`.
+`docs/decisions/0070`-`0072`; user-facing summary `docs/FELLOWENGINE_OPTIONS.md`.
 
 ## 0. Result
 
-(pending)
+**The same frames on every run.** With milestone 14's defaults two runs of FellowEngine at a fixed frame rate render
+the same frames bit for bit in every scene the run-to-run floors are measured in, with autotune off; stock's two runs
+differ at 69-98 dB (section 3). Three decisions close the last sources: textures cleared before their first use
+(0070: no image depends on what memory held), the shadow atlas's reallocation tolerance in the scene's time at a
+fixed frame rate (0071: the wall clock had decided at which frame a light's shadow changed size), and Movie Maker
+mode waiting for its pipelines (0072: no draw on the ubershader in a recording). Also with the separate render thread
+(bit for bit in all four scenes, section 4). With autotune on, three of the four scenes are bit for bit; Sponza differed
+in one run of three while autotune compiled pipelines for an evaluation it was preparing.
+
+Frame times between processes (`m14_f213_final`, 3 runs per build, 1080p "high"; `fellow158` is milestone 13's final
+build, `fellow162` this one's). The machine ran 3-8 % slower than in milestone 13's final for every build, stock
+included:
+
+| scene | stock (ms) | m13 | **m14** | m14 against m13 | m14 with the visually lossless options |
+|---|---:|---:|---:|---:|---:|
+| Sponza | 13.97 | 6.89 (−50.7 %) | **6.66 (−52.3 %)** | −3.3 % (n.s.) | 6.47 (−53.7 %) |
+| Bistro exterior | 7.06 | 4.58 (−35.2 %) | **4.52 (−36.0 %)** | −1.3 % (n.s.) | 4.36 (−38.2 %) |
+| City Lab | 3.35 | 2.21 (−34.2 %) | **2.24 (−33.3 %)** | +1.4 % (n.s.) | 2.25 (−32.9 %) |
+| Lights Lab | 3.28 | 2.45 (−25.3 %) | **2.48 (−24.3 %)** | +1.3 % (n.s.) | 1.89 (−42.2 %) |
+| Bistro interior | 4.46 | 3.51 (−21.3 %) | **3.49 (−21.8 %)** | −0.7 % (n.s.) | 3.25 (−27.1 %) |
+| PBR Lab | 2.80 | 2.25 (−19.5 %) | **2.29 (−18.0 %)** | +1.8 % (n.s.) | 2.05 (−26.8 %) |
+| Foliage Lab | 3.90 | 3.14 (−19.5 %) | **3.20 (−17.9 %)** | +2.0 % (n.s.) | 3.15 (−19.1 %) |
+| Stress Lab | 5.29 | 5.08 (−3.9 %) | **5.00 (−5.4 %)** | −1.5 % (n.s.) | 4.99 (−5.6 %) |
+
+Foliage Lab with one MultiMesh per type: 11.31 → 5.09 ms (−55.1 %, `m14_f213_foliage_single`). As expected the
+milestone's changes cost nothing measurable (each was measured on its own: 0070 in `m13_f200`).
+
+Load to the first frame against stock (the same runs): Lights Lab 282 → 114 ms (−60 %), Stress Lab 571 → 259 (−55 %),
+PBR Lab 936 → 511 (−45 %), Sponza 7489 → 4134 (−45 %; one stock run 9867), City Lab 503 → 340 (−32 %), Bistro
+interior 2008 → 1373 (−32 %), Foliage Lab 923 → 652 (−29 %), Bistro exterior 4014 → 3180 (−21 %).
+
+**Open: City Lab's frames over 6 ms came back in this session** for both FellowEngine builds (`fellow162`: 0, 33, 30
+per run, 1 % low 296, 127, 124 fps; `fellow158`: 12, 30, 26; stock 1, 8, 0, 183-206 fps), in runs limited by the CPU
+(frame 2.2-2.3 ms, GPU 1.4-1.6 ms) — where milestone 13's final had none in three runs and `m14_f207` none outside
+the first run. The milestone's code is not the difference (m13's build has as many tonight); what the machine was
+doing around them is not known (section 5).
 
 ## 1. The question
 
@@ -119,6 +154,11 @@ thread was faster between processes (−2.9 %, 5 of 5 pairs, p 0.054); in one pr
 0.0 / 0.0 / −0.1 % (n.s.). The present thread stays on.
 
 ## 6. Next
+
+* **City Lab's frame pacing** (section 0, 5): the frames over 6 ms come and go between sessions for every
+  FellowEngine build (none in milestone 13's final, 0-33 per run tonight) and much less for stock. Each is a
+  `vkQueuePresentKHR` that blocks for 5-45 ms on this hybrid laptop. Next: sessions of many short runs that alternate
+  the builds and the present/submit threads, with the system's own load recorded beside them.
 
 What milestone 13's breakdown (`m13_f194`) leaves, and what each direction would take:
 
