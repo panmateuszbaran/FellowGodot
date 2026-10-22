@@ -1,6 +1,6 @@
 # 0075 — TAA's 8 × 8 workgroups: the tile loaded by all 64 invocations
 
-Status: **MEASURING** (off) · Branch `fellow/geometry` · Setting `rendering/fellow/postfx/taa_strided_load` · Code:
+Status: **REJECT** (left in, off) · Branch `fellow/geometry` · Setting `rendering/fellow/postfx/taa_strided_load` · Code:
 `shaders/effects/taa_resolve.glsl` (`FELLOW_TAA_STRIDED_LOAD`), `effects/taa.{h,cpp}` (variants 8-11),
 `fellow_settings.*`.
 
@@ -28,8 +28,23 @@ changes, and every invocation reads the tile after the same barrier.
 lavapipe, captures, demote diagnostics, autotune off, the setting off against on: PBR Lab (7 cameras), City Lab (3),
 Lights Lab (4) at 480 × 270: **0 differing pixels**.
 
-RTX: (pending, `m15_f220`).
+RTX, `fellow166` (`m15_f220`): the warm sequences off against on **bit for bit** (Bistro interior, PBR Lab, Sponza,
+Lights Lab: 99 dB, max |d| 0).
+
+## Measurement
+
+In one process (`m15_f220_taa_strided_ab`, blocks of 30 frames, autotune off), off against on:
+
+| scene | TAA pass | GPU time |
+|---|---:|---:|
+| Sponza | 0.267 → 0.281 ms (+0.014) | +0.0 % (p 0.90) |
+| Bistro exterior | 0.248 → 0.238 (−0.010) | −0.2 % (p 0.07) |
+| Bistro interior | 0.230 → 0.228 (−0.003) | −0.0 % (p 0.77) |
+| City Lab | 0.195 → 0.193 (−0.001) | −0.1 % (p 0.88) |
+| Lights Lab | 0.221 → 0.217 (−0.004) | +0.1 % (p 0.64) |
 
 ## Decision
 
-(pending)
+**REJECT** (left in, off). Exact, but no scene's GPU time moves and the TAA pass goes either way by 1-5 %. With 0023
+this answers its open question: neither the workgroup's size nor how its invocations share the tile's loads limits
+the pass.

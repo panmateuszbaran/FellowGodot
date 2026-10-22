@@ -44,6 +44,14 @@ prepared values are rounded where the compiler had kept them in registers or fus
 (`fellow165`): bit for bit, and no measurable gain (−0.1 to −0.3 %, n.s.) — the pass is limited by its arithmetic, not
 its reads. Rejected; with bit-for-bit runs on the RTX (milestone 14) such a difference is now visible in one job.
 
-## 4. Next
+## 4. TAA's tile loaded by every invocation (0075, REJECT)
+
+TAA's 8 × 8 workgroups load their 10 × 10 tile with 25 invocations, four entries each, while the other 39 wait at the
+barrier. With all 64 loading in turn (at most two each; the same entries, the same values): the warm sequences bit
+for bit on the RTX, the TAA pass −4 % in Bistro exterior and +5 % in Sponza, no scene's GPU time moved
+(`m15_f220`). With decision 0023 (16 × 16 workgroups, slower) neither the group's size nor the sharing of its loads
+is what limits the pass. Rejected.
+
+## 5. Next
 
 (pending)

@@ -79,5 +79,5 @@ clipping, decision 0001).
 ## Measured and rejected (left in, off)
 
 Volumetric fog's light loops walked by the subgroup (`postfx/fog_light_loop`, 0053: no frame gain), SSR's roughness filter with a padded shared layout (`postfx/ssr_filter_padded`, 0052: exact, no gain), SSR's resolve with its samples shared per workgroup (`postfx/ssr_resolve_shared`, 0074: exact, no gain; sharing their preparation too, −0.5 % GPU, rounds otherwise on the RTX), SSAO/SSIL gather taps fetched in batches (0041), a PCSS blocker search shared by pixel quads (`shadows/pcss_quad_search`, 0042: not visually lossless in Foliage Lab), occlusion culling of the opaque pass (0026), the depth pre-pass in two orders (0029), SSAO/SSIL coherent gathers
-(0024), TAA in 16 × 16 groups (0023), instance buffers in system memory (0021), early submit (0009), TAA camera motion
+(0024), TAA in 16 × 16 groups (0023), TAA's tile loaded by all 64 invocations of its 8 × 8 groups (`postfx/taa_strided_load`, 0075: exact, no gain), instance buffers in system memory (0021), early submit (0009), TAA camera motion
 vectors (0013), shared-memory SSAO tiles (0011). Not merged: soft shadows with half their taps under TAA (0032).
