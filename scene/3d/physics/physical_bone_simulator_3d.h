@@ -77,6 +77,7 @@ protected:
 	virtual void _skeleton_changed(Skeleton3D *p_old, Skeleton3D *p_new) override;
 
 public:
+	virtual bool fellow_processing_is_noop() const override;
 #ifndef DISABLE_DEPRECATED
 	bool is_compat = false;
 #endif // _DISABLE_DEPRECATED

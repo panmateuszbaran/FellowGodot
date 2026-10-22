@@ -367,6 +367,28 @@ void PhysicalBoneSimulator3D::set_bone_global_pose(int p_bone, const Transform3D
 	bones[p_bone].global_pose = p_pose;
 }
 
+bool PhysicalBoneSimulator3D::fellow_processing_is_noop() const {
+	// FellowEngine (decision 0076): _process_modification() acts only on bones that have a physical bone; without any
+	// (every Skeleton3D's compatibility simulator in a skeleton without PhysicalBone3D nodes) it changes nothing, and
+	// with no connection to modification_processed no script runs either.
+	if (SkeletonModifier3D::fellow_processing_is_noop()) {
+		return true;
+	}
+	if (get_influence() < 1.0 || has_connections(SNAME("modification_processed"))) {
+		return false;
+	}
+	const Skeleton3D *skeleton = get_skeleton();
+	if (!skeleton || skeleton->get_bone_count() != (int)bones.size()) {
+		return false;
+	}
+	for (const SimulatedBone &bone : bones) {
+		if (bone.physical_bone) {
+			return false;
+		}
+	}
+	return true;
+}
+
 void PhysicalBoneSimulator3D::_process_modification(double p_delta) {
 	Skeleton3D *skeleton = get_skeleton();
 	if (!skeleton) {

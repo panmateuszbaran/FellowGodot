@@ -111,6 +111,11 @@ bool SkeletonModifier3D::is_active() const {
 	return active;
 }
 
+bool SkeletonModifier3D::fellow_processing_is_noop() const {
+	// process_modification() returns at once; with full influence Skeleton3D::_process_modifiers() touches no bone.
+	return !active && influence >= 1.0;
+}
+
 void SkeletonModifier3D::_set_active(bool p_active) {
 	//
 }

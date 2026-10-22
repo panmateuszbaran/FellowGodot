@@ -33,6 +33,8 @@
 #include "core/io/resource.h"
 #include "core/templates/local_vector.h"
 
+#include <atomic>
+
 #define ANIM_MIN_LENGTH 0.001
 
 class Animation : public Resource {
@@ -572,6 +574,15 @@ public:
 	// Helper functions for Rotation.
 	static double interpolate_via_rest(double p_from, double p_to, double p_weight, double p_rest = 0.0); // Deterministic slerp to prevent to cross the inverted rest axis.
 	static Quaternion interpolate_via_rest(const Quaternion &p_from, const Quaternion &p_to, real_t p_weight, const Quaternion &p_rest = Quaternion()); // Deterministic slerp to prevent to cross the inverted rest axis.
+
+	// FellowEngine (decision 0076): the animation/* shortcuts in effect (rendering/fellow/animation/full_weight_slerp,
+	// track_shortcuts), refreshed by AnimationMixer at the start of each blend (the settings read once per mixer and frame,
+	// not once per track).
+	enum {
+		FELLOW_FULL_WEIGHT_SLERP = 1,
+		FELLOW_TRACK_SHORTCUTS = 2,
+	};
+	static inline std::atomic<uint32_t> fellow_shortcuts{ 0 };
 
 	// Helper functions for Variant.
 	static bool is_variant_interpolatable(const Variant p_value);

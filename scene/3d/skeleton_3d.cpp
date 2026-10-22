@@ -37,6 +37,7 @@
 #if !defined(DISABLE_DEPRECATED) && !defined(PHYSICS_3D_DISABLED)
 #include "scene/3d/physics/physical_bone_simulator_3d.h"
 #endif // _DISABLE_DEPRECATED && PHYSICS_3D_DISABLED
+#include "servers/rendering/fellow_settings.h"
 #include "servers/rendering/rendering_server.h"
 
 void SkinReference::_skin_changed() {
@@ -326,7 +327,25 @@ void Skeleton3D::_notification(int p_what) {
 
 			LocalVector<BonePoseBackup> bones_backup;
 			_find_modifiers();
-			if (!modifiers.is_empty()) {
+			// FellowEngine (rendering/fellow/animation/elide_modifier_backup, decision 0076): when processing every
+			// modifier changes no bone (an inactive one with full influence; the compatibility PhysicalBoneSimulator3D of a
+			// skeleton without physical bones), the bones saved before them and restored after the skins would be the
+			// same values: the modifiers are processed without the save and the restore.
+			bool fellow_backup = !modifiers.is_empty();
+			if (fellow_backup && Fellow::animation_elide_modifier_backup()) {
+				fellow_backup = false;
+				for (const ObjectID &oid : modifiers) {
+					const SkeletonModifier3D *mod = Object::cast_to<SkeletonModifier3D>(ObjectDB::get_instance(oid));
+					if (mod && !mod->fellow_processing_is_noop()) {
+						fellow_backup = true;
+						break;
+					}
+				}
+				if (!fellow_backup && (update_flags & UPDATE_FLAG_MODIFIER)) {
+					_process_modifiers();
+				}
+			}
+			if (fellow_backup) {
 				bones_backup.resize(bones.size());
 				// Store unmodified bone poses.
 				for (uint32_t i = 0; i < bones.size(); i++) {
@@ -406,7 +425,7 @@ void Skeleton3D::_notification(int p_what) {
 				}
 			}
 
-			if (!modifiers.is_empty()) {
+			if (fellow_backup) {
 				// Restore unmodified bone poses.
 				for (uint32_t i = 0; i < bones.size(); i++) {
 					bones_backup[i].restore(bones[i]);

@@ -121,6 +121,9 @@ public:
 
 	void set_active(bool p_active);
 	bool is_active() const;
+	// FellowEngine (rendering/fellow/animation/elide_modifier_backup, decision 0076): true when process_modification()
+	// would change no bone and call no script this frame.
+	virtual bool fellow_processing_is_noop() const;
 
 	void set_influence(real_t p_influence);
 	real_t get_influence() const;

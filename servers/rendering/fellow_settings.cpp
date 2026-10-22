@@ -45,6 +45,9 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/postfx/enabled", true);
 	GLOBAL_DEF("rendering/fellow/postfx/taa_resolve_v2", true);
 	GLOBAL_DEF("rendering/fellow/postfx/taa_tile16", false);
+	GLOBAL_DEF("rendering/fellow/animation/elide_modifier_backup", false); // decision 0076 (measuring)
+	GLOBAL_DEF("rendering/fellow/animation/full_weight_slerp", false); // decision 0076 (measuring)
+	GLOBAL_DEF("rendering/fellow/animation/track_shortcuts", false); // decision 0076 (measuring)
 	GLOBAL_DEF("rendering/fellow/postfx/taa_strided_load", false); // decision 0075: REJECT (exact, no gain)
 	GLOBAL_DEF("rendering/fellow/postfx/taa_history_pingpong", true);
 	// TAA resolve v2: each tile texel's velocity loaded into shared memory with its colour and depth (the closest

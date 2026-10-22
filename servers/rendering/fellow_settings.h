@@ -194,6 +194,23 @@ inline bool taa_tile16() {
 }
 // postfx/taa_strided_load (decision 0075): TAA's 8 x 8 workgroups load their 10 x 10 tile with all 64 invocations (at
 // most two texels each) instead of four texels each by 25 of them. The same texels, the same expressions per texel.
+// animation/elide_modifier_backup (decision 0076): a Skeleton3D whose modifiers all change nothing this frame (inactive
+// with full influence; the compatibility PhysicalBoneSimulator3D every Skeleton3D has in builds with the deprecated API,
+// in a skeleton without physical bones) does not save and restore its bones around them.
+inline bool animation_elide_modifier_backup() {
+	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/animation/elide_modifier_backup");
+}
+// animation/full_weight_slerp (decision 0076): Animation::interpolate_via_rest() at weight 1 (a track of the only animation
+// playing) computes Quaternion::slerp()'s result without its acos() and sin() calls: the same values bit for bit.
+inline bool animation_full_weight_slerp() {
+	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/animation/full_weight_slerp");
+}
+// animation/track_shortcuts (decision 0076): an animation track's interpolation without the binary search for its last key
+// when only the last can be at the animation's end, and rotation and scale keys not passed through
+// _post_process_key_value() when no script overrides it (it returns them unchanged).
+inline bool animation_track_shortcuts() {
+	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/animation/track_shortcuts");
+}
 inline bool taa_strided_load() {
 	return postfx_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/postfx/taa_strided_load");
 }

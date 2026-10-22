@@ -42,6 +42,7 @@
 #include "scene/resources/animation.h"
 #include "servers/audio/audio_server.h"
 #include "servers/audio/audio_stream.h"
+#include "servers/rendering/fellow_settings.h"
 
 #ifndef _3D_DISABLED
 #include "scene/3d/audio_stream_player_3d.h"
@@ -1222,6 +1223,10 @@ void AnimationMixer::_blend_calc_total_weight() {
 
 void AnimationMixer::_blend_process(double p_delta, bool p_update_only) {
 	// Apply value/transform/blend/bezier blends to track caches and execute method/audio/animation tracks.
+	// FellowEngine (decision 0076): the exact animation shortcuts, read once per blend.
+	const uint32_t fellow_shortcuts = (Fellow::animation_full_weight_slerp() ? Animation::FELLOW_FULL_WEIGHT_SLERP : 0u) | (Fellow::animation_track_shortcuts() ? Animation::FELLOW_TRACK_SHORTCUTS : 0u);
+	Animation::fellow_shortcuts.store(fellow_shortcuts, std::memory_order_relaxed);
+	const bool fellow_track_shortcuts = fellow_shortcuts & Animation::FELLOW_TRACK_SHORTCUTS;
 #ifdef TOOLS_ENABLED
 	bool can_call = is_inside_tree() && !Engine::get_singleton()->is_editor_hint();
 #endif // TOOLS_ENABLED
@@ -1504,7 +1509,11 @@ void AnimationMixer::_blend_process(double p_delta, bool p_update_only) {
 						if (err != OK) {
 							continue;
 						}
-						rot = post_process_key_value(a, i, rot, t->object_id, t->bone_idx);
+						// FellowEngine (rendering/fellow/animation/track_shortcuts, decision 0076): without a script override,
+						// _post_process_key_value() returns a rotation unchanged (through two Variant conversions).
+						if (is_GDVIRTUAL_CALL_post_process_key_value || !fellow_track_shortcuts) {
+							rot = post_process_key_value(a, i, rot, t->object_id, t->bone_idx);
+						}
 						t->rot = Animation::interpolate_via_rest(t->rot, rot, blend, t->init_rot);
 					}
 #endif // _3D_DISABLED
@@ -1592,7 +1601,9 @@ void AnimationMixer::_blend_process(double p_delta, bool p_update_only) {
 						if (err != OK) {
 							continue;
 						}
-						scale = post_process_key_value(a, i, scale, t->object_id, t->bone_idx);
+						if (is_GDVIRTUAL_CALL_post_process_key_value || !fellow_track_shortcuts) { // As rotations (decision 0076).
+							scale = post_process_key_value(a, i, scale, t->object_id, t->bone_idx);
+						}
 						t->scale += (scale - t->init_scale) * blend;
 					}
 #endif // _3D_DISABLED

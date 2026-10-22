@@ -2517,7 +2517,15 @@ Variant Animation::_cubic_interpolate_angle_in_time(const Variant &p_pre_a, cons
 
 template <typename T>
 T Animation::_interpolate(const LocalVector<TKey<T>> &p_keys, double p_time, InterpolationType p_interp, bool p_loop_wrap, bool *p_ok, bool p_backward) const {
-	int len = _find(p_keys, length) + 1; // try to find last key (there may be more past the end)
+	int len;
+	const int key_count = p_keys.size();
+	if (key_count > 0 && (fellow_shortcuts.load(std::memory_order_relaxed) & FELLOW_TRACK_SHORTCUTS) && (Math::is_equal_approx(length, (double)p_keys[key_count - 1].time) || p_keys[key_count - 1].time < length) && (key_count == 1 || (!Math::is_equal_approx(length, (double)p_keys[key_count - 2].time) && p_keys[key_count - 2].time < length))) {
+		// FellowEngine (rendering/fellow/animation/track_shortcuts, decision 0076): what _find(p_keys, length) returns when
+		// no key but the last can match the length (its binary search then only moves up, to the last key): the last.
+		len = key_count;
+	} else {
+		len = _find(p_keys, length) + 1; // try to find last key (there may be more past the end)
+	}
 
 	if (len <= 0) {
 		// (-1 or -2 returned originally) (plus one above)
@@ -5691,6 +5699,19 @@ Quaternion Animation::interpolate_via_rest(const Quaternion &p_from, const Quate
 	ERR_FAIL_COND_V_MSG(!p_to.is_normalized(), Quaternion(), "The end quaternion must be normalized.");
 	ERR_FAIL_COND_V_MSG(!p_rest.is_normalized(), Quaternion(), "The rest quaternion must be normalized.");
 #endif
+	if (p_weight == 1.0f && (fellow_shortcuts.load(std::memory_order_relaxed) & FELLOW_FULL_WEIGHT_SLERP)) {
+		// FellowEngine (rendering/fellow/animation/full_weight_slerp, decision 0076): Quaternion::slerp() at weight 1, without
+		// its trigonometry. On both of its paths its coefficients are then exactly scale0 = +0 (sin(0.0) / sin(omega), or
+		// 1 - 1) and scale1 = 1 (sin(1 * omega) / sin(omega): the same sinf() of the same value, or 1); the final values are
+		// computed with those coefficients in slerp()'s own expressions, so the result is the same bit for bit.
+		const Quaternion from;
+		const Quaternion to = p_rest.inverse() * p_to;
+		const Quaternion to1 = from.dot(to) < 0.0f ? -to : to;
+		const real_t scale0 = 0.0f;
+		const real_t scale1 = 1.0f;
+		const Quaternion s(scale0 * from.x + scale1 * to1.x, scale0 * from.y + scale1 * to1.y, scale0 * from.z + scale1 * to1.z, scale0 * from.w + scale1 * to1.w);
+		return (p_from * s).normalized();
+	}
 	return (p_from * Quaternion().slerp(p_rest.inverse() * p_to, p_weight)).normalized();
 }
 
