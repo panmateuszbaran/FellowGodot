@@ -1,12 +1,28 @@
-# FellowEngine — milestone 15 report (frame pacing on a busy machine)
+# FellowEngine — milestone 15 report (frame pacing, skeletal animation)
 
-Status: **DRAFT** (`fellow163`-). Branch `fellow/geometry`. Benchmark machine as before (Acer Predator PHN16S-71, Core
+Status: **CLOSED** without its final measurement (`fellow163`-`fellow170`): the final (`m15_f229`) was stopped after
+its first scenes when the job queue was cleared at the user's request on 2026-10-22 at 08:03; the numbers below are
+the milestone's own measurements. Branch `fellow/geometry`. Benchmark machine as before (Acer Predator PHN16S-71, Core
 Ultra 9 275HX: 8 performance and 16 efficient cores, RTX 5070 Ti Laptop GPU, NVIDIA GPU only, Windows 11, 1920×1080,
 "high" preset). Decision records `docs/decisions/0073`-; user-facing summary `docs/FELLOWENGINE_OPTIONS.md`.
 
 ## 0. Result
 
-(pending)
+* **City Lab's presentation stalls gone (0073, KEEP):** six worker tasks instead of ten leave the machine's 8
+  performance cores room for the presentation's threads; 1 % low 117-281 → 246-289 fps, no mean frame moves.
+* **A new scene, Crowd Lab** (256 skinned characters, an AnimationPlayer and a Skeleton3D each): the frame is the main
+  thread animating them, in stock's code.
+* **Skeletal animation 20 % faster, exactly (0076, KEEP):** no bone backup around modifiers that change nothing,
+  slerp at weight 1 without its trigonometry, per-track lookups done once or from last frame's key; the same bone poses
+  bit for bit. Crowd Lab between processes: stock 5.25 ms, `fellow168` 4.60 (−12.3 %); in one process −19.6 %, and
+  `fellow170`'s key hints −4.9 % more.
+* **Skins in one call (0077, KEEP):** with the separate render thread Crowd Lab −25.2 %, now faster than the default
+  thread model.
+* Rejected, exact but without gain: SSR's resolve with its samples shared (0074), TAA's tile loaded by every
+  invocation (0075). A shadow mask computed once per pixel was not built: the directional soft shadows cost the opaque
+  pass nothing measurable any more (`m15_f221`).
+* New, not yet measured on the RTX: Crowd Lab with AnimationTrees (`--crowd_blend=1`) and **Particles Lab** (400 GPU
+  particle emitters; lavapipe: two runs bit for bit).
 
 ## 1. The question
 
@@ -95,4 +111,9 @@ separate render thread (4.63 → 3.47 ms, `m15_f227`) — which now runs Crowd L
 
 ## 8. Next
 
-(pending)
+The direction changes with milestone 16 (the user, 2026-10-22): besides making the engine faster, make it look better —
+global illumination, ray and path tracing, better bloom and post-processing — at a cost the frame can afford; later
+collisions and physics. Godot 4.7's RenderingDevice already has acceleration structures, ray-tracing pipelines and ray
+queries (Vulkan), which no renderer feature uses yet. Not done from this milestone: Particles Lab's first measurement
+(`m16_f230`, cleared from the queue), FellowEngine's render thread in Crowd Lab (+0.08 to +0.10 ms for persistent
+instance data and the parallel lists when every instance changes each frame).
