@@ -165,6 +165,7 @@ private:
 	};
 
 	HashSet<SkinReference *> skin_bindings;
+	Vector<Transform3D> fellow_skin_transforms; // FellowEngine (decision 0077): a skin's transforms for the RenderingServer.
 	void _skin_changed();
 
 	mutable LocalVector<Bone> bones;

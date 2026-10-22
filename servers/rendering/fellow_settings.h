@@ -211,6 +211,11 @@ inline bool animation_full_weight_slerp() {
 inline bool animation_track_shortcuts() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/animation/track_shortcuts");
 }
+// animation/batched_skin_transforms (decision 0077): a Skeleton3D hands each skin's bone transforms to the RenderingServer in
+// one call instead of one call per bone (each with the server's wrapper and a mutex-guarded lookup of the skeleton).
+inline bool animation_batched_skin_transforms() {
+	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/animation/batched_skin_transforms");
+}
 inline bool taa_strided_load() {
 	return postfx_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/postfx/taa_strided_load");
 }

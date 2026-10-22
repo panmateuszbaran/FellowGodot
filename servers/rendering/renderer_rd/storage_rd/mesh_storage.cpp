@@ -2569,6 +2569,36 @@ void MeshStorage::skeleton_bone_set_transform(RID p_skeleton, int p_bone, const 
 	_skeleton_make_dirty(skeleton);
 }
 
+void MeshStorage::fellow_skeleton_set_bone_transforms(RID p_skeleton, const Vector<Transform3D> &p_transforms) {
+	// FellowEngine (decision 0077): skeleton_bone_set_transform() for bones 0..size - 1 with one lookup of the skeleton
+	// (a mutex each) and one dirty mark: the same data.
+	Skeleton *skeleton = skeleton_owner.get_or_null(p_skeleton);
+	if (!skeleton || skeleton->use_2d || p_transforms.size() > skeleton->size) {
+		RendererMeshStorage::fellow_skeleton_set_bone_transforms(p_skeleton, p_transforms); // Stock's errors.
+		return;
+	}
+	const Transform3D *xforms = p_transforms.ptr();
+	for (int i = 0; i < p_transforms.size(); i++) {
+		const Transform3D &t = xforms[i];
+		float *dataptr = skeleton->data.ptr() + i * 12;
+		dataptr[0] = t.basis.rows[0][0];
+		dataptr[1] = t.basis.rows[0][1];
+		dataptr[2] = t.basis.rows[0][2];
+		dataptr[3] = t.origin.x;
+		dataptr[4] = t.basis.rows[1][0];
+		dataptr[5] = t.basis.rows[1][1];
+		dataptr[6] = t.basis.rows[1][2];
+		dataptr[7] = t.origin.y;
+		dataptr[8] = t.basis.rows[2][0];
+		dataptr[9] = t.basis.rows[2][1];
+		dataptr[10] = t.basis.rows[2][2];
+		dataptr[11] = t.origin.z;
+	}
+	if (!p_transforms.is_empty()) {
+		_skeleton_make_dirty(skeleton);
+	}
+}
+
 Transform3D MeshStorage::skeleton_bone_get_transform(RID p_skeleton, int p_bone) const {
 	Skeleton *skeleton = skeleton_owner.get_or_null(p_skeleton);
 

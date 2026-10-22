@@ -418,6 +418,26 @@ void Skeleton3D::_notification(int p_what) {
 					E->skeleton_version = version;
 				}
 
+				if (Fellow::animation_batched_skin_transforms()) {
+					// FellowEngine (rendering/fellow/animation/batched_skin_transforms, decision 0077): the skin's
+					// transforms handed over in one call (stock's loop below where a bind's bone is missing).
+					bool fellow_valid = true;
+					for (uint32_t i = 0; i < bind_count; i++) {
+						if (E->skin_bone_indices_ptrs[i] >= (uint32_t)len) {
+							fellow_valid = false;
+							break;
+						}
+					}
+					if (fellow_valid) {
+						fellow_skin_transforms.resize(bind_count);
+						Transform3D *w = fellow_skin_transforms.ptrw();
+						for (uint32_t i = 0; i < bind_count; i++) {
+							w[i] = bonesptr[E->skin_bone_indices_ptrs[i]].global_pose * skin->get_bind_pose(i);
+						}
+						rs->fellow_skeleton_set_bone_transforms(skeleton, fellow_skin_transforms);
+						continue;
+					}
+				}
 				for (uint32_t i = 0; i < bind_count; i++) {
 					uint32_t bone_index = E->skin_bone_indices_ptrs[i];
 					ERR_CONTINUE(bone_index >= (uint32_t)len);
