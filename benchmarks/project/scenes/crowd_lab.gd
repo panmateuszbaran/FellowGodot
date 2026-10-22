@@ -13,6 +13,8 @@ extends "res://bench/scene_base.gd"
 ## Skeleton3D and AnimationPlayer playing one of four looping clips (walk, run, idle, wave; every bone has a rotation
 ## track) at its own phase, and walks along its own lane. Players use the manual process callback: set_time() seeks
 ## each to its time with an update, which evaluates and applies the clip exactly as the idle process would.
+## --crowd_blend=1: instead, an AnimationTree per character blends idle, walk and run (a BlendSpace1D whose position
+## set_time() moves), advanced by set_time()'s step: two clips with fractional weights per character.
 
 const CROWD := 256
 const SPACING := 2.4
@@ -22,6 +24,9 @@ const KEY_FPS := 20.0
 
 var sun: DirectionalLight3D
 var crowd := 256
+var blend := false # --crowd_blend=1: an AnimationTree per character blending idle, walk and run (BlendSpace1D)
+var _trees: Array[AnimationTree] = []
+var _last_t: PackedFloat32Array = PackedFloat32Array()
 var _chars: Array[Node3D] = []
 var _players: Array[AnimationPlayer] = []
 var _clip_of: PackedInt32Array = PackedInt32Array()
@@ -52,6 +57,7 @@ func build(p_args: Dictionary) -> void:
 	args = p_args
 	bench_name = "crowd"
 	crowd = int(args.get("crowd", str(CROWD)))
+	blend = str(args.get("crowd_blend", "0")) == "1"
 	_area = maxf(20.0, sqrt(float(crowd)) * SPACING * 1.6)
 	_setup_common()
 	_setup_environment()
@@ -271,19 +277,42 @@ func _build_crowd() -> void:
 		mi.skin = _skin
 		sk.add_child(mi)
 		mi.skeleton = NodePath("..")
-		var ap := AnimationPlayer.new()
-		ap.name = "AnimationPlayer"
-		root.add_child(ap)
-		ap.root_node = NodePath("..")
-		ap.add_animation_library("", _library)
-		ap.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_MANUAL
 		var clip := i % CLIPS.size()
-		add_child(root)
-		ap.play(CLIPS[clip])
+		var phase := rng.randf_range(0.0, 3.0)
+		if blend:
+			# Locomotion as games do it: idle, walk and run blended by speed; two clips weigh in at once.
+			var at := AnimationTree.new()
+			at.name = "AnimationTree"
+			root.add_child(at)
+			at.root_node = NodePath("..")
+			at.add_animation_library("", _library)
+			var bs := AnimationNodeBlendSpace1D.new()
+			bs.min_space = 0.0
+			bs.max_space = 2.0
+			var names := ["idle", "walk", "run"]
+			for j in 3:
+				var an := AnimationNodeAnimation.new()
+				an.animation = names[j]
+				bs.add_blend_point(an, float(j))
+			at.tree_root = bs
+			at.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_MANUAL
+			add_child(root)
+			at.active = true
+			_trees.append(at)
+			_last_t.append(-phase)
+		else:
+			var ap := AnimationPlayer.new()
+			ap.name = "AnimationPlayer"
+			root.add_child(ap)
+			ap.root_node = NodePath("..")
+			ap.add_animation_library("", _library)
+			ap.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_MANUAL
+			add_child(root)
+			ap.play(CLIPS[clip])
+			_players.append(ap)
 		_chars.append(root)
-		_players.append(ap)
 		_clip_of.append(clip)
-		_phase.append(rng.randf_range(0.0, 3.0))
+		_phase.append(phase)
 		var gx := float(i % side) - float(side - 1) * 0.5
 		var gz := float(i / side) - float(side - 1) * 0.5
 		_lane.append(gz * SPACING)
@@ -328,10 +357,16 @@ func set_time(t: float) -> void:
 	var span := _area * 1.2
 	for i in _chars.size():
 		var clip := _clip_of[i]
-		var speed: float = CLIP_SPEED[clip]
+		var speed: float = CLIP_SPEED[clip] if not blend else 1.4
 		var x := fposmod(_start[i] + _dir[i] * speed * t + span * 0.5, span) - span * 0.5
 		var root := _chars[i]
 		root.position = Vector3(x, 0.0, _lane[i])
 		root.rotation = Vector3(0.0, PI * 0.5 * _dir[i], 0.0)
-		var ap := _players[i]
-		ap.seek(fposmod(t + _phase[i], float(CLIP_LENGTH[clip])), true)
+		if blend:
+			var at := _trees[i]
+			at.set("parameters/blend_position", 1.0 + sin(0.3 * t + _phase[i] * 2.0))
+			at.advance(t - _last_t[i])
+			_last_t[i] = t
+		else:
+			var ap := _players[i]
+			ap.seek(fposmod(t + _phase[i], float(CLIP_LENGTH[clip])), true)
