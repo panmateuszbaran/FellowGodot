@@ -57,6 +57,7 @@ class PhysicalBoneSimulator3D : public SkeletonModifier3D {
 	};
 
 	LocalVector<SimulatedBone> bones;
+	int fellow_physical_bone_count = 0; // FellowEngine (decision 0076): bones with a physical bone.
 
 	/// This is a slow API, so it's cached
 	PhysicalBone3D *_get_physical_bone_parent(int p_bone);

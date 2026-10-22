@@ -1911,12 +1911,21 @@ void AnimationMixer::_blend_process(double p_delta, bool p_update_only) {
 }
 
 void AnimationMixer::_blend_apply() {
+	// FellowEngine (rendering/fellow/animation/track_shortcuts, decision 0076): consecutive bone tracks of the same skeleton
+	// look it up once. Only set_bone_pose_*() runs between them (it cannot free the skeleton); any other kind of track,
+	// which may call scripts, forgets it.
+	const bool fellow_cache_skeleton = Animation::fellow_shortcuts.load(std::memory_order_relaxed) & Animation::FELLOW_TRACK_SHORTCUTS;
+	ObjectID fellow_skeleton_id;
+	Skeleton3D *fellow_skeleton = nullptr;
 	// Finally, set the tracks.
 	for (const KeyValue<Animation::TrackCacheID, TrackCache *> &K : track_cache) {
 		TrackCache *track = K.value;
 		bool is_zero_amount = Math::is_zero_approx(track->total_weight);
 		if (!deterministic && is_zero_amount) {
 			continue;
+		}
+		if (track->type != Animation::TYPE_POSITION_3D) {
+			fellow_skeleton_id = ObjectID();
 		}
 		switch (track->type) {
 			case Animation::TYPE_POSITION_3D: {
@@ -1931,7 +1940,16 @@ void AnimationMixer::_blend_apply() {
 					root_motion_rotation_accumulator = t->rot;
 					root_motion_scale_accumulator = t->scale;
 				} else if (t->skeleton_id.is_valid() && t->bone_idx >= 0) {
-					Skeleton3D *t_skeleton = ObjectDB::get_instance<Skeleton3D>(t->skeleton_id);
+					Skeleton3D *t_skeleton;
+					if (fellow_cache_skeleton && t->skeleton_id == fellow_skeleton_id) {
+						t_skeleton = fellow_skeleton;
+					} else {
+						t_skeleton = ObjectDB::get_instance<Skeleton3D>(t->skeleton_id);
+						if (fellow_cache_skeleton) {
+							fellow_skeleton_id = t->skeleton_id;
+							fellow_skeleton = t_skeleton;
+						}
+					}
 					if (!t_skeleton) {
 						return;
 					}
@@ -1950,6 +1968,7 @@ void AnimationMixer::_blend_apply() {
 					}
 
 				} else if (!t->skeleton_id.is_valid()) {
+					fellow_skeleton_id = ObjectID(); // A node's transform notifications may call scripts.
 					Node3D *t_node_3d = ObjectDB::get_instance<Node3D>(t->object_id);
 					if (!t_node_3d) {
 						return;

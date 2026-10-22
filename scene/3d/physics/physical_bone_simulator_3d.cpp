@@ -193,7 +193,11 @@ PhysicalBone3D *PhysicalBoneSimulator3D::_get_physical_bone_parent(int p_bone) {
 
 void PhysicalBoneSimulator3D::_rebuild_physical_bones_cache() {
 	const int b_size = bones.size();
+	fellow_physical_bone_count = 0; // Decision 0076: bones[].physical_bone changes only in the callers of this function.
 	for (int i = 0; i < b_size; ++i) {
+		if (bones[i].physical_bone) {
+			fellow_physical_bone_count++;
+		}
 		PhysicalBone3D *parent_pb = _get_physical_bone_parent(i);
 		if (parent_pb != bones[i].cache_parent_physical_bone) {
 			bones[i].cache_parent_physical_bone = parent_pb;
@@ -381,12 +385,7 @@ bool PhysicalBoneSimulator3D::fellow_processing_is_noop() const {
 	if (!skeleton || skeleton->get_bone_count() != (int)bones.size()) {
 		return false;
 	}
-	for (const SimulatedBone &bone : bones) {
-		if (bone.physical_bone) {
-			return false;
-		}
-	}
-	return true;
+	return fellow_physical_bone_count == 0;
 }
 
 void PhysicalBoneSimulator3D::_process_modification(double p_delta) {
