@@ -813,8 +813,13 @@ inline bool cpu_verify() {
 }
 
 // Worker tasks posted per parallel loop of the render lists, besides the render thread (0: the render thread alone).
+// -1 (the default, decision 0073): half the logical processors less two, at least 1 and at most 6. Ten had left the
+// benchmark machine (8 performance cores) without a free core for the system's and the driver's threads that the
+// presentation needs: City Lab's frames of 6-50 ms.
+int cpu_worker_tasks_auto();
 inline int cpu_worker_tasks() {
-	return MAX(0, GLOBAL_GET_CACHED(int, "rendering/fellow/cpu/worker_tasks"));
+	const int n = GLOBAL_GET_CACHED(int, "rendering/fellow/cpu/worker_tasks");
+	return n < 0 ? cpu_worker_tasks_auto() : n;
 }
 
 // Hot worker tasks: the worker tasks of the render thread's parallel loops (cull, render lists) stay for this many
