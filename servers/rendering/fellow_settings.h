@@ -141,6 +141,11 @@ inline bool ss_interleave_exact_bounds() {
 inline bool ss_depth_mips_exact() {
 	return postfx_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/postfx/ss_depth_mips_exact");
 }
+// postfx/ssr_resolve_shared (decision 0074): SSR's resolve reads and prepares each half-resolution sample once per
+// workgroup (shared memory) instead of once per pixel that uses it; the same reads and expressions. Read every frame.
+inline bool ssr_resolve_shared() {
+	return postfx_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/postfx/ssr_resolve_shared");
+}
 // Debug (docs/decisions/0026-occlusion-culling.md): after the depth pre-pass, count the opaque list elements a depth
 // pyramid of this frame's pre-pass would hide (measurement only; a GPU sync per frame).
 inline bool debug_occlusion_stats() {

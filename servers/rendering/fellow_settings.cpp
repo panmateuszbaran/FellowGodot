@@ -136,6 +136,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/postfx/ss_interleave_exact_bounds", true);
 	// SSAO/SSIL depth mipmaps: one store per texel of the last two levels (decision 0067; stock races).
 	GLOBAL_DEF("rendering/fellow/postfx/ss_depth_mips_exact", true);
+	GLOBAL_DEF("rendering/fellow/postfx/ssr_resolve_shared", false); // decision 0074 (measuring)
 	GLOBAL_DEF("rendering/fellow/postfx/ssao_temporal", false);
 	GLOBAL_DEF("rendering/fellow/postfx/ssil_temporal", false);
 	// SSAO/SSIL gathers: taps whose texture fetches are issued together (decision 0041; 0 or 1 = stock's loop). Start-up.

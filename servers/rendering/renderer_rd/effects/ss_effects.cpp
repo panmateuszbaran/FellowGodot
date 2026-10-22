@@ -1899,6 +1899,8 @@ void SSEffects::screen_space_reflection(Ref<RenderSceneBuffersRD> p_render_buffe
 			ScreenSpaceReflectionResolvePushConstant push_constant;
 			push_constant.screen_size[0] = internal_size.x;
 			push_constant.screen_size[1] = internal_size.y;
+			push_constant.pad[0] = Fellow::ssr_resolve_shared() ? 1 : 0; // decision 0074 (stock leaves pad unset; unused)
+			push_constant.pad[1] = 0;
 
 			RID depth_texture = p_render_buffers->get_depth_texture(v);
 			RID depth_half_texture = p_render_buffers->get_texture_slice(RB_SCOPE_SSR, RB_HIZ, v, 0);
