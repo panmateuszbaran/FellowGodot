@@ -16,9 +16,12 @@ sample is used by up to four neighbouring pixels, so it is read and prepared up 
 
 `postfx/ssr_resolve_shared` (a push-constant flag; stock leaves that field unset and unused): the 8 × 8 pixels of a
 workgroup use a 6 × 6 tile of half-resolution samples; 36 of the 64 invocations read and prepare one sample each into
-shared memory, then every pixel weights its four from the tile. The same reads at the same coordinates (including
+shared memory, then every pixel computes its four from the tile. The same reads at the same coordinates (including
 stock's integer division of `pixel_pos - 1` towards zero at the left and top edges, and the reads past the right and
-bottom edges), the same expressions: 2.25 instead of 16 texture reads per pixel.
+bottom edges): 2.25 instead of 16 texture reads per pixel. Only the reads are shared; each pixel computes from the
+values read exactly what stock's `get_sample()` computes (`fellow164` shared the prepared samples too — the decoded
+normal, the remapped roughness, the colour with its tone mapping inverted — and the RTX rounded them otherwise:
+`m15_f218`, Bistro interior max |d| 3 on its warm sequence; lavapipe had been bit for bit).
 
 ## Verification
 
@@ -26,8 +29,10 @@ lavapipe, captures with SSR on (`--set=env.ssr_enabled=true`), demote diagnostic
 against on: PBR Lab (7 cameras), City Lab (3), Lights Lab (4) at 480 × 270, PBR Lab at 1366 × 768 (2): **0 differing
 pixels**.
 
-RTX: (to measure — the pass in one process, and the warm sequences of Bistro interior and Sponza bit for bit, on
-against off)
+RTX, `fellow164` (the prepared samples shared), `m15_f218`: in one process (blocks of 30 frames, autotune off) GPU
+−0.5 % in Sponza (−0.033 ms, p 2e-5), −0.4 % in Bistro exterior (−0.017 ms), −0.5 % in Bistro interior (−0.017 ms,
+p 1e-8); the warm sequences off against on **not** bit for bit (Bistro interior 93.5 dB, max |d| 3; Sponza max |d| 1).
+`fellow165` shares the reads only: (to measure, `m15_f219`).
 
 ## Decision
 
