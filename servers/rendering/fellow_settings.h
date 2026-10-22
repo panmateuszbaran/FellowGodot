@@ -216,6 +216,11 @@ inline bool animation_track_shortcuts() {
 inline bool animation_batched_skin_transforms() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/animation/batched_skin_transforms");
 }
+// animation/key_hints (decision 0076): each track's key found in the previous frame (then the next) tried before the
+// binary search, used only when it and the next key enclose the time strictly, outside the search's tolerance.
+inline bool animation_key_hints() {
+	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/animation/key_hints");
+}
 inline bool taa_strided_load() {
 	return postfx_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/postfx/taa_strided_load");
 }

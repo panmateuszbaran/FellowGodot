@@ -48,7 +48,8 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/animation/elide_modifier_backup", true); // decision 0076 (exact; on from fellow168)
 	GLOBAL_DEF("rendering/fellow/animation/full_weight_slerp", true); // decision 0076 (exact; on from fellow168)
 	GLOBAL_DEF("rendering/fellow/animation/track_shortcuts", true); // decision 0076 (exact; on from fellow168)
-	GLOBAL_DEF("rendering/fellow/animation/batched_skin_transforms", false); // decision 0077 (measuring)
+	GLOBAL_DEF("rendering/fellow/animation/key_hints", true); // decision 0076 (exact; from fellow170)
+	GLOBAL_DEF("rendering/fellow/animation/batched_skin_transforms", true); // decision 0077 (exact; on from fellow170)
 	GLOBAL_DEF("rendering/fellow/postfx/taa_strided_load", false); // decision 0075: REJECT (exact, no gain)
 	GLOBAL_DEF("rendering/fellow/postfx/taa_history_pingpong", true);
 	// TAA resolve v2: each tile texel's velocity loaded into shared memory with its colour and depth (the closest

@@ -587,6 +587,7 @@ public:
 	enum {
 		FELLOW_FULL_WEIGHT_SLERP = 1,
 		FELLOW_TRACK_SHORTCUTS = 2,
+		FELLOW_KEY_HINTS = 4,
 	};
 	static inline std::atomic<uint32_t> fellow_shortcuts{ 0 };
 

@@ -1,7 +1,7 @@
 # 0076 — Skeletal animation on the main thread: exact shortcuts
 
 Status: **KEEP**, on by default from `fellow168` · Branch `fellow/geometry` · Settings `rendering/fellow/animation/elide_modifier_backup`,
-`animation/full_weight_slerp`, `animation/track_shortcuts` · Code: `scene/3d/skeleton_3d.cpp`,
+`animation/full_weight_slerp`, `animation/track_shortcuts`, `animation/key_hints` (from `fellow170`) · Code: `scene/3d/skeleton_3d.cpp`,
 `scene/3d/skeleton_modifier_3d.*`, `scene/3d/physics/physical_bone_simulator_3d.*`, `scene/animation/animation_mixer.cpp`,
 `scene/resources/animation.*`, `fellow_settings.*`.
 
@@ -80,6 +80,12 @@ Between processes (3 runs each): stock 5.99 ms, `fellow167` (off) 6.11, `fellow1
 `fellow168` (with the simulator's count and the skeleton looked up once; `m15_f226`): in one process all off against
 all on **−19.6 %** (5.458 → 4.386 ms, p 3e-222); the warm `crowd_pan` sequence off against on **bit for bit** (99 dB,
 max |d| 0); between processes stock 5.25 ms against `fellow168` **4.60** (−12.3 %; 1 % low 117 → 132 fps).
+
+`fellow170` adds `animation/key_hints` (on): each track's key found in the previous frame, then the next one, is
+tried before the binary search for the current time, and taken only when it and the following key enclose the time
+strictly, both outside the search's tolerance — then no key matches and the search would return that one (the keys
+are sorted). Headless hashes identical with steps of 0.029 s, 1/60 s, 0.05 s (landing on the keys) and 0.1 s. RTX:
+(pending, `m15_f228`).
 
 ## Decision
 

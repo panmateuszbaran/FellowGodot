@@ -1,6 +1,6 @@
 # 0077 — A skin's bone transforms handed to the RenderingServer in one call
 
-Status: **MEASURING** (off) · Branch `fellow/geometry` · Setting `rendering/fellow/animation/batched_skin_transforms` ·
+Status: **KEEP**, on by default from `fellow170` · Branch `fellow/geometry` · Setting `rendering/fellow/animation/batched_skin_transforms` ·
 Code: `scene/3d/skeleton_3d.*`, `servers/rendering/rendering_server.h`, `rendering_server_default.h`,
 `storage/mesh_storage.h`, `renderer_rd/storage_rd/mesh_storage.*`, `fellow_settings.*`.
 
@@ -26,8 +26,21 @@ takes stock's loop (and its errors).
 lavapipe, captures, demote diagnostics, autotune off, the setting off against on: Crowd Lab (3 cameras) and City Lab
 (3; no skeletons): **0 differing pixels**.
 
-RTX: (pending, `m15_f227`).
+RTX, `fellow169` (`m15_f227`): the warm `crowd_pan` sequence off against on **bit for bit** (99 dB, max |d| 0). In one
+process (blocks of 30 frames, autotune off), Crowd Lab's frame:
+
+| thread model | off | on | |
+|---|---:|---:|---:|
+| default ("Safe": the RenderingServer called directly) | 4.355 ms | 4.344 | −0.3 % (n.s.) |
+| separate render thread (each call a command in the queue) | 4.634 | **3.466** | **−25.2 %** (p 4e-144) |
+
+With the server called directly a call per bone costs little on this machine. With the separate render thread each
+call is a command pushed into the render thread's queue by the main thread: 13 312 per frame were a quarter of Crowd
+Lab's frame. With one command per skin the separate thread now runs Crowd Lab faster than the default model (3.47
+against 4.34 ms), where before it was slower (4.63).
 
 ## Decision
 
-(pending)
+**KEEP, on by default from `fellow170`.** The same transforms in the server's data; nothing lost with the default
+thread model; with the separate render thread, which `docs/FELLOWENGINE_OPTIONS.md` recommends to projects whose main
+thread works, animated characters cost a quarter less.
