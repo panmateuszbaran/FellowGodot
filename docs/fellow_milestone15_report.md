@@ -79,7 +79,10 @@ captures 0 differing pixels). RTX, in one process: Crowd Lab's frame −4.9, −
 together (5.49 → 4.62 ms); between processes 6.11 → 5.10 ms (stock 5.99), 1 % low 116 → 131 fps. On from
 `fellow168`, which also keeps the simulator's count of physical bones and looks each skeleton up once per run of its
 tracks (`m15_f226`): −19.6 % in one process (5.46 → 4.39 ms), the warm sequence bit for bit on the RTX, and against
-stock between processes 5.25 → **4.60 ms** (−12.3 %; 1 % low 117 → 132 fps).
+stock between processes 5.25 → **4.60 ms** (−12.3 %; 1 % low 117 → 132 fps). `fellow170` adds key hints (each track's
+key found last frame tried before the binary search, used only where the search could return nothing else):
+−4.9 % in one process (`m15_f228`); with every animation setting off against the defaults the warm sequence is bit
+for bit.
 
 ## 7. Skins in one call (0077, KEEP)
 

@@ -84,8 +84,10 @@ max |d| 0); between processes stock 5.25 ms against `fellow168` **4.60** (−12.
 `fellow170` adds `animation/key_hints` (on): each track's key found in the previous frame, then the next one, is
 tried before the binary search for the current time, and taken only when it and the following key enclose the time
 strictly, both outside the search's tolerance — then no key matches and the search would return that one (the keys
-are sorted). Headless hashes identical with steps of 0.029 s, 1/60 s, 0.05 s (landing on the keys) and 0.1 s. RTX:
-(pending, `m15_f228`).
+are sorted). Headless hashes identical with steps of 0.029 s, 1/60 s, 0.05 s (landing on the keys) and 0.1 s, and
+with `--crowd_blend=1` (AnimationTrees blending two clips with fractional weights). RTX (`m15_f228`, `fellow170`): in
+one process key hints off against on **−4.9 %** (4.403 → 4.187 ms, p 2e-21); the warm sequence with every animation
+setting off (0076's and 0077's) against the defaults **bit for bit**.
 
 ## Decision
 
