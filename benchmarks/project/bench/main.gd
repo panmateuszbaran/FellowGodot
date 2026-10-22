@@ -41,6 +41,7 @@ const SCENES := {
 	"city": "res://scenes/city_lab.gd",
 	"foliage": "res://scenes/foliage_lab.gd",
 	"crowd": "res://scenes/crowd_lab.gd",
+	"particles": "res://scenes/particles_lab.gd",
 }
 const DT := 1.0 / 60.0
 
