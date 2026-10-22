@@ -34,6 +34,16 @@ this machine). `m15_f217_city` (`fellow163` built with it, five runs each, inter
 (195-247); mean frame −4.4 % against `fellow162` (n.s., 4 of 5 pairs). The first two rounds followed the build at once
 (the new executable was probably still being scanned); from the third on, none.
 
-## 3. Next
+## 3. SSR's resolve (0074, REJECT)
+
+SSR's resolve reads each half-resolution sample (four textures) and prepares it (normal decoded and normalized,
+roughness remapped, tone mapping inverted) once for each of the up to four pixels that use it. Sharing the prepared
+samples per workgroup (`fellow164`): GPU −0.4 to −0.5 % in Sponza and the Bistros in one process, but the warm
+sequences are not bit for bit on the RTX (Bistro interior max |d| 3; lavapipe was): stored to shared memory, the
+prepared values are rounded where the compiler had kept them in registers or fused them. Sharing the reads only
+(`fellow165`): bit for bit, and no measurable gain (−0.1 to −0.3 %, n.s.) — the pass is limited by its arithmetic, not
+its reads. Rejected; with bit-for-bit runs on the RTX (milestone 14) such a difference is now visible in one job.
+
+## 4. Next
 
 (pending)

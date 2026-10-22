@@ -1,6 +1,6 @@
 # 0074 — SSR's resolve: each half-resolution sample read once per workgroup
 
-Status: **MEASURING** (off) · Branch `fellow/geometry` · Setting `rendering/fellow/postfx/ssr_resolve_shared` · Code:
+Status: **REJECT** (left in, off) · Branch `fellow/geometry` · Setting `rendering/fellow/postfx/ssr_resolve_shared` · Code:
 `shaders/effects/screen_space_reflection_resolve.glsl`, `effects/ss_effects.cpp`, `fellow_settings.*`.
 
 ## Problem
@@ -32,8 +32,11 @@ pixels**.
 RTX, `fellow164` (the prepared samples shared), `m15_f218`: in one process (blocks of 30 frames, autotune off) GPU
 −0.5 % in Sponza (−0.033 ms, p 2e-5), −0.4 % in Bistro exterior (−0.017 ms), −0.5 % in Bistro interior (−0.017 ms,
 p 1e-8); the warm sequences off against on **not** bit for bit (Bistro interior 93.5 dB, max |d| 3; Sponza max |d| 1).
-`fellow165` shares the reads only: (to measure, `m15_f219`).
+`fellow165` shares the reads only (`m15_f219`): the warm sequences off against on **bit for bit** (Bistro interior,
+Sponza), and in one process GPU −0.3 / −0.1 / −0.1 % (Sponza, Bistro exterior, Bistro interior; p ≥ 0.13): the pass
+is not limited by its texture reads; what the first version saved was the preparation done four times (the
+normalization, the division that inverts the tone mapping), and sharing it changes the rounding on the RTX.
 
 ## Decision
 
-(pending)
+**REJECT.** The exact version saves nothing measurable; the faster one is not exact. Left in, off.
