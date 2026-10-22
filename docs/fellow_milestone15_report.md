@@ -29,7 +29,10 @@ not help (5-47). `m15_f216` (between processes, every scene): City Lab 1 % low 1
 +1.3 % (n.s.); no scene's mean frame moves (−1.2 to +2.4 %, n.s.).
 
 `cpu/worker_tasks` is automatic from `fellow163`: half the logical processors less two, at least 1, at most 6 (6 on
-this machine).
+this machine). `m15_f217_city` (`fellow163` built with it, five runs each, interleaved, right after the build): `fellow163` 36,
+10, 0, 0, 0 frames over 6 ms (1 % low 120, 236, 285, 289, 309 fps), `fellow162` 43, 1, 20, 24, 54 (90-255), stock 0-1
+(195-247); mean frame −4.4 % against `fellow162` (n.s., 4 of 5 pairs). The first two rounds followed the build at once
+(the new executable was probably still being scanned); from the third on, none.
 
 ## 3. Next
 
