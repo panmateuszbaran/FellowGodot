@@ -1286,6 +1286,57 @@ Error Animation::try_rotation_track_interpolate(int p_track, double p_time, Quat
 	return OK;
 }
 
+Error Animation::fellow_try_position_track_interpolate(int p_track, double p_time, Vector3 *r_interpolation, int *r_key_hint) const {
+	ERR_FAIL_UNSIGNED_INDEX_V((uint32_t)p_track, tracks.size(), ERR_INVALID_PARAMETER);
+	Track *t = tracks[p_track];
+	ERR_FAIL_COND_V(t->type != TYPE_POSITION_3D, ERR_INVALID_PARAMETER);
+	PositionTrack *tt = static_cast<PositionTrack *>(t);
+	if (tt->compressed_track >= 0) {
+		return try_position_track_interpolate(p_track, p_time, r_interpolation);
+	}
+	bool ok = false;
+	Vector3 tk = _interpolate(tt->positions, p_time, tt->interpolation, tt->loop_wrap, &ok, false, r_key_hint);
+	if (!ok) {
+		return ERR_UNAVAILABLE;
+	}
+	*r_interpolation = tk;
+	return OK;
+}
+
+Error Animation::fellow_try_rotation_track_interpolate(int p_track, double p_time, Quaternion *r_interpolation, int *r_key_hint) const {
+	ERR_FAIL_UNSIGNED_INDEX_V((uint32_t)p_track, tracks.size(), ERR_INVALID_PARAMETER);
+	Track *t = tracks[p_track];
+	ERR_FAIL_COND_V(t->type != TYPE_ROTATION_3D, ERR_INVALID_PARAMETER);
+	RotationTrack *rt = static_cast<RotationTrack *>(t);
+	if (rt->compressed_track >= 0) {
+		return try_rotation_track_interpolate(p_track, p_time, r_interpolation);
+	}
+	bool ok = false;
+	Quaternion tk = _interpolate(rt->rotations, p_time, rt->interpolation, rt->loop_wrap, &ok, false, r_key_hint);
+	if (!ok) {
+		return ERR_UNAVAILABLE;
+	}
+	*r_interpolation = tk;
+	return OK;
+}
+
+Error Animation::fellow_try_scale_track_interpolate(int p_track, double p_time, Vector3 *r_interpolation, int *r_key_hint) const {
+	ERR_FAIL_UNSIGNED_INDEX_V((uint32_t)p_track, tracks.size(), ERR_INVALID_PARAMETER);
+	Track *t = tracks[p_track];
+	ERR_FAIL_COND_V(t->type != TYPE_SCALE_3D, ERR_INVALID_PARAMETER);
+	ScaleTrack *st = static_cast<ScaleTrack *>(t);
+	if (st->compressed_track >= 0) {
+		return try_scale_track_interpolate(p_track, p_time, r_interpolation);
+	}
+	bool ok = false;
+	Vector3 tk = _interpolate(st->scales, p_time, st->interpolation, st->loop_wrap, &ok, false, r_key_hint);
+	if (!ok) {
+		return ERR_UNAVAILABLE;
+	}
+	*r_interpolation = tk;
+	return OK;
+}
+
 Quaternion Animation::rotation_track_interpolate(int p_track, double p_time, bool p_backward) const {
 	Quaternion ret = Quaternion(0, 0, 0, 1);
 	ERR_FAIL_UNSIGNED_INDEX_V((uint32_t)p_track, tracks.size(), ret);
@@ -2516,7 +2567,7 @@ Variant Animation::_cubic_interpolate_angle_in_time(const Variant &p_pre_a, cons
 }
 
 template <typename T>
-T Animation::_interpolate(const LocalVector<TKey<T>> &p_keys, double p_time, InterpolationType p_interp, bool p_loop_wrap, bool *p_ok, bool p_backward) const {
+T Animation::_interpolate(const LocalVector<TKey<T>> &p_keys, double p_time, InterpolationType p_interp, bool p_loop_wrap, bool *p_ok, bool p_backward, int *r_fellow_key_hint) const {
 	int len;
 	const int key_count = p_keys.size();
 	if (key_count > 0 && (fellow_shortcuts.load(std::memory_order_relaxed) & FELLOW_TRACK_SHORTCUTS) && (Math::is_equal_approx(length, (double)p_keys[key_count - 1].time) || p_keys[key_count - 1].time < length) && (key_count == 1 || (!Math::is_equal_approx(length, (double)p_keys[key_count - 2].time) && p_keys[key_count - 2].time < length))) {
@@ -2542,7 +2593,26 @@ T Animation::_interpolate(const LocalVector<TKey<T>> &p_keys, double p_time, Int
 		return p_keys[0].value;
 	}
 
-	int idx = _find(p_keys, p_time, p_backward);
+	int idx = -3;
+	if (r_fellow_key_hint && !p_backward && *r_fellow_key_hint >= 0) {
+		// FellowEngine (decision 0076): when a key and the next enclose p_time strictly, neither within _find()'s tolerance
+		// of it, no key is (the keys are sorted): its binary search finds no match and returns the last key before p_time,
+		// that one. Tried: the key found last time, then the one after it (playback moved on).
+		const int key_count = (int)p_keys.size();
+		for (int h = *r_fellow_key_hint; h <= *r_fellow_key_hint + 1; h++) {
+			if (h + 1 < key_count && p_keys[h].time < p_time && p_keys[h + 1].time > p_time && !Math::is_equal_approx(p_time, (double)p_keys[h].time) && !Math::is_equal_approx(p_time, (double)p_keys[h + 1].time)) {
+				idx = h;
+				*r_fellow_key_hint = h;
+				break;
+			}
+		}
+	}
+	if (idx == -3) {
+		idx = _find(p_keys, p_time, p_backward);
+		if (r_fellow_key_hint) {
+			*r_fellow_key_hint = idx;
+		}
+	}
 
 	ERR_FAIL_COND_V(idx == -2, T());
 	int maxi = len - 1;

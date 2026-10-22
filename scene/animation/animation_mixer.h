@@ -306,6 +306,7 @@ protected:
 	RootMotionCache root_motion_cache;
 	AHashMap<Animation::TrackCacheID, TrackCache *, HashHasher> track_cache;
 	AHashMap<Ref<Animation>, LocalVector<TrackCache *>> animation_track_num_to_track_cache;
+	AHashMap<Ref<Animation>, LocalVector<int>> fellow_key_hints; // FellowEngine (decision 0076): per track, the key found last.
 	HashSet<TrackCache *> playing_caches;
 	Vector<Node *> playing_audio_stream_players;
 

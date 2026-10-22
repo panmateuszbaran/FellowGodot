@@ -593,6 +593,7 @@ void AnimationMixer::_clear_caches() {
 	}
 	track_cache.clear();
 	animation_track_num_to_track_cache.clear();
+	fellow_key_hints.clear();
 	cache_valid = false;
 	capture_cache.clear();
 
@@ -997,6 +998,7 @@ bool AnimationMixer::_update_caches() {
 	}
 
 	animation_track_num_to_track_cache.clear();
+	fellow_key_hints.clear();
 	for (const StringName &E : sname_list) {
 		const Ref<Animation> &anim = get_animation(E);
 		_create_track_num_to_track_cache_for_animation(anim);
@@ -1136,6 +1138,7 @@ void AnimationMixer::blend_capture(double p_delta) {
 	if (Animation::is_less_or_equal_approx(capture_cache.remain, 0)) {
 		if (capture_cache.animation.is_valid()) {
 			animation_track_num_to_track_cache.erase(capture_cache.animation);
+			fellow_key_hints.erase(capture_cache.animation);
 		}
 		capture_cache.clear();
 		return;
@@ -1253,6 +1256,18 @@ void AnimationMixer::_blend_process(double p_delta, bool p_update_only) {
 		Animation::Track *const *tracks_ptr = tracks.ptr();
 		double a_length = a->get_length();
 		int count = tracks.size();
+		// FellowEngine (decision 0076): each track's key found last time, a hint for this frame's search.
+		int *fellow_hints = nullptr;
+		if (fellow_track_shortcuts) {
+			LocalVector<int> &hints = fellow_key_hints[a];
+			if (hints.size() != (uint32_t)count) {
+				hints.resize(count);
+				for (int &h : hints) {
+					h = -1;
+				}
+			}
+			fellow_hints = hints.ptr();
+		}
 		for (int i = 0; i < count; i++) {
 			const Animation::Track *animation_track = tracks_ptr[i];
 			if (!animation_track->enabled) {
@@ -1417,7 +1432,7 @@ void AnimationMixer::_blend_process(double p_delta, bool p_update_only) {
 					}
 					{
 						Vector3 loc;
-						Error err = a->try_position_track_interpolate(i, time, &loc);
+						Error err = fellow_hints ? a->fellow_try_position_track_interpolate(i, time, &loc, &fellow_hints[i]) : a->try_position_track_interpolate(i, time, &loc);
 						if (err != OK) {
 							continue;
 						}
@@ -1505,7 +1520,7 @@ void AnimationMixer::_blend_process(double p_delta, bool p_update_only) {
 					}
 					{
 						Quaternion rot;
-						Error err = a->try_rotation_track_interpolate(i, time, &rot);
+						Error err = fellow_hints ? a->fellow_try_rotation_track_interpolate(i, time, &rot, &fellow_hints[i]) : a->try_rotation_track_interpolate(i, time, &rot);
 						if (err != OK) {
 							continue;
 						}
@@ -1597,7 +1612,7 @@ void AnimationMixer::_blend_process(double p_delta, bool p_update_only) {
 					}
 					{
 						Vector3 scale;
-						Error err = a->try_scale_track_interpolate(i, time, &scale);
+						Error err = fellow_hints ? a->fellow_try_scale_track_interpolate(i, time, &scale, &fellow_hints[i]) : a->try_scale_track_interpolate(i, time, &scale);
 						if (err != OK) {
 							continue;
 						}
@@ -2387,6 +2402,7 @@ void AnimationMixer::capture(const StringName &p_name, double p_duration, Tween:
 	capture_cache.ease_type = p_ease_type;
 	if (capture_cache.animation.is_valid()) {
 		animation_track_num_to_track_cache.erase(capture_cache.animation);
+		fellow_key_hints.erase(capture_cache.animation);
 	}
 	capture_cache.animation.instantiate();
 

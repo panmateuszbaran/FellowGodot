@@ -286,7 +286,7 @@ private:
 	_FORCE_INLINE_ Variant _cubic_interpolate_angle_in_time(const Variant &p_pre_a, const Variant &p_a, const Variant &p_b, const Variant &p_post_b, real_t p_c, real_t p_pre_a_t, real_t p_b_t, real_t p_post_b_t) const;
 
 	template <typename T>
-	_FORCE_INLINE_ T _interpolate(const LocalVector<TKey<T>> &p_keys, double p_time, InterpolationType p_interp, bool p_loop_wrap, bool *p_ok, bool p_backward = false) const;
+	_FORCE_INLINE_ T _interpolate(const LocalVector<TKey<T>> &p_keys, double p_time, InterpolationType p_interp, bool p_loop_wrap, bool *p_ok, bool p_backward = false, int *r_fellow_key_hint = nullptr) const;
 
 	template <typename T>
 	_FORCE_INLINE_ void _track_get_key_indices_in_range(const LocalVector<T> &p_array, double from_time, double to_time, LocalVector<int> *r_indices, bool p_is_backward) const;
@@ -465,6 +465,12 @@ public:
 	int rotation_track_insert_key(int p_track, double p_time, const Quaternion &p_rotation);
 	Error rotation_track_get_key(int p_track, int p_key, Quaternion *r_rotation) const;
 	Error try_rotation_track_interpolate(int p_track, double p_time, Quaternion *r_interpolation, bool p_backward = false) const;
+	// FellowEngine (rendering/fellow/animation/track_shortcuts, decision 0076): the try_*_track_interpolate() functions
+	// with the caller's hint of the key found last time for this track (forward playback; checked before it is used, so
+	// the result is always _find()'s). Not bound.
+	Error fellow_try_position_track_interpolate(int p_track, double p_time, Vector3 *r_interpolation, int *r_key_hint) const;
+	Error fellow_try_rotation_track_interpolate(int p_track, double p_time, Quaternion *r_interpolation, int *r_key_hint) const;
+	Error fellow_try_scale_track_interpolate(int p_track, double p_time, Vector3 *r_interpolation, int *r_key_hint) const;
 	Quaternion rotation_track_interpolate(int p_track, double p_time, bool p_backward = false) const;
 
 	int scale_track_insert_key(int p_track, double p_time, const Vector3 &p_scale);
