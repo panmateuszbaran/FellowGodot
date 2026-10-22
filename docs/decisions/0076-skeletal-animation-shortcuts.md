@@ -1,6 +1,6 @@
 # 0076 — Skeletal animation on the main thread: exact shortcuts
 
-Status: **MEASURING** (off) · Branch `fellow/geometry` · Settings `rendering/fellow/animation/elide_modifier_backup`,
+Status: **KEEP**, on by default from `fellow168` · Branch `fellow/geometry` · Settings `rendering/fellow/animation/elide_modifier_backup`,
 `animation/full_weight_slerp`, `animation/track_shortcuts` · Code: `scene/3d/skeleton_3d.cpp`,
 `scene/3d/skeleton_modifier_3d.*`, `scene/3d/physics/physical_bone_simulator_3d.*`, `scene/animation/animation_mixer.cpp`,
 `scene/resources/animation.*`, `fellow_settings.*`.
@@ -41,21 +41,43 @@ found three kinds of work that change nothing:
   with `-ffp-contract=off`).
 * `animation/track_shortcuts`: the last key's index without the binary search when no key but the last can match the
   length (the search would only move up, to the last key); rotation and scale keys not passed through
-  `post_process_key_value()` once it is known that no script overrides it. The two settings are read once per mixer
-  and frame (`GLOBAL_GET_CACHED` per track cost 7 % of the frame by itself).
+  `post_process_key_value()` once it is known that no script overrides it; consecutive bone tracks of one skeleton look
+  it up once in `_blend_apply()` (only `set_bone_pose_*()` runs between them; any other kind of track forgets it). The
+  two settings are read once per mixer and frame (`GLOBAL_GET_CACHED` per track cost 7 % of the frame by itself).
+* With `elide_modifier_backup` the simulator keeps its count of bones with a physical bone (updated where they are
+  bound and unbound) instead of looping over its bones each update, and skips its own loop when the count is 0.
+
+Tried and not kept: copying each bone's global pose into its `pose_global_no_override` (the deprecated API's value)
+when the skeleton has no override. In stock that value lags: it is computed only by the full update, not by
+`get_bone_global_pose()`'s lazy path, so it differs from the global pose in every bone of an animated skeleton; the
+copy changed what `get_bone_global_pose_no_override()` returns.
 
 ## Verification
 
 Headless, Crowd Lab with 64 characters, 200 frames (times between frames not a multiple of the clips' key spacing):
-every bone's global pose and pose rotation of every character hashed every 25 frames — **the same hashes** with each
-setting off and on and all together. lavapipe, Crowd Lab captures (3 cameras), demote diagnostics, autotune off,
+every bone's global pose, global pose without overrides and pose rotation of every character hashed every 25 frames —
+**the same hashes** with each setting off and on and all together (also with `fellow168`'s additions). lavapipe, Crowd Lab captures (3 cameras), demote diagnostics, autotune off,
 all off against all on: **0 differing pixels**.
 
 Headless timing (Xeon, 2 cores; 256 characters, 600 frames, the frame limiter off): 5.2-5.5 ms → 4.0-4.3 ms with
 all three (backup −10-15 %, slerp −11 %, track shortcuts a few % more); on a second container 12.1 → 9.4-9.9 ms.
 
-RTX machine: (pending, `m15_f225`).
+RTX machine, `fellow167` (`m15_f225`):
+
+In one process (blocks of 30 frames, autotune off), Crowd Lab's frame (limited by its main thread):
+
+| settings | frame | against all off |
+|---|---:|---:|
+| all off | 5.487 ms | |
+| `elide_modifier_backup` | 5.216 | −4.9 % (p 2e-21) |
+| `full_weight_slerp` | 5.215 | −5.0 % (p 3e-18) |
+| `track_shortcuts` | 5.160 | −6.0 % (p 3e-23) |
+| all three | **4.620** | **−15.8 %** (p 2e-207) |
+
+Between processes (3 runs each): stock 5.99 ms, `fellow167` (off) 6.11, `fellow167` with the three on **5.10**
+(1 % low 111 / 116 / **131** fps). The render thread and the GPU do not change.
 
 ## Decision
 
-(pending)
+**KEEP, on by default from `fellow168`.** Exact (the same bone poses bit for bit; captures unchanged), Crowd Lab's main
+thread 16 % faster. Scenes without skeletal animation do not run this code.

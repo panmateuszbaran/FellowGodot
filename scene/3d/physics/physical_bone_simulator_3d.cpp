@@ -34,6 +34,7 @@
 #include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
 #include "scene/3d/physics/physical_bone_3d.h"
+#include "servers/rendering/fellow_settings.h"
 
 void PhysicalBoneSimulator3D::_skeleton_changed(Skeleton3D *p_old, Skeleton3D *p_new) {
 	if (p_old) {
@@ -394,6 +395,9 @@ void PhysicalBoneSimulator3D::_process_modification(double p_delta) {
 		return;
 	}
 	ERR_FAIL_COND(skeleton->get_bone_count() != (int)bones.size());
+	if (fellow_physical_bone_count == 0 && Fellow::animation_elide_modifier_backup()) {
+		return; // FellowEngine (decision 0076): the loop below acts only on bones with a physical bone.
+	}
 	for (int i = 0; i < skeleton->get_bone_count(); i++) {
 		if (!bones[i].physical_bone) {
 			continue;
