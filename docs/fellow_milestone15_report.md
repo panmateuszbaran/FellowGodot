@@ -81,6 +81,15 @@ together (5.49 → 4.62 ms); between processes 6.11 → 5.10 ms (stock 5.99), 1 
 tracks (`m15_f226`): −19.6 % in one process (5.46 → 4.39 ms), the warm sequence bit for bit on the RTX, and against
 stock between processes 5.25 → **4.60 ms** (−12.3 %; 1 % low 117 → 132 fps).
 
-## 7. Next
+## 7. Skins in one call (0077, KEEP)
+
+After its update each Skeleton3D handed every bone's skinning transform to the RenderingServer with its own call:
+13 312 per frame in Crowd Lab, each through the server's wrapper and a mutex-guarded lookup of the skeleton, and with
+the separate render thread each a command pushed into the render thread's queue by the main thread. With one call per
+skin (a server function not bound to scripts; the storage looks the skeleton up once and writes the same floats):
+the warm sequence bit for bit, in one process −0.3 % (n.s.) with the default thread model and **−25.2 %** with the
+separate render thread (4.63 → 3.47 ms, `m15_f227`) — which now runs Crowd Lab faster than the default model (4.34).
+
+## 8. Next
 
 (pending)
