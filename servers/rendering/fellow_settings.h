@@ -192,6 +192,11 @@ inline bool taa_shared_velocity() {
 inline bool taa_tile16() {
 	return postfx_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/postfx/taa_tile16");
 }
+// postfx/taa_strided_load (decision 0075): TAA's 8 x 8 workgroups load their 10 x 10 tile with all 64 invocations (at
+// most two texels each) instead of four texels each by 25 of them. The same texels, the same expressions per texel.
+inline bool taa_strided_load() {
+	return postfx_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/postfx/taa_strided_load");
+}
 inline float taa_v2_gamma() {
 	return GLOBAL_GET_CACHED(float, "rendering/fellow/postfx/taa_v2_gamma");
 }

@@ -48,6 +48,11 @@ TAA::TAA() {
 	for (int i = 0; i < 4; i++) {
 		taa_modes.push_back(taa_modes[i] + "\n#define GROUP_SIZE 16\n#define FELLOW_TAA_STRIDED_LOAD\n");
 	}
+	for (int i = 0; i < 4; i++) {
+		// Decision 0075: stock's 8 x 8 workgroups, the 10 x 10 tile loaded by all 64 invocations in turn (at most two
+		// each) instead of four each by 25 of them.
+		taa_modes.push_back(taa_modes[i] + "\n#define FELLOW_TAA_STRIDED_LOAD\n");
+	}
 	taa_shader.initialize(taa_modes, Fellow::taa_shared_velocity() ? "\n#define FELLOW_TAA_SHARED_VELOCITY\n" : "");
 	shader_version = taa_shader.version_create();
 	for (int i = 0; i < VARIANT_MAX; i++) {
@@ -116,6 +121,8 @@ void TAA::process(Ref<RenderSceneBuffersRD> p_render_buffers, RD::DataFormat p_f
 	uint32_t variant = Fellow::taa_resolve_v2() ? VARIANT_FELLOW_V2 : 0;
 	if (Fellow::taa_tile16()) {
 		variant |= VARIANT_FELLOW_TILE16;
+	} else if (Fellow::taa_strided_load()) {
+		variant |= VARIANT_FELLOW_STRIDED8; // decision 0075
 	}
 	if (Fellow::taa_history_pingpong()) {
 		process_pingpong(p_render_buffers, p_format, p_z_near, p_z_far, variant | VARIANT_FELLOW_WRITE_VELOCITY, p_direct_output && p_render_buffers->get_view_count() == 1);

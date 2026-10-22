@@ -185,8 +185,9 @@ void populate_group_shared_memory(uvec2 group_id, uint group_index) {
 	// Populate group shared memory
 	ivec2 group_top_left = ivec2(group_id) * kGroupSize - kBorderSize;
 #ifdef FELLOW_TAA_STRIDED_LOAD
-	// FellowEngine (postfx/taa_tile16): every thread of the group loads tile entries in turn (the same entries, the same
-	// values; with 16 x 16 groups the 1-texel border is a smaller share of the tile).
+	// FellowEngine (postfx/taa_tile16, postfx/taa_strided_load): every thread of the group loads tile entries in turn
+	// (the same entries, the same values; with 16 x 16 groups the 1-texel border is a smaller share of the tile, with
+	// 8 x 8 groups all 64 threads load instead of 25).
 	for (uint i = group_index; i < uint(kTileDimension2); i += uint(kGroupSize * kGroupSize)) {
 		ivec2 group_thread_id = ivec2(i % kTileDimension, i / kTileDimension);
 		store_color_depth(group_thread_id, group_top_left + group_thread_id);

@@ -45,6 +45,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/postfx/enabled", true);
 	GLOBAL_DEF("rendering/fellow/postfx/taa_resolve_v2", true);
 	GLOBAL_DEF("rendering/fellow/postfx/taa_tile16", false);
+	GLOBAL_DEF("rendering/fellow/postfx/taa_strided_load", false); // decision 0075 (measuring)
 	GLOBAL_DEF("rendering/fellow/postfx/taa_history_pingpong", true);
 	// TAA resolve v2: each tile texel's velocity loaded into shared memory with its colour and depth (the closest
 	// neighbour's velocity then read from there), and the previous velocity fetched as soon as the reprojection is known

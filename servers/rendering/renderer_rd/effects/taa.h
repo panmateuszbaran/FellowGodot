@@ -68,7 +68,8 @@ private:
 		VARIANT_FELLOW_V2 = 1,
 		VARIANT_FELLOW_WRITE_VELOCITY = 2,
 		VARIANT_FELLOW_TILE16 = 4, // postfx/taa_tile16: 16 x 16 workgroups, every thread loading the tile (same results)
-		VARIANT_MAX = 8,
+		VARIANT_FELLOW_STRIDED8 = 8, // postfx/taa_strided_load (decision 0075): 8 x 8 workgroups, every thread loading the tile
+		VARIANT_MAX = 12,
 	};
 
 	TaaResolveShaderRD taa_shader;
