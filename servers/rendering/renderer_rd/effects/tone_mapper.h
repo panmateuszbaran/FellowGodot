@@ -122,6 +122,11 @@ private:
 		float luminance_multiplier; //  4 - 96
 
 		float tonemapper_params[4]; //  16 - 112
+
+		uint32_t fellow_lens_a; // 4 - 116: half2 chromatic aberration, vignette intensity (decision 0079)
+		uint32_t fellow_lens_b; // 4 - 120: half2 vignette smoothness, film grain
+		float fellow_grain_seed; // 4 - 124
+		float fellow_aspect; // 4 - 128
 	};
 
 	struct TonemapPushConstantMobile {
@@ -207,6 +212,13 @@ public:
 		bool bilinear_filtering = true;
 
 		bool convert_to_srgb = false;
+
+		// FellowEngine lens effects (post/lens/*, decision 0079; 0: off).
+		float fellow_chromatic_aberration = 0.0;
+		float fellow_vignette = 0.0;
+		float fellow_vignette_smoothness = 0.5;
+		float fellow_film_grain = 0.0;
+		float fellow_grain_seed = 0.0;
 	};
 
 	void tonemapper(RID p_source_color, RID p_dst_framebuffer, const TonemapSettings &p_settings);

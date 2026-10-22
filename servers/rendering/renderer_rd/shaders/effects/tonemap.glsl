@@ -91,6 +91,10 @@ layout(constant_id = 20) const bool sc_glow_level_4 = false;
 layout(constant_id = 21) const bool sc_glow_level_5 = false;
 layout(constant_id = 22) const bool sc_glow_level_6 = false;
 layout(constant_id = 23) const bool sc_glow_map = false;
+// FellowEngine lens effects (post/lens/*, decision 0079): only in the specialized pipelines (sc_fellow).
+layout(constant_id = 24) const bool sc_lens_chromatic_aberration = false;
+layout(constant_id = 25) const bool sc_lens_vignette = false;
+layout(constant_id = 26) const bool sc_lens_film_grain = false;
 
 #define FELLOW_FLAG(m_flag, m_sc) (sc_fellow ? (m_sc) : bool(params.flags & (m_flag)))
 #define FELLOW_TONEMAPPER(m_mode, m_sc) (sc_fellow ? (m_sc) : params.tonemapper == (m_mode))
@@ -119,6 +123,11 @@ layout(push_constant, std430) uniform Params {
 	float luminance_multiplier;
 
 	vec4 tonemapper_params;
+
+	uint fellow_lens_a; // half2: chromatic aberration, vignette intensity
+	uint fellow_lens_b; // half2: vignette smoothness, film grain
+	float fellow_grain_seed;
+	float fellow_aspect;
 }
 params;
 
@@ -891,6 +900,13 @@ void main() {
 	vec4 color = textureLod(source_color, vec3(uv_interp, ViewIndex), 0.0f);
 #else
 	vec4 color = textureLod(source_color, uv_interp, 0.0f);
+	if (sc_fellow && sc_lens_chromatic_aberration) {
+		// FellowEngine lens effect (decision 0079): red and blue magnified differently about the centre.
+		float ca = unpackHalf2x16(params.fellow_lens_a).x;
+		vec2 d = uv_interp - 0.5;
+		color.r = textureLod(source_color, 0.5 + d * (1.0 + ca), 0.0f).r;
+		color.b = textureLod(source_color, 0.5 + d * (1.0 - ca), 0.0f).b;
+	}
 #endif
 	color.rgb *= params.luminance_multiplier;
 
@@ -941,6 +957,15 @@ void main() {
 		color.rgb = apply_glow(color.rgb, glow, params.white);
 	}
 
+	if (sc_fellow && sc_lens_vignette) {
+		// FellowEngine lens effect (decision 0079): darkening towards the corners (radius 1 at a corner).
+		vec2 ab = unpackHalf2x16(params.fellow_lens_a);
+		float smoothness = unpackHalf2x16(params.fellow_lens_b).x;
+		vec2 d = (uv_interp - 0.5) * vec2(params.fellow_aspect, 1.0);
+		float r = length(d) / length(vec2(params.fellow_aspect, 1.0) * 0.5);
+		color.rgb *= 1.0 - ab.y * smoothstep(1.0 - max(smoothness, 0.01), 1.0, r);
+	}
+
 	// Additional effects.
 
 	if (FELLOW_FLAG(FLAG_USE_BCS, sc_use_bcs)) {
@@ -976,6 +1001,15 @@ void main() {
 		}
 	} else if (FELLOW_FLAG(FLAG_CONVERT_TO_SRGB, sc_convert_to_srgb)) {
 		color.rgb = linear_to_srgb(color.rgb);
+	}
+
+	if (sc_fellow && sc_lens_film_grain) {
+		// FellowEngine lens effect (decision 0079): film grain, a new pattern every frame, strongest in the mid-tones.
+		float grain = unpackHalf2x16(params.fellow_lens_b).y;
+		vec2 p = gl_FragCoord.xy + vec2(params.fellow_grain_seed * 113.0, params.fellow_grain_seed * 71.0);
+		float n = fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453) - 0.5;
+		float l = clamp(dot(color.rgb, vec3(0.2126, 0.7152, 0.0722)), 0.0, 1.0);
+		color.rgb += n * grain * (0.25 + 3.0 * l * (1.0 - l));
 	}
 
 	// Debanding should be done at the end of tonemapping, but before writing to the LDR buffer.

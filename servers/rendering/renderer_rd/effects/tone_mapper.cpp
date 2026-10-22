@@ -231,6 +231,16 @@ void ToneMapper::tonemapper(RID p_source_color, RID p_dst_framebuffer, const Ton
 			fellow_spec |= pc.glow_levels[i] > 0.0001f ? (1u << (16 + i)) : 0u;
 		}
 		fellow_spec |= pc.glow_map_strength > 0.001f ? (1u << 23) : 0u;
+		// Lens effects (decision 0079): in the specialized pipelines only.
+		if (p_settings.view_count == 1) {
+			tonemap.push_constant.fellow_lens_a = Math::make_half_float(p_settings.fellow_chromatic_aberration) | (uint32_t(Math::make_half_float(p_settings.fellow_vignette)) << 16);
+			tonemap.push_constant.fellow_lens_b = Math::make_half_float(p_settings.fellow_vignette_smoothness) | (uint32_t(Math::make_half_float(p_settings.fellow_film_grain)) << 16);
+			tonemap.push_constant.fellow_grain_seed = p_settings.fellow_grain_seed;
+			tonemap.push_constant.fellow_aspect = p_settings.texture_size.y > 0 ? float(p_settings.texture_size.x) / float(p_settings.texture_size.y) : 1.0f;
+			fellow_spec |= p_settings.fellow_chromatic_aberration != 0.0f ? (1u << 24) : 0u;
+			fellow_spec |= p_settings.fellow_vignette > 0.0f ? (1u << 25) : 0u;
+			fellow_spec |= p_settings.fellow_film_grain > 0.0f ? (1u << 26) : 0u;
+		}
 	}
 
 	RD::DrawListID draw_list = RD::get_singleton()->draw_list_begin(p_dst_framebuffer);

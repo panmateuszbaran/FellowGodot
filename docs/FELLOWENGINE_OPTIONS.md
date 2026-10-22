@@ -12,6 +12,9 @@ kinds of options:
 
 Every option has a decision record in `docs/decisions/` with its measurements.
 
+From milestone 16 FellowEngine also adds **visual features** (see *Visual features* below): effects stock Godot does not
+have, off by default; with them off the frame is the stock one.
+
 **Determinism.** With the defaults and autotune off, two runs of a scene at a fixed frame rate (`--fixed-fps`, Movie
 Maker mode) render the same frames bit for bit on the benchmark's RTX (0067, 0070, 0071; milestone 14), where stock's
 runs differ. With autotune on as well, except where a pipeline compiles while the frames are drawn (autotune prepares
@@ -50,6 +53,15 @@ on only where an evaluation measures it faster. `shading/adaptive_vrs_max_rate` 
 seen again. `shading/adaptive_vrs_gloss_guard` keeps glossy, curved surfaces at full rate. Adaptive shading needs a
 GPU with fragment shading rate attachments (Vulkan `VK_KHR_fragment_shading_rate`), a single view, the depth pre-pass
 and no MSAA; otherwise every tile is shaded at full rate.
+
+## Visual features (off by default)
+
+Effects that add to the image what a project asks for. Off, they change nothing (verified bit for bit on lavapipe).
+
+| setting | what it does | record |
+|---|---|---|
+| `post/motion_blur/enabled` (`amount` 0.5, `samples` 12, `max_radius` 32 px) | motion blur after TAA: a reconstruction filter (McGuire 2012, Jimenez 2014) over the velocity buffer, the sky blurred by the camera's motion; works with TAA, MSAA or no anti-aliasing (the colour pass then writes motion vectors for it), not with FSR 2 / MetalFX or in XR | 0078 |
+| `post/lens/chromatic_aberration`, `post/lens/vignette` (`vignette_smoothness`), `post/lens/film_grain` | lens effects folded into the tone mapping pass (no pass added): colour fringes towards the edges, darker corners, per-frame grain in the mid-tones; 0 = off | 0079 |
 
 ## Options that change the image (off by default)
 

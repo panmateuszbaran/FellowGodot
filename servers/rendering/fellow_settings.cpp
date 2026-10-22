@@ -45,6 +45,15 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/postfx/enabled", true);
 	GLOBAL_DEF("rendering/fellow/postfx/taa_resolve_v2", true);
 	GLOBAL_DEF("rendering/fellow/postfx/taa_tile16", false);
+	// Visual features (milestone 16 on): off by default, they add to the image what the project turns on.
+	GLOBAL_DEF("rendering/fellow/post/motion_blur/enabled", false); // decision 0078
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/post/motion_blur/amount", PROPERTY_HINT_RANGE, "0,1,0.01"), 0.5); // fraction of the frame the shutter is open
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/post/motion_blur/samples", PROPERTY_HINT_RANGE, "2,64,1"), 12);
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/post/motion_blur/max_radius", PROPERTY_HINT_RANGE, "1,32,0.5,suffix:px"), 32.0);
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/post/lens/chromatic_aberration", PROPERTY_HINT_RANGE, "-0.05,0.05,0.0005"), 0.0); // decision 0079
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/post/lens/vignette", PROPERTY_HINT_RANGE, "0,1,0.01"), 0.0);
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/post/lens/vignette_smoothness", PROPERTY_HINT_RANGE, "0.01,1,0.01"), 0.5);
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/post/lens/film_grain", PROPERTY_HINT_RANGE, "0,0.2,0.001"), 0.0);
 	GLOBAL_DEF("rendering/fellow/animation/elide_modifier_backup", true); // decision 0076 (exact; on from fellow168)
 	GLOBAL_DEF("rendering/fellow/animation/full_weight_slerp", true); // decision 0076 (exact; on from fellow168)
 	GLOBAL_DEF("rendering/fellow/animation/track_shortcuts", true); // decision 0076 (exact; on from fellow168)

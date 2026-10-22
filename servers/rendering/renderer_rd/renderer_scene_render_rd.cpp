@@ -569,6 +569,50 @@ void RendererSceneRenderRD::_render_buffers_post_process_and_tonemap(const Rende
 		RD::get_singleton()->draw_command_end_label();
 	}
 
+	// FellowEngine motion blur (post/motion_blur, decision 0078): after TAA and depth of field, on the HDR image, from
+	// the velocity buffer; what follows (auto exposure, glow, tone mapping) reads its output.
+	if (can_use_effects && can_use_storage && Fellow::motion_blur_enabled() && rb->get_view_count() == 1 && !use_upscaled_texture && rb->has_velocity_buffer(false)) {
+		RENDER_TIMESTAMP("FellowEngine Motion Blur");
+		const Size2i mb_size = rb->get_internal_size();
+		const Size2i mb_tiles((mb_size.x + RendererRD::FellowMotionBlur::TILE_SIZE - 1) / RendererRD::FellowMotionBlur::TILE_SIZE, (mb_size.y + RendererRD::FellowMotionBlur::TILE_SIZE - 1) / RendererRD::FellowMotionBlur::TILE_SIZE);
+		const StringName mb_scope = SNAME("fellow_motion_blur");
+		if (rb->has_texture(mb_scope, SNAME("tile_max")) && rb->get_texture_format(mb_scope, SNAME("tile_max")).width != uint32_t(mb_tiles.x)) {
+			rb->clear_context(mb_scope);
+		}
+		if (!rb->has_texture(mb_scope, SNAME("color"))) {
+			rb->create_texture(mb_scope, SNAME("color"), rb->get_base_data_format(), RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_STORAGE_BIT | RD::TEXTURE_USAGE_CAN_COPY_FROM_BIT, RD::TEXTURE_SAMPLES_1, mb_size);
+			rb->create_texture(mb_scope, SNAME("tile_max"), RD::DATA_FORMAT_R16G16_SFLOAT, RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_STORAGE_BIT, RD::TEXTURE_SAMPLES_1, mb_tiles);
+			rb->create_texture(mb_scope, SNAME("neighbor_max"), RD::DATA_FORMAT_R16G16_SFLOAT, RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_STORAGE_BIT, RD::TEXTURE_SAMPLES_1, mb_tiles);
+		}
+		if (!fellow_motion_blur) {
+			fellow_motion_blur = memnew(RendererRD::FellowMotionBlur);
+		}
+		RendererRD::FellowMotionBlur::Params mb;
+		mb.source = fellow_post_source.is_valid() ? fellow_post_source : rb->get_internal_texture(0);
+		mb.depth = rb->get_depth_texture(0);
+		mb.velocity = rb->get_velocity_buffer(false, 0);
+		mb.tile_max = rb->get_texture(mb_scope, SNAME("tile_max"));
+		mb.neighbor_max = rb->get_texture(mb_scope, SNAME("neighbor_max"));
+		mb.dest = rb->get_texture(mb_scope, SNAME("color"));
+		mb.size = mb_size;
+		mb.amount = Fellow::motion_blur_amount();
+		mb.sample_count = Fellow::motion_blur_samples();
+		mb.max_radius = Fellow::motion_blur_max_radius();
+		mb.z_near = p_render_data->scene_data->z_near;
+		mb.z_far = p_render_data->scene_data->z_far;
+		mb.orthogonal = p_render_data->scene_data->cam_orthogonal;
+		{
+			// The background's motion: the camera's alone (as MotionVectorsStore reprojects static surfaces, unjittered).
+			Projection correction;
+			correction.set_depth_correction(true, true, false);
+			const RenderSceneDataRD *sd = p_render_data->scene_data;
+			mb.sky_reprojection = (correction * sd->prev_cam_projection) * Projection(sd->prev_cam_transform.affine_inverse() * sd->cam_transform) * (correction * sd->cam_projection).inverse();
+		}
+		fellow_motion_blur->process(mb);
+		fellow_post_source = mb.dest;
+		color_texture = mb.dest;
+	}
+
 	float auto_exposure_scale = 1.0;
 
 	if (can_use_effects && RSG::camera_attributes->camera_attributes_uses_auto_exposure(p_render_data->camera_attributes)) {
@@ -823,6 +867,15 @@ void RendererSceneRenderRD::_render_buffers_post_process_and_tonemap(const Rende
 				// The final destination buffer of this viewport will be 8-bit integer, so match that format.
 				tonemap.debanding_mode = RendererRD::ToneMapper::TonemapSettings::DebandingMode::DEBANDING_MODE_8_BIT;
 			}
+		}
+
+		// FellowEngine lens effects (post/lens/*, decision 0079).
+		if (can_use_effects && Fellow::enabled()) {
+			tonemap.fellow_chromatic_aberration = Fellow::lens_chromatic_aberration();
+			tonemap.fellow_vignette = Fellow::lens_vignette();
+			tonemap.fellow_vignette_smoothness = Fellow::lens_vignette_smoothness();
+			tonemap.fellow_film_grain = Fellow::lens_film_grain();
+			tonemap.fellow_grain_seed = float(RSG::rasterizer->get_frame_number() % 997u);
 		}
 
 		if (can_use_storage) {
@@ -1918,6 +1971,9 @@ RendererSceneRenderRD::~RendererSceneRenderRD() {
 	}
 	if (luminance) {
 		memdelete(luminance);
+	}
+	if (fellow_motion_blur) {
+		memdelete(fellow_motion_blur);
 	}
 	if (smaa) {
 		memdelete(smaa);

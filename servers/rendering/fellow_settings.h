@@ -221,6 +221,32 @@ inline bool animation_batched_skin_transforms() {
 inline bool animation_key_hints() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/animation/key_hints");
 }
+// post/motion_blur/* (decision 0078): motion blur from the velocity buffer after TAA (a visual feature, off by default).
+inline bool motion_blur_enabled() {
+	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/post/motion_blur/enabled");
+}
+inline float motion_blur_amount() {
+	return GLOBAL_GET_CACHED(float, "rendering/fellow/post/motion_blur/amount");
+}
+inline int motion_blur_samples() {
+	return GLOBAL_GET_CACHED(int, "rendering/fellow/post/motion_blur/samples");
+}
+inline float motion_blur_max_radius() {
+	return GLOBAL_GET_CACHED(float, "rendering/fellow/post/motion_blur/max_radius");
+}
+// post/lens/* (decision 0079): lens effects in the tone mapping pass (visual features, 0 = off).
+inline float lens_chromatic_aberration() {
+	return GLOBAL_GET_CACHED(float, "rendering/fellow/post/lens/chromatic_aberration");
+}
+inline float lens_vignette() {
+	return GLOBAL_GET_CACHED(float, "rendering/fellow/post/lens/vignette");
+}
+inline float lens_vignette_smoothness() {
+	return GLOBAL_GET_CACHED(float, "rendering/fellow/post/lens/vignette_smoothness");
+}
+inline float lens_film_grain() {
+	return GLOBAL_GET_CACHED(float, "rendering/fellow/post/lens/film_grain");
+}
 inline bool taa_strided_load() {
 	return postfx_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/postfx/taa_strided_load");
 }

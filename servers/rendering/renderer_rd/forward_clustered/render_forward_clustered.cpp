@@ -4721,6 +4721,10 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 
 	bool using_upscaling = scale_type != SCALE_NONE;
 
+	// FellowEngine (decision 0078): motion blur reads the velocity buffer; without TAA or an upscaler the colour pass
+	// writes it for the blur alone (stock's motion-vector path).
+	const bool fellow_mb_motion_vectors = !is_reflection_probe && rb_data.is_valid() && rb->get_view_count() == 1 && rb->get_can_be_storage() && Fellow::motion_blur_enabled();
+
 	// check if we need motion vectors
 	bool motion_vectors_required;
 	if (using_debug_mvs) {
@@ -4730,6 +4734,8 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	} else if (!is_reflection_probe && using_taa) {
 		motion_vectors_required = true;
 	} else if (!is_reflection_probe && using_upscaling) {
+		motion_vectors_required = true;
+	} else if (fellow_mb_motion_vectors) {
 		motion_vectors_required = true;
 	} else {
 		motion_vectors_required = false;
@@ -5569,7 +5575,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	RD::get_singleton()->draw_command_begin_label("Resolve");
 
 	if (rb_data.is_valid() && use_msaa) {
-		bool resolve_velocity_buffer = (using_taa || using_upscaling || ce_needs_motion_vectors) && rb->has_velocity_buffer(true);
+		bool resolve_velocity_buffer = (using_taa || using_upscaling || ce_needs_motion_vectors || fellow_mb_motion_vectors) && rb->has_velocity_buffer(true);
 		for (uint32_t v = 0; v < rb->get_view_count(); v++) {
 			RD::get_singleton()->texture_resolve_multisample(rb->get_color_msaa(v), rb->get_internal_texture(v));
 			resolve_effects->resolve_depth(rb->get_depth_msaa(v), rb->get_depth_texture(v), rb->get_internal_size(), texture_multisamples[msaa]);
