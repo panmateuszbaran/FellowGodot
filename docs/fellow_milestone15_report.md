@@ -52,6 +52,33 @@ for bit on the RTX, the TAA pass −4 % in Bistro exterior and +5 % in Sponza, n
 (`m15_f220`). With decision 0023 (16 × 16 workgroups, slower) neither the group's size nor the sharing of its loads
 is what limits the pass. Rejected.
 
-## 5. Next
+## 5. A new scene: Crowd Lab (skeletal animation)
+
+No benchmark scene had animated characters. Crowd Lab (`benchmarks/project/scenes/crowd_lab.gd`, `--scene=crowd`)
+builds 256 procedural humanoids (52 bones each: spine, head, arms with five three-bone fingers, legs; 4992 vertices
+and 8736 triangles; one shared mesh and Skin), each with its own Skeleton3D and AnimationPlayer playing one of four
+looping clips with a rotation track per bone, walking along lanes under a sun with four cascades. The players are
+in manual mode and seeked by `set_time()` (the bench's rule for anything animated); `--crowd=N` changes the count.
+
+`m15_f222`, `m15_f224` (between processes, 3 runs each): stock 5.19-5.99 ms per frame, `fellow166` 5.40-6.11 ms, the
+GPU 1.6-2.1 ms and the render thread 0.5-1.0 ms: the frame is the **main thread** animating the characters (about
+4.5 ms), in stock's code. FellowEngine off from start-up, without async compute, without autotune: the same within
+the runs' spread (5.5-5.9 ms); the separate render thread does not help either (5.9-6.0 ms: the main thread is the
+frame). In one process (`m15_f223`) FellowEngine's render-thread work and persistent instance data each cost Crowd
+Lab 1.5 % of its frame (render thread +0.08 to +0.10 ms: all 256 instances change every frame).
+
+## 6. Skeletal animation without its known results (0076, KEEP)
+
+A profile of Crowd Lab's main thread (headless with the dummy renderer, `perf` on a build with its symbol table)
+found work whose result is known: every Skeleton3D saves and restores all its bones around its modifiers because it
+always has one — the compatibility PhysicalBoneSimulator3D, active, with no physical bone to move (12 % of the
+frame); slerp at weight 1 (one animation playing) still computes `acos()` and three sines to get the coefficients 0
+and 1; each track searches for its last key and passes its value through a script hook nobody overrides. The three
+shortcuts give the same bone poses bit for bit (every bone of every character hashed every 25 frames; lavapipe
+captures 0 differing pixels). RTX, in one process: Crowd Lab's frame −4.9, −5.0 and −6.0 % each, **−15.8 %**
+together (5.49 → 4.62 ms); between processes 6.11 → 5.10 ms (stock 5.99), 1 % low 116 → 131 fps. On from
+`fellow168`.
+
+## 7. Next
 
 (pending)
