@@ -550,6 +550,7 @@ func _run_physics() -> void:
 	var per_tick := {"physics_ms": [], "frame_ms": [], "sync_ms": [], "process_ms": [], "step_ms": [], "end_ms": []}
 	var hashes := []
 	var prev := _fellow_stats()
+	var first := prev
 	var last := Time.get_ticks_usec()
 	var t0 := last
 	for i in ticks:
@@ -583,7 +584,14 @@ func _run_physics() -> void:
 		for x in a:
 			total += x
 		summary[k] = {"mean": total / a.size(), "p50": s[s.size() / 2], "p95": s[int(s.size() * 0.95)], "max": s[s.size() - 1], "total": total}
-	result["physics"] = {"ticks": ticks, "warm": warm, "wall_s": wall, "summary": summary, "per_tick": per_tick, "hashes": hashes,
+	# The engines' step by phase (FellowEngine counters), ms per tick over the measured ticks.
+	var phases := {}
+	var fs_end := _fellow_stats()
+	for k in fs_end.keys():
+		var ks := str(k)
+		if (ks.begins_with("physics_godot_") or ks.begins_with("physics_jolt_")) and ks.ends_with("_usec"):
+			phases[ks.trim_prefix("physics_").trim_suffix("_usec")] = (fs_end[k] - first.get(k, 0)) / 1000.0 / maxi(1, ticks)
+	result["physics"] = {"ticks": ticks, "warm": warm, "wall_s": wall, "summary": summary, "per_tick": per_tick, "hashes": hashes, "phases_ms": phases,
 		"counters": scene.physics_counters(), "engine": ProjectSettings.get_setting("physics/3d/physics_engine"),
 		"threads": OS.get_processor_count()}
 	_log("physics: %d ticks, frame %.3f ms, physics %.3f ms/tick (step %.3f, sync %.3f, process %.3f), final hash %s" % [ticks,

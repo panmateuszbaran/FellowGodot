@@ -93,6 +93,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/animation/key_hints", true); // decision 0076 (exact; from fellow170)
 	GLOBAL_DEF("rendering/fellow/animation/batched_skin_transforms", true); // decision 0077 (exact; on from fellow170)
 	GLOBAL_DEF("rendering/fellow/physics/distance_face_cull", true); // decision 0085 (exact)
+	GLOBAL_DEF("rendering/fellow/physics/distance_face_order", true); // decision 0085 (exact)
 	GLOBAL_DEF("rendering/fellow/physics/convex_vertex_cache", true); // decision 0086 (exact)
 	GLOBAL_DEF("rendering/fellow/physics/verify", false);
 	GLOBAL_DEF("rendering/fellow/postfx/taa_strided_load", false); // decision 0075: REJECT (exact, no gain)
@@ -394,6 +395,16 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["physics_process_usec"] = s.physics_process_usec.get();
 	d["physics_step_usec"] = s.physics_step_usec.get();
 	d["physics_end_usec"] = s.physics_end_usec.get();
+	{
+		static const char *godot_phases[6] = { "integrate_forces", "broadphase", "islands", "setup", "solve", "integrate_velocities" };
+		for (int i = 0; i < 6; i++) {
+			d[String("physics_godot_") + godot_phases[i] + "_usec"] = s.physics_godot_usec[i].get();
+		}
+		static const char *jolt_phases[3] = { "pre_step", "update", "post_step" };
+		for (int i = 0; i < 3; i++) {
+			d[String("physics_jolt_") + jolt_phases[i] + "_usec"] = s.physics_jolt_usec[i].get();
+		}
+	}
 	d["physics_verify_faces"] = s.physics_verify_faces.get();
 	d["physics_verify_mismatches"] = s.physics_verify_mismatches.get();
 	d["raytracing_instances"] = s.raytracing_instances.get();

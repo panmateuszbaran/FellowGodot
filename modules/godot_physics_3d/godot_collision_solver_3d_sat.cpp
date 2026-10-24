@@ -1095,6 +1095,9 @@ static void _collision_sphere_face(const GodotShape3D *p_a, const Transform3D &p
 		p_transform_b.xform(face_B->vertex[1]),
 		p_transform_b.xform(face_B->vertex[2]),
 	};
+	// FellowEngine (decision 0086): the face's projections from these (GodotFaceShape3D::project_range() transforms them
+	// again for every axis).
+	separator.fellow_set_vertices_B(Fellow::physics_convex_vertex_cache() ? vertex : nullptr, 3);
 
 	Vector3 normal = (vertex[0] - vertex[2]).cross(vertex[0] - vertex[1]).normalized();
 
@@ -1580,6 +1583,9 @@ static void _collision_box_face(const GodotShape3D *p_a, const Transform3D &p_tr
 		p_transform_b.xform(face_B->vertex[1]),
 		p_transform_b.xform(face_B->vertex[2]),
 	};
+	// FellowEngine (decision 0086): the face's projections from these (GodotFaceShape3D::project_range() transforms them
+	// again for every axis).
+	separator.fellow_set_vertices_B(Fellow::physics_convex_vertex_cache() ? vertex : nullptr, 3);
 
 	Vector3 normal = (vertex[0] - vertex[2]).cross(vertex[0] - vertex[1]).normalized();
 
@@ -1840,6 +1846,9 @@ static void _collision_capsule_face(const GodotShape3D *p_a, const Transform3D &
 		p_transform_b.xform(face_B->vertex[1]),
 		p_transform_b.xform(face_B->vertex[2]),
 	};
+	// FellowEngine (decision 0086): the face's projections from these (GodotFaceShape3D::project_range() transforms them
+	// again for every axis).
+	separator.fellow_set_vertices_B(Fellow::physics_convex_vertex_cache() ? vertex : nullptr, 3);
 
 	Vector3 normal = (vertex[0] - vertex[2]).cross(vertex[0] - vertex[1]).normalized();
 
@@ -2002,6 +2011,9 @@ static void _collision_cylinder_face(const GodotShape3D *p_a, const Transform3D 
 		p_transform_b.xform(face_B->vertex[1]),
 		p_transform_b.xform(face_B->vertex[2]),
 	};
+	// FellowEngine (decision 0086): the face's projections from these (GodotFaceShape3D::project_range() transforms them
+	// again for every axis).
+	separator.fellow_set_vertices_B(Fellow::physics_convex_vertex_cache() ? vertex : nullptr, 3);
 
 	Vector3 normal = (vertex[0] - vertex[2]).cross(vertex[0] - vertex[1]).normalized();
 
@@ -2263,6 +2275,9 @@ static void _collision_convex_polygon_face(const GodotShape3D *p_a, const Transf
 		p_transform_b.xform(face_B->vertex[1]),
 		p_transform_b.xform(face_B->vertex[2]),
 	};
+	// FellowEngine (decision 0086): the face's projections from these (GodotFaceShape3D::project_range() transforms them
+	// again for every axis).
+	separator.fellow_set_vertices_B(Fellow::physics_convex_vertex_cache() ? vertex : nullptr, 3);
 
 	Vector3 normal = (vertex[0] - vertex[2]).cross(vertex[0] - vertex[1]).normalized();
 

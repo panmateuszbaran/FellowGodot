@@ -44,6 +44,8 @@ public:
 	virtual ~GodotShapeOwner3D() {}
 };
 
+// FellowEngine (milestone 17): the concrete shapes are final, so that the SAT tests' calls through their static types
+// (SeparatorAxisTest<ShapeA, ShapeB>) are direct and can be inlined; the same code.
 class GodotShape3D {
 	RID self;
 	AABB aabb;
@@ -111,7 +113,7 @@ public:
 	GodotConcaveShape3D() {}
 };
 
-class GodotWorldBoundaryShape3D : public GodotShape3D {
+class GodotWorldBoundaryShape3D final : public GodotShape3D {
 	Plane plane;
 
 	void _setup(const Plane &p_plane);
@@ -136,7 +138,7 @@ public:
 	GodotWorldBoundaryShape3D();
 };
 
-class GodotSeparationRayShape3D : public GodotShape3D {
+class GodotSeparationRayShape3D final : public GodotShape3D {
 	real_t length = 1.0;
 	bool slide_on_slope = false;
 
@@ -164,7 +166,7 @@ public:
 	GodotSeparationRayShape3D();
 };
 
-class GodotSphereShape3D : public GodotShape3D {
+class GodotSphereShape3D final : public GodotShape3D {
 	real_t radius = 0.0;
 
 	void _setup(real_t p_radius);
@@ -191,7 +193,7 @@ public:
 	GodotSphereShape3D();
 };
 
-class GodotBoxShape3D : public GodotShape3D {
+class GodotBoxShape3D final : public GodotShape3D {
 	Vector3 half_extents;
 	void _setup(const Vector3 &p_half_extents);
 
@@ -216,7 +218,7 @@ public:
 	GodotBoxShape3D();
 };
 
-class GodotCapsuleShape3D : public GodotShape3D {
+class GodotCapsuleShape3D final : public GodotShape3D {
 	real_t height = 0.0;
 	real_t radius = 0.0;
 
@@ -245,7 +247,7 @@ public:
 	GodotCapsuleShape3D();
 };
 
-class GodotCylinderShape3D : public GodotShape3D {
+class GodotCylinderShape3D final : public GodotShape3D {
 	real_t height = 0.0;
 	real_t radius = 0.0;
 
@@ -274,7 +276,7 @@ public:
 	GodotCylinderShape3D();
 };
 
-struct GodotConvexPolygonShape3D : public GodotShape3D {
+struct GodotConvexPolygonShape3D final : public GodotShape3D {
 	Geometry3D::MeshData mesh;
 	LocalVector<int> extreme_vertices;
 	LocalVector<LocalVector<int>> vertex_neighbors;
@@ -306,7 +308,7 @@ public:
 struct _Volume_BVH;
 struct GodotFaceShape3D;
 
-struct GodotConcavePolygonShape3D : public GodotConcaveShape3D {
+struct GodotConcavePolygonShape3D final : public GodotConcaveShape3D {
 	// always a trimesh
 
 	struct Face {
@@ -384,7 +386,7 @@ public:
 	GodotConcavePolygonShape3D();
 };
 
-struct GodotHeightMapShape3D : public GodotConcaveShape3D {
+struct GodotHeightMapShape3D final : public GodotConcaveShape3D {
 	Vector<real_t> heights;
 	int width = 0;
 	int depth = 0;
@@ -448,7 +450,7 @@ public:
 };
 
 //used internally
-struct GodotFaceShape3D : public GodotShape3D {
+struct GodotFaceShape3D final : public GodotShape3D {
 	Vector3 normal; //cache
 	Vector3 vertex[3];
 	bool backface_collision = false;
@@ -473,7 +475,7 @@ struct GodotFaceShape3D : public GodotShape3D {
 	GodotFaceShape3D();
 };
 
-struct GodotMotionShape3D : public GodotShape3D {
+struct GodotMotionShape3D final : public GodotShape3D {
 	GodotShape3D *shape = nullptr;
 	Vector3 motion;
 

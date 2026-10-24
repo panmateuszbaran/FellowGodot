@@ -34,6 +34,7 @@
 
 #include "core/object/worker_thread_pool.h"
 #include "core/os/os.h"
+#include "servers/rendering/fellow_settings.h"
 
 #define BODY_ISLAND_COUNT_RESERVE 128
 #define BODY_ISLAND_SIZE_RESERVE 512
@@ -222,10 +223,13 @@ void GodotStep3D::step(GodotSpace3D *p_space, real_t p_delta) {
 	p_space->set_active_objects(active_count);
 
 	// Update the broadphase to register collision pairs.
+	const uint64_t fellow_broadphase_begin = OS::get_singleton()->get_ticks_usec();
+	Fellow::stats().physics_godot_usec[0].add(fellow_broadphase_begin - profile_begtime);
 	p_space->update();
 
 	{ //profile
 		profile_endtime = OS::get_singleton()->get_ticks_usec();
+		Fellow::stats().physics_godot_usec[1].add(profile_endtime - fellow_broadphase_begin);
 		p_space->set_elapsed_time(GodotSpace3D::ELAPSED_TIME_INTEGRATE_FORCES, profile_endtime - profile_begtime);
 		profile_begtime = profile_endtime;
 	}
@@ -338,6 +342,7 @@ void GodotStep3D::step(GodotSpace3D *p_space, real_t p_delta) {
 	{ //profile
 		profile_endtime = OS::get_singleton()->get_ticks_usec();
 		p_space->set_elapsed_time(GodotSpace3D::ELAPSED_TIME_GENERATE_ISLANDS, profile_endtime - profile_begtime);
+		Fellow::stats().physics_godot_usec[2].add(profile_endtime - profile_begtime); // FellowEngine (milestone 17)
 		profile_begtime = profile_endtime;
 	}
 
@@ -350,6 +355,7 @@ void GodotStep3D::step(GodotSpace3D *p_space, real_t p_delta) {
 	{ //profile
 		profile_endtime = OS::get_singleton()->get_ticks_usec();
 		p_space->set_elapsed_time(GodotSpace3D::ELAPSED_TIME_SETUP_CONSTRAINTS, profile_endtime - profile_begtime);
+		Fellow::stats().physics_godot_usec[3].add(profile_endtime - profile_begtime); // FellowEngine (milestone 17)
 		profile_begtime = profile_endtime;
 	}
 
@@ -370,6 +376,7 @@ void GodotStep3D::step(GodotSpace3D *p_space, real_t p_delta) {
 	{ //profile
 		profile_endtime = OS::get_singleton()->get_ticks_usec();
 		p_space->set_elapsed_time(GodotSpace3D::ELAPSED_TIME_SOLVE_CONSTRAINTS, profile_endtime - profile_begtime);
+		Fellow::stats().physics_godot_usec[4].add(profile_endtime - profile_begtime); // FellowEngine (milestone 17)
 		profile_begtime = profile_endtime;
 	}
 
@@ -399,6 +406,7 @@ void GodotStep3D::step(GodotSpace3D *p_space, real_t p_delta) {
 	{ //profile
 		profile_endtime = OS::get_singleton()->get_ticks_usec();
 		p_space->set_elapsed_time(GodotSpace3D::ELAPSED_TIME_INTEGRATE_VELOCITIES, profile_endtime - profile_begtime);
+		Fellow::stats().physics_godot_usec[5].add(profile_endtime - profile_begtime); // FellowEngine (milestone 17)
 		profile_begtime = profile_endtime;
 	}
 

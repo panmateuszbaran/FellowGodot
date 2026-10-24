@@ -605,6 +605,7 @@ struct _FellowSeparationInfo {
 	const Transform3D *transform_B = nullptr;
 	bool collided = false;
 	bool verify = false;
+	bool ordered = false;
 	uint64_t verified = 0;
 	uint64_t mismatches = 0;
 
@@ -691,8 +692,9 @@ struct _FellowSeparationInfo {
 		}
 	}
 
-	// True when the face is certainly farther from the bound than GJK's tolerance.
-	bool face_separated(const GodotFaceShape3D *p_face) const {
+	// True when the face is certainly farther from the bound than GJK's tolerance. r_score: the largest gap found over
+	// the axes less g (<= 0 when the face is kept; the lower, the deeper the bound overlaps the face on every axis).
+	bool face_separated(const GodotFaceShape3D *p_face, double &r_score) const {
 		const Transform3D &t = *transform_B;
 		double w[3][3];
 		double vmax = magnitude;
@@ -707,6 +709,7 @@ struct _FellowSeparationInfo {
 			}
 		}
 		const double g = 1e-3 + 1e-5 * vmax;
+		double gap = -1e300;
 		for (int j = 0; j < axis_count; j++) {
 			const double p0 = dot3(axis[j], w[0]);
 			const double p1 = dot3(axis[j], w[1]);
@@ -714,6 +717,7 @@ struct _FellowSeparationInfo {
 			if (MIN(p0, MIN(p1, p2)) > hi[j] + g || MAX(p0, MAX(p1, p2)) < lo[j] - g) {
 				return true;
 			}
+			gap = MAX(gap, MAX(MIN(p0, MIN(p1, p2)) - hi[j], lo[j] - MAX(p0, MAX(p1, p2))));
 		}
 		// The face's plane.
 		const double e1[3] = { w[1][0] - w[0][0], w[1][1] - w[0][1], w[1][2] - w[0][2] };
@@ -732,6 +736,47 @@ struct _FellowSeparationInfo {
 			if (MIN(p0, MIN(p1, p2)) > h + g || MAX(p0, MAX(p1, p2)) < l - g) {
 				return true;
 			}
+			gap = MAX(gap, MAX(MIN(p0, MIN(p1, p2)) - h, l - MAX(p0, MAX(p1, p2))));
+		}
+		r_score = gap - g;
+		return false;
+	}
+
+	// The faces kept, given to GJK in batches, the most deeply overlapped first: whether any is touching does not
+	// depend on the order (GJK's answer for a face depends on the face alone), and a touching face found early ends the
+	// search early.
+	struct Candidate {
+		Vector3 vertex[3];
+		double score = 0.0;
+	};
+	static constexpr int MAX_CANDIDATES = 32;
+	Candidate candidates[MAX_CANDIDATES];
+	int candidate_count = 0;
+	GodotFaceShape3D face;
+
+	// GJK on the pending candidates; true when one is touching.
+	bool flush() {
+		const int n = candidate_count;
+		candidate_count = 0;
+		int order[MAX_CANDIDATES];
+		for (int i = 0; i < n; i++) {
+			int j = i;
+			while (j > 0 && candidates[order[j - 1]].score > candidates[i].score) {
+				order[j] = order[j - 1];
+				j--;
+			}
+			order[j] = i;
+		}
+		Vector3 close_A, close_B;
+		for (int i = 0; i < n; i++) {
+			const Candidate &c = candidates[order[i]];
+			face.vertex[0] = c.vertex[0];
+			face.vertex[1] = c.vertex[1];
+			face.vertex[2] = c.vertex[2];
+			if (!gjk_epa_calculate_distance(shape_A, *transform_A, &face, *transform_B, close_A, close_B)) {
+				collided = true;
+				return true;
+			}
 		}
 		return false;
 	}
@@ -740,7 +785,9 @@ struct _FellowSeparationInfo {
 bool GodotCollisionSolver3D::fellow_separation_callback(void *p_userdata, GodotShape3D *p_convex) {
 	_FellowSeparationInfo &info = *(static_cast<_FellowSeparationInfo *>(p_userdata));
 	Vector3 close_A, close_B;
-	if (info.face_separated(static_cast<const GodotFaceShape3D *>(p_convex))) {
+	const GodotFaceShape3D *face = static_cast<const GodotFaceShape3D *>(p_convex);
+	double score = 0.0;
+	if (info.face_separated(face, score)) {
 		if (info.verify) {
 			info.verified++;
 			if (!gjk_epa_calculate_distance(info.shape_A, *info.transform_A, p_convex, *info.transform_B, close_A, close_B)) {
@@ -748,6 +795,14 @@ bool GodotCollisionSolver3D::fellow_separation_callback(void *p_userdata, GodotS
 			}
 		}
 		return false;
+	}
+	if (info.ordered) {
+		_FellowSeparationInfo::Candidate &c = info.candidates[info.candidate_count++];
+		c.vertex[0] = face->vertex[0];
+		c.vertex[1] = face->vertex[1];
+		c.vertex[2] = face->vertex[2];
+		c.score = score;
+		return info.candidate_count == _FellowSeparationInfo::MAX_CANDIDATES ? info.flush() : false;
 	}
 	// As concave_distance_callback(): the first face found touching ends the search.
 	info.collided = !gjk_epa_calculate_distance(info.shape_A, *info.transform_A, p_convex, *info.transform_B, close_A, close_B);
@@ -767,6 +822,7 @@ bool GodotCollisionSolver3D::fellow_test_separation(const GodotShape3D *p_shape_
 	info.shape_A = p_shape_A;
 	info.transform_B = &p_transform_B;
 	info.verify = Fellow::physics_verify();
+	info.ordered = Fellow::physics_distance_face_order();
 	info.setup(p_transform_A, p_bounds_A, p_motion_A);
 
 	// The faces culled exactly as solve_distance() culls them (the same box, the same order).
@@ -802,6 +858,9 @@ bool GodotCollisionSolver3D::fellow_test_separation(const GodotShape3D *p_shape_
 	}
 
 	concave_B->cull(local_aabb, fellow_separation_callback, &info, false);
+	if (!info.collided && info.candidate_count > 0) {
+		info.flush();
+	}
 
 	if (info.verify) {
 		Fellow::stats().physics_verify_faces.add(info.verified);

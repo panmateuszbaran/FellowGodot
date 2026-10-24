@@ -43,9 +43,11 @@
 #include "jolt_physics_direct_space_state_3d.h"
 
 #include "core/io/file_access.h"
+#include "core/os/os.h"
 #include "core/os/time.h"
 #include "core/string/print_string.h"
 #include "core/variant/variant_utility.h"
+#include "servers/rendering/fellow_settings.h"
 
 #include <Jolt/Physics/Collision/CollideShapeVsShapePerLeaf.h>
 #include <Jolt/Physics/Collision/CollisionCollectorImpl.h>
@@ -191,9 +193,15 @@ void JoltSpace3D::step(float p_step) {
 	stepping = true;
 	last_step = p_step;
 
+	// FellowEngine (milestone 17): the step's parts timed into the stats.
+	const uint64_t fellow_begin = OS::get_singleton()->get_ticks_usec();
 	_pre_step(p_step);
+	const uint64_t fellow_update_begin = OS::get_singleton()->get_ticks_usec();
+	Fellow::stats().physics_jolt_usec[0].add(fellow_update_begin - fellow_begin);
 
 	const JPH::EPhysicsUpdateError update_error = physics_system->Update(p_step, 1, temp_allocator, job_system);
+	const uint64_t fellow_post_begin = OS::get_singleton()->get_ticks_usec();
+	Fellow::stats().physics_jolt_usec[1].add(fellow_post_begin - fellow_update_begin);
 
 	if ((update_error & JPH::EPhysicsUpdateError::ManifoldCacheFull) != JPH::EPhysicsUpdateError::None) {
 		WARN_PRINT_ONCE(vformat("Jolt Physics manifold cache exceeded capacity and contacts were ignored. "
@@ -217,6 +225,7 @@ void JoltSpace3D::step(float p_step) {
 	}
 
 	_post_step(p_step);
+	Fellow::stats().physics_jolt_usec[2].add(OS::get_singleton()->get_ticks_usec() - fellow_post_begin);
 
 	stepping = false;
 }

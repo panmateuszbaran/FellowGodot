@@ -48,6 +48,12 @@ def summarize(runs: list[dict]) -> dict:
         vals = [r["summary"][key]["mean"] for r in runs if key in r.get("summary", {})]
         if vals:
             out[key] = {"median": statistics.median(vals), "runs": vals}
+    phases = {}
+    for r in runs:
+        for k, v in (r.get("phases_ms") or {}).items():
+            phases.setdefault(k, []).append(v)
+    if phases:
+        out["phases_ms"] = {k: statistics.median(v) for k, v in phases.items()}
     return out
 
 
@@ -111,7 +117,7 @@ def main() -> int:
                                 d = json.load(f)
                             p = d.get("physics", {})
                             r = {"valid": bool(p), "summary": p.get("summary", {}), "hashes": p.get("hashes", []),
-                                 "counters": p.get("counters", {}), "engine": p.get("engine"), "threads": p.get("threads"),
+                                 "counters": p.get("counters", {}), "engine": p.get("engine"), "threads": p.get("threads"), "phases_ms": p.get("phases_ms"),
                                  "wall_s": p.get("wall_s"), "fellow_requested": (d.get("fellow") or {}).get("requested"),
                                  "verify": {k: v2 for k, v2 in (d.get("fellow_stats_process_total") or {}).items() if k.startswith("physics_verify")}}
                         r["_proc"] = proc
@@ -164,6 +170,18 @@ def main() -> int:
                 if e["repeat_hashes_equal"] is False:
                     hnote.append(f"{v['label']} repeats differ")
             lines.append(f"| {eng} | {case} | " + " | ".join(cells) + " | " + "; ".join(hnote) + " |")
+    # The step's phases (ms per tick, median over runs) where a variant reports them.
+    lines += ["", "Step phases (ms per tick; GodotPhysics3D: integrate forces, broadphase, islands, pair setup, solve, integrate velocities;"
+              " Jolt: pre-step, Update, post-step):", ""]
+    for eng in engines:
+        for case in cases:
+            for v in variants:
+                ph = results[f"{eng}|{case}|{v['label']}"]["stats"].get("phases_ms")
+                if not ph:
+                    continue
+                pre = "godot_" if eng == "godot" else "jolt_"
+                items = [f"{k[len(pre):]} {x:.3f}" for k, x in ph.items() if k.startswith(pre)]
+                lines.append(f"* {eng} {case} {v['label']}: " + ", ".join(items))
     mpath = os.path.join(rb.RESULTS, f"{session}.md")
     with open(mpath, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")

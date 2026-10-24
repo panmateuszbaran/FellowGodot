@@ -229,9 +229,14 @@ inline bool animation_key_hints() {
 inline bool physics_distance_face_cull() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/physics/distance_face_cull");
 }
-// physics/convex_vertex_cache (decision 0086): a SAT test with a convex polygon transforms its vertices once and projects
-// those on its candidate axes (stock transforms every vertex again for every axis, and every edge's vertices again in
-// the edge loops). The same values. Read per test.
+// physics/distance_face_order (decision 0085): the faces kept are given to GJK the most deeply overlapped first (by the
+// separating-axis test's gaps), in batches of 32; whether any is touching does not depend on the order. Read per query.
+inline bool physics_distance_face_order() {
+	return physics_distance_face_cull() && GLOBAL_GET_CACHED(bool, "rendering/fellow/physics/distance_face_order");
+}
+// physics/convex_vertex_cache (decision 0086): a SAT test with a convex polygon (or a concave shape's face) transforms its
+// vertices once and projects those on its candidate axes (stock transforms every vertex again for every axis, and every
+// edge's vertices again in the edge loops). The same values. Read per test.
 inline bool physics_convex_vertex_cache() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/physics/convex_vertex_cache");
 }
@@ -1105,6 +1110,11 @@ struct Stats {
 	SafeNumeric<uint64_t> physics_process_usec; // the scene's _physics_process() (and navigation)
 	SafeNumeric<uint64_t> physics_step_usec; // PhysicsServer3D::end_sync() and step(): the simulation
 	SafeNumeric<uint64_t> physics_end_usec; // the message queue's flush and iteration_end()
+	// GodotPhysics3D's step by phase (GodotSpace3D's elapsed times: integrate forces, the broadphase update, islands, pair
+	// setup (worker threads), pre-solve and solve, integrate velocities and sleep); Jolt's (pre-step, PhysicsSystem::Update,
+	// post-step).
+	SafeNumeric<uint64_t> physics_godot_usec[6];
+	SafeNumeric<uint64_t> physics_jolt_usec[3];
 	SafeNumeric<uint64_t> physics_verify_faces; // faces skipped by the physics toggles and tested anyway (physics/verify)
 	SafeNumeric<uint64_t> physics_verify_mismatches; // of those, faces GJK found within its tolerance (must stay 0)
 	SafeNumeric<uint64_t> shadow_cache_cascades_stock;
