@@ -80,6 +80,13 @@ private:
 
 	bool only_update_transform_changes = false; // This is used for sync to physics.
 
+	uint32_t fellow_transform_sends = 0; // FellowEngine (decision 0093): transforms sent to the physics server
+
+public:
+	uint32_t fellow_get_transform_sends() const { return fellow_transform_sends; }
+
+private:
+
 	bool capture_input_on_drag = false;
 	bool ray_pickable = true;
 

@@ -45,6 +45,35 @@ protected:
 
 	uint16_t locked_axis = 0;
 
+	// FellowEngine (milestone 17, decision 0093): while a CharacterBody3D's move_and_slide() runs, nothing in the physics
+	// world changes but this body's own transform, so a body_test_motion() asked again with the same parameters, from the
+	// same server-side transform, returns what it returned (move_and_slide() asks the same floor-snap test up to three
+	// times per call). The results of the scope's calls are kept and given back for such repeats.
+	struct FellowMotionCacheEntry {
+		PhysicsServer3D::MotionParameters parameters;
+		uint32_t transform_sends = 0; // the body's server-side transform: unchanged while this count is
+		bool colliding = false;
+		// The result: its fields and its first collision_count collisions (the rest as a new MotionResult has them).
+		Vector3 travel;
+		Vector3 remainder;
+		real_t collision_depth = 0.0;
+		real_t collision_safe_fraction = 0.0;
+		real_t collision_unsafe_fraction = 0.0;
+		LocalVector<PhysicsServer3D::MotionCollision> collisions;
+	};
+	static constexpr int FELLOW_MOTION_CACHE_SIZE = 8;
+	FellowMotionCacheEntry fellow_motion_cache[FELLOW_MOTION_CACHE_SIZE];
+	int fellow_motion_cache_count = 0;
+	int fellow_motion_cache_scope = 0;
+	bool fellow_motion_cache_on = false;
+	bool _fellow_body_test_motion(const PhysicsServer3D::MotionParameters &p_parameters, PhysicsServer3D::MotionResult &r_result);
+
+	struct FellowMotionCacheScope {
+		PhysicsBody3D *body;
+		explicit FellowMotionCacheScope(PhysicsBody3D *p_body);
+		~FellowMotionCacheScope();
+	};
+
 	Ref<KinematicCollision3D> _move(const Vector3 &p_motion, bool p_test_only = false, real_t p_margin = 0.001, bool p_recovery_as_collision = false, int p_max_collisions = 1);
 
 public:

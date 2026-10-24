@@ -104,6 +104,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/physics/island_constraint_lists", true); // decision 0091 (exact)
 	GLOBAL_DEF("rendering/fellow/physics/jolt_job_pumps", true); // decision 0092 (exact)
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/physics/jolt_pump_spins", PROPERTY_HINT_RANGE, "1,1000000,1"), 2000);
+	GLOBAL_DEF("rendering/fellow/physics/motion_query_cache", true); // decision 0093 (exact)
 	GLOBAL_DEF("rendering/fellow/physics/verify", false);
 	GLOBAL_DEF("rendering/fellow/postfx/taa_strided_load", false); // decision 0075: REJECT (exact, no gain)
 	GLOBAL_DEF("rendering/fellow/postfx/taa_history_pingpong", true);
@@ -414,6 +415,8 @@ Dictionary Fellow::get_stats_dictionary() {
 			d[String("physics_jolt_") + jolt_phases[i] + "_usec"] = s.physics_jolt_usec[i].get();
 		}
 	}
+	d["physics_motion_cache_calls"] = s.physics_motion_cache_calls.get();
+	d["physics_motion_cache_hits"] = s.physics_motion_cache_hits.get();
 	d["physics_verify_faces"] = s.physics_verify_faces.get();
 	d["physics_verify_mismatches"] = s.physics_verify_mismatches.get();
 	d["raytracing_instances"] = s.raytracing_instances.get();

@@ -285,6 +285,12 @@ inline bool physics_jolt_job_pumps() {
 inline int physics_jolt_pump_spins() {
 	return GLOBAL_GET_CACHED(int, "rendering/fellow/physics/jolt_pump_spins");
 }
+// physics/motion_query_cache (decision 0093): within a CharacterBody3D's move_and_slide() a body_test_motion() repeated
+// with the same parameters from the same transform returns the kept result (any physics engine; the world does not
+// change during the call). Read per move_and_slide().
+inline bool physics_motion_query_cache() {
+	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/physics/motion_query_cache");
+}
 // Debug: every face the physics toggles skip is given to GJK anyway and its answer compared (counters physics_verify_*).
 inline bool physics_verify() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/physics/verify");
@@ -1160,6 +1166,8 @@ struct Stats {
 	// post-step).
 	SafeNumeric<uint64_t> physics_godot_usec[6];
 	SafeNumeric<uint64_t> physics_jolt_usec[3];
+	SafeNumeric<uint64_t> physics_motion_cache_calls; // body_test_motion() calls inside move_and_slide() (decision 0093)
+	SafeNumeric<uint64_t> physics_motion_cache_hits; // of those, answered from the kept results
 	SafeNumeric<uint64_t> physics_verify_faces; // faces skipped by the physics toggles and tested anyway (physics/verify)
 	SafeNumeric<uint64_t> physics_verify_mismatches; // of those, faces GJK found within its tolerance (must stay 0)
 	SafeNumeric<uint64_t> shadow_cache_cascades_stock;

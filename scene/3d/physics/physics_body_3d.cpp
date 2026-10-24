@@ -30,6 +30,8 @@
 
 #include "physics_body_3d.h"
 
+#include "servers/rendering/fellow_settings.h"
+
 #include "core/object/class_db.h"
 #include "scene/main/scene_tree.h"
 
@@ -109,8 +111,104 @@ Ref<KinematicCollision3D> PhysicsBody3D::_move(const Vector3 &p_motion, bool p_t
 	return Ref<KinematicCollision3D>();
 }
 
+PhysicsBody3D::FellowMotionCacheScope::FellowMotionCacheScope(PhysicsBody3D *p_body) :
+		body(p_body) {
+	if (body->fellow_motion_cache_scope++ == 0) {
+		body->fellow_motion_cache_on = Fellow::physics_motion_query_cache();
+		body->fellow_motion_cache_count = 0;
+	}
+}
+
+PhysicsBody3D::FellowMotionCacheScope::~FellowMotionCacheScope() {
+	if (--body->fellow_motion_cache_scope == 0) {
+		body->fellow_motion_cache_count = 0;
+		body->fellow_motion_cache_on = false;
+	}
+}
+
+static bool _fellow_same_bits(const void *p_a, const void *p_b, size_t p_size) {
+	return memcmp(p_a, p_b, p_size) == 0;
+}
+
+static bool _fellow_same_parameters(const PhysicsServer3D::MotionParameters &p_a, const PhysicsServer3D::MotionParameters &p_b) {
+	if (!_fellow_same_bits(&p_a.from, &p_b.from, sizeof(Transform3D)) || !_fellow_same_bits(&p_a.motion, &p_b.motion, sizeof(Vector3)) ||
+			!_fellow_same_bits(&p_a.margin, &p_b.margin, sizeof(real_t)) || p_a.max_collisions != p_b.max_collisions ||
+			p_a.collide_separation_ray != p_b.collide_separation_ray || p_a.recovery_as_collision != p_b.recovery_as_collision ||
+			p_a.exclude_bodies.size() != p_b.exclude_bodies.size() || p_a.exclude_objects.size() != p_b.exclude_objects.size()) {
+		return false;
+	}
+	for (const RID &rid : p_a.exclude_bodies) {
+		if (!p_b.exclude_bodies.has(rid)) {
+			return false;
+		}
+	}
+	for (const ObjectID &id : p_a.exclude_objects) {
+		if (!p_b.exclude_objects.has(id)) {
+			return false;
+		}
+	}
+	return true;
+}
+
+bool PhysicsBody3D::_fellow_body_test_motion(const PhysicsServer3D::MotionParameters &p_parameters, PhysicsServer3D::MotionResult &r_result) {
+	PhysicsServer3D *ps = PhysicsServer3D::get_singleton();
+	if (!fellow_motion_cache_on) {
+		return ps->body_test_motion(get_rid(), p_parameters, &r_result);
+	}
+	// The body's transform as the server has it (its shapes' bounds are taken from it): the same as long as this node
+	// sent it no other (nothing else sets it while move_and_slide() runs).
+	const uint32_t sends = fellow_get_transform_sends();
+	Fellow::stats().physics_motion_cache_calls.increment();
+	for (int i = 0; i < fellow_motion_cache_count; i++) {
+		const FellowMotionCacheEntry &e = fellow_motion_cache[i];
+		if (e.transform_sends == sends && _fellow_same_parameters(e.parameters, p_parameters)) {
+			Fellow::stats().physics_motion_cache_hits.increment();
+			// As the server writes a result: from a new MotionResult, the fields and the collisions it reports.
+			r_result = PhysicsServer3D::MotionResult();
+			r_result.travel = e.travel;
+			r_result.remainder = e.remainder;
+			r_result.collision_depth = e.collision_depth;
+			r_result.collision_safe_fraction = e.collision_safe_fraction;
+			r_result.collision_unsafe_fraction = e.collision_unsafe_fraction;
+			r_result.collision_count = (int)e.collisions.size();
+			for (uint32_t k = 0; k < e.collisions.size(); k++) {
+				r_result.collisions[k] = e.collisions[k];
+			}
+			return e.colliding;
+		}
+	}
+	const bool colliding = ps->body_test_motion(get_rid(), p_parameters, &r_result);
+	if (fellow_motion_cache_count < FELLOW_MOTION_CACHE_SIZE && r_result.collision_count >= 0 && r_result.collision_count <= PhysicsServer3D::MotionResult::MAX_COLLISIONS) {
+		FellowMotionCacheEntry &e = fellow_motion_cache[fellow_motion_cache_count++];
+		e.parameters.from = p_parameters.from;
+		e.parameters.motion = p_parameters.motion;
+		e.parameters.margin = p_parameters.margin;
+		e.parameters.max_collisions = p_parameters.max_collisions;
+		e.parameters.collide_separation_ray = p_parameters.collide_separation_ray;
+		e.parameters.recovery_as_collision = p_parameters.recovery_as_collision;
+		if (!(p_parameters.exclude_bodies.is_empty() && e.parameters.exclude_bodies.is_empty())) {
+			e.parameters.exclude_bodies = p_parameters.exclude_bodies;
+		}
+		if (!(p_parameters.exclude_objects.is_empty() && e.parameters.exclude_objects.is_empty())) {
+			e.parameters.exclude_objects = p_parameters.exclude_objects;
+		}
+		e.transform_sends = sends;
+		e.colliding = colliding;
+		e.travel = r_result.travel;
+		e.remainder = r_result.remainder;
+		e.collision_depth = r_result.collision_depth;
+		e.collision_safe_fraction = r_result.collision_safe_fraction;
+		e.collision_unsafe_fraction = r_result.collision_unsafe_fraction;
+		e.collisions.resize(r_result.collision_count);
+		for (int k = 0; k < r_result.collision_count; k++) {
+			e.collisions[k] = r_result.collisions[k];
+		}
+	}
+	return colliding;
+}
+
 bool PhysicsBody3D::move_and_collide(const PhysicsServer3D::MotionParameters &p_parameters, PhysicsServer3D::MotionResult &r_result, bool p_test_only, bool p_cancel_sliding) {
-	bool colliding = PhysicsServer3D::get_singleton()->body_test_motion(get_rid(), p_parameters, &r_result);
+	bool colliding = _fellow_body_test_motion(p_parameters, r_result);
 
 	// Restore direction of motion to be along original motion,
 	// in order to avoid sliding due to recovery,

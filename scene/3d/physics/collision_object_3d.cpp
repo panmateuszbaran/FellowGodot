@@ -66,6 +66,7 @@ void CollisionObject3D::_notification(int p_what) {
 				PhysicsServer3D::get_singleton()->area_set_transform(rid, get_global_transform());
 			} else {
 				PhysicsServer3D::get_singleton()->body_set_state(rid, PhysicsServer3D::BODY_STATE_TRANSFORM, get_global_transform());
+				fellow_transform_sends++;
 			}
 
 			bool disabled = !is_enabled();
@@ -102,6 +103,7 @@ void CollisionObject3D::_notification(int p_what) {
 				PhysicsServer3D::get_singleton()->area_set_transform(rid, get_global_transform());
 			} else {
 				PhysicsServer3D::get_singleton()->body_set_state(rid, PhysicsServer3D::BODY_STATE_TRANSFORM, get_global_transform());
+				fellow_transform_sends++;
 			}
 
 			_on_transform_changed();

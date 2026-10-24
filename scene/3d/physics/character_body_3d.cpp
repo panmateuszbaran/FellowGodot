@@ -41,6 +41,7 @@
 #define FLOOR_ANGLE_THRESHOLD 0.01
 
 bool CharacterBody3D::move_and_slide() {
+	const FellowMotionCacheScope fellow_scope(this); // FellowEngine (decision 0093)
 	// Hack in order to work with calling from _process as well as from _physics_process; calling from thread is risky
 	double delta = Engine::get_singleton()->is_in_physics_frame() ? get_physics_process_delta_time() : get_process_delta_time();
 
