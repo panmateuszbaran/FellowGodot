@@ -157,8 +157,12 @@ void main() {
 	vec3 tri[3];
 	rayQueryGetIntersectionTriangleVertexPositionsEXT(rq, true, tri);
 	mat4x3 o2w = rayQueryGetIntersectionObjectToWorldEXT(rq, true);
-	vec3 on = cross(tri[1] - tri[0], tri[2] - tri[0]);
-	n = normalize(transpose(inverse(mat3(o2w))) * on);
+	// The triangle in world space, then its normal: no inverse of the instance transform, which is singular for a
+	// compressed flat mesh (its box, and so the transform's scale, is 0 thick: Sponza's floors). A degenerate triangle
+	// takes the reversed ray (a NaN here spread through the probes' bounces: black areas in Sponza on the RTX).
+	vec3 wn = cross(mat3(o2w) * (tri[1] - tri[0]), mat3(o2w) * (tri[2] - tri[0]));
+	float wl = dot(wn, wn);
+	n = wl > 1e-20 ? wn * inversesqrt(wl) : -dir;
 	if (dot(n, dir) > 0.0) {
 		n = -n;
 	}
@@ -186,6 +190,9 @@ void main() {
 	vec3 bounce = fellow_ddgi_irradiance(irradiance_atlas, distance_atlas, linear_sampler, params.volume, hit, n, -dir, coverage);
 	light += mix(fellow_ddgi_ambient(n) * 0.5, bounce, clamp(coverage, 0.0, 1.0)) * params.trace.y;
 	vec3 radiance = inst.albedo.rgb * (1.0 - inst.emission.w) * light + inst.emission.rgb;
+	if (any(isnan(radiance)) || any(isinf(radiance))) {
+		radiance = vec3(0.0); // never into the probes: it would spread through every bounce
+	}
 	if (stored_t < 0.0) {
 		radiance = max(radiance, vec3(1e-4)); // marks it as a lit back face (not a single-sided one; a half float keeps 1e-4)
 	}
@@ -322,7 +329,10 @@ void main() {
 	float probe_active = float(backfaces) < 0.25 * float(rays) ? 1.0 : 0.0;
 	bool same = probe_cells.data[probe].xyz == cell && probe_cells.data[probe].w != 0;
 	if (same) {
-		irradiance = mix(irradiance, imageLoad(irradiance_atlas, at).rgb, params.trace.z);
+		vec3 previous = imageLoad(irradiance_atlas, at).rgb;
+		if (!any(isnan(previous)) && !any(isinf(previous))) {
+			irradiance = mix(irradiance, previous, params.trace.z);
+		}
 	}
 	imageStore(irradiance_atlas, at, vec4(irradiance, probe_active));
 	barrier();

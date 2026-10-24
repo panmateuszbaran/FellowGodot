@@ -220,7 +220,10 @@ void main() {
 		vec3 tri[3];
 		rayQueryGetIntersectionTriangleVertexPositionsEXT(rq, true, tri);
 		mat4x3 o2w = rayQueryGetIntersectionObjectToWorldEXT(rq, true);
-		hn = normalize(transpose(inverse(mat3(o2w))) * cross(tri[1] - tri[0], tri[2] - tri[0]));
+		// In world space (no inverse: singular for compressed flat meshes; see fellow_ddgi.glsl).
+		vec3 wn = cross(mat3(o2w) * (tri[1] - tri[0]), mat3(o2w) * (tri[2] - tri[0]));
+		float wl = dot(wn, wn);
+		hn = wl > 1e-20 ? wn * inversesqrt(wl) : -dir;
 		if (dot(hn, dir) > 0.0) {
 			hn = -hn;
 		}
@@ -251,6 +254,9 @@ void main() {
 		}
 		light += mix(params.sky_params.x != 0.0 ? ambient : vec3(0.0), gi, clamp(coverage, 0.0, 1.0));
 		radiance = inst.albedo.rgb * (1.0 - inst.emission.w) * light + inst.emission.rgb;
+	}
+	if (any(isnan(radiance)) || any(isinf(radiance))) {
+		radiance = vec3(0.0);
 	}
 	imageStore(raw_reflection, pos, vec4(radiance, hit_t));
 }
