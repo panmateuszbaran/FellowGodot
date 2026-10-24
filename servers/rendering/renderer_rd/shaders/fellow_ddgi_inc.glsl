@@ -88,7 +88,11 @@ vec3 fellow_ddgi_irradiance(texture2D p_irradiance, texture2D p_distance, sample
 		sum += sqrt(max(irr.rgb, vec3(0.0))) * w; // interpolated in a perceptual space (DDGI's gamma), squared after
 		wsum += w;
 	}
-	r_coverage = coverage;
+	// Where every active probe around the point is hidden from it (their weights crushed), the normalized sum would be
+	// whatever the least hidden one holds — often a probe in a sealed void or behind a wall, black: blend towards the
+	// ambient light instead, by how visible the probes are (an unoccluded probe weighs at least 0.2 of its trilinear
+	// weight).
+	r_coverage = coverage * clamp(wsum / max(0.2 * coverage, 1e-6), 0.0, 1.0);
 	if (wsum <= 0.0) {
 		return vec3(0.0);
 	}
