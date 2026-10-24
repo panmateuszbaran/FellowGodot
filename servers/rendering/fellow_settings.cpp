@@ -36,6 +36,7 @@
 #include "core/variant/dictionary.h"
 #include "servers/rendering/fellow_parallel.h"
 #include "servers/rendering/renderer_compositor.h"
+#include "servers/rendering/rendering_device.h"
 #include "servers/rendering/rendering_server_globals.h"
 
 #include <atomic>
@@ -54,6 +55,26 @@ void Fellow::register_settings() {
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/post/lens/vignette", PROPERTY_HINT_RANGE, "0,1,0.01"), 0.0);
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/post/lens/vignette_smoothness", PROPERTY_HINT_RANGE, "0.01,1,0.01"), 0.5);
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/post/lens/film_grain", PROPERTY_HINT_RANGE, "0,0.2,0.001"), 0.0);
+	// Ray tracing (decision 0080; start-up): mesh buffers usable as acceleration structure inputs, a scene of the
+	// instances near the camera built for the ray-traced effects that are on.
+	GLOBAL_DEF_RST("rendering/fellow/raytracing/enabled", false);
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/raytracing/radius", PROPERTY_HINT_RANGE, "10,5000,1,suffix:m"), 200.0);
+	GLOBAL_DEF("rendering/fellow/raytracing/skinned", true); // skinned and blend shape meshes rebuilt when they change
+	GLOBAL_DEF("rendering/fellow/raytracing/ambient_occlusion", false); // decision 0081: RTAO in place of SSAO
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/raytracing/ao_rays", PROPERTY_HINT_RANGE, "1,16,1"), 2);
+	GLOBAL_DEF("rendering/fellow/raytracing/sun_shadows", false); // decision 0082: the first directional light's shadow traced
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/raytracing/sun_shadow_rays", PROPERTY_HINT_RANGE, "1,16,1"), 1); // per pixel and frame (soft shadows)
+	GLOBAL_DEF("rendering/fellow/raytracing/gi", false); // decision 0083: DDGI probes in place of the ambient light
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/raytracing/gi_probe_spacing", PROPERTY_HINT_RANGE, "0.25,16,0.05,suffix:m"), 2.0);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/raytracing/gi_probes_xz", PROPERTY_HINT_RANGE, "4,64,1"), 24);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/raytracing/gi_probes_y", PROPERTY_HINT_RANGE, "2,32,1"), 8);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/raytracing/gi_rays", PROPERTY_HINT_RANGE, "16,256,1"), 128);
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/raytracing/gi_hysteresis", PROPERTY_HINT_RANGE, "0,0.999,0.001"), 0.97);
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/raytracing/gi_energy", PROPERTY_HINT_RANGE, "0,4,0.01"), 1.0);
+	GLOBAL_DEF("rendering/fellow/raytracing/reflections", false); // decision 0084: traced reflections in place of SSR
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/raytracing/reflections_max_roughness", PROPERTY_HINT_RANGE, "0,1,0.01"), 0.5);
+	GLOBAL_DEF("rendering/fellow/debug/raytracing_decode_positions", false);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/debug/raytracing_view", PROPERTY_HINT_ENUM, "Off,Hit Distance,Depth Match"), 0); // compressed positions decoded even where the device builds from them
 	GLOBAL_DEF("rendering/fellow/animation/elide_modifier_backup", true); // decision 0076 (exact; on from fellow168)
 	GLOBAL_DEF("rendering/fellow/animation/full_weight_slerp", true); // decision 0076 (exact; on from fellow168)
 	GLOBAL_DEF("rendering/fellow/animation/track_shortcuts", true); // decision 0076 (exact; on from fellow168)
@@ -258,6 +279,30 @@ static double fellow_gate_wait_avg = 0.0;
 static double fellow_gate_frame_avg = 0.0;
 static std::atomic<bool> fellow_gate_open{ true };
 
+bool Fellow::raytracing_active() {
+	// Decided once: the mesh buffers created from then on carry the acceleration structure input usage or not.
+	static std::atomic<int> state{ -1 };
+	int s = state.load(std::memory_order_acquire);
+	if (s >= 0) {
+		return s == 1;
+	}
+	RenderingDevice *rd = RenderingDevice::get_singleton();
+	if (rd == nullptr) {
+		return false; // not decided before the device exists
+	}
+	const bool requested = raytracing_requested();
+	const bool supported = rd->has_feature(RD::SUPPORTS_RAY_QUERY) && rd->has_feature(RD::SUPPORTS_BUFFER_DEVICE_ADDRESS);
+	if (requested && !supported) {
+		WARN_PRINT("FellowEngine: rendering/fellow/raytracing/enabled is set, but this device has no ray query support; ray-traced effects are off.");
+	}
+	s = (requested && supported) ? 1 : 0;
+	state.store(s, std::memory_order_release);
+	if (s == 1) {
+		print_verbose("FellowEngine: ray tracing on (ray queries).");
+	}
+	return s == 1;
+}
+
 bool Fellow::cpu_hot_workers_gate_open() {
 	return fellow_gate_open.load(std::memory_order_relaxed);
 }
@@ -329,6 +374,8 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["shadow_cache_cascades_unstable"] = s.shadow_cache_cascades_unstable.get();
 	d["geometry_cluster_surfaces"] = s.geometry_cluster_surfaces.get();
 	d["geometry_cluster_surfaces_active"] = s.geometry_cluster_surfaces_active.get();
+	d["raytracing_instances"] = s.raytracing_instances.get();
+	d["raytracing_blas_builds"] = s.raytracing_blas_builds.get();
 	d["geometry_cluster_surfaces_dropped"] = s.geometry_cluster_surfaces_dropped.get();
 	d["geometry_cluster_blended_after_activation"] = s.geometry_cluster_blended_after_activation.get();
 	d["geometry_cluster_build_usec"] = s.geometry_cluster_build_usec.get();

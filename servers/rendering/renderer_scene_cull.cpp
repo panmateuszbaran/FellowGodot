@@ -4359,6 +4359,46 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 		prev_camera_data = RSG::viewport->viewport_get_prev_camera_data(p_viewport);
 	}
 
+	// FellowEngine ray tracing (decision 0080): the instances near the camera, for the frame's ray tracing scene.
+	scene_render->fellow_rt_instances.clear();
+	scene_render->fellow_rt_masks.clear();
+	const float fellow_rt_radius = p_reflection_probe.is_null() ? scene_render->fellow_raytracing_radius() : 0.0f;
+	if (fellow_rt_radius > 0.0f) {
+		RENDER_TIMESTAMP("FellowEngine Ray Tracing Instances");
+		struct CullRayTracing {
+			LocalVector<RenderGeometryInstance *> *instances;
+			LocalVector<uint8_t> *masks;
+			uint32_t visible_layers;
+			_FORCE_INLINE_ bool operator()(void *p_data) {
+				Instance *inst = (Instance *)p_data;
+				if (!inst->visible || inst->base_type != RSE::INSTANCE_MESH || !(inst->layer_mask & visible_layers)) {
+					return false;
+				}
+				InstanceGeometryData *geom = static_cast<InstanceGeometryData *>(inst->base_data);
+				if (geom == nullptr || geom->geometry_instance == nullptr) {
+					return false;
+				}
+				uint8_t mask = 0;
+				if (inst->cast_shadows != RSE::SHADOW_CASTING_SETTING_SHADOWS_ONLY) {
+					mask |= RendererSceneRender::FELLOW_RT_MASK_VISIBLE;
+				}
+				if (inst->cast_shadows != RSE::SHADOW_CASTING_SETTING_OFF && geom->can_cast_shadows) {
+					mask |= RendererSceneRender::FELLOW_RT_MASK_SHADOW;
+				}
+				instances->push_back(geom->geometry_instance);
+				masks->push_back(mask);
+				return false;
+			}
+		};
+		CullRayTracing cull_rt;
+		cull_rt.instances = &scene_render->fellow_rt_instances;
+		cull_rt.masks = &scene_render->fellow_rt_masks;
+		cull_rt.visible_layers = p_visible_layers;
+		const Vector3 eye = p_camera_data->main_transform.origin;
+		const Vector3 half(fellow_rt_radius, fellow_rt_radius, fellow_rt_radius);
+		scenario->indexers[Scenario::INDEXER_GEOMETRY].aabb_query(AABB(eye - half, half * 2.0), cull_rt);
+	}
+
 	RENDER_TIMESTAMP("Render 3D Scene");
 	scene_render->render_scene(p_render_buffers, p_camera_data, prev_camera_data, scene_cull_result.geometry_instances, scene_cull_result.light_instances, scene_cull_result.reflections, scene_cull_result.voxel_gi_instances, scene_cull_result.decals, scene_cull_result.lightmaps, scene_cull_result.fog_volumes, p_environment, camera_attributes, p_compositor, p_shadow_atlas, occluders_tex, p_reflection_probe.is_valid() ? RID() : scenario->reflection_atlas, p_reflection_probe, p_reflection_probe_pass, p_screen_mesh_lod_threshold, render_shadow_data, max_shadows_used, render_sdfgi_data, cull.sdfgi.region_count, p_window_output_max_value, &sdfgi_update_data, r_render_info);
 

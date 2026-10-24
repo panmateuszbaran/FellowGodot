@@ -164,6 +164,7 @@ class RenderingDeviceDriverVulkan : public RenderingDeviceDriver {
 	bool vulkan_memory_model_device_scope_support = false;
 	AccelerationStructureCapabilities acceleration_structure_capabilities;
 	bool ray_query_support = false;
+	bool fellow_position_fetch_support = false; // VK_KHR_ray_tracing_position_fetch (decision 0083)
 	RaytracingCapabilities raytracing_capabilities;
 	bool pipeline_cache_control_support = false;
 	bool device_fault_support = false;
@@ -745,6 +746,8 @@ public:
 	};
 
 	virtual AccelerationStructureID blas_create(VectorView<AccelerationStructureGeometry> p_geometries, BitField<AccelerationStructureFlagBits> p_flags) override final;
+	virtual bool fellow_acceleration_structure_vertex_format_supported(DataFormat p_format) override final;
+	virtual bool fellow_ray_position_fetch_supported() override final;
 	virtual AccelerationStructureID tlas_create(uint32_t p_max_instance_count, BitField<AccelerationStructureFlagBits> p_flags) override final;
 	virtual void acceleration_structure_instance_write(uint8_t *r_driver_instance, const AccelerationStructureInstance &p_instance) override final;
 	virtual void acceleration_structure_free(AccelerationStructureID p_acceleration_structure) override final;

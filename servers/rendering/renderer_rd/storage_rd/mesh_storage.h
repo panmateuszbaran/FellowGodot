@@ -35,6 +35,8 @@
 #include "core/templates/self_list.h"
 #include "servers/rendering/renderer_compositor.h"
 #include "servers/rendering/renderer_rd/storage_rd/fellow_mesh_clusters.h"
+#include "servers/rendering/fellow_settings.h"
+#include "servers/rendering/renderer_rd/shaders/fellow_blas_decode.glsl.gen.h"
 #include "servers/rendering/renderer_rd/shaders/skeleton.glsl.gen.h"
 #include "servers/rendering/rendering_server_globals.h"
 #include "servers/rendering/storage/mesh_storage.h"
@@ -155,6 +157,12 @@ private:
 
 			FellowMeshClusters *fellow_clusters = nullptr; // FellowEngine mesh clusters in use (nullptr: none).
 			FellowMeshClusterBuild *fellow_build = nullptr; // Clusters not built or not applied yet.
+			// FellowEngine ray tracing (decision 0080): the surface's bottom-level acceleration structure, built on first
+			// use; the positions decoded to floats where the device cannot build from compressed ones.
+			RID fellow_blas;
+			RID fellow_blas_positions;
+			bool fellow_blas_dirty = false; // vertex data updated since the build
+			bool fellow_blas_failed = false; // cannot have one (not triangles, the build refused)
 		};
 
 		uint32_t blend_shape_count = 0;
@@ -195,6 +203,10 @@ private:
 			uint32_t current_buffer = 0;
 			uint32_t previous_buffer = 0;
 			uint64_t last_change = 0;
+			// FellowEngine ray tracing (decision 0080): one acceleration structure per output buffer, rebuilt when the
+			// skinning or blend shapes wrote that buffer after its build.
+			RID fellow_blas[2];
+			uint64_t fellow_blas_frame[2] = { 0, 0 };
 
 			Mesh::Surface::Version *versions = nullptr; //allocated on demand
 			uint32_t version_count = 0;
@@ -346,6 +358,13 @@ private:
 
 		RID default_skeleton_uniform_set;
 	} skeleton_shader;
+
+	// FellowEngine ray tracing (decision 0080): compressed positions decoded for devices that cannot build from them.
+	struct FellowBlasDecode {
+		FellowBlasDecodeShaderRD shader;
+		RID version;
+		RID pipeline;
+	} fellow_blas_decode;
 
 	struct Skeleton {
 		bool use_2d = false;
@@ -523,6 +542,17 @@ public:
 	// FellowEngine mesh clusters (docs/decisions/0007-mesh-clusters.md). Set by renderers that decide and draw them
 	// (Forward+); without one, surfaces are never clustered.
 	bool fellow_clusters_supported = false;
+	// Ray tracing (decision 0080).
+	uint32_t fellow_blas_builds = 0;
+	int fellow_unorm16_blas = -1; // whether the device builds acceleration structures from R16G16B16A16_UNORM positions
+	bool _fellow_unorm16_blas_supported() {
+		if (fellow_unorm16_blas < 0) {
+			fellow_unorm16_blas = (!Fellow::raytracing_decode_positions() && RD::get_singleton()->fellow_blas_vertex_format_supported(RD::DATA_FORMAT_R16G16B16A16_UNORM)) ? 1 : 0;
+		}
+		return fellow_unorm16_blas == 1;
+	}
+	RID _fellow_decode_positions(Mesh::Surface *p_surface);
+	RID _fellow_build_blas(RID p_vertex_buffer, RD::DataFormat p_format, uint32_t p_stride, uint32_t p_vertex_count, RID p_index_buffer, uint32_t p_index_count, BitField<RD::AccelerationStructureFlagBits> p_flags);
 	enum FellowClusterState {
 		FELLOW_CLUSTERS_NONE,
 		FELLOW_CLUSTERS_PENDING, // Not built or not applied yet (index buffers in stock order).
@@ -601,6 +631,19 @@ public:
 	_FORCE_INLINE_ uint32_t fellow_mesh_surface_get_index_count(void *p_surface, uint32_t p_lod) const {
 		Mesh::Surface *s = reinterpret_cast<Mesh::Surface *>(p_surface);
 		return p_lod == 0 ? s->index_count : s->lods[p_lod - 1].index_count;
+	}
+
+	// FellowEngine ray tracing (decision 0080; render thread, outside draw and compute lists). The bottom-level
+	// acceleration structure of a mesh surface, built on first use, or of a mesh instance's surface (skinning, blend
+	// shapes: rebuilt when the instance's vertices changed since); r_local maps its vertices into the mesh's space (the
+	// compressed positions' box). RID() where there is none (not triangles, no ray tracing, the build refused).
+	RID fellow_mesh_surface_get_blas(void *p_surface, Transform3D &r_local);
+	RID fellow_mesh_instance_surface_get_blas(RID p_mesh_instance, uint32_t p_surface_index, void *p_mesh_surface, Transform3D &r_local);
+	// Acceleration structures built since the last call (statistics).
+	uint32_t fellow_blas_builds_take() {
+		uint32_t n = fellow_blas_builds;
+		fellow_blas_builds = 0;
+		return n;
 	}
 
 	_FORCE_INLINE_ void mesh_surface_get_vertex_arrays_and_format(void *p_surface, uint64_t p_input_mask, bool p_input_motion_vectors, bool p_point_size_emulated, RID &r_vertex_array_rd, RD::VertexFormatID &r_vertex_format) {

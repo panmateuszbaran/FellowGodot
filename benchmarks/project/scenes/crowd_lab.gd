@@ -166,7 +166,8 @@ func _build_mesh() -> void:
 				var i1 := base + r * RADIAL + s2
 				var i2 := base + (r + 1) * RADIAL + s
 				var i3 := base + (r + 1) * RADIAL + s2
-				indices.append_array(PackedInt32Array([i0, i2, i1, i1, i2, i3]))
+				# Clockwise seen from outside (Godot's front faces).
+				indices.append_array(PackedInt32Array([i0, i1, i2, i1, i3, i2]))
 	var arr := []
 	arr.resize(Mesh.ARRAY_MAX)
 	arr[Mesh.ARRAY_VERTEX] = verts

@@ -351,7 +351,9 @@ RID RenderingDevice::blas_create(Span<AccelerationStructureGeometry> p_geometrie
 
 			uint32_t index_stride = (index_buffer->format == INDEX_BUFFER_FORMAT_UINT32 ? sizeof(uint32_t) : sizeof(uint16_t));
 			ERR_FAIL_COND_V_MSG((rd_geometry.index_offset + rd_geometry.index_count * index_stride) > index_buffer->size, RID(), "The specified index offset and count are outside the range of the index buffer.");
-			ERR_FAIL_COND_V_MSG(index_buffer->max_index >= rd_geometry.vertex_count, RID(), "The index buffer contains an index that is outside the specified vertex range.");
+			// FellowEngine (decision 0080): max_index is only known for index buffers created with data in debug builds
+			// (0xFFFFFFFF otherwise); stock's test then refused every indexed geometry of a release build.
+			ERR_FAIL_COND_V_MSG(index_buffer->max_index != 0xFFFFFFFF && index_buffer->max_index >= rd_geometry.vertex_count, RID(), "The index buffer contains an index that is outside the specified vertex range.");
 
 			rdd_geometry.index_buffer = index_buffer->driver_id;
 			rdd_geometry.index_offset = rd_geometry.index_offset;

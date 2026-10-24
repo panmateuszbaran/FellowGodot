@@ -165,6 +165,9 @@ public:
 				// FellowEngine (decision 0057): no omni or spot light of the frame has a shadow (their shadow lookups are
 				// not compiled).
 				uint32_t fellow_no_positional_shadows : 1;
+				uint32_t fellow_rt_sun_shadow : 1; // decision 0082: the first directional light's shadow from the traced mask
+				uint32_t fellow_ddgi : 1; // decision 0083: the ambient light from the DDGI probe volume
+				uint32_t fellow_rt_reflections : 1; // decision 0084: the indirect specular light from the traced reflections
 			};
 		};
 	};

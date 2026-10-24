@@ -12,6 +12,7 @@
 #include "../cluster_data_inc.glsl"
 #include "../decal_data_inc.glsl"
 #include "../oct_inc.glsl"
+#include "../fellow_ddgi_inc.glsl"
 #include "../scene_data_inc.glsl"
 
 #if !defined(MODE_RENDER_DEPTH) || defined(MODE_RENDER_MATERIAL) || defined(MODE_RENDER_SDF) || defined(MODE_RENDER_NORMAL_ROUGHNESS) || defined(MODE_RENDER_VOXEL_GI) || defined(TANGENT_USED) || defined(NORMAL_MAP_USED) || defined(BENT_NORMAL_MAP_USED) || defined(LIGHT_ANISOTROPY_USED)
@@ -271,6 +272,23 @@ bool sc_fellow_no_positional_shadows() {
 	return ((sc_packed_2() >> 0) & 1U) != 0;
 }
 #define FELLOW_HAS_NO_POSITIONAL_SHADOWS
+
+// FellowEngine ray-traced sun shadows (decision 0082): the opaque colour passes read the first directional light's
+// shadow from the traced mask (fellow_rt_shadow_mask) where it is valid.
+bool sc_fellow_rt_sun_shadow() {
+	return ((sc_packed_2() >> 1) & 1U) != 0;
+}
+#define FELLOW_HAS_RT_SUN_SHADOW
+
+// FellowEngine DDGI (decision 0083): the colour passes take the ambient light from the probe volume.
+bool sc_fellow_ddgi() {
+	return ((sc_packed_2() >> 2) & 1U) != 0;
+}
+
+// FellowEngine ray-traced reflections (decision 0084): the opaque colour passes read the traced reflections.
+bool sc_fellow_rt_reflections() {
+	return ((sc_packed_2() >> 3) & 1U) != 0;
+}
 #define FELLOW_OMNI_HOT(m_idx, m_field) (sc_fellow_light_hot() ? (sc_fellow_light_hot_ubo() ? fellow_omni_hot_ubo.data[m_idx].m_field : fellow_omni_hot_ssbo.data[m_idx].m_field) : omni_lights.data[m_idx].m_field)
 #define FELLOW_SPOT_HOT(m_idx, m_field) (sc_fellow_light_hot() ? (sc_fellow_light_hot_ubo() ? fellow_spot_hot_ubo.data[m_idx].m_field : fellow_spot_hot_ssbo.data[m_idx].m_field) : spot_lights.data[m_idx].m_field)
 #define FELLOW_HAS_LIGHT_PREFETCH_NEXT
@@ -738,6 +756,17 @@ layout(set = 1, binding = 37) uniform texture2D directional_shadow_max_mip;
 // FellowEngine: min/max window pyramid of the positional shadow atlas.
 layout(set = 1, binding = 38) uniform texture2D positional_shadow_max_mip;
 #define FELLOW_SHADOW_MAX_MIP
+// FellowEngine ray-traced sun shadows (decision 0082): x the shadow, y 1 where it was traced.
+layout(set = 1, binding = 43) uniform texture2D fellow_rt_shadow_mask;
+// FellowEngine DDGI (decision 0083): the probe volume around the camera.
+layout(set = 1, binding = 44) uniform texture2D fellow_ddgi_irradiance_atlas;
+layout(set = 1, binding = 45) uniform texture2D fellow_ddgi_distance_atlas;
+layout(set = 1, binding = 46, std140) uniform FellowDDGIBlock {
+	FellowDDGIVolume volume;
+}
+fellow_ddgi;
+// FellowEngine ray-traced reflections (decision 0084): RGB the reflected radiance, A its weight.
+layout(set = 1, binding = 47) uniform texture2D fellow_rt_reflection;
 
 #endif
 

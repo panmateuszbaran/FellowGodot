@@ -924,6 +924,9 @@ public:
 		ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT = (1 << 2),
 		ACCELERATION_STRUCTURE_PREFER_FAST_BUILD_BIT = (1 << 3),
 		ACCELERATION_STRUCTURE_LOW_MEMORY_BIT = (1 << 4),
+		// FellowEngine (decision 0083, not bound): the hit triangles' positions readable by ray queries (Vulkan's
+		// VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_DATA_ACCESS_BIT_KHR; the driver passes these flags as they are).
+		ACCELERATION_STRUCTURE_FELLOW_ALLOW_DATA_ACCESS_BIT = (1 << 11),
 	};
 
 	enum AccelerationStructureGeometryFlagBits {

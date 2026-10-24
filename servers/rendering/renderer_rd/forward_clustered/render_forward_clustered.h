@@ -36,6 +36,10 @@
 #include "servers/rendering/multi_uma_buffer.h"
 #include "servers/rendering/renderer_rd/cluster_builder_rd.h"
 #include "servers/rendering/renderer_rd/effects/fellow_shadow_cache.h"
+#include "servers/rendering/renderer_rd/effects/fellow_ddgi.h"
+#include "servers/rendering/renderer_rd/effects/fellow_rt_reflections.h"
+#include "servers/rendering/renderer_rd/effects/fellow_rt_shadow.h"
+#include "servers/rendering/renderer_rd/effects/fellow_rtao.h"
 #include "servers/rendering/renderer_rd/effects/fellow_shadow_max_mip.h"
 #include "servers/rendering/renderer_rd/effects/fsr2.h"
 #include "servers/rendering/renderer_rd/effects/motion_vectors_store.h"
@@ -112,6 +116,30 @@ public:
 
 	public:
 		ClusterBuilderRD *cluster_builder = nullptr;
+
+		// FellowEngine ray tracing (decision 0080): this view's top-level acceleration structure (rebuilt every frame,
+		// recreated when it needs more instances) and RTAO's state (decision 0081).
+		RID fellow_tlas;
+		uint32_t fellow_tlas_capacity = 0;
+		uint32_t fellow_rtao_frame = 0;
+		bool fellow_rtao_history = false;
+		Projection fellow_rtao_last_projection;
+		Transform3D fellow_rtao_last_transform;
+		// DDGI (decision 0083): the probe volume's per-view state (its textures are in the "fellow_ddgi" scope).
+		RID fellow_ddgi_probe_cells;
+		RID fellow_ddgi_ubo; // the volume the scene shader reads
+		int fellow_ddgi_counts[4] = { 0, 0, 0, 0 };
+		uint32_t fellow_ddgi_frame = 0;
+		// Ray-traced reflections (decision 0084).
+		uint32_t fellow_rt_reflection_frame = 0;
+		bool fellow_rt_reflection_history = false;
+		Projection fellow_rt_reflection_last_projection;
+		Transform3D fellow_rt_reflection_last_transform;
+		// Ray-traced sun shadows (decision 0082).
+		uint32_t fellow_rt_shadow_frame = 0;
+		bool fellow_rt_shadow_history = false;
+		Projection fellow_rt_shadow_last_projection;
+		Transform3D fellow_rt_shadow_last_transform;
 
 		// FellowEngine adaptive shading rate (decision 0027): the camera of the frame whose final image was last
 		// estimated (tile_rates), without TAA jitter.
@@ -1380,6 +1408,59 @@ private:
 #endif
 	RendererRD::MotionVectorsStore *motion_vectors_store = nullptr;
 
+	/* FellowEngine ray tracing (decisions 0080, 0081) */
+	RendererRD::FellowRTAO *fellow_rtao = nullptr;
+	RendererRD::FellowRTShadow *fellow_rt_shadow = nullptr;
+	RendererRD::FellowDDGI *fellow_ddgi = nullptr;
+	RendererRD::FellowRTReflections *fellow_rt_reflections = nullptr;
+	bool fellow_rt_reflections_on = false; // this render traces reflections (SSR off)
+	RID fellow_rt_reflection_texture; // this render's traced reflections for the opaque colour passes
+	// How ray-traced effects light their hits (decisions 0083, 0084): the sun and the environment's ambient light in
+	// the scene shader's units, the sky's radiance.
+	struct FellowRTLighting {
+		Vector3 sun_direction;
+		Color sun_color;
+		bool has_sun = false;
+		bool sun_shadow = false;
+		Color ambient_color; // a: the sky contribution
+		bool use_ambient = false;
+		bool use_sky = false;
+		float sky_factor = 1.0;
+		Basis sky_xform;
+		RID radiance;
+		bool radiance_array = false;
+		float radiance_border[2] = { 0.0, 1.0 };
+		float radiance_level = 0.0;
+	};
+	void _fellow_rt_lighting(const RenderDataRD *p_render_data, const Ref<RenderSceneBuffersRD> &p_render_buffers, RID p_radiance_texture, FellowRTLighting &r_lighting);
+	RID _fellow_process_rt_reflections(RenderDataRD *p_render_data, const Ref<RenderSceneBuffersRD> &p_render_buffers, const Ref<RenderBufferDataForwardClustered> &p_rb_data, RID p_normal_roughness, RID p_radiance_texture);
+	// The ray tracing scene's per-instance surface data (FellowRTInstance in fellow_ddgi.glsl: linear albedo and
+	// double-sidedness, emission in the scene's units), indexed by the instances' custom index (decision 0083).
+	struct FellowRTMaterial {
+		Color albedo = Color(0.7, 0.7, 0.7);
+		Color emission = Color(0, 0, 0);
+		float metallic = 0.0f;
+		uint64_t refreshed = 0;
+	};
+	HashMap<RID, FellowRTMaterial> fellow_rt_materials;
+	LocalVector<float> fellow_rt_instance_data;
+	RID fellow_rt_instance_buffer;
+	uint32_t fellow_rt_instance_capacity = 0;
+	RID fellow_ddgi_default_ubo; // a volume without data, for renders without DDGI
+	// This render's DDGI resources for the colour passes (RID(): DDGI off).
+	RID fellow_ddgi_irradiance;
+	RID fellow_ddgi_distance;
+	RID fellow_ddgi_volume_ubo;
+	const FellowRTMaterial &_fellow_rt_material(RID p_material, uint64_t p_frame);
+	RID _fellow_first_directional_light(const RenderDataRD *p_render_data);
+	void _fellow_process_ddgi(RenderDataRD *p_render_data, const Ref<RenderSceneBuffersRD> &p_render_buffers, const Ref<RenderBufferDataForwardClustered> &p_rb_data, RID p_radiance_texture);
+	RID fellow_rt_shadow_mask; // this render's traced sun shadow (RID(): the shadow map), read by the opaque colour passes
+	RID fellow_rt_tlas; // the frame's ray tracing scene (RID() when no ray-traced effect runs)
+	LocalVector<RD::AccelerationStructureInstance> fellow_rt_build;
+	RID _fellow_build_raytracing_scene(RenderDataRD *p_render_data, const Ref<RenderBufferDataForwardClustered> &p_rb_data);
+	void _fellow_process_rtao(RenderDataRD *p_render_data, const Ref<RenderSceneBuffersRD> &p_render_buffers, const Ref<RenderBufferDataForwardClustered> &p_rb_data, RID p_normal_roughness);
+	RID _fellow_process_rt_sun_shadow(RenderDataRD *p_render_data, const Ref<RenderSceneBuffersRD> &p_render_buffers, const Ref<RenderBufferDataForwardClustered> &p_rb_data);
+
 	/* Cluster builder */
 
 	ClusterBuilderSharedDataRD cluster_builder_shared;
@@ -1438,6 +1519,9 @@ protected:
 
 public:
 	static RenderForwardClustered *get_singleton() { return singleton; }
+
+	// FellowEngine ray tracing (decision 0080): the culler gathers the instances near the camera when an effect needs them.
+	virtual float fellow_raytracing_radius() const override { return Fellow::raytracing_scene_wanted() ? Fellow::raytracing_radius() : 0.0f; }
 
 	ClusterBuilderSharedDataRD *get_cluster_builder_shared() { return &cluster_builder_shared; }
 	RendererRD::SSEffects *get_ss_effects() { return ss_effects; }

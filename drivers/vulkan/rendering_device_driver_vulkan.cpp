@@ -586,6 +586,10 @@ Error RenderingDeviceDriverVulkan::_initialize_device_extensions() {
 	_register_requested_device_extension(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME, false);
 	_register_requested_device_extension(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME, false);
 	_register_requested_device_extension(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME, false);
+	// FellowEngine (decision 0080): ray queries from compute and fragment shaders (stock never enabled the feature).
+	_register_requested_device_extension(VK_KHR_RAY_QUERY_EXTENSION_NAME, false);
+	// FellowEngine (decision 0083): a hit triangle's vertex positions in ray queries (its normal for GI hits).
+	_register_requested_device_extension(VK_KHR_RAY_TRACING_POSITION_FETCH_EXTENSION_NAME, false);
 	_register_requested_device_extension(VK_NV_RAY_TRACING_VALIDATION_EXTENSION_NAME, false);
 	_register_requested_device_extension(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME, false);
 
@@ -922,6 +926,8 @@ Error RenderingDeviceDriverVulkan::_check_device_capabilities() {
 		VkPhysicalDeviceVulkanMemoryModelFeatures memory_model_features = {};
 		VkPhysicalDeviceAccelerationStructureFeaturesKHR acceleration_structure_features = {};
 		VkPhysicalDeviceRayTracingPipelineFeaturesKHR raytracing_pipeline_features = {};
+		VkPhysicalDeviceRayQueryFeaturesKHR fellow_ray_query_features = {};
+		VkPhysicalDeviceRayTracingPositionFetchFeaturesKHR fellow_position_fetch_features = {};
 		VkPhysicalDeviceSynchronization2FeaturesKHR sync_2_features = {};
 		VkPhysicalDeviceRayTracingValidationFeaturesNV raytracing_validation_features = {};
 		VkPhysicalDevicePipelineExecutablePropertiesFeaturesKHR fellow_pipeline_executable_features = {};
@@ -1007,6 +1013,18 @@ Error RenderingDeviceDriverVulkan::_check_device_capabilities() {
 			raytracing_validation_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_VALIDATION_FEATURES_NV;
 			raytracing_validation_features.pNext = next_features;
 			next_features = &raytracing_validation_features;
+		}
+
+		if (enabled_device_extension_names.has(VK_KHR_RAY_QUERY_EXTENSION_NAME)) {
+			fellow_ray_query_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR;
+			fellow_ray_query_features.pNext = next_features;
+			next_features = &fellow_ray_query_features;
+		}
+
+		if (enabled_device_extension_names.has(VK_KHR_RAY_TRACING_POSITION_FETCH_EXTENSION_NAME)) {
+			fellow_position_fetch_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_POSITION_FETCH_FEATURES_KHR;
+			fellow_position_fetch_features.pNext = next_features;
+			next_features = &fellow_position_fetch_features;
 		}
 
 		if (enabled_device_extension_names.has(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME)) {
@@ -1112,6 +1130,14 @@ Error RenderingDeviceDriverVulkan::_check_device_capabilities() {
 		if (enabled_device_extension_names.has(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME)) {
 			raytracing_capabilities.raytracing_pipeline_support = raytracing_pipeline_features.rayTracingPipeline;
 			raytracing_capabilities.validation = raytracing_validation_features.rayTracingValidation;
+		}
+
+		if (enabled_device_extension_names.has(VK_KHR_RAY_QUERY_EXTENSION_NAME)) {
+			ray_query_support = acceleration_structure_capabilities.acceleration_structure_support && fellow_ray_query_features.rayQuery;
+		}
+
+		if (enabled_device_extension_names.has(VK_KHR_RAY_TRACING_POSITION_FETCH_EXTENSION_NAME)) {
+			fellow_position_fetch_support = ray_query_support && fellow_position_fetch_features.rayTracingPositionFetch;
 		}
 	}
 
@@ -1471,6 +1497,22 @@ Error RenderingDeviceDriverVulkan::_initialize_device(const LocalVector<VkDevice
 		raytracing_pipeline_features.pNext = create_info_next;
 		raytracing_pipeline_features.rayTracingPipeline = raytracing_capabilities.raytracing_pipeline_support;
 		create_info_next = &raytracing_pipeline_features;
+	}
+
+	VkPhysicalDeviceRayQueryFeaturesKHR fellow_ray_query_features = {};
+	if (ray_query_support) {
+		fellow_ray_query_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR;
+		fellow_ray_query_features.pNext = create_info_next;
+		fellow_ray_query_features.rayQuery = VK_TRUE;
+		create_info_next = &fellow_ray_query_features;
+	}
+
+	VkPhysicalDeviceRayTracingPositionFetchFeaturesKHR fellow_position_fetch_features = {};
+	if (fellow_position_fetch_support) {
+		fellow_position_fetch_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_POSITION_FETCH_FEATURES_KHR;
+		fellow_position_fetch_features.pNext = create_info_next;
+		fellow_position_fetch_features.rayTracingPositionFetch = VK_TRUE;
+		create_info_next = &fellow_position_fetch_features;
 	}
 
 	VkPhysicalDeviceRayTracingValidationFeaturesNV raytracing_validation_features = {};
@@ -6513,6 +6555,23 @@ static_assert(ENUM_MEMBERS_EQUAL(RDD::ACCELERATION_STRUCTURE_LOW_MEMORY_BIT, VK_
 // RDD::AccelerationStructureGeometryBits == VkGeometryFlagsKHR.
 static_assert(ENUM_MEMBERS_EQUAL(RDD::ACCELERATION_STRUCTURE_GEOMETRY_OPAQUE_BIT, VK_GEOMETRY_OPAQUE_BIT_KHR));
 static_assert(ENUM_MEMBERS_EQUAL(RDD::ACCELERATION_STRUCTURE_GEOMETRY_NO_DUPLICATE_ANY_HIT_INVOCATION_BIT, VK_GEOMETRY_NO_DUPLICATE_ANY_HIT_INVOCATION_BIT_KHR));
+
+bool RenderingDeviceDriverVulkan::fellow_ray_position_fetch_supported() {
+	return fellow_position_fetch_support;
+}
+
+bool RenderingDeviceDriverVulkan::fellow_acceleration_structure_vertex_format_supported(DataFormat p_format) {
+#if VULKAN_RAYTRACING_ENABLED
+	if (p_format >= DATA_FORMAT_MAX) {
+		return false;
+	}
+	VkFormatProperties properties = {};
+	vkGetPhysicalDeviceFormatProperties(physical_device, RD_TO_VK_FORMAT[p_format], &properties);
+	return (properties.bufferFeatures & VK_FORMAT_FEATURE_ACCELERATION_STRUCTURE_VERTEX_BUFFER_BIT_KHR) != 0;
+#else
+	return false;
+#endif
+}
 
 RDD::AccelerationStructureID RenderingDeviceDriverVulkan::blas_create(VectorView<AccelerationStructureGeometry> p_geometries, BitField<AccelerationStructureFlagBits> p_flags) {
 #if VULKAN_RAYTRACING_ENABLED

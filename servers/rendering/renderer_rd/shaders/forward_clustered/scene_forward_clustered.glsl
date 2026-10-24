@@ -1980,6 +1980,19 @@ void fragment_shader(in SceneData scene_data) {
 		}
 	}
 #endif // USE_LIGHTMAP
+#if !defined(USE_LIGHTMAP)
+	// FellowEngine DDGI (decision 0083): the probe volume's irradiance in place of the environment's ambient light
+	// (blended with it where the volume ends).
+	if (sc_fellow_ddgi()) {
+		mat4 fellow_inv_view = transpose(mat4(scene_data.inv_view_matrix[0], scene_data.inv_view_matrix[1], scene_data.inv_view_matrix[2], vec4(0.0, 0.0, 0.0, 1.0)));
+		vec3 fellow_wpos = (fellow_inv_view * vec4(vertex, 1.0)).xyz;
+		vec3 fellow_wn = normalize(mat3(fellow_inv_view) * indirect_normal);
+		vec3 fellow_weye = normalize(mat3(fellow_inv_view) * -normalize(vertex));
+		float fellow_coverage;
+		vec3 fellow_gi = fellow_ddgi_irradiance(fellow_ddgi_irradiance_atlas, fellow_ddgi_distance_atlas, SAMPLER_LINEAR_CLAMP, fellow_ddgi.volume, fellow_wpos, fellow_wn, fellow_weye, fellow_coverage);
+		ambient_light = mix(ambient_light, fellow_gi, clamp(fellow_coverage, 0.0, 1.0));
+	}
+#endif
 #if defined(CUSTOM_IRRADIANCE_USED)
 	ambient_light = mix(ambient_light, custom_irradiance.rgb, custom_irradiance.a);
 #endif
@@ -2469,6 +2482,15 @@ void fragment_shader(in SceneData scene_data) {
 			// Alpha is premultiplied.
 			indirect_specular_light = indirect_specular_light * (1.0 - ssr.a) + ssr.rgb;
 		}
+
+#if !defined(USE_MULTIVIEW)
+		// FellowEngine ray-traced reflections (decision 0084): the traced radiance in place of the probes' and the sky's,
+		// faded towards the maximum roughness.
+		if (sc_fellow_rt_reflections()) {
+			vec4 fellow_refl = texelFetch(sampler2D(fellow_rt_reflection, SAMPLER_NEAREST_CLAMP), ivec2(gl_FragCoord.xy), 0);
+			indirect_specular_light = mix(indirect_specular_light, fellow_refl.rgb, fellow_refl.a);
+		}
+#endif
 	}
 #endif // AMBIENT_LIGHT_DISABLED
 
@@ -2597,7 +2619,20 @@ void fragment_shader(in SceneData scene_data) {
 				const bool fellow_skip_shadow = false;
 #endif
 
-				if (directional_lights.data[i].shadow_opacity > 0.001 && !fellow_skip_shadow) {
+				// FellowEngine ray-traced sun shadows (decision 0082): the traced shadow where the mask is valid.
+				float fellow_rt_shadow = -1.0;
+#if !defined(USE_VERTEX_LIGHTING) && !defined(USE_MULTIVIEW)
+				if (sc_fellow_rt_sun_shadow() && i == 0u && directional_lights.data[i].shadow_opacity > 0.001) {
+					vec2 fellow_rt = texelFetch(sampler2D(fellow_rt_shadow_mask, SAMPLER_NEAREST_CLAMP), ivec2(gl_FragCoord.xy), 0).xy;
+					if (fellow_rt.y > 0.5) {
+						fellow_rt_shadow = fellow_rt.x;
+					}
+				}
+#endif
+
+				if (fellow_rt_shadow >= 0.0) {
+					shadow = fellow_rt_shadow;
+				} else if (directional_lights.data[i].shadow_opacity > 0.001 && !fellow_skip_shadow) {
 					float depth_z = -vertex.z;
 					vec3 light_dir = directional_lights.data[i].direction;
 					vec3 base_normal_bias = geo_normal * (1.0 - max(0.0, dot(light_dir, -geo_normal)));

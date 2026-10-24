@@ -781,6 +781,11 @@ public:
 	};
 
 	virtual AccelerationStructureID blas_create(VectorView<AccelerationStructureGeometry> p_geometries, BitField<AccelerationStructureFlagBits> p_flags) = 0;
+	// FellowEngine (decision 0080): whether bottom-level acceleration structures can be built from vertices of this format.
+	virtual bool fellow_acceleration_structure_vertex_format_supported(DataFormat p_format) { return p_format == DATA_FORMAT_R32G32B32_SFLOAT; }
+	// FellowEngine (decision 0083): ray queries can fetch the hit triangle's vertex positions (structures built with
+	// ACCELERATION_STRUCTURE_FELLOW_ALLOW_DATA_ACCESS_BIT).
+	virtual bool fellow_ray_position_fetch_supported() { return false; }
 
 	struct AccelerationStructureInstance {
 		Transform3D transform;

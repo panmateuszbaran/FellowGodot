@@ -247,6 +247,77 @@ inline float lens_vignette_smoothness() {
 inline float lens_film_grain() {
 	return GLOBAL_GET_CACHED(float, "rendering/fellow/post/lens/film_grain");
 }
+// raytracing/* (decision 0080, start-up): ray tracing with ray queries. raytracing_active(): requested and the device
+// supports ray queries (decided on first call, once the rendering device exists).
+inline bool raytracing_requested() {
+	return enabled() && bool(GLOBAL_GET("rendering/fellow/raytracing/enabled"));
+}
+bool raytracing_active();
+inline float raytracing_radius() {
+	return GLOBAL_GET_CACHED(float, "rendering/fellow/raytracing/radius");
+}
+inline bool raytracing_skinned() {
+	return GLOBAL_GET_CACHED(bool, "rendering/fellow/raytracing/skinned");
+}
+// debug/raytracing_view: RTAO's buffer shows the ray tracing scene from the camera instead (1: hit distances, 2: where it
+// matches the depth buffer); with the viewport's SSAO debug draw.
+inline int raytracing_debug_view() {
+	return GLOBAL_GET_CACHED(int, "rendering/fellow/debug/raytracing_view");
+}
+inline bool raytracing_decode_positions() {
+	return GLOBAL_GET_CACHED(bool, "rendering/fellow/debug/raytracing_decode_positions");
+}
+// raytracing/ambient_occlusion (decision 0081): where the environment enables SSAO, ray-traced ambient occlusion
+// writes the buffer SSAO would.
+inline bool raytracing_ao() {
+	return raytracing_active() && GLOBAL_GET_CACHED(bool, "rendering/fellow/raytracing/ambient_occlusion");
+}
+inline int raytracing_ao_rays() {
+	return GLOBAL_GET_CACHED(int, "rendering/fellow/raytracing/ao_rays");
+}
+// raytracing/sun_shadows (decision 0082): the first directional light's shadow from rays, read by the opaque colour
+// pass in place of the shadow map within half the ray tracing radius of the camera.
+inline bool raytracing_sun_shadows() {
+	return raytracing_active() && GLOBAL_GET_CACHED(bool, "rendering/fellow/raytracing/sun_shadows");
+}
+inline int raytracing_sun_shadow_rays() {
+	return GLOBAL_GET_CACHED(int, "rendering/fellow/raytracing/sun_shadow_rays");
+}
+// raytracing/gi (decision 0083): a volume of irradiance probes around the camera, traced every frame, read by the colour
+// passes in place of the environment's ambient light.
+inline bool raytracing_gi() {
+	return raytracing_active() && GLOBAL_GET_CACHED(bool, "rendering/fellow/raytracing/gi");
+}
+inline float raytracing_gi_probe_spacing() {
+	return GLOBAL_GET_CACHED(float, "rendering/fellow/raytracing/gi_probe_spacing");
+}
+inline int raytracing_gi_probes_xz() {
+	return GLOBAL_GET_CACHED(int, "rendering/fellow/raytracing/gi_probes_xz");
+}
+inline int raytracing_gi_probes_y() {
+	return GLOBAL_GET_CACHED(int, "rendering/fellow/raytracing/gi_probes_y");
+}
+inline int raytracing_gi_rays() {
+	return GLOBAL_GET_CACHED(int, "rendering/fellow/raytracing/gi_rays");
+}
+inline float raytracing_gi_hysteresis() {
+	return GLOBAL_GET_CACHED(float, "rendering/fellow/raytracing/gi_hysteresis");
+}
+inline float raytracing_gi_energy() {
+	return GLOBAL_GET_CACHED(float, "rendering/fellow/raytracing/gi_energy");
+}
+// raytracing/reflections (decision 0084): where the environment enables SSR, a traced reflection per pixel up to
+// reflections_max_roughness in place of SSR (and of the probes' and the sky's specular light there).
+inline bool raytracing_reflections() {
+	return raytracing_active() && GLOBAL_GET_CACHED(bool, "rendering/fellow/raytracing/reflections");
+}
+inline float raytracing_reflections_max_roughness() {
+	return GLOBAL_GET_CACHED(float, "rendering/fellow/raytracing/reflections_max_roughness");
+}
+// Whether the frame's renderer needs the ray tracing scene (any ray-traced effect on).
+inline bool raytracing_scene_wanted() {
+	return raytracing_ao() || raytracing_sun_shadows() || raytracing_gi() || raytracing_reflections();
+}
 inline bool taa_strided_load() {
 	return postfx_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/postfx/taa_strided_load");
 }
@@ -986,6 +1057,8 @@ struct Stats {
 	SafeNumeric<uint64_t> shadow_cache_copies_skipped;
 	SafeNumeric<uint64_t> shadow_cache_cascades_uneconomic; // stock because the cache would cost more than it saves
 	SafeNumeric<uint64_t> shadow_cache_cascades_unstable; // stock because the cascade's texel size is changing (zoom)
+	SafeNumeric<uint64_t> raytracing_instances; // ray tracing scene instances built (decision 0080), summed over frames
+	SafeNumeric<uint64_t> raytracing_blas_builds; // bottom-level acceleration structures built or rebuilt
 	SafeNumeric<uint64_t> geometry_cluster_surfaces; // surfaces clustered at creation
 	SafeNumeric<uint64_t> geometry_cluster_surfaces_active; // surfaces whose index buffers were put in cluster order
 	SafeNumeric<uint64_t> geometry_cluster_surfaces_dropped; // surfaces left in stock order (blending or vertex-moving material)

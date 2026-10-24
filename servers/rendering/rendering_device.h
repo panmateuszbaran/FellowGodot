@@ -1375,6 +1375,9 @@ public:
 	};
 
 	RID blas_create(Span<AccelerationStructureGeometry> p_geometries, BitField<AccelerationStructureFlagBits> p_flags);
+	// FellowEngine (decision 0080, not bound): whether blas_create() accepts vertices of this format on this device.
+	bool fellow_blas_vertex_format_supported(DataFormat p_format) { return driver->fellow_acceleration_structure_vertex_format_supported(p_format); }
+	bool fellow_ray_position_fetch_supported() { return driver->fellow_ray_position_fetch_supported(); }
 	RID tlas_create(uint32_t p_max_instance_count, BitField<AccelerationStructureFlagBits> p_flags);
 
 	typedef int64_t HitShaderBindingTableRange;

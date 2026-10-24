@@ -210,6 +210,9 @@ MeshStorage::~MeshStorage() {
 	}
 
 	skeleton_shader.shader.version_free(skeleton_shader.version);
+	if (fellow_blas_decode.version.is_valid()) {
+		fellow_blas_decode.shader.version_free(fellow_blas_decode.version);
+	}
 
 	RD::get_singleton()->free_rid(default_rd_storage_buffer);
 
@@ -392,6 +395,17 @@ void MeshStorage::mesh_add_surface(RID p_mesh, const RenderingServerTypes::Surfa
 
 	const bool use_as_storage = (new_surface.skin_data.size() || mesh->blend_shape_count > 0);
 	const BitField<RD::BufferCreationBits> as_storage_flag = use_as_storage ? RD::BUFFER_CREATION_AS_STORAGE_BIT : 0;
+	// FellowEngine ray tracing (decision 0080): positions and indices usable as acceleration structure build inputs;
+	// compressed positions also readable by the decode shader where the device cannot build from them.
+	BitField<RD::BufferCreationBits> fellow_rt_flags;
+	BitField<RD::BufferCreationBits> vertex_flags = as_storage_flag;
+	if (Fellow::raytracing_active()) {
+		fellow_rt_flags = BitField<RD::BufferCreationBits>(RD::BUFFER_CREATION_DEVICE_ADDRESS_BIT).get_combined(RD::BUFFER_CREATION_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT);
+		vertex_flags = vertex_flags.get_combined(fellow_rt_flags);
+		if ((new_surface.format & RSE::ARRAY_FLAG_COMPRESS_ATTRIBUTES) && !(new_surface.format & RSE::ARRAY_FLAG_USE_2D_VERTICES) && !_fellow_unorm16_blas_supported()) {
+			vertex_flags = vertex_flags.get_combined(RD::BUFFER_CREATION_AS_STORAGE_BIT);
+		}
+	}
 
 	if (new_surface.vertex_data.size()) {
 		// If we have an uncompressed surface that contains normals, but not tangents, we need to differentiate the array
@@ -405,10 +419,10 @@ void MeshStorage::mesh_add_surface(RID p_mesh, const RenderingServerTypes::Surfa
 			Vector<uint8_t> new_vertex_data;
 			new_vertex_data.resize_initialized(new_surface.vertex_data.size() + sizeof(uint16_t) * 2);
 			memcpy(new_vertex_data.ptrw(), new_surface.vertex_data.ptr(), new_surface.vertex_data.size());
-			s->vertex_buffer = RD::get_singleton()->vertex_buffer_create(new_vertex_data.size(), new_vertex_data, as_storage_flag);
+			s->vertex_buffer = RD::get_singleton()->vertex_buffer_create(new_vertex_data.size(), new_vertex_data, vertex_flags);
 			s->vertex_buffer_size = new_vertex_data.size();
 		} else {
-			s->vertex_buffer = RD::get_singleton()->vertex_buffer_create(new_surface.vertex_data.size(), new_surface.vertex_data, as_storage_flag);
+			s->vertex_buffer = RD::get_singleton()->vertex_buffer_create(new_surface.vertex_data.size(), new_surface.vertex_data, vertex_flags);
 			s->vertex_buffer_size = new_surface.vertex_data.size();
 		}
 	}
@@ -431,7 +445,7 @@ void MeshStorage::mesh_add_surface(RID p_mesh, const RenderingServerTypes::Surfa
 	if (new_surface.index_count) {
 		bool is_index_16 = new_surface.vertex_count <= 65536 && new_surface.vertex_count > 0;
 
-		s->index_buffer = RD::get_singleton()->index_buffer_create(new_surface.index_count, is_index_16 ? RD::INDEX_BUFFER_FORMAT_UINT16 : RD::INDEX_BUFFER_FORMAT_UINT32, new_surface.index_data, false);
+		s->index_buffer = RD::get_singleton()->index_buffer_create(new_surface.index_count, is_index_16 ? RD::INDEX_BUFFER_FORMAT_UINT16 : RD::INDEX_BUFFER_FORMAT_UINT32, new_surface.index_data, false, fellow_rt_flags);
 		s->index_buffer_size = new_surface.index_data.size();
 		s->index_count = new_surface.index_count;
 		s->index_array = RD::get_singleton()->index_array_create(s->index_buffer, 0, s->index_count);
@@ -544,6 +558,13 @@ void MeshStorage::mesh_add_surface(RID p_mesh, const RenderingServerTypes::Surfa
 void MeshStorage::_mesh_surface_clear(Mesh *p_mesh, int p_surface) {
 	Mesh::Surface &s = *p_mesh->surfaces[p_surface];
 
+	if (s.fellow_blas.is_valid()) {
+		RD::get_singleton()->free_rid(s.fellow_blas);
+	}
+	if (s.fellow_blas_positions.is_valid()) {
+		RD::get_singleton()->free_rid(s.fellow_blas_positions);
+	}
+
 	if (s.vertex_buffer.is_valid()) {
 		RD::get_singleton()->free_rid(s.vertex_buffer); // Clears arrays as dependency automatically, including all versions.
 	}
@@ -579,6 +600,155 @@ void MeshStorage::_mesh_surface_clear(Mesh *p_mesh, int p_surface) {
 	}
 
 	memdelete(p_mesh->surfaces[p_surface]);
+}
+
+// FellowEngine ray tracing (docs/decisions/0080-raytracing-scene.md).
+
+RID MeshStorage::_fellow_build_blas(RID p_vertex_buffer, RD::DataFormat p_format, uint32_t p_stride, uint32_t p_vertex_count, RID p_index_buffer, uint32_t p_index_count, BitField<RD::AccelerationStructureFlagBits> p_flags) {
+	RD::AccelerationStructureGeometry geometry;
+	geometry.flags = RD::ACCELERATION_STRUCTURE_GEOMETRY_OPAQUE_BIT;
+	geometry.vertex_buffer = p_vertex_buffer;
+	geometry.vertex_offset = 0; // positions first in the vertex buffer
+	geometry.vertex_stride = p_stride;
+	geometry.vertex_count = p_vertex_count;
+	geometry.vertex_format = p_format;
+	geometry.index_buffer = p_index_buffer;
+	geometry.index_count = p_index_buffer.is_valid() ? p_index_count : 0;
+	BitField<RD::AccelerationStructureFlagBits> flags = p_flags;
+	if (RD::get_singleton()->fellow_ray_position_fetch_supported()) {
+		flags.set_flag(RD::ACCELERATION_STRUCTURE_FELLOW_ALLOW_DATA_ACCESS_BIT); // GI hits read their triangle (0083)
+	}
+	RID blas = RD::get_singleton()->blas_create(Span<RD::AccelerationStructureGeometry>(&geometry, 1), flags);
+	if (blas.is_null()) {
+		return RID();
+	}
+	if (RD::get_singleton()->blas_build(blas) != OK) {
+		RD::get_singleton()->free_rid(blas);
+		return RID();
+	}
+	fellow_blas_builds++;
+	return blas;
+}
+
+RID MeshStorage::_fellow_decode_positions(Mesh::Surface *p_surface) {
+	if (fellow_blas_decode.version.is_null()) {
+		Vector<String> modes;
+		modes.push_back("");
+		fellow_blas_decode.shader.initialize(modes);
+		fellow_blas_decode.version = fellow_blas_decode.shader.version_create();
+		fellow_blas_decode.pipeline = RD::get_singleton()->compute_pipeline_create(fellow_blas_decode.shader.version_get_shader(fellow_blas_decode.version, 0));
+	}
+	const BitField<RD::BufferCreationBits> flags = BitField<RD::BufferCreationBits>(RD::BUFFER_CREATION_AS_STORAGE_BIT).get_combined(RD::BUFFER_CREATION_DEVICE_ADDRESS_BIT).get_combined(RD::BUFFER_CREATION_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT);
+	RID positions = RD::get_singleton()->vertex_buffer_create(p_surface->vertex_count * sizeof(float) * 3, Vector<uint8_t>(), flags);
+	ERR_FAIL_COND_V(positions.is_null(), RID());
+
+	RID shader = fellow_blas_decode.shader.version_get_shader(fellow_blas_decode.version, 0);
+	Vector<RD::Uniform> uniforms;
+	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_STORAGE_BUFFER, 0, p_surface->vertex_buffer));
+	uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_STORAGE_BUFFER, 1, positions));
+	RID uniform_set = RD::get_singleton()->uniform_set_create(uniforms, shader, 0);
+	ERR_FAIL_COND_V(uniform_set.is_null(), positions);
+	uint32_t push[4] = { p_surface->vertex_count, 0, 0, 0 };
+	RD::ComputeListID list = RD::get_singleton()->compute_list_begin();
+	RD::get_singleton()->compute_list_bind_compute_pipeline(list, fellow_blas_decode.pipeline);
+	RD::get_singleton()->compute_list_bind_uniform_set(list, uniform_set, 0);
+	RD::get_singleton()->compute_list_set_push_constant(list, push, sizeof(push));
+	RD::get_singleton()->compute_list_dispatch_threads(list, p_surface->vertex_count, 1, 1);
+	RD::get_singleton()->compute_list_end();
+	RD::get_singleton()->free_rid(uniform_set);
+	return positions;
+}
+
+RID MeshStorage::fellow_mesh_surface_get_blas(void *p_surface, Transform3D &r_local) {
+	Mesh::Surface *s = reinterpret_cast<Mesh::Surface *>(p_surface);
+	const bool compressed = s->format & RSE::ARRAY_FLAG_COMPRESS_ATTRIBUTES;
+	// Compressed positions are in the surface's box (scene shader: vertex * aabb size + aabb position).
+	r_local = compressed ? Transform3D(Basis::from_scale(s->aabb.size), s->aabb.position) : Transform3D();
+	if (s->fellow_blas.is_valid() && !s->fellow_blas_dirty) {
+		return s->fellow_blas;
+	}
+	if (s->fellow_blas_failed || !Fellow::raytracing_active()) {
+		return RID();
+	}
+	if (s->fellow_blas.is_valid()) {
+		// Vertex data updated: the same geometry description, built again.
+		s->fellow_blas_dirty = false;
+		if (s->fellow_blas_positions.is_valid()) {
+			RD::get_singleton()->free_rid(s->fellow_blas); // the decoded positions are decoded again
+			s->fellow_blas = RID();
+			RD::get_singleton()->free_rid(s->fellow_blas_positions);
+			s->fellow_blas_positions = RID();
+		} else if (RD::get_singleton()->blas_build(s->fellow_blas) == OK) {
+			fellow_blas_builds++;
+			return s->fellow_blas;
+		} else {
+			RD::get_singleton()->free_rid(s->fellow_blas);
+			s->fellow_blas = RID();
+		}
+	}
+	s->fellow_blas_dirty = false;
+	if (s->primitive != RSE::PRIMITIVE_TRIANGLES || s->vertex_count == 0 || s->vertex_buffer.is_null() || (s->format & RSE::ARRAY_FLAG_USE_2D_VERTICES) || (s->index_buffer.is_null() && s->vertex_count % 3 != 0)) {
+		s->fellow_blas_failed = true;
+		return RID();
+	}
+	RID vertices = s->vertex_buffer;
+	RD::DataFormat format = RD::DATA_FORMAT_R32G32B32_SFLOAT;
+	uint32_t stride = sizeof(float) * 3;
+	if (compressed) {
+		if (_fellow_unorm16_blas_supported()) {
+			format = RD::DATA_FORMAT_R16G16B16A16_UNORM;
+			stride = sizeof(uint16_t) * 4;
+		} else {
+			s->fellow_blas_positions = _fellow_decode_positions(s);
+			vertices = s->fellow_blas_positions;
+		}
+	}
+	if (vertices.is_valid()) {
+		s->fellow_blas = _fellow_build_blas(vertices, format, stride, s->vertex_count, s->index_buffer, s->index_count, RD::ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT);
+	}
+	if (s->fellow_blas.is_null()) {
+		s->fellow_blas_failed = true;
+		if (s->fellow_blas_positions.is_valid()) {
+			RD::get_singleton()->free_rid(s->fellow_blas_positions);
+			s->fellow_blas_positions = RID();
+		}
+	}
+	return s->fellow_blas;
+}
+
+RID MeshStorage::fellow_mesh_instance_surface_get_blas(RID p_mesh_instance, uint32_t p_surface_index, void *p_mesh_surface, Transform3D &r_local) {
+	MeshInstance *mi = mesh_instance_owner.get_or_null(p_mesh_instance);
+	if (mi == nullptr || p_surface_index >= mi->surfaces.size()) {
+		return fellow_mesh_surface_get_blas(p_mesh_surface, r_local);
+	}
+	MeshInstance::Surface &ms = mi->surfaces[p_surface_index];
+	const uint32_t b = ms.current_buffer;
+	if (ms.vertex_buffer[b].is_null()) {
+		return fellow_mesh_surface_get_blas(p_mesh_surface, r_local); // not deformed: the mesh's own
+	}
+	Mesh::Surface *s = reinterpret_cast<Mesh::Surface *>(p_mesh_surface);
+	r_local = Transform3D(); // the deformed positions are written uncompressed, in the mesh's space
+	if (!Fellow::raytracing_skinned()) {
+		return RID();
+	}
+	if (ms.fellow_blas[b].is_valid()) {
+		if (ms.fellow_blas_frame[b] >= ms.last_change) {
+			return ms.fellow_blas[b];
+		}
+		if (RD::get_singleton()->blas_build(ms.fellow_blas[b]) == OK) {
+			fellow_blas_builds++;
+			ms.fellow_blas_frame[b] = RSG::rasterizer->get_frame_number();
+			return ms.fellow_blas[b];
+		}
+		RD::get_singleton()->free_rid(ms.fellow_blas[b]);
+		ms.fellow_blas[b] = RID();
+	}
+	if (s->primitive != RSE::PRIMITIVE_TRIANGLES || s->vertex_count == 0 || (s->format & RSE::ARRAY_FLAG_USE_2D_VERTICES) || (s->index_buffer.is_null() && s->vertex_count % 3 != 0)) {
+		return RID();
+	}
+	ms.fellow_blas[b] = _fellow_build_blas(ms.vertex_buffer[b], RD::DATA_FORMAT_R32G32B32_SFLOAT, sizeof(float) * 3, s->vertex_count, s->index_buffer, s->index_count, BitField<RD::AccelerationStructureFlagBits>(RD::ACCELERATION_STRUCTURE_PREFER_FAST_BUILD_BIT));
+	ms.fellow_blas_frame[b] = RSG::rasterizer->get_frame_number();
+	return ms.fellow_blas[b];
 }
 
 // FellowEngine mesh clusters (docs/decisions/0007-mesh-clusters.md).
@@ -620,8 +790,10 @@ bool MeshStorage::_fellow_try_apply(Mesh::Surface *p_surface) {
 		// (freeing a buffer also frees its index arrays).
 		const bool is_16 = p_surface->vertex_count <= 65536 && p_surface->vertex_count > 0;
 		const RD::IndexBufferFormat format = is_16 ? RD::INDEX_BUFFER_FORMAT_UINT16 : RD::INDEX_BUFFER_FORMAT_UINT32;
-		RD::get_singleton()->free_rid(p_surface->index_buffer);
-		p_surface->index_buffer = RD::get_singleton()->index_buffer_create(p_surface->index_count, format, c->pending_base, false);
+		RD::get_singleton()->free_rid(p_surface->index_buffer); // also frees the surface's acceleration structure (a dependent)
+		p_surface->fellow_blas = RID();
+		const BitField<RD::BufferCreationBits> fellow_rt_flags = Fellow::raytracing_active() ? BitField<RD::BufferCreationBits>(RD::BUFFER_CREATION_DEVICE_ADDRESS_BIT).get_combined(RD::BUFFER_CREATION_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT) : BitField<RD::BufferCreationBits>();
+		p_surface->index_buffer = RD::get_singleton()->index_buffer_create(p_surface->index_count, format, c->pending_base, false, fellow_rt_flags);
 		p_surface->index_array = RD::get_singleton()->index_array_create(p_surface->index_buffer, 0, p_surface->index_count);
 		for (uint32_t i = 0; i < p_surface->lod_count; i++) {
 			RD::get_singleton()->free_rid(p_surface->lods[i].index_buffer);
@@ -717,6 +889,7 @@ void MeshStorage::mesh_surface_update_vertex_region(RID p_mesh, int p_surface, i
 	const uint8_t *r = p_data.ptr();
 
 	RD::get_singleton()->buffer_update(mesh->surfaces[p_surface]->vertex_buffer, p_offset, data_size, r);
+	mesh->surfaces[p_surface]->fellow_blas_dirty = true; // ray tracing: rebuilt on its next use
 
 	// FellowEngine mesh clusters: their bounds come from the vertex data at creation; once positions are updated the
 	// surface is drawn whole (its index buffers may stay in cluster order).
@@ -1215,7 +1388,12 @@ void MeshStorage::_mesh_instance_add_surface(MeshInstance *mi, Mesh *mesh, uint3
 }
 
 void MeshStorage::_mesh_instance_add_surface_buffer(MeshInstance *mi, Mesh *mesh, MeshInstance::Surface *s, uint32_t p_surface, uint32_t p_buffer_index) {
-	s->vertex_buffer[p_buffer_index] = RD::get_singleton()->vertex_buffer_create(mesh->surfaces[p_surface]->vertex_buffer_size, Vector<uint8_t>(), RD::BUFFER_CREATION_AS_STORAGE_BIT);
+	BitField<RD::BufferCreationBits> flags = RD::BUFFER_CREATION_AS_STORAGE_BIT;
+	if (Fellow::raytracing_active()) {
+		// FellowEngine ray tracing (decision 0080): the skinned positions are acceleration structure build inputs.
+		flags = flags.get_combined(RD::BUFFER_CREATION_DEVICE_ADDRESS_BIT).get_combined(RD::BUFFER_CREATION_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT);
+	}
+	s->vertex_buffer[p_buffer_index] = RD::get_singleton()->vertex_buffer_create(mesh->surfaces[p_surface]->vertex_buffer_size, Vector<uint8_t>(), flags);
 
 	Vector<RD::Uniform> uniforms;
 	{
@@ -1249,6 +1427,9 @@ void MeshStorage::_mesh_instance_remove_surface(MeshInstance *mi, int p_surface)
 		memfree(surface.versions);
 	}
 	for (uint32_t i = 0; i < 2; i++) {
+		if (surface.fellow_blas[i].is_valid()) {
+			RD::get_singleton()->free_rid(surface.fellow_blas[i]);
+		}
 		if (surface.vertex_buffer[i].is_valid()) {
 			RD::get_singleton()->free_rid(surface.vertex_buffer[i]);
 		}
