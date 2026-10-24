@@ -100,6 +100,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/physics/parallel_island_solve", true); // decision 0089 (exact)
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/physics/parallel_island_solve_grab", PROPERTY_HINT_RANGE, "1,1024,1"), 32);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/physics/jolt_max_jobs", PROPERTY_HINT_RANGE, "0,256,1"), 8); // decision 0090 (exact)
+	GLOBAL_DEF("rendering/fellow/physics/island_constraint_lists", true); // decision 0091 (exact)
 	GLOBAL_DEF("rendering/fellow/physics/verify", false);
 	GLOBAL_DEF("rendering/fellow/postfx/taa_strided_load", false); // decision 0075: REJECT (exact, no gain)
 	GLOBAL_DEF("rendering/fellow/postfx/taa_history_pingpong", true);

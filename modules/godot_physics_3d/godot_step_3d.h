@@ -77,6 +77,7 @@ class GodotStep3D {
 	void _fellow_solve_participant(uint32_t p_index, void *p_userdata = nullptr);
 	void _fellow_solve_ops();
 	LocalVector<uint32_t> fellow_small_islands;
+	bool fellow_constraint_lists = false; // decision 0091, read per step
 	void _fellow_solve_small_island(uint32_t p_index, void *p_userdata = nullptr);
 
 public:

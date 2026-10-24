@@ -263,6 +263,11 @@ inline bool physics_parallel_island_solve() {
 inline int physics_parallel_island_solve_grab() {
 	return GLOBAL_GET_CACHED(int, "rendering/fellow/physics/parallel_island_solve_grab");
 }
+// physics/island_constraint_lists (decision 0091): GodotPhysics3D's island generation walks each body's constraints from
+// a contiguous list kept in its constraint map's order (stock: the map's linked elements). The same islands. Per step.
+inline bool physics_island_constraint_lists() {
+	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/physics/island_constraint_lists");
+}
 // physics/jolt_max_jobs (decision 0090): the most jobs Jolt splits a phase of its step into (0: one per worker thread, as
 // stock). Jolt's results do not depend on it. Read per step.
 inline int physics_jolt_max_jobs() {

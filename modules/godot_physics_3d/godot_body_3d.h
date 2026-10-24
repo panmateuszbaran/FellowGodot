@@ -200,10 +200,45 @@ public:
 	_FORCE_INLINE_ uint64_t get_island_step() const { return island_step; }
 	_FORCE_INLINE_ void set_island_step(uint64_t p_step) { island_step = p_step; }
 
-	_FORCE_INLINE_ void add_constraint(GodotConstraint3D *p_constraint, int p_pos) { constraint_map[p_constraint] = p_pos; }
-	_FORCE_INLINE_ void remove_constraint(GodotConstraint3D *p_constraint) { constraint_map.erase(p_constraint); }
+	// FellowEngine (milestone 17, decision 0091): constraint_map's entries also kept in a contiguous list in its iteration
+	// order (insertion order: an existing key keeps its place, an erased one leaves), for the island generation.
+	struct FellowConstraintEntry {
+		GodotConstraint3D *constraint = nullptr;
+		int pos = 0;
+	};
+	LocalVector<FellowConstraintEntry> fellow_constraints;
+
+	_FORCE_INLINE_ void add_constraint(GodotConstraint3D *p_constraint, int p_pos) {
+		HashMap<GodotConstraint3D *, int>::Iterator e = constraint_map.find(p_constraint);
+		if (e) {
+			e->value = p_pos;
+			for (FellowConstraintEntry &f : fellow_constraints) {
+				if (f.constraint == p_constraint) {
+					f.pos = p_pos;
+					break;
+				}
+			}
+		} else {
+			constraint_map.insert(p_constraint, p_pos);
+			fellow_constraints.push_back({ p_constraint, p_pos });
+		}
+	}
+	_FORCE_INLINE_ void remove_constraint(GodotConstraint3D *p_constraint) {
+		if (constraint_map.erase(p_constraint)) {
+			for (uint32_t i = 0; i < fellow_constraints.size(); i++) {
+				if (fellow_constraints[i].constraint == p_constraint) {
+					fellow_constraints.remove_at(i);
+					break;
+				}
+			}
+		}
+	}
 	const HashMap<GodotConstraint3D *, int> &get_constraint_map() const { return constraint_map; }
-	_FORCE_INLINE_ void clear_constraint_map() { constraint_map.clear(); }
+	const LocalVector<FellowConstraintEntry> &fellow_get_constraints() const { return fellow_constraints; }
+	_FORCE_INLINE_ void clear_constraint_map() {
+		constraint_map.clear();
+		fellow_constraints.clear();
+	}
 
 	_FORCE_INLINE_ void set_omit_force_integration(bool p_omit_force_integration) { omit_force_integration = p_omit_force_integration; }
 	_FORCE_INLINE_ bool get_omit_force_integration() const { return omit_force_integration; }

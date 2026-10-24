@@ -58,6 +58,43 @@ void GodotStep3D::_populate_island(GodotBody3D *p_body, LocalVector<GodotBody3D 
 		p_body_island.push_back(p_body);
 	}
 
+	if (fellow_constraint_lists) {
+		// FellowEngine (decision 0091): the same entries in the same order, from the body's contiguous list.
+		for (const GodotBody3D::FellowConstraintEntry &E : p_body->fellow_get_constraints()) {
+			GodotConstraint3D *constraint = E.constraint;
+			if (constraint->get_island_step() == _step) {
+				continue; // Already processed.
+			}
+			constraint->set_island_step(_step);
+			p_constraint_island.push_back(constraint);
+
+			all_constraints.push_back(constraint);
+
+			for (int i = 0; i < constraint->get_body_count(); i++) {
+				if (i == E.pos) {
+					continue;
+				}
+				GodotBody3D *other_body = constraint->get_body_ptr()[i];
+				if (other_body->get_island_step() == _step) {
+					continue; // Already processed.
+				}
+				if (other_body->get_mode() == PhysicsServer3D::BODY_MODE_STATIC) {
+					continue; // Static bodies don't connect islands.
+				}
+				_populate_island(other_body, p_body_island, p_constraint_island);
+			}
+
+			for (int i = 0; i < constraint->get_soft_body_count(); i++) {
+				GodotSoftBody3D *soft_body = constraint->get_soft_body_ptr(i);
+				if (soft_body->get_island_step() == _step) {
+					continue; // Already processed.
+				}
+				_populate_island_soft_body(soft_body, p_body_island, p_constraint_island);
+			}
+		}
+		return;
+	}
+
 	for (const KeyValue<GodotConstraint3D *, int> &E : p_body->get_constraint_map()) {
 		GodotConstraint3D *constraint = E.key;
 		if (constraint->get_island_step() == _step) {
@@ -275,6 +312,8 @@ void GodotStep3D::step(GodotSpace3D *p_space, real_t p_delta) {
 	}
 
 	/* GENERATE CONSTRAINT ISLANDS FOR ACTIVE RIGID BODIES */
+
+	fellow_constraint_lists = Fellow::physics_island_constraint_lists();
 
 	b = body_list->first();
 
