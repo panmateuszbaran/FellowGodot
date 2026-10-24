@@ -1985,7 +1985,8 @@ void fragment_shader(in SceneData scene_data) {
 	// (blended with it where the volume ends).
 	if (sc_fellow_ddgi() && sc_fellow_ddgi_screen()) {
 		vec4 fellow_gi = texelFetch(sampler2D(fellow_ddgi_screen, SAMPLER_NEAREST_CLAMP), ivec2(gl_FragCoord.xy), 0);
-		ambient_light = mix(ambient_light, fellow_gi.rgb, fellow_gi.a);
+		// Plus the sky leak: a share of the environment's ambient light everywhere (no interior entirely black).
+		ambient_light = mix(ambient_light, fellow_gi.rgb + ambient_light * fellow_ddgi.volume.shading.x, fellow_gi.a);
 	} else if (sc_fellow_ddgi()) {
 		mat4 fellow_inv_view = transpose(mat4(scene_data.inv_view_matrix[0], scene_data.inv_view_matrix[1], scene_data.inv_view_matrix[2], vec4(0.0, 0.0, 0.0, 1.0)));
 		vec3 fellow_wpos = (fellow_inv_view * vec4(vertex, 1.0)).xyz;
@@ -1993,7 +1994,7 @@ void fragment_shader(in SceneData scene_data) {
 		vec3 fellow_weye = normalize(mat3(fellow_inv_view) * -normalize(vertex));
 		float fellow_coverage;
 		vec3 fellow_gi = fellow_ddgi_irradiance(fellow_ddgi_irradiance_atlas, fellow_ddgi_distance_atlas, SAMPLER_LINEAR_CLAMP, fellow_ddgi.volume, fellow_wpos, fellow_wn, fellow_weye, fellow_coverage);
-		ambient_light = mix(ambient_light, fellow_gi, clamp(fellow_coverage, 0.0, 1.0));
+		ambient_light = mix(ambient_light, fellow_gi + ambient_light * fellow_ddgi.volume.shading.x, clamp(fellow_coverage, 0.0, 1.0));
 	}
 #endif
 #if defined(CUSTOM_IRRADIANCE_USED)

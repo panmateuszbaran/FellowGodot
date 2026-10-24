@@ -4444,6 +4444,7 @@ void RenderForwardClustered::_fellow_process_ddgi(RenderDataRD *p_render_data, c
 	volume.spacing[1] = 0.2f; // normal bias, in spacings
 	volume.spacing[2] = 0.8f * 0.2f; // view bias
 	volume.spacing[3] = Fellow::raytracing_gi_energy();
+	volume.shading[0] = CLAMP(Fellow::raytracing_gi_sky_leak(), 0.0f, 1.0f);
 	volume.atlas_inv_size[0] = 1.0f / float(counts[0] * counts[1] * RendererRD::FellowDDGI::IRRADIANCE_TILE);
 	volume.atlas_inv_size[1] = 1.0f / float(counts[2] * RendererRD::FellowDDGI::IRRADIANCE_TILE);
 	volume.atlas_inv_size[2] = 1.0f / float(counts[0] * counts[1] * RendererRD::FellowDDGI::DISTANCE_TILE);

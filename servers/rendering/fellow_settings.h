@@ -315,6 +315,9 @@ inline int raytracing_gi_dump_every() {
 inline bool raytracing_gi_in_shader() {
 	return GLOBAL_GET_CACHED(bool, "rendering/fellow/debug/raytracing_gi_in_shader");
 }
+inline float raytracing_gi_sky_leak() {
+	return GLOBAL_GET_CACHED(float, "rendering/fellow/raytracing/gi_sky_leak");
+}
 inline int raytracing_gi_update_interval() {
 	return GLOBAL_GET_CACHED(int, "rendering/fellow/raytracing/gi_update_interval");
 }

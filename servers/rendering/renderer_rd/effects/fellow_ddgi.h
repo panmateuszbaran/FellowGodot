@@ -44,12 +44,13 @@ namespace RendererRD {
 // the scene shader in place of the environment's ambient light (fellow_ddgi_inc.glsl).
 class FellowDDGI {
 public:
-	// std140, as FellowDDGIVolume in fellow_ddgi_inc.glsl (64 bytes).
+	// std140, as FellowDDGIVolume in fellow_ddgi_inc.glsl (80 bytes).
 	struct Volume {
 		int32_t counts[4] = { 0, 0, 0, 0 }; // probes, rays per probe
 		int32_t base_cell[4] = { 0, 0, 0, 0 }; // w 1: holds data
 		float spacing[4] = { 1.0, 0.0, 0.0, 1.0 }; // spacing, normal bias, view bias, energy
 		float atlas_inv_size[4] = { 1.0, 1.0, 1.0, 1.0 };
+		float shading[4] = { 0.0, 0.0, 0.0, 0.0 }; // sky leak
 	};
 
 	struct Params {
@@ -107,7 +108,7 @@ private:
 		MODE_MAX,
 	};
 
-	struct UBO { // std140, as Params in fellow_ddgi.glsl (448 bytes)
+	struct UBO { // std140, as Params in fellow_ddgi.glsl (464 bytes)
 		Volume volume;
 		float ray_rotation[16];
 		float sun_direction[4];

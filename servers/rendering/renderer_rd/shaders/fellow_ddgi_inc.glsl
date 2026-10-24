@@ -13,6 +13,7 @@ struct FellowDDGIVolume {
 	ivec4 base_cell; // xyz the first cell in the volume, w 1 when the volume holds data
 	vec4 spacing; // x spacing, y normal bias, z view bias (in spacings), w energy multiplier
 	vec4 atlas_inv_size; // xy irradiance atlas 1 / size, zw distance atlas 1 / size
+	vec4 shading; // x sky leak: the share of the environment's ambient light added to the volume's (scene shader)
 };
 
 #define FELLOW_DDGI_IRRADIANCE_TILE 8

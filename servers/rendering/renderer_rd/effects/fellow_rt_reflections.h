@@ -94,7 +94,7 @@ private:
 		MODE_MAX,
 	};
 
-	struct UBO { // std140, as Params in fellow_rt_reflections.glsl (432 bytes)
+	struct UBO { // std140, as Params in fellow_rt_reflections.glsl (448 bytes)
 		float inv_projection[16];
 		float view_to_world[16];
 		float world_to_prev_clip[16];
