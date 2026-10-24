@@ -221,6 +221,24 @@ inline bool animation_batched_skin_transforms() {
 inline bool animation_key_hints() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/animation/key_hints");
 }
+// physics/* (milestone 17): GodotPhysics3D. physics/distance_face_cull (decision 0085): the motion queries' yes/no distance
+// tests against a concave shape (cast_motion(), test_body_motion(): only whether the shapes are apart is used) do not give
+// GJK the faces a conservative separating-axis test in double precision proves farther from the moving shape's swept box
+// than 1 mm (plus 1e-5 of the coordinates) -- GJK reports a collision only within 1e-4. The closest points that
+// cast_motion() reports are computed again, as stock, at the fraction found. Read per query.
+inline bool physics_distance_face_cull() {
+	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/physics/distance_face_cull");
+}
+// physics/convex_vertex_cache (decision 0086): a SAT test with a convex polygon transforms its vertices once and projects
+// those on its candidate axes (stock transforms every vertex again for every axis, and every edge's vertices again in
+// the edge loops). The same values. Read per test.
+inline bool physics_convex_vertex_cache() {
+	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/physics/convex_vertex_cache");
+}
+// Debug: every face the physics toggles skip is given to GJK anyway and its answer compared (counters physics_verify_*).
+inline bool physics_verify() {
+	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/physics/verify");
+}
 // post/motion_blur/* (decision 0078): motion blur from the velocity buffer after TAA (a visual feature, off by default).
 inline bool motion_blur_enabled() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/post/motion_blur/enabled");
@@ -1087,6 +1105,8 @@ struct Stats {
 	SafeNumeric<uint64_t> physics_process_usec; // the scene's _physics_process() (and navigation)
 	SafeNumeric<uint64_t> physics_step_usec; // PhysicsServer3D::end_sync() and step(): the simulation
 	SafeNumeric<uint64_t> physics_end_usec; // the message queue's flush and iteration_end()
+	SafeNumeric<uint64_t> physics_verify_faces; // faces skipped by the physics toggles and tested anyway (physics/verify)
+	SafeNumeric<uint64_t> physics_verify_mismatches; // of those, faces GJK found within its tolerance (must stay 0)
 	SafeNumeric<uint64_t> shadow_cache_cascades_stock;
 	SafeNumeric<uint64_t> shadow_cache_cascades_fallback;
 	SafeNumeric<uint64_t> shadow_cache_cascades_cached;

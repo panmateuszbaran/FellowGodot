@@ -92,6 +92,9 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/animation/track_shortcuts", true); // decision 0076 (exact; on from fellow168)
 	GLOBAL_DEF("rendering/fellow/animation/key_hints", true); // decision 0076 (exact; from fellow170)
 	GLOBAL_DEF("rendering/fellow/animation/batched_skin_transforms", true); // decision 0077 (exact; on from fellow170)
+	GLOBAL_DEF("rendering/fellow/physics/distance_face_cull", true); // decision 0085 (exact)
+	GLOBAL_DEF("rendering/fellow/physics/convex_vertex_cache", true); // decision 0086 (exact)
+	GLOBAL_DEF("rendering/fellow/physics/verify", false);
 	GLOBAL_DEF("rendering/fellow/postfx/taa_strided_load", false); // decision 0075: REJECT (exact, no gain)
 	GLOBAL_DEF("rendering/fellow/postfx/taa_history_pingpong", true);
 	// TAA resolve v2: each tile texel's velocity loaded into shared memory with its colour and depth (the closest
@@ -391,6 +394,8 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["physics_process_usec"] = s.physics_process_usec.get();
 	d["physics_step_usec"] = s.physics_step_usec.get();
 	d["physics_end_usec"] = s.physics_end_usec.get();
+	d["physics_verify_faces"] = s.physics_verify_faces.get();
+	d["physics_verify_mismatches"] = s.physics_verify_mismatches.get();
 	d["raytracing_instances"] = s.raytracing_instances.get();
 	d["raytracing_multimesh_instances"] = s.raytracing_multimesh_instances.get();
 	d["raytracing_blas_builds"] = s.raytracing_blas_builds.get();

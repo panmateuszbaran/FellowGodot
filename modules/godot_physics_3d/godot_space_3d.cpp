@@ -36,6 +36,7 @@
 #include "godot_physics_server_3d.h"
 
 #include "core/config/project_settings.h"
+#include "servers/rendering/fellow_settings.h"
 
 #define TEST_MOTION_MARGIN_MIN_VALUE 0.0001
 #define TEST_MOTION_MIN_CONTACT_DEPTH_FACTOR 0.05
@@ -285,6 +286,7 @@ bool GodotPhysicsDirectSpaceState3D::cast_motion(const ShapeParameters &p_parame
 	Vector3 motion_normal = p_parameters.motion.normalized();
 
 	Vector3 closest_A, closest_B;
+	const bool fellow_cull = Fellow::physics_distance_face_cull();
 
 	for (int i = 0; i < amount; i++) {
 		if (!_can_collide_with(space->intersection_query_results[i], p_parameters.collision_mask, p_parameters.collide_with_bodies, p_parameters.collide_with_areas)) {
@@ -303,15 +305,26 @@ bool GodotPhysicsDirectSpaceState3D::cast_motion(const ShapeParameters &p_parame
 
 		Transform3D col_obj_xform = col_obj->get_transform() * col_obj->get_shape_transform(shape_idx);
 		//test initial overlap, does it collide if going all the way?
-		if (GodotCollisionSolver3D::solve_distance(&mshape, p_parameters.transform, col_obj->get_shape(shape_idx), col_obj_xform, point_A, point_B, aabb, &sep_axis)) {
-			continue;
-		}
+		if (fellow_cull) {
+			// FellowEngine (decision 0085): the yes/no tests without the faces that cannot touch; the closest points r_info
+			// needs are computed after the search, as stock computes them.
+			if (GodotCollisionSolver3D::fellow_test_separation(&mshape, p_parameters.transform, shape->get_aabb(), mshape.motion, col_obj->get_shape(shape_idx), col_obj_xform, aabb)) {
+				continue;
+			}
+			if (!GodotCollisionSolver3D::fellow_test_separation(shape, p_parameters.transform, shape->get_aabb(), Vector3(), col_obj->get_shape(shape_idx), col_obj_xform, aabb)) {
+				continue;
+			}
+		} else {
+			if (GodotCollisionSolver3D::solve_distance(&mshape, p_parameters.transform, col_obj->get_shape(shape_idx), col_obj_xform, point_A, point_B, aabb, &sep_axis)) {
+				continue;
+			}
 
-		//test initial overlap, ignore objects it's inside of.
-		sep_axis = motion_normal;
+			//test initial overlap, ignore objects it's inside of.
+			sep_axis = motion_normal;
 
-		if (!GodotCollisionSolver3D::solve_distance(shape, p_parameters.transform, col_obj->get_shape(shape_idx), col_obj_xform, point_A, point_B, aabb, &sep_axis)) {
-			continue;
+			if (!GodotCollisionSolver3D::solve_distance(shape, p_parameters.transform, col_obj->get_shape(shape_idx), col_obj_xform, point_A, point_B, aabb, &sep_axis)) {
+				continue;
+			}
 		}
 
 		//just do kinematic solving
@@ -325,7 +338,8 @@ bool GodotPhysicsDirectSpaceState3D::cast_motion(const ShapeParameters &p_parame
 
 			Vector3 lA, lB;
 			Vector3 sep = motion_normal; //important optimization for this to work fast enough
-			bool collided = !GodotCollisionSolver3D::solve_distance(&mshape, p_parameters.transform, col_obj->get_shape(shape_idx), col_obj_xform, lA, lB, aabb, &sep);
+			bool collided = fellow_cull ? !GodotCollisionSolver3D::fellow_test_separation(&mshape, p_parameters.transform, shape->get_aabb(), mshape.motion, col_obj->get_shape(shape_idx), col_obj_xform, aabb)
+										: !GodotCollisionSolver3D::solve_distance(&mshape, p_parameters.transform, col_obj->get_shape(shape_idx), col_obj_xform, lA, lB, aabb, &sep);
 
 			if (collided) {
 				hi = fraction;
@@ -356,6 +370,21 @@ bool GodotPhysicsDirectSpaceState3D::cast_motion(const ShapeParameters &p_parame
 			best_first = true; //force reset
 			best_safe = low;
 			best_unsafe = hi;
+		}
+
+		if (fellow_cull && r_info && (best_first || low <= best_safe)) {
+			// The closest points stock kept: of the last motion found apart (its fraction is low), or of the shape at rest
+			// when every fraction touched. mshape.motion is left as the search left it (the next object's first test
+			// uses it, as in stock).
+			const Vector3 search_motion = mshape.motion;
+			Vector3 sep = motion_normal;
+			if (low > 0.0) {
+				mshape.motion = xform_inv.basis.xform(p_parameters.motion * low);
+				GodotCollisionSolver3D::solve_distance(&mshape, p_parameters.transform, col_obj->get_shape(shape_idx), col_obj_xform, point_A, point_B, aabb, &sep);
+			} else {
+				GodotCollisionSolver3D::solve_distance(shape, p_parameters.transform, col_obj->get_shape(shape_idx), col_obj_xform, point_A, point_B, aabb, &sep);
+			}
+			mshape.motion = search_motion;
 		}
 
 		if (r_info && (best_first || (point_A.distance_squared_to(point_B) < closest_A.distance_squared_to(closest_B) && low <= best_safe))) {
@@ -807,6 +836,7 @@ bool GodotSpace3D::test_body_motion(GodotBody3D *p_body, const PhysicsServer3D::
 		motion_aabb = motion_aabb.merge(body_aabb);
 
 		int amount = _cull_aabb_for_body(p_body, motion_aabb);
+		const bool fellow_cull = Fellow::physics_distance_face_cull();
 
 		for (int j = 0; j < p_body->get_shape_count(); j++) {
 			if (p_body->is_shape_disabled(j)) {
@@ -853,12 +883,15 @@ bool GodotSpace3D::test_body_motion(GodotBody3D *p_body, const PhysicsServer3D::
 
 				Transform3D col_obj_xform = col_obj->get_transform() * col_obj->get_shape_transform(shape_idx);
 				//test initial overlap, does it collide if going all the way?
-				if (GodotCollisionSolver3D::solve_distance(&mshape, body_shape_xform, col_obj->get_shape(shape_idx), col_obj_xform, point_A, point_B, motion_aabb, &sep_axis)) {
+				// FellowEngine (decision 0085): only whether the shapes are apart is used here.
+				if (fellow_cull ? GodotCollisionSolver3D::fellow_test_separation(&mshape, body_shape_xform, body_shape->get_aabb(), mshape.motion, col_obj->get_shape(shape_idx), col_obj_xform, motion_aabb)
+								: GodotCollisionSolver3D::solve_distance(&mshape, body_shape_xform, col_obj->get_shape(shape_idx), col_obj_xform, point_A, point_B, motion_aabb, &sep_axis)) {
 					continue;
 				}
 				sep_axis = motion_normal;
 
-				if (!GodotCollisionSolver3D::solve_distance(body_shape, body_shape_xform, col_obj->get_shape(shape_idx), col_obj_xform, point_A, point_B, motion_aabb, &sep_axis)) {
+				if (fellow_cull ? !GodotCollisionSolver3D::fellow_test_separation(body_shape, body_shape_xform, body_shape->get_aabb(), Vector3(), col_obj->get_shape(shape_idx), col_obj_xform, motion_aabb)
+								: !GodotCollisionSolver3D::solve_distance(body_shape, body_shape_xform, col_obj->get_shape(shape_idx), col_obj_xform, point_A, point_B, motion_aabb, &sep_axis)) {
 					stuck = true;
 					break;
 				}
@@ -874,7 +907,8 @@ bool GodotSpace3D::test_body_motion(GodotBody3D *p_body, const PhysicsServer3D::
 
 					Vector3 lA, lB;
 					Vector3 sep = motion_normal; //important optimization for this to work fast enough
-					bool collided = !GodotCollisionSolver3D::solve_distance(&mshape, body_shape_xform, col_obj->get_shape(shape_idx), col_obj_xform, lA, lB, motion_aabb, &sep);
+					bool collided = fellow_cull ? !GodotCollisionSolver3D::fellow_test_separation(&mshape, body_shape_xform, body_shape->get_aabb(), mshape.motion, col_obj->get_shape(shape_idx), col_obj_xform, motion_aabb)
+												: !GodotCollisionSolver3D::solve_distance(&mshape, body_shape_xform, col_obj->get_shape(shape_idx), col_obj_xform, lA, lB, motion_aabb, &sep);
 
 					if (collided) {
 						hi = fraction;

@@ -34,6 +34,8 @@
 #include "godot_collision_solver_3d_sat.h"
 #include "godot_soft_body_3d.h"
 
+#include "servers/rendering/fellow_settings.h"
+
 #define collision_solver sat_calculate_penetration
 //#define collision_solver gjk_epa_calculate_penetration
 
@@ -585,4 +587,227 @@ bool GodotCollisionSolver3D::solve_distance(const GodotShape3D *p_shape_A, const
 	} else {
 		return gjk_epa_calculate_distance(p_shape_A, p_transform_A, p_shape_B, p_transform_B, r_point_A, r_point_B); //should pass sepaxis..
 	}
+}
+
+// FellowEngine (milestone 17, decision 0085): yes/no distance tests against concave shapes without GJK for the faces that
+// cannot be within its tolerance.
+//
+// GJK (gjk_epa.cpp) reports the shapes as touching when the point of the Minkowski difference closest to the origin it
+// has found is nearer than GJK_MIN_DISTANCE (1e-4), when its simplex encloses the origin, or when it fails to converge in
+// GJK_MAX_ITERATIONS. The first two need the faces' true distance to be within 1e-4 plus GJK's rounding (single
+// precision, relative to the coordinates). A face is skipped only when a separating axis, evaluated in double precision,
+// puts it farther than g = 1 mm + 1e-5 * (the largest coordinate involved) from a box that holds shape A over its whole
+// motion. The third case (a failure to converge) is not geometric; physics/verify gives every skipped face to GJK anyway
+// and counts any that it reports as touching (none in the Physics Lab).
+struct _FellowSeparationInfo {
+	const Transform3D *transform_A = nullptr;
+	const GodotShape3D *shape_A = nullptr;
+	const Transform3D *transform_B = nullptr;
+	bool collided = false;
+	bool verify = false;
+	uint64_t verified = 0;
+	uint64_t mismatches = 0;
+
+	// Shape A's bound: the parallelepiped p_transform_A makes of its local AABB (centre, half-edge vectors), swept along
+	// the motion; its extent [lo, hi] along each axis.
+	double center[3];
+	double edge[3][3];
+	double motion[3];
+	double magnitude = 0.0; // the largest coordinate of a point of the bound (and of p_transform_A's origin)
+	int axis_count = 0;
+	double axis[6][3];
+	double lo[6];
+	double hi[6];
+
+	_FORCE_INLINE_ static double dot3(const double *a, const double *b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
+
+	void range_along(const double *p_axis, double &r_lo, double &r_hi) const {
+		const double c = dot3(p_axis, center);
+		const double m = dot3(p_axis, motion);
+		const double e = Math::abs(dot3(p_axis, edge[0])) + Math::abs(dot3(p_axis, edge[1])) + Math::abs(dot3(p_axis, edge[2]));
+		r_lo = c + MIN(m, 0.0) - e;
+		r_hi = c + MAX(m, 0.0) + e;
+	}
+
+	void add_axis(double x, double y, double z) {
+		const double l = Math::sqrt(x * x + y * y + z * z);
+		if (!(l > 1e-12)) {
+			return;
+		}
+		double *a = axis[axis_count];
+		a[0] = x / l;
+		a[1] = y / l;
+		a[2] = z / l;
+		range_along(a, lo[axis_count], hi[axis_count]);
+		axis_count++;
+	}
+
+	void setup(const Transform3D &p_transform, const AABB &p_bounds, const Vector3 &p_motion) {
+		const Basis &b = p_transform.basis;
+		double cl[3], hl[3], ml[3];
+		for (int i = 0; i < 3; i++) {
+			hl[i] = 0.5 * double(p_bounds.size[i]);
+			cl[i] = double(p_bounds.position[i]) + hl[i];
+			ml[i] = double(p_motion[i]);
+		}
+		magnitude = 0.0;
+		for (int r = 0; r < 3; r++) {
+			center[r] = double(p_transform.origin[r]) + double(b.rows[r][0]) * cl[0] + double(b.rows[r][1]) * cl[1] + double(b.rows[r][2]) * cl[2];
+			motion[r] = double(b.rows[r][0]) * ml[0] + double(b.rows[r][1]) * ml[1] + double(b.rows[r][2]) * ml[2];
+			for (int i = 0; i < 3; i++) {
+				edge[i][r] = double(b.rows[r][i]) * hl[i];
+			}
+		}
+		for (int r = 0; r < 3; r++) {
+			// Every term of the transform's sums counted (GJK's single-precision rounding is relative to them, even where
+			// they cancel).
+			const double reach = Math::abs(double(p_transform.origin[r])) + Math::abs(double(b.rows[r][0]) * cl[0]) + Math::abs(double(b.rows[r][1]) * cl[1]) +
+					Math::abs(double(b.rows[r][2]) * cl[2]) + Math::abs(edge[0][r]) + Math::abs(edge[1][r]) + Math::abs(edge[2][r]) + Math::abs(motion[r]);
+			magnitude = MAX(magnitude, reach);
+		}
+		// The box's own axes, then the motion's direction and two directions across it (a long diagonal motion: the
+		// box's axes alone bound it no better than its AABB).
+		axis_count = 0;
+		for (int i = 0; i < 3; i++) {
+			add_axis(b.rows[0][i], b.rows[1][i], b.rows[2][i]);
+		}
+		const double ml2 = dot3(motion, motion);
+		if (ml2 > 1e-18) {
+			const double l = Math::sqrt(ml2);
+			const double d[3] = { motion[0] / l, motion[1] / l, motion[2] / l };
+			// A reference direction the least aligned with d.
+			int k = 0;
+			for (int i = 1; i < 3; i++) {
+				if (Math::abs(d[i]) < Math::abs(d[k])) {
+					k = i;
+				}
+			}
+			double ref[3] = { 0.0, 0.0, 0.0 };
+			ref[k] = 1.0;
+			const double u[3] = { d[1] * ref[2] - d[2] * ref[1], d[2] * ref[0] - d[0] * ref[2], d[0] * ref[1] - d[1] * ref[0] };
+			add_axis(d[0], d[1], d[2]);
+			add_axis(u[0], u[1], u[2]);
+			add_axis(d[1] * u[2] - d[2] * u[1], d[2] * u[0] - d[0] * u[2], d[0] * u[1] - d[1] * u[0]);
+		}
+	}
+
+	// True when the face is certainly farther from the bound than GJK's tolerance.
+	bool face_separated(const GodotFaceShape3D *p_face) const {
+		const Transform3D &t = *transform_B;
+		double w[3][3];
+		double vmax = magnitude;
+		for (int k = 0; k < 3; k++) {
+			const Vector3 &v = p_face->vertex[k];
+			for (int r = 0; r < 3; r++) {
+				const double tx = double(t.basis.rows[r][0]) * double(v.x);
+				const double ty = double(t.basis.rows[r][1]) * double(v.y);
+				const double tz = double(t.basis.rows[r][2]) * double(v.z);
+				w[k][r] = double(t.origin[r]) + tx + ty + tz;
+				vmax = MAX(vmax, Math::abs(double(t.origin[r])) + Math::abs(tx) + Math::abs(ty) + Math::abs(tz));
+			}
+		}
+		const double g = 1e-3 + 1e-5 * vmax;
+		for (int j = 0; j < axis_count; j++) {
+			const double p0 = dot3(axis[j], w[0]);
+			const double p1 = dot3(axis[j], w[1]);
+			const double p2 = dot3(axis[j], w[2]);
+			if (MIN(p0, MIN(p1, p2)) > hi[j] + g || MAX(p0, MAX(p1, p2)) < lo[j] - g) {
+				return true;
+			}
+		}
+		// The face's plane.
+		const double e1[3] = { w[1][0] - w[0][0], w[1][1] - w[0][1], w[1][2] - w[0][2] };
+		const double e2[3] = { w[2][0] - w[0][0], w[2][1] - w[0][1], w[2][2] - w[0][2] };
+		double n[3] = { e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0] };
+		const double nl = Math::sqrt(dot3(n, n));
+		if (nl > 1e-12) {
+			n[0] /= nl;
+			n[1] /= nl;
+			n[2] /= nl;
+			double l, h;
+			range_along(n, l, h);
+			const double p0 = dot3(n, w[0]);
+			const double p1 = dot3(n, w[1]);
+			const double p2 = dot3(n, w[2]);
+			if (MIN(p0, MIN(p1, p2)) > h + g || MAX(p0, MAX(p1, p2)) < l - g) {
+				return true;
+			}
+		}
+		return false;
+	}
+};
+
+bool GodotCollisionSolver3D::fellow_separation_callback(void *p_userdata, GodotShape3D *p_convex) {
+	_FellowSeparationInfo &info = *(static_cast<_FellowSeparationInfo *>(p_userdata));
+	Vector3 close_A, close_B;
+	if (info.face_separated(static_cast<const GodotFaceShape3D *>(p_convex))) {
+		if (info.verify) {
+			info.verified++;
+			if (!gjk_epa_calculate_distance(info.shape_A, *info.transform_A, p_convex, *info.transform_B, close_A, close_B)) {
+				info.mismatches++;
+			}
+		}
+		return false;
+	}
+	// As concave_distance_callback(): the first face found touching ends the search.
+	info.collided = !gjk_epa_calculate_distance(info.shape_A, *info.transform_A, p_convex, *info.transform_B, close_A, close_B);
+	return info.collided;
+}
+
+bool GodotCollisionSolver3D::fellow_test_separation(const GodotShape3D *p_shape_A, const Transform3D &p_transform_A, const AABB &p_bounds_A, const Vector3 &p_motion_A, const GodotShape3D *p_shape_B, const Transform3D &p_transform_B, const AABB &p_concave_hint) {
+	if (p_shape_B->get_type() == PhysicsServer3D::SHAPE_WORLD_BOUNDARY || !p_shape_B->is_concave() || p_shape_A->is_concave() || !Fellow::physics_distance_face_cull()) {
+		Vector3 a, b;
+		return solve_distance(p_shape_A, p_transform_A, p_shape_B, p_transform_B, a, b, p_concave_hint);
+	}
+
+	const GodotConcaveShape3D *concave_B = static_cast<const GodotConcaveShape3D *>(p_shape_B);
+
+	_FellowSeparationInfo info;
+	info.transform_A = &p_transform_A;
+	info.shape_A = p_shape_A;
+	info.transform_B = &p_transform_B;
+	info.verify = Fellow::physics_verify();
+	info.setup(p_transform_A, p_bounds_A, p_motion_A);
+
+	// The faces culled exactly as solve_distance() culls them (the same box, the same order).
+	Transform3D rel_transform = p_transform_A;
+	rel_transform.origin -= p_transform_B.origin;
+
+	bool use_cc_hint = p_concave_hint != AABB();
+	AABB cc_hint_aabb;
+	if (use_cc_hint) {
+		cc_hint_aabb = p_concave_hint;
+		cc_hint_aabb.position -= p_transform_B.origin;
+	}
+
+	AABB local_aabb;
+	for (int i = 0; i < 3; i++) {
+		Vector3 axis(p_transform_B.basis.get_column(i));
+		real_t axis_scale = ((real_t)1.0) / axis.length();
+		axis *= axis_scale;
+
+		real_t smin, smax;
+
+		if (use_cc_hint) {
+			cc_hint_aabb.project_range_in_plane(Plane(axis), smin, smax);
+		} else {
+			p_shape_A->project_range(axis, rel_transform, smin, smax);
+		}
+
+		smin *= axis_scale;
+		smax *= axis_scale;
+
+		local_aabb.position[i] = smin;
+		local_aabb.size[i] = smax - smin;
+	}
+
+	concave_B->cull(local_aabb, fellow_separation_callback, &info, false);
+
+	if (info.verify) {
+		Fellow::stats().physics_verify_faces.add(info.verified);
+		if (info.mismatches) {
+			Fellow::stats().physics_verify_mismatches.add(info.mismatches);
+		}
+	}
+	return !info.collided;
 }

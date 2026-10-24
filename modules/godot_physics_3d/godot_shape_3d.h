@@ -283,6 +283,8 @@ struct GodotConvexPolygonShape3D : public GodotShape3D {
 
 public:
 	const Geometry3D::MeshData &get_mesh() const { return mesh; }
+	// FellowEngine: project_range() scans every vertex (rather than two get_support() walks).
+	bool fellow_projects_all_vertices() const { return !mesh.vertices.is_empty() && mesh.vertices.size() <= 3 * extreme_vertices.size(); }
 
 	virtual PhysicsServer3D::ShapeType get_type() const override { return PhysicsServer3D::SHAPE_CONVEX_POLYGON; }
 

@@ -33,6 +33,7 @@
 #include "gjk_epa.h"
 
 #include "core/math/geometry_3d.h"
+#include "servers/rendering/fellow_settings.h"
 
 #define fallback_collision_solver gjk_epa_calculate_penetration
 
@@ -625,9 +626,37 @@ class SeparatorAxisTest {
 	real_t margin_A = 0.0;
 	real_t margin_B = 0.0;
 	Vector3 separator_axis;
+	// FellowEngine (decision 0086): a convex polygon's vertices already through its transform; nullptr: project_range().
+	const Vector3 *fellow_vertices_A = nullptr;
+	const Vector3 *fellow_vertices_B = nullptr;
+	int fellow_vertex_count_A = 0;
+	int fellow_vertex_count_B = 0;
+
+	// GodotConvexPolygonShape3D::project_range()'s scan of every vertex, on the vertices it would transform.
+	_FORCE_INLINE_ static void fellow_project(const Vector3 *p_vertices, int p_count, const Vector3 &p_normal, real_t &r_min, real_t &r_max) {
+		for (int i = 0; i < p_count; i++) {
+			real_t d = p_normal.dot(p_vertices[i]);
+
+			if (i == 0 || d > r_max) {
+				r_max = d;
+			}
+			if (i == 0 || d < r_min) {
+				r_min = d;
+			}
+		}
+	}
 
 public:
 	Vector3 best_axis;
+
+	void fellow_set_vertices_A(const Vector3 *p_vertices, int p_count) {
+		fellow_vertices_A = p_vertices;
+		fellow_vertex_count_A = p_count;
+	}
+	void fellow_set_vertices_B(const Vector3 *p_vertices, int p_count) {
+		fellow_vertices_B = p_vertices;
+		fellow_vertex_count_B = p_count;
+	}
 
 	_FORCE_INLINE_ bool test_previous_axis() {
 		if (callback && callback->prev_axis && *callback->prev_axis != Vector3()) {
@@ -647,8 +676,16 @@ public:
 
 		real_t min_A = 0.0, max_A = 0.0, min_B = 0.0, max_B = 0.0;
 
-		shape_A->project_range(axis, *transform_A, min_A, max_A);
-		shape_B->project_range(axis, *transform_B, min_B, max_B);
+		if (fellow_vertices_A) {
+			fellow_project(fellow_vertices_A, fellow_vertex_count_A, axis, min_A, max_A);
+		} else {
+			shape_A->project_range(axis, *transform_A, min_A, max_A);
+		}
+		if (fellow_vertices_B) {
+			fellow_project(fellow_vertices_B, fellow_vertex_count_B, axis, min_B, max_B);
+		} else {
+			shape_B->project_range(axis, *transform_B, min_B, max_B);
+		}
 
 		if (withMargin) {
 			min_A -= margin_A;
@@ -762,6 +799,36 @@ public:
 		callback = p_callback;
 		margin_A = p_margin_A;
 		margin_B = p_margin_B;
+	}
+};
+
+// FellowEngine (milestone 17, decision 0086): a convex polygon's vertices through its transform, computed once per SAT
+// test. project_range() scans every vertex when the mesh has at most three times as many as its extreme vertices (at most
+// 26), i.e. at most 78; above that it walks get_support(), and nothing here is used.
+struct FellowConvexVertices {
+	static constexpr int MAX = 78;
+	real_t storage[MAX * 3];
+	const Vector3 *vertices = nullptr;
+	int count = 0;
+
+	FellowConvexVertices(const GodotConvexPolygonShape3D *p_shape, const Transform3D &p_transform) {
+		const Geometry3D::MeshData &mesh = p_shape->get_mesh();
+		const int n = mesh.vertices.size();
+		if (n > MAX || !p_shape->fellow_projects_all_vertices() || !Fellow::physics_convex_vertex_cache()) {
+			return;
+		}
+		Vector3 *v = reinterpret_cast<Vector3 *>(storage);
+		const Vector3 *local = mesh.vertices.ptr();
+		for (int i = 0; i < n; i++) {
+			v[i] = p_transform.xform(local[i]);
+		}
+		vertices = v;
+		count = n;
+	}
+
+	// The vertex through the transform, as stock computes it where it uses it.
+	_FORCE_INLINE_ Vector3 get(int p_index, const Vector3 *p_local, const Transform3D &p_transform) const {
+		return vertices ? vertices[p_index] : p_transform.xform(p_local[p_index]);
 	}
 };
 
@@ -957,6 +1024,8 @@ static void _collision_sphere_convex_polygon(const GodotShape3D *p_a, const Tran
 	const GodotConvexPolygonShape3D *convex_polygon_B = static_cast<const GodotConvexPolygonShape3D *>(p_b);
 
 	SeparatorAxisTest<GodotSphereShape3D, GodotConvexPolygonShape3D, withMargin> separator(sphere_A, p_transform_a, convex_polygon_B, p_transform_b, p_collector, p_margin_a, p_margin_b);
+	const FellowConvexVertices xv_B(convex_polygon_B, p_transform_b);
+	separator.fellow_set_vertices_B(xv_B.vertices, xv_B.count);
 
 	if (!separator.test_previous_axis()) {
 		return;
@@ -985,8 +1054,8 @@ static void _collision_sphere_convex_polygon(const GodotShape3D *p_a, const Tran
 
 	// edges of B
 	for (int i = 0; i < edge_count; i++) {
-		Vector3 v1 = p_transform_b.xform(vertices[edges[i].vertex_a]);
-		Vector3 v2 = p_transform_b.xform(vertices[edges[i].vertex_b]);
+		Vector3 v1 = xv_B.get(edges[i].vertex_a, vertices, p_transform_b);
+		Vector3 v2 = xv_B.get(edges[i].vertex_b, vertices, p_transform_b);
 		Vector3 v3 = p_transform_a.origin;
 
 		Vector3 n1 = v2 - v1;
@@ -1001,7 +1070,7 @@ static void _collision_sphere_convex_polygon(const GodotShape3D *p_a, const Tran
 
 	// vertices of B
 	for (int i = 0; i < vertex_count; i++) {
-		Vector3 v1 = p_transform_b.xform(vertices[i]);
+		Vector3 v1 = xv_B.get(i, vertices, p_transform_b);
 		Vector3 v2 = p_transform_a.origin;
 
 		Vector3 axis = (v2 - v1).normalized();
@@ -1385,6 +1454,8 @@ static void _collision_box_convex_polygon(const GodotShape3D *p_a, const Transfo
 	const GodotConvexPolygonShape3D *convex_polygon_B = static_cast<const GodotConvexPolygonShape3D *>(p_b);
 
 	SeparatorAxisTest<GodotBoxShape3D, GodotConvexPolygonShape3D, withMargin> separator(box_A, p_transform_a, convex_polygon_B, p_transform_b, p_collector, p_margin_a, p_margin_b);
+	const FellowConvexVertices xv_B(convex_polygon_B, p_transform_b);
+	separator.fellow_set_vertices_B(xv_B.vertices, xv_B.count);
 
 	if (!separator.test_previous_axis()) {
 		return;
@@ -1438,7 +1509,7 @@ static void _collision_box_convex_polygon(const GodotShape3D *p_a, const Transfo
 	if (withMargin) {
 		// calculate closest points between vertices and box edges
 		for (int v = 0; v < vertex_count; v++) {
-			Vector3 vtxb = p_transform_b.xform(vertices[v]);
+			Vector3 vtxb = xv_B.get(v, vertices, p_transform_b);
 			Vector3 ab_vec = vtxb - p_transform_a.origin;
 
 			Vector3 cnormal_a = p_transform_a.basis.xform_inv(ab_vec);
@@ -1481,8 +1552,8 @@ static void _collision_box_convex_polygon(const GodotShape3D *p_a, const Transfo
 					}
 
 					for (int e = 0; e < edge_count; e++) {
-						Vector3 p1 = p_transform_b.xform(vertices[edges[e].vertex_a]);
-						Vector3 p2 = p_transform_b.xform(vertices[edges[e].vertex_b]);
+						Vector3 p1 = xv_B.get(edges[e].vertex_a, vertices, p_transform_b);
+						Vector3 p2 = xv_B.get(edges[e].vertex_b, vertices, p_transform_b);
 						Vector3 n = (p2 - p1);
 
 						if (!separator.test_axis((point - p2).cross(n).cross(n).normalized())) {
@@ -1694,6 +1765,8 @@ static void _collision_capsule_convex_polygon(const GodotShape3D *p_a, const Tra
 	const GodotConvexPolygonShape3D *convex_polygon_B = static_cast<const GodotConvexPolygonShape3D *>(p_b);
 
 	SeparatorAxisTest<GodotCapsuleShape3D, GodotConvexPolygonShape3D, withMargin> separator(capsule_A, p_transform_a, convex_polygon_B, p_transform_b, p_collector, p_margin_a, p_margin_b);
+	const FellowConvexVertices xv_B(convex_polygon_B, p_transform_b);
+	separator.fellow_set_vertices_B(xv_B.vertices, xv_B.count);
 
 	if (!separator.test_previous_axis()) {
 		return;
@@ -1741,7 +1814,7 @@ static void _collision_capsule_convex_polygon(const GodotShape3D *p_a, const Tra
 		Vector3 sphere_pos = p_transform_a.origin + ((i == 0) ? capsule_axis : -capsule_axis);
 
 		for (int j = 0; j < edge_count; j++) {
-			Vector3 n1 = sphere_pos - p_transform_b.xform(vertices[edges[j].vertex_a]);
+			Vector3 n1 = sphere_pos - xv_B.get(edges[j].vertex_a, vertices, p_transform_b);
 			Vector3 n2 = p_transform_b.basis.xform(vertices[edges[j].vertex_a]) - p_transform_b.basis.xform(vertices[edges[j].vertex_b]);
 
 			Vector3 axis = n1.cross(n2).cross(n2).normalized();
@@ -1900,6 +1973,8 @@ static void _collision_cylinder_convex_polygon(const GodotShape3D *p_a, const Tr
 	const GodotConvexPolygonShape3D *convex_polygon_B = static_cast<const GodotConvexPolygonShape3D *>(p_b);
 
 	SeparatorAxisTest<GodotCylinderShape3D, GodotConvexPolygonShape3D, withMargin> separator(cylinder_A, p_transform_a, convex_polygon_B, p_transform_b, p_collector, p_margin_a, p_margin_b);
+	const FellowConvexVertices xv_B(convex_polygon_B, p_transform_b);
+	separator.fellow_set_vertices_B(xv_B.vertices, xv_B.count);
 
 	GodotCollisionSolver3D::CallbackResult callback = SeparatorAxisTest<GodotCylinderShape3D, GodotConvexPolygonShape3D, withMargin>::test_contact_points;
 
@@ -2043,6 +2118,10 @@ static void _collision_convex_polygon_convex_polygon(const GodotShape3D *p_a, co
 	const GodotConvexPolygonShape3D *convex_polygon_B = static_cast<const GodotConvexPolygonShape3D *>(p_b);
 
 	SeparatorAxisTest<GodotConvexPolygonShape3D, GodotConvexPolygonShape3D, withMargin> separator(convex_polygon_A, p_transform_a, convex_polygon_B, p_transform_b, p_collector, p_margin_a, p_margin_b);
+	const FellowConvexVertices xv_A(convex_polygon_A, p_transform_a);
+	const FellowConvexVertices xv_B(convex_polygon_B, p_transform_b);
+	separator.fellow_set_vertices_A(xv_A.vertices, xv_A.count);
+	separator.fellow_set_vertices_B(xv_B.vertices, xv_B.count);
 
 	if (!separator.test_previous_axis()) {
 		return;
@@ -2093,15 +2172,15 @@ static void _collision_convex_polygon_convex_polygon(const GodotShape3D *p_a, co
 	// A<->B edges
 
 	for (int i = 0; i < edge_count_A; i++) {
-		Vector3 p1 = p_transform_a.xform(vertices_A[edges_A[i].vertex_a]);
-		Vector3 q1 = p_transform_a.xform(vertices_A[edges_A[i].vertex_b]);
+		Vector3 p1 = xv_A.get(edges_A[i].vertex_a, vertices_A, p_transform_a);
+		Vector3 q1 = xv_A.get(edges_A[i].vertex_b, vertices_A, p_transform_a);
 		Vector3 e1 = q1 - p1;
 		Vector3 u1 = p_transform_a.basis.xform(faces_A[edges_A[i].face_a].plane.normal).normalized();
 		Vector3 v1 = p_transform_a.basis.xform(faces_A[edges_A[i].face_b].plane.normal).normalized();
 
 		for (int j = 0; j < edge_count_B; j++) {
-			Vector3 p2 = p_transform_b.xform(vertices_B[edges_B[j].vertex_a]);
-			Vector3 q2 = p_transform_b.xform(vertices_B[edges_B[j].vertex_b]);
+			Vector3 p2 = xv_B.get(edges_B[j].vertex_a, vertices_B, p_transform_b);
+			Vector3 q2 = xv_B.get(edges_B[j].vertex_b, vertices_B, p_transform_b);
 			Vector3 e2 = q2 - p2;
 			Vector3 u2 = p_transform_b.basis.xform(faces_B[edges_B[j].face_a].plane.normal).normalized();
 			Vector3 v2 = p_transform_b.basis.xform(faces_B[edges_B[j].face_b].plane.normal).normalized();
@@ -2119,10 +2198,10 @@ static void _collision_convex_polygon_convex_polygon(const GodotShape3D *p_a, co
 	if (withMargin) {
 		//vertex-vertex
 		for (int i = 0; i < vertex_count_A; i++) {
-			Vector3 va = p_transform_a.xform(vertices_A[i]);
+			Vector3 va = xv_A.get(i, vertices_A, p_transform_a);
 
 			for (int j = 0; j < vertex_count_B; j++) {
-				if (!separator.test_axis((va - p_transform_b.xform(vertices_B[j])).normalized())) {
+				if (!separator.test_axis((va - xv_B.get(j, vertices_B, p_transform_b)).normalized())) {
 					return;
 				}
 			}
@@ -2135,7 +2214,7 @@ static void _collision_convex_polygon_convex_polygon(const GodotShape3D *p_a, co
 			Vector3 n = (e2 - e1);
 
 			for (int j = 0; j < vertex_count_B; j++) {
-				Vector3 e3 = p_transform_b.xform(vertices_B[j]);
+				Vector3 e3 = xv_B.get(j, vertices_B, p_transform_b);
 
 				if (!separator.test_axis((e1 - e3).cross(n).cross(n).normalized())) {
 					return;
@@ -2149,7 +2228,7 @@ static void _collision_convex_polygon_convex_polygon(const GodotShape3D *p_a, co
 			Vector3 n = (e2 - e1);
 
 			for (int j = 0; j < vertex_count_A; j++) {
-				Vector3 e3 = p_transform_a.xform(vertices_A[j]);
+				Vector3 e3 = xv_A.get(j, vertices_A, p_transform_a);
 
 				if (!separator.test_axis((e1 - e3).cross(n).cross(n).normalized())) {
 					return;
@@ -2167,6 +2246,8 @@ static void _collision_convex_polygon_face(const GodotShape3D *p_a, const Transf
 	const GodotFaceShape3D *face_B = static_cast<const GodotFaceShape3D *>(p_b);
 
 	SeparatorAxisTest<GodotConvexPolygonShape3D, GodotFaceShape3D, withMargin> separator(convex_polygon_A, p_transform_a, face_B, p_transform_b, p_collector, p_margin_a, p_margin_b);
+	const FellowConvexVertices xv_A(convex_polygon_A, p_transform_a);
+	separator.fellow_set_vertices_A(xv_A.vertices, xv_A.count);
 
 	const Geometry3D::MeshData &mesh = convex_polygon_A->get_mesh();
 
@@ -2204,7 +2285,7 @@ static void _collision_convex_polygon_face(const GodotShape3D *p_a, const Transf
 
 	// A<->B edges
 	for (int i = 0; i < edge_count; i++) {
-		Vector3 e1 = p_transform_a.xform(vertices[edges[i].vertex_a]) - p_transform_a.xform(vertices[edges[i].vertex_b]);
+		Vector3 e1 = xv_A.get(edges[i].vertex_a, vertices, p_transform_a) - xv_A.get(edges[i].vertex_b, vertices, p_transform_a);
 
 		for (int j = 0; j < 3; j++) {
 			Vector3 e2 = vertex[j] - vertex[(j + 1) % 3];
@@ -2223,7 +2304,7 @@ static void _collision_convex_polygon_face(const GodotShape3D *p_a, const Transf
 	if (withMargin) {
 		//vertex-vertex
 		for (int i = 0; i < vertex_count; i++) {
-			Vector3 va = p_transform_a.xform(vertices[i]);
+			Vector3 va = xv_A.get(i, vertices, p_transform_a);
 
 			for (int j = 0; j < 3; j++) {
 				Vector3 axis = (va - vertex[j]).normalized();
@@ -2263,7 +2344,7 @@ static void _collision_convex_polygon_face(const GodotShape3D *p_a, const Transf
 			Vector3 n = (e2 - e1);
 
 			for (int j = 0; j < vertex_count; j++) {
-				Vector3 e3 = p_transform_a.xform(vertices[j]);
+				Vector3 e3 = xv_A.get(j, vertices, p_transform_a);
 
 				Vector3 axis = (e1 - e3).cross(n).cross(n).normalized();
 				if (axis.dot(normal) < 0.0) {
