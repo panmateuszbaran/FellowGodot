@@ -103,7 +103,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/physics/jolt_max_jobs", PROPERTY_HINT_RANGE, "-1,256,1"), -1); // decision 0090 (exact)
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/physics/jolt_bodies_per_job", PROPERTY_HINT_RANGE, "1,100000,1"), 128);
 	GLOBAL_DEF("rendering/fellow/physics/island_constraint_lists", true); // decision 0091 (exact)
-	GLOBAL_DEF("rendering/fellow/physics/jolt_job_pumps", true); // decision 0092 (exact)
+	GLOBAL_DEF("rendering/fellow/physics/jolt_job_pumps", false); // decision 0092 (exact; REJECT, no gain on the laptop)
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/physics/jolt_pump_spins", PROPERTY_HINT_RANGE, "1,1000000,1"), 2000);
 	GLOBAL_DEF("rendering/fellow/physics/motion_query_cache", true); // decision 0093 (exact)
 	GLOBAL_DEF("rendering/fellow/physics/verify", false);
