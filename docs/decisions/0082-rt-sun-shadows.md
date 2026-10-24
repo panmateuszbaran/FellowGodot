@@ -71,6 +71,8 @@ lavapipe, City Lab captures (sun 0.5°, 4 cascades):
 Cost on the RTX laptop (`m16_f231_rt_ab`, 1080p, one ray, in one process against ray tracing with no effect): GPU
 +0.21 ms in City Lab, +0.08 ms in PBR Lab, +0.67 ms in Sponza (the trace 0.92 ms, the opaque pass 0.30 ms faster),
 +0.45 ms in Bistro exterior (0.90 ms, the opaque pass 0.53 ms faster); plus the scene's build (0.2-0.3 ms).
+Interleaved (`m16_f243_rt_ab`, against ray tracing with no effect): Sponza's trace 1.06 → 0.54 ms, the GPU frame
++0.98 → +0.53 ms; City Lab +0.36 → +0.20 ms.
 
 ## Decision
 

@@ -4394,6 +4394,9 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 				if (inst->cast_shadows != RSE::SHADOW_CASTING_SETTING_OFF && geom->can_cast_shadows) {
 					mask |= RendererSceneRender::FELLOW_RT_MASK_SHADOW;
 				}
+				if (inst->base_type == RSE::INSTANCE_MULTIMESH) {
+					mask |= RendererSceneRender::FELLOW_RT_GATHER_MULTIMESH;
+				}
 				instances->push_back(geom->geometry_instance);
 				masks->push_back(mask);
 				return false;

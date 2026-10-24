@@ -368,6 +368,9 @@ public:
 		// alpha skip it (AO, GI, reflections), shadow rays note it and leave those pixels to the shadow map.
 		FELLOW_RT_MASK_ALPHA_VISIBLE = 4,
 		FELLOW_RT_MASK_ALPHA_SHADOW = 8,
+		// Not an instance mask bit: the culler's note that the instance is a MultiMesh (the renderer does not have to read
+		// the instance's data, a cache miss per instance, to know it).
+		FELLOW_RT_GATHER_MULTIMESH = 0x80,
 	};
 	LocalVector<RenderGeometryInstance *> fellow_rt_instances;
 	LocalVector<uint8_t> fellow_rt_masks;

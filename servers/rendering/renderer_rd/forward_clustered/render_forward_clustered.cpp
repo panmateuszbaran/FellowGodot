@@ -4135,9 +4135,9 @@ RID RenderForwardClustered::_fellow_build_raytracing_scene(RenderDataRD *p_rende
 	uint32_t multimesh_instances = 0;
 	for (uint32_t i = 0; i < fellow_rt_instances.size(); i++) {
 		GeometryInstanceForwardClustered *inst = static_cast<GeometryInstanceForwardClustered *>(fellow_rt_instances[i]);
-		const uint8_t mask = fellow_rt_masks[i];
-		const bool multimesh = inst->data != nullptr && inst->data->base_type == RSE::INSTANCE_MULTIMESH;
-		RID mesh = inst->data != nullptr ? inst->data->base : RID();
+		const uint8_t mask = fellow_rt_masks[i] & (FELLOW_RT_MASK_VISIBLE | FELLOW_RT_MASK_SHADOW);
+		const bool multimesh = (fellow_rt_masks[i] & FELLOW_RT_GATHER_MULTIMESH) != 0;
+		RID mesh; // a MultiMesh's mesh (a mesh instance's base is read only when its surface data is refreshed)
 		if (multimesh) {
 			if (!multimesh_enabled || !_fellow_gather_multimesh(inst, eye, radius, tan_min_angle, mesh)) {
 				// Not in the scene: its shadows are the shadow map's.
@@ -4180,8 +4180,11 @@ RID RenderForwardClustered::_fellow_build_raytracing_scene(RenderDataRD *p_rende
 							material = inst->data->material_override;
 						} else if (sc->surface_index < (uint32_t)inst->data->surface_materials.size() && inst->data->surface_materials[sc->surface_index].is_valid()) {
 							material = inst->data->surface_materials[sc->surface_index];
-						} else if (mesh.is_valid()) {
-							material = mesh_storage->mesh_surface_get_material(mesh, sc->surface_index);
+						} else {
+							const RID base = multimesh ? mesh : inst->data->base;
+							if (base.is_valid()) {
+								material = mesh_storage->mesh_surface_get_material(base, sc->surface_index);
+							}
 						}
 					}
 					const FellowRTMaterial &m = _fellow_rt_material(material, frame);

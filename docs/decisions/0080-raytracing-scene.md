@@ -64,6 +64,11 @@ the renderer uses it, and three gaps keep it from being used by effects:
   MultiMesh beyond that reach (a chunk of grass) is skipped from its bounds, and each instance's origin is tested
   before its transform is computed. Counter `raytracing_multimesh_instances`. The geometry is the mesh's rest pose (a
   wind vertex shader is not applied), as Unreal's foliage in ray tracing without its world position offset evaluation.
+  Foliage Lab on the RTX (`m16_f243`, every effect, the meadow and forest cameras): the forest floor and the trunks take
+  the canopy's occlusion and bounce light, the meadow's rocks the grass's; in one process against the same without
+  MultiMesh instances the GPU frame +0.22 ms (the top-level build 0.32 ms instead of 0.04 ms), the render thread +0.6
+  ms. The culler notes a MultiMesh in the instance's mask byte (a bit that is not an instance mask bit): the renderer
+  had read every instance's data to know, a cache miss per instance (City Lab's build 0.5 → 0.8 ms, `m16_f243`).
 * **Alpha-tested surfaces** (alpha scissor, hash or antialiasing, a shader that discards: leaves, fences): the rays do
   not test their alpha, and as whole quads they would occlude everything that shows through them (Sponza's tree came out
   black on the RTX). They are non-opaque instances with their own mask bits (2 drawn, 3 casts shadows): AO, GI and
