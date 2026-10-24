@@ -1,7 +1,7 @@
 # 0089 — GodotPhysics3D: a large island solved on every thread, each body updated in stock's order
 
 Status: **KEEP**, on by default (milestone 17) · Branch `fellow/geometry` · Settings `rendering/fellow/physics/parallel_island_solve`,
-`physics/parallel_island_solve_grab` (32) · Code: `modules/godot_physics_3d/godot_step_3d.*`, `godot_body_3d.h`
+`physics/parallel_island_solve_grab` (16) · Code: `modules/godot_physics_3d/godot_step_3d.*`, `godot_body_3d.h`
 (`fellow_slot*`), `fellow_settings.*`.
 
 ## Problem
@@ -23,7 +23,7 @@ different threads at once.
 * Per island and step (on the stepping thread): the dynamic bodies get slots; one iteration's operations get dependency
   levels (one past the deepest earlier operation on their bodies) and are sorted by level, stably; each position records
   the operation it waits for on each body — in the same iteration, or the body's last one in the previous iteration.
-* The worker threads and the stepping thread take operations from one queue (32 at a time) in that order — iteration by
+* The worker threads and the stepping thread take operations from one queue (16 at a time; 8, 32, 64 and 128 were slower on the laptop, `m17_f251`) in that order — iteration by
   iteration, level by level — wait (spinning, then yielding) for the operations their bodies depend on, run `solve()`,
   mark the operation done. Nothing waits for a later operation, so any number of threads, even one, finishes.
 * Islands of at least 256 constraints, one after another, before the other islands, which are solved as in stock (the

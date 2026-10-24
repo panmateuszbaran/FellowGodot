@@ -40,6 +40,7 @@
 #include "jolt_body_activation_listener_3d.h"
 #include "jolt_contact_listener_3d.h"
 #include "jolt_layers.h"
+#include "jolt_job_system.h"
 #include "jolt_physics_direct_space_state_3d.h"
 
 #include "core/io/file_access.h"
@@ -199,6 +200,7 @@ void JoltSpace3D::step(float p_step) {
 	const uint64_t fellow_update_begin = OS::get_singleton()->get_ticks_usec();
 	Fellow::stats().physics_jolt_usec[0].add(fellow_update_begin - fellow_begin);
 
+	static_cast<JoltJobSystem *>(job_system)->fellow_set_active_bodies((int)physics_system->GetNumActiveBodies(JPH::EBodyType::RigidBody));
 	const JPH::EPhysicsUpdateError update_error = physics_system->Update(p_step, 1, temp_allocator, job_system);
 	const uint64_t fellow_post_begin = OS::get_singleton()->get_ticks_usec();
 	Fellow::stats().physics_jolt_usec[1].add(fellow_post_begin - fellow_update_begin);

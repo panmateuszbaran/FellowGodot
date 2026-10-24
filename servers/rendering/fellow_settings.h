@@ -268,10 +268,14 @@ inline int physics_parallel_island_solve_grab() {
 inline bool physics_island_constraint_lists() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/physics/island_constraint_lists");
 }
-// physics/jolt_max_jobs (decision 0090): the most jobs Jolt splits a phase of its step into (0: one per worker thread, as
-// stock). Jolt's results do not depend on it. Read per step.
+// physics/jolt_max_jobs (decision 0090): the most jobs Jolt splits a phase of its step into: -1 by the work (a job per
+// physics/jolt_bodies_per_job active rigid bodies, at least 4), 0 one per worker thread (stock), n at most n. Jolt's
+// results do not depend on it. Read per step.
 inline int physics_jolt_max_jobs() {
 	return enabled() ? GLOBAL_GET_CACHED(int, "rendering/fellow/physics/jolt_max_jobs") : 0;
+}
+inline int physics_jolt_bodies_per_job() {
+	return GLOBAL_GET_CACHED(int, "rendering/fellow/physics/jolt_bodies_per_job");
 }
 // Debug: every face the physics toggles skip is given to GJK anyway and its answer compared (counters physics_verify_*).
 inline bool physics_verify() {

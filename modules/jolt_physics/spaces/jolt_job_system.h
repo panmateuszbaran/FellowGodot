@@ -81,6 +81,7 @@ class JoltJobSystem final : public JPH::JobSystemWithBarrier {
 	JPH::FixedSizeFreeList<Job> jobs;
 
 	int thread_count = 0;
+	int fellow_active_bodies = 0; // FellowEngine (decision 0090): the stepping space's active rigid bodies
 
 	virtual int GetMaxConcurrency() const override;
 
@@ -92,6 +93,9 @@ class JoltJobSystem final : public JPH::JobSystemWithBarrier {
 	void _reclaim_jobs();
 
 public:
+	// FellowEngine (decision 0090): set by the space before PhysicsSystem::Update().
+	void fellow_set_active_bodies(int p_count) { fellow_active_bodies = p_count; }
+
 	JoltJobSystem();
 
 	void pre_step();

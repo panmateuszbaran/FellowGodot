@@ -62,7 +62,7 @@ class GodotStep3D {
 		uint32_t count = 0; // constraints in the island
 		uint32_t iterations = 0;
 		uint32_t generation = 0;
-		uint32_t grab = 32; // operations a thread takes from the queue at a time
+		uint32_t grab = 16; // operations a thread takes from the queue at a time
 		LocalVector<uint32_t> order; // position in an iteration -> constraint index (by dependency level)
 		LocalVector<uint32_t> dep; // per position and body slot: the operation waited for (see _fellow_solve_ops())
 		LocalVector<uint32_t> level; // scratch: per constraint, then per level

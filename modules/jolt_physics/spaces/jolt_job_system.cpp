@@ -110,8 +110,13 @@ int JoltJobSystem::GetMaxConcurrency() const {
 	// FellowEngine (milestone 17, decision 0090): Jolt splits each phase of its step into this many jobs. Its results do
 	// not depend on the number (Jolt is deterministic regardless of the job count; Physics Lab hashes the same from 1 to
 	// 24 workers), and beyond about 8 the jobs' dispatch and barriers cost more than they gain (laptop, 8 P- and
-	// 16 E-cores: Area3D case 4.7 ms with 24, 2.4 ms with 8).
+	// 16 E-cores: Area3D case 4.7 ms with 24, 2.1 ms with 8; but the 2 000-body pile 3.5 ms with 24, 4.2 ms with 8).
+	// -1 (the default): by the work, a job per 128 active rigid bodies, at least 4 (laptop: Physics Lab pile, 2 000
+	// bodies, best with 16; areas and stack best with 4-8, chars with 4).
 	const int cap = Fellow::physics_jolt_max_jobs();
+	if (cap < 0) {
+		return CLAMP(fellow_active_bodies / MAX(1, Fellow::physics_jolt_bodies_per_job()), MIN(4, thread_count), thread_count);
+	}
 	return cap > 0 ? MIN(thread_count, cap) : thread_count;
 }
 
