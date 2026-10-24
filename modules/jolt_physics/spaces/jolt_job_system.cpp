@@ -149,7 +149,130 @@ JPH::JobHandle JoltJobSystem::CreateJob(const char *p_name, JPH::ColorArg p_colo
 }
 
 void JoltJobSystem::QueueJob(JPH::JobSystem::Job *p_job) {
+	if (Fellow::physics_jolt_job_pumps()) {
+		_fellow_queue(static_cast<Job *>(p_job));
+		return;
+	}
 	static_cast<Job *>(p_job)->queue();
+}
+
+// FellowEngine (milestone 17, decision 0092). A bounded MPMC queue (D. Vyukov's): jobs are queued by the stepping thread
+// and by workers (a finished job's dependents), taken by the pumps. Jolt's barrier also runs ready jobs on the waiting
+// thread (a job runs once whoever takes it: JPH::JobSystem::Job::Execute() is guarded), so a job left in the queue
+// while no pump runs still gets done; the queue's reference is dropped when the job is taken.
+bool JoltJobSystem::_fellow_push(Job *p_job) {
+	uint32_t pos = fellow_enqueue_pos.load(std::memory_order_relaxed);
+	FellowCell *cell;
+	while (true) {
+		cell = &fellow_cells[pos & (FELLOW_QUEUE_SIZE - 1)];
+		const uint32_t seq = cell->sequence.load(std::memory_order_acquire);
+		const int32_t dif = int32_t(seq - pos);
+		if (dif == 0) {
+			if (fellow_enqueue_pos.compare_exchange_weak(pos, pos + 1, std::memory_order_relaxed)) {
+				break;
+			}
+		} else if (dif < 0) {
+			return false; // full
+		} else {
+			pos = fellow_enqueue_pos.load(std::memory_order_relaxed);
+		}
+	}
+	cell->job = p_job;
+	cell->sequence.store(pos + 1, std::memory_order_release);
+	return true;
+}
+
+bool JoltJobSystem::_fellow_pop(Job *&r_job) {
+	uint32_t pos = fellow_dequeue_pos.load(std::memory_order_relaxed);
+	FellowCell *cell;
+	while (true) {
+		cell = &fellow_cells[pos & (FELLOW_QUEUE_SIZE - 1)];
+		const uint32_t seq = cell->sequence.load(std::memory_order_acquire);
+		const int32_t dif = int32_t(seq - (pos + 1));
+		if (dif == 0) {
+			if (fellow_dequeue_pos.compare_exchange_weak(pos, pos + 1, std::memory_order_relaxed)) {
+				break;
+			}
+		} else if (dif < 0) {
+			return false; // empty
+		} else {
+			pos = fellow_dequeue_pos.load(std::memory_order_relaxed);
+		}
+	}
+	r_job = cell->job;
+	cell->sequence.store(pos + FELLOW_QUEUE_SIZE, std::memory_order_release);
+	return true;
+}
+
+void JoltJobSystem::_fellow_queue(Job *p_job) {
+	p_job->fellow_take_reference();
+	if (!_fellow_push(p_job)) {
+		// Full (not expected: Jolt has at most cMaxPhysicsJobs jobs): stock's way.
+		p_job->fellow_run();
+		return;
+	}
+	// A pump per job up to the concurrency less one (the stepping thread runs jobs too, in Jolt's barrier).
+	const int max_pumps = MAX(1, GetMaxConcurrency() - 1);
+	int pumps = fellow_pumps.load(std::memory_order_acquire);
+	while (pumps < max_pumps) {
+		if (fellow_pumps.compare_exchange_weak(pumps, pumps + 1, std::memory_order_acq_rel)) {
+			static const String task_name("Jolt Physics pump");
+			const int64_t task = WorkerThreadPool::get_singleton()->add_native_task(&_fellow_pump, this, true, task_name);
+			fellow_pump_tasks_lock.lock();
+			fellow_pump_tasks.push_back(task);
+			fellow_pump_tasks_lock.unlock();
+			break;
+		}
+	}
+}
+
+static _FORCE_INLINE_ void _fellow_jolt_pause() {
+#if defined(_MSC_VER) && (defined(_M_IX86) || defined(_M_X64))
+	_mm_pause();
+#elif (defined(__GNUC__) || defined(__clang__)) && (defined(__i386__) || defined(__x86_64__))
+	__builtin_ia32_pause();
+#endif
+}
+
+void JoltJobSystem::_fellow_pump(void *p_user_data) {
+	JoltJobSystem *js = static_cast<JoltJobSystem *>(p_user_data);
+	// Idle spins before leaving: about 20-80 us (Jolt queues each phase's jobs a few microseconds after the last).
+	const int idle_limit = Fellow::physics_jolt_pump_spins();
+	int idle = 0;
+	while (true) {
+		Job *job = nullptr;
+		if (js->_fellow_pop(job)) {
+			job->fellow_run();
+			idle = 0;
+			continue;
+		}
+		if (++idle < idle_limit) {
+			_fellow_jolt_pause();
+			continue;
+		}
+		// Leave; a job queued meanwhile either finds the pump count below the limit and starts a pump, or is taken by
+		// the stepping thread's barrier.
+		js->fellow_pumps.fetch_sub(1, std::memory_order_acq_rel);
+		return;
+	}
+}
+
+void JoltJobSystem::_fellow_drain() {
+	// The pumps leave once the queue stays empty; then any job still queued (run meanwhile by the barrier) is released.
+	LocalVector<int64_t> tasks;
+	fellow_pump_tasks_lock.lock();
+	for (int64_t t : fellow_pump_tasks) {
+		tasks.push_back(t);
+	}
+	fellow_pump_tasks.clear();
+	fellow_pump_tasks_lock.unlock();
+	for (int64_t task : tasks) {
+		WorkerThreadPool::get_singleton()->wait_for_task_completion(task);
+	}
+	Job *job = nullptr;
+	while (_fellow_pop(job)) {
+		job->fellow_run();
+	}
 }
 
 void JoltJobSystem::QueueJobs(JPH::JobSystem::Job **p_jobs, JPH::uint p_job_count) {
@@ -172,6 +295,17 @@ JoltJobSystem::JoltJobSystem() :
 		JPH::JobSystemWithBarrier(JPH::cMaxPhysicsBarriers),
 		thread_count(MAX(1, WorkerThreadPool::get_singleton()->get_thread_count())) {
 	jobs.Init(JPH::cMaxPhysicsJobs, JPH::cMaxPhysicsJobs);
+	static_assert(FELLOW_QUEUE_SIZE > JPH::cMaxPhysicsJobs && (FELLOW_QUEUE_SIZE & (FELLOW_QUEUE_SIZE - 1)) == 0);
+	fellow_cells = memnew_arr(FellowCell, FELLOW_QUEUE_SIZE);
+	for (uint32_t i = 0; i < FELLOW_QUEUE_SIZE; i++) {
+		fellow_cells[i].sequence.store(i, std::memory_order_relaxed);
+		fellow_cells[i].job = nullptr;
+	}
+}
+
+JoltJobSystem::~JoltJobSystem() {
+	_fellow_drain();
+	memdelete_arr(fellow_cells);
 }
 
 void JoltJobSystem::pre_step() {
@@ -179,6 +313,9 @@ void JoltJobSystem::pre_step() {
 }
 
 void JoltJobSystem::post_step() {
+	if (fellow_cells) {
+		_fellow_drain();
+	}
 	_reclaim_jobs();
 }
 

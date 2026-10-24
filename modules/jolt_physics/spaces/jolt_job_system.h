@@ -32,6 +32,7 @@
 
 #include "core/os/spin_lock.h"
 #include "core/templates/hash_map.h"
+#include "core/templates/local_vector.h"
 
 #include <Jolt/Jolt.h>
 
@@ -64,6 +65,12 @@ class JoltJobSystem final : public JPH::JobSystemWithBarrier {
 		static Job *pop_completed();
 
 		void queue();
+		// FellowEngine (decision 0092): queued for the job system's pumps instead of as a WorkerThreadPool task.
+		void fellow_take_reference() { AddRef(); }
+		void fellow_run() {
+			Execute();
+			Release();
+		}
 
 		Job &operator=(const Job &p_other) = delete;
 		Job &operator=(Job &&p_other) = delete;
@@ -83,6 +90,26 @@ class JoltJobSystem final : public JPH::JobSystemWithBarrier {
 	int thread_count = 0;
 	int fellow_active_bodies = 0; // FellowEngine (decision 0090): the stepping space's active rigid bodies
 
+	// FellowEngine (milestone 17, decision 0092): ready jobs go to a lock-free queue drained by up to GetMaxConcurrency()
+	// - 1 "pump" tasks, each running jobs until the queue has stayed empty for a while (stock: a WorkerThreadPool task
+	// per job, each queued and later freed under the pool's mutex).
+	static constexpr uint32_t FELLOW_QUEUE_SIZE = 4096; // a power of two above JPH::cMaxPhysicsJobs
+	struct FellowCell {
+		std::atomic<uint32_t> sequence;
+		Job *job;
+	};
+	FellowCell *fellow_cells = nullptr;
+	std::atomic<uint32_t> fellow_enqueue_pos = { 0 };
+	std::atomic<uint32_t> fellow_dequeue_pos = { 0 };
+	std::atomic<int> fellow_pumps = { 0 };
+	SpinLock fellow_pump_tasks_lock;
+	LocalVector<int64_t> fellow_pump_tasks;
+	bool _fellow_push(Job *p_job);
+	bool _fellow_pop(Job *&r_job);
+	void _fellow_queue(Job *p_job);
+	static void _fellow_pump(void *p_user_data);
+	void _fellow_drain();
+
 	virtual int GetMaxConcurrency() const override;
 
 	virtual JPH::JobHandle CreateJob(const char *p_name, JPH::ColorArg p_color, const JPH::JobSystem::JobFunction &p_job_function, JPH::uint32 p_dependency_count = 0) override;
@@ -97,6 +124,7 @@ public:
 	void fellow_set_active_bodies(int p_count) { fellow_active_bodies = p_count; }
 
 	JoltJobSystem();
+	~JoltJobSystem();
 
 	void pre_step();
 	void post_step();

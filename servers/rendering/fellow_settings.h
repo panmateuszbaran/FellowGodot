@@ -277,6 +277,14 @@ inline int physics_jolt_max_jobs() {
 inline int physics_jolt_bodies_per_job() {
 	return GLOBAL_GET_CACHED(int, "rendering/fellow/physics/jolt_bodies_per_job");
 }
+// physics/jolt_job_pumps (decision 0092): Jolt's ready jobs go to a lock-free queue drained by a few long-running pump
+// tasks (stock: a WorkerThreadPool task per job). Jolt's results do not depend on which thread runs a job. Read per job.
+inline bool physics_jolt_job_pumps() {
+	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/physics/jolt_job_pumps");
+}
+inline int physics_jolt_pump_spins() {
+	return GLOBAL_GET_CACHED(int, "rendering/fellow/physics/jolt_pump_spins");
+}
 // Debug: every face the physics toggles skip is given to GJK anyway and its answer compared (counters physics_verify_*).
 inline bool physics_verify() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/physics/verify");
