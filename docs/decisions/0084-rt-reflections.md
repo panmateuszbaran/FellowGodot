@@ -32,10 +32,10 @@ buffer the opaque colour passes read:
    not test alpha; as quads the grass would reflect as green blocks).
    **Interleaved** (`raytracing/reflections_interleaved`, on): surfaces rougher than 0.3 are traced one pixel of each
    2 × 2 block per frame; the others keep their reprojected history, or where it is lost take the block's new sample
-   (lavapipe, PBR Lab: against tracing every pixel at most 33 levels, 56-60 dB). The trace runs one thread per 2 × 2
-   block (its smooth pixels, and its rough pixel of the frame): with a thread per pixel three of four lanes sat idle over
-   rough surfaces, and interleaving had taken Sponza's reflections only from 2.26 to 1.57 ms on the RTX (lavapipe: the
-   same image, 38 pixels of one capture within 2 levels — floating-point contraction in the loop).
+   (lavapipe, PBR Lab: against tracing every pixel at most 33 levels, 56-60 dB). Interleaving had taken Sponza's
+   reflections only from 2.26 to 1.57 ms on the RTX; a thread per 2 × 2 block (its smooth pixels and its rough pixel of
+   the frame, so that no lane idles over rough surfaces) was slower still — 2.04 ms (`m16_f243`): smooth pixels then
+   take four traces in a row on one lane. The trace stays a thread per pixel.
 2. **Temporal**: rough surfaces accumulate up to 16 frames at the reprojected position (mirror-like ones take one exact
    sample; interleaved ones count their new samples only, up to 8).
 3. **Blur**: depth-, normal- and roughness-aware, its radius growing with the roughness (0 to 3 pixels); the weight fades

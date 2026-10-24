@@ -4786,6 +4786,9 @@ void RenderForwardClustered::_fellow_process_ddgi(RenderDataRD *p_render_data, c
 		}
 	}
 
+	// The scene shader's own lookups are the transparent passes' when the screen pass serves the opaque ones: those skip
+	// the visibility test (Sponza's transparent pass had cost 0.85 ms more with DDGI on the RTX, m16_f243).
+	volume.shading[2] = params.screen.is_valid() ? 1.0f : 0.0f;
 	RD::get_singleton()->buffer_update(rbd->fellow_ddgi_ubo, 0, sizeof(RendererRD::FellowDDGI::Volume), &volume);
 	fellow_ddgi_irradiance = params.irradiance;
 	fellow_ddgi_distance = params.distance;

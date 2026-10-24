@@ -250,27 +250,24 @@ void trace_pixel(ivec2 pos, float depth, vec4 nr) {
 	imageStore(raw_reflection, pos, vec4(radiance, hit_t));
 }
 
-// A thread per 2 x 2 block: its smooth pixels are traced every frame, its rough ones (interleaved) only the pixel of
-// traced_offset(). (A thread per pixel left three of four lanes idle over rough surfaces.)
+// A thread per pixel. (A thread per 2 x 2 block — its smooth pixels and its interleaved rough one — was slower on the
+// RTX: Sponza's reflections 2.04 ms against 1.57 ms, its smooth pixels four traces in a row on one lane.)
 void main() {
-	ivec2 block = ivec2(gl_GlobalInvocationID.xy);
-	for (int k = 0; k < 4; k++) {
-		ivec2 pos = block * 2 + ivec2(k & 1, k >> 1);
-		if (any(greaterThanEqual(pos, params.size))) {
-			continue;
-		}
-		float depth = texelFetch(depth_buffer, pos, 0).r;
-		vec4 nr = normal_roughness(pos);
-		if (depth == 0.0 || nr.w > params.max_roughness) {
-			imageStore(raw_reflection, pos, vec4(0.0));
-			continue;
-		}
-		if (nr.w > params.interleave_roughness && any(notEqual(pos & 1, traced_offset()))) {
-			imageStore(raw_reflection, pos, vec4(0.0, 0.0, 0.0, -1.0)); // not traced this frame (A < 0)
-			continue;
-		}
-		trace_pixel(pos, depth, nr);
+	ivec2 pos = ivec2(gl_GlobalInvocationID.xy);
+	if (any(greaterThanEqual(pos, params.size))) {
+		return;
 	}
+	float depth = texelFetch(depth_buffer, pos, 0).r;
+	vec4 nr = normal_roughness(pos);
+	if (depth == 0.0 || nr.w > params.max_roughness) {
+		imageStore(raw_reflection, pos, vec4(0.0));
+		return;
+	}
+	if (nr.w > params.interleave_roughness && any(notEqual(pos & 1, traced_offset()))) {
+		imageStore(raw_reflection, pos, vec4(0.0, 0.0, 0.0, -1.0)); // not traced this frame (A < 0)
+		return;
+	}
+	trace_pixel(pos, depth, nr);
 }
 
 #elif defined(MODE_TEMPORAL)
