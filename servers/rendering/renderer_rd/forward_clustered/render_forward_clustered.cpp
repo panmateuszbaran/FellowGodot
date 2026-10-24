@@ -4792,9 +4792,6 @@ void RenderForwardClustered::_fellow_process_ddgi(RenderDataRD *p_render_data, c
 		}
 	}
 
-	// The scene shader's own lookups are the transparent passes' when the screen pass serves the opaque ones: those skip
-	// the visibility test (Sponza's transparent pass had cost 0.85 ms more with DDGI on the RTX, m16_f243).
-	volume.shading[2] = params.screen.is_valid() ? 1.0f : 0.0f;
 	RD::get_singleton()->buffer_update(rbd->fellow_ddgi_ubo, 0, sizeof(RendererRD::FellowDDGI::Volume), &volume);
 	fellow_ddgi_irradiance = params.irradiance;
 	fellow_ddgi_distance = params.distance;
@@ -6457,6 +6454,9 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	uint32_t transparent_pass_uniform_buffer_index = _setup_environment(p_render_data, is_reflection_probe, screen_size, screen_size, p_default_bg_color, false);
 
 	rp_uniform_set = _setup_render_pass_uniform_set(RENDER_LIST_ALPHA, p_render_data, radiance_texture, samplers, transparent_pass_uniform_buffer_index, true);
+	// DDGI (decision 0083): the transparent surfaces read the screen pass's irradiance (that of the surface behind them).
+	SceneShaderForwardClustered::ShaderSpecialization fellow_alpha_specialization = base_specialization;
+	fellow_alpha_specialization.fellow_ddgi_screen = fellow_ddgi_screen.is_valid();
 
 	{
 		uint32_t transparent_color_pass_flags = (color_pass_flags | uint32_t(COLOR_PASS_FLAG_TRANSPARENT)) & ~uint32_t(COLOR_PASS_FLAG_SEPARATE_SPECULAR);
@@ -6464,7 +6464,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		transparent_color_pass_flags &= ~uint32_t(COLOR_PASS_FLAG_MOTION_VECTORS);
 
 		RID alpha_framebuffer = rb_data.is_valid() ? rb_data->get_color_pass_fb(transparent_color_pass_flags) : color_only_framebuffer;
-		RenderListParameters render_list_params(render_list[RENDER_LIST_ALPHA].elements.ptr(), render_list[RENDER_LIST_ALPHA].element_info.ptr(), render_list[RENDER_LIST_ALPHA].elements.size(), reverse_cull, PASS_MODE_COLOR, transparent_color_pass_flags, rb_data.is_null(), p_render_data->directional_light_soft_shadows, rp_uniform_set, get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_WIREFRAME, Vector2(), p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, p_render_data->scene_data->view_count, 0, base_specialization);
+		RenderListParameters render_list_params(render_list[RENDER_LIST_ALPHA].elements.ptr(), render_list[RENDER_LIST_ALPHA].element_info.ptr(), render_list[RENDER_LIST_ALPHA].elements.size(), reverse_cull, PASS_MODE_COLOR, transparent_color_pass_flags, rb_data.is_null(), p_render_data->directional_light_soft_shadows, rp_uniform_set, get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_WIREFRAME, Vector2(), p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, p_render_data->scene_data->view_count, 0, fellow_alpha_specialization);
 		render_list_params.fellow_cluster_planes = fellow_cluster_planes.ptr();
 		render_list_params.fellow_cluster_plane_count = fellow_cluster_planes.size();
 		render_list_params.fellow_prepare_flips = fellow_prepare_flips & 3u;
@@ -8549,7 +8549,9 @@ RID RenderForwardClustered::_setup_render_pass_uniform_set(RenderListType p_rend
 		RD::Uniform u;
 		u.binding = 48;
 		u.uniform_type = RD::UNIFORM_TYPE_TEXTURE;
-		const bool screen = (p_render_list == RENDER_LIST_OPAQUE || p_render_list == RENDER_LIST_MOTION) && fellow_ddgi_screen.is_valid() && p_render_data != nullptr && p_render_data->reflection_probe.is_null();
+		// The opaque and motion passes, and the transparent pass (its surfaces take the irradiance of what is behind
+		// them: the probes' lookup in the transparent shaders had cost Sponza's transparent pass 0.76 ms, m16_f245).
+		const bool screen = (p_render_list == RENDER_LIST_OPAQUE || p_render_list == RENDER_LIST_MOTION || p_render_list == RENDER_LIST_ALPHA) && fellow_ddgi_screen.is_valid() && p_render_data != nullptr && p_render_data->reflection_probe.is_null();
 		u.append_id(screen ? fellow_ddgi_screen : texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_BLACK));
 		uniforms.push_back(u);
 	}

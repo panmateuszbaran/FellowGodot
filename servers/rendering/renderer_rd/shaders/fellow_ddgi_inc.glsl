@@ -13,7 +13,7 @@ struct FellowDDGIVolume {
 	ivec4 base_cell; // xyz the first cell in the volume, w 1 when the volume holds data
 	vec4 spacing; // x spacing, y normal bias, z view bias (in spacings), w energy multiplier
 	vec4 atlas_inv_size; // xy irradiance atlas 1 / size, zw distance atlas 1 / size
-	vec4 shading; // x sky leak: the share of the environment's ambient light added to the volume's (scene shader), y 1: probes relocated, z 1: no visibility test (the scene shader's own lookups, transparent passes, when the screen pass serves the opaque ones)
+	vec4 shading; // x sky leak: the share of the environment's ambient light added to the volume's (scene shader), y 1: probes relocated
 };
 
 #define FELLOW_DDGI_IRRADIANCE_TILE 8
@@ -78,27 +78,20 @@ vec3 fellow_ddgi_irradiance(texture2D p_irradiance, texture2D p_distance, sample
 			continue; // inactive (inside geometry) or not traced yet
 		}
 		coverage += tri;
-		// (The transparent passes' cheap lookups, shading.z 1, take the cell's position: no offset fetch.)
-		vec3 probe = vec3(cell) * spacing;
-		if (p_volume.shading.z == 0.0) {
-			probe += fellow_ddgi_probe_offset(p_distance, p_sampler, slot, counts);
-		}
+		vec3 probe = vec3(cell) * spacing + fellow_ddgi_probe_offset(p_distance, p_sampler, slot, counts);
 		vec3 to_probe = normalize(probe - p_pos);
 		// Probes behind the surface weigh less (smoothly, so the lighting has no seams).
 		float wrap = (dot(to_probe, p_normal) + 1.0) * 0.5;
 		float w = wrap * wrap + 0.2;
-		// Visibility: Chebyshev's bound from the distances the probe saw towards the (biased) point (not for the
-		// transparent passes: shading.z 1).
-		if (p_volume.shading.z == 0.0) {
-			vec3 from_probe = biased - probe;
-			float d = length(from_probe);
-			vec2 m = textureLod(sampler2D(p_distance, p_sampler), fellow_ddgi_tile_uv(slot, counts, FELLOW_DDGI_DISTANCE_TILE, from_probe / max(d, 1e-4), p_volume.atlas_inv_size.zw), 0.0).rg;
-			if (d > m.x) {
-				float variance = abs(m.y - m.x * m.x);
-				float dd = d - m.x;
-				float cheb = variance / (variance + dd * dd);
-				w *= max(cheb * cheb * cheb, 0.0);
-			}
+		// Visibility: Chebyshev's bound from the distances the probe saw towards the (biased) point.
+		vec3 from_probe = biased - probe;
+		float d = length(from_probe);
+		vec2 m = textureLod(sampler2D(p_distance, p_sampler), fellow_ddgi_tile_uv(slot, counts, FELLOW_DDGI_DISTANCE_TILE, from_probe / max(d, 1e-4), p_volume.atlas_inv_size.zw), 0.0).rg;
+		if (d > m.x) {
+			float variance = abs(m.y - m.x * m.x);
+			float dd = d - m.x;
+			float cheb = variance / (variance + dd * dd);
+			w *= max(cheb * cheb * cheb, 0.0);
 		}
 		w = max(w, 1e-6);
 		// Weights below 0.2 crushed: light leaking through thin walls fades faster.
