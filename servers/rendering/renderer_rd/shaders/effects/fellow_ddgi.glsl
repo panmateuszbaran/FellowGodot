@@ -53,6 +53,7 @@ layout(set = 0, binding = 0, std140) uniform Params {
 	mat4 inv_projection; // MODE_SCREEN: NDC (x, y, depth * 2 - 1) to view
 	mat4 view_to_world;
 	ivec4 screen; // xy the screen pass's size, z the reference's bounces
+	FellowDDGIVolume outer; // the coarser cascade around this volume (base_cell.w 0: none), read where this one ends
 }
 params;
 
@@ -103,6 +104,8 @@ layout(set = 0, binding = 7) uniform texture2DArray radiance_octmap;
 #else
 layout(set = 0, binding = 7) uniform texture2D radiance_octmap;
 #endif
+layout(set = 0, binding = 8) uniform texture2D outer_irradiance_atlas;
+layout(set = 0, binding = 9) uniform texture2D outer_distance_atlas;
 
 vec3 fellow_ddgi_ambient(vec3 p_dir) {
 	// What the environment's ambient light gives in a direction (the scene shader's ambient, per direction).
@@ -190,7 +193,7 @@ void main() {
 	}
 	// Further bounces: the volume's irradiance at the hit (the previous frame's), slightly attenuated.
 	float coverage;
-	vec3 bounce = fellow_ddgi_irradiance(irradiance_atlas, distance_atlas, linear_sampler, params.volume, hit, n, -dir, coverage);
+	vec3 bounce = fellow_ddgi_irradiance_cascades(irradiance_atlas, distance_atlas, params.volume, outer_irradiance_atlas, outer_distance_atlas, params.outer, linear_sampler, hit, n, -dir, coverage);
 	light += mix(fellow_ddgi_ambient(n) * 0.5, bounce, clamp(coverage, 0.0, 1.0)) * params.trace.y;
 	vec3 radiance = inst.albedo.rgb * (1.0 - inst.emission.w) * light + inst.emission.rgb;
 	if (any(isnan(radiance)) || any(isinf(radiance))) {
@@ -314,6 +317,8 @@ layout(set = 0, binding = 3) uniform texture2D irradiance_atlas;
 layout(set = 0, binding = 4) uniform texture2D distance_atlas;
 layout(set = 0, binding = 5) uniform sampler linear_sampler;
 layout(rgba16f, set = 0, binding = 6) uniform restrict writeonly image2D dest;
+layout(set = 0, binding = 7) uniform texture2D outer_irradiance_atlas;
+layout(set = 0, binding = 8) uniform texture2D outer_distance_atlas;
 
 void main() {
 	ivec2 pos = ivec2(gl_GlobalInvocationID.xy);
@@ -334,7 +339,7 @@ void main() {
 	vec3 wn = normalize(mat3(params.view_to_world) * vn);
 	vec3 weye = normalize(mat3(params.view_to_world) * -normalize(vp));
 	float coverage;
-	vec3 gi = fellow_ddgi_irradiance(irradiance_atlas, distance_atlas, linear_sampler, params.volume, wp, wn, weye, coverage);
+	vec3 gi = fellow_ddgi_irradiance_cascades(irradiance_atlas, distance_atlas, params.volume, outer_irradiance_atlas, outer_distance_atlas, params.outer, linear_sampler, wp, wn, weye, coverage);
 	imageStore(dest, pos, vec4(gi, clamp(coverage, 0.0, 1.0)));
 }
 

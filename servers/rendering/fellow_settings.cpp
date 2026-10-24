@@ -77,6 +77,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/raytracing/gi_energy", PROPERTY_HINT_RANGE, "0,4,0.01"), 1.0);
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/raytracing/gi_sky_leak", PROPERTY_HINT_RANGE, "0,1,0.01"), 0.1); // the share of the ambient light kept where the probes are dark (Lumen's "skylight leaking")
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/raytracing/gi_update_interval", PROPERTY_HINT_RANGE, "1,8,1"), 4); // frames between a probe's updates (a share of the probes traced per frame)
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/raytracing/gi_cascades", PROPERTY_HINT_RANGE, "1,2,1"), 2); // 2: a coarser volume (4 x the spacing, half the update rate) around the fine one, read where it ends
 	GLOBAL_DEF("rendering/fellow/raytracing/gi_probe_relocation", true); // probes moved out of geometry and away from surfaces (within their cell)
 	GLOBAL_DEF("rendering/fellow/raytracing/reflections", false); // decision 0084: traced reflections in place of SSR
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/raytracing/reflections_max_roughness", PROPERTY_HINT_RANGE, "0,1,0.01"), 0.7); // SSR's range (it fades out from 0.6 to 0.7)

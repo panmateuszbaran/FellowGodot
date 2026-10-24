@@ -64,11 +64,13 @@ FellowDDGI::FellowDDGI() {
 			pipelines[i] = RD::get_singleton()->compute_pipeline_create(shader.version_get_shader(shader_version, i));
 		}
 	}
-	ubo = RD::get_singleton()->uniform_buffer_create(sizeof(UBO));
+	ubo[0] = RD::get_singleton()->uniform_buffer_create(sizeof(UBO));
+	ubo[1] = RD::get_singleton()->uniform_buffer_create(sizeof(UBO));
 }
 
 FellowDDGI::~FellowDDGI() {
-	RD::get_singleton()->free_rid(ubo);
+	RD::get_singleton()->free_rid(ubo[0]);
+	RD::get_singleton()->free_rid(ubo[1]);
 	shader.version_free(shader_version);
 }
 
@@ -137,9 +139,17 @@ void FellowDDGI::process(const Params &p_params) {
 	u.screen[1] = p_params.screen_size.y;
 	u.screen[2] = p_params.reference_bounces;
 	u.screen[3] = 0;
-	RD::get_singleton()->buffer_update(ubo, 0, sizeof(UBO), &u);
+	u.outer = p_params.outer;
+	const bool outer = p_params.outer.base_cell[3] != 0 && p_params.outer_irradiance.is_valid() && p_params.outer_distance.is_valid();
+	if (!outer) {
+		u.outer.base_cell[3] = 0;
+	}
+	const RID cascade_ubo = ubo[MIN(p_params.cascade, 1u)];
+	RD::get_singleton()->buffer_update(cascade_ubo, 0, sizeof(UBO), &u);
+	RID outer_irradiance = outer ? p_params.outer_irradiance : TextureStorage::get_singleton()->texture_rd_get_default(TextureStorage::DEFAULT_RD_TEXTURE_BLACK);
+	RID outer_distance = outer ? p_params.outer_distance : outer_irradiance;
 
-	RD::Uniform u_params(RD::UNIFORM_TYPE_UNIFORM_BUFFER, 0, ubo);
+	RD::Uniform u_params(RD::UNIFORM_TYPE_UNIFORM_BUFFER, 0, cascade_ubo);
 	RD::Uniform u_rays(RD::UNIFORM_TYPE_IMAGE, 1, p_params.ray_data);
 
 	RD::get_singleton()->draw_command_begin_label("FellowEngine DDGI");
@@ -165,7 +175,9 @@ void FellowDDGI::process(const Params &p_params) {
 		RD::Uniform u_sampler(RD::UNIFORM_TYPE_SAMPLER, 5, linear);
 		RD::Uniform u_inst(RD::UNIFORM_TYPE_STORAGE_BUFFER, 6, p_params.instances);
 		RD::Uniform u_rad(RD::UNIFORM_TYPE_TEXTURE, 7, radiance);
-		RD::get_singleton()->compute_list_bind_uniform_set(list, uniform_set_cache->get_cache(shader_rd, 0, u_params, u_rays, u_tlas, u_irr, u_dist, u_sampler, u_inst, u_rad), 0);
+		RD::Uniform u_outer_irr(RD::UNIFORM_TYPE_TEXTURE, 8, outer_irradiance);
+		RD::Uniform u_outer_dist(RD::UNIFORM_TYPE_TEXTURE, 9, outer_distance);
+		RD::get_singleton()->compute_list_bind_uniform_set(list, uniform_set_cache->get_cache(shader_rd, 0, u_params, u_rays, u_tlas, u_irr, u_dist, u_sampler, u_inst, u_rad, u_outer_irr, u_outer_dist), 0);
 		RD::get_singleton()->compute_list_dispatch_threads(list, rays, updated, 1);
 		RD::get_singleton()->compute_list_end();
 	}
@@ -229,7 +241,9 @@ void FellowDDGI::process(const Params &p_params) {
 		RD::Uniform u_dist(RD::UNIFORM_TYPE_TEXTURE, 4, p_params.distance);
 		RD::Uniform u_sampler(RD::UNIFORM_TYPE_SAMPLER, 5, linear);
 		RD::Uniform u_dest(RD::UNIFORM_TYPE_IMAGE, 6, p_params.screen);
-		RD::get_singleton()->compute_list_bind_uniform_set(list, uniform_set_cache->get_cache(shader_rd, 0, u_params, u_depth, u_nr, u_irr, u_dist, u_sampler, u_dest), 0);
+		RD::Uniform u_outer_irr(RD::UNIFORM_TYPE_TEXTURE, 7, outer_irradiance);
+		RD::Uniform u_outer_dist(RD::UNIFORM_TYPE_TEXTURE, 8, outer_distance);
+		RD::get_singleton()->compute_list_bind_uniform_set(list, uniform_set_cache->get_cache(shader_rd, 0, u_params, u_depth, u_nr, u_irr, u_dist, u_sampler, u_dest, u_outer_irr, u_outer_dist), 0);
 		RD::get_singleton()->compute_list_dispatch_threads(list, p_params.screen_size.x, p_params.screen_size.y, 1);
 		RD::get_singleton()->compute_list_end();
 	}

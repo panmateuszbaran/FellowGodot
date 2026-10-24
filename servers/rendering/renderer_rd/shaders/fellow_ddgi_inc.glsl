@@ -113,3 +113,20 @@ vec3 fellow_ddgi_irradiance(texture2D p_irradiance, texture2D p_distance, sample
 	vec3 r = sum / wsum;
 	return r * r * p_volume.spacing.w;
 }
+
+// The irradiance of the fine volume, completed by a coarser one (p_outer: base_cell.w 0 when there is none) where the
+// fine one does not cover the point (beyond it, or where its probes are hidden from it). r_coverage: both together.
+vec3 fellow_ddgi_irradiance_cascades(texture2D p_irradiance, texture2D p_distance, FellowDDGIVolume p_volume, texture2D p_outer_irradiance, texture2D p_outer_distance, FellowDDGIVolume p_outer, sampler p_sampler, vec3 p_pos, vec3 p_normal, vec3 p_to_eye, out float r_coverage) {
+	float c0;
+	vec3 g0 = fellow_ddgi_irradiance(p_irradiance, p_distance, p_sampler, p_volume, p_pos, p_normal, p_to_eye, c0);
+	c0 = clamp(c0, 0.0, 1.0);
+	if (c0 >= 0.999 || p_outer.base_cell.w == 0) {
+		r_coverage = c0;
+		return g0;
+	}
+	float c1;
+	vec3 g1 = fellow_ddgi_irradiance(p_outer_irradiance, p_outer_distance, p_sampler, p_outer, p_pos, p_normal, p_to_eye, c1);
+	c1 = clamp(c1, 0.0, 1.0) * (1.0 - c0);
+	r_coverage = c0 + c1;
+	return r_coverage > 0.0 ? (g0 * c0 + g1 * c1) / r_coverage : vec3(0.0);
+}

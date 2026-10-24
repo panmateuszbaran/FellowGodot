@@ -91,6 +91,12 @@ public:
 		Size2i screen_size;
 		Projection inv_projection; // NDC (x, y, depth * 2 - 1) to view
 		Transform3D view_to_world;
+		// The coarser cascade around this volume (outer.base_cell[3] 0: none), read by the bounces and the screen pass
+		// where this volume ends.
+		Volume outer;
+		RID outer_irradiance;
+		RID outer_distance;
+		uint32_t cascade = 0; // which of the effect's uniform buffers (one per cascade processed in a frame)
 		// The path-traced reference (debug/raytracing_gi_reference) in place of the screen pass: bounces > 0.
 		int reference_bounces = 0;
 		RID reference_accumulation; // RGBA32F, the screen's size
@@ -118,7 +124,7 @@ private:
 		MODE_MAX,
 	};
 
-	struct UBO { // std140, as Params in fellow_ddgi.glsl (464 bytes)
+	struct UBO { // std140, as Params in fellow_ddgi.glsl (544 bytes)
 		Volume volume;
 		float ray_rotation[16];
 		float sun_direction[4];
@@ -132,12 +138,13 @@ private:
 		float inv_projection[16];
 		float view_to_world[16];
 		int32_t screen[4]; // xy size, z the reference's bounces
+		Volume outer;
 	};
 
 	FellowDdgiShaderRD shader;
 	RID shader_version;
 	RID pipelines[MODE_MAX];
-	RID ubo;
+	RID ubo[2];
 	bool position_fetch = false;
 
 public:

@@ -147,6 +147,10 @@ void RenderForwardClustered::RenderBufferDataForwardClustered::free_data() {
 		RD::get_singleton()->free_rid(fellow_ddgi_ubo);
 		fellow_ddgi_ubo = RID();
 	}
+	if (fellow_ddgi_outer_probe_cells.is_valid()) {
+		RD::get_singleton()->free_rid(fellow_ddgi_outer_probe_cells);
+		fellow_ddgi_outer_probe_cells = RID();
+	}
 	fellow_ddgi_counts[0] = fellow_ddgi_counts[1] = fellow_ddgi_counts[2] = fellow_ddgi_counts[3] = 0;
 
 	if (fsr2_context) {
@@ -4596,6 +4600,22 @@ void RenderForwardClustered::_fellow_process_ddgi(RenderDataRD *p_render_data, c
 		rbd->fellow_ddgi_probe_cells = RD::get_singleton()->storage_buffer_create(probes * 16, zero);
 		memcpy(rbd->fellow_ddgi_counts, counts, sizeof(counts));
 	}
+	const bool outer_cascade = Fellow::raytracing_gi_cascades() > 1;
+	if (outer_cascade && !rb->has_texture(scope, SNAME("irradiance_outer"))) {
+		// The coarser cascade: the same probe counts and tiles.
+		const uint32_t usage = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_STORAGE_BIT;
+		rb->create_texture(scope, SNAME("rays_outer"), RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage, RD::TEXTURE_SAMPLES_1, Size2i(counts[3], probes));
+		rb->create_texture(scope, SNAME("irradiance_outer"), RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage | RD::TEXTURE_USAGE_CAN_COPY_TO_BIT, RD::TEXTURE_SAMPLES_1, Size2i(counts[0] * counts[1] * RendererRD::FellowDDGI::IRRADIANCE_TILE, counts[2] * RendererRD::FellowDDGI::IRRADIANCE_TILE));
+		RD::get_singleton()->texture_clear(rb->get_texture(scope, SNAME("irradiance_outer")), Color(0, 0, 0, 0), 0, 1, 0, 1);
+		rb->create_texture(scope, SNAME("distance_outer"), RD::DATA_FORMAT_R16G16_SFLOAT, usage | RD::TEXTURE_USAGE_CAN_COPY_TO_BIT, RD::TEXTURE_SAMPLES_1, Size2i(counts[0] * counts[1] * RendererRD::FellowDDGI::DISTANCE_TILE, RendererRD::FellowDDGI::distance_atlas_height(counts[2])));
+		RD::get_singleton()->texture_clear(rb->get_texture(scope, SNAME("distance_outer")), Color(0, 0, 0, 0), 0, 1, 0, 1);
+		if (rbd->fellow_ddgi_outer_probe_cells.is_valid()) {
+			RD::get_singleton()->free_rid(rbd->fellow_ddgi_outer_probe_cells);
+		}
+		Vector<uint8_t> zero;
+		zero.resize_initialized(probes * 16);
+		rbd->fellow_ddgi_outer_probe_cells = RD::get_singleton()->storage_buffer_create(probes * 16, zero);
+	}
 	if (rbd->fellow_ddgi_ubo.is_null()) {
 		rbd->fellow_ddgi_ubo = RD::get_singleton()->uniform_buffer_create(sizeof(RendererRD::FellowDDGI::Volume));
 	}
@@ -4703,7 +4723,39 @@ void RenderForwardClustered::_fellow_process_ddgi(RenderDataRD *p_render_data, c
 			rbd->fellow_ddgi_reference_bounces = 0;
 		}
 	}
+	if (outer_cascade) {
+		// The coarser cascade first (its probes read by this volume's bounces): four times the spacing, around the same
+		// camera, updated at half the rate, its own bounces from itself.
+		RendererRD::FellowDDGI::Params outer = params;
+		RendererRD::FellowDDGI::Volume &ov = outer.volume;
+		const float outer_spacing = spacing * 4.0f;
+		for (int k = 0; k < 3; k++) {
+			ov.base_cell[k] = int(Math::floor(eye[k] / outer_spacing)) - counts[k] / 2;
+		}
+		ov.spacing[0] = outer_spacing;
+		ov.shading[0] = 0.0f;
+		outer.ray_data = rb->get_texture(scope, SNAME("rays_outer"));
+		outer.irradiance = rb->get_texture(scope, SNAME("irradiance_outer"));
+		outer.distance = rb->get_texture(scope, SNAME("distance_outer"));
+		outer.probe_cells = rbd->fellow_ddgi_outer_probe_cells;
+		outer.update_interval = MIN(params.update_interval * 2, 16u);
+		outer.hysteresis = Math::pow(CLAMP(Fellow::raytracing_gi_hysteresis(), 0.0f, 0.999f), float(outer.update_interval));
+		outer.distance_hysteresis = outer.hysteresis;
+		outer.outer.base_cell[3] = 0;
+		outer.screen = RID();
+		outer.reference_bounces = 0;
+		outer.cascade = 1;
+		fellow_ddgi->process(outer);
+		params.outer = ov;
+		params.outer_irradiance = outer.irradiance;
+		params.outer_distance = outer.distance;
+		fellow_ddgi_outer_volume = ov;
+		fellow_ddgi_outer_irradiance = outer.irradiance;
+		fellow_ddgi_outer_distance = outer.distance;
+	}
+	params.cascade = 0;
 	fellow_ddgi->process(params);
+	fellow_ddgi_volume = params.volume;
 	rbd->fellow_ddgi_frame++;
 	fellow_ddgi_screen = params.screen;
 	const int dump_every = Fellow::raytracing_gi_dump_every();
@@ -4774,26 +4826,14 @@ RID RenderForwardClustered::_fellow_process_rt_reflections(RenderDataRD *p_rende
 	params.history_prev = rb->get_texture(scope, parity ? SNAME("history0") : SNAME("history1"));
 	params.history_out = rb->get_texture(scope, parity ? SNAME("history1") : SNAME("history0"));
 	params.dest = rb->get_texture(scope, SNAME("result"));
-	if (fellow_ddgi_volume_ubo.is_valid() && rb->has_texture(SNAME("fellow_ddgi"), SNAME("irradiance"))) {
+	if (fellow_ddgi_volume_ubo.is_valid() && fellow_ddgi_volume.base_cell[3] != 0) {
 		params.irradiance = fellow_ddgi_irradiance;
 		params.distance = fellow_ddgi_distance;
-		const int *c = rbd->fellow_ddgi_counts;
-		const float spacing = MAX(0.05f, Fellow::raytracing_gi_probe_spacing());
-		const Vector3 eye = p_render_data->scene_data->cam_transform.origin;
-		for (int k = 0; k < 3; k++) {
-			params.volume.counts[k] = c[k];
-			params.volume.base_cell[k] = int(Math::floor(eye[k] / spacing)) - c[k] / 2;
-		}
-		params.volume.counts[3] = c[3];
-		params.volume.base_cell[3] = 1;
-		params.volume.spacing[0] = spacing;
-		params.volume.spacing[1] = 0.2f;
-		params.volume.spacing[2] = 0.16f;
-		params.volume.spacing[3] = Fellow::raytracing_gi_energy();
-		params.volume.atlas_inv_size[0] = 1.0f / float(c[0] * c[1] * RendererRD::FellowDDGI::IRRADIANCE_TILE);
-		params.volume.atlas_inv_size[1] = 1.0f / float(c[2] * RendererRD::FellowDDGI::IRRADIANCE_TILE);
-		params.volume.atlas_inv_size[2] = 1.0f / float(c[0] * c[1] * RendererRD::FellowDDGI::DISTANCE_TILE);
-		params.volume.atlas_inv_size[3] = 1.0f / float(RendererRD::FellowDDGI::distance_atlas_height(c[2]));
+		params.volume = fellow_ddgi_volume;
+		params.volume.shading[0] = 0.0f;
+		params.outer = fellow_ddgi_outer_volume;
+		params.outer_irradiance = fellow_ddgi_outer_irradiance;
+		params.outer_distance = fellow_ddgi_outer_distance;
 	} else {
 		params.irradiance = texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_BLACK);
 		params.distance = params.irradiance;
@@ -6056,6 +6096,10 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	fellow_ddgi_distance = RID();
 	fellow_ddgi_volume_ubo = RID();
 	fellow_ddgi_screen = RID();
+	fellow_ddgi_volume.base_cell[3] = 0;
+	fellow_ddgi_outer_volume.base_cell[3] = 0;
+	fellow_ddgi_outer_irradiance = RID();
+	fellow_ddgi_outer_distance = RID();
 	if (fellow_rt_tlas.is_valid() && Fellow::raytracing_gi() && fellow_rt_instance_buffer.is_valid()) {
 		const bool screen_pass = depth_pre_pass && !use_msaa && normal_roughness_views[0].is_valid() && !Fellow::raytracing_gi_in_shader();
 		_fellow_process_ddgi(p_render_data, rb, rb_data, radiance_texture, screen_pass ? normal_roughness_views[0] : RID());

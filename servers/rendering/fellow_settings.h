@@ -335,6 +335,9 @@ inline float raytracing_gi_sky_leak() {
 inline int raytracing_gi_update_interval() {
 	return GLOBAL_GET_CACHED(int, "rendering/fellow/raytracing/gi_update_interval");
 }
+inline int raytracing_gi_cascades() {
+	return GLOBAL_GET_CACHED(int, "rendering/fellow/raytracing/gi_cascades");
+}
 inline bool raytracing_gi_probe_relocation() {
 	return GLOBAL_GET_CACHED(bool, "rendering/fellow/raytracing/gi_probe_relocation");
 }

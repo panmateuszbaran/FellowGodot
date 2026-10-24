@@ -61,6 +61,9 @@ public:
 		float radiance_border[2] = { 0.0, 1.0 };
 		float radiance_level = 0.0;
 		FellowDDGI::Volume volume;
+		FellowDDGI::Volume outer; // DDGI's coarser cascade (base_cell[3] 0: none)
+		RID outer_irradiance;
+		RID outer_distance;
 		Size2i size;
 		Projection projection;
 		Transform3D cam_transform;
@@ -94,7 +97,7 @@ private:
 		MODE_MAX,
 	};
 
-	struct UBO { // std140, as Params in fellow_rt_reflections.glsl (448 bytes)
+	struct UBO { // std140, as Params in fellow_rt_reflections.glsl (528 bytes)
 		float inv_projection[16];
 		float view_to_world[16];
 		float world_to_prev_clip[16];
@@ -112,6 +115,7 @@ private:
 		uint32_t history_valid;
 		float interleave_roughness;
 		uint32_t pad;
+		FellowDDGI::Volume outer;
 	};
 
 	FellowRtReflectionsShaderRD shader;

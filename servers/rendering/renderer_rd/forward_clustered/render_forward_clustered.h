@@ -129,6 +129,7 @@ public:
 		// DDGI (decision 0083): the probe volume's per-view state (its textures are in the "fellow_ddgi" scope).
 		RID fellow_ddgi_probe_cells;
 		RID fellow_ddgi_ubo; // the volume the scene shader reads
+		RID fellow_ddgi_outer_probe_cells; // the coarser cascade's (gi_cascades 2)
 		int fellow_ddgi_counts[4] = { 0, 0, 0, 0 };
 		uint32_t fellow_ddgi_frame = 0;
 		// The path-traced reference (debug/raytracing_gi_reference): restarted when the camera or the setting changes.
@@ -1477,6 +1478,12 @@ private:
 	RID fellow_ddgi_irradiance;
 	RID fellow_ddgi_distance;
 	RID fellow_ddgi_volume_ubo;
+	RendererRD::FellowDDGI::Volume fellow_ddgi_volume; // this render's fine volume (for the reflections)
+	// The coarser cascade (gi_cascades 2): read by the screen pass, the bounces and the reflections where the fine volume
+	// ends (base_cell[3] 0: none this render).
+	RendererRD::FellowDDGI::Volume fellow_ddgi_outer_volume;
+	RID fellow_ddgi_outer_irradiance;
+	RID fellow_ddgi_outer_distance;
 	RID fellow_ddgi_screen; // the screen pass's irradiance for the opaque colour passes (RID(): they look the probes up)
 	const FellowRTMaterial &_fellow_rt_material(RID p_material, uint64_t p_frame);
 	static Projection _fellow_jittered_projection(const RenderDataRD *p_render_data);

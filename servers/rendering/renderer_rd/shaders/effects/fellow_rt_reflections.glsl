@@ -50,6 +50,7 @@ layout(set = 0, binding = 0, std140) uniform Params {
 	uint history_valid;
 	float interleave_roughness; // rougher surfaces: one pixel of each 2 x 2 traced per frame (traced_offset())
 	uint pad0;
+	FellowDDGIVolume outer; // DDGI's coarser cascade (base_cell.w 0: none)
 }
 params;
 
@@ -94,6 +95,8 @@ layout(set = 0, binding = 9) uniform texture2DArray radiance_octmap;
 #else
 layout(set = 0, binding = 9) uniform texture2D radiance_octmap;
 #endif
+layout(set = 0, binding = 10) uniform texture2D outer_irradiance_atlas;
+layout(set = 0, binding = 11) uniform texture2D outer_distance_atlas;
 
 uint hash(uint p_x) {
 	p_x ^= p_x >> 16;
@@ -233,7 +236,7 @@ void trace_pixel(ivec2 pos, float depth, vec4 nr) {
 			}
 		}
 		float coverage = 0.0;
-		vec3 gi = fellow_ddgi_irradiance(irradiance_atlas, distance_atlas, linear_sampler, params.volume, hit, hn, -dir, coverage);
+		vec3 gi = fellow_ddgi_irradiance_cascades(irradiance_atlas, distance_atlas, params.volume, outer_irradiance_atlas, outer_distance_atlas, params.outer, linear_sampler, hit, hn, -dir, coverage);
 		vec3 ambient = params.ambient_color.rgb;
 		if (params.sky_params.y != 0.0) {
 			ambient = mix(ambient, environment(hn, params.sky_params.w), params.ambient_color.w);

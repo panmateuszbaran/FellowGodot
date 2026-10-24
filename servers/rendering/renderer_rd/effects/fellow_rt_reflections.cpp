@@ -88,6 +88,11 @@ void FellowRTReflections::process(const Params &p_params) {
 	_fellow_store_mat4(Projection(p_params.cam_transform), u.view_to_world);
 	_fellow_store_mat4((correction * p_params.prev_projection) * Projection(p_params.prev_cam_transform.affine_inverse()), u.world_to_prev_clip);
 	u.volume = p_params.volume;
+	u.outer = p_params.outer;
+	const bool outer = p_params.outer.base_cell[3] != 0 && p_params.outer_irradiance.is_valid() && p_params.outer_distance.is_valid();
+	if (!outer) {
+		u.outer.base_cell[3] = 0;
+	}
 	u.sun_direction[0] = p_params.sun_direction.x;
 	u.sun_direction[1] = p_params.sun_direction.y;
 	u.sun_direction[2] = p_params.sun_direction.z;
@@ -145,7 +150,10 @@ void FellowRTReflections::process(const Params &p_params) {
 		RD::Uniform u_sampler(RD::UNIFORM_TYPE_SAMPLER, 7, linear);
 		RD::Uniform u_inst(RD::UNIFORM_TYPE_STORAGE_BUFFER, 8, p_params.instances);
 		RD::Uniform u_rad(RD::UNIFORM_TYPE_TEXTURE, 9, radiance);
-		RD::get_singleton()->compute_list_bind_uniform_set(list, uniform_set_cache->get_cache(shader_rd, 0, u_params, u_depth, u_normal, u_tlas, u_raw, u_irr, u_dist, u_sampler, u_inst, u_rad), 0);
+		RID outer_irradiance = outer ? p_params.outer_irradiance : TextureStorage::get_singleton()->texture_rd_get_default(TextureStorage::DEFAULT_RD_TEXTURE_BLACK);
+		RD::Uniform u_outer_irr(RD::UNIFORM_TYPE_TEXTURE, 10, outer_irradiance);
+		RD::Uniform u_outer_dist(RD::UNIFORM_TYPE_TEXTURE, 11, outer ? p_params.outer_distance : outer_irradiance);
+		RD::get_singleton()->compute_list_bind_uniform_set(list, uniform_set_cache->get_cache(shader_rd, 0, u_params, u_depth, u_normal, u_tlas, u_raw, u_irr, u_dist, u_sampler, u_inst, u_rad, u_outer_irr, u_outer_dist), 0);
 		// A thread per 2 x 2 block (its smooth pixels, and its interleaved rough pixel).
 		RD::get_singleton()->compute_list_dispatch_threads(list, (p_params.size.x + 1) / 2, (p_params.size.y + 1) / 2, 1);
 		RD::get_singleton()->compute_list_end();
