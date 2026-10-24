@@ -37,6 +37,8 @@
 #include "../objects/jolt_soft_body_3d.h"
 #include "jolt_space_3d.h"
 
+#include "servers/rendering/fellow_settings.h"
+
 #include <Jolt/Physics/Collision/EstimateCollisionResponse.h>
 #include <Jolt/Physics/SoftBody/SoftBodyManifold.h>
 
@@ -192,7 +194,7 @@ bool JoltContactListener3D::_try_add_contacts(const JPH::Body &p_jolt_body1, con
 	const JPH::SubShapeIDPair shape_pair(p_jolt_body1.GetID(), p_manifold.mSubShapeID1, p_jolt_body2.GetID(), p_manifold.mSubShapeID2);
 
 	Manifold &manifold = [&]() -> Manifold & {
-		const MutexLock write_lock(write_mutex);
+		const RWLockWrite write_lock(write_mutex);
 		return manifolds_by_shape_pair[shape_pair];
 	}();
 
@@ -287,14 +289,14 @@ bool JoltContactListener3D::_try_evaluate_area_overlap(const JPH::Body &p_body1,
 }
 
 bool JoltContactListener3D::_try_remove_contacts(const JPH::SubShapeIDPair &p_shape_pair) {
-	const MutexLock write_lock(write_mutex);
+	const RWLockWrite write_lock(write_mutex);
 	return manifolds_by_shape_pair.erase(p_shape_pair);
 }
 
 bool JoltContactListener3D::_try_remove_area_overlap(const JPH::SubShapeIDPair &p_shape_pair) {
 	const JPH::SubShapeIDPair swapped_shape_pair(p_shape_pair.GetBody2ID(), p_shape_pair.GetSubShapeID2(), p_shape_pair.GetBody1ID(), p_shape_pair.GetSubShapeID1());
 
-	const MutexLock write_lock(write_mutex);
+	const RWLockWrite write_lock(write_mutex);
 
 	bool removed = false;
 
@@ -404,9 +406,20 @@ bool JoltContactListener3D::_has_shape_shifted(const JoltShapedObject3D &p_objec
 }
 
 void JoltContactListener3D::_evaluate_area_overlap(const JoltArea3D &p_area, const JoltArea3D &p_other_area, const JPH::SubShapeIDPair &p_shape_pair) {
-	const MutexLock write_lock(write_mutex);
+	const bool monitor = p_area.can_monitor(p_other_area);
+	if (Fellow::physics_jolt_area_read_lock()) {
+		// FellowEngine (decision 0088): a contact the area already knows (or does not monitor and does not have) changes
+		// nothing below; seen under the read lock, the worker threads reporting contacts do not wait for each other.
+		const RWLockRead read_lock(write_mutex);
+		const bool known = area_overlaps.has(p_shape_pair);
+		if (monitor ? (known && !_has_shape_shifted(p_area, p_shape_pair.GetSubShapeID1()) && !_has_shape_shifted(p_other_area, p_shape_pair.GetSubShapeID2())) : !known) {
+			return;
+		}
+	}
 
-	if (p_area.can_monitor(p_other_area)) {
+	const RWLockWrite write_lock(write_mutex);
+
+	if (monitor) {
 		if (!area_overlaps.has(p_shape_pair)) {
 			area_overlaps.insert(p_shape_pair);
 			area_enters.insert(p_shape_pair);
@@ -424,9 +437,20 @@ void JoltContactListener3D::_evaluate_area_overlap(const JoltArea3D &p_area, con
 }
 
 void JoltContactListener3D::_evaluate_area_overlap(const JoltArea3D &p_area, const JoltBody3D &p_body, const JPH::SubShapeIDPair &p_shape_pair) {
-	const MutexLock write_lock(write_mutex);
+	const bool monitor = p_area.can_monitor(p_body);
+	if (Fellow::physics_jolt_area_read_lock()) {
+		// FellowEngine (decision 0088): a contact the area already knows (or does not monitor and does not have) changes
+		// nothing below; seen under the read lock, the worker threads reporting contacts do not wait for each other.
+		const RWLockRead read_lock(write_mutex);
+		const bool known = area_overlaps.has(p_shape_pair);
+		if (monitor ? (known && !_has_shape_shifted(p_area, p_shape_pair.GetSubShapeID1()) && !_has_shape_shifted(p_body, p_shape_pair.GetSubShapeID2())) : !known) {
+			return;
+		}
+	}
 
-	if (p_area.can_monitor(p_body)) {
+	const RWLockWrite write_lock(write_mutex);
+
+	if (monitor) {
 		if (!area_overlaps.has(p_shape_pair)) {
 			area_overlaps.insert(p_shape_pair);
 			area_enters.insert(p_shape_pair);
@@ -444,7 +468,7 @@ void JoltContactListener3D::_evaluate_area_overlap(const JoltArea3D &p_area, con
 }
 
 void JoltContactListener3D::_evaluate_area_overlap(const JoltArea3D &p_area, const JoltSoftBody3D &p_body, const JPH::SubShapeIDPair &p_shape_pair) {
-	const MutexLock write_lock(write_mutex);
+	const RWLockWrite write_lock(write_mutex);
 
 	if (p_area.can_monitor(p_body)) {
 		area_soft_body_overlaps.push_back(p_shape_pair);

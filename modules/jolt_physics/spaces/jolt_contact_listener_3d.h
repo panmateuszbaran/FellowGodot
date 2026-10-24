@@ -31,6 +31,7 @@
 #pragma once
 
 #include "core/os/mutex.h"
+#include "core/os/rw_lock.h"
 #include "core/templates/hash_map.h"
 #include "core/templates/hash_set.h"
 #include "core/templates/hashfuncs.h"
@@ -88,7 +89,7 @@ class JoltContactListener3D final
 	HashSet<JPH::SubShapeIDPair, ShapePairHasher> area_enters;
 	HashSet<JPH::SubShapeIDPair, ShapePairHasher> area_exits;
 	LocalVector<JPH::SubShapeIDPair> area_soft_body_overlaps;
-	Mutex write_mutex;
+	RWLock write_mutex; // FellowEngine: a read-write lock (decision 0088; stock: a mutex, taken for writing everywhere)
 	JoltSpace3D *space = nullptr;
 
 #ifdef DEBUG_ENABLED

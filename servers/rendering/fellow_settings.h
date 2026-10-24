@@ -240,6 +240,18 @@ inline bool physics_distance_face_order() {
 inline bool physics_convex_vertex_cache() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/physics/convex_vertex_cache");
 }
+// physics/parallel_pair_culls (decision 0087): the 3D broadphase's pair update culls the tree for every moved object on
+// worker threads first (the tree is only read), then creates and removes pairs serially in stock's order with those
+// results. From 64 moved objects. Read per step.
+inline bool physics_parallel_pair_culls() {
+	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/physics/parallel_pair_culls");
+}
+// physics/jolt_area_read_lock (decision 0088): Jolt's contact listener checks a sensor contact the area already knows
+// under a read lock and takes the write lock only to change its overlaps (stock: one mutex for every contact, from all
+// of Jolt's worker threads). Read per contact.
+inline bool physics_jolt_area_read_lock() {
+	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/physics/jolt_area_read_lock");
+}
 // Debug: every face the physics toggles skip is given to GJK anyway and its answer compared (counters physics_verify_*).
 inline bool physics_verify() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/physics/verify");

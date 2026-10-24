@@ -52,6 +52,7 @@
 
 #include "core/math/bvh_tree.h"
 #include "core/math/geometry_3d.h"
+#include "core/object/worker_thread_pool.h"
 #include "core/os/mutex.h"
 
 #include <climits> // INT_MAX
@@ -444,7 +445,17 @@ private:
 		params.result_array = nullptr;
 		params.subindex_array = nullptr;
 
-		for (const BVHHandle &h : changed_items) {
+		// FellowEngine (milestone 17): every changed item's cull computed first, on worker threads (they only read the tree:
+		// the loop below changes pairs, never the tree), then used in the same order.
+		const bool fellow_parallel = fellow_parallel_culls && changed_items.size() >= 64;
+		if (fellow_parallel) {
+			fellow_hits.resize(changed_items.size());
+			WorkerThreadPool::GroupID group = WorkerThreadPool::get_singleton()->add_template_group_task(this, &BVH_Manager::_fellow_cull_changed_item, nullptr, changed_items.size(), -1, true, String("BVHPairCulls"));
+			WorkerThreadPool::get_singleton()->wait_for_group_task_completion(group);
+		}
+
+		for (uint32_t item_index = 0; item_index < changed_items.size(); item_index++) {
+			const BVHHandle &h = changed_items[item_index];
 			// use the expanded aabb for pairing
 			const BOUNDS &expanded_aabb = tree._pairs[h.id()].expanded_aabb;
 			BVHABB_CLASS abb;
@@ -461,9 +472,11 @@ private:
 			params.abb = abb;
 
 			params.result_count_overall = 0; // might not be needed
-			tree.cull_aabb(params, false);
+			if (!fellow_parallel) {
+				tree.cull_aabb(params, false);
+			}
 
-			for (const uint32_t ref_id : tree._cull_hits) {
+			for (const uint32_t ref_id : (fellow_parallel ? fellow_hits[item_index] : tree._cull_hits)) {
 				// don't collide against ourself
 				if (ref_id == changed_item_ref_id) {
 					continue;
@@ -480,7 +493,24 @@ private:
 		_reset();
 	}
 
+	void _fellow_cull_changed_item(uint32_t p_index, void *p_userdata) {
+		const BVHHandle &h = changed_items[p_index];
+		typename BVHTREE_CLASS::CullParams params;
+		params.result_count_overall = 0;
+		params.result_max = INT_MAX;
+		params.result_array = nullptr;
+		params.subindex_array = nullptr;
+		BVHABB_CLASS abb;
+		abb.from(tree._pairs[h.id()].expanded_aabb);
+		tree.item_fill_cullparams(h, params);
+		params.abb = abb;
+		tree.cull_aabb_into(params, fellow_hits[p_index]);
+	}
+
 public:
+	// FellowEngine (milestone 17): set by the owner before update() (the 3D physics broadphase).
+	bool fellow_parallel_culls = false;
+
 	void item_get_AABB(BVHHandle p_handle, BOUNDS &r_aabb) {
 		DEV_ASSERT(!p_handle.is_invalid());
 		BVHABB_CLASS abb;
@@ -771,6 +801,7 @@ private:
 	// for collision pairing,
 	// maintain a list of all items moved etc on each frame / tick
 	LocalVector<BVHHandle> changed_items;
+	LocalVector<LocalVector<uint32_t>> fellow_hits; // FellowEngine: each changed item's cull (fellow_parallel_culls)
 	uint32_t _tick = 1; // Start from 1 so items with 0 indicate never updated.
 
 	class BVHLockedFunction {

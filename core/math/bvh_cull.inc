@@ -146,6 +146,32 @@ int cull_point(CullParams &r_params, bool p_translate_hits = true) {
 	return r_params.result_count;
 }
 
+// FellowEngine (milestone 17): cull_aabb() without translating, its hits into r_hits instead of _cull_hits (the same
+// traversal, the same order); the tree is only read, so threads may call it at once while nothing modifies the tree.
+void cull_aabb_into(CullParams &r_params, LocalVector<uint32_t> &r_hits) {
+	r_hits.clear();
+	r_params.result_count = 0;
+
+	uint32_t tree_test_mask = 0;
+
+	for (int n = 0; n < NUM_TREES; n++) {
+		tree_test_mask <<= 1;
+		if (!tree_test_mask) {
+			tree_test_mask = 1;
+		}
+
+		if (_root_node_id[n] == BVHCommon::INVALID) {
+			continue;
+		}
+
+		if (!(r_params.tree_collision_mask & tree_test_mask)) {
+			continue;
+		}
+
+		_cull_aabb_iterative_into(_root_node_id[n], r_params, r_hits);
+	}
+}
+
 int cull_aabb(CullParams &r_params, bool p_translate_hits = true) {
 	_cull_hits.clear();
 	r_params.result_count = 0;
@@ -186,6 +212,10 @@ bool _cull_hits_full(const CullParams &p) {
 }
 
 void _cull_hit(uint32_t p_ref_id, CullParams &p) {
+	_cull_hit_into(p_ref_id, p, _cull_hits);
+}
+
+void _cull_hit_into(uint32_t p_ref_id, CullParams &p, LocalVector<uint32_t> &r_hits) {
 	// take into account masks etc
 	// this would be more efficient to do before plane checks,
 	// but done here for ease to get started
@@ -198,7 +228,7 @@ void _cull_hit(uint32_t p_ref_id, CullParams &p) {
 		}
 	}
 
-	_cull_hits.push_back(p_ref_id);
+	r_hits.push_back(p_ref_id);
 }
 
 bool _cull_segment_iterative(uint32_t p_node_id, CullParams &r_params) {
@@ -324,6 +354,10 @@ bool _cull_point_iterative(uint32_t p_node_id, CullParams &r_params) {
 
 // Note: This is a very hot loop profiling wise. Take care when changing this and profile.
 bool _cull_aabb_iterative(uint32_t p_node_id, CullParams &r_params, bool p_fully_within = false) {
+	return _cull_aabb_iterative_into(p_node_id, r_params, _cull_hits, p_fully_within);
+}
+
+bool _cull_aabb_iterative_into(uint32_t p_node_id, CullParams &r_params, LocalVector<uint32_t> &r_hits, bool p_fully_within = false) {
 	// our function parameters to keep on a stack
 	struct CullAABBParams {
 		uint32_t node_id;
@@ -349,7 +383,7 @@ bool _cull_aabb_iterative(uint32_t p_node_id, CullParams &r_params, bool p_fully
 
 		if (tnode.is_leaf()) {
 			// lazy check for hits full up condition
-			if (_cull_hits_full(r_params)) {
+			if ((int)r_hits.size() >= r_params.result_max) {
 				return false;
 			}
 
@@ -362,7 +396,7 @@ bool _cull_aabb_iterative(uint32_t p_node_id, CullParams &r_params, bool p_fully
 					uint32_t child_id = leaf.get_item_ref_id(n);
 
 					// register hit
-					_cull_hit(child_id, r_params);
+					_cull_hit_into(child_id, r_params, r_hits);
 				}
 			} else {
 				// This section is the hottest area in profiling, so
@@ -381,7 +415,7 @@ bool _cull_aabb_iterative(uint32_t p_node_id, CullParams &r_params, bool p_fully
 						uint32_t child_id = leaf.get_item_ref_id(n);
 
 						// register hit
-						_cull_hit(child_id, r_params);
+						_cull_hit_into(child_id, r_params, r_hits);
 					}
 				}
 
