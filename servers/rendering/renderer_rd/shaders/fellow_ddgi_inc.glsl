@@ -78,7 +78,11 @@ vec3 fellow_ddgi_irradiance(texture2D p_irradiance, texture2D p_distance, sample
 			continue; // inactive (inside geometry) or not traced yet
 		}
 		coverage += tri;
-		vec3 probe = vec3(cell) * spacing + fellow_ddgi_probe_offset(p_distance, p_sampler, slot, counts);
+		// (The transparent passes' cheap lookups, shading.z 1, take the cell's position: no offset fetch.)
+		vec3 probe = vec3(cell) * spacing;
+		if (p_volume.shading.z == 0.0) {
+			probe += fellow_ddgi_probe_offset(p_distance, p_sampler, slot, counts);
+		}
 		vec3 to_probe = normalize(probe - p_pos);
 		// Probes behind the surface weigh less (smoothly, so the lighting has no seams).
 		float wrap = (dot(to_probe, p_normal) + 1.0) * 0.5;

@@ -4607,7 +4607,7 @@ void RenderForwardClustered::_fellow_process_ddgi(RenderDataRD *p_render_data, c
 	if (outer_cascade && !rb->has_texture(scope, SNAME("irradiance_outer"))) {
 		// The coarser cascade: the same probe counts and tiles.
 		const uint32_t usage = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_STORAGE_BIT;
-		rb->create_texture(scope, SNAME("rays_outer"), RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage, RD::TEXTURE_SAMPLES_1, Size2i(counts[3], probes));
+		rb->create_texture(scope, SNAME("rays_outer"), RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage, RD::TEXTURE_SAMPLES_1, Size2i(MAX(32, counts[3] / 2), probes));
 		rb->create_texture(scope, SNAME("irradiance_outer"), RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage | RD::TEXTURE_USAGE_CAN_COPY_TO_BIT, RD::TEXTURE_SAMPLES_1, Size2i(counts[0] * counts[1] * RendererRD::FellowDDGI::IRRADIANCE_TILE, counts[2] * RendererRD::FellowDDGI::IRRADIANCE_TILE));
 		RD::get_singleton()->texture_clear(rb->get_texture(scope, SNAME("irradiance_outer")), Color(0, 0, 0, 0), 0, 1, 0, 1);
 		rb->create_texture(scope, SNAME("distance_outer"), RD::DATA_FORMAT_R16G16_SFLOAT, usage | RD::TEXTURE_USAGE_CAN_COPY_TO_BIT, RD::TEXTURE_SAMPLES_1, Size2i(counts[0] * counts[1] * RendererRD::FellowDDGI::DISTANCE_TILE, RendererRD::FellowDDGI::distance_atlas_height(counts[2])));
@@ -4728,7 +4728,7 @@ void RenderForwardClustered::_fellow_process_ddgi(RenderDataRD *p_render_data, c
 	}
 	if (outer_cascade) {
 		// The coarser cascade first (its probes read by this volume's bounces): four times the spacing, around the same
-		// camera, updated at half the rate, its own bounces from itself.
+		// camera, its own bounces from itself.
 		RendererRD::FellowDDGI::Params outer = params;
 		RendererRD::FellowDDGI::Volume &ov = outer.volume;
 		const float outer_spacing = spacing * 4.0f;
@@ -4741,7 +4741,10 @@ void RenderForwardClustered::_fellow_process_ddgi(RenderDataRD *p_render_data, c
 		outer.irradiance = rb->get_texture(scope, SNAME("irradiance_outer"));
 		outer.distance = rb->get_texture(scope, SNAME("distance_outer"));
 		outer.probe_cells = rbd->fellow_ddgi_outer_probe_cells;
-		outer.update_interval = MIN(params.update_interval * 2, 16u);
+		// A quarter of the fine volume's update rate and half its rays (m16_f244: at half the rate and every ray the
+		// cascade had cost City Lab 0.67 ms, as much as the fine volume).
+		outer.update_interval = MIN(params.update_interval * 4, 16u);
+		ov.counts[3] = MAX(32, counts[3] / 2);
 		outer.hysteresis = Math::pow(CLAMP(Fellow::raytracing_gi_hysteresis(), 0.0f, 0.999f), float(outer.update_interval));
 		outer.distance_hysteresis = outer.hysteresis;
 		outer.outer.base_cell[3] = 0;
