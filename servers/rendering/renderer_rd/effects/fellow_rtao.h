@@ -62,6 +62,7 @@ public:
 		float intensity = 2.0;
 		float power = 1.5;
 		uint32_t debug = 0; // rendering/fellow/debug/raytracing_view
+		bool interleaved = false; // a quarter of the pixels traced per frame (a 2 x 2 pattern), the others from history
 	};
 
 private:
@@ -84,7 +85,8 @@ private:
 		float power;
 		uint32_t history_valid;
 		uint32_t debug;
-		uint32_t pad[3];
+		uint32_t interleave; // 1: every pixel traced, 4: one of each 2 x 2 per frame
+		uint32_t pad[2];
 	}; // 240 bytes
 
 	FellowRtaoShaderRD shader;

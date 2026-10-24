@@ -26,7 +26,11 @@ traced):
    are culled**: the ray keeps the faces that face the light, as a shadow map rendered from the light does — a receiver's
    own lit faces never occlude it (no acne, no bias to tune), and a receiver inside a closed mesh is shadowed by its top
    as with the shadow map. The origin is lifted along the geometric normal from the depth buffer; pixels facing away
-   from the light are shadowed without a ray.
+   from the light are shadowed without a ray. Alpha-tested casters (0080: non-opaque, mask bit 3) are candidates the
+   ray notes and passes: a pixel whose ray meets one and no opaque caster is left to the shadow map, which tests their
+   alpha (leaves' shadows stay as before, opaque casters' are traced). Shadow casters the scene does not hold (MultiMesh,
+   particles, noted by the culler within the radius) make the trace assert shadows only: its lit pixels are left to the
+   shadow map (Foliage Lab's forest floor had come out sunlit under its MultiMesh trees).
 2. **Temporal** (soft shadows only): blended with the previous frames at the reprojected position (depth-checked), up to
    12 frames.
 3. **Blur** (soft shadows only): a depth-aware 3 × 3 blur, its weight falling as frames accumulate.
@@ -47,8 +51,9 @@ lavapipe, City Lab captures (sun 0.5°, 4 cascades):
 * Backface culling first (as for AO rays): the street camera, inside a building, left that building's footprint lit,
   where the shadow map shades it; culling front faces matches the shadow map there and removes self-shadowing by design.
 
-Cost: measured on the RTX when the benchmark queue runs again (the mask replaces the shadow map lookups of the pixels it
-covers: their PCSS / PCF taps are not sampled).
+Cost on the RTX laptop (`m16_f231_rt_ab`, 1080p, one ray, in one process against ray tracing with no effect): GPU
++0.21 ms in City Lab, +0.08 ms in PBR Lab, +0.67 ms in Sponza (the trace 0.92 ms, the opaque pass 0.30 ms faster),
++0.45 ms in Bistro exterior (0.90 ms, the opaque pass 0.53 ms faster); plus the scene's build (0.2-0.3 ms).
 
 ## Decision
 

@@ -87,7 +87,7 @@ void FellowRTShadow::process(const Params &p_params) {
 	u.max_distance = p_params.max_distance;
 	u.ray_length = p_params.ray_length;
 	u.history_valid = p_params.history_valid ? 1 : 0;
-	u.pad = 0;
+	u.missing_casters = p_params.missing_casters ? 1 : 0;
 	RD::get_singleton()->buffer_update(ubo, 0, sizeof(UBO), &u);
 
 	RD::Uniform u_params(RD::UNIFORM_TYPE_UNIFORM_BUFFER, 0, ubo);

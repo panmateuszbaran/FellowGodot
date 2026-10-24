@@ -4369,9 +4369,17 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 			LocalVector<RenderGeometryInstance *> *instances;
 			LocalVector<uint8_t> *masks;
 			uint32_t visible_layers;
+			bool missing_shadow_casters = false;
 			_FORCE_INLINE_ bool operator()(void *p_data) {
 				Instance *inst = (Instance *)p_data;
-				if (!inst->visible || inst->base_type != RSE::INSTANCE_MESH || !(inst->layer_mask & visible_layers)) {
+				if (!inst->visible || !(inst->layer_mask & visible_layers)) {
+					return false;
+				}
+				if (inst->base_type != RSE::INSTANCE_MESH) {
+					// Not in the scene (MultiMesh, particles): noted when it casts shadows.
+					if (inst->cast_shadows != RSE::SHADOW_CASTING_SETTING_OFF && (inst->base_type == RSE::INSTANCE_MULTIMESH || inst->base_type == RSE::INSTANCE_PARTICLES)) {
+						missing_shadow_casters = true;
+					}
 					return false;
 				}
 				InstanceGeometryData *geom = static_cast<InstanceGeometryData *>(inst->base_data);
@@ -4397,6 +4405,7 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 		const Vector3 eye = p_camera_data->main_transform.origin;
 		const Vector3 half(fellow_rt_radius, fellow_rt_radius, fellow_rt_radius);
 		scenario->indexers[Scenario::INDEXER_GEOMETRY].aabb_query(AABB(eye - half, half * 2.0), cull_rt);
+		scene_render->fellow_rt_missing_shadow_casters = cull_rt.missing_shadow_casters;
 	}
 
 	RENDER_TIMESTAMP("Render 3D Scene");

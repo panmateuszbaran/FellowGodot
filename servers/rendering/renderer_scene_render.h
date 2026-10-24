@@ -364,9 +364,16 @@ public:
 	enum {
 		FELLOW_RT_MASK_VISIBLE = 1, // drawn by the camera (not "shadows only")
 		FELLOW_RT_MASK_SHADOW = 2, // casts shadows
+		// The renderer moves an alpha-tested surface's bits here (and makes it non-opaque): rays that cannot test its
+		// alpha skip it (AO, GI, reflections), shadow rays note it and leave those pixels to the shadow map.
+		FELLOW_RT_MASK_ALPHA_VISIBLE = 4,
+		FELLOW_RT_MASK_ALPHA_SHADOW = 8,
 	};
 	LocalVector<RenderGeometryInstance *> fellow_rt_instances;
 	LocalVector<uint8_t> fellow_rt_masks;
+	// Shadow casters near the camera that the ray tracing scene does not hold (MultiMesh, particles: their shadows are the
+	// shadow map's): ray-traced sun shadows then only assert shadow, and leave lit pixels to the shadow map.
+	bool fellow_rt_missing_shadow_casters = false;
 	virtual float fellow_raytracing_radius() const { return 0.0f; }
 
 	virtual void render_scene(const Ref<RenderSceneBuffers> &p_render_buffers, const CameraData *p_camera_data, const CameraData *p_prev_camera_data, const PagedArray<RenderGeometryInstance *> &p_instances, const PagedArray<RID> &p_lights, const PagedArray<RID> &p_reflection_probes, const PagedArray<RID> &p_voxel_gi_instances, const PagedArray<RID> &p_decals, const PagedArray<RID> &p_lightmaps, const PagedArray<RID> &p_fog_volumes, RID p_environment, RID p_camera_attributes, RID p_compositor, RID p_shadow_atlas, RID p_occluder_debug_tex, RID p_reflection_atlas, RID p_reflection_probe, int p_reflection_probe_pass, float p_screen_mesh_lod_threshold, const RenderShadowData *p_render_shadows, int p_render_shadow_count, const RenderSDFGIData *p_render_sdfgi_regions, int p_render_sdfgi_region_count, float p_window_output_max_value, const RenderSDFGIUpdateData *p_sdfgi_update_data = nullptr, RenderingServerTypes::RenderInfo *r_render_info = nullptr) = 0;

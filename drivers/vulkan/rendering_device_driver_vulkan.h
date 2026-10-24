@@ -733,6 +733,8 @@ public:
 		VkAccelerationStructureKHR vk_acceleration_structure = VK_NULL_HANDLE;
 		// Buffer used for the structure
 		RDD::BufferID buffer;
+		// FellowEngine: the structure's device address, asked once (TLAS instances refer to their BLAS by it).
+		VkDeviceAddress fellow_device_address = 0;
 
 		// Alignment of the scratch buffer for building the structure
 		uint32_t scratch_alignment;

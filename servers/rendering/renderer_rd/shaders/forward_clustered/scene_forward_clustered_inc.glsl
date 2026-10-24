@@ -289,6 +289,12 @@ bool sc_fellow_ddgi() {
 bool sc_fellow_rt_reflections() {
 	return ((sc_packed_2() >> 3) & 1U) != 0;
 }
+
+// FellowEngine DDGI's screen pass (decision 0083): the opaque colour passes read the volume's irradiance per pixel
+// (fellow_ddgi_screen) instead of looking the probes up.
+bool sc_fellow_ddgi_screen() {
+	return ((sc_packed_2() >> 4) & 1U) != 0;
+}
 #define FELLOW_OMNI_HOT(m_idx, m_field) (sc_fellow_light_hot() ? (sc_fellow_light_hot_ubo() ? fellow_omni_hot_ubo.data[m_idx].m_field : fellow_omni_hot_ssbo.data[m_idx].m_field) : omni_lights.data[m_idx].m_field)
 #define FELLOW_SPOT_HOT(m_idx, m_field) (sc_fellow_light_hot() ? (sc_fellow_light_hot_ubo() ? fellow_spot_hot_ubo.data[m_idx].m_field : fellow_spot_hot_ssbo.data[m_idx].m_field) : spot_lights.data[m_idx].m_field)
 #define FELLOW_HAS_LIGHT_PREFETCH_NEXT
@@ -767,6 +773,8 @@ layout(set = 1, binding = 46, std140) uniform FellowDDGIBlock {
 fellow_ddgi;
 // FellowEngine ray-traced reflections (decision 0084): RGB the reflected radiance, A its weight.
 layout(set = 1, binding = 47) uniform texture2D fellow_rt_reflection;
+// FellowEngine DDGI's screen pass (decision 0083): RGB the irradiance, A the volume's coverage.
+layout(set = 1, binding = 48) uniform texture2D fellow_ddgi_screen;
 
 #endif
 

@@ -85,7 +85,8 @@ void FellowRTAO::process(const Params &p_params) {
 	u.power = p_params.power;
 	u.history_valid = p_params.history_valid ? 1 : 0;
 	u.debug = p_params.debug;
-	u.pad[0] = u.pad[1] = u.pad[2] = 0;
+	u.interleave = (p_params.interleaved && p_params.debug == 0) ? 4 : 1;
+	u.pad[0] = u.pad[1] = 0;
 	RD::get_singleton()->buffer_update(ubo, 0, sizeof(UBO), &u);
 
 	RD::Uniform u_params(RD::UNIFORM_TYPE_UNIFORM_BUFFER, 0, ubo);
@@ -100,7 +101,11 @@ void FellowRTAO::process(const Params &p_params) {
 		RD::Uniform u_tlas(RD::UNIFORM_TYPE_ACCELERATION_STRUCTURE, 3, p_params.tlas);
 		RD::Uniform u_raw(RD::UNIFORM_TYPE_IMAGE, 4, p_params.raw);
 		RD::get_singleton()->compute_list_bind_uniform_set(list, uniform_set_cache->get_cache(shader_rd, 0, u_params, u_depth, u_normal, u_tlas, u_raw), 0);
-		RD::get_singleton()->compute_list_dispatch_threads(list, p_params.size.x, p_params.size.y, 1);
+		if (u.interleave == 4) {
+			RD::get_singleton()->compute_list_dispatch_threads(list, (p_params.size.x + 1) / 2, (p_params.size.y + 1) / 2, 1);
+		} else {
+			RD::get_singleton()->compute_list_dispatch_threads(list, p_params.size.x, p_params.size.y, 1);
+		}
 		RD::get_singleton()->compute_list_end();
 	}
 	{

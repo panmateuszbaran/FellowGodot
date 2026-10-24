@@ -275,6 +275,9 @@ inline bool raytracing_ao() {
 inline int raytracing_ao_rays() {
 	return GLOBAL_GET_CACHED(int, "rendering/fellow/raytracing/ao_rays");
 }
+inline bool raytracing_ao_interleaved() {
+	return GLOBAL_GET_CACHED(bool, "rendering/fellow/raytracing/ao_interleaved");
+}
 // raytracing/sun_shadows (decision 0082): the first directional light's shadow from rays, read by the opaque colour
 // pass in place of the shadow map within half the ray tracing radius of the camera.
 inline bool raytracing_sun_shadows() {
@@ -305,6 +308,12 @@ inline float raytracing_gi_hysteresis() {
 }
 inline float raytracing_gi_energy() {
 	return GLOBAL_GET_CACHED(float, "rendering/fellow/raytracing/gi_energy");
+}
+inline bool raytracing_gi_in_shader() {
+	return GLOBAL_GET_CACHED(bool, "rendering/fellow/debug/raytracing_gi_in_shader");
+}
+inline int raytracing_gi_update_interval() {
+	return GLOBAL_GET_CACHED(int, "rendering/fellow/raytracing/gi_update_interval");
 }
 // raytracing/reflections (decision 0084): where the environment enables SSR, a traced reflection per pixel up to
 // reflections_max_roughness in place of SSR (and of the probes' and the sky's specular light there).
@@ -1059,6 +1068,8 @@ struct Stats {
 	SafeNumeric<uint64_t> shadow_cache_cascades_unstable; // stock because the cascade's texel size is changing (zoom)
 	SafeNumeric<uint64_t> raytracing_instances; // ray tracing scene instances built (decision 0080), summed over frames
 	SafeNumeric<uint64_t> raytracing_blas_builds; // bottom-level acceleration structures built or rebuilt
+	SafeNumeric<uint64_t> raytracing_build_usec; // render thread time building the ray tracing scene (microseconds, summed)
+	SafeNumeric<uint64_t> raytracing_tlas_usec; // of which in RenderingDevice::tlas_build()
 	SafeNumeric<uint64_t> geometry_cluster_surfaces; // surfaces clustered at creation
 	SafeNumeric<uint64_t> geometry_cluster_surfaces_active; // surfaces whose index buffers were put in cluster order
 	SafeNumeric<uint64_t> geometry_cluster_surfaces_dropped; // surfaces left in stock order (blending or vertex-moving material)

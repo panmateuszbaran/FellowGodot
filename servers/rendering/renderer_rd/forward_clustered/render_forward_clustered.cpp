@@ -547,6 +547,7 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 			pipeline_specialization.fellow_rt_sun_shadow = 0; // decisions 0082, 0083: colour pass code
 			pipeline_specialization.fellow_ddgi = 0;
 			pipeline_specialization.fellow_rt_reflections = 0;
+			pipeline_specialization.fellow_ddgi_screen = 0;
 		}
 
 		pipeline_key.color_pass_flags = 0;
@@ -4083,25 +4084,32 @@ RID RenderForwardClustered::_fellow_build_raytracing_scene(RenderDataRD *p_rende
 			ai.transform = inst->transform * local;
 			ai.id = (fellow_rt_build.size() - 1) & 0xFFFFFF; // the index of its surface data
 			if (want_surface_data) {
-				// The surface's material (override, the instance's, the mesh's), its albedo and emission.
-				RID material;
-				if (inst->data != nullptr) {
-					if (inst->data->material_override.is_valid()) {
-						material = inst->data->material_override;
-					} else if (sc->surface_index < (uint32_t)inst->data->surface_materials.size() && inst->data->surface_materials[sc->surface_index].is_valid()) {
-						material = inst->data->surface_materials[sc->surface_index];
-					} else if (inst->data->base.is_valid()) {
-						material = mesh_storage->mesh_surface_get_material(inst->data->base, sc->surface_index);
+				if (sc->fellow_rt_data_frame == UINT64_MAX || frame - sc->fellow_rt_data_frame >= 120) {
+					// The surface's material (override, the instance's, the mesh's), its albedo and emission.
+					RID material;
+					if (inst->data != nullptr) {
+						if (inst->data->material_override.is_valid()) {
+							material = inst->data->material_override;
+						} else if (sc->surface_index < (uint32_t)inst->data->surface_materials.size() && inst->data->surface_materials[sc->surface_index].is_valid()) {
+							material = inst->data->surface_materials[sc->surface_index];
+						} else if (inst->data->base.is_valid()) {
+							material = mesh_storage->mesh_surface_get_material(inst->data->base, sc->surface_index);
+						}
 					}
+					const FellowRTMaterial &m = _fellow_rt_material(material, frame);
+					const bool double_sided = sc->shader != nullptr && sc->shader->cull_mode == RSE::CULL_MODE_DISABLED;
+					const float d[8] = { m.albedo.r, m.albedo.g, m.albedo.b, double_sided ? 1.0f : 0.0f, m.emission.r, m.emission.g, m.emission.b, m.metallic };
+					memcpy(sc->fellow_rt_data, d, sizeof(d));
+					sc->fellow_rt_data_frame = frame;
 				}
-				const FellowRTMaterial &m = _fellow_rt_material(material, frame);
-				const bool double_sided = sc->shader != nullptr && sc->shader->cull_mode == RSE::CULL_MODE_DISABLED;
-				const float d[8] = { m.albedo.r, m.albedo.g, m.albedo.b, double_sided ? 1.0f : 0.0f, m.emission.r * emissive_exposure, m.emission.g * emissive_exposure, m.emission.b * emissive_exposure, m.metallic };
-				for (int k = 0; k < 8; k++) {
-					fellow_rt_instance_data.push_back(d[k]);
-				}
+				const uint32_t base = fellow_rt_instance_data.size();
+				fellow_rt_instance_data.resize(base + 8);
+				float *d = fellow_rt_instance_data.ptr() + base;
+				memcpy(d, sc->fellow_rt_data, sizeof(sc->fellow_rt_data));
+				d[4] *= emissive_exposure;
+				d[5] *= emissive_exposure;
+				d[6] *= emissive_exposure;
 			}
-			ai.mask = mask;
 			ai.hit_sbt_range = sbt_range;
 			const RSE::CullMode cull = sc->shader != nullptr ? sc->shader->cull_mode : RSE::CULL_MODE_BACK;
 			if (cull == RSE::CULL_MODE_DISABLED) {
@@ -4110,6 +4118,15 @@ RID RenderForwardClustered::_fellow_build_raytracing_scene(RenderDataRD *p_rende
 				ai.flags = RD::ACCELERATION_STRUCTURE_INSTANCE_TRIANGLE_FLIP_FACING_BIT;
 			} else {
 				ai.flags = {};
+			}
+			// Alpha-tested surfaces (leaves, fences): the rays cannot test their alpha, and as opaque quads they would
+			// occlude what shows through them. They move to their own mask bits, non-opaque (decision 0080).
+			const bool alpha_tested = sc->shader != nullptr && (sc->shader->uses_alpha_clip || sc->shader->uses_alpha_antialiasing || sc->shader->uses_discard);
+			if (alpha_tested) {
+				ai.mask = ((mask & FELLOW_RT_MASK_VISIBLE) ? FELLOW_RT_MASK_ALPHA_VISIBLE : 0) | ((mask & FELLOW_RT_MASK_SHADOW) ? FELLOW_RT_MASK_ALPHA_SHADOW : 0);
+				ai.flags.set_flag(RD::ACCELERATION_STRUCTURE_INSTANCE_FORCE_NO_OPAQUE_BIT);
+			} else {
+				ai.mask = mask;
 			}
 			ai.blas = blas;
 		}
@@ -4131,7 +4148,10 @@ RID RenderForwardClustered::_fellow_build_raytracing_scene(RenderDataRD *p_rende
 			return RID();
 		}
 	}
-	if (RD::get_singleton()->tlas_build(rbd->fellow_tlas, Span<RD::AccelerationStructureInstance>(fellow_rt_build.ptr(), fellow_rt_build.size())) != OK) {
+	const uint64_t tlas_t0 = OS::get_singleton()->get_ticks_usec();
+	const Error tlas_err = RD::get_singleton()->tlas_build(rbd->fellow_tlas, Span<RD::AccelerationStructureInstance>(fellow_rt_build.ptr(), fellow_rt_build.size()));
+	Fellow::stats().raytracing_tlas_usec.add(OS::get_singleton()->get_ticks_usec() - tlas_t0);
+	if (tlas_err != OK) {
 		return RID();
 	}
 	if (want_surface_data) {
@@ -4187,6 +4207,7 @@ void RenderForwardClustered::_fellow_process_rtao(RenderDataRD *p_render_data, c
 	params.history_valid = rbd->fellow_rtao_history;
 	params.frame = rbd->fellow_rtao_frame;
 	params.ray_count = uint32_t(Fellow::raytracing_ao_rays());
+	params.interleaved = Fellow::raytracing_ao_interleaved();
 	params.radius = environment_get_ssao_radius(p_render_data->environment);
 	params.intensity = environment_get_ssao_intensity(p_render_data->environment);
 	params.power = environment_get_ssao_power(p_render_data->environment);
@@ -4257,6 +4278,7 @@ RID RenderForwardClustered::_fellow_process_rt_sun_shadow(RenderDataRD *p_render
 	params.light_direction = light_storage->light_instance_get_base_transform(light_instance).basis.get_column(Vector3::AXIS_Z).normalized();
 	params.light_tan_radius = angular_diameter > 0.0f ? Math::tan(Math::deg_to_rad(angular_diameter * 0.5f)) : 0.0f;
 	params.history_valid = rbd->fellow_rt_shadow_history;
+	params.missing_casters = fellow_rt_missing_shadow_casters;
 	params.frame = rbd->fellow_rt_shadow_frame;
 	params.ray_count = uint32_t(Fellow::raytracing_sun_shadow_rays());
 	params.max_distance = radius * 0.5f; // a ray towards the light stays within the scene's box for at least as long
@@ -4270,7 +4292,8 @@ RID RenderForwardClustered::_fellow_process_rt_sun_shadow(RenderDataRD *p_render
 }
 
 const RenderForwardClustered::FellowRTMaterial &RenderForwardClustered::_fellow_rt_material(RID p_material, uint64_t p_frame) {
-	// Cached per material, read again every 120 frames (a parameter changed by a script reaches GI within two seconds).
+	// Cached per material, read again every 120 frames (a parameter changed by a script reaches the ray-traced effects
+	// within four seconds: the surfaces keep theirs as long again).
 	FellowRTMaterial *m = fellow_rt_materials.getptr(p_material);
 	if (m != nullptr && p_frame - m->refreshed < 120) {
 		return *m;
@@ -4363,7 +4386,7 @@ void RenderForwardClustered::_fellow_rt_lighting(const RenderDataRD *p_render_da
 }
 
 // FellowEngine DDGI (docs/decisions/0083-ddgi.md): the probe volume around the camera, traced and blended.
-void RenderForwardClustered::_fellow_process_ddgi(RenderDataRD *p_render_data, const Ref<RenderSceneBuffersRD> &p_render_buffers, const Ref<RenderBufferDataForwardClustered> &p_rb_data, RID p_radiance_texture) {
+void RenderForwardClustered::_fellow_process_ddgi(RenderDataRD *p_render_data, const Ref<RenderSceneBuffersRD> &p_render_buffers, const Ref<RenderBufferDataForwardClustered> &p_rb_data, RID p_radiance_texture, RID p_normal_roughness) {
 	RENDER_TIMESTAMP("FellowEngine DDGI");
 	RendererRD::LightStorage *light_storage = RendererRD::LightStorage::get_singleton();
 	const Ref<RenderSceneBuffersRD> &rb = p_render_buffers;
@@ -4382,7 +4405,9 @@ void RenderForwardClustered::_fellow_process_ddgi(RenderDataRD *p_render_data, c
 		rb->clear_context(scope);
 		const uint32_t usage = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_STORAGE_BIT;
 		rb->create_texture(scope, SNAME("rays"), RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage, RD::TEXTURE_SAMPLES_1, Size2i(counts[3], probes));
-		rb->create_texture(scope, SNAME("irradiance"), RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage, RD::TEXTURE_SAMPLES_1, Size2i(counts[0] * counts[1] * RendererRD::FellowDDGI::IRRADIANCE_TILE, counts[2] * RendererRD::FellowDDGI::IRRADIANCE_TILE));
+		rb->create_texture(scope, SNAME("irradiance"), RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage | RD::TEXTURE_USAGE_CAN_COPY_TO_BIT, RD::TEXTURE_SAMPLES_1, Size2i(counts[0] * counts[1] * RendererRD::FellowDDGI::IRRADIANCE_TILE, counts[2] * RendererRD::FellowDDGI::IRRADIANCE_TILE));
+		// Every probe inactive (alpha 0) until its first update (one in gi_update_interval per frame).
+		RD::get_singleton()->texture_clear(rb->get_texture(scope, SNAME("irradiance")), Color(0, 0, 0, 0), 0, 1, 0, 1);
 		rb->create_texture(scope, SNAME("distance"), RD::DATA_FORMAT_R16G16_SFLOAT, usage, RD::TEXTURE_SAMPLES_1, Size2i(counts[0] * counts[1] * RendererRD::FellowDDGI::DISTANCE_TILE, counts[2] * RendererRD::FellowDDGI::DISTANCE_TILE));
 		if (rbd->fellow_ddgi_probe_cells.is_valid()) {
 			RD::get_singleton()->free_rid(rbd->fellow_ddgi_probe_cells);
@@ -4458,11 +4483,29 @@ void RenderForwardClustered::_fellow_process_ddgi(RenderDataRD *p_render_data, c
 	params.radiance_border[1] = lighting.radiance_border[1];
 	params.radiance_level = lighting.radiance_level;
 	params.ray_length = Fellow::raytracing_radius();
-	params.hysteresis = CLAMP(Fellow::raytracing_gi_hysteresis(), 0.0f, 0.999f);
+	params.update_interval = CLAMP(Fellow::raytracing_gi_update_interval(), 1, 8);
+	// The hysteresis is per frame: a probe updated every n frames blends with its n-th power (the same response time).
+	params.hysteresis = Math::pow(CLAMP(Fellow::raytracing_gi_hysteresis(), 0.0f, 0.999f), float(params.update_interval));
 	params.distance_hysteresis = params.hysteresis;
 	params.frame = rbd->fellow_ddgi_frame;
+	if (p_normal_roughness.is_valid()) {
+		// The screen pass: the irradiance per pixel of the depth pre-pass, for the opaque colour passes.
+		const Size2i size = rb->get_internal_size();
+		if (!rb->has_texture(scope, SNAME("screen"))) { // the render buffers are recreated on a resize
+			rb->create_texture(scope, SNAME("screen"), RD::DATA_FORMAT_R16G16B16A16_SFLOAT, RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_STORAGE_BIT, RD::TEXTURE_SAMPLES_1, size);
+		}
+		params.screen = rb->get_texture(scope, SNAME("screen"));
+		params.screen_size = size;
+		params.depth = rb->get_depth_texture();
+		params.normal_roughness = p_normal_roughness;
+		Projection correction;
+		correction.set_depth_correction(true, true, false);
+		params.inv_projection = (correction * p_render_data->scene_data->cam_projection).inverse();
+		params.view_to_world = p_render_data->scene_data->cam_transform;
+	}
 	fellow_ddgi->process(params);
 	rbd->fellow_ddgi_frame++;
+	fellow_ddgi_screen = params.screen;
 
 	RD::get_singleton()->buffer_update(rbd->fellow_ddgi_ubo, 0, sizeof(RendererRD::FellowDDGI::Volume), &volume);
 	fellow_ddgi_irradiance = params.irradiance;
@@ -5482,7 +5525,8 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 					using_ssil ||
 					ce_needs_normal_roughness ||
 					get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_NORMAL_BUFFER ||
-					scene_state.used_normal_texture) {
+					scene_state.used_normal_texture ||
+					(Fellow::raytracing_gi() && !Fellow::raytracing_gi_in_shader())) { // FellowEngine 0083: DDGI's screen pass
 				depth_pass_mode = PASS_MODE_DEPTH_NORMAL_ROUGHNESS;
 			}
 		} else if (get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_NORMAL_BUFFER || scene_state.used_normal_texture) {
@@ -5775,14 +5819,18 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	fellow_rt_shadow_mask = RID();
 	if (rb_data.is_valid() && !is_reflection_probe && rb->get_view_count() == 1 && Fellow::raytracing_scene_wanted() && !fellow_rt_instances.is_empty()) {
 		RENDER_TIMESTAMP("FellowEngine Ray Tracing Scene");
+		const uint64_t fellow_rt_t0 = OS::get_singleton()->get_ticks_usec();
 		fellow_rt_tlas = _fellow_build_raytracing_scene(p_render_data, rb_data);
+		Fellow::stats().raytracing_build_usec.add(OS::get_singleton()->get_ticks_usec() - fellow_rt_t0);
 	}
 	// FellowEngine DDGI (decision 0083): the probes traced before the passes that read them.
 	fellow_ddgi_irradiance = RID();
 	fellow_ddgi_distance = RID();
 	fellow_ddgi_volume_ubo = RID();
+	fellow_ddgi_screen = RID();
 	if (fellow_rt_tlas.is_valid() && Fellow::raytracing_gi() && fellow_rt_instance_buffer.is_valid()) {
-		_fellow_process_ddgi(p_render_data, rb, rb_data, radiance_texture);
+		const bool screen_pass = depth_pre_pass && !use_msaa && normal_roughness_views[0].is_valid() && !Fellow::raytracing_gi_in_shader();
+		_fellow_process_ddgi(p_render_data, rb, rb_data, radiance_texture, screen_pass ? normal_roughness_views[0] : RID());
 	}
 	base_specialization.fellow_ddgi = fellow_ddgi_volume_ubo.is_valid();
 	// FellowEngine ray-traced reflections (decision 0084): in place of SSR where the environment enables it.
@@ -5897,6 +5945,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			fellow_opaque_specialization.fellow_light_tile_cull = fellow_tile_cull.pass_active;
 			fellow_opaque_specialization.fellow_rt_sun_shadow = fellow_rt_shadow_mask.is_valid();
 			fellow_opaque_specialization.fellow_rt_reflections = fellow_rt_reflection_texture.is_valid();
+			fellow_opaque_specialization.fellow_ddgi_screen = fellow_ddgi_screen.is_valid();
 			RenderListParameters render_list_params(render_list[RENDER_LIST_OPAQUE].elements.ptr(), render_list[RENDER_LIST_OPAQUE].element_info.ptr(), render_list[RENDER_LIST_OPAQUE].elements.size(), reverse_cull, PASS_MODE_COLOR, opaque_color_pass_flags, rb_data.is_null(), p_render_data->directional_light_soft_shadows, rp_uniform_set, get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_WIREFRAME, Vector2(), p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, p_render_data->scene_data->view_count, 0, fellow_opaque_specialization);
 			render_list_params.fellow_prepare_flips = fellow_prepare_flips & (fellow_tile_cull_possible ? 7u : 3u); // tile culling: this pass only
 			render_list_params.fellow_cluster_planes = fellow_cluster_planes.ptr();
@@ -5948,6 +5997,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			SceneShaderForwardClustered::ShaderSpecialization fellow_motion_specialization = base_specialization;
 			fellow_motion_specialization.fellow_rt_sun_shadow = fellow_rt_shadow_mask.is_valid(); // in the depth pre-pass too
 			fellow_motion_specialization.fellow_rt_reflections = fellow_rt_reflection_texture.is_valid();
+			fellow_motion_specialization.fellow_ddgi_screen = fellow_ddgi_screen.is_valid();
 			RenderListParameters render_list_params(render_list[RENDER_LIST_MOTION].elements.ptr(), render_list[RENDER_LIST_MOTION].element_info.ptr(), render_list[RENDER_LIST_MOTION].elements.size(), reverse_cull, PASS_MODE_COLOR, color_pass_flags, rb_data.is_null(), p_render_data->directional_light_soft_shadows, rp_uniform_set, get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_WIREFRAME, Vector2(), p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, p_render_data->scene_data->view_count, 0, fellow_motion_specialization);
 			render_list_params.fellow_prepare_flips = fellow_prepare_flips & 3u;
 			render_list_params.fellow_cluster_planes = fellow_cluster_planes.ptr();
@@ -8177,7 +8227,7 @@ RID RenderForwardClustered::_setup_render_pass_uniform_set(RenderListType p_rend
 		RD::Uniform u;
 		u.binding = 43;
 		u.uniform_type = RD::UNIFORM_TYPE_TEXTURE;
-		const bool rt_mask = p_render_list == RENDER_LIST_OPAQUE && fellow_rt_shadow_mask.is_valid();
+		const bool rt_mask = (p_render_list == RENDER_LIST_OPAQUE || p_render_list == RENDER_LIST_MOTION) && fellow_rt_shadow_mask.is_valid();
 		u.append_id(rt_mask ? fellow_rt_shadow_mask : texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_BLACK));
 		uniforms.push_back(u);
 	}
@@ -8209,8 +8259,17 @@ RID RenderForwardClustered::_setup_render_pass_uniform_set(RenderListType p_rend
 		RD::Uniform u;
 		u.binding = 47;
 		u.uniform_type = RD::UNIFORM_TYPE_TEXTURE;
-		const bool refl = p_render_list == RENDER_LIST_OPAQUE && fellow_rt_reflection_texture.is_valid();
+		const bool refl = (p_render_list == RENDER_LIST_OPAQUE || p_render_list == RENDER_LIST_MOTION) && fellow_rt_reflection_texture.is_valid();
 		u.append_id(refl ? fellow_rt_reflection_texture : texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_BLACK));
+		uniforms.push_back(u);
+	}
+	{
+		// FellowEngine DDGI's screen pass (decision 0083): for the opaque colour passes; black otherwise (not read).
+		RD::Uniform u;
+		u.binding = 48;
+		u.uniform_type = RD::UNIFORM_TYPE_TEXTURE;
+		const bool screen = (p_render_list == RENDER_LIST_OPAQUE || p_render_list == RENDER_LIST_MOTION) && fellow_ddgi_screen.is_valid() && p_render_data != nullptr && p_render_data->reflection_probe.is_null();
+		u.append_id(screen ? fellow_ddgi_screen : texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_BLACK));
 		uniforms.push_back(u);
 	}
 

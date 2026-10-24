@@ -53,6 +53,18 @@ the renderer uses it, and three gaps keep it from being used by effects:
   are flipped (Godot's front faces are clockwise from outside, the ray tracing convention counter-clockwise); a ray that
   culls back faces passes out of a closed mesh as the camera sees out of it. Ray queries ignore the hit shader binding
   table, but the device's build asks for a range: offset 0, one group.
+* **Alpha-tested surfaces** (alpha scissor, hash or antialiasing, a shader that discards: leaves, fences): the rays do
+  not test their alpha, and as whole quads they would occlude everything that shows through them (Sponza's tree came out
+  black on the RTX). They are non-opaque instances with their own mask bits (2 drawn, 3 casts shadows): AO, GI and
+  reflection rays leave them out; shadow rays see them as candidates and leave the pixels only they shadow to the shadow
+  map (0082).
+* **The build's CPU side.** The driver wrote each instance record into the mapped instance buffer field by field, its
+  bitfields with read-modify-writes of that memory (uncached or write-combined), and asked the driver for the BLAS's
+  device address for every instance: City Lab's 7 600 instances took 5.7 ms of the RTX laptop's render thread
+  (`m16_f231`). The record is now built in local memory and copied whole, the address asked once per BLAS, the BLAS's
+  lookup done once per run of instances sharing it, and each surface's data for GI and reflections kept with the
+  surface (read from its material on first use and every 120 frames). Counters `raytracing_build_usec` and
+  `raytracing_tlas_usec`.
 * **Debug** (`debug/raytracing_view`, with the viewport's SSAO debug draw and RTAO on): the scene seen from the camera,
   1 = hit distances, 2 = where the hit matches the depth buffer.
 

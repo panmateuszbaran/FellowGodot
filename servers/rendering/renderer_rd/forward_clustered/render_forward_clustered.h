@@ -1091,6 +1091,11 @@ private:
 		// last frame it was checked (the first list element of a frame checks it).
 		uint32_t fellow_slot = UINT32_MAX;
 		std::atomic<uint64_t> fellow_checked_frame{ 0 };
+		// FellowEngine ray tracing (decisions 0083, 0084): this surface's data in the ray tracing scene (albedo,
+		// double-sided, emission before exposure, metallic), resolved from its material on first use and again every 120
+		// frames (a material change rebuilds the surface caches).
+		float fellow_rt_data[8] = {};
+		uint64_t fellow_rt_data_frame = UINT64_MAX;
 		std::atomic<uint64_t> fellow_seen_version{ 0 }; // the instance's fellow_data_version the entry was last built from
 		SelfList<GeometryInstanceSurfaceDataCache> compilation_dirty_element;
 		SelfList<GeometryInstanceSurfaceDataCache> compilation_all_element;
@@ -1451,9 +1456,10 @@ private:
 	RID fellow_ddgi_irradiance;
 	RID fellow_ddgi_distance;
 	RID fellow_ddgi_volume_ubo;
+	RID fellow_ddgi_screen; // the screen pass's irradiance for the opaque colour passes (RID(): they look the probes up)
 	const FellowRTMaterial &_fellow_rt_material(RID p_material, uint64_t p_frame);
 	RID _fellow_first_directional_light(const RenderDataRD *p_render_data);
-	void _fellow_process_ddgi(RenderDataRD *p_render_data, const Ref<RenderSceneBuffersRD> &p_render_buffers, const Ref<RenderBufferDataForwardClustered> &p_rb_data, RID p_radiance_texture);
+	void _fellow_process_ddgi(RenderDataRD *p_render_data, const Ref<RenderSceneBuffersRD> &p_render_buffers, const Ref<RenderBufferDataForwardClustered> &p_rb_data, RID p_radiance_texture, RID p_normal_roughness);
 	RID fellow_rt_shadow_mask; // this render's traced sun shadow (RID(): the shadow map), read by the opaque colour passes
 	RID fellow_rt_tlas; // the frame's ray tracing scene (RID() when no ray-traced effect runs)
 	LocalVector<RD::AccelerationStructureInstance> fellow_rt_build;

@@ -1983,7 +1983,10 @@ void fragment_shader(in SceneData scene_data) {
 #if !defined(USE_LIGHTMAP)
 	// FellowEngine DDGI (decision 0083): the probe volume's irradiance in place of the environment's ambient light
 	// (blended with it where the volume ends).
-	if (sc_fellow_ddgi()) {
+	if (sc_fellow_ddgi() && sc_fellow_ddgi_screen()) {
+		vec4 fellow_gi = texelFetch(sampler2D(fellow_ddgi_screen, SAMPLER_NEAREST_CLAMP), ivec2(gl_FragCoord.xy), 0);
+		ambient_light = mix(ambient_light, fellow_gi.rgb, fellow_gi.a);
+	} else if (sc_fellow_ddgi()) {
 		mat4 fellow_inv_view = transpose(mat4(scene_data.inv_view_matrix[0], scene_data.inv_view_matrix[1], scene_data.inv_view_matrix[2], vec4(0.0, 0.0, 0.0, 1.0)));
 		vec3 fellow_wpos = (fellow_inv_view * vec4(vertex, 1.0)).xyz;
 		vec3 fellow_wn = normalize(mat3(fellow_inv_view) * indirect_normal);

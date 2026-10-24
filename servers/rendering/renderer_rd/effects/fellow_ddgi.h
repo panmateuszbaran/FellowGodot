@@ -32,6 +32,8 @@
 #pragma once
 
 #include "core/math/basis.h"
+#include "core/math/projection.h"
+#include "core/math/transform_3d.h"
 #include "servers/rendering/renderer_rd/shaders/effects/fellow_ddgi.glsl.gen.h"
 #include "servers/rendering/rendering_device.h"
 
@@ -77,6 +79,17 @@ public:
 		float hysteresis = 0.97;
 		float distance_hysteresis = 0.97;
 		uint32_t frame = 0;
+		// Probes updated per frame: those whose index is the frame modulo update_interval (the hysteresis applies per
+		// update: the caller raises it to the interval's power).
+		uint32_t update_interval = 1;
+		// The screen pass (optional): per pixel of the depth pre-pass, the volume's irradiance for the opaque colour
+		// passes, which then read it instead of looking the probes up themselves.
+		RID depth;
+		RID normal_roughness;
+		RID screen; // RGBA16F: irradiance, coverage
+		Size2i screen_size;
+		Projection inv_projection; // NDC (x, y, depth * 2 - 1) to view
+		Transform3D view_to_world;
 	};
 
 	static constexpr int IRRADIANCE_TILE = 8; // as fellow_ddgi_inc.glsl
@@ -90,10 +103,11 @@ private:
 		MODE_TRACE_FETCH_ARRAY,
 		MODE_DISTANCE,
 		MODE_IRRADIANCE,
+		MODE_SCREEN,
 		MODE_MAX,
 	};
 
-	struct UBO { // std140, as Params in fellow_ddgi.glsl (304 bytes)
+	struct UBO { // std140, as Params in fellow_ddgi.glsl (448 bytes)
 		Volume volume;
 		float ray_rotation[16];
 		float sun_direction[4];
@@ -104,6 +118,9 @@ private:
 		float radiance_border[4];
 		float trace[4];
 		int32_t frame[4];
+		float inv_projection[16];
+		float view_to_world[16];
+		int32_t screen[4]; // xy size
 	};
 
 	FellowDdgiShaderRD shader;

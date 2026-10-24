@@ -53,8 +53,9 @@ lavapipe, PBR Lab captures with SSR enabled (480 × 270), SSR against the traced
 * With DDGI, the hits inside the open room take its bounce light instead of the blue ambient.
 * The defaults, and ray tracing with no effect: unchanged (the milestone 16 identity run).
 
-Cost: measured on the RTX (`m16_f231_rt_ab`: one ray per pixel up to the maximum roughness, a shadow ray per lit hit;
-measured with the earlier maximum of 0.5, then `m16_f232` with 0.7).
+Cost on the RTX laptop (`m16_f231_rt_ab`, 1080p, with the earlier maximum of 0.5, in one process against SSR with ray
+tracing on): GPU +0.02 ms in City Lab, +0.07 ms in PBR Lab, +0.51 ms in Sponza (the trace 0.83 ms in place of SSR's
+0.18 ms), −0.04 ms in Bistro exterior; plus the scene's build. With the default of 0.7: `m16_f233`.
 
 ## Decision
 

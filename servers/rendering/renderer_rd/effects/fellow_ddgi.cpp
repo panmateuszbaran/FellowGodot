@@ -45,6 +45,7 @@ FellowDDGI::FellowDDGI() {
 	modes.push_back("\n#define MODE_TRACE\n#define FELLOW_POSITION_FETCH\n#define FELLOW_RADIANCE_ARRAY\n");
 	modes.push_back("\n#define MODE_DISTANCE\n");
 	modes.push_back("\n#define MODE_IRRADIANCE\n");
+	modes.push_back("\n#define MODE_SCREEN\n");
 	shader.initialize(modes);
 	position_fetch = RD::get_singleton()->fellow_ray_position_fetch_supported();
 	if (!position_fetch) {
@@ -118,8 +119,17 @@ void FellowDDGI::process(const Params &p_params) {
 	u.trace[1] = p_params.energy_keep;
 	u.trace[2] = p_params.hysteresis;
 	u.trace[3] = p_params.distance_hysteresis;
+	const uint32_t interval = MAX(1u, p_params.update_interval);
 	u.frame[0] = int32_t(p_params.frame);
-	u.frame[1] = u.frame[2] = u.frame[3] = 0;
+	u.frame[1] = int32_t(interval);
+	u.frame[2] = int32_t(p_params.frame % interval); // this frame's probes: index % interval == phase
+	u.frame[3] = 0;
+	const int32_t updated = (probes + int32_t(interval) - 1) / int32_t(interval);
+	RendererRD::MaterialStorage::store_camera(p_params.inv_projection, u.inv_projection);
+	RendererRD::MaterialStorage::store_transform(p_params.view_to_world, u.view_to_world);
+	u.screen[0] = p_params.screen_size.x;
+	u.screen[1] = p_params.screen_size.y;
+	u.screen[2] = u.screen[3] = 0;
 	RD::get_singleton()->buffer_update(ubo, 0, sizeof(UBO), &u);
 
 	RD::Uniform u_params(RD::UNIFORM_TYPE_UNIFORM_BUFFER, 0, ubo);
@@ -149,7 +159,7 @@ void FellowDDGI::process(const Params &p_params) {
 		RD::Uniform u_inst(RD::UNIFORM_TYPE_STORAGE_BUFFER, 6, p_params.instances);
 		RD::Uniform u_rad(RD::UNIFORM_TYPE_TEXTURE, 7, radiance);
 		RD::get_singleton()->compute_list_bind_uniform_set(list, uniform_set_cache->get_cache(shader_rd, 0, u_params, u_rays, u_tlas, u_irr, u_dist, u_sampler, u_inst, u_rad), 0);
-		RD::get_singleton()->compute_list_dispatch_threads(list, rays, probes, 1);
+		RD::get_singleton()->compute_list_dispatch_threads(list, rays, updated, 1);
 		RD::get_singleton()->compute_list_end();
 	}
 	{
@@ -159,7 +169,7 @@ void FellowDDGI::process(const Params &p_params) {
 		RD::Uniform u_dist(RD::UNIFORM_TYPE_IMAGE, 2, p_params.distance);
 		RD::Uniform u_cells(RD::UNIFORM_TYPE_STORAGE_BUFFER, 3, p_params.probe_cells);
 		RD::get_singleton()->compute_list_bind_uniform_set(list, uniform_set_cache->get_cache(shader_rd, 0, u_params, u_rays, u_dist, u_cells), 0);
-		RD::get_singleton()->compute_list_dispatch(list, probes, 1, 1);
+		RD::get_singleton()->compute_list_dispatch(list, updated, 1, 1);
 		RD::get_singleton()->compute_list_end();
 	}
 	{
@@ -169,7 +179,24 @@ void FellowDDGI::process(const Params &p_params) {
 		RD::Uniform u_irr(RD::UNIFORM_TYPE_IMAGE, 2, p_params.irradiance);
 		RD::Uniform u_cells(RD::UNIFORM_TYPE_STORAGE_BUFFER, 3, p_params.probe_cells);
 		RD::get_singleton()->compute_list_bind_uniform_set(list, uniform_set_cache->get_cache(shader_rd, 0, u_params, u_rays, u_irr, u_cells), 0);
+		// Every probe: those not updated this frame only check whether the volume moved them to a new cell (then they are
+		// marked inactive until their update, so that no lookup reads the previous cell's light).
 		RD::get_singleton()->compute_list_dispatch(list, probes, 1, 1);
+		RD::get_singleton()->compute_list_end();
+	}
+	if (p_params.screen.is_valid()) {
+		RD::ComputeListID list = RD::get_singleton()->compute_list_begin();
+		RID shader_rd = shader.version_get_shader(shader_version, MODE_SCREEN);
+		RD::get_singleton()->compute_list_bind_compute_pipeline(list, pipelines[MODE_SCREEN]);
+		RID nearest = material_storage->sampler_rd_get_default(RSE::CANVAS_ITEM_TEXTURE_FILTER_NEAREST, RSE::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
+		RD::Uniform u_depth(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 1, Vector<RID>({ nearest, p_params.depth }));
+		RD::Uniform u_nr(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 2, Vector<RID>({ nearest, p_params.normal_roughness }));
+		RD::Uniform u_irr(RD::UNIFORM_TYPE_TEXTURE, 3, p_params.irradiance);
+		RD::Uniform u_dist(RD::UNIFORM_TYPE_TEXTURE, 4, p_params.distance);
+		RD::Uniform u_sampler(RD::UNIFORM_TYPE_SAMPLER, 5, linear);
+		RD::Uniform u_dest(RD::UNIFORM_TYPE_IMAGE, 6, p_params.screen);
+		RD::get_singleton()->compute_list_bind_uniform_set(list, uniform_set_cache->get_cache(shader_rd, 0, u_params, u_depth, u_nr, u_irr, u_dist, u_sampler, u_dest), 0);
+		RD::get_singleton()->compute_list_dispatch_threads(list, p_params.screen_size.x, p_params.screen_size.y, 1);
 		RD::get_singleton()->compute_list_end();
 	}
 	RD::get_singleton()->draw_command_end_label();

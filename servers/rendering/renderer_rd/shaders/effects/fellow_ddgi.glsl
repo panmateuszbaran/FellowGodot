@@ -18,11 +18,15 @@
 // see the environment's ambient light (the sky). The opaque and transparent colour passes read the probes in place of
 // the environment's ambient light (scene shader, fellow_ddgi_inc.glsl).
 //
-// MODE_TRACE: one invocation per ray: its radiance (RGB) and distance (A; negative for a back face) into ray_data.
-// MODE_DISTANCE: one workgroup per probe (16 x 16 texels): the rays' distances around each texel's direction (mean,
-// mean square), blended with the previous values.
-// MODE_IRRADIANCE: one workgroup per probe (8 x 8 texels): the rays' cosine-weighted mean radiance, blended; the
-// probe's state (active: not inside geometry) in A; a slot whose cell changed starts over.
+// A frame updates the probes whose index is the frame's phase modulo the update interval (setting gi_update_interval).
+// MODE_TRACE: one invocation per ray of those probes: its radiance (RGB) and distance (A; negative for a back face).
+// MODE_DISTANCE: one workgroup per probe updated (16 x 16 texels): the rays' distances around each texel's direction
+// (mean, mean square), blended with the previous values.
+// MODE_IRRADIANCE: one workgroup per probe (8 x 8 texels): for those updated, the rays' cosine-weighted mean radiance,
+// blended, the probe's state (active: not inside geometry) in A, a slot whose cell changed starting over; the others
+// only check their cell: one the volume moved to a new cell is marked inactive (not read) until its update.
+// MODE_SCREEN: per pixel of the depth pre-pass, the volume's irradiance and coverage at its position and normal (the
+// opaque colour passes read it instead of looking the probes up: no extra registers in the scene shader).
 
 #include "../oct_inc.glsl"
 #include "../fellow_ddgi_inc.glsl"
@@ -42,11 +46,16 @@ layout(set = 0, binding = 0, std140) uniform Params {
 	mat4 sky_xform; // world directions to the sky's
 	vec4 radiance_border; // x border, y 1 - 2 border
 	vec4 trace; // x the rays' length, y energy kept per bounce, z irradiance hysteresis, w distance hysteresis
-	ivec4 frame; // x frame
+	ivec4 frame; // x frame, y update interval, z this frame's phase (probes with index % interval == phase are updated)
+	mat4 inv_projection; // MODE_SCREEN: NDC (x, y, depth * 2 - 1) to view
+	mat4 view_to_world;
+	ivec4 screen; // xy the screen pass's size
 }
 params;
 
+#if !defined(MODE_SCREEN)
 layout(rgba16f, set = 0, binding = 1) uniform restrict image2D ray_data; // x ray, y probe (linear slot index)
+#endif
 
 vec3 fellow_ddgi_ray_direction(int p_index, int p_count) {
 	// Spherical Fibonacci, rotated.
@@ -60,6 +69,11 @@ vec3 fellow_ddgi_ray_direction(int p_index, int p_count) {
 ivec3 fellow_ddgi_slot_of_index(int p_index) {
 	ivec3 c = params.volume.counts.xyz;
 	return ivec3(p_index % c.x, (p_index / c.x) % c.y, p_index / (c.x * c.y));
+}
+
+// The probe updated by row / workgroup p_row this frame.
+int fellow_ddgi_updated_probe(int p_row) {
+	return p_row * params.frame.y + params.frame.z;
 }
 
 ivec3 fellow_ddgi_cell_of_slot(ivec3 p_slot) {
@@ -108,9 +122,10 @@ vec3 fellow_ddgi_ambient(vec3 p_dir) {
 
 void main() {
 	int ray = int(gl_GlobalInvocationID.x);
-	int probe = int(gl_GlobalInvocationID.y);
+	int probe = fellow_ddgi_updated_probe(int(gl_GlobalInvocationID.y));
 	int rays = params.volume.counts.w;
-	if (ray >= rays) {
+	ivec3 counts = params.volume.counts.xyz;
+	if (ray >= rays || probe >= counts.x * counts.y * counts.z) {
 		return;
 	}
 	ivec3 slot = fellow_ddgi_slot_of_index(probe);
@@ -181,7 +196,11 @@ layout(set = 0, binding = 3, std430) restrict readonly buffer ProbeCells {
 probe_cells;
 
 void main() {
-	int probe = int(gl_WorkGroupID.x);
+	int probe = fellow_ddgi_updated_probe(int(gl_WorkGroupID.x));
+	ivec3 counts = params.volume.counts.xyz;
+	if (probe >= counts.x * counts.y * counts.z) {
+		return;
+	}
 	ivec3 slot = fellow_ddgi_slot_of_index(probe);
 	ivec3 cell = fellow_ddgi_cell_of_slot(slot);
 	ivec2 texel = ivec2(gl_LocalInvocationID.xy);
@@ -209,6 +228,40 @@ void main() {
 	imageStore(distance_atlas, at, vec4(result, 0.0, 0.0));
 }
 
+#elif defined(MODE_SCREEN)
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+layout(set = 0, binding = 1) uniform sampler2D depth_buffer;
+layout(set = 0, binding = 2) uniform sampler2D normal_roughness_buffer;
+layout(set = 0, binding = 3) uniform texture2D irradiance_atlas;
+layout(set = 0, binding = 4) uniform texture2D distance_atlas;
+layout(set = 0, binding = 5) uniform sampler linear_sampler;
+layout(rgba16f, set = 0, binding = 6) uniform restrict writeonly image2D dest;
+
+void main() {
+	ivec2 pos = ivec2(gl_GlobalInvocationID.xy);
+	if (any(greaterThanEqual(pos, params.screen.xy))) {
+		return;
+	}
+	float depth = texelFetch(depth_buffer, pos, 0).r;
+	if (depth == 0.0) {
+		imageStore(dest, pos, vec4(0.0));
+		return;
+	}
+	vec2 uv = (vec2(pos) + 0.5) / vec2(params.screen.xy);
+	vec4 v = params.inv_projection * vec4(uv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
+	vec3 vp = v.xyz / v.w;
+	vec3 wp = (params.view_to_world * vec4(vp, 1.0)).xyz;
+	// The normal as the scene shader writes it (normal_roughness_compatibility()).
+	vec3 vn = normalize(texelFetch(normal_roughness_buffer, pos, 0).xyz * 2.0 - 1.0);
+	vec3 wn = normalize(mat3(params.view_to_world) * vn);
+	vec3 weye = normalize(mat3(params.view_to_world) * -normalize(vp));
+	float coverage;
+	vec3 gi = fellow_ddgi_irradiance(irradiance_atlas, distance_atlas, linear_sampler, params.volume, wp, wn, weye, coverage);
+	imageStore(dest, pos, vec4(gi, clamp(coverage, 0.0, 1.0)));
+}
+
 #else // MODE_IRRADIANCE
 
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
@@ -225,6 +278,20 @@ void main() {
 	ivec3 cell = fellow_ddgi_cell_of_slot(slot);
 	ivec2 texel = ivec2(gl_LocalInvocationID.xy);
 	uint index = gl_LocalInvocationIndex;
+	ivec2 at = fellow_ddgi_tile_origin(slot, params.volume.counts.xyz, FELLOW_DDGI_IRRADIANCE_TILE) + texel;
+	if (probe % params.frame.y != params.frame.z) {
+		// Not updated this frame. If the volume moved this slot to a new cell, its light is the old cell's: inactive
+		// until its update (which then starts over).
+		ivec4 known = probe_cells.data[probe];
+		if (known.w != 0 && known.xyz != cell) {
+			imageStore(irradiance_atlas, at, vec4(imageLoad(irradiance_atlas, at).rgb, 0.0));
+			barrier();
+			if (index == 0u) {
+				probe_cells.data[probe] = ivec4(known.xyz, 0);
+			}
+		}
+		return;
+	}
 	const float tile = float(FELLOW_DDGI_IRRADIANCE_TILE);
 	vec3 dir = oct_to_vec3_with_border((vec2(texel) + 0.5) / tile, (tile - 2.0) / tile);
 	int rays = params.volume.counts.w;
@@ -244,7 +311,6 @@ void main() {
 	vec3 irradiance = wsum > 0.0 ? sum / wsum : vec3(0.0);
 	// Inside geometry: a quarter of the rays or more see back faces (the probe is skipped by the lookups).
 	float probe_active = float(backfaces) < 0.25 * float(rays) ? 1.0 : 0.0;
-	ivec2 at = fellow_ddgi_tile_origin(slot, params.volume.counts.xyz, FELLOW_DDGI_IRRADIANCE_TILE) + texel;
 	bool same = probe_cells.data[probe].xyz == cell && probe_cells.data[probe].w != 0;
 	if (same) {
 		irradiance = mix(irradiance, imageLoad(irradiance_atlas, at).rgb, params.trace.z);

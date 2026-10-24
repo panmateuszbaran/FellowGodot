@@ -62,6 +62,7 @@ public:
 		uint32_t ray_count = 1;
 		float max_distance = 100.0;
 		float ray_length = 200.0;
+		bool missing_casters = false; // shadow casters not in the scene: lit pixels left to the shadow map
 	};
 
 private:
@@ -83,7 +84,7 @@ private:
 		float max_distance;
 		float ray_length;
 		uint32_t history_valid;
-		uint32_t pad;
+		uint32_t missing_casters;
 	}; // 240 bytes
 
 	FellowRtShadowShaderRD shader;

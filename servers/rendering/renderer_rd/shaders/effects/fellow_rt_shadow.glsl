@@ -32,7 +32,7 @@ layout(set = 0, binding = 0, std140) uniform Params {
 	float max_distance; // valid within this distance of the camera
 	float ray_length;
 	uint history_valid;
-	uint pad;
+	uint missing_casters; // 1: shadow casters not in the scene (MultiMesh, particles): lit pixels are the shadow map's
 }
 params;
 
@@ -111,6 +111,7 @@ void main() {
 	vec2 jitter = vec2(float(seed & 0xFFFFu), float(seed >> 16)) / 65536.0;
 
 	float lit = 0.0;
+	bool alpha_only = false;
 	uint rays = params.light_direction.w > 0.0 ? params.ray_count : 1u;
 	for (uint i = 0u; i < rays; i++) {
 		vec3 dir = l;
@@ -125,12 +126,24 @@ void main() {
 		rayQueryEXT rq;
 		// Front faces culled: the ray keeps the faces that face the light, as a shadow map rendered from the light does
 		// (a receiver inside a closed mesh is shadowed by its top; the receiver's own lit faces never occlude it).
-		rayQueryInitializeEXT(rq, tlas, gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsOpaqueEXT | gl_RayFlagsCullFrontFacingTrianglesEXT, 0x02, origin, 0.0, dir, params.ray_length);
+		// Alpha-tested casters (mask 8, non-opaque) report candidates instead of hits: their alpha is not tested here,
+		// so a ray that meets one and no opaque caster leaves the pixel to the shadow map (which tests it).
+		rayQueryInitializeEXT(rq, tlas, gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsCullFrontFacingTrianglesEXT, 0x02 | 0x08, origin, 0.0, dir, params.ray_length);
+		bool alpha_candidate = false;
 		while (rayQueryProceedEXT(rq)) {
+			alpha_candidate = true; // not confirmed: traversal goes on for an opaque caster
 		}
 		if (rayQueryGetIntersectionTypeEXT(rq, true) == gl_RayQueryCommittedIntersectionNoneEXT) {
-			lit += 1.0;
+			if (alpha_candidate) {
+				alpha_only = true;
+			} else {
+				lit += 1.0;
+			}
 		}
+	}
+	if (alpha_only || (params.missing_casters != 0u && lit > 0.0)) {
+		imageStore(raw_shadow, pos, vec4(1.0, 0.0, 0.0, 0.0)); // invalid: the shadow map's
+		return;
 	}
 	imageStore(raw_shadow, pos, vec4(lit / float(rays), 1.0, 0.0, 0.0));
 }

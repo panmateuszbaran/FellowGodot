@@ -36,11 +36,17 @@ layout(set = 0, binding = 0, std140) uniform Params {
 	float power;
 	uint history_valid;
 	uint debug; // rendering/fellow/debug/raytracing_view: 1 the scene's hit distances from the camera, 2 their match with the depth buffer
-	uint pad0;
+	uint interleave; // 1: every pixel traced; 4: one pixel of each 2 x 2 per frame (traced_offset()), the others from history
 	uint pad1;
 	uint pad2;
 }
 params;
+
+// With interleave 4, the pixel of each 2 x 2 block traced this frame: all four in four frames.
+ivec2 traced_offset() {
+	const ivec2 order[4] = ivec2[](ivec2(0, 0), ivec2(1, 1), ivec2(1, 0), ivec2(0, 1));
+	return order[params.frame & 3u];
+}
 
 layout(set = 0, binding = 1) uniform sampler2D depth_buffer;
 layout(set = 0, binding = 2) uniform sampler2D normal_roughness_buffer;
@@ -71,6 +77,9 @@ uint hash(uint p_x) {
 
 void main() {
 	ivec2 pos = ivec2(gl_GlobalInvocationID.xy);
+	if (params.interleave == 4u) {
+		pos = pos * 2 + traced_offset();
+	}
 	if (any(greaterThanEqual(pos, params.size))) {
 		return;
 	}
@@ -152,7 +161,9 @@ void main() {
 		}
 
 		rayQueryEXT rq;
-		rayQueryInitializeEXT(rq, tlas, gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsOpaqueEXT | gl_RayFlagsCullBackFacingTrianglesEXT, 0xFF, origin, 0.0, dir, params.radius);
+		// Mask 1: what the camera sees, alpha-tested surfaces left out (their alpha is not tested: as quads they would
+		// darken everything around them).
+		rayQueryInitializeEXT(rq, tlas, gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsOpaqueEXT | gl_RayFlagsCullBackFacingTrianglesEXT, 0x01, origin, 0.0, dir, params.radius);
 		while (rayQueryProceedEXT(rq)) {
 		}
 		if (rayQueryGetIntersectionTypeEXT(rq, true) != gl_RayQueryCommittedIntersectionNoneEXT) {
@@ -173,8 +184,12 @@ void main() {
 	if (any(greaterThanEqual(pos, params.size))) {
 		return;
 	}
-	float ao = texelFetch(raw_ao, pos, 0).r;
 	float depth = texelFetch(depth_buffer, pos, 0).r;
+	// Interleaved: only one pixel of each 2 x 2 block has a new sample this frame; the others keep their history, or
+	// where it is lost take the block's new sample.
+	bool fresh = params.interleave != 4u || all(equal(pos & 1, traced_offset()));
+	ivec2 sample_pos = fresh ? pos : min((pos & ~1) + traced_offset(), params.size - 1);
+	float ao = texelFetch(raw_ao, sample_pos, 0).r;
 	if (depth == 0.0 || params.debug != 0u) {
 		imageStore(history_out, pos, vec4(ao, 1.0, 0.0, 0.0));
 		return;
@@ -182,6 +197,8 @@ void main() {
 	vec3 vp = view_position(pos, depth);
 	float view_depth = -vp.z;
 	float count = 1.0;
+	// A new sample every interleave frames: the history holds as many frames' worth as before.
+	float max_history = MAX_HISTORY / float(params.interleave);
 	if (params.history_valid != 0u) {
 		vec3 wp = (params.view_to_world * vec4(vp, 1.0)).xyz;
 		vec4 clip = params.world_to_prev_clip * vec4(wp, 1.0);
@@ -206,9 +223,14 @@ void main() {
 			}
 			if (wsum > 0.001) {
 				vec2 h = sum / wsum;
-				float n = min(h.y, MAX_HISTORY - 1.0);
-				ao = mix(h.x, ao, 1.0 / (n + 1.0));
-				count = n + 1.0;
+				if (fresh) {
+					float n = min(h.y, max_history - 1.0);
+					ao = mix(h.x, ao, 1.0 / (n + 1.0));
+					count = n + 1.0;
+				} else {
+					ao = h.x;
+					count = h.y;
+				}
 			}
 		}
 	}
