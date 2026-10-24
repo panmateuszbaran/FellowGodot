@@ -37,6 +37,6 @@ the container's 2 cores, and with 1, 2, 4, 8, 16 and 24 workers on the laptop (`
 
 ## Results
 
-Laptop (`m17_f249`): `pile` solve 11.2 → 4.4 ms per tick (the island: 16 × 4 600 operations, about 600 dependency levels
+Laptop (`m17_f249`; `m17_f252` with the grab at 16: 9.9 → 3.9 ms): `pile` solve 11.2 → 4.4 ms per tick (the island: 16 × 4 600 operations, about 600 dependency levels
 deep); the step 29.2 → 15.8 ms with decisions 0085-0087. The solve scales to about 8 workers (3.4 ms; 16: 3.2 ms; 24:
 4.4 ms — the E-cores, and the bodies' cache lines moving between cores with each operation).

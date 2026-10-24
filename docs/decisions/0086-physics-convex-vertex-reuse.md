@@ -30,4 +30,6 @@ Physics Lab, five cases, 600 ticks, state hashed every 30 ticks: **the same hash
 ## Results
 
 Container: `project_range()` and the SAT functions that call it fell from about 35 % to 21 % of `pile`'s samples; the
-container's timing noise (± 10 % between runs of one binary) hides the total. Laptop: `docs/fellow_milestone17_report.md`.
+container's timing noise (± 10 % between runs of one binary) hides the total; with the faces' vertices reused as well
+(from `fellow184`) container `pile` 67 → 61.5 ms per tick, `chars` −3 %. On the laptop the SAT tests of `pile` run on
+24 workers (pair setup 3.6 → 2.5 ms per tick with every milestone 17 change, `m17_f252`).

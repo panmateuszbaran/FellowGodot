@@ -23,4 +23,5 @@ with caps of 4, 8 and 16 (`m17_f251`).
 
 Laptop (`m17_f251`, fixed caps, per tick): `areas` 3.05 ms with one job per worker → 2.11 with 8 (1.94 with 4); `stack`
 0.75 → 0.60; `chars` 0.77 → 0.62; `pile` 3.54 → 4.23 with 8 but 3.46 with 16, hence the cap by the work (2 000 bodies:
-15 jobs). The adaptive default: `docs/fellow_milestone17_report.md`.
+15 jobs). With the adaptive default and decision 0088 (`m17_f252`, against the job count per worker and the mutex, per
+tick): `areas` 3.83 → 2.16 ms, `stack` 0.76 → 0.63, `chars` 0.75 → 0.61, `pile` 3.52 → 3.31, `rays` unchanged.

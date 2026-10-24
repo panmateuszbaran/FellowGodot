@@ -47,4 +47,7 @@ build without the change in all five cases with GodotPhysics3D. `physics/verify`
 ## Results
 
 Container (2 cores), physics per tick: `rays` 84.0 → 20.4 ms (× 4.1); `chars` 28.1 → 27.3 ms (its cost is in the
-recovery phase's SAT tests, not the motion phase). Laptop: `docs/fellow_milestone17_report.md`.
+recovery phase's SAT tests, not the motion phase). Laptop (`m17_f252`, all of milestone 17 against stock, the rest of
+which does not touch queries): `rays` 79.3 → 18.8 ms per tick (× 4.2), `chars` 22.2 → 21.1 ms. The faces kept are given
+to GJK in order of overlap (`physics/distance_face_order`, from `fellow184`): container `chars` −5 %. With
+`physics/verify` on the final build: 66.4 million faces skipped in `rays`, 131 741 in `chars`, none found touching.

@@ -29,4 +29,5 @@ signals over 600 ticks (container).
 
 ## Results
 
-Laptop (`m17_f251`, with decision 0090's job cap at 8): `areas` 2.41 → 2.11 ms per tick.
+Laptop (`m17_f251`, with decision 0090's job cap at 8): `areas` 2.41 → 2.11 ms per tick; with 0090's default against
+stock (`m17_f252`): 3.83 → 2.16 ms (Jolt's Update 3.21 → 1.55 ms; the evaluation after it 0.08 ms).
