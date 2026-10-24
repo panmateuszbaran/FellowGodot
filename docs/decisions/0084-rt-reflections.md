@@ -1,7 +1,7 @@
 # 0084 — Ray-traced reflections in place of SSR
 
 Status: **KEEP**, off by default (a look) · Branch `fellow/geometry` · Settings `rendering/fellow/raytracing/reflections`,
-`raytracing/reflections_max_roughness` (0.5) (with `raytracing/enabled`, decision 0080; lit with DDGI, 0083, when it is
+`raytracing/reflections_max_roughness` (0.7) (with `raytracing/enabled`, decision 0080; lit with DDGI, 0083, when it is
 on) ·
 Code: `servers/rendering/renderer_rd/shaders/effects/fellow_rt_reflections.glsl`, `renderer_rd/effects/fellow_rt_reflections.*`,
 `renderer_rd/shaders/forward_clustered/scene_forward_clustered{,_inc}.glsl`,
@@ -40,11 +40,21 @@ scene's implementation data while the traced reflections replace it.
 
 ## Verification
 
-lavapipe: see the milestone 16 report (PBR Lab with SSR enabled, the defaults and ray tracing without this setting
-unchanged).
+lavapipe, PBR Lab captures with SSR enabled (480 × 270), SSR against the traced reflections:
 
-Cost: measured on the RTX when the benchmark queue runs again (one ray per pixel up to the maximum roughness, a shadow
-ray per lit hit).
+* The glossy, normal-mapped chrome sphere (`pbr_specular`): SSR's lower half shows the sky's brown ground colour where
+  its rays leave the screen (78 of 255 against the grey ground's 150); traced, it reflects the ground itself (148), the
+  checker strip and the horizon. The first version reflected it at 197, brighter than the ground: the hits were lit
+  with the sun π times too bright, metals lit as diffuse, and rays sent into the sphere by its normal map hit its own
+  surface. All three fixed (the first two in DDGI too).
+* The roughness sweeps, gold and copper spheres: as SSR where SSR finds its hits on screen.
+* With the maximum at 0.5 the checker strip (roughness 0.6) lost SSR's reflection of the sphere and took the sky's,
+  a bright halo beside it; the default is 0.7, SSR's own range (it fades out from 0.6 to 0.7): the halo is gone.
+* With DDGI, the hits inside the open room take its bounce light instead of the blue ambient.
+* The defaults, and ray tracing with no effect: unchanged (the milestone 16 identity run).
+
+Cost: measured on the RTX (`m16_f231_rt_ab`: one ray per pixel up to the maximum roughness, a shadow ray per lit hit;
+measured with the earlier maximum of 0.5, then `m16_f232` with 0.7).
 
 ## Decision
 
