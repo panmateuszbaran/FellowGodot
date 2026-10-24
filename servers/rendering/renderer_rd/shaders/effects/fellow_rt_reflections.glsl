@@ -48,10 +48,15 @@ layout(set = 0, binding = 0, std140) uniform Params {
 	float max_roughness;
 	float ray_length;
 	uint history_valid;
+	float interleave_roughness; // rougher surfaces: one pixel of each 2 x 2 traced per frame (traced_offset())
 	uint pad0;
-	uint pad1;
 }
 params;
+
+ivec2 traced_offset() {
+	const ivec2 order[4] = ivec2[](ivec2(0, 0), ivec2(1, 1), ivec2(1, 0), ivec2(0, 1));
+	return order[params.frame & 3u];
+}
 
 layout(set = 0, binding = 1) uniform sampler2D depth_buffer;
 layout(set = 0, binding = 2) uniform sampler2D normal_roughness_buffer;
@@ -142,6 +147,10 @@ void main() {
 	vec4 nr = normal_roughness(pos);
 	if (depth == 0.0 || nr.w > params.max_roughness) {
 		imageStore(raw_reflection, pos, vec4(0.0));
+		return;
+	}
+	if (nr.w > params.interleave_roughness && any(notEqual(pos & 1, traced_offset()))) {
+		imageStore(raw_reflection, pos, vec4(0.0, 0.0, 0.0, -1.0)); // not traced this frame (A < 0)
 		return;
 	}
 	vec3 vp = view_position(pos, depth);
@@ -263,9 +272,19 @@ void main() {
 		imageStore(history_out, pos, vec4(0.0));
 		return;
 	}
-	vec3 raw = texelFetch(raw_reflection, pos, 0).rgb;
-	// Mirror-like surfaces take one sample (exact), rougher ones accumulate up to 16 frames.
+	vec4 raw4 = texelFetch(raw_reflection, pos, 0);
+	// Not traced this frame (interleaved): the history, or where it is lost the 2 x 2 block's traced sample.
+	bool fresh = raw4.a >= 0.0;
+	if (!fresh) {
+		raw4 = texelFetch(raw_reflection, min((pos & ~1) + traced_offset(), params.size - 1), 0);
+	}
+	vec3 raw = raw4.rgb;
+	// Mirror-like surfaces take one sample (exact), rougher ones accumulate up to 16 frames (interleaved ones count only
+	// their new samples, up to 8: 32 frames).
 	float max_frames = mix(1.0, 16.0, clamp(nr.w * 4.0, 0.0, 1.0));
+	if (nr.w > params.interleave_roughness) {
+		max_frames = 8.0;
+	}
 	vec3 result = raw;
 	float count = 1.0;
 	if (params.history_valid != 0u && max_frames > 1.0) {
@@ -275,9 +294,14 @@ void main() {
 		if (clip.w > 0.0 && all(greaterThanEqual(prev_uv, vec2(0.0))) && all(lessThanEqual(prev_uv, vec2(1.0)))) {
 			vec4 h = textureLod(history, prev_uv, 0.0);
 			if (h.a > 0.0) {
-				float n = min(h.a, max_frames - 1.0);
-				result = mix(h.rgb, raw, 1.0 / (n + 1.0));
-				count = n + 1.0;
+				if (fresh) {
+					float n = min(h.a, max_frames - 1.0);
+					result = mix(h.rgb, raw, 1.0 / (n + 1.0));
+					count = n + 1.0;
+				} else {
+					result = h.rgb;
+					count = h.a;
+				}
 			}
 		}
 	}

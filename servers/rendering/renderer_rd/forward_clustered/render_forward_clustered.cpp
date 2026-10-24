@@ -4591,6 +4591,7 @@ RID RenderForwardClustered::_fellow_process_rt_reflections(RenderDataRD *p_rende
 	params.sky_factor = lighting.sky_factor;
 	params.sky_xform = lighting.sky_xform;
 	params.history_valid = rbd->fellow_rt_reflection_history;
+	params.interleave_roughness = Fellow::raytracing_reflections_interleaved() ? 0.3f : 1.0f;
 	params.frame = rbd->fellow_rt_reflection_frame;
 	params.max_roughness = CLAMP(Fellow::raytracing_reflections_max_roughness(), 0.0f, 1.0f);
 	params.ray_length = Fellow::raytracing_radius();

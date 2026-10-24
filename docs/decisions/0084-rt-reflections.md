@@ -28,8 +28,13 @@ buffer the opaque colour passes read:
    DDGI's (0083): its diffuse albedo (× (1 − metallic)) × (the sun × N·L / π × a shadow ray + the DDGI volume's
    irradiance, or the environment's ambient light outside it) + its emission. A miss returns the sky's radiance at a
    level that grows with the roughness.
+   Alpha-tested surfaces (0080) are not hit: PBR Lab's grass no longer darkens the chrome sphere's horizon (the rays do
+   not test alpha; as quads the grass would reflect as green blocks).
+   **Interleaved** (`raytracing/reflections_interleaved`, on): surfaces rougher than 0.3 are traced one pixel of each
+   2 × 2 block per frame; the others keep their reprojected history, or where it is lost take the block's new sample
+   (lavapipe, PBR Lab: against tracing every pixel at most 33 levels, 56-60 dB).
 2. **Temporal**: rough surfaces accumulate up to 16 frames at the reprojected position (mirror-like ones take one exact
-   sample).
+   sample; interleaved ones count their new samples only, up to 8).
 3. **Blur**: depth-, normal- and roughness-aware, its radius growing with the roughness (0 to 3 pixels); the weight fades
    out between 80 % of the maximum roughness and the maximum, where the probes and the sky take over.
 

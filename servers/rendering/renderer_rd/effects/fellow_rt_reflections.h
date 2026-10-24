@@ -79,6 +79,8 @@ public:
 		uint32_t frame = 0;
 		float max_roughness = 0.5;
 		float ray_length = 200.0;
+		// Surfaces rougher than this are traced one pixel of each 2 x 2 per frame (the others from history); 1: off.
+		float interleave_roughness = 1.0;
 	};
 
 private:
@@ -108,7 +110,8 @@ private:
 		float max_roughness;
 		float ray_length;
 		uint32_t history_valid;
-		uint32_t pad[2];
+		float interleave_roughness;
+		uint32_t pad;
 	};
 
 	FellowRtReflectionsShaderRD shader;

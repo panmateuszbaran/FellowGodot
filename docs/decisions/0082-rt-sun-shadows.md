@@ -26,7 +26,9 @@ traced):
    are culled**: the ray keeps the faces that face the light, as a shadow map rendered from the light does — a receiver's
    own lit faces never occlude it (no acne, no bias to tune), and a receiver inside a closed mesh is shadowed by its top
    as with the shadow map. The origin is lifted along the geometric normal from the depth buffer; pixels facing away
-   from the light are shadowed without a ray. Alpha-tested casters (0080: non-opaque, mask bit 3) are candidates the
+   from the light by that normal are left to the shadow map (no ray: the normal is unreliable on alpha-tested foliage
+   and at silhouettes, where shadowing them had darkened lit leaves on the RTX; a surface that truly faces away is unlit
+   by N·L anyway). Alpha-tested casters (0080: non-opaque, mask bit 3) are candidates the
    ray notes and passes: a pixel whose ray meets one and no opaque caster is left to the shadow map, which tests their
    alpha (leaves' shadows stay as before, opaque casters' are traced). Shadow casters the scene does not hold (MultiMesh,
    particles, noted by the culler within the radius) make the trace assert shadows only: its lit pixels are left to the

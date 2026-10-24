@@ -96,7 +96,10 @@ void main() {
 	vec3 ng = normalize(mat3(params.view_to_world) * gvn);
 	vec3 l = params.light_direction.xyz;
 	if (dot(ng, l) <= 0.0) {
-		imageStore(raw_shadow, pos, vec4(0.0, 1.0, 0.0, 0.0)); // facing away from the light
+		// Facing away from the light by the depth buffer's normal: no ray (the lifted origin would start inside the
+		// surface). The shadow map decides: that normal is unreliable on alpha-tested foliage and at silhouettes (where it
+		// had darkened lit leaves), and a surface that truly faces away is unlit by N.L anyway.
+		imageStore(raw_shadow, pos, vec4(1.0, 0.0, 0.0, 0.0));
 		return;
 	}
 	vec3 origin = wp + ng * (0.003 + 0.0015 * dist);

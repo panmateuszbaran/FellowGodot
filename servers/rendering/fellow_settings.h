@@ -323,6 +323,9 @@ inline bool raytracing_reflections() {
 inline float raytracing_reflections_max_roughness() {
 	return GLOBAL_GET_CACHED(float, "rendering/fellow/raytracing/reflections_max_roughness");
 }
+inline bool raytracing_reflections_interleaved() {
+	return GLOBAL_GET_CACHED(bool, "rendering/fellow/raytracing/reflections_interleaved");
+}
 // Whether the frame's renderer needs the ray tracing scene (any ray-traced effect on).
 inline bool raytracing_scene_wanted() {
 	return raytracing_ao() || raytracing_sun_shadows() || raytracing_gi() || raytracing_reflections();

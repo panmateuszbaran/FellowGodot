@@ -122,7 +122,8 @@ void FellowRTReflections::process(const Params &p_params) {
 	u.max_roughness = p_params.max_roughness;
 	u.ray_length = p_params.ray_length;
 	u.history_valid = p_params.history_valid ? 1 : 0;
-	u.pad[0] = u.pad[1] = 0;
+	u.interleave_roughness = p_params.interleave_roughness;
+	u.pad = 0;
 	RD::get_singleton()->buffer_update(ubo, 0, sizeof(UBO), &u);
 
 	RD::Uniform u_params(RD::UNIFORM_TYPE_UNIFORM_BUFFER, 0, ubo);

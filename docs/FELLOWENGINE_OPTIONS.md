@@ -66,7 +66,7 @@ Effects that add to the image what a project asks for. Off, they change nothing 
 | `raytracing/ambient_occlusion` (`ao_rays` 2, `ao_interleaved` on) | ray-traced ambient occlusion in place of SSAO, where the environment enables SSAO (its radius, intensity, power); interleaved: a quarter of the pixels traced per frame | 0081 |
 | `raytracing/sun_shadows` (`sun_shadow_rays` 1) | the first directional light's shadow traced per pixel within half the radius (soft over the light's angular size), in place of the shadow map there | 0082 |
 | `raytracing/gi` (`gi_probe_spacing` 2 m, `gi_probes_xz` 24, `gi_probes_y` 8, `gi_rays` 128, `gi_hysteresis` 0.97, `gi_energy` 1, `gi_update_interval` 4) | dynamic diffuse global illumination: a volume of probes around the camera traced continuously (a quarter of the probes per frame; sun, sky, emission, multiple bounces), in place of the ambient light in every colour pass (the opaque passes read it from a screen pass) | 0083 |
-| `raytracing/reflections` (`reflections_max_roughness` 0.7) | where the environment enables SSR, reflections traced against the ray tracing scene instead (surfaces up to the maximum roughness; off-screen and occluded objects reflected, lit by the sun and DDGI) | 0084 |
+| `raytracing/reflections` (`reflections_max_roughness` 0.7, `reflections_interleaved` on) | where the environment enables SSR, reflections traced against the ray tracing scene instead (surfaces up to the maximum roughness; off-screen and occluded objects reflected, lit by the sun and DDGI) | 0084 |
 
 ## Options that change the image (off by default)
 
