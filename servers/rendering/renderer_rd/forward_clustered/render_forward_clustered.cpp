@@ -34,6 +34,7 @@
 
 #include "core/config/engine.h"
 #include "core/config/project_settings.h"
+#include "core/io/file_access.h"
 #include "core/os/os.h"
 #include "servers/rendering/fellow_settings.h"
 #include "servers/rendering/renderer_rd/environment/fog.h"
@@ -4410,7 +4411,7 @@ void RenderForwardClustered::_fellow_process_ddgi(RenderDataRD *p_render_data, c
 		rb->clear_context(scope);
 		const uint32_t usage = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_STORAGE_BIT;
 		rb->create_texture(scope, SNAME("rays"), RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage, RD::TEXTURE_SAMPLES_1, Size2i(counts[3], probes));
-		rb->create_texture(scope, SNAME("irradiance"), RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage | RD::TEXTURE_USAGE_CAN_COPY_TO_BIT, RD::TEXTURE_SAMPLES_1, Size2i(counts[0] * counts[1] * RendererRD::FellowDDGI::IRRADIANCE_TILE, counts[2] * RendererRD::FellowDDGI::IRRADIANCE_TILE));
+		rb->create_texture(scope, SNAME("irradiance"), RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage | RD::TEXTURE_USAGE_CAN_COPY_TO_BIT | RD::TEXTURE_USAGE_CAN_COPY_FROM_BIT, RD::TEXTURE_SAMPLES_1, Size2i(counts[0] * counts[1] * RendererRD::FellowDDGI::IRRADIANCE_TILE, counts[2] * RendererRD::FellowDDGI::IRRADIANCE_TILE));
 		// Every probe inactive (alpha 0) until its first update (one in gi_update_interval per frame).
 		RD::get_singleton()->texture_clear(rb->get_texture(scope, SNAME("irradiance")), Color(0, 0, 0, 0), 0, 1, 0, 1);
 		rb->create_texture(scope, SNAME("distance"), RD::DATA_FORMAT_R16G16_SFLOAT, usage, RD::TEXTURE_SAMPLES_1, Size2i(counts[0] * counts[1] * RendererRD::FellowDDGI::DISTANCE_TILE, counts[2] * RendererRD::FellowDDGI::DISTANCE_TILE));
@@ -4511,6 +4512,33 @@ void RenderForwardClustered::_fellow_process_ddgi(RenderDataRD *p_render_data, c
 	fellow_ddgi->process(params);
 	rbd->fellow_ddgi_frame++;
 	fellow_ddgi_screen = params.screen;
+	const int dump_every = Fellow::raytracing_gi_dump_every();
+	if (dump_every > 0 && rbd->fellow_ddgi_frame % uint32_t(dump_every) == 0) {
+		// Diagnostics: the probes' irradiance atlas and cells, the volume and the camera (a synchronous readback).
+		const Vector<uint8_t> irr = RD::get_singleton()->texture_get_data(params.irradiance, 0);
+		const Vector<uint8_t> cells = RD::get_singleton()->buffer_get_data(rbd->fellow_ddgi_probe_cells);
+		Ref<FileAccess> f = FileAccess::open("user://fellow_ddgi_dump.bin", FileAccess::WRITE);
+		if (f.is_valid()) {
+			f->store_32(0x4644444C); // "LDDF"
+			for (int k = 0; k < 4; k++) {
+				f->store_32(uint32_t(volume.counts[k]));
+			}
+			for (int k = 0; k < 4; k++) {
+				f->store_32(uint32_t(volume.base_cell[k]));
+			}
+			for (int k = 0; k < 4; k++) {
+				f->store_float(volume.spacing[k]);
+			}
+			f->store_float(eye.x);
+			f->store_float(eye.y);
+			f->store_float(eye.z);
+			f->store_32(rbd->fellow_ddgi_frame);
+			f->store_32(uint32_t(irr.size()));
+			f->store_buffer(irr.ptr(), irr.size());
+			f->store_32(uint32_t(cells.size()));
+			f->store_buffer(cells.ptr(), cells.size());
+		}
+	}
 
 	RD::get_singleton()->buffer_update(rbd->fellow_ddgi_ubo, 0, sizeof(RendererRD::FellowDDGI::Volume), &volume);
 	fellow_ddgi_irradiance = params.irradiance;

@@ -309,6 +309,9 @@ inline float raytracing_gi_hysteresis() {
 inline float raytracing_gi_energy() {
 	return GLOBAL_GET_CACHED(float, "rendering/fellow/raytracing/gi_energy");
 }
+inline int raytracing_gi_dump_every() {
+	return GLOBAL_GET_CACHED(int, "rendering/fellow/debug/raytracing_gi_dump_every");
+}
 inline bool raytracing_gi_in_shader() {
 	return GLOBAL_GET_CACHED(bool, "rendering/fellow/debug/raytracing_gi_in_shader");
 }

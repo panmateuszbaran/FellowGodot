@@ -77,6 +77,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/raytracing/reflections_max_roughness", PROPERTY_HINT_RANGE, "0,1,0.01"), 0.7); // SSR's range (it fades out from 0.6 to 0.7)
 	GLOBAL_DEF("rendering/fellow/raytracing/reflections_interleaved", true); // surfaces rougher than 0.3 traced a quarter of the pixels per frame
 	GLOBAL_DEF("rendering/fellow/debug/raytracing_decode_positions", false);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/debug/raytracing_gi_dump_every", PROPERTY_HINT_RANGE, "0,10000,1"), 0); // DDGI probes written to user://fellow_ddgi_dump.bin every n updates (diagnostics; stalls the GPU)
 	GLOBAL_DEF("rendering/fellow/debug/raytracing_gi_in_shader", false); // DDGI looked up by the opaque passes themselves (no screen pass): for comparisons
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/debug/raytracing_view", PROPERTY_HINT_ENUM, "Off,Hit Distance,Depth Match"), 0); // compressed positions decoded even where the device builds from them
 	GLOBAL_DEF("rendering/fellow/animation/elide_modifier_backup", true); // decision 0076 (exact; on from fellow168)
