@@ -386,6 +386,11 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["shadow_cache_cascades_unstable"] = s.shadow_cache_cascades_unstable.get();
 	d["geometry_cluster_surfaces"] = s.geometry_cluster_surfaces.get();
 	d["geometry_cluster_surfaces_active"] = s.geometry_cluster_surfaces_active.get();
+	d["physics_ticks"] = s.physics_ticks.get();
+	d["physics_sync_usec"] = s.physics_sync_usec.get();
+	d["physics_process_usec"] = s.physics_process_usec.get();
+	d["physics_step_usec"] = s.physics_step_usec.get();
+	d["physics_end_usec"] = s.physics_end_usec.get();
 	d["raytracing_instances"] = s.raytracing_instances.get();
 	d["raytracing_multimesh_instances"] = s.raytracing_multimesh_instances.get();
 	d["raytracing_blas_builds"] = s.raytracing_blas_builds.get();

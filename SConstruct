@@ -880,7 +880,9 @@ else:
         if methods.is_apple_clang(env):
             # Apple Clang, its linker doesn't like -s.
             env.AppendUnique(LINKFLAGS=["-Wl,-S", "-Wl,-x", "-Wl,-dead_strip"])
-        else:
+        elif os.environ.get("FELLOW_KEEP_SYMBOLS") != "1":
+            # FellowEngine: FELLOW_KEEP_SYMBOLS=1 keeps the symbol table (function names for a sampling profiler; the
+            # code is the same).
             env.AppendUnique(LINKFLAGS=["-s"])
 
     # Linker needs optimization flags too, at least for Emscripten.

@@ -42,6 +42,7 @@ const SCENES := {
 	"foliage": "res://scenes/foliage_lab.gd",
 	"crowd": "res://scenes/crowd_lab.gd",
 	"particles": "res://scenes/particles_lab.gd",
+	"physics": "res://scenes/physics_lab.gd",
 }
 const DT := 1.0 / 60.0
 
@@ -176,6 +177,8 @@ func _ready() -> void:
 			await _run_temporal(false)
 		"reference":
 			await _run_reference()
+		"physics":
+			await _run_physics()
 		"list":
 			pass
 		"geodump":
@@ -525,6 +528,67 @@ func _save_frame(path: String, hdr: bool = false) -> void:
 func _file_stem() -> String:
 	var r: Array = result["resolution"]
 	return "%s_%dx%d" % [result["scene"], r[0], r[1]]
+
+
+## Milestone 17: the Physics Lab's case simulated for --ticks physics ticks (default 600, after --physics_warm ticks,
+## default 0: a case's whole evolution is the measurement), one tick per frame (--fixed-fps 60, one physics step per
+## frame). Per tick: the frame's time and, where the build has them, the FellowEngine phase counters (sync,
+## physics_process, step, end; their sum is physics_ms; Performance's physics time is a per-second maximum, not per
+## tick); every --hash_every ticks (default 30) the SHA-256 of
+## every moving body's transform (and the queries' results): two builds of one engine simulate the same when their
+## hashes agree tick for tick.
+func _run_physics() -> void:
+	if not scene.has_method("physics_state_bytes"):
+		_fail("mode physics needs the physics scene")
+		return
+	var ticks := int(args.get("ticks", "600"))
+	var warm := int(args.get("physics_warm", "0"))
+	var hash_every := int(args.get("hash_every", "30"))
+	for i in warm:
+		await get_tree().physics_frame
+	var keys := ["physics_ticks", "physics_sync_usec", "physics_process_usec", "physics_step_usec", "physics_end_usec"]
+	var per_tick := {"physics_ms": [], "frame_ms": [], "sync_ms": [], "process_ms": [], "step_ms": [], "end_ms": []}
+	var hashes := []
+	var prev := _fellow_stats()
+	var last := Time.get_ticks_usec()
+	var t0 := last
+	for i in ticks:
+		await get_tree().process_frame # one frame: one physics tick, then the frame's processing and drawing
+		var now := Time.get_ticks_usec()
+		per_tick["frame_ms"].append((now - last) / 1000.0)
+		last = now
+		var fs := _fellow_stats()
+		if fs.has("physics_ticks"):
+			var d := {}
+			for k in ["sync", "process", "step", "end"]:
+				d[k] = (fs.get("physics_%s_usec" % k, 0) - prev.get("physics_%s_usec" % k, 0)) / 1000.0
+				per_tick[k + "_ms"].append(d[k])
+			per_tick["physics_ms"].append(d["sync"] + d["process"] + d["step"] + d["end"])
+			prev = fs
+		if hash_every > 0 and (i + 1) % hash_every == 0:
+			var ctx := HashingContext.new()
+			ctx.start(HashingContext.HASH_SHA256)
+			ctx.update(scene.physics_state_bytes())
+			hashes.append([i + 1, ctx.finish().hex_encode()])
+			last = Time.get_ticks_usec() # the hash is not the frame's
+	var wall := (Time.get_ticks_usec() - t0) / 1e6
+	var summary := {}
+	for k in per_tick.keys():
+		var a: Array = per_tick[k]
+		if a.is_empty():
+			continue
+		var s := a.duplicate()
+		s.sort()
+		var total := 0.0
+		for x in a:
+			total += x
+		summary[k] = {"mean": total / a.size(), "p50": s[s.size() / 2], "p95": s[int(s.size() * 0.95)], "max": s[s.size() - 1], "total": total}
+	result["physics"] = {"ticks": ticks, "warm": warm, "wall_s": wall, "summary": summary, "per_tick": per_tick, "hashes": hashes,
+		"counters": scene.physics_counters(), "engine": ProjectSettings.get_setting("physics/3d/physics_engine"),
+		"threads": OS.get_processor_count()}
+	_log("physics: %d ticks, frame %.3f ms, physics %.3f ms/tick (step %.3f, sync %.3f, process %.3f), final hash %s" % [ticks,
+		summary["frame_ms"]["mean"], summary.get("physics_ms", {}).get("mean", -1.0), summary.get("step_ms", {}).get("mean", -1.0), summary.get("sync_ms", {}).get("mean", -1.0),
+		summary.get("process_ms", {}).get("mean", -1.0), hashes[-1][1] if hashes.size() else "-"])
 
 
 ## Diagnostic (lavapipe determinism): one fixed camera, then --repeat frames saved one after another.

@@ -78,6 +78,7 @@
 #include "servers/movie_writer/movie_writer.h"
 #include "servers/register_server_types.h"
 #include "servers/rendering/fellow_parallel.h"
+#include "servers/rendering/fellow_settings.h"
 #include "servers/rendering/rendering_device.h"
 #include "servers/rendering/rendering_server.h"
 #include "servers/rendering/rendering_server_default.h"
@@ -4991,6 +4992,8 @@ bool Main::iteration() {
 		GodotProfileZoneGrouped(_physics_zone, "main loop iteration prepare");
 		OS::get_singleton()->get_main_loop()->iteration_prepare();
 
+		// FellowEngine (milestone 17): the tick's phases timed into the stats.
+		const uint64_t fellow_sync_begin = OS::get_singleton()->get_ticks_usec();
 #ifndef PHYSICS_3D_DISABLED
 		GodotProfileZoneGrouped(_physics_zone, "PhysicsServer3D::sync");
 		PhysicsServer3D::get_singleton()->sync();
@@ -5003,6 +5006,8 @@ bool Main::iteration() {
 		PhysicsServer2D::get_singleton()->flush_queries();
 #endif // PHYSICS_2D_DISABLED
 
+		const uint64_t fellow_process_begin = OS::get_singleton()->get_ticks_usec();
+		Fellow::stats().physics_sync_usec.add(fellow_process_begin - fellow_sync_begin);
 		GodotProfileZoneGrouped(_physics_zone, "physics_process");
 		if (OS::get_singleton()->get_main_loop()->physics_process(physics_step * time_scale)) {
 #ifndef PHYSICS_3D_DISABLED
@@ -5035,6 +5040,8 @@ bool Main::iteration() {
 		message_queue->flush();
 #endif // !defined(NAVIGATION_2D_DISABLED) || !defined(NAVIGATION_3D_DISABLED)
 
+		const uint64_t fellow_step_begin = OS::get_singleton()->get_ticks_usec();
+		Fellow::stats().physics_process_usec.add(fellow_step_begin - fellow_process_begin);
 #ifndef PHYSICS_3D_DISABLED
 		GodotProfileZoneGrouped(_profile_zone, "3D physics");
 		PhysicsServer3D::get_singleton()->end_sync();
@@ -5047,10 +5054,14 @@ bool Main::iteration() {
 		PhysicsServer2D::get_singleton()->step(physics_step * time_scale);
 #endif // PHYSICS_2D_DISABLED
 
+		const uint64_t fellow_end_begin = OS::get_singleton()->get_ticks_usec();
+		Fellow::stats().physics_step_usec.add(fellow_end_begin - fellow_step_begin);
 		message_queue->flush();
 
 		GodotProfileZoneGrouped(_profile_zone, "main loop iteration end");
 		OS::get_singleton()->get_main_loop()->iteration_end();
+		Fellow::stats().physics_end_usec.add(OS::get_singleton()->get_ticks_usec() - fellow_end_begin);
+		Fellow::stats().physics_ticks.increment();
 
 		physics_process_ticks = MAX(physics_process_ticks, OS::get_singleton()->get_ticks_usec() - physics_begin); // keep the largest one for reference
 		physics_process_max = MAX(OS::get_singleton()->get_ticks_usec() - physics_begin, physics_process_max);

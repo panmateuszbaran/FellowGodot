@@ -1081,6 +1081,12 @@ inline bool adaptive_vrs_gloss_guard() {
 
 // Cumulative counters (render thread writes, scripts read through RenderingServer.fellow_get_stats()).
 struct Stats {
+	// Milestone 17: the main loop's physics tick by phase (microseconds, summed over ticks; Main::iteration).
+	SafeNumeric<uint64_t> physics_ticks;
+	SafeNumeric<uint64_t> physics_sync_usec; // PhysicsServer3D::sync() and flush_queries(): bodies' state to their nodes
+	SafeNumeric<uint64_t> physics_process_usec; // the scene's _physics_process() (and navigation)
+	SafeNumeric<uint64_t> physics_step_usec; // PhysicsServer3D::end_sync() and step(): the simulation
+	SafeNumeric<uint64_t> physics_end_usec; // the message queue's flush and iteration_end()
 	SafeNumeric<uint64_t> shadow_cache_cascades_stock;
 	SafeNumeric<uint64_t> shadow_cache_cascades_fallback;
 	SafeNumeric<uint64_t> shadow_cache_cascades_cached;
