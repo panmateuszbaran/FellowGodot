@@ -13,8 +13,10 @@
 // ray tracing scene (decision 0080, its shadow casters). The opaque colour pass reads the result in place of the shadow
 // map lookup where it is valid (within half the ray tracing radius of the camera); elsewhere the shadow map is used.
 //
-// MODE_TRACE: the rays; x the fraction that reach the light, y 1 where the result is valid.
-// MODE_TEMPORAL: (soft shadows only) the trace blended with the previous frames' result at the reprojected position.
+// MODE_TRACE: the rays; x the fraction that reach the light, y 1 where the result is valid. Interleaved
+// (raytracing/sun_shadows_interleaved): one pixel of each 2 x 2 block per frame.
+// MODE_TEMPORAL: soft shadows: the trace blended with the previous frames' result at the reprojected position;
+// interleaved, the pixels not traced keep that history, clamped to the range of the traced neighbours.
 // MODE_DENOISE: (soft shadows only) a depth-aware 3 x 3 blur; hard shadows are written as traced.
 
 #define MAX_HISTORY 12.0
@@ -32,9 +34,19 @@ layout(set = 0, binding = 0, std140) uniform Params {
 	float max_distance; // valid within this distance of the camera
 	float ray_length;
 	uint history_valid;
-	uint missing_casters; // 1: shadow casters not in the scene (MultiMesh, particles): lit pixels are the shadow map's
+	uint missing_casters; // 1: shadow casters not in the scene (particles, ...): lit pixels are the shadow map's
+	uint interleave; // 1: every pixel traced; 4: one pixel of each 2 x 2 per frame (traced_offset()), the others from history
+	uint pad0;
+	uint pad1;
+	uint pad2;
 }
 params;
+
+// With interleave 4, the pixel of each 2 x 2 block traced this frame: all four in four frames (as RTAO's).
+ivec2 traced_offset() {
+	const ivec2 order[4] = ivec2[](ivec2(0, 0), ivec2(1, 1), ivec2(1, 0), ivec2(0, 1));
+	return order[params.frame & 3u];
+}
 
 layout(set = 0, binding = 1) uniform sampler2D depth_buffer;
 
@@ -61,6 +73,9 @@ uint hash(uint p_x) {
 
 void main() {
 	ivec2 pos = ivec2(gl_GlobalInvocationID.xy);
+	if (params.interleave == 4u) {
+		pos = pos * 2 + traced_offset();
+	}
 	if (any(greaterThanEqual(pos, params.size))) {
 		return;
 	}
@@ -154,28 +169,61 @@ void main() {
 #elif defined(MODE_TEMPORAL)
 
 layout(set = 0, binding = 3) uniform sampler2D raw_shadow;
-layout(set = 0, binding = 4) uniform sampler2D history; // x: shadow, y: frames accumulated, z: the view depth it is for
+layout(set = 0, binding = 4) uniform sampler2D history; // x: shadow, y: frames accumulated, z: the view depth it is for, w: valid
 layout(rgba16f, set = 0, binding = 5) uniform restrict writeonly image2D history_out;
+
+// Interleaved: the range of this frame's valid samples in the 3 x 3 blocks around the pixel's (x: min, y: max; min >
+// max where there is none). History is clamped to it: a shadow that moved updates within a frame where the traced
+// neighbours agree, and keeps its accumulated edge where they do not.
+vec2 fresh_range(ivec2 p_pos) {
+	vec2 range = vec2(1.0, 0.0);
+	ivec2 block = p_pos >> 1;
+	for (int y = -1; y <= 1; y++) {
+		for (int x = -1; x <= 1; x++) {
+			ivec2 q = (block + ivec2(x, y)) * 2 + traced_offset();
+			if (any(lessThan(q, ivec2(0))) || any(greaterThanEqual(q, params.size))) {
+				continue;
+			}
+			vec2 s = texelFetch(raw_shadow, q, 0).xy;
+			if (s.y > 0.5) {
+				range = vec2(min(range.x, s.x), max(range.y, s.x));
+			}
+		}
+	}
+	return range;
+}
 
 void main() {
 	ivec2 pos = ivec2(gl_GlobalInvocationID.xy);
 	if (any(greaterThanEqual(pos, params.size))) {
 		return;
 	}
-	vec2 raw = texelFetch(raw_shadow, pos, 0).xy;
 	float depth = texelFetch(depth_buffer, pos, 0).r;
-	if (depth == 0.0 || raw.y < 0.5 || params.light_direction.w == 0.0) {
-		// Hard shadows: one exact ray, nothing to accumulate.
-		if (raw.y > 0.5) {
-			imageStore(history_out, pos, vec4(raw.x, 1.0, -view_position(pos, depth).z, 1.0));
-			return;
-		}
-		imageStore(history_out, pos, vec4(raw.x, 1.0, 0.0, raw.y));
+	if (depth == 0.0) {
+		imageStore(history_out, pos, vec4(1.0, 1.0, 0.0, 0.0)); // the sky
 		return;
 	}
 	vec3 vp = view_position(pos, depth);
-	float shadow = raw.x;
-	float count = 1.0;
+	float view_depth = -vp.z;
+	bool interleaved = params.interleave == 4u;
+	bool fresh = !interleaved || all(equal(pos & 1, traced_offset()));
+	vec2 raw = vec2(1.0, 0.0);
+	if (fresh) {
+		raw = texelFetch(raw_shadow, pos, 0).xy;
+		if (raw.y < 0.5 || (params.light_direction.w == 0.0 && !interleaved)) {
+			// Invalid (the shadow map's), or hard shadows traced every frame: one exact ray, nothing to accumulate.
+			imageStore(history_out, pos, vec4(raw.x, 1.0, view_depth, raw.y));
+			return;
+		}
+	} else if (length(vp) > params.max_distance) {
+		imageStore(history_out, pos, vec4(1.0, 1.0, view_depth, 0.0)); // beyond the traced range
+		return;
+	}
+	// The history at the reprojected position: the four texels around it kept where they were at the expected depth,
+	// valid and invalid ones weighed apart.
+	vec2 hist = vec2(0.0);
+	float valid_w = 0.0;
+	float invalid_w = 0.0;
 	if (params.history_valid != 0u) {
 		vec3 wp = (params.view_to_world * vec4(vp, 1.0)).xyz;
 		vec4 clip = params.world_to_prev_clip * vec4(wp, 1.0);
@@ -185,27 +233,56 @@ void main() {
 			ivec2 base = ivec2(floor(p));
 			vec2 f = p - vec2(base);
 			float expected = clip.w;
-			vec2 sum = vec2(0.0);
-			float wsum = 0.0;
 			for (int j = 0; j < 4; j++) {
 				ivec2 o = ivec2(j & 1, j >> 1);
 				ivec2 q = clamp(base + o, ivec2(0), params.size - 1);
 				vec4 h = texelFetch(history, q, 0);
 				float w = (o.x == 1 ? f.x : 1.0 - f.x) * (o.y == 1 ? f.y : 1.0 - f.y);
-				if (h.w > 0.5 && abs(h.z - expected) <= 0.03 * expected + 0.01) {
-					sum += h.xy * w;
-					wsum += w;
+				if (abs(h.z - expected) > 0.03 * expected + 0.01) {
+					continue;
 				}
-			}
-			if (wsum > 0.001) {
-				vec2 h = sum / wsum;
-				float n = min(h.y, MAX_HISTORY - 1.0);
-				shadow = mix(h.x, shadow, 1.0 / (n + 1.0));
-				count = n + 1.0;
+				if (h.w > 0.5) {
+					hist += h.xy * w;
+					valid_w += w;
+				} else {
+					invalid_w += w;
+				}
 			}
 		}
 	}
-	imageStore(history_out, pos, vec4(shadow, count, -vp.z, 1.0));
+	vec2 range = interleaved ? fresh_range(pos) : vec2(1.0, 0.0);
+	if (fresh) {
+		// A new sample: blended into the history (soft shadows), which holds as many frames' worth as without
+		// interleaving (a new sample every fourth frame).
+		float shadow = raw.x;
+		float count = 1.0;
+		if (valid_w > 0.001 && params.light_direction.w > 0.0) {
+			vec2 h = hist / valid_w;
+			if (range.x <= range.y) {
+				h.x = clamp(h.x, range.x, range.y);
+			}
+			float n = min(h.y, MAX_HISTORY / float(params.interleave) - 1.0);
+			shadow = mix(h.x, shadow, 1.0 / (n + 1.0));
+			count = n + 1.0;
+		}
+		imageStore(history_out, pos, vec4(shadow, count, view_depth, 1.0));
+		return;
+	}
+	// Not traced this frame: the history clamped to the traced neighbours, or where it is lost the block's new sample.
+	if (invalid_w > valid_w) {
+		imageStore(history_out, pos, vec4(1.0, 1.0, view_depth, 0.0)); // it was the shadow map's
+		return;
+	}
+	if (valid_w > 0.001) {
+		vec2 h = hist / valid_w;
+		if (range.x <= range.y) {
+			h.x = clamp(h.x, range.x, range.y);
+		}
+		imageStore(history_out, pos, vec4(h.x, h.y, view_depth, 1.0));
+		return;
+	}
+	vec2 s = texelFetch(raw_shadow, min((pos & ~1) + traced_offset(), params.size - 1), 0).xy;
+	imageStore(history_out, pos, vec4(s.x, 1.0, view_depth, s.y));
 }
 
 #else // MODE_DENOISE

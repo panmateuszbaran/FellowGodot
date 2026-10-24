@@ -4375,9 +4375,10 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 				if (!inst->visible || !(inst->layer_mask & visible_layers)) {
 					return false;
 				}
-				if (inst->base_type != RSE::INSTANCE_MESH) {
-					// Not in the scene (MultiMesh, particles): noted when it casts shadows.
-					if (inst->cast_shadows != RSE::SHADOW_CASTING_SETTING_OFF && (inst->base_type == RSE::INSTANCE_MULTIMESH || inst->base_type == RSE::INSTANCE_PARTICLES)) {
+				if (inst->base_type != RSE::INSTANCE_MESH && inst->base_type != RSE::INSTANCE_MULTIMESH) {
+					// Not in the scene (particles): noted when it casts shadows. MultiMesh instances the renderer adds
+					// from their transforms (or notes when it cannot).
+					if (inst->cast_shadows != RSE::SHADOW_CASTING_SETTING_OFF && inst->base_type == RSE::INSTANCE_PARTICLES) {
 						missing_shadow_casters = true;
 					}
 					return false;

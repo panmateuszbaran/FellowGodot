@@ -60,11 +60,14 @@ void Fellow::register_settings() {
 	GLOBAL_DEF_RST("rendering/fellow/raytracing/enabled", false);
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/raytracing/radius", PROPERTY_HINT_RANGE, "10,5000,1,suffix:m"), 200.0);
 	GLOBAL_DEF("rendering/fellow/raytracing/skinned", true); // skinned and blend shape meshes rebuilt when they change
+	GLOBAL_DEF("rendering/fellow/raytracing/multimesh", true); // MultiMesh instances in the scene (decision 0080)
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/raytracing/multimesh_min_angle", PROPERTY_HINT_RANGE, "0,10,0.05,suffix:°"), 1.0); // MultiMesh instances smaller than this seen from the camera left out (as Unreal's r.RayTracing.Culling.Angle)
 	GLOBAL_DEF("rendering/fellow/raytracing/ambient_occlusion", false); // decision 0081: RTAO in place of SSAO
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/raytracing/ao_rays", PROPERTY_HINT_RANGE, "1,16,1"), 2);
 	GLOBAL_DEF("rendering/fellow/raytracing/ao_interleaved", true); // a quarter of the pixels traced per frame, the others from history
 	GLOBAL_DEF("rendering/fellow/raytracing/sun_shadows", false); // decision 0082: the first directional light's shadow traced
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/raytracing/sun_shadow_rays", PROPERTY_HINT_RANGE, "1,16,1"), 1); // per pixel and frame (soft shadows)
+	GLOBAL_DEF("rendering/fellow/raytracing/sun_shadows_interleaved", true); // a quarter of the pixels traced per frame, the others from history clamped to the traced neighbours
 	GLOBAL_DEF("rendering/fellow/raytracing/gi", false); // decision 0083: DDGI probes in place of the ambient light
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/raytracing/gi_probe_spacing", PROPERTY_HINT_RANGE, "0.25,16,0.05,suffix:m"), 2.0);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/raytracing/gi_probes_xz", PROPERTY_HINT_RANGE, "4,64,1"), 24);
@@ -74,11 +77,13 @@ void Fellow::register_settings() {
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/raytracing/gi_energy", PROPERTY_HINT_RANGE, "0,4,0.01"), 1.0);
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/raytracing/gi_sky_leak", PROPERTY_HINT_RANGE, "0,1,0.01"), 0.1); // the share of the ambient light kept where the probes are dark (Lumen's "skylight leaking")
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/raytracing/gi_update_interval", PROPERTY_HINT_RANGE, "1,8,1"), 4); // frames between a probe's updates (a share of the probes traced per frame)
+	GLOBAL_DEF("rendering/fellow/raytracing/gi_probe_relocation", true); // probes moved out of geometry and away from surfaces (within their cell)
 	GLOBAL_DEF("rendering/fellow/raytracing/reflections", false); // decision 0084: traced reflections in place of SSR
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/raytracing/reflections_max_roughness", PROPERTY_HINT_RANGE, "0,1,0.01"), 0.7); // SSR's range (it fades out from 0.6 to 0.7)
 	GLOBAL_DEF("rendering/fellow/raytracing/reflections_interleaved", true); // surfaces rougher than 0.3 traced a quarter of the pixels per frame
 	GLOBAL_DEF("rendering/fellow/debug/raytracing_decode_positions", false);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/debug/raytracing_gi_dump_every", PROPERTY_HINT_RANGE, "0,10000,1"), 0); // DDGI probes written to user://fellow_ddgi_dump.bin every n updates (diagnostics; stalls the GPU)
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/debug/raytracing_gi_reference", PROPERTY_HINT_RANGE, "0,16,1"), 0); // n > 0: a path traced per pixel (n bounces, accumulated while the camera stands still) in place of the probes' irradiance: a reference for DDGI
 	GLOBAL_DEF("rendering/fellow/debug/raytracing_gi_in_shader", false); // DDGI looked up by the opaque passes themselves (no screen pass): for comparisons
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/debug/raytracing_view", PROPERTY_HINT_ENUM, "Off,Hit Distance,Depth Match"), 0); // compressed positions decoded even where the device builds from them
 	GLOBAL_DEF("rendering/fellow/animation/elide_modifier_backup", true); // decision 0076 (exact; on from fellow168)
@@ -381,7 +386,9 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["geometry_cluster_surfaces"] = s.geometry_cluster_surfaces.get();
 	d["geometry_cluster_surfaces_active"] = s.geometry_cluster_surfaces_active.get();
 	d["raytracing_instances"] = s.raytracing_instances.get();
+	d["raytracing_multimesh_instances"] = s.raytracing_multimesh_instances.get();
 	d["raytracing_blas_builds"] = s.raytracing_blas_builds.get();
+	d["raytracing_albedo_textures"] = s.raytracing_albedo_textures.get();
 	d["raytracing_build_usec"] = s.raytracing_build_usec.get();
 	d["raytracing_tlas_usec"] = s.raytracing_tlas_usec.get();
 	d["geometry_cluster_surfaces_dropped"] = s.geometry_cluster_surfaces_dropped.get();

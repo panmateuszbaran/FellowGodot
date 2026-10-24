@@ -1933,6 +1933,7 @@ void MeshStorage::_multimesh_allocate_data(RID p_multimesh, int p_instances, RSE
 		multimesh->buffer = RD::get_singleton()->storage_buffer_create(buffer_size);
 	}
 	multimesh->fellow_data_version++;
+	multimesh->fellow_rt_buffer = Vector<float>();
 
 	multimesh->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_MULTIMESH);
 }
@@ -2471,6 +2472,9 @@ void MeshStorage::_multimesh_set_buffer(RID p_multimesh, const Vector<float> &p_
 		}
 		multimesh->buffer_set = true;
 		multimesh->fellow_data_version++;
+		if (multimesh->data_cache.is_empty() && Fellow::raytracing_active()) {
+			multimesh->fellow_rt_buffer = p_buffer; // the ray tracing scene's transforms (decision 0080)
+		}
 	}
 
 	if (multimesh->data_cache.size()) {
@@ -2498,6 +2502,50 @@ RID MeshStorage::_multimesh_get_buffer_rd_rid(RID p_multimesh) const {
 	MultiMesh *multimesh = multimesh_owner.get_or_null(p_multimesh);
 	ERR_FAIL_NULL_V(multimesh, RID());
 	return multimesh->buffer;
+}
+
+bool MeshStorage::fellow_multimesh_get_rt_data(RID p_multimesh, FellowMultimeshRTData &r_data) {
+	MultiMesh *multimesh = multimesh_owner.get_or_null(p_multimesh);
+	if (multimesh == nullptr || multimesh->xform_format != RSE::MULTIMESH_TRANSFORM_3D || multimesh->indirect || multimesh->mesh.is_null()) {
+		return false;
+	}
+	Mesh *mesh = mesh_owner.get_or_null(multimesh->mesh);
+	if (mesh == nullptr) {
+		return false;
+	}
+	const uint32_t stride = multimesh->stride_cache;
+	const float *data = nullptr;
+	if (!multimesh->data_cache.is_empty()) {
+		data = multimesh->data_cache.ptr() + multimesh->motion_vectors_current_offset * stride;
+	} else if (multimesh->fellow_rt_buffer.size() == int64_t(multimesh->instances) * stride) {
+		data = multimesh->fellow_rt_buffer.ptr();
+	} else if (multimesh->instances > 0 && multimesh->buffer_set) {
+		return false; // set before ray tracing was decided, or GPU-written
+	}
+	r_data.count = multimesh->visible_instances >= 0 ? uint32_t(MIN(multimesh->visible_instances, multimesh->instances)) : uint32_t(multimesh->instances);
+	if (data == nullptr) {
+		r_data.count = 0; // never set: every transform zero
+	}
+	r_data.data = data;
+	r_data.stride = stride;
+	r_data.mesh = multimesh->mesh;
+	r_data.mesh_aabb = mesh->aabb;
+	if (multimesh->fellow_rt_scale_version != multimesh->fellow_data_version || multimesh->fellow_rt_scale_count != r_data.count) {
+		// The largest axis scale, scanned again when the data changed (it bounds the instances' size from the mesh's).
+		float max2 = 0.0f;
+		for (uint32_t i = 0; i < r_data.count; i++) {
+			const float *x = data + i * stride;
+			const float sx = x[0] * x[0] + x[4] * x[4] + x[8] * x[8];
+			const float sy = x[1] * x[1] + x[5] * x[5] + x[9] * x[9];
+			const float sz = x[2] * x[2] + x[6] * x[6] + x[10] * x[10];
+			max2 = MAX(max2, MAX(sx, MAX(sy, sz)));
+		}
+		multimesh->fellow_rt_max_scale = Math::sqrt(max2);
+		multimesh->fellow_rt_scale_version = multimesh->fellow_data_version;
+		multimesh->fellow_rt_scale_count = r_data.count;
+	}
+	r_data.max_scale = multimesh->fellow_rt_max_scale;
+	return true;
 }
 
 Vector<float> MeshStorage::_multimesh_get_buffer(RID p_multimesh) const {

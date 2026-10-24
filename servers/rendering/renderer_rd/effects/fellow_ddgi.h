@@ -50,7 +50,7 @@ public:
 		int32_t base_cell[4] = { 0, 0, 0, 0 }; // w 1: holds data
 		float spacing[4] = { 1.0, 0.0, 0.0, 1.0 }; // spacing, normal bias, view bias, energy
 		float atlas_inv_size[4] = { 1.0, 1.0, 1.0, 1.0 };
-		float shading[4] = { 0.0, 0.0, 0.0, 0.0 }; // sky leak
+		float shading[4] = { 0.0, 0.0, 0.0, 0.0 }; // sky leak, 1: probes relocated
 	};
 
 	struct Params {
@@ -91,10 +91,16 @@ public:
 		Size2i screen_size;
 		Projection inv_projection; // NDC (x, y, depth * 2 - 1) to view
 		Transform3D view_to_world;
+		// The path-traced reference (debug/raytracing_gi_reference) in place of the screen pass: bounces > 0.
+		int reference_bounces = 0;
+		RID reference_accumulation; // RGBA32F, the screen's size
+		bool reference_restart = false;
 	};
 
 	static constexpr int IRRADIANCE_TILE = 8; // as fellow_ddgi_inc.glsl
 	static constexpr int DISTANCE_TILE = 16;
+	// The distance atlas: the tiles, then a strip of counts.z rows holding the probes' offsets (relocation).
+	static int distance_atlas_height(int p_counts_z) { return p_counts_z * DISTANCE_TILE + p_counts_z; }
 
 private:
 	enum Mode {
@@ -105,6 +111,10 @@ private:
 		MODE_DISTANCE,
 		MODE_IRRADIANCE,
 		MODE_SCREEN,
+		MODE_REFERENCE,
+		MODE_REFERENCE_FETCH,
+		MODE_REFERENCE_ARRAY,
+		MODE_REFERENCE_FETCH_ARRAY,
 		MODE_MAX,
 	};
 
@@ -121,7 +131,7 @@ private:
 		int32_t frame[4];
 		float inv_projection[16];
 		float view_to_world[16];
-		int32_t screen[4]; // xy size
+		int32_t screen[4]; // xy size, z the reference's bounces
 	};
 
 	FellowDdgiShaderRD shader;

@@ -46,11 +46,17 @@ FellowDDGI::FellowDDGI() {
 	modes.push_back("\n#define MODE_DISTANCE\n");
 	modes.push_back("\n#define MODE_IRRADIANCE\n");
 	modes.push_back("\n#define MODE_SCREEN\n");
+	modes.push_back("\n#define MODE_REFERENCE\n");
+	modes.push_back("\n#define MODE_REFERENCE\n#define FELLOW_POSITION_FETCH\n");
+	modes.push_back("\n#define MODE_REFERENCE\n#define FELLOW_RADIANCE_ARRAY\n");
+	modes.push_back("\n#define MODE_REFERENCE\n#define FELLOW_POSITION_FETCH\n#define FELLOW_RADIANCE_ARRAY\n");
 	shader.initialize(modes);
 	position_fetch = RD::get_singleton()->fellow_ray_position_fetch_supported();
 	if (!position_fetch) {
 		shader.set_variant_enabled(MODE_TRACE_FETCH, false);
 		shader.set_variant_enabled(MODE_TRACE_FETCH_ARRAY, false);
+		shader.set_variant_enabled(MODE_REFERENCE_FETCH, false);
+		shader.set_variant_enabled(MODE_REFERENCE_FETCH_ARRAY, false);
 	}
 	shader_version = shader.version_create();
 	for (int i = 0; i < MODE_MAX; i++) {
@@ -123,13 +129,14 @@ void FellowDDGI::process(const Params &p_params) {
 	u.frame[0] = int32_t(p_params.frame);
 	u.frame[1] = int32_t(interval);
 	u.frame[2] = int32_t(p_params.frame % interval); // this frame's probes: index % interval == phase
-	u.frame[3] = 0;
+	u.frame[3] = p_params.reference_restart ? 1 : 0;
 	const int32_t updated = (probes + int32_t(interval) - 1) / int32_t(interval);
 	RendererRD::MaterialStorage::store_camera(p_params.inv_projection, u.inv_projection);
 	RendererRD::MaterialStorage::store_transform(p_params.view_to_world, u.view_to_world);
 	u.screen[0] = p_params.screen_size.x;
 	u.screen[1] = p_params.screen_size.y;
-	u.screen[2] = u.screen[3] = 0;
+	u.screen[2] = p_params.reference_bounces;
+	u.screen[3] = 0;
 	RD::get_singleton()->buffer_update(ubo, 0, sizeof(UBO), &u);
 
 	RD::Uniform u_params(RD::UNIFORM_TYPE_UNIFORM_BUFFER, 0, ubo);
@@ -184,7 +191,34 @@ void FellowDDGI::process(const Params &p_params) {
 		RD::get_singleton()->compute_list_dispatch(list, probes, 1, 1);
 		RD::get_singleton()->compute_list_end();
 	}
-	if (p_params.screen.is_valid()) {
+	if (p_params.screen.is_valid() && p_params.reference_bounces > 0 && p_params.reference_accumulation.is_valid()) {
+		Mode mode = MODE_REFERENCE;
+		if (p_params.radiance_array && sky) {
+			mode = position_fetch ? MODE_REFERENCE_FETCH_ARRAY : MODE_REFERENCE_ARRAY;
+		} else {
+			mode = position_fetch ? MODE_REFERENCE_FETCH : MODE_REFERENCE;
+		}
+		RID radiance = sky ? p_params.radiance : RID();
+		if (radiance.is_null()) {
+			TextureStorage *ts = TextureStorage::get_singleton();
+			radiance = ts->texture_rd_get_default((mode == MODE_REFERENCE_ARRAY || mode == MODE_REFERENCE_FETCH_ARRAY) ? TextureStorage::DEFAULT_RD_TEXTURE_2D_ARRAY_BLACK : TextureStorage::DEFAULT_RD_TEXTURE_BLACK);
+		}
+		RD::ComputeListID list = RD::get_singleton()->compute_list_begin();
+		RID shader_rd = shader.version_get_shader(shader_version, mode);
+		RD::get_singleton()->compute_list_bind_compute_pipeline(list, pipelines[mode]);
+		RID nearest = material_storage->sampler_rd_get_default(RSE::CANVAS_ITEM_TEXTURE_FILTER_NEAREST, RSE::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
+		RD::Uniform u_depth(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 1, Vector<RID>({ nearest, p_params.depth }));
+		RD::Uniform u_nr(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 2, Vector<RID>({ nearest, p_params.normal_roughness }));
+		RD::Uniform u_tlas(RD::UNIFORM_TYPE_ACCELERATION_STRUCTURE, 3, p_params.tlas);
+		RD::Uniform u_sampler(RD::UNIFORM_TYPE_SAMPLER, 4, linear);
+		RD::Uniform u_inst(RD::UNIFORM_TYPE_STORAGE_BUFFER, 5, p_params.instances);
+		RD::Uniform u_rad(RD::UNIFORM_TYPE_TEXTURE, 6, radiance);
+		RD::Uniform u_acc(RD::UNIFORM_TYPE_IMAGE, 7, p_params.reference_accumulation);
+		RD::Uniform u_dest(RD::UNIFORM_TYPE_IMAGE, 8, p_params.screen);
+		RD::get_singleton()->compute_list_bind_uniform_set(list, uniform_set_cache->get_cache(shader_rd, 0, u_params, u_depth, u_nr, u_tlas, u_sampler, u_inst, u_rad, u_acc, u_dest), 0);
+		RD::get_singleton()->compute_list_dispatch_threads(list, p_params.screen_size.x, p_params.screen_size.y, 1);
+		RD::get_singleton()->compute_list_end();
+	} else if (p_params.screen.is_valid()) {
 		RD::ComputeListID list = RD::get_singleton()->compute_list_begin();
 		RID shader_rd = shader.version_get_shader(shader_version, MODE_SCREEN);
 		RD::get_singleton()->compute_list_bind_compute_pipeline(list, pipelines[MODE_SCREEN]);

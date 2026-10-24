@@ -259,6 +259,14 @@ inline float raytracing_radius() {
 inline bool raytracing_skinned() {
 	return GLOBAL_GET_CACHED(bool, "rendering/fellow/raytracing/skinned");
 }
+// raytracing/multimesh: MultiMesh instances in the scene, those whose bounding sphere is seen from the camera under
+// at least raytracing/multimesh_min_angle degrees (the transforms read on the CPU; decision 0080).
+inline bool raytracing_multimesh() {
+	return GLOBAL_GET_CACHED(bool, "rendering/fellow/raytracing/multimesh");
+}
+inline float raytracing_multimesh_min_angle() {
+	return GLOBAL_GET_CACHED(float, "rendering/fellow/raytracing/multimesh_min_angle");
+}
 // debug/raytracing_view: RTAO's buffer shows the ray tracing scene from the camera instead (1: hit distances, 2: where it
 // matches the depth buffer); with the viewport's SSAO debug draw.
 inline int raytracing_debug_view() {
@@ -286,6 +294,9 @@ inline bool raytracing_sun_shadows() {
 inline int raytracing_sun_shadow_rays() {
 	return GLOBAL_GET_CACHED(int, "rendering/fellow/raytracing/sun_shadow_rays");
 }
+inline bool raytracing_sun_shadows_interleaved() {
+	return GLOBAL_GET_CACHED(bool, "rendering/fellow/raytracing/sun_shadows_interleaved");
+}
 // raytracing/gi (decision 0083): a volume of irradiance probes around the camera, traced every frame, read by the colour
 // passes in place of the environment's ambient light.
 inline bool raytracing_gi() {
@@ -312,6 +323,9 @@ inline float raytracing_gi_energy() {
 inline int raytracing_gi_dump_every() {
 	return GLOBAL_GET_CACHED(int, "rendering/fellow/debug/raytracing_gi_dump_every");
 }
+inline int raytracing_gi_reference() {
+	return GLOBAL_GET_CACHED(int, "rendering/fellow/debug/raytracing_gi_reference");
+}
 inline bool raytracing_gi_in_shader() {
 	return GLOBAL_GET_CACHED(bool, "rendering/fellow/debug/raytracing_gi_in_shader");
 }
@@ -320,6 +334,9 @@ inline float raytracing_gi_sky_leak() {
 }
 inline int raytracing_gi_update_interval() {
 	return GLOBAL_GET_CACHED(int, "rendering/fellow/raytracing/gi_update_interval");
+}
+inline bool raytracing_gi_probe_relocation() {
+	return GLOBAL_GET_CACHED(bool, "rendering/fellow/raytracing/gi_probe_relocation");
 }
 // raytracing/reflections (decision 0084): where the environment enables SSR, a traced reflection per pixel up to
 // reflections_max_roughness in place of SSR (and of the probes' and the sky's specular light there).
@@ -1076,7 +1093,9 @@ struct Stats {
 	SafeNumeric<uint64_t> shadow_cache_cascades_uneconomic; // stock because the cache would cost more than it saves
 	SafeNumeric<uint64_t> shadow_cache_cascades_unstable; // stock because the cascade's texel size is changing (zoom)
 	SafeNumeric<uint64_t> raytracing_instances; // ray tracing scene instances built (decision 0080), summed over frames
+	SafeNumeric<uint64_t> raytracing_multimesh_instances; // of which MultiMesh instances (each with all its surfaces once)
 	SafeNumeric<uint64_t> raytracing_blas_builds; // bottom-level acceleration structures built or rebuilt
+	SafeNumeric<uint64_t> raytracing_albedo_textures; // albedo textures averaged for the hits (read back)
 	SafeNumeric<uint64_t> raytracing_build_usec; // render thread time building the ray tracing scene (microseconds, summed)
 	SafeNumeric<uint64_t> raytracing_tlas_usec; // of which in RenderingDevice::tlas_build()
 	SafeNumeric<uint64_t> geometry_cluster_surfaces; // surfaces clustered at creation

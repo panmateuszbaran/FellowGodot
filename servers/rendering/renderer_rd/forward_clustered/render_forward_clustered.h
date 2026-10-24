@@ -37,6 +37,7 @@
 #include "servers/rendering/renderer_rd/cluster_builder_rd.h"
 #include "servers/rendering/renderer_rd/effects/fellow_shadow_cache.h"
 #include "servers/rendering/renderer_rd/effects/fellow_ddgi.h"
+#include "servers/rendering/renderer_rd/effects/fellow_rt_albedo.h"
 #include "servers/rendering/renderer_rd/effects/fellow_rt_reflections.h"
 #include "servers/rendering/renderer_rd/effects/fellow_rt_shadow.h"
 #include "servers/rendering/renderer_rd/effects/fellow_rtao.h"
@@ -130,6 +131,10 @@ public:
 		RID fellow_ddgi_ubo; // the volume the scene shader reads
 		int fellow_ddgi_counts[4] = { 0, 0, 0, 0 };
 		uint32_t fellow_ddgi_frame = 0;
+		// The path-traced reference (debug/raytracing_gi_reference): restarted when the camera or the setting changes.
+		Projection fellow_ddgi_reference_projection;
+		Transform3D fellow_ddgi_reference_transform;
+		int fellow_ddgi_reference_bounces = 0;
 		// Ray-traced reflections (decision 0084).
 		uint32_t fellow_rt_reflection_frame = 0;
 		bool fellow_rt_reflection_history = false;
@@ -1418,6 +1423,7 @@ private:
 	RendererRD::FellowRTShadow *fellow_rt_shadow = nullptr;
 	RendererRD::FellowDDGI *fellow_ddgi = nullptr;
 	RendererRD::FellowRTReflections *fellow_rt_reflections = nullptr;
+	RendererRD::FellowRTAlbedo *fellow_rt_albedo = nullptr;
 	bool fellow_rt_reflections_on = false; // this render traces reflections (SSR off)
 	RID fellow_rt_reflection_texture; // this render's traced reflections for the opaque colour passes
 	// How ray-traced effects light their hits (decisions 0083, 0084): the sun and the environment's ambient light in
@@ -1448,6 +1454,21 @@ private:
 		uint64_t refreshed = 0;
 	};
 	HashMap<RID, FellowRTMaterial> fellow_rt_materials;
+	// The albedo textures' mean colours (decision 0083: the hits see a material's colour × its texture's mean), by
+	// texture: a slot in FellowRTAlbedo's buffer, averaged on the GPU and read back asynchronously; materials and surfaces
+	// computed before one arrives are refreshed (fellow_rt_materials_changed_frame).
+	struct FellowRTTextureAverage {
+		uint32_t slot = 0;
+		bool ready = false;
+		Color color = Color(1, 1, 1);
+	};
+	HashMap<RID, FellowRTTextureAverage> fellow_rt_texture_averages;
+	LocalVector<RID> fellow_rt_albedo_pending_textures; // RD textures to average this frame, into
+	LocalVector<uint32_t> fellow_rt_albedo_pending_slots; // these slots
+	uint32_t fellow_rt_albedo_slots = 0;
+	uint64_t fellow_rt_materials_changed_frame = 0; // material data computed before this frame is stale
+	static void _fellow_rt_albedo_readback(const Vector<uint8_t> &p_data);
+	void _fellow_rt_albedo_flush();
 	LocalVector<float> fellow_rt_instance_data;
 	RID fellow_rt_instance_buffer;
 	uint32_t fellow_rt_instance_capacity = 0;
@@ -1458,11 +1479,14 @@ private:
 	RID fellow_ddgi_volume_ubo;
 	RID fellow_ddgi_screen; // the screen pass's irradiance for the opaque colour passes (RID(): they look the probes up)
 	const FellowRTMaterial &_fellow_rt_material(RID p_material, uint64_t p_frame);
+	static Projection _fellow_jittered_projection(const RenderDataRD *p_render_data);
 	RID _fellow_first_directional_light(const RenderDataRD *p_render_data);
 	void _fellow_process_ddgi(RenderDataRD *p_render_data, const Ref<RenderSceneBuffersRD> &p_render_buffers, const Ref<RenderBufferDataForwardClustered> &p_rb_data, RID p_radiance_texture, RID p_normal_roughness);
 	RID fellow_rt_shadow_mask; // this render's traced sun shadow (RID(): the shadow map), read by the opaque colour passes
 	RID fellow_rt_tlas; // the frame's ray tracing scene (RID() when no ray-traced effect runs)
 	LocalVector<RD::AccelerationStructureInstance> fellow_rt_build;
+	LocalVector<Transform3D> fellow_rt_mm_transforms; // a MultiMesh's instances in the scene (world space)
+	bool _fellow_gather_multimesh(GeometryInstanceForwardClustered *p_inst, const Vector3 &p_eye, float p_radius, float p_tan_min_angle, RID &r_mesh);
 	RID _fellow_build_raytracing_scene(RenderDataRD *p_render_data, const Ref<RenderBufferDataForwardClustered> &p_rb_data);
 	void _fellow_process_rtao(RenderDataRD *p_render_data, const Ref<RenderSceneBuffersRD> &p_render_buffers, const Ref<RenderBufferDataForwardClustered> &p_rb_data, RID p_normal_roughness);
 	RID _fellow_process_rt_sun_shadow(RenderDataRD *p_render_data, const Ref<RenderSceneBuffersRD> &p_render_buffers, const Ref<RenderBufferDataForwardClustered> &p_rb_data);

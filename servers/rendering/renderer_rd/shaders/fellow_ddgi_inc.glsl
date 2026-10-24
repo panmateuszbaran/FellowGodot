@@ -3,7 +3,7 @@
 //
 // The volume is a grid of probes counts.xyz around the camera, spacing.x apart, at world positions cell * spacing. It
 // scrolls with the camera: the cells in view are base_cell .. base_cell + counts - 1, and a cell's probe lives in slot
-// cell mod counts (its data stays when the volume moves; a slot that receives a new cell starts over). Each probe has an
+// cell mod counts, offset from the cell's position where it was relocated (fellow_ddgi_probe_offset()) (its data stays when the volume moves; a slot that receives a new cell starts over). Each probe has an
 // octahedral irradiance tile (8 x 8 texels with a one-texel border, RGB the cosine-weighted mean radiance — the "ambient
 // light" the scene shader multiplies by albedo —, A 1 if the probe is active) and a distance tile (16 x 16, mean and
 // mean square of the distance to the first hit around each direction, for the visibility test).
@@ -13,7 +13,7 @@ struct FellowDDGIVolume {
 	ivec4 base_cell; // xyz the first cell in the volume, w 1 when the volume holds data
 	vec4 spacing; // x spacing, y normal bias, z view bias (in spacings), w energy multiplier
 	vec4 atlas_inv_size; // xy irradiance atlas 1 / size, zw distance atlas 1 / size
-	vec4 shading; // x sky leak: the share of the environment's ambient light added to the volume's (scene shader)
+	vec4 shading; // x sky leak: the share of the environment's ambient light added to the volume's (scene shader), y 1: probes relocated
 };
 
 #define FELLOW_DDGI_IRRADIANCE_TILE 8
@@ -32,6 +32,19 @@ vec2 fellow_ddgi_tile_uv(ivec3 p_slot, ivec3 p_counts, int p_tile, vec3 p_dir, v
 	float t = float(p_tile);
 	vec2 uv = vec3_to_oct_with_border(p_dir, vec2(1.0 / t, (t - 2.0) / t)); // within the tile, its border included
 	return (vec2(fellow_ddgi_tile_origin(p_slot, p_counts, p_tile)) + uv * t) * p_inv_size;
+}
+
+// A probe's offset from its cell's position (relocated out of geometry and away from surfaces): two texels of the
+// distance atlas (RG: x, y; R: z), in a strip of counts.z rows below its tiles.
+ivec2 fellow_ddgi_offset_texel(ivec3 p_slot, ivec3 p_counts) {
+	return ivec2((p_slot.x + p_slot.y * p_counts.x) * 2, p_counts.z * FELLOW_DDGI_DISTANCE_TILE + p_slot.z);
+}
+
+vec3 fellow_ddgi_probe_offset(texture2D p_distance, sampler p_sampler, ivec3 p_slot, ivec3 p_counts) {
+	ivec2 at = fellow_ddgi_offset_texel(p_slot, p_counts);
+	vec2 xy = texelFetch(sampler2D(p_distance, p_sampler), at, 0).rg;
+	float z = texelFetch(sampler2D(p_distance, p_sampler), at + ivec2(1, 0), 0).r;
+	return vec3(xy, z);
 }
 
 // The irradiance ("ambient light", before albedo) at world position p_pos with normal p_normal, p_to_eye the unit vector
@@ -65,7 +78,7 @@ vec3 fellow_ddgi_irradiance(texture2D p_irradiance, texture2D p_distance, sample
 			continue; // inactive (inside geometry) or not traced yet
 		}
 		coverage += tri;
-		vec3 probe = vec3(cell) * spacing;
+		vec3 probe = vec3(cell) * spacing + fellow_ddgi_probe_offset(p_distance, p_sampler, slot, counts);
 		vec3 to_probe = normalize(probe - p_pos);
 		// Probes behind the surface weigh less (smoothly, so the lighting has no seams).
 		float wrap = (dot(to_probe, p_normal) + 1.0) * 0.5;

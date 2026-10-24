@@ -1,7 +1,7 @@
 # 0080 — Ray tracing foundation: ray queries, acceleration structures for the meshes near the camera
 
 Status: **KEEP**, off by default (the base of the ray-traced effects 0081 and 0082) · Branch `fellow/geometry` ·
-Settings `rendering/fellow/raytracing/enabled` (start-up), `radius`, `skinned`; debug `debug/raytracing_view`,
+Settings `rendering/fellow/raytracing/enabled` (start-up), `radius`, `skinned`, `multimesh`, `multimesh_min_angle`; debug `debug/raytracing_view`,
 `debug/raytracing_decode_positions` ·
 Code: `drivers/vulkan/rendering_device_driver_vulkan.*` (ray query feature, vertex format query),
 `servers/rendering/rendering_device.*`, `rendering_device_driver.h`, `renderer_rd/storage_rd/mesh_storage.*` (buffers,
@@ -53,6 +53,17 @@ the renderer uses it, and three gaps keep it from being used by effects:
   are flipped (Godot's front faces are clockwise from outside, the ray tracing convention counter-clockwise); a ray that
   culls back faces passes out of a closed mesh as the camera sees out of it. Ray queries ignore the hit shader binding
   table, but the device's build asks for a range: offset 0, one group.
+* **MultiMesh instances** (`raytracing/multimesh`, on; foliage, rocks, crowds of props): an instance in the scene for
+  each of a MultiMesh's instances, with the same masks, facing and surface data (one record per surface for all of them).
+  Their transforms come from the CPU: the buffer the MultiMesh was last given is kept (a reference, not a copy) while
+  ray tracing is active, or its per-instance cache; a MultiMesh written on the GPU (indirect) or whose buffer was set
+  before ray tracing was decided stays out, and like particles makes the traced sun shadows assert shadow only (0082).
+  Grass would put hundreds of thousands of instances in the scene: as Unreal's `r.RayTracing.Culling.Angle`, an
+  instance is left out when its bounding sphere (the mesh's box, scaled by the instance) is seen from the camera under
+  less than `raytracing/multimesh_min_angle` (1°) — a 0.3 m grass blade beyond 17 m, a 1 m bush beyond 57 m. A whole
+  MultiMesh beyond that reach (a chunk of grass) is skipped from its bounds, and each instance's origin is tested
+  before its transform is computed. Counter `raytracing_multimesh_instances`. The geometry is the mesh's rest pose (a
+  wind vertex shader is not applied), as Unreal's foliage in ray tracing without its world position offset evaluation.
 * **Alpha-tested surfaces** (alpha scissor, hash or antialiasing, a shader that discards: leaves, fences): the rays do
   not test their alpha, and as whole quads they would occlude everything that shows through them (Sponza's tree came out
   black on the RTX). They are non-opaque instances with their own mask bits (2 drawn, 3 casts shadows): AO, GI and
@@ -65,6 +76,11 @@ the renderer uses it, and three gaps keep it from being used by effects:
   lookup done once per run of instances sharing it, and each surface's data for GI and reflections kept with the
   surface (read from its material on first use and every 120 frames). Counters `raytracing_build_usec` and
   `raytracing_tlas_usec`.
+* **The camera's projection.** The effects that rebuild positions from the depth buffer (RTAO, the traced sun shadows,
+  DDGI's screen pass and reference, the reflections) take the projection it was rendered with, the TAA jitter included
+  (`_fellow_jittered_projection()`), also for their reprojection. Without it positions were off by up to half a pixel —
+  on surfaces seen at a grazing angle inside them: City Lab's sunlit walls came out shadowed by the traced shadows in
+  one frame in eight (0082).
 * **Debug** (`debug/raytracing_view`, with the viewport's SSAO debug draw and RTAO on): the scene seen from the camera,
   1 = hit distances, 2 = where the hit matches the depth buffer.
 

@@ -138,21 +138,7 @@ vec3 sample_ggx_vndf(vec3 p_v, float p_alpha, vec2 p_u) {
 	return normalize(vec3(p_alpha * nh.x, p_alpha * nh.y, max(0.0, nh.z)));
 }
 
-void main() {
-	ivec2 pos = ivec2(gl_GlobalInvocationID.xy);
-	if (any(greaterThanEqual(pos, params.size))) {
-		return;
-	}
-	float depth = texelFetch(depth_buffer, pos, 0).r;
-	vec4 nr = normal_roughness(pos);
-	if (depth == 0.0 || nr.w > params.max_roughness) {
-		imageStore(raw_reflection, pos, vec4(0.0));
-		return;
-	}
-	if (nr.w > params.interleave_roughness && any(notEqual(pos & 1, traced_offset()))) {
-		imageStore(raw_reflection, pos, vec4(0.0, 0.0, 0.0, -1.0)); // not traced this frame (A < 0)
-		return;
-	}
+void trace_pixel(ivec2 pos, float depth, vec4 nr) {
 	vec3 vp = view_position(pos, depth);
 	vec3 wp = (params.view_to_world * vec4(vp, 1.0)).xyz;
 	vec3 n = normalize(mat3(params.view_to_world) * nr.xyz);
@@ -259,6 +245,29 @@ void main() {
 		radiance = vec3(0.0);
 	}
 	imageStore(raw_reflection, pos, vec4(radiance, hit_t));
+}
+
+// A thread per 2 x 2 block: its smooth pixels are traced every frame, its rough ones (interleaved) only the pixel of
+// traced_offset(). (A thread per pixel left three of four lanes idle over rough surfaces.)
+void main() {
+	ivec2 block = ivec2(gl_GlobalInvocationID.xy);
+	for (int k = 0; k < 4; k++) {
+		ivec2 pos = block * 2 + ivec2(k & 1, k >> 1);
+		if (any(greaterThanEqual(pos, params.size))) {
+			continue;
+		}
+		float depth = texelFetch(depth_buffer, pos, 0).r;
+		vec4 nr = normal_roughness(pos);
+		if (depth == 0.0 || nr.w > params.max_roughness) {
+			imageStore(raw_reflection, pos, vec4(0.0));
+			continue;
+		}
+		if (nr.w > params.interleave_roughness && any(notEqual(pos & 1, traced_offset()))) {
+			imageStore(raw_reflection, pos, vec4(0.0, 0.0, 0.0, -1.0)); // not traced this frame (A < 0)
+			continue;
+		}
+		trace_pixel(pos, depth, nr);
+	}
 }
 
 #elif defined(MODE_TEMPORAL)

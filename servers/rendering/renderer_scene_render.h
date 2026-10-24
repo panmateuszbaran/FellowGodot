@@ -371,8 +371,9 @@ public:
 	};
 	LocalVector<RenderGeometryInstance *> fellow_rt_instances;
 	LocalVector<uint8_t> fellow_rt_masks;
-	// Shadow casters near the camera that the ray tracing scene does not hold (MultiMesh, particles: their shadows are the
-	// shadow map's): ray-traced sun shadows then only assert shadow, and leave lit pixels to the shadow map.
+	// Shadow casters near the camera that the ray tracing scene does not hold (particles, MultiMeshes whose transforms
+	// are not on the CPU: their shadows are the shadow map's): ray-traced sun shadows then only assert shadow, and leave
+	// lit pixels to the shadow map.
 	bool fellow_rt_missing_shadow_casters = false;
 	virtual float fellow_raytracing_radius() const { return 0.0f; }
 

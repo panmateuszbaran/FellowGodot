@@ -4044,6 +4044,68 @@ void RenderForwardClustered::setup_added_decal(const Transform3D &p_transform, c
 
 /* Render scene */
 
+// FellowEngine ray tracing (decision 0080): the instances of a MultiMesh geometry instance that go into the ray tracing
+// scene, in world space, into fellow_rt_mm_transforms: within the scene's radius, their bounding sphere (the mesh's box
+// around its centre, scaled by the instance) seen from the camera under at least the minimum angle. False where the
+// transforms are not on the CPU (the MultiMesh is then left out).
+bool RenderForwardClustered::_fellow_gather_multimesh(GeometryInstanceForwardClustered *p_inst, const Vector3 &p_eye, float p_radius, float p_tan_min_angle, RID &r_mesh) {
+	fellow_rt_mm_transforms.clear();
+	RendererRD::MeshStorage::FellowMultimeshRTData mm;
+	if (!RendererRD::MeshStorage::get_singleton()->fellow_multimesh_get_rt_data(p_inst->data->base, mm)) {
+		return false;
+	}
+	r_mesh = mm.mesh;
+	if (mm.count == 0 || mm.max_scale <= 0.0f) {
+		return true;
+	}
+	const Transform3D &xf = p_inst->transform;
+	const Basis &b = xf.basis;
+	const float sx = b.get_column(0).length(), sy = b.get_column(1).length(), sz = b.get_column(2).length();
+	const float inst_max_scale = MAX(sx, MAX(sy, sz));
+	const float inst_min_scale = MIN(sx, MIN(sy, sz));
+	if (inst_min_scale <= 0.0f) {
+		return true;
+	}
+	const Vector3 centre = mm.mesh_aabb.get_center();
+	const float mesh_radius = mm.mesh_aabb.size.length() * 0.5f;
+	// No instance is larger than r_max; one is in only within min(r / tan, the radius + r) of the eye.
+	const float r_max = mesh_radius * mm.max_scale * inst_max_scale;
+	float reach = p_radius + r_max;
+	if (p_tan_min_angle > 0.0f) {
+		reach = MIN(reach, r_max / p_tan_min_angle);
+	}
+	// The whole MultiMesh first (chunks of foliage beyond the reach), then each instance's origin (in the MultiMesh's
+	// space: distances there shrink by at most the instance's smallest scale) before its transform.
+	const AABB &box = p_inst->transformed_aabb;
+	const Vector3 nearest = p_eye.clamp(box.position, box.position + box.size);
+	if ((nearest - p_eye).length_squared() > reach * reach) {
+		return true;
+	}
+	const Vector3 eye_local = xf.affine_inverse().xform(p_eye);
+	const float centre_offset = centre.length() * mm.max_scale; // the centre's farthest from an instance's origin
+	const float local_reach = (reach + centre_offset * inst_max_scale) / inst_min_scale;
+	const float local_reach2 = local_reach * local_reach;
+	const float tan2 = p_tan_min_angle * p_tan_min_angle;
+	const float radius2 = mesh_radius * mesh_radius;
+	for (uint32_t i = 0; i < mm.count; i++) {
+		const float *x = mm.data + size_t(i) * mm.stride;
+		const float ox = x[3] - eye_local.x, oy = x[7] - eye_local.y, oz = x[11] - eye_local.z;
+		if (ox * ox + oy * oy + oz * oz > local_reach2) {
+			continue;
+		}
+		const Transform3D w = xf * Transform3D(Basis(x[0], x[1], x[2], x[4], x[5], x[6], x[8], x[9], x[10]), Vector3(x[3], x[7], x[11]));
+		const float s2 = MAX(w.basis.get_column(0).length_squared(), MAX(w.basis.get_column(1).length_squared(), w.basis.get_column(2).length_squared()));
+		const float r2 = radius2 * s2;
+		const float d2 = (w.xform(centre) - p_eye).length_squared();
+		const float rr = p_radius + Math::sqrt(r2);
+		if (d2 > rr * rr || r2 < tan2 * d2) {
+			continue;
+		}
+		fellow_rt_mm_transforms.push_back(w);
+	}
+	return true;
+}
+
 // FellowEngine ray tracing (docs/decisions/0080-raytracing-scene.md): the frame's top-level acceleration structure, an
 // instance per opaque surface of the geometry instances the culler gathered near the camera, each with its surface's
 // bottom-level structure (built on first use; skinned and blend shape surfaces when their vertices changed).
@@ -4060,9 +4122,31 @@ RID RenderForwardClustered::_fellow_build_raytracing_scene(RenderDataRD *p_rende
 	const uint64_t frame = RSG::rasterizer->get_frame_number();
 	const bool want_surface_data = Fellow::raytracing_gi() || Fellow::raytracing_reflections();
 	const float emissive_exposure = p_render_data->camera_attributes.is_valid() ? RSG::camera_attributes->camera_attributes_get_exposure_normalization_factor(p_render_data->camera_attributes) : 1.0f;
+	// MultiMesh instances (foliage, rocks): those near enough to be seen under the minimum angle, from their transforms.
+	const bool multimesh_enabled = Fellow::raytracing_multimesh();
+	const float min_angle = Fellow::raytracing_multimesh_min_angle();
+	const float tan_min_angle = min_angle > 0.0f ? Math::tan(Math::deg_to_rad(MIN(min_angle, 89.0f))) : 0.0f;
+	const Vector3 eye = p_render_data->scene_data->cam_transform.origin;
+	const float radius = Fellow::raytracing_radius();
+	uint32_t multimesh_instances = 0;
 	for (uint32_t i = 0; i < fellow_rt_instances.size(); i++) {
 		GeometryInstanceForwardClustered *inst = static_cast<GeometryInstanceForwardClustered *>(fellow_rt_instances[i]);
 		const uint8_t mask = fellow_rt_masks[i];
+		const bool multimesh = inst->data != nullptr && inst->data->base_type == RSE::INSTANCE_MULTIMESH;
+		RID mesh = inst->data != nullptr ? inst->data->base : RID();
+		if (multimesh) {
+			if (!multimesh_enabled || !_fellow_gather_multimesh(inst, eye, radius, tan_min_angle, mesh)) {
+				// Not in the scene: its shadows are the shadow map's.
+				if (mask & FELLOW_RT_MASK_SHADOW) {
+					fellow_rt_missing_shadow_casters = true;
+				}
+				continue;
+			}
+			if (fellow_rt_mm_transforms.is_empty()) {
+				continue; // every instance too far or too small
+			}
+			multimesh_instances += fellow_rt_mm_transforms.size();
+		}
 		uint64_t surfaces_seen = 0; // a surface drawn with several materials (next passes, overlays) once
 		for (GeometryInstanceSurfaceDataCache *sc = inst->surface_caches; sc != nullptr; sc = sc->next) {
 			if (!(sc->flags & (GeometryInstanceSurfaceDataCache::FLAG_PASS_OPAQUE | GeometryInstanceSurfaceDataCache::FLAG_PASS_DEPTH | GeometryInstanceSurfaceDataCache::FLAG_PASS_SHADOW))) {
@@ -4076,16 +4160,15 @@ RID RenderForwardClustered::_fellow_build_raytracing_scene(RenderDataRD *p_rende
 				surfaces_seen |= bit;
 			}
 			Transform3D local;
-			RID blas = inst->mesh_instance.is_valid() ? mesh_storage->fellow_mesh_instance_surface_get_blas(inst->mesh_instance, sc->surface_index, sc->surface, local) : mesh_storage->fellow_mesh_surface_get_blas(sc->surface, local);
+			RID blas = (!multimesh && inst->mesh_instance.is_valid()) ? mesh_storage->fellow_mesh_instance_surface_get_blas(inst->mesh_instance, sc->surface_index, sc->surface, local) : mesh_storage->fellow_mesh_surface_get_blas(sc->surface, local);
 			if (blas.is_null()) {
 				continue;
 			}
-			fellow_rt_build.push_back(RD::AccelerationStructureInstance());
-			RD::AccelerationStructureInstance &ai = fellow_rt_build[fellow_rt_build.size() - 1];
-			ai.transform = inst->transform * local;
-			ai.id = (fellow_rt_build.size() - 1) & 0xFFFFFF; // the index of its surface data
+			// The surface's data, the shaders' record for the instance's custom index: one per surface of an instance,
+			// shared by all of a MultiMesh's instances.
+			const uint32_t record = fellow_rt_instance_data.size() / 8;
 			if (want_surface_data) {
-				if (sc->fellow_rt_data_frame == UINT64_MAX || frame - sc->fellow_rt_data_frame >= 120) {
+				if (sc->fellow_rt_data_frame == UINT64_MAX || frame - sc->fellow_rt_data_frame >= 120 || sc->fellow_rt_data_frame < fellow_rt_materials_changed_frame) {
 					// The surface's material (override, the instance's, the mesh's), its albedo and emission.
 					RID material;
 					if (inst->data != nullptr) {
@@ -4093,8 +4176,8 @@ RID RenderForwardClustered::_fellow_build_raytracing_scene(RenderDataRD *p_rende
 							material = inst->data->material_override;
 						} else if (sc->surface_index < (uint32_t)inst->data->surface_materials.size() && inst->data->surface_materials[sc->surface_index].is_valid()) {
 							material = inst->data->surface_materials[sc->surface_index];
-						} else if (inst->data->base.is_valid()) {
-							material = mesh_storage->mesh_surface_get_material(inst->data->base, sc->surface_index);
+						} else if (mesh.is_valid()) {
+							material = mesh_storage->mesh_surface_get_material(mesh, sc->surface_index);
 						}
 					}
 					const FellowRTMaterial &m = _fellow_rt_material(material, frame);
@@ -4103,40 +4186,63 @@ RID RenderForwardClustered::_fellow_build_raytracing_scene(RenderDataRD *p_rende
 					memcpy(sc->fellow_rt_data, d, sizeof(d));
 					sc->fellow_rt_data_frame = frame;
 				}
-				const uint32_t base = fellow_rt_instance_data.size();
-				fellow_rt_instance_data.resize(base + 8);
-				float *d = fellow_rt_instance_data.ptr() + base;
+				fellow_rt_instance_data.resize(record * 8 + 8);
+				float *d = fellow_rt_instance_data.ptr() + record * 8;
 				memcpy(d, sc->fellow_rt_data, sizeof(sc->fellow_rt_data));
 				d[4] *= emissive_exposure;
 				d[5] *= emissive_exposure;
 				d[6] *= emissive_exposure;
 			}
+			RD::AccelerationStructureInstance ai;
+			ai.id = record & 0xFFFFFF;
 			ai.hit_sbt_range = sbt_range;
+			ai.blas = blas;
 			const RSE::CullMode cull = sc->shader != nullptr ? sc->shader->cull_mode : RSE::CULL_MODE_BACK;
-			if (cull == RSE::CULL_MODE_DISABLED) {
-				// Never culled; the facing still as Godot's (front faces clockwise from outside): DDGI tells a probe
-				// inside a double-sided mesh by the back faces it sees (decision 0083).
-				ai.flags = RD::ACCELERATION_STRUCTURE_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT;
-				if (godot_winding_flip != inst->mirror) {
-					ai.flags.set_flag(RD::ACCELERATION_STRUCTURE_INSTANCE_TRIANGLE_FLIP_FACING_BIT);
-				}
-			} else if (godot_winding_flip != (inst->mirror != (cull == RSE::CULL_MODE_FRONT))) {
-				ai.flags = RD::ACCELERATION_STRUCTURE_INSTANCE_TRIANGLE_FLIP_FACING_BIT;
-			} else {
-				ai.flags = {};
-			}
 			// Alpha-tested surfaces (leaves, fences): the rays cannot test their alpha, and as opaque quads they would
 			// occlude what shows through them. They move to their own mask bits, non-opaque (decision 0080).
 			const bool alpha_tested = sc->shader != nullptr && (sc->shader->uses_alpha_clip || sc->shader->uses_alpha_antialiasing || sc->shader->uses_discard);
 			if (alpha_tested) {
 				ai.mask = ((mask & FELLOW_RT_MASK_VISIBLE) ? FELLOW_RT_MASK_ALPHA_VISIBLE : 0) | ((mask & FELLOW_RT_MASK_SHADOW) ? FELLOW_RT_MASK_ALPHA_SHADOW : 0);
-				ai.flags.set_flag(RD::ACCELERATION_STRUCTURE_INSTANCE_FORCE_NO_OPAQUE_BIT);
 			} else {
 				ai.mask = mask;
 			}
-			ai.blas = blas;
+			// The flags for a transform with (p_mirror) or without a mirroring.
+			const auto flags_for = [&](bool p_mirror) {
+				BitField<RD::AccelerationStructureInstanceFlagBits> flags = {};
+				if (cull == RSE::CULL_MODE_DISABLED) {
+					// Never culled; the facing still as Godot's (front faces clockwise from outside): DDGI tells a probe
+					// inside a double-sided mesh by the back faces it sees (decision 0083).
+					flags.set_flag(RD::ACCELERATION_STRUCTURE_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT);
+					if (godot_winding_flip != p_mirror) {
+						flags.set_flag(RD::ACCELERATION_STRUCTURE_INSTANCE_TRIANGLE_FLIP_FACING_BIT);
+					}
+				} else if (godot_winding_flip != (p_mirror != (cull == RSE::CULL_MODE_FRONT))) {
+					flags.set_flag(RD::ACCELERATION_STRUCTURE_INSTANCE_TRIANGLE_FLIP_FACING_BIT);
+				}
+				if (alpha_tested) {
+					flags.set_flag(RD::ACCELERATION_STRUCTURE_INSTANCE_FORCE_NO_OPAQUE_BIT);
+				}
+				return flags;
+			};
+			if (!multimesh) {
+				ai.transform = inst->transform * local;
+				ai.flags = flags_for(inst->mirror);
+				fellow_rt_build.push_back(ai);
+				continue;
+			}
+			const BitField<RD::AccelerationStructureInstanceFlagBits> flags[2] = { flags_for(false), flags_for(true) };
+			const uint32_t base = fellow_rt_build.size();
+			fellow_rt_build.resize(base + fellow_rt_mm_transforms.size());
+			for (uint32_t k = 0; k < fellow_rt_mm_transforms.size(); k++) {
+				RD::AccelerationStructureInstance &mi = fellow_rt_build[base + k];
+				mi = ai;
+				mi.transform = fellow_rt_mm_transforms[k] * local;
+				mi.flags = flags[fellow_rt_mm_transforms[k].basis.determinant() < 0.0f ? 1 : 0];
+			}
 		}
 	}
+	Fellow::stats().raytracing_multimesh_instances.add(multimesh_instances);
+	_fellow_rt_albedo_flush();
 	Fellow::stats().raytracing_instances.add(fellow_rt_build.size());
 	Fellow::stats().raytracing_blas_builds.add(mesh_storage->fellow_blas_builds_take());
 	if (fellow_rt_build.is_empty()) {
@@ -4206,7 +4312,7 @@ void RenderForwardClustered::_fellow_process_rtao(RenderDataRD *p_render_data, c
 	params.history_out = rb->get_texture(scope, parity ? SNAME("history1") : SNAME("history0"));
 	params.dest = rb->get_texture(RB_SCOPE_SSAO, RB_FINAL);
 	params.size = size;
-	params.projection = p_render_data->scene_data->cam_projection;
+	params.projection = _fellow_jittered_projection(p_render_data);
 	params.cam_transform = p_render_data->scene_data->cam_transform;
 	params.prev_projection = rbd->fellow_rtao_last_projection;
 	params.prev_cam_transform = rbd->fellow_rtao_last_transform;
@@ -4221,7 +4327,7 @@ void RenderForwardClustered::_fellow_process_rtao(RenderDataRD *p_render_data, c
 	fellow_rtao->process(params);
 	rbd->fellow_rtao_history = true;
 	rbd->fellow_rtao_frame++;
-	rbd->fellow_rtao_last_projection = p_render_data->scene_data->cam_projection;
+	rbd->fellow_rtao_last_projection = _fellow_jittered_projection(p_render_data);
 	rbd->fellow_rtao_last_transform = p_render_data->scene_data->cam_transform;
 }
 
@@ -4277,7 +4383,7 @@ RID RenderForwardClustered::_fellow_process_rt_sun_shadow(RenderDataRD *p_render
 	params.history_out = rb->get_texture(scope, parity ? SNAME("history1") : SNAME("history0"));
 	params.dest = rb->get_texture(scope, SNAME("mask"));
 	params.size = size;
-	params.projection = p_render_data->scene_data->cam_projection;
+	params.projection = _fellow_jittered_projection(p_render_data);
 	params.cam_transform = p_render_data->scene_data->cam_transform;
 	params.prev_projection = rbd->fellow_rt_shadow_last_projection;
 	params.prev_cam_transform = rbd->fellow_rt_shadow_last_transform;
@@ -4285,6 +4391,7 @@ RID RenderForwardClustered::_fellow_process_rt_sun_shadow(RenderDataRD *p_render
 	params.light_tan_radius = angular_diameter > 0.0f ? Math::tan(Math::deg_to_rad(angular_diameter * 0.5f)) : 0.0f;
 	params.history_valid = rbd->fellow_rt_shadow_history;
 	params.missing_casters = fellow_rt_missing_shadow_casters;
+	params.interleaved = Fellow::raytracing_sun_shadows_interleaved();
 	params.frame = rbd->fellow_rt_shadow_frame;
 	params.ray_count = uint32_t(Fellow::raytracing_sun_shadow_rays());
 	params.max_distance = radius * 0.5f; // a ray towards the light stays within the scene's box for at least as long
@@ -4292,16 +4399,28 @@ RID RenderForwardClustered::_fellow_process_rt_sun_shadow(RenderDataRD *p_render
 	fellow_rt_shadow->process(params);
 	rbd->fellow_rt_shadow_history = true;
 	rbd->fellow_rt_shadow_frame++;
-	rbd->fellow_rt_shadow_last_projection = p_render_data->scene_data->cam_projection;
+	rbd->fellow_rt_shadow_last_projection = _fellow_jittered_projection(p_render_data);
 	rbd->fellow_rt_shadow_last_transform = p_render_data->scene_data->cam_transform;
 	return params.dest;
+}
+
+// The projection the depth buffer was rendered with, the TAA jitter included, for the ray-traced effects that rebuild
+// positions from it (their correction flips y: the jitter's y with the other sign, as get_cam_projection() adds it after
+// the flip). Without the jitter the positions were off by up to half a pixel: on walls seen at a grazing angle, inside
+// the wall — every eighth frame or so (the jitter's largest offsets) City Lab's sunlit walls came out shadowed by the
+// traced sun shadows, striped, which interleaving made visible.
+Projection RenderForwardClustered::_fellow_jittered_projection(const RenderDataRD *p_render_data) {
+	Projection jitter;
+	const Vector2 j = p_render_data->scene_data->taa_jitter;
+	jitter.add_jitter_offset(Vector2(j.x, p_render_data->scene_data->flip_y ? -j.y : j.y));
+	return jitter * p_render_data->scene_data->cam_projection;
 }
 
 const RenderForwardClustered::FellowRTMaterial &RenderForwardClustered::_fellow_rt_material(RID p_material, uint64_t p_frame) {
 	// Cached per material, read again every 120 frames (a parameter changed by a script reaches the ray-traced effects
 	// within four seconds: the surfaces keep theirs as long again).
 	FellowRTMaterial *m = fellow_rt_materials.getptr(p_material);
-	if (m != nullptr && p_frame - m->refreshed < 120) {
+	if (m != nullptr && p_frame - m->refreshed < 120 && m->refreshed >= fellow_rt_materials_changed_frame) {
 		return *m;
 	}
 	if (m == nullptr) {
@@ -4315,6 +4434,26 @@ const RenderForwardClustered::FellowRTMaterial &RenderForwardClustered::_fellow_
 	// BaseMaterial3D's parameters (other shaders: the default grey, no emission).
 	const Variant albedo = ms->material_get_param(p_material, SNAME("albedo"));
 	m->albedo = albedo.get_type() == Variant::COLOR ? Color(albedo).srgb_to_linear() : Color(0.7, 0.7, 0.7);
+	// × the albedo texture's mean colour, once it has been averaged (the hits have no texture coordinates).
+	const Variant texture_param = ms->material_get_param(p_material, SNAME("texture_albedo"));
+	const RID texture = texture_param.get_type() == Variant::RID ? RID(texture_param) : RID();
+	if (texture.is_valid()) {
+		const FellowRTTextureAverage *avg = fellow_rt_texture_averages.getptr(texture);
+		if (avg == nullptr) {
+			RID rd_texture = RendererRD::TextureStorage::get_singleton()->texture_get_rd_texture(texture, true);
+			if (rd_texture.is_valid() && fellow_rt_albedo_slots < RendererRD::FellowRTAlbedo::CAPACITY && RD::get_singleton()->texture_get_format(rd_texture).texture_type == RD::TEXTURE_TYPE_2D) {
+				FellowRTTextureAverage a;
+				a.slot = fellow_rt_albedo_slots++;
+				fellow_rt_texture_averages.insert(texture, a);
+				fellow_rt_albedo_pending_textures.push_back(rd_texture);
+				fellow_rt_albedo_pending_slots.push_back(a.slot);
+			}
+		} else if (avg->ready) {
+			m->albedo.r *= avg->color.r;
+			m->albedo.g *= avg->color.g;
+			m->albedo.b *= avg->color.b;
+		}
+	}
 	// Metals have no diffuse reflection: the hits' diffuse albedo is albedo × (1 - metallic).
 	const Variant metallic = ms->material_get_param(p_material, SNAME("metallic"));
 	m->metallic = metallic.get_type() == Variant::FLOAT ? CLAMP(float(metallic), 0.0f, 1.0f) : 0.0f;
@@ -4322,6 +4461,38 @@ const RenderForwardClustered::FellowRTMaterial &RenderForwardClustered::_fellow_
 	const Variant energy = ms->material_get_param(p_material, SNAME("emission_energy"));
 	m->emission = emission.get_type() == Variant::COLOR ? Color(emission).srgb_to_linear() * (energy.get_type() == Variant::FLOAT ? float(energy) : 1.0f) : Color(0, 0, 0);
 	return *m;
+}
+
+// The albedo textures first seen this frame averaged on the GPU, and the averages read back (asynchronously).
+void RenderForwardClustered::_fellow_rt_albedo_flush() {
+	if (fellow_rt_albedo_pending_textures.is_empty()) {
+		return;
+	}
+	if (fellow_rt_albedo == nullptr) {
+		fellow_rt_albedo = memnew(RendererRD::FellowRTAlbedo);
+	}
+	fellow_rt_albedo->average(fellow_rt_albedo_pending_textures, fellow_rt_albedo_pending_slots);
+	fellow_rt_albedo_pending_textures.clear();
+	fellow_rt_albedo_pending_slots.clear();
+	RD::get_singleton()->buffer_get_data_async(fellow_rt_albedo->get_buffer(), callable_mp_static(&RenderForwardClustered::_fellow_rt_albedo_readback), 0, fellow_rt_albedo_slots * sizeof(float) * 4);
+}
+
+void RenderForwardClustered::_fellow_rt_albedo_readback(const Vector<uint8_t> &p_data) {
+	RenderForwardClustered *self = singleton;
+	if (self == nullptr) {
+		return;
+	}
+	const uint32_t count = p_data.size() / (sizeof(float) * 4);
+	const float *f = reinterpret_cast<const float *>(p_data.ptr());
+	for (KeyValue<RID, FellowRTTextureAverage> &kv : self->fellow_rt_texture_averages) {
+		if (kv.value.slot < count && !kv.value.ready) {
+			const float *c = f + kv.value.slot * 4;
+			kv.value.color = Color(c[0], c[1], c[2], c[3]);
+			kv.value.ready = true;
+			Fellow::stats().raytracing_albedo_textures.increment();
+		}
+	}
+	self->fellow_rt_materials_changed_frame = RSG::rasterizer->get_frame_number();
 }
 
 RID RenderForwardClustered::_fellow_first_directional_light(const RenderDataRD *p_render_data) {
@@ -4414,7 +4585,9 @@ void RenderForwardClustered::_fellow_process_ddgi(RenderDataRD *p_render_data, c
 		rb->create_texture(scope, SNAME("irradiance"), RD::DATA_FORMAT_R16G16B16A16_SFLOAT, usage | RD::TEXTURE_USAGE_CAN_COPY_TO_BIT | RD::TEXTURE_USAGE_CAN_COPY_FROM_BIT, RD::TEXTURE_SAMPLES_1, Size2i(counts[0] * counts[1] * RendererRD::FellowDDGI::IRRADIANCE_TILE, counts[2] * RendererRD::FellowDDGI::IRRADIANCE_TILE));
 		// Every probe inactive (alpha 0) until its first update (one in gi_update_interval per frame).
 		RD::get_singleton()->texture_clear(rb->get_texture(scope, SNAME("irradiance")), Color(0, 0, 0, 0), 0, 1, 0, 1);
-		rb->create_texture(scope, SNAME("distance"), RD::DATA_FORMAT_R16G16_SFLOAT, usage, RD::TEXTURE_SAMPLES_1, Size2i(counts[0] * counts[1] * RendererRD::FellowDDGI::DISTANCE_TILE, counts[2] * RendererRD::FellowDDGI::DISTANCE_TILE));
+		rb->create_texture(scope, SNAME("distance"), RD::DATA_FORMAT_R16G16_SFLOAT, usage | RD::TEXTURE_USAGE_CAN_COPY_TO_BIT, RD::TEXTURE_SAMPLES_1, Size2i(counts[0] * counts[1] * RendererRD::FellowDDGI::DISTANCE_TILE, RendererRD::FellowDDGI::distance_atlas_height(counts[2])));
+		// The probes' offsets (in the strip below the tiles) start at 0.
+		RD::get_singleton()->texture_clear(rb->get_texture(scope, SNAME("distance")), Color(0, 0, 0, 0), 0, 1, 0, 1);
 		if (rbd->fellow_ddgi_probe_cells.is_valid()) {
 			RD::get_singleton()->free_rid(rbd->fellow_ddgi_probe_cells);
 		}
@@ -4445,10 +4618,11 @@ void RenderForwardClustered::_fellow_process_ddgi(RenderDataRD *p_render_data, c
 	volume.spacing[2] = 0.8f * 0.2f; // view bias
 	volume.spacing[3] = Fellow::raytracing_gi_energy();
 	volume.shading[0] = CLAMP(Fellow::raytracing_gi_sky_leak(), 0.0f, 1.0f);
+	volume.shading[1] = Fellow::raytracing_gi_probe_relocation() ? 1.0f : 0.0f;
 	volume.atlas_inv_size[0] = 1.0f / float(counts[0] * counts[1] * RendererRD::FellowDDGI::IRRADIANCE_TILE);
 	volume.atlas_inv_size[1] = 1.0f / float(counts[2] * RendererRD::FellowDDGI::IRRADIANCE_TILE);
 	volume.atlas_inv_size[2] = 1.0f / float(counts[0] * counts[1] * RendererRD::FellowDDGI::DISTANCE_TILE);
-	volume.atlas_inv_size[3] = 1.0f / float(counts[2] * RendererRD::FellowDDGI::DISTANCE_TILE);
+	volume.atlas_inv_size[3] = 1.0f / float(RendererRD::FellowDDGI::distance_atlas_height(counts[2]));
 
 	RendererRD::FellowDDGI::Params params;
 	params.tlas = fellow_rt_tlas;
@@ -4507,8 +4681,27 @@ void RenderForwardClustered::_fellow_process_ddgi(RenderDataRD *p_render_data, c
 		params.normal_roughness = p_normal_roughness;
 		Projection correction;
 		correction.set_depth_correction(true, true, false);
-		params.inv_projection = (correction * p_render_data->scene_data->cam_projection).inverse();
+		params.inv_projection = (correction * _fellow_jittered_projection(p_render_data)).inverse();
 		params.view_to_world = p_render_data->scene_data->cam_transform;
+		// The path-traced reference in place of the probes (debug): accumulated while the camera stands still.
+		const int reference = Fellow::raytracing_gi_reference();
+		if (reference > 0) {
+			bool restart = false;
+			if (!rb->has_texture(scope, SNAME("reference"))) { // recreated with the render buffers on a resize
+				rb->create_texture(scope, SNAME("reference"), RD::DATA_FORMAT_R32G32B32A32_SFLOAT, RD::TEXTURE_USAGE_STORAGE_BIT, RD::TEXTURE_SAMPLES_1, size);
+				restart = true;
+			}
+			restart = restart || rbd->fellow_ddgi_reference_bounces != reference || rbd->fellow_ddgi_reference_transform != p_render_data->scene_data->cam_transform || rbd->fellow_ddgi_reference_projection != p_render_data->scene_data->cam_projection;
+			rbd->fellow_ddgi_reference_bounces = reference;
+			rbd->fellow_ddgi_reference_transform = p_render_data->scene_data->cam_transform;
+			rbd->fellow_ddgi_reference_projection = p_render_data->scene_data->cam_projection;
+			params.reference_bounces = reference;
+			params.reference_accumulation = rb->get_texture(scope, SNAME("reference"));
+			params.reference_restart = restart;
+			volume.shading[0] = 0.0f; // the scene shader adds no sky leak to the reference
+		} else {
+			rbd->fellow_ddgi_reference_bounces = 0;
+		}
 	}
 	fellow_ddgi->process(params);
 	rbd->fellow_ddgi_frame++;
@@ -4600,7 +4793,7 @@ RID RenderForwardClustered::_fellow_process_rt_reflections(RenderDataRD *p_rende
 		params.volume.atlas_inv_size[0] = 1.0f / float(c[0] * c[1] * RendererRD::FellowDDGI::IRRADIANCE_TILE);
 		params.volume.atlas_inv_size[1] = 1.0f / float(c[2] * RendererRD::FellowDDGI::IRRADIANCE_TILE);
 		params.volume.atlas_inv_size[2] = 1.0f / float(c[0] * c[1] * RendererRD::FellowDDGI::DISTANCE_TILE);
-		params.volume.atlas_inv_size[3] = 1.0f / float(c[2] * RendererRD::FellowDDGI::DISTANCE_TILE);
+		params.volume.atlas_inv_size[3] = 1.0f / float(RendererRD::FellowDDGI::distance_atlas_height(c[2]));
 	} else {
 		params.irradiance = texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_BLACK);
 		params.distance = params.irradiance;
@@ -4611,7 +4804,7 @@ RID RenderForwardClustered::_fellow_process_rt_reflections(RenderDataRD *p_rende
 	params.radiance_border[1] = lighting.radiance_border[1];
 	params.radiance_level = lighting.radiance_level;
 	params.size = size;
-	params.projection = p_render_data->scene_data->cam_projection;
+	params.projection = _fellow_jittered_projection(p_render_data);
 	params.cam_transform = p_render_data->scene_data->cam_transform;
 	params.prev_projection = rbd->fellow_rt_reflection_last_projection;
 	params.prev_cam_transform = rbd->fellow_rt_reflection_last_transform;
@@ -4632,7 +4825,7 @@ RID RenderForwardClustered::_fellow_process_rt_reflections(RenderDataRD *p_rende
 	fellow_rt_reflections->process(params);
 	rbd->fellow_rt_reflection_history = true;
 	rbd->fellow_rt_reflection_frame++;
-	rbd->fellow_rt_reflection_last_projection = p_render_data->scene_data->cam_projection;
+	rbd->fellow_rt_reflection_last_projection = _fellow_jittered_projection(p_render_data);
 	rbd->fellow_rt_reflection_last_transform = p_render_data->scene_data->cam_transform;
 	return params.dest;
 }
@@ -9985,6 +10178,10 @@ RenderForwardClustered::~RenderForwardClustered() {
 	if (fellow_rt_reflections) {
 		memdelete(fellow_rt_reflections);
 		fellow_rt_reflections = nullptr;
+	}
+	if (fellow_rt_albedo) {
+		memdelete(fellow_rt_albedo);
+		fellow_rt_albedo = nullptr;
 	}
 	if (fellow_rt_instance_buffer.is_valid()) {
 		RD::get_singleton()->free_rid(fellow_rt_instance_buffer);

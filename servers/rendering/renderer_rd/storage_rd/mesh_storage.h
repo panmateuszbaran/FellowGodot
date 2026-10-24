@@ -286,6 +286,13 @@ private:
 		uint32_t fellow_pool_current = 0; // the buffer halves the slot holds (motion vectors: current, previous)
 		uint32_t fellow_pool_previous = 0;
 
+		// FellowEngine ray tracing (decision 0080): the last buffer set (a reference, not a copy) while ray tracing is
+		// active, for the instances' transforms on the CPU; the largest axis scale of its instances.
+		Vector<float> fellow_rt_buffer;
+		uint64_t fellow_rt_scale_version = 0;
+		uint32_t fellow_rt_scale_count = 0;
+		float fellow_rt_max_scale = 0.0f;
+
 		Dependency dependency;
 	};
 
@@ -594,6 +601,19 @@ public:
 		MultiMesh *multimesh = multimesh_owner.get_or_null(p_multimesh);
 		return multimesh ? multimesh->xform_format : RSE::MULTIMESH_TRANSFORM_2D;
 	}
+
+	// FellowEngine ray tracing (decision 0080): a 3D MultiMesh's instance transforms on the CPU, for the ray tracing
+	// scene. False where they are not there: 2D transforms, an indirect (GPU-written) MultiMesh, no mesh, a buffer set
+	// before ray tracing was decided.
+	struct FellowMultimeshRTData {
+		const float *data = nullptr; // the first instance's transform (3 × 4, row-major), `stride` floats apart
+		uint32_t count = 0;
+		uint32_t stride = 0;
+		RID mesh;
+		AABB mesh_aabb;
+		float max_scale = 0.0f; // the largest axis scale of any instance
+	};
+	bool fellow_multimesh_get_rt_data(RID p_multimesh, FellowMultimeshRTData &r_data);
 
 private:
 	LocalVector<Mesh::Surface *> fellow_pending_surfaces;

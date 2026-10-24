@@ -146,7 +146,8 @@ void FellowRTReflections::process(const Params &p_params) {
 		RD::Uniform u_inst(RD::UNIFORM_TYPE_STORAGE_BUFFER, 8, p_params.instances);
 		RD::Uniform u_rad(RD::UNIFORM_TYPE_TEXTURE, 9, radiance);
 		RD::get_singleton()->compute_list_bind_uniform_set(list, uniform_set_cache->get_cache(shader_rd, 0, u_params, u_depth, u_normal, u_tlas, u_raw, u_irr, u_dist, u_sampler, u_inst, u_rad), 0);
-		RD::get_singleton()->compute_list_dispatch_threads(list, p_params.size.x, p_params.size.y, 1);
+		// A thread per 2 x 2 block (its smooth pixels, and its interleaved rough pixel).
+		RD::get_singleton()->compute_list_dispatch_threads(list, (p_params.size.x + 1) / 2, (p_params.size.y + 1) / 2, 1);
 		RD::get_singleton()->compute_list_end();
 	}
 	{

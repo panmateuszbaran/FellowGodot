@@ -39,8 +39,8 @@ namespace RendererRD {
 
 // FellowEngine ray-traced sun shadows (docs/decisions/0082-rt-sun-shadows.md): the first directional light's shadow per
 // pixel, from rays against the frame's ray tracing scene (decision 0080), read by the opaque colour pass in place of
-// the shadow map where valid. Three compute passes: the trace, the temporal accumulation and a small blur (both for
-// soft shadows only).
+// the shadow map where valid. Three compute passes: the trace (interleaved: a quarter of the pixels per frame), the
+// temporal accumulation and a small blur (soft shadows only).
 class FellowRTShadow {
 public:
 	struct Params {
@@ -63,6 +63,7 @@ public:
 		float max_distance = 100.0;
 		float ray_length = 200.0;
 		bool missing_casters = false; // shadow casters not in the scene: lit pixels left to the shadow map
+		bool interleaved = false; // one pixel of each 2 x 2 traced per frame, the others from history
 	};
 
 private:
@@ -85,7 +86,9 @@ private:
 		float ray_length;
 		uint32_t history_valid;
 		uint32_t missing_casters;
-	}; // 240 bytes
+		uint32_t interleave;
+		uint32_t pad[3];
+	}; // 256 bytes
 
 	FellowRtShadowShaderRD shader;
 	RID shader_version;
