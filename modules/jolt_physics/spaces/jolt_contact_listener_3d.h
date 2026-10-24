@@ -31,7 +31,6 @@
 #pragma once
 
 #include "core/os/mutex.h"
-#include "core/os/rw_lock.h"
 #include "core/templates/hash_map.h"
 #include "core/templates/hash_set.h"
 #include "core/templates/hashfuncs.h"
@@ -89,7 +88,19 @@ class JoltContactListener3D final
 	HashSet<JPH::SubShapeIDPair, ShapePairHasher> area_enters;
 	HashSet<JPH::SubShapeIDPair, ShapePairHasher> area_exits;
 	LocalVector<JPH::SubShapeIDPair> area_soft_body_overlaps;
-	RWLock write_mutex; // FellowEngine: a read-write lock (decision 0088; stock: a mutex, taken for writing everywhere)
+	Mutex write_mutex;
+
+	// FellowEngine (milestone 17, decision 0088): sensor contacts recorded per thread during the step and evaluated after
+	// it (stock: each evaluated under write_mutex as reported, by every worker thread).
+	struct FellowSensorContact {
+		const JPH::Body *body1 = nullptr;
+		const JPH::Body *body2 = nullptr;
+		JPH::SubShapeID shape_id1;
+		JPH::SubShapeID shape_id2;
+	};
+	LocalVector<LocalVector<FellowSensorContact>> fellow_sensor_contacts; // per thread (0: not a worker thread)
+	bool fellow_defer_sensors = false;
+	void _fellow_evaluate_deferred_sensor_contacts();
 	JoltSpace3D *space = nullptr;
 
 #ifdef DEBUG_ENABLED

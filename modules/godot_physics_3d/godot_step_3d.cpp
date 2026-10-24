@@ -467,7 +467,6 @@ static _FORCE_INLINE_ void _fellow_pause() {
 
 static constexpr uint32_t FELLOW_DEP_NONE = UINT32_MAX;
 static constexpr uint32_t FELLOW_DEP_TAIL = 0x80000000u; // the body's last operation in the previous iteration
-static constexpr uint32_t FELLOW_OPS_PER_GRAB = 8;
 
 bool GodotStep3D::_fellow_solve_island_parallel(LocalVector<GodotConstraint3D *> &p_constraint_island, uint32_t p_count) {
 	FellowSolve &fs = fellow_solve;
@@ -598,6 +597,7 @@ bool GodotStep3D::_fellow_solve_island_parallel(LocalVector<GodotConstraint3D *>
 	fs.constraints = p_constraint_island.ptr();
 	fs.count = n;
 	fs.iterations = uint32_t(iterations);
+	fs.grab = uint32_t(CLAMP(Fellow::physics_parallel_island_solve_grab(), 1, 1024));
 	fs.next.store(0, std::memory_order_release);
 
 	// Every worker thread may join; this thread works too (and alone would finish: an operation only waits for
@@ -619,11 +619,11 @@ void GodotStep3D::_fellow_solve_ops() {
 	const uint32_t total = n * fs.iterations;
 	const uint32_t gen = fs.generation;
 	while (true) {
-		const uint32_t g0 = fs.next.fetch_add(FELLOW_OPS_PER_GRAB, std::memory_order_relaxed);
+		const uint32_t g0 = fs.next.fetch_add(fs.grab, std::memory_order_relaxed);
 		if (g0 >= total) {
 			return;
 		}
-		const uint32_t g1 = MIN(g0 + FELLOW_OPS_PER_GRAB, total);
+		const uint32_t g1 = MIN(g0 + fs.grab, total);
 		uint32_t k = g0 / n;
 		uint32_t pos = g0 - k * n;
 		for (uint32_t g = g0; g < g1; g++) {

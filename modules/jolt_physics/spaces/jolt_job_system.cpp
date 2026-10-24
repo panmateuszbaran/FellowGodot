@@ -34,6 +34,7 @@
 #include "core/object/worker_thread_pool.h"
 #include "core/os/os.h"
 #include "core/os/time.h"
+#include "servers/rendering/fellow_settings.h"
 
 #include <Jolt/Physics/PhysicsSettings.h>
 
@@ -106,7 +107,12 @@ void JoltJobSystem::Job::queue() {
 }
 
 int JoltJobSystem::GetMaxConcurrency() const {
-	return thread_count;
+	// FellowEngine (milestone 17, decision 0090): Jolt splits each phase of its step into this many jobs. Its results do
+	// not depend on the number (Jolt is deterministic regardless of the job count; Physics Lab hashes the same from 1 to
+	// 24 workers), and beyond about 8 the jobs' dispatch and barriers cost more than they gain (laptop, 8 P- and
+	// 16 E-cores: Area3D case 4.7 ms with 24, 2.4 ms with 8).
+	const int cap = Fellow::physics_jolt_max_jobs();
+	return cap > 0 ? MIN(thread_count, cap) : thread_count;
 }
 
 JPH::JobHandle JoltJobSystem::CreateJob(const char *p_name, JPH::ColorArg p_color, const JPH::JobSystem::JobFunction &p_job_function, JPH::uint32 p_dependency_count) {

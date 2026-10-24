@@ -37,6 +37,7 @@
 #include "../objects/jolt_soft_body_3d.h"
 #include "jolt_space_3d.h"
 
+#include "core/object/worker_thread_pool.h"
 #include "servers/rendering/fellow_settings.h"
 
 #include <Jolt/Physics/Collision/EstimateCollisionResponse.h>
@@ -194,7 +195,7 @@ bool JoltContactListener3D::_try_add_contacts(const JPH::Body &p_jolt_body1, con
 	const JPH::SubShapeIDPair shape_pair(p_jolt_body1.GetID(), p_manifold.mSubShapeID1, p_jolt_body2.GetID(), p_manifold.mSubShapeID2);
 
 	Manifold &manifold = [&]() -> Manifold & {
-		const RWLockWrite write_lock(write_mutex);
+		const MutexLock write_lock(write_mutex);
 		return manifolds_by_shape_pair[shape_pair];
 	}();
 
@@ -257,6 +258,23 @@ bool JoltContactListener3D::_try_evaluate_area_overlap(const JPH::Body &p_body1,
 		return false;
 	}
 
+	if (fellow_defer_sensors) {
+		// FellowEngine (decision 0088): recorded on this thread's list, evaluated after the step. During a step Jolt
+		// reports each sensor pair's contact (added or persisted) at most once and removes only pairs it did not report,
+		// so the overlaps come out the same whatever the order of evaluation (as in stock, where it is the order the worker
+		// threads happen to report them).
+		const int slot = WorkerThreadPool::get_singleton()->get_thread_index() + 1;
+		if (slot >= 0 && slot < (int)fellow_sensor_contacts.size()) {
+			FellowSensorContact c;
+			c.body1 = &p_body1;
+			c.body2 = &p_body2;
+			c.shape_id1 = p_shape_id1;
+			c.shape_id2 = p_shape_id2;
+			fellow_sensor_contacts[slot].push_back(c);
+			return true;
+		}
+	}
+
 	const JPH::SubShapeIDPair shape_pair1(p_body1.GetID(), p_shape_id1, p_body2.GetID(), p_shape_id2);
 	const JPH::SubShapeIDPair shape_pair2(p_body2.GetID(), p_shape_id2, p_body1.GetID(), p_shape_id1);
 
@@ -289,14 +307,14 @@ bool JoltContactListener3D::_try_evaluate_area_overlap(const JPH::Body &p_body1,
 }
 
 bool JoltContactListener3D::_try_remove_contacts(const JPH::SubShapeIDPair &p_shape_pair) {
-	const RWLockWrite write_lock(write_mutex);
+	const MutexLock write_lock(write_mutex);
 	return manifolds_by_shape_pair.erase(p_shape_pair);
 }
 
 bool JoltContactListener3D::_try_remove_area_overlap(const JPH::SubShapeIDPair &p_shape_pair) {
 	const JPH::SubShapeIDPair swapped_shape_pair(p_shape_pair.GetBody2ID(), p_shape_pair.GetSubShapeID2(), p_shape_pair.GetBody1ID(), p_shape_pair.GetSubShapeID1());
 
-	const RWLockWrite write_lock(write_mutex);
+	const MutexLock write_lock(write_mutex);
 
 	bool removed = false;
 
@@ -406,20 +424,9 @@ bool JoltContactListener3D::_has_shape_shifted(const JoltShapedObject3D &p_objec
 }
 
 void JoltContactListener3D::_evaluate_area_overlap(const JoltArea3D &p_area, const JoltArea3D &p_other_area, const JPH::SubShapeIDPair &p_shape_pair) {
-	const bool monitor = p_area.can_monitor(p_other_area);
-	if (Fellow::physics_jolt_area_read_lock()) {
-		// FellowEngine (decision 0088): a contact the area already knows (or does not monitor and does not have) changes
-		// nothing below; seen under the read lock, the worker threads reporting contacts do not wait for each other.
-		const RWLockRead read_lock(write_mutex);
-		const bool known = area_overlaps.has(p_shape_pair);
-		if (monitor ? (known && !_has_shape_shifted(p_area, p_shape_pair.GetSubShapeID1()) && !_has_shape_shifted(p_other_area, p_shape_pair.GetSubShapeID2())) : !known) {
-			return;
-		}
-	}
+	const MutexLock write_lock(write_mutex);
 
-	const RWLockWrite write_lock(write_mutex);
-
-	if (monitor) {
+	if (p_area.can_monitor(p_other_area)) {
 		if (!area_overlaps.has(p_shape_pair)) {
 			area_overlaps.insert(p_shape_pair);
 			area_enters.insert(p_shape_pair);
@@ -437,20 +444,9 @@ void JoltContactListener3D::_evaluate_area_overlap(const JoltArea3D &p_area, con
 }
 
 void JoltContactListener3D::_evaluate_area_overlap(const JoltArea3D &p_area, const JoltBody3D &p_body, const JPH::SubShapeIDPair &p_shape_pair) {
-	const bool monitor = p_area.can_monitor(p_body);
-	if (Fellow::physics_jolt_area_read_lock()) {
-		// FellowEngine (decision 0088): a contact the area already knows (or does not monitor and does not have) changes
-		// nothing below; seen under the read lock, the worker threads reporting contacts do not wait for each other.
-		const RWLockRead read_lock(write_mutex);
-		const bool known = area_overlaps.has(p_shape_pair);
-		if (monitor ? (known && !_has_shape_shifted(p_area, p_shape_pair.GetSubShapeID1()) && !_has_shape_shifted(p_body, p_shape_pair.GetSubShapeID2())) : !known) {
-			return;
-		}
-	}
+	const MutexLock write_lock(write_mutex);
 
-	const RWLockWrite write_lock(write_mutex);
-
-	if (monitor) {
+	if (p_area.can_monitor(p_body)) {
 		if (!area_overlaps.has(p_shape_pair)) {
 			area_overlaps.insert(p_shape_pair);
 			area_enters.insert(p_shape_pair);
@@ -468,7 +464,7 @@ void JoltContactListener3D::_evaluate_area_overlap(const JoltArea3D &p_area, con
 }
 
 void JoltContactListener3D::_evaluate_area_overlap(const JoltArea3D &p_area, const JoltSoftBody3D &p_body, const JPH::SubShapeIDPair &p_shape_pair) {
-	const RWLockWrite write_lock(write_mutex);
+	const MutexLock write_lock(write_mutex);
 
 	if (p_area.can_monitor(p_body)) {
 		area_soft_body_overlaps.push_back(p_shape_pair);
@@ -580,12 +576,33 @@ void JoltContactListener3D::_clear_area_soft_body_overlaps() {
 void JoltContactListener3D::pre_step() {
 	_clear_area_soft_body_overlaps();
 
+	fellow_defer_sensors = Fellow::physics_jolt_deferred_sensor_contacts();
+	if (fellow_defer_sensors) {
+		const uint32_t slots = uint32_t(WorkerThreadPool::get_singleton()->get_thread_count()) + 1;
+		if (fellow_sensor_contacts.size() != slots) {
+			fellow_sensor_contacts.resize(slots);
+		}
+	}
+
 #ifdef DEBUG_ENABLED
 	debug_contact_count = 0;
 #endif
 }
 
+void JoltContactListener3D::_fellow_evaluate_deferred_sensor_contacts() {
+	fellow_defer_sensors = false;
+	for (LocalVector<FellowSensorContact> &list : fellow_sensor_contacts) {
+		for (const FellowSensorContact &c : list) {
+			_try_evaluate_area_overlap(*c.body1, *c.body2, c.shape_id1, c.shape_id2);
+		}
+		list.clear();
+	}
+}
+
 void JoltContactListener3D::post_step() {
+	if (fellow_defer_sensors) {
+		_fellow_evaluate_deferred_sensor_contacts();
+	}
 	_flush_contacts();
 	_flush_area_exits();
 	_flush_area_enters();

@@ -246,17 +246,27 @@ inline bool physics_convex_vertex_cache() {
 inline bool physics_parallel_pair_culls() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/physics/parallel_pair_culls");
 }
-// physics/jolt_area_read_lock (decision 0088): Jolt's contact listener checks a sensor contact the area already knows
-// under a read lock and takes the write lock only to change its overlaps (stock: one mutex for every contact, from all
-// of Jolt's worker threads). Read per contact.
-inline bool physics_jolt_area_read_lock() {
-	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/physics/jolt_area_read_lock");
+// physics/jolt_deferred_sensor_contacts (decision 0088): Jolt's contact listener records the sensor (Area3D) contacts per
+// worker thread during the step and evaluates them after it (stock: each under one mutex as it is reported, from every
+// worker thread). The same overlaps. Read per step.
+inline bool physics_jolt_deferred_sensor_contacts() {
+	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/physics/jolt_deferred_sensor_contacts");
 }
 // physics/parallel_island_solve (decision 0089): GodotPhysics3D solves an island of at least 256 constraints on every
 // thread: each constraint's solve() waits only for the solve before it on each of its dynamic bodies (in stock's
 // sequence), so every body is updated in stock's order; stock solves an island on one thread. Read per step.
 inline bool physics_parallel_island_solve() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/physics/parallel_island_solve");
+}
+// The operations a thread takes from the queue at a time (more: fewer atomic operations on the queue's counter; fewer:
+// more threads at work on a narrow stretch of the sequence). Any value gives the same results.
+inline int physics_parallel_island_solve_grab() {
+	return GLOBAL_GET_CACHED(int, "rendering/fellow/physics/parallel_island_solve_grab");
+}
+// physics/jolt_max_jobs (decision 0090): the most jobs Jolt splits a phase of its step into (0: one per worker thread, as
+// stock). Jolt's results do not depend on it. Read per step.
+inline int physics_jolt_max_jobs() {
+	return enabled() ? GLOBAL_GET_CACHED(int, "rendering/fellow/physics/jolt_max_jobs") : 0;
 }
 // Debug: every face the physics toggles skip is given to GJK anyway and its answer compared (counters physics_verify_*).
 inline bool physics_verify() {
