@@ -4113,7 +4113,12 @@ RID RenderForwardClustered::_fellow_build_raytracing_scene(RenderDataRD *p_rende
 			ai.hit_sbt_range = sbt_range;
 			const RSE::CullMode cull = sc->shader != nullptr ? sc->shader->cull_mode : RSE::CULL_MODE_BACK;
 			if (cull == RSE::CULL_MODE_DISABLED) {
+				// Never culled; the facing still as Godot's (front faces clockwise from outside): DDGI tells a probe
+				// inside a double-sided mesh by the back faces it sees (decision 0083).
 				ai.flags = RD::ACCELERATION_STRUCTURE_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT;
+				if (godot_winding_flip != inst->mirror) {
+					ai.flags.set_flag(RD::ACCELERATION_STRUCTURE_INSTANCE_TRIANGLE_FLIP_FACING_BIT);
+				}
 			} else if (godot_winding_flip != (inst->mirror != (cull == RSE::CULL_MODE_FRONT))) {
 				ai.flags = RD::ACCELERATION_STRUCTURE_INSTANCE_TRIANGLE_FLIP_FACING_BIT;
 			} else {

@@ -148,6 +148,10 @@ void main() {
 		imageStore(ray_data, ivec2(ray, probe), vec4(0.0, 0.0, 0.0, -t * 0.2));
 		return;
 	}
+	// The back face of a double-sided surface is a surface (it is lit below), but it also counts towards telling a probe
+	// inside a double-sided mesh (walls and columns modelled double-sided): its distance is stored negative too, with its
+	// radiance (the irradiance pass adds the radiance of negative rays that have any).
+	float stored_t = front ? t : -t;
 	vec3 n;
 #if defined(FELLOW_POSITION_FETCH)
 	vec3 tri[3];
@@ -182,7 +186,10 @@ void main() {
 	vec3 bounce = fellow_ddgi_irradiance(irradiance_atlas, distance_atlas, linear_sampler, params.volume, hit, n, -dir, coverage);
 	light += mix(fellow_ddgi_ambient(n) * 0.5, bounce, clamp(coverage, 0.0, 1.0)) * params.trace.y;
 	vec3 radiance = inst.albedo.rgb * (1.0 - inst.emission.w) * light + inst.emission.rgb;
-	imageStore(ray_data, ivec2(ray, probe), vec4(radiance, t));
+	if (stored_t < 0.0) {
+		radiance = max(radiance, vec3(1e-4)); // marks it as a lit back face (not a single-sided one; a half float keeps 1e-4)
+	}
+	imageStore(ray_data, ivec2(ray, probe), vec4(radiance, stored_t));
 }
 
 #elif defined(MODE_DISTANCE)
@@ -302,7 +309,9 @@ void main() {
 		vec4 rd = imageLoad(ray_data, ivec2(r, probe));
 		if (rd.a < 0.0) {
 			backfaces++;
-			continue;
+			if (all(equal(rd.rgb, vec3(0.0)))) {
+				continue; // a single-sided back face: no light
+			}
 		}
 		float w = max(0.0, dot(dir, fellow_ddgi_ray_direction(r, rays)));
 		sum += rd.rgb * w;
