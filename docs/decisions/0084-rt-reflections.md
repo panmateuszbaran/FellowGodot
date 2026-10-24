@@ -65,6 +65,9 @@ Cost on the RTX laptop (`m16_f231_rt_ab`, 1080p, with the earlier maximum of 0.5
 tracing on): GPU +0.02 ms in City Lab, +0.07 ms in PBR Lab, +0.51 ms in Sponza (the trace 0.83 ms in place of SSR's
 0.18 ms), −0.04 ms in Bistro exterior; plus the scene's build. With the default of 0.7: `m16_f233`.
 
+With the milestone's last build (`m16_f246_rt_ab`, `fellow182`, in one process against ray tracing with no effect):
+GPU +8 % in City Lab, +13 % in Sponza (the trace and its passes 1.43 ms, SSR no longer run), +5 % in Bistro exterior.
+
 ## Decision
 
 **KEEP, off by default.**

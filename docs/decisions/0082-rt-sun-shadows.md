@@ -74,6 +74,9 @@ Cost on the RTX laptop (`m16_f231_rt_ab`, 1080p, one ray, in one process against
 Interleaved (`m16_f243_rt_ab`, against ray tracing with no effect): Sponza's trace 1.06 → 0.54 ms, the GPU frame
 +0.98 → +0.53 ms; City Lab +0.36 → +0.20 ms.
 
+With the milestone's last build (`m16_f246_rt_ab`, `fellow182`, interleaved, in one process against ray tracing with
+no effect): GPU +4 % in City Lab, +7 % in Sponza (the trace 0.48 ms), +14 % in Bistro exterior (0.72 ms).
+
 ## Decision
 
 **KEEP, off by default.**
