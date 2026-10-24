@@ -252,6 +252,12 @@ inline bool physics_parallel_pair_culls() {
 inline bool physics_jolt_area_read_lock() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/physics/jolt_area_read_lock");
 }
+// physics/parallel_island_solve (decision 0089): GodotPhysics3D solves an island of at least 256 constraints on every
+// thread: each constraint's solve() waits only for the solve before it on each of its dynamic bodies (in stock's
+// sequence), so every body is updated in stock's order; stock solves an island on one thread. Read per step.
+inline bool physics_parallel_island_solve() {
+	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/physics/parallel_island_solve");
+}
 // Debug: every face the physics toggles skip is given to GJK anyway and its answer compared (counters physics_verify_*).
 inline bool physics_verify() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/physics/verify");

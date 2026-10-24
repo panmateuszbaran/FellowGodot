@@ -34,6 +34,8 @@
 
 #include "core/templates/local_vector.h"
 
+#include <atomic>
+
 class GodotStep3D {
 	uint64_t _step = 1;
 
@@ -50,6 +52,32 @@ class GodotStep3D {
 	void _pre_solve_island(LocalVector<GodotConstraint3D *> &p_constraint_island) const;
 	void _solve_island(uint32_t p_island_index, void *p_userdata = nullptr);
 	void _check_suspend(const LocalVector<GodotBody3D *> &p_body_island) const;
+
+	// FellowEngine (milestone 17, decision 0089): a large island's iterations solved on several threads. Every
+	// constraint's solve() in stock's sequence (iteration by iteration, the island's order) is an operation; an operation
+	// waits for the operation before it on each of its dynamic bodies (and only those), so every body sees the same
+	// updates in the same order as in stock, and operations on disjoint bodies (which commute exactly) run at once.
+	struct FellowSolve {
+		GodotConstraint3D **constraints = nullptr;
+		uint32_t count = 0; // constraints in the island
+		uint32_t iterations = 0;
+		uint32_t generation = 0;
+		uint64_t stamp = 0;
+		LocalVector<uint32_t> order; // position in an iteration -> constraint index (by dependency level)
+		LocalVector<uint32_t> dep; // per position and body slot: the operation waited for (see _fellow_solve_ops())
+		LocalVector<uint32_t> level; // scratch: per constraint, then per level
+		LocalVector<uint32_t> slot_level; // scratch: per body slot
+		LocalVector<uint32_t> slot_last; // scratch: per body slot, the position of its last operation in an iteration
+		LocalVector<uint32_t> con_slots; // scratch: per constraint, its two dynamic bodies' slots (UINT32_MAX: none)
+		std::atomic<uint32_t> next = { 0 };
+		std::atomic<uint32_t> *done = nullptr; // per operation: == generation when done
+		uint32_t done_capacity = 0;
+	} fellow_solve;
+	bool _fellow_solve_island_parallel(LocalVector<GodotConstraint3D *> &p_constraint_island, uint32_t p_count);
+	void _fellow_solve_participant(uint32_t p_index, void *p_userdata = nullptr);
+	void _fellow_solve_ops();
+	LocalVector<uint32_t> fellow_small_islands;
+	void _fellow_solve_small_island(uint32_t p_index, void *p_userdata = nullptr);
 
 public:
 	void step(GodotSpace3D *p_space, real_t p_delta);

@@ -97,6 +97,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/physics/convex_vertex_cache", true); // decision 0086 (exact)
 	GLOBAL_DEF("rendering/fellow/physics/parallel_pair_culls", true); // decision 0087 (exact)
 	GLOBAL_DEF("rendering/fellow/physics/jolt_area_read_lock", true); // decision 0088
+	GLOBAL_DEF("rendering/fellow/physics/parallel_island_solve", true); // decision 0089 (exact)
 	GLOBAL_DEF("rendering/fellow/physics/verify", false);
 	GLOBAL_DEF("rendering/fellow/postfx/taa_strided_load", false); // decision 0075: REJECT (exact, no gain)
 	GLOBAL_DEF("rendering/fellow/postfx/taa_history_pingpong", true);
