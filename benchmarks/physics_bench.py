@@ -8,8 +8,9 @@ the frame time) and whether the scene's per-tick state hashes equal the referenc
   physics_bench.py --builds "stock=stock,off=fellow183@physics/distance_face_cull=false;physics/convex_vertex_cache=false,on=fellow183"
                    --engines godot,jolt --cases pile,stack,chars,rays,areas --ticks 600 --repeats 2 --session m17_f247 --ref off
 
-A variant is label=bin[@toggles]: bin is a folder of .tools/bin (or a path to an executable), toggles are FellowEngine
-settings relative to rendering/fellow/ separated by ';' (the bench's --fellow argument).
+A variant is label=bin[@toggles][%overrides]: bin is a folder of .tools/bin (or a path to an executable), toggles are
+FellowEngine settings relative to rendering/fellow/ separated by ';' (the bench's --fellow argument), overrides are
+startup settings section/key=value separated by ';' (override.cfg; e.g. threading/worker_pool/max_threads=4).
 """
 
 from __future__ import annotations
@@ -35,9 +36,11 @@ def parse_variants(spec: str) -> list[dict]:
         if not part:
             continue
         label, rest = part.split("=", 1)
+        rest, _, overrides = rest.partition("%")
         binname, _, toggles = rest.partition("@")
         exe = binname if os.path.isfile(binname) else rb.exe_for(binname, None)
-        out.append({"label": label.strip(), "bin": binname, "exe": exe, "fellow": toggles.replace(";", ",")})
+        out.append({"label": label.strip(), "bin": binname, "exe": exe, "fellow": toggles.replace(";", ","),
+                    "overrides": [o for o in overrides.split(";") if o]})
     return out
 
 
@@ -106,7 +109,7 @@ def main() -> int:
                             user.append(f"--fellow={v['fellow']}")
                         if args.extra:
                             user.extend(args.extra.split())
-                        rb.write_override_cfg(ENGINES[eng])
+                        rb.write_override_cfg(ENGINES[eng] + v["overrides"])
                         lp = os.path.join(out_dir, f"run{i}.log")
                         rb.log(f"{eng} {case} {v['label']} run {i} ...")
                         proc = rb.run_godot(v["exe"], ["--headless", "--fixed-fps", "60"], user, args.timeout, lp)
