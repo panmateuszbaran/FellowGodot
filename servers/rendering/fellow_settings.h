@@ -234,6 +234,11 @@ inline bool physics_distance_face_cull() {
 inline bool physics_distance_face_order() {
 	return physics_distance_face_cull() && GLOBAL_GET_CACHED(bool, "rendering/fellow/physics/distance_face_order");
 }
+// The faces kept by physics/distance_face_cull are given to GJK in batches of this many (1-32); any value gives the same
+// answers.
+inline int physics_distance_face_batch() {
+	return GLOBAL_GET_CACHED(int, "rendering/fellow/physics/distance_face_batch");
+}
 // physics/convex_vertex_cache (decision 0086): a SAT test with a convex polygon (or a concave shape's face) transforms its
 // vertices once and projects those on its candidate axes (stock transforms every vertex again for every axis, and every
 // edge's vertices again in the edge loops). The same values. Read per test.

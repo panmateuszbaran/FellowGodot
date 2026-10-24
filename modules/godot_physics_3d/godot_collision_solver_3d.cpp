@@ -666,12 +666,9 @@ struct _FellowSeparationInfo {
 					Math::abs(double(b.rows[r][2]) * cl[2]) + Math::abs(edge[0][r]) + Math::abs(edge[1][r]) + Math::abs(edge[2][r]) + Math::abs(motion[r]);
 			magnitude = MAX(magnitude, reach);
 		}
-		// The box's own axes, then the motion's direction and two directions across it (a long diagonal motion: the
-		// box's axes alone bound it no better than its AABB).
+		// The motion's direction and two directions across it (a long diagonal motion: the box's axes alone bound it no
+		// better than its AABB; across the motion is where most faces are left out), then the box's own axes.
 		axis_count = 0;
-		for (int i = 0; i < 3; i++) {
-			add_axis(b.rows[0][i], b.rows[1][i], b.rows[2][i]);
-		}
 		const double ml2 = dot3(motion, motion);
 		if (ml2 > 1e-18) {
 			const double l = Math::sqrt(ml2);
@@ -686,43 +683,90 @@ struct _FellowSeparationInfo {
 			double ref[3] = { 0.0, 0.0, 0.0 };
 			ref[k] = 1.0;
 			const double u[3] = { d[1] * ref[2] - d[2] * ref[1], d[2] * ref[0] - d[0] * ref[2], d[0] * ref[1] - d[1] * ref[0] };
-			add_axis(d[0], d[1], d[2]);
 			add_axis(u[0], u[1], u[2]);
 			add_axis(d[1] * u[2] - d[2] * u[1], d[2] * u[0] - d[0] * u[2], d[0] * u[1] - d[1] * u[0]);
+			add_axis(d[0], d[1], d[2]);
 		}
+		for (int i = 0; i < 3; i++) {
+			add_axis(b.rows[0][i], b.rows[1][i], b.rows[2][i]);
+		}
+	}
+
+	// The axes taken into the concave shape's local space (a projection of a world point B v + o on a is (Bt a) . v + a . o),
+	// so that a face is tested on its local vertices; the face normal's direction in world space is the cofactor matrix of
+	// B times the local normal. One g for the query: from the largest coordinate a vertex of the shape can have.
+	double local_axis[6][3];
+	double local_offset[6];
+	double cofactor[3][3];
+	double basis_b[3][3];
+	double origin_b[3];
+	double g = 0.0;
+
+	void prepare_local(const Transform3D &p_transform_B, const AABB &p_shape_B_aabb) {
+		const Basis &b = p_transform_B.basis;
+		for (int r = 0; r < 3; r++) {
+			origin_b[r] = p_transform_B.origin[r];
+			for (int c = 0; c < 3; c++) {
+				basis_b[r][c] = b.rows[r][c];
+			}
+		}
+		for (int j = 0; j < axis_count; j++) {
+			for (int c = 0; c < 3; c++) {
+				local_axis[j][c] = axis[j][0] * basis_b[0][c] + axis[j][1] * basis_b[1][c] + axis[j][2] * basis_b[2][c];
+			}
+			local_offset[j] = dot3(axis[j], origin_b);
+		}
+		const double(&m)[3][3] = basis_b;
+		cofactor[0][0] = m[1][1] * m[2][2] - m[1][2] * m[2][1];
+		cofactor[0][1] = m[1][2] * m[2][0] - m[1][0] * m[2][2];
+		cofactor[0][2] = m[1][0] * m[2][1] - m[1][1] * m[2][0];
+		cofactor[1][0] = m[0][2] * m[2][1] - m[0][1] * m[2][2];
+		cofactor[1][1] = m[0][0] * m[2][2] - m[0][2] * m[2][0];
+		cofactor[1][2] = m[0][1] * m[2][0] - m[0][0] * m[2][1];
+		cofactor[2][0] = m[0][1] * m[1][2] - m[0][2] * m[1][1];
+		cofactor[2][1] = m[0][2] * m[1][0] - m[0][0] * m[1][2];
+		cofactor[2][2] = m[0][0] * m[1][1] - m[0][1] * m[1][0];
+		double vmax = magnitude;
+		for (int r = 0; r < 3; r++) {
+			double reach = Math::abs(origin_b[r]);
+			for (int c = 0; c < 3; c++) {
+				const double lo_c = Math::abs(double(p_shape_B_aabb.position[c]));
+				const double hi_c = Math::abs(double(p_shape_B_aabb.position[c]) + double(p_shape_B_aabb.size[c]));
+				reach += Math::abs(basis_b[r][c]) * MAX(lo_c, hi_c) * (1.0 + 1e-6);
+			}
+			vmax = MAX(vmax, reach);
+		}
+		g = 1e-3 + 1e-5 * vmax;
 	}
 
 	// True when the face is certainly farther from the bound than GJK's tolerance. r_score: the largest gap found over
 	// the axes less g (<= 0 when the face is kept; the lower, the deeper the bound overlaps the face on every axis).
 	bool face_separated(const GodotFaceShape3D *p_face, double &r_score) const {
-		const Transform3D &t = *transform_B;
-		double w[3][3];
-		double vmax = magnitude;
+		double v[3][3];
 		for (int k = 0; k < 3; k++) {
-			const Vector3 &v = p_face->vertex[k];
-			for (int r = 0; r < 3; r++) {
-				const double tx = double(t.basis.rows[r][0]) * double(v.x);
-				const double ty = double(t.basis.rows[r][1]) * double(v.y);
-				const double tz = double(t.basis.rows[r][2]) * double(v.z);
-				w[k][r] = double(t.origin[r]) + tx + ty + tz;
-				vmax = MAX(vmax, Math::abs(double(t.origin[r])) + Math::abs(tx) + Math::abs(ty) + Math::abs(tz));
-			}
+			v[k][0] = p_face->vertex[k].x;
+			v[k][1] = p_face->vertex[k].y;
+			v[k][2] = p_face->vertex[k].z;
 		}
-		const double g = 1e-3 + 1e-5 * vmax;
 		double gap = -1e300;
 		for (int j = 0; j < axis_count; j++) {
-			const double p0 = dot3(axis[j], w[0]);
-			const double p1 = dot3(axis[j], w[1]);
-			const double p2 = dot3(axis[j], w[2]);
-			if (MIN(p0, MIN(p1, p2)) > hi[j] + g || MAX(p0, MAX(p1, p2)) < lo[j] - g) {
+			const double *a = local_axis[j];
+			const double p0 = dot3(a, v[0]) + local_offset[j];
+			const double p1 = dot3(a, v[1]) + local_offset[j];
+			const double p2 = dot3(a, v[2]) + local_offset[j];
+			const double pmin = MIN(p0, MIN(p1, p2));
+			const double pmax = MAX(p0, MAX(p1, p2));
+			if (pmin > hi[j] + g || pmax < lo[j] - g) {
 				return true;
 			}
-			gap = MAX(gap, MAX(MIN(p0, MIN(p1, p2)) - hi[j], lo[j] - MAX(p0, MAX(p1, p2))));
+			gap = MAX(gap, MAX(pmin - hi[j], lo[j] - pmax));
 		}
-		// The face's plane.
-		const double e1[3] = { w[1][0] - w[0][0], w[1][1] - w[0][1], w[1][2] - w[0][2] };
-		const double e2[3] = { w[2][0] - w[0][0], w[2][1] - w[0][1], w[2][2] - w[0][2] };
-		double n[3] = { e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0] };
+		// The face's plane (any direction is a valid separating axis; the face's three vertices are projected on it).
+		const Vector3 &nl_f = p_face->normal;
+		double n[3];
+		for (int r = 0; r < 3; r++) {
+			n[r] = cofactor[r][0] * double(nl_f.x) + cofactor[r][1] * double(nl_f.y) + cofactor[r][2] * double(nl_f.z);
+		}
 		const double nl = Math::sqrt(dot3(n, n));
 		if (nl > 1e-12) {
 			n[0] /= nl;
@@ -730,13 +774,20 @@ struct _FellowSeparationInfo {
 			n[2] /= nl;
 			double l, h;
 			range_along(n, l, h);
-			const double p0 = dot3(n, w[0]);
-			const double p1 = dot3(n, w[1]);
-			const double p2 = dot3(n, w[2]);
-			if (MIN(p0, MIN(p1, p2)) > h + g || MAX(p0, MAX(p1, p2)) < l - g) {
+			double la[3];
+			for (int c = 0; c < 3; c++) {
+				la[c] = n[0] * basis_b[0][c] + n[1] * basis_b[1][c] + n[2] * basis_b[2][c];
+			}
+			const double off = dot3(n, origin_b);
+			const double p0 = dot3(la, v[0]) + off;
+			const double p1 = dot3(la, v[1]) + off;
+			const double p2 = dot3(la, v[2]) + off;
+			const double pmin = MIN(p0, MIN(p1, p2));
+			const double pmax = MAX(p0, MAX(p1, p2));
+			if (pmin > h + g || pmax < l - g) {
 				return true;
 			}
-			gap = MAX(gap, MAX(MIN(p0, MIN(p1, p2)) - h, l - MAX(p0, MAX(p1, p2))));
+			gap = MAX(gap, MAX(pmin - h, l - pmax));
 		}
 		r_score = gap - g;
 		return false;
@@ -752,6 +803,7 @@ struct _FellowSeparationInfo {
 	static constexpr int MAX_CANDIDATES = 32;
 	Candidate candidates[MAX_CANDIDATES];
 	int candidate_count = 0;
+	int batch = MAX_CANDIDATES;
 	GodotFaceShape3D face;
 
 	// GJK on the pending candidates; true when one is touching.
@@ -802,7 +854,7 @@ bool GodotCollisionSolver3D::fellow_separation_callback(void *p_userdata, GodotS
 		c.vertex[1] = face->vertex[1];
 		c.vertex[2] = face->vertex[2];
 		c.score = score;
-		return info.candidate_count == _FellowSeparationInfo::MAX_CANDIDATES ? info.flush() : false;
+		return info.candidate_count >= info.batch ? info.flush() : false;
 	}
 	// As concave_distance_callback(): the first face found touching ends the search.
 	info.collided = !gjk_epa_calculate_distance(info.shape_A, *info.transform_A, p_convex, *info.transform_B, close_A, close_B);
@@ -823,7 +875,9 @@ bool GodotCollisionSolver3D::fellow_test_separation(const GodotShape3D *p_shape_
 	info.transform_B = &p_transform_B;
 	info.verify = Fellow::physics_verify();
 	info.ordered = Fellow::physics_distance_face_order();
+	info.batch = CLAMP(Fellow::physics_distance_face_batch(), 1, _FellowSeparationInfo::MAX_CANDIDATES);
 	info.setup(p_transform_A, p_bounds_A, p_motion_A);
+	info.prepare_local(p_transform_B, p_shape_B->get_aabb());
 
 	// The faces culled exactly as solve_distance() culls them (the same box, the same order).
 	Transform3D rel_transform = p_transform_A;

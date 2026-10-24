@@ -94,6 +94,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/animation/batched_skin_transforms", true); // decision 0077 (exact; on from fellow170)
 	GLOBAL_DEF("rendering/fellow/physics/distance_face_cull", true); // decision 0085 (exact)
 	GLOBAL_DEF("rendering/fellow/physics/distance_face_order", true); // decision 0085 (exact)
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/physics/distance_face_batch", PROPERTY_HINT_RANGE, "1,32,1"), 8);
 	GLOBAL_DEF("rendering/fellow/physics/convex_vertex_cache", true); // decision 0086 (exact)
 	GLOBAL_DEF("rendering/fellow/physics/parallel_pair_culls", true); // decision 0087 (exact)
 	GLOBAL_DEF("rendering/fellow/physics/jolt_deferred_sensor_contacts", true); // decision 0088
