@@ -248,6 +248,11 @@ void ToneMapper::tonemapper(RID p_source_color, RID p_dst_framebuffer, const Ton
 			fellow_spec |= (p_settings.fellow_local_exposure && p_settings.fellow_local_grid.is_valid() && p_settings.fellow_local_blurred.is_valid()) ? (1u << 27) : 0u;
 			fellow_spec |= p_settings.fellow_sharpen > 0.0f ? (1u << 28) : 0u;
 			fellow_spec |= (p_settings.fellow_lens_dirt > 0.0f && p_settings.glow_map.is_valid() && (pc.flags & TONEMAP_FLAG_USE_GLOW)) ? (1u << 29) : 0u;
+			// Bloom, lens flare, white balance (decisions 0112-0114).
+			const bool bloom = p_settings.fellow_bloom.is_valid() && p_settings.fellow_bloom_intensity > 0.0f;
+			const bool flare = p_settings.fellow_flare.is_valid() && p_settings.fellow_flare_intensity > 0.0f;
+			const bool shafts = p_settings.fellow_shafts.is_valid() && p_settings.fellow_shafts_intensity > 0.0f;
+			fellow_spec |= (bloom || flare || shafts || p_settings.fellow_white_balance) ? (1u << 30) : 0u;
 		}
 	}
 
@@ -255,26 +260,41 @@ void ToneMapper::tonemapper(RID p_source_color, RID p_dst_framebuffer, const Ton
 	// shader declares them), white textures when unused.
 	if (fellow_local_ubo.is_null()) {
 		Vector<uint8_t> zeros;
-		zeros.resize(48);
+		zeros.resize(FELLOW_LOCAL_UBO_SIZE);
 		zeros.fill(0);
-		fellow_local_ubo = RD::get_singleton()->uniform_buffer_create(48, zeros);
+		fellow_local_ubo = RD::get_singleton()->uniform_buffer_create(FELLOW_LOCAL_UBO_SIZE, zeros);
 	}
 	const bool fellow_local = (fellow_spec & (1u << 27)) != 0;
-	if (fellow_spec & ((1u << 27) | (1u << 28) | (1u << 29))) {
-		float data[12];
+	const bool fellow_grade = (fellow_spec & (1u << 30)) != 0;
+	const bool fellow_bloom = fellow_grade && p_settings.fellow_bloom.is_valid() && p_settings.fellow_bloom_intensity > 0.0f;
+	const bool fellow_flare = fellow_grade && p_settings.fellow_flare.is_valid() && p_settings.fellow_flare_intensity > 0.0f;
+	const bool fellow_shafts = fellow_grade && p_settings.fellow_shafts.is_valid() && p_settings.fellow_shafts_intensity > 0.0f;
+	if (fellow_spec & ((1u << 27) | (1u << 28) | (1u << 29) | (1u << 30))) {
+		float data[FELLOW_LOCAL_UBO_SIZE / 4] = {};
 		for (int i = 0; i < 8; i++) {
 			data[i] = p_settings.fellow_local_params[i];
 		}
 		data[8] = p_settings.fellow_sharpen;
 		data[9] = p_settings.fellow_lens_dirt;
-		data[10] = 0.0f;
-		data[11] = 0.0f;
-		RD::get_singleton()->buffer_update(fellow_local_ubo, 0, 48, data);
+		data[10] = fellow_bloom ? p_settings.fellow_bloom_intensity : 0.0f;
+		data[11] = fellow_flare ? p_settings.fellow_flare_intensity : 0.0f;
+		data[12] = (fellow_grade && p_settings.fellow_white_balance) ? 1.0f : 0.0f;
+		data[13] = fellow_bloom ? p_settings.fellow_bloom_dirt : 0.0f;
+		data[14] = fellow_shafts ? p_settings.fellow_shafts_intensity : 0.0f;
+		for (int c = 0; c < 3; c++) {
+			for (int r = 0; r < 3; r++) {
+				data[16 + c * 4 + r] = p_settings.fellow_white_balance_matrix[c * 3 + r];
+			}
+		}
+		RD::get_singleton()->buffer_update(fellow_local_ubo, 0, FELLOW_LOCAL_UBO_SIZE, data);
 	}
 	TextureStorage *texture_storage = TextureStorage::get_singleton();
 	RD::Uniform u_local_grid(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 0, Vector<RID>({ default_sampler, fellow_local ? p_settings.fellow_local_grid : texture_storage->texture_rd_get_default(TextureStorage::DEFAULT_RD_TEXTURE_3D_WHITE) }));
 	RD::Uniform u_local_blurred(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 1, Vector<RID>({ default_sampler, fellow_local ? p_settings.fellow_local_blurred : texture_storage->texture_rd_get_default(TextureStorage::DEFAULT_RD_TEXTURE_WHITE) }));
 	RD::Uniform u_local_params(RD::UNIFORM_TYPE_UNIFORM_BUFFER, 2, Vector<RID>({ fellow_local_ubo }));
+	RD::Uniform u_bloom(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 3, Vector<RID>({ default_sampler, fellow_bloom ? p_settings.fellow_bloom : texture_storage->texture_rd_get_default(TextureStorage::DEFAULT_RD_TEXTURE_WHITE) }));
+	RD::Uniform u_flare(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 4, Vector<RID>({ default_sampler, fellow_flare ? p_settings.fellow_flare : texture_storage->texture_rd_get_default(TextureStorage::DEFAULT_RD_TEXTURE_WHITE) }));
+	RD::Uniform u_shafts(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 5, Vector<RID>({ default_sampler, fellow_shafts ? p_settings.fellow_shafts : texture_storage->texture_rd_get_default(TextureStorage::DEFAULT_RD_TEXTURE_WHITE) }));
 
 	RD::DrawListID draw_list = RD::get_singleton()->draw_list_begin(p_dst_framebuffer);
 	RD::get_singleton()->draw_list_bind_render_pipeline(draw_list, tonemap.pipelines[mode].get_render_pipeline(RD::INVALID_ID, RD::get_singleton()->framebuffer_get_format(p_dst_framebuffer), false, RD::get_singleton()->draw_list_get_current_pass(), fellow_spec));
@@ -282,7 +302,7 @@ void ToneMapper::tonemapper(RID p_source_color, RID p_dst_framebuffer, const Ton
 	RD::get_singleton()->draw_list_bind_uniform_set(draw_list, uniform_set_cache->get_cache(shader, 1, u_exposure_texture), 1);
 	RD::get_singleton()->draw_list_bind_uniform_set(draw_list, uniform_set_cache->get_cache(shader, 2, u_glow_texture, u_glow_map), 2);
 	RD::get_singleton()->draw_list_bind_uniform_set(draw_list, uniform_set_cache->get_cache(shader, 3, u_color_correction_texture), 3);
-	RD::get_singleton()->draw_list_bind_uniform_set(draw_list, uniform_set_cache->get_cache(shader, 4, u_local_grid, u_local_blurred, u_local_params), 4);
+	RD::get_singleton()->draw_list_bind_uniform_set(draw_list, uniform_set_cache->get_cache(shader, 4, u_local_grid, u_local_blurred, u_local_params, u_bloom, u_flare, u_shafts), 4);
 
 	RD::get_singleton()->draw_list_set_push_constant(draw_list, &tonemap.push_constant, sizeof(TonemapPushConstant));
 	RD::get_singleton()->draw_list_draw(draw_list, false, 1u, 3u);

@@ -157,7 +157,9 @@ private:
 		PipelineCacheRD pipelines[TONEMAP_MODE_MAX];
 	} tonemap;
 
-	// FellowEngine local exposure (decision 0106): its parameters (set 4), updated before each tone mapping.
+	// FellowEngine: the local exposure's, sharpening's, lens dirt's, bloom's and white balance's uniforms (set 4; std140),
+	// updated before each tone mapping (decisions 0106, 0110-0114).
+	static constexpr uint32_t FELLOW_LOCAL_UBO_SIZE = 112;
 	RID fellow_local_ubo;
 
 	struct TonemapMobile {
@@ -231,6 +233,16 @@ public:
 		// FellowEngine sharpening (decision 0110; 0: off) and additive lens dirt (decision 0111; 0: the glow map's mix).
 		float fellow_sharpen = 0.0;
 		float fellow_lens_dirt = 0.0;
+		// FellowEngine bloom (decision 0112; intensity 0: off), lens flare (0113) and white balance (0114).
+		RID fellow_bloom; // RGBA16F, scene-linear
+		float fellow_bloom_intensity = 0.0;
+		float fellow_bloom_dirt = 0.0; // the lens dirt on the bloom
+		RID fellow_flare;
+		float fellow_flare_intensity = 0.0;
+		RID fellow_shafts; // decision 0116
+		float fellow_shafts_intensity = 0.0;
+		bool fellow_white_balance = false;
+		float fellow_white_balance_matrix[9] = { 1, 0, 0, 0, 1, 0, 0, 0, 1 }; // columns
 	};
 
 	void tonemapper(RID p_source_color, RID p_dst_framebuffer, const TonemapSettings &p_settings);

@@ -1,8 +1,8 @@
 # 0107 — Contact shadows (screen-space, the sun)
 
 Status: **KEEP as an option**, off by default — a visual feature (milestone 18) · Branch `fellow/geometry` · Settings
-`rendering/fellow/post/contact_shadows/enabled` (false), `length` (0.3 m), `steps` (16), `thickness` (0.02 m) ·
-Code: `effects/fellow_contact_shadow.*`, `shaders/effects/fellow_contact_shadow.glsl`,
+`rendering/fellow/post/contact_shadows/enabled` (false), `length` (0.3 m), `steps` (8; 16 until milestone 19),
+`thickness` (0.02 m) · Code: `effects/fellow_contact_shadow.*`, `shaders/effects/fellow_contact_shadow.glsl`,
 `forward_clustered/render_forward_clustered.cpp` (`_fellow_process_contact_shadow`), `scene_forward_clustered.glsl`
 (specialization bit `fellow_contact_shadow`).
 
@@ -48,3 +48,7 @@ and 0.264 ms — the 16 depth fetches per pixel are the cost. Skipping the pixel
 from the depth buffer, the smaller change of depth on each axis) was tried and dropped: at the creases between the
 characters' body discs, seen at a grazing angle, the reconstructed normal points away from the sun and the contact
 shadow there — the effect's main use — was lost (2 300 pixels brighter).
+
+Milestone 19: 8 steps by default (Unreal's count), half the fetches. Crowd Lab on lavapipe: 6 100 pixels darkened
+against 5 300 with 16 (the tolerance of two steps' depth change is twice as long), the total darkening +5 % (close) and
+−1 % (street); side by side the two are not told apart.

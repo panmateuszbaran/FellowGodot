@@ -68,6 +68,7 @@ public:
 		RID atmosphere_sky_view;
 		uint32_t frame = 0;
 		bool history_valid = false;
+		bool interleaved = true; // decision 0115: a quarter of the pixels traced per frame
 	};
 
 private:
@@ -105,6 +106,7 @@ private:
 	RID trace;
 	RID history[2];
 	uint32_t parity = 0;
+	bool interleave_primed = false; // every pixel of the trace written since the targets were made
 
 	void _free_targets();
 

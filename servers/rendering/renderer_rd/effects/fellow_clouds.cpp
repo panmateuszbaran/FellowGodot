@@ -102,6 +102,7 @@ void FellowClouds::_free_targets() {
 		}
 	}
 	trace_size = Size2i();
+	interleave_primed = false;
 }
 
 FellowClouds::~FellowClouds() {
@@ -173,6 +174,10 @@ void FellowClouds::process(const Params &p_params) {
 	u.sizes[3] = p_params.size.y;
 	const bool atmosphere = p_params.atmosphere_transmittance.is_valid() && p_params.atmosphere_sky_view.is_valid();
 	u.flags[0] = atmosphere ? 1 : 0;
+	// Interleaved (decision 0115): one pixel of every 2 x 2 block per frame, once the history (every pixel's trace) exists.
+	const bool interleaved = p_params.interleaved && history_valid && interleave_primed;
+	u.flags[1] = interleaved ? 1 : 0;
+	u.flags[2] = int32_t(p_params.frame & 3);
 	RD::get_singleton()->buffer_update(ubo, 0, sizeof(UBO), &u);
 	RD::Uniform u_params(RD::UNIFORM_TYPE_UNIFORM_BUFFER, 0, ubo);
 
@@ -189,8 +194,15 @@ void FellowClouds::process(const Params &p_params) {
 		RD::get_singleton()->compute_list_bind_uniform_set(list, uniform_set_cache->get_cache(shader_rd, 0, u_params, u_shape, u_detail, u_t, u_sv, u_depth), 0);
 		RD::Uniform u_dest(RD::UNIFORM_TYPE_IMAGE, 0, trace);
 		RD::get_singleton()->compute_list_bind_uniform_set(list, uniform_set_cache->get_cache(shader_rd, 1, u_dest), 1);
-		RD::get_singleton()->compute_list_dispatch_threads(list, ts.x, ts.y, 1);
+		if (interleaved) {
+			RD::get_singleton()->compute_list_dispatch_threads(list, (ts.x + 1) / 2, (ts.y + 1) / 2, 1);
+		} else {
+			RD::get_singleton()->compute_list_dispatch_threads(list, ts.x, ts.y, 1);
+		}
 		RD::get_singleton()->compute_list_end();
+	}
+	if (!interleaved) {
+		interleave_primed = true; // this frame traced every pixel
 	}
 	RID hist_prev = history[parity];
 	RID hist_out = history[parity ^ 1];

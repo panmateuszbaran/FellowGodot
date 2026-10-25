@@ -50,7 +50,7 @@ public:
 		Projection projection; // the jittered projection the depth buffer was rendered with
 		Vector3 light_direction_view; // towards the light, view space
 		float length = 0.5; // metres
-		int steps = 16;
+		int steps = 8;
 		float thickness = 0.3; // metres: a surface at most this far in front of the march occludes
 		uint32_t frame = 0;
 	};

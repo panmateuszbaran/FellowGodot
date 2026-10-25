@@ -219,6 +219,8 @@ func _define_cameras() -> void:
 	temporal_seqs = {
 		"city_pan": {"start": 3.0, "frames": 60, "purpose": "pan over the roofs with moving carts",
 			"path": CameraPath.from_array([[0.0, Vector3(-40, 30, 60), Vector3(-20, 0, -20), 60.0], [1.0, Vector3(40, 30, 60), Vector3(20, 0, -20), 60.0]])},
+		"city_sky_pan": {"start": 3.0, "frames": 60, "purpose": "a fast pan along the sky from the roofs (the clouds' reprojection)",
+			"path": CameraPath.from_array([[0.0, Vector3(0, 40, 0), Vector3(200, 110, 60), 70.0], [1.0, Vector3(0, 40, 0), Vector3(-60, 110, 200), 70.0]])},
 	}
 
 

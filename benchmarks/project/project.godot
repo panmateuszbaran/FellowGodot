@@ -75,3 +75,7 @@ fellow_atmosphere_transmittance={
 "type": "sampler2D",
 "value": ""
 }
+fellow_atmosphere_camera_height={
+"type": "float",
+"value": 0.0
+}

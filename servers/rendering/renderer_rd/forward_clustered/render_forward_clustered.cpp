@@ -4509,8 +4509,28 @@ void RenderForwardClustered::_fellow_update_atmosphere(RenderDataRD *p_render_da
 	params.aerial = Fellow::atmosphere_aerial_perspective();
 	params.aerial_distance_scale = Fellow::atmosphere_aerial_distance_scale();
 	RENDER_TIMESTAMP("FellowEngine Atmosphere");
-	fellow_atmosphere->update(params);
+	const bool fellow_tables_recomputed = fellow_atmosphere->update(params);
 	fellow_atmosphere_valid = true;
+	{
+		// The camera's height for the sky shader (a global shader parameter, so that the sky need not read POSITION, which
+		// makes Godot redraw its radiance every frame); the sky's radiance redrawn when what it shows changes beyond what
+		// Godot watches (the light): the atmosphere's settings, the height by more than 100 m.
+		RendererRD::MaterialStorage *material_storage = RendererRD::MaterialStorage::get_singleton();
+		const float height_km = MAX(0.0f, float(params.camera_position.y - params.ground_height) * 0.001f);
+		const StringName height_name = SNAME("fellow_atmosphere_camera_height");
+		if (material_storage->global_shader_parameter_get_type_internal(height_name) == RSE::GLOBAL_VAR_TYPE_FLOAT && height_km != fellow_atmosphere_height_set) {
+			material_storage->global_shader_parameter_set(height_name, height_km);
+			fellow_atmosphere_height_set = height_km;
+		}
+		if (fellow_tables_recomputed || Math::abs(height_km - fellow_atmosphere_sky_height) > 0.1f) {
+			fellow_atmosphere_sky_height = height_km;
+			RID sky_rid = environment_get_sky(p_render_data->environment);
+			RendererRD::SkyRD::Sky *sky_data = sky_rid.is_valid() ? sky.get_sky(sky_rid) : nullptr;
+			if (sky_data) {
+				sky_data->reflection.dirty = true;
+			}
+		}
+	}
 
 	// The tables as textures of the global shader parameters (declared by the project, shader_globals), set once.
 	if (!fellow_atmosphere_globals_set) {
@@ -4588,6 +4608,7 @@ void RenderForwardClustered::_fellow_process_clouds(RenderDataRD *p_render_data,
 		params.atmosphere_sky_view = fellow_atmosphere->get_sky_view();
 	}
 	params.frame = fellow_clouds_frame++;
+	params.interleaved = Fellow::clouds_interleaved();
 	params.history_valid = fellow_clouds_history;
 	fellow_clouds->process(params);
 	fellow_clouds_history = true;

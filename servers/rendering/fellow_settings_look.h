@@ -81,6 +81,10 @@ inline bool atmosphere_srgb_rayleigh() {
 inline float atmosphere_ground_albedo() {
 	return GLOBAL_GET_CACHED(float, "rendering/fellow/post/atmosphere/ground_albedo");
 }
+// post/clouds/interleaved (decision 0115): a quarter of the clouds' pixels traced per frame, the rest reprojected.
+inline bool clouds_interleaved() {
+	return GLOBAL_GET_CACHED(bool, "rendering/fellow/post/clouds/interleaved");
+}
 // post/clouds/* (decision 0109): volumetric clouds over the sky (a visual feature, off by default).
 inline bool clouds_enabled() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/post/clouds/enabled");
@@ -108,6 +112,43 @@ inline float sharpen_strength() {
 // this intensity (0: Godot's mix by the glow map strength).
 inline float lens_dirt_intensity() {
 	return GLOBAL_GET_CACHED(float, "rendering/fellow/post/bloom/lens_dirt");
+}
+// post/bloom/* (decision 0112): an energy-conserving bloom of the whole image (Unreal's has no threshold either), mixed
+// in by `intensity`; `scatter` widens it. The lens dirt then lies on it instead of Godot's glow.
+inline bool bloom_enabled() {
+	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/post/bloom/enabled");
+}
+inline float bloom_intensity() {
+	return GLOBAL_GET_CACHED(float, "rendering/fellow/post/bloom/intensity");
+}
+inline float bloom_scatter() {
+	return GLOBAL_GET_CACHED(float, "rendering/fellow/post/bloom/scatter");
+}
+// post/bloom/lens_flare* (decision 0113): ghosts and a halo of the sources brighter than the threshold (scene-linear).
+inline float lens_flare_intensity() {
+	return GLOBAL_GET_CACHED(float, "rendering/fellow/post/bloom/lens_flare");
+}
+inline float lens_flare_threshold() {
+	return GLOBAL_GET_CACHED(float, "rendering/fellow/post/bloom/lens_flare_threshold");
+}
+// post/light_shafts/* (decision 0116): the bright sky around the sun blurred radially towards it (Unreal's light shaft
+// bloom); 0: off.
+inline float light_shafts_intensity() {
+	return GLOBAL_GET_CACHED(float, "rendering/fellow/post/light_shafts/intensity");
+}
+inline float light_shafts_threshold() {
+	return GLOBAL_GET_CACHED(float, "rendering/fellow/post/light_shafts/threshold");
+}
+inline float light_shafts_length() {
+	return GLOBAL_GET_CACHED(float, "rendering/fellow/post/light_shafts/length");
+}
+// post/white_balance/* (decision 0114): the scene's white (temperature in kelvin, tint along the isotherm) shown as
+// white, as Unreal's white balance; 6500 and 0: off.
+inline float white_balance_temperature() {
+	return GLOBAL_GET_CACHED(float, "rendering/fellow/post/white_balance/temperature");
+}
+inline float white_balance_tint() {
+	return GLOBAL_GET_CACHED(float, "rendering/fellow/post/white_balance/tint");
 }
 
 } // namespace Fellow

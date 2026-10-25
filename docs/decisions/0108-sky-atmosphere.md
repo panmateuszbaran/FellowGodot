@@ -2,8 +2,8 @@
 
 Status: **KEEP as an option**, off by default — a visual feature (milestone 18) · Branch `fellow/geometry` · Settings
 `rendering/fellow/post/atmosphere/enabled` (false), `aerial_perspective` (true), `sun_transmittance` (true),
-`aerial_distance_scale` (1), `mie_scale` (1), `rayleigh_scale` (1), `ground_albedo` (0.3), `srgb_rayleigh` (true) · Code:
-`effects/fellow_atmosphere.*`, `shaders/effects/fellow_atmosphere.glsl`,
+`aerial_distance_scale` (1), `mie_scale` (1), `rayleigh_scale` (1), `ground_albedo` (0.3), `srgb_rayleigh` (true) ·
+Code: `effects/fellow_atmosphere.*`, `shaders/effects/fellow_atmosphere.glsl`,
 `forward_clustered/render_forward_clustered.cpp` (`_fellow_update_atmosphere`), `storage_rd/light_storage.*` (the sun's
 tint); bench `bench/fellow_atmosphere_sky.gdshader`, `--sky=atmosphere`, `--sun_elevation`.
 
@@ -80,3 +80,11 @@ The ozone's coefficients are still Hillaire's three wavelengths (no spectrum at 
 
 City Lab (lavapipe, 960 × 540): a blue sky brightening to white at the horizon at a high sun, orange at 3°, the city's
 far blocks bluish in the haze, the sunlit walls orange-tinted at a low sun. RTX cost: milestone 18's report.
+
+**The sky's radiance (milestone 19).** The bench's sky shader read the camera's height from `POSITION`: Godot then
+counts the sky as real-time and redraws its radiance (the reflections' and the ambient light's cubemap) every frame —
+"Setup Sky" 0.25 ms on the RTX laptop in every scene with it (`m18_f255`-`m18_f257`), against 0.002 ms for the stock
+skies. The height now comes from a third global shader parameter, `fellow_atmosphere_camera_height` (km), set by the
+engine each frame; the sky's radiance is redrawn when the light changes (Godot's incremental mode) and when the
+atmosphere's settings change or the camera's height moves by more than 100 m (FellowEngine marks it). The sky drawn
+behind the scene is the same computation, the height from the parameter instead of `POSITION` (a frame late).

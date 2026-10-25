@@ -454,6 +454,65 @@ void RendererSceneRenderRD::_render_buffers_copy_depth_texture(const RenderDataR
 	RD::get_singleton()->draw_command_end_label();
 }
 
+// FellowEngine white balance (decision 0114, after Unreal's): the scene's white — CIE daylight at `p_temperature`
+// kelvin (the Planckian locus below 4000 K), moved along the isotherm by `p_tint` (positive: greener, so the image turns
+// magenta) — adapted to D65 by the Bradford transform; the matrix in linear sRGB, columns.
+static void _fellow_white_balance_matrix(float p_temperature, float p_tint, float *r_m) {
+	const double T = CLAMP(double(p_temperature), 1000.0, 25000.0);
+	// Krystek's Planckian locus in CIE 1960 uv.
+	auto planck_uv = [](double t, double &u, double &v) {
+		u = (0.860117757 + 1.54118254e-4 * t + 1.28641212e-7 * t * t) / (1.0 + 8.42420235e-4 * t + 7.08145163e-7 * t * t);
+		v = (0.317398726 + 4.22806245e-5 * t + 4.20481691e-8 * t * t) / (1.0 - 2.89741816e-5 * t + 1.61456053e-7 * t * t);
+	};
+	double x, y;
+	if (T < 4000.0) {
+		double u, v;
+		planck_uv(T, u, v);
+		x = 3.0 * u / (2.0 * u - 8.0 * v + 4.0);
+		y = 2.0 * v / (2.0 * u - 8.0 * v + 4.0);
+	} else {
+		// CIE daylight; 6500 K taken as D65 (6504 K with today's radiation constant).
+		const double t = T * (6504.0 / 6500.0);
+		const double t3 = t * t * t;
+		x = t <= 7000.0 ? (-4.6070e9 / t3 + 2.9678e6 / (t * t) + 0.09911e3 / t + 0.244063) : (-2.0064e9 / t3 + 1.9018e6 / (t * t) + 0.24748e3 / t + 0.237040);
+		y = -3.0 * x * x + 2.87 * x - 0.275;
+	}
+	if (p_tint != 0.0f) {
+		// Along the isotherm (perpendicular to the locus in uv), towards green (+v) for a positive tint.
+		double u0, v0, u1, v1;
+		planck_uv(T - 1.0, u0, v0);
+		planck_uv(T + 1.0, u1, v1);
+		double nu = -(v1 - v0);
+		double nv = u1 - u0;
+		const double len = Math::sqrt(nu * nu + nv * nv);
+		nu /= len;
+		nv /= len;
+		if (nv < 0.0) {
+			nu = -nu;
+			nv = -nv;
+		}
+		double u = 4.0 * x / (-2.0 * x + 12.0 * y + 3.0);
+		double v = 6.0 * y / (-2.0 * x + 12.0 * y + 3.0);
+		u += nu * double(p_tint) * 0.05;
+		v += nv * double(p_tint) * 0.05;
+		x = 3.0 * u / (2.0 * u - 8.0 * v + 4.0);
+		y = 2.0 * v / (2.0 * u - 8.0 * v + 4.0);
+	}
+	const Basis to_xyz(0.4124564, 0.3575761, 0.1804375, 0.2126729, 0.7151522, 0.0721750, 0.0193339, 0.1191920, 0.9503041);
+	const Basis bradford(0.8951, 0.2664, -0.1614, -0.7502, 1.7135, 0.0367, 0.0389, -0.0685, 1.0296);
+	const Vector3 src_xyz(x / y, 1.0, (1.0 - x - y) / y);
+	const Vector3 dst_xyz(0.31271 / 0.32902, 1.0, (1.0 - 0.31271 - 0.32902) / 0.32902);
+	const Vector3 src_lms = bradford.xform(src_xyz);
+	const Vector3 dst_lms = bradford.xform(dst_xyz);
+	const Basis scale(dst_lms.x / src_lms.x, 0, 0, 0, dst_lms.y / src_lms.y, 0, 0, 0, dst_lms.z / src_lms.z);
+	const Basis m = to_xyz.inverse() * bradford.inverse() * scale * bradford * to_xyz;
+	for (int c = 0; c < 3; c++) {
+		for (int r = 0; r < 3; r++) {
+			r_m[c * 3 + r] = float(m.rows[r][c]);
+		}
+	}
+}
+
 void RendererSceneRenderRD::_render_buffers_post_process_and_tonemap(const RenderDataRD *p_render_data, bool p_use_msaa) {
 	RendererRD::TextureStorage *texture_storage = RendererRD::TextureStorage::get_singleton();
 
@@ -685,6 +744,56 @@ void RendererSceneRenderRD::_render_buffers_post_process_and_tonemap(const Rende
 		ep.blur_size = Fellow::local_exposure_blur_size();
 		fellow_exposure->process(ep);
 		fellow_local_done = true;
+	}
+
+	// FellowEngine bloom and lens flare (post/bloom/*, decisions 0112, 0113): from the colour the tone mapper reads.
+	bool fellow_bloom_done = false;
+	float fellow_shafts_intensity = 0.0f;
+	Vector2 fellow_sun_uv;
+	if (can_use_effects && can_use_storage && Fellow::enabled() && rb->get_view_count() == 1 && Fellow::light_shafts_intensity() > 0.0f) {
+		// Light shafts (decision 0116): the first directional light on the screen, faded out as it leaves the view.
+		RendererRD::LightStorage *light_storage = RendererRD::LightStorage::get_singleton();
+		for (uint32_t i = 0; i < (uint32_t)p_render_data->lights->size(); i++) {
+			RID li = (*p_render_data->lights)[i];
+			RID base = light_storage->light_instance_get_base_light(li);
+			if (light_storage->light_get_type(base) != RSE::LIGHT_DIRECTIONAL || light_storage->light_directional_get_sky_mode(base) == RSE::LIGHT_DIRECTIONAL_SKY_MODE_LIGHT_ONLY) {
+				continue;
+			}
+			const Vector3 to_sun = light_storage->light_instance_get_base_transform(li).basis.get_column(Vector3::AXIS_Z).normalized();
+			const Transform3D &cam = p_render_data->scene_data->cam_transform;
+			const float facing = (-cam.basis.get_column(Vector3::AXIS_Z)).normalized().dot(to_sun);
+			if (facing > 0.0f) {
+				const Vector3 view_dir = cam.basis.xform_inv(to_sun);
+				const Plane clip = p_render_data->scene_data->cam_projection.xform4(Plane(view_dir.x, view_dir.y, view_dir.z, 0.0f));
+				if (clip.d > 1e-6f) {
+					fellow_sun_uv = Vector2(clip.normal.x / clip.d * 0.5f + 0.5f, 0.5f - clip.normal.y / clip.d * 0.5f);
+					// Fading as the sun leaves the screen (half a screen beyond its edge) and turns away.
+					const float out = MAX(MAX(-fellow_sun_uv.x, fellow_sun_uv.x - 1.0f), MAX(-fellow_sun_uv.y, fellow_sun_uv.y - 1.0f));
+					const float fade = CLAMP(1.0f - out * 2.0f, 0.0f, 1.0f) * CLAMP(facing * 4.0f, 0.0f, 1.0f);
+					fellow_shafts_intensity = Fellow::light_shafts_intensity() * fade;
+				}
+			}
+			break;
+		}
+	}
+	if (can_use_effects && can_use_storage && (Fellow::bloom_enabled() || fellow_shafts_intensity > 0.0f) && rb->get_view_count() == 1) {
+		RENDER_TIMESTAMP("FellowEngine Bloom");
+		if (!fellow_bloom) {
+			fellow_bloom = memnew(RendererRD::FellowBloom);
+		}
+		RendererRD::FellowBloom::Params bp;
+		bp.source = fellow_post_source.is_valid() ? fellow_post_source : rb->get_internal_texture();
+		bp.size = rb->get_internal_size();
+		bp.scatter = Fellow::bloom_scatter();
+		bp.flare_intensity = Fellow::lens_flare_intensity();
+		bp.flare_threshold = Fellow::lens_flare_threshold();
+		bp.shafts_intensity = fellow_shafts_intensity;
+		bp.shafts_threshold = Fellow::light_shafts_threshold();
+		bp.shafts_length = Fellow::light_shafts_length();
+		bp.sun_uv = fellow_sun_uv;
+		bp.depth = rb->get_depth_texture();
+		fellow_bloom->process(bp);
+		fellow_bloom_done = true;
 	}
 
 	if (can_use_effects && p_render_data->environment.is_valid() && environment_get_glow_enabled(p_render_data->environment)) {
@@ -931,6 +1040,28 @@ void RendererSceneRenderRD::_render_buffers_post_process_and_tonemap(const Rende
 			// The dirt is the environment's glow map: without one there is no dirt (not a brighter glow).
 			if (p_render_data->environment.is_valid() && environment_get_glow_map(p_render_data->environment).is_valid()) {
 				tonemap.fellow_lens_dirt = Fellow::lens_dirt_intensity();
+			}
+		}
+		if (fellow_bloom_done && fellow_bloom) {
+			// Bloom and lens flare (decisions 0112, 0113); the lens dirt (0111) lies on the bloom instead of the glow.
+			tonemap.fellow_bloom = fellow_bloom->get_bloom();
+			tonemap.fellow_bloom_intensity = Fellow::bloom_enabled() ? Fellow::bloom_intensity() : 0.0f;
+			tonemap.fellow_shafts = fellow_bloom->get_shafts();
+			tonemap.fellow_shafts_intensity = fellow_shafts_intensity;
+			tonemap.fellow_flare = fellow_bloom->get_flare();
+			tonemap.fellow_flare_intensity = Fellow::lens_flare_intensity();
+			if (p_render_data->environment.is_valid() && environment_get_glow_map(p_render_data->environment).is_valid()) {
+				tonemap.fellow_bloom_dirt = Fellow::lens_dirt_intensity();
+			}
+			tonemap.fellow_lens_dirt = 0.0f;
+		}
+		if (can_use_effects && Fellow::enabled()) {
+			// White balance (decision 0114).
+			const float temperature = Fellow::white_balance_temperature();
+			const float tint = Fellow::white_balance_tint();
+			if (temperature != 6500.0f || tint != 0.0f) {
+				tonemap.fellow_white_balance = true;
+				_fellow_white_balance_matrix(temperature, tint, tonemap.fellow_white_balance_matrix);
 			}
 		}
 		if (fellow_local_done && fellow_exposure) {
@@ -2044,6 +2175,10 @@ RendererSceneRenderRD::~RendererSceneRenderRD() {
 	if (fellow_exposure) {
 		memdelete(fellow_exposure);
 		fellow_exposure = nullptr;
+	}
+	if (fellow_bloom) {
+		memdelete(fellow_bloom);
+		fellow_bloom = nullptr;
 	}
 	if (fellow_motion_blur) {
 		memdelete(fellow_motion_blur);

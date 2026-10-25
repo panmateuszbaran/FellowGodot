@@ -35,7 +35,8 @@ layout(set = 0, binding = 0, std140) uniform Params {
 	vec4 shape; // shape scale (1 / km), detail scale (1 / km), wind x, wind z (km / s)
 	vec4 misc; // max distance (km), fade distance (km), history blend, frame
 	ivec4 sizes; // trace w, h; screen w, h
-	ivec4 flags; // x: 1 the atmosphere's tables are bound (the sun through the atmosphere, the sky's light)
+	ivec4 flags; // x: 1 the atmosphere's tables are bound (the sun through the atmosphere, the sky's light); y: 1 interleaved
+	// (each frame one pixel of every 2 x 2 block traced, decision 0115); z: this frame's pixel in the block (0-3)
 }
 params;
 
@@ -215,8 +216,17 @@ float hg(float g, float cos_theta) {
 	return (1.0 - g2) / (4.0 * 3.14159265 * pow(max(1.0 + g2 - 2.0 * g * cos_theta, 1e-4), 1.5));
 }
 
+ivec2 interleave_offset() {
+	// The 2 x 2 block's pixels in a diagonal order (0, 0), (1, 1), (1, 0), (0, 1).
+	int k = params.flags.z & 3;
+	return ivec2((k == 1 || k == 2) ? 1 : 0, (k == 1 || k == 3) ? 1 : 0);
+}
+
 void main() {
 	ivec2 pos = ivec2(gl_GlobalInvocationID.xy);
+	if (params.flags.y != 0) {
+		pos = pos * 2 + interleave_offset(); // one thread per 2 x 2 block
+	}
 	if (any(greaterThanEqual(pos, params.sizes.xy))) {
 		return;
 	}
@@ -364,26 +374,53 @@ void main() {
 	}
 	vec2 uv = (vec2(pos) + 0.5) / vec2(params.sizes.xy);
 	vec4 cur = texelFetch(trace_tex, pos, 0);
+	// Interleaved (decision 0115): one pixel of each 2 x 2 block was traced this frame; the others hold traces of up to
+	// three frames ago, at the screen positions of then. A pixel not traced follows its reprojected history, clamped to
+	// this frame's traces around it (one to four in the 3 x 3), or, without history (uncovered by the camera's motion),
+	// takes their mean.
+	bool interleaved = params.flags.y != 0;
+	ivec2 o = ivec2(0);
+	bool fresh = true;
+	if (interleaved) {
+		int k = params.flags.z & 3;
+		o = ivec2((k == 1 || k == 2) ? 1 : 0, (k == 1 || k == 3) ? 1 : 0);
+		fresh = all(equal(pos & 1, o));
+	}
+	vec4 lo = cur;
+	vec4 hi = cur;
+	vec4 sum = vec4(0.0);
+	float count = 0.0;
+	bool first = interleaved;
+	for (int y = -1; y <= 1; y++) {
+		for (int x = -1; x <= 1; x++) {
+			ivec2 q = clamp(pos + ivec2(x, y), ivec2(0), params.sizes.xy - 1);
+			if (interleaved && !all(equal(q & 1, o))) {
+				continue;
+			}
+			vec4 n = texelFetch(trace_tex, q, 0);
+			if (first) {
+				lo = n;
+				hi = n;
+				first = false;
+			}
+			lo = min(lo, n);
+			hi = max(hi, n);
+			sum += n;
+			count += 1.0;
+		}
+	}
+	vec4 result = (fresh || count == 0.0) ? cur : sum / count;
 	// The clouds' far point reprojected: rotation and slow translation (the clouds are kilometres away).
 	vec4 wp = params.inv_view_projection * vec4(uv * 2.0 - 1.0, 0.5, 1.0);
 	vec3 dir = normalize(wp.xyz / wp.w - params.camera_position.xyz);
 	vec4 prev_clip = params.prev_view_projection * vec4(params.camera_position.xyz + dir * 5000.0, 1.0);
 	vec2 prev_uv = (prev_clip.xy / prev_clip.w) * 0.5 + 0.5;
-	vec4 result = cur;
 	if (params.misc.z > 0.0 && prev_clip.w > 0.0 && all(greaterThanEqual(prev_uv, vec2(0.0))) && all(lessThanEqual(prev_uv, vec2(1.0)))) {
-		vec4 hist = textureLod(history_tex, prev_uv, 0.0);
-		// Clamped to this frame's 3 x 3 neighbourhood (moving clouds, uncovered sky).
-		vec4 lo = cur;
-		vec4 hi = cur;
-		for (int y = -1; y <= 1; y++) {
-			for (int x = -1; x <= 1; x++) {
-				vec4 n = texelFetch(trace_tex, clamp(pos + ivec2(x, y), ivec2(0), params.sizes.xy - 1), 0);
-				lo = min(lo, n);
-				hi = max(hi, n);
-			}
-		}
-		hist = clamp(hist, lo, hi);
-		result = mix(cur, hist, params.misc.z);
+		// Clamped to this frame's neighbourhood (moving clouds, uncovered sky).
+		vec4 hist = clamp(textureLod(history_tex, prev_uv, 0.0), lo, hi);
+		// A fresh trace each fourth frame when interleaved: a lighter history keeps about the same response time.
+		float blend = interleaved ? 0.7 : params.misc.z;
+		result = fresh ? mix(cur, hist, blend) : hist;
 	}
 	imageStore(history_dest, pos, result);
 }

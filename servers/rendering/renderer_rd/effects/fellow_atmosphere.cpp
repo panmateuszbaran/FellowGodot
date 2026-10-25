@@ -140,11 +140,11 @@ void FellowAtmosphere::_fill_ubo(const Params &p_params, const Size2i &p_screen)
 	RD::get_singleton()->buffer_update(ubo, 0, sizeof(UBO), &u);
 }
 
-void FellowAtmosphere::update(const Params &p_params) {
+bool FellowAtmosphere::update(const Params &p_params) {
 	UniformSetCacheRD *uniform_set_cache = UniformSetCacheRD::get_singleton();
-	ERR_FAIL_NULL(uniform_set_cache);
+	ERR_FAIL_NULL_V(uniform_set_cache, false);
 	MaterialStorage *material_storage = MaterialStorage::get_singleton();
-	ERR_FAIL_NULL(material_storage);
+	ERR_FAIL_NULL_V(material_storage, false);
 	RID linear = material_storage->sampler_rd_get_default(RSE::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RSE::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
 
 	_fill_ubo(p_params, Size2i());
@@ -164,7 +164,9 @@ void FellowAtmosphere::update(const Params &p_params) {
 	};
 
 	RD::get_singleton()->draw_command_begin_label("FellowEngine Atmosphere");
+	bool recomputed = false;
 	if (!static_valid || !(static_settings == p_params.settings)) {
+		recomputed = true;
 		run(MODE_TRANSMITTANCE, dummy, dummy, transmittance, TRANSMITTANCE_W, TRANSMITTANCE_H, 1);
 		run(MODE_MULTISCATTER, transmittance, dummy, multiscatter, MULTISCATTER_SIZE, MULTISCATTER_SIZE, 1);
 		static_settings = p_params.settings;
@@ -175,6 +177,7 @@ void FellowAtmosphere::update(const Params &p_params) {
 		run(MODE_AERIAL, transmittance, multiscatter, aerial, AERIAL_SIZE, AERIAL_SIZE, AERIAL_DEPTH);
 	}
 	RD::get_singleton()->draw_command_end_label();
+	return recomputed;
 }
 
 void FellowAtmosphere::apply(const Params &p_params, RID p_color, RID p_depth, const Size2i &p_size) {

@@ -123,7 +123,7 @@ private:
 
 public:
 	// The tables for this frame (the sky shader reads them during the sky's update and draw).
-	void update(const Params &p_params);
+	bool update(const Params &p_params); // true: the static tables (transmittance, multiple scattering) were recomputed
 	// Aerial perspective on p_color (RGBA16F storage) where p_depth holds a surface.
 	void apply(const Params &p_params, RID p_color, RID p_depth, const Size2i &p_size);
 

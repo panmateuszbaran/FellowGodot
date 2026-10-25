@@ -1,13 +1,16 @@
 // FellowEngine sky atmosphere (docs/decisions/0108-sky-atmosphere.md): the sky drawn from the tables FellowEngine
 // computes every frame (rendering/fellow/post/atmosphere/enabled) for the sky's first light (LIGHT0): the in-scattered
 // light seen from the camera (Hillaire's sky-view table, for a sun of illuminance 1) and the sun's disk through the
-// atmosphere's transmittance. The project must declare the two global shader parameters (Project Settings > Shader
-// Globals, sampler2D): fellow_atmosphere_sky_view, fellow_atmosphere_transmittance. Without FellowEngine's tables the
-// sky is black.
+// atmosphere's transmittance. The project must declare three global shader parameters (Project Settings > Shader
+// Globals): fellow_atmosphere_sky_view, fellow_atmosphere_transmittance (sampler2D), fellow_atmosphere_camera_height
+// (float). Without FellowEngine's tables the sky is black.
 shader_type sky;
 
 global uniform sampler2D fellow_atmosphere_sky_view : filter_linear, repeat_disable;
 global uniform sampler2D fellow_atmosphere_transmittance : filter_linear, repeat_disable;
+// The camera's height above the ground (km), set by FellowEngine every frame: reading POSITION instead would make Godot
+// redraw the sky's radiance every frame (0.25 ms on an RTX 5070 Ti laptop at 1080p).
+global uniform float fellow_atmosphere_camera_height;
 
 uniform float intensity = 1.0;
 uniform float sun_disk_scale = 1.0;
@@ -31,7 +34,7 @@ vec2 transmittance_uv(float r, float mu) {
 
 void sky() {
 	vec3 d = EYEDIR;
-	float r = clamp(BOTTOM_RADIUS + max(POSITION.y, 0.0) * 0.001, BOTTOM_RADIUS + 0.0005, TOP_RADIUS - 0.0005);
+	float r = clamp(BOTTOM_RADIUS + max(fellow_atmosphere_camera_height, 0.0), BOTTOM_RADIUS + 0.0005, TOP_RADIUS - 0.0005);
 	float beta = acos(clamp(sqrt(max(0.0, r * r - BOTTOM_RADIUS * BOTTOM_RADIUS)) / r, -1.0, 1.0));
 	float horizon_zenith = PI - beta;
 	float zenith = acos(clamp(d.y, -1.0, 1.0));

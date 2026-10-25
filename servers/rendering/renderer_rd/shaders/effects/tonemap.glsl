@@ -63,9 +63,15 @@ layout(set = 4, binding = 1) uniform sampler2D fellow_local_blurred;
 layout(set = 4, binding = 2, std140) uniform FellowLocalExposure {
 	vec4 contrast;
 	vec4 grid;
-	vec4 extra; // x: sharpening strength (0-1), y: lens dirt intensity
+	vec4 extra; // x: sharpening strength (0-1), y: lens dirt intensity, z: bloom intensity, w: lens flare intensity
+	vec4 grade; // x: 1 white balance, y: lens dirt on the bloom (intensity), z: light shafts' intensity
+	vec4 white_balance[3]; // the white balance's matrix (linear sRGB), columns
 }
 fellow_local;
+// FellowEngine bloom and lens flare (decisions 0112, 0113): half and quarter resolution, scene-linear.
+layout(set = 4, binding = 3) uniform sampler2D fellow_bloom;
+layout(set = 4, binding = 4) uniform sampler2D fellow_flare;
+layout(set = 4, binding = 5) uniform sampler2D fellow_shafts; // decision 0116
 
 #define FLAG_USE_BCS (1 << 0)
 #define FLAG_USE_GLOW (1 << 1)
@@ -112,6 +118,8 @@ layout(constant_id = 27) const bool sc_local_exposure = false;
 // FellowEngine sharpening after TAA (post/sharpen/strength, decision 0110) and additive lens dirt (post/bloom/*, 0111).
 layout(constant_id = 28) const bool sc_sharpen = false;
 layout(constant_id = 29) const bool sc_lens_dirt_additive = false;
+// FellowEngine grading (decisions 0112-0114): bloom, lens flare and white balance, each further by its uniform value.
+layout(constant_id = 30) const bool sc_fellow_grade = false;
 
 #define FELLOW_FLAG(m_flag, m_sc) (sc_fellow ? (m_sc) : bool(params.flags & (m_flag)))
 #define FELLOW_TONEMAPPER(m_mode, m_sc) (sc_fellow ? (m_sc) : params.tonemapper == (m_mode))
@@ -948,6 +956,33 @@ void main() {
 		vec3 sharp = (lobe * (n + w + e + s) + c) / (4.0 * lobe + 1.0);
 		sharp = clamp(sharp, vec3(0.0), vec3(0.9999));
 		color.rgb = sharp / (1.0 - sharp);
+	}
+#endif
+#ifndef USE_MULTIVIEW
+	if (sc_fellow && sc_fellow_grade) {
+		if (fellow_local.grade.x > 0.0) {
+			// White balance (decision 0114, as Unreal's): the scene's white (its temperature and tint) adapted to D65.
+			color.rgb = mat3(fellow_local.white_balance[0].xyz, fellow_local.white_balance[1].xyz, fellow_local.white_balance[2].xyz) * color.rgb;
+		}
+		if (fellow_local.extra.z > 0.0) {
+			// Bloom (decision 0112): the image mixed with its energy-conserving blur; lens dirt (0111) lit by it.
+			vec3 bloom = textureLod(fellow_bloom, uv_interp, 0.0).rgb;
+			if (fellow_local.grade.x > 0.0) {
+				bloom = mat3(fellow_local.white_balance[0].xyz, fellow_local.white_balance[1].xyz, fellow_local.white_balance[2].xyz) * bloom;
+			}
+			color.rgb = mix(color.rgb, bloom, fellow_local.extra.z);
+			if (fellow_local.grade.y > 0.0) {
+				color.rgb += texture(glow_map, uv_interp).rgb * bloom * fellow_local.grade.y;
+			}
+		}
+		if (fellow_local.extra.w > 0.0) {
+			// Lens flare (decision 0113): ghosts and halo of the bright sources.
+			color.rgb += textureLod(fellow_flare, uv_interp, 0.0).rgb * fellow_local.extra.w;
+		}
+		if (fellow_local.grade.z > 0.0) {
+			// Light shafts (decision 0116): the bright sky around the sun streaked towards it.
+			color.rgb += textureLod(fellow_shafts, uv_interp, 0.0).rgb * fellow_local.grade.z;
+		}
 	}
 #endif
 	color.rgb *= params.luminance_multiplier;
