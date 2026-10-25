@@ -2,7 +2,7 @@
 
 Status: **KEEP as an option**, off by default — a visual feature (milestone 18) · Branch `fellow/geometry` · Settings
 `rendering/fellow/post/atmosphere/enabled` (false), `aerial_perspective` (true), `sun_transmittance` (true),
-`aerial_distance_scale` (1), `mie_scale` (1), `rayleigh_scale` (1), `ground_albedo` (0.3) · Code:
+`aerial_distance_scale` (1), `mie_scale` (1), `rayleigh_scale` (1), `ground_albedo` (0.3), `srgb_rayleigh` (true) · Code:
 `effects/fellow_atmosphere.*`, `shaders/effects/fellow_atmosphere.glsl`,
 `forward_clustered/render_forward_clustered.cpp` (`_fellow_update_atmosphere`), `storage_rd/light_storage.*` (the sun's
 tint); bench `bench/fellow_atmosphere_sky.gdshader`, `--sky=atmosphere`, `--sun_elevation`.
@@ -57,6 +57,26 @@ first version (the one measured) added the Mie absorption as the whole extinctio
 per km, an optical depth of 0.005 too much); fixed. The sky is physically consistent with the scene's sun: with the
 bench's sun of energy 2 and exposure 1, a sunlit wall is about 15 × brighter than the zenith (a clean atmosphere;
 `mie_scale` 2-4 gives a hazier, brighter sky).
+
+**The sky's colour (`srgb_rayleigh`).** The first RTX captures (milestone 18's report) showed the shade in Sponza and
+Bistro strongly blue — the red awnings in shade purple. Part of it is Hillaire's (and Unreal's) three Rayleigh
+coefficients: λ⁻⁴ sampled at 680, 550 and 440 nm. A spectral single-scattering sky (5 nm steps, a 5778 K sun, CIE 1931
+through the sRGB primaries; Python) against RGB renderings of the same integral, as the ratio red : green : blue:
+
+| elevation | spectral | Hillaire's coefficients | sRGB-integrated |
+|---|---|---|---|
+| 90° | 0.293 : 0.520 : 1 | 0.242 : 0.503 : 1 | 0.295 : 0.516 : 1 |
+| 30° | 0.312 : 0.553 : 1 | 0.256 : 0.535 : 1 | 0.314 : 0.547 : 1 |
+| 10° | 0.428 : 0.694 : 1 | 0.360 : 0.679 : 1 | 0.430 : 0.687 : 1 |
+| 3° | 0.745 : 0.976 : 1 | 0.647 : 0.978 : 1 | 0.734 : 0.978 : 1 |
+
+(sun 45° high, `mie_scale` 1; with 10 the same.) Three wavelengths leave the red 15-20 % low everywhere; the
+sRGB-integrated coefficients — λ⁻⁴ × the sun's spectrum against each channel's colour matching function, divided by the
+sun's own response: (7.190, 13.763, 32.519) × 10⁻³ per km — reproduce the spectral colour within 1-2 %. They are the
+default; `srgb_rayleigh` false gives Unreal's. The rest of the blue is the atmosphere's cleanliness: Hillaire's aerosols
+are an optical depth of 0.005 at 550 nm, a typical day's 0.05-0.15 (`mie_scale` 10-30). Crowd Lab's linear captures
+(lavapipe): the zenith's ratio 0.21 : 0.44 : 1 at `mie_scale` 1, 0.28 : 0.49 at 4, 0.39 : 0.56 at 10, 0.52 : 0.65 at 20.
+The ozone's coefficients are still Hillaire's three wavelengths (no spectrum at hand).
 
 City Lab (lavapipe, 960 × 540): a blue sky brightening to white at the horizon at a high sun, orange at 3°, the city's
 far blocks bluish in the haze, the sunlit walls orange-tinted at a low sun. RTX cost: milestone 18's report.

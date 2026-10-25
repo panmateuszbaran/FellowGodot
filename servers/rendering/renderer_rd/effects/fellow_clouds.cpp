@@ -185,7 +185,8 @@ void FellowClouds::process(const Params &p_params) {
 		RD::Uniform u_detail(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 2, Vector<RID>({ linear_repeat, detail_noise }));
 		RD::Uniform u_t(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 3, Vector<RID>({ linear, atmosphere ? p_params.atmosphere_transmittance : white }));
 		RD::Uniform u_sv(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 4, Vector<RID>({ linear, atmosphere ? p_params.atmosphere_sky_view : white }));
-		RD::get_singleton()->compute_list_bind_uniform_set(list, uniform_set_cache->get_cache(shader_rd, 0, u_params, u_shape, u_detail, u_t, u_sv), 0);
+		RD::Uniform u_depth(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 5, Vector<RID>({ nearest, p_params.depth }));
+		RD::get_singleton()->compute_list_bind_uniform_set(list, uniform_set_cache->get_cache(shader_rd, 0, u_params, u_shape, u_detail, u_t, u_sv, u_depth), 0);
 		RD::Uniform u_dest(RD::UNIFORM_TYPE_IMAGE, 0, trace);
 		RD::get_singleton()->compute_list_bind_uniform_set(list, uniform_set_cache->get_cache(shader_rd, 1, u_dest), 1);
 		RD::get_singleton()->compute_list_dispatch_threads(list, ts.x, ts.y, 1);

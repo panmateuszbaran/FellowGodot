@@ -66,6 +66,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/post/atmosphere/mie_scale", PROPERTY_HINT_RANGE, "0,20,0.01"), 1.0);
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/post/atmosphere/rayleigh_scale", PROPERTY_HINT_RANGE, "0,10,0.01"), 1.0);
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/post/atmosphere/ground_albedo", PROPERTY_HINT_RANGE, "0,1,0.01"), 0.3);
+	GLOBAL_DEF("rendering/fellow/post/atmosphere/srgb_rayleigh", true); // false: Unreal's coefficients
 	GLOBAL_DEF("rendering/fellow/post/contact_shadows/enabled", false); // decision 0107
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/post/contact_shadows/length", PROPERTY_HINT_RANGE, "0.01,5,0.01,suffix:m"), 0.3);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/post/contact_shadows/steps", PROPERTY_HINT_RANGE, "2,64,1"), 16);

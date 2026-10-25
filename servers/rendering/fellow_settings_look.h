@@ -73,6 +73,11 @@ inline float atmosphere_mie_scale() {
 inline float atmosphere_rayleigh_scale() {
 	return GLOBAL_GET_CACHED(float, "rendering/fellow/post/atmosphere/rayleigh_scale");
 }
+// The Rayleigh coefficients integrated over the sRGB channels (reproduces a spectral sky) instead of Hillaire's and
+// Unreal's three wavelengths (680, 550, 440 nm: the sky about 20 % too low in red).
+inline bool atmosphere_srgb_rayleigh() {
+	return GLOBAL_GET_CACHED(bool, "rendering/fellow/post/atmosphere/srgb_rayleigh");
+}
 inline float atmosphere_ground_albedo() {
 	return GLOBAL_GET_CACHED(float, "rendering/fellow/post/atmosphere/ground_albedo");
 }

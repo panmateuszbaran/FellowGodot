@@ -64,11 +64,17 @@ void main() {
 	// contact shadows), at least `thickness`. A surface further in front was passed behind, not hit (the march goes
 	// behind objects seen from the camera: they are not solid all the way back).
 	float tolerance = max(abs(l.z) * step_len * 2.0, params.thickness);
+	// The march in clip space (linear along the ray: one projection for all its steps) and the depth buffer's view-space
+	// depth from the inverse projection's z and w rows alone (they do not depend on x and y for a perspective or
+	// orthographic projection, jittered or not).
+	vec4 c0 = params.projection * vec4(vp, 1.0);
+	vec4 dc = params.projection * vec4(l, 0.0);
+	vec4 z_row = vec4(params.inv_projection[0][2], params.inv_projection[1][2], params.inv_projection[2][2], params.inv_projection[3][2]);
+	vec4 w_row = vec4(params.inv_projection[0][3], params.inv_projection[1][3], params.inv_projection[2][3], params.inv_projection[3][3]);
 	float shadow = 1.0;
 	for (uint i = 0u; i < steps; i++) {
 		float t = (float(i) + jitter) * step_len + step_len * 0.5;
-		vec3 p = vp + l * t;
-		vec4 clip = params.projection * vec4(p, 1.0);
+		vec4 clip = c0 + dc * t;
 		if (clip.w <= 0.0) {
 			break;
 		}
@@ -81,8 +87,9 @@ void main() {
 		if (sd == 0.0) {
 			continue; // the sky
 		}
-		float zs = view_position((vec2(sp) + 0.5) / vec2(params.size), sd).z;
-		float delta = zs - p.z; // > 0: the surface seen there is in front of the march
+		vec4 ndc = vec4((vec2(sp) + 0.5) / vec2(params.size) * 2.0 - 1.0, sd * 2.0 - 1.0, 1.0);
+		float zs = dot(z_row, ndc) / dot(w_row, ndc);
+		float delta = zs - (vp.z + l.z * t); // > 0: the surface seen there is in front of the march
 		if (delta > bias && delta < tolerance + bias) {
 			shadow = 0.0;
 			break;

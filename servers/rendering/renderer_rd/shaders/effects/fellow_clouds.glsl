@@ -137,6 +137,7 @@ layout(set = 0, binding = 1) uniform sampler3D shape_noise;
 layout(set = 0, binding = 2) uniform sampler3D detail_noise;
 layout(set = 0, binding = 3) uniform sampler2D atmosphere_transmittance;
 layout(set = 0, binding = 4) uniform sampler2D atmosphere_sky_view;
+layout(set = 0, binding = 5) uniform sampler2D depth_buffer;
 layout(rgba16f, set = 1, binding = 0) uniform restrict writeonly image2D trace_dest;
 
 #define ATMOSPHERE_TOP 6460.0
@@ -218,6 +219,26 @@ void main() {
 	ivec2 pos = ivec2(gl_GlobalInvocationID.xy);
 	if (any(greaterThanEqual(pos, params.sizes.xy))) {
 		return;
+	}
+	// Only where the composite can show clouds: a sky pixel among the full-resolution pixels whose bilinear sample
+	// reads this one (its own 2 x 2 and a pixel around them). Under surfaces (most of an interior, a street) nothing
+	// is traced.
+	{
+		bool sky = false;
+		ivec2 base = pos * 2 - 1;
+		ivec2 last = params.sizes.zw - 1;
+		for (int y = 0; y < 4 && !sky; y++) {
+			for (int x = 0; x < 4; x++) {
+				if (texelFetch(depth_buffer, clamp(base + ivec2(x, y), ivec2(0), last), 0).r == 0.0) {
+					sky = true;
+					break;
+				}
+			}
+		}
+		if (!sky) {
+			imageStore(trace_dest, pos, vec4(0.0, 0.0, 0.0, 1.0));
+			return;
+		}
 	}
 	vec2 uv = (vec2(pos) + 0.5) / vec2(params.sizes.xy);
 	vec4 wp = params.inv_view_projection * vec4(uv * 2.0 - 1.0, 0.5, 1.0);

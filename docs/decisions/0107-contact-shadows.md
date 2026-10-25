@@ -38,4 +38,12 @@ Lavapipe, 960 × 540, on against off: Crowd Lab's close camera 5 300 pixels dark
 stacked body discs and where the feet meet the ground, which the shadow map's bias leaves lit — and no broad surface
 shadowed by itself; City Lab's street 70 pixels (the lamp posts' bases). The first version (thickness 0.3 m, a fixed
 tolerance) shadowed the characters' sunlit sides behind their own silhouettes: the tolerance of two steps' depth
-change fixed it. RTX cost: milestone 18's report.
+change fixed it.
+
+RTX (milestone 18's report, `m18_f255`/`m18_f256`, 1920 × 1080): the pass 0.18 ms in City Lab, 0.29 ms in Sponza,
+0.25 ms in Bistro exterior. A second version marches in clip space (the ray's clip position is linear along it: one
+projection for all steps, the depth buffer's view-space depth from the inverse projection's z and w rows alone, which do
+not depend on x and y): the same image within rounding (lavapipe: 1-2 pixels by 4 levels). Skipping the pixels facing
+away from the light (their normal from the depth buffer, the smaller change of depth on each axis) was tried and
+dropped: at the creases between the characters' body discs, seen at a grazing angle, the reconstructed normal points
+away from the sun and the contact shadow there — the effect's main use — was lost (2 300 pixels brighter).

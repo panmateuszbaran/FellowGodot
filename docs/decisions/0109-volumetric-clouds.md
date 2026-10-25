@@ -35,8 +35,9 @@ sky's light from above (from the atmosphere's sky-view table) and the sunlit gro
 atmosphere the sun reaches each sample through its transmittance (orange at sunset). Far clouds fade into the sky
 (40 km). A temporal pass blends each frame's trace with the reprojected history (85 %, clamped to the frame's 3 × 3
 neighbourhood), and a composite pass puts the clouds over the sky's pixels (depth at the far plane), before the
-transparent pass. Needs a single view and no MSAA; the sky must be drawn. The history is the renderer's, not the
-viewport's: several viewports with clouds share it (clamped, so only blurrier).
+transparent pass. Half-resolution pixels whose composite footprint (their 2 × 2 pixels and a pixel around them, for the
+bilinear filter) holds no sky pixel are not traced. Needs a single view and no MSAA; the sky must be drawn. The history
+is the renderer's, not the viewport's: several viewports with clouds share it (clamped, so only blurrier).
 
 ## Development
 
@@ -53,4 +54,8 @@ Off (the default) the image is the previous build's bit for bit.
 ## Results
 
 City Lab (lavapipe, 960 × 540, sun at 35°): separate cumulus over a blue sky at coverage 0.3, a broken layer at 0.6;
-grey-white undersides, warm at a low sun. RTX cost: milestone 18's report.
+grey-white undersides, warm at a low sun. RTX (`m18_f255`/`m18_f256`, 1920 × 1080): the passes 0.53 ms in City Lab,
+0.61 ms in Sponza (where only a strip of sky is seen: every half-resolution pixel was traced), 0.50 ms in Bistro
+exterior; tracing only where the composite shows clouds: milestone 18's report. On lavapipe the image is the same in the
+sky (a sky camera: 162 pixels by at most 2 levels) and within 14 levels at the silhouettes (the temporal clamp's
+neighbourhood).

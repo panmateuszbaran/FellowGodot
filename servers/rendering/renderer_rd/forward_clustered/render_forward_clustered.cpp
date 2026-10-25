@@ -4436,6 +4436,12 @@ void RenderForwardClustered::_fellow_update_atmosphere(RenderDataRD *p_render_da
 	params = RendererRD::FellowAtmosphere::Params();
 	const float mie = Fellow::atmosphere_mie_scale();
 	const float rayleigh = Fellow::atmosphere_rayleigh_scale();
+	if (Fellow::atmosphere_srgb_rayleigh()) {
+		// Rayleigh's lambda^-4 times a 5778 K sun, integrated against the sRGB channels' colour matching functions and
+		// divided by the sun's own response (CIE 1931; green within 2 % of the 550 nm value): with these a
+		// single-scattering sky renders within 1 % of the spectral one's colour, at every elevation.
+		params.settings.rayleigh_scattering = Vector3(7.190e-3, 13.763e-3, 32.519e-3);
+	}
 	params.settings.rayleigh_scattering *= rayleigh;
 	params.settings.mie_scattering *= mie;
 	params.settings.mie_absorption *= mie;
