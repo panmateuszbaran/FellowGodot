@@ -4691,6 +4691,11 @@ bool RenderForwardClustered::_fellow_begin_gas(RenderDataRD *p_render_data, cons
 	fp.exposure = p_render_data->camera_attributes.is_valid() ? RSG::camera_attributes->camera_attributes_get_exposure_normalization_factor(p_render_data->camera_attributes) : 1.0f;
 	fp.size = p_render_buffers->get_internal_size();
 	fp.frame = uint32_t(RSG::rasterizer->get_frame_number());
+	// The sun's shadow map on the smoke (directional light 0 of the light buffer, as the contact shadows take it).
+	fp.view = p_render_data->scene_data->cam_transform.affine_inverse();
+	fp.sun_shadow = lighting.has_sun && lighting.sun_shadow && Fellow::enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/fluid/gas_scene_shadows");
+	fp.directional_lights = RendererRD::LightStorage::get_singleton()->get_directional_light_buffer();
+	fp.shadow_atlas = RendererRD::LightStorage::get_singleton()->directional_shadow_get_texture();
 	return gas->begin_frame(fp);
 }
 

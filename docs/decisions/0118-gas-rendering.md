@@ -28,7 +28,9 @@ compute pass:
   box it crosses, front to back, up to the depth buffer, in steps of `render_step` cells with the start dithered per
   pixel and frame (TAA averages it) and the empty bricks skipped; at each sample the smoke's extinction (`smoke_density`
   per unit of smoke per metre) and in-scattering: the sun through the light grid with Wrenninge's multiple scattering
-  (four octaves of a Henyey-Greenstein phase, `anisotropy`), the environment's ambient light (as the scene shader and
+  (four octaves of a Henyey-Greenstein phase, `anisotropy`), darkened where the scene shadows it (the sun's shadow
+  map, sampled as Godot's volumetric fog samples it: the cascade by view depth, a soft exponential comparison; setting
+  `fluid/gas_scene_shadows`), the environment's ambient light (as the scene shader and
   DDGI take it: the sky's radiance from six directions, mostly from above), the fire light's (below) without
   shadowing; and the fire's emission: radiance per metre = `fire_intensity` × (T / 1500 K)⁴, visible from 700 K
   (a smoothstep to 1000 K), coloured as a blackbody (Krystek's Planckian locus to sRGB) at T × `fire_temperature_scale`
@@ -46,13 +48,17 @@ and centroid place and colour an `OmniLight3D` the node owns (an internal child)
 ## Limits
 
 Transparent objects behind the smoke are drawn over it (the composite is before the transparent pass); the smoke is
-not in the volumetric fog; the scene's shadows do not darken the smoke (only its own); one view (no XR), no MSAA; the
-volume moves with its node (the gas does not stay behind).
+not in the volumetric fog; one view (no XR), no MSAA. (Since added: the scene's shadows on the smoke; the world-space
+volume, 0117.)
 
 ## Verification
 
 Without a volume, or with `gas_rendering` off, nothing of it runs: the frame is the previous build's bit for bit
 (lavapipe: City Lab, Crowd Lab, Lights Lab, City Lab with auto exposure and the dirt map, against milestone 19's build).
+
+Fire Lab with the sun's shadow map on the smoke against without (lavapipe, 960 × 540): the shadow of the sphere
+circling through the campfire's smoke a darker channel through it (32 000 pixels changed, by up to 68 levels, under
+the sphere's camera), the logs' shadows in the flames' smoke at the bottom.
 
 ## Results
 

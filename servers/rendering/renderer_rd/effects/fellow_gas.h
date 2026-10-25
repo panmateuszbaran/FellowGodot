@@ -146,6 +146,10 @@ public:
 		float radiance_border[2] = { 0.0f, 1.0f };
 		float radiance_level = 0.0f;
 		float exposure = 1.0f; // the emission's exposure normalization
+		Transform3D view; // world -> view
+		bool sun_shadow = false; // the sun's shadow map darkens the smoke (directional light 0 casts shadows)
+		RID directional_lights; // LightStorage's directional light buffer
+		RID shadow_atlas; // the directional shadow atlas
 		Size2i size;
 		uint32_t frame = 0;
 	};
@@ -188,6 +192,7 @@ private:
 		float sky_params[4];
 		float radiance_border[4];
 		float sky_xform[16];
+		float view[16];
 		int32_t sizes[4];
 		int32_t rect[4];
 		int32_t counts[4];

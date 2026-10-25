@@ -19,6 +19,7 @@
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 
 #ifdef MODE_TRACE
+#include "../light_data_inc.glsl"
 #include "../oct_inc.glsl"
 #endif
 
@@ -47,9 +48,10 @@ layout(set = 0, binding = 0, std140) uniform Params {
 	vec4 sky_params; // x 1: ambient light, y 1: from the sky's radiance, z the radiance's factor, w its level
 	vec4 radiance_border; // x border, y 1 - 2 border
 	mat4 sky_xform; // world -> the sky's orientation (3 x 3)
+	mat4 view; // world -> view (the directional shadow's cascades are in view space)
 	ivec4 sizes; // trace w, h; full w, h
 	ivec4 rect; // the screen rectangle covered (full resolution): x, y, w, h
-	ivec4 counts; // x volumes, y max steps, z frame, w unused
+	ivec4 counts; // x volumes, y max steps, z frame, w 1: the sun's shadow map darkens the smoke
 	Volume volumes[MAX_VOLUMES];
 }
 params;
@@ -213,6 +215,42 @@ layout(set = 0, binding = 7) uniform sampler2DArray radiance_octmap;
 layout(set = 0, binding = 7) uniform sampler2D radiance_octmap;
 #endif
 
+layout(set = 0, binding = 8, std140) uniform DirectionalLights {
+	DirectionalLightData data[MAX_DIRECTIONAL_LIGHT_DATA_STRUCTS];
+}
+directional_lights;
+layout(set = 0, binding = 9) uniform sampler2D directional_shadow_atlas;
+
+// The sun's shadow map at a point (the first directional light, as Godot's volumetric fog samples it: the cascade by
+// view depth, a soft exponential comparison, faded out where the shadow ends).
+float sun_shadow(vec3 p_world) {
+	if (params.counts.w == 0) {
+		return 1.0;
+	}
+	vec4 v = params.view * vec4(p_world, 1.0);
+	float depth_z = -v.z;
+	vec4 pssm;
+	float z_range;
+	if (depth_z < directional_lights.data[0].shadow_split_offsets.x) {
+		pssm = directional_lights.data[0].shadow_matrix1 * v;
+		z_range = directional_lights.data[0].shadow_z_range.x;
+	} else if (depth_z < directional_lights.data[0].shadow_split_offsets.y) {
+		pssm = directional_lights.data[0].shadow_matrix2 * v;
+		z_range = directional_lights.data[0].shadow_z_range.y;
+	} else if (depth_z < directional_lights.data[0].shadow_split_offsets.z) {
+		pssm = directional_lights.data[0].shadow_matrix3 * v;
+		z_range = directional_lights.data[0].shadow_z_range.z;
+	} else {
+		pssm = directional_lights.data[0].shadow_matrix4 * v;
+		z_range = directional_lights.data[0].shadow_z_range.w;
+	}
+	pssm /= pssm.w;
+	float depth = textureLod(directional_shadow_atlas, pssm.xy, 0.0).r;
+	float shadow = exp(min(0.0, pssm.z - depth) * z_range * 10.0);
+	shadow = mix(shadow, 1.0, smoothstep(directional_lights.data[0].fade_from, directional_lights.data[0].fade_to, v.z));
+	return mix(1.0 - directional_lights.data[0].shadow_opacity, 1.0, shadow);
+}
+
 vec3 ambient_light(vec3 p_dir) {
 	// The environment's ambient light from a direction (as the scene shader and DDGI take it).
 	if (params.sky_params.x == 0.0) {
@@ -305,7 +343,7 @@ void main() {
 						b *= 0.3;
 						c *= 0.5;
 					}
-					in_scatter = sun * ms;
+					in_scatter = sun * (ms * sun_shadow(cam + dir * s));
 					in_scatter += ambient * v.misc.x * (0.35 + 0.65 * exp(-tau_l * 0.3));
 					if (v.fire_light_position.w > 0.0) {
 						vec3 wpos = cam + dir * s;

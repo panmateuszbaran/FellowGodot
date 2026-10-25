@@ -34,6 +34,7 @@
 #include "core/object/callable_mp.h"
 #include "servers/rendering/fellow_settings.h"
 #include "servers/rendering/renderer_rd/renderer_scene_render_rd.h"
+#include "servers/rendering/renderer_rd/storage_rd/light_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/texture_storage.h"
 #include "servers/rendering/renderer_rd/uniform_set_cache_rd.h"
 #include "servers/rendering/rendering_server_globals.h"
@@ -108,7 +109,8 @@ FellowGas::FellowGas() {
 	render_modes.push_back("\n#define MODE_TRACE\n");
 	render_modes.push_back("\n#define MODE_TRACE\n#define FELLOW_RADIANCE_ARRAY\n");
 	render_modes.push_back("\n#define MODE_COMPOSITE\n");
-	render_shader.initialize(render_modes);
+	const uint32_t max_directional = RendererRD::LightStorage::get_singleton() ? RendererRD::LightStorage::get_singleton()->get_max_directional_lights() : 8;
+	render_shader.initialize(render_modes, "\n#define MAX_DIRECTIONAL_LIGHT_DATA_STRUCTS " + itos(max_directional) + "\n");
 	render_version = render_shader.version_create();
 	for (int i = 0; i < RENDER_MAX; i++) {
 		render_pipelines[i] = RD::get_singleton()->compute_pipeline_create(render_shader.version_get_shader(render_version, i));
@@ -717,6 +719,7 @@ bool FellowGas::begin_frame(const FrameParams &p_frame) {
 		}
 	}
 	u.sky_xform[15] = 1.0f;
+	_fellow_gas_store_matrix(Projection(p_frame.view), u.view);
 	trace_size = Size2i((p_frame.size.x + 1) / 2, (p_frame.size.y + 1) / 2);
 	u.sizes[0] = trace_size.x;
 	u.sizes[1] = trace_size.y;
@@ -729,6 +732,7 @@ bool FellowGas::begin_frame(const FrameParams &p_frame) {
 	u.counts[0] = int32_t(candidates.size());
 	u.counts[1] = 384;
 	u.counts[2] = int32_t(p_frame.frame & 0x7fffffff);
+	u.counts[3] = (p_frame.has_sun && p_frame.sun_shadow && p_frame.directional_lights.is_valid() && p_frame.shadow_atlas.is_valid()) ? 1 : 0;
 	for (uint32_t i = 0; i < candidates.size(); i++) {
 		const Volume &v = volumes[candidates[i].id];
 		const RenderParams &r = v.render;
@@ -880,6 +884,10 @@ void FellowGas::render(RID p_color, RID p_depth, RID p_trace, RID p_trace_depth)
 		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 5, trace_tex));
 		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 6, trace_depth_tex));
 		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 7, Vector<RID>({ linear_mip_sampler, radiance })));
+		RendererRD::LightStorage *ls = RendererRD::LightStorage::get_singleton();
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_UNIFORM_BUFFER, 8, frame.directional_lights.is_valid() ? frame.directional_lights : ls->get_directional_light_buffer()));
+		RID atlas = frame.shadow_atlas.is_valid() ? frame.shadow_atlas : RendererRD::TextureStorage::get_singleton()->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_WHITE);
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 9, Vector<RID>({ linear_sampler, atlas })));
 		RID set = UniformSetCacheRD::get_singleton()->get_cache_vec(shader, 0, uniforms);
 		RD::ComputeListID list = RD::get_singleton()->compute_list_begin();
 		RD::get_singleton()->compute_list_bind_compute_pipeline(list, render_pipelines[trace_mode]);

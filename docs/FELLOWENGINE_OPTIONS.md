@@ -101,10 +101,10 @@ the node places at the fire lights the scene. Without such a node nothing of it 
 | `fire_light`, `fire_light_energy`, `fire_light_range`, `fire_light_shadows` | the omni light at the fire, from the simulated emission (2-3 frames late) |
 | `velocity_texture_enabled`, `velocity_texture_scale` (5 m/s) | the velocity at the cell centres as a `Texture3D` (`get_velocity_texture()`) for a `GPUParticlesAttractorVectorField3D` over the box: sparks and embers carried by the flow (Fire Lab's embers) |
 
-Project settings: `fluid/enabled` (the simulation), `fluid/gas_rendering` (the drawing), `fluid/gas_solver`
-(measurements: 0 the node's solver, 1 SOR, 2 multigrid). Limits: transparent objects
-behind the smoke are drawn over it; the smoke is not in the volumetric fog; the scene's shadows do not darken the smoke;
-one view (no XR), no MSAA.
+Project settings: `fluid/enabled` (the simulation), `fluid/gas_rendering` (the drawing), `fluid/gas_scene_shadows`
+(the sun's shadow map on the smoke, on), `fluid/gas_solver` (measurements: 0 the node's solver, 1 SOR, 2 multigrid).
+Limits: transparent objects behind the smoke are drawn over it; the smoke is not in the volumetric fog; one view (no
+XR), no MSAA.
 
 ## Options that change the image (off by default)
 
