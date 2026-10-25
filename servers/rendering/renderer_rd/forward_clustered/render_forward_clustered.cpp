@@ -6752,7 +6752,17 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	if (fellow_gas_frame) {
 		RendererRD::FellowGas *gas = RendererRD::FellowGas::get_singleton_if_exists();
 		if (gas) {
-			gas->render(rb->get_internal_texture(), rb->get_depth_texture());
+			// The half-resolution targets, the viewport's (several viewports of different sizes do not reallocate them).
+			const Size2i ts = gas->get_trace_size();
+			const StringName scope = SNAME("fellow_gas");
+			if (rb->has_texture(scope, SNAME("trace")) && rb->get_texture_format(scope, SNAME("trace")).width != uint32_t(ts.x)) {
+				rb->clear_context(scope);
+			}
+			if (!rb->has_texture(scope, SNAME("trace"))) {
+				rb->create_texture(scope, SNAME("trace"), RD::DATA_FORMAT_R16G16B16A16_SFLOAT, RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_STORAGE_BIT, RD::TEXTURE_SAMPLES_1, ts);
+				rb->create_texture(scope, SNAME("trace_depth"), RD::DATA_FORMAT_R32_SFLOAT, RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_STORAGE_BIT, RD::TEXTURE_SAMPLES_1, ts);
+			}
+			gas->render(rb->get_internal_texture(), rb->get_depth_texture(), rb->get_texture(scope, SNAME("trace")), rb->get_texture(scope, SNAME("trace_depth")));
 			gas->end_frame();
 		}
 		fellow_gas_frame = false;

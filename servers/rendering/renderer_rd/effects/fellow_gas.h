@@ -274,10 +274,7 @@ private:
 	RID linear_sampler; // clamped in u, v and w
 	RID linear_mip_sampler;
 	RID nearest_sampler;
-	RID trace_tex;
-	RID trace_depth_tex;
 	Size2i trace_size;
-	Size2i trace_alloc_size;
 
 	HashMap<uint32_t, Volume> volumes;
 	// The frame's volumes in the render UBO's order (near to far), from begin_frame().
@@ -331,7 +328,9 @@ public:
 	bool begin_frame(const FrameParams &p_frame);
 	bool frame_has_shadows() const;
 	void apply_shadow(RID p_mask, bool p_multiply, RID p_depth);
-	void render(RID p_color, RID p_depth);
+	// p_trace (RGBA16F) and p_trace_depth (R32F): the viewport's half-resolution targets (trace_size()).
+	void render(RID p_color, RID p_depth, RID p_trace, RID p_trace_depth);
+	Size2i get_trace_size() const { return trace_size; }
 	void end_frame() { frame_active = false; }
 
 	FellowGas();

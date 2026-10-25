@@ -140,7 +140,7 @@ FellowGas::~FellowGas() {
 		_free_volume_textures(kv.value);
 	}
 	volumes.clear();
-	RID rids[] = { render_ubo, dummy_3d, trace_tex, trace_depth_tex, linear_sampler, linear_mip_sampler, nearest_sampler };
+	RID rids[] = { render_ubo, dummy_3d, linear_sampler, linear_mip_sampler, nearest_sampler };
 	for (RID r : rids) {
 		if (r.is_valid()) {
 			RD::get_singleton()->free_rid(r);
@@ -833,26 +833,14 @@ void FellowGas::apply_shadow(RID p_mask, bool p_multiply, RID p_depth) {
 	RD::get_singleton()->compute_list_end();
 }
 
-void FellowGas::render(RID p_color, RID p_depth) {
+void FellowGas::render(RID p_color, RID p_depth, RID p_trace, RID p_trace_depth) {
 	if (!frame_active || frame_rect.size.x <= 0 || frame_rect.size.y <= 0) {
 		return;
 	}
+	ERR_FAIL_COND(p_trace.is_null() || p_trace_depth.is_null());
 	RENDER_TIMESTAMP("FellowEngine Gas Trace");
-	if (trace_tex.is_null() || trace_alloc_size != trace_size) {
-		if (trace_tex.is_valid()) {
-			RD::get_singleton()->free_rid(trace_tex);
-			RD::get_singleton()->free_rid(trace_depth_tex);
-		}
-		RD::TextureFormat tf;
-		tf.width = trace_size.x;
-		tf.height = trace_size.y;
-		tf.format = RD::DATA_FORMAT_R16G16B16A16_SFLOAT;
-		tf.usage_bits = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_STORAGE_BIT;
-		trace_tex = RD::get_singleton()->texture_create(tf, RD::TextureView());
-		tf.format = RD::DATA_FORMAT_R32_SFLOAT;
-		trace_depth_tex = RD::get_singleton()->texture_create(tf, RD::TextureView());
-		trace_alloc_size = trace_size;
-	}
+	const RID trace_tex = p_trace;
+	const RID trace_depth_tex = p_trace_depth;
 	const bool array = RendererSceneRenderRD::get_singleton()->is_using_radiance_octmap_array();
 	const RenderMode trace_mode = array ? RENDER_TRACE_ARRAY : RENDER_TRACE;
 	RID shader = render_shader.version_get_shader(render_version, trace_mode);
