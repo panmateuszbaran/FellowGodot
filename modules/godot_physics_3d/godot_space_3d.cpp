@@ -264,6 +264,7 @@ int GodotPhysicsDirectSpaceState3D::intersect_shape(const ShapeParameters &p_par
 }
 
 bool GodotPhysicsDirectSpaceState3D::cast_motion(const ShapeParameters &p_parameters, real_t &p_closest_safe, real_t &p_closest_unsafe, ShapeRestInfo *r_info) {
+	GodotCollisionSolver3D::FellowFaceCullScope fellow_cull_scope; // decision 0097
 	GodotShape3D *shape = GodotPhysicsServer3D::godot_singleton->shape_owner.get_or_null(p_parameters.shape_rid);
 	ERR_FAIL_NULL_V(shape, false);
 
@@ -308,10 +309,10 @@ bool GodotPhysicsDirectSpaceState3D::cast_motion(const ShapeParameters &p_parame
 		if (fellow_cull) {
 			// FellowEngine (decision 0085): the yes/no tests without the faces that cannot touch; the closest points r_info
 			// needs are computed after the search, as stock computes them.
-			if (GodotCollisionSolver3D::fellow_test_separation(&mshape, p_parameters.transform, shape->get_aabb(), mshape.motion, col_obj->get_shape(shape_idx), col_obj_xform, aabb)) {
+			if (GodotCollisionSolver3D::fellow_test_separation(&mshape, p_parameters.transform, shape->get_aabb(), mshape.motion, col_obj->get_shape(shape_idx), col_obj_xform, aabb, shape)) {
 				continue;
 			}
-			if (!GodotCollisionSolver3D::fellow_test_separation(shape, p_parameters.transform, shape->get_aabb(), Vector3(), col_obj->get_shape(shape_idx), col_obj_xform, aabb)) {
+			if (!GodotCollisionSolver3D::fellow_test_separation(shape, p_parameters.transform, shape->get_aabb(), Vector3(), col_obj->get_shape(shape_idx), col_obj_xform, aabb, shape)) {
 				continue;
 			}
 		} else {
@@ -338,7 +339,7 @@ bool GodotPhysicsDirectSpaceState3D::cast_motion(const ShapeParameters &p_parame
 
 			Vector3 lA, lB;
 			Vector3 sep = motion_normal; //important optimization for this to work fast enough
-			bool collided = fellow_cull ? !GodotCollisionSolver3D::fellow_test_separation(&mshape, p_parameters.transform, shape->get_aabb(), mshape.motion, col_obj->get_shape(shape_idx), col_obj_xform, aabb)
+			bool collided = fellow_cull ? !GodotCollisionSolver3D::fellow_test_separation(&mshape, p_parameters.transform, shape->get_aabb(), mshape.motion, col_obj->get_shape(shape_idx), col_obj_xform, aabb, shape)
 										: !GodotCollisionSolver3D::solve_distance(&mshape, p_parameters.transform, col_obj->get_shape(shape_idx), col_obj_xform, lA, lB, aabb, &sep);
 
 			if (collided) {
@@ -679,6 +680,7 @@ int GodotSpace3D::_cull_aabb_for_body(GodotBody3D *p_body, const AABB &p_aabb) {
 }
 
 bool GodotSpace3D::test_body_motion(GodotBody3D *p_body, const PhysicsServer3D::MotionParameters &p_parameters, PhysicsServer3D::MotionResult *r_result) {
+	GodotCollisionSolver3D::FellowFaceCullScope fellow_cull_scope; // decision 0097
 	//give me back regular physics engine logic
 	//this is madness
 	//and most people using this function will think
@@ -884,13 +886,13 @@ bool GodotSpace3D::test_body_motion(GodotBody3D *p_body, const PhysicsServer3D::
 				Transform3D col_obj_xform = col_obj->get_transform() * col_obj->get_shape_transform(shape_idx);
 				//test initial overlap, does it collide if going all the way?
 				// FellowEngine (decision 0085): only whether the shapes are apart is used here.
-				if (fellow_cull ? GodotCollisionSolver3D::fellow_test_separation(&mshape, body_shape_xform, body_shape->get_aabb(), mshape.motion, col_obj->get_shape(shape_idx), col_obj_xform, motion_aabb)
+				if (fellow_cull ? GodotCollisionSolver3D::fellow_test_separation(&mshape, body_shape_xform, body_shape->get_aabb(), mshape.motion, col_obj->get_shape(shape_idx), col_obj_xform, motion_aabb, body_shape)
 								: GodotCollisionSolver3D::solve_distance(&mshape, body_shape_xform, col_obj->get_shape(shape_idx), col_obj_xform, point_A, point_B, motion_aabb, &sep_axis)) {
 					continue;
 				}
 				sep_axis = motion_normal;
 
-				if (fellow_cull ? !GodotCollisionSolver3D::fellow_test_separation(body_shape, body_shape_xform, body_shape->get_aabb(), Vector3(), col_obj->get_shape(shape_idx), col_obj_xform, motion_aabb)
+				if (fellow_cull ? !GodotCollisionSolver3D::fellow_test_separation(body_shape, body_shape_xform, body_shape->get_aabb(), Vector3(), col_obj->get_shape(shape_idx), col_obj_xform, motion_aabb, body_shape)
 								: !GodotCollisionSolver3D::solve_distance(body_shape, body_shape_xform, col_obj->get_shape(shape_idx), col_obj_xform, point_A, point_B, motion_aabb, &sep_axis)) {
 					stuck = true;
 					break;
@@ -907,7 +909,7 @@ bool GodotSpace3D::test_body_motion(GodotBody3D *p_body, const PhysicsServer3D::
 
 					Vector3 lA, lB;
 					Vector3 sep = motion_normal; //important optimization for this to work fast enough
-					bool collided = fellow_cull ? !GodotCollisionSolver3D::fellow_test_separation(&mshape, body_shape_xform, body_shape->get_aabb(), mshape.motion, col_obj->get_shape(shape_idx), col_obj_xform, motion_aabb)
+					bool collided = fellow_cull ? !GodotCollisionSolver3D::fellow_test_separation(&mshape, body_shape_xform, body_shape->get_aabb(), mshape.motion, col_obj->get_shape(shape_idx), col_obj_xform, motion_aabb, body_shape)
 												: !GodotCollisionSolver3D::solve_distance(&mshape, body_shape_xform, col_obj->get_shape(shape_idx), col_obj_xform, lA, lB, motion_aabb, &sep);
 
 					if (collided) {

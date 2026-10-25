@@ -353,6 +353,11 @@ struct GodotConcavePolygonShape3D final : public GodotConcaveShape3D {
 		int face_index = -1;
 		real_t min_d = 1e20;
 		int collisions = 0;
+		// FellowEngine (decision 0098): nodes whose box the segment enters farther than the closest hit so far (by more
+		// than prune_eps) are not visited; their faces could not be closer.
+		bool prune = false;
+		real_t length = 0.0;
+		real_t prune_eps = 0.0;
 	};
 
 	bool backface_collision = false;

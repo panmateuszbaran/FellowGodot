@@ -31,8 +31,10 @@
 #pragma once
 
 #include "core/math/aabb.h"
+#include "core/math/fellow_segment_sse.h"
 
 #include <cfloat> // FLT_MAX
+#include <type_traits>
 
 // special optimized version of axis aligned bounding box
 template <typename BOUNDS = AABB, typename POINT = Vector3>
@@ -200,6 +202,13 @@ struct BVH_ABB {
 	}
 
 	bool intersects_segment(const Segment &p_s) const {
+#ifdef FELLOW_AABB_SEGMENT_SSE
+		if constexpr (std::is_same_v<BOUNDS, AABB>) {
+			// FellowEngine (milestone 17, decision 0099): AABB::intersects_segment()'s answer for the box to() makes (the
+			// same size, the same sums), computed inline.
+			return _fellow_intersects_segment_sse(min, calculate_size(), p_s.from, p_s.to);
+		}
+#endif
 		BOUNDS bb;
 		to(bb);
 		return bb.intersects_segment(p_s.from, p_s.to);

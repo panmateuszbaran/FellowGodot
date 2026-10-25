@@ -34,6 +34,7 @@
 #include "core/math/convex_hull.h"
 #include "core/math/geometry_3d.h"
 #include "core/templates/sort_array.h"
+#include "servers/rendering/fellow_settings.h"
 
 // GodotHeightMapShape3D is based on Bullet btHeightfieldTerrainShape.
 
@@ -1337,6 +1338,34 @@ void GodotConcavePolygonShape3D::_cull_segment(int p_idx, _SegmentCullParams *p_
 		return;
 	}
 
+	if (p_params->prune && p_params->collisions > 0) {
+		// Where the segment enters the box (a fraction of it): a face in the box is hit no nearer.
+		const AABB &box = params_bvh->aabb;
+		real_t lo = 0.0;
+		for (int i = 0; i < 3; i++) {
+			const real_t f = p_params->from[i];
+			const real_t t = p_params->to[i];
+			const real_t b = box.position[i];
+			const real_t e = b + box.size[i];
+			real_t c = 0.0;
+			if (f < t) {
+				if (f < b) {
+					c = (b - f) / (t - f);
+				}
+			} else if (f > t) {
+				if (f > e) {
+					c = (e - f) / (t - f);
+				}
+			}
+			if (c > lo) {
+				lo = c;
+			}
+		}
+		if (lo * p_params->length > p_params->min_d + p_params->prune_eps) {
+			return;
+		}
+	}
+
 	if (params_bvh->face_index >= 0) {
 		const Face *f = &p_params->faces[params_bvh->face_index];
 		GodotFaceShape3D *face = p_params->face;
@@ -1385,6 +1414,12 @@ bool GodotConcavePolygonShape3D::intersect_segment(const Vector3 &p_begin, const
 	params.from = p_begin;
 	params.to = p_end;
 	params.dir = (p_end - p_begin).normalized();
+	if (Fellow::physics_ray_prune()) {
+		params.prune = true;
+		params.length = (p_end - p_begin).length();
+		const real_t reach = MAX(MAX(Math::abs(p_begin.x), Math::abs(p_begin.y)), MAX(Math::abs(p_begin.z), MAX(Math::abs(p_end.x), MAX(Math::abs(p_end.y), Math::abs(p_end.z)))));
+		params.prune_eps = 1e-3 + 1e-5 * (reach + params.length);
+	}
 
 	params.faces = fr;
 	params.vertices = vr;

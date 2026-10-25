@@ -614,18 +614,37 @@ struct _FellowSeparationInfo {
 	double center[3];
 	double edge[3][3];
 	double motion[3];
+	// Decision 0096: the bound is the shape itself where it is a capsule or a sphere (its support along a world axis a is
+	// that of the local shape along w = Bt a: radius |w| + half the capsule's segment |w.y|), not its box.
+	int kind = 0; // 0: the box (p_bounds_A), 1: a capsule, 2: a sphere
+	double basis_a[3][3];
+	double radius_a = 0.0;
+	double half_segment_a = 0.0;
+	bool shape_axes = false;
 	double magnitude = 0.0; // the largest coordinate of a point of the bound (and of p_transform_A's origin)
 	int axis_count = 0;
-	double axis[6][3];
-	double lo[6];
-	double hi[6];
+	double axis[7][3];
+	double lo[7];
+	double hi[7];
 
 	_FORCE_INLINE_ static double dot3(const double *a, const double *b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
 
 	void range_along(const double *p_axis, double &r_lo, double &r_hi) const {
 		const double c = dot3(p_axis, center);
 		const double m = dot3(p_axis, motion);
-		const double e = Math::abs(dot3(p_axis, edge[0])) + Math::abs(dot3(p_axis, edge[1])) + Math::abs(dot3(p_axis, edge[2]));
+		double e;
+		if (kind == 0) {
+			e = Math::abs(dot3(p_axis, edge[0])) + Math::abs(dot3(p_axis, edge[1])) + Math::abs(dot3(p_axis, edge[2]));
+		} else {
+			double w[3];
+			for (int i = 0; i < 3; i++) {
+				w[i] = p_axis[0] * basis_a[0][i] + p_axis[1] * basis_a[1][i] + p_axis[2] * basis_a[2][i];
+			}
+			e = radius_a * Math::sqrt(dot3(w, w));
+			if (kind == 1) {
+				e += half_segment_a * Math::abs(w[1]);
+			}
+		}
 		r_lo = c + MIN(m, 0.0) - e;
 		r_hi = c + MAX(m, 0.0) + e;
 	}
@@ -643,8 +662,26 @@ struct _FellowSeparationInfo {
 		axis_count++;
 	}
 
-	void setup(const Transform3D &p_transform, const AABB &p_bounds, const Vector3 &p_motion) {
+	void setup(const Transform3D &p_transform, const AABB &p_bounds, const Vector3 &p_motion, const GodotShape3D *p_bound_shape) {
 		const Basis &b = p_transform.basis;
+		kind = 0;
+		if (p_bound_shape && shape_axes) {
+			for (int r = 0; r < 3; r++) {
+				for (int c = 0; c < 3; c++) {
+					basis_a[r][c] = b.rows[r][c];
+				}
+			}
+			if (p_bound_shape->get_type() == PhysicsServer3D::SHAPE_CAPSULE) {
+				const GodotCapsuleShape3D *capsule = static_cast<const GodotCapsuleShape3D *>(p_bound_shape);
+				kind = 1;
+				radius_a = capsule->get_radius();
+				half_segment_a = MAX(0.0, 0.5 * double(capsule->get_height()) - double(capsule->get_radius()));
+			} else if (p_bound_shape->get_type() == PhysicsServer3D::SHAPE_SPHERE) {
+				kind = 2;
+				radius_a = static_cast<const GodotSphereShape3D *>(p_bound_shape)->get_radius();
+				half_segment_a = 0.0;
+			}
+		}
 		double cl[3], hl[3], ml[3];
 		for (int i = 0; i < 3; i++) {
 			hl[i] = 0.5 * double(p_bounds.size[i]);
@@ -665,6 +702,11 @@ struct _FellowSeparationInfo {
 			const double reach = Math::abs(double(p_transform.origin[r])) + Math::abs(double(b.rows[r][0]) * cl[0]) + Math::abs(double(b.rows[r][1]) * cl[1]) +
 					Math::abs(double(b.rows[r][2]) * cl[2]) + Math::abs(edge[0][r]) + Math::abs(edge[1][r]) + Math::abs(edge[2][r]) + Math::abs(motion[r]);
 			magnitude = MAX(magnitude, reach);
+		}
+		if (kind != 0) {
+			for (int r = 0; r < 3; r++) {
+				center[r] = double(p_transform.origin[r]);
+			}
 		}
 		// The motion's direction and two directions across it (a long diagonal motion: the box's axes alone bound it no
 		// better than its AABB; across the motion is where most faces are left out), then the box's own axes.
@@ -690,13 +732,18 @@ struct _FellowSeparationInfo {
 		for (int i = 0; i < 3; i++) {
 			add_axis(b.rows[0][i], b.rows[1][i], b.rows[2][i]);
 		}
+		if (kind == 1 && ml2 > 1e-18) {
+			// Across the capsule's segment and the motion: the normal of the parallelogram its segment sweeps.
+			const double u[3] = { basis_a[0][1], basis_a[1][1], basis_a[2][1] };
+			add_axis(u[1] * motion[2] - u[2] * motion[1], u[2] * motion[0] - u[0] * motion[2], u[0] * motion[1] - u[1] * motion[0]);
+		}
 	}
 
 	// The axes taken into the concave shape's local space (a projection of a world point B v + o on a is (Bt a) . v + a . o),
 	// so that a face is tested on its local vertices; the face normal's direction in world space is the cofactor matrix of
 	// B times the local normal. One g for the query: from the largest coordinate a vertex of the shape can have.
-	double local_axis[6][3];
-	double local_offset[6];
+	double local_axis[7][3];
+	double local_offset[7];
 	double cofactor[3][3];
 	double basis_b[3][3];
 	double origin_b[3];
@@ -739,6 +786,9 @@ struct _FellowSeparationInfo {
 		g = 1e-3 + 1e-5 * vmax;
 	}
 
+	// The gap along the axis that separated the last face found separated (> g).
+	mutable double last_sep_gap = 0.0;
+
 	// True when the face is certainly farther from the bound than GJK's tolerance. r_score: the largest gap found over
 	// the axes less g (<= 0 when the face is kept; the lower, the deeper the bound overlaps the face on every axis).
 	bool face_separated(const GodotFaceShape3D *p_face, double &r_score) const {
@@ -757,6 +807,7 @@ struct _FellowSeparationInfo {
 			const double pmin = MIN(p0, MIN(p1, p2));
 			const double pmax = MAX(p0, MAX(p1, p2));
 			if (pmin > hi[j] + g || pmax < lo[j] - g) {
+				last_sep_gap = MAX(pmin - hi[j], lo[j] - pmax);
 				return true;
 			}
 			gap = MAX(gap, MAX(pmin - hi[j], lo[j] - pmax));
@@ -785,9 +836,55 @@ struct _FellowSeparationInfo {
 			const double pmin = MIN(p0, MIN(p1, p2));
 			const double pmax = MAX(p0, MAX(p1, p2));
 			if (pmin > h + g || pmax < l - g) {
+				last_sep_gap = MAX(pmin - h, l - pmax);
 				return true;
 			}
 			gap = MAX(gap, MAX(pmin - h, l - pmax));
+			if (shape_axes) {
+				// Decision 0096: the face's edges: across each in the face's plane (a face beside the shape), across each
+				// and the capsule's segment, across each and the motion (the axes of the closest features of the swept
+				// shape and the face, but for vertex against vertex).
+				double p[3][3];
+				for (int k = 0; k < 3; k++) {
+					for (int r = 0; r < 3; r++) {
+						p[k][r] = basis_b[r][0] * v[k][0] + basis_b[r][1] * v[k][1] + basis_b[r][2] * v[k][2] + origin_b[r];
+					}
+				}
+				double e[3][3];
+				for (int r = 0; r < 3; r++) {
+					e[0][r] = p[1][r] - p[0][r];
+					e[1][r] = p[2][r] - p[1][r];
+					e[2][r] = p[0][r] - p[2][r];
+				}
+				const double u[3] = { basis_a[0][1], basis_a[1][1], basis_a[2][1] };
+				const bool has_motion = dot3(motion, motion) > 1e-18;
+				const int sets = kind == 1 ? (has_motion ? 3 : 2) : (has_motion ? 2 : 1);
+				for (int set = 0; set < sets; set++) {
+					const double *d = set == 0 ? n : ((set == 1 && kind == 1) ? u : motion);
+					for (int k = 0; k < 3; k++) {
+						double a[3] = { d[1] * e[k][2] - d[2] * e[k][1], d[2] * e[k][0] - d[0] * e[k][2], d[0] * e[k][1] - d[1] * e[k][0] };
+						const double al = Math::sqrt(dot3(a, a));
+						if (!(al > 1e-12)) {
+							continue;
+						}
+						a[0] /= al;
+						a[1] /= al;
+						a[2] /= al;
+						double sl, sh;
+						range_along(a, sl, sh);
+						const double q0 = dot3(a, p[0]);
+						const double q1 = dot3(a, p[1]);
+						const double q2 = dot3(a, p[2]);
+						const double qmin = MIN(q0, MIN(q1, q2));
+						const double qmax = MAX(q0, MAX(q1, q2));
+						if (qmin > sh + g || qmax < sl - g) {
+							last_sep_gap = MAX(qmin - sh, sl - qmax);
+							return true;
+						}
+						gap = MAX(gap, MAX(qmin - sh, sl - qmax));
+					}
+				}
+			}
 		}
 		r_score = gap - g;
 		return false;
@@ -834,12 +931,92 @@ struct _FellowSeparationInfo {
 	}
 };
 
+// Decision 0097: within one test_body_motion() or cast_motion() (a FellowFaceCullScope), the faces one concave shape's
+// cull gives for one box are kept: the motion phase culls the shape with the motion's box for each of its tests of a body
+// (ten for a body it reaches). The faces are given to the test in the cull's order, as the cull would give them.
+namespace {
+struct FellowCulledFace {
+	Vector3 normal;
+	Vector3 vertex[3];
+	bool backface_collision = false;
+	bool invert_backface_collision = false;
+};
+
+struct FellowFaceCullCache {
+	struct Entry {
+		const GodotConcaveShape3D *shape = nullptr;
+		AABB box;
+		bool valid = false;
+		LocalVector<FellowCulledFace> faces;
+		// Decision 0100: per face, the gap that proved it out of reach of shape A swept by `motion` (0: not proved),
+		// for this shape A and transform. A sweep within that one (but for delta) leaves the face out of reach.
+		struct Record {
+			double gap = 0.0;
+			double motion[3] = { 0.0, 0.0, 0.0 };
+		};
+		LocalVector<Record> records;
+		const GodotShape3D *record_shape = nullptr;
+		Transform3D record_transform;
+	};
+	static constexpr int ENTRIES = 4;
+	Entry entries[ENTRIES];
+	int next = 0;
+	int depth = 0;
+};
+
+thread_local FellowFaceCullCache fellow_face_cull_cache;
+
+bool fellow_collect_face(void *p_userdata, GodotShape3D *p_convex) {
+	LocalVector<FellowCulledFace> &faces = *static_cast<LocalVector<FellowCulledFace> *>(p_userdata);
+	const GodotFaceShape3D *f = static_cast<const GodotFaceShape3D *>(p_convex);
+	FellowCulledFace c;
+	c.normal = f->normal;
+	c.vertex[0] = f->vertex[0];
+	c.vertex[1] = f->vertex[1];
+	c.vertex[2] = f->vertex[2];
+	c.backface_collision = f->backface_collision;
+	c.invert_backface_collision = f->invert_backface_collision;
+	faces.push_back(c);
+	return false;
+}
+} // namespace
+
+GodotCollisionSolver3D::FellowFaceCullScope::FellowFaceCullScope() {
+	active = Fellow::physics_distance_face_cull_cache();
+	if (active) {
+		fellow_face_cull_cache.depth++;
+	}
+}
+
+GodotCollisionSolver3D::FellowFaceCullScope::~FellowFaceCullScope() {
+	if (active && --fellow_face_cull_cache.depth == 0) {
+		for (int i = 0; i < FellowFaceCullCache::ENTRIES; i++) {
+			fellow_face_cull_cache.entries[i].valid = false;
+			fellow_face_cull_cache.entries[i].shape = nullptr;
+			fellow_face_cull_cache.entries[i].record_shape = nullptr;
+		}
+		fellow_face_cull_cache.next = 0;
+	}
+}
+
+static bool fellow_consider_face(_FellowSeparationInfo &info, GodotShape3D *p_convex, bool *r_separated);
+
 bool GodotCollisionSolver3D::fellow_separation_callback(void *p_userdata, GodotShape3D *p_convex) {
 	_FellowSeparationInfo &info = *(static_cast<_FellowSeparationInfo *>(p_userdata));
+	return fellow_consider_face(info, p_convex, nullptr);
+}
+
+// The face test and GJK for one face; true ends the search (a face touching). r_separated (when not null): set to
+// whether the face test proved the face out of reach.
+static bool fellow_consider_face(_FellowSeparationInfo &info, GodotShape3D *p_convex, bool *r_separated) {
 	Vector3 close_A, close_B;
 	const GodotFaceShape3D *face = static_cast<const GodotFaceShape3D *>(p_convex);
 	double score = 0.0;
-	if (info.face_separated(face, score)) {
+	const bool separated = info.face_separated(face, score);
+	if (r_separated) {
+		*r_separated = separated;
+	}
+	if (separated) {
 		if (info.verify) {
 			info.verified++;
 			if (!gjk_epa_calculate_distance(info.shape_A, *info.transform_A, p_convex, *info.transform_B, close_A, close_B)) {
@@ -861,7 +1038,7 @@ bool GodotCollisionSolver3D::fellow_separation_callback(void *p_userdata, GodotS
 	return info.collided;
 }
 
-bool GodotCollisionSolver3D::fellow_test_separation(const GodotShape3D *p_shape_A, const Transform3D &p_transform_A, const AABB &p_bounds_A, const Vector3 &p_motion_A, const GodotShape3D *p_shape_B, const Transform3D &p_transform_B, const AABB &p_concave_hint) {
+bool GodotCollisionSolver3D::fellow_test_separation(const GodotShape3D *p_shape_A, const Transform3D &p_transform_A, const AABB &p_bounds_A, const Vector3 &p_motion_A, const GodotShape3D *p_shape_B, const Transform3D &p_transform_B, const AABB &p_concave_hint, const GodotShape3D *p_bound_shape_A) {
 	if (p_shape_B->get_type() == PhysicsServer3D::SHAPE_WORLD_BOUNDARY || !p_shape_B->is_concave() || p_shape_A->is_concave() || !Fellow::physics_distance_face_cull()) {
 		Vector3 a, b;
 		return solve_distance(p_shape_A, p_transform_A, p_shape_B, p_transform_B, a, b, p_concave_hint);
@@ -876,7 +1053,8 @@ bool GodotCollisionSolver3D::fellow_test_separation(const GodotShape3D *p_shape_
 	info.verify = Fellow::physics_verify();
 	info.ordered = Fellow::physics_distance_face_order();
 	info.batch = CLAMP(Fellow::physics_distance_face_batch(), 1, _FellowSeparationInfo::MAX_CANDIDATES);
-	info.setup(p_transform_A, p_bounds_A, p_motion_A);
+	info.shape_axes = Fellow::physics_distance_face_shape_axes();
+	info.setup(p_transform_A, p_bounds_A, p_motion_A, p_bound_shape_A);
 	info.prepare_local(p_transform_B, p_shape_B->get_aabb());
 
 	// The faces culled exactly as solve_distance() culls them (the same box, the same order).
@@ -911,7 +1089,87 @@ bool GodotCollisionSolver3D::fellow_test_separation(const GodotShape3D *p_shape_
 		local_aabb.size[i] = smax - smin;
 	}
 
-	concave_B->cull(local_aabb, fellow_separation_callback, &info, false);
+	FellowFaceCullCache &cache = fellow_face_cull_cache;
+	if (cache.depth > 0) {
+		FellowFaceCullCache::Entry *entry = nullptr;
+		for (int i = 0; i < FellowFaceCullCache::ENTRIES; i++) {
+			FellowFaceCullCache::Entry &e = cache.entries[i];
+			if (e.valid && e.shape == concave_B && e.box.position == local_aabb.position && e.box.size == local_aabb.size) {
+				entry = &e;
+				break;
+			}
+		}
+		if (!entry) {
+			entry = &cache.entries[cache.next];
+			cache.next = (cache.next + 1) % FellowFaceCullCache::ENTRIES;
+			entry->shape = concave_B;
+			entry->box = local_aabb;
+			entry->valid = true;
+			entry->faces.clear();
+			entry->record_shape = nullptr;
+			concave_B->cull(local_aabb, fellow_collect_face, &entry->faces, false);
+		}
+		const bool records = p_bound_shape_A && Fellow::physics_distance_face_sweep_reuse();
+		if (records && !(entry->record_shape == p_bound_shape_A && entry->record_transform == p_transform_A)) {
+			entry->record_shape = p_bound_shape_A;
+			entry->record_transform = p_transform_A;
+			entry->records.resize(entry->faces.size());
+			for (FellowFaceCullCache::Entry::Record &r : entry->records) {
+				r.gap = 0.0;
+			}
+		}
+		GodotFaceShape3D face;
+		Vector3 close_A, close_B;
+		for (uint32_t fi = 0; fi < entry->faces.size(); fi++) {
+			const FellowCulledFace &c = entry->faces[fi];
+			face.normal = c.normal;
+			face.vertex[0] = c.vertex[0];
+			face.vertex[1] = c.vertex[1];
+			face.vertex[2] = c.vertex[2];
+			face.backface_collision = c.backface_collision;
+			face.invert_backface_collision = c.invert_backface_collision;
+			if (records) {
+				FellowFaceCullCache::Entry::Record &r = entry->records[fi];
+				if (r.gap > 0.0) {
+					// Shape A swept by m lies within shape A swept by r.motion grown by delta, the distance from m to the
+					// segment [0, r.motion] (shape A at rest: delta 0); the face is then at least r.gap - delta away.
+					const double *m = info.motion;
+					const double rr = r.motion[0] * r.motion[0] + r.motion[1] * r.motion[1] + r.motion[2] * r.motion[2];
+					double lambda = rr > 0.0 ? (m[0] * r.motion[0] + m[1] * r.motion[1] + m[2] * r.motion[2]) / rr : 0.0;
+					lambda = CLAMP(lambda, 0.0, 1.0);
+					const double d0 = m[0] - lambda * r.motion[0];
+					const double d1 = m[1] - lambda * r.motion[1];
+					const double d2 = m[2] - lambda * r.motion[2];
+					const double delta = Math::sqrt(d0 * d0 + d1 * d1 + d2 * d2) * (1.0 + 1e-9) + 1e-12;
+					if (r.gap - delta > info.g) {
+						if (info.verify) {
+							info.verified++;
+							if (!gjk_epa_calculate_distance(info.shape_A, *info.transform_A, &face, *info.transform_B, close_A, close_B)) {
+								info.mismatches++;
+							}
+						}
+						continue;
+					}
+				}
+				bool separated = false;
+				if (fellow_consider_face(info, &face, &separated)) {
+					break;
+				}
+				if (separated) {
+					r.gap = info.last_sep_gap;
+					r.motion[0] = info.motion[0];
+					r.motion[1] = info.motion[1];
+					r.motion[2] = info.motion[2];
+				}
+				continue;
+			}
+			if (fellow_separation_callback(&info, &face)) {
+				break;
+			}
+		}
+	} else {
+		concave_B->cull(local_aabb, fellow_separation_callback, &info, false);
+	}
 	if (!info.collided && info.candidate_count > 0) {
 		info.flush();
 	}

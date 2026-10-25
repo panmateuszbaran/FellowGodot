@@ -293,6 +293,26 @@ inline int physics_jolt_pump_spins() {
 // physics/motion_query_cache (decision 0093): within a CharacterBody3D's move_and_slide() a body_test_motion() repeated
 // with the same parameters from the same transform returns the kept result (any physics engine; the world does not
 // change during the call). Read per move_and_slide().
+// physics/distance_face_shape_axes (decision 0096, exact): 0085's face test with the capsule or sphere itself as the
+// bound (not its box) and the face's edges' axes.
+inline bool physics_distance_face_shape_axes() {
+	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/physics/distance_face_shape_axes");
+}
+// physics/distance_face_cull_cache (decision 0097, exact): within one motion query, a concave shape's faces culled once
+// per box.
+inline bool physics_distance_face_cull_cache() {
+	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/physics/distance_face_cull_cache");
+}
+// physics/ray_prune (decision 0098, exact): a ray through a concave shape skips the tree's nodes beyond its closest hit so
+// far.
+inline bool physics_ray_prune() {
+	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/physics/ray_prune");
+}
+// physics/distance_face_sweep_reuse (decision 0100, exact): a face 0085's test proved out of reach of a sweep is not
+// tested again for a sweep within it (the bisection's shorter ones, the shape at rest).
+inline bool physics_distance_face_sweep_reuse() {
+	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/physics/distance_face_sweep_reuse");
+}
 inline bool physics_motion_query_cache() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/physics/motion_query_cache");
 }

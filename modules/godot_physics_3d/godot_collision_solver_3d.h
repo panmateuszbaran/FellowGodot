@@ -55,5 +55,13 @@ public:
 	// FellowEngine (milestone 17, decision 0085): solve_distance()'s return value alone (true: the shapes are apart), for
 	// callers that discard the closest points. p_shape_A may be a GodotMotionShape3D: p_bounds_A is then its shape's local
 	// AABB and p_motion_A its local motion (Vector3() for a shape at rest).
-	static bool fellow_test_separation(const GodotShape3D *p_shape_A, const Transform3D &p_transform_A, const AABB &p_bounds_A, const Vector3 &p_motion_A, const GodotShape3D *p_shape_B, const Transform3D &p_transform_B, const AABB &p_concave_hint);
+	// p_bound_shape_A: shape A without its motion (the capsule or sphere bounds A exactly, decision 0096), or nullptr.
+	static bool fellow_test_separation(const GodotShape3D *p_shape_A, const Transform3D &p_transform_A, const AABB &p_bounds_A, const Vector3 &p_motion_A, const GodotShape3D *p_shape_B, const Transform3D &p_transform_B, const AABB &p_concave_hint, const GodotShape3D *p_bound_shape_A = nullptr);
+	// Decision 0097: while one is alive (on this thread), fellow_test_separation() keeps the faces of its concave culls.
+	// Opened by test_body_motion() and cast_motion(); the shapes must not change while it is alive.
+	struct FellowFaceCullScope {
+		bool active = false;
+		FellowFaceCullScope();
+		~FellowFaceCullScope();
+	};
 };
