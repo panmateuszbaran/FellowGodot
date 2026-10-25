@@ -153,6 +153,64 @@ func _build_campfire() -> void:
 	e.noise_scale = 0.18
 	campfire.add_child(e)
 	add_child(campfire)
+	if args.get("gas_embers", "1") != "0":
+		_build_embers()
+
+
+## Embers: GPU particles pushed by the campfire's velocity (its velocity texture in a vector field attractor).
+func _build_embers() -> void:
+	campfire.velocity_texture_enabled = true
+	campfire.velocity_texture_scale = 4.0
+	var field := GPUParticlesAttractorVectorField3D.new()
+	field.size = campfire.size
+	field.position = Vector3(0.0, campfire.size.y * 0.5, 0.0)
+	field.texture = campfire.get_velocity_texture()
+	field.strength = 14.0
+	field.attenuation = 1.0
+	add_child(field)
+	var p := GPUParticles3D.new()
+	p.amount = 64
+	p.lifetime = 2.2
+	p.fixed_fps = 60
+	p.interpolate = false
+	p.use_fixed_seed = true
+	p.seed = 4242
+	p.visibility_aabb = AABB(Vector3(-2.0, -0.5, -2.0), Vector3(4.0, 6.0, 4.0))
+	var pm := ParticleProcessMaterial.new()
+	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE
+	pm.emission_sphere_radius = 0.25
+	pm.direction = Vector3(0, 1, 0)
+	pm.spread = 25.0
+	pm.initial_velocity_min = 0.5
+	pm.initial_velocity_max = 1.5
+	pm.gravity = Vector3(0, -0.6, 0)
+	pm.damping_min = 2.5
+	pm.damping_max = 3.5
+	pm.scale_min = 0.6
+	pm.scale_max = 1.0
+	var fade := Curve.new()
+	fade.add_point(Vector2(0.0, 1.0))
+	fade.add_point(Vector2(0.7, 0.8))
+	fade.add_point(Vector2(1.0, 0.0))
+	var ft := CurveTexture.new()
+	ft.curve = fade
+	pm.scale_curve = ft
+	p.process_material = pm
+	var quad := QuadMesh.new()
+	quad.size = Vector2(0.03, 0.03)
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	m.albedo_color = Color(1.0, 0.55, 0.18)
+	m.emission_enabled = true
+	m.emission = Color(1.0, 0.5, 0.15)
+	m.emission_energy_multiplier = 8.0
+	quad.material = m
+	p.draw_pass_1 = quad
+	p.position = Vector3(0.0, 0.25, 0.0)
+	add_child(p)
 
 
 func _build_house() -> void:

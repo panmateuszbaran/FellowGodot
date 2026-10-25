@@ -210,6 +210,7 @@ private:
 		SIM_MG_RESTRICT,
 		SIM_MG_PROLONG,
 		SIM_MG_COARSE,
+		SIM_EXPORT,
 		SIM_MAX,
 	};
 	enum RenderMode {
@@ -243,6 +244,8 @@ private:
 		RID coarse;
 		RID light;
 		RID emission_buffer;
+		RID velocity_export; // RGBA16F, the cell-centred velocity for GPU particles (when asked for)
+		float velocity_export_scale = 5.0f;
 		RID ubo;
 		uint32_t current = 0;
 		uint64_t steps = 0;
@@ -316,6 +319,9 @@ public:
 	// recomputed from the current velocity, 4 the solid cells), asynchronously; the callback gets (PackedByteArray).
 	void volume_debug_read(uint32_t p_id, int p_what, const Callable &p_callback);
 	uint64_t volume_get_steps(uint32_t p_id) const;
+	// The velocity at the cell centres as a texture for GPU particles' vector field attractors (2 * texel - 1 =
+	// v / p_scale), updated after every step; RID() turns it off.
+	RID volume_enable_velocity_export(uint32_t p_id, bool p_enable, float p_scale);
 
 	void process_pending(); // the queued steps, at the start of a frame
 	bool has_volumes() const { return !volumes.is_empty(); }

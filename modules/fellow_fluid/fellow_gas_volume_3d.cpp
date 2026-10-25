@@ -47,6 +47,7 @@ FellowGasVolume3D::FellowGasVolume3D() {
 	volume_id = FellowGas::allocate_id();
 	emission.instantiate();
 	debug.instantiate();
+	velocity_texture.instantiate();
 	_update_grid();
 }
 
@@ -96,6 +97,20 @@ void FellowGasVolume3D::set_fire_light(bool p_enable) {
 	}
 }
 
+void FellowGasVolume3D::set_velocity_texture_enabled(bool p_enable) {
+	velocity_texture_enabled = p_enable;
+	if (configured) {
+		RS::get_singleton()->call_on_render_thread(callable_mp_static(&FellowGasVolume3D::_rt_export).bind(volume_id, p_enable, velocity_texture_scale, velocity_texture));
+	}
+}
+
+void FellowGasVolume3D::set_velocity_texture_scale(float p_scale) {
+	velocity_texture_scale = MAX(p_scale, 0.01f);
+	if (configured && velocity_texture_enabled) {
+		RS::get_singleton()->call_on_render_thread(callable_mp_static(&FellowGasVolume3D::_rt_export).bind(volume_id, true, velocity_texture_scale, velocity_texture));
+	}
+}
+
 int64_t FellowGasVolume3D::get_vram_bytes() const {
 	return FellowGas::estimate_vram_bytes(grid_res, high_precision);
 }
@@ -119,6 +134,14 @@ void FellowGasVolume3D::_rt_configure(uint32_t p_id, Vector3i p_res, float p_dx,
 	}
 	gas->volume_configure(p_id, p_res, p_dx, p_high_precision);
 	gas->volume_set_emission_callback(p_id, callable_mp_static(&FellowGasVolume3D::_rt_store).bind(p_emission));
+}
+
+void FellowGasVolume3D::_rt_export(uint32_t p_id, bool p_enable, float p_scale, Ref<Texture3DRD> p_texture) {
+	FellowGas *gas = FellowGas::get_singleton_if_exists();
+	if (!gas || p_texture.is_null()) {
+		return;
+	}
+	p_texture->set_texture_rd_rid(gas->volume_enable_velocity_export(p_id, p_enable, p_scale));
 }
 
 void FellowGasVolume3D::_rt_free(uint32_t p_id) {
@@ -170,6 +193,9 @@ void FellowGasVolume3D::_rt_store(const PackedByteArray &p_data, Ref<FellowGasRe
 void FellowGasVolume3D::_configure() {
 	_update_grid();
 	RS::get_singleton()->call_on_render_thread(callable_mp_static(&FellowGasVolume3D::_rt_configure).bind(volume_id, grid_res, grid_dx, high_precision, emission));
+	if (velocity_texture_enabled) {
+		RS::get_singleton()->call_on_render_thread(callable_mp_static(&FellowGasVolume3D::_rt_export).bind(volume_id, true, velocity_texture_scale, velocity_texture));
+	}
 	configured = true;
 	ticks = 0;
 	sim_time = 0.0;
@@ -701,6 +727,11 @@ void FellowGasVolume3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_fire_light_shadows", "enable"), &FellowGasVolume3D::set_fire_light_shadows);
 	ClassDB::bind_method(D_METHOD("is_fire_light_shadows"), &FellowGasVolume3D::is_fire_light_shadows);
 
+	ClassDB::bind_method(D_METHOD("set_velocity_texture_enabled", "enable"), &FellowGasVolume3D::set_velocity_texture_enabled);
+	ClassDB::bind_method(D_METHOD("is_velocity_texture_enabled"), &FellowGasVolume3D::is_velocity_texture_enabled);
+	ClassDB::bind_method(D_METHOD("set_velocity_texture_scale", "speed"), &FellowGasVolume3D::set_velocity_texture_scale);
+	ClassDB::bind_method(D_METHOD("get_velocity_texture_scale"), &FellowGasVolume3D::get_velocity_texture_scale);
+	ClassDB::bind_method(D_METHOD("get_velocity_texture"), &FellowGasVolume3D::get_velocity_texture);
 	ClassDB::bind_method(D_METHOD("reset_simulation"), &FellowGasVolume3D::reset_simulation);
 	ClassDB::bind_method(D_METHOD("get_grid_size"), &FellowGasVolume3D::get_grid_size);
 	ClassDB::bind_method(D_METHOD("get_cell_size"), &FellowGasVolume3D::get_cell_size);
@@ -762,6 +793,10 @@ void FellowGasVolume3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "fire_light_energy", PROPERTY_HINT_RANGE, "0,16,0.01,or_greater"), "set_fire_light_energy", "get_fire_light_energy");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "fire_light_range", PROPERTY_HINT_RANGE, "0,100,0.01,or_greater,suffix:m"), "set_fire_light_range", "get_fire_light_range");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "fire_light_shadows"), "set_fire_light_shadows", "is_fire_light_shadows");
+
+	ADD_GROUP("Velocity Texture", "velocity_texture_");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "velocity_texture_enabled"), "set_velocity_texture_enabled", "is_velocity_texture_enabled");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "velocity_texture_scale", PROPERTY_HINT_RANGE, "0.1,50,0.1,suffix:m/s"), "set_velocity_texture_scale", "get_velocity_texture_scale");
 
 	BIND_ENUM_CONSTANT(SOLVER_SOR);
 	BIND_ENUM_CONSTANT(SOLVER_MULTIGRID);

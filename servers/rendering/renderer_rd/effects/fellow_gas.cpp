@@ -159,7 +159,7 @@ void FellowGas::_ensure_sim(int p_precision) {
 		return;
 	}
 	Vector<String> modes;
-	const char *names[SIM_MAX] = { "OBSTACLES", "EMIT", "ADVECT_S1", "ADVECT_S2", "ADVECT_V1", "ADVECT_V2", "CURL", "CELL_FORCE", "FACE_FORCE", "DIVERGENCE", "PRESSURE", "PROJECT", "COARSE", "MG_RESTRICT", "MG_PROLONG", "MG_COARSE" };
+	const char *names[SIM_MAX] = { "OBSTACLES", "EMIT", "ADVECT_S1", "ADVECT_S2", "ADVECT_V1", "ADVECT_V2", "CURL", "CELL_FORCE", "FACE_FORCE", "DIVERGENCE", "PRESSURE", "PROJECT", "COARSE", "MG_RESTRICT", "MG_PROLONG", "MG_COARSE", "EXPORT" };
 	for (int i = 0; i < SIM_MAX; i++) {
 		modes.push_back(String("\n#define MODE_") + names[i] + "\n");
 	}
@@ -172,7 +172,7 @@ void FellowGas::_ensure_sim(int p_precision) {
 }
 
 void FellowGas::_free_volume_textures(Volume &r_v) {
-	RID *rids[] = { &r_v.scalars[0], &r_v.scalars[1], &r_v.scalars_hat, &r_v.velocity[0], &r_v.velocity[1], &r_v.velocity_hat, &r_v.pressure, &r_v.rhs, &r_v.solid, &r_v.coarse, &r_v.light, &r_v.emission_buffer, &r_v.ubo };
+	RID *rids[] = { &r_v.scalars[0], &r_v.scalars[1], &r_v.scalars_hat, &r_v.velocity[0], &r_v.velocity[1], &r_v.velocity_hat, &r_v.pressure, &r_v.rhs, &r_v.solid, &r_v.coarse, &r_v.light, &r_v.emission_buffer, &r_v.velocity_export, &r_v.ubo };
 	for (RID *r : rids) {
 		if (r->is_valid()) {
 			RD::get_singleton()->free_rid(*r);
@@ -302,6 +302,24 @@ void FellowGas::volume_set_emission_callback(uint32_t p_id, const Callable &p_ca
 	Volume *v = volumes.getptr(p_id);
 	ERR_FAIL_NULL(v);
 	v->emission_callback = p_callback;
+}
+
+RID FellowGas::volume_enable_velocity_export(uint32_t p_id, bool p_enable, float p_scale) {
+	Volume *v = volumes.getptr(p_id);
+	ERR_FAIL_NULL_V(v, RID());
+	v->velocity_export_scale = MAX(p_scale, 1e-3f);
+	if (!p_enable) {
+		if (v->velocity_export.is_valid()) {
+			RD::get_singleton()->free_rid(v->velocity_export);
+			v->velocity_export = RID();
+		}
+		return RID();
+	}
+	if (v->velocity_export.is_null()) {
+		v->velocity_export = _fellow_gas_tex3d(RD::DATA_FORMAT_R16G16B16A16_SFLOAT, v->res, RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_STORAGE_BIT | RD::TEXTURE_USAGE_CAN_COPY_TO_BIT);
+		RD::get_singleton()->texture_clear(v->velocity_export, Color(0.5, 0.5, 0.5, 1.0), 0, 1, 0, 1);
+	}
+	return v->velocity_export;
 }
 
 uint64_t FellowGas::volume_get_steps(uint32_t p_id) const {
@@ -490,6 +508,10 @@ void FellowGas::_run_step(uint32_t p_id, Volume &r_v, const StepParams &p_step) 
 	_dispatch_sim(r_v, SIM_PROJECT, { image(1, r_v.pressure), image(4, r_v.velocity[nxt]), image(5, r_v.solid) }, nv);
 	// The bricks' largest values (the renderer's empty space) and the fire's emission (its light).
 	_dispatch_sim(r_v, SIM_COARSE, { image(1, r_v.scalars[nxt]), image(4, r_v.coarse), buffer(6, r_v.emission_buffer) }, _fellow_gas_coarse_size(n));
+	if (r_v.velocity_export.is_valid()) {
+		MGPush push = { { 0, 0, 0, 0 }, { 1.0f / r_v.velocity_export_scale, 0.0f, 0.0f, 0.0f }, { 0, 0, 0, 0 } };
+		_dispatch_sim(r_v, SIM_EXPORT, { image(1, r_v.velocity[nxt]), image(4, r_v.velocity_export) }, n, &push);
+	}
 	RD::get_singleton()->draw_command_end_label();
 
 	r_v.current = nxt;

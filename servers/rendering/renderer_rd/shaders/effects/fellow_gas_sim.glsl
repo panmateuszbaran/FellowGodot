@@ -853,4 +853,28 @@ void main() {
 }
 #endif
 
+#ifdef MODE_EXPORT
+// The velocity at the cell centres for GPU particles (a GPUParticlesAttractorVectorField3D over the box): their
+// vector field reads 2 * texel - 1 as the force's direction and length, so the texel is v / scale mapped to [0, 1].
+layout(push_constant, std430) uniform Push {
+	ivec4 size; // unused
+	vec4 level; // x: 1 / the velocity mapped to 1 (m/s)
+	ivec4 coarse_size; // unused
+}
+push;
+
+layout(FMT, set = 0, binding = 1) uniform restrict readonly image3D vel;
+layout(rgba16f, set = 0, binding = 4) uniform restrict writeonly image3D dest;
+
+void main() {
+	ivec3 c = ivec3(gl_GlobalInvocationID);
+	if (any(greaterThanEqual(c, N()))) {
+		return;
+	}
+	vec3 a = imageLoad(vel, c).xyz;
+	vec3 v = 0.5 * vec3(a.x + imageLoad(vel, c + ivec3(1, 0, 0)).x, a.y + imageLoad(vel, c + ivec3(0, 1, 0)).y, a.z + imageLoad(vel, c + ivec3(0, 0, 1)).z);
+	imageStore(dest, c, vec4(clamp(v * push.level.x, vec3(-1.0), vec3(1.0)) * 0.5 + 0.5, 1.0));
+}
+#endif
+
 /* clang-format on */

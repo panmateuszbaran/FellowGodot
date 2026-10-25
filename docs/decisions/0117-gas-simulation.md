@@ -63,6 +63,10 @@ the obstacle's index); per 4³ brick the largest smoke and temperature (RG16F, f
    and its emission-weighted position, read back asynchronously (2-3 frames later): the node's omni light (decision
    0118) is placed and coloured from them.
 
+8. *Export* (when `velocity_texture_enabled`): the velocity at the cell centres, v / `velocity_texture_scale` mapped to
+   [0, 1], into an RGBA16F texture a `GPUParticlesAttractorVectorField3D` reads (2 × texel − 1 is its force): GPU
+   particles carried by the flow (Fire Lab's embers).
+
 The steps a node queues during the physics ticks run at the start of the next frame (inside its timestamps:
 "FellowEngine Gas Simulation"), in the order of the volumes' creation.
 

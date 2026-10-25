@@ -34,6 +34,7 @@
 #include "core/os/mutex.h"
 #include "scene/3d/light_3d.h"
 #include "scene/3d/node_3d.h"
+#include "scene/resources/texture_rd.h"
 
 class FellowGasEmitter3D;
 
@@ -127,6 +128,10 @@ private:
 	float fire_light_energy = 1.0f;
 	float fire_light_range = 0.0f;
 	bool fire_light_shadows = false;
+	// The velocity for GPU particles.
+	bool velocity_texture_enabled = false;
+	float velocity_texture_scale = 5.0f;
+	Ref<Texture3DRD> velocity_texture;
 
 	// State.
 	uint32_t volume_id = 0;
@@ -156,6 +161,7 @@ private:
 
 	static void _rt_configure(uint32_t p_id, Vector3i p_res, float p_dx, bool p_high_precision, Ref<FellowGasReadback> p_emission);
 	static void _rt_free(uint32_t p_id);
+	static void _rt_export(uint32_t p_id, bool p_enable, float p_scale, Ref<Texture3DRD> p_texture);
 	static void _rt_reset(uint32_t p_id);
 	static void _rt_step(uint32_t p_id, PackedByteArray p_step);
 	static void _rt_render(uint32_t p_id, PackedByteArray p_render);
@@ -256,6 +262,12 @@ public:
 	float get_fire_light_range() const { return fire_light_range; }
 	void set_fire_light_shadows(bool p_enable) { fire_light_shadows = p_enable; }
 	bool is_fire_light_shadows() const { return fire_light_shadows; }
+
+	void set_velocity_texture_enabled(bool p_enable);
+	bool is_velocity_texture_enabled() const { return velocity_texture_enabled; }
+	void set_velocity_texture_scale(float p_scale);
+	float get_velocity_texture_scale() const { return velocity_texture_scale; }
+	Ref<Texture3D> get_velocity_texture() const { return velocity_texture; }
 
 	void reset_simulation();
 	Vector3i get_grid_size() const { return grid_res; }

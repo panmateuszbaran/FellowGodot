@@ -99,6 +99,7 @@ the node places at the fire lights the scene. Without such a node nothing of it 
 | `fire_intensity` (20), `fire_temperature_scale` (1.4) | the fire's blackbody emission (brightness by the fourth power of the temperature) and its colour's temperature |
 | `cast_shadows`, `shadow_strength` | the sun's shadow through the smoke on the scene (in the contact shadow mask; not with the ray-traced sun shadows) |
 | `fire_light`, `fire_light_energy`, `fire_light_range`, `fire_light_shadows` | the omni light at the fire, from the simulated emission (2-3 frames late) |
+| `velocity_texture_enabled`, `velocity_texture_scale` (5 m/s) | the velocity at the cell centres as a `Texture3D` (`get_velocity_texture()`) for a `GPUParticlesAttractorVectorField3D` over the box: sparks and embers carried by the flow (Fire Lab's embers) |
 
 Project settings: `fluid/enabled` (the simulation), `fluid/gas_rendering` (the drawing), `fluid/gas_solver`
 (measurements: 0 the node's solver, 1 SOR, 2 multigrid). Limits: transparent objects
