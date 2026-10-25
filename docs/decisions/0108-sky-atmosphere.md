@@ -87,4 +87,5 @@ counts the sky as real-time and redraws its radiance (the reflections' and the a
 skies. The height now comes from a third global shader parameter, `fellow_atmosphere_camera_height` (km), set by the
 engine each frame; the sky's radiance is redrawn when the light changes (Godot's incremental mode) and when the
 atmosphere's settings change or the camera's height moves by more than 100 m (FellowEngine marks it). The sky drawn
-behind the scene is the same computation, the height from the parameter instead of `POSITION` (a frame late).
+behind the scene is the same computation, the height from the parameter instead of `POSITION` (a frame late). RTX
+(`m19_f258`): "Setup Sky" 0.002 ms in City Lab and Sponza.

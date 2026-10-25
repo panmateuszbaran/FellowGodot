@@ -37,4 +37,5 @@ Off (the default) the image is the previous build's bit for bit.
 
 ## Results
 
-See milestone 19's report.
+RTX (`m19_f258`, 1920 × 1080): City Lab +0.14 ms (the passes 0.116 ms, the tone mapping pass +0.016 ms); with the lens
+flare and dirt, Sponza +0.13 ms. At a low sun the sun glows over the roofs in proportion to its brightness.

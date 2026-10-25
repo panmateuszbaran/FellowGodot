@@ -24,4 +24,8 @@ Off: the previous version's image. On: see the results.
 
 ## Results
 
-See milestone 19's report.
+lavapipe, City Lab, a 60-frame pan along the sky at 60° per second (`city_sky_pan`), 960 × 540: every frame of the
+interleaved trace within 47.7-49.0 dB of the full trace. The first version gave a pixel without history (uncovered by
+the pan) its own trace of up to three frames ago, from where the screen was then: blocky trails at the leading edge
+(31.8 dB); it now takes the mean of this frame's traces around it. RTX (`m19_f258`): City Lab's clouds 0.505 →
+0.325 ms; Sponza 0.139 → 0.134 ms (little sky: what is left is the temporal and composite passes).

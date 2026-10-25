@@ -32,4 +32,5 @@ At 0 (the default) the image is the previous build's bit for bit.
 
 ## Results
 
-See milestone 19's report.
+RTX (`m19_f258`): City Lab at an 8° sun +0.06 ms (the bloom's chain runs for it; nothing where the sun is off the
+screen). At a 3° sun the roofs in front of it break the low sky into rays over the city.

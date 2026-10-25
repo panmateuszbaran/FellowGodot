@@ -51,4 +51,5 @@ shadow there — the effect's main use — was lost (2 300 pixels brighter).
 
 Milestone 19: 8 steps by default (Unreal's count), half the fetches. Crowd Lab on lavapipe: 6 100 pixels darkened
 against 5 300 with 16 (the tolerance of two steps' depth change is twice as long), the total darkening +5 % (close) and
-−1 % (street); side by side the two are not told apart.
+−1 % (street); side by side the two are not told apart. RTX (`m19_f258`): City Lab 0.159 → 0.104 ms, Sponza 0.282 →
+0.179 ms.

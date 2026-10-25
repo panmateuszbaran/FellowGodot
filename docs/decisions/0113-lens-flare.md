@@ -27,4 +27,5 @@ At 0 (the default) the image is the previous build's bit for bit.
 
 ## Results
 
-See milestone 19's report.
+RTX (`m19_f258`): +0.007 ms over the bloom in City Lab. On lavapipe at a threshold of 2 the ghosts show as faint
+tinted disks mirrored through the centre.

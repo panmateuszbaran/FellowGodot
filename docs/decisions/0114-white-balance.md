@@ -27,4 +27,5 @@ white at 6500 K → (1.001, 1, 1.001); 8000 K → (1.10, 0.99, 0.83); 5000 K →
 
 ## Results
 
-See milestone 19's report.
+RTX (`m19_f258`): free (−0.002 ms, n.s.). At 7000 K Sponza's sky-lit floor turns from blue to grey and Bistro's red
+awnings stay red in the shade (milestone 19's report).
