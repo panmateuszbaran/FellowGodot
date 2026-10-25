@@ -280,6 +280,12 @@ bool sc_fellow_rt_sun_shadow() {
 }
 #define FELLOW_HAS_RT_SUN_SHADOW
 
+// FellowEngine contact shadows (decision 0107): the first directional light's shadow multiplied by the contact mask
+// (bound where the traced mask is, fellow_rt_shadow_mask; the two are never on together).
+bool sc_fellow_contact_shadow() {
+	return ((sc_packed_2() >> 5) & 1U) != 0;
+}
+
 // FellowEngine DDGI (decision 0083): the colour passes take the ambient light from the probe volume.
 bool sc_fellow_ddgi() {
 	return ((sc_packed_2() >> 2) & 1U) != 0;

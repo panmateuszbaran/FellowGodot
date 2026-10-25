@@ -51,6 +51,36 @@ void Fellow::register_settings() {
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/post/motion_blur/amount", PROPERTY_HINT_RANGE, "0,1,0.01"), 0.5); // fraction of the frame the shutter is open
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/post/motion_blur/samples", PROPERTY_HINT_RANGE, "2,64,1"), 12);
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/post/motion_blur/max_radius", PROPERTY_HINT_RANGE, "1,32,0.5,suffix:px"), 32.0);
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/post/sharpen/strength", PROPERTY_HINT_RANGE, "0,1,0.01"), 0.0); // decision 0110
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/post/bloom/lens_dirt", PROPERTY_HINT_RANGE, "0,20,0.01"), 0.0); // decision 0111
+	GLOBAL_DEF("rendering/fellow/post/clouds/enabled", false); // decision 0109
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/post/clouds/coverage", PROPERTY_HINT_RANGE, "0,1,0.01"), 0.45);
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/post/clouds/density", PROPERTY_HINT_RANGE, "0,5,0.01"), 1.0);
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/post/clouds/altitude", PROPERTY_HINT_RANGE, "0.1,10,0.1,suffix:km"), 1.5);
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/post/clouds/thickness", PROPERTY_HINT_RANGE, "0.1,10,0.1,suffix:km"), 2.5);
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/post/clouds/wind", PROPERTY_HINT_RANGE, "0,0.2,0.001,suffix:km/s"), 0.01);
+	GLOBAL_DEF("rendering/fellow/post/atmosphere/enabled", false); // decision 0108
+	GLOBAL_DEF("rendering/fellow/post/atmosphere/aerial_perspective", true);
+	GLOBAL_DEF("rendering/fellow/post/atmosphere/sun_transmittance", true); // the sun's light coloured by the atmosphere
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/post/atmosphere/aerial_distance_scale", PROPERTY_HINT_RANGE, "0,100,0.01"), 1.0);
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/post/atmosphere/mie_scale", PROPERTY_HINT_RANGE, "0,20,0.01"), 1.0);
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/post/atmosphere/rayleigh_scale", PROPERTY_HINT_RANGE, "0,10,0.01"), 1.0);
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/post/atmosphere/ground_albedo", PROPERTY_HINT_RANGE, "0,1,0.01"), 0.3);
+	GLOBAL_DEF("rendering/fellow/post/contact_shadows/enabled", false); // decision 0107
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/post/contact_shadows/length", PROPERTY_HINT_RANGE, "0.01,5,0.01,suffix:m"), 0.3);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/post/contact_shadows/steps", PROPERTY_HINT_RANGE, "2,64,1"), 16);
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/post/contact_shadows/thickness", PROPERTY_HINT_RANGE, "0.001,1,0.001,suffix:m"), 0.02);
+	GLOBAL_DEF("rendering/fellow/post/exposure/histogram", false); // decision 0105
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/post/exposure/low_percent", PROPERTY_HINT_RANGE, "0,100,0.5,suffix:%"), 10.0);
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/post/exposure/high_percent", PROPERTY_HINT_RANGE, "0,100,0.5,suffix:%"), 90.0);
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/post/exposure/speed_up", PROPERTY_HINT_RANGE, "0,20,0.1"), 3.0); // exposure rising (to darker scenes)
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/post/exposure/speed_down", PROPERTY_HINT_RANGE, "0,20,0.1"), 1.0);
+	GLOBAL_DEF("rendering/fellow/post/local_exposure/enabled", false); // decision 0106
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/post/local_exposure/highlight_contrast", PROPERTY_HINT_RANGE, "0,1,0.01"), 0.8);
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/post/local_exposure/shadow_contrast", PROPERTY_HINT_RANGE, "0,1,0.01"), 0.8);
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/post/local_exposure/detail_strength", PROPERTY_HINT_RANGE, "0,4,0.01"), 1.0);
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/post/local_exposure/blurred_blend", PROPERTY_HINT_RANGE, "0,1,0.01"), 0.6);
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/post/local_exposure/blur_size", PROPERTY_HINT_RANGE, "0.05,1,0.01"), 0.5);
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/post/lens/chromatic_aberration", PROPERTY_HINT_RANGE, "-0.05,0.05,0.0005"), 0.0); // decision 0079
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/post/lens/vignette", PROPERTY_HINT_RANGE, "0,1,0.01"), 0.0);
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/post/lens/vignette_smoothness", PROPERTY_HINT_RANGE, "0.01,1,0.01"), 0.5);

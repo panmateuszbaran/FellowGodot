@@ -345,6 +345,43 @@ inline int motion_blur_samples() {
 inline float motion_blur_max_radius() {
 	return GLOBAL_GET_CACHED(float, "rendering/fellow/post/motion_blur/max_radius");
 }
+// post/exposure/* (decision 0105): auto exposure from a log-luminance histogram between two percentiles, adapted with
+// separate speeds (Unreal's eye adaptation; a visual feature, off by default; only where auto exposure is on).
+inline bool exposure_histogram() {
+	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/post/exposure/histogram");
+}
+inline float exposure_low_percent() {
+	return GLOBAL_GET_CACHED(float, "rendering/fellow/post/exposure/low_percent");
+}
+inline float exposure_high_percent() {
+	return GLOBAL_GET_CACHED(float, "rendering/fellow/post/exposure/high_percent");
+}
+inline float exposure_speed_up() {
+	return GLOBAL_GET_CACHED(float, "rendering/fellow/post/exposure/speed_up");
+}
+inline float exposure_speed_down() {
+	return GLOBAL_GET_CACHED(float, "rendering/fellow/post/exposure/speed_down");
+}
+// post/local_exposure/* (decision 0106): Unreal-style local exposure in the tone mapping pass (a visual feature, off by
+// default).
+inline bool local_exposure_enabled() {
+	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/post/local_exposure/enabled");
+}
+inline float local_exposure_highlight_contrast() {
+	return GLOBAL_GET_CACHED(float, "rendering/fellow/post/local_exposure/highlight_contrast");
+}
+inline float local_exposure_shadow_contrast() {
+	return GLOBAL_GET_CACHED(float, "rendering/fellow/post/local_exposure/shadow_contrast");
+}
+inline float local_exposure_detail() {
+	return GLOBAL_GET_CACHED(float, "rendering/fellow/post/local_exposure/detail_strength");
+}
+inline float local_exposure_blurred_blend() {
+	return GLOBAL_GET_CACHED(float, "rendering/fellow/post/local_exposure/blurred_blend");
+}
+inline float local_exposure_blur_size() {
+	return GLOBAL_GET_CACHED(float, "rendering/fellow/post/local_exposure/blur_size");
+}
 // post/lens/* (decision 0079): lens effects in the tone mapping pass (visual features, 0 = off).
 inline float lens_chromatic_aberration() {
 	return GLOBAL_GET_CACHED(float, "rendering/fellow/post/lens/chromatic_aberration");

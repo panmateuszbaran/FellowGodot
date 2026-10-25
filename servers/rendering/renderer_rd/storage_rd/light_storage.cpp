@@ -840,6 +840,12 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 				}
 
 				Color linear_col = light->color.srgb_to_linear();
+				if (fellow_sun_tint_instance.is_valid() && p_lights[i] == fellow_sun_tint_instance) {
+					// FellowEngine (decision 0108): the sun through the atmosphere.
+					linear_col.r *= fellow_sun_tint.r;
+					linear_col.g *= fellow_sun_tint.g;
+					linear_col.b *= fellow_sun_tint.b;
+				}
 				light_data.color[0] = linear_col.r;
 				light_data.color[1] = linear_col.g;
 				light_data.color[2] = linear_col.b;

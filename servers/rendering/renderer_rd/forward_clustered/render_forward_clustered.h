@@ -40,6 +40,9 @@
 #include "servers/rendering/renderer_rd/effects/fellow_rt_albedo.h"
 #include "servers/rendering/renderer_rd/effects/fellow_rt_reflections.h"
 #include "servers/rendering/renderer_rd/effects/fellow_rt_shadow.h"
+#include "servers/rendering/renderer_rd/effects/fellow_atmosphere.h"
+#include "servers/rendering/renderer_rd/effects/fellow_clouds.h"
+#include "servers/rendering/renderer_rd/effects/fellow_contact_shadow.h"
 #include "servers/rendering/renderer_rd/effects/fellow_rtao.h"
 #include "servers/rendering/renderer_rd/effects/fellow_shadow_max_mip.h"
 #include "servers/rendering/renderer_rd/effects/fsr2.h"
@@ -1422,6 +1425,22 @@ private:
 	/* FellowEngine ray tracing (decisions 0080, 0081) */
 	RendererRD::FellowRTAO *fellow_rtao = nullptr;
 	RendererRD::FellowRTShadow *fellow_rt_shadow = nullptr;
+	RendererRD::FellowContactShadow *fellow_contact_shadow = nullptr; // decision 0107
+	// FellowEngine sky atmosphere (decision 0108): the tables, their wrappers for the global shader parameters, this
+	// frame's parameters (valid: the tables were updated for this render).
+	RendererRD::FellowAtmosphere *fellow_atmosphere = nullptr;
+	RID fellow_atmosphere_sky_view_texture;
+	RID fellow_atmosphere_transmittance_texture;
+	bool fellow_atmosphere_globals_set = false;
+	bool fellow_atmosphere_valid = false;
+	RendererRD::FellowAtmosphere::Params fellow_atmosphere_params;
+	void _fellow_update_atmosphere(RenderDataRD *p_render_data);
+	// FellowEngine volumetric clouds (decision 0109).
+	RendererRD::FellowClouds *fellow_clouds = nullptr;
+	Projection fellow_clouds_last_view_projection;
+	bool fellow_clouds_history = false;
+	uint32_t fellow_clouds_frame = 0;
+	void _fellow_process_clouds(RenderDataRD *p_render_data, const Ref<RenderSceneBuffersRD> &p_render_buffers);
 	RendererRD::FellowDDGI *fellow_ddgi = nullptr;
 	RendererRD::FellowRTReflections *fellow_rt_reflections = nullptr;
 	RendererRD::FellowRTAlbedo *fellow_rt_albedo = nullptr;
@@ -1497,6 +1516,8 @@ private:
 	RID _fellow_build_raytracing_scene(RenderDataRD *p_render_data, const Ref<RenderBufferDataForwardClustered> &p_rb_data);
 	void _fellow_process_rtao(RenderDataRD *p_render_data, const Ref<RenderSceneBuffersRD> &p_render_buffers, const Ref<RenderBufferDataForwardClustered> &p_rb_data, RID p_normal_roughness);
 	RID _fellow_process_rt_sun_shadow(RenderDataRD *p_render_data, const Ref<RenderSceneBuffersRD> &p_render_buffers, const Ref<RenderBufferDataForwardClustered> &p_rb_data);
+	RID fellow_contact_shadow_mask; // decision 0107: this render's contact shadow mask (RID(): none), bound where the traced mask is
+	RID _fellow_process_contact_shadow(RenderDataRD *p_render_data, const Ref<RenderSceneBuffersRD> &p_render_buffers);
 
 	/* Cluster builder */
 

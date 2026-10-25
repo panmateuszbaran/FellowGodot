@@ -37,6 +37,7 @@
 #include "core/io/file_access.h"
 #include "core/os/os.h"
 #include "servers/rendering/fellow_settings.h"
+#include "servers/rendering/fellow_settings_look.h"
 #include "servers/rendering/renderer_rd/environment/fog.h"
 #include "servers/rendering/renderer_rd/framebuffer_cache_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/light_storage.h"
@@ -4411,6 +4412,230 @@ RID RenderForwardClustered::_fellow_process_rt_sun_shadow(RenderDataRD *p_render
 	return params.dest;
 }
 
+void RenderForwardClustered::_fellow_update_atmosphere(RenderDataRD *p_render_data) {
+	RendererRD::LightStorage *light_storage = RendererRD::LightStorage::get_singleton();
+	// The sky's first light (LIGHT0 in sky shaders): the first directional light visible in the sky.
+	RID light_instance;
+	for (uint32_t i = 0; i < (uint32_t)p_render_data->lights->size(); i++) {
+		RID li = (*p_render_data->lights)[i];
+		RID base = light_storage->light_instance_get_base_light(li);
+		if (light_storage->light_get_type(base) != RSE::LIGHT_DIRECTIONAL || light_storage->light_directional_get_sky_mode(base) == RSE::LIGHT_DIRECTIONAL_SKY_MODE_LIGHT_ONLY) {
+			continue;
+		}
+		light_instance = li;
+		break;
+	}
+	if (light_instance.is_null()) {
+		return;
+	}
+	RID light = light_storage->light_instance_get_base_light(light_instance);
+	if (!fellow_atmosphere) {
+		fellow_atmosphere = memnew(RendererRD::FellowAtmosphere);
+	}
+	RendererRD::FellowAtmosphere::Params &params = fellow_atmosphere_params;
+	params = RendererRD::FellowAtmosphere::Params();
+	const float mie = Fellow::atmosphere_mie_scale();
+	const float rayleigh = Fellow::atmosphere_rayleigh_scale();
+	params.settings.rayleigh_scattering *= rayleigh;
+	params.settings.mie_scattering *= mie;
+	params.settings.mie_absorption *= mie;
+	const float albedo = Fellow::atmosphere_ground_albedo();
+	params.settings.ground_albedo = Vector3(albedo, albedo, albedo);
+	params.sun_direction = light_storage->light_instance_get_base_transform(light_instance).basis.get_column(Vector3::AXIS_Z).normalized();
+	// The sun's illuminance as sky shaders receive LIGHT0's (sky.cpp): energy (times the intensity with physical units,
+	// times the exposure normalisation) and the linear colour.
+	float energy = light_storage->light_get_param(light, RSE::LIGHT_PARAM_ENERGY);
+	if (RendererSceneRenderRD::get_singleton()->is_using_physical_light_units()) {
+		energy *= light_storage->light_get_param(light, RSE::LIGHT_PARAM_INTENSITY);
+	}
+	if (p_render_data->camera_attributes.is_valid()) {
+		energy *= RSG::camera_attributes->camera_attributes_get_exposure_normalization_factor(p_render_data->camera_attributes);
+	}
+	if (!RendererSceneRenderRD::get_singleton()->is_using_physical_light_units()) {
+		energy *= Math::PI; // the colour passes' directional light (light_storage.cpp): the sky's tables are per unit illuminance
+	}
+	params.sun_illuminance = light_storage->light_get_color(light).srgb_to_linear() * energy;
+	params.camera_position = p_render_data->scene_data->cam_transform.origin;
+	params.ground_height = 0.0f;
+	if (Fellow::atmosphere_sun_transmittance()) {
+		// The sun's light at the camera through the atmosphere (Unreal's "atmosphere sun light"): the optical depth from
+		// the camera's height towards the sun, as the transmittance table's.
+		const RendererRD::FellowAtmosphere::Settings &st = params.settings;
+		const double R = st.bottom_radius;
+		const double top = st.top_radius;
+		const Vector3 sd = params.sun_direction;
+		const double h0 = MAX(0.0, double(params.camera_position.y - params.ground_height) * 0.001);
+		const double ox = 0.0, oy = R + h0, oz = 0.0;
+		const double b = oy * sd.y;
+		const double c = oy * oy - top * top;
+		const double disc = b * b - c;
+		Color tint(1, 1, 1);
+		// Below the horizon (the planet in the way) the sun is dark.
+		const double bg = oy * sd.y;
+		const double cg = oy * oy - R * R;
+		const bool ground = bg < 0.0 && bg * bg - cg >= 0.0;
+		if (ground) {
+			tint = Color(0, 0, 0);
+		} else if (disc > 0.0) {
+			const double t_top = -b + Math::sqrt(disc);
+			const int n = 40;
+			const double dt = t_top / n;
+			double od[3] = { 0.0, 0.0, 0.0 };
+			for (int k = 0; k < n; k++) {
+				const double t = (k + 0.5) * dt;
+				const double px = ox + sd.x * t, py = oy + sd.y * t, pz = oz + sd.z * t;
+				const double hh = MAX(0.0, Math::sqrt(px * px + py * py + pz * pz) - R);
+				const double dr = Math::exp(-hh / st.rayleigh_height);
+				const double dm = Math::exp(-hh / st.mie_height);
+				const double doz = MAX(0.0, 1.0 - Math::abs(hh - st.ozone_center) / (0.5 * st.ozone_width));
+				for (int ch = 0; ch < 3; ch++) {
+					od[ch] += (st.rayleigh_scattering[ch] * dr + (st.mie_scattering + st.mie_absorption) * dm + st.ozone_absorption[ch] * doz) * dt;
+				}
+			}
+			tint = Color(Math::exp(-od[0]), Math::exp(-od[1]), Math::exp(-od[2]));
+		}
+		RendererRD::LightStorage::get_singleton()->fellow_sun_tint_instance = light_instance;
+		RendererRD::LightStorage::get_singleton()->fellow_sun_tint = tint;
+	}
+	Projection correction;
+	correction.set_depth_correction(true, true, false);
+	params.view_projection = correction * _fellow_jittered_projection(p_render_data) * Projection(p_render_data->scene_data->cam_transform.affine_inverse());
+	params.aerial = Fellow::atmosphere_aerial_perspective();
+	params.aerial_distance_scale = Fellow::atmosphere_aerial_distance_scale();
+	RENDER_TIMESTAMP("FellowEngine Atmosphere");
+	fellow_atmosphere->update(params);
+	fellow_atmosphere_valid = true;
+
+	// The tables as textures of the global shader parameters (declared by the project, shader_globals), set once.
+	if (!fellow_atmosphere_globals_set) {
+		fellow_atmosphere_globals_set = true;
+		RendererRD::TextureStorage *texture_storage = RendererRD::TextureStorage::get_singleton();
+		RendererRD::MaterialStorage *material_storage = RendererRD::MaterialStorage::get_singleton();
+		fellow_atmosphere_sky_view_texture = texture_storage->texture_allocate();
+		texture_storage->texture_rd_initialize(fellow_atmosphere_sky_view_texture, fellow_atmosphere->get_sky_view());
+		fellow_atmosphere_transmittance_texture = texture_storage->texture_allocate();
+		texture_storage->texture_rd_initialize(fellow_atmosphere_transmittance_texture, fellow_atmosphere->get_transmittance());
+		const StringName names[2] = { SNAME("fellow_atmosphere_sky_view"), SNAME("fellow_atmosphere_transmittance") };
+		const RID textures[2] = { fellow_atmosphere_sky_view_texture, fellow_atmosphere_transmittance_texture };
+		for (int i = 0; i < 2; i++) {
+			if (material_storage->global_shader_parameter_get_type_internal(names[i]) == RSE::GLOBAL_VAR_TYPE_SAMPLER2D) {
+				material_storage->global_shader_parameter_set(names[i], textures[i]);
+			} else {
+				WARN_PRINT_ONCE("FellowEngine atmosphere: the project declares no global shader parameter fellow_atmosphere_sky_view / fellow_atmosphere_transmittance (sampler2D); the sky shader cannot read the tables.");
+			}
+		}
+	}
+}
+
+void RenderForwardClustered::_fellow_process_clouds(RenderDataRD *p_render_data, const Ref<RenderSceneBuffersRD> &p_render_buffers) {
+	RendererRD::LightStorage *light_storage = RendererRD::LightStorage::get_singleton();
+	RID light_instance;
+	for (uint32_t i = 0; i < (uint32_t)p_render_data->lights->size(); i++) {
+		RID li = (*p_render_data->lights)[i];
+		RID base = light_storage->light_instance_get_base_light(li);
+		if (light_storage->light_get_type(base) != RSE::LIGHT_DIRECTIONAL || light_storage->light_directional_get_sky_mode(base) == RSE::LIGHT_DIRECTIONAL_SKY_MODE_LIGHT_ONLY) {
+			continue;
+		}
+		light_instance = li;
+		break;
+	}
+	if (light_instance.is_null()) {
+		fellow_clouds_history = false;
+		return;
+	}
+	RID light = light_storage->light_instance_get_base_light(light_instance);
+	if (!fellow_clouds) {
+		fellow_clouds = memnew(RendererRD::FellowClouds);
+	}
+	RendererRD::FellowClouds::Params params;
+	params.color = p_render_buffers->get_internal_texture();
+	params.depth = p_render_buffers->get_depth_texture();
+	params.size = p_render_buffers->get_internal_size();
+	Projection correction;
+	correction.set_depth_correction(true, true, false);
+	params.view_projection = correction * _fellow_jittered_projection(p_render_data) * Projection(p_render_data->scene_data->cam_transform.affine_inverse());
+	params.prev_view_projection = fellow_clouds_history ? fellow_clouds_last_view_projection : params.view_projection;
+	params.camera_position = p_render_data->scene_data->cam_transform.origin;
+	params.sun_direction = light_storage->light_instance_get_base_transform(light_instance).basis.get_column(Vector3::AXIS_Z).normalized();
+	float energy = light_storage->light_get_param(light, RSE::LIGHT_PARAM_ENERGY);
+	if (RendererSceneRenderRD::get_singleton()->is_using_physical_light_units()) {
+		energy *= light_storage->light_get_param(light, RSE::LIGHT_PARAM_INTENSITY);
+	}
+	if (p_render_data->camera_attributes.is_valid()) {
+		energy *= RSG::camera_attributes->camera_attributes_get_exposure_normalization_factor(p_render_data->camera_attributes);
+	}
+	if (!RendererSceneRenderRD::get_singleton()->is_using_physical_light_units()) {
+		energy *= Math::PI; // as the colour passes' directional light (light_storage.cpp)
+	}
+	params.sun_illuminance = light_storage->light_get_color(light).srgb_to_linear() * energy;
+	params.ambient = Color(0.25, 0.32, 0.45) * energy; // without the atmosphere: a blue sky's light
+	params.ground_albedo = Fellow::atmosphere_ground_albedo();
+	params.time = float(time);
+	params.coverage = Fellow::clouds_coverage();
+	params.density = Fellow::clouds_density();
+	params.bottom_altitude = Fellow::clouds_altitude();
+	params.thickness = Fellow::clouds_thickness();
+	const float wind = Fellow::clouds_wind();
+	params.wind = Vector2(wind, wind * 0.3f);
+	if (fellow_atmosphere_valid && fellow_atmosphere) {
+		params.atmosphere_transmittance = fellow_atmosphere->get_transmittance();
+		params.atmosphere_sky_view = fellow_atmosphere->get_sky_view();
+	}
+	params.frame = fellow_clouds_frame++;
+	params.history_valid = fellow_clouds_history;
+	fellow_clouds->process(params);
+	fellow_clouds_history = true;
+	fellow_clouds_last_view_projection = params.view_projection;
+}
+
+RID RenderForwardClustered::_fellow_process_contact_shadow(RenderDataRD *p_render_data, const Ref<RenderSceneBuffersRD> &p_render_buffers) {
+	RendererRD::LightStorage *light_storage = RendererRD::LightStorage::get_singleton();
+	// The first directional light of the frame, as LightStorage::update_light_buffers() numbers them (index 0).
+	RID light_instance;
+	for (uint32_t i = 0; i < (uint32_t)p_render_data->lights->size(); i++) {
+		RID li = (*p_render_data->lights)[i];
+		RID base = light_storage->light_instance_get_base_light(li);
+		if (light_storage->light_get_type(base) != RSE::LIGHT_DIRECTIONAL || light_storage->light_directional_get_sky_mode(base) == RSE::LIGHT_DIRECTIONAL_SKY_MODE_SKY_ONLY) {
+			continue;
+		}
+		light_instance = li;
+		break;
+	}
+	if (light_instance.is_null()) {
+		return RID();
+	}
+	RID light = light_storage->light_instance_get_base_light(light_instance);
+	if (!light_storage->light_has_shadow(light) || light_storage->light_get_param(light, RSE::LIGHT_PARAM_SHADOW_OPACITY) <= 0.001f) {
+		return RID();
+	}
+	RENDER_TIMESTAMP("FellowEngine Contact Shadows");
+	const Ref<RenderSceneBuffersRD> &rb = p_render_buffers;
+	const Size2i size = rb->get_internal_size();
+	const StringName scope = SNAME("fellow_contact_shadow");
+	if (rb->has_texture(scope, SNAME("mask")) && rb->get_texture_format(scope, SNAME("mask")).width != uint32_t(size.x)) {
+		rb->clear_context(scope);
+	}
+	if (!rb->has_texture(scope, SNAME("mask"))) {
+		rb->create_texture(scope, SNAME("mask"), RD::DATA_FORMAT_R8G8_UNORM, RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_STORAGE_BIT, RD::TEXTURE_SAMPLES_1, size);
+	}
+	if (!fellow_contact_shadow) {
+		fellow_contact_shadow = memnew(RendererRD::FellowContactShadow);
+	}
+	RendererRD::FellowContactShadow::Params params;
+	params.depth = rb->get_depth_texture(0);
+	params.dest = rb->get_texture(scope, SNAME("mask"));
+	params.size = size;
+	params.projection = _fellow_jittered_projection(p_render_data);
+	const Vector3 l = light_storage->light_instance_get_base_transform(light_instance).basis.get_column(Vector3::AXIS_Z).normalized();
+	params.light_direction_view = p_render_data->scene_data->cam_transform.basis.xform_inv(l);
+	params.length = Fellow::contact_shadows_length();
+	params.steps = Fellow::contact_shadows_steps();
+	params.thickness = Fellow::contact_shadows_thickness();
+	params.frame = uint32_t(RSG::rasterizer->get_frame_number());
+	fellow_contact_shadow->process(params);
+	return params.dest;
+}
+
 // The projection the depth buffer was rendered with, the TAA jitter included, for the ray-traced effects that rebuild
 // positions from it (their correction flips y: the jitter's y with the other sign, as get_cam_projection() adds it after
 // the flip). Without the jitter the positions were off by up to half a pixel: on walls seen at a grazing angle, inside
@@ -5934,6 +6159,13 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			}
 		}
 
+		// FellowEngine sky atmosphere (decision 0108): the tables the sky shader reads, before the sky's update and draw.
+		fellow_atmosphere_valid = false;
+		RendererRD::LightStorage::get_singleton()->fellow_sun_tint_instance = RID();
+		if (Fellow::atmosphere_enabled() && rb.is_valid() && rb->get_view_count() == 1) {
+			_fellow_update_atmosphere(p_render_data);
+		}
+
 		// setup sky if used for ambient, reflections, or background
 		if (draw_sky || draw_sky_fog_only || (reflection_source == RSE::ENV_REFLECTION_SOURCE_BG && bg_mode == RSE::ENV_BG_SKY) || reflection_source == RSE::ENV_REFLECTION_SOURCE_SKY || environment_get_ambient_source(p_render_data->environment) == RSE::ENV_AMBIENT_SOURCE_SKY) {
 			RENDER_TIMESTAMP("Setup Sky");
@@ -6091,6 +6323,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	// FellowEngine ray tracing (decision 0080): the frame's ray tracing scene, when a ray-traced effect runs.
 	fellow_rt_tlas = RID();
 	fellow_rt_shadow_mask = RID();
+	fellow_contact_shadow_mask = RID();
 	if (rb_data.is_valid() && !is_reflection_probe && rb->get_view_count() == 1 && Fellow::raytracing_scene_wanted() && !fellow_rt_instances.is_empty()) {
 		RENDER_TIMESTAMP("FellowEngine Ray Tracing Scene");
 		const uint64_t fellow_rt_t0 = OS::get_singleton()->get_ticks_usec();
@@ -6122,6 +6355,10 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	// before the colour passes that read the mask.
 	if (fellow_rt_tlas.is_valid() && Fellow::raytracing_sun_shadows() && rb->get_view_count() == 1 && p_render_data->directional_light_count > 0) {
 		fellow_rt_shadow_mask = _fellow_process_rt_sun_shadow(p_render_data, rb, rb_data);
+	}
+	// FellowEngine contact shadows (decision 0107): from the depth pre-pass, where the sun's shadow is the shadow map's.
+	if (fellow_rt_shadow_mask.is_null() && Fellow::contact_shadows_enabled() && depth_pre_pass && !use_msaa && !is_reflection_probe && rb.is_valid() && rb->get_view_count() == 1 && p_render_data->directional_light_count > 0) {
+		fellow_contact_shadow_mask = _fellow_process_contact_shadow(p_render_data, rb);
 	}
 	// FellowEngine (lights/fields_early, decision 0045): only where omni or spot lights are in view (the colour passes
 	// below; the depth pre-pass above does not light).
@@ -6222,6 +6459,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			SceneShaderForwardClustered::ShaderSpecialization fellow_opaque_specialization = base_specialization;
 			fellow_opaque_specialization.fellow_light_tile_cull = fellow_tile_cull.pass_active;
 			fellow_opaque_specialization.fellow_rt_sun_shadow = fellow_rt_shadow_mask.is_valid();
+			fellow_opaque_specialization.fellow_contact_shadow = fellow_contact_shadow_mask.is_valid();
 			fellow_opaque_specialization.fellow_rt_reflections = fellow_rt_reflection_texture.is_valid();
 			fellow_opaque_specialization.fellow_ddgi_screen = fellow_ddgi_screen.is_valid();
 			RenderListParameters render_list_params(render_list[RENDER_LIST_OPAQUE].elements.ptr(), render_list[RENDER_LIST_OPAQUE].element_info.ptr(), render_list[RENDER_LIST_OPAQUE].elements.size(), reverse_cull, PASS_MODE_COLOR, opaque_color_pass_flags, rb_data.is_null(), p_render_data->directional_light_soft_shadows, rp_uniform_set, get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_WIREFRAME, Vector2(), p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, p_render_data->scene_data->view_count, 0, fellow_opaque_specialization);
@@ -6274,6 +6512,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 
 			SceneShaderForwardClustered::ShaderSpecialization fellow_motion_specialization = base_specialization;
 			fellow_motion_specialization.fellow_rt_sun_shadow = fellow_rt_shadow_mask.is_valid(); // in the depth pre-pass too
+			fellow_motion_specialization.fellow_contact_shadow = fellow_contact_shadow_mask.is_valid();
 			fellow_motion_specialization.fellow_rt_reflections = fellow_rt_reflection_texture.is_valid();
 			fellow_motion_specialization.fellow_ddgi_screen = fellow_ddgi_screen.is_valid();
 			RenderListParameters render_list_params(render_list[RENDER_LIST_MOTION].elements.ptr(), render_list[RENDER_LIST_MOTION].element_info.ptr(), render_list[RENDER_LIST_MOTION].elements.size(), reverse_cull, PASS_MODE_COLOR, color_pass_flags, rb_data.is_null(), p_render_data->directional_light_soft_shadows, rp_uniform_set, get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_WIREFRAME, Vector2(), p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, p_render_data->scene_data->view_count, 0, fellow_motion_specialization);
@@ -6394,6 +6633,20 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		blank_clear_color.push_back(Color(0.0, 0.0, 0.0));
 		RD::get_singleton()->draw_list_begin(rb_data->get_specular_only_fb(), RD::DRAW_CLEAR_ALL, blank_clear_color);
 		RD::get_singleton()->draw_list_end();
+	}
+
+	// FellowEngine aerial perspective (decision 0108): on the opaque surfaces, before the transparent pass and the
+	// screen texture's copy.
+	if (fellow_atmosphere_valid && fellow_atmosphere_params.aerial && !use_msaa && !is_reflection_probe && rb->get_view_count() == 1) {
+		RENDER_TIMESTAMP("FellowEngine Aerial Perspective");
+		fellow_atmosphere->apply(fellow_atmosphere_params, rb->get_internal_texture(), rb->get_depth_texture(), rb->get_internal_size());
+	}
+	// FellowEngine volumetric clouds (decision 0109): over the sky's pixels, before the transparent pass.
+	if (Fellow::clouds_enabled() && !use_msaa && !is_reflection_probe && rb->get_view_count() == 1 && (draw_sky || draw_sky_fog_only)) {
+		RENDER_TIMESTAMP("FellowEngine Clouds");
+		_fellow_process_clouds(p_render_data, rb);
+	} else {
+		fellow_clouds_history = false;
 	}
 
 	if (rb_data.is_valid() && using_upscaling) {
@@ -8509,7 +8762,8 @@ RID RenderForwardClustered::_setup_render_pass_uniform_set(RenderListType p_rend
 		u.binding = 43;
 		u.uniform_type = RD::UNIFORM_TYPE_TEXTURE;
 		const bool rt_mask = (p_render_list == RENDER_LIST_OPAQUE || p_render_list == RENDER_LIST_MOTION) && fellow_rt_shadow_mask.is_valid();
-		u.append_id(rt_mask ? fellow_rt_shadow_mask : texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_BLACK));
+		const bool contact_mask = (p_render_list == RENDER_LIST_OPAQUE || p_render_list == RENDER_LIST_MOTION) && fellow_contact_shadow_mask.is_valid();
+		u.append_id(rt_mask ? fellow_rt_shadow_mask : (contact_mask ? fellow_contact_shadow_mask : texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_BLACK)));
 		uniforms.push_back(u);
 	}
 	{
@@ -10221,6 +10475,24 @@ RenderForwardClustered::~RenderForwardClustered() {
 	if (fellow_rtao) {
 		memdelete(fellow_rtao);
 		fellow_rtao = nullptr;
+	}
+	if (fellow_contact_shadow) {
+		memdelete(fellow_contact_shadow);
+		fellow_contact_shadow = nullptr;
+	}
+	if (fellow_atmosphere_sky_view_texture.is_valid()) {
+		RendererRD::TextureStorage::get_singleton()->texture_free(fellow_atmosphere_sky_view_texture);
+	}
+	if (fellow_atmosphere_transmittance_texture.is_valid()) {
+		RendererRD::TextureStorage::get_singleton()->texture_free(fellow_atmosphere_transmittance_texture);
+	}
+	if (fellow_atmosphere) {
+		memdelete(fellow_atmosphere);
+		fellow_atmosphere = nullptr;
+	}
+	if (fellow_clouds) {
+		memdelete(fellow_clouds);
+		fellow_clouds = nullptr;
 	}
 	if (fellow_rt_shadow) {
 		memdelete(fellow_rt_shadow);

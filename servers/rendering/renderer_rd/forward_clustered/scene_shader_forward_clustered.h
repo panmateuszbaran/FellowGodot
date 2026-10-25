@@ -169,6 +169,7 @@ public:
 				uint32_t fellow_ddgi : 1; // decision 0083: the ambient light from the DDGI probe volume
 				uint32_t fellow_rt_reflections : 1; // decision 0084: the indirect specular light from the traced reflections
 				uint32_t fellow_ddgi_screen : 1; // decision 0083: DDGI's irradiance from its screen pass (opaque passes)
+				uint32_t fellow_contact_shadow : 1; // decision 0107: the first directional light's shadow times the contact mask
 			};
 		};
 	};

@@ -21,6 +21,10 @@ extends Node
 ##                            run, so that the pipelines its frames need (new lights or materials coming into view) are
 ##                            compiled before it, not while it is drawn with the ubershader
 ##   --hdr=1                  capture: also write linear pre-tonemap EXR (linear tonemapper, no glow, HDR 2D)
+##   --sky=atmosphere         the scene's sky from FellowEngine's atmosphere tables (bench/fellow_atmosphere_sky.gdshader)
+##   --sun_elevation=<deg>    the scene's sun at this elevation (its azimuth kept)
+##   --add_camera=<n>@p@t[@fov]  extra fixed cameras (positions x,y,z; ';' separates several)
+##   --dirt_map=1             a procedural lens dirt texture as the environment's glow map (strength 0)
 ##   --jitter=<n>             reference: sub-pixel jittered renders per output frame (default 16)
 ##   --ablate=<a+b>           sizing only (items separated by + or ,): hide omni / spot / sun lights, probes, decals, or pos_shadows (see _ablate)
 ##   --profile=1              perf: collect per-pass GPU timestamps (run godot with --gpu-profile). Changes GPU
@@ -144,6 +148,34 @@ func _ready() -> void:
 		_log("ablate: " + str(result["ablate"]))
 	preset = Presets.build(args.get("preset", "high"), Presets.parse_overrides(args.get("set", "")))
 	Presets.apply(preset, vp, scene.env, scene.cam_attr)
+	# --sky=atmosphere: the scene's sky drawn by bench/fellow_atmosphere_sky.gdshader, from the tables FellowEngine computes
+	# with rendering/fellow/post/atmosphere/enabled (decision 0108; black on stock).
+	if args.get("sky", "") == "atmosphere" and scene.env and scene.env.sky:
+		var sky_mat := ShaderMaterial.new()
+		sky_mat.shader = load("res://bench/fellow_atmosphere_sky.gdshader")
+		scene.env.sky.sky_material = sky_mat
+		result["sky"] = "atmosphere"
+	# --dirt_map=1: a procedural lens dirt texture (soft specks and smudges) as the environment's glow map, at strength 0
+	# (no effect on stock's glow); FellowEngine's rendering/fellow/post/bloom/lens_dirt adds it where the glow is (0111).
+	if args.get("dirt_map", "0") == "1" and scene.env:
+		scene.env.glow_map = _make_dirt_map()
+		scene.env.glow_map_strength = 0.0
+		result["dirt_map"] = true
+	# --add_camera=<name>@px,py,pz@tx,ty,tz[@fov][;...]: extra fixed cameras (e.g. looking at the sky).
+	for cam_spec in str(args.get("add_camera", "")).split(";", false):
+		var cam_parts := cam_spec.split("@")
+		if cam_parts.size() >= 3:
+			var cp := cam_parts[1].split_floats(",")
+			var ct := cam_parts[2].split_floats(",")
+			scene.fixed_cameras[cam_parts[0]] = {"pos": Vector3(cp[0], cp[1], cp[2]), "target": Vector3(ct[0], ct[1], ct[2]), "fov": float(cam_parts[3]) if cam_parts.size() > 3 else 60.0}
+	# --sun_elevation=<degrees>: the scene's sun (its `sun` member) at this elevation, its azimuth kept.
+	if args.has("sun_elevation") and "sun" in scene and scene.sun is DirectionalLight3D:
+		var fwd: Vector3 = -scene.sun.global_transform.basis.z
+		var az := atan2(fwd.x, fwd.z)
+		var e := deg_to_rad(float(args["sun_elevation"]))
+		var nf := Vector3(cos(e) * sin(az), -sin(e), cos(e) * cos(az))
+		scene.sun.global_transform.basis = Basis.looking_at(nf, Vector3.UP if abs(nf.y) < 0.999 else Vector3.FORWARD)
+		result["sun_elevation"] = float(args["sun_elevation"])
 	RenderingServer.viewport_set_measure_render_time(vp.get_viewport_rid(), true)
 	await get_tree().process_frame
 	await _post_draw()
@@ -689,6 +721,34 @@ func _run_capture() -> void:
 			_save_frame(p, true)
 			files.append(p.get_file())
 	result["files"] = files
+
+
+## A deterministic lens dirt mask: a few hundred soft specks of varying size and brightness, and a few large smudges.
+func _make_dirt_map() -> ImageTexture:
+	var w := 480
+	var h := 270
+	var img := Image.create_empty(w, h, false, Image.FORMAT_RGBF)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 1811
+	var acc := PackedFloat32Array()
+	acc.resize(w * h)
+	var blobs := []
+	for i in range(260):
+		blobs.append([rng.randf() * w, rng.randf() * h, rng.randf_range(1.5, 7.0), rng.randf_range(0.2, 1.0)])
+	for i in range(7):
+		blobs.append([rng.randf() * w, rng.randf() * h, rng.randf_range(25.0, 60.0), rng.randf_range(0.15, 0.35)])
+	for b in blobs:
+		var r: float = b[2]
+		for y in range(maxi(0, int(b[1] - r)), mini(h, int(b[1] + r) + 1)):
+			for x in range(maxi(0, int(b[0] - r)), mini(w, int(b[0] + r) + 1)):
+				var d := Vector2(x - b[0], y - b[1]).length() / r
+				if d < 1.0:
+					acc[y * w + x] += b[3] * (1.0 - d * d)
+	for y in range(h):
+		for x in range(w):
+			var v := minf(acc[y * w + x], 1.5)
+			img.set_pixel(x, y, Color(v, v * 0.97, v * 0.92))
+	return ImageTexture.create_from_image(img)
 
 
 ## Temporal sequences and their ground truth must see the same exposure: auto exposure adapts per rendered

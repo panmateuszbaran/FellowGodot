@@ -32,6 +32,7 @@
 
 #include "servers/rendering/renderer_rd/renderer_compositor_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
+#include "servers/rendering/renderer_rd/storage_rd/texture_storage.h"
 #include "servers/rendering/renderer_rd/uniform_set_cache_rd.h"
 
 #include "servers/rendering/fellow_settings.h"
@@ -109,6 +110,9 @@ ToneMapper::ToneMapper(bool p_use_mobile_version) {
 }
 
 ToneMapper::~ToneMapper() {
+	if (fellow_local_ubo.is_valid()) {
+		RD::get_singleton()->free_rid(fellow_local_ubo);
+	}
 	if (using_mobile_version) {
 		tonemap_mobile.shader.version_free(tonemap_mobile.shader_version);
 	} else {
@@ -240,8 +244,37 @@ void ToneMapper::tonemapper(RID p_source_color, RID p_dst_framebuffer, const Ton
 			fellow_spec |= p_settings.fellow_chromatic_aberration != 0.0f ? (1u << 24) : 0u;
 			fellow_spec |= p_settings.fellow_vignette > 0.0f ? (1u << 25) : 0u;
 			fellow_spec |= p_settings.fellow_film_grain > 0.0f ? (1u << 26) : 0u;
+			// Local exposure (decision 0106).
+			fellow_spec |= (p_settings.fellow_local_exposure && p_settings.fellow_local_grid.is_valid() && p_settings.fellow_local_blurred.is_valid()) ? (1u << 27) : 0u;
+			fellow_spec |= p_settings.fellow_sharpen > 0.0f ? (1u << 28) : 0u;
+			fellow_spec |= (p_settings.fellow_lens_dirt > 0.0f && p_settings.glow_map.is_valid() && (pc.flags & TONEMAP_FLAG_USE_GLOW)) ? (1u << 29) : 0u;
 		}
 	}
+
+	// Set 4 (decision 0106): the local exposure's grid, blurred luminance and parameters; bound for every pipeline (the
+	// shader declares them), white textures when unused.
+	if (fellow_local_ubo.is_null()) {
+		Vector<uint8_t> zeros;
+		zeros.resize(48);
+		zeros.fill(0);
+		fellow_local_ubo = RD::get_singleton()->uniform_buffer_create(48, zeros);
+	}
+	const bool fellow_local = (fellow_spec & (1u << 27)) != 0;
+	if (fellow_spec & ((1u << 27) | (1u << 28) | (1u << 29))) {
+		float data[12];
+		for (int i = 0; i < 8; i++) {
+			data[i] = p_settings.fellow_local_params[i];
+		}
+		data[8] = p_settings.fellow_sharpen;
+		data[9] = p_settings.fellow_lens_dirt;
+		data[10] = 0.0f;
+		data[11] = 0.0f;
+		RD::get_singleton()->buffer_update(fellow_local_ubo, 0, 48, data);
+	}
+	TextureStorage *texture_storage = TextureStorage::get_singleton();
+	RD::Uniform u_local_grid(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 0, Vector<RID>({ default_sampler, fellow_local ? p_settings.fellow_local_grid : texture_storage->texture_rd_get_default(TextureStorage::DEFAULT_RD_TEXTURE_3D_WHITE) }));
+	RD::Uniform u_local_blurred(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 1, Vector<RID>({ default_sampler, fellow_local ? p_settings.fellow_local_blurred : texture_storage->texture_rd_get_default(TextureStorage::DEFAULT_RD_TEXTURE_WHITE) }));
+	RD::Uniform u_local_params(RD::UNIFORM_TYPE_UNIFORM_BUFFER, 2, Vector<RID>({ fellow_local_ubo }));
 
 	RD::DrawListID draw_list = RD::get_singleton()->draw_list_begin(p_dst_framebuffer);
 	RD::get_singleton()->draw_list_bind_render_pipeline(draw_list, tonemap.pipelines[mode].get_render_pipeline(RD::INVALID_ID, RD::get_singleton()->framebuffer_get_format(p_dst_framebuffer), false, RD::get_singleton()->draw_list_get_current_pass(), fellow_spec));
@@ -249,6 +282,7 @@ void ToneMapper::tonemapper(RID p_source_color, RID p_dst_framebuffer, const Ton
 	RD::get_singleton()->draw_list_bind_uniform_set(draw_list, uniform_set_cache->get_cache(shader, 1, u_exposure_texture), 1);
 	RD::get_singleton()->draw_list_bind_uniform_set(draw_list, uniform_set_cache->get_cache(shader, 2, u_glow_texture, u_glow_map), 2);
 	RD::get_singleton()->draw_list_bind_uniform_set(draw_list, uniform_set_cache->get_cache(shader, 3, u_color_correction_texture), 3);
+	RD::get_singleton()->draw_list_bind_uniform_set(draw_list, uniform_set_cache->get_cache(shader, 4, u_local_grid, u_local_blurred, u_local_params), 4);
 
 	RD::get_singleton()->draw_list_set_push_constant(draw_list, &tonemap.push_constant, sizeof(TonemapPushConstant));
 	RD::get_singleton()->draw_list_draw(draw_list, false, 1u, 3u);

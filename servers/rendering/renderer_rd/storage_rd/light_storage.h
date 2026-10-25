@@ -46,6 +46,12 @@ namespace RendererRD {
 
 class LightStorage : public RendererLightStorage {
 public:
+	// FellowEngine sky atmosphere (decision 0108): the sun's light through the atmosphere (Unreal's "atmosphere sun
+	// light"): this light instance's colour multiplied by the tint in the colour passes' light buffer (not in the sky's).
+	RID fellow_sun_tint_instance;
+	Color fellow_sun_tint = Color(1, 1, 1);
+
+public:
 	enum ShadowAtlastQuadrant : uint32_t {
 		QUADRANT_SHIFT = 27,
 		OMNI_LIGHT_FLAG = 1 << 26,

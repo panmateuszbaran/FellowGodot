@@ -157,6 +157,9 @@ private:
 		PipelineCacheRD pipelines[TONEMAP_MODE_MAX];
 	} tonemap;
 
+	// FellowEngine local exposure (decision 0106): its parameters (set 4), updated before each tone mapping.
+	RID fellow_local_ubo;
+
 	struct TonemapMobile {
 		TonemapPushConstantMobile push_constant;
 		TonemapMobileShaderRD shader;
@@ -219,6 +222,15 @@ public:
 		float fellow_vignette_smoothness = 0.5;
 		float fellow_film_grain = 0.0;
 		float fellow_grain_seed = 0.0;
+
+		// FellowEngine local exposure (post/local_exposure/*, decision 0106).
+		bool fellow_local_exposure = false;
+		RID fellow_local_grid; // RG16F 3D bilateral grid (blurred)
+		RID fellow_local_blurred; // R16F 2D blurred log luminance
+		float fellow_local_params[8] = { 0.8, 0.8, 1.0, 0.6, 1.0, 1.0, 0.0, 0.0 }; // highlight, shadow, detail, blend; grid scale
+		// FellowEngine sharpening (decision 0110; 0: off) and additive lens dirt (decision 0111; 0: the glow map's mix).
+		float fellow_sharpen = 0.0;
+		float fellow_lens_dirt = 0.0;
 	};
 
 	void tonemapper(RID p_source_color, RID p_dst_framebuffer, const TonemapSettings &p_settings);

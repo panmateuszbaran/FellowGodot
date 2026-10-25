@@ -1,0 +1,41 @@
+# 0107 — Contact shadows (screen-space, the sun)
+
+Status: **KEEP as an option**, off by default — a visual feature (milestone 18) · Branch `fellow/geometry` · Settings
+`rendering/fellow/post/contact_shadows/enabled` (false), `length` (0.3 m), `steps` (16), `thickness` (0.02 m) ·
+Code: `effects/fellow_contact_shadow.*`, `shaders/effects/fellow_contact_shadow.glsl`,
+`forward_clustered/render_forward_clustered.cpp` (`_fellow_process_contact_shadow`), `scene_forward_clustered.glsl`
+(specialization bit `fellow_contact_shadow`).
+
+## Problem
+
+A shadow map's texels are centimetres to decimetres wide and need a depth bias: the shadow does not reach the point
+where an object touches the ground (feet, a lamp post's base, a box on a floor) — the objects float. Unreal (and
+most engines) add contact shadows: a short screen-space ray march towards the light that catches what the shadow map
+misses.
+
+## Change
+
+After the depth pre-pass, one compute pass per pixel marches `steps` steps over `length` metres towards the first
+directional light (the one the colour passes number 0), in view space, each step projected with the frame's jittered
+projection and compared with the depth buffer: when the surface seen there is in front of the march by more than a
+bias (1 cm + 0.2 % of the distance, the depth buffer's precision and the jitter) and by less than two steps' change of
+depth (at least `thickness`), the pixel is in contact shadow. The tolerance is what keeps the march from shadowing
+behind everything seen in front of it (objects are not solid all the way back): a march passing behind a lamp post
+seen in front shadows only where it meets the post's surface. The start is dithered per pixel and frame
+(interleaved gradient noise; TAA averages it). The result (an RG8 mask) is bound where the ray-traced sun shadows'
+mask is (decision 0082; the two are exclusive, the traced shadows win), and the opaque passes, in specialized
+pipelines only, multiply the light's shadow by it (with the light's shadow opacity). Needs the depth pre-pass and no
+MSAA; the light must cast shadows.
+
+## Verification
+
+Off (the default) the image is the previous build's bit for bit (lavapipe: City Lab, Crowd Lab, Lights Lab, 0
+differing pixels; PBR Lab differs by ±1 between two runs of the same build).
+
+## Results
+
+Lavapipe, 960 × 540, on against off: Crowd Lab's close camera 5 300 pixels darker — the creases under the characters'
+stacked body discs and where the feet meet the ground, which the shadow map's bias leaves lit — and no broad surface
+shadowed by itself; City Lab's street 70 pixels (the lamp posts' bases). The first version (thickness 0.3 m, a fixed
+tolerance) shadowed the characters' sunlit sides behind their own silhouettes: the tolerance of two steps' depth
+change fixed it. RTX cost: milestone 18's report.

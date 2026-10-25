@@ -2966,6 +2966,15 @@ void fragment_shader(in SceneData scene_data) {
 #undef BIAS_FUNC
 				} // shadows
 
+#if !defined(USE_VERTEX_LIGHTING) && !defined(USE_MULTIVIEW)
+				// FellowEngine contact shadows (decision 0107): the screen-space march's result multiplies the first
+				// directional light's shadow (by the light's shadow opacity).
+				if (sc_fellow_contact_shadow() && i == 0u && directional_lights.data[i].shadow_opacity > 0.001) {
+					float fellow_contact = texelFetch(sampler2D(fellow_rt_shadow_mask, SAMPLER_NEAREST_CLAMP), ivec2(gl_FragCoord.xy), 0).x;
+					shadow *= mix(1.0, fellow_contact, directional_lights.data[i].shadow_opacity);
+				}
+#endif
+
 				if (i < 4) {
 					shadow0 |= uint(clamp(shadow * 255.0, 0.0, 255.0)) << (i * 8);
 				} else {

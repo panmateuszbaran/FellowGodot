@@ -43,6 +43,7 @@
 #include "servers/rendering/rendering_server_enums.h"
 #include "servers/rendering/shader_include_db.h"
 #include "servers/rendering/fellow_settings.h"
+#include "servers/rendering/fellow_settings_look.h"
 #include "servers/rendering/storage/camera_attributes_storage.h"
 
 void get_vogel_disk(float *r_kernel, int p_sample_count) {
@@ -615,6 +616,11 @@ void RendererSceneRenderRD::_render_buffers_post_process_and_tonemap(const Rende
 
 	float auto_exposure_scale = 1.0;
 
+	// FellowEngine exposure (post/exposure/histogram, decision 0105; post/local_exposure/*, decision 0106).
+	const bool fellow_exposure_ok = can_use_effects && can_use_storage && Fellow::enabled() && rb->get_view_count() == 1 && !use_upscaled_texture;
+	const bool fellow_local_exposure = fellow_exposure_ok && Fellow::local_exposure_enabled();
+	bool fellow_local_done = false;
+
 	if (can_use_effects && RSG::camera_attributes->camera_attributes_uses_auto_exposure(p_render_data->camera_attributes)) {
 		RENDER_TIMESTAMP("Auto exposure");
 
@@ -629,7 +635,33 @@ void RendererSceneRenderRD::_render_buffers_post_process_and_tonemap(const Rende
 		double step = RSG::camera_attributes->camera_attributes_get_auto_exposure_adjust_speed(p_render_data->camera_attributes) * time_step;
 		float auto_exposure_min_sensitivity = RSG::camera_attributes->camera_attributes_get_auto_exposure_min_sensitivity(p_render_data->camera_attributes);
 		float auto_exposure_max_sensitivity = RSG::camera_attributes->camera_attributes_get_auto_exposure_max_sensitivity(p_render_data->camera_attributes);
-		luminance->luminance_reduction(fellow_post_source.is_valid() ? fellow_post_source : rb->get_internal_texture(), rb->get_internal_size(), luminance_buffers, auto_exposure_min_sensitivity, auto_exposure_max_sensitivity, step, set_immediate);
+		if (fellow_exposure_ok && Fellow::exposure_histogram()) {
+			// The average luminance from a histogram between two percentiles, adapted with Unreal's speeds (decision 0105);
+			// written where stock's reduction writes it. Local exposure's grid is built in the same pass over the image.
+			if (!fellow_exposure) {
+				fellow_exposure = memnew(RendererRD::FellowExposure);
+			}
+			RendererRD::FellowExposure::Params ep;
+			ep.source = fellow_post_source.is_valid() ? fellow_post_source : rb->get_internal_texture();
+			ep.size = rb->get_internal_size();
+			ep.luminance_multiplier = rb->get_luminance_multiplier();
+			ep.histogram = true;
+			ep.current = luminance_buffers->current;
+			ep.low_percent = Fellow::exposure_low_percent() * 0.01f;
+			ep.high_percent = Fellow::exposure_high_percent() * 0.01f;
+			ep.speed_up = Fellow::exposure_speed_up();
+			ep.speed_down = Fellow::exposure_speed_down();
+			ep.dt = float(time_step);
+			ep.immediate = set_immediate;
+			ep.min_luminance = auto_exposure_min_sensitivity;
+			ep.max_luminance = auto_exposure_max_sensitivity;
+			ep.local = fellow_local_exposure;
+			ep.blur_size = Fellow::local_exposure_blur_size();
+			fellow_exposure->process(ep);
+			fellow_local_done = fellow_local_exposure;
+		} else {
+			luminance->luminance_reduction(fellow_post_source.is_valid() ? fellow_post_source : rb->get_internal_texture(), rb->get_internal_size(), luminance_buffers, auto_exposure_min_sensitivity, auto_exposure_max_sensitivity, step, set_immediate);
+		}
 
 		// Swap final reduce with prev luminance.
 
@@ -637,6 +669,22 @@ void RendererSceneRenderRD::_render_buffers_post_process_and_tonemap(const Rende
 
 		RenderingServerDefault::redraw_request(); // Redraw all the time if auto exposure rendering is on.
 		RD::get_singleton()->draw_command_end_label();
+	}
+
+	if (fellow_local_exposure && !fellow_local_done) {
+		// Local exposure without the histogram (decision 0106).
+		RENDER_TIMESTAMP("FellowEngine Local Exposure");
+		if (!fellow_exposure) {
+			fellow_exposure = memnew(RendererRD::FellowExposure);
+		}
+		RendererRD::FellowExposure::Params ep;
+		ep.source = fellow_post_source.is_valid() ? fellow_post_source : rb->get_internal_texture();
+		ep.size = rb->get_internal_size();
+		ep.luminance_multiplier = rb->get_luminance_multiplier();
+		ep.local = true;
+		ep.blur_size = Fellow::local_exposure_blur_size();
+		fellow_exposure->process(ep);
+		fellow_local_done = true;
 	}
 
 	if (can_use_effects && p_render_data->environment.is_valid() && environment_get_glow_enabled(p_render_data->environment)) {
@@ -876,6 +924,27 @@ void RendererSceneRenderRD::_render_buffers_post_process_and_tonemap(const Rende
 			tonemap.fellow_vignette_smoothness = Fellow::lens_vignette_smoothness();
 			tonemap.fellow_film_grain = Fellow::lens_film_grain();
 			tonemap.fellow_grain_seed = float(RSG::rasterizer->get_frame_number() % 997u);
+		}
+		if (can_use_effects && Fellow::enabled()) {
+			// Sharpening after TAA (decision 0110) and additive lens dirt (decision 0111).
+			tonemap.fellow_sharpen = rb->get_use_taa() ? Fellow::sharpen_strength() : 0.0f;
+			// The dirt is the environment's glow map: without one there is no dirt (not a brighter glow).
+			if (p_render_data->environment.is_valid() && environment_get_glow_map(p_render_data->environment).is_valid()) {
+				tonemap.fellow_lens_dirt = Fellow::lens_dirt_intensity();
+			}
+		}
+		if (fellow_local_done && fellow_exposure) {
+			// Local exposure (decision 0106).
+			tonemap.fellow_local_exposure = true;
+			tonemap.fellow_local_grid = fellow_exposure->get_grid();
+			tonemap.fellow_local_blurred = fellow_exposure->get_blurred();
+			const Vector2 gs = fellow_exposure->get_grid_scale(rb->get_internal_size());
+			tonemap.fellow_local_params[0] = Fellow::local_exposure_highlight_contrast();
+			tonemap.fellow_local_params[1] = Fellow::local_exposure_shadow_contrast();
+			tonemap.fellow_local_params[2] = Fellow::local_exposure_detail();
+			tonemap.fellow_local_params[3] = Fellow::local_exposure_blurred_blend();
+			tonemap.fellow_local_params[4] = gs.x;
+			tonemap.fellow_local_params[5] = gs.y;
 		}
 
 		if (can_use_storage) {
@@ -1971,6 +2040,10 @@ RendererSceneRenderRD::~RendererSceneRenderRD() {
 	}
 	if (luminance) {
 		memdelete(luminance);
+	}
+	if (fellow_exposure) {
+		memdelete(fellow_exposure);
+		fellow_exposure = nullptr;
 	}
 	if (fellow_motion_blur) {
 		memdelete(fellow_motion_blur);

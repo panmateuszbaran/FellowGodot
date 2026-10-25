@@ -64,3 +64,14 @@ environment/ssil/quality=2
 environment/screen_space_reflection/roughness_quality=2
 anti_aliasing/quality/use_taa=true
 occlusion_culling/use_occlusion_culling=false
+
+[shader_globals]
+
+fellow_atmosphere_sky_view={
+"type": "sampler2D",
+"value": ""
+}
+fellow_atmosphere_transmittance={
+"type": "sampler2D",
+"value": ""
+}

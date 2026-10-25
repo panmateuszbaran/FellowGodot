@@ -55,6 +55,18 @@ layout(set = 3, binding = 0) uniform sampler2D source_color_correction;
 layout(set = 3, binding = 0) uniform sampler3D source_color_correction;
 #endif
 
+// FellowEngine local exposure (decision 0106): the bilateral grid of log luminance (slice = EV + 16, the mean log
+// luminance + 16 premultiplied by the slice's share in .r, the share in .g), the blurred log luminance (+ 16), and
+// (highlight contrast, shadow contrast, detail, blurred blend), (grid scale x, y).
+layout(set = 4, binding = 0) uniform sampler3D fellow_local_grid;
+layout(set = 4, binding = 1) uniform sampler2D fellow_local_blurred;
+layout(set = 4, binding = 2, std140) uniform FellowLocalExposure {
+	vec4 contrast;
+	vec4 grid;
+	vec4 extra; // x: sharpening strength (0-1), y: lens dirt intensity
+}
+fellow_local;
+
 #define FLAG_USE_BCS (1 << 0)
 #define FLAG_USE_GLOW (1 << 1)
 #define FLAG_USE_AUTO_EXPOSURE (1 << 2)
@@ -95,6 +107,11 @@ layout(constant_id = 23) const bool sc_glow_map = false;
 layout(constant_id = 24) const bool sc_lens_chromatic_aberration = false;
 layout(constant_id = 25) const bool sc_lens_vignette = false;
 layout(constant_id = 26) const bool sc_lens_film_grain = false;
+// FellowEngine local exposure (post/local_exposure/*, decision 0106): only in the specialized pipelines.
+layout(constant_id = 27) const bool sc_local_exposure = false;
+// FellowEngine sharpening after TAA (post/sharpen/strength, decision 0110) and additive lens dirt (post/bloom/*, 0111).
+layout(constant_id = 28) const bool sc_sharpen = false;
+layout(constant_id = 29) const bool sc_lens_dirt_additive = false;
 
 #define FELLOW_FLAG(m_flag, m_sc) (sc_fellow ? (m_sc) : bool(params.flags & (m_flag)))
 #define FELLOW_TONEMAPPER(m_mode, m_sc) (sc_fellow ? (m_sc) : params.tonemapper == (m_mode))
@@ -908,6 +925,31 @@ void main() {
 		color.b = textureLod(source_color, 0.5 + d * (1.0 - ca), 0.0f).b;
 	}
 #endif
+#ifndef USE_MULTIVIEW
+	if (sc_fellow && sc_sharpen) {
+		// FellowEngine sharpening (decision 0110): AMD FidelityFX's robust contrast-adaptive sharpening (RCAS, as in
+		// FSR 1) on the TAA output, in a tonemapped domain (x / (1 + x)) so that bright pixels do not ring.
+		vec3 n = textureLodOffset(source_color, uv_interp, 0.0, ivec2(0, -1)).rgb;
+		vec3 w = textureLodOffset(source_color, uv_interp, 0.0, ivec2(-1, 0)).rgb;
+		vec3 e = textureLodOffset(source_color, uv_interp, 0.0, ivec2(1, 0)).rgb;
+		vec3 s = textureLodOffset(source_color, uv_interp, 0.0, ivec2(0, 1)).rgb;
+		vec3 c = color.rgb;
+		n = n / (1.0 + n);
+		w = w / (1.0 + w);
+		e = e / (1.0 + e);
+		s = s / (1.0 + s);
+		c = c / (1.0 + c);
+		vec3 mn4 = min(min(n, w), min(e, s));
+		vec3 mx4 = max(max(n, w), max(e, s));
+		vec3 hit_min = min(mn4, c) / (4.0 * mx4 + 1e-5);
+		vec3 hit_max = (1.0 - max(mx4, c)) / (4.0 * mn4 - 4.0);
+		vec3 lobe_rgb = max(-hit_min, hit_max);
+		float lobe = max(-0.1875, min(max(lobe_rgb.r, max(lobe_rgb.g, lobe_rgb.b)), 0.0)) * clamp(fellow_local.extra.x, 0.0, 1.0);
+		vec3 sharp = (lobe * (n + w + e + s) + c) / (4.0 * lobe + 1.0);
+		sharp = clamp(sharp, vec3(0.0), vec3(0.9999));
+		color.rgb = sharp / (1.0 - sharp);
+	}
+#endif
 	color.rgb *= params.luminance_multiplier;
 
 	// Exposure
@@ -917,6 +959,25 @@ void main() {
 	if (FELLOW_FLAG(FLAG_USE_AUTO_EXPOSURE, sc_use_auto_exposure)) {
 		exposure *= 1.0 / (texelFetch(source_auto_exposure, ivec2(0, 0), 0).r * params.luminance_multiplier / params.auto_exposure_scale);
 	}
+
+#ifndef USE_MULTIVIEW
+	if (sc_fellow && sc_local_exposure) {
+		// FellowEngine local exposure (decision 0106, as Unreal's): the pixel's log luminance split into a base (its
+		// neighbourhood's, from the bilateral grid at its own luminance, mixed with the wide blur) and detail; the base's
+		// distance from middle grey scaled by the highlight or shadow contrast, the detail by the detail strength.
+		float lum = dot(color.rgb, vec3(0.2126, 0.7152, 0.0722));
+		float l = log2(clamp(lum, 1.0 / 65536.0, 65504.0));
+		vec2 guv = uv_interp * fellow_local.grid.xy;
+		vec2 g = textureLod(fellow_local_grid, vec3(guv, (clamp(l, -16.0, 15.999) + 16.0) / 32.0), 0.0).rg;
+		float blurred = textureLod(fellow_local_blurred, guv, 0.0).r - 16.0;
+		float bilateral = g.y > 1e-4 ? g.x / g.y - 16.0 : blurred;
+		float base = mix(bilateral, blurred, fellow_local.contrast.w);
+		float middle = log2(0.18 / max(exposure, 1e-20));
+		float contrast = base > middle ? fellow_local.contrast.x : fellow_local.contrast.y;
+		float new_l = middle + (base - middle) * contrast + (l - base) * fellow_local.contrast.z;
+		color.rgb *= exp2(new_l - l);
+	}
+#endif
 
 	color.rgb *= exposure;
 
@@ -928,7 +989,10 @@ void main() {
 
 	if (FELLOW_FLAG(FLAG_USE_GLOW, sc_use_glow) && !FELLOW_GLOW_MODE(GLOW_MODE_SOFTLIGHT, sc_glow_mode_softlight)) {
 		vec3 glow = gather_glow(source_glow, uv_interp) * params.glow_intensity;
-		if (FELLOW_GLOW_MAP) {
+		if (sc_fellow && sc_lens_dirt_additive) {
+			// FellowEngine lens dirt (decision 0111, as Unreal's): the glow map lights up where the glow is, on top of it.
+			glow += texture(glow_map, uv_interp).rgb * glow * fellow_local.extra.y;
+		} else if (FELLOW_GLOW_MAP) {
 			glow = mix(glow, texture(glow_map, uv_interp).rgb * glow, params.glow_map_strength);
 		}
 
