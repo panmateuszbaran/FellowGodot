@@ -120,7 +120,7 @@ def main() -> int:
                                 d = json.load(f)
                             p = d.get("physics", {})
                             r = {"valid": bool(p), "summary": p.get("summary", {}), "hashes": p.get("hashes", []),
-                                 "counters": p.get("counters", {}), "engine": p.get("engine"), "threads": p.get("threads"), "phases_ms": p.get("phases_ms"),
+                                 "counters": p.get("counters", {}), "engine": p.get("engine"), "threads": p.get("threads"), "phases_ms": p.get("phases_ms"), "states": p.get("states"),
                                  "wall_s": p.get("wall_s"), "fellow_requested": (d.get("fellow") or {}).get("requested"),
                                  "verify": {k: v2 for k, v2 in (d.get("fellow_stats_process_total") or {}).items() if k.startswith("physics_verify")}}
                         r["_proc"] = proc

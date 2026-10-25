@@ -106,6 +106,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/physics/jolt_job_pumps", false); // decision 0092 (exact; REJECT, no gain on the laptop)
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/physics/jolt_pump_spins", PROPERTY_HINT_RANGE, "1,1000000,1"), 2000);
 	GLOBAL_DEF("rendering/fellow/physics/motion_query_cache", true); // decision 0093 (exact)
+	GLOBAL_DEF("rendering/fellow/physics/fast/jolt_shape_cast", false); // decision 0095 (fast mode: not stock's results)
 	GLOBAL_DEF("rendering/fellow/physics/verify", false);
 	GLOBAL_DEF("rendering/fellow/postfx/taa_strided_load", false); // decision 0075: REJECT (exact, no gain)
 	GLOBAL_DEF("rendering/fellow/postfx/taa_history_pingpong", true);

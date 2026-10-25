@@ -44,6 +44,8 @@
 #include "jolt_query_filter_3d.h"
 #include "jolt_space_3d.h"
 
+#include "servers/rendering/fellow_settings.h"
+
 #include <Jolt/Geometry/GJKClosestPoint.h>
 #include <Jolt/Physics/Body/Body.h>
 #include <Jolt/Physics/Body/BodyFilter.h>
@@ -51,9 +53,34 @@
 #include <Jolt/Physics/Collision/CastResult.h>
 #include <Jolt/Physics/Collision/CollidePointResult.h>
 #include <Jolt/Physics/Collision/NarrowPhaseQuery.h>
+#include <Jolt/Physics/Collision/CollisionCollectorImpl.h>
 #include <Jolt/Physics/Collision/RayCast.h>
+#include <Jolt/Physics/Collision/ShapeCast.h>
 #include <Jolt/Physics/Collision/Shape/MeshShape.h>
 #include <Jolt/Physics/PhysicsSystem.h>
+
+namespace {
+// FellowEngine (decision 0095): the motion queries' shape filters take the first shape for a JoltCustomMotionShape (they
+// look at its inner shape); a plain shape cast passes the shape itself, so it is shown to them wrapped.
+class FellowMotionShapeFilter final : public JPH::ShapeFilter {
+	const JPH::ShapeFilter &inner;
+	const JPH::Shape *as_self = nullptr;
+
+public:
+	FellowMotionShapeFilter(const JPH::ShapeFilter &p_inner, const JPH::Shape *p_as_self) :
+			inner(p_inner), as_self(p_as_self) {}
+
+	virtual bool ShouldCollide(const JPH::Shape *p_shape2, const JPH::SubShapeID &p_id2) const override {
+		inner.mBodyID2 = mBodyID2;
+		return inner.ShouldCollide(p_shape2, p_id2);
+	}
+
+	virtual bool ShouldCollide(const JPH::Shape *p_shape1, const JPH::SubShapeID &p_id1, const JPH::Shape *p_shape2, const JPH::SubShapeID &p_id2) const override {
+		inner.mBodyID2 = mBodyID2;
+		return inner.ShouldCollide(as_self, p_id1, p_shape2, p_id2);
+	}
+};
+} // namespace
 
 bool JoltPhysicsDirectSpaceState3D::_cast_motion_impl(const JPH::Shape &p_jolt_shape, const Transform3D &p_transform_com, const Vector3 &p_scale, const Vector3 &p_motion, bool p_use_edge_removal, bool p_ignore_overlaps, const JPH::CollideShapeSettings &p_settings, const JPH::BroadPhaseLayerFilter &p_broad_phase_layer_filter, const JPH::ObjectLayerFilter &p_object_layer_filter, const JPH::BodyFilter &p_body_filter, const JPH::ShapeFilter &p_shape_filter, real_t &r_closest_safe, real_t &r_closest_unsafe) const {
 	r_closest_safe = 1.0f;
@@ -113,25 +140,15 @@ bool JoltPhysicsDirectSpaceState3D::_cast_motion_impl(const JPH::Shape &p_jolt_s
 	// Figure out the number of steps we need in our binary search in order to achieve millimeter precision, within reason.
 	const int step_count = CLAMP(int(std::log(1000.0f * motion_length) / (float)Math::LN2), 4, 16);
 
-	bool collided = false;
-
-	for (int i = 0; i < aabb_collector.get_hit_count(); ++i) {
-		const JPH::BodyID other_jolt_id = aabb_collector.get_hit(i);
-		if (!p_body_filter.ShouldCollide(other_jolt_id)) {
-			continue;
+	// The first contact with one body, bracketed by a bisection of collision tests with the shape swept over part of the
+	// motion; false when the motion does not reach the body (or starts in it, with p_ignore_overlaps).
+	auto bisect = [&](const JPH::Body &p_other_body, float &r_lo, float &r_hi, bool &r_collided) {
+		if (!collides(p_other_body, 1.0f)) {
+			return false;
 		}
 
-		const JPH::Body *other_jolt_body = space->try_get_jolt_body(other_jolt_id);
-		if (!p_body_filter.ShouldCollideLocked(*other_jolt_body)) {
-			continue;
-		}
-
-		if (!collides(*other_jolt_body, 1.0f)) {
-			continue;
-		}
-
-		if (p_ignore_overlaps && collides(*other_jolt_body, 0.0f)) {
-			continue;
+		if (p_ignore_overlaps && collides(p_other_body, 0.0f)) {
+			return false;
 		}
 
 		float lo = 0.0f;
@@ -141,8 +158,8 @@ bool JoltPhysicsDirectSpaceState3D::_cast_motion_impl(const JPH::Shape &p_jolt_s
 		for (int j = 0; j < step_count; ++j) {
 			const float fraction = lo + (hi - lo) * coeff;
 
-			if (collides(*other_jolt_body, fraction)) {
-				collided = true;
+			if (collides(p_other_body, fraction)) {
+				r_collided = true;
 
 				hi = fraction;
 
@@ -160,6 +177,89 @@ bool JoltPhysicsDirectSpaceState3D::_cast_motion_impl(const JPH::Shape &p_jolt_s
 					coeff = 0.75f;
 				}
 			}
+		}
+
+		r_lo = lo;
+		r_hi = hi;
+		return true;
+	};
+
+	if (Fellow::physics_fast_jolt_shape_cast()) {
+		// FellowEngine fast mode (milestone 17, decision 0095; off by default, not stock's results): one Jolt shape cast
+		// per body (GJK ray casting to the time of impact) instead of a bisection of up to 16 collision tests with the
+		// shape swept over part of the motion. The time of impact t gives the unsafe fraction; the safe one is t less a
+		// millimetre along the motion (the bisection's precision) and the separation margin. The cast sees the shapes'
+		// rounded edges (their convex radius) as the collision tests do; internal edges are not removed by the enhanced
+		// method. A body the shape starts in contact with is bisected as in stock.
+		JPH::ShapeCastSettings cast_settings;
+		cast_settings.mActiveEdgeMode = p_settings.mActiveEdgeMode;
+		cast_settings.mCollisionTolerance = p_settings.mCollisionTolerance;
+		cast_settings.mPenetrationTolerance = p_settings.mPenetrationTolerance;
+		cast_settings.mBackFaceModeTriangles = JPH::EBackFaceMode::IgnoreBackFaces;
+		cast_settings.mBackFaceModeConvex = JPH::EBackFaceMode::CollideWithBackFaces; // starting inside: a hit at 0
+		cast_settings.mUseShrunkenShapeAndConvexRadius = true; // the shapes' rounded edges, as the collision tests see them
+		const JPH::RShapeCast shape_cast(&p_jolt_shape, scale, transform_com, motion);
+		const JoltCustomMotionShape filter_self(static_cast<const JPH::ConvexShape &>(p_jolt_shape));
+		const FellowMotionShapeFilter shape_filter(p_shape_filter, &filter_self);
+		const float back_off = motion_length > 0.0f ? MAX(0.0f, (0.001f + p_settings.mMaxSeparationDistance) / motion_length) : 0.0f;
+
+		bool fast_collided = false;
+		for (int i = 0; i < aabb_collector.get_hit_count(); ++i) {
+			const JPH::BodyID other_jolt_id = aabb_collector.get_hit(i);
+			if (!p_body_filter.ShouldCollide(other_jolt_id)) {
+				continue;
+			}
+
+			const JPH::Body *other_jolt_body = space->try_get_jolt_body(other_jolt_id);
+			if (!p_body_filter.ShouldCollideLocked(*other_jolt_body)) {
+				continue;
+			}
+
+			JPH::ClosestHitCollisionCollector<JPH::CastShapeCollector> collector;
+			other_jolt_body->GetTransformedShape().CastShape(shape_cast, cast_settings, base_offset, collector, shape_filter);
+			if (!collector.HadHit()) {
+				continue;
+			}
+
+			const float t = CLAMP(collector.mHit.mFraction, 0.0f, 1.0f);
+			float lo = 0.0f;
+			float hi = 1.0f;
+			if (t <= 0.0f) {
+				// Starting in contact: the cast and the collision tests disagree about triangles seen from behind (the
+				// cast judges a back face by the motion, the tests by where the shape is), so this body is bisected.
+				if (!bisect(*other_jolt_body, lo, hi, fast_collided)) {
+					continue;
+				}
+			} else {
+				lo = MAX(0.0f, t - back_off);
+				hi = t;
+				fast_collided = true;
+			}
+			if (lo < r_closest_safe) {
+				r_closest_safe = lo;
+				r_closest_unsafe = hi;
+			}
+		}
+		return fast_collided;
+	}
+
+	bool collided = false;
+
+	for (int i = 0; i < aabb_collector.get_hit_count(); ++i) {
+		const JPH::BodyID other_jolt_id = aabb_collector.get_hit(i);
+		if (!p_body_filter.ShouldCollide(other_jolt_id)) {
+			continue;
+		}
+
+		const JPH::Body *other_jolt_body = space->try_get_jolt_body(other_jolt_id);
+		if (!p_body_filter.ShouldCollideLocked(*other_jolt_body)) {
+			continue;
+		}
+
+		float lo = 0.0f;
+		float hi = 1.0f;
+		if (!bisect(*other_jolt_body, lo, hi, collided)) {
+			continue;
 		}
 
 		if (lo < r_closest_safe) {

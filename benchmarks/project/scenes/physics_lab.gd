@@ -283,14 +283,11 @@ func _terrain() -> void:
 			var p10 := Vector3(x0 + cell, _terrain_height(x0 + cell, z0), z0)
 			var p01 := Vector3(x0, _terrain_height(x0, z0 + cell), z0 + cell)
 			var p11 := Vector3(x0 + cell, _terrain_height(x0 + cell, z0 + cell), z0 + cell)
+			# Godot's front faces are clockwise as seen from their front: these face up (+y). (Until 2026-10-25 the
+			# terrain was wound the other way, facing down: the characters fell through it.)
 			for v in [p00, p10, p11, p00, p11, p01]:
 				faces.append(v)
-	# Godot's front faces are clockwise: the triangles above are counter-clockwise seen from above, so reversed.
-	var cw := PackedVector3Array()
-	for t in range(0, faces.size(), 3):
-		cw.append(faces[t])
-		cw.append(faces[t + 2])
-		cw.append(faces[t + 1])
+	var cw := faces
 	var shape := ConcavePolygonShape3D.new()
 	shape.set_faces(cw)
 	var sb := StaticBody3D.new()

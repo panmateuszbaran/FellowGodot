@@ -544,6 +544,11 @@ func _run_physics() -> void:
 	var ticks := int(args.get("ticks", "600"))
 	var warm := int(args.get("physics_warm", "0"))
 	var hash_every := int(args.get("hash_every", "30"))
+	# --physics_dump=30,600: the state's floats at those ticks (multiples of hash_every) in the result.
+	var dump_ticks := []
+	for tk in str(args.get("physics_dump", "")).split(",", false):
+		dump_ticks.append(int(tk))
+	var states := {}
 	for i in warm:
 		await get_tree().physics_frame
 	var keys := ["physics_ticks", "physics_sync_usec", "physics_process_usec", "physics_step_usec", "physics_end_usec"]
@@ -569,8 +574,12 @@ func _run_physics() -> void:
 		if hash_every > 0 and (i + 1) % hash_every == 0:
 			var ctx := HashingContext.new()
 			ctx.start(HashingContext.HASH_SHA256)
-			ctx.update(scene.physics_state_bytes())
+			var state_bytes: PackedByteArray = scene.physics_state_bytes()
+			ctx.update(state_bytes)
 			hashes.append([i + 1, ctx.finish().hex_encode()])
+			if dump_ticks.has(i + 1):
+				# The state itself (for the fast mode's deviation from stock), as floats.
+				states[str(i + 1)] = Array(state_bytes.to_float32_array())
 			last = Time.get_ticks_usec() # the hash is not the frame's
 	var wall := (Time.get_ticks_usec() - t0) / 1e6
 	var summary := {}
@@ -591,7 +600,7 @@ func _run_physics() -> void:
 		var ks := str(k)
 		if (ks.begins_with("physics_godot_") or ks.begins_with("physics_jolt_")) and ks.ends_with("_usec"):
 			phases[ks.trim_prefix("physics_").trim_suffix("_usec")] = (fs_end[k] - first.get(k, 0)) / 1000.0 / maxi(1, ticks)
-	result["physics"] = {"ticks": ticks, "warm": warm, "wall_s": wall, "summary": summary, "per_tick": per_tick, "hashes": hashes, "phases_ms": phases,
+	result["physics"] = {"ticks": ticks, "warm": warm, "wall_s": wall, "summary": summary, "per_tick": per_tick, "hashes": hashes, "phases_ms": phases, "states": states,
 		"counters": scene.physics_counters(), "engine": ProjectSettings.get_setting("physics/3d/physics_engine"),
 		"threads": OS.get_processor_count()}
 	_log("physics: %d ticks, frame %.3f ms, physics %.3f ms/tick (step %.3f, sync %.3f, process %.3f), final hash %s" % [ticks,

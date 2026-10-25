@@ -296,6 +296,13 @@ inline int physics_jolt_pump_spins() {
 inline bool physics_motion_query_cache() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/physics/motion_query_cache");
 }
+// Fast physics mode (milestone 17, off by default): options that are not stock's results tick by tick (deterministic,
+// physically equivalent within the stated tolerance), each with its decision record.
+// physics/fast/jolt_shape_cast (decision 0095): Jolt's motion queries (ShapeCast3D, move_and_slide()) by one shape cast
+// per body instead of a bisection of collision tests (fractions within a millimetre).
+inline bool physics_fast_jolt_shape_cast() {
+	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/physics/fast/jolt_shape_cast");
+}
 // Debug: every face the physics toggles skip is given to GJK anyway and its answer compared (counters physics_verify_*).
 inline bool physics_verify() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/physics/verify");
