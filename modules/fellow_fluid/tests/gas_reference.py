@@ -491,6 +491,21 @@ class State:
 					v = np.where(mask, bv, v)
 			self.vel[..., c] = np.clip(v, -maxs, maxs).astype(f32)
 
+	def shift(self, off):
+		"""The GPU's SHIFT pass: the box moved by whole cells (new cell c = old cell c + off), fresh air coming in."""
+		p = self.p
+		off = np.array(off)
+		n = np.array(p.n)
+		g = np.stack(np.meshgrid(*[np.arange(v) for v in p.n], indexing="ij"), axis=-1) + off
+		inside = np.all((g >= 0) & (g < n), axis=-1)
+		gc = np.clip(g, 0, n - 1)
+		self.s = np.where(inside[..., None], self.s[gc[..., 0], gc[..., 1], gc[..., 2]], f32(0.0)).astype(f32)
+		gv = np.stack(np.meshgrid(*[np.arange(v + 1) for v in p.n], indexing="ij"), axis=-1) + off
+		inside_v = np.all((gv >= 0) & (gv <= n), axis=-1)
+		gvc = np.clip(gv, 0, n)
+		self.vel = np.where(inside_v[..., None], self.vel[gvc[..., 0], gvc[..., 1], gvc[..., 2]], p.wind).astype(f32)
+		self.pressure = np.zeros_like(self.pressure)
+
 	def step(self):
 		self.emit()
 		self.advect_scalars()

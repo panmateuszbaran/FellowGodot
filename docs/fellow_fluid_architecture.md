@@ -42,8 +42,9 @@ one-way obstacles), the state on the GPU in the renderer's `FellowGas` (`servers
 steps queued by the node per physics tick and run at the start of the next frame. Rendering: a half-resolution ray
 march with the smoke's self-shadow, its shadow on the scene, the fire's blackbody emission and an omni light at the
 fire. Verified against a NumPy port (`tests/gas_reference.py`, `tests/gas_compare.py`). The same grid, advection and
-projection are what tier 3 (liquids: FLIP / APIC on a grid) needs; next for the gas: a multigrid pressure solve,
-sparse bricks for large volumes, a domain that follows its emitter, two-way coupling with Jolt.
+projection are what tier 3 (liquids: FLIP / APIC on a grid) needs. Since added: a multigrid pressure solve (the
+default), a world-space box that follows its node by whole cells (a carried torch), the velocity as a texture for GPU
+particles. Next for the gas: sparse bricks for large volumes, two-way coupling with Jolt.
 
 ## Tier 2 prototype: `FellowShallowWater3D`
 

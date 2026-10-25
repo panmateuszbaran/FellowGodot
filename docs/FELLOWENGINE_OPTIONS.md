@@ -89,7 +89,7 @@ the node places at the fire lights the scene. Without such a node nothing of it 
 
 | property (node) | what it does |
 |---|---|
-| `size`, `resolution` (64), `high_precision` | the box (its floor at the node), the cells along its longest side; RGBA32F state instead of RGBA16F |
+| `size`, `resolution` (64), `high_precision`, `space` (local) | the box (its floor at the node), the cells along its longest side; RGBA32F state instead of RGBA16F; world: the gas stays in the world, the box follows the node by whole cells (a carried torch) |
 | `closed_faces` (the floor) | walls; the other faces are open (fresh air), or an inflow where the `wind` blows in |
 | `buoyancy` (1: an ideal gas's), `smoke_weight`, `vorticity` (0.3), `turbulence`, `turbulence_scale`, `wind`, `wind_rate` | the forces |
 | `smoke_dissipation`, `cooling`, `ignition_temperature` (250 K), `burn_rate`, `heat_release` (1400 K), `soot`, `expansion` | the smoke's life and the combustion: fuel burns above the ignition temperature into heat, soot and expansion |

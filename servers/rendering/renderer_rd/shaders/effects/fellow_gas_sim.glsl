@@ -203,6 +203,36 @@ float emitter_weight(int p_e, vec3 p_g) {
 
 /* clang-format off */
 
+#ifdef MODE_SHIFT
+// The box moved by whole cells (a volume in world space following its node): the state shifted by the offset into the
+// other buffers; the cells and faces coming in get fresh air (the wind's velocity).
+layout(push_constant, std430) uniform Push {
+	ivec4 size; // xyz: the offset (cells): new cell c holds old cell c + offset
+	vec4 level; // unused
+	ivec4 coarse_size; // unused
+}
+push;
+
+layout(FMT, set = 0, binding = 1) uniform restrict readonly image3D scalars_in;
+layout(FMT, set = 0, binding = 2) uniform restrict readonly image3D vel_in;
+layout(FMT, set = 0, binding = 3) uniform restrict writeonly image3D scalars_out;
+layout(FMT, set = 0, binding = 4) uniform restrict writeonly image3D vel_out;
+
+void main() {
+	ivec3 t = ivec3(gl_GlobalInvocationID);
+	if (any(greaterThan(t, N()))) {
+		return;
+	}
+	ivec3 src = t + push.size.xyz;
+	if (all(lessThan(t, N()))) {
+		bool inside = all(greaterThanEqual(src, ivec3(0))) && all(lessThan(src, N()));
+		imageStore(scalars_out, t, inside ? imageLoad(scalars_in, src) : vec4(0.0));
+	}
+	bool inside_v = all(greaterThanEqual(src, ivec3(0))) && all(lessThanEqual(src, N()));
+	imageStore(vel_out, t, inside_v ? imageLoad(vel_in, src) : vec4(params.wind.xyz, 0.0));
+}
+#endif
+
 #ifdef MODE_OBSTACLES
 layout(r8ui, set = 0, binding = 1) uniform restrict writeonly uimage3D solid_out;
 

@@ -15,6 +15,7 @@ var stage := 0
 var what := 0
 var out_dir := ""
 var frames := 0
+var moved := false
 const NAMES := ["scalars", "velocity", "pressure", "residual", "solid"]
 
 
@@ -62,6 +63,8 @@ func _initialize() -> void:
 		e.smoke = 1.0
 	elif case_name == "wind":
 		vol.wind = Vector3(1.0, 0.0, 0.0)
+	elif case_name == "shift":
+		vol.space = 1  # world: the box follows the node by whole cells (moved after 20 steps)
 	elif case_name == "sphere":
 		# A static sphere obstacle (r 0.5 m) above the emitter, found through the physics server.
 		vol.physics_obstacles = true
@@ -80,6 +83,9 @@ func _initialize() -> void:
 func _physics_process(_delta: float) -> bool:
 	frames += 1
 	if stage == 0:
+		if args.get("case", "") == "shift" and vol.get_steps_simulated() == 20 and not moved:
+			vol.position += Vector3(0.2, 0.0, -0.1)
+			moved = true
 		if vol.get_steps_simulated() >= steps:
 			vol.simulation_enabled = false
 			stage = 1

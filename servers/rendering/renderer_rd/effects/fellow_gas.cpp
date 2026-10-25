@@ -159,7 +159,7 @@ void FellowGas::_ensure_sim(int p_precision) {
 		return;
 	}
 	Vector<String> modes;
-	const char *names[SIM_MAX] = { "OBSTACLES", "EMIT", "ADVECT_S1", "ADVECT_S2", "ADVECT_V1", "ADVECT_V2", "CURL", "CELL_FORCE", "FACE_FORCE", "DIVERGENCE", "PRESSURE", "PROJECT", "COARSE", "MG_RESTRICT", "MG_PROLONG", "MG_COARSE", "EXPORT" };
+	const char *names[SIM_MAX] = { "OBSTACLES", "EMIT", "ADVECT_S1", "ADVECT_S2", "ADVECT_V1", "ADVECT_V2", "CURL", "CELL_FORCE", "FACE_FORCE", "DIVERGENCE", "PRESSURE", "PROJECT", "COARSE", "MG_RESTRICT", "MG_PROLONG", "MG_COARSE", "EXPORT", "SHIFT" };
 	for (int i = 0; i < SIM_MAX; i++) {
 		modes.push_back(String("\n#define MODE_") + names[i] + "\n");
 	}
@@ -433,6 +433,15 @@ void FellowGas::_run_step(uint32_t p_id, Volume &r_v, const StepParams &p_step) 
 	memcpy(u.obstacles, p_step.obstacles, sizeof(u.obstacles));
 	RD::get_singleton()->buffer_update(r_v.ubo, 0, sizeof(SimUBO), &u);
 
+	if (p_step.shift[0] != 0 || p_step.shift[1] != 0 || p_step.shift[2] != 0) {
+		// The box followed its node by whole cells: the state shifted into the other buffers, the pressure's warm start
+		// dropped (the multigrid solve recovers within the step).
+		const uint32_t c = r_v.current;
+		MGPush push = { { p_step.shift[0], p_step.shift[1], p_step.shift[2], 0 }, { 0.0f, 0.0f, 0.0f, 0.0f }, { 0, 0, 0, 0 } };
+		_dispatch_sim(r_v, SIM_SHIFT, { RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 1, r_v.scalars[c]), RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 2, r_v.velocity[c]), RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 3, r_v.scalars[c ^ 1u]), RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 4, r_v.velocity[c ^ 1u]) }, n + Vector3i(1, 1, 1), &push);
+		RD::get_singleton()->texture_clear(r_v.pressure, Color(0, 0, 0, 0), 0, 1, 0, 1);
+		r_v.current = c ^ 1u;
+	}
 	const uint32_t cur = r_v.current;
 	const uint32_t nxt = cur ^ 1u;
 	const bool mc = p_step.maccormack != 0;

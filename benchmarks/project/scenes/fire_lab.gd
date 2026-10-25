@@ -8,13 +8,18 @@ extends "res://bench/scene_base.gd"
 ##   * a sphere (an AnimatableBody3D, driven by set_time()) circling through the campfire's smoke.
 ## Options: --gas_res=N (the campfire's cells along its longest side, default 64; the chimney 1.25 x), --gas_prewarm=0
 ## (no prewarm: the volumes start empty), --gas_render=0 (simulated, not drawn), --gas_sim=0 (no simulation),
-## --night=1 (a dark sky: the fire light), --gas_chimney=0 (the campfire only).
+## --night=1 (a dark sky: the fire light), --gas_chimney=0 (no chimney), --gas_torch=0 (no torch), --gas_sphere=0,
+## --gas_embers=0.
+##   * a torch carried in a circle (set_time()): a volume in world space, its box following the torch by whole cells, the
+##     flame and smoke trailing behind it.
 ## Extra per-frame metrics: gas_steps (steps simulated by the campfire), fire_power (its emitted luminance).
 
 var sun: DirectionalLight3D
 var campfire
 var chimney
 var sphere: AnimatableBody3D
+var torch: Node3D
+var torch_gas
 var night := false
 var gas_res := 64
 
@@ -35,6 +40,8 @@ func build(p_args: Dictionary) -> void:
 		_build_house()
 	if args.get("gas_sphere", "1") != "0":
 		_build_sphere()
+	if args.get("gas_torch", "1") != "0":
+		_build_torch()
 	_define_cameras()
 	set_time(0.0)
 	info = {"stats": scene_stats(self), "night": night,
@@ -268,6 +275,52 @@ func _build_sphere() -> void:
 	add_child(sphere)
 
 
+func _build_torch() -> void:
+	torch = Node3D.new()
+	var stick := MeshInstance3D.new()
+	var cm := CylinderMesh.new()
+	cm.top_radius = 0.035
+	cm.bottom_radius = 0.025
+	cm.height = 0.9
+	stick.mesh = cm
+	stick.material_override = _material(Color(0.25, 0.16, 0.1))
+	stick.position = Vector3(0.0, -0.45, 0.0)
+	torch.add_child(stick)
+	add_child(torch)
+	torch_gas = ClassDB.instantiate("FellowGasVolume3D")
+	torch_gas.name = "Torch"
+	torch_gas.space = 1  # world: the gas stays behind the moving torch
+	torch_gas.size = Vector3(3.0, 3.0, 3.0)
+	torch_gas.resolution = gas_res
+	torch_gas.vorticity = 0.3
+	torch_gas.turbulence = 4.0
+	torch_gas.turbulence_scale = 0.2
+	torch_gas.smoke_color = Color(0.45, 0.44, 0.43)
+	torch_gas.smoke_density = 5.0
+	torch_gas.fire_intensity = 18.0
+	torch_gas.fire_light_energy = 0.6
+	torch_gas.closed_faces = 0
+	torch_gas.prewarm_steps = 0 if args.get("gas_prewarm", "1") == "0" else 60
+	torch_gas.simulation_enabled = args.get("gas_sim", "1") != "0"
+	torch_gas.render_enabled = args.get("gas_render", "1") != "0"
+	var e = ClassDB.instantiate("FellowGasEmitter3D")
+	e.shape = 0
+	e.radius = 0.11
+	e.position = Vector3(0.0, 0.45, 0.0)
+	e.fuel = 2.2
+	e.temperature = 1000.0
+	e.smoke = 0.06
+	e.noise = 0.6
+	e.noise_scale = 0.12
+	torch_gas.add_child(e)
+	add_child(torch_gas)
+
+
+func _torch_pos(t: float) -> Vector3:
+	var a := t * 0.6
+	return Vector3(-4.5 + 2.2 * cos(a), 1.6, 3.0 + 2.2 * sin(a))
+
+
 func _sphere_pos(t: float) -> Vector3:
 	return Vector3(0.85 * cos(t * 0.8), 2.6, 0.85 * sin(t * 0.8))
 
@@ -275,6 +328,11 @@ func _sphere_pos(t: float) -> Vector3:
 func set_time(t: float) -> void:
 	if sphere:
 		sphere.global_position = _sphere_pos(t)
+	if torch:
+		var p := _torch_pos(t)
+		torch.global_position = p
+		# The volume's floor 0.45 m below the torch's head (its emitter there).
+		torch_gas.global_position = p - Vector3(0.0, 0.45, 0.0)
 
 
 func sample_extra() -> Dictionary:
@@ -289,7 +347,8 @@ func sample_extra() -> Dictionary:
 func _define_cameras() -> void:
 	fixed_cameras = {
 		"fire_close": {"pos": Vector3(2.4, 1.2, 3.0), "target": Vector3(0.0, 1.1, 0.0), "fov": 55.0, "time": 4.0, "purpose": "the campfire: flames, smoke, the sphere in the smoke"},
-		"fire_overview": {"pos": Vector3(-8.0, 6.0, 13.0), "target": Vector3(5.0, 4.0, -4.0), "fov": 60.0, "time": 4.0, "purpose": "both volumes, the chimney's plume in the wind, shadows"},
+		"fire_overview": {"pos": Vector3(-8.0, 6.0, 13.0), "target": Vector3(5.0, 4.0, -4.0), "fov": 60.0, "time": 4.0, "purpose": "the volumes, the chimney's plume in the wind, shadows"},
+		"fire_torch": {"pos": Vector3(-2.2, 2.0, 6.4), "target": Vector3(-4.5, 1.9, 3.0), "fov": 55.0, "time": 4.0, "purpose": "the torch carried in a circle: its flame and smoke trailing (a world-space volume)"},
 		"fire_chimney": {"pos": Vector3(4.0, 4.5, 5.0), "target": Vector3(13.5, 10.0, -7.0), "fov": 60.0, "time": 4.0, "purpose": "the plume against the sky, its shadow on the roof"},
 	}
 	flythrough = CameraPath.from_array([
@@ -305,4 +364,6 @@ func _define_cameras() -> void:
 		orbit.append([i * 0.25, Vector3(cos(a) * 3.4, 1.3, sin(a) * 3.4), Vector3(0.0, 1.2, 0.0), 55.0])
 	temporal_seqs = {
 		"fire_orbit": {"start": 4.0, "frames": 60, "purpose": "orbit around the campfire (the flames move, the camera too)", "path": CameraPath.from_array(orbit)},
+		"fire_torch_walk": {"start": 4.0, "frames": 90, "purpose": "the torch carried past a still camera: its flame and smoke trail behind (a world-space volume)",
+			"path": CameraPath.from_array([[0.0, Vector3(-2.2, 2.0, 6.4), Vector3(-4.5, 1.9, 3.0), 55.0], [1.5, Vector3(-2.2, 2.0, 6.4), Vector3(-4.5, 1.9, 3.0), 55.0]])},
 	}

@@ -70,7 +70,9 @@ def main():
 	nv = (n[0] + 1, n[1] + 1, n[2] + 1)
 	p = make_params(info)
 	st = make_state(p, info)
-	for _ in range(info["steps"]):
+	for i in range(info["steps"]):
+		if info["case"] == "shift" and i == 20:
+			st.shift((2, 0, -1))  # gas_check.gd moves the world-space volume by (0.2, 0, -0.1) m after 20 steps
 		st.step()
 	s_gpu = load(os.path.join(d, "scalars.bin"), n, 4)
 	v_gpu = load(os.path.join(d, "velocity.bin"), nv, 4)[..., :3]

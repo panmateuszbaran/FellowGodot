@@ -66,8 +66,29 @@ void FellowGasVolume3D::_update_grid() {
 }
 
 Transform3D FellowGasVolume3D::_grid_to_world() const {
+	if (space == SPACE_WORLD) {
+		return Transform3D(Basis::from_scale(Vector3(grid_dx, grid_dx, grid_dx)), grid_origin);
+	}
 	const Transform3D local(Basis::from_scale(Vector3(grid_dx, grid_dx, grid_dx)), Vector3(-grid_res.x * grid_dx * 0.5f, 0.0f, -grid_res.z * grid_dx * 0.5f));
 	return (is_inside_tree() ? get_global_transform() : get_transform()) * local;
+}
+
+Basis FellowGasVolume3D::_world_to_grid_axes() const {
+	if (space == SPACE_WORLD) {
+		return Basis();
+	}
+	return (is_inside_tree() ? get_global_transform() : get_transform()).basis.inverse();
+}
+
+Vector3 FellowGasVolume3D::_snapped_origin() const {
+	const Vector3 p = (is_inside_tree() ? get_global_transform() : get_transform()).origin;
+	const Vector3 corner = p - Vector3(grid_res.x * grid_dx * 0.5f, 0.0f, grid_res.z * grid_dx * 0.5f);
+	return Vector3(Math::round(corner.x / grid_dx), Math::round(corner.y / grid_dx), Math::round(corner.z / grid_dx)) * grid_dx;
+}
+
+void FellowGasVolume3D::set_space(Space p_space) {
+	space = p_space;
+	configured = false;
 }
 
 void FellowGasVolume3D::set_size(const Vector3 &p_size) {
@@ -192,6 +213,7 @@ void FellowGasVolume3D::_rt_store(const PackedByteArray &p_data, Ref<FellowGasRe
 
 void FellowGasVolume3D::_configure() {
 	_update_grid();
+	grid_origin = _snapped_origin();
 	RS::get_singleton()->call_on_render_thread(callable_mp_static(&FellowGasVolume3D::_rt_configure).bind(volume_id, grid_res, grid_dx, high_precision, emission));
 	if (velocity_texture_enabled) {
 		RS::get_singleton()->call_on_render_thread(callable_mp_static(&FellowGasVolume3D::_rt_export).bind(volume_id, true, velocity_texture_scale, velocity_texture));
@@ -219,7 +241,7 @@ static void _fellow_gas_axes(const Basis &p_grid_basis, float r_rot[3][4], Vecto
 void FellowGasVolume3D::_gather_emitters(void *r_step) const {
 	FellowGas::StepParams &sp = *reinterpret_cast<FellowGas::StepParams *>(r_step);
 	const Transform3D w2g = _grid_to_world().affine_inverse();
-	const Basis node_inv = get_global_transform().basis.inverse();
+	const Basis node_inv = _world_to_grid_axes();
 	int count = 0;
 	for (int i = 0; i < get_child_count() && count < FellowGas::MAX_EMITTERS; i++) {
 		FellowGasEmitter3D *e = Object::cast_to<FellowGasEmitter3D>(get_child(i));
@@ -321,8 +343,8 @@ void FellowGasVolume3D::_gather_obstacles(void *r_step) const {
 		bool operator<(const Found &p_o) const { return distance < p_o.distance || (distance == p_o.distance && (object < p_o.object || (object == p_o.object && shape < p_o.shape))); }
 	};
 	LocalVector<Found> found;
-	const Basis node_inv = get_global_transform().basis.inverse();
-	const Basis node_rot_inv = get_global_transform().basis.orthonormalized().inverse();
+	const Basis node_inv = _world_to_grid_axes();
+	const Basis node_rot_inv = this->space == SPACE_WORLD ? Basis() : get_global_transform().basis.orthonormalized().inverse();
 	const Vector3 centre_w = box.get_center();
 	const float max_speed = 6.0f * grid_dx / MAX(float(get_physics_process_delta_time() * time_scale / substeps), 1e-5f); // FellowGas::StepParams::max_speed_cells
 	for (int i = 0; i < n; i++) {
@@ -446,13 +468,22 @@ void FellowGasVolume3D::_queue_step(bool p_read_emission) {
 	memset(sp.obstacles, 0, sizeof(sp.obstacles));
 	const double tick = get_physics_process_delta_time();
 	sp.dt = float(tick * time_scale / substeps);
-	const Basis basis = get_global_transform().basis;
-	const Vector3 up = basis.inverse().xform(Vector3(0, 1, 0)).normalized();
+	if (space == SPACE_WORLD) {
+		// The box follows the node by whole cells; the state shifts with it.
+		const Vector3 o = _snapped_origin();
+		const Vector3 d = (o - grid_origin) / grid_dx;
+		sp.shift[0] = int(Math::round(d.x));
+		sp.shift[1] = int(Math::round(d.y));
+		sp.shift[2] = int(Math::round(d.z));
+		grid_origin = o;
+	}
+	const Basis to_grid = _world_to_grid_axes();
+	const Vector3 up = to_grid.xform(Vector3(0, 1, 0)).normalized();
 	sp.up[0] = up.x;
 	sp.up[1] = up.y;
 	sp.up[2] = up.z;
 	sp.buoyancy = buoyancy;
-	const Vector3 w = basis.inverse().xform(wind);
+	const Vector3 w = to_grid.xform(wind);
 	sp.wind[0] = w.x;
 	sp.wind[1] = w.y;
 	sp.wind[2] = w.z;
@@ -646,6 +677,8 @@ void FellowGasVolume3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_resolution"), &FellowGasVolume3D::get_resolution);
 	ClassDB::bind_method(D_METHOD("set_high_precision", "enable"), &FellowGasVolume3D::set_high_precision);
 	ClassDB::bind_method(D_METHOD("is_high_precision"), &FellowGasVolume3D::is_high_precision);
+	ClassDB::bind_method(D_METHOD("set_space", "space"), &FellowGasVolume3D::set_space);
+	ClassDB::bind_method(D_METHOD("get_space"), &FellowGasVolume3D::get_space);
 	ClassDB::bind_method(D_METHOD("set_simulation_enabled", "enable"), &FellowGasVolume3D::set_simulation_enabled);
 	ClassDB::bind_method(D_METHOD("is_simulation_enabled"), &FellowGasVolume3D::is_simulation_enabled);
 	ClassDB::bind_method(D_METHOD("set_substeps", "substeps"), &FellowGasVolume3D::set_substeps);
@@ -747,6 +780,7 @@ void FellowGasVolume3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::VECTOR3, "size", PROPERTY_HINT_NONE, "suffix:m"), "set_size", "get_size");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "resolution", PROPERTY_HINT_RANGE, "8,512,1"), "set_resolution", "get_resolution");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "high_precision"), "set_high_precision", "is_high_precision");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "space", PROPERTY_HINT_ENUM, "Local,World"), "set_space", "get_space");
 	ADD_GROUP("Simulation", "");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "simulation_enabled"), "set_simulation_enabled", "is_simulation_enabled");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "substeps", PROPERTY_HINT_RANGE, "1,8,1"), "set_substeps", "get_substeps");
@@ -798,6 +832,8 @@ void FellowGasVolume3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "velocity_texture_enabled"), "set_velocity_texture_enabled", "is_velocity_texture_enabled");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "velocity_texture_scale", PROPERTY_HINT_RANGE, "0.1,50,0.1,suffix:m/s"), "set_velocity_texture_scale", "get_velocity_texture_scale");
 
+	BIND_ENUM_CONSTANT(SPACE_LOCAL);
+	BIND_ENUM_CONSTANT(SPACE_WORLD);
 	BIND_ENUM_CONSTANT(SOLVER_SOR);
 	BIND_ENUM_CONSTANT(SOLVER_MULTIGRID);
 	BIND_ENUM_CONSTANT(FACE_NEG_X);

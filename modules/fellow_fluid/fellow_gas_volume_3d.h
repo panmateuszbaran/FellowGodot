@@ -66,6 +66,11 @@ class FellowGasVolume3D : public Node3D {
 	GDCLASS(FellowGasVolume3D, Node3D);
 
 public:
+	enum Space {
+		SPACE_LOCAL, // the gas moves and turns with the node
+		SPACE_WORLD, // the gas stays in the world; the box (axis-aligned) follows the node by whole cells
+	};
+
 	enum PressureSolver {
 		SOLVER_SOR, // red-black SOR, `pressure_iterations` sweeps
 		SOLVER_MULTIGRID, // multigrid V-cycles, `multigrid_cycles` of them
@@ -85,6 +90,7 @@ private:
 	Vector3 size = Vector3(2.0, 4.0, 2.0);
 	int resolution = 64;
 	bool high_precision = false;
+	Space space = SPACE_LOCAL;
 	// Simulation.
 	bool simulation_enabled = true;
 	int substeps = 1;
@@ -138,6 +144,7 @@ private:
 	bool configured = false;
 	Vector3i grid_res;
 	float grid_dx = 0.1f;
+	Vector3 grid_origin; // SPACE_WORLD: the box's corner in the world, on the world's grid of cells
 	uint64_t ticks = 0;
 	double sim_time = 0.0;
 	int prewarm_left = 0;
@@ -152,6 +159,8 @@ private:
 
 	void _update_grid();
 	Transform3D _grid_to_world() const;
+	Basis _world_to_grid_axes() const; // world vectors (m/s) to the grid's axes (local units)
+	Vector3 _snapped_origin() const;
 	void _configure();
 	void _queue_step(bool p_read_emission);
 	void _send_render();
@@ -179,6 +188,8 @@ public:
 	int get_resolution() const { return resolution; }
 	void set_high_precision(bool p_enable);
 	bool is_high_precision() const { return high_precision; }
+	void set_space(Space p_space);
+	Space get_space() const { return space; }
 
 	void set_simulation_enabled(bool p_enable) { simulation_enabled = p_enable; }
 	bool is_simulation_enabled() const { return simulation_enabled; }
@@ -289,3 +300,4 @@ public:
 
 VARIANT_ENUM_CAST(FellowGasVolume3D::Face);
 VARIANT_ENUM_CAST(FellowGasVolume3D::PressureSolver);
+VARIANT_ENUM_CAST(FellowGasVolume3D::Space);

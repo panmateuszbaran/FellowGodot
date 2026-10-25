@@ -67,6 +67,12 @@ the obstacle's index); per 4³ brick the largest smoke and temperature (RG16F, f
    [0, 1], into an RGBA16F texture a `GPUParticlesAttractorVectorField3D` reads (2 × texel − 1 is its force): GPU
    particles carried by the flow (Fire Lab's embers).
 
+**Space.** `space` = Local (the default): the gas moves and turns with the node (a fire on a ship). World: the gas
+stays in the world and the box, axis-aligned, follows the node by whole cells — before a step in which the node moved,
+a pass shifts the state by the offset into the other buffers, the cells and faces coming in getting fresh air (the
+wind's velocity), the pressure's warm start dropped: a torch carried around trails its flame and smoke (Fire Lab's
+torch). Checked against the reference: a move of (2, 0, −1) cells after 20 steps, 8.1 × 10⁻⁷ after 30.
+
 The steps a node queues during the physics ticks run at the start of the next frame (inside its timestamps:
 "FellowEngine Gas Simulation"), in the order of the volumes' creation.
 

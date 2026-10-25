@@ -104,6 +104,7 @@ public:
 		int32_t emitter_count = 0;
 		int32_t obstacle_count = 0;
 		int32_t read_emission = 0;
+		int32_t shift[3] = { 0, 0, 0 }; // the box moved by whole cells before this step (new cell c = old cell c + shift)
 		GPUEmitter emitters[MAX_EMITTERS];
 		GPUObstacle obstacles[MAX_OBSTACLES];
 	};
@@ -211,6 +212,7 @@ private:
 		SIM_MG_PROLONG,
 		SIM_MG_COARSE,
 		SIM_EXPORT,
+		SIM_SHIFT,
 		SIM_MAX,
 	};
 	enum RenderMode {
