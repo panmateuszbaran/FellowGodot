@@ -30,6 +30,8 @@
 
 #include "render_forward_clustered.h"
 
+#include "servers/rendering/renderer_rd/effects/fellow_gas.h"
+
 #include "core/object/callable_mp.h"
 
 #include "core/config/engine.h"
@@ -4663,6 +4665,64 @@ RID RenderForwardClustered::_fellow_process_contact_shadow(RenderDataRD *p_rende
 	return params.dest;
 }
 
+bool RenderForwardClustered::_fellow_begin_gas(RenderDataRD *p_render_data, const Ref<RenderSceneBuffersRD> &p_render_buffers, RID p_radiance_texture) {
+	RendererRD::FellowGas *gas = RendererRD::FellowGas::get_singleton_if_exists();
+	ERR_FAIL_NULL_V(gas, false);
+	FellowRTLighting lighting;
+	_fellow_rt_lighting(p_render_data, p_render_buffers, p_radiance_texture, lighting);
+	RendererRD::FellowGas::FrameParams fp;
+	Projection correction;
+	correction.set_depth_correction(true, true, false);
+	fp.view_projection = correction * _fellow_jittered_projection(p_render_data) * Projection(p_render_data->scene_data->cam_transform.affine_inverse());
+	fp.camera_position = p_render_data->scene_data->cam_transform.origin;
+	fp.has_sun = lighting.has_sun;
+	fp.sun_direction = lighting.sun_direction;
+	// The RT lighting's sun is for Lambert surfaces (illuminance / pi); the smoke's phase function wants the illuminance.
+	fp.sun_illuminance = Color(lighting.sun_color.r * Math::PI, lighting.sun_color.g * Math::PI, lighting.sun_color.b * Math::PI);
+	fp.ambient_color = lighting.ambient_color;
+	fp.use_ambient = lighting.use_ambient;
+	fp.use_sky = lighting.use_sky;
+	fp.sky_factor = lighting.sky_factor;
+	fp.sky_xform = lighting.sky_xform;
+	fp.radiance = lighting.radiance;
+	fp.radiance_border[0] = lighting.radiance_border[0];
+	fp.radiance_border[1] = lighting.radiance_border[1];
+	fp.radiance_level = lighting.radiance_level;
+	fp.exposure = p_render_data->camera_attributes.is_valid() ? RSG::camera_attributes->camera_attributes_get_exposure_normalization_factor(p_render_data->camera_attributes) : 1.0f;
+	fp.size = p_render_buffers->get_internal_size();
+	fp.frame = uint32_t(RSG::rasterizer->get_frame_number());
+	return gas->begin_frame(fp);
+}
+
+void RenderForwardClustered::_fellow_gas_shadow(RenderDataRD *p_render_data, const Ref<RenderSceneBuffersRD> &p_render_buffers) {
+	RendererRD::FellowGas *gas = RendererRD::FellowGas::get_singleton_if_exists();
+	ERR_FAIL_NULL(gas);
+	const bool multiply = fellow_contact_shadow_mask.is_valid();
+	if (!multiply) {
+		// The mask the contact shadows would have made (the opaque passes multiply the first directional light's shadow by it).
+		RendererRD::LightStorage *light_storage = RendererRD::LightStorage::get_singleton();
+		RID light_instance = _fellow_first_directional_light(p_render_data);
+		if (light_instance.is_null()) {
+			return;
+		}
+		RID light = light_storage->light_instance_get_base_light(light_instance);
+		if (!light_storage->light_has_shadow(light) || light_storage->light_get_param(light, RSE::LIGHT_PARAM_SHADOW_OPACITY) <= 0.001f) {
+			return;
+		}
+		const Ref<RenderSceneBuffersRD> &rb = p_render_buffers;
+		const Size2i size = rb->get_internal_size();
+		const StringName scope = SNAME("fellow_contact_shadow");
+		if (rb->has_texture(scope, SNAME("mask")) && rb->get_texture_format(scope, SNAME("mask")).width != uint32_t(size.x)) {
+			rb->clear_context(scope);
+		}
+		if (!rb->has_texture(scope, SNAME("mask"))) {
+			rb->create_texture(scope, SNAME("mask"), RD::DATA_FORMAT_R8G8_UNORM, RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_STORAGE_BIT, RD::TEXTURE_SAMPLES_1, size);
+		}
+		fellow_contact_shadow_mask = rb->get_texture(scope, SNAME("mask"));
+	}
+	gas->apply_shadow(fellow_contact_shadow_mask, multiply, p_render_buffers->get_depth_texture(0));
+}
+
 // The projection the depth buffer was rendered with, the TAA jitter included, for the ray-traced effects that rebuild
 // positions from it (their correction flips y: the jitter's y with the other sign, as get_cam_projection() adds it after
 // the flip). Without the jitter the positions were off by up to half a pixel: on walls seen at a grazing angle, inside
@@ -6387,6 +6447,18 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	if (fellow_rt_shadow_mask.is_null() && Fellow::contact_shadows_enabled() && depth_pre_pass && !use_msaa && !is_reflection_probe && rb.is_valid() && rb->get_view_count() == 1 && p_render_data->directional_light_count > 0) {
 		fellow_contact_shadow_mask = _fellow_process_contact_shadow(p_render_data, rb);
 	}
+	// FellowEngine gas volumes (decision 0118): their light volumes, and the sun's shadow through them multiplied into the
+	// contact shadow mask (made here when the contact shadows are off).
+	fellow_gas_frame = false;
+	if (RendererRD::FellowGas::rendering_enabled() && !use_msaa && !is_reflection_probe && rb.is_valid() && rb->get_view_count() == 1) {
+		RendererRD::FellowGas *gas = RendererRD::FellowGas::get_singleton_if_exists();
+		if (gas && gas->has_volumes()) {
+			fellow_gas_frame = _fellow_begin_gas(p_render_data, rb, radiance_texture);
+			if (fellow_gas_frame && fellow_rt_shadow_mask.is_null() && depth_pre_pass && p_render_data->directional_light_count > 0 && gas->frame_has_shadows()) {
+				_fellow_gas_shadow(p_render_data, rb);
+			}
+		}
+	}
 	// FellowEngine (lights/fields_early, decision 0045): only where omni or spot lights are in view (the colour passes
 	// below; the depth pre-pass above does not light).
 	base_specialization.fellow_light_fields_early = Fellow::light_fields_early() && fellow_positional_light_count > 0;
@@ -6674,6 +6746,16 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		_fellow_process_clouds(p_render_data, rb);
 	} else {
 		fellow_clouds_history = false;
+	}
+	// FellowEngine gas volumes (decision 0118): smoke and fire, over the opaque surfaces and the sky, before the
+	// transparent pass and the screen texture's copy.
+	if (fellow_gas_frame) {
+		RendererRD::FellowGas *gas = RendererRD::FellowGas::get_singleton_if_exists();
+		if (gas) {
+			gas->render(rb->get_internal_texture(), rb->get_depth_texture());
+			gas->end_frame();
+		}
+		fellow_gas_frame = false;
 	}
 
 	if (rb_data.is_valid() && using_upscaling) {

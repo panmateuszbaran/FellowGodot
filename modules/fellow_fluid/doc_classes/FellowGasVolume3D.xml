@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="FellowGasVolume3D" inherits="Node3D" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+	<brief_description>
+		FellowEngine: smoke and fire simulated on the GPU in a box, drawn by the Forward+ renderer.
+	</brief_description>
+	<description>
+		Simulates gas on a regular grid in a box (its floor centred on the node, [member size] metres, [member resolution] cells along its longest side): smoke, temperature and fuel advected by a staggered velocity field (MacCormack), fuel burning above [member ignition_temperature] into heat and soot, buoyancy, vorticity confinement, the physics bodies inside the box as obstacles, a pressure projection. [FellowGasEmitter3D] children emit smoke, fuel and heat. One step per physics tick (deterministic at a fixed tick rate).
+		The Forward+ renderer draws the volume with self-shadowing, the sun's shadow on the scene and the fire's blackbody emission; an [OmniLight3D] the node owns lights the scene from the fire. Requires a RenderingDevice renderer. See [code]docs/decisions/0117-gas-simulation.md[/code] and [code]0118-gas-rendering.md[/code].
+	</description>
+	<tutorials>
+	</tutorials>
+</class>

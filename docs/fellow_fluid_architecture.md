@@ -34,6 +34,17 @@ seeded from and drains back into tier 1/2 height fields.
   The simulation itself never waits for the CPU. (Not implemented in milestone 1: the prototype is one-way
   collider → water.)
 
+## Gas: smoke and fire (`FellowGasVolume3D`, milestone 20)
+
+Implemented: decision records 0117 (simulation) and 0118 (rendering). An Eulerian grid in a box the node owns (MAC
+velocity, MacCormack advection, combustion, buoyancy, vorticity confinement, red-black SOR projection, physics bodies as
+one-way obstacles), the state on the GPU in the renderer's `FellowGas` (`servers/rendering/renderer_rd/effects/`), its
+steps queued by the node per physics tick and run at the start of the next frame. Rendering: a half-resolution ray
+march with the smoke's self-shadow, its shadow on the scene, the fire's blackbody emission and an omni light at the
+fire. Verified against a NumPy port (`tests/gas_reference.py`, `tests/gas_compare.py`). The same grid, advection and
+projection are what tier 3 (liquids: FLIP / APIC on a grid) needs; next for the gas: a multigrid pressure solve,
+sparse bricks for large volumes, a domain that follows its emitter, two-way coupling with Jolt.
+
 ## Tier 2 prototype: `FellowShallowWater3D`
 
 ### Numerics (`modules/fellow_fluid/fellow_swe.glsl`)

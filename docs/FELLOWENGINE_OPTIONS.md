@@ -79,6 +79,31 @@ Effects that add to the image what a project asks for. Off, they change nothing 
 | `raytracing/gi` (`gi_probe_spacing` 2 m, `gi_probes_xz` 24, `gi_probes_y` 8, `gi_rays` 128, `gi_hysteresis` 0.97, `gi_energy` 1, `gi_update_interval` 4, `gi_sky_leak` 0.1, `gi_probe_relocation` on, `gi_cascades` 2; debug `raytracing_gi_reference`) | dynamic diffuse global illumination: a volume of probes around the camera traced continuously (a quarter of the probes per frame; sun, sky, emission, multiple bounces, the materials' colour × their albedo texture's mean; probes moved out of geometry; a coarser volume, 4 × the spacing, where the fine one ends), in place of the ambient light in every colour pass (the opaque passes read it from a screen pass); the debug setting shows a path-traced reference instead | 0083 |
 | `raytracing/reflections` (`reflections_max_roughness` 0.7, `reflections_interleaved` on) | where the environment enables SSR, reflections traced against the ray tracing scene instead (surfaces up to the maximum roughness; off-screen and occluded objects reflected, lit by the sun and DDGI) | 0084 |
 
+## Gas volumes: smoke and fire (milestone 20)
+
+A `FellowGasVolume3D` node (module `fellow_fluid`) simulates smoke and fire in a box on the GPU — one step per physics
+tick, the same steps on every run — and the Forward+ renderer draws it; its `FellowGasEmitter3D` children (sphere, box,
+cylinder) emit smoke, fuel and heat, the physics bodies inside it are obstacles the gas flows around, and an omni light
+the node places at the fire lights the scene. Without such a node nothing of it runs. Decision records 0117
+(simulation) and 0118 (rendering); bench scene Fire Lab (`--scene=fire`).
+
+| property (node) | what it does |
+|---|---|
+| `size`, `resolution` (64), `high_precision` | the box (its floor at the node), the cells along its longest side; RGBA32F state instead of RGBA16F |
+| `closed_faces` (the floor) | walls; the other faces are open (fresh air), or an inflow where the `wind` blows in |
+| `buoyancy` (1: an ideal gas's), `smoke_weight`, `vorticity` (0.3), `turbulence`, `turbulence_scale`, `wind`, `wind_rate` | the forces |
+| `smoke_dissipation`, `cooling`, `ignition_temperature` (250 K), `burn_rate`, `heat_release` (1400 K), `soot`, `expansion` | the smoke's life and the combustion: fuel burns above the ignition temperature into heat, soot and expansion |
+| `pressure_iterations` (20), `maccormack` (on), `substeps`, `time_scale`, `prewarm_steps` | the solver |
+| `physics_obstacles`, `collision_mask` | the bodies inside the box as obstacles (spheres, boxes, capsules, cylinders, world boundaries; convex shapes as their box; at most 16); a body moved faster than six cells per step counts as teleported |
+| `smoke_color`, `smoke_density` (4 / m), `anisotropy`, `ambient_strength`, `self_shadow`, `render_step` | the smoke's look |
+| `fire_intensity` (20), `fire_temperature_scale` (1.4) | the fire's blackbody emission (brightness by the fourth power of the temperature) and its colour's temperature |
+| `cast_shadows`, `shadow_strength` | the sun's shadow through the smoke on the scene (in the contact shadow mask; not with the ray-traced sun shadows) |
+| `fire_light`, `fire_light_energy`, `fire_light_range`, `fire_light_shadows` | the omni light at the fire, from the simulated emission (2-3 frames late) |
+
+Project settings: `fluid/enabled` (the simulation), `fluid/gas_rendering` (the drawing). Limits: transparent objects
+behind the smoke are drawn over it; the smoke is not in the volumetric fog; the scene's shadows do not darken the smoke;
+one view (no XR), no MSAA.
+
 ## Options that change the image (off by default)
 
 | setting | what it does | image cost | record |

@@ -1443,6 +1443,10 @@ private:
 	bool fellow_clouds_history = false;
 	uint32_t fellow_clouds_frame = 0;
 	void _fellow_process_clouds(RenderDataRD *p_render_data, const Ref<RenderSceneBuffersRD> &p_render_buffers);
+	// FellowEngine gas volumes (decision 0118): this render's volumes (begin_frame() done), their shadow in the mask.
+	bool fellow_gas_frame = false;
+	bool _fellow_begin_gas(RenderDataRD *p_render_data, const Ref<RenderSceneBuffersRD> &p_render_buffers, RID p_radiance_texture);
+	void _fellow_gas_shadow(RenderDataRD *p_render_data, const Ref<RenderSceneBuffersRD> &p_render_buffers);
 	RendererRD::FellowDDGI *fellow_ddgi = nullptr;
 	RendererRD::FellowRTReflections *fellow_rt_reflections = nullptr;
 	RendererRD::FellowRTAlbedo *fellow_rt_albedo = nullptr;

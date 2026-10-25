@@ -30,6 +30,8 @@
 
 #include "renderer_scene_render_rd.h"
 
+#include "servers/rendering/renderer_rd/effects/fellow_gas.h"
+
 #include "core/config/project_settings.h"
 #include "core/io/image.h"
 #include "servers/rendering/renderer_rd/environment/fog.h"
@@ -1827,6 +1829,10 @@ void RendererSceneRenderRD::set_debug_draw_mode(RSE::ViewportDebugDraw p_debug_d
 
 void RendererSceneRenderRD::update() {
 	sky.update_dirty_skys();
+	// FellowEngine gas volumes (decision 0117): the steps queued since the last frame, inside this frame's timestamps.
+	if (RendererRD::FellowGas *gas = RendererRD::FellowGas::get_singleton_if_exists()) {
+		gas->process_pending();
+	}
 }
 
 void RendererSceneRenderRD::set_time(double p_time, double p_step) {
@@ -2180,6 +2186,7 @@ RendererSceneRenderRD::~RendererSceneRenderRD() {
 		memdelete(fellow_bloom);
 		fellow_bloom = nullptr;
 	}
+	RendererRD::FellowGas::finalize();
 	if (fellow_motion_blur) {
 		memdelete(fellow_motion_blur);
 	}

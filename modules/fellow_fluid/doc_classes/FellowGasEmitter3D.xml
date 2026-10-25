@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="FellowGasEmitter3D" inherits="Node3D" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+	<brief_description>
+		FellowEngine: a source of smoke, fuel and heat in its parent [FellowGasVolume3D].
+	</brief_description>
+	<description>
+		A sphere, box or cylinder that adds [member smoke] and [member fuel] per second to the gas, heats it to [member temperature] (or adds heat per second), optionally with flickering value [member noise], and pulls the gas towards [member velocity]. Fire is fuel and heat: the fuel burns where the gas is hotter than the volume's ignition temperature. Must be a direct child of a [FellowGasVolume3D].
+	</description>
+	<tutorials>
+	</tutorials>
+</class>
