@@ -291,7 +291,7 @@ func _build_torch() -> void:
 	torch_gas.name = "Torch"
 	torch_gas.space = 1  # world: the gas stays behind the moving torch
 	torch_gas.size = Vector3(3.0, 3.0, 3.0)
-	torch_gas.resolution = gas_res
+	torch_gas.resolution = int(gas_res * 0.75)
 	torch_gas.vorticity = 0.3
 	torch_gas.turbulence = 4.0
 	torch_gas.turbulence_scale = 0.2
