@@ -65,6 +65,11 @@ class FellowGasVolume3D : public Node3D {
 	GDCLASS(FellowGasVolume3D, Node3D);
 
 public:
+	enum PressureSolver {
+		SOLVER_SOR, // red-black SOR, `pressure_iterations` sweeps
+		SOLVER_MULTIGRID, // multigrid V-cycles, `multigrid_cycles` of them
+	};
+
 	enum Face {
 		FACE_NEG_X = 1,
 		FACE_POS_X = 2,
@@ -100,6 +105,8 @@ private:
 	float soot = 0.6f;
 	float expansion = 0.4f;
 	int pressure_iterations = 20;
+	PressureSolver pressure_solver = SOLVER_MULTIGRID;
+	int multigrid_cycles = 2;
 	bool maccormack = true;
 	bool physics_obstacles = true;
 	uint32_t collision_mask = 1;
@@ -207,6 +214,10 @@ public:
 	float get_expansion() const { return expansion; }
 	void set_pressure_iterations(int p_value) { pressure_iterations = CLAMP(p_value, 0, 200); }
 	int get_pressure_iterations() const { return pressure_iterations; }
+	void set_pressure_solver(PressureSolver p_solver) { pressure_solver = p_solver; }
+	PressureSolver get_pressure_solver() const { return pressure_solver; }
+	void set_multigrid_cycles(int p_cycles) { multigrid_cycles = CLAMP(p_cycles, 1, 8); }
+	int get_multigrid_cycles() const { return multigrid_cycles; }
 	void set_maccormack(bool p_enable) { maccormack = p_enable; }
 	bool is_maccormack() const { return maccormack; }
 	void set_physics_obstacles(bool p_enable) { physics_obstacles = p_enable; }
@@ -265,3 +276,4 @@ public:
 };
 
 VARIANT_ENUM_CAST(FellowGasVolume3D::Face);
+VARIANT_ENUM_CAST(FellowGasVolume3D::PressureSolver);

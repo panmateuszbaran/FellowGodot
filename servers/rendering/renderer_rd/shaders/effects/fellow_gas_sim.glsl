@@ -563,54 +563,174 @@ void main() {
 }
 #endif
 
-#ifdef MODE_PRESSURE
+#if defined(MODE_PRESSURE) || defined(MODE_MG_RESTRICT) || defined(MODE_MG_PROLONG) || defined(MODE_MG_COARSE)
+// The pressure solve's levels: level 0 is the grid, each coarser level half its size (rounded up), its cells solid where
+// all their children are (decision 0117: SOR, or a multigrid V-cycle with red-black Gauss-Seidel smoothing).
 layout(push_constant, std430) uniform Push {
-	int colour; // the red-black colour
-	int pad0;
-	int pad1;
-	int pad2;
+	ivec4 size; // this level's size (RESTRICT, PROLONG: the finer level's); w: the red-black colour (PRESSURE)
+	vec4 level; // x dx^2 of this level (RESTRICT, PROLONG: the finer level's), y SOR omega, z iterations (COARSE), w unused
+	ivec4 coarse_size; // RESTRICT, PROLONG: the coarser level's size
 }
 push;
 
-layout(r32f, set = 0, binding = 1) uniform restrict readonly image3D rhs;
-layout(r32f, set = 0, binding = 4) uniform restrict image3D pressure;
-layout(r8ui, set = 0, binding = 5) uniform restrict readonly uimage3D solid;
+ivec3 LN() {
+	return push.size.xyz;
+}
 
-void main() {
-	ivec3 t = ivec3(gl_GlobalInvocationID);
-	ivec3 c = ivec3(2 * t.x + ((t.y + t.z + push.colour) & 1), t.y, t.z);
-	if (any(greaterThanEqual(c, N()))) {
-		return;
-	}
-	if (imageLoad(solid, c).r != 0u) {
-		imageStore(pressure, c, vec4(0.0));
-		return;
-	}
+// The neighbours' sum and count of the Poisson stencil at a cell of a level (solid neighbours and closed or inflow
+// faces left out, an open face counted with zero pressure outside).
+void stencil(ivec3 p_c, out float r_sum, out float r_count);
+#endif
+
+#if defined(MODE_PRESSURE) || defined(MODE_MG_COARSE)
+layout(r32f, set = 0, binding = 1) uniform restrict readonly image3D rhs;
+#ifdef MODE_MG_COARSE
+layout(r32f, set = 0, binding = 4) uniform restrict coherent image3D pressure;
+#else
+layout(r32f, set = 0, binding = 4) uniform restrict image3D pressure;
+#endif
+layout(r8ui, set = 0, binding = 5) uniform restrict readonly uimage3D solid;
+#endif
+
+#ifdef MODE_MG_RESTRICT
+layout(r32f, set = 0, binding = 1) uniform restrict readonly image3D fine_rhs;
+layout(r32f, set = 0, binding = 3) uniform restrict writeonly image3D coarse_rhs;
+layout(r32f, set = 0, binding = 4) uniform restrict readonly image3D pressure; // the finer level's
+layout(r8ui, set = 0, binding = 5) uniform restrict readonly uimage3D solid; // the finer level's
+layout(r32f, set = 0, binding = 6) uniform restrict writeonly image3D coarse_pressure_out; // zeroed
+layout(r8ui, set = 0, binding = 7) uniform restrict writeonly uimage3D coarse_solid;
+#endif
+
+#ifdef MODE_MG_PROLONG
+layout(r32f, set = 0, binding = 2) uniform restrict readonly image3D coarse_pressure_in;
+layout(r32f, set = 0, binding = 4) uniform restrict image3D pressure; // the finer level's
+layout(r8ui, set = 0, binding = 5) uniform restrict readonly uimage3D solid; // the finer level's
+#endif
+
+#if defined(MODE_PRESSURE) || defined(MODE_MG_RESTRICT) || defined(MODE_MG_PROLONG) || defined(MODE_MG_COARSE)
+void stencil(ivec3 p_c, out float r_sum, out float r_count) {
 	float sum = 0.0;
 	float count = 0.0;
 	for (int a = 0; a < 3; a++) {
 		ivec3 e = unit(a);
-		if (icomp(c, a) > 0) {
-			if (imageLoad(solid, c - e).r == 0u) {
-				sum += imageLoad(pressure, c - e).r;
+		if (icomp(p_c, a) > 0) {
+			if (imageLoad(solid, p_c - e).r == 0u) {
+				sum += imageLoad(pressure, p_c - e).r;
 				count += 1.0;
 			}
 		} else if (face_kind(2 * a) == 1) {
 			count += 1.0; // open: zero pressure outside
 		}
-		if (icomp(c, a) < icomp(N(), a) - 1) {
-			if (imageLoad(solid, c + e).r == 0u) {
-				sum += imageLoad(pressure, c + e).r;
+		if (icomp(p_c, a) < icomp(LN(), a) - 1) {
+			if (imageLoad(solid, p_c + e).r == 0u) {
+				sum += imageLoad(pressure, p_c + e).r;
 				count += 1.0;
 			}
 		} else if (face_kind(2 * a + 1) == 1) {
 			count += 1.0;
 		}
 	}
-	float q = imageLoad(pressure, c).r;
-	float gs = count > 0.0 ? (sum - params.misc.y * imageLoad(rhs, c).r) / count : 0.0;
-	q = (1.0 - params.combustion.w) * q + params.combustion.w * gs;
-	imageStore(pressure, c, vec4(q));
+	r_sum = sum;
+	r_count = count;
+}
+#endif
+
+#if defined(MODE_PRESSURE) || defined(MODE_MG_COARSE)
+void relax(ivec3 p_c) {
+	if (imageLoad(solid, p_c).r != 0u) {
+		imageStore(pressure, p_c, vec4(0.0));
+		return;
+	}
+	float sum;
+	float count;
+	stencil(p_c, sum, count);
+	float q = imageLoad(pressure, p_c).r;
+	float gs = count > 0.0 ? (sum - push.level.x * imageLoad(rhs, p_c).r) / count : 0.0;
+	q = (1.0 - push.level.y) * q + push.level.y * gs;
+	imageStore(pressure, p_c, vec4(q));
+}
+#endif
+
+#ifdef MODE_PRESSURE
+// One colour of a red-black sweep (SOR at level 0, Gauss-Seidel at the multigrid's levels).
+void main() {
+	ivec3 t = ivec3(gl_GlobalInvocationID);
+	ivec3 c = ivec3(2 * t.x + ((t.y + t.z + push.size.w) & 1), t.y, t.z);
+	if (any(greaterThanEqual(c, LN()))) {
+		return;
+	}
+	relax(c);
+}
+#endif
+
+#ifdef MODE_MG_COARSE
+// The coarsest level, solved by one workgroup: red-black Gauss-Seidel sweeps with barriers between the colours.
+void main() {
+	ivec3 n = LN();
+	int total = n.x * n.y * n.z;
+	int tid = int(gl_LocalInvocationIndex);
+	int iterations = int(push.level.z);
+	for (int it = 0; it < iterations; it++) {
+		for (int colour = 0; colour < 2; colour++) {
+			for (int i = tid; i < total; i += 64) {
+				ivec3 c = ivec3(i % n.x, (i / n.x) % n.y, i / (n.x * n.y));
+				if (((c.x + c.y + c.z) & 1) == colour) {
+					relax(c);
+				}
+			}
+			memoryBarrierImage();
+			barrier();
+		}
+	}
+}
+#endif
+
+#ifdef MODE_MG_RESTRICT
+// Per coarse cell: the residual of its fine children (rhs - the stencil's Laplacian), averaged over those that are
+// fluid; the coarse correction starts at zero; the coarse cell is solid where all its children are.
+void main() {
+	ivec3 cc = ivec3(gl_GlobalInvocationID);
+	if (any(greaterThanEqual(cc, push.coarse_size.xyz))) {
+		return;
+	}
+	float sum = 0.0;
+	float fluid = 0.0;
+	for (int k = 0; k < 8; k++) {
+		ivec3 c = cc * 2 + ivec3(k & 1, (k >> 1) & 1, (k >> 2) & 1);
+		if (any(greaterThanEqual(c, LN())) || imageLoad(solid, c).r != 0u) {
+			continue;
+		}
+		float s;
+		float count;
+		stencil(c, s, count);
+		float q = imageLoad(pressure, c).r;
+		sum += imageLoad(fine_rhs, c).r - (s - count * q) / push.level.x;
+		fluid += 1.0;
+	}
+	imageStore(coarse_rhs, cc, vec4(fluid > 0.0 ? sum / fluid : 0.0));
+	imageStore(coarse_pressure_out, cc, vec4(0.0));
+	imageStore(coarse_solid, cc, uvec4(fluid > 0.0 ? 0u : 1u));
+}
+#endif
+
+#ifdef MODE_MG_PROLONG
+// Per fine cell: the coarse correction interpolated trilinearly (cell centres: 3/4 and 1/4 per axis) and added.
+void main() {
+	ivec3 c = ivec3(gl_GlobalInvocationID);
+	if (any(greaterThanEqual(c, LN())) || imageLoad(solid, c).r != 0u) {
+		return;
+	}
+	ivec3 m = push.coarse_size.xyz - 1;
+	ivec3 par = c / 2;
+	ivec3 nb = clamp(par + ivec3(((c & 1) * 2) - 1), ivec3(0), m);
+	float e = 0.0;
+	for (int k = 0; k < 8; k++) {
+		ivec3 sel = ivec3(k & 1, (k >> 1) & 1, (k >> 2) & 1);
+		ivec3 q = ivec3(sel.x != 0 ? nb.x : par.x, sel.y != 0 ? nb.y : par.y, sel.z != 0 ? nb.z : par.z);
+		float w = (sel.x != 0 ? 0.25 : 0.75) * (sel.y != 0 ? 0.25 : 0.75) * (sel.z != 0 ? 0.25 : 0.75);
+		e += w * imageLoad(coarse_pressure_in, q).r;
+	}
+	imageStore(pressure, c, vec4(imageLoad(pressure, c).r + e));
 }
 #endif
 

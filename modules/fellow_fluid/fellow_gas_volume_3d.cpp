@@ -447,6 +447,8 @@ void FellowGasVolume3D::_queue_step(bool p_read_emission) {
 	sp.emission_intensity = fire_intensity;
 	sp.emission_temperature_scale = fire_temperature_scale;
 	sp.iterations = pressure_iterations;
+	sp.multigrid = pressure_solver == SOLVER_MULTIGRID ? 1 : 0;
+	sp.multigrid_cycles = multigrid_cycles;
 	sp.closed_faces = closed_faces;
 	sp.maccormack = maccormack ? 1 : 0;
 	sp.read_emission = p_read_emission ? 1 : 0;
@@ -658,6 +660,10 @@ void FellowGasVolume3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_expansion"), &FellowGasVolume3D::get_expansion);
 	ClassDB::bind_method(D_METHOD("set_pressure_iterations", "iterations"), &FellowGasVolume3D::set_pressure_iterations);
 	ClassDB::bind_method(D_METHOD("get_pressure_iterations"), &FellowGasVolume3D::get_pressure_iterations);
+	ClassDB::bind_method(D_METHOD("set_pressure_solver", "solver"), &FellowGasVolume3D::set_pressure_solver);
+	ClassDB::bind_method(D_METHOD("get_pressure_solver"), &FellowGasVolume3D::get_pressure_solver);
+	ClassDB::bind_method(D_METHOD("set_multigrid_cycles", "cycles"), &FellowGasVolume3D::set_multigrid_cycles);
+	ClassDB::bind_method(D_METHOD("get_multigrid_cycles"), &FellowGasVolume3D::get_multigrid_cycles);
 	ClassDB::bind_method(D_METHOD("set_maccormack", "enable"), &FellowGasVolume3D::set_maccormack);
 	ClassDB::bind_method(D_METHOD("is_maccormack"), &FellowGasVolume3D::is_maccormack);
 	ClassDB::bind_method(D_METHOD("set_physics_obstacles", "enable"), &FellowGasVolume3D::set_physics_obstacles);
@@ -732,6 +738,8 @@ void FellowGasVolume3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "soot", PROPERTY_HINT_RANGE, "0,5,0.01"), "set_soot", "get_soot");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "expansion", PROPERTY_HINT_RANGE, "0,5,0.01"), "set_expansion", "get_expansion");
 	ADD_SUBGROUP("Solver", "");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "pressure_solver", PROPERTY_HINT_ENUM, "SOR,Multigrid"), "set_pressure_solver", "get_pressure_solver");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "multigrid_cycles", PROPERTY_HINT_RANGE, "1,8,1"), "set_multigrid_cycles", "get_multigrid_cycles");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "pressure_iterations", PROPERTY_HINT_RANGE, "0,200,1"), "set_pressure_iterations", "get_pressure_iterations");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "maccormack"), "set_maccormack", "is_maccormack");
 	ADD_SUBGROUP("Obstacles", "");
@@ -755,6 +763,8 @@ void FellowGasVolume3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "fire_light_range", PROPERTY_HINT_RANGE, "0,100,0.01,or_greater,suffix:m"), "set_fire_light_range", "get_fire_light_range");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "fire_light_shadows"), "set_fire_light_shadows", "is_fire_light_shadows");
 
+	BIND_ENUM_CONSTANT(SOLVER_SOR);
+	BIND_ENUM_CONSTANT(SOLVER_MULTIGRID);
 	BIND_ENUM_CONSTANT(FACE_NEG_X);
 	BIND_ENUM_CONSTANT(FACE_POS_X);
 	BIND_ENUM_CONSTANT(FACE_NEG_Y);

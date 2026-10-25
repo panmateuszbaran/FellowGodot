@@ -40,6 +40,8 @@ func _initialize() -> void:
 	vol.high_precision = args.get("high_precision", "1") == "1"
 	vol.maccormack = args.get("maccormack", "1") == "1"
 	vol.pressure_iterations = int(args.get("iterations", "20"))
+	vol.pressure_solver = 1 if args.get("multigrid", "1") == "1" else 0
+	vol.multigrid_cycles = int(args.get("cycles", "2"))
 	vol.physics_obstacles = false
 	vol.fire_light = false
 	vol.render_enabled = false
@@ -96,7 +98,8 @@ func _physics_process(_delta: float) -> bool:
 			return false
 		var info := {"grid": [vol.get_grid_size().x, vol.get_grid_size().y, vol.get_grid_size().z], "dx": vol.get_cell_size(),
 			"steps": vol.get_steps_simulated(), "high_precision": vol.high_precision, "maccormack": vol.maccormack,
-			"iterations": vol.pressure_iterations, "case": args.get("case", "campfire"), "frames": frames}
+			"iterations": vol.pressure_iterations, "multigrid": vol.pressure_solver == 1, "cycles": vol.multigrid_cycles,
+			"case": args.get("case", "campfire"), "frames": frames}
 		var j := FileAccess.open(out_dir.path_join("info.json"), FileAccess.WRITE)
 		j.store_string(JSON.stringify(info))
 		j.close()

@@ -51,9 +51,14 @@ the obstacle's index); per 4³ brick the largest smoke and temperature (RG16F, f
    puts back the swirls the grid's numerical diffusion takes; optional `turbulence`, a value-noise force where the gas
    is hot; the wind (`wind`, `wind_rate`: a relaxation towards it).
 6. *Projection*: the divergence of the velocity against the solids' velocities and the walls, minus the combustion's
-   `expansion` (burning gas expands: the fire's puffs), then red-black SOR (ω = 1.6) on the Poisson equation and the
-   pressure gradient subtracted. Faces: closed (a wall), open (zero pressure outside) or, open with the wind blowing
-   in, an inflow at the wind's velocity (fresh air).
+   `expansion` (burning gas expands: the fire's puffs), then the Poisson equation for the pressure (warm-started from
+   the last step) and its gradient subtracted. Faces: closed (a wall), open (zero pressure outside) or, open with the
+   wind blowing in, an inflow at the wind's velocity (fresh air). Two solvers (`pressure_solver`):
+   - **multigrid** (the default): `multigrid_cycles` (2) V-cycles — at each level two red-black Gauss-Seidel sweeps
+     (ω 1.15), the residual restricted to a level of half the size (averaged over the fluid children; a coarse cell
+     solid where all its children are), down to a smallest side of at most 4 cells solved by one workgroup (20 sweeps),
+     the corrections interpolated back trilinearly and two sweeps after each;
+   - **SOR**: `pressure_iterations` (20) red-black sweeps, ω 1.6.
 7. *Bricks*: the largest smoke and temperature per 4³ brick (with a one-cell border); per workgroup the fire's emission
    and its emission-weighted position, read back asynchronously (2-3 frames later): the node's omni light (decision
    0118) is placed and coloured from them.
@@ -76,9 +81,19 @@ cells) in high precision on lavapipe and dumps its textures; `gas_compare.py` st
 | wind 1 m/s through the x faces | 30 | 8.0 × 10⁻⁷ | 0.0113 / 0.0113 |
 | closed box, warm smoke | 30 | 8.1 × 10⁻⁷ | 0.0027 / 0.0027 |
 
-(The divergence before the projection: up to 5.4 s⁻¹; 20 SOR iterations warm-started take it to 0.016 s⁻¹ at most,
-0.003 on average, in the reference's study — `pressure_iterations` and ω chosen there: cold-started, 40 iterations were
-needed for the same.) The GPU is the reference to float rounding: the solver is what this record describes.
+With the multigrid solver (the default since it was added; the table above is SOR's):
+
+| case | steps | largest relative L2 difference | residual after the projection, max / mean (s⁻¹) | SOR's |
+|---|---:|---:|---|---|
+| campfire | 1 | 8.0 × 10⁻⁷ | 0.0073 / 0.0006 | 0.0211 / 0.0019 |
+| campfire | 60 | 3.1 × 10⁻⁶ | 0.0019 / 0.00012 | 0.0171 / 0.0021 |
+| a static sphere obstacle | 30 | 1.0 × 10⁻⁶ | 0.0010 / 0.00005 | 0.0077 / 0.00067 |
+
+The reference's study, one projection of the campfire's state after 60 steps (the divergence before it up to 5.4 s⁻¹,
+0.071 on average): SOR 20 warm-started 0.026 / 0.0032, cold 0.23 / 0.029; two V-cycles warm 0.0041 / 0.00025, cold
+0.031 / 0.0027 (one V-cycle with piecewise-constant interpolation: max 0.27 — the trilinear interpolation and ω 1.15
+chosen there). Two V-cycles are 8 sweeps of the grid and 4 passes besides (plus the coarser levels, about 1/7 more)
+against SOR's 20 sweeps. The GPU is the reference to float rounding: the solver is what this record describes.
 
 **Without a volume** nothing of it runs (no pass, no pipeline): the frame is the previous build's bit for bit (lavapipe,
 City Lab, Crowd Lab, Lights Lab, City Lab with auto exposure; see the milestone report).

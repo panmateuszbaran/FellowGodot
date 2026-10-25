@@ -47,6 +47,8 @@ class Params:
 		self.expansion = f32(0.4)  # divergence (1/s) per unit fuel burnt per second
 		self.iterations = 20
 		self.omega = f32(1.6)
+		self.multigrid = True  # the pressure by multigrid V-cycles (else SOR)
+		self.multigrid_cycles = 2
 		self.maccormack = True
 		self.max_speed_cells = f32(6.0)  # |u| <= this many cells per step
 		self.emitters = []  # dicts: centre (grid), radius (grid), smoke, temperature, fuel (per second), velocity
@@ -336,30 +338,116 @@ class State:
 		rhs[self.solid] = 0.0
 		return rhs
 
-	def neighbour_terms(self, q):
+	def neighbour_terms(self, q, solid=None):
 		"""Sum of the included neighbours' q and their count (solid and closed / inflow faces excluded, open faces
-		counted with q = 0)."""
-		p = self.p
-		tot = np.zeros(p.n, f32)
-		cnt = np.zeros(p.n, f32)
+		counted with q = 0), on the grid or on a multigrid level (q's shape)."""
+		solid = self.solid if solid is None else solid
+		n = q.shape
+		tot = np.zeros(n, f32)
+		cnt = np.zeros(n, f32)
 		for c in range(3):
 			for side in (0, 1):
 				shift = 1 if side == 0 else -1
 				qn = np.roll(q, shift, axis=c)
-				sn = np.roll(self.solid, shift, axis=c)
+				sn = np.roll(solid, shift, axis=c)
 				edge = [slice(None)] * 3
-				edge[c] = 0 if side == 0 else p.n[c] - 1
+				edge[c] = 0 if side == 0 else n[c] - 1
 				inc = ~sn
 				inc[tuple(edge)] = False
 				tot = (tot + np.where(inc, qn, f32(0.0))).astype(f32)
 				cnt = cnt + inc
 				if self.face_kind(c, side) == 1:
-					e = np.zeros(p.n, bool)
+					e = np.zeros(n, bool)
 					e[tuple(edge)] = True
 					cnt = cnt + e  # an open face: q = 0 outside
 		return tot, cnt
 
+	def smooth(self, q, rhs, solid, dx, omega, iterations):
+		"""Red-black Gauss-Seidel / SOR sweeps on a level (the GPU's PRESSURE and MG_COARSE passes)."""
+		ii, jj, kk = np.meshgrid(*[np.arange(v) for v in q.shape], indexing="ij")
+		colour = (ii + jj + kk) & 1
+		dx2 = (dx * dx).astype(f32)
+		for _ in range(iterations):
+			for col in (0, 1):
+				tot, cnt = self.neighbour_terms(q, solid)
+				gs = np.where(cnt > 0, (tot - dx2 * rhs) / np.maximum(cnt, 1), f32(0.0)).astype(f32)
+				new = ((f32(1.0) - omega) * q + omega * gs).astype(f32)
+				q = np.where((colour == col) & ~solid, new, q).astype(f32)
+				q[solid & (colour == col)] = 0.0
+		return q
+
+	def multigrid_levels(self):
+		sizes = []
+		s = self.p.n
+		while min(s) > 4:
+			s = tuple((v + 1) // 2 for v in s)
+			sizes.append(s)
+		return sizes
+
+	def restrict(self, q, rhs, solid, dx, coarse):
+		"""MG_RESTRICT: the children's residual averaged over the fluid ones; a coarse cell is solid where all are."""
+		tot, cnt = self.neighbour_terms(q, solid)
+		dx2 = (dx * dx).astype(f32)
+		r = (rhs - (tot - cnt * q) / dx2).astype(f32)
+		n = q.shape
+		pad = [(0, 2 * coarse[a] - n[a]) for a in range(3)]
+		rp = np.pad(np.where(solid, f32(0.0), r), pad)
+		fp = np.pad(~solid, pad, constant_values=False)
+		rs = np.zeros(coarse, f32)
+		fs = np.zeros(coarse, f32)
+		for k in range(8):
+			ox, oy, oz = k & 1, (k >> 1) & 1, (k >> 2) & 1
+			rs = (rs + rp[ox::2, oy::2, oz::2]).astype(f32)
+			fs = fs + fp[ox::2, oy::2, oz::2]
+		rc = np.where(fs > 0, rs / np.maximum(fs, 1), f32(0.0)).astype(f32)
+		return rc, fs == 0
+
+	@staticmethod
+	def prolong(qc, n, solid):
+		"""MG_PROLONG: the coarse correction interpolated trilinearly (3/4, 1/4 per axis), added to fluid cells."""
+		m = np.array(qc.shape)
+		ii, jj, kk = np.meshgrid(np.arange(n[0]), np.arange(n[1]), np.arange(n[2]), indexing="ij")
+		c = np.stack([ii, jj, kk], axis=-1)
+		par = c // 2
+		nb = np.clip(par + (c & 1) * 2 - 1, 0, m - 1)
+		e = np.zeros(n, f32)
+		for k in range(8):
+			sel = [(k >> a) & 1 for a in range(3)]
+			q = [nb[..., a] if sel[a] else par[..., a] for a in range(3)]
+			w = f32((0.25 if sel[0] else 0.75) * (0.25 if sel[1] else 0.75))
+			w = f32(w * f32(0.25 if sel[2] else 0.75))
+			e = (e + w * qc[q[0], q[1], q[2]]).astype(f32)
+		return np.where(solid, f32(0.0), e).astype(f32)
+
+	def pressure_solve_multigrid(self, rhs):
+		p = self.p
+		omega = f32(1.15)
+		sizes = self.multigrid_levels()
+		L = len(sizes)
+		q0 = self.pressure
+		for _ in range(p.multigrid_cycles):
+			qs = [q0] + [None] * L
+			rs = [rhs] + [None] * L
+			ss = [self.solid] + [None] * L
+			for level in range(L):
+				dxl = f32(float(p.dx) * (1 << level))
+				qs[level] = self.smooth(qs[level], rs[level], ss[level], dxl, omega, 2)
+				rs[level + 1], ss[level + 1] = self.restrict(qs[level], rs[level], ss[level], dxl, sizes[level])
+				qs[level + 1] = np.zeros(sizes[level], f32)
+			dxc = f32(float(p.dx) * (1 << L))
+			qs[L] = self.smooth(qs[L], rs[L], ss[L], dxc, omega, 20)
+			for level in range(L - 1, -1, -1):
+				dxl = f32(float(p.dx) * (1 << level))
+				n = qs[level].shape
+				qs[level] = (qs[level] + self.prolong(qs[level + 1], n, ss[level])).astype(f32)
+				qs[level] = self.smooth(qs[level], rs[level], ss[level], dxl, omega, 2)
+			q0 = qs[0]
+		q0[self.solid] = 0.0
+		self.pressure = q0
+
 	def pressure_solve(self, rhs, iterations=None, omega=None):
+		if self.p.multigrid and iterations is None and omega is None and self.multigrid_levels():
+			return self.pressure_solve_multigrid(rhs)
 		p = self.p
 		iterations = p.iterations if iterations is None else iterations
 		omega = p.omega if omega is None else omega

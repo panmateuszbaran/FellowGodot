@@ -93,14 +93,15 @@ the node places at the fire lights the scene. Without such a node nothing of it 
 | `closed_faces` (the floor) | walls; the other faces are open (fresh air), or an inflow where the `wind` blows in |
 | `buoyancy` (1: an ideal gas's), `smoke_weight`, `vorticity` (0.3), `turbulence`, `turbulence_scale`, `wind`, `wind_rate` | the forces |
 | `smoke_dissipation`, `cooling`, `ignition_temperature` (250 K), `burn_rate`, `heat_release` (1400 K), `soot`, `expansion` | the smoke's life and the combustion: fuel burns above the ignition temperature into heat, soot and expansion |
-| `pressure_iterations` (20), `maccormack` (on), `substeps`, `time_scale`, `prewarm_steps` | the solver |
+| `pressure_solver` (multigrid; SOR), `multigrid_cycles` (2), `pressure_iterations` (20, SOR's), `maccormack` (on), `substeps`, `time_scale`, `prewarm_steps` | the solver |
 | `physics_obstacles`, `collision_mask` | the bodies inside the box as obstacles (spheres, boxes, capsules, cylinders, world boundaries; convex shapes as their box; at most 16); a body moved faster than six cells per step counts as teleported |
 | `smoke_color`, `smoke_density` (4 / m), `anisotropy`, `ambient_strength`, `self_shadow`, `render_step` | the smoke's look |
 | `fire_intensity` (20), `fire_temperature_scale` (1.4) | the fire's blackbody emission (brightness by the fourth power of the temperature) and its colour's temperature |
 | `cast_shadows`, `shadow_strength` | the sun's shadow through the smoke on the scene (in the contact shadow mask; not with the ray-traced sun shadows) |
 | `fire_light`, `fire_light_energy`, `fire_light_range`, `fire_light_shadows` | the omni light at the fire, from the simulated emission (2-3 frames late) |
 
-Project settings: `fluid/enabled` (the simulation), `fluid/gas_rendering` (the drawing). Limits: transparent objects
+Project settings: `fluid/enabled` (the simulation), `fluid/gas_rendering` (the drawing), `fluid/gas_solver`
+(measurements: 0 the node's solver, 1 SOR, 2 multigrid). Limits: transparent objects
 behind the smoke are drawn over it; the smoke is not in the volumetric fog; the scene's shadows do not darken the smoke;
 one view (no XR), no MSAA.
 

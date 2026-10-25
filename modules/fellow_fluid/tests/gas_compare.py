@@ -29,6 +29,8 @@ def make_params(info):
 	n = tuple(info["grid"])
 	p = gr.Params(n, info["dx"])
 	p.iterations = info["iterations"]
+	p.multigrid = info.get("multigrid", False)
+	p.multigrid_cycles = info.get("cycles", 2)
 	p.maccormack = info["maccormack"]
 	case = info["case"]
 	e = {"centre": (n[0] * 0.5, 2.5, n[2] * 0.5), "radius": n[0] * 0.12, "fuel": 3.0, "temperature": 900.0, "smoke": 0.2}
@@ -76,7 +78,8 @@ def main():
 	r_gpu = load(os.path.join(d, "residual.bin"), n, 1)
 	solid_gpu = load(os.path.join(d, "solid.bin"), n, 1, np.uint8)
 	print(f"  solid cells  GPU {int((solid_gpu != 0).sum())} reference {int(st.solid.sum())}, differing {int(((solid_gpu != 0) != st.solid).sum())}")
-	print(f"{d}: {info['case']}, {n}, {info['steps']} steps, MacCormack {info['maccormack']}, {info['iterations']} iterations")
+	solver = f"multigrid x{p.multigrid_cycles}" if p.multigrid else f"SOR {info['iterations']}"
+	print(f"{d}: {info['case']}, {n}, {info['steps']} steps, MacCormack {info['maccormack']}, {solver}")
 	worst = 0.0
 	for c, name in enumerate(["smoke", "temperature", "fuel", "burn rate"]):
 		worst = max(worst, report(name, s_gpu[..., c], st.s[..., c]))

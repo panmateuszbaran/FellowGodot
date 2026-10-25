@@ -96,7 +96,9 @@ public:
 		float emission_temperature_scale = 1.4f;
 		float max_speed_cells = 6.0f;
 		float ambient_temperature = 293.0f;
-		int32_t iterations = 20;
+		int32_t iterations = 20; // SOR's iterations
+		int32_t multigrid = 1; // 1: the pressure by multigrid V-cycles (red-black Gauss-Seidel smoothing), 0: SOR
+		int32_t multigrid_cycles = 2;
 		uint32_t closed_faces = 1u << 2; // bit per face: -x +x -y +y -z +z
 		int32_t maccormack = 1;
 		int32_t emitter_count = 0;
@@ -205,6 +207,9 @@ private:
 		SIM_PRESSURE,
 		SIM_PROJECT,
 		SIM_COARSE,
+		SIM_MG_RESTRICT,
+		SIM_MG_PROLONG,
+		SIM_MG_COARSE,
 		SIM_MAX,
 	};
 	enum RenderMode {
@@ -216,7 +221,15 @@ private:
 		RENDER_MAX,
 	};
 
+	struct Level { // a coarser level of the multigrid pressure solve
+		Vector3i size;
+		RID pressure;
+		RID rhs;
+		RID solid;
+	};
+
 	struct Volume {
+		LocalVector<Level> levels; // the multigrid's coarser levels, the coarsest last
 		Vector3i res;
 		float dx = 0.1f;
 		bool high_precision = false;
@@ -275,7 +288,13 @@ private:
 	void _allocate(Volume &r_v);
 	void _clear(Volume &r_v);
 	void _run_step(uint32_t p_id, Volume &r_v, const StepParams &p_step);
-	void _dispatch_sim(Volume &r_v, SimMode p_mode, const Vector<RD::Uniform> &p_uniforms, const Vector3i &p_threads, const void *p_push = nullptr);
+	struct MGPush { // fellow_gas_sim.glsl's Push (the pressure's levels)
+		int32_t size[4];
+		float level[4];
+		int32_t coarse_size[4];
+	};
+	void _dispatch_sim(Volume &r_v, SimMode p_mode, const Vector<RD::Uniform> &p_uniforms, const Vector3i &p_threads, const MGPush *p_push = nullptr, bool p_groups = false);
+	void _smooth(Volume &r_v, const Vector3i &p_size, RID p_pressure, RID p_rhs, RID p_solid, float p_dx2, float p_omega, int p_iterations);
 	static void _emission_read(const Vector<uint8_t> &p_data, Callable p_callback, uint32_t p_id);
 
 public:

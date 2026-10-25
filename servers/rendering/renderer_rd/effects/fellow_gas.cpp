@@ -159,7 +159,7 @@ void FellowGas::_ensure_sim(int p_precision) {
 		return;
 	}
 	Vector<String> modes;
-	const char *names[SIM_MAX] = { "OBSTACLES", "EMIT", "ADVECT_S1", "ADVECT_S2", "ADVECT_V1", "ADVECT_V2", "CURL", "CELL_FORCE", "FACE_FORCE", "DIVERGENCE", "PRESSURE", "PROJECT", "COARSE" };
+	const char *names[SIM_MAX] = { "OBSTACLES", "EMIT", "ADVECT_S1", "ADVECT_S2", "ADVECT_V1", "ADVECT_V2", "CURL", "CELL_FORCE", "FACE_FORCE", "DIVERGENCE", "PRESSURE", "PROJECT", "COARSE", "MG_RESTRICT", "MG_PROLONG", "MG_COARSE" };
 	for (int i = 0; i < SIM_MAX; i++) {
 		modes.push_back(String("\n#define MODE_") + names[i] + "\n");
 	}
@@ -179,6 +179,15 @@ void FellowGas::_free_volume_textures(Volume &r_v) {
 			*r = RID();
 		}
 	}
+	for (Level &l : r_v.levels) {
+		RID lr[] = { l.pressure, l.rhs, l.solid };
+		for (RID r : lr) {
+			if (r.is_valid()) {
+				RD::get_singleton()->free_rid(r);
+			}
+		}
+	}
+	r_v.levels.clear();
 }
 
 void FellowGas::_allocate(Volume &r_v) {
@@ -207,6 +216,18 @@ void FellowGas::_allocate(Volume &r_v) {
 	zeros.resize(sizeof(SimUBO));
 	zeros.fill(0);
 	r_v.ubo = RD::get_singleton()->uniform_buffer_create(sizeof(SimUBO), zeros);
+	// The multigrid's levels: halved (rounded up) until the smallest side is at most 4 cells.
+	Vector3i ls = n;
+	while (MIN(ls.x, MIN(ls.y, ls.z)) > 4) {
+		ls = Vector3i((ls.x + 1) / 2, (ls.y + 1) / 2, (ls.z + 1) / 2);
+		Level l;
+		l.size = ls;
+		const uint32_t u = RD::TEXTURE_USAGE_STORAGE_BIT | RD::TEXTURE_USAGE_CAN_COPY_TO_BIT;
+		l.pressure = _fellow_gas_tex3d(RD::DATA_FORMAT_R32_SFLOAT, ls, u);
+		l.rhs = _fellow_gas_tex3d(RD::DATA_FORMAT_R32_SFLOAT, ls, u);
+		l.solid = _fellow_gas_tex3d(RD::DATA_FORMAT_R8_UINT, ls, u);
+		r_v.levels.push_back(l);
+	}
 	r_v.needs_clear = true;
 }
 
@@ -214,6 +235,11 @@ void FellowGas::_clear(Volume &r_v) {
 	RID rids[] = { r_v.scalars[0], r_v.scalars[1], r_v.scalars_hat, r_v.velocity[0], r_v.velocity[1], r_v.velocity_hat, r_v.pressure, r_v.rhs, r_v.solid, r_v.coarse, r_v.light };
 	for (RID r : rids) {
 		RD::get_singleton()->texture_clear(r, Color(0, 0, 0, 0), 0, 1, 0, 1);
+	}
+	for (Level &l : r_v.levels) {
+		RD::get_singleton()->texture_clear(l.pressure, Color(0, 0, 0, 0), 0, 1, 0, 1);
+		RD::get_singleton()->texture_clear(l.rhs, Color(0, 0, 0, 0), 0, 1, 0, 1);
+		RD::get_singleton()->texture_clear(l.solid, Color(0, 0, 0, 0), 0, 1, 0, 1);
 	}
 	r_v.current = 0;
 	r_v.steps = 0;
@@ -295,7 +321,7 @@ void FellowGas::_emission_read(const Vector<uint8_t> &p_data, Callable p_callbac
 	}
 }
 
-void FellowGas::_dispatch_sim(Volume &r_v, SimMode p_mode, const Vector<RD::Uniform> &p_uniforms, const Vector3i &p_threads, const void *p_push) {
+void FellowGas::_dispatch_sim(Volume &r_v, SimMode p_mode, const Vector<RD::Uniform> &p_uniforms, const Vector3i &p_threads, const MGPush *p_push, bool p_groups) {
 	const int p = r_v.high_precision ? 1 : 0;
 	RID shader = sim_shader[p].version_get_shader(sim_version[p], p_mode);
 	LocalVector<RD::Uniform> u;
@@ -308,10 +334,26 @@ void FellowGas::_dispatch_sim(Volume &r_v, SimMode p_mode, const Vector<RD::Unif
 	RD::get_singleton()->compute_list_bind_compute_pipeline(list, sim_pipelines[p][p_mode]);
 	RD::get_singleton()->compute_list_bind_uniform_set(list, set, 0);
 	if (p_push) {
-		RD::get_singleton()->compute_list_set_push_constant(list, p_push, 16);
+		RD::get_singleton()->compute_list_set_push_constant(list, p_push, sizeof(MGPush));
 	}
-	RD::get_singleton()->compute_list_dispatch_threads(list, p_threads.x, p_threads.y, p_threads.z);
+	if (p_groups) {
+		RD::get_singleton()->compute_list_dispatch(list, p_threads.x, p_threads.y, p_threads.z);
+	} else {
+		RD::get_singleton()->compute_list_dispatch_threads(list, p_threads.x, p_threads.y, p_threads.z);
+	}
 	RD::get_singleton()->compute_list_end();
+}
+
+void FellowGas::_smooth(Volume &r_v, const Vector3i &p_size, RID p_pressure, RID p_rhs, RID p_solid, float p_dx2, float p_omega, int p_iterations) {
+	const Vector3i half((p_size.x + 1) / 2, p_size.y, p_size.z);
+	MGPush push = { { p_size.x, p_size.y, p_size.z, 0 }, { p_dx2, p_omega, 0.0f, 0.0f }, { 0, 0, 0, 0 } };
+	const Vector<RD::Uniform> uniforms = { RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 1, p_rhs), RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 4, p_pressure), RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 5, p_solid) };
+	for (int it = 0; it < p_iterations; it++) {
+		for (int colour = 0; colour < 2; colour++) {
+			push.size[3] = colour;
+			_dispatch_sim(r_v, SIM_PRESSURE, uniforms, half, &push);
+		}
+	}
 }
 
 void FellowGas::_run_step(uint32_t p_id, Volume &r_v, const StepParams &p_step) {
@@ -402,13 +444,48 @@ void FellowGas::_run_step(uint32_t p_id, Volume &r_v, const StepParams &p_step) 
 	_dispatch_sim(r_v, SIM_FACE_FORCE, { image(1, r_v.velocity_hat), image(4, r_v.velocity[nxt]) }, nv);
 	// Projection.
 	_dispatch_sim(r_v, SIM_DIVERGENCE, { image(1, r_v.velocity[nxt]), image(2, r_v.scalars[nxt]), image(4, r_v.rhs), image(5, r_v.solid) }, n);
-	const Vector3i half((n.x + 1) / 2, n.y, n.z);
-	const int iterations = CLAMP(p_step.iterations, 0, 200);
-	for (int it = 0; it < iterations; it++) {
-		for (int colour = 0; colour < 2; colour++) {
-			int32_t push[4] = { colour, 0, 0, 0 };
-			_dispatch_sim(r_v, SIM_PRESSURE, { image(1, r_v.rhs), image(4, r_v.pressure), image(5, r_v.solid) }, half, push);
+	// rendering/fellow/fluid/gas_solver (measurements): 0 the node's choice, 1 SOR, 2 multigrid.
+	const int forced = GLOBAL_GET_CACHED(int, "rendering/fellow/fluid/gas_solver");
+	const bool multigrid = forced == 0 ? p_step.multigrid != 0 : forced == 2;
+	if (multigrid && !r_v.levels.is_empty()) {
+		// V-cycles (decision 0117): two red-black Gauss-Seidel sweeps (omega 1.15) before and after each level's
+		// correction, the residual restricted to the coarser level (averaged over the fluid children), the coarsest
+		// level solved by one workgroup, the correction interpolated back trilinearly.
+		const float omega = 1.15f;
+		const int cycles = CLAMP(p_step.multigrid_cycles, 1, 8);
+		const int L = int(r_v.levels.size());
+		for (int cycle = 0; cycle < cycles; cycle++) {
+			for (int l = 0; l < L; l++) {
+				const Vector3i fs = l == 0 ? n : r_v.levels[l - 1].size;
+				const float fdx = dx * float(1 << l);
+				RID fq = l == 0 ? r_v.pressure : r_v.levels[l - 1].pressure;
+				RID fr = l == 0 ? r_v.rhs : r_v.levels[l - 1].rhs;
+				RID fsolid = l == 0 ? r_v.solid : r_v.levels[l - 1].solid;
+				_smooth(r_v, fs, fq, fr, fsolid, fdx * fdx, omega, 2);
+				const Level &c = r_v.levels[l];
+				MGPush push = { { fs.x, fs.y, fs.z, 0 }, { fdx * fdx, omega, 0.0f, 0.0f }, { c.size.x, c.size.y, c.size.z, 0 } };
+				_dispatch_sim(r_v, SIM_MG_RESTRICT, { image(1, fr), image(3, c.rhs), image(4, fq), image(5, fsolid), image(6, c.pressure), image(7, c.solid) }, c.size, &push);
+			}
+			{
+				const Level &c = r_v.levels[L - 1];
+				const float cdx = dx * float(1 << L);
+				MGPush push = { { c.size.x, c.size.y, c.size.z, 0 }, { cdx * cdx, omega, 20.0f, 0.0f }, { 0, 0, 0, 0 } };
+				_dispatch_sim(r_v, SIM_MG_COARSE, { image(1, c.rhs), image(4, c.pressure), image(5, c.solid) }, Vector3i(1, 1, 1), &push, true);
+			}
+			for (int l = L - 1; l >= 0; l--) {
+				const Vector3i fs = l == 0 ? n : r_v.levels[l - 1].size;
+				const float fdx = dx * float(1 << l);
+				RID fq = l == 0 ? r_v.pressure : r_v.levels[l - 1].pressure;
+				RID fr = l == 0 ? r_v.rhs : r_v.levels[l - 1].rhs;
+				RID fsolid = l == 0 ? r_v.solid : r_v.levels[l - 1].solid;
+				const Level &c = r_v.levels[l];
+				MGPush push = { { fs.x, fs.y, fs.z, 0 }, { fdx * fdx, omega, 0.0f, 0.0f }, { c.size.x, c.size.y, c.size.z, 0 } };
+				_dispatch_sim(r_v, SIM_MG_PROLONG, { image(2, c.pressure), image(4, fq), image(5, fsolid) }, fs, &push);
+				_smooth(r_v, fs, fq, fr, fsolid, fdx * fdx, omega, 2);
+			}
 		}
+	} else {
+		_smooth(r_v, n, r_v.pressure, r_v.rhs, r_v.solid, dx * dx, p_step.omega, CLAMP(p_step.iterations, 0, 200));
 	}
 	_dispatch_sim(r_v, SIM_PROJECT, { image(1, r_v.pressure), image(4, r_v.velocity[nxt]), image(5, r_v.solid) }, nv);
 	// The bricks' largest values (the renderer's empty space) and the fire's emission (its light).
