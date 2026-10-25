@@ -28,7 +28,9 @@ Lab, 0 differing pixels).
 
 ## Results
 
-City Lab facing a sun 8° high (lavapipe, procedural sky, intensity 4): the dirt appears only around the sun (8 000
-pixels, at most +4 levels) — the procedural sky's sun is barely above the glow's threshold. With the atmosphere's sky
-(its sun disk is the sun's illuminance over its solid angle) the glow, and the dirt, are far stronger: milestone 18's
-report.
+City Lab facing a sun 8° high (lavapipe, procedural sky, intensity 4): the dirt appears only around the sun
+(8 000 pixels, at most +4 levels) — the procedural sky's sun is barely above the glow's threshold. With the atmosphere's
+sky and its sun in clear view (lavapipe, intensity 2) still only 1 700 pixels, at most +27 levels, also with the glow's
+luminance cap raised from 12 to 256: Godot's glow of a disk 7 pixels wide is weak (a threshold, a cap, and the levels'
+spread), where Unreal's bloom convolves the whole image without either. The dirt is as strong as the glow it multiplies:
+an Unreal-like bloom under it is still to be done (milestone 18's report, Open).

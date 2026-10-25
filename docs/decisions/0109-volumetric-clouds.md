@@ -56,6 +56,6 @@ Off (the default) the image is the previous build's bit for bit.
 City Lab (lavapipe, 960 × 540, sun at 35°): separate cumulus over a blue sky at coverage 0.3, a broken layer at 0.6;
 grey-white undersides, warm at a low sun. RTX (`m18_f255`/`m18_f256`, 1920 × 1080): the passes 0.53 ms in City Lab,
 0.61 ms in Sponza (where only a strip of sky is seen: every half-resolution pixel was traced), 0.50 ms in Bistro
-exterior; tracing only where the composite shows clouds: milestone 18's report. On lavapipe the image is the same in the
-sky (a sky camera: 162 pixels by at most 2 levels) and within 14 levels at the silhouettes (the temporal clamp's
-neighbourhood).
+exterior; traced only where the composite shows clouds (`m18_f257`): 0.455, 0.107 and 0.151 ms. On lavapipe the image is
+the same in the sky (a sky camera: 162 pixels by at most 2 levels) and within 14 levels at the silhouettes (the temporal
+clamp's neighbourhood).
