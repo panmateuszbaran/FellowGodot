@@ -1182,3 +1182,398 @@ bool GodotCollisionSolver3D::fellow_test_separation(const GodotShape3D *p_shape_
 	}
 	return !info.collided;
 }
+
+// FellowEngine fast mode (milestone 17, decision 0102; physics/fast/godot_toi, off by default): the time of impact by GJK
+// ray casting (G. van den Bergen, "Ray Casting against General Convex Objects with Application to Continuous Collision
+// Detection", 2004), in double precision, against the Minkowski difference C = B - A of the shapes at their transforms:
+// A moved by l * motion touches B when l * motion is in C.
+namespace {
+struct FellowToi {
+	const GodotShape3D *shape_A = nullptr;
+	const GodotShape3D *shape_B = nullptr;
+	double basis_A[3][3];
+	double origin_A[3];
+	double basis_B[3][3];
+	double origin_B[3];
+
+	static void set_transform(const Transform3D &p_t, double r_basis[3][3], double r_origin[3]) {
+		for (int r = 0; r < 3; r++) {
+			r_origin[r] = p_t.origin[r];
+			for (int c = 0; c < 3; c++) {
+				r_basis[r][c] = p_t.basis.rows[r][c];
+			}
+		}
+	}
+
+	static void support_of(const GodotShape3D *p_shape, const double p_basis[3][3], const double p_origin[3], const double *p_dir, double *r_point) {
+		// As GJK: the direction into the shape's space by the transposed basis, normalised, the support point back.
+		Vector3 local(
+				p_basis[0][0] * p_dir[0] + p_basis[1][0] * p_dir[1] + p_basis[2][0] * p_dir[2],
+				p_basis[0][1] * p_dir[0] + p_basis[1][1] * p_dir[1] + p_basis[2][1] * p_dir[2],
+				p_basis[0][2] * p_dir[0] + p_basis[1][2] * p_dir[1] + p_basis[2][2] * p_dir[2]);
+		const Vector3 s = p_shape->get_support(local.normalized());
+		for (int r = 0; r < 3; r++) {
+			r_point[r] = p_basis[r][0] * s.x + p_basis[r][1] * s.y + p_basis[r][2] * s.z + p_origin[r];
+		}
+	}
+
+	// The point of C farthest along p_dir.
+	void support(const double *p_dir, double *r_point) const {
+		double b[3], a[3];
+		const double nd[3] = { -p_dir[0], -p_dir[1], -p_dir[2] };
+		support_of(shape_B, basis_B, origin_B, p_dir, b);
+		support_of(shape_A, basis_A, origin_A, nd, a);
+		for (int r = 0; r < 3; r++) {
+			r_point[r] = b[r] - a[r];
+		}
+	}
+
+	_FORCE_INLINE_ static double dot(const double *a, const double *b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
+
+	// The closest point to the origin of the convex hull of q[0..n), q reduced (with y) to the points of the feature
+	// it lies on.
+	static void closest(double q[4][3], double y[4][3], int &n, double *r_v) {
+		auto keep = [&](std::initializer_list<int> p_idx) {
+			double tq[4][3], ty[4][3];
+			int k = 0;
+			for (int i : p_idx) {
+				for (int c = 0; c < 3; c++) {
+					tq[k][c] = q[i][c];
+					ty[k][c] = y[i][c];
+				}
+				k++;
+			}
+			for (int i = 0; i < k; i++) {
+				for (int c = 0; c < 3; c++) {
+					q[i][c] = tq[i][c];
+					y[i][c] = ty[i][c];
+				}
+			}
+			n = k;
+		};
+		auto set = [&](const double *p) { r_v[0] = p[0]; r_v[1] = p[1]; r_v[2] = p[2]; };
+		if (n == 1) {
+			set(q[0]);
+			return;
+		}
+		if (n == 2) {
+			const double *a = q[0], *b = q[1];
+			const double ab[3] = { b[0] - a[0], b[1] - a[1], b[2] - a[2] };
+			const double den = dot(ab, ab);
+			const double t = den > 0.0 ? -dot(a, ab) / den : 0.0;
+			if (t <= 0.0) {
+				set(a);
+				keep({ 0 });
+			} else if (t >= 1.0) {
+				const double bb[3] = { b[0], b[1], b[2] };
+				set(bb);
+				keep({ 1 });
+			} else {
+				for (int c = 0; c < 3; c++) {
+					r_v[c] = a[c] + t * ab[c];
+				}
+			}
+			return;
+		}
+		if (n == 3) {
+			triangle(q, y, n, 0, 1, 2, r_v, keep);
+			return;
+		}
+		// Tetrahedron: the origin is inside unless it is beyond one of the faces (from the opposite vertex).
+		static const int faces[4][4] = { { 0, 1, 2, 3 }, { 0, 2, 3, 1 }, { 0, 3, 1, 2 }, { 1, 3, 2, 0 } };
+		double best[3] = { 0.0, 0.0, 0.0 };
+		double best_d = -1.0;
+		double best_q[4][3], best_y[4][3];
+		int best_n = 0;
+		for (int f = 0; f < 4; f++) {
+			const double *a = q[faces[f][0]], *b = q[faces[f][1]], *c = q[faces[f][2]], *d = q[faces[f][3]];
+			const double ab[3] = { b[0] - a[0], b[1] - a[1], b[2] - a[2] };
+			const double ac[3] = { c[0] - a[0], c[1] - a[1], c[2] - a[2] };
+			const double nrm[3] = { ab[1] * ac[2] - ab[2] * ac[1], ab[2] * ac[0] - ab[0] * ac[2], ab[0] * ac[1] - ab[1] * ac[0] };
+			const double ao[3] = { -a[0], -a[1], -a[2] };
+			const double ad[3] = { d[0] - a[0], d[1] - a[1], d[2] - a[2] };
+			const double so = dot(ao, nrm);
+			const double sd = dot(ad, nrm);
+			if (so * sd >= 0.0 && sd != 0.0) {
+				continue; // the origin is on the tetrahedron's side of this face
+			}
+			double fq[4][3], fy[4][3];
+			for (int i = 0; i < 3; i++) {
+				for (int k = 0; k < 3; k++) {
+					fq[i][k] = q[faces[f][i]][k];
+					fy[i][k] = y[faces[f][i]][k];
+				}
+			}
+			int fn = 3;
+			double v[3];
+			auto fkeep = [&](std::initializer_list<int> p_idx) {
+				double tq[4][3], ty[4][3];
+				int k = 0;
+				for (int i : p_idx) {
+					for (int c2 = 0; c2 < 3; c2++) {
+						tq[k][c2] = fq[i][c2];
+						ty[k][c2] = fy[i][c2];
+					}
+					k++;
+				}
+				for (int i = 0; i < k; i++) {
+					for (int c2 = 0; c2 < 3; c2++) {
+						fq[i][c2] = tq[i][c2];
+						fy[i][c2] = ty[i][c2];
+					}
+				}
+				fn = k;
+			};
+			triangle(fq, fy, fn, 0, 1, 2, v, fkeep);
+			const double dv = dot(v, v);
+			if (best_d < 0.0 || dv < best_d) {
+				best_d = dv;
+				best[0] = v[0];
+				best[1] = v[1];
+				best[2] = v[2];
+				best_n = fn;
+				for (int i = 0; i < fn; i++) {
+					for (int k = 0; k < 3; k++) {
+						best_q[i][k] = fq[i][k];
+						best_y[i][k] = fy[i][k];
+					}
+				}
+			}
+		}
+		if (best_d < 0.0) {
+			r_v[0] = r_v[1] = r_v[2] = 0.0; // inside
+			return;
+		}
+		set(best);
+		n = best_n;
+		for (int i = 0; i < n; i++) {
+			for (int k = 0; k < 3; k++) {
+				q[i][k] = best_q[i][k];
+				y[i][k] = best_y[i][k];
+			}
+		}
+	}
+
+	// Ericson, Real-Time Collision Detection 5.1.5, for the point at the origin.
+	template <typename K>
+	static void triangle(double q[4][3], double y[4][3], int &n, int ia, int ib, int ic, double *r_v, K &&p_keep) {
+		const double *a = q[ia], *b = q[ib], *c = q[ic];
+		const double ab[3] = { b[0] - a[0], b[1] - a[1], b[2] - a[2] };
+		const double ac[3] = { c[0] - a[0], c[1] - a[1], c[2] - a[2] };
+		const double ap[3] = { -a[0], -a[1], -a[2] };
+		const double d1 = dot(ab, ap), d2 = dot(ac, ap);
+		if (d1 <= 0.0 && d2 <= 0.0) {
+			const double p[3] = { a[0], a[1], a[2] };
+			p_keep({ ia });
+			r_v[0] = p[0], r_v[1] = p[1], r_v[2] = p[2];
+			return;
+		}
+		const double bp[3] = { -b[0], -b[1], -b[2] };
+		const double d3 = dot(ab, bp), d4 = dot(ac, bp);
+		if (d3 >= 0.0 && d4 <= d3) {
+			const double p[3] = { b[0], b[1], b[2] };
+			p_keep({ ib });
+			r_v[0] = p[0], r_v[1] = p[1], r_v[2] = p[2];
+			return;
+		}
+		const double vc = d1 * d4 - d3 * d2;
+		if (vc <= 0.0 && d1 >= 0.0 && d3 <= 0.0) {
+			const double den = d1 - d3;
+			const double t = den != 0.0 ? d1 / den : 0.0;
+			const double p[3] = { a[0] + t * ab[0], a[1] + t * ab[1], a[2] + t * ab[2] };
+			p_keep({ ia, ib });
+			r_v[0] = p[0], r_v[1] = p[1], r_v[2] = p[2];
+			return;
+		}
+		const double cp[3] = { -c[0], -c[1], -c[2] };
+		const double d5 = dot(ab, cp), d6 = dot(ac, cp);
+		if (d6 >= 0.0 && d5 <= d6) {
+			const double p[3] = { c[0], c[1], c[2] };
+			p_keep({ ic });
+			r_v[0] = p[0], r_v[1] = p[1], r_v[2] = p[2];
+			return;
+		}
+		const double vb = d5 * d2 - d1 * d6;
+		if (vb <= 0.0 && d2 >= 0.0 && d6 <= 0.0) {
+			const double den = d2 - d6;
+			const double t = den != 0.0 ? d2 / den : 0.0;
+			const double p[3] = { a[0] + t * ac[0], a[1] + t * ac[1], a[2] + t * ac[2] };
+			p_keep({ ia, ic });
+			r_v[0] = p[0], r_v[1] = p[1], r_v[2] = p[2];
+			return;
+		}
+		const double va = d3 * d6 - d5 * d4;
+		if (va <= 0.0 && (d4 - d3) >= 0.0 && (d5 - d6) >= 0.0) {
+			const double den = (d4 - d3) + (d5 - d6);
+			const double t = den != 0.0 ? (d4 - d3) / den : 0.0;
+			const double p[3] = { b[0] + t * (c[0] - b[0]), b[1] + t * (c[1] - b[1]), b[2] + t * (c[2] - b[2]) };
+			p_keep({ ib, ic });
+			r_v[0] = p[0], r_v[1] = p[1], r_v[2] = p[2];
+			return;
+		}
+		const double sum = va + vb + vc;
+		if (!(sum > 0.0)) {
+			// Degenerate (flat) triangle: the nearest of its vertices.
+			const double da = dot(a, a), db = dot(b, b), dc = dot(c, c);
+			const int i = (da <= db && da <= dc) ? ia : (db <= dc ? ib : ic);
+			const double p[3] = { q[i][0], q[i][1], q[i][2] };
+			p_keep({ i });
+			r_v[0] = p[0], r_v[1] = p[1], r_v[2] = p[2];
+			return;
+		}
+		const double den = 1.0 / sum;
+		const double v = vb * den, w = vc * den;
+		for (int k = 0; k < 3; k++) {
+			r_v[k] = a[k] + ab[k] * v + ac[k] * w;
+		}
+	}
+
+	// The fraction of p_motion (world) at which A first touches B; 1 when it does not (also when A starts in B: 0).
+	double cast(const double *p_motion) const {
+		const double r[3] = { p_motion[0], p_motion[1], p_motion[2] };
+		double lambda = 0.0;
+		double x[3] = { 0.0, 0.0, 0.0 };
+		double y[4][3], q[4][3];
+		int n = 0;
+		double v[3];
+		{
+			double p[3];
+			support(r, p);
+			v[0] = x[0] - p[0];
+			v[1] = x[1] - p[1];
+			v[2] = x[2] - p[2];
+		}
+		// Scale for the tolerances: the size of the coordinates and of the motion.
+		double scale = Math::sqrt(dot(r, r));
+		for (int k = 0; k < 3; k++) {
+			scale = MAX(scale, MAX(Math::abs(origin_A[k]), Math::abs(origin_B[k])));
+		}
+		const double eps = 1e-6 + 1e-9 * scale;
+		for (int iter = 0; iter < 64; iter++) {
+			const double vv = dot(v, v);
+			if (vv <= eps * eps) {
+				return lambda;
+			}
+			double p[3];
+			support(v, p);
+			const double w[3] = { x[0] - p[0], x[1] - p[1], x[2] - p[2] };
+			const double vw = dot(v, w);
+			if (vw > 0.0) {
+				const double vr = dot(v, r);
+				if (vr >= 0.0) {
+					return 1.0; // C is behind the ray, or beside it
+				}
+				lambda -= vw / vr;
+				if (lambda > 1.0) {
+					return 1.0;
+				}
+				x[0] = lambda * r[0];
+				x[1] = lambda * r[1];
+				x[2] = lambda * r[2];
+			} else if (vv - vw <= eps * Math::sqrt(vv)) {
+				return lambda; // no support point nearer: x is within the tolerance of C
+			}
+			bool duplicate = false;
+			for (int i = 0; i < n; i++) {
+				if (y[i][0] == p[0] && y[i][1] == p[1] && y[i][2] == p[2]) {
+					duplicate = true;
+				}
+			}
+			if (duplicate) {
+				return lambda;
+			}
+			if (n == 4) {
+				return lambda; // should not happen (closest() reduces it)
+			}
+			y[n][0] = p[0];
+			y[n][1] = p[1];
+			y[n][2] = p[2];
+			n++;
+			for (int i = 0; i < n; i++) {
+				for (int k = 0; k < 3; k++) {
+					q[i][k] = x[k] - y[i][k];
+				}
+			}
+			closest(q, y, n, v);
+			if (n == 4) {
+				return lambda; // x inside the simplex
+			}
+		}
+		return lambda;
+	}
+};
+
+struct FellowToiFaces {
+	_FellowSeparationInfo *sep = nullptr;
+	FellowToi *toi = nullptr;
+	const double *motion = nullptr;
+	double best = 1.0;
+	GodotFaceShape3D face;
+};
+
+bool fellow_toi_face(void *p_userdata, GodotShape3D *p_convex) {
+	FellowToiFaces &tf = *static_cast<FellowToiFaces *>(p_userdata);
+	const GodotFaceShape3D *f = static_cast<const GodotFaceShape3D *>(p_convex);
+	double score = 0.0;
+	if (tf.sep->face_separated(f, score)) {
+		return false;
+	}
+	tf.face.normal = f->normal;
+	tf.face.vertex[0] = f->vertex[0];
+	tf.face.vertex[1] = f->vertex[1];
+	tf.face.vertex[2] = f->vertex[2];
+	tf.toi->shape_B = &tf.face;
+	const double l = tf.toi->cast(tf.motion);
+	if (l < tf.best) {
+		tf.best = l;
+	}
+	return false;
+}
+} // namespace
+
+real_t GodotCollisionSolver3D::fellow_time_of_impact(const GodotShape3D *p_shape_A, const Transform3D &p_transform_A, const Vector3 &p_motion, const Vector3 &p_local_motion, const GodotShape3D *p_shape_B, const Transform3D &p_transform_B, const AABB &p_concave_hint) {
+	FellowToi toi;
+	toi.shape_A = p_shape_A;
+	FellowToi::set_transform(p_transform_A, toi.basis_A, toi.origin_A);
+	FellowToi::set_transform(p_transform_B, toi.basis_B, toi.origin_B);
+	const double motion[3] = { p_motion.x, p_motion.y, p_motion.z };
+
+	if (!p_shape_B->is_concave()) {
+		toi.shape_B = p_shape_B;
+		return (real_t)toi.cast(motion);
+	}
+
+	const GodotConcaveShape3D *concave_B = static_cast<const GodotConcaveShape3D *>(p_shape_B);
+	_FellowSeparationInfo sep;
+	sep.transform_A = &p_transform_A;
+	sep.shape_A = p_shape_A;
+	sep.transform_B = &p_transform_B;
+	sep.shape_axes = Fellow::physics_distance_face_shape_axes();
+	sep.setup(p_transform_A, p_shape_A->get_aabb(), p_local_motion, p_shape_A);
+	sep.prepare_local(p_transform_B, p_shape_B->get_aabb());
+
+	// The faces as fellow_test_separation() culls them (the same box).
+	Transform3D rel_transform = p_transform_A;
+	rel_transform.origin -= p_transform_B.origin;
+	AABB cc_hint_aabb = p_concave_hint;
+	cc_hint_aabb.position -= p_transform_B.origin;
+	AABB local_aabb;
+	for (int i = 0; i < 3; i++) {
+		Vector3 axis(p_transform_B.basis.get_column(i));
+		real_t axis_scale = ((real_t)1.0) / axis.length();
+		axis *= axis_scale;
+		real_t smin, smax;
+		cc_hint_aabb.project_range_in_plane(Plane(axis), smin, smax);
+		smin *= axis_scale;
+		smax *= axis_scale;
+		local_aabb.position[i] = smin;
+		local_aabb.size[i] = smax - smin;
+	}
+
+	FellowToiFaces tf;
+	tf.sep = &sep;
+	tf.toi = &toi;
+	tf.motion = motion;
+	concave_B->cull(local_aabb, fellow_toi_face, &tf, false);
+	return (real_t)tf.best;
+}

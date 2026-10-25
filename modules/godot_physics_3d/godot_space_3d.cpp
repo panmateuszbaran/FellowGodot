@@ -332,7 +332,17 @@ bool GodotPhysicsDirectSpaceState3D::cast_motion(const ShapeParameters &p_parame
 		real_t low = 0.0;
 		real_t hi = 1.0;
 		real_t fraction_coeff = 0.5;
-		for (int j = 0; j < 8; j++) { //steps should be customizable..
+		const bool fellow_toi = fellow_cull && Fellow::physics_fast_godot_toi();
+		if (fellow_toi) {
+			// FellowEngine fast mode (decision 0102): the time of impact by GJK ray casting instead of the bisection; the
+			// safe fraction a millimetre before it. The motion shape is left at the unsafe fraction (stock leaves it
+			// at its last step, and the next object's first test uses it).
+			hi = GodotCollisionSolver3D::fellow_time_of_impact(shape, p_parameters.transform, p_parameters.motion, xform_inv.basis.xform(p_parameters.motion), col_obj->get_shape(shape_idx), col_obj_xform, aabb);
+			const real_t motion_length = p_parameters.motion.length();
+			low = MAX((real_t)0.0, hi - (motion_length > 0 ? MIN((real_t)1.0, (real_t)0.001 / motion_length) : (real_t)0.0));
+			mshape.motion = xform_inv.basis.xform(p_parameters.motion * hi);
+		}
+		for (int j = 0; j < (fellow_toi ? 0 : 8); j++) { //steps should be customizable..
 			real_t fraction = low + (hi - low) * fraction_coeff;
 
 			mshape.motion = xform_inv.basis.xform(p_parameters.motion * fraction);
@@ -902,7 +912,14 @@ bool GodotSpace3D::test_body_motion(GodotBody3D *p_body, const PhysicsServer3D::
 				real_t low = 0.0;
 				real_t hi = 1.0;
 				real_t fraction_coeff = 0.5;
-				for (int k = 0; k < 8; k++) { //steps should be customizable..
+				const bool fellow_toi = fellow_cull && Fellow::physics_fast_godot_toi();
+				if (fellow_toi) {
+					// FellowEngine fast mode (decision 0102): as in cast_motion().
+					hi = GodotCollisionSolver3D::fellow_time_of_impact(body_shape, body_shape_xform, p_parameters.motion, body_shape_xform_inv.basis.xform(p_parameters.motion), col_obj->get_shape(shape_idx), col_obj_xform, motion_aabb);
+					low = MAX((real_t)0.0, hi - (motion_length > 0 ? MIN((real_t)1.0, (real_t)0.001 / motion_length) : (real_t)0.0));
+					mshape.motion = body_shape_xform_inv.basis.xform(p_parameters.motion * hi);
+				}
+				for (int k = 0; k < (fellow_toi ? 0 : 8); k++) { //steps should be customizable..
 					real_t fraction = low + (hi - low) * fraction_coeff;
 
 					mshape.motion = body_shape_xform_inv.basis.xform(p_parameters.motion * fraction);

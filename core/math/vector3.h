@@ -184,7 +184,7 @@ struct [[nodiscard]] Vector3 {
 	bool is_equal_approx(const Vector3 &p_v) const;
 	bool is_same(const Vector3 &p_v) const;
 	bool is_zero_approx() const;
-	bool is_finite() const;
+	_FORCE_INLINE_ bool is_finite() const;
 
 	/* Operators */
 
@@ -543,6 +543,11 @@ real_t Vector3::length_squared() const {
 	real_t z2 = z * z;
 
 	return x2 + y2 + z2;
+}
+
+// FellowEngine (milestone 17): inline (normalize() calls it; it was a call into vector3.cpp for every normalisation).
+bool Vector3::is_finite() const {
+	return Math::is_finite(x) && Math::is_finite(y) && Math::is_finite(z);
 }
 
 void Vector3::normalize() {

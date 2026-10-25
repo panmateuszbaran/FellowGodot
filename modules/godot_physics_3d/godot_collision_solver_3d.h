@@ -57,6 +57,9 @@ public:
 	// AABB and p_motion_A its local motion (Vector3() for a shape at rest).
 	// p_bound_shape_A: shape A without its motion (the capsule or sphere bounds A exactly, decision 0096), or nullptr.
 	static bool fellow_test_separation(const GodotShape3D *p_shape_A, const Transform3D &p_transform_A, const AABB &p_bounds_A, const Vector3 &p_motion_A, const GodotShape3D *p_shape_B, const Transform3D &p_transform_B, const AABB &p_concave_hint, const GodotShape3D *p_bound_shape_A = nullptr);
+	// Decision 0102 (fast mode): the first fraction of p_motion (world; p_local_motion: in p_shape_A's space) at which
+	// p_shape_A (not a motion shape) touches p_shape_B, by GJK ray casting; 1 when it does not.
+	static real_t fellow_time_of_impact(const GodotShape3D *p_shape_A, const Transform3D &p_transform_A, const Vector3 &p_motion, const Vector3 &p_local_motion, const GodotShape3D *p_shape_B, const Transform3D &p_transform_B, const AABB &p_concave_hint);
 	// Decision 0097: while one is alive (on this thread), fellow_test_separation() keeps the faces of its concave culls.
 	// Opened by test_body_motion() and cast_motion(); the shapes must not change while it is alive.
 	struct FellowFaceCullScope {

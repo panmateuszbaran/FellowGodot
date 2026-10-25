@@ -501,8 +501,11 @@ void GodotCapsuleShape3D::project_range(const Vector3 &p_normal, const Transform
 	n *= radius;
 	n.y += (n.y > 0) ? h : -h;
 
-	r_max = p_normal.dot(p_transform.xform(n));
-	r_min = p_normal.dot(p_transform.xform(-n));
+	// FellowEngine (milestone 17): xform(n) and xform(-n) from one basis product (B(-n) = -(Bn) exactly: every product
+	// and sum only changes sign), the same values.
+	const Vector3 bn = p_transform.basis.xform(n);
+	r_max = p_normal.dot(bn + p_transform.origin);
+	r_min = p_normal.dot(-bn + p_transform.origin);
 }
 
 Vector3 GodotCapsuleShape3D::get_support(const Vector3 &p_normal) const {

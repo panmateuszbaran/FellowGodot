@@ -111,6 +111,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/physics/ray_prune", true); // decision 0098 (exact)
 	GLOBAL_DEF("rendering/fellow/physics/distance_face_sweep_reuse", true); // decision 0100 (exact)
 	GLOBAL_DEF("rendering/fellow/physics/fast/jolt_shape_cast", false); // decision 0095 (fast mode: not stock's results)
+	GLOBAL_DEF("rendering/fellow/physics/fast/godot_toi", false); // decision 0102 (fast mode: not stock's results)
 	GLOBAL_DEF("rendering/fellow/physics/verify", false);
 	GLOBAL_DEF("rendering/fellow/postfx/taa_strided_load", false); // decision 0075: REJECT (exact, no gain)
 	GLOBAL_DEF("rendering/fellow/postfx/taa_history_pingpong", true);

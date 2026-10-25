@@ -323,6 +323,11 @@ inline bool physics_motion_query_cache() {
 inline bool physics_fast_jolt_shape_cast() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/physics/fast/jolt_shape_cast");
 }
+// physics/fast/godot_toi (decision 0102): GodotPhysics3D's motion queries' bisection (8 GJK tests per object) replaced by
+// the time of impact by GJK ray casting (the safe fraction a millimetre before it).
+inline bool physics_fast_godot_toi() {
+	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/physics/fast/godot_toi");
+}
 // Debug: every face the physics toggles skip is given to GJK anyway and its answer compared (counters physics_verify_*).
 inline bool physics_verify() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/physics/verify");
