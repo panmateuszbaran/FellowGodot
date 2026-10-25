@@ -1,8 +1,9 @@
 # FellowEngine — milestone 17 report (physics and collisions)
 
-Status: **DONE** (`fellow183`-`fellow187`, laptop measurements `m17_f247`-`m17_f252`, 2026-10-24/25). Branch
+Status: **DONE** (`fellow183`-`fellow187`, laptop measurements `m17_f247`-`m17_f252`, 2026-10-24/25; continued with
+`fellow188`-`fellow189`, `m17_f253`-`m17_f254`, the terrain fixed and a fast mode added — §7). Branch
 `fellow/geometry`. Benchmark machine as before (Acer Predator PHN16S-71, Core Ultra 9 275HX: 8 P- and 16 E-cores, 24
-workers in Godot's WorkerThreadPool; Windows 11). Decision records `docs/decisions/0085`-`0091`; user-facing summary
+workers in Godot's WorkerThreadPool; Windows 11). Decision records `docs/decisions/0085`-`0104`; user-facing summary
 `docs/FELLOWENGINE_OPTIONS.md` ("Exact options", Physics).
 
 ## 0. Result
@@ -21,6 +22,11 @@ tick (stock: the frame; the fork: the frame, which is its physics plus about 0.1
 | `chars` — 250 `CharacterBody3D` (`move_and_slide()`) on a trimesh terrain | 22.22 | 21.10 | −5 % | 0.78 | 0.67 | −15 % |
 | `rays` — 1 500 `RayCast3D` and 150 `ShapeCast3D` on moving rigs | 79.29 | 18.78 | **× 4.2** | 4.05 | 4.07 | = |
 | `areas` — 300 `Area3D` monitoring 1 000 bouncing spheres | 3.88 | 2.65 | −32 % | 3.84 | 2.24 | **−42 %** |
+
+**Correction (2026-10-25, §7):** the `chars` and `rays` rows above were measured on a Physics Lab terrain wound facing
+down — Jolt's characters fell through it (hence its 0.8 ms), its shape casts passed through it, GodotPhysics3D's
+characters sank into it. The hashes were stock's all the same, so the exactness holds, but the numbers for those two
+cases are replaced by §7's, measured on the fixed terrain with the continuation's further changes.
 
 Jolt stays the faster engine everywhere (GodotPhysics3D's `chars` is 30 × Jolt's: its `move_and_slide()` is SAT tests,
 below). The changes, every one exact:
@@ -114,3 +120,89 @@ number of threads finishes. `pile`: one island, about 600 dependency levels deep
 The non-ray-traced look features listed in milestone 16's report (a physically based sky with aerial perspective,
 volumetric clouds, histogram and local exposure, a sharper TAA, contact shadows per light, an Unreal-style bloom), or
 more physics (above), as the user decides.
+
+## 7. Continuation (2026-10-25): the terrain fixed, more exact work, the fast mode
+
+The user asked to squeeze the physics fully, and approved an opt-in mode whose results are not stock's bit for bit
+("fast mode", below). Builds `fellow188`-`fellow189`, laptop jobs `m17_f253`-`m17_f254`, decision records
+`0092`-`0104`.
+
+### 7.1 The terrain bug
+
+Checking the fast mode's deviation from stock showed every Jolt character 494 m below the terrain after 600 ticks — in
+stock too. `physics_lab.gd` wound the terrain's triangles the wrong way round (a comment claimed they needed reversing;
+Godot's `ConcavePolygonShape3D` front faces were already up), so the terrain faced down: Jolt ignores back faces
+(characters fell through, shape casts passed), GodotPhysics3D's characters sank about 0.4 m. Fixed (commit `2e1cd05`):
+on the fixed terrain the characters stand on it in both engines (median 1.5 cm above the analytic surface — the mesh's
+chords — only the 7 that walk off its edge fall). The motion-test cache (0093) owed its × 2.4 to the old scene: its
+repeats come from characters in the air; on the ground it hits 0.7 % of tests (kept: free, and it helps jumping and
+falling characters).
+
+### 7.2 Result
+
+Laptop, headless, 600 ticks, median of two runs per variant (`m17_f254_main`, `m17_f254_fast`), frame per tick in ms:
+
+| case | GodotPhysics3D stock | exact fork | | fast mode | | Jolt stock | exact fork | | fast mode | |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| `pile` | 28.11 | 12.36 | **× 2.27** | | | 3.52 | 3.50 | −1 % | | |
+| `stack` | 1.37 | 1.13 | −17 % | | | 0.77 | 0.65 | −16 % | | |
+| `chars` | 27.39 | 19.95 | −27 % | 12.69 | **× 2.2** | 5.77 | 5.78 | = | 3.87 | **−33 %** |
+| `rays` | 74.08 | 8.65 | **× 8.6** | 8.02 | **× 9.2** | 10.52 | 10.12 | −4 % | 2.38 | **× 4.4** |
+| `areas` | 4.00 | 2.61 | −35 % | | | 3.78 | 2.20 | **−42 %** | | |
+
+(The fast-mode ratios are against the main session's stock; the fast session's own stock runs were 30.0 and 78.6 ms
+with GodotPhysics3D, 6.1 and 9.6 with Jolt.)
+
+**Exact fork:** the physics state hashed every 30 ticks equals stock's in all ten engine × case pairs, and the dumped
+states (every body's transform, every ray's hit point, every shape cast's result at ticks 30, 300 and 600) are
+identical. **Fast mode** (both options on), against stock:
+
+| case | deviation |
+|---|---|
+| GodotPhysics3D `rays` | ray hits identical; shape casts' safe fractions within 0.0058 (mean 0.002) — stock's bisection resolves 1/256 of the 25 m sweep (0.0039) |
+| GodotPhysics3D `chars` | after 30 ticks positions within 6.2 mm RMS (largest 8.5 cm); the 250 colliding characters then diverge (0.7 m RMS at tick 300) |
+| Jolt `rays` | shape casts' safe fractions within 0.0001 (2.5 mm on 25 m), mean 2·10⁻⁵ |
+| Jolt `chars` | after 30 ticks within 1.9 mm RMS (largest 2.7 cm); 0.26 m RMS at tick 300 |
+
+Both modes are deterministic, and the laptop's deviations are the container's to the last printed digit: stock's
+simulation, the fork's and the fast mode's are the same on Windows (MSVC) and Linux (GCC) here.
+
+### 7.3 The changes
+
+Exact (on by default):
+
+* **0096** — 0085's face test bounds a capsule or a sphere by the shape itself (its support along any axis from its
+  transform), not its box, and tests the faces' edge axes (in the face's plane, across the capsule's segment, across
+  the motion). A character's foot no longer keeps the faces beside it: GJK calls in `chars` 14 → ~6 per test.
+* **0097** — a concave shape's faces culled once per box within one motion query (the ten tests of a body share it).
+* **0098** — a ray through a trimesh skips the tree's nodes it enters beyond its nearest hit (stock's order kept, so
+  ties resolve as in stock).
+* **0099** — the BVH's segment test inline (0094's vectorised test on the node's box, the same sums).
+* **0100** — a face proven out of reach of a sweep is not tested again for a sweep within it (the bisection's shorter
+  steps; the shape at rest): the gap less the distance between the motions still exceeds GJK's tolerance.
+* **0103** — `Vector3::is_finite()` inline (every `normalize()` called into `vector3.cpp`), a capsule's projection from
+  one basis product (B(−n) = −Bn exactly): container `chars` −13 %.
+* `physics/verify` checked 36 million skipped faces (0096, 0100) against GJK: none touching.
+
+Fast mode (off by default; `rendering/fellow/physics/fast/*`, `FELLOWENGINE_OPTIONS.md`):
+
+* **0095** — Jolt's motion queries by one shape cast per body (shrunken shapes and convex radius, as its collision tests
+  see them) instead of a bisection of up to 16 collision tests; a body the shape starts touching is still bisected.
+  Checking it showed stock's bisection 1-3 cm deep against boxes (their convex radius): the cast is the more exact.
+* **0102** — GodotPhysics3D's 8-step bisection replaced by the time of impact by GJK ray casting (double precision);
+  the tests of whether the body is reached and whether the shape starts in it stay stock's.
+
+Measured and not kept: Jolt's jobs through a lock-free queue and pump tasks (0092, no consistent gain, off); a
+capsule's SAT without the faces 0096's test proves out of reach (0101, exact, no gain: those faces fail the SAT's first
+axes as cheaply); `test_body_motion()`'s broadphase culls filtered from one collected set (0104, exact, −1.5 %).
+
+### 7.4 Open
+
+* GodotPhysics3D's `chars` (exact): the recovery and rest phases' SAT tests (a quarter) and GJK on the faces the
+  character touches (a third) are what remains; GJK through templated, inlined support functions would be the next
+  exact step (about 5 %).
+* Jolt's `chars`: its motion queries are Jolt's own collision code (12 collision queries per `move_and_slide()` test:
+  4 recovery iterations, the cast, the contacts); the fast mode's cast halves the cast's share; the recovery's
+  iterations are project settings (`physics/jolt_physics_3d/motion_queries/*`).
+* The physics thread (`physics/3d/run_on_separate_thread`) and scenes with rendering on were not measured.
+

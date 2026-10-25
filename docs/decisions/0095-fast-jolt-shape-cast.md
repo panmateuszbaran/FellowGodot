@@ -46,5 +46,6 @@ The bisection was also checked against an exact reference: with plain shapes a s
 
 ## Results
 
-Container, physics per tick: `rays` 17.2 → 3.1 ms (× 5.5), `chars` 9.2 → 6.1 ms (−34 %). Laptop: see milestone 17's
-report (continuation).
+Container, physics per tick: `rays` 17.2 → 3.1 ms (× 5.5), `chars` 9.2 → 6.1 ms (−34 %). Laptop (`m17_f254_fast`,
+`fellow189` with both fast options against stock, frame per tick): Jolt `rays` 9.57 → 2.38 ms (× 4.0), `chars` 6.09 →
+3.87 ms (−36 %); the deviations from stock are the same as in the container.

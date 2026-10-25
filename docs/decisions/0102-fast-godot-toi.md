@@ -28,4 +28,6 @@ terrain as in stock (the same median height above it, 1.5 cm).
 
 ## Results
 
-Container, physics per tick: `chars` 17.7 → 11.7 ms (−34 %), `rays` 11.3 → 10.1 ms (−10 %).
+Container, physics per tick: `chars` 17.7 → 11.7 ms (−34 %), `rays` 11.3 → 10.1 ms (−10 %). Laptop (`m17_f254`, frame
+per tick): `chars` stock 30.0, exact fork 19.9, fast 12.7 ms; `rays` stock 78.6, exact fork 8.7, fast 8.0 ms. The
+deviations from stock are the same as in the container (Linux, GCC) to the last digit printed.
