@@ -94,6 +94,7 @@ the node places at the fire lights the scene. Without such a node nothing of it 
 | `buoyancy` (1: an ideal gas's), `smoke_weight`, `vorticity` (0.3), `turbulence`, `turbulence_scale`, `wind`, `wind_rate` | the forces |
 | `smoke_dissipation`, `cooling`, `ignition_temperature` (250 K), `burn_rate`, `heat_release` (1400 K), `soot`, `expansion` | the smoke's life and the combustion: fuel burns above the ignition temperature into heat, soot and expansion |
 | `pressure_solver` (multigrid; SOR), `multigrid_cycles` (2), `pressure_iterations` (20, SOR's), `maccormack` (on), `substeps`, `time_scale`, `prewarm_steps` | the solver |
+| `sparse` (on), `sparse_margin` (2 bricks) | only the 4³ bricks within the margin of smoke, heat, fuel or an emitter simulated (the velocity one brick further), the air beyond still (the wind, zero pressure) — 0119: Fire Lab's simulation −51 % at 128 cells, −11 % at 64 |
 | `physics_obstacles`, `collision_mask` | the bodies inside the box as obstacles (spheres, boxes, capsules, cylinders, world boundaries; convex shapes as their box; at most 16); a body moved faster than six cells per step counts as teleported |
 | `smoke_color`, `smoke_density` (4 / m), `anisotropy`, `ambient_strength`, `self_shadow`, `render_step` | the smoke's look |
 | `fire_intensity` (20), `fire_temperature_scale` (1.4) | the fire's blackbody emission (brightness by the fourth power of the temperature) and its colour's temperature |
@@ -102,7 +103,10 @@ the node places at the fire lights the scene. Without such a node nothing of it 
 | `velocity_texture_enabled`, `velocity_texture_scale` (5 m/s) | the velocity at the cell centres as a `Texture3D` (`get_velocity_texture()`) for a `GPUParticlesAttractorVectorField3D` over the box: sparks and embers carried by the flow (Fire Lab's embers) |
 
 Project settings: `fluid/enabled` (the simulation), `fluid/gas_rendering` (the drawing), `fluid/gas_scene_shadows`
-(the sun's shadow map on the smoke, on), `fluid/gas_solver` (measurements: 0 the node's solver, 1 SOR, 2 multigrid).
+(the sun's shadow map on the smoke, on); for measurements: `fluid/gas_solver` (0 the node's solver, 1 SOR, 2
+multigrid), `fluid/gas_sparse` (0 the node's, 1 off, 2 on), `fluid/gas_sparse_margin` (0 the node's),
+`fluid/gas_mg_tail_cells` (0: the multigrid's levels of at most that many cells in one workgroup; measured slower,
+0119), `fluid/gas_profile_passes` (a timestamp before each group of a step's passes).
 Limits: transparent objects behind the smoke are drawn over it; the smoke is not in the volumetric fog; one view (no
 XR), no MSAA.
 

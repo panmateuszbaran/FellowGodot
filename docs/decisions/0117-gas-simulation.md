@@ -63,9 +63,12 @@ the obstacle's index); per 4³ brick the largest smoke and temperature (RG16F, f
      outermost cell centres (at least a quarter cell: a level rounded up hangs over the high faces) — see "Open faces
      on the coarse levels" below;
    - **SOR**: `pressure_iterations` (20) red-black sweeps, ω 1.6.
-7. *Bricks*: the largest smoke and temperature per 4³ brick (with a one-cell border); per workgroup the fire's emission
-   and its emission-weighted position, read back asynchronously (2-3 frames later): the node's omni light (decision
-   0118) is placed and coloured from them.
+7. *Bricks*: the largest smoke, temperature and fuel per 4³ brick (with a one-cell border; RGBA16F); per workgroup
+   the fire's emission and its emission-weighted position, read back asynchronously (2-3 frames later): the node's
+   omni light (decision 0118) is placed and coloured from them.
+
+Since milestone 21 the passes run by default only over the bricks near smoke, heat, fuel or an emitter (`sparse`,
+decision 0119).
 
 8. *Export* (when `velocity_texture_enabled`): the velocity at the cell centres, v / `velocity_texture_scale` mapped to
    [0, 1], into an RGBA16F texture a `GPUParticlesAttractorVectorField3D` reads (2 × texel − 1 is its force): GPU
