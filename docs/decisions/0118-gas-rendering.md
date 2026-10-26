@@ -64,4 +64,15 @@ the sphere's camera), the logs' shadows in the flames' smoke at the bottom.
 
 Fire Lab on lavapipe (960 × 540): flames orange to yellow at their cores, red at their tips, the logs and stones lit
 orange by the fire light (at night the only light), the smoke's shadow on the ground beside the fire, a sunlit white
-plume from the chimney. RTX: the milestone report.
+plume from the chimney.
+
+RTX 5070 Ti Laptop (`m20_f261`, 1080p, Fire Lab's three volumes, GPU timestamps per frame):
+
+| `--gas_res` | Light | Shadow | Trace | Composite | total | frame without the drawing |
+|---|---:|---:|---:|---:|---:|---|
+| 64 | 0.048 | 0.043 | 0.191 | 0.025 | 0.31 ms | +0.5 % (n.s.) |
+| 128 | 0.149 | 0.048 | 0.221 | 0.030 | 0.45 ms | −6.2 % (−0.46 ms) |
+
+The light grid is recomputed after each step (half resolution: its cost grows with the volume); the trace and the
+composite depend on the pixels the boxes cover more than on the cells (the empty bricks skipped). The CPU records it in
+about 0.02 ms. Captures at 1080p (day, night, the torch carried past, an orbit of the campfire): the milestone report.

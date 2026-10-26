@@ -141,5 +141,20 @@ City Lab, Crowd Lab, Lights Lab, City Lab with auto exposure; see the milestone 
 ## Results
 
 Fire Lab (lavapipe, 960 × 540): a campfire (2.4 × 4.8 × 2.4 m, 0.1 m cells at `--gas_res=48`) whose flames rise between
-the logs (obstacles) and flicker, dark smoke above them; a chimney's plume (6 × 9 × 6 m) blown sideways. RTX: the
-milestone report.
+the logs (obstacles) and flicker, dark smoke above them; a chimney's plume (6 × 9 × 6 m) blown sideways.
+
+**RTX 5070 Ti Laptop** (`m20_f261`, `fellow194`, 1080p, Fire Lab's three volumes: the campfire, the chimney, the
+torch; in one process, blocks of 30 frames switching the settings; GPU timestamps):
+
+| `--gas_res` | cells | simulation, multigrid | SOR (20 sweeps) | frame: all / without the simulation |
+|---|---:|---:|---:|---|
+| 64 (32 × 64 × 32, 53 × 80 × 53, 48³) | 0.47 M | **1.69 ms** | 1.08 ms | 3.25 / 1.76 ms |
+| 128 (64 × 128 × 64, 107 × 160 × 107, 96³) | 3.24 M | **5.62 ms** | 6.03 ms | 7.52 / 1.87 ms |
+
+Per step and cell 1.7 ns at 128 (the passes bound by memory), 3.6 ns at 64: there the V-cycles' many small dispatches
+(about 80 per volume and step, the coarse levels a few hundred cells) wait on each other (roughly 5 µs each, judging by the difference) and the
+multigrid solve costs 0.2 ms per volume more than SOR's 40 larger ones (for a residual 10× lower; one V-cycle instead
+of two: the largest residual 0.076 s⁻¹ against SOR's 0.026 over the campfire's 60 steps in the reference, so two stay).
+The CPU records a step in 0.05-0.07 ms per volume. The chimney's state after 120 steps on the RTX
+(`gas_diag.gd`): finite at 53 × 80 × 53 and 107 × 160 × 107 (`f259`, before the open faces' weights: its plume missing
+from every capture).
