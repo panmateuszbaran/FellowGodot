@@ -161,7 +161,7 @@ void FellowGas::_ensure_sim(int p_precision) {
 		return;
 	}
 	Vector<String> modes;
-	const char *names[SIM_MAX] = { "OBSTACLES", "EMIT", "ADVECT_S1", "ADVECT_S2", "ADVECT_V1", "ADVECT_V2", "CURL", "CELL_FORCE", "FACE_FORCE", "DIVERGENCE", "PRESSURE", "PROJECT", "COARSE", "MG_RESTRICT", "MG_PROLONG", "MG_COARSE", "EXPORT", "SHIFT", "MG_TAIL", "SPARSE_SOURCE", "SPARSE_ACTIVATE" };
+	const char *names[SIM_MAX] = { "OBSTACLES", "EMIT", "ADVECT_S1", "ADVECT_S2", "ADVECT_V1", "ADVECT_V2", "CURL", "CELL_FORCE", "FACE_FORCE", "DIVERGENCE", "PRESSURE", "PROJECT", "COARSE", "MG_RESTRICT", "MG_PROLONG", "MG_COARSE", "EXPORT", "SHIFT", "MG_TAIL", "SPARSE_SOURCE", "SPARSE_ACTIVATE", "SPARSE_LIST1" };
 	for (int i = 0; i < SIM_MAX; i++) {
 		modes.push_back(String("\n#define MODE_") + names[i] + "\n");
 	}
@@ -217,8 +217,10 @@ void FellowGas::_allocate(Volume &r_v) {
 		r_v.brick_source = _fellow_gas_tex3d(RD::DATA_FORMAT_R8_UINT, bc, u);
 		r_v.brick_mask = _fellow_gas_tex3d(RD::DATA_FORMAT_R8_UINT, bv, u);
 		r_v.bricks_v = bv.x * bv.y * bv.z;
-		r_v.brick_list = RD::get_singleton()->storage_buffer_create(uint32_t(r_v.bricks_v) * 2 * 4);
-		const uint32_t args[6] = { 0, 1, 1, 0, 1, 1 };
+		const Vector3i n1((n.x + 1) / 2, (n.y + 1) / 2, (n.z + 1) / 2);
+		const int bricks_l1 = ((n1.x + 3) / 4) * ((n1.y + 3) / 4) * ((n1.z + 3) / 4);
+		r_v.brick_list = RD::get_singleton()->storage_buffer_create(uint32_t(r_v.bricks_v * 2 + bricks_l1) * 4);
+		const uint32_t args[9] = { 0, 1, 1, 0, 1, 1, 0, 1, 1 };
 		r_v.brick_args = RD::get_singleton()->storage_buffer_create(sizeof(args), Span<uint8_t>((const uint8_t *)args, sizeof(args)), RD::STORAGE_BUFFER_USAGE_DISPATCH_INDIRECT);
 	}
 	r_v.light = _fellow_gas_tex3d(RD::DATA_FORMAT_R16_SFLOAT, _fellow_gas_light_size(n), RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_STORAGE_BIT | RD::TEXTURE_USAGE_CAN_COPY_TO_BIT);
@@ -392,7 +394,7 @@ void FellowGas::_dispatch_sim(Volume &r_v, SimMode p_mode, const Vector<RD::Unif
 		RD::get_singleton()->compute_list_set_push_constant(list, p_push, sizeof(MGPush));
 	}
 	if (p_list != LIST_NONE && r_v.sparse_now) {
-		RD::get_singleton()->compute_list_dispatch_indirect(list, r_v.brick_args, p_list == LIST_A ? 0 : 12);
+		RD::get_singleton()->compute_list_dispatch_indirect(list, r_v.brick_args, p_list == LIST_A ? 0 : (p_list == LIST_F ? 12 : 24));
 	} else if (p_groups) {
 		RD::get_singleton()->compute_list_dispatch(list, p_threads.x, p_threads.y, p_threads.z);
 	} else {
@@ -427,14 +429,15 @@ void FellowGas::_open_weights(const Vector3i &p_res, int p_level, MGPush &r_push
 
 void FellowGas::_smooth(Volume &r_v, const Vector3i &p_size, int p_level, RID p_pressure, RID p_rhs, RID p_solid, float p_dx2, float p_omega, int p_iterations) {
 	const Vector3i half((p_size.x + 1) / 2, p_size.y, p_size.z);
-	const bool sparse = p_level == 0 && r_v.sparse_now;
-	MGPush push = { { p_size.x, p_size.y, p_size.z, 0 }, { p_dx2, p_omega, 0.0f, 0.0f }, { 0, 0, 0, 0 }, {}, {}, { p_level > 0 ? r_v.levels[p_level - 1].offset_x : 0, 0, sparse ? 1 : 0, 0 } };
+	// Sparse bricks: the grid over A's bricks, the first coarser level over its listed bricks.
+	const int sparse = (r_v.sparse_now && p_level <= 1) ? p_level + 1 : 0;
+	MGPush push = { { p_size.x, p_size.y, p_size.z, 0 }, { p_dx2, p_omega, 0.0f, 0.0f }, { 0, 0, 0, 0 }, {}, {}, { p_level > 0 ? r_v.levels[p_level - 1].offset_x : 0, 0, sparse, 0 } };
 	_open_weights(r_v.res, p_level, push);
 	const Vector<RD::Uniform> uniforms = { RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 1, p_rhs), RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 4, p_pressure), RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 5, p_solid) };
 	for (int it = 0; it < p_iterations; it++) {
 		for (int colour = 0; colour < 2; colour++) {
 			push.size[3] = colour;
-			_dispatch_sim(r_v, SIM_PRESSURE, uniforms, half, &push, false, sparse ? LIST_A : LIST_NONE);
+			_dispatch_sim(r_v, SIM_PRESSURE, uniforms, half, &push, false, sparse == 1 ? LIST_A : (sparse == 2 ? LIST_L1 : LIST_NONE));
 		}
 	}
 }
@@ -548,10 +551,14 @@ void FellowGas::_run_step(uint32_t p_id, Volume &r_v, const StepParams &p_step) 
 			MGPush all = { { 1, 0, 0, 0 }, { 0.0f, 0.0f, 0.0f, 0.0f }, { 0, 0, 0, 0 }, {}, {}, {} };
 			_dispatch_sim(r_v, SIM_COARSE, { image(1, r_v.scalars[cur]), image(4, r_v.coarse), buffer(6, r_v.emission_buffer) }, _fellow_gas_coarse_size(n), &all);
 		}
-		const uint32_t args[6] = { 0, 1, 1, 0, 1, 1 };
+		const uint32_t args[9] = { 0, 1, 1, 0, 1, 1, 0, 1, 1 };
 		RD::get_singleton()->buffer_update(r_v.brick_args, 0, sizeof(args), args);
 		_dispatch_sim(r_v, SIM_SPARSE_SOURCE, { image(1, r_v.coarse), image(2, r_v.brick_source) }, _fellow_gas_coarse_size(n));
 		_dispatch_sim(r_v, SIM_SPARSE_ACTIVATE, { image(1, r_v.brick_source), image(2, r_v.brick_mask), image(3, r_v.scalars[0]), image(4, r_v.scalars[1]), image(5, r_v.velocity[0]), image(6, r_v.velocity[1]), image(7, r_v.scalars_hat), image(8, r_v.velocity_hat), image(9, r_v.pressure), image(10, r_v.rhs), image(11, r_v.solid), image(12, r_v.coarse), buffer(14, r_v.brick_list), buffer(15, r_v.brick_args) }, Vector3i((n.x + 4) / 4, (n.y + 4) / 4, (n.z + 4) / 4));
+		if (!r_v.levels.is_empty()) {
+			const Vector3i l1 = r_v.levels[0].size;
+			_dispatch_sim(r_v, SIM_SPARSE_LIST1, { image(2, r_v.brick_mask), buffer(14, r_v.brick_list), buffer(15, r_v.brick_args) }, Vector3i((l1.x + 3) / 4, (l1.y + 3) / 4, (l1.z + 3) / 4));
+		}
 	}
 	// The obstacles (also when there are none left: the cells they covered become air).
 	_dispatch_sim(r_v, SIM_OBSTACLES, { image(1, r_v.solid) }, n, nullptr, false, LIST_F);
@@ -640,9 +647,9 @@ void FellowGas::_run_step(uint32_t p_id, Volume &r_v, const StepParams &p_step) 
 				RID fr = l == 0 ? r_v.rhs : r_v.levels[l - 1].rhs;
 				RID fsolid = l == 0 ? r_v.solid : r_v.levels[l - 1].solid;
 				const Level &c = r_v.levels[l];
-				const bool sparse_level = sparse && l == 0;
-				MGPush push = { { fs.x, fs.y, fs.z, 0 }, { fdx * fdx, omega, 0.0f, 0.0f }, { c.size.x, c.size.y, c.size.z, 0 }, {}, {}, { foff, c.offset_x, sparse_level ? 1 : 0, 0 } };
-				_dispatch_sim(r_v, SIM_MG_PROLONG, { image(2, c.pressure), image(4, fq), image(5, fsolid) }, fs, &push, false, sparse_level ? LIST_A : LIST_NONE);
+				const int sparse_level = (sparse && l <= 1) ? l + 1 : 0;
+				MGPush push = { { fs.x, fs.y, fs.z, 0 }, { fdx * fdx, omega, 0.0f, 0.0f }, { c.size.x, c.size.y, c.size.z, 0 }, {}, {}, { foff, c.offset_x, sparse_level, 0 } };
+				_dispatch_sim(r_v, SIM_MG_PROLONG, { image(2, c.pressure), image(4, fq), image(5, fsolid) }, fs, &push, false, sparse_level == 1 ? LIST_A : (sparse_level == 2 ? LIST_L1 : LIST_NONE));
 				_smooth(r_v, fs, l, fq, fr, fsolid, fdx * fdx, omega, 2);
 			}
 		}

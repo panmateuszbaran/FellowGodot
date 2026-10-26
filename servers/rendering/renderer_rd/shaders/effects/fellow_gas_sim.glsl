@@ -139,10 +139,20 @@ layout(set = 0, binding = 14, std430) restrict readonly buffer Bricks {
 }
 bricks;
 
-// The cell (texel) this invocation handles: dense, or one workgroup per listed brick (F: p_faces).
-ivec3 sparse_id(bool p_faces) {
-	uint e = bricks.list[(p_faces ? uint(params.sparse.y) : 0u) + gl_WorkGroupID.x];
+// The cell (texel) a workgroup's invocation handles in the listed brick (lists from p_start: A 0, F params.sparse.y,
+// the first coarser level's bricks 2 * params.sparse.y).
+ivec3 sparse_id_from(uint p_start) {
+	uint e = bricks.list[p_start + gl_WorkGroupID.x];
 	return ivec3(int(e & 1023u), int((e >> 10u) & 1023u), int(e >> 20u)) * 4 + ivec3(gl_LocalInvocationID);
+}
+
+ivec3 sparse_id(bool p_faces) {
+	return sparse_id_from(p_faces ? uint(params.sparse.y) : 0u);
+}
+
+// PRESSURE, PROLONG: push.offsets.z 1 the grid's A, 2 the first coarser level's bricks.
+uint level_list_start(int p_which) {
+	return p_which == 1 ? 0u : 2u * uint(params.sparse.y);
 }
 
 ivec3 cell_id(bool p_faces) {
@@ -647,8 +657,9 @@ layout(push_constant, std430) uniform Push {
 	vec4 open_lo; // xyz: an open face's weight in the stencil on the low sides (this level's; RESTRICT: the finer's)
 	vec4 open_hi; // xyz: on the high sides (1 on the grid; on the coarser levels 1 / the distance in cells to the zero)
 	ivec4 offsets; // x: this level's x offset in the levels' atlas (RESTRICT, PROLONG: the finer level's), y: the coarser
-	// level's (RESTRICT, PROLONG); the grid itself (level 0) has its own textures, offset 0. z 1: the grid with sparse
-	// bricks (PRESSURE, PROLONG over A's list; RESTRICT: a child outside A is a zero cell).
+	// level's (RESTRICT, PROLONG); the grid itself (level 0) has its own textures, offset 0. z: sparse bricks, 1 the grid
+	// (PRESSURE, PROLONG over A's list; RESTRICT: a child outside A is a zero cell), 2 the first coarser level
+	// (PRESSURE, PROLONG over its bricks with a cell of A's below).
 	// TAIL: size.x the first level it solves, size.y the coarsest; level.y omega, level.z the coarsest's iterations.
 }
 push;
@@ -751,8 +762,9 @@ void relax(ivec3 p_c) {
 void main() {
 	ivec3 c;
 	if (push.offsets.z != 0) {
-		// Sparse bricks (the grid): one workgroup per brick of A, the other colour's invocations idle.
-		c = sparse_id(false);
+		// Sparse bricks (the grid, the first coarser level): one workgroup per listed brick, the other colour's
+		// invocations idle.
+		c = sparse_id_from(level_list_start(push.offsets.z));
 		if (((c.x + c.y + c.z) & 1) != push.size.w) {
 			return;
 		}
@@ -834,7 +846,7 @@ void main() {
 #ifdef MODE_MG_PROLONG
 // Per fine cell: the coarse correction interpolated trilinearly (cell centres: 3/4 and 1/4 per axis) and added.
 void main() {
-	ivec3 c = push.offsets.z != 0 ? sparse_id(false) : ivec3(gl_GlobalInvocationID);
+	ivec3 c = push.offsets.z != 0 ? sparse_id_from(level_list_start(push.offsets.z)) : ivec3(gl_GlobalInvocationID);
 	const ivec3 g = OFF() + c;
 	if (any(greaterThanEqual(c, LN())) || imageLoad(solid, g).r != 0u) {
 		return;
@@ -1206,22 +1218,36 @@ layout(set = 0, binding = 15, std430) restrict buffer Args {
 }
 dispatch;
 
+// The workgroup's 4^3 bricks and the sources within margin + 1 of them (at most 4 + 2 * 5 per axis), in shared memory.
+#define ACT_TILE 14
+shared uint s_source[ACT_TILE * ACT_TILE * ACT_TILE];
+
 void main() {
+	const ivec3 nb = (N() + 3) / 4;
+	const int d = params.sparse.z;
+	const int r = d + 1;
+	const int w = 4 + 2 * r;
+	const ivec3 base = ivec3(gl_WorkGroupID) * 4 - r;
+	for (int i = int(gl_LocalInvocationIndex); i < w * w * w; i += 64) {
+		ivec3 q = base + ivec3(i % w, (i / w) % w, i / (w * w));
+		bool inside = all(greaterThanEqual(q, ivec3(0))) && all(lessThan(q, nb));
+		s_source[i] = inside ? imageLoad(source, q).r : 0u;
+	}
+	barrier();
 	ivec3 b = ivec3(gl_GlobalInvocationID);
 	if (any(greaterThanEqual(b, (N() + 4) / 4))) {
 		return;
 	}
-	const ivec3 nb = (N() + 3) / 4;
-	const int d = params.sparse.z;
 	bool a = false;
 	bool f = false;
-	for (int z = max(b.z - d - 1, 0); z <= min(b.z + d + 1, nb.z - 1); z++) {
-		for (int y = max(b.y - d - 1, 0); y <= min(b.y + d + 1, nb.y - 1); y++) {
-			for (int x = max(b.x - d - 1, 0); x <= min(b.x + d + 1, nb.x - 1); x++) {
-				if (imageLoad(source, ivec3(x, y, z)).r != 0u) {
+	const ivec3 l = ivec3(gl_LocalInvocationID) + r; // b in the tile
+	for (int z = -r; z <= r; z++) {
+		for (int y = -r; y <= r; y++) {
+			for (int x = -r; x <= r; x++) {
+				ivec3 q = l + ivec3(x, y, z);
+				if (s_source[q.x + w * (q.y + w * q.z)] != 0u) {
 					f = true;
-					ivec3 q = abs(ivec3(x, y, z) - b);
-					a = a || max(q.x, max(q.y, q.z)) <= d;
+					a = a || max(abs(x), max(abs(y), abs(z))) <= d;
 				}
 			}
 		}
@@ -1273,6 +1299,39 @@ void main() {
 	}
 	if (f) {
 		bricks.list[uint(params.sparse.y) + atomicAdd(dispatch.args[3], 1u)] = packed_b;
+	}
+}
+#endif
+
+#ifdef MODE_SPARSE_LIST1
+// Per brick of the first coarser level (4^3 of its cells, 2^3 of the grid's bricks): listed where one of the grid's
+// bricks below is in A (the others' cells are all zero cells: their pressure stays 0, MG_RESTRICT writes them).
+layout(r8ui, set = 0, binding = 2) uniform restrict readonly uimage3D brick_mask;
+layout(set = 0, binding = 14, std430) restrict writeonly buffer Bricks {
+	uint list[];
+}
+bricks;
+layout(set = 0, binding = 15, std430) restrict buffer Args {
+	uint args[]; // ..., the first coarser level's workgroups at 6, 1, 1
+}
+dispatch;
+
+void main() {
+	ivec3 b = ivec3(gl_GlobalInvocationID);
+	const ivec3 n1 = (N() + 1) / 2;
+	if (any(greaterThanEqual(b, (n1 + 3) / 4))) {
+		return;
+	}
+	const ivec3 nb = (N() + 3) / 4;
+	bool any_a = false;
+	for (int k = 0; k < 8; k++) {
+		ivec3 q = b * 2 + ivec3(k & 1, (k >> 1) & 1, (k >> 2) & 1);
+		if (all(lessThan(q, nb)) && (imageLoad(brick_mask, q).r & 1u) != 0u) {
+			any_a = true;
+		}
+	}
+	if (any_a) {
+		bricks.list[2u * uint(params.sparse.y) + atomicAdd(dispatch.args[6], 1u)] = uint(b.x) | (uint(b.y) << 10u) | (uint(b.z) << 20u);
 	}
 }
 #endif

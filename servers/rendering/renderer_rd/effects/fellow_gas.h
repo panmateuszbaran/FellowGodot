@@ -228,6 +228,7 @@ private:
 		SIM_MG_TAIL,
 		SIM_SPARSE_SOURCE,
 		SIM_SPARSE_ACTIVATE,
+		SIM_SPARSE_LIST1,
 		SIM_MAX,
 	};
 	enum RenderMode {
@@ -255,8 +256,8 @@ private:
 		// Sparse bricks (4^3 cells; the velocity's texels t in brick t / 4).
 		RID brick_source; // R8UI, per brick of the cells: a source of smoke, heat, fuel or an emitter
 		RID brick_mask; // R8UI, per brick of the velocity: bit 0 A (cells simulated), bit 1 F (velocity simulated)
-		RID brick_list; // A's bricks, then F's (from bricks_v): x | y << 10 | z << 20
-		RID brick_args; // the indirect dispatches' workgroups: A, 1, 1, F, 1, 1
+		RID brick_list; // A's bricks, then F's (from bricks_v), the first coarser level's (from 2 bricks_v): x | y << 10 | z << 20
+		RID brick_args; // the indirect dispatches' workgroups: A, 1, 1, F, 1, 1, level 1, 1, 1
 		int bricks_v = 0;
 		bool sparse_now = false; // this step runs sparse
 		bool sparse_last = false; // the last step ran sparse (its masks are valid)
@@ -331,6 +332,7 @@ private:
 		LIST_NONE, // dense
 		LIST_A, // sparse: one workgroup per brick of A
 		LIST_F,
+		LIST_L1, // the first coarser level's bricks with a cell of A's below
 	};
 	void _dispatch_sim(Volume &r_v, SimMode p_mode, const Vector<RD::Uniform> &p_uniforms, const Vector3i &p_threads, const MGPush *p_push = nullptr, bool p_groups = false, BrickList p_list = LIST_NONE);
 	void _smooth(Volume &r_v, const Vector3i &p_size, int p_level, RID p_pressure, RID p_rhs, RID p_solid, float p_dx2, float p_omega, int p_iterations);
