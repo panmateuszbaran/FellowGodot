@@ -29,7 +29,12 @@
 // the x faces (i, j + .5, k + .5), y at the y faces, z at the z faces; the texels past a component's last face repeat
 // it (each pass computes the clamped face), so clamp-to-edge sampling extends the field with a zero gradient.
 
+#ifdef MODE_MG_TAIL
+#define TAIL_THREADS 256
+layout(local_size_x = TAIL_THREADS, local_size_y = 1, local_size_z = 1) in;
+#else
 layout(local_size_x = 4, local_size_y = 4, local_size_z = 4) in;
+#endif
 
 #ifdef HIGH_PRECISION
 #define FMT rgba32f
@@ -39,6 +44,7 @@ layout(local_size_x = 4, local_size_y = 4, local_size_z = 4) in;
 
 #define MAX_EMITTERS 16
 #define MAX_OBSTACLES 16
+#define MAX_MG_LEVELS 12
 
 struct Emitter {
 	vec4 centre_radius; // grid position; radius (cells; sphere, cylinder)
@@ -72,6 +78,10 @@ layout(set = 0, binding = 0, std140) uniform Params {
 	vec4 emission; // the fire light's emission: x intensity, y cell volume (m^3), z colour temperature scale, w unused
 	Emitter emitters[MAX_EMITTERS];
 	Obstacle obstacles[MAX_OBSTACLES];
+	// The multigrid's coarser levels (index 1 = the first coarser, 0 unused), all in one atlas texture per field:
+	ivec4 mg_levels[MAX_MG_LEVELS]; // xyz size, w x offset in the atlas
+	vec4 mg_open_lo[MAX_MG_LEVELS]; // xyz the open faces' weights on the low sides, w dx^2 of the level
+	vec4 mg_open_hi[MAX_MG_LEVELS]; // xyz on the high sides
 }
 params;
 
@@ -212,6 +222,7 @@ layout(push_constant, std430) uniform Push {
 	ivec4 coarse_size; // unused
 	vec4 open_lo; // unused
 	vec4 open_hi; // unused
+	ivec4 offsets; // unused
 }
 push;
 
@@ -595,7 +606,7 @@ void main() {
 }
 #endif
 
-#if defined(MODE_PRESSURE) || defined(MODE_MG_RESTRICT) || defined(MODE_MG_PROLONG) || defined(MODE_MG_COARSE)
+#if defined(MODE_PRESSURE) || defined(MODE_MG_RESTRICT) || defined(MODE_MG_PROLONG) || defined(MODE_MG_COARSE) || defined(MODE_MG_TAIL)
 // The pressure solve's levels: level 0 is the grid, each coarser level half its size (rounded up), its cells solid where
 // all their children are (decision 0117: SOR, or a multigrid V-cycle with red-black Gauss-Seidel smoothing).
 layout(push_constant, std430) uniform Push {
@@ -604,6 +615,9 @@ layout(push_constant, std430) uniform Push {
 	ivec4 coarse_size; // RESTRICT, PROLONG: the coarser level's size
 	vec4 open_lo; // xyz: an open face's weight in the stencil on the low sides (this level's; RESTRICT: the finer's)
 	vec4 open_hi; // xyz: on the high sides (1 on the grid; on the coarser levels 1 / the distance in cells to the zero)
+	ivec4 offsets; // x: this level's x offset in the levels' atlas (RESTRICT, PROLONG: the finer level's), y: the coarser
+	// level's (RESTRICT, PROLONG); the grid itself (level 0) has its own textures, offset 0.
+	// TAIL: size.x the first level it solves, size.y the coarsest; level.y omega, level.z the coarsest's iterations.
 }
 push;
 
@@ -611,9 +625,15 @@ ivec3 LN() {
 	return push.size.xyz;
 }
 
+ivec3 OFF() {
+	return ivec3(push.offsets.x, 0, 0);
+}
+
+#ifndef MODE_MG_TAIL
 // The neighbours' sum and weights' sum of the Poisson stencil at a cell of a level (solid neighbours and closed or
 // inflow faces left out, an open face counted at the level's weight with zero pressure outside).
 void stencil(ivec3 p_c, out float r_sum, out float r_count);
+#endif
 #endif
 
 #if defined(MODE_PRESSURE) || defined(MODE_MG_COARSE)
@@ -645,19 +665,20 @@ layout(r8ui, set = 0, binding = 5) uniform restrict readonly uimage3D solid; // 
 void stencil(ivec3 p_c, out float r_sum, out float r_count) {
 	float sum = 0.0;
 	float count = 0.0;
+	const ivec3 o = OFF();
 	for (int a = 0; a < 3; a++) {
 		ivec3 e = unit(a);
 		if (icomp(p_c, a) > 0) {
-			if (imageLoad(solid, p_c - e).r == 0u) {
-				sum += imageLoad(pressure, p_c - e).r;
+			if (imageLoad(solid, o + p_c - e).r == 0u) {
+				sum += imageLoad(pressure, o + p_c - e).r;
 				count += 1.0;
 			}
 		} else if (face_kind(2 * a) == 1) {
 			count += comp(push.open_lo.xyz, a); // open: zero pressure outside
 		}
 		if (icomp(p_c, a) < icomp(LN(), a) - 1) {
-			if (imageLoad(solid, p_c + e).r == 0u) {
-				sum += imageLoad(pressure, p_c + e).r;
+			if (imageLoad(solid, o + p_c + e).r == 0u) {
+				sum += imageLoad(pressure, o + p_c + e).r;
 				count += 1.0;
 			}
 		} else if (face_kind(2 * a + 1) == 1) {
@@ -671,17 +692,18 @@ void stencil(ivec3 p_c, out float r_sum, out float r_count) {
 
 #if defined(MODE_PRESSURE) || defined(MODE_MG_COARSE)
 void relax(ivec3 p_c) {
-	if (imageLoad(solid, p_c).r != 0u) {
-		imageStore(pressure, p_c, vec4(0.0));
+	const ivec3 g = OFF() + p_c;
+	if (imageLoad(solid, g).r != 0u) {
+		imageStore(pressure, g, vec4(0.0));
 		return;
 	}
 	float sum;
 	float count;
 	stencil(p_c, sum, count);
-	float q = imageLoad(pressure, p_c).r;
-	float gs = count > 0.0 ? (sum - push.level.x * imageLoad(rhs, p_c).r) / count : 0.0;
+	float q = imageLoad(pressure, g).r;
+	float gs = count > 0.0 ? (sum - push.level.x * imageLoad(rhs, g).r) / count : 0.0;
 	q = (1.0 - push.level.y) * q + push.level.y * gs;
-	imageStore(pressure, p_c, vec4(q));
+	imageStore(pressure, g, vec4(q));
 }
 #endif
 
@@ -729,21 +751,23 @@ void main() {
 	}
 	float sum = 0.0;
 	float fluid = 0.0;
+	const ivec3 o = OFF();
 	for (int k = 0; k < 8; k++) {
 		ivec3 c = cc * 2 + ivec3(k & 1, (k >> 1) & 1, (k >> 2) & 1);
-		if (any(greaterThanEqual(c, LN())) || imageLoad(solid, c).r != 0u) {
+		if (any(greaterThanEqual(c, LN())) || imageLoad(solid, o + c).r != 0u) {
 			continue;
 		}
 		float s;
 		float count;
 		stencil(c, s, count);
-		float q = imageLoad(pressure, c).r;
-		sum += imageLoad(fine_rhs, c).r - (s - count * q) / push.level.x;
+		float q = imageLoad(pressure, o + c).r;
+		sum += imageLoad(fine_rhs, o + c).r - (s - count * q) / push.level.x;
 		fluid += 1.0;
 	}
-	imageStore(coarse_rhs, cc, vec4(fluid > 0.0 ? sum / fluid : 0.0));
-	imageStore(coarse_pressure_out, cc, vec4(0.0));
-	imageStore(coarse_solid, cc, uvec4(fluid > 0.0 ? 0u : 1u));
+	const ivec3 gc = ivec3(push.offsets.y, 0, 0) + cc;
+	imageStore(coarse_rhs, gc, vec4(fluid > 0.0 ? sum / fluid : 0.0));
+	imageStore(coarse_pressure_out, gc, vec4(0.0));
+	imageStore(coarse_solid, gc, uvec4(fluid > 0.0 ? 0u : 1u));
 }
 #endif
 
@@ -751,20 +775,180 @@ void main() {
 // Per fine cell: the coarse correction interpolated trilinearly (cell centres: 3/4 and 1/4 per axis) and added.
 void main() {
 	ivec3 c = ivec3(gl_GlobalInvocationID);
-	if (any(greaterThanEqual(c, LN())) || imageLoad(solid, c).r != 0u) {
+	const ivec3 g = OFF() + c;
+	if (any(greaterThanEqual(c, LN())) || imageLoad(solid, g).r != 0u) {
 		return;
 	}
 	ivec3 m = push.coarse_size.xyz - 1;
 	ivec3 par = c / 2;
 	ivec3 nb = clamp(par + ivec3(((c & 1) * 2) - 1), ivec3(0), m);
+	const ivec3 oc = ivec3(push.offsets.y, 0, 0);
 	float e = 0.0;
 	for (int k = 0; k < 8; k++) {
 		ivec3 sel = ivec3(k & 1, (k >> 1) & 1, (k >> 2) & 1);
 		ivec3 q = ivec3(sel.x != 0 ? nb.x : par.x, sel.y != 0 ? nb.y : par.y, sel.z != 0 ? nb.z : par.z);
 		float w = (sel.x != 0 ? 0.25 : 0.75) * (sel.y != 0 ? 0.25 : 0.75) * (sel.z != 0 ? 0.25 : 0.75);
-		e += w * imageLoad(coarse_pressure_in, q).r;
+		e += w * imageLoad(coarse_pressure_in, oc + q).r;
 	}
-	imageStore(pressure, c, vec4(imageLoad(pressure, c).r + e));
+	imageStore(pressure, g, vec4(imageLoad(pressure, g).r + e));
+}
+#endif
+
+#ifdef MODE_MG_TAIL
+// The multigrid's small levels in one workgroup, from level push.size.x down to the coarsest (push.size.y) and back up:
+// the per-level passes' operations (PRESSURE's red-black sweeps, MG_RESTRICT, MG_COARSE's sweeps, MG_PROLONG) in the
+// same order on the same cells, a barrier after each (dozens of small dispatches, each waiting for the last, in one).
+// The levels are in the atlas (params.mg_levels: sizes and x offsets).
+layout(r32f, set = 0, binding = 1) uniform restrict coherent image3D t_rhs;
+layout(r32f, set = 0, binding = 4) uniform restrict coherent image3D t_pressure;
+layout(r8ui, set = 0, binding = 5) uniform restrict coherent uimage3D t_solid;
+
+void tail_sync() {
+	memoryBarrierImage();
+	barrier();
+}
+
+ivec3 tail_size(int p_l) {
+	return params.mg_levels[p_l].xyz;
+}
+
+ivec3 tail_offset(int p_l) {
+	return ivec3(params.mg_levels[p_l].w, 0, 0);
+}
+
+// stencil() on level p_l.
+void tail_stencil(int p_l, ivec3 p_c, out float r_sum, out float r_count) {
+	const ivec3 n = tail_size(p_l);
+	const ivec3 o = tail_offset(p_l);
+	float sum = 0.0;
+	float count = 0.0;
+	for (int a = 0; a < 3; a++) {
+		ivec3 e = unit(a);
+		if (icomp(p_c, a) > 0) {
+			if (imageLoad(t_solid, o + p_c - e).r == 0u) {
+				sum += imageLoad(t_pressure, o + p_c - e).r;
+				count += 1.0;
+			}
+		} else if (face_kind(2 * a) == 1) {
+			count += comp(params.mg_open_lo[p_l].xyz, a);
+		}
+		if (icomp(p_c, a) < icomp(n, a) - 1) {
+			if (imageLoad(t_solid, o + p_c + e).r == 0u) {
+				sum += imageLoad(t_pressure, o + p_c + e).r;
+				count += 1.0;
+			}
+		} else if (face_kind(2 * a + 1) == 1) {
+			count += comp(params.mg_open_hi[p_l].xyz, a);
+		}
+	}
+	r_sum = sum;
+	r_count = count;
+}
+
+// PRESSURE's red-black sweeps on level p_l.
+void tail_smooth(int p_l, int p_iterations, float p_omega) {
+	const ivec3 n = tail_size(p_l);
+	const ivec3 o = tail_offset(p_l);
+	const float dx2 = params.mg_open_lo[p_l].w;
+	const int hx = (n.x + 1) / 2;
+	const int total = hx * n.y * n.z;
+	for (int it = 0; it < p_iterations; it++) {
+		for (int colour = 0; colour < 2; colour++) {
+			for (int i = int(gl_LocalInvocationIndex); i < total; i += TAIL_THREADS) {
+				ivec3 t = ivec3(i % hx, (i / hx) % n.y, i / (hx * n.y));
+				ivec3 c = ivec3(2 * t.x + ((t.y + t.z + colour) & 1), t.y, t.z);
+				if (c.x >= n.x) {
+					continue;
+				}
+				const ivec3 g = o + c;
+				if (imageLoad(t_solid, g).r != 0u) {
+					imageStore(t_pressure, g, vec4(0.0));
+					continue;
+				}
+				float sum;
+				float count;
+				tail_stencil(p_l, c, sum, count);
+				float q = imageLoad(t_pressure, g).r;
+				float gs = count > 0.0 ? (sum - dx2 * imageLoad(t_rhs, g).r) / count : 0.0;
+				q = (1.0 - p_omega) * q + p_omega * gs;
+				imageStore(t_pressure, g, vec4(q));
+			}
+			tail_sync();
+		}
+	}
+}
+
+// MG_RESTRICT from level p_l to p_l + 1.
+void tail_restrict(int p_l) {
+	const ivec3 n = tail_size(p_l);
+	const ivec3 o = tail_offset(p_l);
+	const ivec3 nc = tail_size(p_l + 1);
+	const ivec3 oc = tail_offset(p_l + 1);
+	const float dx2 = params.mg_open_lo[p_l].w;
+	const int total = nc.x * nc.y * nc.z;
+	for (int i = int(gl_LocalInvocationIndex); i < total; i += TAIL_THREADS) {
+		ivec3 cc = ivec3(i % nc.x, (i / nc.x) % nc.y, i / (nc.x * nc.y));
+		float sum = 0.0;
+		float fluid = 0.0;
+		for (int k = 0; k < 8; k++) {
+			ivec3 c = cc * 2 + ivec3(k & 1, (k >> 1) & 1, (k >> 2) & 1);
+			if (any(greaterThanEqual(c, n)) || imageLoad(t_solid, o + c).r != 0u) {
+				continue;
+			}
+			float s;
+			float count;
+			tail_stencil(p_l, c, s, count);
+			float q = imageLoad(t_pressure, o + c).r;
+			sum += imageLoad(t_rhs, o + c).r - (s - count * q) / dx2;
+			fluid += 1.0;
+		}
+		imageStore(t_rhs, oc + cc, vec4(fluid > 0.0 ? sum / fluid : 0.0));
+		imageStore(t_pressure, oc + cc, vec4(0.0));
+		imageStore(t_solid, oc + cc, uvec4(fluid > 0.0 ? 0u : 1u));
+	}
+	tail_sync();
+}
+
+// MG_PROLONG from level p_l + 1 to p_l.
+void tail_prolong(int p_l) {
+	const ivec3 n = tail_size(p_l);
+	const ivec3 o = tail_offset(p_l);
+	const ivec3 m = tail_size(p_l + 1) - 1;
+	const ivec3 oc = tail_offset(p_l + 1);
+	const int total = n.x * n.y * n.z;
+	for (int i = int(gl_LocalInvocationIndex); i < total; i += TAIL_THREADS) {
+		ivec3 c = ivec3(i % n.x, (i / n.x) % n.y, i / (n.x * n.y));
+		const ivec3 g = o + c;
+		if (imageLoad(t_solid, g).r != 0u) {
+			continue;
+		}
+		ivec3 par = c / 2;
+		ivec3 nb = clamp(par + ivec3(((c & 1) * 2) - 1), ivec3(0), m);
+		float e = 0.0;
+		for (int k = 0; k < 8; k++) {
+			ivec3 sel = ivec3(k & 1, (k >> 1) & 1, (k >> 2) & 1);
+			ivec3 q = ivec3(sel.x != 0 ? nb.x : par.x, sel.y != 0 ? nb.y : par.y, sel.z != 0 ? nb.z : par.z);
+			float w = (sel.x != 0 ? 0.25 : 0.75) * (sel.y != 0 ? 0.25 : 0.75) * (sel.z != 0 ? 0.25 : 0.75);
+			e += w * imageLoad(t_pressure, oc + q).r;
+		}
+		imageStore(t_pressure, g, vec4(imageLoad(t_pressure, g).r + e));
+	}
+	tail_sync();
+}
+
+void main() {
+	const int first = push.size.x;
+	const int last = push.size.y;
+	const float omega = push.level.y;
+	for (int l = first; l < last; l++) {
+		tail_smooth(l, 2, omega);
+		tail_restrict(l);
+	}
+	tail_smooth(last, int(push.level.z), omega);
+	for (int l = last - 1; l >= first; l--) {
+		tail_prolong(l);
+		tail_smooth(l, 2, omega);
+	}
 }
 #endif
 
@@ -896,6 +1080,7 @@ layout(push_constant, std430) uniform Push {
 	ivec4 coarse_size; // unused
 	vec4 open_lo; // unused
 	vec4 open_hi; // unused
+	ivec4 offsets; // unused
 }
 push;
 

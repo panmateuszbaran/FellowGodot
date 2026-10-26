@@ -174,6 +174,8 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/fluid/gas_rendering", true);
 	GLOBAL_DEF("rendering/fellow/fluid/gas_scene_shadows", true);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/fluid/gas_solver", PROPERTY_HINT_ENUM, "Node's,SOR,Multigrid"), 0);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/fluid/gas_mg_tail_cells", PROPERTY_HINT_RANGE, "0,65536,1"), 0);
+	GLOBAL_DEF("rendering/fellow/fluid/gas_profile_passes", false);
 	GLOBAL_DEF("rendering/fellow/profiling/pass_timestamps", false);
 	GLOBAL_DEF("rendering/fellow/profiling/list_markers", false);
 	GLOBAL_DEF("rendering/fellow/shadows/enabled", true);

@@ -52,6 +52,7 @@ public:
 	static constexpr int MAX_EMITTERS = 16;
 	static constexpr int MAX_OBSTACLES = 16;
 	static constexpr int MAX_RENDERED = 8;
+	static constexpr int MAX_MG_LEVELS = 12; // the grid and its coarser levels (fellow_gas_sim.glsl's MAX_MG_LEVELS)
 
 	// fellow_gas_sim.glsl's Emitter and Obstacle (std140), in the volume's grid (cells).
 	struct GPUEmitter {
@@ -168,6 +169,9 @@ private:
 		float emission[4];
 		GPUEmitter emitters[MAX_EMITTERS];
 		GPUObstacle obstacles[MAX_OBSTACLES];
+		int32_t mg_levels[MAX_MG_LEVELS][4]; // xyz size, w x offset in the atlas
+		float mg_open_lo[MAX_MG_LEVELS][4]; // the open faces' weights, w dx^2
+		float mg_open_hi[MAX_MG_LEVELS][4];
 	};
 
 	struct RenderVolumeUBO { // std140, fellow_gas_render.glsl's Volume
@@ -218,6 +222,7 @@ private:
 		SIM_MG_COARSE,
 		SIM_EXPORT,
 		SIM_SHIFT,
+		SIM_MG_TAIL,
 		SIM_MAX,
 	};
 	enum RenderMode {
@@ -229,8 +234,9 @@ private:
 		RENDER_MAX,
 	};
 
-	struct Level { // a coarser level of the multigrid pressure solve
+	struct Level { // a coarser level of the multigrid pressure solve (its textures: the volume's atlases)
 		Vector3i size;
+		int offset_x = 0; // where it starts in the atlases
 		RID pressure;
 		RID rhs;
 		RID solid;
@@ -238,6 +244,9 @@ private:
 
 	struct Volume {
 		LocalVector<Level> levels; // the multigrid's coarser levels, the coarsest last
+		RID mg_pressure; // the coarser levels side by side along x (one texture each: the small levels in one pass)
+		RID mg_rhs;
+		RID mg_solid;
 		Vector3i res;
 		float dx = 0.1f;
 		bool high_precision = false;
@@ -301,7 +310,9 @@ private:
 		int32_t coarse_size[4];
 		float open_lo[4]; // the open faces' weights in the level's stencil
 		float open_hi[4];
+		int32_t offsets[4]; // x the level's offset in the atlas (RESTRICT, PROLONG: the finer's), y the coarser's
 	};
+	static void _open_weights(const Vector3i &p_res, int p_level, float *r_lo, float *r_hi);
 	void _open_weights(const Vector3i &p_res, int p_level, MGPush &r_push) const;
 	void _dispatch_sim(Volume &r_v, SimMode p_mode, const Vector<RD::Uniform> &p_uniforms, const Vector3i &p_threads, const MGPush *p_push = nullptr, bool p_groups = false);
 	void _smooth(Volume &r_v, const Vector3i &p_size, int p_level, RID p_pressure, RID p_rhs, RID p_solid, float p_dx2, float p_omega, int p_iterations);
