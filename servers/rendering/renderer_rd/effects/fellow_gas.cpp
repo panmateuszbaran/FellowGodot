@@ -161,7 +161,7 @@ void FellowGas::_ensure_sim(int p_precision) {
 		return;
 	}
 	Vector<String> modes;
-	const char *names[SIM_MAX] = { "OBSTACLES", "EMIT", "ADVECT_S1", "ADVECT_S2", "ADVECT_V1", "ADVECT_V2", "CURL", "CELL_FORCE", "FACE_FORCE", "DIVERGENCE", "PRESSURE", "PROJECT", "COARSE", "MG_RESTRICT", "MG_PROLONG", "MG_COARSE", "EXPORT", "SHIFT", "MG_TAIL", "SPARSE_SOURCE", "SPARSE_ACTIVATE", "SPARSE_LIST1" };
+	const char *names[SIM_MAX] = { "OBSTACLES", "EMIT", "ADVECT_S1", "ADVECT_S2", "ADVECT_V1", "ADVECT_V2", "CURL", "CELL_FORCE", "FACE_FORCE", "DIVERGENCE", "PRESSURE", "PROJECT", "COARSE", "MG_RESTRICT", "MG_PROLONG", "MG_COARSE", "EXPORT", "SHIFT", "MG_TAIL", "SPARSE_SOURCE", "SPARSE_ACTIVATE", "SPARSE_LIST1", "SPARSE_CLEAR" };
 	for (int i = 0; i < SIM_MAX; i++) {
 		modes.push_back(String("\n#define MODE_") + names[i] + "\n");
 	}
@@ -554,7 +554,11 @@ void FellowGas::_run_step(uint32_t p_id, Volume &r_v, const StepParams &p_step) 
 		const uint32_t args[9] = { 0, 1, 1, 0, 1, 1, 0, 1, 1 };
 		RD::get_singleton()->buffer_update(r_v.brick_args, 0, sizeof(args), args);
 		_dispatch_sim(r_v, SIM_SPARSE_SOURCE, { image(1, r_v.coarse), image(2, r_v.brick_source) }, _fellow_gas_coarse_size(n));
-		_dispatch_sim(r_v, SIM_SPARSE_ACTIVATE, { image(1, r_v.brick_source), image(2, r_v.brick_mask), image(3, r_v.scalars[0]), image(4, r_v.scalars[1]), image(5, r_v.velocity[0]), image(6, r_v.velocity[1]), image(7, r_v.scalars_hat), image(8, r_v.velocity_hat), image(9, r_v.pressure), image(10, r_v.rhs), image(11, r_v.solid), image(12, r_v.coarse), buffer(14, r_v.brick_list), buffer(15, r_v.brick_args) }, Vector3i((n.x + 4) / 4, (n.y + 4) / 4, (n.z + 4) / 4));
+		_dispatch_sim(r_v, SIM_SPARSE_ACTIVATE, { image(1, r_v.brick_source), image(2, r_v.brick_mask), image(3, r_v.scalars[0]), image(4, r_v.scalars[1]), image(5, r_v.velocity[0]), image(6, r_v.velocity[1]), image(7, r_v.scalars_hat), image(8, r_v.velocity_hat), image(9, r_v.pressure), image(11, r_v.solid), image(12, r_v.coarse), buffer(14, r_v.brick_list), buffer(15, r_v.brick_args) }, Vector3i((n.x + 4) / 4, (n.y + 4) / 4, (n.z + 4) / 4));
+		if (u.sparse[3] != 0) {
+			// After a shift or dense steps: everything outside A and F cleared, one invocation per texel.
+			_dispatch_sim(r_v, SIM_SPARSE_CLEAR, { image(2, r_v.brick_mask), image(3, r_v.scalars[0]), image(4, r_v.scalars[1]), image(5, r_v.velocity[0]), image(6, r_v.velocity[1]), image(7, r_v.scalars_hat), image(8, r_v.velocity_hat), image(9, r_v.pressure), image(11, r_v.solid), image(12, r_v.coarse) }, nv);
+		}
 		if (!r_v.levels.is_empty()) {
 			const Vector3i l1 = r_v.levels[0].size;
 			_dispatch_sim(r_v, SIM_SPARSE_LIST1, { image(2, r_v.brick_mask), buffer(14, r_v.brick_list), buffer(15, r_v.brick_args) }, Vector3i((l1.x + 3) / 4, (l1.y + 3) / 4, (l1.z + 3) / 4));
@@ -704,7 +708,10 @@ void FellowGas::volume_debug_read(uint32_t p_id, int p_what, const Callable &p_c
 		case 3: {
 			// The divergence's right-hand side of the current velocity (the residual after the last projection).
 			const uint32_t c = v->current;
-			// (Sparse: over the last step's A, as the step computed it; the UBO is the last step's.)
+			// (Sparse: over the last step's A, as the step computed it, zero elsewhere; the UBO is the last step's.)
+			if (v->sparse_now) {
+				RD::get_singleton()->texture_clear(v->rhs, Color(0, 0, 0, 0), 0, 1, 0, 1);
+			}
 			_dispatch_sim(*v, SIM_DIVERGENCE, { RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 1, v->velocity[c]), RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 2, v->scalars[c]), RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 4, v->rhs), RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 5, v->solid) }, v->res, nullptr, false, LIST_A);
 			tex = v->rhs;
 		} break;

@@ -229,6 +229,7 @@ private:
 		SIM_SPARSE_SOURCE,
 		SIM_SPARSE_ACTIVATE,
 		SIM_SPARSE_LIST1,
+		SIM_SPARSE_CLEAR,
 		SIM_MAX,
 	};
 	enum RenderMode {

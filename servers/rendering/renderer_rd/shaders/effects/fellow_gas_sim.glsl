@@ -1206,7 +1206,6 @@ layout(FMT, set = 0, binding = 6) uniform restrict writeonly image3D vel1;
 layout(FMT, set = 0, binding = 7) uniform restrict writeonly image3D scalars_hat;
 layout(FMT, set = 0, binding = 8) uniform restrict writeonly image3D vel_hat;
 layout(r32f, set = 0, binding = 9) uniform restrict writeonly image3D pressure;
-layout(r32f, set = 0, binding = 10) uniform restrict writeonly image3D rhs;
 layout(r8ui, set = 0, binding = 11) uniform restrict writeonly uimage3D solid;
 layout(rgba16f, set = 0, binding = 12) uniform restrict writeonly image3D coarse;
 layout(set = 0, binding = 14, std430) restrict writeonly buffer Bricks {
@@ -1254,8 +1253,10 @@ void main() {
 	}
 	a = a && all(lessThan(b, nb));
 	uint old = imageLoad(brick_mask, b).r;
-	bool prev_a = params.sparse.w != 0 || (old & 1u) != 0u;
-	bool prev_f = params.sparse.w != 0 || (old & 2u) != 0u;
+	// After a shift or dense steps (params.sparse.w) every brick outside A and F is cleared by SPARSE_CLEAR, one
+	// invocation per texel; otherwise the few bricks that left them here.
+	bool prev_a = params.sparse.w == 0 && (old & 1u) != 0u;
+	bool prev_f = params.sparse.w == 0 && (old & 2u) != 0u;
 	if (prev_f && !f) {
 		for (int z = 0; z < 4; z++) {
 			for (int y = 0; y < 4; y++) {
@@ -1285,8 +1286,7 @@ void main() {
 					}
 					imageStore(scalars0, c, vec4(0.0));
 					imageStore(scalars1, c, vec4(0.0));
-					imageStore(pressure, c, vec4(0.0));
-					imageStore(rhs, c, vec4(0.0));
+					imageStore(pressure, c, vec4(0.0)); // (the divergence outside A is never read)
 				}
 			}
 		}
@@ -1332,6 +1332,48 @@ void main() {
 	}
 	if (any_a) {
 		bricks.list[2u * uint(params.sparse.y) + atomicAdd(dispatch.args[6], 1u)] = uint(b.x) | (uint(b.y) << 10u) | (uint(b.z) << 20u);
+	}
+}
+#endif
+
+#ifdef MODE_SPARSE_CLEAR
+// After a shift or dense steps: every texel outside F gets the ambient velocity and no solid, zero hats; every cell
+// outside A no smoke and zero pressure, every brick outside A zero maxima (one invocation per velocity texel).
+layout(r8ui, set = 0, binding = 2) uniform restrict readonly uimage3D brick_mask;
+layout(FMT, set = 0, binding = 3) uniform restrict writeonly image3D scalars0;
+layout(FMT, set = 0, binding = 4) uniform restrict writeonly image3D scalars1;
+layout(FMT, set = 0, binding = 5) uniform restrict writeonly image3D vel0;
+layout(FMT, set = 0, binding = 6) uniform restrict writeonly image3D vel1;
+layout(FMT, set = 0, binding = 7) uniform restrict writeonly image3D scalars_hat;
+layout(FMT, set = 0, binding = 8) uniform restrict writeonly image3D vel_hat;
+layout(r32f, set = 0, binding = 9) uniform restrict writeonly image3D pressure;
+layout(r8ui, set = 0, binding = 11) uniform restrict writeonly uimage3D solid;
+layout(rgba16f, set = 0, binding = 12) uniform restrict writeonly image3D coarse;
+
+void main() {
+	ivec3 t = ivec3(gl_GlobalInvocationID);
+	if (any(greaterThan(t, N()))) {
+		return;
+	}
+	ivec3 b = t / 4;
+	uint m = imageLoad(brick_mask, b).r;
+	bool cell = all(lessThan(t, N()));
+	if ((m & 2u) == 0u) {
+		imageStore(vel0, t, vec4(params.wind.xyz, 0.0));
+		imageStore(vel1, t, vec4(params.wind.xyz, 0.0));
+		imageStore(vel_hat, t, vec4(0.0));
+		if (cell) {
+			imageStore(scalars_hat, t, vec4(0.0));
+			imageStore(solid, t, uvec4(0u));
+		}
+	}
+	if ((m & 1u) == 0u && cell) {
+		imageStore(scalars0, t, vec4(0.0));
+		imageStore(scalars1, t, vec4(0.0));
+		imageStore(pressure, t, vec4(0.0));
+		if (all(equal(t & 3, ivec3(0)))) {
+			imageStore(coarse, b, vec4(0.0));
+		}
 	}
 }
 #endif
