@@ -81,6 +81,17 @@ func _initialize() -> void:
 		vol.add_child(e)
 		root.add_child(vol)
 		parent = vol
+	if case_name == "ash":
+		# In a static body: its box shape is disabled once the box has burned away (collapse_fraction).
+		var body := StaticBody3D.new()
+		var cs := CollisionShape3D.new()
+		cs.name = "Shape"
+		var sh := BoxShape3D.new()
+		sh.size = Vector3(0.3, 0.2, 0.25)
+		cs.shape = sh
+		body.add_child(cs)
+		parent.add_child(body)
+		parent = body
 	parent.add_child(target)
 	burn = ClassDB.instantiate("FellowBurnable3D")
 	burn.resolution = int(args.get("res", "24"))
@@ -174,7 +185,7 @@ func _physics_process(_delta: float) -> bool:
 				wait += 1
 				return false
 			wait = 0
-			_queue_reads([[0, "before.bin", burn]])
+			_queue_reads([[0, "before.bin", burn], [1, "before_emission.bin", burn]])
 			stage = 12
 		12:
 			if not _reads_done():
@@ -232,6 +243,9 @@ func _finish() -> void:
 	info["char"] = burn.get_char_fraction()
 	info["ash"] = burn.get_ash_fraction()
 	info["t_max"] = burn.get_max_temperature()
+	info["collapsed"] = burn.is_collapsed()
+	if case_name == "ash":
+		info["shape_disabled"] = (target.get_parent().get_node("Shape") as CollisionShape3D).disabled
 	if vol:
 		var gs: Vector3i = vol.get_grid_size()
 		info["gas_grid"] = [gs.x, gs.y, gs.z]

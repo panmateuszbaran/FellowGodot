@@ -8,9 +8,9 @@
 // in NumPy). A burnable object is a box of cubic voxels around its mesh, each with x the temperature above ambient
 // (K), y the volume fraction of virgin wood, z of char, w of ash (the rest air). Per step (burning time):
 //   IGNITE  (when asked) the voxels within a sphere at least a temperature;
-//   HEAT    conduction, the exchange with the gas (its hottest of three samples outwards) at the exposed faces,
-//           pyrolysis (wood -> char, the volatiles the gas's fuel; their flame's heat back into the surface), char
-//           oxidation (char -> ash, heat); the emission texture for the gas;
+//   HEAT    conduction, the exchange at the exposed faces with the gas (its hottest of three samples outwards) or the
+//           surface's own flame (over the voxels that released volatiles the step before, and above them), pyrolysis
+//           (wood -> char, the volatiles the gas's fuel), char oxidation (char -> ash, heat); the emission texture;
 //   SETTLE  ash with no wood or char left falls into the voxel below (along the voxel axis nearest to the world's
 //           down) while it has room, down to the floor (the object's lowest layer); the display texture;
 //   INJECT  per cell of the gas grid's region around the object: the fuel released, the surface's temperature and
@@ -39,7 +39,7 @@ layout(set = 0, binding = 0, std140) uniform Params {
 	vec4 gas_to_voxel[3]; // rows: the gas grid's coordinates -> voxel coordinates
 	vec4 inject; // x the fuel's footprint (gas cells)
 	ivec4 settle; // the ash's fall: x the axis, y its sign, z the floor (the last layer along it the ash may reach)
-	vec4 flame; // x the heat of the volatiles' flame returned to the voxel they leave (J per kg of volatiles)
+	vec4 flame; // the surface's own flame: x its temperature (K above ambient; 0 none), y the volatiles' flux it needs (kg/(m^2 s)), z its reach above the surface (voxels)
 }
 params;
 
@@ -78,8 +78,30 @@ void main() {
 #ifdef MODE_HEAT
 layout(rgba32f, set = 0, binding = 1) uniform restrict readonly image3D state_in;
 layout(rgba32f, set = 0, binding = 2) uniform restrict writeonly image3D state_out;
-layout(rgba16f, set = 0, binding = 3) uniform restrict writeonly image3D emission; // fuel, surface T, exposure / 6, solid
+layout(rgba16f, set = 0, binding = 3) uniform restrict writeonly image3D emission; // volatiles (kg/(m^3 s)), surface T, exposure / 6, solid
 layout(set = 0, binding = 4) uniform sampler3D gas_scalars; // linear, clamped (the gas's temperature in .y)
+layout(rgba16f, set = 0, binding = 5) uniform restrict readonly image3D emission_prev; // the step before's
+
+// The surface's own flame over voxel p_c: the largest volatiles' release (the step before) of the voxels below it, up
+// to the flame's reach, and beside those (one voxel across: the flame's width, how it creeps sideways), in kg/(m^3 s).
+float flame_source(ivec3 p_c) {
+	ivec3 up = -unit(params.settle.x) * params.settle.y;
+	ivec3 s1 = unit((params.settle.x + 1) % 3);
+	ivec3 s2 = unit((params.settle.x + 2) % 3);
+	int reach = int(params.flame.z);
+	float q = 0.0;
+	for (int k = 0; k <= reach; k++) {
+		for (int d1 = -1; d1 <= 1; d1++) {
+			for (int d2 = -1; d2 <= 1; d2++) {
+				ivec3 b = p_c - up * k + s1 * d1 + s2 * d2;
+				if (inside(b)) {
+					q = max(q, imageLoad(emission_prev, b).x);
+				}
+			}
+		}
+	}
+	return q;
+}
 
 float heat_capacity(vec4 p_s) {
 	float cv = params.densities.x * params.heats.x * p_s.y + params.densities.y * params.heats.y * p_s.z + params.densities.z * params.heats.z * p_s.w;
@@ -147,23 +169,24 @@ void main() {
 	// the gas cells are coarser than the voxels, the flame sheet lies somewhere in front of the surface).
 	vec3 p0 = vec3(c) + 0.5;
 	float tg = max(gas_temperature(p0 + n * (0.5 * params.misc.z)), max(gas_temperature(p0 + n * params.misc.z), gas_temperature(p0 + n * (1.5 * params.misc.z))));
+	if (params.flame.x > 0.0) {
+		// The surface's own flame (thinner than a voxel, over the voxels releasing volatiles and above them): the
+		// surface exchanges with it as much as their flux covers it.
+		float cover = clamp(flame_source(c) * h / params.flame.y, 0.0, 1.0);
+		tg = max(tg, cover * params.flame.x);
+	}
 	float ta = T + params.misc.w;
 	float tga = tg + params.misc.w;
 	float hr = params.misc.x * SIGMA * (tga * tga + ta * ta) * (tga + ta);
 	float coef = (params.conduct.w + hr) * e / (cv * h);
 	T = (T + dt * coef * tg) / (1.0 + dt * coef);
-	// 3. Pyrolysis: wood -> char, the volatiles the gas's fuel.
+	// 3. Pyrolysis: wood -> char, the volatiles the gas's fuel (and the surface's own flame).
 	float rp = params.pyro.y * smoothstep(params.pyro.x, params.pyro.x + 120.0, T);
 	float dw = w * (1.0 - exp(-rp * dt));
 	w = w - dw;
 	ch = ch + dw * params.pyro.w;
 	T = T - dw * params.densities.x * params.heats.w / cv;
-	// The volatiles burn in a flame just outside the surface (thinner than a voxel): a part of their heat of
-	// combustion comes back to the voxel they leave where it has an open face.
-	if (e > 0.0) {
-		T = T + dw * params.densities.x * (1.0 - params.pyro.z) * params.flame.x / cv;
-	}
-	float fuel = dw * params.densities.x * (1.0 - params.pyro.z) * params.misc.y * params.grid.z;
+	float fuel = dw * params.densities.x * (1.0 - params.pyro.z) * params.grid.z; // the volatiles, kg/(m^3 s)
 	// 4. Char oxidation where exposed: char -> ash, heat.
 	float ro = params.glow.y * smoothstep(params.glow.x, params.glow.x + 200.0, T) * min(e, 1.0);
 	float dc = ch * (1.0 - exp(-ro * dt));
@@ -267,7 +290,7 @@ void main() {
 	// The surface's temperature: where fuel is released the pyrolysing voxels' (the volatiles leave at it: the flame
 	// attaches to the surface), elsewhere the exposed surface's.
 	float t = fuel > 0.0 ? tf / fuel : (ex > 0.0 ? ts / ex : 0.0);
-	imageStore(injection, q, vec4(fuel * (1.0 / 64.0), t, ex * (1.0 / 64.0), solid * 0.125));
+	imageStore(injection, q, vec4(fuel * (params.misc.y / 64.0), t, ex * (1.0 / 64.0), solid * 0.125)); // the volatiles as the gas's fuel
 }
 #endif
 

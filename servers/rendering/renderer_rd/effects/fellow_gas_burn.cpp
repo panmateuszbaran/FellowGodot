@@ -71,7 +71,7 @@ void FellowGas::_ensure_burn() {
 }
 
 void FellowGas::_free_burnable(Burnable &r_b) {
-	RID *rids[] = { &r_b.state[0], &r_b.state[1], &r_b.display, &r_b.emission, &r_b.inject, &r_b.ubo, &r_b.totals };
+	RID *rids[] = { &r_b.state[0], &r_b.state[1], &r_b.display, &r_b.emission[0], &r_b.emission[1], &r_b.inject, &r_b.ubo, &r_b.totals };
 	for (RID *r : rids) {
 		if (r->is_valid()) {
 			RD::get_singleton()->free_rid(*r);
@@ -108,8 +108,11 @@ void FellowGas::burnable_configure(uint32_t p_id, const Vector3i &p_res, const V
 	const uint32_t view_usage = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_STORAGE_BIT | RD::TEXTURE_USAGE_CAN_COPY_FROM_BIT | RD::TEXTURE_USAGE_CAN_COPY_TO_BIT;
 	b->display = _fellow_burn_tex3d(RD::DATA_FORMAT_R16G16B16A16_SFLOAT, p_res, view_usage, half);
 	RD::get_singleton()->set_resource_name(b->display, "FellowBurn display");
-	b->emission = _fellow_burn_tex3d(RD::DATA_FORMAT_R16G16B16A16_SFLOAT, p_res, view_usage);
-	RD::get_singleton()->texture_clear(b->emission, Color(0, 0, 0, 0), 0, 1, 0, 1);
+	for (int i = 0; i < 2; i++) {
+		b->emission[i] = _fellow_burn_tex3d(RD::DATA_FORMAT_R16G16B16A16_SFLOAT, p_res, view_usage);
+		RD::get_singleton()->texture_clear(b->emission[i], Color(0, 0, 0, 0), 0, 1, 0, 1);
+	}
+	b->emission_current = 0;
 	Vector<uint8_t> zeros;
 	zeros.resize(sizeof(BurnUBO));
 	zeros.fill(0);
@@ -158,7 +161,7 @@ void FellowGas::burnable_debug_read(uint32_t p_id, int p_what, const Callable &p
 		_run_burn_step(p_id, *b, s);
 	}
 	b->pending.clear();
-	RID tex = p_what == 1 ? b->emission : (p_what == 2 ? b->inject : b->state[b->current]);
+	RID tex = p_what == 1 ? b->emission[b->emission_current] : (p_what == 2 ? b->inject : b->state[b->current]);
 	if (tex.is_null()) {
 		p_callback.call(Vector<uint8_t>());
 		return;
@@ -236,7 +239,9 @@ void FellowGas::_run_burn_step(uint32_t p_id, Burnable &r_b, const BurnStepParam
 	u.settle[0] = CLAMP(p_step.settle_axis, 0, 2);
 	u.settle[1] = p_step.settle_sign < 0 ? -1 : 1;
 	u.settle[2] = p_step.settle_floor;
-	u.flame[0] = p_step.flame_heat;
+	u.flame[0] = p_step.flame_temperature;
+	u.flame[1] = MAX(p_step.flame_flux, 1e-6f);
+	u.flame[2] = CLAMP(Math::round(p_step.flame_reach), 0.0f, 8.0f);
 	RD::get_singleton()->buffer_update(r_b.ubo, 0, sizeof(BurnUBO), &u);
 
 	auto image = [](int p_binding, RID p_tex) { return RD::Uniform(RD::UNIFORM_TYPE_IMAGE, p_binding, p_tex); };
@@ -248,7 +253,11 @@ void FellowGas::_run_burn_step(uint32_t p_id, Burnable &r_b, const BurnStepParam
 		_dispatch_burn(r_b, BURN_IGNITE, { image(1, r_b.state[cur]) }, n);
 	}
 	RID gas_scalars = gas ? gas->scalars[gas->current] : dummy_3d;
-	_dispatch_burn(r_b, BURN_HEAT, { image(1, r_b.state[cur]), image(2, r_b.state[nxt]), image(3, r_b.emission), sampled(4, gas_scalars) }, n);
+	// The emission ping-pongs: HEAT reads the step before's (the surface's own flame) and writes this step's.
+	const uint32_t em_prev = r_b.emission_current;
+	r_b.emission_current ^= 1u;
+	const RID em = r_b.emission[r_b.emission_current];
+	_dispatch_burn(r_b, BURN_HEAT, { image(1, r_b.state[cur]), image(2, r_b.state[nxt]), image(3, em), sampled(4, gas_scalars), image(5, r_b.emission[em_prev]) }, n);
 	_dispatch_burn(r_b, BURN_SETTLE, { image(1, r_b.state[nxt]), image(2, r_b.state[cur]), image(3, r_b.display) }, n);
 	// The gas's region (its EMIT and OBSTACLES at the next step).
 	const Vector3i region(p_step.region_size[0], p_step.region_size[1], p_step.region_size[2]);
@@ -260,7 +269,7 @@ void FellowGas::_run_burn_step(uint32_t p_id, Burnable &r_b, const BurnStepParam
 			r_b.inject = _fellow_burn_tex3d(RD::DATA_FORMAT_R16G16B16A16_SFLOAT, region, RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_STORAGE_BIT | RD::TEXTURE_USAGE_CAN_COPY_FROM_BIT);
 			r_b.inject_size = region;
 		}
-		_dispatch_burn(r_b, BURN_INJECT, { sampled(1, r_b.emission), image(2, r_b.inject) }, region);
+		_dispatch_burn(r_b, BURN_INJECT, { sampled(1, em), image(2, r_b.inject) }, region);
 		r_b.gas_id = p_step.gas_id;
 		for (int i = 0; i < 3; i++) {
 			r_b.region_origin[i] = p_step.region_origin[i];
@@ -275,7 +284,7 @@ void FellowGas::_run_burn_step(uint32_t p_id, Burnable &r_b, const BurnStepParam
 		r_b.gas_id = 0;
 	}
 	if (p_step.read_totals && r_b.totals_callback.is_valid() && !r_b.totals_in_flight) {
-		_dispatch_burn(r_b, BURN_REDUCE, { image(1, r_b.state[cur]), image(2, r_b.emission), RD::Uniform(RD::UNIFORM_TYPE_STORAGE_BUFFER, 3, r_b.totals) }, n);
+		_dispatch_burn(r_b, BURN_REDUCE, { image(1, r_b.state[cur]), image(2, em), RD::Uniform(RD::UNIFORM_TYPE_STORAGE_BUFFER, 3, r_b.totals) }, n);
 		r_b.totals_in_flight = true;
 		RD::get_singleton()->buffer_get_data_async(r_b.totals, callable_mp_static(&FellowGas::_burn_totals_read).bind(r_b.totals_callback, p_id));
 	}

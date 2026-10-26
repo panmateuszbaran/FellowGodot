@@ -39,7 +39,9 @@ def material(info):
 	m.pyrolysis_temperature, m.pyrolysis_rate, m.char_yield, m.char_volume = v[12], v[13], v[14], v[15]
 	m.glow_temperature, m.glow_rate, m.glow_heat, m.ash_volume = v[16], v[17], v[18], v[19]
 	m.emissivity, m.fuel_per_kg = v[20], v[21]
-	m.flame_heat = f32(info.get("flame_heat", 0.0))
+	m.flame_temperature = f32(info.get("flame_temperature", 0.0))
+	m.flame_flux = f32(info.get("flame_flux", 0.005))
+	m.flame_reach = int(round(info.get("flame_reach", 0.0)))
 	assert abs(float(min_cv) - 0.05 * float(m.density) * float(m.specific_heat)) < 1e-2 * float(min_cv)
 	return m, float(v[22])
 
@@ -111,13 +113,14 @@ def main():
 		ref = np.stack([b.T, b.w, b.c, b.a], axis=-1)
 		worst = report("state after %d steps" % info["steps"], gpu, ref)
 		em = load_half(d + "/emission.bin", n)
-		print("emission fuel: rel %.2e (sum gpu %.4g ref %.4g)" % (rel(em[..., 0], b.fuel), float(em[..., 0].sum()), float(b.fuel.sum())))
+		print("emission volatiles: rel %.2e (sum gpu %.4g ref %.4g)" % (rel(em[..., 0], b.volatiles), float(em[..., 0].sum()), float(b.volatiles.sum())))
 		t = b.totals()
 		print("reference totals: wood %.5f char %.5f ash %.5f m^3, T max %.0f K; GPU fractions wood %.4f char %.4f ash %.4f T max %.0f K" % (t["wood"], t["char"], t["ash"], t["T max"] + 293, info["wood"], info["char"], info["ash"], info["t_max"]))
 	else:
 		s0 = load_state(d + "/before.bin", n)
 		b = br.Burnable(s0[..., 1] > 0, h, m)
 		b.T, b.w, b.c, b.a = [s0[..., c].copy() for c in range(4)]
+		b.volatiles_prev = load_half(d + "/before_emission.bin", n)[..., 0].copy()  # the GPU's step before (the surface's own flame)
 		gn = info["gas_grid"]
 		dtype = np.float32 if info.get("gas_high_precision") else np.float16
 		gas = np.fromfile(d + "/gas.bin", dtype=dtype).astype(np.float32).reshape(gn[2], gn[1], gn[0], 4).transpose(2, 1, 0, 3)
@@ -137,8 +140,8 @@ def main():
 		print("before: T max %.0f K, wood %.4f char %.4f ash %.4f (fractions of the voxels)" % (float(s0[..., 0].max()) + 293, float(s0[..., 1].sum()) / max(float((s0[..., 1] > 0).sum()), 1), float(s0[..., 2].sum()) / max(float((s0[..., 1] > 0).sum()), 1), float(s0[..., 3].sum())))
 		# The emission (half precision on the GPU).
 		em = load_half(d + "/emission.bin", n)
-		ref_em = np.stack([b.fuel, np.where((e_before > 0) | (b.fuel > 0), b.T, 0), e_before / 6.0, b.w + b.c], axis=-1).astype(np.float16).astype(np.float32)
-		for c, label in enumerate(["fuel", "surface T", "exposure", "solid"]):
+		ref_em = np.stack([b.volatiles, np.where((e_before > 0) | (b.volatiles > 0), b.T, 0), e_before / 6.0, b.w + b.c], axis=-1).astype(np.float16).astype(np.float32)
+		for c, label in enumerate(["volatiles", "surface T", "exposure", "solid"]):
 			r = rel(em[..., c], ref_em[..., c])
 			worst = max(worst, r) if label != "surface T" else worst
 			print("emission %s: rel %.2e" % (label, r))
@@ -174,7 +177,7 @@ def main():
 			o = np.array([i & 1, (i >> 1) & 1, i >> 2], f32) * 0.5 - 0.25
 			solid += emission_at(centre + o)[..., 3]
 		t_surface = np.where(fuel > 0, tf / np.maximum(fuel, 1e-30), np.where(ex > 0, ts / np.maximum(ex, 1e-30), 0))
-		ref_inj = np.stack([fuel / 64, t_surface, ex / 64, solid / 8], axis=-1)
+		ref_inj = np.stack([fuel * (m.fuel_per_kg / f32(64.0)), t_surface, ex / 64, solid / 8], axis=-1)
 		for c, label in enumerate(["fuel", "surface T", "exposure", "solid"]):
 			r = rel(inj[..., c], ref_inj[..., c])
 			worst = max(worst, r)

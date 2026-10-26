@@ -36,6 +36,8 @@
 #include "core/templates/hash_set.h"
 #include "scene/3d/mesh_instance_3d.h"
 #include "scene/3d/physics/collision_object_3d.h"
+#include "scene/3d/physics/collision_shape_3d.h"
+#include "scene/3d/physics/rigid_body_3d.h"
 #include "scene/main/scene_tree.h"
 #include "scene/resources/shader.h"
 #include "servers/rendering/fellow_settings.h"
@@ -58,7 +60,7 @@ static constexpr float BURN_CONVECTION = 20.0f;
 static constexpr float BURN_EMISSIVITY = 0.9f;
 static constexpr float BURN_SETTLE_RATE = 2.0f;
 static constexpr float BURN_FUEL_PER_KG = 2.7f; // the gas's fuel per kg of volatiles at flame_strength 1 (each unit heats 1 m^3 of gas by 1400 K, 1.7 MJ: 30 % of the volatiles' 15 MJ/kg in the cells they burn in; Burn Lab's logs then have flames of the kindling's size)
-static constexpr float BURN_HEAT_OF_COMBUSTION = 15.0e6f; // J per kg of the volatiles
+static constexpr float BURN_FLAME_FLUX = 0.005f; // kg/(m^2 s): the volatiles' flux for a surface fully in its flame (wood's critical mass flux for flaming, 2.5-5 g/(m^2 s))
 static constexpr int BURN_MARGIN = 2; // voxels around the mesh
 static constexpr int BURN_TRIANGLE_BUDGET = 300000;
 
@@ -1135,6 +1137,7 @@ void FellowBurnable3D::_unconfigure() {
 		}
 		target->set_material_override(original_material_override);
 	}
+	_restore_collision();
 	if (body_id.is_valid()) {
 		MutexLock lock(body_mutex);
 		int *c = burnable_bodies.getptr(uint64_t(body_id));
@@ -1193,7 +1196,9 @@ void FellowBurnable3D::_queue_step() {
 	sp.misc[1] = BURN_FUEL_PER_KG * flame_strength;
 	sp.misc[2] = 1.5f;
 	sp.misc[3] = BURN_AMBIENT;
-	sp.flame_heat = flame_feedback * BURN_HEAT_OF_COMBUSTION;
+	sp.flame_temperature = MAX(flame_temperature - BURN_AMBIENT, 0.0f);
+	sp.flame_flux = BURN_FLAME_FLUX;
+	sp.flame_reach = flame_reach / MAX(h, 1e-6f);
 	// Voxel coordinates -> world.
 	const Transform3D voxel_to_world = m * Transform3D(Basis::from_scale(Vector3(voxel, voxel, voxel)), origin);
 	// The ash falls along the voxel axis nearest to the world's down.
@@ -1294,7 +1299,9 @@ void FellowBurnable3D::_queue_step() {
 	last_step["smoke_per_fuel"] = sp.smoke_per_fuel;
 	last_step["heat_rate"] = sp.heat_rate;
 	last_step["attached"] = sp.attached;
-	last_step["flame_heat"] = sp.flame_heat;
+	last_step["flame_temperature"] = sp.flame_temperature;
+	last_step["flame_flux"] = sp.flame_flux;
+	last_step["flame_reach"] = CLAMP(Math::round(sp.flame_reach), 0.0f, 8.0f);
 	last_step["tick"] = int64_t(sp.tick);
 }
 
@@ -1335,6 +1342,49 @@ void FellowBurnable3D::_read_totals() {
 		has_burned_out = true;
 		emit_signal(SNAME("burned_out"));
 	}
+	if (has_ignited && !has_collapsed && collapse_fraction > 0.0f && wood_fraction + char_fraction <= collapse_fraction) {
+		_collapse();
+	}
+}
+
+// Less wood and char left than collapse_fraction: the body it belongs to stops colliding (its shapes disabled; a
+// rigid body frozen first, so it does not fall through the ground). Restored when the node leaves the tree or the
+// burning is reset.
+void FellowBurnable3D::_collapse() {
+	has_collapsed = true;
+	CollisionObject3D *body = Object::cast_to<CollisionObject3D>(ObjectDB::get_instance(body_id));
+	if (body) {
+		if (RigidBody3D *rb = Object::cast_to<RigidBody3D>(body)) {
+			if (!rb->is_freeze_enabled()) {
+				rb->set_freeze_enabled(true);
+				froze_body = true;
+			}
+		}
+		for (int i = 0; i < body->get_child_count(); i++) {
+			CollisionShape3D *cs = Object::cast_to<CollisionShape3D>(body->get_child(i));
+			if (cs && !cs->is_disabled()) {
+				cs->set_disabled(true);
+				disabled_shapes.push_back(cs->get_instance_id());
+			}
+		}
+	}
+	emit_signal(SNAME("collapsed"));
+}
+
+void FellowBurnable3D::_restore_collision() {
+	for (const ObjectID &id : disabled_shapes) {
+		if (CollisionShape3D *cs = Object::cast_to<CollisionShape3D>(ObjectDB::get_instance(id))) {
+			cs->set_disabled(false);
+		}
+	}
+	disabled_shapes.clear();
+	if (froze_body) {
+		if (RigidBody3D *rb = Object::cast_to<RigidBody3D>(ObjectDB::get_instance(body_id))) {
+			rb->set_freeze_enabled(false);
+		}
+		froze_body = false;
+	}
+	has_collapsed = false;
 }
 
 // ------------------------------------------------------------------ API
@@ -1523,8 +1573,13 @@ void FellowBurnable3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_surface_heating"), &FellowBurnable3D::get_surface_heating);
 	ClassDB::bind_method(D_METHOD("set_flame_attachment", "fraction"), &FellowBurnable3D::set_flame_attachment);
 	ClassDB::bind_method(D_METHOD("get_flame_attachment"), &FellowBurnable3D::get_flame_attachment);
-	ClassDB::bind_method(D_METHOD("set_flame_feedback", "fraction"), &FellowBurnable3D::set_flame_feedback);
-	ClassDB::bind_method(D_METHOD("get_flame_feedback"), &FellowBurnable3D::get_flame_feedback);
+	ClassDB::bind_method(D_METHOD("set_flame_temperature", "kelvin"), &FellowBurnable3D::set_flame_temperature);
+	ClassDB::bind_method(D_METHOD("get_flame_temperature"), &FellowBurnable3D::get_flame_temperature);
+	ClassDB::bind_method(D_METHOD("set_flame_reach", "metres"), &FellowBurnable3D::set_flame_reach);
+	ClassDB::bind_method(D_METHOD("get_flame_reach"), &FellowBurnable3D::get_flame_reach);
+	ClassDB::bind_method(D_METHOD("set_collapse_fraction", "fraction"), &FellowBurnable3D::set_collapse_fraction);
+	ClassDB::bind_method(D_METHOD("get_collapse_fraction"), &FellowBurnable3D::get_collapse_fraction);
+	ClassDB::bind_method(D_METHOD("is_collapsed"), &FellowBurnable3D::is_collapsed);
 	ClassDB::bind_method(D_METHOD("set_char_color", "color"), &FellowBurnable3D::set_char_color);
 	ClassDB::bind_method(D_METHOD("get_char_color"), &FellowBurnable3D::get_char_color);
 	ClassDB::bind_method(D_METHOD("set_ash_color", "color"), &FellowBurnable3D::set_ash_color);
@@ -1572,12 +1627,14 @@ void FellowBurnable3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "glow_temperature", PROPERTY_HINT_RANGE, "300,1500,1,suffix:K"), "set_glow_temperature", "get_glow_temperature");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "glow_rate", PROPERTY_HINT_RANGE, "0,1,0.001,suffix:1/s"), "set_glow_rate", "get_glow_rate");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "ash_volume", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_ash_volume", "get_ash_volume");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "collapse_fraction", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_collapse_fraction", "get_collapse_fraction");
 	ADD_GROUP("Gas", "");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "flame_strength", PROPERTY_HINT_RANGE, "0,10,0.01,or_greater"), "set_flame_strength", "get_flame_strength");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "smoke", PROPERTY_HINT_RANGE, "0,4,0.01,or_greater"), "set_smoke", "get_smoke");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "surface_heating", PROPERTY_HINT_RANGE, "0,1000,0.1,or_greater,suffix:1/s"), "set_surface_heating", "get_surface_heating");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "flame_attachment", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_flame_attachment", "get_flame_attachment");
-	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "flame_feedback", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_flame_feedback", "get_flame_feedback");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "flame_temperature", PROPERTY_HINT_RANGE, "0,2000,1,suffix:K"), "set_flame_temperature", "get_flame_temperature");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "flame_reach", PROPERTY_HINT_RANGE, "0,1,0.01,or_greater,suffix:m"), "set_flame_reach", "get_flame_reach");
 	ADD_GROUP("Look", "");
 	ADD_PROPERTY(PropertyInfo(Variant::COLOR, "char_color", PROPERTY_HINT_COLOR_NO_ALPHA), "set_char_color", "get_char_color");
 	ADD_PROPERTY(PropertyInfo(Variant::COLOR, "ash_color", PROPERTY_HINT_COLOR_NO_ALPHA), "set_ash_color", "get_ash_color");
@@ -1586,4 +1643,5 @@ void FellowBurnable3D::_bind_methods() {
 
 	ADD_SIGNAL(MethodInfo("ignited"));
 	ADD_SIGNAL(MethodInfo("burned_out"));
+	ADD_SIGNAL(MethodInfo("collapsed"));
 }

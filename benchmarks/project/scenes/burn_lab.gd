@@ -148,8 +148,10 @@ func _burnable(p_mesh: MeshInstance3D, p_res: int) -> Node:
 		b.surface_heating = float(args["surface_heating"])
 	if args.has("attach"):
 		b.flame_attachment = float(args["attach"])
-	if args.has("feedback"):
-		b.flame_feedback = float(args["feedback"])
+	if args.has("flame_temperature"):
+		b.flame_temperature = float(args["flame_temperature"])
+	if args.has("flame_reach"):
+		b.flame_reach = float(args["flame_reach"])
 	p_mesh.add_child(b)
 	return b
 
@@ -226,8 +228,8 @@ func _physics_process(_delta: float) -> void:
 	kindling.temperature = 900.0 * k
 	kindling.smoke = 0.08 * k
 	if ticks == 180 and crate:
-		# A corner of the crate, the side towards the fire, lit as by a torch.
-		crate.ignite(crate.get_parent().to_global(Vector3(-0.24, 0.3, 0.24)), 0.1, 1000.0)
+		# A bottom corner of the crate, the side towards the fire, lit as by a torch.
+		crate.ignite(crate.get_parent().to_global(Vector3(-0.24, 0.04, 0.24)), 0.1, 1000.0)
 
 
 func sample_extra() -> Dictionary:

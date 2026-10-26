@@ -125,12 +125,14 @@ materials while in the tree. Decision record 0120; bench scene Burn Lab (`--scen
 | `mesh_path` (the parent), `gas_volume_path` (the volume holding the object's centre), `resolution` (32 voxels along the longest side), `subdivide` (on) | the object, its fire, its voxels; the drawn mesh subdivided to 1.5 voxels per edge so it can follow them |
 | `burn_speed` (10) | burning seconds per second: a log burns in about a minute, not an hour (the flames keep their real size) |
 | `density` (500 kg/m³), `specific_heat`, `conductivity`, `pyrolysis_temperature` (573 K), `pyrolysis_rate`, `char_yield`, `glow_temperature` (673 K), `glow_rate`, `ash_volume` | the wood: how fast it heats through (thin parts first), chars, glows and how much ash it leaves |
-| `flame_strength` (1: 2.7 of the gas's fuel units per kg of volatiles), `flame_attachment` (0.5), `flame_feedback` (0.1), `surface_heating` (200/s), `smoke` (0.05) | the coupling with the gas: the flames' size, the part burning at the surface, the flame's heat back into the surface (keeps the object burning on its own), the air heated by the hot surface, the smoke |
+| `flame_temperature` (1100 K), `flame_reach` (10 cm) | the surface's own flame (thinner than a voxel): a burning surface exchanges heat with it, the flame climbs over the wood above and creeps sideways — what keeps the object burning to ash on its own; lower to make it go out by itself |
+| `flame_strength` (1: 2.7 of the gas's fuel units per kg of volatiles), `flame_attachment` (0.5), `surface_heating` (200/s), `smoke` (0.05) | the coupling with the gas: the visible flames' size, the part burning at the surface, the air heated by the hot surface, the smoke |
+| `collapse_fraction` (0.2) | with less wood and char left the object's physics body stops colliding (its shapes disabled, a rigid body frozen); signal `collapsed` |
 | `char_color`, `ash_color`, `glow_intensity` (4), `crack_scale` (2.5 cm) | the look |
 
 Methods `ignite(position, radius, temperature)`, `reset_burning()`, `get_wood_fraction()` / `get_char_fraction()` /
-`get_ash_fraction()`, `is_burning()`; signals `ignited`, `burned_out`. Limits: at most 8 objects per gas volume; skinned
-meshes are simulated, not drawn burning; the physics body keeps its shape.
+`get_ash_fraction()`, `is_burning()`, `is_collapsed()`; signals `ignited`, `burned_out`, `collapsed`. Limits: at most 8
+objects per gas volume; skinned meshes are simulated, not drawn burning.
 
 ## Options that change the image (off by default)
 

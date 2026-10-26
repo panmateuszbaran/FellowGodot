@@ -77,7 +77,9 @@ private:
 	float smoke = 0.05f;
 	float surface_heating = 200.0f;
 	float flame_attachment = 0.5f;
-	float flame_feedback = 0.1f;
+	float flame_temperature = 1100.0f; // K: the surface's own flame
+	float flame_reach = 0.1f; // m: how far above the burning surface its flame heats
+	float collapse_fraction = 0.2f; // the physics body stops colliding when less wood and char is left (0: never)
 	// Look.
 	Color char_color = Color(0.045, 0.038, 0.034);
 	Color ash_color = Color(0.56, 0.54, 0.51);
@@ -115,6 +117,9 @@ private:
 	float fuel_release = 0.0f;
 	bool has_ignited = false;
 	bool has_burned_out = false;
+	bool has_collapsed = false;
+	LocalVector<ObjectID> disabled_shapes; // the body's shapes this node disabled (collapsed)
+	bool froze_body = false;
 	uint64_t ticks = 0;
 	LocalVector<Vector4> pending_ignitions; // centre (voxels), radius (voxels)
 	LocalVector<float> pending_ignition_temperatures; // K above ambient
@@ -133,6 +138,8 @@ private:
 	void _unconfigure();
 	void _queue_step();
 	void _read_totals();
+	void _collapse();
+	void _restore_collision();
 	float _fill_at(const Vector3 &p_local) const; // the initial fill, trilinear (as the GPU's display texture)
 
 	static void _rt_configure(uint32_t p_id, Vector3i p_res, PackedByteArray p_initial, Ref<FellowGasReadback> p_totals, Ref<Texture3DRD> p_texture);
@@ -190,8 +197,13 @@ public:
 	float get_surface_heating() const { return surface_heating; }
 	void set_flame_attachment(float p_value) { flame_attachment = CLAMP(p_value, 0.0f, 1.0f); }
 	float get_flame_attachment() const { return flame_attachment; }
-	void set_flame_feedback(float p_value) { flame_feedback = CLAMP(p_value, 0.0f, 1.0f); }
-	float get_flame_feedback() const { return flame_feedback; }
+	void set_flame_temperature(float p_value) { flame_temperature = CLAMP(p_value, 0.0f, 3000.0f); }
+	float get_flame_temperature() const { return flame_temperature; }
+	void set_flame_reach(float p_value) { flame_reach = CLAMP(p_value, 0.0f, 10.0f); }
+	float get_flame_reach() const { return flame_reach; }
+	void set_collapse_fraction(float p_value) { collapse_fraction = CLAMP(p_value, 0.0f, 1.0f); }
+	float get_collapse_fraction() const { return collapse_fraction; }
+	bool is_collapsed() const { return has_collapsed; }
 
 	void set_char_color(const Color &p_color);
 	Color get_char_color() const { return char_color; }

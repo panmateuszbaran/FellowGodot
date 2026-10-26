@@ -10,10 +10,11 @@ BURN_SETTLE):
      conduct), explicit;
   2. exchange with the gas at the exposed faces (a face is exposed by how little solid and ash is beyond it):
      convection and radiation to the gas temperature outside the surface (the hottest of three samples along the
-     outward direction: the flame in front of it), semi-implicit (stable at any step);
+     outward direction: the flame in front of it) or the surface's own flame (thinner than a voxel: over the voxels
+     that released volatiles the step before, beside them and up to `flame_reach` above, as much as their flux per
+     area covers it), semi-implicit (stable at any step);
   3. pyrolysis above `pyrolysis_temperature`: wood -> char (`char_volume` of its volume), endothermic, the volatiles
-     (1 - `char_yield` of the mass) released as the gas's fuel at the surface; where the voxel has an open face
-     their flame (outside it, thinner than a voxel) returns `flame_heat` per kg of them;
+     (1 - `char_yield` of the mass) released as the gas's fuel at the surface;
   4. char oxidation (glowing) above `glow_temperature` where the char is exposed: char -> ash (`ash_volume` of its
      volume), exothermic;
   5. ash settles: ash with no wood or char left in its voxel falls into the voxel below (along the voxel axis
@@ -55,7 +56,9 @@ class Material:
 		self.emissivity = f32(0.9)
 		self.fuel_per_kg = f32(40.0)  # the gas's fuel units per kg of volatiles
 		self.settle_rate = f32(2.0)  # 1/s
-		self.flame_heat = f32(0.0)  # J per kg of volatiles: their flame's heat returned to a surface voxel they leave
+		self.flame_temperature = f32(0.0)  # K above ambient: a surface in its own flame exchanges with it (0: off)
+		self.flame_flux = f32(0.005)  # kg/(m^2 s) of volatiles for a surface fully in its flame
+		self.flame_reach = 0  # voxels: the flame over the voxels releasing volatiles and this far above them
 
 
 def smoothstep(e0, e1, x):
@@ -72,6 +75,24 @@ def neighbour(a, axis, d, fill):
 	return out
 
 
+def shift(a, axis, d, fill):
+	"""a shifted so that out[i] = a[i + d] along axis (any d); fill outside the grid."""
+	out = np.full_like(a, fill)
+	n = a.shape[axis]
+	if abs(d) >= n:
+		return out
+	src = [slice(None)] * a.ndim
+	dst = [slice(None)] * a.ndim
+	if d >= 0:
+		src[axis] = slice(d, n)
+		dst[axis] = slice(0, n - d)
+	else:
+		src[axis] = slice(0, n + d)
+		dst[axis] = slice(-d, n)
+	out[tuple(dst)] = a[tuple(src)]
+	return out
+
+
 class Burnable:
 	def __init__(self, occupancy, h, mat=None):
 		self.n = occupancy.shape
@@ -82,6 +103,8 @@ class Burnable:
 		self.c = np.zeros(self.n, f32)
 		self.a = np.zeros(self.n, f32)
 		self.fuel = np.zeros(self.n, f32)  # released this step, units / (s m^3)
+		self.volatiles = np.zeros(self.n, f32)  # released this step, kg / (s m^3)
+		self.volatiles_prev = np.zeros(self.n, f32)  # the step before's (the flame rising from them heats this step)
 		self.time = 0.0
 
 	def heat_capacity(self):
@@ -135,6 +158,23 @@ class Burnable:
 		idx = np.stack(np.meshgrid(*[np.arange(v) for v in self.n], indexing="ij"), axis=-1).astype(f32) + f32(0.5)
 		sd = f32(sample_distance)
 		tg = np.maximum(gas_temperature(idx + n * (f32(0.5) * sd)), np.maximum(gas_temperature(idx + n * sd), gas_temperature(idx + n * (f32(1.5) * sd)))).astype(f32)
+		if float(m.flame_temperature) > 0.0:
+			# The surface's own flame (thinner than a voxel): where the voxel or those below it (up to flame_reach)
+			# released volatiles the step before, the surface exchanges with a flame of flame_temperature, as much as
+			# their flux (per area) covers it.
+			axis, sign = settle[0], -settle[1]  # up
+			# The flame over the voxel: the volatiles of the voxels below it (up to flame_reach) and beside them (one
+			# voxel across: the flame's width, how it creeps sideways).
+			side = np.zeros(self.n, f32)
+			o1, o2 = [x for x in range(3) if x != axis]
+			for d1 in (-1, 0, 1):
+				for d2 in (-1, 0, 1):
+					side = np.maximum(side, shift(shift(self.volatiles_prev, o1, d1, f32(0.0)), o2, d2, f32(0.0)))
+			q = side.copy()
+			for kk in range(1, int(m.flame_reach) + 1):
+				q = np.maximum(q, shift(side, axis, -sign * kk, f32(0.0)))
+			cover = np.clip(q * h / m.flame_flux, 0.0, 1.0).astype(f32)
+			tg = np.maximum(tg, cover * m.flame_temperature).astype(f32)
 		ta = T + T_AMBIENT
 		tga = tg + T_AMBIENT
 		hr = (m.emissivity * SIGMA * (tga * tga + ta * ta) * (tga + ta)).astype(f32)
@@ -146,8 +186,8 @@ class Burnable:
 		w = (w - dw).astype(f32)
 		c = (c + dw * m.char_volume).astype(f32)
 		T = (T - dw * m.density * m.pyrolysis_heat / cv).astype(f32)
-		T = np.where(e > 0, T + dw * m.density * (f32(1.0) - m.char_yield) * m.flame_heat / cv, T).astype(f32)
-		self.fuel = (dw * m.density * (f32(1.0) - m.char_yield) * m.fuel_per_kg / f32(dt)).astype(f32)
+		self.volatiles = (dw * m.density * (f32(1.0) - m.char_yield) / f32(dt)).astype(f32)
+		self.fuel = (self.volatiles * m.fuel_per_kg).astype(f32)
 		# 4. char oxidation where exposed
 		ro = (m.glow_rate * smoothstep(m.glow_temperature, m.glow_temperature + f32(200.0), T) * np.minimum(e, f32(1.0))).astype(f32)
 		dc = (c * (f32(1.0) - np.exp(-ro * dt))).astype(f32)
@@ -159,6 +199,7 @@ class Burnable:
 		T = np.where(fill < f32(1e-3), tg, T).astype(f32)
 		self.w, self.c, self.a, self.T = w, c, a, T
 		self.settle(dt, *settle)
+		self.volatiles_prev = self.volatiles.astype(np.float16).astype(f32)  # the GPU keeps it in half precision
 		self.time += float(dt)
 
 	def settle(self, dt, axis=1, sign=-1, floor=0):

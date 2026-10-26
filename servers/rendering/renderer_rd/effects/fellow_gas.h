@@ -142,7 +142,9 @@ public:
 		int32_t settle_axis = 1; // the ash falls along this voxel axis (the one nearest to the world's down),
 		int32_t settle_sign = -1; // in this direction,
 		int32_t settle_floor = 0; // down to this layer (the object's lowest)
-		float flame_heat = 0.0f; // the volatiles' flame's heat returned to the surface (J per kg of volatiles)
+		float flame_temperature = 0.0f; // the surface's own flame (K above ambient; 0: none)
+		float flame_flux = 0.005f; // the volatiles' flux (kg/(m^2 s)) a surface needs to be in its flame
+		float flame_reach = 0.0f; // voxels above the surface
 		int32_t read_totals = 0;
 		uint64_t tick = 0; // the physics frame (the gas's and the burnables' steps run in its order)
 	};
@@ -248,7 +250,8 @@ private:
 		Vector3i res;
 		RID state[2]; // RGBA32F: temperature, wood, char, ash
 		RID display; // RGBA16F copy (the mesh's material samples it)
-		RID emission; // RGBA16F: fuel released, surface temperature, exposure, solid
+		RID emission[2]; // RGBA16F: volatiles released (kg/(m^3 s)), surface temperature, exposure, solid; this step's and the one before
+		uint32_t emission_current = 0;
 		RID inject; // RGBA16F, the gas cells' region
 		Vector3i inject_size;
 		RID ubo;
