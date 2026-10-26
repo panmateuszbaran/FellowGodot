@@ -114,7 +114,7 @@ private:
 	int pressure_iterations = 20;
 	PressureSolver pressure_solver = SOLVER_MULTIGRID;
 	int multigrid_cycles = 2;
-	bool sparse = false;
+	bool sparse = true;
 	int sparse_margin = 2;
 	bool maccormack = true;
 	bool physics_obstacles = true;
