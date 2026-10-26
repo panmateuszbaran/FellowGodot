@@ -55,9 +55,13 @@ the obstacle's index); per 4³ brick the largest smoke and temperature (RG16F, f
    the last step) and its gradient subtracted. Faces: closed (a wall), open (zero pressure outside) or, open with the
    wind blowing in, an inflow at the wind's velocity (fresh air). Two solvers (`pressure_solver`):
    - **multigrid** (the default): `multigrid_cycles` (2) V-cycles — at each level two red-black Gauss-Seidel sweeps
-     (ω 1.15), the residual restricted to a level of half the size (averaged over the fluid children; a coarse cell
-     solid where all its children are), down to a smallest side of at most 4 cells solved by one workgroup (20 sweeps),
-     the corrections interpolated back trilinearly and two sweeps after each;
+     (ω 1.15), the residual restricted to a level of half the size (rounded up; averaged over the fluid children; a
+     coarse cell solid where all its children are), down to a smallest side of at most 4 cells solved by one workgroup
+     (20 sweeps), the corrections interpolated back trilinearly and two sweeps after each. An open face's zero
+     pressure sits half a cell past the face (the centres of the cells outside, which the grid's stencil counts with
+     weight 1); on a coarser level the stencil counts it with 1 / its distance, in that level's cells, from the
+     outermost cell centres (at least a quarter cell: a level rounded up hangs over the high faces) — see "Open faces
+     on the coarse levels" below;
    - **SOR**: `pressure_iterations` (20) red-black sweeps, ω 1.6.
 7. *Bricks*: the largest smoke and temperature per 4³ brick (with a one-cell border); per workgroup the fire's emission
    and its emission-weighted position, read back asynchronously (2-3 frames later): the node's omni light (decision
@@ -91,19 +95,45 @@ cells) in high precision on lavapipe and dumps its textures; `gas_compare.py` st
 | wind 1 m/s through the x faces | 30 | 8.0 × 10⁻⁷ | 0.0113 / 0.0113 |
 | closed box, warm smoke | 30 | 8.1 × 10⁻⁷ | 0.0027 / 0.0027 |
 
-With the multigrid solver (the default since it was added; the table above is SOR's):
+With the multigrid solver (the default since it was added; the table above is SOR's; with the open faces' weights on
+the coarse levels, below):
 
 | case | steps | largest relative L2 difference | residual after the projection, max / mean (s⁻¹) | SOR's |
 |---|---:|---:|---|---|
-| campfire | 1 | 8.0 × 10⁻⁷ | 0.0073 / 0.0006 | 0.0211 / 0.0019 |
-| campfire | 60 | 3.1 × 10⁻⁶ | 0.0019 / 0.00012 | 0.0171 / 0.0021 |
-| a static sphere obstacle | 30 | 1.0 × 10⁻⁶ | 0.0010 / 0.00005 | 0.0077 / 0.00067 |
+| campfire | 1 | 7.1 × 10⁻⁷ | 0.0015 / 0.00004 | 0.0211 / 0.0019 |
+| campfire | 20, 40 | 5.9 × 10⁻⁷, 1.5 × 10⁻⁶ | | |
+| campfire | 60 | 9.6 × 10⁻⁵ (the fuel; the velocity 2.4 × 10⁻⁶) | 0.0012 / 0.00003 | 0.0171 / 0.0021 |
+| campfire, 34 × 51 × 34 cells | 60 | 2.5 × 10⁻⁶ | 0.0013 / 0.00003 | |
+| a static sphere obstacle | 30 | 9.1 × 10⁻⁷ | 0.0003 / 0.00001 | 0.0077 / 0.00067 |
+| wind 1 m/s through the x faces | 30 | 8.0 × 10⁻⁷ | 0.0003 / 0.00001 | 0.0113 (max) |
+| closed box, warm smoke | 30 | 8.7 × 10⁻⁷ | 0.0001 / 0.000004 | 0.0027 (max) |
+| world space, moved (2, 0, −1) cells after 20 | 30 | 8.2 × 10⁻⁷ | 0.0003 / 0.00001 | |
+
+(The campfire's fuel after 60 steps: between 40 and 60 a cell's gas crossed the ignition temperature in one and not
+in the other — rounding, amplified by the threshold.)
 
 The reference's study, one projection of the campfire's state after 60 steps (the divergence before it up to 5.4 s⁻¹,
-0.071 on average): SOR 20 warm-started 0.026 / 0.0032, cold 0.23 / 0.029; two V-cycles warm 0.0041 / 0.00025, cold
-0.031 / 0.0027 (one V-cycle with piecewise-constant interpolation: max 0.27 — the trilinear interpolation and ω 1.15
-chosen there). Two V-cycles are 8 sweeps of the grid and 4 passes besides (plus the coarser levels, about 1/7 more)
-against SOR's 20 sweeps. The GPU is the reference to float rounding: the solver is what this record describes.
+0.070 on average): SOR 20 warm-started 0.019 / 0.0024, cold 0.22 / 0.028; two V-cycles warm 0.0022 / 0.00004, cold
+0.0082 / 0.00035 (with weight 1 for the open faces on every level: warm 0.0022 / 0.00013, cold 0.030 / 0.0027; one
+V-cycle with piecewise-constant interpolation: max 0.27 — the trilinear interpolation and ω 1.15 chosen there). Two
+V-cycles are 8 sweeps of the grid and 4 passes besides (plus the coarser levels, about 1/7 more) against SOR's 20
+sweeps. The GPU is the reference to float rounding: the solver is what this record describes.
+
+**Open faces on the coarse levels.** The multigrid solve first counted an open face with weight 1 at every level,
+as the grid does. On a grid whose size is odd along an open axis the coarser levels hang over the face (53 cells:
+27 of 2, 14 of 4 — the last coarse cells mostly outside), the coarse problem was much softer than the grid's, its
+correction too large, and the V-cycle amplified the error: Fire Lab's chimney (53 × 80 × 53 cells at `--gas_res=64`,
+all faces open) reached NaN within seconds on the RTX (f259: the plume missing from the captures) and on lavapipe
+(gas_diag.gd: the pressure all NaN after 120 steps; closed, or with SOR: finite), the reference too (the pressure
+6 × 10²² after 40 steps). Even sizes converged, slowly. V-cycles on a random right-hand side (the residual's RMS
+relative to the start): with weight 1, after 12 cycles, 53 × 80 × 53 and 27 × 41 × 27 with all faces open 87 and
+1.1, 21³, 33 × 65 × 33 and 37 × 73 × 37 with the floor closed 12, 6800 and 590 (diverging), 32 × 64 × 32 all open
+3 × 10⁻⁴ (2× per cycle); with the weights by distance every size from 5³ to 40³ and 17 × 129 × 17, 65 × 17 × 33,
+100 × 30 × 7 (the floor closed) converge, 10× per cycle on most (the worst, 65 × 17 × 33: 7 × 10⁻⁴ after 6 cycles),
+53 × 80 × 53 all open 8 × 10⁻⁷ after 12 (float rounding). The chimney's state after 60 steps in the reference (wind blowing in through
+two faces), one projection from zero: SOR 20 max 0.023 / mean 0.0049 s⁻¹, two V-cycles with weight 1 0.15 / 0.0077, with the weights
+0.0022 / 0.00011. On the grid itself the weight is 1, so SOR is unchanged (lavapipe: the campfire's 60 SOR steps bit
+for bit the previous build's).
 
 **Without a volume** nothing of it runs (no pass, no pipeline): the frame is the previous build's bit for bit (lavapipe,
 City Lab, Crowd Lab, Lights Lab, City Lab with auto exposure; see the milestone report).

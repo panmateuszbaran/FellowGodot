@@ -299,9 +299,12 @@ private:
 		int32_t size[4];
 		float level[4];
 		int32_t coarse_size[4];
+		float open_lo[4]; // the open faces' weights in the level's stencil
+		float open_hi[4];
 	};
+	void _open_weights(const Vector3i &p_res, int p_level, MGPush &r_push) const;
 	void _dispatch_sim(Volume &r_v, SimMode p_mode, const Vector<RD::Uniform> &p_uniforms, const Vector3i &p_threads, const MGPush *p_push = nullptr, bool p_groups = false);
-	void _smooth(Volume &r_v, const Vector3i &p_size, RID p_pressure, RID p_rhs, RID p_solid, float p_dx2, float p_omega, int p_iterations);
+	void _smooth(Volume &r_v, const Vector3i &p_size, int p_level, RID p_pressure, RID p_rhs, RID p_solid, float p_dx2, float p_omega, int p_iterations);
 	static void _emission_read(const Vector<uint8_t> &p_data, Callable p_callback, uint32_t p_id);
 
 public:

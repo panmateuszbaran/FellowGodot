@@ -338,11 +338,32 @@ class State:
 		rhs[self.solid] = 0.0
 		return rhs
 
-	def neighbour_terms(self, q, solid=None):
-		"""Sum of the included neighbours' q and their count (solid and closed / inflow faces excluded, open faces
-		counted with q = 0), on the grid or on a multigrid level (q's shape)."""
+	def open_weights(self, level):
+		"""The open faces' weights in the stencil of a multigrid level, per axis (low, high sides): 1 / the distance in
+		the level's cells from its outermost cell centres to where the fine grid's zero pressure sits (the centres of
+		the cells just outside, half a fine cell beyond the face), at least a quarter cell. 1 on the grid itself; on a
+		coarser level whose size was rounded up the last cells hang over the face, the weight is larger (decision 0117;
+		with 1 the V-cycle diverged on odd grids)."""
+		h = float(1 << level)
+		lo = []
+		hi = []
+		n = self.p.n
+		m = n
+		for _ in range(level):
+			m = tuple((v + 1) // 2 for v in m)
+		for a in range(3):
+			d_lo = 0.5 + 0.5 / h
+			d_hi = (n[a] + 0.5) / h - m[a] + 0.5
+			lo.append(f32(1.0 / max(d_lo, 0.25)))
+			hi.append(f32(1.0 / max(d_hi, 0.25)))
+		return lo, hi
+
+	def neighbour_terms(self, q, solid=None, level=0):
+		"""Sum of the included neighbours' q and their weights' sum (solid and closed / inflow faces excluded, open
+		faces counted with q = 0 at the level's weight), on the grid or on a multigrid level (q's shape)."""
 		solid = self.solid if solid is None else solid
 		n = q.shape
+		w_lo, w_hi = self.open_weights(level)
 		tot = np.zeros(n, f32)
 		cnt = np.zeros(n, f32)
 		for c in range(3):
@@ -355,22 +376,22 @@ class State:
 				inc = ~sn
 				inc[tuple(edge)] = False
 				tot = (tot + np.where(inc, qn, f32(0.0))).astype(f32)
-				cnt = cnt + inc
+				cnt = (cnt + inc.astype(f32)).astype(f32)
 				if self.face_kind(c, side) == 1:
-					e = np.zeros(n, bool)
-					e[tuple(edge)] = True
-					cnt = cnt + e  # an open face: q = 0 outside
+					e = np.zeros(n, f32)
+					e[tuple(edge)] = w_lo[c] if side == 0 else w_hi[c]
+					cnt = (cnt + e).astype(f32)  # an open face: q = 0 outside
 		return tot, cnt
 
-	def smooth(self, q, rhs, solid, dx, omega, iterations):
+	def smooth(self, q, rhs, solid, dx, omega, iterations, level=0):
 		"""Red-black Gauss-Seidel / SOR sweeps on a level (the GPU's PRESSURE and MG_COARSE passes)."""
 		ii, jj, kk = np.meshgrid(*[np.arange(v) for v in q.shape], indexing="ij")
 		colour = (ii + jj + kk) & 1
 		dx2 = (dx * dx).astype(f32)
 		for _ in range(iterations):
 			for col in (0, 1):
-				tot, cnt = self.neighbour_terms(q, solid)
-				gs = np.where(cnt > 0, (tot - dx2 * rhs) / np.maximum(cnt, 1), f32(0.0)).astype(f32)
+				tot, cnt = self.neighbour_terms(q, solid, level)
+				gs = np.where(cnt > 0, (tot - dx2 * rhs) / np.where(cnt > 0, cnt, f32(1.0)), f32(0.0)).astype(f32)
 				new = ((f32(1.0) - omega) * q + omega * gs).astype(f32)
 				q = np.where((colour == col) & ~solid, new, q).astype(f32)
 				q[solid & (colour == col)] = 0.0
@@ -384,9 +405,9 @@ class State:
 			sizes.append(s)
 		return sizes
 
-	def restrict(self, q, rhs, solid, dx, coarse):
+	def restrict(self, q, rhs, solid, dx, coarse, level):
 		"""MG_RESTRICT: the children's residual averaged over the fluid ones; a coarse cell is solid where all are."""
-		tot, cnt = self.neighbour_terms(q, solid)
+		tot, cnt = self.neighbour_terms(q, solid, level)
 		dx2 = (dx * dx).astype(f32)
 		r = (rhs - (tot - cnt * q) / dx2).astype(f32)
 		n = q.shape
@@ -431,16 +452,16 @@ class State:
 			ss = [self.solid] + [None] * L
 			for level in range(L):
 				dxl = f32(float(p.dx) * (1 << level))
-				qs[level] = self.smooth(qs[level], rs[level], ss[level], dxl, omega, 2)
-				rs[level + 1], ss[level + 1] = self.restrict(qs[level], rs[level], ss[level], dxl, sizes[level])
+				qs[level] = self.smooth(qs[level], rs[level], ss[level], dxl, omega, 2, level)
+				rs[level + 1], ss[level + 1] = self.restrict(qs[level], rs[level], ss[level], dxl, sizes[level], level)
 				qs[level + 1] = np.zeros(sizes[level], f32)
 			dxc = f32(float(p.dx) * (1 << L))
-			qs[L] = self.smooth(qs[L], rs[L], ss[L], dxc, omega, 20)
+			qs[L] = self.smooth(qs[L], rs[L], ss[L], dxc, omega, 20, L)
 			for level in range(L - 1, -1, -1):
 				dxl = f32(float(p.dx) * (1 << level))
 				n = qs[level].shape
 				qs[level] = (qs[level] + self.prolong(qs[level + 1], n, ss[level])).astype(f32)
-				qs[level] = self.smooth(qs[level], rs[level], ss[level], dxl, omega, 2)
+				qs[level] = self.smooth(qs[level], rs[level], ss[level], dxl, omega, 2, level)
 			q0 = qs[0]
 		q0[self.solid] = 0.0
 		self.pressure = q0

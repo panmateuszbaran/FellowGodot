@@ -210,6 +210,8 @@ layout(push_constant, std430) uniform Push {
 	ivec4 size; // xyz: the offset (cells): new cell c holds old cell c + offset
 	vec4 level; // unused
 	ivec4 coarse_size; // unused
+	vec4 open_lo; // unused
+	vec4 open_hi; // unused
 }
 push;
 
@@ -600,6 +602,8 @@ layout(push_constant, std430) uniform Push {
 	ivec4 size; // this level's size (RESTRICT, PROLONG: the finer level's); w: the red-black colour (PRESSURE)
 	vec4 level; // x dx^2 of this level (RESTRICT, PROLONG: the finer level's), y SOR omega, z iterations (COARSE), w unused
 	ivec4 coarse_size; // RESTRICT, PROLONG: the coarser level's size
+	vec4 open_lo; // xyz: an open face's weight in the stencil on the low sides (this level's; RESTRICT: the finer's)
+	vec4 open_hi; // xyz: on the high sides (1 on the grid; on the coarser levels 1 / the distance in cells to the zero)
 }
 push;
 
@@ -607,8 +611,8 @@ ivec3 LN() {
 	return push.size.xyz;
 }
 
-// The neighbours' sum and count of the Poisson stencil at a cell of a level (solid neighbours and closed or inflow
-// faces left out, an open face counted with zero pressure outside).
+// The neighbours' sum and weights' sum of the Poisson stencil at a cell of a level (solid neighbours and closed or
+// inflow faces left out, an open face counted at the level's weight with zero pressure outside).
 void stencil(ivec3 p_c, out float r_sum, out float r_count);
 #endif
 
@@ -649,7 +653,7 @@ void stencil(ivec3 p_c, out float r_sum, out float r_count) {
 				count += 1.0;
 			}
 		} else if (face_kind(2 * a) == 1) {
-			count += 1.0; // open: zero pressure outside
+			count += comp(push.open_lo.xyz, a); // open: zero pressure outside
 		}
 		if (icomp(p_c, a) < icomp(LN(), a) - 1) {
 			if (imageLoad(solid, p_c + e).r == 0u) {
@@ -657,7 +661,7 @@ void stencil(ivec3 p_c, out float r_sum, out float r_count) {
 				count += 1.0;
 			}
 		} else if (face_kind(2 * a + 1) == 1) {
-			count += 1.0;
+			count += comp(push.open_hi.xyz, a);
 		}
 	}
 	r_sum = sum;
@@ -890,6 +894,8 @@ layout(push_constant, std430) uniform Push {
 	ivec4 size; // unused
 	vec4 level; // x: 1 / the velocity mapped to 1 (m/s)
 	ivec4 coarse_size; // unused
+	vec4 open_lo; // unused
+	vec4 open_hi; // unused
 }
 push;
 
