@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="FellowBurnable3D" inherits="Node3D" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+	<brief_description>
+		FellowEngine: makes a [MeshInstance3D] burn like wood: it chars, glows, recedes and ends as ash, its volatiles feeding the flames of a [FellowGasVolume3D].
+	</brief_description>
+	<description>
+		The mesh of [member mesh_path] (empty: the parent) is voxelized ([member resolution] voxels along its longest side); each voxel has a temperature and how much of it is wood, char and ash. The GPU heats the voxels from the gas around the object (the flames' temperature, by convection and radiation), conducts the heat inwards, pyrolyses the wood to char (above [member pyrolysis_temperature]; the volatiles become the gas's fuel, so the flames come from the object itself), oxidises the exposed char to ash (above [member glow_temperature]: glowing embers) and lets the ash fall into a heap. Thin parts burn through first, thick ones char slowly. The mesh is drawn from the voxels: its vertices recede with the material, its surface darkens with char and greys with ash, and the hot char glows in its cracks. The gas flows around the object's voxels (its physics body is not the gas's obstacle).
+		Runs only in a running game, not in the editor. While in the tree it replaces the mesh instance's mesh (subdivided so the surface can follow the voxels) and its materials ([BaseMaterial3D] and [ShaderMaterial] spatial shaders are extended with the burning); they are restored when it leaves. Needs a RenderingDevice renderer (Forward+ or Mobile). Without a gas volume the object can only be heated by [method ignite] and cools by itself. At most 8 burning objects inject into one gas volume. See [code]docs/decisions/0120-burning.md[/code].
+	</description>
+	<tutorials>
+	</tutorials>
+</class>

@@ -16,7 +16,7 @@ fellow_run() {
 	shift 3
 	mkdir -p "$out"
 	printf "[rendering]\n%s\n" "$ov" > "$FELLOW_PROJECT/override.cfg"
-	env $envs VK_ICD_FILENAMES=$LVP_ICD timeout 5400 xvfb-run -a "$FELLOW_BIN" --path "$FELLOW_PROJECT" --rendering-driver vulkan --resolution $RES --fixed-fps 60 -- --res=$RES --out="$out" "$@" > "$out.log" 2>&1
+	env $envs VK_ICD_FILENAMES=$LVP_ICD timeout ${FELLOW_TIMEOUT:-5400} xvfb-run -a "$FELLOW_BIN" --path "$FELLOW_PROJECT" --rendering-driver vulkan --resolution $RES --fixed-fps 60 -- --res=$RES --out="$out" "$@" > "$out.log" 2>&1
 	rm -f "$FELLOW_PROJECT/override.cfg"
 }
 # For exactness checks: no undefined derivatives after discard (decision 0057's demote diagnostics).

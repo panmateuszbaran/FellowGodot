@@ -142,6 +142,13 @@ FellowGas::~FellowGas() {
 		_free_volume_textures(kv.value);
 	}
 	volumes.clear();
+	for (KeyValue<uint32_t, Burnable> &kv : burnables) {
+		_free_burnable(kv.value);
+	}
+	burnables.clear();
+	if (burn_ready) {
+		burn_shader.version_free(burn_version);
+	}
 	RID rids[] = { render_ubo, dummy_3d, linear_sampler, linear_mip_sampler, nearest_sampler };
 	for (RID r : rids) {
 		if (r.is_valid()) {
@@ -386,6 +393,10 @@ void FellowGas::_dispatch_sim(Volume &r_v, SimMode p_mode, const Vector<RD::Unif
 	if (!has_list) {
 		u.push_back(RD::Uniform(RD::UNIFORM_TYPE_STORAGE_BUFFER, 14, r_v.brick_list));
 	}
+	// The burning objects' injections (the step's, _gather_burnables()).
+	if ((p_mode == SIM_OBSTACLES || p_mode == SIM_EMIT || p_mode == SIM_SPARSE_SOURCE) && !step_burn_uniforms.is_empty()) {
+		u.push_back(step_burn_uniforms[0]);
+	}
 	RID set = UniformSetCacheRD::get_singleton()->get_cache_vec(shader, 0, u);
 	RD::ComputeListID list = RD::get_singleton()->compute_list_begin();
 	RD::get_singleton()->compute_list_bind_compute_pipeline(list, sim_pipelines[p][p_mode]);
@@ -494,6 +505,7 @@ void FellowGas::_run_step(uint32_t p_id, Volume &r_v, const StepParams &p_step) 
 	u.misc[0] = p_step.time;
 	u.misc[1] = dx * dx;
 	u.misc[2] = p_step.ambient_temperature;
+	u.misc[3] = MAX(p_step.flame_limit, 0.0f);
 	u.emission[0] = p_step.emission_intensity;
 	u.emission[1] = dx * dx * dx;
 	u.emission[2] = p_step.emission_temperature_scale;
@@ -519,6 +531,10 @@ void FellowGas::_run_step(uint32_t p_id, Volume &r_v, const StepParams &p_step) 
 		_open_weights(n, l, u.mg_open_lo[l], u.mg_open_hi[l]);
 		const float ldx = dx * float(1 << l);
 		u.mg_open_lo[l][3] = ldx * ldx;
+	}
+	const int burn_count = _gather_burnables(p_id, u);
+	if (u.misc[3] <= 0.0f && burn_count > 0) {
+		u.misc[3] = BURN_FLAME_LIMIT; // no limit set: with burning objects in it a flame's (their fuel would run it away)
 	}
 	RD::get_singleton()->buffer_update(r_v.ubo, 0, sizeof(SimUBO), &u);
 	// rendering/fellow/fluid/gas_profile_passes (measurements): a timestamp before each group of passes.
@@ -566,7 +582,7 @@ void FellowGas::_run_step(uint32_t p_id, Volume &r_v, const StepParams &p_step) 
 	}
 	// The obstacles (also when there are none left: the cells they covered become air).
 	_dispatch_sim(r_v, SIM_OBSTACLES, { image(1, r_v.solid) }, n, nullptr, false, LIST_F);
-	if (u.size[3] > 0) {
+	if (u.size[3] > 0 || burn_count > 0) {
 		_dispatch_sim(r_v, SIM_EMIT, { image(1, r_v.scalars[cur]), image(2, r_v.solid) }, n, nullptr, false, LIST_A);
 	}
 	// Scalars.
@@ -732,25 +748,72 @@ void FellowGas::process_pending() {
 			break;
 		}
 	}
+	for (const KeyValue<uint32_t, Burnable> &kv : burnables) {
+		any = any || !kv.value.pending.is_empty();
+	}
 	if (!any) {
 		return;
 	}
 	RENDER_TIMESTAMP("FellowEngine Gas Simulation");
-	// In the order of the volumes' ids: the same order on every run.
-	LocalVector<uint32_t> ids;
-	for (const KeyValue<uint32_t, Volume> &kv : volumes) {
-		ids.push_back(kv.key);
+	// In the order of the physics frames they were queued in, per frame the volumes (by id) before the burning objects
+	// (by id): the burning objects read the gas's temperature of that frame, the gas reads their injections at its next
+	// step. The same order on every run.
+	struct Item {
+		uint64_t tick;
+		uint32_t kind; // 0 a volume's step, 1 a burnable's
+		uint32_t id;
+		uint32_t index;
+		bool operator<(const Item &p_o) const {
+			if (tick != p_o.tick) {
+				return tick < p_o.tick;
+			}
+			if (kind != p_o.kind) {
+				return kind < p_o.kind;
+			}
+			return id < p_o.id || (id == p_o.id && index < p_o.index);
+		}
+	};
+	LocalVector<Item> items;
+	for (KeyValue<uint32_t, Volume> &kv : volumes) {
+		if (kv.value.needs_clear) {
+			_clear(kv.value);
+		}
+		for (uint32_t i = 0; i < kv.value.pending.size(); i++) {
+			items.push_back({ kv.value.pending[i].tick, 0u, kv.key, i });
+		}
 	}
-	ids.sort();
-	for (uint32_t id : ids) {
-		Volume &v = volumes[id];
-		if (v.needs_clear) {
-			_clear(v);
+	for (const KeyValue<uint32_t, Burnable> &kv : burnables) {
+		for (uint32_t i = 0; i < kv.value.pending.size(); i++) {
+			items.push_back({ kv.value.pending[i].tick, 1u, kv.key, i });
 		}
-		for (const StepParams &s : v.pending) {
-			_run_step(id, v, s);
+	}
+	items.sort();
+	// rendering/fellow/fluid/gas_profile_passes (measurements): a timestamp where the steps switch between the volumes'
+	// and the burning objects'.
+	const bool profile = GLOBAL_GET_CACHED(bool, "rendering/fellow/fluid/gas_profile_passes");
+	uint32_t last_kind = 0;
+	for (const Item &it : items) {
+		if (profile && it.kind != last_kind) {
+			if (it.kind == 1) {
+				RENDER_TIMESTAMP("FellowEngine Burn Steps");
+			} else {
+				RENDER_TIMESTAMP("FellowEngine Gas Steps");
+			}
+			last_kind = it.kind;
 		}
-		v.pending.clear();
+		if (it.kind == 0) {
+			Volume &v = volumes[it.id];
+			_run_step(it.id, v, v.pending[it.index]);
+		} else {
+			Burnable &b = burnables[it.id];
+			_run_burn_step(it.id, b, b.pending[it.index]);
+		}
+	}
+	for (KeyValue<uint32_t, Volume> &kv : volumes) {
+		kv.value.pending.clear();
+	}
+	for (KeyValue<uint32_t, Burnable> &kv : burnables) {
+		kv.value.pending.clear();
 	}
 	RENDER_TIMESTAMP("FellowEngine Gas Simulation Done");
 }

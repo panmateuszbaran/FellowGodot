@@ -101,6 +101,7 @@ the node places at the fire lights the scene. Without such a node nothing of it 
 | `cast_shadows`, `shadow_strength` | the sun's shadow through the smoke on the scene (in the contact shadow mask; not with the ray-traced sun shadows) |
 | `fire_light`, `fire_light_energy`, `fire_light_range`, `fire_light_shadows` | the omni light at the fire, from the simulated emission (2-3 frames late) |
 | `velocity_texture_enabled`, `velocity_texture_scale` (5 m/s) | the velocity at the cell centres as a `Texture3D` (`get_velocity_texture()`) for a `GPUParticlesAttractorVectorField3D` over the box: sparks and embers carried by the flow (Fire Lab's embers) |
+| `flame_temperature_limit` (0: none; 2200 K above ambient where burning objects feed the volume) | the combustion makes no cell hotter (the fuel left burns further on): burning objects' fuel cannot run the gas away (0120) |
 
 Project settings: `fluid/enabled` (the simulation), `fluid/gas_rendering` (the drawing), `fluid/gas_scene_shadows`
 (the sun's shadow map on the smoke, on); for measurements: `fluid/gas_solver` (0 the node's solver, 1 SOR, 2
@@ -109,6 +110,27 @@ multigrid), `fluid/gas_sparse` (0 the node's, 1 off, 2 on), `fluid/gas_sparse_ma
 0119), `fluid/gas_profile_passes` (a timestamp before each group of a step's passes).
 Limits: transparent objects behind the smoke are drawn over it; the smoke is not in the volumetric fog; one view (no
 XR), no MSAA.
+
+## Burning objects (milestone 22)
+
+A `FellowBurnable3D` node (module `fellow_fluid`; a child of a `MeshInstance3D`, or `mesh_path`) makes the mesh burn
+like wood in a gas volume's fire: the mesh is voxelized, the GPU heats the voxels from the flames, pyrolyses the wood
+to char (the volatiles feed the gas's flames: the fire comes from the object), oxidises the exposed char to glowing
+embers and ash, and lets the ash fall into a heap; the mesh recedes with the material, darkens, glows in its cracks
+and is burned through where it is thin. Runs only in a running game; it replaces the mesh instance's mesh and
+materials while in the tree. Decision record 0120; bench scene Burn Lab (`--scene=burn`).
+
+| property (node) | what it does |
+|---|---|
+| `mesh_path` (the parent), `gas_volume_path` (the volume holding the object's centre), `resolution` (32 voxels along the longest side), `subdivide` (on) | the object, its fire, its voxels; the drawn mesh subdivided to 1.5 voxels per edge so it can follow them |
+| `burn_speed` (10) | burning seconds per second: a log burns in about a minute, not an hour (the flames keep their real size) |
+| `density` (500 kg/m³), `specific_heat`, `conductivity`, `pyrolysis_temperature` (573 K), `pyrolysis_rate`, `char_yield`, `glow_temperature` (673 K), `glow_rate`, `ash_volume` | the wood: how fast it heats through (thin parts first), chars, glows and how much ash it leaves |
+| `flame_strength` (1: 2.7 of the gas's fuel units per kg of volatiles), `flame_attachment` (0.5), `flame_feedback` (0.1), `surface_heating` (200/s), `smoke` (0.05) | the coupling with the gas: the flames' size, the part burning at the surface, the flame's heat back into the surface (keeps the object burning on its own), the air heated by the hot surface, the smoke |
+| `char_color`, `ash_color`, `glow_intensity` (4), `crack_scale` (2.5 cm) | the look |
+
+Methods `ignite(position, radius, temperature)`, `reset_burning()`, `get_wood_fraction()` / `get_char_fraction()` /
+`get_ash_fraction()`, `is_burning()`; signals `ignited`, `burned_out`. Limits: at most 8 objects per gas volume; skinned
+meshes are simulated, not drawn burning; the physics body keeps its shape.
 
 ## Options that change the image (off by default)
 

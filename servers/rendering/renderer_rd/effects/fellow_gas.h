@@ -36,6 +36,7 @@
 #include "core/templates/hash_map.h"
 #include "core/templates/local_vector.h"
 #include "core/variant/callable.h"
+#include "servers/rendering/renderer_rd/shaders/effects/fellow_burn_sim.glsl.gen.h"
 #include "servers/rendering/renderer_rd/shaders/effects/fellow_gas_render.glsl.gen.h"
 #include "servers/rendering/renderer_rd/shaders/effects/fellow_gas_sim.glsl.gen.h"
 #include "servers/rendering/rendering_device.h"
@@ -53,6 +54,8 @@ public:
 	static constexpr int MAX_OBSTACLES = 16;
 	static constexpr int MAX_RENDERED = 8;
 	static constexpr int MAX_MG_LEVELS = 12; // the grid and its coarser levels (fellow_gas_sim.glsl's MAX_MG_LEVELS)
+	static constexpr int MAX_BURNABLES = 8; // burning objects coupled with one gas volume
+	static constexpr float BURN_FLAME_LIMIT = 2200.0f; // K above ambient: the gas's flame limit where burning objects feed it and none is set
 
 	// fellow_gas_sim.glsl's Emitter and Obstacle (std140), in the volume's grid (cells).
 	struct GPUEmitter {
@@ -87,6 +90,7 @@ public:
 		float smoke_dissipation = 0.05f; // 1/s
 		float cooling = 1.2f; // 1/s
 		float ignition = 250.0f; // K above ambient
+		float flame_limit = 0.0f; // K above ambient: the hottest the combustion makes the gas (0: none, BURN_FLAME_LIMIT with burning objects)
 		float burn_rate = 6.0f; // 1/s
 		float heat = 1400.0f; // K per unit fuel
 		float soot = 0.6f; // smoke per unit fuel
@@ -110,6 +114,37 @@ public:
 		int32_t shift[3] = { 0, 0, 0 }; // the box moved by whole cells before this step (new cell c = old cell c + shift)
 		GPUEmitter emitters[MAX_EMITTERS];
 		GPUObstacle obstacles[MAX_OBSTACLES];
+		uint64_t tick = 0; // the physics frame (the volumes' and the burnables' steps run in its order)
+	};
+
+	// One step of a burning object (FellowBurnable3D, decision 0120; plain data). Temperatures in K above ambient.
+	struct BurnStepParams {
+		float dt = 0.0f; // burning time (the physics tick times the node's burn speed)
+		float voxel_size = 0.05f; // m
+		float settle = 0.0f; // the ash settled this step (1 - exp(-rate dt))
+		float densities[4] = {}; // wood, char, ash (kg/m^3), the smallest heat capacity
+		float heats[4] = {}; // wood, char, ash specific heat, pyrolysis heat
+		float conduct[4] = {}; // wood, char, ash conductivity, convection
+		float pyro[4] = {}; // onset, rate, char yield, char volume
+		float glow[4] = {}; // onset, rate, heat kept, ash volume
+		float misc[4] = {}; // emissivity, fuel per kg, gas sample distance (voxels), ambient (K)
+		uint32_t gas_id = 0; // the gas volume it burns in (0: none)
+		float voxel_to_gas[12] = {}; // rows: voxel coordinates -> the gas grid's
+		float gas_to_voxel[12] = {};
+		int32_t region_origin[3] = {}; // the gas cells it injects into
+		int32_t region_size[3] = {};
+		float footprint = 2.0f; // gas cells
+		float smoke_per_fuel = 0.3f;
+		float heat_rate = 20.0f; // the air's heating at full exposure (1/s)
+		float attached = 0.5f; // the fraction of the fuel burning where it is released (the flame on the surface)
+		float ignite[4] = {}; // centre (voxels), radius (voxels; 0 none)
+		float ignite_temperature = 0.0f;
+		int32_t settle_axis = 1; // the ash falls along this voxel axis (the one nearest to the world's down),
+		int32_t settle_sign = -1; // in this direction,
+		int32_t settle_floor = 0; // down to this layer (the object's lowest)
+		float flame_heat = 0.0f; // the volatiles' flame's heat returned to the surface (J per kg of volatiles)
+		int32_t read_totals = 0;
+		uint64_t tick = 0; // the physics frame (the gas's and the burnables' steps run in its order)
 	};
 
 	// How a volume is drawn (plain data).
@@ -175,6 +210,61 @@ private:
 		int32_t mg_levels[MAX_MG_LEVELS][4]; // xyz size, w x offset in the atlas
 		float mg_open_lo[MAX_MG_LEVELS][4]; // the open faces' weights, w dx^2
 		float mg_open_hi[MAX_MG_LEVELS][4];
+		int32_t burn_count[4];
+		int32_t burn_origin[MAX_BURNABLES][4];
+		int32_t burn_size[MAX_BURNABLES][4];
+		float burn_params[MAX_BURNABLES][4];
+	};
+
+	struct BurnUBO { // std140, fellow_burn_sim.glsl's Params
+		int32_t size[4];
+		float grid[4];
+		float densities[4];
+		float heats[4];
+		float conduct[4];
+		float pyro[4];
+		float glow[4];
+		float misc[4];
+		float voxel_to_gas[3][4];
+		int32_t gas_size[4];
+		float ignite[4];
+		float ignite_temperature[4];
+		int32_t region_origin[4];
+		int32_t region_size[4];
+		float gas_to_voxel[3][4];
+		float inject[4];
+		int32_t settle[4];
+		float flame[4];
+	};
+	enum BurnMode {
+		BURN_IGNITE,
+		BURN_HEAT,
+		BURN_SETTLE,
+		BURN_INJECT,
+		BURN_REDUCE,
+		BURN_MAX,
+	};
+	struct Burnable {
+		Vector3i res;
+		RID state[2]; // RGBA32F: temperature, wood, char, ash
+		RID display; // RGBA16F copy (the mesh's material samples it)
+		RID emission; // RGBA16F: fuel released, surface temperature, exposure, solid
+		RID inject; // RGBA16F, the gas cells' region
+		Vector3i inject_size;
+		RID ubo;
+		RID totals;
+		uint32_t current = 0;
+		LocalVector<BurnStepParams> pending;
+		Callable totals_callback;
+		bool totals_in_flight = false;
+		// What the gas reads (the last step's).
+		uint32_t gas_id = 0;
+		int32_t region_origin[3] = {};
+		int32_t region_size[3] = {};
+		float smoke_per_fuel = 0.0f;
+		float heat_rate = 0.0f;
+		float attached = 0.0f;
+		bool injected = false;
 	};
 
 	struct RenderVolumeUBO { // std140, fellow_gas_render.glsl's Volume
@@ -308,6 +398,12 @@ private:
 	Size2i trace_size;
 
 	HashMap<uint32_t, Volume> volumes;
+	HashMap<uint32_t, Burnable> burnables;
+	FellowBurnSimShaderRD burn_shader;
+	RID burn_version;
+	RID burn_pipelines[BURN_MAX];
+	bool burn_ready = false;
+	LocalVector<RD::Uniform> step_burn_uniforms; // the gas step's burnables (binding 16)
 	// The frame's volumes in the render UBO's order (near to far), from begin_frame().
 	LocalVector<uint32_t> frame_volumes;
 	FrameParams frame;
@@ -338,6 +434,12 @@ private:
 	void _dispatch_sim(Volume &r_v, SimMode p_mode, const Vector<RD::Uniform> &p_uniforms, const Vector3i &p_threads, const MGPush *p_push = nullptr, bool p_groups = false, BrickList p_list = LIST_NONE);
 	void _smooth(Volume &r_v, const Vector3i &p_size, int p_level, RID p_pressure, RID p_rhs, RID p_solid, float p_dx2, float p_omega, int p_iterations);
 	static void _emission_read(const Vector<uint8_t> &p_data, Callable p_callback, uint32_t p_id);
+	void _ensure_burn();
+	void _free_burnable(Burnable &r_b);
+	void _run_burn_step(uint32_t p_id, Burnable &r_b, const BurnStepParams &p_step);
+	void _dispatch_burn(Burnable &r_b, BurnMode p_mode, const Vector<RD::Uniform> &p_uniforms, const Vector3i &p_threads);
+	int _gather_burnables(uint32_t p_volume, SimUBO &r_ubo); // the burnables injecting into a volume (fills step_burn_uniforms)
+	static void _burn_totals_read(const Vector<uint8_t> &p_data, Callable p_callback, uint32_t p_id);
 
 public:
 	static FellowGas *get_singleton(); // created on first use (render thread); nullptr without a RenderingDevice
@@ -361,6 +463,14 @@ public:
 	// The velocity at the cell centres as a texture for GPU particles' vector field attractors (2 * texel - 1 =
 	// v / p_scale), updated after every step; RID() turns it off.
 	RID volume_enable_velocity_export(uint32_t p_id, bool p_enable, float p_scale);
+
+	// Burning objects (FellowBurnable3D; render thread).
+	void burnable_configure(uint32_t p_id, const Vector3i &p_res, const Vector<uint8_t> &p_initial); // RGBA32F texels
+	void burnable_free(uint32_t p_id);
+	void burnable_queue_step(uint32_t p_id, const BurnStepParams &p_step);
+	RID burnable_get_display(uint32_t p_id) const; // RGBA16F state for the mesh's material
+	void burnable_set_totals_callback(uint32_t p_id, const Callable &p_callback); // (PackedByteArray) per workgroup
+	void burnable_debug_read(uint32_t p_id, int p_what, const Callable &p_callback); // 0 state (RGBA32F), 1 emission, 2 injection
 
 	void process_pending(); // the queued steps, at the start of a frame
 	bool has_volumes() const { return !volumes.is_empty(); }

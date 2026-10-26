@@ -4,7 +4,7 @@ extends SceneTree
 ##
 ##   godot --path benchmarks/project --fixed-fps 60 -s res://bench/gas_check.gd -- --out=<dir> --steps=<n>
 ##         [--res=48] [--high_precision=1] [--maccormack=1] [--iterations=20] [--case=campfire|closed|wind|shift|sphere]
-##         [--multigrid=1] [--cycles=2] [--sparse=0] [--margin=2]
+##         [--multigrid=1] [--cycles=2] [--sparse=0] [--margin=2] [--flame_limit=0]
 ##
 ## Writes <out>/scalars.bin, velocity.bin, pressure.bin, residual.bin, solid.bin (raw texels, x fastest) and
 ## <out>/info.json (the grid, the parameters).
@@ -50,6 +50,7 @@ func _initialize() -> void:
 	vol.fire_light = false
 	vol.render_enabled = false
 	vol.vorticity = float(args.get("vorticity", "0.3"))
+	vol.flame_temperature_limit = float(args.get("flame_limit", "0"))
 	var case_name: String = args.get("case", "campfire")
 	var e = ClassDB.instantiate("FellowGasEmitter3D")
 	e.shape = 0
@@ -107,7 +108,7 @@ func _physics_process(_delta: float) -> bool:
 			return false
 		var info := {"grid": [vol.get_grid_size().x, vol.get_grid_size().y, vol.get_grid_size().z], "dx": vol.get_cell_size(),
 			"steps": vol.get_steps_simulated(), "high_precision": vol.high_precision, "maccormack": vol.maccormack,
-			"iterations": vol.pressure_iterations, "multigrid": vol.pressure_solver == 1, "cycles": vol.multigrid_cycles, "sparse": vol.sparse, "margin": vol.sparse_margin,
+			"iterations": vol.pressure_iterations, "multigrid": vol.pressure_solver == 1, "cycles": vol.multigrid_cycles, "sparse": vol.sparse, "margin": vol.sparse_margin, "flame_limit": vol.flame_temperature_limit,
 			"case": args.get("case", "campfire"), "frames": frames}
 		var j := FileAccess.open(out_dir.path_join("info.json"), FileAccess.WRITE)
 		j.store_string(JSON.stringify(info))

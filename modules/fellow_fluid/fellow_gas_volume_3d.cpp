@@ -30,8 +30,10 @@
 
 #include "fellow_gas_volume_3d.h"
 
+#include "fellow_burnable_3d.h"
 #include "fellow_gas_emitter_3d.h"
 
+#include "core/config/engine.h"
 #include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
 #include "scene/main/viewport.h"
@@ -353,6 +355,9 @@ void FellowGasVolume3D::_gather_obstacles(void *r_step) const {
 		if (body.is_null() || shape_idx < 0 || shape_idx >= ps->body_get_shape_count(body)) {
 			continue;
 		}
+		if (FellowBurnable3D::is_burnable_body(results[i].collider_id)) {
+			continue; // a burning object is its own obstacle (its voxels' solid, decision 0120)
+		}
 		const RID shape = ps->body_get_shape(body, shape_idx);
 		const PhysicsServer3D::ShapeType type = ps->shape_get_type(shape);
 		const Variant data = ps->shape_get_data(shape);
@@ -495,6 +500,7 @@ void FellowGasVolume3D::_queue_step(bool p_read_emission) {
 	sp.smoke_dissipation = smoke_dissipation;
 	sp.cooling = cooling;
 	sp.ignition = ignition_temperature;
+	sp.flame_limit = flame_temperature_limit;
 	sp.burn_rate = burn_rate;
 	sp.heat = heat_release;
 	sp.soot = soot;
@@ -511,6 +517,7 @@ void FellowGasVolume3D::_queue_step(bool p_read_emission) {
 	sp.closed_faces = closed_faces;
 	sp.maccormack = maccormack ? 1 : 0;
 	sp.read_emission = p_read_emission ? 1 : 0;
+	sp.tick = Engine::get_singleton()->get_physics_frames();
 	_gather_emitters(&sp);
 	_gather_obstacles(&sp);
 	PackedByteArray bytes;
@@ -623,6 +630,7 @@ PackedByteArray FellowGasVolume3D::get_debug_data() const {
 void FellowGasVolume3D::_notification(int p_what) {
 	switch (p_what) {
 		case NOTIFICATION_ENTER_TREE: {
+			add_to_group(SNAME("fellow_gas_volumes"));
 			if (query_shape.is_null() && PhysicsServer3D::get_singleton()) {
 				query_shape = PhysicsServer3D::get_singleton()->box_shape_create();
 			}
@@ -711,6 +719,8 @@ void FellowGasVolume3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_cooling"), &FellowGasVolume3D::get_cooling);
 	ClassDB::bind_method(D_METHOD("set_ignition_temperature", "kelvin"), &FellowGasVolume3D::set_ignition_temperature);
 	ClassDB::bind_method(D_METHOD("get_ignition_temperature"), &FellowGasVolume3D::get_ignition_temperature);
+	ClassDB::bind_method(D_METHOD("set_flame_temperature_limit", "kelvin"), &FellowGasVolume3D::set_flame_temperature_limit);
+	ClassDB::bind_method(D_METHOD("get_flame_temperature_limit"), &FellowGasVolume3D::get_flame_temperature_limit);
 	ClassDB::bind_method(D_METHOD("set_burn_rate", "rate"), &FellowGasVolume3D::set_burn_rate);
 	ClassDB::bind_method(D_METHOD("get_burn_rate"), &FellowGasVolume3D::get_burn_rate);
 	ClassDB::bind_method(D_METHOD("set_heat_release", "kelvin"), &FellowGasVolume3D::set_heat_release);
@@ -804,6 +814,7 @@ void FellowGasVolume3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "cooling", PROPERTY_HINT_RANGE, "0,10,0.01,suffix:/s"), "set_cooling", "get_cooling");
 	ADD_SUBGROUP("Combustion", "");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "ignition_temperature", PROPERTY_HINT_RANGE, "0,2000,1,suffix:K"), "set_ignition_temperature", "get_ignition_temperature");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "flame_temperature_limit", PROPERTY_HINT_RANGE, "0,4000,1,suffix:K"), "set_flame_temperature_limit", "get_flame_temperature_limit");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "burn_rate", PROPERTY_HINT_RANGE, "0,50,0.01,suffix:/s"), "set_burn_rate", "get_burn_rate");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "heat_release", PROPERTY_HINT_RANGE, "0,5000,1,suffix:K"), "set_heat_release", "get_heat_release");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "soot", PROPERTY_HINT_RANGE, "0,5,0.01"), "set_soot", "get_soot");

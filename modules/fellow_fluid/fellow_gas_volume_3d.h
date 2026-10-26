@@ -107,6 +107,7 @@ private:
 	float smoke_dissipation = 0.05f;
 	float cooling = 1.2f;
 	float ignition_temperature = 250.0f;
+	float flame_temperature_limit = 0.0f; // 0: none (with burning objects in the volume: FellowGas::BURN_FLAME_LIMIT)
 	float burn_rate = 6.0f;
 	float heat_release = 1400.0f;
 	float soot = 0.6f;
@@ -223,6 +224,8 @@ public:
 	float get_cooling() const { return cooling; }
 	void set_ignition_temperature(float p_value) { ignition_temperature = MAX(p_value, 0.0f); }
 	float get_ignition_temperature() const { return ignition_temperature; }
+	void set_flame_temperature_limit(float p_value) { flame_temperature_limit = MAX(p_value, 0.0f); }
+	float get_flame_temperature_limit() const { return flame_temperature_limit; }
 	void set_burn_rate(float p_value) { burn_rate = MAX(p_value, 0.0f); }
 	float get_burn_rate() const { return burn_rate; }
 	void set_heat_release(float p_value) { heat_release = MAX(p_value, 0.0f); }
@@ -288,6 +291,9 @@ public:
 
 	void reset_simulation();
 	Vector3i get_grid_size() const { return grid_res; }
+	uint32_t get_volume_id() const { return volume_id; } // FellowGas's (burning objects couple with it)
+	Transform3D get_grid_transform() const { return _grid_to_world(); } // grid coordinates (cells) -> world
+	bool is_configured() const { return configured; }
 	float get_cell_size() const { return grid_dx; }
 	int64_t get_vram_bytes() const;
 	int64_t get_steps_simulated() const { return int64_t(ticks); }

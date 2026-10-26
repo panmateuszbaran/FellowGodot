@@ -51,6 +51,7 @@ layout(local_size_x = 4, local_size_y = 4, local_size_z = 4) in;
 #define MAX_EMITTERS 16
 #define MAX_OBSTACLES 16
 #define MAX_MG_LEVELS 12
+#define MAX_BURNABLES 8 // burning objects coupled with a volume (FellowBurnable3D, decision 0120)
 #define ZERO_CELL 255u // a coarse level's cell (solid texture) whose children are all outside the simulated bricks
 // Sparse bricks: a brick is a source where its largest smoke, temperature (K) or fuel is above these.
 #define SPARSE_SMOKE 1e-3
@@ -85,7 +86,7 @@ layout(set = 0, binding = 0, std140) uniform Params {
 	vec4 decay; // x smoke kept per step, y temperature kept per step, z ignition (K), w fuel burnt per step when hot (fraction)
 	vec4 combustion; // x heat (K per unit fuel), y soot (smoke per unit fuel), z expansion (1/s per unit fuel per s), w SOR omega
 	ivec4 flags; // x closed faces (bit per face: -x +x -y +y -z +z), y inflow faces, z obstacle count, w MacCormack
-	vec4 misc; // x time (s), y dx^2, z ambient temperature (K), w unused
+	vec4 misc; // x time (s), y dx^2, z ambient temperature (K), w the flame's temperature limit (K above ambient; 0 none)
 	vec4 emission; // the fire light's emission: x intensity, y cell volume (m^3), z colour temperature scale, w unused
 	ivec4 sparse; // x 1: sparse bricks, y the F list's start in the brick list, z the margin (bricks), w 1: every brick counts as simulated before (ACTIVATE)
 	Emitter emitters[MAX_EMITTERS];
@@ -94,6 +95,12 @@ layout(set = 0, binding = 0, std140) uniform Params {
 	ivec4 mg_levels[MAX_MG_LEVELS]; // xyz size, w x offset in the atlas
 	vec4 mg_open_lo[MAX_MG_LEVELS]; // xyz the open faces' weights on the low sides, w dx^2 of the level
 	vec4 mg_open_hi[MAX_MG_LEVELS]; // xyz on the high sides
+	// Burning objects (their INJECT textures: per cell of a region of this grid, x fuel released (per s per m^3),
+	// y the surface's temperature, z its exposure, w the solid fraction).
+	ivec4 burn_count; // x
+	ivec4 burn_origin[MAX_BURNABLES]; // the region's first cell
+	ivec4 burn_size[MAX_BURNABLES];
+	vec4 burn_params[MAX_BURNABLES]; // x smoke per unit of fuel released, y the air's heating rate (1/s) at full exposure
 }
 params;
 
@@ -172,6 +179,19 @@ bool face_inflow(int p_face) {
 int face_kind(int p_face) {
 	return face_closed(p_face) ? 0 : (face_inflow(p_face) ? 2 : 1);
 }
+
+#if defined(MODE_OBSTACLES) || defined(MODE_EMIT) || defined(MODE_SPARSE_SOURCE)
+layout(set = 0, binding = 16) uniform sampler3D burn_inject[MAX_BURNABLES]; // texelFetch
+
+// Burnable p_b's injection at cell p_c, or zero outside its region.
+vec4 burn_at(int p_b, ivec3 p_c) {
+	ivec3 q = p_c - params.burn_origin[p_b].xyz;
+	if (any(lessThan(q, ivec3(0))) || any(greaterThanEqual(q, params.burn_size[p_b].xyz))) {
+		return vec4(0.0);
+	}
+	return texelFetch(burn_inject[p_b], q, 0);
+}
+#endif
 
 bool outside_open(vec3 p_g) {
 	for (int a = 0; a < 3; a++) {
@@ -320,6 +340,12 @@ void main() {
 			id = uint(k + 1);
 		}
 	}
+	// Burning objects: their solid (wood and char) where it fills half the cell (still: ids past the obstacles').
+	for (int b = 0; b < params.burn_count.x; b++) {
+		if (burn_at(b, c).w > 0.5) {
+			id = uint(MAX_OBSTACLES + 1 + b);
+		}
+	}
 	imageStore(solid_out, c, uvec4(id));
 }
 #endif
@@ -360,6 +386,27 @@ void main() {
 		}
 		changed = true;
 	}
+	// Burning objects: the air next to a hot surface heated towards its temperature (by its exposure); the volatiles
+	// they release (the fuel, some smoke), a part of which (burn_params.z) burns where it is released when the
+	// surface or the air there is above the ignition temperature (the flame attached to the surface: the cells are
+	// coarser than its stand-off), no hotter than the flame's limit.
+	for (int b = 0; b < params.burn_count.x; b++) {
+		vec4 v = burn_at(b, c);
+		if (v.x > 0.0 || v.y > s.y) {
+			if (v.y > s.y) {
+				s.y += (v.y - s.y) * (1.0 - exp(-params.burn_params[b].y * v.z * dt()));
+			}
+			float released = v.x * dt();
+			float now = max(v.y, s.y) > params.decay.z ? released * params.burn_params[b].z : 0.0;
+			if (params.misc.w > 0.0 && params.combustion.x > 0.0) {
+				now = min(now, max(params.misc.w - s.y, 0.0) / params.combustion.x);
+			}
+			s.z += released - now;
+			s.y += params.combustion.x * now;
+			s.x += released * params.burn_params[b].x + params.combustion.y * now;
+			changed = true;
+		}
+	}
 	if (changed) {
 		imageStore(scalars, c, s);
 	}
@@ -383,6 +430,10 @@ vec3 sample_velocity(vec3 p_g) {
 
 vec4 react(vec4 p_s) {
 	float burnt = p_s.y > params.decay.z ? p_s.z * params.decay.w : 0.0;
+	if (params.misc.w > 0.0 && params.combustion.x > 0.0) {
+		// No hotter than the limit (the flame's temperature): the fuel left burns further on, where it is cooler.
+		burnt = min(burnt, max(params.misc.w - p_s.y, 0.0) / params.combustion.x);
+	}
 	p_s.z -= burnt;
 	p_s.y += params.combustion.x * burnt;
 	p_s.x += params.combustion.y * burnt;
@@ -1188,6 +1239,18 @@ void main() {
 		float r = shape == 1 ? length(vec3(em.rot0.w, em.rot1.w, em.rot2.w)) : (shape == 2 ? length(vec2(em.centre_radius.w, em.rot0.w)) : em.centre_radius.w);
 		vec3 d = max(max(lo - em.centre_radius.xyz, em.centre_radius.xyz - hi), vec3(0.0));
 		src = length(d) <= r + 1.5;
+	}
+	// Burning objects releasing fuel or hotter than the threshold in the brick's cells.
+	for (int k = 0; k < params.burn_count.x && !src; k++) {
+		ivec3 o = params.burn_origin[k].xyz;
+		ivec3 e = o + params.burn_size[k].xyz;
+		if (any(greaterThanEqual(b * 4, e)) || any(lessThanEqual(b * 4 + 4, o))) {
+			continue;
+		}
+		for (int i = 0; i < 64 && !src; i++) {
+			vec4 v = burn_at(k, b * 4 + ivec3(i & 3, (i >> 2) & 3, i >> 4));
+			src = v.x > 0.0 || v.y > SPARSE_TEMPERATURE;
+		}
 	}
 	imageStore(source, b, uvec4(src ? 1u : 0u));
 }

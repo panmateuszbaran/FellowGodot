@@ -34,6 +34,7 @@ def make_params(info):
 	p.sparse = info.get("sparse", False)
 	p.sparse_margin = info.get("margin", 2)
 	p.maccormack = info["maccormack"]
+	p.flame_limit = np.float32(info.get("flame_limit", 0.0))
 	case = info["case"]
 	e = {"centre": (n[0] * 0.5, 2.5, n[2] * 0.5), "radius": n[0] * 0.12, "fuel": 3.0, "temperature": 900.0, "smoke": 0.2}
 	if case == "closed":

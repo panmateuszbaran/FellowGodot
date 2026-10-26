@@ -66,6 +66,7 @@ class Params:
 		self.smoke_dissipation = f32(0.05)  # 1/s
 		self.cooling = f32(1.2)  # 1/s
 		self.ignition = f32(250.0)  # K above ambient
+		self.flame_limit = f32(0.0)  # K above ambient: the hottest the combustion makes the gas (0: no limit)
 		self.burn_rate = f32(6.0)  # 1/s (fraction of the fuel burnt per second when hot)
 		self.heat = f32(1400.0)  # K per unit fuel burnt
 		self.soot = f32(0.6)  # smoke per unit fuel burnt
@@ -281,6 +282,8 @@ class State:
 		smoke, temp, fuel = s[..., 0], s[..., 1], s[..., 2]
 		hot = temp > p.ignition
 		burnt = np.where(hot, fuel * burn, f32(0.0)).astype(f32)
+		if float(getattr(p, "flame_limit", 0.0)) > 0.0 and float(p.heat) > 0.0:
+			burnt = np.minimum(burnt, np.maximum(f32(p.flame_limit) - temp, f32(0.0)) / f32(p.heat)).astype(f32)
 		fuel = fuel - burnt
 		temp = temp + p.heat * burnt
 		smoke = smoke + p.soot * burnt
