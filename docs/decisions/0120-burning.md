@@ -92,10 +92,14 @@ difference of T, wood, char, ash:
 
 | case | steps | difference |
 |---|---:|---:|
-| a log alone (24 voxels along it, no gas), ignited in its middle at 1100 K | 2, 120 | 2.2 × 10⁻⁵, 8.9 × 10⁻⁶ |
-| a box on its side (the ash falls along its local x), ignited through, fast | 120 | 1.3 × 10⁻⁶ |
-| the log over a campfire, one coupled step after 60 and 600 (the gas's temperature read back) | 1 | 1.1 × 10⁻⁶, 2.6 × 10⁻⁷ |
-| — its emission (half precision) and the gas cells' injection | 1 | ≤ 6.5 × 10⁻⁴ |
+| a log alone (24 voxels along it, no gas), ignited in its middle at 1100 K (with the surface flame's feedback) | 60 | 1.1 × 10⁻⁵ |
+| a box on its side (the ash falls along its local x), ignited through, fast | 120 | 1.7 × 10⁻⁶ |
+| the log over a campfire, one coupled step after 60 (the gas's temperature read back) | 1 | 9.2 × 10⁻⁷ |
+| — its emission (half precision) and the gas cells' injection | 1 | ≤ 5.6 × 10⁻⁴ |
+
+The gas: `gas_check.gd`'s campfire dense and sparse after 60 steps the same state bit for bit as before; with a flame
+limit of 1500 K against `gas_compare.py` 3.1 × 10⁻⁶; Fire Lab's captures (three views) 0 differing pixels against
+`fellow198`'s code.
 
 ## Calibration (Burn Lab, `burn_diag.gd`: the objects' fractions every second)
 
@@ -110,14 +114,22 @@ corner at 3 s; 48 gas cells, 32 voxels per object), in this order:
 | the fuel's surface temperature from the voxels releasing it (not the exposed surface's average, 200 K above ambient: below the ignition temperature), `surface_heating` 20 → 200/s | with 9 per kg the flames outlived the kindling by 8 s; out at 25 s, 54 % / 27 % wood left |
 | half the fuel burning where it is released (`flame_attachment` 0.5) | the logs burned to 10 % / 5 % wood, but in a fireball metres high (the gas's flame fed with the model's burning rate, about a hundred times real wood's per second of burning time) |
 | the surface flame's heat back into the voxel (`flame_feedback` 0.1), 5.4 per kg | the logs burn on their own after the kindling to **5 % / 10 % wood, 4 % / 6 % char, 27 % / 25 % ash** (of the initial volume; 30 % is all of it as ash) at 70 s; the crate burns a sixth of its wood from its corner and goes out; but the flames lie on the ground, blown sideways at 5–9 m/s (the combustion's expansion of that much fuel: with the gas's `expansion` 0 the plume rises again) |
-| **2.7 per kg** (1 unit heats 1 m³ of gas by 1400 K, 1.7 MJ: 30 % of the volatiles' 15 MJ/kg in the cells they burn in) | a campfire: the kindling's tall flame, then the logs' own smaller flames, leaning in the draught; the logs still burn to ash (the feedback, not the gas's flame, keeps them burning) |
+| **2.7 per kg** (1 unit heats 1 m³ of gas by 1400 K, 1.7 MJ: 30 % of the volatiles' 15 MJ/kg in the cells they burn in) | a campfire: the kindling's tall flame, then the logs' own smaller flames for about 40 s more, leaning in the draught; at 70 s the upper log 13 % wood, 7 % char, 23 % ash, the lower 31 % / 5 % / 19 %, the branch 19 % / 16 % / 18 % (the feedback, not the gas's flame, keeps them burning; with `flame_feedback` 0.15 both logs end at 15 % wood, 24 % ash) |
 
 (The surface feedback alone, without the gas's flames, does not keep a single log burning: in the reference, a log
 heated by a 1200 K gas for 40 s chars and goes out with χ up to 0.2 — as a lone log does.)
 
 ## Results
 
-(Burn Lab, lavapipe captures and the RTX job below.)
+Burn Lab on lavapipe (960 × 540, 48 gas cells, 32 voxels per log, `--settle=300`: a capture every 5 s): the
+kindling's flame and the crate's corner catching (5 s), the logs' own flames (10-45 s) with embers glowing in the
+char's cracks, the logs receding — the upper one collapsing onto its ash — and the fire out at about 50 s, grey heaps
+and charred ends left. Every step of the burning is the same on every run (the diagnostics of two runs agree to the
+last digit). The RTX job (`m22_f266`: 1080p captures; the cost with the burning drawn and simulated, simulated with
+the original meshes, neither) is prepared and waits for the user.
+
+Look issues left: the collapsed shell folds in a saw-tooth where neighbouring vertices fall onto different heights;
+a thin plank (a voxel and a half) chars and goes out (the crate).
 
 ## Limits
 
