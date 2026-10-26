@@ -20,8 +20,14 @@
 //   DIVERGENCE  of the velocity against the solids' and the walls' velocities, minus the combustion's expansion;
 //   PRESSURE    red-black SOR on the Poisson equation, warm-started from the last step;
 //   PROJECT     the pressure gradient subtracted: the velocity without divergence;
-//   COARSE      per 4 x 4 x 4 brick the largest smoke density and temperature (empty space skipped by the
-//               renderer) and per workgroup the fire's emission (the fire light, read back asynchronously).
+//   COARSE      per 4 x 4 x 4 brick the largest smoke density, temperature and fuel (empty space skipped by the
+//               renderer; the sparse bricks' sources) and per workgroup the fire's emission (the fire light, read
+//               back asynchronously).
+//
+// Sparse bricks (params.sparse.x): SPARSE_SOURCE marks the 4^3 bricks with smoke, heat or fuel or an emitter,
+// SPARSE_ACTIVATE the bricks within the margin of a source (A: their cells are simulated) and within one brick more
+// (F: their velocity is), gives what leaves them ambient values (no smoke, the wind, zero pressure) and lists them;
+// the passes then run over the lists (one workgroup per brick, indirect dispatches), the pressure outside A zero.
 //
 // The grid (tests/gas_reference.py is this file in NumPy): cells (i, j, k) with centres at grid position
 // (i + 0.5, j + 0.5, k + 0.5), dx metres each. Scalars at the centres: x smoke, y temperature above ambient (K),
@@ -45,6 +51,11 @@ layout(local_size_x = 4, local_size_y = 4, local_size_z = 4) in;
 #define MAX_EMITTERS 16
 #define MAX_OBSTACLES 16
 #define MAX_MG_LEVELS 12
+#define ZERO_CELL 255u // a coarse level's cell (solid texture) whose children are all outside the simulated bricks
+// Sparse bricks: a brick is a source where its largest smoke, temperature (K) or fuel is above these.
+#define SPARSE_SMOKE 1e-3
+#define SPARSE_TEMPERATURE 1.0
+#define SPARSE_FUEL 1e-3
 
 struct Emitter {
 	vec4 centre_radius; // grid position; radius (cells; sphere, cylinder)
@@ -76,6 +87,7 @@ layout(set = 0, binding = 0, std140) uniform Params {
 	ivec4 flags; // x closed faces (bit per face: -x +x -y +y -z +z), y inflow faces, z obstacle count, w MacCormack
 	vec4 misc; // x time (s), y dx^2, z ambient temperature (K), w unused
 	vec4 emission; // the fire light's emission: x intensity, y cell volume (m^3), z colour temperature scale, w unused
+	ivec4 sparse; // x 1: sparse bricks, y the F list's start in the brick list, z the margin (bricks), w 1: every brick counts as simulated before (ACTIVATE)
 	Emitter emitters[MAX_EMITTERS];
 	Obstacle obstacles[MAX_OBSTACLES];
 	// The multigrid's coarser levels (index 1 = the first coarser, 0 unused), all in one atlas texture per field:
@@ -118,6 +130,25 @@ ivec3 iwith_comp(ivec3 p_v, int p_c, int p_x) {
 ivec3 unit(int p_c) {
 	return ivec3(p_c == 0 ? 1 : 0, p_c == 1 ? 1 : 0, p_c == 2 ? 1 : 0);
 }
+
+#if defined(MODE_OBSTACLES) || defined(MODE_EMIT) || defined(MODE_ADVECT_S1) || defined(MODE_ADVECT_S2) || defined(MODE_ADVECT_V1) || defined(MODE_ADVECT_V2) || defined(MODE_CURL) || defined(MODE_CELL_FORCE) || defined(MODE_FACE_FORCE) || defined(MODE_DIVERGENCE) || defined(MODE_PRESSURE) || defined(MODE_MG_PROLONG) || defined(MODE_PROJECT)
+#define SPARSE_PASS
+// The simulated bricks (SPARSE_ACTIVATE): A from 0, F from params.sparse.y; x | y << 10 | z << 20 each.
+layout(set = 0, binding = 14, std430) restrict readonly buffer Bricks {
+	uint list[];
+}
+bricks;
+
+// The cell (texel) this invocation handles: dense, or one workgroup per listed brick (F: p_faces).
+ivec3 sparse_id(bool p_faces) {
+	uint e = bricks.list[(p_faces ? uint(params.sparse.y) : 0u) + gl_WorkGroupID.x];
+	return ivec3(int(e & 1023u), int((e >> 10u) & 1023u), int(e >> 20u)) * 4 + ivec3(gl_LocalInvocationID);
+}
+
+ivec3 cell_id(bool p_faces) {
+	return params.sparse.x != 0 ? sparse_id(p_faces) : ivec3(gl_GlobalInvocationID);
+}
+#endif
 
 bool face_closed(int p_face) {
 	return (params.flags.x & (1 << p_face)) != 0;
@@ -250,7 +281,7 @@ void main() {
 layout(r8ui, set = 0, binding = 1) uniform restrict writeonly uimage3D solid_out;
 
 void main() {
-	ivec3 c = ivec3(gl_GlobalInvocationID);
+	ivec3 c = cell_id(true);
 	if (any(greaterThanEqual(c, N()))) {
 		return;
 	}
@@ -288,7 +319,7 @@ layout(FMT, set = 0, binding = 1) uniform restrict image3D scalars;
 layout(r8ui, set = 0, binding = 2) uniform restrict readonly uimage3D solid;
 
 void main() {
-	ivec3 c = ivec3(gl_GlobalInvocationID);
+	ivec3 c = cell_id(false);
 	if (any(greaterThanEqual(c, N()))) {
 		return;
 	}
@@ -354,7 +385,7 @@ vec4 react(vec4 p_s) {
 
 #ifdef MODE_ADVECT_S1
 void main() {
-	ivec3 c = ivec3(gl_GlobalInvocationID);
+	ivec3 c = cell_id(params.flags.w != 0); // MacCormack: the hat over F
 	if (any(greaterThanEqual(c, N()))) {
 		return;
 	}
@@ -371,7 +402,7 @@ void main() {
 
 #ifdef MODE_ADVECT_S2
 void main() {
-	ivec3 c = ivec3(gl_GlobalInvocationID);
+	ivec3 c = cell_id(false);
 	if (any(greaterThanEqual(c, N()))) {
 		return;
 	}
@@ -410,7 +441,7 @@ float sample_component(sampler3D p_tex, vec3 p_g, int p_c) {
 
 #ifdef MODE_ADVECT_V1
 void main() {
-	ivec3 t = ivec3(gl_GlobalInvocationID);
+	ivec3 t = cell_id(true);
 	if (any(greaterThan(t, N()))) {
 		return;
 	}
@@ -426,7 +457,7 @@ void main() {
 
 #ifdef MODE_ADVECT_V2
 void main() {
-	ivec3 t = ivec3(gl_GlobalInvocationID);
+	ivec3 t = cell_id(true);
 	if (any(greaterThan(t, N()))) {
 		return;
 	}
@@ -467,7 +498,7 @@ vec3 cell_velocity(ivec3 p_c) {
 }
 
 void main() {
-	ivec3 c = ivec3(gl_GlobalInvocationID);
+	ivec3 c = cell_id(true);
 	if (any(greaterThanEqual(c, N()))) {
 		return;
 	}
@@ -491,7 +522,7 @@ layout(FMT, set = 0, binding = 4) uniform restrict writeonly image3D dest;
 layout(r8ui, set = 0, binding = 5) uniform restrict readonly uimage3D solid;
 
 void main() {
-	ivec3 c = ivec3(gl_GlobalInvocationID);
+	ivec3 c = cell_id(true);
 	if (any(greaterThanEqual(c, N()))) {
 		return;
 	}
@@ -526,7 +557,7 @@ layout(FMT, set = 0, binding = 1) uniform restrict readonly image3D force; // pe
 layout(FMT, set = 0, binding = 4) uniform restrict image3D vel;
 
 void main() {
-	ivec3 t = ivec3(gl_GlobalInvocationID);
+	ivec3 t = cell_id(true);
 	if (any(greaterThan(t, N()))) {
 		return;
 	}
@@ -562,7 +593,7 @@ layout(r32f, set = 0, binding = 4) uniform restrict writeonly image3D rhs;
 layout(r8ui, set = 0, binding = 5) uniform restrict readonly uimage3D solid;
 
 void main() {
-	ivec3 c = ivec3(gl_GlobalInvocationID);
+	ivec3 c = cell_id(false);
 	if (any(greaterThanEqual(c, N()))) {
 		return;
 	}
@@ -616,7 +647,8 @@ layout(push_constant, std430) uniform Push {
 	vec4 open_lo; // xyz: an open face's weight in the stencil on the low sides (this level's; RESTRICT: the finer's)
 	vec4 open_hi; // xyz: on the high sides (1 on the grid; on the coarser levels 1 / the distance in cells to the zero)
 	ivec4 offsets; // x: this level's x offset in the levels' atlas (RESTRICT, PROLONG: the finer level's), y: the coarser
-	// level's (RESTRICT, PROLONG); the grid itself (level 0) has its own textures, offset 0.
+	// level's (RESTRICT, PROLONG); the grid itself (level 0) has its own textures, offset 0. z 1: the grid with sparse
+	// bricks (PRESSURE, PROLONG over A's list; RESTRICT: a child outside A is a zero cell).
 	// TAIL: size.x the first level it solves, size.y the coarsest; level.y omega, level.z the coarsest's iterations.
 }
 push;
@@ -653,6 +685,7 @@ layout(r32f, set = 0, binding = 4) uniform restrict readonly image3D pressure; /
 layout(r8ui, set = 0, binding = 5) uniform restrict readonly uimage3D solid; // the finer level's
 layout(r32f, set = 0, binding = 6) uniform restrict writeonly image3D coarse_pressure_out; // zeroed
 layout(r8ui, set = 0, binding = 7) uniform restrict writeonly uimage3D coarse_solid;
+layout(r8ui, set = 0, binding = 13) uniform restrict readonly uimage3D brick_mask; // sparse (offsets.z): bit 0 A
 #endif
 
 #ifdef MODE_MG_PROLONG
@@ -669,16 +702,22 @@ void stencil(ivec3 p_c, out float r_sum, out float r_count) {
 	for (int a = 0; a < 3; a++) {
 		ivec3 e = unit(a);
 		if (icomp(p_c, a) > 0) {
-			if (imageLoad(solid, o + p_c - e).r == 0u) {
+			uint sn = imageLoad(solid, o + p_c - e).r;
+			if (sn == 0u) {
 				sum += imageLoad(pressure, o + p_c - e).r;
 				count += 1.0;
+			} else if (sn == ZERO_CELL) {
+				count += 1.0; // a zero cell (sparse: outside the simulated bricks)
 			}
 		} else if (face_kind(2 * a) == 1) {
 			count += comp(push.open_lo.xyz, a); // open: zero pressure outside
 		}
 		if (icomp(p_c, a) < icomp(LN(), a) - 1) {
-			if (imageLoad(solid, o + p_c + e).r == 0u) {
+			uint sn = imageLoad(solid, o + p_c + e).r;
+			if (sn == 0u) {
 				sum += imageLoad(pressure, o + p_c + e).r;
+				count += 1.0;
+			} else if (sn == ZERO_CELL) {
 				count += 1.0;
 			}
 		} else if (face_kind(2 * a + 1) == 1) {
@@ -710,8 +749,17 @@ void relax(ivec3 p_c) {
 #ifdef MODE_PRESSURE
 // One colour of a red-black sweep (SOR at level 0, Gauss-Seidel at the multigrid's levels).
 void main() {
-	ivec3 t = ivec3(gl_GlobalInvocationID);
-	ivec3 c = ivec3(2 * t.x + ((t.y + t.z + push.size.w) & 1), t.y, t.z);
+	ivec3 c;
+	if (push.offsets.z != 0) {
+		// Sparse bricks (the grid): one workgroup per brick of A, the other colour's invocations idle.
+		c = sparse_id(false);
+		if (((c.x + c.y + c.z) & 1) != push.size.w) {
+			return;
+		}
+	} else {
+		ivec3 t = ivec3(gl_GlobalInvocationID);
+		c = ivec3(2 * t.x + ((t.y + t.z + push.size.w) & 1), t.y, t.z);
+	}
 	if (any(greaterThanEqual(c, LN()))) {
 		return;
 	}
@@ -751,10 +799,20 @@ void main() {
 	}
 	float sum = 0.0;
 	float fluid = 0.0;
+	bool zero = false;
 	const ivec3 o = OFF();
 	for (int k = 0; k < 8; k++) {
 		ivec3 c = cc * 2 + ivec3(k & 1, (k >> 1) & 1, (k >> 2) & 1);
-		if (any(greaterThanEqual(c, LN())) || imageLoad(solid, o + c).r != 0u) {
+		if (any(greaterThanEqual(c, LN()))) {
+			continue;
+		}
+		uint sc = imageLoad(solid, o + c).r;
+		if (sc != 0u) {
+			zero = zero || sc == ZERO_CELL;
+			continue;
+		}
+		if (push.offsets.z != 0 && (imageLoad(brick_mask, c / 4).r & 1u) == 0u) {
+			zero = true; // outside the simulated bricks
 			continue;
 		}
 		float s;
@@ -767,14 +825,16 @@ void main() {
 	const ivec3 gc = ivec3(push.offsets.y, 0, 0) + cc;
 	imageStore(coarse_rhs, gc, vec4(fluid > 0.0 ? sum / fluid : 0.0));
 	imageStore(coarse_pressure_out, gc, vec4(0.0));
-	imageStore(coarse_solid, gc, uvec4(fluid > 0.0 ? 0u : 1u));
+	// A zero cell where any child is one: the zero pressure outside the simulated bricks kept on every level (a level
+	// without it would be a closed box's singular problem, its right-hand side incompatible: the V-cycle diverged).
+	imageStore(coarse_solid, gc, uvec4(zero ? ZERO_CELL : (fluid > 0.0 ? 0u : 1u)));
 }
 #endif
 
 #ifdef MODE_MG_PROLONG
 // Per fine cell: the coarse correction interpolated trilinearly (cell centres: 3/4 and 1/4 per axis) and added.
 void main() {
-	ivec3 c = ivec3(gl_GlobalInvocationID);
+	ivec3 c = push.offsets.z != 0 ? sparse_id(false) : ivec3(gl_GlobalInvocationID);
 	const ivec3 g = OFF() + c;
 	if (any(greaterThanEqual(c, LN())) || imageLoad(solid, g).r != 0u) {
 		return;
@@ -825,16 +885,22 @@ void tail_stencil(int p_l, ivec3 p_c, out float r_sum, out float r_count) {
 	for (int a = 0; a < 3; a++) {
 		ivec3 e = unit(a);
 		if (icomp(p_c, a) > 0) {
-			if (imageLoad(t_solid, o + p_c - e).r == 0u) {
+			uint sn = imageLoad(t_solid, o + p_c - e).r;
+			if (sn == 0u) {
 				sum += imageLoad(t_pressure, o + p_c - e).r;
+				count += 1.0;
+			} else if (sn == ZERO_CELL) {
 				count += 1.0;
 			}
 		} else if (face_kind(2 * a) == 1) {
 			count += comp(params.mg_open_lo[p_l].xyz, a);
 		}
 		if (icomp(p_c, a) < icomp(n, a) - 1) {
-			if (imageLoad(t_solid, o + p_c + e).r == 0u) {
+			uint sn = imageLoad(t_solid, o + p_c + e).r;
+			if (sn == 0u) {
 				sum += imageLoad(t_pressure, o + p_c + e).r;
+				count += 1.0;
+			} else if (sn == ZERO_CELL) {
 				count += 1.0;
 			}
 		} else if (face_kind(2 * a + 1) == 1) {
@@ -890,9 +956,15 @@ void tail_restrict(int p_l) {
 		ivec3 cc = ivec3(i % nc.x, (i / nc.x) % nc.y, i / (nc.x * nc.y));
 		float sum = 0.0;
 		float fluid = 0.0;
+		bool zero = false;
 		for (int k = 0; k < 8; k++) {
 			ivec3 c = cc * 2 + ivec3(k & 1, (k >> 1) & 1, (k >> 2) & 1);
-			if (any(greaterThanEqual(c, n)) || imageLoad(t_solid, o + c).r != 0u) {
+			if (any(greaterThanEqual(c, n))) {
+				continue;
+			}
+			uint sc = imageLoad(t_solid, o + c).r;
+			if (sc != 0u) {
+				zero = zero || sc == ZERO_CELL;
 				continue;
 			}
 			float s;
@@ -904,7 +976,7 @@ void tail_restrict(int p_l) {
 		}
 		imageStore(t_rhs, oc + cc, vec4(fluid > 0.0 ? sum / fluid : 0.0));
 		imageStore(t_pressure, oc + cc, vec4(0.0));
-		imageStore(t_solid, oc + cc, uvec4(fluid > 0.0 ? 0u : 1u));
+		imageStore(t_solid, oc + cc, uvec4(zero ? ZERO_CELL : (fluid > 0.0 ? 0u : 1u)));
 	}
 	tail_sync();
 }
@@ -958,7 +1030,7 @@ layout(FMT, set = 0, binding = 4) uniform restrict image3D vel;
 layout(r8ui, set = 0, binding = 5) uniform restrict readonly uimage3D solid;
 
 void main() {
-	ivec3 t = ivec3(gl_GlobalInvocationID);
+	ivec3 t = cell_id(true);
 	if (any(greaterThan(t, N()))) {
 		return;
 	}
@@ -993,8 +1065,19 @@ void main() {
 #endif
 
 #ifdef MODE_COARSE
+layout(push_constant, std430) uniform Push {
+	ivec4 size; // x 1: every brick (sparse: after a shift), else only A's (the others keep their zeros)
+	vec4 level; // unused
+	ivec4 coarse_size; // unused
+	vec4 open_lo; // unused
+	vec4 open_hi; // unused
+	ivec4 offsets; // unused
+}
+push;
+
 layout(FMT, set = 0, binding = 1) uniform restrict readonly image3D scalars;
-layout(rg16f, set = 0, binding = 4) uniform restrict writeonly image3D coarse;
+layout(rgba16f, set = 0, binding = 4) uniform restrict writeonly image3D coarse; // x smoke, y temperature, z fuel
+layout(r8ui, set = 0, binding = 13) uniform restrict readonly uimage3D brick_mask; // sparse: bit 0 A
 
 layout(set = 0, binding = 6, std430) restrict writeonly buffer Emission {
 	vec4 data[]; // per workgroup: x luminance, yzw luminance-weighted grid position; then rgb emission, w unused
@@ -1030,17 +1113,18 @@ void main() {
 	uint li = gl_LocalInvocationIndex;
 	vec4 sum = vec4(0.0);
 	vec3 rgb = vec3(0.0);
-	if (all(lessThan(b, nb))) {
+	bool simulated = params.sparse.x == 0 || push.size.x != 0 || (all(lessThan(b, nb)) && (imageLoad(brick_mask, b).r & 1u) != 0u);
+	if (all(lessThan(b, nb)) && simulated) {
 		// The brick's largest values over its cells and their neighbours (what trilinear sampling inside it reads).
 		ivec3 lo = max(b * 4 - 1, ivec3(0));
 		ivec3 hi = min(b * 4 + 4, N() - 1);
-		vec2 m = vec2(0.0);
+		vec3 m = vec3(0.0);
 		for (int z = lo.z; z <= hi.z; z++) {
 			for (int y = lo.y; y <= hi.y; y++) {
 				for (int x = lo.x; x <= hi.x; x++) {
 					ivec3 c = ivec3(x, y, z);
 					vec4 s = imageLoad(scalars, c);
-					m = max(m, s.xy);
+					m = max(m, s.xyz);
 					if (all(greaterThanEqual(c, b * 4)) && all(lessThan(c, b * 4 + 4)) && s.y > 300.0) {
 						vec3 e = emission_rgb(s.y) * params.emission.y;
 						float l = dot(e, vec3(0.2126, 0.7152, 0.0722));
@@ -1050,7 +1134,7 @@ void main() {
 				}
 			}
 		}
-		imageStore(coarse, b, vec4(m, 0.0, 0.0));
+		imageStore(coarse, b, vec4(m, 0.0));
 	}
 	s_sum[li] = sum;
 	s_rgb[li] = vec4(rgb, 0.0);
@@ -1067,6 +1151,128 @@ void main() {
 		uint gi = gl_WorkGroupID.x + groups.x * (gl_WorkGroupID.y + groups.y * gl_WorkGroupID.z);
 		emission_out.data[gi * 2u] = s_sum[0];
 		emission_out.data[gi * 2u + 1u] = s_rgb[0];
+	}
+}
+#endif
+
+#ifdef MODE_SPARSE_SOURCE
+// Per brick: a source where its largest smoke, temperature or fuel (COARSE's, the last step's) is above the
+// thresholds or an emitter (its bounding sphere and the one-cell ramp) reaches it.
+layout(rgba16f, set = 0, binding = 1) uniform restrict readonly image3D coarse;
+layout(r8ui, set = 0, binding = 2) uniform restrict writeonly uimage3D source;
+
+void main() {
+	ivec3 b = ivec3(gl_GlobalInvocationID);
+	if (any(greaterThanEqual(b, (N() + 3) / 4))) {
+		return;
+	}
+	vec4 m = imageLoad(coarse, b);
+	bool src = m.x > SPARSE_SMOKE || m.y > SPARSE_TEMPERATURE || m.z > SPARSE_FUEL;
+	vec3 lo = vec3(b * 4);
+	vec3 hi = lo + 4.0;
+	for (int e = 0; e < params.size.w && !src; e++) {
+		Emitter em = params.emitters[e];
+		int shape = int(em.shape.x);
+		float r = shape == 1 ? length(vec3(em.rot0.w, em.rot1.w, em.rot2.w)) : (shape == 2 ? length(vec2(em.centre_radius.w, em.rot0.w)) : em.centre_radius.w);
+		vec3 d = max(max(lo - em.centre_radius.xyz, em.centre_radius.xyz - hi), vec3(0.0));
+		src = length(d) <= r + 1.5;
+	}
+	imageStore(source, b, uvec4(src ? 1u : 0u));
+}
+#endif
+
+#ifdef MODE_SPARSE_ACTIVATE
+// Per brick (of the velocity's texels: one more layer where N % 4 == 0): A within params.sparse.z bricks of a source
+// (cells only), F within one more; what leaves F gets the ambient velocity (the wind) and no solid, what leaves A no
+// smoke and zero pressure; both listed for the passes' indirect dispatches.
+layout(r8ui, set = 0, binding = 1) uniform restrict readonly uimage3D source;
+layout(r8ui, set = 0, binding = 2) uniform restrict uimage3D brick_mask; // bit 0 A, bit 1 F
+layout(FMT, set = 0, binding = 3) uniform restrict writeonly image3D scalars0;
+layout(FMT, set = 0, binding = 4) uniform restrict writeonly image3D scalars1;
+layout(FMT, set = 0, binding = 5) uniform restrict writeonly image3D vel0;
+layout(FMT, set = 0, binding = 6) uniform restrict writeonly image3D vel1;
+layout(FMT, set = 0, binding = 7) uniform restrict writeonly image3D scalars_hat;
+layout(FMT, set = 0, binding = 8) uniform restrict writeonly image3D vel_hat;
+layout(r32f, set = 0, binding = 9) uniform restrict writeonly image3D pressure;
+layout(r32f, set = 0, binding = 10) uniform restrict writeonly image3D rhs;
+layout(r8ui, set = 0, binding = 11) uniform restrict writeonly uimage3D solid;
+layout(rgba16f, set = 0, binding = 12) uniform restrict writeonly image3D coarse;
+layout(set = 0, binding = 14, std430) restrict writeonly buffer Bricks {
+	uint list[];
+}
+bricks;
+layout(set = 0, binding = 15, std430) restrict buffer Args {
+	uint args[]; // the indirect dispatches: A's workgroups, 1, 1, F's, 1, 1
+}
+dispatch;
+
+void main() {
+	ivec3 b = ivec3(gl_GlobalInvocationID);
+	if (any(greaterThanEqual(b, (N() + 4) / 4))) {
+		return;
+	}
+	const ivec3 nb = (N() + 3) / 4;
+	const int d = params.sparse.z;
+	bool a = false;
+	bool f = false;
+	for (int z = max(b.z - d - 1, 0); z <= min(b.z + d + 1, nb.z - 1); z++) {
+		for (int y = max(b.y - d - 1, 0); y <= min(b.y + d + 1, nb.y - 1); y++) {
+			for (int x = max(b.x - d - 1, 0); x <= min(b.x + d + 1, nb.x - 1); x++) {
+				if (imageLoad(source, ivec3(x, y, z)).r != 0u) {
+					f = true;
+					ivec3 q = abs(ivec3(x, y, z) - b);
+					a = a || max(q.x, max(q.y, q.z)) <= d;
+				}
+			}
+		}
+	}
+	a = a && all(lessThan(b, nb));
+	uint old = imageLoad(brick_mask, b).r;
+	bool prev_a = params.sparse.w != 0 || (old & 1u) != 0u;
+	bool prev_f = params.sparse.w != 0 || (old & 2u) != 0u;
+	if (prev_f && !f) {
+		for (int z = 0; z < 4; z++) {
+			for (int y = 0; y < 4; y++) {
+				for (int x = 0; x < 4; x++) {
+					ivec3 t = b * 4 + ivec3(x, y, z);
+					if (any(greaterThan(t, N()))) {
+						continue;
+					}
+					imageStore(vel0, t, vec4(params.wind.xyz, 0.0));
+					imageStore(vel1, t, vec4(params.wind.xyz, 0.0));
+					imageStore(vel_hat, t, vec4(0.0));
+					if (all(lessThan(t, N()))) {
+						imageStore(scalars_hat, t, vec4(0.0));
+						imageStore(solid, t, uvec4(0u));
+					}
+				}
+			}
+		}
+	}
+	if (prev_a && !a && all(lessThan(b, nb))) {
+		for (int z = 0; z < 4; z++) {
+			for (int y = 0; y < 4; y++) {
+				for (int x = 0; x < 4; x++) {
+					ivec3 c = b * 4 + ivec3(x, y, z);
+					if (any(greaterThanEqual(c, N()))) {
+						continue;
+					}
+					imageStore(scalars0, c, vec4(0.0));
+					imageStore(scalars1, c, vec4(0.0));
+					imageStore(pressure, c, vec4(0.0));
+					imageStore(rhs, c, vec4(0.0));
+				}
+			}
+		}
+		imageStore(coarse, b, vec4(0.0));
+	}
+	imageStore(brick_mask, b, uvec4((a ? 1u : 0u) | (f ? 2u : 0u)));
+	uint packed_b = uint(b.x) | (uint(b.y) << 10u) | (uint(b.z) << 20u);
+	if (a) {
+		bricks.list[atomicAdd(dispatch.args[0], 1u)] = packed_b;
+	}
+	if (f) {
+		bricks.list[uint(params.sparse.y) + atomicAdd(dispatch.args[3], 1u)] = packed_b;
 	}
 }
 #endif

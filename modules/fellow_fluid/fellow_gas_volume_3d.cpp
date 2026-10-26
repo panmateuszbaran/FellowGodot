@@ -506,6 +506,8 @@ void FellowGasVolume3D::_queue_step(bool p_read_emission) {
 	sp.iterations = pressure_iterations;
 	sp.multigrid = pressure_solver == SOLVER_MULTIGRID ? 1 : 0;
 	sp.multigrid_cycles = multigrid_cycles;
+	sp.sparse = sparse ? 1 : 0;
+	sp.sparse_margin = sparse_margin;
 	sp.closed_faces = closed_faces;
 	sp.maccormack = maccormack ? 1 : 0;
 	sp.read_emission = p_read_emission ? 1 : 0;
@@ -723,6 +725,10 @@ void FellowGasVolume3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_pressure_solver"), &FellowGasVolume3D::get_pressure_solver);
 	ClassDB::bind_method(D_METHOD("set_multigrid_cycles", "cycles"), &FellowGasVolume3D::set_multigrid_cycles);
 	ClassDB::bind_method(D_METHOD("get_multigrid_cycles"), &FellowGasVolume3D::get_multigrid_cycles);
+	ClassDB::bind_method(D_METHOD("set_sparse", "sparse"), &FellowGasVolume3D::set_sparse);
+	ClassDB::bind_method(D_METHOD("is_sparse"), &FellowGasVolume3D::is_sparse);
+	ClassDB::bind_method(D_METHOD("set_sparse_margin", "bricks"), &FellowGasVolume3D::set_sparse_margin);
+	ClassDB::bind_method(D_METHOD("get_sparse_margin"), &FellowGasVolume3D::get_sparse_margin);
 	ClassDB::bind_method(D_METHOD("set_maccormack", "enable"), &FellowGasVolume3D::set_maccormack);
 	ClassDB::bind_method(D_METHOD("is_maccormack"), &FellowGasVolume3D::is_maccormack);
 	ClassDB::bind_method(D_METHOD("set_physics_obstacles", "enable"), &FellowGasVolume3D::set_physics_obstacles);
@@ -805,6 +811,8 @@ void FellowGasVolume3D::_bind_methods() {
 	ADD_SUBGROUP("Solver", "");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "pressure_solver", PROPERTY_HINT_ENUM, "SOR,Multigrid"), "set_pressure_solver", "get_pressure_solver");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "multigrid_cycles", PROPERTY_HINT_RANGE, "1,8,1"), "set_multigrid_cycles", "get_multigrid_cycles");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "sparse"), "set_sparse", "is_sparse");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "sparse_margin", PROPERTY_HINT_RANGE, "1,4,1"), "set_sparse_margin", "get_sparse_margin");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "pressure_iterations", PROPERTY_HINT_RANGE, "0,200,1"), "set_pressure_iterations", "get_pressure_iterations");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "maccormack"), "set_maccormack", "is_maccormack");
 	ADD_SUBGROUP("Obstacles", "");

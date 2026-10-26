@@ -114,6 +114,8 @@ private:
 	int pressure_iterations = 20;
 	PressureSolver pressure_solver = SOLVER_MULTIGRID;
 	int multigrid_cycles = 2;
+	bool sparse = false;
+	int sparse_margin = 2;
 	bool maccormack = true;
 	bool physics_obstacles = true;
 	uint32_t collision_mask = 1;
@@ -235,6 +237,10 @@ public:
 	PressureSolver get_pressure_solver() const { return pressure_solver; }
 	void set_multigrid_cycles(int p_cycles) { multigrid_cycles = CLAMP(p_cycles, 1, 8); }
 	int get_multigrid_cycles() const { return multigrid_cycles; }
+	void set_sparse(bool p_sparse) { sparse = p_sparse; }
+	bool is_sparse() const { return sparse; }
+	void set_sparse_margin(int p_margin) { sparse_margin = CLAMP(p_margin, 1, 4); }
+	int get_sparse_margin() const { return sparse_margin; }
 	void set_maccormack(bool p_enable) { maccormack = p_enable; }
 	bool is_maccormack() const { return maccormack; }
 	void set_physics_obstacles(bool p_enable) { physics_obstacles = p_enable; }

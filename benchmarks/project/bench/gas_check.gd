@@ -3,7 +3,8 @@ extends SceneTree
 ## its GPU state to files, for modules/fellow_fluid/tests/gas_compare.py (the NumPy reference, gas_reference.py).
 ##
 ##   godot --path benchmarks/project --fixed-fps 60 -s res://bench/gas_check.gd -- --out=<dir> --steps=<n>
-##         [--res=48] [--high_precision=1] [--maccormack=1] [--iterations=20] [--case=campfire|closed|wind]
+##         [--res=48] [--high_precision=1] [--maccormack=1] [--iterations=20] [--case=campfire|closed|wind|shift|sphere]
+##         [--multigrid=1] [--cycles=2] [--sparse=0] [--margin=2]
 ##
 ## Writes <out>/scalars.bin, velocity.bin, pressure.bin, residual.bin, solid.bin (raw texels, x fastest) and
 ## <out>/info.json (the grid, the parameters).
@@ -43,6 +44,8 @@ func _initialize() -> void:
 	vol.pressure_iterations = int(args.get("iterations", "20"))
 	vol.pressure_solver = 1 if args.get("multigrid", "1") == "1" else 0
 	vol.multigrid_cycles = int(args.get("cycles", "2"))
+	vol.sparse = args.get("sparse", "0") == "1"
+	vol.sparse_margin = int(args.get("margin", "2"))
 	vol.physics_obstacles = false
 	vol.fire_light = false
 	vol.render_enabled = false
@@ -104,7 +107,7 @@ func _physics_process(_delta: float) -> bool:
 			return false
 		var info := {"grid": [vol.get_grid_size().x, vol.get_grid_size().y, vol.get_grid_size().z], "dx": vol.get_cell_size(),
 			"steps": vol.get_steps_simulated(), "high_precision": vol.high_precision, "maccormack": vol.maccormack,
-			"iterations": vol.pressure_iterations, "multigrid": vol.pressure_solver == 1, "cycles": vol.multigrid_cycles,
+			"iterations": vol.pressure_iterations, "multigrid": vol.pressure_solver == 1, "cycles": vol.multigrid_cycles, "sparse": vol.sparse, "margin": vol.sparse_margin,
 			"case": args.get("case", "campfire"), "frames": frames}
 		var j := FileAccess.open(out_dir.path_join("info.json"), FileAccess.WRITE)
 		j.store_string(JSON.stringify(info))
