@@ -137,6 +137,7 @@ public:
 		float smoke_per_fuel = 0.3f;
 		float heat_rate = 20.0f; // the air's heating at full exposure (1/s)
 		float attached = 0.5f; // the fraction of the fuel burning where it is released (the flame on the surface)
+		float flicker = 0.0f; // the flicker of the fuel released (0 none; 1: value noise between none and twice)
 		float ignite[4] = {}; // centre (voxels), radius (voxels; 0 none)
 		float ignite_temperature = 0.0f;
 		int32_t settle_axis = 1; // the ash falls along this voxel axis (the one nearest to the world's down),
@@ -267,6 +268,7 @@ private:
 		float smoke_per_fuel = 0.0f;
 		float heat_rate = 0.0f;
 		float attached = 0.0f;
+		float flicker = 0.0f;
 		bool injected = false;
 	};
 

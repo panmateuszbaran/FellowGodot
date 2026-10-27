@@ -65,6 +65,7 @@ static constexpr float BURN_FUEL_PER_KG = 2.7f; // the gas's fuel per kg of vola
 static constexpr float BURN_FLAME_FLUX = 0.005f; // kg/(m^2 s): the volatiles' flux for a surface fully in its flame (wood's critical mass flux for flaming, 2.5-5 g/(m^2 s))
 static constexpr int BURN_MARGIN = 2; // voxels around the mesh
 static constexpr int BURN_GROUND_LAYERS = 64; // at most this many layers added down to the ground
+static constexpr float BURN_LOOSE_ASH = 0.6f; // a voxel without wood has crumbled with this much ash per char, in ash volumes (fellow_burn_sim.glsl)
 static constexpr int BURN_TRIANGLE_BUDGET = 300000;
 
 Mutex FellowBurnable3D::body_mutex;
@@ -158,6 +159,8 @@ bool FellowBurnable3D::_voxelize(const Ref<Mesh> &p_mesh) {
 	if (longest < 1e-6f) {
 		return false;
 	}
+	grain = Vector3();
+	grain[box.get_longest_axis_index()] = 1.0f; // the wood's grain along its longest side (its cracks)
 	voxel = longest / float(resolution);
 	for (int a = 0; a < 3; a++) {
 		res[a] = MAX(1, int(Math::ceil(box.size[a] / voxel - 1e-4f))) + 2 * BURN_MARGIN;
@@ -534,6 +537,8 @@ uniform vec3 fellow_burn_char_color : source_color = vec3(0.045, 0.038, 0.034);
 uniform vec3 fellow_burn_ash_color : source_color = vec3(0.56, 0.54, 0.51);
 uniform float fellow_burn_glow = 4.0;
 uniform float fellow_burn_crack_scale = 0.025;
+uniform float fellow_burn_loose_ash = 0.09; // ash per char at which a voxel without wood has crumbled (the simulation's)
+uniform vec3 fellow_burn_grain = vec3(0.0, 1.0, 0.0); // the wood's grain: the mesh's longest axis (local)
 varying vec3 fellow_burn_local;
 varying vec4 fellow_burn_mat;
 varying float fellow_burn_gone;
@@ -547,10 +552,16 @@ float fellow_burn_fill(vec3 p_local) {
 	return s.y + s.z + s.w;
 }
 
-// The wood and char standing (not the ash, nor the crumbled debris lying in the heap: as the simulation's SETTLE).
+// Whether a voxel's material is loose: crumbled (no wood; its char burned far, or next to none), as the simulation's
+// SETTLE tells.
+bool fellow_burn_loose(vec4 p_s) {
+	return p_s.y < 0.05 && (p_s.y + p_s.z < 0.05 || p_s.w >= fellow_burn_loose_ash * p_s.z);
+}
+
+// The wood and char standing (not the ash, nor the crumbled debris lying in the heap).
 float fellow_burn_solid(vec3 p_local) {
 	vec4 s = fellow_burn_sample(p_local);
-	return (s.y < 0.05 && (s.y + s.z < 0.5 || s.w >= 0.2 * s.z)) ? 0.0 : s.y + s.z;
+	return fellow_burn_loose(s) ? 0.0 : s.y + s.z;
 }
 
 vec3 fellow_burn_oct_decode(vec2 p_e) {
@@ -566,12 +577,14 @@ vec3 fellow_burn_hash3(vec3 p_p) {
 	return fract(sin(p_p) * 43758.5453123);
 }
 
-// 1 on the cracks between cells (a cellular pattern: the distance to the nearest cell's point against the second's).
-float fellow_burn_cracks(vec3 p_p) {
+// A cellular pattern at p_p: x 1 on the cracks between cells, y a random value per cell, z the distance to the cell's
+// point, w to its border (the second point's distance less the first's).
+vec4 fellow_burn_cells(vec3 p_p) {
 	vec3 i = floor(p_p);
 	vec3 f = p_p - i;
 	float d1 = 8.0;
 	float d2 = 8.0;
+	vec3 best = i;
 	for (int z = -1; z <= 1; z++) {
 		for (int y = -1; y <= 1; y++) {
 			for (int x = -1; x <= 1; x++) {
@@ -581,13 +594,38 @@ float fellow_burn_cracks(vec3 p_p) {
 				if (d < d1) {
 					d2 = d1;
 					d1 = d;
+					best = i + o;
 				} else if (d < d2) {
 					d2 = d;
 				}
 			}
 		}
 	}
-	return 1.0 - smoothstep(0.0, 0.08, sqrt(d2) - sqrt(d1));
+	float e1 = sqrt(d1);
+	float e = sqrt(d2) - e1;
+	return vec4(1.0 - smoothstep(0.0, 0.06, e), fellow_burn_hash3(best + vec3(17.0, 31.0, 7.0)).x, e1, e);
+}
+
+// The wood's own space for its cracks: cells 1.8 times as long along the grain as across (charred wood's alligator
+// pattern).
+vec3 fellow_burn_grain_space(vec3 p_p) {
+	return p_p - 0.45 * dot(p_p, fellow_burn_grain) * fellow_burn_grain;
+}
+
+// Smooth value noise, 0..1.
+float fellow_burn_noise(vec3 p_p) {
+	vec3 i = floor(p_p);
+	vec3 f = p_p - i;
+	f = f * f * (3.0 - 2.0 * f);
+	float n000 = fellow_burn_hash3(i).x;
+	float n100 = fellow_burn_hash3(i + vec3(1.0, 0.0, 0.0)).x;
+	float n010 = fellow_burn_hash3(i + vec3(0.0, 1.0, 0.0)).x;
+	float n110 = fellow_burn_hash3(i + vec3(1.0, 1.0, 0.0)).x;
+	float n001 = fellow_burn_hash3(i + vec3(0.0, 0.0, 1.0)).x;
+	float n101 = fellow_burn_hash3(i + vec3(1.0, 0.0, 1.0)).x;
+	float n011 = fellow_burn_hash3(i + vec3(0.0, 1.0, 1.0)).x;
+	float n111 = fellow_burn_hash3(i + vec3(1.0, 1.0, 1.0)).x;
+	return mix(mix(mix(n000, n100, f.x), mix(n010, n110, f.x), f.y), mix(mix(n001, n101, f.x), mix(n011, n111, f.x), f.y), f.z);
 }
 
 // A blackbody's colour (linear, its brightest channel 1), roughly, 800-2000 K: deep red to orange-yellow.
@@ -646,10 +684,11 @@ static const char *FELLOW_BURN_VERTEX = R"(
 	}
 )";
 
-// The ash heap (FellowAshHeap): a grid over the box's floor, a vertex per voxel column risen by the loose material in
-// the column (the ash and the crumbled char, the simulation's SETTLE: its volume over the column's area),
-// smoothed over the columns around it, so the heap thins out over a voxel or two at its edges; the columns without
-// ash left at the floor and their triangles not drawn; embers glow in it while hot.
+// The ash heap (FellowAshHeap): a grid over the box's floor (two vertices per voxel along each side), each vertex risen by
+// the loose material in the columns around it (the ash and the crumbled char, the simulation's SETTLE: their volume
+// over a column's area, smoothed), so the heap thins out at its edges, which are ragged; lumps of charcoal in it (as
+// many as the char's share) raised and cracked, the ash between them powdery; embers glow in the lumps' cracks and
+// dully through the ash while hot. The columns without loose material stay at the floor, their triangles not drawn.
 static const char *FELLOW_HEAP_CODE = R"(
 uniform vec3 fellow_heap_up; // the mesh's local space, away from the floor
 uniform vec3 fellow_heap_u; // the grid's axes, a voxel long
@@ -663,7 +702,7 @@ vec3 fellow_heap_column(vec3 p_floor) {
 	for (int i = 0; i < fellow_burn_steps; i++) {
 		vec4 s = fellow_burn_sample(p_floor + fellow_heap_up * ((float(i) + 0.5) * fellow_burn_voxel));
 		float f = s.y + s.z + s.w;
-		if (f < 0.02 || !(s.y < 0.05 && (s.y + s.z < 0.5 || s.w >= 0.2 * s.z))) {
+		if (f < 0.02 || !fellow_burn_loose(s)) {
 			break;
 		}
 		r.x += f * fellow_burn_voxel;
@@ -676,9 +715,22 @@ vec3 fellow_heap_column(vec3 p_floor) {
 	return r;
 }
 
+// The pieces of charcoal in the heap at p_local: cells of 1.6 crack scales, longer along the burned wood's grain, each
+// a piece shrunk from its cell's border by a random amount (pieces of many sizes, the ash between them), as many as the
+// char's share p_char allows (at most seven in ten); x the piece (0..1), y its relief (local units), z its cell's random
+// value.
+vec3 fellow_heap_pieces(vec3 p_local, float p_char) {
+	vec4 c = fellow_burn_cells(fellow_burn_grain_space(p_local) / max(1.6 * fellow_burn_crack_scale, 1e-4));
+	float shrink = 0.04 + 0.3 * fract(c.y * 13.7);
+	float piece = (c.y < min(p_char * 1.2, 0.7) ? 1.0 : 0.0) * smoothstep(shrink, shrink + 0.06, c.w);
+	return vec3(piece, piece * smoothstep(shrink, shrink + 0.3, c.w) * 0.7 * fellow_burn_crack_scale, c.y);
+}
+
+varying float fellow_heap_margin; // how much thicker the heap is than its (ragged) edge: below 0 not drawn
+
 void vertex() {
 	fellow_burn_local = VERTEX;
-	fellow_burn_gone = 1.0;
+	fellow_burn_gone = 0.0;
 	fellow_burn_mat = vec4(0.0, 0.0, 0.0, 1.0);
 	// The heights of the 3 x 3 columns around: smoothed (1 2 1) and their slope (Sobel).
 	float fb_c[9];
@@ -693,63 +745,79 @@ void vertex() {
 		}
 	}
 	float fb_h = (fb_c[0] + fb_c[2] + fb_c[6] + fb_c[8] + 2.0 * (fb_c[1] + fb_c[3] + fb_c[5] + fb_c[7]) + 4.0 * fb_c[4]) / 16.0;
-	if (fb_h > 0.08 * fellow_burn_voxel) {
-		fellow_burn_gone = 0.0;
-		VERTEX += fellow_heap_up * fb_h;
-		float fb_gu = ((fb_c[2] + 2.0 * fb_c[5] + fb_c[8]) - (fb_c[0] + 2.0 * fb_c[3] + fb_c[6])) / (8.0 * fellow_burn_voxel);
-		float fb_gv = ((fb_c[6] + 2.0 * fb_c[7] + fb_c[8]) - (fb_c[0] + 2.0 * fb_c[1] + fb_c[2])) / (8.0 * fellow_burn_voxel);
-		NORMAL = normalize(fellow_heap_up - normalize(fellow_heap_u) * fb_gu - normalize(fellow_heap_v) * fb_gv);
-		fellow_burn_mat = vec4(fb_mid.z, 0.0, fb_mid.y, max(fb_mid.x - fb_mid.y, 0.0));
-	} else {
-		NORMAL = fellow_heap_up;
-	}
-}
-
-// A random value per cell (that of the nearest of the jittered points): the lumps of charcoal in the ash.
-float fellow_heap_lumps(vec3 p_p) {
-	vec3 i = floor(p_p);
-	vec3 f = p_p - i;
-	float d1 = 8.0;
-	vec3 best = i;
-	for (int z = -1; z <= 1; z++) {
-		for (int y = -1; y <= 1; y++) {
-			for (int x = -1; x <= 1; x++) {
-				vec3 o = vec3(float(x), float(y), float(z));
-				vec3 r = o + fellow_burn_hash3(i + o) - f;
-				float d = dot(r, r);
-				if (d < d1) {
-					d1 = d;
-					best = i + o;
-				}
-			}
-		}
-	}
-	return fellow_burn_hash3(best + vec3(17.0, 31.0, 7.0)).x;
+	// Lumpy, not a pillow: the height times a smooth noise (and its slope into the normal's).
+	float fb_ls = 1.0 / max(4.0 * fellow_burn_crack_scale, 1e-4);
+	vec3 fb_lo = vec3(5.3, 1.7, 9.1);
+	float fb_m = 0.75 + 0.5 * fellow_burn_noise(VERTEX * fb_ls + fb_lo);
+	vec3 fb_eu = normalize(fellow_heap_u) * (0.25 / fb_ls);
+	vec3 fb_ev = normalize(fellow_heap_v) * (0.25 / fb_ls);
+	float fb_mu = 0.5 * (fellow_burn_noise((VERTEX + fb_eu) * fb_ls + fb_lo) - fellow_burn_noise((VERTEX - fb_eu) * fb_ls + fb_lo)) / (0.5 / fb_ls);
+	float fb_mv = 0.5 * (fellow_burn_noise((VERTEX + fb_ev) * fb_ls + fb_lo) - fellow_burn_noise((VERTEX - fb_ev) * fb_ls + fb_lo)) / (0.5 / fb_ls);
+	float fb_h0 = fb_h;
+	fb_h *= fb_m;
+	// Ragged edges: the heap ends where it is thinner than a noisy threshold (the outline where the margin, interpolated
+	// across the triangles, crosses zero), meeting the floor there.
+	float fb_edge = (0.06 + 0.35 * fellow_burn_noise(VERTEX / max(3.0 * fellow_burn_crack_scale, 1e-4))) * fellow_burn_voxel;
+	fellow_heap_margin = fb_h - fb_edge;
+	float fb_share = fb_mid.y / max(fb_mid.x, 1e-6);
+	vec3 fb_piece = fellow_heap_pieces(VERTEX, fb_share);
+	float fb_hold = smoothstep(0.0, 0.6 * fellow_burn_voxel, fellow_heap_margin); // a thin heap holds no pieces
+	VERTEX += fellow_heap_up * (max(fellow_heap_margin, 0.0) + 0.002 + fb_piece.y * fb_hold);
+	float fb_gu = ((fb_c[2] + 2.0 * fb_c[5] + fb_c[8]) - (fb_c[0] + 2.0 * fb_c[3] + fb_c[6])) / (8.0 * fellow_burn_voxel) * fb_m + fb_h0 * fb_mu;
+	float fb_gv = ((fb_c[6] + 2.0 * fb_c[7] + fb_c[8]) - (fb_c[0] + 2.0 * fb_c[1] + fb_c[2])) / (8.0 * fellow_burn_voxel) * fb_m + fb_h0 * fb_mv;
+	NORMAL = normalize(fellow_heap_up - normalize(fellow_heap_u) * fb_gu - normalize(fellow_heap_v) * fb_gv);
+	fellow_burn_mat = vec4(fb_mid.z, 0.0, fb_mid.y, max(fb_mid.x - fb_mid.y, 0.0));
 }
 
 void fragment() {
-	if (fellow_burn_gone > 0.999) {
+	if (fellow_heap_margin < 0.0) {
 		discard;
 	}
 	vec4 fb = fellow_burn_mat;
 	float fb_sum = max(fb.y + fb.z + fb.w, 1e-4);
 	float fb_char = (fb.y + fb.z) / fb_sum;
-	// Grey ash with lumps of charcoal in it, black where the heap is mostly charcoal.
-	float fb_lump = fellow_heap_lumps(fellow_burn_local / max(0.6 * fellow_burn_crack_scale, 1e-4));
-	ALBEDO = mix(fellow_burn_ash_color, fellow_burn_char_color, smoothstep(0.3, 0.75, fb_char + 0.35 * (fb_lump - 0.5)));
-	ROUGHNESS = 0.97;
+	// Pieces of charcoal, a few small bits between them, half buried in the ash and dusted with it; further away, their
+	// average. The ash grey, mottled, specked with char dust.
+	vec3 fb_q = fellow_burn_local / max(1.6 * fellow_burn_crack_scale, 1e-4);
+	float fb_blur = smoothstep(0.25, 0.8, length(fwidth(fb_q)));
+	vec3 fb_piece = fellow_heap_pieces(fellow_burn_local, fb_char);
+	vec4 fb_bits = fellow_burn_cells(fellow_burn_local / max(0.6 * fellow_burn_crack_scale, 1e-4));
+	float fb_bit = (fb_bits.y < fb_char * 0.3 ? 1.0 : 0.0) * smoothstep(0.15, 0.25, fb_bits.w) * (1.0 - fb_piece.x);
+	float fb_dust = smoothstep(0.4, 0.85, fellow_burn_noise(fellow_burn_local / max(0.5 * fellow_burn_crack_scale, 1e-4)));
+	float fb_coal_share = mix(max(fb_piece.x, fb_bit) * (1.0 - 0.5 * fb_dust), min(fb_char * 1.2, 0.7) * 0.6, fb_blur);
+	float fb_tone = fellow_burn_noise(fellow_burn_local / max(5.0 * fellow_burn_crack_scale, 1e-4));
+	float fb_grain = fellow_burn_noise(fellow_burn_local / max(0.15 * fellow_burn_crack_scale, 1e-4));
+	float fb_specks = smoothstep(0.62, 0.8, fb_grain) * clamp(fb_char * 1.5, 0.2, 0.8);
+	vec3 fb_ash = fellow_burn_ash_color * (0.55 + 0.45 * fb_tone) * (1.0 - 0.6 * fb_specks);
+	vec3 fb_coal = fellow_burn_char_color * (0.6 + 0.8 * fract(fb_piece.z * 7.31 + fb_bits.y));
+	ALBEDO = mix(fb_ash, fb_coal, fb_coal_share);
+	ROUGHNESS = mix(0.98, 0.55, fb_coal_share);
+	// Relief: the pieces' plateaus, the bits, the ash's grain (the normal bumped by the height's screen derivatives).
+	float fb_rh = (fb_piece.y + fb_bit * smoothstep(0.15, 0.35, fb_bits.w) * 0.25 * fellow_burn_crack_scale + (fb_grain - 0.5) * 0.03 * fellow_burn_crack_scale) * (1.0 - fb_blur);
+	vec3 fb_dpx = dFdx(VERTEX);
+	vec3 fb_dpy = dFdy(VERTEX);
+	vec3 fb_r1 = cross(fb_dpy, NORMAL);
+	vec3 fb_r2 = cross(NORMAL, fb_dpx);
+	float fb_det = dot(fb_dpx, fb_r1);
+	if (abs(fb_det) > 1e-14) {
+		NORMAL = normalize(abs(fb_det) * NORMAL - sign(fb_det) * (dFdx(fb_rh) * fb_r1 + dFdy(fb_rh) * fb_r2));
+	}
+	// Embers: in the pieces' cracks, breathing; dull red through the ash.
 	float fb_temperature = min(fb.x + 293.0, 1300.0);
 	float fb_hot = smoothstep(750.0, 1000.0, fb_temperature) * pow(fb_temperature / 1300.0, 3.0);
 	if (fb_hot > 0.0) {
-		vec3 fb_p = fellow_burn_local / max(fellow_burn_crack_scale, 1e-4);
-		float fb_crack = mix(fellow_burn_cracks(fb_p), 0.3, smoothstep(0.25, 0.8, length(fwidth(fb_p))));
-		EMISSION = fellow_burn_blackbody(fb_temperature) * (fellow_burn_glow * fb_hot * (0.3 + 0.7 * fb_crack) * (0.5 + fb_char));
+		float fb_breath = mix(1.0, 0.55 + 0.45 * sin(TIME * (0.9 + 1.4 * fb_piece.z) + 6.2832 * fb_piece.z), 1.0 - fb_blur);
+		float fb_crack = mix(max(fb_bits.x, 1.0 - smoothstep(0.0, 0.1, fellow_burn_cells(fb_q).w)), 0.3, fb_blur);
+		float fb_glow = fb_coal_share * (0.06 + 0.94 * fb_crack) * fb_breath * (1.0 - 0.7 * fb_dust) + (1.0 - fb_coal_share) * 0.1 * fb_tone;
+		EMISSION = fellow_burn_blackbody(fb_temperature) * (fellow_burn_glow * fb_hot * fb_glow);
 	}
 }
 )";
 
 static const char *FELLOW_BURN_FRAGMENT = R"(
-	// FellowEngine burning: scorched, charred, ash; the embers glow in the char's cracks and the hot ash.
+	// FellowEngine burning: scorched brown, then charred black (alligator cracks along the grain, each block a little
+	// different, a faint sheen), a white-grey film of ash on the char about to crumble; the embers glow in the cracks,
+	// breathing, softer and even under the ash.
 	if (fellow_burn_gone > 0.001) {
 		discard;
 	}
@@ -759,20 +827,43 @@ static const char *FELLOW_BURN_FRAGMENT = R"(
 		float fb_sum = max(fb.y + fb.z + fb.w, 1e-4);
 		float fb_char = fb.z / fb_sum;
 		float fb_ash = fb.w / fb_sum;
-		float fb_dark = smoothstep(0.0, 0.35, fb_char + fb_ash);
-		ALBEDO = mix(ALBEDO, fellow_burn_char_color, fb_dark);
-		ALBEDO = mix(ALBEDO, fellow_burn_ash_color, smoothstep(0.15, 0.7, fb_ash));
-		ROUGHNESS = mix(ROUGHNESS, 0.95, fb_dark);
+		float fb_film = smoothstep(0.2, 1.0, fb.w / max(fellow_burn_loose_ash * fb.z, 1e-5)); // how near it is to crumbling
+		vec3 fb_p = fellow_burn_grain_space(fellow_burn_local) / max(fellow_burn_crack_scale, 1e-4);
+		vec4 fb_cell = fellow_burn_cells(fb_p);
+		float fb_blur = smoothstep(0.25, 0.8, length(fwidth(fb_p))); // fewer pixels than cells: the pattern's average
+		float fb_crack = mix(fb_cell.x, 0.3, fb_blur);
+		// The char's front ragged (noise on the share it shows at), not along the mesh's triangles.
+		float fb_front = fb_char + fb_ash + 0.3 * (fellow_burn_noise(fb_p * 0.25) + 0.5 * fellow_burn_noise(fb_p * 0.7) - 0.75);
+		float fb_dark = smoothstep(0.0, 0.35, fb_front);
+		// The ash coats the char in patches as it burns towards crumbling (on the blocks, not in the cracks).
+		float fb_coat = mix(smoothstep(0.45, 0.75, fellow_burn_noise(fb_p * 0.8) + 0.5 * fb_film - 0.2), 0.6, fb_blur) * fb_film * fb_dark * (1.0 - fb_crack);
+		ALBEDO = mix(ALBEDO, ALBEDO * vec3(0.5, 0.36, 0.26), smoothstep(-0.02, 0.1, fb_front));
+		vec3 fb_char_albedo = fellow_burn_char_color * (0.85 + 0.3 * fb_cell.y) * (1.0 - 0.7 * fb_crack * (1.0 - fb_blur));
+		ALBEDO = mix(ALBEDO, fb_char_albedo, smoothstep(0.08, 0.4, fb_front));
+		ALBEDO = mix(ALBEDO, fellow_burn_ash_color * (0.6 + 0.25 * fb_cell.y), 0.85 * fb_coat);
+		ROUGHNESS = mix(ROUGHNESS, mix(0.6, 0.97, fb_coat), fb_dark);
+		// The blocks between the cracks raised (the normal bumped by the height's screen derivatives).
+		float fb_bh = smoothstep(0.0, 0.12, fb_cell.w) * fb_dark * (1.0 - fb_blur) * 0.08 * fellow_burn_crack_scale;
+		vec3 fb_dpx = dFdx(VERTEX);
+		vec3 fb_dpy = dFdy(VERTEX);
+		vec3 fb_r1 = cross(fb_dpy, NORMAL);
+		vec3 fb_r2 = cross(NORMAL, fb_dpx);
+		float fb_det = dot(fb_dpx, fb_r1);
+		if (abs(fb_det) > 1e-14) {
+			NORMAL = normalize(abs(fb_det) * NORMAL - sign(fb_det) * (dFdx(fb_bh) * fb_r1 + dFdy(fb_bh) * fb_r2));
+		}
 		// Embers: the char's surface no hotter than glowing charcoal (it sits in the flame; the gas's temperature is the
-		// flame's), brightest in the cracks between its cells.
+		// flame's), brightest in the cracks between its blocks; some blocks glow, some do not, each breathing slowly
+		// (the air moving over the embers).
 		float fb_temperature = min(fb.x + 293.0, 1300.0);
 		float fb_hot = smoothstep(750.0, 1000.0, fb_temperature) * pow(fb_temperature / 1300.0, 3.0);
 		if (fb_hot > 0.0) {
-			vec3 fb_p = fellow_burn_local / max(fellow_burn_crack_scale, 1e-4);
-			// Fewer pixels than cells: the pattern's average (no sparkle).
-			float fb_crack = mix(fellow_burn_cracks(fb_p), 0.3, smoothstep(0.25, 0.8, length(fwidth(fb_p))));
-			float fb_patch = 0.35 + 0.65 * fellow_burn_hash3(floor(fb_p * 0.5)).x; // some cells glow, some do not
-			EMISSION += fellow_burn_blackbody(fb_temperature) * (fellow_burn_glow * fb_hot * (fb_char * (0.08 + 0.92 * fb_crack) * fb_patch + 0.5 * fb_ash));
+			float fb_patch = 0.35 + 0.65 * fellow_burn_hash3(floor(fb_p * 0.5)).x;
+			float fb_breath = mix(1.0, 0.55 + 0.45 * sin(TIME * (0.9 + 1.4 * fb_cell.y) + 6.2832 * fb_cell.y), 1.0 - fb_blur);
+			// The faces glow dimly, more at the hottest; through the ash coat, softly.
+			float fb_face = 0.04 + 0.3 * smoothstep(1100.0, 1300.0, fb_temperature) + 0.06 * fb_coat;
+			float fb_glow = fb_char * (fb_face + (1.0 - fb_face) * fb_crack) * fb_patch * fb_breath + 0.15 * fb_ash;
+			EMISSION += fellow_burn_blackbody(fb_temperature) * (fellow_burn_glow * fb_hot * fb_glow);
 		}
 	}
 )";
@@ -942,6 +1033,8 @@ Ref<ShaderMaterial> FellowBurnable3D::_make_burn_material(const Ref<Material> &p
 	m->set_shader_parameter("fellow_burn_ash_color", ash_color);
 	m->set_shader_parameter("fellow_burn_glow", glow_intensity);
 	m->set_shader_parameter("fellow_burn_crack_scale", crack_scale);
+	m->set_shader_parameter("fellow_burn_loose_ash", BURN_LOOSE_ASH * ash_volume);
+	m->set_shader_parameter("fellow_burn_grain", grain);
 	return m;
 }
 
@@ -959,6 +1052,7 @@ void FellowBurnable3D::_update_materials() {
 		m->set_shader_parameter("fellow_burn_ash_color", ash_color);
 		m->set_shader_parameter("fellow_burn_glow", glow_intensity);
 		m->set_shader_parameter("fellow_burn_crack_scale", crack_scale);
+		m->set_shader_parameter("fellow_burn_loose_ash", BURN_LOOSE_ASH * ash_volume);
 	}
 }
 
@@ -966,8 +1060,8 @@ void FellowBurnable3D::_build_heap(MeshInstance3D *p_target) {
 	const int a = CLAMP(heap_axis, 0, 2);
 	const int u = (a + 1) % 3;
 	const int v = (a + 2) % 3;
-	const int nu = res[u];
-	const int nv = res[v];
+	const int nu = res[u] * 2; // two vertices per voxel along each side
+	const int nv = res[v] * 2;
 	const float floor_face = origin[a] + float(heap_sign < 0 ? heap_floor : heap_floor + 1) * voxel;
 	PackedVector3Array pv;
 	PackedVector3Array pn;
@@ -976,8 +1070,8 @@ void FellowBurnable3D::_build_heap(MeshInstance3D *p_target) {
 	for (int j = 0; j < nv; j++) {
 		for (int i = 0; i < nu; i++) {
 			Vector3 p;
-			p[u] = origin[u] + (i + 0.5f) * voxel;
-			p[v] = origin[v] + (j + 0.5f) * voxel;
+			p[u] = origin[u] + (i + 0.5f) * voxel * 0.5f;
+			p[v] = origin[v] + (j + 0.5f) * voxel * 0.5f;
 			p[a] = floor_face;
 			pv.push_back(p);
 			pn.push_back(up);
@@ -1033,6 +1127,8 @@ void FellowBurnable3D::_build_heap(MeshInstance3D *p_target) {
 	heap_material->set_shader_parameter("fellow_burn_ash_color", ash_color);
 	heap_material->set_shader_parameter("fellow_burn_glow", glow_intensity);
 	heap_material->set_shader_parameter("fellow_burn_crack_scale", crack_scale);
+	heap_material->set_shader_parameter("fellow_burn_loose_ash", BURN_LOOSE_ASH * ash_volume);
+	heap_material->set_shader_parameter("fellow_burn_grain", grain);
 	mesh->surface_set_material(0, heap_material);
 	MeshInstance3D *heap = memnew(MeshInstance3D);
 	heap->set_name("FellowAshHeap");
@@ -1523,6 +1619,7 @@ void FellowBurnable3D::_queue_step() {
 		sp.smoke_per_fuel = smoke;
 		sp.heat_rate = surface_heating;
 		sp.attached = flame_attachment;
+		sp.flicker = flame_flicker;
 	}
 	// Ignition (one per step).
 	if (!pending_ignitions.is_empty()) {
@@ -1569,6 +1666,7 @@ void FellowBurnable3D::_queue_step() {
 	last_step["smoke_per_fuel"] = sp.smoke_per_fuel;
 	last_step["heat_rate"] = sp.heat_rate;
 	last_step["attached"] = sp.attached;
+	last_step["flicker"] = sp.flicker;
 	last_step["flame_temperature"] = sp.flame_temperature;
 	last_step["flame_flux"] = sp.flame_flux;
 	last_step["flame_reach"] = CLAMP(Math::round(sp.flame_reach), 0.0f, 8.0f);
@@ -1848,6 +1946,8 @@ void FellowBurnable3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_surface_heating"), &FellowBurnable3D::get_surface_heating);
 	ClassDB::bind_method(D_METHOD("set_flame_attachment", "fraction"), &FellowBurnable3D::set_flame_attachment);
 	ClassDB::bind_method(D_METHOD("get_flame_attachment"), &FellowBurnable3D::get_flame_attachment);
+	ClassDB::bind_method(D_METHOD("set_flame_flicker", "amount"), &FellowBurnable3D::set_flame_flicker);
+	ClassDB::bind_method(D_METHOD("get_flame_flicker"), &FellowBurnable3D::get_flame_flicker);
 	ClassDB::bind_method(D_METHOD("set_flame_temperature", "kelvin"), &FellowBurnable3D::set_flame_temperature);
 	ClassDB::bind_method(D_METHOD("get_flame_temperature"), &FellowBurnable3D::get_flame_temperature);
 	ClassDB::bind_method(D_METHOD("set_flame_reach", "metres"), &FellowBurnable3D::set_flame_reach);
@@ -1908,6 +2008,7 @@ void FellowBurnable3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "smoke", PROPERTY_HINT_RANGE, "0,4,0.01,or_greater"), "set_smoke", "get_smoke");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "surface_heating", PROPERTY_HINT_RANGE, "0,1000,0.1,or_greater,suffix:1/s"), "set_surface_heating", "get_surface_heating");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "flame_attachment", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_flame_attachment", "get_flame_attachment");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "flame_flicker", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_flame_flicker", "get_flame_flicker");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "flame_temperature", PROPERTY_HINT_RANGE, "0,2000,1,suffix:K"), "set_flame_temperature", "get_flame_temperature");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "flame_reach", PROPERTY_HINT_RANGE, "0,1,0.01,or_greater,suffix:m"), "set_flame_reach", "get_flame_reach");
 	ADD_GROUP("Look", "");

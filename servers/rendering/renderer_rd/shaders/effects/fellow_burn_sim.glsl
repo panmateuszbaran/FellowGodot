@@ -11,8 +11,8 @@
 //   HEAT    conduction, the exchange at the exposed faces with the gas (its hottest of three samples outwards) or the
 //           surface's own flame (over the voxels that released volatiles the step before, and above them), pyrolysis
 //           (wood -> char, the volatiles the gas's fuel), char oxidation (char -> ash, heat); the emission texture;
-//   SETTLE  the loose material (ash; with the char where a voxel has crumbled: next to no wood; little char, or char
-//           with ash in it, the debris of a heap) falls
+//   SETTLE  the loose material (ash; with the char where a voxel has crumbled: next to no wood, and its char burned
+//           three eighths away, the ash it left in it, or next to none left; the debris of a heap) falls
 //           into the voxel below (along the voxel axis nearest to the world's down) while it has room, down to the
 //           floor (the ground's layer, or the object's lowest), and slides down beside where it cannot (a heap no
 //           steeper than a voxel per voxel), carrying its heat; the display texture;
@@ -48,6 +48,15 @@ params;
 
 ivec3 N() {
 	return params.size.xyz;
+}
+
+#define BURN_DEBRIS_ASH 0.6 // ash per char, in ash volumes: a voxel with no wood whose char has burned this far (3/8 of
+// it: the ash it left is 0.6 ash volumes per char left) has crumbled; the debris in a heap stays loose
+
+// Whether a voxel's material (wood p_w, char p_c, ash p_a) is loose: crumbled (next to no wood; its char burned three
+// eighths away, or next to none left), the debris of a heap; it falls (SETTLE) and is no obstacle to the gas (porous).
+bool is_loose(float p_w, float p_c, float p_a) {
+	return p_w < 0.05 && (p_w + p_c < 0.05 || p_a >= BURN_DEBRIS_ASH * params.glow.w * p_c);
 }
 
 bool inside(ivec3 p_c) {
@@ -201,7 +210,7 @@ void main() {
 		T = tg;
 	}
 	imageStore(state_out, c, vec4(T, w, ch, a));
-	imageStore(emission, c, vec4(fuel, (e > 0.0 || fuel > 0.0) ? T : 0.0, e * (1.0 / 6.0), w + ch));
+	imageStore(emission, c, vec4(fuel, (e > 0.0 || fuel > 0.0) ? T : 0.0, e * (1.0 / 6.0), is_loose(w, ch, a) ? 0.0 : w + ch));
 }
 #endif
 
@@ -210,8 +219,6 @@ layout(rgba32f, set = 0, binding = 1) uniform restrict readonly image3D state_in
 layout(rgba32f, set = 0, binding = 2) uniform restrict writeonly image3D state_out;
 layout(rgba16f, set = 0, binding = 3) uniform restrict writeonly image3D display;
 
-#define BURN_DEBRIS 0.5 // next to no wood and less char than this (less than the drawn surface, half full): crumbled
-#define BURN_DEBRIS_ASH 0.2 // or this much ash per char (the debris in a heap stays loose; standing char has less)
 #define BURN_DOWN_SHARE 0.6 // of the room below, the most the voxel above may fill per step
 #define BURN_SIDE_SHARE 0.1 // of the room beside-below, the most each of the four slides into it may fill
 
@@ -241,10 +248,10 @@ bool passage(ivec3 p_c) {
 	return s.y + s.z + s.w < 0.5;
 }
 
-// The loose material of a voxel (char, ash): where it has crumbled (next to no wood; little char, or char with ash in it:
-// debris) its char and ash.
+// The loose material of a voxel (char, ash): where it has crumbled (next to no wood; next to no char, or char that has
+// burned three eighths away: the ash it left in it) its char and ash.
 vec2 loose(vec4 p_s) {
-	return (p_s.y < 0.05 && (p_s.y + p_s.z < BURN_DEBRIS || p_s.w >= BURN_DEBRIS_ASH * p_s.z)) ? vec2(p_s.z, p_s.w) : vec2(0.0);
+	return is_loose(p_s.y, p_s.z, p_s.w) ? vec2(p_s.z, p_s.w) : vec2(0.0);
 }
 
 // What voxel p_c moves this step: x down, y the rest, which may slide down beside it.

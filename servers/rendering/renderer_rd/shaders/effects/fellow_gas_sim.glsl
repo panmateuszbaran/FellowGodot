@@ -52,6 +52,7 @@ layout(local_size_x = 4, local_size_y = 4, local_size_z = 4) in;
 #define MAX_OBSTACLES 16
 #define MAX_MG_LEVELS 12
 #define MAX_BURNABLES 8 // burning objects coupled with a volume (FellowBurnable3D, decision 0120)
+#define BURN_AIR_MAX 350.0 // K above ambient: the most a hot surface heats the air of a cell next to it
 #define ZERO_CELL 255u // a coarse level's cell (solid texture) whose children are all outside the simulated bricks
 // Sparse bricks: a brick is a source where its largest smoke, temperature (K) or fuel is above these.
 #define SPARSE_SMOKE 1e-3
@@ -100,7 +101,8 @@ layout(set = 0, binding = 0, std140) uniform Params {
 	ivec4 burn_count; // x
 	ivec4 burn_origin[MAX_BURNABLES]; // the region's first cell
 	ivec4 burn_size[MAX_BURNABLES];
-	vec4 burn_params[MAX_BURNABLES]; // x smoke per unit of fuel released, y the air's heating rate (1/s) at full exposure
+	vec4 burn_params[MAX_BURNABLES]; // x smoke per unit of fuel released, y the air's heating rate (1/s) at full exposure,
+	// z the fuel burning where it is released, w the flicker of the fuel released (0 none)
 }
 params;
 
@@ -393,10 +395,19 @@ void main() {
 	for (int b = 0; b < params.burn_count.x; b++) {
 		vec4 v = burn_at(b, c);
 		if (v.x > 0.0 || v.y > s.y) {
-			if (v.y > s.y) {
-				s.y += (v.y - s.y) * (1.0 - exp(-params.burn_params[b].y * v.z * dt()));
+			// The air next to the hot surface is heated towards its temperature, but its cell no hotter than 350 K above
+			// ambient: the hot layer on a surface is far thinner than a cell, and hot air without a flame does not glow
+			// (the embers' heat glowed as an orange fog over the ground). Above the ignition temperature still.
+			float air = min(v.y, BURN_AIR_MAX);
+			if (air > s.y) {
+				s.y += (air - s.y) * (1.0 - exp(-params.burn_params[b].y * v.z * dt()));
 			}
 			float released = v.x * dt();
+			if (params.burn_params[b].w > 0.0) {
+				// Flicker (as an emitter's): value noise of a 15 cm period drifting upwards through the fuel released.
+				float n = value_noise(g * (sqrt(params.misc.y) / 0.15) - params.up.xyz * (params.misc.x * 2.0), uint(b) * 104729u + 31u);
+				released *= max(1.0 + params.burn_params[b].w * (2.0 * n - 1.0), 0.0);
+			}
 			float now = max(v.y, s.y) > params.decay.z ? released * params.burn_params[b].z : 0.0;
 			if (params.misc.w > 0.0 && params.combustion.x > 0.0) {
 				now = min(now, max(params.misc.w - s.y, 0.0) / params.combustion.x);

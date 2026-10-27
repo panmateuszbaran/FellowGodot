@@ -140,7 +140,7 @@ def main():
 		print("before: T max %.0f K, wood %.4f char %.4f ash %.4f (fractions of the voxels)" % (float(s0[..., 0].max()) + 293, float(s0[..., 1].sum()) / max(float((s0[..., 1] > 0).sum()), 1), float(s0[..., 2].sum()) / max(float((s0[..., 1] > 0).sum()), 1), float(s0[..., 3].sum())))
 		# The emission (half precision on the GPU).
 		em = load_half(d + "/emission.bin", n)
-		ref_em = np.stack([b.volatiles, np.where((e_before > 0) | (b.volatiles > 0), b.T, 0), e_before / 6.0, b.w + b.c], axis=-1).astype(np.float16).astype(np.float32)
+		ref_em = np.stack([b.volatiles, np.where((e_before > 0) | (b.volatiles > 0), b.T_heat, 0), e_before / 6.0, b.obstacle], axis=-1).astype(np.float16).astype(np.float32)
 		for c, label in enumerate(["volatiles", "surface T", "exposure", "solid"]):
 			r = rel(em[..., c], ref_em[..., c])
 			worst = max(worst, r) if label != "surface T" else worst

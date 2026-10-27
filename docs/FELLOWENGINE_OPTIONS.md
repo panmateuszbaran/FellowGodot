@@ -124,11 +124,11 @@ Runs only in a running game; it replaces the mesh instance's mesh and materials 
 |---|---|
 | `mesh_path` (the parent), `gas_volume_path` (the volume holding the object's centre), `resolution` (32 voxels along the longest side), `subdivide` (on) | the object, its fire, its voxels; the drawn mesh subdivided to 1.5 voxels per edge so it can follow them |
 | `burn_speed` (10) | burning seconds per second: a log burns in about a minute, not an hour (the flames keep their real size) |
-| `density` (500 kg/m³), `specific_heat`, `conductivity`, `pyrolysis_temperature` (573 K), `pyrolysis_rate`, `char_yield`, `glow_temperature` (673 K), `glow_rate`, `ash_volume` | the wood: how fast it heats through (thin parts first), chars, glows and how much ash it leaves |
+| `density` (500 kg/m³), `specific_heat`, `conductivity`, `pyrolysis_temperature` (573 K), `pyrolysis_rate`, `char_yield`, `glow_temperature` (673 K), `glow_rate`, `ash_volume` (0.15) | the wood: how fast it heats through (thin parts first), chars, glows and how much ash it leaves |
 | `flame_temperature` (1100 K), `flame_reach` (10 cm) | the surface's own flame (thinner than a voxel): a burning surface exchanges heat with it, the flame climbs over the wood above and creeps sideways — what keeps the object burning to ash on its own; lower to make it go out by itself |
-| `flame_strength` (1: 2.7 of the gas's fuel units per kg of volatiles), `flame_attachment` (0.5), `surface_heating` (200/s), `smoke` (0.05) | the coupling with the gas: the visible flames' size, the part burning at the surface, the air heated by the hot surface, the smoke |
+| `flame_strength` (1: 2.7 of the gas's fuel units per kg of volatiles), `flame_attachment` (0.5), `flame_flicker` (0.7), `surface_heating` (200/s), `smoke` (0.05) | the coupling with the gas: the visible flames' size, the part burning at the surface, how much they lick (the fuel released flickering), the air heated by the hot surface, the smoke |
 | `collapse_fraction` (0.2) | with less wood and char left the object's physics body stops colliding (its shapes disabled, a rigid body frozen); signal `collapsed` |
-| `char_color`, `ash_color`, `glow_intensity` (4), `crack_scale` (2.5 cm) | the look |
+| `char_color`, `ash_color`, `glow_intensity` (4), `crack_scale` (1.2 cm) | the look: the char's alligator cracks (along the grain, the mesh's longest axis), the ash coating it, the embers breathing in the cracks; the heap's charcoal pieces in grey ash |
 
 Methods `ignite(position, radius, temperature)`, `reset_burning()`, `get_wood_fraction()` / `get_char_fraction()` /
 `get_ash_fraction()`, `is_burning()`, `is_collapsed()`; signals `ignited`, `burned_out`, `collapsed`. Limits: at most 8

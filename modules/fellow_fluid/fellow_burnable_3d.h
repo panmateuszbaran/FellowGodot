@@ -71,12 +71,13 @@ private:
 	float char_yield = 0.25f;
 	float glow_temperature = 673.0f;
 	float glow_rate = 0.02f;
-	float ash_volume = 0.35f;
+	float ash_volume = 0.15f;
 	// Coupling with the gas.
 	float flame_strength = 1.0f;
 	float smoke = 0.05f;
 	float surface_heating = 200.0f;
 	float flame_attachment = 0.5f;
+	float flame_flicker = 0.7f;
 	float flame_temperature = 1100.0f; // K: the surface's own flame
 	float flame_reach = 0.1f; // m: how far above the burning surface its flame heats
 	float collapse_fraction = 0.2f; // the physics body stops colliding when less wood and char is left (0: never)
@@ -84,7 +85,7 @@ private:
 	Color char_color = Color(0.045, 0.038, 0.034);
 	Color ash_color = Color(0.56, 0.54, 0.51);
 	float glow_intensity = 4.0f;
-	float crack_scale = 0.025f; // m
+	float crack_scale = 0.012f; // m
 
 	// State.
 	uint32_t burn_id = 0;
@@ -104,6 +105,7 @@ private:
 	Vector3i res;
 	float voxel = 0.05f; // local units
 	Vector3 origin; // the box's corner
+	Vector3 grain = Vector3(0.0f, 1.0f, 0.0f); // the wood's grain (the mesh's longest axis, local)
 	Vector<float> initial_fill;
 	int occupied_min[3] = { 0, 0, 0 };
 	int occupied_max[3] = { 0, 0, 0 };
@@ -197,7 +199,10 @@ public:
 	float get_glow_temperature() const { return glow_temperature; }
 	void set_glow_rate(float p_value) { glow_rate = MAX(p_value, 0.0f); }
 	float get_glow_rate() const { return glow_rate; }
-	void set_ash_volume(float p_value) { ash_volume = CLAMP(p_value, 0.0f, 1.0f); }
+	void set_ash_volume(float p_value) {
+		ash_volume = CLAMP(p_value, 0.0f, 1.0f);
+		_update_materials();
+	}
 	float get_ash_volume() const { return ash_volume; }
 	void set_flame_strength(float p_value) { flame_strength = MAX(p_value, 0.0f); }
 	float get_flame_strength() const { return flame_strength; }
@@ -207,6 +212,8 @@ public:
 	float get_surface_heating() const { return surface_heating; }
 	void set_flame_attachment(float p_value) { flame_attachment = CLAMP(p_value, 0.0f, 1.0f); }
 	float get_flame_attachment() const { return flame_attachment; }
+	void set_flame_flicker(float p_value) { flame_flicker = CLAMP(p_value, 0.0f, 1.0f); }
+	float get_flame_flicker() const { return flame_flicker; }
 	void set_flame_temperature(float p_value) { flame_temperature = CLAMP(p_value, 0.0f, 3000.0f); }
 	float get_flame_temperature() const { return flame_temperature; }
 	void set_flame_reach(float p_value) { flame_reach = CLAMP(p_value, 0.0f, 10.0f); }

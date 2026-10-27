@@ -278,6 +278,7 @@ void FellowGas::_run_burn_step(uint32_t p_id, Burnable &r_b, const BurnStepParam
 		r_b.smoke_per_fuel = p_step.smoke_per_fuel;
 		r_b.heat_rate = p_step.heat_rate;
 		r_b.attached = p_step.attached;
+		r_b.flicker = p_step.flicker;
 		r_b.injected = true;
 	} else {
 		r_b.injected = false;
@@ -314,6 +315,7 @@ int FellowGas::_gather_burnables(uint32_t p_volume, SimUBO &r_ubo) {
 			r_ubo.burn_params[i][0] = b.smoke_per_fuel;
 			r_ubo.burn_params[i][1] = b.heat_rate;
 			r_ubo.burn_params[i][2] = b.attached;
+			r_ubo.burn_params[i][3] = b.flicker;
 		}
 		textures.push_back(nearest_sampler);
 		textures.push_back(tex);

@@ -23,11 +23,12 @@ like wood in a gas volume's fire (milestones 20-21):
   not drawn, the ash and the crumbled charcoal are a heap of its own (a grid over the floor, each vertex risen by the
   loose material in its voxel column).
 * **Verification**: the GPU matches a NumPy reference (`burn_reference.py`) to ~10⁻⁵ (relative L2 after 60-120
-  steps), the coupling's injection to half-precision rounding; Fire Lab and the gas checks unchanged bit for bit.
+  steps), the coupling's injection to half-precision rounding; Fire Lab and the gas checks unchanged bit for bit (the burning objects' terms in the gas are theirs alone).
 * **Burn Lab** (`--scene=burn`): two logs and a branch over a kindling fire (out after 12 s), a crate lit at a
-  bottom corner. **The wood burns away on its own** — the branch by 15 s, the logs by 35-45 s, the crate's planks by
-  about a minute — and **the remains crumble into heaps on the ground**: grey ash with charcoal in it (the logs: 0 %
-  wood, 11-16 % char, 24-26 % ash of their volume at 70 s; the crate 0.2 % / 5.6 % / 28 %), glowing while hot.
+  bottom corner. **The wood burns away on its own** — the branch by 15 s, the logs by 35-40 s, the crate's planks by
+  about a minute — with flames that stand and lick, and **the remains crumble into beds of grey ash with pieces of
+  charcoal on the ground**, glowing while hot (the logs: 0 % wood, 13-25 % char, 9-11 % ash of their volume at 70 s;
+  the crate 0.4 % / 7 % / 12 %).
 * **Collision**: once less than a fifth of the wood and char is left, the object's physics body stops colliding
   (`collapse_fraction`, signal `collapsed`).
 
@@ -63,29 +64,45 @@ like wood in a gas volume's fire (milestones 20-21):
   char and the ash mixed in it hung in the air, invisible, and the rest dropped in two ridges where its sides had
   been. Now the char of a crumbled voxel (no wood, less than half full, or debris with ash in it) falls with the
   ash, the loose material slides down beside where it cannot fall (a 45° heap), and it carries its heat; the shell
-  draws only standing wood and char, the heap the rest. The reference got the same rule (`ash` case 2.4 × 10⁻⁵, the
+  draws only standing wood and char, the heap the rest. The reference got the same rule (`ash` case 2.2 × 10⁻⁵, the
   heap reaching the box's sides). The heap's triangles were wound upside down for one floor orientation (lit from
   below); fixed. A teardown error ("Texture ... is not a valid texture") came from the heap's material outliving the
   voxels it samples: they are freed last now.
+
+* **The look reworked** (2026-10-27, the user: "it seems not very realistic"), from captures and a voxel/gas dump:
+  * the flames lay on the ground: in Burn Lab's gas volume, open at its sides, the fire grew a wind across it
+    (several m/s by the ground, 15 m/s at its sides; the cold air moving, not the expansion) — Burn Lab closes its
+    volume but for the top, and the flames stand; the fuel released now flickers (`flame_flicker` 0.7: the emitters'
+    value noise), so they lick; the air over hot surfaces is no hotter than 350 K above ambient (the embers' heat had
+    glowed as an orange fog); the crumbled debris is no obstacle to the gas (porous);
+  * crumbling by the char burned away (three eighths) instead of by the voxel's fill: thin planks lost their char as
+    soon as it formed and burned twice as fast; `ash_volume` 0.35 → 0.15 (real wood ash is a few per cent);
+  * the char: alligator cracks along the grain (1.2 cm, 1.8 times as long along the mesh's longest axis), raised
+    blocks, a faint sheen, a ragged front, grey ash coating it in patches before it crumbles, the embers breathing in
+    the cracks, the faces glowing dimly;
+  * the heap: ragged curved edges, lumpy, pieces of charcoal of many sizes (longer along the grain) raised and dusted
+    in mottled grey ash, glowing in their cracks (tried: smooth pillows, round lumps like a Dalmatian's spots, a mosaic
+    of whole cells).
 
 ## 2. Verification (lavapipe)
 
 | check | result |
 |---|---|
 | `burn_check.gd --case=solo` (a log alone, ignited), 60 steps | 1.1 × 10⁻⁵ (T, wood, char, ash; relative L2) |
-| `--case=ash` (a box on its side in a static body, burned through fast, the remains falling along its local x and sliding into a heap), 120 steps | 2.4 × 10⁻⁵; the body's shape disabled |
-| `--case=gas` (over a campfire), one coupled step after 60 | 9.2 × 10⁻⁷; emission and injection ≤ 6.2 × 10⁻⁴ (half precision) |
+| `--case=ash` (a box on its side in a static body, burned through fast, the remains falling along its local x and sliding into a heap), 120 steps | 2.2 × 10⁻⁵; the body's shape disabled |
+| `--case=gas` (over a campfire), one coupled step after 60 | 9.1 × 10⁻⁷; emission and injection ≤ 5.8 × 10⁻⁴ (half precision) |
 | `gas_check.gd` campfire dense / sparse, 60 steps | the same state bit for bit as milestone 21's |
 | `gas_check.gd --flame_limit=1500` against `gas_compare.py` | 3.1 × 10⁻⁶ |
 | Fire Lab captures (fire_close, fire_chimney, fire_torch) against `fellow198`'s code | 0 differing pixels |
 
-## 3. Burn Lab (lavapipe captures, 480 × 270, 48 gas cells)
+## 3. Burn Lab (lavapipe captures, 480 × 270, 64 gas cells)
 
-Every 5 s: the kindling's tall flame and the crate's corner catching (5 s), the logs' own flames (10-35 s), embers
-glowing in the char's cracks, the logs receding, burning through and crumbling into glowing heaps, the fire out at
-about 45 s, crossed ridges of ash and charcoal left where the logs lay (50-55 s). The same burning on every run (two
-runs' fractions agree to the last digit). Files: `m23_burn_progress.jpg` (5-55 s), `m23_heaps.png` (the heaps in
-daylight: two crossed logs and a box burned fast without gas).
+Every 5 s: the kindling's tall flame and the crate's corner catching (5 s), the logs' own flames licking up from them
+(10-25 s), embers glowing in the char's cracks and in the heap under them, the logs receding, burning through and
+crumbling, the fire out at about 30 s while the crate burns on, crossed beds of ash and charcoal left where the logs
+lay (45-55 s). The same burning on every run (two runs' fractions agree to the last digit). Files:
+`m24_burn_progress.jpg` (5-55 s), `m24_flames_before_after.jpg` (the volume's sides open and closed),
+`m24_char_heaps.jpg` (the char and the heaps in daylight: two crossed logs and a box burned without gas).
 
 ## 4. RTX (not run)
 
@@ -97,6 +114,10 @@ switch between the gas's and the objects' steps). Queued only when the user agre
 
 * The physics body stops colliding at once (no gradual shrinking); the remains stay in the object's box (reaching
   down to the ground found at configuration; a heap spreads at most to its sides, does not follow a moved object).
-* The crumbled char buried in a heap stops glowing when the fire dies: the logs end with 11-16 % of their volume as
+* The crumbled char buried in a heap stops glowing when the fire dies: the logs end with 13-25 % of their volume as
   charcoal, not all ash (earlier, char left standing burned to 1.4-1.8 %, but floated invisibly when thin).
+* A gas volume open at its sides can grow a wind across it under a large fire (Burn Lab closes its sides); a sponge
+  layer at the open faces would be the gas's fix (0117), not done (it changes Fire Lab).
+* The scene's own art is plain (untextured logs, spheres for stones, a flat ground): the burning is drawn on whatever
+  material the mesh has.
 * Skinned meshes are simulated, not drawn burning; at most 8 objects per gas volume.

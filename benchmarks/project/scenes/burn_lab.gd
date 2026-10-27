@@ -9,7 +9,8 @@ extends "res://bench/scene_base.gd"
 ## Options: --gas_res=N (the volume's cells along its longest side, default 64), --burn_res=N (the voxels along each
 ## object's longest side, default 32), --burn_speed=S (burning time per second, default 10), --kindling_s=S (how long
 ## the kindling burns, default 12), --night=1, --burn_draw=0 (simulated, drawn with the original meshes: the drawing's
-## cost), --flame_limit=K (the gas's, default 1500).
+## cost), --flame_limit=K (the gas's, default 1500), --closed_faces=F (the gas volume's, default 55: all but the top),
+## --turbulence=, --vorticity=, --expansion= (the gas volume's).
 ## Captures: burn_a ... burn_f are the same view one after another (with --settle=300: every 5 s), burn_top the ash.
 ## Extra per-frame metrics: the logs' and the crate's wood, char and ash fractions, their burning voxels.
 
@@ -126,9 +127,16 @@ func _build_fire() -> void:
 	gas.smoke_density = 5.0
 	gas.fire_intensity = 18.0
 	gas.physics_obstacles = false
+	# Closed but for the top: with open sides the fire's inflow grew into a wind of several m/s across the volume
+	# (15 m/s at its sides) that laid the flames along the ground.
+	gas.closed_faces = int(args.get("closed_faces", "55"))
 	gas.flame_temperature_limit = float(args.get("flame_limit", "1500"))
 	if args.has("expansion"):
 		gas.expansion = float(args["expansion"])
+	if args.has("turbulence"):
+		gas.turbulence = float(args["turbulence"])
+	if args.has("vorticity"):
+		gas.vorticity = float(args["vorticity"])
 	add_child(gas)
 	kindling = ClassDB.instantiate("FellowGasEmitter3D")
 	kindling.shape = 2  # cylinder

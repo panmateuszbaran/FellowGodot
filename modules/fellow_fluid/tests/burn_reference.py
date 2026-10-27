@@ -17,12 +17,12 @@ BURN_SETTLE):
      (1 - `char_yield` of the mass) released as the gas's fuel at the surface;
   4. char oxidation (glowing) above `glow_temperature` where the char is exposed: char -> ash (`ash_volume` of its
      volume), exothermic;
-  5. the loose material settles: ash, and the char where a voxel has crumbled (next to no wood; little char, or ash
-     in it: debris), falls into the voxel below (along the voxel axis nearest to the world's down) while that has
+  5. the loose material settles: ash, and the char where a voxel has crumbled (next to no wood; the char burned three
+     eighths away, or next to none left: debris), falls into the voxel below (along the voxel axis nearest to the world's down) while that has
      room, down to the floor (the ground's layer or the object's lowest), and slides down beside where it cannot
      (heaps a voxel per voxel), carrying its heat.
 The gas sees per voxel: the fuel released (units per second per m^3), the surface temperature and exposure (its air
-next to a hot surface heats), the solid fraction (w + c: an obstacle).
+next to a hot surface heats), the solid fraction (w + c standing: an obstacle; the loose debris is porous).
 """
 
 import numpy as np
@@ -53,7 +53,7 @@ class Material:
 		self.glow_temperature = f32(380.0)  # char oxidation onset (673 K); full rate 200 K above
 		self.glow_rate = f32(0.02)  # 1/s at full rate, exposed char
 		self.glow_heat = f32(4.0e6)  # J per kg of char oxidised kept by the solid
-		self.ash_volume = f32(0.35)  # volume of ash per volume of char oxidised
+		self.ash_volume = f32(0.15)  # volume of ash per volume of char oxidised
 		self.convection = f32(20.0)  # W/(m^2 K)
 		self.emissivity = f32(0.9)
 		self.fuel_per_kg = f32(40.0)  # the gas's fuel units per kg of volatiles
@@ -200,13 +200,21 @@ class Burnable:
 		fill = (w + c + a).astype(f32)
 		T = np.where(fill < f32(1e-3), tg, T).astype(f32)
 		self.w, self.c, self.a, self.T = w, c, a, T
+		# The gas's obstacle: the standing wood and char (the loose debris is porous), before the settling.
+		self.obstacle = np.where(self.loose(w, c, a), f32(0.0), w + c).astype(f32)
+		self.T_heat = T  # the surface's temperature the gas reads (before the settling moves heat)
 		self.settle(dt, *settle)
 		self.volatiles_prev = self.volatiles.astype(np.float16).astype(f32)  # the GPU keeps it in half precision
 		self.time += float(dt)
 
+	def loose(self, w, c, a):
+		"""Crumbled: next to no wood, and next to no char or the char burned three eighths away (0.6 ash volumes of ash
+		per char left): the debris of a heap."""
+		return (w < f32(0.05)) & (((w + c) < f32(0.05)) | (a >= f32(0.6) * self.mat.ash_volume * c))
+
 	def settle(self, dt, axis=1, sign=-1, floor=0):
-		"""The loose material (ash; with the char where a voxel has crumbled: next to no wood, and less wood and char
-		than half the voxel or at least 0.2 of ash per char, the debris of a heap) moves along `axis` in the direction `sign` (the voxel axis nearest to the world's down) while the voxel
+		"""The loose material (ash; with the char where a voxel has crumbled: next to no wood, and next to no char or
+		the char burned three eighths away — 0.6 ash volumes of ash per char left —, the debris of a heap) moves along `axis` in the direction `sign` (the voxel axis nearest to the world's down) while the voxel
 		there has room (taking at most 0.6 of it), not beyond layer `floor`; what cannot slides through a less than half
 		full neighbour into the voxel below it (each of the four at most 0.1 of its room, a quarter of the rest): heaps
 		no steeper than a voxel per voxel. As the GPU's SETTLE, in the same order."""
@@ -220,7 +228,7 @@ class Burnable:
 		ok = np.broadcast_to((along >= floor) if sign < 0 else (along <= floor), self.n)
 		room = np.where(ok, np.clip(f32(1.0) - fill, 0.0, 1.0), f32(0.0)).astype(f32)
 		passage = fill < f32(0.5)
-		crumbled = (w < f32(0.05)) & (((w + c) < f32(0.5)) | (a >= f32(0.2) * c))
+		crumbled = self.loose(w, c, a)
 		lc = np.where(crumbled, c, f32(0.0)).astype(f32)
 		la = np.where(crumbled, a, f32(0.0)).astype(f32)
 		lt = (lc + la).astype(f32)
