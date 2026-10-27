@@ -116,9 +116,9 @@ XR), no MSAA.
 A `FellowBurnable3D` node (module `fellow_fluid`; a child of a `MeshInstance3D`, or `mesh_path`) makes the mesh burn
 like wood in a gas volume's fire: the mesh is voxelized, the GPU heats the voxels from the flames, pyrolyses the wood
 to char (the volatiles feed the gas's flames: the fire comes from the object), oxidises the exposed char to glowing
-embers and ash, and lets the ash fall into a heap; the mesh recedes with the material, darkens, glows in its cracks
-and is burned through where it is thin. Runs only in a running game; it replaces the mesh instance's mesh and
-materials while in the tree. Decision record 0120; bench scene Burn Lab (`--scene=burn`).
+embers and ash, and lets the ash fall into a heap on the ground below; the mesh recedes with the material, darkens,
+glows in its cracks and is burned through where it is thin, the ash drawn as a heap of its own (`FellowAshHeap`).
+Runs only in a running game; it replaces the mesh instance's mesh and materials while in the tree. Decision record 0120; bench scene Burn Lab (`--scene=burn`).
 
 | property (node) | what it does |
 |---|---|

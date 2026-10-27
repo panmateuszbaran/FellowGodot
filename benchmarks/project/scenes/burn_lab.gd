@@ -95,6 +95,12 @@ func _build_ground() -> void:
 	mi.mesh = pm
 	mi.material_override = _material(Color(0.3, 0.27, 0.23), 0.95)
 	add_child(mi)
+	# The ground as a physics body: the burning objects' ash falls onto it (and the gas skips it: not in its box).
+	var ground := StaticBody3D.new()
+	var gs := CollisionShape3D.new()
+	gs.shape = WorldBoundaryShape3D.new()
+	ground.add_child(gs)
+	add_child(ground)
 	var stone := _material(Color(0.42, 0.41, 0.4), 0.8)
 	for i in 12:
 		var a := TAU * i / 12.0

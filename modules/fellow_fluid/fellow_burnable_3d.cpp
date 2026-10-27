@@ -39,7 +39,9 @@
 #include "scene/3d/physics/collision_shape_3d.h"
 #include "scene/3d/physics/rigid_body_3d.h"
 #include "scene/main/scene_tree.h"
+#include "scene/resources/3d/world_3d.h"
 #include "scene/resources/shader.h"
+#include "servers/physics_3d/physics_server_3d.h"
 #include "servers/rendering/fellow_settings.h"
 #include "servers/rendering/renderer_rd/effects/fellow_gas.h"
 #include "servers/rendering/rendering_server.h"
@@ -62,6 +64,7 @@ static constexpr float BURN_SETTLE_RATE = 2.0f;
 static constexpr float BURN_FUEL_PER_KG = 2.7f; // the gas's fuel per kg of volatiles at flame_strength 1 (each unit heats 1 m^3 of gas by 1400 K, 1.7 MJ: 30 % of the volatiles' 15 MJ/kg in the cells they burn in; Burn Lab's logs then have flames of the kindling's size)
 static constexpr float BURN_FLAME_FLUX = 0.005f; // kg/(m^2 s): the volatiles' flux for a surface fully in its flame (wood's critical mass flux for flaming, 2.5-5 g/(m^2 s))
 static constexpr int BURN_MARGIN = 2; // voxels around the mesh
+static constexpr int BURN_GROUND_LAYERS = 64; // at most this many layers added down to the ground
 static constexpr int BURN_TRIANGLE_BUDGET = 300000;
 
 Mutex FellowBurnable3D::body_mutex;
@@ -160,6 +163,34 @@ bool FellowBurnable3D::_voxelize(const Ref<Mesh> &p_mesh) {
 		res[a] = MAX(1, int(Math::ceil(box.size[a] / voxel - 1e-4f))) + 2 * BURN_MARGIN;
 	}
 	origin = box.get_center() - Vector3(res) * voxel * 0.5f;
+	// The box reaches down to the ground (the physics bodies below the object), so the ash falls onto it: its floor is
+	// the layer just above the ground, not the margin below it.
+	ground_axis = -1;
+	ground_floor = 0;
+	MeshInstance3D *target = Object::cast_to<MeshInstance3D>(ObjectDB::get_instance(target_id));
+	if (target) {
+		int axis = 1, sign = -1;
+		float below = 0.0f;
+		const bool ground = _ground_distance(target, box, axis, sign, below);
+		heap_axis = axis;
+		heap_sign = sign;
+		if (ground) {
+			const float g = sign < 0 ? box.position[axis] - below : box.position[axis] + box.size[axis] + below; // local
+			const float k = (g - origin[axis]) / voxel;
+			origin[axis] += (k - Math::round(k)) * voxel; // a face between layers on the ground (half a voxel at most)
+			if (sign < 0 && g < origin[axis]) {
+				const int extra = MIN(int(Math::ceil((origin[axis] - g) / voxel - 1e-4f)), BURN_GROUND_LAYERS);
+				res[axis] += extra;
+				origin[axis] -= extra * voxel;
+			} else if (sign > 0 && g > origin[axis] + res[axis] * voxel) {
+				res[axis] += MIN(int(Math::ceil((g - origin[axis] - res[axis] * voxel) / voxel - 1e-4f)), BURN_GROUND_LAYERS);
+			}
+			const int at = int(Math::round((g - origin[axis]) / voxel)); // the ground's face between layers at-1 and at
+			ground_floor = CLAMP(sign < 0 ? at : at - 1, 0, res[axis] - 1);
+			ground_axis = axis;
+			ground_sign = sign;
+		}
+	}
 	const int64_t count = int64_t(res.x) * res.y * res.z;
 	LocalVector<float> cov[3];
 	for (int a = 0; a < 3; a++) {
@@ -262,6 +293,56 @@ bool FellowBurnable3D::_voxelize(const Ref<Mesh> &p_mesh) {
 		}
 	}
 	return initial_volume > 0.0;
+}
+
+// The ground below the mesh's box (along the voxel axis nearest to the world's down: r_axis, r_sign): a ray down from
+// the box's lowest point against the physics bodies (not the object's own), at most 2 m. r_below: how far below the
+// box's lowest point it is, in the mesh's units. False without ground.
+bool FellowBurnable3D::_ground_distance(MeshInstance3D *p_target, const AABB &p_box, int &r_axis, int &r_sign, float &r_below) const {
+	if (!p_target->is_inside_tree()) {
+		return false;
+	}
+	const Transform3D m = p_target->get_global_transform();
+	const Vector3 down = m.basis.inverse().xform(Vector3(0, -1, 0));
+	r_axis = 1;
+	for (int a = 0; a < 3; a++) {
+		if (Math::abs(down[a]) > Math::abs(down[r_axis]) + 1e-6f) {
+			r_axis = a;
+		}
+	}
+	r_sign = down[r_axis] < 0.0f ? -1 : 1;
+	Ref<World3D> world = p_target->get_world_3d();
+	PhysicsDirectSpaceState3D *space = world.is_valid() ? world->get_direct_space_state() : nullptr;
+	if (!space) {
+		return false;
+	}
+	float low = 1e30f;
+	Vector3 centre = m.xform(p_box.get_center());
+	for (int c = 0; c < 8; c++) {
+		low = MIN(low, m.xform(p_box.get_endpoint(c)).y);
+	}
+	const float scale = Math::pow(Math::abs(m.basis.determinant()), 1.0f / 3.0f);
+	const float h = voxel * scale;
+	PhysicsDirectSpaceState3D::RayParameters params;
+	params.from = Vector3(centre.x, low + 0.25f * h, centre.z);
+	params.to = params.from - Vector3(0, 2.0f, 0);
+	HashSet<RID> exclude;
+	if (CollisionObject3D *own = Object::cast_to<CollisionObject3D>(ObjectDB::get_instance(body_id))) {
+		exclude.insert(own->get_rid());
+	}
+	for (Node *n = p_target; n; n = n->get_parent()) {
+		if (CollisionObject3D *co = Object::cast_to<CollisionObject3D>(n)) {
+			exclude.insert(co->get_rid());
+			break;
+		}
+	}
+	params.exclude = exclude;
+	PhysicsDirectSpaceState3D::RayResult hit;
+	if (!space->intersect_ray(params, hit)) {
+		return false;
+	}
+	r_below = (low - hit.position.y) / MAX(scale, 1e-6f);
+	return true;
 }
 
 float FellowBurnable3D::_fill_at(const Vector3 &p_local) const {
@@ -466,6 +547,12 @@ float fellow_burn_fill(vec3 p_local) {
 	return s.y + s.z + s.w;
 }
 
+// The wood and char standing (not the ash, nor the crumbled debris lying in the heap: as the simulation's SETTLE).
+float fellow_burn_solid(vec3 p_local) {
+	vec4 s = fellow_burn_sample(p_local);
+	return (s.y < 0.05 && (s.y + s.z < 0.5 || s.w >= 0.2 * s.z)) ? 0.0 : s.y + s.z;
+}
+
 vec3 fellow_burn_oct_decode(vec2 p_e) {
 	vec3 n = vec3(p_e, 1.0 - abs(p_e.x) - abs(p_e.y));
 	float t = max(-n.z, 0.0);
@@ -511,9 +598,10 @@ vec3 fellow_burn_blackbody(float p_t) {
 )";
 
 static const char *FELLOW_BURN_VERTEX = R"(
-	// FellowEngine burning: the vertex marches into the voxels (along its stored direction) to the material's
-	// surface now, and moves by how far that surface has receded since the start; where it finds none the object is
-	// burned through there and the vertex falls onto what is left below.
+	// FellowEngine burning: the vertex marches into the voxels (along its stored direction) to the wood and char's
+	// surface now (through any ash on it), and moves by how far that surface has receded since the start. Where it
+	// finds none (burned through: only ash or nothing left), the triangles touching it are not drawn; the ash on the
+	// ground is drawn by its own mesh (FellowAshHeap).
 	fellow_burn_local = VERTEX;
 	fellow_burn_gone = 0.0;
 	fellow_burn_mat = vec4(0.0, 1.0, 0.0, 0.0);
@@ -522,14 +610,14 @@ static const char *FELLOW_BURN_VERTEX = R"(
 		if (fb_c.y > 0.0) {
 			vec3 fb_d = fellow_burn_oct_decode(fb_c.zw);
 			float fb_thr = 0.5 * fb_c.y;
-			float fb_prev = fellow_burn_fill(VERTEX);
+			float fb_prev = fellow_burn_solid(VERTEX);
 			float fb_t = -1.0;
 			if (fb_prev > fb_thr) {
 				fb_t = 0.0;
 			} else {
 				for (int i = 1; i <= fellow_burn_steps; i++) {
 					float t = float(i) * fellow_burn_step;
-					float f = fellow_burn_fill(VERTEX + fb_d * t);
+					float f = fellow_burn_solid(VERTEX + fb_d * t);
 					if (f > fb_thr) {
 						fb_t = t - fellow_burn_step * (f - fb_thr) / max(f - fb_prev, 1e-6);
 						break;
@@ -537,47 +625,127 @@ static const char *FELLOW_BURN_VERTEX = R"(
 					fb_prev = f;
 				}
 			}
-			float fb_disp = 0.0;
-			vec3 fb_move = vec3(0.0);
-			vec3 fb_in = fb_d;
 			if (fb_t < 0.0) {
-				// Burned through along its direction: the vertex falls (the world's down) onto what is left below it,
-				// the ash heap or the char; with nothing below, the triangles touching it are not drawn.
-				vec3 fb_down = normalize((inverse(MODEL_MATRIX) * vec4(0.0, -1.0, 0.0, 0.0)).xyz);
-				float fb_prev2 = fellow_burn_fill(VERTEX);
-				for (int i = 1; i <= fellow_burn_steps; i++) {
-					float t = float(i) * fellow_burn_step;
-					float f = fellow_burn_fill(VERTEX + fb_down * t);
-					if (f > fb_thr) {
-						fb_t = t - fellow_burn_step * (f - fb_thr) / max(f - fb_prev2, 1e-6);
-						break;
-					}
-					fb_prev2 = f;
-				}
-				if (fb_t < 0.0) {
-					fellow_burn_gone = 1.0;
-				} else {
-					fb_disp = fb_t;
-					fb_move = fb_down * fb_t;
-					fb_in = fb_down;
-				}
+				fellow_burn_gone = 1.0;
 			} else {
-				fb_disp = max(fb_t - fb_c.x - 0.15 * fellow_burn_voxel, 0.0);
-				fb_move = fb_d * fb_disp;
-			}
-			VERTEX += fb_move;
-			if (fb_disp > 0.0) {
-				float h = fellow_burn_voxel;
-				vec3 g = vec3(fellow_burn_fill(VERTEX + vec3(h, 0.0, 0.0)) - fellow_burn_fill(VERTEX - vec3(h, 0.0, 0.0)),
-						fellow_burn_fill(VERTEX + vec3(0.0, h, 0.0)) - fellow_burn_fill(VERTEX - vec3(0.0, h, 0.0)),
-						fellow_burn_fill(VERTEX + vec3(0.0, 0.0, h)) - fellow_burn_fill(VERTEX - vec3(0.0, 0.0, h)));
-				if (length(g) > 1e-4) {
-					NORMAL = normalize(mix(NORMAL, -normalize(g), smoothstep(0.0, fellow_burn_voxel, fb_disp)));
+				float fb_disp = max(fb_t - fb_c.x - 0.15 * fellow_burn_voxel, 0.0);
+				VERTEX += fb_d * fb_disp;
+				if (fb_disp > 0.0) {
+					float h = fellow_burn_voxel;
+					vec3 g = vec3(fellow_burn_solid(VERTEX + vec3(h, 0.0, 0.0)) - fellow_burn_solid(VERTEX - vec3(h, 0.0, 0.0)),
+							fellow_burn_solid(VERTEX + vec3(0.0, h, 0.0)) - fellow_burn_solid(VERTEX - vec3(0.0, h, 0.0)),
+							fellow_burn_solid(VERTEX + vec3(0.0, 0.0, h)) - fellow_burn_solid(VERTEX - vec3(0.0, 0.0, h)));
+					if (length(g) > 1e-4) {
+						NORMAL = normalize(mix(NORMAL, -normalize(g), smoothstep(0.0, fellow_burn_voxel, fb_disp)));
+					}
 				}
+				// The composition at the surface (the ash on it greys it) and just inside.
+				fellow_burn_mat = fellow_burn_sample(VERTEX + fb_d * (0.25 * fellow_burn_voxel));
 			}
-			fellow_burn_mat = fellow_burn_sample(VERTEX + fb_in * (0.5 * fellow_burn_voxel));
 		}
 	}
+)";
+
+// The ash heap (FellowAshHeap): a grid over the box's floor, a vertex per voxel column risen by the loose material in
+// the column (the ash and the crumbled char, the simulation's SETTLE: its volume over the column's area),
+// smoothed over the columns around it, so the heap thins out over a voxel or two at its edges; the columns without
+// ash left at the floor and their triangles not drawn; embers glow in it while hot.
+static const char *FELLOW_HEAP_CODE = R"(
+uniform vec3 fellow_heap_up; // the mesh's local space, away from the floor
+uniform vec3 fellow_heap_u; // the grid's axes, a voxel long
+uniform vec3 fellow_heap_v;
+
+// The loose material's height in the column standing at p_floor (from the floor up to the first voxel of standing wood
+// or char, the shell's, or less than a quarter full: the heap's top), the char's in it, the top's temperature (above
+// ambient).
+vec3 fellow_heap_column(vec3 p_floor) {
+	vec3 r = vec3(0.0);
+	for (int i = 0; i < fellow_burn_steps; i++) {
+		vec4 s = fellow_burn_sample(p_floor + fellow_heap_up * ((float(i) + 0.5) * fellow_burn_voxel));
+		float f = s.y + s.z + s.w;
+		if (f < 0.02 || !(s.y < 0.05 && (s.y + s.z < 0.5 || s.w >= 0.2 * s.z))) {
+			break;
+		}
+		r.x += f * fellow_burn_voxel;
+		r.y += (s.y + s.z) * fellow_burn_voxel;
+		r.z = s.x;
+		if (f < 0.25) {
+			break;
+		}
+	}
+	return r;
+}
+
+void vertex() {
+	fellow_burn_local = VERTEX;
+	fellow_burn_gone = 1.0;
+	fellow_burn_mat = vec4(0.0, 0.0, 0.0, 1.0);
+	// The heights of the 3 x 3 columns around: smoothed (1 2 1) and their slope (Sobel).
+	float fb_c[9];
+	vec3 fb_mid = vec3(0.0);
+	for (int j = 0; j < 3; j++) {
+		for (int i = 0; i < 3; i++) {
+			vec3 col = fellow_heap_column(VERTEX + fellow_heap_u * float(i - 1) + fellow_heap_v * float(j - 1));
+			fb_c[j * 3 + i] = col.x;
+			if (i == 1 && j == 1) {
+				fb_mid = col;
+			}
+		}
+	}
+	float fb_h = (fb_c[0] + fb_c[2] + fb_c[6] + fb_c[8] + 2.0 * (fb_c[1] + fb_c[3] + fb_c[5] + fb_c[7]) + 4.0 * fb_c[4]) / 16.0;
+	if (fb_h > 0.08 * fellow_burn_voxel) {
+		fellow_burn_gone = 0.0;
+		VERTEX += fellow_heap_up * fb_h;
+		float fb_gu = ((fb_c[2] + 2.0 * fb_c[5] + fb_c[8]) - (fb_c[0] + 2.0 * fb_c[3] + fb_c[6])) / (8.0 * fellow_burn_voxel);
+		float fb_gv = ((fb_c[6] + 2.0 * fb_c[7] + fb_c[8]) - (fb_c[0] + 2.0 * fb_c[1] + fb_c[2])) / (8.0 * fellow_burn_voxel);
+		NORMAL = normalize(fellow_heap_up - normalize(fellow_heap_u) * fb_gu - normalize(fellow_heap_v) * fb_gv);
+		fellow_burn_mat = vec4(fb_mid.z, 0.0, fb_mid.y, max(fb_mid.x - fb_mid.y, 0.0));
+	} else {
+		NORMAL = fellow_heap_up;
+	}
+}
+
+// A random value per cell (that of the nearest of the jittered points): the lumps of charcoal in the ash.
+float fellow_heap_lumps(vec3 p_p) {
+	vec3 i = floor(p_p);
+	vec3 f = p_p - i;
+	float d1 = 8.0;
+	vec3 best = i;
+	for (int z = -1; z <= 1; z++) {
+		for (int y = -1; y <= 1; y++) {
+			for (int x = -1; x <= 1; x++) {
+				vec3 o = vec3(float(x), float(y), float(z));
+				vec3 r = o + fellow_burn_hash3(i + o) - f;
+				float d = dot(r, r);
+				if (d < d1) {
+					d1 = d;
+					best = i + o;
+				}
+			}
+		}
+	}
+	return fellow_burn_hash3(best + vec3(17.0, 31.0, 7.0)).x;
+}
+
+void fragment() {
+	if (fellow_burn_gone > 0.999) {
+		discard;
+	}
+	vec4 fb = fellow_burn_mat;
+	float fb_sum = max(fb.y + fb.z + fb.w, 1e-4);
+	float fb_char = (fb.y + fb.z) / fb_sum;
+	// Grey ash with lumps of charcoal in it, black where the heap is mostly charcoal.
+	float fb_lump = fellow_heap_lumps(fellow_burn_local / max(0.6 * fellow_burn_crack_scale, 1e-4));
+	ALBEDO = mix(fellow_burn_ash_color, fellow_burn_char_color, smoothstep(0.3, 0.75, fb_char + 0.35 * (fb_lump - 0.5)));
+	ROUGHNESS = 0.97;
+	float fb_temperature = min(fb.x + 293.0, 1300.0);
+	float fb_hot = smoothstep(750.0, 1000.0, fb_temperature) * pow(fb_temperature / 1300.0, 3.0);
+	if (fb_hot > 0.0) {
+		vec3 fb_p = fellow_burn_local / max(fellow_burn_crack_scale, 1e-4);
+		float fb_crack = mix(fellow_burn_cracks(fb_p), 0.3, smoothstep(0.25, 0.8, length(fwidth(fb_p))));
+		EMISSION = fellow_burn_blackbody(fb_temperature) * (fellow_burn_glow * fb_hot * (0.3 + 0.7 * fb_crack) * (0.5 + fb_char));
+	}
+}
 )";
 
 static const char *FELLOW_BURN_FRAGMENT = R"(
@@ -585,6 +753,7 @@ static const char *FELLOW_BURN_FRAGMENT = R"(
 	if (fellow_burn_gone > 0.001) {
 		discard;
 	}
+
 	{
 		vec4 fb = fellow_burn_mat;
 		float fb_sum = max(fb.y + fb.z + fb.w, 1e-4);
@@ -777,7 +946,12 @@ Ref<ShaderMaterial> FellowBurnable3D::_make_burn_material(const Ref<Material> &p
 }
 
 void FellowBurnable3D::_update_materials() {
-	for (Ref<ShaderMaterial> &m : burn_materials) {
+	LocalVector<Ref<ShaderMaterial>> all;
+	for (const Ref<ShaderMaterial> &m : burn_materials) {
+		all.push_back(m);
+	}
+	all.push_back(heap_material);
+	for (Ref<ShaderMaterial> &m : all) {
 		if (m.is_null()) {
 			continue;
 		}
@@ -786,6 +960,87 @@ void FellowBurnable3D::_update_materials() {
 		m->set_shader_parameter("fellow_burn_glow", glow_intensity);
 		m->set_shader_parameter("fellow_burn_crack_scale", crack_scale);
 	}
+}
+
+void FellowBurnable3D::_build_heap(MeshInstance3D *p_target) {
+	const int a = CLAMP(heap_axis, 0, 2);
+	const int u = (a + 1) % 3;
+	const int v = (a + 2) % 3;
+	const int nu = res[u];
+	const int nv = res[v];
+	const float floor_face = origin[a] + float(heap_sign < 0 ? heap_floor : heap_floor + 1) * voxel;
+	PackedVector3Array pv;
+	PackedVector3Array pn;
+	Vector3 up;
+	up[a] = heap_sign < 0 ? 1.0f : -1.0f;
+	for (int j = 0; j < nv; j++) {
+		for (int i = 0; i < nu; i++) {
+			Vector3 p;
+			p[u] = origin[u] + (i + 0.5f) * voxel;
+			p[v] = origin[v] + (j + 0.5f) * voxel;
+			p[a] = floor_face;
+			pv.push_back(p);
+			pn.push_back(up);
+		}
+	}
+	// Front faces (clockwise, seen from above) up: u x v is the axis a, so the winding turns with the heap's up.
+	const bool flip = up[a] > 0.0f;
+	PackedInt32Array idx;
+	for (int j = 0; j + 1 < nv; j++) {
+		for (int i = 0; i + 1 < nu; i++) {
+			const int q = i + j * nu;
+			idx.push_back(q);
+			idx.push_back(flip ? q + 1 + nu : q + 1);
+			idx.push_back(flip ? q + 1 : q + 1 + nu);
+			idx.push_back(q);
+			idx.push_back(flip ? q + nu : q + 1 + nu);
+			idx.push_back(flip ? q + 1 + nu : q + nu);
+		}
+	}
+	if (idx.is_empty()) {
+		return;
+	}
+	Array arrays;
+	arrays.resize(Mesh::ARRAY_MAX);
+	arrays[Mesh::ARRAY_VERTEX] = pv;
+	arrays[Mesh::ARRAY_NORMAL] = pn;
+	arrays[Mesh::ARRAY_INDEX] = idx;
+	Ref<ArrayMesh> mesh;
+	mesh.instantiate();
+	mesh->add_surface_from_arrays(Mesh::PRIMITIVE_TRIANGLES, arrays);
+	// The heap's vertices rise up to the box's height: a custom box so it is not culled.
+	mesh->set_custom_aabb(AABB(origin, Vector3(res) * voxel));
+	Ref<Shader> shader;
+	shader.instantiate();
+	shader->set_code(String("shader_type spatial;\nrender_mode cull_disabled;\n") + FELLOW_BURN_DECLARATIONS + FELLOW_HEAP_CODE);
+	heap_material.instantiate();
+	heap_material->set_shader(shader);
+	heap_material->set_shader_parameter("fellow_burn_state", display_texture);
+	heap_material->set_shader_parameter("fellow_burn_origin", origin);
+	const Vector3 extent = Vector3(res) * voxel;
+	heap_material->set_shader_parameter("fellow_burn_inv_extent", Vector3(1.0f / extent.x, 1.0f / extent.y, 1.0f / extent.z));
+	heap_material->set_shader_parameter("fellow_burn_voxel", voxel);
+	heap_material->set_shader_parameter("fellow_burn_step", voxel * 0.5f);
+	heap_material->set_shader_parameter("fellow_burn_steps", res[a]);
+	heap_material->set_shader_parameter("fellow_heap_up", up);
+	Vector3 du;
+	du[u] = voxel;
+	Vector3 dv;
+	dv[v] = voxel;
+	heap_material->set_shader_parameter("fellow_heap_u", du);
+	heap_material->set_shader_parameter("fellow_heap_v", dv);
+	heap_material->set_shader_parameter("fellow_burn_char_color", char_color);
+	heap_material->set_shader_parameter("fellow_burn_ash_color", ash_color);
+	heap_material->set_shader_parameter("fellow_burn_glow", glow_intensity);
+	heap_material->set_shader_parameter("fellow_burn_crack_scale", crack_scale);
+	mesh->surface_set_material(0, heap_material);
+	MeshInstance3D *heap = memnew(MeshInstance3D);
+	heap->set_name("FellowAshHeap");
+	heap->set_mesh(mesh);
+	heap->set_cast_shadows_setting(p_target->get_cast_shadows_setting());
+	heap->set_layer_mask(p_target->get_layer_mask());
+	p_target->add_child(heap, false, INTERNAL_MODE_BACK);
+	heap_id = heap->get_instance_id();
 }
 
 void FellowBurnable3D::_build_display(MeshInstance3D *p_target) {
@@ -1060,6 +1315,7 @@ void FellowBurnable3D::_configure() {
 		return; // tried again next tick
 	}
 	original_mesh = target->get_mesh();
+	target_id = target->get_instance_id();
 	if (!_voxelize(original_mesh)) {
 		ERR_PRINT(vformat("FellowBurnable3D %s: the mesh has no volume to burn.", get_path()));
 		failed = true;
@@ -1080,8 +1336,12 @@ void FellowBurnable3D::_configure() {
 	}
 	RS::get_singleton()->call_on_render_thread(callable_mp_static(&FellowBurnable3D::_rt_configure).bind(burn_id, res, bytes, totals, display_texture));
 	// The display: the mesh subdivided, its materials burning.
+	heap_floor = heap_sign < 0 ? occupied_min[CLAMP(heap_axis, 0, 2)] : occupied_max[CLAMP(heap_axis, 0, 2)];
+	if (heap_axis == ground_axis && heap_sign == ground_sign) {
+		heap_floor = ground_floor;
+	}
 	if (draw_burning) {
-		_build_display(target);
+		_build_display(target); // the ash heap's mesh once there is ash (_read_totals)
 	}
 	if (display_mesh.is_valid()) {
 		_swap_in(target);
@@ -1128,7 +1388,6 @@ void FellowBurnable3D::_unconfigure() {
 	if (!configured) {
 		return;
 	}
-	RS::get_singleton()->call_on_render_thread(callable_mp_static(&FellowBurnable3D::_rt_free).bind(burn_id));
 	MeshInstance3D *target = Object::cast_to<MeshInstance3D>(ObjectDB::get_instance(target_id));
 	if (target && display_mesh.is_valid() && target->get_mesh() == display_mesh) {
 		target->set_mesh(original_mesh);
@@ -1151,6 +1410,14 @@ void FellowBurnable3D::_unconfigure() {
 	original_material_override.unref();
 	display_mesh.unref();
 	burn_materials.clear();
+	if (MeshInstance3D *heap = Object::cast_to<MeshInstance3D>(ObjectDB::get_instance(heap_id))) {
+		heap->set_mesh(Ref<Mesh>()); // its material goes now: it samples the voxels freed below
+		heap->queue_free();
+	}
+	heap_id = ObjectID();
+	heap_material.unref();
+	// The voxels last, once no material samples them.
+	RS::get_singleton()->call_on_render_thread(callable_mp_static(&FellowBurnable3D::_rt_free).bind(burn_id));
 	target_id = ObjectID();
 	configured = false;
 }
@@ -1212,6 +1479,9 @@ void FellowBurnable3D::_queue_step() {
 	sp.settle_axis = axis;
 	sp.settle_sign = down[axis] < 0.0f ? -1 : 1;
 	sp.settle_floor = sp.settle_sign < 0 ? occupied_min[axis] : occupied_max[axis];
+	if (axis == ground_axis && sp.settle_sign == ground_sign) {
+		sp.settle_floor = ground_floor; // the layer on the ground the box reaches down to
+	}
 	// The gas.
 	FellowGasVolume3D *gas = _find_gas_volume();
 	Transform3D v2g;
@@ -1341,6 +1611,11 @@ void FellowBurnable3D::_read_totals() {
 	if (has_ignited && !has_burned_out && burning_voxels == 0 && max_temperature < pyrolysis_temperature) {
 		has_burned_out = true;
 		emit_signal(SNAME("burned_out"));
+	}
+	if (draw_burning && heap_id.is_null() && ash_fraction > 0.001f) {
+		if (MeshInstance3D *target = Object::cast_to<MeshInstance3D>(ObjectDB::get_instance(target_id))) {
+			_build_heap(target);
+		}
 	}
 	if (has_ignited && !has_collapsed && collapse_fraction > 0.0f && wood_fraction + char_fraction <= collapse_fraction) {
 		_collapse();

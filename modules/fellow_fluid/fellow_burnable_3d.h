@@ -107,6 +107,14 @@ private:
 	Vector<float> initial_fill;
 	int occupied_min[3] = { 0, 0, 0 };
 	int occupied_max[3] = { 0, 0, 0 };
+	int ground_axis = -1; // the box reaches down to the ground along this voxel axis (the ash falls to it)
+	int ground_sign = -1;
+	int ground_floor = 0; // the layer on the ground
+	int heap_axis = 1; // the voxel axis nearest to the world's down at configuration, its sign, the ash's floor layer
+	int heap_sign = -1;
+	int heap_floor = 0;
+	ObjectID heap_id; // the ash heap's MeshInstance3D (an internal child of the target)
+	Ref<ShaderMaterial> heap_material;
 	double initial_volume = 0.0; // voxels
 	// Totals (read back every few ticks).
 	float wood_fraction = 1.0f;
@@ -130,10 +138,12 @@ private:
 	MeshInstance3D *_get_target() const;
 	FellowGasVolume3D *_find_gas_volume() const;
 	bool _voxelize(const Ref<Mesh> &p_mesh);
+	bool _ground_distance(MeshInstance3D *p_target, const AABB &p_box, int &r_axis, int &r_sign, float &r_below) const; // the ground below the box
 	void _build_display(MeshInstance3D *p_target);
 	Ref<ShaderMaterial> _make_burn_material(const Ref<Material> &p_source, int p_custom) const;
 	void _update_materials();
 	void _swap_in(MeshInstance3D *p_target);
+	void _build_heap(MeshInstance3D *p_target);
 	void _configure();
 	void _unconfigure();
 	void _queue_step();

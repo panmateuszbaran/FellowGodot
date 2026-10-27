@@ -17,8 +17,10 @@ BURN_SETTLE):
      (1 - `char_yield` of the mass) released as the gas's fuel at the surface;
   4. char oxidation (glowing) above `glow_temperature` where the char is exposed: char -> ash (`ash_volume` of its
      volume), exothermic;
-  5. ash settles: ash with no wood or char left in its voxel falls into the voxel below (along the voxel axis
-     nearest to the world's down) while that has room, down to the object's lowest layer.
+  5. the loose material settles: ash, and the char where a voxel has crumbled (next to no wood; little char, or ash
+     in it: debris), falls into the voxel below (along the voxel axis nearest to the world's down) while that has
+     room, down to the floor (the ground's layer or the object's lowest), and slides down beside where it cannot
+     (heaps a voxel per voxel), carrying its heat.
 The gas sees per voxel: the fuel released (units per second per m^3), the surface temperature and exposure (its air
 next to a hot surface heats), the solid fraction (w + c: an obstacle).
 """
@@ -203,8 +205,11 @@ class Burnable:
 		self.time += float(dt)
 
 	def settle(self, dt, axis=1, sign=-1, floor=0):
-		"""Ash moves along `axis` in the direction `sign` (the voxel axis nearest to the world's down) while the voxel
-		there has room, not beyond layer `floor` (the object's lowest along it)."""
+		"""The loose material (ash; with the char where a voxel has crumbled: next to no wood, and less wood and char
+		than half the voxel or at least 0.2 of ash per char, the debris of a heap) moves along `axis` in the direction `sign` (the voxel axis nearest to the world's down) while the voxel
+		there has room (taking at most 0.6 of it), not beyond layer `floor`; what cannot slides through a less than half
+		full neighbour into the voxel below it (each of the four at most 0.1 of its room, a quarter of the rest): heaps
+		no steeper than a voxel per voxel. As the GPU's SETTLE, in the same order."""
 		m = self.mat
 		w, c, a = self.w, self.c, self.a
 		fill = (w + c + a).astype(f32)
@@ -213,13 +218,53 @@ class Burnable:
 		shape[axis] = self.n[axis]
 		along = np.arange(self.n[axis]).reshape(shape)
 		ok = np.broadcast_to((along >= floor) if sign < 0 else (along <= floor), self.n)
-		fill_b = neighbour(fill, axis, sign, f32(1.0))
-		ok_b = neighbour(ok.astype(np.uint8), axis, sign, 0) > 0
-		cap_below = np.where(ok_b, np.clip(f32(1.0) - fill_b, 0.0, 1.0), f32(0.0)).astype(f32)
-		movable = (w + c) < f32(0.05)
-		out = np.where(movable, np.minimum(a * rate, cap_below), f32(0.0)).astype(f32)
-		inflow = neighbour(out, axis, -sign, f32(0.0))
-		self.a = (a - out + inflow).astype(f32)
+		room = np.where(ok, np.clip(f32(1.0) - fill, 0.0, 1.0), f32(0.0)).astype(f32)
+		passage = fill < f32(0.5)
+		crumbled = (w < f32(0.05)) & (((w + c) < f32(0.5)) | (a >= f32(0.2) * c))
+		lc = np.where(crumbled, c, f32(0.0)).astype(f32)
+		la = np.where(crumbled, a, f32(0.0)).astype(f32)
+		lt = (lc + la).astype(f32)
+		mv = (lt * rate).astype(f32)
+		room_dn = shift(room, axis, sign, f32(0.0))
+		d = np.minimum(mv, f32(0.6) * room_dn).astype(f32)
+		r = (mv - d).astype(f32)
+		lats = [((axis + 1) % 3, 1), ((axis + 1) % 3, -1), ((axis + 2) % 3, 1), ((axis + 2) % 3, -1)]
+		slides = []
+		for lax, ls in lats:
+			pas = shift(passage, lax, ls, False)
+			room_t = shift(room_dn, lax, ls, f32(0.0))
+			slides.append(np.where((r > 0) & pas, np.minimum(f32(0.25) * r, f32(0.1) * room_t), f32(0.0)).astype(f32))
+		out = d
+		for sl in slides:
+			out = (out + sl).astype(f32)
+		safe = np.where(lt > 0, lt, f32(1.0)).astype(f32)
+		out_c = np.where(lt > 0, out * lc / safe, f32(0.0)).astype(f32)
+		out_a = (out - out_c).astype(f32)
+
+		def parts(flow):
+			return (np.where(lt > 0, flow * lc / safe, f32(0.0)).astype(f32),
+					np.where(lt > 0, flow * la / safe, f32(0.0)).astype(f32))
+
+		# The moved material carries its heat (the voxels' temperatures mixed by heat capacity).
+		cc = (m.char_density * m.char_specific_heat).astype(f32)
+		ca = (m.ash_density * m.ash_specific_heat).astype(f32)
+		T = self.T
+
+		def arriving(fc, fa, move):
+			cv = (cc * fc + ca * fa).astype(f32)
+			return move(fc), move(fa), move((cv * T).astype(f32)), move(cv)
+
+		in_c, in_a, in_q, in_cv = arriving(*parts(d), lambda x: shift(x, axis, -sign, f32(0.0)))
+		for (lax, ls), sl in zip(lats, slides):
+			ac, aa, aq, acv = arriving(*parts(sl), lambda x, lax=lax, ls=ls: shift(shift(x, axis, -sign, f32(0.0)), lax, -ls, f32(0.0)))
+			in_c = (in_c + ac).astype(f32)
+			in_a = (in_a + aa).astype(f32)
+			in_q = (in_q + aq).astype(f32)
+			in_cv = (in_cv + acv).astype(f32)
+		keep_cv = (m.density * m.specific_heat * w + cc * (c - out_c) + ca * (a - out_a)).astype(f32)
+		self.T = np.where(in_cv > 0, (keep_cv * T + in_q) / np.maximum(keep_cv + in_cv, f32(1e-6)), T).astype(f32)
+		self.c = (c - out_c + in_c).astype(f32)
+		self.a = (a - out_a + in_a).astype(f32)
 
 	def totals(self):
 		v = float(self.h) ** 3

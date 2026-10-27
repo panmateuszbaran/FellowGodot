@@ -11,8 +11,11 @@
 //   HEAT    conduction, the exchange at the exposed faces with the gas (its hottest of three samples outwards) or the
 //           surface's own flame (over the voxels that released volatiles the step before, and above them), pyrolysis
 //           (wood -> char, the volatiles the gas's fuel), char oxidation (char -> ash, heat); the emission texture;
-//   SETTLE  ash with no wood or char left falls into the voxel below (along the voxel axis nearest to the world's
-//           down) while it has room, down to the floor (the object's lowest layer); the display texture;
+//   SETTLE  the loose material (ash; with the char where a voxel has crumbled: next to no wood; little char, or char
+//           with ash in it, the debris of a heap) falls
+//           into the voxel below (along the voxel axis nearest to the world's down) while it has room, down to the
+//           floor (the ground's layer, or the object's lowest), and slides down beside where it cannot (a heap no
+//           steeper than a voxel per voxel), carrying its heat; the display texture;
 //   INJECT  per cell of the gas grid's region around the object: the fuel released, the surface's temperature and
 //           exposure, the solid fraction (the gas's EMIT and OBSTACLES read it);
 //   REDUCE  per workgroup the totals (read back: the burned fraction, the node's signals).
@@ -207,16 +210,58 @@ layout(rgba32f, set = 0, binding = 1) uniform restrict readonly image3D state_in
 layout(rgba32f, set = 0, binding = 2) uniform restrict writeonly image3D state_out;
 layout(rgba16f, set = 0, binding = 3) uniform restrict writeonly image3D display;
 
-// The ash leaving voxel p_s downwards, given the room below.
-float ash_out(vec4 p_s, float p_cap_below) {
-	return (p_s.y + p_s.z) < 0.05 ? min(p_s.w * params.grid.w, p_cap_below) : 0.0;
-}
+#define BURN_DEBRIS 0.5 // next to no wood and less char than this (less than the drawn surface, half full): crumbled
+#define BURN_DEBRIS_ASH 0.2 // or this much ash per char (the debris in a heap stays loose; standing char has less)
+#define BURN_DOWN_SHARE 0.6 // of the room below, the most the voxel above may fill per step
+#define BURN_SIDE_SHARE 0.1 // of the room beside-below, the most each of the four slides into it may fill
 
-// Whether ash may lie in voxel p_c (inside the box, not beyond the floor).
+ivec3 g_dn; // down (the voxel axis nearest to the world's down)
+
+// Whether loose material may lie in voxel p_c (inside the box, not beyond the floor).
 bool settle_ok(ivec3 p_c) {
 	ivec3 u = unit(params.settle.x);
 	int along = u.x * p_c.x + u.y * p_c.y + u.z * p_c.z;
 	return inside(p_c) && (params.settle.y < 0 ? along >= params.settle.z : along <= params.settle.z);
+}
+
+float room(ivec3 p_c) {
+	if (!settle_ok(p_c)) {
+		return 0.0;
+	}
+	vec4 s = imageLoad(state_in, p_c);
+	return clamp(1.0 - (s.y + s.z + s.w), 0.0, 1.0);
+}
+
+// Whether material may slide through voxel p_c (less than half full).
+bool passage(ivec3 p_c) {
+	if (!inside(p_c)) {
+		return false;
+	}
+	vec4 s = imageLoad(state_in, p_c);
+	return s.y + s.z + s.w < 0.5;
+}
+
+// The loose material of a voxel (char, ash): where it has crumbled (next to no wood; little char, or char with ash in it:
+// debris) its char and ash.
+vec2 loose(vec4 p_s) {
+	return (p_s.y < 0.05 && (p_s.y + p_s.z < BURN_DEBRIS || p_s.w >= BURN_DEBRIS_ASH * p_s.z)) ? vec2(p_s.z, p_s.w) : vec2(0.0);
+}
+
+// What voxel p_c moves this step: x down, y the rest, which may slide down beside it.
+vec2 sends(ivec3 p_c, vec4 p_s) {
+	vec2 l = loose(p_s);
+	float m = (l.x + l.y) * params.grid.w;
+	float d = min(m, BURN_DOWN_SHARE * room(p_c + g_dn));
+	return vec2(d, m - d);
+}
+
+// The slide from voxel p_c (its rest p_r) through its neighbour along p_lat into the voxel below that: a heap's
+// slope no steeper than a voxel per voxel.
+float slide(ivec3 p_c, ivec3 p_lat, float p_r) {
+	if (p_r <= 0.0 || !passage(p_c + p_lat)) {
+		return 0.0;
+	}
+	return min(0.25 * p_r, BURN_SIDE_SHARE * room(p_c + g_dn + p_lat));
 }
 
 void main() {
@@ -224,20 +269,68 @@ void main() {
 	if (!inside(c)) {
 		return;
 	}
-	ivec3 dn = unit(params.settle.x) * params.settle.y; // down (the voxel axis nearest to the world's down)
+	g_dn = unit(params.settle.x) * params.settle.y;
+	ivec3 s1 = unit((params.settle.x + 1) % 3);
+	ivec3 s2 = unit((params.settle.x + 2) % 3);
+	ivec3 lat[4] = ivec3[4](s1, -s1, s2, -s2);
 	vec4 s = imageLoad(state_in, c);
-	float fill = s.y + s.z + s.w;
-	float cap_below = 0.0; // the floor: no room
-	if (settle_ok(c + dn)) {
-		vec4 b = imageLoad(state_in, c + dn);
-		cap_below = clamp(1.0 - (b.y + b.z + b.w), 0.0, 1.0);
+	// Out: down, then sliding beside, in the shares of its char and ash.
+	vec2 l = loose(s);
+	float lt = l.x + l.y;
+	vec2 snd = sends(c, s);
+	float out_m = snd.x;
+	for (int k = 0; k < 4; k++) {
+		out_m += slide(c, lat[k], snd.y);
 	}
-	float out_a = ash_out(s, cap_below);
+	float out_c = lt > 0.0 ? out_m * l.x / lt : 0.0;
+	float out_a = out_m - out_c;
+	// In: from the voxel above, and sliding from the four beside it, with their heat (the hot char keeps glowing in the
+	// heap).
+	float cc = params.densities.y * params.heats.y; // heat capacities per volume fraction (J/(m^3 K))
+	float ca = params.densities.z * params.heats.z;
+	float in_c = 0.0;
 	float in_a = 0.0;
-	if (inside(c - dn) && settle_ok(c)) {
-		vec4 u = imageLoad(state_in, c - dn);
-		in_a = ash_out(u, clamp(1.0 - fill, 0.0, 1.0));
+	float in_q = 0.0;
+	float in_cv = 0.0;
+	ivec3 u = c - g_dn;
+	if (inside(u)) {
+		vec4 su = imageLoad(state_in, u);
+		vec2 lu = loose(su);
+		float lut = lu.x + lu.y;
+		if (lut > 0.0) {
+			float d = sends(u, su).x;
+			float fc = d * lu.x / lut;
+			float fa = d * lu.y / lut;
+			in_c += fc;
+			in_a += fa;
+			float cv = cc * fc + ca * fa;
+			in_q += cv * su.x;
+			in_cv += cv;
+		}
 	}
+	for (int k = 0; k < 4; k++) {
+		ivec3 q = c - g_dn - lat[k];
+		if (inside(q)) {
+			vec4 sq = imageLoad(state_in, q);
+			vec2 lq = loose(sq);
+			float lqt = lq.x + lq.y;
+			if (lqt > 0.0) {
+				float f = slide(q, lat[k], sends(q, sq).y);
+				float fc = f * lq.x / lqt;
+				float fa = f * lq.y / lqt;
+				in_c += fc;
+				in_a += fa;
+				float cv = cc * fc + ca * fa;
+				in_q += cv * sq.x;
+				in_cv += cv;
+			}
+		}
+	}
+	float keep_cv = params.densities.x * params.heats.x * s.y + cc * (s.z - out_c) + ca * (s.w - out_a);
+	if (in_cv > 0.0) {
+		s.x = (keep_cv * s.x + in_q) / max(keep_cv + in_cv, 1e-6);
+	}
+	s.z = s.z - out_c + in_c;
 	s.w = s.w - out_a + in_a;
 	imageStore(state_out, c, s);
 	imageStore(display, c, s);

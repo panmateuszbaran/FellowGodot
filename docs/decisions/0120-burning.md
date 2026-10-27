@@ -36,9 +36,20 @@ of burning time (the physics tick × `burn_speed`, 10 by default: a log burns in
 4. **Char oxidation** above `glow_temperature` (673 K, full 200 K above, `glow_rate` 0.02/s) where the char is
    exposed: char → ash (`ash_volume` 0.35 of its volume), exothermic (4 MJ per kg of char kept by the solid): the
    embers.
-5. **Ash settles**: ash in a voxel with no wood or char left (< 0.05) falls into the voxel below while that has room
-   (rate 2/s), down to the object's lowest layer — "below" along the voxel axis nearest to the world's down (a log
-   modelled upright and laid on its side drops its ash downwards, not along its length).
+5. **The remains settle**: the loose material — the ash, and the char of a voxel that has crumbled (next to no wood,
+   < 0.05, and less wood and char than half the voxel: less than the drawn surface) — falls into the voxel below
+   (rate 2/s, taking at most 0.6 of its room per step) down to the box's floor; what cannot fall slides through a
+   less than half full neighbour into the voxel below that (each of the four at most 0.1 of its room, a quarter of
+   what is left): heaps no steeper than a voxel per voxel. The moved material carries its heat (the temperatures
+   mixed by heat capacity), so crumbled embers keep glowing in the heap. "Below" is along the voxel axis nearest to
+   the world's down (a log modelled upright and laid on its side drops its ash downwards, not along its length).
+   (Only ash with no wood or char left falling, straight down, left a burned-out log's thin char and the ash mixed
+   in it hanging in the air, invisible, and dropped the rest in two ridges where the log's sides had been.) The box
+   reaches down to the ground:
+   at configuration a ray from the object's lowest point down to the physics bodies below it (not its own; at most
+   2 m) extends it where the ground is beyond it, and the floor is the layer just above the ground (not the box's
+   margin below it, where the ash lay hidden under the ground in the first captures), so a log lying on another
+   drops its ash to the ground; without ground the floor is the object's lowest layer.
 
 Empty voxels take the gas's temperature. The heat capacity of a voxel is its materials' (wood 500 kg/m³ × 1700
 J/(kg K), char ρ × yield / 0.85, ash 60 × 800), at least 5 % of solid wood's (nearly empty voxels stay stable).
@@ -76,17 +87,34 @@ BaseMaterial3D's generated code, a ShaderMaterial's own) and parameters, plus:
 
 * **vertex()**: from each vertex a march (half-voxel steps) along its stored direction (CUSTOM0: minus the initial
   fill's gradient at its position — the same for every copy of a position, so the surface cannot crack — the
-  distance to the surface then, a reference fill) to where the fill (w + c + a) exceeds half the reference: the
-  vertex moves by how far that surface has receded since the start (less a tolerance of 0.15 voxel). A vertex that
-  finds no material is burned through there: it falls along the world's down onto what is left below it (the ash
-  heap, the char), so the shell collapses onto the remains; with nothing below, every triangle touching it is
-  discarded (moving such vertices to the material left drew stretched slivers, discarding all of them left a
-  cage of strips). The normal follows the fill's gradient where the surface moved. The
-  composition just inside the surface goes to the fragment.
+  distance to the surface then, a reference fill) to where the standing material exceeds half the reference — the
+  wood and char, not the ash on them nor the crumbled debris of the heap (as the simulation's SETTLE tells them
+  apart): the vertex moves by how far that surface has receded since the start (less a tolerance of 0.15 voxel). A
+  vertex that finds none (burned through) is gone, and every triangle touching it is discarded — the ash and the
+  debris are the heap's to draw (below). The normal follows the gradient where the surface moved. The composition
+  just inside the surface (a quarter voxel: the ash on it greys it) goes to the fragment.
 * **fragment()**: darkened by char, greyed by ash (`char_color`, `ash_color`), rough; above ~750 K the char glows in
   a cellular crack pattern (`crack_scale` 2.5 cm; some cells brighter than others) and the hot ash softly
   (blackbody colour, `glow_intensity` × (T/1300)³, the temperature taken as at most 1300 K: the voxels sit in the
   flame and take its temperature, glowing charcoal is no hotter).
+
+**The ash heap** (`FellowAshHeap`, an internal child of the mesh instance, made when the first ash appears): a grid
+over the box's floor (the ground's layer when the box reaches down to it), one vertex per voxel column. In its own
+shader each vertex adds up the loose material in its column from the floor (the voxel centres) up to the first voxel
+of standing wood or char (the shell's) or less than a quarter full (the heap's top, or ash still falling onto it),
+and rises by that volume over the column's area: the heap's height. The heights of the 3 × 3 columns around are
+smoothed (1 2 1) and give the normal (Sobel), so the heap thins out over a voxel or two at its edges; the colour is
+the column's char share, grey ash with lumps of charcoal in it (a random share per cell, about 1.5 cm) and black where
+it is mostly charcoal, glowing while hot. Columns without loose material stay at the
+floor and their triangles are discarded. The triangles turn with the heap's up (front faces clockwise from above: the
+other way round they were lit from below). The voxels are freed only after the heap's mesh and material (they sample
+them). Tried first, from the captures: burned-through vertices moved to the material left drew stretched slivers;
+discarding them all left a cage of strips; letting the burned-through and ash-covered vertices fall along the
+world's down onto what was left below folded the collapsed shell in a saw-tooth and drew vertical curtains from the
+long falls (from the top of a log to the ground); discarding the walls then left thin ribbons; a heap climbing to
+where the fill drops below half drew flat slabs with steep sides; the shell marching onto the debris on the ground
+drew tents from a log down to it. A surface of its own for the loose material, its height its volume, has none of
+these.
 
 ## Verification (lavapipe)
 
@@ -96,7 +124,7 @@ difference of T, wood, char, ash:
 | case | steps | difference |
 |---|---:|---:|
 | a log alone (24 voxels along it, no gas), ignited in its middle at 1100 K | 60 | 1.1 × 10⁻⁵ |
-| a box on its side (the ash falls along its local x), ignited through, fast; in a static body whose shape is disabled when it has burned away | 120 | 4.2 × 10⁻⁵ (the shape disabled) |
+| a box on its side (the remains fall along its local x), ignited through, fast; in a static body whose shape is disabled when it has burned away | 120 | 2.4 × 10⁻⁵ (the crumbled char and the ash slid out to the box's edges; the shape disabled) |
 | the log over a campfire, one coupled step after 60 (the gas's temperature and the step before's volatiles read back) | 1 | 9.2 × 10⁻⁷ |
 | — its emission (half precision) and the gas cells' injection | 1 | ≤ 6.2 × 10⁻⁴ |
 
@@ -121,6 +149,7 @@ corner at 3 s; 48 gas cells, 32 voxels per object), in this order:
 | the surface flame's heat back into the voxel (`flame_feedback` 0.1), 5.4 per kg | the logs burn on their own after the kindling to **5 % / 10 % wood, 4 % / 6 % char, 27 % / 25 % ash** (of the initial volume; 30 % is all of it as ash) at 70 s; the crate burns a sixth of its wood from its corner and goes out; but the flames lie on the ground, blown sideways at 5–9 m/s (the combustion's expansion of that much fuel: with the gas's `expansion` 0 the plume rises again) |
 | **2.7 per kg** (1 unit heats 1 m³ of gas by 1400 K, 1.7 MJ: 30 % of the volatiles' 15 MJ/kg in the cells they burn in) | a campfire: the kindling's tall flame, then the logs' own smaller flames for about 40 s more, leaning in the draught; at 70 s the upper log 13 % wood, 7 % char, 23 % ash, the lower 31 % / 5 % / 19 %, the branch 19 % / 16 % / 18 %; the crate (planks a voxel and a half thick) chars at its corner and goes out |
 | **the surface's own flame** (2.) instead of the feedback; the crate lit at a bottom corner | **everything burns to ash**: the branch by 15 s, the logs by 45 s (0 % wood, 1.4 % / 1.8 % char, 29 % ash: all of it), the crate's flame climbs its walls and spreads over it in a minute (0.2 % wood, 10 % char, 26 % ash at 70 s) |
+| **the remains settling** (5.: crumbled char falls with the ash, slides into heaps, carries its heat) | the wood burns as before, a little faster under the glowing heap (the logs' wood gone by 35-45 s, the branch's by 15 s); the crumbled char lies buried in the heaps' ash and stops glowing when the fire dies: the logs end as **heaps of ash and charcoal** (0 % wood, 11 % / 16 % char, 26 % / 24 % ash at 70 s), the branch 19 % / 23 %; the crate's planks lose their charred skin and burn faster (wood 44 % at 20 s instead of 72 %; 0.2 % wood, 5.6 % char, 28 % ash at 70 s); for a few seconds at 10 s and 25 s the larger fuel release lays the flames along the ground |
 
 The feedback (χ of the volatiles' heat of combustion returned to the voxel releasing them) was not enough for thin
 wood: a plank 1.76 voxels thick, lit at a corner without a gas, burned out where it was lit with χ up to 0.3, its
@@ -132,14 +161,14 @@ themselves.
 
 ## Results
 
-Burn Lab on lavapipe (960 × 540, 48 gas cells, 32 voxels per log, `--settle=300`: a capture every 5 s): the
-kindling's flame and the crate's corner catching (5 s), the logs' own flames (10-45 s) with embers glowing in the
-char's cracks, the logs receding — the upper one collapsing onto its ash — and the fire out at about 50 s, grey heaps
-and charred ends left. Every step of the burning is the same on every run (the diagnostics of two runs agree to the
-last digit). The RTX job (`m22_f266`: 1080p captures; the cost with the burning drawn and simulated, simulated with
-the original meshes, neither) is prepared and waits for the user.
-
-Look issues left: the collapsed shell folds in a saw-tooth where neighbouring vertices fall onto different heights.
+Burn Lab on lavapipe (480 × 270, 48 gas cells, 32 voxels per log, `--settle=300`: a capture every 5 s): the
+kindling's flame and the crate's corner catching (5 s), the logs' own flames (10-35 s) with embers glowing in the
+char's cracks, the logs receding, burning through and crumbling into glowing heaps on the ground, the crate's walls
+burning down, and the fire out at about 45 s: two crossed ridges of grey ash with charcoal in them where the logs lay,
+a smaller one for the branch, the crate's remains a flat heap still glowing at its edges at 55 s. Every step of the
+burning is the same on every run (the diagnostics of two runs agree to the last digit). The RTX job (`m22_f266`:
+1080p captures; the cost with the burning drawn and simulated, simulated with the original meshes, neither) is
+prepared and waits for the user.
 
 ## Limits
 
@@ -147,6 +176,8 @@ Look issues left: the collapsed shell folds in a saw-tooth where neighbouring ve
   (`world_vertex_coords`) gets the look, not the deformation.
 * At most 8 objects inject into one gas volume (the rest burn without feeding it). Without a gas volume an object
   lit by `ignite()` burns by its own flame, without visible flames.
-* The ash stays inside the object's box (it does not spill onto the ground beyond it). The physics body keeps its
+* The remains stay inside the object's box (the box reaches down to the ground below it at configuration; a heap
+  spreads at most to the box's sides — two voxels beyond the mesh — and does not follow the object when it moves).
+  The heap of each object is its own (two logs' heaps cross, they do not pile on each other). The physics body keeps its
   shape until less than `collapse_fraction` (0.2) of the wood and char is left; then its shapes are disabled (a rigid
   body frozen first) and `collapsed` is emitted — restored when the node leaves the tree or the burning is reset.
