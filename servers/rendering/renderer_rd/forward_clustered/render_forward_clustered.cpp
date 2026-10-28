@@ -3337,6 +3337,7 @@ void RenderForwardClustered::_fill_render_list(RenderListType p_render_list, con
 	if (p_render_list == RENDER_LIST_OPAQUE) {
 		scene_state.used_sss = false;
 		scene_state.used_screen_texture = false;
+		scene_state.used_screen_texture_mipmaps = false;
 		scene_state.used_normal_texture = false;
 		scene_state.used_depth_texture = false;
 		scene_state.used_lightmap = false;
@@ -3658,6 +3659,9 @@ void RenderForwardClustered::_fill_render_list_range(const FellowFillParams &p_p
 				}
 				if (surf->flags & GeometryInstanceSurfaceDataCache::FLAG_USES_SCREEN_TEXTURE) {
 					r_out.used_screen_texture = true;
+					if (surf->flags & GeometryInstanceSurfaceDataCache::FLAG_USES_SCREEN_TEXTURE_MIPMAPS) {
+						r_out.used_screen_texture_mipmaps = true;
+					}
 				}
 				if (surf->flags & GeometryInstanceSurfaceDataCache::FLAG_USES_NORMAL_TEXTURE) {
 					r_out.used_normal_texture = true;
@@ -3717,6 +3721,9 @@ void RenderForwardClustered::_fellow_fill_apply_output(const FellowFillParams &p
 	}
 	if (p_out.used_screen_texture) {
 		scene_state.used_screen_texture = true;
+	}
+	if (p_out.used_screen_texture_mipmaps) {
+		scene_state.used_screen_texture_mipmaps = true;
 	}
 	if (p_out.used_normal_texture) {
 		scene_state.used_normal_texture = true;
@@ -3801,6 +3808,7 @@ bool RenderForwardClustered::_fellow_fill_render_list_parallel(const FellowFillP
 		total.primitives += chunk.out.primitives;
 		total.used_sss = total.used_sss || chunk.out.used_sss;
 		total.used_screen_texture = total.used_screen_texture || chunk.out.used_screen_texture;
+		total.used_screen_texture_mipmaps = total.used_screen_texture_mipmaps || chunk.out.used_screen_texture_mipmaps;
 		total.used_normal_texture = total.used_normal_texture || chunk.out.used_normal_texture;
 		total.used_depth_texture = total.used_depth_texture || chunk.out.used_depth_texture;
 		total.used_lightmap = total.used_lightmap || chunk.out.used_lightmap;
@@ -6843,7 +6851,9 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 
 		if (scene_state.used_screen_texture) {
 			// Copy screen texture to backbuffer so we can read from it
+			fellow_screen_copy_mipmaps = !Fellow::screen_copy_mipmaps_on_demand() || scene_state.used_screen_texture_mipmaps;
 			_render_buffers_copy_screen_texture(p_render_data);
+			fellow_screen_copy_mipmaps = true;
 		}
 	}
 
@@ -9462,6 +9472,9 @@ void RenderForwardClustered::_geometry_instance_add_surface_with_material(Geomet
 	if (p_material->shader_data->uses_screen_texture) {
 		flags |= GeometryInstanceSurfaceDataCache::FLAG_USES_SCREEN_TEXTURE;
 		global_surface_data.screen_texture_used = true;
+		if (p_material->shader_data->uses_screen_texture_mipmaps) {
+			flags |= GeometryInstanceSurfaceDataCache::FLAG_USES_SCREEN_TEXTURE_MIPMAPS;
+		}
 	}
 
 	if (p_material->shader_data->uses_depth_texture) {

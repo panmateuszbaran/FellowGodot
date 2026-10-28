@@ -116,6 +116,7 @@ private:
 	RID state[3];
 	RID terrain_tex;
 	RID surface_tex;
+	RID flow_tex; // cell-centre velocity and depth (FellowWater3D)
 	RID interaction_buffer;
 	RID uniform_sets[KERNEL_MAX];
 	int allocated_resolution = 0;
@@ -125,6 +126,7 @@ private:
 
 	Ref<Texture2DRD> surface_texture;
 	Ref<Texture2DRD> terrain_texture;
+	Ref<Texture2DRD> flow_texture;
 
 	// Rendering.
 	MeshInstance3D *mesh_instance = nullptr;
@@ -207,6 +209,7 @@ public:
 	int64_t get_steps_simulated() const { return steps_simulated; }
 	Ref<Texture2D> get_surface_texture() const { return surface_texture; }
 	Ref<Texture2D> get_terrain_texture() const { return terrain_texture; }
+	Ref<Texture2D> get_flow_texture() const { return flow_texture; }
 	MeshInstance3D *get_water_mesh_instance() const { return mesh_instance; }
 
 	FellowShallowWater3D();

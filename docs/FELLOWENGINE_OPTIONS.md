@@ -165,6 +165,26 @@ are; put a mesh in the group `fellow_hlod_exclude` to keep it out; lightmapped m
 The meshes must not move while built. `get_build_info()` reports what was merged. Decision record 0122; bench
 City Lab `--city_hlod=<distance>`.
 
+## Water bodies (milestone 24)
+
+A `FellowWater3D` node (module `fellow_fluid`) is a body of water at its height, to the horizon or within `extent`:
+
+* **wind waves** from a JONSWAP spectrum (`wind_speed`, `wind_direction`, `fetch`: a small lake's short waves, the
+  sea's long ones), simulated on the GPU by FFT in up to four cascades (`cascade_lengths`, 160 / 27 / 5 m;
+  `wave_resolution` 256), `choppiness` for sharp crests, foam where they break (`whitecap_threshold`, `foam_decay`,
+  `foam_gain`); `time_auto` off to drive the clock yourself (`time`);
+* a **FellowShallowWater3D** (`simulation_path`) drawn as part of it where it covers the body: its surface, slopes and
+  foam, its flow carrying the waves; blended in over `simulation_blend` from its edges; its own mesh hidden;
+* **shading**: screen-space reflections (`screen_space_reflections`, `reflection_steps`, `reflection_distance`) with
+  the screen's view of distant scenery and the sky as fallback, Fresnel, refraction (`refraction_strength`),
+  absorption and in-scattering (`absorption` per metre, `scattering_color`), shore foam (`shore_foam_depth`),
+  caustics on the bottom (`caustics_strength`, `caustics_depths`), the sun's glitter path (`roughness` plus the waves
+  a pixel does not resolve); `debug_view` shows the terms one by one.
+
+The surface is a polar grid around the camera (`grid_segments`, `grid_near`, `grid_far`). The node's rotation and
+scale are not used. `rendering/fellow/fluid/enabled` off stops the waves. Decision record 0123; bench Water Lab
+(`--scene=water`, `--water=full|basic|none`).
+
 ## Options that change the image (off by default)
 
 | setting | what it does | image cost | record |
@@ -187,6 +207,7 @@ City Lab `--city_hlod=<distance>`.
 | Geometry | `geometry/multimesh_culling` (from `fellow93`: MultiMesh instances culled one by one per pass on the GPU; an autotune tunable), `geometry/multimesh_cull_min_instances`, `geometry/multimesh_cull_min_indices` | 0034 |
 | Lights | `lights/cluster_depth_slices`, `lights/zero_attenuation_skip`, `lights/cluster_pack_parallel`, `lights/fields_early` (from `fellow115`, v2 `fellow117`: Bistro interior −3.1 %, Lights Lab −3.0 %), `lights/tile_cull` (from `fellow127`, under autotune: Lights Lab −5.6 %; from `fellow132` split around the async compute part, `debug/tile_cull_split`: Bistro interior −1.9 %), `lights/cluster_pack_elements` and `lights/cluster_instanced_draws` (from `fellow130`: the cluster build without its 21.5 MB clear per frame, GPU −1 to −2.3 % where lights, decals or probes are in view) | 0008, 0014, 0045, 0049, 0051 |
 | Shading | `shading/blended_alpha_zero_skip`, `shading/absent_features_specialized` (from `fellow142`, 63: the colour passes compiled without the decal, probe, directional, omni, spot and positional shadow code the frame cannot run; GPU −9 % Sponza, −5 to −6 % Bistros and City Lab) | 0010, 0057 |
+| Post | `postfx/screen_copy_mipmaps_on_demand` (milestone 24: the screen texture's copy builds its mip chain only when a material drawn this frame samples its mips) | 0123 |
 | Post | `postfx/fast_luminance_reduce`, `postfx/taa_history_pingpong`, `postfx/taa_direct_output`, `postfx/taa_shared_velocity` (start-up), `postfx/ss_last_frame_direct`, `postfx/glow_blur` (from `fellow130`, 2: glow's blur without bank conflicts in 16 × 16 tiles, glow −60 %, GPU −1.1 to −4.5 %), `postfx/tonemap_specialized` (from `fellow138`: tone mapping compiled for the frame's paths only, the pass −12 to −14 %), `postfx/fog_specialized` (from `fellow138`: volumetric fog's density pass without the loops the frame does not run, the pass −21 to −27 %), `postfx/ss_interleave_exact_bounds` and `postfx/ss_depth_mips_exact` (from `fellow158`, correctness: SSAO's last column written at widths such as 1920, where stock leaves it as memory held it; the depth mipmaps without stock's racing stores) | 0025, 0002, 0033, 0044, 0052, 0055, 0056, 0067 |
 | Render thread | `cpu/parallel_*`, `cpu/batched_shadow_lists`, `cpu/compact_shadow_instances`, `cpu/persistent_instances`, `cpu/hot_workers_usec` (30 from `fellow156`, was 300: the hot workers no longer spin through a CPU-bound frame; City Lab's 16-45 ms presentation stalls gone, 1 % low 325-358 fps), `cpu/worker_tasks` (automatic from `fellow163`, 6 on the benchmark machine, was 10: City Lab's remaining presentation stalls gone, 1 % low 246-289 fps) | 0016, 0018, 0022, 0065, 0073 |
 | Frame | `frame/parallel_replay`, `frame/present_thread`, `frame/submit_thread`, `frame/async_compute` (NVIDIA), `frame/pipeline_cache_max_mb` (1024; the pipeline cache no longer crashes at 2 GiB), `debug/segment_barriers` (from `fellow134`: barriers between the command buffers of a frame for resources used again with the same usage), `frame/async_ss_split` (from `fellow146`, 3 from `fellow147`: with async compute SSIL runs on the main queue beside the async SSAO, SSR too where autotune measures it faster; Bistro interior −2.7 to −3.8 % GPU), `frame/parallel_shader_create` and `frame/lazy_shader_variants` (from `fellow150`: shaders read from the shader cache created in parallel and only when first asked for; a scene loads to its first frame 12-62 % faster than with stock), `frame/depth_pipeline_keys` (from `fellow158`: the depth passes' pipeline keys without bits their code does not read: fewer duplicate pipelines), `frame/clear_new_textures` (from `fellow160`, correctness: a texture a pass can write, created without data, is cleared before its first use, as stock does on Direct3D 12 — no image depends on what memory held), `frame/movie_wait_pipelines` (from `fellow161`: while Movie Maker mode writes a video, a 3D draw waits for its pipeline instead of drawing with the ubershader — recordings are the same on every run) | 0015, 0017, 0050, 0054, 0060, 0061, 0069, 0070, 0072 |

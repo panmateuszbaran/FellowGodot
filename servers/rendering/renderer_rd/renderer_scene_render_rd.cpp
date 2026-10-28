@@ -379,7 +379,7 @@ void RendererSceneRenderRD::_render_buffers_copy_screen_texture(const RenderData
 
 	for (uint32_t v = 0; v < rb->get_view_count(); v++) {
 		RID texture = rb->get_internal_texture(v);
-		int mipmaps = int(rb->get_texture_format(RB_SCOPE_BUFFERS, texture_name).mipmaps);
+		int mipmaps = fellow_screen_copy_mipmaps ? int(rb->get_texture_format(RB_SCOPE_BUFFERS, texture_name).mipmaps) : 1;
 		RID dest = rb->get_texture_slice(RB_SCOPE_BUFFERS, texture_name, v, 0);
 
 		if (can_use_storage) {

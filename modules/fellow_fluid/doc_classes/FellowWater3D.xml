@@ -1,0 +1,183 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="FellowWater3D" inherits="Node3D" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+	<brief_description>
+		A body of water (lake, river, sea) with spectral wind waves, drawn to the horizon (FellowEngine).
+	</brief_description>
+	<description>
+		The surface of a body of water at the node's height, to the horizon or within [member extent]. Wind waves are simulated on the GPU after Tessendorf: a JONSWAP spectrum (wind speed and fetch) with the Donelan-Banner spreading, evolved and transformed by FFT every frame in up to four cascades of different tile lengths ([member cascade_lengths]); the surface is displaced by them and shaded with their slopes. Where a [FellowShallowWater3D] covers the body ([member simulation_path]), its simulated surface is blended in: its height, its slopes and foam, and its flow carries the waves (flow mapping).
+		Shading (one transparent material): reflections traced in screen space against the opaque scene, with the screen's view of distant scenery and the sky's IBL where nothing near is hit; Fresnel; refraction of the scene below through the screen texture; absorption along the light's path down and the view's path up ([member absorption]); in-scattering ([member scattering_color]) lit by the scene's lights, shadows included; foam from breaking waves (where the surface folds), shores ([member shore_foam_depth]) and the simulation; caustics on the refracted bottom computed from the waves' own slopes; the sun's highlight with a roughness that grows with the slope variance a pixel does not resolve, so a far surface shows a glitter path rather than a mirror image.
+		The surface mesh is a polar grid around the camera; its displacement is band-limited to the grid's spacing. The node's rotation and scale are not used; [member extent] is axis-aligned. Needs the Forward+ or Mobile renderer; [code]rendering/fellow/fluid/enabled[/code] off stops the waves (the surface keeps its last state). Decision record [code]docs/decisions/0123-water.md[/code].
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="debug_get_displacement_image">
+			<return type="Image" />
+			<param index="0" name="cascade" type="int" />
+			<description>
+				The displacement of a cascade as computed on the GPU (x, y, z, foam; with mipmaps). Synchronous: for tests.
+			</description>
+		</method>
+		<method name="debug_get_spectrum_image">
+			<return type="Image" />
+			<param index="0" name="cascade" type="int" />
+			<description>
+				The initial spectrum of a cascade as uploaded (h0(k), conj(h0(-k))): for tests against a reference.
+			</description>
+		</method>
+		<method name="get_displacement_texture" qualifiers="const">
+			<return type="Texture2DArrayRD" />
+			<description>
+				The cascades' displacement (x, y, z in metres; foam in alpha), one layer per cascade, with mipmaps.
+			</description>
+		</method>
+		<method name="get_significant_wave_height" qualifiers="const">
+			<return type="float" />
+			<description>
+				The significant wave height (four times the standard deviation of the surface) of the configured spectrum, in metres.
+			</description>
+		</method>
+		<method name="get_slope_texture" qualifiers="const">
+			<return type="Texture2DArrayRD" />
+			<description>
+				The cascades' slopes (sx, sz, sx², sz²), one layer per cascade, with mipmaps.
+			</description>
+		</method>
+		<method name="get_surface_mesh_instance" qualifiers="const">
+			<return type="MeshInstance3D" />
+			<description>
+				The internal mesh instance that draws the surface.
+			</description>
+		</method>
+		<method name="get_waves_gpu_time_ms" qualifiers="const">
+			<return type="float" />
+			<description>
+				GPU time of the waves' compute passes in the last measured frame (RenderingDevice timestamps).
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="absorption" type="Vector3" setter="set_absorption" getter="get_absorption" default="Vector3(0.55, 0.16, 0.3)">
+			Absorption per metre for red, green and blue light. Pure water absorbs red (0.45); dissolved matter absorbs blue (the default is a temperate lake's greenish water).
+		</member>
+		<member name="cascade_lengths" type="Vector4" setter="set_cascade_lengths" getter="get_cascade_lengths" default="Vector4(160, 27, 5, 0)">
+			Tile lengths of the wave cascades in metres, longest first; a zero ends the list. Each cascade holds the waves from six of its own fundamentals to where the next one starts.
+		</member>
+		<member name="caustics_depths" type="Vector2" setter="set_caustics_depths" getter="get_caustics_depths" default="Vector2(0.6, 2.5)">
+			The two depths at which the caustics are computed; the bottom interpolates between them.
+		</member>
+		<member name="caustics_strength" type="float" setter="set_caustics_strength" getter="get_caustics_strength" default="0.7">
+			Strength of the caustics on the refracted bottom (0 = off). They come from the cascades of at most 12 m.
+		</member>
+		<member name="choppiness" type="float" setter="set_choppiness" getter="get_choppiness" default="1.0">
+			Horizontal displacement of the waves (sharper crests, broader troughs). 0 = sine-like waves.
+		</member>
+		<member name="debug_view" type="int" setter="set_debug_view" getter="get_debug_view" enum="FellowWater3D.DebugView" default="0">
+			Shows one of the shading's terms instead of the water.
+		</member>
+		<member name="extent" type="Vector2" setter="set_extent" getter="get_extent" default="Vector2(0, 0)">
+			Size of the water's rectangle centred on the node (x and z, in metres). Zero: to the horizon.
+		</member>
+		<member name="fetch" type="float" setter="set_fetch" getter="get_fetch" default="3.0">
+			Distance over which the wind has blown over water, in kilometres: a small lake's waves are short, the open sea's long.
+		</member>
+		<member name="flow_period" type="float" setter="set_flow_period" getter="get_flow_period" default="1.6">
+			Period of the flow mapping that carries the waves with the simulation's flow (two phases half a period apart).
+		</member>
+		<member name="foam_color" type="Color" setter="set_foam_color" getter="get_foam_color" default="Color(0.85, 0.87, 0.88, 1)">
+			Albedo of the foam.
+		</member>
+		<member name="foam_decay" type="float" setter="set_foam_decay" getter="get_foam_decay" default="0.6">
+			Rate at which breaking waves' foam fades (1/s).
+		</member>
+		<member name="foam_gain" type="float" setter="set_foam_gain" getter="get_foam_gain" default="0.15">
+			Foam produced where the surface folds, per unit of the Jacobian below [member whitecap_threshold], per sixtieth of a second.
+		</member>
+		<member name="grid_far" type="float" setter="set_grid_far" getter="get_grid_far" default="20000.0">
+			Radius of the surface's grid around the camera, in metres.
+		</member>
+		<member name="grid_near" type="float" setter="set_grid_near" getter="get_grid_near" default="0.25">
+			Radius of the grid's innermost ring, in metres.
+		</member>
+		<member name="grid_segments" type="int" setter="set_grid_segments" getter="get_grid_segments" default="256">
+			Segments of each ring of the grid (the rings grow by 1 + 2π / segments, so its cells stay square).
+		</member>
+		<member name="reflection_distance" type="float" setter="set_reflection_distance" getter="get_reflection_distance" default="80.0">
+			Length of the screen-space reflection rays, in metres.
+		</member>
+		<member name="reflection_steps" type="int" setter="set_reflection_steps" getter="get_reflection_steps" default="32">
+			Steps of the screen-space reflection rays (quadratically spaced, then refined by bisection).
+		</member>
+		<member name="refraction_strength" type="float" setter="set_refraction_strength" getter="get_refraction_strength" default="0.25">
+			How far the waves shift the scene seen below, relative to the water's thickness and the distance (0 = no refraction).
+		</member>
+		<member name="repeat_period" type="float" setter="set_repeat_period" getter="get_repeat_period" default="200.0">
+			The waves repeat exactly after this many seconds (the dispersion relation is quantized to it): precise phases however long the clock runs.
+		</member>
+		<member name="roughness" type="float" setter="set_roughness" getter="get_roughness" default="0.04">
+			Roughness of the surface below the waves' finest scale; the waves the pixel does not resolve add to it.
+		</member>
+		<member name="scattering_color" type="Color" setter="set_scattering_color" getter="get_scattering_color" default="Color(0.01, 0.032, 0.022, 1)">
+			Albedo of the light scattered back by the water's body (lit by the scene's lights).
+		</member>
+		<member name="screen_space_reflections" type="bool" setter="set_screen_space_reflections" getter="get_screen_space_reflections" default="true">
+			Trace reflections against the opaque scene's depth. Off: only the sky's IBL is reflected.
+		</member>
+		<member name="shore_foam_depth" type="float" setter="set_shore_foam_depth" getter="get_shore_foam_depth" default="0.15">
+			Depth below which shores and objects in the water get foam, in metres.
+		</member>
+		<member name="simulation_blend" type="float" setter="set_simulation_blend" getter="get_simulation_blend" default="4.0">
+			Width of the band along the simulation's edges in which its surface blends into the body's, in metres.
+		</member>
+		<member name="simulation_path" type="NodePath" setter="set_simulation_path" getter="get_simulation_path" default="NodePath(&quot;&quot;)">
+			A [FellowShallowWater3D] whose simulated surface this node draws where it covers the body (its own mesh is hidden). It must be axis-aligned.
+		</member>
+		<member name="simulation_wave_scale" type="float" setter="set_simulation_wave_scale" getter="get_simulation_wave_scale" default="0.35">
+			Scale of the wind waves inside the simulation (they also fade in water shallower than 60 cm).
+		</member>
+		<member name="sun_path" type="NodePath" setter="set_sun_path" getter="get_sun_path" default="NodePath(&quot;&quot;)">
+			The [DirectionalLight3D] whose direction the caustics use. Empty: the scene's first visible directional light.
+		</member>
+		<member name="time_auto" type="bool" setter="set_time_auto" getter="is_time_auto" default="true">
+			Advance the waves' clock with the process time. Off: set it yourself (deterministic playback).
+		</member>
+		<member name="wave_resolution" type="int" setter="set_wave_resolution" getter="get_wave_resolution" default="256">
+			Grid of each cascade (64, 128, 256 or 512 texels per side).
+		</member>
+		<member name="wave_scale" type="float" setter="set_wave_scale" getter="get_wave_scale" default="1.0">
+			Scale of the waves' height and slopes.
+		</member>
+		<member name="whitecap_threshold" type="float" setter="set_whitecap_threshold" getter="get_whitecap_threshold" default="0.45">
+			Jacobian of the horizontal displacement below which breaking waves make foam (1 = flat; lower = fewer whitecaps).
+		</member>
+		<member name="wind_direction" type="float" setter="set_wind_direction" getter="get_wind_direction" default="0.0">
+			Direction the wind blows towards, in degrees (0 = +X, 90 = +Z).
+		</member>
+		<member name="wind_speed" type="float" setter="set_wind_speed" getter="get_wind_speed" default="6.0">
+			Wind speed 10 m above the water, in m/s.
+		</member>
+	</members>
+	<constants>
+		<constant name="DEBUG_VIEW_OFF" value="0" enum="DebugView">
+			The water.
+		</constant>
+		<constant name="DEBUG_VIEW_REFLECTIONS" value="1" enum="DebugView">
+			Red: the screen-space reflection's weight; green: Fresnel.
+		</constant>
+		<constant name="DEBUG_VIEW_FOAM" value="2" enum="DebugView">
+			Red: foam amount; green: the foam drawn; blue: the shore term.
+		</constant>
+		<constant name="DEBUG_VIEW_REFRACTION" value="3" enum="DebugView">
+			The scene below after absorption and caustics.
+		</constant>
+		<constant name="DEBUG_VIEW_NORMALS" value="4" enum="DebugView">
+			World-space normals.
+		</constant>
+		<constant name="DEBUG_VIEW_SIMULATION" value="5" enum="DebugView">
+			Red: the simulation's weight; green: its foam; blue: its flow speed (/ 2 m/s).
+		</constant>
+		<constant name="DEBUG_VIEW_ROUGHNESS" value="6" enum="DebugView">
+			Red: the unresolved slope deviation; green: roughness.
+		</constant>
+	</constants>
+</class>

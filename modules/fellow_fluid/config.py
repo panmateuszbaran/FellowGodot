@@ -10,6 +10,7 @@ def configure(env):
 def get_doc_classes():
     return [
         "FellowShallowWater3D",
+        "FellowWater3D",
         "FellowGasVolume3D",
         "FellowGasEmitter3D",
         "FellowBurnable3D",

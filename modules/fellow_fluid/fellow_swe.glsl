@@ -34,6 +34,8 @@ layout(r32f, set = 0, binding = 1) uniform restrict readonly image2D terrain;
 
 #ifdef MODE_SURFACE
 layout(rgba16f, set = 0, binding = 2) uniform restrict writeonly image2D surface_out;
+// Cell-centre velocity (m/s) and depth (m) for FellowWater3D (its waves follow the flow).
+layout(rgba16f, set = 0, binding = 4) uniform restrict writeonly image2D flow_out;
 #else
 layout(rgba32f, set = 0, binding = 2) uniform restrict writeonly image2D state_out;
 #endif
@@ -344,5 +346,26 @@ void main() {
 	float ez1 = eta_s(c + ivec2(0, 1), e);
 	vec2 grad = vec2(ex1 - ex0, ez1 - ez0) / (2.0 * params.dx);
 	imageStore(surface_out, c, vec4(e, grad.x, grad.y, wet ? s.a : 0.0));
+	// u lives on +X faces, v on +Z faces: the centre is the mean of a cell's two faces.
+	vec2 vel = wet ? vec2(s.g + S(c + ivec2(-1, 0)).g, s.b + S(c + ivec2(0, -1)).b) * 0.5 : vec2(0.0);
+	// The water level extended one cell beyond the wet ones (a dry cell takes its highest wet neighbour's), else a
+	// metre below the bed: interpolated, the surface stays level up to where a terrain cuts it, instead of climbing
+	// the bank cell by cell (the dry cells' e is just below their bed).
+	float level = (wet || is_solid) ? e : -1e9; // solid: e is already below its wet neighbours (hidden in the obstacle)
+	if (!wet && !is_solid) {
+		for (int k = 0; k < 9; k++) {
+			ivec2 n = c + ivec2(k % 3 - 1, k / 3 - 1);
+			if (k != 4 && all(greaterThanEqual(n, ivec2(0))) && all(lessThan(n, params.size))) {
+				vec4 sn = S(n);
+				if (sn.r > 1e-3 && !solid(n)) {
+					level = max(level, sn.r + B(n));
+				}
+			}
+		}
+		if (level < -1e8) {
+			level = b - 1.0;
+		}
+	}
+	imageStore(flow_out, c, vec4(vel, wet ? s.r : 0.0, level));
 }
 #endif

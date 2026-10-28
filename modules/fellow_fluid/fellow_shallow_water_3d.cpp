@@ -102,6 +102,7 @@ static const char *kernel_names[] = { "advect", "height", "velocity", "surface" 
 FellowShallowWater3D::FellowShallowWater3D() {
 	surface_texture.instantiate();
 	terrain_texture.instantiate();
+	flow_texture.instantiate();
 }
 
 FellowShallowWater3D::~FellowShallowWater3D() {
@@ -207,7 +208,7 @@ void FellowShallowWater3D::reset_simulation() {
 
 int64_t FellowShallowWater3D::get_simulation_vram_bytes() const {
 	int64_t n = int64_t(resolution) * resolution;
-	return n * 16 * 3 + n * 4 + n * 8 + int64_t(sizeof(InteractionBuffer));
+	return n * 16 * 3 + n * 4 + n * 8 * 2 + int64_t(sizeof(InteractionBuffer)); // state x3, terrain, surface, flow
 }
 
 // ------------------------------------------------------------------ CPU-side setup
@@ -321,6 +322,9 @@ RID FellowShallowWater3D::_get_uniform_set(Kernel p_kernel, RID p_in, RID p_out)
 	u.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 1, terrain_tex));
 	u.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 2, p_out));
 	u.push_back(RD::Uniform(RD::UNIFORM_TYPE_STORAGE_BUFFER, 3, interaction_buffer));
+	if (p_kernel == KERNEL_SURFACE) {
+		u.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 4, flow_tex));
+	}
 	return rd->uniform_set_create(u, shaders[p_kernel], 0);
 }
 
@@ -364,6 +368,8 @@ void FellowShallowWater3D::_rt_create() {
 	tf.usage_bits = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_STORAGE_BIT;
 	surface_tex = rd->texture_create(tf, RD::TextureView());
 	rd->set_resource_name(surface_tex, "FellowSWE surface");
+	flow_tex = rd->texture_create(tf, RD::TextureView());
+	rd->set_resource_name(flow_tex, "FellowSWE flow");
 	interaction_buffer = rd->storage_buffer_create(sizeof(InteractionBuffer));
 
 	uniform_sets[KERNEL_ADVECT] = _get_uniform_set(KERNEL_ADVECT, state[0], state[1]);
@@ -373,6 +379,7 @@ void FellowShallowWater3D::_rt_create() {
 
 	surface_texture->set_texture_rd_rid(surface_tex);
 	terrain_texture->set_texture_rd_rid(terrain_tex);
+	flow_texture->set_texture_rd_rid(flow_tex);
 	allocated_resolution = resolution;
 	gpu_ready = true;
 }
@@ -383,6 +390,7 @@ void FellowShallowWater3D::_rt_free() {
 	}
 	surface_texture->set_texture_rd_rid(RID());
 	terrain_texture->set_texture_rd_rid(RID());
+	flow_texture->set_texture_rd_rid(RID());
 	for (int k = 0; k < KERNEL_MAX; k++) {
 		if (uniform_sets[k].is_valid() && rd->uniform_set_is_valid(uniform_sets[k])) {
 			rd->free_rid(uniform_sets[k]);
@@ -395,7 +403,7 @@ void FellowShallowWater3D::_rt_free() {
 			state[i] = RID();
 		}
 	}
-	RID *others[] = { &terrain_tex, &surface_tex, &interaction_buffer };
+	RID *others[] = { &terrain_tex, &surface_tex, &flow_tex, &interaction_buffer };
 	for (RID *r : others) {
 		if (r->is_valid()) {
 			rd->free_rid(*r);
@@ -619,6 +627,7 @@ void FellowShallowWater3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_steps_simulated"), &FellowShallowWater3D::get_steps_simulated);
 	ClassDB::bind_method(D_METHOD("get_surface_texture"), &FellowShallowWater3D::get_surface_texture);
 	ClassDB::bind_method(D_METHOD("get_terrain_texture"), &FellowShallowWater3D::get_terrain_texture);
+	ClassDB::bind_method(D_METHOD("get_flow_texture"), &FellowShallowWater3D::get_flow_texture);
 	ClassDB::bind_method(D_METHOD("get_water_mesh_instance"), &FellowShallowWater3D::get_water_mesh_instance);
 
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "resolution", PROPERTY_HINT_RANGE, "16,4096,1"), "set_resolution", "get_resolution");

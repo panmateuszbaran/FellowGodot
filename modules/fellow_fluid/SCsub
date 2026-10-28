@@ -6,6 +6,7 @@ Import("env_modules")
 
 env_fellow_fluid = env_modules.Clone()
 env_fellow_fluid.GLSL_HEADER("fellow_swe.glsl")
+env_fellow_fluid.GLSL_HEADER("fellow_water_waves.glsl")
 env_fellow_fluid.Depends(Glob("*.glsl.gen.h"), ["#glsl_builders.py"])
 
 env_fellow_fluid.add_source_files(env.modules_sources, "*.cpp")

@@ -35,12 +35,14 @@
 #include "fellow_gas_emitter_3d.h"
 #include "fellow_gas_volume_3d.h"
 #include "fellow_shallow_water_3d.h"
+#include "fellow_water_3d.h"
 
 #include "core/object/class_db.h"
 
 void initialize_fellow_fluid_module(ModuleInitializationLevel p_level) {
 	if (p_level == MODULE_INITIALIZATION_LEVEL_SCENE) {
 		GDREGISTER_CLASS(FellowShallowWater3D);
+		GDREGISTER_CLASS(FellowWater3D);
 		GDREGISTER_CLASS(FellowGasVolume3D);
 		GDREGISTER_CLASS(FellowGasEmitter3D);
 		GDREGISTER_CLASS(FellowBurnable3D);

@@ -115,6 +115,8 @@ protected:
 	bool _has_compositor_effect(RSE::CompositorEffectCallbackType p_callback_type, const RenderDataRD *p_render_data);
 	void _process_compositor_effects(RSE::CompositorEffectCallbackType p_callback_type, const RenderDataRD *p_render_data);
 	void _render_buffers_ensure_screen_texture(const RenderDataRD *p_render_data);
+	// FellowEngine (decision 0123): false when no material drawn this frame samples the screen texture's mips.
+	bool fellow_screen_copy_mipmaps = true;
 	void _render_buffers_copy_screen_texture(const RenderDataRD *p_render_data);
 	void _render_buffers_ensure_depth_texture(const RenderDataRD *p_render_data);
 	void _render_buffers_copy_depth_texture(const RenderDataRD *p_render_data, bool p_use_msaa = false);

@@ -64,6 +64,13 @@ inline int glow_blur() {
 	return postfx_enabled() ? CLAMP(GLOBAL_GET_CACHED(int, "rendering/fellow/postfx/glow_blur"), 0, 2) : 0;
 }
 
+// The screen texture's copy (hint_screen_texture) builds its mip chain only when a material drawn this frame samples
+// the mips (a filter_*_mipmap hint): stock always builds it. Materials reading only the base level see the same image
+// (decision 0123). Read every frame.
+inline bool screen_copy_mipmaps_on_demand() {
+	return postfx_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/postfx/screen_copy_mipmaps_on_demand");
+}
+
 // SSR's roughness filter (a blur per mip of the reflection) with its shared-memory arrays padded so that neither pass
 // has bank conflicts; the same values, the same sums (decision 0052). Read every frame.
 inline bool ssr_filter_padded() {

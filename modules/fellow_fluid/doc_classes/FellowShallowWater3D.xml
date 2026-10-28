@@ -6,6 +6,7 @@
 	<description>
 		Simulates the 2D shallow-water equations on a staggered grid entirely with [RenderingDevice] compute shaders (no CPU readback) and renders the resulting water surface with displacement, normals, foam and screen-space refraction. Colliders and impulses are uploaded as a compact buffer each frame. Every processed frame advances exactly [member substeps] substeps of [member time_step] seconds, which makes the simulation deterministic under [code]--fixed-fps[/code].
 		Requires the Forward+ or Mobile renderer. GPU time of the simulation and of the surface-generation pass is available through [method get_simulation_gpu_time_ms] and [method get_surface_gpu_time_ms]. See [code]docs/fellow_fluid_architecture.md[/code].
+		A [FellowWater3D] whose [member FellowWater3D.simulation_path] points here draws the simulated surface as part of a larger body of water (this node's own mesh is then hidden); it reads the surface texture and [code]get_flow_texture()[/code] (cell-centre velocity and depth).
 	</description>
 	<tutorials>
 	</tutorials>
