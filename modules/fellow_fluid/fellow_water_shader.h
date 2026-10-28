@@ -73,6 +73,7 @@ uniform vec3 sun_direction = vec3(0.0, -1.0, 0.0);
 uniform bool ssr_enabled = true;
 uniform int ssr_steps = 32;
 uniform float ssr_max_distance = 80.0;
+uniform float ssr_min_fresnel = 0.04;
 uniform float water_time = 0.0;
 uniform int debug_view = 0;
 
@@ -225,7 +226,10 @@ void fragment() {
 	// Reflections traced against the opaque scene's depth; the sky's IBL where nothing is hit.
 	float ssr_weight = 0.0;
 	vec3 ssr_color = vec3(0.0);
-	if (ssr_enabled) {
+	// Where Fresnel is small (looking down into the water) the reflection is a few per cent of the light: the sky's
+	// IBL, no march. Faded in over 1.5x the threshold.
+	float ssr_need = smoothstep(ssr_min_fresnel, ssr_min_fresnel * 1.5, fresnel);
+	if (ssr_enabled && ssr_need > 0.0) {
 		vec3 r = reflect(-VIEW, n_view);
 		// A wave facet tilted far enough sends the ray below the horizon: it would leave by the next wave, upwards.
 		vec3 rw = (INV_VIEW_MATRIX * vec4(r, 0.0)).xyz;
@@ -235,9 +239,17 @@ void fragment() {
 		}
 		bool hit = false;
 		vec3 p0 = VERTEX + n_view * 0.02;
+		// Steps by the ray's length on the screen (about one per 10 pixels): a far pixel's ray crosses few pixels.
+		float t_end = r.z > 0.0 ? min(ssr_max_distance, (-p0.z - 0.06) / r.z) : ssr_max_distance;
+		vec4 ce = PROJECTION_MATRIX * vec4(p0 + r * t_end, 1.0);
+		vec4 cs = PROJECTION_MATRIX * vec4(p0, 1.0);
+		float px = length((ce.xy / ce.w - cs.xy / cs.w) * 0.5 * VIEWPORT_SIZE);
+		int steps = clamp(int(px / 10.0), 6, ssr_steps);
+		// A per-pixel, per-frame offset of the samples (interleaved gradient noise): TAA averages the gaps.
+		float jitter = fract(52.9829189 * fract(dot(FRAGCOORD.xy + 5.588238 * fract(water_time * 7.31), vec2(0.06711056, 0.00583715))));
 		float t_prev = 0.0;
-		for (int i = 1; i <= ssr_steps; i++) {
-			float f = float(i) / float(ssr_steps);
+		for (int i = 1; i <= steps; i++) {
+			float f = (float(i) - 1.0 + max(jitter, 0.05)) / float(steps);
 			float t = ssr_max_distance * f * f;
 			vec3 p = p0 + r * t;
 			if (p.z > -0.05) {
@@ -270,7 +282,7 @@ void fragment() {
 				vec4 ch = PROJECTION_MATRIX * vec4(ph, 1.0);
 				vec2 uh = ch.xy / ch.w * 0.5 + 0.5;
 				vec2 edge = min(uh, 1.0 - uh);
-				ssr_weight = smoothstep(0.0, 0.08, min(edge.x, edge.y)) * (1.0 - smoothstep(0.75, 1.0, hi / ssr_max_distance));
+				ssr_weight = smoothstep(0.0, 0.08, min(edge.x, edge.y)) * (1.0 - smoothstep(0.75, 1.0, hi / ssr_max_distance)) * ssr_need;
 				ssr_color = textureLod(screen_tex, uh, 0.0).rgb;
 				hit = true;
 				break;
@@ -286,7 +298,7 @@ void fragment() {
 				float zi = view_position(ui, textureLod(depth_tex, ui, 0.0).r, INV_PROJECTION_MATRIX).z;
 				if (-zi > max(ssr_max_distance, -VERTEX.z * 0.5)) {
 					vec2 edge = min(ui, 1.0 - ui);
-					ssr_weight = smoothstep(0.0, 0.08, min(edge.x, edge.y));
+					ssr_weight = smoothstep(0.0, 0.08, min(edge.x, edge.y)) * ssr_need;
 					ssr_color = textureLod(screen_tex, ui, 0.0).rgb;
 				}
 			}

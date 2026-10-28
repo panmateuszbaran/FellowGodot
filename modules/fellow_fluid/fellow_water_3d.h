@@ -127,6 +127,7 @@ private:
 	bool screen_space_reflections = true;
 	int reflection_steps = 32;
 	float reflection_distance = 80.0f; // m
+	float reflection_min_fresnel = 0.04f; // below: the IBL only, no march
 	int grid_segments = 256;
 	float grid_near = 0.25f; // m: radius of the innermost ring
 	float grid_far = 20000.0f; // m
@@ -251,6 +252,8 @@ public:
 	int get_reflection_steps() const { return reflection_steps; }
 	void set_reflection_distance(float p_distance);
 	float get_reflection_distance() const { return reflection_distance; }
+	void set_reflection_min_fresnel(float p_fresnel);
+	float get_reflection_min_fresnel() const { return reflection_min_fresnel; }
 	void set_grid_segments(int p_segments);
 	int get_grid_segments() const { return grid_segments; }
 	void set_grid_near(float p_near);

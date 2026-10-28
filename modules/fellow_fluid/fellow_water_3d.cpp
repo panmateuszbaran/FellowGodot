@@ -356,6 +356,7 @@ void FellowWater3D::_update_material() {
 	material->set_shader_parameter("ssr_enabled", screen_space_reflections);
 	material->set_shader_parameter("ssr_steps", reflection_steps);
 	material->set_shader_parameter("ssr_max_distance", reflection_distance);
+	material->set_shader_parameter("ssr_min_fresnel", reflection_min_fresnel);
 	material->set_shader_parameter("sim_wave_scale", simulation_wave_scale);
 	material->set_shader_parameter("sim_blend", simulation_blend);
 	material->set_shader_parameter("flow_period", flow_period);
@@ -467,8 +468,8 @@ void FellowWater3D::_notification(int p_what) {
 			}
 			int cascades = _cascade_count();
 			if (spectrum_dirty) {
-				Vector<uint8_t> data = _build_spectrum(wave_resolution, cascades);
-				RS::get_singleton()->call_on_render_thread(callable_mp(this, &FellowWater3D::_rt_upload_spectrum).bind(data));
+				Vector<uint8_t> spectrum = _build_spectrum(wave_resolution, cascades);
+				RS::get_singleton()->call_on_render_thread(callable_mp(this, &FellowWater3D::_rt_upload_spectrum).bind(spectrum));
 				spectrum_dirty = false;
 			}
 			double step = last_dispatch_time < 0.0 ? 1.0 / 60.0 : CLAMP(time - last_dispatch_time, 0.0, 0.25);
@@ -798,6 +799,7 @@ WATER_MATERIAL_SETTER(set_caustics_strength, float, caustics_strength)
 WATER_MATERIAL_SETTER(set_caustics_depths, const Vector2 &, caustics_depths)
 WATER_MATERIAL_SETTER(set_screen_space_reflections, bool, screen_space_reflections)
 WATER_MATERIAL_SETTER(set_reflection_distance, float, reflection_distance)
+WATER_MATERIAL_SETTER(set_reflection_min_fresnel, float, reflection_min_fresnel)
 WATER_MATERIAL_SETTER(set_simulation_wave_scale, float, simulation_wave_scale)
 WATER_MATERIAL_SETTER(set_simulation_blend, float, simulation_blend)
 WATER_MATERIAL_SETTER(set_flow_period, float, flow_period)
@@ -886,6 +888,8 @@ void FellowWater3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_reflection_steps"), &FellowWater3D::get_reflection_steps);
 	ClassDB::bind_method(D_METHOD("set_reflection_distance", "distance"), &FellowWater3D::set_reflection_distance);
 	ClassDB::bind_method(D_METHOD("get_reflection_distance"), &FellowWater3D::get_reflection_distance);
+	ClassDB::bind_method(D_METHOD("set_reflection_min_fresnel", "fresnel"), &FellowWater3D::set_reflection_min_fresnel);
+	ClassDB::bind_method(D_METHOD("get_reflection_min_fresnel"), &FellowWater3D::get_reflection_min_fresnel);
 	ClassDB::bind_method(D_METHOD("set_grid_segments", "segments"), &FellowWater3D::set_grid_segments);
 	ClassDB::bind_method(D_METHOD("get_grid_segments"), &FellowWater3D::get_grid_segments);
 	ClassDB::bind_method(D_METHOD("set_grid_near", "near"), &FellowWater3D::set_grid_near);
@@ -942,6 +946,7 @@ void FellowWater3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "screen_space_reflections"), "set_screen_space_reflections", "get_screen_space_reflections");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "reflection_steps", PROPERTY_HINT_RANGE, "4,128,1"), "set_reflection_steps", "get_reflection_steps");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "reflection_distance", PROPERTY_HINT_RANGE, "1,1000,0.1,suffix:m"), "set_reflection_distance", "get_reflection_distance");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "reflection_min_fresnel", PROPERTY_HINT_RANGE, "0,1,0.001"), "set_reflection_min_fresnel", "get_reflection_min_fresnel");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "grid_segments", PROPERTY_HINT_RANGE, "16,2048,1"), "set_grid_segments", "get_grid_segments");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "grid_near", PROPERTY_HINT_RANGE, "0.01,10,0.01,suffix:m"), "set_grid_near", "get_grid_near");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "grid_far", PROPERTY_HINT_RANGE, "10,100000,1,suffix:m"), "set_grid_far", "get_grid_far");

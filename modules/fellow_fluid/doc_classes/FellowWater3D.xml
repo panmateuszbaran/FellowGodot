@@ -105,8 +105,11 @@
 		<member name="reflection_distance" type="float" setter="set_reflection_distance" getter="get_reflection_distance" default="80.0">
 			Length of the screen-space reflection rays, in metres.
 		</member>
+		<member name="reflection_min_fresnel" type="float" setter="set_reflection_min_fresnel" getter="get_reflection_min_fresnel" default="0.04">
+			Below this Fresnel factor (looking down into the water) no reflection ray is traced: the sky's IBL alone (faded in over 1.5 times it).
+		</member>
 		<member name="reflection_steps" type="int" setter="set_reflection_steps" getter="get_reflection_steps" default="32">
-			Steps of the screen-space reflection rays (quadratically spaced, then refined by bisection).
+			Most steps of a screen-space reflection ray (about one per 10 pixels of its length on the screen, at least 6; quadratically spaced from a per-pixel offset, then refined by bisection).
 		</member>
 		<member name="refraction_strength" type="float" setter="set_refraction_strength" getter="get_refraction_strength" default="0.25">
 			How far the waves shift the scene seen below, relative to the water's thickness and the distance (0 = no refraction).
