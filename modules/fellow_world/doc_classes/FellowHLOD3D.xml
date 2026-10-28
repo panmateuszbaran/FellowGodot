@@ -67,8 +67,8 @@
 		<member name="impostor_frames" type="int" setter="set_impostor_frames" getter="get_impostor_frames" default="8">
 			Views per side of an impostor's octahedral atlas (frames x frames views over the sphere).
 		</member>
-		<member name="impostor_min_triangles" type="int" setter="set_impostor_min_triangles" getter="get_impostor_min_triangles" default="256">
-			Meshes with fewer triangles get no impostor (a quad would not save much).
+		<member name="impostor_min_triangles" type="int" setter="set_impostor_min_triangles" getter="get_impostor_min_triangles" default="2000">
+			Meshes with fewer triangles get no impostor. An impostor is an alpha-tested quad covering the mesh's bounding sphere, blending four views: it saves vertices and costs fragments, so it pays for heavy meshes only (420-triangle trees drew faster as meshes on an RTX 5070 Ti Laptop and on lavapipe).
 		</member>
 		<member name="impostor_resolution" type="int" setter="set_impostor_resolution" getter="get_impostor_resolution" default="128">
 			Pixels per side of each view.

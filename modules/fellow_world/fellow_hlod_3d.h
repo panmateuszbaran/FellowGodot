@@ -64,7 +64,7 @@ private:
 	real_t impostor_distance = 0.0;
 	int impostor_frames = 8;
 	int impostor_resolution = 128;
-	int impostor_min_triangles = 256;
+	int impostor_min_triangles = 2000;
 	bool lods = true;
 	bool build_on_ready = true;
 	ShadowMode shadow_mode = SHADOW_MODE_PER_CASCADE;

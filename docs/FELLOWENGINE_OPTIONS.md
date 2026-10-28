@@ -149,11 +149,14 @@ when the node is ready (or by `build()`):
   better instanced (merging undoes Godot's instancing: City Lab's 18 800 meshes as 2 300 merged surfaces drew 1 500
   draws instead of 200).
 
-* **impostors** (`impostor_distance`, 0 = off): meshes of at least `impostor_min_triangles` (256) with an instanced
+* **impostors** (`impostor_distance`, 0 = off): meshes of at least `impostor_min_triangles` (2 000) with an instanced
   proxy, and the `MultiMeshInstance3D` nodes below the node, get octahedral impostors baked at run time
   (`impostor_frames`² views of `impostor_resolution` pixels, albedo and normals) and drawn from `impostor_distance` on
-  as camera-facing quads blending the four nearest views. Foliage Lab's trees at 60 m: see 0122 (they change the
-  image: far trees as pictures).
+  as camera-facing quads blending the four nearest views. They change the image (far trees as pictures: Foliage Lab
+  aerial 27.4 dB, mean colour within 1.4 levels) and pay for **heavy meshes only**: an impostor is an alpha-tested
+  quad over the bounding sphere, so it trades vertices for fragments. Foliage Lab's 420-triangle trees beyond 60 m:
+  flythrough −2.8 % on the RTX, but the aerial view +5 % and the forest +6 % (lavapipe forest +85 %); baking 8 x 8
+  views of a mesh takes about 70 frames at start. Measure with your own meshes before using them.
 
 Directional cascades starting beyond `distance` draw the proxies, the nearer ones the meshes, independently of the
 camera's position (`shadow_mode`), so the directional shadow cache keeps both. Meshes with skins, blend shapes,

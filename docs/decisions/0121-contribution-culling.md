@@ -102,6 +102,12 @@ Foliage Lab (`m23_f267_foliage`, the same settings, thinning): one MultiMesh per
 (+4.3 %) and meadow 4.008 → 4.126 ms (+2.9 %) — where nothing is small, the per-instance test and the MultiMeshes that
 are wholly in view becoming culling jobs cost a little. Chunks: 2.953 → 3.005 ms (+1.8 %), aerial −3.0 %.
 
+After it the compaction stopped recomputing every instance's thinning (the cull marks the survivors it grew, bit
+`0x80` of the bucket code, and only those are grown again). `m23_f268_foliage` (fellow201, the same settings, one
+MultiMesh per type, 3 runs): aerial 6.522 → 5.840 ms (**−10.5 %**), forest 1.864 → 1.842 ms (−1.2 %), meadow 4.176 →
+4.076 ms (−2.4 %): the near views' penalty is gone. The flythrough 4.805 → 4.869 ms (+1.3 %, within the runs' spread: 4.76-4.96 ms
+against 4.77-4.85).
+
 Captures at 1080p on the RTX (`m23_f267_*_capture`): City Lab aerial 59.55 dB (442 pixels differ), roofs 72.37,
 street 70.96; Foliage Lab aerial 40.28 dB (3.9 % of the pixels by more than 2 levels: the thinned far meadow), forest
 and meadow identical.

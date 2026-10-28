@@ -1,6 +1,6 @@
 # FellowEngine — milestone 23 report (far objects: contribution culling, automatic HLOD)
 
-Status: **lavapipe measured; RTX job `m23_f267` queued** (2026-10-28). Branch `fellow/geometry`. Decision records
+Status: **measured** (lavapipe; RTX jobs `m23_f267`, `m23_f268`, 2026-10-28). Branch `fellow/geometry`. Decision records
 `docs/decisions/0121` (contribution culling) and `0122` (automatic HLOD); user-facing summary
 `docs/FELLOWENGINE_OPTIONS.md` ("Far objects: automatic HLOD", and the two culling options under "Options that change
 the image").
@@ -27,7 +27,9 @@ Two mechanisms, both measured on City Lab (18 800 static meshes, a sun with four
   * the others are **merged per cell** and material into meshes with generated LODs (for unique meshes; merging
     repeated ones undoes Godot's instancing — measured);
   * **shadows decided per cascade** (cascades starting beyond the distance draw the proxies), camera-independent, so
-    the directional shadow cache keeps them.
+    the directional shadow cache keeps them;
+  * **impostors** (an option): far instances of heavy meshes drawn as octahedral impostors baked at start —
+    measured slower than Foliage Lab's light trees, so only for meshes of 2 000 triangles and more (section 4).
 
 ## 1. Development
 
@@ -67,10 +69,42 @@ Two mechanisms, both measured on City Lab (18 800 static meshes, a sun with four
 
 ## 3. Performance
 
-lavapipe, 480 x 270, per fixed camera, mean of two runs: see the tables in 0121 and 0122. RTX: job `m23_f267` (City
-Lab stock / off / culling / HLOD / both, Foliage Lab, 1080p captures; also milestone 22's Burn Lab measurements).
+lavapipe, 480 x 270, per fixed camera, mean of two runs: see the tables in 0121 and 0122.
 
-## 4. Left for later
+RTX 5070 Ti Laptop, 1080p, autotune off, 3 runs each (`m23_f267`, fellow200):
 
-* Impostors for far vegetation (octahedral billboards baked at run time), as a further level of the instanced proxies.
-* Far shading (fewer shadow taps in far cascades where the filter is below a texel).
+| City Lab flythrough | frame | render thread | GPU |
+|---|---:|---:|---:|
+| stock 4.7.2 | 2.705 ms | 2.066 ms | 1.789 ms |
+| fellow200 | 2.053 ms | 1.592 ms | 1.711 ms |
+| + contribution culling 4 px | 2.020 ms (−1.6 %) | 1.569 ms | 1.695 ms |
+| + FellowHLOD3D 100 m | **1.813 ms (−11.7 %)** | **1.172 ms (−26.4 %)** | 1.746 ms |
+
+Per camera the HLOD's render thread is 21-35 % shorter, the GPU 4-7 % less; captures with the node are identical to
+those without it (aerial: 3 pixels off by 2 levels). Foliage Lab with contribution culling: the aerial view 10.5 %
+faster (the far meadow thinned, 40.3 dB), the near views 3-4 % slower (the per-instance test where nothing is small).
+With the compaction growing only the instances the cull kept (`m23_f268`, fellow201): aerial −10.5 %, forest −1.2 %,
+meadow −2.4 % — the near views' penalty is gone.
+
+Milestone 22's Burn Lab measurements ran in the same job (see that report).
+
+## 4. Impostors
+
+Added after the RTX job: `FellowHLOD3D.impostor_distance` hands far instances over to octahedral impostors baked at
+run time (8 x 8 views of 128 px, albedo with coverage and normals, about 70 frames per mesh), per instance on the GPU
+and per cascade in the shadows. Foliage Lab's trees (420 triangles, 6 000 instances in one MultiMesh) beyond 60 m,
+against the same scene with the impostors baked but not shown: lavapipe 28.3 dB aerial, 49.7 forest, 32.2 meadow; RTX
+1080p 27.4 / 49.0 / 32.0 dB — per pixel the far trees are pictures (a little softer, trunks fainter), the mean colour
+within 1.4 levels.
+
+**They do not pay for trees this light** (`m23_f268_foliage`, RTX, 3 runs): flythrough 4.805 → 4.671 ms (−2.8 %), but
+aerial +5.1 % and forest +6.2 % (lavapipe forest +85 %): an alpha-tested quad over the bounding sphere blending four
+views costs more fragments than 420 triangles cost vertices. Impostors stay as an option for heavy meshes; the default
+`impostor_min_triangles` is now 2 000 (the bench passes 256), so turning them on leaves light meshes as meshes.
+
+## 5. Left for later
+
+* Far shading (fewer shadow taps in far cascades where the filter is below a texel): not done — FellowEngine's
+  min/max early-outs (0005) already skip uniform regions, and the far cascades' PCSS radii are several texels.
+* Impostors with depth (parallax-correct views, depth offset), per-instance colour; a cheaper impostor (a tighter
+  quad per view, fewer views blended) before trying them again on light meshes; a heavy-mesh bench (scanned trees).
