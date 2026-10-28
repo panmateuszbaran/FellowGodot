@@ -1,6 +1,6 @@
 # FellowEngine — milestone 24 report (water: lakes and rivers)
 
-Status: **in progress** (lavapipe). Branch `fellow/geometry`. Decision record `docs/decisions/0123-water.md`;
+Status: **measured** (lavapipe; RTX jobs `m24_f269`, `m24_f270`, 2026-10-28). Branch `fellow/geometry`. Decision record `docs/decisions/0123-water.md`;
 user-facing summary `docs/FELLOWENGINE_OPTIONS.md` ("Water bodies").
 
 ## 0. Result
@@ -19,6 +19,9 @@ reflections, refraction, foam at the shores, caustics, on the GPU shallow-water 
   **foam** at shores and objects, **caustics** from the waves' own slopes, the sun's **glitter path**.
 
 And an exact optimization: the screen texture's copy builds its mip chain only when a material samples it.
+
+Cost on the RTX 5070 Ti Laptop at 1080p: 1.6 ms of the frame (Godot's water 0.38 ms), more than half of it the
+reflections.
 
 ## 1. Development
 
@@ -55,8 +58,26 @@ And an exact optimization: the screen texture's copy builds its mip chain only w
 ## 3. Performance
 
 lavapipe (480 x 270): see 0123 — FellowWater3D 24-149 ms of GPU time more than Godot's water per view, the waves'
-compute about 70 ms more per frame (lavapipe's compute is slow). RTX below.
+compute about 70 ms more per frame (lavapipe's compute is slow).
+
+RTX 5070 Ti Laptop, 1080p, autotune off, 3 runs each (`m24_f269`, `m24_f270`):
+
+| Water Lab flythrough | frame | the water's pass |
+|---|---:|---:|
+| no water | 1.615 ms | — |
+| Godot's water (StandardMaterial3D + the milestone-1 river) | 1.999 ms | 0.166 ms |
+| FellowWater3D (f269) | 3.482 ms | 1.591 ms |
+| FellowWater3D, the cheaper reflection march (f270) | 3.264 ms | 1.389 ms |
+| FellowWater3D without reflections (f270) | 2.372 ms | 0.463 ms |
+
+The waves' compute 0.10 ms, the simulation 0.14 ms, the caustics 0.03 ms, the screen copy 0.031 ms (0.064 with its
+mips always). The reflections are the cost: 1.13 ms, after the Fresnel cutoff, steps by screen length and jitter
+0.93 ms (−18 %, 45-57 dB against the full march) — rays towards the horizon need their steps. Captures at 1080p:
+`m24_f269_water_capture`, `m24_f270_water_capture`.
 
 ## 4. Left for later
 
+* Reflections: a cheaper march (a hierarchical depth buffer, half resolution with a resolve), ray-traced reflections
+  for the water with ray tracing on (0084 traces only opaque surfaces).
+* TAA on moving water (a reactive mask: the depth the water writes against the opaque depth).
 * Underwater views (the surface from below, fog), rain on the water, shore waves breaking.

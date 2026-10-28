@@ -181,8 +181,10 @@ A `FellowWater3D` node (module `fellow_fluid`) is a body of water at its height,
   caustics on the bottom (`caustics_strength`, `caustics_depths`), the sun's glitter path (`roughness` plus the waves
   a pixel does not resolve); `debug_view` shows the terms one by one.
 
-The surface is a polar grid around the camera (`grid_segments`, `grid_near`, `grid_far`). The node's rotation and
-scale are not used. `rendering/fellow/fluid/enabled` off stops the waves. Decision record 0123; bench Water Lab
+Cost (RTX 5070 Ti Laptop, 1080p, Water Lab): 1.6 ms of the frame (Godot's water 0.38 ms), of it the reflections
+0.93 ms (`screen_space_reflections` off, fewer `reflection_steps`, a higher `reflection_min_fresnel` trade them), the
+waves' compute 0.10 ms, the caustics 0.03 ms. The surface is a polar grid around the camera (`grid_segments`,
+`grid_near`, `grid_far`). The node's rotation and scale are not used. `rendering/fellow/fluid/enabled` off stops the waves. Decision record 0123; bench Water Lab
 (`--scene=water`, `--water=full|basic|none`).
 
 ## Options that change the image (off by default)

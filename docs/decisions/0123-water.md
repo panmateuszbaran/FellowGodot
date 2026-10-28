@@ -114,6 +114,46 @@ compute is slow), frame time 595 ms against 452 ms with Godot's water in the fly
 near the camera, costs most (the reflection rays march their 32 steps where nothing is hit). The RTX measurement
 decides.
 
+## RTX 5070 Ti Laptop (`m24_f269_water`, fellow202, 1080p, autotune off, 3 runs each, pass timestamps)
+
+| Water Lab | frame (flythrough) | GPU | shore | pier | glint | aerial | river |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| no water | 1.615 ms | 1.547 ms | 1.485 | 1.601 | 1.561 | 1.676 | 1.514 |
+| Godot's water | 1.999 ms | 1.777 ms | 1.684 | 1.921 | 1.829 | 1.872 | 1.719 |
+| FellowWater3D | 3.482 ms | 3.148 ms | 2.401 | 3.098 | 3.247 | 2.108 | 1.648 |
+| without its reflections | 2.427 ms | 2.091 ms | 1.837 | 2.303 | 2.066 | 1.914 | 1.628 |
+| without its caustics | 3.456 ms | 3.123 ms | 2.355 | 3.037 | 3.246 | 2.138 | 1.640 |
+| screen copy's mips always | 3.469 ms | 3.140 ms | 2.462 | 3.191 | 3.305 | 2.090 | 1.649 |
+
+(per camera: GPU ms.) The passes (FellowWater3D): the transparent pass, where the water is drawn, 1.591 ms (Godot's
+water 0.166 ms; without the reflections 0.459 ms) — **the reflections' march is 1.1 ms**; the waves' compute 0.101 ms
+(three cascades of 256², FFT, assembly, 24 mip levels, caustics); the simulation 0.14 ms (as with Godot's water); the
+caustics 0.03 ms; the screen copy 0.031 ms with its mips on demand, 0.064 ms with them always (the frame within the
+runs' spread). The river's camera, mostly banks, is cheaper with FellowWater3D than with Godot's water (its plane and
+the copy's mips go).
+
+Captures at 1080p (`m24_f269_water_capture`): as on lavapipe — the far shore and its trees mirrored and broken by the
+waves, the pier's posts and the boat reflected, green shallows with caustics, a glitter path; Godot's water a grey-blue
+mirror without waves, the sun a single dot.
+
+**The cheaper march** (after f269): no march where Fresnel is below `reflection_min_fresnel` (0.04: looking down into
+the water, the sky's IBL alone), the steps by the ray's length on the screen (one per 10 pixels, 6 to
+`reflection_steps`), the samples offset per pixel and frame (interleaved gradient noise; TAA averages). `m24_f270_water`
+(fellow203, the same settings):
+
+| | flythrough frame | transparent pass | shore | pier | glint | aerial | river |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| no water | 1.657 ms | — | 1.522 | 1.626 | 1.636 | 1.751 | 1.541 |
+| FellowWater3D | 3.264 ms (was 3.482) | 1.389 ms (was 1.591) | 2.306 | 2.956 | 3.102 | 2.085 | 1.616 |
+| without its reflections | 2.372 ms | 0.463 ms | 1.779 | 2.272 | 2.041 | 1.894 | 1.611 |
+
+The reflections 0.93 ms instead of 1.13 (−18 %); captures against f269's 45.0 / 49.3 / 54.7 / 54.8 / 56.6 dB (the
+differences in the reflections of the pier and the far shore: the jittered samples). Most of the march's cost is in
+the grazing views (the glint's 1.06 ms, the pier's far half): rays towards the horizon cross the screen and need their
+steps. FellowWater3D costs 1.6 ms of a 1080p frame on this GPU (Godot's water 0.38 ms), the reflections more than half
+of it; `screen_space_reflections` off or fewer `reflection_steps` trade them away.
+
 ## Decision
 
-**KEEP** — a new node, nothing changes without it.
+**KEEP** — a new node, nothing changes without it. The screen copy's mips on demand: exact, on by default (the copy
+0.064 → 0.031 ms in Water Lab).
