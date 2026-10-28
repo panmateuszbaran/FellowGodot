@@ -2173,15 +2173,17 @@ void RenderForwardClustered::_fellow_multimesh_cull_collect(uint32_t p_set, Rend
 		const GeometryInstanceSurfaceDataCache *surf = rl.elements[i];
 		const RenderElementInfo &info = rl.element_info[i];
 		const GeometryInstanceForwardClustered *inst = surf->owner;
-		// An HLOD proxy (decision 0122) draws its instances only from a distance on: it must be culled (any instance count).
-		const bool range_proxy = !p_shadow && inst->fellow_instance_range_begin > 0.0f;
+		// A MultiMesh with an instance range (decision 0122: an HLOD proxy, or a MultiMesh handing over to impostors) draws
+		// its instances only within distances: it must be culled (any instance count).
+		const bool range_proxy = !p_shadow && (inst->fellow_instance_range_begin > 0.0f || inst->fellow_instance_range_end > 0.0f);
 		if (!(inst->base_flags & INSTANCE_DATA_FLAG_MULTIMESH) || (inst->base_flags & excluded) || (inst->instance_count < min_instances && !range_proxy) || info.repeat > 1) {
 			continue;
 		}
 		const SceneShaderForwardClustered::ShaderData *shaders[2] = { surf->shader, surf->shader_shadow };
 		// VERTEX written by the material: culled only under decision 0036, with the node's extra cull margin as the
 		// displacement's bound.
-		const bool bounded_vertex_motion = inst->fellow_extra_margin > 0.0f && Fellow::multimesh_cull_vertex_motion();
+		// (Or decision 0122's impostors: a billboard whose vertices stay in the quad mesh's box, the impostor's sphere.)
+		const bool bounded_vertex_motion = (inst->fellow_extra_margin > 0.0f && Fellow::multimesh_cull_vertex_motion()) || inst->fellow_vertices_bounded;
 		bool moves = false;
 		for (const SceneShaderForwardClustered::ShaderData *sh : shaders) {
 			if (sh == nullptr || (sh->uses_vertex && !bounded_vertex_motion) || sh->uses_position || sh->writes_modelview_or_projection || sh->uses_z_clip_scale || sh->uses_particle_trails || sh->uses_point_size || sh->fellow_uses_instance_id) {
@@ -2247,7 +2249,7 @@ void RenderForwardClustered::_fellow_multimesh_cull_collect(uint32_t p_set, Rend
 						}
 					}
 					// An HLOD proxy in a shadow pass: also the caster planes, as the scene cull tests its members.
-					const bool proxy_planes = p_shadow && inst->fellow_instance_range_begin > 0.0f && p_proxy_plane_count > 0;
+					const bool proxy_planes = p_shadow && inst->fellow_hlod_proxy && p_proxy_plane_count > 0;
 					if (proxy_planes && proxy_planes_offset == UINT32_MAX) {
 						proxy_planes_offset = set.planes.size() / 4;
 						for (int p = 0; p < p_plane_count + p_proxy_plane_count; p++) {
@@ -2311,13 +2313,14 @@ void RenderForwardClustered::_fellow_multimesh_cull_collect(uint32_t p_set, Rend
 						j.instance_range[1] = p_lod.camera.y;
 						j.instance_range[2] = p_lod.camera.z;
 						j.instance_range[3] = inst->fellow_instance_range_begin * inst->fellow_instance_range_begin;
+						j.contribution_mode[1] = inst->fellow_instance_range_end * inst->fellow_instance_range_end;
 						set.required = true;
 					}
 					if (p_contribution.active()) {
 						j.lod_params[2] = p_contribution.a;
 						j.lod_params[3] = p_contribution.b;
 						// HLOD proxies stand in for nodes, which are culled whole: not thinned.
-						j.contribution_mode[0] = (p_contribution.thin && inst->fellow_instance_range_begin <= 0.0f) ? 1.0f : 0.0f;
+						j.contribution_mode[0] = (p_contribution.thin && !inst->fellow_hlod_proxy) ? 1.0f : 0.0f;
 						j.contribution[0] = p_contribution.plane.normal.x;
 						j.contribution[1] = p_contribution.plane.normal.y;
 						j.contribution[2] = p_contribution.plane.normal.z;
@@ -3439,8 +3442,8 @@ void RenderForwardClustered::_fill_render_list_range(const FellowFillParams &p_p
 		if (inst->non_uniform_scale) {
 			flags |= INSTANCE_DATA_FLAGS_NON_UNIFORM_SCALE;
 		}
-		if (inst->fellow_instance_range_begin > 0.0f) {
-			flags |= INSTANCE_DATA_FLAG_FELLOW_INSTANCE_NORMALS; // an HLOD MultiMesh proxy (decision 0122)
+		if (inst->fellow_hlod_proxy) {
+			flags |= INSTANCE_DATA_FLAG_FELLOW_INSTANCE_NORMALS; // an HLOD proxy (decision 0122): MultiMesh normals as nodes
 		}
 		bool uses_lightmap = false;
 		bool uses_gi = false;

@@ -149,6 +149,12 @@ when the node is ready (or by `build()`):
   better instanced (merging undoes Godot's instancing: City Lab's 18 800 meshes as 2 300 merged surfaces drew 1 500
   draws instead of 200).
 
+* **impostors** (`impostor_distance`, 0 = off): meshes of at least `impostor_min_triangles` (256) with an instanced
+  proxy, and the `MultiMeshInstance3D` nodes below the node, get octahedral impostors baked at run time
+  (`impostor_frames`² views of `impostor_resolution` pixels, albedo and normals) and drawn from `impostor_distance` on
+  as camera-facing quads blending the four nearest views. Foliage Lab's trees at 60 m: see 0122 (they change the
+  image: far trees as pictures).
+
 Directional cascades starting beyond `distance` draw the proxies, the nearer ones the meshes, independently of the
 camera's position (`shadow_mode`), so the directional shadow cache keeps both. Meshes with skins, blend shapes,
 overlays, transparency, their own visibility range or parent, or lights and particles below them are left as they

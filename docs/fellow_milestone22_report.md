@@ -1,7 +1,7 @@
 # FellowEngine — milestone 22 report (burning objects: char, embers, ash)
 
-Status: **DRAFT — lavapipe only** (the RTX job `m22_f266` is prepared, not run: the user asked to leave the laptop
-idle, 2026-10-26). Branch `fellow/geometry`. Decision record `docs/decisions/0120`; user-facing summary
+Status: **measured** (lavapipe; RTX in job `m23_f267`, 2026-10-28, `fellow200` — milestone 23's build, the burning
+unchanged). Branch `fellow/geometry`. Decision record `docs/decisions/0120`; user-facing summary
 `docs/FELLOWENGINE_OPTIONS.md` ("Burning objects").
 
 ## 0. Result
@@ -104,11 +104,24 @@ lay (45-55 s). The same burning on every run (two runs' fractions agree to the l
 `m24_burn_progress.jpg` (5-55 s), `m24_flames_before_after.jpg` (the volume's sides open and closed),
 `m24_char_heaps.jpg` (the char and the heaps in daylight: two crossed logs and a box burned without gas).
 
-## 4. RTX (not run)
+## 4. RTX 5070 Ti Laptop (`m22_f267_burn_*`, fellow200, 1080p, autotune off)
 
-Job `m22_f266` (prepared, `fellow199`): Burn Lab captures at 1080p over 55 s; the cost per frame with the burning
-drawn and simulated, simulated with the original meshes, neither (the burn steps' own time from a timestamp at the
-switch between the gas's and the objects' steps). Queued only when the user agrees.
+Job `m22_f266` was never run (the laptop was to stay idle); its measurements ran in `m23_f267` with `fellow200`.
+
+* **Captures** (`m22_f267_burn_capture`: 11 cameras over 55 s): the scene burns on the RTX as on lavapipe — standing
+  flames over the logs and the crate, charred and cracked wood, the remains as ash beds with charcoal pieces. The
+  beds' contrast is high at 1080p (dark charcoal pieces on light ash, a spotted look): left for the appearance work.
+* **Cost per frame** (`m22_f267_burn_cost`, 2 runs each, the burn steps timestamped):
+
+| | frame | GPU | render thread | opaque pass |
+|---|---:|---:|---:|---:|
+| burning drawn and simulated | 3.417 ms | 2.548 ms | 0.560 ms | 0.713 ms |
+| simulated, original meshes drawn | 2.594 ms | 1.742 ms | 0.512 ms | 0.266 ms |
+| neither (the gas's fire only) | 2.387 ms | 1.710 ms | 0.485 ms | 0.283 ms |
+
+The simulation of four objects costs about 0.2 ms of the frame (0.03 ms of GPU time: the objects' steps are small next
+to the gas's); drawing them burning costs 0.8 ms — the subdivided meshes reading the voxels in every pass (opaque +0.45
+ms, depth pre-pass and shadows the rest).
 
 ## 5. Open
 

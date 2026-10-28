@@ -955,7 +955,8 @@ public:
 	FUNC2(instance_set_visibility_parent, RID, RID)
 
 	FUNC2(instance_set_ignore_culling, RID, bool)
-	FUNC3(fellow_instance_set_hlod, RID, int, float) // decision 0122
+	FUNC4(fellow_instance_set_hlod, RID, int, float, float) // decision 0122
+	FUNC4(fellow_instance_set_instance_range, RID, float, float, bool) // decision 0122
 
 	// don't use these in a game!
 	FUNC2RC(Vector<ObjectID>, instances_cull_aabb, const AABB &, RID)

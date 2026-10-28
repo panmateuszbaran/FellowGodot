@@ -78,9 +78,12 @@ public:
 	// FellowEngine MultiMesh culling (decision 0036): the node's extra cull margin (GeometryInstance3D.extra_cull_margin),
 	// which the renderers that cull instances one by one add to each instance's box. No-op elsewhere.
 	virtual void set_fellow_extra_margin(float p_margin) {}
-	// FellowEngine automatic HLOD (decision 0122): a MultiMesh proxy whose instances the camera draws only from this
-	// distance on (each instance's own distance), culled one by one on the GPU. 0: none. No-op elsewhere.
-	virtual void set_fellow_instance_range_begin(float p_begin) {}
+	// FellowEngine automatic HLOD (decision 0122): a MultiMesh whose instances the camera draws only within these
+	// distances (each instance's own; 0: no bound), culled one by one on the GPU; p_vertices_bounded: its material's
+	// vertices stay in the mesh's box. No-op elsewhere.
+	virtual void set_fellow_instance_range(float p_begin, float p_end, bool p_vertices_bounded) {}
+	// An HLOD proxy (decision 0122): a MultiMesh's instances transform normals as nodes do. No-op elsewhere.
+	virtual void set_fellow_hlod_proxy(bool p_proxy) {}
 };
 
 // Base implementation of RenderGeometryInstance shared by internal renderers.
@@ -102,7 +105,10 @@ public:
 	float lod_model_scale = 1.0;
 	float lod_bias = 0.0;
 	float fellow_extra_margin = 0.0; // the node's extra cull margin, in its own space (decision 0036)
-	float fellow_instance_range_begin = 0.0; // decision 0122: MultiMesh instances drawn by the camera from this distance on
+	float fellow_instance_range_begin = 0.0; // decision 0122: MultiMesh instances drawn by the camera from this distance
+	float fellow_instance_range_end = 0.0; // and up to this one (0: no bound)
+	bool fellow_vertices_bounded = false; // the material's vertices stay in the mesh's box
+	bool fellow_hlod_proxy = false; // an HLOD proxy: per-instance normals as nodes
 	float sorting_offset = 0.0;
 	bool use_aabb_center = true;
 
@@ -162,7 +168,8 @@ public:
 	virtual void set_instance_shader_uniforms_offset(int32_t p_offset) override;
 	virtual void set_cast_double_sided_shadows(bool p_enable) override;
 	virtual void set_fellow_extra_margin(float p_margin) override;
-	virtual void set_fellow_instance_range_begin(float p_begin) override;
+	virtual void set_fellow_instance_range(float p_begin, float p_end, bool p_vertices_bounded) override;
+	virtual void set_fellow_hlod_proxy(bool p_proxy) override;
 
 	virtual void reset_motion_vectors() override;
 

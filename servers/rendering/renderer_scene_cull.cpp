@@ -736,7 +736,8 @@ void RendererSceneCull::instance_set_base(RID p_instance, RID p_base) {
 				geom->geometry_instance->set_pivot_data(instance->sorting_offset, instance->use_aabb_center);
 				geom->geometry_instance->set_lod_bias(instance->lod_bias);
 				geom->geometry_instance->set_fellow_extra_margin(instance->extra_margin);
-				geom->geometry_instance->set_fellow_instance_range_begin(instance->fellow_hlod_role == RenderingServer::FELLOW_HLOD_PROXY && instance->base_type == RSE::INSTANCE_MULTIMESH ? instance->fellow_hlod_distance : 0.0f);
+				geom->geometry_instance->set_fellow_instance_range(instance->fellow_range_begin, instance->fellow_range_end, instance->fellow_vertices_bounded);
+				geom->geometry_instance->set_fellow_hlod_proxy(instance->fellow_hlod_role == RenderingServer::FELLOW_HLOD_PROXY);
 				geom->geometry_instance->set_transparency(instance->transparency);
 				geom->geometry_instance->set_use_baked_light(instance->baked_light);
 				geom->geometry_instance->set_use_dynamic_gi(instance->dynamic_gi);
@@ -1165,11 +1166,12 @@ void RendererSceneCull::instance_set_extra_visibility_margin(RID p_instance, rea
 	}
 }
 
-void RendererSceneCull::fellow_instance_set_hlod(RID p_instance, int p_role, float p_distance) {
+void RendererSceneCull::fellow_instance_set_hlod(RID p_instance, int p_role, float p_distance, float p_end_distance) {
 	Instance *instance = instance_owner.get_or_null(p_instance);
 	ERR_FAIL_NULL(instance);
 	instance->fellow_hlod_role = (uint8_t)CLAMP(p_role, 0, 2);
 	instance->fellow_hlod_distance = p_distance;
+	instance->fellow_hlod_end = MAX(0.0f, p_end_distance);
 	if (instance->scenario && instance->array_index >= 0) {
 		InstanceData &idata = instance->scenario->instance_data[instance->array_index];
 		idata.flags &= ~(InstanceData::FLAG_FELLOW_HLOD_PROXY | InstanceData::FLAG_FELLOW_HLOD_MEMBER);
@@ -1179,15 +1181,28 @@ void RendererSceneCull::fellow_instance_set_hlod(RID p_instance, int p_role, flo
 			idata.flags |= InstanceData::FLAG_FELLOW_HLOD_MEMBER;
 		}
 	}
-	// A MultiMesh proxy: its instances drawn by the camera from the distance on, each by its own distance.
-	if (instance->base_type == RSE::INSTANCE_MULTIMESH && instance->base_data) {
+	if (((1 << instance->base_type) & RSE::INSTANCE_GEOMETRY_MASK) && instance->base_data) {
 		InstanceGeometryData *geom = static_cast<InstanceGeometryData *>(instance->base_data);
 		if (geom->geometry_instance) {
-			geom->geometry_instance->set_fellow_instance_range_begin(instance->fellow_hlod_role == RenderingServer::FELLOW_HLOD_PROXY ? p_distance : 0.0f);
+			geom->geometry_instance->set_fellow_hlod_proxy(instance->fellow_hlod_role == RenderingServer::FELLOW_HLOD_PROXY);
 		}
 	}
 	// The directional shadow cache's view of the instance changed (decision 0004).
 	_fellow_shadow_instance_changed(instance);
+}
+
+void RendererSceneCull::fellow_instance_set_instance_range(RID p_instance, float p_begin, float p_end, bool p_vertices_bounded) {
+	Instance *instance = instance_owner.get_or_null(p_instance);
+	ERR_FAIL_NULL(instance);
+	instance->fellow_range_begin = MAX(0.0f, p_begin);
+	instance->fellow_range_end = MAX(0.0f, p_end);
+	instance->fellow_vertices_bounded = p_vertices_bounded;
+	if (((1 << instance->base_type) & RSE::INSTANCE_GEOMETRY_MASK) && instance->base_data) {
+		InstanceGeometryData *geom = static_cast<InstanceGeometryData *>(instance->base_data);
+		if (geom->geometry_instance) {
+			geom->geometry_instance->set_fellow_instance_range(instance->fellow_range_begin, instance->fellow_range_end, p_vertices_bounded);
+		}
+	}
 }
 
 void RendererSceneCull::instance_set_ignore_culling(RID p_instance, bool p_enabled) {
@@ -3826,6 +3841,10 @@ void RendererSceneCull::_scene_cull(CullData &cull_data, InstanceCullResult &cul
 						const real_t begin = k == 0 ? (real_t)0.0 : cull_data.cull->shadows[j].cascades[k - 1].split;
 						const bool far_cascade = begin >= (real_t)idata.instance->fellow_hlod_distance;
 						if (far_cascade != ((fellow_hlod & InstanceData::FLAG_FELLOW_HLOD_PROXY) != 0)) {
+							continue;
+						}
+						// A proxy that hands over to a farther one (a mesh's instanced proxy to its impostors).
+						if (far_cascade && idata.instance->fellow_hlod_end > 0.0f && begin >= (real_t)idata.instance->fellow_hlod_end) {
 							continue;
 						}
 					}

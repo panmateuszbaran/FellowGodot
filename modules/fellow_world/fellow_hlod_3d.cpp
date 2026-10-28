@@ -30,6 +30,8 @@
 
 #include "fellow_hlod_3d.h"
 
+#include "fellow_impostor_baker.h"
+
 #include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
 #include "core/os/os.h"
@@ -351,12 +353,75 @@ bool mesh_instance_instancing_safe(MeshInstance3D *p_mi) {
 	return true;
 }
 
+int mesh_triangles(const Ref<Mesh> &p_mesh) {
+	int64_t n = 0;
+	for (int s = 0; s < p_mesh->get_surface_count(); s++) {
+		const int idx = p_mesh->surface_get_array_index_len(s);
+		n += (idx > 0 ? idx : p_mesh->surface_get_array_len(s)) / 3;
+	}
+	return (int)MIN(n, (int64_t)INT32_MAX);
+}
+
+// A MultiMeshInstance3D below the node that can hand over to impostors: its instances must be culled one by one (its
+// box the culler's, its materials not moving vertices), nothing per instance the impostor would lose but colour.
+bool multimesh_instance_impostor_safe(MultiMeshInstance3D *p_mmi, int p_min_triangles) {
+	if (!p_mmi->is_visible_in_tree() || p_mmi->is_in_group(SNAME("fellow_hlod_exclude")) || p_mmi->is_set_as_top_level()) {
+		return false;
+	}
+	const Ref<MultiMesh> mm = p_mmi->get_multimesh();
+	if (mm.is_null() || mm->get_transform_format() != MultiMesh::TRANSFORM_3D || mm->get_instance_count() <= 0 || mm->get_mesh().is_null()) {
+		return false;
+	}
+	if (p_mmi->get_visibility_range_begin() > 0.0f || p_mmi->get_visibility_range_end() > 0.0f || !p_mmi->get_visibility_parent().is_empty() || p_mmi->get_extra_cull_margin() > 0.0f || p_mmi->get_custom_aabb().has_volume() || p_mmi->get_material_overlay().is_valid() || p_mmi->get_transparency() > 0.0f) {
+		return false;
+	}
+	const Ref<Mesh> mesh = mm->get_mesh();
+	if (mesh_triangles(mesh) < p_min_triangles || mesh->get_blend_shape_count() > 0) {
+		return false;
+	}
+	if (!material_instancing_safe(p_mmi->get_material_override())) {
+		return false;
+	}
+	if (p_mmi->get_material_override().is_null()) {
+		for (int s = 0; s < mesh->get_surface_count(); s++) {
+			if (!material_instancing_safe(mesh->surface_get_material(s))) {
+				return false;
+			}
+		}
+	}
+	return true;
+}
+
+void collect_multimeshes(Node *p_node, LocalVector<MultiMeshInstance3D *> &r_out) {
+	for (int i = 0; i < p_node->get_child_count(false); i++) {
+		Node *c = p_node->get_child(i, false);
+		MultiMeshInstance3D *mmi = Object::cast_to<MultiMeshInstance3D>(c);
+		if (mmi) {
+			r_out.push_back(mmi);
+		}
+		collect_multimeshes(c, r_out);
+	}
+}
+
 } // namespace
 
 void FellowHLOD3D::build() {
 	ERR_FAIL_COND_MSG(!is_inside_tree(), "FellowHLOD3D: build() needs the node in the scene tree.");
 	clear();
+	generation++;
 	const uint64_t t0 = OS::get_singleton()->get_ticks_usec();
+	// Impostors (decision 0122): baked one view per frame by an internal baker; applied when done.
+	const bool impostors = impostor_distance > 0.0 && Fellow::multimesh_culling();
+	int impostor_bakes = 0;
+	auto queue_impostor = [&](const Ref<Mesh> &p_mesh, const Ref<Material> &p_override, uint32_t p_index) {
+		if (!baker) {
+			baker = memnew(FellowImpostorBaker);
+			baker->set_name("ImpostorBaker");
+			add_child(baker, false, INTERNAL_MODE_BACK);
+		}
+		baker->queue_bake(p_mesh, p_override, impostor_frames, impostor_resolution, callable_mp(this, &FellowHLOD3D::_impostor_baked).bind(generation, p_index));
+		impostor_bakes++;
+	};
 
 	LocalVector<MeshInstance3D *> candidates;
 	collect(this, this, candidates);
@@ -409,7 +474,12 @@ void FellowHLOD3D::build() {
 			proxy->set_layer_mask(first->get_layer_mask());
 			proxy->set_gi_mode(first->get_gi_mode());
 			add_child(proxy, false, INTERNAL_MODE_BACK);
-			instanced_proxies.push_back(proxy);
+			Instanced in;
+			in.proxy = proxy;
+			instanced.push_back(in);
+			if (impostors && impostor_distance > distance && mesh_triangles(first->get_mesh()) >= impostor_min_triangles) {
+				queue_impostor(first->get_mesh(), first->get_material_override(), instanced.size() - 1);
+			}
 			instanced_groups++;
 			for (MeshInstance3D *mi : g) {
 				// Drawn by the camera up to the distance, its instance from it on (no hysteresis: both draw the same
@@ -563,6 +633,26 @@ void FellowHLOD3D::build() {
 			merged_members++;
 		}
 	}
+	// MultiMeshInstance3D nodes below this node: their far instances handed over to impostors.
+	int impostor_multimeshes = 0;
+	if (impostors) {
+		LocalVector<MultiMeshInstance3D *> mmis;
+		collect_multimeshes(this, mmis);
+		for (MultiMeshInstance3D *mmi : mmis) {
+			bool own = false;
+			for (const Instanced &in : instanced) {
+				own = own || in.proxy == mmi;
+			}
+			if (own || !multimesh_instance_impostor_safe(mmi, impostor_min_triangles)) {
+				continue;
+			}
+			Instanced in;
+			in.original = mmi->get_instance_id();
+			instanced.push_back(in);
+			queue_impostor(mmi->get_multimesh()->get_mesh(), mmi->get_material_override(), instanced.size() - 1);
+			impostor_multimeshes++;
+		}
+	}
 	built = true;
 	_apply_roles();
 
@@ -576,7 +666,43 @@ void FellowHLOD3D::build() {
 	build_info["cells_skipped"] = skipped_cells;
 	build_info["merged_triangles"] = triangles;
 	build_info["lod_triangles"] = lod_triangles;
+	build_info["impostor_bakes"] = impostor_bakes;
+	build_info["impostor_multimeshes"] = impostor_multimeshes;
 	build_info["build_msec"] = double(OS::get_singleton()->get_ticks_usec() - t0) / 1000.0;
+}
+
+void FellowHLOD3D::_impostor_baked(const Ref<ArrayMesh> &p_quad, uint32_t p_generation, uint32_t p_index) {
+	if (p_generation != generation || !built || p_index >= instanced.size() || p_quad.is_null()) {
+		return;
+	}
+	Instanced &in = instanced[p_index];
+	MultiMeshInstance3D *source = in.proxy ? in.proxy : ObjectDB::get_instance<MultiMeshInstance3D>(in.original);
+	if (!source || source->get_multimesh().is_null()) {
+		return;
+	}
+	const Ref<MultiMesh> src = source->get_multimesh();
+	Ref<MultiMesh> mm;
+	mm.instantiate();
+	mm->set_transform_format(MultiMesh::TRANSFORM_3D);
+	mm->set_mesh(p_quad);
+	mm->set_instance_count(src->get_instance_count());
+	for (int i = 0; i < src->get_instance_count(); i++) {
+		mm->set_instance_transform(i, src->get_instance_transform(i));
+	}
+	MultiMeshInstance3D *imp = memnew(MultiMeshInstance3D);
+	imp->set_name("HLOD_impostors");
+	imp->set_multimesh(mm);
+	imp->set_cast_shadows_setting(source->get_cast_shadows_setting());
+	imp->set_layer_mask(source->get_layer_mask());
+	imp->set_gi_mode(source->get_gi_mode());
+	// Under its source, so its instances sit where the source's do (the node's own proxies are at its origin).
+	source->add_child(imp, false, INTERNAL_MODE_BACK);
+	in.impostor = imp;
+	_apply_roles();
+}
+
+bool FellowHLOD3D::is_baking() const {
+	return baker && baker->is_busy();
 }
 
 void FellowHLOD3D::clear() {
@@ -586,7 +712,7 @@ void FellowHLOD3D::clear() {
 		if (!mi) {
 			continue;
 		}
-		rs->fellow_instance_set_hlod(mi->get_instance(), RenderingServer::FELLOW_HLOD_NONE, 0.0f);
+		rs->fellow_instance_set_hlod(mi->get_instance(), RenderingServer::FELLOW_HLOD_NONE, 0.0f, 0.0f);
 		if (m.instanced) {
 			mi->set_visibility_range_end(m.old_range_end);
 			mi->set_visibility_range_end_margin(m.old_range_end_margin);
@@ -595,15 +721,34 @@ void FellowHLOD3D::clear() {
 		}
 	}
 	members.clear();
-	for (LocalVector<GeometryInstance3D *> *list : { &merged_proxies, &instanced_proxies }) {
-		for (GeometryInstance3D *p : *list) {
-			if (p->get_parent() == this) {
-				remove_child(p);
-			}
-			memdelete(p);
+	for (GeometryInstance3D *p : merged_proxies) {
+		if (p->get_parent() == this) {
+			remove_child(p);
 		}
-		list->clear();
+		memdelete(p);
 	}
+	merged_proxies.clear();
+	for (Instanced &in : instanced) {
+		if (in.impostor) {
+			if (in.impostor->get_parent()) {
+				in.impostor->get_parent()->remove_child(in.impostor);
+			}
+			memdelete(in.impostor);
+		}
+		MultiMeshInstance3D *original = ObjectDB::get_instance<MultiMeshInstance3D>(in.original);
+		if (original) {
+			rs->fellow_instance_set_hlod(original->get_instance(), RenderingServer::FELLOW_HLOD_NONE, 0.0f, 0.0f);
+			rs->fellow_instance_set_instance_range(original->get_instance(), 0.0f, 0.0f, false);
+		}
+		if (in.proxy) {
+			if (in.proxy->get_parent() == this) {
+				remove_child(in.proxy);
+			}
+			memdelete(in.proxy);
+		}
+	}
+	instanced.clear();
+	generation++;
 	built = false;
 	build_info.clear();
 }
@@ -629,18 +774,33 @@ void FellowHLOD3D::_apply_roles() {
 	// shadows; merged proxies with SHADOW_MODE_PER_CASCADE: a directional cascade starting beyond the distance draws the
 	// proxies, the others the meshes (camera-independent, so the shadow cache can keep them). SHADOW_MODE_FOLLOW_CAMERA:
 	// stock's visibility dependencies in every pass.
+	// Impostors (once baked) take over from impostor_distance on: the instanced proxy (or the MultiMesh below the node)
+	// draws its instances up to it, the impostors from it, per instance on the GPU and per cascade in the shadows.
 	RenderingServer *rs = RenderingServer::get_singleton();
 	const bool per_cascade = shadow_mode == SHADOW_MODE_PER_CASCADE;
-	for (GeometryInstance3D *p : instanced_proxies) {
-		rs->fellow_instance_set_hlod(p->get_instance(), RenderingServer::FELLOW_HLOD_PROXY, distance);
+	for (const Instanced &in : instanced) {
+		const float hand_over = in.impostor ? (float)impostor_distance : 0.0f;
+		if (in.proxy) {
+			rs->fellow_instance_set_hlod(in.proxy->get_instance(), RenderingServer::FELLOW_HLOD_PROXY, distance, hand_over);
+			rs->fellow_instance_set_instance_range(in.proxy->get_instance(), distance, hand_over, false);
+		}
+		MultiMeshInstance3D *original = ObjectDB::get_instance<MultiMeshInstance3D>(in.original);
+		if (original) {
+			rs->fellow_instance_set_hlod(original->get_instance(), in.impostor ? RenderingServer::FELLOW_HLOD_MEMBER : RenderingServer::FELLOW_HLOD_NONE, hand_over, 0.0f);
+			rs->fellow_instance_set_instance_range(original->get_instance(), 0.0f, hand_over, false);
+		}
+		if (in.impostor) {
+			rs->fellow_instance_set_hlod(in.impostor->get_instance(), RenderingServer::FELLOW_HLOD_PROXY, impostor_distance, 0.0f);
+			rs->fellow_instance_set_instance_range(in.impostor->get_instance(), impostor_distance, 0.0f, true);
+		}
 	}
 	for (GeometryInstance3D *p : merged_proxies) {
-		rs->fellow_instance_set_hlod(p->get_instance(), per_cascade ? RenderingServer::FELLOW_HLOD_PROXY : RenderingServer::FELLOW_HLOD_NONE, distance);
+		rs->fellow_instance_set_hlod(p->get_instance(), per_cascade ? RenderingServer::FELLOW_HLOD_PROXY : RenderingServer::FELLOW_HLOD_NONE, distance, 0.0f);
 	}
 	for (const Member &m : members) {
 		MeshInstance3D *mi = ObjectDB::get_instance<MeshInstance3D>(m.id);
 		if (mi) {
-			rs->fellow_instance_set_hlod(mi->get_instance(), (per_cascade || m.instanced) ? RenderingServer::FELLOW_HLOD_MEMBER : RenderingServer::FELLOW_HLOD_NONE, distance);
+			rs->fellow_instance_set_hlod(mi->get_instance(), (per_cascade || m.instanced) ? RenderingServer::FELLOW_HLOD_MEMBER : RenderingServer::FELLOW_HLOD_NONE, distance, 0.0f);
 		}
 	}
 }
@@ -745,10 +905,45 @@ FellowHLOD3D::ShadowMode FellowHLOD3D::get_shadow_mode() const {
 	return shadow_mode;
 }
 
+void FellowHLOD3D::set_impostor_distance(real_t p_distance) {
+	impostor_distance = MAX((real_t)0.0, p_distance);
+	if (built) {
+		_apply_roles();
+	}
+}
+
+real_t FellowHLOD3D::get_impostor_distance() const {
+	return impostor_distance;
+}
+
+void FellowHLOD3D::set_impostor_frames(int p_frames) {
+	impostor_frames = CLAMP(p_frames, 2, 32);
+}
+
+int FellowHLOD3D::get_impostor_frames() const {
+	return impostor_frames;
+}
+
+void FellowHLOD3D::set_impostor_resolution(int p_resolution) {
+	impostor_resolution = CLAMP(p_resolution, 16, 1024);
+}
+
+int FellowHLOD3D::get_impostor_resolution() const {
+	return impostor_resolution;
+}
+
+void FellowHLOD3D::set_impostor_min_triangles(int p_count) {
+	impostor_min_triangles = MAX(0, p_count);
+}
+
+int FellowHLOD3D::get_impostor_min_triangles() const {
+	return impostor_min_triangles;
+}
+
 FellowHLOD3D::~FellowHLOD3D() {
 	members.clear(); // the proxies are children: freed with the node
 	merged_proxies.clear();
-	instanced_proxies.clear();
+	instanced.clear();
 }
 
 void FellowHLOD3D::_bind_methods() {
@@ -764,6 +959,15 @@ void FellowHLOD3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_instancing"), &FellowHLOD3D::get_instancing);
 	ClassDB::bind_method(D_METHOD("set_instance_threshold", "count"), &FellowHLOD3D::set_instance_threshold);
 	ClassDB::bind_method(D_METHOD("get_instance_threshold"), &FellowHLOD3D::get_instance_threshold);
+	ClassDB::bind_method(D_METHOD("set_impostor_distance", "distance"), &FellowHLOD3D::set_impostor_distance);
+	ClassDB::bind_method(D_METHOD("get_impostor_distance"), &FellowHLOD3D::get_impostor_distance);
+	ClassDB::bind_method(D_METHOD("set_impostor_frames", "frames"), &FellowHLOD3D::set_impostor_frames);
+	ClassDB::bind_method(D_METHOD("get_impostor_frames"), &FellowHLOD3D::get_impostor_frames);
+	ClassDB::bind_method(D_METHOD("set_impostor_resolution", "resolution"), &FellowHLOD3D::set_impostor_resolution);
+	ClassDB::bind_method(D_METHOD("get_impostor_resolution"), &FellowHLOD3D::get_impostor_resolution);
+	ClassDB::bind_method(D_METHOD("set_impostor_min_triangles", "count"), &FellowHLOD3D::set_impostor_min_triangles);
+	ClassDB::bind_method(D_METHOD("get_impostor_min_triangles"), &FellowHLOD3D::get_impostor_min_triangles);
+	ClassDB::bind_method(D_METHOD("is_baking"), &FellowHLOD3D::is_baking);
 	ClassDB::bind_method(D_METHOD("set_generate_lods", "enable"), &FellowHLOD3D::set_generate_lods);
 	ClassDB::bind_method(D_METHOD("get_generate_lods"), &FellowHLOD3D::get_generate_lods);
 	ClassDB::bind_method(D_METHOD("set_build_on_ready", "enable"), &FellowHLOD3D::set_build_on_ready);
@@ -779,6 +983,12 @@ void FellowHLOD3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "margin", PROPERTY_HINT_RANGE, "0,100,0.1,or_greater,suffix:m"), "set_margin", "get_margin");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "instancing"), "set_instancing", "get_instancing");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "instance_threshold", PROPERTY_HINT_RANGE, "1,100000,1,or_greater"), "set_instance_threshold", "get_instance_threshold");
+	ADD_GROUP("Impostors", "impostor_");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "impostor_distance", PROPERTY_HINT_RANGE, "0,10000,0.1,or_greater,suffix:m"), "set_impostor_distance", "get_impostor_distance");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "impostor_frames", PROPERTY_HINT_RANGE, "2,32,1"), "set_impostor_frames", "get_impostor_frames");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "impostor_resolution", PROPERTY_HINT_RANGE, "16,1024,1,suffix:px"), "set_impostor_resolution", "get_impostor_resolution");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "impostor_min_triangles", PROPERTY_HINT_RANGE, "0,100000,1,or_greater"), "set_impostor_min_triangles", "get_impostor_min_triangles");
+	ADD_GROUP("", "");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "cell_size", PROPERTY_HINT_RANGE, "1,1000,0.1,or_greater,suffix:m"), "set_cell_size", "get_cell_size");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "min_meshes", PROPERTY_HINT_RANGE, "1,1000,1,or_greater"), "set_min_meshes", "get_min_meshes");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "generate_lods"), "set_generate_lods", "get_generate_lods");

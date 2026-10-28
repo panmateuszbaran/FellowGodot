@@ -433,6 +433,10 @@ public:
 		bool ignore_all_culling;
 		uint8_t fellow_hlod_role = 0; // decision 0122: RenderingServer::FELLOW_HLOD_*
 		float fellow_hlod_distance = 0.0f;
+		float fellow_hlod_end = 0.0f; // a proxy: the distance it stands in up to (0: no bound)
+		float fellow_range_begin = 0.0f; // a MultiMesh: the camera's per-instance range (fellow_instance_set_instance_range)
+		float fellow_range_end = 0.0f;
+		bool fellow_vertices_bounded = false;
 
 		Vector<RID> materials;
 
@@ -1128,7 +1132,8 @@ public:
 	virtual void instance_set_visibility_parent(RID p_instance, RID p_parent_instance);
 
 	virtual void instance_set_ignore_culling(RID p_instance, bool p_enabled);
-	virtual void fellow_instance_set_hlod(RID p_instance, int p_role, float p_distance);
+	virtual void fellow_instance_set_hlod(RID p_instance, int p_role, float p_distance, float p_end_distance);
+	virtual void fellow_instance_set_instance_range(RID p_instance, float p_begin, float p_end, bool p_vertices_bounded);
 
 	bool _update_instance_visibility_depth(Instance *p_instance);
 	void _update_instance_visibility_dependencies(Instance *p_instance) const;

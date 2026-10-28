@@ -94,8 +94,14 @@ void RenderGeometryInstanceBase::set_fellow_extra_margin(float p_margin) {
 	fellow_extra_margin = p_margin;
 }
 
-void RenderGeometryInstanceBase::set_fellow_instance_range_begin(float p_begin) {
+void RenderGeometryInstanceBase::set_fellow_instance_range(float p_begin, float p_end, bool p_vertices_bounded) {
 	fellow_instance_range_begin = MAX(0.0f, p_begin);
+	fellow_instance_range_end = MAX(0.0f, p_end);
+	fellow_vertices_bounded = p_vertices_bounded;
+}
+
+void RenderGeometryInstanceBase::set_fellow_hlod_proxy(bool p_proxy) {
+	fellow_hlod_proxy = p_proxy;
 }
 
 void RenderGeometryInstanceBase::set_layer_mask(uint32_t p_layer_mask) {

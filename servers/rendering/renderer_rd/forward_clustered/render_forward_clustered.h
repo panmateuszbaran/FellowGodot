@@ -972,7 +972,7 @@ private:
 			float lod_edges[8];
 			float contribution[4]; // contribution culling (decision 0121): the pass's view direction as a plane
 			float instance_range[4]; // HLOD proxies (decision 0122): camera position, squared distance drawn from (0: none)
-			float contribution_mode[4]; // x: 0 small instances culled, 1 thinned (decision 0121)
+			float contribution_mode[4]; // x: 0 small instances culled, 1 thinned (decision 0121); y: instance range end^2 (0122)
 		};
 		static_assert(sizeof(Job) == 240);
 		static constexpr uint32_t BUCKETS = 8;

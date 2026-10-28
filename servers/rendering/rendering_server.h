@@ -752,16 +752,22 @@ public:
 	virtual void instance_set_visibility_parent(RID p_instance, RID p_parent_instance) = 0;
 
 	virtual void instance_set_ignore_culling(RID p_instance, bool p_enabled) = 0;
-	// FellowEngine automatic HLOD (decision 0122, FellowHLOD3D): the instance is a proxy (visible beyond p_distance) or
-	// follows one (its visibility parent). In directional shadow cascades the visibility dependency is then decided per
-	// cascade instead of from the camera: cascades starting beyond p_distance draw the proxies, the others the members
-	// (camera-independent, so the shadow cache can keep both); positional shadows draw the members. Not bound.
+	// FellowEngine automatic HLOD (decision 0122, FellowHLOD3D): the instance is a proxy (standing in beyond p_distance,
+	// up to p_end_distance if positive) or a member (drawn up to p_distance). In directional shadow cascades the
+	// visibility dependency is then decided per cascade instead of from the camera: a proxy is drawn by the cascades
+	// starting within its distances, a member by the cascades starting before its distance (camera-independent, so the
+	// shadow cache can keep both); positional shadows draw no proxy. Not bound.
 	enum {
 		FELLOW_HLOD_NONE = 0,
 		FELLOW_HLOD_PROXY = 1,
 		FELLOW_HLOD_MEMBER = 2,
 	};
-	virtual void fellow_instance_set_hlod(RID p_instance, int p_role, float p_distance) {}
+	virtual void fellow_instance_set_hlod(RID p_instance, int p_role, float p_distance, float p_end_distance) {}
+	// FellowEngine (decision 0122): a MultiMesh whose instances the camera draws only from p_begin to p_end (each by the
+	// distance to its box's center; 0: no bound), culled one by one on the GPU (MultiMesh culling must be on).
+	// p_vertices_bounded: its material moves vertices but never out of the mesh's box (an impostor's billboard), so it
+	// can be culled. Not bound.
+	virtual void fellow_instance_set_instance_range(RID p_instance, float p_begin, float p_end, bool p_vertices_bounded) {}
 
 	// Don't use these in a game!
 	virtual Vector<ObjectID> instances_cull_aabb(const AABB &p_aabb, RID p_scenario = RID()) const = 0;

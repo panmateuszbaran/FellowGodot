@@ -31,9 +31,12 @@
 #pragma once
 
 #include "scene/3d/node_3d.h"
+#include "scene/resources/mesh.h"
 
+class FellowImpostorBaker;
 class GeometryInstance3D;
 class MeshInstance3D;
+class MultiMeshInstance3D;
 
 // FellowEngine automatic HLOD (docs/decisions/0122-hlod.md): beyond a distance, the static meshes under this node are
 // replaced by proxies, through Godot's visibility ranges and visibility parents:
@@ -58,6 +61,10 @@ private:
 	int min_meshes = 4;
 	int instance_threshold = 32;
 	bool instancing = true;
+	real_t impostor_distance = 0.0;
+	int impostor_frames = 8;
+	int impostor_resolution = 128;
+	int impostor_min_triangles = 256;
 	bool lods = true;
 	bool build_on_ready = true;
 	ShadowMode shadow_mode = SHADOW_MODE_PER_CASCADE;
@@ -71,7 +78,16 @@ private:
 	};
 	LocalVector<Member> members;
 	LocalVector<GeometryInstance3D *> merged_proxies;
-	LocalVector<GeometryInstance3D *> instanced_proxies;
+	// An instanced proxy (a MultiMesh of the node's repeated meshes), or a MultiMeshInstance3D below the node standing
+	// in for itself up to its impostors; with impostors beyond impostor_distance once baked.
+	struct Instanced {
+		MultiMeshInstance3D *proxy = nullptr;
+		ObjectID original; // a MultiMeshInstance3D below the node (impostors only)
+		MultiMeshInstance3D *impostor = nullptr;
+	};
+	LocalVector<Instanced> instanced;
+	FellowImpostorBaker *baker = nullptr;
+	uint32_t generation = 0; // builds: a bake finishing after a later build or clear is dropped
 	Dictionary build_info;
 	bool built = false;
 	bool build_queued = false;
@@ -79,6 +95,7 @@ private:
 	void _queue_build();
 	void _deferred_build();
 	void _apply_roles();
+	void _impostor_baked(const Ref<ArrayMesh> &p_quad, uint32_t p_generation, uint32_t p_index);
 
 protected:
 	void _notification(int p_what);
@@ -97,6 +114,15 @@ public:
 	bool get_instancing() const;
 	void set_instance_threshold(int p_count);
 	int get_instance_threshold() const;
+	void set_impostor_distance(real_t p_distance);
+	real_t get_impostor_distance() const;
+	void set_impostor_frames(int p_frames);
+	int get_impostor_frames() const;
+	void set_impostor_resolution(int p_resolution);
+	int get_impostor_resolution() const;
+	void set_impostor_min_triangles(int p_count);
+	int get_impostor_min_triangles() const;
+	bool is_baking() const;
 	void set_generate_lods(bool p_enable);
 	bool get_generate_lods() const;
 	void set_build_on_ready(bool p_enable);

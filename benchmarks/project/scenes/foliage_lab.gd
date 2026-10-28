@@ -29,6 +29,8 @@ var sun: DirectionalLight3D
 var layout := "chunks"
 var wind := false
 var _counts := {}
+var _mm_parent: Node3D = null # where the vegetation goes: a FellowHLOD3D with --foliage_impostors=<distance>
+var hlod: Node3D = null
 
 # Wind sway: VERTEX moves by up to strength * 1.25^2 * sqrt(1 + 0.6^2) = 1.82 * strength (mesh space) above y0;
 # the node's extra cull margin bounds it in the node's space (instance scales up to 1.25 / 1.3 / 1.4).
@@ -69,12 +71,35 @@ func build(p_args: Dictionary) -> void:
 	_setup_common()
 	_setup_environment()
 	_build_terrain()
+	# --foliage_impostors=<distance> (FellowEngine, decision 0122): the vegetation under a FellowHLOD3D whose impostors
+	# (baked at start) draw the far trees (meshes of at least --foliage_impostor_tris triangles, default 256: the trees);
+	# --foliage_impostor_frames=<n> (8), --foliage_impostor_res=<px> (128).
+	_mm_parent = self
+	var imp_distance := float(args.get("foliage_impostors", "0"))
+	if imp_distance > 0.0 and ClassDB.class_exists("FellowHLOD3D"):
+		hlod = ClassDB.instantiate("FellowHLOD3D")
+		hlod.name = "hlod"
+		hlod.set("build_on_ready", false)
+		hlod.set("impostor_distance", imp_distance)
+		hlod.set("impostor_frames", int(args.get("foliage_impostor_frames", "8")))
+		hlod.set("impostor_resolution", int(args.get("foliage_impostor_res", "128")))
+		hlod.set("impostor_min_triangles", int(args.get("foliage_impostor_tris", "256")))
+		add_child(hlod)
+		_mm_parent = hlod
 	_build_vegetation()
+	_mm_parent = self
 	_build_lights()
 	_define_cameras()
+	if hlod:
+		hlod.call("build")
+		while hlod.call("is_baking"):
+			await get_tree().process_frame
 	set_time(0.0)
 	info = {"stats": scene_stats(self), "layout": layout, "counts": _counts, "lods": str(args.get("foliage_lods", "0")) == "1",
 		"wind": wind, "notes": "Open-world vegetation with MultiMesh instancing (%s layout); sun with 4 cascades." % layout}
+	if hlod:
+		info["hlod"] = hlod.call("get_build_info")
+		print("foliage hlod: ", info["hlod"])
 
 
 func _setup_environment() -> void:
@@ -397,7 +422,7 @@ func _add_multimesh(p_name: String, p_mesh: Mesh, p_items: Array, p_colors: bool
 		mmi.visibility_range_end = p_range
 		mmi.visibility_range_end_margin = 10.0
 		mmi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_DISABLED
-	add_child(mmi)
+	_mm_parent.add_child(mmi)
 
 
 func _build_lights() -> void:

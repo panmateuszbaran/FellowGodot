@@ -90,6 +90,22 @@ The draws hardly change (201 → 199): City Lab draws its many objects instanced
 work (culling, pairing, its element and instance data) and its triangles, not a draw. The saving grows with the share
 of the view that is far clutter and with the threshold; it is the project's choice how many pixels it can lose.
 
+## RTX 5070 Ti Laptop (`m23_f267_city`, fellow200, 1080p, 4 px, casters 2 texels, autotune off, 3 runs)
+
+City Lab flythrough: frame 2.053 → 2.020 ms (−1.6 %), render thread 1.592 → 1.569 ms, GPU 1.711 → 1.695 ms; 963
+objects and 11 % of the primitives fewer per frame. Per camera the render thread is within its run-to-run spread
+(aerial −1.4 %, street +3.6 %, roofs +5.4 %: the test costs about what the few culled objects saved there), the GPU
+2-4 % less. City Lab's objects are mostly large; the option is for scenes with far clutter.
+
+Foliage Lab (`m23_f267_foliage`, the same settings, thinning): one MultiMesh per type, flythrough 4.776 → 4.749 ms
+(−0.6 %); per camera aerial 6.456 → 5.778 ms (**−10.5 %**, GPU-bound: far grass thinned), forest 1.819 → 1.897 ms
+(+4.3 %) and meadow 4.008 → 4.126 ms (+2.9 %) — where nothing is small, the per-instance test and the MultiMeshes that
+are wholly in view becoming culling jobs cost a little. Chunks: 2.953 → 3.005 ms (+1.8 %), aerial −3.0 %.
+
+Captures at 1080p on the RTX (`m23_f267_*_capture`): City Lab aerial 59.55 dB (442 pixels differ), roofs 72.37,
+street 70.96; Foliage Lab aerial 40.28 dB (3.9 % of the pixels by more than 2 levels: the thinned far meadow), forest
+and meadow identical.
+
 ## Decision
 
 **KEEP as an option** (off): it changes the image, by design and by the project's threshold. The test is cheap (a dot

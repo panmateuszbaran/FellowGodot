@@ -221,17 +221,22 @@ void main() {
 				break;
 			}
 		}
-		if (visible && job.instance_range.w > 0.0) {
+		if (visible && (job.instance_range.w > 0.0 || job.contribution_mode.y > 0.0)) {
 			// An HLOD proxy's instance (decision 0122) is drawn from the distance on, by its box's center, as the scene
 			// cull judges the node it replaces (closer, that node is drawn).
 			const vec3 to_camera = center - job.instance_range.xyz;
-			if (dot(to_camera, to_camera) < job.instance_range.w) {
+			const float d2 = dot(to_camera, to_camera);
+			if (d2 < job.instance_range.w || (job.contribution_mode.y > 0.0 && d2 >= job.contribution_mode.y)) {
 				visible = false;
 			}
 		}
-		if (visible && contribution_scale(job, center, half_extents, instance) == 0.0) {
-			visible = false;
-			atomicAdd(s_small, 1);
+		float grow = 1.0;
+		if (visible) {
+			grow = contribution_scale(job, center, half_extents, instance);
+			if (grow == 0.0) {
+				visible = false;
+				atomicAdd(s_small, 1);
+			}
 		}
 		if (visible) {
 			uint bucket = 0;
@@ -252,7 +257,9 @@ void main() {
 			}
 			atomicAdd(s_counts[bucket], 1);
 			const uint shift = (lid & 3) * 8;
-			atomicAnd(s_bytes[lid >> 2], ~(0xFFu << shift) | (bucket << shift));
+			// Bit 0x80: a thinned survivor, grown in the compaction (which computes its growth again).
+			const uint code = bucket | (grow != 1.0 ? 0x80u : 0u);
+			atomicAnd(s_bytes[lid >> 2], ~(0xFFu << shift) | (code << shift));
 		}
 	}
 	barrier();
@@ -341,13 +348,15 @@ void main() {
 			s_bytes[lid] = block_data.data[b * BLOCK_UINTS + lid];
 		}
 		barrier();
-		const uint bucket = (s_bytes[lid >> 2] >> ((lid & 3) * 8)) & 0xFFu;
-		if (bucket == 0xFFu) {
+		const uint code = (s_bytes[lid >> 2] >> ((lid & 3) * 8)) & 0xFFu;
+		if (code == 0xFFu) {
 			return;
 		}
+		const uint bucket = code & 0x7Fu;
 		uint rank = 0;
 		for (uint k = 0; k < lid; k++) {
-			if (((s_bytes[k >> 2] >> ((k & 3) * 8)) & 0xFFu) == bucket) {
+			const uint other = (s_bytes[k >> 2] >> ((k & 3) * 8)) & 0xFFu;
+			if (other != 0xFFu && (other & 0x7Fu) == bucket) {
 				rank++;
 			}
 		}
@@ -358,7 +367,7 @@ void main() {
 		const uint dst = ((job.out_offset + position) * job.stride) / 4;
 		// A thinned survivor (decision 0121) is grown about its origin: the basis (xyz of the three rows) scaled.
 		float grow = 1.0;
-		if (job.contribution_mode.x > 0.5 && (job.lod_params.z > 0.0 || job.lod_params.w > 0.0)) {
+		if ((code & 0x80u) != 0u) {
 			vec3 center, half_extents;
 			mat3 wb;
 			instance_box(job, pool.data[src + 0], pool.data[src + 1], pool.data[src + 2], center, half_extents, wb);

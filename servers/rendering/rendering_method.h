@@ -102,7 +102,8 @@ public:
 	virtual void instance_set_visibility_parent(RID p_instance, RID p_parent_instance) = 0;
 
 	virtual void instance_set_ignore_culling(RID p_instance, bool p_enabled) = 0;
-	virtual void fellow_instance_set_hlod(RID p_instance, int p_role, float p_distance) {} // decision 0122
+	virtual void fellow_instance_set_hlod(RID p_instance, int p_role, float p_distance, float p_end_distance) {} // decision 0122
+	virtual void fellow_instance_set_instance_range(RID p_instance, float p_begin, float p_end, bool p_vertices_bounded) {} // decision 0122
 
 	// don't use these in a game!
 	virtual Vector<ObjectID> instances_cull_aabb(const AABB &p_aabb, RID p_scenario = RID()) const = 0;
