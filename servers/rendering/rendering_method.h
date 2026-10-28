@@ -102,6 +102,7 @@ public:
 	virtual void instance_set_visibility_parent(RID p_instance, RID p_parent_instance) = 0;
 
 	virtual void instance_set_ignore_culling(RID p_instance, bool p_enabled) = 0;
+	virtual void fellow_instance_set_hlod(RID p_instance, int p_role, float p_distance) {} // decision 0122
 
 	// don't use these in a game!
 	virtual Vector<ObjectID> instances_cull_aabb(const AABB &p_aabb, RID p_scenario = RID()) const = 0;
@@ -351,6 +352,10 @@ public:
 	virtual void render_empty_scene(const Ref<RenderSceneBuffers> &p_render_buffers, RID p_scenario, RID p_shadow_atlas, float p_window_output_max_value) = 0;
 
 	virtual void render_camera(const Ref<RenderSceneBuffers> &p_render_buffers, RID p_camera, RID p_scenario, RID p_viewport, Size2 p_viewport_size, uint32_t p_jitter_phase_count, float p_mesh_lod_threshold, RID p_shadow_atlas, Ref<XRInterface> &p_xr_interface, float p_window_output_max_value, RenderingServerTypes::RenderInfo *r_render_info = nullptr) = 0;
+	// FellowEngine contribution culling (decision 0121): for the next render_camera() calls, a mesh or MultiMesh node
+	// whose bounding sphere would cover less than this fraction of the viewport's width is not drawn (0: off). The
+	// viewport sets it around each camera it renders (its pixel threshold over its width, as mesh_lod_threshold).
+	virtual void fellow_set_contribution_fraction(float p_fraction) {}
 
 	virtual void update() = 0;
 	virtual void render_probes() = 0;

@@ -37,6 +37,7 @@
 #include "core/os/os.h"
 #include "core/profiling/profiling.h"
 #include "servers/display/display_server.h"
+#include "servers/rendering/fellow_settings.h"
 #include "servers/rendering/renderer_canvas_cull.h"
 #include "servers/rendering/renderer_compositor.h"
 #include "servers/rendering/renderer_scene_occlusion_cull.h"
@@ -329,7 +330,15 @@ void RendererViewport::_draw_3d(Viewport *p_viewport) {
 	}
 
 	float screen_mesh_lod_threshold = p_viewport->mesh_lod_threshold / float(p_viewport->size.width);
+	// FellowEngine contribution culling (decision 0121): its pixel threshold over the viewport's width.
+	const float fellow_contribution_pixels = Fellow::contribution_cull_pixels();
+	if (fellow_contribution_pixels > 0.0f) {
+		RSG::scene->fellow_set_contribution_fraction(fellow_contribution_pixels / float(MAX(1, p_viewport->size.width)));
+	}
 	RSG::scene->render_camera(p_viewport->render_buffers, p_viewport->camera, p_viewport->scenario, p_viewport->self, p_viewport->internal_size, p_viewport->jitter_phase_count, screen_mesh_lod_threshold, p_viewport->shadow_atlas, xr_interface, p_viewport->window_output_max_value, &p_viewport->render_info);
+	if (fellow_contribution_pixels > 0.0f) {
+		RSG::scene->fellow_set_contribution_fraction(0.0f);
+	}
 
 	RENDER_TIMESTAMP("< Render 3D Scene");
 #endif // _3D_DISABLED

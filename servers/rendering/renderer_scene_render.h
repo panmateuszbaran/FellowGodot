@@ -300,11 +300,17 @@ public:
 		float remap_bias = 0.0;
 		uint64_t build_frame = 0; // identifies the rebuild in fellow_directional_shadow_cache_get_static_cost()
 		PagedArray<RenderGeometryInstance *> cache_instances;
+		// A directional cascade's caster culling planes (the light culler's: a caster wholly outside one casts no
+		// shadow the camera sees), for the renderers that cull instances one by one (HLOD proxies, decision 0122).
+		static constexpr int MAX_CASTER_PLANES = 17;
+		Plane caster_planes[MAX_CASTER_PLANES];
+		int caster_plane_count = 0;
 
 		void reset() {
 			cache_id = -1;
 			rebuild = false;
 			cache_instances.clear();
+			caster_plane_count = 0;
 		}
 	};
 

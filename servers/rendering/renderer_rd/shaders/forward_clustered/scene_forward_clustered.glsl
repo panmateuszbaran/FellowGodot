@@ -343,7 +343,11 @@ void vertex_shader(vec3 vertex_input,
 		model_matrix = read_model_matrix;
 #endif // !defined(USE_DOUBLE_PRECISION) || defined(SKIP_TRANSFORM_USED) || defined(VERTEX_WORLD_COORDS_USED)
 #endif // !defined(USE_DOUBLE_PRECISION) || defined(SKIP_TRANSFORM_USED) || defined(VERTEX_WORLD_COORDS_USED) || defined(MODEL_MATRIX_USED)
-		model_normal_matrix = model_normal_matrix * mat3(matrix);
+		if (bool(fellow_flags & INSTANCE_FLAGS_FELLOW_INSTANCE_NORMALS)) {
+			model_normal_matrix = model_normal_matrix * transpose(inverse(mat3(matrix)));
+		} else {
+			model_normal_matrix = model_normal_matrix * mat3(matrix);
+		}
 	}
 
 	vec3 vertex = vertex_input;

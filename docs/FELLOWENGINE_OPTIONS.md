@@ -134,12 +134,37 @@ Methods `ignite(position, radius, temperature)`, `reset_burning()`, `get_wood_fr
 `get_ash_fraction()`, `is_burning()`, `is_collapsed()`; signals `ignited`, `burned_out`, `collapsed`. Limits: at most 8
 objects per gas volume; skinned meshes are simulated, not drawn burning.
 
+## Far objects: automatic HLOD (milestone 23)
+
+A `FellowHLOD3D` node (module `fellow_world`) replaces the static meshes below it beyond `distance` by proxies, built
+when the node is ready (or by `build()`):
+
+* **instanced proxies**: a mesh repeated at least `instance_threshold` (32) times with the same material override and
+  instance settings becomes one MultiMesh per kind, culled instance by instance on the GPU and drawn only from
+  `distance` on (each mesh node up to it). The same mesh, material and transform either way: City Lab gives the same
+  image bit for bit (lavapipe) with the render thread 23-42 % shorter. Needs `geometry/multimesh_culling` (on by
+  default) and materials the GPU can cull (`BaseMaterial3D` without billboard, grow, point or fixed size);
+* **merged proxies** for the rest: per cell (`cell_size`, 50 m) and material, one mesh with generated LODs
+  (`generate_lods`), switching per cell with `margin` as hysteresis. They pay for unique meshes; repeated ones are
+  better instanced (merging undoes Godot's instancing: City Lab's 18 800 meshes as 2 300 merged surfaces drew 1 500
+  draws instead of 200).
+
+Directional cascades starting beyond `distance` draw the proxies, the nearer ones the meshes, independently of the
+camera's position (`shadow_mode`), so the directional shadow cache keeps both. Meshes with skins, blend shapes,
+overlays, transparency, their own visibility range or parent, or lights and particles below them are left as they
+are; put a mesh in the group `fellow_hlod_exclude` to keep it out; lightmapped meshes lose their lightmap in a proxy.
+The meshes must not move while built. `get_build_info()` reports what was merged. Decision record 0122; bench
+City Lab `--city_hlod=<distance>`.
+
 ## Options that change the image (off by default)
 
 | setting | what it does | image cost | record |
 |---|---|---|---|
 | `geometry/multimesh_instance_lod` (with `geometry/multimesh_culling`) | each MultiMesh instance gets the mesh LOD level stock gives a node of its own (distance to its box, the project's `mesh_lod_threshold`), instead of the level of the MultiMesh's whole box | not visually lossless where many far instances coarsen together: Foliage Lab from above 33-40 dB (far grass clumps lose blades); at ground level 48.2-64.6 dB; −2.2 % with the bench's light LOD meshes | 0035 |
 | `geometry/multimesh_cull_vertex_motion` (with `geometry/multimesh_culling`) | MultiMeshes whose material moves vertices (wind) are culled too when their node has an extra cull margin: the margin is taken as how far the vertices move | none while the material keeps within the node's margin (Foliage Lab with wind: 0 differing pixels); beyond it, instances near the view's edges can be lost | 0036 |
+| `geometry/contribution_cull_pixels` (0 = off) | contribution culling: the camera does not draw a mesh or MultiMesh node whose bounding sphere would cover fewer than this many pixels of the viewport's width (as `mesh_lod_threshold`), nor, with `geometry/multimesh_culling`, such a MultiMesh instance; nodes with `ignore_occlusion_culling` are always drawn | tiny far objects disappear: City Lab at 2 px of 960 (about 4 px at 1080p) 62.9-78.4 dB, 292 pixels over three captures; 5-14 % of the city's nodes not drawn, 10-13 % fewer primitives | 0121 |
+| `geometry/contribution_cull_instances` (Thin) | MultiMesh instances below the threshold: thinned (a share kept and grown to the threshold's size, so a far meadow keeps its coverage) or culled | Foliage Lab aerial at 2 px of 960: thinned 41.1 dB with the meadow's mean colour unchanged; culled 36.8 dB, the meadow 3.7 levels lighter | 0121 |
+| `shadows/contribution_cull_texels` (0 = off) | a caster whose box's diagonal spans fewer than this many texels of a directional cascade is not drawn into it (per node; per instance for culled MultiMeshes) | the shadows of tiny far casters disappear: City Lab at 2 texels 0 differing pixels (its smallest casters span 6 texels of the far cascade) | 0121 |
 | `geometry/cluster_lod` (with `geometry/mesh_clusters`) | each cluster of a large static surface is drawn at the mesh LOD stock would give it as an instance of its own (the main camera's distance to the cluster), with its neighbours' finer levels where they meet (no cracks) | the image as LOD changes it: Sponza 63.6 dB on a moving sequence, stills 52.9-56.8 dB at distant silhouettes; Sponza GPU −3.1 %, render thread +0.21 ms | 0063 |
 
 ## Exact options (on by default unless noted)

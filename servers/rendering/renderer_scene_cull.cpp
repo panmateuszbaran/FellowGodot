@@ -736,6 +736,7 @@ void RendererSceneCull::instance_set_base(RID p_instance, RID p_base) {
 				geom->geometry_instance->set_pivot_data(instance->sorting_offset, instance->use_aabb_center);
 				geom->geometry_instance->set_lod_bias(instance->lod_bias);
 				geom->geometry_instance->set_fellow_extra_margin(instance->extra_margin);
+				geom->geometry_instance->set_fellow_instance_range_begin(instance->fellow_hlod_role == RenderingServer::FELLOW_HLOD_PROXY && instance->base_type == RSE::INSTANCE_MULTIMESH ? instance->fellow_hlod_distance : 0.0f);
 				geom->geometry_instance->set_transparency(instance->transparency);
 				geom->geometry_instance->set_use_baked_light(instance->baked_light);
 				geom->geometry_instance->set_use_dynamic_gi(instance->dynamic_gi);
@@ -1162,6 +1163,31 @@ void RendererSceneCull::instance_set_extra_visibility_margin(RID p_instance, rea
 			geom->geometry_instance->set_fellow_extra_margin(p_margin);
 		}
 	}
+}
+
+void RendererSceneCull::fellow_instance_set_hlod(RID p_instance, int p_role, float p_distance) {
+	Instance *instance = instance_owner.get_or_null(p_instance);
+	ERR_FAIL_NULL(instance);
+	instance->fellow_hlod_role = (uint8_t)CLAMP(p_role, 0, 2);
+	instance->fellow_hlod_distance = p_distance;
+	if (instance->scenario && instance->array_index >= 0) {
+		InstanceData &idata = instance->scenario->instance_data[instance->array_index];
+		idata.flags &= ~(InstanceData::FLAG_FELLOW_HLOD_PROXY | InstanceData::FLAG_FELLOW_HLOD_MEMBER);
+		if (instance->fellow_hlod_role == RenderingServer::FELLOW_HLOD_PROXY) {
+			idata.flags |= InstanceData::FLAG_FELLOW_HLOD_PROXY;
+		} else if (instance->fellow_hlod_role == RenderingServer::FELLOW_HLOD_MEMBER) {
+			idata.flags |= InstanceData::FLAG_FELLOW_HLOD_MEMBER;
+		}
+	}
+	// A MultiMesh proxy: its instances drawn by the camera from the distance on, each by its own distance.
+	if (instance->base_type == RSE::INSTANCE_MULTIMESH && instance->base_data) {
+		InstanceGeometryData *geom = static_cast<InstanceGeometryData *>(instance->base_data);
+		if (geom->geometry_instance) {
+			geom->geometry_instance->set_fellow_instance_range_begin(instance->fellow_hlod_role == RenderingServer::FELLOW_HLOD_PROXY ? p_distance : 0.0f);
+		}
+	}
+	// The directional shadow cache's view of the instance changed (decision 0004).
+	_fellow_shadow_instance_changed(instance);
 }
 
 void RendererSceneCull::instance_set_ignore_culling(RID p_instance, bool p_enabled) {
@@ -1857,6 +1883,11 @@ void RendererSceneCull::_update_instance(Instance *p_instance) const {
 		}
 		if (p_instance->ignore_all_culling) {
 			idata.flags |= InstanceData::FLAG_IGNORE_ALL_CULLING;
+		}
+		if (p_instance->fellow_hlod_role == RenderingServer::FELLOW_HLOD_PROXY) {
+			idata.flags |= InstanceData::FLAG_FELLOW_HLOD_PROXY;
+		} else if (p_instance->fellow_hlod_role == RenderingServer::FELLOW_HLOD_MEMBER) {
+			idata.flags |= InstanceData::FLAG_FELLOW_HLOD_MEMBER;
 		}
 
 		p_instance->scenario->instance_data.push_back(idata);
@@ -2905,7 +2936,7 @@ bool RendererSceneCull::_light_instance_update_shadow(Instance *p_instance, cons
 
 					for (int j = 0; j < (int)instance_shadow_cull_result.size(); j++) {
 						Instance *instance = instance_shadow_cull_result[j];
-						if (!instance->visible || !((1 << instance->base_type) & RSE::INSTANCE_GEOMETRY_MASK) || !static_cast<InstanceGeometryData *>(instance->base_data)->can_cast_shadows || !(p_visible_layers & instance->layer_mask & RSG::light_storage->light_get_shadow_caster_mask(p_instance->base))) {
+						if (!instance->visible || instance->fellow_hlod_role == RenderingServer::FELLOW_HLOD_PROXY || !((1 << instance->base_type) & RSE::INSTANCE_GEOMETRY_MASK) || !static_cast<InstanceGeometryData *>(instance->base_data)->can_cast_shadows || !(p_visible_layers & instance->layer_mask & RSG::light_storage->light_get_shadow_caster_mask(p_instance->base))) {
 							continue;
 						} else {
 							if (static_cast<InstanceGeometryData *>(instance->base_data)->material_is_animated) {
@@ -2988,7 +3019,7 @@ bool RendererSceneCull::_light_instance_update_shadow(Instance *p_instance, cons
 
 					for (int j = 0; j < (int)instance_shadow_cull_result.size(); j++) {
 						Instance *instance = instance_shadow_cull_result[j];
-						if (!instance->visible || !((1 << instance->base_type) & RSE::INSTANCE_GEOMETRY_MASK) || !static_cast<InstanceGeometryData *>(instance->base_data)->can_cast_shadows || !(p_visible_layers & instance->layer_mask & RSG::light_storage->light_get_shadow_caster_mask(p_instance->base))) {
+						if (!instance->visible || instance->fellow_hlod_role == RenderingServer::FELLOW_HLOD_PROXY || !((1 << instance->base_type) & RSE::INSTANCE_GEOMETRY_MASK) || !static_cast<InstanceGeometryData *>(instance->base_data)->can_cast_shadows || !(p_visible_layers & instance->layer_mask & RSG::light_storage->light_get_shadow_caster_mask(p_instance->base))) {
 							continue;
 						} else {
 							if (static_cast<InstanceGeometryData *>(instance->base_data)->material_is_animated) {
@@ -3056,7 +3087,7 @@ bool RendererSceneCull::_light_instance_update_shadow(Instance *p_instance, cons
 
 			for (int j = 0; j < (int)instance_shadow_cull_result.size(); j++) {
 				Instance *instance = instance_shadow_cull_result[j];
-				if (!instance->visible || !((1 << instance->base_type) & RSE::INSTANCE_GEOMETRY_MASK) || !static_cast<InstanceGeometryData *>(instance->base_data)->can_cast_shadows || !(p_visible_layers & instance->layer_mask & RSG::light_storage->light_get_shadow_caster_mask(p_instance->base))) {
+				if (!instance->visible || instance->fellow_hlod_role == RenderingServer::FELLOW_HLOD_PROXY || !((1 << instance->base_type) & RSE::INSTANCE_GEOMETRY_MASK) || !static_cast<InstanceGeometryData *>(instance->base_data)->can_cast_shadows || !(p_visible_layers & instance->layer_mask & RSG::light_storage->light_get_shadow_caster_mask(p_instance->base))) {
 					continue;
 				} else {
 					if (static_cast<InstanceGeometryData *>(instance->base_data)->material_is_animated) {
@@ -3122,7 +3153,7 @@ bool RendererSceneCull::_light_instance_update_shadow(Instance *p_instance, cons
 
 			for (int j = 0; j < (int)instance_shadow_cull_result.size(); j++) {
 				Instance *instance = instance_shadow_cull_result[j];
-				if (!instance->visible || !((1 << instance->base_type) & RSE::INSTANCE_GEOMETRY_MASK) || !static_cast<InstanceGeometryData *>(instance->base_data)->can_cast_shadows || !(p_visible_layers & instance->layer_mask & RSG::light_storage->light_get_shadow_caster_mask(p_instance->base))) {
+				if (!instance->visible || instance->fellow_hlod_role == RenderingServer::FELLOW_HLOD_PROXY || !((1 << instance->base_type) & RSE::INSTANCE_GEOMETRY_MASK) || !static_cast<InstanceGeometryData *>(instance->base_data)->can_cast_shadows || !(p_visible_layers & instance->layer_mask & RSG::light_storage->light_get_shadow_caster_mask(p_instance->base))) {
 					continue;
 				} else {
 					if (static_cast<InstanceGeometryData *>(instance->base_data)->material_is_animated) {
@@ -3417,6 +3448,31 @@ void RendererSceneCull::_scene_cull(CullData &cull_data, InstanceCullResult &cul
 	const uint64_t fellow_static_frames = (uint64_t)Fellow::directional_shadow_cache_static_frames();
 	bool is_orthogonal = cull_data.camera_matrix->is_orthogonal();
 
+	// FellowEngine contribution culling (decision 0121): a mesh or MultiMesh node whose bounding sphere (half its box's
+	// diagonal) covers too little of the camera's view is not drawn by it; nodes that ignore occlusion culling are kept.
+	const bool fellow_contribution = cull_data.fellow_contribution_a > 0.0 || cull_data.fellow_contribution_b > 0.0;
+	const Vector3 fellow_cam_origin = cull_data.cam_transform.origin;
+	uint64_t fellow_contribution_count = 0;
+	uint64_t fellow_caster_count = 0;
+	auto fellow_contribution_culled = [&](const InstanceData &p_idata, const InstanceBounds &p_bounds) -> bool {
+		const uint32_t base_type = p_idata.flags & InstanceData::FLAG_BASE_TYPE_MASK;
+		if ((base_type != RSE::INSTANCE_MESH && base_type != RSE::INSTANCE_MULTIMESH) || (p_idata.flags & (InstanceData::FLAG_IGNORE_OCCLUSION_CULLING | InstanceData::FLAG_IGNORE_ALL_CULLING))) {
+			return false;
+		}
+		const real_t *b = p_bounds.bounds;
+		const Vector3 size(b[3] - b[0], b[4] - b[1], b[5] - b[2]);
+		const Vector3 center((b[0] + b[3]) * 0.5, (b[1] + b[4]) * 0.5, (b[2] + b[5]) * 0.5);
+		const real_t z = cull_data.fellow_contribution_forward.dot(center - fellow_cam_origin);
+		if (size.length_squared() * 0.25 < cull_data.fellow_contribution_a * z * z + cull_data.fellow_contribution_b) {
+			fellow_contribution_count++;
+			return true;
+		}
+		return false;
+	};
+	// Directional shadow casters (decision 0121): not drawn into a cascade when their box's diagonal spans fewer than
+	// fellow_caster_texels of its texels.
+	const real_t fellow_caster_texels = cull_data.fellow_caster_texels;
+
 	for (uint64_t i = p_from; i < p_to; i++) {
 		bool mesh_visible = false;
 
@@ -3431,9 +3487,12 @@ void RendererSceneCull::_scene_cull(CullData &cull_data, InstanceCullResult &cul
 #define VIS_PARENT_CHECK (_visibility_parent_check(cull_data, idata))
 #define VIS_CHECK (visibility_check < 0 ? (visibility_check = (visibility_flags != InstanceData::FLAG_VISIBILITY_DEPENDENCY_NEEDS_CHECK || (VIS_RANGE_CHECK && VIS_PARENT_CHECK))) : visibility_check)
 #define OCCLUSION_CULLED (cull_data.occlusion_buffer != nullptr && (cull_data.scenario->instance_data[i].flags & InstanceData::FLAG_IGNORE_OCCLUSION_CULLING) == 0 && cull_data.occlusion_buffer->is_occluded(cull_data.scenario->instance_aabbs[i].bounds, cull_data.cam_transform.origin, inv_cam_transform, *cull_data.camera_matrix, z_near, is_orthogonal, cull_data.scenario->instance_data[i].occlusion_timeout))
+#define FELLOW_CONTRIBUTION_CULLED (fellow_contribution && fellow_contribution_culled(idata, cull_data.scenario->instance_aabbs[i]))
 
-		if (!HIDDEN_BY_VISIBILITY_CHECKS) {
-			if ((LAYER_CHECK && IN_FRUSTUM(cull_data.cull->frustum) && VIS_CHECK && !OCCLUSION_CULLED) || (cull_data.scenario->instance_data[i].flags & InstanceData::FLAG_IGNORE_ALL_CULLING)) {
+		// FellowEngine automatic HLOD (decision 0122): a proxy or member hidden from the camera by its range may still cast
+		// shadows (its cascades are decided below).
+		if (!HIDDEN_BY_VISIBILITY_CHECKS || (idata.flags & (InstanceData::FLAG_FELLOW_HLOD_PROXY | InstanceData::FLAG_FELLOW_HLOD_MEMBER))) {
+			if (!HIDDEN_BY_VISIBILITY_CHECKS && ((LAYER_CHECK && IN_FRUSTUM(cull_data.cull->frustum) && VIS_CHECK && !FELLOW_CONTRIBUTION_CULLED && !OCCLUSION_CULLED) || (cull_data.scenario->instance_data[i].flags & InstanceData::FLAG_IGNORE_ALL_CULLING))) {
 				uint32_t base_type = idata.flags & InstanceData::FLAG_BASE_TYPE_MASK;
 				if (base_type == RSE::INSTANCE_LIGHT) {
 					cull_result.lights.push_back(idata.instance);
@@ -3743,9 +3802,33 @@ void RendererSceneCull::_scene_cull(CullData &cull_data, InstanceCullResult &cul
 				}
 			}
 
+			// FellowEngine automatic HLOD (decision 0122): proxies and their members are drawn per cascade (a cascade
+			// starting beyond the distance draws the proxies, the others the members), not by the camera's visibility
+			// dependencies: what a cascade draws does not depend on where the camera is, so the shadow cache keeps it.
+			const uint32_t fellow_hlod = idata.flags & (InstanceData::FLAG_FELLOW_HLOD_PROXY | InstanceData::FLAG_FELLOW_HLOD_MEMBER);
+#define SHADOW_VIS_CHECK (fellow_hlod != 0 || VIS_CHECK)
+			real_t fellow_caster_diagonal2 = -1.0; // squared, < 0: not a candidate
+			if (fellow_caster_texels > 0.0 && cull_data.cull->shadow_count > 0 && !(idata.flags & (InstanceData::FLAG_IGNORE_OCCLUSION_CULLING | InstanceData::FLAG_IGNORE_ALL_CULLING))) {
+				const real_t *b = cull_data.scenario->instance_aabbs[i].bounds;
+				fellow_caster_diagonal2 = Vector3(b[3] - b[0], b[4] - b[1], b[5] - b[2]).length_squared();
+			}
 			for (uint32_t j = 0; j < cull_data.cull->shadow_count; j++) {
 				for (uint32_t k = 0; k < cull_data.cull->shadows[j].cascade_count; k++) {
 					Cull::Shadow::Cascade &cascade = cull_data.cull->shadows[j].cascades[k];
+					if (fellow_caster_diagonal2 >= 0.0) {
+						const real_t min_diagonal = fellow_caster_texels * cascade.shadow_texel_size;
+						if (fellow_caster_diagonal2 < min_diagonal * min_diagonal) {
+							fellow_caster_count++;
+							continue; // decision 0121: too small for this cascade's texels
+						}
+					}
+					if (fellow_hlod) {
+						const real_t begin = k == 0 ? (real_t)0.0 : cull_data.cull->shadows[j].cascades[k - 1].split;
+						const bool far_cascade = begin >= (real_t)idata.instance->fellow_hlod_distance;
+						if (far_cascade != ((fellow_hlod & InstanceData::FLAG_FELLOW_HLOD_PROXY) != 0)) {
+							continue;
+						}
+					}
 					if (cascade.fellow_mode >= FELLOW_CASCADE_CACHED) {
 						// FellowEngine directional shadow cache: casters unchanged since the cache was built are in the
 						// cache; only the others are drawn this frame. On a rebuild, static casters of the whole cache
@@ -3754,7 +3837,7 @@ void RendererSceneCull::_scene_cull(CullData &cull_data, InstanceCullResult &cul
 						if (!(((1 << base_type) & RSE::INSTANCE_GEOMETRY_MASK) && (idata.flags & InstanceData::FLAG_CAST_SHADOWS) && (LAYER_CHECK & cull_data.cull->shadows[j].caster_mask))) {
 							continue;
 						}
-						const bool cacheable = idata.visibility_index == -1 && idata.parent_array_index == -1 && !idata.instance->dynamic_gi && static_cast<InstanceGeometryData *>(idata.instance->base_data)->fellow_shadow_cacheable;
+						const bool cacheable = (fellow_hlod != 0 || (idata.visibility_index == -1 && idata.parent_array_index == -1)) && !idata.instance->dynamic_gi && static_cast<InstanceGeometryData *>(idata.instance->base_data)->fellow_shadow_cacheable;
 						const uint64_t change_frame = idata.instance->fellow_change_frame;
 						const bool static_now = cacheable && change_frame + fellow_static_frames <= frame_number;
 						const bool in_cache = cacheable && change_frame + fellow_static_frames <= cascade.fellow_build_frame;
@@ -3763,7 +3846,7 @@ void RendererSceneCull::_scene_cull(CullData &cull_data, InstanceCullResult &cul
 						}
 						if (in_cache) {
 							// Cost gate measurement (one frame per build): would stock have drawn this cached caster?
-							if (cascade.fellow_measure_stock && light_culler->cull_directional_light(cull_data.scenario->instance_aabbs[i], j, k) && IN_FRUSTUM(cascade.frustum) && VIS_CHECK) {
+							if (cascade.fellow_measure_stock && light_culler->cull_directional_light(cull_data.scenario->instance_aabbs[i], j, k) && IN_FRUSTUM(cascade.frustum) && SHADOW_VIS_CHECK) {
 								cascade.fellow_stock_static.increment();
 							}
 							continue;
@@ -3771,7 +3854,7 @@ void RendererSceneCull::_scene_cull(CullData &cull_data, InstanceCullResult &cul
 						if (!light_culler->cull_directional_light(cull_data.scenario->instance_aabbs[i], j, k)) {
 							continue;
 						}
-						if (IN_FRUSTUM(cascade.frustum) && VIS_CHECK) {
+						if (IN_FRUSTUM(cascade.frustum) && SHADOW_VIS_CHECK) {
 							cull_result.directional_shadows[j].cascade_geometry_instances[k].push_back(idata.instance_geometry);
 							mesh_visible = true;
 							cascade.fellow_dynamic.increment();
@@ -3784,7 +3867,7 @@ void RendererSceneCull::_scene_cull(CullData &cull_data, InstanceCullResult &cul
 					if (!light_culler->cull_directional_light(cull_data.scenario->instance_aabbs[i], j, k)) { // pass the cascade index
 						continue;
 					}
-					if (IN_FRUSTUM(cull_data.cull->shadows[j].cascades[k].frustum) && VIS_CHECK) {
+					if (IN_FRUSTUM(cull_data.cull->shadows[j].cascades[k].frustum) && SHADOW_VIS_CHECK) {
 						uint32_t base_type = idata.flags & InstanceData::FLAG_BASE_TYPE_MASK;
 
 						if (((1 << base_type) & RSE::INSTANCE_GEOMETRY_MASK) && idata.flags & InstanceData::FLAG_CAST_SHADOWS && (LAYER_CHECK & cull_data.cull->shadows[j].caster_mask)) {
@@ -3803,6 +3886,8 @@ void RendererSceneCull::_scene_cull(CullData &cull_data, InstanceCullResult &cul
 #undef VIS_PARENT_CHECK
 #undef VIS_CHECK
 #undef OCCLUSION_CULLED
+#undef FELLOW_CONTRIBUTION_CULLED
+#undef SHADOW_VIS_CHECK
 
 		for (uint32_t j = 0; j < cull_data.cull->sdfgi.region_count; j++) {
 			if (cull_data.scenario->instance_aabbs[i].in_aabb(cull_data.cull->sdfgi.region_aabb[j])) {
@@ -3829,6 +3914,12 @@ void RendererSceneCull::_scene_cull(CullData &cull_data, InstanceCullResult &cul
 		if (mesh_visible && cull_data.scenario->instance_data[i].flags & InstanceData::FLAG_USES_MESH_INSTANCE) {
 			cull_result.mesh_instances.push_back(cull_data.scenario->instance_data[i].instance->mesh_instance);
 		}
+	}
+	if (fellow_contribution_count > 0) {
+		Fellow::stats().geometry_contribution_culled.add(fellow_contribution_count);
+	}
+	if (fellow_caster_count > 0) {
+		Fellow::stats().shadow_contribution_culled.add(fellow_caster_count);
 	}
 }
 
@@ -4040,6 +4131,19 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 		cull_data.occlusion_buffer = RendererSceneOcclusionCull::get_singleton()->buffer_get_ptr(p_viewport);
 		cull_data.camera_matrix = &p_camera_data->main_projection;
 		cull_data.visibility_viewport_mask = scenario->viewport_visibility_masks.has(p_viewport) ? scenario->viewport_visibility_masks[p_viewport] : 0;
+		// FellowEngine contribution culling (decision 0121): the camera's threshold (a fraction of the viewport's width)
+		// over its projection's x scale is the smallest bounding radius kept at unit depth (orthogonal: at any depth).
+		if (fellow_contribution_fraction > 0.0f && render_reflection_probe == nullptr) {
+			const real_t k = fellow_contribution_fraction / MAX((real_t)CMP_EPSILON, Math::abs(p_camera_data->main_projection.columns[0][0]));
+			cull_data.fellow_contribution_forward = -p_camera_data->main_transform.basis.get_column(2).normalized();
+			if (p_camera_data->is_orthogonal) {
+				cull_data.fellow_contribution_b = k * k;
+			} else {
+				// The sphere's silhouette: r / sqrt(z^2 - r^2) < k  <=>  r^2 < z^2 k^2 / (1 + k^2).
+				cull_data.fellow_contribution_a = k * k / (1.0 + k * k);
+			}
+		}
+		cull_data.fellow_caster_texels = Fellow::shadow_contribution_cull_texels();
 #ifdef DEBUG_CULL_TIME
 		uint64_t time_from = OS::get_singleton()->get_ticks_usec();
 #endif
@@ -4142,6 +4246,8 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 				render_shadow_data[max_shadows_used].pass = j;
 				render_shadow_data[max_shadows_used].instances.merge_unordered(scene_cull_result.directional_shadows[i].cascade_geometry_instances[j]);
 				_fellow_shadow_cache_fill_render_data(i, j, render_shadow_data[max_shadows_used], RSG::rasterizer->get_frame_number());
+				RendererSceneRender::FellowShadowCacheOp &fop = render_shadow_data[max_shadows_used].fellow;
+				fop.caster_plane_count = light_culler->fellow_get_directional_cull_planes(i, j, fop.caster_planes, RendererSceneRender::FellowShadowCacheOp::MAX_CASTER_PLANES);
 				max_shadows_used++;
 			}
 		}

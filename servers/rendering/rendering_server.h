@@ -752,6 +752,16 @@ public:
 	virtual void instance_set_visibility_parent(RID p_instance, RID p_parent_instance) = 0;
 
 	virtual void instance_set_ignore_culling(RID p_instance, bool p_enabled) = 0;
+	// FellowEngine automatic HLOD (decision 0122, FellowHLOD3D): the instance is a proxy (visible beyond p_distance) or
+	// follows one (its visibility parent). In directional shadow cascades the visibility dependency is then decided per
+	// cascade instead of from the camera: cascades starting beyond p_distance draw the proxies, the others the members
+	// (camera-independent, so the shadow cache can keep both); positional shadows draw the members. Not bound.
+	enum {
+		FELLOW_HLOD_NONE = 0,
+		FELLOW_HLOD_PROXY = 1,
+		FELLOW_HLOD_MEMBER = 2,
+	};
+	virtual void fellow_instance_set_hlod(RID p_instance, int p_role, float p_distance) {}
 
 	// Don't use these in a game!
 	virtual Vector<ObjectID> instances_cull_aabb(const AABB &p_aabb, RID p_scenario = RID()) const = 0;

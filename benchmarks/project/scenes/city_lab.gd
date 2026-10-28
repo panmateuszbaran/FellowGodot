@@ -21,6 +21,8 @@ var _meshes := {}
 var _mats: Array[StandardMaterial3D] = []
 var _unique: Array[StandardMaterial3D] = [] # --city_materials=N: building walls get one of N materials (draw-heavy variant)
 var _count := 0
+var _parent: Node3D = null # where _add() puts the static city: a FellowHLOD3D with --city_hlod=<distance>
+var hlod: Node3D = null
 
 
 func build(p_args: Dictionary) -> void:
@@ -29,14 +31,37 @@ func build(p_args: Dictionary) -> void:
 	_setup_common()
 	_setup_environment()
 	_make_resources()
+	_parent = self
+	# --city_hlod=<distance> (FellowEngine, decision 0122): the static city (not the ground, not the carts) under a
+	# FellowHLOD3D that merges it per cell into proxies beyond <distance>; --city_hlod_cell=<m> (44: 4 x 4 lots),
+	# --city_hlod_shadows=0|1 (follow camera | per cascade), --city_hlod_lods=0|1, --city_hlod_instancing=0|1 (repeated
+	# meshes as GPU-culled MultiMeshes | everything merged per cell).
+	var hlod_distance := float(args.get("city_hlod", "0"))
+	if hlod_distance > 0.0 and ClassDB.class_exists("FellowHLOD3D"):
+		hlod = ClassDB.instantiate("FellowHLOD3D")
+		hlod.name = "hlod"
+		hlod.set("build_on_ready", false)
+		hlod.set("distance", hlod_distance)
+		hlod.set("cell_size", float(args.get("city_hlod_cell", "44")))
+		hlod.set("shadow_mode", int(args.get("city_hlod_shadows", "1")))
+		hlod.set("generate_lods", str(args.get("city_hlod_lods", "1")) == "1")
+		hlod.set("instancing", str(args.get("city_hlod_instancing", "1")) == "1")
+		add_child(hlod)
+		_parent = hlod
 	_build_city()
+	_parent = self
 	_build_carts()
 	_build_lights()
 	if args.get("city_lightmap", "0") == "1":
 		_build_lightmap_capture()
 	_define_cameras()
+	if hlod:
+		hlod.call("build")
 	set_time(0.0)
 	info = {"stats": scene_stats(self), "nodes": _count, "notes": "CPU-bound city: ~17k separate objects, 300 moving carts, sun with 4 cascades."}
+	if hlod:
+		info["hlod"] = hlod.call("get_build_info")
+		print("city hlod: ", info["hlod"])
 
 
 func _setup_environment() -> void:
@@ -92,7 +117,7 @@ func _add(mesh_key: String, mat: Material, pos: Vector3, size: Vector3, rot_y :=
 	mi.mesh = _meshes[mesh_key]
 	mi.material_override = mat
 	mi.transform = Transform3D(Basis(Vector3.UP, deg_to_rad(rot_y)).scaled(size), pos)
-	add_child(mi)
+	_parent.add_child(mi)
 	_count += 1
 	return mi
 

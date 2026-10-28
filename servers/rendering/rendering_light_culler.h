@@ -164,6 +164,9 @@ public:
 
 	// Return false if the instance is to be culled.
 	bool cull_directional_light(const RendererSceneCull::InstanceBounds &p_bound, int32_t p_directional_light_id, int32_t p_cascade);
+	// FellowEngine (decision 0122): the planes cull_directional_light() tests (a box wholly in front of one is culled),
+	// copied to r_planes (at most p_max); 0 when caster culling is off.
+	int fellow_get_directional_cull_planes(int32_t p_directional_light_id, int32_t p_cascade, Plane *r_planes, int p_max) const;
 
 	// Can turn on and off from the engine if desired.
 	void set_caster_culling_active(bool p_active) { data.caster_culling_active = p_active; }

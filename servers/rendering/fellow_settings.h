@@ -773,6 +773,12 @@ inline bool shadow_positional_max_mip() {
 inline bool shadow_pcss_directional_penumbra() {
 	return shadows_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/shadows/pcss_directional_penumbra");
 }
+// Shadow caster contribution culling (decision 0121): a caster whose bounding sphere spans fewer than this many texels
+// of a directional cascade is not drawn into that cascade (per node; per instance for culled MultiMeshes, in every
+// shadow pass). Changes the image (the shadows of tiny far objects disappear). 0: off.
+inline float shadow_contribution_cull_texels() {
+	return shadows_enabled() ? MAX(0.0f, GLOBAL_GET_CACHED(float, "rendering/fellow/shadows/contribution_cull_texels")) : 0.0f;
+}
 
 inline bool geometry_enabled() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/geometry/enabled");
@@ -797,6 +803,19 @@ inline bool mesh_clusters_blended() {
 // elements have no fragment that passes the opaque pass's depth test. Needs persistent instance data; read every frame.
 inline bool occlusion_culling() {
 	return geometry_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/geometry/occlusion_culling");
+}
+// Contribution culling (docs/decisions/0121-contribution-culling.md): in the camera's passes, a mesh or MultiMesh node
+// whose bounding sphere (its box's) would cover fewer than this many pixels of the viewport's width (the viewport's
+// size, as mesh_lod_threshold), and with MultiMesh culling each instance of a culled MultiMesh likewise, is not drawn.
+// Changes the image (tiny far objects disappear); nodes with ignore_occlusion_culling are always kept. 0: off.
+inline float contribution_cull_pixels() {
+	return geometry_enabled() ? MAX(0.0f, GLOBAL_GET_CACHED(float, "rendering/fellow/geometry/contribution_cull_pixels")) : 0.0f;
+}
+// MultiMesh instances below the threshold (camera and shadow passes): thinned (1, default) — of those at a fraction f of
+// the threshold's area, the share f is kept (a stable hash of the instance) and grown about its origin to the
+// threshold's size, so many small instances (a far meadow) keep their coverage — or culled (0). HLOD proxies: culled.
+inline bool contribution_cull_thin_instances() {
+	return GLOBAL_GET_CACHED(int, "rendering/fellow/geometry/contribution_cull_instances") == 1;
 }
 // MultiMesh instance culling (docs/decisions/0034-multimesh-culling.md): the instances of a MultiMeshInstance3D are tested
 // one by one against each pass's view volume (camera, every shadow pass) on the GPU, and only the visible ones are drawn
@@ -1338,6 +1357,9 @@ struct Stats {
 	SafeNumeric<uint64_t> geometry_multimesh_instances_tested; // instances tested (read back asynchronously with debug/multimesh_stats)
 	SafeNumeric<uint64_t> geometry_multimesh_instances_visible; // of which drawn
 	SafeNumeric<uint64_t> geometry_multimesh_instances_coarse; // of which at a coarser level than 0 (per-instance LOD)
+	SafeNumeric<uint64_t> geometry_multimesh_instances_small; // of the tested ones, left out as too small (decision 0121)
+	SafeNumeric<uint64_t> geometry_contribution_culled; // nodes the camera did not draw as too small (decision 0121)
+	SafeNumeric<uint64_t> shadow_contribution_culled; // caster x cascade pairs left out as too small (decision 0121)
 	SafeNumeric<uint64_t> geometry_multimesh_jobs_inside; // MultiMeshes left whole: their box inside the pass's volume
 	SafeNumeric<uint64_t> geometry_multimesh_sets_small; // pass groups left whole: too few indices to save
 	SafeNumeric<uint64_t> geometry_multimesh_pool_copies; // MultiMesh data copied into the pool

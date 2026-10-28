@@ -2139,6 +2139,7 @@ void RenderForwardClustered::_fellow_multimesh_cull_begin(uint32_t p_set) {
 	set.compacted_floats = 0;
 	set.potential_indices = 0;
 	set.active = false;
+	set.required = false;
 	m.job_of_owner.clear();
 	const RenderListType lists[2] = { p_set == 0 ? RENDER_LIST_OPAQUE : RENDER_LIST_SECONDARY, p_set == 0 ? RENDER_LIST_ALPHA : RENDER_LIST_MAX };
 	for (RenderListType l : lists) {
@@ -2153,7 +2154,7 @@ void RenderForwardClustered::_fellow_multimesh_cull_begin(uint32_t p_set) {
 	}
 }
 
-void RenderForwardClustered::_fellow_multimesh_cull_collect(uint32_t p_set, RenderListType p_list, uint32_t p_from, uint32_t p_to, const Plane *p_planes, int p_plane_count, bool p_shadow, const FellowMultimeshLod &p_lod) {
+void RenderForwardClustered::_fellow_multimesh_cull_collect(uint32_t p_set, RenderListType p_list, uint32_t p_from, uint32_t p_to, const Plane *p_planes, int p_plane_count, bool p_shadow, const FellowMultimeshLod &p_lod, const FellowMultimeshContribution &p_contribution, const Plane *p_proxy_planes, int p_proxy_plane_count) {
 	// The pass's MultiMesh elements that can be culled exactly: their materials neither move vertices nor read
 	// INSTANCE_ID, 3D transforms (data changed this frame or the last: its previous-frame half too, for motion vectors).
 	if (p_plane_count <= 0) {
@@ -2166,12 +2167,15 @@ void RenderForwardClustered::_fellow_multimesh_cull_collect(uint32_t p_set, Rend
 	const uint32_t min_instances = uint32_t(MAX(1, Fellow::multimesh_cull_min_instances()));
 	const uint64_t excluded = INSTANCE_DATA_FLAG_PARTICLES | INSTANCE_DATA_FLAG_MULTIMESH_INDIRECT | INSTANCE_DATA_FLAG_MULTIMESH_FORMAT_2D;
 	uint32_t planes_offset = UINT32_MAX;
+	uint32_t proxy_planes_offset = UINT32_MAX; // the pass's planes and the caster planes, for HLOD proxies (decision 0122)
 	const uint32_t to = MIN(p_to, rl.elements.size());
 	for (uint32_t i = p_from; i < to; i++) {
 		const GeometryInstanceSurfaceDataCache *surf = rl.elements[i];
 		const RenderElementInfo &info = rl.element_info[i];
 		const GeometryInstanceForwardClustered *inst = surf->owner;
-		if (!(inst->base_flags & INSTANCE_DATA_FLAG_MULTIMESH) || (inst->base_flags & excluded) || inst->instance_count < min_instances || info.repeat > 1) {
+		// An HLOD proxy (decision 0122) draws its instances only from a distance on: it must be culled (any instance count).
+		const bool range_proxy = !p_shadow && inst->fellow_instance_range_begin > 0.0f;
+		if (!(inst->base_flags & INSTANCE_DATA_FLAG_MULTIMESH) || (inst->base_flags & excluded) || (inst->instance_count < min_instances && !range_proxy) || info.repeat > 1) {
 			continue;
 		}
 		const SceneShaderForwardClustered::ShaderData *shaders[2] = { surf->shader, surf->shader_shadow };
@@ -2211,8 +2215,8 @@ void RenderForwardClustered::_fellow_multimesh_cull_collect(uint32_t p_set, Rend
 		} else {
 			const RID base = inst->data->base;
 			// A node whose whole box (stock's, with its margin) lies inside the volume has nothing to cull: drawn whole, as
-			// stock draws it, without a job (unless per-instance LOD needs one).
-			bool inside = lod_count == 0;
+			// stock draws it, without a job (unless per-instance LOD or contribution culling needs one).
+			bool inside = lod_count == 0 && !p_contribution.active() && !range_proxy;
 			if (inside) {
 				const Vector3 c = inst->transformed_aabb.get_center();
 				const Vector3 h = inst->transformed_aabb.size * 0.5;
@@ -2242,6 +2246,18 @@ void RenderForwardClustered::_fellow_multimesh_cull_collect(uint32_t p_set, Rend
 							set.planes.push_back(p_planes[p].d);
 						}
 					}
+					// An HLOD proxy in a shadow pass: also the caster planes, as the scene cull tests its members.
+					const bool proxy_planes = p_shadow && inst->fellow_instance_range_begin > 0.0f && p_proxy_plane_count > 0;
+					if (proxy_planes && proxy_planes_offset == UINT32_MAX) {
+						proxy_planes_offset = set.planes.size() / 4;
+						for (int p = 0; p < p_plane_count + p_proxy_plane_count; p++) {
+							const Plane &pl = p < p_plane_count ? p_planes[p] : p_proxy_planes[p - p_plane_count];
+							set.planes.push_back(pl.normal.x);
+							set.planes.push_back(pl.normal.y);
+							set.planes.push_back(pl.normal.z);
+							set.planes.push_back(pl.d);
+						}
+					}
 					const AABB aabb = mesh_storage->mesh_get_aabb(mesh, RID());
 					const Transform3D &xf = inst->transform;
 					FellowMultimeshCull::Job j = {};
@@ -2266,8 +2282,8 @@ void RenderForwardClustered::_fellow_multimesh_cull_collect(uint32_t p_set, Rend
 					j.pool_offset = uint32_t(pool_offset);
 					j.stride = stride;
 					j.count = inst->instance_count;
-					j.planes_offset = planes_offset;
-					j.plane_count = uint32_t(MIN(p_plane_count, 8));
+					j.planes_offset = proxy_planes ? proxy_planes_offset : planes_offset;
+					j.plane_count = proxy_planes ? uint32_t(p_plane_count + p_proxy_plane_count) : uint32_t(MIN(p_plane_count, 8));
 					j.out_offset = uint32_t((set.compacted_floats + stride - 1) / stride);
 					set.compacted_floats = (uint64_t(j.out_offset) + j.count) * stride;
 					if (with_previous) {
@@ -2289,6 +2305,23 @@ void RenderForwardClustered::_fellow_multimesh_cull_collect(uint32_t p_set, Rend
 						for (uint32_t l = 0; l < lod_count; l++) {
 							j.lod_edges[l] = lod_edges[l];
 						}
+					}
+					if (range_proxy) {
+						j.instance_range[0] = p_lod.camera.x;
+						j.instance_range[1] = p_lod.camera.y;
+						j.instance_range[2] = p_lod.camera.z;
+						j.instance_range[3] = inst->fellow_instance_range_begin * inst->fellow_instance_range_begin;
+						set.required = true;
+					}
+					if (p_contribution.active()) {
+						j.lod_params[2] = p_contribution.a;
+						j.lod_params[3] = p_contribution.b;
+						// HLOD proxies stand in for nodes, which are culled whole: not thinned.
+						j.contribution_mode[0] = (p_contribution.thin && inst->fellow_instance_range_begin <= 0.0f) ? 1.0f : 0.0f;
+						j.contribution[0] = p_contribution.plane.normal.x;
+						j.contribution[1] = p_contribution.plane.normal.y;
+						j.contribution[2] = p_contribution.plane.normal.z;
+						j.contribution[3] = p_contribution.plane.d;
 					}
 					for (uint32_t b = 0; b < j.block_count; b++) {
 						set.blocks.push_back(set.jobs.size());
@@ -2330,13 +2363,13 @@ void RenderForwardClustered::_fellow_multimesh_cull_dispatch(uint32_t p_set) {
 	}
 	// Too little to save: the set's draws together draw fewer indices than geometry/multimesh_cull_min_indices with
 	// every instance, about what the dispatches and their barriers cost. Drawn the stock way (exact either way).
-	if (set.potential_indices < uint64_t(MAX(0, Fellow::multimesh_cull_min_indices()))) {
+	if (!set.required && set.potential_indices < uint64_t(MAX(0, Fellow::multimesh_cull_min_indices()))) {
 		Fellow::stats().geometry_multimesh_sets_small.increment();
 		return;
 	}
 	// Autotune (decision 0020) measures the culling against drawing the MultiMeshes whole while there are any to cull.
 	Fellow::autotune_note_multimesh_candidates();
-	if (!Fellow::autotune_allows(Fellow::TUNE_MULTIMESH_CULLING)) {
+	if (!set.required && !Fellow::autotune_allows(Fellow::TUNE_MULTIMESH_CULLING)) {
 		return;
 	}
 	// A pool slot handed out early in the collection moves if a later MultiMesh made the pool grow (a new buffer): every
@@ -2476,6 +2509,9 @@ void RenderForwardClustered::_fellow_multimesh_cull_readback(const Vector<uint8_
 	Fellow::stats().geometry_multimesh_instances_visible.add(c[1]);
 	if (p_data.size() >= 12) {
 		Fellow::stats().geometry_multimesh_instances_coarse.add(c[2]);
+	}
+	if (p_data.size() >= 16) {
+		Fellow::stats().geometry_multimesh_instances_small.add(c[3]);
 	}
 }
 
@@ -3402,6 +3438,9 @@ void RenderForwardClustered::_fill_render_list_range(const FellowFillParams &p_p
 
 		if (inst->non_uniform_scale) {
 			flags |= INSTANCE_DATA_FLAGS_NON_UNIFORM_SCALE;
+		}
+		if (inst->fellow_instance_range_begin > 0.0f) {
+			flags |= INSTANCE_DATA_FLAG_FELLOW_INSTANCE_NORMALS; // an HLOD MultiMesh proxy (decision 0122)
 		}
 		bool uses_lightmap = false;
 		bool uses_gi = false;
@@ -6095,9 +6134,24 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		lod.camera = p_render_data->scene_data->main_cam_transform.origin;
 		lod.threshold = p_render_data->scene_data->screen_mesh_lod_threshold;
 		lod.distance_multiplier = p_render_data->scene_data->lod_distance_multiplier;
+		// Contribution culling (decision 0121): the threshold over the viewport's width, as the culler's for the nodes.
+		FellowMultimeshContribution contribution;
+		const float fellow_contribution_pixels = Fellow::contribution_cull_pixels();
+		if (fellow_contribution_pixels > 0.0f && !is_reflection_probe && p_render_data->render_buffers.is_valid()) {
+			const float fraction = fellow_contribution_pixels / float(MAX(1, p_render_data->render_buffers->get_target_size().x));
+			const float k = fraction / MAX(float(CMP_EPSILON), Math::abs(float(p_render_data->scene_data->cam_projection.columns[0][0])));
+			const Vector3 forward = -p_render_data->scene_data->cam_transform.basis.get_column(2).normalized();
+			contribution.plane = Plane(forward, -forward.dot(p_render_data->scene_data->cam_transform.origin));
+			if (p_render_data->scene_data->cam_orthogonal) {
+				contribution.b = k * k;
+			} else {
+				contribution.a = k * k / (1.0f + k * k);
+			}
+			contribution.thin = Fellow::contribution_cull_thin_instances();
+		}
 		_fellow_multimesh_cull_begin(0);
-		_fellow_multimesh_cull_collect(0, RENDER_LIST_OPAQUE, 0, render_list[RENDER_LIST_OPAQUE].elements.size(), planes.ptr(), planes.size(), false, lod);
-		_fellow_multimesh_cull_collect(0, RENDER_LIST_ALPHA, 0, render_list[RENDER_LIST_ALPHA].elements.size(), planes.ptr(), planes.size(), false, lod);
+		_fellow_multimesh_cull_collect(0, RENDER_LIST_OPAQUE, 0, render_list[RENDER_LIST_OPAQUE].elements.size(), planes.ptr(), planes.size(), false, lod, contribution);
+		_fellow_multimesh_cull_collect(0, RENDER_LIST_ALPHA, 0, render_list[RENDER_LIST_ALPHA].elements.size(), planes.ptr(), planes.size(), false, lod, contribution);
 		_fellow_multimesh_cull_dispatch(0);
 	}
 	if (fellow_markers) {
@@ -7301,7 +7355,10 @@ void RenderForwardClustered::_render_shadow_pass(RID p_light, RID p_shadow_atlas
 
 		if (p_instances.size() > 0) {
 			// Dynamic casters on top, exactly like the stock pass (no clear).
+			fellow_pending_caster_planes = p_fellow_op->caster_planes;
+			fellow_pending_caster_plane_count = p_fellow_op->caster_plane_count;
 			_render_shadow_append(render_fb, p_instances, light_projection, light_transform, zfar, 0, 0, reverse_cull_face, false, false, use_pancake, p_lod_distance_multiplier, p_screen_mesh_lod_threshold, atlas_rect, flip_y, false, false, p_close_pass, p_render_info, p_viewport_size, p_main_cam_transform);
+			fellow_pending_caster_planes = nullptr;
 			_fellow_mark_dir_atlas_dirty(atlas_rect);
 		}
 	} else {
@@ -7316,7 +7373,12 @@ void RenderForwardClustered::_render_shadow_pass(RID p_light, RID p_shadow_atlas
 			}
 		}
 		//render shadow
+		if (p_fellow_op != nullptr && light_storage->light_get_type(base) == RSE::LIGHT_DIRECTIONAL) {
+			fellow_pending_caster_planes = p_fellow_op->caster_planes;
+			fellow_pending_caster_plane_count = p_fellow_op->caster_plane_count;
+		}
 		_render_shadow_append(render_fb, p_instances, light_projection, light_transform, zfar, 0, 0, reverse_cull_face, using_dual_paraboloid, using_dual_paraboloid_flip, use_pancake, p_lod_distance_multiplier, p_screen_mesh_lod_threshold, atlas_rect, flip_y, clear_region, p_open_pass, p_close_pass, p_render_info, p_viewport_size, p_main_cam_transform);
+		fellow_pending_caster_planes = nullptr;
 	}
 }
 
@@ -7879,6 +7941,22 @@ void RenderForwardClustered::_render_shadow_append(RID p_framebuffer, const Page
 				shadow_pass.fellow_mm_planes[shadow_pass.fellow_mm_plane_count++] = planes[i];
 			}
 		}
+		// Shadow caster contribution culling (decision 0121): a directional cascade's texel is its projection's width
+		// over the region's; an instance whose box's diagonal spans fewer texels than the threshold is left out.
+		shadow_pass.fellow_mm_caster_plane_count = 0;
+		if (fellow_pending_caster_planes != nullptr) {
+			shadow_pass.fellow_mm_caster_plane_count = MIN(fellow_pending_caster_plane_count, RendererSceneRender::FellowShadowCacheOp::MAX_CASTER_PLANES);
+			for (int i = 0; i < shadow_pass.fellow_mm_caster_plane_count; i++) {
+				shadow_pass.fellow_mm_caster_planes[i] = fellow_pending_caster_planes[i];
+			}
+		}
+		shadow_pass.fellow_mm_min_radius2 = 0.0;
+		const float fellow_caster_texels = Fellow::shadow_contribution_cull_texels();
+		if (fellow_caster_texels > 0.0f && p_projection.is_orthogonal() && !p_use_dp && p_rect.size.x > 0) {
+			const float texel = 2.0f / (MAX(float(CMP_EPSILON), Math::abs(float(p_projection.columns[0][0]))) * float(p_rect.size.x));
+			const float min_radius = 0.5f * fellow_caster_texels * texel;
+			shadow_pass.fellow_mm_min_radius2 = min_radius * min_radius;
+		}
 
 		if (fellow_entry >= 0) {
 			fellow_shadow_entries[fellow_entry].shadow_pass = scene_state.shadow_passes.size();
@@ -7908,7 +7986,10 @@ void RenderForwardClustered::_render_shadow_process() {
 		for (const SceneState::ShadowPass &shadow_pass : scene_state.shadow_passes) {
 			if (!shadow_pass.fellow_copy && shadow_pass.fellow_mm_plane_count > 0) {
 				fellow_mm.job_of_owner.clear();
-				_fellow_multimesh_cull_collect(1, RENDER_LIST_SECONDARY, shadow_pass.element_from, shadow_pass.element_from + shadow_pass.element_count, shadow_pass.fellow_mm_planes, shadow_pass.fellow_mm_plane_count, true, FellowMultimeshLod());
+				FellowMultimeshContribution contribution;
+				contribution.b = shadow_pass.fellow_mm_min_radius2;
+				contribution.thin = Fellow::contribution_cull_thin_instances();
+				_fellow_multimesh_cull_collect(1, RENDER_LIST_SECONDARY, shadow_pass.element_from, shadow_pass.element_from + shadow_pass.element_count, shadow_pass.fellow_mm_planes, shadow_pass.fellow_mm_plane_count, true, FellowMultimeshLod(), contribution, shadow_pass.fellow_mm_caster_planes, shadow_pass.fellow_mm_caster_plane_count);
 			}
 		}
 		_fellow_multimesh_cull_dispatch(1);

@@ -78,6 +78,9 @@ public:
 	// FellowEngine MultiMesh culling (decision 0036): the node's extra cull margin (GeometryInstance3D.extra_cull_margin),
 	// which the renderers that cull instances one by one add to each instance's box. No-op elsewhere.
 	virtual void set_fellow_extra_margin(float p_margin) {}
+	// FellowEngine automatic HLOD (decision 0122): a MultiMesh proxy whose instances the camera draws only from this
+	// distance on (each instance's own distance), culled one by one on the GPU. 0: none. No-op elsewhere.
+	virtual void set_fellow_instance_range_begin(float p_begin) {}
 };
 
 // Base implementation of RenderGeometryInstance shared by internal renderers.
@@ -99,6 +102,7 @@ public:
 	float lod_model_scale = 1.0;
 	float lod_bias = 0.0;
 	float fellow_extra_margin = 0.0; // the node's extra cull margin, in its own space (decision 0036)
+	float fellow_instance_range_begin = 0.0; // decision 0122: MultiMesh instances drawn by the camera from this distance on
 	float sorting_offset = 0.0;
 	bool use_aabb_center = true;
 
@@ -158,6 +162,7 @@ public:
 	virtual void set_instance_shader_uniforms_offset(int32_t p_offset) override;
 	virtual void set_cast_double_sided_shadows(bool p_enable) override;
 	virtual void set_fellow_extra_margin(float p_margin) override;
+	virtual void set_fellow_instance_range_begin(float p_begin) override;
 
 	virtual void reset_motion_vectors() override;
 

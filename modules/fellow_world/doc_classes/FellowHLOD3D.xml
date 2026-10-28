@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="FellowHLOD3D" inherits="Node3D" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+	<brief_description>
+		FellowEngine: automatic HLOD. Merges the static meshes below it, per cell and per material, into proxies that replace them beyond a distance.
+	</brief_description>
+	<description>
+		On [method build] (when the node is ready if [member build_on_ready]), the [MeshInstance3D] nodes below this node are replaced beyond [member distance] by proxies, in two ways.
+		[b]Instanced proxies[/b] ([member instancing], with [code]rendering/fellow/geometry/multimesh_culling[/code] on): meshes repeated at least [member instance_threshold] times (the same mesh and material override, the same cast shadow setting, layers and GI mode; materials that draw every vertex where the mesh has it: [BaseMaterial3D] without billboard, grow, point or fixed size; no surface override materials, extra cull margin or custom AABB) become one [MultiMesh] per kind, whose instances the GPU culls one by one and draws only from [member distance] on; each mesh's own visibility range ends there. The switch is per object and does not show (the same mesh, material and transform either way, no hysteresis), and any number of far objects costs a few draws.
+		[b]Merged proxies[/b]: the other meshes are grouped by the cell of a grid ([member cell_size], in this node's space) that holds the center of their box, and by their per-instance settings (cast shadow setting, layers, GI mode). For each cell with at least [member min_meshes] of them, their triangle surfaces are merged per material into one proxy mesh (transforms applied; detail levels generated if [member generate_lods], so Godot's mesh LOD draws far cells coarser) drawn by an internal [MeshInstance3D] whose visibility range begins at [member distance]. Each merged mesh gets the proxy as its [member Node3D.visibility_parent]: closer than [member distance] to the cell (with the [member margin] as hysteresis) the meshes are drawn, beyond it the proxy is, so the camera draws a few large draws instead of many small ones for the far part of the scene.
+		Only meshes that nothing makes per-instance are merged: no skin or blend shapes, no material overlay or transparency, no visibility range or parent of their own, not shadows-only, not top-level, visible, not in the group [code]fellow_hlod_exclude[/code], and with no other visual instance (light, particles, decal...) below them (a visibility parent passes to children). The merged meshes must not move while built: call [method build] again after changing them, or [method clear]. Surfaces with bone weights or custom arrays are not merged (their mesh is left as it is).
+		Shadows: directional cascades that start beyond [member distance] draw the proxies and the others the meshes, whatever the camera's distance to them, so the directional shadow cache can keep both (instanced proxies always; merged ones with [constant SHADOW_MODE_PER_CASCADE]). Positional shadows draw the meshes. Lightmapped meshes lose their lightmap in a proxy. See [code]docs/decisions/0122-hlod.md[/code].
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="build">
+			<return type="void" />
+			<description>
+				Merges the meshes below this node into proxies (removing the previous ones first). Needs the node in the scene tree.
+			</description>
+		</method>
+		<method name="clear">
+			<return type="void" />
+			<description>
+				Removes the proxies and gives the merged meshes back their own visibility parent.
+			</description>
+		</method>
+		<method name="get_build_info" qualifiers="const">
+			<return type="Dictionary" />
+			<description>
+				Statistics of the last build: [code]candidates[/code], [code]instanced_members[/code], [code]instanced_proxies[/code], [code]merged_members[/code], [code]merged_proxies[/code], [code]merged_surfaces[/code], [code]cells_skipped[/code], [code]merged_triangles[/code], [code]lod_triangles[/code] (summed over the generated levels) and [code]build_msec[/code].
+			</description>
+		</method>
+		<method name="is_built" qualifiers="const">
+			<return type="bool" />
+			<description>
+				Whether proxies are in place.
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="build_on_ready" type="bool" setter="set_build_on_ready" getter="get_build_on_ready" default="true">
+			Builds the proxies (deferred) when the node is ready.
+		</member>
+		<member name="cell_size" type="float" setter="set_cell_size" getter="get_cell_size" default="50.0">
+			The size of the grid's cells, in this node's space. Larger cells: fewer, larger proxies (fewer draws, coarser switching).
+		</member>
+		<member name="distance" type="float" setter="set_distance" getter="get_distance" default="100.0">
+			Beyond this distance from the camera to a cell's proxy (the center of its box), the proxy is drawn instead of the cell's meshes.
+		</member>
+		<member name="generate_lods" type="bool" setter="set_generate_lods" getter="get_generate_lods" default="true">
+			Generates detail levels for the proxies' surfaces (as the mesh importer does), applied by Godot's mesh LOD ([member Viewport.mesh_lod_threshold]).
+		</member>
+		<member name="margin" type="float" setter="set_margin" getter="get_margin" default="5.0">
+			Hysteresis around [member distance], so a camera moving around it does not switch every frame.
+		</member>
+		<member name="instance_threshold" type="int" setter="set_instance_threshold" getter="get_instance_threshold" default="32">
+			A mesh repeated at least this many times (same mesh, material override and instance settings) gets an instanced proxy; fewer: merged.
+		</member>
+		<member name="instancing" type="bool" setter="set_instancing" getter="get_instancing" default="true">
+			Repeated meshes get instanced proxies (needs [code]rendering/fellow/geometry/multimesh_culling[/code]); off: every mesh is merged per cell.
+		</member>
+		<member name="min_meshes" type="int" setter="set_min_meshes" getter="get_min_meshes" default="4">
+			Cells with fewer mergeable meshes keep them as they are.
+		</member>
+		<member name="shadow_mode" type="int" setter="set_shadow_mode" getter="get_shadow_mode" enum="FellowHLOD3D.ShadowMode" default="1">
+			How directional shadow cascades choose between the proxies and the meshes.
+		</member>
+	</members>
+	<constants>
+		<constant name="SHADOW_MODE_FOLLOW_CAMERA" value="0" enum="ShadowMode">
+			As stock Godot's visibility dependencies: every shadow pass draws what the camera's distance selects.
+		</constant>
+		<constant name="SHADOW_MODE_PER_CASCADE" value="1" enum="ShadowMode">
+			A directional cascade that starts beyond [member distance] draws the proxies, the others the meshes; positional shadows draw the meshes. Independent of where the camera is in the cascade, so the directional shadow cache can keep them.
+		</constant>
+	</constants>
+</class>

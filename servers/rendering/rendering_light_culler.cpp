@@ -256,6 +256,18 @@ bool RenderingLightCuller::cull_directional_light(const RendererSceneCull::Insta
 	return true;
 }
 
+int RenderingLightCuller::fellow_get_directional_cull_planes(int32_t p_directional_light_id, int32_t p_cascade, Plane *r_planes, int p_max) const {
+	if (!data.is_active() || !is_caster_culling_active() || p_directional_light_id < 0 || p_directional_light_id >= (int32_t)data.directional_cull_planes.size() || p_cascade < 0 || p_cascade >= 4) {
+		return 0;
+	}
+	const LightCullPlanes &cull_planes = data.directional_cull_planes[p_directional_light_id].planes[p_cascade];
+	const int n = MIN(cull_planes.num_cull_planes, p_max);
+	for (int p = 0; p < n; p++) {
+		r_planes[p] = cull_planes.cull_planes[p];
+	}
+	return n;
+}
+
 void RenderingLightCuller::cull_regular_light(PagedArray<RendererSceneCull::Instance *> &r_instance_shadow_cull_result) {
 	if (!data.is_active() || !is_caster_culling_active()) {
 		return;

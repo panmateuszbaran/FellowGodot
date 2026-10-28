@@ -360,6 +360,7 @@ private:
 
 	// When changing any of these enums, remember to change the corresponding enums in the shader files as well.
 	enum {
+		INSTANCE_DATA_FLAG_FELLOW_INSTANCE_NORMALS = 1 << 1, // decision 0122: HLOD MultiMesh proxies
 		INSTANCE_DATA_FLAG_MULTIMESH_INDIRECT = 1 << 2,
 		INSTANCE_DATA_FLAGS_DYNAMIC = 1 << 3,
 		INSTANCE_DATA_FLAGS_NON_UNIFORM_SCALE = 1 << 4,
@@ -545,6 +546,13 @@ private:
 			// FellowEngine MultiMesh culling (decision 0034): the pass's view volume (as the clusters', also without them).
 			Plane fellow_mm_planes[6];
 			int fellow_mm_plane_count = 0;
+			// Shadow caster contribution culling (decision 0121): in a directional cascade, instances whose bounding
+			// radius is below this (squared, world units) are left out (0: off).
+			float fellow_mm_min_radius2 = 0.0;
+			// A directional cascade's caster culling planes (the light culler's), tested for HLOD proxies' instances
+			// (decision 0122) as the scene cull tests the nodes they stand in for.
+			Plane fellow_mm_caster_planes[RendererSceneRender::FellowShadowCacheOp::MAX_CASTER_PLANES];
+			int fellow_mm_caster_plane_count = 0;
 		};
 
 		LocalVector<ShadowPass> shadow_passes;
@@ -962,8 +970,11 @@ private:
 			uint32_t out_prev_offset; // and its compacted region (instances)
 			uint32_t has_previous;
 			float lod_edges[8];
+			float contribution[4]; // contribution culling (decision 0121): the pass's view direction as a plane
+			float instance_range[4]; // HLOD proxies (decision 0122): camera position, squared distance drawn from (0: none)
+			float contribution_mode[4]; // x: 0 small instances culled, 1 thinned (decision 0121)
 		};
-		static_assert(sizeof(Job) == 192);
+		static_assert(sizeof(Job) == 240);
 		static constexpr uint32_t BUCKETS = 8;
 		static constexpr uint32_t BLOCK_UINTS = 32;
 		static constexpr uint32_t DRAW_INFO_UINTS = 10;
@@ -983,6 +994,7 @@ private:
 			uint64_t cap_compacted = 0; // floats
 			RID xforms_uniform_set;
 			bool active = false; // this frame's draws of the set's lists use it
+			bool required = false; // a job must cull (an HLOD proxy's instance range): never drawn the stock way instead
 		} sets[2];
 		LocalVector<uint32_t> slots[RENDER_LIST_MAX]; // per list element: draw slot or UINT32_MAX
 		HashMap<const void *, uint32_t> job_of_owner; // within one pass
@@ -996,7 +1008,19 @@ private:
 		float threshold = 0.0;
 		float distance_multiplier = 1.0;
 	};
-	void _fellow_multimesh_cull_collect(uint32_t p_set, RenderListType p_list, uint32_t p_from, uint32_t p_to, const Plane *p_planes, int p_plane_count, bool p_shadow, const FellowMultimeshLod &p_lod);
+	// Contribution culling (decision 0121) of a pass: an instance whose bounding radius r satisfies r^2 < a * z^2 + b, z
+	// its center's depth along the pass's view direction (plane: z = normal . p + d), is left out (off: a = b = 0).
+	struct FellowMultimeshContribution {
+		Plane plane;
+		float a = 0.0;
+		float b = 0.0;
+		bool thin = false; // the small instances thinned (coverage kept), not culled
+		bool active() const { return a > 0.0f || b > 0.0f; }
+	};
+	void _fellow_multimesh_cull_collect(uint32_t p_set, RenderListType p_list, uint32_t p_from, uint32_t p_to, const Plane *p_planes, int p_plane_count, bool p_shadow, const FellowMultimeshLod &p_lod, const FellowMultimeshContribution &p_contribution, const Plane *p_proxy_planes = nullptr, int p_proxy_plane_count = 0);
+	// The caster planes of the directional cascade pass being appended (decision 0122), copied into its ShadowPass.
+	const Plane *fellow_pending_caster_planes = nullptr;
+	int fellow_pending_caster_plane_count = 0;
 	void _fellow_multimesh_cull_dispatch(uint32_t p_set);
 	void _fellow_multimesh_cull_params(uint32_t p_set, RenderListType p_list, uint32_t p_element_from, RenderListParameters &r_params);
 	static void _fellow_multimesh_cull_readback(const Vector<uint8_t> &p_data);

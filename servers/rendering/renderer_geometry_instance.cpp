@@ -94,6 +94,10 @@ void RenderGeometryInstanceBase::set_fellow_extra_margin(float p_margin) {
 	fellow_extra_margin = p_margin;
 }
 
+void RenderGeometryInstanceBase::set_fellow_instance_range_begin(float p_begin) {
+	fellow_instance_range_begin = MAX(0.0f, p_begin);
+}
+
 void RenderGeometryInstanceBase::set_layer_mask(uint32_t p_layer_mask) {
 	layer_mask = p_layer_mask;
 	fellow_data_version++;

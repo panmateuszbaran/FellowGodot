@@ -335,6 +335,9 @@ layout(constant_id = 2) const bool sc_emulate_point_size = false;
 
 layout(set = 0, binding = 2) uniform sampler shadow_sampler;
 
+// FellowEngine automatic HLOD (decision 0122): a MultiMesh proxy's instances transform their normals by the inverse
+// transpose of their basis (stock: the basis), as the nodes they stand in for do under a non-uniform scale.
+#define INSTANCE_FLAGS_FELLOW_INSTANCE_NORMALS (1 << 1)
 #define INSTANCE_FLAGS_DYNAMIC (1 << 3)
 #define INSTANCE_FLAGS_NON_UNIFORM_SCALE (1 << 4)
 #define INSTANCE_FLAGS_USE_GI_BUFFERS (1 << 5)

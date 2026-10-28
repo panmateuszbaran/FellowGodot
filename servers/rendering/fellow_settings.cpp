@@ -202,6 +202,9 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/shadows/max_mip_visible_region", false);
 	GLOBAL_DEF("rendering/fellow/shadows/positional_max_mip", true);
 	GLOBAL_DEF("rendering/fellow/shadows/debug_disable_caster_culling", false);
+	// Shadow caster contribution culling (decision 0121): casters whose bounding sphere spans fewer than this many texels
+	// of a directional shadow cascade are not drawn into it (0: off).
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/shadows/contribution_cull_texels", PROPERTY_HINT_RANGE, "0,64,0.1"), 0.0);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/shadows/directional_cache_debug_mode", PROPERTY_HINT_ENUM, "Normal,Lattice Only (No Cache),Rebuild Every Frame"), 0);
 	GLOBAL_DEF("rendering/fellow/geometry/enabled", true);
 	GLOBAL_DEF("rendering/fellow/geometry/mesh_clusters", true);
@@ -268,6 +271,11 @@ void Fellow::register_settings() {
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/geometry/multimesh_cull_min_instances", PROPERTY_HINT_RANGE, "1,65536,1"), 64);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/geometry/multimesh_cull_min_indices", PROPERTY_HINT_RANGE, "0,100000000,1"), 300000);
 	GLOBAL_DEF("rendering/fellow/geometry/prepass_simple_first", false);
+	// Contribution culling (decision 0121): nodes and MultiMesh instances whose bounding sphere covers fewer than this many
+	// pixels of the viewport's width are not drawn by the camera (0: off).
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/geometry/contribution_cull_pixels", PROPERTY_HINT_RANGE, "0,64,0.1,suffix:px"), 0.0);
+	// MultiMesh instances below the threshold: culled, or thinned (a share kept and grown so their coverage stays).
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/geometry/contribution_cull_instances", PROPERTY_HINT_ENUM, "Cull,Thin"), 1);
 	GLOBAL_DEF("rendering/fellow/debug/occlusion_stats", false);
 	GLOBAL_DEF("rendering/fellow/debug/multimesh_stats", false);
 	// Diagnostics: experiments on the compiled scene shaders (e.g. their register counts with FELLOW_PIPELINE_STATS), bits
@@ -547,6 +555,9 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["geometry_multimesh_instances_tested"] = s.geometry_multimesh_instances_tested.get();
 	d["geometry_multimesh_instances_visible"] = s.geometry_multimesh_instances_visible.get();
 	d["geometry_multimesh_instances_coarse"] = s.geometry_multimesh_instances_coarse.get();
+	d["geometry_multimesh_instances_small"] = s.geometry_multimesh_instances_small.get();
+	d["geometry_contribution_culled"] = s.geometry_contribution_culled.get();
+	d["shadow_contribution_culled"] = s.shadow_contribution_culled.get();
 	d["geometry_multimesh_jobs_inside"] = s.geometry_multimesh_jobs_inside.get();
 	d["geometry_multimesh_sets_small"] = s.geometry_multimesh_sets_small.get();
 	d["geometry_multimesh_pool_copies"] = s.geometry_multimesh_pool_copies.get();

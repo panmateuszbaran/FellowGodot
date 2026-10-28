@@ -277,6 +277,9 @@ public:
 			FLAG_VISIBILITY_DEPENDENCY_FADE_CHILDREN = (1 << 22),
 			FLAG_GEOM_PROJECTOR_SOFTSHADOW_DIRTY = (1 << 23),
 			FLAG_IGNORE_ALL_CULLING = (1 << 24),
+			// FellowEngine automatic HLOD (decision 0122): its role in directional shadow cascades.
+			FLAG_FELLOW_HLOD_PROXY = (1 << 25),
+			FLAG_FELLOW_HLOD_MEMBER = (1 << 26),
 		};
 
 		uint32_t flags = 0;
@@ -428,6 +431,8 @@ public:
 
 		bool ignore_occlusion_culling;
 		bool ignore_all_culling;
+		uint8_t fellow_hlod_role = 0; // decision 0122: RenderingServer::FELLOW_HLOD_*
+		float fellow_hlod_distance = 0.0f;
 
 		Vector<RID> materials;
 
@@ -1123,6 +1128,7 @@ public:
 	virtual void instance_set_visibility_parent(RID p_instance, RID p_parent_instance);
 
 	virtual void instance_set_ignore_culling(RID p_instance, bool p_enabled);
+	virtual void fellow_instance_set_hlod(RID p_instance, int p_role, float p_distance);
 
 	bool _update_instance_visibility_depth(Instance *p_instance);
 	void _update_instance_visibility_dependencies(Instance *p_instance) const;
@@ -1320,6 +1326,15 @@ public:
 		const RendererSceneOcclusionCull::HZBuffer *occlusion_buffer;
 		const Projection *camera_matrix;
 		uint64_t visibility_viewport_mask;
+		// FellowEngine contribution culling (decision 0121): a mesh or MultiMesh node is not drawn by the camera when its
+		// bounding sphere's radius r (half its box's diagonal) satisfies r^2 < a * z^2 + b, z its center's depth along
+		// fellow_contribution_forward from the camera (a = k^2 / (1 + k^2) for a perspective camera, b = k^2 for an
+		// orthogonal one, k the threshold over the projection's x scale); off when both are 0.
+		Vector3 fellow_contribution_forward;
+		real_t fellow_contribution_a = 0.0;
+		real_t fellow_contribution_b = 0.0;
+		// Directional shadow casters: not drawn into a cascade when their box's diagonal is below this many of its texels.
+		real_t fellow_caster_texels = 0.0;
 	};
 
 	void _scene_cull_threaded(uint32_t p_thread, CullData *cull_data);
@@ -1343,6 +1358,8 @@ public:
 	void render_empty_scene(const Ref<RenderSceneBuffers> &p_render_buffers, RID p_scenario, RID p_shadow_atlas, float p_window_output_max_value);
 
 	void render_camera(const Ref<RenderSceneBuffers> &p_render_buffers, RID p_camera, RID p_scenario, RID p_viewport, Size2 p_viewport_size, uint32_t p_jitter_phase_count, float p_screen_mesh_lod_threshold, RID p_shadow_atlas, Ref<XRInterface> &p_xr_interface, float p_window_output_max_value, RenderingServerTypes::RenderInfo *r_render_info = nullptr);
+	float fellow_contribution_fraction = 0.0f; // decision 0121, for the cameras the viewport renders next
+	virtual void fellow_set_contribution_fraction(float p_fraction) { fellow_contribution_fraction = p_fraction; }
 	void update_dirty_instances() const;
 
 	void render_particle_colliders();
