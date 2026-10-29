@@ -133,6 +133,11 @@ void FellowRain3D::_build_children() {
 	splash_process->set_param_min(ParticleProcessMaterial::PARAM_SCALE, 0.5);
 	splash_process->set_param_max(ParticleProcessMaterial::PARAM_SCALE, 1.0);
 	splash_process->set_gravity(Vector3(0, -9.8, 0));
+	// A drop is stopped a step below the surface it hits (hide on contact does not move it out) and its splash is
+	// emitted there: colliding, the splash is put back on the surface (a roof's splashes stay above its ceiling).
+	splash_process->set_collision_mode(ParticleProcessMaterial::COLLISION_RIGID);
+	splash_process->set_collision_bounce(0.1);
+	splash_process->set_collision_friction(0.5);
 
 	splash_material.instantiate();
 	splash_material->set_shading_mode(BaseMaterial3D::SHADING_MODE_UNSHADED);
@@ -152,6 +157,7 @@ void FellowRain3D::_build_children() {
 	splash->set_draw_pass_mesh(0, splash_mesh);
 	splash->set_cast_shadows_setting(GeometryInstance3D::SHADOW_CASTING_SETTING_OFF);
 	splash->set_lifetime(0.3);
+	splash->set_collision_base_size(0.01);
 	splash->set_emitting(false);
 	splash->set_use_fixed_seed(true);
 	splash->set_seed(20261030);
@@ -165,7 +171,9 @@ void FellowRain3D::_update_children() {
 	}
 	occlusion->set_size(Vector3(occlusion_size, occlusion_height, occlusion_size));
 	occlusion->set_resolution(rain_occlusion_resolution(occlusion_resolution));
-	occlusion->set_follow_camera_enabled(true);
+	// FellowRain3D moves it with the camera itself (by whole sixteenths of its size: whole texels, so the shelter's
+	// edges do not shift between renders, and five times fewer renders than the stock 1 m steps).
+	occlusion->set_follow_camera_enabled(false);
 	occlusion->set_update_mode(occlusion_always_update ? GPUParticlesCollisionHeightField3D::UPDATE_MODE_ALWAYS : GPUParticlesCollisionHeightField3D::UPDATE_MODE_WHEN_MOVED);
 
 	Vector3 v = wind - Vector3(0, drop_speed, 0);
@@ -265,8 +273,17 @@ void FellowRain3D::_notification(int p_what) {
 				drops->set_global_position(at);
 				splash->set_global_position(c);
 			}
-			if (occlusion && !cam) {
-				occlusion->set_global_position(get_global_position());
+			if (occlusion) {
+				Vector3 at = get_global_position();
+				if (cam) {
+					Vector3 c = cam->get_global_position();
+					float step = occlusion_size / 16.0f;
+					at.x = Math::floor(c.x / step + 0.5f) * step;
+					at.z = Math::floor(c.z / step + 0.5f) * step;
+				}
+				if (!occlusion->get_global_transform().origin.is_equal_approx(at) || occlusion->get_global_basis() != Basis()) {
+					occlusion->set_global_transform(Transform3D(Basis(), at));
+				}
 			}
 			if (drops) {
 				drops->set_amount_ratio(CLAMP(rain, 0.0f, 1.0f));
