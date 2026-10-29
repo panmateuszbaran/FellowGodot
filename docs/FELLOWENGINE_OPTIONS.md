@@ -187,6 +187,25 @@ waves' compute 0.10 ms, the caustics 0.03 ms. The surface is a polar grid around
 `grid_near`, `grid_far`). The node's rotation and scale are not used. `rendering/fellow/fluid/enabled` off stops the waves. Decision record 0123; bench Water Lab
 (`--scene=water`, `--water=full|basic|none`).
 
+## Rain and wet surfaces (milestone 25)
+
+A `FellowRain3D` node (module `fellow_fluid`; one active at a time) makes it rain around the camera and wets the
+scene where the rain falls (Forward+):
+
+* **drops**: GPU particles in a box of `area` around the camera (`max_drops`, `drop_speed`, `wind`, `drop_size`,
+  `drop_color`), stopping on the scene as seen from above and splashing there (`splashes`); `rain` (0-1) scales them;
+* **wet materials**: every opaque material, after its own code, by `wetness`: porous ones (rough, not metallic)
+  darker, all with a glossy film; **puddles** on flat rough ground (`puddles`) with the rain's **ripples**
+  (`ripple_tile`, `ripple_strength`), in the depth pre-pass too so screen-space reflections show them;
+  `wetness_follows_rain` with `wetting_time` / `drying_time` to wet and dry over time;
+* **shelter**: a heightfield of the scene seen from above following the camera (`occlusion_size`,
+  `occlusion_height`, `occlusion_resolution`; `occlusion_always_update` for moving roofs; `get_occlusion()` for its
+  `heightfield_mask`) keeps the drops off and the ground dry under roofs;
+* a `FellowWater3D` shows the ripples too.
+
+Transparent materials are not wetted. `rendering/fellow/fluid/enabled` off turns the wetting off. Decision record
+0124; bench Rain Lab (`--scene=rain`, `--rain=on|dry|off`, `--rain_light=day|dusk`).
+
 ## Options that change the image (off by default)
 
 | setting | what it does | image cost | record |

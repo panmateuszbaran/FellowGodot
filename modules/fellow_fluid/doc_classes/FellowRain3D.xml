@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="FellowRain3D" inherits="Node3D" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+	<brief_description>
+		Rain around the camera and wet surfaces where it falls: darker, glossier materials and puddles with ripples (FellowEngine).
+	</brief_description>
+	<description>
+		Drops fall in a box of [member area] around the current camera (GPU particles: streaks aligned with their velocity, [member wind] included), stop where they hit the scene as seen from above and splash there ([member splashes]).
+		While the node is active, the Forward+ renderer wets every opaque material after the material's own code ([code]fragment()[/code] of a [ShaderMaterial] too), in the depth pre-pass as well as the colour pass so screen-space and other reflections see the result: by [member wetness], porous surfaces (rough, not metallic) darken, all of them get a glossy film, and on flat rough ground puddles form ([member puddles]): flat, smooth standing water with the rain's ripples ([member ripple_tile], [member ripple_strength]). Undersides and surfaces under a roof stay dry: the scene's top seen from above (a [GPUParticlesCollisionHeightField3D] of [member occlusion_size] following the camera, the drops' collider) tells where the rain reaches. A [FellowWater3D] shows the ripples on its surface too. Transparent materials are not wetted.
+		One node at a time is active: the last one to enter the tree. Wetness can follow the rain over time ([member wetness_follows_rain]). [code]rendering/fellow/fluid/enabled[/code] off turns the wetting off. The drops and the heightfield are internal children ([method get_drops], [method get_occlusion]). Decision record [code]docs/decisions/0124-rain.md[/code].
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="get_drops" qualifiers="const">
+			<return type="GPUParticles3D" />
+			<description>
+				The internal particles of the drops (their sub-emitter makes the splashes).
+			</description>
+		</method>
+		<method name="get_occlusion" qualifiers="const">
+			<return type="GPUParticlesCollisionHeightField3D" />
+			<description>
+				The internal heightfield of the scene seen from above: the drops collide with it and surfaces below its top stay dry. Its [member GPUParticlesCollisionHeightField3D.heightfield_mask] picks the layers that shelter.
+			</description>
+		</method>
+		<method name="get_ripple_texture" qualifiers="const">
+			<return type="Texture2DRD" />
+			<description>
+				The rain's ripples on standing water: a tiling texture of [member ripple_tile] (slopes in red and green, with mipmaps), computed every frame while the node is active.
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="area" type="float" setter="set_area" getter="get_area" default="40.0">
+			The side of the box around the camera the drops fall in, in metres.
+		</member>
+		<member name="drop_color" type="Color" setter="set_drop_color" getter="get_drop_color" default="Color(0.72, 0.76, 0.8, 0.4)">
+			The colour of the drops (unshaded; alpha is their opacity at the middle of a streak). The splashes are twice as opaque.
+		</member>
+		<member name="drop_size" type="Vector2" setter="set_drop_size" getter="get_drop_size" default="Vector2(0.024, 0.55)">
+			A drop's streak in metres: width and length (the path a frame's exposure sees). Drops fade in from 0.5 m to 4 m from the camera.
+		</member>
+		<member name="drop_speed" type="float" setter="set_drop_speed" getter="get_drop_speed" default="9.0">
+			The falling speed of the drops, in metres per second (the terminal speed of a raindrop of a few millimetres).
+		</member>
+		<member name="drying_time" type="float" setter="set_drying_time" getter="get_drying_time" default="600.0">
+			With [member wetness_follows_rain], the seconds a fully wet scene takes to dry once the rain stops.
+		</member>
+		<member name="fall_height" type="float" setter="set_fall_height" getter="get_fall_height" default="14.0">
+			The height above the camera the drops start from, in metres.
+		</member>
+		<member name="max_drops" type="int" setter="set_max_drops" getter="get_max_drops" default="24000">
+			The number of drops at full [member rain]; [member rain] scales the number drawn.
+		</member>
+		<member name="occlusion_always_update" type="bool" setter="set_occlusion_always_update" getter="get_occlusion_always_update" default="false">
+			If [code]true[/code], the heightfield of the scene seen from above is rendered again every frame (for moving roofs: vehicles, doors); otherwise when it moves with the camera.
+		</member>
+		<member name="occlusion_height" type="float" setter="set_occlusion_height" getter="get_occlusion_height" default="80.0">
+			The height of the heightfield's box, in metres, centred on the node's height.
+		</member>
+		<member name="occlusion_resolution" type="int" setter="set_occlusion_resolution" getter="get_occlusion_resolution" default="1024">
+			The resolution of the heightfield (256 to 4096 texels a side). With the default [member occlusion_size], 1024 is 8 cm a texel.
+		</member>
+		<member name="occlusion_size" type="float" setter="set_occlusion_size" getter="get_occlusion_size" default="80.0">
+			The side of the heightfield around the camera, in metres. Beyond it everything is exposed to the rain.
+		</member>
+		<member name="puddles" type="float" setter="set_puddles" getter="get_puddles" default="0.5">
+			How much of flat, rough ground is covered by puddles once it is wet (0: none, 1: nearly all).
+		</member>
+		<member name="rain" type="float" setter="set_rain" getter="get_rain" default="0.6">
+			How hard it rains (0 to 1): the number of drops, the ripples on standing water and, with [member wetness_follows_rain], how fast surfaces get wet.
+		</member>
+		<member name="ripple_strength" type="float" setter="set_ripple_strength" getter="get_ripple_strength" default="1.0">
+			A scale of the ripples' slopes on puddles and on wet flat ground.
+		</member>
+		<member name="ripple_tile" type="float" setter="set_ripple_tile" getter="get_ripple_tile" default="1.5">
+			The size in metres of the tile of the ripple texture (two offset lookups hide the repeat).
+		</member>
+		<member name="splashes" type="bool" setter="set_splashes" getter="get_splashes" default="true">
+			If [code]true[/code], drops splash where they land (two small droplets each, a sub-emitter at collision).
+		</member>
+		<member name="time_auto" type="bool" setter="set_time_auto" getter="is_time_auto" default="true">
+			If [code]true[/code], the ripples' time advances with the process time; otherwise it is set by the [code]time[/code] property (deterministic renders).
+		</member>
+		<member name="wetness" type="float" setter="set_wetness" getter="get_wetness" default="1.0">
+			How wet surfaces exposed to the rain are (0 to 1). Puddles appear above 0.4.
+		</member>
+		<member name="wetness_follows_rain" type="bool" setter="set_wetness_follows_rain" getter="is_wetness_following_rain" default="false">
+			If [code]true[/code], [member wetness] grows while it rains (in [member wetting_time] at full rain) and falls when it does not (in [member drying_time]).
+		</member>
+		<member name="wetting_time" type="float" setter="set_wetting_time" getter="get_wetting_time" default="60.0">
+			With [member wetness_follows_rain], the seconds full rain takes to make a dry scene fully wet.
+		</member>
+		<member name="wind" type="Vector3" setter="set_wind" getter="get_wind" default="Vector3(1, 0, 0.5)">
+			The wind carrying the drops, in metres per second: their streaks lean with it and they start upwind of the camera so they land around it.
+		</member>
+	</members>
+</class>

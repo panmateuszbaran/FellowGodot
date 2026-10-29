@@ -11,6 +11,7 @@ extends "res://bench/scene_base.gd"
 ##                       off: no FellowRain3D
 ##   --rain_amount=<0..1> (0.7), --rain_wetness=<0..1> (1), --rain_puddles=<0..1> (0.55), --rain_drops=<n> (24000)
 ##   --rain_light=day|dusk  overcast day (default) or dusk with the street lamps on
+##   --rain_occlusion=moved|always  the shelter heightfield rendered when it moves with the camera (default) or every frame
 ## Extra per-frame metrics: none (the drops are GPU particles; the wetting is in the scene's passes).
 
 const LENGTH := 140.0
@@ -53,8 +54,9 @@ func build(p_args: Dictionary) -> void:
 		rain.wetness = float(args.get("rain_wetness", "1.0")) if mode == "on" else 0.0
 		rain.puddles = float(args.get("rain_puddles", "0.55"))
 		rain.max_drops = int(args.get("rain_drops", "24000"))
+		rain.occlusion_always_update = str(args.get("rain_occlusion", "moved")) == "always"
 		rain.wind = Vector3(1.2, 0.0, 0.6)
-		rain.drop_color = Color(0.70, 0.74, 0.78, 0.30) if light == "day" else Color(0.55, 0.55, 0.6, 0.24)
+		rain.drop_color = Color(0.70, 0.74, 0.78, 0.40) if light == "day" else Color(0.55, 0.55, 0.6, 0.32)
 		add_child(rain)
 	_define_cameras()
 	set_time(0.0)

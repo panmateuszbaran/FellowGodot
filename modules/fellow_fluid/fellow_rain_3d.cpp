@@ -37,6 +37,7 @@
 #include "scene/3d/camera_3d.h"
 #include "scene/main/viewport.h"
 #include "scene/resources/3d/primitive_meshes.h"
+#include "scene/resources/image_texture.h"
 #include "scene/resources/particle_process_material.h"
 #include "servers/rendering/fellow_settings.h"
 #include "servers/rendering/renderer_rd/effects/fellow_weather.h"
@@ -85,10 +86,28 @@ void FellowRain3D::_build_children() {
 	drop_material->set_billboard_mode(BaseMaterial3D::BILLBOARD_FIXED_Y);
 	drop_material->set_flag(BaseMaterial3D::FLAG_DISABLE_FOG, false);
 	drop_material->set_cull_mode(BaseMaterial3D::CULL_DISABLED);
-	// A drop passing the lens would fill the screen: the drops fade in from 0.3 m to 2 m from the camera.
+	// A drop passing the lens would fill the screen (and be out of focus): the drops fade in from 0.5 m to 4 m from
+	// the camera.
 	drop_material->set_distance_fade(BaseMaterial3D::DISTANCE_FADE_PIXEL_ALPHA);
-	drop_material->set_distance_fade_min_distance(0.3);
-	drop_material->set_distance_fade_max_distance(2.0);
+	drop_material->set_distance_fade_min_distance(0.5);
+	drop_material->set_distance_fade_max_distance(4.0);
+	// A streak, not a rectangle: soft across, thinning to both ends (the mipmaps average a distant one to a faint line).
+	{
+		const int w = 8;
+		const int h = 64;
+		Ref<Image> img = Image::create_empty(w, h, false, Image::FORMAT_RGBA8);
+		for (int y = 0; y < h; y++) {
+			float v = (y + 0.5f) / h;
+			float along = Math::pow(Math::sin(v * Math::PI), 0.6f);
+			for (int x = 0; x < w; x++) {
+				float u = ((x + 0.5f) / w) * 2.0f - 1.0f;
+				float across = 1.0f - u * u;
+				img->set_pixel(x, y, Color(1.0f, 1.0f, 1.0f, across * along));
+			}
+		}
+		img->generate_mipmaps();
+		drop_material->set_texture(BaseMaterial3D::TEXTURE_ALBEDO, ImageTexture::create_from_image(img));
+	}
 
 	Ref<QuadMesh> drop_mesh;
 	drop_mesh.instantiate();

@@ -71,8 +71,8 @@ class FellowRain3D : public Node3D {
 	float fall_height = 14.0f; // m above the camera the drops start
 	int max_drops = 24000;
 	float drop_speed = 9.0f; // m/s
-	Vector2 drop_size = Vector2(0.018f, 0.55f); // m: width, length (the streak a frame's exposure sees)
-	Color drop_color = Color(0.72f, 0.76f, 0.8f, 0.3f);
+	Vector2 drop_size = Vector2(0.024f, 0.55f); // m: width, length (the streak a frame's exposure sees)
+	Color drop_color = Color(0.72f, 0.76f, 0.8f, 0.4f);
 	bool splashes = true;
 	float occlusion_size = 80.0f; // m
 	float occlusion_height = 80.0f; // m

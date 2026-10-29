@@ -1420,6 +1420,11 @@ void fellow_wetness_apply(in SceneData p_scene, inout vec3 r_albedo, inout float
 	mat4 inv_view = transpose(mat4(p_scene.inv_view_matrix[0], p_scene.inv_view_matrix[1], p_scene.inv_view_matrix[2], vec4(0.0, 0.0, 0.0, 1.0)));
 	vec3 wp = (inv_view * vec4(p_vertex, 1.0)).xyz;
 	vec3 gn = normalize(mat3(inv_view) * p_geometric_normal);
+	// The ripples' texture coordinates and their derivatives while every pixel of the quad is here (the early returns
+	// below are not uniform).
+	vec2 ruv = wp.xz * w.ripples.x;
+	vec2 ruv_dx = dFdx(ruv);
+	vec2 ruv_dy = dFdy(ruv);
 
 	// Where the rain reaches: below the scene's top as seen from above it does not. A wall looks just outside itself
 	// (the roof above its own footprint would keep it dry); four taps across a texel soften the edges.
@@ -1439,6 +1444,9 @@ void fellow_wetness_apply(in SceneData p_scene, inout vec3 r_albedo, inout float
 			exposed = acc * 0.25;
 		}
 	}
+	if (exposed <= 0.0) {
+		return; // sheltered: dry
+	}
 
 	// The surface's own water: undersides stay nearly dry; porous (rough, non-metal) materials darken as water fills
 	// their pores; a film makes every wet surface glossier.
@@ -1449,15 +1457,21 @@ void fellow_wetness_apply(in SceneData p_scene, inout vec3 r_albedo, inout float
 	r_roughness = mix(r_roughness, min(r_roughness, 0.2), wet * 0.9);
 
 	// Puddles on flat, rough, non-metal ground (noise thresholded by `puddles`, appearing once the surface is wet).
+	// Walls and slopes have neither puddles nor the film's ripples: done.
 	float flatness = smoothstep(0.95, 0.99, gn.y);
+	if (flatness <= 0.0) {
+		return;
+	}
 	float n = fellow_wet_noise(wp.xz * 0.23) * 0.6 + fellow_wet_noise(wp.xz * 0.91 + 17.31) * 0.3 + fellow_wet_noise(wp.xz * 3.7 + 5.3) * 0.1;
 	float puddle = clamp((n - 1.0 + w.params.y) * 6.0, 0.0, 1.0) * flatness * exposed * smoothstep(0.4, 0.9, wetness) * (1.0 - r_metallic) * smoothstep(0.25, 0.45, rough0);
 
 	// The rain's ripples (two lookups of the tiling texture, offset: no visible repeat), where it falls.
-	vec2 ruv = wp.xz * w.ripples.x;
-	vec2 ra = texture(sampler2D(fellow_rain_ripples, SAMPLER_LINEAR_WITH_MIPMAPS_REPEAT), ruv).rg;
-	vec2 rb = texture(sampler2D(fellow_rain_ripples, SAMPLER_LINEAR_WITH_MIPMAPS_REPEAT), ruv * 0.77 + vec2(0.37, 0.61)).rg;
-	vec2 slope = (ra + rb) * (w.ripples.y * w.params.z * exposed);
+	vec2 slope = vec2(0.0);
+	if (w.params.z > 0.0) {
+		vec2 ra = textureGrad(sampler2D(fellow_rain_ripples, SAMPLER_LINEAR_WITH_MIPMAPS_REPEAT), ruv, ruv_dx, ruv_dy).rg;
+		vec2 rb = textureGrad(sampler2D(fellow_rain_ripples, SAMPLER_LINEAR_WITH_MIPMAPS_REPEAT), ruv * 0.77 + vec2(0.37, 0.61), ruv_dx * 0.77, ruv_dy * 0.77).rg;
+		slope = (ra + rb) * (w.ripples.y * w.params.z * exposed);
+	}
 
 	vec3 nw = normalize(mat3(inv_view) * r_normal);
 	nw = normalize(mix(nw, normalize(vec3(-slope.x, 1.0, -slope.y)), puddle)); // standing water: flat, rippled
