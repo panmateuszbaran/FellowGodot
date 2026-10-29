@@ -83,6 +83,7 @@ public:
 		virtual bool casts_shadows() const = 0;
 		// FellowEngine directional shadow cache (see RendererMaterialStorage::material_fellow_shadow_cacheable).
 		virtual bool fellow_shadow_cacheable() const { return !is_animated(); }
+		virtual bool fellow_shadow_cacheable_far() const { return fellow_shadow_cacheable(); }
 		virtual RenderingServerTypes::ShaderNativeSourceCode get_native_source_code() const = 0;
 		virtual Pair<ShaderRD *, RID> get_native_shader_and_version() const = 0;
 
@@ -505,6 +506,7 @@ public:
 	virtual bool material_is_animated(RID p_material) override;
 	virtual bool material_casts_shadows(RID p_material) override;
 	virtual bool material_fellow_shadow_cacheable(RID p_material) override;
+	virtual bool material_fellow_shadow_cacheable_far(RID p_material) override;
 	virtual RSE::CullMode material_get_cull_mode(RID p_material) const override;
 
 	virtual void material_get_instance_shader_parameters(RID p_material, List<InstanceShaderParam> *r_parameters) override;

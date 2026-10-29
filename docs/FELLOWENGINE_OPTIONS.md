@@ -225,6 +225,9 @@ Each mesh instance (a MultiMesh's instance or a node) is one plant standing at i
 the wind there, sways at a frequency of its size, its branches at their own phases, its leaves flutter; normals turn
 with the bend; shadows and motion vectors follow. A `FellowRain3D` takes its drops' wind from it
 (`wind_from_scene`). Not moved: the Mobile and Compatibility renderers, SDFGI's voxelization, `skip_vertex_transform`.
+MultiMesh culling knows the wind's bound (no cull margin needed); the shadows of plants in the wind are cached from
+directional cascade `shadows/wind_cached_from_cascade` on (2; -1: never — every cascade redrawn every frame), where
+they keep the pose of the cache's last build.
 Decision record 0125; bench Wind Lab (`--scene=wind`, `--wind=on|off|shader`).
 
 ## Options that change the image (off by default)

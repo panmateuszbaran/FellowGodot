@@ -28,7 +28,6 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-
 #pragma once
 
 #include "core/config/project_settings.h"
@@ -597,6 +596,11 @@ inline bool directional_shadow_cache() {
 // Guard band in texels on each side of a cascade (cache texture = cascade size + 2 * guard).
 inline int directional_shadow_cache_guard() {
 	return CLAMP(GLOBAL_GET_CACHED(int, "rendering/fellow/shadows/directional_cache_guard_texels"), 16, 1024);
+}
+
+// The first directional cascade where casters moved only by the wind are cached (decision 0125); -1: none.
+inline int shadow_wind_cached_from_cascade() {
+	return GLOBAL_GET_CACHED(int, "rendering/fellow/shadows/wind_cached_from_cascade");
 }
 
 // Frames an instance must stay unchanged before it is treated as static and cached.

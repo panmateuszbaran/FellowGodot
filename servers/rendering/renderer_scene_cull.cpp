@@ -3461,6 +3461,7 @@ void RendererSceneCull::_scene_cull(CullData &cull_data, InstanceCullResult &cul
 	Transform3D inv_cam_transform = cull_data.cam_transform.inverse();
 	float z_near = cull_data.camera_matrix->get_z_near();
 	const uint64_t fellow_static_frames = (uint64_t)Fellow::directional_shadow_cache_static_frames();
+	const int fellow_wind_from = Fellow::shadow_wind_cached_from_cascade(); // decision 0125
 	bool is_orthogonal = cull_data.camera_matrix->is_orthogonal();
 
 	// FellowEngine contribution culling (decision 0121): a mesh or MultiMesh node whose bounding sphere (half its box's
@@ -3856,7 +3857,10 @@ void RendererSceneCull::_scene_cull(CullData &cull_data, InstanceCullResult &cul
 						if (!(((1 << base_type) & RSE::INSTANCE_GEOMETRY_MASK) && (idata.flags & InstanceData::FLAG_CAST_SHADOWS) && (LAYER_CHECK & cull_data.cull->shadows[j].caster_mask))) {
 							continue;
 						}
-						const bool cacheable = (fellow_hlod != 0 || (idata.visibility_index == -1 && idata.parent_array_index == -1)) && !idata.instance->dynamic_gi && static_cast<InstanceGeometryData *>(idata.instance->base_data)->fellow_shadow_cacheable;
+						// Decision 0125: a caster moved only by the wind is cached from the far cascades on.
+						const InstanceGeometryData *fellow_geom = static_cast<InstanceGeometryData *>(idata.instance->base_data);
+						const bool fellow_cacheable_material = fellow_geom->fellow_shadow_cacheable || (fellow_wind_from >= 0 && int(k) >= fellow_wind_from && fellow_geom->fellow_shadow_cacheable_far);
+						const bool cacheable = (fellow_hlod != 0 || (idata.visibility_index == -1 && idata.parent_array_index == -1)) && !idata.instance->dynamic_gi && fellow_cacheable_material;
 						const uint64_t change_frame = idata.instance->fellow_change_frame;
 						const bool static_now = cacheable && change_frame + fellow_static_frames <= frame_number;
 						const bool in_cache = cacheable && change_frame + fellow_static_frames <= cascade.fellow_build_frame;
@@ -5167,12 +5171,16 @@ void RendererSceneCull::_update_dirty_instance(Instance *p_instance) const {
 			// instance's transform, mesh and material state (all of which update the instance when they change).
 			{
 				bool cacheable = (p_instance->base_type == RSE::INSTANCE_MESH || p_instance->base_type == RSE::INSTANCE_MULTIMESH) && !p_instance->mesh_instance.is_valid() && !is_animated;
+				bool cacheable_far = cacheable;
 				auto check = [&](RID p_mat) {
 					if (cacheable && p_mat.is_valid() && !RSG::material_storage->material_fellow_shadow_cacheable(p_mat)) {
 						cacheable = false;
 					}
+					if (cacheable_far && p_mat.is_valid() && !RSG::material_storage->material_fellow_shadow_cacheable_far(p_mat)) {
+						cacheable_far = false;
+					}
 				};
-				if (cacheable) {
+				if (cacheable_far) {
 					if (p_instance->material_override.is_valid()) {
 						check(p_instance->material_override);
 					} else if (p_instance->base_type == RSE::INSTANCE_MESH && p_instance->base.is_valid()) {
@@ -5191,6 +5199,7 @@ void RendererSceneCull::_update_dirty_instance(Instance *p_instance) const {
 					check(p_instance->material_overlay);
 				}
 				geom->fellow_shadow_cacheable = cacheable;
+				geom->fellow_shadow_cacheable_far = cacheable_far;
 			}
 
 			if (p_instance->instance_uniforms.materials_finish(p_instance->self)) {

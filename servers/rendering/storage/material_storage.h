@@ -93,6 +93,8 @@ public:
 	// FellowEngine directional shadow cache: false if the material's shadow can change without the instance being
 	// updated (TIME, vertex displacement, ...). The default is conservative for renderers that do not implement it.
 	virtual bool material_fellow_shadow_cacheable(RID p_material) { return !material_is_animated(p_material); }
+	// As above, but a material moved only by the wind counts as static (decision 0125: its far cascades are cached).
+	virtual bool material_fellow_shadow_cacheable_far(RID p_material) { return material_fellow_shadow_cacheable(p_material); }
 	virtual RSE::CullMode material_get_cull_mode(RID p_material) const = 0;
 
 	struct InstanceShaderParam {

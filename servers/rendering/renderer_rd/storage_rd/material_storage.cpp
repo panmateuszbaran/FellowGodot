@@ -2617,6 +2617,18 @@ bool MaterialStorage::material_fellow_shadow_cacheable(RID p_material) {
 	return true;
 }
 
+bool MaterialStorage::material_fellow_shadow_cacheable_far(RID p_material) {
+	Material *material = material_owner.get_or_null(p_material);
+	ERR_FAIL_NULL_V(material, false);
+	if (material->shader && material->shader->data && !material->shader->data->fellow_shadow_cacheable_far()) {
+		return false;
+	}
+	if (material->next_pass.is_valid()) {
+		return material_fellow_shadow_cacheable_far(material->next_pass);
+	}
+	return true;
+}
+
 bool MaterialStorage::material_casts_shadows(RID p_material) {
 	Material *material = material_owner.get_or_null(p_material);
 	ERR_FAIL_NULL_V(material, true);

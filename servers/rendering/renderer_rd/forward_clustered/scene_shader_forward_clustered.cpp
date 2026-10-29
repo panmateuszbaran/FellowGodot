@@ -283,6 +283,18 @@ bool SceneShaderForwardClustered::ShaderData::fellow_shadow_cacheable() const {
 	return true;
 }
 
+bool SceneShaderForwardClustered::ShaderData::fellow_shadow_cacheable_far() const {
+	// As fellow_shadow_cacheable(), the wind's motion aside (decision 0125): it moves vertices, but in a far cascade the
+	// pose of the cache's build stands for it.
+	if (fellow_writes_vertex || uses_position || uses_vertex_time || writes_modelview_or_projection || uses_particle_trails || uses_z_clip_scale) {
+		return false;
+	}
+	if (uses_fragment_time && (uses_discard || uses_alpha_clip || uses_alpha_antialiasing || uses_depth_prepass_alpha || uses_alpha)) {
+		return false;
+	}
+	return true;
+}
+
 bool SceneShaderForwardClustered::ShaderData::is_animated() const {
 	return (uses_fragment_time && uses_discard) || (uses_vertex_time && uses_vertex);
 }

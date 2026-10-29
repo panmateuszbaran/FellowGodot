@@ -649,6 +649,7 @@ public:
 		bool can_cast_shadows;
 		bool material_is_animated;
 		bool fellow_shadow_cacheable = false; // FellowEngine: shadow depends only on transform/mesh/material state.
+		bool fellow_shadow_cacheable_far = false; // as above, the wind's motion aside (decision 0125)
 		uint32_t projector_count = 0;
 		uint32_t softshadow_count = 0;
 
@@ -985,10 +986,10 @@ public:
 		static constexpr uint32_t FELLOW_MERGE_DIRECTIONAL = RendererSceneRender::MAX_DIRECTIONAL_LIGHTS * RendererSceneRender::MAX_DIRECTIONAL_LIGHT_CASCADES;
 		static constexpr uint32_t FELLOW_MERGE_KINDS = FELLOW_MERGE_SIMPLE + FELLOW_MERGE_DIRECTIONAL * 2 + SDFGI_MAX_CASCADES * SDFGI_MAX_REGIONS_PER_CASCADE + SDFGI_MAX_CASCADES;
 		void fellow_merge_kind(uint32_t p_kind, InstanceCullResult *p_sources, uint32_t p_source_count) {
-#define FELLOW_MERGE(m_member)                                    \
-	for (uint32_t s = 0; s < p_source_count; s++) {             \
-		m_member.merge_unordered(p_sources[s].m_member);         \
-	}                                                            \
+#define FELLOW_MERGE(m_member) \
+	for (uint32_t s = 0; s < p_source_count; s++) { \
+		m_member.merge_unordered(p_sources[s].m_member); \
+	} \
 	return;
 			switch (p_kind) {
 				case 0:
