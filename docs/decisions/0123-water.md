@@ -153,6 +153,11 @@ the grazing views (the glint's 1.06 ms, the pier's far half): rays towards the h
 steps. FellowWater3D costs 1.6 ms of a 1080p frame on this GPU (Godot's water 0.38 ms), the reflections more than half
 of it; `screen_space_reflections` off or fewer `reflection_steps` trade them away.
 
+**The hierarchical march** (milestone 26, decision 0126): with the depth texture's nearest-depth mip levels
+(`postfx/depth_copy_nearest_mipmaps`, on) the rays cross the screen a cell of a level per step — no gaps, no jitter,
+the far shore at its true parallax; at 1080p 12-31 % fewer depth lookups in the shore, pier and glint views, 23 % more
+in the aerial one. The linear march above remains where the depth texture has one level.
+
 ## Decision
 
 **KEEP** — a new node, nothing changes without it. The screen copy's mips on demand: exact, on by default (the copy

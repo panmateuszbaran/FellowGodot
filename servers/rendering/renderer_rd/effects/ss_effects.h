@@ -188,6 +188,9 @@ public:
 
 	void ssr_allocate_buffers(Ref<RenderSceneBuffersRD> p_render_buffers, SSRRenderBuffers &p_ssr_buffers, const RD::DataFormat p_color_format);
 	void screen_space_reflection(Ref<RenderSceneBuffersRD> p_render_buffers, SSRRenderBuffers &p_ssr_buffers, const RID *p_normal_roughness_slices, int p_max_steps, float p_fade_in, float p_fade_out, float p_tolerance, const Projection *p_projections, const Projection *p_reprojections, const Vector3 *p_eye_offsets, RendererRD::CopyEffects &p_copy_effects);
+	// FellowEngine (decision 0126): levels 1 to the last of a named texture (R32F, storage) from the depth buffer, each
+	// texel the nearest depth (the largest reverse-Z value) of the texels below it (SSR's Hi-Z reduction).
+	void fellow_nearest_depth_mipmaps(Ref<RenderSceneBuffersRD> p_render_buffers, const StringName &p_context, const StringName &p_name, uint32_t p_view_count);
 
 	/* subsurface scattering */
 	void sss_set_quality(RSE::SubSurfaceScatteringQuality p_quality);

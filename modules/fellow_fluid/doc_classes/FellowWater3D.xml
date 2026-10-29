@@ -103,13 +103,13 @@
 			Segments of each ring of the grid (the rings grow by 1 + 2π / segments, so its cells stay square).
 		</member>
 		<member name="reflection_distance" type="float" setter="set_reflection_distance" getter="get_reflection_distance" default="80.0">
-			Length of the screen-space reflection rays, in metres.
+			Length of the screen-space reflection rays of the linear march, in metres (the hierarchical one, with the depth texture's mip levels, follows a ray across the whole screen). Where nothing is hit, what the screen shows in the ray's direction is reflected if it is farther than this.
 		</member>
 		<member name="reflection_min_fresnel" type="float" setter="set_reflection_min_fresnel" getter="get_reflection_min_fresnel" default="0.04">
 			Below this Fresnel factor (looking down into the water) no reflection ray is traced: the sky's IBL alone (faded in over 1.5 times it).
 		</member>
 		<member name="reflection_steps" type="int" setter="set_reflection_steps" getter="get_reflection_steps" default="32">
-			Most steps of a screen-space reflection ray (about one per 10 pixels of its length on the screen, at least 6; quadratically spaced from a per-pixel offset, then refined by bisection).
+			Most steps of a screen-space reflection ray. With the depth texture's nearest-depth mip levels ([code]rendering/fellow/postfx/depth_copy_nearest_mipmaps[/code], on) the ray crosses the screen hierarchically, a cell of a level per step, up to twice this many steps; without them about one step per 10 pixels of its length on the screen, at least 6, quadratically spaced from a per-pixel offset, then refined by bisection.
 		</member>
 		<member name="refraction_strength" type="float" setter="set_refraction_strength" getter="get_refraction_strength" default="0.25">
 			How far the waves shift the scene seen below, relative to the water's thickness and the distance (0 = no refraction).
@@ -181,6 +181,9 @@
 		</constant>
 		<constant name="DEBUG_VIEW_ROUGHNESS" value="6" enum="DebugView">
 			Red: the unresolved slope deviation; green: roughness.
+		</constant>
+		<constant name="DEBUG_VIEW_REFLECTION_COST" value="7" enum="DebugView">
+			Red: the reflection ray's depth lookups (divided by twice [member reflection_steps]); green: the screen-space hit's weight.
 		</constant>
 	</constants>
 </class>

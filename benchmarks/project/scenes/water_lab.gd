@@ -13,7 +13,8 @@ extends "res://bench/scene_base.gd"
 ##   --water_preroll=<s>      simulated seconds before the first frame (40: the river reaches the lake)
 ##   --water_wind=<m/s>       wind speed (5), --water_waves=<n> wave grid per cascade (256)
 ##   --water_ssr=0, --water_caustics=0, --water_refraction=0 (refraction_strength 0), --water_ssr_steps=<n> (32)
-##   --water_debug=<n>        FellowWater3D.debug_view (1 reflections, 2 foam, 3 refraction, 4 normals, 5 simulation, 6 roughness)
+##   --water_debug=<n>        FellowWater3D.debug_view (1 reflections, 2 foam, 3 refraction, 4 normals, 5 simulation, 6 roughness,
+##                            7 reflection cost)
 ## Extra per-frame metrics: water_waves_gpu_ms, fluid_sim_gpu_ms.
 
 const SIZE := 640.0

@@ -57,7 +57,7 @@ uniform float flow_period = 1.6;
 uniform vec4 extent = vec4(-1e9, -1e9, 1e9, 1e9);
 
 uniform sampler2D screen_tex : hint_screen_texture, filter_linear, repeat_disable;
-uniform sampler2D depth_tex : hint_depth_texture, filter_nearest, repeat_disable;
+uniform sampler2D depth_tex : hint_depth_texture, filter_nearest_mipmap, repeat_disable; // the nearest depth's mips (decision 0126)
 uniform sampler2D foam_noise : filter_linear_mipmap, repeat_enable;
 
 uniform vec3 absorption = vec3(0.55, 0.16, 0.30);
@@ -234,6 +234,7 @@ void fragment() {
 	// Reflections traced against the opaque scene's depth; the sky's IBL where nothing is hit.
 	float ssr_weight = 0.0;
 	vec3 ssr_color = vec3(0.0);
+	float ssr_cost = 0.0; // the share of the steps taken (debug view 7)
 	// Where Fresnel is small (looking down into the water) the reflection is a few per cent of the light: the sky's
 	// IBL, no march. Faded in over 1.5x the threshold.
 	float ssr_need = smoothstep(ssr_min_fresnel, ssr_min_fresnel * 1.5, fresnel);
@@ -247,59 +248,145 @@ void fragment() {
 		}
 		bool hit = false;
 		vec3 p0 = VERTEX + n_view * 0.02;
-		// Steps by the ray's length on the screen (about one per 10 pixels): a far pixel's ray crosses few pixels.
-		float t_end = r.z > 0.0 ? min(ssr_max_distance, (-p0.z - 0.06) / r.z) : ssr_max_distance;
-		vec4 ce = PROJECTION_MATRIX * vec4(p0 + r * t_end, 1.0);
-		vec4 cs = PROJECTION_MATRIX * vec4(p0, 1.0);
-		float px = length((ce.xy / ce.w - cs.xy / cs.w) * 0.5 * VIEWPORT_SIZE);
-		int steps = clamp(int(px / 10.0), 6, ssr_steps);
-		// A per-pixel, per-frame offset of the samples (interleaved gradient noise): TAA averages the gaps.
-		float jitter = fract(52.9829189 * fract(dot(FRAGCOORD.xy + 5.588238 * fract(water_time * 7.31), vec2(0.06711056, 0.00583715))));
-		// The ray's clip position is linear in t (two vectors, once), the depth buffer's view z needs only the inverse
-		// projection's z and w rows (the jitter only moves x and y).
-		vec4 c0 = PROJECTION_MATRIX * vec4(p0, 1.0);
-		vec4 c1 = PROJECTION_MATRIX * vec4(r, 0.0);
+		// The depth buffer's view z needs only the inverse projection's z and w rows.
 		vec2 iz = vec2(INV_PROJECTION_MATRIX[2][2], INV_PROJECTION_MATRIX[3][2]);
 		vec2 iw = vec2(INV_PROJECTION_MATRIX[2][3], INV_PROJECTION_MATRIX[3][3]);
-		float t_prev = 0.0;
-		for (int i = 1; i <= steps; i++) {
-			float f = (float(i) - 1.0 + max(jitter, 0.05)) / float(steps);
-			float t = ssr_max_distance * f * f;
-			float pz = p0.z + r.z * t;
-			if (pz > -0.05) {
-				break;
+		int levels = textureQueryLevels(depth_tex);
+		if (levels > 1) {
+			// Hierarchical (decision 0126): the depth texture's levels hold the nearest depth of their cells. The ray
+			// in screen space, its depth linear there, crosses a cell per step: a level up where nothing in the cell is
+			// nearer than the ray, down where something may be (after Godot's SSR). Empty stretches — the water below
+			// the ray, the sky — go in a few steps; every pixel the ray crosses is tested, without gaps.
+			vec2 vs = VIEWPORT_SIZE;
+			vec3 pe = p0 + r;
+			if (pe.z > -0.00001) {
+				pe -= r / r.z * (pe.z + 0.00001); // to the camera's plane: the near plane's depth is the largest
 			}
-			vec4 cp = c0 + c1 * t;
-			vec2 uv = cp.xy / cp.w * 0.5 + 0.5;
-			if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
-				break;
-			}
-			float d = textureLod(depth_tex, uv, 0.0).r;
-			float dz = (iz.x * d + iz.y) / (iw.x * d + iw.y) - pz;
-			if (dz > 0.0 && dz < max(0.4, (t - t_prev) * 1.5)) {
-				// Refine between the last two samples.
-				float lo = t_prev;
-				float hi = t;
-				for (int j = 0; j < 5; j++) {
-					float mid = 0.5 * (lo + hi);
-					vec4 cm = c0 + c1 * mid;
-					vec2 um = cm.xy / cm.w * 0.5 + 0.5;
-					float dm = textureLod(depth_tex, um, 0.0).r;
-					if ((iz.x * dm + iz.y) / (iw.x * dm + iw.y) > p0.z + r.z * mid) {
-						hi = mid;
+			vec4 h0 = PROJECTION_MATRIX * vec4(p0, 1.0);
+			vec4 h1 = PROJECTION_MATRIX * vec4(pe, 1.0);
+			vec3 s0 = vec3(h0.xy / h0.w * 0.5 + 0.5, h0.z / h0.w);
+			vec3 sd = vec3(h1.xy / h1.w * 0.5 + 0.5, h1.z / h1.w) - s0;
+			if (abs(sd.z) > 1e-12) {
+				// t: the change of the depth buffer's value along the ray.
+				sd /= abs(sd.z);
+				bool toward = sd.z >= 0.0;
+				vec2 inv_sd = 1.0 / sd.xy;
+				vec2 tb = max(-s0.xy * inv_sd, (vec2(1.0) - s0.xy) * inv_sd);
+				float t_max = min(tb.x, tb.y);
+				vec2 cstep = vec2(sd.x < 0.0 ? -1.0 : 1.0, sd.y < 0.0 ? -1.0 : 1.0);
+				vec2 cnext = clamp(cstep, vec2(0.0), vec2(1.0));
+				vec2 cbias = cstep * 0.000001 - s0.xy;
+				vec2 pt0 = ((floor(s0.xy * vs) + cnext) / vs + cbias) * inv_sd;
+				float t = min(pt0.x, pt0.y); // from the next pixel
+				int level = 0;
+				int iterations = 2 * ssr_steps;
+				int behind = 0;
+				while (level >= 0 && iterations > 0 && t < t_max) {
+					vec3 sc = s0 + sd * t;
+					vec2 cells = max(floor(vs / exp2(float(level))), vec2(1.0));
+					vec2 ci = min(floor(sc.xy * cells), cells - 1.0);
+					float cd = texelFetch(depth_tex, ivec2(ci), level).r;
+					float depth_t = (cd - s0.z) * sd.z;
+					vec2 pt = ((ci + cnext) / cells + cbias) * inv_sd;
+					float edge_t = min(pt.x, pt.y);
+					bool meets = toward ? (t <= depth_t) : (depth_t <= edge_t);
+					int dl = meets ? -1 : 1;
+					if (level == 0 && !meets) {
+						behind = 0;
+					} else if (level == 0) {
+						// Behind the surface by more than its thickness (40 cm, at least twice the ray's depth across
+						// the pixel): the ray passes behind it — a post, a trunk. Behind for more than four pixels (a
+						// deck, a bank), what it meets there is hidden from the screen: no hit (the fallback below).
+						float zs = (iz.x * cd + iz.y) / (iw.x * cd + iw.y);
+						float zr = (iz.x * sc.z + iz.y) / (iw.x * sc.z + iw.y);
+						float ze = s0.z + sd.z * edge_t;
+						ze = (iz.x * ze + iz.y) / (iw.x * ze + iw.y);
+						if (zs - zr > max(0.4, 2.0 * abs(zr - ze))) {
+							behind++;
+							if (behind > 4) {
+								break;
+							}
+							meets = false;
+							dl = 0;
+						}
+					}
+					if (meets) {
+						if (!toward) {
+							t = max(t, depth_t);
+						}
 					} else {
-						lo = mid;
+						t = edge_t;
+					}
+					level = min(level + dl, levels - 1);
+					iterations--;
+				}
+				ssr_cost = 1.0 - float(iterations) / float(2 * ssr_steps);
+				if (level < 0) {
+					vec2 uh = (s0 + sd * t).xy;
+					if (texelFetch(depth_tex, min(ivec2(uh * vs), ivec2(vs) - ivec2(1)), 0).r > 0.0) { // not the sky
+						vec2 edge = min(uh, 1.0 - uh);
+						ssr_weight = smoothstep(0.0, 0.08, min(edge.x, edge.y)) * ssr_need;
+						ssr_color = textureLod(screen_tex, uh, 0.0).rgb;
+						hit = true;
 					}
 				}
-				vec4 ch = c0 + c1 * hi;
-				vec2 uh = ch.xy / ch.w * 0.5 + 0.5;
-				vec2 edge = min(uh, 1.0 - uh);
-				ssr_weight = smoothstep(0.0, 0.08, min(edge.x, edge.y)) * (1.0 - smoothstep(0.75, 1.0, hi / ssr_max_distance)) * ssr_need;
-				ssr_color = textureLod(screen_tex, uh, 0.0).rgb;
-				hit = true;
-				break;
 			}
-			t_prev = t;
+		} else {
+			// Steps by the ray's length on the screen (about one per 10 pixels): a far pixel's ray crosses few pixels.
+			float t_end = r.z > 0.0 ? min(ssr_max_distance, (-p0.z - 0.06) / r.z) : ssr_max_distance;
+			vec4 ce = PROJECTION_MATRIX * vec4(p0 + r * t_end, 1.0);
+			vec4 cs = PROJECTION_MATRIX * vec4(p0, 1.0);
+			float px = length((ce.xy / ce.w - cs.xy / cs.w) * 0.5 * VIEWPORT_SIZE);
+			int steps = clamp(int(px / 10.0), 6, ssr_steps);
+			// A per-pixel, per-frame offset of the samples (interleaved gradient noise): TAA averages the gaps.
+			float jitter = fract(52.9829189 * fract(dot(FRAGCOORD.xy + 5.588238 * fract(water_time * 7.31), vec2(0.06711056, 0.00583715))));
+			// The ray's clip position is linear in t (two vectors, once).
+			vec4 c0 = PROJECTION_MATRIX * vec4(p0, 1.0);
+			vec4 c1 = PROJECTION_MATRIX * vec4(r, 0.0);
+			float t_prev = 0.0;
+			int lookups = 0;
+			for (int i = 1; i <= steps; i++) {
+				lookups = i;
+				float f = (float(i) - 1.0 + max(jitter, 0.05)) / float(steps);
+				float t = ssr_max_distance * f * f;
+				float pz = p0.z + r.z * t;
+				if (pz > -0.05) {
+					break;
+				}
+				vec4 cp = c0 + c1 * t;
+				vec2 uv = cp.xy / cp.w * 0.5 + 0.5;
+				if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
+					break;
+				}
+				float d = textureLod(depth_tex, uv, 0.0).r;
+				float dz = (iz.x * d + iz.y) / (iw.x * d + iw.y) - pz;
+				if (dz > 0.0 && dz < max(0.4, (t - t_prev) * 1.5)) {
+					// Refine between the last two samples.
+					lookups += 5;
+					float lo = t_prev;
+					float hi = t;
+					for (int j = 0; j < 5; j++) {
+						float mid = 0.5 * (lo + hi);
+						vec4 cm = c0 + c1 * mid;
+						vec2 um = cm.xy / cm.w * 0.5 + 0.5;
+						float dm = textureLod(depth_tex, um, 0.0).r;
+						if ((iz.x * dm + iz.y) / (iw.x * dm + iw.y) > p0.z + r.z * mid) {
+							hi = mid;
+						} else {
+							lo = mid;
+						}
+					}
+					vec4 ch = c0 + c1 * hi;
+					vec2 uh = ch.xy / ch.w * 0.5 + 0.5;
+					vec2 edge = min(uh, 1.0 - uh);
+					ssr_weight = smoothstep(0.0, 0.08, min(edge.x, edge.y)) * (1.0 - smoothstep(0.75, 1.0, hi / ssr_max_distance)) * ssr_need;
+					ssr_color = textureLod(screen_tex, uh, 0.0).rgb;
+					hit = true;
+					break;
+				}
+				t_prev = t;
+			}
+			ssr_cost = float(lookups) / float(2 * ssr_steps);
 		}
 		if (!hit && r.z < -0.01) {
 			// Nothing near: what the screen shows in the ray's direction, if it is distant (the far shore, the
@@ -349,6 +436,8 @@ void fragment() {
 			dbg = vec3(v_sim, sims.a, length(flow) * 0.5);
 		} else if (debug_view == 6) {
 			dbg = vec3(sqrt(variance), rough, 0.0);
+		} else if (debug_view == 7) {
+			dbg = vec3(ssr_cost, ssr_weight, 0.0);
 		}
 		ALBEDO = vec3(0.0);
 		EMISSION = dbg;

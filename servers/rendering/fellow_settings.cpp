@@ -247,6 +247,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/postfx/glow_blur", PROPERTY_HINT_ENUM, "Stock,Padded,Tiles 16x16"), 2); // decision 0052
 	GLOBAL_DEF("rendering/fellow/postfx/ssr_filter_padded", false); // decision 0052: no gain (m10_f151)
 	GLOBAL_DEF("rendering/fellow/postfx/screen_copy_mipmaps_on_demand", true); // decision 0123: exact
+	GLOBAL_DEF("rendering/fellow/postfx/depth_copy_nearest_mipmaps", true); // decision 0126
 	GLOBAL_DEF("rendering/fellow/postfx/tonemap_specialized", true); // decision 0055 (on from fellow138)
 	GLOBAL_DEF("rendering/fellow/postfx/fog_specialized", true); // decision 0056 (on from fellow138)
 	// Bits: 1 no decals, 2 no reflection probes, 4 no directional lights, 8 no omni lights, 16 no spot lights, 32 no

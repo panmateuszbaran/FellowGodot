@@ -954,6 +954,10 @@ String ShaderCompiler::_dump_node_code(const SL::Node *p_node, int p_level, Gene
 							r_gen_code.uses_normal_roughness_texture = true;
 						} else if (u.hint == ShaderLanguage::ShaderNode::Uniform::HINT_DEPTH_TEXTURE) {
 							name = "depth_buffer";
+							if (u.filter >= ShaderLanguage::FILTER_NEAREST_MIPMAP && u.filter != ShaderLanguage::FILTER_DEFAULT) {
+								// FellowEngine: a mipmap filter written out asks for the nearest depth's mips (decision 0126).
+								r_gen_code.uses_depth_texture_mipmaps = true;
+							}
 							r_gen_code.uses_depth_texture = true;
 						} else if (u.hint == ShaderLanguage::ShaderNode::Uniform::HINT_BLIT_SOURCE0) {
 							name = "source0";
@@ -1643,6 +1647,7 @@ Error ShaderCompiler::compile(RSE::ShaderMode p_mode, const String &p_code, Iden
 	r_gen_code.uses_screen_texture_mipmaps = false;
 	r_gen_code.uses_screen_texture = false;
 	r_gen_code.uses_depth_texture = false;
+	r_gen_code.uses_depth_texture_mipmaps = false;
 	r_gen_code.uses_normal_roughness_texture = false;
 
 	used_name_defines.clear();

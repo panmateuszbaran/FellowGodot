@@ -311,6 +311,7 @@ public:
 		bool writes_modelview_or_projection = false;
 		bool uses_world_coordinates = false;
 		bool uses_screen_texture_mipmaps = false;
+		bool uses_depth_texture_mipmaps = false; // FellowEngine (decision 0126)
 		bool uses_z_clip_scale = false;
 		// FellowEngine occlusion culling (decision 0026): materials whose fragments can be nearer than their surface's
 		// bounding box (DEPTH written) or whose output depends on the instance's index in its draw (INSTANCE_ID) are

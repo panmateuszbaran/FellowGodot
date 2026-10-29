@@ -69,6 +69,7 @@ public:
 		DEBUG_VIEW_NORMALS,
 		DEBUG_VIEW_SIMULATION, // r: simulation weight, g: its foam, b: flow speed / 2 m/s
 		DEBUG_VIEW_ROUGHNESS, // r: unresolved slope deviation, g: roughness
+		DEBUG_VIEW_REFLECTION_COST, // r: depth lookups / (2 x reflection_steps), g: screen-space hit weight
 	};
 
 private:

@@ -3352,6 +3352,7 @@ void RenderForwardClustered::_fill_render_list(RenderListType p_render_list, con
 		scene_state.used_screen_texture_mipmaps = false;
 		scene_state.used_normal_texture = false;
 		scene_state.used_depth_texture = false;
+		scene_state.used_depth_texture_mipmaps = false;
 		scene_state.used_lightmap = false;
 		scene_state.used_opaque_stencil = false;
 	}
@@ -3680,6 +3681,9 @@ void RenderForwardClustered::_fill_render_list_range(const FellowFillParams &p_p
 				}
 				if (surf->flags & GeometryInstanceSurfaceDataCache::FLAG_USES_DEPTH_TEXTURE) {
 					r_out.used_depth_texture = true;
+					if (surf->flags & GeometryInstanceSurfaceDataCache::FLAG_USES_DEPTH_TEXTURE_MIPMAPS) {
+						r_out.used_depth_texture_mipmaps = true;
+					}
 				}
 				if ((surf->flags & GeometryInstanceSurfaceDataCache::FLAG_USES_STENCIL) && !force_alpha && (surf->flags & (GeometryInstanceSurfaceDataCache::FLAG_PASS_DEPTH | GeometryInstanceSurfaceDataCache::FLAG_PASS_OPAQUE))) {
 					r_out.used_opaque_stencil = true;
@@ -3742,6 +3746,9 @@ void RenderForwardClustered::_fellow_fill_apply_output(const FellowFillParams &p
 	}
 	if (p_out.used_depth_texture) {
 		scene_state.used_depth_texture = true;
+	}
+	if (p_out.used_depth_texture_mipmaps) {
+		scene_state.used_depth_texture_mipmaps = true;
 	}
 	if (p_out.used_lightmap) {
 		scene_state.used_lightmap = true;
@@ -3823,6 +3830,7 @@ bool RenderForwardClustered::_fellow_fill_render_list_parallel(const FellowFillP
 		total.used_screen_texture_mipmaps = total.used_screen_texture_mipmaps || chunk.out.used_screen_texture_mipmaps;
 		total.used_normal_texture = total.used_normal_texture || chunk.out.used_normal_texture;
 		total.used_depth_texture = total.used_depth_texture || chunk.out.used_depth_texture;
+		total.used_depth_texture_mipmaps = total.used_depth_texture_mipmaps || chunk.out.used_depth_texture_mipmaps;
 		total.used_lightmap = total.used_lightmap || chunk.out.used_lightmap;
 		total.used_opaque_stencil = total.used_opaque_stencil || chunk.out.used_opaque_stencil;
 	}
@@ -4725,6 +4733,39 @@ RID RenderForwardClustered::_fellow_process_contact_shadow(RenderDataRD *p_rende
 	params.frame = uint32_t(RSG::rasterizer->get_frame_number());
 	fellow_contact_shadow->process(params);
 	return params.dest;
+}
+
+// FellowEngine (decision 0126): the depth texture's copy for materials sampling it with a mipmap filter, its levels the
+// nearest depth of their cells (SSR's Hi-Z reduction; up to 8 levels: cells of up to 128 pixels). Its own texture: the
+// single-level copy stays as it is for every other reader.
+bool RenderForwardClustered::_fellow_depth_nearest_mipmaps(const RenderDataRD *p_render_data) {
+	Ref<RenderSceneBuffersRD> rb = p_render_data->render_buffers;
+	if (rb.is_null() || !rb->has_depth_texture() || !_render_buffers_can_be_storage()) {
+		return false;
+	}
+	const Size2i size = rb->get_internal_size();
+	uint32_t mipmaps = 1;
+	while (mipmaps < 8 && (MAX(size.x, size.y) >> mipmaps) > 0) {
+		mipmaps++;
+	}
+	const StringName scope = SNAME("fellow_depth");
+	const StringName name = SNAME("nearest");
+	if (rb->has_texture(scope, name)) {
+		const RD::TextureFormat tf = rb->get_texture_format(scope, name);
+		if (tf.width != uint32_t(size.x) || tf.height != uint32_t(size.y) || tf.mipmaps != mipmaps) {
+			rb->clear_context(scope);
+		}
+	}
+	if (!rb->has_texture(scope, name)) {
+		rb->create_texture(scope, name, RD::DATA_FORMAT_R32_SFLOAT, RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_STORAGE_BIT | RD::TEXTURE_USAGE_CAN_COPY_TO_BIT, RD::TEXTURE_SAMPLES_1, size, 0, mipmaps);
+	}
+	RD::get_singleton()->draw_command_begin_label("Fellow Depth Nearest Mipmaps");
+	for (uint32_t v = 0; v < p_render_data->scene_data->view_count; v++) {
+		copy_effects->copy_to_rect(rb->get_depth_texture(v), rb->get_texture_slice(scope, name, v, 0), Rect2i(0, 0, size.x, size.y));
+	}
+	ss_effects->fellow_nearest_depth_mipmaps(rb, scope, name, p_render_data->scene_data->view_count);
+	RD::get_singleton()->draw_command_end_label();
+	return true;
 }
 
 bool RenderForwardClustered::_fellow_begin_gas(RenderDataRD *p_render_data, const Ref<RenderSceneBuffersRD> &p_render_buffers, RID p_radiance_texture) {
@@ -6874,6 +6915,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		}
 	}
 
+	fellow_depth_mipmaps_frame = false;
 	if (scene_state.used_depth_texture || global_surface_data.depth_texture_used) {
 		RENDER_TIMESTAMP("Copy Depth Texture");
 
@@ -6882,6 +6924,9 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		if (scene_state.used_depth_texture) {
 			// Copy depth texture to backbuffer so we can read from it
 			_render_buffers_copy_depth_texture(p_render_data);
+			if (scene_state.used_depth_texture_mipmaps && Fellow::depth_copy_nearest_mipmaps()) {
+				fellow_depth_mipmaps_frame = _fellow_depth_nearest_mipmaps(p_render_data);
+			}
 		}
 	}
 
@@ -8815,7 +8860,9 @@ RID RenderForwardClustered::_setup_render_pass_uniform_set(RenderListType p_rend
 		u.binding = 24;
 		u.uniform_type = RD::UNIFORM_TYPE_TEXTURE;
 		RID texture;
-		if (rb.is_valid() && rb->has_texture(RB_SCOPE_BUFFERS, RB_TEX_BACK_DEPTH)) {
+		if (p_render_list == RENDER_LIST_ALPHA && fellow_depth_mipmaps_frame && rb.is_valid() && rb->has_texture(SNAME("fellow_depth"), SNAME("nearest"))) {
+			texture = rb->get_texture(SNAME("fellow_depth"), SNAME("nearest")); // decision 0126: the same base level, with mips
+		} else if (rb.is_valid() && rb->has_texture(RB_SCOPE_BUFFERS, RB_TEX_BACK_DEPTH)) {
 			texture = rb->get_texture(RB_SCOPE_BUFFERS, RB_TEX_BACK_DEPTH);
 		} else {
 			texture = texture_storage->texture_rd_get_default(is_multiview ? RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_2D_ARRAY_DEPTH : RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_DEPTH);
@@ -9533,6 +9580,9 @@ void RenderForwardClustered::_geometry_instance_add_surface_with_material(Geomet
 	if (p_material->shader_data->uses_depth_texture) {
 		flags |= GeometryInstanceSurfaceDataCache::FLAG_USES_DEPTH_TEXTURE;
 		global_surface_data.depth_texture_used = true;
+		if (p_material->shader_data->uses_depth_texture_mipmaps) {
+			flags |= GeometryInstanceSurfaceDataCache::FLAG_USES_DEPTH_TEXTURE_MIPMAPS;
+		}
 	}
 
 	if (p_material->shader_data->uses_normal_texture) {

@@ -89,6 +89,7 @@ public:
 		bool uses_screen_texture_mipmaps = false;
 		bool uses_screen_texture = false;
 		bool uses_depth_texture = false;
+		bool uses_depth_texture_mipmaps = false; // FellowEngine: a mipmap filter on the depth texture (decision 0126)
 		bool uses_normal_roughness_texture = false;
 	};
 

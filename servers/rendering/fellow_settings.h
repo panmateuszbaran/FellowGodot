@@ -70,6 +70,14 @@ inline bool screen_copy_mipmaps_on_demand() {
 	return postfx_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/postfx/screen_copy_mipmaps_on_demand");
 }
 
+// The depth texture's copy (hint_depth_texture) gets mip levels holding the nearest depth of their cells (a Hi-Z
+// pyramid: reverse-Z, the largest value of the four texels below) when a material drawn this frame samples it with a
+// filter_*_mipmap hint: hierarchical ray marches (FellowWater3D's reflections). Stock's copy has one level; the base
+// level is the same (decision 0126). Read every frame.
+inline bool depth_copy_nearest_mipmaps() {
+	return postfx_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/postfx/depth_copy_nearest_mipmaps");
+}
+
 // SSR's roughness filter (a blur per mip of the reflection) with its shared-memory arrays padded so that neither pass
 // has bank conflicts; the same values, the same sums (decision 0052). Read every frame.
 inline bool ssr_filter_padded() {

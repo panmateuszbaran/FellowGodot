@@ -973,7 +973,7 @@ void FellowWater3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::NODE_PATH, "sun_path", PROPERTY_HINT_NODE_PATH_VALID_TYPES, "DirectionalLight3D"), "set_sun_path", "get_sun_path");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "time", PROPERTY_HINT_NONE, "suffix:s", PROPERTY_USAGE_NONE), "set_time", "get_time");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "time_auto"), "set_time_auto", "is_time_auto");
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "debug_view", PROPERTY_HINT_ENUM, "Off,Reflections,Foam,Refraction,Normals,Simulation,Roughness"), "set_debug_view", "get_debug_view");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "debug_view", PROPERTY_HINT_ENUM, "Off,Reflections,Foam,Refraction,Normals,Simulation,Roughness,Reflection Cost"), "set_debug_view", "get_debug_view");
 
 	BIND_ENUM_CONSTANT(DEBUG_VIEW_OFF);
 	BIND_ENUM_CONSTANT(DEBUG_VIEW_REFLECTIONS);
@@ -982,6 +982,7 @@ void FellowWater3D::_bind_methods() {
 	BIND_ENUM_CONSTANT(DEBUG_VIEW_NORMALS);
 	BIND_ENUM_CONSTANT(DEBUG_VIEW_SIMULATION);
 	BIND_ENUM_CONSTANT(DEBUG_VIEW_ROUGHNESS);
+	BIND_ENUM_CONSTANT(DEBUG_VIEW_REFLECTION_COST);
 }
 
 FellowWater3D::FellowWater3D() {

@@ -1658,6 +1658,50 @@ void SSEffects::ssr_allocate_buffers(Ref<RenderSceneBuffersRD> p_render_buffers,
 	}
 }
 
+void SSEffects::fellow_nearest_depth_mipmaps(Ref<RenderSceneBuffersRD> p_render_buffers, const StringName &p_context, const StringName &p_name, uint32_t p_view_count) {
+	UniformSetCacheRD *uniform_set_cache = UniformSetCacheRD::get_singleton();
+	ERR_FAIL_NULL(uniform_set_cache);
+	MaterialStorage *material_storage = MaterialStorage::get_singleton();
+	ERR_FAIL_NULL(material_storage);
+	RID nearest_sampler = material_storage->sampler_rd_get_default(RSE::CANVAS_ITEM_TEXTURE_FILTER_NEAREST_WITH_MIPMAPS, RSE::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
+	const RD::TextureFormat tf = p_render_buffers->get_texture_format(p_context, p_name);
+	for (uint32_t v = 0; v < p_view_count; v++) {
+		for (uint32_t m = 1; m < tf.mipmaps; m++) {
+			ScreenSpaceReflectionHizPushConstant push_constant;
+			push_constant.screen_size[0] = MAX(1, int(tf.width) >> m);
+			push_constant.screen_size[1] = MAX(1, int(tf.height) >> m);
+			push_constant.pad[0] = 0;
+			push_constant.pad[1] = 0;
+			// The first level from the depth buffer itself: no wait for the copy of level 0.
+			RID source = m == 1 ? p_render_buffers->get_depth_texture(v) : p_render_buffers->get_texture_slice(p_context, p_name, v, m - 1);
+			RID dest = p_render_buffers->get_texture_slice(p_context, p_name, v, m);
+			const int parent_width = MAX(1, int(tf.width) >> (m - 1));
+			const int parent_height = MAX(1, int(tf.height) >> (m - 1));
+			const bool is_width_odd = (parent_width % 2) != 0;
+			const bool is_height_odd = (parent_height % 2) != 0;
+			int32_t hiz_mode;
+			if (is_width_odd && is_height_odd) {
+				hiz_mode = SCREEN_SPACE_REFLECTION_HIZ_ODD_WIDTH_AND_HEIGHT;
+			} else if (is_width_odd) {
+				hiz_mode = SCREEN_SPACE_REFLECTION_HIZ_ODD_WIDTH;
+			} else if (is_height_odd) {
+				hiz_mode = SCREEN_SPACE_REFLECTION_HIZ_ODD_HEIGHT;
+			} else {
+				hiz_mode = SCREEN_SPACE_REFLECTION_HIZ_DEFAULT;
+			}
+			RID hiz_shader = ssr.hiz_shader.version_get_shader(ssr.hiz_shader_version, hiz_mode);
+			RD::Uniform u_source(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 0, Vector<RID>{ nearest_sampler, source });
+			RD::Uniform u_dest(RD::UNIFORM_TYPE_IMAGE, 1, dest);
+			RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
+			RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, ssr.hiz_pipelines[hiz_mode].get_rid());
+			RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache(hiz_shader, 0, u_source, u_dest), 0);
+			RD::get_singleton()->compute_list_set_push_constant(compute_list, &push_constant, sizeof(push_constant));
+			RD::get_singleton()->compute_list_dispatch_threads(compute_list, push_constant.screen_size[0], push_constant.screen_size[1], 1);
+			RD::get_singleton()->compute_list_end();
+		}
+	}
+}
+
 void SSEffects::screen_space_reflection(Ref<RenderSceneBuffersRD> p_render_buffers, SSRRenderBuffers &p_ssr_buffers, const RID *p_normal_roughness_slices, int p_max_steps, float p_fade_in, float p_fade_out, float p_tolerance, const Projection *p_projections, const Projection *p_reprojections, const Vector3 *p_eye_offsets, RendererRD::CopyEffects &p_copy_effects) {
 	UniformSetCacheRD *uniform_set_cache = UniformSetCacheRD::get_singleton();
 	ERR_FAIL_NULL(uniform_set_cache);

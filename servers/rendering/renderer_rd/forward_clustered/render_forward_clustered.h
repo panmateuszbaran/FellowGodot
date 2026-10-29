@@ -510,6 +510,7 @@ private:
 		bool used_screen_texture_mipmaps = false; // FellowEngine (decision 0123)
 		bool used_normal_texture = false;
 		bool used_depth_texture = false;
+		bool used_depth_texture_mipmaps = false; // FellowEngine (decision 0126)
 		bool used_sss = false;
 		bool used_lightmap = false;
 		bool used_opaque_stencil = false;
@@ -662,6 +663,7 @@ private:
 		bool used_screen_texture_mipmaps = false;
 		bool used_normal_texture = false;
 		bool used_depth_texture = false;
+		bool used_depth_texture_mipmaps = false;
 		bool used_lightmap = false;
 		bool used_opaque_stencil = false;
 	};
@@ -1078,6 +1080,7 @@ private:
 			FLAG_USES_MOTION_VECTOR = 131072,
 			FLAG_USES_STENCIL = 262144,
 			FLAG_USES_SCREEN_TEXTURE_MIPMAPS = 524288, // FellowEngine (decision 0123)
+			FLAG_USES_DEPTH_TEXTURE_MIPMAPS = 1048576, // FellowEngine (decision 0126)
 		};
 
 		union {
@@ -1472,6 +1475,10 @@ private:
 	void _fellow_process_clouds(RenderDataRD *p_render_data, const Ref<RenderSceneBuffersRD> &p_render_buffers);
 	// FellowEngine gas volumes (decision 0118): this render's volumes (begin_frame() done), their shadow in the mask.
 	bool fellow_gas_frame = false;
+	// FellowEngine (decision 0126): the depth texture's copy with the nearest depth's mip levels, bound for the transparent
+	// pass of this render instead of the single-level copy.
+	bool fellow_depth_mipmaps_frame = false;
+	bool _fellow_depth_nearest_mipmaps(const RenderDataRD *p_render_data);
 	bool _fellow_begin_gas(RenderDataRD *p_render_data, const Ref<RenderSceneBuffersRD> &p_render_buffers, RID p_radiance_texture);
 	void _fellow_gas_shadow(RenderDataRD *p_render_data, const Ref<RenderSceneBuffersRD> &p_render_buffers);
 	RendererRD::FellowDDGI *fellow_ddgi = nullptr;
