@@ -42,11 +42,21 @@ roll over a meadow in waves. Vegetation moves with it in the vertex shader of ev
 
 ## 3. Performance
 
-lavapipe (480 x 270): see 0125.
+lavapipe (480 x 270, Wind Lab with one grass clump per m², GPU time of the viewport in ms; details in 0125):
+
+| Wind Lab | flythrough | meadow | edge | forest | aerial |
+|---|---:|---:|---:|---:|---:|
+| still | 840 | 587 | 216 | 180 | 862 |
+| the TIME-based sway projects write | 2079 | 1974 | 1484 | 1000 | 1505 |
+| FellowWind3D, first build | 2304 | 2151 | 1694 | 1165 | 1710 |
+| FellowWind3D (culling bound, far cascades cached) | **1303** | **1067** | **623** | **555** | **1016** |
+
+The cost is in the shadows (moving casters leave the shadow cache): two optimizations made during the milestone —
+MultiMesh culling with the wind's bound on the displacement instead of drawing wind MultiMeshes whole, and the far
+cascades (from the third) cached with the plants' pose of their last build — took 41-63 % off. FellowWind3D now costs
+32-58 % less than the sway projects write for the same scene. The RTX measurement (laptop) is pending.
 
 ## 4. Left for later
 
-* Culling margins from the wind (MultiMesh culling treats wind materials as moving vertices: drawn whole, unless
-  `geometry/multimesh_cull_vertex_motion` with a margin).
 * The Mobile and Compatibility renderers; SDFGI's voxelization of moving plants; particles in the wind; the water's
   waves from the same wind; the RTX measurement.
