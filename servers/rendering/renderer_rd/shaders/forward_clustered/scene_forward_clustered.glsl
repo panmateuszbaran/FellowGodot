@@ -1407,10 +1407,11 @@ void fellow_wetness_apply(in SceneData p_scene, inout vec3 r_albedo, inout float
 	mat4 inv_view = transpose(mat4(p_scene.inv_view_matrix[0], p_scene.inv_view_matrix[1], p_scene.inv_view_matrix[2], vec4(0.0, 0.0, 0.0, 1.0)));
 	vec3 wp = (inv_view * vec4(p_vertex, 1.0)).xyz;
 	vec3 gn = normalize(mat3(inv_view) * p_geometric_normal);
-	// The derivatives of the position for the textures' lookups, while every pixel of the quad is here (the early
-	// returns below are not uniform).
-	vec2 wxz_dx = dFdx(wp.xz);
-	vec2 wxz_dy = dFdy(wp.xz);
+	// The mip level of the ripple texture (256²) at one texel per metre, from the position's derivatives while every
+	// pixel of the quad is here (the early returns below are not uniform); each lookup adds log2 of its texels per
+	// metre. Explicit levels: lookups with explicit gradients run at a fraction of the rate (RTX: 0.05 ms of the
+	// pre-pass for five of them).
+	float wet_lod = log2(max(max(length(dFdx(wp.xz)), length(dFdy(wp.xz))), 1e-6) * 256.0);
 
 	// Where the rain reaches: below the scene's top as seen from above it does not. A wall looks just outside itself
 	// (the roof above its own footprint would keep it dry); the bilinear lookup and the 25 cm ramp soften the edges.
@@ -1447,19 +1448,24 @@ void fellow_wetness_apply(in SceneData p_scene, inout vec3 r_albedo, inout float
 	const float CELLS = 16.0;
 	const mat2 ROT1 = mat2(0.8, 0.6, -0.6, 0.8);
 	const mat2 ROT2 = mat2(-0.28, 0.96, -0.96, -0.28);
-	float n = textureGrad(sampler2D(fellow_rain_ripples, SAMPLER_LINEAR_WITH_MIPMAPS_REPEAT), wp.xz * (0.23 / CELLS), wxz_dx * (0.23 / CELLS), wxz_dy * (0.23 / CELLS)).a * 0.6;
-	n += textureGrad(sampler2D(fellow_rain_ripples, SAMPLER_LINEAR_WITH_MIPMAPS_REPEAT), ROT1 * wp.xz * (0.91 / CELLS) + vec2(0.31, 0.17), ROT1 * wxz_dx * (0.91 / CELLS), ROT1 * wxz_dy * (0.91 / CELLS)).a * 0.3;
-	n += textureGrad(sampler2D(fellow_rain_ripples, SAMPLER_LINEAR_WITH_MIPMAPS_REPEAT), ROT2 * wp.xz * (3.7 / CELLS) + vec2(0.53, 0.71), ROT2 * wxz_dx * (3.7 / CELLS), ROT2 * wxz_dy * (3.7 / CELLS)).a * 0.1;
-	float puddle = clamp((n - 1.0 + w.params.y) * 6.0, 0.0, 1.0) * flatness * exposed * smoothstep(0.4, 0.9, wetness) * (1.0 - r_metallic) * smoothstep(0.25, 0.45, rough0);
+	// Only where a puddle can be (flat, exposed, wet enough, rough and not metallic).
+	float puddle = flatness * exposed * smoothstep(0.4, 0.9, wetness) * (1.0 - r_metallic) * smoothstep(0.25, 0.45, rough0);
+	if (puddle > 0.0 && w.params.y > 0.0) {
+		float n = textureLod(sampler2D(fellow_rain_ripples, SAMPLER_LINEAR_WITH_MIPMAPS_REPEAT), wp.xz * (0.23 / CELLS), wet_lod + log2(0.23 / CELLS)).a * 0.6;
+		n += textureLod(sampler2D(fellow_rain_ripples, SAMPLER_LINEAR_WITH_MIPMAPS_REPEAT), ROT1 * wp.xz * (0.91 / CELLS) + vec2(0.31, 0.17), wet_lod + log2(0.91 / CELLS)).a * 0.3;
+		n += textureLod(sampler2D(fellow_rain_ripples, SAMPLER_LINEAR_WITH_MIPMAPS_REPEAT), ROT2 * wp.xz * (3.7 / CELLS) + vec2(0.53, 0.71), wet_lod + log2(3.7 / CELLS)).a * 0.1;
+		puddle *= clamp((n - 1.0 + w.params.y) * 6.0, 0.0, 1.0);
+	} else {
+		puddle = 0.0;
+	}
 
 	// The rain's ripples (two lookups of the tiling texture, offset: no visible repeat), where it falls.
 	vec2 slope = vec2(0.0);
 	if (w.params.z > 0.0) {
 		vec2 ruv = wp.xz * w.ripples.x;
-		vec2 ruv_dx = wxz_dx * w.ripples.x;
-		vec2 ruv_dy = wxz_dy * w.ripples.x;
-		vec2 ra = textureGrad(sampler2D(fellow_rain_ripples, SAMPLER_LINEAR_WITH_MIPMAPS_REPEAT), ruv, ruv_dx, ruv_dy).rg;
-		vec2 rb = textureGrad(sampler2D(fellow_rain_ripples, SAMPLER_LINEAR_WITH_MIPMAPS_REPEAT), ruv * 0.77 + vec2(0.37, 0.61), ruv_dx * 0.77, ruv_dy * 0.77).rg;
+		float rlod = wet_lod + log2(w.ripples.x);
+		vec2 ra = textureLod(sampler2D(fellow_rain_ripples, SAMPLER_LINEAR_WITH_MIPMAPS_REPEAT), ruv, rlod).rg;
+		vec2 rb = textureLod(sampler2D(fellow_rain_ripples, SAMPLER_LINEAR_WITH_MIPMAPS_REPEAT), ruv * 0.77 + vec2(0.37, 0.61), rlod + log2(0.77)).rg;
 		slope = (ra + rb) * (w.ripples.y * w.params.z * exposed);
 	}
 
