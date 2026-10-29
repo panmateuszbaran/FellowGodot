@@ -37,7 +37,6 @@
 #include "scene/3d/camera_3d.h"
 #include "scene/main/viewport.h"
 #include "scene/resources/3d/primitive_meshes.h"
-#include "scene/resources/image_texture.h"
 #include "scene/resources/particle_process_material.h"
 #include "servers/rendering/fellow_settings.h"
 #include "servers/rendering/renderer_rd/effects/fellow_weather.h"
@@ -46,6 +45,72 @@
 FellowRain3D *FellowRain3D::active = nullptr;
 
 // ------------------------------------------------------------------ children
+
+// The drops and their splashes. A drop is a streak along its velocity (the particle's Y axis, wind included) turned to
+// face the camera, soft across and thinning to both ends; lit (the sky's ambient and the scene's lights, brighter
+// against a light behind it: water scatters forward), so a drop at night is dark but where a lamp shines through
+// the rain. Within 0.5 m of the camera a drop is not drawn and it fades in to 4 m (one at the lens would be a blurred
+// bar). A splash is a camera-facing droplet fading over its life.
+static const char *rain_drop_shader_code = R"(
+shader_type spatial;
+render_mode blend_mix, depth_draw_never, cull_disabled, shadows_disabled, specular_disabled, skip_vertex_transform;
+
+uniform vec4 drop_color : source_color = vec4(0.85, 0.88, 0.92, 0.4);
+uniform bool splash = false;
+uniform float fade_near = 0.5;
+uniform float fade_far = 4.0;
+uniform float forward_scatter = 6.0;
+// A drop refracts the sky and the lights around it into the view: brighter than a diffuse surface lit the same.
+uniform float brightness = 2.5;
+
+varying float v_alpha;
+
+void vertex() {
+	vec3 centre = MODEL_MATRIX[3].xyz;
+	vec3 to_cam = INV_VIEW_MATRIX[3].xyz - centre;
+	float dist = length(to_cam);
+	vec3 axis_x;
+	vec3 axis_y;
+	float sx = length(MODEL_MATRIX[0].xyz);
+	float sy = length(MODEL_MATRIX[1].xyz);
+	if (splash) {
+		axis_x = INV_VIEW_MATRIX[0].xyz;
+		axis_y = INV_VIEW_MATRIX[1].xyz;
+		v_alpha = 1.0 - clamp(INSTANCE_CUSTOM.y, 0.0, 1.0);
+	} else {
+		axis_y = MODEL_MATRIX[1].xyz / max(sy, 1e-6);
+		axis_x = cross(axis_y, to_cam / max(dist, 1e-6));
+		float lx = length(axis_x);
+		axis_x = lx > 1e-4 ? axis_x / lx : INV_VIEW_MATRIX[0].xyz;
+		v_alpha = 1.0;
+	}
+	float fade = clamp((dist - fade_near) / (fade_far - fade_near), 0.0, 1.0);
+	v_alpha *= fade;
+	vec3 wp = centre;
+	if (fade > 0.0) {
+		wp += axis_x * (VERTEX.x * sx) + axis_y * (VERTEX.y * sy);
+	}
+	VERTEX = (VIEW_MATRIX * vec4(wp, 1.0)).xyz;
+	NORMAL = normalize((VIEW_MATRIX * vec4(to_cam, 0.0)).xyz);
+}
+
+void fragment() {
+	vec2 p = UV * 2.0 - 1.0;
+	float shape;
+	if (splash) {
+		shape = max(0.0, 1.0 - dot(p, p));
+	} else {
+		shape = (1.0 - p.x * p.x) * pow(max(sin(UV.y * PI), 0.0), 0.6);
+	}
+	ALBEDO = drop_color.rgb * brightness;
+	ALPHA = drop_color.a * shape * v_alpha;
+}
+
+void light() {
+	float behind = max(dot(-VIEW, LIGHT), 0.0);
+	DIFFUSE_LIGHT += LIGHT_COLOR * ATTENUATION * (0.25 + forward_scatter * pow(behind, 4.0)) / PI;
+}
+)";
 
 static GPUParticlesCollisionHeightField3D::Resolution rain_occlusion_resolution(int p_res) {
 	switch (p_res) {
@@ -80,34 +145,11 @@ void FellowRain3D::_build_children() {
 	drop_process->set_particle_flag(ParticleProcessMaterial::PARTICLE_FLAG_ALIGN_Y_TO_VELOCITY, true);
 	drop_process->set_collision_mode(ParticleProcessMaterial::COLLISION_HIDE_ON_CONTACT);
 
+	drop_shader.instantiate();
+	drop_shader->set_code(rain_drop_shader_code);
 	drop_material.instantiate();
-	drop_material->set_shading_mode(BaseMaterial3D::SHADING_MODE_UNSHADED);
-	drop_material->set_transparency(BaseMaterial3D::TRANSPARENCY_ALPHA);
-	drop_material->set_billboard_mode(BaseMaterial3D::BILLBOARD_FIXED_Y);
-	drop_material->set_flag(BaseMaterial3D::FLAG_DISABLE_FOG, false);
-	drop_material->set_cull_mode(BaseMaterial3D::CULL_DISABLED);
-	// A drop passing the lens would fill the screen (and be out of focus): the drops fade in from 0.5 m to 4 m from
-	// the camera.
-	drop_material->set_distance_fade(BaseMaterial3D::DISTANCE_FADE_PIXEL_ALPHA);
-	drop_material->set_distance_fade_min_distance(0.5);
-	drop_material->set_distance_fade_max_distance(4.0);
-	// A streak, not a rectangle: soft across, thinning to both ends (the mipmaps average a distant one to a faint line).
-	{
-		const int w = 8;
-		const int h = 64;
-		Ref<Image> img = Image::create_empty(w, h, false, Image::FORMAT_RGBA8);
-		for (int y = 0; y < h; y++) {
-			float v = (y + 0.5f) / h;
-			float along = Math::pow(Math::sin(v * float(Math::PI)), 0.6f);
-			for (int x = 0; x < w; x++) {
-				float u = ((x + 0.5f) / w) * 2.0f - 1.0f;
-				float across = 1.0f - u * u;
-				img->set_pixel(x, y, Color(1.0f, 1.0f, 1.0f, across * along));
-			}
-		}
-		img->generate_mipmaps();
-		drop_material->set_texture(BaseMaterial3D::TEXTURE_ALBEDO, ImageTexture::create_from_image(img));
-	}
+	drop_material->set_shader(drop_shader);
+	drop_material->set_shader_parameter("splash", false);
 
 	Ref<QuadMesh> drop_mesh;
 	drop_mesh.instantiate();
@@ -140,13 +182,12 @@ void FellowRain3D::_build_children() {
 	splash_process->set_collision_friction(0.5);
 
 	splash_material.instantiate();
-	splash_material->set_shading_mode(BaseMaterial3D::SHADING_MODE_UNSHADED);
-	splash_material->set_transparency(BaseMaterial3D::TRANSPARENCY_ALPHA);
-	splash_material->set_billboard_mode(BaseMaterial3D::BILLBOARD_ENABLED);
+	splash_material->set_shader(drop_shader);
+	splash_material->set_shader_parameter("splash", true);
 
 	Ref<QuadMesh> splash_mesh;
 	splash_mesh.instantiate();
-	splash_mesh->set_size(Vector2(0.018, 0.018));
+	splash_mesh->set_size(Vector2(0.014, 0.014));
 	splash_mesh->set_material(splash_material);
 
 	splash = memnew(GPUParticles3D);
@@ -184,8 +225,8 @@ void FellowRain3D::_update_children() {
 	drop_process->set_emission_box_extents(Vector3(area * 0.5f, 0.5f, area * 0.5f));
 	drop_process->set_sub_emitter_mode(splashes ? ParticleProcessMaterial::SUB_EMITTER_AT_COLLISION : ParticleProcessMaterial::SUB_EMITTER_DISABLED);
 	drop_process->set_sub_emitter_amount_at_collision(2);
-	drop_material->set_albedo(drop_color);
-	splash_material->set_albedo(Color(drop_color.r, drop_color.g, drop_color.b, MIN(1.0f, drop_color.a * 2.0f)));
+	drop_material->set_shader_parameter("drop_color", drop_color);
+	splash_material->set_shader_parameter("drop_color", drop_color);
 	Ref<QuadMesh> qm = drops->get_draw_pass_mesh(0);
 	if (qm.is_valid()) {
 		qm->set_size(drop_size);
@@ -231,6 +272,7 @@ void FellowRain3D::_push_state() {
 	PushConstant pc;
 	memset(&pc, 0, sizeof(pc));
 	pc.size = ripple_size;
+	pc.levels = int(Math::round(Math::log2(double(ripple_size)))) + 1;
 	pc.tile = ripple_tile;
 	pc.time = st.time;
 	pc.rain = rain;
@@ -325,13 +367,13 @@ void FellowRain3D::_rt_create() {
 	}
 	if (shader_ripples.is_null()) {
 		shader_ripples = rd->shader_create_from_spirv(shader_file->get_spirv_stages("ripples"), "FellowRain ripples");
-		shader_downsample = rd->shader_create_from_spirv(shader_file->get_spirv_stages("downsample"), "FellowRain downsample");
-		if (shader_ripples.is_null() || shader_downsample.is_null()) {
+		shader_tail = rd->shader_create_from_spirv(shader_file->get_spirv_stages("tail"), "FellowRain mip tail");
+		if (shader_ripples.is_null() || shader_tail.is_null()) {
 			gpu_failed = true;
 			return;
 		}
 		pipeline_ripples = rd->compute_pipeline_create(shader_ripples);
-		pipeline_downsample = rd->compute_pipeline_create(shader_downsample);
+		pipeline_tail = rd->compute_pipeline_create(shader_tail);
 	}
 	int levels = int(Math::round(Math::log2(double(ripple_size)))) + 1;
 	RD::TextureFormat tf;
@@ -346,16 +388,19 @@ void FellowRain3D::_rt_create() {
 	for (int l = 0; l < levels; l++) {
 		ripple_mips.push_back(rd->texture_create_shared_from_slice(RD::TextureView(), ripple_tex, 0, l));
 	}
+	// Levels 0-4 written by the tiles, 4 read and 5-8 written by the tail (a level that does not exist: the last one,
+	// never written).
 	Vector<RD::Uniform> u;
-	u.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 0, ripple_mips[0]));
-	set_ripples = rd->uniform_set_create(u, shader_ripples, 0);
-	sets_downsample.clear();
-	for (int l = 0; l + 1 < levels; l++) {
-		Vector<RD::Uniform> ud;
-		ud.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 0, ripple_mips[l]));
-		ud.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 1, ripple_mips[l + 1]));
-		sets_downsample.push_back(rd->uniform_set_create(ud, shader_downsample, 0));
+	for (int b = 0; b < 5; b++) {
+		u.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, b, ripple_mips[MIN(b, levels - 1)]));
 	}
+	set_ripples = rd->uniform_set_create(u, shader_ripples, 0);
+	Vector<RD::Uniform> ut;
+	ut.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 0, ripple_mips[MIN(4, levels - 1)]));
+	for (int b = 1; b < 5; b++) {
+		ut.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, b, ripple_mips[MIN(4 + b, levels - 1)]));
+	}
+	set_tail = rd->uniform_set_create(ut, shader_tail, 0);
 	gpu_ready = true;
 	ripple_texture->set_texture_rd_rid(ripple_tex);
 }
@@ -370,12 +415,10 @@ void FellowRain3D::_rt_free() {
 		}
 	}
 	ripple_texture->set_texture_rd_rid(RID());
-	for (RID &s : sets_downsample) {
-		if (s.is_valid() && rd->uniform_set_is_valid(s)) {
-			rd->free_rid(s);
-		}
+	if (set_tail.is_valid() && rd->uniform_set_is_valid(set_tail)) {
+		rd->free_rid(set_tail);
 	}
-	sets_downsample.clear();
+	set_tail = RID();
 	if (set_ripples.is_valid() && rd->uniform_set_is_valid(set_ripples)) {
 		rd->free_rid(set_ripples);
 	}
@@ -423,17 +466,13 @@ void FellowRain3D::_rt_update(PackedByteArray p_push, bool p_enabled, PackedByte
 		rd->compute_list_bind_compute_pipeline(list, pipeline_ripples);
 		rd->compute_list_bind_uniform_set(list, set_ripples, 0);
 		rd->compute_list_set_push_constant(list, &pc, sizeof(pc));
-		rd->compute_list_dispatch(list, (n + 7) / 8, (n + 7) / 8, 1);
+		rd->compute_list_dispatch(list, n / 16, n / 16, 1);
+		rd->compute_list_add_barrier(list);
+		rd->compute_list_bind_compute_pipeline(list, pipeline_tail);
+		rd->compute_list_bind_uniform_set(list, set_tail, 0);
+		rd->compute_list_set_push_constant(list, &pc, sizeof(pc));
+		rd->compute_list_dispatch(list, 1, 1, 1);
 		rd->compute_list_end();
-		for (int l = 0; l < sets_downsample.size(); l++) {
-			pc.dst_size = MAX(n >> (l + 1), 1);
-			list = rd->compute_list_begin();
-			rd->compute_list_bind_compute_pipeline(list, pipeline_downsample);
-			rd->compute_list_bind_uniform_set(list, sets_downsample[l], 0);
-			rd->compute_list_set_push_constant(list, &pc, sizeof(pc));
-			rd->compute_list_dispatch(list, (pc.dst_size + 7) / 8, (pc.dst_size + 7) / 8, 1);
-			rd->compute_list_end();
-		}
 		rd->draw_command_end_label();
 	}
 	w->set_state(st);
@@ -556,8 +595,8 @@ FellowRain3D::~FellowRain3D() {
 		if (shader_ripples.is_valid()) {
 			rd->free_rid(shader_ripples);
 		}
-		if (shader_downsample.is_valid()) {
-			rd->free_rid(shader_downsample);
+		if (shader_tail.is_valid()) {
+			rd->free_rid(shader_tail);
 		}
 	}
 }

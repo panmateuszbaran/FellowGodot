@@ -49,7 +49,7 @@ class FellowRain3D : public Node3D {
 
 	struct PushConstant {
 		int32_t size;
-		int32_t dst_size;
+		int32_t levels;
 		float tile;
 		float time;
 		float rain;
@@ -72,7 +72,7 @@ class FellowRain3D : public Node3D {
 	int max_drops = 24000;
 	float drop_speed = 9.0f; // m/s
 	Vector2 drop_size = Vector2(0.024f, 0.55f); // m: width, length (the streak a frame's exposure sees)
-	Color drop_color = Color(0.72f, 0.76f, 0.8f, 0.4f);
+	Color drop_color = Color(0.85f, 0.88f, 0.92f, 0.4f);
 	bool splashes = true;
 	float occlusion_size = 80.0f; // m
 	float occlusion_height = 80.0f; // m
@@ -88,21 +88,22 @@ class FellowRain3D : public Node3D {
 	GPUParticles3D *splash = nullptr;
 	Ref<ParticleProcessMaterial> drop_process;
 	Ref<ParticleProcessMaterial> splash_process;
-	Ref<StandardMaterial3D> drop_material;
-	Ref<StandardMaterial3D> splash_material;
+	Ref<Shader> drop_shader;
+	Ref<ShaderMaterial> drop_material;
+	Ref<ShaderMaterial> splash_material;
 	double last_time = -1.0;
 
 	// Render thread.
 	RenderingDevice *rd = nullptr;
 	Ref<RDShaderFile> shader_file;
 	RID shader_ripples;
-	RID shader_downsample;
+	RID shader_tail;
 	RID pipeline_ripples;
-	RID pipeline_downsample;
+	RID pipeline_tail;
 	RID ripple_tex;
 	Vector<RID> ripple_mips;
-	Vector<RID> sets_downsample;
 	RID set_ripples;
+	RID set_tail;
 	int ripple_size = 256;
 	bool gpu_ready = false;
 	bool gpu_failed = false;

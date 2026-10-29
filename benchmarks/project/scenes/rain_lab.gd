@@ -56,7 +56,6 @@ func build(p_args: Dictionary) -> void:
 		rain.max_drops = int(args.get("rain_drops", "24000"))
 		rain.occlusion_always_update = str(args.get("rain_occlusion", "moved")) == "always"
 		rain.wind = Vector3(1.2, 0.0, 0.6)
-		rain.drop_color = Color(0.70, 0.74, 0.78, 0.40) if light == "day" else Color(0.55, 0.55, 0.6, 0.32)
 		add_child(rain)
 	_define_cameras()
 	set_time(0.0)
@@ -353,7 +352,7 @@ func _define_cameras() -> void:
 		"rain_street": {"pos": Vector3(-30.0, 1.7, 1.5), "target": Vector3(20.0, 0.5, -1.0), "fov": 60.0, "time": 10.0, "purpose": "eye level down the wet street: puddles reflecting the buildings, the car"},
 		"rain_arcade": {"pos": Vector3(-36.0, 1.7, -(STREET_W * 0.5 + WALK_W * 0.5) - 0.5), "target": Vector3(-12.0, 0.8, -1.0), "fov": 65.0, "time": 10.0, "purpose": "under the arcade: its floor dry, the street wet, the drops beyond the columns"},
 		"rain_puddle": {"pos": Vector3(2.0, 1.6, -1.0), "target": Vector3(5.0, -0.3, 1.5), "fov": 55.0, "time": 10.0, "purpose": "looking down at the asphalt: puddles, ripples, the film of water"},
-		"rain_square": {"pos": Vector3(6.0, 2.2, zn + 4.0), "target": Vector3(20.0, 0.3, zn + WALK_W * 0.5 + 11.0), "fov": 60.0, "time": 10.0, "purpose": "the square: wet cobbles, the basin's water with the rain's ripples, the benches, trees"},
+		"rain_square": {"pos": Vector3(5.0, 1.9, zn + 8.0), "target": Vector3(20.0, 0.3, zn + WALK_W * 0.5 + 11.0), "fov": 60.0, "time": 10.0, "purpose": "the square: wet cobbles, the basin's water with the rain's ripples, the benches, trees"},
 		"rain_aerial": {"pos": Vector3(-45.0, 28.0, -30.0), "target": Vector3(0.0, 0.0, 4.0), "fov": 55.0, "time": 10.0, "purpose": "overview: roofs (wet, puddles), the street, the arcade's dry strip"},
 	}
 	var keys := []
