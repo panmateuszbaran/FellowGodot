@@ -66,7 +66,8 @@ order: the wind's shadows, the wind's vertex cost, the rain, the water's reflect
 |---|---|---|---|
 | 1 | wind: MultiMesh culling with the wind's displacement bound; far cascades (from the third) cached with the plants' last pose | Wind Lab −41 to −63 % GPU time against the first build; −32 to −58 % against the TIME-based sway projects write | KEEP (0125) |
 | 2 | wind: the vertex work without shadows | 0-25 % of the still scene; nothing left worth a change once the shadows are cached | — |
-| 3 | rain: the wetting (0124 already: explicit-level lookups, the noise only where a puddle can be), SSR on the wet surfaces | no further change that keeps the image: SSR's share comes with the wet roughness below its cutoff (walls included), the wetting's lookups are already at their minimum | — |
+| 3a | rain: the ripples' compute — the 75 cells' drops worked out once per group in shared memory instead of 27 times per texel; wraps without integer modulo | exact (Rain Lab without drops bit for bit); the ripples' compute 14.1 → 9.4 ms on lavapipe (−33 %; on the RTX it is 0.04 ms) | KEEP (0124) |
+| 3b | rain: the wetting, SSR on the wet surfaces (lavapipe pass timestamps: depth pre-pass +4 ms, SSR +6.5 ms of the wetting's) | nothing more that keeps the image: SSR's share comes with the wet roughness below its cutoff (walls included); the wetting's lookups (0124: explicit levels, the noise only where a puddle can be) are at their minimum | — |
 | 4a | water: a Fresnel-scaled step count for the reflection march | no measurable change (+2-9 %, the spread) | reverted |
 | 4b | water: reflections traced over a Hi-Z pyramid of the depth texture (`postfx/depth_copy_nearest_mipmaps`) | 1080p: depth lookups per water pixel −12 % shore, −20 % pier, −30 % glint (where the RTX march costs 0.5-1.1 ms), +23 % aerial (0.19 ms); the far shore reflected at its true parallax, no jitter; lavapipe's timing does not resolve the march | KEEP, on; RTX to confirm (0126) |
 

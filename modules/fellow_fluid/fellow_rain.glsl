@@ -51,7 +51,7 @@ float hash(vec3 p) {
 const int NOISE_CELLS = 16;
 
 float lattice(ivec2 c) {
-	c = (c % NOISE_CELLS + NOISE_CELLS) % NOISE_CELLS;
+	c = c & (NOISE_CELLS - 1); // the wrap (a power of two: as the modulo, negative cells too)
 	return hash(vec3(vec2(c), 91.7));
 }
 
@@ -63,6 +63,16 @@ float value_noise(vec2 uv) {
 	return mix(mix(lattice(i), lattice(i + ivec2(1, 0)), u.x), mix(lattice(i + ivec2(0, 1)), lattice(i + ivec2(1, 1)), u.x), u.y);
 }
 
+const int CELLS = 5;
+const float SPEED = 0.25; // m/s
+const float LIFE = 0.55; // s
+const float WIDTH = 0.012; // m
+
+// This frame's drop in each of the 3 x 5 x 5 cells (x: its age, y: 1 if one fell, zw: its position's hashes), worked
+// out once per group instead of once per texel and neighbour (the same expressions: the same values).
+shared vec4 cell_drop[3 * CELLS * CELLS];
+shared vec2 layer_shift[3];
+
 void main() {
 	ivec2 c = ivec2(gl_GlobalInvocationID.xy);
 	ivec2 l = ivec2(gl_LocalInvocationID.xy);
@@ -70,28 +80,39 @@ void main() {
 	vec2 p = uv * params.tile;
 	vec2 slope = vec2(0.0);
 	float height = 0.0;
-	const int CELLS = 5;
-	const float SPEED = 0.25; // m/s
-	const float LIFE = 0.55; // s
-	const float WIDTH = 0.012; // m
 	float cell = params.tile / float(CELLS);
+	uint li = gl_LocalInvocationIndex;
+	if (li < uint(3 * CELLS * CELLS)) {
+		int layer = int(li) / (CELLS * CELLS);
+		int k = int(li) % (CELLS * CELLS);
+		ivec2 wc = ivec2(k % CELLS, k / CELLS);
+		vec3 id = vec3(wc, layer);
+		float period = 0.8 + 0.6 * hash(id + vec3(0.0, 0.0, 11.0));
+		float tp = params.time + hash(id + vec3(0.0, 0.0, 23.0)) * period;
+		float n = floor(tp / period);
+		float age = tp - n * period;
+		bool fell = !(age > LIFE || hash(id + vec3(n * 1.37, n * 0.71, 41.0)) >= params.rain);
+		cell_drop[li] = vec4(age, fell ? 1.0 : 0.0, hash(id + vec3(n, 0.0, 53.0)), hash(id + vec3(0.0, n, 67.0)));
+	} else if (li < uint(3 * CELLS * CELLS + 3)) {
+		int layer = int(li) - 3 * CELLS * CELLS;
+		layer_shift[layer] = vec2(hash(vec3(layer, 1.7, 3.1)), hash(vec3(layer, 5.3, 7.9)));
+	}
+	barrier();
 	if (params.rain > 0.0) {
 		for (int layer = 0; layer < 3; layer++) {
-			vec2 shift = vec2(hash(vec3(layer, 1.7, 3.1)), hash(vec3(layer, 5.3, 7.9))) * cell;
+			vec2 shift = layer_shift[layer] * cell;
 			vec2 q = p - shift;
 			ivec2 base = ivec2(floor(q / cell));
 			for (int k = 0; k < 9; k++) {
 				ivec2 cc = base + ivec2(k % 3 - 1, k / 3 - 1);
-				ivec2 wc = (cc % CELLS + CELLS) % CELLS; // the tile repeats
-				vec3 id = vec3(wc, layer);
-				float period = 0.8 + 0.6 * hash(id + vec3(0.0, 0.0, 11.0));
-				float tp = params.time + hash(id + vec3(0.0, 0.0, 23.0)) * period;
-				float n = floor(tp / period);
-				float age = tp - n * period;
-				if (age > LIFE || hash(id + vec3(n * 1.37, n * 0.71, 41.0)) >= params.rain) {
+				// The tile repeats (cc within -2..6: a wrap by one tile, as the modulo).
+				ivec2 wc = cc + CELLS * (ivec2(lessThan(cc, ivec2(0))) - ivec2(greaterThanEqual(cc, ivec2(CELLS))));
+				vec4 drop = cell_drop[(layer * CELLS + wc.y) * CELLS + wc.x];
+				if (drop.y == 0.0) {
 					continue;
 				}
-				vec2 centre = (vec2(cc) + 0.15 + 0.7 * vec2(hash(id + vec3(n, 0.0, 53.0)), hash(id + vec3(0.0, n, 67.0)))) * cell;
+				float age = drop.x;
+				vec2 centre = (vec2(cc) + 0.15 + 0.7 * drop.zw) * cell;
 				vec2 d = q - centre;
 				float r = max(length(d), 1e-4);
 				float x = (r - age * SPEED) / WIDTH;
