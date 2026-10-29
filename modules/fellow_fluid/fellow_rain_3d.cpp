@@ -98,7 +98,7 @@ void FellowRain3D::_build_children() {
 		Ref<Image> img = Image::create_empty(w, h, false, Image::FORMAT_RGBA8);
 		for (int y = 0; y < h; y++) {
 			float v = (y + 0.5f) / h;
-			float along = Math::pow(Math::sin(v * Math::PI), 0.6f);
+			float along = Math::pow(Math::sin(v * float(Math::PI)), 0.6f);
 			for (int x = 0; x < w; x++) {
 				float u = ((x + 0.5f) / w) * 2.0f - 1.0f;
 				float across = 1.0f - u * u;
