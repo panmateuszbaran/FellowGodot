@@ -203,8 +203,11 @@ scene where the rain falls (Forward+):
   `heightfield_mask`) keeps the drops off and the ground dry under roofs;
 * a `FellowWater3D` shows the ripples too.
 
-Transparent materials are not wetted. `rendering/fellow/fluid/enabled` off turns the wetting off. Decision record
-0124; bench Rain Lab (`--scene=rain`, `--rain=on|dry|off`, `--rain_light=day|dusk`).
+Cost (RTX 5070 Ti Laptop, 1080p, Rain Lab): 0.36 ms of GPU time raining — screen-space reflections 0.13 ms more
+(wet surfaces are glossy enough for SSR; without SSR there is none of it), the wetting 0.12 ms (depth pre-pass and
+opaque pass), the ripples 0.04 ms, the particles 0.04 ms, the drops' drawing 0.03 ms; a FellowRain3D without rain and
+wetness costs nothing. Transparent materials are not wetted. `rendering/fellow/fluid/enabled` off turns the wetting
+off. Decision record 0124; bench Rain Lab (`--scene=rain`, `--rain=on|dry|off`, `--rain_light=day|dusk`).
 
 ## Options that change the image (off by default)
 

@@ -4,7 +4,7 @@
 		Rain around the camera and wet surfaces where it falls: darker, glossier materials and puddles with ripples (FellowEngine).
 	</brief_description>
 	<description>
-		Drops fall in a box of [member area] around the current camera (GPU particles: streaks aligned with their velocity, [member wind] included), stop where they hit the scene as seen from above and splash there ([member splashes]).
+		Drops fall in a box of [member area] around the current camera (GPU particles: lit streaks along their velocity, [member wind] included, facing the camera), stop where they hit the scene as seen from above and splash there ([member splashes]).
 		While the node is active, the Forward+ renderer wets every opaque material after the material's own code ([code]fragment()[/code] of a [ShaderMaterial] too), in the depth pre-pass as well as the colour pass so screen-space and other reflections see the result: by [member wetness], porous surfaces (rough, not metallic) darken, all of them get a glossy film, and on flat rough ground puddles form ([member puddles]): flat, smooth standing water with the rain's ripples ([member ripple_tile], [member ripple_strength]). Undersides and surfaces under a roof stay dry: the scene's top seen from above (a [GPUParticlesCollisionHeightField3D] of [member occlusion_size] following the camera, the drops' collider) tells where the rain reaches. A [FellowWater3D] shows the ripples on its surface too. Transparent materials are not wetted.
 		One node at a time is active: the last one to enter the tree. Wetness can follow the rain over time ([member wetness_follows_rain]). [code]rendering/fellow/fluid/enabled[/code] off turns the wetting off. The drops and the heightfield are internal children ([method get_drops], [method get_occlusion]). Decision record [code]docs/decisions/0124-rain.md[/code].
 	</description>
@@ -26,7 +26,7 @@
 		<method name="get_ripple_texture" qualifiers="const">
 			<return type="Texture2DRD" />
 			<description>
-				The rain's ripples on standing water: a tiling texture of [member ripple_tile] (slopes in red and green, with mipmaps), computed every frame while the node is active.
+				The rain's ripples on standing water: a tiling texture of [member ripple_tile] (slopes in red and green, height in blue, the puddles' tiling noise in alpha; with mipmaps), computed every frame while the node is active.
 			</description>
 		</method>
 	</methods>
@@ -34,11 +34,11 @@
 		<member name="area" type="float" setter="set_area" getter="get_area" default="40.0">
 			The side of the box around the camera the drops fall in, in metres.
 		</member>
-		<member name="drop_color" type="Color" setter="set_drop_color" getter="get_drop_color" default="Color(0.72, 0.76, 0.8, 0.4)">
-			The colour of the drops (unshaded; alpha is their opacity at the middle of a streak). The splashes are twice as opaque.
+		<member name="drop_color" type="Color" setter="set_drop_color" getter="get_drop_color" default="Color(0.85, 0.88, 0.92, 0.4)">
+			The colour of the drops and splashes; alpha is their opacity at the middle of a streak. They are lit by the sky's ambient and the scene's lights (brighter with a light behind them), so the rain is dark at night but where lights shine through it.
 		</member>
 		<member name="drop_size" type="Vector2" setter="set_drop_size" getter="get_drop_size" default="Vector2(0.024, 0.55)">
-			A drop's streak in metres: width and length (the path a frame's exposure sees). Drops fade in from 0.5 m to 4 m from the camera.
+			A drop's streak in metres: width and length (the path a frame's exposure sees). Drops within 0.5 m of the camera are not drawn; they fade in to 4 m.
 		</member>
 		<member name="drop_speed" type="float" setter="set_drop_speed" getter="get_drop_speed" default="9.0">
 			The falling speed of the drops, in metres per second (the terminal speed of a raindrop of a few millimetres).
@@ -77,7 +77,7 @@
 			The size in metres of the tile of the ripple texture (two offset lookups hide the repeat).
 		</member>
 		<member name="splashes" type="bool" setter="set_splashes" getter="get_splashes" default="true">
-			If [code]true[/code], drops splash where they land (two small droplets each, a sub-emitter at collision).
+			If [code]true[/code], drops splash where they land (two small droplets each, a sub-emitter at collision, fading over 0.3 s).
 		</member>
 		<member name="time_auto" type="bool" setter="set_time_auto" getter="is_time_auto" default="true">
 			If [code]true[/code], the ripples' time advances with the process time; otherwise it is set by the [code]time[/code] property (deterministic renders).
