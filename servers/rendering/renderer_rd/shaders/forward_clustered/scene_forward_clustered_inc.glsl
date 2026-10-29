@@ -796,6 +796,12 @@ struct FellowWeatherData {
 	vec4 occlusion; // origin x, origin z, 1 / width x, 1 / width z
 	vec4 occlusion2; // origin y, half height, enabled, bias
 	vec4 ripples; // 1 / tile, strength
+	// The wind (decision 0125), this frame's and the previous one's (motion vectors).
+	vec4 wind; // direction x, direction z, speed (m/s), gustiness
+	vec4 wind2; // the gusts' offset along the wind (m), 1 / gust size, flutter, enabled
+	vec4 wind_prev;
+	vec4 wind2_prev;
+	vec4 wind_time; // this frame's and the previous frame's time of the wind (s)
 };
 layout(set = 1, binding = 49, std140) uniform FellowWeatherBlock {
 	FellowWeatherData data;
@@ -803,6 +809,8 @@ layout(set = 1, binding = 49, std140) uniform FellowWeatherBlock {
 fellow_weather;
 layout(set = 1, binding = 50) uniform texture2D fellow_rain_occlusion;
 layout(set = 1, binding = 51) uniform texture2D fellow_rain_ripples;
+// The wind's gusts: a tiling noise (r), laid along the wind and travelling with it.
+layout(set = 1, binding = 52) uniform texture2D fellow_wind_gusts;
 
 #endif
 

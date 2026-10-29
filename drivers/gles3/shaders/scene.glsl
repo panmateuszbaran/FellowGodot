@@ -714,6 +714,11 @@ void vertex_shader(vec4 vertex_angle_attrib_input,
 #endif
 
 	float roughness = 1.0;
+	// FellowEngine wind's parameters (decision 0125): set by materials, unused in this renderer.
+	float fellow_wind_height = 1.0;
+	float fellow_wind_bend = 0.3;
+	float fellow_wind_flutter = 0.0;
+	float fellow_wind_sheen = 0.0;
 
 	highp mat4 modelview = scene_data_input.view_matrix * model_matrix;
 	highp mat3 modelview_normal = mat3(scene_data_input.view_matrix) * model_normal_matrix;

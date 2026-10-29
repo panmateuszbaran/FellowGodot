@@ -30,17 +30,15 @@
 
 #include "render_forward_clustered.h"
 
-#include "servers/rendering/renderer_rd/effects/fellow_weather.h"
-#include "servers/rendering/renderer_rd/effects/fellow_gas.h"
-
-#include "core/object/callable_mp.h"
-
 #include "core/config/engine.h"
 #include "core/config/project_settings.h"
 #include "core/io/file_access.h"
+#include "core/object/callable_mp.h"
 #include "core/os/os.h"
 #include "servers/rendering/fellow_settings.h"
 #include "servers/rendering/fellow_settings_look.h"
+#include "servers/rendering/renderer_rd/effects/fellow_gas.h"
+#include "servers/rendering/renderer_rd/effects/fellow_weather.h"
 #include "servers/rendering/renderer_rd/environment/fog.h"
 #include "servers/rendering/renderer_rd/framebuffer_cache_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/light_storage.h"
@@ -51,7 +49,6 @@
 #include "servers/rendering/rendering_device.h"
 #include "servers/rendering/rendering_server_default.h"
 #include "servers/rendering/storage/ltc_lut.gen.h"
-
 
 using namespace RendererSceneRenderImplementation;
 
@@ -2185,10 +2182,16 @@ void RenderForwardClustered::_fellow_multimesh_cull_collect(uint32_t p_set, Rend
 		// displacement's bound.
 		// (Or decision 0122's impostors: a billboard whose vertices stay in the quad mesh's box, the impostor's sphere.)
 		const bool bounded_vertex_motion = (inst->fellow_extra_margin > 0.0f && Fellow::multimesh_cull_vertex_motion()) || inst->fellow_vertices_bounded;
+		// The wind (decision 0125) moves a plant's vertices within a bound of its mesh's height: the instances' boxes
+		// grow by it (exact; no margin needed).
 		bool moves = false;
+		bool wind = false;
 		for (const SceneShaderForwardClustered::ShaderData *sh : shaders) {
-			if (sh == nullptr || (sh->uses_vertex && !bounded_vertex_motion) || sh->uses_position || sh->writes_modelview_or_projection || sh->uses_z_clip_scale || sh->uses_particle_trails || sh->uses_point_size || sh->fellow_uses_instance_id) {
+			if (sh == nullptr || (sh->fellow_writes_vertex && !bounded_vertex_motion) || sh->uses_position || sh->writes_modelview_or_projection || sh->uses_z_clip_scale || sh->uses_particle_trails || sh->uses_point_size || sh->fellow_uses_instance_id) {
 				moves = true;
+			}
+			if (sh != nullptr && sh->fellow_wind) {
+				wind = true;
 			}
 		}
 		if (moves || (!p_shadow && surf->surface != surf->surface_shadow)) {
@@ -2271,7 +2274,15 @@ void RenderForwardClustered::_fellow_multimesh_cull_collect(uint32_t p_set, Rend
 						j.xform[r * 4 + 3] = xf.origin[r];
 					}
 					const Vector3 center = aabb.get_center();
-					const Vector3 half = aabb.size * 0.5;
+					Vector3 half = aabb.size * 0.5;
+					if (wind) {
+						// fellow_wind_offset's bound at height y (the mesh's space, up to its box's top): the bend and the
+						// branches 0.95 y across, down 0.37 y, up 0.08 y; the leaves' flutter 0.24 m (absolute, below).
+						const float top = MAX(aabb.position.y + aabb.size.y, 0.0f);
+						half.x += 0.95f * top;
+						half.z += 0.95f * top;
+						half.y += 0.37f * top;
+					}
 					j.aabb_center[0] = center.x;
 					j.aabb_center[1] = center.y;
 					j.aabb_center[2] = center.z;
@@ -2281,7 +2292,7 @@ void RenderForwardClustered::_fellow_multimesh_cull_collect(uint32_t p_set, Rend
 					j.aabb_half[0] = half.x;
 					j.aabb_half[1] = half.y;
 					j.aabb_half[2] = half.z;
-					j.aabb_half[3] = 1e-3f; // absolute margin (world units)
+					j.aabb_half[3] = wind ? 0.25f : 1e-3f; // absolute margin (world units): the wind's flutter
 					j.pool_offset = uint32_t(pool_offset);
 					j.stride = stride;
 					j.count = inst->instance_count;
@@ -6388,7 +6399,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	{
 		// FellowEngine weather (decision 0124): materials wetted in the depth pre-pass and the opaque colour passes.
 		RendererRD::FellowWeather *weather = RendererRD::FellowWeather::get_singleton_if_exists();
-		base_specialization.fellow_wetness = weather && weather->is_active() && weather->get_state().wetness > 0.0f;
+		base_specialization.fellow_wetness = weather && weather->get_state().enabled && weather->get_state().wetness > 0.0f;
 	}
 	base_specialization.fellow_light_fields_early = false; // set after the lights are set up (below)
 	base_specialization.fellow_light_prefetch_next = false;
@@ -9061,6 +9072,13 @@ RID RenderForwardClustered::_setup_render_pass_uniform_set(RenderListType p_rend
 		u_rip.uniform_type = RD::UNIFORM_TYPE_TEXTURE;
 		u_rip.append_id(rip.is_valid() ? rip : texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_BLACK));
 		uniforms.push_back(u_rip);
+		// The wind's gusts (decision 0125): read by the vertex shaders of `fellow_wind` materials.
+		RID gust = active ? weather->get_gust_texture() : RID();
+		RD::Uniform u_gust;
+		u_gust.binding = 52;
+		u_gust.uniform_type = RD::UNIFORM_TYPE_TEXTURE;
+		u_gust.append_id(gust.is_valid() ? gust : texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_BLACK));
+		uniforms.push_back(u_gust);
 	}
 
 	return UniformSetCacheRD::get_singleton()->get_cache_vec(scene_shader.default_shader_rd, RENDER_PASS_UNIFORM_SET, uniforms);

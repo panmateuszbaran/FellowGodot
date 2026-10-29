@@ -41,6 +41,10 @@ namespace RendererRD {
 // wetted after its own code (and its decals) — porous surfaces darker, all of them glossier, puddles on flat ground with
 // the rain's ripples — where the rain reaches it (a heightfield of the scene seen from above: a particle collision
 // heightfield, which the rain's drops collide with too).
+//
+// Wind (docs/decisions/0125-wind.md): the scene side is FellowWind3D. Materials with the render mode `fellow_wind` (a
+// BaseMaterial3D's Wind group) are displaced in the vertex shader by the wind and its gusts, a noise field travelling
+// with the wind; the previous frame's wind is kept for the motion vectors.
 class FellowWeather {
 	static FellowWeather *singleton;
 
@@ -60,16 +64,36 @@ public:
 		float ripple_strength = 1.0f;
 	};
 
+	struct WindState {
+		bool enabled = false;
+		Vector2 direction = Vector2(1.0f, 0.0f); // xz, unit: where the wind blows to
+		float speed = 0.0f; // m/s
+		float gustiness = 0.0f; // 0..1: the gusts' share of the speed
+		float offset = 0.0f; // m: how far the gust field has travelled along the wind
+		float gust_size = 30.0f; // m
+		float flutter = 1.0f; // scale of the leaves' flutter
+		float time = 0.0f; // s: the sway's clock (FellowWind3D's time, repeating)
+		RID gust_texture; // RD texture: the gust field's tiling noise (r)
+	};
+
 	// std140: the shader's FellowWeatherData.
 	struct UBO {
 		float params[4]; // wetness, puddles, rain, time
 		float occlusion[4]; // origin x, origin z, 1 / (2 extents x), 1 / (2 extents z)
 		float occlusion2[4]; // origin y, extents y, enabled, bias
 		float ripples[4]; // 1 / tile, strength, -, -
+		float wind[4]; // direction x, direction z, speed, gustiness
+		float wind2[4]; // offset along the wind, 1 / gust size, flutter, enabled
+		float wind_prev[4]; // the previous frame's wind (motion vectors)
+		float wind2_prev[4];
+		float wind_time[4]; // this frame's and the previous frame's time of the wind
 	};
 
 private:
 	State state;
+	WindState wind;
+	WindState wind_prev;
+	bool wind_has_prev = false;
 	RID ubo;
 	bool ubo_dirty = true;
 
@@ -79,11 +103,15 @@ public:
 	static void finalize();
 
 	void set_state(const State &p_state);
-	bool is_active() const { return state.enabled; }
+	// Once per frame while a FellowWind3D is active; the previous call's state becomes the previous frame's.
+	void set_wind_state(const WindState &p_wind);
+	bool is_active() const { return state.enabled || wind.enabled; }
 	const State &get_state() const { return state; }
+	const WindState &get_wind_state() const { return wind; }
 	RID get_uniform_buffer();
 	RID get_occlusion_texture() const;
 	RID get_ripple_texture() const;
+	RID get_gust_texture() const;
 
 	FellowWeather();
 	~FellowWeather();

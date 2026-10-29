@@ -31,6 +31,7 @@
 #include "fellow_rain_3d.h"
 
 #include "fellow_rain.glsl.gen.h"
+#include "fellow_wind_3d.h"
 
 #include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
@@ -217,7 +218,7 @@ void FellowRain3D::_update_children() {
 	occlusion->set_follow_camera_enabled(false);
 	occlusion->set_update_mode(occlusion_always_update ? GPUParticlesCollisionHeightField3D::UPDATE_MODE_ALWAYS : GPUParticlesCollisionHeightField3D::UPDATE_MODE_WHEN_MOVED);
 
-	Vector3 v = wind - Vector3(0, drop_speed, 0);
+	Vector3 v = wind_applied - Vector3(0, drop_speed, 0);
 	float speed = v.length();
 	drop_process->set_direction(v / MAX(speed, 0.01f));
 	drop_process->set_param_min(ParticleProcessMaterial::PARAM_INITIAL_LINEAR_VELOCITY, speed * 0.95);
@@ -311,7 +312,16 @@ void FellowRain3D::_notification(int p_what) {
 			if (cam && drops) {
 				Vector3 c = cam->get_global_position();
 				// Upwind of the camera by the fall's drift, so the drops land around it.
-				Vector3 at = c + Vector3(0, fall_height, 0) - wind * (fall_height / MAX(drop_speed, 0.1f));
+				// The scene's wind at the camera (its gust there), if it has one (decision 0125).
+				Vector3 w = wind;
+				if (wind_from_scene && FellowWind3D::get_active()) {
+					w = FellowWind3D::get_active()->get_velocity_at(c);
+				}
+				if (!w.is_equal_approx(wind_applied) && w.distance_to(wind_applied) > 0.25f) {
+					wind_applied = w;
+					_update_children();
+				}
+				Vector3 at = c + Vector3(0, fall_height, 0) - wind_applied * (fall_height / MAX(drop_speed, 0.1f));
 				drops->set_global_position(at);
 				splash->set_global_position(c);
 			}
@@ -490,7 +500,11 @@ void FellowRain3D::set_rain(float p_rain) {
 		_update_children(); \
 	}
 
-RAIN_CHILD_SETTER(set_wind, const Vector3 &, wind, p_value)
+void FellowRain3D::set_wind(const Vector3 &p_wind) {
+	wind = p_wind;
+	wind_applied = p_wind;
+	_update_children();
+}
 RAIN_CHILD_SETTER(set_area, float, area, MAX(1.0f, p_value))
 RAIN_CHILD_SETTER(set_fall_height, float, fall_height, MAX(1.0f, p_value))
 RAIN_CHILD_SETTER(set_max_drops, int, max_drops, CLAMP(p_value, 1, 1000000))
@@ -518,6 +532,8 @@ void FellowRain3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_puddles"), &FellowRain3D::get_puddles);
 	ClassDB::bind_method(D_METHOD("set_wind", "wind"), &FellowRain3D::set_wind);
 	ClassDB::bind_method(D_METHOD("get_wind"), &FellowRain3D::get_wind);
+	ClassDB::bind_method(D_METHOD("set_wind_from_scene", "enable"), &FellowRain3D::set_wind_from_scene);
+	ClassDB::bind_method(D_METHOD("is_wind_from_scene"), &FellowRain3D::is_wind_from_scene);
 	ClassDB::bind_method(D_METHOD("set_area", "metres"), &FellowRain3D::set_area);
 	ClassDB::bind_method(D_METHOD("get_area"), &FellowRain3D::get_area);
 	ClassDB::bind_method(D_METHOD("set_fall_height", "metres"), &FellowRain3D::set_fall_height);
@@ -555,6 +571,7 @@ void FellowRain3D::_bind_methods() {
 	ADD_GROUP("Rain", "");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rain", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_rain", "get_rain");
 	ADD_PROPERTY(PropertyInfo(Variant::VECTOR3, "wind", PROPERTY_HINT_NONE, "suffix:m/s"), "set_wind", "get_wind");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "wind_from_scene"), "set_wind_from_scene", "is_wind_from_scene");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "area", PROPERTY_HINT_RANGE, "1,500,0.1,suffix:m"), "set_area", "get_area");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "fall_height", PROPERTY_HINT_RANGE, "1,200,0.1,suffix:m"), "set_fall_height", "get_fall_height");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "max_drops", PROPERTY_HINT_RANGE, "1,1000000,1"), "set_max_drops", "get_max_drops");
@@ -582,6 +599,7 @@ void FellowRain3D::_bind_methods() {
 
 FellowRain3D::FellowRain3D() {
 	ripple_texture.instantiate();
+	wind_applied = wind;
 }
 
 FellowRain3D::~FellowRain3D() {

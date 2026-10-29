@@ -296,7 +296,9 @@ public:
 		bool wireframe = false;
 
 		bool unshaded = false;
-		bool uses_vertex = false;
+		bool uses_vertex = false; // VERTEX written, or the wind moves the vertices (fellow_wind)
+		bool fellow_writes_vertex = false; // VERTEX written by the material's code
+		bool fellow_wind = false; // render_mode fellow_wind (decision 0125): moved by the wind, within a known bound
 		bool uses_position = false;
 		bool uses_sss = false;
 		bool uses_transmittance = false;

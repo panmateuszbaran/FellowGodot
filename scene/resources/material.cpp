@@ -592,6 +592,10 @@ void BaseMaterial3D::init_shaders() {
 	shader_names->heightmap_flip = "heightmap_flip";
 
 	shader_names->grow = "grow";
+	shader_names->wind_height = "wind_height";
+	shader_names->wind_bend = "wind_bend";
+	shader_names->wind_flutter = "wind_flutter";
+	shader_names->wind_sheen = "wind_sheen";
 
 	shader_names->ao_light_affect = "ao_light_affect";
 
@@ -869,6 +873,9 @@ void BaseMaterial3D::_update_shader() {
 	if (transparency == TRANSPARENCY_ALPHA_DEPTH_PRE_PASS) {
 		code += ", depth_prepass_alpha";
 	}
+	if (wind_enabled) {
+		code += ", fellow_wind";
+	}
 
 	// Although it's technically possible to do alpha antialiasing without using alpha hash or alpha scissor,
 	// it is restricted in the base material because it has no use, and abusing it with regular Alpha blending can
@@ -943,6 +950,13 @@ uniform sampler2D texture_albedo : source_color, %s;
 
 	if (grow_enabled) {
 		code += "uniform float grow : hint_range(-16.0, 16.0, 0.001);\n";
+	}
+
+	if (wind_enabled) {
+		code += "uniform float wind_height : hint_range(0.01, 100.0, 0.01);\n";
+		code += "uniform float wind_bend : hint_range(0.0, 4.0, 0.01);\n";
+		code += "uniform float wind_flutter : hint_range(0.0, 4.0, 0.01);\n";
+		code += "uniform float wind_sheen : hint_range(0.0, 2.0, 0.01);\n";
 	}
 
 	if (proximity_fade_enabled) {
@@ -1430,6 +1444,16 @@ void vertex() {)";
 		code += R"(
 	// Grow: Enabled
 	VERTEX += NORMAL * grow;
+)";
+	}
+
+	if (wind_enabled) {
+		code += R"(
+	// Wind: Enabled (FellowEngine: moved by the scene's FellowWind3D)
+	WIND_HEIGHT = wind_height;
+	WIND_BEND = wind_bend;
+	WIND_FLUTTER = wind_flutter;
+	WIND_SHEEN = wind_sheen;
 )";
 	}
 
@@ -2562,6 +2586,10 @@ void BaseMaterial3D::_validate_property(PropertyInfo &p_property) const {
 			p_property.usage = PROPERTY_USAGE_NO_EDITOR;
 		}
 
+		if ((p_property.name == "wind_height" || p_property.name == "wind_bend" || p_property.name == "wind_flutter" || p_property.name == "wind_sheen") && !wind_enabled) {
+			p_property.usage = PROPERTY_USAGE_NO_EDITOR;
+		}
+
 		if (p_property.name == "point_size" && !flags[FLAG_USE_POINT_SIZE]) {
 			p_property.usage = PROPERTY_USAGE_NO_EDITOR;
 		}
@@ -2917,6 +2945,52 @@ void BaseMaterial3D::set_grow(float p_grow) {
 
 float BaseMaterial3D::get_grow() const {
 	return grow;
+}
+
+void BaseMaterial3D::set_wind_enabled(bool p_enable) {
+	wind_enabled = p_enable;
+	_queue_shader_change();
+	notify_property_list_changed();
+}
+
+bool BaseMaterial3D::is_wind_enabled() const {
+	return wind_enabled;
+}
+
+void BaseMaterial3D::set_wind_height(float p_height) {
+	wind_height = MAX(p_height, 0.01f);
+	_material_set_param(shader_names->wind_height, wind_height);
+}
+
+float BaseMaterial3D::get_wind_height() const {
+	return wind_height;
+}
+
+void BaseMaterial3D::set_wind_bend(float p_bend) {
+	wind_bend = MAX(p_bend, 0.0f);
+	_material_set_param(shader_names->wind_bend, wind_bend);
+}
+
+float BaseMaterial3D::get_wind_bend() const {
+	return wind_bend;
+}
+
+void BaseMaterial3D::set_wind_flutter(float p_flutter) {
+	wind_flutter = MAX(p_flutter, 0.0f);
+	_material_set_param(shader_names->wind_flutter, wind_flutter);
+}
+
+float BaseMaterial3D::get_wind_flutter() const {
+	return wind_flutter;
+}
+
+void BaseMaterial3D::set_wind_sheen(float p_sheen) {
+	wind_sheen = MAX(p_sheen, 0.0f);
+	_material_set_param(shader_names->wind_sheen, wind_sheen);
+}
+
+float BaseMaterial3D::get_wind_sheen() const {
+	return wind_sheen;
 }
 
 static Vector4 _get_texture_mask(BaseMaterial3D::TextureChannel p_channel) {
@@ -3498,6 +3572,17 @@ void BaseMaterial3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_grow_enabled", "enable"), &BaseMaterial3D::set_grow_enabled);
 	ClassDB::bind_method(D_METHOD("is_grow_enabled"), &BaseMaterial3D::is_grow_enabled);
 
+	ClassDB::bind_method(D_METHOD("set_wind_enabled", "enable"), &BaseMaterial3D::set_wind_enabled);
+	ClassDB::bind_method(D_METHOD("is_wind_enabled"), &BaseMaterial3D::is_wind_enabled);
+	ClassDB::bind_method(D_METHOD("set_wind_height", "height"), &BaseMaterial3D::set_wind_height);
+	ClassDB::bind_method(D_METHOD("get_wind_height"), &BaseMaterial3D::get_wind_height);
+	ClassDB::bind_method(D_METHOD("set_wind_bend", "bend"), &BaseMaterial3D::set_wind_bend);
+	ClassDB::bind_method(D_METHOD("get_wind_bend"), &BaseMaterial3D::get_wind_bend);
+	ClassDB::bind_method(D_METHOD("set_wind_flutter", "flutter"), &BaseMaterial3D::set_wind_flutter);
+	ClassDB::bind_method(D_METHOD("get_wind_flutter"), &BaseMaterial3D::get_wind_flutter);
+	ClassDB::bind_method(D_METHOD("set_wind_sheen", "sheen"), &BaseMaterial3D::set_wind_sheen);
+	ClassDB::bind_method(D_METHOD("get_wind_sheen"), &BaseMaterial3D::get_wind_sheen);
+
 	ClassDB::bind_method(D_METHOD("set_metallic_texture_channel", "channel"), &BaseMaterial3D::set_metallic_texture_channel);
 	ClassDB::bind_method(D_METHOD("get_metallic_texture_channel"), &BaseMaterial3D::get_metallic_texture_channel);
 
@@ -3719,6 +3804,13 @@ void BaseMaterial3D::_bind_methods() {
 	ADD_GROUP("Grow", "grow_");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "grow", PROPERTY_HINT_GROUP_ENABLE), "set_grow_enabled", "is_grow_enabled");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "grow_amount", PROPERTY_HINT_RANGE, "-16,16,0.001,suffix:m"), "set_grow", "get_grow");
+
+	ADD_GROUP("Wind", "wind_");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "wind", PROPERTY_HINT_GROUP_ENABLE), "set_wind_enabled", "is_wind_enabled");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "wind_height", PROPERTY_HINT_RANGE, "0.01,100,0.01,or_greater,suffix:m"), "set_wind_height", "get_wind_height");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "wind_bend", PROPERTY_HINT_RANGE, "0,4,0.01"), "set_wind_bend", "get_wind_bend");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "wind_flutter", PROPERTY_HINT_RANGE, "0,4,0.01"), "set_wind_flutter", "get_wind_flutter");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "wind_sheen", PROPERTY_HINT_RANGE, "0,2,0.01"), "set_wind_sheen", "get_wind_sheen");
 
 	ADD_GROUP("Transform", "");
 	ADD_PROPERTYI(PropertyInfo(Variant::BOOL, "fixed_size"), "set_flag", "get_flag", FLAG_FIXED_SIZE);
@@ -3960,6 +4052,10 @@ BaseMaterial3D::BaseMaterial3D(bool p_orm) :
 	set_refraction_texture_channel(TEXTURE_CHANNEL_RED);
 
 	set_grow(0.0);
+	set_wind_height(1.0);
+	set_wind_bend(0.3);
+	set_wind_flutter(0.0);
+	set_wind_sheen(0.0);
 
 	set_msdf_pixel_range(4.0);
 	set_msdf_outline_size(0.0);

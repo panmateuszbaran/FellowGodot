@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="FellowWind3D" inherits="Node3D" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+	<brief_description>
+		The scene's wind: grass, bushes and trees bend, sway and flutter with it and its gusts (FellowEngine).
+	</brief_description>
+	<description>
+		The wind blows along the node's forward axis (-Z, projected on the ground plane) at [member speed]. Gusts — a noise field of cells of [member gust_size], twice as long along the wind, travelling with it — change its speed from place to place and in time by up to [member gustiness], so they roll over a meadow in waves.
+		Materials move with it in the vertex shader (Forward+): a [BaseMaterial3D] with its Wind group on ([member BaseMaterial3D.wind]), or a [ShaderMaterial] with [code]render_mode fellow_wind;[/code] (its [code]vertex()[/code] can set [code]WIND_HEIGHT[/code], [code]WIND_BEND[/code], [code]WIND_FLUTTER[/code] and [code]WIND_SHEEN[/code]). Each mesh instance (a MultiMesh's instance or a node) is a plant standing at its origin: it bends with the wind's force (the square of its speed), more towards its top, and sways about that at a natural frequency of its size; vertices away from its stem (branches, a clump's blades) sway at their own phases; leaves flutter along their normals. The normals turn with the bend, and a sheen ([member BaseMaterial3D.wind_sheen]) brightens what is bent. The shadows and the motion vectors (TAA, motion blur) follow: the previous frame's wind is kept.
+		A [FellowRain3D] in the scene takes its drops' wind from this node (its [member FellowRain3D.wind_from_scene]). One node at a time is active: the last one to enter the tree. Without one, materials with wind stand still. [code]rendering/fellow/fluid/enabled[/code] off stops the wind. The Mobile and Compatibility renderers do not move the vertices. Decision record [code]docs/decisions/0125-wind.md[/code].
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="get_direction" qualifiers="const">
+			<return type="Vector3" />
+			<description>
+				The direction the wind blows to: the node's forward axis on the ground plane, normalized.
+			</description>
+		</method>
+		<method name="get_gust_texture" qualifiers="const">
+			<return type="ImageTexture" />
+			<description>
+				The gusts' tiling noise (red channel; 8 gust cells a side).
+			</description>
+		</method>
+		<method name="get_velocity" qualifiers="const">
+			<return type="Vector3" />
+			<description>
+				The mean wind's velocity in metres per second.
+			</description>
+		</method>
+		<method name="get_velocity_at" qualifiers="const">
+			<return type="Vector3" />
+			<param index="0" name="position" type="Vector3" />
+			<description>
+				The wind's velocity at a point now, with the gust there (as the materials see it), in metres per second.
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="flutter" type="float" setter="set_flutter" getter="get_flutter" default="1.0">
+			A scale of the leaves' flutter (the materials' [code]WIND_FLUTTER[/code]).
+		</member>
+		<member name="gust_size" type="float" setter="set_gust_size" getter="get_gust_size" default="25.0">
+			The size of a gust across the wind, in metres (twice as long along it).
+		</member>
+		<member name="gustiness" type="float" setter="set_gustiness" getter="get_gustiness" default="0.5">
+			How much the gusts change the wind's speed: between [code]1 - gustiness[/code] and [code]1 + gustiness[/code] times [member speed].
+		</member>
+		<member name="speed" type="float" setter="set_speed" getter="get_speed" default="6.0">
+			The mean wind's speed in metres per second (a breeze 3, a fresh wind 10, a gale 20).
+		</member>
+		<member name="time_auto" type="bool" setter="set_time_auto" getter="is_time_auto" default="true">
+			If [code]true[/code], the wind's clock (the sway's phase, the gusts' travel) advances with the process time; otherwise it is set by the [code]time[/code] property (deterministic renders: the same pose for the same time).
+		</member>
+	</members>
+</class>

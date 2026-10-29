@@ -1279,6 +1279,11 @@ MaterialStorage::MaterialStorage() {
 		actions.renames["INSTANCE_ID"] = "gl_InstanceID";
 		actions.renames["VERTEX_ID"] = "gl_VertexID";
 		actions.renames["Z_CLIP_SCALE"] = "z_clip_scale";
+		// FellowEngine wind (decision 0125): its parameters compile; the wind moves vertices in Forward+ only.
+		actions.renames["WIND_HEIGHT"] = "fellow_wind_height";
+		actions.renames["WIND_BEND"] = "fellow_wind_bend";
+		actions.renames["WIND_FLUTTER"] = "fellow_wind_flutter";
+		actions.renames["WIND_SHEEN"] = "fellow_wind_sheen";
 
 		actions.renames["ALPHA_SCISSOR_THRESHOLD"] = "alpha_scissor_threshold";
 		actions.renames["ALPHA_HASH_SCALE"] = "alpha_hash_scale";

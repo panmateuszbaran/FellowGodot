@@ -75,6 +75,8 @@ void SceneShaderForwardClustered::ShaderData::set_code(const String &p_code) {
 
 	unshaded = false;
 	uses_vertex = false;
+	fellow_writes_vertex = false;
+	fellow_wind = false;
 	uses_position = false;
 	uses_sss = false;
 	uses_transmittance = false;
@@ -123,6 +125,9 @@ void SceneShaderForwardClustered::ShaderData::set_code(const String &p_code) {
 	actions.render_mode_flags["wireframe"] = &wireframe;
 	actions.render_mode_flags["particle_trails"] = &uses_particle_trails;
 	actions.render_mode_flags["world_vertex_coords"] = &uses_world_coordinates;
+	// The wind moves the vertices (decision 0125): as a material that writes VERTEX for the shadow cache; MultiMesh
+	// culling knows the wind's bound.
+	actions.render_mode_flags["fellow_wind"] = &fellow_wind;
 
 	actions.usage_flag_pointers["ALPHA"] = &uses_alpha;
 	actions.usage_flag_pointers["ALPHA_SCISSOR_THRESHOLD"] = &uses_alpha_clip;
@@ -151,7 +156,7 @@ void SceneShaderForwardClustered::ShaderData::set_code(const String &p_code) {
 
 	actions.write_flag_pointers["MODELVIEW_MATRIX"] = &writes_modelview_or_projection;
 	actions.write_flag_pointers["PROJECTION_MATRIX"] = &writes_modelview_or_projection;
-	actions.write_flag_pointers["VERTEX"] = &uses_vertex;
+	actions.write_flag_pointers["VERTEX"] = &fellow_writes_vertex;
 	actions.write_flag_pointers["POSITION"] = &uses_position;
 	actions.write_flag_pointers["TANGENT"] = &writes_tangent;
 	actions.write_flag_pointers["BINORMAL"] = &writes_tangent;
@@ -207,6 +212,7 @@ void SceneShaderForwardClustered::ShaderData::set_code(const String &p_code) {
 	uses_depth_texture = gen_code.uses_depth_texture;
 	uses_normal_texture = gen_code.uses_normal_roughness_texture;
 	uses_vertex_time = gen_code.uses_vertex_time;
+	uses_vertex = fellow_writes_vertex || fellow_wind;
 	uses_fragment_time = gen_code.uses_fragment_time;
 	uses_normal |= uses_normal_map;
 	uses_normal |= uses_bent_normal_map;
@@ -758,6 +764,10 @@ void SceneShaderForwardClustered::init(const String p_defines) {
 		actions.renames["MAIN_CAM_INV_VIEW_MATRIX"] = "scene_data.main_cam_inv_view_matrix";
 
 		actions.renames["VERTEX"] = "vertex";
+		actions.renames["WIND_HEIGHT"] = "fellow_wind_height";
+		actions.renames["WIND_BEND"] = "fellow_wind_bend";
+		actions.renames["WIND_FLUTTER"] = "fellow_wind_flutter";
+		actions.renames["WIND_SHEEN"] = "fellow_wind_sheen";
 		actions.renames["NORMAL"] = "normal_highp";
 		actions.renames["TANGENT"] = "tangent";
 		actions.renames["BINORMAL"] = "binormal";
@@ -905,6 +915,7 @@ void SceneShaderForwardClustered::init(const String p_defines) {
 
 		actions.render_mode_defines["skip_vertex_transform"] = "#define SKIP_TRANSFORM_USED\n";
 		actions.render_mode_defines["world_vertex_coords"] = "#define VERTEX_WORLD_COORDS_USED\n";
+		actions.render_mode_defines["fellow_wind"] = "#define FELLOW_WIND_USED\n";
 		actions.render_mode_defines["ensure_correct_normals"] = "#define ENSURE_CORRECT_NORMALS\n";
 		actions.render_mode_defines["cull_front"] = "#define DO_SIDE_CHECK\n";
 		actions.render_mode_defines["cull_disabled"] = "#define DO_SIDE_CHECK\n";
@@ -945,7 +956,7 @@ void SceneShaderForwardClustered::init(const String p_defines) {
 		actions.base_texture_binding_index = 1;
 		actions.texture_layout_set = RenderForwardClustered::MATERIAL_UNIFORM_SET;
 		actions.base_uniform_string = "material.";
-		actions.base_varying_index = 15;
+		actions.base_varying_index = 16; // 15: the wind's sheen (decision 0125)
 
 		actions.default_filter = ShaderLanguage::FILTER_LINEAR_MIPMAP;
 		actions.default_repeat = ShaderLanguage::REPEAT_ENABLE;

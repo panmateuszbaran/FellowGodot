@@ -182,6 +182,11 @@ uint cluster_get_range_clip_mask(uint i, uint z_min, uint z_max) {
 layout(location = 14) out vec2 point_coord_interp;
 #endif
 
+#if defined(FELLOW_WIND_USED) && !defined(MODE_RENDER_SDF)
+// The wind's sheen (decision 0125): how much brighter the bent plant looks (WIND_SHEEN x its bend).
+layout(location = 15) out float fellow_wind_sheen_interp;
+#endif
+
 invariant gl_Position;
 
 #GLOBALS
@@ -219,6 +224,76 @@ uint multimesh_stride() {
 	stride += sc_multimesh_has_custom_data() ? 1 : 0;
 	return stride;
 }
+
+#if defined(FELLOW_WIND_USED) && !defined(MODE_RENDER_SDF)
+// FellowEngine wind (FellowWind3D, decision 0125). A plant bends with the wind's force (the square of its speed), more
+// towards its top (the bend grows with the height's square, as a cantilever's), and sways about that at a natural
+// frequency of its size; gusts (a noise field laid along the wind and travelling with it) change the force from plant
+// to plant and in time, so they roll over a meadow in waves. Vertices away from the stem (branches, a clump's blades)
+// sway at their own phases; leaves flutter along their normals at a phase of their own. The material says how tall
+// the plant is in its mesh (WIND_HEIGHT: from y = 0 to the top), how much it bends (WIND_BEND) and flutters
+// (WIND_FLUTTER). The previous frame's wind and time give the motion vectors.
+float fellow_wind_hash(vec2 p_p) {
+	vec3 p3 = fract(vec3(p_p.xyx) * 0.1031);
+	p3 += dot(p3, p3.yzx + 33.33);
+	return fract((p3.x + p3.y) * p3.z);
+}
+
+// The displacement in world space of a vertex at p_local (the mesh's space) of a plant placed by p_model, and the stem's
+// tilt there (world, horizontal: how far the stem leans per metre of height), which turns the normal with the bend.
+vec3 fellow_wind_offset(vec3 p_local, vec3 p_normal_world, mat4 p_model, bool p_prev, float p_height, float p_bend, float p_flutter, out vec3 r_tilt, out float r_bend) {
+	r_tilt = vec3(0.0);
+	r_bend = 0.0;
+	vec4 w0 = p_prev ? fellow_weather.data.wind_prev : fellow_weather.data.wind;
+	vec4 w1 = p_prev ? fellow_weather.data.wind2_prev : fellow_weather.data.wind2;
+	// The wind's own clock (FellowWind3D.time): deterministic, and the previous frame's for the motion vectors.
+	float p_time = p_prev ? fellow_weather.data.wind_time.y : fellow_weather.data.wind_time.x;
+	if (w1.w <= 0.0 || w0.z <= 0.0) {
+		return vec3(0.0);
+	}
+	const float TWO_PI = 6.2831853;
+	vec2 dir = w0.xy;
+	vec2 side = vec2(-dir.y, dir.x);
+	vec3 origin = p_model[3].xyz;
+	float height = max(p_height, 1e-3);
+	float height_w = height * length(p_model[1].xyz);
+	float h = clamp(p_local.y / height, 0.0, 1.0);
+
+	// The gust at the plant (cells of the gust size, twice as long along the wind).
+	vec2 guv = vec2((dot(origin.xz, dir) - w1.x) * 0.5, dot(origin.xz, side)) * (w1.y * 0.125);
+	float g = textureLod(sampler2D(fellow_wind_gusts, SAMPLER_LINEAR_REPEAT), guv, 0.0).r;
+	float speed = w0.z * max(0.0, 1.0 + w0.w * clamp((g - 0.5) * 3.0, -1.0, 1.0));
+	float force = speed * speed * 0.01; // 1 at 10 m/s
+
+	// The bend at the top, a fraction of the height: steady with the force, softly limited.
+	float b = p_bend * force;
+	b = 0.75 * b / (0.75 + b);
+	float phase = fellow_wind_hash(origin.xz) * TWO_PI;
+	float freq = clamp(1.0 / sqrt(height_w), 0.15, 3.0); // Hz: a tall tree slower than a blade of grass
+	float along = b * (0.75 + 0.25 * sin(TWO_PI * freq * p_time + phase));
+	r_bend = along * h / 0.75; // 0..1: how far this part of the plant is bent
+	float across = b * 0.15 * sin(TWO_PI * freq * 1.37 * p_time + phase * 1.7);
+	vec2 top = (dir * along + side * across) * height_w;
+	vec3 d = vec3(top.x, 0.0, top.y) * (h * h);
+	r_tilt = vec3(top.x, 0.0, top.y) * (2.0 * h / height_w);
+	d.y = -0.5 * dot(d.xz, d.xz) / max(h * height_w, 0.01); // the stem keeps its length
+
+	// Branches: away from the stem, swaying at their own phases (coherent over a branch).
+	float r = min(length(p_local.xz) / height, 1.0);
+	float bp = phase + dot(p_local, vec3(0.7, 0.4, 0.6)) * 2.0;
+	float branch = r * h * (0.03 + 0.08 * min(force, 2.0)) * height_w;
+	d += vec3(dir.x, 0.0, dir.y) * (branch * sin(TWO_PI * freq * 2.7 * p_time + bp)) + vec3(0.0, branch * 0.4 * cos(TWO_PI * freq * 2.1 * p_time + bp), 0.0);
+
+	// Leaves: a flutter along their normals, a few hertz, a phase per vertex.
+	if (p_flutter > 0.0) {
+		float lh = fellow_wind_hash(p_local.xz * 17.0 + p_local.y * 5.3);
+		float fl = sin(TWO_PI * (4.0 + 3.0 * lh) * p_time + lh * 37.0);
+		// At most 0.24 m (MultiMesh culling's bound for wind materials).
+		d += p_normal_world * (fl * min(p_flutter * w1.z, 4.0) * 0.03 * sqrt(min(force, 4.0)) * min(height_w, 1.0));
+	}
+	return d;
+}
+#endif
 
 void vertex_shader(vec3 vertex_input,
 #ifdef NORMAL_USED
@@ -335,14 +410,14 @@ void vertex_shader(vec3 vertex_input,
 #endif
 		//transpose
 		matrix = transpose(matrix);
-#if !defined(USE_DOUBLE_PRECISION) || defined(SKIP_TRANSFORM_USED) || defined(VERTEX_WORLD_COORDS_USED) || defined(MODEL_MATRIX_USED)
+#if !defined(USE_DOUBLE_PRECISION) || defined(SKIP_TRANSFORM_USED) || defined(VERTEX_WORLD_COORDS_USED) || defined(MODEL_MATRIX_USED) || defined(FELLOW_WIND_USED)
 		// Normally we can bake the multimesh transform into the model matrix, but when using double precision
 		// we avoid baking it in so we can emulate high precision.
 		read_model_matrix = model_matrix * matrix;
 #if !defined(USE_DOUBLE_PRECISION) || defined(SKIP_TRANSFORM_USED) || defined(VERTEX_WORLD_COORDS_USED)
 		model_matrix = read_model_matrix;
 #endif // !defined(USE_DOUBLE_PRECISION) || defined(SKIP_TRANSFORM_USED) || defined(VERTEX_WORLD_COORDS_USED)
-#endif // !defined(USE_DOUBLE_PRECISION) || defined(SKIP_TRANSFORM_USED) || defined(VERTEX_WORLD_COORDS_USED) || defined(MODEL_MATRIX_USED)
+#endif // !defined(USE_DOUBLE_PRECISION) || defined(SKIP_TRANSFORM_USED) || defined(VERTEX_WORLD_COORDS_USED) || defined(MODEL_MATRIX_USED) || defined(FELLOW_WIND_USED)
 		if (bool(fellow_flags & INSTANCE_FLAGS_FELLOW_INSTANCE_NORMALS)) {
 			model_normal_matrix = model_normal_matrix * transpose(inverse(mat3(matrix)));
 		} else {
@@ -449,10 +524,41 @@ void vertex_shader(vec3 vertex_input,
 #ifdef POINT_SIZE_USED
 	float point_size = 1.0;
 #endif
+	// The wind's parameters for this material (decision 0125): WIND_HEIGHT, WIND_BEND, WIND_FLUTTER.
+	float fellow_wind_height = 1.0;
+	float fellow_wind_bend = 0.3;
+	float fellow_wind_flutter = 0.0;
+	float fellow_wind_sheen = 0.0;
 
 	{
 #CODE : VERTEX
 	}
+
+#if defined(FELLOW_WIND_USED) && !defined(MODE_RENDER_SDF) && !defined(SKIP_TRANSFORM_USED)
+	// The wind (decision 0125): the displacement and the stem's tilt in world space, added after the transform below
+	// (no inverse of the model matrix: in view space).
+	vec3 wind_d;
+	vec3 wind_tilt;
+	float wind_bend_amount;
+	{
+#ifdef NORMAL_USED
+#ifdef VERTEX_WORLD_COORDS_USED
+		vec3 wind_normal = normalize(normal_highp);
+#else
+		vec3 wind_normal = normalize(model_normal_matrix * normal_highp);
+#endif
+#else
+		vec3 wind_normal = vec3(0.0, 1.0, 0.0);
+#endif
+#ifdef VERTEX_WORLD_COORDS_USED
+		vec3 wind_local = (inverse(read_model_matrix) * vec4(vertex, 1.0)).xyz;
+#else
+		vec3 wind_local = vertex;
+#endif
+		wind_d = fellow_wind_offset(wind_local, wind_normal, read_model_matrix, scene_data.time != scene_data_block.data.time, fellow_wind_height, fellow_wind_bend, fellow_wind_flutter, wind_tilt, wind_bend_amount);
+		fellow_wind_sheen_interp = fellow_wind_sheen * wind_bend_amount;
+	}
+#endif
 
 	float roughness = roughness_highp;
 #ifdef NORMAL_USED
@@ -473,11 +579,29 @@ void vertex_shader(vec3 vertex_input,
 	binormal = modelview_normal * binormal;
 	tangent = modelview_normal * tangent;
 #endif
+#if defined(FELLOW_WIND_USED) && !defined(MODE_RENDER_SDF)
+	{
+		mat3 wind_view = mat3(read_view_matrix);
+		vertex += wind_view * wind_d;
+#ifdef NORMAL_USED
+		// The normal turned with the stem (a small rotation about up x tilt): n + t (n . up) - up (t . n).
+		vec3 wind_t = wind_view * wind_tilt;
+		vec3 wind_up = wind_view[1];
+		normal = normalize(normal) + wind_t * dot(normalize(normal), wind_up) - wind_up * dot(wind_t, normalize(normal));
+#endif
+	}
+#endif
 #endif // !defined(SKIP_TRANSFORM_USED) && !defined(VERTEX_WORLD_COORDS_USED)
 
 //using world coordinates
 #if !defined(SKIP_TRANSFORM_USED) && defined(VERTEX_WORLD_COORDS_USED)
 
+#if defined(FELLOW_WIND_USED) && !defined(MODE_RENDER_SDF)
+	vertex += wind_d;
+#ifdef NORMAL_USED
+	normal = normalize(normal) + wind_tilt * normalize(normal).y - vec3(0.0, 1.0, 0.0) * dot(wind_tilt, normalize(normal));
+#endif
+#endif
 	vertex = (read_view_matrix * vec4(vertex, 1.0)).xyz;
 #ifdef NORMAL_USED
 	normal = (read_view_matrix * vec4(normal, 0.0)).xyz;
@@ -1017,6 +1141,10 @@ layout(location = 13) in vec4 specular_light_interp;
 
 #if defined(POINT_SIZE_USED) && defined(POINT_COORD_USED)
 layout(location = 14) in vec2 point_coord_interp;
+#endif
+
+#if defined(FELLOW_WIND_USED) && !defined(MODE_RENDER_SDF)
+layout(location = 15) in float fellow_wind_sheen_interp;
 #endif
 
 //defines to keep compatibility with vertex
@@ -1970,6 +2098,10 @@ void fragment_shader(in SceneData scene_data) {
 	if (sc_fellow_wetness()) {
 		fellow_wetness_apply(scene_data, albedo, roughness, metallic, normal, vertex, normalize(normal_interp));
 	}
+#endif
+#if defined(FELLOW_WIND_USED) && !defined(MODE_RENDER_SDF) && !defined(MODE_RENDER_DEPTH)
+	// The wind's sheen (decision 0125): bent grass shows its lighter, glossier side (the gusts' waves over a meadow).
+	albedo *= 1.0 + fellow_wind_sheen_interp;
 #endif
 	/////////////////////// LIGHTING //////////////////////////////
 

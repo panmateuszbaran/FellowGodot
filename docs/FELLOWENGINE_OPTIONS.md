@@ -209,6 +209,24 @@ opaque pass), the ripples 0.04 ms, the particles 0.04 ms, the drops' drawing 0.0
 wetness costs nothing. Transparent materials are not wetted. `rendering/fellow/fluid/enabled` off turns the wetting
 off. Decision record 0124; bench Rain Lab (`--scene=rain`, `--rain=on|dry|off`, `--rain_light=day|dusk`).
 
+## Wind (milestone 26)
+
+A `FellowWind3D` node (module `fellow_fluid`; one active at a time) is the scene's wind, blowing along the node's
+forward axis at `speed`, with gusts (`gustiness`, `gust_size`) that roll over the landscape with it. Vegetation moves
+with it in the vertex shader (Forward+):
+
+* a `BaseMaterial3D`'s **Wind** group: `wind_height` (the plant's height in its mesh, from y = 0), `wind_bend` (how
+  far it bends in 10 m/s: grass about 1, bushes 0.3, trees 0.05-0.1), `wind_flutter` (leaves 1, bark 0), `wind_sheen`
+  (bent grass brightens: the gusts' waves; about 1 for grass);
+* a `ShaderMaterial`: `render_mode fellow_wind;` and `WIND_HEIGHT`, `WIND_BEND`, `WIND_FLUTTER`, `WIND_SHEEN` in its
+  `vertex()`.
+
+Each mesh instance (a MultiMesh's instance or a node) is one plant standing at its origin: it bends with the force of
+the wind there, sways at a frequency of its size, its branches at their own phases, its leaves flutter; normals turn
+with the bend; shadows and motion vectors follow. A `FellowRain3D` takes its drops' wind from it
+(`wind_from_scene`). Not moved: the Mobile and Compatibility renderers, SDFGI's voxelization, `skip_vertex_transform`.
+Decision record 0125; bench Wind Lab (`--scene=wind`, `--wind=on|off|shader`).
+
 ## Options that change the image (off by default)
 
 | setting | what it does | image cost | record |

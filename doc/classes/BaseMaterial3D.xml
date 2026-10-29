@@ -486,6 +486,21 @@
 		<member name="vertex_color_use_as_albedo" type="bool" setter="set_flag" getter="get_flag" default="false">
 			If [code]true[/code], the vertex color is used as albedo color.
 		</member>
+		<member name="wind" type="bool" setter="set_wind_enabled" getter="is_wind_enabled" default="false">
+			If [code]true[/code], the scene's [code]FellowWind3D[/code] moves the vertices (FellowEngine, Forward+): the mesh is a plant standing at its origin, [member wind_height] tall, which bends with the wind and its gusts, sways, and whose leaves flutter. The shadows and the motion vectors follow. See also [member wind_bend] and [member wind_flutter]. Without a [code]FellowWind3D[/code] in the scene nothing moves.
+		</member>
+		<member name="wind_bend" type="float" setter="set_wind_bend" getter="get_wind_bend" default="0.3">
+			How far the plant bends in a wind of 10 m/s, as a share of its height (the force grows with the square of the speed; the bend is limited to three quarters of the height). Grass about [code]1.0[/code], bushes [code]0.3[/code], trees [code]0.05[/code]-[code]0.1[/code].
+		</member>
+		<member name="wind_flutter" type="float" setter="set_wind_flutter" getter="get_wind_flutter" default="0.0">
+			How much the surface's vertices flutter along their normals (leaves). [code]0.0[/code] for trunks and bark, [code]1.0[/code] for leaves.
+		</member>
+		<member name="wind_height" type="float" setter="set_wind_height" getter="get_wind_height" default="1.0">
+			The plant's height in the mesh's units, from its base at [code]y = 0[/code]: the bend grows with the square of the height along it, and the plant sways more slowly the taller it is. Use the same value for all the surfaces of a plant (its bark and its leaves), so they move together.
+		</member>
+		<member name="wind_sheen" type="float" setter="set_wind_sheen" getter="get_wind_sheen" default="0.0">
+			How much brighter the plant looks where it is bent (its lighter, glossier side turned up): the albedo is multiplied by [code]1 + wind_sheen * bend[/code], the bend from 0 (upright) to 1. It makes the gusts' waves over a meadow visible; about [code]0.5[/code] for grass.
+		</member>
 		<member name="z_clip_scale" type="float" setter="set_z_clip_scale" getter="get_z_clip_scale" default="1.0">
 			Scales the object being rendered towards the camera to avoid clipping into things like walls. This is intended to be used for objects that are fixed with respect to the camera like player arms, tools, etc. Lighting and shadows will continue to work correctly when this setting is adjusted, but screen-space effects like SSAO and SSR may break with lower scales. Therefore, try to keep this setting as close to [code]1.0[/code] as possible.
 		</member>

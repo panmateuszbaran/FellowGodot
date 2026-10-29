@@ -384,6 +384,7 @@ private:
 		uint64_t invalid_key : 1;
 		uint64_t deep_parallax : 1;
 		uint64_t grow : 1;
+		uint64_t fellow_wind : 1;
 		uint64_t proximity_fade : 1;
 		uint64_t orm : 1;
 
@@ -435,6 +436,7 @@ private:
 		mk.billboard_mode = billboard_mode;
 		mk.deep_parallax = deep_parallax;
 		mk.grow = grow_enabled;
+		mk.fellow_wind = wind_enabled;
 		mk.proximity_fade = proximity_fade_enabled;
 		mk.distance_fade = distance_fade;
 		mk.emission_op = emission_op;
@@ -495,6 +497,10 @@ private:
 		StringName uv1_blend_sharpness;
 		StringName uv2_blend_sharpness;
 		StringName grow;
+		StringName wind_height;
+		StringName wind_bend;
+		StringName wind_flutter;
+		StringName wind_sheen;
 		StringName proximity_fade_distance;
 		StringName msdf_pixel_range;
 		StringName msdf_outline_size;
@@ -563,6 +569,12 @@ private:
 	bool grow_enabled = false;
 	float ao_light_affect = 0.0f;
 	float grow = 0.0f;
+	// FellowEngine wind (decision 0125).
+	bool wind_enabled = false;
+	float wind_height = 1.0f;
+	float wind_bend = 0.3f;
+	float wind_flutter = 0.0f;
+	float wind_sheen = 0.0f;
 	int particles_anim_h_frames = 0;
 	int particles_anim_v_frames = 0;
 	bool particles_anim_loop = false;
@@ -807,6 +819,17 @@ public:
 
 	void set_grow(float p_grow);
 	float get_grow() const;
+
+	void set_wind_enabled(bool p_enable);
+	bool is_wind_enabled() const;
+	void set_wind_height(float p_height);
+	float get_wind_height() const;
+	void set_wind_bend(float p_bend);
+	float get_wind_bend() const;
+	void set_wind_flutter(float p_flutter);
+	float get_wind_flutter() const;
+	void set_wind_sheen(float p_sheen);
+	float get_wind_sheen() const;
 
 	void set_alpha_scissor_threshold(float p_threshold);
 	float get_alpha_scissor_threshold() const;

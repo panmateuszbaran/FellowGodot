@@ -67,6 +67,8 @@ class FellowRain3D : public Node3D {
 	float drying_time = 600.0f; // s to dry
 	float puddles = 0.5f; // 0..1
 	Vector3 wind = Vector3(1.0f, 0.0f, 0.5f); // m/s
+	bool wind_from_scene = true; // a FellowWind3D's, where there is one
+	Vector3 wind_applied; // what the drops were last given
 	float area = 40.0f; // m: side of the box the drops fall in around the camera
 	float fall_height = 14.0f; // m above the camera the drops start
 	int max_drops = 24000;
@@ -138,6 +140,8 @@ public:
 	float get_puddles() const { return puddles; }
 	void set_wind(const Vector3 &p_wind);
 	Vector3 get_wind() const { return wind; }
+	void set_wind_from_scene(bool p_enable) { wind_from_scene = p_enable; }
+	bool is_wind_from_scene() const { return wind_from_scene; }
 	void set_area(float p_area);
 	float get_area() const { return area; }
 	void set_fall_height(float p_height);
