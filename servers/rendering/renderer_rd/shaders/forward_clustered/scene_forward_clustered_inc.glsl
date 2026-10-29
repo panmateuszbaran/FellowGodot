@@ -286,6 +286,11 @@ bool sc_fellow_contact_shadow() {
 	return ((sc_packed_2() >> 5) & 1U) != 0;
 }
 
+// FellowEngine weather (decision 0124): the depth pre-pass and opaque colour passes wet the materials (FellowRain3D).
+bool sc_fellow_wetness() {
+	return ((sc_packed_2() >> 6) & 1U) != 0;
+}
+
 // FellowEngine DDGI (decision 0083): the colour passes take the ambient light from the probe volume.
 bool sc_fellow_ddgi() {
 	return ((sc_packed_2() >> 2) & 1U) != 0;
@@ -784,6 +789,20 @@ fellow_ddgi;
 layout(set = 1, binding = 47) uniform texture2D fellow_rt_reflection;
 // FellowEngine DDGI's screen pass (decision 0083): RGB the irradiance, A the volume's coverage.
 layout(set = 1, binding = 48) uniform texture2D fellow_ddgi_screen;
+// FellowEngine weather (decision 0124): its parameters, the scene's heightfield seen from above (where the rain falls),
+// the rain's ripples (slopes in rg, tiling).
+struct FellowWeatherData {
+	vec4 params; // wetness, puddles, rain, time
+	vec4 occlusion; // origin x, origin z, 1 / width x, 1 / width z
+	vec4 occlusion2; // origin y, half height, enabled, bias
+	vec4 ripples; // 1 / tile, strength
+};
+layout(set = 1, binding = 49, std140) uniform FellowWeatherBlock {
+	FellowWeatherData data;
+}
+fellow_weather;
+layout(set = 1, binding = 50) uniform texture2D fellow_rain_occlusion;
+layout(set = 1, binding = 51) uniform texture2D fellow_rain_ripples;
 
 #endif
 

@@ -30,6 +30,7 @@
 
 #include "render_forward_clustered.h"
 
+#include "servers/rendering/renderer_rd/effects/fellow_weather.h"
 #include "servers/rendering/renderer_rd/effects/fellow_gas.h"
 
 #include "core/object/callable_mp.h"
@@ -6384,6 +6385,11 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	base_specialization.fellow_shadow_tap_batch = Fellow::shadow_batched_taps_directional();
 	base_specialization.fellow_shadow_tap_batch_positional = Fellow::shadow_batched_taps_positional();
 	base_specialization.fellow_pcss_quad_search = fellow_subgroup_quad_fragment && Fellow::shadow_pcss_quad_search();
+	{
+		// FellowEngine weather (decision 0124): materials wetted in the depth pre-pass and the opaque colour passes.
+		RendererRD::FellowWeather *weather = RendererRD::FellowWeather::get_singleton_if_exists();
+		base_specialization.fellow_wetness = weather && weather->is_active() && weather->get_state().wetness > 0.0f;
+	}
 	base_specialization.fellow_light_fields_early = false; // set after the lights are set up (below)
 	base_specialization.fellow_light_prefetch_next = false;
 	base_specialization.fellow_light_prefetch_all = false;
@@ -6901,6 +6907,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	// DDGI (decision 0083): the transparent surfaces read the screen pass's irradiance (that of the surface behind them).
 	SceneShaderForwardClustered::ShaderSpecialization fellow_alpha_specialization = base_specialization;
 	fellow_alpha_specialization.fellow_ddgi_screen = fellow_ddgi_screen.is_valid();
+	fellow_alpha_specialization.fellow_wetness = false; // decision 0124: opaque materials only
 
 	{
 		uint32_t transparent_color_pass_flags = (color_pass_flags | uint32_t(COLOR_PASS_FLAG_TRANSPARENT)) & ~uint32_t(COLOR_PASS_FLAG_SEPARATE_SPECULAR);
@@ -9027,6 +9034,34 @@ RID RenderForwardClustered::_setup_render_pass_uniform_set(RenderListType p_rend
 		u.append_id(screen ? fellow_ddgi_screen : texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_BLACK));
 		uniforms.push_back(u);
 	}
+	{
+		// FellowEngine weather (decision 0124): its parameters, the rain's heightfield and ripples; read only by passes
+		// specialized with fellow_wetness (defaults otherwise).
+		RendererRD::FellowWeather *weather = RendererRD::FellowWeather::get_singleton_if_exists();
+		if (fellow_weather_default_ubo.is_null()) {
+			RendererRD::FellowWeather::UBO none;
+			memset(&none, 0, sizeof(none));
+			fellow_weather_default_ubo = RD::get_singleton()->uniform_buffer_create(sizeof(none), Span<uint8_t>((uint8_t *)&none, sizeof(none)));
+		}
+		const bool active = weather && weather->is_active();
+		RD::Uniform u_ubo;
+		u_ubo.binding = 49;
+		u_ubo.uniform_type = RD::UNIFORM_TYPE_UNIFORM_BUFFER;
+		u_ubo.append_id(active ? weather->get_uniform_buffer() : fellow_weather_default_ubo);
+		uniforms.push_back(u_ubo);
+		RID occ = active ? weather->get_occlusion_texture() : RID();
+		RD::Uniform u_occ;
+		u_occ.binding = 50;
+		u_occ.uniform_type = RD::UNIFORM_TYPE_TEXTURE;
+		u_occ.append_id(occ.is_valid() ? occ : texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_BLACK));
+		uniforms.push_back(u_occ);
+		RID rip = active ? weather->get_ripple_texture() : RID();
+		RD::Uniform u_rip;
+		u_rip.binding = 51;
+		u_rip.uniform_type = RD::UNIFORM_TYPE_TEXTURE;
+		u_rip.append_id(rip.is_valid() ? rip : texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_BLACK));
+		uniforms.push_back(u_rip);
+	}
 
 	return UniformSetCacheRD::get_singleton()->get_cache_vec(scene_shader.default_shader_rd, RENDER_PASS_UNIFORM_SET, uniforms);
 }
@@ -10734,6 +10769,10 @@ RenderForwardClustered::~RenderForwardClustered() {
 	if (fellow_rt_instance_buffer.is_valid()) {
 		RD::get_singleton()->free_rid(fellow_rt_instance_buffer);
 		fellow_rt_instance_buffer = RID();
+	}
+	if (fellow_weather_default_ubo.is_valid()) {
+		RD::get_singleton()->free_rid(fellow_weather_default_ubo);
+		fellow_weather_default_ubo = RID();
 	}
 	if (fellow_ddgi_default_ubo.is_valid()) {
 		RD::get_singleton()->free_rid(fellow_ddgi_default_ubo);

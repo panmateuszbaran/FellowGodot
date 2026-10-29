@@ -598,6 +598,8 @@ public:
 	Vector3 particles_collision_get_extents(RID p_particles_collision) const;
 	virtual bool particles_collision_is_heightfield(RID p_particles_collision) const override;
 	RID particles_collision_get_heightfield_framebuffer(RID p_particles_collision) const;
+	// FellowEngine weather (decision 0124): the heightfield's depth texture (the scene seen from above), if drawn yet.
+	RID fellow_particles_collision_get_heightfield_texture(RID p_particles_collision) const;
 	virtual uint32_t particles_collision_get_height_field_mask(RID p_particles_collision) const override;
 	virtual void particles_collision_set_height_field_mask(RID p_particles_collision, uint32_t p_heightfield_mask) override;
 	virtual uint32_t particles_collision_get_cull_mask(RID p_particles_collision) const override;

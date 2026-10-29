@@ -75,6 +75,9 @@ uniform int ssr_steps = 32;
 uniform float ssr_max_distance = 80.0;
 uniform float ssr_min_fresnel = 0.04;
 uniform float water_time = 0.0;
+uniform sampler2D rain_ripples : filter_linear_mipmap, repeat_enable;
+uniform float rain_amount = 0.0;
+uniform float rain_tile = 1.5;
 uniform int debug_view = 0;
 
 varying vec3 v_base;
@@ -171,6 +174,11 @@ void fragment() {
 	}
 	slope *= amp;
 	variance *= amp * amp;
+	if (rain_amount > 0.0) {
+		// FellowRain3D's ripples (decision 0124): two offset lookups of its tiling texture.
+		vec2 ruv = xz / rain_tile;
+		slope += (texture(rain_ripples, ruv).rg + texture(rain_ripples, ruv * 0.77 + vec2(0.37, 0.61)).rg) * rain_amount;
+	}
 	slope += sims.gb * v_sim;
 	vec3 n_world = normalize(vec3(-slope.x, 1.0, -slope.y));
 	vec3 n_view = normalize((VIEW_MATRIX * vec4(n_world, 0.0)).xyz);
@@ -247,39 +255,43 @@ void fragment() {
 		int steps = clamp(int(px / 10.0), 6, ssr_steps);
 		// A per-pixel, per-frame offset of the samples (interleaved gradient noise): TAA averages the gaps.
 		float jitter = fract(52.9829189 * fract(dot(FRAGCOORD.xy + 5.588238 * fract(water_time * 7.31), vec2(0.06711056, 0.00583715))));
+		// The ray's clip position is linear in t (two vectors, once), the depth buffer's view z needs only the inverse
+		// projection's z and w rows (the jitter only moves x and y).
+		vec4 c0 = PROJECTION_MATRIX * vec4(p0, 1.0);
+		vec4 c1 = PROJECTION_MATRIX * vec4(r, 0.0);
+		vec2 iz = vec2(INV_PROJECTION_MATRIX[2][2], INV_PROJECTION_MATRIX[3][2]);
+		vec2 iw = vec2(INV_PROJECTION_MATRIX[2][3], INV_PROJECTION_MATRIX[3][3]);
 		float t_prev = 0.0;
 		for (int i = 1; i <= steps; i++) {
 			float f = (float(i) - 1.0 + max(jitter, 0.05)) / float(steps);
 			float t = ssr_max_distance * f * f;
-			vec3 p = p0 + r * t;
-			if (p.z > -0.05) {
+			float pz = p0.z + r.z * t;
+			if (pz > -0.05) {
 				break;
 			}
-			vec4 cp = PROJECTION_MATRIX * vec4(p, 1.0);
+			vec4 cp = c0 + c1 * t;
 			vec2 uv = cp.xy / cp.w * 0.5 + 0.5;
 			if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
 				break;
 			}
-			float sz = view_position(uv, textureLod(depth_tex, uv, 0.0).r, INV_PROJECTION_MATRIX).z;
-			float dz = sz - p.z;
+			float d = textureLod(depth_tex, uv, 0.0).r;
+			float dz = (iz.x * d + iz.y) / (iw.x * d + iw.y) - pz;
 			if (dz > 0.0 && dz < max(0.4, (t - t_prev) * 1.5)) {
 				// Refine between the last two samples.
 				float lo = t_prev;
 				float hi = t;
 				for (int j = 0; j < 5; j++) {
 					float mid = 0.5 * (lo + hi);
-					vec3 pm = p0 + r * mid;
-					vec4 cm = PROJECTION_MATRIX * vec4(pm, 1.0);
+					vec4 cm = c0 + c1 * mid;
 					vec2 um = cm.xy / cm.w * 0.5 + 0.5;
-					float zm = view_position(um, textureLod(depth_tex, um, 0.0).r, INV_PROJECTION_MATRIX).z;
-					if (zm > pm.z) {
+					float dm = textureLod(depth_tex, um, 0.0).r;
+					if ((iz.x * dm + iz.y) / (iw.x * dm + iw.y) > p0.z + r.z * mid) {
 						hi = mid;
 					} else {
 						lo = mid;
 					}
 				}
-				vec3 ph = p0 + r * hi;
-				vec4 ch = PROJECTION_MATRIX * vec4(ph, 1.0);
+				vec4 ch = c0 + c1 * hi;
 				vec2 uh = ch.xy / ch.w * 0.5 + 0.5;
 				vec2 edge = min(uh, 1.0 - uh);
 				ssr_weight = smoothstep(0.0, 0.08, min(edge.x, edge.y)) * (1.0 - smoothstep(0.75, 1.0, hi / ssr_max_distance)) * ssr_need;

@@ -30,6 +30,7 @@
 
 #include "fellow_water_3d.h"
 
+#include "fellow_rain_3d.h"
 #include "fellow_shallow_water_3d.h"
 #include "fellow_water_shader.h"
 #include "fellow_water_waves.glsl.gen.h"
@@ -453,6 +454,19 @@ void FellowWater3D::_notification(int p_what) {
 			if (!sun.is_equal_approx(last_sun_direction)) {
 				material->set_shader_parameter("sun_direction", sun);
 				last_sun_direction = sun;
+			}
+			// FellowRain3D (decision 0124): its ripples on the water.
+			FellowRain3D *rain_node = FellowRain3D::get_active();
+			float rain_amount = (rain_node && rain_node->is_visible_in_tree()) ? rain_node->get_rain() * rain_node->get_ripple_strength() : 0.0f;
+			if (rain_amount != last_rain_amount) {
+				material->set_shader_parameter("rain_amount", rain_amount);
+				last_rain_amount = rain_amount;
+			}
+			if (rain_node && (rain_node->get_instance_id() != last_rain_id || rain_node->get_ripple_tile() != last_rain_tile)) {
+				material->set_shader_parameter("rain_ripples", rain_node->get_ripple_texture());
+				material->set_shader_parameter("rain_tile", rain_node->get_ripple_tile());
+				last_rain_id = rain_node->get_instance_id();
+				last_rain_tile = rain_node->get_ripple_tile();
 			}
 			FellowShallowWater3D *sim = Object::cast_to<FellowShallowWater3D>(ObjectDB::get_instance(sim_id));
 			if (sim && sim->is_inside_tree()) {

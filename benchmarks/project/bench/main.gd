@@ -50,6 +50,7 @@ const SCENES := {
 	"fire": "res://scenes/fire_lab.gd",
 	"burn": "res://scenes/burn_lab.gd",
 	"water": "res://scenes/water_lab.gd",
+	"rain": "res://scenes/rain_lab.gd",
 }
 const DT := 1.0 / 60.0
 

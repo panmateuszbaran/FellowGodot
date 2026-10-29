@@ -1396,6 +1396,80 @@ uint fellow_spot_reach(uint p_word, uint p_mask, vec3 p_vertex, uint p_layer_mas
 }
 #endif
 
+#if !defined(MODE_RENDER_SDF) && (!defined(MODE_RENDER_DEPTH) || defined(MODE_RENDER_NORMAL_ROUGHNESS))
+// FellowEngine weather (decision 0124): a material wetted after its own code and its decals, where the rain reaches it.
+float fellow_wet_hash(vec2 p_p) {
+	vec3 p3 = fract(vec3(p_p.xyx) * 0.1031);
+	p3 += dot(p3, p3.yzx + 33.33);
+	return fract((p3.x + p3.y) * p3.z);
+}
+
+float fellow_wet_noise(vec2 p_p) {
+	vec2 i = floor(p_p);
+	vec2 f = fract(p_p);
+	vec2 u = f * f * (3.0 - 2.0 * f);
+	return mix(mix(fellow_wet_hash(i), fellow_wet_hash(i + vec2(1.0, 0.0)), u.x), mix(fellow_wet_hash(i + vec2(0.0, 1.0)), fellow_wet_hash(i + vec2(1.0, 1.0)), u.x), u.y);
+}
+
+void fellow_wetness_apply(in SceneData p_scene, inout vec3 r_albedo, inout float r_roughness, inout float r_metallic, inout vec3 r_normal, vec3 p_vertex, vec3 p_geometric_normal) {
+	FellowWeatherData w = fellow_weather.data;
+	float wetness = w.params.x;
+	if (wetness <= 0.0) {
+		return;
+	}
+	mat4 inv_view = transpose(mat4(p_scene.inv_view_matrix[0], p_scene.inv_view_matrix[1], p_scene.inv_view_matrix[2], vec4(0.0, 0.0, 0.0, 1.0)));
+	vec3 wp = (inv_view * vec4(p_vertex, 1.0)).xyz;
+	vec3 gn = normalize(mat3(inv_view) * p_geometric_normal);
+
+	// Where the rain reaches: below the scene's top as seen from above it does not. A wall looks just outside itself
+	// (the roof above its own footprint would keep it dry); four taps across a texel soften the edges.
+	float exposed = 1.0;
+	if (w.occlusion2.z > 0.5) {
+		vec3 sp = wp + vec3(gn.x, 0.0, gn.z) * (w.occlusion2.w + 0.1);
+		vec2 uv = (sp.xz - w.occlusion.xy) * w.occlusion.zw + 0.5;
+		if (all(greaterThan(uv, vec2(0.0))) && all(lessThan(uv, vec2(1.0)))) {
+			vec2 texel = 1.0 / vec2(textureSize(sampler2D(fellow_rain_occlusion, SAMPLER_LINEAR_CLAMP), 0));
+			float acc = 0.0;
+			for (int k = 0; k < 4; k++) {
+				vec2 o = vec2((k & 1) != 0 ? 0.75 : -0.75, (k & 2) != 0 ? 0.75 : -0.75) * texel;
+				float h = textureLod(sampler2D(fellow_rain_occlusion, SAMPLER_LINEAR_CLAMP), uv + o, 0.0).r;
+				float top = w.occlusion2.x + (h * 2.0 - 1.0) * w.occlusion2.y;
+				acc += smoothstep(top - w.occlusion2.w * 2.0, top - w.occlusion2.w, wp.y);
+			}
+			exposed = acc * 0.25;
+		}
+	}
+
+	// The surface's own water: undersides stay nearly dry; porous (rough, non-metal) materials darken as water fills
+	// their pores; a film makes every wet surface glossier.
+	float wet = wetness * exposed * mix(0.1, 1.0, smoothstep(-0.3, 0.3, gn.y));
+	float rough0 = r_roughness;
+	float porous = (1.0 - r_metallic) * smoothstep(0.2, 0.6, rough0);
+	r_albedo *= mix(1.0, 0.5, wet * porous);
+	r_roughness = mix(r_roughness, min(r_roughness, 0.2), wet * 0.9);
+
+	// Puddles on flat, rough, non-metal ground (noise thresholded by `puddles`, appearing once the surface is wet).
+	float flatness = smoothstep(0.95, 0.99, gn.y);
+	float n = fellow_wet_noise(wp.xz * 0.23) * 0.6 + fellow_wet_noise(wp.xz * 0.91 + 17.31) * 0.3 + fellow_wet_noise(wp.xz * 3.7 + 5.3) * 0.1;
+	float puddle = clamp((n - 1.0 + w.params.y) * 6.0, 0.0, 1.0) * flatness * exposed * smoothstep(0.4, 0.9, wetness) * (1.0 - r_metallic) * smoothstep(0.25, 0.45, rough0);
+
+	// The rain's ripples (two lookups of the tiling texture, offset: no visible repeat), where it falls.
+	vec2 ruv = wp.xz * w.ripples.x;
+	vec2 ra = texture(sampler2D(fellow_rain_ripples, SAMPLER_LINEAR_WITH_MIPMAPS_REPEAT), ruv).rg;
+	vec2 rb = texture(sampler2D(fellow_rain_ripples, SAMPLER_LINEAR_WITH_MIPMAPS_REPEAT), ruv * 0.77 + vec2(0.37, 0.61)).rg;
+	vec2 slope = (ra + rb) * (w.ripples.y * w.params.z * exposed);
+
+	vec3 nw = normalize(mat3(inv_view) * r_normal);
+	nw = normalize(mix(nw, normalize(vec3(-slope.x, 1.0, -slope.y)), puddle)); // standing water: flat, rippled
+	nw = normalize(nw + vec3(-slope.x, 0.0, -slope.y) * (0.35 * wet * flatness * (1.0 - puddle))); // a film
+	mat4 view = transpose(mat4(p_scene.view_matrix[0], p_scene.view_matrix[1], p_scene.view_matrix[2], vec4(0.0, 0.0, 0.0, 1.0)));
+	r_normal = normalize(mat3(view) * nw);
+	r_albedo *= mix(1.0, 0.8, puddle);
+	r_roughness = mix(r_roughness, 0.03, puddle);
+	r_metallic = mix(r_metallic, 0.0, puddle);
+}
+#endif
+
 void fragment_shader(in SceneData scene_data) {
 	uint instance_index = instance_index_interp;
 	fellow_element_init(instance_index);
@@ -1879,6 +1953,14 @@ void fragment_shader(in SceneData scene_data) {
 	//pack albedo until needed again, saves 2 VGPRs in the meantime
 
 #endif //not render depth
+
+#if !defined(MODE_RENDER_SDF) && (!defined(MODE_RENDER_DEPTH) || defined(MODE_RENDER_NORMAL_ROUGHNESS)) && defined(NORMAL_USED)
+	// FellowEngine weather (decision 0124): the same in the depth pre-pass (its normals and roughness feed the
+	// reflections) and the colour passes.
+	if (sc_fellow_wetness()) {
+		fellow_wetness_apply(scene_data, albedo, roughness, metallic, normal, vertex, normalize(normal_interp));
+	}
+#endif
 	/////////////////////// LIGHTING //////////////////////////////
 
 #ifdef NORMAL_USED

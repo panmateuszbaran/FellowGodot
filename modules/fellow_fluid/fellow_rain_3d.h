@@ -1,0 +1,177 @@
+/**************************************************************************/
+/*  fellow_rain_3d.h                                                      */
+/**************************************************************************/
+/*                         This file is part of:                          */
+/*                             GODOT ENGINE                               */
+/*                        https://godotengine.org                         */
+/**************************************************************************/
+/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
+/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
+/*                                                                        */
+/* Permission is hereby granted, free of charge, to any person obtaining  */
+/* a copy of this software and associated documentation files (the        */
+/* "Software"), to deal in the Software without restriction, including    */
+/* without limitation the rights to use, copy, modify, merge, publish,    */
+/* distribute, sublicense, and/or sell copies of the Software, and to     */
+/* permit persons to whom the Software is furnished to do so, subject to  */
+/* the following conditions:                                              */
+/*                                                                        */
+/* The above copyright notice and this permission notice shall be         */
+/* included in all copies or substantial portions of the Software.        */
+/*                                                                        */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
+/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
+/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
+/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
+/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
+/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
+/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
+/**************************************************************************/
+
+#pragma once
+
+#include "scene/3d/gpu_particles_3d.h"
+#include "scene/3d/gpu_particles_collision_3d.h"
+#include "scene/3d/node_3d.h"
+#include "scene/resources/material.h"
+#include "scene/resources/particle_process_material.h"
+#include "scene/resources/texture_rd.h"
+#include "servers/rendering/rendering_device.h"
+#include "servers/rendering/rendering_device_binds.h"
+
+// FellowEngine rain (docs/decisions/0124-rain.md): drops falling around the camera (GPU particles colliding with the
+// scene as seen from above, splashing where they land), and the renderer told to wet every opaque material where the
+// rain reaches it (Forward+: darker porous surfaces, glossier ones, puddles on flat ground with the drops' ripples). The
+// same heightfield (a GPUParticlesCollisionHeightField3D following the camera) keeps the drops off and the ground dry
+// under roofs. A FellowWater3D shows the ripples too. One node at a time is active (the last one to enter the tree).
+class FellowRain3D : public Node3D {
+	GDCLASS(FellowRain3D, Node3D);
+
+	struct PushConstant {
+		int32_t size;
+		int32_t dst_size;
+		float tile;
+		float time;
+		float rain;
+		float amplitude;
+		float pad[2];
+	};
+	static_assert(sizeof(PushConstant) == 32);
+
+	static FellowRain3D *active;
+
+	float rain = 0.6f; // 0..1
+	float wetness = 1.0f; // 0..1
+	bool wetness_follows_rain = false;
+	float wetting_time = 60.0f; // s to get fully wet in full rain
+	float drying_time = 600.0f; // s to dry
+	float puddles = 0.5f; // 0..1
+	Vector3 wind = Vector3(1.0f, 0.0f, 0.5f); // m/s
+	float area = 40.0f; // m: side of the box the drops fall in around the camera
+	float fall_height = 14.0f; // m above the camera the drops start
+	int max_drops = 24000;
+	float drop_speed = 9.0f; // m/s
+	Vector2 drop_size = Vector2(0.018f, 0.55f); // m: width, length (the streak a frame's exposure sees)
+	Color drop_color = Color(0.72f, 0.76f, 0.8f, 0.3f);
+	bool splashes = true;
+	float occlusion_size = 80.0f; // m
+	float occlusion_height = 80.0f; // m
+	int occlusion_resolution = 1024;
+	bool occlusion_always_update = false;
+	float ripple_tile = 1.5f; // m
+	float ripple_strength = 1.0f;
+	double time = 0.0;
+	bool time_auto = true;
+
+	GPUParticlesCollisionHeightField3D *occlusion = nullptr;
+	GPUParticles3D *drops = nullptr;
+	GPUParticles3D *splash = nullptr;
+	Ref<ParticleProcessMaterial> drop_process;
+	Ref<ParticleProcessMaterial> splash_process;
+	Ref<StandardMaterial3D> drop_material;
+	Ref<StandardMaterial3D> splash_material;
+	double last_time = -1.0;
+
+	// Render thread.
+	RenderingDevice *rd = nullptr;
+	Ref<RDShaderFile> shader_file;
+	RID shader_ripples;
+	RID shader_downsample;
+	RID pipeline_ripples;
+	RID pipeline_downsample;
+	RID ripple_tex;
+	Vector<RID> ripple_mips;
+	Vector<RID> sets_downsample;
+	RID set_ripples;
+	int ripple_size = 256;
+	bool gpu_ready = false;
+	bool gpu_failed = false;
+	Ref<Texture2DRD> ripple_texture;
+
+	void _build_children();
+	void _update_children();
+	void _push_state();
+	void _rt_create();
+	void _rt_free();
+	void _rt_update(PackedByteArray p_push, bool p_enabled, PackedByteArray p_state);
+	void _rt_disable();
+
+protected:
+	void _notification(int p_what);
+	static void _bind_methods();
+
+public:
+	static FellowRain3D *get_active() { return active; }
+
+	void set_rain(float p_rain);
+	float get_rain() const { return rain; }
+	void set_wetness(float p_wetness) { wetness = CLAMP(p_wetness, 0.0f, 1.0f); }
+	float get_wetness() const { return wetness; }
+	void set_wetness_follows_rain(bool p_enable) { wetness_follows_rain = p_enable; }
+	bool is_wetness_following_rain() const { return wetness_follows_rain; }
+	void set_wetting_time(float p_seconds) { wetting_time = MAX(0.0f, p_seconds); }
+	float get_wetting_time() const { return wetting_time; }
+	void set_drying_time(float p_seconds) { drying_time = MAX(0.0f, p_seconds); }
+	float get_drying_time() const { return drying_time; }
+	void set_puddles(float p_puddles) { puddles = CLAMP(p_puddles, 0.0f, 1.0f); }
+	float get_puddles() const { return puddles; }
+	void set_wind(const Vector3 &p_wind);
+	Vector3 get_wind() const { return wind; }
+	void set_area(float p_area);
+	float get_area() const { return area; }
+	void set_fall_height(float p_height);
+	float get_fall_height() const { return fall_height; }
+	void set_max_drops(int p_count);
+	int get_max_drops() const { return max_drops; }
+	void set_drop_speed(float p_speed);
+	float get_drop_speed() const { return drop_speed; }
+	void set_drop_size(const Vector2 &p_size);
+	Vector2 get_drop_size() const { return drop_size; }
+	void set_drop_color(const Color &p_color);
+	Color get_drop_color() const { return drop_color; }
+	void set_splashes(bool p_enable);
+	bool get_splashes() const { return splashes; }
+	void set_occlusion_size(float p_size);
+	float get_occlusion_size() const { return occlusion_size; }
+	void set_occlusion_height(float p_height);
+	float get_occlusion_height() const { return occlusion_height; }
+	void set_occlusion_resolution(int p_resolution);
+	int get_occlusion_resolution() const { return occlusion_resolution; }
+	void set_occlusion_always_update(bool p_enable);
+	bool get_occlusion_always_update() const { return occlusion_always_update; }
+	void set_ripple_tile(float p_tile) { ripple_tile = MAX(0.1f, p_tile); }
+	float get_ripple_tile() const { return ripple_tile; }
+	void set_ripple_strength(float p_strength) { ripple_strength = MAX(0.0f, p_strength); }
+	float get_ripple_strength() const { return ripple_strength; }
+	void set_time(double p_time) { time = p_time; }
+	double get_time() const { return time; }
+	void set_time_auto(bool p_auto) { time_auto = p_auto; }
+	bool is_time_auto() const { return time_auto; }
+
+	Ref<Texture2DRD> get_ripple_texture() const { return ripple_texture; }
+	GPUParticles3D *get_drops() const { return drops; }
+	GPUParticlesCollisionHeightField3D *get_occlusion() const { return occlusion; }
+
+	FellowRain3D();
+	~FellowRain3D();
+};

@@ -1476,6 +1476,7 @@ private:
 	void _fellow_gas_shadow(RenderDataRD *p_render_data, const Ref<RenderSceneBuffersRD> &p_render_buffers);
 	RendererRD::FellowDDGI *fellow_ddgi = nullptr;
 	RendererRD::FellowRTReflections *fellow_rt_reflections = nullptr;
+	RID fellow_weather_default_ubo; // decision 0124: bound while no FellowRain3D is active
 	RendererRD::FellowRTAlbedo *fellow_rt_albedo = nullptr;
 	bool fellow_rt_reflections_on = false; // this render traces reflections (SSR off)
 	RID fellow_rt_reflection_texture; // this render's traced reflections for the opaque colour passes

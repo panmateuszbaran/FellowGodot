@@ -154,6 +154,9 @@ private:
 	bool spectrum_dirty = true;
 	bool mesh_dirty = true;
 	Vector3 last_sun_direction;
+	float last_rain_amount = 0.0f;
+	ObjectID last_rain_id;
+	float last_rain_tile = 0.0f;
 	double last_dispatch_time = -1.0;
 
 	// Render-thread state.

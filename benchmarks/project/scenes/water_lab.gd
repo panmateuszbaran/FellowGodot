@@ -12,7 +12,7 @@ extends "res://bench/scene_base.gd"
 ##   --water_sim_res=<n>      simulation grid (384 cells: 25 cm)
 ##   --water_preroll=<s>      simulated seconds before the first frame (40: the river reaches the lake)
 ##   --water_wind=<m/s>       wind speed (5), --water_waves=<n> wave grid per cascade (256)
-##   --water_ssr=0, --water_caustics=0, --water_refraction=0 (refraction_strength 0)
+##   --water_ssr=0, --water_caustics=0, --water_refraction=0 (refraction_strength 0), --water_ssr_steps=<n> (32)
 ##   --water_debug=<n>        FellowWater3D.debug_view (1 reflections, 2 foam, 3 refraction, 4 normals, 5 simulation, 6 roughness)
 ## Extra per-frame metrics: water_waves_gpu_ms, fluid_sim_gpu_ms.
 
@@ -373,6 +373,8 @@ func _build_water() -> void:
 	water.fetch = 2.0
 	water.wave_resolution = int(args.get("water_waves", "256"))
 	water.screen_space_reflections = args.get("water_ssr", "1") != "0"
+	if args.has("water_ssr_steps"):
+		water.reflection_steps = int(args["water_ssr_steps"])
 	if args.get("water_caustics", "1") == "0":
 		water.caustics_strength = 0.0
 	if args.get("water_refraction", "1") == "0":
