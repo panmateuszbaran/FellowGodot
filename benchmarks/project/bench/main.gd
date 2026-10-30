@@ -22,8 +22,10 @@ extends Node
 ##                            compiled before it, not while it is drawn with the ubershader
 ##   --hdr=1                  capture: also write linear pre-tonemap EXR (linear tonemapper, no glow, HDR 2D)
 ##   --sky=atmosphere         the scene's sky from FellowEngine's atmosphere tables (bench/fellow_atmosphere_sky.gdshader)
-##   --sun_elevation=<deg>    the scene's sun at this elevation (its azimuth kept)
-##   --add_camera=<n>@p@t[@fov]  extra fixed cameras (positions x,y,z; ';' separates several)
+##   --sun_elevation=<deg>    the scene's sun at this elevation (its azimuth kept); --sun_azimuth=<deg>, --sun_energy=<x>,
+##                            --sun_color=r,g,b (showcase captures)
+##   --add_camera=<n>@p@t[@fov[@time]]  extra fixed cameras (positions x,y,z; ';' separates several; time: the scene's
+##                            time at the capture, s)
 ##   --dirt_map=1             a procedural lens dirt texture as the environment's glow map (strength 0)
 ##   --jitter=<n>             reference: sub-pixel jittered renders per output frame (default 16)
 ##   --ablate=<a+b>           sizing only (items separated by + or ,): hide omni / spot / sun lights, probes, decals, or pos_shadows (see _ablate)
@@ -172,15 +174,30 @@ func _ready() -> void:
 		if cam_parts.size() >= 3:
 			var cp := cam_parts[1].split_floats(",")
 			var ct := cam_parts[2].split_floats(",")
-			scene.fixed_cameras[cam_parts[0]] = {"pos": Vector3(cp[0], cp[1], cp[2]), "target": Vector3(ct[0], ct[1], ct[2]), "fov": float(cam_parts[3]) if cam_parts.size() > 3 else 60.0}
-	# --sun_elevation=<degrees>: the scene's sun (its `sun` member) at this elevation, its azimuth kept.
-	if args.has("sun_elevation") and "sun" in scene and scene.sun is DirectionalLight3D:
-		var fwd: Vector3 = -scene.sun.global_transform.basis.z
-		var az := atan2(fwd.x, fwd.z)
-		var e := deg_to_rad(float(args["sun_elevation"]))
+			scene.fixed_cameras[cam_parts[0]] = {"pos": Vector3(cp[0], cp[1], cp[2]), "target": Vector3(ct[0], ct[1], ct[2]), "fov": float(cam_parts[3]) if cam_parts.size() > 3 else 60.0, "time": float(cam_parts[4]) if cam_parts.size() > 4 else 0.0}
+	# --sun_elevation=<degrees>, --sun_azimuth=<degrees>: the scene's sun (its `sun` member, else its "BenchSun") at this
+	# elevation / azimuth (the other kept); --sun_energy=<x>, --sun_color=<r,g,b>: its energy and colour (showcases).
+	var bench_sun: DirectionalLight3D = null
+	if "sun" in scene and scene.sun is DirectionalLight3D:
+		bench_sun = scene.sun
+	else:
+		bench_sun = scene.find_child("BenchSun", true, false) as DirectionalLight3D
+	if bench_sun and (args.has("sun_elevation") or args.has("sun_azimuth")):
+		var fwd: Vector3 = -bench_sun.global_transform.basis.z
+		var az := deg_to_rad(float(args["sun_azimuth"])) if args.has("sun_azimuth") else atan2(fwd.x, fwd.z)
+		var e := deg_to_rad(float(args["sun_elevation"])) if args.has("sun_elevation") else asin(clampf(-fwd.y, -1.0, 1.0))
 		var nf := Vector3(cos(e) * sin(az), -sin(e), cos(e) * cos(az))
-		scene.sun.global_transform.basis = Basis.looking_at(nf, Vector3.UP if abs(nf.y) < 0.999 else Vector3.FORWARD)
-		result["sun_elevation"] = float(args["sun_elevation"])
+		bench_sun.global_transform.basis = Basis.looking_at(nf, Vector3.UP if abs(nf.y) < 0.999 else Vector3.FORWARD)
+		result["sun_elevation"] = rad_to_deg(e)
+		result["sun_azimuth"] = rad_to_deg(az)
+	if bench_sun and args.has("sun_energy"):
+		bench_sun.light_energy = float(args["sun_energy"])
+		result["sun_energy"] = bench_sun.light_energy
+	if bench_sun and args.has("sun_color"):
+		var sc := str(args["sun_color"]).split_floats(",")
+		if sc.size() >= 3:
+			bench_sun.light_color = Color(sc[0], sc[1], sc[2])
+			result["sun_color"] = [sc[0], sc[1], sc[2]]
 	RenderingServer.viewport_set_measure_render_time(vp.get_viewport_rid(), true)
 	await get_tree().process_frame
 	await _post_draw()
