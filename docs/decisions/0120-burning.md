@@ -225,10 +225,12 @@ On the RTX (`m26_f285_burn`, fellow212 = `d183ac7`, Burn Lab at 1080p, 3 runs ea
 |---|---:|---:|---:|---:|---:|---:|
 | fellow211 (before) | 2.634 | 3.552 | 0.358 | 0.723 | 0.212 | 0.854 |
 | the cells pruned, the march in the materials | 2.680 | 3.597 | 0.356 | 0.742 | 0.208 | 0.852 |
-| **the cells pruned, the vertices marched once per frame** | **2.139** | **3.084** | 0.230 | 0.455 | 0.074 | 0.882 |
+| the cells pruned, the vertices marched once per frame | 2.139 | 3.084 | 0.230 | 0.455 | 0.074 | 0.882 |
+| **what ships: the vertices marched once per frame, the cells not pruned** (`m26_f286_burn`, fellow213 = `81a6a80`, against fellow211 again: 2.638 / 3.554) | **2.134** | **3.089** | 0.236 | 0.442 | 0.073 | 0.893 |
 
 The march once per frame: **−0.50 ms of GPU time (−19 %), the frame −13 %** — the shadows −0.14 (−65 %), the opaque
-pass −0.27, the pre-pass −0.13; its compute pass costs 0.03 ms (in the frames with steps). Of the burning's drawing
+pass −0.27, the pre-pass −0.13; its compute pass costs 0.03 ms (in the frames with steps). What ships (`m26_f286`): −0.50 ms, the
+same; Fire Lab (gas volumes, no burning objects) unchanged (GPU 1.336 / 1.331 ms, 2 runs). Of the burning's drawing
 (+0.84 ms in `m26_f284`) about 0.35 ms is left. With 48 voxels per object (`--burn_res=48`, longer marches;
 `m26_f285_burn48`, 2 runs) 2.894 → 2.213 ms (−0.68 ms, −24 %): the opaque pass −0.38, the shadows −0.16, the pre-pass
 −0.15, the compute pass +0.03. The images (`m26_f285_burn_capture`, 1080p, the 11 views with and without): 0 to 151
