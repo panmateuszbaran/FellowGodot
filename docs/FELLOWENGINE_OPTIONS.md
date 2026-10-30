@@ -229,7 +229,8 @@ with the bend; shadows and motion vectors follow. A `FellowRain3D` takes its dro
 (`wind_from_scene`). Not moved: the Mobile and Compatibility renderers, SDFGI's voxelization, `skip_vertex_transform`.
 MultiMesh culling knows the wind's bound (no cull margin needed); the shadows of plants in the wind are cached from
 directional cascade `shadows/wind_cached_from_cascade` on (2; -1: never — every cascade redrawn every frame), where
-they keep the pose of the cache's last build.
+they keep the pose of the cache's last build (RTX, Wind Lab: −0.32 ms from the third cascade; from the second
+another −0.11 ms, but only the nearest cascade's shadows sway).
 
 Cost (RTX 5070 Ti Laptop, 1080p, Wind Lab): 0.56 ms of GPU time against the still scene (the near shadow cascades
 0.33 ms, the opaque pass's two poses per vertex for the motion vectors 0.23 ms); the TIME-based sway projects write

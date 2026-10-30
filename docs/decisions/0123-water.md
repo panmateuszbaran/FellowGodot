@@ -158,6 +158,12 @@ of it; `screen_space_reflections` off or fewer `reflection_steps` trade them awa
 the far shore at its true parallax; at 1080p 12-31 % fewer depth lookups in the shore, pier and glint views, 23 % more
 in the aerial one. The linear march above remains where the depth texture has one level.
 
+**Where the rest goes** (`m26_f278_water`, fellow210, 1080p, 3 runs each, GPU time against Water Lab without water,
+1.611 ms): FellowWater3D 1.14 ms — the water's pass 1.069 ms (the reflections 0.61; without them 0.455 ms, of it the
+caustics 0.019 and the refraction 0.012 ms: 0.42 ms are the cascades' slopes and foam, the foam's noise and the
+lighting), the river's simulation 0.16 ms, the waves' compute 0.11 ms, the depth copy with its pyramid 0.08 ms (0.026
+without reflections, since `560d36c`), the screen copy 0.03 ms.
+
 ## Decision
 
 **KEEP** — a new node, nothing changes without it. The screen copy's mips on demand: exact, on by default (the copy
