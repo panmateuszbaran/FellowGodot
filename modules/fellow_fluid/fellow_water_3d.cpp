@@ -319,9 +319,18 @@ void FellowWater3D::_update_mesh() {
 }
 
 void FellowWater3D::_update_material() {
-	if (shader.is_null()) {
-		shader.instantiate();
-		shader->set_code(fellow_water_shader_code);
+	// The depth texture's nearest-depth mip levels (decision 0126) are asked for only while reflections are traced:
+	// without them the renderer does not build the pyramid.
+	if (shader.is_null() || shader_hierarchical != screen_space_reflections) {
+		if (shader.is_null()) {
+			shader.instantiate();
+		}
+		String code = String::utf8(fellow_water_shader_code);
+		if (!screen_space_reflections) {
+			code = code.replace("hint_depth_texture, filter_nearest_mipmap,", "hint_depth_texture, filter_nearest,");
+		}
+		shader->set_code(code);
+		shader_hierarchical = screen_space_reflections;
 	}
 	if (material.is_null()) {
 		material.instantiate();

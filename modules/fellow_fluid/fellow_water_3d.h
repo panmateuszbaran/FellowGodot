@@ -149,6 +149,7 @@ private:
 	MeshInstance3D *mesh_instance = nullptr;
 	Ref<ShaderMaterial> material;
 	Ref<Shader> shader;
+	bool shader_hierarchical = false; // the shader's depth texture has a mipmap filter (reflections on)
 	Ref<ImageTexture> foam_noise;
 	ObjectID sim_id;
 	ObjectID sun_id;
