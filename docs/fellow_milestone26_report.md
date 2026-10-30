@@ -99,3 +99,7 @@ Foliage Lab −18.0 %, PBR Lab −14.7 %, Stress Lab −10.3 % (frame time; `m20
 
 * The Mobile and Compatibility renderers; SDFGI's voxelization of moving plants; particles in the wind; the water's
   waves from the same wind.
+* Burning: of its drawing about 0.35 ms is left (Burn Lab, RTX) — the pre-pass's normals for SSAO (the crack cells),
+  the subdivided mesh, and the `discard` of the burned-through triangles, which can keep the pre-pass and the shadows
+  from writing depth before the fragment shader (not measured); the compute pass could drop those triangles from the
+  index buffer instead.
