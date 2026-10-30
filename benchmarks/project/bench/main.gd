@@ -198,6 +198,18 @@ func _ready() -> void:
 		if sc.size() >= 3:
 			bench_sun.light_color = Color(sc[0], sc[1], sc[2])
 			result["sun_color"] = [sc[0], sc[1], sc[2]]
+	# --weather_rain=<0-1>: a FellowRain3D in any scene (showcases; Rain Lab has its own): raining that much, the scene
+	# wet, puddles (--weather_puddles, 0.6).
+	if args.has("weather_rain") and ClassDB.class_exists("FellowRain3D"):
+		var r = ClassDB.instantiate("FellowRain3D")
+		r.name = "ShowcaseRain"
+		r.rain = float(args["weather_rain"])
+		r.wetness = 1.0
+		r.puddles = float(args.get("weather_puddles", "0.6"))
+		r.max_drops = 24000
+		r.wind = Vector3(0.8, 0.0, 0.4)
+		scene.add_child(r)
+		result["weather_rain"] = r.rain
 	RenderingServer.viewport_set_measure_render_time(vp.get_viewport_rid(), true)
 	await get_tree().process_frame
 	await _post_draw()
