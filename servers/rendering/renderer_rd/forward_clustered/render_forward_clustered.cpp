@@ -9054,12 +9054,15 @@ RID RenderForwardClustered::_setup_render_pass_uniform_set(RenderListType p_rend
 	}
 	{
 		// FellowEngine ray-traced sun shadows (decision 0082): the traced mask for the opaque colour passes; black
-		// (never valid) otherwise.
+		// (never valid) otherwise. Not for the depth pre-pass (no render data): it is set up before this render's masks
+		// are made, so they still name the previous render's, which may be freed since (Water Lab with contact shadows:
+		// "Texture (binding: 43) is not a valid texture", then a crash).
 		RD::Uniform u;
 		u.binding = 43;
 		u.uniform_type = RD::UNIFORM_TYPE_TEXTURE;
-		const bool rt_mask = (p_render_list == RENDER_LIST_OPAQUE || p_render_list == RENDER_LIST_MOTION) && fellow_rt_shadow_mask.is_valid();
-		const bool contact_mask = (p_render_list == RENDER_LIST_OPAQUE || p_render_list == RENDER_LIST_MOTION) && fellow_contact_shadow_mask.is_valid();
+		const bool colour_pass = p_render_data != nullptr && (p_render_list == RENDER_LIST_OPAQUE || p_render_list == RENDER_LIST_MOTION);
+		const bool rt_mask = colour_pass && fellow_rt_shadow_mask.is_valid();
+		const bool contact_mask = colour_pass && fellow_contact_shadow_mask.is_valid();
 		u.append_id(rt_mask ? fellow_rt_shadow_mask : (contact_mask ? fellow_contact_shadow_mask : texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_BLACK)));
 		uniforms.push_back(u);
 	}
@@ -9091,7 +9094,7 @@ RID RenderForwardClustered::_setup_render_pass_uniform_set(RenderListType p_rend
 		RD::Uniform u;
 		u.binding = 47;
 		u.uniform_type = RD::UNIFORM_TYPE_TEXTURE;
-		const bool refl = (p_render_list == RENDER_LIST_OPAQUE || p_render_list == RENDER_LIST_MOTION) && fellow_rt_reflection_texture.is_valid();
+		const bool refl = p_render_data != nullptr && (p_render_list == RENDER_LIST_OPAQUE || p_render_list == RENDER_LIST_MOTION) && fellow_rt_reflection_texture.is_valid(); // (as binding 43: not the pre-pass)
 		u.append_id(refl ? fellow_rt_reflection_texture : texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_BLACK));
 		uniforms.push_back(u);
 	}
