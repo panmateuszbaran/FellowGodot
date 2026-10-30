@@ -204,11 +204,12 @@ pass −0.07), without the vertices' march 0.37 ms less (the opaque pass −0.27
 the march ran in every pass drawing the mesh). The rest, 0.28 ms, is the subdivided mesh and the fragment's char, ash
 and glow.
 
-Two exact changes:
+Two exact changes were tried:
 
 * **The crack cells' neighbours pruned** (`e3c73d3`): a neighbour's point lies inside its cell, so a cell whose box is
   no nearer than the second-nearest point found so far cannot change the pattern — skipped before its hash (the
-  comparison with a margin of 10⁻⁵ over the sums' rounding). Burn Lab on lavapipe: 11 images, 0 pixels differ.
+  comparison with a margin of 10⁻⁵ over the sums' rounding). Burn Lab on lavapipe: 11 images, 0 pixels differ. On
+  the RTX no gain (below): the per-neighbour test costs what the skipped hashes save. **Reverted** (`4cb4a82`).
 * **The vertices marched once per frame** (`d183ac7`, `fluid/burn_vertices_cached`, on): FellowGas's burn shader
   gets a VERTICES mode doing the material's march (the same expressions) for every vertex of the display after the
   frame's steps — once after configuring, then only in frames with steps (60 per second) — and writes three texels
@@ -218,7 +219,21 @@ Two exact changes:
   material per surface, the shader shared). A material whose vertex code may change `VERTEX` or `NORMAL` (an
   assignment, an increment, passed to a function of its own) or that works in world space marches as before.
 
-The RTX's measurement of the two (`m26_f285`) follows.
+On the RTX (`m26_f285_burn`, fellow212 = `d183ac7`, Burn Lab at 1080p, 3 runs each, pass timestamps; ms of GPU time):
+
+| Burn Lab | GPU | frame | depth pre-pass | opaque pass | shadows | gas simulation (+ the vertices) |
+|---|---:|---:|---:|---:|---:|---:|
+| fellow211 (before) | 2.634 | 3.552 | 0.358 | 0.723 | 0.212 | 0.854 |
+| the cells pruned, the march in the materials | 2.680 | 3.597 | 0.356 | 0.742 | 0.208 | 0.852 |
+| **the cells pruned, the vertices marched once per frame** | **2.139** | **3.084** | 0.230 | 0.455 | 0.074 | 0.882 |
+
+The march once per frame: **−0.50 ms of GPU time (−19 %), the frame −13 %** — the shadows −0.14 (−65 %), the opaque
+pass −0.27, the pre-pass −0.13; its compute pass costs 0.03 ms (in the frames with steps). Of the burning's drawing
+(+0.84 ms in `m26_f284`) about 0.35 ms is left. With 48 voxels per object (`--burn_res=48`, longer marches;
+`m26_f285_burn48`, 2 runs) 2.894 → 2.213 ms (−0.68 ms, −24 %): the opaque pass −0.38, the shadows −0.16, the pre-pass
+−0.15, the compute pass +0.03. The images (`m26_f285_burn_capture`, 1080p, the 11 views with and without): 0 to 151
+pixels differ per view (504 of 22.8 million), PSNR 81-116 dB — the compute pass rounding differently from the vertex
+shader (fused multiply-adds), a pixel at an edge here and there; nothing visible.
 
 ## Limits
 
