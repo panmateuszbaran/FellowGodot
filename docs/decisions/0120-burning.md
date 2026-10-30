@@ -233,7 +233,11 @@ pass −0.27, the pre-pass −0.13; its compute pass costs 0.03 ms (in the frame
 `m26_f285_burn48`, 2 runs) 2.894 → 2.213 ms (−0.68 ms, −24 %): the opaque pass −0.38, the shadows −0.16, the pre-pass
 −0.15, the compute pass +0.03. The images (`m26_f285_burn_capture`, 1080p, the 11 views with and without): 0 to 151
 pixels differ per view (504 of 22.8 million), PSNR 81-116 dB — the compute pass rounding differently from the vertex
-shader (fused multiply-adds, say), a pixel at an edge here and there; nothing visible.
+shader (fused multiply-adds, say), a pixel at an edge here and there; nothing visible. On lavapipe (480 × 270, the 11
+views) the march once per frame and in the materials give the same images bit for bit, and the march in the materials
+the images of the build before. Which materials march once per frame (a test scene of nine): a StandardMaterial3D
+(triplanar), shaders reading `VERTEX`, `NORMAL` and `VERTEX_ID` or without vertex(), yes; `VERTEX +=`, `VERTEX.y =`,
+`NORMAL =`, `VERTEX` passed to a function of the shader's own, `world_vertex_coords`, no.
 
 ## Limits
 
