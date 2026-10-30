@@ -3353,6 +3353,7 @@ void RenderForwardClustered::_fill_render_list(RenderListType p_render_list, con
 		scene_state.used_normal_texture = false;
 		scene_state.used_depth_texture = false;
 		scene_state.used_depth_texture_mipmaps = false;
+		scene_state.used_depth_texture_opaque = false;
 		scene_state.used_lightmap = false;
 		scene_state.used_opaque_stencil = false;
 	}
@@ -3684,6 +3685,9 @@ void RenderForwardClustered::_fill_render_list_range(const FellowFillParams &p_p
 					if (surf->flags & GeometryInstanceSurfaceDataCache::FLAG_USES_DEPTH_TEXTURE_MIPMAPS) {
 						r_out.used_depth_texture_mipmaps = true;
 					}
+					if (surf->flags & (GeometryInstanceSurfaceDataCache::FLAG_PASS_DEPTH | GeometryInstanceSurfaceDataCache::FLAG_PASS_OPAQUE)) {
+						r_out.used_depth_texture_opaque = true;
+					}
 				}
 				if ((surf->flags & GeometryInstanceSurfaceDataCache::FLAG_USES_STENCIL) && !force_alpha && (surf->flags & (GeometryInstanceSurfaceDataCache::FLAG_PASS_DEPTH | GeometryInstanceSurfaceDataCache::FLAG_PASS_OPAQUE))) {
 					r_out.used_opaque_stencil = true;
@@ -3749,6 +3753,9 @@ void RenderForwardClustered::_fellow_fill_apply_output(const FellowFillParams &p
 	}
 	if (p_out.used_depth_texture_mipmaps) {
 		scene_state.used_depth_texture_mipmaps = true;
+	}
+	if (p_out.used_depth_texture_opaque) {
+		scene_state.used_depth_texture_opaque = true;
 	}
 	if (p_out.used_lightmap) {
 		scene_state.used_lightmap = true;
@@ -3831,6 +3838,7 @@ bool RenderForwardClustered::_fellow_fill_render_list_parallel(const FellowFillP
 		total.used_normal_texture = total.used_normal_texture || chunk.out.used_normal_texture;
 		total.used_depth_texture = total.used_depth_texture || chunk.out.used_depth_texture;
 		total.used_depth_texture_mipmaps = total.used_depth_texture_mipmaps || chunk.out.used_depth_texture_mipmaps;
+		total.used_depth_texture_opaque = total.used_depth_texture_opaque || chunk.out.used_depth_texture_opaque;
 		total.used_lightmap = total.used_lightmap || chunk.out.used_lightmap;
 		total.used_opaque_stencil = total.used_opaque_stencil || chunk.out.used_opaque_stencil;
 	}
@@ -6922,10 +6930,16 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		_render_buffers_ensure_depth_texture(p_render_data);
 
 		if (scene_state.used_depth_texture) {
-			// Copy depth texture to backbuffer so we can read from it
-			_render_buffers_copy_depth_texture(p_render_data);
 			if (scene_state.used_depth_texture_mipmaps && Fellow::depth_copy_nearest_mipmaps()) {
 				fellow_depth_mipmaps_frame = _fellow_depth_nearest_mipmaps(p_render_data);
+			}
+			// FellowEngine (decision 0126): the pyramid's base level is the same copy, bound for the transparent pass;
+			// the single-level copy is made only when something else reads it — an opaque or depth-pass material
+			// sampling the depth texture (they read the frame before's copy), MSAA's depth of field.
+			const bool msaa = rb.is_valid() && rb->get_msaa_3d() != RSE::VIEWPORT_MSAA_DISABLED;
+			if (!fellow_depth_mipmaps_frame || scene_state.used_depth_texture_opaque || msaa) {
+				// Copy depth texture to backbuffer so we can read from it
+				_render_buffers_copy_depth_texture(p_render_data);
 			}
 		}
 	}

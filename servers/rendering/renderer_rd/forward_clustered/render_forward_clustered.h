@@ -511,6 +511,7 @@ private:
 		bool used_normal_texture = false;
 		bool used_depth_texture = false;
 		bool used_depth_texture_mipmaps = false; // FellowEngine (decision 0126)
+		bool used_depth_texture_opaque = false; // FellowEngine (0126): read in the depth or opaque passes
 		bool used_sss = false;
 		bool used_lightmap = false;
 		bool used_opaque_stencil = false;
@@ -664,6 +665,7 @@ private:
 		bool used_normal_texture = false;
 		bool used_depth_texture = false;
 		bool used_depth_texture_mipmaps = false;
+		bool used_depth_texture_opaque = false;
 		bool used_lightmap = false;
 		bool used_opaque_stencil = false;
 	};
