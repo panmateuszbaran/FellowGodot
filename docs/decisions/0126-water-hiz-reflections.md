@@ -108,6 +108,11 @@ the depth texture (they read the frame before's copy), MSAA's depth of field. Wa
 RTX (`m26_f280`, fellow210 against fellow211, 3 runs) the depth copy 0.023 ms cheaper in Water Lab and Rain Lab (the
 pyramid's whole cost now about 0.055 ms at 1080p).
 
+**In motion** (`m26_f282_water_temporal`, fellow211, 1080p, Water Lab's two sequences of 60 frames): the mean absolute
+difference between consecutive frames (luminance, frames 10-59) 0.473 → 0.462 (`water_flow`) and 2.520 → 2.487
+(`water_pan`, the camera panning) — a little less change from frame to frame without the jittered samples; the frames
+alike (the far shore's reflection as in the stills).
+
 ## Decision
 
 **KEEP, on**: on the RTX the reflections cost 38 % less (Water Lab's frame −0.37 ms), geometrically right at any
