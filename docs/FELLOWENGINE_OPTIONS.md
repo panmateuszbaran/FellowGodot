@@ -134,6 +134,11 @@ Methods `ignite(position, radius, temperature)`, `reset_burning()`, `get_wood_fr
 `get_ash_fraction()`, `is_burning()`, `is_collapsed()`; signals `ignited`, `burned_out`, `collapsed`. Limits: at most 8
 objects per gas volume; skinned meshes are simulated, not drawn burning.
 
+Project setting `fluid/burn_vertices_cached` (on): the drawn mesh's vertices march into the voxels once per frame
+with steps, in a compute pass, instead of in every pass that draws them (the depth pre-pass, the opaque pass, each
+shadow cascade); a material whose vertex code changes `VERTEX` or `NORMAL`, or works in world space, marches as
+before. Off: the march in the materials.
+
 ## Far objects: automatic HLOD (milestone 23)
 
 A `FellowHLOD3D` node (module `fellow_world`) replaces the static meshes below it beyond `distance` by proxies, built

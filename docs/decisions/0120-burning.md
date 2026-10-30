@@ -194,6 +194,32 @@ burning is the same on every run (the diagnostics of two runs agree to the last 
 1080p captures; the cost with the burning drawn and simulated, simulated with the original meshes, neither) is
 prepared and waits for the user.
 
+## Cost of the drawing (RTX 5070 Ti Laptop, 1080p; milestone 26)
+
+Burn Lab with the burning drawn against the same simulation drawn with the original meshes (`--burn_draw=0`;
+`m26_f284`, fellow211, 2 runs, pass timestamps): **+0.84 ms** of GPU time — the opaque pass +0.43, the depth pre-pass
++0.28, the shadows +0.16, the depth's preparation for SSAO +0.06. Two measurement builds told it apart: without the
+crack cells (the char's pattern, the heap's pieces) 0.19 ms less (the pre-pass −0.11: its normals for SSAO; the opaque
+pass −0.07), without the vertices' march 0.37 ms less (the opaque pass −0.27, the shadows −0.12, the pre-pass −0.05:
+the march ran in every pass drawing the mesh). The rest, 0.28 ms, is the subdivided mesh and the fragment's char, ash
+and glow.
+
+Two exact changes:
+
+* **The crack cells' neighbours pruned** (`e3c73d3`): a neighbour's point lies inside its cell, so a cell whose box is
+  no nearer than the second-nearest point found so far cannot change the pattern — skipped before its hash (the
+  comparison with a margin of 10⁻⁵ over the sums' rounding). Burn Lab on lavapipe: 11 images, 0 pixels differ.
+* **The vertices marched once per frame** (`d183ac7`, `fluid/burn_vertices_cached`, on): FellowGas's burn shader
+  gets a VERTICES mode doing the material's march (the same expressions) for every vertex of the display after the
+  frame's steps — once after configuring, then only in frames with steps (60 per second) — and writes three texels
+  per vertex to an RGBA32F texture (1024 vertices per row): the position and whether it is gone, the surface's normal
+  and how far the vertex's turns to it (the vertex's own normal is the mesh's compressed one, so the material does the
+  mix), the composition at the surface. The materials read them by `VERTEX_ID` plus the surface's first vertex (a
+  material per surface, the shader shared). A material whose vertex code may change `VERTEX` or `NORMAL` (an
+  assignment, an increment, passed to a function of its own) or that works in world space marches as before.
+
+The RTX's measurement of the two (`m26_f285`) follows.
+
 ## Limits
 
 * In a gas volume open at its sides (the default: only the floor closed), Burn Lab's fire grew a wind across the
@@ -203,7 +229,8 @@ prepared and waits for the user.
   (`closed_faces` 55): the flames stand. The open faces' treatment is the gas's (0117); a sponge layer relaxing the
   velocity towards the wind near them would be the fix there.
 * Skinned meshes are simulated but not drawn burning. A material whose vertex() writes world-space positions
-  (`world_vertex_coords`) gets the look, not the deformation.
+  (`world_vertex_coords`) gets the look, not the deformation. A material whose vertex() changes `VERTEX` or `NORMAL`
+  marches in every pass that draws it (not once per frame).
 * At most 8 objects inject into one gas volume (the rest burn without feeding it). Without a gas volume an object
   lit by `ignite()` burns by its own flame, without visible flames.
 * The remains stay inside the object's box (the box reaches down to the ground below it at configuration; a heap

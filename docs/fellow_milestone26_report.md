@@ -85,6 +85,8 @@ The night of 2026-10-29/30 the user allowed the laptop's GPU (jobs `m26_f275`-`f
 | 8 | wind: the shadows cached from the second cascade | −0.11 ms more than from the third, but only the nearest cascade's shadows sway | the third stays |
 | 9 | depth texture: the single-level copy skipped where the pyramid replaces it (`e99e5db`) | the depth copy −0.023 ms in Water Lab and Rain Lab (`m26_f280`); exact (lavapipe: Water Lab bit for bit) | KEEP |
 | 10 | water: where the shading without reflections goes (`m26_f281`, measurement builds) | of the 0.46 ms: the cascades' lookups 0.21 ms (their anisotropic filtering 0.10), the foam's noise 0.013, the caustics 0.02, the refraction 0.01; the rest the lighting | — |
+| 11 | the labs the final run does not cover, before and after milestone 26 (`m26_f283`: fellow207 / fellow211, 2 runs) | frame time Fire Lab 2.914 / 2.950 ms, Burn Lab 3.669 / 3.628, Fluid Lab 2.315 / 2.311, Particles Lab 2.946 / 2.921, Blend Lab 2.008 / 2.033: within the runs' spread (none of milestone 26 runs there) | — |
+| 12 | burning (milestone 22): where its drawing goes (`m26_f284`, measurement builds) | +0.84 ms of GPU time against the original meshes (the opaque pass +0.43, the depth pre-pass +0.28, the shadows +0.16); the crack cells 0.19 ms of it, the vertices' march into the voxels 0.37 ms (the opaque pass 0.27, the shadows 0.12: it ran in every pass drawing the mesh) | → 13, 14 |
 
 **The defaults are not slower** (`m26_f279_final`, stock against fellow210, the nine scenes, three runs each after a
 pass filling the shader caches, as `m20_f260`): FellowEngine faster in every scene and every pair of runs — Sponza
