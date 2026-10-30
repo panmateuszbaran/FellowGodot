@@ -93,7 +93,14 @@ more.
 (per camera: the transparent pass, where the water is drawn, ms.) The reflections cost 0.61 ms instead of 0.99 ms
 (−38 %), the frame's GPU time −0.37 ms (−12 %): shore −29 %, pier −24 %, glint −36 % of the pass, the aerial view
 +26 % (0.09 ms; as the lookups said). The pyramid's build: the depth copy 0.031 → 0.080 ms (a second copy of the base
-level and seven reductions) — also with `screen_space_reflections` off, the shader's filter asking for it.
+level and seven reductions) — also with `screen_space_reflections` off, the shader's filter asking for it (since
+`560d36c` the shader asks for the mips only while reflections are traced).
+
+**Rays towards the camera bounded** (`m26_f276_water`, experiment `exp/hiz1`, fellow209h): looking down at the water
+the reflected rays come towards the camera, and only what stands between the water and the camera can meet them;
+ending them at `reflection_distance` as the linear march does changed the aerial view's water pass by −0.01 ms
+(0.439 → 0.429 ms; the other views within the runs' spread, the frame 2.821 → 2.856 ms): not kept. The aerial view's
+extra cost is in the rays climbing past the trees on the banks, not in their length.
 
 ## Decision
 
