@@ -585,10 +585,18 @@ vec4 fellow_burn_cells(vec3 p_p) {
 	float d1 = 8.0;
 	float d2 = 8.0;
 	vec3 best = i;
+	// A neighbour's point lies in its cell: no nearer to f than the cell's box. A cell whose box is no nearer than the
+	// second-nearest point found so far cannot change the result: skipped before its hash (the same values).
+	vec3 lo2 = f * f;
+	vec3 hi2 = (1.0 - f) * (1.0 - f);
 	for (int z = -1; z <= 1; z++) {
 		for (int y = -1; y <= 1; y++) {
 			for (int x = -1; x <= 1; x++) {
 				vec3 o = vec3(float(x), float(y), float(z));
+				float box = (x < 0 ? lo2.x : (x > 0 ? hi2.x : 0.0)) + (y < 0 ? lo2.y : (y > 0 ? hi2.y : 0.0)) + (z < 0 ? lo2.z : (z > 0 ? hi2.z : 0.0));
+				if (box * 0.99999 >= d2) { // with a margin over the rounding of the two sums
+					continue;
+				}
 				vec3 r = o + fellow_burn_hash3(i + o) - f;
 				float d = dot(r, r);
 				if (d < d1) {
