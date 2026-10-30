@@ -1,7 +1,6 @@
 # FellowEngine — milestone 26 report (wind in the forest)
 
-Status: **measured on lavapipe** (2026-10-29; the user asked not to load the laptop's GPU for now: no RTX job yet;
-the job measuring the wind and the water's hierarchical reflections at 1080p is prepared, not queued).
+Status: **measured** — lavapipe (2026-10-29) and the RTX 5070 Ti Laptop at 1080p (`m26_f275`, 2026-10-30).
 Branch `fellow/geometry`. Decision record `docs/decisions/0125-wind.md`; user-facing summary
 `docs/FELLOWENGINE_OPTIONS.md` ("Wind").
 
@@ -55,7 +54,12 @@ lavapipe (480 x 270, Wind Lab with one grass clump per m², GPU time of the view
 The cost is in the shadows (moving casters leave the shadow cache): two optimizations made during the milestone —
 MultiMesh culling with the wind's bound on the displacement instead of drawing wind MultiMeshes whole, and the far
 cascades (from the third) cached with the plants' pose of their last build — took 41-63 % off. FellowWind3D now costs
-32-58 % less than the sway projects write for the same scene. The RTX measurement (laptop) is pending.
+32-58 % less than the sway projects write for the same scene.
+
+RTX 5070 Ti Laptop (1080p, the full meadow, 3 runs, `m26_f275_wind`): still 3.566 ms of GPU time, FellowWind3D
+4.122 ms (+0.56: the near shadow cascades +0.33, the opaque pass +0.23 — two poses per vertex for the motion vectors —,
+the pre-pass +0.06), the TIME-based sway 5.372 ms (+1.81). The wind with gusts is 1.25 ms (23 %) cheaper than what
+projects write.
 
 ## 4. Optimizations of the new features (2026-10-29, afternoon and evening)
 
@@ -69,9 +73,9 @@ order: the wind's shadows, the wind's vertex cost, the rain, the water's reflect
 | 3a | rain: the ripples' compute — the 75 cells' drops worked out once per group in shared memory instead of 27 times per texel; wraps without integer modulo | exact (Rain Lab without drops bit for bit); the ripples' compute 14.1 → 9.4 ms on lavapipe (−33 %; on the RTX it is 0.04 ms) | KEEP (0124) |
 | 3b | rain: the wetting, SSR on the wet surfaces (lavapipe pass timestamps: depth pre-pass +4 ms, SSR +6.5 ms of the wetting's) | nothing more that keeps the image: SSR's share comes with the wet roughness below its cutoff (walls included); the wetting's lookups (0124: explicit levels, the noise only where a puddle can be) are at their minimum | — |
 | 4a | water: a Fresnel-scaled step count for the reflection march | no measurable change (+2-9 %, the spread) | reverted |
-| 4b | water: reflections traced over a Hi-Z pyramid of the depth texture (`postfx/depth_copy_nearest_mipmaps`) | 1080p: depth lookups per water pixel −12 % shore, −20 % pier, −30 % glint (where the RTX march costs 0.5-1.1 ms), +23 % aerial (0.19 ms); the far shore reflected at its true parallax, no jitter; lavapipe's timing does not resolve the march | KEEP, on; RTX to confirm (0126) |
+| 4b | water: reflections traced over a Hi-Z pyramid of the depth texture (`postfx/depth_copy_nearest_mipmaps`) | RTX 1080p: the reflections 0.99 → 0.61 ms (−38 %), Water Lab's GPU time 3.128 → 2.762 ms (−12 %; shore −29 %, pier −24 %, glint −36 % of the water's pass, aerial +26 %); the far shore reflected at its true parallax, no jitter | KEEP, on (0126) |
 
 ## 5. Left for later
 
 * The Mobile and Compatibility renderers; SDFGI's voxelization of moving plants; particles in the wind; the water's
-  waves from the same wind; the RTX measurement.
+  waves from the same wind.

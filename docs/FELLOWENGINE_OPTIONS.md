@@ -183,7 +183,7 @@ A `FellowWater3D` node (module `fellow_fluid`) is a body of water at its height,
   a pixel does not resolve); `debug_view` shows the terms one by one.
 
 Cost (RTX 5070 Ti Laptop, 1080p, Water Lab): 1.6 ms of the frame (Godot's water 0.38 ms), of it the reflections
-0.93 ms (before 0126's hierarchical march: 12-31 % fewer lookups in the costly views, not yet measured on the RTX;
+0.93 ms — 0.61 ms with 0126's hierarchical march (fellow208: Water Lab 2.76 ms of GPU time instead of 3.13;
 `screen_space_reflections` off, fewer `reflection_steps`, a higher `reflection_min_fresnel` trade them), the
 waves' compute 0.10 ms, the caustics 0.03 ms. The surface is a polar grid around the camera (`grid_segments`,
 `grid_near`, `grid_far`). The node's rotation and scale are not used. `rendering/fellow/fluid/enabled` off stops the waves. Decision record 0123; bench Water Lab
@@ -230,7 +230,10 @@ with the bend; shadows and motion vectors follow. A `FellowRain3D` takes its dro
 MultiMesh culling knows the wind's bound (no cull margin needed); the shadows of plants in the wind are cached from
 directional cascade `shadows/wind_cached_from_cascade` on (2; -1: never — every cascade redrawn every frame), where
 they keep the pose of the cache's last build.
-Decision record 0125; bench Wind Lab (`--scene=wind`, `--wind=on|off|shader`).
+
+Cost (RTX 5070 Ti Laptop, 1080p, Wind Lab): 0.56 ms of GPU time against the still scene (the near shadow cascades
+0.33 ms, the opaque pass's two poses per vertex for the motion vectors 0.23 ms); the TIME-based sway projects write
+costs 1.81 ms. Decision record 0125; bench Wind Lab (`--scene=wind`, `--wind=on|off|shader`).
 
 ## Options that change the image (off by default)
 

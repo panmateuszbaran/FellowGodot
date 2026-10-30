@@ -1,6 +1,6 @@
 # 0126 — Water's reflections traced over a Hi-Z pyramid of the depth texture
 
-Status: **KEEP, on** (the RTX measurement decides; off restores the march of 0123 exactly) · Branch `fellow/geometry` · Setting `rendering/fellow/postfx/depth_copy_nearest_mipmaps` (on) ·
+Status: **KEEP, on** (RTX: the reflections −38 %, the frame −12 %; off restores the march of 0123 exactly) · Branch `fellow/geometry` · Setting `rendering/fellow/postfx/depth_copy_nearest_mipmaps` (on) ·
 Code: `servers/rendering/shader_compiler.{h,cpp}` (a mipmap filter on `hint_depth_texture`),
 `renderer_rd/forward_clustered/scene_shader_forward_clustered.{h,cpp}`, `render_forward_clustered.{h,cpp}`
 (`_fellow_depth_nearest_mipmaps()`, the transparent pass's binding 24), `renderer_rd/effects/ss_effects.{h,cpp}`
@@ -80,11 +80,24 @@ the aerial view, where rays rise towards the camera past the trees on the banks 
 nearer than the ray: down and up the levels), but the march costs little there. A step of it is more arithmetic than
 a step of the linear march (two cell edges; at the base level three view depths), the lookups the same latency: if
 the GPU's time follows the lookups, the views' reflections cost 0.1-0.3 ms less (glint, pier), the aerial 0.04 ms
-more. The RTX measurement decides.
+more.
+
+**RTX 5070 Ti Laptop** (`m26_f275_water`, fellow208, 1080p, autotune off, 3 runs each, pass timestamps):
+
+| Water Lab | frame (flythrough) | GPU | transparent pass | shore | pier | river | aerial | glint |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| linear march | 3.471 ms | 3.128 ms | 1.456 ms | 0.866 | 1.422 | 0.145 | 0.329 | 1.530 |
+| **hierarchical** | **3.140 ms** | **2.762 ms** | **1.078 ms** | 0.615 | 1.085 | 0.147 | 0.415 | 0.973 |
+| no reflections | 2.531 ms | 2.181 ms | 0.465 ms | 0.281 | 0.662 | 0.100 | 0.194 | 0.498 |
+
+(per camera: the transparent pass, where the water is drawn, ms.) The reflections cost 0.61 ms instead of 0.99 ms
+(−38 %), the frame's GPU time −0.37 ms (−12 %): shore −29 %, pier −24 %, glint −36 % of the pass, the aerial view
++26 % (0.09 ms; as the lookups said). The pyramid's build: the depth copy 0.031 → 0.080 ms (a second copy of the base
+level and seven reductions) — also with `screen_space_reflections` off, the shader's filter asking for it.
 
 ## Decision
 
-**KEEP, on**, pending the RTX measurement: the reflections are geometrically right at any distance (the far shore's
-parallax, without jitter), the lookups fewer in the views that cost most. `postfx/depth_copy_nearest_mipmaps` off
+**KEEP, on**: on the RTX the reflections cost 38 % less (Water Lab's frame −0.37 ms), geometrically right at any
+distance (the far shore's parallax, without jitter). `postfx/depth_copy_nearest_mipmaps` off
 gives the linear march back bit for bit. A Fresnel-scaled step count for the linear march (half the steps below a
 Fresnel of 0.3) was tried first: no measurable change on lavapipe (+2-9 %, its spread), reverted.
