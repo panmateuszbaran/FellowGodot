@@ -18,7 +18,8 @@
 //           steeper than a voxel per voxel), carrying its heat; the display texture;
 //   INJECT  per cell of the gas grid's region around the object: the fuel released, the surface's temperature and
 //           exposure, the solid fraction (the gas's EMIT and OBSTACLES read it);
-//   REDUCE  per workgroup the totals (read back: the burned fraction, the node's signals).
+//   REDUCE  per workgroup the totals (read back: the burned fraction, the node's signals);
+//   VERTICES the burning mesh's vertices after the step (their march to the surface, once instead of in every pass).
 
 layout(local_size_x = 4, local_size_y = 4, local_size_z = 4) in;
 
@@ -432,6 +433,104 @@ void main() {
 		totals.data[gi * 2u] = s_a[0];
 		totals.data[gi * 2u + 1u] = s_b[0];
 	}
+}
+#endif
+
+#ifdef MODE_VERTICES
+// The burning mesh's vertices (FellowBurnable3D's display mesh), once per step instead of in every pass that draws it:
+// each vertex marches into the voxels along its stored direction to the wood and char's surface now and moves by how
+// far that surface has receded (the material's vertex code before, FELLOW_BURN_VERTEX: the same expressions). Out:
+// three texels per vertex — the position and whether it is gone; the surface's normal and how far the vertex's own
+// normal turns to it (w; below 0: it keeps its own: the mesh's normals are compressed, the material mixes its own); the
+// composition at the surface.
+layout(set = 0, binding = 1) uniform sampler3D display;
+layout(set = 0, binding = 2, std430) restrict readonly buffer Vertices {
+	vec4 data[]; // per vertex: position (w 0), unused, the march's custom data (start, 2 x threshold, direction)
+}
+vertices;
+layout(rgba32f, set = 0, binding = 3) uniform restrict writeonly image2D result;
+layout(set = 0, binding = 4, std140) uniform VertexParams {
+	vec4 origin; // the voxels' corner (the mesh's local space), w the voxel size
+	vec4 inv_extent; // 1 / the box's size, w the march's step
+	ivec4 counts; // x the march's steps, y the vertices, z vertices per row of the result
+	vec4 loose; // x ash per char at which a voxel without wood has crumbled
+}
+vp;
+
+vec4 fellow_burn_sample(vec3 p_local) {
+	return texture(display, (p_local - vp.origin.xyz) * vp.inv_extent.xyz);
+}
+
+bool fellow_burn_loose(vec4 p_s) {
+	return p_s.y < 0.05 && (p_s.y + p_s.z < 0.05 || p_s.w >= vp.loose.x * p_s.z);
+}
+
+float fellow_burn_solid(vec3 p_local) {
+	vec4 s = fellow_burn_sample(p_local);
+	return fellow_burn_loose(s) ? 0.0 : s.y + s.z;
+}
+
+vec3 fellow_burn_oct_decode(vec2 p_e) {
+	vec3 n = vec3(p_e, 1.0 - abs(p_e.x) - abs(p_e.y));
+	float t = max(-n.z, 0.0);
+	n.x += n.x >= 0.0 ? -t : t;
+	n.y += n.y >= 0.0 ? -t : t;
+	return normalize(n);
+}
+
+void main() {
+	uvec3 g = gl_GlobalInvocationID;
+	int id = int(g.x + 4u * (g.y + 4u * g.z));
+	if (id >= vp.counts.y) {
+		return;
+	}
+	vec3 VERTEX = vertices.data[id * 3].xyz;
+	vec4 fb_c = vertices.data[id * 3 + 2];
+	vec4 fb_n = vec4(0.0, 0.0, 0.0, -1.0);
+	const float fellow_burn_voxel = vp.origin.w;
+	const float fellow_burn_step = vp.inv_extent.w;
+	const int fellow_burn_steps = vp.counts.x;
+	float fellow_burn_gone = 0.0;
+	vec4 fellow_burn_mat = vec4(0.0, 1.0, 0.0, 0.0);
+	if (fb_c.y > 0.0) {
+		vec3 fb_d = fellow_burn_oct_decode(fb_c.zw);
+		float fb_thr = 0.5 * fb_c.y;
+		float fb_prev = fellow_burn_solid(VERTEX);
+		float fb_t = -1.0;
+		if (fb_prev > fb_thr) {
+			fb_t = 0.0;
+		} else {
+			for (int i = 1; i <= fellow_burn_steps; i++) {
+				float t = float(i) * fellow_burn_step;
+				float f = fellow_burn_solid(VERTEX + fb_d * t);
+				if (f > fb_thr) {
+					fb_t = t - fellow_burn_step * (f - fb_thr) / max(f - fb_prev, 1e-6);
+					break;
+				}
+				fb_prev = f;
+			}
+		}
+		if (fb_t < 0.0) {
+			fellow_burn_gone = 1.0;
+		} else {
+			float fb_disp = max(fb_t - fb_c.x - 0.15 * fellow_burn_voxel, 0.0);
+			VERTEX += fb_d * fb_disp;
+			if (fb_disp > 0.0) {
+				float h = fellow_burn_voxel;
+				vec3 gr = vec3(fellow_burn_solid(VERTEX + vec3(h, 0.0, 0.0)) - fellow_burn_solid(VERTEX - vec3(h, 0.0, 0.0)),
+						fellow_burn_solid(VERTEX + vec3(0.0, h, 0.0)) - fellow_burn_solid(VERTEX - vec3(0.0, h, 0.0)),
+						fellow_burn_solid(VERTEX + vec3(0.0, 0.0, h)) - fellow_burn_solid(VERTEX - vec3(0.0, 0.0, h)));
+				if (length(gr) > 1e-4) {
+					fb_n = vec4(-normalize(gr), smoothstep(0.0, fellow_burn_voxel, fb_disp));
+				}
+			}
+			fellow_burn_mat = fellow_burn_sample(VERTEX + fb_d * (0.25 * fellow_burn_voxel));
+		}
+	}
+	ivec2 at = ivec2((id % vp.counts.z) * 3, id / vp.counts.z);
+	imageStore(result, at, vec4(VERTEX, fellow_burn_gone));
+	imageStore(result, at + ivec2(1, 0), fb_n);
+	imageStore(result, at + ivec2(2, 0), fellow_burn_mat);
 }
 #endif
 

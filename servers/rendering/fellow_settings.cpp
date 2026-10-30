@@ -177,6 +177,11 @@ void Fellow::register_settings() {
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/fluid/gas_sparse", PROPERTY_HINT_ENUM, "Node's,Off,On"), 0);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/fluid/gas_sparse_margin", PROPERTY_HINT_RANGE, "0,4,1"), 0);
 	GLOBAL_DEF("rendering/fellow/fluid/gas_profile_passes", false);
+	// fluid/burn_vertices_cached (decision 0120): a burning mesh's vertices march into the voxels once per frame with
+	// steps, in a compute pass writing a texture its materials read by VERTEX_ID, instead of in every pass that draws
+	// them (the depth prepass, the opaque pass, each shadow). Off: the march in the material's vertex code, as before.
+	// Read when a FellowBurnable3D builds its display (fellow_burnable_3d.cpp).
+	GLOBAL_DEF("rendering/fellow/fluid/burn_vertices_cached", true);
 	GLOBAL_DEF("rendering/fellow/profiling/pass_timestamps", false);
 	GLOBAL_DEF("rendering/fellow/profiling/list_markers", false);
 	GLOBAL_DEF("rendering/fellow/shadows/enabled", true);

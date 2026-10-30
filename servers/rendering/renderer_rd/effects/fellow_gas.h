@@ -245,6 +245,7 @@ private:
 		BURN_SETTLE,
 		BURN_INJECT,
 		BURN_REDUCE,
+		BURN_VERTICES,
 		BURN_MAX,
 	};
 	struct Burnable {
@@ -270,6 +271,14 @@ private:
 		float attached = 0.0f;
 		float flicker = 0.0f;
 		bool injected = false;
+		// The display mesh's vertices marched once per step (VERTICES): their inputs, the march's parameters, the result
+		// (RGBA32F, three texels per vertex) the materials read.
+		RID vertices;
+		RID vertex_params;
+		RID vertex_result;
+		uint32_t vertex_count = 0;
+		uint32_t vertex_row = 1;
+		bool vertex_dirty = false;
 	};
 
 	struct RenderVolumeUBO { // std140, fellow_gas_render.glsl's Volume
@@ -443,6 +452,7 @@ private:
 	void _free_burnable(Burnable &r_b);
 	void _run_burn_step(uint32_t p_id, Burnable &r_b, const BurnStepParams &p_step);
 	void _dispatch_burn(Burnable &r_b, BurnMode p_mode, const Vector<RD::Uniform> &p_uniforms, const Vector3i &p_threads);
+	void _burn_vertices(Burnable &r_b);
 	int _gather_burnables(uint32_t p_volume, SimUBO &r_ubo); // the burnables injecting into a volume (fills step_burn_uniforms)
 	static void _burn_totals_read(const Vector<uint8_t> &p_data, Callable p_callback, uint32_t p_id);
 
@@ -476,6 +486,11 @@ public:
 	RID burnable_get_display(uint32_t p_id) const; // RGBA16F state for the mesh's material
 	void burnable_set_totals_callback(uint32_t p_id, const Callable &p_callback); // (PackedByteArray) per workgroup
 	void burnable_debug_read(uint32_t p_id, int p_what, const Callable &p_callback); // 0 state (RGBA32F), 1 emission, 2 injection
+	// The display mesh's vertices (three vec4 each: position, unused, the march's custom data) and the march's
+	// parameters (vec4 origin + voxel, vec4 1 / extent + step, ivec4 steps, count, -, -, vec4 loose ash): the result
+	// texture (RGBA32F, three texels per vertex, `p_row` vertices per row), marched at the next frame's start and after
+	// every frame's steps.
+	RID burnable_set_vertices(uint32_t p_id, const Vector<uint8_t> &p_vertices, uint32_t p_count, uint32_t p_row, const Vector<uint8_t> &p_params);
 
 	void process_pending(); // the queued steps, at the start of a frame
 	bool has_volumes() const { return !volumes.is_empty(); }

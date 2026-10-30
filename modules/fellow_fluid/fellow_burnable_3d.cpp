@@ -67,6 +67,7 @@ static constexpr int BURN_MARGIN = 2; // voxels around the mesh
 static constexpr int BURN_GROUND_LAYERS = 64; // at most this many layers added down to the ground
 static constexpr float BURN_LOOSE_ASH = 0.6f; // a voxel without wood has crumbled with this much ash per char, in ash volumes (fellow_burn_sim.glsl)
 static constexpr int BURN_TRIANGLE_BUDGET = 300000;
+static constexpr int BURN_VERTEX_ROW = 1024; // vertices per row of the marched vertices' texture (three texels each; FELLOW_BURN_VERTEX_CACHED)
 
 Mutex FellowBurnable3D::body_mutex;
 HashMap<uint64_t, int> FellowBurnable3D::burnable_bodies;
@@ -76,6 +77,7 @@ FellowBurnable3D::FellowBurnable3D() {
 	totals.instantiate();
 	debug.instantiate();
 	display_texture.instantiate();
+	vertex_texture.instantiate();
 }
 
 FellowBurnable3D::~FellowBurnable3D() {
@@ -692,6 +694,36 @@ static const char *FELLOW_BURN_VERTEX = R"(
 	}
 )";
 
+// The same with the march done once per frame with steps (FellowGas's VERTICES, the same expressions) for every vertex
+// of the display, read here by the vertex's index: the passes drawing the mesh (the depth prepass, the opaque pass, each
+// shadow) fetch three texels instead of marching. Only where VERTEX and NORMAL are the mesh's here (the source's
+// vertex code does not change them, nor works in world space).
+static const char *FELLOW_BURN_VERTEX_CACHED = R"(
+	// FellowEngine burning: the vertex where the march into the voxels moved it (FellowGas's VERTICES, once per frame
+	// with steps; FellowBurnable3D's FELLOW_BURN_VERTEX does the same here). Where the march found no surface, the
+	// triangles touching it are not drawn.
+	fellow_burn_local = VERTEX;
+	fellow_burn_gone = 0.0;
+	fellow_burn_mat = vec4(0.0, 1.0, 0.0, 0.0);
+	if (CUSTOM_CHANNEL.y > 0.0) {
+		int fb_id = VERTEX_ID + fellow_burn_vertex_offset;
+		ivec2 fb_at = ivec2((fb_id % BURN_VERTEX_ROW) * 3, fb_id / BURN_VERTEX_ROW);
+		vec4 fb_v = texelFetch(fellow_burn_vertices, fb_at, 0);
+		vec4 fb_n = texelFetch(fellow_burn_vertices, fb_at + ivec2(1, 0), 0);
+		VERTEX = fb_v.xyz;
+		fellow_burn_gone = fb_v.w;
+		if (fb_n.w >= 0.0) { // the surface's normal and how far the vertex's turns to it
+			NORMAL = normalize(mix(NORMAL, fb_n.xyz, fb_n.w));
+		}
+		fellow_burn_mat = texelFetch(fellow_burn_vertices, fb_at + ivec2(2, 0), 0);
+	}
+)";
+
+static const char *FELLOW_BURN_VERTEX_CACHED_DECLARATIONS = R"(
+uniform sampler2D fellow_burn_vertices : filter_nearest, repeat_disable; // the marched vertices: position + gone, normal + weight, composition
+uniform int fellow_burn_vertex_offset = 0; // the surface's first vertex among the display's
+)";
+
 // The ash heap (FellowAshHeap): a grid over the box's floor (two vertices per voxel along each side), each vertex risen by
 // the loose material in the columns around it (the ash and the crumbled char, the simulation's SETTLE: their volume
 // over a column's area, smoothed), so the heap thins out at its edges, which are ragged; lumps of charcoal in it (as
@@ -877,7 +909,7 @@ static const char *FELLOW_BURN_FRAGMENT = R"(
 )";
 
 // The end of a shader function's body (the index of its closing brace), or -1.
-static int _fellow_function_end(const String &p_code, const String &p_name) {
+static int _fellow_function_end(const String &p_code, const String &p_name, int *r_open = nullptr) {
 	int at = 0;
 	while (true) {
 		at = p_code.find(p_name, at);
@@ -902,6 +934,9 @@ static int _fellow_function_end(const String &p_code, const String &p_name) {
 		const int open = p_code.find("{", i);
 		if (open < 0) {
 			return -1;
+		}
+		if (r_open) {
+			*r_open = open;
 		}
 		int depth = 0;
 		for (int k = open; k < p_code.length(); k++) {
@@ -935,8 +970,125 @@ static int _fellow_function_end(const String &p_code, const String &p_name) {
 	}
 }
 
-static String _fellow_burn_code(const String &p_code, int p_custom) {
+static bool _fellow_is_ident(char32_t p_c) {
+	return is_ascii_alphanumeric_char(p_c) || p_c == '_';
+}
+
+// Whether the shader's vertex() may change VERTEX or NORMAL (an assignment to them or to a component, an increment;
+// comments skipped). Conservative: what is not a plain read counts.
+static bool _fellow_vertex_changes_geometry(const String &p_code) {
+	int open = -1;
+	const int end = _fellow_function_end(p_code, "vertex", &open);
+	if (end < 0 || open < 0) {
+		return false;
+	}
+	String body;
+	for (int k = open; k < end; k++) {
+		const char32_t c = p_code[k];
+		if (c == '/' && k + 1 < end && p_code[k + 1] == '/') {
+			const int e = p_code.find("\n", k);
+			k = e < 0 ? end : e - 1;
+			continue;
+		}
+		if (c == '/' && k + 1 < end && p_code[k + 1] == '*') {
+			const int e = p_code.find("*/", k + 2);
+			k = e < 0 ? end : e + 1;
+			body += " ";
+			continue;
+		}
+		body += c;
+	}
+	const char *names[] = { "VERTEX", "NORMAL" };
+	for (const char *name : names) {
+		const int len = String(name).length();
+		int at = 0;
+		while ((at = body.find(name, at)) >= 0) {
+			const int s = at;
+			at += len;
+			if ((s > 0 && _fellow_is_ident(body[s - 1])) || (at < body.length() && _fellow_is_ident(body[at]))) {
+				continue; // another identifier (VERTEX_ID, ...)
+			}
+			int i = at;
+			while (i < body.length() && (body[i] == ' ' || body[i] == '\t' || body[i] == '\n' || body[i] == '\r')) {
+				i++;
+			}
+			// A component or an element.
+			if (i < body.length() && body[i] == '.') {
+				i++;
+				while (i < body.length() && _fellow_is_ident(body[i])) {
+					i++;
+				}
+			} else if (i < body.length() && body[i] == '[') {
+				const int e = body.find("]", i);
+				i = e < 0 ? body.length() : e + 1;
+			}
+			while (i < body.length() && (body[i] == ' ' || body[i] == '\t' || body[i] == '\n' || body[i] == '\r')) {
+				i++;
+			}
+			if (i >= body.length()) {
+				continue;
+			}
+			const char32_t c = body[i];
+			const char32_t n = i + 1 < body.length() ? body[i + 1] : ' ';
+			if (c == '=' && n != '=') {
+				return true;
+			}
+			if ((c == '+' || c == '-' || c == '*' || c == '/') && (n == '=' || n == c)) {
+				return true;
+			}
+			// Before it: an increment, or passed to a function (it might be an out parameter).
+			int b = s - 1;
+			while (b >= 0 && (body[b] == ' ' || body[b] == '\t' || body[b] == '\n' || body[b] == '\r')) {
+				b--;
+			}
+			if (b >= 1 && ((body[b] == '+' && body[b - 1] == '+') || (body[b] == '-' && body[b - 1] == '-'))) {
+				return true;
+			}
+			if (b >= 0 && (body[b] == '(' || body[b] == ',') && (c == ')' || c == ',')) {
+				// An argument by itself: a constructor's or a built-in function's is read only; another function's
+				// may be out. The call's name: before the unmatched '('.
+				int depth = 0;
+				int k = b;
+				if (body[b] == ',') {
+					for (k = b - 1; k >= 0; k--) {
+						if (body[k] == ')') {
+							depth++;
+						} else if (body[k] == '(') {
+							if (depth == 0) {
+								break;
+							}
+							depth--;
+						}
+					}
+				}
+				int fe = k - 1;
+				while (fe >= 0 && (body[fe] == ' ' || body[fe] == '\t')) {
+					fe--;
+				}
+				int fs = fe;
+				while (fs >= 0 && _fellow_is_ident(body[fs])) {
+					fs--;
+				}
+				const String fn = fe >= 0 ? body.substr(fs + 1, fe - fs) : String();
+				static const char *read_only[] = { "vec2", "vec3", "vec4", "mat3", "mat4", "normalize", "length", "dot", "cross", "abs", "pow",
+					"mix", "max", "min", "clamp", "texture", "textureLod", "sign", "floor", "fract", "sin", "cos", "inverse", "transpose",
+					"distance", "reflect", "step", "smoothstep", "exp", "log", "sqrt", "mod", "if", "while", "for", "return" };
+				bool ro = fn.is_empty(); // a parenthesised expression
+				for (const char *r : read_only) {
+					ro = ro || fn == r;
+				}
+				if (!ro) {
+					return true;
+				}
+			}
+		}
+	}
+	return false;
+}
+
+static String _fellow_burn_code(const String &p_code, int p_custom, bool p_cached, bool &r_cached) {
 	String code = p_code;
+	r_cached = false;
 	if (!code.contains("shader_type spatial")) {
 		return String();
 	}
@@ -952,9 +1104,10 @@ static String _fellow_burn_code(const String &p_code, int p_custom) {
 	if (insert < 0) {
 		return String();
 	}
-	code = code.insert(insert + 1, String("\n") + FELLOW_BURN_DECLARATIONS);
 	const bool world_vertex = rm >= 0 && code.substr(rm, code.find(";", rm) - rm).contains("world_vertex_coords");
-	String vertex = String(FELLOW_BURN_VERTEX).replace("CUSTOM_CHANNEL", "CUSTOM" + itos(p_custom));
+	r_cached = p_cached && !world_vertex && !_fellow_vertex_changes_geometry(code);
+	code = code.insert(insert + 1, String("\n") + FELLOW_BURN_DECLARATIONS + (r_cached ? FELLOW_BURN_VERTEX_CACHED_DECLARATIONS : ""));
+	String vertex = String(r_cached ? FELLOW_BURN_VERTEX_CACHED : FELLOW_BURN_VERTEX).replace("CUSTOM_CHANNEL", "CUSTOM" + itos(p_custom)).replace("BURN_VERTEX_ROW", itos(BURN_VERTEX_ROW));
 	if (world_vertex) {
 		// Vertices in world space: no deformation (the look only, at the undeformed surface).
 		vertex = "\n\tfellow_burn_local = (inverse(MODEL_MATRIX) * vec4(VERTEX, 1.0)).xyz;\n\tfellow_burn_gone = 0.0;\n\tfellow_burn_mat = fellow_burn_sample(fellow_burn_local);\n";
@@ -974,7 +1127,8 @@ static String _fellow_burn_code(const String &p_code, int p_custom) {
 	return code;
 }
 
-Ref<ShaderMaterial> FellowBurnable3D::_make_burn_material(const Ref<Material> &p_source, int p_custom) const {
+Ref<ShaderMaterial> FellowBurnable3D::_make_burn_material(const Ref<Material> &p_source, int p_custom, bool p_cached, bool &r_cached) const {
+	r_cached = false;
 	Ref<Material> src = p_source;
 	if (src.is_null()) {
 		Ref<StandardMaterial3D> def;
@@ -998,7 +1152,8 @@ Ref<ShaderMaterial> FellowBurnable3D::_make_burn_material(const Ref<Material> &p
 	} else {
 		return Ref<ShaderMaterial>();
 	}
-	const String burn_code = _fellow_burn_code(code, p_custom);
+	bool cached = false;
+	const String burn_code = _fellow_burn_code(code, p_custom, p_cached, cached);
 	if (burn_code.is_empty()) {
 		return Ref<ShaderMaterial>();
 	}
@@ -1043,6 +1198,10 @@ Ref<ShaderMaterial> FellowBurnable3D::_make_burn_material(const Ref<Material> &p
 	m->set_shader_parameter("fellow_burn_crack_scale", crack_scale);
 	m->set_shader_parameter("fellow_burn_loose_ash", BURN_LOOSE_ASH * ash_volume);
 	m->set_shader_parameter("fellow_burn_grain", grain);
+	if (cached) {
+		m->set_shader_parameter("fellow_burn_vertices", vertex_texture);
+		r_cached = true;
+	}
 	return m;
 }
 
@@ -1277,8 +1436,27 @@ void FellowBurnable3D::_build_display(MeshInstance3D *p_target) {
 	display_mesh.instantiate();
 	burn_materials.clear();
 	HashMap<Material *, Ref<ShaderMaterial>> made;
+	HashMap<Material *, bool> made_cached;
+	HashSet<ShaderMaterial *> offset_set;
+	const bool cache = GLOBAL_GET_CACHED(bool, "rendering/fellow/fluid/burn_vertices_cached"); // (fellow_settings.cpp)
+	LocalVector<float> marched; // the vertices of the surfaces marched once per frame: position, 0, the march's custom data
 	for (uint32_t si = 0; si < surfaces.size(); si++) {
 		const SurfaceInfo &info = surfaces[si];
+		Ref<ShaderMaterial> bm;
+		bool bm_cached = false;
+		if (info.custom >= 0) {
+			Ref<ShaderMaterial> *f = made.getptr(info.material.ptr());
+			if (f) {
+				bm = *f;
+				bm_cached = made_cached[info.material.ptr()];
+			} else {
+				bm = _make_burn_material(info.material, info.custom, cache, bm_cached);
+				made.insert(info.material.ptr(), bm);
+				made_cached.insert(info.material.ptr(), bm_cached);
+			}
+		}
+		bm_cached = bm_cached && bm.is_valid();
+		const uint32_t first_marched = marched.size() / 12;
 		HashMap<uint32_t, int> remap;
 		PackedVector3Array pv;
 		PackedVector3Array pn;
@@ -1316,6 +1494,12 @@ void FellowBurnable3D::_build_display(MeshInstance3D *p_target) {
 					pcu.push_back(cu.y);
 					pcu.push_back(cu.z);
 					pcu.push_back(cu.w);
+					if (bm_cached) {
+						const float rec[12] = { b.pos[v].x, b.pos[v].y, b.pos[v].z, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, cu.x, cu.y, cu.z, cu.w };
+						for (float x : rec) {
+							marched.push_back(x);
+						}
+					}
 				}
 				pidx.push_back(ni);
 			}
@@ -1349,15 +1533,13 @@ void FellowBurnable3D::_build_display(MeshInstance3D *p_target) {
 		arrays[Mesh::ARRAY_INDEX] = pidx;
 		display_mesh->add_surface_from_arrays(Mesh::PRIMITIVE_TRIANGLES, arrays, TypedArray<Array>(), Dictionary(), flags);
 		const int ds = display_mesh->get_surface_count() - 1;
-		Ref<ShaderMaterial> bm;
-		if (info.custom >= 0) {
-			Ref<ShaderMaterial> *f = made.getptr(info.material.ptr());
-			if (f) {
-				bm = *f;
-			} else {
-				bm = _make_burn_material(info.material, info.custom);
-				made.insert(info.material.ptr(), bm);
+		if (bm_cached) {
+			// The surface's vertices among the marched ones: a material per surface (the shader shared).
+			if (offset_set.has(bm.ptr())) {
+				bm = bm->duplicate();
 			}
+			offset_set.insert(bm.ptr());
+			bm->set_shader_parameter("fellow_burn_vertex_offset", int(first_marched));
 		}
 		if (bm.is_valid()) {
 			display_mesh->surface_set_material(ds, bm);
@@ -1365,6 +1547,24 @@ void FellowBurnable3D::_build_display(MeshInstance3D *p_target) {
 		} else {
 			display_mesh->surface_set_material(ds, info.material);
 		}
+	}
+	const uint32_t count = marched.size() / 12;
+	print_verbose(vformat("FellowBurnable3D %s: %d of the display's vertices marched once per frame (fluid/burn_vertices_cached %s).", get_path(), count, cache ? "on" : "off"));
+	if (count > 0) {
+		PackedByteArray vertices;
+		vertices.resize(int64_t(count) * 48);
+		memcpy(vertices.ptrw(), marched.ptr(), vertices.size());
+		// FellowGas's VertexParams (std140): the march's parameters, as the materials' (_make_burn_material).
+		const Vector3 extent = Vector3(res) * voxel;
+		const float pf[8] = { origin.x, origin.y, origin.z, voxel, 1.0f / extent.x, 1.0f / extent.y, 1.0f / extent.z, voxel * 0.5f };
+		const int32_t pi[4] = { int32_t(Math::ceil(extent.length() / (voxel * 0.5f))), int32_t(count), BURN_VERTEX_ROW, 0 };
+		const float pl[4] = { BURN_LOOSE_ASH * ash_volume, 0.0f, 0.0f, 0.0f };
+		PackedByteArray params;
+		params.resize(64);
+		memcpy(params.ptrw(), pf, 32);
+		memcpy(params.ptrw() + 32, pi, 16);
+		memcpy(params.ptrw() + 48, pl, 16);
+		RS::get_singleton()->call_on_render_thread(callable_mp_static(&FellowBurnable3D::_rt_vertices).bind(burn_id, vertices, count, params, vertex_texture));
 	}
 }
 
@@ -1380,6 +1580,17 @@ void FellowBurnable3D::_rt_configure(uint32_t p_id, Vector3i p_res, PackedByteAr
 	gas->burnable_set_totals_callback(p_id, callable_mp_static(&FellowBurnable3D::_rt_store).bind(p_totals));
 	if (p_texture.is_valid()) {
 		p_texture->set_texture_rd_rid(gas->burnable_get_display(p_id));
+	}
+}
+
+void FellowBurnable3D::_rt_vertices(uint32_t p_id, PackedByteArray p_vertices, uint32_t p_count, PackedByteArray p_params, Ref<Texture2DRD> p_texture) {
+	FellowGas *gas = FellowGas::get_singleton_if_exists();
+	if (!gas) {
+		return;
+	}
+	const RID tex = gas->burnable_set_vertices(p_id, p_vertices, p_count, BURN_VERTEX_ROW, p_params);
+	if (tex.is_valid() && p_texture.is_valid()) {
+		p_texture->set_texture_rd_rid(tex);
 	}
 }
 

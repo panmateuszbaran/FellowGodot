@@ -34,6 +34,7 @@
 #include "fellow_gas.h"
 
 #include "core/object/callable_mp.h"
+#include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
 #include "servers/rendering/renderer_rd/uniform_set_cache_rd.h"
 
 using namespace RendererRD;
@@ -58,7 +59,7 @@ void FellowGas::_ensure_burn() {
 		return;
 	}
 	Vector<String> modes;
-	const char *names[BURN_MAX] = { "IGNITE", "HEAT", "SETTLE", "INJECT", "REDUCE" };
+	const char *names[BURN_MAX] = { "IGNITE", "HEAT", "SETTLE", "INJECT", "REDUCE", "VERTICES" };
 	for (int i = 0; i < BURN_MAX; i++) {
 		modes.push_back(String("\n#define MODE_") + names[i] + "\n");
 	}
@@ -71,7 +72,7 @@ void FellowGas::_ensure_burn() {
 }
 
 void FellowGas::_free_burnable(Burnable &r_b) {
-	RID *rids[] = { &r_b.state[0], &r_b.state[1], &r_b.display, &r_b.emission[0], &r_b.emission[1], &r_b.inject, &r_b.ubo, &r_b.totals };
+	RID *rids[] = { &r_b.state[0], &r_b.state[1], &r_b.display, &r_b.emission[0], &r_b.emission[1], &r_b.inject, &r_b.ubo, &r_b.totals, &r_b.vertices, &r_b.vertex_params, &r_b.vertex_result };
 	for (RID *r : rids) {
 		if (r->is_valid()) {
 			RD::get_singleton()->free_rid(*r);
@@ -143,6 +144,45 @@ void FellowGas::burnable_queue_step(uint32_t p_id, const BurnStepParams &p_step)
 	b->pending.push_back(p_step);
 }
 
+RID FellowGas::burnable_set_vertices(uint32_t p_id, const Vector<uint8_t> &p_vertices, uint32_t p_count, uint32_t p_row, const Vector<uint8_t> &p_params) {
+	Burnable *b = burnables.getptr(p_id);
+	ERR_FAIL_NULL_V(b, RID());
+	ERR_FAIL_COND_V(p_vertices.size() != int64_t(p_count) * 48 || p_params.size() != 64 || p_count == 0 || p_row == 0, RID());
+	RID *rids[] = { &b->vertices, &b->vertex_params, &b->vertex_result };
+	for (RID *r : rids) {
+		if (r->is_valid()) {
+			RD::get_singleton()->free_rid(*r);
+			*r = RID();
+		}
+	}
+	b->vertices = RD::get_singleton()->storage_buffer_create(p_vertices.size(), p_vertices);
+	b->vertex_params = RD::get_singleton()->uniform_buffer_create(64, p_params);
+	RD::TextureFormat tf;
+	tf.format = RD::DATA_FORMAT_R32G32B32A32_SFLOAT;
+	tf.width = p_row * 3;
+	tf.height = (p_count + p_row - 1) / p_row;
+	tf.usage_bits = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_STORAGE_BIT;
+	b->vertex_result = RD::get_singleton()->texture_create(tf, RD::TextureView());
+	RD::get_singleton()->set_resource_name(b->vertex_result, "FellowBurn vertices");
+	b->vertex_count = p_count;
+	b->vertex_row = p_row;
+	b->vertex_dirty = true; // marched at the start of the next frame (process_pending)
+	return b->vertex_result;
+}
+
+void FellowGas::_burn_vertices(Burnable &r_b) {
+	r_b.vertex_dirty = false;
+	if (r_b.vertex_count == 0 || r_b.vertex_result.is_null()) {
+		return;
+	}
+	MaterialStorage *material_storage = MaterialStorage::get_singleton();
+	// The materials' sampler for the state (filter_linear, repeat_disable).
+	const RID sampler = material_storage->sampler_rd_get_default(RSE::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RSE::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
+	RD::get_singleton()->draw_command_begin_label("FellowEngine Burn Vertices");
+	_dispatch_burn(r_b, BURN_VERTICES, { RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 1, Vector<RID>({ sampler, r_b.display })), RD::Uniform(RD::UNIFORM_TYPE_STORAGE_BUFFER, 2, r_b.vertices), RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 3, r_b.vertex_result), RD::Uniform(RD::UNIFORM_TYPE_UNIFORM_BUFFER, 4, r_b.vertex_params) }, Vector3i(4, 4, int((r_b.vertex_count + 15) / 16)));
+	RD::get_singleton()->draw_command_end_label();
+}
+
 RID FellowGas::burnable_get_display(uint32_t p_id) const {
 	const Burnable *b = burnables.getptr(p_id);
 	return b ? b->display : RID();
@@ -161,6 +201,9 @@ void FellowGas::burnable_debug_read(uint32_t p_id, int p_what, const Callable &p
 		_run_burn_step(p_id, *b, s);
 	}
 	b->pending.clear();
+	if (b->vertex_dirty) {
+		_burn_vertices(*b);
+	}
 	RID tex = p_what == 1 ? b->emission[b->emission_current] : (p_what == 2 ? b->inject : b->state[b->current]);
 	if (tex.is_null()) {
 		p_callback.call(Vector<uint8_t>());
@@ -259,6 +302,7 @@ void FellowGas::_run_burn_step(uint32_t p_id, Burnable &r_b, const BurnStepParam
 	const RID em = r_b.emission[r_b.emission_current];
 	_dispatch_burn(r_b, BURN_HEAT, { image(1, r_b.state[cur]), image(2, r_b.state[nxt]), image(3, em), sampled(4, gas_scalars), image(5, r_b.emission[em_prev]) }, n);
 	_dispatch_burn(r_b, BURN_SETTLE, { image(1, r_b.state[nxt]), image(2, r_b.state[cur]), image(3, r_b.display) }, n);
+	r_b.vertex_dirty = r_b.vertex_count > 0; // marched again after this frame's steps (process_pending)
 	// The gas's region (its EMIT and OBSTACLES at the next step).
 	const Vector3i region(p_step.region_size[0], p_step.region_size[1], p_step.region_size[2]);
 	if (gas && region.x > 0 && region.y > 0 && region.z > 0) {

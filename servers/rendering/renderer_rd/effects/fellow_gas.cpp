@@ -749,7 +749,7 @@ void FellowGas::process_pending() {
 		}
 	}
 	for (const KeyValue<uint32_t, Burnable> &kv : burnables) {
-		any = any || !kv.value.pending.is_empty();
+		any = any || !kv.value.pending.is_empty() || kv.value.vertex_dirty;
 	}
 	if (!any) {
 		return;
@@ -807,6 +807,12 @@ void FellowGas::process_pending() {
 		} else {
 			Burnable &b = burnables[it.id];
 			_run_burn_step(it.id, b, b.pending[it.index]);
+		}
+	}
+	// The burning meshes' vertices after this frame's last step of each (once, whatever the number of steps).
+	for (KeyValue<uint32_t, Burnable> &kv : burnables) {
+		if (kv.value.vertex_dirty) {
+			_burn_vertices(kv.value);
 		}
 	}
 	for (KeyValue<uint32_t, Volume> &kv : volumes) {

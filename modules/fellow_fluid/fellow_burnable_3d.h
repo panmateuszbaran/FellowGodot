@@ -98,6 +98,7 @@ private:
 	Ref<ArrayMesh> display_mesh;
 	Vector<Ref<ShaderMaterial>> burn_materials;
 	Ref<Texture3DRD> display_texture;
+	Ref<Texture2DRD> vertex_texture; // the display's vertices marched once per frame (FellowGas::burnable_set_vertices)
 	Ref<FellowGasReadback> totals;
 	Ref<FellowGasReadback> debug;
 	ObjectID body_id;
@@ -142,7 +143,7 @@ private:
 	bool _voxelize(const Ref<Mesh> &p_mesh);
 	bool _ground_distance(MeshInstance3D *p_target, const AABB &p_box, int &r_axis, int &r_sign, float &r_below) const; // the ground below the box
 	void _build_display(MeshInstance3D *p_target);
-	Ref<ShaderMaterial> _make_burn_material(const Ref<Material> &p_source, int p_custom) const;
+	Ref<ShaderMaterial> _make_burn_material(const Ref<Material> &p_source, int p_custom, bool p_cached, bool &r_cached) const;
 	void _update_materials();
 	void _swap_in(MeshInstance3D *p_target);
 	void _build_heap(MeshInstance3D *p_target);
@@ -156,6 +157,7 @@ private:
 
 	static void _rt_configure(uint32_t p_id, Vector3i p_res, PackedByteArray p_initial, Ref<FellowGasReadback> p_totals, Ref<Texture3DRD> p_texture);
 	static void _rt_free(uint32_t p_id);
+	static void _rt_vertices(uint32_t p_id, PackedByteArray p_vertices, uint32_t p_count, PackedByteArray p_params, Ref<Texture2DRD> p_texture);
 	static void _rt_step(uint32_t p_id, PackedByteArray p_step);
 	static void _rt_debug(uint32_t p_id, int p_what, Ref<FellowGasReadback> p_target);
 	static void _rt_store(const PackedByteArray &p_data, Ref<FellowGasReadback> p_target);
