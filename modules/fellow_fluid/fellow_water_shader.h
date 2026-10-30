@@ -231,7 +231,9 @@ void fragment() {
 	float nv = clamp(dot(n_view, VIEW), 0.0, 1.0);
 	float fresnel = 0.02 + 0.98 * pow(1.0 - nv, 5.0);
 
-	// Reflections traced against the opaque scene's depth; the sky's IBL where nothing is hit.
+)"
+		// MSVC: one string literal holds at most 16380 characters (C2026).
+		R"(	// Reflections traced against the opaque scene's depth; the sky's IBL where nothing is hit.
 	float ssr_weight = 0.0;
 	vec3 ssr_color = vec3(0.0);
 	float ssr_cost = 0.0; // the share of the steps taken (debug view 7)
