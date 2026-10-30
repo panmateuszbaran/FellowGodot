@@ -52,7 +52,9 @@ the trees, about a degree too high; the hierarchical ray finds the shore itself,
 the trees is mirrored under the waterline and wave facets tilted towards the camera mirror the bank, as they would.
 The pier's posts and the boat are reflected in both, without the jittered samples' noise. With a far-occlusion taken
 as a hit instead of a miss, the water under the pier mirrored the deck's lit top (31.3 dB shore): now a miss there,
-as before.
+as before. With MSAA 4x and no TAA (`--preset=high_msaa4`) the linear march's jittered samples show as speckles in
+every reflection, the hierarchical one's are clean (28.6-51.3 dB between them). At a render scale of 2 with MSAA 8x
+(`--preset=reference_ssaa`: the depth texture at the internal size) the same kind of differences, 35.3-40.1 dB.
 
 **Cost.** lavapipe's timing does not show the march: its texture filtering in software (the waves' anisotropic
 lookups) makes the water's other work dominate — the transparent pass 167 / 139 / 202 / 129 / 96 / 184 ms (flythrough,
