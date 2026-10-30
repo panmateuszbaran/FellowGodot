@@ -102,6 +102,12 @@ ending them at `reflection_distance` as the linear march does changed the aerial
 (0.439 → 0.429 ms; the other views within the runs' spread, the frame 2.821 → 2.856 ms): not kept. The aerial view's
 extra cost is in the rays climbing past the trees on the banks, not in their length.
 
+**The single-level copy skipped** (`e99e5db`): the pyramid's base level is the same copy and is what the transparent
+pass binds, so the stock copy is made only when something else reads it — an opaque or depth-pass material sampling
+the depth texture (they read the frame before's copy), MSAA's depth of field. Water Lab bit for bit on lavapipe; on the
+RTX (`m26_f280`, fellow210 against fellow211, 3 runs) the depth copy 0.023 ms cheaper in Water Lab and Rain Lab (the
+pyramid's whole cost now about 0.055 ms at 1080p).
+
 ## Decision
 
 **KEEP, on**: on the RTX the reflections cost 38 % less (Water Lab's frame −0.37 ms), geometrically right at any

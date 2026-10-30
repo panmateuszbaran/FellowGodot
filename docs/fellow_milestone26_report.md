@@ -83,7 +83,13 @@ The night of 2026-10-29/30 the user allowed the laptop's GPU (jobs `m26_f275`-`f
 | 6 | water: the rays towards the camera bounded by `reflection_distance` | aerial −0.01 ms, the rest within the spread (`m26_f276`) | not kept |
 | 7 | water: the depth pyramid asked for only while reflections are traced (`560d36c`) | without reflections the depth copy 0.079 → 0.026 ms (`m26_f278`); exact | KEEP |
 | 8 | wind: the shadows cached from the second cascade | −0.11 ms more than from the third, but only the nearest cascade's shadows sway | the third stays |
-| 9 | depth texture: the single-level copy skipped where the pyramid replaces it (`e99e5db`) | `m26_f280` | see below |
+| 9 | depth texture: the single-level copy skipped where the pyramid replaces it (`e99e5db`) | the depth copy −0.023 ms in Water Lab and Rain Lab (`m26_f280`); exact (lavapipe: Water Lab bit for bit) | KEEP |
+| 10 | water: where the shading without reflections goes (`m26_f281`, measurement builds) | of the 0.46 ms: the cascades' lookups 0.21 ms (their anisotropic filtering 0.10), the foam's noise 0.013, the caustics 0.02, the refraction 0.01; the rest the lighting | — |
+
+**The defaults are not slower** (`m26_f279_final`, stock against fellow210, the nine scenes, three runs each after a
+pass filling the shader caches, as `m20_f260`): FellowEngine faster in every scene and every pair of runs — Sponza
+−52.8 %, Bistro exterior −29.6 %, City Lab −27.4 %, Bistro interior −24.1 %, Crowd Lab −23.0 %, Lights Lab −22.9 %,
+Foliage Lab −18.0 %, PBR Lab −14.7 %, Stress Lab −10.3 % (frame time; `m20_f260`: −8.2 to −53.7 %).
 
 ## 5. Left for later
 
