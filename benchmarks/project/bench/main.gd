@@ -26,6 +26,8 @@ extends Node
 ##                            --sun_color=r,g,b (showcase captures)
 ##   --add_camera=<n>@p@t[@fov[@time]]  extra fixed cameras (positions x,y,z; ';' separates several; time: the scene's
 ##                            time at the capture, s)
+##   --add_seq=<n>@frames@start@p0@t0@p1@t1[@fov]  an extra temporal sequence (';' separates several; --seq_every=<k>:
+##                            save every k-th frame)
 ##   --dirt_map=1             a procedural lens dirt texture as the environment's glow map (strength 0)
 ##   --jitter=<n>             reference: sub-pixel jittered renders per output frame (default 16)
 ##   --ablate=<a+b>           sizing only (items separated by + or ,): hide omni / spot / sun lights, probes, decals, or pos_shadows (see _ablate)
@@ -175,6 +177,20 @@ func _ready() -> void:
 			var cp := cam_parts[1].split_floats(",")
 			var ct := cam_parts[2].split_floats(",")
 			scene.fixed_cameras[cam_parts[0]] = {"pos": Vector3(cp[0], cp[1], cp[2]), "target": Vector3(ct[0], ct[1], ct[2]), "fov": float(cam_parts[3]) if cam_parts.size() > 3 else 60.0, "time": float(cam_parts[4]) if cam_parts.size() > 4 else 0.0}
+	# --add_seq=<n>@frames@start@p0@t0@p1@t1[@fov][;...]: an extra temporal sequence, the camera moving from p0 looking at
+	# t0 to p1 looking at t1 over its frames from the scene time start (showcase loops; --seq_every=<k> saves every
+	# k-th frame).
+	for seq_spec in str(args.get("add_seq", "")).split(";", false):
+		var sp := seq_spec.split("@")
+		if sp.size() >= 7:
+			var nfr := int(sp[1])
+			var p0 := sp[3].split_floats(",")
+			var t0 := sp[4].split_floats(",")
+			var p1 := sp[5].split_floats(",")
+			var t1 := sp[6].split_floats(",")
+			var sfov := float(sp[7]) if sp.size() > 7 else 60.0
+			var spath = load("res://bench/camera_path.gd").from_array([[0.0, Vector3(p0[0], p0[1], p0[2]), Vector3(t0[0], t0[1], t0[2]), sfov], [nfr * DT, Vector3(p1[0], p1[1], p1[2]), Vector3(t1[0], t1[1], t1[2]), sfov]])
+			scene.temporal_seqs[sp[0]] = {"start": float(sp[2]), "frames": nfr, "purpose": "showcase", "path": spath}
 	# --sun_elevation=<degrees>, --sun_azimuth=<degrees>: the scene's sun (its `sun` member, else its "BenchSun") at this
 	# elevation / azimuth (the other kept); --sun_energy=<x>, --sun_color=<r,g,b>: its energy and colour (showcases).
 	var bench_sun: DirectionalLight3D = null
@@ -788,6 +804,8 @@ func _make_dirt_map() -> ImageTexture:
 ## Temporal sequences and their ground truth must see the same exposure: auto exposure adapts per rendered
 ## frame, and reference mode renders many sub-frames per output frame, so it is disabled for both modes.
 func _freeze_exposure() -> void:
+	if args.get("keep_exposure", "0") == "1":  # showcase loops: the exposure as in the stills
+		return
 	if scene.cam_attr and scene.cam_attr.auto_exposure_enabled:
 		scene.cam_attr.auto_exposure_enabled = false
 		result["auto_exposure_disabled_for_mode"] = true
@@ -856,6 +874,8 @@ func _run_temporal(jittered_reference: bool) -> void:
 			scene.apply_path_sample(path.sample(t - start))
 			await get_tree().process_frame
 			await _post_draw()
+			if f % maxi(int(args.get("seq_every", "1")), 1) != 0:
+				continue
 			var p := out_dir.path_join("%s_seq-%s_f%03d.png" % [stem, sname, f])
 			_save_frame(p)
 			lst.append(p.get_file())
