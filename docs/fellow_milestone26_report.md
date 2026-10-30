@@ -75,6 +75,16 @@ order: the wind's shadows, the wind's vertex cost, the rain, the water's reflect
 | 4a | water: a Fresnel-scaled step count for the reflection march | no measurable change (+2-9 %, the spread) | reverted |
 | 4b | water: reflections traced over a Hi-Z pyramid of the depth texture (`postfx/depth_copy_nearest_mipmaps`) | RTX 1080p: the reflections 0.99 → 0.61 ms (−38 %), Water Lab's GPU time 3.128 → 2.762 ms (−12 %; shore −29 %, pier −24 %, glint −36 % of the water's pass, aerial +26 %); the far shore reflected at its true parallax, no jitter | KEEP, on (0126) |
 
+The night of 2026-10-29/30 the user allowed the laptop's GPU (jobs `m26_f275`-`f281`):
+
+| | change | effect (RTX 5070 Ti Laptop, 1080p) | decision |
+|---|---|---|---|
+| 5 | rain: the ripples' cells shared (3a) | the ripples' compute −0.025 ms; Rain Lab's frame unchanged (the basin's depth pyramid +0.047 ms) | KEEP |
+| 6 | water: the rays towards the camera bounded by `reflection_distance` | aerial −0.01 ms, the rest within the spread (`m26_f276`) | not kept |
+| 7 | water: the depth pyramid asked for only while reflections are traced (`560d36c`) | without reflections the depth copy 0.079 → 0.026 ms (`m26_f278`); exact | KEEP |
+| 8 | wind: the shadows cached from the second cascade | −0.11 ms more than from the third, but only the nearest cascade's shadows sway | the third stays |
+| 9 | depth texture: the single-level copy skipped where the pyramid replaces it (`e99e5db`) | `m26_f280` | see below |
+
 ## 5. Left for later
 
 * The Mobile and Compatibility renderers; SDFGI's voxelization of moving plants; particles in the wind; the water's
