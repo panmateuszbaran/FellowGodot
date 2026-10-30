@@ -93,7 +93,11 @@ The night of 2026-10-29/30 the user allowed the laptop's GPU (jobs `m26_f275`-`f
 **The defaults are not slower** (`m26_f279_final`, stock against fellow210, the nine scenes, three runs each after a
 pass filling the shader caches, as `m20_f260`): FellowEngine faster in every scene and every pair of runs — Sponza
 −52.8 %, Bistro exterior −29.6 %, City Lab −27.4 %, Bistro interior −24.1 %, Crowd Lab −23.0 %, Lights Lab −22.9 %,
-Foliage Lab −18.0 %, PBR Lab −14.7 %, Stress Lab −10.3 % (frame time; `m20_f260`: −8.2 to −53.7 %).
+Foliage Lab −18.0 %, PBR Lab −14.7 %, Stress Lab −10.3 % (frame time; `m20_f260`: −8.2 to −53.7 %). Again at the
+end of the night with fellow212 (`d183ac7`: the copy skipped, the burning's vertices marched once per frame;
+`m26_f285_final`, the same procedure): faster in every scene and every pair of runs — Sponza −54.6 %, Bistro exterior
+−30.8 %, City Lab −25.1 %, Bistro interior −23.5 %, Lights Lab −22.2 %, Crowd Lab −21.8 %, Foliage Lab −16.7 %, PBR Lab
+−16.0 %, Stress Lab −11.5 %.
 
 ## 5. Left for later
 
