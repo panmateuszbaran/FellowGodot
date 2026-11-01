@@ -120,6 +120,11 @@ Vector3 FellowWind3D::get_velocity_at(const Vector3 &p_position) const {
 	return d * s;
 }
 
+Vector4 FellowWind3D::get_gust_mapping() const {
+	const Vector3 d = get_direction();
+	return Vector4(d.x, d.z, float(Math::fmod(offset, double(gust_size) * GUST_CELLS * 2.0)), 1.0f / (gust_size * GUST_CELLS));
+}
+
 void FellowWind3D::_push_state(bool p_enabled) {
 	RendererRD::FellowWeather::WindState st;
 	st.enabled = p_enabled;

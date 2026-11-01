@@ -440,6 +440,7 @@ ShaderTypes::ShaderTypes() {
 	shader_modes[RSE::SHADER_PARTICLES].functions["process"].built_ins["COLLISION_NORMAL"] = constt(ShaderLanguage::TYPE_VEC3);
 	shader_modes[RSE::SHADER_PARTICLES].functions["process"].built_ins["COLLISION_DEPTH"] = constt(ShaderLanguage::TYPE_FLOAT);
 	shader_modes[RSE::SHADER_PARTICLES].functions["process"].built_ins["ATTRACTOR_FORCE"] = constt(ShaderLanguage::TYPE_VEC3);
+	shader_modes[RSE::SHADER_PARTICLES].functions["process"].built_ins["WIND_VELOCITY"] = constt(ShaderLanguage::TYPE_VEC3); // FellowEngine wind (decision 0127)
 	shader_modes[RSE::SHADER_PARTICLES].functions["process"].built_ins["AMOUNT_RATIO"] = constt(ShaderLanguage::TYPE_FLOAT);
 	shader_modes[RSE::SHADER_PARTICLES].functions["process"].main_function = true;
 

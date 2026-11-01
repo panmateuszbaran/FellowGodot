@@ -104,6 +104,7 @@ private:
 	float turbulence_scale = 0.4f;
 	Vector3 wind;
 	float wind_rate = 0.0f;
+	bool wind_from_scene = false; // the active FellowWind3D's velocity at the box (with its gusts) instead of `wind` (decision 0127)
 	float smoke_dissipation = 0.05f;
 	float cooling = 1.2f;
 	float ignition_temperature = 250.0f;
@@ -217,6 +218,8 @@ public:
 	void set_wind(const Vector3 &p_wind) { wind = p_wind; }
 	Vector3 get_wind() const { return wind; }
 	void set_wind_rate(float p_value) { wind_rate = MAX(p_value, 0.0f); }
+	void set_wind_from_scene(bool p_enable) { wind_from_scene = p_enable; }
+	bool is_wind_from_scene() const { return wind_from_scene; }
 	float get_wind_rate() const { return wind_rate; }
 	void set_smoke_dissipation(float p_value) { smoke_dissipation = MAX(p_value, 0.0f); }
 	float get_smoke_dissipation() const { return smoke_dissipation; }

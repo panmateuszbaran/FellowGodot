@@ -32,6 +32,7 @@
 
 #include "fellow_rain_3d.h"
 #include "fellow_shallow_water_3d.h"
+#include "fellow_wind_3d.h"
 #include "fellow_water_shader.h"
 #include "fellow_water_waves.glsl.gen.h"
 
@@ -477,6 +478,31 @@ void FellowWater3D::_notification(int p_what) {
 				last_rain_id = rain_node->get_instance_id();
 				last_rain_tile = rain_node->get_ripple_tile();
 			}
+			// FellowWind3D (decision 0127): its mean wind drives the spectrum (rebuilt when it changes by more than 2 % or
+			// a degree), its gusts roughen the short waves where they blow and calm them in the lulls.
+			FellowWind3D *wind_node = wind_from_scene ? FellowWind3D::get_active() : nullptr;
+			float gust_strength = 0.0f;
+			if (wind_node && wind_node->is_visible_in_tree()) {
+				const Vector3 wd = wind_node->get_direction();
+				const float ws = MAX(0.1f, wind_node->get_speed());
+				const float wa = float(Math::rad_to_deg(Math::atan2(wd.z, wd.x)));
+				const float da = Math::abs(Math::fposmod(wa - wind_direction + 180.0f, 360.0f) - 180.0f);
+				if (Math::abs(ws - wind_speed) > 0.02f * MAX(ws, wind_speed) || da > 1.0f) {
+					wind_speed = ws;
+					wind_direction = wa;
+					spectrum_dirty = true;
+				}
+				gust_strength = wind_node->get_gustiness() * gust_ripples;
+				material->set_shader_parameter("wind_gust_map", wind_node->get_gust_mapping());
+				if (wind_node->get_instance_id() != last_wind_id) {
+					material->set_shader_parameter("wind_gusts", wind_node->get_gust_texture());
+					last_wind_id = wind_node->get_instance_id();
+				}
+			}
+			if (gust_strength != last_gust_strength) {
+				material->set_shader_parameter("wind_gust_strength", gust_strength);
+				last_gust_strength = gust_strength;
+			}
 			FellowShallowWater3D *sim = Object::cast_to<FellowShallowWater3D>(ObjectDB::get_instance(sim_id));
 			if (sim && sim->is_inside_tree()) {
 				Transform3D st = sim->get_global_transform();
@@ -869,6 +895,10 @@ void FellowWater3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_wind_speed"), &FellowWater3D::get_wind_speed);
 	ClassDB::bind_method(D_METHOD("set_wind_direction", "degrees"), &FellowWater3D::set_wind_direction);
 	ClassDB::bind_method(D_METHOD("get_wind_direction"), &FellowWater3D::get_wind_direction);
+	ClassDB::bind_method(D_METHOD("set_wind_from_scene", "enable"), &FellowWater3D::set_wind_from_scene);
+	ClassDB::bind_method(D_METHOD("is_wind_from_scene"), &FellowWater3D::is_wind_from_scene);
+	ClassDB::bind_method(D_METHOD("set_gust_ripples", "strength"), &FellowWater3D::set_gust_ripples);
+	ClassDB::bind_method(D_METHOD("get_gust_ripples"), &FellowWater3D::get_gust_ripples);
 	ClassDB::bind_method(D_METHOD("set_fetch", "km"), &FellowWater3D::set_fetch);
 	ClassDB::bind_method(D_METHOD("get_fetch"), &FellowWater3D::get_fetch);
 	ClassDB::bind_method(D_METHOD("set_wave_scale", "scale"), &FellowWater3D::set_wave_scale);
@@ -947,6 +977,8 @@ void FellowWater3D::_bind_methods() {
 	ADD_GROUP("Waves", "");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "wind_speed", PROPERTY_HINT_RANGE, "0.1,40,0.01,suffix:m/s"), "set_wind_speed", "get_wind_speed");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "wind_direction", PROPERTY_HINT_RANGE, "-360,360,0.1,degrees"), "set_wind_direction", "get_wind_direction");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "wind_from_scene"), "set_wind_from_scene", "is_wind_from_scene");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "gust_ripples", PROPERTY_HINT_RANGE, "0,3,0.01"), "set_gust_ripples", "get_gust_ripples");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "fetch", PROPERTY_HINT_RANGE, "0.01,1000,0.01,or_greater,suffix:km"), "set_fetch", "get_fetch");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "wave_scale", PROPERTY_HINT_RANGE, "0,4,0.01"), "set_wave_scale", "get_wave_scale");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "choppiness", PROPERTY_HINT_RANGE, "0,2,0.01"), "set_choppiness", "get_choppiness");

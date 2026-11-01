@@ -32,6 +32,7 @@
 
 #include "fellow_burnable_3d.h"
 #include "fellow_gas_emitter_3d.h"
+#include "fellow_wind_3d.h"
 
 #include "core/config/engine.h"
 #include "core/object/callable_mp.h"
@@ -488,7 +489,14 @@ void FellowGasVolume3D::_queue_step(bool p_read_emission) {
 	sp.up[1] = up.y;
 	sp.up[2] = up.z;
 	sp.buoyancy = buoyancy;
-	const Vector3 w = to_grid.xform(wind);
+	Vector3 wind_now = wind;
+	if (wind_from_scene) {
+		FellowWind3D *scene_wind = FellowWind3D::get_active();
+		if (scene_wind && scene_wind->is_visible_in_tree()) {
+			wind_now = scene_wind->get_velocity_at(get_global_transform().xform(Vector3(0.0f, size.y * 0.5f, 0.0f)));
+		}
+	}
+	const Vector3 w = to_grid.xform(wind_now);
 	sp.wind[0] = w.x;
 	sp.wind[1] = w.y;
 	sp.wind[2] = w.z;
@@ -713,6 +721,8 @@ void FellowGasVolume3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_wind"), &FellowGasVolume3D::get_wind);
 	ClassDB::bind_method(D_METHOD("set_wind_rate", "rate"), &FellowGasVolume3D::set_wind_rate);
 	ClassDB::bind_method(D_METHOD("get_wind_rate"), &FellowGasVolume3D::get_wind_rate);
+	ClassDB::bind_method(D_METHOD("set_wind_from_scene", "enable"), &FellowGasVolume3D::set_wind_from_scene);
+	ClassDB::bind_method(D_METHOD("is_wind_from_scene"), &FellowGasVolume3D::is_wind_from_scene);
 	ClassDB::bind_method(D_METHOD("set_smoke_dissipation", "rate"), &FellowGasVolume3D::set_smoke_dissipation);
 	ClassDB::bind_method(D_METHOD("get_smoke_dissipation"), &FellowGasVolume3D::get_smoke_dissipation);
 	ClassDB::bind_method(D_METHOD("set_cooling", "rate"), &FellowGasVolume3D::set_cooling);
@@ -810,6 +820,7 @@ void FellowGasVolume3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "turbulence_scale", PROPERTY_HINT_RANGE, "0.01,5,0.01,suffix:m"), "set_turbulence_scale", "get_turbulence_scale");
 	ADD_PROPERTY(PropertyInfo(Variant::VECTOR3, "wind", PROPERTY_HINT_NONE, "suffix:m/s"), "set_wind", "get_wind");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "wind_rate", PROPERTY_HINT_RANGE, "0,10,0.01,suffix:/s"), "set_wind_rate", "get_wind_rate");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "wind_from_scene"), "set_wind_from_scene", "is_wind_from_scene");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "smoke_dissipation", PROPERTY_HINT_RANGE, "0,5,0.001,suffix:/s"), "set_smoke_dissipation", "get_smoke_dissipation");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "cooling", PROPERTY_HINT_RANGE, "0,10,0.01,suffix:/s"), "set_cooling", "get_cooling");
 	ADD_SUBGROUP("Combustion", "");

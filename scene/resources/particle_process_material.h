@@ -133,6 +133,7 @@ private:
 		uint64_t use_rotation_3d : 1;
 		uint64_t use_rotation_velocity_3d : 1;
 		uint64_t use_rotation_velocity_3d_curve : 1;
+		uint64_t wind_enabled : 1; // FellowEngine wind (decision 0127)
 
 		MaterialKey() {
 			memset(this, 0, sizeof(MaterialKey));
@@ -172,6 +173,7 @@ private:
 		mk.attractor_enabled = attractor_interaction_enabled;
 		mk.collision_scale = collision_scale;
 		mk.turbulence_enabled = turbulence_enabled;
+		mk.wind_enabled = wind_enabled;
 		mk.limiter_curve = velocity_limit_curve.is_valid() ? 1 : 0;
 		mk.alpha_curve = alpha_curve.is_valid() ? 1 : 0;
 		mk.emission_curve = emission_curve.is_valid() ? 1 : 0;
@@ -286,6 +288,7 @@ private:
 		StringName emission_shape_scale;
 
 		StringName turbulence_enabled;
+		StringName wind_influence;
 		StringName turbulence_noise_strength;
 		StringName turbulence_noise_scale;
 		StringName turbulence_noise_speed;
@@ -355,6 +358,10 @@ private:
 	Vector3 emission_shape_scale;
 
 	bool turbulence_enabled;
+	// FellowEngine wind (decision 0127): the particles' velocity relaxes towards the scene's wind (FellowWind3D, its
+	// gusts included) at wind_influence per second, horizontally.
+	bool wind_enabled = false;
+	float wind_influence = 1.0f;
 	Vector3 turbulence_noise_speed;
 	Ref<Texture2D> turbulence_color_ramp;
 	float turbulence_noise_strength = 0.0f;
@@ -487,6 +494,10 @@ public:
 	int get_emission_point_count() const;
 
 	void set_turbulence_enabled(bool p_turbulence_enabled);
+	void set_wind_enabled(bool p_enabled);
+	bool is_wind_enabled() const;
+	void set_wind_influence(float p_influence);
+	float get_wind_influence() const;
 	void set_turbulence_noise_strength(float p_turbulence_noise_strength);
 	void set_turbulence_noise_scale(float p_turbulence_noise_scale);
 	void set_turbulence_noise_speed_random(float p_turbulence_noise_speed_random);

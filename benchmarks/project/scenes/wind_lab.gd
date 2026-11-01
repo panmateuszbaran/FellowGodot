@@ -80,6 +80,10 @@ func build(p_args: Dictionary) -> void:
 		wind.basis = Basis.looking_at(Vector3(0.35, 0.0, 1.0).normalized(), Vector3.UP)
 		wind.time_auto = false # driven by set_time(): the same pose in every run
 		add_child(wind)
+		# --wind_leaves=<amount> (decision 0127): leaves falling from the forest's edge and blown over the meadow, GPU
+		# particles with the Wind group (they drift with the wind and its gusts).
+		if int(args.get("wind_leaves", "0")) > 0:
+			_build_leaves(int(args["wind_leaves"]))
 	_define_cameras()
 	set_time(0.0)
 	info = {"mode": mode, "counts": _counts, "stats": scene_stats(self)}
@@ -458,3 +462,69 @@ func _define_cameras() -> void:
 		"wind_tree": {"start": 2.0, "frames": 90, "purpose": "a still camera on a tree at the forest edge: branches and leaves",
 			"path": CameraPath.from_array([[0.0, _eye(52, 8, 1.6), _eye(64, 12, 4.5), 65.0], [1.0, _eye(52, 8, 1.6), _eye(64, 12, 4.5), 65.0]])},
 	}
+
+
+## A single leaf (alpha: its shape, a midrib), for the falling leaves.
+func _single_leaf_texture() -> ImageTexture:
+	var n := 32
+	var img := Image.create_empty(n, n, false, Image.FORMAT_RGBA8)
+	for y in n:
+		for x in n:
+			var u := (float(x) + 0.5) / n * 2.0 - 1.0
+			var v := (float(y) + 0.5) / n * 2.0 - 1.0
+			var w := 0.55 * (1.0 - v * v) # half-width along the leaf
+			var inside := absf(u) < w and absf(v) < 0.95
+			var shade := 0.85 + 0.15 * (1.0 - absf(u) / maxf(w, 0.01))
+			if absf(u) < 0.04:
+				shade *= 0.8
+			img.set_pixel(x, y, Color(shade, shade, shade, 1.0 if inside else 0.0))
+	img.generate_mipmaps()
+	return ImageTexture.create_from_image(img)
+
+
+func _build_leaves(p_amount: int) -> void:
+	var p := GPUParticles3D.new()
+	p.name = "Leaves"
+	p.amount = p_amount
+	p.lifetime = 10.0
+	p.preprocess = 10.0
+	p.fixed_fps = 60
+	p.use_fixed_seed = true
+	p.seed = 2627
+	p.visibility_aabb = AABB(Vector3(-140, -10, -140), Vector3(280, 40, 280))
+	var pm := ParticleProcessMaterial.new()
+	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
+	pm.emission_box_extents = Vector3(45.0, 2.5, 35.0)
+	pm.direction = Vector3(0, -1, 0)
+	pm.spread = 30.0
+	pm.initial_velocity_min = 0.2
+	pm.initial_velocity_max = 0.6
+	pm.gravity = Vector3(0, -0.9, 0)
+	pm.damping_min = 0.3
+	pm.damping_max = 0.6
+	pm.angular_velocity_min = -220.0
+	pm.angular_velocity_max = 220.0
+	pm.angle_min = -180.0
+	pm.angle_max = 180.0
+	pm.scale_min = 0.7
+	pm.scale_max = 1.3
+	pm.hue_variation_min = -0.06
+	pm.hue_variation_max = 0.04
+	pm.set("wind_enabled", true)
+	pm.set("wind_influence", float(args.get("wind_leaves_influence", "0.8")))
+	p.process_material = pm
+	p.position = Vector3(5.0, 9.0, -5.0)
+	var q := QuadMesh.new()
+	q.size = Vector2(0.09, 0.13)
+	var m := StandardMaterial3D.new()
+	m.albedo_texture = _single_leaf_texture()
+	m.albedo_color = Color(0.62, 0.55, 0.18)
+	m.vertex_color_use_as_albedo = true
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
+	m.alpha_scissor_threshold = 0.5
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	m.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	m.roughness = 0.8
+	q.material = m
+	p.draw_pass_1 = q
+	add_child(p)

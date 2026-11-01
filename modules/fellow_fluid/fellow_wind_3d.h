@@ -86,6 +86,9 @@ public:
 	Vector3 get_velocity() const { return get_direction() * speed; }
 	Vector3 get_velocity_at(const Vector3 &p_position) const;
 	Ref<ImageTexture> get_gust_texture() const { return gust_texture; }
+	// How a point maps into the gust texture, as the wind's materials do: (direction x, direction z, the distance the
+	// field has travelled (wrapped where it repeats), 1 / (gust size x cells)). uv = ((p.d - offset) / 2, p.side) * w.
+	Vector4 get_gust_mapping() const;
 
 	FellowWind3D();
 	~FellowWind3D();

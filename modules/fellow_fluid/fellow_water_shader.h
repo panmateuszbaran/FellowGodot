@@ -78,6 +78,11 @@ uniform float water_time = 0.0;
 uniform sampler2D rain_ripples : filter_linear_mipmap, repeat_enable;
 uniform float rain_amount = 0.0;
 uniform float rain_tile = 1.5;
+// FellowWind3D's gusts (decision 0127): its gust field, mapped as the wind's materials map it (direction, offset,
+// 1 / (cell size x cells)); the short waves roughen in the gusts and calm in the lulls (cat's paws).
+uniform sampler2D wind_gusts : filter_linear, repeat_enable;
+uniform vec4 wind_gust_map = vec4(1.0, 0.0, 0.0, 0.005);
+uniform float wind_gust_strength = 0.0;
 uniform int debug_view = 0;
 
 varying vec3 v_base;
@@ -151,6 +156,13 @@ void fragment() {
 	vec2 o0 = flow * (ph0 * flow_period);
 	vec2 o1 = flow * (ph1 * flow_period);
 
+	// The wind's gusts scale the shortest cascade's slopes by the local wind over the mean (1 without them).
+	float gust_k = 1.0;
+	if (wind_gust_strength > 0.0) {
+		vec2 gd = wind_gust_map.xy;
+		vec2 guv = vec2((dot(xz, gd) - wind_gust_map.z) * 0.5, dot(xz, vec2(-gd.y, gd.x))) * wind_gust_map.w;
+		gust_k = max(0.0, 1.0 + wind_gust_strength * clamp((texture(wind_gusts, guv).r - 0.5) * 3.0, -1.0, 1.0));
+	}
 	vec2 slope = vec2(0.0);
 	float variance = 0.0;
 	float whitecap = 0.0;
@@ -168,8 +180,9 @@ void fragment() {
 			s = texture(wave_slope, u);
 			fm = texture(wave_disp, u).w;
 		}
-		slope += s.xy;
-		variance += max(s.z - s.x * s.x, 0.0) + max(s.w - s.y * s.y, 0.0);
+		float k = c == cascade_count - 1 ? gust_k : 1.0;
+		slope += s.xy * k;
+		variance += (max(s.z - s.x * s.x, 0.0) + max(s.w - s.y * s.y, 0.0)) * (k * k);
 		whitecap = max(whitecap, fm);
 	}
 	slope *= amp;

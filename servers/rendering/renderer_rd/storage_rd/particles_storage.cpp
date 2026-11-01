@@ -30,6 +30,7 @@
 
 #include "particles_storage.h"
 
+#include "servers/rendering/renderer_rd/effects/fellow_weather.h"
 #include "servers/rendering/renderer_rd/effects/sort_effects.h"
 #include "servers/rendering/renderer_rd/renderer_compositor_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/texture_storage.h"
@@ -109,6 +110,7 @@ ParticlesStorage::ParticlesStorage() {
 		actions.renames["COLLISION_NORMAL"] = "collision_normal";
 		actions.renames["COLLISION_DEPTH"] = "collision_depth";
 		actions.renames["ATTRACTOR_FORCE"] = "attractor_force";
+		actions.renames["WIND_VELOCITY"] = "fellow_wind_velocity"; // FellowEngine wind (decision 0127)
 
 		actions.render_mode_defines["disable_force"] = "#define DISABLE_FORCE\n";
 		actions.render_mode_defines["disable_velocity"] = "#define DISABLE_VELOCITY\n";
@@ -883,6 +885,26 @@ void ParticlesStorage::_particles_process(Particles *p_particles, double p_delta
 	frame_params.emitter_velocity[2] = p_particles->emitter_velocity.z;
 	frame_params.interp_to_end = p_particles->interp_to_end;
 
+	// FellowEngine wind (decision 0127): the scene's wind for the process code's WIND_VELOCITY (speed 0 without a
+	// FellowWind3D). The gust field repeats every 8 cells (FellowWind3D's GUST_CELLS).
+	RID fellow_wind_gusts;
+	memset(frame_params.fellow_wind, 0, sizeof(frame_params.fellow_wind));
+	memset(frame_params.fellow_wind_map, 0, sizeof(frame_params.fellow_wind_map));
+	if (const FellowWeather *fellow_weather = FellowWeather::get_singleton_if_exists()) {
+		const FellowWeather::WindState &ws = fellow_weather->get_wind_state();
+		if (ws.enabled && ws.speed > 0.0f) {
+			frame_params.fellow_wind[0] = ws.direction.x;
+			frame_params.fellow_wind[1] = ws.direction.y;
+			frame_params.fellow_wind[2] = ws.speed;
+			frame_params.fellow_wind[3] = ws.gust_texture.is_valid() ? ws.gustiness : 0.0f;
+			frame_params.fellow_wind_map[0] = ws.direction.x;
+			frame_params.fellow_wind_map[1] = ws.direction.y;
+			frame_params.fellow_wind_map[2] = ws.offset;
+			frame_params.fellow_wind_map[3] = 1.0f / (MAX(ws.gust_size, 0.1f) * 8.0f);
+			fellow_wind_gusts = ws.gust_texture;
+		}
+	}
+
 	{ //collision and attractors
 
 		frame_params.collider_count = 0;
@@ -1086,6 +1108,9 @@ void ParticlesStorage::_particles_process(Particles *p_particles, double p_delta
 		if (collision_heightmap_texture != p_particles->collision_heightmap_texture) {
 			different = true;
 		}
+		if (fellow_wind_gusts != p_particles->fellow_wind_gust_texture) {
+			different = true;
+		}
 
 		bool uniform_set_valid = RD::get_singleton()->uniform_set_is_valid(p_particles->collision_textures_uniform_set);
 
@@ -1127,8 +1152,17 @@ void ParticlesStorage::_particles_process(Particles *p_particles, double p_delta
 				}
 				uniforms.push_back(u);
 			}
+			{
+				// FellowEngine wind (decision 0127): its gust field.
+				RD::Uniform u;
+				u.uniform_type = RD::UNIFORM_TYPE_TEXTURE;
+				u.binding = 2;
+				u.append_id(fellow_wind_gusts.is_valid() ? fellow_wind_gusts : texture_storage->texture_rd_get_default(TextureStorage::DEFAULT_RD_TEXTURE_WHITE));
+				uniforms.push_back(u);
+			}
 			p_particles->collision_textures_uniform_set = RD::get_singleton()->uniform_set_create(uniforms, particles_shader.default_shader_rd, 2);
 			p_particles->collision_heightmap_texture = collision_heightmap_texture;
+			p_particles->fellow_wind_gust_texture = fellow_wind_gusts;
 		}
 	}
 

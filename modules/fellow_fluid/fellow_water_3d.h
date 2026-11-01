@@ -139,6 +139,10 @@ private:
 	float simulation_blend = 4.0f; // m
 	float flow_period = 1.6f; // s
 
+	// The scene's wind (decision 0127).
+	bool wind_from_scene = false;
+	float gust_ripples = 1.0f;
+
 	NodePath sun_path;
 	DebugView debug_view = DEBUG_VIEW_OFF;
 
@@ -159,6 +163,8 @@ private:
 	float last_rain_amount = 0.0f;
 	ObjectID last_rain_id;
 	float last_rain_tile = 0.0f;
+	ObjectID last_wind_id;
+	float last_gust_strength = 0.0f;
 	double last_dispatch_time = -1.0;
 
 	// Render-thread state.
@@ -214,6 +220,10 @@ public:
 	float get_wind_speed() const { return wind_speed; }
 	void set_wind_direction(float p_degrees);
 	float get_wind_direction() const { return wind_direction; }
+	void set_wind_from_scene(bool p_enable) { wind_from_scene = p_enable; }
+	bool is_wind_from_scene() const { return wind_from_scene; }
+	void set_gust_ripples(float p_strength) { gust_ripples = MAX(0.0f, p_strength); }
+	float get_gust_ripples() const { return gust_ripples; }
 	void set_fetch(float p_km);
 	float get_fetch() const { return fetch; }
 	void set_wave_scale(float p_scale);

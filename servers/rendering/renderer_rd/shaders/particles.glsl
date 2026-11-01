@@ -80,6 +80,9 @@ struct FrameParams {
 	vec3 emitter_velocity;
 	float interp_to_end;
 
+	vec4 fellow_wind; // FellowEngine wind (decision 0127): direction x, direction z, speed (0: none), gustiness
+	vec4 fellow_wind_map; // the gust field's mapping: direction x, direction z, offset along the wind, 1 / (size x cells)
+
 	Attractor attractors[MAX_ATTRACTORS];
 	Collider colliders[MAX_COLLIDERS];
 };
@@ -164,6 +167,7 @@ dst_particles;
 
 layout(set = 2, binding = 0) uniform texture3D sdf_vec_textures[MAX_3D_TEXTURES];
 layout(set = 2, binding = 1) uniform texture2D height_field_texture;
+layout(set = 2, binding = 2) uniform texture2D fellow_wind_gusts; // FellowEngine wind's gust field (r)
 
 /* SET 3: MATERIAL */
 
@@ -665,6 +669,18 @@ void main() {
 				}
 			}
 		}
+	}
+
+	// FellowEngine wind (decision 0127): the scene's wind at the particle, its gusts included (WIND_VELOCITY), as the
+	// wind's materials and FellowWind3D::get_velocity_at() read it.
+	vec3 fellow_wind_velocity = vec3(0.0);
+	if (particle_active && FRAME.fellow_wind.z > 0.0) {
+		vec2 gd = FRAME.fellow_wind.xy;
+		vec2 gp = PARTICLE.xform[3].xz;
+		vec2 guv = vec2((dot(gp, gd) - FRAME.fellow_wind_map.z) * 0.5, dot(gp, vec2(-gd.y, gd.x))) * FRAME.fellow_wind_map.w;
+		float gust = textureLod(sampler2D(fellow_wind_gusts, SAMPLER_LINEAR_REPEAT), guv, 0.0).r;
+		float speed = FRAME.fellow_wind.z * max(0.0, 1.0 + FRAME.fellow_wind.w * clamp((gust - 0.5) * 3.0, -1.0, 1.0));
+		fellow_wind_velocity = vec3(gd.x, 0.0, gd.y) * speed;
 	}
 
 	if (particle_active) {

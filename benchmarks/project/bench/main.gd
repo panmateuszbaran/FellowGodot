@@ -28,6 +28,8 @@ extends Node
 ##                            time at the capture, s)
 ##   --add_seq=<n>@frames@start@p0@t0@p1@t1[@fov]  an extra temporal sequence (';' separates several; --seq_every=<k>:
 ##                            save every k-th frame)
+##   --weather_wind=<m/s>     a FellowWind3D (--weather_wind_dir=<deg>, --weather_gustiness=<0-1>); --weather_rain=<0-1>
+##                            a FellowRain3D (--weather_puddles)
 ##   --dirt_map=1             a procedural lens dirt texture as the environment's glow map (strength 0)
 ##   --jitter=<n>             reference: sub-pixel jittered renders per output frame (default 16)
 ##   --ablate=<a+b>           sizing only (items separated by + or ,): hide omni / spot / sun lights, probes, decals, or pos_shadows (see _ablate)
@@ -214,6 +216,17 @@ func _ready() -> void:
 		if sc.size() >= 3:
 			bench_sun.light_color = Color(sc[0], sc[1], sc[2])
 			result["sun_color"] = [sc[0], sc[1], sc[2]]
+	# --weather_wind=<m/s>: a FellowWind3D in any scene (blowing towards --weather_wind_dir degrees, 0 = +X, 90 = +Z;
+	# gusts --weather_gustiness); the labs hand it to their water and gas (wind_from_scene, decision 0127).
+	if args.has("weather_wind") and ClassDB.class_exists("FellowWind3D"):
+		var wn = ClassDB.instantiate("FellowWind3D")
+		wn.name = "SceneWind"
+		wn.speed = float(args["weather_wind"])
+		wn.gustiness = float(args.get("weather_gustiness", "0.6"))
+		var wa := deg_to_rad(float(args.get("weather_wind_dir", "40")))
+		wn.basis = Basis.looking_at(Vector3(cos(wa), 0.0, sin(wa)), Vector3.UP)
+		scene.add_child(wn)
+		result["weather_wind"] = [wn.speed, wn.gustiness, float(args.get("weather_wind_dir", "40"))]
 	# --weather_rain=<0-1>: a FellowRain3D in any scene (showcases; Rain Lab has its own): raining that much, the scene
 	# wet, puddles (--weather_puddles, 0.6).
 	if args.has("weather_rain") and ClassDB.class_exists("FellowRain3D"):

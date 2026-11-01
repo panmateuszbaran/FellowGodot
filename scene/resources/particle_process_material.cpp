@@ -126,6 +126,7 @@ void ParticleProcessMaterial::init_shaders() {
 	shader_names->emission_shape_scale = "emission_shape_scale";
 
 	shader_names->turbulence_enabled = "turbulence_enabled";
+	shader_names->wind_influence = "wind_influence";
 	shader_names->turbulence_noise_strength = "turbulence_noise_strength";
 	shader_names->turbulence_noise_scale = "turbulence_noise_scale";
 	shader_names->turbulence_noise_speed = "turbulence_noise_speed";
@@ -237,6 +238,9 @@ void ParticleProcessMaterial::_update_shader() {
 
 	code += "uniform float damping_min;\n";
 	code += "uniform float damping_max;\n";
+	if (wind_enabled) {
+		code += "uniform float wind_influence;\n"; // FellowEngine wind (decision 0127)
+	}
 
 	code += "uniform float initial_angle_min;\n";
 	code += "uniform float initial_angle_max;\n";
@@ -1074,6 +1078,11 @@ void ParticleProcessMaterial::_update_shader() {
 	}
 	if (attractor_interaction_enabled) {
 		code += "		force += ATTRACTOR_FORCE;\n";
+	}
+	if (wind_enabled) {
+		// FellowEngine wind (decision 0127): a drag towards the scene's wind, horizontally (WIND_VELOCITY: zero without a
+		// FellowWind3D, and on the Compatibility renderer).
+		code += "		force.xz += (WIND_VELOCITY.xz - USERDATA1.xz) * wind_influence;\n";
 	}
 	if (particle_flags[PARTICLE_FLAG_DISABLE_Z]) {
 		code += "		force.z = 0.0;\n";
@@ -2072,6 +2081,25 @@ bool ParticleProcessMaterial::get_turbulence_enabled() const {
 	return turbulence_enabled;
 }
 
+void ParticleProcessMaterial::set_wind_enabled(bool p_enabled) {
+	wind_enabled = p_enabled;
+	_queue_shader_change();
+	notify_property_list_changed();
+}
+
+bool ParticleProcessMaterial::is_wind_enabled() const {
+	return wind_enabled;
+}
+
+void ParticleProcessMaterial::set_wind_influence(float p_influence) {
+	wind_influence = MAX(0.0f, p_influence);
+	RenderingServer::get_singleton()->material_set_param(_get_material(), shader_names->wind_influence, wind_influence);
+}
+
+float ParticleProcessMaterial::get_wind_influence() const {
+	return wind_influence;
+}
+
 void ParticleProcessMaterial::set_turbulence_noise_strength(float p_turbulence_noise_strength) {
 	turbulence_noise_strength = p_turbulence_noise_strength;
 	RenderingServer::get_singleton()->material_set_param(_get_material(), shader_names->turbulence_noise_strength, p_turbulence_noise_strength);
@@ -2497,6 +2525,10 @@ void ParticleProcessMaterial::_bind_methods() {
 
 	ClassDB::bind_method(D_METHOD("get_turbulence_enabled"), &ParticleProcessMaterial::get_turbulence_enabled);
 	ClassDB::bind_method(D_METHOD("set_turbulence_enabled", "turbulence_enabled"), &ParticleProcessMaterial::set_turbulence_enabled);
+	ClassDB::bind_method(D_METHOD("set_wind_enabled", "enabled"), &ParticleProcessMaterial::set_wind_enabled);
+	ClassDB::bind_method(D_METHOD("is_wind_enabled"), &ParticleProcessMaterial::is_wind_enabled);
+	ClassDB::bind_method(D_METHOD("set_wind_influence", "influence"), &ParticleProcessMaterial::set_wind_influence);
+	ClassDB::bind_method(D_METHOD("get_wind_influence"), &ParticleProcessMaterial::get_wind_influence);
 
 	ClassDB::bind_method(D_METHOD("get_turbulence_noise_strength"), &ParticleProcessMaterial::get_turbulence_noise_strength);
 	ClassDB::bind_method(D_METHOD("set_turbulence_noise_strength", "turbulence_noise_strength"), &ParticleProcessMaterial::set_turbulence_noise_strength);
@@ -2677,6 +2709,10 @@ void ParticleProcessMaterial::_bind_methods() {
 	ADD_MIN_MAX_PROPERTY("turbulence_initial_displacement", "-100,100,0.1", PARAM_TURB_INIT_DISPLACEMENT);
 	ADD_PROPERTYI(PropertyInfo(Variant::OBJECT, "turbulence_influence_over_life", PROPERTY_HINT_RESOURCE_TYPE, CurveTexture::get_class_static()), "set_param_texture", "get_param_texture", PARAM_TURB_INFLUENCE_OVER_LIFE);
 
+	ADD_GROUP("Wind", "wind_");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "wind_enabled", PROPERTY_HINT_GROUP_ENABLE), "set_wind_enabled", "is_wind_enabled");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "wind_influence", PROPERTY_HINT_RANGE, "0,20,0.01,suffix:/s"), "set_wind_influence", "get_wind_influence");
+
 	ADD_GROUP("Collision", "collision_");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "collision_mode", PROPERTY_HINT_ENUM, "Disabled,Rigid,Hide On Contact"), "set_collision_mode", "get_collision_mode");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "collision_friction", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_collision_friction", "get_collision_friction");
@@ -2795,6 +2831,7 @@ ParticleProcessMaterial::ParticleProcessMaterial() :
 	set_emission_shape_scale(Vector3(1.0, 1.0, 1.0));
 
 	set_turbulence_enabled(false);
+	set_wind_influence(1.0);
 	set_turbulence_noise_speed(Vector3(0.0, 0.0, 0.0));
 	set_turbulence_noise_strength(1);
 	set_turbulence_noise_scale(9);

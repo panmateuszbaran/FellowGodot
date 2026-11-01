@@ -1496,6 +1496,7 @@ MaterialStorage::MaterialStorage() {
 		actions.renames["COLLISION_NORMAL"] = "collision_normal";
 		actions.renames["COLLISION_DEPTH"] = "collision_depth";
 		actions.renames["ATTRACTOR_FORCE"] = "attractor_force";
+		actions.renames["WIND_VELOCITY"] = "vec3(0.0)"; // FellowEngine wind (decision 0127): Forward+ and Mobile only
 		actions.renames["EMITTER_VELOCITY"] = "emitter_velocity";
 		actions.renames["INTERPOLATE_TO_END"] = "interp_to_end";
 

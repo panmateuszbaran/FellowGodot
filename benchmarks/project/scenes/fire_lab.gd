@@ -148,6 +148,7 @@ func _build_campfire() -> void:
 	campfire.prewarm_steps = 0 if args.get("gas_prewarm", "1") == "0" else 120
 	campfire.simulation_enabled = args.get("gas_sim", "1") != "0"
 	campfire.render_enabled = args.get("gas_render", "1") != "0"
+	_scene_wind(campfire)
 	var e = ClassDB.instantiate("FellowGasEmitter3D")
 	e.shape = 2  # cylinder
 	e.radius = 0.3
@@ -183,7 +184,12 @@ func _build_embers() -> void:
 	p.use_fixed_seed = true
 	p.seed = 4242
 	p.visibility_aabb = AABB(Vector3(-2.0, -0.5, -2.0), Vector3(4.0, 6.0, 4.0))
+	if args.has("weather_wind"):  # as far as the wind carries them in their life
+		p.visibility_aabb = p.visibility_aabb.grow(float(args["weather_wind"]) * 1.6 * p.lifetime)
 	var pm := ParticleProcessMaterial.new()
+	if args.has("weather_wind"):  # the embers drift with the scene's wind (decision 0127)
+		pm.set("wind_enabled", true)
+		pm.set("wind_influence", 1.0)
 	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE
 	pm.emission_sphere_radius = 0.25
 	pm.direction = Vector3(0, 1, 0)
@@ -242,6 +248,7 @@ func _build_house() -> void:
 	chimney.prewarm_steps = 0 if args.get("gas_prewarm", "1") == "0" else 240
 	chimney.simulation_enabled = args.get("gas_sim", "1") != "0"
 	chimney.render_enabled = args.get("gas_render", "1") != "0"
+	_scene_wind(chimney)
 	var e = ClassDB.instantiate("FellowGasEmitter3D")
 	e.shape = 0
 	e.radius = 0.32
@@ -303,6 +310,7 @@ func _build_torch() -> void:
 	torch_gas.prewarm_steps = 0 if args.get("gas_prewarm", "1") == "0" else 60
 	torch_gas.simulation_enabled = args.get("gas_sim", "1") != "0"
 	torch_gas.render_enabled = args.get("gas_render", "1") != "0"
+	_scene_wind(torch_gas)
 	var e = ClassDB.instantiate("FellowGasEmitter3D")
 	e.shape = 0
 	e.radius = 0.11
@@ -367,3 +375,13 @@ func _define_cameras() -> void:
 		"fire_torch_walk": {"start": 4.0, "frames": 90, "purpose": "the torch carried past a still camera: its flame and smoke trail behind (a world-space volume)",
 			"path": CameraPath.from_array([[0.0, Vector3(-2.2, 2.0, 6.4), Vector3(-4.5, 1.9, 3.0), 55.0], [1.5, Vector3(-2.2, 2.0, 6.4), Vector3(-4.5, 1.9, 3.0), 55.0]])},
 	}
+
+
+## --weather_wind (FellowBench, decision 0127): the volume blows with the scene's FellowWind3D, its gusts included,
+## relaxing towards it at --gas_wind_rate (1/s, 0.5; the chimney keeps its own rate).
+func _scene_wind(p_volume) -> void:
+	if not args.has("weather_wind"):
+		return
+	p_volume.wind_from_scene = true
+	if p_volume.wind_rate <= 0.0:
+		p_volume.wind_rate = float(args.get("gas_wind_rate", "0.5"))

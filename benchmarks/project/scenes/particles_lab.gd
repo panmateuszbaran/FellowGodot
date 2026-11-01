@@ -113,6 +113,10 @@ func _soft_dot() -> ImageTexture:
 func _make_emitter(kind: int, p_seed: int) -> GPUParticles3D:
 	var p := GPUParticles3D.new()
 	var pm := ParticleProcessMaterial.new()
+	# --weather_wind (FellowBench, decision 0127): the particles drift with the scene's FellowWind3D.
+	if args.has("weather_wind"):
+		pm.set("wind_enabled", true)
+		pm.set("wind_influence", float(args.get("particles_wind_influence", "1.5")))
 	var quad := QuadMesh.new()
 	match kind:
 		0: # fire
@@ -171,6 +175,8 @@ func _make_emitter(kind: int, p_seed: int) -> GPUParticles3D:
 	p.seed = p_seed
 	p.preprocess = 2.0
 	p.visibility_aabb = AABB(Vector3(-3, -1, -3), Vector3(6, 7, 6))
+	if args.has("weather_wind"):  # as far as the wind carries them in their life
+		p.visibility_aabb = p.visibility_aabb.grow(float(args["weather_wind"]) * 1.6 * p.lifetime)
 	return p
 
 

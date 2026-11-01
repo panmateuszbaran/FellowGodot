@@ -139,6 +139,9 @@ private:
 		float emitter_velocity[3];
 		float interp_to_end;
 
+		float fellow_wind[4]; // FellowEngine wind (decision 0127): direction x, z, speed (0: none), gustiness
+		float fellow_wind_map[4]; // its gust field's mapping: direction x, z, offset, 1 / (gust size x cells)
+
 		Attractor attractors[MAX_ATTRACTORS];
 		Collider colliders[MAX_COLLIDERS];
 	};
@@ -211,6 +214,7 @@ private:
 		RID collision_3d_textures[ParticlesFrameParams::MAX_3D_TEXTURES];
 		uint32_t collision_3d_textures_used = 0;
 		RID collision_heightmap_texture;
+		RID fellow_wind_gust_texture; // the gust field bound in the collision textures' set (FellowEngine wind)
 
 		RID particles_sort_buffer;
 		RID particles_sort_uniform_set;

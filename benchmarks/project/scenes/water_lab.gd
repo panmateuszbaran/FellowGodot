@@ -371,6 +371,10 @@ func _build_water() -> void:
 	water.extent = Vector2(SIZE, SIZE)
 	water.wind_speed = float(args.get("water_wind", "5.0"))
 	water.wind_direction = 40.0
+	# --weather_wind (FellowBench, decision 0127): the scene's FellowWind3D drives the waves and its gusts the ripples.
+	if args.has("weather_wind"):
+		water.wind_from_scene = true
+		water.gust_ripples = float(args.get("water_gust_ripples", "1.0"))
 	water.fetch = 2.0
 	water.wave_resolution = int(args.get("water_waves", "256"))
 	water.screen_space_reflections = args.get("water_ssr", "1") != "0"
