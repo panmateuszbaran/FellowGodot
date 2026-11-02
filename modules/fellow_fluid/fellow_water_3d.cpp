@@ -467,7 +467,7 @@ void FellowWater3D::_notification(int p_what) {
 			}
 			// FellowRain3D (decision 0124): its ripples on the water.
 			FellowRain3D *rain_node = FellowRain3D::get_active();
-			float rain_amount = (rain_node && rain_node->is_visible_in_tree()) ? rain_node->get_rain() * rain_node->get_ripple_strength() : 0.0f;
+			float rain_amount = (rain_node && rain_node->is_visible_in_tree()) ? rain_node->get_ripple_rain() * rain_node->get_ripple_strength() : 0.0f;
 			if (rain_amount != last_rain_amount) {
 				material->set_shader_parameter("rain_amount", rain_amount);
 				last_rain_amount = rain_amount;

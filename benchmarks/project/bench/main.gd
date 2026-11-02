@@ -29,7 +29,8 @@ extends Node
 ##   --add_seq=<n>@frames@start@p0@t0@p1@t1[@fov]  an extra temporal sequence (';' separates several; --seq_every=<k>:
 ##                            save every k-th frame)
 ##   --weather_wind=<m/s>     a FellowWind3D (--weather_wind_dir=<deg>, --weather_gustiness=<0-1>); --weather_rain=<0-1>
-##                            a FellowRain3D (--weather_puddles)
+##                            a FellowRain3D (--weather_puddles); --weather_snow=<0-1> snowing (--weather_snow_cover=<0-1>,
+##                            --weather_snow_flakes=<n>, --weather_snow_area=<m>, --weather_snow_sparkle=<0-1>)
 ##   --dirt_map=1             a procedural lens dirt texture as the environment's glow map (strength 0)
 ##   --jitter=<n>             reference: sub-pixel jittered renders per output frame (default 16)
 ##   --ablate=<a+b>           sizing only (items separated by + or ,): hide omni / spot / sun lights, probes, decals, or pos_shadows (see _ablate)
@@ -239,6 +240,21 @@ func _ready() -> void:
 		r.wind = Vector3(0.8, 0.0, 0.4)
 		scene.add_child(r)
 		result["weather_rain"] = r.rain
+	# --weather_snow=<0-1>: snowing that much (FellowRain3D's snow mode, decision 0128), the ground covered
+	# (--weather_snow_cover, 1), --weather_snow_flakes (60000) in a box of --weather_snow_area (30 m).
+	if args.has("weather_snow") and ClassDB.class_exists("FellowRain3D"):
+		var sn = ClassDB.instantiate("FellowRain3D")
+		sn.name = "ShowcaseSnow"
+		sn.precipitation = 1
+		sn.rain = float(args["weather_snow"])
+		sn.wetness = 0.0
+		sn.snow = float(args.get("weather_snow_cover", "1.0"))
+		sn.snow_sparkle = float(args.get("weather_snow_sparkle", "1.0"))
+		sn.max_drops = int(args.get("weather_snow_flakes", "60000"))
+		sn.area = float(args.get("weather_snow_area", "30"))
+		sn.wind = Vector3(0.6, 0.0, 0.3)
+		scene.add_child(sn)
+		result["weather_snow"] = [sn.rain, sn.snow, sn.max_drops, sn.area]
 	RenderingServer.viewport_set_measure_render_time(vp.get_viewport_rid(), true)
 	await get_tree().process_frame
 	await _post_draw()

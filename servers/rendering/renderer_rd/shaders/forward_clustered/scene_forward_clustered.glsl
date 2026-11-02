@@ -1525,38 +1525,9 @@ uint fellow_spot_reach(uint p_word, uint p_mask, vec3 p_vertex, uint p_layer_mas
 #endif
 
 #if !defined(MODE_RENDER_SDF) && (!defined(MODE_RENDER_DEPTH) || defined(MODE_RENDER_NORMAL_ROUGHNESS))
-// FellowEngine weather (decision 0124): a material wetted after its own code and its decals, where the rain reaches it.
-void fellow_wetness_apply(in SceneData p_scene, inout vec3 r_albedo, inout float r_roughness, inout float r_metallic, inout vec3 r_normal, vec3 p_vertex, vec3 p_geometric_normal) {
-	FellowWeatherData w = fellow_weather.data;
-	float wetness = w.params.x;
-	if (wetness <= 0.0) {
-		return;
-	}
+// The rain's water on a surface (decision 0124).
+void fellow_wet_surface(in SceneData p_scene, in FellowWeatherData w, float wetness, float exposed, vec3 wp, vec3 gn, float wet_lod, inout vec3 r_albedo, inout float r_roughness, inout float r_metallic, inout vec3 r_normal) {
 	mat4 inv_view = transpose(mat4(p_scene.inv_view_matrix[0], p_scene.inv_view_matrix[1], p_scene.inv_view_matrix[2], vec4(0.0, 0.0, 0.0, 1.0)));
-	vec3 wp = (inv_view * vec4(p_vertex, 1.0)).xyz;
-	vec3 gn = normalize(mat3(inv_view) * p_geometric_normal);
-	// The mip level of the ripple texture (256²) at one texel per metre, from the position's derivatives while every
-	// pixel of the quad is here (the early returns below are not uniform); each lookup adds log2 of its texels per
-	// metre. Explicit levels: lookups with explicit gradients run at a fraction of the rate (RTX: 0.05 ms of the
-	// pre-pass for five of them).
-	float wet_lod = log2(max(max(length(dFdx(wp.xz)), length(dFdy(wp.xz))), 1e-6) * 256.0);
-
-	// Where the rain reaches: below the scene's top as seen from above it does not. A wall looks just outside itself
-	// (the roof above its own footprint would keep it dry); the bilinear lookup and the 25 cm ramp soften the edges.
-	float exposed = 1.0;
-	if (w.occlusion2.z > 0.5) {
-		vec3 sp = wp + vec3(gn.x, 0.0, gn.z) * (w.occlusion2.w + 0.1);
-		vec2 uv = (sp.xz - w.occlusion.xy) * w.occlusion.zw + 0.5;
-		if (all(greaterThan(uv, vec2(0.0))) && all(lessThan(uv, vec2(1.0)))) {
-			float h = textureLod(sampler2D(fellow_rain_occlusion, SAMPLER_LINEAR_CLAMP), uv, 0.0).r;
-			float top = w.occlusion2.x + (h * 2.0 - 1.0) * w.occlusion2.y;
-			exposed = smoothstep(top - w.occlusion2.w * 2.0, top - w.occlusion2.w, wp.y);
-		}
-	}
-	if (exposed <= 0.0) {
-		return; // sheltered: dry
-	}
-
 	// The surface's own water: undersides stay nearly dry; porous (rough, non-metal) materials darken as water fills
 	// their pores; a film makes every wet surface glossier.
 	float wet = wetness * exposed * mix(0.1, 1.0, smoothstep(-0.3, 0.3, gn.y));
@@ -1606,6 +1577,107 @@ void fellow_wetness_apply(in SceneData p_scene, inout vec3 r_albedo, inout float
 	r_roughness = mix(r_roughness, 0.03, puddle);
 	r_metallic = mix(r_metallic, 0.0, puddle);
 }
+
+// Snow on a surface (decision 0128): it lies on what faces up (the geometry, and the material's own bumps a little),
+// patchy while thin (the puddles' noise), and covers everything facing up once deep. Fresh snow: white with a little
+// blue, rough, its surface smooth (the snow fills the material's relief), glinting where a crystal faces the sun.
+void fellow_snow_cover(in SceneData p_scene, in FellowWeatherData w, float snow, float exposed, vec3 wp, vec3 gn, float wet_lod, inout vec3 r_albedo, inout float r_roughness, inout float r_metallic, inout vec3 r_normal) {
+	mat4 inv_view = transpose(mat4(p_scene.inv_view_matrix[0], p_scene.inv_view_matrix[1], p_scene.inv_view_matrix[2], vec4(0.0, 0.0, 0.0, 1.0)));
+	vec3 nw = normalize(mat3(inv_view) * r_normal);
+	float up = mix(gn.y, nw.y, 0.35);
+	if (up <= 0.5) {
+		return;
+	}
+	// The noise: the puddles' (the ripple texture's alpha), cells of 2.7 m and 43 cm.
+	const float CELLS = 16.0;
+	const mat2 ROT1 = mat2(0.8, 0.6, -0.6, 0.8);
+	const float FINE = 2.3 / CELLS;
+	vec2 fuv = ROT1 * wp.xz * FINE + vec2(0.71, 0.29);
+	float flod = wet_lod + log2(FINE);
+	float nc = textureLod(sampler2D(fellow_rain_ripples, SAMPLER_LINEAR_WITH_MIPMAPS_REPEAT), wp.xz * (0.37 / CELLS) + vec2(0.11, 0.43), wet_lod + log2(0.37 / CELLS)).a;
+	float nf = textureLod(sampler2D(fellow_rain_ripples, SAMPLER_LINEAR_WITH_MIPMAPS_REPEAT), fuv, flod).a;
+	float n = nc * 0.65 + nf * 0.35;
+	// How deep the snow is here (0: none, 1: it covers): the cover, none on slopes steeper than 60 degrees, thinner
+	// where the noise is low.
+	float depth = snow * 1.5 * smoothstep(0.5, 0.85, up) - (1.0 - n) * 0.75;
+	float cover = smoothstep(0.0, 0.3, depth) * exposed;
+	if (cover <= 0.0) {
+		return;
+	}
+	// Its surface: smooth (it fills the material's relief), with gentle undulations of a centimetre or two (the fine
+	// noise's slopes, 8 cm differences; flat where its mip levels blur it).
+	const float D = 0.08;
+	float nfx = textureLod(sampler2D(fellow_rain_ripples, SAMPLER_LINEAR_WITH_MIPMAPS_REPEAT), fuv + ROT1 * vec2(D, 0.0) * FINE, flod).a;
+	float nfz = textureLod(sampler2D(fellow_rain_ripples, SAMPLER_LINEAR_WITH_MIPMAPS_REPEAT), fuv + ROT1 * vec2(0.0, D) * FINE, flod).a;
+	vec2 slope = vec2(nfx - nf, nfz - nf) * (0.015 / D);
+	vec3 sn = normalize(normalize(mix(nw, gn, 0.8)) + vec3(-slope.x, 0.0, -slope.y));
+	float rough = 0.62;
+	// Glints: a crystal in a cell of 8 mm, one cell in 20, turned at random; faded where a cell is under a pixel.
+	if (w.snow.y > 0.0) {
+		ivec3 cell = ivec3(floor(wp * 125.0));
+		uint h = uint(cell.x) * 73856093u ^ uint(cell.y) * 19349663u ^ uint(cell.z) * 83492791u;
+		h ^= h >> 16u;
+		h *= 0x7feb352du;
+		h ^= h >> 15u;
+		h *= 0x846ca68bu;
+		h ^= h >> 16u;
+		float r = float(h & 0xffffu) / 65535.0;
+		float px = exp2(wet_lod) * (1.0 / 256.0); // metres per pixel
+		float k = w.snow.y * cover * smoothstep(0.016, 0.006, px) * step(0.95, r);
+		if (k > 0.0) {
+			vec3 t = vec3(float((h >> 16u) & 0xffu), float((h >> 24u) & 0xffu), float(h & 0xffu)) / 127.5 - 1.0;
+			sn = normalize(mix(sn, normalize(sn + t * 0.5), k));
+			rough = mix(rough, 0.12, k);
+		}
+	}
+	mat4 view = transpose(mat4(p_scene.view_matrix[0], p_scene.view_matrix[1], p_scene.view_matrix[2], vec4(0.0, 0.0, 0.0, 1.0)));
+	r_normal = normalize(mat3(view) * normalize(mix(nw, sn, cover)));
+	r_albedo = mix(r_albedo, vec3(0.86, 0.89, 0.93), cover);
+	r_roughness = mix(r_roughness, rough, cover);
+	r_metallic = mix(r_metallic, 0.0, cover);
+}
+
+// FellowEngine weather (decision 0124): a material wetted after its own code and its decals, where the rain reaches it;
+// covered with snow where the snow falls (decision 0128).
+void fellow_wetness_apply(in SceneData p_scene, inout vec3 r_albedo, inout float r_roughness, inout float r_metallic, inout vec3 r_normal, vec3 p_vertex, vec3 p_geometric_normal) {
+	FellowWeatherData w = fellow_weather.data;
+	float wetness = w.params.x;
+	float snow = w.snow.x;
+	if (wetness <= 0.0 && snow <= 0.0) {
+		return;
+	}
+	mat4 inv_view = transpose(mat4(p_scene.inv_view_matrix[0], p_scene.inv_view_matrix[1], p_scene.inv_view_matrix[2], vec4(0.0, 0.0, 0.0, 1.0)));
+	vec3 wp = (inv_view * vec4(p_vertex, 1.0)).xyz;
+	vec3 gn = normalize(mat3(inv_view) * p_geometric_normal);
+	// The mip level of the ripple texture (256²) at one texel per metre, from the position's derivatives while every
+	// pixel of the quad is here (the early returns below are not uniform); each lookup adds log2 of its texels per
+	// metre. Explicit levels: lookups with explicit gradients run at a fraction of the rate (RTX: 0.05 ms of the
+	// pre-pass for five of them).
+	float wet_lod = log2(max(max(length(dFdx(wp.xz)), length(dFdy(wp.xz))), 1e-6) * 256.0);
+
+	// Where the rain reaches: below the scene's top as seen from above it does not. A wall looks just outside itself
+	// (the roof above its own footprint would keep it dry); the bilinear lookup and the 25 cm ramp soften the edges.
+	float exposed = 1.0;
+	if (w.occlusion2.z > 0.5) {
+		vec3 sp = wp + vec3(gn.x, 0.0, gn.z) * (w.occlusion2.w + 0.1);
+		vec2 uv = (sp.xz - w.occlusion.xy) * w.occlusion.zw + 0.5;
+		if (all(greaterThan(uv, vec2(0.0))) && all(lessThan(uv, vec2(1.0)))) {
+			float h = textureLod(sampler2D(fellow_rain_occlusion, SAMPLER_LINEAR_CLAMP), uv, 0.0).r;
+			float top = w.occlusion2.x + (h * 2.0 - 1.0) * w.occlusion2.y;
+			exposed = smoothstep(top - w.occlusion2.w * 2.0, top - w.occlusion2.w, wp.y);
+		}
+	}
+	if (exposed <= 0.0) {
+		return; // sheltered: dry
+	}
+	if (wetness > 0.0) {
+		fellow_wet_surface(p_scene, w, wetness, exposed, wp, gn, wet_lod, r_albedo, r_roughness, r_metallic, r_normal);
+	}
+	if (snow > 0.0) {
+		fellow_snow_cover(p_scene, w, snow, exposed, wp, gn, wet_lod, r_albedo, r_roughness, r_metallic, r_normal);
+	}
+}
+
 #endif
 
 void fragment_shader(in SceneData scene_data) {

@@ -102,6 +102,9 @@
 		<member name="grid_segments" type="int" setter="set_grid_segments" getter="get_grid_segments" default="256">
 			Segments of each ring of the grid (the rings grow by 1 + 2π / segments, so its cells stay square).
 		</member>
+		<member name="gust_ripples" type="float" setter="set_gust_ripples" getter="get_gust_ripples" default="1.0">
+			With [member wind_from_scene], how much the scene wind's gusts roughen the shortest waves (0: not at all).
+		</member>
 		<member name="reflection_distance" type="float" setter="set_reflection_distance" getter="get_reflection_distance" default="80.0">
 			Length of the screen-space reflection rays of the linear march, in metres (the hierarchical one, with the depth texture's mip levels, follows a ray across the whole screen). Where nothing is hit, what the screen shows in the ray's direction is reflected if it is farther than this.
 		</member>
@@ -155,6 +158,9 @@
 		</member>
 		<member name="wind_direction" type="float" setter="set_wind_direction" getter="get_wind_direction" default="0.0">
 			Direction the wind blows towards, in degrees (0 = +X, 90 = +Z).
+		</member>
+		<member name="wind_from_scene" type="bool" setter="set_wind_from_scene" getter="is_wind_from_scene" default="false">
+			If [code]true[/code] and the scene has a [FellowWind3D], the waves follow its wind: [member wind_speed] and [member wind_direction] follow its speed and direction (the spectrum rebuilt when they change by 2 % or a degree), and its gusts roughen the shortest waves by [member gust_ripples] — darker, rougher water in a gust, a mirror in a lull.
 		</member>
 		<member name="wind_speed" type="float" setter="set_wind_speed" getter="get_wind_speed" default="6.0">
 			Wind speed 10 m above the water, in m/s.

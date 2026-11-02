@@ -6,6 +6,7 @@
 	<description>
 		Drops fall in a box of [member area] around the current camera (GPU particles: lit streaks along their velocity, [member wind] included, facing the camera), stop where they hit the scene as seen from above and splash there ([member splashes]).
 		While the node is active, the Forward+ renderer wets every opaque material after the material's own code ([code]fragment()[/code] of a [ShaderMaterial] too), in the depth pre-pass as well as the colour pass so screen-space and other reflections see the result: by [member wetness], porous surfaces (rough, not metallic) darken, all of them get a glossy film, and on flat rough ground puddles form ([member puddles]): flat, smooth standing water with the rain's ripples ([member ripple_tile], [member ripple_strength]). Undersides and surfaces under a roof stay dry: the scene's top seen from above (a [GPUParticlesCollisionHeightField3D] of [member occlusion_size] following the camera, the drops' collider) tells where the rain reaches. A [FellowWater3D] shows the ripples on its surface too. Transparent materials are not wetted.
+		With [member precipitation] [constant PRECIPITATION_SNOW] it snows instead, and [member snow] covers what faces up with snow where it falls (decision record [code]docs/decisions/0128-snow.md[/code]).
 		One node at a time is active: the last one to enter the tree. Wetness can follow the rain over time ([member wetness_follows_rain]). [code]rendering/fellow/fluid/enabled[/code] off turns the wetting off. The drops and the heightfield are internal children ([method get_drops], [method get_occlusion]). Decision record [code]docs/decisions/0124-rain.md[/code].
 	</description>
 	<tutorials>
@@ -49,8 +50,26 @@
 		<member name="fall_height" type="float" setter="set_fall_height" getter="get_fall_height" default="14.0">
 			The height above the camera the drops start from, in metres.
 		</member>
+		<member name="flake_color" type="Color" setter="set_flake_color" getter="get_flake_color" default="Color(0.95, 0.96, 1, 0.9)">
+			The snowflakes' colour and opacity (with [member precipitation] [constant PRECIPITATION_SNOW]).
+		</member>
+		<member name="flake_flutter" type="float" setter="set_flake_flutter" getter="get_flake_flutter" default="0.12">
+			How far, in metres, a snowflake swings about its path as it falls, at a rate of its own.
+		</member>
+		<member name="flake_size" type="float" setter="set_flake_size" getter="get_flake_size" default="0.018">
+			The snowflakes' diameter in metres (each flake 0.5 to 1.5 times it).
+		</member>
+		<member name="flake_speed" type="float" setter="set_flake_speed" getter="get_flake_speed" default="1.1">
+			How fast the snowflakes fall, in metres per second.
+		</member>
+		<member name="flake_wind_influence" type="float" setter="set_flake_wind_influence" getter="get_flake_wind_influence" default="1.5">
+			How fast, per second, the snowflakes take the wind where they are, gusts included, when the scene has a [FellowWind3D] and [member wind_from_scene] is on (the Wind group of [ParticleProcessMaterial]).
+		</member>
 		<member name="max_drops" type="int" setter="set_max_drops" getter="get_max_drops" default="24000">
 			The number of drops at full [member rain]; [member rain] scales the number drawn.
+		</member>
+		<member name="melting_time" type="float" setter="set_melting_time" getter="get_melting_time" default="1800.0">
+			With [member snow_follows_precipitation], the seconds a full [member snow] cover takes to melt while it does not snow.
 		</member>
 		<member name="occlusion_always_update" type="bool" setter="set_occlusion_always_update" getter="get_occlusion_always_update" default="false">
 			If [code]true[/code], the heightfield of the scene seen from above is rendered again every frame (for moving roofs: vehicles, doors); otherwise when it moves with the camera.
@@ -64,6 +83,9 @@
 		<member name="occlusion_size" type="float" setter="set_occlusion_size" getter="get_occlusion_size" default="80.0">
 			The side of the heightfield around the camera, in metres. Beyond it everything is exposed to the rain.
 		</member>
+		<member name="precipitation" type="int" setter="set_precipitation" getter="get_precipitation" enum="FellowRain3D.Precipitation" default="0">
+			Rain, or snow: flakes drifting down around the camera instead of drops (they live in a box around it, follow the scene's wind and swing as they fall), and no ripples or splashes. The surfaces are covered with snow by [member snow], whatever falls.
+		</member>
 		<member name="puddles" type="float" setter="set_puddles" getter="get_puddles" default="0.5">
 			How much of flat, rough ground is covered by puddles once it is wet (0: none, 1: nearly all).
 		</member>
@@ -75,6 +97,18 @@
 		</member>
 		<member name="ripple_tile" type="float" setter="set_ripple_tile" getter="get_ripple_tile" default="1.5">
 			The size in metres of the tile of the ripple texture (two offset lookups hide the repeat).
+		</member>
+		<member name="snow" type="float" setter="set_snow" getter="get_snow" default="0.0">
+			The snow cover, from 0 to 1: what faces up is covered where the snow falls (not under roofs: the heightfield of [method get_occlusion]) — patchy while thin, everything facing up once deep, nothing on slopes steeper than 60 degrees. Fresh snow: white, rough, smooth (it fills the materials' relief) with gentle undulations, glinting by [member snow_sparkle]. Opaque materials on the Forward+ renderer, in the depth pre-pass and the colour pass, after their own code.
+		</member>
+		<member name="snow_follows_precipitation" type="bool" setter="set_snow_follows_precipitation" getter="is_snow_following_precipitation" default="false">
+			If [code]true[/code], [member snow] grows while it snows (fully in [member snowing_time] at [member rain] 1) and melts otherwise (in [member melting_time]).
+		</member>
+		<member name="snow_sparkle" type="float" setter="set_snow_sparkle" getter="get_snow_sparkle" default="1.0">
+			The glints of fresh snow, from 0 to 1: crystals in cells of 8 mm, one in 20 turned at random, shining where one faces the light; faded where a cell is smaller than a pixel.
+		</member>
+		<member name="snowing_time" type="float" setter="set_snowing_time" getter="get_snowing_time" default="900.0">
+			With [member snow_follows_precipitation], the seconds full snowfall takes to cover the ground.
 		</member>
 		<member name="splashes" type="bool" setter="set_splashes" getter="get_splashes" default="true">
 			If [code]true[/code], drops splash where they land (two small droplets each, a sub-emitter at collision, fading over 0.3 s).
@@ -98,4 +132,12 @@
 			If [code]true[/code] and the scene has a [FellowWind3D], the drops are carried by its wind at the camera (with the gust there) instead of [member wind].
 		</member>
 	</members>
+	<constants>
+		<constant name="PRECIPITATION_RAIN" value="0" enum="Precipitation">
+			Drops: lit streaks falling from above the camera, splashing where they land.
+		</constant>
+		<constant name="PRECIPITATION_SNOW" value="1" enum="Precipitation">
+			Snowflakes: soft discs drifting down around the camera, swinging as they fall and following the scene's wind.
+		</constant>
+	</constants>
 </class>

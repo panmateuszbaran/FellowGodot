@@ -122,6 +122,8 @@ RID FellowWeather::get_uniform_buffer() {
 		}
 		u.ripples[0] = 1.0f / MAX(state.ripple_tile, 0.01f);
 		u.ripples[1] = state.ripple_strength;
+		u.snow[0] = state.enabled ? CLAMP(state.snow, 0.0f, 1.0f) : 0.0f;
+		u.snow[1] = CLAMP(state.snow_sparkle, 0.0f, 1.0f);
 		const bool gusts = get_gust_texture().is_valid();
 		const WindState *ws[2] = { &wind, &wind_prev };
 		float *w0[2] = { u.wind, u.wind_prev };

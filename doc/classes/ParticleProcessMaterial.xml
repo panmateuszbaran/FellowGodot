@@ -449,6 +449,12 @@
 		<member name="velocity_pivot" type="Vector3" setter="set_velocity_pivot" getter="get_velocity_pivot" default="Vector3(0, 0, 0)">
 			A pivot point used to calculate radial and orbital velocity of particles.
 		</member>
+		<member name="wind_enabled" type="bool" setter="set_wind_enabled" getter="is_wind_enabled" default="false">
+			If [code]true[/code], the particles' horizontal velocity relaxes towards the scene's wind at their position, gusts included, at [member wind_influence] per second (FellowEngine: the wind of a [code]FellowWind3D[/code]; none without one, and on the Compatibility renderer). Particle shaders read the wind as [code]WIND_VELOCITY[/code] in [code]process()[/code].
+		</member>
+		<member name="wind_influence" type="float" setter="set_wind_influence" getter="get_wind_influence" default="1.0">
+			How fast, per second, the particles take the wind with [member wind_enabled].
+		</member>
 	</members>
 	<signals>
 		<signal name="emission_shape_changed">

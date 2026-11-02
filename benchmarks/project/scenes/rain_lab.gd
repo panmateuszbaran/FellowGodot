@@ -8,7 +8,8 @@ extends "res://bench/scene_base.gd"
 ## paint: not porous), benches, trees on grass, street lamps.
 ## Options:
 ##   --rain=on|dry|off   on: raining and wet (default); dry: FellowRain3D present but no rain, dry (its cost when idle);
-##                       off: no FellowRain3D
+##                       off: no FellowRain3D; snow: snowing, the street under snow (its snow mode, decision 0128:
+##                       --rain_snow_cover=<0..1> (1), --rain_flakes=<n> (60000), --rain_snow_sparkle=<0..1> (1))
 ##   --rain_amount=<0..1> (0.7), --rain_wetness=<0..1> (1), --rain_puddles=<0..1> (0.55), --rain_drops=<n> (24000)
 ##   --rain_light=day|dusk  overcast day (default) or dusk with the street lamps on
 ##   --rain_wind=<m/s>      a FellowWind3D blowing along +X (the drops follow it; 0: none, the default)
@@ -51,10 +52,16 @@ func build(p_args: Dictionary) -> void:
 		rain = ClassDB.instantiate("FellowRain3D")
 		rain.name = "Rain"
 		rain.time_auto = false
-		rain.rain = float(args.get("rain_amount", "0.7")) if mode == "on" else 0.0
+		rain.rain = float(args.get("rain_amount", "0.7")) if mode == "on" or mode == "snow" else 0.0
 		rain.wetness = float(args.get("rain_wetness", "1.0")) if mode == "on" else 0.0
 		rain.puddles = float(args.get("rain_puddles", "0.55"))
 		rain.max_drops = int(args.get("rain_drops", "24000"))
+		if mode == "snow":
+			rain.precipitation = 1
+			rain.snow = float(args.get("rain_snow_cover", "1.0"))
+			rain.snow_sparkle = float(args.get("rain_snow_sparkle", "1.0"))
+			rain.max_drops = int(args.get("rain_flakes", "60000"))
+			rain.area = 30.0
 		rain.occlusion_always_update = str(args.get("rain_occlusion", "moved")) == "always"
 		rain.wind = Vector3(1.2, 0.0, 0.6)
 		add_child(rain)

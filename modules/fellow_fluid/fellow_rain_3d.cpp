@@ -51,16 +51,21 @@ FellowRain3D *FellowRain3D::active = nullptr;
 // face the camera, soft across and thinning to both ends; lit (the sky's ambient and the scene's lights, brighter
 // against a light behind it: water scatters forward), so a drop at night is dark but where a lamp shines through
 // the rain. Within 0.5 m of the camera a drop is not drawn and it fades in to 4 m (one at the lens would be a blurred
-// bar). A splash is a camera-facing droplet fading over its life.
+// bar). A splash is a camera-facing droplet fading over its life. A snowflake (decision 0128) is a soft camera-facing
+// disc swinging about its path at its own rate, fading in and out at the ends of its life (it lives in a box around
+// the camera); its shader receives shadows (a flake in a building's shadow is not lit by the sun).
 static const char *rain_drop_shader_code = R"(
 shader_type spatial;
 render_mode blend_mix, depth_draw_never, cull_disabled, shadows_disabled, specular_disabled, skip_vertex_transform;
 
 uniform vec4 drop_color : source_color = vec4(0.85, 0.88, 0.92, 0.4);
 uniform bool splash = false;
+uniform bool flake = false;
+uniform float flutter = 0.0;
 uniform float fade_near = 0.5;
 uniform float fade_far = 4.0;
 uniform float forward_scatter = 6.0;
+uniform float light_wrap = 0.25;
 // A drop refracts the sky and the lights around it into the view: brighter than a diffuse surface lit the same.
 uniform float brightness = 2.5;
 
@@ -68,16 +73,24 @@ varying float v_alpha;
 
 void vertex() {
 	vec3 centre = MODEL_MATRIX[3].xyz;
+	if (flake) {
+		// Its own phase and rate (the golden ratio's sequence over the particles).
+		float ph = fract(float(INSTANCE_ID) * 0.618034);
+		float t = TIME * (1.4 + fract(ph * 7.31) * 1.4) + ph * TAU;
+		centre += flutter * (0.6 + 0.8 * fract(ph * 3.17)) * vec3(sin(t), 0.25 * sin(t * 2.0), cos(t * 0.83 + 1.7));
+	}
 	vec3 to_cam = INV_VIEW_MATRIX[3].xyz - centre;
 	float dist = length(to_cam);
 	vec3 axis_x;
 	vec3 axis_y;
 	float sx = length(MODEL_MATRIX[0].xyz);
 	float sy = length(MODEL_MATRIX[1].xyz);
-	if (splash) {
+	if (splash || flake) {
 		axis_x = INV_VIEW_MATRIX[0].xyz;
 		axis_y = INV_VIEW_MATRIX[1].xyz;
-		v_alpha = 1.0 - clamp(INSTANCE_CUSTOM.y, 0.0, 1.0);
+		float life = clamp(INSTANCE_CUSTOM.y, 0.0, 1.0);
+		v_alpha = splash ? 1.0 - life : smoothstep(0.0, 0.08, life) * (1.0 - smoothstep(0.85, 1.0, life));
+		sy = flake ? sx : sy;
 	} else {
 		axis_y = MODEL_MATRIX[1].xyz / max(sy, 1e-6);
 		axis_x = cross(axis_y, to_cam / max(dist, 1e-6));
@@ -100,6 +113,8 @@ void fragment() {
 	float shape;
 	if (splash) {
 		shape = max(0.0, 1.0 - dot(p, p));
+	} else if (flake) {
+		shape = smoothstep(1.0, 0.25, length(p));
 	} else {
 		shape = (1.0 - p.x * p.x) * pow(max(sin(UV.y * PI), 0.0), 0.6);
 	}
@@ -109,7 +124,7 @@ void fragment() {
 
 void light() {
 	float behind = max(dot(-VIEW, LIGHT), 0.0);
-	DIFFUSE_LIGHT += LIGHT_COLOR * ATTENUATION * (0.25 + forward_scatter * pow(behind, 4.0)) / PI;
+	DIFFUSE_LIGHT += LIGHT_COLOR * ATTENUATION * (light_wrap + forward_scatter * pow(behind, 4.0)) / PI;
 }
 )";
 
@@ -151,6 +166,18 @@ void FellowRain3D::_build_children() {
 	drop_material.instantiate();
 	drop_material->set_shader(drop_shader);
 	drop_material->set_shader_parameter("splash", false);
+
+	// The snowflakes' (decision 0128): the same code receiving shadows.
+	flake_shader.instantiate();
+	flake_shader->set_code(String(rain_drop_shader_code).replace("shadows_disabled, ", ""));
+	flake_material.instantiate();
+	flake_material->set_shader(flake_shader);
+	flake_material->set_shader_parameter("flake", true);
+	flake_material->set_shader_parameter("fade_near", 0.3);
+	flake_material->set_shader_parameter("fade_far", 1.2);
+	flake_material->set_shader_parameter("forward_scatter", 1.5);
+	flake_material->set_shader_parameter("light_wrap", 0.5);
+	flake_material->set_shader_parameter("brightness", 1.0);
 
 	Ref<QuadMesh> drop_mesh;
 	drop_mesh.instantiate();
@@ -218,22 +245,41 @@ void FellowRain3D::_update_children() {
 	occlusion->set_follow_camera_enabled(false);
 	occlusion->set_update_mode(occlusion_always_update ? GPUParticlesCollisionHeightField3D::UPDATE_MODE_ALWAYS : GPUParticlesCollisionHeightField3D::UPDATE_MODE_WHEN_MOVED);
 
-	Vector3 v = wind_applied - Vector3(0, drop_speed, 0);
+	const bool flakes = _is_snow();
+	const bool splashing = splashes && !flakes;
+	const float fall_speed = flakes ? flake_speed : drop_speed;
+	Vector3 v = wind_applied - Vector3(0, fall_speed, 0);
 	float speed = v.length();
 	drop_process->set_direction(v / MAX(speed, 0.01f));
 	drop_process->set_param_min(ParticleProcessMaterial::PARAM_INITIAL_LINEAR_VELOCITY, speed * 0.95);
 	drop_process->set_param_max(ParticleProcessMaterial::PARAM_INITIAL_LINEAR_VELOCITY, speed * 1.05);
-	drop_process->set_emission_box_extents(Vector3(area * 0.5f, 0.5f, area * 0.5f));
-	drop_process->set_sub_emitter_mode(splashes ? ParticleProcessMaterial::SUB_EMITTER_AT_COLLISION : ParticleProcessMaterial::SUB_EMITTER_DISABLED);
+	drop_process->set_param_min(ParticleProcessMaterial::PARAM_SCALE, flakes ? 0.5 : 0.8);
+	drop_process->set_param_max(ParticleProcessMaterial::PARAM_SCALE, flakes ? 1.5 : 1.2);
+	// The flakes live in a box around the camera (from 3 m below it to fall_height above), and take the scene's wind
+	// where they are, gusts included (decision 0127).
+	float box_height = fall_height + 6.0f;
+	drop_process->set_emission_box_extents(Vector3(area * 0.5f, flakes ? box_height * 0.5f : 0.5f, area * 0.5f));
+	bool flake_wind = flakes && wind_from_scene && FellowWind3D::get_active() != nullptr;
+	if (drop_process->is_wind_enabled() != flake_wind) {
+		drop_process->set_wind_enabled(flake_wind);
+	}
+	drop_process->set_wind_influence(flake_wind_influence);
+	drop_process->set_sub_emitter_mode(splashing ? ParticleProcessMaterial::SUB_EMITTER_AT_COLLISION : ParticleProcessMaterial::SUB_EMITTER_DISABLED);
 	drop_process->set_sub_emitter_amount_at_collision(2);
 	drop_material->set_shader_parameter("drop_color", drop_color);
 	splash_material->set_shader_parameter("drop_color", drop_color);
+	flake_material->set_shader_parameter("drop_color", flake_color);
+	flake_material->set_shader_parameter("flutter", flake_flutter);
 	Ref<QuadMesh> qm = drops->get_draw_pass_mesh(0);
 	if (qm.is_valid()) {
-		qm->set_size(drop_size);
+		qm->set_size(flakes ? Vector2(flake_size, flake_size) : drop_size);
+		Ref<Material> m = flakes ? Ref<Material>(flake_material) : Ref<Material>(drop_material);
+		if (qm->get_material() != m) {
+			qm->set_material(m);
+		}
 	}
 	// The drops fall from fall_height above the camera to well below it (the ground may be far below).
-	double lifetime = (fall_height + 30.0) / MAX(drop_speed, 0.1f);
+	double lifetime = flakes ? double(SNOW_LIFETIME) : (fall_height + 30.0) / MAX(drop_speed, 0.1f);
 	if (drops->get_amount() != max_drops) {
 		drops->set_amount(max_drops);
 	}
@@ -241,24 +287,33 @@ void FellowRain3D::_update_children() {
 		drops->set_lifetime(lifetime);
 		drops->set_pre_process_time(lifetime);
 	}
-	drops->set_visibility_aabb(AABB(Vector3(-area, -fall_height - 40.0f, -area), Vector3(area * 2.0f, fall_height + 50.0f, area * 2.0f)));
+	if (flakes) {
+		// The box, and how far the flakes drift and fall in a life (twice the wind at the camera: the gusts).
+		float drift = wind_applied.length() * SNOW_LIFETIME * 2.0f + 2.0f;
+		float drop = flake_speed * SNOW_LIFETIME + 2.0f;
+		drops->set_visibility_aabb(AABB(Vector3(-area * 0.5f - drift, -box_height * 0.5f - drop, -area * 0.5f - drift), Vector3(area + drift * 2.0f, box_height + drop + 2.0f, area + drift * 2.0f)));
+	} else {
+		drops->set_visibility_aabb(AABB(Vector3(-area, -fall_height - 40.0f, -area), Vector3(area * 2.0f, fall_height + 50.0f, area * 2.0f)));
+	}
 	splash->set_amount(MAX(64, max_drops / 4));
 	splash->set_visibility_aabb(AABB(Vector3(-area, -fall_height - 40.0f, -area), Vector3(area * 2.0f, fall_height + 50.0f, area * 2.0f)));
 	if (drops->is_inside_tree() && splash->is_inside_tree()) {
-		drops->set_sub_emitter(splashes ? drops->get_path_to(splash) : NodePath());
+		drops->set_sub_emitter(splashing ? drops->get_path_to(splash) : NodePath());
 	}
-	splash->set_visible(splashes);
+	splash->set_visible(splashing);
 }
 
 // ------------------------------------------------------------------ main thread
 
 void FellowRain3D::_push_state() {
-	bool enabled = is_visible_in_tree() && active == this && (wetness > 0.0f || rain > 0.0f) && Fellow::fluid_enabled();
+	bool enabled = is_visible_in_tree() && active == this && (wetness > 0.0f || rain > 0.0f || snow > 0.0f) && Fellow::fluid_enabled();
 	RendererRD::FellowWeather::State st;
 	st.enabled = enabled;
 	st.wetness = wetness;
 	st.puddles = puddles;
-	st.rain = rain;
+	st.rain = get_ripple_rain();
+	st.snow = snow;
+	st.snow_sparkle = snow_sparkle;
 	st.time = float(Math::fmod(time, 3600.0));
 	if (occlusion && occlusion->is_inside_tree()) {
 		st.occlusion_collider = occlusion->get_base();
@@ -276,7 +331,7 @@ void FellowRain3D::_push_state() {
 	pc.levels = int(Math::round(Math::log2(double(ripple_size)))) + 1;
 	pc.tile = ripple_tile;
 	pc.time = st.time;
-	pc.rain = rain;
+	pc.rain = get_ripple_rain();
 	pc.amplitude = 0.0015f;
 	PackedByteArray push;
 	push.resize(sizeof(PushConstant));
@@ -302,10 +357,17 @@ void FellowRain3D::_notification(int p_what) {
 			double step = last_time < 0.0 ? 0.0 : CLAMP(time - last_time, 0.0, 1.0);
 			last_time = time;
 			if (wetness_follows_rain) {
-				if (rain > 0.0f) {
+				if (get_ripple_rain() > 0.0f) {
 					wetness = MIN(1.0f, wetness + float(step) * rain / MAX(wetting_time, 0.01f));
 				} else {
 					wetness = MAX(0.0f, wetness - float(step) / MAX(drying_time, 0.01f));
+				}
+			}
+			if (snow_follows_precipitation) {
+				if (_is_snow() && rain > 0.0f) {
+					snow = MIN(1.0f, snow + float(step) * rain / MAX(snowing_time, 0.01f));
+				} else {
+					snow = MAX(0.0f, snow - float(step) / MAX(melting_time, 0.01f));
 				}
 			}
 			Camera3D *cam = get_viewport() ? get_viewport()->get_camera_3d() : nullptr;
@@ -317,11 +379,18 @@ void FellowRain3D::_notification(int p_what) {
 				if (wind_from_scene && FellowWind3D::get_active()) {
 					w = FellowWind3D::get_active()->get_velocity_at(c);
 				}
-				if (!w.is_equal_approx(wind_applied) && w.distance_to(wind_applied) > 0.25f) {
+				bool flake_wind = _is_snow() && wind_from_scene && FellowWind3D::get_active() != nullptr;
+				if ((!w.is_equal_approx(wind_applied) && w.distance_to(wind_applied) > 0.25f) || drop_process->is_wind_enabled() != flake_wind) {
 					wind_applied = w;
 					_update_children();
 				}
-				Vector3 at = c + Vector3(0, fall_height, 0) - wind_applied * (fall_height / MAX(drop_speed, 0.1f));
+				Vector3 at;
+				if (_is_snow()) {
+					// The flakes' box, raised and upwind by half what they fall and drift in a life.
+					at = c + Vector3(0, fall_height * 0.5f - 3.0f + flake_speed * SNOW_LIFETIME * 0.5f, 0) - wind_applied * (SNOW_LIFETIME * 0.5f);
+				} else {
+					at = c + Vector3(0, fall_height, 0) - wind_applied * (fall_height / MAX(drop_speed, 0.1f));
+				}
 				drops->set_global_position(at);
 				splash->set_global_position(c);
 			}
@@ -494,6 +563,11 @@ void FellowRain3D::set_rain(float p_rain) {
 	rain = CLAMP(p_rain, 0.0f, 1.0f);
 }
 
+void FellowRain3D::set_precipitation(Precipitation p_precipitation) {
+	precipitation = p_precipitation;
+	_update_children();
+}
+
 #define RAIN_CHILD_SETTER(m_func, m_type, m_member, m_expr) \
 	void FellowRain3D::m_func(m_type p_value) { \
 		m_member = m_expr; \
@@ -516,8 +590,35 @@ RAIN_CHILD_SETTER(set_occlusion_size, float, occlusion_size, MAX(1.0f, p_value))
 RAIN_CHILD_SETTER(set_occlusion_height, float, occlusion_height, MAX(1.0f, p_value))
 RAIN_CHILD_SETTER(set_occlusion_resolution, int, occlusion_resolution, p_value)
 RAIN_CHILD_SETTER(set_occlusion_always_update, bool, occlusion_always_update, p_value)
+RAIN_CHILD_SETTER(set_flake_speed, float, flake_speed, MAX(0.05f, p_value))
+RAIN_CHILD_SETTER(set_flake_size, float, flake_size, MAX(0.001f, p_value))
+RAIN_CHILD_SETTER(set_flake_flutter, float, flake_flutter, MAX(0.0f, p_value))
+RAIN_CHILD_SETTER(set_flake_wind_influence, float, flake_wind_influence, MAX(0.0f, p_value))
+RAIN_CHILD_SETTER(set_flake_color, const Color &, flake_color, p_value)
 
 void FellowRain3D::_bind_methods() {
+	ClassDB::bind_method(D_METHOD("set_precipitation", "precipitation"), &FellowRain3D::set_precipitation);
+	ClassDB::bind_method(D_METHOD("get_precipitation"), &FellowRain3D::get_precipitation);
+	ClassDB::bind_method(D_METHOD("set_snow", "snow"), &FellowRain3D::set_snow);
+	ClassDB::bind_method(D_METHOD("get_snow"), &FellowRain3D::get_snow);
+	ClassDB::bind_method(D_METHOD("set_snow_follows_precipitation", "enable"), &FellowRain3D::set_snow_follows_precipitation);
+	ClassDB::bind_method(D_METHOD("is_snow_following_precipitation"), &FellowRain3D::is_snow_following_precipitation);
+	ClassDB::bind_method(D_METHOD("set_snowing_time", "seconds"), &FellowRain3D::set_snowing_time);
+	ClassDB::bind_method(D_METHOD("get_snowing_time"), &FellowRain3D::get_snowing_time);
+	ClassDB::bind_method(D_METHOD("set_melting_time", "seconds"), &FellowRain3D::set_melting_time);
+	ClassDB::bind_method(D_METHOD("get_melting_time"), &FellowRain3D::get_melting_time);
+	ClassDB::bind_method(D_METHOD("set_snow_sparkle", "sparkle"), &FellowRain3D::set_snow_sparkle);
+	ClassDB::bind_method(D_METHOD("get_snow_sparkle"), &FellowRain3D::get_snow_sparkle);
+	ClassDB::bind_method(D_METHOD("set_flake_speed", "speed"), &FellowRain3D::set_flake_speed);
+	ClassDB::bind_method(D_METHOD("get_flake_speed"), &FellowRain3D::get_flake_speed);
+	ClassDB::bind_method(D_METHOD("set_flake_size", "size"), &FellowRain3D::set_flake_size);
+	ClassDB::bind_method(D_METHOD("get_flake_size"), &FellowRain3D::get_flake_size);
+	ClassDB::bind_method(D_METHOD("set_flake_flutter", "metres"), &FellowRain3D::set_flake_flutter);
+	ClassDB::bind_method(D_METHOD("get_flake_flutter"), &FellowRain3D::get_flake_flutter);
+	ClassDB::bind_method(D_METHOD("set_flake_wind_influence", "influence"), &FellowRain3D::set_flake_wind_influence);
+	ClassDB::bind_method(D_METHOD("get_flake_wind_influence"), &FellowRain3D::get_flake_wind_influence);
+	ClassDB::bind_method(D_METHOD("set_flake_color", "color"), &FellowRain3D::set_flake_color);
+	ClassDB::bind_method(D_METHOD("get_flake_color"), &FellowRain3D::get_flake_color);
 	ClassDB::bind_method(D_METHOD("set_rain", "rain"), &FellowRain3D::set_rain);
 	ClassDB::bind_method(D_METHOD("get_rain"), &FellowRain3D::get_rain);
 	ClassDB::bind_method(D_METHOD("set_wetness", "wetness"), &FellowRain3D::set_wetness);
@@ -569,6 +670,7 @@ void FellowRain3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_occlusion"), &FellowRain3D::get_occlusion);
 
 	ADD_GROUP("Rain", "");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "precipitation", PROPERTY_HINT_ENUM, "Rain,Snow"), "set_precipitation", "get_precipitation");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rain", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_rain", "get_rain");
 	ADD_PROPERTY(PropertyInfo(Variant::VECTOR3, "wind", PROPERTY_HINT_NONE, "suffix:m/s"), "set_wind", "get_wind");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "wind_from_scene"), "set_wind_from_scene", "is_wind_from_scene");
@@ -587,6 +689,18 @@ void FellowRain3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "puddles", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_puddles", "get_puddles");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "ripple_tile", PROPERTY_HINT_RANGE, "0.1,10,0.01,suffix:m"), "set_ripple_tile", "get_ripple_tile");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "ripple_strength", PROPERTY_HINT_RANGE, "0,4,0.01"), "set_ripple_strength", "get_ripple_strength");
+	ADD_GROUP("Snow", "");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "snow", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_snow", "get_snow");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "snow_follows_precipitation"), "set_snow_follows_precipitation", "is_snow_following_precipitation");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "snowing_time", PROPERTY_HINT_RANGE, "0,36000,0.1,suffix:s"), "set_snowing_time", "get_snowing_time");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "melting_time", PROPERTY_HINT_RANGE, "0,36000,0.1,suffix:s"), "set_melting_time", "get_melting_time");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "snow_sparkle", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_snow_sparkle", "get_snow_sparkle");
+	ADD_SUBGROUP("Flakes", "flake_");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "flake_speed", PROPERTY_HINT_RANGE, "0.05,5,0.01,suffix:m/s"), "set_flake_speed", "get_flake_speed");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "flake_size", PROPERTY_HINT_RANGE, "0.001,0.2,0.001,suffix:m"), "set_flake_size", "get_flake_size");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "flake_flutter", PROPERTY_HINT_RANGE, "0,1,0.01,suffix:m"), "set_flake_flutter", "get_flake_flutter");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "flake_wind_influence", PROPERTY_HINT_RANGE, "0,10,0.01,suffix:1/s"), "set_flake_wind_influence", "get_flake_wind_influence");
+	ADD_PROPERTY(PropertyInfo(Variant::COLOR, "flake_color"), "set_flake_color", "get_flake_color");
 	ADD_GROUP("Shelter", "occlusion_");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "occlusion_size", PROPERTY_HINT_RANGE, "1,1000,0.1,suffix:m"), "set_occlusion_size", "get_occlusion_size");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "occlusion_height", PROPERTY_HINT_RANGE, "1,1000,0.1,suffix:m"), "set_occlusion_height", "get_occlusion_height");
@@ -595,6 +709,9 @@ void FellowRain3D::_bind_methods() {
 	ADD_GROUP("", "");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "time", PROPERTY_HINT_NONE, "suffix:s", PROPERTY_USAGE_NONE), "set_time", "get_time");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "time_auto"), "set_time_auto", "is_time_auto");
+
+	BIND_ENUM_CONSTANT(PRECIPITATION_RAIN);
+	BIND_ENUM_CONSTANT(PRECIPITATION_SNOW);
 }
 
 FellowRain3D::FellowRain3D() {

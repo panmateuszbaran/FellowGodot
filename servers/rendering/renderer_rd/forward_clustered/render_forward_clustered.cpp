@@ -6448,7 +6448,8 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	{
 		// FellowEngine weather (decision 0124): materials wetted in the depth pre-pass and the opaque colour passes.
 		RendererRD::FellowWeather *weather = RendererRD::FellowWeather::get_singleton_if_exists();
-		base_specialization.fellow_wetness = weather && weather->get_state().enabled && weather->get_state().wetness > 0.0f;
+		// The snow's cover too (decision 0128).
+		base_specialization.fellow_wetness = weather && weather->get_state().enabled && (weather->get_state().wetness > 0.0f || weather->get_state().snow > 0.0f);
 	}
 	base_specialization.fellow_light_fields_early = false; // set after the lights are set up (below)
 	base_specialization.fellow_light_prefetch_next = false;

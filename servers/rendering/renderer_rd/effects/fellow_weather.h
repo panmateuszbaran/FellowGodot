@@ -42,6 +42,9 @@ namespace RendererRD {
 // the rain's ripples — where the rain reaches it (a heightfield of the scene seen from above: a particle collision
 // heightfield, which the rain's drops collide with too).
 //
+// Snow (docs/decisions/0128-snow.md): the same node in its snow mode; the same pass covers what faces up, where the
+// snow falls, with snow.
+//
 // Wind (docs/decisions/0125-wind.md): the scene side is FellowWind3D. Materials with the render mode `fellow_wind` (a
 // BaseMaterial3D's Wind group) are displaced in the vertex shader by the wind and its gusts, a noise field travelling
 // with the wind; the previous frame's wind is kept for the motion vectors.
@@ -62,6 +65,8 @@ public:
 		RID ripple_texture; // RD texture: rain ripples' slopes (rg), mipmapped, tiling
 		float ripple_tile = 1.5f; // m
 		float ripple_strength = 1.0f;
+		float snow = 0.0f; // 0..1: the snow cover (decision 0128)
+		float snow_sparkle = 0.0f; // 0..1: the fresh snow's glints
 	};
 
 	struct WindState {
@@ -87,6 +92,7 @@ public:
 		float wind_prev[4]; // the previous frame's wind (motion vectors)
 		float wind2_prev[4];
 		float wind_time[4]; // this frame's and the previous frame's time of the wind
+		float snow[4]; // cover, sparkle, -, - (decision 0128)
 	};
 
 private:

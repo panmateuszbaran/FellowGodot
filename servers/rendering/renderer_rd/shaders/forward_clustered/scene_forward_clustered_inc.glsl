@@ -802,6 +802,7 @@ struct FellowWeatherData {
 	vec4 wind_prev;
 	vec4 wind2_prev;
 	vec4 wind_time; // this frame's and the previous frame's time of the wind (s)
+	vec4 snow; // the snow's cover (0-1), its sparkle (decision 0128)
 };
 layout(set = 1, binding = 49, std140) uniform FellowWeatherBlock {
 	FellowWeatherData data;

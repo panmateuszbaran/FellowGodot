@@ -44,9 +44,19 @@
 // rain reaches it (Forward+: darker porous surfaces, glossier ones, puddles on flat ground with the drops' ripples). The
 // same heightfield (a GPUParticlesCollisionHeightField3D following the camera) keeps the drops off and the ground dry
 // under roofs. A FellowWater3D shows the ripples too. One node at a time is active (the last one to enter the tree).
+//
+// Snow (docs/decisions/0128-snow.md): with `precipitation` SNOW the same node lets flakes drift down around the camera
+// (following the scene's wind and its gusts, fluttering) and covers what faces up with snow where it falls (`snow`).
 class FellowRain3D : public Node3D {
 	GDCLASS(FellowRain3D, Node3D);
 
+public:
+	enum Precipitation {
+		PRECIPITATION_RAIN,
+		PRECIPITATION_SNOW,
+	};
+
+private:
 	struct PushConstant {
 		int32_t size;
 		int32_t levels;
@@ -60,7 +70,8 @@ class FellowRain3D : public Node3D {
 
 	static FellowRain3D *active;
 
-	float rain = 0.6f; // 0..1
+	Precipitation precipitation = PRECIPITATION_RAIN;
+	float rain = 0.6f; // 0..1: how hard it rains (or snows)
 	float wetness = 1.0f; // 0..1
 	bool wetness_follows_rain = false;
 	float wetting_time = 60.0f; // s to get fully wet in full rain
@@ -82,6 +93,16 @@ class FellowRain3D : public Node3D {
 	bool occlusion_always_update = false;
 	float ripple_tile = 1.5f; // m
 	float ripple_strength = 1.0f;
+	float snow = 0.0f; // 0..1: the snow's cover
+	bool snow_follows_precipitation = false;
+	float snowing_time = 900.0f; // s to cover the ground in full snowfall
+	float melting_time = 1800.0f; // s to melt
+	float snow_sparkle = 1.0f;
+	float flake_speed = 1.1f; // m/s
+	float flake_size = 0.018f; // m
+	float flake_flutter = 0.12f; // m: how far a flake swings about its path
+	float flake_wind_influence = 1.5f; // 1/s: how fast the flakes take the scene's wind
+	Color flake_color = Color(0.95f, 0.96f, 1.0f, 0.9f);
 	double time = 0.0;
 	bool time_auto = true;
 
@@ -93,6 +114,8 @@ class FellowRain3D : public Node3D {
 	Ref<Shader> drop_shader;
 	Ref<ShaderMaterial> drop_material;
 	Ref<ShaderMaterial> splash_material;
+	Ref<Shader> flake_shader;
+	Ref<ShaderMaterial> flake_material;
 	double last_time = -1.0;
 
 	// Render thread.
@@ -111,6 +134,9 @@ class FellowRain3D : public Node3D {
 	bool gpu_failed = false;
 	Ref<Texture2DRD> ripple_texture;
 
+	static constexpr float SNOW_LIFETIME = 8.0f; // s: a flake's life in the box around the camera
+
+	bool _is_snow() const { return precipitation == PRECIPITATION_SNOW; }
 	void _build_children();
 	void _update_children();
 	void _push_state();
@@ -126,8 +152,12 @@ protected:
 public:
 	static FellowRain3D *get_active() { return active; }
 
+	void set_precipitation(Precipitation p_precipitation);
+	Precipitation get_precipitation() const { return precipitation; }
 	void set_rain(float p_rain);
 	float get_rain() const { return rain; }
+	// What makes ripples on puddles and water: the rain's rate, none while it snows.
+	float get_ripple_rain() const { return precipitation == PRECIPITATION_RAIN ? rain : 0.0f; }
 	void set_wetness(float p_wetness) { wetness = CLAMP(p_wetness, 0.0f, 1.0f); }
 	float get_wetness() const { return wetness; }
 	void set_wetness_follows_rain(bool p_enable) { wetness_follows_rain = p_enable; }
@@ -168,6 +198,26 @@ public:
 	float get_ripple_tile() const { return ripple_tile; }
 	void set_ripple_strength(float p_strength) { ripple_strength = MAX(0.0f, p_strength); }
 	float get_ripple_strength() const { return ripple_strength; }
+	void set_snow(float p_snow) { snow = CLAMP(p_snow, 0.0f, 1.0f); }
+	float get_snow() const { return snow; }
+	void set_snow_follows_precipitation(bool p_enable) { snow_follows_precipitation = p_enable; }
+	bool is_snow_following_precipitation() const { return snow_follows_precipitation; }
+	void set_snowing_time(float p_seconds) { snowing_time = MAX(0.0f, p_seconds); }
+	float get_snowing_time() const { return snowing_time; }
+	void set_melting_time(float p_seconds) { melting_time = MAX(0.0f, p_seconds); }
+	float get_melting_time() const { return melting_time; }
+	void set_snow_sparkle(float p_sparkle) { snow_sparkle = CLAMP(p_sparkle, 0.0f, 1.0f); }
+	float get_snow_sparkle() const { return snow_sparkle; }
+	void set_flake_speed(float p_speed);
+	float get_flake_speed() const { return flake_speed; }
+	void set_flake_size(float p_size);
+	float get_flake_size() const { return flake_size; }
+	void set_flake_flutter(float p_flutter);
+	float get_flake_flutter() const { return flake_flutter; }
+	void set_flake_wind_influence(float p_influence);
+	float get_flake_wind_influence() const { return flake_wind_influence; }
+	void set_flake_color(const Color &p_color);
+	Color get_flake_color() const { return flake_color; }
 	void set_time(double p_time) { time = p_time; }
 	double get_time() const { return time; }
 	void set_time_auto(bool p_auto) { time_auto = p_auto; }
@@ -180,3 +230,5 @@ public:
 	FellowRain3D();
 	~FellowRain3D();
 };
+
+VARIANT_ENUM_CAST(FellowRain3D::Precipitation);
