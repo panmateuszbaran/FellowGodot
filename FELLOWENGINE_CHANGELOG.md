@@ -9,6 +9,21 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 28 — snow (2026-11-02)
+
+- `FellowRain3D.precipitation` = Snow (decision 0128): flakes drift down in a box around the camera, take the
+  scene's wind where they are (gusts included, the particles' Wind group), swing about their paths, stop on the
+  shelter heightfield and receive shadows; drawn in the opaque pass with hashed alpha so that TAA reprojects them
+  (blended, TAA wiped them out).
+- `FellowRain3D.snow`: a snow cover on what faces up where the snow falls — patchy with ragged edges while thin,
+  everything facing up once deep, nothing on slopes over 60°, bare under roofs and canopies (the shelter eroded by
+  35 cm, so wires and lamps overhead leave no bare spots); smooth with gentle undulations, glinting
+  (`snow_sparkle`); `snow_follows_precipitation` grows it in `snowing_time` and melts it in `melting_time`.
+- The rain unchanged: Rain Lab without drops and Water Lab bit for bit on lavapipe. Cost on the RTX (Rain Lab,
+  `m28_f289`): snowing on a covered street +0.37 ms of GPU time (raining +0.34).
+- FellowBench: `--weather_snow` in any scene, Rain Lab `--rain=snow`. Fire Lab's embers are round.
+- Class reference for the new members and for milestone 27's water and particle wind members.
+
 ## Milestone 27 — the scene's wind for water, gas and particles (2026-11-01/02)
 
 - `FellowWater3D.wind_from_scene` (decision 0127): the spectrum follows the active `FellowWind3D`'s speed and
@@ -20,7 +35,8 @@ Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.m
   relaxes towards the wind at their position, gusts included. Particle shaders read it as `WIND_VELOCITY` (zero
   without a wind and on the Compatibility renderer).
 - Off is the previous image: Water Lab and Fire Lab without a wind bit for bit on lavapipe. Cost on the RTX
-  (`m27_f287`): the water's gust ripples and the gas's wind not measurable, Particles Lab's update +0.15 ms.
+  (`m27_f287`, `m28_f288`): the water's gust ripples and the gas's wind not measurable, Particles Lab's update +0.04
+  to +0.15 ms, its frame +0.09 ms.
 - Fixed: Water Lab with contact shadows crashed — the depth pre-pass bound per-render masks that did not exist yet
   (`84f3a8e`).
 - FellowBench: `--weather_wind=<m/s>` in any scene (Water, Fire and Particles Lab hand it on), `--wind_leaves=<n>`

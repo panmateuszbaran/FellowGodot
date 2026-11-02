@@ -56,9 +56,9 @@ falling leaves to Wind Lab.
   4 m/s 2.491 ms (still 2.545): the particles' update +0.149 ms (0.495 → 0.644), the drawing a little less. Wind Lab
   with 4000 falling leaves +0.016 ms.
 * **Visibility boxes.** Particles that drift need a visibility box that reaches as far as they drift. Particles
-  Lab first grew its emitters' boxes by the drift in every direction: 86 more emitters counted as visible, and its
-  frame rose by 1.4 ms on the CPU (draw calls 289 → 374). Grown downwind only, the boxes cover the drift and nothing
-  more.
+  Lab first grew its emitters' boxes by the drift in every direction: 86 more emitters counted as visible (draw calls
+  289 → 374). Grown downwind only, the boxes cover the drift and nothing more: Particles Lab in 4 m/s 3.208 ms of
+  frame against 3.114 still, the particles' update +0.04 ms (`m28_f288`).
 
 ## Decision
 

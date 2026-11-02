@@ -6,8 +6,8 @@
 
 **FellowEngine is a fork of [Godot Engine](https://github.com/godotengine/godot) 4.7.2-stable** that makes the
 Forward+ renderer faster and adds real-time effects that stock Godot does not have: water with FFT waves, rain and wet
-surfaces, wind with gusts, GPU smoke and fire, wood that burns to char and ash, automatic HLOD, ray tracing and a set
-of post-processing effects.
+surfaces, snow, lightning, wind with gusts, GPU smoke and fire, wood that burns to char and ash, automatic HLOD, ray
+tracing and a set of post-processing effects.
 
 * **Faster with the same image.** With the default settings FellowEngine renders the nine benchmark scenes
   11-55 % faster than stock Godot (table below). The changes that are on by default are *exact*: verified
@@ -32,6 +32,8 @@ in [docs/](docs/) and the [showcase](docs/SHOWCASE.md).
   <img src="docs/showcase/loop_meadow.webp" width="49%" alt="Gusts rolling over the meadow">
   <img src="docs/showcase/burn_night_logs.jpg" width="49%" alt="FellowBurnable3D: logs charring and burning with their own flames at night">
   <img src="docs/showcase/loop_fire.webp" width="49%" alt="FellowGasVolume3D: a campfire simulated on the GPU">
+  <img src="docs/showcase/bistro_snow_night_cafe.jpg" width="49%" alt="FellowRain3D's snow: Bistro's cafe at night under snow, flakes in the lamplight">
+  <img src="docs/showcase/bistro_snow_gold_tree.jpg" width="49%" alt="Snow in Bistro's square against a low sun: bare cobbles under the tree, light shafts">
 </p>
 
 These are real-time captures from the benchmark scenes on an RTX 5070 Ti Laptop GPU, with FellowEngine's visual
@@ -78,8 +80,9 @@ to −21 %. They are listed in the [options](docs/FELLOWENGINE_OPTIONS.md).
 |---|---|---|
 | `FellowWater3D` | lakes and seas: JONSWAP wind waves simulated by FFT in cascades, foam, screen-space reflections traced over a Hi-Z depth pyramid, refraction, absorption, shore foam, caustics, the sun's glitter | 1.6 ms of Water Lab's frame; reflections 0.61 ms |
 | `FellowShallowWater3D` | a mass-conserving shallow-water simulation on the GPU (rivers, obstacles, moving bodies), drawn alone or blended into a `FellowWater3D` | 512²: 0.21 ms, 1024²: 0.75-0.79 ms per step |
-| `FellowRain3D` | rain around the camera: GPU drops that stop and splash on the scene, roofs sheltering the ground, wet materials, puddles with ripples | 0.36 ms (Rain Lab) |
-| `FellowWind3D` | wind with gusts rolling over the landscape: plants bend, sway, flutter and shine with it; shadows and motion vectors follow | 0.56 ms (Wind Lab); projects' own `TIME`-based sway costs 1.81 ms |
+| `FellowRain3D` | rain around the camera: GPU drops that stop and splash on the scene, roofs sheltering the ground, wet materials, puddles with ripples; or snow: flakes drifting in the wind and a snow cover on what faces up, bare under roofs and trees, glinting in the sun | 0.36 ms (Rain Lab); snowing 0.37 ms |
+| `FellowWind3D` | wind with gusts rolling over the landscape: plants bend, sway, flutter and shine with it; shadows and motion vectors follow; water, smoke and fire, and particles (`ParticleProcessMaterial`'s Wind group) take the same wind | 0.56 ms (Wind Lab); projects' own `TIME`-based sway costs 1.81 ms |
+| `FellowLightning3D` | lightning strikes around the camera: a few return strokes flashing over the scene with shadows, a branching bolt, a lit cloud, a signal for the thunder | +0.04 ms on average with a strike every 2 s (Rain Lab) |
 | `FellowGasVolume3D` | smoke and fire simulated on the GPU (sparse bricks, multigrid pressure solve), physics bodies as obstacles, blackbody flames lighting the scene | Fire Lab's three volumes (0.47 M cells): the simulation 1.58 ms per step, the drawing 0.31 ms |
 | `FellowBurnable3D` | a mesh burns like wood in the gas's fire: voxels pyrolyse to char and glowing embers, the surface recedes, burns through and falls as a heap of ash and charcoal | drawing 0.35 ms (Burn Lab) |
 | `FellowHLOD3D` | automatic HLOD: repeated far meshes instanced and culled on the GPU, the rest merged per cell with LODs, optional octahedral impostors | City Lab: render thread −23 to −42 % |

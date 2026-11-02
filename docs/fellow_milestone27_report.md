@@ -59,9 +59,11 @@ RTX 5070 Ti Laptop, 1080p, fellow215 (`0784530`), autotune off, 2 runs each with
 | Particles Lab, 4 m/s | 2.545 ms GPU | 2.491 ms | the particles' update +0.149 ms (0.495 → 0.644: the gust lookup and the drag per particle), the transparent pass −0.06 |
 | Wind Lab, 4000 falling leaves | 4.212 ms GPU | 4.228 ms | the leaves' update +0.025 ms, the shadows +0.025 |
 
-Particles Lab's frame rose on the CPU, 6.05 → 7.50 ms. That was the bench, not the wind: it grew each emitter's
-visibility box by the drift in every direction, which put 86 more emitters in view (draw calls 289 → 374, primitives
-200 k → 329 k). The boxes now grow downwind only; re-measured in milestone 28 (`m28_f288`).
+Particles Lab's frame rose on the CPU, 6.05 → 7.50 ms. Part of it was the bench: it grew each emitter's visibility
+box by the drift in every direction, which put 86 more emitters in view (draw calls 289 → 374, primitives 200 k →
+329 k). The boxes now grow downwind only. Re-measured in `m28_f288`: 3.114 ms of frame still, 3.208 ms in the wind
+(+0.09; GPU 2.412 / 2.338 ms), the particles' update +0.04 ms, draw calls 309 → 338 — in `f287` both variants had
+run at about 6 ms of frame, CPU time that run lost elsewhere.
 
 ## 4. Showcase
 

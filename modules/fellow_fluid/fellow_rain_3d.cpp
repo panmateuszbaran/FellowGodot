@@ -179,7 +179,7 @@ void FellowRain3D::_build_children() {
 	flake_material->set_shader_parameter("flake", true);
 	flake_material->set_shader_parameter("fade_near", 0.3);
 	flake_material->set_shader_parameter("fade_far", 1.2);
-	flake_material->set_shader_parameter("forward_scatter", 1.5);
+	flake_material->set_shader_parameter("forward_scatter", 4.0); // ice crystals scatter forward: flakes glow against the sun
 	flake_material->set_shader_parameter("light_wrap", 0.5);
 	flake_material->set_shader_parameter("brightness", 1.0);
 

@@ -1,8 +1,8 @@
 # FellowEngine showcase
 
-Real-time captures from FellowBench (`benchmarks/project`) on an RTX 5070 Ti Laptop GPU, build `fellow214`
-(`0b7c021`). Each was rendered at 1920 × 1080, supersampled 1.5× under TAA and settled for 300 frames, then scaled to
-1600 × 900. The loops are 960 × 540 animated WebP.
+Real-time captures from FellowBench (`benchmarks/project`) on an RTX 5070 Ti Laptop GPU, builds `fellow214`
+(`0b7c021`) to `fellow217` (`6958bfd`, the snow). Each was rendered at 1920 × 1080, supersampled 1.5× under TAA and
+settled for 300 frames, then scaled to 1600 × 900. The loops are 960 × 540 animated WebP.
 
 Nothing here is painted over. Each scene is the bench scene with FellowEngine's settings and nodes turned on, plus a
 camera, sun and exposure chosen for the picture. The command lines are in the showcase jobs (`m26_s2`-`m26_s4`): see
@@ -24,6 +24,29 @@ everything gets a glossy film, and puddles with ripples form on flat ground. The
 lamps and string lights in the cobblestones. The sun is off, and the scene's own lamps and ray-traced GI light it.
 
 Settings: ray tracing (DDGI, reflections, AO), bloom with lens flare, contact shadows, exposure ×6.
+
+## Bistro in the snow
+
+<img src="showcase/bistro_snow_night_cafe.jpg" width="100%" alt="Bistro's cafe at night in the snow: snow on the awnings, the planters and the street, flakes in the lamplight">
+
+<img src="showcase/loop_bistro_snow_cafe.webp" width="100%" alt="Moving towards the cafe at night as it snows">
+
+<img src="showcase/bistro_snow_night_street.jpg" width="100%" alt="A Bistro street at night under snow, the lamps lighting the flakes">
+
+<img src="showcase/loop_bistro_snow_street.webp" width="100%" alt="Moving down the snowy street at night">
+
+<img src="showcase/bistro_snow_gold_tree.jpg" width="100%" alt="The square's tree after snowfall against a low sun: bare cobbles under its canopy, light shafts, flakes glowing">
+
+<img src="showcase/bistro_snow_gold_cafe.jpg" width="100%" alt="The cafe in the snow in low sunlight">
+
+The same Bistro with `FellowRain3D` in its snow mode (milestone 28). Flakes drift down around the camera and stop on
+roofs and awnings. The snow cover lies on everything that faces up, where the snow falls: the streets, the awnings,
+the planters, the leaves. Under the café's awnings and the tree's canopy the ground stays bare, but wires and strings
+of lights overhead leave no marks. The flakes are drawn in the opaque pass with the particles' motion vectors, so TAA
+keeps them. At night the lamps light them; after sunset they glow against the low sun.
+
+Settings: at night as in the rain, exposure ×5, `--weather_snow=0.8`; at the golden hour as below with
+`--weather_snow=0.3`, the sun at 7°.
 
 ## Bistro at the golden hour
 
@@ -121,8 +144,8 @@ settings under `rendering/fellow/`:
   `raytracing/ambient_occlusion`, `raytracing/sun_shadows`.
 
 FellowBench's options place the sun and the cameras: `--sun_elevation`, `--sun_azimuth`, `--sun_energy`,
-`--add_camera`, `--add_seq`. Its option `--weather_rain` adds the rain to Bistro, and `--set` supplies the 1.5×
-supersampling, the exposure and the sky's energy.
+`--add_camera`, `--add_seq`. Its options `--weather_rain` and `--weather_snow` add the rain and the snow to Bistro,
+and `--set` supplies the 1.5× supersampling, the exposure and the sky's energy.
 
 The benchmark assets keep their licenses: Intel New Sponza (CC BY 4.0, Intel) and Amazon Lumberyard Bistro (CC BY
 4.0, Amazon Lumberyard / NVIDIA ORCA).

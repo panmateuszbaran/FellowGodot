@@ -255,9 +255,48 @@ asked:
   renderer).
 
 Particles that drift need a visibility box reaching as far as they drift (downwind). Cost (RTX 5070 Ti Laptop,
-1080p, `m27_f287`): the water's gust ripples and the gas's wind not measurable; Particles Lab's update +0.15 ms
-(0.50 → 0.64). Decision record 0127; FellowBench `--weather_wind=<m/s>` in any scene, `--wind_leaves=<n>` falling
+1080p, `m27_f287`, `m28_f288`): the water's gust ripples and the gas's wind not measurable; Particles Lab's update
++0.04 to +0.15 ms (of 0.5 ms), its frame +0.09 ms. Decision record 0127; FellowBench `--weather_wind=<m/s>` in any scene, `--wind_leaves=<n>` falling
 leaves in Wind Lab.
+
+## Snow (milestone 28)
+
+`FellowRain3D` snows with `precipitation` = Snow (Forward+):
+
+* **flakes** (`max_drops`, scaled by `rain`): soft camera-facing discs (`flake_size` 1.8 cm, `flake_color`) falling at
+  `flake_speed` (1.1 m/s) and swinging about their paths (`flake_flutter`, 12 cm), in a box of `area` around the
+  camera (8 s lives, fading in and out); with a `FellowWind3D` they take the wind where they are, gusts included
+  (`flake_wind_influence`, 1.5/s); they stop on the shelter heightfield (none under roofs) and receive shadows; drawn
+  in the opaque pass with hashed alpha, with the particles' motion vectors (blended, TAA wiped them out);
+* **snow cover** (`snow`, 0-1, independent of what falls): what faces up is covered where the snow falls — patchy
+  while thin, everything facing up once deep, nothing on slopes steeper than 60°, bare under roofs and trees (the
+  shelter, eroded by 35 cm: wires and lamps overhead leave no bare spots); fresh snow is white, rough and smooth with gentle undulations; `snow_sparkle` glints where a crystal
+  faces the light; `snow_follows_precipitation` grows it in `snowing_time` (900 s) and melts it in `melting_time`
+  (1800 s);
+* no ripples on puddles or water, no splashes, while it snows.
+
+Cost (RTX 5070 Ti Laptop, 1080p, Rain Lab, `m28_f289`): 0.37 ms of GPU time snowing on a covered street (60000
+flakes; raining 0.34 ms) — the depth pre-pass +0.10 ms and the opaque pass +0.10 ms (the flakes and the cover), the
+flakes' update +0.07 ms. Decision record 0128; FellowBench `--weather_snow=<0-1>` in any scene (`--weather_snow_cover`,
+`--weather_snow_flakes`, `--weather_snow_area`, `--weather_snow_sparkle`), Rain Lab `--rain=snow`.
+
+## Lightning (milestone 29)
+
+A `FellowLightning3D` node (module `fellow_fluid`) strikes at random (`strikes_per_minute`, 4; `distance_range` 0.4-3 km
+around the camera) or when `strike(distance, azimuth)` is called. A strike is two to four return strokes 40-120 ms
+apart, each a flash decaying over about 40 ms:
+
+* a directional light from the bolt's direction (`energy` 6 at 1 km, `color`; `shadows`), visible only during a
+  flash, no sun disc in the sky;
+* the bolt: a branching channel from the cloud (`cloud_height`, 1.2 km), ribbons of a constant width on screen
+  (`bolt_width`, 0.006 rad), additive and unshaded (`bolt_brightness`; bloom makes the glow), hidden by the scene in
+  front of it; a lit cloud above it;
+* the same clock (`time`, `seed`) gives the same storm; `struck(position, distance)` for the thunder
+  (distance / 343 s later).
+
+Cost (RTX 5070 Ti Laptop, 1080p, Rain Lab at dusk, `m29_f290`): +0.04 ms of GPU time on average with a strike every
+2 s (the flash's shadows +0.02 ms, the opaque pass +0.03 ms); nothing between strikes. Decision record 0129; FellowBench `--weather_lightning=<per minute>` in any scene
+(`--weather_lightning_flash`, `--weather_lightning_frames`).
 
 ## Options that change the image (off by default)
 
