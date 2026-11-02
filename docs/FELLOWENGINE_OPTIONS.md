@@ -274,6 +274,12 @@ leaves in Wind Lab.
   faces the light; `snow_follows_precipitation` grows it in `snowing_time` (900 s) and melts it in `melting_time`
   (1800 s);
 * no ripples on puddles or water, no splashes, while it snows.
+* **tracks** (milestone 30; `tracks`, on): `FellowSnowTracker3D` nodes (feet, wheels, runners: `radius`, `length`,
+  `depth`, `contact_height`) press capsules into the snow while they touch the scene's top, and `stamp(from, to,
+  radius, depth)` presses one when asked; the cover shows the tracks' walls, packed snow at their bottom, the ground
+  where they reach `snow_depth` (0.08 m), a rim beside them; the falling snow fills them back (`track_refill_time`,
+  900 s). They live in a world-anchored window of `track_window` (48 m, `track_resolution` 2048) around the camera.
+  Cost: not measurable (Rain Lab, a cart's wheels pressing every frame, `m30_f292`). Decision record 0130.
 
 Cost (RTX 5070 Ti Laptop, 1080p, Rain Lab, `m28_f289`): 0.37 ms of GPU time snowing on a covered street (60000
 flakes; raining 0.34 ms) — the depth pre-pass +0.10 ms and the opaque pass +0.10 ms (the flakes and the cover), the

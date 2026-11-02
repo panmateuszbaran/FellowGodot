@@ -9,6 +9,17 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 30 — snow tracks (2026-11-02)
+
+- Added `FellowSnowTracker3D` and `FellowRain3D.stamp()` (decision 0130): feet, wheels and runners press tracks into
+  the snow while they touch the ground (the shelter heightfield, eroded); the cover shows their walls, packed snow at
+  their bottom, a rim beside them and the ground where they cut through; the falling snow fills them back. The
+  tracks live in a world-anchored, wrapping R16F window around the camera (48 m, 2048², `tracks`, `track_window`,
+  `track_resolution`, `snow_depth`, `track_refill_time`), updated only where something changed.
+- Cost on the RTX (Rain Lab snowing, a cart's wheels pressing every frame, `m30_f292`): not measurable. Rain Lab
+  without drops and Water Lab bit for bit on lavapipe.
+- FellowBench: `--weather_snow_footprints`, `--weather_snow_ruts`, `--weather_snow_depth`; Rain Lab `--rain_tracks=1`.
+
 ## Milestone 29 — lightning (2026-11-02)
 
 - Added `FellowLightning3D` (decision 0129): strikes at random around the camera (`strikes_per_minute`,

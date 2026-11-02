@@ -30,6 +30,16 @@
 				The rain's ripples on standing water: a tiling texture of [member ripple_tile] (slopes in red and green, height in blue, the puddles' tiling noise in alpha; with mipmaps), computed every frame while the node is active.
 			</description>
 		</method>
+		<method name="stamp">
+			<return type="void" />
+			<param index="0" name="from" type="Vector3" />
+			<param index="1" name="to" type="Vector3" />
+			<param index="2" name="radius" type="float" />
+			<param index="3" name="depth" type="float" default="-1.0" />
+			<description>
+				Presses a capsule from [param from] to [param to] (their x and z) of [param radius] into the snow, [param depth] metres deep (negative: 0.8 of [member snow_depth]), once — a footprint, a groove. Applied in the next frames, within the tracks' window around the camera.
+			</description>
+		</method>
 	</methods>
 	<members>
 		<member name="area" type="float" setter="set_area" getter="get_area" default="40.0">
@@ -101,6 +111,9 @@
 		<member name="snow" type="float" setter="set_snow" getter="get_snow" default="0.0">
 			The snow cover, from 0 to 1: what faces up is covered where the snow falls (not under roofs: the heightfield of [method get_occlusion]) — patchy while thin, everything facing up once deep, nothing on slopes steeper than 60 degrees. Fresh snow: white, rough, smooth (it fills the materials' relief) with gentle undulations, glinting by [member snow_sparkle]. Opaque materials on the Forward+ renderer, in the depth pre-pass and the colour pass, after their own code.
 		</member>
+		<member name="snow_depth" type="float" setter="set_snow_depth" getter="get_snow_depth" default="0.08">
+			How deep the snow is, in metres: tracks that reach it show the ground ([FellowSnowTracker3D], [method stamp]).
+		</member>
 		<member name="snow_follows_precipitation" type="bool" setter="set_snow_follows_precipitation" getter="is_snow_following_precipitation" default="false">
 			If [code]true[/code], [member snow] grows while it snows (fully in [member snowing_time] at [member rain] 1) and melts otherwise (in [member melting_time]).
 		</member>
@@ -115,6 +128,18 @@
 		</member>
 		<member name="time_auto" type="bool" setter="set_time_auto" getter="is_time_auto" default="true">
 			If [code]true[/code], the ripples' time advances with the process time; otherwise it is set by the [code]time[/code] property (deterministic renders).
+		</member>
+		<member name="track_refill_time" type="float" setter="set_track_refill_time" getter="get_track_refill_time" default="900.0">
+			The seconds full snowfall ([member rain] 1) takes to fill a track of [member snow_depth] back (0: never).
+		</member>
+		<member name="track_resolution" type="int" setter="set_track_resolution" getter="get_track_resolution" default="2048">
+			The tracks' texture side in cells (a power of two; R16F).
+		</member>
+		<member name="track_window" type="float" setter="set_track_window" getter="get_track_window" default="48.0">
+			The side of the tracks' window around the camera, in metres (48 m at 2048 cells: 2.3 cm each).
+		</member>
+		<member name="tracks" type="bool" setter="set_tracks" getter="get_tracks" default="true">
+			If [code]true[/code], the snow keeps tracks: [FellowSnowTracker3D]s and [method stamp] press them in, the cover shows them (their walls, packed snow at their bottom, the ground where they reach [member snow_depth], a rim beside them), and the falling snow fills them back ([member track_refill_time]). They live in a window of [member track_window] around the camera, anchored to the world: a place that leaves the window is fresh snow when it comes back.
 		</member>
 		<member name="wetness" type="float" setter="set_wetness" getter="get_wetness" default="1.0">
 			How wet surfaces exposed to the rain are (0 to 1). Puddles appear above 0.4.

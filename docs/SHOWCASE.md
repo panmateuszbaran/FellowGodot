@@ -1,7 +1,7 @@
 # FellowEngine showcase
 
 Real-time captures from FellowBench (`benchmarks/project`) on an RTX 5070 Ti Laptop GPU, builds `fellow214`
-(`0b7c021`) to `fellow219` (`32265c8`, the snow and the lightning). Each was rendered at 1920 × 1080, supersampled 1.5× under TAA and
+(`0b7c021`) to `fellow220` (`9356d62`, the snow, its tracks and the lightning). Each was rendered at 1920 × 1080, supersampled 1.5× under TAA and
 settled for 300 frames, then scaled to 1600 × 900. The loops are 960 × 540 animated WebP.
 
 Nothing here is painted over. Each scene is the bench scene with FellowEngine's settings and nodes turned on, plus a
@@ -47,6 +47,17 @@ keeps them. At night the lamps light them; after sunset they glow against the lo
 
 Settings: at night as in the rain, exposure ×5, `--weather_snow=0.8`; at the golden hour as below with
 `--weather_snow=0.3`, the sun at 7°.
+
+<img src="showcase/bistro_snow_tracks_night.jpg" width="100%" alt="A snowy Bistro street at night with a cart's wheel ruts cut to the cobbles and a line of footprints">
+
+<img src="showcase/loop_bistro_snow_tracks.webp" width="100%" alt="Moving down the street along the ruts and the footprints">
+
+<img src="showcase/bistro_snow_tracks_gold.jpg" width="100%" alt="The same tracks after sunset">
+
+Tracks (milestone 30): a cart's two ruts cut down to the cobbles and a line of footprints beside them, laid along
+polylines with `--weather_snow_footprints` and `--weather_snow_ruts` (`FellowRain3D.stamp()`; in a game,
+`FellowSnowTracker3D` nodes on feet and wheels press them as they move). The footprints' walls catch the light, their
+bottoms are packed snow, and a rim of pushed-up snow runs beside them.
 
 ## Bistro at the golden hour
 

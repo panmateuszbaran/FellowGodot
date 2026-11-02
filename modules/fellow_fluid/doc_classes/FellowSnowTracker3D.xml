@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="FellowSnowTracker3D" inherits="Node3D" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+	<brief_description>
+		Presses tracks into the snow: a foot, a wheel, a sledge's runner (FellowEngine).
+	</brief_description>
+	<description>
+		While it touches the scene's top — within [member contact_height] of it, the top as the snow sees it (the active [FellowRain3D]'s shelter heightfield, wires and lamps overhead ignored) — the tracker presses a capsule of [member radius] into the snow each frame, from where it was to where it is, lengthened by [member length] along its forward axis (-Z): a footprint when it stands (a foot: [member radius] 0.055 m, [member length] 0.15 m — 26 cm with its round ends), a groove when it moves (a wheel: [member length] 0). Attach one to each foot of a character (a [BoneAttachment3D]) or each wheel of a vehicle; its origin is its lowest point.
+		The tracks show where the active [FellowRain3D] has a snow cover with [member FellowRain3D.tracks] on. Decision record [code]docs/decisions/0130-snow-tracks.md[/code].
+	</description>
+	<tutorials>
+	</tutorials>
+	<members>
+		<member name="contact_height" type="float" setter="set_contact_height" getter="get_contact_height" default="0.2">
+			How far above (or below) the scene's top the tracker still presses, in metres.
+		</member>
+		<member name="depth" type="float" setter="set_depth" getter="get_depth" default="-1.0">
+			How deep it presses, in metres (negative: 0.8 of [member FellowRain3D.snow_depth]; deeper than the snow shows the ground).
+		</member>
+		<member name="enabled" type="bool" setter="set_enabled" getter="is_enabled" default="true">
+			If [code]false[/code], it presses nothing.
+		</member>
+		<member name="length" type="float" setter="set_length" getter="get_length" default="0.0">
+			How far its capsule reaches along its forward axis, in metres (a foot's length less its width).
+		</member>
+		<member name="radius" type="float" setter="set_radius" getter="get_radius" default="0.1">
+			Half its width, in metres.
+		</member>
+	</members>
+</class>
