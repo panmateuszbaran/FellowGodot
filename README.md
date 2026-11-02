@@ -123,7 +123,8 @@ timestamps, plus analysis tools. See [benchmarks/README.md](benchmarks/README.md
 ## Credits and license
 
 FellowEngine is built on [Godot Engine](https://godotengine.org) by Juan Linietsky, Ariel Manzur and the Godot
-contributors, released under the MIT license ([LICENSE.txt](LICENSE.txt), [COPYRIGHT.txt](COPYRIGHT.txt)). This fork is
-not affiliated with or endorsed by the Godot Foundation. The benchmark assets are not in the repository, and
+contributors, released under the MIT license ([LICENSE.txt](LICENSE.txt), [COPYRIGHT.txt](COPYRIGHT.txt)). FellowEngine's
+own changes are released under the same MIT license. This fork is not affiliated with or endorsed by the Godot
+Foundation. The benchmark assets are not in the repository, and
 `benchmarks/scripts` fetches them. They keep their own licenses: Intel New Sponza (CC BY 4.0, Intel) and Amazon
 Lumberyard Bistro (CC BY 4.0, Amazon Lumberyard / NVIDIA ORCA), both shown in the showcase images.
