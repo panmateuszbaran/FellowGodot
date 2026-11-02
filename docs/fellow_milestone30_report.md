@@ -51,7 +51,9 @@ streets from above with test paths: the first ruts ran over the curb and were mo
 
 ## 5. Left for later
 
-* Real depth: the tracks shade the snow but do not displace it (no parallax, no shadows inside a footprint); a
-  parallax step in the cover or a displaced snow mesh near the camera would add both.
+* Real depth: the tracks shade the snow but do not displace it (no parallax, no shadows inside a footprint). A
+  one-step offset parallax was tried and reverted: at grazing views it moved a deep rut's samples out of the rut (a
+  thin line instead of a groove) and drew footprints as outlines; a march of several steps, or a displaced snow mesh
+  near the camera, would be needed.
 * Characters in the bench that walk (Crowd Lab's) with trackers on their feet.
 * Tracks in the snow on other surfaces than the scene's top (a roof under a balcony is not reachable).

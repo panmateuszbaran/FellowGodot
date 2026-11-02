@@ -63,6 +63,10 @@ FellowBench: `--weather_snow_footprints=<x,z;...|...>` (footprints along polylin
 * **Bistro** (RTX, `m30_s10`): a cart's ruts down the snowy street at night, footprints beside them; seen from above,
   the tracks lie where the polylines put them.
 
+**Tried and not kept:** a one-step offset parallax in the cover (the floor of a track seen farther from the camera):
+at grazing views it moved a deep rut's samples out of the rut — a thin line instead of a groove — and drew
+footprints as outlines (lavapipe).
+
 ## Decision
 
 **KEEP.**
