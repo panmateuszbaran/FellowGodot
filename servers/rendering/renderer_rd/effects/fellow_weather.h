@@ -67,6 +67,10 @@ public:
 		float ripple_strength = 1.0f;
 		float snow = 0.0f; // 0..1: the snow cover (decision 0128)
 		float snow_sparkle = 0.0f; // 0..1: the fresh snow's glints
+		float snow_depth = 0.08f; // m (decision 0130: how deep tracks can go before the ground shows)
+		RID tracks_texture; // RD texture (r16f): the tracks' depth in m (negative: a rim), world-anchored, wrapping
+		Vector2 tracks_origin; // m: the window's centre
+		float tracks_window = 0.0f; // m: its side (0: no tracks)
 	};
 
 	struct WindState {
@@ -92,7 +96,8 @@ public:
 		float wind_prev[4]; // the previous frame's wind (motion vectors)
 		float wind2_prev[4];
 		float wind_time[4]; // this frame's and the previous frame's time of the wind
-		float snow[4]; // cover, sparkle, -, - (decision 0128)
+		float snow[4]; // cover, sparkle, depth (m), tracks on (decision 0128, 0130)
+		float tracks[4]; // the tracks' window: centre x, z (m), 1 / side (m), half its side less a margin (m)
 	};
 
 private:
@@ -118,6 +123,7 @@ public:
 	RID get_occlusion_texture() const;
 	RID get_ripple_texture() const;
 	RID get_gust_texture() const;
+	RID get_tracks_texture() const;
 
 	FellowWeather();
 	~FellowWeather();

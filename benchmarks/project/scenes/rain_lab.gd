@@ -9,7 +9,9 @@ extends "res://bench/scene_base.gd"
 ## Options:
 ##   --rain=on|dry|off   on: raining and wet (default); dry: FellowRain3D present but no rain, dry (its cost when idle);
 ##                       off: no FellowRain3D; snow: snowing, the street under snow (its snow mode, decision 0128:
-##                       --rain_snow_cover=<0..1> (1), --rain_flakes=<n> (60000), --rain_snow_sparkle=<0..1> (1))
+##                       --rain_snow_cover=<0..1> (1), --rain_flakes=<n> (60000), --rain_snow_sparkle=<0..1> (1);
+##                       --rain_tracks=1: a cart's two wheels press tracks into the snow driving down the street, and
+##                       footprints wander down it (decision 0130); --rain_tracks=0 turns the tracks off)
 ##   --rain_amount=<0..1> (0.7), --rain_wetness=<0..1> (1), --rain_puddles=<0..1> (0.55), --rain_drops=<n> (24000)
 ##   --rain_light=day|dusk  overcast day (default) or dusk with the street lamps on
 ##   --rain_wind=<m/s>      a FellowWind3D blowing along +X (the drops follow it; 0: none, the default)
@@ -25,6 +27,7 @@ var mode := "on"
 var light := "day"
 var rain  # FellowRain3D
 var basin  # FellowWater3D
+var wheels := []  # FellowSnowTracker3D (--rain_tracks)
 var sun: DirectionalLight3D
 var _mats := {}
 var _rng := RandomNumberGenerator.new()
@@ -62,6 +65,15 @@ func build(p_args: Dictionary) -> void:
 			rain.snow_sparkle = float(args.get("rain_snow_sparkle", "1.0"))
 			rain.max_drops = int(args.get("rain_flakes", "60000"))
 			rain.area = 30.0
+			rain.tracks = str(args.get("rain_tracks", "1")) != "0"
+			if str(args.get("rain_tracks", "0")) == "1" and ClassDB.class_exists("FellowSnowTracker3D"):
+				for side in [-0.75, 0.75]:
+					var w = ClassDB.instantiate("FellowSnowTracker3D")
+					w.radius = 0.09
+					w.depth = 0.1
+					w.set_meta("side", side)
+					add_child(w)
+					wheels.append(w)
 		rain.occlusion_always_update = str(args.get("rain_occlusion", "moved")) == "always"
 		rain.wind = Vector3(1.2, 0.0, 0.6)
 		add_child(rain)
@@ -359,6 +371,19 @@ func set_time(t: float) -> void:
 		rain.time = t
 	if basin:
 		basin.time = t
+	# The cart drives down the street at 4 m/s in the far lane (from x = -60, again every 30 s); footprints wander
+	# down the near one.
+	for w in wheels:
+		var x := -60.0 + fmod(t, 30.0) * 4.0
+		w.position = Vector3(x, 0.05, -2.0 + float(w.get_meta("side")))
+	if rain and wheels.size() > 0 and not has_meta("footprints"):
+		set_meta("footprints", true)
+		var left := true
+		for k in 120:
+			var x := -40.0 + k * 0.7
+			var z := 1.8 + (0.12 if left else -0.12) + sin(k * 0.11) * 0.6
+			rain.stamp(Vector3(x - 0.09, 0, z), Vector3(x + 0.09, 0, z), 0.055)
+			left = not left
 
 
 func _define_cameras() -> void:

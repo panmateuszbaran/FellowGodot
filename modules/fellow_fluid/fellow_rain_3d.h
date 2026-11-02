@@ -37,6 +37,7 @@
 #include "scene/resources/particle_process_material.h"
 #include "scene/resources/texture_rd.h"
 #include "servers/rendering/rendering_device.h"
+#include "servers/rendering/renderer_rd/effects/fellow_weather.h"
 #include "servers/rendering/rendering_device_binds.h"
 
 // FellowEngine rain (docs/decisions/0124-rain.md): drops falling around the camera (GPU particles colliding with the
@@ -68,6 +69,35 @@ private:
 	};
 	static_assert(sizeof(PushConstant) == 32);
 
+	// The snow tracks' pass (decision 0130): fellow_snow_tracks.glsl's Params.
+	struct TracksPush {
+		int32_t origin[2];
+		int32_t prev_origin[2];
+		int32_t region_lo[2];
+		int32_t region_size[2];
+		int32_t size;
+		int32_t stamp_count;
+		float cell;
+		float refill;
+		float occ_origin[2];
+		float occ_inv[2];
+		float occ_y;
+		float occ_half;
+		float occ_enabled;
+		float pad;
+	};
+	static_assert(sizeof(TracksPush) == 80);
+
+public:
+	// A capsule pressed into the snow: x0, z0, x1, z1; radius, depth, the presser's height, its contact height (< 0:
+	// always).
+	struct TrackStamp {
+		float segment[4];
+		float shape[4];
+	};
+	static constexpr int MAX_TRACK_STAMPS = 256;
+
+private:
 	static FellowRain3D *active;
 
 	Precipitation precipitation = PRECIPITATION_RAIN;
@@ -102,6 +132,13 @@ private:
 	float flake_size = 0.018f; // m
 	float flake_flutter = 0.12f; // m: how far a flake swings about its path
 	float flake_wind_influence = 1.5f; // 1/s: how fast the flakes take the scene's wind
+	bool tracks = true; // decision 0130
+	float track_window = 48.0f; // m: the side of the tracks' window around the camera (2048 cells: 2.3 cm each)
+	int track_resolution = 2048;
+	float snow_depth = 0.08f; // m
+	float track_refill_time = 900.0f; // s for full snowfall to fill a track of the snow's depth
+	LocalVector<TrackStamp> pending_stamps;
+	double track_refill_accum = 0.0;
 	Color flake_color = Color(0.95f, 0.96f, 1.0f, 0.9f);
 	double time = 0.0;
 	bool time_auto = true;
@@ -133,6 +170,17 @@ private:
 	bool gpu_ready = false;
 	bool gpu_failed = false;
 	Ref<Texture2DRD> ripple_texture;
+	// The snow's tracks.
+	Ref<RDShaderFile> tracks_shader_file;
+	RID tracks_shader;
+	RID tracks_pipeline;
+	RID tracks_tex;
+	RID tracks_stamps;
+	RID tracks_sampler;
+	RID tracks_set;
+	RID tracks_set_occlusion; // the heightfield texture tracks_set was built with
+	int tracks_size = 0;
+	int32_t tracks_prev_origin[2] = {};
 
 	static constexpr float SNOW_LIFETIME = 8.0f; // s: a flake's life in the box around the camera
 
@@ -142,7 +190,10 @@ private:
 	void _push_state();
 	void _rt_create();
 	void _rt_free();
-	void _rt_update(PackedByteArray p_push, bool p_enabled, PackedByteArray p_state);
+	void _rt_update(PackedByteArray p_push, bool p_enabled, PackedByteArray p_state, PackedByteArray p_tracks);
+	void _rt_tracks(RendererRD::FellowWeather::State &r_state, const PackedByteArray &p_tracks);
+	void _rt_free_tracks();
+	bool _tracks_active() const;
 	void _rt_disable();
 
 protected:
@@ -218,6 +269,20 @@ public:
 	float get_flake_wind_influence() const { return flake_wind_influence; }
 	void set_flake_color(const Color &p_color);
 	Color get_flake_color() const { return flake_color; }
+	void set_tracks(bool p_enable) { tracks = p_enable; }
+	bool get_tracks() const { return tracks; }
+	void set_track_window(float p_metres) { track_window = CLAMP(p_metres, 4.0f, 1024.0f); }
+	float get_track_window() const { return track_window; }
+	void set_track_resolution(int p_resolution);
+	int get_track_resolution() const { return track_resolution; }
+	void set_snow_depth(float p_metres) { snow_depth = MAX(0.001f, p_metres); }
+	float get_snow_depth() const { return snow_depth; }
+	void set_track_refill_time(float p_seconds) { track_refill_time = MAX(0.0f, p_seconds); }
+	float get_track_refill_time() const { return track_refill_time; }
+	// Presses a capsule from p_from to p_to (their x and z) of p_radius into the snow, p_depth deep (< 0: 0.8 of
+	// snow_depth), once (applied next frame, within the window around the camera).
+	void stamp(const Vector3 &p_from, const Vector3 &p_to, float p_radius, float p_depth = -1.0f);
+	void add_track_stamp(const TrackStamp &p_stamp);
 	void set_time(double p_time) { time = p_time; }
 	double get_time() const { return time; }
 	void set_time_auto(bool p_auto) { time_auto = p_auto; }

@@ -1607,14 +1607,38 @@ void fellow_snow_cover(in SceneData p_scene, in FellowWeatherData w, float snow,
 	if (cover <= 0.0) {
 		return;
 	}
+	// Tracks (decision 0130): how deep they go here (m; negative: a rim of pushed-up snow), from a world-anchored
+	// wrapping texture around the camera. Where they reach the snow's depth the ground shows; their walls turn the
+	// normal; the packed snow at their bottom is greyer and smoother.
+	float track = 0.0;
+	vec2 track_slope = vec2(0.0);
+	if (w.snow.w > 0.5 && all(lessThan(abs(wp.xz - w.tracks.xy), vec2(w.tracks.w)))) {
+		vec2 tuv = wp.xz * w.tracks.z;
+		vec2 tsize = vec2(textureSize(sampler2D(fellow_snow_tracks, SAMPLER_LINEAR_REPEAT), 0));
+		track = textureLod(sampler2D(fellow_snow_tracks, SAMPLER_LINEAR_REPEAT), tuv, 0.0).r;
+		if (track != 0.0) {
+			float tx = textureLod(sampler2D(fellow_snow_tracks, SAMPLER_LINEAR_REPEAT), tuv + vec2(1.0 / tsize.x, 0.0), 0.0).r;
+			float tz = textureLod(sampler2D(fellow_snow_tracks, SAMPLER_LINEAR_REPEAT), tuv + vec2(0.0, 1.0 / tsize.y), 0.0).r;
+			track_slope = vec2(tx - track, tz - track) * (w.tracks.z * tsize.x); // per metre (one texel apart)
+			float sl = length(track_slope);
+			track_slope *= sl > 3.0 ? 3.0 / sl : 1.0;
+		}
+	}
+	float tdepth = clamp(track / w.snow.z, -1.0, 1.0);
+	cover *= 1.0 - smoothstep(0.85, 1.0, tdepth); // the ground at the bottom of the deepest
+	if (cover <= 0.0) {
+		return;
+	}
+	float packed = max(tdepth, 0.0);
 	// Its surface: smooth (it fills the material's relief), with gentle undulations of a centimetre or two (the fine
 	// noise's slopes, 8 cm differences; flat where its mip levels blur it).
 	const float D = 0.08;
 	float nfx = textureLod(sampler2D(fellow_rain_ripples, SAMPLER_LINEAR_WITH_MIPMAPS_REPEAT), fuv + ROT1 * vec2(D, 0.0) * FINE, flod).a;
 	float nfz = textureLod(sampler2D(fellow_rain_ripples, SAMPLER_LINEAR_WITH_MIPMAPS_REPEAT), fuv + ROT1 * vec2(0.0, D) * FINE, flod).a;
 	vec2 slope = vec2(nfx - nf, nfz - nf) * (0.015 / D);
-	vec3 sn = normalize(normalize(mix(nw, gn, 0.8)) + vec3(-slope.x, 0.0, -slope.y));
-	float rough = 0.62;
+	// The tracks' walls: the snow's surface is -track, so its normal leans along +grad(track).
+	vec3 sn = normalize(normalize(mix(nw, gn, 0.8)) + vec3(track_slope.x - slope.x, 0.0, track_slope.y - slope.y));
+	float rough = mix(0.62, 0.45, packed);
 	// Glints: a crystal in a cell of 8 mm, one cell in 20, turned at random; faded where a cell is under a pixel.
 	if (w.snow.y > 0.0) {
 		ivec3 cell = ivec3(floor(wp * 125.0));
@@ -1626,7 +1650,7 @@ void fellow_snow_cover(in SceneData p_scene, in FellowWeatherData w, float snow,
 		h ^= h >> 16u;
 		float r = float(h & 0xffffu) / 65535.0;
 		float px = exp2(wet_lod) * (1.0 / 256.0); // metres per pixel
-		float k = w.snow.y * cover * smoothstep(0.016, 0.006, px) * step(0.95, r);
+		float k = w.snow.y * cover * (1.0 - packed) * smoothstep(0.016, 0.006, px) * step(0.95, r);
 		if (k > 0.0) {
 			vec3 t = vec3(float((h >> 16u) & 0xffu), float((h >> 24u) & 0xffu), float(h & 0xffu)) / 127.5 - 1.0;
 			sn = normalize(mix(sn, normalize(sn + t * 0.5), k));
@@ -1635,7 +1659,7 @@ void fellow_snow_cover(in SceneData p_scene, in FellowWeatherData w, float snow,
 	}
 	mat4 view = transpose(mat4(p_scene.view_matrix[0], p_scene.view_matrix[1], p_scene.view_matrix[2], vec4(0.0, 0.0, 0.0, 1.0)));
 	r_normal = normalize(mat3(view) * normalize(mix(nw, sn, cover)));
-	r_albedo = mix(r_albedo, vec3(0.86, 0.89, 0.93), cover);
+	r_albedo = mix(r_albedo, vec3(0.86, 0.89, 0.93) * (1.0 - 0.3 * packed), cover);
 	r_roughness = mix(r_roughness, rough, cover);
 	r_metallic = mix(r_metallic, 0.0, cover);
 }

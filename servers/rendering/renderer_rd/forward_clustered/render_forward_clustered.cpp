@@ -9144,6 +9144,13 @@ RID RenderForwardClustered::_setup_render_pass_uniform_set(RenderListType p_rend
 		u_gust.uniform_type = RD::UNIFORM_TYPE_TEXTURE;
 		u_gust.append_id(gust.is_valid() ? gust : texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_BLACK));
 		uniforms.push_back(u_gust);
+		// The snow's tracks (decision 0130).
+		RID tracks = active ? weather->get_tracks_texture() : RID();
+		RD::Uniform u_tracks;
+		u_tracks.binding = 53;
+		u_tracks.uniform_type = RD::UNIFORM_TYPE_TEXTURE;
+		u_tracks.append_id(tracks.is_valid() ? tracks : texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_BLACK));
+		uniforms.push_back(u_tracks);
 	}
 
 	return UniformSetCacheRD::get_singleton()->get_cache_vec(scene_shader.default_shader_rd, RENDER_PASS_UNIFORM_SET, uniforms);

@@ -802,7 +802,8 @@ struct FellowWeatherData {
 	vec4 wind_prev;
 	vec4 wind2_prev;
 	vec4 wind_time; // this frame's and the previous frame's time of the wind (s)
-	vec4 snow; // the snow's cover (0-1), its sparkle (decision 0128)
+	vec4 snow; // the snow's cover (0-1), its sparkle (decision 0128), its depth (m), tracks on (decision 0130)
+	vec4 tracks; // the tracks' window: centre x, z (m), 1 / side (m), half its side less a margin (m)
 };
 layout(set = 1, binding = 49, std140) uniform FellowWeatherBlock {
 	FellowWeatherData data;
@@ -812,6 +813,8 @@ layout(set = 1, binding = 50) uniform texture2D fellow_rain_occlusion;
 layout(set = 1, binding = 51) uniform texture2D fellow_rain_ripples;
 // The wind's gusts: a tiling noise (r), laid along the wind and travelling with it.
 layout(set = 1, binding = 52) uniform texture2D fellow_wind_gusts;
+// The snow's tracks (decision 0130): their depth in m (negative: a rim), world-anchored, wrapping.
+layout(set = 1, binding = 53) uniform texture2D fellow_snow_tracks;
 
 #endif
 

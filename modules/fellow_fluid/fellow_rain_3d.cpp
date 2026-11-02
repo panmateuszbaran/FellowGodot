@@ -31,6 +31,8 @@
 #include "fellow_rain_3d.h"
 
 #include "fellow_rain.glsl.gen.h"
+#include "fellow_snow_tracker_3d.h"
+#include "fellow_snow_tracks.glsl.gen.h"
 #include "fellow_wind_3d.h"
 
 #include "core/object/callable_mp.h"
@@ -41,6 +43,8 @@
 #include "scene/resources/particle_process_material.h"
 #include "servers/rendering/fellow_settings.h"
 #include "servers/rendering/renderer_rd/effects/fellow_weather.h"
+#include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
+#include "servers/rendering/renderer_rd/storage_rd/texture_storage.h"
 #include "servers/rendering/rendering_server.h"
 
 FellowRain3D *FellowRain3D::active = nullptr;
@@ -340,7 +344,95 @@ void FellowRain3D::_push_state() {
 	PackedByteArray push;
 	push.resize(sizeof(PushConstant));
 	memcpy(push.ptrw(), &pc, sizeof(pc));
-	RS::get_singleton()->call_on_render_thread(callable_mp(this, &FellowRain3D::_rt_update).bind(push, enabled, state));
+
+	// The snow's tracks (decision 0130): the window around the camera (in whole cells), this frame's stamps (the
+	// trackers' and those asked for), and how much the falling snow has filled them back since the last pass that
+	// did it (a tenth of a millimetre at a time: smaller steps would be lost in the texture's half floats).
+	PackedByteArray tracks_data;
+	if (enabled && _tracks_active()) {
+		TracksPush tp;
+		memset(&tp, 0, sizeof(tp));
+		int size = track_resolution;
+		float cell = track_window / float(size);
+		Camera3D *cam = get_viewport() ? get_viewport()->get_camera_3d() : nullptr;
+		Vector3 c = cam ? cam->get_global_position() : get_global_position();
+		tp.origin[0] = int32_t(Math::floor(c.x / cell + 0.5f));
+		tp.origin[1] = int32_t(Math::floor(c.z / cell + 0.5f));
+		tp.size = size;
+		tp.cell = cell;
+		if (_is_snow() && rain > 0.0f && track_refill_time > 0.0f) {
+			track_refill_accum += double(rain) * snow_depth / track_refill_time * MIN(get_process_delta_time(), 1.0);
+		}
+		if (track_refill_accum >= 1e-4) {
+			tp.refill = float(track_refill_accum);
+			track_refill_accum = 0.0;
+		}
+		// The trackers first (every frame), then the stamps asked for (the rest wait for the next frames).
+		LocalVector<TrackStamp> frame_stamps;
+		for (FellowSnowTracker3D *t : FellowSnowTracker3D::get_trackers()) {
+			TrackStamp s;
+			if (frame_stamps.size() < uint32_t(MAX_TRACK_STAMPS) && t->take_stamp(s.segment, s.shape, snow_depth)) {
+				frame_stamps.push_back(s);
+			}
+		}
+		uint32_t taken = 0;
+		while (frame_stamps.size() < uint32_t(MAX_TRACK_STAMPS) && taken < pending_stamps.size()) {
+			frame_stamps.push_back(pending_stamps[taken++]);
+		}
+		uint32_t n = frame_stamps.size();
+		tp.stamp_count = int32_t(n);
+		tracks_data.resize(sizeof(TracksPush) + n * sizeof(TrackStamp));
+		memcpy(tracks_data.ptrw(), &tp, sizeof(tp));
+		if (n > 0) {
+			memcpy(tracks_data.ptrw() + sizeof(TracksPush), frame_stamps.ptr(), n * sizeof(TrackStamp));
+		}
+		if (taken < pending_stamps.size()) {
+			LocalVector<TrackStamp> rest;
+			for (uint32_t i = taken; i < pending_stamps.size(); i++) {
+				rest.push_back(pending_stamps[i]);
+			}
+			pending_stamps = rest;
+		} else {
+			pending_stamps.clear();
+		}
+		st.snow_depth = snow_depth;
+		st.tracks_origin = Vector2(tp.origin[0] * cell, tp.origin[1] * cell);
+		st.tracks_window = track_window;
+		memcpy(state.ptrw(), &st, sizeof(st));
+	}
+	RS::get_singleton()->call_on_render_thread(callable_mp(this, &FellowRain3D::_rt_update).bind(push, enabled, state, tracks_data));
+}
+
+bool FellowRain3D::_tracks_active() const {
+	return tracks && snow > 0.0f;
+}
+
+void FellowRain3D::stamp(const Vector3 &p_from, const Vector3 &p_to, float p_radius, float p_depth) {
+	TrackStamp s;
+	s.segment[0] = p_from.x;
+	s.segment[1] = p_from.z;
+	s.segment[2] = p_to.x;
+	s.segment[3] = p_to.z;
+	s.shape[0] = MAX(0.005f, p_radius);
+	s.shape[1] = p_depth >= 0.0f ? p_depth : snow_depth * 0.8f;
+	s.shape[2] = 0.0f;
+	s.shape[3] = -1.0f; // no contact test
+	add_track_stamp(s);
+}
+
+void FellowRain3D::add_track_stamp(const TrackStamp &p_stamp) {
+	if (pending_stamps.size() < uint32_t(MAX_TRACK_STAMPS) * 64) {
+		pending_stamps.push_back(p_stamp);
+	}
+}
+
+void FellowRain3D::set_track_resolution(int p_resolution) {
+	// A power of two (the pass wraps the texels with a mask).
+	int r = 256;
+	while (r < p_resolution && r < 8192) {
+		r *= 2;
+	}
+	track_resolution = r;
 }
 
 void FellowRain3D::_notification(int p_what) {
@@ -498,6 +590,7 @@ void FellowRain3D::_rt_free() {
 		}
 	}
 	ripple_texture->set_texture_rd_rid(RID());
+	_rt_free_tracks();
 	if (set_tail.is_valid() && rd->uniform_set_is_valid(set_tail)) {
 		rd->free_rid(set_tail);
 	}
@@ -525,7 +618,7 @@ void FellowRain3D::_rt_disable() {
 	}
 }
 
-void FellowRain3D::_rt_update(PackedByteArray p_push, bool p_enabled, PackedByteArray p_state) {
+void FellowRain3D::_rt_update(PackedByteArray p_push, bool p_enabled, PackedByteArray p_state, PackedByteArray p_tracks) {
 	RendererRD::FellowWeather *w = RendererRD::FellowWeather::get_singleton();
 	if (!w || gpu_failed || p_state.size() != int64_t(sizeof(RendererRD::FellowWeather::State)) || p_push.size() != int64_t(sizeof(PushConstant))) {
 		return;
@@ -558,7 +651,197 @@ void FellowRain3D::_rt_update(PackedByteArray p_push, bool p_enabled, PackedByte
 		rd->compute_list_end();
 		rd->draw_command_end_label();
 	}
+	if (p_enabled && p_tracks.size() >= int64_t(sizeof(TracksPush))) {
+		_rt_tracks(st, p_tracks);
+	} else if (tracks_tex.is_valid()) {
+		_rt_free_tracks();
+	}
 	w->set_state(st);
+}
+
+void FellowRain3D::_rt_tracks(RendererRD::FellowWeather::State &r_state, const PackedByteArray &p_tracks) {
+	TracksPush tp;
+	memcpy(&tp, p_tracks.ptr(), sizeof(tp));
+	int n = tp.stamp_count;
+	if (p_tracks.size() != int64_t(sizeof(TracksPush) + n * sizeof(TrackStamp))) {
+		return;
+	}
+	if (tracks_shader.is_null()) {
+		tracks_shader_file.instantiate();
+		if (tracks_shader_file->parse_versions_from_text(fellow_snow_tracks_shader_glsl) != OK) {
+			tracks_shader_file->print_errors("fellow_snow_tracks");
+			return;
+		}
+		tracks_shader = rd->shader_create_from_spirv(tracks_shader_file->get_spirv_stages(), "FellowRain snow tracks");
+		if (tracks_shader.is_null()) {
+			return;
+		}
+		tracks_pipeline = rd->compute_pipeline_create(tracks_shader);
+		RD::SamplerState ss;
+		ss.mag_filter = RD::SAMPLER_FILTER_NEAREST;
+		ss.min_filter = RD::SAMPLER_FILTER_NEAREST;
+		ss.repeat_u = RD::SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE;
+		ss.repeat_v = RD::SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE;
+		tracks_sampler = rd->sampler_create(ss);
+		tracks_stamps = rd->storage_buffer_create(MAX_TRACK_STAMPS * sizeof(TrackStamp));
+	}
+	if (tracks_tex.is_null() || tracks_size != tp.size) {
+		_rt_free_tracks();
+		RD::TextureFormat tf;
+		tf.width = tp.size;
+		tf.height = tp.size;
+		tf.format = RD::DATA_FORMAT_R16_SFLOAT;
+		tf.usage_bits = RD::TEXTURE_USAGE_STORAGE_BIT | RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_CAN_UPDATE_BIT | RD::TEXTURE_USAGE_CAN_COPY_TO_BIT;
+		tracks_tex = rd->texture_create(tf, RD::TextureView());
+		rd->set_resource_name(tracks_tex, "FellowRain snow tracks");
+		rd->texture_clear(tracks_tex, Color(0, 0, 0, 0), 0, 1, 0, 1);
+		tracks_size = tp.size;
+		tracks_prev_origin[0] = tp.origin[0];
+		tracks_prev_origin[1] = tp.origin[1];
+	}
+	// The shelter heightfield, for the trackers' contact test.
+	RID occ;
+	if (r_state.occlusion_collider.is_valid()) {
+		RendererRD::ParticlesStorage *ps = RendererRD::ParticlesStorage::get_singleton();
+		if (ps && ps->particles_collision_is_heightfield(r_state.occlusion_collider)) {
+			occ = ps->fellow_particles_collision_get_heightfield_texture(r_state.occlusion_collider);
+			if (!rd->texture_is_valid(occ)) {
+				occ = RID();
+			}
+		}
+	}
+	if (occ.is_valid() && r_state.occlusion_extents.x > 0.0f && r_state.occlusion_extents.z > 0.0f) {
+		tp.occ_origin[0] = r_state.occlusion_transform.origin.x;
+		tp.occ_origin[1] = r_state.occlusion_transform.origin.z;
+		tp.occ_inv[0] = 1.0f / (2.0f * r_state.occlusion_extents.x);
+		tp.occ_inv[1] = 1.0f / (2.0f * r_state.occlusion_extents.z);
+		tp.occ_y = r_state.occlusion_transform.origin.y;
+		tp.occ_half = r_state.occlusion_extents.y;
+		tp.occ_enabled = 1.0f;
+	}
+	RID occ_bound = occ.is_valid() ? occ : RendererRD::TextureStorage::get_singleton()->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_BLACK);
+	if (tracks_set.is_null() || !rd->uniform_set_is_valid(tracks_set) || tracks_set_occlusion != occ_bound) {
+		if (tracks_set.is_valid() && rd->uniform_set_is_valid(tracks_set)) {
+			rd->free_rid(tracks_set);
+		}
+		Vector<RD::Uniform> u;
+		u.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 0, tracks_tex));
+		u.push_back(RD::Uniform(RD::UNIFORM_TYPE_TEXTURE, 1, occ_bound));
+		u.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER, 2, tracks_sampler));
+		u.push_back(RD::Uniform(RD::UNIFORM_TYPE_STORAGE_BUFFER, 3, tracks_stamps));
+		tracks_set = rd->uniform_set_create(u, tracks_shader, 0);
+		tracks_set_occlusion = occ_bound;
+	}
+	if (n > 0) {
+		rd->buffer_update(tracks_stamps, 0, n * sizeof(TrackStamp), p_tracks.ptr() + sizeof(TracksPush));
+	}
+	tp.prev_origin[0] = tracks_prev_origin[0];
+	tp.prev_origin[1] = tracks_prev_origin[1];
+	tracks_prev_origin[0] = tp.origin[0];
+	tracks_prev_origin[1] = tp.origin[1];
+
+	// The rectangles of cells to update (in the window): all of it when the falling snow fills the tracks back or the
+	// window jumped; otherwise the strips it entered (cleared), then the stamps' bounds.
+	struct Rect {
+		int32_t lo[2];
+		int32_t size[2];
+		bool clear = false;
+		Rect() {
+			lo[0] = lo[1] = size[0] = size[1] = 0;
+		}
+		Rect(int32_t p_x, int32_t p_z, int32_t p_w, int32_t p_h, bool p_clear) {
+			lo[0] = p_x;
+			lo[1] = p_z;
+			size[0] = p_w;
+			size[1] = p_h;
+			clear = p_clear;
+		}
+	};
+	LocalVector<Rect> rects;
+	const int32_t half = tp.size / 2;
+	const int32_t win_lo[2] = { tp.origin[0] - half, tp.origin[1] - half };
+	const int32_t d[2] = { tp.origin[0] - tp.prev_origin[0], tp.origin[1] - tp.prev_origin[1] };
+	if (tp.refill > 0.0f || Math::abs(d[0]) >= tp.size || Math::abs(d[1]) >= tp.size) {
+		rects.push_back(Rect(win_lo[0], win_lo[1], tp.size, tp.size, true));
+	} else {
+		if (d[0] != 0) {
+			// The columns entered along x, the window's whole depth.
+			int32_t x0 = d[0] > 0 ? win_lo[0] + tp.size - d[0] : win_lo[0];
+			rects.push_back(Rect(x0, win_lo[1], Math::abs(d[0]), tp.size, true));
+		}
+		if (d[1] != 0) {
+			int32_t z0 = d[1] > 0 ? win_lo[1] + tp.size - d[1] : win_lo[1];
+			rects.push_back(Rect(win_lo[0], z0, tp.size, Math::abs(d[1]), true));
+		}
+		if (n > 0) {
+			const TrackStamp *sp = reinterpret_cast<const TrackStamp *>(p_tracks.ptr() + sizeof(TracksPush));
+			float lo[2] = { 1e30f, 1e30f };
+			float hi[2] = { -1e30f, -1e30f };
+			for (int i = 0; i < n; i++) {
+				float r = sp[i].shape[0] * 1.5f + tp.cell;
+				lo[0] = MIN(lo[0], MIN(sp[i].segment[0], sp[i].segment[2]) - r);
+				lo[1] = MIN(lo[1], MIN(sp[i].segment[1], sp[i].segment[3]) - r);
+				hi[0] = MAX(hi[0], MAX(sp[i].segment[0], sp[i].segment[2]) + r);
+				hi[1] = MAX(hi[1], MAX(sp[i].segment[1], sp[i].segment[3]) + r);
+			}
+			int32_t c0[2];
+			int32_t c1[2];
+			for (int k = 0; k < 2; k++) {
+				c0[k] = MAX(win_lo[k], int32_t(Math::floor(lo[k] / tp.cell)));
+				c1[k] = MIN(win_lo[k] + tp.size, int32_t(Math::ceil(hi[k] / tp.cell)) + 1);
+			}
+			if (c1[0] > c0[0] && c1[1] > c0[1]) {
+				rects.push_back(Rect(c0[0], c0[1], c1[0] - c0[0], c1[1] - c0[1], false));
+			}
+		}
+	}
+	if (!rects.is_empty()) {
+		rd->draw_command_begin_label("FellowEngine snow tracks");
+		RD::ComputeListID list = rd->compute_list_begin();
+		rd->compute_list_bind_compute_pipeline(list, tracks_pipeline);
+		rd->compute_list_bind_uniform_set(list, tracks_set, 0);
+		for (uint32_t i = 0; i < rects.size(); i++) {
+			const Rect &r = rects[i];
+			TracksPush rp = tp;
+			rp.region_lo[0] = r.lo[0];
+			rp.region_lo[1] = r.lo[1];
+			rp.region_size[0] = r.size[0];
+			rp.region_size[1] = r.size[1];
+			if (!r.clear) {
+				// The strips are cleared already: the texels hold this window's cells.
+				rp.prev_origin[0] = tp.origin[0];
+				rp.prev_origin[1] = tp.origin[1];
+			}
+			// The stamps go into the last rectangle only (a strip and the stamps' bounds may overlap; the stamps'
+			// bounds, when there are stamps, are the last).
+			bool last = i + 1 == rects.size();
+			rp.stamp_count = last ? tp.stamp_count : 0;
+			rd->compute_list_set_push_constant(list, &rp, sizeof(rp));
+			rd->compute_list_dispatch(list, (r.size[0] + 7) / 8, (r.size[1] + 7) / 8, 1);
+			if (!last) {
+				rd->compute_list_add_barrier(list);
+			}
+		}
+		rd->compute_list_end();
+		rd->draw_command_end_label();
+	}
+	r_state.tracks_texture = tracks_tex;
+}
+
+void FellowRain3D::_rt_free_tracks() {
+	if (!rd) {
+		return;
+	}
+	if (tracks_set.is_valid() && rd->uniform_set_is_valid(tracks_set)) {
+		rd->free_rid(tracks_set);
+	}
+	tracks_set = RID();
+	tracks_set_occlusion = RID();
+	if (tracks_tex.is_valid()) {
+		rd->free_rid(tracks_tex);
+		tracks_tex = RID();
+	}
+	tracks_size = 0;
 }
 
 // ------------------------------------------------------------------ settings
@@ -623,6 +906,17 @@ void FellowRain3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_flake_wind_influence"), &FellowRain3D::get_flake_wind_influence);
 	ClassDB::bind_method(D_METHOD("set_flake_color", "color"), &FellowRain3D::set_flake_color);
 	ClassDB::bind_method(D_METHOD("get_flake_color"), &FellowRain3D::get_flake_color);
+	ClassDB::bind_method(D_METHOD("set_tracks", "enable"), &FellowRain3D::set_tracks);
+	ClassDB::bind_method(D_METHOD("get_tracks"), &FellowRain3D::get_tracks);
+	ClassDB::bind_method(D_METHOD("set_track_window", "metres"), &FellowRain3D::set_track_window);
+	ClassDB::bind_method(D_METHOD("get_track_window"), &FellowRain3D::get_track_window);
+	ClassDB::bind_method(D_METHOD("set_track_resolution", "resolution"), &FellowRain3D::set_track_resolution);
+	ClassDB::bind_method(D_METHOD("get_track_resolution"), &FellowRain3D::get_track_resolution);
+	ClassDB::bind_method(D_METHOD("set_snow_depth", "metres"), &FellowRain3D::set_snow_depth);
+	ClassDB::bind_method(D_METHOD("get_snow_depth"), &FellowRain3D::get_snow_depth);
+	ClassDB::bind_method(D_METHOD("set_track_refill_time", "seconds"), &FellowRain3D::set_track_refill_time);
+	ClassDB::bind_method(D_METHOD("get_track_refill_time"), &FellowRain3D::get_track_refill_time);
+	ClassDB::bind_method(D_METHOD("stamp", "from", "to", "radius", "depth"), &FellowRain3D::stamp, DEFVAL(-1.0f));
 	ClassDB::bind_method(D_METHOD("set_rain", "rain"), &FellowRain3D::set_rain);
 	ClassDB::bind_method(D_METHOD("get_rain"), &FellowRain3D::get_rain);
 	ClassDB::bind_method(D_METHOD("set_wetness", "wetness"), &FellowRain3D::set_wetness);
@@ -699,6 +993,12 @@ void FellowRain3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "snowing_time", PROPERTY_HINT_RANGE, "0,36000,0.1,suffix:s"), "set_snowing_time", "get_snowing_time");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "melting_time", PROPERTY_HINT_RANGE, "0,36000,0.1,suffix:s"), "set_melting_time", "get_melting_time");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "snow_sparkle", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_snow_sparkle", "get_snow_sparkle");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "snow_depth", PROPERTY_HINT_RANGE, "0.001,2,0.001,suffix:m"), "set_snow_depth", "get_snow_depth");
+	ADD_SUBGROUP("Tracks", "track");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "tracks"), "set_tracks", "get_tracks");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "track_window", PROPERTY_HINT_RANGE, "4,1024,0.1,suffix:m"), "set_track_window", "get_track_window");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "track_resolution", PROPERTY_HINT_ENUM, "512:512,1024:1024,2048:2048,4096:4096"), "set_track_resolution", "get_track_resolution");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "track_refill_time", PROPERTY_HINT_RANGE, "0,36000,0.1,suffix:s"), "set_track_refill_time", "get_track_refill_time");
 	ADD_SUBGROUP("Flakes", "flake_");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "flake_speed", PROPERTY_HINT_RANGE, "0.05,5,0.01,suffix:m/s"), "set_flake_speed", "get_flake_speed");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "flake_size", PROPERTY_HINT_RANGE, "0.001,0.2,0.001,suffix:m"), "set_flake_size", "get_flake_size");
@@ -736,6 +1036,16 @@ FellowRain3D::~FellowRain3D() {
 		}
 		if (shader_tail.is_valid()) {
 			rd->free_rid(shader_tail);
+		}
+		_rt_free_tracks();
+		if (tracks_stamps.is_valid()) {
+			rd->free_rid(tracks_stamps);
+		}
+		if (tracks_sampler.is_valid()) {
+			rd->free_rid(tracks_sampler);
+		}
+		if (tracks_shader.is_valid()) {
+			rd->free_rid(tracks_shader);
 		}
 	}
 }

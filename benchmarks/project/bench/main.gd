@@ -31,6 +31,8 @@ extends Node
 ##   --weather_wind=<m/s>     a FellowWind3D (--weather_wind_dir=<deg>, --weather_gustiness=<0-1>); --weather_rain=<0-1>
 ##                            a FellowRain3D (--weather_puddles); --weather_snow=<0-1> snowing (--weather_snow_cover=<0-1>,
 ##                            --weather_snow_flakes=<n>, --weather_snow_area=<m>, --weather_snow_sparkle=<0-1>)
+##   --weather_snow_footprints=<x,z;x,z;..[|..]>  footprints along polylines in the snow (decision 0130);
+##                            --weather_snow_ruts=<x,z;x,z;..[|..]> a cart's wheel ruts (to the ground)
 ##   --weather_lightning=<n/min>  a FellowLightning3D (--weather_lightning_flash=<k>: captures strike k frames before each
 ##                            save, in view; --weather_lightning_frames=<f,..>: sequences strike at these frames)
 ##   --dirt_map=1             a procedural lens dirt texture as the environment's glow map (strength 0)
@@ -76,6 +78,7 @@ var t_start_usec := 0
 var watchdog_s := 1800.0
 var finished := false
 var lightning  # FellowLightning3D (--weather_lightning)
+var snow_node  # FellowRain3D snowing (--weather_snow)
 
 
 var pace_usec := 0 # --max_fps with --fixed-fps (where Engine.max_fps does nothing): the main thread waits here
@@ -256,7 +259,9 @@ func _ready() -> void:
 		sn.max_drops = int(args.get("weather_snow_flakes", "60000"))
 		sn.area = float(args.get("weather_snow_area", "30"))
 		sn.wind = Vector3(0.6, 0.0, 0.3)
+		sn.snow_depth = float(args.get("weather_snow_depth", "0.08"))
 		scene.add_child(sn)
+		snow_node = sn
 		result["weather_snow"] = [sn.rain, sn.snow, sn.max_drops, sn.area]
 	# --weather_lightning=<strikes per minute>: a FellowLightning3D (decision 0129) striking at random (0: only when
 	# asked); --weather_lightning_flash=<k>: captures strike k frames before each save, in the camera's view
@@ -777,6 +782,7 @@ func _run_capture() -> void:
 		var c: Dictionary = scene.fixed_cameras[k]
 		scene.set_time(c.get("time", 0.0))
 		scene.set_camera_pose(c["pos"], c["target"], c.get("fov", 60.0))
+		_stamp_snow()
 		var strike_at := settle - int(args.get("weather_lightning_flash", "0"))
 		for i in range(settle):
 			if lightning and i == strike_at and strike_at < settle:
@@ -849,6 +855,53 @@ func _make_dirt_map() -> ImageTexture:
 
 ## Temporal sequences and their ground truth must see the same exposure: auto exposure adapts per rendered
 ## frame, and reference mode renders many sub-frames per output frame, so it is disabled for both modes.
+# Footprints and ruts in the snow along the polylines of --weather_snow_footprints / --weather_snow_ruts (the tracks
+# live in a window around the camera: stamped again whenever the camera jumps).
+func _stamp_snow() -> void:
+	if not snow_node:
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 130
+	for spec in str(args.get("weather_snow_footprints", "")).split("|", false):
+		var pts := _polyline(spec)
+		var left := true
+		var carry := 0.0
+		for i in range(pts.size() - 1):
+			var a: Vector2 = pts[i]
+			var b: Vector2 = pts[i + 1]
+			var d := (b - a).length()
+			if d < 0.01:
+				continue
+			var dir := (b - a) / d
+			var s := carry
+			while s < d:
+				var f := dir.rotated(rng.randf_range(-0.15, 0.15) + (0.08 if left else -0.08))
+				var c := a + dir * s + Vector2(-dir.y, dir.x) * (0.12 if left else -0.12)
+				snow_node.stamp(Vector3(c.x - f.x * 0.09, 0, c.y - f.y * 0.09), Vector3(c.x + f.x * 0.09, 0, c.y + f.y * 0.09), 0.055)
+				left = not left
+				s += 0.72 + rng.randf_range(-0.04, 0.04)
+			carry = s - d
+	for spec in str(args.get("weather_snow_ruts", "")).split("|", false):
+		var pts := _polyline(spec)
+		for i in range(pts.size() - 1):
+			var a: Vector2 = pts[i]
+			var b: Vector2 = pts[i + 1]
+			var n := (b - a).normalized()
+			n = Vector2(-n.y, n.x) * 0.75
+			for side in [-1.0, 1.0]:
+				var o: Vector2 = n * side
+				snow_node.stamp(Vector3(a.x + o.x, 0, a.y + o.y), Vector3(b.x + o.x, 0, b.y + o.y), 0.09, snow_node.snow_depth * 1.2)
+
+
+func _polyline(p_spec: String) -> Array:
+	var pts := []
+	for p in p_spec.split(";", false):
+		var v := p.split_floats(",")
+		if v.size() >= 2:
+			pts.append(Vector2(v[0], v[1]))
+	return pts
+
+
 # A lightning strike in the current camera's view, --weather_lightning_turn degrees right of its centre.
 func _strike_in_view() -> void:
 	var cam := get_viewport().get_camera_3d()
@@ -918,6 +971,11 @@ func _run_temporal(jittered_reference: bool) -> void:
 				await get_tree().process_frame
 		var pc_start := _pipeline_compilations()
 		var frames_at_preroll := Engine.get_frames_drawn()
+		if snow_node:
+			# The tracks around the sequence's first pose.
+			scene.set_time(start - pre_roll * DT)
+			scene.apply_path_sample(path.sample(-pre_roll * DT))
+			_stamp_snow()
 		# Pre-roll: run the sequence backwards in time so TAA history is "in motion" when capture starts.
 		for i in range(pre_roll):
 			var t := start + (i - pre_roll) * DT

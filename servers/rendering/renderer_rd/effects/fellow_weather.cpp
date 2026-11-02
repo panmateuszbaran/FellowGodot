@@ -76,6 +76,13 @@ RID FellowWeather::get_gust_texture() const {
 	return wind.gust_texture;
 }
 
+RID FellowWeather::get_tracks_texture() const {
+	if (!state.enabled || state.tracks_texture.is_null() || !RD::get_singleton()->texture_is_valid(state.tracks_texture)) {
+		return RID();
+	}
+	return state.tracks_texture;
+}
+
 RID FellowWeather::get_occlusion_texture() const {
 	if (!state.enabled || state.occlusion_collider.is_null()) {
 		return RID();
@@ -124,6 +131,14 @@ RID FellowWeather::get_uniform_buffer() {
 		u.ripples[1] = state.ripple_strength;
 		u.snow[0] = state.enabled ? CLAMP(state.snow, 0.0f, 1.0f) : 0.0f;
 		u.snow[1] = CLAMP(state.snow_sparkle, 0.0f, 1.0f);
+		u.snow[2] = MAX(0.001f, state.snow_depth);
+		if (get_tracks_texture().is_valid() && state.tracks_window > 0.0f) {
+			u.snow[3] = 1.0f;
+			u.tracks[0] = state.tracks_origin.x;
+			u.tracks[1] = state.tracks_origin.y;
+			u.tracks[2] = 1.0f / state.tracks_window;
+			u.tracks[3] = state.tracks_window * 0.5f * 0.97f;
+		}
 		const bool gusts = get_gust_texture().is_valid();
 		const WindState *ws[2] = { &wind, &wind_prev };
 		float *w0[2] = { u.wind, u.wind_prev };
