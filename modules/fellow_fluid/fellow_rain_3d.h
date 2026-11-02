@@ -180,6 +180,7 @@ private:
 	RID tracks_set;
 	RID tracks_set_occlusion; // the heightfield texture tracks_set was built with
 	int tracks_size = 0;
+	float tracks_cell = 0.0f; // m: the window's cell the texture holds (a new window size starts it afresh)
 	int32_t tracks_prev_origin[2] = {};
 
 	static constexpr float SNOW_LIFETIME = 8.0f; // s: a flake's life in the box around the camera

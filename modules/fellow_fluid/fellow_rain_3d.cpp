@@ -696,6 +696,13 @@ void FellowRain3D::_rt_tracks(RendererRD::FellowWeather::State &r_state, const P
 		rd->set_resource_name(tracks_tex, "FellowRain snow tracks");
 		rd->texture_clear(tracks_tex, Color(0, 0, 0, 0), 0, 1, 0, 1);
 		tracks_size = tp.size;
+		tracks_cell = tp.cell;
+		tracks_prev_origin[0] = tp.origin[0];
+		tracks_prev_origin[1] = tp.origin[1];
+	} else if (tracks_cell != tp.cell) {
+		// The window's size changed: its cells are other places.
+		rd->texture_clear(tracks_tex, Color(0, 0, 0, 0), 0, 1, 0, 1);
+		tracks_cell = tp.cell;
 		tracks_prev_origin[0] = tp.origin[0];
 		tracks_prev_origin[1] = tp.origin[1];
 	}
