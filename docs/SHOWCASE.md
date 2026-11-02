@@ -1,7 +1,7 @@
 # FellowEngine showcase
 
 Real-time captures from FellowBench (`benchmarks/project`) on an RTX 5070 Ti Laptop GPU, builds `fellow214`
-(`0b7c021`) to `fellow220` (`9356d62`, the snow, its tracks and the lightning). Each was rendered at 1920 × 1080, supersampled 1.5× under TAA and
+(`0b7c021`) to `fellow221` (`584727c`, the snow, its tracks, the lightning and its clouds). Each was rendered at 1920 × 1080, supersampled 1.5× under TAA and
 settled for 300 frames, then scaled to 1600 × 900. The loops are 960 × 540 animated WebP.
 
 Nothing here is painted over. Each scene is the bench scene with FellowEngine's settings and nodes turned on, plus a
@@ -149,6 +149,14 @@ ground mirrors the flash. The captures strike in the camera's view two frames be
 (`--weather_lightning_flash=2`); the loop strikes at two frames of its sequence.
 
 Settings: night look, exposure ×2, the lightning's energy 6.
+
+<img src="showcase/storm_clouds_square.jpg" width="100%" alt="The same strike under volumetric clouds: the cloud deck lit from inside">
+
+<img src="showcase/loop_storm_clouds.webp" width="100%" alt="Walking down the street under a cloud deck that lights up with each strike">
+
+Under FellowEngine's volumetric clouds (milestone 31) each flash lights the cloud deck from inside, by how near the
+view passes to the flash and how thick the clouds are; between strikes the deck is dark. Settings as above with
+`post/clouds/enabled` (coverage 0.7).
 
 ## Ray-traced GI in Sponza
 

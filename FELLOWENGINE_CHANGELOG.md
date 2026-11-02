@@ -9,6 +9,14 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 31 — lightning lights the clouds (2026-11-02)
+
+- `FellowLightning3D.cloud_glow` (decision 0131): while a flash lasts, the volumetric clouds glow around it — by how
+  near the view passes to the flash and how opaque they are — added in the clouds' composite at full resolution every
+  frame (their traces, accumulated over frames, would smear a flash of a few frames). Without a flash the clouds are
+  bit for bit milestone 30's (lavapipe). Showcase: the thunderstorm in Rain Lab under a cloud deck.
+- Snow tracks: a new `track_window` starts the tracks afresh; a one-step parallax for them was tried and reverted.
+
 ## Milestone 30 — snow tracks (2026-11-02)
 
 - Added `FellowSnowTracker3D` and `FellowRain3D.stamp()` (decision 0130): feet, wheels and runners press tracks into

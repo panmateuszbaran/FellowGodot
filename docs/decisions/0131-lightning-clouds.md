@@ -32,7 +32,8 @@ which a flash this short does not show anyway.
   0.5, a little less washed out).
 * **Cost**: one branch in the composite while a flash lasts (a dot product, a length, two exponentials per sky pixel);
   nothing between strikes.
-* **RTX** (`m31_s12_rain_storm_clouds`): pending (queued after the nine-scene check `m30_f294`).
+* **RTX** (`m31_s12_rain_storm_clouds`, fellow221): Rain Lab at dusk under a deck at coverage 0.7 — dark between
+  strikes, lit grey-white from the bolt outwards during one, holes in the deck staying dark.
 
 ## Decision
 

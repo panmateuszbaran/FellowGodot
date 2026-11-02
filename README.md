@@ -35,7 +35,7 @@ in [docs/](docs/) and the [showcase](docs/SHOWCASE.md).
   <img src="docs/showcase/bistro_snow_night_cafe.jpg" width="49%" alt="FellowRain3D's snow: Bistro's cafe at night under snow, flakes in the lamplight">
   <img src="docs/showcase/bistro_snow_gold_tree.jpg" width="49%" alt="Snow in Bistro's square against a low sun: bare cobbles under the tree, light shafts">
   <img src="docs/showcase/storm_square.jpg" width="49%" alt="FellowLightning3D: a bolt over Rain Lab's square, the flash on the rain and the wet ground">
-  <img src="docs/showcase/loop_storm.webp" width="49%" alt="Walking down a street in a thunderstorm">
+  <img src="docs/showcase/loop_storm_clouds.webp" width="49%" alt="Walking down a street in a thunderstorm, the cloud deck lit by each strike">
 </p>
 
 These are real-time captures from the benchmark scenes on an RTX 5070 Ti Laptop GPU, with FellowEngine's visual

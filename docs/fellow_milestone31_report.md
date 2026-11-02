@@ -1,6 +1,6 @@
 # FellowEngine — milestone 31 report (lightning lights the clouds)
 
-Status: **measured on lavapipe**; the RTX showcase (`m31_s12`) is pending (2026-11-02). Branch `fellow/geometry`.
+Status: **measured** — lavapipe and the RTX 5070 Ti Laptop (`m31_s12`, 2026-11-02). Branch `fellow/geometry`.
 Decision record `docs/decisions/0131-lightning-clouds.md`.
 
 ## 0. Result
@@ -29,8 +29,9 @@ between strikes.
 
 ## 4. Showcase
 
-Pending: Rain Lab at dusk in a thunderstorm under volumetric clouds (`m31_s12_rain_storm_clouds`, stills and a loop),
-queued on the RTX after the nine-scene check.
+Rain Lab at dusk in a thunderstorm under volumetric clouds (`m31_s12_rain_storm_clouds`, fellow221;
+[SHOWCASE.md](SHOWCASE.md)): the deck dark between strikes and lit from inside during one (`storm_clouds_square.jpg`),
+and a loop down the street with two strikes (`loop_storm_clouds.webp`, in the README in place of milestone 29's).
 
 ## 5. Left for later
 
