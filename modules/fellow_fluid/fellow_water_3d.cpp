@@ -414,7 +414,7 @@ DirectionalLight3D *FellowWater3D::_find_sun() const {
 		Node *n = stack[stack.size() - 1];
 		stack.resize(stack.size() - 1);
 		DirectionalLight3D *l = Object::cast_to<DirectionalLight3D>(n);
-		if (l && l->is_visible_in_tree()) {
+		if (l && l->is_visible_in_tree() && !l->has_meta(SNAME("_fellow_lightning"))) { // a FellowLightning3D's flash is no sun
 			return l;
 		}
 		for (int i = n->get_child_count() - 1; i >= 0; i--) {

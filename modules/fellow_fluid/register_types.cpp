@@ -34,6 +34,7 @@
 #include "fellow_burnable_3d.h"
 #include "fellow_gas_emitter_3d.h"
 #include "fellow_gas_volume_3d.h"
+#include "fellow_lightning_3d.h"
 #include "fellow_rain_3d.h"
 #include "fellow_wind_3d.h"
 #include "fellow_shallow_water_3d.h"
@@ -47,6 +48,7 @@ void initialize_fellow_fluid_module(ModuleInitializationLevel p_level) {
 		GDREGISTER_CLASS(FellowWater3D);
 		GDREGISTER_CLASS(FellowRain3D);
 		GDREGISTER_CLASS(FellowWind3D);
+		GDREGISTER_CLASS(FellowLightning3D);
 		GDREGISTER_CLASS(FellowGasVolume3D);
 		GDREGISTER_CLASS(FellowGasEmitter3D);
 		GDREGISTER_CLASS(FellowBurnable3D);

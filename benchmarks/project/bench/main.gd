@@ -31,6 +31,8 @@ extends Node
 ##   --weather_wind=<m/s>     a FellowWind3D (--weather_wind_dir=<deg>, --weather_gustiness=<0-1>); --weather_rain=<0-1>
 ##                            a FellowRain3D (--weather_puddles); --weather_snow=<0-1> snowing (--weather_snow_cover=<0-1>,
 ##                            --weather_snow_flakes=<n>, --weather_snow_area=<m>, --weather_snow_sparkle=<0-1>)
+##   --weather_lightning=<n/min>  a FellowLightning3D (--weather_lightning_flash=<k>: captures strike k frames before each
+##                            save, in view; --weather_lightning_frames=<f,..>: sequences strike at these frames)
 ##   --dirt_map=1             a procedural lens dirt texture as the environment's glow map (strength 0)
 ##   --jitter=<n>             reference: sub-pixel jittered renders per output frame (default 16)
 ##   --ablate=<a+b>           sizing only (items separated by + or ,): hide omni / spot / sun lights, probes, decals, or pos_shadows (see _ablate)
@@ -73,6 +75,7 @@ var frame_counter := 0
 var t_start_usec := 0
 var watchdog_s := 1800.0
 var finished := false
+var lightning  # FellowLightning3D (--weather_lightning)
 
 
 var pace_usec := 0 # --max_fps with --fixed-fps (where Engine.max_fps does nothing): the main thread waits here
@@ -255,6 +258,17 @@ func _ready() -> void:
 		sn.wind = Vector3(0.6, 0.0, 0.3)
 		scene.add_child(sn)
 		result["weather_snow"] = [sn.rain, sn.snow, sn.max_drops, sn.area]
+	# --weather_lightning=<strikes per minute>: a FellowLightning3D (decision 0129) striking at random (0: only when
+	# asked); --weather_lightning_flash=<k>: captures strike k frames before each save, in the camera's view
+	# (--weather_lightning_distance=<m>, 1200; --weather_lightning_turn=<deg>, 15: how far right of the view's centre);
+	# --weather_lightning_frames=<f,f,...>: temporal sequences strike at these frames.
+	if args.has("weather_lightning") and ClassDB.class_exists("FellowLightning3D"):
+		lightning = ClassDB.instantiate("FellowLightning3D")
+		lightning.name = "ShowcaseLightning"
+		lightning.strikes_per_minute = float(args["weather_lightning"])
+		lightning.energy = float(args.get("weather_lightning_energy", "6"))
+		scene.add_child(lightning)
+		result["weather_lightning"] = lightning.strikes_per_minute
 	RenderingServer.viewport_set_measure_render_time(vp.get_viewport_rid(), true)
 	await get_tree().process_frame
 	await _post_draw()
@@ -763,7 +777,10 @@ func _run_capture() -> void:
 		var c: Dictionary = scene.fixed_cameras[k]
 		scene.set_time(c.get("time", 0.0))
 		scene.set_camera_pose(c["pos"], c["target"], c.get("fov", 60.0))
+		var strike_at := settle - int(args.get("weather_lightning_flash", "0"))
 		for i in range(settle):
+			if lightning and i == strike_at and strike_at < settle:
+				_strike_in_view()
 			await get_tree().process_frame
 		await _post_draw()
 		var p := out_dir.path_join("%s_%s.png" % [stem, k])
@@ -832,6 +849,16 @@ func _make_dirt_map() -> ImageTexture:
 
 ## Temporal sequences and their ground truth must see the same exposure: auto exposure adapts per rendered
 ## frame, and reference mode renders many sub-frames per output frame, so it is disabled for both modes.
+# A lightning strike in the current camera's view, --weather_lightning_turn degrees right of its centre.
+func _strike_in_view() -> void:
+	var cam := get_viewport().get_camera_3d()
+	var az := -1000.0
+	if cam:
+		var fwd := -cam.global_basis.z
+		az = rad_to_deg(atan2(fwd.z, fwd.x)) + float(args.get("weather_lightning_turn", "15"))
+	lightning.strike(float(args.get("weather_lightning_distance", "1200")), az)
+
+
 func _freeze_exposure() -> void:
 	if args.get("keep_exposure", "0") == "1":  # showcase loops: the exposure as in the stills
 		return
@@ -897,10 +924,15 @@ func _run_temporal(jittered_reference: bool) -> void:
 			scene.set_time(t)
 			scene.apply_path_sample(path.sample(t - start))
 			await get_tree().process_frame
+		var strike_frames := []
+		for x in str(args.get("weather_lightning_frames", "")).split(",", false):
+			strike_frames.append(int(x))
 		for f in range(nframes):
 			var t := start + f * DT
 			scene.set_time(t)
 			scene.apply_path_sample(path.sample(t - start))
+			if lightning and f in strike_frames:
+				_strike_in_view()
 			await get_tree().process_frame
 			await _post_draw()
 			if f % maxi(int(args.get("seq_every", "1")), 1) != 0:

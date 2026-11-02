@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="FellowLightning3D" inherits="Node3D" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+	<brief_description>
+		Lightning: strikes around the camera that flash over the scene, with a glowing bolt and a lit cloud (FellowEngine).
+	</brief_description>
+	<description>
+		Strikes come at random times ([member strikes_per_minute]) and distances ([member distance_range]) around the current camera, or when [method strike] is called. A strike is two to four return strokes, each a flash that decays in about 40 ms: a [DirectionalLight3D] shining from the bolt's direction lights the scene (with [member shadows]), the bolt — a branching channel of [member cloud_height], built when it strikes and turned to the camera — glows, and the cloud above it lights up. Bloom makes the bolt's glow. The strikes are a function of [member seed] and [member time], so the same clock gives the same storm.
+		[signal struck] gives the bolt's foot and its distance, for the thunder: it arrives [code]distance / 343[/code] seconds later. Decision record [code]docs/decisions/0129-lightning.md[/code].
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="get_flash" qualifiers="const">
+			<return type="float" />
+			<description>
+				The strike's brightness now, from 0 to 1 (0 between strikes).
+			</description>
+		</method>
+		<method name="get_flash_light" qualifiers="const">
+			<return type="DirectionalLight3D" />
+			<description>
+				The internal light of the flashes (visible only while one lasts).
+			</description>
+		</method>
+		<method name="is_striking" qualifiers="const">
+			<return type="bool" />
+			<description>
+				Whether a strike is in progress.
+			</description>
+		</method>
+		<method name="strike">
+			<return type="Vector3" />
+			<param index="0" name="distance" type="float" default="-1.0" />
+			<param index="1" name="azimuth_degrees" type="float" default="-1000.0" />
+			<description>
+				Strikes now, [param distance] metres from the camera (negative: at random within [member distance_range]) towards [param azimuth_degrees] (0: +X, 90: +Z; below -360: at random). Returns the bolt's foot.
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="bolt_brightness" type="float" setter="set_bolt_brightness" getter="get_bolt_brightness" default="30.0">
+			The bolt's brightness at a stroke's peak.
+		</member>
+		<member name="bolt_width" type="float" setter="set_bolt_width" getter="get_bolt_width" default="0.006">
+			The bolt's width as seen from the camera, in radians (0.006: about 6 pixels at 1080p with a 55 degree view).
+		</member>
+		<member name="cloud_height" type="float" setter="set_cloud_height" getter="get_cloud_height" default="1200.0">
+			The height of the cloud the bolts come from, in metres above the node.
+		</member>
+		<member name="color" type="Color" setter="set_color" getter="get_color" default="Color(0.78, 0.85, 1, 1)">
+			The colour of the flash and the bolt.
+		</member>
+		<member name="distance_range" type="Vector2" setter="set_distance_range" getter="get_distance_range" default="Vector2(400, 3000)">
+			The nearest and farthest a random strike falls from the camera, in metres (uniformly over the ring's area).
+		</member>
+		<member name="energy" type="float" setter="set_energy" getter="get_energy" default="6.0">
+			The flash light's energy at a stroke's peak for a strike 1 km away (nearer brighter, by the inverse of the distance, 0.3 to 2.5 times).
+		</member>
+		<member name="seed" type="int" setter="set_seed" getter="get_seed" default="2026">
+			The storm: with the same seed and clock, the same strikes.
+		</member>
+		<member name="shadows" type="bool" setter="set_shadows" getter="get_shadows" default="true">
+			If [code]true[/code], the flash casts shadows.
+		</member>
+		<member name="strikes_per_minute" type="float" setter="set_strikes_per_minute" getter="get_strikes_per_minute" default="4.0">
+			How often it strikes at random (0: only when [method strike] is called).
+		</member>
+		<member name="time_auto" type="bool" setter="set_time_auto" getter="is_time_auto" default="true">
+			If [code]true[/code], the node's clock advances with the frames; otherwise set [code]time[/code] yourself.
+		</member>
+	</members>
+	<signals>
+		<signal name="struck">
+			<param index="0" name="position" type="Vector3" />
+			<param index="1" name="distance" type="float" />
+			<description>
+				A strike began: [param position] is the bolt's foot, [param distance] its distance from the camera in metres.
+			</description>
+		</signal>
+	</signals>
+</class>
