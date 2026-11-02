@@ -1,7 +1,7 @@
 # FellowEngine showcase
 
 Real-time captures from FellowBench (`benchmarks/project`) on an RTX 5070 Ti Laptop GPU, builds `fellow214`
-(`0b7c021`) to `fellow217` (`6958bfd`, the snow). Each was rendered at 1920 × 1080, supersampled 1.5× under TAA and
+(`0b7c021`) to `fellow219` (`32265c8`, the snow and the lightning). Each was rendered at 1920 × 1080, supersampled 1.5× under TAA and
 settled for 300 frames, then scaled to 1600 × 900. The loops are 960 × 540 animated WebP.
 
 Nothing here is painted over. Each scene is the bench scene with FellowEngine's settings and nodes turned on, plus a
@@ -122,6 +122,22 @@ circling through the smoke, is an obstacle the gas flows around. Exposure is ×2
 ## Rain Lab at dusk: `FellowRain3D`
 
 <img src="showcase/loop_rain.webp" width="100%" alt="Walking down a wet street at dusk in the rain">
+
+## A thunderstorm in Rain Lab: `FellowLightning3D`
+
+<img src="showcase/storm_square.jpg" width="100%" alt="A lightning bolt over Rain Lab's square, the flash lighting the rain and the wet ground">
+
+<img src="showcase/loop_storm.webp" width="100%" alt="Walking down the street in a thunderstorm: flashes, then a bolt over the roofs">
+
+<img src="showcase/storm_arcade.jpg" width="100%" alt="The arcade's columns casting the flash's shadows across its floor">
+
+The same street at dusk with a `FellowLightning3D` (milestone 29). Each strike is a few return strokes in quick
+succession: the flash lights the scene from the bolt's direction with shadows, so the arcade's columns throw them
+across its floor. The bolt branches from the cloud and stays the same width on screen at any distance, and the wet
+ground mirrors the flash. The captures strike in the camera's view two frames before the save
+(`--weather_lightning_flash=2`); the loop strikes at two frames of its sequence.
+
+Settings: night look, exposure ×2, the lightning's energy 6.
 
 ## Ray-traced GI in Sponza
 

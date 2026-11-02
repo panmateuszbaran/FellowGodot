@@ -9,6 +9,18 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 29 — lightning (2026-11-02)
+
+- Added `FellowLightning3D` (decision 0129): strikes at random around the camera (`strikes_per_minute`,
+  `distance_range`) or on `strike()`; two to four return strokes, each a flash decaying over about 40 ms — a
+  directional light from the bolt's direction with shadows (no sun disc, not taken for the sun by `FellowWater3D`), a
+  branching bolt of a constant width on screen, a lit cloud. The same clock gives the same storm; `struck(position,
+  distance)` for the thunder.
+- Cost on the RTX (Rain Lab at dusk, `m29_f290`): +0.04 ms of GPU time on average with a strike every 2 s; nothing
+  between strikes.
+- FellowBench: `--weather_lightning`, `--weather_lightning_flash` (captures), `--weather_lightning_frames`
+  (sequences). Showcase: a thunderstorm in Rain Lab.
+
 ## Milestone 28 — snow (2026-11-02)
 
 - `FellowRain3D.precipitation` = Snow (decision 0128): flakes drift down in a box around the camera, take the
