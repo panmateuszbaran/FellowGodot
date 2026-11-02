@@ -175,8 +175,11 @@ func _make_emitter(kind: int, p_seed: int) -> GPUParticles3D:
 	p.seed = p_seed
 	p.preprocess = 2.0
 	p.visibility_aabb = AABB(Vector3(-3, -1, -3), Vector3(6, 7, 6))
-	if args.has("weather_wind"):  # as far as the wind carries them in their life
-		p.visibility_aabb = p.visibility_aabb.grow(float(args["weather_wind"]) * 1.6 * p.lifetime)
+	if args.has("weather_wind"):  # downwind, as far as the wind (its gusts 1.6 times the mean) carries them in their life
+		var wa := deg_to_rad(float(args.get("weather_wind_dir", "40")))
+		var drift: Vector3 = p.transform.basis.inverse() * (Vector3(cos(wa), 0.0, sin(wa)) * float(args["weather_wind"]) * 1.6 * p.lifetime)
+		var box: AABB = p.visibility_aabb
+		p.visibility_aabb = box.merge(AABB(box.position + drift, box.size)).grow(1.0)
 	return p
 
 

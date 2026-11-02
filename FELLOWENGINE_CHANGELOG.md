@@ -9,6 +9,23 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 27 — the scene's wind for water, gas and particles (2026-11-01/02)
+
+- `FellowWater3D.wind_from_scene` (decision 0127): the spectrum follows the active `FellowWind3D`'s speed and
+  direction, and its gusts roughen the shortest waves — darker, rougher water in a gust, a mirror in a lull, the
+  "cat's paws" running over a lake (`gust_ripples` scales them).
+- `FellowGasVolume3D.wind_from_scene`: the gas's wind each step is the scene's wind at the box's centre, gusts
+  included; flames and smoke lean and waver with the gusts.
+- `ParticleProcessMaterial` gets a Wind group (`wind_enabled`, `wind_influence`): the particles' horizontal velocity
+  relaxes towards the wind at their position, gusts included. Particle shaders read it as `WIND_VELOCITY` (zero
+  without a wind and on the Compatibility renderer).
+- Off is the previous image: Water Lab and Fire Lab without a wind bit for bit on lavapipe. Cost on the RTX
+  (`m27_f287`): the water's gust ripples and the gas's wind not measurable, Particles Lab's update +0.15 ms.
+- Fixed: Water Lab with contact shadows crashed — the depth pre-pass bound per-render masks that did not exist yet
+  (`84f3a8e`).
+- FellowBench: `--weather_wind=<m/s>` in any scene (Water, Fire and Particles Lab hand it on), `--wind_leaves=<n>`
+  falling leaves in Wind Lab.
+
 ## Milestone 26 — wind in the forest (2026-10-29/30)
 
 - Added `FellowWind3D` (module `fellow_fluid`, decision 0125): the scene's wind with gusts, a noise field travelling

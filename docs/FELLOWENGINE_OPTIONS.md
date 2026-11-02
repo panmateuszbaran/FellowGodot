@@ -241,6 +241,24 @@ Cost (RTX 5070 Ti Laptop, 1080p, Wind Lab): 0.56 ms of GPU time against the stil
 0.33 ms, the opaque pass's two poses per vertex for the motion vectors 0.23 ms); the TIME-based sway projects write
 costs 1.81 ms. Decision record 0125; bench Wind Lab (`--scene=wind`, `--wind=on|off|shader`).
 
+**The scene's wind for water, gas and particles (milestone 27).** The same wind moves more than plants, each when
+asked:
+
+* `FellowWater3D.wind_from_scene`: the spectrum follows the wind's speed and direction (rebuilt when they change by
+  2 % or a degree), and the gusts roughen the shortest waves — darker, rougher water in a gust, a mirror in a lull,
+  the "cat's paws" running over a lake (`gust_ripples`, 1, scales them);
+* `FellowGasVolume3D.wind_from_scene`: the gas's `wind` each step is the scene's wind at the box's centre, gusts
+  included (flames and smoke lean and flicker with the gusts);
+* a `ParticleProcessMaterial`'s **Wind** group, `wind_enabled` and `wind_influence` (1/s): the particles' horizontal
+  velocity relaxes towards the wind at their position, gusts included (sparks, embers, leaves, snow); a particle
+  shader's process function reads it as `WIND_VELOCITY` (zero without a FellowWind3D, and on the Compatibility
+  renderer).
+
+Particles that drift need a visibility box reaching as far as they drift (downwind). Cost (RTX 5070 Ti Laptop,
+1080p, `m27_f287`): the water's gust ripples and the gas's wind not measurable; Particles Lab's update +0.15 ms
+(0.50 → 0.64). Decision record 0127; FellowBench `--weather_wind=<m/s>` in any scene, `--wind_leaves=<n>` falling
+leaves in Wind Lab.
+
 ## Options that change the image (off by default)
 
 | setting | what it does | image cost | record |

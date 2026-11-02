@@ -51,6 +51,11 @@ a pixel does not resolve. Reflections are traced over a Hi-Z pyramid of the dept
 pier are mirrored at their true parallax. The sun is at 8°, under the atmosphere sky with volumetric clouds and light
 shafts.
 
+<img src="showcase/water_gusts_sunset.jpg" width="100%" alt="The glitter path broken up by gusts of wind running over the lake">
+
+Under a `FellowWind3D` of 9 m/s (milestone 27) the water takes the scene's wind: the spectrum follows its speed and
+direction, and its gusts roughen the short waves, so the glitter path breaks up where a gust runs over the lake.
+
 ## Wind in the forest: `FellowWind3D`
 
 <img src="showcase/wind_forest_backlit.jpg" width="100%" alt="Light shafts between the trunks of a forest, backlit by a low sun">
