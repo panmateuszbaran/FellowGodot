@@ -10,8 +10,8 @@ surfaces, snow, lightning, wind with gusts, GPU smoke and fire, wood that burns 
 tracing and a set of post-processing effects.
 
 * **Faster with the same image.** With the default settings FellowEngine renders eight of the nine benchmark scenes
-  16-54 % faster than stock Godot, the ninth 3-12 % (table below). The changes that are on by default are *exact*: verified
-  bit for bit against stock on lavapipe, and at the run-to-run floor on an RTX GPU.
+  16-54 % faster than stock Godot, the ninth 3-12 % (table below). The changes that are on by default are *exact*:
+  verified bit for bit against stock on lavapipe, and at the run-to-run floor on an RTX GPU.
 * **New effects, off until used.** The visual features and the new nodes do nothing until a project turns them on
   or adds the node. With them off, the frame is stock's.
 * **Everything behind a setting.** All behaviour sits under *Project Settings → Rendering → Fellow*
