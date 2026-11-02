@@ -47,6 +47,9 @@
 		<member name="cloud_height" type="float" setter="set_cloud_height" getter="get_cloud_height" default="1200.0">
 			The height of the cloud the bolts come from, in metres above the node.
 		</member>
+		<member name="cloud_glow" type="float" setter="set_cloud_glow" getter="get_cloud_glow" default="0.5">
+			How brightly the volumetric clouds ([code]rendering/fellow/post/clouds/enabled[/code]) glow around a flash, as much as they are opaque, by how near the view passes to it (0: not at all).
+		</member>
 		<member name="color" type="Color" setter="set_color" getter="get_color" default="Color(0.78, 0.85, 1, 1)">
 			The colour of the flash and the bolt.
 		</member>

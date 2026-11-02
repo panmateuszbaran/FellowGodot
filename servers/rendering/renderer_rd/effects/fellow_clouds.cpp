@@ -178,6 +178,16 @@ void FellowClouds::process(const Params &p_params) {
 	const bool interleaved = p_params.interleaved && history_valid && interleave_primed;
 	u.flags[1] = interleaved ? 1 : 0;
 	u.flags[2] = int32_t(p_params.frame & 3);
+	if (p_params.flash) {
+		u.flash[0] = p_params.flash_position.x;
+		u.flash[1] = p_params.flash_position.y;
+		u.flash[2] = p_params.flash_position.z;
+		u.flash[3] = MAX(p_params.flash_radius, 1.0f);
+		u.flash_color[0] = p_params.flash_color.r;
+		u.flash_color[1] = p_params.flash_color.g;
+		u.flash_color[2] = p_params.flash_color.b;
+		u.flash_color[3] = 1.0f;
+	}
 	RD::get_singleton()->buffer_update(ubo, 0, sizeof(UBO), &u);
 	RD::Uniform u_params(RD::UNIFORM_TYPE_UNIFORM_BUFFER, 0, ubo);
 

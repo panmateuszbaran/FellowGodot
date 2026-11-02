@@ -85,6 +85,14 @@ public:
 		RID gust_texture; // RD texture: the gust field's tiling noise (r)
 	};
 
+	// A lightning flash (decision 0131): the volumetric clouds glow around it.
+	struct LightningState {
+		bool active = false;
+		Vector3 position; // the flash in the cloud, world (m)
+		Color color; // its light (colour * energy, the stroke's envelope included)
+		float radius = 1000.0f; // m: how far through the cloud it lights
+	};
+
 	// std140: the shader's FellowWeatherData.
 	struct UBO {
 		float params[4]; // wetness, puddles, rain, time
@@ -105,6 +113,7 @@ private:
 	WindState wind;
 	WindState wind_prev;
 	bool wind_has_prev = false;
+	LightningState lightning;
 	RID ubo;
 	bool ubo_dirty = true;
 
@@ -119,6 +128,8 @@ public:
 	bool is_active() const { return state.enabled || wind.enabled; }
 	const State &get_state() const { return state; }
 	const WindState &get_wind_state() const { return wind; }
+	void set_lightning_state(const LightningState &p_lightning) { lightning = p_lightning; }
+	const LightningState &get_lightning_state() const { return lightning; }
 	RID get_uniform_buffer();
 	RID get_occlusion_texture() const;
 	RID get_ripple_texture() const;

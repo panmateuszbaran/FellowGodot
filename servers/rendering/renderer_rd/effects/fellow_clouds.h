@@ -69,6 +69,11 @@ public:
 		uint32_t frame = 0;
 		bool history_valid = false;
 		bool interleaved = true; // decision 0115: a quarter of the pixels traced per frame
+		// A lightning flash (decision 0131): the clouds around it glow.
+		bool flash = false;
+		Vector3 flash_position; // world (m)
+		Color flash_color; // colour * energy, exposure included
+		float flash_radius = 1000.0f; // m
 	};
 
 private:
@@ -93,7 +98,9 @@ private:
 		float misc[4];
 		int32_t sizes[4];
 		int32_t flags[4];
-	}; // 240 bytes
+		float flash[4]; // position (m), radius (m)
+		float flash_color[4]; // colour * energy, on
+	}; // 272 bytes
 
 	FellowCloudsShaderRD shader;
 	RID shader_version;

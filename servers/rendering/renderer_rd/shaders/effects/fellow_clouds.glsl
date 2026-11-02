@@ -37,6 +37,8 @@ layout(set = 0, binding = 0, std140) uniform Params {
 	ivec4 sizes; // trace w, h; screen w, h
 	ivec4 flags; // x: 1 the atmosphere's tables are bound (the sun through the atmosphere, the sky's light); y: 1 interleaved
 	// (each frame one pixel of every 2 x 2 block traced, decision 0115); z: this frame's pixel in the block (0-3)
+	vec4 flash; // a lightning flash (decision 0131): its position (world, m), the radius it lights (m)
+	vec4 flash_color; // its light (colour * energy); w: 1 when there is one
 }
 params;
 
@@ -443,6 +445,19 @@ void main() {
 	vec4 c = textureLod(clouds_tex, uv, 0.0);
 	vec4 col = imageLoad(color_image, pos);
 	col.rgb = col.rgb * c.a + c.rgb;
+	if (params.flash_color.w > 0.0 && c.a < 1.0) {
+		// A lightning flash inside the clouds (decision 0131): the clouds glow by how near the view ray passes to it,
+		// as much as they are opaque. Here, at full resolution, every frame: the traces' accumulation over frames would
+		// smear a flash of a few frames.
+		vec4 wp = params.inv_view_projection * vec4(uv * 2.0 - 1.0, 0.5, 1.0);
+		vec3 dir = normalize(wp.xyz / wp.w - params.camera_position.xyz);
+		vec3 to_flash = params.flash.xyz - params.camera_position.xyz;
+		float t = dot(to_flash, dir);
+		if (t > 0.0) {
+			float miss = length(to_flash - dir * t) / params.flash.w;
+			col.rgb += params.flash_color.rgb * (exp(-miss * miss * 1.5) + 0.25 * exp(-miss)) * (1.0 - c.a);
+		}
+	}
 	imageStore(color_image, pos, col);
 }
 #endif

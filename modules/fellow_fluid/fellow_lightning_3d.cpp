@@ -30,10 +30,13 @@
 
 #include "fellow_lightning_3d.h"
 
+#include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
 #include "scene/3d/camera_3d.h"
 #include "scene/main/viewport.h"
 #include "scene/resources/3d/primitive_meshes.h"
+#include "servers/rendering/renderer_rd/effects/fellow_weather.h"
+#include "servers/rendering/rendering_server.h"
 
 // The bolt: ribbons turned to the camera, a soft core across them (UV.x), the branches dimmer (COLOR.a). Additive,
 // unshaded, tested against the scene's depth (buildings hide it), not fogged (fog would add its colour). `flash` is the
@@ -308,6 +311,35 @@ Vector3 FellowLightning3D::strike(float p_distance, float p_azimuth_degrees) {
 	return current.bottom;
 }
 
+void FellowLightning3D::_rt_set_cloud_flash(PackedByteArray p_state) {
+	if (p_state.size() != int64_t(sizeof(RendererRD::FellowWeather::LightningState))) {
+		return;
+	}
+	RendererRD::FellowWeather *w = RendererRD::FellowWeather::get_singleton();
+	if (w) {
+		RendererRD::FellowWeather::LightningState ls;
+		memcpy(&ls, p_state.ptr(), sizeof(ls));
+		w->set_lightning_state(ls);
+	}
+}
+
+void FellowLightning3D::_push_cloud_flash(bool p_on, float p_brightness) {
+	if (!p_on && !cloud_state_pushed) {
+		return; // nothing to turn off
+	}
+	RendererRD::FellowWeather::LightningState ls;
+	ls.active = p_on && cloud_glow > 0.0f;
+	ls.position = current.top;
+	// As the colour passes light the scene with a directional light (light_storage.cpp): colour * energy * pi.
+	ls.color = color.srgb_to_linear() * (p_brightness * cloud_glow * float(Math::PI));
+	ls.radius = cloud_height * 0.6f;
+	cloud_state_pushed = ls.active;
+	PackedByteArray state;
+	state.resize(sizeof(ls));
+	memcpy(state.ptrw(), &ls, sizeof(ls));
+	RS::get_singleton()->call_on_render_thread(callable_mp_static(&FellowLightning3D::_rt_set_cloud_flash).bind(state));
+}
+
 void FellowLightning3D::set_shadows(bool p_enable) {
 	shadows = p_enable;
 	if (flash) {
@@ -371,11 +403,13 @@ void FellowLightning3D::_notification(int p_what) {
 				bolt_material->set_shader_parameter("brightness", bolt_brightness);
 				glow_material->set_shader_parameter("flash", env * near);
 				glow_material->set_shader_parameter("glow_color", color);
+				_push_cloud_flash(on, energy * near * env);
 			}
 		} break;
 		case NOTIFICATION_EXIT_TREE: {
 			last_time = -1.0;
 			current.active = false;
+			_push_cloud_flash(false, 0.0f);
 		} break;
 	}
 }
@@ -399,6 +433,8 @@ void FellowLightning3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_bolt_brightness"), &FellowLightning3D::get_bolt_brightness);
 	ClassDB::bind_method(D_METHOD("set_bolt_width", "radians"), &FellowLightning3D::set_bolt_width);
 	ClassDB::bind_method(D_METHOD("get_bolt_width"), &FellowLightning3D::get_bolt_width);
+	ClassDB::bind_method(D_METHOD("set_cloud_glow", "glow"), &FellowLightning3D::set_cloud_glow);
+	ClassDB::bind_method(D_METHOD("get_cloud_glow"), &FellowLightning3D::get_cloud_glow);
 	ClassDB::bind_method(D_METHOD("set_shadows", "enable"), &FellowLightning3D::set_shadows);
 	ClassDB::bind_method(D_METHOD("get_shadows"), &FellowLightning3D::get_shadows);
 	ClassDB::bind_method(D_METHOD("set_seed", "seed"), &FellowLightning3D::set_seed);
@@ -415,6 +451,7 @@ void FellowLightning3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::COLOR, "color", PROPERTY_HINT_COLOR_NO_ALPHA), "set_color", "get_color");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "bolt_brightness", PROPERTY_HINT_RANGE, "0,1000,0.1"), "set_bolt_brightness", "get_bolt_brightness");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "bolt_width", PROPERTY_HINT_RANGE, "0.0001,0.05,0.0001,suffix:rad"), "set_bolt_width", "get_bolt_width");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "cloud_glow", PROPERTY_HINT_RANGE, "0,10,0.01"), "set_cloud_glow", "get_cloud_glow");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "shadows"), "set_shadows", "get_shadows");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "seed"), "set_seed", "get_seed");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "time", PROPERTY_HINT_NONE, "suffix:s", PROPERTY_USAGE_NONE), "set_time", "get_time");

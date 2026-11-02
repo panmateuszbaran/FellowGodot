@@ -53,6 +53,8 @@ class FellowLightning3D : public Node3D {
 	float bolt_brightness = 30.0f;
 	float bolt_width = 0.006f; // radians: the core's width as seen from the camera (about 6 pixels at 1080p, 55 degrees)
 	bool shadows = true;
+	float cloud_glow = 0.5f; // decision 0131: how bright the volumetric clouds glow around a flash
+	bool cloud_state_pushed = false;
 	int64_t seed = 2026;
 	double time = 0.0;
 	bool time_auto = true;
@@ -84,6 +86,9 @@ class FellowLightning3D : public Node3D {
 	void _build_bolt(RandomPCG &p_rng, const Vector3 &p_camera);
 	float _envelope(double p_t) const;
 	static uint64_t _hash(uint64_t p_x);
+	// Static: it may run on the render thread after the node is gone (its state is in the argument).
+	static void _rt_set_cloud_flash(PackedByteArray p_state);
+	void _push_cloud_flash(bool p_on, float p_brightness);
 
 protected:
 	void _notification(int p_what);
@@ -109,6 +114,8 @@ public:
 	float get_bolt_brightness() const { return bolt_brightness; }
 	void set_bolt_width(float p_width) { bolt_width = MAX(0.0001f, p_width); }
 	float get_bolt_width() const { return bolt_width; }
+	void set_cloud_glow(float p_glow) { cloud_glow = MAX(0.0f, p_glow); }
+	float get_cloud_glow() const { return cloud_glow; }
 	void set_shadows(bool p_enable);
 	bool get_shadows() const { return shadows; }
 	void set_seed(int64_t p_seed) { seed = p_seed; }

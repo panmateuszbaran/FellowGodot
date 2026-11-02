@@ -4690,6 +4690,20 @@ void RenderForwardClustered::_fellow_process_clouds(RenderDataRD *p_render_data,
 	params.frame = fellow_clouds_frame++;
 	params.interleaved = Fellow::clouds_interleaved();
 	params.history_valid = fellow_clouds_history;
+	// A lightning flash in the clouds (decision 0131), exposed as the scene's lights are.
+	if (RendererRD::FellowWeather *weather = RendererRD::FellowWeather::get_singleton_if_exists()) {
+		const RendererRD::FellowWeather::LightningState &ls = weather->get_lightning_state();
+		if (ls.active) {
+			float exposure = 1.0f;
+			if (p_render_data->camera_attributes.is_valid()) {
+				exposure = RSG::camera_attributes->camera_attributes_get_exposure_normalization_factor(p_render_data->camera_attributes);
+			}
+			params.flash = true;
+			params.flash_position = ls.position;
+			params.flash_color = ls.color * exposure;
+			params.flash_radius = ls.radius;
+		}
+	}
 	fellow_clouds->process(params);
 	fellow_clouds_history = true;
 	fellow_clouds_last_view_projection = params.view_projection;
