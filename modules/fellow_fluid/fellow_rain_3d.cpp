@@ -53,7 +53,8 @@ FellowRain3D *FellowRain3D::active = nullptr;
 // the rain. Within 0.5 m of the camera a drop is not drawn and it fades in to 4 m (one at the lens would be a blurred
 // bar). A splash is a camera-facing droplet fading over its life. A snowflake (decision 0128) is a soft camera-facing
 // disc swinging about its path at its own rate, fading in and out at the ends of its life (it lives in a box around
-// the camera); its shader receives shadows (a flake in a building's shadow is not lit by the sun).
+// the camera); its shader is opaque with hashed alpha and receives shadows (a flake in a building's shadow is not lit
+// by the sun).
 static const char *rain_drop_shader_code = R"(
 shader_type spatial;
 render_mode blend_mix, depth_draw_never, cull_disabled, shadows_disabled, specular_disabled, skip_vertex_transform;
@@ -120,6 +121,7 @@ void fragment() {
 	}
 	ALBEDO = drop_color.rgb * brightness;
 	ALPHA = drop_color.a * shape * v_alpha;
+	// FLAKE_ALPHA_HASH
 }
 
 void light() {
@@ -167,9 +169,11 @@ void FellowRain3D::_build_children() {
 	drop_material->set_shader(drop_shader);
 	drop_material->set_shader_parameter("splash", false);
 
-	// The snowflakes' (decision 0128): the same code receiving shadows.
+	// The snowflakes' (decision 0128): the same code, opaque with hashed alpha (drawn in the opaque pass with the
+	// particles' motion vectors: TAA reprojects them; blended, TAA wiped out flakes that move more than their size in
+	// a frame), receiving shadows.
 	flake_shader.instantiate();
-	flake_shader->set_code(String(rain_drop_shader_code).replace("shadows_disabled, ", ""));
+	flake_shader->set_code(String(rain_drop_shader_code).replace("render_mode blend_mix, depth_draw_never, cull_disabled, shadows_disabled,", "render_mode cull_disabled,").replace("// FLAKE_ALPHA_HASH", "ALPHA_HASH_SCALE = 1.0;"));
 	flake_material.instantiate();
 	flake_material->set_shader(flake_shader);
 	flake_material->set_shader_parameter("flake", true);

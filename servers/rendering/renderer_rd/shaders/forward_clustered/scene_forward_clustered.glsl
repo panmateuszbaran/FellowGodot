@@ -1661,6 +1661,9 @@ void fellow_wetness_apply(in SceneData p_scene, inout vec3 r_albedo, inout float
 	// Where the rain reaches: below the scene's top as seen from above it does not. A wall looks just outside itself
 	// (the roof above its own footprint would keep it dry); the bilinear lookup and the 25 cm ramp soften the edges.
 	float exposed = 1.0;
+	// The snow's shelter: the heightfield eroded by 35 cm (the lowest of five points), so that thin things overhead —
+	// wires, strings of lights, lamps — leave no bare spots below them; under a roof the snow reaches 35 cm in.
+	float exposed_snow = 1.0;
 	if (w.occlusion2.z > 0.5) {
 		vec3 sp = wp + vec3(gn.x, 0.0, gn.z) * (w.occlusion2.w + 0.1);
 		vec2 uv = (sp.xz - w.occlusion.xy) * w.occlusion.zw + 0.5;
@@ -1668,16 +1671,25 @@ void fellow_wetness_apply(in SceneData p_scene, inout vec3 r_albedo, inout float
 			float h = textureLod(sampler2D(fellow_rain_occlusion, SAMPLER_LINEAR_CLAMP), uv, 0.0).r;
 			float top = w.occlusion2.x + (h * 2.0 - 1.0) * w.occlusion2.y;
 			exposed = smoothstep(top - w.occlusion2.w * 2.0, top - w.occlusion2.w, wp.y);
+			if (snow > 0.0) {
+				vec2 r = 0.35 * w.occlusion.zw;
+				h = min(h, textureLod(sampler2D(fellow_rain_occlusion, SAMPLER_LINEAR_CLAMP), uv + vec2(r.x, 0.0), 0.0).r);
+				h = min(h, textureLod(sampler2D(fellow_rain_occlusion, SAMPLER_LINEAR_CLAMP), uv - vec2(r.x, 0.0), 0.0).r);
+				h = min(h, textureLod(sampler2D(fellow_rain_occlusion, SAMPLER_LINEAR_CLAMP), uv + vec2(0.0, r.y), 0.0).r);
+				h = min(h, textureLod(sampler2D(fellow_rain_occlusion, SAMPLER_LINEAR_CLAMP), uv - vec2(0.0, r.y), 0.0).r);
+				top = w.occlusion2.x + (h * 2.0 - 1.0) * w.occlusion2.y;
+				exposed_snow = smoothstep(top - w.occlusion2.w * 2.0, top - w.occlusion2.w, wp.y);
+			}
 		}
 	}
-	if (exposed <= 0.0) {
+	if (exposed <= 0.0 && (snow <= 0.0 || exposed_snow <= 0.0)) {
 		return; // sheltered: dry
 	}
-	if (wetness > 0.0) {
+	if (wetness > 0.0 && exposed > 0.0) {
 		fellow_wet_surface(p_scene, w, wetness, exposed, wp, gn, wet_lod, r_albedo, r_roughness, r_metallic, r_normal);
 	}
-	if (snow > 0.0) {
-		fellow_snow_cover(p_scene, w, snow, exposed, wp, gn, wet_lod, r_albedo, r_roughness, r_metallic, r_normal);
+	if (snow > 0.0 && exposed_snow > 0.0) {
+		fellow_snow_cover(p_scene, w, snow, exposed_snow, wp, gn, wet_lod, r_albedo, r_roughness, r_metallic, r_normal);
 	}
 }
 
