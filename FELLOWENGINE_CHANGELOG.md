@@ -16,6 +16,10 @@ Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.m
   frame (their traces, accumulated over frames, would smear a flash of a few frames). Without a flash the clouds are
   bit for bit milestone 30's (lavapipe). Showcase: the thunderstorm in Rain Lab under a cloud deck.
 - Snow tracks: a new `track_window` starts the tracks afresh; a one-step parallax for them was tried and reverted.
+- The defaults are not slower (`m30_f294_final`, stock / fellow212 / fellow220, 3 runs): fellow220 faster than stock in
+  every scene (Sponza −54.2 %, Bistro exterior −33.4 %, City Lab −25.8 %, Crowd Lab −24.0 %, Bistro interior −23.6 %,
+  Lights Lab −23.4 %, Foliage Lab −17.8 %, PBR Lab −16.4 %; Stress Lab −2.7 %, within its spread this time). Against
+  milestone 26's build within the spread (`m30_f296_order`, the order reversed).
 
 ## Milestone 30 — snow tracks (2026-11-02)
 

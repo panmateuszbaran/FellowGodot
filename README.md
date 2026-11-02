@@ -46,20 +46,21 @@ features, nodes and (in Bistro) ray tracing on. Captions, settings and more imag
 
 Stock Godot 4.7.2 against FellowEngine with its defaults, frame time in ms. Measured on an Acer Predator PHN16S-71
 (RTX 5070 Ti Laptop GPU, Core Ultra 9 275HX, Windows 11) at 1920 × 1080 with the benchmark's "high" preset. Three
-runs per scene after a pass that fills the shader caches (`m26_f285_final`, build `d183ac7`). FellowEngine was faster
-in every scene and every pair of runs.
+runs per scene after a pass that fills the shader caches (`m30_f294_final`, build `9356d62`, milestone 30).
+FellowEngine was faster in every scene and every pair of runs except Stress Lab, which was within the runs' spread
+this time (2 of 3 pairs faster; −11.5 % in milestone 26's final check, `m26_f285_final`).
 
 | scene | stock | FellowEngine | change |
 |---|---:|---:|---:|
-| Sponza | 13.568 | 6.166 | **−54.6 %** |
-| Bistro exterior | 5.999 | 4.149 | **−30.8 %** |
-| City Lab (18 800 meshes) | 2.716 | 2.033 | **−25.1 %** |
-| Bistro interior | 4.184 | 3.200 | **−23.5 %** |
-| Lights Lab | 3.021 | 2.351 | **−22.2 %** |
-| Crowd Lab (256 animated characters) | 5.463 | 4.271 | **−21.8 %** |
-| Foliage Lab | 3.553 | 2.959 | **−16.7 %** |
-| PBR Lab | 2.582 | 2.169 | **−16.0 %** |
-| Stress Lab | 4.925 | 4.359 | **−11.5 %** |
+| Sponza | 13.399 | 6.132 | **−54.2 %** |
+| Bistro exterior | 6.297 | 4.192 | **−33.4 %** |
+| City Lab (18 800 meshes) | 2.854 | 2.117 | **−25.8 %** |
+| Crowd Lab (256 animated characters) | 5.811 | 4.418 | **−24.0 %** |
+| Bistro interior | 4.127 | 3.151 | **−23.6 %** |
+| Lights Lab | 2.942 | 2.254 | **−23.4 %** |
+| Foliage Lab | 3.505 | 2.880 | **−17.8 %** |
+| PBR Lab | 2.519 | 2.105 | **−16.4 %** |
+| Stress Lab | 4.792 | 4.661 | −2.7 % (within the spread) |
 
 Where the time goes:
 
