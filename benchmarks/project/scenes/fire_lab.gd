@@ -184,8 +184,11 @@ func _build_embers() -> void:
 	p.use_fixed_seed = true
 	p.seed = 4242
 	p.visibility_aabb = AABB(Vector3(-2.0, -0.5, -2.0), Vector3(4.0, 6.0, 4.0))
-	if args.has("weather_wind"):  # as far as the wind carries them in their life
-		p.visibility_aabb = p.visibility_aabb.grow(float(args["weather_wind"]) * 1.6 * p.lifetime)
+	if args.has("weather_wind"):  # downwind, as far as the wind (its gusts 1.6 times the mean) carries them in their life
+		var wa := deg_to_rad(float(args.get("weather_wind_dir", "40")))
+		var drift := Vector3(cos(wa), 0.0, sin(wa)) * float(args["weather_wind"]) * 1.6 * p.lifetime
+		var box: AABB = p.visibility_aabb
+		p.visibility_aabb = box.merge(AABB(box.position + drift, box.size)).grow(1.0)
 	var pm := ParticleProcessMaterial.new()
 	if args.has("weather_wind"):  # the embers drift with the scene's wind (decision 0127)
 		pm.set("wind_enabled", true)
@@ -220,6 +223,19 @@ func _build_embers() -> void:
 	m.emission_enabled = true
 	m.emission = Color(1.0, 0.5, 0.15)
 	m.emission_energy_multiplier = 8.0
+	# Round, soft-edged sparks (a radial gradient: a hot core fading out).
+	var g := Gradient.new()
+	g.set_color(0, Color(1, 1, 1, 1))
+	g.set_color(1, Color(1, 1, 1, 0))
+	g.add_point(0.35, Color(1, 1, 1, 0.9))
+	var gt := GradientTexture2D.new()
+	gt.gradient = g
+	gt.fill = GradientTexture2D.FILL_RADIAL
+	gt.fill_from = Vector2(0.5, 0.5)
+	gt.fill_to = Vector2(1.0, 0.5)
+	gt.width = 32
+	gt.height = 32
+	m.albedo_texture = gt
 	quad.material = m
 	p.draw_pass_1 = quad
 	p.position = Vector3(0.0, 0.25, 0.0)

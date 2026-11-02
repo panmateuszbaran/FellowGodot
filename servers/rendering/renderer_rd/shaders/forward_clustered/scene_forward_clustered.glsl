@@ -1588,19 +1588,22 @@ void fellow_snow_cover(in SceneData p_scene, in FellowWeatherData w, float snow,
 	if (up <= 0.5) {
 		return;
 	}
-	// The noise: the puddles' (the ripple texture's alpha), cells of 2.7 m and 43 cm.
+	// The noise: the puddles' (the ripple texture's alpha), cells of 2.7 m, 43 cm and 7 cm (the finest gives thin
+	// snow's patches their ragged edges).
 	const float CELLS = 16.0;
 	const mat2 ROT1 = mat2(0.8, 0.6, -0.6, 0.8);
+	const mat2 ROT2 = mat2(-0.28, 0.96, -0.96, -0.28);
 	const float FINE = 2.3 / CELLS;
 	vec2 fuv = ROT1 * wp.xz * FINE + vec2(0.71, 0.29);
 	float flod = wet_lod + log2(FINE);
 	float nc = textureLod(sampler2D(fellow_rain_ripples, SAMPLER_LINEAR_WITH_MIPMAPS_REPEAT), wp.xz * (0.37 / CELLS) + vec2(0.11, 0.43), wet_lod + log2(0.37 / CELLS)).a;
 	float nf = textureLod(sampler2D(fellow_rain_ripples, SAMPLER_LINEAR_WITH_MIPMAPS_REPEAT), fuv, flod).a;
-	float n = nc * 0.65 + nf * 0.35;
+	float nx = textureLod(sampler2D(fellow_rain_ripples, SAMPLER_LINEAR_WITH_MIPMAPS_REPEAT), ROT2 * wp.xz * (14.0 / CELLS) + vec2(0.37, 0.83), wet_lod + log2(14.0 / CELLS)).a;
+	float n = nc * 0.6 + nf * 0.28 + nx * 0.12;
 	// How deep the snow is here (0: none, 1: it covers): the cover, none on slopes steeper than 60 degrees, thinner
 	// where the noise is low.
 	float depth = snow * 1.5 * smoothstep(0.5, 0.85, up) - (1.0 - n) * 0.75;
-	float cover = smoothstep(0.0, 0.3, depth) * exposed;
+	float cover = smoothstep(0.0, 0.15, depth) * exposed;
 	if (cover <= 0.0) {
 		return;
 	}
