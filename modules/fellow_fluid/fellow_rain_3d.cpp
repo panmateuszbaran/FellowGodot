@@ -324,6 +324,7 @@ void FellowRain3D::_push_state() {
 	st.snow_sparkle = snow_sparkle;
 	st.freeze = freeze;
 	st.frost = frost;
+	st.drying_patches = drying_patches;
 	st.showers = (is_visible_in_tree() && active == this && rain > 0.0f) ? showers : 0.0f;
 	st.rainbow = is_visible_in_tree() && active == this ? rainbow * rain_seen : 0.0f;
 	st.shafts = is_visible_in_tree() && active == this ? MIN(shafts * rain, 1.0f) : 0.0f;
@@ -941,6 +942,8 @@ void FellowRain3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_frost", "frost"), &FellowRain3D::set_frost);
 	ClassDB::bind_method(D_METHOD("get_frost"), &FellowRain3D::get_frost);
 	ClassDB::bind_method(D_METHOD("set_freezing_time", "seconds"), &FellowRain3D::set_freezing_time);
+	ClassDB::bind_method(D_METHOD("set_drying_patches", "patches"), &FellowRain3D::set_drying_patches);
+	ClassDB::bind_method(D_METHOD("get_drying_patches"), &FellowRain3D::get_drying_patches);
 	ClassDB::bind_method(D_METHOD("get_freezing_time"), &FellowRain3D::get_freezing_time);
 	ClassDB::bind_method(D_METHOD("set_shafts", "shafts"), &FellowRain3D::set_shafts);
 	ClassDB::bind_method(D_METHOD("get_shafts"), &FellowRain3D::get_shafts);
@@ -1050,6 +1053,7 @@ void FellowRain3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "freeze", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_freeze", "get_freeze");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "frost", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_frost", "get_frost");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "freezing_time", PROPERTY_HINT_RANGE, "0,36000,0.1,suffix:s"), "set_freezing_time", "get_freezing_time");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "drying_patches", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_drying_patches", "get_drying_patches");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "snow_depth", PROPERTY_HINT_RANGE, "0.001,2,0.001,suffix:m"), "set_snow_depth", "get_snow_depth");
 	ADD_SUBGROUP("Tracks", "track");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "tracks"), "set_tracks", "get_tracks");

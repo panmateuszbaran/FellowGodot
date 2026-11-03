@@ -1530,7 +1530,26 @@ void fellow_wet_surface(in SceneData p_scene, in FellowWeatherData w, float wetn
 	mat4 inv_view = transpose(mat4(p_scene.inv_view_matrix[0], p_scene.inv_view_matrix[1], p_scene.inv_view_matrix[2], vec4(0.0, 0.0, 0.0, 1.0)));
 	// The surface's own water: undersides stay nearly dry; porous (rough, non-metal) materials darken as water fills
 	// their pores; a film makes every wet surface glossier.
-	float wet = wetness * exposed * mix(0.1, 1.0, smoothstep(-0.3, 0.3, gn.y));
+	// Drying in patches (decision 0138): between wet and dry the surface is wet in patches — the puddles' noise taken as
+	// the ground's lows (where the puddles stand) and highs, with a finer one at their edges and a broad one: the highs
+	// dry first and wet last, the lows last and first.
+	const float CELLS = 16.0;
+	const mat2 ROT1 = mat2(0.8, 0.6, -0.6, 0.8);
+	const mat2 ROT2 = mat2(-0.28, 0.96, -0.96, -0.28);
+	float patches = (w.frost.z > 0.0 && wetness < 1.0) ? w.frost.z : 0.0;
+	float wet_here = wetness;
+	if (patches > 0.0) {
+		vec2 puv = abs(gn.y) > 0.7 ? wp.xz : (abs(gn.x) > abs(gn.z) ? wp.zy : wp.xy);
+		float lows = textureLod(sampler2D(fellow_rain_ripples, SAMPLER_LINEAR_WITH_MIPMAPS_REPEAT), puv * (0.23 / CELLS), wet_lod + log2(0.23 / CELLS)).a * 0.6;
+		lows += textureLod(sampler2D(fellow_rain_ripples, SAMPLER_LINEAR_WITH_MIPMAPS_REPEAT), ROT1 * puv * (0.91 / CELLS) + vec2(0.31, 0.17), wet_lod + log2(0.91 / CELLS)).a * 0.3;
+		lows += textureLod(sampler2D(fellow_rain_ripples, SAMPLER_LINEAR_WITH_MIPMAPS_REPEAT), ROT2 * puv * (3.7 / CELLS) + vec2(0.53, 0.71), wet_lod + log2(3.7 / CELLS)).a * 0.1;
+		float fine = textureLod(sampler2D(fellow_rain_ripples, SAMPLER_LINEAR_WITH_MIPMAPS_REPEAT), ROT1 * puv * (11.0 / CELLS) + vec2(0.13, 0.89), wet_lod + log2(11.0 / CELLS)).a;
+		// And a broad one (cells of 20 m, turned): the noise's 70 m repeat is not seen from above.
+		float broad = textureLod(sampler2D(fellow_rain_ripples, SAMPLER_LINEAR_WITH_MIPMAPS_REPEAT), ROT2 * puv * (0.05 / CELLS) + vec2(0.47, 0.19), wet_lod + log2(0.05 / CELLS)).a;
+		float high = 1.0 - (0.6 * lows + 0.25 * broad + 0.15 * fine);
+		wet_here = mix(wetness, smoothstep(high - 0.08, high + 0.08, wetness * 1.4 - 0.2), patches);
+	}
+	float wet = wet_here * exposed * mix(0.1, 1.0, smoothstep(-0.3, 0.3, gn.y));
 	float rough0 = r_roughness;
 	float porous = (1.0 - r_metallic) * smoothstep(0.2, 0.6, rough0);
 	r_albedo *= mix(1.0, 0.5, wet * porous);
@@ -1544,16 +1563,20 @@ void fellow_wet_surface(in SceneData p_scene, in FellowWeatherData w, float wetn
 	}
 	// The noise: the ripple texture's alpha, a tiling value noise of 16 x 16 cells, at three scales (cells of 4.3 m,
 	// 1.1 m and 27 cm; the two finer turned: no visible repeat).
-	const float CELLS = 16.0;
-	const mat2 ROT1 = mat2(0.8, 0.6, -0.6, 0.8);
-	const mat2 ROT2 = mat2(-0.28, 0.96, -0.96, -0.28);
-	// Only where a puddle can be (flat, exposed, wet enough, rough and not metallic).
-	float puddle = flatness * exposed * smoothstep(0.4, 0.9, wetness) * (1.0 - r_metallic) * smoothstep(0.25, 0.45, rough0);
-	if (puddle > 0.0 && w.params.y > 0.0) {
+	// Only where a puddle can be (flat, exposed, wet enough, rough and not metallic). Drying in patches (0138), the
+	// puddles shrink to their deepest instead of fading: the threshold rises as the wetness falls.
+	float puddle_amount = w.params.y;
+	float puddle_wet = smoothstep(0.4, 0.9, wetness);
+	if (patches > 0.0) {
+		puddle_amount *= mix(1.0, smoothstep(0.15, 1.0, wetness), patches);
+		puddle_wet = mix(puddle_wet, smoothstep(0.1, 0.3, wetness), patches);
+	}
+	float puddle = flatness * exposed * puddle_wet * (1.0 - r_metallic) * smoothstep(0.25, 0.45, rough0);
+	if (puddle > 0.0 && puddle_amount > 0.0) {
 		float n = textureLod(sampler2D(fellow_rain_ripples, SAMPLER_LINEAR_WITH_MIPMAPS_REPEAT), wp.xz * (0.23 / CELLS), wet_lod + log2(0.23 / CELLS)).a * 0.6;
 		n += textureLod(sampler2D(fellow_rain_ripples, SAMPLER_LINEAR_WITH_MIPMAPS_REPEAT), ROT1 * wp.xz * (0.91 / CELLS) + vec2(0.31, 0.17), wet_lod + log2(0.91 / CELLS)).a * 0.3;
 		n += textureLod(sampler2D(fellow_rain_ripples, SAMPLER_LINEAR_WITH_MIPMAPS_REPEAT), ROT2 * wp.xz * (3.7 / CELLS) + vec2(0.53, 0.71), wet_lod + log2(3.7 / CELLS)).a * 0.1;
-		puddle *= clamp((n - 1.0 + w.params.y) * 6.0, 0.0, 1.0);
+		puddle *= clamp((n - 1.0 + puddle_amount) * 6.0, 0.0, 1.0);
 	} else {
 		puddle = 0.0;
 	}

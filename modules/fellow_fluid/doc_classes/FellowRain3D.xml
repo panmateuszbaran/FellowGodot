@@ -60,6 +60,9 @@
 		<member name="drop_speed" type="float" setter="set_drop_speed" getter="get_drop_speed" default="9.0">
 			The falling speed of the drops, in metres per second (the terminal speed of a raindrop of a few millimetres).
 		</member>
+		<member name="drying_patches" type="float" setter="set_drying_patches" getter="get_drying_patches" default="1.0">
+			Between dry and wet (0 &lt; [member wetness] &lt; 1) the surfaces are wet in patches — the high spots drying first and wetting last — and the puddles shrink to their deepest instead of fading (0-1; 0: an even wetness, the puddles fading). At [member wetness] 0 and 1 it changes nothing.
+		</member>
 		<member name="drying_time" type="float" setter="set_drying_time" getter="get_drying_time" default="600.0">
 			With [member wetness_follows_rain], the seconds a fully wet scene takes to dry once the rain stops.
 		</member>
