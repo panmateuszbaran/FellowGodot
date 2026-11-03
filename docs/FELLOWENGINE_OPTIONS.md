@@ -66,7 +66,7 @@ Effects that add to the image what a project asks for. Off, they change nothing 
 | `post/local_exposure/enabled` (`highlight_contrast` 0.8, `shadow_contrast` 0.8, `detail_strength` 1, `blurred_blend` 0.6, `blur_size` 0.5) | Unreal 5's local exposure: large-scale contrast compressed around middle grey (below 1 compresses), local detail kept (a bilateral grid and a wide blur of log luminance) | 0106 |
 | `post/contact_shadows/enabled` (`length` 0.3 m, `steps` 8, `thickness` 0.02 m) | screen-space contact shadows of the first directional light (where it casts shadows): what the shadow map misses where objects touch; needs the depth pre-pass, no MSAA; the ray-traced sun shadows replace it | 0107 |
 | `post/atmosphere/enabled` (`aerial_perspective` on, `sun_transmittance` on, `aerial_distance_scale` 1, `mie_scale` 1, `rayleigh_scale` 1, `ground_albedo` 0.3, `srgb_rayleigh` on) | Unreal's sky atmosphere (Hillaire 2020; `srgb_rayleigh` off: Unreal's colour coefficients, a bluer sky; `mie_scale` 10-30: a typical day's haze, less blue shade): tables for a sky shader (global shader parameters `fellow_atmosphere_sky_view`, `fellow_atmosphere_transmittance`, `fellow_atmosphere_camera_height`; see `benchmarks/project/bench/fellow_atmosphere_sky.gdshader`), aerial perspective on the opaque surfaces, the sun's colour through the atmosphere | 0108 |
-| `post/clouds/enabled` (`coverage` 0.45, `density` 1, `altitude` 1.5 km, `thickness` 2.5 km, `wind` 0.01 km/s, `interleaved` on) | volumetric clouds over the sky's pixels (half resolution, temporal; interleaved: a quarter of the pixels traced per frame); lit through the atmosphere when it is on | 0109, 0115 |
+| `post/clouds/enabled` (`coverage` 0.45, `density` 1, `altitude` 1.5 km, `thickness` 2.5 km, `wind` 0.01 km/s, `interleaved` on, `shadows` 1, `sky_light` 1) | volumetric clouds over the sky's pixels (half resolution, temporal; interleaved: a quarter of the pixels traced per frame); lit through the atmosphere when it is on; their shadows on the scene's surfaces (a map of the sun through the layer, 16 km around the camera; `shadows` scales them, 0: none); the sky's ambient light and reflections greyed where they cover it (`sky_light`) | 0109, 0115, 0133 |
 | `post/sharpen/strength` (0-1) | contrast-adaptive sharpening (RCAS) of the TAA output, in the tone mapping pass; only with TAA | 0110 |
 | `post/bloom/lens_dirt` | the environment's glow map as a lens dirt mask, added where the glow is (Unreal's bloom dirt) — on FellowEngine's bloom when it is on, else on Godot's glow; needs a glow map | 0111 |
 | `post/bloom/enabled` (`intensity` 0.05, `scatter` 0.7) | an energy-conserving bloom of the whole image (no threshold or cap: the sun's disk glows in proportion), mixed into the image by `intensity`; independent of Godot's glow | 0112 |
@@ -208,7 +208,10 @@ scene where the rain falls (Forward+):
 * **shelter**: a heightfield of the scene seen from above following the camera (`occlusion_size`,
   `occlusion_height`, `occlusion_resolution`; `occlusion_always_update` for moving roofs; `get_occlusion()` for its
   `heightfield_mask`) keeps the drops off and the ground dry under roofs;
-* a `FellowWater3D` shows the ripples too.
+* a `FellowWater3D` shows the ripples too;
+* **rainbows** (milestone 34, decision 0134): while it rains or lately rained (fading over 90 s once it stops; none
+  once it snows) and the sun shines on the rain, the primary and secondary bows around the point opposite the sun,
+  over the sky and over what stands behind the rain (`rainbow` scales them, 0: none).
 
 Cost (RTX 5070 Ti Laptop, 1080p, Rain Lab): 0.36 ms of GPU time raining — screen-space reflections 0.13 ms more
 (wet surfaces are glossy enough for SSR; without SSR there is none of it), the wetting 0.12 ms (depth pre-pass and
@@ -313,8 +316,9 @@ Cloudy, Overcast, Rain, Storm, Snow, Blizzard (presets) or Custom, `set_weather(
 `fog_density`, `temperature` — eased from where it is; rain and snow hand over at the transition's midpoint, when
 nothing falls. It drives (`controls`, all by default): the scene's `FellowWind3D`, `FellowRain3D` and
 `FellowLightning3D` (found, or created when needed: `create_missing`; all at the start: `prepare_nodes`); the
-volumetric clouds' coverage and density in place of the project settings (the clouds must be on); the sun on the
-scene's surfaces only (its light buffer energy times `sunlight` — the sky and the clouds keep the full sun); the
+volumetric clouds' coverage and density in place of the project settings (the clouds must be on), and so their
+shadows (decision 0133); the sun on the scene's surfaces only where the clouds cast no shadows (its light buffer
+energy times `sunlight` — the sky and the clouds keep the full sun); the
 environment's fog (added to its own, in `fog_color` as bright as the sky) and its background energy (the sky, its
 ambient light and reflections); and the ground — wet in the rain, drying after it, covered by falling snow below 1 °C,
 melting above 0 °C (`ground_speed` speeds it up; `settle_ground` starts it as the weather leaves it). It does nothing

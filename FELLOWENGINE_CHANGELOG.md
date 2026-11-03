@@ -9,6 +9,30 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 34 — rainbows (2026-11-03)
+
+- `FellowRain3D.rainbow` (decision 0134): while it rains or lately rained (fading over 90 s once it stops, none once it
+  snows) and the sun shines on the rain, the primary and secondary bows around the point opposite the sun — from each
+  wavelength's refraction in water through the CIE matching functions, the sky brighter inside the primary and darker
+  between the two — over the sky and over what stands behind the rain, dimmed by the clouds' shadow at the camera.
+- Off is the previous image (lavapipe). Cost on the RTX (Bistro raining, `m34_f305`): the pass 0.045 ms, the frame
+  +0.07 ms. FellowBench: `--weather_rainbow`. Showcase: a double rainbow over Bistro as the rain clears.
+
+## Milestone 33 — the clouds' shadows and the sky's light under them (2026-11-03)
+
+- `post/clouds/shadows` (decision 0133, on with the clouds): a map of the sun's transmittance through the cloud layer,
+  512² over 16 km around the camera (the clouds' own density, eroded edges included), multiplied into the sun's shadow
+  in the colour passes — moving shadows on a cloudy day, sunny gaps under an overcast; a FellowWeather3D's `sunlight`
+  factor steps aside while they are on.
+- `post/clouds/sky_light`: where the clouds cover the sky, its ambient light and reflections turn grey (no clear-sky
+  blue on a wet street under rain clouds).
+- Fixed before release: with ray-traced GI on, reading the map written earlier in the same frame lost the device on the
+  RTX; the map is double-buffered (read a frame later).
+- Off is the previous image (lavapipe: Rain Lab without drops, Water Lab, Rain Lab under clouds with both off, bit for
+  bit). Cost on the RTX (Bistro under clouds, `m33_f305`): the map 0.12 ms, the frame +0.17 ms.
+- `Light3D::get_light_rid()` serves the sun's identification; `light_storage.cpp` skips the weather's sun factor
+  under the clouds' shadows.
+
 ## Milestone 32 — a weather controller (2026-11-03)
 
 - Added `FellowWeather3D` (decision 0132): the weather from one node — presets (clear, cloudy, overcast, rain, storm,

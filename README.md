@@ -36,8 +36,10 @@ in [docs/](docs/) and the [showcase](docs/SHOWCASE.md).
   <img src="docs/showcase/bistro_snow_gold_tree.jpg" width="49%" alt="Snow in Bistro's square against a low sun: bare cobbles under the tree, light shafts">
   <img src="docs/showcase/storm_square.jpg" width="49%" alt="FellowLightning3D: a bolt over Rain Lab's square, the flash on the rain and the wet ground">
   <img src="docs/showcase/loop_storm_clouds.webp" width="49%" alt="Walking down a street in a thunderstorm, the cloud deck lit by each strike">
-  <img src="docs/showcase/bistro_weather_storm_street.jpg" width="49%" alt="FellowWeather3D's thunderstorm by day in Bistro: a flash over the wet street">
-  <img src="docs/showcase/loop_weather_lapse.webp" width="49%" alt="A time-lapse of the weather in Bistro, from clear to a thunderstorm to snow and back">
+  <img src="docs/showcase/bistro_weather_storm_day.jpg" width="49%" alt="FellowWeather3D's thunderstorm by day in Bistro: a bolt over the roofs, the wet street lit by the flash">
+  <img src="docs/showcase/loop_weather_lapse.webp" width="49%" alt="A time-lapse of the weather in Bistro: clouds and their shadows, rain, a thunderstorm, a rainbow, snow and the sun again">
+  <img src="docs/showcase/bistro_rainbow_street.jpg" width="49%" alt="A double rainbow over Bistro's wet street after the rain">
+  <img src="docs/showcase/loop_bistro_rainbow.webp" width="49%" alt="The rain clouds part over Bistro and a double rainbow appears">
 </p>
 
 These are real-time captures from the benchmark scenes on an RTX 5070 Ti Laptop GPU, with FellowEngine's visual
@@ -85,7 +87,7 @@ to −21 %. They are listed in the [options](docs/FELLOWENGINE_OPTIONS.md).
 |---|---|---|
 | `FellowWater3D` | lakes and seas: JONSWAP wind waves simulated by FFT in cascades, foam, screen-space reflections traced over a Hi-Z depth pyramid, refraction, absorption, shore foam, caustics, the sun's glitter | 1.6 ms of Water Lab's frame; reflections 0.61 ms |
 | `FellowShallowWater3D` | a mass-conserving shallow-water simulation on the GPU (rivers, obstacles, moving bodies), drawn alone or blended into a `FellowWater3D` | 512²: 0.21 ms, 1024²: 0.75-0.79 ms per step |
-| `FellowRain3D` | rain around the camera: GPU drops that stop and splash on the scene, roofs sheltering the ground, wet materials, puddles with ripples; or snow: flakes drifting in the wind and a snow cover on what faces up, bare under roofs and trees, glinting in the sun, with footprints and wheel ruts (`FellowSnowTracker3D`) | 0.36 ms (Rain Lab); snowing 0.37 ms |
+| `FellowRain3D` | rain around the camera: GPU drops that stop and splash on the scene, roofs sheltering the ground, wet materials, puddles with ripples, a rainbow when the sun shines on it; or snow: flakes drifting in the wind and a snow cover on what faces up, bare under roofs and trees, glinting in the sun, with footprints and wheel ruts (`FellowSnowTracker3D`) | 0.36 ms (Rain Lab); snowing 0.37 ms; the rainbow 0.05 ms |
 | `FellowWind3D` | wind with gusts rolling over the landscape: plants bend, sway, flutter and shine with it; shadows and motion vectors follow; water, smoke and fire, and particles (`ParticleProcessMaterial`'s Wind group) take the same wind | 0.56 ms (Wind Lab); projects' own `TIME`-based sway costs 1.81 ms |
 | `FellowLightning3D` | lightning strikes around the camera: a few return strokes flashing over the scene with shadows, a branching bolt, a lit cloud, a signal for the thunder | +0.04 ms on average with a strike every 2 s (Rain Lab) |
 | `FellowWeather3D` | the weather from one node: clear, cloudy, overcast, rain, a thunderstorm, snow, a blizzard or a state of its own, changing smoothly; it drives the wind, rain, snow and lightning, the clouds, the sun on the scene, the fog and the ground (wet, drying, under snow, melting) | the parts it turns on (Bistro: clear weather not measurable, rain +0.5 ms) |
@@ -93,7 +95,7 @@ to −21 %. They are listed in the [options](docs/FELLOWENGINE_OPTIONS.md).
 | `FellowBurnable3D` | a mesh burns like wood in the gas's fire: voxels pyrolyse to char and glowing embers, the surface recedes, burns through and falls as a heap of ash and charcoal | drawing 0.35 ms (Burn Lab) |
 | `FellowHLOD3D` | automatic HLOD: repeated far meshes instanced and culled on the GPU, the rest merged per cell with LODs, optional octahedral impostors | City Lab: render thread −23 to −42 % |
 | `raytracing/*` | hardware ray tracing (`VK_KHR_ray_query`): ambient occlusion, sun shadows, dynamic diffuse GI with probes, reflections | — |
-| `post/*` | motion blur, histogram and local exposure, contact shadows, sky atmosphere with aerial perspective, volumetric clouds, bloom with lens dirt and flare, light shafts, sharpening, white balance, lens effects | — |
+| `post/*` | motion blur, histogram and local exposure, contact shadows, sky atmosphere with aerial perspective, volumetric clouds with their shadows on the scene, bloom with lens dirt and flare, light shafts, sharpening, white balance, lens effects | the clouds' shadows 0.17 ms (Bistro) |
 
 Forward+ only: the Mobile and Compatibility renderers are unchanged.
 

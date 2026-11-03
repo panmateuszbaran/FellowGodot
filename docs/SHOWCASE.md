@@ -20,9 +20,21 @@ the volumetric clouds' coverage and density, the sun on the scene's surfaces, th
 the ground as it would be (wet, under snow). The time-lapse turns from one to the next in about a second each, with
 the ground's wetting, drying, snowing and melting sped up to match (`--weather_cycle`, `--weather_times`).
 
-<img src="showcase/bistro_weather_storm_street.jpg" width="100%" alt="Bistro's street in a thunderstorm by day: a flash over the wet street">
+<img src="showcase/bistro_weather_storm_day.jpg" width="100%" alt="Bistro's street in a thunderstorm by day: a bolt over the roofs, the wet street lit by the flash">
 
-Settings: the day look with ray tracing, the sun at 32°, auto exposure.
+The time-lapse (milestones 33-34): the volumetric clouds cast their shadows, so the street goes into their shade as they
+close in and back into the sun as they part; under them the sky's light turns grey. With the sun behind the camera, a
+rainbow follows the storm. Settings: the day look with ray tracing, the sun at 20° (32° for the grid), auto exposure.
+
+## A rainbow after the rain: `FellowRain3D.rainbow`
+
+<img src="showcase/bistro_rainbow_street.jpg" width="100%" alt="The primary and secondary rainbows over Bistro's wet street as the rain clears">
+
+<img src="showcase/loop_bistro_rainbow.webp" width="100%" alt="The rain clouds part over Bistro, the sun comes out and a double rainbow appears">
+
+Milestone 34: as the controller's rain turns to clear and the sun comes out 14° up behind the camera, the rain still
+falling gives the primary bow — red outside, violet inside — and the secondary above it with its colours reversed, the
+sky brighter inside the primary. The colours come from each wavelength's refraction in water.
 
 ## Bistro at night, in the rain
 
