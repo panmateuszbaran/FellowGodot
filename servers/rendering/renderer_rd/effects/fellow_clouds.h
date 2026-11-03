@@ -126,8 +126,10 @@ private:
 	RID pipelines[MODE_MAX];
 	RID ubo;
 	RID shadow_ubo; // decision 0133: the shadow pass's own, written before the frame's colour passes
-	RID shadow_map; // R16F SHADOW_SIZE^2
-	Vector2 shadow_origin; // m
+	RID shadow_maps[2]; // R16F SHADOW_SIZE^2: written by turns
+	uint32_t shadow_parity = 0;
+	Vector2 shadow_origins[2]; // m: each map's centre
+	Vector2 shadow_read_origin;
 	RID shape_noise; // RGBA8 128^3
 	RID detail_noise; // RGBA8 32^3
 	RID white; // 1 x 1 for the atmosphere's tables when there is none
@@ -141,9 +143,11 @@ private:
 
 public:
 	void process(const Params &p_params);
-	// Writes the shadow map for this frame; returns it, centred at get_shadow_origin() (m), SHADOW_EXTENT on a side.
+	// Writes the shadow map for this frame into one of two maps and returns the other, written by the previous call —
+	// the one the colour passes read (a map written and read in the same frame lost the device with DDGI on, decision
+	// 0133) — centred at get_shadow_origin() (m), SHADOW_EXTENT on a side.
 	RID process_shadow(const ShadowParams &p_params);
-	Vector2 get_shadow_origin() const { return shadow_origin; }
+	Vector2 get_shadow_origin() const { return shadow_read_origin; }
 
 	FellowClouds();
 	~FellowClouds();

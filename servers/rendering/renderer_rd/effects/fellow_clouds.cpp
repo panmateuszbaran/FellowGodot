@@ -109,7 +109,7 @@ void FellowClouds::_free_targets() {
 
 FellowClouds::~FellowClouds() {
 	_free_targets();
-	RID rids[] = { ubo, shadow_ubo, shadow_map, shape_noise, detail_noise, white };
+	RID rids[] = { ubo, shadow_ubo, shadow_maps[0], shadow_maps[1], shape_noise, detail_noise, white };
 	for (RID r : rids) {
 		if (r.is_valid()) {
 			RD::get_singleton()->free_rid(r);
@@ -252,12 +252,20 @@ RID FellowClouds::process_shadow(const ShadowParams &p_params) {
 	MaterialStorage *material_storage = MaterialStorage::get_singleton();
 	ERR_FAIL_NULL_V(material_storage, RID());
 	RID linear_repeat = material_storage->sampler_rd_get_default(RSE::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RSE::CANVAS_ITEM_TEXTURE_REPEAT_ENABLED);
-	if (shadow_map.is_null()) {
-		shadow_map = _fellow_clouds_texture(RD::TEXTURE_TYPE_2D, RD::DATA_FORMAT_R16_SFLOAT, SHADOW_SIZE, SHADOW_SIZE, 1);
-	}
 	// Centred on the camera, in whole texels (the map does not swim as the camera moves).
 	const float texel = SHADOW_EXTENT / float(SHADOW_SIZE);
-	shadow_origin = Vector2(Math::floor(p_params.camera_position.x / texel + 0.5f) * texel, Math::floor(p_params.camera_position.z / texel + 0.5f) * texel);
+	const Vector2 shadow_origin = Vector2(Math::floor(p_params.camera_position.x / texel + 0.5f) * texel, Math::floor(p_params.camera_position.z / texel + 0.5f) * texel);
+	if (shadow_maps[0].is_null()) {
+		for (int i = 0; i < 2; i++) {
+			shadow_maps[i] = _fellow_clouds_texture(RD::TEXTURE_TYPE_2D, RD::DATA_FORMAT_R16_SFLOAT, SHADOW_SIZE, SHADOW_SIZE, 1);
+			RD::get_singleton()->texture_clear(shadow_maps[i], Color(1, 1, 1, 1), 0, 1, 0, 1); // the first frame in sunlight
+			shadow_origins[i] = shadow_origin;
+		}
+	}
+	const uint32_t write = shadow_parity;
+	shadow_parity ^= 1;
+	shadow_origins[write] = shadow_origin;
+	shadow_read_origin = shadow_origins[write ^ 1];
 
 	UBO u;
 	memset(&u, 0, sizeof(UBO));
@@ -290,10 +298,10 @@ RID FellowClouds::process_shadow(const ShadowParams &p_params) {
 	RD::Uniform u_shape(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 1, Vector<RID>({ linear_repeat, shape_noise }));
 	RD::Uniform u_detail(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 2, Vector<RID>({ linear_repeat, detail_noise }));
 	RD::get_singleton()->compute_list_bind_uniform_set(list, uniform_set_cache->get_cache(shader_rd, 0, u_params, u_shape, u_detail), 0);
-	RD::Uniform u_dest(RD::UNIFORM_TYPE_IMAGE, 0, shadow_map);
+	RD::Uniform u_dest(RD::UNIFORM_TYPE_IMAGE, 0, shadow_maps[write]);
 	RD::get_singleton()->compute_list_bind_uniform_set(list, uniform_set_cache->get_cache(shader_rd, 1, u_dest), 1);
 	RD::get_singleton()->compute_list_dispatch_threads(list, SHADOW_SIZE, SHADOW_SIZE, 1);
 	RD::get_singleton()->compute_list_end();
 	RD::get_singleton()->draw_command_end_label();
-	return shadow_map;
+	return shadow_maps[write ^ 1];
 }
