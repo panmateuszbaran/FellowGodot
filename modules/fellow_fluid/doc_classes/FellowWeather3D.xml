@@ -131,7 +131,7 @@
 			The [FellowRain3D] to drive. Empty: the active one. The weather turns its [member FellowRain3D.wetness_follows_rain] and [member FellowRain3D.snow_follows_precipitation] off and sets its wetness and snow itself.
 		</member>
 		<member name="settle_ground" type="bool" setter="set_settle_ground" getter="get_settle_ground" default="true">
-			When the node is ready, the ground as the weather leaves it: wet in the rain, covered in snow while it snows below freezing. A project's own wet or snowy ground is kept.
+			When the node is ready, the ground as the weather leaves it: wet in the rain, covered in snow while it snows below freezing, its water frozen below 0 °C and frosted under a clear sky when nothing falls. A project's own wet or snowy ground is kept.
 		</member>
 		<member name="sun_path" type="NodePath" setter="set_sun_path" getter="get_sun_path" default="NodePath(&quot;&quot;)">
 			The sun the clouds dim. Empty: the current scene's first [DirectionalLight3D] that lights the scene.
@@ -140,7 +140,7 @@
 			The share of the sun's light that reaches the scene's surfaces through the clouds, on average. The light's own energy is unchanged: the sky and the clouds stay lit by the full sun. While the volumetric clouds cast their own shadows ([code]rendering/fellow/post/clouds/shadows[/code]) they take its place and it is not applied.
 		</member>
 		<member name="temperature" type="float" setter="set_temperature" getter="get_temperature" default="18.0">
-			Degrees Celsius. Falling snow settles at 1 °C and below; snow on the ground melts above 0 °C, in the rain node's [code]melting_time[/code] at 5 °C (faster when warmer, three times as fast in the rain).
+			Degrees Celsius. Falling snow settles at 1 °C and below; snow on the ground melts above 0 °C, in the rain node's [code]melting_time[/code] at 5 °C (faster when warmer, three times as fast in the rain). Below 0 °C the water on the ground freezes and, when nothing falls, hoarfrost forms (slower under clouds), both in the rain node's [code]freezing_time[/code] at -5 °C; above 0 °C they thaw (the frost at once in the rain). Below 0 °C the controller creates the rain node (without rain) for them.
 		</member>
 		<member name="transition_time" type="float" setter="set_transition_time" getter="get_transition_time" default="30.0">
 			Seconds a change of weather takes when none is given ([member weather] set, a state's value set).

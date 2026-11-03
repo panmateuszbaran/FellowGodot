@@ -486,8 +486,25 @@ void FellowWeather3D::_apply_ground(FellowRain3D *p_rain, double p_delta) {
 	if (rain <= 0.0f && melt <= 0.0f) {
 		wet = MAX(0.0f, wet - dt * (t > 0.0f ? 1.0f : 0.25f) / MAX(p_rain->get_drying_time(), 0.01f));
 	}
+	// Ice (decision 0136): below freezing the water on the ground freezes, in freezing_time at 5 degrees below (rain
+	// falling below freezing glazes it as it lands); above freezing it thaws twice as fast. Hoarfrost forms on what
+	// faces the sky in the cold when nothing falls — in freezing_time at 5 degrees below under a clear sky, a fifth as
+	// fast under a full deck (the clouds keep the ground warm) — and goes above freezing, at once in the rain.
+	const float ft = MAX(p_rain->get_freezing_time(), 0.01f);
+	float freeze = p_rain->get_freeze();
+	float frost = p_rain->get_frost();
+	if (t < 0.0f) {
+		freeze = MIN(1.0f, freeze + dt * MIN(-t / 5.0f, 2.0f) / ft);
+		const float falling = current.precipitation != PRECIPITATION_NONE ? current.intensity : 0.0f;
+		frost = MIN(1.0f, frost + dt * MIN(-t / 5.0f, 2.0f) * (1.0f - 0.8f * current.clouds) * (1.0f - falling) / ft);
+	} else {
+		freeze = MAX(0.0f, freeze - dt * 2.0f * MAX(t / 5.0f, 0.2f) / ft);
+		frost = MAX(0.0f, frost - dt * (4.0f * MAX(t / 5.0f, 0.2f) + 20.0f * rain) / ft);
+	}
 	p_rain->set_wetness(wet);
 	p_rain->set_snow(snow);
+	p_rain->set_freeze(freeze);
+	p_rain->set_frost(frost);
 }
 
 void FellowWeather3D::_restore_environment() {
@@ -647,7 +664,8 @@ void FellowWeather3D::_apply(double p_delta) {
 	const bool precipitation = has_control(CONTROL_PRECIPITATION);
 	const bool ground = has_control(CONTROL_GROUND);
 	if (precipitation || ground) {
-		const bool needed = (current.precipitation != PRECIPITATION_NONE && current.intensity > 0.0f) || (target.precipitation != PRECIPITATION_NONE && target.intensity > 0.0f);
+		// Below freezing the ground model needs the rain node too: its ice and frost (decision 0136).
+		const bool needed = (current.precipitation != PRECIPITATION_NONE && current.intensity > 0.0f) || (target.precipitation != PRECIPITATION_NONE && target.intensity > 0.0f) || (ground && (current.temperature < 0.0f || target.temperature < 0.0f));
 		if (FellowRain3D *r = _get_rain(create && precipitation && (needed || prepare_nodes))) {
 			if (precipitation) {
 				const bool owned = r->get_instance_id() == rain_created;
@@ -705,12 +723,19 @@ void FellowWeather3D::_notification(int p_what) {
 			// The ground as the weather leaves it: wet in the rain, covered in the snow (a project's own wet or snowy
 			// ground is kept).
 			if (settle_ground && has_control(CONTROL_GROUND)) {
-				const bool needed = current.precipitation != PRECIPITATION_NONE && current.intensity > 0.0f;
+				const bool needed = (current.precipitation != PRECIPITATION_NONE && current.intensity > 0.0f) || current.temperature < 0.0f;
 				if (FellowRain3D *r = _get_rain(create_missing && has_control(CONTROL_PRECIPITATION) && (needed || prepare_nodes))) {
 					if (current.precipitation == PRECIPITATION_RAIN && current.intensity > 0.0f) {
 						r->set_wetness(1.0f);
 					} else if (current.precipitation == PRECIPITATION_SNOW && current.intensity > 0.0f && current.temperature <= 1.0f) {
 						r->set_snow(1.0f);
+					}
+					// Below freezing its water is ice, and under a clear sky without snow the ground is frosted.
+					if (current.temperature < 0.0f) {
+						r->set_freeze(1.0f);
+						if (current.intensity <= 0.0f && current.clouds < 0.6f) {
+							r->set_frost(1.0f);
+						}
 					}
 				}
 			}

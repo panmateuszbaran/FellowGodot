@@ -1567,6 +1567,8 @@ void fellow_wet_surface(in SceneData p_scene, in FellowWeatherData w, float wetn
 		vec2 rb = textureLod(sampler2D(fellow_rain_ripples, SAMPLER_LINEAR_WITH_MIPMAPS_REPEAT), ruv * 0.77 + vec2(0.37, 0.61), rlod + log2(0.77)).rg;
 		slope = (ra + rb) * (w.ripples.y * w.params.z * exposed);
 	}
+	// Ice (decision 0136): frozen water does not ripple.
+	slope *= 1.0 - w.frost.x;
 
 	vec3 nw = normalize(mat3(inv_view) * r_normal);
 	nw = normalize(mix(nw, normalize(vec3(-slope.x, 1.0, -slope.y)), puddle)); // standing water: flat, rippled
@@ -1576,6 +1578,54 @@ void fellow_wet_surface(in SceneData p_scene, in FellowWeatherData w, float wetn
 	r_albedo *= mix(1.0, 0.8, puddle);
 	r_roughness = mix(r_roughness, 0.03, puddle);
 	r_metallic = mix(r_metallic, 0.0, puddle);
+	if (w.frost.x > 0.0 && puddle > 0.0) {
+		// The puddles frozen (decision 0136): dark clear ice, glossy still, a white rough rim where the ice is thin.
+		float ice = puddle * w.frost.x;
+		float rim = smoothstep(0.1, 0.35, puddle) * (1.0 - smoothstep(0.35, 0.7, puddle));
+		r_albedo = mix(r_albedo, vec3(0.75, 0.8, 0.85), ice * (0.05 + 0.5 * rim));
+		r_roughness = mix(r_roughness, 0.05 + 0.35 * rim, ice);
+	}
+}
+
+// Hoarfrost (decision 0136): on what faces the sky (it cools there on a clear cold night), less on walls, none
+// underneath; feathery (the puddles' noise, fine), white-grey crystals, rough, glinting.
+void fellow_frost(in SceneData p_scene, in FellowWeatherData w, float frost, float exposed, vec3 wp, vec3 gn, float wet_lod, inout vec3 r_albedo, inout float r_roughness, inout float r_metallic, inout vec3 r_normal) {
+	const float CELLS = 16.0;
+	const mat2 ROT1 = mat2(0.8, 0.6, -0.6, 0.8);
+	vec2 puv = abs(gn.y) > 0.7 ? wp.xz : (abs(gn.x) > abs(gn.z) ? wp.zy : wp.xy);
+	float n = textureLod(sampler2D(fellow_rain_ripples, SAMPLER_LINEAR_WITH_MIPMAPS_REPEAT), puv * (5.0 / CELLS) + vec2(0.17, 0.59), wet_lod + log2(5.0 / CELLS)).a * 0.35;
+	n += textureLod(sampler2D(fellow_rain_ripples, SAMPLER_LINEAR_WITH_MIPMAPS_REPEAT), ROT1 * puv * (19.0 / CELLS) + vec2(0.83, 0.41), wet_lod + log2(19.0 / CELLS)).a * 0.65;
+	float fine = textureLod(sampler2D(fellow_rain_ripples, SAMPLER_LINEAR_WITH_MIPMAPS_REPEAT), ROT1 * puv * (47.0 / CELLS) + vec2(0.29, 0.71), wet_lod + log2(47.0 / CELLS)).a;
+	float face = smoothstep(-0.2, 0.6, gn.y);
+	// It grows in fine grains (5 cm), sooner in places (20 cm), and stays a thin veil, thicker here and there (the
+	// finest noise): the surface shows through it.
+	float grow = smoothstep(0.0, 0.3, n - 1.0 + frost * 1.3);
+	float f = exposed * face * grow * min(frost * 2.0, 1.0);
+	if (f <= 0.0) {
+		return;
+	}
+	float veil = f * mix(0.3, 0.7, fine);
+	r_albedo = mix(r_albedo, vec3(0.78, 0.81, 0.86), veil);
+	r_roughness = mix(r_roughness, 0.5, f);
+	r_metallic = mix(r_metallic, 0.0, f);
+	// Glints: a crystal facing the light, here and there (cells of 5 mm).
+	ivec3 cell = ivec3(floor(wp * 200.0));
+	uint h = uint(cell.x) * 73856093u ^ uint(cell.y) * 19349663u ^ uint(cell.z) * 83492791u;
+	h ^= h >> 16u;
+	h *= 0x7feb352du;
+	h ^= h >> 15u;
+	h *= 0x846ca68bu;
+	h ^= h >> 16u;
+	float px = exp2(wet_lod) * (1.0 / 256.0); // metres per pixel
+	float k = f * smoothstep(0.01, 0.004, px) * step(0.93, float(h & 0xffffu) / 65535.0);
+	if (k > 0.0) {
+		mat4 inv_view = transpose(mat4(p_scene.inv_view_matrix[0], p_scene.inv_view_matrix[1], p_scene.inv_view_matrix[2], vec4(0.0, 0.0, 0.0, 1.0)));
+		mat4 view = transpose(mat4(p_scene.view_matrix[0], p_scene.view_matrix[1], p_scene.view_matrix[2], vec4(0.0, 0.0, 0.0, 1.0)));
+		vec3 nw = normalize(mat3(inv_view) * r_normal);
+		vec3 t = vec3(float((h >> 16u) & 0xffu), float((h >> 24u) & 0xffu), float(h & 0xffu)) / 127.5 - 1.0;
+		r_normal = normalize(mat3(view) * normalize(mix(nw, normalize(nw + t * 0.6), k)));
+		r_roughness = mix(r_roughness, 0.1, k);
+	}
 }
 
 // Snow on a surface (decision 0128): it lies on what faces up (the geometry, and the material's own bumps a little),
@@ -1670,7 +1720,8 @@ void fellow_wetness_apply(in SceneData p_scene, inout vec3 r_albedo, inout float
 	FellowWeatherData w = fellow_weather.data;
 	float wetness = w.params.x;
 	float snow = w.snow.x;
-	if (wetness <= 0.0 && snow <= 0.0) {
+	float frost = w.frost.y;
+	if (wetness <= 0.0 && snow <= 0.0 && frost <= 0.0) {
 		return;
 	}
 	mat4 inv_view = transpose(mat4(p_scene.inv_view_matrix[0], p_scene.inv_view_matrix[1], p_scene.inv_view_matrix[2], vec4(0.0, 0.0, 0.0, 1.0)));
@@ -1711,6 +1762,9 @@ void fellow_wetness_apply(in SceneData p_scene, inout vec3 r_albedo, inout float
 	}
 	if (wetness > 0.0 && exposed > 0.0) {
 		fellow_wet_surface(p_scene, w, wetness, exposed, wp, gn, wet_lod, r_albedo, r_roughness, r_metallic, r_normal);
+	}
+	if (frost > 0.0 && exposed > 0.0) {
+		fellow_frost(p_scene, w, frost, exposed, wp, gn, wet_lod, r_albedo, r_roughness, r_metallic, r_normal);
 	}
 	if (snow > 0.0 && exposed_snow > 0.0) {
 		fellow_snow_cover(p_scene, w, snow, exposed_snow, wp, gn, wet_lod, r_albedo, r_roughness, r_metallic, r_normal);

@@ -67,6 +67,8 @@ public:
 		float ripple_strength = 1.0f;
 		float snow = 0.0f; // 0..1: the snow cover (decision 0128)
 		float snow_sparkle = 0.0f; // 0..1: the fresh snow's glints
+		float freeze = 0.0f; // 0..1: how much of the wet surfaces' water is ice (decision 0136)
+		float frost = 0.0f; // 0..1: hoarfrost on what is exposed to the sky
 		float snow_depth = 0.08f; // m (decision 0130: how deep tracks can go before the ground shows)
 		RID tracks_texture; // RD texture (r16f): the tracks' depth in m (negative: a rim), world-anchored, wrapping
 		Vector2 tracks_origin; // m: the window's centre
@@ -137,6 +139,7 @@ public:
 		float cloud_shadow[4]; // the clouds' shadow map (decision 0133): centre x, z (m), 1 / side (1/m), strength
 		float cloud_shadow2[4]; // the sun's directional light index, its direction's x / y and z / y, the ground (m)
 		float cloud_shadow3[4]; // beyond the map: the sun's share there; the sky's light's cover (greyed)
+		float frost[4]; // decision 0136: the water's ice (0..1), the hoarfrost (0..1)
 	};
 
 private:

@@ -811,7 +811,8 @@ struct FellowWeatherData {
 	vec4 tracks; // the tracks' window: centre x, z (m), 1 / side (m), half its side less a margin (m)
 	vec4 cloud_shadow; // the clouds' shadow map (decision 0133): centre x, z (m), 1 / side (1/m), strength
 	vec4 cloud_shadow2; // the sun's directional light index, its direction's x / y and z / y, the ground's height (m)
-	vec4 cloud_shadow3; // beyond the map: the sun's share there (the clear sky's share)
+	vec4 cloud_shadow3; // beyond the map: the sun's share there (the clear sky's share); the sky light's cover
+	vec4 frost; // decision 0136: how much of the wet surfaces' water is ice (0..1), the hoarfrost (0..1)
 };
 layout(set = 1, binding = 49, std140) uniform FellowWeatherBlock {
 	FellowWeatherData data;

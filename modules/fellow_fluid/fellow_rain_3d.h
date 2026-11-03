@@ -130,6 +130,9 @@ private:
 	float snow_sparkle = 1.0f;
 	float rainbow = 1.0f; // decision 0134: the rainbow's strength
 	float shafts = 1.0f; // decision 0135: the rain shafts' strength under the volumetric clouds
+	float freeze = 0.0f; // decision 0136: 0..1, how much of the wet surfaces' water is ice
+	float frost = 0.0f; // 0..1: hoarfrost on what is exposed to the sky
+	float freezing_time = 600.0f; // s for the water to freeze at -5 degrees (a weather controller's ground model)
 	float rain_seen = 0.0f; // the rain lately (it fades over RAINBOW_TIME once the rain stops: the rain moving away)
 	static constexpr float RAINBOW_TIME = 90.0f; // s
 	float flake_speed = 1.1f; // m/s
@@ -268,6 +271,12 @@ public:
 	float get_rainbow() const { return rainbow; }
 	void set_shafts(float p_shafts) { shafts = MAX(0.0f, p_shafts); }
 	float get_shafts() const { return shafts; }
+	void set_freeze(float p_freeze) { freeze = CLAMP(p_freeze, 0.0f, 1.0f); }
+	float get_freeze() const { return freeze; }
+	void set_frost(float p_frost) { frost = CLAMP(p_frost, 0.0f, 1.0f); }
+	float get_frost() const { return frost; }
+	void set_freezing_time(float p_seconds) { freezing_time = MAX(0.0f, p_seconds); }
+	float get_freezing_time() const { return freezing_time; }
 	void set_flake_speed(float p_speed);
 	float get_flake_speed() const { return flake_speed; }
 	void set_flake_size(float p_size);

@@ -75,6 +75,15 @@
 		<member name="flake_wind_influence" type="float" setter="set_flake_wind_influence" getter="get_flake_wind_influence" default="1.5">
 			How fast, per second, the snowflakes take the wind where they are, gusts included, when the scene has a [FellowWind3D] and [member wind_from_scene] is on (the Wind group of [ParticleProcessMaterial]).
 		</member>
+		<member name="freeze" type="float" setter="set_freeze" getter="get_freeze" default="0.0">
+			How much of the water on the ground is ice (0-1): the puddles do not ripple, frozen glossy and a little milky, white at their thin edges; the wet film's gloss stays (glaze). A [FellowWeather3D] sets it from its temperature.
+		</member>
+		<member name="freezing_time" type="float" setter="set_freezing_time" getter="get_freezing_time" default="600.0">
+			The seconds the water on the ground takes to freeze at 5 degrees below zero, and the hoarfrost to form under a clear sky, under a [FellowWeather3D] (which sets [member freeze] and [member frost]).
+		</member>
+		<member name="frost" type="float" setter="set_frost" getter="get_frost" default="0.0">
+			Hoarfrost (0-1): white, rough, glinting crystals on what faces the sky where the rain would reach (less on walls, none underneath), in a feathery pattern that spreads as it grows. A [FellowWeather3D] grows it below freezing when nothing falls, slower under clouds.
+		</member>
 		<member name="max_drops" type="int" setter="set_max_drops" getter="get_max_drops" default="24000">
 			The number of drops at full [member rain]; [member rain] scales the number drawn.
 		</member>
