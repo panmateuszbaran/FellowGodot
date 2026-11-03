@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="FellowMotionModel" inherits="RefCounted" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+	<brief_description>
+		FellowEngine: a neural motion model (MotionBricks SOMA) run on the GPU.
+	</brief_description>
+	<description>
+		Loads a [code].fmb[/code] file — NVIDIA's MotionBricks SOMA checkpoints converted by [code]modules/fellow_motion/tools/fmb_convert.py[/code] (the weights are NVIDIA's, under the NVIDIA Open Model Agreement, and are not part of the engine) — and runs it on a local [RenderingDevice] of its own: a GPU queue beside the renderer's. One [method run] generates a batch of independent requests, each from four context poses and up to four target poses, of 24 to 64 frames of motion at 30 Hz, with the ONNX model's inputs and outputs (MotionBricks' [code]docs/onnx_inference.md[/code]): [code]global_root_values[/code] [N, 8, 5], [code]has_global_root_values[/code] [N, 8], [code]local_root_values[/code] [N, 8, 4], [code]has_local_root_values[/code] [N, 8], [code]local_poses[/code] [N, 8, 267], [code]has_local_poses[/code] [N, 8], [code]allowed_pred_num_tokens[/code] [N, 11] in; [code]pred_global_motions[/code] [N, 64, 366] and [code]pred_num_tokens[/code] [N] out (row-major packed arrays). The weights are fp16 or fp32 as converted; the arithmetic is fp32. [FellowMotionCharacter3D] drives characters with it. See [code]docs/decisions/0143-neural-motion.md[/code].
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="get_activation">
+			<return type="PackedFloat32Array" />
+			<param index="0" name="name" type="String" />
+			<param index="1" name="count" type="int" default="-1" />
+			<description>
+				Reads one of the plan's activation tensors back after a run (the first [param count] requests; all [method get_max_batch] if negative). For tests.
+			</description>
+		</method>
+		<method name="get_info" qualifiers="const">
+			<return type="Dictionary" />
+			<description>
+				The file, its weight precision, the number of ops, the largest batch, the activation and scratch memory, the device and the model's license notice.
+			</description>
+		</method>
+		<method name="get_last_timings" qualifiers="const">
+			<return type="Dictionary" />
+			<description>
+				The last run's CPU times (recording, submit and wait, read-back and decoding); with [member profile], the GPU time of the whole plan and of each op.
+			</description>
+		</method>
+		<method name="get_max_batch" qualifiers="const">
+			<return type="int" />
+			<description>
+				The largest batch a run takes (set by [method load]).
+			</description>
+		</method>
+		<method name="is_loaded" qualifiers="const">
+			<return type="bool" />
+			<description>
+				Whether a model is loaded.
+			</description>
+		</method>
+		<method name="load">
+			<param index="0" name="path" type="String" />
+			<param index="1" name="max_batch" type="int" default="16" />
+			<return type="int" enum="Error" />
+			<description>
+				Loads an [code].fmb[/code] file, creates the model's device, compiles its shaders and uploads the weights (about 380 MB in fp16). [param max_batch] sizes the activations.
+			</description>
+		</method>
+		<method name="run">
+			<return type="Dictionary" />
+			<param index="0" name="inputs" type="Dictionary" />
+			<description>
+				Runs one batch (the size taken from [code]global_root_values[/code]) and waits for it. Returns [code]pred_global_motions[/code] and [code]pred_num_tokens[/code], or an empty dictionary on an error.
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="profile" type="bool" setter="set_profile" getter="is_profile" default="false">
+			GPU timestamps around every op (needs [code]debug/settings/profiler/max_timestamp_query_elements[/code] above the op count).
+		</member>
+		<member name="target_groups" type="int" setter="set_target_groups" getter="get_target_groups" default="96">
+			Small matrix products are split along K until they have at least this many workgroups (split-K, then a reduction).
+		</member>
+	</members>
+</class>

@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="FellowMotionCharacter3D" inherits="Node3D" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+	<brief_description>
+		FellowEngine: a character whose whole-body motion a neural network generates (MotionBricks SOMA on the GPU).
+	</brief_description>
+	<description>
+		Set [member desired_velocity] every frame and the character walks, jogs, runs, turns and stops by itself — no animation clips. Its motion is generated in segments of 0.6-1.9 s by a [FellowMotionModel] ([member model_path]): each segment from the four poses the character last showed towards a target [member lead_time] ahead along the smoothed desired velocity, facing it and moving at it (the root only: the model fills in the body). The next segment is requested before the current one's transition point ([member transition_early_frames] before its end, or when the speed or the direction changes enough) and crossfaded in over [member crossfade_time] when it arrives. With a zero velocity it comes to rest in a relaxed stance and keeps generating small idle segments ([member idle_motion]).
+		Every character naming one model file shares one model and its GPU device: their requests run as one batch ([member inference_mode]). The node moves itself: its origin follows the hips on the ground (at the height it started at), its +Z the facing. [member body_path] loads a skinned body (the SOMA mannequin [code]tools/fmb_usd.py[/code] writes) whose skeleton it poses; the model's 30 joints drive it, the hands keep a relaxed pose. The motion follows MotionBricks' runtime (context sampling from the recorded poses, endpoint correction, MovementControl's springs and regeneration rules). See [code]docs/decisions/0143-neural-motion.md[/code].
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="advance">
+			<return type="void" />
+			<param index="0" name="delta" type="float" />
+			<description>
+				Steps the character by [param delta] seconds (what the process callback does when [member auto_process] is on).
+			</description>
+		</method>
+		<method name="flush_requests" qualifiers="static">
+			<return type="void" />
+			<param index="0" name="model_path" type="String" />
+			<description>
+				Runs every request waiting for the model (those of the characters in [constant INFERENCE_FLUSH] mode) as batches on the calling thread.
+			</description>
+		</method>
+		<method name="get_actual_velocity" qualifiers="const">
+			<return type="Vector3" />
+			<description>
+				The ground velocity the character showed in the last step.
+			</description>
+		</method>
+		<method name="get_error" qualifiers="const">
+			<return type="String" />
+			<description>
+				Why the character does not move (no model, a model without a skeleton...), or empty.
+			</description>
+		</method>
+		<method name="get_joint_positions" qualifiers="const">
+			<return type="PackedVector3Array" />
+			<description>
+				The world positions of the skeleton's joints in the pose shown.
+			</description>
+		</method>
+		<method name="get_service_stats" qualifiers="static">
+			<return type="Dictionary" />
+			<param index="0" name="model_path" type="String" />
+			<description>
+				The shared model's requests, batches, average batch size and time, the last batch's.
+			</description>
+		</method>
+		<method name="get_state" qualifiers="const">
+			<return type="int" enum="FellowMotionCharacter3D.MotionState" />
+			<description>
+				Idle or moving.
+			</description>
+		</method>
+		<method name="get_stats" qualifiers="const">
+			<return type="Dictionary" />
+			<description>
+				Generations, request latency, state, smoothed speed, the current segment's frames.
+			</description>
+		</method>
+		<method name="is_ready" qualifiers="const">
+			<return type="bool" />
+			<description>
+				Whether the model is loaded and the character placed.
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="auto_process" type="bool" setter="set_auto_process" getter="is_auto_process" default="true">
+			Step in the process callback; off, call [method advance].
+		</member>
+		<member name="body_color" type="Color" setter="set_body_color" getter="get_body_color" default="Color(0.62, 0.66, 0.72, 1)">
+			The body's colour.
+		</member>
+		<member name="body_path" type="String" setter="set_body_path" getter="get_body_path" default="&quot;&quot;">
+			A glTF (.glb) with the SOMA skeleton and a skinned mesh, loaded at run time (once per file).
+		</member>
+		<member name="crossfade_time" type="float" setter="set_crossfade_time" getter="get_crossfade_time" default="0.15">
+			How long a new segment takes to replace the one playing when it arrives later than requested.
+		</member>
+		<member name="desired_velocity" type="Vector3" setter="set_desired_velocity" getter="get_desired_velocity" default="Vector3(0, 0, 0)">
+			Where and how fast to go (its ground part; up to [member max_speed]). Zero stops.
+		</member>
+		<member name="idle_motion" type="bool" setter="set_idle_motion" getter="is_idle_motion" default="true">
+			Standing still, keep generating small idle segments (off: the last pose holds).
+		</member>
+		<member name="inference_mode" type="int" setter="set_inference_mode" getter="get_inference_mode" enum="FellowMotionCharacter3D.InferenceMode" default="0">
+			When the requests run.
+		</member>
+		<member name="lead_time" type="float" setter="set_lead_time" getter="get_lead_time" default="0.97">
+			How far ahead the target is placed, in seconds of the desired velocity.
+		</member>
+		<member name="max_batch" type="int" setter="set_max_batch" getter="get_max_batch" default="32">
+			The largest batch of the shared model (taken from the first character that loads it).
+		</member>
+		<member name="max_speed" type="float" setter="set_max_speed" getter="get_max_speed" default="4.5">
+			The fastest the character goes.
+		</member>
+		<member name="max_tokens" type="int" setter="set_max_tokens" getter="get_max_tokens" default="14">
+			The longest segment the model may choose, in tokens of four frames (6-16).
+		</member>
+		<member name="min_tokens" type="int" setter="set_min_tokens" getter="get_min_tokens" default="8">
+			The shortest segment the model may choose, in tokens of four frames (6-16).
+		</member>
+		<member name="model_path" type="String" setter="set_model_path" getter="get_model_path" default="&quot;&quot;">
+			The converted model (.fmb).
+		</member>
+		<member name="transition_early_frames" type="int" setter="set_transition_early_frames" getter="get_transition_early_frames" default="8">
+			How many frames before a moving segment's end the next one takes over.
+		</member>
+	</members>
+	<constants>
+		<constant name="STATE_IDLE" value="0" enum="MotionState">
+			Standing.
+		</constant>
+		<constant name="STATE_LOCOMOTION" value="1" enum="MotionState">
+			Moving.
+		</constant>
+		<constant name="INFERENCE_ASYNC" value="0" enum="InferenceMode">
+			The model's worker thread runs the requests as they come; results on a later frame.
+		</constant>
+		<constant name="INFERENCE_FLUSH" value="1" enum="InferenceMode">
+			Requests wait for [method flush_requests] (all characters' as one batch); results the next step. Deterministic.
+		</constant>
+		<constant name="INFERENCE_IMMEDIATE" value="2" enum="InferenceMode">
+			Each request runs at once on the calling thread (a batch of one; no latency).
+		</constant>
+	</constants>
+</class>
