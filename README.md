@@ -44,6 +44,10 @@ in [docs/](docs/) and the [showcase](docs/SHOWCASE.md).
   <img src="docs/showcase/loop_water_rain_shafts.webp" width="49%" alt="Showers drifting with the clouds over the lake">
   <img src="docs/showcase/bistro_showers_street.jpg" width="49%" alt="A shower over Bistro's street, its curtain of rain hanging from the cloud">
   <img src="docs/showcase/loop_bistro_showers.webp" width="49%" alt="Showers passing over Bistro with the clouds">
+  <img src="docs/showcase/bistro_frost_morning.jpg" width="49%" alt="Hoarfrost on Bistro's street on a frosty morning">
+  <img src="docs/showcase/loop_bistro_thaw.webp" width="49%" alt="The frost on Bistro's street thawing as it warms">
+  <img src="docs/showcase/bistro_thin_streaks_ab.jpg" width="49%" alt="Rain against the sun as bars and as thin streaks">
+  <img src="docs/showcase/loop_bistro_drying.webp" width="49%" alt="Bistro's street drying in patches after the rain">
 </p>
 
 These are real-time captures from the benchmark scenes on an RTX 5070 Ti Laptop GPU, with FellowEngine's visual

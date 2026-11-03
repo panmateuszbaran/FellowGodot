@@ -35,7 +35,11 @@ is the previous one (the glints multiplied by exactly 1).
 frame 5.045 → 5.064 ms (+0.02 ms). The first measurement and stills (`m40_f314_slush`, `m40_s24_bistro_slush`) ran on a
 dry street (no rain node in a clear weather above freezing).
 
-(Showcase: to be filled.)
+**Bistro under snow at 3 °C** (`m40_s25_bistro_slush`: fresh against soaked; `bistro_slush_street.jpg`): the soaked
+snow greyer with a wet sheen down the street — subtle under auto exposure, which brightens the greyer scene back.
+**The snow melting** (`m40_s26_bistro_melt_loop`, with milestone 36's ice at its edges; `loop_bistro_melt.webp`): the
+snow stops, it turns warm, the cover greys and thins and the wet cobbles come through. (The first loop,
+`m40_s24_bistro_melt_loop`, had the frozen puddles' old wide white rims.)
 
 ## Decision
 

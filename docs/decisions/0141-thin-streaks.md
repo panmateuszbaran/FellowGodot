@@ -32,7 +32,10 @@ seen. 0.004 m is a large drop's streak. The splashes and the snowflakes are unch
 runs each, `m41_f315_streaks`, fellow236): the transparent pass 1.134 / 1.154 ms, the frame 3.628 / 3.663 ms (both
 builds' runs noisy): not measurable.
 
-(Showcase: to be filled.)
+**By day** (`m41_s25_water_streaks`, `m41_s25_bistro_streaks`: the controller's rain, the drops as bars against thin
+streaks; `bistro_thin_streaks_ab.jpg`, `loop_water_thin_rain.webp` from `m41_s25_water_streaks_loop`): against the
+low sun the bars are a curtain of white rods across the square and the lake; as thin streaks near drops are fine lines
+and far ones faint, the view behind them clear. Milestone 42 makes it the default of the weather's own rain node.
 
 ## Decision
 

@@ -43,7 +43,10 @@ at full wetness too (lavapipe: up to 4 levels in 225 pixels of Rain Lab — the 
 differently), so the lookups stay as they are. The first measurement (`m38_f313_patches`) and stills (`m38_s23_bistro_drying`) showed a dry street: a clear
 weather above freezing creates no rain node, so the ground given to the bench was dropped (fixed in FellowBench).
 
-(Showcase: to be filled.)
+**Bistro half dry** (`m38_s25_bistro_drying`: wet, half dry even, half dry in patches; `bistro_drying_patches.jpg`):
+the square wet in its dips and dry on its highs where the even wetness was a uniform damp sheen. **Drying after the
+rain** (`m38_s23_bistro_drying_loop`, fellow234 — valid: the rain node is there in the rain; `loop_bistro_drying.webp`):
+the rain stops and the street dries in 9 s, the puddles shrinking.
 
 ## Decision
 

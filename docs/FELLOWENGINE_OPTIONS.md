@@ -334,7 +334,8 @@ Cloudy, Overcast, Rain, Storm, Snow, Blizzard (presets) or Custom, `set_weather(
 `intensity`, `lightning_rate`, `cloud_coverage`, `cloud_density`, `sunlight`, `ambient_light` (the sky's light),
 `fog_density`, `temperature` — eased from where it is; rain and snow hand over at the transition's midpoint, when
 nothing falls. It drives (`controls`, all by default): the scene's `FellowWind3D`, `FellowRain3D` and
-`FellowLightning3D` (found, or created when needed: `create_missing`; all at the start: `prepare_nodes`); the
+`FellowLightning3D` (found, or created when needed: `create_missing`, a created rain node with thin streaks; all at the
+start: `prepare_nodes`); the
 volumetric clouds' coverage and density in place of the project settings (the clouds must be on), and so their
 shadows (decision 0133); the sun on the scene's surfaces only where the clouds cast no shadows (its light buffer
 energy times `sunlight` — the sky and the clouds keep the full sun); the

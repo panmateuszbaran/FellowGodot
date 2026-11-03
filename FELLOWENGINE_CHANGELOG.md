@@ -9,6 +9,11 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 42 — the weather's own rain in thin streaks (2026-11-03)
+
+- A rain node a FellowWeather3D creates (`create_missing`) draws its drops as thin streaks (`streak_width` 0.004 m,
+  decision 0142); a scene's own rain node is left as it is.
+
 ## Milestone 41 — thin rain streaks (2026-11-03)
 
 - `FellowRain3D.streak_width` (decision 0141, 0: off): each drop drawn at its own width or a pixel at its distance,

@@ -64,6 +64,47 @@ Milestone 39: in the controller's rain (6 m/s) the drops fall slanted, and the s
 shelter straight down (`wind_driven` 0): the facades are half as wet as the street and dry under their awnings. Right,
 slanted: the walls facing the wind darker, wet under the awnings and balconies.
 
+## A frosty morning: `FellowRain3D.freeze` and `.frost`
+
+<img src="showcase/bistro_frost_morning.jpg" width="100%" alt="Bistro's street on a frosty morning: hoarfrost over the cobbles, the pavement by the walls bare under the awnings">
+
+<img src="showcase/loop_bistro_thaw.webp" width="100%" alt="The frost on Bistro's street thawing in grains as it warms, leaving the wet cobbles and puddles">
+
+Milestone 36: a clear night at −4 °C after rain. The puddles froze (dark ice, white at their edges) and hoarfrost grew
+on what faces the sky — fine grey-white grains, matte, a crystal glinting here and there — but not under the awnings.
+The loop: the weather turning warm (3 s), the frost thawing in grains (four times as fast as it formed) and the ice
+going, the street left wet. The sun 9° up; the ground model sped up 16 times.
+
+## The street drying after the rain: `FellowRain3D.drying_patches`
+
+<img src="showcase/bistro_drying_patches.jpg" width="100%" alt="Bistro's square half dry: wet patches in the dips, dry stone on the highs">
+
+<img src="showcase/loop_bistro_drying.webp" width="100%" alt="Bistro's street drying after the rain in a time-lapse: the puddles shrinking, the cobbles drying in patches">
+
+Milestone 38: between wet and dry the ground dries in patches — the highs first, the dips and the puddles last,
+shrinking to their deepest instead of fading out. The loop: the rain stops and the street dries in 9 s (the drops not
+drawn).
+
+## Snow melting: `FellowRain3D.slush`
+
+<img src="showcase/bistro_slush_street.jpg" width="100%" alt="Bistro's street under snow soaked with meltwater at 3 °C: greyer, with a wet sheen">
+
+<img src="showcase/loop_bistro_melt.webp" width="100%" alt="The snow on Bistro's street turning to slush and melting away as it turns warm, leaving the cobbles wet">
+
+Milestone 40: at 3 °C the snow on the ground soaks with its meltwater — greyer, glossier, without the fresh snow's
+glints, its thin parts first. The loop: the snow stops and it turns warm (2 s), the cover greys and thins and the wet
+cobbles come through, the frozen puddles thawing; the ground model sped up ten times.
+
+## Thin rain streaks: `FellowRain3D.streak_width`
+
+<img src="showcase/bistro_thin_streaks_ab.jpg" width="100%" alt="Rain in Bistro's square against the sun: left, the drops as bars; right, as thin streaks">
+
+<img src="showcase/loop_water_thin_rain.webp" width="100%" alt="Rain over the lake in thin streaks, showers drifting beyond">
+
+Milestone 41: a drop drawn at its own width (4 mm) or a pixel, whichever is wider, its opacity scaled to match. Left,
+the drops as `drop_size`'s bars (2.4 cm at every distance), white against the low sun; right, thin streaks — near
+drops fine lines, far ones faint. The loop: the lake in the rain in thin streaks.
+
 ## Bistro at night, in the rain
 
 <img src="showcase/bistro_night_rain_cafe.jpg" width="100%" alt="Bistro's cafe at night in the rain, wet cobblestones reflecting the lamps">

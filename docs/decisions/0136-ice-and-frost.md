@@ -65,7 +65,11 @@ against frozen and frosted, 2 runs each, `m36_f313_ice`, fellow234): the depth p
 the frost's three lookups run there too), the opaque pass 1.648 / 1.642 ms; the frame 4.971 / 4.837 ms (the first
 build's runs noisy: not measurable).
 
-(Showcase: to be filled.)
+**Bistro on a frosty morning** (the controller clear at −4 °C, the sun 9° up, the day look with ray tracing; stills
+`m36_s23_bistro_frost` with fellow234, `m36_s25_bistro_ice` with fellow236; the loop `m36_s25_bistro_thaw_loop`;
+`bistro_frost_morning.jpg`, `loop_bistro_thaw.webp`): the street grey-white with hoarfrost, bare by the walls under
+the awnings; the puddles' ice dark with pale edges; turned warm, the frost thaws in grains and the ice goes, the street
+left wet.
 
 ## Decision
 
