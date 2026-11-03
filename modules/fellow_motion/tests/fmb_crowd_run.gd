@@ -1,7 +1,8 @@
 # FellowEngine — Motion Lab's crowd without the bench (run from a copy of benchmarks/project): N characters wander for
 # a while; per step and character the hips' and head's heights, the state (0 idle, 1 moving), the target speed, the
 # desired speed, the generations and the get-ups so far go to <out>/crowd.bin ([steps][characters][7]) for the check
-# that no one stays on the ground (tests/fmb_crowd_check.py). --get_up=0 and --catch_up=0 turn those off.
+# that no one stays on the ground (tests/fmb_crowd_check.py). --get_up=0 and --catch_up=0 turn those off; --max_speed,
+# --crossfade, --lead and --early set the characters' max_speed, crossfade_time, lead_time and transition_early_frames.
 #
 #   godot --path <bench project copy> --rendering-driver vulkan --script res://fmb_crowd_run.gd -- \
 #       --fmb=<model.fmb> [--body=<mannequin.glb>] --out=<dir> [--crowd=8] [--seconds=20] [--get_up=1] [--catch_up=1]
@@ -37,6 +38,14 @@ func _initialize() -> void:
 	for c in lab._chars:
 		c.get_up = _arg("get_up", "1") != "0"
 		c.catch_up = _arg("catch_up", "1") != "0"
+		if _arg("max_speed", "") != "":
+			c.max_speed = float(_arg("max_speed", ""))
+		if _arg("crossfade", "") != "":
+			c.crossfade_time = float(_arg("crossfade", ""))
+		if _arg("lead", "") != "":
+			c.lead_time = float(_arg("lead", ""))
+		if _arg("early", "") != "":
+			c.transition_early_frames = int(_arg("early", ""))
 
 
 func _process(_delta: float) -> bool:

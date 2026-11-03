@@ -4,7 +4,7 @@
 		FellowEngine: a character whose whole-body motion a neural network generates (MotionBricks SOMA on the GPU).
 	</brief_description>
 	<description>
-		Set [member desired_velocity] every frame and the character walks, jogs, runs, turns and stops by itself — no animation clips. Its motion is generated in segments of 0.6-1.9 s by a [FellowMotionModel] ([member model_path]): each segment from the four poses the character last showed towards a target ahead along the smoothed desired velocity ([member lead_time]), facing it and moving at it (the root only: the model fills in the body). The next segment is requested before the current one's transition point ([member transition_early_frames] before its end, or when the speed or the direction changes enough) and crossfaded in over [member crossfade_time] when it arrives. With a zero velocity it comes to rest in a relaxed stance and keeps generating small idle segments ([member idle_motion]).
+		Set [member desired_velocity] every frame and the character walks, jogs, runs, turns and stops by itself — no animation clips. Its motion is generated in segments of 0.6-1.9 s by a [FellowMotionModel] ([member model_path]): each segment from the four poses the character last showed towards a target [member lead_time] ahead along the smoothed desired velocity, facing it and moving at it (the root only: the model fills in the body). The next segment is requested before the current one's transition point ([member transition_early_frames] before its end, or when the speed or the direction changes enough) and crossfaded in over [member crossfade_time] when it arrives. With a zero velocity it comes to rest in a relaxed stance and keeps generating small idle segments ([member idle_motion]).
 		Every character naming one model file shares one model and its GPU device: their requests run as one batch ([member inference_mode]). The node moves itself: its origin follows the hips on the ground (at the height it started at), its +Z the facing. [member body_path] loads a skinned body (the SOMA mannequin [code]tools/fmb_usd.py[/code] writes) whose skeleton it poses; the model's 30 joints drive it, the hands keep a relaxed pose. The motion follows MotionBricks' runtime (context sampling from the recorded poses, endpoint correction, MovementControl's springs and regeneration rules). See [code]docs/decisions/0143-neural-motion.md[/code].
 	</description>
 	<tutorials>
@@ -97,7 +97,7 @@
 			When the requests run.
 		</member>
 		<member name="lead_time" type="float" setter="set_lead_time" getter="get_lead_time" default="0.97">
-			How far ahead the target is placed, in seconds: as far as the character gets in that time changing its speed evenly from the speed it shows to the target's.
+			How far ahead the target is placed, in seconds of the desired velocity.
 		</member>
 		<member name="max_batch" type="int" setter="set_max_batch" getter="get_max_batch" default="32">
 			The largest batch of the shared model (taken from the first character that loads it).

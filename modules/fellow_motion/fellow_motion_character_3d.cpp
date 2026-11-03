@@ -362,13 +362,9 @@ void FellowMotionCharacter3D::_generate(bool p_idle) {
 	// On the ground (lying, crawling), a standing pose as the target, a little ahead if moving: the model gets up.
 	bool rise = get_up && _is_down(base);
 	if (!p_idle && !rise) {
-		// Root-only target: along the smoothed desired velocity, facing it, moving at it, as far ahead as the
-		// character gets in lead_time changing evenly from the speed it shows to the target's (a target lead_time
-		// ahead at the full speed asked a character at rest to cover 4 m in a second, which the model answered by
-		// diving forward).
-		Vector3 dir(Math::sin(vel_angle), 0.0f, Math::cos(vel_angle));
-		v = dir * speed;
-		Vector3 gt = ground + dir * (0.5f * (MIN(shown_speed, max_speed) + speed) * lead_time);
+		// Root-only target: lead_time ahead along the smoothed desired velocity, facing it, moving at it.
+		v = Vector3(Math::sin(vel_angle), 0.0f, Math::cos(vel_angle)) * speed;
+		Vector3 gt = ground + v * lead_time;
 		Quaternion turn(Vector3(0, 1, 0), wrap_angle(vel_angle - heading_now));
 		// The hips at a standing height for the speed (a little lower running), never the current one: a target at
 		// the hips' height of the moment let a crowd's frequent re-planning sink lower each time, down to crawling.

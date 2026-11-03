@@ -22,12 +22,14 @@ def main():
     for c in range(n):
         print(f"  character {c}: hips min {hips[:, c].min():.2f} mean {hips[:, c].mean():.2f}, head min {head[:, c].min():.2f},"
               f" low {low[:, c].mean() * 100:.1f} % of the steps")
+    falls = 0
     if a.shape[2] >= 6:
         for c in range(n):
             idx = np.flatnonzero(low[:, c])
             if idx.size == 0:
                 continue
             s0 = idx[0]
+            falls += 1
             w = a[max(0, s0 - 60):s0 + 1, c]
             print(f"  character {c} first low at step {s0} ({s0 / 60:.2f} s): the second before: state {w[:, 2].min():.0f}-{w[:, 2].max():.0f},"
                   f" target speed {w[:, 3].min():.2f}-{w[:, 3].max():.2f}, desired {w[:, 4].min():.2f}-{w[:, 4].max():.2f},"
@@ -44,6 +46,15 @@ def main():
         if best > 180:
             stuck += 1
             print(f"  character {c} down for {best / 60:.1f} s in a row")
+    # Falls: entries into the low state after at least 1 s up.
+    entries = 0
+    for c in range(n):
+        up = 0
+        for v in low[:, c]:
+            if v and up >= 60:
+                entries += 1
+            up = 0 if v else up + 1
+    print("FALLS", entries, "characters", falls)
     print("STUCK", stuck)
     bad = low.mean()
     print("CROWD", "OK" if bad < 0.01 else f"SINKS ({bad * 100:.1f} % of character-steps low)")
