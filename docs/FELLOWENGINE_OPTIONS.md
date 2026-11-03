@@ -217,7 +217,10 @@ scene where the rain falls (Forward+):
 * **ice and hoarfrost** (milestone 36, decision 0136): `freeze` (0-1) freezes the water on the ground — no ripples, the
   puddles dark clear ice with white rims, the film a glaze; `frost` (0-1) covers what faces the sky with hoarfrost,
   fine grey-white glinting grains, under the snow; a FellowWeather3D sets both from its temperature
-  (`freezing_time`).
+  (`freezing_time`);
+* **showers** (milestone 37, decision 0137): `showers` (0-1, 0 by default) makes it rain at the camera only as the
+  volumetric clouds above let it — under their dense parts, as the rain shafts hang — eased over 2 s as showers pass
+  with the clouds' wind (`get_rain_here()`); the drops, ripples, wetting and settling snow follow it.
 
 Cost (RTX 5070 Ti Laptop, 1080p, Rain Lab): 0.36 ms of GPU time raining — screen-space reflections 0.13 ms more
 (wet surfaces are glossy enough for SSR; without SSR there is none of it), the wetting 0.12 ms (depth pre-pass and

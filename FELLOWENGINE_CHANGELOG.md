@@ -9,6 +9,13 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 37 — showers (2026-11-03)
+
+- `FellowRain3D.showers` (decision 0137, 0 by default): with the volumetric clouds on, it rains at the camera only as
+  the clouds above let it — under their dense parts, as the rain shafts hang — so showers pass over with the clouds'
+  wind: the drops, the ripples, the wetting and the settling snow follow; the shafts and the rainbow keep the rain set.
+  A one-thread probe of the clouds' layer at the camera, read back asynchronously. FellowBench: `--weather_showers`.
+
 ## Milestone 36 — ice and hoarfrost (2026-11-03)
 
 - `FellowRain3D.freeze` and `.frost` (decision 0136): the water on the ground frozen — no ripples, the puddles dark
