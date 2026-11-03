@@ -110,8 +110,8 @@ builds.
 
 * `m43_f318` was rejected by the queue once: its `.bat` had been copied into `.tools\` before queueing (the runner
   refuses a job whose name is already there); queued again.
-* The cloud's build after the RenderingDevice feature enum (`rendering_device_commons.h`) recompiled nearly the whole
-  engine (about an hour on two cores); the RTX's builds were incremental.
+* A cloud build without `disable_path_overrides=no` (the tests' `--path` needs it) recompiled the whole engine, and
+  the one with it again (about 50 minutes each on two cores); the RTX's builds were incremental.
 
 ## 6. Next
 
