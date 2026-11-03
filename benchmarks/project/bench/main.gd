@@ -44,6 +44,7 @@ extends Node
 ##                            shafts under the clouds, decision 0135), --weather_coverage=<0-1> (a custom coverage),
 ##                            --weather_temperature=<C> (a custom temperature; below 0 ice and frost, decision 0136),
 ##                            --weather_ground=<wet,snow,freeze,frost> (the rain node's ground at the start),
+##                            (these lists also take ':' between their values: run_benchmarks' --builds splits at commas)
 ##                            --weather_drops=<n> (the rain node's drops; 0: none drawn — the camera in a dry gap),
 ##                            --weather_showers=<0-1> (1: it rains at the camera only under the clouds' dense parts,
 ##                            decision 0137), --weather_patches=<0-1> (the ground's wetting and drying in patches, 1,
@@ -304,14 +305,14 @@ func _ready() -> void:
 		# A cycle: the nodes it will need from the start (none created, and compiled, during a sequence).
 		weather_node.prepare_nodes = args.has("weather_cycle")
 		if args.has("weather_fog_color"):
-			var fc := str(args["weather_fog_color"]).split_floats(",")
+			var fc := str(args["weather_fog_color"]).replace(":", ",").split_floats(",")
 			if fc.size() >= 3:
 				weather_node.fog_color = Color(fc[0], fc[1], fc[2])
 		scene.add_child(weather_node)
 		if weather_node.get_lightning_node() and lightning == null:
 			lightning = weather_node.get_lightning_node()
 		# --weather_times=<wet,dry,snow,melt>: the rain node's wetting, drying, snowing and melting times (s; time-lapses).
-		var wtimes := str(args.get("weather_times", "")).split_floats(",")
+		var wtimes := str(args.get("weather_times", "")).replace(":", ",").split_floats(",")
 		var wrn = weather_node.get_rain_node()
 		if wrn and wtimes.size() >= 4:
 			wrn.wetting_time = wtimes[0]
@@ -319,7 +320,7 @@ func _ready() -> void:
 			wrn.snowing_time = wtimes[2]
 			wrn.melting_time = wtimes[3]
 		if wrn and args.has("weather_ground"):
-			var wg := str(args["weather_ground"]).split_floats(",")
+			var wg := str(args["weather_ground"]).replace(":", ",").split_floats(",")
 			if wg.size() >= 4:
 				wrn.wetness = wg[0]
 				wrn.snow = wg[1]
