@@ -43,7 +43,7 @@ extends Node
 ##                            --weather_rainbow=<k> (1: the rain's rainbow, decision 0134), --weather_shafts=<k> (1: rain
 ##                            shafts under the clouds, decision 0135), --weather_coverage=<0-1> (a custom coverage),
 ##                            --weather_temperature=<C> (a custom temperature; below 0 ice and frost, decision 0136),
-##                            --weather_ground=<wet,snow,freeze,frost> (the rain node's ground at the start),
+##                            --weather_ground=<wet,snow,freeze,frost[,slush]> (the rain node's ground at the start),
 ##                            (these lists also take ':' between their values: run_benchmarks' --builds splits at commas)
 ##                            --weather_drops=<n> (the rain node's drops; 0: none drawn — the camera in a dry gap),
 ##                            --weather_showers=<0-1> (1: it rains at the camera only under the clouds' dense parts,
@@ -326,13 +326,15 @@ func _ready() -> void:
 				wrn.snow = wg[1]
 				wrn.freeze = wg[2]
 				wrn.frost = wg[3]
+			if wg.size() >= 5:
+				wrn.slush = wg[4]
 		if wrn and args.has("weather_drops"):
 			var nd := int(args["weather_drops"])
 			wrn.max_drops = maxi(nd, 1)
 			if nd <= 0:
 				wrn.drop_color.a = 0.0
 		if wrn:
-			weather_ground = [wrn.wetness, wrn.snow, wrn.freeze, wrn.frost]
+			weather_ground = [wrn.wetness, wrn.snow, wrn.freeze, wrn.frost, wrn.slush]
 		# --weather_rainbow=<k>: the rain node's rainbow (decision 0134; 0: none); --weather_shafts=<k>: its rain shafts
 		# under the clouds (decision 0135).
 		if wrn and args.has("weather_rainbow"):
@@ -1048,11 +1050,12 @@ func _run_temporal(jittered_reference: bool) -> void:
 			weather_node.set_weather(maxi(WEATHERS.find(str(args["weather"])), 0), 0.0)
 			_weather_custom()
 			var wr = weather_node.get_rain_node()
-			if wr and weather_ground.size() == 4:
+			if wr and weather_ground.size() == 5:
 				wr.wetness = weather_ground[0]
 				wr.snow = weather_ground[1]
 				wr.freeze = weather_ground[2]
 				wr.frost = weather_ground[3]
+				wr.slush = weather_ground[4]
 		if snow_node:
 			# The tracks around the sequence's first pose.
 			scene.set_time(start - pre_roll * DT)
