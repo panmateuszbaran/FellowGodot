@@ -36,7 +36,11 @@ storm gets wet under its eaves. One more lookup of the heightfield per pixel whi
 
 ## Results
 
-(RTX: to be filled.)
+**Cost** (RTX 5070 Ti Laptop, 1080p, Bistro exterior in a FellowWeather3D storm — 12 m/s, fully slanted — straight
+against slanted, 2 runs each, `m39_f313_wind_driven`, fellow234): the depth pre-pass 0.696 → 0.742 ms, the opaque pass
+1.550 → 1.585 ms; the frame 4.908 → 4.968 ms (+0.06 ms).
+
+(Showcase: to be filled.)
 
 ## Decision
 

@@ -9,6 +9,13 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 41 — thin rain streaks (2026-11-03)
+
+- `FellowRain3D.streak_width` (decision 0141, 0: off): each drop drawn at its own width or a pixel at its distance,
+  whichever is wider, its opacity scaled by their ratio — near drops thin, far ones faint, instead of `drop_size`'s
+  bars (heavy by day against the sun). FellowBench: `--weather_streaks`.
+- Milestone 36's frozen puddles: white only at their edges (the rims had turned whole puddles white in Bistro).
+
 ## Milestone 40 — slush (2026-11-03)
 
 - `FellowRain3D.slush` (decision 0140): melting snow soaks with its meltwater — greyer, glossier, without glints, its

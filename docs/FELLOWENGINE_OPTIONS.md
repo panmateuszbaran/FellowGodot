@@ -228,7 +228,9 @@ scene where the rain falls (Forward+):
   the wind get wet under their eaves and as wet as the ground, the lee of a building stays drier (`wind_driven` 1;
   nothing below a breeze of about 1.8 m/s);
 * **slush** (milestone 40, decision 0140): `slush` (0-1) soaks the snow cover with its meltwater — greyer, glossier,
-  no glints, its thin parts first; a FellowWeather3D sets it while the snow melts.
+  no glints, its thin parts first; a FellowWeather3D sets it while the snow melts;
+* **thin streaks** (milestone 41, decision 0141): `streak_width` (m, 0: off) draws each drop at its own width or a
+  pixel, its opacity scaled to match — thin near, faint far, instead of `drop_size`'s bars.
 
 Cost (RTX 5070 Ti Laptop, 1080p, Rain Lab): 0.36 ms of GPU time raining — screen-space reflections 0.13 ms more
 (wet surfaces are glossy enough for SSR; without SSR there is none of it), the wetting 0.12 ms (depth pre-pass and
