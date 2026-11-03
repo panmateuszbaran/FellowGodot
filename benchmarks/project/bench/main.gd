@@ -41,7 +41,10 @@ extends Node
 ##                            over s seconds (3); --weather_ground_speed=<k> (1), --weather_fog_color=r,g,b,
 ##                            --weather_controls=<flags> (255), --weather_times=<wet,dry,snow,melt> (s),
 ##                            --weather_rainbow=<k> (1: the rain's rainbow, decision 0134), --weather_shafts=<k> (1: rain
-##                            shafts under the clouds, decision 0135), --weather_coverage=<0-1> (a custom coverage)
+##                            shafts under the clouds, decision 0135), --weather_coverage=<0-1> (a custom coverage),
+##                            --weather_temperature=<C> (a custom temperature; below 0 ice and frost, decision 0136),
+##                            --weather_ground=<wet,snow,freeze,frost> (the rain node's ground at the start),
+##                            --weather_drops=<n> (the rain node's drops; 0: none drawn — the camera in a dry gap)
 ##   --dirt_map=1             a procedural lens dirt texture as the environment's glow map (strength 0)
 ##   --jitter=<n>             reference: sub-pixel jittered renders per output frame (default 16)
 ##   --ablate=<a+b>           sizing only (items separated by + or ,): hide omni / spot / sun lights, probes, decals, or pos_shadows (see _ablate)
@@ -293,8 +296,7 @@ func _ready() -> void:
 		weather_node.ground_speed = float(args.get("weather_ground_speed", "1"))
 		weather_node.controls = int(args.get("weather_controls", "255"))
 		# --weather_coverage=<0-1>: the weather's own cloud coverage (a custom weather: showers under broken clouds).
-		if args.has("weather_coverage"):
-			weather_node.cloud_coverage = float(args["weather_coverage"])
+		_weather_custom()
 		# A cycle: the nodes it will need from the start (none created, and compiled, during a sequence).
 		weather_node.prepare_nodes = args.has("weather_cycle")
 		if args.has("weather_fog_color"):
@@ -312,15 +314,27 @@ func _ready() -> void:
 			wrn.drying_time = wtimes[1]
 			wrn.snowing_time = wtimes[2]
 			wrn.melting_time = wtimes[3]
+		if wrn and args.has("weather_ground"):
+			var wg := str(args["weather_ground"]).split_floats(",")
+			if wg.size() >= 4:
+				wrn.wetness = wg[0]
+				wrn.snow = wg[1]
+				wrn.freeze = wg[2]
+				wrn.frost = wg[3]
+		if wrn and args.has("weather_drops"):
+			var nd := int(args["weather_drops"])
+			wrn.max_drops = maxi(nd, 1)
+			if nd <= 0:
+				wrn.drop_color.a = 0.0
 		if wrn:
-			weather_ground = [wrn.wetness, wrn.snow]
+			weather_ground = [wrn.wetness, wrn.snow, wrn.freeze, wrn.frost]
 		# --weather_rainbow=<k>: the rain node's rainbow (decision 0134; 0: none); --weather_shafts=<k>: its rain shafts
 		# under the clouds (decision 0135).
 		if wrn and args.has("weather_rainbow"):
 			wrn.rainbow = float(args["weather_rainbow"])
 		if wrn and args.has("weather_shafts"):
 			wrn.shafts = float(args["weather_shafts"])
-		result["weather"] = [WEATHERS[weather_node.weather], weather_node.ground_speed, weather_node.controls]
+		result["weather"] = [WEATHERS[weather_node.weather] if weather_node.weather < WEATHERS.size() else "custom", weather_node.ground_speed, weather_node.controls]
 	RenderingServer.viewport_set_measure_render_time(vp.get_viewport_rid(), true)
 	await get_tree().process_frame
 	await _post_draw()
@@ -1021,10 +1035,13 @@ func _run_temporal(jittered_reference: bool) -> void:
 		if weather_node and args.has("weather_cycle"):
 			# Each sequence starts in the first weather, on the ground it left at the start.
 			weather_node.set_weather(maxi(WEATHERS.find(str(args["weather"])), 0), 0.0)
+			_weather_custom()
 			var wr = weather_node.get_rain_node()
-			if wr and weather_ground.size() == 2:
+			if wr and weather_ground.size() == 4:
 				wr.wetness = weather_ground[0]
 				wr.snow = weather_ground[1]
+				wr.freeze = weather_ground[2]
+				wr.frost = weather_ground[3]
 		if snow_node:
 			# The tracks around the sequence's first pose.
 			scene.set_time(start - pre_roll * DT)
@@ -1260,6 +1277,18 @@ func _fail(msg: String) -> void:
 
 
 ## frame_post_draw is never emitted by the headless display server (used for script CI only).
+# --weather_coverage / --weather_temperature: the weather made custom at once (no transition).
+func _weather_custom() -> void:
+	if weather_node == null:
+		return
+	var tt: float = weather_node.transition_time
+	weather_node.transition_time = 0.0
+	if args.has("weather_coverage"):
+		weather_node.cloud_coverage = float(args["weather_coverage"])
+	if args.has("weather_temperature"):
+		weather_node.temperature = float(args["weather_temperature"])
+	weather_node.transition_time = tt
+
 func _post_draw() -> void:
 	if DisplayServer.get_name() == "headless":
 		await get_tree().process_frame
