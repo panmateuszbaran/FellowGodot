@@ -156,6 +156,9 @@
 		<member name="splashes" type="bool" setter="set_splashes" getter="get_splashes" default="true">
 			If [code]true[/code], drops splash where they land (two small droplets each, a sub-emitter at collision, fading over 0.3 s).
 		</member>
+		<member name="streak_width" type="float" setter="set_streak_width" getter="get_streak_width" default="0.0">
+			Thin streaks (m; 0: off): the drops' own width. A streak is drawn at this width or a pixel at its distance, whichever is wider, its opacity scaled by their ratio — thin and faint in the distance, as rain is seen, instead of bars of [member drop_size]'s width at every distance (which read heavy in daylight, against the sun). 0.004 is a large drop's streak.
+		</member>
 		<member name="time_auto" type="bool" setter="set_time_auto" getter="is_time_auto" default="true">
 			If [code]true[/code], the ripples' time advances with the process time; otherwise it is set by the [code]time[/code] property (deterministic renders).
 		</member>

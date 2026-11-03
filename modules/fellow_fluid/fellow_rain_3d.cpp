@@ -69,6 +69,11 @@ uniform bool flake = false;
 uniform float flutter = 0.0;
 uniform float fade_near = 0.5;
 uniform float fade_far = 4.0;
+// Thin streaks (decision 0141): the drops' own width (m; 0: the quad's) and the quad's width (m). A streak is drawn at
+// its own width or a pixel, whichever is wider, its opacity scaled by their ratio (the light it carries the same): thin
+// and faint in the distance instead of bars of the same width at every distance.
+uniform float streak_width = 0.0;
+uniform float quad_width = 0.024;
 uniform float forward_scatter = 6.0;
 uniform float light_wrap = 0.25;
 // A drop refracts the sky and the lights around it into the view: brighter than a diffuse surface lit the same.
@@ -105,6 +110,12 @@ void vertex() {
 	}
 	float fade = clamp((dist - fade_near) / (fade_far - fade_near), 0.0, 1.0);
 	v_alpha *= fade;
+	if (!splash && !flake && streak_width > 0.0) {
+		float pixel = dist * 2.0 / (PROJECTION_MATRIX[1][1] * VIEWPORT_SIZE.y); // m per pixel at the drop
+		float w = max(streak_width, pixel);
+		v_alpha *= streak_width / w;
+		sx *= w / max(quad_width, 1e-6);
+	}
 	vec3 wp = centre;
 	if (fade > 0.0) {
 		wp += axis_x * (VERTEX.x * sx) + axis_y * (VERTEX.y * sy);
@@ -275,6 +286,8 @@ void FellowRain3D::_update_children() {
 	drop_process->set_sub_emitter_mode(splashing ? ParticleProcessMaterial::SUB_EMITTER_AT_COLLISION : ParticleProcessMaterial::SUB_EMITTER_DISABLED);
 	drop_process->set_sub_emitter_amount_at_collision(2);
 	drop_material->set_shader_parameter("drop_color", drop_color);
+	drop_material->set_shader_parameter("streak_width", streak_width);
+	drop_material->set_shader_parameter("quad_width", drop_size.x);
 	splash_material->set_shader_parameter("drop_color", drop_color);
 	flake_material->set_shader_parameter("drop_color", flake_color);
 	flake_material->set_shader_parameter("flutter", flake_flutter);
@@ -923,6 +936,7 @@ RAIN_CHILD_SETTER(set_max_drops, int, max_drops, CLAMP(p_value, 1, 1000000))
 RAIN_CHILD_SETTER(set_drop_speed, float, drop_speed, MAX(0.1f, p_value))
 RAIN_CHILD_SETTER(set_drop_size, const Vector2 &, drop_size, p_value)
 RAIN_CHILD_SETTER(set_drop_color, const Color &, drop_color, p_value)
+RAIN_CHILD_SETTER(set_streak_width, float, streak_width, MAX(0.0f, p_value))
 RAIN_CHILD_SETTER(set_splashes, bool, splashes, p_value)
 RAIN_CHILD_SETTER(set_occlusion_size, float, occlusion_size, MAX(1.0f, p_value))
 RAIN_CHILD_SETTER(set_occlusion_height, float, occlusion_height, MAX(1.0f, p_value))
@@ -960,6 +974,8 @@ void FellowRain3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_wind_driven"), &FellowRain3D::get_wind_driven);
 	ClassDB::bind_method(D_METHOD("set_slush", "slush"), &FellowRain3D::set_slush);
 	ClassDB::bind_method(D_METHOD("get_slush"), &FellowRain3D::get_slush);
+	ClassDB::bind_method(D_METHOD("set_streak_width", "width"), &FellowRain3D::set_streak_width);
+	ClassDB::bind_method(D_METHOD("get_streak_width"), &FellowRain3D::get_streak_width);
 	ClassDB::bind_method(D_METHOD("get_freezing_time"), &FellowRain3D::get_freezing_time);
 	ClassDB::bind_method(D_METHOD("set_shafts", "shafts"), &FellowRain3D::set_shafts);
 	ClassDB::bind_method(D_METHOD("get_shafts"), &FellowRain3D::get_shafts);
@@ -1072,6 +1088,7 @@ void FellowRain3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "drying_patches", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_drying_patches", "get_drying_patches");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "wind_driven", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_wind_driven", "get_wind_driven");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "slush", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_slush", "get_slush");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "streak_width", PROPERTY_HINT_RANGE, "0,0.05,0.0001,suffix:m"), "set_streak_width", "get_streak_width");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "snow_depth", PROPERTY_HINT_RANGE, "0.001,2,0.001,suffix:m"), "set_snow_depth", "get_snow_depth");
 	ADD_SUBGROUP("Tracks", "track");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "tracks"), "set_tracks", "get_tracks");

@@ -140,6 +140,7 @@ private:
 	float drying_patches = 1.0f; // decision 0138: 0..1, the ground wets and dries in patches, the puddles shrinking
 	float wind_driven = 1.0f; // decision 0139: 0..1, the shelter follows the drops' slant in the wind
 	float slush = 0.0f; // decision 0140: 0..1, the snow cover soaked with its meltwater
+	float streak_width = 0.0f; // decision 0141: m, the drops' own width (0: drop_size's)
 	float rain_seen = 0.0f; // the rain lately (it fades over RAINBOW_TIME once the rain stops: the rain moving away)
 	static constexpr float RAINBOW_TIME = 90.0f; // s
 	float flake_speed = 1.1f; // m/s
@@ -293,6 +294,8 @@ public:
 	float get_wind_driven() const { return wind_driven; }
 	void set_slush(float p_slush) { slush = CLAMP(p_slush, 0.0f, 1.0f); }
 	float get_slush() const { return slush; }
+	void set_streak_width(float p_width);
+	float get_streak_width() const { return streak_width; }
 	float get_freezing_time() const { return freezing_time; }
 	void set_flake_speed(float p_speed);
 	float get_flake_speed() const { return flake_speed; }
