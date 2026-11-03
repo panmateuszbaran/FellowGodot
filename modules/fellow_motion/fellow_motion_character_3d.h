@@ -74,7 +74,7 @@ private:
 	String model_path;
 	String body_path;
 	Vector3 desired_velocity;
-	float max_speed = 4.5f;
+	float max_speed = 3.5f;
 	int transition_early_frames = 8;
 	int min_tokens = 8;
 	int max_tokens = 14;

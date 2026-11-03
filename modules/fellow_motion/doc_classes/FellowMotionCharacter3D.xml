@@ -102,8 +102,8 @@
 		<member name="max_batch" type="int" setter="set_max_batch" getter="get_max_batch" default="32">
 			The largest batch of the shared model (taken from the first character that loads it).
 		</member>
-		<member name="max_speed" type="float" setter="set_max_speed" getter="get_max_speed" default="4.5">
-			The fastest the character goes.
+		<member name="max_speed" type="float" setter="set_max_speed" getter="get_max_speed" default="3.5">
+			The fastest it goes (a run). Faster targets make the model fall more often: 32 characters for 40 s fell 17 times running at up to 4.2 m/s, 8 times at up to 3.5 and 3 times at up to 3.0 (without [member get_up]).
 		</member>
 		<member name="max_tokens" type="int" setter="set_max_tokens" getter="get_max_tokens" default="14">
 			The longest segment the model may choose, in tokens of four frames (6-16).

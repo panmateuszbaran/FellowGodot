@@ -136,7 +136,7 @@ func _build_crowd() -> void:
 		_chars.append(ch)
 		# Pace: walkers, joggers, runners, idlers.
 		var kind := r.randf()
-		var sp := r.randf_range(1.1, 1.5) if kind < 0.45 else (r.randf_range(2.4, 3.0) if kind < 0.75 else (r.randf_range(3.4, 4.2) if kind < 0.9 else r.randf_range(1.0, 1.3)))
+		var sp := r.randf_range(1.1, 1.5) if kind < 0.45 else (r.randf_range(2.4, 3.0) if kind < 0.75 else (r.randf_range(3.2, 3.5) if kind < 0.9 else r.randf_range(1.0, 1.3)))
 		var pause_bias := 0.6 if kind >= 0.9 else 0.25
 		_rng_state.append({"wp": _waypoint(r), "pause": r.randf_range(0.0, 1.0), "speed": sp, "rng": r, "pause_bias": pause_bias})
 	_sim_t = 0.0

@@ -38,7 +38,7 @@ func _velocity(time: float) -> Vector3:
 		return Vector3(2.8, 0, 0)
 	if time < 10.0:
 		var a := (time - 8.0) * 0.8
-		return Vector3(cos(a), 0, -sin(a)) * 4.0
+		return Vector3(cos(a), 0, -sin(a)) * 3.5
 	return Vector3.ZERO
 
 

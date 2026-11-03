@@ -12,7 +12,7 @@ import numpy as np
 
 # The schedule of fmb_character_run.gd: (start, end, desired speed).
 PHASES = [(0.0, 1.0, 0.0, "stand"), (1.0, 4.0, 1.3, "walk +Z"), (4.0, 6.0, 1.3, "walk +X"), (6.0, 8.0, 2.8, "jog +X"),
-          (8.0, 10.0, 4.0, "run a curve"), (10.0, 12.0, 0.0, "stop")]
+          (8.0, 10.0, 3.5, "run a curve"), (10.0, 12.0, 0.0, "stop")]
 J = 77
 FOOT = ["LeftFoot", "LeftToeBase", "RightFoot", "RightToeBase"]
 
