@@ -304,7 +304,9 @@ func _ready() -> void:
 		# --weather_coverage=<0-1>: the weather's own cloud coverage (a custom weather: showers under broken clouds).
 		_weather_custom()
 		# A cycle: the nodes it will need from the start (none created, and compiled, during a sequence).
-		weather_node.prepare_nodes = args.has("weather_cycle")
+		# A ground given (--weather_ground): the rain node too, though nothing falls (a clear weather above freezing
+		# would not create it).
+		weather_node.prepare_nodes = args.has("weather_cycle") or args.has("weather_ground")
 		if args.has("weather_fog_color"):
 			var fc := str(args["weather_fog_color"]).replace(":", ",").split_floats(",")
 			if fc.size() >= 3:
@@ -336,6 +338,7 @@ func _ready() -> void:
 				wrn.drop_color.a = 0.0
 		if wrn:
 			weather_ground = [wrn.wetness, wrn.snow, wrn.freeze, wrn.frost, wrn.slush]
+			result["weather_ground"] = weather_ground
 		# --weather_rainbow=<k>: the rain node's rainbow (decision 0134; 0: none); --weather_shafts=<k>: its rain shafts
 		# under the clouds (decision 0135).
 		if wrn and args.has("weather_rainbow"):
