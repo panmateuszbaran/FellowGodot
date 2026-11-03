@@ -9,6 +9,24 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 36 — ice and hoarfrost (2026-11-03)
+
+- `FellowRain3D.freeze` and `.frost` (decision 0136): the water on the ground frozen — no ripples, the puddles dark
+  clear ice with white rims, the wet film a glaze — and hoarfrost on what faces the sky where the rain would reach, fine
+  grey-white grains growing into a veil the surface shows through, glinting in the sun; under the snow cover.
+- A FellowWeather3D's ground model below 0 °C freezes the water and, when nothing falls, grows the frost (slower under
+  clouds), in the rain node's `freezing_time` (600 s) at −5 °C; above 0 °C both thaw. It creates its rain node in the
+  cold; ready below 0 °C it settles the ground frozen and frosted under a clear sky.
+- FellowBench: `--weather_temperature`, `--weather_ground=<wet,snow,freeze,frost>`, `--weather_drops` (0: none drawn).
+
+## Milestone 35 — rain shafts (2026-11-03)
+
+- `FellowRain3D.shafts` (decision 0135): while it rains under the volumetric clouds, grey curtains of rain hang below
+  their dense parts (local coverage 0.7 to 0.95), streaked along the fall and drifting with the clouds, beyond 2 km of
+  the camera and fading out from 25 to 40 km; snow's are brighter. Without rain the clouds' trace is the same bit for
+  bit (lavapipe).
+- Cost on the RTX (Water Lab in showers, `m35_f307`): the clouds' pass +0.05 ms; the frame within noise.
+
 ## Milestone 34 — rainbows (2026-11-03)
 
 - `FellowRain3D.rainbow` (decision 0134): while it rains or lately rained (fading over 90 s once it stops, none once it

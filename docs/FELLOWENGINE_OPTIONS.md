@@ -211,7 +211,13 @@ scene where the rain falls (Forward+):
 * a `FellowWater3D` shows the ripples too;
 * **rainbows** (milestone 34, decision 0134): while it rains or lately rained (fading over 90 s once it stops; none
   once it snows) and the sun shines on the rain, the primary and secondary bows around the point opposite the sun,
-  over the sky and over what stands behind the rain (`rainbow` scales them, 0: none).
+  over the sky and over what stands behind the rain (`rainbow` scales them, 0: none);
+* **rain shafts** (milestone 35, decision 0135): with the volumetric clouds on, grey curtains of rain below their dense
+  parts, from 2 km to 40 km away (`shafts` scales them, 0: none);
+* **ice and hoarfrost** (milestone 36, decision 0136): `freeze` (0-1) freezes the water on the ground — no ripples, the
+  puddles dark clear ice with white rims, the film a glaze; `frost` (0-1) covers what faces the sky with hoarfrost,
+  fine grey-white glinting grains, under the snow; a FellowWeather3D sets both from its temperature
+  (`freezing_time`).
 
 Cost (RTX 5070 Ti Laptop, 1080p, Rain Lab): 0.36 ms of GPU time raining — screen-space reflections 0.13 ms more
 (wet surfaces are glossy enough for SSR; without SSR there is none of it), the wetting 0.12 ms (depth pre-pass and
@@ -321,7 +327,8 @@ shadows (decision 0133); the sun on the scene's surfaces only where the clouds c
 energy times `sunlight` — the sky and the clouds keep the full sun); the
 environment's fog (added to its own, in `fog_color` as bright as the sky) and its background energy (the sky, its
 ambient light and reflections); and the ground — wet in the rain, drying after it, covered by falling snow below 1 °C,
-melting above 0 °C (`ground_speed` speeds it up; `settle_ground` starts it as the weather leaves it). It does nothing
+melting above 0 °C, its water freezing and frosted below 0 °C when nothing falls (decision 0136) (`ground_speed`
+speeds it up; `settle_ground` starts it as the weather leaves it). It does nothing
 in the editor. Without the node nothing changes (bit for bit); with it, the cost is that of the parts it turns on.
 Decision 0132.
 
