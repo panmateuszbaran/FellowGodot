@@ -2,7 +2,7 @@
 # write the outputs and a few activations back, for tests/fmb_parity_gpu.py.
 #
 #   godot --path <any project> --rendering-driver vulkan --script fmb_gpu_run.gd -- --fmb=<model.fmb> \
-#       --case=<dir> --out=<dir> [--max_batch=16] [--repeat=1] [--profile] [--batch=N] [--target_groups=96]
+#       --case=<dir> --out=<dir> [--max_batch=16] [--repeat=1] [--profile] [--batch=N] [--target_groups=96] [--coop=0]
 extends SceneTree
 
 const F32 := ["global_root_values", "local_root_values", "local_poses"]
@@ -40,6 +40,7 @@ func _process(_delta: float) -> bool:
 	done = true
 	var model := FellowMotionModel.new()
 	var max_batch := int(_arg("max_batch", "16"))
+	model.cooperative_matrix = _arg("coop", "1") != "0"
 	var t0 := Time.get_ticks_usec()
 	var err := model.load(_arg("fmb", ""), max_batch)
 	print("load: ", err, " ", (Time.get_ticks_usec() - t0) / 1000.0, " ms ", model.get_info())

@@ -1042,6 +1042,9 @@ public:
 		SUPPORTS_RAY_QUERY,
 		SUPPORTS_RAYTRACING_PIPELINE,
 		SUPPORTS_HDR_OUTPUT,
+		// FellowEngine (decision 0143): subgroup cooperative matrices of 16x16x16, fp16 products accumulated in fp32
+		// (GL_KHR_cooperative_matrix; tensor cores).
+		SUPPORTS_FELLOW_COOPERATIVE_MATRIX_F16,
 	};
 
 	enum SubgroupOperations {

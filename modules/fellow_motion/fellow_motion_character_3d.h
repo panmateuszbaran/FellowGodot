@@ -121,6 +121,7 @@ private:
 	float input_angle = 0.0f;
 	Vector3 prev_gen_velocity;
 	Vector3 actual_velocity;
+	float shown_speed = 0.0f;
 	Vector3 last_ground;
 	bool force_regen = true;
 	MotionState state = STATE_IDLE;

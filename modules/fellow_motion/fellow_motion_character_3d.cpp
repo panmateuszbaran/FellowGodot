@@ -347,11 +347,14 @@ void FellowMotionCharacter3D::_generate(bool p_idle) {
 		v = Vector3(Math::sin(vel_angle), 0.0f, Math::cos(vel_angle)) * speed;
 		Vector3 gt = ground + v * lead_time;
 		Quaternion turn(Vector3(0, 1, 0), wrap_angle(vel_angle - heading_now));
+		// The hips at a standing height for the speed (a little lower running), never the current one: a target at
+		// the hips' height of the moment let a crowd's frequent re-planning sink lower each time, down to crawling.
+		float hips_y = relaxed[0].p.y - 0.012f * MAX(0.0f, speed - 1.5f);
 		for (int k = 0; k < 4; k++) {
 			Xf *t = tgt.ptr() + k * J;
 			memcpy((void *)t, base, J * sizeof(Xf));
 			t[0].q = (turn * base[0].q).normalized();
-			t[0].p = Vector3(gt.x + v.x * k / SAMPLE_RATE, base[0].p.y, gt.z + v.z * k / SAMPLE_RATE);
+			t[0].p = Vector3(gt.x + v.x * k / SAMPLE_RATE, hips_y, gt.z + v.z * k / SAMPLE_RATE);
 		}
 	} else {
 		// Pose target: the relaxed stance where the character comes to rest, facing as it does.
@@ -471,8 +474,7 @@ void FellowMotionCharacter3D::_process(double p_delta) {
 		if (state == STATE_LOCOMOTION) {
 			// Catching up: while the shown speed is far from the target's (accelerating, braking), re-plan every 0.33 s
 			// instead of at the transition point (the model approaches a target over its whole segment).
-			Vector3 av(actual_velocity.x, 0.0f, actual_velocity.z);
-			bool behind = catch_up && seg.valid() && seg.time > 0.33 && Math::abs(av.length() - speed) > MAX(0.25f * speed, 0.3f);
+			bool behind = catch_up && seg.valid() && seg.time > 0.33 && Math::abs(shown_speed - speed) > MAX(0.25f * speed, 0.3f);
 			if (force_regen || !seg.valid() || seg.time_to_transition() <= lookahead || _needs_regeneration() || behind) {
 				_generate(false);
 			}
@@ -501,6 +503,8 @@ void FellowMotionCharacter3D::_process(double p_delta) {
 	Vector3 g = _ground();
 	actual_velocity = p_delta > 0.0 ? (g - last_ground) / p_delta : Vector3();
 	last_ground = g;
+	// The speed shown, smoothed over 0.2 s (a stride's sway is not a speed error).
+	shown_speed += (actual_velocity.length() - shown_speed) * float(1.0 - Math::exp(-p_delta / 0.2));
 	_apply_to_skeleton();
 }
 

@@ -172,6 +172,7 @@ class RenderingDeviceDriverVulkan : public RenderingDeviceDriver {
 	// pipeline created, appended to the file named by the environment variable FELLOW_PIPELINE_STATS. Diagnostics only.
 	String fellow_pipeline_stats_path;
 	bool fellow_pipeline_stats_support = false;
+	bool fellow_coop_matrix_support = false; // VK_KHR_cooperative_matrix, 16x16x16 fp16 -> fp32 (decision 0143)
 	PFN_vkGetPipelineExecutablePropertiesKHR fellow_get_pipeline_executable_properties = nullptr;
 	PFN_vkGetPipelineExecutableStatisticsKHR fellow_get_pipeline_executable_statistics = nullptr;
 	Mutex fellow_pipeline_stats_mutex;

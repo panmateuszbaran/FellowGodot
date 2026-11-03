@@ -87,10 +87,11 @@ func _build_ground() -> void:
 	var m := StandardMaterial3D.new()
 	m.albedo_texture = ImageTexture.create_from_image(img)
 	m.roughness = 0.85
-	m.uv1_scale = Vector3(_area * 0.5, _area * 0.5, 1)
+	var ground := maxf(_area * 12.0, 240.0)
+	m.uv1_scale = Vector3(ground * 0.25, ground * 0.25, 1)
 	var mi := MeshInstance3D.new()
 	var pm := PlaneMesh.new()
-	pm.size = Vector2(_area * 2.0, _area * 2.0)
+	pm.size = Vector2(ground, ground)
 	mi.mesh = pm
 	mi.material_override = m
 	add_child(mi)
@@ -225,16 +226,16 @@ func _define_cameras() -> void:
 	var h := _area
 	fixed_cameras = {
 		"motion_aerial": {"pos": Vector3(-h * 0.9, h * 0.7, h * 0.9), "target": Vector3(0, 0, 0), "fov": 55.0, "time": 12.0, "purpose": "the whole crowd from above"},
-		"motion_street": {"pos": Vector3(0.0, 1.6, h * 0.75), "target": Vector3(0, 1.0, -h * 0.4), "fov": 60.0, "time": 12.0, "purpose": "eye level in the plaza: walkers, joggers, runners"},
+		"motion_street": {"pos": Vector3(0.0, 1.6, h * 1.05), "target": Vector3(0, 1.0, -h * 0.2), "fov": 55.0, "time": 12.0, "purpose": "eye level at the plaza's edge: walkers, joggers, runners"},
 		"motion_close": {"pos": Vector3(2.5, 1.4, 3.5), "target": Vector3(0, 0.95, 0), "fov": 45.0, "time": 12.0, "purpose": "a few characters near the middle, full size"},
 	}
 	flythrough = CameraPath.from_array([
 		[0.0, Vector3(-h * 0.9, h * 0.7, h * 0.9), Vector3(0, 0, 0), 55.0],
 		[10.0, Vector3(h * 0.7, h * 0.35, h * 0.7), Vector3(0, 0.5, 0), 55.0],
-		[20.0, Vector3(0.0, 1.6, h * 0.75), Vector3(0, 1.0, -h * 0.4), 60.0],
+		[20.0, Vector3(0.0, 1.6, h * 1.05), Vector3(0, 1.0, -h * 0.2), 55.0],
 		[30.0, Vector3(h * 0.8, 2.5, -h * 0.6), Vector3(0, 0.8, 0), 55.0],
 	])
 	temporal_seqs = {
 		"motion_walk": {"start": 6.0, "frames": 240, "purpose": "4 s of the crowd at eye level (a loop's frames)",
-			"path": CameraPath.from_array([[0.0, Vector3(-4, 1.6, h * 0.6), Vector3(0, 1.0, -h * 0.3), 55.0], [4.0, Vector3(4, 1.6, h * 0.6), Vector3(0, 1.0, -h * 0.3), 55.0]])},
+			"path": CameraPath.from_array([[0.0, Vector3(-4, 1.6, h * 1.0), Vector3(0, 1.0, -h * 0.2), 50.0], [4.0, Vector3(4, 1.6, h * 1.0), Vector3(0, 1.0, -h * 0.2), 50.0]])},
 	}

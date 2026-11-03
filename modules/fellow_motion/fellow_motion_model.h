@@ -104,6 +104,7 @@ private:
 	RID act_buffer;
 	RID op_buffer;
 	RID part_buffer;
+	RID out_buffer; // the outputs, copied for the read-back
 	HashMap<uint64_t, RID> uniform_sets; // (version << 32 | chunk) -> set
 	HashMap<String, ActInfo> acts;
 	LocalVector<OpRec> op_recs;
@@ -113,6 +114,9 @@ private:
 	bool weights_f16 = true;
 	bool loaded = false;
 	bool profile = false;
+	bool cooperative_matrix = true;
+	bool coop_active = false;
+	String coop_note;
 	int target_groups = 96;
 	String path;
 
@@ -154,6 +158,9 @@ public:
 	void set_target_groups(int p_groups) { target_groups = MAX(1, p_groups); }
 	int get_target_groups() const { return target_groups; }
 	Dictionary get_last_timings() const { return last_timings; }
+	void set_cooperative_matrix(bool p_enable) { cooperative_matrix = p_enable; }
+	bool is_cooperative_matrix() const { return cooperative_matrix; }
+	bool is_cooperative_matrix_active() const { return coop_active; }
 	Dictionary get_skeleton() const { return meta.get("skeleton", Dictionary()); }
 	const float *get_capture_offsets() const { return capture_offsets; }
 	const float *get_standard_offsets() const { return standard_offsets; }

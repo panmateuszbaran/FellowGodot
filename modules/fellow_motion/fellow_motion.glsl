@@ -6,6 +6,9 @@ gemm_h64 = "#define MODE_GEMM\n#define WEIGHT_F16\n#define BM 64";
 gemm_f16 = "#define MODE_GEMM\n#define BM 16";
 gemm_f32 = "#define MODE_GEMM\n#define BM 32";
 gemm_f64 = "#define MODE_GEMM\n#define BM 64";
+gemmc16 = "#define MODE_GEMM_COOP\n#define BM 16";
+gemmc32 = "#define MODE_GEMM_COOP\n#define BM 32";
+gemmc64 = "#define MODE_GEMM_COOP\n#define BM 64";
 reduce = "#define MODE_REDUCE";
 attn = "#define MODE_ATTN";
 ln = "#define MODE_LN";
@@ -24,7 +27,15 @@ glue = "#define MODE_GLUE";
 // epilogues (bias, residual, activation, token mask), attention, layer norm and the model's glue. The NumPy executor
 // in tools/fmb_plan.py is the reference of every op here.
 
-#if defined(MODE_ATTN)
+#if defined(MODE_GEMM_COOP)
+#extension GL_KHR_cooperative_matrix : require
+#extension GL_KHR_memory_scope_semantics : require
+#extension GL_EXT_shader_explicit_arithmetic_types_float16 : require
+#extension GL_KHR_shader_subgroup_basic : require
+#define WEIGHT_F16
+// Four subgroups (SGSIZE, the device's fixed subgroup size, comes with the defines): one per 16-column tile of the 64.
+layout(local_size_x = 4 * SGSIZE, local_size_y = 1, local_size_z = 1) in;
+#elif defined(MODE_ATTN)
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 #else
 layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
@@ -103,7 +114,7 @@ float token_count(uint t_off, uint b) {
 	return act[t_off + b * 4u];
 }
 
-#if defined(MODE_GEMM) || defined(MODE_REDUCE)
+#if defined(MODE_GEMM) || defined(MODE_GEMM_COOP) || defined(MODE_REDUCE)
 
 // The epilogue: bias, residual, activation, token mask, then the store through the output row map.
 void store_epilogue(uint gr, uint n, float v) {
@@ -269,6 +280,143 @@ void main() {
 }
 
 #endif // MODE_GEMM
+
+#ifdef MODE_GEMM_COOP
+
+// The same product on tensor cores: the A tile (gathered as in MODE_GEMM) and the W tile go to shared memory as fp16,
+// each subgroup multiplies its 16 columns by the tile's 16-row blocks with 16x16x16 cooperative matrices accumulated
+// in fp32, and the accumulators go through shared memory to the same epilogue (or the split-K partials).
+
+#define BN 64u
+#define BK 32u
+#define RT (BM / 16)
+#define WG (4u * uint(SGSIZE))
+#define AST (BK + 8u) // shared row strides (fp16 elements), padded
+#define CST (BN + 4u)
+
+shared float16_t As[BM * AST];
+shared float16_t Bs[BN * AST];
+shared float Cs[BM * CST];
+
+void main() {
+	uint t = gl_LocalInvocationIndex;
+	uint sg = gl_SubgroupID;
+	uint rows = O(G_ROWS);
+	uint M = rows * pc.n;
+	uint Nout = O(G_N);
+	uint m0 = gl_WorkGroupID.y * uint(BM);
+	uint n0 = gl_WorkGroupID.x * BN;
+	uint split = gl_WorkGroupID.z;
+	uint kb = O(G_KB);
+	uint ke = O(G_KE);
+	uint ktiles = (ke - kb + BK - 1u) / BK;
+	uint per = (ktiles + pc.splits - 1u) / pc.splits;
+	uint kt0 = split * per;
+	uint kt1 = min(ktiles, kt0 + per);
+
+	uint a_off = O(G_A_OFF);
+	uint a_rows = O(G_A_ROWS);
+	uint a_ld = O(G_A_LD);
+	uint ag = O(G_AG);
+	uint as_ = O(G_AS);
+	uint ao = O(G_AO);
+	uint taps = O(G_TAPS);
+	int dil = int(O(G_DIL));
+	uint up = O(G_UP);
+	bool aprelu = O(G_APRELU) != 0u;
+	uint w_off = O(G_W_OFF);
+	uint w_ld = O(G_W_LD);
+
+	coopmat<float, gl_ScopeSubgroup, 16, 16, gl_MatrixUseAccumulator> acc[RT];
+	for (uint r = 0u; r < uint(RT); r++) {
+		acc[r] = coopmat<float, gl_ScopeSubgroup, 16, 16, gl_MatrixUseAccumulator>(0.0);
+	}
+
+	for (uint kt = kt0; kt < kt1; kt++) {
+		uint k0 = kb + kt * BK;
+		for (uint e = t; e < uint(BM) * BK; e += WG) {
+			uint r = e / BK;
+			uint kk = e % BK;
+			uint gr = m0 + r;
+			uint k = k0 + kk;
+			float v = 0.0;
+			if (gr < M && k < ke) {
+				uint b = gr / rows;
+				uint rr = gr % rows;
+				if (taps != 0u) {
+					uint tap = k / a_ld;
+					uint c = k % a_ld;
+					int tt = int(rr) + (int(tap) - int(taps / 2u)) * dil;
+					if (tt >= 0 && tt < int(rows)) {
+						v = act[a_off + (b * a_rows + uint(tt) / up) * a_ld + c];
+					}
+				} else {
+					uint ar = (rr / ag) * as_ + ao + rr % ag;
+					v = act[a_off + (b * a_rows + ar) * a_ld + k];
+				}
+				if (aprelu) {
+					v = max(v, 0.0);
+				}
+			}
+			As[r * AST + kk] = float16_t(clamp(v, -65504.0, 65504.0));
+		}
+		// W: 64 rows x 32 k = 256 uvec4 of 8 halves.
+		for (uint e = t; e < BN * (BK / 8u); e += WG) {
+			uint nn = e / (BK / 8u);
+			uint kc = e % (BK / 8u);
+			uint gn = n0 + nn;
+			uvec4 h = uvec4(0u);
+			if (gn < Nout) {
+				h = wt[(w_off + gn * w_ld + k0 + kc * 8u) >> 3u];
+			}
+			uint base = nn * AST + kc * 8u;
+			f16vec2 p0 = unpackFloat2x16(h.x);
+			f16vec2 p1 = unpackFloat2x16(h.y);
+			f16vec2 p2 = unpackFloat2x16(h.z);
+			f16vec2 p3 = unpackFloat2x16(h.w);
+			Bs[base + 0u] = p0.x;
+			Bs[base + 1u] = p0.y;
+			Bs[base + 2u] = p1.x;
+			Bs[base + 3u] = p1.y;
+			Bs[base + 4u] = p2.x;
+			Bs[base + 5u] = p2.y;
+			Bs[base + 6u] = p3.x;
+			Bs[base + 7u] = p3.y;
+		}
+		barrier();
+		for (uint ks = 0u; ks < BK; ks += 16u) {
+			coopmat<float16_t, gl_ScopeSubgroup, 16, 16, gl_MatrixUseB> mb;
+			coopMatLoad(mb, Bs, sg * 16u * AST + ks, AST, gl_CooperativeMatrixLayoutColumnMajor);
+			for (uint r = 0u; r < uint(RT); r++) {
+				coopmat<float16_t, gl_ScopeSubgroup, 16, 16, gl_MatrixUseA> ma;
+				coopMatLoad(ma, As, r * 16u * AST + ks, AST, gl_CooperativeMatrixLayoutRowMajor);
+				acc[r] = coopMatMulAdd(ma, mb, acc[r]);
+			}
+		}
+		barrier();
+	}
+	for (uint r = 0u; r < uint(RT); r++) {
+		coopMatStore(acc[r], Cs, r * 16u * CST + sg * 16u, CST, gl_CooperativeMatrixLayoutRowMajor);
+	}
+	barrier();
+	for (uint e = t; e < uint(BM) * BN; e += WG) {
+		uint r = e / BN;
+		uint c = e % BN;
+		uint gr = m0 + r;
+		uint nn = n0 + c;
+		if (gr >= M || nn >= Nout) {
+			continue;
+		}
+		float v = Cs[r * CST + c];
+		if (pc.splits > 1u) {
+			part[(split * M + gr) * Nout + nn] = v;
+		} else {
+			store_epilogue(gr, nn, v);
+		}
+	}
+}
+
+#endif // MODE_GEMM_COOP
 
 #ifdef MODE_REDUCE
 

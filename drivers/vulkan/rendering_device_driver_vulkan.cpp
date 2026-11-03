@@ -592,6 +592,8 @@ Error RenderingDeviceDriverVulkan::_initialize_device_extensions() {
 	_register_requested_device_extension(VK_KHR_RAY_TRACING_POSITION_FETCH_EXTENSION_NAME, false);
 	_register_requested_device_extension(VK_NV_RAY_TRACING_VALIDATION_EXTENSION_NAME, false);
 	_register_requested_device_extension(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME, false);
+	// FellowEngine (decision 0143): tensor-core matrix products for neural motion (modules/fellow_motion).
+	_register_requested_device_extension(VK_KHR_COOPERATIVE_MATRIX_EXTENSION_NAME, false);
 
 	// We don't actually use this extension, but some runtime components on some platforms
 	// can and will fill the validation layers with useless info otherwise if not enabled.
@@ -931,6 +933,7 @@ Error RenderingDeviceDriverVulkan::_check_device_capabilities() {
 		VkPhysicalDeviceSynchronization2FeaturesKHR sync_2_features = {};
 		VkPhysicalDeviceRayTracingValidationFeaturesNV raytracing_validation_features = {};
 		VkPhysicalDevicePipelineExecutablePropertiesFeaturesKHR fellow_pipeline_executable_features = {};
+		VkPhysicalDeviceCooperativeMatrixFeaturesKHR fellow_coop_matrix_features = {};
 
 		const bool use_1_2_features = physical_device_properties.apiVersion >= VK_API_VERSION_1_2;
 		if (use_1_2_features) {
@@ -1039,6 +1042,12 @@ Error RenderingDeviceDriverVulkan::_check_device_capabilities() {
 			next_features = &fellow_pipeline_executable_features;
 		}
 
+		if (enabled_device_extension_names.has(VK_KHR_COOPERATIVE_MATRIX_EXTENSION_NAME)) {
+			fellow_coop_matrix_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_FEATURES_KHR;
+			fellow_coop_matrix_features.pNext = next_features;
+			next_features = &fellow_coop_matrix_features;
+		}
+
 		VkPhysicalDeviceFeatures2 device_features_2 = {};
 		device_features_2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
 		device_features_2.pNext = next_features;
@@ -1116,6 +1125,32 @@ Error RenderingDeviceDriverVulkan::_check_device_capabilities() {
 
 		if (enabled_device_extension_names.has(VK_KHR_PIPELINE_EXECUTABLE_PROPERTIES_EXTENSION_NAME)) {
 			fellow_pipeline_stats_support = fellow_pipeline_executable_features.pipelineExecutableInfo;
+		}
+
+		// Tensor-core products: the extension, the feature, and a 16x16x16 fp16 x fp16 + fp32 subgroup configuration.
+		print_verbose(vformat("Vulkan: VK_KHR_cooperative_matrix %s, feature %d", enabled_device_extension_names.has(VK_KHR_COOPERATIVE_MATRIX_EXTENSION_NAME) ? "enabled" : "absent", int(fellow_coop_matrix_features.cooperativeMatrix)));
+		if (enabled_device_extension_names.has(VK_KHR_COOPERATIVE_MATRIX_EXTENSION_NAME) && fellow_coop_matrix_features.cooperativeMatrix && shader_capabilities.shader_float16_is_supported) {
+			PFN_vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR get_props = (PFN_vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR)vkGetInstanceProcAddr(context_driver->instance_get(), "vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR");
+			if (get_props) {
+				uint32_t count = 0;
+				get_props(physical_device, &count, nullptr);
+				LocalVector<VkCooperativeMatrixPropertiesKHR> props;
+				props.resize(count);
+				for (VkCooperativeMatrixPropertiesKHR &pr : props) {
+					pr = {};
+					pr.sType = VK_STRUCTURE_TYPE_COOPERATIVE_MATRIX_PROPERTIES_KHR;
+				}
+				if (count) {
+					get_props(physical_device, &count, props.ptr());
+				}
+				for (const VkCooperativeMatrixPropertiesKHR &pr : props) {
+					print_verbose(vformat("Vulkan: cooperative matrix %dx%dx%d A %d B %d C %d R %d scope %d", pr.MSize, pr.NSize, pr.KSize, pr.AType, pr.BType, pr.CType, pr.ResultType, pr.scope));
+					if (pr.MSize == 16 && pr.NSize == 16 && pr.KSize == 16 && pr.AType == VK_COMPONENT_TYPE_FLOAT16_KHR && pr.BType == VK_COMPONENT_TYPE_FLOAT16_KHR &&
+							pr.CType == VK_COMPONENT_TYPE_FLOAT32_KHR && pr.ResultType == VK_COMPONENT_TYPE_FLOAT32_KHR && pr.scope == VK_SCOPE_SUBGROUP_KHR) {
+						fellow_coop_matrix_support = true;
+					}
+				}
+			}
 		}
 #if defined(VK_TRACK_DEVICE_MEMORY)
 		if (enabled_device_extension_names.has(VK_EXT_DEVICE_MEMORY_REPORT_EXTENSION_NAME)) {
@@ -1435,6 +1470,14 @@ Error RenderingDeviceDriverVulkan::_initialize_device(const LocalVector<VkDevice
 		fellow_pipeline_executable_features.pNext = create_info_next;
 		fellow_pipeline_executable_features.pipelineExecutableInfo = VK_TRUE;
 		create_info_next = &fellow_pipeline_executable_features;
+	}
+
+	VkPhysicalDeviceCooperativeMatrixFeaturesKHR fellow_coop_matrix_features = {};
+	if (fellow_coop_matrix_support) {
+		fellow_coop_matrix_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_FEATURES_KHR;
+		fellow_coop_matrix_features.pNext = create_info_next;
+		fellow_coop_matrix_features.cooperativeMatrix = VK_TRUE;
+		create_info_next = &fellow_coop_matrix_features;
 	}
 
 	VkPhysicalDeviceFragmentDensityMapFeaturesEXT fdm_features = {};
@@ -7801,6 +7844,8 @@ bool RenderingDeviceDriverVulkan::has_feature(Features p_feature) {
 			return acceleration_structure_capabilities.acceleration_structure_support && ray_query_support;
 		case SUPPORTS_RAYTRACING_PIPELINE:
 			return acceleration_structure_capabilities.acceleration_structure_support && raytracing_capabilities.raytracing_pipeline_support;
+		case SUPPORTS_FELLOW_COOPERATIVE_MATRIX_F16:
+			return fellow_coop_matrix_support && has_feature(SUPPORTS_HALF_FLOAT);
 		case SUPPORTS_HDR_OUTPUT:
 #if defined(WINDOWS_ENABLED)
 			// When using a Vulkan swapchain on Windows, some configurations

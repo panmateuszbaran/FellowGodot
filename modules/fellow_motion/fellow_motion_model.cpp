@@ -168,7 +168,7 @@ void FellowMotionModel::_free() {
 		rd->free_rid(b);
 	}
 	weight_buffers.clear();
-	for (RID *b : { &param_buffer, &act_buffer, &op_buffer, &part_buffer }) {
+	for (RID *b : { &param_buffer, &act_buffer, &op_buffer, &part_buffer, &out_buffer }) {
 		if (b->is_valid()) {
 			rd->free_rid(*b);
 			*b = RID();
@@ -492,8 +492,15 @@ Error FellowMotionModel::load(const String &p_path, int p_max_batch) {
 	// The device and the shaders.
 	rd = RenderingServer::get_singleton()->create_local_rendering_device();
 	ERR_FAIL_NULL_V_MSG(rd, ERR_UNAVAILABLE, "FellowMotionModel requires a RenderingDevice (Forward+ or Mobile renderer).");
+	// Tensor cores (VK_KHR_cooperative_matrix, 16x16x16 fp16 -> fp32) for the products, with fp16 weights and a fixed
+	// subgroup size (the kernel's four subgroups per workgroup).
+	int sg = int(rd->limit_get(RD::LIMIT_SUBGROUP_SIZE));
+	bool sg_fixed = sg > 0 && int(rd->limit_get(RD::LIMIT_SUBGROUP_MIN_SIZE)) == sg && int(rd->limit_get(RD::LIMIT_SUBGROUP_MAX_SIZE)) == sg;
+	bool coop_device = rd->has_feature(RD::SUPPORTS_FELLOW_COOPERATIVE_MATRIX_F16);
+	coop_active = cooperative_matrix && weights_f16 && sg_fixed && (sg == 8 || sg == 16 || sg == 32 || sg == 64) && coop_device;
+	coop_note = coop_active ? String() : (!cooperative_matrix ? String("off") : !weights_f16 ? String("fp32 weights") : !coop_device ? String("the device has no 16x16x16 fp16 cooperative matrices") : vformat("subgroup size %d (%d-%d) not fixed", sg, int(rd->limit_get(RD::LIMIT_SUBGROUP_MIN_SIZE)), int(rd->limit_get(RD::LIMIT_SUBGROUP_MAX_SIZE))));
 	shader_file.instantiate();
-	Error err = shader_file->parse_versions_from_text(fellow_motion_shader_glsl);
+	Error err = shader_file->parse_versions_from_text(fellow_motion_shader_glsl, "#define SGSIZE " + itos(MAX(sg, 8)) + "\n");
 	if (err != OK) {
 		shader_file->print_errors("fellow_motion");
 		_free();
@@ -501,8 +508,9 @@ Error FellowMotionModel::load(const String &p_path, int p_max_batch) {
 	}
 	const char *names_h[V_MAX] = { "gemm_h16", "gemm_h32", "gemm_h64", "reduce", "attn", "ln", "glue" };
 	const char *names_f[V_MAX] = { "gemm_f16", "gemm_f32", "gemm_f64", "reduce", "attn", "ln", "glue" };
+	const char *names_c[V_MAX] = { "gemmc16", "gemmc32", "gemmc64", "reduce", "attn", "ln", "glue" };
 	for (int i = 0; i < V_MAX; i++) {
-		const char *nm = weights_f16 ? names_h[i] : names_f[i];
+		const char *nm = coop_active ? names_c[i] : (weights_f16 ? names_h[i] : names_f[i]);
 		shaders[i] = rd->shader_create_from_spirv(shader_file->get_spirv_stages(nm), String("FellowMotion ") + nm);
 		if (shaders[i].is_null()) {
 			_free();
@@ -534,6 +542,7 @@ Error FellowMotionModel::load(const String &p_path, int p_max_batch) {
 		WARN_PRINT("FellowMotionModel: the activations exceed 128 MB at this max_batch; some drivers may not bind them.");
 	}
 	act_buffer = rd->storage_buffer_create(act_floats * 4);
+	out_buffer = rd->storage_buffer_create(max_batch * (FRAMES * 370 + 4) * 4);
 	part_buffer = rd->storage_buffer_create(part_floats * 4);
 	op_buffer = rd->storage_buffer_create(table.size() * 4, Span<uint8_t>((const uint8_t *)table.ptr(), table.size() * 4));
 	rd->set_resource_name(act_buffer, "FellowMotion activations");
@@ -546,6 +555,7 @@ Dictionary FellowMotionModel::get_info() const {
 	d["path"] = path;
 	d["loaded"] = loaded;
 	d["weights"] = weights_f16 ? "f16" : "f32";
+	d["products"] = coop_active ? String("cooperative matrix 16x16x16 fp16 -> fp32") : "fp32 (" + coop_note + ")";
 	d["ops"] = int(op_recs.size());
 	d["max_batch"] = max_batch;
 	d["activation_mb"] = act_floats * 4.0 / 1e6;
@@ -748,29 +758,17 @@ Error FellowMotionModel::run_batch(Batch &p_batch) {
 			rd->capture_timestamp(op.tag);
 		}
 	}
+	// The outputs into the small read-back buffer (buffer_get_data stages the whole buffer it reads from).
+	const uint32_t n_vout = n * FRAMES * 365, n_rout = n * FRAMES * 5, n_t = n * 4;
+	rd->buffer_copy(act_buffer, out_buffer, acts["v.out"].offset * 4, 0, n_vout * 4);
+	rd->buffer_copy(act_buffer, out_buffer, acts["r.out"].offset * 4, n_vout * 4, n_rout * 4);
+	rd->buffer_copy(act_buffer, out_buffer, acts["meta.T"].offset * 4, (n_vout + n_rout) * 4, n_t * 4);
 	uint64_t t1 = OS::get_singleton()->get_ticks_usec();
 	rd->submit();
 	rd->sync();
 	uint64_t t2 = OS::get_singleton()->get_ticks_usec();
-
-	auto read = [&](const char *p_name, int p_per_req) {
-		LocalVector<float> v;
-		v.resize(n * p_per_req);
-		Vector<uint8_t> d = rd->buffer_get_data(act_buffer, acts[p_name].offset * 4, n * p_per_req * 4);
-		memcpy(v.ptr(), d.ptr(), v.size() * 4);
-		return v;
-	};
-	LocalVector<float> vout = read("v.out", FRAMES * 365);
-	LocalVector<float> rout = read("r.out", FRAMES * 5);
-	LocalVector<float> tk = read("meta.T", 4);
-	_decode(p_batch, vout, rout, tk, grv_n, off, head0);
-	uint64_t t3 = OS::get_singleton()->get_ticks_usec();
-
 	last_timings = Dictionary();
-	last_timings["record_msec"] = (t1 - t0) / 1000.0;
-	last_timings["submit_sync_msec"] = (t2 - t1) / 1000.0;
-	last_timings["read_decode_msec"] = (t3 - t2) / 1000.0;
-	last_timings["total_msec"] = (t3 - t0) / 1000.0;
+	// The timestamps before any read-back (which begins a new frame).
 	if (profile) {
 		uint32_t cnt = rd->get_captured_timestamps_count();
 		if (cnt > 1) {
@@ -788,6 +786,23 @@ Error FellowMotionModel::run_batch(Batch &p_batch) {
 			last_timings["ops"] = per;
 		}
 	}
+	Vector<uint8_t> d = rd->buffer_get_data(out_buffer, 0, (n_vout + n_rout + n_t) * 4);
+	LocalVector<float> vout, rout, tk;
+	vout.resize(n_vout);
+	rout.resize(n_rout);
+	tk.resize(n_t);
+	const float *src = (const float *)d.ptr();
+	memcpy(vout.ptr(), src, n_vout * 4);
+	memcpy(rout.ptr(), src + n_vout, n_rout * 4);
+	memcpy(tk.ptr(), src + n_vout + n_rout, n_t * 4);
+	uint64_t t3 = OS::get_singleton()->get_ticks_usec();
+	_decode(p_batch, vout, rout, tk, grv_n, off, head0);
+	uint64_t t4 = OS::get_singleton()->get_ticks_usec();
+	last_timings["record_msec"] = (t1 - t0) / 1000.0;
+	last_timings["submit_sync_msec"] = (t2 - t1) / 1000.0;
+	last_timings["read_msec"] = (t3 - t2) / 1000.0;
+	last_timings["decode_msec"] = (t4 - t3) / 1000.0;
+	last_timings["total_msec"] = (t4 - t0) / 1000.0;
 	return OK;
 }
 
@@ -854,8 +869,12 @@ void FellowMotionModel::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_target_groups", "groups"), &FellowMotionModel::set_target_groups);
 	ClassDB::bind_method(D_METHOD("get_target_groups"), &FellowMotionModel::get_target_groups);
 	ClassDB::bind_method(D_METHOD("get_last_timings"), &FellowMotionModel::get_last_timings);
+	ClassDB::bind_method(D_METHOD("set_cooperative_matrix", "enable"), &FellowMotionModel::set_cooperative_matrix);
+	ClassDB::bind_method(D_METHOD("is_cooperative_matrix"), &FellowMotionModel::is_cooperative_matrix);
+	ClassDB::bind_method(D_METHOD("is_cooperative_matrix_active"), &FellowMotionModel::is_cooperative_matrix_active);
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "profile"), "set_profile", "is_profile");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "target_groups"), "set_target_groups", "get_target_groups");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "cooperative_matrix"), "set_cooperative_matrix", "is_cooperative_matrix");
 }
 
 FellowMotionModel::FellowMotionModel() {

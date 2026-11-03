@@ -58,6 +58,9 @@
 		</method>
 	</methods>
 	<members>
+		<member name="cooperative_matrix" type="bool" setter="set_cooperative_matrix" getter="is_cooperative_matrix" default="true">
+			Run the matrix products on tensor cores (VK_KHR_cooperative_matrix: 16x16x16 blocks, fp16 inputs, fp32 accumulation) when the device has them, the weights are fp16 and its subgroup size is fixed. Set before [method load]. The activations are rounded to fp16 for the products (as NVIDIA's mixed-FP16 model does); off, the products are fp32. [method get_info] tells which runs.
+		</member>
 		<member name="profile" type="bool" setter="set_profile" getter="is_profile" default="false">
 			GPU timestamps around every op (needs [code]debug/settings/profiler/max_timestamp_query_elements[/code] above the op count).
 		</member>
