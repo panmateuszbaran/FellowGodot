@@ -40,7 +40,8 @@ extends Node
 ##                            --weather_cycle=<w>@<frame>[@<s>];..  temporal sequences turn to weather w at that frame,
 ##                            over s seconds (3); --weather_ground_speed=<k> (1), --weather_fog_color=r,g,b,
 ##                            --weather_controls=<flags> (255), --weather_times=<wet,dry,snow,melt> (s),
-##                            --weather_rainbow=<k> (1: the rain's rainbow, decision 0134)
+##                            --weather_rainbow=<k> (1: the rain's rainbow, decision 0134), --weather_shafts=<k> (1: rain
+##                            shafts under the clouds, decision 0135), --weather_coverage=<0-1> (a custom coverage)
 ##   --dirt_map=1             a procedural lens dirt texture as the environment's glow map (strength 0)
 ##   --jitter=<n>             reference: sub-pixel jittered renders per output frame (default 16)
 ##   --ablate=<a+b>           sizing only (items separated by + or ,): hide omni / spot / sun lights, probes, decals, or pos_shadows (see _ablate)
@@ -291,6 +292,9 @@ func _ready() -> void:
 		weather_node.weather = maxi(WEATHERS.find(str(args["weather"])), 0)
 		weather_node.ground_speed = float(args.get("weather_ground_speed", "1"))
 		weather_node.controls = int(args.get("weather_controls", "255"))
+		# --weather_coverage=<0-1>: the weather's own cloud coverage (a custom weather: showers under broken clouds).
+		if args.has("weather_coverage"):
+			weather_node.cloud_coverage = float(args["weather_coverage"])
 		# A cycle: the nodes it will need from the start (none created, and compiled, during a sequence).
 		weather_node.prepare_nodes = args.has("weather_cycle")
 		if args.has("weather_fog_color"):
@@ -310,9 +314,12 @@ func _ready() -> void:
 			wrn.melting_time = wtimes[3]
 		if wrn:
 			weather_ground = [wrn.wetness, wrn.snow]
-		# --weather_rainbow=<k>: the rain node's rainbow (decision 0134; 0: none).
+		# --weather_rainbow=<k>: the rain node's rainbow (decision 0134; 0: none); --weather_shafts=<k>: its rain shafts
+		# under the clouds (decision 0135).
 		if wrn and args.has("weather_rainbow"):
 			wrn.rainbow = float(args["weather_rainbow"])
+		if wrn and args.has("weather_shafts"):
+			wrn.shafts = float(args["weather_shafts"])
 		result["weather"] = [WEATHERS[weather_node.weather], weather_node.ground_speed, weather_node.controls]
 	RenderingServer.viewport_set_measure_render_time(vp.get_viewport_rid(), true)
 	await get_tree().process_frame
