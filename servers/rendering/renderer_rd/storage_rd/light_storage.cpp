@@ -35,6 +35,7 @@
 #include "core/os/os.h"
 #include "servers/rendering/fellow_settings.h"
 #include "servers/rendering/renderer_rd/renderer_scene_render_rd.h"
+#include "servers/rendering/renderer_rd/effects/fellow_weather.h"
 #include "servers/rendering/renderer_rd/storage_rd/texture_storage.h"
 #include "servers/rendering/rendering_server_globals.h"
 
@@ -838,6 +839,15 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 				if (p_render_data->camera_attributes.is_valid()) {
 					light_data.energy *= RSG::camera_attributes->camera_attributes_get_exposure_normalization_factor(p_render_data->camera_attributes);
 				}
+				float fellow_cloud_factor = 1.0f;
+				if (FellowWeather *weather = FellowWeather::get_singleton_if_exists()) {
+					// FellowEngine (decision 0132): the sun behind a FellowWeather3D's clouds, on the scene's surfaces.
+					const FellowWeather::SkyState &sky = weather->get_sky_state();
+					if (sky.sun_light.is_valid() && sky.sun_light == light_instance->light) {
+						fellow_cloud_factor = sky.sun_factor;
+						light_data.energy *= fellow_cloud_factor;
+					}
+				}
 
 				Color linear_col = light->color.srgb_to_linear();
 				if (fellow_sun_tint_instance.is_valid() && p_lights[i] == fellow_sun_tint_instance) {
@@ -851,7 +861,7 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 				light_data.color[2] = linear_col.b;
 
 				light_data.specular = light->param[RSE::LIGHT_PARAM_SPECULAR];
-				light_data.volumetric_fog_energy = light->param[RSE::LIGHT_PARAM_VOLUMETRIC_FOG_ENERGY];
+				light_data.volumetric_fog_energy = light->param[RSE::LIGHT_PARAM_VOLUMETRIC_FOG_ENERGY] * fellow_cloud_factor;
 				light_data.mask = light->cull_mask;
 
 				float size = light->param[RSE::LIGHT_PARAM_SIZE];

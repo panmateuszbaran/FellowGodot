@@ -35,6 +35,11 @@ extends Node
 ##                            --weather_snow_ruts=<x,z;x,z;..[|..]> a cart's wheel ruts (to the ground)
 ##   --weather_lightning=<n/min>  a FellowLightning3D (--weather_lightning_flash=<k>: captures strike k frames before each
 ##                            save, in view; --weather_lightning_frames=<f,..>: sequences strike at these frames)
+##   --weather=<clear|cloudy|overcast|rain|storm|snow|blizzard>  a FellowWeather3D (decision 0132) in that weather, the
+##                            ground settled to it; it drives the --weather_* nodes above and creates those it lacks.
+##                            --weather_cycle=<w>@<frame>[@<s>];..  temporal sequences turn to weather w at that frame,
+##                            over s seconds (3); --weather_ground_speed=<k> (1), --weather_fog_color=r,g,b,
+##                            --weather_controls=<flags> (255), --weather_times=<wet,dry,snow,melt> (s)
 ##   --dirt_map=1             a procedural lens dirt texture as the environment's glow map (strength 0)
 ##   --jitter=<n>             reference: sub-pixel jittered renders per output frame (default 16)
 ##   --ablate=<a+b>           sizing only (items separated by + or ,): hide omni / spot / sun lights, probes, decals, or pos_shadows (see _ablate)
@@ -79,6 +84,9 @@ var watchdog_s := 1800.0
 var finished := false
 var lightning  # FellowLightning3D (--weather_lightning)
 var snow_node  # FellowRain3D snowing (--weather_snow)
+var weather_node  # FellowWeather3D (--weather)
+var weather_ground := []  # its rain node's wetness and snow at the start
+const WEATHERS := ["clear", "cloudy", "overcast", "rain", "storm", "snow", "blizzard"]
 
 
 var pace_usec := 0 # --max_fps with --fixed-fps (where Engine.max_fps does nothing): the main thread waits here
@@ -274,6 +282,34 @@ func _ready() -> void:
 		lightning.energy = float(args.get("weather_lightning_energy", "6"))
 		scene.add_child(lightning)
 		result["weather_lightning"] = lightning.strikes_per_minute
+	# --weather=<name>: a FellowWeather3D (decision 0132) in that weather at once, the ground settled to it. It drives
+	# the nodes above (and a lab's own) and creates the ones it lacks. --weather_cycle: see _run_temporal().
+	if args.has("weather") and ClassDB.class_exists("FellowWeather3D"):
+		weather_node = ClassDB.instantiate("FellowWeather3D")
+		weather_node.name = "ShowcaseWeather"
+		weather_node.weather = maxi(WEATHERS.find(str(args["weather"])), 0)
+		weather_node.ground_speed = float(args.get("weather_ground_speed", "1"))
+		weather_node.controls = int(args.get("weather_controls", "255"))
+		# A cycle: the nodes it will need from the start (none created, and compiled, during a sequence).
+		weather_node.prepare_nodes = args.has("weather_cycle")
+		if args.has("weather_fog_color"):
+			var fc := str(args["weather_fog_color"]).split_floats(",")
+			if fc.size() >= 3:
+				weather_node.fog_color = Color(fc[0], fc[1], fc[2])
+		scene.add_child(weather_node)
+		if weather_node.get_lightning_node() and lightning == null:
+			lightning = weather_node.get_lightning_node()
+		# --weather_times=<wet,dry,snow,melt>: the rain node's wetting, drying, snowing and melting times (s; time-lapses).
+		var wtimes := str(args.get("weather_times", "")).split_floats(",")
+		var wrn = weather_node.get_rain_node()
+		if wrn and wtimes.size() >= 4:
+			wrn.wetting_time = wtimes[0]
+			wrn.drying_time = wtimes[1]
+			wrn.snowing_time = wtimes[2]
+			wrn.melting_time = wtimes[3]
+		if wrn:
+			weather_ground = [wrn.wetness, wrn.snow]
+		result["weather"] = [WEATHERS[weather_node.weather], weather_node.ground_speed, weather_node.controls]
 	RenderingServer.viewport_set_measure_render_time(vp.get_viewport_rid(), true)
 	await get_tree().process_frame
 	await _post_draw()
@@ -971,6 +1007,13 @@ func _run_temporal(jittered_reference: bool) -> void:
 				await get_tree().process_frame
 		var pc_start := _pipeline_compilations()
 		var frames_at_preroll := Engine.get_frames_drawn()
+		if weather_node and args.has("weather_cycle"):
+			# Each sequence starts in the first weather, on the ground it left at the start.
+			weather_node.set_weather(maxi(WEATHERS.find(str(args["weather"])), 0), 0.0)
+			var wr = weather_node.get_rain_node()
+			if wr and weather_ground.size() == 2:
+				wr.wetness = weather_ground[0]
+				wr.snow = weather_ground[1]
 		if snow_node:
 			# The tracks around the sequence's first pose.
 			scene.set_time(start - pre_roll * DT)
@@ -985,10 +1028,18 @@ func _run_temporal(jittered_reference: bool) -> void:
 		var strike_frames := []
 		for x in str(args.get("weather_lightning_frames", "")).split(",", false):
 			strike_frames.append(int(x))
+		# --weather_cycle=<w>@<frame>[@<s>];...: the weather turns to w at that frame of the sequence, over s seconds (3).
+		var cycle := {}
+		for spec in str(args.get("weather_cycle", "")).split(";", false):
+			var parts := spec.split("@")
+			if parts.size() >= 2:
+				cycle[int(parts[1])] = [maxi(WEATHERS.find(parts[0]), 0), float(parts[2]) if parts.size() >= 3 else 3.0]
 		for f in range(nframes):
 			var t := start + f * DT
 			scene.set_time(t)
 			scene.apply_path_sample(path.sample(t - start))
+			if weather_node and cycle.has(f):
+				weather_node.set_weather(cycle[f][0], cycle[f][1])
 			if lightning and f in strike_frames:
 				_strike_in_view()
 			await get_tree().process_frame

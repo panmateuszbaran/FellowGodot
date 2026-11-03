@@ -1,0 +1,234 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="FellowWeather3D" inherits="Node" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+	<brief_description>
+		The weather: clear, cloudy, overcast, rain, a thunderstorm, snow or a blizzard, changing over time (FellowEngine).
+	</brief_description>
+	<description>
+		One node sets the scene's weather and changes it smoothly ([method set_weather]). A weather is a state: the wind and its gusts, rain or snow and how hard it falls, lightning, the volumetric clouds' coverage and density, the sunlight that gets through the clouds, the sky's light, the fog and the temperature. The presets fill it in; setting a value of the state yourself makes the weather [constant WEATHER_CUSTOM].
+		The node drives the scene's [FellowWind3D], [FellowRain3D] and [FellowLightning3D] (the paths in the Nodes group, or the active ones, or the first in the current scene) and creates the ones it needs that are missing ([member create_missing]). It sets the volumetric clouds' coverage and density in place of the project settings (they must be on: [code]rendering/fellow/post/clouds/enabled[/code]), dims the sun on the scene's surfaces (not in the sky, nor on the clouds, which stay lit from above), adds fog to the environment and scales its sky's light. It wets the ground in the rain and dries it after, covers it with falling snow and melts the snow above freezing (wetting it): the rain node's own [code]wetting_time[/code], [code]drying_time[/code], [code]snowing_time[/code] and [code]melting_time[/code], sped up by [member ground_speed].
+		Rain turning to snow (or back) eases off over the first half of the transition and the other sets in over the second. The node works only while the game runs, not in the editor; when it leaves the tree, the environment gets its own values back. Decision record [code]docs/decisions/0132-weather-controller.md[/code].
+		[codeblock]
+		# A storm coming in over two minutes; thunder after each strike.
+		$FellowWeather3D.set_weather(FellowWeather3D.WEATHER_STORM, 120.0)
+		$FellowWeather3D.get_lightning_node().struck.connect(func(pos, dist): get_tree().create_timer(dist / 343.0).timeout.connect(play_thunder))
+		[/codeblock]
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="get_current_state" qualifiers="const">
+			<return type="Dictionary" />
+			<description>
+				The state now (during a transition, between the two weathers): [code]wind_speed[/code], [code]gustiness[/code], [code]precipitation[/code], [code]intensity[/code], [code]lightning_rate[/code], [code]cloud_coverage[/code], [code]cloud_density[/code], [code]sunlight[/code], [code]ambient_light[/code], [code]fog_density[/code], [code]temperature[/code].
+			</description>
+		</method>
+		<method name="get_lightning_node" qualifiers="const">
+			<return type="FellowLightning3D" />
+			<description>
+				The lightning node the weather drives (or created), or [code]null[/code].
+			</description>
+		</method>
+		<method name="get_preset_state" qualifiers="static">
+			<return type="Dictionary" />
+			<param index="0" name="weather" type="int" enum="FellowWeather3D.Weather" />
+			<description>
+				A preset's state, as [method get_current_state] gives it.
+			</description>
+		</method>
+		<method name="get_rain_node" qualifiers="const">
+			<return type="FellowRain3D" />
+			<description>
+				The rain node the weather drives (or created), or [code]null[/code].
+			</description>
+		</method>
+		<method name="get_sun_node" qualifiers="const">
+			<return type="DirectionalLight3D" />
+			<description>
+				The sun the clouds dim: [member sun_path], or the current scene's first [DirectionalLight3D] that lights it.
+			</description>
+		</method>
+		<method name="get_transition_progress" qualifiers="const">
+			<return type="float" />
+			<description>
+				How far the transition in progress has gone, from 0 to 1 (1 when there is none).
+			</description>
+		</method>
+		<method name="get_wind_node" qualifiers="const">
+			<return type="FellowWind3D" />
+			<description>
+				The wind node the weather drives (or created), or [code]null[/code].
+			</description>
+		</method>
+		<method name="has_control" qualifiers="const">
+			<return type="bool" />
+			<param index="0" name="control" type="int" enum="FellowWeather3D.Control" is_bitfield="true" />
+			<description>
+				Whether the weather drives this part of the scene ([member controls]).
+			</description>
+		</method>
+		<method name="is_transitioning" qualifiers="const">
+			<return type="bool" />
+			<description>
+				Whether the weather is changing.
+			</description>
+		</method>
+		<method name="set_weather">
+			<return type="void" />
+			<param index="0" name="weather" type="int" enum="FellowWeather3D.Weather" />
+			<param index="1" name="transition" type="float" default="-1.0" />
+			<description>
+				Turns to [param weather] over [param transition] seconds (negative: [member transition_time]; 0: at once). Before the node is ready the weather is taken at once. [constant WEATHER_CUSTOM] keeps the state's values and turns to them.
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="ambient_light" type="float" setter="set_ambient_light" getter="get_ambient_light" default="1.0">
+			The sky's light — its ambient light and reflections, and the sky drawn: the environment's [member Environment.background_energy_multiplier] — relative to the environment's own.
+		</member>
+		<member name="cloud_coverage" type="float" setter="set_cloud_coverage" getter="get_cloud_coverage" default="0.15">
+			The volumetric clouds' coverage, about the share of the sky they cover (in place of [code]rendering/fellow/post/clouds/coverage[/code]).
+		</member>
+		<member name="cloud_density" type="float" setter="set_cloud_density" getter="get_cloud_density" default="1.0">
+			The volumetric clouds' density: denser clouds are darker underneath (in place of [code]rendering/fellow/post/clouds/density[/code]).
+		</member>
+		<member name="controls" type="int" setter="set_controls" getter="get_controls" enum="FellowWeather3D.Control" is_bitfield="true" default="255">
+			What the weather drives. The parts left out keep their own settings.
+		</member>
+		<member name="create_missing" type="bool" setter="set_create_missing" getter="get_create_missing" default="true">
+			Creates the wind, rain and lightning nodes the weather needs when the scene has none (as internal children).
+		</member>
+		<member name="environment_path" type="NodePath" setter="set_environment_path" getter="get_environment_path" default="NodePath(&quot;&quot;)">
+			The [WorldEnvironment] whose environment gets the weather's fog and sky light. Empty: the current camera's environment, or the world's.
+		</member>
+		<member name="fog_color" type="Color" setter="set_fog_color" getter="get_fog_color" default="Color(0.52, 0.55, 0.6, 1)">
+			The colour of the weather's fog, scaled by the sky's brightness (the environment's background energy, so dark at night). Where the environment has fog of its own, the weather's share of the fog takes this colour.
+		</member>
+		<member name="fog_density" type="float" setter="set_fog_density" getter="get_fog_density" default="0.0">
+			Exponential fog added to the environment's (per metre: about 3 / the visibility). The sky greys with it.
+		</member>
+		<member name="ground_speed" type="float" setter="set_ground_speed" getter="get_ground_speed" default="1.0">
+			How many times faster the ground wets, dries, is covered and melts than the rain node's times (a game's compressed day).
+		</member>
+		<member name="gustiness" type="float" setter="set_gustiness" getter="get_gustiness" default="0.3">
+			The wind's gusts ([member FellowWind3D.gustiness]).
+		</member>
+		<member name="intensity" type="float" setter="set_intensity" getter="get_intensity" default="0.0">
+			How hard it rains or snows, from 0 to 1 ([member FellowRain3D.rain]).
+		</member>
+		<member name="lightning_path" type="NodePath" setter="set_lightning_path" getter="get_lightning_path" default="NodePath(&quot;&quot;)">
+			The [FellowLightning3D] to drive. Empty: the current scene's first.
+		</member>
+		<member name="lightning_rate" type="float" setter="set_lightning_rate" getter="get_lightning_rate" default="0.0">
+			Lightning strikes per minute ([member FellowLightning3D.strikes_per_minute]).
+		</member>
+		<member name="precipitation" type="int" setter="set_precipitation" getter="get_precipitation" enum="FellowWeather3D.Precipitation" default="0">
+			What falls: nothing, rain or snow.
+		</member>
+		<member name="prepare_nodes" type="bool" setter="set_prepare_nodes" getter="get_prepare_nodes" default="false">
+			With [member create_missing], creates every node the weather can drive when it starts, so that none is created (and its shaders compiled) when the weather first needs it. An idle rain node still keeps its shelter heightfield up to date around the camera.
+		</member>
+		<member name="rain_path" type="NodePath" setter="set_rain_path" getter="get_rain_path" default="NodePath(&quot;&quot;)">
+			The [FellowRain3D] to drive. Empty: the active one. The weather turns its [member FellowRain3D.wetness_follows_rain] and [member FellowRain3D.snow_follows_precipitation] off and sets its wetness and snow itself.
+		</member>
+		<member name="settle_ground" type="bool" setter="set_settle_ground" getter="get_settle_ground" default="true">
+			When the node is ready, the ground as the weather leaves it: wet in the rain, covered in snow while it snows below freezing. A project's own wet or snowy ground is kept.
+		</member>
+		<member name="sun_path" type="NodePath" setter="set_sun_path" getter="get_sun_path" default="NodePath(&quot;&quot;)">
+			The sun the clouds dim. Empty: the current scene's first [DirectionalLight3D] that lights the scene.
+		</member>
+		<member name="sunlight" type="float" setter="set_sunlight" getter="get_sunlight" default="1.0">
+			The share of the sun's light that reaches the scene's surfaces through the clouds. The light's own energy is unchanged: the sky and the clouds stay lit by the full sun.
+		</member>
+		<member name="temperature" type="float" setter="set_temperature" getter="get_temperature" default="18.0">
+			Degrees Celsius. Falling snow settles at 1 °C and below; snow on the ground melts above 0 °C, in the rain node's [code]melting_time[/code] at 5 °C (faster when warmer, three times as fast in the rain).
+		</member>
+		<member name="transition_time" type="float" setter="set_transition_time" getter="get_transition_time" default="30.0">
+			Seconds a change of weather takes when none is given ([member weather] set, a state's value set).
+		</member>
+		<member name="weather" type="int" setter="set_weather" getter="get_weather" enum="FellowWeather3D.Weather" default="0">
+			The weather. Setting it turns to it over [member transition_time].
+		</member>
+		<member name="wind_path" type="NodePath" setter="set_wind_path" getter="get_wind_path" default="NodePath(&quot;&quot;)">
+			The [FellowWind3D] to drive. Empty: the active one.
+		</member>
+		<member name="wind_speed" type="float" setter="set_wind_speed" getter="get_wind_speed" default="2.0">
+			The wind's speed in m/s ([member FellowWind3D.speed]).
+		</member>
+	</members>
+	<signals>
+		<signal name="transition_finished">
+			<param index="0" name="weather" type="int" />
+			<description>
+				The weather has finished turning to [param weather].
+			</description>
+		</signal>
+		<signal name="weather_changed">
+			<param index="0" name="weather" type="int" />
+			<description>
+				The weather began turning to [param weather].
+			</description>
+		</signal>
+	</signals>
+	<constants>
+		<constant name="WEATHER_CLEAR" value="0" enum="Weather">
+			A light breeze, a few clouds, full sun, 18 °C.
+		</constant>
+		<constant name="WEATHER_CLOUDY" value="1" enum="Weather">
+			Half the sky covered, three quarters of the sunlight, 15 °C.
+		</constant>
+		<constant name="WEATHER_OVERCAST" value="2" enum="Weather">
+			Nearly covered, a fifth of the sunlight, a light haze, 12 °C.
+		</constant>
+		<constant name="WEATHER_RAIN" value="3" enum="Weather">
+			Rain (0.6), a tenth of the sunlight, 6 m/s of wind, 10 °C.
+		</constant>
+		<constant name="WEATHER_STORM" value="4" enum="Weather">
+			A thunderstorm: heavy rain, 12 m/s of gusty wind, five strikes a minute, dark dense clouds, 14 °C.
+		</constant>
+		<constant name="WEATHER_SNOW" value="5" enum="Weather">
+			Snow (0.6), a light wind, -3 °C.
+		</constant>
+		<constant name="WEATHER_BLIZZARD" value="6" enum="Weather">
+			Heavy snow in 14 m/s of wind, visibility about 300 m, -10 °C.
+		</constant>
+		<constant name="WEATHER_CUSTOM" value="7" enum="Weather">
+			The state's own values.
+		</constant>
+		<constant name="PRECIPITATION_NONE" value="0" enum="Precipitation">
+			Nothing falls.
+		</constant>
+		<constant name="PRECIPITATION_RAIN" value="1" enum="Precipitation">
+			Rain.
+		</constant>
+		<constant name="PRECIPITATION_SNOW" value="2" enum="Precipitation">
+			Snow.
+		</constant>
+		<constant name="CONTROL_WIND" value="1" enum="Control" is_bitfield="true">
+			The wind node's speed and gusts.
+		</constant>
+		<constant name="CONTROL_PRECIPITATION" value="2" enum="Control" is_bitfield="true">
+			The rain node's rain or snow and how hard it falls.
+		</constant>
+		<constant name="CONTROL_GROUND" value="4" enum="Control" is_bitfield="true">
+			The rain node's wetness and snow cover.
+		</constant>
+		<constant name="CONTROL_LIGHTNING" value="8" enum="Control" is_bitfield="true">
+			The lightning node's strikes.
+		</constant>
+		<constant name="CONTROL_CLOUDS" value="16" enum="Control" is_bitfield="true">
+			The volumetric clouds' coverage and density.
+		</constant>
+		<constant name="CONTROL_SUN" value="32" enum="Control" is_bitfield="true">
+			The sunlight on the scene's surfaces.
+		</constant>
+		<constant name="CONTROL_FOG" value="64" enum="Control" is_bitfield="true">
+			The environment's fog.
+		</constant>
+		<constant name="CONTROL_AMBIENT" value="128" enum="Control" is_bitfield="true">
+			The environment's sky light (background energy).
+		</constant>
+		<constant name="CONTROL_ALL" value="255" enum="Control" is_bitfield="true">
+			All of them.
+		</constant>
+	</constants>
+</class>

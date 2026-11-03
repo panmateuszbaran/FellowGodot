@@ -93,6 +93,16 @@ public:
 		float radius = 1000.0f; // m: how far through the cloud it lights
 	};
 
+	// The sky under a FellowWeather3D (decision 0132): the volumetric clouds' coverage and density in place of the project
+	// settings', and the sun dimmed on the scene's surfaces by the clouds over it (not in the sky or on the clouds).
+	struct SkyState {
+		bool active = false; // the clouds' coverage and density
+		float coverage = 0.45f;
+		float density = 1.0f;
+		RID sun_light; // RS light (base) RID: the sun the clouds dim
+		float sun_factor = 1.0f;
+	};
+
 	// std140: the shader's FellowWeatherData.
 	struct UBO {
 		float params[4]; // wetness, puddles, rain, time
@@ -114,6 +124,7 @@ private:
 	WindState wind_prev;
 	bool wind_has_prev = false;
 	LightningState lightning;
+	SkyState sky;
 	RID ubo;
 	bool ubo_dirty = true;
 
@@ -130,6 +141,8 @@ public:
 	const WindState &get_wind_state() const { return wind; }
 	void set_lightning_state(const LightningState &p_lightning) { lightning = p_lightning; }
 	const LightningState &get_lightning_state() const { return lightning; }
+	void set_sky_state(const SkyState &p_sky) { sky = p_sky; }
+	const SkyState &get_sky_state() const { return sky; }
 	RID get_uniform_buffer();
 	RID get_occlusion_texture() const;
 	RID get_ripple_texture() const;

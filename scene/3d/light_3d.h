@@ -101,6 +101,8 @@ protected:
 
 public:
 	RSE::LightType get_light_type() const { return type; }
+	// FellowEngine (decision 0132): the RenderingServer light (VisualInstance3D::get_base() is not set for lights).
+	RID get_light_rid() const { return light; }
 
 	void set_editor_only(bool p_editor_only);
 	bool is_editor_only() const;

@@ -4679,6 +4679,14 @@ void RenderForwardClustered::_fellow_process_clouds(RenderDataRD *p_render_data,
 	params.time = float(time);
 	params.coverage = Fellow::clouds_coverage();
 	params.density = Fellow::clouds_density();
+	if (RendererRD::FellowWeather *weather = RendererRD::FellowWeather::get_singleton_if_exists()) {
+		// A FellowWeather3D's sky (decision 0132).
+		const RendererRD::FellowWeather::SkyState &weather_sky = weather->get_sky_state();
+		if (weather_sky.active) {
+			params.coverage = weather_sky.coverage;
+			params.density = weather_sky.density;
+		}
+	}
 	params.bottom_altitude = Fellow::clouds_altitude();
 	params.thickness = Fellow::clouds_thickness();
 	const float wind = Fellow::clouds_wind();
