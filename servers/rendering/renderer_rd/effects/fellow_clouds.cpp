@@ -31,6 +31,10 @@
 
 #include "fellow_clouds.h"
 
+#include "fellow_weather.h"
+
+#include "core/object/callable_mp.h"
+
 #include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
 #include "servers/rendering/renderer_rd/uniform_set_cache_rd.h"
 
@@ -63,6 +67,7 @@ FellowClouds::FellowClouds() {
 	modes.push_back("\n#define MODE_TEMPORAL\n");
 	modes.push_back("\n#define MODE_COMPOSITE\n");
 	modes.push_back("\n#define MODE_SHADOW\n");
+	modes.push_back("\n#define MODE_PROBE\n");
 	shader.initialize(modes);
 	shader_version = shader.version_create();
 	for (int i = 0; i < MODE_MAX; i++) {
@@ -73,6 +78,8 @@ FellowClouds::FellowClouds() {
 	zeros.fill(0);
 	ubo = RD::get_singleton()->uniform_buffer_create(sizeof(UBO), zeros);
 	shadow_ubo = RD::get_singleton()->uniform_buffer_create(sizeof(UBO), zeros);
+	probe_ubo = RD::get_singleton()->uniform_buffer_create(sizeof(UBO), zeros);
+	probe_buffer = RD::get_singleton()->storage_buffer_create(16);
 	shape_noise = _fellow_clouds_texture(RD::TEXTURE_TYPE_3D, RD::DATA_FORMAT_R8G8B8A8_UNORM, 128, 128, 128);
 	detail_noise = _fellow_clouds_texture(RD::TEXTURE_TYPE_3D, RD::DATA_FORMAT_R8G8B8A8_UNORM, 32, 32, 32);
 	white = _fellow_clouds_texture(RD::TEXTURE_TYPE_2D, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, 1, 1, 1);
@@ -109,7 +116,7 @@ void FellowClouds::_free_targets() {
 
 FellowClouds::~FellowClouds() {
 	_free_targets();
-	RID rids[] = { ubo, shadow_ubo, shadow_maps[0], shadow_maps[1], shape_noise, detail_noise, white };
+	RID rids[] = { ubo, shadow_ubo, shadow_maps[0], shadow_maps[1], probe_ubo, probe_buffer, shape_noise, detail_noise, white };
 	for (RID r : rids) {
 		if (r.is_valid()) {
 			RD::get_singleton()->free_rid(r);
@@ -306,4 +313,51 @@ RID FellowClouds::process_shadow(const ShadowParams &p_params) {
 	RD::get_singleton()->compute_list_end();
 	RD::get_singleton()->draw_command_end_label();
 	return shadow_maps[write ^ 1];
+}
+
+void FellowClouds::_probe_readback(const Vector<uint8_t> &p_data) {
+	if (p_data.size() < 16) {
+		return;
+	}
+	const float *v = reinterpret_cast<const float *>(p_data.ptr());
+	if (FellowWeather *weather = FellowWeather::get_singleton_if_exists()) {
+		weather->set_rain_here(CLAMP(v[0], 0.0f, 1.0f));
+	}
+}
+
+void FellowClouds::process_probe(const ShadowParams &p_params) {
+	UniformSetCacheRD *uniform_set_cache = UniformSetCacheRD::get_singleton();
+	ERR_FAIL_NULL(uniform_set_cache);
+	MaterialStorage *material_storage = MaterialStorage::get_singleton();
+	ERR_FAIL_NULL(material_storage);
+	RID linear_repeat = material_storage->sampler_rd_get_default(RSE::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RSE::CANVAS_ITEM_TEXTURE_REPEAT_ENABLED);
+	UBO u;
+	memset(&u, 0, sizeof(UBO));
+	u.sun_direction[3] = p_params.time;
+	u.layer[0] = MAX(p_params.bottom_altitude, 0.0f);
+	u.layer[1] = MAX(p_params.thickness, 0.05f);
+	u.layer[2] = CLAMP(p_params.coverage, 0.0f, 1.0f);
+	u.layer[3] = MAX(p_params.density, 0.0f);
+	u.shape[0] = p_params.shape_scale;
+	u.shape[1] = p_params.detail_scale;
+	u.shape[2] = p_params.wind.x;
+	u.shape[3] = p_params.wind.y;
+	u.shadow[0] = p_params.camera_position.x;
+	u.shadow[1] = p_params.camera_position.z;
+	RD::get_singleton()->buffer_update(probe_ubo, 0, sizeof(UBO), &u);
+
+	RD::get_singleton()->draw_command_begin_label("FellowEngine Showers Probe");
+	RID shader_rd = shader.version_get_shader(shader_version, MODE_PROBE);
+	RD::ComputeListID list = RD::get_singleton()->compute_list_begin();
+	RD::get_singleton()->compute_list_bind_compute_pipeline(list, pipelines[MODE_PROBE]);
+	RD::Uniform u_params(RD::UNIFORM_TYPE_UNIFORM_BUFFER, 0, probe_ubo);
+	RD::Uniform u_shape(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 1, Vector<RID>({ linear_repeat, shape_noise }));
+	RD::Uniform u_detail(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 2, Vector<RID>({ linear_repeat, detail_noise }));
+	RD::get_singleton()->compute_list_bind_uniform_set(list, uniform_set_cache->get_cache(shader_rd, 0, u_params, u_shape, u_detail), 0);
+	RD::Uniform u_dest(RD::UNIFORM_TYPE_STORAGE_BUFFER, 0, probe_buffer);
+	RD::get_singleton()->compute_list_bind_uniform_set(list, uniform_set_cache->get_cache(shader_rd, 1, u_dest), 1);
+	RD::get_singleton()->compute_list_dispatch(list, 1, 1, 1);
+	RD::get_singleton()->compute_list_end();
+	RD::get_singleton()->draw_command_end_label();
+	RD::get_singleton()->buffer_get_data_async(probe_buffer, callable_mp_static(&FellowClouds::_probe_readback), 0, 16);
 }

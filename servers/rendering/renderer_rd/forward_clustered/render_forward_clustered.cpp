@@ -4798,6 +4798,29 @@ void RenderForwardClustered::_fellow_process_cloud_shadow(RenderDataRD *p_render
 		weather->set_cloud_shadow(cs);
 	}
 	fellow_cloud_shadow_frame = cs.active;
+	// Showers (decision 0137): while a raining node asks, the rain the clouds let fall at the camera (the layer the
+	// clouds pass draws), read back for it. Without the clouds the node rains as it is set.
+	if (p_allowed && weather && weather->get_state().enabled && weather->get_state().showers > 0.0f && Fellow::clouds_enabled()) {
+		RendererRD::FellowClouds::ShadowParams pp;
+		pp.camera_position = p_render_data->scene_data->cam_transform.origin;
+		pp.time = float(time);
+		pp.coverage = Fellow::clouds_coverage();
+		pp.density = Fellow::clouds_density();
+		const RendererRD::FellowWeather::SkyState &weather_sky = weather->get_sky_state();
+		if (weather_sky.active) {
+			pp.coverage = weather_sky.coverage;
+			pp.density = weather_sky.density;
+		}
+		pp.bottom_altitude = Fellow::clouds_altitude();
+		pp.thickness = Fellow::clouds_thickness();
+		const float wind = Fellow::clouds_wind();
+		pp.wind = Vector2(wind, wind * 0.3f);
+		if (!fellow_clouds) {
+			fellow_clouds = memnew(RendererRD::FellowClouds);
+		}
+		RENDER_TIMESTAMP("FellowEngine Showers Probe");
+		fellow_clouds->process_probe(pp);
+	}
 }
 
 // FellowEngine rainbows (decision 0134): while a FellowRain3D has rained lately, the bows around the point opposite the

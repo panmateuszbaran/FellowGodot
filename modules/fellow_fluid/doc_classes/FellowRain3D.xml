@@ -24,6 +24,12 @@
 				The internal heightfield of the scene seen from above: the drops collide with it and surfaces below its top stay dry. Its [member GPUParticlesCollisionHeightField3D.heightfield_mask] picks the layers that shelter.
 			</description>
 		</method>
+		<method name="get_rain_here" qualifiers="const">
+			<return type="float" />
+			<description>
+				The share of [member rain] falling at the camera under [member showers] (1 without them).
+			</description>
+		</method>
 		<method name="get_ripple_texture" qualifiers="const">
 			<return type="Texture2DRD" />
 			<description>
@@ -122,6 +128,9 @@
 		</member>
 		<member name="shafts" type="float" setter="set_shafts" getter="get_shafts" default="1.0">
 			The strength of the rain shafts under the volumetric clouds (0: none): while it rains (or snows), grey curtains hang below the clouds' dense parts in the distance (from 2 km on), streaked along the fall and drifting with the clouds. Needs [code]rendering/fellow/post/clouds/enabled[/code]. Decision record [code]docs/decisions/0135-rain-shafts.md[/code].
+		</member>
+		<member name="showers" type="float" setter="set_showers" getter="get_showers" default="0.0">
+			Showers (0-1): with the volumetric clouds on, it rains at the camera only as the clouds above let it — where their layer is dense (the rain shafts' share: none below 0.7 of their local coverage, all of it from 0.95), eased over 2 s as showers pass with the clouds' wind. The drops, the ripples, the wetting and the snow's settling follow it; the rain shafts and the rainbow keep the [member rain] set. At 0 it rains everywhere as set; without the clouds too. See [method get_rain_here].
 		</member>
 		<member name="snow" type="float" setter="set_snow" getter="get_snow" default="0.0">
 			The snow cover, from 0 to 1: what faces up is covered where the snow falls (not under roofs: the heightfield of [method get_occlusion]) — patchy while thin, everything facing up once deep, nothing on slopes steeper than 60 degrees. Fresh snow: white, rough, smooth (it fills the materials' relief) with gentle undulations, glinting by [member snow_sparkle]. Opaque materials on the Forward+ renderer, in the depth pre-pass and the colour pass, after their own code.

@@ -31,6 +31,7 @@
 #pragma once
 
 #include "core/math/transform_3d.h"
+#include "core/templates/safe_refcount.h"
 #include "servers/rendering/rendering_device.h"
 
 namespace RendererRD {
@@ -76,6 +77,7 @@ public:
 		float rainbow = 0.0f; // the rain's rainbow (decision 0134): its strength times the rain seen lately
 		float shafts = 0.0f; // rain shafts (decision 0135): the rain's (or snow's) rate, times its shafts' strength
 		bool shafts_snow = false;
+		float showers = 0.0f; // decision 0137: > 0 while a rain node raining asks where the clouds let it fall
 	};
 
 	struct WindState {
@@ -152,6 +154,10 @@ private:
 	CloudShadowState cloud_shadow;
 	RID ubo;
 	bool ubo_dirty = true;
+	// Showers (decision 0137): the clouds' rain at the camera, read back from the GPU (render thread), read by the rain
+	// node (main thread).
+	static SafeNumeric<float> rain_here;
+	static SafeNumeric<uint64_t> rain_here_msec;
 
 public:
 	static FellowWeather *get_singleton();
@@ -173,6 +179,10 @@ public:
 	RID get_cloud_shadow_texture() const { return cloud_shadow.active ? cloud_shadow.texture : RID(); }
 	// The clouds shade the sun this frame (their map, at some strength).
 	bool is_cloud_shadowing() const { return cloud_shadow.active && cloud_shadow.texture.is_valid() && cloud_shadow.strength > 0.0f; }
+	static void set_rain_here(float p_rain);
+	// The share of the rain falling at the camera (0..1) as the clouds let it, or -1 when it is not known (no clouds
+	// probed in the last half second).
+	static float get_rain_here();
 	RID get_uniform_buffer();
 	RID get_occlusion_texture() const;
 	RID get_ripple_texture() const;

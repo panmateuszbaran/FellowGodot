@@ -324,6 +324,7 @@ void FellowRain3D::_push_state() {
 	st.snow_sparkle = snow_sparkle;
 	st.freeze = freeze;
 	st.frost = frost;
+	st.showers = (is_visible_in_tree() && active == this && rain > 0.0f) ? showers : 0.0f;
 	st.rainbow = is_visible_in_tree() && active == this ? rainbow * rain_seen : 0.0f;
 	st.shafts = is_visible_in_tree() && active == this ? MIN(shafts * rain, 1.0f) : 0.0f;
 	st.shafts_snow = _is_snow();
@@ -366,7 +367,7 @@ void FellowRain3D::_push_state() {
 		tp.size = size;
 		tp.cell = cell;
 		if (_is_snow() && rain > 0.0f && track_refill_time > 0.0f) {
-			track_refill_accum += double(rain) * snow_depth / track_refill_time * MIN(get_process_delta_time(), 1.0);
+			track_refill_accum += double(rain * rain_here) * snow_depth / track_refill_time * MIN(get_process_delta_time(), 1.0);
 		}
 		if (track_refill_accum >= 1e-4) {
 			tp.refill = float(track_refill_accum);
@@ -457,9 +458,26 @@ void FellowRain3D::_notification(int p_what) {
 			}
 			double step = last_time < 0.0 ? 0.0 : CLAMP(time - last_time, 0.0, 1.0);
 			last_time = time;
+			// Showers (decision 0137): the rain at the camera as the clouds above let it fall (read back from the
+			// clouds' layer); without clouds, or unknown yet, as it is set.
+			{
+				float target = 1.0f;
+				const float probed = (showers > 0.0f && rain > 0.0f) ? RendererRD::FellowWeather::get_rain_here() : -1.0f;
+				if (probed >= 0.0f) {
+					target = Math::lerp(1.0f, probed, showers);
+					if (!rain_here_seen) {
+						rain_here = target; // the first reading: no rain easing out at the start
+						rain_here_seen = true;
+					}
+				} else if (showers > 0.0f && rain > 0.0f && !rain_here_seen) {
+					target = rain_here;
+				}
+				rain_here += (target - rain_here) * float(1.0 - Math::exp(-step / double(SHOWER_TIME)));
+			}
+			const float falling = rain * rain_here;
 			if (wetness_follows_rain) {
 				if (get_ripple_rain() > 0.0f) {
-					wetness = MIN(1.0f, wetness + float(step) * rain / MAX(wetting_time, 0.01f));
+					wetness = MIN(1.0f, wetness + float(step) * falling / MAX(wetting_time, 0.01f));
 				} else {
 					wetness = MAX(0.0f, wetness - float(step) / MAX(drying_time, 0.01f));
 				}
@@ -469,11 +487,12 @@ void FellowRain3D::_notification(int p_what) {
 			if (_is_snow() && rain > 0.0f) {
 				rain_seen = 0.0f;
 			} else {
-				rain_seen = MAX(get_ripple_rain(), rain_seen * float(Math::exp(-step / double(RAINBOW_TIME))));
+				// The rain around, not only here (under a gap in the showers the bow stands in them).
+				rain_seen = MAX(precipitation == PRECIPITATION_RAIN ? rain : 0.0f, rain_seen * float(Math::exp(-step / double(RAINBOW_TIME))));
 			}
 			if (snow_follows_precipitation) {
 				if (_is_snow() && rain > 0.0f) {
-					snow = MIN(1.0f, snow + float(step) * rain / MAX(snowing_time, 0.01f));
+					snow = MIN(1.0f, snow + float(step) * falling / MAX(snowing_time, 0.01f));
 				} else {
 					snow = MAX(0.0f, snow - float(step) / MAX(melting_time, 0.01f));
 				}
@@ -515,8 +534,8 @@ void FellowRain3D::_notification(int p_what) {
 				}
 			}
 			if (drops) {
-				drops->set_amount_ratio(CLAMP(rain, 0.0f, 1.0f));
-				drops->set_emitting(rain > 0.0f && is_visible_in_tree());
+				drops->set_amount_ratio(CLAMP(falling, 0.0f, 1.0f));
+				drops->set_emitting(falling > 0.0f && is_visible_in_tree());
 			}
 			if (active == this) {
 				_push_state();
@@ -925,6 +944,9 @@ void FellowRain3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_freezing_time"), &FellowRain3D::get_freezing_time);
 	ClassDB::bind_method(D_METHOD("set_shafts", "shafts"), &FellowRain3D::set_shafts);
 	ClassDB::bind_method(D_METHOD("get_shafts"), &FellowRain3D::get_shafts);
+	ClassDB::bind_method(D_METHOD("set_showers", "showers"), &FellowRain3D::set_showers);
+	ClassDB::bind_method(D_METHOD("get_showers"), &FellowRain3D::get_showers);
+	ClassDB::bind_method(D_METHOD("get_rain_here"), &FellowRain3D::get_rain_here);
 	ClassDB::bind_method(D_METHOD("set_flake_speed", "speed"), &FellowRain3D::set_flake_speed);
 	ClassDB::bind_method(D_METHOD("get_flake_speed"), &FellowRain3D::get_flake_speed);
 	ClassDB::bind_method(D_METHOD("set_flake_size", "size"), &FellowRain3D::set_flake_size);
@@ -1024,6 +1046,7 @@ void FellowRain3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "snow_sparkle", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_snow_sparkle", "get_snow_sparkle");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rainbow", PROPERTY_HINT_RANGE, "0,4,0.01,or_greater"), "set_rainbow", "get_rainbow");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "shafts", PROPERTY_HINT_RANGE, "0,4,0.01,or_greater"), "set_shafts", "get_shafts");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "showers", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_showers", "get_showers");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "freeze", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_freeze", "get_freeze");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "frost", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_frost", "get_frost");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "freezing_time", PROPERTY_HINT_RANGE, "0,36000,0.1,suffix:s"), "set_freezing_time", "get_freezing_time");

@@ -30,11 +30,28 @@
 
 #include "fellow_weather.h"
 
+#include "core/os/os.h"
+
 #include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
 
 namespace RendererRD {
 
 FellowWeather *FellowWeather::singleton = nullptr;
+SafeNumeric<float> FellowWeather::rain_here(-1.0f);
+SafeNumeric<uint64_t> FellowWeather::rain_here_msec(0);
+
+void FellowWeather::set_rain_here(float p_rain) {
+	rain_here.set(p_rain);
+	rain_here_msec.set(OS::get_singleton()->get_ticks_msec());
+}
+
+float FellowWeather::get_rain_here() {
+	const uint64_t at = rain_here_msec.get();
+	if (at == 0 || OS::get_singleton()->get_ticks_msec() - at > 500) {
+		return -1.0f;
+	}
+	return rain_here.get();
+}
 
 FellowWeather *FellowWeather::get_singleton() {
 	if (!singleton && RD::get_singleton()) {

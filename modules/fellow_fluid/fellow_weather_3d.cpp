@@ -461,8 +461,9 @@ void FellowWeather3D::_apply_ground(FellowRain3D *p_rain, double p_delta) {
 	if (dt <= 0.0f) {
 		return;
 	}
-	const float rain = current.precipitation == PRECIPITATION_RAIN ? current.intensity : 0.0f;
-	const float snowfall = current.precipitation == PRECIPITATION_SNOW ? current.intensity : 0.0f;
+	// What falls here: under showers (decision 0137) as the clouds above let it.
+	const float rain = current.precipitation == PRECIPITATION_RAIN ? current.intensity * p_rain->get_rain_here() : 0.0f;
+	const float snowfall = current.precipitation == PRECIPITATION_SNOW ? current.intensity * p_rain->get_rain_here() : 0.0f;
 	const float t = current.temperature;
 	float wet = p_rain->get_wetness();
 	float snow = p_rain->get_snow();
@@ -495,7 +496,7 @@ void FellowWeather3D::_apply_ground(FellowRain3D *p_rain, double p_delta) {
 	float frost = p_rain->get_frost();
 	if (t < 0.0f) {
 		freeze = MIN(1.0f, freeze + dt * MIN(-t / 5.0f, 2.0f) / ft);
-		const float falling = current.precipitation != PRECIPITATION_NONE ? current.intensity : 0.0f;
+		const float falling = rain + snowfall;
 		frost = MIN(1.0f, frost + dt * MIN(-t / 5.0f, 2.0f) * (1.0f - 0.8f * current.clouds) * (1.0f - falling) / ft);
 	} else {
 		freeze = MAX(0.0f, freeze - dt * 2.0f * MAX(t / 5.0f, 0.2f) / ft);

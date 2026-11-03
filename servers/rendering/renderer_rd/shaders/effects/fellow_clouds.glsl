@@ -17,6 +17,7 @@
 // transmittance (orange at sunset) and the sky's light comes from its sky-view table.
 // MODE_TEMPORAL: this frame's trace blended with the previous result at the reprojected position.
 // MODE_COMPOSITE: the clouds over the sky's pixels of the colour buffer (bilinear from half resolution).
+// MODE_PROBE: showers (decision 0137): the rain the clouds let fall at the camera, one thread.
 
 #if defined(MODE_NOISE_SHAPE) || defined(MODE_NOISE_DETAIL)
 layout(local_size_x = 4, local_size_y = 4, local_size_z = 4) in;
@@ -137,7 +138,7 @@ void main() {
 }
 #endif
 
-#if defined(MODE_TRACE) || defined(MODE_SHADOW)
+#if defined(MODE_TRACE) || defined(MODE_SHADOW) || defined(MODE_PROBE)
 layout(set = 0, binding = 1) uniform sampler3D shape_noise;
 layout(set = 0, binding = 2) uniform sampler3D detail_noise;
 #endif
@@ -150,8 +151,14 @@ layout(rgba16f, set = 1, binding = 0) uniform restrict writeonly image2D trace_d
 #if defined(MODE_SHADOW)
 layout(r16f, set = 1, binding = 0) uniform restrict writeonly image2D shadow_dest;
 #endif
+#if defined(MODE_PROBE)
+layout(set = 1, binding = 0, std430) restrict writeonly buffer Probe {
+	vec4 value; // x: the rain's share at the camera (0..1), y: the local coverage there
+}
+probe;
+#endif
 
-#if defined(MODE_TRACE) || defined(MODE_SHADOW)
+#if defined(MODE_TRACE) || defined(MODE_SHADOW) || defined(MODE_PROBE)
 #define ATMOSPHERE_TOP 6460.0
 
 vec2 transmittance_uv(float r, float mu) {
@@ -261,6 +268,18 @@ void main() {
 		}
 	}
 	imageStore(shadow_dest, pos, vec4(exp(-od)));
+}
+#endif
+
+#if defined(MODE_PROBE)
+// Showers (decision 0137): at the camera (params.shadow.xy, m), the share of the rain the shafts let fall there (decision
+// 0135): none below 0.7 of the local coverage, all of it from 0.95.
+void main() {
+	if (gl_LocalInvocationIndex != 0) {
+		return;
+	}
+	float c = cloud_cover_at(vec3(params.shadow.x * 0.001, PLANET_RADIUS, params.shadow.y * 0.001));
+	probe.value = vec4(smoothstep(0.7, 0.95, c), c, 0.0, 0.0);
 }
 #endif
 

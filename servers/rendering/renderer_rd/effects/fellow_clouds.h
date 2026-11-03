@@ -104,6 +104,7 @@ private:
 		MODE_TEMPORAL,
 		MODE_COMPOSITE,
 		MODE_SHADOW,
+		MODE_PROBE,
 		MODE_MAX,
 	};
 
@@ -134,6 +135,9 @@ private:
 	uint32_t shadow_parity = 0;
 	Vector2 shadow_origins[2]; // m: each map's centre
 	Vector2 shadow_read_origin;
+	RID probe_ubo; // decision 0137
+	RID probe_buffer; // 16 bytes: the rain at the camera, read back
+	static void _probe_readback(const Vector<uint8_t> &p_data);
 	RID shape_noise; // RGBA8 128^3
 	RID detail_noise; // RGBA8 32^3
 	RID white; // 1 x 1 for the atmosphere's tables when there is none
@@ -152,6 +156,9 @@ public:
 	// 0133) — centred at get_shadow_origin() (m), SHADOW_EXTENT on a side.
 	RID process_shadow(const ShadowParams &p_params);
 	Vector2 get_shadow_origin() const { return shadow_read_origin; }
+	// Showers (decision 0137): the rain the layer lets fall at the camera (p_params' camera, layer, wind and time), read
+	// back a frame or two later into FellowWeather::set_rain_here().
+	void process_probe(const ShadowParams &p_params);
 
 	FellowClouds();
 	~FellowClouds();

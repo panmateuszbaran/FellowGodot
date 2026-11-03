@@ -130,6 +130,10 @@ private:
 	float snow_sparkle = 1.0f;
 	float rainbow = 1.0f; // decision 0134: the rainbow's strength
 	float shafts = 1.0f; // decision 0135: the rain shafts' strength under the volumetric clouds
+	float showers = 0.0f; // decision 0137: 1: it rains at the camera only as the clouds above let it (0: everywhere)
+	float rain_here = 1.0f; // the share of the rain falling at the camera (showers), eased over SHOWER_TIME
+	bool rain_here_seen = false;
+	static constexpr float SHOWER_TIME = 2.0f; // s
 	float freeze = 0.0f; // decision 0136: 0..1, how much of the wet surfaces' water is ice
 	float frost = 0.0f; // 0..1: hoarfrost on what is exposed to the sky
 	float freezing_time = 600.0f; // s for the water to freeze at -5 degrees (a weather controller's ground model)
@@ -216,7 +220,9 @@ public:
 	void set_rain(float p_rain);
 	float get_rain() const { return rain; }
 	// What makes ripples on puddles and water: the rain's rate, none while it snows.
-	float get_ripple_rain() const { return precipitation == PRECIPITATION_RAIN ? rain : 0.0f; }
+	// The rain falling here: at the camera, under showers (decision 0137) as the clouds let it.
+	float get_ripple_rain() const { return precipitation == PRECIPITATION_RAIN ? rain * rain_here : 0.0f; }
+	float get_rain_here() const { return rain_here; }
 	void set_wetness(float p_wetness) { wetness = CLAMP(p_wetness, 0.0f, 1.0f); }
 	float get_wetness() const { return wetness; }
 	void set_wetness_follows_rain(bool p_enable) { wetness_follows_rain = p_enable; }
@@ -271,6 +277,8 @@ public:
 	float get_rainbow() const { return rainbow; }
 	void set_shafts(float p_shafts) { shafts = MAX(0.0f, p_shafts); }
 	float get_shafts() const { return shafts; }
+	void set_showers(float p_showers) { showers = CLAMP(p_showers, 0.0f, 1.0f); }
+	float get_showers() const { return showers; }
 	void set_freeze(float p_freeze) { freeze = CLAMP(p_freeze, 0.0f, 1.0f); }
 	float get_freeze() const { return freeze; }
 	void set_frost(float p_frost) { frost = CLAMP(p_frost, 0.0f, 1.0f); }
