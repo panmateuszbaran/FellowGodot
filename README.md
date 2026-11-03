@@ -50,21 +50,21 @@ features, nodes and (in Bistro) ray tracing on. Captions, settings and more imag
 
 Stock Godot 4.7.2 against FellowEngine with its defaults, frame time in ms. Measured on an Acer Predator PHN16S-71
 (RTX 5070 Ti Laptop GPU, Core Ultra 9 275HX, Windows 11) at 1920 × 1080 with the benchmark's "high" preset. Three
-runs per scene after a pass that fills the shader caches (`m30_f294_final`, build `9356d62`, milestone 30).
-FellowEngine was faster in every scene and every pair of runs except Stress Lab, which was within the runs' spread
-this time (2 of 3 pairs faster; −11.5 % in milestone 26's final check, `m26_f285_final`).
+runs per scene after a pass that fills the shader caches (`m35_f308_final`, build `1cb7529`, milestone 35).
+FellowEngine was faster in every scene and every pair of runs. The weather of milestones 32-35 costs nothing without its
+nodes: against milestone 30's build in the same session each scene was within its runs' spread (−0.3 % to +2.4 %).
 
 | scene | stock | FellowEngine | change |
 |---|---:|---:|---:|
-| Sponza | 13.399 | 6.132 | **−54.2 %** |
-| Bistro exterior | 6.297 | 4.192 | **−33.4 %** |
-| City Lab (18 800 meshes) | 2.854 | 2.117 | **−25.8 %** |
-| Crowd Lab (256 animated characters) | 5.811 | 4.418 | **−24.0 %** |
-| Bistro interior | 4.127 | 3.151 | **−23.6 %** |
-| Lights Lab | 2.942 | 2.254 | **−23.4 %** |
-| Foliage Lab | 3.505 | 2.880 | **−17.8 %** |
-| PBR Lab | 2.519 | 2.105 | **−16.4 %** |
-| Stress Lab | 4.792 | 4.661 | −2.7 % (within the spread) |
+| Sponza | 13.757 | 6.266 | **−54.5 %** |
+| Bistro exterior | 6.693 | 4.258 | **−36.4 %** |
+| City Lab (18 800 meshes) | 3.012 | 2.286 | **−24.1 %** |
+| Bistro interior | 4.313 | 3.286 | **−23.8 %** |
+| Lights Lab | 3.007 | 2.370 | **−21.2 %** |
+| Foliage Lab | 3.685 | 3.024 | **−17.9 %** |
+| Crowd Lab (256 animated characters) | 6.207 | 5.106 | **−17.7 %** |
+| PBR Lab | 2.600 | 2.235 | **−14.0 %** |
+| Stress Lab | 5.020 | 4.820 | **−4.0 %** |
 
 Where the time goes:
 

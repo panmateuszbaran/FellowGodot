@@ -9,6 +9,13 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 39 — wind-driven rain (2026-11-03)
+
+- `FellowRain3D.wind_driven` (decision 0139, 1): in a wind the shelter follows the drops' slant — the heightfield
+  looked up back along their drift as well — so walls facing the wind get wet under their eaves (and as wet as the
+  ground), the rain reaches in under an awning on the windward side and the lee stays dry beyond it. Nothing changes
+  below a drift of 0.2 m per metre of fall (a breeze of 1.8 m/s); not for snow. FellowBench: `--weather_wind_driven`.
+
 ## Milestone 38 — wetting and drying in patches (2026-11-03)
 
 - `FellowRain3D.drying_patches` (decision 0138, 1): between dry and wet the surfaces are wet in patches — the puddles'
