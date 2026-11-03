@@ -4712,6 +4712,9 @@ void RenderForwardClustered::_fellow_process_clouds(RenderDataRD *p_render_data,
 			params.flash_color = ls.color * exposure;
 			params.flash_radius = ls.radius;
 		}
+		// Rain shafts under the clouds (decision 0135).
+		params.precipitation = weather->get_state().shafts;
+		params.snow = weather->get_state().shafts_snow;
 	}
 	fellow_clouds->process(params);
 	fellow_clouds_history = true;

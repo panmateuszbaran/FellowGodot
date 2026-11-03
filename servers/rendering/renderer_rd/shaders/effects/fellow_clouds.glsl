@@ -40,6 +40,7 @@ layout(set = 0, binding = 0, std140) uniform Params {
 	vec4 flash; // a lightning flash (decision 0131): its position (world, m), the radius it lights (m)
 	vec4 flash_color; // its light (colour * energy); w: 1 when there is one
 	vec4 shadow; // the clouds' shadow map (decision 0133): its centre x, z (m), its side (m), the ground's height (m)
+	vec4 precip; // rain shafts (decision 0135): the rain's rate (0..1), 1 when it snows
 }
 params;
 
@@ -181,6 +182,14 @@ float ray_sphere_near(vec3 o, vec3 d, float r) {
 		return -1.0;
 	}
 	return -b - sqrt(disc);
+}
+
+// The clouds' local coverage over p's ground point (the weather field; 0 in the clear, 1 in a cloud's middle).
+float cloud_cover_at(vec3 p) {
+	vec3 q = p + vec3(params.shape.z, 0.0, params.shape.w) * params.sun_direction.w;
+	float w = textureLod(shape_noise, vec3(q.x, 0.0, q.z) * params.shape.x * WEATHER_SCALE, 0.0).r;
+	float wn = clamp((w - 0.70) * (1.0 / (0.14 * 3.46)) + 0.5, 0.0, 1.0);
+	return clamp((wn - (1.0 - params.layer.z)) * 2.0, 0.0, 1.0);
 }
 
 // Density at p (km, planet-centred); p_detail: with the eroded edges (the light samples skip them).
@@ -325,13 +334,6 @@ void main() {
 			t1 = ray_sphere_far(o, d, r_top);
 		}
 	}
-	if (t0 < 0.0 || t1 <= t0 || t0 > params.misc.x) {
-		imageStore(trace_dest, pos, vec4(0.0, 0.0, 0.0, 1.0));
-		return;
-	}
-	t1 = min(t1, params.misc.x);
-	const int STEPS = 64;
-	float dt = (t1 - t0) / float(STEPS);
 	float jitter = fract(52.9829189 * fract(dot(vec2(pos) + 5.588238 * float(int(params.misc.w) & 63), vec2(0.06711056, 0.00583715))));
 	vec3 sun = params.sun_direction.xyz;
 	float cos_theta = dot(d, sun);
@@ -343,6 +345,42 @@ void main() {
 		vec3 mid = textureLod(atmosphere_sky_view, vec2(0.25, 0.3), 0.0).rgb;
 		sky_top = (zenith + mid) * 0.5 * 3.14159265 * params.sun_color.rgb;
 	}
+	// Rain shafts (decision 0135): below the cloud base, under the clouds' dense parts, while it rains or snows — grey
+	// curtains in the distance (not within 2 km: the rain around the camera is its own), streaked along the fall, lit
+	// by the light under the clouds.
+	vec3 Ls = vec3(0.0);
+	float Ts = 1.0;
+	if (params.precip.x > 0.0 && r_o < r_bottom && t0 > 0.0) {
+		const int SHAFT_STEPS = 16;
+		float ts = min(t0, 40.0); // a curtain further than 40 km is lost in the haze
+		float sdt = ts / float(SHAFT_STEPS);
+		float snow = params.precip.y;
+		vec3 shaft_light = (sky_top * 0.25 + params.sun_color.rgb * (max(sun.y, 0.0) * 0.04)) * (mix(1.0, 2.0, snow) / (4.0 * 3.14159265));
+		vec3 fall = vec3(params.shape.z, 0.0, params.shape.w) * params.sun_direction.w;
+		for (int i = 0; i < SHAFT_STEPS; i++) {
+			float t = (float(i) + jitter) * sdt;
+			vec3 p = o + d * t;
+			float hb = (length(p) - PLANET_RADIUS) / max(params.layer.x, 0.05); // 0 at the ground, 1 at the cloud base
+			float dens = smoothstep(0.7, 0.95, cloud_cover_at(p)) * smoothstep(1.0, 3.0, t) * smoothstep(1.05, 0.8, hb) * smoothstep(40.0, 25.0, t);
+			if (dens <= 0.0) {
+				continue;
+			}
+			vec3 q = p + fall;
+			float streak = textureLod(shape_noise, vec3(q.x * 0.8, q.y * 0.08, q.z * 0.8) * (params.shape.x * 3.0), 0.0).g;
+			float sigma = dens * params.precip.x * (0.25 + 0.75 * streak) * 0.6; // per km at the heaviest rain
+			vec3 S = shaft_light * sigma;
+			float st = exp(-sigma * sdt);
+			Ls += Ts * (S - S * st) / max(sigma, 1e-5);
+			Ts *= st;
+		}
+	}
+	if (t0 < 0.0 || t1 <= t0 || t0 > params.misc.x) {
+		imageStore(trace_dest, pos, vec4(Ls, Ts));
+		return;
+	}
+	t1 = min(t1, params.misc.x);
+	const int STEPS = 64;
+	float dt = (t1 - t0) / float(STEPS);
 	vec3 L = vec3(0.0);
 	float T = 1.0;
 	float first_hit = -1.0;
@@ -404,7 +442,7 @@ void main() {
 		L *= fade;
 		T = mix(1.0, T, fade);
 	}
-	imageStore(trace_dest, pos, vec4(L, T));
+	imageStore(trace_dest, pos, vec4(Ls + Ts * L, Ts * T));
 }
 #endif
 

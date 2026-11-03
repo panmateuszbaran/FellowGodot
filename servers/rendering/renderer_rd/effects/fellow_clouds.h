@@ -74,6 +74,9 @@ public:
 		Vector3 flash_position; // world (m)
 		Color flash_color; // colour * energy, exposure included
 		float flash_radius = 1000.0f; // m
+		// Rain shafts (decision 0135): the rain's rate (0..1), and whether it snows.
+		float precipitation = 0.0f;
+		bool snow = false;
 	};
 
 	// The clouds' shadow map (decision 0133): the sun's light through the layer over the ground around the camera.
@@ -119,7 +122,8 @@ private:
 		float flash[4]; // position (m), radius (m)
 		float flash_color[4]; // colour * energy, on
 		float shadow[4]; // the shadow map's centre x, z (m), side (m), the ground's height (m)
-	}; // 288 bytes
+		float precip[4]; // rain shafts: the rain's rate, 1 when it snows
+	}; // 304 bytes
 
 	FellowCloudsShaderRD shader;
 	RID shader_version;

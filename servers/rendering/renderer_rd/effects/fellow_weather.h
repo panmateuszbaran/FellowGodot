@@ -72,6 +72,8 @@ public:
 		Vector2 tracks_origin; // m: the window's centre
 		float tracks_window = 0.0f; // m: its side (0: no tracks)
 		float rainbow = 0.0f; // the rain's rainbow (decision 0134): its strength times the rain seen lately
+		float shafts = 0.0f; // rain shafts (decision 0135): the rain's (or snow's) rate, times its shafts' strength
+		bool shafts_snow = false;
 	};
 
 	struct WindState {

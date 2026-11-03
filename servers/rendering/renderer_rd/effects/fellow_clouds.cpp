@@ -190,6 +190,8 @@ void FellowClouds::process(const Params &p_params) {
 		u.flash_color[2] = p_params.flash_color.b;
 		u.flash_color[3] = 1.0f;
 	}
+	u.precip[0] = CLAMP(p_params.precipitation, 0.0f, 1.0f);
+	u.precip[1] = p_params.snow ? 1.0f : 0.0f;
 	RD::get_singleton()->buffer_update(ubo, 0, sizeof(UBO), &u);
 	RD::Uniform u_params(RD::UNIFORM_TYPE_UNIFORM_BUFFER, 0, ubo);
 

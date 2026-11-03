@@ -129,6 +129,7 @@ private:
 	float melting_time = 1800.0f; // s to melt
 	float snow_sparkle = 1.0f;
 	float rainbow = 1.0f; // decision 0134: the rainbow's strength
+	float shafts = 1.0f; // decision 0135: the rain shafts' strength under the volumetric clouds
 	float rain_seen = 0.0f; // the rain lately (it fades over RAINBOW_TIME once the rain stops: the rain moving away)
 	static constexpr float RAINBOW_TIME = 90.0f; // s
 	float flake_speed = 1.1f; // m/s
@@ -265,6 +266,8 @@ public:
 	float get_snow_sparkle() const { return snow_sparkle; }
 	void set_rainbow(float p_rainbow) { rainbow = MAX(0.0f, p_rainbow); }
 	float get_rainbow() const { return rainbow; }
+	void set_shafts(float p_shafts) { shafts = MAX(0.0f, p_shafts); }
+	float get_shafts() const { return shafts; }
 	void set_flake_speed(float p_speed);
 	float get_flake_speed() const { return flake_speed; }
 	void set_flake_size(float p_size);
