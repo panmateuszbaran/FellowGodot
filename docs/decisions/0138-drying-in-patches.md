@@ -35,7 +35,11 @@ wetness as before). At a wetness of 0 or 1 the branch is skipped: the same image
 
 ## Results
 
-(RTX: to be filled.)
+**Cost** (RTX 5070 Ti Laptop, 1080p, Bistro exterior half dry — wetness 0.5, the ground held — even against in
+patches, 2 runs each, `m38_f313_patches`, fellow234): the depth pre-pass 0.603 → 0.617 ms, the opaque pass 1.434 →
+1.438 ms (+0.02 ms in the passes for five lookups while the ground dries); the frame 4.256 → 4.311 ms.
+
+(Showcase: to be filled.)
 
 ## Decision
 

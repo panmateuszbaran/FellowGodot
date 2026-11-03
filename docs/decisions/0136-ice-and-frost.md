@@ -57,7 +57,12 @@ it settles the ground frozen, and frosted under a clear sky when nothing falls.
 
 ## Results
 
-(RTX: to be filled.)
+**Cost** (RTX 5070 Ti Laptop, 1080p, Bistro exterior under a FellowWeather3D clear at −4 °C with the ground held, wet
+against frozen and frosted, 2 runs each, `m36_f313_ice`, fellow234): the depth pre-pass 0.765 → 0.821 ms (+0.06 ms;
+the frost's three lookups run there too), the opaque pass 1.648 / 1.642 ms; the frame 4.971 / 4.837 ms (the first
+build's runs noisy: not measurable).
+
+(Showcase: to be filled.)
 
 ## Decision
 

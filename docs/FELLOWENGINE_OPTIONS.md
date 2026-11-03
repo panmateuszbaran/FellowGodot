@@ -226,7 +226,9 @@ scene where the rain falls (Forward+):
   1; 0: an even wetness);
 * **wind-driven rain** (milestone 39, decision 0139): in a wind the shelter follows the drops' slant — walls facing
   the wind get wet under their eaves and as wet as the ground, the lee of a building stays drier (`wind_driven` 1;
-  nothing below a breeze of about 1.8 m/s).
+  nothing below a breeze of about 1.8 m/s);
+* **slush** (milestone 40, decision 0140): `slush` (0-1) soaks the snow cover with its meltwater — greyer, glossier,
+  no glints, its thin parts first; a FellowWeather3D sets it while the snow melts.
 
 Cost (RTX 5070 Ti Laptop, 1080p, Rain Lab): 0.36 ms of GPU time raining — screen-space reflections 0.13 ms more
 (wet surfaces are glossy enough for SSR; without SSR there is none of it), the wetting 0.12 ms (depth pre-pass and

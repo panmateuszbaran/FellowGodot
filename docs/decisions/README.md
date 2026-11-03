@@ -178,3 +178,4 @@ Status: KEEP | REWORK | REJECT | MEASURING      Branch / commit: ...      Toggle
 | [0137](0137-showers.md) | Showers: the rain at the camera only under the clouds' dense parts — a probe of the clouds' layer at the camera, read back to the rain node | `FellowRain3D.showers` | KEEP (opt-in) |
 | [0138](0138-drying-in-patches.md) | Wetting and drying in patches: between dry and wet the highs dry first and the puddles shrink to their deepest | `FellowRain3D.drying_patches` | KEEP (wetness 0 or 1: bit for bit) |
 | [0139](0139-wind-driven-rain.md) | Wind-driven rain: the shelter follows the drops' slant — windward walls wet under their eaves, the lee drier | `FellowRain3D.wind_driven` | KEEP (light wind: bit for bit) |
+| [0140](0140-slush.md) | Slush: melting snow soaks with its water — greyer, glossier, no glints; the weather controller's ground model | `FellowRain3D.slush` | KEEP (0: bit for bit) |

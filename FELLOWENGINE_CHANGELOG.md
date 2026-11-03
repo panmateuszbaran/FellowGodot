@@ -9,6 +9,12 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 40 — slush (2026-11-03)
+
+- `FellowRain3D.slush` (decision 0140): melting snow soaks with its meltwater — greyer, glossier, without glints, its
+  thin parts first. A FellowWeather3D raises it while snow lies above 0 °C (fully at 3 °C or in the rain) and lowers it
+  below freezing and under fresh snow. `--weather_ground` takes a fifth value, the slush.
+
 ## Milestone 39 — wind-driven rain (2026-11-03)
 
 - `FellowRain3D.wind_driven` (decision 0139, 1): in a wind the shelter follows the drops' slant — the heightfield
