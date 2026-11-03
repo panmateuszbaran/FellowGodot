@@ -1,7 +1,8 @@
 # FellowEngine showcase
 
 Real-time captures from FellowBench (`benchmarks/project`) on an RTX 5070 Ti Laptop GPU, builds `fellow214`
-(`0b7c021`) to `fellow222` (`4caccc2`, the snow, its tracks, the lightning and its clouds, the weather controller). Each was rendered at 1920 × 1080, supersampled 1.5× under TAA and
+(`0b7c021`) to `fellow236` (`084ba55`: the snow, its tracks, the lightning and its clouds, the weather controller and
+milestones 33-42's weather). Each was rendered at 1920 × 1080, supersampled 1.5× under TAA and
 settled for 300 frames, then scaled to 1600 × 900. The loops are 960 × 540 animated WebP.
 
 Nothing here is painted over. Each scene is the bench scene with FellowEngine's settings and nodes turned on, plus a
