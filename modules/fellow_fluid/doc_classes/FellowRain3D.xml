@@ -102,6 +102,9 @@
 		<member name="rain" type="float" setter="set_rain" getter="get_rain" default="0.6">
 			How hard it rains (0 to 1): the number of drops, the ripples on standing water and, with [member wetness_follows_rain], how fast surfaces get wet.
 		</member>
+		<member name="rainbow" type="float" setter="set_rainbow" getter="get_rainbow" default="1.0">
+			The rainbow's strength (0: none). While it rains, or lately rained (the rain seen fades over 90 s once it stops: the rain moving away), and the sun shines on it, the primary and secondary bows appear around the point opposite the sun, over the sky and over what stands far enough behind the rain. The clouds' shadow at the camera, or a [FellowWeather3D]'s sunlight, dims them. Decision record [code]docs/decisions/0134-rainbows.md[/code].
+		</member>
 		<member name="ripple_strength" type="float" setter="set_ripple_strength" getter="get_ripple_strength" default="1.0">
 			A scale of the ripples' slopes on puddles and on wet flat ground.
 		</member>

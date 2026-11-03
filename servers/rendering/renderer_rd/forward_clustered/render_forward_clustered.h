@@ -42,6 +42,7 @@
 #include "servers/rendering/renderer_rd/effects/fellow_rt_shadow.h"
 #include "servers/rendering/renderer_rd/effects/fellow_atmosphere.h"
 #include "servers/rendering/renderer_rd/effects/fellow_clouds.h"
+#include "servers/rendering/renderer_rd/effects/fellow_rainbow.h"
 #include "servers/rendering/renderer_rd/effects/fellow_contact_shadow.h"
 #include "servers/rendering/renderer_rd/effects/fellow_rtao.h"
 #include "servers/rendering/renderer_rd/effects/fellow_shadow_max_mip.h"
@@ -1471,11 +1472,13 @@ private:
 	void _fellow_update_atmosphere(RenderDataRD *p_render_data);
 	// FellowEngine volumetric clouds (decision 0109).
 	RendererRD::FellowClouds *fellow_clouds = nullptr;
+	RendererRD::FellowRainbow *fellow_rainbow = nullptr; // decision 0134
 	Projection fellow_clouds_last_view_projection;
 	bool fellow_clouds_history = false;
 	uint32_t fellow_clouds_frame = 0;
 	void _fellow_process_clouds(RenderDataRD *p_render_data, const Ref<RenderSceneBuffersRD> &p_render_buffers);
 	void _fellow_process_cloud_shadow(RenderDataRD *p_render_data, bool p_allowed); // decision 0133
+	void _fellow_process_rainbow(RenderDataRD *p_render_data, const Ref<RenderSceneBuffersRD> &p_render_buffers); // decision 0134
 	bool fellow_cloud_shadow_frame = false; // this render's colour passes read the clouds' shadow map
 	// FellowEngine gas volumes (decision 0118): this render's volumes (begin_frame() done), their shadow in the mask.
 	bool fellow_gas_frame = false;

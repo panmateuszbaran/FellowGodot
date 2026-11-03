@@ -4797,6 +4797,76 @@ void RenderForwardClustered::_fellow_process_cloud_shadow(RenderDataRD *p_render
 	fellow_cloud_shadow_frame = cs.active;
 }
 
+// FellowEngine rainbows (decision 0134): while a FellowRain3D has rained lately, the bows around the point opposite the
+// sun — the clouds' light, the first directional light that lights the sky — as bright as its light (exposed as the
+// scene's lights are), less the clouds' shadow at the camera, or a FellowWeather3D's sunlight without them.
+void RenderForwardClustered::_fellow_process_rainbow(RenderDataRD *p_render_data, const Ref<RenderSceneBuffersRD> &p_render_buffers) {
+	RendererRD::FellowWeather *weather = RendererRD::FellowWeather::get_singleton_if_exists();
+	if (!weather || weather->get_state().rainbow <= 0.0f || !p_render_data->lights) {
+		return;
+	}
+	RendererRD::LightStorage *light_storage = RendererRD::LightStorage::get_singleton();
+	RID light_instance;
+	for (uint32_t i = 0; i < (uint32_t)p_render_data->lights->size(); i++) {
+		RID li = (*p_render_data->lights)[i];
+		RID base = light_storage->light_instance_get_base_light(li);
+		if (light_storage->light_get_type(base) != RSE::LIGHT_DIRECTIONAL || light_storage->light_directional_get_sky_mode(base) == RSE::LIGHT_DIRECTIONAL_SKY_MODE_LIGHT_ONLY) {
+			continue;
+		}
+		light_instance = li;
+		break;
+	}
+	if (light_instance.is_null()) {
+		return;
+	}
+	RID light = light_storage->light_instance_get_base_light(light_instance);
+	const Vector3 sun = light_storage->light_instance_get_base_transform(light_instance).basis.get_column(Vector3::AXIS_Z).normalized();
+	if (sun.y < -0.01f) {
+		return; // the sun below the horizon
+	}
+	float energy = light_storage->light_get_param(light, RSE::LIGHT_PARAM_ENERGY);
+	if (RendererSceneRenderRD::get_singleton()->is_using_physical_light_units()) {
+		energy *= light_storage->light_get_param(light, RSE::LIGHT_PARAM_INTENSITY);
+	} else {
+		energy *= Math::PI; // as the colour passes' directional light (light_storage.cpp)
+	}
+	if (p_render_data->camera_attributes.is_valid()) {
+		energy *= RSG::camera_attributes->camera_attributes_get_exposure_normalization_factor(p_render_data->camera_attributes);
+	}
+	const RendererRD::FellowWeather::SkyState &sky_state = weather->get_sky_state();
+	const bool shadowing = weather->is_cloud_shadowing();
+	if (!shadowing && sky_state.sun_light.is_valid() && sky_state.sun_light == light) {
+		energy *= sky_state.sun_factor; // decision 0132
+	}
+	// The bow's peak a few hundredths of the sunlit white's brightness (E / pi): a fine bow against the sky, bright
+	// against a dark rain cloud.
+	const float k = 0.12f * MIN(weather->get_state().rainbow, 4.0f);
+	if (!fellow_rainbow) {
+		fellow_rainbow = memnew(RendererRD::FellowRainbow);
+	}
+	RendererRD::FellowRainbow::Params params;
+	params.color = p_render_buffers->get_internal_texture();
+	params.depth = p_render_buffers->get_depth_texture();
+	params.size = p_render_buffers->get_internal_size();
+	Projection correction;
+	correction.set_depth_correction(true, true, false);
+	params.view_projection = correction * _fellow_jittered_projection(p_render_data) * Projection(p_render_data->scene_data->cam_transform.affine_inverse());
+	params.camera_position = p_render_data->scene_data->cam_transform.origin;
+	params.sun_direction = sun;
+	params.light = light_storage->light_get_color(light).srgb_to_linear() * (energy * k);
+	if (shadowing) {
+		const RendererRD::FellowWeather::CloudShadowState &cs = weather->get_cloud_shadow();
+		const float sy = MAX(cs.sun_direction.y, 0.01f);
+		params.cloud_shadow = cs.texture;
+		params.cloud_shadow_origin = cs.origin;
+		params.cloud_shadow_inv_extent = 1.0f / MAX(cs.extent, 1.0f);
+		params.cloud_shadow_slope = Vector2(cs.sun_direction.x / sy, cs.sun_direction.z / sy);
+		params.cloud_shadow_strength = cs.strength;
+	}
+	RENDER_TIMESTAMP("FellowEngine Rainbow");
+	fellow_rainbow->process(params);
+}
+
 RID RenderForwardClustered::_fellow_process_contact_shadow(RenderDataRD *p_render_data, const Ref<RenderSceneBuffersRD> &p_render_buffers) {
 	RendererRD::LightStorage *light_storage = RendererRD::LightStorage::get_singleton();
 	// The first directional light of the frame, as LightStorage::update_light_buffers() numbers them (index 0).
@@ -6990,6 +7060,11 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		_fellow_process_clouds(p_render_data, rb);
 	} else {
 		fellow_clouds_history = false;
+	}
+	// FellowEngine rainbows (decision 0134): over the opaque surfaces and the sky, clouds included, before the
+	// transparent pass.
+	if (!use_msaa && !is_reflection_probe && rb->get_view_count() == 1) {
+		_fellow_process_rainbow(p_render_data, rb);
 	}
 	// FellowEngine gas volumes (decision 0118): smoke and fire, over the opaque surfaces and the sky, before the
 	// transparent pass and the screen texture's copy.
@@ -10956,6 +11031,10 @@ RenderForwardClustered::~RenderForwardClustered() {
 	if (fellow_clouds) {
 		memdelete(fellow_clouds);
 		fellow_clouds = nullptr;
+	}
+	if (fellow_rainbow) {
+		memdelete(fellow_rainbow);
+		fellow_rainbow = nullptr;
 	}
 	if (fellow_rt_shadow) {
 		memdelete(fellow_rt_shadow);

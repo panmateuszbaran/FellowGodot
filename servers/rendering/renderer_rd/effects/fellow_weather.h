@@ -71,6 +71,7 @@ public:
 		RID tracks_texture; // RD texture (r16f): the tracks' depth in m (negative: a rim), world-anchored, wrapping
 		Vector2 tracks_origin; // m: the window's centre
 		float tracks_window = 0.0f; // m: its side (0: no tracks)
+		float rainbow = 0.0f; // the rain's rainbow (decision 0134): its strength times the rain seen lately
 	};
 
 	struct WindState {

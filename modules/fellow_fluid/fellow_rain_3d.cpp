@@ -322,6 +322,7 @@ void FellowRain3D::_push_state() {
 	st.rain = get_ripple_rain();
 	st.snow = snow;
 	st.snow_sparkle = snow_sparkle;
+	st.rainbow = is_visible_in_tree() && active == this ? rainbow * rain_seen : 0.0f;
 	st.time = float(Math::fmod(time, 3600.0));
 	if (occlusion && occlusion->is_inside_tree()) {
 		st.occlusion_collider = occlusion->get_base();
@@ -459,6 +460,8 @@ void FellowRain3D::_notification(int p_what) {
 					wetness = MAX(0.0f, wetness - float(step) / MAX(drying_time, 0.01f));
 				}
 			}
+			// The rainbow (decision 0134): the rain seen lately, fading once it stops (the rain moving away).
+			rain_seen = MAX(get_ripple_rain(), rain_seen * float(Math::exp(-step / double(RAINBOW_TIME))));
 			if (snow_follows_precipitation) {
 				if (_is_snow() && rain > 0.0f) {
 					snow = MIN(1.0f, snow + float(step) * rain / MAX(snowing_time, 0.01f));
@@ -903,6 +906,8 @@ void FellowRain3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_melting_time"), &FellowRain3D::get_melting_time);
 	ClassDB::bind_method(D_METHOD("set_snow_sparkle", "sparkle"), &FellowRain3D::set_snow_sparkle);
 	ClassDB::bind_method(D_METHOD("get_snow_sparkle"), &FellowRain3D::get_snow_sparkle);
+	ClassDB::bind_method(D_METHOD("set_rainbow", "rainbow"), &FellowRain3D::set_rainbow);
+	ClassDB::bind_method(D_METHOD("get_rainbow"), &FellowRain3D::get_rainbow);
 	ClassDB::bind_method(D_METHOD("set_flake_speed", "speed"), &FellowRain3D::set_flake_speed);
 	ClassDB::bind_method(D_METHOD("get_flake_speed"), &FellowRain3D::get_flake_speed);
 	ClassDB::bind_method(D_METHOD("set_flake_size", "size"), &FellowRain3D::set_flake_size);
@@ -1000,6 +1005,7 @@ void FellowRain3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "snowing_time", PROPERTY_HINT_RANGE, "0,36000,0.1,suffix:s"), "set_snowing_time", "get_snowing_time");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "melting_time", PROPERTY_HINT_RANGE, "0,36000,0.1,suffix:s"), "set_melting_time", "get_melting_time");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "snow_sparkle", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_snow_sparkle", "get_snow_sparkle");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rainbow", PROPERTY_HINT_RANGE, "0,4,0.01,or_greater"), "set_rainbow", "get_rainbow");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "snow_depth", PROPERTY_HINT_RANGE, "0.001,2,0.001,suffix:m"), "set_snow_depth", "get_snow_depth");
 	ADD_SUBGROUP("Tracks", "track");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "tracks"), "set_tracks", "get_tracks");
