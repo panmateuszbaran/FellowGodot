@@ -28,7 +28,8 @@ Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.m
 - `FellowRain3D.showers` (decision 0137, 0 by default): with the volumetric clouds on, it rains at the camera only as
   the clouds above let it — under their dense parts, as the rain shafts hang — so showers pass over with the clouds'
   wind: the drops, the ripples, the wetting and the settling snow follow; the shafts and the rainbow keep the rain set.
-  A one-thread probe of the clouds' layer at the camera, read back asynchronously. FellowBench: `--weather_showers`.
+  A one-thread probe of the clouds' layer at the camera, read back asynchronously (0.010 ms on the RTX, `m37_f310`).
+  FellowBench: `--weather_showers`. Showcase: a shower passing over Bistro.
 
 ## Milestone 36 — ice and hoarfrost (2026-11-03)
 

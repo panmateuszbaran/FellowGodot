@@ -42,6 +42,8 @@ in [docs/](docs/) and the [showcase](docs/SHOWCASE.md).
   <img src="docs/showcase/loop_bistro_rainbow.webp" width="49%" alt="The rain clouds part over Bistro and a double rainbow appears">
   <img src="docs/showcase/water_rain_shafts.jpg" width="49%" alt="Curtains of rain hanging from the clouds over the far shore of a lake">
   <img src="docs/showcase/loop_water_rain_shafts.webp" width="49%" alt="Showers drifting with the clouds over the lake">
+  <img src="docs/showcase/bistro_showers_street.jpg" width="49%" alt="A shower over Bistro's street, its curtain of rain hanging from the cloud">
+  <img src="docs/showcase/loop_bistro_showers.webp" width="49%" alt="Showers passing over Bistro with the clouds">
 </p>
 
 These are real-time captures from the benchmark scenes on an RTX 5070 Ti Laptop GPU, with FellowEngine's visual

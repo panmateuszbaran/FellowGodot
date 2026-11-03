@@ -46,6 +46,16 @@ Milestone 35: in the controller's rain under a broken layer (coverage 0.78), gre
 clouds' dense parts and drift with them, the far shore hazy behind them; the sun 14° up. The camera stands in a dry gap
 (the drops around it not drawn, `--weather_drops=0`); milestone 37 makes that the rain's own doing (`showers`).
 
+## A shower passing over Bistro: `FellowRain3D.showers`
+
+<img src="showcase/bistro_showers_street.jpg" width="100%" alt="A shower over Bistro's street: its curtain of rain hanging from the cloud above the roofs, the cobbles wet">
+
+<img src="showcase/loop_bistro_showers.webp" width="100%" alt="Showers passing over Bistro with the clouds: the street wets as the rain arrives">
+
+Milestone 37: under broken rain clouds (coverage 0.82, the clouds' wind sped up to 0.2 km/s), it rains at the camera
+only under the clouds' dense parts: the street is dry in a gap, a shower arrives with the clouds — its curtain over the
+roofs — the drops start and the cobbles wet, and the sky brightens again as it moves on. 30 s of weather in 7.5 s.
+
 ## Bistro at night, in the rain
 
 <img src="showcase/bistro_night_rain_cafe.jpg" width="100%" alt="Bistro's cafe at night in the rain, wet cobblestones reflecting the lamps">

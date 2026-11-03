@@ -42,7 +42,14 @@ share stays 1 (the rain the same bit for bit, the probe not run).
 
 ## Results
 
-(RTX: to be filled.)
+**Cost** (RTX 5070 Ti Laptop, 1080p, Water Lab raining under a FellowWeather3D at coverage 0.82, the clouds on, 2 runs
+each, `m37_f310_showers`, fellow231): the probe 0.010 ms; the frame 4.149 ms without showers, 4.120 ms with them (the
+lake mostly under rain there; fewer drops when it is not).
+
+**Bistro** (`m37_s20_bistro_showers_loop`: the controller's rain at coverage 0.82 with showers, the clouds' wind 0.2
+km/s, the ground dry at the start, wetting in 4 s, 30 s from the street; `bistro_showers_street.jpg`,
+`loop_bistro_showers.webp`): the street dry under the gap, a shower arriving with its curtain hanging from the cloud
+over the roofs, the drops starting and the cobbles wetting, the sky brightening again as it moves on.
 
 ## Decision
 
