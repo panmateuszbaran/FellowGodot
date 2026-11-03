@@ -40,7 +40,10 @@ storm gets wet under its eaves. One more lookup of the heightfield per pixel whi
 against slanted, 2 runs each, `m39_f313_wind_driven`, fellow234): the depth pre-pass 0.696 → 0.742 ms, the opaque pass
 1.550 → 1.585 ms; the frame 4.908 → 4.968 ms (+0.06 ms).
 
-(Showcase: to be filled.)
+**Bistro in the rain** (`m39_s23_bistro_wind_driven`: the controller's rain, 6 m/s, and storm, 12 m/s, the drops not
+drawn, straight against slanted, five views; `bistro_wind_driven_ab.jpg`): the facades facing the wind darker and wet
+under their awnings and balconies, the street's wet edges moved along the kerbs, the lee walls as before. In the storm
+the lightning's flashes differ between the captures, so the rain's comparison is the cleaner one.
 
 ## Decision
 

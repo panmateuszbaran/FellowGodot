@@ -56,6 +56,14 @@ Milestone 37: under broken rain clouds (coverage 0.82, the clouds' wind sped up 
 only under the clouds' dense parts: the street is dry in a gap, a shower arrives with the clouds — its curtain over the
 roofs — the drops start and the cobbles wet, and the sky brightens again as it moves on. 30 s of weather in 7.5 s.
 
+## Rain on the wind: `FellowRain3D.wind_driven`
+
+<img src="showcase/bistro_wind_driven_ab.jpg" width="100%" alt="Bistro's facades in the rain: left, the shelter straight down; right, slanted with the wind - the facades facing it wet under their awnings">
+
+Milestone 39: in the controller's rain (6 m/s) the drops fall slanted, and the shelter follows them. Left, the rain's
+shelter straight down (`wind_driven` 0): the facades are half as wet as the street and dry under their awnings. Right,
+slanted: the walls facing the wind darker, wet under the awnings and balconies.
+
 ## Bistro at night, in the rain
 
 <img src="showcase/bistro_night_rain_cafe.jpg" width="100%" alt="Bistro's cafe at night in the rain, wet cobblestones reflecting the lamps">
