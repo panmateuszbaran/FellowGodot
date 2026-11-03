@@ -460,8 +460,13 @@ void FellowRain3D::_notification(int p_what) {
 					wetness = MAX(0.0f, wetness - float(step) / MAX(drying_time, 0.01f));
 				}
 			}
-			// The rainbow (decision 0134): the rain seen lately, fading once it stops (the rain moving away).
-			rain_seen = MAX(get_ripple_rain(), rain_seen * float(Math::exp(-step / double(RAINBOW_TIME))));
+			// The rainbow (decision 0134): the rain seen lately, fading once it stops (the rain moving away); none once it
+			// snows.
+			if (_is_snow() && rain > 0.0f) {
+				rain_seen = 0.0f;
+			} else {
+				rain_seen = MAX(get_ripple_rain(), rain_seen * float(Math::exp(-step / double(RAINBOW_TIME))));
+			}
 			if (snow_follows_precipitation) {
 				if (_is_snow() && rain > 0.0f) {
 					snow = MIN(1.0f, snow + float(step) * rain / MAX(snowing_time, 0.01f));
