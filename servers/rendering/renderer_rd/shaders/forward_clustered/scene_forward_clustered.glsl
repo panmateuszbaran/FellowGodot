@@ -3312,6 +3312,18 @@ void fragment_shader(in SceneData scene_data) {
 					float fellow_contact = texelFetch(sampler2D(fellow_rt_shadow_mask, SAMPLER_NEAREST_CLAMP), ivec2(gl_FragCoord.xy), 0).x;
 					shadow *= mix(1.0, fellow_contact, directional_lights.data[i].shadow_opacity);
 				}
+				// FellowEngine cloud shadows (decision 0133): the sun through the clouds over this point (the map holds the
+				// ground's; a point above it is moved down along the sun to the ground).
+				if (sc_fellow_cloud_shadow() && i == uint(fellow_weather.data.cloud_shadow2.x)) {
+					vec3 fellow_wp = (inv_view_matrix * vec4(vertex, 1.0)).xyz;
+					vec2 fellow_g = fellow_wp.xz - fellow_weather.data.cloud_shadow2.yz * (fellow_wp.y - fellow_weather.data.cloud_shadow2.w);
+					vec2 fellow_uv = (fellow_g - fellow_weather.data.cloud_shadow.xy) * fellow_weather.data.cloud_shadow.z + 0.5;
+					float fellow_cloud = textureLod(sampler2D(fellow_cloud_shadow, SAMPLER_LINEAR_CLAMP), fellow_uv, 0.0).r;
+					// Towards the map's edges (8 km away) the share of clear sky instead.
+					float fellow_edge = max(abs(fellow_uv.x - 0.5), abs(fellow_uv.y - 0.5));
+					fellow_cloud = mix(fellow_cloud, fellow_weather.data.cloud_shadow3.x, smoothstep(0.4, 0.5, fellow_edge));
+					shadow *= mix(1.0, fellow_cloud, fellow_weather.data.cloud_shadow.w);
+				}
 #endif
 
 				if (i < 4) {

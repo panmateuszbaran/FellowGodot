@@ -1475,6 +1475,8 @@ private:
 	bool fellow_clouds_history = false;
 	uint32_t fellow_clouds_frame = 0;
 	void _fellow_process_clouds(RenderDataRD *p_render_data, const Ref<RenderSceneBuffersRD> &p_render_buffers);
+	void _fellow_process_cloud_shadow(RenderDataRD *p_render_data, bool p_allowed); // decision 0133
+	bool fellow_cloud_shadow_frame = false; // this render's colour passes read the clouds' shadow map
 	// FellowEngine gas volumes (decision 0118): this render's volumes (begin_frame() done), their shadow in the mask.
 	bool fellow_gas_frame = false;
 	// FellowEngine (decision 0126): the depth texture's copy with the nearest depth's mip levels, bound for the transparent

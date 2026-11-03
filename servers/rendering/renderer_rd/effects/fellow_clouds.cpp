@@ -62,6 +62,7 @@ FellowClouds::FellowClouds() {
 	modes.push_back("\n#define MODE_TRACE\n");
 	modes.push_back("\n#define MODE_TEMPORAL\n");
 	modes.push_back("\n#define MODE_COMPOSITE\n");
+	modes.push_back("\n#define MODE_SHADOW\n");
 	shader.initialize(modes);
 	shader_version = shader.version_create();
 	for (int i = 0; i < MODE_MAX; i++) {
@@ -71,6 +72,7 @@ FellowClouds::FellowClouds() {
 	zeros.resize(sizeof(UBO));
 	zeros.fill(0);
 	ubo = RD::get_singleton()->uniform_buffer_create(sizeof(UBO), zeros);
+	shadow_ubo = RD::get_singleton()->uniform_buffer_create(sizeof(UBO), zeros);
 	shape_noise = _fellow_clouds_texture(RD::TEXTURE_TYPE_3D, RD::DATA_FORMAT_R8G8B8A8_UNORM, 128, 128, 128);
 	detail_noise = _fellow_clouds_texture(RD::TEXTURE_TYPE_3D, RD::DATA_FORMAT_R8G8B8A8_UNORM, 32, 32, 32);
 	white = _fellow_clouds_texture(RD::TEXTURE_TYPE_2D, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, 1, 1, 1);
@@ -107,7 +109,7 @@ void FellowClouds::_free_targets() {
 
 FellowClouds::~FellowClouds() {
 	_free_targets();
-	RID rids[] = { ubo, shape_noise, detail_noise, white };
+	RID rids[] = { ubo, shadow_ubo, shadow_map, shape_noise, detail_noise, white };
 	for (RID r : rids) {
 		if (r.is_valid()) {
 			RD::get_singleton()->free_rid(r);
@@ -242,4 +244,56 @@ void FellowClouds::process(const Params &p_params) {
 		RD::get_singleton()->compute_list_end();
 	}
 	RD::get_singleton()->draw_command_end_label();
+}
+
+RID FellowClouds::process_shadow(const ShadowParams &p_params) {
+	UniformSetCacheRD *uniform_set_cache = UniformSetCacheRD::get_singleton();
+	ERR_FAIL_NULL_V(uniform_set_cache, RID());
+	MaterialStorage *material_storage = MaterialStorage::get_singleton();
+	ERR_FAIL_NULL_V(material_storage, RID());
+	RID linear_repeat = material_storage->sampler_rd_get_default(RSE::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RSE::CANVAS_ITEM_TEXTURE_REPEAT_ENABLED);
+	if (shadow_map.is_null()) {
+		shadow_map = _fellow_clouds_texture(RD::TEXTURE_TYPE_2D, RD::DATA_FORMAT_R16_SFLOAT, SHADOW_SIZE, SHADOW_SIZE, 1);
+	}
+	// Centred on the camera, in whole texels (the map does not swim as the camera moves).
+	const float texel = SHADOW_EXTENT / float(SHADOW_SIZE);
+	shadow_origin = Vector2(Math::floor(p_params.camera_position.x / texel + 0.5f) * texel, Math::floor(p_params.camera_position.z / texel + 0.5f) * texel);
+
+	UBO u;
+	memset(&u, 0, sizeof(UBO));
+	const Vector3 sun = p_params.sun_direction.normalized();
+	u.sun_direction[0] = sun.x;
+	u.sun_direction[1] = sun.y;
+	u.sun_direction[2] = sun.z;
+	u.sun_direction[3] = p_params.time;
+	u.layer[0] = MAX(p_params.bottom_altitude, 0.0f);
+	u.layer[1] = MAX(p_params.thickness, 0.05f);
+	u.layer[2] = CLAMP(p_params.coverage, 0.0f, 1.0f);
+	u.layer[3] = MAX(p_params.density, 0.0f);
+	u.shape[0] = p_params.shape_scale;
+	u.shape[1] = p_params.detail_scale;
+	u.shape[2] = p_params.wind.x;
+	u.shape[3] = p_params.wind.y;
+	u.sizes[0] = SHADOW_SIZE;
+	u.sizes[1] = SHADOW_SIZE;
+	u.shadow[0] = shadow_origin.x;
+	u.shadow[1] = shadow_origin.y;
+	u.shadow[2] = SHADOW_EXTENT;
+	u.shadow[3] = p_params.ground_height;
+	RD::get_singleton()->buffer_update(shadow_ubo, 0, sizeof(UBO), &u);
+
+	RD::get_singleton()->draw_command_begin_label("FellowEngine Cloud Shadows");
+	RID shader_rd = shader.version_get_shader(shader_version, MODE_SHADOW);
+	RD::ComputeListID list = RD::get_singleton()->compute_list_begin();
+	RD::get_singleton()->compute_list_bind_compute_pipeline(list, pipelines[MODE_SHADOW]);
+	RD::Uniform u_params(RD::UNIFORM_TYPE_UNIFORM_BUFFER, 0, shadow_ubo);
+	RD::Uniform u_shape(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 1, Vector<RID>({ linear_repeat, shape_noise }));
+	RD::Uniform u_detail(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 2, Vector<RID>({ linear_repeat, detail_noise }));
+	RD::get_singleton()->compute_list_bind_uniform_set(list, uniform_set_cache->get_cache(shader_rd, 0, u_params, u_shape, u_detail), 0);
+	RD::Uniform u_dest(RD::UNIFORM_TYPE_IMAGE, 0, shadow_map);
+	RD::get_singleton()->compute_list_bind_uniform_set(list, uniform_set_cache->get_cache(shader_rd, 1, u_dest), 1);
+	RD::get_singleton()->compute_list_dispatch_threads(list, SHADOW_SIZE, SHADOW_SIZE, 1);
+	RD::get_singleton()->compute_list_end();
+	RD::get_singleton()->draw_command_end_label();
+	return shadow_map;
 }

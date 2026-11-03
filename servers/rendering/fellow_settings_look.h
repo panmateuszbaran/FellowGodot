@@ -104,6 +104,10 @@ inline float clouds_thickness() {
 inline float clouds_wind() {
 	return GLOBAL_GET_CACHED(float, "rendering/fellow/post/clouds/wind");
 }
+// post/clouds/shadows (decision 0133): how much of the sun the clouds' shadows take from the scene's surfaces (0: none).
+inline float clouds_shadows() {
+	return GLOBAL_GET_CACHED(float, "rendering/fellow/post/clouds/shadows");
+}
 // post/sharpen/strength (decision 0110): contrast-adaptive sharpening of the TAA output in the tone mapping pass (0: off).
 inline float sharpen_strength() {
 	return GLOBAL_GET_CACHED(float, "rendering/fellow/post/sharpen/strength");

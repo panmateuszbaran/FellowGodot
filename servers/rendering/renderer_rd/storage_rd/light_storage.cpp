@@ -841,9 +841,10 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 				}
 				float fellow_cloud_factor = 1.0f;
 				if (FellowWeather *weather = FellowWeather::get_singleton_if_exists()) {
-					// FellowEngine (decision 0132): the sun behind a FellowWeather3D's clouds, on the scene's surfaces.
+					// FellowEngine (decision 0132): the sun behind a FellowWeather3D's clouds, on the scene's surfaces — unless
+					// the clouds cast their own shadows this frame (decision 0133).
 					const FellowWeather::SkyState &sky = weather->get_sky_state();
-					if (sky.sun_light.is_valid() && sky.sun_light == light_instance->light) {
+					if (sky.sun_light.is_valid() && sky.sun_light == light_instance->light && !weather->get_cloud_shadow().active) {
 						fellow_cloud_factor = sky.sun_factor;
 						light_data.energy *= fellow_cloud_factor;
 					}

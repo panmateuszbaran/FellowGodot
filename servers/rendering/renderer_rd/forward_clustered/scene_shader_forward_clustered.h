@@ -171,6 +171,7 @@ public:
 				uint32_t fellow_ddgi_screen : 1; // decision 0083: DDGI's irradiance from its screen pass (opaque passes)
 				uint32_t fellow_contact_shadow : 1; // decision 0107: the first directional light's shadow times the contact mask
 				uint32_t fellow_wetness : 1; // decision 0124: materials wetted by the weather (FellowRain3D)
+				uint32_t fellow_cloud_shadow : 1; // decision 0133: the sun's shadow times the clouds' shadow map
 			};
 		};
 	};

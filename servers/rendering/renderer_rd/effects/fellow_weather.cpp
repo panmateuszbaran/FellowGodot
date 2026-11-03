@@ -159,10 +159,33 @@ RID FellowWeather::get_uniform_buffer() {
 			w1[i][3] = 1.0f;
 			u.wind_time[i] = w.time;
 		}
+		if (cloud_shadow.active && cloud_shadow.texture.is_valid()) {
+			u.cloud_shadow[0] = cloud_shadow.origin.x;
+			u.cloud_shadow[1] = cloud_shadow.origin.y;
+			u.cloud_shadow[2] = 1.0f / MAX(cloud_shadow.extent, 1.0f);
+			u.cloud_shadow[3] = CLAMP(cloud_shadow.strength, 0.0f, 1.0f);
+			const Vector3 sd = cloud_shadow.sun_direction;
+			const float sy = MAX(sd.y, 0.01f);
+			u.cloud_shadow2[0] = float(cloud_shadow.light_index);
+			u.cloud_shadow2[1] = sd.x / sy;
+			u.cloud_shadow2[2] = sd.z / sy;
+			u.cloud_shadow2[3] = cloud_shadow.ground_height;
+			u.cloud_shadow3[0] = CLAMP(cloud_shadow.beyond, 0.0f, 1.0f);
+		}
 		RD::get_singleton()->buffer_update(ubo, 0, sizeof(UBO), &u);
 		ubo_dirty = false;
 	}
 	return ubo;
+}
+
+void FellowWeather::set_cloud_shadow(const CloudShadowState &p_shadow) {
+	const CloudShadowState &c = cloud_shadow;
+	if (c.active != p_shadow.active || c.texture != p_shadow.texture || c.origin != p_shadow.origin || c.extent != p_shadow.extent ||
+			c.strength != p_shadow.strength || c.light_index != p_shadow.light_index || c.sun_direction != p_shadow.sun_direction ||
+			c.ground_height != p_shadow.ground_height || c.beyond != p_shadow.beyond) {
+		ubo_dirty = true;
+	}
+	cloud_shadow = p_shadow;
 }
 
 FellowWeather::FellowWeather() {

@@ -103,6 +103,20 @@ public:
 		float sun_factor = 1.0f;
 	};
 
+	// The volumetric clouds' shadow on the scene (decision 0133): the sun's light through the cloud layer over the ground
+	// around the camera, set by the renderer each frame before the colour passes.
+	struct CloudShadowState {
+		bool active = false;
+		RID texture; // RD texture (r16f): the sun's transmittance through the clouds
+		Vector2 origin; // m: the map's centre
+		float extent = 16000.0f; // m: its side
+		float strength = 1.0f;
+		uint32_t light_index = 0; // the sun's index among the frame's directional lights
+		Vector3 sun_direction = Vector3(0, 1, 0); // world, towards the sun
+		float ground_height = 0.0f; // m
+		float beyond = 1.0f; // the sun's share beyond the map (the clear sky's share)
+	};
+
 	// std140: the shader's FellowWeatherData.
 	struct UBO {
 		float params[4]; // wetness, puddles, rain, time
@@ -116,6 +130,9 @@ public:
 		float wind_time[4]; // this frame's and the previous frame's time of the wind
 		float snow[4]; // cover, sparkle, depth (m), tracks on (decision 0128, 0130)
 		float tracks[4]; // the tracks' window: centre x, z (m), 1 / side (m), half its side less a margin (m)
+		float cloud_shadow[4]; // the clouds' shadow map (decision 0133): centre x, z (m), 1 / side (1/m), strength
+		float cloud_shadow2[4]; // the sun's directional light index, its direction's x / y and z / y, the ground (m)
+		float cloud_shadow3[4]; // beyond the map: the sun's share there
 	};
 
 private:
@@ -125,6 +142,7 @@ private:
 	bool wind_has_prev = false;
 	LightningState lightning;
 	SkyState sky;
+	CloudShadowState cloud_shadow;
 	RID ubo;
 	bool ubo_dirty = true;
 
@@ -136,13 +154,16 @@ public:
 	void set_state(const State &p_state);
 	// Once per frame while a FellowWind3D is active; the previous call's state becomes the previous frame's.
 	void set_wind_state(const WindState &p_wind);
-	bool is_active() const { return state.enabled || wind.enabled; }
+	bool is_active() const { return state.enabled || wind.enabled || cloud_shadow.active; }
 	const State &get_state() const { return state; }
 	const WindState &get_wind_state() const { return wind; }
 	void set_lightning_state(const LightningState &p_lightning) { lightning = p_lightning; }
 	const LightningState &get_lightning_state() const { return lightning; }
 	void set_sky_state(const SkyState &p_sky) { sky = p_sky; }
 	const SkyState &get_sky_state() const { return sky; }
+	void set_cloud_shadow(const CloudShadowState &p_shadow);
+	const CloudShadowState &get_cloud_shadow() const { return cloud_shadow; }
+	RID get_cloud_shadow_texture() const { return cloud_shadow.active ? cloud_shadow.texture : RID(); }
 	RID get_uniform_buffer();
 	RID get_occlusion_texture() const;
 	RID get_ripple_texture() const;

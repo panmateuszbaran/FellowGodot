@@ -39,6 +39,7 @@ layout(set = 0, binding = 0, std140) uniform Params {
 	// (each frame one pixel of every 2 x 2 block traced, decision 0115); z: this frame's pixel in the block (0-3)
 	vec4 flash; // a lightning flash (decision 0131): its position (world, m), the radius it lights (m)
 	vec4 flash_color; // its light (colour * energy); w: 1 when there is one
+	vec4 shadow; // the clouds' shadow map (decision 0133): its centre x, z (m), its side (m), the ground's height (m)
 }
 params;
 
@@ -135,14 +136,21 @@ void main() {
 }
 #endif
 
-#if defined(MODE_TRACE)
+#if defined(MODE_TRACE) || defined(MODE_SHADOW)
 layout(set = 0, binding = 1) uniform sampler3D shape_noise;
 layout(set = 0, binding = 2) uniform sampler3D detail_noise;
+#endif
+#if defined(MODE_TRACE)
 layout(set = 0, binding = 3) uniform sampler2D atmosphere_transmittance;
 layout(set = 0, binding = 4) uniform sampler2D atmosphere_sky_view;
 layout(set = 0, binding = 5) uniform sampler2D depth_buffer;
 layout(rgba16f, set = 1, binding = 0) uniform restrict writeonly image2D trace_dest;
+#endif
+#if defined(MODE_SHADOW)
+layout(r16f, set = 1, binding = 0) uniform restrict writeonly image2D shadow_dest;
+#endif
 
+#if defined(MODE_TRACE) || defined(MODE_SHADOW)
 #define ATMOSPHERE_TOP 6460.0
 
 vec2 transmittance_uv(float r, float mu) {
@@ -212,6 +220,42 @@ float cloud_density(vec3 p, bool p_detail) {
 	}
 	return max(c, 0.0) * params.layer.w;
 }
+#endif
+
+#if defined(MODE_SHADOW)
+// The clouds' shadow map (decision 0133): for each texel, a point on the ground around the camera, the sun's light that
+// passes the cloud layer above it towards the sun (with the eroded edges, as the clouds are drawn: a sun seen past a
+// cloud's edge lights the ground). The scene's surfaces multiply the sun by it.
+void main() {
+	ivec2 pos = ivec2(gl_GlobalInvocationID.xy);
+	if (any(greaterThanEqual(pos, params.sizes.xy))) {
+		return;
+	}
+	vec3 sun = params.sun_direction.xyz;
+	if (sun.y < 0.01) {
+		imageStore(shadow_dest, pos, vec4(1.0));
+		return;
+	}
+	vec2 xz = params.shadow.xy + ((vec2(pos) + 0.5) / vec2(params.sizes.xy) - 0.5) * params.shadow.z;
+	// Planet-centred km, as the trace places the camera (its height above the ground: here 0).
+	vec3 o = vec3(xz.x * 0.001, PLANET_RADIUS, xz.y * 0.001);
+	float r_bottom = PLANET_RADIUS + params.layer.x;
+	float t0 = max(ray_sphere_far(o, sun, r_bottom), 0.0);
+	float t1 = ray_sphere_far(o, sun, r_bottom + params.layer.y);
+	const int STEPS = 32;
+	float dt = max(t1 - t0, 0.0) / float(STEPS);
+	float od = 0.0;
+	for (int i = 0; i < STEPS; i++) {
+		od += cloud_density(o + sun * (t0 + (float(i) + 0.5) * dt), true) * EXTINCTION * dt;
+		if (od > 10.0) {
+			break; // no light left
+		}
+	}
+	imageStore(shadow_dest, pos, vec4(exp(-od)));
+}
+#endif
+
+#if defined(MODE_TRACE)
 
 float hg(float g, float cos_theta) {
 	float g2 = g * g;

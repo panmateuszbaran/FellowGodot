@@ -76,6 +76,23 @@ public:
 		float flash_radius = 1000.0f; // m
 	};
 
+	// The clouds' shadow map (decision 0133): the sun's light through the layer over the ground around the camera.
+	struct ShadowParams {
+		Vector3 camera_position;
+		float ground_height = 0.0;
+		Vector3 sun_direction; // towards the sun
+		float time = 0.0;
+		float bottom_altitude = 1.5; // km
+		float thickness = 2.5;
+		float coverage = 0.45;
+		float density = 1.0;
+		float shape_scale = 0.16;
+		float detail_scale = 1.0;
+		Vector2 wind = Vector2(0.01, 0.003); // km / s
+	};
+	static constexpr int SHADOW_SIZE = 512;
+	static constexpr float SHADOW_EXTENT = 16000.0f; // m: the map's side (31 m texels)
+
 private:
 	enum Mode {
 		MODE_NOISE_SHAPE,
@@ -83,6 +100,7 @@ private:
 		MODE_TRACE,
 		MODE_TEMPORAL,
 		MODE_COMPOSITE,
+		MODE_SHADOW,
 		MODE_MAX,
 	};
 
@@ -100,12 +118,16 @@ private:
 		int32_t flags[4];
 		float flash[4]; // position (m), radius (m)
 		float flash_color[4]; // colour * energy, on
-	}; // 272 bytes
+		float shadow[4]; // the shadow map's centre x, z (m), side (m), the ground's height (m)
+	}; // 288 bytes
 
 	FellowCloudsShaderRD shader;
 	RID shader_version;
 	RID pipelines[MODE_MAX];
 	RID ubo;
+	RID shadow_ubo; // decision 0133: the shadow pass's own, written before the frame's colour passes
+	RID shadow_map; // R16F SHADOW_SIZE^2
+	Vector2 shadow_origin; // m
 	RID shape_noise; // RGBA8 128^3
 	RID detail_noise; // RGBA8 32^3
 	RID white; // 1 x 1 for the atmosphere's tables when there is none
@@ -119,6 +141,9 @@ private:
 
 public:
 	void process(const Params &p_params);
+	// Writes the shadow map for this frame; returns it, centred at get_shadow_origin() (m), SHADOW_EXTENT on a side.
+	RID process_shadow(const ShadowParams &p_params);
+	Vector2 get_shadow_origin() const { return shadow_origin; }
 
 	FellowClouds();
 	~FellowClouds();

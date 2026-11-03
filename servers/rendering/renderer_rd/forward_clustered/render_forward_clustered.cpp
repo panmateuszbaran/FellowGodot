@@ -554,6 +554,7 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 			pipeline_specialization.fellow_ddgi = 0;
 			pipeline_specialization.fellow_rt_reflections = 0;
 			pipeline_specialization.fellow_ddgi_screen = 0;
+			pipeline_specialization.fellow_cloud_shadow = 0; // decision 0133: colour pass code
 		}
 
 		pipeline_key.color_pass_flags = 0;
@@ -4717,6 +4718,75 @@ void RenderForwardClustered::_fellow_process_clouds(RenderDataRD *p_render_data,
 	fellow_clouds_last_view_projection = params.view_projection;
 }
 
+// FellowEngine cloud shadows (decision 0133): the volumetric clouds' shadow map for this render, with the layer the
+// clouds pass will draw (a FellowWeather3D's coverage and density, or the project settings') and its sun — the first
+// directional light that lights the sky, as the clouds' — and that light's index among the frame's directional lights
+// (as LightStorage::update_light_buffers() numbers them), for the colour passes.
+void RenderForwardClustered::_fellow_process_cloud_shadow(RenderDataRD *p_render_data, bool p_allowed) {
+	fellow_cloud_shadow_frame = false;
+	RendererRD::FellowWeather::CloudShadowState cs;
+	RID light_instance;
+	uint32_t light_index = 0;
+	if (p_allowed && Fellow::clouds_enabled() && Fellow::clouds_shadows() > 0.0f && p_render_data->lights) {
+		RendererRD::LightStorage *light_storage = RendererRD::LightStorage::get_singleton();
+		uint32_t directional = 0;
+		for (uint32_t i = 0; i < (uint32_t)p_render_data->lights->size(); i++) {
+			RID li = (*p_render_data->lights)[i];
+			RID base = light_storage->light_instance_get_base_light(li);
+			if (light_storage->light_get_type(base) != RSE::LIGHT_DIRECTIONAL || light_storage->light_directional_get_sky_mode(base) == RSE::LIGHT_DIRECTIONAL_SKY_MODE_SKY_ONLY) {
+				continue; // not in the directional light buffer
+			}
+			if (directional >= RendererSceneRender::MAX_DIRECTIONAL_LIGHTS) {
+				break;
+			}
+			if (light_storage->light_directional_get_sky_mode(base) != RSE::LIGHT_DIRECTIONAL_SKY_MODE_LIGHT_ONLY) {
+				light_instance = li;
+				light_index = directional;
+				break;
+			}
+			directional++;
+		}
+		if (light_instance.is_valid()) {
+			if (!fellow_clouds) {
+				fellow_clouds = memnew(RendererRD::FellowClouds);
+			}
+			RendererRD::FellowClouds::ShadowParams sp;
+			sp.camera_position = p_render_data->scene_data->cam_transform.origin;
+			sp.ground_height = 0.0f;
+			sp.sun_direction = light_storage->light_instance_get_base_transform(light_instance).basis.get_column(Vector3::AXIS_Z).normalized();
+			sp.time = float(time);
+			sp.coverage = Fellow::clouds_coverage();
+			sp.density = Fellow::clouds_density();
+			if (RendererRD::FellowWeather *weather = RendererRD::FellowWeather::get_singleton_if_exists()) {
+				const RendererRD::FellowWeather::SkyState &weather_sky = weather->get_sky_state();
+				if (weather_sky.active) {
+					sp.coverage = weather_sky.coverage;
+					sp.density = weather_sky.density;
+				}
+			}
+			sp.bottom_altitude = Fellow::clouds_altitude();
+			sp.thickness = Fellow::clouds_thickness();
+			const float wind = Fellow::clouds_wind();
+			sp.wind = Vector2(wind, wind * 0.3f);
+			RENDER_TIMESTAMP("FellowEngine Cloud Shadows");
+			cs.texture = fellow_clouds->process_shadow(sp);
+			cs.active = cs.texture.is_valid();
+			cs.origin = fellow_clouds->get_shadow_origin();
+			cs.extent = RendererRD::FellowClouds::SHADOW_EXTENT;
+			cs.strength = MIN(Fellow::clouds_shadows(), 1.0f);
+			cs.light_index = light_index;
+			cs.sun_direction = sp.sun_direction;
+			cs.ground_height = sp.ground_height;
+			cs.beyond = 1.0f - CLAMP(sp.coverage, 0.0f, 1.0f);
+		}
+	}
+	RendererRD::FellowWeather *weather = cs.active ? RendererRD::FellowWeather::get_singleton() : RendererRD::FellowWeather::get_singleton_if_exists();
+	if (weather) {
+		weather->set_cloud_shadow(cs);
+	}
+	fellow_cloud_shadow_frame = cs.active;
+}
+
 RID RenderForwardClustered::_fellow_process_contact_shadow(RenderDataRD *p_render_data, const Ref<RenderSceneBuffersRD> &p_render_buffers) {
 	RendererRD::LightStorage *light_storage = RendererRD::LightStorage::get_singleton();
 	// The first directional light of the frame, as LightStorage::update_light_buffers() numbers them (index 0).
@@ -6337,6 +6407,10 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	_update_dirty_geometry_pipelines();
 
 	RID radiance_texture;
+	// FellowEngine cloud shadows (decision 0133): the map the colour passes read, before them (every render: a render
+	// without them turns them off).
+	_fellow_process_cloud_shadow(p_render_data, rb.is_valid() && rb->get_view_count() == 1 && !is_reflection_probe && is_environment(p_render_data->environment) && get_debug_draw_mode() != RSE::VIEWPORT_DEBUG_DRAW_OVERDRAW);
+
 	bool draw_sky = false;
 	bool draw_sky_fog_only = false;
 	// We invert luminance_multiplier for sky so that we can combine it with exposure value.
@@ -6472,6 +6546,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		RendererRD::FellowWeather *weather = RendererRD::FellowWeather::get_singleton_if_exists();
 		// The snow's cover too (decision 0128).
 		base_specialization.fellow_wetness = weather && weather->get_state().enabled && (weather->get_state().wetness > 0.0f || weather->get_state().snow > 0.0f);
+		base_specialization.fellow_cloud_shadow = fellow_cloud_shadow_frame; // decision 0133
 	}
 	base_specialization.fellow_light_fields_early = false; // set after the lights are set up (below)
 	base_specialization.fellow_light_prefetch_next = false;
@@ -9173,6 +9248,13 @@ RID RenderForwardClustered::_setup_render_pass_uniform_set(RenderListType p_rend
 		u_tracks.uniform_type = RD::UNIFORM_TYPE_TEXTURE;
 		u_tracks.append_id(tracks.is_valid() ? tracks : texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_BLACK));
 		uniforms.push_back(u_tracks);
+		// The clouds' shadow (decision 0133): read by colour passes specialized with fellow_cloud_shadow.
+		RID cloud_shadow = (weather && fellow_cloud_shadow_frame) ? weather->get_cloud_shadow_texture() : RID();
+		RD::Uniform u_cloud_shadow;
+		u_cloud_shadow.binding = 54;
+		u_cloud_shadow.uniform_type = RD::UNIFORM_TYPE_TEXTURE;
+		u_cloud_shadow.append_id(cloud_shadow.is_valid() ? cloud_shadow : texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_WHITE));
+		uniforms.push_back(u_cloud_shadow);
 	}
 
 	return UniformSetCacheRD::get_singleton()->get_cache_vec(scene_shader.default_shader_rd, RENDER_PASS_UNIFORM_SET, uniforms);

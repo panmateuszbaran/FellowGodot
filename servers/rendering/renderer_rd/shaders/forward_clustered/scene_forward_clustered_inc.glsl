@@ -291,6 +291,11 @@ bool sc_fellow_wetness() {
 	return ((sc_packed_2() >> 6) & 1U) != 0;
 }
 
+// FellowEngine cloud shadows (decision 0133): the colour passes multiply the sun's shadow by the clouds' shadow map.
+bool sc_fellow_cloud_shadow() {
+	return ((sc_packed_2() >> 7) & 1U) != 0;
+}
+
 // FellowEngine DDGI (decision 0083): the colour passes take the ambient light from the probe volume.
 bool sc_fellow_ddgi() {
 	return ((sc_packed_2() >> 2) & 1U) != 0;
@@ -804,6 +809,9 @@ struct FellowWeatherData {
 	vec4 wind_time; // this frame's and the previous frame's time of the wind (s)
 	vec4 snow; // the snow's cover (0-1), its sparkle (decision 0128), its depth (m), tracks on (decision 0130)
 	vec4 tracks; // the tracks' window: centre x, z (m), 1 / side (m), half its side less a margin (m)
+	vec4 cloud_shadow; // the clouds' shadow map (decision 0133): centre x, z (m), 1 / side (1/m), strength
+	vec4 cloud_shadow2; // the sun's directional light index, its direction's x / y and z / y, the ground's height (m)
+	vec4 cloud_shadow3; // beyond the map: the sun's share there (the clear sky's share)
 };
 layout(set = 1, binding = 49, std140) uniform FellowWeatherBlock {
 	FellowWeatherData data;
@@ -815,6 +823,8 @@ layout(set = 1, binding = 51) uniform texture2D fellow_rain_ripples;
 layout(set = 1, binding = 52) uniform texture2D fellow_wind_gusts;
 // The snow's tracks (decision 0130): their depth in m (negative: a rim), world-anchored, wrapping.
 layout(set = 1, binding = 53) uniform texture2D fellow_snow_tracks;
+// The volumetric clouds' shadow (decision 0133): the sun's transmittance through the cloud layer over the ground.
+layout(set = 1, binding = 54) uniform texture2D fellow_cloud_shadow;
 
 #endif
 
