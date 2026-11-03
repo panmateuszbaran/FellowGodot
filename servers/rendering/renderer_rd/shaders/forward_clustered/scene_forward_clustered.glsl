@@ -1729,7 +1729,7 @@ void fellow_snow_cover(in SceneData p_scene, in FellowWeatherData w, float snow,
 		h ^= h >> 16u;
 		float r = float(h & 0xffffu) / 65535.0;
 		float px = exp2(wet_lod) * (1.0 / 256.0); // metres per pixel
-		float k = w.snow.y * cover * (1.0 - packed) * smoothstep(0.016, 0.006, px) * step(0.95, r);
+		float k = w.snow.y * cover * (1.0 - packed) * (1.0 - w.frost.w) * smoothstep(0.016, 0.006, px) * step(0.95, r);
 		if (k > 0.0) {
 			vec3 t = vec3(float((h >> 16u) & 0xffu), float((h >> 24u) & 0xffu), float(h & 0xffu)) / 127.5 - 1.0;
 			sn = normalize(mix(sn, normalize(sn + t * 0.5), k));
@@ -1738,7 +1738,15 @@ void fellow_snow_cover(in SceneData p_scene, in FellowWeatherData w, float snow,
 	}
 	mat4 view = transpose(mat4(p_scene.view_matrix[0], p_scene.view_matrix[1], p_scene.view_matrix[2], vec4(0.0, 0.0, 0.0, 1.0)));
 	r_normal = normalize(mat3(view) * normalize(mix(nw, sn, cover)));
-	r_albedo = mix(r_albedo, vec3(0.86, 0.89, 0.93) * (1.0 - 0.3 * packed), cover);
+	vec3 snow_albedo = vec3(0.86, 0.89, 0.93) * (1.0 - 0.3 * packed);
+	if (w.frost.w > 0.0) {
+		// Slush (decision 0140): melting snow soaks with its water — greyer (wet snow's albedo is lower), glossier, no
+		// glints, its thin parts first (where the cover is partial, the water shows).
+		float sl = w.frost.w * mix(1.0, 0.7, smoothstep(0.5, 1.0, cover));
+		snow_albedo = mix(snow_albedo, vec3(0.45, 0.48, 0.52), sl * 0.85);
+		rough = mix(rough, 0.25, sl);
+	}
+	r_albedo = mix(r_albedo, snow_albedo, cover);
 	r_roughness = mix(r_roughness, rough, cover);
 	r_metallic = mix(r_metallic, 0.0, cover);
 }

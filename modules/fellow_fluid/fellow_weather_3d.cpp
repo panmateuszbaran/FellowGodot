@@ -502,10 +502,25 @@ void FellowWeather3D::_apply_ground(FellowRain3D *p_rain, double p_delta) {
 		freeze = MAX(0.0f, freeze - dt * 2.0f * MAX(t / 5.0f, 0.2f) / ft);
 		frost = MAX(0.0f, frost - dt * (4.0f * MAX(t / 5.0f, 0.2f) + 20.0f * rain) / ft);
 	}
+	// Slush (decision 0140): snow on the ground soaks as it melts — at 3 degrees and above, or in the rain, fully —
+	// over a twentieth of freezing_time; below freezing it sets again (more slowly) and fresh snow covers it.
+	float slush = p_rain->get_slush();
+	{
+		float target = 0.0f;
+		if (snow > 0.0f && t > 0.0f) {
+			target = MIN(1.0f, t / 3.0f + rain * 2.0f);
+		}
+		const float rate = dt * (target > slush ? 20.0f : (t < 0.0f ? 4.0f : 20.0f)) / ft;
+		slush = target > slush ? MIN(target, slush + rate) : MAX(target, slush - rate);
+		if (snowfall > 0.0f && t <= 1.0f) {
+			slush = MAX(0.0f, slush - dt * snowfall * 10.0f / MAX(p_rain->get_snowing_time(), 0.01f));
+		}
+	}
 	p_rain->set_wetness(wet);
 	p_rain->set_snow(snow);
 	p_rain->set_freeze(freeze);
 	p_rain->set_frost(frost);
+	p_rain->set_slush(slush);
 }
 
 void FellowWeather3D::_restore_environment() {

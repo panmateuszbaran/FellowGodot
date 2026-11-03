@@ -325,6 +325,7 @@ void FellowRain3D::_push_state() {
 	st.freeze = freeze;
 	st.frost = frost;
 	st.drying_patches = drying_patches;
+	st.slush = slush;
 	// Wind-driven rain (decision 0139): the drops' drift per metre of fall, the wind they were given over their speed;
 	// from a drift of 0.2 (a breeze of 1.8 m/s at the drops' 9 m/s: the rain as good as vertical) to fully slanted at
 	// 0.6 (5.4 m/s). Not for snow.
@@ -957,6 +958,8 @@ void FellowRain3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_drying_patches"), &FellowRain3D::get_drying_patches);
 	ClassDB::bind_method(D_METHOD("set_wind_driven", "amount"), &FellowRain3D::set_wind_driven);
 	ClassDB::bind_method(D_METHOD("get_wind_driven"), &FellowRain3D::get_wind_driven);
+	ClassDB::bind_method(D_METHOD("set_slush", "slush"), &FellowRain3D::set_slush);
+	ClassDB::bind_method(D_METHOD("get_slush"), &FellowRain3D::get_slush);
 	ClassDB::bind_method(D_METHOD("get_freezing_time"), &FellowRain3D::get_freezing_time);
 	ClassDB::bind_method(D_METHOD("set_shafts", "shafts"), &FellowRain3D::set_shafts);
 	ClassDB::bind_method(D_METHOD("get_shafts"), &FellowRain3D::get_shafts);
@@ -1068,6 +1071,7 @@ void FellowRain3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "freezing_time", PROPERTY_HINT_RANGE, "0,36000,0.1,suffix:s"), "set_freezing_time", "get_freezing_time");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "drying_patches", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_drying_patches", "get_drying_patches");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "wind_driven", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_wind_driven", "get_wind_driven");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "slush", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_slush", "get_slush");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "snow_depth", PROPERTY_HINT_RANGE, "0.001,2,0.001,suffix:m"), "set_snow_depth", "get_snow_depth");
 	ADD_SUBGROUP("Tracks", "track");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "tracks"), "set_tracks", "get_tracks");

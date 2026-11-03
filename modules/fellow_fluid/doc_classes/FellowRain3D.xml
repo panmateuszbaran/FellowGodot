@@ -135,6 +135,9 @@
 		<member name="showers" type="float" setter="set_showers" getter="get_showers" default="0.0">
 			Showers (0-1): with the volumetric clouds on, it rains at the camera only as the clouds above let it — where their layer is dense (the rain shafts' share: none below 0.7 of their local coverage, all of it from 0.95), eased over 2 s as showers pass with the clouds' wind. The drops, the ripples, the wetting and the snow's settling follow it; the rain shafts and the rainbow keep the [member rain] set. At 0 it rains everywhere as set; without the clouds too. See [method get_rain_here].
 		</member>
+		<member name="slush" type="float" setter="set_slush" getter="get_slush" default="0.0">
+			How much the [member snow] cover is soaked with its meltwater (0-1): greyer, glossier, without glints, its thin parts first. A [FellowWeather3D] sets it while the snow melts (fully at 3 °C and above, or in the rain).
+		</member>
 		<member name="snow" type="float" setter="set_snow" getter="get_snow" default="0.0">
 			The snow cover, from 0 to 1: what faces up is covered where the snow falls (not under roofs: the heightfield of [method get_occlusion]) — patchy while thin, everything facing up once deep, nothing on slopes steeper than 60 degrees. Fresh snow: white, rough, smooth (it fills the materials' relief) with gentle undulations, glinting by [member snow_sparkle]. Opaque materials on the Forward+ renderer, in the depth pre-pass and the colour pass, after their own code.
 		</member>
