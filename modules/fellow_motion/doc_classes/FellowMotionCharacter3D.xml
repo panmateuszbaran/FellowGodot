@@ -87,6 +87,9 @@
 		<member name="desired_velocity" type="Vector3" setter="set_desired_velocity" getter="get_desired_velocity" default="Vector3(0, 0, 0)">
 			Where and how fast to go (its ground part; up to [member max_speed]). Zero stops.
 		</member>
+		<member name="get_up" type="bool" setter="set_get_up" getter="is_get_up" default="true">
+			When the pose is on the ground (the hips below three quarters of the standing height or the head below four fifths: the model's training data has lying and crawling, and a target ahead of a character on the ground keeps it there), the next segment's target is a standing pose a little ahead, and that segment plays to its transition point without being re-planned. [method get_stats] counts them ([code]get_ups[/code]).
+		</member>
 		<member name="idle_motion" type="bool" setter="set_idle_motion" getter="is_idle_motion" default="true">
 			Standing still, keep generating small idle segments (off: the last pose holds).
 		</member>

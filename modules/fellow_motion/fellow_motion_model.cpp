@@ -497,7 +497,7 @@ Error FellowMotionModel::load(const String &p_path, int p_max_batch) {
 	int sg = int(rd->limit_get(RD::LIMIT_SUBGROUP_SIZE));
 	bool sg_fixed = sg > 0 && int(rd->limit_get(RD::LIMIT_SUBGROUP_MIN_SIZE)) == sg && int(rd->limit_get(RD::LIMIT_SUBGROUP_MAX_SIZE)) == sg;
 	bool coop_device = rd->has_feature(RD::SUPPORTS_FELLOW_COOPERATIVE_MATRIX_F16);
-	coop_active = cooperative_matrix && weights_f16 && sg_fixed && (sg == 8 || sg == 16 || sg == 32 || sg == 64) && coop_device;
+	coop_active = cooperative_matrix && weights_f16 && sg_fixed && (sg == 16 || sg == 32 || sg == 64) && coop_device;
 	coop_note = coop_active ? String() : (!cooperative_matrix ? String("off") : !weights_f16 ? String("fp32 weights") : !coop_device ? String("the device has no 16x16x16 fp16 cooperative matrices") : vformat("subgroup size %d (%d-%d) not fixed", sg, int(rd->limit_get(RD::LIMIT_SUBGROUP_MIN_SIZE)), int(rd->limit_get(RD::LIMIT_SUBGROUP_MAX_SIZE))));
 	shader_file.instantiate();
 	Error err = shader_file->parse_versions_from_text(fellow_motion_shader_glsl, "#define SGSIZE " + itos(MAX(sg, 8)) + "\n");

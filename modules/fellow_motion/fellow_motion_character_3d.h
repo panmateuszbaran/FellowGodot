@@ -64,6 +64,7 @@ private:
 		LocalVector<float> contacts;
 		int count = 0;
 		int transition_early = 0;
+		bool get_up = false; // towards a standing pose from the ground: not re-planned before its transition
 		double time = 0.0;
 		bool valid() const { return count > 0; }
 		double duration() const { return MAX(0, count - 1 - transition_early) / 30.0; }
@@ -86,6 +87,7 @@ private:
 	int max_batch = 32;
 	Color body_color = Color(0.62, 0.66, 0.72);
 	bool idle_motion = true;
+	bool get_up = true;
 
 	Ref<FellowMotionService> service;
 	const FellowMotionRig *rig = nullptr;
@@ -98,6 +100,9 @@ private:
 	LocalVector<Xf> history; // [32][J], oldest first
 	float history_dt[32] = {};
 	LocalVector<Xf> relaxed;
+	int head_joint = -1;
+	float stand_hips_y = 0.97f; // the relaxed stance's hips and head heights
+	float stand_head_y = 1.6f;
 
 	Segment seg;
 	Segment old_seg;
@@ -107,6 +112,7 @@ private:
 	uint64_t pending_id = 0;
 	double pending_time = 0.0; // seconds since it was made
 	bool pending_idle = false;
+	bool pending_get_up = false;
 	LocalVector<Xf> pending_start; // the last context pose
 	LocalVector<Xf> pending_end; // the first target pose
 	Xf pending_align;
@@ -133,6 +139,7 @@ private:
 
 	// Statistics.
 	uint64_t generations = 0;
+	uint64_t get_ups = 0;
 	double latency_sum = 0.0;
 
 	void _start();
@@ -147,6 +154,7 @@ private:
 	void _context(Xf *r_context) const;
 	Vector3 _ground() const;
 	float _heading_of(const Xf *p_local) const;
+	bool _is_down(const Xf *p_local) const;
 	void _process(double p_delta);
 
 protected:
@@ -188,6 +196,8 @@ public:
 	Color get_body_color() const { return body_color; }
 	void set_idle_motion(bool p_v) { idle_motion = p_v; }
 	bool is_idle_motion() const { return idle_motion; }
+	void set_get_up(bool p_v) { get_up = p_v; }
+	bool is_get_up() const { return get_up; }
 
 	Vector3 get_actual_velocity() const { return actual_velocity; }
 	MotionState get_state() const { return state; }

@@ -128,6 +128,15 @@ float FellowMotionCharacter3D::_heading_of(const Xf *p_local) const {
 	return rig->heading_of(w.ptr());
 }
 
+// Lying or crawling: the hips or the head well below the relaxed stance's (the model's training data has motion on the
+// ground, and a target ahead of a character on the ground keeps it there).
+bool FellowMotionCharacter3D::_is_down(const Xf *p_local) const {
+	LocalVector<Xf> w;
+	w.resize(rig->joints);
+	rig->world(p_local, w.ptr());
+	return w[0].p.y < 0.75f * stand_hips_y || (head_joint >= 0 && w[head_joint].p.y < 0.8f * stand_head_y);
+}
+
 void FellowMotionCharacter3D::_start() {
 	if (model_path.is_empty()) {
 		error = "no model_path.";
@@ -145,6 +154,14 @@ void FellowMotionCharacter3D::_start() {
 	const int J = rig->joints;
 	relaxed.resize(J);
 	rig->relaxed_pose(relaxed.ptr());
+	{
+		head_joint = rig->find("Head");
+		LocalVector<Xf> w;
+		w.resize(J);
+		rig->world(relaxed.ptr(), w.ptr());
+		stand_hips_y = w[0].p.y;
+		stand_head_y = head_joint >= 0 ? w[head_joint].p.y : 1.6f;
+	}
 	// Place the relaxed stance at the node, facing its +Z.
 	Transform3D gt = is_inside_tree() ? get_global_transform() : get_transform();
 	ground_y = gt.origin.y;
@@ -342,7 +359,9 @@ void FellowMotionCharacter3D::_generate(bool p_idle) {
 	Vector3 ground(base[0].p.x, 0.0f, base[0].p.z);
 	float heading_now = _heading_of(base);
 	Vector3 v;
-	if (!p_idle) {
+	// On the ground (lying, crawling), a standing pose as the target, a little ahead if moving: the model gets up.
+	bool rise = get_up && _is_down(base);
+	if (!p_idle && !rise) {
 		// Root-only target: lead_time ahead along the smoothed desired velocity, facing it, moving at it.
 		v = Vector3(Math::sin(vel_angle), 0.0f, Math::cos(vel_angle)) * speed;
 		Vector3 gt = ground + v * lead_time;
@@ -357,9 +376,20 @@ void FellowMotionCharacter3D::_generate(bool p_idle) {
 			t[0].p = Vector3(gt.x + v.x * k / SAMPLE_RATE, hips_y, gt.z + v.z * k / SAMPLE_RATE);
 		}
 	} else {
-		// Pose target: the relaxed stance where the character comes to rest, facing as it does.
-		Vector3 p = state == STATE_IDLE && actual_velocity.length() < 0.2f ? ground : ground + actual_velocity * 0.6f;
-		Quaternion r(Vector3(0, 1, 0), heading_now);
+		// Pose target: the relaxed stance where the character comes to rest (or stands up), facing as it does (or
+		// its way, getting up while moving).
+		Vector3 p;
+		float facing = heading_now;
+		if (rise) {
+			bool moving = !p_idle && speed > 0.05f;
+			if (moving) {
+				facing = vel_angle;
+			}
+			p = ground + (moving ? Vector3(Math::sin(vel_angle), 0.0f, Math::cos(vel_angle)) * MIN(speed, 1.0f) * 0.5f : Vector3());
+		} else {
+			p = state == STATE_IDLE && actual_velocity.length() < 0.2f ? ground : ground + actual_velocity * 0.6f;
+		}
+		Quaternion r(Vector3(0, 1, 0), facing);
 		for (int k = 0; k < 4; k++) {
 			Xf *t = tgt.ptr() + k * J;
 			memcpy((void *)t, relaxed.ptr(), J * sizeof(Xf));
@@ -372,12 +402,16 @@ void FellowMotionCharacter3D::_generate(bool p_idle) {
 		bits |= 1u << (c - 6);
 	}
 	FellowMotionService::Request req;
-	rig->encode(ctx.ptr(), tgt.ptr(), 4, p_idle, bits, req.grv, req.hg, req.lrv, req.hl, req.lp, req.hp, req.allowed, pending_align);
+	rig->encode(ctx.ptr(), tgt.ptr(), 4, p_idle || rise, bits, req.grv, req.hg, req.lrv, req.hl, req.lp, req.hp, req.allowed, pending_align);
 	pending_start.resize(J);
 	pending_end.resize(J);
 	memcpy((void *)pending_start.ptr(), base, J * sizeof(Xf));
 	memcpy((void *)pending_end.ptr(), tgt.ptr(), J * sizeof(Xf));
 	pending_idle = p_idle;
+	pending_get_up = rise;
+	if (rise) {
+		get_ups++;
+	}
 	pending_time = 0.0;
 	prev_gen_velocity = v;
 	force_regen = false;
@@ -412,6 +446,7 @@ void FellowMotionCharacter3D::_accept(const FellowMotionService::Result &p_resul
 	seg.contacts = contacts;
 	seg.count = count;
 	seg.transition_early = pending_idle ? 0 : transition_early_frames;
+	seg.get_up = pending_get_up;
 	seg.time = pending_time;
 }
 
@@ -474,8 +509,10 @@ void FellowMotionCharacter3D::_process(double p_delta) {
 		if (state == STATE_LOCOMOTION) {
 			// Catching up: while the shown speed is far from the target's (accelerating, braking), re-plan every 0.33 s
 			// instead of at the transition point (the model approaches a target over its whole segment).
-			bool behind = catch_up && seg.valid() && seg.time > 0.33 && Math::abs(shown_speed - speed) > MAX(0.25f * speed, 0.3f);
-			if (force_regen || !seg.valid() || seg.time_to_transition() <= lookahead || _needs_regeneration() || behind) {
+			// Getting up plays to its transition point.
+			bool rising = seg.valid() && seg.get_up && seg.time_to_transition() > lookahead;
+			bool behind = catch_up && !rising && seg.valid() && seg.time > 0.33 && Math::abs(shown_speed - speed) > MAX(0.25f * speed, 0.3f);
+			if (force_regen || !seg.valid() || seg.time_to_transition() <= lookahead || (!rising && _needs_regeneration()) || behind) {
 				_generate(false);
 			}
 		} else if (force_regen || (idle_motion && (!seg.valid() || seg.time_to_transition() <= lookahead))) {
@@ -532,6 +569,7 @@ Dictionary FellowMotionCharacter3D::get_stats() const {
 	d["speed"] = speed;
 	d["segment_frames"] = seg.count;
 	d["error"] = error;
+	d["get_ups"] = int64_t(get_ups);
 	return d;
 }
 
@@ -612,6 +650,8 @@ void FellowMotionCharacter3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_body_color"), &FellowMotionCharacter3D::get_body_color);
 	ClassDB::bind_method(D_METHOD("set_idle_motion", "enable"), &FellowMotionCharacter3D::set_idle_motion);
 	ClassDB::bind_method(D_METHOD("is_idle_motion"), &FellowMotionCharacter3D::is_idle_motion);
+	ClassDB::bind_method(D_METHOD("set_get_up", "enable"), &FellowMotionCharacter3D::set_get_up);
+	ClassDB::bind_method(D_METHOD("is_get_up"), &FellowMotionCharacter3D::is_get_up);
 	ClassDB::bind_method(D_METHOD("get_actual_velocity"), &FellowMotionCharacter3D::get_actual_velocity);
 	ClassDB::bind_method(D_METHOD("get_state"), &FellowMotionCharacter3D::get_state);
 	ClassDB::bind_method(D_METHOD("is_ready"), &FellowMotionCharacter3D::is_ready);
@@ -636,6 +676,7 @@ void FellowMotionCharacter3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "max_batch", PROPERTY_HINT_RANGE, "1,256,1"), "set_max_batch", "get_max_batch");
 	ADD_PROPERTY(PropertyInfo(Variant::COLOR, "body_color"), "set_body_color", "get_body_color");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "idle_motion"), "set_idle_motion", "is_idle_motion");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "get_up"), "set_get_up", "is_get_up");
 
 	BIND_ENUM_CONSTANT(STATE_IDLE);
 	BIND_ENUM_CONSTANT(STATE_LOCOMOTION);

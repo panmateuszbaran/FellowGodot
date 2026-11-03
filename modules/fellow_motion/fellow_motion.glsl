@@ -148,10 +148,103 @@ void store_epilogue(uint gr, uint n, float v) {
 
 #endif
 
-#ifdef MODE_GEMM
+#if defined(MODE_GEMM) || defined(MODE_GEMM_COOP)
+
+// The tiles: BM rows x BN = 64 columns of the output per workgroup, K in steps of BK = 32. Every thread keeps one column
+// kk of the A tile and A_SLOTS of its rows for the whole product, with the rows' addresses worked out once; the next K
+// step's A and W are fetched into registers while the current one is multiplied (the loads' latency, not the
+// arithmetic, bounds these small products).
 
 #define BN 64u
 #define BK 32u
+#ifdef MODE_GEMM_COOP
+#define WG (4u * uint(SGSIZE))
+#else
+#define WG 256u
+#endif
+#define A_RSTEP (WG / BK)
+#define A_SLOTS (uint(BM) / A_RSTEP)
+
+uint g_rows;
+uint g_M;
+uint g_kb;
+uint g_ke;
+uint g_a_off;
+uint g_a_ld;
+uint g_taps;
+int g_dil;
+uint g_up;
+bool g_aprelu;
+uint s_base[A_SLOTS]; // the row's offset in act (no taps) or its request's first row (taps); NONE past the batch
+uint s_rr[A_SLOTS]; // the row within its request (taps)
+float pa[A_SLOTS];
+
+void a_rows_setup(uint m0, uint r0) {
+	uint a_rows = O(G_A_ROWS);
+	uint ag = O(G_AG);
+	uint as_ = O(G_AS);
+	uint ao = O(G_AO);
+	for (uint i = 0u; i < A_SLOTS; i++) {
+		uint gr = m0 + r0 + i * A_RSTEP;
+		s_base[i] = NONE;
+		s_rr[i] = 0u;
+		if (gr < g_M) {
+			uint b = gr / g_rows;
+			uint rr = gr % g_rows;
+			if (g_taps == 0u) {
+				uint ar = (rr / ag) * as_ + ao + rr % ag;
+				s_base[i] = g_a_off + (b * a_rows + ar) * g_a_ld;
+			} else {
+				s_base[i] = b * a_rows;
+				s_rr[i] = rr;
+			}
+		}
+	}
+}
+
+// This thread's A elements of the K step starting at k0 (gathered through the row map or the conv taps, zero outside).
+void a_fetch(uint k) {
+	bool kv = k < g_ke;
+	uint tap = 0u;
+	uint c = k;
+	if (g_taps != 0u) {
+		tap = k / g_a_ld;
+		c = k % g_a_ld;
+	}
+	int shift = (int(tap) - int(g_taps / 2u)) * g_dil;
+	for (uint i = 0u; i < A_SLOTS; i++) {
+		float v = 0.0;
+		if (kv && s_base[i] != NONE) {
+			if (g_taps == 0u) {
+				v = act[s_base[i] + k];
+			} else {
+				int tt = int(s_rr[i]) + shift;
+				if (tt >= 0 && tt < int(g_rows)) {
+					v = act[g_a_off + (s_base[i] + uint(tt) / g_up) * g_a_ld + c];
+				}
+			}
+		}
+		pa[i] = g_aprelu ? max(v, 0.0) : v;
+	}
+}
+
+void gemm_setup() {
+	g_rows = O(G_ROWS);
+	g_M = g_rows * pc.n;
+	g_kb = O(G_KB);
+	g_ke = O(G_KE);
+	g_a_off = O(G_A_OFF);
+	g_a_ld = O(G_A_LD);
+	g_taps = O(G_TAPS);
+	g_dil = int(O(G_DIL));
+	g_up = O(G_UP);
+	g_aprelu = O(G_APRELU) != 0u;
+}
+
+#endif
+
+#ifdef MODE_GEMM
+
 #define RM (BM / 16)
 
 shared float As[BM * (BK + 1u)];
@@ -159,31 +252,32 @@ shared vec4 Ws[BK * (BN / 4u)];
 
 void main() {
 	uint t = gl_LocalInvocationIndex;
-	uint rows = O(G_ROWS);
-	uint M = rows * pc.n;
+	gemm_setup();
 	uint Nout = O(G_N);
 	uint m0 = gl_WorkGroupID.y * uint(BM);
 	uint n0 = gl_WorkGroupID.x * BN;
 	uint split = gl_WorkGroupID.z;
-	uint kb = O(G_KB);
-	uint ke = O(G_KE);
-	uint ktiles = (ke - kb + BK - 1u) / BK;
+	uint ktiles = (g_ke - g_kb + BK - 1u) / BK;
 	uint per = (ktiles + pc.splits - 1u) / pc.splits;
 	uint kt0 = split * per;
 	uint kt1 = min(ktiles, kt0 + per);
 
-	uint a_off = O(G_A_OFF);
-	uint a_rows = O(G_A_ROWS);
-	uint a_ld = O(G_A_LD);
-	uint ag = O(G_AG);
-	uint as_ = O(G_AS);
-	uint ao = O(G_AO);
-	uint taps = O(G_TAPS);
-	int dil = int(O(G_DIL));
-	uint up = O(G_UP);
-	bool aprelu = O(G_APRELU) != 0u;
-	uint w_off = O(G_W_OFF);
-	uint w_ld = O(G_W_LD);
+	uint kk = t % BK;
+	uint r0 = t / BK;
+	a_rows_setup(m0, r0);
+	// W: thread t loads 8 consecutive k of column nn.
+	uint nn = t & 63u;
+	uint kc = t >> 6u;
+	uint gn = n0 + nn;
+	bool wv = gn < Nout;
+#ifdef WEIGHT_F16
+	uint w_idx = (O(G_W_OFF) + gn * O(G_W_LD) + g_kb + kc * 8u) >> 3u;
+	uvec4 pw = uvec4(0u);
+#else
+	uint w_idx = (O(G_W_OFF) + gn * O(G_W_LD) + g_kb + kc * 8u) >> 2u;
+	vec4 pw0 = vec4(0.0);
+	vec4 pw1 = vec4(0.0);
+#endif
 
 	vec4 acc[RM];
 	for (uint i = 0u; i < uint(RM); i++) {
@@ -192,53 +286,29 @@ void main() {
 	uint tx = t & 15u;
 	uint ty = t >> 4u;
 
-	for (uint kt = kt0; kt < kt1; kt++) {
-		uint k0 = kb + kt * BK;
-		// A tile: BM rows x BK, gathered (row map or conv taps), zero outside.
-		for (uint e = t; e < uint(BM) * BK; e += 256u) {
-			uint r = e / BK;
-			uint kk = e % BK;
-			uint gr = m0 + r;
-			uint k = k0 + kk;
-			float v = 0.0;
-			if (gr < M && k < ke) {
-				uint b = gr / rows;
-				uint rr = gr % rows;
-				if (taps != 0u) {
-					uint tap = k / a_ld;
-					uint c = k % a_ld;
-					int tt = int(rr) + (int(tap) - int(taps / 2u)) * dil;
-					if (tt >= 0 && tt < int(rows)) {
-						v = act[a_off + (b * a_rows + uint(tt) / up) * a_ld + c];
-					}
-				} else {
-					uint ar = (rr / ag) * as_ + ao + rr % ag;
-					v = act[a_off + (b * a_rows + ar) * a_ld + k];
-				}
-				if (aprelu) {
-					v = max(v, 0.0);
-				}
-			}
-			As[r * (BK + 1u) + kk] = v;
-		}
-		// W tile: BN rows x BK, transposed into Ws[k][n].
-		{
-			uint nn = t & 63u;
-			uint kc = t >> 6u;
-			uint gn = n0 + nn;
-			vec4 w0 = vec4(0.0);
-			vec4 w1 = vec4(0.0);
-			if (gn < Nout) {
+	if (kt0 < kt1) {
+		a_fetch(g_kb + kt0 * BK + kk);
+		if (wv) {
 #ifdef WEIGHT_F16
-				uvec4 h = wt[(w_off + gn * w_ld + k0 + kc * 8u) >> 3u];
-				w0 = vec4(unpackHalf2x16(h.x), unpackHalf2x16(h.y));
-				w1 = vec4(unpackHalf2x16(h.z), unpackHalf2x16(h.w));
+			pw = wt[w_idx + kt0 * (BK / 8u)];
 #else
-				uint idx = (w_off + gn * w_ld + k0 + kc * 8u) >> 2u;
-				w0 = wt[idx];
-				w1 = wt[idx + 1u];
+			pw0 = wt[w_idx + kt0 * (BK / 4u)];
+			pw1 = wt[w_idx + kt0 * (BK / 4u) + 1u];
 #endif
-			}
+		}
+	}
+	for (uint kt = kt0; kt < kt1; kt++) {
+		for (uint i = 0u; i < A_SLOTS; i++) {
+			As[(r0 + i * A_RSTEP) * (BK + 1u) + kk] = pa[i];
+		}
+		{
+#ifdef WEIGHT_F16
+			vec4 w0 = vec4(unpackHalf2x16(pw.x), unpackHalf2x16(pw.y));
+			vec4 w1 = vec4(unpackHalf2x16(pw.z), unpackHalf2x16(pw.w));
+#else
+			vec4 w0 = pw0;
+			vec4 w1 = pw1;
+#endif
 			uint base = (kc * 8u) * (BN / 4u) + (nn >> 2u);
 			uint comp = nn & 3u;
 			Ws[base + 0u * (BN / 4u)][comp] = w0.x;
@@ -251,10 +321,22 @@ void main() {
 			Ws[base + 7u * (BN / 4u)][comp] = w1.w;
 		}
 		barrier();
-		for (uint kk = 0u; kk < BK; kk++) {
-			vec4 w = Ws[kk * (BN / 4u) + tx];
+		// The next step's loads go out before this step's arithmetic.
+		if (kt + 1u < kt1) {
+			a_fetch(g_kb + (kt + 1u) * BK + kk);
+			if (wv) {
+#ifdef WEIGHT_F16
+				pw = wt[w_idx + (kt + 1u) * (BK / 8u)];
+#else
+				pw0 = wt[w_idx + (kt + 1u) * (BK / 4u)];
+				pw1 = wt[w_idx + (kt + 1u) * (BK / 4u) + 1u];
+#endif
+			}
+		}
+		for (uint k2 = 0u; k2 < BK; k2++) {
+			vec4 w = Ws[k2 * (BN / 4u) + tx];
 			for (uint i = 0u; i < uint(RM); i++) {
-				acc[i] += As[(ty * uint(RM) + i) * (BK + 1u) + kk] * w;
+				acc[i] += As[(ty * uint(RM) + i) * (BK + 1u) + k2] * w;
 			}
 		}
 		barrier();
@@ -262,18 +344,18 @@ void main() {
 
 	for (uint i = 0u; i < uint(RM); i++) {
 		uint gr = m0 + ty * uint(RM) + i;
-		if (gr >= M) {
+		if (gr >= g_M) {
 			continue;
 		}
 		for (uint c = 0u; c < 4u; c++) {
-			uint nn = n0 + tx * 4u + c;
-			if (nn >= Nout) {
+			uint on = n0 + tx * 4u + c;
+			if (on >= Nout) {
 				continue;
 			}
 			if (pc.splits > 1u) {
-				part[(split * M + gr) * Nout + nn] = acc[i][c];
+				part[(split * g_M + gr) * Nout + on] = acc[i][c];
 			} else {
-				store_epilogue(gr, nn, acc[i][c]);
+				store_epilogue(gr, on, acc[i][c]);
 			}
 		}
 	}
@@ -287,12 +369,10 @@ void main() {
 // each subgroup multiplies its 16 columns by the tile's 16-row blocks with 16x16x16 cooperative matrices accumulated
 // in fp32, and the accumulators go through shared memory to the same epilogue (or the split-K partials).
 
-#define BN 64u
-#define BK 32u
 #define RT (BM / 16)
-#define WG (4u * uint(SGSIZE))
 #define AST (BK + 8u) // shared row strides (fp16 elements), padded
 #define CST (BN + 4u)
+#define W_SLOTS ((BN * (BK / 8u)) / WG) // uvec4 of 8 weights per thread per K step
 
 shared float16_t As[BM * AST];
 shared float16_t Bs[BN * AST];
@@ -301,79 +381,52 @@ shared float Cs[BM * CST];
 void main() {
 	uint t = gl_LocalInvocationIndex;
 	uint sg = gl_SubgroupID;
-	uint rows = O(G_ROWS);
-	uint M = rows * pc.n;
+	gemm_setup();
 	uint Nout = O(G_N);
 	uint m0 = gl_WorkGroupID.y * uint(BM);
 	uint n0 = gl_WorkGroupID.x * BN;
 	uint split = gl_WorkGroupID.z;
-	uint kb = O(G_KB);
-	uint ke = O(G_KE);
-	uint ktiles = (ke - kb + BK - 1u) / BK;
+	uint ktiles = (g_ke - g_kb + BK - 1u) / BK;
 	uint per = (ktiles + pc.splits - 1u) / pc.splits;
 	uint kt0 = split * per;
 	uint kt1 = min(ktiles, kt0 + per);
 
-	uint a_off = O(G_A_OFF);
-	uint a_rows = O(G_A_ROWS);
-	uint a_ld = O(G_A_LD);
-	uint ag = O(G_AG);
-	uint as_ = O(G_AS);
-	uint ao = O(G_AO);
-	uint taps = O(G_TAPS);
-	int dil = int(O(G_DIL));
-	uint up = O(G_UP);
-	bool aprelu = O(G_APRELU) != 0u;
-	uint w_off = O(G_W_OFF);
-	uint w_ld = O(G_W_LD);
+	uint kk = t % BK;
+	uint r0 = t / BK;
+	a_rows_setup(m0, r0);
+	// W: slot j of thread t is column t / 4 + j * WG / 4, k chunk t % 4 (8 weights).
+	uint kc = t % (BK / 8u);
+	uint w_idx[W_SLOTS];
+	uvec4 pw[W_SLOTS];
+	for (uint j = 0u; j < W_SLOTS; j++) {
+		uint gn = n0 + t / (BK / 8u) + j * (WG / (BK / 8u));
+		w_idx[j] = gn < Nout ? (O(G_W_OFF) + gn * O(G_W_LD) + g_kb + kc * 8u) >> 3u : NONE;
+		pw[j] = uvec4(0u);
+	}
 
 	coopmat<float, gl_ScopeSubgroup, 16, 16, gl_MatrixUseAccumulator> acc[RT];
 	for (uint r = 0u; r < uint(RT); r++) {
 		acc[r] = coopmat<float, gl_ScopeSubgroup, 16, 16, gl_MatrixUseAccumulator>(0.0);
 	}
 
-	for (uint kt = kt0; kt < kt1; kt++) {
-		uint k0 = kb + kt * BK;
-		for (uint e = t; e < uint(BM) * BK; e += WG) {
-			uint r = e / BK;
-			uint kk = e % BK;
-			uint gr = m0 + r;
-			uint k = k0 + kk;
-			float v = 0.0;
-			if (gr < M && k < ke) {
-				uint b = gr / rows;
-				uint rr = gr % rows;
-				if (taps != 0u) {
-					uint tap = k / a_ld;
-					uint c = k % a_ld;
-					int tt = int(rr) + (int(tap) - int(taps / 2u)) * dil;
-					if (tt >= 0 && tt < int(rows)) {
-						v = act[a_off + (b * a_rows + uint(tt) / up) * a_ld + c];
-					}
-				} else {
-					uint ar = (rr / ag) * as_ + ao + rr % ag;
-					v = act[a_off + (b * a_rows + ar) * a_ld + k];
-				}
-				if (aprelu) {
-					v = max(v, 0.0);
-				}
+	if (kt0 < kt1) {
+		a_fetch(g_kb + kt0 * BK + kk);
+		for (uint j = 0u; j < W_SLOTS; j++) {
+			if (w_idx[j] != NONE) {
+				pw[j] = wt[w_idx[j] + kt0 * (BK / 8u)];
 			}
-			As[r * AST + kk] = float16_t(clamp(v, -65504.0, 65504.0));
 		}
-		// W: 64 rows x 32 k = 256 uvec4 of 8 halves.
-		for (uint e = t; e < BN * (BK / 8u); e += WG) {
-			uint nn = e / (BK / 8u);
-			uint kc = e % (BK / 8u);
-			uint gn = n0 + nn;
-			uvec4 h = uvec4(0u);
-			if (gn < Nout) {
-				h = wt[(w_off + gn * w_ld + k0 + kc * 8u) >> 3u];
-			}
-			uint base = nn * AST + kc * 8u;
-			f16vec2 p0 = unpackFloat2x16(h.x);
-			f16vec2 p1 = unpackFloat2x16(h.y);
-			f16vec2 p2 = unpackFloat2x16(h.z);
-			f16vec2 p3 = unpackFloat2x16(h.w);
+	}
+	for (uint kt = kt0; kt < kt1; kt++) {
+		for (uint i = 0u; i < A_SLOTS; i++) {
+			As[(r0 + i * A_RSTEP) * AST + kk] = float16_t(clamp(pa[i], -65504.0, 65504.0));
+		}
+		for (uint j = 0u; j < W_SLOTS; j++) {
+			uint base = (t / (BK / 8u) + j * (WG / (BK / 8u))) * AST + kc * 8u;
+			f16vec2 p0 = unpackFloat2x16(pw[j].x);
+			f16vec2 p1 = unpackFloat2x16(pw[j].y);
+			f16vec2 p2 = unpackFloat2x16(pw[j].z);
+			f16vec2 p3 = unpackFloat2x16(pw[j].w);
 			Bs[base + 0u] = p0.x;
 			Bs[base + 1u] = p0.y;
 			Bs[base + 2u] = p1.x;
@@ -384,6 +437,14 @@ void main() {
 			Bs[base + 7u] = p3.y;
 		}
 		barrier();
+		if (kt + 1u < kt1) {
+			a_fetch(g_kb + (kt + 1u) * BK + kk);
+			for (uint j = 0u; j < W_SLOTS; j++) {
+				if (w_idx[j] != NONE) {
+					pw[j] = wt[w_idx[j] + (kt + 1u) * (BK / 8u)];
+				}
+			}
+		}
 		for (uint ks = 0u; ks < BK; ks += 16u) {
 			coopmat<float16_t, gl_ScopeSubgroup, 16, 16, gl_MatrixUseB> mb;
 			coopMatLoad(mb, Bs, sg * 16u * AST + ks, AST, gl_CooperativeMatrixLayoutColumnMajor);
@@ -403,15 +464,15 @@ void main() {
 		uint r = e / BN;
 		uint c = e % BN;
 		uint gr = m0 + r;
-		uint nn = n0 + c;
-		if (gr >= M || nn >= Nout) {
+		uint on = n0 + c;
+		if (gr >= g_M || on >= Nout) {
 			continue;
 		}
 		float v = Cs[r * CST + c];
 		if (pc.splits > 1u) {
-			part[(split * M + gr) * Nout + nn] = v;
+			part[(split * g_M + gr) * Nout + on] = v;
 		} else {
-			store_epilogue(gr, nn, v);
+			store_epilogue(gr, on, v);
 		}
 	}
 }
