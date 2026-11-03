@@ -24,9 +24,9 @@ puddle's depth from 0.1 to 0.7: up to half white, roughness 0.4). The wet film k
 **Hoarfrost.** `FellowRain3D.frost` (0-1): crystals on what faces the sky, where the rain would reach (its shelter
 heightfield, 0124) — all of it on what faces up, less on walls (a third on a vertical face), none underneath. It grows in
 fine grains (the puddles' noise at 5 cm, sooner in places at 20 cm) and stays a veil the surface shows through: grey
-white (0.78, 0.81, 0.86) over 30-70 % (a finer noise), roughness 0.5, no metal; one crystal in 14 (cells of 5 mm) turned
-at random and smoother — glints in the sun, faded where a cell is under a pixel. Drawn before the snow cover, which
-covers it.
+white (0.76, 0.8, 0.85) over 20-50 % (a finer noise), matte (roughness at least 0.75), no metal; one crystal in 14
+(cells of 5 mm) turned at random and smoother — glints in the sun, faded where a cell is under a pixel. Drawn before the
+snow cover, which covers it.
 
 Both go to the renderer with the wetness and the snow (`FellowWeather::State`, the weather UBO's `frost` vector); the
 weather's specialization (the `fellow_wetness` bit, 0124) is on while either is above zero. At 0 the code is skipped
@@ -48,6 +48,9 @@ it settles the ground frozen, and frosted under a clear sky when nothing falls.
   ground; frost at 0.4, 0.6 and 1 — scattered grains, a speckled cover, a grey-white veil with the ground showing
   through — on the ground, the sphere's top and the box's top, less on their sides. The first frost (the puddles' noise
   at 20 cm, white over 85 %) was patchy snow; at 5 cm and as a veil it reads as frost.
+* **The first look on the RTX** (`m36_s19_bistro_thaw_loop`, fellow230: the veil over 30-70 % at roughness 0.5) turned
+  Bistro's street white as snow: most of it was the sky mirrored at a grazing angle by the glossier crystals. Matte
+  (roughness at least 0.75) and thinner (20-50 %), the cobbles show through (lavapipe).
 * **The ground model** (the test scene, custom weather at −5 °C under a clear sky, the ground at 0, the model 200 times
   as fast): frost 0.147, 0.587 and 1 at 0.5, 2 and 4 s — the expected 200 × (1 − 0.8 × 0.15) / 600 = 0.293 per second; the
   puddles' ice 0.167 and 0.667 (0.333 per second).

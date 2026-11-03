@@ -1633,9 +1633,9 @@ void fellow_frost(in SceneData p_scene, in FellowWeatherData w, float frost, flo
 	if (f <= 0.0) {
 		return;
 	}
-	float veil = f * mix(0.3, 0.7, fine);
-	r_albedo = mix(r_albedo, vec3(0.78, 0.81, 0.86), veil);
-	r_roughness = mix(r_roughness, 0.5, f);
+	float veil = f * mix(0.2, 0.5, fine);
+	r_albedo = mix(r_albedo, vec3(0.76, 0.8, 0.85), veil);
+	r_roughness = mix(r_roughness, max(r_roughness, 0.75), f); // matte crystals (a gloss would mirror the sky white)
 	r_metallic = mix(r_metallic, 0.0, f);
 	// Glints: a crystal facing the light, here and there (cells of 5 mm).
 	ivec3 cell = ivec3(floor(wp * 200.0));
