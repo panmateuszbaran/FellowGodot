@@ -172,6 +172,9 @@ RID FellowWeather::get_uniform_buffer() {
 			u.cloud_shadow2[3] = cloud_shadow.ground_height;
 			u.cloud_shadow3[0] = CLAMP(cloud_shadow.beyond, 0.0f, 1.0f);
 		}
+		if (cloud_shadow.active) {
+			u.cloud_shadow3[1] = CLAMP(cloud_shadow.sky_cover, 0.0f, 1.0f);
+		}
 		RD::get_singleton()->buffer_update(ubo, 0, sizeof(UBO), &u);
 		ubo_dirty = false;
 	}
@@ -182,7 +185,7 @@ void FellowWeather::set_cloud_shadow(const CloudShadowState &p_shadow) {
 	const CloudShadowState &c = cloud_shadow;
 	if (c.active != p_shadow.active || c.texture != p_shadow.texture || c.origin != p_shadow.origin || c.extent != p_shadow.extent ||
 			c.strength != p_shadow.strength || c.light_index != p_shadow.light_index || c.sun_direction != p_shadow.sun_direction ||
-			c.ground_height != p_shadow.ground_height || c.beyond != p_shadow.beyond) {
+			c.ground_height != p_shadow.ground_height || c.beyond != p_shadow.beyond || c.sky_cover != p_shadow.sky_cover) {
 		ubo_dirty = true;
 	}
 	cloud_shadow = p_shadow;

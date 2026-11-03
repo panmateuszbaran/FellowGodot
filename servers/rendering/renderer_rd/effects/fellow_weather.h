@@ -115,6 +115,7 @@ public:
 		Vector3 sun_direction = Vector3(0, 1, 0); // world, towards the sun
 		float ground_height = 0.0f; // m
 		float beyond = 1.0f; // the sun's share beyond the map (the clear sky's share)
+		float sky_cover = 0.0f; // 0..1: how grey the sky's light is under the clouds (its ambient light, its reflections)
 	};
 
 	// std140: the shader's FellowWeatherData.
@@ -132,7 +133,7 @@ public:
 		float tracks[4]; // the tracks' window: centre x, z (m), 1 / side (m), half its side less a margin (m)
 		float cloud_shadow[4]; // the clouds' shadow map (decision 0133): centre x, z (m), 1 / side (1/m), strength
 		float cloud_shadow2[4]; // the sun's directional light index, its direction's x / y and z / y, the ground (m)
-		float cloud_shadow3[4]; // beyond the map: the sun's share there
+		float cloud_shadow3[4]; // beyond the map: the sun's share there; the sky's light's cover (greyed)
 	};
 
 private:
@@ -164,6 +165,8 @@ public:
 	void set_cloud_shadow(const CloudShadowState &p_shadow);
 	const CloudShadowState &get_cloud_shadow() const { return cloud_shadow; }
 	RID get_cloud_shadow_texture() const { return cloud_shadow.active ? cloud_shadow.texture : RID(); }
+	// The clouds shade the sun this frame (their map, at some strength).
+	bool is_cloud_shadowing() const { return cloud_shadow.active && cloud_shadow.texture.is_valid() && cloud_shadow.strength > 0.0f; }
 	RID get_uniform_buffer();
 	RID get_occlusion_texture() const;
 	RID get_ripple_texture() const;

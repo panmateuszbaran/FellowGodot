@@ -108,6 +108,10 @@ inline float clouds_wind() {
 inline float clouds_shadows() {
 	return GLOBAL_GET_CACHED(float, "rendering/fellow/post/clouds/shadows");
 }
+// post/clouds/sky_light (decision 0133): the sky's light (ambient, reflections) greyed where the clouds cover it (0: not).
+inline float clouds_sky_light() {
+	return GLOBAL_GET_CACHED(float, "rendering/fellow/post/clouds/sky_light");
+}
 // post/sharpen/strength (decision 0110): contrast-adaptive sharpening of the TAA output in the tone mapping pass (0: off).
 inline float sharpen_strength() {
 	return GLOBAL_GET_CACHED(float, "rendering/fellow/post/sharpen/strength");

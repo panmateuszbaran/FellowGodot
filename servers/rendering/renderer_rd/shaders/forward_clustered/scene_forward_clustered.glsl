@@ -2289,6 +2289,19 @@ void fragment_shader(in SceneData scene_data) {
 		indirect_specular_light = textureLod(sampler2D(radiance_octmap, DEFAULT_SAMPLER_LINEAR_WITH_MIPMAPS_CLAMP), ref_uv, roughness_lod).rgb;
 
 #endif //USE_RADIANCE_OCTMAP_ARRAY
+#if !defined(MODE_RENDER_DEPTH)
+		if (sc_fellow_cloud_shadow() && fellow_weather.data.cloud_shadow3.y > 0.0) {
+			// FellowEngine (decision 0133): the sky's reflection under the clouds — where they cover it, the grey of the
+			// sky's mean brightness there (its blurriest level: no sun disc), above the horizon.
+#ifdef USE_RADIANCE_OCTMAP_ARRAY
+			vec3 fellow_sky_mean = textureLod(sampler2DArray(radiance_octmap, DEFAULT_SAMPLER_LINEAR_WITH_MIPMAPS_CLAMP), vec3(ref_uv, MAX_ROUGHNESS_LOD), 0.0).rgb;
+#else
+			vec3 fellow_sky_mean = textureLod(sampler2D(radiance_octmap, DEFAULT_SAMPLER_LINEAR_WITH_MIPMAPS_CLAMP), ref_uv, MAX_ROUGHNESS_LOD).rgb;
+#endif
+			float fellow_cover = fellow_weather.data.cloud_shadow3.y * smoothstep(-0.1, 0.15, ref_vec.y);
+			indirect_specular_light = mix(indirect_specular_light, vec3(dot(fellow_sky_mean, vec3(0.2126, 0.7152, 0.0722))), fellow_cover);
+		}
+#endif
 		indirect_specular_light *= scene_data.IBL_exposure_normalization;
 		indirect_specular_light *= horizon * horizon;
 		indirect_specular_light *= scene_data.ambient_light_color_energy.a;
@@ -2314,6 +2327,12 @@ void fragment_shader(in SceneData scene_data) {
 			vec2 ambient_uv = vec3_to_oct_with_border(ambient_dir, vec2(scene_data_block.data.radiance_border_size, 1.0 - scene_data_block.data.radiance_border_size * 2.0));
 			vec3 cubemap_ambient = textureLod(sampler2D(radiance_octmap, DEFAULT_SAMPLER_LINEAR_WITH_MIPMAPS_CLAMP), ambient_uv, roughness_lod).rgb;
 #endif //USE_RADIANCE_OCTMAP_ARRAY
+#if !defined(MODE_RENDER_DEPTH)
+			if (sc_fellow_cloud_shadow()) {
+				// FellowEngine (decision 0133): the sky's light under the clouds, grey where they cover it.
+				cubemap_ambient = mix(cubemap_ambient, vec3(dot(cubemap_ambient, vec3(0.2126, 0.7152, 0.0722))), fellow_weather.data.cloud_shadow3.y);
+			}
+#endif
 			cubemap_ambient *= scene_data.IBL_exposure_normalization;
 			ambient_light = mix(ambient_light, cubemap_ambient * scene_data.ambient_light_color_energy.a, scene_data.ambient_color_sky_mix);
 		}

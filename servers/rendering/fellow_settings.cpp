@@ -70,6 +70,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/post/clouds/wind", PROPERTY_HINT_RANGE, "0,0.2,0.001,suffix:km/s"), 0.01);
 	GLOBAL_DEF("rendering/fellow/post/clouds/interleaved", true); // decision 0115
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/post/clouds/shadows", PROPERTY_HINT_RANGE, "0,1,0.01"), 1.0); // decision 0133
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/post/clouds/sky_light", PROPERTY_HINT_RANGE, "0,1,0.01"), 1.0); // decision 0133
 	GLOBAL_DEF("rendering/fellow/post/atmosphere/enabled", false); // decision 0108
 	GLOBAL_DEF("rendering/fellow/post/atmosphere/aerial_perspective", true);
 	GLOBAL_DEF("rendering/fellow/post/atmosphere/sun_transmittance", true); // the sun's light coloured by the atmosphere

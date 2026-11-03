@@ -4721,16 +4721,33 @@ void RenderForwardClustered::_fellow_process_clouds(RenderDataRD *p_render_data,
 // FellowEngine cloud shadows (decision 0133): the volumetric clouds' shadow map for this render, with the layer the
 // clouds pass will draw (a FellowWeather3D's coverage and density, or the project settings') and its sun — the first
 // directional light that lights the sky, as the clouds' — and that light's index among the frame's directional lights
-// (as LightStorage::update_light_buffers() numbers them), for the colour passes.
+// (as LightStorage::update_light_buffers() numbers them), for the colour passes; and how grey the sky's light is under
+// them.
 void RenderForwardClustered::_fellow_process_cloud_shadow(RenderDataRD *p_render_data, bool p_allowed) {
 	fellow_cloud_shadow_frame = false;
 	RendererRD::FellowWeather::CloudShadowState cs;
-	RID light_instance;
-	uint32_t light_index = 0;
-	if (p_allowed && Fellow::clouds_enabled() && Fellow::clouds_shadows() > 0.0f && p_render_data->lights) {
+	const float shadows = MIN(Fellow::clouds_shadows(), 1.0f);
+	const float sky_light = MIN(Fellow::clouds_sky_light(), 1.0f);
+	if (p_allowed && Fellow::clouds_enabled() && (shadows > 0.0f || sky_light > 0.0f) && p_render_data->lights) {
+		// The layer the clouds pass will draw.
+		float coverage = Fellow::clouds_coverage();
+		float density = Fellow::clouds_density();
+		if (RendererRD::FellowWeather *weather = RendererRD::FellowWeather::get_singleton_if_exists()) {
+			const RendererRD::FellowWeather::SkyState &weather_sky = weather->get_sky_state();
+			if (weather_sky.active) {
+				coverage = weather_sky.coverage;
+				density = weather_sky.density;
+			}
+		}
+		// The sky's light greys as the clouds close in: from none at a third of the sky covered to all of it at nine
+		// tenths.
+		const float c = CLAMP((coverage - 0.3f) / 0.6f, 0.0f, 1.0f);
+		cs.sky_cover = sky_light * c * c * (3.0f - 2.0f * c);
 		RendererRD::LightStorage *light_storage = RendererRD::LightStorage::get_singleton();
+		RID light_instance;
+		uint32_t light_index = 0;
 		uint32_t directional = 0;
-		for (uint32_t i = 0; i < (uint32_t)p_render_data->lights->size(); i++) {
+		for (uint32_t i = 0; i < (uint32_t)p_render_data->lights->size() && shadows > 0.0f; i++) {
 			RID li = (*p_render_data->lights)[i];
 			RID base = light_storage->light_instance_get_base_light(li);
 			if (light_storage->light_get_type(base) != RSE::LIGHT_DIRECTIONAL || light_storage->light_directional_get_sky_mode(base) == RSE::LIGHT_DIRECTIONAL_SKY_MODE_SKY_ONLY) {
@@ -4755,30 +4772,23 @@ void RenderForwardClustered::_fellow_process_cloud_shadow(RenderDataRD *p_render
 			sp.ground_height = 0.0f;
 			sp.sun_direction = light_storage->light_instance_get_base_transform(light_instance).basis.get_column(Vector3::AXIS_Z).normalized();
 			sp.time = float(time);
-			sp.coverage = Fellow::clouds_coverage();
-			sp.density = Fellow::clouds_density();
-			if (RendererRD::FellowWeather *weather = RendererRD::FellowWeather::get_singleton_if_exists()) {
-				const RendererRD::FellowWeather::SkyState &weather_sky = weather->get_sky_state();
-				if (weather_sky.active) {
-					sp.coverage = weather_sky.coverage;
-					sp.density = weather_sky.density;
-				}
-			}
+			sp.coverage = coverage;
+			sp.density = density;
 			sp.bottom_altitude = Fellow::clouds_altitude();
 			sp.thickness = Fellow::clouds_thickness();
 			const float wind = Fellow::clouds_wind();
 			sp.wind = Vector2(wind, wind * 0.3f);
 			RENDER_TIMESTAMP("FellowEngine Cloud Shadows");
 			cs.texture = fellow_clouds->process_shadow(sp);
-			cs.active = cs.texture.is_valid();
 			cs.origin = fellow_clouds->get_shadow_origin();
 			cs.extent = RendererRD::FellowClouds::SHADOW_EXTENT;
-			cs.strength = MIN(Fellow::clouds_shadows(), 1.0f);
+			cs.strength = cs.texture.is_valid() ? shadows : 0.0f;
 			cs.light_index = light_index;
 			cs.sun_direction = sp.sun_direction;
 			cs.ground_height = sp.ground_height;
-			cs.beyond = 1.0f - CLAMP(sp.coverage, 0.0f, 1.0f);
+			cs.beyond = 1.0f - CLAMP(coverage, 0.0f, 1.0f);
 		}
+		cs.active = cs.strength > 0.0f || cs.sky_cover > 0.0f;
 	}
 	RendererRD::FellowWeather *weather = cs.active ? RendererRD::FellowWeather::get_singleton() : RendererRD::FellowWeather::get_singleton_if_exists();
 	if (weather) {
