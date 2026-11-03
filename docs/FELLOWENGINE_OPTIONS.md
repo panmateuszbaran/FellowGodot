@@ -304,6 +304,23 @@ Cost (RTX 5070 Ti Laptop, 1080p, Rain Lab at dusk, `m29_f290`): +0.04 ms of GPU 
 2 s (the flash's shadows +0.02 ms, the opaque pass +0.03 ms); nothing between strikes. Decision record 0129; FellowBench `--weather_lightning=<per minute>` in any scene
 (`--weather_lightning_flash`, `--weather_lightning_frames`).
 
+## Weather (milestone 32)
+
+A `FellowWeather3D` node (module `fellow_fluid`) sets the weather and changes it over time: `weather` = Clear,
+Cloudy, Overcast, Rain, Storm, Snow, Blizzard (presets) or Custom, `set_weather(weather, seconds)` (`transition_time`
+30 s when none is given). The weather is a state — `wind_speed`, `gustiness`, `precipitation` (none, rain, snow),
+`intensity`, `lightning_rate`, `cloud_coverage`, `cloud_density`, `sunlight`, `ambient_light` (the sky's light),
+`fog_density`, `temperature` — eased from where it is; rain and snow hand over at the transition's midpoint, when
+nothing falls. It drives (`controls`, all by default): the scene's `FellowWind3D`, `FellowRain3D` and
+`FellowLightning3D` (found, or created when needed: `create_missing`; all at the start: `prepare_nodes`); the
+volumetric clouds' coverage and density in place of the project settings (the clouds must be on); the sun on the
+scene's surfaces only (its light buffer energy times `sunlight` — the sky and the clouds keep the full sun); the
+environment's fog (added to its own, in `fog_color` as bright as the sky) and its background energy (the sky, its
+ambient light and reflections); and the ground — wet in the rain, drying after it, covered by falling snow below 1 °C,
+melting above 0 °C (`ground_speed` speeds it up; `settle_ground` starts it as the weather leaves it). It does nothing
+in the editor. Without the node nothing changes (bit for bit); with it, the cost is that of the parts it turns on.
+Decision 0132.
+
 ## Options that change the image (off by default)
 
 | setting | what it does | image cost | record |

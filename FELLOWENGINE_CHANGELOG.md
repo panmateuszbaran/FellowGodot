@@ -9,6 +9,21 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 32 — a weather controller (2026-11-03)
+
+- Added `FellowWeather3D` (decision 0132): the weather from one node — presets (clear, cloudy, overcast, rain, storm,
+  snow, blizzard) or a custom state of wind, rain or snow, lightning, cloud coverage and density, sunlight, sky light,
+  fog and temperature — changed smoothly with `set_weather(weather, seconds)` (rain and snow hand over at the
+  transition's midpoint). It drives the scene's `FellowWind3D`, `FellowRain3D` and `FellowLightning3D` (creating the
+  missing ones), the volumetric clouds through a render-side override, the sun on the scene's surfaces only (the sky
+  and the clouds keep the full sun), the environment's fog and background energy, and the ground: wet in the rain,
+  drying after it, covered by falling snow below freezing, melting above it. Nothing in the editor.
+- `Light3D::get_light_rid()` (C++): a light's RenderingServer RID (`VisualInstance3D::get_base()` is not set for lights).
+- Off is the previous image (lavapipe: Rain Lab without drops, Water Lab bit for bit). Cost on the RTX (Bistro
+  exterior, `m32_f297`): the controller not measurable, its weathers the cost of their parts (rain +0.5 ms).
+- FellowBench: `--weather`, `--weather_cycle`, `--weather_times`. Showcase: Bistro under each weather, a time-lapse.
+- The decision index lists records 0127-0132.
+
 ## Milestone 31 — lightning lights the clouds (2026-11-02)
 
 - `FellowLightning3D.cloud_glow` (decision 0131): while a flash lasts, the volumetric clouds glow around it — by how

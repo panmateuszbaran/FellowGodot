@@ -6,8 +6,8 @@
 
 **FellowEngine is a fork of [Godot Engine](https://github.com/godotengine/godot) 4.7.2-stable** that makes the
 Forward+ renderer faster and adds real-time effects that stock Godot does not have: water with FFT waves, rain and wet
-surfaces, snow, lightning, wind with gusts, GPU smoke and fire, wood that burns to char and ash, automatic HLOD, ray
-tracing and a set of post-processing effects.
+surfaces, snow, lightning, wind with gusts and a weather controller that changes them all over time, GPU smoke and
+fire, wood that burns to char and ash, automatic HLOD, ray tracing and a set of post-processing effects.
 
 * **Faster with the same image.** With the default settings FellowEngine renders eight of the nine benchmark scenes
   16-54 % faster than stock Godot, the ninth 3-12 % (table below). The changes that are on by default are *exact*:
@@ -36,6 +36,8 @@ in [docs/](docs/) and the [showcase](docs/SHOWCASE.md).
   <img src="docs/showcase/bistro_snow_gold_tree.jpg" width="49%" alt="Snow in Bistro's square against a low sun: bare cobbles under the tree, light shafts">
   <img src="docs/showcase/storm_square.jpg" width="49%" alt="FellowLightning3D: a bolt over Rain Lab's square, the flash on the rain and the wet ground">
   <img src="docs/showcase/loop_storm_clouds.webp" width="49%" alt="Walking down a street in a thunderstorm, the cloud deck lit by each strike">
+  <img src="docs/showcase/bistro_weather_storm_street.jpg" width="49%" alt="FellowWeather3D's thunderstorm by day in Bistro: a flash over the wet street">
+  <img src="docs/showcase/loop_weather_lapse.webp" width="49%" alt="A time-lapse of the weather in Bistro, from clear to a thunderstorm to snow and back">
 </p>
 
 These are real-time captures from the benchmark scenes on an RTX 5070 Ti Laptop GPU, with FellowEngine's visual
@@ -86,6 +88,7 @@ to −21 %. They are listed in the [options](docs/FELLOWENGINE_OPTIONS.md).
 | `FellowRain3D` | rain around the camera: GPU drops that stop and splash on the scene, roofs sheltering the ground, wet materials, puddles with ripples; or snow: flakes drifting in the wind and a snow cover on what faces up, bare under roofs and trees, glinting in the sun, with footprints and wheel ruts (`FellowSnowTracker3D`) | 0.36 ms (Rain Lab); snowing 0.37 ms |
 | `FellowWind3D` | wind with gusts rolling over the landscape: plants bend, sway, flutter and shine with it; shadows and motion vectors follow; water, smoke and fire, and particles (`ParticleProcessMaterial`'s Wind group) take the same wind | 0.56 ms (Wind Lab); projects' own `TIME`-based sway costs 1.81 ms |
 | `FellowLightning3D` | lightning strikes around the camera: a few return strokes flashing over the scene with shadows, a branching bolt, a lit cloud, a signal for the thunder | +0.04 ms on average with a strike every 2 s (Rain Lab) |
+| `FellowWeather3D` | the weather from one node: clear, cloudy, overcast, rain, a thunderstorm, snow, a blizzard or a state of its own, changing smoothly; it drives the wind, rain, snow and lightning, the clouds, the sun on the scene, the fog and the ground (wet, drying, under snow, melting) | the parts it turns on (Bistro: clear weather not measurable, rain +0.5 ms) |
 | `FellowGasVolume3D` | smoke and fire simulated on the GPU (sparse bricks, multigrid pressure solve), physics bodies as obstacles, blackbody flames lighting the scene | Fire Lab's three volumes (0.47 M cells): the simulation 1.58 ms per step, the drawing 0.31 ms |
 | `FellowBurnable3D` | a mesh burns like wood in the gas's fire: voxels pyrolyse to char and glowing embers, the surface recedes, burns through and falls as a heap of ash and charcoal | drawing 0.35 ms (Burn Lab) |
 | `FellowHLOD3D` | automatic HLOD: repeated far meshes instanced and culled on the GPU, the rest merged per cell with LODs, optional octahedral impostors | City Lab: render thread −23 to −42 % |

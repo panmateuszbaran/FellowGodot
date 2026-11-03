@@ -1,12 +1,28 @@
 # FellowEngine showcase
 
 Real-time captures from FellowBench (`benchmarks/project`) on an RTX 5070 Ti Laptop GPU, builds `fellow214`
-(`0b7c021`) to `fellow221` (`584727c`, the snow, its tracks, the lightning and its clouds). Each was rendered at 1920 × 1080, supersampled 1.5× under TAA and
+(`0b7c021`) to `fellow222` (`4caccc2`, the snow, its tracks, the lightning and its clouds, the weather controller). Each was rendered at 1920 × 1080, supersampled 1.5× under TAA and
 settled for 300 frames, then scaled to 1600 × 900. The loops are 960 × 540 animated WebP.
 
 Nothing here is painted over. Each scene is the bench scene with FellowEngine's settings and nodes turned on, plus a
 camera, sun and exposure chosen for the picture. The command lines are in the showcase jobs (`m26_s2`-`m26_s4`): see
 [how they were made](#how-they-were-made) below.
+
+## The weather in Bistro: `FellowWeather3D`
+
+<img src="showcase/bistro_weather_grid.jpg" width="100%" alt="The same Bistro street under each of FellowWeather3D's presets: clear, overcast, rain, a thunderstorm, snow and a blizzard">
+
+<img src="showcase/loop_weather_lapse.webp" width="100%" alt="A time-lapse in Bistro: clear, clouds coming in, overcast, rain, a thunderstorm with lightning, snow, and the sun again">
+
+One `FellowWeather3D` node (milestone 32) and its presets: the same street by day in clear weather, overcast, rain,
+a thunderstorm (a strike in view), snow and a blizzard. Each weather sets the wind, the rain or snow, the lightning,
+the volumetric clouds' coverage and density, the sun on the scene's surfaces, the fog and the sky's light, and leaves
+the ground as it would be (wet, under snow). The time-lapse turns from one to the next in about a second each, with
+the ground's wetting, drying, snowing and melting sped up to match (`--weather_cycle`, `--weather_times`).
+
+<img src="showcase/bistro_weather_storm_street.jpg" width="100%" alt="Bistro's street in a thunderstorm by day: a flash over the wet street">
+
+Settings: the day look with ray tracing, the sun at 32°, auto exposure.
 
 ## Bistro at night, in the rain
 
@@ -180,7 +196,8 @@ settings under `rendering/fellow/`:
 
 FellowBench's options place the sun and the cameras: `--sun_elevation`, `--sun_azimuth`, `--sun_energy`,
 `--add_camera`, `--add_seq`. Its options `--weather_rain` and `--weather_snow` add the rain and the snow to Bistro,
-and `--set` supplies the 1.5× supersampling, the exposure and the sky's energy.
+`--weather` a `FellowWeather3D` (`--weather_cycle` changes it during a loop), and `--set` supplies the 1.5×
+supersampling, the exposure and the sky's energy.
 
 The benchmark assets keep their licenses: Intel New Sponza (CC BY 4.0, Intel) and Amazon Lumberyard Bistro (CC BY
 4.0, Amazon Lumberyard / NVIDIA ORCA).
