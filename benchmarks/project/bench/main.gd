@@ -47,7 +47,8 @@ extends Node
 ##                            --weather_drops=<n> (the rain node's drops; 0: none drawn — the camera in a dry gap),
 ##                            --weather_showers=<0-1> (1: it rains at the camera only under the clouds' dense parts,
 ##                            decision 0137), --weather_patches=<0-1> (the ground's wetting and drying in patches, 1,
-##                            decision 0138)
+##                            decision 0138), --weather_wind_driven=<0-1> (the shelter follows the slanted rain, 1,
+##                            decision 0139)
 ##   --dirt_map=1             a procedural lens dirt texture as the environment's glow map (strength 0)
 ##   --jitter=<n>             reference: sub-pixel jittered renders per output frame (default 16)
 ##   --ablate=<a+b>           sizing only (items separated by + or ,): hide omni / spot / sun lights, probes, decals, or pos_shadows (see _ablate)
@@ -341,6 +342,8 @@ func _ready() -> void:
 			wrn.showers = float(args["weather_showers"])
 		if wrn and args.has("weather_patches"):
 			wrn.drying_patches = float(args["weather_patches"])
+		if wrn and args.has("weather_wind_driven"):
+			wrn.wind_driven = float(args["weather_wind_driven"])
 		result["weather"] = [WEATHERS[weather_node.weather] if weather_node.weather < WEATHERS.size() else "custom", weather_node.ground_speed, weather_node.controls]
 	RenderingServer.viewport_set_measure_render_time(vp.get_viewport_rid(), true)
 	await get_tree().process_frame
