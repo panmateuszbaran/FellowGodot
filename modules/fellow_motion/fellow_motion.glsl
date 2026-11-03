@@ -64,12 +64,9 @@ layout(set = 0, binding = 4, std430) restrict buffer Part {
 };
 #if defined(MODE_GEMM) || defined(MODE_GEMM_COOP)
 // The activations again, read-only, for the products' A operand (never the tensor a product writes): read-only loads
-// can be cached nearer the cores, where the workgroups of other column tiles read the same rows.
+// can be cached nearer the cores, where the workgroups of the other column tiles read the same rows.
 layout(set = 0, binding = 5, std430) restrict readonly buffer ActIn {
 	float act_in[];
-};
-layout(set = 0, binding = 6, std430) restrict readonly buffer ActIn4 {
-	vec4 act_in4[];
 };
 #endif
 
@@ -160,24 +157,19 @@ void store_epilogue(uint gr, uint n, float v) {
 
 #if defined(MODE_GEMM) || defined(MODE_GEMM_COOP)
 
-// The tiles: BM rows x BN = 64 columns of the output per workgroup, K in steps of BK. Every thread keeps A_KPT
-// consecutive columns of the A tile and A_SLOTS of its rows for the whole product, with the rows' addresses worked out
-// once; the next K step's A and W are fetched into registers while the current one is multiplied (the loads' latency,
-// not the arithmetic, bounds these small products).
+// The tiles: BM rows x BN = 64 columns of the output per workgroup, K in steps of BK = 32. Every thread keeps one column
+// kk of the A tile and A_SLOTS of its rows for the whole product, with the rows' addresses worked out once; the next K
+// step's A and W are fetched into registers while the current one is multiplied (the loads' latency, not the
+// arithmetic, bounds these small products).
 
 #define BN 64u
+#define BK 32u
 #ifdef MODE_GEMM_COOP
 #define WG (4u * uint(SGSIZE))
-#define BK 64u
-#define A_KPT 4u
-#define A_VEC
 #else
 #define WG 256u
-#define BK 32u
-#define A_KPT 1u
 #endif
-#define A_TPR (BK / A_KPT) // threads per row of the A tile
-#define A_RSTEP (WG / A_TPR) // rows per pass of the workgroup
+#define A_RSTEP (WG / BK)
 #define A_SLOTS (uint(BM) / A_RSTEP)
 
 uint g_rows;
@@ -190,10 +182,9 @@ uint g_taps;
 int g_dil;
 uint g_up;
 bool g_aprelu;
-bool g_avec; // the rows and the K range 4-aligned: vec4 loads
 uint s_base[A_SLOTS]; // the row's offset in act (no taps) or its request's first row (taps); NONE past the batch
 uint s_rr[A_SLOTS]; // the row within its request (taps)
-float pa[A_SLOTS * A_KPT];
+float pa[A_SLOTS];
 
 void a_rows_setup(uint m0, uint r0) {
 	uint a_rows = O(G_A_ROWS);
@@ -218,65 +209,29 @@ void a_rows_setup(uint m0, uint r0) {
 	}
 }
 
-// This thread's A elements of the K step at k (gathered through the row map or the conv taps, zero outside).
+// This thread's A elements of the K step starting at k0 (gathered through the row map or the conv taps, zero outside).
 void a_fetch(uint k) {
-#ifdef A_VEC
-	if (g_avec && k + 3u < g_ke) {
-		// Four columns of one tap (the channel count is a multiple of 4).
-		uint tap = 0u;
-		uint c = k;
-		if (g_taps != 0u) {
-			tap = k / g_a_ld;
-			c = k % g_a_ld;
-		}
-		int shift = (int(tap) - int(g_taps / 2u)) * g_dil;
-		for (uint i = 0u; i < A_SLOTS; i++) {
-			vec4 v = vec4(0.0);
-			if (s_base[i] != NONE) {
-				if (g_taps == 0u) {
-					v = act_in4[(s_base[i] + k) >> 2u];
-				} else {
-					int tt = int(s_rr[i]) + shift;
-					if (tt >= 0 && tt < int(g_rows)) {
-						v = act_in4[(g_a_off + (s_base[i] + uint(tt) / g_up) * g_a_ld + c) >> 2u];
-					}
-				}
-			}
-			if (g_aprelu) {
-				v = max(v, vec4(0.0));
-			}
-			pa[i * 4u + 0u] = v.x;
-			pa[i * 4u + 1u] = v.y;
-			pa[i * 4u + 2u] = v.z;
-			pa[i * 4u + 3u] = v.w;
-		}
-		return;
+	bool kv = k < g_ke;
+	uint tap = 0u;
+	uint c = k;
+	if (g_taps != 0u) {
+		tap = k / g_a_ld;
+		c = k % g_a_ld;
 	}
-#endif
-	for (uint j = 0u; j < A_KPT; j++) {
-		uint kj = k + j;
-		bool kv = kj < g_ke;
-		uint tap = 0u;
-		uint c = kj;
-		if (g_taps != 0u) {
-			tap = kj / g_a_ld;
-			c = kj % g_a_ld;
-		}
-		int shift = (int(tap) - int(g_taps / 2u)) * g_dil;
-		for (uint i = 0u; i < A_SLOTS; i++) {
-			float v = 0.0;
-			if (kv && s_base[i] != NONE) {
-				if (g_taps == 0u) {
-					v = act_in[s_base[i] + kj];
-				} else {
-					int tt = int(s_rr[i]) + shift;
-					if (tt >= 0 && tt < int(g_rows)) {
-						v = act_in[g_a_off + (s_base[i] + uint(tt) / g_up) * g_a_ld + c];
-					}
+	int shift = (int(tap) - int(g_taps / 2u)) * g_dil;
+	for (uint i = 0u; i < A_SLOTS; i++) {
+		float v = 0.0;
+		if (kv && s_base[i] != NONE) {
+			if (g_taps == 0u) {
+				v = act_in[s_base[i] + k];
+			} else {
+				int tt = int(s_rr[i]) + shift;
+				if (tt >= 0 && tt < int(g_rows)) {
+					v = act_in[g_a_off + (s_base[i] + uint(tt) / g_up) * g_a_ld + c];
 				}
 			}
-			pa[i * A_KPT + j] = g_aprelu ? max(v, 0.0) : v;
 		}
+		pa[i] = g_aprelu ? max(v, 0.0) : v;
 	}
 }
 
@@ -291,7 +246,6 @@ void gemm_setup() {
 	g_dil = int(O(G_DIL));
 	g_up = O(G_UP);
 	g_aprelu = O(G_APRELU) != 0u;
-	g_avec = ((g_a_off | g_a_ld | g_kb) & 3u) == 0u;
 }
 
 #endif
@@ -420,18 +374,16 @@ void main() {
 
 // The same product on tensor cores: the A tile (gathered as in MODE_GEMM) and the W tile go to shared memory as fp16,
 // each subgroup multiplies its 16 columns by the tile's 16-row blocks with 16x16x16 cooperative matrices accumulated
-// in fp32, and each 16 x 16 accumulator goes through the subgroup's own corner of shared memory to the same epilogue
-// (or the split-K partials).
+// in fp32, and the accumulators go through shared memory to the same epilogue (or the split-K partials).
 
 #define RT (BM / 16)
 #define AST (BK + 8u) // shared row strides (fp16 elements), padded
-#define CST 20u
-#define W_TPC (BK / 8u) // threads per column of the W tile (8 weights each)
-#define W_SLOTS ((BN * W_TPC) / WG) // uvec4 of 8 weights per thread per K step
+#define CST (BN + 4u)
+#define W_SLOTS ((BN * (BK / 8u)) / WG) // uvec4 of 8 weights per thread per K step
 
 shared float16_t As[BM * AST];
 shared float16_t Bs[BN * AST];
-shared float Cs[4u * 16u * CST];
+shared float Cs[BM * CST];
 
 void main() {
 	uint t = gl_LocalInvocationIndex;
@@ -446,15 +398,15 @@ void main() {
 	uint kt0 = split * per;
 	uint kt1 = min(ktiles, kt0 + per);
 
-	uint kk0 = (t % A_TPR) * A_KPT;
-	uint r0 = t / A_TPR;
+	uint kk = t % BK;
+	uint r0 = t / BK;
 	a_rows_setup(m0, r0);
-	// W: slot j of thread t is column t / W_TPC + j * WG / W_TPC, k chunk t % W_TPC (8 weights).
-	uint kc = t % W_TPC;
+	// W: slot j of thread t is column t / 4 + j * WG / 4, k chunk t % 4 (8 weights).
+	uint kc = t % (BK / 8u);
 	uint w_idx[W_SLOTS];
 	uvec4 pw[W_SLOTS];
 	for (uint j = 0u; j < W_SLOTS; j++) {
-		uint gn = n0 + t / W_TPC + j * (WG / W_TPC);
+		uint gn = n0 + t / (BK / 8u) + j * (WG / (BK / 8u));
 		w_idx[j] = gn < Nout ? (O(G_W_OFF) + gn * O(G_W_LD) + g_kb + kc * 8u) >> 3u : NONE;
 		pw[j] = uvec4(0u);
 	}
@@ -464,25 +416,20 @@ void main() {
 		acc[r] = coopmat<float, gl_ScopeSubgroup, 16, 16, gl_MatrixUseAccumulator>(0.0);
 	}
 
-	// (W past the K range is not read: with 64-wide steps it can lie past the matrix's padded rows.)
 	if (kt0 < kt1) {
-		a_fetch(g_kb + kt0 * BK + kk0);
-		bool kin = g_kb + kt0 * BK + kc * 8u < g_ke;
+		a_fetch(g_kb + kt0 * BK + kk);
 		for (uint j = 0u; j < W_SLOTS; j++) {
-			if (w_idx[j] != NONE && kin) {
+			if (w_idx[j] != NONE) {
 				pw[j] = wt[w_idx[j] + kt0 * (BK / 8u)];
 			}
 		}
 	}
 	for (uint kt = kt0; kt < kt1; kt++) {
 		for (uint i = 0u; i < A_SLOTS; i++) {
-			uint base = (r0 + i * A_RSTEP) * AST + kk0;
-			for (uint j = 0u; j < A_KPT; j++) {
-				As[base + j] = float16_t(clamp(pa[i * A_KPT + j], -65504.0, 65504.0));
-			}
+			As[(r0 + i * A_RSTEP) * AST + kk] = float16_t(clamp(pa[i], -65504.0, 65504.0));
 		}
 		for (uint j = 0u; j < W_SLOTS; j++) {
-			uint base = (t / W_TPC + j * (WG / W_TPC)) * AST + kc * 8u;
+			uint base = (t / (BK / 8u) + j * (WG / (BK / 8u))) * AST + kc * 8u;
 			f16vec2 p0 = unpackFloat2x16(pw[j].x);
 			f16vec2 p1 = unpackFloat2x16(pw[j].y);
 			f16vec2 p2 = unpackFloat2x16(pw[j].z);
@@ -498,11 +445,9 @@ void main() {
 		}
 		barrier();
 		if (kt + 1u < kt1) {
-			a_fetch(g_kb + (kt + 1u) * BK + kk0);
-			bool kin = g_kb + (kt + 1u) * BK + kc * 8u < g_ke;
+			a_fetch(g_kb + (kt + 1u) * BK + kk);
 			for (uint j = 0u; j < W_SLOTS; j++) {
-				pw[j] = uvec4(0u);
-				if (w_idx[j] != NONE && kin) {
+				if (w_idx[j] != NONE) {
 					pw[j] = wt[w_idx[j] + (kt + 1u) * (BK / 8u)];
 				}
 			}
@@ -518,26 +463,24 @@ void main() {
 		}
 		barrier();
 	}
-	uint lane = gl_SubgroupInvocationID;
-	uint cbase = sg * 16u * CST;
 	for (uint r = 0u; r < uint(RT); r++) {
-		coopMatStore(acc[r], Cs, cbase, CST, gl_CooperativeMatrixLayoutRowMajor);
-		subgroupMemoryBarrierShared();
-		subgroupBarrier();
-		for (uint e = lane; e < 256u; e += uint(SGSIZE)) {
-			uint gr = m0 + r * 16u + e / 16u;
-			uint on = n0 + sg * 16u + e % 16u;
-			if (gr < g_M && on < Nout) {
-				float v = Cs[cbase + (e / 16u) * CST + e % 16u];
-				if (pc.splits > 1u) {
-					part[(split * g_M + gr) * Nout + on] = v;
-				} else {
-					store_epilogue(gr, on, v);
-				}
-			}
+		coopMatStore(acc[r], Cs, r * 16u * CST + sg * 16u, CST, gl_CooperativeMatrixLayoutRowMajor);
+	}
+	barrier();
+	for (uint e = t; e < uint(BM) * BN; e += WG) {
+		uint r = e / BN;
+		uint c = e % BN;
+		uint gr = m0 + r;
+		uint on = n0 + c;
+		if (gr >= g_M || on >= Nout) {
+			continue;
 		}
-		subgroupMemoryBarrierShared();
-		subgroupBarrier();
+		float v = Cs[r * CST + c];
+		if (pc.splits > 1u) {
+			part[(split * g_M + gr) * Nout + on] = v;
+		} else {
+			store_epilogue(gr, on, v);
+		}
 	}
 }
 
