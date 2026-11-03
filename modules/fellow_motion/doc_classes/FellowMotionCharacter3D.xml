@@ -78,6 +78,9 @@
 		<member name="body_path" type="String" setter="set_body_path" getter="get_body_path" default="&quot;&quot;">
 			A glTF (.glb) with the SOMA skeleton and a skinned mesh, loaded at run time (once per file).
 		</member>
+		<member name="catch_up" type="bool" setter="set_catch_up" getter="is_catch_up" default="true">
+			While the speed shown is far from the target's (by a quarter, at least 0.3 m/s: accelerating or braking), request a new segment every 0.33 s instead of at the transition point (the model approaches a target over its whole segment, up to 1.9 s).
+		</member>
 		<member name="crossfade_time" type="float" setter="set_crossfade_time" getter="get_crossfade_time" default="0.15">
 			How long a new segment takes to replace the one playing when it arrives later than requested.
 		</member>
@@ -107,6 +110,9 @@
 		</member>
 		<member name="model_path" type="String" setter="set_model_path" getter="get_model_path" default="&quot;&quot;">
 			The converted model (.fmb).
+		</member>
+		<member name="speed_halflife" type="float" setter="set_speed_halflife" getter="get_speed_halflife" default="0.1">
+			How fast the target's speed follows [member desired_velocity]'s (a critically damped spring's halflife; the direction follows in 0.2 s). Starting to move, the target is at once at the desired speed: the model accelerates over the segment.
 		</member>
 		<member name="transition_early_frames" type="int" setter="set_transition_early_frames" getter="get_transition_early_frames" default="8">
 			How many frames before a moving segment's end the next one takes over.

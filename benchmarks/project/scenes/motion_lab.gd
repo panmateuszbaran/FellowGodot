@@ -9,7 +9,8 @@ extends "res://bench/scene_base.gd"
 ## poses it last showed towards a target ahead of it, the requests of all characters run as one batch on the model's
 ## own GPU device.
 ##
-## The simulation steps at 60 Hz from set_time(); a step back in time rebuilds it from t = 0. --motion_mode=flush
+## The simulation steps at 60 Hz from set_time(); a step back in time continues it (--motion_rewind=1: rebuilds it
+## from t = 0, the same frames again). --motion_mode=flush
 ## (default): each step's requests run as one batch at the step's end and are taken the next step (deterministic);
 ## async: on the service's worker thread as they come (results when they are ready); immediate: each at once.
 
@@ -24,6 +25,9 @@ var _area := 16.0
 var _chars: Array = []
 var _rng_state: Array = []  # per character: [waypoint, pause_left, speed, rng]
 var _sim_t := 0.0
+var _last_t := 0.0
+var _acc := 0.0
+var _rewind := false
 var _root: Node3D
 
 
@@ -34,6 +38,7 @@ func build(p_args: Dictionary) -> void:
 	model_path = str(args.get("motion_model", OS.get_environment("FELLOW_MOTION_MODEL")))
 	body_path = str(args.get("motion_body", OS.get_environment("FELLOW_MOTION_BODY")))
 	mode = str(args.get("motion_mode", "flush"))
+	_rewind = str(args.get("motion_rewind", "0")) == "1"
 	_area = clampf(sqrt(float(crowd)) * 4.0, 12.0, 60.0)
 	_setup_common()
 	_setup_environment()
@@ -134,6 +139,8 @@ func _build_crowd() -> void:
 		var pause_bias := 0.6 if kind >= 0.9 else 0.25
 		_rng_state.append({"wp": _waypoint(r), "pause": r.randf_range(0.0, 1.0), "speed": sp, "rng": r, "pause_bias": pause_bias})
 	_sim_t = 0.0
+	_last_t = 0.0
+	_acc = 0.0
 
 
 func _waypoint(r: RandomNumberGenerator) -> Vector3:
@@ -191,10 +198,16 @@ func _step(dt: float) -> void:
 func set_time(t: float) -> void:
 	if _chars.is_empty():
 		return
-	if t + 1e-6 < _sim_t:
-		_build_crowd()
-	while _sim_t + STEP * 0.5 <= t:
+	if t + 1e-6 < _last_t:
+		if _rewind:
+			_build_crowd()
+		else:
+			_last_t = t
+	_acc += t - _last_t
+	_last_t = t
+	while _acc >= STEP * 0.5:
 		_step(STEP)
+		_acc -= STEP
 
 
 func sample_extra() -> Dictionary:

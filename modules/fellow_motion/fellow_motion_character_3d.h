@@ -78,6 +78,8 @@ private:
 	int min_tokens = 8;
 	int max_tokens = 14;
 	float lead_time = 0.97f;
+	float speed_halflife = 0.1f;
+	bool catch_up = true;
 	InferenceMode inference_mode = INFERENCE_ASYNC;
 	bool auto_process = true;
 	float crossfade_time = 0.15f;
@@ -165,6 +167,10 @@ public:
 	int get_min_tokens() const { return min_tokens; }
 	void set_max_tokens(int p_v) { max_tokens = CLAMP(p_v, 6, 16); }
 	int get_max_tokens() const { return max_tokens; }
+	void set_catch_up(bool p_v) { catch_up = p_v; }
+	bool is_catch_up() const { return catch_up; }
+	void set_speed_halflife(float p_v) { speed_halflife = CLAMP(p_v, 0.01f, 2.0f); }
+	float get_speed_halflife() const { return speed_halflife; }
 	void set_lead_time(float p_v) { lead_time = MAX(0.1f, p_v); }
 	float get_lead_time() const { return lead_time; }
 	void set_inference_mode(InferenceMode p_v) { inference_mode = p_v; }

@@ -259,7 +259,7 @@ void FellowMotionCharacter3D::_update_movement(double p_delta) {
 	if (cur.dot(in) < 0.92f) {
 		goal_speed *= 1.0f - 0.25f * CLAMP(speed / max_speed, 0.0f, 1.0f);
 	}
-	spring(speed, speed_rate, goal_speed, goal_speed > speed ? 0.6f : 0.4f, dt);
+	spring(speed, speed_rate, goal_speed, speed_halflife, dt);
 	if (speed > max_speed) {
 		speed = max_speed;
 		speed_rate = MIN(speed_rate, 0.0f);
@@ -451,9 +451,11 @@ void FellowMotionCharacter3D::_process(double p_delta) {
 	} else if (state == STATE_IDLE && input_speed > 0.0f) {
 		state = STATE_LOCOMOTION;
 		entered = true;
+		// The target at once at the desired speed (the model accelerates over the segment); the direction from the
+		// motion if there is any.
 		Vector3 av(actual_velocity.x, 0.0f, actual_velocity.z);
-		speed = av.length();
-		vel_angle = speed > 1e-6f ? Math::atan2(av.x, av.z) : _heading_of(pose.ptr());
+		speed = input_speed;
+		vel_angle = av.length() > 0.2f ? Math::atan2(av.x, av.z) : input_angle;
 		speed_rate = 0.0f;
 		vel_angle_rate = 0.0f;
 	}
@@ -467,7 +469,11 @@ void FellowMotionCharacter3D::_process(double p_delta) {
 	double lookahead = inference_mode == INFERENCE_IMMEDIATE ? p_delta : latency + p_delta;
 	if (!pending_id) {
 		if (state == STATE_LOCOMOTION) {
-			if (force_regen || !seg.valid() || seg.time_to_transition() <= lookahead || _needs_regeneration()) {
+			// Catching up: while the shown speed is far from the target's (accelerating, braking), re-plan every 0.33 s
+			// instead of at the transition point (the model approaches a target over its whole segment).
+			Vector3 av(actual_velocity.x, 0.0f, actual_velocity.z);
+			bool behind = catch_up && seg.valid() && seg.time > 0.33 && Math::abs(av.length() - speed) > MAX(0.25f * speed, 0.3f);
+			if (force_regen || !seg.valid() || seg.time_to_transition() <= lookahead || _needs_regeneration() || behind) {
 				_generate(false);
 			}
 		} else if (force_regen || (idle_motion && (!seg.valid() || seg.time_to_transition() <= lookahead))) {
@@ -582,6 +588,10 @@ void FellowMotionCharacter3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_min_tokens"), &FellowMotionCharacter3D::get_min_tokens);
 	ClassDB::bind_method(D_METHOD("set_max_tokens", "tokens"), &FellowMotionCharacter3D::set_max_tokens);
 	ClassDB::bind_method(D_METHOD("get_max_tokens"), &FellowMotionCharacter3D::get_max_tokens);
+	ClassDB::bind_method(D_METHOD("set_catch_up", "enable"), &FellowMotionCharacter3D::set_catch_up);
+	ClassDB::bind_method(D_METHOD("is_catch_up"), &FellowMotionCharacter3D::is_catch_up);
+	ClassDB::bind_method(D_METHOD("set_speed_halflife", "seconds"), &FellowMotionCharacter3D::set_speed_halflife);
+	ClassDB::bind_method(D_METHOD("get_speed_halflife"), &FellowMotionCharacter3D::get_speed_halflife);
 	ClassDB::bind_method(D_METHOD("set_lead_time", "seconds"), &FellowMotionCharacter3D::set_lead_time);
 	ClassDB::bind_method(D_METHOD("get_lead_time"), &FellowMotionCharacter3D::get_lead_time);
 	ClassDB::bind_method(D_METHOD("set_inference_mode", "mode"), &FellowMotionCharacter3D::set_inference_mode);
@@ -614,6 +624,8 @@ void FellowMotionCharacter3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "min_tokens", PROPERTY_HINT_RANGE, "6,16,1"), "set_min_tokens", "get_min_tokens");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "max_tokens", PROPERTY_HINT_RANGE, "6,16,1"), "set_max_tokens", "get_max_tokens");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "lead_time", PROPERTY_HINT_RANGE, "0.1,3,0.01,suffix:s"), "set_lead_time", "get_lead_time");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "catch_up"), "set_catch_up", "is_catch_up");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "speed_halflife", PROPERTY_HINT_RANGE, "0.01,2,0.01,suffix:s"), "set_speed_halflife", "get_speed_halflife");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "inference_mode", PROPERTY_HINT_ENUM, "Async,Flush,Immediate"), "set_inference_mode", "get_inference_mode");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "auto_process"), "set_auto_process", "is_auto_process");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "crossfade_time", PROPERTY_HINT_RANGE, "0,1,0.01,suffix:s"), "set_crossfade_time", "get_crossfade_time");
