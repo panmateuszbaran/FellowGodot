@@ -9,6 +9,25 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 43 — neural motion: MotionBricks on the GPU (2026-11-03)
+
+- New module `fellow_motion` (decision 0143): `FellowMotionModel` runs NVIDIA's MotionBricks SOMA model (a root and a
+  pose transformer and a VQ-VAE decoder, 188 M weights) on a RenderingDevice of its own — a plan of 251 GPU ops that
+  `tools/fmb_convert.py` writes from the released checkpoints into an `.fmb` file, checked against NVIDIA's PyTorch
+  model (`tools/fmb_plan.py` executes the same plan in NumPy). The weights are NVIDIA's (NVIDIA Open Model Agreement)
+  and are not in this repository.
+- Tensor cores: `VK_KHR_cooperative_matrix` enabled in the Vulkan driver when the device has it
+  (`RD::SUPPORTS_FELLOW_COOPERATIVE_MATRIX_F16`); the products run on it with fp16 weights (`cooperative_matrix`, on),
+  fp32 elsewhere. RTX 5070 Ti Laptop (in use): a request 4.3 ms, 16 at once 18 ms, 64 at once 62 ms (the first
+  version: 32, 68 and 171 ms).
+- `FellowMotionCharacter3D`: a desired velocity in, a walking, jogging, running, turning, stopping and standing
+  character out, with no animation clip (root-only targets from a relaxed stance; MotionBricks' runtime glue ported);
+  one batched service per model (async, flush or immediate); a skinned SOMA mannequin (`tools/fmb_usd.py`). Falls
+  (the training data has lying and crawling): the hips' target at a standing height, `get_up` (a standing target on
+  the ground), `max_speed` 3.5 m/s — 32 characters for 40 s: 8 falls, all back up within 0.4 s.
+- FellowBench: Motion Lab (`--scene=motion`, `--motion_model`, `--motion_body`, `--motion_crowd`, `--motion_mode`,
+  `--motion_rewind`): 64 characters 9.4 ms a frame waiting for their requests, 5.0 ms with a worker thread running them.
+
 ## Milestone 42 — the weather's own rain in thin streaks (2026-11-03)
 
 - A rain node a FellowWeather3D creates (`create_missing`) draws its drops as thin streaks (`streak_width` 0.004 m,

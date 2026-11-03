@@ -346,6 +346,23 @@ speeds it up; `settle_ground` starts it as the weather leaves it). It does nothi
 in the editor. Without the node nothing changes (bit for bit); with it, the cost is that of the parts it turns on.
 Decision 0132.
 
+## Neural motion (milestone 43)
+
+Module `fellow_motion`. `FellowMotionModel` runs NVIDIA's MotionBricks SOMA model on a RenderingDevice of its own
+(`load(path, max_batch)`, `run(inputs)` with the ONNX model's inputs and outputs, `get_info()`, `get_last_timings()`):
+an `.fmb` file that `modules/fellow_motion/tools/fmb_convert.py` writes from the released checkpoints (the weights are
+NVIDIA's, under the NVIDIA Open Model Agreement, and not in this repository). `cooperative_matrix` (on): the products
+on tensor cores (`VK_KHR_cooperative_matrix`, fp16 weights, a fixed subgroup size), fp32 elsewhere; `profile` (GPU
+timestamps per op); `target_groups` (96, split-K). `FellowMotionCharacter3D` (`model_path`, `body_path` — the SOMA
+mannequin `tools/fmb_usd.py` writes — and `desired_velocity` each frame) walks, jogs, runs, turns and stops by itself
+with no animation clip: `max_speed` (3.5 m/s), `lead_time` (0.97 s), `speed_halflife` (0.1 s), `catch_up` (on),
+`get_up` (on), `transition_early_frames` (8), `min_tokens` / `max_tokens` (8 / 14), `crossfade_time` (0.15 s),
+`inference_mode` (async, flush, immediate), `max_batch` (32), `idle_motion` (on), `body_color`; `get_stats()`, the
+static `get_service_stats(model_path)` and `flush_requests(model_path)`. Nothing changes without the nodes. Decision
+0143; bench Motion Lab (`--scene=motion`, `--motion_model=<.fmb>`, `--motion_body=<.glb>` or the environment's
+`FELLOW_MOTION_MODEL` and `FELLOW_MOTION_BODY`, `--motion_crowd=16`, `--motion_mode=flush|async|immediate`,
+`--motion_rewind=1`).
+
 ## Options that change the image (off by default)
 
 | setting | what it does | image cost | record |
