@@ -95,7 +95,7 @@
 			What the weather drives. The parts left out keep their own settings.
 		</member>
 		<member name="create_missing" type="bool" setter="set_create_missing" getter="get_create_missing" default="true">
-			Creates the wind, rain and lightning nodes the weather needs when the scene has none (as internal children).
+			Creates the wind, rain and lightning nodes the weather needs when the scene has none (as internal children). A rain node it creates draws its drops as thin streaks ([member FellowRain3D.streak_width] 0.004 m).
 		</member>
 		<member name="environment_path" type="NodePath" setter="set_environment_path" getter="get_environment_path" default="NodePath(&quot;&quot;)">
 			The [WorldEnvironment] whose environment gets the weather's fog and sky light. Empty: the current camera's environment, or the world's.

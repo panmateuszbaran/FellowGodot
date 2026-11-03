@@ -365,6 +365,8 @@ FellowRain3D *FellowWeather3D::_get_rain(bool p_create) {
 		r->set_rain(0.0f);
 		r->set_wetness(0.0f);
 		r->set_snow(0.0f);
+		// Its drops thin streaks (decision 0142): rain by day, against the sun, as rain is seen.
+		r->set_streak_width(0.004f);
 		add_child(r, false, INTERNAL_MODE_BACK);
 		rain_created = r->get_instance_id();
 	}
