@@ -35,11 +35,9 @@ wetness as before). At a wetness of 0 or 1 the branch is skipped: the same image
 
 ## Results
 
-**Cost** (RTX 5070 Ti Laptop, 1080p, Bistro exterior half dry — wetness 0.5, the ground held — even against in
-patches, 2 runs each, `m38_f313_patches`, fellow234): the depth pre-pass 0.603 → 0.617 ms, the opaque pass 1.434 →
-1.438 ms (+0.02 ms in the passes for five lookups while the ground dries); the frame 4.256 → 4.311 ms.
-
-(Showcase: to be filled.)
+(RTX: to be filled. The first measurement, `m38_f313_patches`, and stills, `m38_s23_bistro_drying`, showed a dry
+street: a clear weather above freezing creates no rain node, so the half-dry ground given to the bench was dropped —
+fixed in FellowBench, redone in `m38_f315`.)
 
 ## Decision
 
