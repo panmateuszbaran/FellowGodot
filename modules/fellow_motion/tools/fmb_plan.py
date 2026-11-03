@@ -22,6 +22,8 @@ EPS_STATS = 1e-05
 KPAD = 32
 MAGIC = b"FMB1"
 VERSION = 1
+# The GEMMs' A operand rounded to fp16 (as the cooperative-matrix products on the GPU take it): the reference of that path.
+HALF_A = False
 
 # Feature layout of the dual representation's statistics (370): global root pos 3, heading 2 | local root rot vel 1,
 # vel 2, y 1 | body: joint positions 87, 6D rotations 180, velocities 90, foot contacts 4.
@@ -499,6 +501,8 @@ def _gemm(op, W, P, A):
     if op["aprelu"]:
         X = np.maximum(X, 0)
     X = X[:, :, kb:ke]
+    if HALF_A:
+        X = np.clip(X, -65504.0, 65504.0).astype(np.float16).astype(np.float32)
     acc = X @ w[:, kb:ke].T
     if op["b"] is not None:
         acc = acc + P[op["b"]]
