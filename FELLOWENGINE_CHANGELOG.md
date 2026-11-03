@@ -13,6 +13,9 @@ Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.m
 
 - A rain node a FellowWeather3D creates (`create_missing`) draws its drops as thin streaks (`streak_width` 0.004 m,
   decision 0142); a scene's own rain node is left as it is.
+- The final check of milestones 36-42 (`m41_f317_final`, stock against fellow229 and fellow236, the nine scenes, 3 runs):
+  fellow236 faster than stock in every scene (Stress Lab within its spread, its frame bound by the render thread), and
+  against fellow229 each scene within its runs' spread. The README's table is from it.
 
 ## Milestone 41 — thin rain streaks (2026-11-03)
 

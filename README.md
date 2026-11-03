@@ -58,21 +58,23 @@ features, nodes and (in Bistro) ray tracing on. Captions, settings and more imag
 
 Stock Godot 4.7.2 against FellowEngine with its defaults, frame time in ms. Measured on an Acer Predator PHN16S-71
 (RTX 5070 Ti Laptop GPU, Core Ultra 9 275HX, Windows 11) at 1920 × 1080 with the benchmark's "high" preset. Three
-runs per scene after a pass that fills the shader caches (`m35_f308_final`, build `1cb7529`, milestone 35).
-FellowEngine was faster in every scene and every pair of runs. The weather of milestones 32-35 costs nothing without its
-nodes: against milestone 30's build in the same session each scene was within its runs' spread (−0.3 % to +2.4 %).
+runs per scene after a pass that fills the shader caches (`m41_f317_final`, build `084ba55`, milestone 41).
+FellowEngine was faster in every scene and every pair of runs except Stress Lab, within its runs' spread this time
+(2 of 3 pairs faster): its frame is bound by the render thread, and its GPU time is 2.4 ms against stock's 3.2 ms. The
+weather of milestones 32-42 costs nothing without its nodes: against milestone 35's build in the same session each
+scene was within its runs' spread.
 
 | scene | stock | FellowEngine | change |
 |---|---:|---:|---:|
-| Sponza | 13.757 | 6.266 | **−54.5 %** |
-| Bistro exterior | 6.693 | 4.258 | **−36.4 %** |
-| City Lab (18 800 meshes) | 3.012 | 2.286 | **−24.1 %** |
-| Bistro interior | 4.313 | 3.286 | **−23.8 %** |
-| Lights Lab | 3.007 | 2.370 | **−21.2 %** |
-| Foliage Lab | 3.685 | 3.024 | **−17.9 %** |
-| Crowd Lab (256 animated characters) | 6.207 | 5.106 | **−17.7 %** |
-| PBR Lab | 2.600 | 2.235 | **−14.0 %** |
-| Stress Lab | 5.020 | 4.820 | **−4.0 %** |
+| Sponza | 13.521 | 6.170 | **−54.4 %** |
+| Bistro exterior | 6.646 | 4.164 | **−37.4 %** |
+| City Lab (18 800 meshes) | 3.145 | 2.230 | **−29.1 %** |
+| Bistro interior | 4.261 | 3.254 | **−23.6 %** |
+| Lights Lab | 3.076 | 2.365 | **−23.1 %** |
+| Crowd Lab (256 animated characters) | 6.234 | 5.028 | **−19.3 %** |
+| Foliage Lab | 3.679 | 2.985 | **−18.9 %** |
+| PBR Lab | 2.585 | 2.197 | **−15.0 %** |
+| Stress Lab | 4.984 | 4.893 | −1.8 % (within the spread) |
 
 Where the time goes:
 

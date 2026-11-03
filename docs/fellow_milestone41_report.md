@@ -27,6 +27,13 @@ default of the rain node a FellowWeather3D creates.
 Water Lab in the controller's rain, bars against thin streaks, 1080p, 2 runs each (`m41_f315_streaks`, fellow236): not
 measurable (the transparent pass 1.134 / 1.154 ms, both builds' runs noisy).
 
+The final check of milestones 36-42 (`m41_f317_final`, stock against fellow229 — milestone 35 — and fellow236, the
+nine scenes, 3 runs after a pass that fills the shader caches): fellow236 faster than stock in every scene and pair of
+runs (Sponza −54.4 %, Bistro exterior −37.4 %, City −29.1 %, Bistro interior −23.6 %, Lights −23.1 %, Crowd −19.3 %,
+Foliage −18.9 %, PBR −15.0 %) but Stress Lab, within its spread (−1.8 %, 2 of 3 pairs: its frame is bound by the render
+thread; its GPU time 2.4 ms in both FellowEngine builds against stock's 3.2 ms); against fellow229 each scene within its
+runs' spread. The README's table is from this check.
+
 ## 4. Showcase
 
 Bistro's square against the sun, bars against thin streaks (`m41_s25_bistro_streaks`; `bistro_thin_streaks_ab.jpg`),
