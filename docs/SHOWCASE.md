@@ -36,6 +36,16 @@ Milestone 34: as the controller's rain turns to clear and the sun comes out 14°
 falling gives the primary bow — red outside, violet inside — and the secondary above it with its colours reversed, the
 sky brighter inside the primary. The colours come from each wavelength's refraction in water.
 
+## Showers over the lake: `FellowRain3D.shafts`
+
+<img src="showcase/water_rain_shafts.jpg" width="100%" alt="Grey curtains of rain hanging from the dense clouds over the far shore of Water Lab's lake">
+
+<img src="showcase/loop_water_rain_shafts.webp" width="100%" alt="Showers drifting with the clouds over the lake, curtains of rain below them">
+
+Milestone 35: in the controller's rain under a broken layer (coverage 0.78), grey curtains of rain hang below the
+clouds' dense parts and drift with them, the far shore hazy behind them; the sun 14° up. The camera stands in a dry gap
+(the drops around it not drawn, `--weather_drops=0`); milestone 37 makes that the rain's own doing (`showers`).
+
 ## Bistro at night, in the rain
 
 <img src="showcase/bistro_night_rain_cafe.jpg" width="100%" alt="Bistro's cafe at night in the rain, wet cobblestones reflecting the lamps">

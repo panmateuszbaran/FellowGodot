@@ -43,8 +43,9 @@ frame 4.226 / 4.140 ms (the difference within the runs' noise).
 **Over the lake** (`m35_s18_water_showers`: the day look, the sun 14° up, coverage 0.75, four views): with the shafts
 the band below the clouds on the far shore turns grey under the denser clouds; without them it is clear. They are
 subtle there — the drops around the camera, lit against the low sun, take most of the frame — and the loop over the lake
-(`m35_s18_water_showers_loop`) the same. A view from a dry gap, the drops off (`--weather_drops=0`), is milestone 36's
-showcase.
+(`m35_s18_water_showers_loop`) the same. From a dry gap, the drops not drawn (`m35_s19_water_shafts_dry`,
+`--weather_drops=0`, coverage 0.78, job f309 with fellow230): the curtains hang over the far shore, hazy behind them, and
+drift with the clouds in the loop (`m35_s19_water_shafts_loop`; `water_rain_shafts.jpg`, `loop_water_rain_shafts.webp`).
 
 ## Decision
 

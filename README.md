@@ -40,6 +40,8 @@ in [docs/](docs/) and the [showcase](docs/SHOWCASE.md).
   <img src="docs/showcase/loop_weather_lapse.webp" width="49%" alt="A time-lapse of the weather in Bistro: clouds and their shadows, rain, a thunderstorm, a rainbow, snow and the sun again">
   <img src="docs/showcase/bistro_rainbow_street.jpg" width="49%" alt="A double rainbow over Bistro's wet street after the rain">
   <img src="docs/showcase/loop_bistro_rainbow.webp" width="49%" alt="The rain clouds part over Bistro and a double rainbow appears">
+  <img src="docs/showcase/water_rain_shafts.jpg" width="49%" alt="Curtains of rain hanging from the clouds over the far shore of a lake">
+  <img src="docs/showcase/loop_water_rain_shafts.webp" width="49%" alt="Showers drifting with the clouds over the lake">
 </p>
 
 These are real-time captures from the benchmark scenes on an RTX 5070 Ti Laptop GPU, with FellowEngine's visual
