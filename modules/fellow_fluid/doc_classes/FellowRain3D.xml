@@ -180,6 +180,9 @@
 		<member name="wind" type="Vector3" setter="set_wind" getter="get_wind" default="Vector3(1, 0, 0.5)">
 			The wind carrying the drops, in metres per second: their streaks lean with it and they start upwind of the camera so they land around it. With [member wind_from_scene] and a [FellowWind3D] in the scene, that node's wind is used instead.
 		</member>
+		<member name="wind_driven" type="float" setter="set_wind_driven" getter="get_wind_driven" default="1.0">
+			Wind-driven rain (0-1): in a wind the drops fall slanted, and the shelter follows them — a surface is wet where the slanted path from it up into the rain is open, so walls facing the wind get wet under their eaves (and as wet as the ground) while the lee of a building stays drier. From a drift of 0.2 m per metre of fall (a breeze of 1.8 m/s at the default [member drop_speed]: the rain as good as vertical, nothing changes) to fully slanted at 0.6. Not for snow.
+		</member>
 		<member name="wind_from_scene" type="bool" setter="set_wind_from_scene" getter="is_wind_from_scene" default="true">
 			If [code]true[/code] and the scene has a [FellowWind3D], the drops are carried by its wind at the camera (with the gust there) instead of [member wind].
 		</member>

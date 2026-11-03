@@ -1549,7 +1549,13 @@ void fellow_wet_surface(in SceneData p_scene, in FellowWeatherData w, float wetn
 		float high = 1.0 - (0.6 * lows + 0.25 * broad + 0.15 * fine);
 		wet_here = mix(wetness, smoothstep(high - 0.08, high + 0.08, wetness * 1.4 - 0.2), patches);
 	}
-	float wet = wet_here * exposed * mix(0.1, 1.0, smoothstep(-0.3, 0.3, gn.y));
+	float facing = mix(0.1, 1.0, smoothstep(-0.3, 0.3, gn.y));
+	if (w.slant.z > 0.0) {
+		// Wind-driven rain (decision 0139): a wall facing the wind is as wet as the ground.
+		vec2 back = -w.slant.xy / max(length(w.slant.xy), 1e-4);
+		facing = max(facing, smoothstep(0.0, 0.6, dot(gn.xz, back)) * w.slant.z);
+	}
+	float wet = wet_here * exposed * facing;
 	float rough0 = r_roughness;
 	float porous = (1.0 - r_metallic) * smoothstep(0.2, 0.6, rough0);
 	r_albedo *= mix(1.0, 0.5, wet * porous);
@@ -1779,6 +1785,24 @@ void fellow_wetness_apply(in SceneData p_scene, inout vec3 r_albedo, inout float
 				exposed_snow = smoothstep(top - w.occlusion2.w * 2.0, top - w.occlusion2.w, wp.y);
 			}
 		}
+	}
+	// Wind-driven rain (decision 0139): the drops fall slanted, drifting w.slant.xy per metre of fall; the rain reaches
+	// a point where its slanted path up into the rain is open — the heightfield back along the drift (up to 1 m, as
+	// far as the path rises 3 m) below the height the drop had there. Walls facing the wind get it under their eaves,
+	// the lee of a building stays drier.
+	if (w.occlusion2.z > 0.5 && w.slant.z > 0.0) {
+		float s = length(w.slant.xy);
+		vec2 back = -w.slant.xy / max(s, 1e-4);
+		float d = min(1.0, s * 3.0);
+		vec3 sp = wp + vec3(gn.x, 0.0, gn.z) * (w.occlusion2.w + 0.1) + vec3(back.x, 0.0, back.y) * d;
+		vec2 uv = (sp.xz - w.occlusion.xy) * w.occlusion.zw + 0.5;
+		float exposed_slant = 1.0;
+		if (all(greaterThan(uv, vec2(0.0))) && all(lessThan(uv, vec2(1.0)))) {
+			float h = textureLod(sampler2D(fellow_rain_occlusion, SAMPLER_LINEAR_CLAMP), uv, 0.0).r;
+			float top = w.occlusion2.x + (h * 2.0 - 1.0) * w.occlusion2.y;
+			exposed_slant = smoothstep(top - w.occlusion2.w * 2.0, top - w.occlusion2.w, wp.y + d / max(s, 1e-4));
+		}
+		exposed = mix(exposed, exposed_slant, w.slant.z);
 	}
 	if (exposed <= 0.0 && (snow <= 0.0 || exposed_snow <= 0.0)) {
 		return; // sheltered: dry

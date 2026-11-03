@@ -138,6 +138,7 @@ private:
 	float frost = 0.0f; // 0..1: hoarfrost on what is exposed to the sky
 	float freezing_time = 600.0f; // s for the water to freeze at -5 degrees (a weather controller's ground model)
 	float drying_patches = 1.0f; // decision 0138: 0..1, the ground wets and dries in patches, the puddles shrinking
+	float wind_driven = 1.0f; // decision 0139: 0..1, the shelter follows the drops' slant in the wind
 	float rain_seen = 0.0f; // the rain lately (it fades over RAINBOW_TIME once the rain stops: the rain moving away)
 	static constexpr float RAINBOW_TIME = 90.0f; // s
 	float flake_speed = 1.1f; // m/s
@@ -287,6 +288,8 @@ public:
 	void set_freezing_time(float p_seconds) { freezing_time = MAX(0.0f, p_seconds); }
 	void set_drying_patches(float p_patches) { drying_patches = CLAMP(p_patches, 0.0f, 1.0f); }
 	float get_drying_patches() const { return drying_patches; }
+	void set_wind_driven(float p_amount) { wind_driven = CLAMP(p_amount, 0.0f, 1.0f); }
+	float get_wind_driven() const { return wind_driven; }
 	float get_freezing_time() const { return freezing_time; }
 	void set_flake_speed(float p_speed);
 	float get_flake_speed() const { return flake_speed; }

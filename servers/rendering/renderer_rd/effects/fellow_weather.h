@@ -71,6 +71,8 @@ public:
 		float freeze = 0.0f; // 0..1: how much of the wet surfaces' water is ice (decision 0136)
 		float frost = 0.0f; // 0..1: hoarfrost on what is exposed to the sky
 		float drying_patches = 0.0f; // 0..1: the ground wets and dries in patches, the puddles shrinking (decision 0138)
+		Vector2 rain_drift; // decision 0139: the drops' horizontal drift per metre of fall (the wind over their speed)
+		float rain_slant = 0.0f; // 0..1: how much the shelter follows the slanted rain
 		float snow_depth = 0.08f; // m (decision 0130: how deep tracks can go before the ground shows)
 		RID tracks_texture; // RD texture (r16f): the tracks' depth in m (negative: a rim), world-anchored, wrapping
 		Vector2 tracks_origin; // m: the window's centre
@@ -143,6 +145,7 @@ public:
 		float cloud_shadow2[4]; // the sun's directional light index, its direction's x / y and z / y, the ground (m)
 		float cloud_shadow3[4]; // beyond the map: the sun's share there; the sky's light's cover (greyed)
 		float frost[4]; // decision 0136: the water's ice (0..1), the hoarfrost (0..1); 0138: the drying's patches (0..1)
+		float slant[4]; // decision 0139: the rain's drift per metre of fall (x, z), how slanted it counts (0..1)
 	};
 
 private:

@@ -151,6 +151,9 @@ RID FellowWeather::get_uniform_buffer() {
 		u.frost[0] = state.enabled ? CLAMP(state.freeze, 0.0f, 1.0f) : 0.0f;
 		u.frost[1] = state.enabled ? CLAMP(state.frost, 0.0f, 1.0f) : 0.0f;
 		u.frost[2] = state.enabled ? CLAMP(state.drying_patches, 0.0f, 1.0f) : 0.0f;
+		u.slant[0] = state.enabled ? state.rain_drift.x : 0.0f;
+		u.slant[1] = state.enabled ? state.rain_drift.y : 0.0f;
+		u.slant[2] = state.enabled ? CLAMP(state.rain_slant, 0.0f, 1.0f) : 0.0f;
 		u.snow[2] = MAX(0.001f, state.snow_depth);
 		if (get_tracks_texture().is_valid() && state.tracks_window > 0.0f) {
 			u.snow[3] = 1.0f;

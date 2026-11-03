@@ -813,6 +813,7 @@ struct FellowWeatherData {
 	vec4 cloud_shadow2; // the sun's directional light index, its direction's x / y and z / y, the ground's height (m)
 	vec4 cloud_shadow3; // beyond the map: the sun's share there (the clear sky's share); the sky light's cover
 	vec4 frost; // decision 0136: how much of the wet surfaces' water is ice (0..1), the hoarfrost (0..1); z: decision 0138's drying patches (0..1)
+	vec4 slant; // decision 0139: the rain's drift per metre of fall (x, z), how slanted the shelter is (0..1)
 };
 layout(set = 1, binding = 49, std140) uniform FellowWeatherBlock {
 	FellowWeatherData data;
