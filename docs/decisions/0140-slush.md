@@ -30,7 +30,12 @@ is the previous one (the glints multiplied by exactly 1).
 
 ## Results
 
-(RTX: to be filled.)
+**Cost** (RTX 5070 Ti Laptop, 1080p, Bistro exterior under snow at 3 °C with the ground held, fresh against soaked,
+2 runs each, `m40_f315_slush`, fellow236): the depth pre-pass 0.939 / 0.953 ms, the opaque pass 1.670 / 1.685 ms; the
+frame 5.045 → 5.064 ms (+0.02 ms). The first measurement and stills (`m40_f314_slush`, `m40_s24_bistro_slush`) ran on a
+dry street (no rain node in a clear weather above freezing).
+
+(Showcase: to be filled.)
 
 ## Decision
 

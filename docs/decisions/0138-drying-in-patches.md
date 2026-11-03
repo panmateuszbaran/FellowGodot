@@ -35,9 +35,15 @@ wetness as before). At a wetness of 0 or 1 the branch is skipped: the same image
 
 ## Results
 
-(RTX: to be filled. The first measurement, `m38_f313_patches`, and stills, `m38_s23_bistro_drying`, showed a dry
-street: a clear weather above freezing creates no rain node, so the half-dry ground given to the bench was dropped —
-fixed in FellowBench, redone in `m38_f315`.)
+**Cost** (RTX 5070 Ti Laptop, 1080p, Bistro exterior half dry — wetness 0.5, the ground held — even against in
+patches, 2 runs each, `m38_f315_patches`, fellow236): the depth pre-pass 0.720 → 0.818 ms, the opaque pass 1.564 →
+1.634 ms; the frame 4.677 → 4.891 ms (+0.21 ms) while the ground is between wet and dry. The puddles' noise is looked up
+twice on flat ground (for the patches and for the puddles): reusing the first lookup for the puddles changed the image
+at full wetness too (lavapipe: up to 4 levels in 225 pixels of Rain Lab — the compiler fuses the reordered sums
+differently), so the lookups stay as they are. The first measurement (`m38_f313_patches`) and stills (`m38_s23_bistro_drying`) showed a dry street: a clear
+weather above freezing creates no rain node, so the ground given to the bench was dropped (fixed in FellowBench).
+
+(Showcase: to be filled.)
 
 ## Decision
 

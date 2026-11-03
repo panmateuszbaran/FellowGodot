@@ -28,7 +28,11 @@ seen. 0.004 m is a large drop's streak. The splashes and the snowflakes are unch
 
 ## Results
 
-(RTX: to be filled.)
+**Cost** (RTX 5070 Ti Laptop, 1080p, Water Lab in a FellowWeather3D's rain, the drops as bars against thin streaks, 2
+runs each, `m41_f315_streaks`, fellow236): the transparent pass 1.134 / 1.154 ms, the frame 3.628 / 3.663 ms (both
+builds' runs noisy): not measurable.
+
+(Showcase: to be filled.)
 
 ## Decision
 
