@@ -220,7 +220,10 @@ scene where the rain falls (Forward+):
   (`freezing_time`);
 * **showers** (milestone 37, decision 0137): `showers` (0-1, 0 by default) makes it rain at the camera only as the
   volumetric clouds above let it — under their dense parts, as the rain shafts hang — eased over 2 s as showers pass
-  with the clouds' wind (`get_rain_here()`); the drops, ripples, wetting and settling snow follow it.
+  with the clouds' wind (`get_rain_here()`); the drops, ripples, wetting and settling snow follow it;
+* **drying in patches** (milestone 38, decision 0138): between dry and wet the surfaces are wet in patches — the high
+  spots drying first and wetting last — and the puddles shrink to their deepest instead of fading (`drying_patches`
+  1; 0: an even wetness).
 
 Cost (RTX 5070 Ti Laptop, 1080p, Rain Lab): 0.36 ms of GPU time raining — screen-space reflections 0.13 ms more
 (wet surfaces are glossy enough for SSR; without SSR there is none of it), the wetting 0.12 ms (depth pre-pass and

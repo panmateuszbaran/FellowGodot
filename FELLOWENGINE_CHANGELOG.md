@@ -9,6 +9,13 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 38 — wetting and drying in patches (2026-11-03)
+
+- `FellowRain3D.drying_patches` (decision 0138, 1): between dry and wet the surfaces are wet in patches — the puddles'
+  noise taken as the ground's lows and highs, a broad and a fine noise with it: the highs dry first and wet last — and
+  the puddles shrink to their deepest instead of fading. At a wetness of 0 or 1 the image is the same bit for bit.
+  FellowBench: `--weather_patches`.
+
 ## Milestone 37 — showers (2026-11-03)
 
 - `FellowRain3D.showers` (decision 0137, 0 by default): with the volumetric clouds on, it rains at the camera only as
