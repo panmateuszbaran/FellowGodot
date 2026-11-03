@@ -199,6 +199,9 @@ RID FellowMotionModel::_uniform_set(int p_version, uint32_t p_chunk) {
 	u.push_back(RD::Uniform(RD::UNIFORM_TYPE_STORAGE_BUFFER, 2, param_buffer));
 	u.push_back(RD::Uniform(RD::UNIFORM_TYPE_STORAGE_BUFFER, 3, op_buffer));
 	u.push_back(RD::Uniform(RD::UNIFORM_TYPE_STORAGE_BUFFER, 4, part_buffer));
+	// The activations again, read-only (the products' A operand, scalar and vec4).
+	u.push_back(RD::Uniform(RD::UNIFORM_TYPE_STORAGE_BUFFER, 5, act_buffer));
+	u.push_back(RD::Uniform(RD::UNIFORM_TYPE_STORAGE_BUFFER, 6, act_buffer));
 	RID s = rd->uniform_set_create(u, shaders[p_version], 0);
 	uniform_sets[key] = s;
 	return s;
@@ -209,11 +212,13 @@ int FellowMotionModel::_splits(const OpRec &p_op, int p_n, int &r_bm) const {
 	uint32_t m = p_op.rows * p_n;
 	r_bm = m <= 16 ? 16 : (m <= 32 ? 32 : 64);
 	uint32_t groups = ((p_op.nout + 63) / 64) * ((m + r_bm - 1) / r_bm);
-	uint32_t ktiles = (p_op.ke - p_op.kb + 31) / 32;
+	// K steps of 32 (64 on tensor cores); at least 128 of K per split.
+	const uint32_t bk = coop_active ? 64 : 32;
+	uint32_t ktiles = (p_op.ke - p_op.kb + bk - 1) / bk;
 	int s = 1;
 	if (groups < uint32_t(target_groups)) {
 		s = int((target_groups + groups - 1) / groups);
-		s = MIN(s, int(MAX(1u, ktiles / 4)));
+		s = MIN(s, int(MAX(1u, ktiles / (128 / bk))));
 		s = MIN(s, 16);
 	}
 	return MAX(s, 1);
@@ -474,7 +479,17 @@ Error FellowMotionModel::load(const String &p_path, int p_max_batch) {
 		v[0] = rec.kind;
 	}
 
-	// The split-K scratch: the largest over the ops and batch sizes.
+	// The device and the shaders.
+	rd = RenderingServer::get_singleton()->create_local_rendering_device();
+	ERR_FAIL_NULL_V_MSG(rd, ERR_UNAVAILABLE, "FellowMotionModel requires a RenderingDevice (Forward+ or Mobile renderer).");
+	// Tensor cores (VK_KHR_cooperative_matrix, 16x16x16 fp16 -> fp32) for the products, with fp16 weights and a fixed
+	// subgroup size (the kernel's four subgroups per workgroup).
+	int sg = int(rd->limit_get(RD::LIMIT_SUBGROUP_SIZE));
+	bool sg_fixed = sg > 0 && int(rd->limit_get(RD::LIMIT_SUBGROUP_MIN_SIZE)) == sg && int(rd->limit_get(RD::LIMIT_SUBGROUP_MAX_SIZE)) == sg;
+	bool coop_device = rd->has_feature(RD::SUPPORTS_FELLOW_COOPERATIVE_MATRIX_F16);
+	coop_active = cooperative_matrix && weights_f16 && sg_fixed && (sg == 16 || sg == 32 || sg == 64) && coop_device;
+	coop_note = coop_active ? String() : (!cooperative_matrix ? String("off") : !weights_f16 ? String("fp32 weights") : !coop_device ? String("the device has no 16x16x16 fp16 cooperative matrices") : vformat("subgroup size %d (%d-%d) not fixed", sg, int(rd->limit_get(RD::LIMIT_SUBGROUP_MIN_SIZE)), int(rd->limit_get(RD::LIMIT_SUBGROUP_MAX_SIZE))));
+	// The split-K scratch (after the choice of products, whose K steps it depends on): the largest over the ops and batch sizes.
 	part_floats = 64;
 	for (const OpRec &op : op_recs) {
 		if (op.kind != 0) {
@@ -489,16 +504,6 @@ Error FellowMotionModel::load(const String &p_path, int p_max_batch) {
 		}
 	}
 
-	// The device and the shaders.
-	rd = RenderingServer::get_singleton()->create_local_rendering_device();
-	ERR_FAIL_NULL_V_MSG(rd, ERR_UNAVAILABLE, "FellowMotionModel requires a RenderingDevice (Forward+ or Mobile renderer).");
-	// Tensor cores (VK_KHR_cooperative_matrix, 16x16x16 fp16 -> fp32) for the products, with fp16 weights and a fixed
-	// subgroup size (the kernel's four subgroups per workgroup).
-	int sg = int(rd->limit_get(RD::LIMIT_SUBGROUP_SIZE));
-	bool sg_fixed = sg > 0 && int(rd->limit_get(RD::LIMIT_SUBGROUP_MIN_SIZE)) == sg && int(rd->limit_get(RD::LIMIT_SUBGROUP_MAX_SIZE)) == sg;
-	bool coop_device = rd->has_feature(RD::SUPPORTS_FELLOW_COOPERATIVE_MATRIX_F16);
-	coop_active = cooperative_matrix && weights_f16 && sg_fixed && (sg == 16 || sg == 32 || sg == 64) && coop_device;
-	coop_note = coop_active ? String() : (!cooperative_matrix ? String("off") : !weights_f16 ? String("fp32 weights") : !coop_device ? String("the device has no 16x16x16 fp16 cooperative matrices") : vformat("subgroup size %d (%d-%d) not fixed", sg, int(rd->limit_get(RD::LIMIT_SUBGROUP_MIN_SIZE)), int(rd->limit_get(RD::LIMIT_SUBGROUP_MAX_SIZE))));
 	shader_file.instantiate();
 	Error err = shader_file->parse_versions_from_text(fellow_motion_shader_glsl, "#define SGSIZE " + itos(MAX(sg, 8)) + "\n");
 	if (err != OK) {
