@@ -80,7 +80,9 @@ transition point; and the model falls far more often running fast — `max_speed
   own mixed-FP16 model "can choose different motion tokens" too.
 * **The GPU executor against the plan** (`tests/fmb_gpu_run.gd`, `fmb_parity_gpu.py`): fp32 products — lavapipe and
   the RTX — the same tokens, within 1e-4 (fp32 and fp16 weights, batches of 1, 3 and 6: the split-K and tile
-  variants); the rewritten kernels give the earlier ones' results bit for bit (RTX: `m43_f320`, `f324`). Tensor cores
+  variants); the rewritten kernels give the earlier ones' results bit for bit (RTX: `m43_f320`, `f324`), and the final
+  code on lavapipe the plan's tokens within 1e-4 again (fp16 and fp32 weights; the RTX's motion within 2.4e-5 and
+  9.2e-4). Tensor cores
   (RTX): the same token counts; 10 of 405 pose tokens of the six clip requests differ from the plan's, all where the
   two best logits are within 0.08 — rounding A to fp16 in the plan alone (`fmb_plan.HALF_A`) changes 9, and the tensor
   cores differ from that plan in 7.
@@ -98,6 +100,8 @@ transition point; and the model falls far more often running fast — `max_speed
   character-steps); without getting up, 17 falls running at up to 4.2 m/s, 8 at up to 3.5, 3 at up to 3.0
   (`m43_f323`; crossfades, the target's lead and the transition point made no difference); final (`m43_f324`): 8
   falls of 5 characters, all back up (10 get-ups, 0.4 s on the ground at most, 0.15 % of the character-steps).
+  lavapipe, 4 characters for 10 s, the final code: the character that lay down for 7 of the 10 s before falls once
+  and is back up within 0.5 s.
 
 ## Results
 

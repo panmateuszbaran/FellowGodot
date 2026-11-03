@@ -50,7 +50,7 @@ MotionBricks' sample clips.
 * **GPU against the plan**: fp32 products (lavapipe and RTX) the same tokens, within 1e-4, batches 1, 3, 6; the
   rewritten kernels bit for bit the earlier ones' results (`m43_f320`, `f324`). Tensor cores: the same token counts, 10
   of 405 pose tokens different, all near ties (within 0.08 of the best logit); the plan with fp16 A operands changes
-  9 itself.
+  9 itself. The final code on lavapipe (efe14d2e): the plan's tokens, within 1e-4, fp16 and fp32 weights.
 * **A character** (RTX, tensor cores, `m43_f324`): stand, walk ahead, turn walking, jog, run a curve, stop — the
   walk 0.95-1.17 m/s of 1.3, the jog 2.52 of 2.8, the run 3.06 of 3.5, the hips at 0.97-0.98 m, the feet on the
   ground (the lowest joint's median 0.0 m), the stop within 0.12 m/s; 26 requests in 12 s, 4.8 ms each.
@@ -66,6 +66,9 @@ MotionBricks' sample clips.
 | without crossfades / the target 1.5 s ahead / the transition 4 frames early | 12 / 14 / 18 | 6 / 4 / 7 | 7.1 / 4.8 / 10.2 % |
 | `m43_f324`, final: up to 3.5 m/s, getting up | 8 (5), 10 get-ups | 0 (0.4 s at most) | 0.15 % |
 | `m43_f324`, final, without getting up | 11 (5) | 0 (2.3 s at most) | 0.88 % |
+
+On lavapipe (4 characters for 10 s) the character that lay on the ground for 7 of the 10 s with the first version
+(74 % of its steps) falls once with the final code and is back up within 0.5 s.
 
 ## 3. Performance
 
