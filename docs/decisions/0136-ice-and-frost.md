@@ -18,8 +18,9 @@ frozen puddles, no hoarfrost on the morning after.
 
 **Ice.** `FellowRain3D.freeze` (0-1) is how much of the water on the ground is ice. The rain's ripples on the wet
 surfaces are multiplied by `1 − freeze` (ice does not ripple; rain falling on it splashes still). The puddles frozen are
-dark clear ice, a little milky (5 %), glossy still (roughness 0.05), with a white rough rim where the ice is thin (the
-puddle's depth from 0.1 to 0.7: up to half white, roughness 0.4). The wet film keeps its darkening and gloss: glaze.
+dark clear ice, a little milky (4 %), glossy still (roughness 0.05), with a white rough rim where the ice is thin (the
+puddle's edge, its depth from 0.05 to 0.3: up to a third white, roughness 0.35). The wet film keeps its darkening and
+gloss: glaze.
 
 **Hoarfrost.** `FellowRain3D.frost` (0-1): crystals on what faces the sky, where the rain would reach (its shelter
 heightfield, 0124) — all of it on what faces up, less on walls (a third on a vertical face), none underneath. It grows in
@@ -50,7 +51,9 @@ it settles the ground frozen, and frosted under a clear sky when nothing falls.
   at 20 cm, white over 85 %) was patchy snow; at 5 cm and as a veil it reads as frost.
 * **The first look on the RTX** (`m36_s19_bistro_thaw_loop`, fellow230: the veil over 30-70 % at roughness 0.5) turned
   Bistro's street white as snow: most of it was the sky mirrored at a grazing angle by the glossier crystals. Matte
-  (roughness at least 0.75) and thinner (20-50 %), the cobbles show through (lavapipe).
+  (roughness at least 0.75) and thinner (20-50 %), the cobbles show through (lavapipe). The frozen puddles' rims
+  (depth 0.1 to 0.7, half white) turned whole puddles white on the street and the roofs (`m36_s23_bistro_frost`);
+  narrowed to their edges (0.05 to 0.3, a third white) the ice is dark (lavapipe).
 * **The ground model** (the test scene, custom weather at −5 °C under a clear sky, the ground at 0, the model 200 times
   as fast): frost 0.147, 0.587 and 1 at 0.5, 2 and 4 s — the expected 200 × (1 − 0.8 × 0.15) / 600 = 0.293 per second; the
   puddles' ice 0.167 and 0.667 (0.333 per second).

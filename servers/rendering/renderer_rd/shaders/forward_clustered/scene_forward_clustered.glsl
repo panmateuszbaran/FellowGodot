@@ -1610,9 +1610,9 @@ void fellow_wet_surface(in SceneData p_scene, in FellowWeatherData w, float wetn
 	if (w.frost.x > 0.0 && puddle > 0.0) {
 		// The puddles frozen (decision 0136): dark clear ice, glossy still, a white rough rim where the ice is thin.
 		float ice = puddle * w.frost.x;
-		float rim = smoothstep(0.1, 0.35, puddle) * (1.0 - smoothstep(0.35, 0.7, puddle));
-		r_albedo = mix(r_albedo, vec3(0.75, 0.8, 0.85), ice * (0.05 + 0.5 * rim));
-		r_roughness = mix(r_roughness, 0.05 + 0.35 * rim, ice);
+		float rim = smoothstep(0.05, 0.15, puddle) * (1.0 - smoothstep(0.15, 0.3, puddle));
+		r_albedo = mix(r_albedo, vec3(0.75, 0.8, 0.85), ice * (0.04 + 0.35 * rim));
+		r_roughness = mix(r_roughness, 0.05 + 0.3 * rim, ice);
 	}
 }
 
