@@ -411,6 +411,18 @@ where the GPU supports it (not SPD's pyramids, not the accumulation on NVIDIA). 
 less error and flicker than FSR 2.2 in every mode measured; on still views at 2× softer. Decision 0148; bench
 `tools/lavapipe/upscaler_check.sh`.
 
+## Motion matching (milestone 48)
+
+Module `fellow_animation`. `FellowMotionDatabase.build(skeleton, animations, options)` turns clips into a searchable
+database (60 Hz; bone roles by name, feature weights, contact thresholds in `options`; saved as a resource;
+`import_bvh()`/`create_skeleton()` read BVH motion capture). `FellowMotionMatcher3D`, a modifier of the skeleton:
+`desired_velocity`, `desired_facing`, `search_interval` (0.1 s), `inertialization` (on, `inertialization_halflife`
+0.1 s), `velocity_halflife`/`rotation_halflife` (0.27 s), `synchronization` (on, `adjustment_halflife` 0.1 s,
+`clamp_distance` 0.15 m), `foot_locking` and `foot_ik` (on, `unlock_radius` 0.2 m), `lod_distances` (none),
+`root_path` (the skeleton's parent), `auto_update` (on; `advance()`, `advance_group()` for many on the worker threads);
+`get_stats()`, `get_global_stats()`, `get_last_search()`. Nothing changes without the nodes. Decision 0149; bench
+Matching Lab (`--scene=matching`, data from `benchmarks/scripts/get_cmu_locomotion.sh`, `bench/matching_eval.gd`).
+
 ## Options that change the image (off by default)
 
 | setting | what it does | image cost | record |

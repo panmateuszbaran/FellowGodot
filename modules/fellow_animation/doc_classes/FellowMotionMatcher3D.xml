@@ -1,0 +1,167 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="FellowMotionMatcher3D" inherits="SkeletonModifier3D" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+	<brief_description>
+		FellowEngine: motion matching on a [Skeleton3D] — clips searched for the frame that continues the pose and follows the desired trajectory, blended by inertialization, feet locked with IK.
+	</brief_description>
+	<description>
+		A modifier of a [Skeleton3D] whose bones are a [FellowMotionDatabase]'s. Gameplay sets [member desired_velocity] (and [member desired_facing]); a simulated character follows them with critically damped springs, and every [member search_interval] its predicted trajectory (1/3, 2/3 and 1 s ahead, relative to the character) and the current frame's pose features query the database. The best frame, when it is not the current one, is blended in by inertialization. The character's root ([member root_path], by default the skeleton's parent) moves with the animation's own root motion, pulled towards the simulation within [member clamp_distance]; the skeleton's transform relative to it is taken as identity, the root's +Z as forward. Feet in contact are locked and reached with two-bone IK. With [member lod_distances] it searches less often, then skips the IK and updates at a quarter of the rate farther from the camera. See [code]docs/decisions/0149-motion-matching.md[/code].
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="advance">
+			<return type="void" />
+			<param index="0" name="delta" type="float" />
+			<description>
+				One update: the simulation, the search when due, playback, inertialization, the root's motion and the feet. Called by the skeleton's modifier processing when [member auto_update] is on.
+			</description>
+		</method>
+		<method name="advance_group" qualifiers="static">
+			<return type="void" />
+			<param index="0" name="matchers" type="FellowMotionMatcher3D[]" />
+			<param index="1" name="delta" type="float" />
+			<description>
+				[method advance] for several matchers at once: their updates run on the [WorkerThreadPool], then their roots are moved on the calling thread. Use it with [member auto_update] off.
+			</description>
+		</method>
+		<method name="get_character_position" qualifiers="const">
+			<return type="Vector3" />
+			<description>
+				Where the character's root is (the animation's root motion pulled towards the simulation).
+			</description>
+		</method>
+		<method name="get_current_clip" qualifiers="const">
+			<return type="String" />
+			<description>
+				The clip being played.
+			</description>
+		</method>
+		<method name="get_current_frame" qualifiers="const">
+			<return type="int" />
+			<description>
+				The database frame being played.
+			</description>
+		</method>
+		<method name="get_foot_positions" qualifiers="const">
+			<return type="PackedVector3Array" />
+			<description>
+				The left and right ankles after the IK, in world space.
+			</description>
+		</method>
+		<method name="get_global_stats" qualifiers="static">
+			<return type="Dictionary" />
+			<description>
+				Every matcher's updates, searches (count, microseconds, frames checked), transitions and updates per LOD since [method reset_global_stats].
+			</description>
+		</method>
+		<method name="get_last_search" qualifiers="const">
+			<return type="Dictionary" />
+			<description>
+				The last search's query, result and current features in their units, the frame and clip found, its cost.
+			</description>
+		</method>
+		<method name="get_lod" qualifiers="const">
+			<return type="int" />
+			<description>
+				The LOD level of the last update (0-2).
+			</description>
+		</method>
+		<method name="get_simulation_position" qualifiers="const">
+			<return type="Vector3" />
+			<description>
+				The simulated character's position (where gameplay put it).
+			</description>
+		</method>
+		<method name="get_simulation_velocity" qualifiers="const">
+			<return type="Vector3" />
+			<description>
+				The simulated character's velocity.
+			</description>
+		</method>
+		<method name="get_stats" qualifiers="const">
+			<return type="Dictionary" />
+			<description>
+				This matcher's searches, transitions, search microseconds, foot sliding while in contact ([code]foot_slide_distance[/code], [code]foot_slide_locked[/code], [code]foot_contact_time[/code], [code]foot_slide_speed[/code]), [code]trajectory_error[/code] (the mean distance between the character and the simulation), popping ([code]pop_p50_mm[/code], [code]pop_p99_mm[/code], [code]pop_p999_mm[/code], [code]pop_max_mm[/code]: per frame the largest second difference of the hips' and legs' joints), the clip, frame and LOD.
+			</description>
+		</method>
+		<method name="reset">
+			<return type="void" />
+			<description>
+				Starts again from the root's transform at the next update.
+			</description>
+		</method>
+		<method name="reset_global_stats" qualifiers="static">
+			<return type="void" />
+			<description>
+				Clears [method get_global_stats].
+			</description>
+		</method>
+		<method name="reset_stats">
+			<return type="void" />
+			<description>
+				Clears [method get_stats].
+			</description>
+		</method>
+		<method name="teleport">
+			<return type="void" />
+			<param index="0" name="position" type="Vector3" />
+			<param index="1" name="facing" type="Vector3" />
+			<description>
+				Puts the simulation and the character at [param position] facing [param facing], at rest.
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="adjustment_halflife" type="float" setter="set_adjustment_halflife" getter="get_adjustment_halflife" default="0.1">
+			How fast the character is pulled towards the simulation (the adjustment's half-life, limited to half the root's own speed).
+		</member>
+		<member name="auto_update" type="bool" setter="set_auto_update" getter="is_auto_update" default="true">
+			Update in the skeleton's modifier processing; off: call [method advance].
+		</member>
+		<member name="clamp_distance" type="float" setter="set_clamp_distance" getter="get_clamp_distance" default="0.15">
+			The character never farther from the simulation than this.
+		</member>
+		<member name="database" type="FellowMotionDatabase" setter="set_database" getter="get_database">
+			The motion to match.
+		</member>
+		<member name="desired_facing" type="Vector3" setter="set_desired_facing" getter="get_desired_facing" default="Vector3(0, 0, 0)">
+			The direction to face; zero: the direction of [member desired_velocity].
+		</member>
+		<member name="desired_velocity" type="Vector3" setter="set_desired_velocity" getter="get_desired_velocity" default="Vector3(0, 0, 0)">
+			The velocity on the ground the character should reach.
+		</member>
+		<member name="foot_ik" type="bool" setter="set_foot_ik" getter="is_foot_ik" default="true">
+			Two-bone IK of the legs reaching the locked feet.
+		</member>
+		<member name="foot_locking" type="bool" setter="set_foot_locking" getter="is_foot_locking" default="true">
+			A foot in contact (the database's contacts) stays where it landed until it lifts or the animation pulls it [member unlock_radius] away.
+		</member>
+		<member name="inertialization" type="bool" setter="set_inertialization" getter="is_inertialization" default="true">
+			Transitions blended by inertialization (the offset between the poses decays); off: hard cuts.
+		</member>
+		<member name="inertialization_halflife" type="float" setter="set_inertialization_halflife" getter="get_inertialization_halflife" default="0.1">
+			The offsets' half-life.
+		</member>
+		<member name="lod_distances" type="PackedFloat32Array" setter="set_lod_distances" getter="get_lod_distances" default="PackedFloat32Array()">
+			Distances from the camera: beyond the first, searches half as often and no foot IK; beyond the second, a quarter as often and updates at a quarter of the rate.
+		</member>
+		<member name="root_path" type="NodePath" setter="set_root_path" getter="get_root_path" default="NodePath(&quot;&quot;)">
+			The node moved with the character; empty: the skeleton's parent.
+		</member>
+		<member name="rotation_halflife" type="float" setter="set_rotation_halflife" getter="get_rotation_halflife" default="0.27">
+			The simulation's turning half-life.
+		</member>
+		<member name="search_interval" type="float" setter="set_search_interval" getter="get_search_interval" default="0.1">
+			Seconds between searches (and a search when the desired velocity changes by 0.1 m/s, or the clip ends).
+		</member>
+		<member name="synchronization" type="bool" setter="set_synchronization" getter="is_synchronization" default="true">
+			Pull the character towards the simulation (and clamp it); off: the root follows the animation alone.
+		</member>
+		<member name="unlock_radius" type="float" setter="set_unlock_radius" getter="get_unlock_radius" default="0.2">
+			A locked foot is released when the animation's foot is this far from it.
+		</member>
+		<member name="velocity_halflife" type="float" setter="set_velocity_halflife" getter="get_velocity_halflife" default="0.27">
+			The simulation's acceleration half-life.
+		</member>
+	</members>
+</class>

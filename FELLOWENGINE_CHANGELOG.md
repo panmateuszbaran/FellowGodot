@@ -9,6 +9,18 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 48 — motion matching (2026-11-04)
+
+- `FellowMotionDatabase` and `FellowMotionMatcher3D` (new module `fellow_animation`, decision 0149): clips sampled into
+  a database of poses, foot contacts and 27 features a frame (feet, hips, the trajectory 1 s ahead), searched every
+  0.1 s with bounding boxes; inertialized transitions, the root's motion pulled towards a spring simulation, foot
+  locking with two-bone IK, LOD by camera distance, `advance_group()` on the worker threads; BVH import; the database
+  saved as a 16-bit resource.
+- Matching Lab on 27 minutes of the CMU motion capture database: 16 characters follow their paths within 3.9 cm, feet
+  sliding 0.11 m/s in contact (0.32 without locking and IK), popping's p99 36 mm (174 with hard cuts), 15 µs a
+  character a frame; 256 characters 4.5 ms, 3.0 ms with LOD.
+- FellowBench: Matching Lab (`--scene matching`), `bench/matching_eval.gd`, `scripts/get_cmu_locomotion.sh`.
+
 ## Milestone 47 — FSR 3.1 upscaler (2026-11-04)
 
 - `rendering/fellow/upscaling/fsr3` (opt-in, decision 0148): a viewport in the FSR 2 scaling mode runs AMD's FSR 3.1

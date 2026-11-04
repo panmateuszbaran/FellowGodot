@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="FellowMotionDatabase" inherits="Resource" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+	<brief_description>
+		FellowEngine: a motion-matching database built from animation clips, searched by [FellowMotionMatcher3D].
+	</brief_description>
+	<description>
+		[method build] samples every frame of a set of [Animation] clips of one [Skeleton3D] at a fixed rate (60 Hz): each bone's pose, a "simulation" root on the ground under the hips facing the way the pelvis faces (smoothed), the feet's contacts (a toe low and slow), and per frame a feature vector — both feet's positions and velocities, the hips' velocity and the root's trajectory 1/3, 2/3 and 1 s ahead (positions and directions on the ground), all in the root's space, normalised per group and weighted. Frames whose trajectory would run past their clip's end are not searched. Bones that never move are not stored, rotations are stored in 16 bits. The database saves as a resource ([ResourceSaver]) and loads without being built again. [method import_bvh] reads a Biovision BVH file into an [Animation] and the hierarchy [method create_skeleton] turns into a [Skeleton3D]. See [code]docs/decisions/0149-motion-matching.md[/code].
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="build">
+			<return type="int" enum="Error" />
+			<param index="0" name="skeleton" type="Object" />
+			<param index="1" name="animations" type="Animation[]" />
+			<param index="2" name="options" type="Dictionary" default="{}" />
+			<description>
+				Builds the database from [param animations] (tracks addressed to the bones of [param skeleton], a [Skeleton3D], by name). [param options]: [code]sample_rate[/code] (60), [code]hips[/code], [code]left_upper_leg[/code], [code]left_lower_leg[/code], [code]left_foot[/code], [code]left_toe[/code] and the right ones (bone names; by default the CMU/MotionBuilder names or Godot's humanoid profile), [code]facing_smoothing[/code] (0.15 s), [code]root_smoothing[/code] (0.05 s), [code]contact_speed[/code] (0.3 m/s), [code]contact_height_margin[/code] (0.04 m above the toes' 5th percentile) or [code]contact_height[/code], [code]ignore_range_end[/code] (the trajectory's frames), and the weights [code]weight_foot_position[/code] (0.75), [code]weight_foot_velocity[/code] (1), [code]weight_hips_velocity[/code] (1), [code]weight_trajectory_position[/code] (1), [code]weight_trajectory_direction[/code] (1.5). The hips must be a root bone of the skeleton or have parents at rest; the skeleton faces +Z.
+			</description>
+		</method>
+		<method name="create_skeleton" qualifiers="static">
+			<return type="Node" />
+			<param index="0" name="bvh" type="Dictionary" />
+			<description>
+				A new [Skeleton3D] with the bones of a BVH hierarchy read by [method import_bvh] (rests at the joints' offsets).
+			</description>
+		</method>
+		<method name="get_data" qualifiers="const">
+			<return type="Dictionary" />
+			<description>
+				The database's arrays (what is saved).
+			</description>
+		</method>
+		<method name="get_frame_count" qualifiers="const">
+			<return type="int" />
+			<description>
+				The number of frames.
+			</description>
+		</method>
+		<method name="get_info" qualifiers="const">
+			<return type="Dictionary" />
+			<description>
+				Frames, bones, clips, sample rate, seconds of motion, bytes, the fraction of frames each foot is in contact and the bones found for each role.
+			</description>
+		</method>
+		<method name="import_bvh" qualifiers="static">
+			<return type="Dictionary" />
+			<param index="0" name="path" type="String" />
+			<param index="1" name="scale" type="float" default="1.0" />
+			<param index="2" name="skip_first_frame" type="bool" default="false" />
+			<description>
+				Reads a BVH file: [code]animation[/code] (an [Animation] with a rotation track for every joint with rotation channels and a position track for every joint with position channels, addressed to [code]Skeleton3D:&lt;joint&gt;[/code]), [code]bone_names[/code], [code]bone_parents[/code], [code]bone_offsets[/code] (end sites as bones named after their parent with [code]_end[/code]), [code]frame_time[/code] and [code]frame_count[/code]. [param scale] converts the file's units to metres (CMU: 0.056444); [param skip_first_frame] drops a T-pose added as the first frame (CMU's BVH conversion).
+			</description>
+		</method>
+		<method name="set_data">
+			<return type="void" />
+			<param index="0" name="data" type="Dictionary" />
+			<description>
+				Restores the arrays of [method get_data].
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="data" type="Dictionary" setter="set_data" getter="get_data" default="{}">
+			The stored database.
+		</member>
+	</members>
+	<constants>
+		<constant name="ROLE_HIPS" value="0" enum="BoneRole">
+		</constant>
+		<constant name="ROLE_LEFT_UPPER_LEG" value="1" enum="BoneRole">
+		</constant>
+		<constant name="ROLE_LEFT_LOWER_LEG" value="2" enum="BoneRole">
+		</constant>
+		<constant name="ROLE_LEFT_FOOT" value="3" enum="BoneRole">
+		</constant>
+		<constant name="ROLE_LEFT_TOE" value="4" enum="BoneRole">
+		</constant>
+		<constant name="ROLE_RIGHT_UPPER_LEG" value="5" enum="BoneRole">
+		</constant>
+		<constant name="ROLE_RIGHT_LOWER_LEG" value="6" enum="BoneRole">
+		</constant>
+		<constant name="ROLE_RIGHT_FOOT" value="7" enum="BoneRole">
+		</constant>
+		<constant name="ROLE_RIGHT_TOE" value="8" enum="BoneRole">
+		</constant>
+		<constant name="ROLE_MAX" value="9" enum="BoneRole">
+		</constant>
+	</constants>
+</class>

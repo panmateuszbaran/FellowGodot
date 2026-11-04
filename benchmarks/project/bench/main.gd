@@ -80,6 +80,7 @@ const SCENES := {
 	"rain": "res://scenes/rain_lab.gd",
 	"wind": "res://scenes/wind_lab.gd",
 	"motion": "res://scenes/motion_lab.gd",
+	"matching": "res://scenes/matching_lab.gd",
 	"streaming": "res://scenes/streaming_lab.gd",
 	"world": "res://scenes/world_lab.gd",
 }

@@ -42,7 +42,7 @@ measured, but short of AAA scale or breadth. Gap: not addressed by FellowEngine 
 | Geometry scale | **Partial** | cluster culling of large surfaces, LOD of their parts (option), contribution culling, `FellowHLOD3D` (City Lab's 18 800 nodes in 14 proxies, render thread −26 %), impostors (option); Sponza's 12.8 M triangles in 6.2 ms | no virtualized geometry (Nanite-class), no mesh or LOD streaming; the largest scene 12.8 M triangles and 18 800 nodes; single-precision coordinates (Godot's double-precision builds not tested) |
 | Streaming and memory | **Partial** (milestones 45-46) | loading to the first frame 12-62 % faster (parallel, lazy shader creation; milestone 12); texture streaming (`streaming/textures`, opt-in): VRAM-compressed textures keep only the mips the cameras can see, loaded on worker threads within a budget — Streaming Lab at 1080p 3-77 MiB of 384 MiB resident; world streaming (`FellowWorldStreamer3D`): cells loaded on worker threads and freed around the camera — World Lab 289-612 MiB of video memory a view instead of 740 MiB, the same images (lavapipe) | no tool to split a level into cells, no baked proxies for unloaded cells, no mesh LOD streaming; DDS and uncompressed textures load whole; the streamers' reports are the only residency tooling; not yet measured on the RTX (Sponza needed 2.5 GB of VRAM) |
 | Shader compilation and stutter | **Partial** | pipelines created lazily and in parallel, the ubershader while a specialization compiles, a pipeline cache that no longer crashes at 2 GiB, frame pacing (worker counts, hot workers, presentation stalls) | no offline PSO collection and pre-warming for shipping builds; hitches measured per scene, not over a play session |
-| Characters and animation | **Partial** | Crowd Lab: 256 skinned characters, −19 % (elided work, batched skin transforms); `FellowMotionCharacter3D`: clip-free locomotion from NVIDIA's MotionBricks on the GPU (a request 4.0 ms, 16 at once 12.6 ms, 64 at once 41 ms on the RTX; Motion Lab's 64 characters 7.3 ms a frame waiting for them, 3.6 ms with the service on a worker thread), its CPU work off the main thread, falls caught | no motion matching, full-body IK, facial animation, cloth or hair; neural motion is locomotion only, tensor-core-dependent for speed (fp32 products elsewhere: 1.4-2.1× slower on the same GPU), its weights under NVIDIA's Open Model Agreement (shipping needs its terms checked) |
+| Characters and animation | **Partial** (M48) | motion matching on clips with inertialization, foot locking and IK, LOD and worker threads (`FellowMotionMatcher3D`: 15 µs a character, 256 in 3 ms with LOD); Crowd Lab: 256 skinned characters, −19 % (elided work, batched skin transforms); `FellowMotionCharacter3D`: clip-free locomotion from NVIDIA's MotionBricks on the GPU (a request 4.0 ms, 16 at once 12.6 ms, 64 at once 41 ms on the RTX; Motion Lab's 64 characters 7.3 ms a frame waiting for them, 3.6 ms with the service on a worker thread), its CPU work off the main thread, falls caught | no ground adaptation, tags or mirroring in the matching yet, no facial animation, cloth or hair; neural motion is locomotion only, tensor-core-dependent for speed (fp32 products elsewhere: 1.4-2.1× slower on the same GPU), its weights under NVIDIA's Open Model Agreement (shipping needs its terms checked) |
 | Physics | **Partial** | GodotPhysics3D and Jolt faster and exactly stock's (pile × 2.27, rays × 8.6 on GodotPhysics; Jolt areas −42 %), deterministic fast modes | no destruction, vehicles or cloth beyond stock; thousands of bodies not measured |
 | CPU and threading | **Partial** | the render thread parallel; worker counts tuned; animation and physics multi-threaded where stock is | gameplay on GDScript's main thread (Crowd Lab's frame is the main thread animating); no data-oriented job system for game code |
 | Upscaling, frame generation, HDR | **Partial** (M47) | TAA improved, contrast-adaptive sharpening, motion blur, FSR 3.1 upscaler (opt-in) | no DLSS or XeSS, no frame generation; FSR 3.1 not yet measured on a GPU; HDR output not addressed by FellowEngine |
@@ -63,7 +63,8 @@ measured, but short of AAA scale or breadth. Gap: not addressed by FellowEngine 
    exactly the areas FellowEngine tuned (barriers, async compute, subgroup sizes, ray tracing).
 4. **4K and upscaling.** Without DLSS/XeSS and frame generation, the ray-traced feature set's +53-66 % GPU cost is
    hard to afford at 4K; FSR 3.1 (milestone 47) upscales better in motion than FSR 2.2, its GPU cost still to measure.
-5. **Animation.** AAA characters need motion matching, IK and facial animation; neural motion covers locomotion only.
+5. **Animation.** Motion matching with foot IK (milestone 48) covers locomotion on clips; AAA characters also need
+   ground adaptation, tagged actions, facial animation, cloth and hair.
 6. **Team scale.** The editor and the content pipeline are stock Godot's, which is built for small teams.
 
 ## 4. What it is ready for now
@@ -88,8 +89,9 @@ measured, but short of AAA scale or breadth. Gap: not addressed by FellowEngine 
    generated frames).
 4. **Editor and pipeline**: previews and gizmos for every FellowEngine node in the editor, offline HLOD/impostor
    baking, a cooking step, a GPU profiler view of its passes, shader/PSO pre-warming for shipping builds.
-5. **Animation**: motion matching on clips with IK and animation LOD; neural motion kept as a second path (its next
-   steps: products nearer the GPU's limits, target poses beyond locomotion, uneven ground).
+5. **Animation**: motion matching on clips with IK and animation LOD (milestone 48: done for locomotion; ground
+   adaptation, tags and mirroring to come); neural motion kept as a second path (its next steps: products nearer the
+   GPU's limits, target poses beyond locomotion, uneven ground).
 6. **Scale and soak tests**: AAA-sized test levels (50-100 M triangles, 10 k+ objects, 100+ lights, all systems
    together), hour-long play sessions, memory and hitch tracking, an automated perf farm.
 7. **Middleware**: audio (Wwise/FMOD) and online services through plugins.
@@ -97,7 +99,8 @@ measured, but short of AAA scale or breadth. Gap: not addressed by FellowEngine 
 The order agreed for the next milestones (2026-11-04): streaming (textures in milestone 45, then the world), upscaling
 and frame generation, animation, platforms (Godot's own exports, checked in emulated and containerised environments
 for want of other machines: Linux containers, other GPU drivers), and the editor and tools last. Done so far: texture
-streaming (45), world streaming (46), the FSR 3.1 upscaler (47); DLSS, XeSS and frame generation wait for the GPU.
+streaming (45), world streaming (46), the FSR 3.1 upscaler (47), motion matching (48); DLSS, XeSS and frame
+generation wait for the GPU.
 
 ## 6. Neural motion's state (milestones 43-44)
 
