@@ -3,8 +3,9 @@
 # with FSR 2.2 and FSR 3.1 at a render scale, against a ground truth accumulated from 16 jittered renders a frame
 # (no TAA), and the fixed cameras' stills against theirs.
 #   upscaler_check.sh <outdir> [scale] [bench args]
-# SEQS (the sequences), CAMS (the stills), VARIANTS (taa fsr2 fsr3 ...; a variant fsr3_<name> adds the override lines
-# in $FSR3_<name>), RES (e.g. 960x540). The ground truth is rendered once into <outdir>/ref and reused.
+# SEQS (the sequences), CAMS (the stills), VARIANTS (taa fsr2 fsr3 at the scale; fsr2q fsr3q at 0.667, the quality
+# mode; fsr2n fsr3n at 1.0, native AA; fsr3_<name> adds the override lines in $FSR3_<name>), RES (e.g. 960x540).
+# The ground truth is rendered once into <outdir>/ref and reused (reference mode args: --jitter=<n>, --ref_settle=<n>).
 . "$(dirname "$0")/common.sh"
 OUT=$1
 SCALE=${2:-0.5}
@@ -25,6 +26,10 @@ for v in $VARIANTS; do
 		taa) ov=""; set_args="" ;;
 		fsr2) ov=""; set_args=$UPSCALE ;;
 		fsr3) ov="fellow/upscaling/fsr3=true"; set_args=$UPSCALE ;;
+		fsr2q) ov=""; set_args="--set=vp.scaling_3d_mode=2,vp.scaling_3d_scale=0.667" ;;
+		fsr3q) ov="fellow/upscaling/fsr3=true"; set_args="--set=vp.scaling_3d_mode=2,vp.scaling_3d_scale=0.667" ;;
+		fsr2n) ov=""; set_args="--set=vp.scaling_3d_mode=2,vp.scaling_3d_scale=1.0" ;;
+		fsr3n) ov="fellow/upscaling/fsr3=true"; set_args="--set=vp.scaling_3d_mode=2,vp.scaling_3d_scale=1.0" ;;
 		fsr3_*)
 			var="FSR3_${v#fsr3_}"
 			ov="fellow/upscaling/fsr3=true

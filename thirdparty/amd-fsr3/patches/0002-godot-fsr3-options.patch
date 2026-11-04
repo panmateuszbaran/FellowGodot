@@ -258,6 +258,26 @@ diff --git a/FidelityFX/host/ffx_fsr3upscaler.h b/FidelityFX/host/ffx_fsr3upscal
  } FfxFsr3UpscalerDispatchDescription;
  
  /// A structure encapsulating the parameters for automatic generation of a reactive mask
+diff --git a/FidelityFX/host/ffx_types.h b/FidelityFX/host/ffx_types.h
+--- a/FidelityFX/host/ffx_types.h
++++ b/FidelityFX/host/ffx_types.h
+@@ -82,12 +82,14 @@
+ /// Maximum supported number of simultaneously bound SRVs.
+ ///
+ /// @ingroup Defines
+-#define FFX_MAX_NUM_SRVS            64
++// FellowEngine: 16 (the SDK: 64). The upscaler's passes bind at most 9 SRVs and 9 UAVs; every job description and
++// pipeline state copies these arrays (with their wchar_t names) on each dispatch.
++#define FFX_MAX_NUM_SRVS            16
+ 
+ /// Maximum supported number of simultaneously bound UAVs.
+ ///
+ /// @ingroup Defines
+-#define FFX_MAX_NUM_UAVS            64
++#define FFX_MAX_NUM_UAVS            16
+ 
+ /// Maximum number of constant buffers bound.
+ ///
 diff --git a/src/ffx_fsr3upscaler.cpp b/src/ffx_fsr3upscaler.cpp
 --- a/src/ffx_fsr3upscaler.cpp
 +++ b/src/ffx_fsr3upscaler.cpp

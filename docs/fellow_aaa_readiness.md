@@ -45,7 +45,7 @@ measured, but short of AAA scale or breadth. Gap: not addressed by FellowEngine 
 | Characters and animation | **Partial** | Crowd Lab: 256 skinned characters, −19 % (elided work, batched skin transforms); `FellowMotionCharacter3D`: clip-free locomotion from NVIDIA's MotionBricks on the GPU (a request 4.0 ms, 16 at once 12.6 ms, 64 at once 41 ms on the RTX; Motion Lab's 64 characters 7.3 ms a frame waiting for them, 3.6 ms with the service on a worker thread), its CPU work off the main thread, falls caught | no motion matching, full-body IK, facial animation, cloth or hair; neural motion is locomotion only, tensor-core-dependent for speed (fp32 products elsewhere: 1.4-2.1× slower on the same GPU), its weights under NVIDIA's Open Model Agreement (shipping needs its terms checked) |
 | Physics | **Partial** | GodotPhysics3D and Jolt faster and exactly stock's (pile × 2.27, rays × 8.6 on GodotPhysics; Jolt areas −42 %), deterministic fast modes | no destruction, vehicles or cloth beyond stock; thousands of bodies not measured |
 | CPU and threading | **Partial** | the render thread parallel; worker counts tuned; animation and physics multi-threaded where stock is | gameplay on GDScript's main thread (Crowd Lab's frame is the main thread animating); no data-oriented job system for game code |
-| Upscaling, frame generation, HDR | **Gap** | TAA improved, contrast-adaptive sharpening, motion blur | on Vulkan stock's FSR 2.2 only: no DLSS, XeSS or FSR 3+, no frame generation; HDR output not addressed by FellowEngine |
+| Upscaling, frame generation, HDR | **Partial** (M47) | TAA improved, contrast-adaptive sharpening, motion blur, FSR 3.1 upscaler (opt-in) | no DLSS or XeSS, no frame generation; FSR 3.1 not yet measured on a GPU; HDR output not addressed by FellowEngine |
 | Platforms and GPUs | **Gap** (the largest) | Windows, Vulkan, Forward+, one NVIDIA laptop GPU; Linux builds tested on lavapipe | no consoles (Godot's console ports are third-party; FellowEngine's RenderingDevice and driver changes would need porting to each); Direct3D 12 and Metal untouched by FellowEngine's work (ray queries and cooperative matrices are Vulkan-only here); AMD and Intel GPUs never measured; Mobile and Compatibility renderers unchanged |
 | Editor, tools, content pipeline | **Gap** | the editor builds and opens projects; a headless import crash fixed; the bench (A/B with heat soak, telemetry, per-pass timestamps), autotune | FellowEngine's work is in the runtime: few editor previews or gizmos for its nodes, HLOD and impostors baked at run time, no DCC round-trip, no profiler UI for its passes, no asset validation or cooking pipeline for a large team |
 | Audio, networking, UI, localization | **Gap** | not touched (stock Godot) | no Wwise/FMOD-class middleware in the engine, no large-scale multiplayer stack, no platform online services |
@@ -61,8 +61,8 @@ measured, but short of AAA scale or breadth. Gap: not addressed by FellowEngine 
    async compute choices) needs its counterpart or a fallback.
 3. **GPU breadth.** Autotune and every default were chosen on one NVIDIA GPU; AMD's and Intel's drivers differ in
    exactly the areas FellowEngine tuned (barriers, async compute, subgroup sizes, ray tracing).
-4. **4K and upscaling.** Without DLSS/FSR 3/XeSS and frame generation, the ray-traced feature set's +53-66 % GPU cost
-   is hard to afford at 4K.
+4. **4K and upscaling.** Without DLSS/XeSS and frame generation, the ray-traced feature set's +53-66 % GPU cost is
+   hard to afford at 4K; FSR 3.1 (milestone 47) upscales better in motion than FSR 2.2, its GPU cost still to measure.
 5. **Animation.** AAA characters need motion matching, IK and facial animation; neural motion covers locomotion only.
 6. **Team scale.** The editor and the content pipeline are stock Godot's, which is built for small teams.
 
@@ -83,7 +83,9 @@ measured, but short of AAA scale or breadth. Gap: not addressed by FellowEngine 
 2. **Streaming**: texture mip streaming (milestone 45: done, CPU-estimated, within a budget), cell-based world
    streaming (milestone 46: done; proxies and a cell-splitting tool to come), mesh LOD streaming, memory budgets with
    tooling.
-3. **Upscaling and frame generation**: DLSS, FSR 3+ and XeSS behind one interface (TAA's inputs are already there).
+3. **Upscaling and frame generation**: FSR 3.1's upscaler (milestone 47: done, measured on lavapipe); DLSS and XeSS
+   behind the same scaling mode (vendor libraries, their hardware), FSR 3 frame generation (a present path for
+   generated frames).
 4. **Editor and pipeline**: previews and gizmos for every FellowEngine node in the editor, offline HLOD/impostor
    baking, a cooking step, a GPU profiler view of its passes, shader/PSO pre-warming for shipping builds.
 5. **Animation**: motion matching on clips with IK and animation LOD; neural motion kept as a second path (its next
@@ -94,7 +96,8 @@ measured, but short of AAA scale or breadth. Gap: not addressed by FellowEngine 
 
 The order agreed for the next milestones (2026-11-04): streaming (textures in milestone 45, then the world), upscaling
 and frame generation, animation, platforms (Godot's own exports, checked in emulated and containerised environments
-for want of other machines: Linux containers, other GPU drivers), and the editor and tools last.
+for want of other machines: Linux containers, other GPU drivers), and the editor and tools last. Done so far: texture
+streaming (45), world streaming (46), the FSR 3.1 upscaler (47); DLSS, XeSS and frame generation wait for the GPU.
 
 ## 6. Neural motion's state (milestones 43-44)
 

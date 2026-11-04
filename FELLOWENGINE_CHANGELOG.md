@@ -9,6 +9,19 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 47 — FSR 3.1 upscaler (2026-11-04)
+
+- `rendering/fellow/upscaling/fsr3` (opt-in, decision 0148): a viewport in the FSR 2 scaling mode runs AMD's FSR 3.1
+  upscaler instead of 2.2 — the FidelityFX SDK 1.1.4 (MIT) built from source, with a RenderingDevice backend
+  (`effects/fsr3.{h,cpp}`) and the SDK's Vulkan GLSL through Godot's shader builder; Godot's FSR 2.2 options kept
+  (motion vectors derived from the depth where there are none, the reactive mask clamp); half precision where the GPU
+  has it; the SDK's tunables and debug view as settings.
+- PBR Lab on lavapipe at 960 × 540 against an accumulated ground truth: at 2× upscaling less error in motion (−9 to
+  −24 %) and flicker (−10 to −14 %) than FSR 2.2, +0.6 to +1.0 dB; in quality mode +0.7 to +0.9 dB, within 0.4-1.1 dB
+  of native TAA; as native AA +1.3 dB over TAA in three of four sequences. Still views at 2× softer (−1.3 dB in two of
+  three). 8.5 MiB less memory than FSR 2.2 at that size; no validation message of its own.
+- FellowBench: `tools/lavapipe/upscaler_check.sh` (TAA, FSR 2.2 and 3.1 at three scales against a ground truth).
+
 ## Milestone 46 — world streaming (2026-11-04)
 
 - `FellowWorldStreamer3D` and `FellowStreamingCell3D` (module `fellow_world`, decision 0147): a level in cells, each a

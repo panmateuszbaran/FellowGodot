@@ -82,12 +82,14 @@
 /// Maximum supported number of simultaneously bound SRVs.
 ///
 /// @ingroup Defines
-#define FFX_MAX_NUM_SRVS            64
+// FellowEngine: 16 (the SDK: 64). The upscaler's passes bind at most 9 SRVs and 9 UAVs; every job description and
+// pipeline state copies these arrays (with their wchar_t names) on each dispatch.
+#define FFX_MAX_NUM_SRVS            16
 
 /// Maximum supported number of simultaneously bound UAVs.
 ///
 /// @ingroup Defines
-#define FFX_MAX_NUM_UAVS            64
+#define FFX_MAX_NUM_UAVS            16
 
 /// Maximum number of constant buffers bound.
 ///
