@@ -101,6 +101,7 @@ private:
 		int height = 0;
 		Image::Format format = Image::FORMAT_L8;
 		int levels = 1;
+		float log2_size = 0.0f; // log2 of the larger side
 		int tail_mip = 0; // always resident: the first level at or below texture_resident_size
 		int resident_mip = 0;
 		int target_mip = 0;
@@ -116,8 +117,21 @@ private:
 		int64_t chain_size(int p_mip) const { return mip_offsets[levels] - mip_offsets[p_mip]; }
 	};
 
+	struct MaterialCache {
+		MaterialInfo info;
+		LocalVector<Texture *> streamed; // info.textures that are streamed, resolved at `epoch`
+		uint64_t epoch = 0;
+		uint64_t checked_frame = 0; // its version was checked in this update
+	};
+
 	HashMap<RID, Texture *> textures;
-	HashMap<RID, MaterialInfo> materials;
+	HashMap<RID, MaterialCache> materials;
+	uint64_t textures_epoch = 1; // bumped when a texture is registered or freed
+	uint64_t frame = 0;
+	RID last_material;
+	MaterialCache *last_cache = nullptr;
+	bool schedule_dirty = true;
+	int waiting_releases = 0;
 	LocalVector<Camera> cameras; // recorded this frame (render_camera)
 	LocalVector<Camera> eval_cameras; // the previous frame's, used by the evaluation
 	LocalVector<Job *> jobs;
@@ -138,8 +152,18 @@ private:
 	uint64_t eval_references = 0;
 	bool targets_valid = false;
 
+	struct Stats {
+		int textures = 0, streamed = 0, full = 0, fresh = 0, at_full = 0, at_tail = 0, pending = 0, jobs = 0, materials = 0;
+		int64_t resident_bytes = 0, peak_resident_bytes = 0, target_bytes = 0, wanted_bytes = 0, full_bytes = 0;
+		int max_pending = 0;
+		float budget_bias = 0.0f;
+		uint64_t cycles = 0, loads = 0, downgrades = 0, failures = 0, bytes_read = 0, eval_usec = 0, eval_references = 0, update_usec = 0, frames = 0;
+	};
+	Stats counts; // the render thread's, from the last schedule
 	mutable Mutex info_mutex;
-	Dictionary info_snapshot;
+	Stats info_stats; // copied under the mutex every update
+	Array info_details;
+	uint64_t update_usec = 0;
 
 	static void _job_run(void *p_job);
 	void _finish_job(Texture *p_tex, Job *p_job);

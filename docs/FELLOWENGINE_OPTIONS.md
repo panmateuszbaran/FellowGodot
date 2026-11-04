@@ -369,6 +369,23 @@ joints the model drives. On tensor cores with a subgroup of 32 or less the produ
 time; the environment's `FELLOW_MOTION_GEMM=scalar` (a diagnostic) takes milestone 43's scalar loads — the same
 results either way.
 
+## Texture streaming (milestone 45)
+
+`rendering/fellow/streaming/textures` (off; read at start-up): a `CompressedTexture2D` holding a VRAM-compressed
+image with its full mip chain (how Godot imports 3D textures) loads only its mips at or below
+`texture_resident_size` (128 px); the RenderingServer loads the rest on worker threads as the cameras need them and
+releases them when they no longer do. The level each texture needs comes from the instances that use it (their box's
+nearest view depth, their smallest scale, their surfaces' texel density, BaseMaterial3D's `uv1_scale`) and the
+samplers' bias; `texture_lod_bias` (-1) is the margin, `texture_budget_mb` (0: none) caps the streamed textures'
+memory (every texture coarsened by the same bias over it). `texture_instances_per_frame` (2048) instances are
+evaluated a frame; `texture_max_jobs` (4), `texture_upload_mb_per_frame` (64), `texture_release_hold_s` (2),
+`texture_unreferenced_hold_s` (5); `texture_info_details` lists every texture in
+`RenderingServer.fellow_get_texture_streaming_info()`, which reports the streamer's state (resident, target, wanted and
+full bytes, pending, loads, releases, `settled`). Loaded, the same images as without it (lavapipe, bit for bit);
+until the loads land, coarser mips. Not streamed: lossless or uncompressed textures, DDS (`ImageTexture`), texture
+arrays and cubemaps; a ShaderMaterial's textures stay at full resolution. Decision 0146; bench Streaming Lab
+(`--scene=streaming`, textures from `benchmarks/scripts/make_streaming_textures.py`).
+
 ## Options that change the image (off by default)
 
 | setting | what it does | image cost | record |

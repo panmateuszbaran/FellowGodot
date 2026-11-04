@@ -251,6 +251,7 @@ void FellowTextureStreaming::register_texture(RID p_texture, const String &p_pat
 	tex->height = p_height;
 	tex->format = p_format;
 	tex->levels = p_levels;
+	tex->log2_size = std::log2(float(MAX(p_width, p_height)));
 	for (int i = 0; i <= p_levels; i++) {
 		int w, h;
 		tex->mip_offsets[i] = Image::get_image_mipmap_offset_and_dimensions(p_width, p_height, p_format, i, w, h);
@@ -266,6 +267,8 @@ void FellowTextureStreaming::register_texture(RID p_texture, const String &p_pat
 	resident_bytes += tex->chain_size(tex->resident_mip);
 	full_bytes += tex->chain_size(0);
 	targets_valid = false;
+	schedule_dirty = true;
+	textures_epoch++;
 }
 
 void FellowTextureStreaming::texture_freed(RID p_texture) {
@@ -282,6 +285,8 @@ void FellowTextureStreaming::texture_freed(RID p_texture) {
 	memdelete(tex);
 	textures.erase(p_texture);
 	targets_valid = false;
+	schedule_dirty = true;
+	textures_epoch++;
 }
 
 /* EVALUATION */
@@ -293,45 +298,61 @@ void FellowTextureStreaming::add_camera(const Camera &p_camera) {
 void FellowTextureStreaming::begin_frame() {
 	eval_cameras = cameras;
 	cameras.clear();
+	frame++;
 }
 
 void FellowTextureStreaming::reference_material(RID p_material, float p_pixels_per_unit, float p_scale, float p_density, float p_mip_bias) {
 	RID mat = p_material;
 	for (int depth = 0; depth < 4 && mat.is_valid(); depth++) {
-		const uint32_t version = RSG::material_storage->material_get_fellow_version(mat);
-		if (version == UINT32_MAX) {
-			return; // freed
-		}
-		MaterialInfo *mi = materials.getptr(mat);
-		if (mi == nullptr || mi->version != version) {
-			MaterialInfo info;
-			if (!RSG::material_storage->material_get_fellow_stream_info(mat, info)) {
-				return;
+		MaterialCache *mc = (mat == last_material) ? last_cache : materials.getptr(mat);
+		if (mc == nullptr || mc->checked_frame != frame) {
+			// Once an update: the material's version (it changes only between updates, through the command queue).
+			const uint32_t version = RSG::material_storage->material_get_fellow_version(mat);
+			if (version == UINT32_MAX) {
+				return; // freed
 			}
-			info.version = version;
-			materials[mat] = info;
-			mi = materials.getptr(mat);
-		}
-		for (const RID &t : mi->textures) {
-			Texture **tp = textures.getptr(t);
-			if (tp == nullptr) {
-				continue;
+			if (mc == nullptr || mc->info.version != version) {
+				MaterialCache cache;
+				if (!RSG::material_storage->material_get_fellow_stream_info(mat, cache.info)) {
+					return;
+				}
+				cache.info.version = version;
+				materials[mat] = cache;
+				mc = materials.getptr(mat);
 			}
-			Texture *tex = *tp;
-			if (!mi->known_uv || (!mi->triplanar && !(p_density > 0.0f))) {
-				tex->cycle_full = true; // a shader whose UVs are unknown: full resolution
-				continue;
-			}
-			// Texels per world unit at mip 0: the texture's size times the UV units per world unit. Triplanar UVs are
-			// the position times uv1_scale (local or world: the finer of the two).
-			const float density = mi->triplanar ? 1.0f : p_density;
-			const float scale = mi->triplanar ? MIN(p_scale, 1.0f) : p_scale;
-			const float texels = float(MAX(tex->width, tex->height)) * density * mi->uv_scale / MAX(scale, 1e-6f);
-			// Anisotropic filtering samples along the footprint's minor axis: off the view axis up to a level finer.
-			const float lod = std::log2(MAX(texels, 1e-12f) / MAX(p_pixels_per_unit, 1e-12f)) + p_mip_bias - (mi->anisotropic ? 1.0f : 0.0f);
-			tex->cycle_lod = MIN(tex->cycle_lod, lod);
+			mc->checked_frame = frame;
 		}
-		mat = mi->next_pass;
+		last_material = mat;
+		last_cache = mc;
+		if (mc->epoch != textures_epoch) {
+			mc->streamed.clear();
+			for (const RID &t : mc->info.textures) {
+				Texture **tp = textures.getptr(t);
+				if (tp) {
+					mc->streamed.push_back(*tp);
+				}
+			}
+			mc->epoch = textures_epoch;
+		}
+		if (!mc->streamed.is_empty()) {
+			const MaterialInfo &mi = mc->info;
+			if (!mi.known_uv || (!mi.triplanar && !(p_density > 0.0f))) {
+				for (Texture *tex : mc->streamed) {
+					tex->cycle_full = true; // a shader whose UVs are unknown: full resolution
+				}
+			} else {
+				// Texels per world unit at mip 0: the texture's size times the UV units per world unit. Triplanar UVs are
+				// the position times uv1_scale (local or world: the finer of the two). Anisotropic filtering samples
+				// along the footprint's minor axis: off the view axis up to a level finer.
+				const float density = mi.triplanar ? 1.0f : p_density;
+				const float scale = mi.triplanar ? MIN(p_scale, 1.0f) : p_scale;
+				const float base = std::log2(MAX(density * mi.uv_scale / MAX(scale, 1e-6f), 1e-20f) / MAX(p_pixels_per_unit, 1e-12f)) + p_mip_bias - (mi.anisotropic ? 1.0f : 0.0f);
+				for (Texture *tex : mc->streamed) {
+					tex->cycle_lod = MIN(tex->cycle_lod, base + tex->log2_size);
+				}
+			}
+		}
+		mat = mc->info.next_pass;
 	}
 }
 
@@ -367,7 +388,7 @@ void FellowTextureStreaming::end_cycle() {
 	// Forget materials that no longer exist (their RIDs are never reused).
 	if ((cycles & 63) == 0) {
 		LocalVector<RID> dead;
-		for (const KeyValue<RID, MaterialInfo> &E : materials) {
+		for (const KeyValue<RID, MaterialCache> &E : materials) {
 			if (RSG::material_storage->material_get_fellow_version(E.key) == UINT32_MAX) {
 				dead.push_back(E.key);
 			}
@@ -375,6 +396,8 @@ void FellowTextureStreaming::end_cycle() {
 		for (const RID &r : dead) {
 			materials.erase(r);
 		}
+		last_material = RID();
+		last_cache = nullptr;
 	}
 	targets_valid = false;
 }
@@ -514,17 +537,39 @@ void FellowTextureStreaming::_schedule() {
 	LocalVector<Candidate> up;
 	LocalVector<Candidate> down;
 	int64_t inflight_growth = 0;
+	Stats c = counts;
+	c.textures = int(textures.size());
+	c.streamed = c.full = c.fresh = c.at_full = c.at_tail = c.pending = 0;
 	for (KeyValue<RID, Texture *> &E : textures) {
 		Texture *tex = E.value;
+		switch (tex->state) {
+			case STATE_NEW:
+				c.fresh++;
+				break;
+			case STATE_STREAMED:
+				c.streamed++;
+				break;
+			case STATE_FULL:
+				c.full++;
+				break;
+		}
+		if (tex->resident_mip == 0) {
+			c.at_full++;
+		} else if (tex->resident_mip == tex->tail_mip) {
+			c.at_tail++;
+		}
 		if (tex->job) {
+			c.pending++;
 			inflight_growth += tex->chain_size(tex->job->mip) - tex->chain_size(tex->resident_mip);
 			continue;
 		}
 		if (tex->target_mip < tex->resident_mip) {
+			c.pending++;
 			tex->coarser_since_usec = 0;
 			// The most needed first: the finest target, then the largest step.
 			up.push_back({ tex, float(tex->target_mip) * 64.0f - float(tex->resident_mip - tex->target_mip) });
 		} else if (tex->target_mip > tex->resident_mip) {
+			c.pending++;
 			if (tex->coarser_since_usec == 0) {
 				tex->coarser_since_usec = now;
 			}
@@ -534,43 +579,49 @@ void FellowTextureStreaming::_schedule() {
 			tex->coarser_since_usec = 0;
 		}
 	}
+	counts = c;
 	int inflight = int(jobs.size());
 	int64_t started = 0;
+	waiting_releases = 0;
 	const bool pressure = budget > 0 && resident_bytes + inflight_growth > budget;
 	if (!down.is_empty()) {
 		down.sort();
-		for (const Candidate &c : down) {
+		for (const Candidate &d : down) {
 			if (inflight >= max_jobs || started >= upload_limit) {
-				break;
-			}
-			if (!pressure && now - c.tex->coarser_since_usec < hold) {
+				waiting_releases++;
 				continue;
 			}
-			_start_job(c.tex, c.tex->target_mip, true);
-			inflight_growth += c.tex->chain_size(c.tex->target_mip) - c.tex->chain_size(c.tex->resident_mip);
-			started += c.tex->chain_size(c.tex->target_mip);
+			if (!pressure && now - d.tex->coarser_since_usec < hold) {
+				waiting_releases++;
+				continue;
+			}
+			_start_job(d.tex, d.tex->target_mip, true);
+			inflight_growth += d.tex->chain_size(d.tex->target_mip) - d.tex->chain_size(d.tex->resident_mip);
+			started += d.tex->chain_size(d.tex->target_mip);
 			inflight++;
 		}
 	}
 	if (!up.is_empty()) {
 		up.sort();
-		for (const Candidate &c : up) {
-			if (inflight >= max_jobs || (started > 0 && started + c.tex->chain_size(c.tex->target_mip) > upload_limit)) {
+		for (const Candidate &u : up) {
+			if (inflight >= max_jobs || (started > 0 && started + u.tex->chain_size(u.tex->target_mip) > upload_limit)) {
+				waiting_releases++; // capacity: try again next frame
 				break;
 			}
-			const int64_t growth = c.tex->chain_size(c.tex->target_mip) - c.tex->chain_size(c.tex->resident_mip);
+			const int64_t growth = u.tex->chain_size(u.tex->target_mip) - u.tex->chain_size(u.tex->resident_mip);
 			if (budget > 0 && resident_bytes + inflight_growth + growth > budget) {
-				continue; // waits for the releases
+				continue; // waits for the releases (a finished job marks the schedule dirty)
 			}
-			_start_job(c.tex, c.tex->target_mip, false);
+			_start_job(u.tex, u.tex->target_mip, false);
 			inflight_growth += growth;
-			started += c.tex->chain_size(c.tex->target_mip);
+			started += u.tex->chain_size(u.tex->target_mip);
 			inflight++;
 		}
 	}
 }
 
 void FellowTextureStreaming::update() {
+	const uint64_t t0 = OS::get_singleton()->get_ticks_usec();
 	// Finished jobs: swap them in.
 	for (uint32_t i = 0; i < jobs.size();) {
 		Job *job = jobs[i];
@@ -587,13 +638,23 @@ void FellowTextureStreaming::update() {
 		_finish_job(tex, job);
 		memdelete(job);
 		jobs.remove_at_unordered(i);
+		schedule_dirty = true;
 	}
 	if (!textures.is_empty()) {
 		if (!targets_valid) {
 			_compute_targets();
+			schedule_dirty = true;
 		}
-		_schedule();
+		// The schedule's walk over every texture only when something changed, or for releases waiting on their hold
+		// (every 8th frame).
+		if (schedule_dirty || (waiting_releases > 0 && (frame & 7) == 0)) {
+			schedule_dirty = false;
+			_schedule();
+		}
+	} else {
+		counts = Stats();
 	}
+	update_usec += OS::get_singleton()->get_ticks_usec() - t0;
 	_update_snapshot();
 }
 
@@ -614,35 +675,33 @@ void FellowTextureStreaming::finish() {
 /* INFO */
 
 void FellowTextureStreaming::_update_snapshot() {
-	int pending = 0;
-	int streamed = 0, full = 0, fresh = 0, at_full = 0, at_tail = 0;
-	for (const KeyValue<RID, Texture *> &E : textures) {
-		const Texture *tex = E.value;
-		if (tex->target_mip != tex->resident_mip || tex->job) {
-			pending++;
-		}
-		switch (tex->state) {
-			case STATE_NEW:
-				fresh++;
-				break;
-			case STATE_STREAMED:
-				streamed++;
-				break;
-			case STATE_FULL:
-				full++;
-				break;
-		}
-		if (tex->resident_mip == 0) {
-			at_full++;
-		} else if (tex->resident_mip == tex->tail_mip) {
-			at_tail++;
-		}
-	}
-	Dictionary d;
-	if (GLOBAL_GET_CACHED(bool, "rendering/fellow/streaming/texture_info_details")) {
+	Stats c = counts;
+	c.textures = int(textures.size());
+	c.jobs = int(jobs.size());
+	c.materials = int(materials.size());
+	peak_resident_bytes = MAX(peak_resident_bytes, resident_bytes);
+	max_pending = MAX(max_pending, c.pending);
+	c.resident_bytes = resident_bytes;
+	c.peak_resident_bytes = peak_resident_bytes;
+	c.max_pending = max_pending;
+	c.target_bytes = target_bytes;
+	c.wanted_bytes = wanted_bytes;
+	c.full_bytes = full_bytes;
+	c.budget_bias = budget_bias;
+	c.cycles = cycles;
+	c.loads = loads;
+	c.downgrades = downgrades;
+	c.failures = failures;
+	c.bytes_read = bytes_read;
+	c.eval_usec = eval_usec;
+	c.eval_references = eval_references;
+	c.update_usec = update_usec;
+	c.frames = frame;
+	Array details;
+	const bool with_details = GLOBAL_GET_CACHED(bool, "rendering/fellow/streaming/texture_info_details");
+	if (with_details) {
 		// Per texture (tooling): path, size, levels, resident and target level, the estimated level, state, bytes.
 		static const char *state_names[3] = { "new", "streamed", "full" };
-		Array list;
 		for (const KeyValue<RID, Texture *> &E : textures) {
 			const Texture *tex = E.value;
 			Dictionary t;
@@ -655,42 +714,52 @@ void FellowTextureStreaming::_update_snapshot() {
 			t["lod"] = tex->lod < 1e29f ? Variant(tex->lod) : Variant();
 			t["state"] = state_names[tex->state];
 			t["bytes"] = tex->chain_size(tex->resident_mip);
-			list.push_back(t);
+			details.push_back(t);
 		}
-		d["list"] = list;
 	}
-	d["textures"] = textures.size();
-	d["streamed"] = streamed;
-	d["pinned_full"] = full;
-	d["new"] = fresh;
-	d["resident_at_full"] = at_full;
-	d["resident_at_tail"] = at_tail;
-	peak_resident_bytes = MAX(peak_resident_bytes, resident_bytes);
-	max_pending = MAX(max_pending, pending);
-	d["resident_bytes"] = resident_bytes;
-	d["peak_resident_bytes"] = peak_resident_bytes;
-	d["max_pending"] = max_pending;
-	d["target_bytes"] = target_bytes;
-	d["wanted_bytes"] = wanted_bytes;
-	d["full_bytes"] = full_bytes;
-	d["budget_bias"] = budget_bias;
-	d["pending"] = pending;
-	d["jobs"] = jobs.size();
-	d["cycles"] = cycles;
-	d["loads"] = loads;
-	d["downgrades"] = downgrades;
-	d["failures"] = failures;
-	d["bytes_read"] = bytes_read;
-	d["eval_usec"] = eval_usec;
-	d["eval_references"] = eval_references;
-	d["materials"] = materials.size();
-	// Settled: every texture at its target after at least two cycles, nothing in flight.
-	d["settled"] = cycles >= 2 && pending == 0 && fresh == 0;
 	MutexLock lock(info_mutex);
-	info_snapshot = d;
+	info_stats = c;
+	info_details = details;
 }
 
 Dictionary FellowTextureStreaming::get_info() const {
-	MutexLock lock(info_mutex);
-	return info_snapshot.duplicate();
+	Stats c;
+	Array details;
+	{
+		MutexLock lock(info_mutex);
+		c = info_stats;
+		details = info_details.duplicate();
+	}
+	Dictionary d;
+	if (!details.is_empty()) {
+		d["list"] = details;
+	}
+	d["textures"] = c.textures;
+	d["streamed"] = c.streamed;
+	d["pinned_full"] = c.full;
+	d["new"] = c.fresh;
+	d["resident_at_full"] = c.at_full;
+	d["resident_at_tail"] = c.at_tail;
+	d["resident_bytes"] = c.resident_bytes;
+	d["peak_resident_bytes"] = c.peak_resident_bytes;
+	d["target_bytes"] = c.target_bytes;
+	d["wanted_bytes"] = c.wanted_bytes;
+	d["full_bytes"] = c.full_bytes;
+	d["budget_bias"] = c.budget_bias;
+	d["pending"] = c.pending;
+	d["max_pending"] = c.max_pending;
+	d["jobs"] = c.jobs;
+	d["cycles"] = c.cycles;
+	d["loads"] = c.loads;
+	d["downgrades"] = c.downgrades;
+	d["failures"] = c.failures;
+	d["bytes_read"] = c.bytes_read;
+	d["eval_usec"] = c.eval_usec;
+	d["eval_references"] = c.eval_references;
+	d["update_usec"] = c.update_usec;
+	d["frames"] = c.frames;
+	d["materials"] = c.materials;
+	// Settled: every texture at its target after at least two cycles, nothing in flight.
+	d["settled"] = c.cycles >= 2 && c.pending == 0 && c.jobs == 0 && c.fresh == 0;
+	return d;
 }
