@@ -30,9 +30,12 @@
 
 #pragma once
 
+#include "core/os/mutex.h"
 #include "core/templates/hash_map.h"
+#include "core/templates/hash_set.h"
 #include "core/templates/paged_allocator.h"
 #include "core/templates/rb_map.h"
+#include "drivers/vulkan/fellow_vulkan_profile.h"
 #include "drivers/vulkan/rendering_context_driver_vulkan.h"
 #include "drivers/vulkan/rendering_shader_container_vulkan.h"
 #include "servers/rendering/rendering_device_driver.h"
@@ -173,6 +176,16 @@ class RenderingDeviceDriverVulkan : public RenderingDeviceDriver {
 	String fellow_pipeline_stats_path;
 	bool fellow_pipeline_stats_support = false;
 	bool fellow_coop_matrix_support = false; // VK_KHR_cooperative_matrix, 16x16x16 fp16 -> fp32 (decision 0143)
+	// FellowEngine (milestone 49, decision 0150): a simulated device (FELLOW_VULKAN_PROFILE, fellow_vulkan_profile.h): its
+	// extensions, features and subgroup operations hidden, its limits clamped, every shader checked against it.
+	const FellowVulkanProfile *fellow_profile = nullptr;
+	HashSet<String> fellow_profile_reported;
+	Mutex fellow_profile_mutex;
+	void _fellow_profile_apply_limits();
+	void _fellow_profile_apply_capabilities();
+	void _fellow_profile_report(const String &p_message);
+	void _fellow_profile_check_layout(const String &p_name, const ShaderReflection &p_reflection);
+	void _fellow_profile_check_stage(const String &p_name, ShaderStage p_stage, const uint8_t *p_spirv, size_t p_size);
 	PFN_vkGetPipelineExecutablePropertiesKHR fellow_get_pipeline_executable_properties = nullptr;
 	PFN_vkGetPipelineExecutableStatisticsKHR fellow_get_pipeline_executable_statistics = nullptr;
 	Mutex fellow_pipeline_stats_mutex;

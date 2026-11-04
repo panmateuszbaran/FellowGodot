@@ -312,8 +312,8 @@ void FellowGasVolume3D::_gather_obstacles(void *r_step) const {
 	if (world.is_null()) {
 		return;
 	}
-	PhysicsDirectSpaceState3D *space = world->get_direct_space_state();
-	if (!space) {
+	PhysicsDirectSpaceState3D *space_state = world->get_direct_space_state();
+	if (!space_state) {
 		return;
 	}
 	PhysicsServer3D *ps = PhysicsServer3D::get_singleton();
@@ -337,7 +337,7 @@ void FellowGasVolume3D::_gather_obstacles(void *r_step) const {
 	params.collide_with_bodies = true;
 	params.collide_with_areas = false;
 	PhysicsDirectSpaceState3D::ShapeResult results[32];
-	const int n = space->intersect_shape(params, results, 32);
+	const int n = space_state->intersect_shape(params, results, 32);
 	struct Found {
 		float distance;
 		uint64_t object;
@@ -361,7 +361,7 @@ void FellowGasVolume3D::_gather_obstacles(void *r_step) const {
 		}
 		const RID shape = ps->body_get_shape(body, shape_idx);
 		const PhysicsServer3D::ShapeType type = ps->shape_get_type(shape);
-		const Variant data = ps->shape_get_data(shape);
+		const Variant shape_data = ps->shape_get_data(shape);
 		const Transform3D body_xform = ps->body_get_state(body, PhysicsServer3D::BODY_STATE_TRANSFORM);
 		Transform3D xform = body_xform * ps->body_get_shape_transform(body, shape_idx);
 		Found f;
@@ -372,11 +372,11 @@ void FellowGasVolume3D::_gather_obstacles(void *r_step) const {
 			case PhysicsServer3D::SHAPE_SPHERE: {
 				_fellow_gas_axes(w2g.basis * xform.basis, rot, cpu);
 				f.gpu.centre_type[3] = 0.0f;
-				f.gpu.rot0[3] = float(data) * (cpu.x + cpu.y + cpu.z) / 3.0f;
+				f.gpu.rot0[3] = float(shape_data) * (cpu.x + cpu.y + cpu.z) / 3.0f;
 			} break;
 			case PhysicsServer3D::SHAPE_BOX: {
 				_fellow_gas_axes(w2g.basis * xform.basis, rot, cpu);
-				const Vector3 h = data;
+				const Vector3 h = shape_data;
 				f.gpu.centre_type[3] = 1.0f;
 				f.gpu.rot0[3] = h.x * cpu.x;
 				f.gpu.rot1[3] = h.y * cpu.y;
@@ -385,7 +385,7 @@ void FellowGasVolume3D::_gather_obstacles(void *r_step) const {
 			case PhysicsServer3D::SHAPE_CAPSULE:
 			case PhysicsServer3D::SHAPE_CYLINDER: {
 				_fellow_gas_axes(w2g.basis * xform.basis, rot, cpu);
-				const Dictionary d = data;
+				const Dictionary d = shape_data;
 				const float r = d.get("radius", 0.5);
 				const float h = d.get("height", 1.0);
 				f.gpu.rot0[3] = r * 0.5f * (cpu.x + cpu.z);
@@ -399,7 +399,7 @@ void FellowGasVolume3D::_gather_obstacles(void *r_step) const {
 			} break;
 			case PhysicsServer3D::SHAPE_CONVEX_POLYGON: {
 				// Its box (in the shape's space).
-				const PackedVector3Array pts = data;
+				const PackedVector3Array pts = shape_data;
 				if (pts.is_empty()) {
 					continue;
 				}
@@ -416,7 +416,7 @@ void FellowGasVolume3D::_gather_obstacles(void *r_step) const {
 			} break;
 			case PhysicsServer3D::SHAPE_WORLD_BOUNDARY: {
 				// Solid below the plane: a frame on the plane with its y axis the plane's normal.
-				const Plane p = data;
+				const Plane p = shape_data;
 				Basis b;
 				b.set_column(1, p.normal);
 				b.set_column(0, p.normal.cross(Math::abs(p.normal.x) < 0.9f ? Vector3(1, 0, 0) : Vector3(0, 0, 1)).normalized());
@@ -537,17 +537,17 @@ void FellowGasVolume3D::_queue_step(bool p_read_emission) {
 }
 
 void FellowGasVolume3D::_update_fire_light() {
-	PackedByteArray data;
+	PackedByteArray light_data;
 	{
 		MutexLock lock(emission->mutex);
 		if (!emission->fresh) {
 			return;
 		}
-		data = emission->data;
+		light_data = emission->data;
 		emission->fresh = false;
 	}
-	const float *f = reinterpret_cast<const float *>(data.ptr());
-	const int groups = int(data.size() / 32);
+	const float *f = reinterpret_cast<const float *>(light_data.ptr());
+	const int groups = int(light_data.size() / 32);
 	// Summed in a fixed order: the same light on every run.
 	double l = 0.0;
 	Vector3 p;

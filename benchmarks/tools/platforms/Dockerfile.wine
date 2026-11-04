@@ -1,0 +1,9 @@
+# FellowEngine platform checks (milestone 49): Wine to run the Windows x86_64 build, with Mesa's lavapipe as the
+# Vulkan driver behind winevulkan (no GPU), and Xvfb for a window.
+FROM ubuntu:24.04
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+		ca-certificates wine64 libvulkan1 mesa-vulkan-drivers xvfb xauth \
+	&& rm -rf /var/lib/apt/lists/*
+ENV WINEDEBUG=-all WINEPREFIX=/root/.wine
+WORKDIR /src

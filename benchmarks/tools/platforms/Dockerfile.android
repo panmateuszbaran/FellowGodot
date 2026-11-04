@@ -1,0 +1,15 @@
+# FellowEngine platform checks (milestone 49): the Android NDK Godot asks for (platform/android/java/app/config.gradle),
+# to build the arm64 export template's native library.
+FROM ubuntu:24.04
+ENV DEBIAN_FRONTEND=noninteractive
+ARG NDK_RELEASE=r29
+ARG NDK_VERSION=29.0.14206865
+COPY certs/ /tmp/certs/
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl unzip python3 scons git pkg-config \
+	&& rm -rf /var/lib/apt/lists/* \
+	&& (cat /tmp/certs/*.crt >> /etc/ssl/certs/ca-certificates.crt 2>/dev/null || true)
+RUN mkdir -p /opt/android/ndk && cd /opt/android/ndk \
+	&& curl -fsSLo ndk.zip https://dl.google.com/android/repository/android-ndk-${NDK_RELEASE}-linux.zip \
+	&& unzip -q ndk.zip && rm ndk.zip && mv android-ndk-${NDK_RELEASE} ${NDK_VERSION}
+ENV ANDROID_HOME=/opt/android
+WORKDIR /src

@@ -641,6 +641,18 @@ Error RenderingDeviceDriverVulkan::_initialize_device_extensions() {
 	err = vkEnumerateDeviceExtensionProperties(physical_device, nullptr, &device_extension_count, device_extensions.ptr());
 	ERR_FAIL_COND_V_MSG(err != VK_SUCCESS, ERR_CANT_CREATE, vformat("Couldn't get Vulkan device extension properties (VkResult error %d).", err));
 
+	if (fellow_profile) {
+		// FellowEngine (decision 0150): the simulated device's extensions only.
+		uint32_t kept = 0;
+		for (uint32_t i = 0; i < device_extension_count; i++) {
+			if (fellow_vulkan_profile_allows_extension(fellow_profile, device_extensions[i].extensionName)) {
+				device_extensions[kept++] = device_extensions[i];
+			}
+		}
+		device_extension_count = kept;
+		device_extensions.resize(kept);
+	}
+
 #if defined(SWAPPY_FRAME_PACING_ENABLED)
 	if (swappy_frame_pacer_enable) {
 		char **swappy_required_extensions;
@@ -780,10 +792,24 @@ void RenderingDeviceDriverVulkan::_get_device_properties() {
 
 		_check_driver_workarounds(physical_device_properties, nullptr);
 	}
+
+	if (fellow_profile) {
+		_fellow_profile_apply_limits();
+	}
 }
 
 Error RenderingDeviceDriverVulkan::_check_device_features() {
 	vkGetPhysicalDeviceFeatures(physical_device, &physical_device_features);
+
+	if (fellow_profile) {
+		// FellowEngine (decision 0150): the simulated device's features only.
+#define FELLOW_PROFILE_MASK_FEATURE(m_name) \
+	if (!(fellow_profile->features & FELLOW_VKF_BIT(m_name))) { \
+		physical_device_features.m_name = VK_FALSE; \
+	}
+		FELLOW_VK_BASE_FEATURES(FELLOW_PROFILE_MASK_FEATURE)
+#undef FELLOW_PROFILE_MASK_FEATURE
+	}
 
 	// Check for required features.
 	if (!physical_device_features.imageCubeArray || !physical_device_features.independentBlend) {
@@ -1361,6 +1387,10 @@ Error RenderingDeviceDriverVulkan::_check_device_capabilities() {
 		} else {
 			print_verbose("- Vulkan Raytracing not supported");
 		}
+	}
+
+	if (fellow_profile) {
+		_fellow_profile_apply_capabilities();
 	}
 
 	return OK;
@@ -1974,6 +2004,8 @@ Error RenderingDeviceDriverVulkan::initialize(uint32_t p_device_index, uint32_t 
 	for (uint32_t i = 0; i < queue_family_count; i++) {
 		queue_family_properties[i] = context_driver->queue_family_get(p_device_index, i);
 	}
+
+	fellow_profile = fellow_vulkan_profile_get();
 
 	Error err = _initialize_device_extensions();
 	ERR_FAIL_COND_V_MSG(err != OK, err, "Couldn't initialize Vulkan device extensions. This may be caused by an incompatible or outdated graphics driver.");
@@ -2871,6 +2903,15 @@ BitField<RDD::TextureUsageBits> RenderingDeviceDriverVulkan::texture_get_usages_
 		// Formats that were introduced later with extensions must not reach vkGetPhysicalDeviceFormatProperties if the extension isn't available. This means it's not supported.
 		return 0;
 	}
+	if (fellow_profile) {
+		// FellowEngine (decision 0150): block compression the simulated device lacks.
+		const bool bc = p_format >= DATA_FORMAT_BC1_RGB_UNORM_BLOCK && p_format <= DATA_FORMAT_BC7_SRGB_BLOCK;
+		const bool etc2 = p_format >= DATA_FORMAT_ETC2_R8G8B8_UNORM_BLOCK && p_format <= DATA_FORMAT_EAC_R11G11_SNORM_BLOCK;
+		const bool astc = p_format >= DATA_FORMAT_ASTC_4x4_UNORM_BLOCK && p_format <= DATA_FORMAT_ASTC_12x12_SRGB_BLOCK;
+		if ((bc && !physical_device_features.textureCompressionBC) || (etc2 && !physical_device_features.textureCompressionETC2) || (astc && !physical_device_features.textureCompressionASTC_LDR)) {
+			return 0;
+		}
+	}
 	VkFormatProperties properties = {};
 	vkGetPhysicalDeviceFormatProperties(physical_device, RD_TO_VK_FORMAT[p_format], &properties);
 
@@ -3133,7 +3174,7 @@ void RenderingDeviceDriverVulkan::command_pipeline_barrier(
 			src_stage_flags = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
 		}
 		if (dst_stage_flags & ~compute_stages) {
-			dst_stage_flags = (dst_stage_flags & compute_stages) ? (dst_stage_flags & compute_stages) : VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+			dst_stage_flags = (dst_stage_flags & compute_stages) ? (dst_stage_flags & compute_stages) : (VkPipelineStageFlags)VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
 		}
 		for (uint32_t i = 0; i < p_memory_barriers.size(); i++) {
 			vk_memory_barriers[i].srcAccessMask &= compute_access;
@@ -4625,6 +4666,10 @@ RDD::ShaderID RenderingDeviceDriverVulkan::shader_create_from_container(const Re
 		}
 	}
 
+	if (fellow_profile) {
+		_fellow_profile_check_layout(shader_info.name, shader_refl);
+	}
+
 	// Modules.
 	VkResult res;
 	String error_text;
@@ -4676,6 +4721,10 @@ RDD::ShaderID RenderingDeviceDriverVulkan::shader_create_from_container(const Re
 		}
 
 		shader_info.original_stage_size.push_back(decoded_spirv.size());
+
+		if (fellow_profile) {
+			_fellow_profile_check_stage(shader_info.name, shader_refl.stages_vector[i], decoded_spirv.ptr(), decoded_spirv.size());
+		}
 
 		if (use_respv) {
 			const bool inline_data = store_respv || (RESPV_ONLY_INLINE_SHADERS_WITH_SPEC_CONSTANTS == 0);
@@ -7832,7 +7881,8 @@ bool RenderingDeviceDriverVulkan::has_feature(Features p_feature) {
 			// MoltenVK has previously had issues with 32-bit atomics on images.
 			return false;
 #else
-			return true;
+			// FellowEngine (decision 0150): as on macOS when an Apple device is simulated.
+			return !(fellow_profile && strncmp(fellow_profile->name, "apple", 5) == 0);
 #endif
 		case SUPPORTS_VULKAN_MEMORY_MODEL:
 			return vulkan_memory_model_support && vulkan_memory_model_device_scope_support;
@@ -7941,5 +7991,325 @@ RenderingDeviceDriverVulkan::~RenderingDeviceDriverVulkan() {
 
 	if (vk_device != VK_NULL_HANDLE) {
 		vkDestroyDevice(vk_device, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_DEVICE));
+	}
+}
+
+/******************************************/
+/**** FELLOWENGINE: A SIMULATED DEVICE ****/
+/******************************************/
+
+// FellowEngine (milestone 49, decision 0150): FELLOW_VULKAN_PROFILE (fellow_vulkan_profile.h).
+
+void RenderingDeviceDriverVulkan::_fellow_profile_apply_limits() {
+	VkPhysicalDeviceLimits &l = physical_device_properties.limits;
+#define FELLOW_PROFILE_MAXIMUM(m_name) \
+	if (fellow_profile->limits[FELLOW_VKL_##m_name]) { \
+		l.m_name = MIN(l.m_name, (uint32_t)fellow_profile->limits[FELLOW_VKL_##m_name]); \
+	}
+#define FELLOW_PROFILE_ALIGNMENT(m_name) \
+	if (fellow_profile->limits[FELLOW_VKL_##m_name]) { \
+		l.m_name = MAX(l.m_name, (VkDeviceSize)fellow_profile->limits[FELLOW_VKL_##m_name]); \
+	}
+	FELLOW_VK_LIMITS(FELLOW_PROFILE_MAXIMUM, FELLOW_PROFILE_ALIGNMENT)
+#undef FELLOW_PROFILE_MAXIMUM
+#undef FELLOW_PROFILE_ALIGNMENT
+	for (int i = 0; i < 3; i++) {
+		if (fellow_profile->compute_workgroup_count[i]) {
+			l.maxComputeWorkGroupCount[i] = MIN(l.maxComputeWorkGroupCount[i], fellow_profile->compute_workgroup_count[i]);
+		}
+		if (fellow_profile->compute_workgroup_size[i]) {
+			l.maxComputeWorkGroupSize[i] = MIN(l.maxComputeWorkGroupSize[i], fellow_profile->compute_workgroup_size[i]);
+		}
+	}
+	if (fellow_profile->api_version && VK_API_VERSION_MINOR(fellow_profile->api_version) < VK_API_VERSION_MINOR(physical_device_properties.apiVersion)) {
+		physical_device_properties.apiVersion = fellow_profile->api_version;
+	}
+}
+
+void RenderingDeviceDriverVulkan::_fellow_profile_apply_capabilities() {
+	const uint64_t f = fellow_profile->features;
+#define FELLOW_HAS(m_name) ((f & FELLOW_VKF_BIT(m_name)) != 0)
+	shader_capabilities.shader_float16_is_supported = shader_capabilities.shader_float16_is_supported && FELLOW_HAS(shaderFloat16);
+	shader_capabilities.shader_int8_is_supported = shader_capabilities.shader_int8_is_supported && FELLOW_HAS(shaderInt8);
+	storage_buffer_capabilities.storage_buffer_16_bit_access_is_supported = storage_buffer_capabilities.storage_buffer_16_bit_access_is_supported && FELLOW_HAS(storageBuffer16BitAccess);
+	storage_buffer_capabilities.uniform_and_storage_buffer_16_bit_access_is_supported = storage_buffer_capabilities.uniform_and_storage_buffer_16_bit_access_is_supported && FELLOW_HAS(uniformAndStorageBuffer16BitAccess);
+	storage_buffer_capabilities.storage_push_constant_16_is_supported = storage_buffer_capabilities.storage_push_constant_16_is_supported && FELLOW_HAS(storagePushConstant16);
+	storage_buffer_capabilities.storage_input_output_16 = storage_buffer_capabilities.storage_input_output_16 && FELLOW_HAS(storageInputOutput16);
+	if (!FELLOW_HAS(multiview)) {
+		multiview_capabilities.is_supported = false;
+		multiview_capabilities.geometry_shader_is_supported = false;
+		multiview_capabilities.tessellation_shader_is_supported = false;
+	}
+	buffer_device_address_support = buffer_device_address_support && FELLOW_HAS(bufferDeviceAddress);
+	vulkan_memory_model_support = vulkan_memory_model_support && FELLOW_HAS(vulkanMemoryModel);
+	vulkan_memory_model_device_scope_support = vulkan_memory_model_device_scope_support && FELLOW_HAS(vulkanMemoryModelDeviceScope);
+	pipeline_cache_control_support = pipeline_cache_control_support && FELLOW_HAS(pipelineCreationCacheControl);
+	acceleration_structure_capabilities.acceleration_structure_support = acceleration_structure_capabilities.acceleration_structure_support && FELLOW_HAS(accelerationStructure);
+	raytracing_capabilities.raytracing_pipeline_support = raytracing_capabilities.raytracing_pipeline_support && FELLOW_HAS(rayTracingPipeline) && acceleration_structure_capabilities.acceleration_structure_support;
+	ray_query_support = ray_query_support && FELLOW_HAS(rayQuery) && acceleration_structure_capabilities.acceleration_structure_support;
+	fellow_position_fetch_support = fellow_position_fetch_support && FELLOW_HAS(rayTracingPositionFetch) && ray_query_support;
+	fellow_coop_matrix_support = fellow_coop_matrix_support && FELLOW_HAS(cooperativeMatrix) && shader_capabilities.shader_float16_is_supported;
+	fsr_capabilities.pipeline_supported = fsr_capabilities.pipeline_supported && FELLOW_HAS(pipelineFragmentShadingRate);
+	fsr_capabilities.primitive_supported = fsr_capabilities.primitive_supported && FELLOW_HAS(primitiveFragmentShadingRate);
+	fsr_capabilities.attachment_supported = fsr_capabilities.attachment_supported && FELLOW_HAS(attachmentFragmentShadingRate);
+	if (!FELLOW_HAS(fragmentDensityMap)) {
+		fdm_capabilities.attachment_supported = false;
+		fdm_capabilities.dynamic_attachment_supported = false;
+		fdm_capabilities.non_subsampled_images_supported = false;
+		fdm_capabilities.offset_supported = false;
+	}
+#undef FELLOW_HAS
+	// The subgroup's size cannot be simulated (shaders run with the device's); its operations and stages can.
+	subgroup_capabilities.supported_stages &= fellow_profile->subgroup_stages;
+	subgroup_capabilities.supported_operations &= fellow_profile->subgroup_operations;
+	if (!(subgroup_capabilities.supported_operations & VK_SUBGROUP_FEATURE_QUAD_BIT) || (subgroup_capabilities.supported_stages & (VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT)) != (VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT)) {
+		subgroup_capabilities.quad_operations_in_all_stages = false;
+	}
+	print_line(vformat("FellowEngine: simulated device: Vulkan 1.%d, %d extensions, fp16 %s, ray queries %s, subgroup operations 0x%x in stages 0x%x, %d invocations and %d bytes of shared memory a workgroup, %d bound sets.",
+			VK_API_VERSION_MINOR(physical_device_properties.apiVersion), enabled_device_extension_names.size(), shader_capabilities.shader_float16_is_supported ? "yes" : "no", ray_query_support ? "yes" : "no",
+			subgroup_capabilities.supported_operations, subgroup_capabilities.supported_stages, physical_device_properties.limits.maxComputeWorkGroupInvocations,
+			physical_device_properties.limits.maxComputeSharedMemorySize, physical_device_properties.limits.maxBoundDescriptorSets));
+}
+
+void RenderingDeviceDriverVulkan::_fellow_profile_report(const String &p_message) {
+	MutexLock lock(fellow_profile_mutex);
+	if (fellow_profile_reported.has(p_message)) {
+		return;
+	}
+	fellow_profile_reported.insert(p_message);
+	print_line(vformat("FELLOW_PORTABILITY %s: %s", fellow_profile->name, p_message));
+}
+
+void RenderingDeviceDriverVulkan::_fellow_profile_check_layout(const String &p_name, const ShaderReflection &p_reflection) {
+	const VkPhysicalDeviceLimits &l = physical_device_properties.limits;
+	if ((uint32_t)p_reflection.uniform_sets.size() > l.maxBoundDescriptorSets) {
+		_fellow_profile_report(vformat("%s: %d descriptor sets, the device binds %d", p_name, p_reflection.uniform_sets.size(), l.maxBoundDescriptorSets));
+	}
+	if (p_reflection.push_constant_size > l.maxPushConstantsSize) {
+		_fellow_profile_report(vformat("%s: %d bytes of push constants, the device has %d", p_name, p_reflection.push_constant_size, l.maxPushConstantsSize));
+	}
+	enum Kind {
+		SAMPLERS,
+		SAMPLED_IMAGES,
+		STORAGE_IMAGES,
+		UNIFORM_BUFFERS,
+		STORAGE_BUFFERS,
+		INPUT_ATTACHMENTS,
+		KIND_MAX,
+	};
+	static const char *kind_names[KIND_MAX] = { "samplers", "sampled images", "storage images", "uniform buffers", "storage buffers", "input attachments" };
+	const uint32_t per_stage_limits[KIND_MAX] = { l.maxPerStageDescriptorSamplers, l.maxPerStageDescriptorSampledImages, l.maxPerStageDescriptorStorageImages, l.maxPerStageDescriptorUniformBuffers, l.maxPerStageDescriptorStorageBuffers, l.maxPerStageDescriptorInputAttachments };
+	const uint32_t layout_limits[KIND_MAX] = { l.maxDescriptorSetSamplers, l.maxDescriptorSetSampledImages, l.maxDescriptorSetStorageImages, l.maxDescriptorSetUniformBuffers, l.maxDescriptorSetStorageBuffers, l.maxDescriptorSetInputAttachments };
+	uint32_t per_stage[SHADER_STAGE_MAX][KIND_MAX] = {};
+	uint32_t layout[KIND_MAX] = {};
+	for (int s = 0; s < p_reflection.uniform_sets.size(); s++) {
+		for (const ShaderUniform &u : p_reflection.uniform_sets[s]) {
+			uint32_t add[KIND_MAX] = {};
+			switch (u.type) {
+				case UNIFORM_TYPE_SAMPLER:
+					add[SAMPLERS] = u.length;
+					break;
+				case UNIFORM_TYPE_SAMPLER_WITH_TEXTURE:
+					add[SAMPLERS] = u.length;
+					add[SAMPLED_IMAGES] = u.length;
+					break;
+				case UNIFORM_TYPE_TEXTURE:
+				case UNIFORM_TYPE_TEXTURE_BUFFER:
+					add[SAMPLED_IMAGES] = u.length;
+					break;
+				case UNIFORM_TYPE_IMAGE:
+					add[STORAGE_IMAGES] = u.length;
+					break;
+				case UNIFORM_TYPE_IMAGE_BUFFER:
+					add[STORAGE_IMAGES] = 1;
+					break;
+				case UNIFORM_TYPE_UNIFORM_BUFFER:
+				case UNIFORM_TYPE_UNIFORM_BUFFER_DYNAMIC:
+					add[UNIFORM_BUFFERS] = 1;
+					if (u.length > l.maxUniformBufferRange) {
+						_fellow_profile_report(vformat("%s: a uniform buffer of %d bytes (set %d, binding %d), the device's range is %d", p_name, u.length, s, u.binding, l.maxUniformBufferRange));
+					}
+					break;
+				case UNIFORM_TYPE_STORAGE_BUFFER:
+				case UNIFORM_TYPE_STORAGE_BUFFER_DYNAMIC:
+					add[STORAGE_BUFFERS] = 1;
+					break;
+				case UNIFORM_TYPE_INPUT_ATTACHMENT:
+					add[INPUT_ATTACHMENTS] = MAX(u.length, 1u);
+					break;
+				default:
+					break;
+			}
+			for (int k = 0; k < KIND_MAX; k++) {
+				layout[k] += add[k];
+				for (int st = 0; st < SHADER_STAGE_MAX; st++) {
+					if (u.stages.has_flag(ShaderStage(1U << st))) {
+						per_stage[st][k] += add[k];
+					}
+				}
+			}
+		}
+	}
+	for (int st = 0; st < SHADER_STAGE_MAX; st++) {
+		uint32_t resources = 0;
+		for (int k = 0; k < KIND_MAX; k++) {
+			if (k != SAMPLERS) {
+				resources += per_stage[st][k];
+			}
+			if (per_stage[st][k] > per_stage_limits[k]) {
+				_fellow_profile_report(vformat("%s (%s): %d %s, the device has %d a stage", p_name, SHADER_STAGE_NAMES[st], per_stage[st][k], kind_names[k], per_stage_limits[k]));
+			}
+		}
+		if (resources > l.maxPerStageResources) {
+			_fellow_profile_report(vformat("%s (%s): %d resources, the device has %d a stage", p_name, SHADER_STAGE_NAMES[st], resources, l.maxPerStageResources));
+		}
+	}
+	for (int k = 0; k < KIND_MAX; k++) {
+		if (layout[k] > layout_limits[k]) {
+			_fellow_profile_report(vformat("%s: %d %s in its layout, the device has %d", p_name, layout[k], kind_names[k], layout_limits[k]));
+		}
+	}
+}
+
+void RenderingDeviceDriverVulkan::_fellow_profile_check_stage(const String &p_name, ShaderStage p_stage, const uint8_t *p_spirv, size_t p_size) {
+	FellowSpirvSummary summary;
+	if (!fellow_spirv_summarize((const uint32_t *)p_spirv, p_size / sizeof(uint32_t), summary)) {
+		return;
+	}
+	const String where = vformat("%s (%s)", p_name, SHADER_STAGE_NAMES[p_stage]);
+	const VkShaderStageFlags vk_stage = RD_STAGE_TO_VK_SHADER_STAGE_BITS[p_stage];
+	const VkPhysicalDeviceFeatures &rf = requested_device_features;
+	for (uint32_t cap : summary.capabilities) {
+		bool ok = true;
+		switch (cap) {
+			case 2: // Geometry
+				ok = rf.geometryShader;
+				break;
+			case 3: // Tessellation
+				ok = rf.tessellationShader;
+				break;
+			case 9: // Float16
+				ok = shader_capabilities.shader_float16_is_supported;
+				break;
+			case 10: // Float64
+				ok = rf.shaderFloat64;
+				break;
+			case 11: // Int64
+				ok = rf.shaderInt64;
+				break;
+			case 12: // Int64Atomics (never enabled)
+			case 27: // StorageImageMultisample (never enabled)
+			case 4448: // StorageBuffer8BitAccess (never enabled)
+			case 4449: // UniformAndStorageBuffer8BitAccess (never enabled)
+				ok = false;
+				break;
+			case 22: // Int16
+				ok = rf.shaderInt16;
+				break;
+			case 25: // ImageGatherExtended
+				ok = rf.shaderImageGatherExtended;
+				break;
+			case 32: // ClipDistance
+				ok = rf.shaderClipDistance;
+				break;
+			case 33: // CullDistance
+				ok = rf.shaderCullDistance;
+				break;
+			case 34: // ImageCubeArray
+			case 45: // SampledCubeArray
+				ok = rf.imageCubeArray;
+				break;
+			case 35: // SampleRateShading
+				ok = rf.sampleRateShading;
+				break;
+			case 39: // Int8
+				ok = shader_capabilities.shader_int8_is_supported;
+				break;
+			case 42: // MinLod
+				ok = rf.shaderResourceMinLod;
+				break;
+			case 49: // StorageImageExtendedFormats
+				ok = rf.shaderStorageImageExtendedFormats;
+				break;
+			case 55: // StorageImageReadWithoutFormat
+				ok = rf.shaderStorageImageReadWithoutFormat;
+				break;
+			case 56: // StorageImageWriteWithoutFormat
+				ok = rf.shaderStorageImageWriteWithoutFormat;
+				break;
+			case 57: // MultiViewport
+				ok = rf.multiViewport;
+				break;
+			case 61: // GroupNonUniform...
+			case 62:
+			case 63:
+			case 64:
+			case 65:
+			case 66:
+			case 67:
+			case 68:
+				ok = (subgroup_capabilities.supported_operations & (1u << (cap - 61))) && (subgroup_capabilities.supported_stages & vk_stage);
+				break;
+			case 4422: // FragmentShadingRateKHR
+				ok = fsr_capabilities.pipeline_supported || fsr_capabilities.primitive_supported || fsr_capabilities.attachment_supported;
+				break;
+			case 4433: // StorageBuffer16BitAccess
+				ok = storage_buffer_capabilities.storage_buffer_16_bit_access_is_supported;
+				break;
+			case 4434: // UniformAndStorageBuffer16BitAccess
+				ok = storage_buffer_capabilities.uniform_and_storage_buffer_16_bit_access_is_supported;
+				break;
+			case 4435: // StoragePushConstant16
+				ok = storage_buffer_capabilities.storage_push_constant_16_is_supported;
+				break;
+			case 4436: // StorageInputOutput16
+				ok = storage_buffer_capabilities.storage_input_output_16;
+				break;
+			case 4439: // MultiView
+				ok = multiview_capabilities.is_supported;
+				break;
+			case 4472: // RayQueryKHR
+				ok = ray_query_support;
+				break;
+			case 4479: // RayTracingKHR
+				ok = raytracing_capabilities.raytracing_pipeline_support;
+				break;
+			case 5291: // FragmentDensityEXT
+				ok = fdm_capabilities.attachment_supported;
+				break;
+			case 5336: // RayTracingPositionFetchKHR
+			case 5391: // RayQueryPositionFetchKHR
+				ok = fellow_position_fetch_support;
+				break;
+			case 5345: // VulkanMemoryModel
+				ok = vulkan_memory_model_support;
+				break;
+			case 5346: // VulkanMemoryModelDeviceScope
+				ok = vulkan_memory_model_device_scope_support;
+				break;
+			case 5347: // PhysicalStorageBufferAddresses
+				ok = buffer_device_address_support;
+				break;
+			case 6022: // CooperativeMatrixKHR
+				ok = fellow_coop_matrix_support;
+				break;
+			default:
+				break;
+		}
+		if (!ok) {
+			const char *cap_name = fellow_spirv_capability_name(cap);
+			_fellow_profile_report(vformat("%s needs %s, which the device lacks", where, cap_name ? String(cap_name) : vformat("capability %d", cap)));
+		}
+	}
+	if (p_stage == SHADER_STAGE_COMPUTE && summary.local_size[0]) {
+		const VkPhysicalDeviceLimits &l = physical_device_properties.limits;
+		const uint64_t invocations = uint64_t(summary.local_size[0]) * summary.local_size[1] * summary.local_size[2];
+		if (invocations > l.maxComputeWorkGroupInvocations || summary.local_size[0] > l.maxComputeWorkGroupSize[0] || summary.local_size[1] > l.maxComputeWorkGroupSize[1] || summary.local_size[2] > l.maxComputeWorkGroupSize[2]) {
+			_fellow_profile_report(vformat("%s: workgroup %dx%dx%d (%d invocations), the device has %d (%dx%dx%d)", where, summary.local_size[0], summary.local_size[1], summary.local_size[2], invocations,
+					l.maxComputeWorkGroupInvocations, l.maxComputeWorkGroupSize[0], l.maxComputeWorkGroupSize[1], l.maxComputeWorkGroupSize[2]));
+		}
+		if (summary.workgroup_bytes > l.maxComputeSharedMemorySize) {
+			_fellow_profile_report(vformat("%s: %d bytes of shared memory, the device has %d", where, summary.workgroup_bytes, l.maxComputeSharedMemorySize));
+		}
 	}
 }

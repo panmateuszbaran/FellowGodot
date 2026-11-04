@@ -1,0 +1,13 @@
+# FellowEngine platform checks (milestone 49): Emscripten for Godot's web export template (WebAssembly, WebGL 2).
+FROM ubuntu:24.04
+ENV DEBIAN_FRONTEND=noninteractive
+ARG EMSDK_VERSION=4.0.10
+COPY certs/ /tmp/certs/
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates git python3 python3-pip scons xz-utils lbzip2 pkg-config \
+	&& rm -rf /var/lib/apt/lists/* \
+	&& (cat /tmp/certs/*.crt >> /etc/ssl/certs/ca-certificates.crt 2>/dev/null || true)
+RUN git clone --depth 1 https://github.com/emscripten-core/emsdk.git /opt/emsdk \
+	&& cd /opt/emsdk && ./emsdk install ${EMSDK_VERSION} && ./emsdk activate ${EMSDK_VERSION} \
+	&& rm -rf /opt/emsdk/downloads
+ENV EMSDK=/opt/emsdk EM_CONFIG=/opt/emsdk/.emscripten PATH=/opt/emsdk:/opt/emsdk/upstream/emscripten:$PATH
+WORKDIR /src

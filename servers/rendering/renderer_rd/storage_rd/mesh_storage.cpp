@@ -401,7 +401,7 @@ void MeshStorage::mesh_add_surface(RID p_mesh, const RenderingServerTypes::Surfa
 	const BitField<RD::BufferCreationBits> as_storage_flag = use_as_storage ? RD::BUFFER_CREATION_AS_STORAGE_BIT : 0;
 	// FellowEngine ray tracing (decision 0080): positions and indices usable as acceleration structure build inputs;
 	// compressed positions also readable by the decode shader where the device cannot build from them.
-	BitField<RD::BufferCreationBits> fellow_rt_flags;
+	BitField<RD::BufferCreationBits> fellow_rt_flags = {}; // (zero: BitField leaves its value uninitialized)
 	BitField<RD::BufferCreationBits> vertex_flags = as_storage_flag;
 	if (Fellow::raytracing_active()) {
 		fellow_rt_flags = BitField<RD::BufferCreationBits>(RD::BUFFER_CREATION_DEVICE_ADDRESS_BIT).get_combined(RD::BUFFER_CREATION_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT);

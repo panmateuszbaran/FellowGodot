@@ -217,7 +217,7 @@ void FellowLightning3D::_build_bolt(RandomPCG &p_rng, const Vector3 &p_camera) {
 
 	// Ribbons turned to the camera, of a constant width as seen from it.
 	Camera3D *cam = get_viewport() ? get_viewport()->get_camera_3d() : nullptr;
-	float far = cam ? cam->get_far() : 4000.0f;
+	float far_plane = cam ? cam->get_far() : 4000.0f;
 	// Beyond the camera's far plane the bolt is drawn nearer, scaled to look the same (still behind the scene).
 	float max_d = 1.0f;
 	for (const Channel &ch : channels) {
@@ -225,7 +225,7 @@ void FellowLightning3D::_build_bolt(RandomPCG &p_rng, const Vector3 &p_camera) {
 			max_d = MAX(max_d, p.distance_to(p_camera));
 		}
 	}
-	float k = MIN(1.0f, far * 0.9f / max_d);
+	float k = MIN(1.0f, far_plane * 0.9f / max_d);
 	PackedVector3Array verts;
 	PackedVector2Array uvs;
 	PackedColorArray cols;
@@ -390,8 +390,8 @@ void FellowLightning3D::_notification(int p_what) {
 			bool on = env > 0.002f && is_visible_in_tree();
 			if (flash) {
 				// Brighter near, as a lit cloud is: by the inverse of the distance, 1 km as the reference.
-				float near = CLAMP(1000.0f / MAX(current.distance, 1.0f), 0.3f, 2.5f);
-				flash->set_param(Light3D::PARAM_ENERGY, energy * near * env);
+				float closeness = CLAMP(1000.0f / MAX(current.distance, 1.0f), 0.3f, 2.5f);
+				flash->set_param(Light3D::PARAM_ENERGY, energy * closeness * env);
 				flash->set_color(color);
 				if (flash->is_visible() != on) {
 					flash->set_visible(on);
@@ -401,9 +401,9 @@ void FellowLightning3D::_notification(int p_what) {
 				bolt_material->set_shader_parameter("flash", env);
 				bolt_material->set_shader_parameter("bolt_color", color);
 				bolt_material->set_shader_parameter("brightness", bolt_brightness);
-				glow_material->set_shader_parameter("flash", env * near);
+				glow_material->set_shader_parameter("flash", env * closeness);
 				glow_material->set_shader_parameter("glow_color", color);
-				_push_cloud_flash(on, energy * near * env);
+				_push_cloud_flash(on, energy * closeness * env);
 			}
 		} break;
 		case NOTIFICATION_EXIT_TREE: {

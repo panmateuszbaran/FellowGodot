@@ -65,7 +65,7 @@ public:
 		Vector3 position;
 		Vector3 forward;
 		float pixels_per_unit = 0.0f; // at 1 m of view depth for a perspective camera; everywhere for an orthogonal one
-		float near = 0.05f;
+		float z_near = 0.05f;
 		float mip_bias = 0.0f; // the viewport's texture mipmap bias
 		bool orthogonal = false;
 	};

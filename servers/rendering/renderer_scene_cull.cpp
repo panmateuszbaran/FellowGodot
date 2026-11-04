@@ -1238,7 +1238,7 @@ void RendererSceneCull::fellow_texture_streaming_update() {
 						} else {
 							depth = zc - ze;
 						}
-						p = cam.pixels_per_unit / MAX(depth, MAX(cam.near, 1e-3f));
+						p = cam.pixels_per_unit / MAX(depth, MAX(cam.z_near, 1e-3f));
 					}
 					ppu = MAX(ppu, p);
 					bias = MIN(bias, cam.mip_bias);
@@ -3448,7 +3448,7 @@ void RendererSceneCull::render_camera(const Ref<RenderSceneBuffers> &p_render_bu
 		sc.forward = -camera_data.main_transform.basis.get_column(2).normalized();
 		sc.pixels_per_unit = 0.5f * float(p_viewport_size.height) * float(camera_data.main_projection.columns[1][1]);
 		sc.orthogonal = camera_data.is_orthogonal;
-		sc.near = camera->znear;
+		sc.z_near = camera->znear;
 		sc.mip_bias = p_render_buffers.is_valid() ? p_render_buffers->fellow_get_texture_mipmap_bias() : 0.0f;
 		FellowTextureStreaming::get_singleton()->add_camera(sc);
 	}
