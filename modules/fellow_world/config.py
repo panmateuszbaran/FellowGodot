@@ -10,6 +10,8 @@ def configure(env):
 def get_doc_classes():
     return [
         "FellowHLOD3D",
+        "FellowStreamingCell3D",
+        "FellowWorldStreamer3D",
     ]
 
 

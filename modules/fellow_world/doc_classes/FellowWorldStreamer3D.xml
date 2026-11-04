@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="FellowWorldStreamer3D" inherits="Node3D" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+	<brief_description>
+		FellowEngine: keeps the [FellowStreamingCell3D] nodes below it loaded around the camera.
+	</brief_description>
+	<description>
+		Every frame the streamer measures the distance from the viewport's camera (with [member use_camera]), its [member targets] and the [method prefetch] points to each cell's box. Cells within their load distance are requested from the [ResourceLoader]'s threads (the nearest first, at most [member max_loading] loading or being instantiated at once), instantiated on a worker thread ([member threaded_instancing]) and added to the tree, at most [member max_activations_per_frame] a frame; loaded cells beyond the distance plus [member unload_margin] are freed, the farthest first, at most [member max_releases_per_frame] a frame. With [member streaming] off every cell loads (the whole level resident). With FellowEngine's texture streaming ([code]rendering/fellow/streaming/textures[/code]) the cells' textures load with only their small mips. See [code]docs/decisions/0147-world-streaming.md[/code].
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="clear_prefetch">
+			<return type="void" />
+			<description>
+				Forgets the [method prefetch] points.
+			</description>
+		</method>
+		<method name="get_stats" qualifiers="const">
+			<return type="Dictionary" />
+			<description>
+				The cells by state, loads and releases, failures, the main thread's time adding and removing cells (total and the largest), the worker threads' instantiation time, the time from request to the tree (total and the largest), the streamer's own time, frames, [code]settled[/code].
+			</description>
+		</method>
+		<method name="is_settled" qualifiers="const">
+			<return type="bool" />
+			<description>
+				Every cell within its distance is in the tree, every cell beyond its distance plus the margin is freed, and nothing is loading.
+			</description>
+		</method>
+		<method name="load_now">
+			<return type="int" />
+			<description>
+				Loads, instantiates and adds every cell in range at once, on this thread (behind a loading screen); returns how many entered the tree.
+			</description>
+		</method>
+		<method name="prefetch">
+			<return type="void" />
+			<param index="0" name="position" type="Vector3" />
+			<param index="1" name="radius" type="float" />
+			<description>
+				Cells within [param radius] of [param position] (and within the load distance of it) load as if a camera were there: a teleport's destination, before the camera arrives.
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="load_distance" type="float" setter="set_load_distance" getter="get_load_distance" default="200.0">
+			The distance from a cell's box at which it loads (a cell's own [member FellowStreamingCell3D.load_distance] wins).
+		</member>
+		<member name="max_activations_per_frame" type="int" setter="set_max_activations_per_frame" getter="get_max_activations_per_frame" default="1">
+			Cells added to the tree a frame (each costs the main thread its nodes' entering the tree).
+		</member>
+		<member name="max_loading" type="int" setter="set_max_loading" getter="get_max_loading" default="2">
+			Cells loading or being instantiated at once.
+		</member>
+		<member name="max_releases_per_frame" type="int" setter="set_max_releases_per_frame" getter="get_max_releases_per_frame" default="2">
+			Cells freed a frame.
+		</member>
+		<member name="streaming" type="bool" setter="set_streaming" getter="is_streaming" default="true">
+			Off: every cell loads, whatever the distance.
+		</member>
+		<member name="targets" type="NodePath[]" setter="set_targets" getter="get_targets" default="[]">
+			Nodes around which cells load, besides the camera (players, vehicles).
+		</member>
+		<member name="threaded_instancing" type="bool" setter="set_threaded_instancing" getter="is_threaded_instancing" default="true">
+			A loaded cell's nodes are created on a worker thread (off: on the main thread, when its load finishes).
+		</member>
+		<member name="unload_margin" type="float" setter="set_unload_margin" getter="get_unload_margin" default="25.0">
+			Hysteresis: a cell is freed only beyond its load distance plus this.
+		</member>
+		<member name="use_camera" type="bool" setter="set_use_camera" getter="is_using_camera" default="true">
+			The viewport's current camera is a point around which cells load.
+		</member>
+	</members>
+</class>

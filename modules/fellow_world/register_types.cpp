@@ -31,12 +31,15 @@
 #include "register_types.h"
 
 #include "fellow_hlod_3d.h"
+#include "fellow_world_streamer_3d.h"
 
 #include "core/object/class_db.h"
 
 void initialize_fellow_world_module(ModuleInitializationLevel p_level) {
 	if (p_level == MODULE_INITIALIZATION_LEVEL_SCENE) {
 		GDREGISTER_CLASS(FellowHLOD3D);
+		GDREGISTER_CLASS(FellowStreamingCell3D);
+		GDREGISTER_CLASS(FellowWorldStreamer3D);
 	}
 }
 

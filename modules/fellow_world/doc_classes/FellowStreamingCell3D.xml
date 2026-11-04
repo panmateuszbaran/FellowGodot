@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="FellowStreamingCell3D" inherits="Node3D" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+	<brief_description>
+		FellowEngine: a cell of a streamed world, its content a [PackedScene] loaded and freed by a [FellowWorldStreamer3D].
+	</brief_description>
+	<description>
+		Placed below a [FellowWorldStreamer3D], the cell's [member scene_path] is loaded on the [ResourceLoader]'s threads when a camera or target comes within [member load_distance] of its [member bounds] (the streamer's distance if 0), instantiated on a worker thread and added as the cell's child; beyond the distance plus the streamer's [member FellowWorldStreamer3D.unload_margin] it is freed. The cell's own [Node3D] children are its proxy: shown while the content is not in the tree (an HLOD mesh, a low-detail stand-in), hidden while it is. In the editor nothing is loaded. See [code]docs/decisions/0147-world-streaming.md[/code].
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="get_content" qualifiers="const">
+			<return type="Node" />
+			<description>
+				The content's root node while it is loaded ([constant STATE_READY] or [constant STATE_LOADED]), otherwise [code]null[/code].
+			</description>
+		</method>
+		<method name="get_global_bounds" qualifiers="const">
+			<return type="AABB" />
+			<description>
+				[member bounds] in global space.
+			</description>
+		</method>
+		<method name="get_state" qualifiers="const">
+			<return type="int" enum="FellowStreamingCell3D.State" />
+			<description>
+				Where the content is: unloaded, loading, being instantiated, ready to enter the tree or in it.
+			</description>
+		</method>
+		<method name="is_loaded" qualifiers="const">
+			<return type="bool" />
+			<description>
+				The content is in the tree.
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="bounds" type="AABB" setter="set_bounds" getter="get_bounds" default="AABB(-32, -16, -32, 64, 64, 64)">
+			The cell's extent in its own space: the distance to a camera is measured to this box.
+		</member>
+		<member name="load_distance" type="float" setter="set_load_distance" getter="get_load_distance" default="0.0">
+			The distance from the box at which the content loads; 0: the streamer's [member FellowWorldStreamer3D.load_distance].
+		</member>
+		<member name="scene_path" type="String" setter="set_scene_path" getter="get_scene_path" default="&quot;&quot;">
+			The [PackedScene] file of the cell's content.
+		</member>
+	</members>
+	<signals>
+		<signal name="loaded">
+			<description>
+				The content entered the tree.
+			</description>
+		</signal>
+		<signal name="unloaded">
+			<description>
+				The content left the tree (it is freed).
+			</description>
+		</signal>
+	</signals>
+	<constants>
+		<constant name="STATE_UNLOADED" value="0" enum="State">
+		</constant>
+		<constant name="STATE_LOADING" value="1" enum="State">
+		</constant>
+		<constant name="STATE_INSTANCING" value="2" enum="State">
+		</constant>
+		<constant name="STATE_READY" value="3" enum="State">
+		</constant>
+		<constant name="STATE_LOADED" value="4" enum="State">
+		</constant>
+	</constants>
+</class>

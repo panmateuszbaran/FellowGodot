@@ -81,6 +81,7 @@ const SCENES := {
 	"wind": "res://scenes/wind_lab.gd",
 	"motion": "res://scenes/motion_lab.gd",
 	"streaming": "res://scenes/streaming_lab.gd",
+	"world": "res://scenes/world_lab.gd",
 }
 const DT := 1.0 / 60.0
 
@@ -423,6 +424,23 @@ func _texture_streaming_info() -> Dictionary:
 	return d
 
 
+## FellowEngine world streaming (milestone 46): waits until the scene's FellowWorldStreamer3D (its `streamer`) has
+## every cell in range in the tree (at most --streaming_wait frames). Nothing without one.
+func _wait_world_streaming() -> void:
+	var st = scene.get("streamer") if "streamer" in scene else null
+	if st == null or not st.has_method("is_settled"):
+		return
+	var limit := int(args.get("streaming_wait", "1200"))
+	var waited := 0
+	while waited < limit and not st.is_settled():
+		await get_tree().process_frame
+		waited += 1
+	result["world_streaming_wait_frames"] = int(result.get("world_streaming_wait_frames", 0)) + waited
+	if not result.has("world_streaming"):
+		result["world_streaming"] = {}
+	result["world_streaming"][str(result["world_streaming"].size())] = st.get_stats()
+
+
 ## Waits until texture streaming has evaluated the current view twice and has nothing left to load (at most
 ## --streaming_wait frames, 1200 by default). True if it had to wait (the caller renders its settle frames again).
 func _wait_texture_streaming() -> bool:
@@ -590,6 +608,9 @@ func _run_perf() -> void:
 	var tsi := _texture_streaming_info()
 	if not tsi.is_empty():
 		result["texture_streaming"] = tsi
+	var wst = scene.get("streamer") if "streamer" in scene else null
+	if wst != null and wst.has_method("get_stats"):
+		result["world_streaming"] = wst.get_stats()
 	var pc2 := _pipeline_compilations()
 	if not ab.is_empty():
 		# Per configuration: the mean of every (pass, block) it ran, keyed "pass:block" (block = position on the path).
@@ -915,6 +936,7 @@ func _run_capture() -> void:
 		# --streaming_fixed_wait=<n>: exactly n frames for texture streaming, then the settle frames again, with streaming
 		# or without (the same frame count, so the same jitter phase and history: an A/B comparison); otherwise wait
 		# until streaming has settled (no extra frames without it).
+		await _wait_world_streaming()
 		var fixed_wait := int(args.get("streaming_fixed_wait", "0"))
 		if fixed_wait > 0:
 			for i in range(fixed_wait):
