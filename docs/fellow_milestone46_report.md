@@ -36,7 +36,8 @@ once settled, the same frames:
 
 * World streaming, 480 × 270: 0 pixels differ (a load distance of 320 m for a 200-300 m far plane missed far corners of
   the view, 177 pixels: the far plane is a depth; 400 m for 200 m covers them).
-* World and texture streaming, 480 × 270: 0 pixels; 1920 × 1080: 1 pixel by 1 level in one view, 0 in the others.
+* World and texture streaming, 480 × 270: 0 pixels; 1920 × 1080: 1 pixel by 1 level in one view, 0 in the others; world
+  streaming alone: 0 in that view too (the pixel is texture streaming's estimate, one level short there).
 * With the old pinning rule every streamed texture went to full resolution in World Lab (384 of 384 MiB); with the
   new one a cell's textures keep their tails until used.
 

@@ -52,7 +52,8 @@ settled (`is_settled()`), the same frames:
   did: the far plane is a depth, and at the corners of the view a visible point can be farther than it — hence 400 m
   for a 200 m far plane).
 * World and texture streaming, 480 × 270: 0 pixels; 1920 × 1080: **1 pixel by 1 level** of 2 073 600 in one view
-  (`centre`), the others 0.
+  (`centre`), the others 0 — texture streaming's: world streaming alone gives 0 in that view at 1080p (a texel level
+  estimated one short at one pixel, within decision 0146's margin's reach).
 * A texture loaded with a cell before the cell enters the tree stays at its tail until an instance uses it (with the
   old rule all 96 went to full resolution: 384 of 384 MiB resident).
 
