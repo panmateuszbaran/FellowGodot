@@ -9,6 +9,24 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 44 — neural motion's CPU side and faster tensor-core products; readiness for AAA (2026-11-04)
+
+- `fellow_motion` off the main thread (decision 0144): the service encodes the requests and decodes and
+  endpoint-corrects the results on the WorkerThreadPool, one task per request; a character interpolates, crossfades
+  and poses only the 26 joints the model drives, with a ring history and no per-frame allocation. The characters'
+  main-thread work a step: 64 characters 0.888 → 0.212 ms on the laptop's CPU (16 on the cloud's: 0.611 → 0.204 ms);
+  the same motion within 8.3e-6 m.
+- The tensor-core products (decision 0145): the activations loaded four at a time (`vec4`), the epilogue's addresses
+  and mask a row at a time — the same results bit for bit, 13-22 % faster from 2 requests on (RTX: 16 at once
+  15.23 → 12.60 ms, 64 at once 51.55 → 40.95 ms; a request 4.03 ms). Six other designs measured and not kept.
+  `FELLOW_MOTION_GEMM=scalar` (diagnostic) takes the scalar loads.
+- Motion Lab on the RTX (milestone 43's build alternating with this one): 64 characters 8.52 → 7.33 ms a frame in
+  flush mode, 4.30 → 3.56 ms asynchronous (the 99th percentile 11.6 → 6.1 ms); 16 characters 3.51 → 3.43 ms.
+- `docs/fellow_aaa_readiness.md`: an assessment of FellowEngine's readiness for AAA production — a scorecard of 14
+  areas, what an AAA project would hit first, what it is ready for now, a path in seven steps. Verdict: not AAA-ready as
+  an engine (streaming, platforms and GPU breadth, upscaling, animation, tools); a renderer and simulation close to
+  AAA-class on Windows/Vulkan/NVIDIA, ready for PC indie and AA games with a high-end look.
+
 ## Milestone 43 — neural motion: MotionBricks on the GPU (2026-11-03)
 
 - New module `fellow_motion` (decision 0143): `FellowMotionModel` runs NVIDIA's MotionBricks SOMA model (a root and a

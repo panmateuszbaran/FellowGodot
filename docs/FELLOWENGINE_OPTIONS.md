@@ -363,6 +363,12 @@ static `get_service_stats(model_path)` and `flush_requests(model_path)`. Nothing
 `FELLOW_MOTION_MODEL` and `FELLOW_MOTION_BODY`, `--motion_crowd=16`, `--motion_mode=flush|async|immediate`,
 `--motion_rewind=1`).
 
+Milestone 44 (decisions 0144, 0145): the service encodes the requests and decodes and endpoint-corrects the results
+on the WorkerThreadPool (`get_service_stats()` reports `avg_decode_msec`), and a character's frame poses only the 26
+joints the model drives. On tensor cores with a subgroup of 32 or less the products load the activations four at a
+time; the environment's `FELLOW_MOTION_GEMM=scalar` (a diagnostic) takes milestone 43's scalar loads — the same
+results either way.
+
 ## Options that change the image (off by default)
 
 | setting | what it does | image cost | record |

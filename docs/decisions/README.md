@@ -182,3 +182,5 @@ Status: KEEP | REWORK | REJECT | MEASURING      Branch / commit: ...      Toggle
 | [0141](0141-thin-streaks.md) | Thin rain streaks: a drop at its own width or a pixel, its opacity scaled to match | `FellowRain3D.streak_width` | KEEP (opt-in) |
 | [0142](0142-weather-thin-streaks.md) | The weather's own rain in thin streaks: a rain node a FellowWeather3D creates has `streak_width` 0.004 m | `FellowWeather3D` | KEEP |
 | [0143](0143-neural-motion.md) | Neural motion: NVIDIA's MotionBricks SOMA model on the RenderingDevice (tensor cores where present), characters that walk, run, turn and stop with no clip | `FellowMotionModel`, `FellowMotionCharacter3D` | KEEP (a new module) |
+| [0144](0144-motion-cpu.md) | Neural motion's CPU work off the main thread: encoding, decoding and endpoint correction on worker threads; only the driven joints posed | `FellowMotionCharacter3D`, the service | KEEP (the same motion within 8.3e-6 m) |
+| [0145](0145-motion-gemm-vec4.md) | Neural motion's tensor-core products: vec4 activation loads, the epilogue a row at a time (−13 to −22 % from 2 requests on) | `FellowMotionModel` | KEEP (bit for bit) |

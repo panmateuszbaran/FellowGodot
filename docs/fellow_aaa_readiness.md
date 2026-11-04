@@ -1,0 +1,109 @@
+# FellowEngine — readiness for AAA production (assessment, 2026-11-04)
+
+Status: an assessment after milestone 44, from the milestones' measurements (the RTX 5070 Ti Laptop and lavapipe) and
+what they did not cover. It is a judgement, not a measurement: where it says "not measured", nothing in the 44
+milestones measured it.
+
+## 0. Verdict
+
+**Not AAA-ready as an engine. Close to AAA-class in parts of its renderer and simulation, on one platform.**
+
+On a Windows PC with an NVIDIA GPU and Vulkan, FellowEngine renders the benchmark scenes 15-54 % faster than stock
+Godot 4.7.2 (Sponza 13.5 → 6.2 ms, Bistro exterior 6.6 → 4.2 ms at 1080p on a laptop GPU), the same frames on every
+run, and it has features of a current AAA renderer: ray-traced GI, shadows, reflections and AO, an atmosphere with
+volumetric clouds and their shadows, FFT water, a weather system that drives rain, snow, ice, wind and lightning, GPU
+smoke, fire and burning objects, automatic HLOD, and characters moved by a neural network. Together that is a strong
+base for a **PC-first indie or AA game** with a high-end look.
+
+AAA production needs more than a fast renderer, and here the 44 milestones left most of it as stock Godot gives it:
+streaming of large worlds and of textures, platforms beyond Windows/Vulkan/NVIDIA (consoles above all), an animation
+stack (motion matching, IK, faces), content pipeline and editor tooling for large teams, upscalers and frame
+generation, audio and online middleware, and validation on more than one machine. Those, not the renderer's speed, are
+what stands between FellowEngine and an AAA project.
+
+## 1. The bar
+
+"AAA" here means what a current AAA title ships on: a world of tens to hundreds of millions of triangles and gigabytes
+of textures streamed as the player moves; 60 fps on the current consoles and a wide range of PC GPUs (NVIDIA, AMD,
+Intel) at 1440p-4K with upscaling; hundreds of animated characters with motion matching, IK and facial animation; a
+team of dozens to hundreds working in an editor with a content pipeline, profilers and build automation; certification
+on each platform.
+
+## 2. Scorecard
+
+Ready: usable for AAA-class content as it is (within the platform limits of section 3). Partial: present and
+measured, but short of AAA scale or breadth. Gap: not addressed by FellowEngine (stock Godot's, or missing).
+
+| area | status | what the milestones showed | what is missing for AAA |
+|---|---|---|---|
+| Frame time (render thread and GPU) | **Ready** (on its platform) | −15 to −54 % against stock in 8 of 9 scenes (`m41_f317_final`); parallel culling and recording, persistent instance data, shadow caches, GPU culling of MultiMesh instances, specialized colour passes, async compute; autotune per scene; bit-for-bit runs | measured on one laptop GPU at 1080p (1440p in milestone 1); Stress Lab (render-thread bound) −1.8 %, within the spread; no 4K, no AMD/Intel numbers |
+| Lighting and GI | **Ready / Partial** | ray-traced AO, sun shadows, DDGI (two cascades of probes), reflections (`raytracing/*`, milestone 16): all four +53-66 % GPU (Bistro exterior 4.07 → 6.45 ms); sky atmosphere, volumetric clouds with shadows | RT only through `VK_KHR_ray_query`; a device loss with DDGI and the cloud shadow map was worked around (double-buffered), its cause not found (milestone 33); no RT fallback chain tuned per GPU tier |
+| Environment and VFX | **Ready** (a strength) | FFT water with SSR over Hi-Z, shallow-water simulation, rain (puddles, ripples, wet and drying ground, shafts, showers, wind-driven, thin streaks), snow with tracks, ice and hoarfrost, slush, rainbows, wind for plants, water, gas and particles, lightning, a weather controller; GPU smoke and fire, burning objects; each measured (e.g. Rain Lab 0.36 ms, the wind +0.56 ms) | authoring: little editor support (the weather does nothing in the editor, few gizmos); not combined at AAA scale (all systems in one large level) |
+| Geometry scale | **Partial** | cluster culling of large surfaces, LOD of their parts (option), contribution culling, `FellowHLOD3D` (City Lab's 18 800 nodes in 14 proxies, render thread −26 %), impostors (option); Sponza's 12.8 M triangles in 6.2 ms | no virtualized geometry (Nanite-class), no mesh or LOD streaming; the largest scene 12.8 M triangles and 18 800 nodes; single-precision coordinates (Godot's double-precision builds not tested) |
+| Streaming and memory | **Gap** | loading to the first frame 12-62 % faster (parallel, lazy shader creation; milestone 12) | no texture streaming (every texture resident at full resolution), no world partition / cell streaming, no memory budgets or residency tooling; Sponza needed 2.5 GB of VRAM |
+| Shader compilation and stutter | **Partial** | pipelines created lazily and in parallel, the ubershader while a specialization compiles, a pipeline cache that no longer crashes at 2 GiB, frame pacing (worker counts, hot workers, presentation stalls) | no offline PSO collection and pre-warming for shipping builds; hitches measured per scene, not over a play session |
+| Characters and animation | **Partial** | Crowd Lab: 256 skinned characters, −19 % (elided work, batched skin transforms); `FellowMotionCharacter3D`: clip-free locomotion from NVIDIA's MotionBricks on the GPU (a request 4.0 ms, 16 at once 12.6 ms, 64 at once 41 ms on the RTX; Motion Lab's 64 characters 7.3 ms a frame waiting for them, 3.6 ms with the service on a worker thread), its CPU work off the main thread, falls caught | no motion matching, full-body IK, facial animation, cloth or hair; neural motion is locomotion only, tensor-core-dependent for speed (fp32 products elsewhere: 1.4-2.1× slower on the same GPU), its weights under NVIDIA's Open Model Agreement (shipping needs its terms checked) |
+| Physics | **Partial** | GodotPhysics3D and Jolt faster and exactly stock's (pile × 2.27, rays × 8.6 on GodotPhysics; Jolt areas −42 %), deterministic fast modes | no destruction, vehicles or cloth beyond stock; thousands of bodies not measured |
+| CPU and threading | **Partial** | the render thread parallel; worker counts tuned; animation and physics multi-threaded where stock is | gameplay on GDScript's main thread (Crowd Lab's frame is the main thread animating); no data-oriented job system for game code |
+| Upscaling, frame generation, HDR | **Gap** | TAA improved, contrast-adaptive sharpening, motion blur | on Vulkan stock's FSR 2.2 only: no DLSS, XeSS or FSR 3+, no frame generation; HDR output not addressed by FellowEngine |
+| Platforms and GPUs | **Gap** (the largest) | Windows, Vulkan, Forward+, one NVIDIA laptop GPU; Linux builds tested on lavapipe | no consoles (Godot's console ports are third-party; FellowEngine's RenderingDevice and driver changes would need porting to each); Direct3D 12 and Metal untouched by FellowEngine's work (ray queries and cooperative matrices are Vulkan-only here); AMD and Intel GPUs never measured; Mobile and Compatibility renderers unchanged |
+| Editor, tools, content pipeline | **Gap** | the editor builds and opens projects; a headless import crash fixed; the bench (A/B with heat soak, telemetry, per-pass timestamps), autotune | FellowEngine's work is in the runtime: few editor previews or gizmos for its nodes, HLOD and impostors baked at run time, no DCC round-trip, no profiler UI for its passes, no asset validation or cooking pipeline for a large team |
+| Audio, networking, UI, localization | **Gap** | not touched (stock Godot) | no Wwise/FMOD-class middleware in the engine, no large-scale multiplayer stack, no platform online services |
+| Quality and validation | **Partial** | a strict method: every option against its absence bit for bit on lavapipe, A/B in alternating order with heat soak, Vulkan synchronization validation | one test machine; no farm across GPUs, drivers and OS versions; no long soak or memory-leak runs; no crash reporting |
+
+## 3. What an AAA project would hit first
+
+1. **Memory and streaming.** With every texture resident and every object loaded with its scene, an AAA level does
+   not fit in 8-12 GB of VRAM, and an open world cannot stream. FellowHLOD helps the far field's draws, not memory.
+2. **Platforms.** A console version needs a RenderingDevice backend per console (third-party ports exist for stock
+   Godot, none carries FellowEngine's changes), and every Vulkan-only feature (ray queries, cooperative matrices,
+   async compute choices) needs its counterpart or a fallback.
+3. **GPU breadth.** Autotune and every default were chosen on one NVIDIA GPU; AMD's and Intel's drivers differ in
+   exactly the areas FellowEngine tuned (barriers, async compute, subgroup sizes, ray tracing).
+4. **4K and upscaling.** Without DLSS/FSR 3/XeSS and frame generation, the ray-traced feature set's +53-66 % GPU cost
+   is hard to afford at 4K.
+5. **Animation.** AAA characters need motion matching, IK and facial animation; neural motion covers locomotion only.
+6. **Team scale.** The editor and the content pipeline are stock Godot's, which is built for small teams.
+
+## 4. What it is ready for now
+
+* PC games (Windows, Vulkan, NVIDIA-class GPUs) of indie to AA scope that want a high-end look: weather, water, fire,
+  ray-traced lighting, at frame times well under stock's.
+* Levels of the benchmark scenes' size (Sponza, Bistro, City Lab: up to 13 M triangles, 19 k nodes) at 60 fps with
+  headroom on a laptop GPU.
+* Simulation-heavy scenes (rain, snow, gas, water) where its nodes cost a fraction of a millisecond each.
+* Research and prototypes: neural character motion in the engine, deterministic frames for testing.
+
+## 5. A path towards AAA, in order of what blocks most
+
+1. **Hardware and platform breadth**: measure on AMD and Intel GPUs and on the Steam Deck/Linux; decide Vulkan-only
+   (PC/Linux) or bring the features to Direct3D 12; a console strategy (a partner port that carries the
+   RenderingDevice changes).
+2. **Streaming**: texture mip streaming with residency feedback, mesh LOD streaming, cell-based world streaming built
+   on FellowHLOD's cells, memory budgets with tooling.
+3. **Upscaling and frame generation**: DLSS, FSR 3+ and XeSS behind one interface (TAA's inputs are already there).
+4. **Editor and pipeline**: previews and gizmos for every FellowEngine node in the editor, offline HLOD/impostor
+   baking, a cooking step, a GPU profiler view of its passes, shader/PSO pre-warming for shipping builds.
+5. **Animation**: motion matching on clips with IK and animation LOD; neural motion kept as a second path (its next
+   steps: products nearer the GPU's limits, target poses beyond locomotion, uneven ground).
+6. **Scale and soak tests**: AAA-sized test levels (50-100 M triangles, 10 k+ objects, 100+ lights, all systems
+   together), hour-long play sessions, memory and hitch tracking, an automated perf farm.
+7. **Middleware**: audio (Wwise/FMOD) and online services through plugins.
+
+## 6. Neural motion's state (milestones 43-44)
+
+* GPU: a request 4.0 ms, 16 at once 12.6 ms, 64 at once 41 ms on the RTX's tensor cores (milestone 44, the laptop
+  presumably idle; milestone 43's kernel 4.1, 15.2 and 51.6 ms the same night): the activations loaded four at a time
+  and the epilogue a row at a time, the same results bit for bit. Six other kernel designs were measured and dropped;
+  the products are bound by each workgroup's latency through its K steps and by the epilogue, still far from the
+  tensor cores' limits.
+* CPU (milestone 44): encoding, decoding and endpoint correction on the service's worker threads, in parallel; a
+  character's frame only the joints the model drives — 64 characters' main-thread work 0.89 → 0.21 ms a step on the
+  laptop's CPU.
+* Motion Lab on the RTX (1080p): 64 characters 7.33 ms a frame in flush mode, 3.56 ms asynchronous (the 99th percentile
+  6.1 ms) — milestone 43's 8.52 and 4.30 ms the same night; 16 characters 3.43 ms. Neural motion is affordable for a
+  crowd of tens of characters on a high-end GPU, not yet for hundreds.
+* Behaviour: walks, jogs, runs, turns, stops without clips; falls caught and recovered (32 characters × 40 s: 15
+  falls, all back up, no one down for 3 s).
+* Not yet: other motions (crouch, jump, interact), terrain, obstacles, cheaper fp32 path for GPUs without tensor
+  cores, a measured comparison with clip-based locomotion's look.

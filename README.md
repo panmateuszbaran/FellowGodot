@@ -103,7 +103,7 @@ to −21 %. They are listed in the [options](docs/FELLOWENGINE_OPTIONS.md).
 | `FellowWind3D` | wind with gusts rolling over the landscape: plants bend, sway, flutter and shine with it; shadows and motion vectors follow; water, smoke and fire, and particles (`ParticleProcessMaterial`'s Wind group) take the same wind | 0.56 ms (Wind Lab); projects' own `TIME`-based sway costs 1.81 ms |
 | `FellowLightning3D` | lightning strikes around the camera: a few return strokes flashing over the scene with shadows, a branching bolt, a lit cloud, a signal for the thunder | +0.04 ms on average with a strike every 2 s (Rain Lab) |
 | `FellowWeather3D` | the weather from one node: clear, cloudy, overcast, rain, a thunderstorm, snow, a blizzard or a state of its own, changing smoothly; it drives the wind, rain, snow and lightning, the clouds, the sun on the scene, the fog and the ground (wet, drying, under snow, melting into slush, frozen and frosted below 0 °C) | the parts it turns on (Bistro: clear weather not measurable, rain +0.5 ms) |
-| `FellowMotionCharacter3D` | characters that walk, jog, run, turn, stop and stand by themselves with no animation clip: NVIDIA's MotionBricks model generates their whole-body motion on the GPU (Vulkan compute, tensor cores), a desired velocity in; the weights are NVIDIA's and not in this repository | a request 4.3 ms, 16 at once 18 ms, 64 at once 62 ms (the laptop in use); Motion Lab's 64 characters 9.4 ms a frame waiting for them, 5.0 ms on a worker thread |
+| `FellowMotionCharacter3D` | characters that walk, jog, run, turn, stop and stand by themselves with no animation clip: NVIDIA's MotionBricks model generates their whole-body motion on the GPU (Vulkan compute, tensor cores), a desired velocity in; the weights are NVIDIA's and not in this repository | a request 4.0 ms, 16 at once 12.6 ms, 64 at once 41 ms; Motion Lab's 64 characters 7.3 ms a frame waiting for them, 3.6 ms on a worker thread |
 | `FellowGasVolume3D` | smoke and fire simulated on the GPU (sparse bricks, multigrid pressure solve), physics bodies as obstacles, blackbody flames lighting the scene | Fire Lab's three volumes (0.47 M cells): the simulation 1.58 ms per step, the drawing 0.31 ms |
 | `FellowBurnable3D` | a mesh burns like wood in the gas's fire: voxels pyrolyse to char and glowing embers, the surface recedes, burns through and falls as a heap of ash and charcoal | drawing 0.35 ms (Burn Lab) |
 | `FellowHLOD3D` | automatic HLOD: repeated far meshes instanced and culled on the GPU, the rest merged per cell with LODs, optional octahedral impostors | City Lab: render thread −23 to −42 % |
@@ -137,6 +137,8 @@ timestamps, plus analysis tools. See [benchmarks/README.md](benchmarks/README.md
 * [docs/decisions/](docs/decisions/): one record per change, covering the problem, the change, the measurements and
   the decision, including what was tried and rejected.
 * `docs/fellow_milestoneN_report.md`: the milestone reports.
+* [docs/fellow_aaa_readiness.md](docs/fellow_aaa_readiness.md): an assessment of FellowEngine's readiness for AAA
+  production — what is ready, what is missing, and a path.
 
 ## Credits and license
 
