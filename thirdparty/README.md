@@ -47,6 +47,27 @@ Patches:
 - `0002-godot-fsr2-options.patch` ([GH-81197](https://github.com/godotengine/godot/pull/81197))
 
 
+## amd-fsr3
+
+- Upstream: https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK
+- Version: 1.1.4 (c6efa6bf7f2027b3ec94f28578bb5965eabb9e55, 2025)
+- License: MIT
+
+Files extracted from upstream source (FSR 3.1 upscaler only; FellowEngine):
+
+- `FidelityFX/host/ffx_{assert,error,fsr3upscaler,interface,message,types,util}.h` from `sdk/include/FidelityFX/host`
+- `FidelityFX/gpu/ffx_core*.h`, `ffx_common_types.h` and the `fsr1`, `fsr3upscaler` and `spd` folders from
+  `sdk/include/FidelityFX/gpu`
+- `FidelityFX/gpu/ffx_fsr3upscaler_*_pass.glsl` from `sdk/src/backends/vk/shaders/fsr3upscaler`
+- `src/ffx_fsr3upscaler.cpp`, `src/ffx_fsr3upscaler_private.h` from `sdk/src/components/fsr3upscaler`;
+  `src/ffx_object_management.{h,cpp}`, `src/ffx_assert.cpp`, `src/ffx_message.cpp` from `sdk/src/shared`
+- `LICENSE.txt`
+
+Patches:
+
+- `0001-include-paths.patch` (FellowEngine: includes between the GPU folders made relative, for Godot's shader builder)
+
+
 ## angle
 
 - Upstream: https://chromium.googlesource.com/angle/angle/

@@ -1,0 +1,189 @@
+diff -ruN a/FidelityFX/gpu/fsr1/ffx_fsr1_callbacks_glsl.h b/FidelityFX/gpu/fsr1/ffx_fsr1_callbacks_glsl.h
+--- a/FidelityFX/gpu/fsr1/ffx_fsr1_callbacks_glsl.h
++++ b/FidelityFX/gpu/fsr1/ffx_fsr1_callbacks_glsl.h
+@@ -23,7 +23,7 @@
+ #include "ffx_fsr1_resources.h"
+ 
+ #if defined(FFX_GPU)
+-#include "ffx_core.h"
++#include "../ffx_core.h"
+ 
+ #ifndef FFX_PREFER_WAVE64
+ #define FFX_PREFER_WAVE64
+diff -ruN a/FidelityFX/gpu/fsr1/ffx_fsr1_callbacks_hlsl.h b/FidelityFX/gpu/fsr1/ffx_fsr1_callbacks_hlsl.h
+--- a/FidelityFX/gpu/fsr1/ffx_fsr1_callbacks_hlsl.h
++++ b/FidelityFX/gpu/fsr1/ffx_fsr1_callbacks_hlsl.h
+@@ -27,7 +27,7 @@
+ #pragma dxc diagnostic push
+ #pragma dxc diagnostic ignored "-Wambig-lit-shift"
+ #endif //__hlsl_dx_compiler
+-#include "ffx_core.h"
++#include "../ffx_core.h"
+ #ifdef __hlsl_dx_compiler
+ #pragma dxc diagnostic pop
+ #endif //__hlsl_dx_compiler
+diff -ruN a/FidelityFX/gpu/fsr1/ffx_fsr1_easu.h b/FidelityFX/gpu/fsr1/ffx_fsr1_easu.h
+--- a/FidelityFX/gpu/fsr1/ffx_fsr1_easu.h
++++ b/FidelityFX/gpu/fsr1/ffx_fsr1_easu.h
+@@ -23,7 +23,7 @@
+ #define GROUP_SIZE  8
+ #define FSR_RCAS_DENOISE 1
+ 
+-#include "ffx_core.h"
++#include "../ffx_core.h"
+ 
+ #if FFX_HALF
+ 
+@@ -45,7 +45,7 @@
+     #define FSR_RCAS_PASSTHROUGH_ALPHA
+ #endif // FFX_FSR1_OPTION_RCAS_PASSTHROUGH_ALPHA
+ 
+-#include "fsr1/ffx_fsr1.h"
++#include "../fsr1/ffx_fsr1.h"
+ 
+ void CurrFilter(FfxUInt32x2 pos)
+ {
+diff -ruN a/FidelityFX/gpu/fsr1/ffx_fsr1_rcas.h b/FidelityFX/gpu/fsr1/ffx_fsr1_rcas.h
+--- a/FidelityFX/gpu/fsr1/ffx_fsr1_rcas.h
++++ b/FidelityFX/gpu/fsr1/ffx_fsr1_rcas.h
+@@ -23,7 +23,7 @@
+ #define GROUP_SIZE  8
+ #define FSR_RCAS_DENOISE 1
+ 
+-#include "ffx_core.h"
++#include "../ffx_core.h"
+ 
+ #if FFX_HALF
+     #define FSR_RCAS_HX2 1
+@@ -45,7 +45,7 @@
+     #define FSR_RCAS_PASSTHROUGH_ALPHA
+ #endif // FFX_FSR1_OPTION_RCAS_PASSTHROUGH_ALPHA
+ 
+-#include "fsr1/ffx_fsr1.h"
++#include "../fsr1/ffx_fsr1.h"
+ 
+ void CurrFilter(FFX_MIN16_U2 pos)
+ {
+diff -ruN a/FidelityFX/gpu/fsr3upscaler/ffx_fsr3upscaler_callbacks_glsl.h b/FidelityFX/gpu/fsr3upscaler/ffx_fsr3upscaler_callbacks_glsl.h
+--- a/FidelityFX/gpu/fsr3upscaler/ffx_fsr3upscaler_callbacks_glsl.h
++++ b/FidelityFX/gpu/fsr3upscaler/ffx_fsr3upscaler_callbacks_glsl.h
+@@ -23,7 +23,7 @@
+ #include "ffx_fsr3upscaler_resources.h"
+ 
+ #if defined(FFX_GPU)
+-#include "ffx_core.h"
++#include "../ffx_core.h"
+ #endif // #if defined(FFX_GPU)
+ 
+ #if defined(FFX_GPU)
+diff -ruN a/FidelityFX/gpu/fsr3upscaler/ffx_fsr3upscaler_callbacks_hlsl.h b/FidelityFX/gpu/fsr3upscaler/ffx_fsr3upscaler_callbacks_hlsl.h
+--- a/FidelityFX/gpu/fsr3upscaler/ffx_fsr3upscaler_callbacks_hlsl.h
++++ b/FidelityFX/gpu/fsr3upscaler/ffx_fsr3upscaler_callbacks_hlsl.h
+@@ -27,7 +27,7 @@
+ #pragma dxc diagnostic push
+ #pragma dxc diagnostic ignored "-Wambig-lit-shift"
+ #endif //__hlsl_dx_compiler
+-#include "ffx_core.h"
++#include "../ffx_core.h"
+ #ifdef __hlsl_dx_compiler
+ #pragma dxc diagnostic pop
+ #endif //__hlsl_dx_compiler
+diff -ruN a/FidelityFX/gpu/fsr3upscaler/ffx_fsr3upscaler_luma_pyramid.h b/FidelityFX/gpu/fsr3upscaler/ffx_fsr3upscaler_luma_pyramid.h
+--- a/FidelityFX/gpu/fsr3upscaler/ffx_fsr3upscaler_luma_pyramid.h
++++ b/FidelityFX/gpu/fsr3upscaler/ffx_fsr3upscaler_luma_pyramid.h
+@@ -168,7 +168,7 @@
+ }
+ #endif
+ 
+-#include "spd/ffx_spd.h"
++#include "../spd/ffx_spd.h"
+ 
+ void ComputeAutoExposure(FfxUInt32x3 WorkGroupId, FfxUInt32 LocalThreadIndex)
+ {
+diff -ruN a/FidelityFX/gpu/fsr3upscaler/ffx_fsr3upscaler_rcas.h b/FidelityFX/gpu/fsr3upscaler/ffx_fsr3upscaler_rcas.h
+--- a/FidelityFX/gpu/fsr3upscaler/ffx_fsr3upscaler_rcas.h
++++ b/FidelityFX/gpu/fsr3upscaler/ffx_fsr3upscaler_rcas.h
+@@ -23,7 +23,7 @@
+ #define GROUP_SIZE  8
+ #define FSR_RCAS_DENOISE 1
+ 
+-#include "ffx_core.h"
++#include "../ffx_core.h"
+ 
+ #if FFX_HALF && defined(__XBOX_SCARLETT) && defined(__XBATG_EXTRA_16_BIT_OPTIMISATION) && (__XBATG_EXTRA_16_BIT_OPTIMISATION == 1)
+     #define FSR_RCAS_PREFER_PAIRED_VERSION 1
+@@ -50,7 +50,7 @@
+         b = FfxFloat16x2(b * e);
+     }
+ 
+-	#include "fsr1/ffx_fsr1.h"
++	#include "../fsr1/ffx_fsr1.h"
+ 	
+ 	void CurrFilterPaired(FFX_MIN16_U2 pos)
+     {
+@@ -78,7 +78,7 @@
+     }
+     void FsrRcasInputF(inout FfxFloat32 r, inout FfxFloat32 g, inout FfxFloat32 b) {}
+ 
+-    #include "fsr1/ffx_fsr1.h"
++    #include "../fsr1/ffx_fsr1.h"
+ 
+     void CurrFilter(FFX_MIN16_U2 pos)
+     {
+diff -ruN a/FidelityFX/gpu/fsr3upscaler/ffx_fsr3upscaler_shading_change_pyramid.h b/FidelityFX/gpu/fsr3upscaler/ffx_fsr3upscaler_shading_change_pyramid.h
+--- a/FidelityFX/gpu/fsr3upscaler/ffx_fsr3upscaler_shading_change_pyramid.h
++++ b/FidelityFX/gpu/fsr3upscaler/ffx_fsr3upscaler_shading_change_pyramid.h
+@@ -273,7 +273,7 @@
+ }
+ #endif
+ 
+-#include "spd/ffx_spd.h"
++#include "../spd/ffx_spd.h"
+ 
+ void ComputeShadingChangePyramid(FfxUInt32x3 WorkGroupId, FfxUInt32 LocalThreadIndex)
+ {
+diff -ruN a/FidelityFX/gpu/spd/ffx_spd_callbacks_glsl.h b/FidelityFX/gpu/spd/ffx_spd_callbacks_glsl.h
+--- a/FidelityFX/gpu/spd/ffx_spd_callbacks_glsl.h
++++ b/FidelityFX/gpu/spd/ffx_spd_callbacks_glsl.h
+@@ -23,7 +23,7 @@
+ #include "ffx_spd_resources.h"
+ 
+ #if defined(FFX_GPU)
+-#include "ffx_core.h"
++#include "../ffx_core.h"
+ 
+ #ifndef FFX_PREFER_WAVE64
+ #define FFX_PREFER_WAVE64
+diff -ruN a/FidelityFX/gpu/spd/ffx_spd_callbacks_hlsl.h b/FidelityFX/gpu/spd/ffx_spd_callbacks_hlsl.h
+--- a/FidelityFX/gpu/spd/ffx_spd_callbacks_hlsl.h
++++ b/FidelityFX/gpu/spd/ffx_spd_callbacks_hlsl.h
+@@ -27,7 +27,7 @@
+ #pragma dxc diagnostic push
+ #pragma dxc diagnostic ignored "-Wambig-lit-shift"
+ #endif //__hlsl_dx_compiler
+-#include "ffx_core.h"
++#include "../ffx_core.h"
+ #ifdef __hlsl_dx_compiler
+ #pragma dxc diagnostic pop
+ #endif //__hlsl_dx_compiler
+diff -ruN a/FidelityFX/gpu/spd/ffx_spd_downsample.h b/FidelityFX/gpu/spd/ffx_spd_downsample.h
+--- a/FidelityFX/gpu/spd/ffx_spd_downsample.h
++++ b/FidelityFX/gpu/spd/ffx_spd_downsample.h
+@@ -20,7 +20,7 @@
+ // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ // THE SOFTWARE.
+ 
+-#include "ffx_core.h"
++#include "../ffx_core.h"
+ 
+ #if FFX_HALF
+     #define FFX_SPD_PACKED_ONLY 1
+@@ -159,7 +159,7 @@
+ 
+ #endif // FFX_HALF
+ 
+-#include "spd/ffx_spd.h"
++#include "../spd/ffx_spd.h"
+ 
+ void DOWNSAMPLE(FfxUInt32 LocalThreadId, FfxUInt32x3 WorkGroupId)
+ {
