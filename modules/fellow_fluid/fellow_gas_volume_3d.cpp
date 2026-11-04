@@ -153,8 +153,12 @@ void FellowGasVolume3D::reset_simulation() {
 void FellowGasVolume3D::_rt_configure(uint32_t p_id, Vector3i p_res, float p_dx, bool p_high_precision, Ref<FellowGasReadback> p_emission) {
 	FellowGas *gas = FellowGas::get_singleton();
 	if (!gas) {
-		ERR_PRINT_ONCE("FellowGasVolume3D requires a RenderingDevice renderer (Forward+ or Mobile).");
+		WARN_PRINT_ONCE("FellowGasVolume3D needs the Forward+ renderer: with the Compatibility renderer it is neither simulated nor drawn.");
 		return;
+	}
+	if (RS::get_singleton()->get_current_rendering_method() != "forward_plus") {
+		// Decision 0150: the gas is drawn in the clustered renderer's passes only (its simulation runs everywhere).
+		WARN_PRINT_ONCE("FellowGasVolume3D is drawn by the Forward+ renderer only: with the Mobile renderer it is simulated but not drawn.");
 	}
 	gas->volume_configure(p_id, p_res, p_dx, p_high_precision);
 	gas->volume_set_emission_callback(p_id, callable_mp_static(&FellowGasVolume3D::_rt_store).bind(p_emission));

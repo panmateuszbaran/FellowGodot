@@ -266,7 +266,11 @@ void fragment() {
 		// The depth buffer's view z needs only the inverse projection's z and w rows.
 		vec2 iz = vec2(INV_PROJECTION_MATRIX[2][2], INV_PROJECTION_MATRIX[3][2]);
 		vec2 iw = vec2(INV_PROJECTION_MATRIX[2][3], INV_PROJECTION_MATRIX[3][3]);
+#if CURRENT_RENDERER == RENDERER_COMPATIBILITY
+		int levels = 1; // no textureQueryLevels() there (nor the hierarchical depth): the linear march
+#else
 		int levels = textureQueryLevels(depth_tex);
+#endif
 		if (levels > 1) {
 			// Hierarchical (decision 0126): the depth texture's levels hold the nearest depth of their cells. The ray
 			// in screen space, its depth linear there, crosses a cell per step: a level up where nothing in the cell is

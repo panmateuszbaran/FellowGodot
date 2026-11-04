@@ -575,7 +575,7 @@ void FellowWater3D::_rt_create(int p_size, int p_cascades) {
 	rd = RS::get_singleton()->get_rendering_device();
 	if (!rd) {
 		gpu_failed = true;
-		ERR_PRINT("FellowWater3D requires a RenderingDevice renderer (Forward+ or Mobile).");
+		WARN_PRINT("FellowWater3D needs a RenderingDevice renderer (Forward+ or Mobile): with the Compatibility renderer its surface is flat.");
 		return;
 	}
 	if (shader_file.is_null()) {

@@ -332,7 +332,7 @@ void FellowShallowWater3D::_rt_create() {
 	rd = RS::get_singleton()->get_rendering_device();
 	if (!rd) {
 		gpu_failed = true;
-		ERR_PRINT("FellowShallowWater3D requires a RenderingDevice renderer (Forward+ or Mobile).");
+		WARN_PRINT("FellowShallowWater3D needs a RenderingDevice renderer (Forward+ or Mobile): with the Compatibility renderer there is no water.");
 		return;
 	}
 	if (shader_file.is_null()) {

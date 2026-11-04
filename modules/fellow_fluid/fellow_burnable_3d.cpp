@@ -1565,7 +1565,7 @@ void FellowBurnable3D::_build_display(MeshInstance3D *p_target) {
 void FellowBurnable3D::_rt_configure(uint32_t p_id, Vector3i p_res, PackedByteArray p_initial, Ref<FellowGasReadback> p_totals, Ref<Texture3DRD> p_texture) {
 	FellowGas *gas = FellowGas::get_singleton();
 	if (!gas) {
-		ERR_PRINT_ONCE("FellowBurnable3D requires a RenderingDevice renderer (Forward+ or Mobile).");
+		WARN_PRINT_ONCE("FellowBurnable3D needs a RenderingDevice renderer (Forward+ or Mobile): with the Compatibility renderer nothing burns.");
 		return;
 	}
 	gas->burnable_configure(p_id, p_res, p_initial);

@@ -586,7 +586,7 @@ void FellowRain3D::_rt_create() {
 	rd = RS::get_singleton()->get_rendering_device();
 	if (!rd) {
 		gpu_failed = true;
-		ERR_PRINT("FellowRain3D requires a RenderingDevice renderer (Forward+).");
+		WARN_PRINT("FellowRain3D needs a RenderingDevice renderer (Forward+ or Mobile) for its ripples and puddles: with the Compatibility renderer only the drops fall.");
 		return;
 	}
 	if (shader_file.is_null()) {
