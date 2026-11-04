@@ -36,8 +36,11 @@ instance's, the mesh's; the overlay; next passes) that is streamed: the level
 `log2(size × density × uv1_scale / scale / pixels_per_unit) + the samplers' bias (TAA -0.5, FXAA -0.25, the viewport's)
 + texture_lod_bias (-1)`, the finest over the cycle. Triplanar materials (`uv1_blend_sharpness`) use `uv1_scale` per
 unit; anisotropic samplers one level finer. A shader without `uv1_scale` (not a BaseMaterial3D: its UVs are unknown)
-asks for full resolution; a texture no 3D instance used in its first two cycles (2D, sky, decals) goes to full
-resolution and stays there.
+asks for full resolution. A texture not used yet keeps its tail; a use the evaluation cannot estimate pins it at full
+resolution for good: drawn in 2D, copied into the decal or area light atlas, or in a material that is not a
+BaseMaterial3D-style 3D shader (sky, canvas item, fog, particles, a custom spatial shader), as the RD material storage
+builds its uniform set. (Until milestone 46 a texture no 3D instance used in its first two cycles went to full
+resolution: a streamed world's textures, loaded before their cells enter the tree, all did.)
 
 The margin `texture_lod_bias = -1`: the estimate is the level along the UV mapping's largest stretch at the nearest
 depth, the level a fronto-parallel surface shows there; a GPU's level is the larger of the screen axes' derivatives,

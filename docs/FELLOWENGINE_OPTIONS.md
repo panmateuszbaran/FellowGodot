@@ -383,8 +383,20 @@ evaluated a frame; `texture_max_jobs` (4), `texture_upload_mb_per_frame` (64), `
 `RenderingServer.fellow_get_texture_streaming_info()`, which reports the streamer's state (resident, target, wanted and
 full bytes, pending, loads, releases, `settled`). Loaded, the same images as without it (lavapipe, bit for bit);
 until the loads land, coarser mips. Not streamed: lossless or uncompressed textures, DDS (`ImageTexture`), texture
-arrays and cubemaps; a ShaderMaterial's textures stay at full resolution. Decision 0146; bench Streaming Lab
+arrays and cubemaps; a texture drawn in 2D, in a decal or area light atlas, or by a material that is not a
+BaseMaterial3D-style 3D shader (sky, canvas, fog, particles, custom shaders) stays at full resolution; one not used
+yet keeps its small mips. Decision 0146; bench Streaming Lab
 (`--scene=streaming`, textures from `benchmarks/scripts/make_streaming_textures.py`).
+
+## World streaming (milestone 46)
+
+Module `fellow_world`. `FellowStreamingCell3D` (`scene_path`, `bounds`, `load_distance`; its own children are a proxy
+shown while unloaded) below a `FellowWorldStreamer3D` (`load_distance` 200 m, `unload_margin` 25 m, `max_loading` 2,
+`max_activations_per_frame` 1, `max_releases_per_frame` 2, `threaded_instancing` on, `streaming` on, `use_camera`
+on, `targets`; `prefetch(position, radius)`, `load_now()`, `is_settled()`, `get_stats()`): each cell's PackedScene
+loaded on the ResourceLoader's threads when the camera or a target comes within its distance, instantiated on a
+worker thread, added to the tree a few a frame and freed beyond the distance plus the margin. Nothing changes without
+the nodes. Decision 0147; bench World Lab (`--scene=world --world_streaming=1`).
 
 ## Options that change the image (off by default)
 
