@@ -212,7 +212,6 @@ RID FellowMotionModel::_uniform_set(int p_version, uint32_t p_chunk) {
 int FellowMotionModel::_splits(const OpRec &p_op, int p_n, int &r_bm) const {
 	uint32_t m = p_op.rows * p_n;
 	r_bm = m <= 16 ? 16 : (m <= 32 ? 32 : 64);
-	r_bm = MIN(r_bm, bm_max);
 	uint32_t groups = ((p_op.nout + 63) / 64) * ((m + r_bm - 1) / r_bm);
 	uint32_t ktiles = (p_op.ke - p_op.kb + 31) / 32;
 	int s = 1;
@@ -489,11 +488,6 @@ Error FellowMotionModel::load(const String &p_path, int p_max_batch) {
 	bool coop_device = rd->has_feature(RD::SUPPORTS_FELLOW_COOPERATIVE_MATRIX_F16);
 	coop_active = cooperative_matrix && weights_f16 && sg_fixed && (sg == 16 || sg == 32 || sg == 64) && coop_device;
 	coop_note = coop_active ? String() : (!cooperative_matrix ? String("off") : !weights_f16 ? String("fp32 weights") : !coop_device ? String("the device has no 16x16x16 fp16 cooperative matrices") : vformat("subgroup size %d (%d-%d) not fixed", sg, int(rd->limit_get(RD::LIMIT_SUBGROUP_MIN_SIZE)), int(rd->limit_get(RD::LIMIT_SUBGROUP_MAX_SIZE))));
-	// FELLOW_MOTION_BM_MAX=16 or 32 (a diagnostic): at most that many rows a workgroup (more, smaller workgroups).
-	{
-		int b = OS::get_singleton()->get_environment("FELLOW_MOTION_BM_MAX").to_int();
-		bm_max = (b == 16 || b == 32) ? b : 64;
-	}
 	// The split-K scratch: the largest over the ops and batch sizes.
 	part_floats = 64;
 	for (const OpRec &op : op_recs) {
@@ -520,12 +514,16 @@ Error FellowMotionModel::load(const String &p_path, int p_max_batch) {
 	const char *names_f[V_MAX] = { "gemm_f16", "gemm_f32", "gemm_f64", "reduce", "attn", "ln", "glue" };
 	const char *names_c[V_MAX] = { "gemmc16", "gemmc32", "gemmc64", "reduce", "attn", "ln", "glue" };
 	const char *names_d[V_MAX] = { "gemmd16", "gemmd32", "gemmd64", "reduce", "attn", "ln", "glue" };
+	const char *names_s[V_MAX] = { "gemms16", "gemms32", "gemms64", "reduce", "attn", "ln", "glue" };
 	// The tensor-core products with vec4 A loads where the subgroup is 32 or less (16-19 % faster at batches of 8 and
 	// more on the RTX, the same results bit for bit: m44_f326); FELLOW_MOTION_GEMM=scalar, a diagnostic, takes the
 	// scalar loads.
-	coop_vec4 = coop_active && sg <= 32 && OS::get_singleton()->get_environment("FELLOW_MOTION_GEMM") != "scalar";
+	const String gemm_env = OS::get_singleton()->get_environment("FELLOW_MOTION_GEMM");
+	coop_vec4 = coop_active && sg <= 32 && gemm_env != "scalar";
+	// FELLOW_MOTION_GEMM=stages (a diagnostic): two stages of shared memory, one barrier a K step.
+	coop_stages = coop_vec4 && gemm_env == "stages";
 	for (int i = 0; i < V_MAX; i++) {
-		const char *nm = coop_active ? (coop_vec4 ? names_d[i] : names_c[i]) : (weights_f16 ? names_h[i] : names_f[i]);
+		const char *nm = coop_active ? (coop_stages ? names_s[i] : (coop_vec4 ? names_d[i] : names_c[i])) : (weights_f16 ? names_h[i] : names_f[i]);
 		shaders[i] = rd->shader_create_from_spirv(shader_file->get_spirv_stages(nm), String("FellowMotion ") + nm);
 		if (shaders[i].is_null()) {
 			_free();
@@ -570,7 +568,7 @@ Dictionary FellowMotionModel::get_info() const {
 	d["path"] = path;
 	d["loaded"] = loaded;
 	d["weights"] = weights_f16 ? "f16" : "f32";
-	d["products"] = coop_active ? String("cooperative matrix 16x16x16 fp16 -> fp32") + (coop_vec4 ? " (vec4 A loads)" : "") : "fp32 (" + coop_note + ")";
+	d["products"] = coop_active ? String("cooperative matrix 16x16x16 fp16 -> fp32") + (coop_stages ? " (vec4 A loads, two stages)" : (coop_vec4 ? " (vec4 A loads)" : "")) : "fp32 (" + coop_note + ")";
 	d["ops"] = int(op_recs.size());
 	d["max_batch"] = max_batch;
 	d["activation_mb"] = act_floats * 4.0 / 1e6;
