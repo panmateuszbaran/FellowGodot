@@ -103,6 +103,7 @@ public:
 
 	virtual void instance_set_ignore_culling(RID p_instance, bool p_enabled) = 0;
 	virtual void fellow_instance_set_hlod(RID p_instance, int p_role, float p_distance, float p_end_distance) {} // decision 0122
+	virtual void fellow_texture_streaming_update() {} // milestone 45: once a frame, before the scene's update
 	virtual void fellow_instance_set_instance_range(RID p_instance, float p_begin, float p_end, bool p_vertices_bounded) {} // decision 0122
 
 	// don't use these in a game!

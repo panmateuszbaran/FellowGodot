@@ -2212,6 +2212,7 @@ void MaterialStorage::shader_set_code(RID p_shader, const String &p_code) {
 	MutexLock lock(*shader->mutex);
 
 	shader->code = p_code;
+	shader->fellow_version++;
 	String mode_string = ShaderLanguage::get_shader_type(p_code);
 
 	ShaderType new_type;
@@ -2481,6 +2482,7 @@ void MaterialStorage::material_free(RID p_rid) {
 void MaterialStorage::material_set_shader(RID p_material, RID p_shader) {
 	Material *material = material_owner.get_or_null(p_material);
 	ERR_FAIL_NULL(material);
+	material->fellow_version++;
 
 	if (material->data) {
 		memdelete(material->data);
@@ -2540,6 +2542,7 @@ MaterialStorage::ShaderData *MaterialStorage::material_get_shader_data(RID p_mat
 void MaterialStorage::material_set_param(RID p_material, const StringName &p_param, const Variant &p_value) {
 	Material *material = material_owner.get_or_null(p_material);
 	ERR_FAIL_NULL(material);
+	material->fellow_version++;
 
 	if (p_value.get_type() == Variant::NIL) {
 		material->params.erase(p_param);
@@ -2566,6 +2569,63 @@ Variant MaterialStorage::material_get_param(RID p_material, const StringName &p_
 	}
 }
 
+uint32_t MaterialStorage::material_get_fellow_version(RID p_material) const {
+	const Material *material = material_owner.get_or_null(p_material);
+	if (material == nullptr) {
+		return UINT32_MAX;
+	}
+	const uint32_t shader_version = material->shader ? material->shader->fellow_version : 0;
+	return (material->fellow_version + (shader_version << 20) + material->shader_id * 2654435761u) & 0x7FFFFFFFu;
+}
+
+bool MaterialStorage::material_get_fellow_stream_info(RID p_material, FellowTextureStreaming::MaterialInfo &r_info) const {
+	const Material *material = material_owner.get_or_null(p_material);
+	if (material == nullptr) {
+		return false;
+	}
+	static const StringName uv1_scale_name = "uv1_scale";
+	static const StringName uv1_blend_sharpness_name = "uv1_blend_sharpness";
+	r_info.next_pass = material->next_pass;
+	r_info.known_uv = false;
+	r_info.triplanar = false;
+	r_info.uv_scale = 1.0f;
+	if (material->shader_type == SHADER_TYPE_3D && material->shader && material->shader->data) {
+		// A BaseMaterial3D-style shader: its textures are sampled at uv1 * uv1_scale (or triplanar from the position).
+		const HashMap<StringName, ShaderLanguage::ShaderNode::Uniform> &uniforms = material->shader->data->uniforms;
+		r_info.known_uv = uniforms.has(uv1_scale_name);
+		r_info.triplanar = uniforms.has(uv1_blend_sharpness_name);
+		for (const KeyValue<StringName, ShaderLanguage::ShaderNode::Uniform> &U : uniforms) {
+			if (U.value.filter == ShaderLanguage::FILTER_LINEAR_MIPMAP_ANISOTROPIC || U.value.filter == ShaderLanguage::FILTER_NEAREST_MIPMAP_ANISOTROPIC) {
+				r_info.anisotropic = true;
+				break;
+			}
+		}
+	}
+	for (const KeyValue<StringName, Variant> &E : material->params) {
+		const Variant &v = E.value;
+		if (v.get_type() == Variant::RID) {
+			const RID rid = v;
+			if (rid.is_valid()) {
+				r_info.textures.push_back(rid);
+			}
+		} else if (v.get_type() == Variant::ARRAY) {
+			const Array arr = v;
+			for (int i = 0; i < arr.size(); i++) {
+				if (arr[i].get_type() == Variant::RID) {
+					const RID rid = arr[i];
+					if (rid.is_valid()) {
+						r_info.textures.push_back(rid);
+					}
+				}
+			}
+		} else if (E.key == uv1_scale_name && v.get_type() == Variant::VECTOR3) {
+			const Vector3 sc = v;
+			r_info.uv_scale = r_info.triplanar ? MAX(Math::abs(sc.x), MAX(Math::abs(sc.y), Math::abs(sc.z))) : MAX(Math::abs(sc.x), Math::abs(sc.y));
+		}
+	}
+	return true;
+}
+
 void MaterialStorage::material_set_next_pass(RID p_material, RID p_next_material) {
 	Material *material = material_owner.get_or_null(p_material);
 	ERR_FAIL_NULL(material);
@@ -2575,6 +2635,7 @@ void MaterialStorage::material_set_next_pass(RID p_material, RID p_next_material
 	}
 
 	material->next_pass = p_next_material;
+	material->fellow_version++;
 	if (material->data) {
 		material->data->set_next_pass(p_next_material);
 	}

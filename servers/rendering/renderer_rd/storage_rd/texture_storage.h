@@ -622,6 +622,9 @@ public:
 	virtual RID texture_drawable_get_default_material() const override;
 
 	virtual void texture_replace(RID p_texture, RID p_by_texture) override;
+	virtual void texture_2d_fellow_set_stream_source(RID p_texture, const String &p_path, uint64_t p_data_offset, int p_width, int p_height, Image::Format p_format, int p_levels, int p_resident_mip) override;
+	virtual void texture_2d_fellow_stream_swap(RID p_texture, RID p_by_texture) override;
+	virtual bool fellow_texture_exists(RID p_texture) const override { return texture_owner.owns(p_texture); }
 	virtual void texture_set_size_override(RID p_texture, int p_width, int p_height) override;
 
 	virtual void texture_set_path(RID p_texture, const String &p_path) override;

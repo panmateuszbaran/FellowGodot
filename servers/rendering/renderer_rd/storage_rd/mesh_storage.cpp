@@ -31,6 +31,7 @@
 #include "mesh_storage.h"
 
 #include "servers/rendering/fellow_settings.h"
+#include "servers/rendering/fellow_texture_streaming.h"
 #include "core/os/os.h"
 
 #include "servers/rendering/renderer_viewport.h"
@@ -392,6 +393,9 @@ void MeshStorage::mesh_add_surface(RID p_mesh, const RenderingServerTypes::Surfa
 
 	s->format = new_surface.format;
 	s->primitive = new_surface.primitive;
+	if (FellowTextureStreaming::enabled_at_startup()) {
+		s->fellow_uv_density = FellowTextureStreaming::compute_uv_density(new_surface);
+	}
 
 	const bool use_as_storage = (new_surface.skin_data.size() || mesh->blend_shape_count > 0);
 	const BitField<RD::BufferCreationBits> as_storage_flag = use_as_storage ? RD::BUFFER_CREATION_AS_STORAGE_BIT : 0;
@@ -963,6 +967,14 @@ RID MeshStorage::mesh_surface_get_material(RID p_mesh, int p_surface) const {
 	ERR_FAIL_UNSIGNED_INDEX_V((uint32_t)p_surface, mesh->surface_count, RID());
 
 	return mesh->surfaces[p_surface]->material;
+}
+
+float MeshStorage::mesh_surface_get_fellow_uv_density(RID p_mesh, int p_surface) const {
+	const Mesh *mesh = mesh_owner.get_or_null(p_mesh);
+	if (mesh == nullptr || uint32_t(p_surface) >= mesh->surface_count) {
+		return 0.0f;
+	}
+	return mesh->surfaces[p_surface]->fellow_uv_density;
 }
 
 RenderingServerTypes::SurfaceData MeshStorage::mesh_get_surface(RID p_mesh, int p_surface) const {

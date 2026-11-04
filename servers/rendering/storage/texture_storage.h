@@ -94,6 +94,12 @@ public:
 	virtual RID texture_drawable_get_default_material() const = 0;
 
 	virtual void texture_replace(RID p_texture, RID p_by_texture) = 0;
+	// FellowEngine texture streaming (milestone 45): register a texture loaded with only its tail of mips (the file's
+	// position of mip 0, its full size and format, its levels and the first level resident); replace a streamed
+	// texture's data by another texture's (p_by_texture is consumed) keeping its size, path and users.
+	virtual void texture_2d_fellow_set_stream_source(RID p_texture, const String &p_path, uint64_t p_data_offset, int p_width, int p_height, Image::Format p_format, int p_levels, int p_resident_mip) {}
+	virtual void texture_2d_fellow_stream_swap(RID p_texture, RID p_by_texture) { texture_replace(p_texture, p_by_texture); }
+	virtual bool fellow_texture_exists(RID p_texture) const { return false; }
 	virtual void texture_set_size_override(RID p_texture, int p_width, int p_height) = 0;
 
 	virtual void texture_set_path(RID p_texture, const String &p_path) = 0;

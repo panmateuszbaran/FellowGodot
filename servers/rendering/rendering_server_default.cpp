@@ -35,6 +35,7 @@
 #include "core/profiling/profiling.h"
 #include "servers/display/display_server.h"
 #include "servers/rendering/fellow_settings.h"
+#include "servers/rendering/fellow_texture_streaming.h"
 #include "servers/rendering/renderer_canvas_cull.h"
 #include "servers/rendering/renderer_scene_cull.h"
 #include "servers/rendering/rendering_device.h"
@@ -53,6 +54,9 @@ int RenderingServerDefault::changes = 0;
 void RenderingServerDefault::_free(RID p_rid) {
 	if (unlikely(p_rid.is_null())) {
 		return;
+	}
+	if (FellowTextureStreaming::get_singleton()->has_textures()) {
+		FellowTextureStreaming::get_singleton()->texture_freed(p_rid); // milestone 45 (nothing unless it is streamed)
 	}
 	if (RSG::utilities->free(p_rid)) {
 		return;
@@ -97,6 +101,10 @@ void RenderingServerDefault::_draw(bool p_swap_buffers, double frame_step) {
 		xr_server->pre_render();
 	}
 #endif // XR_DISABLED
+
+	// FellowEngine texture streaming (milestone 45): finished loads swapped in (before the materials are updated), the
+	// last frame's cameras evaluated against a slice of the instances, new loads started.
+	RSG::scene->fellow_texture_streaming_update();
 
 	GodotProfileZoneGrouped(_profile_zone, "scene->update");
 	RSG::scene->update(); //update scenes stuff before updating instances
@@ -283,6 +291,7 @@ void RenderingServerDefault::_finish() {
 	if (test_cube.is_valid()) {
 		free_rid(test_cube);
 	}
+	FellowTextureStreaming::destroy_singleton();
 
 	RSG::canvas->finalize();
 	memdelete(RSG::canvas);

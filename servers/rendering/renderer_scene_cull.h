@@ -1134,6 +1134,12 @@ public:
 
 	virtual void instance_set_ignore_culling(RID p_instance, bool p_enabled);
 	virtual void fellow_instance_set_hlod(RID p_instance, int p_role, float p_distance, float p_end_distance);
+	// FellowEngine texture streaming (milestone 45): the evaluation's position in its cycle over the scenarios the last
+	// frame's cameras rendered.
+	LocalVector<RID> fellow_stream_scenarios;
+	uint32_t fellow_stream_scenario_index = 0;
+	uint32_t fellow_stream_instance_index = 0;
+	virtual void fellow_texture_streaming_update() override;
 	virtual void fellow_instance_set_instance_range(RID p_instance, float p_begin, float p_end, bool p_vertices_bounded);
 
 	bool _update_instance_visibility_depth(Instance *p_instance);

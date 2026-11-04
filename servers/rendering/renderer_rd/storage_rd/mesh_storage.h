@@ -81,6 +81,7 @@ private:
 		struct Surface {
 			RSE::PrimitiveType primitive = RSE::PRIMITIVE_POINTS;
 			uint64_t format = 0;
+			float fellow_uv_density = 0.0f; // texture streaming (milestone 45): UV1 units per mesh unit
 
 			uint32_t vertex_count = 0;
 			RID vertex_buffer;
@@ -438,6 +439,7 @@ public:
 
 	virtual void mesh_surface_set_material(RID p_mesh, int p_surface, RID p_material) override;
 	virtual RID mesh_surface_get_material(RID p_mesh, int p_surface) const override;
+	virtual float mesh_surface_get_fellow_uv_density(RID p_mesh, int p_surface) const override;
 
 	virtual RenderingServerTypes::SurfaceData mesh_get_surface(RID p_mesh, int p_surface) const override;
 

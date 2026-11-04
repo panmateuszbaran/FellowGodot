@@ -34,9 +34,10 @@
 #include "core/io/resource_loader.h"
 #include "core/object/class_db.h"
 #include "scene/resources/bit_map.h"
+#include "servers/rendering/fellow_texture_streaming.h"
 #include "servers/rendering/rendering_server.h"
 
-Error CompressedTexture2D::_load_data(const String &p_path, int &r_width, int &r_height, Ref<Image> &image, bool &r_request_3d, bool &r_request_normal, bool &r_request_roughness, int &mipmap_limit, int p_size_limit) {
+Error CompressedTexture2D::_load_data(const String &p_path, int &r_width, int &r_height, Ref<Image> &image, bool &r_request_3d, bool &r_request_normal, bool &r_request_roughness, int &mipmap_limit, int p_size_limit, FellowStreamSource *r_stream) {
 	alpha_cache.unref();
 
 	ERR_FAIL_COND_V(image.is_null(), ERR_INVALID_PARAMETER);
@@ -81,6 +82,53 @@ Error CompressedTexture2D::_load_data(const String &p_path, int &r_width, int &r
 #endif
 	if (!(df & FORMAT_BIT_STREAM)) {
 		p_size_limit = 0;
+	}
+
+	if (r_stream && FellowTextureStreaming::enabled_at_startup() && RenderingServer::get_singleton() && RenderingServer::get_singleton()->get_rendering_device() != nullptr) {
+		// Texture streaming: a VRAM-compressed image with its full mip chain is read from its first level at or below
+		// the resident size; the rest stays in the file (the chain is stored from mip 0 down).
+		const uint64_t pos = f->get_position();
+		const uint32_t data_format = f->get_32();
+		if (data_format == DATA_FORMAT_IMAGE) {
+			const int iw = f->get_16();
+			const int ih = f->get_16();
+			const int mips = int(f->get_32());
+			const uint32_t fmt_raw = f->get_32();
+			const int rs = FellowTextureStreaming::resident_size();
+			if (fmt_raw < uint32_t(Image::FORMAT_MAX) && mips > 0 && mips < 16) {
+				const Image::Format fmt = Image::Format(fmt_raw);
+				if (Image::is_format_compressed(fmt) && MAX(iw, ih) > rs && mips == Image::get_image_required_mipmaps(iw, ih, fmt)) {
+					int tail = 0;
+					int tw = iw, th = ih;
+					while (tail < mips && MAX(tw, th) > rs) {
+						tail++;
+						Image::get_image_mipmap_offset_and_dimensions(iw, ih, fmt, tail, tw, th);
+					}
+					const uint64_t data_start = f->get_position();
+					const int64_t total = Image::get_image_mipmap_offset(iw, ih, fmt, mips + 1);
+					const int64_t ofs = Image::get_image_mipmap_offset_and_dimensions(iw, ih, fmt, tail, tw, th);
+					if (tail > 0 && data_start + uint64_t(total) <= f->get_length()) {
+						f->seek(data_start + uint64_t(ofs));
+						Vector<uint8_t> data;
+						data.resize(total - ofs);
+						if (f->get_buffer(data.ptrw(), data.size()) == uint64_t(data.size())) {
+							image = Image::create_from_data(tw, th, tail < mips, fmt, data);
+							if (image.is_valid() && !image->is_empty()) {
+								r_stream->streamed = true;
+								r_stream->data_offset = data_start;
+								r_stream->width = iw;
+								r_stream->height = ih;
+								r_stream->format = fmt;
+								r_stream->levels = mips + 1;
+								r_stream->resident_mip = tail;
+								return OK;
+							}
+						}
+					}
+				}
+			}
+		}
+		f->seek(pos);
 	}
 
 	image = load_image_from_file(f, p_size_limit);
@@ -139,7 +187,8 @@ Error CompressedTexture2D::load(const String &p_path) {
 	bool request_roughness;
 	int mipmap_limit;
 
-	Error err = _load_data(p_path, lw, lh, image, request_3d, request_normal, request_roughness, mipmap_limit);
+	FellowStreamSource stream;
+	Error err = _load_data(p_path, lw, lh, image, request_3d, request_normal, request_roughness, mipmap_limit, 0, &stream);
 	if (err) {
 		return err;
 	}
@@ -152,6 +201,10 @@ Error CompressedTexture2D::load(const String &p_path) {
 	}
 	if (lw || lh) {
 		RS::get_singleton()->texture_set_size_override(texture, lw, lh);
+	}
+	fellow_streamed = stream.streamed;
+	if (stream.streamed) {
+		RS::get_singleton()->texture_2d_fellow_set_stream_source(texture, p_path, stream.data_offset, stream.width, stream.height, stream.format, stream.levels, stream.resident_mip);
 	}
 
 	w = lw;
@@ -241,6 +294,16 @@ bool CompressedTexture2D::has_alpha() const {
 }
 
 Ref<Image> CompressedTexture2D::get_image() const {
+	if (fellow_streamed && !path_to_file.is_empty()) {
+		// Streamed: the RenderingServer holds only some of its mips; the file has all of them.
+		int lw, lh, limit;
+		bool r3, rn, rr;
+		Ref<Image> image;
+		image.instantiate();
+		if (const_cast<CompressedTexture2D *>(this)->_load_data(path_to_file, lw, lh, image, r3, rn, rr, limit) == OK) {
+			return image;
+		}
+	}
 	if (texture.is_valid()) {
 		return RS::get_singleton()->texture_2d_get(texture);
 	} else {

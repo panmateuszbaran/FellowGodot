@@ -202,6 +202,7 @@ public:
 	void configure_for_reflections(const Size2i p_reflection_size);
 	virtual void set_fsr_sharpness(float p_fsr_sharpness) override;
 	virtual void set_texture_mipmap_bias(float p_texture_mipmap_bias) override;
+	virtual float fellow_get_texture_mipmap_bias() const override { return texture_mipmap_bias; }
 	virtual void set_anisotropic_filtering_level(RSE::ViewportAnisotropicFiltering p_anisotropic_filtering_level) override;
 	virtual void set_use_debanding(bool p_use_debanding) override;
 

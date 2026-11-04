@@ -112,6 +112,7 @@ public:
 	// for those settings that are unlikely to require buffers to be recreated, we'll add setters
 	virtual void set_fsr_sharpness(float p_fsr_sharpness) = 0;
 	virtual void set_texture_mipmap_bias(float p_texture_mipmap_bias) = 0;
+	virtual float fellow_get_texture_mipmap_bias() const { return 0.0f; } // FellowEngine texture streaming
 	virtual void set_anisotropic_filtering_level(RSE::ViewportAnisotropicFiltering p_anisotropic_filtering_level) = 0;
 	virtual void set_use_debanding(bool p_use_debanding) = 0;
 };

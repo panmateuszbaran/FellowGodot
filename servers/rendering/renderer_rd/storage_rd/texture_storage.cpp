@@ -36,6 +36,7 @@
 #include "servers/rendering/renderer_rd/renderer_scene_render_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
 #include "servers/rendering/renderer_rd/uniform_set_cache_rd.h"
+#include "servers/rendering/fellow_texture_streaming.h"
 #include "servers/rendering/rendering_server_globals.h"
 
 using namespace RendererRD;
@@ -2061,6 +2062,61 @@ void TextureStorage::texture_replace(RID p_texture, RID p_by_texture) {
 	//delete last, so proxies can be updated
 	texture_owner.free(p_by_texture);
 
+	decal_atlas_mark_dirty_on_texture(p_texture);
+	area_light_atlas_mark_dirty_on_texture(p_texture);
+}
+
+void TextureStorage::texture_2d_fellow_set_stream_source(RID p_texture, const String &p_path, uint64_t p_data_offset, int p_width, int p_height, Image::Format p_format, int p_levels, int p_resident_mip) {
+	FellowTextureStreaming::get_singleton()->register_texture(p_texture, p_path, p_data_offset, p_width, p_height, p_format, p_levels, p_resident_mip);
+}
+
+void TextureStorage::texture_2d_fellow_stream_swap(RID p_texture, RID p_by_texture) {
+	// Texture streaming (milestone 45): p_texture takes p_by_texture's data (another range of its mips) and keeps its
+	// size override, path, callbacks, proxies and users; the old data is freed, so the uniform sets that use it are
+	// invalidated and their materials rebuild them with the new one.
+	Texture *tex = texture_owner.get_or_null(p_texture);
+	Texture *by_tex = texture_owner.get_or_null(p_by_texture);
+	ERR_FAIL_NULL(by_tex);
+	if (tex == nullptr || tex == by_tex || tex->type != TYPE_2D || by_tex->type != TYPE_2D || tex->proxy_to.is_valid() || tex->is_render_target) {
+		texture_free(p_by_texture);
+		return;
+	}
+	if (tex->rd_texture_srgb.is_valid()) {
+		RD::get_singleton()->free_rid(tex->rd_texture_srgb);
+	}
+	if (tex->rd_texture.is_valid()) {
+		RD::get_singleton()->free_rid(tex->rd_texture);
+	}
+	if (tex->canvas_texture) {
+		memdelete(tex->canvas_texture);
+		tex->canvas_texture = nullptr;
+	}
+	tex->cached_rd_slices.clear(); // slices of the freed texture (freed with it)
+	tex->rd_type = by_tex->rd_type;
+	tex->rd_texture = by_tex->rd_texture;
+	tex->rd_texture_srgb = by_tex->rd_texture_srgb;
+	tex->rd_format = by_tex->rd_format;
+	tex->rd_format_srgb = by_tex->rd_format_srgb;
+	tex->rd_view = by_tex->rd_view;
+	tex->format = by_tex->format;
+	tex->validated_format = by_tex->validated_format;
+	tex->width = by_tex->width;
+	tex->height = by_tex->height;
+	tex->depth = by_tex->depth;
+	tex->layers = by_tex->layers;
+	tex->mipmaps = by_tex->mipmaps;
+	tex->image_cache_2d.unref();
+	by_tex->rd_texture = RID();
+	by_tex->rd_texture_srgb = RID();
+	if (by_tex->canvas_texture) {
+		memdelete(by_tex->canvas_texture);
+		by_tex->canvas_texture = nullptr;
+	}
+	texture_owner.free(p_by_texture);
+
+	for (int i = 0; i < tex->proxies.size(); i++) {
+		texture_proxy_update(tex->proxies[i], p_texture);
+	}
 	decal_atlas_mark_dirty_on_texture(p_texture);
 	area_light_atlas_mark_dirty_on_texture(p_texture);
 }

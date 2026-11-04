@@ -30,6 +30,7 @@
 
 #pragma once
 
+#include "servers/rendering/fellow_texture_streaming.h"
 #include "servers/rendering/rendering_server_enums.h"
 #include "servers/rendering/rendering_server_types.h"
 #include "servers/rendering/storage/utilities.h"
@@ -96,6 +97,10 @@ public:
 	// As above, but a material moved only by the wind counts as static (decision 0125: its far cascades are cached).
 	virtual bool material_fellow_shadow_cacheable_far(RID p_material) { return material_fellow_shadow_cacheable(p_material); }
 	virtual RSE::CullMode material_get_cull_mode(RID p_material) const = 0;
+	// FellowEngine texture streaming (milestone 45): a number that changes when the material's parameters, shader or
+	// next pass change (UINT32_MAX: no such material), and the streamed textures' facts about it.
+	virtual uint32_t material_get_fellow_version(RID p_material) const { return UINT32_MAX; }
+	virtual bool material_get_fellow_stream_info(RID p_material, FellowTextureStreaming::MaterialInfo &r_info) const { return false; }
 
 	struct InstanceShaderParam {
 		PropertyInfo info;

@@ -80,6 +80,7 @@ const SCENES := {
 	"rain": "res://scenes/rain_lab.gd",
 	"wind": "res://scenes/wind_lab.gd",
 	"motion": "res://scenes/motion_lab.gd",
+	"streaming": "res://scenes/streaming_lab.gd",
 }
 const DT := 1.0 / 60.0
 
@@ -412,6 +413,35 @@ func _pipeline_compilations() -> Dictionary:
 	}
 
 
+## FellowEngine texture streaming (milestone 45): its state; empty on stock Godot or when nothing is streamed.
+func _texture_streaming_info() -> Dictionary:
+	if not RenderingServer.has_method("fellow_get_texture_streaming_info"):
+		return {}
+	var d: Dictionary = RenderingServer.call("fellow_get_texture_streaming_info")
+	if d.is_empty() or int(d.get("textures", 0)) == 0:
+		return {}
+	return d
+
+
+## Waits until texture streaming has evaluated the current view twice and has nothing left to load (at most
+## --streaming_wait frames, 1200 by default). True if it had to wait (the caller renders its settle frames again).
+func _wait_texture_streaming() -> bool:
+	var d := _texture_streaming_info()
+	if d.is_empty():
+		return false
+	var c0 := int(d.get("cycles", 0))
+	var limit := int(args.get("streaming_wait", "1200"))
+	var waited := 0
+	while waited < limit:
+		d = _texture_streaming_info()
+		if int(d.get("cycles", 0)) >= c0 + 2 and int(d.get("pending", 1)) == 0 and int(d.get("jobs", 1)) == 0:
+			break
+		await get_tree().process_frame
+		waited += 1
+	result["texture_streaming_wait_frames"] = int(result.get("texture_streaming_wait_frames", 0)) + waited
+	return waited > 0
+
+
 func _mem() -> Dictionary:
 	return {
 		"video_mem_used": RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_VIDEO_MEM_USED),
@@ -557,6 +587,9 @@ func _run_perf() -> void:
 			break
 		if not ab.is_empty() and passes >= ab_passes:
 			break
+	var tsi := _texture_streaming_info()
+	if not tsi.is_empty():
+		result["texture_streaming"] = tsi
 	var pc2 := _pipeline_compilations()
 	if not ab.is_empty():
 		# Per configuration: the mean of every (pass, block) it ran, keyed "pass:block" (block = position on the path).
@@ -869,10 +902,22 @@ func _run_capture() -> void:
 			if lightning and i == strike_at and strike_at < settle:
 				_strike_in_view()
 			await get_tree().process_frame
+		if await _wait_texture_streaming():
+			for i in range(settle):
+				await get_tree().process_frame
 		await _post_draw()
 		var p := out_dir.path_join("%s_%s.png" % [stem, k])
 		_save_frame(p)
 		files.append(p.get_file())
+		if not result.has("camera_mem"):
+			result["camera_mem"] = {}
+		result["camera_mem"][k] = _mem()
+		var tsi := _texture_streaming_info()
+		if not tsi.is_empty():
+			if not result.has("texture_streaming"):
+				result["texture_streaming"] = {}
+			result["texture_streaming"][k] = tsi
+			result["texture_streaming"][k]["texture_mem_used"] = RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TEXTURE_MEM_USED)
 	# Optional: frames sampled along the flythrough (to review camera paths / coverage).
 	var pathshots := int(args.get("pathshots", "0"))
 	if pathshots > 0 and scene.flythrough:

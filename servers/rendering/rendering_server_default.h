@@ -244,6 +244,7 @@ public:
 	FUNC0RC(RID, texture_drawable_get_default_material)
 
 	FUNC2(texture_replace, RID, RID)
+	FUNC8(texture_2d_fellow_set_stream_source, RID, const String &, uint64_t, int, int, Image::Format, int, int) // milestone 45
 
 	FUNC3(texture_set_size_override, RID, int, int)
 // FIXME: Disabled during Vulkan refactoring, should be ported.

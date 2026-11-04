@@ -35,7 +35,9 @@
 #include "core/math/geometry_3d.h"
 #include "core/object/callable_mp.h"
 #include "core/object/worker_thread_pool.h"
+#include "core/os/os.h"
 #include "servers/rendering/fellow_settings.h"
+#include "servers/rendering/fellow_texture_streaming.h"
 #include "servers/rendering/rendering_light_culler.h"
 #include "servers/rendering/rendering_server.h"
 #include "servers/rendering/rendering_server_default.h"
@@ -1164,6 +1166,140 @@ void RendererSceneCull::instance_set_extra_visibility_margin(RID p_instance, rea
 			geom->geometry_instance->set_fellow_extra_margin(p_margin);
 		}
 	}
+}
+
+void RendererSceneCull::fellow_texture_streaming_update() {
+	FellowTextureStreaming *ts = FellowTextureStreaming::get_singleton();
+	ts->begin_frame();
+	if (!ts->has_textures()) {
+		fellow_stream_scenarios.clear();
+		return;
+	}
+	const LocalVector<FellowTextureStreaming::Camera> &cams = ts->get_eval_cameras();
+	if (!cams.is_empty()) {
+		const uint64_t t0 = OS::get_singleton()->get_ticks_usec();
+		if (fellow_stream_scenarios.is_empty()) {
+			// A cycle starts: the scenarios the cameras rendered, fixed until it ends.
+			for (const FellowTextureStreaming::Camera &c : cams) {
+				if (fellow_stream_scenarios.find(c.scenario) < 0) {
+					fellow_stream_scenarios.push_back(c.scenario);
+				}
+			}
+			fellow_stream_scenario_index = 0;
+			fellow_stream_instance_index = 0;
+		}
+		const float user_bias = GLOBAL_GET_CACHED(float, "rendering/fellow/streaming/texture_lod_bias");
+		int budget = MAX(1, GLOBAL_GET_CACHED(int, "rendering/fellow/streaming/texture_instances_per_frame"));
+		uint64_t refs = 0;
+		const FellowTextureStreaming::Camera *scams[8];
+		while (budget > 0 && fellow_stream_scenario_index < fellow_stream_scenarios.size()) {
+			Scenario *scenario = scenario_owner.get_or_null(fellow_stream_scenarios[fellow_stream_scenario_index]);
+			uint32_t ncams = 0;
+			if (scenario) {
+				for (const FellowTextureStreaming::Camera &c : cams) {
+					if (c.scenario == fellow_stream_scenarios[fellow_stream_scenario_index] && ncams < 8) {
+						scams[ncams++] = &c;
+					}
+				}
+			}
+			if (scenario == nullptr || ncams == 0) {
+				fellow_stream_scenario_index++;
+				fellow_stream_instance_index = 0;
+				continue;
+			}
+			const uint32_t count = scenario->instance_data.size();
+			while (budget > 0 && fellow_stream_instance_index < count) {
+				InstanceData &idata = scenario->instance_data[fellow_stream_instance_index++];
+				budget--;
+				const uint32_t base_type = idata.flags & InstanceData::FLAG_BASE_TYPE_MASK;
+				if (!((1 << base_type) & RSE::INSTANCE_GEOMETRY_MASK) || idata.instance == nullptr) {
+					continue;
+				}
+				Instance *ins = idata.instance;
+				// The finest pixels per world unit any camera can have on the instance: its box's nearest view depth
+				// (perspective; the distance to the box when it is behind the camera).
+				const AABB &ab = ins->transformed_aabb;
+				const Vector3 center = ab.get_center();
+				const Vector3 half = ab.size * 0.5f;
+				float ppu = 0.0f;
+				float bias = 1e30f;
+				for (uint32_t c = 0; c < ncams; c++) {
+					const FellowTextureStreaming::Camera &cam = *scams[c];
+					float p;
+					if (cam.orthogonal) {
+						p = cam.pixels_per_unit;
+					} else {
+						const Vector3 rel = center - cam.position;
+						const float zc = rel.dot(cam.forward);
+						const float ze = Math::abs(cam.forward.x) * half.x + Math::abs(cam.forward.y) * half.y + Math::abs(cam.forward.z) * half.z;
+						float depth;
+						if (zc + ze <= 0.0f) {
+							depth = (rel.abs() - half).max(Vector3()).length();
+						} else {
+							depth = zc - ze;
+						}
+						p = cam.pixels_per_unit / MAX(depth, MAX(cam.near, 1e-3f));
+					}
+					ppu = MAX(ppu, p);
+					bias = MIN(bias, cam.mip_bias);
+				}
+				bias += user_bias;
+				const Basis &b = ins->transform.basis;
+				const float scale = MIN(b.get_column(0).length(), MIN(b.get_column(1).length(), b.get_column(2).length()));
+
+				auto reference_mesh = [&](RID p_mesh, bool p_instance_materials) {
+					if (p_mesh.is_null()) {
+						return;
+					}
+					const int surfaces = RSG::mesh_storage->mesh_get_surface_count(p_mesh);
+					for (int i = 0; i < surfaces; i++) {
+						RID mat;
+						if (ins->material_override.is_valid()) {
+							mat = ins->material_override;
+						} else if (p_instance_materials && i < ins->materials.size() && ins->materials[i].is_valid()) {
+							mat = ins->materials[i];
+						} else {
+							mat = RSG::mesh_storage->mesh_surface_get_material(p_mesh, i);
+						}
+						const float density = RSG::mesh_storage->mesh_surface_get_fellow_uv_density(p_mesh, i);
+						if (mat.is_valid()) {
+							ts->reference_material(mat, ppu, scale, density, bias);
+						}
+						if (ins->material_overlay.is_valid()) {
+							ts->reference_material(ins->material_overlay, ppu, scale, density, bias);
+						}
+						refs++;
+					}
+				};
+				switch (ins->base_type) {
+					case RSE::INSTANCE_MESH:
+						reference_mesh(ins->base, true);
+						break;
+					case RSE::INSTANCE_MULTIMESH:
+						reference_mesh(RSG::mesh_storage->multimesh_get_mesh(ins->base), false);
+						break;
+					case RSE::INSTANCE_PARTICLES: {
+						const int passes = RSG::particles_storage->particles_get_draw_passes(ins->base);
+						for (int i = 0; i < passes; i++) {
+							reference_mesh(RSG::particles_storage->particles_get_draw_pass_mesh(ins->base, i), false);
+						}
+					} break;
+					default:
+						break;
+				}
+			}
+			if (fellow_stream_instance_index >= count) {
+				fellow_stream_scenario_index++;
+				fellow_stream_instance_index = 0;
+			}
+		}
+		if (fellow_stream_scenario_index >= fellow_stream_scenarios.size()) {
+			ts->end_cycle();
+			fellow_stream_scenarios.clear();
+		}
+		ts->add_eval_time(OS::get_singleton()->get_ticks_usec() - t0, refs);
+	}
+	ts->update();
 }
 
 void RendererSceneCull::fellow_instance_set_hlod(RID p_instance, int p_role, float p_distance, float p_end_distance) {
@@ -3302,6 +3438,20 @@ void RendererSceneCull::render_camera(const Ref<RenderSceneBuffers> &p_render_bu
 
 	RID environment = _render_get_environment(p_camera, p_scenario);
 	RID compositor = _render_get_compositor(p_camera, p_scenario);
+
+	if (FellowTextureStreaming::get_singleton()->has_textures()) {
+		// Texture streaming (milestone 45): the camera's position, view direction and pixels per world unit at 1 m of
+		// view depth (half the render height times the projection's vertical scale).
+		FellowTextureStreaming::Camera sc;
+		sc.scenario = p_scenario;
+		sc.position = camera_data.main_transform.origin;
+		sc.forward = -camera_data.main_transform.basis.get_column(2).normalized();
+		sc.pixels_per_unit = 0.5f * float(p_viewport_size.height) * float(camera_data.main_projection.columns[1][1]);
+		sc.orthogonal = camera_data.is_orthogonal;
+		sc.near = camera->znear;
+		sc.mip_bias = p_render_buffers.is_valid() ? p_render_buffers->fellow_get_texture_mipmap_bias() : 0.0f;
+		FellowTextureStreaming::get_singleton()->add_camera(sc);
+	}
 
 	RENDER_TIMESTAMP("Update Occlusion Buffer")
 	// For now just cull on the first camera

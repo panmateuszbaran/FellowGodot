@@ -37,6 +37,7 @@
 #include "core/os/os.h"
 #include "core/variant/typed_array.h"
 #include "servers/rendering/fellow_settings.h"
+#include "servers/rendering/fellow_texture_streaming.h"
 #include "servers/rendering/rendering_device.h"
 #include "servers/rendering/rendering_server_types.h"
 #include "servers/rendering/shader_language.h"
@@ -3511,6 +3512,7 @@ void RenderingServer::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("has_changed"), &RenderingServer::has_changed);
 	ClassDB::bind_method(D_METHOD("get_rendering_info", "info"), &RenderingServer::get_rendering_info);
 	ClassDB::bind_method(D_METHOD("fellow_get_stats"), &RenderingServer::fellow_get_stats);
+	ClassDB::bind_method(D_METHOD("fellow_get_texture_streaming_info"), &RenderingServer::fellow_get_texture_streaming_info);
 	ClassDB::bind_method(D_METHOD("get_video_adapter_name"), &RenderingServer::get_video_adapter_name);
 	ClassDB::bind_method(D_METHOD("get_video_adapter_vendor"), &RenderingServer::get_video_adapter_vendor);
 	ClassDB::bind_method(D_METHOD("get_video_adapter_type"), &RenderingServer::get_video_adapter_type);
@@ -3658,8 +3660,13 @@ Dictionary RenderingServer::fellow_get_stats() const {
 	return Fellow::get_stats_dictionary();
 }
 
+Dictionary RenderingServer::fellow_get_texture_streaming_info() const {
+	return FellowTextureStreaming::get_singleton()->get_info();
+}
+
 void RenderingServer::init() {
 	Fellow::register_settings();
+	FellowTextureStreaming::get_singleton(); // created here, on the main thread, before any render thread uses it
 
 	// These are overrides, even if they are false Godot will still
 	// import the texture formats that the host platform needs.

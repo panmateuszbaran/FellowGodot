@@ -371,6 +371,23 @@ void Fellow::register_settings() {
 	// it grow without bound, and at 2 GiB its checksum's length overflows and the save crashes (decision 0050).
 	GLOBAL_DEF_RST(PropertyInfo(Variant::INT, "rendering/fellow/frame/pipeline_cache_max_mb", PROPERTY_HINT_RANGE, "64,2000,1,suffix:MiB"), 1024);
 	GLOBAL_DEF_RST(PropertyInfo(Variant::INT, "rendering/fellow/frame/async_compute_family", PROPERTY_HINT_ENUM, "Dedicated Compute Family,Main Family,Main Queue (Split Only)"), 0);
+	// Texture streaming (milestone 45, servers/rendering/fellow_texture_streaming.h). Off: textures load whole, as stock.
+	GLOBAL_DEF_RST("rendering/fellow/streaming/textures", false);
+	// Mips at or below this size (the larger side) are always resident; smaller textures are not streamed.
+	GLOBAL_DEF_RST(PropertyInfo(Variant::INT, "rendering/fellow/streaming/texture_resident_size", PROPERTY_HINT_RANGE, "16,4096,1,suffix:px"), 128);
+	// The streamed textures' memory (0: no limit); over it every streamed texture is coarsened by the same bias.
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/streaming/texture_budget_mb", PROPERTY_HINT_RANGE, "0,65536,1,suffix:MiB"), 0);
+	// Added to the estimated level (negative: finer, a margin; positive: coarser). -0.5: the estimate is the finest
+	// level along the UV mapping's largest stretch; a GPU's isotropic level, the larger of the screen axes' derivatives,
+	// can be up to half a level finer when that stretch is diagonal on screen.
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/streaming/texture_lod_bias", PROPERTY_HINT_RANGE, "-4,4,0.05"), -0.5);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/streaming/texture_instances_per_frame", PROPERTY_HINT_RANGE, "64,1000000,1"), 2048);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/streaming/texture_max_jobs", PROPERTY_HINT_RANGE, "1,64,1"), 4);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/streaming/texture_upload_mb_per_frame", PROPERTY_HINT_RANGE, "1,4096,1,suffix:MiB"), 64);
+	// A texture needing fewer mips keeps them this long before they are released (unless over the budget).
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/streaming/texture_release_hold_s", PROPERTY_HINT_RANGE, "0,600,0.1,suffix:s"), 2.0);
+	// A streamed texture no instance uses any more keeps its mips this long, then falls back to its resident tail.
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/streaming/texture_unreferenced_hold_s", PROPERTY_HINT_RANGE, "0,600,0.1,suffix:s"), 5.0);
 }
 
 // Hot workers' gate (render thread only): exponential averages of the fence wait and the frame interval; the gate

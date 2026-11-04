@@ -67,7 +67,20 @@ private:
 	int h = 0;
 	mutable Ref<BitMap> alpha_cache;
 
-	Error _load_data(const String &p_path, int &r_width, int &r_height, Ref<Image> &image, bool &r_request_3d, bool &r_request_normal, bool &r_request_roughness, int &mipmap_limit, int p_size_limit = 0);
+	// FellowEngine texture streaming (rendering/fellow/streaming/textures, milestone 45): a VRAM-compressed texture with
+	// a full mip chain is loaded with only its tail of mips; the RenderingServer streams the rest.
+	struct FellowStreamSource {
+		bool streamed = false;
+		uint64_t data_offset = 0;
+		int width = 0;
+		int height = 0;
+		Image::Format format = Image::FORMAT_L8;
+		int levels = 0;
+		int resident_mip = 0;
+	};
+	bool fellow_streamed = false;
+
+	Error _load_data(const String &p_path, int &r_width, int &r_height, Ref<Image> &image, bool &r_request_3d, bool &r_request_normal, bool &r_request_roughness, int &mipmap_limit, int p_size_limit = 0, FellowStreamSource *r_stream = nullptr);
 	virtual void reload_from_file() override;
 
 	static void _requested_3d(void *p_ud);

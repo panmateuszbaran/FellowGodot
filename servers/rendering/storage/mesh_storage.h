@@ -64,6 +64,9 @@ public:
 
 	virtual void mesh_surface_set_material(RID p_mesh, int p_surface, RID p_material) = 0;
 	virtual RID mesh_surface_get_material(RID p_mesh, int p_surface) const = 0;
+	// FellowEngine texture streaming (milestone 45): the surface's UV1 texel density (FellowTextureStreaming::
+	// compute_uv_density, measured when the surface is added while streaming is on); 0 if unknown.
+	virtual float mesh_surface_get_fellow_uv_density(RID p_mesh, int p_surface) const { return 0.0f; }
 
 	virtual RenderingServerTypes::SurfaceData mesh_get_surface(RID p_mesh, int p_surface) const = 0;
 

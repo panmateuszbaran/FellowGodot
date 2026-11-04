@@ -276,6 +276,7 @@ private:
 		HashMap<StringName, HashMap<int, RID>> default_texture_parameter;
 		HashSet<Material *> owners;
 		bool embedded = false;
+		uint32_t fellow_version = 0; // texture streaming: bumped when the code changes
 	};
 
 	typedef ShaderData *(*ShaderDataRequestFunction)();
@@ -303,6 +304,7 @@ private:
 		int32_t priority = 0;
 		RID next_pass;
 		SelfList<Material> update_element;
+		uint32_t fellow_version = 0; // texture streaming: bumped by set_param, set_shader, set_next_pass
 
 		Dependency dependency;
 
@@ -508,6 +510,8 @@ public:
 	virtual bool material_fellow_shadow_cacheable(RID p_material) override;
 	virtual bool material_fellow_shadow_cacheable_far(RID p_material) override;
 	virtual RSE::CullMode material_get_cull_mode(RID p_material) const override;
+	virtual uint32_t material_get_fellow_version(RID p_material) const override;
+	virtual bool material_get_fellow_stream_info(RID p_material, FellowTextureStreaming::MaterialInfo &r_info) const override;
 
 	virtual void material_get_instance_shader_parameters(RID p_material, List<InstanceShaderParam> *r_parameters) override;
 

@@ -133,6 +133,9 @@ public:
 	virtual Vector<Ref<Image>> texture_3d_get(RID p_texture) const = 0;
 
 	virtual void texture_replace(RID p_texture, RID p_by_texture) = 0;
+	// FellowEngine texture streaming (rendering/fellow/streaming/textures, milestone 45): the texture was created from
+	// its mips p_resident_mip.. of a VRAM-compressed chain at p_data_offset in p_path (p_width x p_height, p_levels).
+	virtual void texture_2d_fellow_set_stream_source(RID p_texture, const String &p_path, uint64_t p_data_offset, int p_width, int p_height, Image::Format p_format, int p_levels, int p_resident_mip) {}
 	virtual void texture_set_size_override(RID p_texture, int p_width, int p_height) = 0;
 
 	virtual void texture_set_path(RID p_texture, const String &p_path) = 0;
@@ -999,6 +1002,9 @@ public:
 	virtual uint64_t get_rendering_info(RSE::RenderingInfo p_info) = 0;
 	// FellowEngine: cumulative counters of FellowEngine rendering features (see servers/rendering/fellow_settings.h).
 	Dictionary fellow_get_stats() const;
+	// FellowEngine texture streaming: the streamer's state after its last update (textures, resident/target/wanted/
+	// full bytes, budget bias, pending, loads, settled, ...).
+	Dictionary fellow_get_texture_streaming_info() const;
 	virtual String get_video_adapter_name() const = 0;
 	virtual String get_video_adapter_vendor() const = 0;
 	virtual RenderingDeviceEnums::DeviceType get_video_adapter_type() const = 0;
