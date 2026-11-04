@@ -29,9 +29,9 @@
 /**************************************************************************/
 
 #include "copy_effects.h"
-#include "servers/rendering/fellow_settings.h"
 
 #include "core/config/project_settings.h"
+#include "servers/rendering/fellow_settings.h"
 #include "servers/rendering/renderer_rd/renderer_compositor_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
 #include "servers/rendering/renderer_rd/uniform_set_cache_rd.h"
@@ -111,7 +111,13 @@ CopyEffects::CopyEffects(BitField<RasterEffects> p_raster_effects) {
 
 		copy.shader_version = copy.shader.version_create();
 
+		// FellowEngine (decision 0150): the 16 x 16 glow tiles need 256 invocations a workgroup, twice Vulkan's minimum;
+		// on a device with fewer the padded blur is used.
+		copy.fellow_tile16 = RD::get_singleton()->limit_get(RD::LIMIT_MAX_COMPUTE_WORKGROUP_INVOCATIONS) >= 256;
 		for (int i = 0; i < COPY_MODE_MAX; i++) {
+			if (!copy.fellow_tile16 && (i == COPY_MODE_GAUSSIAN_GLOW_FELLOW_TILE16 || i == COPY_MODE_GAUSSIAN_GLOW_AUTO_EXPOSURE_FELLOW_TILE16)) {
+				continue;
+			}
 			if (copy.shader.is_variant_enabled(i)) {
 				copy.pipelines[i].create_compute_pipeline(copy.shader.version_get_shader(copy.shader_version, i));
 			}
@@ -827,7 +833,7 @@ void CopyEffects::gaussian_glow(RID p_source_rd_texture, RID p_back_texture, con
 	memset(&copy.push_constant, 0, sizeof(CopyPushConstant));
 
 	CopyMode copy_mode = p_first_pass && p_auto_exposure.is_valid() ? COPY_MODE_GAUSSIAN_GLOW_AUTO_EXPOSURE : COPY_MODE_GAUSSIAN_GLOW;
-	const int fellow_glow_blur = Fellow::glow_blur();
+	const int fellow_glow_blur = Fellow::glow_blur() == 2 && !copy.fellow_tile16 ? 1 : Fellow::glow_blur();
 	if (fellow_glow_blur == 1) {
 		// FellowEngine (decision 0052): the same blur with a shared-memory layout free of bank conflicts.
 		copy_mode = copy_mode == COPY_MODE_GAUSSIAN_GLOW_AUTO_EXPOSURE ? COPY_MODE_GAUSSIAN_GLOW_AUTO_EXPOSURE_FELLOW_PAD : COPY_MODE_GAUSSIAN_GLOW_FELLOW_PAD;

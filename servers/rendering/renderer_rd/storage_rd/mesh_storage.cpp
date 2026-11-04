@@ -30,10 +30,9 @@
 
 #include "mesh_storage.h"
 
+#include "core/os/os.h"
 #include "servers/rendering/fellow_settings.h"
 #include "servers/rendering/fellow_texture_streaming.h"
-#include "core/os/os.h"
-
 #include "servers/rendering/renderer_viewport.h"
 #include "servers/rendering/rendering_server.h"
 #include "servers/rendering/rendering_server_types.h"
@@ -216,6 +215,11 @@ MeshStorage::~MeshStorage() {
 	}
 
 	RD::get_singleton()->free_rid(default_rd_storage_buffer);
+	if (fellow_mm_pool.buffer.is_valid()) {
+		// FellowEngine MultiMesh culling's pool (decision 0034): leaked at exit before milestone 49.
+		RD::get_singleton()->free_rid(fellow_mm_pool.buffer);
+		fellow_mm_pool.buffer = RID();
+	}
 
 	singleton = nullptr;
 }

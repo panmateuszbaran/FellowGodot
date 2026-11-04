@@ -172,6 +172,7 @@ private:
 		CopyShaderRD shader;
 		RID shader_version;
 		PipelineDeferredRD pipelines[COPY_MODE_MAX];
+		bool fellow_tile16 = true; // FellowEngine (decision 0150): the device runs 256 invocations a workgroup
 
 	} copy;
 
