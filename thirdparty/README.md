@@ -66,6 +66,10 @@ Files extracted from upstream source (FSR 3.1 upscaler only; FellowEngine):
 Patches:
 
 - `0001-include-paths.patch` (FellowEngine: includes between the GPU folders made relative, for Godot's shader builder)
+- `0002-godot-fsr3-options.patch` (FellowEngine: builds with GCC and Clang, a context large enough where `wchar_t` has
+  4 bytes, `#version` left to Godot's shader wrappers, FSR 1's header included once in the RCAS pass, the luma history's
+  storage format matching its texture, and FSR 2.2's Godot options: the reprojection matrix for motion vectors derived
+  from the depth, the reactive mask clamp)
 
 
 ## angle

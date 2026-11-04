@@ -21,6 +21,13 @@ thirdparty_sources = [thirdparty_dir + file for file in thirdparty_sources]
 
 env_effects.Prepend(CPPPATH=[thirdparty_dir])
 
+# FellowEngine (milestone 47): the FSR 3.1 upscaler of AMD's FidelityFX SDK. Its assertion functions are FSR 2.2's
+# (the same C symbols), so ffx_assert.cpp is not built twice.
+fsr3_dir = "#thirdparty/amd-fsr3/"
+fsr3_sources = ["src/ffx_fsr3upscaler.cpp", "src/ffx_message.cpp", "src/ffx_object_management.cpp"]
+fsr3_sources = [fsr3_dir + file for file in fsr3_sources]
+env_effects.Prepend(CPPPATH=[fsr3_dir])
+
 
 def areatex_builder(target, source, env):
     buffer = methods.get_buffer(str(source[0]))
@@ -66,6 +73,9 @@ env_effects.Append(CPPDEFINES=["FFX_GCC"])
 env_thirdparty = env_effects.Clone()
 env_thirdparty.disable_warnings()
 env_thirdparty.add_source_files(thirdparty_obj, thirdparty_sources)
+env_thirdparty_fsr3 = env_thirdparty.Clone()
+env_thirdparty_fsr3.Prepend(CPPPATH=[fsr3_dir + "src/"])
+env_thirdparty_fsr3.add_source_files(thirdparty_obj, fsr3_sources)
 env.servers_sources += thirdparty_obj
 
 # Godot source files

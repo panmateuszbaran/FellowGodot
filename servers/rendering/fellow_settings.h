@@ -347,6 +347,11 @@ inline bool physics_verify() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/physics/verify");
 }
 // post/motion_blur/* (decision 0078): motion blur from the velocity buffer after TAA (a visual feature, off by default).
+// FSR 3.1 upscaler in place of FSR 2.2 (decision 0148).
+inline bool fsr3_enabled() {
+	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/upscaling/fsr3");
+}
+
 inline bool motion_blur_enabled() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/post/motion_blur/enabled");
 }

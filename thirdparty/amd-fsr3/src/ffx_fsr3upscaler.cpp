@@ -41,6 +41,16 @@
 #include <FidelityFX/gpu/fsr3upscaler/ffx_fsr3upscaler_common.h>
 #include <ffx_object_management.h>
 
+// FellowEngine: build fixes for compilers other than MSVC.
+#ifndef _countof
+#define _countof(array) (sizeof(array) / sizeof(array[0]))
+#endif
+
+#include <wchar.h>
+#ifndef _MSC_VER
+#define wcscpy_s wcscpy
+#endif
+
 // max queued frames for descriptor management
 static const uint32_t FSR3UPSCALER_MAX_QUEUED_FRAMES = 16;
 
@@ -1029,6 +1039,9 @@ static FfxErrorCode fsr3upscalerDispatch(FfxFsr3UpscalerContext_Private* context
     } else {
         context->constants.frameIndex += 1.0f;
     }
+
+    // FellowEngine (Godot): for pixels without motion vectors.
+    memcpy(context->constants.reprojectionMatrix, params->reprojectionMatrix, sizeof(context->constants.reprojectionMatrix));
 
     // reactive mask bias
     const int32_t threadGroupWorkRegionDim = 8;

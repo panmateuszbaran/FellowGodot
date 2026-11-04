@@ -1,0 +1,315 @@
+diff --git a/FidelityFX/gpu/ffx_fsr3upscaler_accumulate_pass.glsl b/FidelityFX/gpu/ffx_fsr3upscaler_accumulate_pass.glsl
+--- a/FidelityFX/gpu/ffx_fsr3upscaler_accumulate_pass.glsl
++++ b/FidelityFX/gpu/ffx_fsr3upscaler_accumulate_pass.glsl
+@@ -20,7 +20,7 @@
+ // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ // THE SOFTWARE.
+ 
+-#version 450
++//#version 450
+ 
+ #extension GL_GOOGLE_include_directive : require
+ #extension GL_EXT_samplerless_texture_functions : require
+diff --git a/FidelityFX/gpu/ffx_fsr3upscaler_autogen_reactive_pass.glsl b/FidelityFX/gpu/ffx_fsr3upscaler_autogen_reactive_pass.glsl
+--- a/FidelityFX/gpu/ffx_fsr3upscaler_autogen_reactive_pass.glsl
++++ b/FidelityFX/gpu/ffx_fsr3upscaler_autogen_reactive_pass.glsl
+@@ -20,7 +20,7 @@
+ // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ // THE SOFTWARE.
+ 
+-#version 450
++//#version 450
+ 
+ #extension GL_GOOGLE_include_directive : require
+ #extension GL_EXT_samplerless_texture_functions : require
+diff --git a/FidelityFX/gpu/ffx_fsr3upscaler_debug_view_pass.glsl b/FidelityFX/gpu/ffx_fsr3upscaler_debug_view_pass.glsl
+--- a/FidelityFX/gpu/ffx_fsr3upscaler_debug_view_pass.glsl
++++ b/FidelityFX/gpu/ffx_fsr3upscaler_debug_view_pass.glsl
+@@ -20,7 +20,7 @@
+ // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ // THE SOFTWARE.
+ 
+-#version 450
++//#version 450
+ 
+ #extension GL_GOOGLE_include_directive : require
+ #extension GL_EXT_samplerless_texture_functions : require
+diff --git a/FidelityFX/gpu/ffx_fsr3upscaler_luma_instability_pass.glsl b/FidelityFX/gpu/ffx_fsr3upscaler_luma_instability_pass.glsl
+--- a/FidelityFX/gpu/ffx_fsr3upscaler_luma_instability_pass.glsl
++++ b/FidelityFX/gpu/ffx_fsr3upscaler_luma_instability_pass.glsl
+@@ -20,7 +20,7 @@
+ // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ // THE SOFTWARE.
+ 
+-#version 450
++//#version 450
+ 
+ #extension GL_GOOGLE_include_directive : require
+ #extension GL_EXT_samplerless_texture_functions : require
+diff --git a/FidelityFX/gpu/ffx_fsr3upscaler_luma_pyramid_pass.glsl b/FidelityFX/gpu/ffx_fsr3upscaler_luma_pyramid_pass.glsl
+--- a/FidelityFX/gpu/ffx_fsr3upscaler_luma_pyramid_pass.glsl
++++ b/FidelityFX/gpu/ffx_fsr3upscaler_luma_pyramid_pass.glsl
+@@ -20,7 +20,7 @@
+ // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ // THE SOFTWARE.
+ 
+-#version 450
++//#version 450
+ 
+ #extension GL_GOOGLE_include_directive : require
+ #extension GL_EXT_samplerless_texture_functions : require
+diff --git a/FidelityFX/gpu/ffx_fsr3upscaler_prepare_inputs_pass.glsl b/FidelityFX/gpu/ffx_fsr3upscaler_prepare_inputs_pass.glsl
+--- a/FidelityFX/gpu/ffx_fsr3upscaler_prepare_inputs_pass.glsl
++++ b/FidelityFX/gpu/ffx_fsr3upscaler_prepare_inputs_pass.glsl
+@@ -20,7 +20,7 @@
+ // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ // THE SOFTWARE.
+ 
+-#version 450
++//#version 450
+ 
+ #extension GL_GOOGLE_include_directive : require
+ #extension GL_EXT_samplerless_texture_functions : require
+diff --git a/FidelityFX/gpu/ffx_fsr3upscaler_prepare_reactivity_pass.glsl b/FidelityFX/gpu/ffx_fsr3upscaler_prepare_reactivity_pass.glsl
+--- a/FidelityFX/gpu/ffx_fsr3upscaler_prepare_reactivity_pass.glsl
++++ b/FidelityFX/gpu/ffx_fsr3upscaler_prepare_reactivity_pass.glsl
+@@ -20,7 +20,7 @@
+ // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ // THE SOFTWARE.
+ 
+-#version 450
++//#version 450
+ 
+ #extension GL_GOOGLE_include_directive : require
+ #extension GL_EXT_samplerless_texture_functions : require
+diff --git a/FidelityFX/gpu/ffx_fsr3upscaler_rcas_pass.glsl b/FidelityFX/gpu/ffx_fsr3upscaler_rcas_pass.glsl
+--- a/FidelityFX/gpu/ffx_fsr3upscaler_rcas_pass.glsl
++++ b/FidelityFX/gpu/ffx_fsr3upscaler_rcas_pass.glsl
+@@ -20,7 +20,7 @@
+ // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ // THE SOFTWARE.
+ 
+-#version 450
++//#version 450
+ 
+ #extension GL_GOOGLE_include_directive : require
+ #extension GL_EXT_samplerless_texture_functions : require
+diff --git a/FidelityFX/gpu/ffx_fsr3upscaler_shading_change_pass.glsl b/FidelityFX/gpu/ffx_fsr3upscaler_shading_change_pass.glsl
+--- a/FidelityFX/gpu/ffx_fsr3upscaler_shading_change_pass.glsl
++++ b/FidelityFX/gpu/ffx_fsr3upscaler_shading_change_pass.glsl
+@@ -20,7 +20,7 @@
+ // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ // THE SOFTWARE.
+ 
+-#version 450
++//#version 450
+ 
+ #extension GL_GOOGLE_include_directive : require
+ #extension GL_EXT_samplerless_texture_functions : require
+diff --git a/FidelityFX/gpu/ffx_fsr3upscaler_shading_change_pyramid_pass.glsl b/FidelityFX/gpu/ffx_fsr3upscaler_shading_change_pyramid_pass.glsl
+--- a/FidelityFX/gpu/ffx_fsr3upscaler_shading_change_pyramid_pass.glsl
++++ b/FidelityFX/gpu/ffx_fsr3upscaler_shading_change_pyramid_pass.glsl
+@@ -20,7 +20,7 @@
+ // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ // THE SOFTWARE.
+ 
+-#version 450
++//#version 450
+ 
+ #extension GL_GOOGLE_include_directive : require
+ #extension GL_EXT_samplerless_texture_functions : require
+diff --git a/FidelityFX/gpu/fsr3upscaler/ffx_fsr3upscaler_callbacks_glsl.h b/FidelityFX/gpu/fsr3upscaler/ffx_fsr3upscaler_callbacks_glsl.h
+--- a/FidelityFX/gpu/fsr3upscaler/ffx_fsr3upscaler_callbacks_glsl.h
++++ b/FidelityFX/gpu/fsr3upscaler/ffx_fsr3upscaler_callbacks_glsl.h
+@@ -65,6 +65,11 @@
+         FfxFloat32    fShadingChangeScale;
+         FfxFloat32    fAccumulationAddedPerFrame;
+         FfxFloat32    fMinDisocclusionAccumulation;
++
++        FfxFloat32    fPad0;
++        FfxFloat32    fPad1;
++        FfxFloat32    fPad2;
++        mat4          mReprojectionMatrix;
+ 	} cbFSR3Upscaler;
+ 
+ 
+@@ -316,7 +321,11 @@ layout (set = 0, binding = FSR3UPSCALER_BIND_SRV_REACTIVE_MASK) uniform texture2
+ 
+ FfxFloat32 LoadReactiveMask(FfxInt32x2 iPxPos)
+ {
++#if FFX_FSR3UPSCALER_OPTION_GODOT_REACTIVE_MASK_CLAMP
++	return min(texelFetch(r_reactive_mask, FfxInt32x2(iPxPos), 0).r, 0.9f) * cbFSR3Upscaler.fReactivenessScale;
++#else
+ 	return texelFetch(r_reactive_mask, FfxInt32x2(iPxPos), 0).r * cbFSR3Upscaler.fReactivenessScale;
++#endif
+ }
+ 
+ FfxInt32x2 GetReactiveMaskResourceDimensions()
+@@ -326,7 +335,11 @@ FfxInt32x2 GetReactiveMaskResourceDimensions()
+ 
+ FfxFloat32 SampleReactiveMask(FfxFloat32x2 fUV)
+ {
++#if FFX_FSR3UPSCALER_OPTION_GODOT_REACTIVE_MASK_CLAMP
++	return min(textureLod(sampler2D(r_reactive_mask, s_LinearClamp), fUV, 0.0).x, 0.9f) * cbFSR3Upscaler.fReactivenessScale;
++#else
+ 	return textureLod(sampler2D(r_reactive_mask, s_LinearClamp), fUV, 0.0).x * cbFSR3Upscaler.fReactivenessScale;
++#endif
+ }
+ #endif
+ 
+@@ -370,6 +383,16 @@ FfxFloat32x2 LoadInputMotionVector(FfxInt32x2 iPxDilatedMotionVectorPos)
+ {
+ 	FfxFloat32x2 fSrcMotionVector = texelFetch(r_input_motion_vectors, iPxDilatedMotionVectorPos, 0).xy;
+ 
++#if FFX_FSR3UPSCALER_OPTION_GODOT_DERIVE_INVALID_MOTION_VECTORS && defined(FSR3UPSCALER_BIND_SRV_INPUT_DEPTH)
++	bool bInvalidMotionVector = all(lessThanEqual(fSrcMotionVector, vec2(-1.0f, -1.0f)));
++	if (bInvalidMotionVector)
++	{
++		FfxFloat32 fSrcDepth = LoadInputDepth(iPxDilatedMotionVectorPos);
++		FfxFloat32x2 fUv = (iPxDilatedMotionVectorPos + FfxFloat32(0.5)) / RenderSize();
++		fSrcMotionVector = FFX_FSR3UPSCALER_OPTION_GODOT_DERIVE_INVALID_MOTION_VECTORS_FUNCTION(fUv, fSrcDepth, cbFSR3Upscaler.mReprojectionMatrix);
++	}
++#endif
++
+ 	FfxFloat32x2 fUvMotionVector = fSrcMotionVector * MotionVectorScale();
+ 
+ #if FFX_FSR3UPSCALER_OPTION_JITTERED_MOTION_VECTORS
+@@ -395,7 +418,7 @@ FfxFloat32x4 SampleHistory(FfxFloat32x2 fUV)
+ #endif
+ 
+ #if defined(FSR3UPSCALER_BIND_UAV_LUMA_HISTORY)
+-layout (set = 0, binding = FSR3UPSCALER_BIND_UAV_LUMA_HISTORY, rgba8) uniform image2D  rw_luma_history;
++layout (set = 0, binding = FSR3UPSCALER_BIND_UAV_LUMA_HISTORY, rgba16f) uniform image2D  rw_luma_history;
+ 
+ void StoreLumaHistory(FfxInt32x2 iPxPos, FfxFloat32x4 fLumaHistory)
+ {
+diff --git a/FidelityFX/gpu/fsr3upscaler/ffx_fsr3upscaler_rcas.h b/FidelityFX/gpu/fsr3upscaler/ffx_fsr3upscaler_rcas.h
+--- a/FidelityFX/gpu/fsr3upscaler/ffx_fsr3upscaler_rcas.h
++++ b/FidelityFX/gpu/fsr3upscaler/ffx_fsr3upscaler_rcas.h
+@@ -49,9 +49,24 @@ void WriteUpscaledOutput(FFX_MIN16_U2 iPxHrPos, FfxFloat32x3 fUpscaledColor)
+         g = FfxFloat16x2(g * e);
+         b = FfxFloat16x2(b * e);
+     }
++#else
++    #define FSR_RCAS_F 1
++    FfxFloat32x4 FsrRcasLoadF(FfxInt32x2 p)
++    {
++        FfxFloat32x4 fColor = LoadRCAS_Input(p);
++
++        fColor.rgb *= Exposure();
++
++        return fColor;
++    }
++    void FsrRcasInputF(inout FfxFloat32 r, inout FfxFloat32 g, inout FfxFloat32 b) {}
++#endif // #if FSR_RCAS_PREFER_PAIRED_VERSION
++
++// FellowEngine: included once, outside the branches (Godot's shader builder includes a file once, where it first
++// appears, even in a branch the preprocessor leaves out).
++#include "../fsr1/ffx_fsr1.h"
+ 
+-	#include "../fsr1/ffx_fsr1.h"
+-	
++#if FSR_RCAS_PREFER_PAIRED_VERSION
+ 	void CurrFilterPaired(FFX_MIN16_U2 pos)
+     {
+         FfxFloat16x2 cr;
+@@ -67,19 +82,6 @@ void WriteUpscaledOutput(FFX_MIN16_U2 iPxHrPos, FfxFloat32x3 fUpscaledColor)
+         WriteUpscaledOutput(pos, FfxFloat16x3(cr.y, cg.y, cb.y)); //TODO: fix type
+     }	
+ #else
+-    #define FSR_RCAS_F 1
+-    FfxFloat32x4 FsrRcasLoadF(FfxInt32x2 p)
+-    {
+-        FfxFloat32x4 fColor = LoadRCAS_Input(p);
+-
+-        fColor.rgb *= Exposure();
+-
+-        return fColor;
+-    }
+-    void FsrRcasInputF(inout FfxFloat32 r, inout FfxFloat32 g, inout FfxFloat32 b) {}
+-
+-    #include "../fsr1/ffx_fsr1.h"
+-
+     void CurrFilter(FFX_MIN16_U2 pos)
+     {
+         FfxFloat32x3 c;
+diff --git a/FidelityFX/host/ffx_fsr3upscaler.h b/FidelityFX/host/ffx_fsr3upscaler.h
+--- a/FidelityFX/host/ffx_fsr3upscaler.h
++++ b/FidelityFX/host/ffx_fsr3upscaler.h
+@@ -55,7 +55,12 @@
+ /// The size of the context specified in 32bit values.
+ ///
+ /// @ingroup ffxFsr3Upscaler
++// FellowEngine: the private context holds FfxPipelineStates with wchar_t names, twice as large where wchar_t has 4 bytes.
++#if defined(_WIN32)
+ #define FFX_FSR3UPSCALER_CONTEXT_SIZE (FFX_SDK_DEFAULT_CONTEXT_SIZE)
++#else
++#define FFX_FSR3UPSCALER_CONTEXT_SIZE (FFX_SDK_DEFAULT_CONTEXT_SIZE * 2)
++#endif
+ 
+ #if defined(__cplusplus)
+ extern "C" {
+@@ -213,6 +218,8 @@ typedef struct FfxFsr3UpscalerDispatchDescription {
+     float                       cameraFovAngleVertical;             ///< The camera angle field of view in the vertical direction (expressed in radians).
+     float                       viewSpaceToMetersFactor;            ///< The scale factor to convert view space units to meters
+     uint32_t                    flags;                              ///< combination of FfxFsr3UpscalerDispatchFlags
++
++    float                       reprojectionMatrix[16];             ///< FellowEngine (Godot): the matrix used for reprojecting pixels with invalid motion vectors by using the depth.
+ } FfxFsr3UpscalerDispatchDescription;
+ 
+ /// A structure encapsulating the parameters for automatic generation of a reactive mask
+diff --git a/src/ffx_fsr3upscaler.cpp b/src/ffx_fsr3upscaler.cpp
+--- a/src/ffx_fsr3upscaler.cpp
++++ b/src/ffx_fsr3upscaler.cpp
+@@ -41,6 +41,16 @@
+ #include <FidelityFX/gpu/fsr3upscaler/ffx_fsr3upscaler_common.h>
+ #include <ffx_object_management.h>
+ 
++// FellowEngine: build fixes for compilers other than MSVC.
++#ifndef _countof
++#define _countof(array) (sizeof(array) / sizeof(array[0]))
++#endif
++
++#include <wchar.h>
++#ifndef _MSC_VER
++#define wcscpy_s wcscpy
++#endif
++
+ // max queued frames for descriptor management
+ static const uint32_t FSR3UPSCALER_MAX_QUEUED_FRAMES = 16;
+ 
+@@ -1030,6 +1040,9 @@ static FfxErrorCode fsr3upscalerDispatch(FfxFsr3UpscalerContext_Private* context
+         context->constants.frameIndex += 1.0f;
+     }
+ 
++    // FellowEngine (Godot): for pixels without motion vectors.
++    memcpy(context->constants.reprojectionMatrix, params->reprojectionMatrix, sizeof(context->constants.reprojectionMatrix));
++
+     // reactive mask bias
+     const int32_t threadGroupWorkRegionDim = 8;
+     const int32_t dispatchSrcX = (context->constants.renderSize[0] + (threadGroupWorkRegionDim - 1)) / threadGroupWorkRegionDim;
+diff --git a/src/ffx_fsr3upscaler_private.h b/src/ffx_fsr3upscaler_private.h
+--- a/src/ffx_fsr3upscaler_private.h
++++ b/src/ffx_fsr3upscaler_private.h
+@@ -77,6 +77,10 @@ typedef struct Fsr3UpscalerConstants {
+     float                       shadingChangeScale;
+     float                       accumulationAddedPerFrame;
+     float                       minDisocclusionAccumulation;
++
++    // FellowEngine (Godot): the matrix used for reprojecting pixels with invalid motion vectors by using the depth.
++    float                       pad[3];
++    float                       reprojectionMatrix[16];
+ } Fsr3UpscalerConstants;
+ 
+ struct FfxFsr3UpscalerContextDescription;
+diff --git a/src/ffx_message.cpp b/src/ffx_message.cpp
+--- a/src/ffx_message.cpp
++++ b/src/ffx_message.cpp
+@@ -21,6 +21,7 @@
+ // THE SOFTWARE.
+ 
+ #include <FidelityFX/host/ffx_message.h>
++#include <FidelityFX/host/ffx_util.h> // FellowEngine: FFX_UNUSED
+ 
+ #ifdef _WIN32
+ #ifndef WIN32_LEAN_AND_MEAN

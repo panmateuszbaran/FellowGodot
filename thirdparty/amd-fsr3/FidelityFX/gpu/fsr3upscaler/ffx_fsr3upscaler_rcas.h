@@ -49,9 +49,24 @@ void WriteUpscaledOutput(FFX_MIN16_U2 iPxHrPos, FfxFloat32x3 fUpscaledColor)
         g = FfxFloat16x2(g * e);
         b = FfxFloat16x2(b * e);
     }
+#else
+    #define FSR_RCAS_F 1
+    FfxFloat32x4 FsrRcasLoadF(FfxInt32x2 p)
+    {
+        FfxFloat32x4 fColor = LoadRCAS_Input(p);
 
-	#include "../fsr1/ffx_fsr1.h"
-	
+        fColor.rgb *= Exposure();
+
+        return fColor;
+    }
+    void FsrRcasInputF(inout FfxFloat32 r, inout FfxFloat32 g, inout FfxFloat32 b) {}
+#endif // #if FSR_RCAS_PREFER_PAIRED_VERSION
+
+// FellowEngine: included once, outside the branches (Godot's shader builder includes a file once, where it first
+// appears, even in a branch the preprocessor leaves out).
+#include "../fsr1/ffx_fsr1.h"
+
+#if FSR_RCAS_PREFER_PAIRED_VERSION
 	void CurrFilterPaired(FFX_MIN16_U2 pos)
     {
         FfxFloat16x2 cr;
@@ -67,19 +82,6 @@ void WriteUpscaledOutput(FFX_MIN16_U2 iPxHrPos, FfxFloat32x3 fUpscaledColor)
         WriteUpscaledOutput(pos, FfxFloat16x3(cr.y, cg.y, cb.y)); //TODO: fix type
     }	
 #else
-    #define FSR_RCAS_F 1
-    FfxFloat32x4 FsrRcasLoadF(FfxInt32x2 p)
-    {
-        FfxFloat32x4 fColor = LoadRCAS_Input(p);
-
-        fColor.rgb *= Exposure();
-
-        return fColor;
-    }
-    void FsrRcasInputF(inout FfxFloat32 r, inout FfxFloat32 g, inout FfxFloat32 b) {}
-
-    #include "../fsr1/ffx_fsr1.h"
-
     void CurrFilter(FFX_MIN16_U2 pos)
     {
         FfxFloat32x3 c;

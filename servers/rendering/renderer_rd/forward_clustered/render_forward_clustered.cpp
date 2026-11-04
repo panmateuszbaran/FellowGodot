@@ -98,6 +98,14 @@ void RenderForwardClustered::RenderBufferDataForwardClustered::ensure_fsr2(Rende
 	}
 }
 
+bool RenderForwardClustered::RenderBufferDataForwardClustered::ensure_fsr3(RendererRD::FSR3Effect *p_effect) {
+	if (fsr3_context == nullptr) {
+		fsr3_context = p_effect->create_context(render_buffers->get_internal_size(), render_buffers->get_target_size());
+		return fsr3_context != nullptr;
+	}
+	return false;
+}
+
 #ifdef METAL_MFXTEMPORAL_ENABLED
 bool RenderForwardClustered::RenderBufferDataForwardClustered::ensure_mfx_temporal(RendererRD::MFXTemporalEffect *p_effect) {
 	if (mfx_temporal_context == nullptr) {
@@ -157,6 +165,11 @@ void RenderForwardClustered::RenderBufferDataForwardClustered::free_data() {
 	if (fsr2_context) {
 		memdelete(fsr2_context);
 		fsr2_context = nullptr;
+	}
+
+	if (fsr3_context) {
+		RendererRD::FSR3Effect::free_context(fsr3_context);
+		fsr3_context = nullptr;
 	}
 
 #ifdef METAL_MFXTEMPORAL_ENABLED
@@ -7238,7 +7251,70 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	}
 
 	if (rb_data.is_valid() && (using_upscaling || using_taa)) {
-		if (scale_type == SCALE_FSR2) {
+		// FellowEngine (milestone 47, decision 0148): the FSR 2 scaling mode runs AMD's FSR 3.1 upscaler instead.
+		bool fellow_fsr3 = scale_type == SCALE_FSR2 && Fellow::fsr3_enabled();
+		if (fellow_fsr3) {
+			if (fsr3_effect == nullptr) {
+				fsr3_effect = memnew(RendererRD::FSR3Effect);
+			}
+			rb_data->ensure_fsr3(fsr3_effect);
+			fellow_fsr3 = rb_data->get_fsr3_context() != nullptr; // Stock's FSR 2.2 if it could not be created.
+		}
+
+		if (fellow_fsr3) {
+			RID exposure;
+			if (RSG::camera_attributes->camera_attributes_uses_auto_exposure(p_render_data->camera_attributes)) {
+				exposure = luminance->get_current_luminance_buffer(rb);
+			}
+
+			RendererRD::FSR3Effect::Tuning tuning;
+			tuning.velocity_factor = GLOBAL_GET_CACHED(float, "rendering/fellow/upscaling/fsr3_velocity_factor");
+			tuning.reactiveness_scale = GLOBAL_GET_CACHED(float, "rendering/fellow/upscaling/fsr3_reactiveness_scale");
+			tuning.shading_change_scale = GLOBAL_GET_CACHED(float, "rendering/fellow/upscaling/fsr3_shading_change_scale");
+			tuning.accumulation_added_per_frame = GLOBAL_GET_CACHED(float, "rendering/fellow/upscaling/fsr3_accumulation_added_per_frame");
+			tuning.min_disocclusion_accumulation = GLOBAL_GET_CACHED(float, "rendering/fellow/upscaling/fsr3_min_disocclusion_accumulation");
+			const bool debug_view = GLOBAL_GET_CACHED(bool, "rendering/fellow/upscaling/fsr3_debug_view");
+
+			RD::get_singleton()->draw_command_begin_label("FSR 3.1");
+			RENDER_TIMESTAMP("FSR 3.1");
+
+			for (uint32_t v = 0; v < rb->get_view_count(); v++) {
+				real_t fov = p_render_data->scene_data->cam_projection.get_fov();
+				real_t aspect = p_render_data->scene_data->cam_projection.get_aspect();
+				real_t fovy = p_render_data->scene_data->cam_projection.get_fovy(fov, 1.0 / aspect);
+				Vector2 jitter = p_render_data->scene_data->taa_jitter * Vector2(rb->get_internal_size()) * 0.5f;
+				RendererRD::FSR3Effect::Parameters params;
+				params.context = rb_data->get_fsr3_context();
+				params.internal_size = rb->get_internal_size();
+				params.target_size = rb->get_target_size();
+				params.sharpness = CLAMP(1.0f - (rb->get_fsr_sharpness() / 2.0f), 0.0f, 1.0f);
+				params.color = rb->get_internal_texture(v);
+				params.depth = rb->get_depth_texture(v);
+				params.velocity = rb->get_velocity_buffer(false, v);
+				params.reactive = rb->get_internal_texture_reactive(v);
+				params.exposure = exposure;
+				params.output = rb->get_upscaled_texture(v);
+				params.z_near = p_render_data->scene_data->z_near;
+				params.z_far = p_render_data->scene_data->z_far;
+				params.fovy = fovy;
+				params.jitter = jitter;
+				params.delta_time = float(time_step);
+				params.reset_accumulation = false;
+
+				Projection correction;
+				correction.set_depth_correction(true, true, false);
+
+				const Projection &prev_proj = p_render_data->scene_data->prev_cam_projection;
+				const Projection &cur_proj = p_render_data->scene_data->cam_projection;
+				const Transform3D &prev_transform = p_render_data->scene_data->prev_cam_transform;
+				const Transform3D &cur_transform = p_render_data->scene_data->cam_transform;
+				params.reprojection = (correction * prev_proj) * prev_transform.affine_inverse() * cur_transform * (correction * cur_proj).inverse();
+
+				fsr3_effect->upscale(params, tuning, debug_view);
+			}
+
+			RD::get_singleton()->draw_command_end_label();
+		} else if (scale_type == SCALE_FSR2) {
 			rb_data->ensure_fsr2(fsr2_effect);
 
 			RID exposure;
@@ -11022,6 +11098,11 @@ RenderForwardClustered::~RenderForwardClustered() {
 	if (fsr2_effect) {
 		memdelete(fsr2_effect);
 		fsr2_effect = nullptr;
+	}
+
+	if (fsr3_effect) {
+		memdelete(fsr3_effect);
+		fsr3_effect = nullptr;
 	}
 
 #ifdef METAL_MFXTEMPORAL_ENABLED

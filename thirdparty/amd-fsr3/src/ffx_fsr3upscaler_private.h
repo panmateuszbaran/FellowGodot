@@ -77,6 +77,10 @@ typedef struct Fsr3UpscalerConstants {
     float                       shadingChangeScale;
     float                       accumulationAddedPerFrame;
     float                       minDisocclusionAccumulation;
+
+    // FellowEngine (Godot): the matrix used for reprojecting pixels with invalid motion vectors by using the depth.
+    float                       pad[3];
+    float                       reprojectionMatrix[16];
 } Fsr3UpscalerConstants;
 
 struct FfxFsr3UpscalerContextDescription;

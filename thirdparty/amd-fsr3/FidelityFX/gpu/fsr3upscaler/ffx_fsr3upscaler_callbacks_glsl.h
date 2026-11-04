@@ -65,6 +65,11 @@
         FfxFloat32    fShadingChangeScale;
         FfxFloat32    fAccumulationAddedPerFrame;
         FfxFloat32    fMinDisocclusionAccumulation;
+
+        FfxFloat32    fPad0;
+        FfxFloat32    fPad1;
+        FfxFloat32    fPad2;
+        mat4          mReprojectionMatrix;
 	} cbFSR3Upscaler;
 
 
@@ -316,7 +321,11 @@ layout (set = 0, binding = FSR3UPSCALER_BIND_SRV_REACTIVE_MASK) uniform texture2
 
 FfxFloat32 LoadReactiveMask(FfxInt32x2 iPxPos)
 {
+#if FFX_FSR3UPSCALER_OPTION_GODOT_REACTIVE_MASK_CLAMP
+	return min(texelFetch(r_reactive_mask, FfxInt32x2(iPxPos), 0).r, 0.9f) * cbFSR3Upscaler.fReactivenessScale;
+#else
 	return texelFetch(r_reactive_mask, FfxInt32x2(iPxPos), 0).r * cbFSR3Upscaler.fReactivenessScale;
+#endif
 }
 
 FfxInt32x2 GetReactiveMaskResourceDimensions()
@@ -326,7 +335,11 @@ FfxInt32x2 GetReactiveMaskResourceDimensions()
 
 FfxFloat32 SampleReactiveMask(FfxFloat32x2 fUV)
 {
+#if FFX_FSR3UPSCALER_OPTION_GODOT_REACTIVE_MASK_CLAMP
+	return min(textureLod(sampler2D(r_reactive_mask, s_LinearClamp), fUV, 0.0).x, 0.9f) * cbFSR3Upscaler.fReactivenessScale;
+#else
 	return textureLod(sampler2D(r_reactive_mask, s_LinearClamp), fUV, 0.0).x * cbFSR3Upscaler.fReactivenessScale;
+#endif
 }
 #endif
 
@@ -370,6 +383,16 @@ FfxFloat32x2 LoadInputMotionVector(FfxInt32x2 iPxDilatedMotionVectorPos)
 {
 	FfxFloat32x2 fSrcMotionVector = texelFetch(r_input_motion_vectors, iPxDilatedMotionVectorPos, 0).xy;
 
+#if FFX_FSR3UPSCALER_OPTION_GODOT_DERIVE_INVALID_MOTION_VECTORS && defined(FSR3UPSCALER_BIND_SRV_INPUT_DEPTH)
+	bool bInvalidMotionVector = all(lessThanEqual(fSrcMotionVector, vec2(-1.0f, -1.0f)));
+	if (bInvalidMotionVector)
+	{
+		FfxFloat32 fSrcDepth = LoadInputDepth(iPxDilatedMotionVectorPos);
+		FfxFloat32x2 fUv = (iPxDilatedMotionVectorPos + FfxFloat32(0.5)) / RenderSize();
+		fSrcMotionVector = FFX_FSR3UPSCALER_OPTION_GODOT_DERIVE_INVALID_MOTION_VECTORS_FUNCTION(fUv, fSrcDepth, cbFSR3Upscaler.mReprojectionMatrix);
+	}
+#endif
+
 	FfxFloat32x2 fUvMotionVector = fSrcMotionVector * MotionVectorScale();
 
 #if FFX_FSR3UPSCALER_OPTION_JITTERED_MOTION_VECTORS
@@ -395,7 +418,7 @@ FfxFloat32x4 SampleHistory(FfxFloat32x2 fUV)
 #endif
 
 #if defined(FSR3UPSCALER_BIND_UAV_LUMA_HISTORY)
-layout (set = 0, binding = FSR3UPSCALER_BIND_UAV_LUMA_HISTORY, rgba8) uniform image2D  rw_luma_history;
+layout (set = 0, binding = FSR3UPSCALER_BIND_UAV_LUMA_HISTORY, rgba16f) uniform image2D  rw_luma_history;
 
 void StoreLumaHistory(FfxInt32x2 iPxPos, FfxFloat32x4 fLumaHistory)
 {

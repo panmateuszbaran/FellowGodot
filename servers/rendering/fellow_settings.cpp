@@ -371,6 +371,22 @@ void Fellow::register_settings() {
 	// it grow without bound, and at 2 GiB its checksum's length overflows and the save crashes (decision 0050).
 	GLOBAL_DEF_RST(PropertyInfo(Variant::INT, "rendering/fellow/frame/pipeline_cache_max_mb", PROPERTY_HINT_RANGE, "64,2000,1,suffix:MiB"), 1024);
 	GLOBAL_DEF_RST(PropertyInfo(Variant::INT, "rendering/fellow/frame/async_compute_family", PROPERTY_HINT_ENUM, "Dedicated Compute Family,Main Family,Main Queue (Split Only)"), 0);
+	// FSR 3.1 upscaler (milestone 47, decision 0148, renderer_rd/effects/fsr3.h): a viewport in the FSR 2 scaling mode runs
+	// AMD's FidelityFX Super Resolution 3.1 upscaler instead of stock's 2.2. Read every frame (a new context, a new history).
+	GLOBAL_DEF("rendering/fellow/upscaling/fsr3", false);
+	// Half precision in the passes that have it (where the GPU supports it; not in the accumulation on NVIDIA).
+	GLOBAL_DEF_RST("rendering/fellow/upscaling/fsr3_half_precision", true);
+	// The SDK's tunables (ffxFsr3UpscalerSetConstant): 0 velocity factor steadies bright pixels; a larger reactiveness or
+	// shading change scale reacts faster; less accumulation added a frame ghosts less where the history is rejected;
+	// the accumulation a disoccluded pixel starts from.
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/upscaling/fsr3_velocity_factor", PROPERTY_HINT_RANGE, "0,1,0.01"), 1.0);
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/upscaling/fsr3_reactiveness_scale", PROPERTY_HINT_RANGE, "0,10,0.01"), 1.0);
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/upscaling/fsr3_shading_change_scale", PROPERTY_HINT_RANGE, "0,10,0.01"), 1.0);
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/upscaling/fsr3_accumulation_added_per_frame", PROPERTY_HINT_RANGE, "0,1,0.001"), 1.0 / 3.0);
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/upscaling/fsr3_min_disocclusion_accumulation", PROPERTY_HINT_RANGE, "-1,1,0.001"), -1.0 / 3.0);
+	// The SDK's debug view over the output (dilated motion vectors, depth, reactive masks, the history).
+	GLOBAL_DEF("rendering/fellow/upscaling/fsr3_debug_view", false);
+
 	// Texture streaming (milestone 45, servers/rendering/fellow_texture_streaming.h). Off: textures load whole, as stock.
 	GLOBAL_DEF_RST("rendering/fellow/streaming/textures", false);
 	// Mips at or below this size (the larger side) are always resident; smaller textures are not streamed.

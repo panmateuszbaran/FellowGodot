@@ -55,7 +55,12 @@
 /// The size of the context specified in 32bit values.
 ///
 /// @ingroup ffxFsr3Upscaler
+// FellowEngine: the private context holds FfxPipelineStates with wchar_t names, twice as large where wchar_t has 4 bytes.
+#if defined(_WIN32)
 #define FFX_FSR3UPSCALER_CONTEXT_SIZE (FFX_SDK_DEFAULT_CONTEXT_SIZE)
+#else
+#define FFX_FSR3UPSCALER_CONTEXT_SIZE (FFX_SDK_DEFAULT_CONTEXT_SIZE * 2)
+#endif
 
 #if defined(__cplusplus)
 extern "C" {
@@ -213,6 +218,8 @@ typedef struct FfxFsr3UpscalerDispatchDescription {
     float                       cameraFovAngleVertical;             ///< The camera angle field of view in the vertical direction (expressed in radians).
     float                       viewSpaceToMetersFactor;            ///< The scale factor to convert view space units to meters
     uint32_t                    flags;                              ///< combination of FfxFsr3UpscalerDispatchFlags
+
+    float                       reprojectionMatrix[16];             ///< FellowEngine (Godot): the matrix used for reprojecting pixels with invalid motion vectors by using the depth.
 } FfxFsr3UpscalerDispatchDescription;
 
 /// A structure encapsulating the parameters for automatic generation of a reactive mask
