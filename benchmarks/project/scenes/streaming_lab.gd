@@ -118,6 +118,14 @@ func _build_street() -> void:
 	for i in BLOCKS:
 		var mat := _mats[(i * 7 + 3) % _mats.size()]
 		_add(crate, mat, Vector3((-1 if i % 2 == 0 else 1) * (STREET_HALF - 1.5), 0.5, -i * SPACING - 4.0))
+	# --streaming_props=<n>: n more small boxes scattered over the roofs (the evaluation's cost per instance).
+	var props := int(args.get("streaming_props", "0"))
+	var small := _box(Vector3(0.5, 0.5, 0.5))
+	for i in props:
+		var side := -1 if i % 2 == 0 else 1
+		var x := side * (STREET_HALF + 1.0 + rng.randf() * 10.0)
+		var z := -rng.randf() * length
+		_add(small, _mats[i % _mats.size()], Vector3(x, 30.0 + rng.randf() * 4.0, z))
 
 
 func _build_lights() -> void:

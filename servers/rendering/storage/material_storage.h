@@ -30,7 +30,7 @@
 
 #pragma once
 
-#include "servers/rendering/fellow_texture_streaming.h"
+#include "servers/rendering/fellow_texture_streaming_types.h"
 #include "servers/rendering/rendering_server_enums.h"
 #include "servers/rendering/rendering_server_types.h"
 #include "servers/rendering/storage/utilities.h"
@@ -100,7 +100,7 @@ public:
 	// FellowEngine texture streaming (milestone 45): a number that changes when the material's parameters, shader or
 	// next pass change (UINT32_MAX: no such material), and the streamed textures' facts about it.
 	virtual uint32_t material_get_fellow_version(RID p_material) const { return UINT32_MAX; }
-	virtual bool material_get_fellow_stream_info(RID p_material, FellowTextureStreaming::MaterialInfo &r_info) const { return false; }
+	virtual bool material_get_fellow_stream_info(RID p_material, FellowStreamMaterialInfo &r_info) const { return false; }
 
 	struct InstanceShaderParam {
 		PropertyInfo info;

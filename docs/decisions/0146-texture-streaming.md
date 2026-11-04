@@ -65,4 +65,20 @@ captures with the same frame count, `--streaming_prepass=<n>` to visit every cam
 
 ## Verification
 
+lavapipe (`tools/lavapipe/streaming_check.sh`, `$DEMOTE`), Streaming Lab's four cameras, streaming off against on with
+no budget, the same frames (`--streaming_fixed_wait=48`):
+
+* Without TAA (`--preset=high_noaa`, 960 × 540): **0 pixels differ** in all four views at the default margin -1; at
+  -0.5, 1 358 pixels of one view (`street_start`) by 1 level (a facade where the margin was short).
+* With TAA (the default preset): **0 pixels** at 960 × 540 and at 1920 × 1080 when every camera is visited before the
+  captures (`--streaming_prepass=48`). Without the pre-pass 4 761-7 413 pixels differ by 1-6 levels in the views that
+  needed new levels, the same after 720 frames as after 48 and the same with every texture loaded at full resolution
+  (`texture_lod_bias=-20`): the frames rendered before the loads landed, which TAA's half-float history keeps (a
+  difference smaller than half a unit in the last place at its blend factor never decays). The streamed textures
+  themselves sample the same values.
+* With a budget (32 MiB, 960 × 540): the targets fit (27.8-29.3 MiB in the views that wanted 35.9 and 45.9 MiB, a bias
+  of 1.0 and 3.0); within it the views are coarser, as intended.
+* Off: nothing changes (no texture is registered, no camera recorded; the meshes' texel densities are measured only
+  when it is on).
+
 RESULTS_PENDING

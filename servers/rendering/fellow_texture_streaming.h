@@ -38,6 +38,7 @@
 #include "core/templates/local_vector.h"
 #include "core/templates/rid.h"
 #include "core/variant/dictionary.h"
+#include "servers/rendering/fellow_texture_streaming_types.h"
 #include "servers/rendering/rendering_server_types.h"
 
 #include <atomic>
@@ -57,15 +58,7 @@
 // (2D, sky, decals, custom shaders) goes to its full resolution after the first cycles.
 class FellowTextureStreaming {
 public:
-	struct MaterialInfo {
-		LocalVector<RID> textures;
-		float uv_scale = 1.0f; // the largest |uv1_scale| component
-		bool known_uv = false; // a BaseMaterial3D-style shader (declares uv1_scale)
-		bool triplanar = false; // uv1 triplanar (declares uv1_blend_sharpness)
-		bool anisotropic = false; // a texture sampled with anisotropic filtering (its minor axis: up to a level finer)
-		RID next_pass;
-		uint32_t version = 0;
-	};
+	typedef FellowStreamMaterialInfo MaterialInfo;
 
 	struct Camera {
 		RID scenario;

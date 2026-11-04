@@ -511,7 +511,7 @@ public:
 	virtual bool material_fellow_shadow_cacheable_far(RID p_material) override;
 	virtual RSE::CullMode material_get_cull_mode(RID p_material) const override;
 	virtual uint32_t material_get_fellow_version(RID p_material) const override;
-	virtual bool material_get_fellow_stream_info(RID p_material, FellowTextureStreaming::MaterialInfo &r_info) const override;
+	virtual bool material_get_fellow_stream_info(RID p_material, FellowStreamMaterialInfo &r_info) const override;
 
 	virtual void material_get_instance_shader_parameters(RID p_material, List<InstanceShaderParam> *r_parameters) override;
 

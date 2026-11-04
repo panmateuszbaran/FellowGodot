@@ -2578,7 +2578,7 @@ uint32_t MaterialStorage::material_get_fellow_version(RID p_material) const {
 	return (material->fellow_version + (shader_version << 20) + material->shader_id * 2654435761u) & 0x7FFFFFFFu;
 }
 
-bool MaterialStorage::material_get_fellow_stream_info(RID p_material, FellowTextureStreaming::MaterialInfo &r_info) const {
+bool MaterialStorage::material_get_fellow_stream_info(RID p_material, FellowStreamMaterialInfo &r_info) const {
 	const Material *material = material_owner.get_or_null(p_material);
 	if (material == nullptr) {
 		return false;
