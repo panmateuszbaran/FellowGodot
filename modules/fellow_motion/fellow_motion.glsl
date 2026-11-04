@@ -12,9 +12,6 @@ gemmc64 = "#define MODE_GEMM_COOP\n#define BM 64";
 gemmd16 = "#define MODE_GEMM_COOP\n#define A_VEC4\n#define BM 16";
 gemmd32 = "#define MODE_GEMM_COOP\n#define A_VEC4\n#define BM 32";
 gemmd64 = "#define MODE_GEMM_COOP\n#define A_VEC4\n#define BM 64";
-gemme16 = "#define MODE_GEMM_COOP\n#define A_VEC4\n#define ROW_EPILOGUE\n#define BM 16";
-gemme32 = "#define MODE_GEMM_COOP\n#define A_VEC4\n#define ROW_EPILOGUE\n#define BM 32";
-gemme64 = "#define MODE_GEMM_COOP\n#define A_VEC4\n#define ROW_EPILOGUE\n#define BM 64";
 reduce = "#define MODE_REDUCE";
 attn = "#define MODE_ATTN";
 ln = "#define MODE_LN";
@@ -468,13 +465,12 @@ void main() {
 shared float16_t As[BM * AST];
 shared float16_t Bs[BN * AST];
 shared float Cs[BM * CST];
-#ifdef ROW_EPILOGUE
 // The epilogue's addresses a row at a time: each of the tile's rows' output and residual offsets and token mask,
-// worked out once by one thread instead of for each of the row's 64 elements.
+// worked out once by one thread instead of for each of the row's 64 elements (m44_f332: 5 % of the GPU's time at a
+// batch of 16).
 shared uint row_o[BM]; // NONE past the batch
 shared uint row_r[BM]; // NONE without a residual
 shared uint row_masked[BM];
-#endif
 
 void main() {
 	uint t = gl_LocalInvocationIndex;
@@ -559,7 +555,6 @@ void main() {
 	for (uint r = 0u; r < uint(RT); r++) {
 		coopMatStore(acc[r], Cs, r * 16u * CST + sg * 16u, CST, gl_CooperativeMatrixLayoutRowMajor);
 	}
-#ifdef ROW_EPILOGUE
 	if (t < uint(BM)) {
 		uint gr = m0 + t;
 		row_o[t] = NONE;
@@ -614,24 +609,6 @@ void main() {
 		}
 		act[ob + on] = v;
 	}
-#else
-	barrier();
-	for (uint e = t; e < uint(BM) * BN; e += WG) {
-		uint r = e / BN;
-		uint c = e % BN;
-		uint gr = m0 + r;
-		uint on = n0 + c;
-		if (gr >= g_M || on >= Nout) {
-			continue;
-		}
-		float v = Cs[r * CST + c];
-		if (pc.splits > 1u) {
-			part[(split * g_M + gr) * Nout + on] = v;
-		} else {
-			store_epilogue(gr, on, v);
-		}
-	}
-#endif
 }
 
 #endif // MODE_GEMM_COOP
