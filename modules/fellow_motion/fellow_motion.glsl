@@ -12,9 +12,6 @@ gemmc64 = "#define MODE_GEMM_COOP\n#define BM 64";
 gemmd16 = "#define MODE_GEMM_COOP\n#define A_VEC4\n#define BM 16";
 gemmd32 = "#define MODE_GEMM_COOP\n#define A_VEC4\n#define BM 32";
 gemmd64 = "#define MODE_GEMM_COOP\n#define A_VEC4\n#define BM 64";
-gemme16 = "#define MODE_GEMM_COOP\n#define A_VEC4\n#define SHARED_PACKED\n#define BM 16";
-gemme32 = "#define MODE_GEMM_COOP\n#define A_VEC4\n#define SHARED_PACKED\n#define BM 32";
-gemme64 = "#define MODE_GEMM_COOP\n#define A_VEC4\n#define SHARED_PACKED\n#define BM 64";
 reduce = "#define MODE_REDUCE";
 attn = "#define MODE_ATTN";
 ln = "#define MODE_LN";
@@ -465,18 +462,8 @@ void main() {
 #define CST (BN + 4u)
 #define W_SLOTS ((BN * (BK / 8u)) / WG) // uvec4 of 8 weights per thread per K step
 
-#ifdef SHARED_PACKED
-// The tiles written 4 (A) and 8 (W) halves at a time; the cooperative-matrix loads read them as halves.
-shared uvec2 As[BM * AST / 4u];
-shared uvec4 Bs[BN * AST / 8u];
-#define A_UNIT 4u
-#define B_UNIT 8u
-#else
 shared float16_t As[BM * AST];
 shared float16_t Bs[BN * AST];
-#define A_UNIT 1u
-#define B_UNIT 1u
-#endif
 shared float Cs[BM * CST];
 
 void main() {
@@ -520,20 +507,12 @@ void main() {
 	}
 	for (uint kt = kt0; kt < kt1; kt++) {
 		for (uint i = 0u; i < A_SLOTS; i++) {
-#ifdef SHARED_PACKED
-			f16vec4 h = f16vec4(clamp(vec4(pa[i * 4u], pa[i * 4u + 1u], pa[i * 4u + 2u], pa[i * 4u + 3u]), -65504.0, 65504.0));
-			As[((r0 + i * A_RSTEP) * AST + kk) / 4u] = uvec2(packFloat2x16(h.xy), packFloat2x16(h.zw));
-#else
 			for (uint j = 0u; j < A_KPT; j++) {
 				As[(r0 + i * A_RSTEP) * AST + kk + j] = float16_t(clamp(pa[i * A_KPT + j], -65504.0, 65504.0));
 			}
-#endif
 		}
 		for (uint j = 0u; j < W_SLOTS; j++) {
 			uint base = (t / (BK / 8u) + j * (WG / (BK / 8u))) * AST + kc * 8u;
-#ifdef SHARED_PACKED
-			Bs[base / 8u] = pw[j];
-#else
 			f16vec2 p0 = unpackFloat2x16(pw[j].x);
 			f16vec2 p1 = unpackFloat2x16(pw[j].y);
 			f16vec2 p2 = unpackFloat2x16(pw[j].z);
@@ -546,7 +525,6 @@ void main() {
 			Bs[base + 5u] = p2.y;
 			Bs[base + 6u] = p3.x;
 			Bs[base + 7u] = p3.y;
-#endif
 		}
 		barrier();
 		if (kt + 1u < kt1) {
@@ -559,10 +537,10 @@ void main() {
 		}
 		for (uint ks = 0u; ks < BK; ks += 16u) {
 			coopmat<float16_t, gl_ScopeSubgroup, 16, 16, gl_MatrixUseB> mb;
-			coopMatLoad(mb, Bs, (sg * 16u * AST + ks) / B_UNIT, AST / B_UNIT, gl_CooperativeMatrixLayoutColumnMajor);
+			coopMatLoad(mb, Bs, sg * 16u * AST + ks, AST, gl_CooperativeMatrixLayoutColumnMajor);
 			for (uint r = 0u; r < uint(RT); r++) {
 				coopmat<float16_t, gl_ScopeSubgroup, 16, 16, gl_MatrixUseA> ma;
-				coopMatLoad(ma, As, (r * 16u * AST + ks) / A_UNIT, AST / A_UNIT, gl_CooperativeMatrixLayoutRowMajor);
+				coopMatLoad(ma, As, r * 16u * AST + ks, AST, gl_CooperativeMatrixLayoutRowMajor);
 				acc[r] = coopMatMulAdd(ma, mb, acc[r]);
 			}
 		}
