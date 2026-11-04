@@ -81,22 +81,6 @@ int FellowTextureStreaming::resident_size() {
 	return size;
 }
 
-static int _setting_int(const char *p_name, int p_default) {
-	ProjectSettings *ps = ProjectSettings::get_singleton();
-	if (ps && ps->has_setting(p_name)) {
-		return int(ps->get_setting(p_name));
-	}
-	return p_default;
-}
-
-static float _setting_float(const char *p_name, float p_default) {
-	ProjectSettings *ps = ProjectSettings::get_singleton();
-	if (ps && ps->has_setting(p_name)) {
-		return float(ps->get_setting(p_name));
-	}
-	return p_default;
-}
-
 /* UV DENSITY */
 
 float FellowTextureStreaming::compute_uv_density(const RenderingServerTypes::SurfaceData &p_surface) {
@@ -359,7 +343,8 @@ void FellowTextureStreaming::reference_material(RID p_material, float p_pixels_p
 void FellowTextureStreaming::end_cycle() {
 	cycles++;
 	const uint64_t now = OS::get_singleton()->get_ticks_usec();
-	const uint64_t unreferenced_hold = uint64_t(MAX(0.0f, _setting_float("rendering/fellow/streaming/texture_unreferenced_hold_s", 5.0f)) * 1000000.0f);
+	const uint64_t unreferenced_hold = uint64_t(MAX(0.0f, GLOBAL_GET_CACHED(float, "rendering/fellow/streaming/texture_unreferenced_hold_s")) * 1000000.0f);
+	bool changed = false;
 	for (KeyValue<RID, Texture *> &E : textures) {
 		Texture *tex = E.value;
 		tex->cycles_seen++;
@@ -384,6 +369,11 @@ void FellowTextureStreaming::end_cycle() {
 		}
 		tex->cycle_lod = 1e30f;
 		tex->cycle_full = false;
+		const int base = _base_target(tex);
+		if (base != tex->base_target) {
+			tex->base_target = base;
+			changed = true;
+		}
 	}
 	// Forget materials that no longer exist (their RIDs are never reused).
 	if ((cycles & 63) == 0) {
@@ -399,30 +389,34 @@ void FellowTextureStreaming::end_cycle() {
 		last_material = RID();
 		last_cache = nullptr;
 	}
-	targets_valid = false;
+	if (changed) {
+		targets_valid = false; // otherwise every target is what it was
+	}
+}
+
+int FellowTextureStreaming::_target_at(const Texture *p_tex, float p_bias) {
+	switch (p_tex->state) {
+		case STATE_FULL:
+			return 0;
+		case STATE_NEW:
+			return p_tex->tail_mip;
+		default:
+			break;
+	}
+	if (p_tex->lod >= 1e29f) {
+		return p_tex->tail_mip;
+	}
+	const float l = std::floor(p_tex->lod + p_bias);
+	if (l <= 0.0f) {
+		return 0;
+	}
+	return MIN(int(l), p_tex->tail_mip);
 }
 
 void FellowTextureStreaming::_compute_targets() {
-	const int64_t budget = int64_t(MAX(0, _setting_int("rendering/fellow/streaming/texture_budget_mb", 0))) * 1024 * 1024;
+	const int64_t budget = int64_t(MAX(0, GLOBAL_GET_CACHED(int, "rendering/fellow/streaming/texture_budget_mb"))) * 1024 * 1024;
 	// Pass 1: the targets without the budget's bias.
-	auto target_at = [](const Texture *p_tex, float p_bias) -> int {
-		switch (p_tex->state) {
-			case STATE_FULL:
-				return 0;
-			case STATE_NEW:
-				return p_tex->tail_mip;
-			default:
-				break;
-		}
-		if (p_tex->lod >= 1e29f) {
-			return p_tex->tail_mip;
-		}
-		const float l = std::floor(p_tex->lod + p_bias);
-		if (l <= 0.0f) {
-			return 0;
-		}
-		return MIN(int(l), p_tex->tail_mip);
-	};
+	auto target_at = [](const Texture *p_tex, float p_bias) -> int { return _target_at(p_tex, p_bias); };
 	int64_t wanted = 0;
 	for (const KeyValue<RID, Texture *> &E : textures) {
 		wanted += E.value->chain_size(target_at(E.value, 0.0f));
@@ -444,6 +438,7 @@ void FellowTextureStreaming::_compute_targets() {
 	}
 	budget_bias = bias;
 	target_bytes = total;
+	computed_budget = budget;
 	for (KeyValue<RID, Texture *> &E : textures) {
 		E.value->target_mip = target_at(E.value, bias);
 	}
@@ -524,10 +519,10 @@ void FellowTextureStreaming::_finish_job(Texture *p_tex, Job *p_job) {
 
 void FellowTextureStreaming::_schedule() {
 	const uint64_t now = OS::get_singleton()->get_ticks_usec();
-	const int max_jobs = CLAMP(_setting_int("rendering/fellow/streaming/texture_max_jobs", 4), 1, 64);
-	const int64_t upload_limit = int64_t(MAX(1, _setting_int("rendering/fellow/streaming/texture_upload_mb_per_frame", 64))) * 1024 * 1024;
-	const int64_t budget = int64_t(MAX(0, _setting_int("rendering/fellow/streaming/texture_budget_mb", 0))) * 1024 * 1024;
-	const uint64_t hold = uint64_t(MAX(0.0f, _setting_float("rendering/fellow/streaming/texture_release_hold_s", 2.0f)) * 1000000.0f);
+	const int max_jobs = CLAMP(GLOBAL_GET_CACHED(int, "rendering/fellow/streaming/texture_max_jobs"), 1, 64);
+	const int64_t upload_limit = int64_t(MAX(1, GLOBAL_GET_CACHED(int, "rendering/fellow/streaming/texture_upload_mb_per_frame"))) * 1024 * 1024;
+	const int64_t budget = int64_t(MAX(0, GLOBAL_GET_CACHED(int, "rendering/fellow/streaming/texture_budget_mb"))) * 1024 * 1024;
+	const uint64_t hold = uint64_t(MAX(0.0f, GLOBAL_GET_CACHED(float, "rendering/fellow/streaming/texture_release_hold_s")) * 1000000.0f);
 
 	struct Candidate {
 		Texture *tex;
@@ -641,6 +636,9 @@ void FellowTextureStreaming::update() {
 		schedule_dirty = true;
 	}
 	if (!textures.is_empty()) {
+		if (computed_budget != int64_t(MAX(0, GLOBAL_GET_CACHED(int, "rendering/fellow/streaming/texture_budget_mb"))) * 1024 * 1024) {
+			targets_valid = false; // the budget changed
+		}
 		if (!targets_valid) {
 			_compute_targets();
 			schedule_dirty = true;

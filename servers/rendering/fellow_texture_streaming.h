@@ -105,6 +105,7 @@ private:
 		int tail_mip = 0; // always resident: the first level at or below texture_resident_size
 		int resident_mip = 0;
 		int target_mip = 0;
+		int base_target = -1; // the target without the budget's bias, at the last cycle's end
 		State state = STATE_NEW;
 		uint32_t cycles_seen = 0; // cycles completed since registration
 		float cycle_lod = 1e30f; // the finest LOD any reference of the current cycle needed (1e30: none)
@@ -151,6 +152,7 @@ private:
 	uint64_t eval_usec = 0;
 	uint64_t eval_references = 0;
 	bool targets_valid = false;
+	int64_t computed_budget = -1; // the budget the targets were computed for
 
 	struct Stats {
 		int textures = 0, streamed = 0, full = 0, fresh = 0, at_full = 0, at_tail = 0, pending = 0, jobs = 0, materials = 0;
@@ -167,6 +169,8 @@ private:
 
 	static void _job_run(void *p_job);
 	void _finish_job(Texture *p_tex, Job *p_job);
+	static int _target_at(const Texture *p_tex, float p_bias);
+	static int _base_target(const Texture *p_tex) { return _target_at(p_tex, 0.0f); }
 	void _compute_targets();
 	void _schedule();
 	void _start_job(Texture *p_tex, int p_mip, bool p_downgrade);
