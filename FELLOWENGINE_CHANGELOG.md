@@ -9,6 +9,21 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 46 — world streaming (2026-11-04)
+
+- `FellowWorldStreamer3D` and `FellowStreamingCell3D` (module `fellow_world`, decision 0147): a level in cells, each a
+  PackedScene loaded on the ResourceLoader's threads when the camera or a target comes within its distance, its nodes
+  built on a worker thread, a few cells a frame entering or leaving the tree (the nearest in first, the farthest out
+  first), with hysteresis, `prefetch()`, `load_now()`, `is_settled()` and statistics; the cell's own children are its
+  proxy while it is unloaded.
+- Texture streaming: a texture not used yet keeps its small mips (a cell's, loaded before the cell enters the tree);
+  2D, the decal and area light atlases and materials whose UVs it cannot estimate pin a texture at full resolution.
+- A `.ctex` loads where a `Texture2D` is expected (stock: no loader).
+- World Lab (lavapipe): at 1080p 289-612 MiB of video memory a view instead of 740 MiB with world and texture
+  streaming, the start 4.09 → 2.55 s, the same images (one pixel by one level at 1080p); over a flythrough the peak
+  708 → 321 MiB.
+- FellowBench: World Lab (`--scene world`, `--world_streaming=1`, generated cells), the streamer's state in results.
+
 ## Milestone 45 — texture streaming (2026-11-04)
 
 - `rendering/fellow/streaming/textures` (opt-in, decision 0146): VRAM-compressed `CompressedTexture2D` with a full mip

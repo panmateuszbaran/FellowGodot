@@ -40,7 +40,7 @@ measured, but short of AAA scale or breadth. Gap: not addressed by FellowEngine 
 | Lighting and GI | **Ready / Partial** | ray-traced AO, sun shadows, DDGI (two cascades of probes), reflections (`raytracing/*`, milestone 16): all four +53-66 % GPU (Bistro exterior 4.07 → 6.45 ms); sky atmosphere, volumetric clouds with shadows | RT only through `VK_KHR_ray_query`; a device loss with DDGI and the cloud shadow map was worked around (double-buffered), its cause not found (milestone 33); no RT fallback chain tuned per GPU tier |
 | Environment and VFX | **Ready** (a strength) | FFT water with SSR over Hi-Z, shallow-water simulation, rain (puddles, ripples, wet and drying ground, shafts, showers, wind-driven, thin streaks), snow with tracks, ice and hoarfrost, slush, rainbows, wind for plants, water, gas and particles, lightning, a weather controller; GPU smoke and fire, burning objects; each measured (e.g. Rain Lab 0.36 ms, the wind +0.56 ms) | authoring: little editor support (the weather does nothing in the editor, few gizmos); not combined at AAA scale (all systems in one large level) |
 | Geometry scale | **Partial** | cluster culling of large surfaces, LOD of their parts (option), contribution culling, `FellowHLOD3D` (City Lab's 18 800 nodes in 14 proxies, render thread −26 %), impostors (option); Sponza's 12.8 M triangles in 6.2 ms | no virtualized geometry (Nanite-class), no mesh or LOD streaming; the largest scene 12.8 M triangles and 18 800 nodes; single-precision coordinates (Godot's double-precision builds not tested) |
-| Streaming and memory | **Partial** (milestone 45) | loading to the first frame 12-62 % faster (parallel, lazy shader creation; milestone 12); texture streaming (`streaming/textures`, opt-in): VRAM-compressed textures keep only the mips the cameras can see, loaded on worker threads within a budget — Streaming Lab at 1080p 3-77 MiB of 384 MiB resident, the same images once loaded (lavapipe) | no world partition / cell streaming, no mesh streaming; DDS and uncompressed textures load whole; the streamer's report is the only residency tooling; not yet measured on the RTX (Sponza needed 2.5 GB of VRAM) |
+| Streaming and memory | **Partial** (milestones 45-46) | loading to the first frame 12-62 % faster (parallel, lazy shader creation; milestone 12); texture streaming (`streaming/textures`, opt-in): VRAM-compressed textures keep only the mips the cameras can see, loaded on worker threads within a budget — Streaming Lab at 1080p 3-77 MiB of 384 MiB resident; world streaming (`FellowWorldStreamer3D`): cells loaded on worker threads and freed around the camera — World Lab 289-612 MiB of video memory a view instead of 740 MiB, the same images (lavapipe) | no tool to split a level into cells, no baked proxies for unloaded cells, no mesh LOD streaming; DDS and uncompressed textures load whole; the streamers' reports are the only residency tooling; not yet measured on the RTX (Sponza needed 2.5 GB of VRAM) |
 | Shader compilation and stutter | **Partial** | pipelines created lazily and in parallel, the ubershader while a specialization compiles, a pipeline cache that no longer crashes at 2 GiB, frame pacing (worker counts, hot workers, presentation stalls) | no offline PSO collection and pre-warming for shipping builds; hitches measured per scene, not over a play session |
 | Characters and animation | **Partial** | Crowd Lab: 256 skinned characters, −19 % (elided work, batched skin transforms); `FellowMotionCharacter3D`: clip-free locomotion from NVIDIA's MotionBricks on the GPU (a request 4.0 ms, 16 at once 12.6 ms, 64 at once 41 ms on the RTX; Motion Lab's 64 characters 7.3 ms a frame waiting for them, 3.6 ms with the service on a worker thread), its CPU work off the main thread, falls caught | no motion matching, full-body IK, facial animation, cloth or hair; neural motion is locomotion only, tensor-core-dependent for speed (fp32 products elsewhere: 1.4-2.1× slower on the same GPU), its weights under NVIDIA's Open Model Agreement (shipping needs its terms checked) |
 | Physics | **Partial** | GodotPhysics3D and Jolt faster and exactly stock's (pile × 2.27, rays × 8.6 on GodotPhysics; Jolt areas −42 %), deterministic fast modes | no destruction, vehicles or cloth beyond stock; thousands of bodies not measured |
@@ -53,9 +53,9 @@ measured, but short of AAA scale or breadth. Gap: not addressed by FellowEngine 
 
 ## 3. What an AAA project would hit first
 
-1. **Memory and streaming.** With every object loaded with its scene, an open world cannot stream; textures can now
-   (milestone 45: only the mips the cameras can see), meshes cannot. FellowHLOD helps the far field's draws, not
-   memory.
+1. **Memory and streaming.** Textures stream (milestone 45: only the mips the cameras can see) and a level split into
+   cells streams (milestone 46); what is missing is the authoring side — splitting a level, baking each cell's proxy
+   — and measurements on a GPU and a real drive.
 2. **Platforms.** A console version needs a RenderingDevice backend per console (third-party ports exist for stock
    Godot, none carries FellowEngine's changes), and every Vulkan-only feature (ray queries, cooperative matrices,
    async compute choices) needs its counterpart or a fallback.
@@ -81,7 +81,8 @@ measured, but short of AAA scale or breadth. Gap: not addressed by FellowEngine 
    (PC/Linux) or bring the features to Direct3D 12; a console strategy (a partner port that carries the
    RenderingDevice changes).
 2. **Streaming**: texture mip streaming (milestone 45: done, CPU-estimated, within a budget), cell-based world
-   streaming built on FellowHLOD's cells, mesh LOD streaming, memory budgets with tooling.
+   streaming (milestone 46: done; proxies and a cell-splitting tool to come), mesh LOD streaming, memory budgets with
+   tooling.
 3. **Upscaling and frame generation**: DLSS, FSR 3+ and XeSS behind one interface (TAA's inputs are already there).
 4. **Editor and pipeline**: previews and gizmos for every FellowEngine node in the editor, offline HLOD/impostor
    baking, a cooking step, a GPU profiler view of its passes, shader/PSO pre-warming for shipping builds.

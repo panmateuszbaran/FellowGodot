@@ -185,3 +185,4 @@ Status: KEEP | REWORK | REJECT | MEASURING      Branch / commit: ...      Toggle
 | [0144](0144-motion-cpu.md) | Neural motion's CPU work off the main thread: encoding, decoding and endpoint correction on worker threads; only the driven joints posed | `FellowMotionCharacter3D`, the service | KEEP (the same motion within 8.3e-6 m) |
 | [0145](0145-motion-gemm-vec4.md) | Neural motion's tensor-core products: vec4 activation loads, the epilogue a row at a time (−13 to −22 % from 2 requests on) | `FellowMotionModel` | KEEP (bit for bit) |
 | [0146](0146-texture-streaming.md) | Texture streaming: only the mips the cameras can see, loaded on worker threads within a budget | `streaming/textures` | KEEP (opt-in; loaded, bit for bit) |
+| [0147](0147-world-streaming.md) | World streaming: cells of a level loaded and freed around the camera; texture streaming keeps not-yet-used textures at their tail | `FellowWorldStreamer3D`, `FellowStreamingCell3D` | KEEP (new nodes) |

@@ -56,4 +56,38 @@ settled (`is_settled()`), the same frames:
 * A texture loaded with a cell before the cell enters the tree stays at its tail until an instance uses it (with the
   old rule all 96 went to full resolution: 384 of 384 MiB resident).
 
-RESULTS_PENDING
+## Results
+
+World Lab (144 cells of 64 m, 1.6 M triangles, 288 materials on 96 textures of 2048²; lavapipe):
+
+| 1920 × 1080, settled in each view (`w6`) | video memory | mesh buffers | textures |
+|---|---:|---:|---:|
+| the whole world loaded at start | 740.2 MiB | 157.9 MiB | 546.8 MiB |
+| streamed (world and textures): low over a corner | **289.2 MiB** | 62.4 MiB | 183.6 MiB |
+| above the centre (most of the world in range) | **611.5 MiB** | 150.4 MiB | 393.8 MiB |
+| the opposite corner | **322.1 MiB** | 65.6 MiB | 189.2 MiB |
+
+The level's start (to the first frame): 4.09 → 2.55 s (1080p; 10.3 → 2.4-2.8 s at 960 × 540 in perf mode, where the
+start includes the flythrough's first pose).
+
+The flythrough (960 × 540, two passes over the world at 25 m, 3 663 frames; `wp`):
+
+| | peak video memory | peak mesh buffers | peak textures | loads / releases | main thread: adding a cell (largest) | instantiating a cell (worker) | request to tree (mean / largest) |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| whole world | 707.6 MiB | 141.1 MiB | 531.0 MiB | — | — | — | — |
+| world streaming | 623.2 | **56.9** | 531.0 | 336 / 284 | 3.5 ms | 0.34 ms | 0.88 / 5.7 s |
+| world and texture streaming | **321.4** | 56.9 | **197.2** | 323 / 271 | 1.8 ms | 0.31 ms | 0.85 / 4.8 s |
+| world streaming, instancing on the main thread | 624.2 | 56.9 | 531.0 | 340 / 288 | 1.5 ms | 0.32 ms (main thread) | 1.8 / 10.8 s |
+
+The streamer's own work: 74-123 µs a frame for 144 cells on the cloud's CPU (shared with lavapipe's rasterizer);
+freeing a cell at most 1.9-2.4 ms. The latencies are lavapipe's (a frame takes 0.39 s: a load finishes, then waits for
+its frame to be instantiated and its turn to enter the tree, one a frame); the frame times are the CPU rasterizer's
+(392 ms whole, 390 ms streamed; 408 ms with texture streaming's uploads competing for the same two cores).
+
+## Decision
+
+**KEEP.** A level split into cells costs the memory of what is around the camera — 57 instead of 141 MiB of meshes on
+the flythrough, and with texture streaming 321 instead of 708 MiB of video memory — starts in a fraction of the time,
+and shows the same image as when it is all loaded. Next: baked proxies for unloaded cells (FellowHLOD3D's merged meshes
+saved with each cell), a tool to split a level into cells, and the RTX: a streamed world's hitches on a GPU and a real
+drive.

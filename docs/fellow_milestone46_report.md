@@ -7,11 +7,12 @@ Branch `fellow/geometry`. Decision record `docs/decisions/0147-world-streaming.m
 
 `FellowWorldStreamer3D` and `FellowStreamingCell3D`: a level made of cells, each a PackedScene loaded on the
 ResourceLoader's threads when the camera comes within its distance, instantiated on a worker thread, added to the tree
-a cell a frame and freed when the camera has gone. In World Lab (144 cells of 64 m, 1.6 M triangles, 48 materials'
-2048² textures) at 1080p, with texture streaming too, a view needs **289-612 MiB of video memory instead of 740 MiB**
+a cell a frame and freed when the camera has gone. In World Lab (144 cells of 64 m, 1.6 M triangles, 288 materials on
+Streaming Lab's 96 textures of 2048²) at 1080p, with texture streaming too, a view needs **289-612 MiB of video memory instead of 740 MiB**
 (mesh buffers 62-150 MiB instead of 158, textures 184-394 MiB instead of 547), the level starts in **2.55 s instead of
 4.09 s**, and what the camera sees is the same as with the whole world loaded (bit for bit at 480 × 270; one pixel by
-one level at 1080p). PERF_SUMMARY
+one level at 1080p). Over a flythrough the peak video memory falls from 708 to 321 MiB; a cell costs the main thread at
+most 1.8-3.5 ms entering the tree (lavapipe's CPU) and its nodes are built on a worker thread.
 
 ## 1. Development
 
@@ -30,11 +31,29 @@ one level at 1080p). PERF_SUMMARY
 
 ## 2. Verification
 
-VERIFICATION
+lavapipe (`$DEMOTE`, without TAA), World Lab's three cameras, the whole world loaded at start against the streamed one
+once settled, the same frames:
+
+* World streaming, 480 × 270: 0 pixels differ (a load distance of 320 m for a 200-300 m far plane missed far corners of
+  the view, 177 pixels: the far plane is a depth; 400 m for 200 m covers them).
+* World and texture streaming, 480 × 270: 0 pixels; 1920 × 1080: 1 pixel by 1 level in one view, 0 in the others.
+* With the old pinning rule every streamed texture went to full resolution in World Lab (384 of 384 MiB); with the
+  new one a cell's textures keep their tails until used.
 
 ## 3. Performance and memory
 
-MEMORY
+| World Lab, 1920 × 1080, each view settled | video memory | mesh buffers | textures |
+|---|---:|---:|---:|
+| the whole world loaded | 740.2 MiB | 157.9 MiB | 546.8 MiB |
+| streamed, low over a corner | **289.2 MiB** | 62.4 MiB | 183.6 MiB |
+| streamed, above the centre | **611.5 MiB** | 150.4 MiB | 393.8 MiB |
+| streamed, the opposite corner | **322.1 MiB** | 65.6 MiB | 189.2 MiB |
+
+The flythrough (960 × 540, two passes, 3 663 frames): peak video memory 707.6 MiB whole, 623.2 MiB with world
+streaming, **321.4 MiB** with world and texture streaming; peak mesh buffers 141.1 → **56.9 MiB**; 323-340 cell loads
+and 271-288 releases; adding a cell to the tree at most 1.5-3.5 ms of the main thread, instantiating it 0.31-0.34 ms
+(on a worker thread, or on the main thread with `threaded_instancing` off); the streamer itself 74-123 µs a frame for
+144 cells. Start to the first frame: 4.09 → 2.55 s at 1080p.
 
 ## 4. Limits
 
