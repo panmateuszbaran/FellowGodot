@@ -1,4 +1,5 @@
 diff --git a/FidelityFX/gpu/ffx_fsr3upscaler_accumulate_pass.glsl b/FidelityFX/gpu/ffx_fsr3upscaler_accumulate_pass.glsl
+index 3b93575536..7707a27646 100644
 --- a/FidelityFX/gpu/ffx_fsr3upscaler_accumulate_pass.glsl
 +++ b/FidelityFX/gpu/ffx_fsr3upscaler_accumulate_pass.glsl
 @@ -20,7 +20,7 @@
@@ -11,6 +12,7 @@ diff --git a/FidelityFX/gpu/ffx_fsr3upscaler_accumulate_pass.glsl b/FidelityFX/g
  #extension GL_GOOGLE_include_directive : require
  #extension GL_EXT_samplerless_texture_functions : require
 diff --git a/FidelityFX/gpu/ffx_fsr3upscaler_autogen_reactive_pass.glsl b/FidelityFX/gpu/ffx_fsr3upscaler_autogen_reactive_pass.glsl
+index 474cb51264..d8d2456528 100644
 --- a/FidelityFX/gpu/ffx_fsr3upscaler_autogen_reactive_pass.glsl
 +++ b/FidelityFX/gpu/ffx_fsr3upscaler_autogen_reactive_pass.glsl
 @@ -20,7 +20,7 @@
@@ -23,6 +25,7 @@ diff --git a/FidelityFX/gpu/ffx_fsr3upscaler_autogen_reactive_pass.glsl b/Fideli
  #extension GL_GOOGLE_include_directive : require
  #extension GL_EXT_samplerless_texture_functions : require
 diff --git a/FidelityFX/gpu/ffx_fsr3upscaler_debug_view_pass.glsl b/FidelityFX/gpu/ffx_fsr3upscaler_debug_view_pass.glsl
+index 4840e5bdbe..187538126c 100644
 --- a/FidelityFX/gpu/ffx_fsr3upscaler_debug_view_pass.glsl
 +++ b/FidelityFX/gpu/ffx_fsr3upscaler_debug_view_pass.glsl
 @@ -20,7 +20,7 @@
@@ -35,6 +38,7 @@ diff --git a/FidelityFX/gpu/ffx_fsr3upscaler_debug_view_pass.glsl b/FidelityFX/g
  #extension GL_GOOGLE_include_directive : require
  #extension GL_EXT_samplerless_texture_functions : require
 diff --git a/FidelityFX/gpu/ffx_fsr3upscaler_luma_instability_pass.glsl b/FidelityFX/gpu/ffx_fsr3upscaler_luma_instability_pass.glsl
+index 6d5db88e1c..9a70ae57e9 100644
 --- a/FidelityFX/gpu/ffx_fsr3upscaler_luma_instability_pass.glsl
 +++ b/FidelityFX/gpu/ffx_fsr3upscaler_luma_instability_pass.glsl
 @@ -20,7 +20,7 @@
@@ -47,6 +51,7 @@ diff --git a/FidelityFX/gpu/ffx_fsr3upscaler_luma_instability_pass.glsl b/Fideli
  #extension GL_GOOGLE_include_directive : require
  #extension GL_EXT_samplerless_texture_functions : require
 diff --git a/FidelityFX/gpu/ffx_fsr3upscaler_luma_pyramid_pass.glsl b/FidelityFX/gpu/ffx_fsr3upscaler_luma_pyramid_pass.glsl
+index 29f4c8f8dd..0fe6b7418a 100644
 --- a/FidelityFX/gpu/ffx_fsr3upscaler_luma_pyramid_pass.glsl
 +++ b/FidelityFX/gpu/ffx_fsr3upscaler_luma_pyramid_pass.glsl
 @@ -20,7 +20,7 @@
@@ -59,6 +64,7 @@ diff --git a/FidelityFX/gpu/ffx_fsr3upscaler_luma_pyramid_pass.glsl b/FidelityFX
  #extension GL_GOOGLE_include_directive : require
  #extension GL_EXT_samplerless_texture_functions : require
 diff --git a/FidelityFX/gpu/ffx_fsr3upscaler_prepare_inputs_pass.glsl b/FidelityFX/gpu/ffx_fsr3upscaler_prepare_inputs_pass.glsl
+index 6e3c572233..806c11a3e0 100644
 --- a/FidelityFX/gpu/ffx_fsr3upscaler_prepare_inputs_pass.glsl
 +++ b/FidelityFX/gpu/ffx_fsr3upscaler_prepare_inputs_pass.glsl
 @@ -20,7 +20,7 @@
@@ -71,6 +77,7 @@ diff --git a/FidelityFX/gpu/ffx_fsr3upscaler_prepare_inputs_pass.glsl b/Fidelity
  #extension GL_GOOGLE_include_directive : require
  #extension GL_EXT_samplerless_texture_functions : require
 diff --git a/FidelityFX/gpu/ffx_fsr3upscaler_prepare_reactivity_pass.glsl b/FidelityFX/gpu/ffx_fsr3upscaler_prepare_reactivity_pass.glsl
+index e09d5d36df..dfe12700ea 100644
 --- a/FidelityFX/gpu/ffx_fsr3upscaler_prepare_reactivity_pass.glsl
 +++ b/FidelityFX/gpu/ffx_fsr3upscaler_prepare_reactivity_pass.glsl
 @@ -20,7 +20,7 @@
@@ -83,6 +90,7 @@ diff --git a/FidelityFX/gpu/ffx_fsr3upscaler_prepare_reactivity_pass.glsl b/Fide
  #extension GL_GOOGLE_include_directive : require
  #extension GL_EXT_samplerless_texture_functions : require
 diff --git a/FidelityFX/gpu/ffx_fsr3upscaler_rcas_pass.glsl b/FidelityFX/gpu/ffx_fsr3upscaler_rcas_pass.glsl
+index 112c2e5fbc..445bd21391 100644
 --- a/FidelityFX/gpu/ffx_fsr3upscaler_rcas_pass.glsl
 +++ b/FidelityFX/gpu/ffx_fsr3upscaler_rcas_pass.glsl
 @@ -20,7 +20,7 @@
@@ -95,6 +103,7 @@ diff --git a/FidelityFX/gpu/ffx_fsr3upscaler_rcas_pass.glsl b/FidelityFX/gpu/ffx
  #extension GL_GOOGLE_include_directive : require
  #extension GL_EXT_samplerless_texture_functions : require
 diff --git a/FidelityFX/gpu/ffx_fsr3upscaler_shading_change_pass.glsl b/FidelityFX/gpu/ffx_fsr3upscaler_shading_change_pass.glsl
+index 539728f0a1..5ece0ea933 100644
 --- a/FidelityFX/gpu/ffx_fsr3upscaler_shading_change_pass.glsl
 +++ b/FidelityFX/gpu/ffx_fsr3upscaler_shading_change_pass.glsl
 @@ -20,7 +20,7 @@
@@ -107,6 +116,7 @@ diff --git a/FidelityFX/gpu/ffx_fsr3upscaler_shading_change_pass.glsl b/Fidelity
  #extension GL_GOOGLE_include_directive : require
  #extension GL_EXT_samplerless_texture_functions : require
 diff --git a/FidelityFX/gpu/ffx_fsr3upscaler_shading_change_pyramid_pass.glsl b/FidelityFX/gpu/ffx_fsr3upscaler_shading_change_pyramid_pass.glsl
+index 5e02d3da91..0476afb236 100644
 --- a/FidelityFX/gpu/ffx_fsr3upscaler_shading_change_pyramid_pass.glsl
 +++ b/FidelityFX/gpu/ffx_fsr3upscaler_shading_change_pyramid_pass.glsl
 @@ -20,7 +20,7 @@
@@ -119,6 +129,7 @@ diff --git a/FidelityFX/gpu/ffx_fsr3upscaler_shading_change_pyramid_pass.glsl b/
  #extension GL_GOOGLE_include_directive : require
  #extension GL_EXT_samplerless_texture_functions : require
 diff --git a/FidelityFX/gpu/fsr3upscaler/ffx_fsr3upscaler_callbacks_glsl.h b/FidelityFX/gpu/fsr3upscaler/ffx_fsr3upscaler_callbacks_glsl.h
+index b11bb6d371..633d0d2a78 100644
 --- a/FidelityFX/gpu/fsr3upscaler/ffx_fsr3upscaler_callbacks_glsl.h
 +++ b/FidelityFX/gpu/fsr3upscaler/ffx_fsr3upscaler_callbacks_glsl.h
 @@ -65,6 +65,11 @@
@@ -184,6 +195,7 @@ diff --git a/FidelityFX/gpu/fsr3upscaler/ffx_fsr3upscaler_callbacks_glsl.h b/Fid
  void StoreLumaHistory(FfxInt32x2 iPxPos, FfxFloat32x4 fLumaHistory)
  {
 diff --git a/FidelityFX/gpu/fsr3upscaler/ffx_fsr3upscaler_rcas.h b/FidelityFX/gpu/fsr3upscaler/ffx_fsr3upscaler_rcas.h
+index 81f8ed2a9f..81e74efd32 100644
 --- a/FidelityFX/gpu/fsr3upscaler/ffx_fsr3upscaler_rcas.h
 +++ b/FidelityFX/gpu/fsr3upscaler/ffx_fsr3upscaler_rcas.h
 @@ -49,9 +49,24 @@ void WriteUpscaledOutput(FFX_MIN16_U2 iPxHrPos, FfxFloat32x3 fUpscaledColor)
@@ -234,6 +246,7 @@ diff --git a/FidelityFX/gpu/fsr3upscaler/ffx_fsr3upscaler_rcas.h b/FidelityFX/gp
      {
          FfxFloat32x3 c;
 diff --git a/FidelityFX/host/ffx_fsr3upscaler.h b/FidelityFX/host/ffx_fsr3upscaler.h
+index 25cbef552c..242436d1bf 100644
 --- a/FidelityFX/host/ffx_fsr3upscaler.h
 +++ b/FidelityFX/host/ffx_fsr3upscaler.h
 @@ -55,7 +55,12 @@
@@ -259,6 +272,7 @@ diff --git a/FidelityFX/host/ffx_fsr3upscaler.h b/FidelityFX/host/ffx_fsr3upscal
  
  /// A structure encapsulating the parameters for automatic generation of a reactive mask
 diff --git a/FidelityFX/host/ffx_types.h b/FidelityFX/host/ffx_types.h
+index ca9bc37913..2bdf3487fa 100644
 --- a/FidelityFX/host/ffx_types.h
 +++ b/FidelityFX/host/ffx_types.h
 @@ -82,12 +82,14 @@
@@ -279,6 +293,7 @@ diff --git a/FidelityFX/host/ffx_types.h b/FidelityFX/host/ffx_types.h
  /// Maximum number of constant buffers bound.
  ///
 diff --git a/src/ffx_fsr3upscaler.cpp b/src/ffx_fsr3upscaler.cpp
+index b5f1f7477f..f45a01ea83 100644
 --- a/src/ffx_fsr3upscaler.cpp
 +++ b/src/ffx_fsr3upscaler.cpp
 @@ -41,6 +41,16 @@
@@ -309,6 +324,7 @@ diff --git a/src/ffx_fsr3upscaler.cpp b/src/ffx_fsr3upscaler.cpp
      const int32_t threadGroupWorkRegionDim = 8;
      const int32_t dispatchSrcX = (context->constants.renderSize[0] + (threadGroupWorkRegionDim - 1)) / threadGroupWorkRegionDim;
 diff --git a/src/ffx_fsr3upscaler_private.h b/src/ffx_fsr3upscaler_private.h
+index 79d25a747e..2858f7f77c 100644
 --- a/src/ffx_fsr3upscaler_private.h
 +++ b/src/ffx_fsr3upscaler_private.h
 @@ -77,6 +77,10 @@ typedef struct Fsr3UpscalerConstants {
@@ -323,9 +339,10 @@ diff --git a/src/ffx_fsr3upscaler_private.h b/src/ffx_fsr3upscaler_private.h
  
  struct FfxFsr3UpscalerContextDescription;
 diff --git a/src/ffx_message.cpp b/src/ffx_message.cpp
+index 7dd5127d1a..52cb240148 100644
 --- a/src/ffx_message.cpp
 +++ b/src/ffx_message.cpp
-@@ -21,6 +21,7 @@
+@@ -21,12 +21,14 @@
  // THE SOFTWARE.
  
  #include <FidelityFX/host/ffx_message.h>
@@ -333,3 +350,23 @@ diff --git a/src/ffx_message.cpp b/src/ffx_message.cpp
  
  #ifdef _WIN32
  #ifndef WIN32_LEAN_AND_MEAN
+ #define WIN32_LEAN_AND_MEAN
+ #endif
+ #include <windows.h>  // required for OutputDebugString()
++#include <wchar.h>  // FellowEngine: swprintf() (swprintf_s() is MSVC-only)
+ #endif                // #ifdef _WIN32
+ 
+ static ffxMessageCallback s_messageCallback;
+@@ -47,10 +49,10 @@ void ffxPrintMessage(uint32_t type, const wchar_t* message)
+         // Format the message string
+         wchar_t buffer[512];
+         if (type == FFX_MESSAGE_TYPE_ERROR) {
+-            swprintf_s(buffer, 512, L"FSR_API_DEBUG_ERROR: %ls\n", message);
++            swprintf(buffer, 512, L"FSR_API_DEBUG_ERROR: %ls\n", message);
+         }
+         else if (type == FFX_MESSAGE_TYPE_WARNING) {
+-            swprintf_s(buffer, 512, L"FSR_API_DEBUG_WARNING: %ls\n", message);
++            swprintf(buffer, 512, L"FSR_API_DEBUG_WARNING: %ls\n", message);
+         }
+         OutputDebugStringW(buffer);
+     } else {

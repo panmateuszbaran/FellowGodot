@@ -28,6 +28,7 @@
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>  // required for OutputDebugString()
+#include <wchar.h>  // FellowEngine: swprintf() (swprintf_s() is MSVC-only)
 #endif                // #ifdef _WIN32
 
 static ffxMessageCallback s_messageCallback;
@@ -48,10 +49,10 @@ void ffxPrintMessage(uint32_t type, const wchar_t* message)
         // Format the message string
         wchar_t buffer[512];
         if (type == FFX_MESSAGE_TYPE_ERROR) {
-            swprintf_s(buffer, 512, L"FSR_API_DEBUG_ERROR: %ls\n", message);
+            swprintf(buffer, 512, L"FSR_API_DEBUG_ERROR: %ls\n", message);
         }
         else if (type == FFX_MESSAGE_TYPE_WARNING) {
-            swprintf_s(buffer, 512, L"FSR_API_DEBUG_WARNING: %ls\n", message);
+            swprintf(buffer, 512, L"FSR_API_DEBUG_WARNING: %ls\n", message);
         }
         OutputDebugStringW(buffer);
     } else {
