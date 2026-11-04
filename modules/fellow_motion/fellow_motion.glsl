@@ -12,9 +12,9 @@ gemmc64 = "#define MODE_GEMM_COOP\n#define BM 64";
 gemmd16 = "#define MODE_GEMM_COOP\n#define A_VEC4\n#define BM 16";
 gemmd32 = "#define MODE_GEMM_COOP\n#define A_VEC4\n#define BM 32";
 gemmd64 = "#define MODE_GEMM_COOP\n#define A_VEC4\n#define BM 64";
-gemms16 = "#define MODE_GEMM_COOP\n#define A_VEC4\n#define STAGES2\n#define BM 16";
-gemms32 = "#define MODE_GEMM_COOP\n#define A_VEC4\n#define STAGES2\n#define BM 32";
-gemms64 = "#define MODE_GEMM_COOP\n#define A_VEC4\n#define STAGES2\n#define BM 64";
+gemml16 = "#define MODE_GEMM_COOP\n#define A_VEC4\n#define LEAN_EPILOGUE\n#define BM 16";
+gemml32 = "#define MODE_GEMM_COOP\n#define A_VEC4\n#define LEAN_EPILOGUE\n#define BM 32";
+gemml64 = "#define MODE_GEMM_COOP\n#define A_VEC4\n#define LEAN_EPILOGUE\n#define BM 64";
 reduce = "#define MODE_REDUCE";
 attn = "#define MODE_ATTN";
 ln = "#define MODE_LN";
@@ -465,15 +465,16 @@ void main() {
 #define CST (BN + 4u)
 #define W_SLOTS ((BN * (BK / 8u)) / WG) // uvec4 of 8 weights per thread per K step
 
-#ifdef STAGES2
-// Two stages: a step multiplies one while the next step's tiles go into the other, one barrier a step.
-#define NSTAGE 2u
+shared float16_t As[BM * AST];
+shared float16_t Bs[BN * AST];
+#ifdef LEAN_EPILOGUE
+// Each subgroup's 16 x 16 accumulators through its own 16 x 20 corner of shared memory, one at a time: 5 KB instead of
+// BM x 68 floats (17 KB at 64 rows), for more workgroups on a multiprocessor.
+#define LST 20u
+shared float Cs[4u * 16u * LST];
 #else
-#define NSTAGE 1u
-#endif
-shared float16_t As[NSTAGE * BM * AST];
-shared float16_t Bs[NSTAGE * BN * AST];
 shared float Cs[BM * CST];
+#endif
 
 void main() {
 	uint t = gl_LocalInvocationIndex;
@@ -514,81 +515,6 @@ void main() {
 			}
 		}
 	}
-#ifdef STAGES2
-	// The first step's tiles into stage 0.
-	if (kt0 < kt1) {
-		for (uint i = 0u; i < A_SLOTS; i++) {
-			for (uint j = 0u; j < A_KPT; j++) {
-				As[(r0 + i * A_RSTEP) * AST + kk + j] = float16_t(clamp(pa[i * A_KPT + j], -65504.0, 65504.0));
-			}
-		}
-		for (uint j = 0u; j < W_SLOTS; j++) {
-			uint base = (t / (BK / 8u) + j * (WG / (BK / 8u))) * AST + kc * 8u;
-			f16vec2 p0 = unpackFloat2x16(pw[j].x);
-			f16vec2 p1 = unpackFloat2x16(pw[j].y);
-			f16vec2 p2 = unpackFloat2x16(pw[j].z);
-			f16vec2 p3 = unpackFloat2x16(pw[j].w);
-			Bs[base + 0u] = p0.x;
-			Bs[base + 1u] = p0.y;
-			Bs[base + 2u] = p1.x;
-			Bs[base + 3u] = p1.y;
-			Bs[base + 4u] = p2.x;
-			Bs[base + 5u] = p2.y;
-			Bs[base + 6u] = p3.x;
-			Bs[base + 7u] = p3.y;
-		}
-	}
-	barrier();
-	for (uint kt = kt0; kt < kt1; kt++) {
-		uint cur = (kt - kt0) & 1u;
-		uint a_cur = cur * uint(BM) * AST;
-		uint b_cur = cur * BN * AST;
-		bool more = kt + 1u < kt1;
-		if (more) {
-			a_fetch(g_kb + (kt + 1u) * BK + kk);
-			for (uint j = 0u; j < W_SLOTS; j++) {
-				if (w_idx[j] != NONE) {
-					pw[j] = wt[w_idx[j] + (kt + 1u) * (BK / 8u)];
-				}
-			}
-		}
-		for (uint ks = 0u; ks < BK; ks += 16u) {
-			coopmat<float16_t, gl_ScopeSubgroup, 16, 16, gl_MatrixUseB> mb;
-			coopMatLoad(mb, Bs, b_cur + sg * 16u * AST + ks, AST, gl_CooperativeMatrixLayoutColumnMajor);
-			for (uint r = 0u; r < uint(RT); r++) {
-				coopmat<float16_t, gl_ScopeSubgroup, 16, 16, gl_MatrixUseA> ma;
-				coopMatLoad(ma, As, a_cur + r * 16u * AST + ks, AST, gl_CooperativeMatrixLayoutRowMajor);
-				acc[r] = coopMatMulAdd(ma, mb, acc[r]);
-			}
-		}
-		if (more) {
-			// The other stage was last read in the step before, which the barrier below that step ended.
-			uint a_nxt = (cur ^ 1u) * uint(BM) * AST;
-			uint b_nxt = (cur ^ 1u) * BN * AST;
-			for (uint i = 0u; i < A_SLOTS; i++) {
-				for (uint j = 0u; j < A_KPT; j++) {
-					As[a_nxt + (r0 + i * A_RSTEP) * AST + kk + j] = float16_t(clamp(pa[i * A_KPT + j], -65504.0, 65504.0));
-				}
-			}
-			for (uint j = 0u; j < W_SLOTS; j++) {
-				uint base = b_nxt + (t / (BK / 8u) + j * (WG / (BK / 8u))) * AST + kc * 8u;
-				f16vec2 p0 = unpackFloat2x16(pw[j].x);
-				f16vec2 p1 = unpackFloat2x16(pw[j].y);
-				f16vec2 p2 = unpackFloat2x16(pw[j].z);
-				f16vec2 p3 = unpackFloat2x16(pw[j].w);
-				Bs[base + 0u] = p0.x;
-				Bs[base + 1u] = p0.y;
-				Bs[base + 2u] = p1.x;
-				Bs[base + 3u] = p1.y;
-				Bs[base + 4u] = p2.x;
-				Bs[base + 5u] = p2.y;
-				Bs[base + 6u] = p3.x;
-				Bs[base + 7u] = p3.y;
-			}
-		}
-		barrier();
-	}
-#else
 	for (uint kt = kt0; kt < kt1; kt++) {
 		for (uint i = 0u; i < A_SLOTS; i++) {
 			for (uint j = 0u; j < A_KPT; j++) {
@@ -630,6 +556,29 @@ void main() {
 		}
 		barrier();
 	}
+#ifdef LEAN_EPILOGUE
+	uint lane = gl_SubgroupInvocationID;
+	uint cbase = sg * 16u * LST;
+	for (uint r = 0u; r < uint(RT); r++) {
+		coopMatStore(acc[r], Cs, cbase, LST, gl_CooperativeMatrixLayoutRowMajor);
+		subgroupMemoryBarrierShared();
+		subgroupBarrier();
+		for (uint e = lane; e < 256u; e += uint(SGSIZE)) {
+			uint gr = m0 + r * 16u + e / 16u;
+			uint on = n0 + sg * 16u + e % 16u;
+			if (gr < g_M && on < Nout) {
+				float v = Cs[cbase + (e / 16u) * LST + e % 16u];
+				if (pc.splits > 1u) {
+					part[(split * g_M + gr) * Nout + on] = v;
+				} else {
+					store_epilogue(gr, on, v);
+				}
+			}
+		}
+		subgroupMemoryBarrierShared();
+		subgroupBarrier();
+	}
+	return;
 #endif
 	for (uint r = 0u; r < uint(RT); r++) {
 		coopMatStore(acc[r], Cs, r * 16u * CST + sg * 16u, CST, gl_CooperativeMatrixLayoutRowMajor);

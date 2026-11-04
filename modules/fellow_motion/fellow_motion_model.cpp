@@ -514,16 +514,16 @@ Error FellowMotionModel::load(const String &p_path, int p_max_batch) {
 	const char *names_f[V_MAX] = { "gemm_f16", "gemm_f32", "gemm_f64", "reduce", "attn", "ln", "glue" };
 	const char *names_c[V_MAX] = { "gemmc16", "gemmc32", "gemmc64", "reduce", "attn", "ln", "glue" };
 	const char *names_d[V_MAX] = { "gemmd16", "gemmd32", "gemmd64", "reduce", "attn", "ln", "glue" };
-	const char *names_s[V_MAX] = { "gemms16", "gemms32", "gemms64", "reduce", "attn", "ln", "glue" };
+	const char *names_l[V_MAX] = { "gemml16", "gemml32", "gemml64", "reduce", "attn", "ln", "glue" };
 	// The tensor-core products with vec4 A loads where the subgroup is 32 or less (16-19 % faster at batches of 8 and
 	// more on the RTX, the same results bit for bit: m44_f326); FELLOW_MOTION_GEMM=scalar, a diagnostic, takes the
 	// scalar loads.
 	const String gemm_env = OS::get_singleton()->get_environment("FELLOW_MOTION_GEMM");
 	coop_vec4 = coop_active && sg <= 32 && gemm_env != "scalar";
-	// FELLOW_MOTION_GEMM=stages (a diagnostic): two stages of shared memory, one barrier a K step.
-	coop_stages = coop_vec4 && gemm_env == "stages";
+	// FELLOW_MOTION_GEMM=lean (a diagnostic): each subgroup's epilogue through its own corner of shared memory.
+	coop_lean = coop_vec4 && gemm_env == "lean";
 	for (int i = 0; i < V_MAX; i++) {
-		const char *nm = coop_active ? (coop_stages ? names_s[i] : (coop_vec4 ? names_d[i] : names_c[i])) : (weights_f16 ? names_h[i] : names_f[i]);
+		const char *nm = coop_active ? (coop_lean ? names_l[i] : (coop_vec4 ? names_d[i] : names_c[i])) : (weights_f16 ? names_h[i] : names_f[i]);
 		shaders[i] = rd->shader_create_from_spirv(shader_file->get_spirv_stages(nm), String("FellowMotion ") + nm);
 		if (shaders[i].is_null()) {
 			_free();
@@ -568,7 +568,7 @@ Dictionary FellowMotionModel::get_info() const {
 	d["path"] = path;
 	d["loaded"] = loaded;
 	d["weights"] = weights_f16 ? "f16" : "f32";
-	d["products"] = coop_active ? String("cooperative matrix 16x16x16 fp16 -> fp32") + (coop_stages ? " (vec4 A loads, two stages)" : (coop_vec4 ? " (vec4 A loads)" : "")) : "fp32 (" + coop_note + ")";
+	d["products"] = coop_active ? String("cooperative matrix 16x16x16 fp16 -> fp32") + (coop_lean ? " (vec4 A loads, lean epilogue)" : (coop_vec4 ? " (vec4 A loads)" : "")) : "fp32 (" + coop_note + ")";
 	d["ops"] = int(op_recs.size());
 	d["max_batch"] = max_batch;
 	d["activation_mb"] = act_floats * 4.0 / 1e6;
