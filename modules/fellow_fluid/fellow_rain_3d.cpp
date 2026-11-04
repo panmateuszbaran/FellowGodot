@@ -551,9 +551,9 @@ void FellowRain3D::_notification(int p_what) {
 				Vector3 at = get_global_position();
 				if (cam) {
 					Vector3 c = cam->get_global_position();
-					float step = occlusion_size / 16.0f;
-					at.x = Math::floor(c.x / step + 0.5f) * step;
-					at.z = Math::floor(c.z / step + 0.5f) * step;
+					float snap = occlusion_size / 16.0f;
+					at.x = Math::floor(c.x / snap + 0.5f) * snap;
+					at.z = Math::floor(c.z / snap + 0.5f) * snap;
 				}
 				if (!occlusion->get_global_transform().origin.is_equal_approx(at) || occlusion->get_global_basis() != Basis()) {
 					occlusion->set_global_transform(Transform3D(Basis(), at));
