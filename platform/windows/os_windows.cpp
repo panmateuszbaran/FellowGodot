@@ -2923,7 +2923,10 @@ LPVOID install_iat_hook(const String &p_target, const String &p_module, const St
 						LPVOID old_func = (LPVOID)first_thunk->u1.Function;
 						first_thunk->u1.Function = (DWORD_PTR)p_hook_func;
 
-						VirtualProtect((LPVOID)(&first_thunk->u1.Function), 8, old_protect, nullptr);
+						// FellowEngine (decision 0150): lpflOldProtect must point to a variable (Windows fails the call
+						// without one; Wine 9 crashed on the null pointer, before main()).
+						DWORD restored_protect = 0;
+						VirtualProtect((LPVOID)(&first_thunk->u1.Function), 8, old_protect, &restored_protect);
 						return old_func;
 					}
 					original_first_thunk++;
