@@ -12,9 +12,9 @@ gemmc64 = "#define MODE_GEMM_COOP\n#define BM 64";
 gemmd16 = "#define MODE_GEMM_COOP\n#define A_VEC4\n#define BM 16";
 gemmd32 = "#define MODE_GEMM_COOP\n#define A_VEC4\n#define BM 32";
 gemmd64 = "#define MODE_GEMM_COOP\n#define A_VEC4\n#define BM 64";
-gemml16 = "#define MODE_GEMM_COOP\n#define A_VEC4\n#define LEAN_EPILOGUE\n#define BM 16";
-gemml32 = "#define MODE_GEMM_COOP\n#define A_VEC4\n#define LEAN_EPILOGUE\n#define BM 32";
-gemml64 = "#define MODE_GEMM_COOP\n#define A_VEC4\n#define LEAN_EPILOGUE\n#define BM 64";
+gemme16 = "#define MODE_GEMM_COOP\n#define A_VEC4\n#define ROW_EPILOGUE\n#define BM 16";
+gemme32 = "#define MODE_GEMM_COOP\n#define A_VEC4\n#define ROW_EPILOGUE\n#define BM 32";
+gemme64 = "#define MODE_GEMM_COOP\n#define A_VEC4\n#define ROW_EPILOGUE\n#define BM 64";
 reduce = "#define MODE_REDUCE";
 attn = "#define MODE_ATTN";
 ln = "#define MODE_LN";
@@ -467,13 +467,13 @@ void main() {
 
 shared float16_t As[BM * AST];
 shared float16_t Bs[BN * AST];
-#ifdef LEAN_EPILOGUE
-// Each subgroup's 16 x 16 accumulators through its own 16 x 20 corner of shared memory, one at a time: 5 KB instead of
-// BM x 68 floats (17 KB at 64 rows), for more workgroups on a multiprocessor.
-#define LST 20u
-shared float Cs[4u * 16u * LST];
-#else
 shared float Cs[BM * CST];
+#ifdef ROW_EPILOGUE
+// The epilogue's addresses a row at a time: each of the tile's rows' output and residual offsets and token mask,
+// worked out once by one thread instead of for each of the row's 64 elements.
+shared uint row_o[BM]; // NONE past the batch
+shared uint row_r[BM]; // NONE without a residual
+shared uint row_masked[BM];
 #endif
 
 void main() {
@@ -556,33 +556,65 @@ void main() {
 		}
 		barrier();
 	}
-#ifdef LEAN_EPILOGUE
-	uint lane = gl_SubgroupInvocationID;
-	uint cbase = sg * 16u * LST;
-	for (uint r = 0u; r < uint(RT); r++) {
-		coopMatStore(acc[r], Cs, cbase, LST, gl_CooperativeMatrixLayoutRowMajor);
-		subgroupMemoryBarrierShared();
-		subgroupBarrier();
-		for (uint e = lane; e < 256u; e += uint(SGSIZE)) {
-			uint gr = m0 + r * 16u + e / 16u;
-			uint on = n0 + sg * 16u + e % 16u;
-			if (gr < g_M && on < Nout) {
-				float v = Cs[cbase + (e / 16u) * LST + e % 16u];
-				if (pc.splits > 1u) {
-					part[(split * g_M + gr) * Nout + on] = v;
-				} else {
-					store_epilogue(gr, on, v);
-				}
-			}
-		}
-		subgroupMemoryBarrierShared();
-		subgroupBarrier();
-	}
-	return;
-#endif
 	for (uint r = 0u; r < uint(RT); r++) {
 		coopMatStore(acc[r], Cs, r * 16u * CST + sg * 16u, CST, gl_CooperativeMatrixLayoutRowMajor);
 	}
+#ifdef ROW_EPILOGUE
+	if (t < uint(BM)) {
+		uint gr = m0 + t;
+		row_o[t] = NONE;
+		row_r[t] = NONE;
+		row_masked[t] = 0u;
+		if (gr < g_M) {
+			uint b = gr / g_rows;
+			uint r = gr % g_rows;
+			uint og = O(G_OG);
+			uint orow = (r / og) * O(G_OS) + O(G_OO) + r % og;
+			row_o[t] = pc.splits > 1u ? (split * g_M + gr) * Nout : O(G_O_OFF) + (b * O(G_O_ROWS) + orow) * O(G_O_LD) + O(G_OC);
+			uint ro = O(G_R_OFF);
+			if (ro != NONE) {
+				row_r[t] = ro + (b * O(G_R_ROWS) + r) * O(G_R_LD);
+			}
+			uint mk = O(G_MASK);
+			if (mk != 0u && float(r) >= token_count(O(G_T_OFF), b) * float(mk)) {
+				row_masked[t] = 1u;
+			}
+		}
+	}
+	barrier();
+	uint bo = O(G_B_OFF);
+	uint act_mode = O(G_ACT);
+	for (uint e = t; e < uint(BM) * BN; e += WG) {
+		uint r = e / BN;
+		uint c = e % BN;
+		uint on = n0 + c;
+		uint ob = row_o[r];
+		if (ob == NONE || on >= Nout) {
+			continue;
+		}
+		float v = Cs[r * CST + c];
+		if (pc.splits > 1u) {
+			part[ob + on] = v;
+			continue;
+		}
+		// store_epilogue's arithmetic, in its order.
+		if (bo != NONE) {
+			v += par[bo + on];
+		}
+		if (row_r[r] != NONE) {
+			v += act[row_r[r] + on];
+		}
+		if (act_mode == 1u) {
+			v = max(v, 0.0);
+		} else if (act_mode == 2u) {
+			v = v >= 0.0 ? v : 0.01 * v;
+		}
+		if (row_masked[r] != 0u) {
+			v = 0.0;
+		}
+		act[ob + on] = v;
+	}
+#else
 	barrier();
 	for (uint e = t; e < uint(BM) * BN; e += WG) {
 		uint r = e / BN;
@@ -599,6 +631,7 @@ void main() {
 			store_epilogue(gr, on, v);
 		}
 	}
+#endif
 }
 
 #endif // MODE_GEMM_COOP
