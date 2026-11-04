@@ -11,10 +11,10 @@ with containers, emulators and Mesa's software drivers, without the hardware (de
 | Windows x86_64 export template | MinGW-w64 in a container | `platforms.sh build windows` |
 | the Windows build running | Wine, with lavapipe behind winevulkan | `platforms.sh shell wine ...` |
 | Linux arm64 export template | GCC's aarch64 cross-compiler in a container | `platforms.sh build linux-arm64` |
-| the arm64 build running | qemu-user | `platforms.sh shell cross qemu-aarch64 ...` |
+| the arm64 build running | qemu-user: headless with the cross-compiler's libraries, rendering with Ubuntu's arm64 Mesa (lavapipe, llvmpipe) | `platforms.sh shell cross qemu-aarch64 -L /usr/aarch64-linux-gnu ...`, `shell arm64 qemu-aarch64 -L / ...` |
 | Android and web export templates | the Android NDK and Emscripten (downloaded toolchains) | `platforms.sh build android`, `build web` |
 
-`platforms.sh image <cross|wine|android|web>` builds the container images (`Dockerfile.*`; Ubuntu 24.04 packages,
+`platforms.sh image <cross|wine|arm64|android|web>` builds the container images (`Dockerfile.*`; Ubuntu 24.04 packages,
 plus the NDK from Google and emsdk from GitHub for the last two). Builds run in a copy of the repository
 (`$FELLOW_PLATFORMS_TREE`, rsync) so that the containers' SCons keeps its own objects.
 

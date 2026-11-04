@@ -174,7 +174,11 @@ void FellowGas::_ensure_sim(int p_precision) {
 	}
 	sim_shader[p_precision].initialize(modes, p_precision ? "\n#define HIGH_PRECISION\n" : "");
 	sim_version[p_precision] = sim_shader[p_precision].version_create();
+	sparse_supported = RD::get_singleton()->limit_get(RD::LIMIT_MAX_STORAGE_IMAGES_PER_SHADER_STAGE) >= SPARSE_STORAGE_IMAGES;
 	for (int i = 0; i < SIM_MAX; i++) {
+		if (!sparse_supported && (i == SIM_SPARSE_ACTIVATE || i == SIM_SPARSE_CLEAR)) {
+			continue;
+		}
 		sim_pipelines[p_precision][i] = RD::get_singleton()->compute_pipeline_create(sim_shader[p_precision].version_get_shader(sim_version[p_precision], i));
 	}
 	sim_ready[p_precision] = true;
@@ -511,7 +515,11 @@ void FellowGas::_run_step(uint32_t p_id, Volume &r_v, const StepParams &p_step) 
 	u.emission[2] = p_step.emission_temperature_scale;
 	// rendering/fellow/fluid/gas_sparse (measurements): 0 the node's choice, 1 off, 2 on.
 	const int forced_sparse = GLOBAL_GET_CACHED(int, "rendering/fellow/fluid/gas_sparse");
-	const bool sparse = forced_sparse == 0 ? p_step.sparse != 0 : forced_sparse == 2;
+	bool sparse = forced_sparse == 0 ? p_step.sparse != 0 : forced_sparse == 2;
+	if (sparse && !sparse_supported) {
+		WARN_PRINT_ONCE(vformat("FellowGasVolume3D: the sparse simulation binds %d storage images a shader stage, the device has %d: the volumes are simulated dense.", SPARSE_STORAGE_IMAGES, RD::get_singleton()->limit_get(RD::LIMIT_MAX_STORAGE_IMAGES_PER_SHADER_STAGE)));
+		sparse = false;
+	}
 	const bool shifted = p_step.shift[0] != 0 || p_step.shift[1] != 0 || p_step.shift[2] != 0;
 	r_v.sparse_now = sparse;
 	u.sparse[0] = sparse ? 1 : 0;
@@ -1085,11 +1093,8 @@ void FellowGas::render(RID p_color, RID p_depth, RID p_trace, RID p_trace_depth)
 	Vector<RID> coarse;
 	for (int i = 0; i < MAX_RENDERED; i++) {
 		const Volume *v = i < int(frame_volumes.size()) ? volumes.getptr(frame_volumes[i]) : nullptr;
-		scal.push_back(linear_sampler);
 		scal.push_back(v ? v->scalars[v->current] : dummy_3d);
-		light.push_back(linear_sampler);
 		light.push_back(v ? v->light : dummy_3d);
-		coarse.push_back(nearest_sampler);
 		coarse.push_back(v ? v->coarse : dummy_3d);
 	}
 	RID radiance = frame.radiance;
@@ -1100,9 +1105,9 @@ void FellowGas::render(RID p_color, RID p_depth, RID p_trace, RID p_trace_depth)
 	{
 		LocalVector<RD::Uniform> uniforms;
 		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_UNIFORM_BUFFER, 0, render_ubo));
-		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 1, scal));
-		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 2, light));
-		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 3, coarse));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_TEXTURE, 1, scal)); // textures and one sampler (decision 0150)
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_TEXTURE, 2, light));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_TEXTURE, 3, coarse));
 		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 4, Vector<RID>({ nearest_sampler, p_depth })));
 		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 5, trace_tex));
 		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 6, trace_depth_tex));
@@ -1111,6 +1116,7 @@ void FellowGas::render(RID p_color, RID p_depth, RID p_trace, RID p_trace_depth)
 		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_UNIFORM_BUFFER, 8, frame.directional_lights.is_valid() ? frame.directional_lights : ls->get_directional_light_buffer()));
 		RID atlas = frame.shadow_atlas.is_valid() ? frame.shadow_atlas : RendererRD::TextureStorage::get_singleton()->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_WHITE);
 		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 9, Vector<RID>({ linear_sampler, atlas })));
+		uniforms.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER, 10, linear_sampler));
 		RID set = UniformSetCacheRD::get_singleton()->get_cache_vec(shader, 0, uniforms);
 		RD::ComputeListID list = RD::get_singleton()->compute_list_begin();
 		RD::get_singleton()->compute_list_bind_compute_pipeline(list, render_pipelines[trace_mode]);

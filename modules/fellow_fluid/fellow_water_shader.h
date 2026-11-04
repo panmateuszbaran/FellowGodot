@@ -85,8 +85,9 @@ uniform vec4 wind_gust_map = vec4(1.0, 0.0, 0.0, 0.005);
 uniform float wind_gust_strength = 0.0;
 uniform int debug_view = 0;
 
-varying vec3 v_base;
-varying float v_sim;
+// xyz: the point before the waves (world), w: the simulation's weight there; one interpolant (decision 0150: Godot's
+// Mobile renderer leaves a user shader 1 on a device with Vulkan's minimum of 64 vertex output components).
+varying vec4 v_base_sim;
 varying float v_glint; // the sun's highlight: off on foam
 
 vec2 sim_uv(vec3 wp) {
@@ -126,8 +127,7 @@ void vertex() {
 		d += textureLod(wave_disp, vec3(xz / len, float(c)), lod).xyz;
 	}
 	d *= amp;
-	v_base = vec3(xz.x, level, xz.y);
-	v_sim = sim_w;
+	v_base_sim = vec4(xz.x, level, xz.y, sim_w);
 	VERTEX = vec3(xz.x + d.x, level + d.y, xz.y + d.z);
 }
 
@@ -137,16 +137,16 @@ vec3 view_position(vec2 uv, float depth, mat4 inv_projection) {
 }
 
 void fragment() {
-	vec2 xz = v_base.xz;
+	vec2 xz = v_base_sim.xz;
 	float amp = wave_scale;
 	vec2 flow = vec2(0.0);
 	vec4 sims = vec4(0.0);
-	if (sim_enabled && v_sim > 0.0) {
-		vec2 uv = sim_uv(v_base);
+	if (sim_enabled && v_base_sim.w > 0.0) {
+		vec2 uv = sim_uv(v_base_sim.xyz);
 		vec4 f = texture(sim_flow, uv);
 		sims = texture(sim_surface, uv);
-		flow = f.xy * v_sim;
-		amp *= mix(1.0, sim_wave_scale * smoothstep(0.02, 0.6, f.z), v_sim);
+		flow = f.xy * v_base_sim.w;
+		amp *= mix(1.0, sim_wave_scale * smoothstep(0.02, 0.6, f.z), v_base_sim.w);
 	}
 	// Flow mapping: two phases half a period apart, each restarted when its weight is zero.
 	float ph0 = fract(water_time / flow_period);
@@ -192,7 +192,7 @@ void fragment() {
 		vec2 ruv = xz / rain_tile;
 		slope += (texture(rain_ripples, ruv).rg + texture(rain_ripples, ruv * 0.77 + vec2(0.37, 0.61)).rg) * rain_amount;
 	}
-	slope += sims.gb * v_sim;
+	slope += sims.gb * v_base_sim.w;
 	vec3 n_world = normalize(vec3(-slope.x, 1.0, -slope.y));
 	vec3 n_view = normalize((VIEW_MATRIX * vec4(n_world, 0.0)).xyz);
 	NORMAL = n_view;
@@ -426,7 +426,7 @@ void fragment() {
 	// Foam: breaking waves, shores, the simulation's.
 	float shore = 1.0 - smoothstep(0.0, shore_foam_depth, down0);
 	shore *= shore;
-	float foam_amount = clamp(whitecap * smoothstep(0.0, 0.1, amp) + shore * 0.4 + sims.a * v_sim, 0.0, 1.0);
+	float foam_amount = clamp(whitecap * smoothstep(0.0, 0.1, amp) + shore * 0.4 + sims.a * v_base_sim.w, 0.0, 1.0);
 	vec2 fuv = xz * 0.31;
 	float noise = texture(foam_noise, fuv - o0 * 0.31 * float(flowing) + vec2(water_time * 0.011, 0.0)).r * 0.65 + texture(foam_noise, fuv * 2.3 + vec2(0.0, water_time * 0.017)).r * 0.35;
 	float foam = smoothstep(1.0 - foam_amount, 1.0 - foam_amount + 0.22, noise) * step(0.001, foam_amount);
@@ -452,7 +452,7 @@ void fragment() {
 		} else if (debug_view == 4) {
 			dbg = n_world * 0.5 + 0.5;
 		} else if (debug_view == 5) {
-			dbg = vec3(v_sim, sims.a, length(flow) * 0.5);
+			dbg = vec3(v_base_sim.w, sims.a, length(flow) * 0.5);
 		} else if (debug_view == 6) {
 			dbg = vec3(sqrt(variance), rough, 0.0);
 		} else if (debug_view == 7) {

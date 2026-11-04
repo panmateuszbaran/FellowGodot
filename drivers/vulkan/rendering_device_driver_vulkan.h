@@ -184,12 +184,13 @@ class RenderingDeviceDriverVulkan : public RenderingDeviceDriver {
 	void _fellow_profile_apply_limits();
 	void _fellow_profile_apply_capabilities();
 	void _fellow_profile_report(const String &p_message);
-	void _fellow_profile_check_layout(const String &p_name, const ShaderReflection &p_reflection);
-	void _fellow_profile_check_stage(const String &p_name, ShaderStage p_stage, const uint8_t *p_spirv, size_t p_size);
+	void _fellow_profile_check_layout(const String &p_name, const ShaderReflection &p_reflection, Vector<String> &r_problems);
+	void _fellow_profile_check_stage(const String &p_name, ShaderStage p_stage, const uint8_t *p_spirv, size_t p_size, Vector<String> &r_problems);
 	PFN_vkGetPipelineExecutablePropertiesKHR fellow_get_pipeline_executable_properties = nullptr;
 	PFN_vkGetPipelineExecutableStatisticsKHR fellow_get_pipeline_executable_statistics = nullptr;
 	Mutex fellow_pipeline_stats_mutex;
 	struct ShaderInfo;
+	void _fellow_profile_report_pipeline(const ShaderInfo *p_shader_info);
 	void _fellow_dump_pipeline_stats(VkPipeline p_pipeline, const ShaderInfo *p_shader_info, VectorView<PipelineSpecializationConstant> p_specialization_constants, const char *p_kind);
 	bool framebuffer_depth_resolve = false;
 #if defined(VK_TRACK_DEVICE_MEMORY)
@@ -531,6 +532,7 @@ private:
 		TightLocalVector<Vector<uint8_t>> spirv_stage_bytes;
 		TightLocalVector<uint64_t> original_stage_size;
 		VkPipelineLayout vk_pipeline_layout = VK_NULL_HANDLE;
+		Vector<String> fellow_portability; // FELLOW_VULKAN_PROFILE: what the simulated device lacks, printed with a pipeline
 	};
 
 public:

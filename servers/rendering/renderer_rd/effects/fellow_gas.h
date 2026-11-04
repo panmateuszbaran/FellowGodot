@@ -401,6 +401,10 @@ private:
 	RID sim_version[2];
 	RID sim_pipelines[2][SIM_MAX];
 	bool sim_ready[2] = { false, false };
+	// Decision 0150: SPARSE_ACTIVATE binds 11 storage images, SPARSE_CLEAR 10 (fellow_gas_sim.glsl); on a device with
+	// fewer a shader stage (Android's 2025 baseline: 8) the volumes are simulated dense and those pipelines not made.
+	static constexpr uint32_t SPARSE_STORAGE_IMAGES = 11;
+	bool sparse_supported = true;
 	FellowGasRenderShaderRD render_shader;
 	RID render_version;
 	RID render_pipelines[RENDER_MAX];

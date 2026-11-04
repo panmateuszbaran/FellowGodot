@@ -1,7 +1,7 @@
 #!/bin/bash
 # FellowEngine platform checks (milestone 49): Godot's export templates for other platforms, built and run in docker
 # containers on one x86_64 Linux machine (no other hardware needed). See README.md.
-#   platforms.sh image <cross|wine|android|web>        build a container image (fellow-platforms-<name>)
+#   platforms.sh image <cross|wine|arm64|android|web>  build a container image (fellow-platforms-<name>)
 #   platforms.sh build <windows|linux-arm64|android|web> [scons args]
 #   platforms.sh shell <image> [command]                a command in a container, the build tree mounted at /src
 #                                                       (and FELLOW_PLATFORMS_MOUNTS="host:container ...")

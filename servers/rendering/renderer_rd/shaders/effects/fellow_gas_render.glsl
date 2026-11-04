@@ -203,9 +203,12 @@ void main() {
 #endif
 
 #ifdef MODE_TRACE
-layout(set = 0, binding = 1) uniform sampler3D scalars[MAX_VOLUMES];
-layout(set = 0, binding = 2) uniform sampler3D light_tex[MAX_VOLUMES];
-layout(set = 0, binding = 3) uniform sampler3D coarse[MAX_VOLUMES]; // nearest
+// Textures and one sampler, not combined samplers: 3 x MAX_VOLUMES of those are beyond the 16 a stage of some
+// devices (Apple's through MoltenVK, Android's baselines); decision 0150.
+layout(set = 0, binding = 1) uniform texture3D scalars[MAX_VOLUMES];
+layout(set = 0, binding = 2) uniform texture3D light_tex[MAX_VOLUMES];
+layout(set = 0, binding = 3) uniform texture3D coarse[MAX_VOLUMES]; // texelFetch
+layout(set = 0, binding = 10) uniform sampler linear_clamp;
 layout(set = 0, binding = 4) uniform sampler2D depth_buffer;
 layout(rgba16f, set = 0, binding = 5) uniform restrict writeonly image2D trace_out;
 layout(r32f, set = 0, binding = 6) uniform restrict writeonly image2D trace_depth_out;
@@ -310,12 +313,12 @@ void main() {
 		vec3 albedo = v.albedo_density.rgb;
 		float density = v.albedo_density.w;
 		vec3 sun = params.sun_illuminance.rgb * params.sun_direction.w;
-		ivec3 nbrick = ivec3(textureSize(coarse[i], 0));
+		ivec3 nbrick = ivec3(textureSize(sampler3D(coarse[i], linear_clamp), 0));
 		float s = t.x + ds * jitter;
 		for (int k = 0; k < steps && transmittance > 0.003; k++) {
 			vec3 gp = o + d * s;
 			ivec3 b = clamp(ivec3(gp * 0.25), ivec3(0), nbrick - 1);
-			vec2 cm = texelFetch(coarse[i], b, 0).xy;
+			vec2 cm = texelFetch(sampler3D(coarse[i], linear_clamp), b, 0).xy;
 			if (cm.x * density < 1e-4 && cm.y < 300.0) {
 				s += ds;
 				continue;
@@ -325,14 +328,14 @@ void main() {
 						(ambient_light(vec3(1.0, 0.0, 0.0)) + ambient_light(vec3(-1.0, 0.0, 0.0)) + ambient_light(vec3(0.0, 0.0, 1.0)) + ambient_light(vec3(0.0, 0.0, -1.0))) * 0.15;
 				ambient_done = true;
 			}
-			vec4 sc = textureLod(scalars[i], gp / n, 0.0);
+			vec4 sc = textureLod(sampler3D(scalars[i], linear_clamp), gp / n, 0.0);
 			float sigma_t = sc.x * density;
 			vec3 eps = sc.y > 300.0 ? emission_rgb(i, sc.y) : vec3(0.0);
 			if (sigma_t > 1e-5 || dot(eps, vec3(1.0)) > 0.0) {
 				vec3 in_scatter = vec3(0.0);
 				if (sigma_t > 1e-5) {
 					// Sun: Wrenninge's multiple-scattering approximation, four octaves.
-					float tau_l = textureLod(light_tex[i], gp / n, 0.0).r * v.misc.y;
+					float tau_l = textureLod(sampler3D(light_tex[i], linear_clamp), gp / n, 0.0).r * v.misc.y;
 					float a = 1.0;
 					float b = 1.0;
 					float c = 1.0;

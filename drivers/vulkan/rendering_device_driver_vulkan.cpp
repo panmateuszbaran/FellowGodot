@@ -4667,7 +4667,7 @@ RDD::ShaderID RenderingDeviceDriverVulkan::shader_create_from_container(const Re
 	}
 
 	if (fellow_profile) {
-		_fellow_profile_check_layout(shader_info.name, shader_refl);
+		_fellow_profile_check_layout(shader_info.name, shader_refl, shader_info.fellow_portability);
 	}
 
 	// Modules.
@@ -4723,7 +4723,7 @@ RDD::ShaderID RenderingDeviceDriverVulkan::shader_create_from_container(const Re
 		shader_info.original_stage_size.push_back(decoded_spirv.size());
 
 		if (fellow_profile) {
-			_fellow_profile_check_stage(shader_info.name, shader_refl.stages_vector[i], decoded_spirv.ptr(), decoded_spirv.size());
+			_fellow_profile_check_stage(shader_info.name, shader_refl.stages_vector[i], decoded_spirv.ptr(), decoded_spirv.size(), shader_info.fellow_portability);
 		}
 
 		if (use_respv) {
@@ -6455,6 +6455,9 @@ RDD::PipelineID RenderingDeviceDriverVulkan::render_pipeline_create(
 	// Finally, pipeline create info.
 
 	const ShaderInfo *shader_info = (const ShaderInfo *)p_shader.id;
+	if (fellow_profile) {
+		_fellow_profile_report_pipeline(shader_info);
+	}
 
 	VkGraphicsPipelineCreateInfo pipeline_create_info = {};
 
@@ -6929,6 +6932,9 @@ RDD::RaytracingPipelineID RenderingDeviceDriverVulkan::raytracing_pipeline_creat
 		const PipelineShader &shader = p_shaders[i];
 		const ShaderInfo *shader_info = (const ShaderInfo *)shader.shader.id;
 		bool found_shader_stage = false;
+		if (fellow_profile) {
+			_fellow_profile_report_pipeline(shader_info);
+		}
 
 		for (uint32_t j = 0; j < shader_info->vk_stages_create_info.size(); j++) {
 			const VkPipelineShaderStageCreateInfo &create_info = shader_info->vk_stages_create_info[j];
@@ -7104,6 +7110,9 @@ void RenderingDeviceDriverVulkan::command_compute_dispatch_indirect(CommandBuffe
 
 RDD::PipelineID RenderingDeviceDriverVulkan::compute_pipeline_create(ShaderID p_shader, VectorView<PipelineSpecializationConstant> p_specialization_constants) {
 	const ShaderInfo *shader_info = (const ShaderInfo *)p_shader.id;
+	if (fellow_profile) {
+		_fellow_profile_report_pipeline(shader_info);
+	}
 
 	VkComputePipelineCreateInfo pipeline_create_info = {};
 	pipeline_create_info.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
@@ -8080,13 +8089,21 @@ void RenderingDeviceDriverVulkan::_fellow_profile_report(const String &p_message
 	print_line(vformat("FELLOW_PORTABILITY %s: %s", fellow_profile->name, p_message));
 }
 
-void RenderingDeviceDriverVulkan::_fellow_profile_check_layout(const String &p_name, const ShaderReflection &p_reflection) {
+void RenderingDeviceDriverVulkan::_fellow_profile_report_pipeline(const ShaderInfo *p_shader_info) {
+	// A shader's problems are printed when a pipeline is made from it: Godot compiles every variant of a shader and
+	// makes pipelines of the ones the device's features select (FSR 1's half-float one is compiled everywhere).
+	for (const String &problem : p_shader_info->fellow_portability) {
+		_fellow_profile_report(problem);
+	}
+}
+
+void RenderingDeviceDriverVulkan::_fellow_profile_check_layout(const String &p_name, const ShaderReflection &p_reflection, Vector<String> &r_problems) {
 	const VkPhysicalDeviceLimits &l = physical_device_properties.limits;
 	if ((uint32_t)p_reflection.uniform_sets.size() > l.maxBoundDescriptorSets) {
-		_fellow_profile_report(vformat("%s: %d descriptor sets, the device binds %d", p_name, p_reflection.uniform_sets.size(), l.maxBoundDescriptorSets));
+		r_problems.push_back(vformat("%s: %d descriptor sets, the device binds %d", p_name, p_reflection.uniform_sets.size(), l.maxBoundDescriptorSets));
 	}
 	if (p_reflection.push_constant_size > l.maxPushConstantsSize) {
-		_fellow_profile_report(vformat("%s: %d bytes of push constants, the device has %d", p_name, p_reflection.push_constant_size, l.maxPushConstantsSize));
+		r_problems.push_back(vformat("%s: %d bytes of push constants, the device has %d", p_name, p_reflection.push_constant_size, l.maxPushConstantsSize));
 	}
 	enum Kind {
 		SAMPLERS,
@@ -8127,7 +8144,7 @@ void RenderingDeviceDriverVulkan::_fellow_profile_check_layout(const String &p_n
 				case UNIFORM_TYPE_UNIFORM_BUFFER_DYNAMIC:
 					add[UNIFORM_BUFFERS] = 1;
 					if (u.length > l.maxUniformBufferRange) {
-						_fellow_profile_report(vformat("%s: a uniform buffer of %d bytes (set %d, binding %d), the device's range is %d", p_name, u.length, s, u.binding, l.maxUniformBufferRange));
+						r_problems.push_back(vformat("%s: a uniform buffer of %d bytes (set %d, binding %d), the device's range is %d", p_name, u.length, s, u.binding, l.maxUniformBufferRange));
 					}
 					break;
 				case UNIFORM_TYPE_STORAGE_BUFFER:
@@ -8157,21 +8174,21 @@ void RenderingDeviceDriverVulkan::_fellow_profile_check_layout(const String &p_n
 				resources += per_stage[st][k];
 			}
 			if (per_stage[st][k] > per_stage_limits[k]) {
-				_fellow_profile_report(vformat("%s (%s): %d %s, the device has %d a stage", p_name, SHADER_STAGE_NAMES[st], per_stage[st][k], kind_names[k], per_stage_limits[k]));
+				r_problems.push_back(vformat("%s (%s): %d %s, the device has %d a stage", p_name, SHADER_STAGE_NAMES[st], per_stage[st][k], kind_names[k], per_stage_limits[k]));
 			}
 		}
 		if (resources > l.maxPerStageResources) {
-			_fellow_profile_report(vformat("%s (%s): %d resources, the device has %d a stage", p_name, SHADER_STAGE_NAMES[st], resources, l.maxPerStageResources));
+			r_problems.push_back(vformat("%s (%s): %d resources, the device has %d a stage", p_name, SHADER_STAGE_NAMES[st], resources, l.maxPerStageResources));
 		}
 	}
 	for (int k = 0; k < KIND_MAX; k++) {
 		if (layout[k] > layout_limits[k]) {
-			_fellow_profile_report(vformat("%s: %d %s in its layout, the device has %d", p_name, layout[k], kind_names[k], layout_limits[k]));
+			r_problems.push_back(vformat("%s: %d %s in its layout, the device has %d", p_name, layout[k], kind_names[k], layout_limits[k]));
 		}
 	}
 }
 
-void RenderingDeviceDriverVulkan::_fellow_profile_check_stage(const String &p_name, ShaderStage p_stage, const uint8_t *p_spirv, size_t p_size) {
+void RenderingDeviceDriverVulkan::_fellow_profile_check_stage(const String &p_name, ShaderStage p_stage, const uint8_t *p_spirv, size_t p_size, Vector<String> &r_problems) {
 	FellowSpirvSummary summary;
 	if (!fellow_spirv_summarize((const uint32_t *)p_spirv, p_size / sizeof(uint32_t), summary)) {
 		return;
@@ -8298,18 +8315,18 @@ void RenderingDeviceDriverVulkan::_fellow_profile_check_stage(const String &p_na
 		}
 		if (!ok) {
 			const char *cap_name = fellow_spirv_capability_name(cap);
-			_fellow_profile_report(vformat("%s needs %s, which the device lacks", where, cap_name ? String(cap_name) : vformat("capability %d", cap)));
+			r_problems.push_back(vformat("%s needs %s, which the device lacks", where, cap_name ? String(cap_name) : vformat("capability %d", cap)));
 		}
 	}
 	if (p_stage == SHADER_STAGE_COMPUTE && summary.local_size[0]) {
 		const VkPhysicalDeviceLimits &l = physical_device_properties.limits;
 		const uint64_t invocations = uint64_t(summary.local_size[0]) * summary.local_size[1] * summary.local_size[2];
 		if (invocations > l.maxComputeWorkGroupInvocations || summary.local_size[0] > l.maxComputeWorkGroupSize[0] || summary.local_size[1] > l.maxComputeWorkGroupSize[1] || summary.local_size[2] > l.maxComputeWorkGroupSize[2]) {
-			_fellow_profile_report(vformat("%s: workgroup %dx%dx%d (%d invocations), the device has %d (%dx%dx%d)", where, summary.local_size[0], summary.local_size[1], summary.local_size[2], invocations,
+			r_problems.push_back(vformat("%s: workgroup %dx%dx%d (%d invocations), the device has %d (%dx%dx%d)", where, summary.local_size[0], summary.local_size[1], summary.local_size[2], invocations,
 					l.maxComputeWorkGroupInvocations, l.maxComputeWorkGroupSize[0], l.maxComputeWorkGroupSize[1], l.maxComputeWorkGroupSize[2]));
 		}
 		if (summary.workgroup_bytes > l.maxComputeSharedMemorySize) {
-			_fellow_profile_report(vformat("%s: %d bytes of shared memory, the device has %d", where, summary.workgroup_bytes, l.maxComputeSharedMemorySize));
+			r_problems.push_back(vformat("%s: %d bytes of shared memory, the device has %d", where, summary.workgroup_bytes, l.maxComputeSharedMemorySize));
 		}
 	}
 }

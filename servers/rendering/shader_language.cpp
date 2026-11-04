@@ -11125,6 +11125,12 @@ Error ShaderLanguage::_parse_shader(const HashMap<StringName, FunctionInfo> &p_f
 			return ERR_PARSE_ERROR;
 		}
 
+		if (kv.value.stage == ShaderNode::Varying::STAGE_FRAGMENT) {
+			// FellowEngine (decision 0150): a varying passed from fragment() to light() is a plain variable in the
+			// fragment stage (ShaderCompiler gives it no location), not an interpolant: it takes none of the device's.
+			continue;
+		}
+
 		if (varying_index + kv.value.get_size() > max_varyings) {
 			_set_tkpos(kv.value.tkpos);
 			_set_error(vformat(RTR("Too many varyings used in shader (%d used, maximum supported is %d)."), varying_index + kv.value.get_size(), max_varyings));
