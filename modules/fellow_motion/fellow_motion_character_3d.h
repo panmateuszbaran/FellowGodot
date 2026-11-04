@@ -97,7 +97,9 @@ private:
 
 	// Shown pose and its history (motion space: the ground at y = 0).
 	LocalVector<Xf> pose;
-	LocalVector<Xf> history; // [32][J], oldest first
+	LocalVector<Xf> history; // [32][J], a ring: logical slot i (0 the oldest) at (history_head + i) % 32
+	int history_head = 0;
+	LocalVector<Xf> fade_pose; // the old segment's pose while crossfading
 	float history_dt[32] = {};
 	LocalVector<Xf> relaxed;
 	int head_joint = -1;
@@ -113,9 +115,6 @@ private:
 	double pending_time = 0.0; // seconds since it was made
 	bool pending_idle = false;
 	bool pending_get_up = false;
-	LocalVector<Xf> pending_start; // the last context pose
-	LocalVector<Xf> pending_end; // the first target pose
-	Xf pending_align;
 	double latency = 0.05; // the measured request -> result time (EMA)
 
 	// Movement (MotionBricks' MovementControl, 1D: the facing follows the velocity).
@@ -136,6 +135,7 @@ private:
 	Node3D *body = nullptr;
 	Skeleton3D *skeleton = nullptr;
 	LocalVector<int> bone_of_joint;
+	bool bones_set = false; // every bone posed once (the joints the model does not drive need it only once)
 
 	// Statistics.
 	uint64_t generations = 0;
@@ -144,11 +144,11 @@ private:
 
 	void _start();
 	void _load_body();
-	void _apply_to_skeleton();
+	void _apply_to_skeleton(bool p_all = false);
 	void _update_movement(double p_delta);
 	bool _needs_regeneration() const;
 	void _generate(bool p_idle);
-	void _accept(const FellowMotionService::Result &p_result);
+	void _accept(FellowMotionService::Result &p_result);
 	void _sample(const Segment &p_seg, Xf *r_pose) const;
 	void _record(double p_delta);
 	void _context(Xf *r_context) const;

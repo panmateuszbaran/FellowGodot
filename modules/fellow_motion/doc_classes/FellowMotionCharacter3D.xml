@@ -5,7 +5,7 @@
 	</brief_description>
 	<description>
 		Set [member desired_velocity] every frame and the character walks, jogs, runs, turns and stops by itself — no animation clips. Its motion is generated in segments of 0.6-1.9 s by a [FellowMotionModel] ([member model_path]): each segment from the four poses the character last showed towards a target [member lead_time] ahead along the smoothed desired velocity, facing it and moving at it (the root only: the model fills in the body). The next segment is requested before the current one's transition point ([member transition_early_frames] before its end, or when the speed or the direction changes enough) and crossfaded in over [member crossfade_time] when it arrives. With a zero velocity it comes to rest in a relaxed stance and keeps generating small idle segments ([member idle_motion]).
-		Every character naming one model file shares one model and its GPU device: their requests run as one batch ([member inference_mode]). The node moves itself: its origin follows the hips on the ground (at the height it started at), its +Z the facing. [member body_path] loads a skinned body (the SOMA mannequin [code]tools/fmb_usd.py[/code] writes) whose skeleton it poses; the model's 30 joints drive it, the hands keep a relaxed pose. The motion follows MotionBricks' runtime (context sampling from the recorded poses, endpoint correction, MovementControl's springs and regeneration rules). See [code]docs/decisions/0143-neural-motion.md[/code].
+		Every character naming one model file shares one model and its GPU device: their requests run as one batch ([member inference_mode]), the service encoding them and decoding and correcting the results on the worker threads (none of it on the main thread when asynchronous). The node moves itself: its origin follows the hips on the ground (at the height it started at), its +Z the facing. [member body_path] loads a skinned body (the SOMA mannequin [code]tools/fmb_usd.py[/code] writes) whose skeleton it poses; the model's 30 joints drive it, the hands keep a relaxed pose. The motion follows MotionBricks' runtime (context sampling from the recorded poses, endpoint correction, MovementControl's springs and regeneration rules). See [code]docs/decisions/0143-neural-motion.md[/code].
 	</description>
 	<tutorials>
 	</tutorials>
@@ -46,7 +46,7 @@
 			<return type="Dictionary" />
 			<param index="0" name="model_path" type="String" />
 			<description>
-				The shared model's requests, batches, average batch size and time, the last batch's.
+				The shared model's requests, batches, average batch size and time ([code]avg_batch_msec[/code]; the decoding after it, [code]avg_decode_msec[/code]), the last batch's.
 			</description>
 		</method>
 		<method name="get_state" qualifiers="const">

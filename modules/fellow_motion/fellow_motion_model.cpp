@@ -35,6 +35,7 @@
 #include "core/io/file_access.h"
 #include "core/io/json.h"
 #include "core/object/class_db.h"
+#include "core/object/worker_thread_pool.h"
 #include "core/os/os.h"
 #include "core/os/time.h"
 #include "servers/rendering/rendering_device_binds.h"
@@ -631,7 +632,15 @@ void FellowMotionModel::_prepare(const Batch &p_b, LocalVector<float> &r_grv_n, 
 
 void FellowMotionModel::_decode(Batch &p_b, const LocalVector<float> &p_vout, const LocalVector<float> &p_rout, const LocalVector<float> &p_T, const LocalVector<float> &p_grv_n, const LocalVector<float> &p_off, const LocalVector<float> &p_head0) {
 	const int n = p_b.n;
-	float lm[365], ls[365], gm[5], gs[5];
+	DecodeCtx c;
+	c.b = &p_b;
+	c.vout = &p_vout;
+	c.rout = &p_rout;
+	c.T = &p_T;
+	c.grv_n = &p_grv_n;
+	c.off = &p_off;
+	c.head0 = &p_head0;
+	float *lm = c.lm, *ls = c.ls, *gm = c.gm, *gs = c.gs;
 	for (int i = 0; i < 365; i++) {
 		lm[i] = mean[dual_local(i)];
 		ls[i] = Math::sqrt(std_dev[dual_local(i)] * std_dev[dual_local(i)] + EPS_STATS);
@@ -640,60 +649,77 @@ void FellowMotionModel::_decode(Batch &p_b, const LocalVector<float> &p_vout, co
 		gm[i] = mean[dual_global(i)];
 		gs[i] = Math::sqrt(std_dev[dual_global(i)] * std_dev[dual_global(i)] + EPS_STATS);
 	}
-	for (int b = 0; b < n; b++) {
-		int T = int(p_T[b * 4]);
-		p_b.pred_num_tokens[b] = T;
-		float *out = p_b.pred_global_motions.ptr() + b * FRAMES * MOTION_DIM;
-		float ang = 0.0f, px = 0.0f, pz = 0.0f;
-		for (int f = 0; f < FRAMES; f++) {
-			const float *v = p_vout.ptr() + (b * FRAMES + f) * 365;
-			float loc[365];
-			for (int c = 0; c < 365; c++) {
-				loc[c] = v[c] * ls[c] + lm[c];
-			}
-			float a2 = Math::atan2(Math::sin(ang * 0.5f), Math::cos(ang * 0.5f)) * 2.0f;
-			float *o = out + f * MOTION_DIM;
-			o[0] = px;
-			o[1] = loc[3];
-			o[2] = pz;
-			o[3] = Math::cos(a2);
-			o[4] = Math::sin(a2);
-			memcpy(o + 5, loc + 4, 361 * sizeof(float));
-			ang += loc[0] / FPS;
-			px += loc[1] / FPS;
-			pz += loc[2] / FPS;
+	// The requests spread over the worker threads.
+	if (n > 1) {
+		WorkerThreadPool::GroupID g = WorkerThreadPool::get_singleton()->add_template_group_task(this, &FellowMotionModel::_decode_one, &c, n, -1, true, "FellowMotion outputs");
+		WorkerThreadPool::get_singleton()->wait_for_group_task_completion(g);
+	} else {
+		_decode_one(0, &c);
+	}
+}
+
+void FellowMotionModel::_decode_one(uint32_t p_index, DecodeCtx *p_ctx) {
+	const int b = int(p_index);
+	Batch &p_b = *p_ctx->b;
+	const LocalVector<float> &p_vout = *p_ctx->vout;
+	const LocalVector<float> &p_rout = *p_ctx->rout;
+	const LocalVector<float> &p_T = *p_ctx->T;
+	const LocalVector<float> &p_grv_n = *p_ctx->grv_n;
+	const LocalVector<float> &p_off = *p_ctx->off;
+	const LocalVector<float> &p_head0 = *p_ctx->head0;
+	const float *lm = p_ctx->lm, *ls = p_ctx->ls, *gm = p_ctx->gm, *gs = p_ctx->gs;
+	int T = int(p_T[b * 4]);
+	p_b.pred_num_tokens[b] = T;
+	float *out = p_b.pred_global_motions.ptr() + b * FRAMES * MOTION_DIM;
+	float ang = 0.0f, px = 0.0f, pz = 0.0f;
+	for (int f = 0; f < FRAMES; f++) {
+		const float *v = p_vout.ptr() + (b * FRAMES + f) * 365;
+		float loc[365];
+		for (int c = 0; c < 365; c++) {
+			loc[c] = v[c] * ls[c] + lm[c];
 		}
-		// The root module's root where the pose module misses the target height (final_root_pred_mode).
-		float e_pose = 0.0f, e_root = 0.0f, wsum = 0.0f;
-		for (int i = 0; i < 4; i++) {
-			int fr = (T - 1) * 4 + i;
-			float w = float(p_b.has_global_root_values[b * SLOTS + 4 + i]);
-			float th = p_grv_n[(b * SLOTS + 4 + i) * 5 + 1] * gs[1] + gm[1];
-			float hr = p_rout[(b * FRAMES + fr) * 5 + 1] * gs[1] + gm[1];
-			e_pose += Math::abs(out[fr * MOTION_DIM + 1] - th) * w;
-			e_root += Math::abs(hr - th) * w;
-			wsum += w;
-		}
-		if (wsum > 0.0f) {
-			e_pose /= wsum;
-			e_root /= wsum;
-			if (e_root < e_pose && e_pose > 0.05f) {
-				for (int f = 0; f < FRAMES; f++) {
-					for (int k = 0; k < 5; k++) {
-						out[f * MOTION_DIM + k] = p_rout[(b * FRAMES + f) * 5 + k] * gs[k] + gm[k];
-					}
+		float a2 = Math::atan2(Math::sin(ang * 0.5f), Math::cos(ang * 0.5f)) * 2.0f;
+		float *o = out + f * MOTION_DIM;
+		o[0] = px;
+		o[1] = loc[3];
+		o[2] = pz;
+		o[3] = Math::cos(a2);
+		o[4] = Math::sin(a2);
+		memcpy(o + 5, loc + 4, 361 * sizeof(float));
+		ang += loc[0] / FPS;
+		px += loc[1] / FPS;
+		pz += loc[2] / FPS;
+	}
+	// The root module's root where the pose module misses the target height (final_root_pred_mode).
+	float e_pose = 0.0f, e_root = 0.0f, wsum = 0.0f;
+	for (int i = 0; i < 4; i++) {
+		int fr = (T - 1) * 4 + i;
+		float w = float(p_b.has_global_root_values[b * SLOTS + 4 + i]);
+		float th = p_grv_n[(b * SLOTS + 4 + i) * 5 + 1] * gs[1] + gm[1];
+		float hr = p_rout[(b * FRAMES + fr) * 5 + 1] * gs[1] + gm[1];
+		e_pose += Math::abs(out[fr * MOTION_DIM + 1] - th) * w;
+		e_root += Math::abs(hr - th) * w;
+		wsum += w;
+	}
+	if (wsum > 0.0f) {
+		e_pose /= wsum;
+		e_root /= wsum;
+		if (e_root < e_pose && e_pose > 0.05f) {
+			for (int f = 0; f < FRAMES; f++) {
+				for (int k = 0; k < 5; k++) {
+					out[f * MOTION_DIM + k] = p_rout[(b * FRAMES + f) * 5 + k] * gs[k] + gm[k];
 				}
 			}
 		}
-		for (int f = 0; f < FRAMES; f++) {
-			float *o = out + f * MOTION_DIM;
-			float a = Math::atan2(o[4], o[3]) + p_head0[b];
-			o[3] = Math::cos(a);
-			o[4] = Math::sin(a);
-			o[0] += p_off[b * 2 + 0];
-			o[2] += p_off[b * 2 + 1];
-			retarget_6d(o + 92, standard_offsets, capture_offsets);
-		}
+	}
+	for (int f = 0; f < FRAMES; f++) {
+		float *o = out + f * MOTION_DIM;
+		float a = Math::atan2(o[4], o[3]) + p_head0[b];
+		o[3] = Math::cos(a);
+		o[4] = Math::sin(a);
+		o[0] += p_off[b * 2 + 0];
+		o[2] += p_off[b * 2 + 1];
+		retarget_6d(o + 92, standard_offsets, capture_offsets);
 	}
 }
 

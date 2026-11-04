@@ -47,6 +47,7 @@ struct FellowMotionRig {
 	};
 	static constexpr int MODEL_JOINTS = 30;
 	static constexpr int BOUNDARY = 3;
+	static constexpr int MAX_JOINTS = 256;
 
 	int joints = 0;
 	LocalVector<String> names;
@@ -56,6 +57,10 @@ struct FellowMotionRig {
 	LocalVector<int> pose_to_model;
 	int right_leg = -1;
 	int left_leg = -1;
+	int head = -1;
+	LocalVector<int> animated; // the hips and the model's joints; the others always keep the reference pose
+	LocalVector<int> heading_chain; // the joints from the hips to both legs (parents first)
+	LocalVector<int> head_chain; // the joints from the hips to the head (parents first)
 	float capture_offsets[MODEL_JOINTS * 9] = {};
 	float standard_offsets[MODEL_JOINTS * 9] = {};
 
@@ -63,6 +68,10 @@ struct FellowMotionRig {
 	int find(const String &p_name) const;
 	void world(const Xf *p_local, Xf *r_world) const;
 	float heading_of(const Xf *p_world) const; // the legs' heading, atan2(forward.x, forward.z) (0 faces +Z)
+	// The same from local transforms, with only the joints on the way to the legs transformed.
+	float heading_of_local(const Xf *p_local) const;
+	// The world hips and head heights of local transforms (only the joints on the way to the head).
+	void hips_head_heights(const Xf *p_local, float &r_hips, float &r_head) const;
 
 	// A relaxed standing pose (the T pose of the model's standard rotations, arms lowered by p_arm_drop radians),
 	// the hips at p_hips_height, facing +Z.

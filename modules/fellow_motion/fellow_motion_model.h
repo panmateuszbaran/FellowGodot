@@ -136,6 +136,17 @@ private:
 	void _free();
 
 	void _prepare(const Batch &p_batch, LocalVector<float> &r_grv_n, LocalVector<float> &r_off, LocalVector<float> &r_head0);
+	struct DecodeCtx {
+		Batch *b = nullptr;
+		const LocalVector<float> *vout = nullptr;
+		const LocalVector<float> *rout = nullptr;
+		const LocalVector<float> *T = nullptr;
+		const LocalVector<float> *grv_n = nullptr;
+		const LocalVector<float> *off = nullptr;
+		const LocalVector<float> *head0 = nullptr;
+		float lm[365], ls[365], gm[5], gs[5];
+	};
+	void _decode_one(uint32_t p_index, DecodeCtx *p_ctx);
 	void _decode(Batch &p_batch, const LocalVector<float> &p_vout, const LocalVector<float> &p_rout, const LocalVector<float> &p_T, const LocalVector<float> &p_grv_n, const LocalVector<float> &p_off, const LocalVector<float> &p_head0);
 
 protected:

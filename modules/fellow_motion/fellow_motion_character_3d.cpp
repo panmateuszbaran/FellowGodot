@@ -122,19 +122,15 @@ Vector3 FellowMotionCharacter3D::_ground() const {
 }
 
 float FellowMotionCharacter3D::_heading_of(const Xf *p_local) const {
-	LocalVector<Xf> w;
-	w.resize(rig->joints);
-	rig->world(p_local, w.ptr());
-	return rig->heading_of(w.ptr());
+	return rig->heading_of_local(p_local);
 }
 
 // Lying or crawling: the hips or the head well below the relaxed stance's (the model's training data has motion on the
 // ground, and a target ahead of a character on the ground keeps it there).
 bool FellowMotionCharacter3D::_is_down(const Xf *p_local) const {
-	LocalVector<Xf> w;
-	w.resize(rig->joints);
-	rig->world(p_local, w.ptr());
-	return w[0].p.y < 0.75f * stand_hips_y || (head_joint >= 0 && w[head_joint].p.y < 0.8f * stand_head_y);
+	float hips, head;
+	rig->hips_head_heights(p_local, hips, head);
+	return hips < 0.75f * stand_hips_y || (head_joint >= 0 && head < 0.8f * stand_head_y);
 }
 
 void FellowMotionCharacter3D::_start() {
@@ -172,6 +168,7 @@ void FellowMotionCharacter3D::_start() {
 	pose[0].q = r * relaxed[0].q;
 	pose[0].p = r.xform(relaxed[0].p) + Vector3(gt.origin.x, 0.0f, gt.origin.z);
 	history.resize(HISTORY * J);
+	history_head = 0;
 	for (int i = 0; i < HISTORY; i++) {
 		memcpy((void *)(history.ptr() + i * J), pose.ptr(), J * sizeof(Xf));
 		history_dt[i] = 0.0f;
@@ -183,7 +180,7 @@ void FellowMotionCharacter3D::_start() {
 	started = true;
 	force_regen = true;
 	state = STATE_IDLE;
-	_apply_to_skeleton();
+	_apply_to_skeleton(true);
 }
 
 void FellowMotionCharacter3D::_load_body() {
@@ -219,6 +216,7 @@ void FellowMotionCharacter3D::_load_body() {
 	ERR_FAIL_NULL(body);
 	add_child(body, false, INTERNAL_MODE_FRONT);
 	skeleton = find_skeleton(body);
+	bones_set = false;
 	bone_of_joint.resize(rig->joints);
 	for (int j = 0; j < rig->joints; j++) {
 		bone_of_joint[j] = skeleton ? skeleton->find_bone(rig->names[j]) : -1;
@@ -226,7 +224,7 @@ void FellowMotionCharacter3D::_load_body() {
 	set_body_color(body_color);
 }
 
-void FellowMotionCharacter3D::_apply_to_skeleton() {
+void FellowMotionCharacter3D::_apply_to_skeleton(bool p_all) {
 	if (!is_inside_tree()) {
 		return;
 	}
@@ -239,8 +237,12 @@ void FellowMotionCharacter3D::_apply_to_skeleton() {
 	Transform3D sk = skeleton->get_global_transform();
 	Transform3D hips(Basis(pose[0].q), pose[0].p + Vector3(0, ground_y, 0));
 	Transform3D hl = sk.affine_inverse() * hips;
-	const int J = rig->joints;
-	for (int j = 0; j < J; j++) {
+	// Every bone once, then only those the model drives (the others keep the reference pose).
+	p_all = p_all || !bones_set;
+	bones_set = true;
+	const int J = p_all ? rig->joints : int(rig->animated.size());
+	for (int i = 0; i < J; i++) {
+		int j = p_all ? i : rig->animated[i];
 		int b = bone_of_joint[j];
 		if (b < 0) {
 			continue;
@@ -249,7 +251,10 @@ void FellowMotionCharacter3D::_apply_to_skeleton() {
 			skeleton->set_bone_pose_position(b, hl.origin);
 			skeleton->set_bone_pose_rotation(b, hl.basis.get_rotation_quaternion());
 		} else {
-			skeleton->set_bone_pose_position(b, pose[j].p);
+			// Below the hips the joints keep their rest offsets: only the rotations change.
+			if (p_all) {
+				skeleton->set_bone_pose_position(b, pose[j].p);
+			}
 			skeleton->set_bone_pose_rotation(b, pose[j].q);
 		}
 	}
@@ -325,10 +330,12 @@ void FellowMotionCharacter3D::_context(Xf *r_context) const {
 		} else {
 			lower = upper;
 		}
-		const Xf *a = history.ptr() + lower * J;
-		const Xf *b = history.ptr() + upper * J;
+		const Xf *a = history.ptr() + ((history_head + lower) % HISTORY) * J;
+		const Xf *b = history.ptr() + ((history_head + upper) % HISTORY) * J;
 		Xf *o = r_context + k * J;
-		for (int j = 0; j < J; j++) {
+		// The joints the model does not drive are the same in every recorded pose.
+		memcpy((void *)o, (const void *)b, J * sizeof(Xf));
+		for (int j : rig->animated) {
 			o[j].p = a[j].p.lerp(b[j].p, blend);
 			o[j].q = a[j].q.slerp(b[j].q, blend);
 		}
@@ -345,8 +352,9 @@ void FellowMotionCharacter3D::_record(double p_delta) {
 	}
 	history_dt[HISTORY - 2] = float(p_delta);
 	history_dt[HISTORY - 1] = 0.0f;
-	memmove((void *)history.ptr(), (const void *)(history.ptr() + J), (HISTORY - 1) * J * sizeof(Xf));
-	memcpy((void *)(history.ptr() + (HISTORY - 1) * J), pose.ptr(), J * sizeof(Xf));
+	// A ring: the oldest pose's slot takes the newest.
+	history_head = (history_head + 1) % HISTORY;
+	memcpy((void *)(history.ptr() + ((history_head + HISTORY - 1) % HISTORY) * J), pose.ptr(), J * sizeof(Xf));
 }
 
 void FellowMotionCharacter3D::_generate(bool p_idle) {
@@ -401,12 +409,14 @@ void FellowMotionCharacter3D::_generate(bool p_idle) {
 	for (int c = MIN(min_tokens, max_tokens); c <= MAX(min_tokens, max_tokens); c++) {
 		bits |= 1u << (c - 6);
 	}
+	// The service encodes the poses, and decodes and corrects the prediction (in parallel with the other
+	// characters', off this thread when asynchronous).
 	FellowMotionService::Request req;
-	rig->encode(ctx.ptr(), tgt.ptr(), 4, p_idle || rise, bits, req.grv, req.hg, req.lrv, req.hl, req.lp, req.hp, req.allowed, pending_align);
-	pending_start.resize(J);
-	pending_end.resize(J);
-	memcpy((void *)pending_start.ptr(), base, J * sizeof(Xf));
-	memcpy((void *)pending_end.ptr(), tgt.ptr(), J * sizeof(Xf));
+	req.context = std::move(ctx);
+	req.target = std::move(tgt);
+	req.target_has_pose = p_idle || rise;
+	req.allowed_bits = bits;
+	req.correct_end = p_idle;
 	pending_idle = p_idle;
 	pending_get_up = rise;
 	if (rise) {
@@ -418,33 +428,27 @@ void FellowMotionCharacter3D::_generate(bool p_idle) {
 	generations++;
 	if (inference_mode == INFERENCE_IMMEDIATE) {
 		FellowMotionService::Result res;
-		if (service->run_now(req, res)) {
+		if (service->run_now(std::move(req), res)) {
 			_accept(res);
 		}
 		return;
 	}
-	pending_id = service->submit(req, inference_mode == INFERENCE_ASYNC);
+	pending_id = service->submit(std::move(req), inference_mode == INFERENCE_ASYNC);
 }
 
-void FellowMotionCharacter3D::_accept(const FellowMotionService::Result &p_result) {
+void FellowMotionCharacter3D::_accept(FellowMotionService::Result &p_result) {
 	pending_id = 0;
-	if (p_result.tokens <= 0) {
+	if (p_result.tokens <= 0 || p_result.count < 2) {
 		return;
 	}
-	LocalVector<Xf> frames;
-	LocalVector<float> contacts;
-	int count = rig->decode(p_result.motion.ptr(), p_result.tokens, pending_align, frames, contacts);
-	if (count < 2) {
-		return;
-	}
-	rig->correct_endpoints(frames, count, pending_start.ptr(), pending_end.ptr(), pending_idle, pending_idle);
 	latency = 0.8 * latency + 0.2 * pending_time;
 	latency_sum += pending_time;
-	old_seg = seg;
+	// The old segment keeps its frames for the crossfade; the new one takes the result's.
+	SWAP(old_seg, seg);
 	fade = (inference_mode == INFERENCE_IMMEDIATE || !old_seg.valid() || crossfade_time <= 0.0f) ? 1.0 : 0.0;
-	seg.frames = frames;
-	seg.contacts = contacts;
-	seg.count = count;
+	seg.frames = std::move(p_result.frames);
+	seg.contacts = std::move(p_result.contacts);
+	seg.count = p_result.count;
 	seg.transition_early = pending_idle ? 0 : transition_early_frames;
 	seg.get_up = pending_get_up;
 	seg.time = pending_time;
@@ -458,7 +462,8 @@ void FellowMotionCharacter3D::_sample(const Segment &p_seg, Xf *r_pose) const {
 	float w = a < p_seg.count - 1 ? float(CLAMP(f - a, 0.0, 1.0)) : 0.0f;
 	const Xf *fa = p_seg.frames.ptr() + a * J;
 	const Xf *fb = p_seg.frames.ptr() + b * J;
-	for (int j = 0; j < J; j++) {
+	// The joints the model drives (the others are the reference pose in every frame and stay as they are).
+	for (int j : rig->animated) {
 		r_pose[j].p = fa[j].p.lerp(fb[j].p, w);
 		r_pose[j].q = fa[j].q.slerp(fb[j].q, w);
 	}
@@ -527,10 +532,10 @@ void FellowMotionCharacter3D::_process(double p_delta) {
 		if (fade < 1.0 && old_seg.valid()) {
 			fade = MIN(1.0, fade + p_delta / MAX(1e-3, double(crossfade_time)));
 			float w = float(fade * fade * (3.0 - 2.0 * fade));
-			LocalVector<Xf> o;
-			o.resize(J);
-			_sample(old_seg, o.ptr());
-			for (int j = 0; j < J; j++) {
+			fade_pose.resize(J);
+			Xf *o = fade_pose.ptr();
+			_sample(old_seg, o);
+			for (int j : rig->animated) {
 				pose[j].p = o[j].p.lerp(pose[j].p, w);
 				pose[j].q = o[j].q.slerp(pose[j].q, w);
 			}

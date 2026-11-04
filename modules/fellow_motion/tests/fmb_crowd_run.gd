@@ -6,6 +6,7 @@
 #
 #   godot --path <bench project copy> --rendering-driver vulkan --script res://fmb_crowd_run.gd -- \
 #       --fmb=<model.fmb> [--body=<mannequin.glb>] --out=<dir> [--crowd=8] [--seconds=20] [--get_up=1] [--catch_up=1]
+#       [--mode=flush|async|immediate]
 extends SceneTree
 
 var lab
@@ -30,7 +31,7 @@ func _initialize() -> void:
 	DirAccess.make_dir_recursive_absolute(out_dir)
 	lab = load("res://scenes/motion_lab.gd").new()
 	get_root().add_child(lab)
-	lab.build({"motion_model": _arg("fmb", ""), "motion_body": _arg("body", ""), "motion_crowd": _arg("crowd", "8"), "motion_mode": "flush"})
+	lab.build({"motion_model": _arg("fmb", ""), "motion_body": _arg("body", ""), "motion_crowd": _arg("crowd", "8"), "motion_mode": _arg("mode", "flush")})
 	if lab.load_error != "":
 		push_error(lab.load_error)
 		quit(1)

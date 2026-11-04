@@ -216,7 +216,7 @@ func sample_extra() -> Dictionary:
 		return {}
 	var s: Dictionary = ClassDB.class_call_static("FellowMotionCharacter3D", "get_service_stats", model_path)
 	var d := {}
-	for k in ["requests", "batches", "avg_batch", "avg_batch_msec", "last_batch", "last_batch_msec", "max_batch_seen", "pending"]:
+	for k in ["requests", "batches", "avg_batch", "avg_batch_msec", "avg_decode_msec", "last_batch", "last_batch_msec", "max_batch_seen", "pending"]:
 		if s.has(k):
 			d["motion_" + k] = s[k]
 	return d

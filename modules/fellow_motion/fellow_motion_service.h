@@ -43,6 +43,7 @@ class FellowMotionService : public RefCounted {
 	GDCLASS(FellowMotionService, RefCounted);
 
 public:
+	using Xf = FellowMotionRig::Xf;
 	struct Request {
 		float grv[8 * 5];
 		int32_t hg[8];
@@ -51,11 +52,25 @@ public:
 		float lp[8 * 267];
 		int32_t hp[8];
 		int32_t allowed[11];
+		// Or the poses, which the service encodes into the arrays above, and after the batch decodes into poses and
+		// endpoint-corrects (in parallel, on the worker thread when asynchronous): four context poses and four
+		// target poses (local transforms, [4][joints] each), whether the targets are whole poses, the allowed token
+		// counts (bit c - 6 for c tokens), and whether the end is corrected too (to the whole first target pose).
+		LocalVector<Xf> context;
+		LocalVector<Xf> target;
+		bool target_has_pose = false;
+		uint32_t allowed_bits = 0;
+		bool correct_end = false;
+		Xf align; // set by the encoding
 	};
 	struct Result {
-		LocalVector<float> motion; // [64, 366]
+		LocalVector<float> motion; // [64, 366], when the request asked for no poses
+		LocalVector<Xf> frames; // [count][joints], when it did
+		LocalVector<float> contacts; // [count][4]
+		int count = 0;
 		int tokens = 0;
 		double gpu_msec = 0.0; // the batch's
+		double decode_msec = 0.0; // the batch's decoding (parallel)
 		int batch = 0;
 	};
 
@@ -91,6 +106,14 @@ private:
 
 	static void _thread_func(void *p_self);
 	void _run(LocalVector<Pending> &p_work);
+	struct DecodeWork {
+		LocalVector<Pending> *work = nullptr;
+		LocalVector<Result> *results = nullptr;
+		const FellowMotionModel::Batch *batch = nullptr;
+	};
+	void _encode_one(uint32_t p_index, LocalVector<Pending> *p_work);
+	void _decode_one(uint32_t p_index, DecodeWork *p_work);
+	double stat_decode_msec = 0.0;
 
 protected:
 	static void _bind_methods();
@@ -102,13 +125,13 @@ public:
 	bool is_ready() const { return model.is_valid() && model->is_loaded() && rig_ok; }
 	Ref<FellowMotionModel> get_model() const { return model; }
 
-	uint64_t submit(const Request &p_request, bool p_wake = true);
+	uint64_t submit(Request &&p_request, bool p_wake = true);
 	// Runs every request waiting (submitted with p_wake false, or not yet taken by the worker) on the calling thread.
 	void flush();
 	bool fetch(uint64_t p_id, Result &r_result);
 	void cancel(uint64_t p_id);
 	// Runs one request on the calling thread and waits (deterministic, for tests and single characters).
-	bool run_now(const Request &p_request, Result &r_result);
+	bool run_now(Request &&p_request, Result &r_result);
 
 	Dictionary get_stats() const;
 	static Dictionary get_stats_for(const String &p_path);

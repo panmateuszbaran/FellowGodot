@@ -31,6 +31,7 @@
 #include "fellow_motion_service.h"
 
 #include "core/object/class_db.h"
+#include "core/object/worker_thread_pool.h"
 #include "core/os/os.h"
 
 Mutex FellowMotionService::registry_mutex;
@@ -72,13 +73,13 @@ void FellowMotionService::_thread_func(void *p_self) {
 			MutexLock lock(self->mutex);
 			int n = MIN(int(self->pending.size()), self->model->get_max_batch());
 			for (int i = 0; i < n; i++) {
-				work.push_back(self->pending[i]);
+				work.push_back(std::move(self->pending[i]));
 			}
 			LocalVector<Pending> rest;
 			for (uint32_t i = n; i < self->pending.size(); i++) {
-				rest.push_back(self->pending[i]);
+				rest.push_back(std::move(self->pending[i]));
 			}
-			self->pending = rest;
+			self->pending = std::move(rest);
 			if (!self->pending.is_empty()) {
 				self->semaphore.post();
 			}
@@ -91,6 +92,13 @@ void FellowMotionService::_thread_func(void *p_self) {
 
 void FellowMotionService::_run(LocalVector<Pending> &p_work) {
 	const int n = p_work.size();
+	// The requests given as poses encoded, spread over the worker threads.
+	if (n > 1) {
+		WorkerThreadPool::GroupID g = WorkerThreadPool::get_singleton()->add_template_group_task(this, &FellowMotionService::_encode_one, &p_work, n, -1, true, "FellowMotion encode");
+		WorkerThreadPool::get_singleton()->wait_for_group_task_completion(g);
+	} else {
+		_encode_one(0, &p_work);
+	}
 	FellowMotionModel::Batch b;
 	b.resize(n);
 	for (int i = 0; i < n; i++) {
@@ -105,31 +113,76 @@ void FellowMotionService::_run(LocalVector<Pending> &p_work) {
 	}
 	uint64_t t0 = OS::get_singleton()->get_ticks_usec();
 	Error err = model->run_batch(b);
-	double ms = (OS::get_singleton()->get_ticks_usec() - t0) / 1000.0;
+	uint64_t t1 = OS::get_singleton()->get_ticks_usec();
+	double ms = (t1 - t0) / 1000.0;
+	LocalVector<Result> out;
+	out.resize(n);
+	for (int i = 0; i < n; i++) {
+		out[i].batch = n;
+		out[i].gpu_msec = ms;
+		out[i].tokens = err == OK ? b.pred_num_tokens[i] : 0;
+	}
+	if (err == OK) {
+		// Each request's poses (or raw prediction), the requests spread over the worker threads.
+		DecodeWork dw;
+		dw.work = &p_work;
+		dw.results = &out;
+		dw.batch = &b;
+		if (n > 1) {
+			WorkerThreadPool::GroupID g = WorkerThreadPool::get_singleton()->add_template_group_task(this, &FellowMotionService::_decode_one, &dw, n, -1, true, "FellowMotion decode");
+			WorkerThreadPool::get_singleton()->wait_for_group_task_completion(g);
+		} else {
+			_decode_one(0, &dw);
+		}
+	}
+	double dms = (OS::get_singleton()->get_ticks_usec() - t1) / 1000.0;
 	MutexLock lock(mutex);
 	stat_batches++;
 	stat_requests += n;
 	stat_msec += ms;
+	stat_decode_msec += dms;
 	stat_last_msec = ms;
 	stat_last_batch = n;
 	stat_max_batch_seen = MAX(stat_max_batch_seen, n);
 	for (int i = 0; i < n; i++) {
-		Result res;
-		res.batch = n;
-		res.gpu_msec = ms;
-		if (err == OK) {
-			res.tokens = b.pred_num_tokens[i];
-			res.motion.resize(64 * 366);
-			memcpy(res.motion.ptr(), b.pred_global_motions.ptr() + i * 64 * 366, 64 * 366 * sizeof(float));
-		}
-		results[p_work[i].id] = res;
+		out[i].decode_msec = dms;
+		results[p_work[i].id] = std::move(out[i]);
 	}
 }
 
-uint64_t FellowMotionService::submit(const Request &p_request, bool p_wake) {
+void FellowMotionService::_encode_one(uint32_t p_index, LocalVector<Pending> *p_work) {
+	Request &r = (*p_work)[p_index].req;
+	const uint32_t J = rig.joints;
+	if (r.context.size() != 4 * J || r.target.size() != 4 * J) {
+		return;
+	}
+	rig.encode(r.context.ptr(), r.target.ptr(), 4, r.target_has_pose, r.allowed_bits, r.grv, r.hg, r.lrv, r.hl, r.lp, r.hp, r.allowed, r.align);
+}
+
+void FellowMotionService::_decode_one(uint32_t p_index, DecodeWork *p_work) {
+	const Request &r = (*p_work->work)[p_index].req;
+	Result &res = (*p_work->results)[p_index];
+	const float *m = p_work->batch->pred_global_motions.ptr() + p_index * 64 * 366;
+	if (res.tokens <= 0) {
+		return;
+	}
+	const uint32_t J = rig.joints;
+	if (r.context.size() != 4 * J || r.target.size() != 4 * J) {
+		res.motion.resize(64 * 366);
+		memcpy(res.motion.ptr(), m, 64 * 366 * sizeof(float));
+		return;
+	}
+	res.count = rig.decode(m, res.tokens, r.align, res.frames, res.contacts);
+	if (res.count >= 2) {
+		// From the last context pose to the first target pose.
+		rig.correct_endpoints(res.frames, res.count, r.context.ptr() + 3 * J, r.target.ptr(), r.correct_end, r.correct_end);
+	}
+}
+
+uint64_t FellowMotionService::submit(Request &&p_request, bool p_wake) {
 	MutexLock lock(mutex);
 	uint64_t id = next_id++;
-	pending.push_back({ id, p_request });
+	pending.push_back({ id, std::move(p_request) });
 	if (p_wake) {
 		semaphore.post();
 	}
@@ -146,13 +199,13 @@ void FellowMotionService::flush() {
 				return;
 			}
 			for (int i = 0; i < n; i++) {
-				work.push_back(pending[i]);
+				work.push_back(std::move(pending[i]));
 			}
 			LocalVector<Pending> rest;
 			for (uint32_t i = n; i < pending.size(); i++) {
-				rest.push_back(pending[i]);
+				rest.push_back(std::move(pending[i]));
 			}
-			pending = rest;
+			pending = std::move(rest);
 		}
 		_run(work);
 	}
@@ -164,7 +217,7 @@ bool FellowMotionService::fetch(uint64_t p_id, Result &r_result) {
 	if (!r) {
 		return false;
 	}
-	r_result = *r;
+	r_result = std::move(*r);
 	results.erase(p_id);
 	return true;
 }
@@ -180,9 +233,9 @@ void FellowMotionService::cancel(uint64_t p_id) {
 	}
 }
 
-bool FellowMotionService::run_now(const Request &p_request, Result &r_result) {
+bool FellowMotionService::run_now(Request &&p_request, Result &r_result) {
 	LocalVector<Pending> one;
-	one.push_back({ 0, p_request });
+	one.push_back({ 0, std::move(p_request) });
 	_run(one);
 	return fetch(0, r_result) && r_result.tokens > 0;
 }
@@ -194,6 +247,7 @@ Dictionary FellowMotionService::get_stats() const {
 	d["batches"] = int64_t(stat_batches);
 	d["avg_batch"] = stat_batches ? double(stat_requests) / double(stat_batches) : 0.0;
 	d["avg_batch_msec"] = stat_batches ? stat_msec / double(stat_batches) : 0.0;
+	d["avg_decode_msec"] = stat_batches ? stat_decode_msec / double(stat_batches) : 0.0;
 	d["last_batch"] = stat_last_batch;
 	d["last_batch_msec"] = stat_last_msec;
 	d["max_batch_seen"] = stat_max_batch_seen;

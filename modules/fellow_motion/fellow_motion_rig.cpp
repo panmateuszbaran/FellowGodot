@@ -96,6 +96,10 @@ bool FellowMotionRig::setup(const Dictionary &p_skeleton, const float *p_capture
 		r_error = "the model file has no SOMA skeleton (convert it with --usd).";
 		return false;
 	}
+	if (joints > MAX_JOINTS) {
+		r_error = vformat("the skeleton has %d joints (at most %d).", joints, MAX_JOINTS);
+		return false;
+	}
 	names.resize(joints);
 	parents.resize(joints);
 	reference.resize(joints);
@@ -131,8 +135,45 @@ bool FellowMotionRig::setup(const Dictionary &p_skeleton, const float *p_capture
 			pose_to_model[pj] = m;
 		}
 	}
+	animated.clear();
+	for (int j = 0; j < joints; j++) {
+		if (parents[j] < 0 || pose_to_model[j] >= 0) {
+			animated.push_back(j);
+		}
+	}
 	right_leg = find("RightLeg");
 	left_leg = find("LeftLeg");
+	head = find("Head");
+	// The chains to the legs and to the head, parents first (the skeleton lists parents before children).
+	auto chain = [&](const LocalVector<int> &p_ends, LocalVector<int> &r_chain) {
+		LocalVector<bool> on;
+		on.resize(joints);
+		for (int j = 0; j < joints; j++) {
+			on[j] = false;
+		}
+		for (int e : p_ends) {
+			for (int j = e; j >= 0; j = parents[j]) {
+				on[j] = true;
+			}
+		}
+		r_chain.clear();
+		for (int j = 0; j < joints; j++) {
+			if (on[j]) {
+				r_chain.push_back(j);
+			}
+		}
+	};
+	LocalVector<int> legs;
+	if (right_leg >= 0 && left_leg >= 0) {
+		legs.push_back(right_leg);
+		legs.push_back(left_leg);
+	}
+	chain(legs, heading_chain);
+	LocalVector<int> hd;
+	if (head >= 0) {
+		hd.push_back(head);
+	}
+	chain(hd, head_chain);
 	memcpy(capture_offsets, p_capture, sizeof(capture_offsets));
 	memcpy(standard_offsets, p_standard, sizeof(standard_offsets));
 	return true;
@@ -159,6 +200,43 @@ float FellowMotionRig::heading_of(const Xf *p_world) const {
 	}
 	// forward = up x across = (az, 0, -ax)
 	return Math::atan2(az / ln, -ax / ln);
+}
+
+float FellowMotionRig::heading_of_local(const Xf *p_local) const {
+	if (right_leg < 0 || left_leg < 0) {
+		return 0.0f;
+	}
+	Xf w[MAX_JOINTS];
+	for (int j : heading_chain) {
+		int p = parents[j];
+		if (p < 0) {
+			w[j] = p_local[j];
+		} else {
+			w[j].q = w[p].q * p_local[j].q;
+			w[j].p = w[p].p + w[p].q.xform(p_local[j].p);
+		}
+	}
+	return heading_of(w);
+}
+
+void FellowMotionRig::hips_head_heights(const Xf *p_local, float &r_hips, float &r_head) const {
+	r_hips = p_local[0].p.y;
+	r_head = r_hips;
+	if (head < 0) {
+		return;
+	}
+	Xf w[MAX_JOINTS];
+	for (int j : head_chain) {
+		int p = parents[j];
+		if (p < 0) {
+			w[j] = p_local[j];
+		} else {
+			w[j].q = w[p].q * p_local[j].q;
+			w[j].p = w[p].p + w[p].q.xform(p_local[j].p);
+		}
+	}
+	r_hips = w[0].p.y;
+	r_head = w[head].p.y;
 }
 
 void FellowMotionRig::relaxed_pose(Xf *r_local, float p_arm_drop, float p_hips_height) const {
@@ -318,46 +396,83 @@ int FellowMotionRig::decode(const float *p_motion, int p_tokens, const Xf &p_ali
 	return frames;
 }
 
+// Identity.slerp(q, t) (Godot's slerp from the identity, shortest arc), with the angle worked out once per joint:
+// two trigonometric calls a frame instead of five.
+struct FellowPowQ {
+	Vector3 k;
+	Quaternion to;
+	float omega = 0.0f;
+	bool lin = true;
+	bool identity = true;
+};
+
+static inline FellowPowQ fellow_pow_prep(const Quaternion &p_q) {
+	FellowPowQ r;
+	float cosom = p_q.w;
+	r.to = p_q;
+	if (cosom < 0.0f) {
+		cosom = -cosom;
+		r.to = -p_q;
+	}
+	r.identity = r.to.x == 0.0f && r.to.y == 0.0f && r.to.z == 0.0f && r.to.w == 1.0f;
+	if (1.0f - cosom > (float)CMP_EPSILON) {
+		r.omega = Math::acos(cosom);
+		r.k = Vector3(r.to.x, r.to.y, r.to.z) / Math::sin(r.omega);
+		r.lin = false;
+	}
+	return r;
+}
+
+static inline Quaternion fellow_pow_at(const FellowPowQ &p_p, float p_t) {
+	if (p_p.lin) {
+		return Quaternion(p_t * p_p.to.x, p_t * p_p.to.y, p_t * p_p.to.z, (1.0f - p_t) + p_t * p_p.to.w);
+	}
+	float s = Math::sin(p_t * p_p.omega);
+	return Quaternion(p_p.k.x * s, p_p.k.y * s, p_p.k.z * s, Math::cos(p_t * p_p.omega));
+}
+
 void FellowMotionRig::correct_endpoints(LocalVector<Xf> &r_frames, int p_frames, const Xf *p_start, const Xf *p_end, bool p_correct_end, bool p_end_joints) const {
 	if (p_frames < 2) {
 		return;
 	}
 	const Xf *f0 = r_frames.ptr();
 	const Xf *fl = r_frames.ptr() + (p_frames - 1) * joints;
-	LocalVector<Xf> sd, ed;
-	sd.resize(joints);
-	ed.resize(joints);
-	sd[0].p = p_start[0].p - f0[0].p;
-	sd[0].q = (f0[0].q.inverse() * p_start[0].q).normalized();
-	ed[0].p = p_correct_end ? p_end[0].p - fl[0].p : Vector3();
-	ed[0].q = p_correct_end ? (fl[0].q.inverse() * p_end[0].q).normalized() : Quaternion();
+	Vector3 sp[MAX_JOINTS], ep[MAX_JOINTS];
+	FellowPowQ sq[MAX_JOINTS], eq[MAX_JOINTS];
+	sp[0] = p_start[0].p - f0[0].p;
+	sq[0] = fellow_pow_prep((f0[0].q.inverse() * p_start[0].q).normalized());
+	ep[0] = p_correct_end ? p_end[0].p - fl[0].p : Vector3();
+	eq[0] = fellow_pow_prep(p_correct_end ? (fl[0].q.inverse() * p_end[0].q).normalized() : Quaternion());
+	const bool end_joints = p_correct_end && p_end_joints;
 	for (int j = 1; j < joints; j++) {
 		Quaternion is = f0[j].q.inverse();
-		sd[j].p = is.xform(p_start[j].p - f0[j].p);
-		sd[j].q = (is * p_start[j].q).normalized();
-		if (p_correct_end && p_end_joints) {
+		sp[j] = is.xform(p_start[j].p - f0[j].p);
+		sq[j] = fellow_pow_prep((is * p_start[j].q).normalized());
+		if (end_joints) {
 			Quaternion ie = fl[j].q.inverse();
-			ed[j].p = ie.xform(p_end[j].p - fl[j].p);
-			ed[j].q = (ie * p_end[j].q).normalized();
-		} else {
-			ed[j].p = Vector3();
-			ed[j].q = Quaternion();
+			ep[j] = ie.xform(p_end[j].p - fl[j].p);
+			eq[j] = fellow_pow_prep((ie * p_end[j].q).normalized());
 		}
 	}
-	const Quaternion I;
 	for (int f = 0; f < p_frames; f++) {
 		float we = float(f) / float(p_frames - 1);
 		float ws = 1.0f - we;
 		Xf *x = r_frames.ptr() + f * joints;
-		x[0].q = (x[0].q * I.slerp(sd[0].q, ws) * I.slerp(ed[0].q, we)).normalized();
-		x[0].p = x[0].p + sd[0].p * ws + ed[0].p * we;
+		x[0].q = (x[0].q * fellow_pow_at(sq[0], ws) * fellow_pow_at(eq[0], we)).normalized();
+		x[0].p = x[0].p + sp[0] * ws + ep[0] * we;
 		for (int j = 1; j < joints; j++) {
 			Vector3 p = x[j].p;
 			Quaternion q = x[j].q;
-			p = p + q.xform(sd[j].p * ws);
-			q = q * I.slerp(sd[j].q, ws);
-			p = p + q.xform(ed[j].p * we);
-			q = q * I.slerp(ed[j].q, we);
+			p = p + q.xform(sp[j] * ws);
+			if (!sq[j].identity) {
+				q = q * fellow_pow_at(sq[j], ws);
+			}
+			if (end_joints) {
+				p = p + q.xform(ep[j] * we);
+				if (!eq[j].identity) {
+					q = q * fellow_pow_at(eq[j], we);
+				}
+			}
 			x[j].p = p;
 			x[j].q = q.normalized();
 		}
