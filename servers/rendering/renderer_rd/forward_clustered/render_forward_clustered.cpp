@@ -440,7 +440,7 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 	bool should_request_redraw = false;
 
 	// FellowEngine parallel recording: set while this thread records a segment of a forked draw list.
-	FellowRecordJob *const fellow_record = static_cast<FellowRecordJob *>(fellow_tl_record);
+	FellowRecordJob *const record_job = static_cast<FellowRecordJob *>(fellow_tl_record);
 	void *fellow_va_surface = nullptr; // the last mesh surface's vertex array lookup (segments: no lock per draw)
 	uint64_t fellow_va_input_mask = 0;
 	bool fellow_va_motion_vectors = false;
@@ -449,7 +449,7 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 	RD::VertexFormatID fellow_va_format = 0;
 
 	for (uint32_t i = p_from_element; i < p_to_element; i++) {
-		if (fellow_record != nullptr && fellow_record->abort.load(std::memory_order_relaxed)) {
+		if (record_job != nullptr && record_job->abort.load(std::memory_order_relaxed)) {
 			return; // Another segment needs a pipeline that is not compiled yet: the list is recorded again serially.
 		}
 		const GeometryInstanceSurfaceDataCache *surf = p_params->elements[i];
@@ -645,7 +645,7 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 			uint64_t input_mask = shader->get_vertex_input_mask(pipeline_key.version, pipeline_key.color_pass_flags, pipeline_key.ubershader);
 			if (surf->owner->mesh_instance.is_valid()) {
 				mesh_storage->mesh_instance_surface_get_vertex_arrays_and_format(surf->owner->mesh_instance, surf->surface_index, input_mask, pipeline_motion_vectors, emulate_point_size, vertex_array_rd, vertex_format);
-			} else if (fellow_record != nullptr) {
+			} else if (record_job != nullptr) {
 				// Same result as the lookup (the surface's versions do not change while lists are recorded), without its
 				// lock when consecutive elements use the same surface.
 				if (mesh_surface != fellow_va_surface || input_mask != fellow_va_input_mask || pipeline_motion_vectors != fellow_va_motion_vectors || emulate_point_size != fellow_va_point_size) {
@@ -675,11 +675,11 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 
 			if (shader != prev_shader || pipeline_hash != prev_pipeline_hash) {
 				RSE::PipelineSource pipeline_source = pipeline_key.ubershader ? RSE::PIPELINE_SOURCE_DRAW : RSE::PIPELINE_SOURCE_SPECIALIZATION;
-				if (fellow_record != nullptr) {
+				if (record_job != nullptr) {
 					// Parallel recording: pipelines already in the map only. Otherwise the list is recorded again serially,
 					// which requests (and for the ubershader, waits for) the compilation as stock does.
 					if (!shader->pipeline_hash_map.fellow_find_pipeline(pipeline_hash, pipeline_rd)) {
-						fellow_record->abort.store(true, std::memory_order_relaxed);
+						record_job->abort.store(true, std::memory_order_relaxed);
 						return;
 					}
 				} else {
@@ -775,7 +775,7 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 
 			if (material_uniform_set != prev_material_uniform_set) {
 				// Update uniform set.
-				if (material_uniform_set.is_valid() && (fellow_record != nullptr ? RD::get_singleton()->fellow_uniform_set_is_valid_unlocked(material_uniform_set) : RD::get_singleton()->uniform_set_is_valid(material_uniform_set))) { // Material may not have a uniform set.
+				if (material_uniform_set.is_valid() && (record_job != nullptr ? RD::get_singleton()->fellow_uniform_set_is_valid_unlocked(material_uniform_set) : RD::get_singleton()->uniform_set_is_valid(material_uniform_set))) { // Material may not have a uniform set.
 					RD::get_singleton()->draw_list_bind_uniform_set(draw_list, material_uniform_set, MATERIAL_UNIFORM_SET);
 				}
 
@@ -986,8 +986,8 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 
 	// Make the actual redraw request
 	if (should_request_redraw) {
-		if (fellow_record != nullptr) {
-			fellow_record->redraw.store(true, std::memory_order_relaxed); // requested by the render thread at the join
+		if (record_job != nullptr) {
+			record_job->redraw.store(true, std::memory_order_relaxed); // requested by the render thread at the join
 		} else {
 			RenderingServerDefault::redraw_request();
 		}
@@ -5211,7 +5211,6 @@ void RenderForwardClustered::_fellow_rt_lighting(const RenderDataRD *p_render_da
 // FellowEngine DDGI (docs/decisions/0083-ddgi.md): the probe volume around the camera, traced and blended.
 void RenderForwardClustered::_fellow_process_ddgi(RenderDataRD *p_render_data, const Ref<RenderSceneBuffersRD> &p_render_buffers, const Ref<RenderBufferDataForwardClustered> &p_rb_data, RID p_radiance_texture, RID p_normal_roughness) {
 	RENDER_TIMESTAMP("FellowEngine DDGI");
-	RendererRD::LightStorage *light_storage = RendererRD::LightStorage::get_singleton();
 	const Ref<RenderSceneBuffersRD> &rb = p_render_buffers;
 	RenderBufferDataForwardClustered *rbd = const_cast<RenderBufferDataForwardClustered *>(p_rb_data.ptr());
 
@@ -5785,7 +5784,7 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 	}
 	const bool fellow_async = fellow_async_wanted && RD::get_singleton()->fellow_async_compute_begin();
 	if (fellow_async) {
-		_fellow_process_ss_effects(p_render_data, rb, p_use_ssao, p_use_ssil, p_use_ssr, p_normal_roughness_slices, fellow_ssil_main ? ((FELLOW_SS_SSAO | FELLOW_SS_SSR) & ~fellow_main_parts) : FELLOW_SS_ALL);
+		_fellow_process_ss_effects(p_render_data, rb, p_use_ssao, p_use_ssil, p_use_ssr, p_normal_roughness_slices, fellow_ssil_main ? ((FELLOW_SS_SSAO | FELLOW_SS_SSR) & ~fellow_main_parts) : uint32_t(FELLOW_SS_ALL));
 		RD::get_singleton()->fellow_async_compute_end();
 		if (fellow_ssil_main) {
 			_fellow_process_ss_effects(p_render_data, rb, p_use_ssao, p_use_ssil, p_use_ssr, p_normal_roughness_slices, fellow_main_parts);
@@ -7158,8 +7157,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			// FellowEngine (decision 0126): the pyramid's base level is the same copy, bound for the transparent pass;
 			// the single-level copy is made only when something else reads it — an opaque or depth-pass material
 			// sampling the depth texture (they read the frame before's copy), MSAA's depth of field.
-			const bool msaa = rb.is_valid() && rb->get_msaa_3d() != RSE::VIEWPORT_MSAA_DISABLED;
-			if (!fellow_depth_mipmaps_frame || scene_state.used_depth_texture_opaque || msaa) {
+			if (!fellow_depth_mipmaps_frame || scene_state.used_depth_texture_opaque || use_msaa) {
 				// Copy depth texture to backbuffer so we can read from it
 				_render_buffers_copy_depth_texture(p_render_data);
 			}

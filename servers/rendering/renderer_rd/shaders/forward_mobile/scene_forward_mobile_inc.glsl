@@ -149,14 +149,15 @@ bool sc_scene_roughness_limiter_enabled() {
 	return ((sc_packed_0() >> 18) & 1U) != 0;
 }
 
-// FellowEngine: the clustered renderer drops disabled features from specialized pipelines; the mobile renderer keeps
-// only the runtime scene flags for the code shared with it.
+// FellowEngine: the clustered renderer's early outs of the shared light functions (zero attenuation, back-facing
+// positional lights) are off in the mobile renderer (decision 0150): its light loop runs at most 8 lights an object, and
+// with the early returns lavapipe dropped the lights after the first skipped one (the lights lab 4x darker than stock).
 bool sc_fellow_zero_attenuation_skip() {
-	return true;
+	return false;
 }
 
 bool sc_fellow_skip_backfacing_positional() {
-	return true;
+	return false;
 }
 
 uint sc_soft_shadow_samples() {

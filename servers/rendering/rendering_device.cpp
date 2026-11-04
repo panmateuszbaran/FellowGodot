@@ -8930,7 +8930,7 @@ bool RenderingDevice::_fellow_present_async(RDD::CommandQueueID p_queue, RDD::Se
 	job.present_semaphore = p_semaphore;
 	job.swap_chains = p_swap_chains;
 	const uint64_t ticket = thread->commit();
-	if (p_submit && frame < FellowPresentThread::MAX_FRAME_SLOTS) {
+	if (p_submit && uint32_t(frame) < FellowPresentThread::MAX_FRAME_SLOTS) {
 		thread->frame_tickets[frame] = ticket; // _stall_for_frame() waits for this one only
 	}
 	Fellow::stats().frame_present_thread_uses.increment();

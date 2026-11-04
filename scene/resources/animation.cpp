@@ -2598,7 +2598,6 @@ T Animation::_interpolate(const LocalVector<TKey<T>> &p_keys, double p_time, Int
 		// FellowEngine (decision 0076): when a key and the next enclose p_time strictly, neither within _find()'s tolerance
 		// of it, no key is (the keys are sorted): its binary search finds no match and returns the last key before p_time,
 		// that one. Tried: the key found last time, then the one after it (playback moved on).
-		const int key_count = (int)p_keys.size();
 		for (int h = *r_fellow_key_hint; h <= *r_fellow_key_hint + 1; h++) {
 			if (h + 1 < key_count && p_keys[h].time < p_time && p_keys[h + 1].time > p_time && !Math::is_equal_approx(p_time, (double)p_keys[h].time) && !Math::is_equal_approx(p_time, (double)p_keys[h + 1].time)) {
 				idx = h;
