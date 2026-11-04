@@ -177,8 +177,8 @@ void store_epilogue(uint gr, uint n, float v) {
 #else
 #define WG 256u
 #endif
-// A_VEC4 (tensor cores, a subgroup of 32 or less): four consecutive k a thread, one vec4 load where the rows and the
-// K range are 4-aligned — a quarter of the loads and of the rows' addresses.
+// A_VEC4 (tensor cores with a subgroup of 32 or less, the default there): four consecutive k a thread, one vec4 load
+// where the rows and the K range are 4-aligned — a quarter of the loads and of the rows' addresses.
 #ifdef A_VEC4
 #define A_KPT 4u
 #else

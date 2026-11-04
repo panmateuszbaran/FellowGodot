@@ -514,9 +514,10 @@ Error FellowMotionModel::load(const String &p_path, int p_max_batch) {
 	const char *names_f[V_MAX] = { "gemm_f16", "gemm_f32", "gemm_f64", "reduce", "attn", "ln", "glue" };
 	const char *names_c[V_MAX] = { "gemmc16", "gemmc32", "gemmc64", "reduce", "attn", "ln", "glue" };
 	const char *names_d[V_MAX] = { "gemmd16", "gemmd32", "gemmd64", "reduce", "attn", "ln", "glue" };
-	// A diagnostic for measurements: FELLOW_MOTION_GEMM=vec4 takes the tensor-core products with vec4 A loads (a
-	// subgroup of 32 or less).
-	coop_vec4 = coop_active && sg <= 32 && OS::get_singleton()->get_environment("FELLOW_MOTION_GEMM") == "vec4";
+	// The tensor-core products with vec4 A loads where the subgroup is 32 or less (16-19 % faster at batches of 8 and
+	// more on the RTX, the same results bit for bit: m44_f326); FELLOW_MOTION_GEMM=scalar, a diagnostic, takes the
+	// scalar loads.
+	coop_vec4 = coop_active && sg <= 32 && OS::get_singleton()->get_environment("FELLOW_MOTION_GEMM") != "scalar";
 	for (int i = 0; i < V_MAX; i++) {
 		const char *nm = coop_active ? (coop_vec4 ? names_d[i] : names_c[i]) : (weights_f16 ? names_h[i] : names_f[i]);
 		shaders[i] = rd->shader_create_from_spirv(shader_file->get_spirv_stages(nm), String("FellowMotion ") + nm);

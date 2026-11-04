@@ -116,7 +116,7 @@ private:
 	bool profile = false;
 	bool cooperative_matrix = true;
 	bool coop_active = false;
-	bool coop_vec4 = false; // FELLOW_MOTION_GEMM=vec4 (a diagnostic)
+	bool coop_vec4 = false; // vec4 A loads (a subgroup of 32 or less; FELLOW_MOTION_GEMM=scalar: off, a diagnostic)
 	String coop_note;
 	int target_groups = 96;
 	String path;
