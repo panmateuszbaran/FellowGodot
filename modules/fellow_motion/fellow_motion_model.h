@@ -117,7 +117,7 @@ private:
 	bool cooperative_matrix = true;
 	bool coop_active = false;
 	bool coop_vec4 = false; // vec4 A loads (a subgroup of 32 or less; FELLOW_MOTION_GEMM=scalar: off, a diagnostic)
-	bool coop_wide = false; // FELLOW_MOTION_GEMM=wide (a diagnostic): 128 columns a workgroup
+	int bm_max = 64; // FELLOW_MOTION_BM_MAX (a diagnostic): the most rows a GEMM workgroup takes
 	String coop_note;
 	int target_groups = 96;
 	String path;

@@ -12,9 +12,6 @@ gemmc64 = "#define MODE_GEMM_COOP\n#define BM 64";
 gemmd16 = "#define MODE_GEMM_COOP\n#define A_VEC4\n#define BM 16";
 gemmd32 = "#define MODE_GEMM_COOP\n#define A_VEC4\n#define BM 32";
 gemmd64 = "#define MODE_GEMM_COOP\n#define A_VEC4\n#define BM 64";
-gemmw16 = "#define MODE_GEMM_COOP\n#define A_VEC4\n#define WIDE\n#define BM 16";
-gemmw32 = "#define MODE_GEMM_COOP\n#define A_VEC4\n#define WIDE\n#define BM 32";
-gemmw64 = "#define MODE_GEMM_COOP\n#define A_VEC4\n#define WIDE\n#define BM 64";
 reduce = "#define MODE_REDUCE";
 attn = "#define MODE_ATTN";
 ln = "#define MODE_LN";
@@ -173,13 +170,7 @@ void store_epilogue(uint gr, uint n, float v) {
 // step's A and W are fetched into registers while the current one is multiplied (the loads' latency, not the
 // arithmetic, bounds these small products).
 
-// WIDE (tensor cores): 128 columns a workgroup, two 16-column tiles a subgroup — each A tile loaded from shared memory
-// multiplies two W tiles, and the activations are read by half as many workgroups.
-#ifdef WIDE
-#define BN 128u
-#else
 #define BN 64u
-#endif
 #define BK 32u
 #ifdef MODE_GEMM_COOP
 #define WG (4u * uint(SGSIZE))
@@ -467,9 +458,8 @@ void main() {
 // in fp32, and the accumulators go through shared memory to the same epilogue (or the split-K partials).
 
 #define RT (BM / 16)
-#define CT (BN / 64u) // 16-column tiles a subgroup: columns c * 64 + sg * 16
 #define AST (BK + 8u) // shared row strides (fp16 elements), padded
-#define CST (64u + 4u) // the epilogue goes through shared memory 64 columns at a time
+#define CST (BN + 4u)
 #define W_SLOTS ((BN * (BK / 8u)) / WG) // uvec4 of 8 weights per thread per K step
 
 shared float16_t As[BM * AST];
@@ -502,8 +492,8 @@ void main() {
 		pw[j] = uvec4(0u);
 	}
 
-	coopmat<float, gl_ScopeSubgroup, 16, 16, gl_MatrixUseAccumulator> acc[RT * CT];
-	for (uint r = 0u; r < uint(RT) * CT; r++) {
+	coopmat<float, gl_ScopeSubgroup, 16, 16, gl_MatrixUseAccumulator> acc[RT];
+	for (uint r = 0u; r < uint(RT); r++) {
 		acc[r] = coopmat<float, gl_ScopeSubgroup, 16, 16, gl_MatrixUseAccumulator>(0.0);
 	}
 
@@ -546,42 +536,33 @@ void main() {
 			}
 		}
 		for (uint ks = 0u; ks < BK; ks += 16u) {
-			coopmat<float16_t, gl_ScopeSubgroup, 16, 16, gl_MatrixUseB> mb[CT];
-			for (uint c = 0u; c < CT; c++) {
-				coopMatLoad(mb[c], Bs, (c * 64u + sg * 16u) * AST + ks, AST, gl_CooperativeMatrixLayoutColumnMajor);
-			}
+			coopmat<float16_t, gl_ScopeSubgroup, 16, 16, gl_MatrixUseB> mb;
+			coopMatLoad(mb, Bs, sg * 16u * AST + ks, AST, gl_CooperativeMatrixLayoutColumnMajor);
 			for (uint r = 0u; r < uint(RT); r++) {
 				coopmat<float16_t, gl_ScopeSubgroup, 16, 16, gl_MatrixUseA> ma;
 				coopMatLoad(ma, As, r * 16u * AST + ks, AST, gl_CooperativeMatrixLayoutRowMajor);
-				for (uint c = 0u; c < CT; c++) {
-					acc[r * CT + c] = coopMatMulAdd(ma, mb[c], acc[r * CT + c]);
-				}
+				acc[r] = coopMatMulAdd(ma, mb, acc[r]);
 			}
 		}
 		barrier();
 	}
-	for (uint ct = 0u; ct < CT; ct++) {
-		if (ct > 0u) {
-			barrier();
+	for (uint r = 0u; r < uint(RT); r++) {
+		coopMatStore(acc[r], Cs, r * 16u * CST + sg * 16u, CST, gl_CooperativeMatrixLayoutRowMajor);
+	}
+	barrier();
+	for (uint e = t; e < uint(BM) * BN; e += WG) {
+		uint r = e / BN;
+		uint c = e % BN;
+		uint gr = m0 + r;
+		uint on = n0 + c;
+		if (gr >= g_M || on >= Nout) {
+			continue;
 		}
-		for (uint r = 0u; r < uint(RT); r++) {
-			coopMatStore(acc[r * CT + ct], Cs, r * 16u * CST + sg * 16u, CST, gl_CooperativeMatrixLayoutRowMajor);
-		}
-		barrier();
-		for (uint e = t; e < uint(BM) * 64u; e += WG) {
-			uint r = e / 64u;
-			uint c = e % 64u;
-			uint gr = m0 + r;
-			uint on = n0 + ct * 64u + c;
-			if (gr >= g_M || on >= Nout) {
-				continue;
-			}
-			float v = Cs[r * CST + c];
-			if (pc.splits > 1u) {
-				part[(split * g_M + gr) * Nout + on] = v;
-			} else {
-				store_epilogue(gr, on, v);
-			}
+		float v = Cs[r * CST + c];
+		if (pc.splits > 1u) {
+			part[(split * g_M + gr) * Nout + on] = v;
+		} else {
+			store_epilogue(gr, on, v);
 		}
 	}
 }
