@@ -902,7 +902,19 @@ func _run_capture() -> void:
 			if lightning and i == strike_at and strike_at < settle:
 				_strike_in_view()
 			await get_tree().process_frame
-		if await _wait_texture_streaming():
+		# --streaming_fixed_wait=<n>: exactly n frames for texture streaming, then the settle frames again, with streaming
+		# or without (the same frame count, so the same jitter phase and history: an A/B comparison); otherwise wait
+		# until streaming has settled (no extra frames without it).
+		var fixed_wait := int(args.get("streaming_fixed_wait", "0"))
+		if fixed_wait > 0:
+			for i in range(fixed_wait):
+				await get_tree().process_frame
+			var tsw := _texture_streaming_info()
+			if not tsw.is_empty() and not (int(tsw.get("pending", 1)) == 0 and int(tsw.get("jobs", 1)) == 0):
+				result["texture_streaming_unsettled"] = int(result.get("texture_streaming_unsettled", 0)) + 1
+			for i in range(settle):
+				await get_tree().process_frame
+		elif await _wait_texture_streaming():
 			for i in range(settle):
 				await get_tree().process_frame
 		await _post_draw()
