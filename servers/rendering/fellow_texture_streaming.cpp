@@ -639,13 +639,37 @@ void FellowTextureStreaming::_update_snapshot() {
 		}
 	}
 	Dictionary d;
+	if (GLOBAL_GET_CACHED(bool, "rendering/fellow/streaming/texture_info_details")) {
+		// Per texture (tooling): path, size, levels, resident and target level, the estimated level, state, bytes.
+		static const char *state_names[3] = { "new", "streamed", "full" };
+		Array list;
+		for (const KeyValue<RID, Texture *> &E : textures) {
+			const Texture *tex = E.value;
+			Dictionary t;
+			t["path"] = tex->path;
+			t["size"] = Vector2i(tex->width, tex->height);
+			t["levels"] = tex->levels;
+			t["tail"] = tex->tail_mip;
+			t["resident"] = tex->resident_mip;
+			t["target"] = tex->target_mip;
+			t["lod"] = tex->lod < 1e29f ? Variant(tex->lod) : Variant();
+			t["state"] = state_names[tex->state];
+			t["bytes"] = tex->chain_size(tex->resident_mip);
+			list.push_back(t);
+		}
+		d["list"] = list;
+	}
 	d["textures"] = textures.size();
 	d["streamed"] = streamed;
 	d["pinned_full"] = full;
 	d["new"] = fresh;
 	d["resident_at_full"] = at_full;
 	d["resident_at_tail"] = at_tail;
+	peak_resident_bytes = MAX(peak_resident_bytes, resident_bytes);
+	max_pending = MAX(max_pending, pending);
 	d["resident_bytes"] = resident_bytes;
+	d["peak_resident_bytes"] = peak_resident_bytes;
+	d["max_pending"] = max_pending;
 	d["target_bytes"] = target_bytes;
 	d["wanted_bytes"] = wanted_bytes;
 	d["full_bytes"] = full_bytes;

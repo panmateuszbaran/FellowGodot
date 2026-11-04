@@ -892,6 +892,16 @@ func _run_capture() -> void:
 	var files := []
 	var stem := _file_stem()
 	var cams := _selected(scene.fixed_cameras.keys(), "cameras")
+	# --streaming_prepass=<frames>: every camera visited for that many frames before the captures (with streaming or
+	# without: the same frames), so that texture streaming has loaded what the captures need before they start.
+	var prepass := int(args.get("streaming_prepass", "0"))
+	if prepass > 0:
+		for k in cams:
+			var c: Dictionary = scene.fixed_cameras[k]
+			scene.set_time(c.get("time", 0.0))
+			scene.set_camera_pose(c["pos"], c["target"], c.get("fov", 60.0))
+			for i in range(prepass):
+				await get_tree().process_frame
 	for k in cams:
 		var c: Dictionary = scene.fixed_cameras[k]
 		scene.set_time(c.get("time", 0.0))

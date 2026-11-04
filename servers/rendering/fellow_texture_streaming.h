@@ -130,6 +130,8 @@ private:
 	LocalVector<Job *> jobs;
 
 	int64_t resident_bytes = 0;
+	int64_t peak_resident_bytes = 0;
+	int max_pending = 0;
 	int64_t target_bytes = 0;
 	int64_t wanted_bytes = 0; // the targets without the budget's bias
 	int64_t full_bytes = 0;
