@@ -81,4 +81,32 @@ no budget, the same frames (`--streaming_fixed_wait=48`):
 * Off: nothing changes (no texture is registered, no camera recorded; the meshes' texel densities are measured only
   when it is on).
 
-RESULTS_PENDING
+## Results
+
+Streaming Lab (48 materials, 96 textures of 2048², 384 MiB with their mip chains), lavapipe:
+
+| 1920 × 1080, each view after its loads (`st13`) | streamed textures resident | all texture memory (RD) |
+|---|---:|---:|
+| streaming off (any view) | 384.0 MiB | 602.2 MiB |
+| street level, looking down the street | **29.3 MiB** | 247.6 MiB |
+| mid-street, a facade 7 m away | **52.7 MiB** | 270.9 MiB |
+| 1.2 m from a wall | **77.1 MiB** | 295.3 MiB |
+| above the street (90 m) | **3.1 MiB** | 221.3 MiB |
+
+(The rest of the texture memory, 218 MiB, is the render targets, shadow maps and sky: not streamed.) All four views
+visited and kept (the release hold at 600 s): 124.4 MiB. Loading the 96 textures: **460 → 7-9 ms** (the tails
+only); the first frame 4.2 → 3.8 s (lavapipe's shader compilation dominates it).
+
+The flythrough (960 × 540, 30 s down the street, over the roofs and up; two passes, 3 683 frames, `sp5`): 2 019 loads
+and 1 462 releases, 3.58 GB read (1 MB a frame), at the end 25.9 MiB resident, at most 205.8 MiB (low over the roofs,
+with the release hold); with a 48 MiB budget (`sp4`) at most 48.0 MiB, 1 751 loads, 2.71 GB read. The render
+thread's cost: the evaluation 79 µs and the rest of the update (swaps, schedule, report) 59 µs a frame for 97
+instances and 96 textures — a cycle every frame in a scene this small — on the cloud's CPU shared with lavapipe; the
+frame setup 0.033 → 0.223 ms. With 20 097 instances (`--streaming_props=20000`): 0.146 µs an instance surface, a cycle
+of 3.0 ms spread over 10 frames (2 048 instances a frame: 0.30 ms a frame).
+
+## Decision
+
+**KEEP**, opt-in. Off, nothing changes; on, a level's textures cost what its cameras can see, and load in a fraction of
+the time, with the same images once loaded. Next: DDS streaming (Bistro), a prefetch at a position, GPU feedback for
+custom shaders, and on the RTX: Sponza's textures (imported as VRAM-compressed `.ctex`) and the swaps' cost on a GPU.

@@ -1,11 +1,18 @@
 # FellowEngine — milestone 45 report (texture streaming)
 
-Status: **measured on lavapipe** (the cloud's CPU Vulkan driver, 2026-11-04); the RTX not used (the user's GPU was
-busy). Branch `fellow/geometry`. Decision record `docs/decisions/0146-texture-streaming.md`.
+Status: **measured on lavapipe** (the cloud's CPU Vulkan driver, 2026-11-04); the RTX not used (the user asked
+for no GPU load for now). Branch `fellow/geometry`. Decision record `docs/decisions/0146-texture-streaming.md`.
 
 ## 0. Result
 
-TEXTURE_RESULT
+Texture streaming (`rendering/fellow/streaming/textures`, opt-in): a VRAM-compressed texture loads only its mips at or
+below 128 px; the RenderingServer works out, from the instances that use it and the cameras that see them, the finest
+level each texture can need, loads those levels on worker threads, swaps them in under the same RID and releases them
+when they are no longer needed, within an optional budget. In Streaming Lab at 1080p (96 textures, 384 MiB with their
+mip chains) a view holds **3-77 MiB** of them instead of 384 MiB — all texture memory 221-295 MiB instead of 602 MiB —
+the textures load in **7-9 ms instead of 460 ms**, and once the loads have landed the images are **the same bit for
+bit** as without streaming (lavapipe; with TAA once each camera has been visited, since TAA keeps the frames rendered
+before). A 48 MiB budget held at 48.0 MiB over the whole flythrough.
 
 ## 1. Development
 
@@ -33,11 +40,36 @@ TEXTURE_RESULT
 
 ## 2. Verification
 
-VERIFICATION
+lavapipe (`tools/lavapipe/streaming_check.sh`, `$DEMOTE`), Streaming Lab's four cameras, streaming off against on, the
+same frames in both runs:
+
+* Without TAA (960 × 540): 0 pixels differ in all four views with the default margin -1 (at -0.5: 1 358 pixels of one
+  view by 1 level, so the default is -1); after the evaluation's rewrite and the schedule's: 0 again.
+* With TAA, every camera visited before the captures (`--streaming_prepass=48`): 0 pixels at 960 × 540 and at
+  1920 × 1080. Without the pre-pass, 4 761-7 413 pixels by 1-6 levels in the views that needed new levels, unchanged
+  after 720 frames and present also when every texture ends at full resolution (`texture_lod_bias=-20`): TAA's
+  half-float history keeps the frames before the loads landed.
+* Budgets: 32 MiB (960 × 540, captures) at most 31.2 MiB, the views that wanted 43.6 and 49.5 MiB coarsened by 1.5 and
+  3.5 levels; 48 MiB over the flythrough at most 48.0 MiB.
+* A scene without streamed textures (PBR Lab, procedural textures), streaming on: the same 7 images.
+* The streamer's report in every FellowBench result (per capture and per run).
 
 ## 3. Performance and memory
 
-MEMORY
+| Streaming Lab, 1920 × 1080 | streamed textures resident | all texture memory |
+|---|---:|---:|
+| off | 384.0 MiB | 602.2 MiB |
+| street level | **29.3 MiB** | 247.6 MiB |
+| mid-street | **52.7 MiB** | 270.9 MiB |
+| 1.2 m from a wall | **77.1 MiB** | 295.3 MiB |
+| above the street | **3.1 MiB** | 221.3 MiB |
+
+Loading: the 96 textures in 7-9 ms instead of 460 ms. The flythrough (960 × 540, two passes, 3 683 frames): 2 019 loads,
+1 462 releases, 1 MB read a frame, at most 205.8 MiB resident (low over the roofs, with the 2 s release hold), with a
+48 MiB budget at most 48.0 MiB. The render thread: 0.19 ms a frame more in frame setup on the cloud's CPU (the
+evaluation 79 µs, swaps and schedule 59 µs; a full cycle every frame in a scene of 97 instances), and 0.146 µs an
+instance surface at 20 097 instances (0.30 ms a frame at the default 2 048 instances a frame). Frame times on lavapipe
+are the CPU rasterizer's: 135.6 ms off, 138.5 ms on, within its spread.
 
 ## 4. Limits
 

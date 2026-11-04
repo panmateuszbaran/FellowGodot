@@ -9,6 +9,19 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 45 — texture streaming (2026-11-04)
+
+- `rendering/fellow/streaming/textures` (opt-in, decision 0146): VRAM-compressed `CompressedTexture2D` with a full mip
+  chain load only their mips at or below 128 px; the RenderingServer estimates the finest level each texture can need
+  (the cameras, the instances' boxes and scales, the surfaces' texel densities, BaseMaterial3D's `uv1_scale`, the
+  samplers' bias), loads it on worker threads, swaps it in under the same RID and releases it when no longer needed,
+  within `texture_budget_mb`. `RenderingServer.fellow_get_texture_streaming_info()` reports it.
+- Streaming Lab at 1080p (lavapipe): 3-77 MiB of its 384 MiB of textures resident in a view (all texture memory 221-295
+  MiB instead of 602), the textures loaded in 7-9 ms instead of 460 ms, the same images bit for bit once loaded.
+- FellowBench: Streaming Lab (`--scene streaming`; textures from `benchmarks/scripts/make_streaming_textures.py`),
+  waits for streaming before captures (`--streaming_fixed_wait`, `--streaming_prepass`), the streamer's state in every
+  result; `tools/lavapipe/streaming_check.sh`.
+
 ## Milestone 44 — neural motion's CPU side and faster tensor-core products; readiness for AAA (2026-11-04)
 
 - `fellow_motion` off the main thread (decision 0144): the service encodes the requests and decodes and
