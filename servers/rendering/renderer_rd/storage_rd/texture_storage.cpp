@@ -869,6 +869,9 @@ TextureStorage::CanvasTextureInfo TextureStorage::canvas_texture_get_info(RID p_
 		if (!t->canvas_texture) {
 			t->canvas_texture = memnew(CanvasTexture);
 			t->canvas_texture->diffuse = p_texture;
+			if (unlikely(t->fellow_streamed)) {
+				FellowTextureStreaming::get_singleton()->pin_full(p_texture); // drawn in 2D: full resolution
+			}
 		}
 
 		ct = t->canvas_texture;
@@ -895,6 +898,9 @@ TextureStorage::CanvasTextureInfo TextureStorage::canvas_texture_get_info(RID p_
 			!RD::get_singleton()->texture_is_valid(ctc.specular)) {
 		{ //diffuse
 			t = get_texture(ct->diffuse);
+			if (t && unlikely(t->fellow_streamed)) {
+				FellowTextureStreaming::get_singleton()->pin_full(ct->diffuse);
+			}
 			if (!t) {
 				ctc.diffuse = texture_rd_get_default(DEFAULT_RD_TEXTURE_WHITE);
 				ct->size_cache = Size2i(1, 1);
@@ -908,6 +914,9 @@ TextureStorage::CanvasTextureInfo TextureStorage::canvas_texture_get_info(RID p_
 		}
 		{ //normal
 			t = get_texture(ct->normal_map);
+			if (t && unlikely(t->fellow_streamed)) {
+				FellowTextureStreaming::get_singleton()->pin_full(ct->normal_map);
+			}
 			if (!t) {
 				ctc.normal = texture_rd_get_default(DEFAULT_RD_TEXTURE_NORMAL);
 				ct->use_normal_cache = false;
@@ -921,6 +930,9 @@ TextureStorage::CanvasTextureInfo TextureStorage::canvas_texture_get_info(RID p_
 		}
 		{ //specular
 			t = get_texture(ct->specular);
+			if (t && unlikely(t->fellow_streamed)) {
+				FellowTextureStreaming::get_singleton()->pin_full(ct->specular);
+			}
 			if (!t) {
 				ctc.specular = texture_rd_get_default(DEFAULT_RD_TEXTURE_WHITE);
 				ct->use_specular_cache = false;
@@ -2067,7 +2079,22 @@ void TextureStorage::texture_replace(RID p_texture, RID p_by_texture) {
 }
 
 void TextureStorage::texture_2d_fellow_set_stream_source(RID p_texture, const String &p_path, uint64_t p_data_offset, int p_width, int p_height, Image::Format p_format, int p_levels, int p_resident_mip) {
+	Texture *tex = texture_owner.get_or_null(p_texture);
+	if (tex == nullptr) {
+		return;
+	}
+	tex->fellow_streamed = true;
 	FellowTextureStreaming::get_singleton()->register_texture(p_texture, p_path, p_data_offset, p_width, p_height, p_format, p_levels, p_resident_mip);
+	if (tex->canvas_texture || decal_atlas.textures.has(p_texture) || area_light_atlas.textures.has(p_texture)) {
+		fellow_pin_if_streamed(p_texture); // already drawn in 2D or in an atlas
+	}
+}
+
+void TextureStorage::fellow_pin_if_streamed(RID p_texture) {
+	Texture *tex = texture_owner.get_or_null(p_texture);
+	if (tex && unlikely(tex->fellow_streamed)) {
+		FellowTextureStreaming::get_singleton()->pin_full(p_texture);
+	}
 }
 
 void TextureStorage::texture_2d_fellow_stream_swap(RID p_texture, RID p_by_texture) {
@@ -3642,6 +3669,7 @@ void TextureStorage::update_area_light_atlas() {
 }
 
 void TextureStorage::texture_add_to_area_light_atlas(RID p_texture) {
+	fellow_pin_if_streamed(p_texture); // texture streaming: an atlas copies the whole texture
 	if (!area_light_atlas.textures.has(p_texture)) {
 		AreaLightAtlas::Texture t;
 		t.users = 1;
@@ -4001,6 +4029,7 @@ void TextureStorage::update_decal_atlas() {
 }
 
 void TextureStorage::texture_add_to_decal_atlas(RID p_texture, bool p_panorama_to_dp) {
+	fellow_pin_if_streamed(p_texture); // texture streaming: an atlas copies the whole texture
 	if (!decal_atlas.textures.has(p_texture)) {
 		DecalAtlas::Texture t;
 		t.users = 1;

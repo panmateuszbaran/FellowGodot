@@ -201,6 +201,7 @@ private:
 		void *detect_roughness_callback_ud = nullptr;
 
 		CanvasTexture *canvas_texture = nullptr;
+		bool fellow_streamed = false; // texture streaming (milestone 45): registered with the streamer
 
 		void cleanup();
 	};
@@ -625,6 +626,8 @@ public:
 	virtual void texture_2d_fellow_set_stream_source(RID p_texture, const String &p_path, uint64_t p_data_offset, int p_width, int p_height, Image::Format p_format, int p_levels, int p_resident_mip) override;
 	virtual void texture_2d_fellow_stream_swap(RID p_texture, RID p_by_texture) override;
 	virtual bool fellow_texture_exists(RID p_texture) const override { return texture_owner.owns(p_texture); }
+	// Texture streaming: a use the streamer cannot estimate (2D, decals, light projectors) keeps it at full resolution.
+	void fellow_pin_if_streamed(RID p_texture);
 	virtual void texture_set_size_override(RID p_texture, int p_width, int p_height) override;
 
 	virtual void texture_set_path(RID p_texture, const String &p_path) override;

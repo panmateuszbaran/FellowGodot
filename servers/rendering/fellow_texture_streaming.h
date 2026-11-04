@@ -54,8 +54,8 @@
 // created). When every instance has been seen (a cycle), each texture's target is the finest level any reference
 // needed, coarsened uniformly (a global bias) until all of them fit the budget. Loads read the chain from the target
 // level on a worker thread and create the new texture there; the render thread swaps it in under the same RID (the
-// texture keeps its size, so materials and UVs are unchanged). A texture no 3D material of known UV density uses
-// (2D, sky, decals, custom shaders) goes to its full resolution after the first cycles.
+// texture keeps its size, so materials and UVs are unchanged). A texture not used yet keeps its tail; one used where
+// the evaluation cannot estimate it (2D, an atlas, a sky or custom shader) is pinned at full resolution (pin_full).
 class FellowTextureStreaming {
 public:
 	typedef FellowStreamMaterialInfo MaterialInfo;
@@ -74,7 +74,7 @@ private:
 	enum State : uint8_t {
 		STATE_NEW, // registered, not yet referenced by a 3D material of known UV density
 		STATE_STREAMED, // referenced: its target follows the references
-		STATE_FULL, // pinned at full resolution (never referenced in the first cycles, or by an unknown shader)
+		STATE_FULL, // pinned at full resolution: used in 2D, in an atlas, by a material whose UVs are unknown
 	};
 
 	struct Job {
@@ -195,6 +195,8 @@ public:
 	// Render thread.
 	void register_texture(RID p_texture, const String &p_path, uint64_t p_data_offset, int p_width, int p_height, Image::Format p_format, int p_levels, int p_resident_mip);
 	void texture_freed(RID p_texture);
+	// A use the streamer cannot estimate (2D, an atlas, a sky, a custom shader): full resolution from now on.
+	void pin_full(RID p_texture);
 	void add_camera(const Camera &p_camera);
 	const LocalVector<Camera> &get_eval_cameras() const { return eval_cameras; }
 	void begin_frame(); // moves this frame's cameras to the evaluation

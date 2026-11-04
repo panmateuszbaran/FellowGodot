@@ -1,12 +1,13 @@
 extends "res://bench/scene_base.gd"
 ## WORLD LAB (milestone 46; built in code, deterministic): a 768 m square world in 12 x 12 cells of 64 m, each a saved
 ## PackedScene (a ground tile, 10 buildings as one mesh of ~1.5 m quads, 40 crates in a MultiMesh; materials from
-## Streaming Lab's textures): about 3.6 M triangles and 144 different meshes in all.
+## Streaming Lab's textures): 1.6 M triangles and 144 different building meshes in all.
 ##
 ##   --world_streaming=1   the cells under a FellowWorldStreamer3D (FellowEngine), loaded and freed around the camera;
 ##                         0 (default, and on stock Godot): every cell instantiated at load, as a level is today.
-##   --world_distance=<m>  the streamer's load distance (320; the camera's far plane is 300, so what the camera can see
-##                         is loaded); --world_cells=<n> cells per side (12).
+##   --world_distance=<m>  the streamer's load distance (400: the camera's far plane is at a depth of 200 m, which at
+##                         the corners of a 70-degree view is up to 350 m away; the sun's shadows end at 150 m), so
+##                         what the camera can see is loaded; --world_cells=<n> cells per side (12).
 ##
 ## The cells are generated into res://external/world/ the first time (or with --world_generate=1): they need the
 ## Streaming Lab's textures (benchmarks/scripts/make_streaming_textures.py).
@@ -19,6 +20,7 @@ var n_cells := 12
 var sun: DirectionalLight3D
 var streamer: Node3D = null
 var _mats: Array[StandardMaterial3D] = []
+var _textures: Array = []
 var _generated := 0
 
 
@@ -27,9 +29,20 @@ func build(p_args: Dictionary) -> void:
 	bench_name = "world"
 	n_cells = int(args.get("world_cells", "12"))
 	_setup_common()
-	camera.far = 300.0
+	camera.far = 200.0
 	_setup_environment()
 	var t0 := Time.get_ticks_usec()
+	# The cells' textures, referenced by the saved cells as .ctex files: loaded first, so that the cells find them in
+	# the resource cache (stock Godot has no loader for a .ctex asked for as a Texture2D). With texture streaming these
+	# are only the small mips.
+	for i in 48:
+		var a = load(TEX_DIR.path_join("m%02d_albedo.ctex" % i))
+		var nm = load(TEX_DIR.path_join("m%02d_normal.ctex" % i))
+		if a == null or nm == null:
+			load_error = "World Lab: Streaming Lab's textures missing in %s (benchmarks/scripts/make_streaming_textures.py)" % TEX_DIR
+			return
+		_textures.append(a)
+		_textures.append(nm)
 	if not _ensure_cells():
 		return
 	var gen_ms := (Time.get_ticks_usec() - t0) / 1000.0
@@ -38,10 +51,11 @@ func build(p_args: Dictionary) -> void:
 	if use_streaming:
 		streamer = ClassDB.instantiate("FellowWorldStreamer3D")
 		streamer.name = "streamer"
-		streamer.set("load_distance", float(args.get("world_distance", "320")))
+		streamer.set("load_distance", float(args.get("world_distance", "400")))
 		streamer.set("unload_margin", float(args.get("world_margin", "32")))
 		streamer.set("max_loading", int(args.get("world_max_loading", "2")))
 		streamer.set("max_activations_per_frame", int(args.get("world_activations", "1")))
+		streamer.set("threaded_instancing", str(args.get("world_threaded", "1")) == "1")
 		add_child(streamer)
 	for x in n_cells:
 		for z in n_cells:
@@ -223,7 +237,7 @@ func _build_lights() -> void:
 	sun.rotation_degrees = Vector3(-50, 35, 0)
 	sun.light_energy = 1.2
 	sun.shadow_enabled = true
-	sun.directional_shadow_max_distance = 250.0
+	sun.directional_shadow_max_distance = 150.0
 	add_child(sun)
 	apply_sun_overrides(sun)
 
@@ -231,9 +245,9 @@ func _build_lights() -> void:
 func _define_cameras() -> void:
 	var half := n_cells * CELL * 0.5
 	fixed_cameras = {
-		"street": {"pos": Vector3(-half + 40, 2.0, -half + 40), "target": Vector3(0, 4, 0), "fov": 70.0, "purpose": "street level near a corner, looking across the world"},
+		"street": {"pos": Vector3(-half + 4, 8.0, -half + 4), "target": Vector3(0, 4, 0), "fov": 70.0, "purpose": "low over a corner, looking across the world"},
 		"centre": {"pos": Vector3(10, 30, 10), "target": Vector3(-60, 0, -60), "fov": 65.0, "purpose": "above the centre"},
-		"far_corner": {"pos": Vector3(half - 30, 3.0, half - 30), "target": Vector3(half - 120, 6, half - 140), "fov": 70.0, "purpose": "the opposite corner (other cells)"},
+		"far_corner": {"pos": Vector3(half - 4, 20.0, half - 4), "target": Vector3(half - 120, 6, half - 140), "fov": 70.0, "purpose": "the opposite corner (other cells)"},
 	}
 	flythrough = CameraPath.from_array([
 		[0.0, Vector3(-half + 30, 25, -half + 30), Vector3(0, 0, 0), 65.0],

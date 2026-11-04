@@ -30,6 +30,8 @@
 
 #include "material_storage.h"
 
+#include "servers/rendering/fellow_texture_streaming.h"
+
 #include "core/config/engine.h"
 #include "core/config/project_settings.h"
 #include "core/io/resource_loader.h"
@@ -876,6 +878,16 @@ void MaterialStorage::MaterialData::update_textures(const HashMap<StringName, Va
 	bool uses_global_textures = false;
 	global_textures_pass++;
 
+	// FellowEngine texture streaming (milestone 46): a material whose UVs the streamer cannot estimate (not a
+	// BaseMaterial3D-style 3D shader: sky, canvas, fog, particles, custom shaders) keeps its streamed textures at full
+	// resolution.
+	bool fellow_pin = false;
+	if (unlikely(FellowTextureStreaming::get_singleton()->has_textures())) {
+		const Material *m = material_storage->get_material(self);
+		static const StringName uv1_scale_name = "uv1_scale";
+		fellow_pin = !(m && m->shader_type == SHADER_TYPE_3D && m->shader && m->shader->data && m->shader->data->uniforms.has(uv1_scale_name));
+	}
+
 	for (int i = 0, k = 0; i < p_texture_uniforms.size(); i++) {
 		const StringName &uniform_name = p_texture_uniforms[i].name;
 		int uniform_array_size = p_texture_uniforms[i].array_size;
@@ -982,6 +994,9 @@ void MaterialStorage::MaterialData::update_textures(const HashMap<StringName, Va
 				RID rd_texture;
 
 				if (tex) {
+					if (unlikely(fellow_pin && tex->fellow_streamed)) {
+						FellowTextureStreaming::get_singleton()->pin_full(textures[j]);
+					}
 					rd_texture = (srgb && tex->rd_texture_srgb.is_valid()) ? tex->rd_texture_srgb : tex->rd_texture;
 #ifdef TOOLS_ENABLED
 					if (tex->detect_3d_callback && p_3d_material) {

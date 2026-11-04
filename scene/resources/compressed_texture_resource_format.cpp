@@ -30,6 +30,7 @@
 
 #include "compressed_texture_resource_format.h"
 
+#include "core/object/class_db.h"
 #include "scene/resources/compressed_texture.h"
 
 Ref<Resource> ResourceFormatLoaderCompressedTexture2D::load(const String &p_path, const String &p_original_path, Error *r_error, bool p_use_sub_threads, float *r_progress, CacheMode p_cache_mode) {
@@ -51,7 +52,9 @@ void ResourceFormatLoaderCompressedTexture2D::get_recognized_extensions(List<Str
 }
 
 bool ResourceFormatLoaderCompressedTexture2D::handles_type(const String &p_type) const {
-	return p_type == "CompressedTexture2D";
+	// FellowEngine: also where a Texture2D (or Texture, Resource) is expected, as a scene saved with a direct reference
+	// to a .ctex file asks for it (stock: "No loader found").
+	return p_type == "CompressedTexture2D" || ClassDB::is_parent_class("CompressedTexture2D", p_type);
 }
 
 String ResourceFormatLoaderCompressedTexture2D::get_resource_type(const String &p_path) const {

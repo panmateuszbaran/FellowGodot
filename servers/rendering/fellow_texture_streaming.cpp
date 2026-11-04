@@ -255,6 +255,15 @@ void FellowTextureStreaming::register_texture(RID p_texture, const String &p_pat
 	textures_epoch++;
 }
 
+void FellowTextureStreaming::pin_full(RID p_texture) {
+	Texture **tp = textures.getptr(p_texture);
+	if (tp && (*tp)->state != STATE_FULL) {
+		(*tp)->state = STATE_FULL;
+		(*tp)->base_target = -1;
+		targets_valid = false;
+	}
+}
+
 void FellowTextureStreaming::texture_freed(RID p_texture) {
 	Texture **tp = textures.getptr(p_texture);
 	if (tp == nullptr) {
@@ -355,9 +364,8 @@ void FellowTextureStreaming::end_cycle() {
 				tex->lod = tex->cycle_full ? -100.0f : tex->cycle_lod;
 				tex->unreferenced_since_usec = 0;
 			} else if (tex->state == STATE_NEW) {
-				if (tex->cycles_seen >= 2) {
-					tex->state = STATE_FULL; // nothing in 3D uses it: 2D, sky, decals, ...
-				}
+				// Not used yet (loaded ahead, by a cell of the world before it enters the tree, a preload): its tail.
+				// Uses the evaluation cannot see pin it to full resolution (pin_full).
 			} else {
 				// No longer referenced (hidden, or out of every scenario a camera sees): keep it, then release it.
 				if (tex->unreferenced_since_usec == 0) {
@@ -758,6 +766,6 @@ Dictionary FellowTextureStreaming::get_info() const {
 	d["frames"] = c.frames;
 	d["materials"] = c.materials;
 	// Settled: every texture at its target after at least two cycles, nothing in flight.
-	d["settled"] = c.cycles >= 2 && c.pending == 0 && c.jobs == 0 && c.fresh == 0;
+	d["settled"] = c.cycles >= 2 && c.pending == 0 && c.jobs == 0;
 	return d;
 }
