@@ -45,4 +45,15 @@ classes `CompressedTexture2D` derives from.
 
 ## Verification
 
+lavapipe (`$DEMOTE`, without TAA), World Lab's three cameras, the whole world loaded at start against the streamed one
+settled (`is_settled()`), the same frames:
+
+* World streaming alone, 480 × 270: **0 pixels** differ in the three views (with the load distance at 320 m, 177 pixels
+  did: the far plane is a depth, and at the corners of the view a visible point can be farther than it — hence 400 m
+  for a 200 m far plane).
+* World and texture streaming, 480 × 270: 0 pixels; 1920 × 1080: **1 pixel by 1 level** of 2 073 600 in one view
+  (`centre`), the others 0.
+* A texture loaded with a cell before the cell enters the tree stays at its tail until an instance uses it (with the
+  old rule all 96 went to full resolution: 384 of 384 MiB resident).
+
 RESULTS_PENDING
