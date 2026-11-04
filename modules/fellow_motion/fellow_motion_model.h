@@ -116,6 +116,7 @@ private:
 	bool profile = false;
 	bool cooperative_matrix = true;
 	bool coop_active = false;
+	bool coop_vec4 = false; // FELLOW_MOTION_GEMM=vec4 (a diagnostic)
 	String coop_note;
 	int target_groups = 96;
 	String path;

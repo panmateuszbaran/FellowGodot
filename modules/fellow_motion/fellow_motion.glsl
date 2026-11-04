@@ -9,6 +9,9 @@ gemm_f64 = "#define MODE_GEMM\n#define BM 64";
 gemmc16 = "#define MODE_GEMM_COOP\n#define BM 16";
 gemmc32 = "#define MODE_GEMM_COOP\n#define BM 32";
 gemmc64 = "#define MODE_GEMM_COOP\n#define BM 64";
+gemmd16 = "#define MODE_GEMM_COOP\n#define A_VEC4\n#define BM 16";
+gemmd32 = "#define MODE_GEMM_COOP\n#define A_VEC4\n#define BM 32";
+gemmd64 = "#define MODE_GEMM_COOP\n#define A_VEC4\n#define BM 64";
 reduce = "#define MODE_REDUCE";
 attn = "#define MODE_ATTN";
 ln = "#define MODE_LN";
@@ -68,6 +71,11 @@ layout(set = 0, binding = 4, std430) restrict buffer Part {
 layout(set = 0, binding = 5, std430) restrict readonly buffer ActIn {
 	float act_in[];
 };
+#ifdef A_VEC4
+layout(set = 0, binding = 6, std430) restrict readonly buffer ActIn4 {
+	vec4 act_in4[];
+};
+#endif
 #endif
 
 layout(push_constant, std430) uniform Params {
@@ -169,7 +177,15 @@ void store_epilogue(uint gr, uint n, float v) {
 #else
 #define WG 256u
 #endif
-#define A_RSTEP (WG / BK)
+// A_VEC4 (tensor cores, a subgroup of 32 or less): four consecutive k a thread, one vec4 load where the rows and the
+// K range are 4-aligned — a quarter of the loads and of the rows' addresses.
+#ifdef A_VEC4
+#define A_KPT 4u
+#else
+#define A_KPT 1u
+#endif
+#define A_TPR (BK / A_KPT) // threads per row of the A tile
+#define A_RSTEP (WG / A_TPR) // rows per pass of the workgroup
 #define A_SLOTS (uint(BM) / A_RSTEP)
 
 uint g_rows;
@@ -184,7 +200,10 @@ uint g_up;
 bool g_aprelu;
 uint s_base[A_SLOTS]; // the row's offset in act (no taps) or its request's first row (taps); NONE past the batch
 uint s_rr[A_SLOTS]; // the row within its request (taps)
-float pa[A_SLOTS];
+float pa[A_SLOTS * A_KPT];
+#ifdef A_VEC4
+bool g_avec; // the rows and the K range 4-aligned
+#endif
 
 void a_rows_setup(uint m0, uint r0) {
 	uint a_rows = O(G_A_ROWS);
@@ -211,6 +230,64 @@ void a_rows_setup(uint m0, uint r0) {
 
 // This thread's A elements of the K step starting at k0 (gathered through the row map or the conv taps, zero outside).
 void a_fetch(uint k) {
+#ifdef A_VEC4
+	if (g_avec && k + 3u < g_ke) {
+		// Four columns of one tap (the channel count is a multiple of 4).
+		uint tap = 0u;
+		uint c = k;
+		if (g_taps != 0u) {
+			tap = k / g_a_ld;
+			c = k % g_a_ld;
+		}
+		int shift = (int(tap) - int(g_taps / 2u)) * g_dil;
+		for (uint i = 0u; i < A_SLOTS; i++) {
+			vec4 v = vec4(0.0);
+			if (s_base[i] != NONE) {
+				if (g_taps == 0u) {
+					v = act_in4[(s_base[i] + k) >> 2u];
+				} else {
+					int tt = int(s_rr[i]) + shift;
+					if (tt >= 0 && tt < int(g_rows)) {
+						v = act_in4[(g_a_off + (s_base[i] + uint(tt) / g_up) * g_a_ld + c) >> 2u];
+					}
+				}
+			}
+			if (g_aprelu) {
+				v = max(v, vec4(0.0));
+			}
+			pa[i * 4u + 0u] = v.x;
+			pa[i * 4u + 1u] = v.y;
+			pa[i * 4u + 2u] = v.z;
+			pa[i * 4u + 3u] = v.w;
+		}
+		return;
+	}
+	for (uint j = 0u; j < A_KPT; j++) {
+		uint kj = k + j;
+		bool kv = kj < g_ke;
+		uint tap = 0u;
+		uint c = kj;
+		if (g_taps != 0u) {
+			tap = kj / g_a_ld;
+			c = kj % g_a_ld;
+		}
+		int shift = (int(tap) - int(g_taps / 2u)) * g_dil;
+		for (uint i = 0u; i < A_SLOTS; i++) {
+			float v = 0.0;
+			if (kv && s_base[i] != NONE) {
+				if (g_taps == 0u) {
+					v = act_in[s_base[i] + kj];
+				} else {
+					int tt = int(s_rr[i]) + shift;
+					if (tt >= 0 && tt < int(g_rows)) {
+						v = act_in[g_a_off + (s_base[i] + uint(tt) / g_up) * g_a_ld + c];
+					}
+				}
+			}
+			pa[i * A_KPT + j] = g_aprelu ? max(v, 0.0) : v;
+		}
+	}
+#else
 	bool kv = k < g_ke;
 	uint tap = 0u;
 	uint c = k;
@@ -233,6 +310,7 @@ void a_fetch(uint k) {
 		}
 		pa[i] = g_aprelu ? max(v, 0.0) : v;
 	}
+#endif
 }
 
 void gemm_setup() {
@@ -246,6 +324,9 @@ void gemm_setup() {
 	g_dil = int(O(G_DIL));
 	g_up = O(G_UP);
 	g_aprelu = O(G_APRELU) != 0u;
+#ifdef A_VEC4
+	g_avec = ((g_a_off | g_a_ld | g_kb) & 3u) == 0u;
+#endif
 }
 
 #endif
@@ -398,8 +479,8 @@ void main() {
 	uint kt0 = split * per;
 	uint kt1 = min(ktiles, kt0 + per);
 
-	uint kk = t % BK;
-	uint r0 = t / BK;
+	uint kk = (t % A_TPR) * A_KPT;
+	uint r0 = t / A_TPR;
 	a_rows_setup(m0, r0);
 	// W: slot j of thread t is column t / 4 + j * WG / 4, k chunk t % 4 (8 weights).
 	uint kc = t % (BK / 8u);
@@ -426,7 +507,9 @@ void main() {
 	}
 	for (uint kt = kt0; kt < kt1; kt++) {
 		for (uint i = 0u; i < A_SLOTS; i++) {
-			As[(r0 + i * A_RSTEP) * AST + kk] = float16_t(clamp(pa[i], -65504.0, 65504.0));
+			for (uint j = 0u; j < A_KPT; j++) {
+				As[(r0 + i * A_RSTEP) * AST + kk + j] = float16_t(clamp(pa[i * A_KPT + j], -65504.0, 65504.0));
+			}
 		}
 		for (uint j = 0u; j < W_SLOTS; j++) {
 			uint base = (t / (BK / 8u) + j * (WG / (BK / 8u))) * AST + kc * 8u;

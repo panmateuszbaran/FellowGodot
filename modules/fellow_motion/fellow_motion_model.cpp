@@ -200,8 +200,9 @@ RID FellowMotionModel::_uniform_set(int p_version, uint32_t p_chunk) {
 	u.push_back(RD::Uniform(RD::UNIFORM_TYPE_STORAGE_BUFFER, 2, param_buffer));
 	u.push_back(RD::Uniform(RD::UNIFORM_TYPE_STORAGE_BUFFER, 3, op_buffer));
 	u.push_back(RD::Uniform(RD::UNIFORM_TYPE_STORAGE_BUFFER, 4, part_buffer));
-	// The activations again, read-only (the products' A operand).
+	// The activations again, read-only (the products' A operand; scalar and vec4).
 	u.push_back(RD::Uniform(RD::UNIFORM_TYPE_STORAGE_BUFFER, 5, act_buffer));
+	u.push_back(RD::Uniform(RD::UNIFORM_TYPE_STORAGE_BUFFER, 6, act_buffer));
 	RID s = rd->uniform_set_create(u, shaders[p_version], 0);
 	uniform_sets[key] = s;
 	return s;
@@ -512,8 +513,12 @@ Error FellowMotionModel::load(const String &p_path, int p_max_batch) {
 	const char *names_h[V_MAX] = { "gemm_h16", "gemm_h32", "gemm_h64", "reduce", "attn", "ln", "glue" };
 	const char *names_f[V_MAX] = { "gemm_f16", "gemm_f32", "gemm_f64", "reduce", "attn", "ln", "glue" };
 	const char *names_c[V_MAX] = { "gemmc16", "gemmc32", "gemmc64", "reduce", "attn", "ln", "glue" };
+	const char *names_d[V_MAX] = { "gemmd16", "gemmd32", "gemmd64", "reduce", "attn", "ln", "glue" };
+	// A diagnostic for measurements: FELLOW_MOTION_GEMM=vec4 takes the tensor-core products with vec4 A loads (a
+	// subgroup of 32 or less).
+	coop_vec4 = coop_active && sg <= 32 && OS::get_singleton()->get_environment("FELLOW_MOTION_GEMM") == "vec4";
 	for (int i = 0; i < V_MAX; i++) {
-		const char *nm = coop_active ? names_c[i] : (weights_f16 ? names_h[i] : names_f[i]);
+		const char *nm = coop_active ? (coop_vec4 ? names_d[i] : names_c[i]) : (weights_f16 ? names_h[i] : names_f[i]);
 		shaders[i] = rd->shader_create_from_spirv(shader_file->get_spirv_stages(nm), String("FellowMotion ") + nm);
 		if (shaders[i].is_null()) {
 			_free();
@@ -558,7 +563,7 @@ Dictionary FellowMotionModel::get_info() const {
 	d["path"] = path;
 	d["loaded"] = loaded;
 	d["weights"] = weights_f16 ? "f16" : "f32";
-	d["products"] = coop_active ? String("cooperative matrix 16x16x16 fp16 -> fp32") : "fp32 (" + coop_note + ")";
+	d["products"] = coop_active ? String("cooperative matrix 16x16x16 fp16 -> fp32") + (coop_vec4 ? " (vec4 A loads)" : "") : "fp32 (" + coop_note + ")";
 	d["ops"] = int(op_recs.size());
 	d["max_batch"] = max_batch;
 	d["activation_mb"] = act_floats * 4.0 / 1e6;
