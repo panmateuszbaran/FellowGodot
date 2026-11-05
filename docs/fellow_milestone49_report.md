@@ -64,7 +64,7 @@ decision record.
 | 9 simulated GPUs × 8 labs | 72 | no crash; errors only on Android 2022 (2, stock's triplanar material); FellowEngine's findings: Android 2022 only |
 | every ray-traced effect on, RTX 4070 / GTX 1060 / no ray tracing | 6 | traced / off with one warning, the image without them exactly |
 | Windows (MinGW, Wine): `--version`, Matching Lab, PBR Lab on Vulkan and OpenGL | 4 | the same searches and transitions; PBR 150.6 / 40.8 and 166.1 / 50.1, Linux's |
-| Linux arm64 (qemu): `--version`, Matching Lab | 2 | the same searches, transitions and frames checked; floats within FMA's rounding |
+| Linux arm64 (qemu): `--version`, Matching Lab, PBR Lab on arm64 lavapipe | 3 | the same searches, transitions and frames checked; floats within FMA's rounding; PBR 150.4 / 40.8, x86_64's (mean difference 0.02) |
 | clang 18 + lld build, PBR and Fire Labs, Matching Lab | 5 | no error, two warnings fixed; GCC's images and statistics |
 | **the RTX** (Windows, NVIDIA): stock's 9 labs and FellowEngine's 17 on the three renderers | 78 | no error; Mobile and Compatibility give stock's images (mean difference 0.00), Forward+ within 0.07-1.03 |
 

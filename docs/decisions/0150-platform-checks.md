@@ -167,8 +167,10 @@ Vulkan through winevulkan on lavapipe — **150.6 / 40.8, Linux's image**; with 
 
 **Linux arm64** (GCC 13 cross-compiler, 1 h 20 min; qemu-user 8.2): `--version`; Matching Lab headless — the same
 searches, transitions and frames checked as x86_64, foot sliding 0.07734 against 0.07733 m/s (GCC contracts
-multiply-adds into FMA on aarch64); 7.8 s against 0.3 s (emulated). Rendering (the PBR Lab, Forward+, with Ubuntu's arm64 lavapipe under qemu): it starts, compiles its
-shaders (half an hour emulated) and renders, but did not reach its capture within the bench's 30-minute watchdog (a lighter capture is the next check).
+multiply-adds into FMA on aarch64); 7.8 s against 0.3 s (emulated). Rendering (the PBR Lab, Forward+, with Ubuntu's arm64 lavapipe under qemu): at 480 × 270 it compiles its
+shaders (half an hour emulated) and renders, but does not reach its capture within the bench's 30-minute watchdog; at
+240 × 135 with 4 frames it does, in 113 minutes — **150.4 / 40.8, x86_64's image** (mean luma difference 0.02, 5 % of
+the pixels a few levels apart: llvmpipe's 128-bit vectors on arm64 against 256-bit ones, and FMA).
 
 **Clang** (the compiler of Android's NDK, Emscripten and Apple's toolchains; Ubuntu's clang 18 with lld, a Linux
 template, 1 h 44 min): it builds with no error; two warnings of FellowEngine's headers (an `override` the class's other
