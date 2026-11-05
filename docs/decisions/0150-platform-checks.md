@@ -136,6 +136,10 @@ lavapipe). The Mobile renderer on the RTX, half floats and all, draws Forward+'s
 Lights 38.2), so its darkness on lavapipe is lavapipe's half floats; the gas volumes are absent from its frames (Fire
 Lab 120.4 against Forward+'s 121.9), as the warning says.
 
+The frame time on the RTX (job f334, the 9 standard scenes at 1080p, 3 runs): milestone 49's build against milestone
+44's, every scene within 2 %, about the runs' spread (Bistro exterior 4.23 / 4.23 ms, Sponza 6.22 / 6.21, City 2.31 / 2.29,
+Crowd 5.44 / 5.23): the platform fixes, and milestones 45-48, cost nothing there.
+
 **Simulated GPUs** (`profile_matrix.sh`: 8 labs — PBR, Fire, Water, the storm, Wind, Crowd, Streaming, Matching — on
 each device; Android's with Mobile, the others with Forward+). No crash and no error on any device (but the one
 below, stock's); the desktop devices' images are lavapipe's (their fallbacks draw the same: FSR 1 without half floats,

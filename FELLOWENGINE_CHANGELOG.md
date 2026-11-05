@@ -27,6 +27,12 @@ Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.m
   of errors from FellowEngine's nodes with the Compatibility renderer.
 - On Android's 2025 baseline and every desktop profile FellowEngine needs nothing the device lacks; ray tracing falls
   back to the same image without it.
+- On the RTX: the Mobile and Compatibility renderers give stock's images in every lab; milestones 45-49 cost nothing
+  in frame time (the 9 standard scenes against milestone 44). Milestones 45-48 measured there: FSR 3.1 at FSR 2.2's
+  cost and **on by default** (`upscaling/fsr3`) after a crash at its first frame was fixed (an ODR violation between the
+  two FidelityFX SDKs' `FfxResourceDescription`); texture streaming's per-view memory as on lavapipe (video memory
+  377-457 instead of 667 MiB, the first frame 838 → 103 ms); motion matching 0.12-0.89 ms a step for 16-256 characters
+  on the laptop's CPU.
 
 ## Milestone 48 — motion matching (2026-11-04)
 

@@ -1,6 +1,7 @@
 # FellowEngine — milestone 47 report (FSR 3.1 upscaler)
 
-Status: **measured on lavapipe** (the cloud's CPU Vulkan driver, 2026-11-04; the RTX not used, at the user's request).
+Status: **measured on lavapipe** (the cloud's CPU Vulkan driver, 2026-11-04), **and its cost on the RTX** (milestone
+49's jobs f335-f337, 2026-11-05).
 Branch `fellow/geometry`. Decision record `docs/decisions/0148-fsr3-upscaler.md`.
 
 ## 0. Result
@@ -12,7 +13,8 @@ every mode measured — at 2× upscaling **−9 to −24 % error where things mo
 in quality mode (1.5×) +0.7 to +0.9 dB, within 0.4-1.1 dB of the native-resolution TAA at 44 % of its pixels; as native
 AA +1.3 dB over TAA in three of four sequences. On still views at 2× it is softer than FSR 2.2 (−1.3 dB in two of
 three views; FSR 2.2's sharper image aliases). It uses 8.5 MiB less memory at that size and adds no Vulkan validation
-message. Opt-in until it is measured on the RTX.
+message. On the RTX it costs what FSR 2.2 costs (Bistro exterior and Sponza at 1080p, within 0.7 %) — after a crash
+there, an ODR violation between the two SDKs, was fixed — and it is **on by default from milestone 49**.
 
 ## 1. Development
 
@@ -69,7 +71,13 @@ energy 0.0165, the ground truth's 0.0177, FSR 2.2's 0.0190).
 * Memory (960 × 540, scale 0.5): all textures 207.2 MiB with FSR 3.1, 215.7 MiB with FSR 2.2.
 * lavapipe (A/B blocks in one run, `--profile`): the upscaler's passes 81.7 ms against FSR 2.2's 98.3 ms of the CPU
   rasterizer's time — the shaders' work ranked, not a GPU's time; recording 0.083 against 0.074 ms.
-* Not measured on the RTX: the GPU cost at 1080p-4K, half precision's gain, Sponza and Bistro.
+* On the RTX (1080p output, 2 runs): Bistro exterior TAA 4.13 ms; FSR 2.2 / 3.1 at 50 % 2.72 / 2.72, at 67 % 3.20 /
+  3.22, at 100 % 4.71 / 4.75 ms. Sponza TAA 5.96 ms; 3.56 / 3.57, 4.36 / 4.37, 6.58 / 6.55 ms. Not measured: 1440p
+  and 4K, half precision's gain alone.
+* Found on the RTX: FSR 3.1 crashed at its first frame (heap corruption). FSR 2.2's and FSR 3.1's SDKs each define
+  `FfxResourceDescription` (28 and 32 bytes), and `LocalVector<FfxResourceDescription>` in both backends was one
+  template to the linker; FSR 2.2's growth allocated FSR 3.1's table. Found with AddressSanitizer, fixed with a type of
+  FSR 3.1's backend's own (decision 0148).
 
 ## 5. Limits
 
@@ -81,7 +89,7 @@ energy 0.0165, the ground truth's 0.0177, FSR 2.2's 0.0190).
 
 ## 6. Next
 
-* On the RTX (when free): FSR 3.1's cost against FSR 2.2 at 1080p and 1440p, half precision, Sponza and Bistro in
-  motion; then the default.
+* Done in milestone 49: the cost on the RTX at 1080p (FSR 2.2's), and the default (on). Still to measure: 1440p and
+  4K, half precision's gain.
 * DLSS (Streamline or the DLSS SDK) and XeSS behind the same mode; FSR 3 frame generation with a present path.
 * The agreed order continues with animation.

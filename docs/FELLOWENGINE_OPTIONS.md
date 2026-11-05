@@ -400,7 +400,7 @@ the nodes. Decision 0147; bench World Lab (`--scene=world --world_streaming=1`).
 
 ## FSR 3.1 upscaler (milestone 47)
 
-`rendering/fellow/upscaling/fsr3` (off; read every frame): a viewport in Godot's FSR 2 scaling mode
+`rendering/fellow/upscaling/fsr3` (on from milestone 49; read every frame): a viewport in Godot's FSR 2 scaling mode
 (`scaling_3d_mode` FSR 2, any `scaling_3d_scale`, 1.0 for native AA) runs AMD's FidelityFX Super Resolution 3.1
 upscaler instead of FSR 2.2, with the same inputs, jitter, sharpness (`fsr_sharpness`) and output; switching makes a
 new context (a new history). `fsr3_half_precision` (on; read at start-up): half precision in the passes that have it,
@@ -408,8 +408,8 @@ where the GPU supports it (not SPD's pyramids, not the accumulation on NVIDIA). 
 `fsr3_velocity_factor` (1; 0 steadies bright pixels), `fsr3_reactiveness_scale` (1), `fsr3_shading_change_scale` (1),
 `fsr3_accumulation_added_per_frame` (0.333; less ghosts less where the history is rejected),
 `fsr3_min_disocclusion_accumulation` (−0.333). `fsr3_debug_view` draws the SDK's debug view over the output. In motion
-less error and flicker than FSR 2.2 in every mode measured; on still views at 2× softer. Decision 0148; bench
-`tools/lavapipe/upscaler_check.sh`.
+less error and flicker than FSR 2.2 in every mode measured; on still views at 2× softer. On the RTX it costs what FSR
+2.2 costs (within 0.7 % at 1080p). Decision 0148; bench `tools/lavapipe/upscaler_check.sh`.
 
 ## Motion matching (milestone 48)
 

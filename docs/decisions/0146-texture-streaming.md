@@ -108,8 +108,27 @@ instances and 96 textures — a cycle every frame in a scene this small — on t
 frame setup 0.033 → 0.223 ms. With 20 097 instances (`--streaming_props=20000`): 0.146 µs an instance surface, a cycle
 of 3.0 ms spread over 10 frames (2 048 instances a frame: 0.30 ms a frame).
 
+**On the RTX** (milestone 49, jobs f335 and f337; RTX 5070 Ti Laptop, Windows, 1920 × 1080; each view captured after
+its loads, settled within 1.5 s a view):
+
+| Streaming Lab | streamed textures resident | all texture memory | video memory |
+|---|---:|---:|---:|
+| streaming off (any view) | 384.0 MiB | 605.3 MiB | 667.4 MiB |
+| street level | **29.3 MiB** | 250.6 MiB | 376.8 MiB |
+| mid-street | **52.7 MiB** | 274.0 MiB | 400.6 MiB |
+| 1.2 m from a wall | **77.1 MiB** | 298.4 MiB | 456.5 MiB |
+| above the street | **3.1 MiB** | 224.4 MiB | 382.5 MiB |
+
+The same textures resident as on lavapipe in every view (the estimate does not depend on the GPU). The first frame
+838 → 103 ms. The flythrough (`perf`, 2 runs): frame time 0.729 → 0.721 ms (the update's cost not measurable at this
+frame rate); but its peak video memory is higher with streaming and no budget — 763 against 667 MiB, and the process's
+memory 909 against 691 MiB — the swaps' new textures beside the old ones and the loaded mips' data; with a 64 MiB
+budget the peak is 419 MiB (textures at most 285 MiB). The bench's waits were frames only (1 200), which the RTX ran in
+a second, before the loads from disk landed: they wait 20 s of wall time now too (`--streaming_wait_s`).
+
 ## Decision
 
 **KEEP**, opt-in. Off, nothing changes; on, a level's textures cost what its cameras can see, and load in a fraction of
 the time, with the same images once loaded. Next: DDS streaming (Bistro), a prefetch at a position, GPU feedback for
-custom shaders, and on the RTX: Sponza's textures (imported as VRAM-compressed `.ctex`) and the swaps' cost on a GPU.
+custom shaders, Sponza's textures on the RTX (imported as VRAM-compressed `.ctex`), and a cap on the swaps' transient
+memory: on the RTX, without a budget, a flythrough's peak is higher than without streaming (763 against 667 MiB).

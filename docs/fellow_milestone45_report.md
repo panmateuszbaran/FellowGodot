@@ -1,7 +1,7 @@
 # FellowEngine — milestone 45 report (texture streaming)
 
-Status: **measured on lavapipe** (the cloud's CPU Vulkan driver, 2026-11-04); the RTX not used (the user asked
-for no GPU load for now). Branch `fellow/geometry`. Decision record `docs/decisions/0146-texture-streaming.md`.
+Status: **measured on lavapipe** (the cloud's CPU Vulkan driver, 2026-11-04), **and on the RTX** (milestone 49's
+jobs f335 and f337, 2026-11-05). Branch `fellow/geometry`. Decision record `docs/decisions/0146-texture-streaming.md`.
 
 ## 0. Result
 
@@ -81,12 +81,15 @@ are the CPU rasterizer's: 135.6 ms off, 138.5 ms on, within its spread.
   (spawned after the start). A texture shared by a far mesh and a sky, decal or 2D control follows the mesh.
 * The first frames after a view needs new levels show the coarser ones until the loads land (pop-in); with TAA they
   stay in its history at 1-2 levels. A game can wait for `settled` behind a loading screen, or pre-visit its cameras.
-* Measured on lavapipe only: load times on an NVMe drive and the swaps' cost on a GPU are for the RTX.
+* On the RTX (1080p, each view settled): the same textures resident as on lavapipe (29.3, 52.7, 77.1, 3.1 MiB of
+  384), video memory 377-457 MiB against 667 MiB without streaming, the first frame 838 → 103 ms, the frame time
+  unchanged (0.729 → 0.721 ms). But a flythrough's peak video memory is higher with streaming and no budget, 763
+  against 667 MiB (the swaps' new textures beside the old ones); with a 64 MiB budget 419 MiB.
 
 ## 5. Next
 
 * World streaming: cells of a level loaded and freed by distance on worker threads (the next milestone).
-* On the RTX (when free): Sponza with streaming (its glTF textures are imported as VRAM-compressed `.ctex`), the swap's
-  cost in frame time, NVMe load times.
+* Done on the RTX in milestone 49: memory per view, the first frame, the frame time. Still: Sponza with streaming (its
+  glTF textures are imported as VRAM-compressed `.ctex`), and a cap on the swaps' transient memory.
 * DDS streaming (Bistro), a pre-fetch API (warm a position before the camera gets there), GPU feedback for custom
   shaders.

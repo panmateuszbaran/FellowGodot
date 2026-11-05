@@ -1,6 +1,6 @@
 # 0148 — FSR 3.1 upscaler on RenderingDevice
 
-Status: **KEEP** (opt-in: `rendering/fellow/upscaling/fsr3`, off by default until it is measured on the RTX) · Branch
+Status: **KEEP** (`rendering/fellow/upscaling/fsr3`, on by default from milestone 49, after the RTX) · Branch
 `fellow/geometry` · `servers/rendering/renderer_rd/effects/fsr3.{h,cpp}`, `shaders/effects/fsr3/*.glsl`,
 `render_forward_clustered.cpp` (the FSR 2 scaling mode's dispatch) · `thirdparty/amd-fsr3` (AMD FidelityFX SDK 1.1.4,
 MIT; patches `0001`, `0002`) · Settings `rendering/fellow/upscaling/*` · Bench: `tools/lavapipe/upscaler_check.sh`.
@@ -96,12 +96,32 @@ passes 81.7 ms against FSR 2.2's 98.3 ms (lavapipe runs the compute shaders on t
 work, not a GPU's time), recording 0.083 against 0.074 ms of the render thread (0.213 ms before the SDK's job
 descriptions were cut to 16 slots).
 
+**On the RTX** (milestone 49, jobs f335-f337; RTX 5070 Ti Laptop, Windows, 1920 × 1080 output, autotune off, 2 runs,
+frame time):
+
+| | TAA (native) | FSR 2.2 50 % | FSR 3.1 50 % | FSR 2.2 67 % | FSR 3.1 67 % | FSR 2.2 100 % | FSR 3.1 100 % |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Bistro exterior | 4.126 ms | 2.716 | **2.719** | 3.199 | **3.221** | 4.711 | **4.748** |
+| Sponza | 5.962 ms | 3.564 | **3.570** | 4.363 | **4.366** | 6.584 | **6.554** |
+
+FSR 3.1 costs what FSR 2.2 costs, within 0.7 % either way: at half the pixels −34 to −40 % against native TAA, at 67 %
+−22 to −27 %, as native AA +10 to +15 % (0.6 ms more than TAA's resolve at 1080p). Not measured: 1440p and 4K
+output.
+
+It first crashed there, at its first frame, in every run (heap corruption; nothing on lavapipe, under Wine or with
+clang): FSR 2.2's SDK (stock's FSR 2 backend) and FSR 3.1's each define `FfxResourceDescription` (28 and 32 bytes),
+and both backends kept a `LocalVector<FfxResourceDescription>` — one template to the linker, an ODR violation that let
+FSR 2.2's `reserve()` allocate FSR 3.1's resource table too small. AddressSanitizer (clang 18, lavapipe) showed the
+overflow at the context's creation; FSR 3.1's table now has an element type of its own (commit `9717601`), with no
+error under ASan and none on the RTX.
+
 ## Decision
 
-**KEEP**, opt-in. In motion — what an upscaler is for — FSR 3.1 is better than FSR 2.2 in every sequence and mode
+**KEEP**, on by default from milestone 49. In motion — what an upscaler is for — FSR 3.1 is better than FSR 2.2 in every sequence and mode
 measured: less error where things move (up to −24 %), less flicker (up to −31 %), +0.6 to +1.3 dB; in quality mode it
 comes within about 0.5 dB of the native-resolution TAA at 44 % of the pixels. It is softer on still views at 2×
-upscaling (−1.3 dB in two of three), where FSR 2.2's sharper image aliases. On by default after the RTX: the cost on a
-GPU, 1080p-4K output, Sponza and Bistro. Next for upscaling: DLSS and XeSS behind the same scaling mode (vendor
+upscaling (−1.3 dB in two of three), where FSR 2.2's sharper image aliases. On the RTX it costs what FSR 2.2 costs
+(Bistro and Sponza at 1080p, within 0.7 %), so a viewport in the FSR 2 scaling mode now runs FSR 3.1 unless the
+setting is off. Next for upscaling: DLSS and XeSS behind the same scaling mode (vendor
 libraries, their hardware), and frame generation (FSR 3's frame interpolation is in the same SDK; it needs a present
 path that shows generated frames between rendered ones).

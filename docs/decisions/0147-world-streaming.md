@@ -85,10 +85,24 @@ freeing a cell at most 1.9-2.4 ms. The latencies are lavapipe's (a frame takes 0
 its frame to be instantiated and its turn to enter the tree, one a frame); the frame times are the CPU rasterizer's
 (392 ms whole, 390 ms streamed; 408 ms with texture streaming's uploads competing for the same two cores).
 
+**On the RTX** (milestone 49, jobs f335 and f337; RTX 5070 Ti Laptop, Windows, 1920 × 1080; each view settled):
+
+| World Lab | video memory | mesh buffers | textures |
+|---|---:|---:|---:|
+| the whole world loaded at start | 798.7 MiB | 157.9 MiB | 605.3 MiB |
+| world streaming: low over a corner / the centre / the opposite corner | 704.0 / 792.2 / 707.3 | 62.5 / 150.7 / 65.7 | 605.3 |
+| world and texture streaming | **394.2 / 769.0 / 477.3** | 62.5 / 150.7 / 65.7 | 248.5 / 455.1 / 248.4 |
+
+The cells in range loaded and in the tree within 16-47 frames (20-50 ms); the first frame 583 → 365 ms (world
+streaming) → 71 ms (with texture streaming). The flythrough (`perf`, 2 runs): frame time 0.977 ms whole, 0.967 streamed,
+0.961 with texture streaming — streaming costs nothing a frame there; peak video memory 798.7 → 715.3 MiB with world
+streaming, but 842.3 MiB with texture streaming too (its swaps' transient copies, no budget: decision 0146).
+
 ## Decision
 
 **KEEP.** A level split into cells costs the memory of what is around the camera — 57 instead of 141 MiB of meshes on
 the flythrough, and with texture streaming 321 instead of 708 MiB of video memory — starts in a fraction of the time,
 and shows the same image as when it is all loaded. Next: baked proxies for unloaded cells (FellowHLOD3D's merged meshes
-saved with each cell), a tool to split a level into cells, and the RTX: a streamed world's hitches on a GPU and a real
-drive.
+saved with each cell), a tool to split a level into cells, and with texture streaming a cap on the swaps' transient
+memory (the RTX's flythrough peaked above the whole world's). On the RTX the views' memory and the frame time are as
+expected; hitches over a long play session on a real drive are still to measure.

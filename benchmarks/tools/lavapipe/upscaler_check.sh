@@ -24,11 +24,11 @@ fi
 for v in $VARIANTS; do
 	case $v in
 		taa) ov=""; set_args="" ;;
-		fsr2) ov=""; set_args=$UPSCALE ;;
+		fsr2) ov="fellow/upscaling/fsr3=false"; set_args=$UPSCALE ;;
 		fsr3) ov="fellow/upscaling/fsr3=true"; set_args=$UPSCALE ;;
-		fsr2q) ov=""; set_args="--set=vp.scaling_3d_mode=2,vp.scaling_3d_scale=0.667" ;;
+		fsr2q) ov="fellow/upscaling/fsr3=false"; set_args="--set=vp.scaling_3d_mode=2,vp.scaling_3d_scale=0.667" ;;
 		fsr3q) ov="fellow/upscaling/fsr3=true"; set_args="--set=vp.scaling_3d_mode=2,vp.scaling_3d_scale=0.667" ;;
-		fsr2n) ov=""; set_args="--set=vp.scaling_3d_mode=2,vp.scaling_3d_scale=1.0" ;;
+		fsr2n) ov="fellow/upscaling/fsr3=false"; set_args="--set=vp.scaling_3d_mode=2,vp.scaling_3d_scale=1.0" ;;
 		fsr3n) ov="fellow/upscaling/fsr3=true"; set_args="--set=vp.scaling_3d_mode=2,vp.scaling_3d_scale=1.0" ;;
 		fsr3_*)
 			var="FSR3_${v#fsr3_}"

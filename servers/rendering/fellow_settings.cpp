@@ -373,7 +373,8 @@ void Fellow::register_settings() {
 	GLOBAL_DEF_RST(PropertyInfo(Variant::INT, "rendering/fellow/frame/async_compute_family", PROPERTY_HINT_ENUM, "Dedicated Compute Family,Main Family,Main Queue (Split Only)"), 0);
 	// FSR 3.1 upscaler (milestone 47, decision 0148, renderer_rd/effects/fsr3.h): a viewport in the FSR 2 scaling mode runs
 	// AMD's FidelityFX Super Resolution 3.1 upscaler instead of stock's 2.2. Read every frame (a new context, a new history).
-	GLOBAL_DEF("rendering/fellow/upscaling/fsr3", false);
+	// On by default from milestone 49: on the RTX it costs what FSR 2.2 costs (within 1 %), and it is better in motion.
+	GLOBAL_DEF("rendering/fellow/upscaling/fsr3", true);
 	// Half precision in the passes that have it (where the GPU supports it; not in the accumulation on NVIDIA).
 	GLOBAL_DEF_RST("rendering/fellow/upscaling/fsr3_half_precision", true);
 	// The SDK's tunables (ffxFsr3UpscalerSetConstant): 0 velocity factor steadies bright pixels; a larger reactiveness or

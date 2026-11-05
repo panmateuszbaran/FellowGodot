@@ -1,6 +1,7 @@
 # FellowEngine — milestone 46 report (world streaming)
 
-Status: **measured on lavapipe** (the cloud's CPU Vulkan driver, 2026-11-04; the RTX not used, at the user's request).
+Status: **measured on lavapipe** (the cloud's CPU Vulkan driver, 2026-11-04), **and on the RTX** (milestone 49's jobs
+f335 and f337, 2026-11-05).
 Branch `fellow/geometry`. Decision record `docs/decisions/0147-world-streaming.md` (and 0146's revised pinning rule).
 
 ## 0. Result
@@ -65,10 +66,15 @@ and 271-288 releases; adding a cell to the tree at most 1.5-3.5 ms of the main t
   it enters (`activation_usec_max`); a large cell should be split.
 * Freed nodes are freed with `queue_free` on the main thread; resources (meshes, materials) are freed when the last
   cell using them goes.
-* Not measured on the RTX or a real drive: lavapipe's frame times are the CPU rasterizer's.
+* On the RTX (1080p, each view settled): video memory 799 MiB whole, 704-792 MiB with world streaming, 394-769 MiB
+  with texture streaming too; the cells in range in the tree within 20-50 ms; the first frame 583 → 365 → 71 ms; the
+  flythrough's frame time 0.98 → 0.97 → 0.96 ms. Its peak video memory 799 → 715 MiB with world streaming, 842 MiB
+  with texture streaming too (the swaps' transient copies, no budget). Hitches over a long session on a real drive
+  are still to measure.
 
 ## 5. Next
 
 * Upscaling and frame generation (the agreed next milestone).
 * For streaming: baked proxies (FellowHLOD3D's merged meshes saved with each cell), a tool to split a level into cells,
-  DDS texture streaming, and the RTX measurements (Sponza with texture streaming, a streamed world's hitches on a GPU).
+  DDS texture streaming, a cap on texture streaming's transient memory, Sponza with texture streaming on the RTX, a
+  streamed world's hitches over a long session.

@@ -67,9 +67,17 @@ decision record.
 | Linux arm64 (qemu): `--version`, Matching Lab, PBR Lab on arm64 lavapipe | 3 | the same searches, transitions and frames checked; floats within FMA's rounding; PBR 150.4 / 40.8, x86_64's (mean difference 0.02) |
 | clang 18 + lld build, PBR and Fire Labs, Matching Lab | 5 | no error, two warnings fixed; GCC's images and statistics |
 | **the RTX** (Windows, NVIDIA): stock's 9 labs and FellowEngine's 17 on the three renderers | 78 | no error; Mobile and Compatibility give stock's images (mean difference 0.00), Forward+ within 0.07-1.03 |
+| the RTX: the 9 standard scenes, stock / milestone 44 / milestone 49 (3 runs each, 1080p) | 81 | milestones 45-49 cost nothing: Bistro exterior 4.23 / 4.23 ms, Sponza 6.22 / 6.21 ms (stock 6.81, 13.67); every scene within 2 %, about the runs' spread |
 
 Build times on the cloud's two cores: the Windows template 1 h 14 min, the arm64 template 1 h 20 min, clang's Linux
 template 1 h 44 min.
+
+Milestones 45-48 measured on the RTX at the same time (their decisions and reports): FSR 3.1 costs what FSR 2.2
+costs (within 0.7 %) and is on by default now; it had crashed there at its first frame — an ODR violation between FSR
+2.2's and FSR 3.1's SDKs (two `FfxResourceDescription`s, one `LocalVector` template), found with AddressSanitizer and
+fixed. Texture streaming: the per-view residency lavapipe measured, video memory 377-457 instead of 667 MiB, the first
+frame 838 → 103 ms. World streaming: no frame-time cost. Motion matching on the laptop's CPU: 0.12-0.89 ms for 16-256
+characters.
 
 ## 4. Limits
 
