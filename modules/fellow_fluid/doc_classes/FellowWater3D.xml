@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<class name="FellowWater3D" inherits="Node3D" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+<class name="FellowWater3D" inherits="Node3D" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
 	<brief_description>
 		A body of water (lake, river, sea) with spectral wind waves, drawn to the horizon (FellowEngine).
 	</brief_description>
@@ -18,7 +18,7 @@
 				The displacement of a cascade as computed on the GPU (x, y, z, foam; with mipmaps). Synchronous: for tests.
 			</description>
 		</method>
-		<method name="debug_get_spectrum_image">
+		<method name="debug_get_spectrum_image" qualifiers="const">
 			<return type="Image" />
 			<param index="0" name="cascade" type="int" />
 			<description>
@@ -143,6 +143,9 @@
 		</member>
 		<member name="sun_path" type="NodePath" setter="set_sun_path" getter="get_sun_path" default="NodePath(&quot;&quot;)">
 			The [DirectionalLight3D] whose direction the caustics use. Empty: the scene's first visible directional light.
+		</member>
+		<member name="time" type="float" setter="set_time" getter="get_time">
+			The waves' clock in seconds (not saved): advanced by the process time with [member time_auto], or set here for deterministic playback.
 		</member>
 		<member name="time_auto" type="bool" setter="set_time_auto" getter="is_time_auto" default="true">
 			Advance the waves' clock with the process time. Off: set it yourself (deterministic playback).

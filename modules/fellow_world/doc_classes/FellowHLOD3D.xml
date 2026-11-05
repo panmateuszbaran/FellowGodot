@@ -58,9 +58,6 @@
 		<member name="generate_lods" type="bool" setter="set_generate_lods" getter="get_generate_lods" default="true">
 			Generates detail levels for the proxies' surfaces (as the mesh importer does), applied by Godot's mesh LOD ([member Viewport.mesh_lod_threshold]).
 		</member>
-		<member name="margin" type="float" setter="set_margin" getter="get_margin" default="5.0">
-			Hysteresis around [member distance], so a camera moving around it does not switch every frame.
-		</member>
 		<member name="impostor_distance" type="float" setter="set_impostor_distance" getter="get_impostor_distance" default="0.0">
 			Beyond this distance (per instance) impostors draw the meshes that have them; 0: no impostors.
 		</member>
@@ -78,6 +75,9 @@
 		</member>
 		<member name="instancing" type="bool" setter="set_instancing" getter="get_instancing" default="true">
 			Repeated meshes get instanced proxies (needs [code]rendering/fellow/geometry/multimesh_culling[/code]); off: every mesh is merged per cell.
+		</member>
+		<member name="margin" type="float" setter="set_margin" getter="get_margin" default="5.0">
+			Hysteresis around [member distance], so a camera moving around it does not switch every frame.
 		</member>
 		<member name="min_meshes" type="int" setter="set_min_meshes" getter="get_min_meshes" default="4">
 			Cells with fewer mergeable meshes keep them as they are.

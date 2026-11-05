@@ -9,4 +9,257 @@
 	</description>
 	<tutorials>
 	</tutorials>
+	<methods>
+		<method name="get_cell_size" qualifiers="const">
+			<return type="float" />
+			<description>
+				The cells' edge in metres (the longest side of [member size] over [member resolution]).
+			</description>
+		</method>
+		<method name="get_debug_data" qualifiers="const">
+			<return type="PackedByteArray" />
+			<description>
+				The data of the last [method request_debug_data], once [method is_debug_data_ready]: the texture's texels as raw bytes (for tests).
+			</description>
+		</method>
+		<method name="get_fire_light_node" qualifiers="const">
+			<return type="OmniLight3D" />
+			<description>
+				The [OmniLight3D] the node places at the fire (internal; [member fire_light]), or [code]null[/code].
+			</description>
+		</method>
+		<method name="get_fire_power" qualifiers="const">
+			<return type="float" />
+			<description>
+				The fire's total emission at the last readback (the sum of the burning cells' brightness, 2-3 frames late): 0 when nothing burns.
+			</description>
+		</method>
+		<method name="get_grid_size" qualifiers="const">
+			<return type="Vector3i" />
+			<description>
+				The grid's cells along X, Y and Z (from [member size] and [member resolution]).
+			</description>
+		</method>
+		<method name="get_steps_simulated" qualifiers="const">
+			<return type="int" />
+			<description>
+				The simulation steps run since the start or the last [method reset_simulation].
+			</description>
+		</method>
+		<method name="get_velocity_texture" qualifiers="const">
+			<return type="Texture3D" />
+			<description>
+				The velocity at the cell centres as a [Texture3D] with [member velocity_texture_enabled] (each component v / [member velocity_texture_scale] mapped to 0-1), for a [GPUParticlesAttractorVectorField3D] over the box.
+			</description>
+		</method>
+		<method name="get_vram_bytes" qualifiers="const">
+			<return type="int" />
+			<description>
+				The video memory of the simulation's textures and buffers.
+			</description>
+		</method>
+		<method name="is_debug_data_ready" qualifiers="const">
+			<return type="bool" />
+			<description>
+				[code]true[/code] when the data of [method request_debug_data] has arrived.
+			</description>
+		</method>
+		<method name="request_debug_data">
+			<return type="void" />
+			<param index="0" name="what" type="int" />
+			<description>
+				Reads a GPU state back asynchronously, for tests: [param what] 0 the scalars (smoke, temperature, fuel), 1 the velocity, 2 the pressure, 3 the divergence's right-hand side, 4 the solid cells. Poll [method is_debug_data_ready].
+			</description>
+		</method>
+		<method name="reset_simulation">
+			<return type="void" />
+			<description>
+				Empties the box: no smoke, heat or fuel, the gas at rest (then [member prewarm_steps] again).
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="ambient_strength" type="float" setter="set_ambient_strength" getter="get_ambient_strength" default="1.0">
+			How much of the scene's ambient light the smoke scatters.
+		</member>
+		<member name="anisotropy" type="float" setter="set_anisotropy" getter="get_anisotropy" default="0.3">
+			The smoke's scattering phase (Henyey-Greenstein): positive scatters forwards (bright towards the sun), negative backwards.
+		</member>
+		<member name="buoyancy" type="float" setter="set_buoyancy" getter="get_buoyancy" default="1.0">
+			How hot gas rises: 1 is an ideal gas's buoyancy, 0 none, negative sinks.
+		</member>
+		<member name="burn_rate" type="float" setter="set_burn_rate" getter="get_burn_rate" default="6.0">
+			How fast fuel burns where the gas is above [member ignition_temperature], per second.
+		</member>
+		<member name="cast_shadows" type="bool" setter="set_cast_shadows" getter="is_casting_shadows" default="true">
+			The sun's shadow through the smoke on the scene (in the contact shadow mask; not with the ray-traced sun shadows).
+		</member>
+		<member name="closed_faces" type="int" setter="set_closed_faces" getter="get_closed_faces" default="4">
+			The box's faces that are walls (by default the floor); the others are open to fresh air, or an inflow where [member wind] blows in.
+		</member>
+		<member name="collision_mask" type="int" setter="set_collision_mask" getter="get_collision_mask" default="1">
+			The physics layers whose bodies are obstacles ([member physics_obstacles]).
+		</member>
+		<member name="cooling" type="float" setter="set_cooling" getter="get_cooling" default="1.2">
+			How fast hot gas cools towards the ambient temperature, per second.
+		</member>
+		<member name="expansion" type="float" setter="set_expansion" getter="get_expansion" default="0.4">
+			How much burning fuel expands the gas (a source in the pressure projection): flames that push outwards.
+		</member>
+		<member name="fire_intensity" type="float" setter="set_fire_intensity" getter="get_fire_intensity" default="20.0">
+			The fire's blackbody emission's brightness (it grows with the fourth power of the temperature).
+		</member>
+		<member name="fire_light" type="bool" setter="set_fire_light" getter="is_fire_light" default="true">
+			An [OmniLight3D] at the fire lights the scene, its energy and colour from the simulated emission (2-3 frames late).
+		</member>
+		<member name="fire_light_energy" type="float" setter="set_fire_light_energy" getter="get_fire_light_energy" default="1.0">
+			A multiplier of the fire light's energy, which follows the fire's emission.
+		</member>
+		<member name="fire_light_range" type="float" setter="set_fire_light_range" getter="get_fire_light_range" default="0.0">
+			The fire light's range in metres (0: from its energy, 2-60 m).
+		</member>
+		<member name="fire_light_shadows" type="bool" setter="set_fire_light_shadows" getter="is_fire_light_shadows" default="false">
+			The fire light casts shadows (an omni shadow: costly).
+		</member>
+		<member name="fire_temperature_scale" type="float" setter="set_fire_temperature_scale" getter="get_fire_temperature_scale" default="1.4">
+			The flames' colour temperature: the gas's temperature times this is the blackbody's (higher is whiter).
+		</member>
+		<member name="flame_temperature_limit" type="float" setter="set_flame_temperature_limit" getter="get_flame_temperature_limit" default="0.0">
+			The combustion heats no cell above this (kelvin; the fuel left burns further on), so that burning objects' fuel cannot run the gas away; 0: no limit (2200 K above the ambient where [FellowBurnable3D] objects feed the volume).
+		</member>
+		<member name="heat_release" type="float" setter="set_heat_release" getter="get_heat_release" default="1400.0">
+			The heat a unit of fuel releases as it burns (kelvin per unit).
+		</member>
+		<member name="high_precision" type="bool" setter="set_high_precision" getter="is_high_precision" default="false">
+			RGBA32F state textures instead of RGBA16F: for very hot or large volumes; twice the memory.
+		</member>
+		<member name="ignition_temperature" type="float" setter="set_ignition_temperature" getter="get_ignition_temperature" default="250.0">
+			Fuel burns where the gas is hotter than this (kelvin).
+		</member>
+		<member name="maccormack" type="bool" setter="set_maccormack" getter="is_maccormack" default="true">
+			MacCormack advection (second order, sharper detail) instead of semi-Lagrangian.
+		</member>
+		<member name="multigrid_cycles" type="int" setter="set_multigrid_cycles" getter="get_multigrid_cycles" default="2">
+			The multigrid solver's V-cycles a step ([member pressure_solver] Multigrid).
+		</member>
+		<member name="physics_obstacles" type="bool" setter="set_physics_obstacles" getter="is_physics_obstacles" default="true">
+			The physics bodies inside the box are obstacles the gas flows around (spheres, boxes, capsules, cylinders, world boundaries; other convex shapes as their box; at most 16); a body moved more than six cells in a step counts as teleported.
+		</member>
+		<member name="pressure_iterations" type="int" setter="set_pressure_iterations" getter="get_pressure_iterations" default="20">
+			The SOR solver's sweeps a step ([member pressure_solver] SOR).
+		</member>
+		<member name="pressure_solver" type="int" setter="set_pressure_solver" getter="get_pressure_solver" enum="FellowGasVolume3D.PressureSolver" default="1">
+			How the pressure projection is solved: multigrid V-cycles (faster to converge) or red-black SOR.
+		</member>
+		<member name="prewarm_steps" type="int" setter="set_prewarm_steps" getter="get_prewarm_steps" default="0">
+			Steps simulated at once when the simulation starts or resets, so the fire is already burning.
+		</member>
+		<member name="render_enabled" type="bool" setter="set_render_enabled" getter="is_render_enabled" default="true">
+			Draws the volume (Forward+ and Mobile simulate it; only Forward+ draws it).
+		</member>
+		<member name="render_step" type="float" setter="set_render_step" getter="get_render_step" default="1.0">
+			The ray march's step through the volume, in cells: larger is cheaper and coarser.
+		</member>
+		<member name="resolution" type="int" setter="set_resolution" getter="get_resolution" default="64">
+			The cells along the box's longest side (the others in proportion).
+		</member>
+		<member name="self_shadow" type="float" setter="set_self_shadow" getter="get_self_shadow" default="1.0">
+			How strongly the smoke shadows itself from the sun.
+		</member>
+		<member name="shadow_strength" type="float" setter="set_shadow_strength" getter="get_shadow_strength" default="1.0">
+			How dark the smoke's shadow on the scene is ([member cast_shadows]).
+		</member>
+		<member name="simulation_enabled" type="bool" setter="set_simulation_enabled" getter="is_simulation_enabled" default="true">
+			Off: the gas stays as it is (no steps), still drawn.
+		</member>
+		<member name="size" type="Vector3" setter="set_size" getter="get_size" default="Vector3(2, 4, 2)">
+			The box in metres, its floor centred on the node.
+		</member>
+		<member name="smoke_color" type="Color" setter="set_smoke_color" getter="get_smoke_color" default="Color(0.75, 0.75, 0.75, 1)">
+			The smoke's scattering colour.
+		</member>
+		<member name="smoke_density" type="float" setter="set_smoke_density" getter="get_smoke_density" default="4.0">
+			The smoke's extinction per metre at a smoke density of 1.
+		</member>
+		<member name="smoke_dissipation" type="float" setter="set_smoke_dissipation" getter="get_smoke_dissipation" default="0.05">
+			How fast smoke fades, per second.
+		</member>
+		<member name="smoke_weight" type="float" setter="set_smoke_weight" getter="get_smoke_weight" default="0.0">
+			A downward acceleration per unit of smoke (m/s²): heavy smoke sinks as it cools.
+		</member>
+		<member name="soot" type="float" setter="set_soot" getter="get_soot" default="0.6">
+			The smoke a unit of burning fuel leaves.
+		</member>
+		<member name="space" type="int" setter="set_space" getter="get_space" enum="FellowGasVolume3D.Space" default="0">
+			Local: the gas moves and turns with the node. World: the gas stays in the world and the (axis-aligned) box follows the node by whole cells (a carried torch).
+		</member>
+		<member name="sparse" type="bool" setter="set_sparse" getter="is_sparse" default="true">
+			Only the 4³-cell bricks near smoke, heat, fuel or an emitter are simulated (within [member sparse_margin] bricks; the velocity one brick further), the air beyond still: much cheaper for a fire in a large box.
+		</member>
+		<member name="sparse_margin" type="int" setter="set_sparse_margin" getter="get_sparse_margin" default="2">
+			How many bricks around the active ones are simulated ([member sparse]).
+		</member>
+		<member name="substeps" type="int" setter="set_substeps" getter="get_substeps" default="1">
+			Simulation steps per physics tick, each a fraction of it (shorter steps for fast flows).
+		</member>
+		<member name="time_scale" type="float" setter="set_time_scale" getter="get_time_scale" default="1.0">
+			The simulation's speed: its time step is the physics tick times this.
+		</member>
+		<member name="turbulence" type="float" setter="set_turbulence" getter="get_turbulence" default="0.0">
+			A noise force (m/s²) that breaks the flow up.
+		</member>
+		<member name="turbulence_scale" type="float" setter="set_turbulence_scale" getter="get_turbulence_scale" default="0.4">
+			The turbulence noise's size in metres.
+		</member>
+		<member name="velocity_texture_enabled" type="bool" setter="set_velocity_texture_enabled" getter="is_velocity_texture_enabled" default="false">
+			Exports the velocity at the cell centres as a [Texture3D] ([method get_velocity_texture]) for a [GPUParticlesAttractorVectorField3D]: sparks and embers carried by the flow.
+		</member>
+		<member name="velocity_texture_scale" type="float" setter="set_velocity_texture_scale" getter="get_velocity_texture_scale" default="5.0">
+			The speed that maps to the texture's full range ([member velocity_texture_enabled]).
+		</member>
+		<member name="vorticity" type="float" setter="set_vorticity" getter="get_vorticity" default="0.3">
+			Vorticity confinement: puts back the small swirls the grid smooths away.
+		</member>
+		<member name="wind" type="Vector3" setter="set_wind" getter="get_wind" default="Vector3(0, 0, 0)">
+			The wind in metres per second: it blows in through the open faces and the gas inside relaxes towards it at [member wind_rate].
+		</member>
+		<member name="wind_from_scene" type="bool" setter="set_wind_from_scene" getter="is_wind_from_scene" default="false">
+			The active [FellowWind3D]'s velocity at the box, with its gusts, instead of [member wind].
+		</member>
+		<member name="wind_rate" type="float" setter="set_wind_rate" getter="get_wind_rate" default="0.0">
+			How fast the gas inside the box takes the wind's velocity, per second (0: only through the open faces).
+		</member>
+	</members>
+	<constants>
+		<constant name="SPACE_LOCAL" value="0" enum="Space">
+			The gas moves and turns with the node.
+		</constant>
+		<constant name="SPACE_WORLD" value="1" enum="Space">
+			The gas stays in the world; the box (axis-aligned) follows the node by whole cells.
+		</constant>
+		<constant name="SOLVER_SOR" value="0" enum="PressureSolver">
+			Red-black successive over-relaxation, [member pressure_iterations] sweeps.
+		</constant>
+		<constant name="SOLVER_MULTIGRID" value="1" enum="PressureSolver">
+			Multigrid V-cycles, [member multigrid_cycles] of them.
+		</constant>
+		<constant name="FACE_NEG_X" value="1" enum="Face">
+			The box's -X face.
+		</constant>
+		<constant name="FACE_POS_X" value="2" enum="Face">
+			The box's +X face.
+		</constant>
+		<constant name="FACE_NEG_Y" value="4" enum="Face">
+			The floor.
+		</constant>
+		<constant name="FACE_POS_Y" value="8" enum="Face">
+			The top.
+		</constant>
+		<constant name="FACE_NEG_Z" value="16" enum="Face">
+			The box's -Z face.
+		</constant>
+		<constant name="FACE_POS_Z" value="32" enum="Face">
+			The box's +Z face.
+		</constant>
+	</constants>
 </class>

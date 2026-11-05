@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<class name="FellowRain3D" inherits="Node3D" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+<class name="FellowRain3D" inherits="Node3D" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
 	<brief_description>
 		Rain around the camera and wet surfaces where it falls: darker, glossier materials and puddles with ripples (FellowEngine).
 	</brief_description>
@@ -159,8 +159,11 @@
 		<member name="streak_width" type="float" setter="set_streak_width" getter="get_streak_width" default="0.0">
 			Thin streaks (m; 0: off): the drops' own width. A streak is drawn at this width or a pixel at its distance, whichever is wider, its opacity scaled by their ratio — thin and faint in the distance, as rain is seen, instead of bars of [member drop_size]'s width at every distance (which read heavy in daylight, against the sun). 0.004 is a large drop's streak.
 		</member>
+		<member name="time" type="float" setter="set_time" getter="get_time">
+			The ripples' and showers' clock in seconds (not saved): advanced by the process time with [member time_auto], or set here for deterministic renders.
+		</member>
 		<member name="time_auto" type="bool" setter="set_time_auto" getter="is_time_auto" default="true">
-			If [code]true[/code], the ripples' time advances with the process time; otherwise it is set by the [code]time[/code] property (deterministic renders).
+			If [code]true[/code], the ripples' time advances with the process time; otherwise it is set by the [member time] property (deterministic renders).
 		</member>
 		<member name="track_refill_time" type="float" setter="set_track_refill_time" getter="get_track_refill_time" default="900.0">
 			The seconds full snowfall ([member rain] 1) takes to fill a track of [member snow_depth] back (0: never).

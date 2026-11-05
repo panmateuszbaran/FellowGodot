@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<class name="FellowWind3D" inherits="Node3D" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+<class name="FellowWind3D" inherits="Node3D" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
 	<brief_description>
 		The scene's wind: grass, bushes and trees bend, sway and flutter with it and its gusts (FellowEngine).
 	</brief_description>
@@ -50,8 +50,11 @@
 		<member name="speed" type="float" setter="set_speed" getter="get_speed" default="6.0">
 			The mean wind's speed in metres per second (a breeze 3, a fresh wind 10, a gale 20).
 		</member>
+		<member name="time" type="float" setter="set_time" getter="get_time">
+			The wind's clock in seconds (not saved): advanced by the process time with [member time_auto], or set here for deterministic renders.
+		</member>
 		<member name="time_auto" type="bool" setter="set_time_auto" getter="is_time_auto" default="true">
-			If [code]true[/code], the wind's clock (the sway's phase, the gusts' travel) advances with the process time; otherwise it is set by the [code]time[/code] property (deterministic renders: the same pose for the same time).
+			If [code]true[/code], the wind's clock (the sway's phase, the gusts' travel) advances with the process time; otherwise it is set by the [member time] property (deterministic renders: the same pose for the same time).
 		</member>
 	</members>
 </class>

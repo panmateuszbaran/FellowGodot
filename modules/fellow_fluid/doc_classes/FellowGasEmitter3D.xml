@@ -8,4 +8,62 @@
 	</description>
 	<tutorials>
 	</tutorials>
+	<members>
+		<member name="box_size" type="Vector3" setter="set_box_size" getter="get_box_size" default="Vector3(0.5, 0.5, 0.5)">
+			The box's size with [member shape] [constant SHAPE_BOX], in the emitter's space.
+		</member>
+		<member name="emitting" type="bool" setter="set_emitting" getter="is_emitting" default="true">
+			While on, the emitter adds to the gas every step; off, it adds nothing (the gas already released stays).
+		</member>
+		<member name="fuel" type="float" setter="set_fuel" getter="get_fuel" default="2.0">
+			Fuel released per second where the emitter covers the gas, in the gas's units of fuel a cell. Fuel burns where the gas is above the volume's [member FellowGasVolume3D.ignition_temperature]: that is fire; with [member temperature] above it the emitter lights its own fuel.
+		</member>
+		<member name="height" type="float" setter="set_height" getter="get_height" default="0.5">
+			The cylinder's height along the emitter's Y axis with [member shape] [constant SHAPE_CYLINDER] (its radius is [member radius]).
+		</member>
+		<member name="noise" type="float" setter="set_noise" getter="get_noise" default="0.5">
+			Flicker: how much a value noise drifting upwards through the emitter modulates what it releases (0: steady, 1: from nothing to twice as much).
+		</member>
+		<member name="noise_scale" type="float" setter="set_noise_scale" getter="get_noise_scale" default="0.3">
+			The flicker noise's period in metres ([member noise]); smaller is finer.
+		</member>
+		<member name="radius" type="float" setter="set_radius" getter="get_radius" default="0.25">
+			The sphere's radius ([constant SHAPE_SPHERE]) or the cylinder's ([constant SHAPE_CYLINDER]).
+		</member>
+		<member name="shape" type="int" setter="set_shape" getter="get_shape" enum="FellowGasEmitter3D.Shape" default="0">
+			The region the emitter covers: a sphere, a box or a vertical cylinder around its origin, soft at its edge.
+		</member>
+		<member name="smoke" type="float" setter="set_smoke" getter="get_smoke" default="0.5">
+			Smoke density released per second where the emitter covers the gas.
+		</member>
+		<member name="temperature" type="float" setter="set_temperature" getter="get_temperature" default="900.0">
+			With [constant TEMPERATURE_SET] the gas inside the emitter is kept at least this hot (kelvin); with [constant TEMPERATURE_ADD], the heat added per second.
+		</member>
+		<member name="temperature_mode" type="int" setter="set_temperature_mode" getter="get_temperature_mode" enum="FellowGasEmitter3D.TemperatureMode" default="0">
+			How [member temperature] heats the gas: a floor ([constant TEMPERATURE_SET]) or a rate ([constant TEMPERATURE_ADD]).
+		</member>
+		<member name="velocity" type="Vector3" setter="set_velocity" getter="get_velocity" default="Vector3(0, 0, 0)">
+			The velocity the emitter pushes the gas towards, in its own space (turned with the node), in metres per second; see [member velocity_strength].
+		</member>
+		<member name="velocity_strength" type="float" setter="set_velocity_strength" getter="get_velocity_strength" default="0.0">
+			How strongly the gas inside the emitter is set to [member velocity] each step (0: not at all, 1: exactly).
+		</member>
+	</members>
+	<constants>
+		<constant name="SHAPE_SPHERE" value="0" enum="Shape">
+			A sphere of [member radius].
+		</constant>
+		<constant name="SHAPE_BOX" value="1" enum="Shape">
+			A box of [member box_size].
+		</constant>
+		<constant name="SHAPE_CYLINDER" value="2" enum="Shape">
+			A vertical cylinder of [member radius] and [member height].
+		</constant>
+		<constant name="TEMPERATURE_SET" value="0" enum="TemperatureMode">
+			The gas inside is at least [member temperature].
+		</constant>
+		<constant name="TEMPERATURE_ADD" value="1" enum="TemperatureMode">
+			[member temperature] is added per second.
+		</constant>
+	</constants>
 </class>

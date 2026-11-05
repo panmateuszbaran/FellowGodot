@@ -16,6 +16,9 @@ def get_doc_classes():
         "FellowGasVolume3D",
         "FellowGasEmitter3D",
         "FellowBurnable3D",
+        "FellowLightning3D",
+        "FellowSnowTracker3D",
+        "FellowWeather3D",
     ]
 
 

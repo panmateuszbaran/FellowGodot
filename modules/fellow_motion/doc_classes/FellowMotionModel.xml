@@ -4,7 +4,7 @@
 		FellowEngine: a neural motion model (MotionBricks SOMA) run on the GPU.
 	</brief_description>
 	<description>
-		Loads a [code].fmb[/code] file — NVIDIA's MotionBricks SOMA checkpoints converted by [code]modules/fellow_motion/tools/fmb_convert.py[/code] (the weights are NVIDIA's, under the NVIDIA Open Model Agreement, and are not part of the engine) — and runs it on a local [RenderingDevice] of its own: a GPU queue beside the renderer's. One [method run] generates a batch of independent requests, each from four context poses and up to four target poses, of 24 to 64 frames of motion at 30 Hz, with the ONNX model's inputs and outputs (MotionBricks' [code]docs/onnx_inference.md[/code]): [code]global_root_values[/code] [N, 8, 5], [code]has_global_root_values[/code] [N, 8], [code]local_root_values[/code] [N, 8, 4], [code]has_local_root_values[/code] [N, 8], [code]local_poses[/code] [N, 8, 267], [code]has_local_poses[/code] [N, 8], [code]allowed_pred_num_tokens[/code] [N, 11] in; [code]pred_global_motions[/code] [N, 64, 366] and [code]pred_num_tokens[/code] [N] out (row-major packed arrays). The weights are fp16 or fp32 as converted; the arithmetic is fp32. [FellowMotionCharacter3D] drives characters with it. See [code]docs/decisions/0143-neural-motion.md[/code].
+		Loads a [code].fmb[/code] file — NVIDIA's MotionBricks SOMA checkpoints converted by [code]modules/fellow_motion/tools/fmb_convert.py[/code] (the weights are NVIDIA's, under the NVIDIA Open Model Agreement, and are not part of the engine) — and runs it on a local [RenderingDevice] of its own: a GPU queue beside the renderer's. One [method run] generates a batch of independent requests, each from four context poses and up to four target poses, of 24 to 64 frames of motion at 30 Hz, with the ONNX model's inputs and outputs (MotionBricks' [code]docs/onnx_inference.md[/code]): [code]global_root_values[/code] [lb]N, 8, 5[rb], [code]has_global_root_values[/code] [lb]N, 8[rb], [code]local_root_values[/code] [lb]N, 8, 4[rb], [code]has_local_root_values[/code] [lb]N, 8[rb], [code]local_poses[/code] [lb]N, 8, 267[rb], [code]has_local_poses[/code] [lb]N, 8[rb], [code]allowed_pred_num_tokens[/code] [lb]N, 11[rb] in; [code]pred_global_motions[/code] [lb]N, 64, 366[rb] and [code]pred_num_tokens[/code] [lb]N[rb] out (row-major packed arrays). The weights are fp16 or fp32 as converted; the arithmetic is fp32. [FellowMotionCharacter3D] drives characters with it. See [code]docs/decisions/0143-neural-motion.md[/code].
 	</description>
 	<tutorials>
 	</tutorials>
@@ -35,6 +35,12 @@
 				The largest batch a run takes (set by [method load]).
 			</description>
 		</method>
+		<method name="is_cooperative_matrix_active" qualifiers="const">
+			<return type="bool" />
+			<description>
+				[code]true[/code] if the model's products run on the device's cooperative matrices (tensor cores; [code]VK_KHR_cooperative_matrix[/code]), [code]false[/code] on the portable compute path.
+			</description>
+		</method>
 		<method name="is_loaded" qualifiers="const">
 			<return type="bool" />
 			<description>
@@ -42,9 +48,9 @@
 			</description>
 		</method>
 		<method name="load">
+			<return type="int" enum="Error" />
 			<param index="0" name="path" type="String" />
 			<param index="1" name="max_batch" type="int" default="16" />
-			<return type="int" enum="Error" />
 			<description>
 				Loads an [code].fmb[/code] file, creates the model's device, compiles its shaders and uploads the weights (about 380 MB in fp16). [param max_batch] sizes the activations.
 			</description>

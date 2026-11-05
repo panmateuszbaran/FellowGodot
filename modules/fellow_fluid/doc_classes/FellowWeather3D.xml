@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<class name="FellowWeather3D" inherits="Node" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+<class name="FellowWeather3D" inherits="Node" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
 	<brief_description>
 		The weather: clear, cloudy, overcast, rain, a thunderstorm, snow or a blizzard, changing over time (FellowEngine).
 	</brief_description>
@@ -19,7 +19,7 @@
 		<method name="get_current_state" qualifiers="const">
 			<return type="Dictionary" />
 			<description>
-				The state now (during a transition, between the two weathers): [code]wind_speed[/code], [code]gustiness[/code], [code]precipitation[/code], [code]intensity[/code], [code]lightning_rate[/code], [code]cloud_coverage[/code], [code]cloud_density[/code], [code]sunlight[/code], [code]ambient_light[/code], [code]fog_density[/code], [code]temperature[/code].
+				The state now (during a transition, between the two weathers): [code skip-lint]wind_speed[/code], [code skip-lint]gustiness[/code], [code skip-lint]precipitation[/code], [code skip-lint]intensity[/code], [code skip-lint]lightning_rate[/code], [code skip-lint]cloud_coverage[/code], [code skip-lint]cloud_density[/code], [code skip-lint]sunlight[/code], [code skip-lint]ambient_light[/code], [code skip-lint]fog_density[/code], [code skip-lint]temperature[/code].
 			</description>
 		</method>
 		<method name="get_lightning_node" qualifiers="const">

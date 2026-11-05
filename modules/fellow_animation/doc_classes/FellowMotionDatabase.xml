@@ -25,12 +25,6 @@
 				A new [Skeleton3D] with the bones of a BVH hierarchy read by [method import_bvh] (rests at the joints' offsets).
 			</description>
 		</method>
-		<method name="get_data" qualifiers="const">
-			<return type="Dictionary" />
-			<description>
-				The database's arrays (what is saved).
-			</description>
-		</method>
 		<method name="get_frame_count" qualifiers="const">
 			<return type="int" />
 			<description>
@@ -52,39 +46,42 @@
 				Reads a BVH file: [code]animation[/code] (an [Animation] with a rotation track for every joint with rotation channels and a position track for every joint with position channels, addressed to [code]Skeleton3D:&lt;joint&gt;[/code]), [code]bone_names[/code], [code]bone_parents[/code], [code]bone_offsets[/code] (end sites as bones named after their parent with [code]_end[/code]), [code]frame_time[/code] and [code]frame_count[/code]. [param scale] converts the file's units to metres (CMU: 0.056444); [param skip_first_frame] drops a T-pose added as the first frame (CMU's BVH conversion).
 			</description>
 		</method>
-		<method name="set_data">
-			<return type="void" />
-			<param index="0" name="data" type="Dictionary" />
-			<description>
-				Restores the arrays of [method get_data].
-			</description>
-		</method>
 	</methods>
 	<members>
-		<member name="data" type="Dictionary" setter="set_data" getter="get_data" default="{}">
+		<member name="data" type="Dictionary" setter="set_data" getter="get_data" default="{ &quot;bone_names&quot;: PackedStringArray(), &quot;bone_parents&quot;: PackedInt32Array(), &quot;bone_rest_positions&quot;: PackedVector3Array(), &quot;bone_rest_rotations&quot;: PackedFloat32Array(), &quot;bone_roles&quot;: PackedInt32Array(-1, -1, -1, -1, -1, -1, -1, -1, -1), &quot;contacts&quot;: PackedByteArray(), &quot;feature_offset&quot;: PackedFloat32Array(), &quot;feature_scale&quot;: PackedFloat32Array(), &quot;features&quot;: PackedFloat32Array(), &quot;frame_count&quot;: 0, &quot;ignore_range_end&quot;: 20, &quot;position_slots&quot;: PackedInt32Array(), &quot;positions&quot;: PackedVector3Array(), &quot;range_names&quot;: PackedStringArray(), &quot;range_starts&quot;: PackedInt32Array(), &quot;range_stops&quot;: PackedInt32Array(), &quot;root_positions&quot;: PackedVector3Array(), &quot;root_rotations&quot;: PackedFloat32Array(), &quot;rotation_slots&quot;: PackedInt32Array(), &quot;rotations&quot;: PackedByteArray(), &quot;sample_rate&quot;: 60.0, &quot;trajectory_frames&quot;: PackedInt32Array(20, 40, 60), &quot;weights&quot;: PackedFloat32Array() }">
 			The stored database.
 		</member>
 	</members>
 	<constants>
 		<constant name="ROLE_HIPS" value="0" enum="BoneRole">
+			The hips: the character's root for the features (the trajectory, the velocity).
 		</constant>
 		<constant name="ROLE_LEFT_UPPER_LEG" value="1" enum="BoneRole">
+			The left thigh (the foot IK's first bone).
 		</constant>
 		<constant name="ROLE_LEFT_LOWER_LEG" value="2" enum="BoneRole">
+			The left shin.
 		</constant>
 		<constant name="ROLE_LEFT_FOOT" value="3" enum="BoneRole">
+			The left foot: its position and velocity are features; locked on its contacts.
 		</constant>
 		<constant name="ROLE_LEFT_TOE" value="4" enum="BoneRole">
+			The left toe, optional (the foot stands in for it): with the foot, where contacts are detected.
 		</constant>
 		<constant name="ROLE_RIGHT_UPPER_LEG" value="5" enum="BoneRole">
+			The right thigh.
 		</constant>
 		<constant name="ROLE_RIGHT_LOWER_LEG" value="6" enum="BoneRole">
+			The right shin.
 		</constant>
 		<constant name="ROLE_RIGHT_FOOT" value="7" enum="BoneRole">
+			The right foot.
 		</constant>
 		<constant name="ROLE_RIGHT_TOE" value="8" enum="BoneRole">
+			The right toe, optional.
 		</constant>
 		<constant name="ROLE_MAX" value="9" enum="BoneRole">
+			The number of roles.
 		</constant>
 	</constants>
 </class>

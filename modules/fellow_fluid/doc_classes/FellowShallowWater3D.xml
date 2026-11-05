@@ -6,8 +6,139 @@
 	<description>
 		Simulates the 2D shallow-water equations on a staggered grid entirely with [RenderingDevice] compute shaders (no CPU readback) and renders the resulting water surface with displacement, normals, foam and screen-space refraction. Colliders and impulses are uploaded as a compact buffer each frame. Every processed frame advances exactly [member substeps] substeps of [member time_step] seconds, which makes the simulation deterministic under [code]--fixed-fps[/code].
 		Requires the Forward+ or Mobile renderer. GPU time of the simulation and of the surface-generation pass is available through [method get_simulation_gpu_time_ms] and [method get_surface_gpu_time_ms]. See [code]docs/fellow_fluid_architecture.md[/code].
-		A [FellowWater3D] whose [member FellowWater3D.simulation_path] points here draws the simulated surface as part of a larger body of water (this node's own mesh is then hidden); it reads the surface texture and [code]get_flow_texture()[/code] (cell-centre velocity and depth).
+		A [FellowWater3D] whose [member FellowWater3D.simulation_path] points here draws the simulated surface as part of a larger body of water (this node's own mesh is then hidden); it reads the surface texture and [method get_flow_texture] (cell-centre velocity and depth).
 	</description>
 	<tutorials>
 	</tutorials>
+	<methods>
+		<method name="add_impulse">
+			<return type="void" />
+			<param index="0" name="world_position" type="Vector3" />
+			<param index="1" name="radius" type="float" />
+			<param index="2" name="depth_change" type="float" />
+			<description>
+				Raises (positive [param depth_change], metres) or lowers the water within [param radius] metres of [param world_position] at the next step: a splash, a wave maker. At most 16 impulses a frame.
+			</description>
+		</method>
+		<method name="clear_colliders">
+			<return type="void" />
+			<description>
+				Removes every collider set with [method set_collider].
+			</description>
+		</method>
+		<method name="get_flow_texture" qualifiers="const">
+			<return type="Texture2D" />
+			<description>
+				The cells' velocity and depth (RGBA: velocity x, z, the depth, the surface level), for [member FellowWater3D.simulation_path] and other shaders.
+			</description>
+		</method>
+		<method name="get_simulation_gpu_time_ms" qualifiers="const">
+			<return type="float" />
+			<description>
+				The GPU time of the last frame's simulation steps in milliseconds (RenderingDevice timestamps), or -1 before the first.
+			</description>
+		</method>
+		<method name="get_simulation_vram_bytes" qualifiers="const">
+			<return type="int" />
+			<description>
+				The video memory of the simulation's textures and buffers.
+			</description>
+		</method>
+		<method name="get_steps_simulated" qualifiers="const">
+			<return type="int" />
+			<description>
+				The number of substeps simulated since the start or the last [method reset_simulation].
+			</description>
+		</method>
+		<method name="get_surface_gpu_time_ms" qualifiers="const">
+			<return type="float" />
+			<description>
+				The GPU time of the last frame's surface pass (the height, normals and foam drawn from) in milliseconds, or -1.
+			</description>
+		</method>
+		<method name="get_surface_texture" qualifiers="const">
+			<return type="Texture2D" />
+			<description>
+				The surface the water is drawn from (RGBA: the height, its gradient x and z, the foam).
+			</description>
+		</method>
+		<method name="get_terrain_texture" qualifiers="const">
+			<return type="Texture2D" />
+			<description>
+				The bed heights (R32F) the simulation runs over: [member terrain_image] at [member resolution], or flat.
+			</description>
+		</method>
+		<method name="get_water_mesh_instance" qualifiers="const">
+			<return type="MeshInstance3D" />
+			<description>
+				The internal mesh instance that draws the water (hidden while a [FellowWater3D] draws the simulated surface instead).
+			</description>
+		</method>
+		<method name="reset_simulation">
+			<return type="void" />
+			<description>
+				Starts again: the water at [member initial_water_level] over the bed, at rest, no foam.
+			</description>
+		</method>
+		<method name="set_collider">
+			<return type="void" />
+			<param index="0" name="index" type="int" />
+			<param index="1" name="world_position" type="Vector3" />
+			<param index="2" name="radius" type="float" />
+			<param index="3" name="world_velocity" type="Vector3" />
+			<description>
+				Sets moving collider [param index] (0-15): a sphere of [param radius] metres at [param world_position] moving at [param world_velocity], which the water flows around and is dragged by ([member collider_drag]). Set it every frame for a moving body.
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="collider_drag" type="float" setter="set_collider_drag" getter="get_collider_drag" default="0.25">
+			How much of a collider's velocity the water under it takes each substep (0: none, 1: all of it).
+		</member>
+		<member name="damping" type="float" setter="set_damping" getter="get_damping" default="0.05">
+			Velocity damping per second (friction with the bed, viscosity): higher calms the water faster.
+		</member>
+		<member name="domain_size" type="Vector2" setter="set_domain_size" getter="get_domain_size" default="Vector2(64, 64)">
+			The simulated area in metres (X, Z), centred on the node.
+		</member>
+		<member name="foam_decay" type="float" setter="set_foam_decay" getter="get_foam_decay" default="0.4">
+			How fast foam fades, per second.
+		</member>
+		<member name="gravity" type="float" setter="set_gravity" getter="get_gravity" default="9.81">
+			The gravitational acceleration in metres per second squared: the waves' speed.
+		</member>
+		<member name="inflow_cells" type="int" setter="set_inflow_cells" getter="get_inflow_cells" default="2">
+			How many columns of cells at the domain's -X edge hold the inflow.
+		</member>
+		<member name="inflow_depth" type="float" setter="set_inflow_depth" getter="get_inflow_depth" default="0.0">
+			River mode when above 0: the surface level (metres, the node's space) held in the first [member inflow_cells] columns at -X, with an open outflow at +X.
+		</member>
+		<member name="inflow_velocity" type="Vector2" setter="set_inflow_velocity" getter="get_inflow_velocity" default="Vector2(0, 0)">
+			The water's velocity in the inflow columns (metres per second, X and Z), with [member inflow_depth] above 0.
+		</member>
+		<member name="initial_water_level" type="float" setter="set_initial_water_level" getter="get_initial_water_level" default="1.0">
+			The water's level at the start and after [method reset_simulation], in metres in the node's space: cells whose bed is below it start wet.
+		</member>
+		<member name="render_grid" type="int" setter="set_render_grid" getter="get_render_grid" default="512">
+			The water mesh's grid (at most [member resolution]): its vertices per side.
+		</member>
+		<member name="resolution" type="int" setter="set_resolution" getter="get_resolution" default="512">
+			The simulation's cells per side: finer is more detailed and costs more (512²: about 0.21 ms per step on the benchmark's RTX).
+		</member>
+		<member name="simulation_enabled" type="bool" setter="set_simulation_enabled" getter="is_simulation_enabled" default="true">
+			Off: the water stays as it is (no steps), still drawn.
+		</member>
+		<member name="solid_height" type="float" setter="set_solid_height" getter="get_solid_height" default="20.0">
+			Bed heights at or above this (metres) are solid obstacles: walls the water does not enter.
+		</member>
+		<member name="substeps" type="int" setter="set_substeps" getter="get_substeps" default="2">
+			Substeps simulated each frame (0: paused); the simulation is frame-locked, [member time_step] seconds each, so it is deterministic.
+		</member>
+		<member name="terrain_image" type="Image" setter="set_terrain_image" getter="get_terrain_image">
+			The bed's heights in metres (red channel, any size: resized to [member resolution] without filtering, so give it at that size for smooth terrain); none: a flat bed at 0.
+		</member>
+		<member name="time_step" type="float" setter="set_time_step" getter="get_time_step" default="0.008333334">
+			The substep's length in seconds (stability needs it short enough for the cells' size and the water's depth).
+		</member>
+	</members>
 </class>

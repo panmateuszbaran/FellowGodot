@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<class name="FellowLightning3D" inherits="Node3D" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+<class name="FellowLightning3D" inherits="Node3D" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
 	<brief_description>
 		Lightning: strikes around the camera that flash over the scene, with a glowing bolt and a lit cloud (FellowEngine).
 	</brief_description>
@@ -44,11 +44,11 @@
 		<member name="bolt_width" type="float" setter="set_bolt_width" getter="get_bolt_width" default="0.006">
 			The bolt's width as seen from the camera, in radians (0.006: about 6 pixels at 1080p with a 55 degree view).
 		</member>
-		<member name="cloud_height" type="float" setter="set_cloud_height" getter="get_cloud_height" default="1200.0">
-			The height of the cloud the bolts come from, in metres above the node.
-		</member>
 		<member name="cloud_glow" type="float" setter="set_cloud_glow" getter="get_cloud_glow" default="0.5">
 			How brightly the volumetric clouds ([code]rendering/fellow/post/clouds/enabled[/code]) glow around a flash, as much as they are opaque, by how near the view passes to it (0: not at all).
+		</member>
+		<member name="cloud_height" type="float" setter="set_cloud_height" getter="get_cloud_height" default="1200.0">
+			The height of the cloud the bolts come from, in metres above the node.
 		</member>
 		<member name="color" type="Color" setter="set_color" getter="get_color" default="Color(0.78, 0.85, 1, 1)">
 			The colour of the flash and the bolt.
@@ -68,8 +68,11 @@
 		<member name="strikes_per_minute" type="float" setter="set_strikes_per_minute" getter="get_strikes_per_minute" default="4.0">
 			How often it strikes at random (0: only when [method strike] is called).
 		</member>
+		<member name="time" type="float" setter="set_time" getter="get_time">
+			The strikes' clock in seconds (not saved): advanced by the process time with [member time_auto], or set here for deterministic renders.
+		</member>
 		<member name="time_auto" type="bool" setter="set_time_auto" getter="is_time_auto" default="true">
-			If [code]true[/code], the node's clock advances with the frames; otherwise set [code]time[/code] yourself.
+			If [code]true[/code], the node's clock advances with the frames; otherwise set [member time] yourself.
 		</member>
 	</members>
 	<signals>

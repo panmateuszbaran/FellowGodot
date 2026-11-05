@@ -1585,6 +1585,12 @@
 				FellowEngine: returns cumulative counters of FellowEngine rendering features (for example the directional shadow cache: cascades served from the cache, rebuilt or rendered the stock way). Only available in FellowEngine builds.
 			</description>
 		</method>
+		<method name="fellow_get_texture_streaming_info" qualifiers="const">
+			<return type="Dictionary" />
+			<description>
+				FellowEngine: the state of texture streaming ([code]rendering/fellow/streaming/textures[/code]): the textures registered and streamed, the bytes resident, wanted and at full resolution, the loads pending and done, the evaluation's cost; with [code]rendering/fellow/streaming/texture_info_details[/code] a [code]list[/code] of every streamed texture (path, size, levels, resident and target level, bytes). See [code]docs/decisions/0146-texture-streaming.md[/code].
+			</description>
+		</method>
 		<method name="fog_volume_create">
 			<return type="RID" />
 			<description>

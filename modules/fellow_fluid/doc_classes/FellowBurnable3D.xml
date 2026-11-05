@@ -9,4 +9,233 @@
 	</description>
 	<tutorials>
 	</tutorials>
+	<methods>
+		<method name="get_ash_fraction" qualifiers="const">
+			<return type="float" />
+			<description>
+				The share of the object's initial volume that is ash now (from the last readback, a few frames late).
+			</description>
+		</method>
+		<method name="get_burning_voxels" qualifiers="const">
+			<return type="int" />
+			<description>
+				How many voxels are pyrolysing or glowing now.
+			</description>
+		</method>
+		<method name="get_char_fraction" qualifiers="const">
+			<return type="float" />
+			<description>
+				The share of the object's initial volume that is char now.
+			</description>
+		</method>
+		<method name="get_debug_data" qualifiers="const">
+			<return type="PackedByteArray" />
+			<description>
+				The data of the last [method request_debug_data], once [method is_debug_data_ready] (raw texels, for tests).
+			</description>
+		</method>
+		<method name="get_display_triangle_count" qualifiers="const">
+			<return type="int" />
+			<description>
+				The triangles of the mesh drawn while burning (the original's, subdivided with [member subdivide]).
+			</description>
+		</method>
+		<method name="get_initial_fill" qualifiers="const">
+			<return type="PackedFloat32Array" />
+			<description>
+				Each voxel's share inside the mesh when it was voxelized (0-1, X fastest), for tests.
+			</description>
+		</method>
+		<method name="get_last_step_info" qualifiers="const">
+			<return type="Dictionary" />
+			<description>
+				The transforms and parameters of the last simulation step queued (for tests).
+			</description>
+		</method>
+		<method name="get_max_temperature" qualifiers="const">
+			<return type="float" />
+			<description>
+				The hottest voxel's temperature in kelvin.
+			</description>
+		</method>
+		<method name="get_steps_simulated" qualifiers="const">
+			<return type="int" />
+			<description>
+				The simulation steps run since the object was set up or reset.
+			</description>
+		</method>
+		<method name="get_voxel_grid_size" qualifiers="const">
+			<return type="Vector3i" />
+			<description>
+				The voxel grid's size (from [member resolution] along the mesh's longest side).
+			</description>
+		</method>
+		<method name="get_voxel_origin" qualifiers="const">
+			<return type="Vector3" />
+			<description>
+				The voxel grid's corner in the mesh's space.
+			</description>
+		</method>
+		<method name="get_voxel_size" qualifiers="const">
+			<return type="float" />
+			<description>
+				A voxel's edge in the mesh's units.
+			</description>
+		</method>
+		<method name="get_wood_fraction" qualifiers="const">
+			<return type="float" />
+			<description>
+				The share of the object's initial volume that is still wood.
+			</description>
+		</method>
+		<method name="ignite">
+			<return type="void" />
+			<param index="0" name="position" type="Vector3" />
+			<param index="1" name="radius" type="float" />
+			<param index="2" name="temperature" type="float" default="900.0" />
+			<description>
+				Heats the material within [param radius] metres of [param position] (global) to at least [param temperature] kelvin: lights the object without a gas volume's fire.
+			</description>
+		</method>
+		<method name="is_burned_out" qualifiers="const">
+			<return type="bool" />
+			<description>
+				[code]true[/code] once it has burned and nothing is burning or hot enough to pyrolyse any more (signal [signal burned_out]).
+			</description>
+		</method>
+		<method name="is_burning" qualifiers="const">
+			<return type="bool" />
+			<description>
+				[code]true[/code] while some voxel is pyrolysing or glowing.
+			</description>
+		</method>
+		<method name="is_collapsed" qualifiers="const">
+			<return type="bool" />
+			<description>
+				[code]true[/code] once less than [member collapse_fraction] of the wood and char is left and the physics body has stopped colliding (signal [signal collapsed]).
+			</description>
+		</method>
+		<method name="is_debug_data_ready" qualifiers="const">
+			<return type="bool" />
+			<description>
+				[code]true[/code] when the data of [method request_debug_data] has arrived.
+			</description>
+		</method>
+		<method name="request_debug_data">
+			<return type="void" />
+			<param index="0" name="what" type="int" />
+			<description>
+				Reads a GPU state back asynchronously, for tests: [param what] 0 the voxels (RGBA32F: the temperature above the ambient, wood, char, ash), 1 the emission, 2 the injection into the gas. Poll [method is_debug_data_ready].
+			</description>
+		</method>
+		<method name="reset_burning">
+			<return type="void" />
+			<description>
+				Starts again: the object set up anew from wood at the ambient temperature (its mesh, materials and physics body restored first).
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="ash_color" type="Color" setter="set_ash_color" getter="get_ash_color" default="Color(0.56, 0.54, 0.51, 1)">
+			The ash's colour, on the surface and in the heap.
+		</member>
+		<member name="ash_volume" type="float" setter="set_ash_volume" getter="get_ash_volume" default="0.15">
+			The ash's volume as a share of the char it comes from (what is left in the heap).
+		</member>
+		<member name="burn_speed" type="float" setter="set_burn_speed" getter="get_burn_speed" default="10.0">
+			Burning seconds per second: at 10 the wood burns ten times faster than real wood (the flames keep their real size).
+		</member>
+		<member name="char_color" type="Color" setter="set_char_color" getter="get_char_color" default="Color(0.045, 0.038, 0.034, 1)">
+			The char's colour.
+		</member>
+		<member name="char_yield" type="float" setter="set_char_yield" getter="get_char_yield" default="0.25">
+			The share of the wood's mass that pyrolysis leaves as char (the rest are volatiles: the fuel).
+		</member>
+		<member name="collapse_fraction" type="float" setter="set_collapse_fraction" getter="get_collapse_fraction" default="0.2">
+			With less of the wood and char than this left, the object's physics body stops colliding (its shapes disabled, a rigid body frozen) and [signal collapsed] is emitted.
+		</member>
+		<member name="conductivity" type="float" setter="set_conductivity" getter="get_conductivity" default="0.15">
+			The wood's thermal conductivity (W/(m K)): how fast heat goes inwards.
+		</member>
+		<member name="crack_scale" type="float" setter="set_crack_scale" getter="get_crack_scale" default="0.012">
+			The size of the char's cracks (along the grain, the mesh's longest axis) where the embers glow.
+		</member>
+		<member name="density" type="float" setter="set_density" getter="get_density" default="500.0">
+			The wood's density (kg/m³).
+		</member>
+		<member name="draw_burning" type="bool" setter="set_draw_burning" getter="is_draw_burning" default="true">
+			Draws the mesh burning (receding, charred, glowing); off, the simulation runs and the mesh is drawn as it was.
+		</member>
+		<member name="flame_attachment" type="float" setter="set_flame_attachment" getter="get_flame_attachment" default="0.5">
+			The share of the volatiles that burns where it is released (the flame attached to the surface, thinner than the gas's cells).
+		</member>
+		<member name="flame_flicker" type="float" setter="set_flame_flicker" getter="get_flame_flicker" default="0.7">
+			How much the fuel released flickers (the flames lick).
+		</member>
+		<member name="flame_reach" type="float" setter="set_flame_reach" getter="get_flame_reach" default="0.1">
+			How far the surface's own flame climbs over the wood above it, in metres.
+		</member>
+		<member name="flame_strength" type="float" setter="set_flame_strength" getter="get_flame_strength" default="1.0">
+			The fuel the volatiles give the gas (1: 2.7 of the gas's fuel units per kg): the visible flames' size.
+		</member>
+		<member name="flame_temperature" type="float" setter="set_flame_temperature" getter="get_flame_temperature" default="1100.0">
+			The surface's own flame's temperature (kelvin): what keeps the object burning without the gas's flames; lower, it goes out by itself.
+		</member>
+		<member name="gas_volume_path" type="NodePath" setter="set_gas_volume_path" getter="get_gas_volume_path" default="NodePath(&quot;&quot;)">
+			The [FellowGasVolume3D] whose fire heats the object and which its volatiles feed (empty: the volume holding the object's centre).
+		</member>
+		<member name="glow_intensity" type="float" setter="set_glow_intensity" getter="get_glow_intensity" default="4.0">
+			The embers' brightness.
+		</member>
+		<member name="glow_rate" type="float" setter="set_glow_rate" getter="get_glow_rate" default="0.02">
+			How fast exposed char oxidises to ash above [member glow_temperature], per second.
+		</member>
+		<member name="glow_temperature" type="float" setter="set_glow_temperature" getter="get_glow_temperature" default="673.0">
+			Char glows and turns to ash above this (kelvin).
+		</member>
+		<member name="mesh_path" type="NodePath" setter="set_mesh_path" getter="get_mesh_path" default="NodePath(&quot;&quot;)">
+			The [MeshInstance3D] that burns (empty: the parent).
+		</member>
+		<member name="pyrolysis_rate" type="float" setter="set_pyrolysis_rate" getter="get_pyrolysis_rate" default="0.05">
+			How fast wood above [member pyrolysis_temperature] turns to char and volatiles, per second.
+		</member>
+		<member name="pyrolysis_temperature" type="float" setter="set_pyrolysis_temperature" getter="get_pyrolysis_temperature" default="573.0">
+			Wood pyrolyses above this (kelvin).
+		</member>
+		<member name="resolution" type="int" setter="set_resolution" getter="get_resolution" default="32">
+			Voxels along the mesh's longest side.
+		</member>
+		<member name="simulation_enabled" type="bool" setter="set_simulation_enabled" getter="is_simulation_enabled" default="true">
+			Off: the burning stops where it is (no steps).
+		</member>
+		<member name="smoke" type="float" setter="set_smoke" getter="get_smoke" default="0.05">
+			Smoke released with the volatiles, per unit of fuel.
+		</member>
+		<member name="specific_heat" type="float" setter="set_specific_heat" getter="get_specific_heat" default="1700.0">
+			The wood's specific heat (J/(kg K)).
+		</member>
+		<member name="subdivide" type="bool" setter="set_subdivide" getter="is_subdivide" default="true">
+			Subdivides the drawn mesh to about 1.5 voxels per edge, so the surface can follow the voxels as it recedes.
+		</member>
+		<member name="surface_heating" type="float" setter="set_surface_heating" getter="get_surface_heating" default="200.0">
+			How fast a hot surface heats the air next to it, per second.
+		</member>
+	</members>
+	<signals>
+		<signal name="burned_out">
+			<description>
+				Emitted once when the object has burned and nothing is burning any more.
+			</description>
+		</signal>
+		<signal name="collapsed">
+			<description>
+				Emitted once when the object's physics body stops colliding ([member collapse_fraction]).
+			</description>
+		</signal>
+		<signal name="ignited">
+			<description>
+				Emitted once when the first voxel starts burning.
+			</description>
+		</signal>
+	</signals>
 </class>
