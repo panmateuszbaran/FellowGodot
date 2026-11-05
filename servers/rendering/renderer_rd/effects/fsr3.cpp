@@ -31,6 +31,7 @@
 #include "fsr3.h"
 
 #include "core/config/project_settings.h"
+#include "core/os/os.h"
 #include "servers/rendering/renderer_rd/shaders/effects/fsr3/fsr3_accumulate_pass.glsl.gen.h"
 #include "servers/rendering/renderer_rd/shaders/effects/fsr3/fsr3_autogen_reactive_pass.glsl.gen.h"
 #include "servers/rendering/renderer_rd/shaders/effects/fsr3/fsr3_debug_view_pass.glsl.gen.h"
@@ -363,6 +364,16 @@ static FSR3Context::Scratch &get_scratch(FfxInterface *p_backend_interface) {
 	return *reinterpret_cast<FSR3Context::Scratch *>(p_backend_interface->scratchBuffer);
 }
 
+// FELLOW_FSR3_DEBUG=1 (the environment): the backend's resources and jobs printed as the SDK asks for them.
+static bool fsr3_debug() {
+	static const bool debug = OS::get_singleton()->get_environment("FELLOW_FSR3_DEBUG") == "1";
+	return debug;
+}
+
+static uint32_t fsr3_texture_mips(RID p_rid) {
+	return p_rid.is_valid() ? RD::get_singleton()->texture_get_format(p_rid).mipmaps : 0;
+}
+
 // The backend (FfxInterface's callbacks).
 
 static FfxVersionNumber get_sdk_version_rd(FfxInterface *p_backend_interface) {
@@ -447,6 +458,9 @@ static FfxErrorCode create_resource_rd(FfxInterface *p_backend_interface, const 
 
 	FSR3Context::Resources &resources = get_scratch(p_backend_interface).resources;
 	r_resource->internalIndex = resources.add(texture, false, true, desc);
+	if (fsr3_debug()) {
+		print_line(vformat("FSR3_DEBUG create #%d \"%s\" %dx%d mips %d (texture %d) format %d usage 0x%x flags 0x%x init %d", r_resource->internalIndex, p_description->name ? String(p_description->name) : String(), desc.width, desc.height, desc.mipCount, fsr3_texture_mips(texture), int(desc.format), uint32_t(desc.usage), uint32_t(desc.flags), int(init.type)));
+	}
 	if (init.type != FFX_RESOURCE_INIT_DATA_TYPE_UNINITIALIZED && uint32_t(r_resource->internalIndex) + 1 == resources.size()) {
 		// The SDK releases a resource with initial data and "its copy" at the next index (ffxSafeReleaseCopyResource,
 		// the Vulkan backend's staging buffer): keep that index empty.
@@ -463,6 +477,9 @@ static FfxErrorCode register_resource_rd(FfxInterface *p_backend_interface, cons
 	const RID &rid = *reinterpret_cast<const RID *>(p_resource->resource);
 	ERR_FAIL_COND_V(rid.is_null(), FFX_ERROR_INVALID_ARGUMENT);
 	r_resource->internalIndex = get_scratch(p_backend_interface).resources.add(rid, true, false, p_resource->description);
+	if (fsr3_debug()) {
+		print_line(vformat("FSR3_DEBUG register #%d \"%s\" %dx%d mips %d (texture %d)", r_resource->internalIndex, String(p_resource->name), p_resource->description.width, p_resource->description.height, p_resource->description.mipCount, fsr3_texture_mips(rid)));
+	}
 	return FFX_OK;
 }
 
@@ -495,6 +512,9 @@ static FfxErrorCode destroy_resource_rd(FfxInterface *p_backend_interface, FfxRe
 		return FFX_OK;
 	}
 	const uint32_t index = p_resource.internalIndex;
+	if (fsr3_debug()) {
+		print_line(vformat("FSR3_DEBUG destroy #%d (owned %d, valid %d)", index, int(resources.owned[index]), int(resources.rids[index].is_valid())));
+	}
 	if (resources.owned[index] && resources.rids[index].is_valid()) {
 		// Freeing the texture frees its mip views with it.
 		RD::get_singleton()->free_rid(resources.rids[index]);
@@ -577,6 +597,9 @@ static FfxErrorCode schedule_gpu_job_rd(FfxInterface *p_backend_interface, const
 			FSR3Context::Job job;
 			job.type = FFX_GPU_JOB_CLEAR_FLOAT;
 			job.target = p_job->clearJobDescriptor.target.internalIndex;
+			if (fsr3_debug()) {
+				print_line(vformat("FSR3_DEBUG schedule clear #%d \"%s\"", job.target, String(p_job->jobLabel)));
+			}
 			const float *c = p_job->clearJobDescriptor.color;
 			job.color = Color(c[0], c[1], c[2], c[3]);
 			scratch.jobs.push_back(job);
@@ -586,6 +609,9 @@ static FfxErrorCode schedule_gpu_job_rd(FfxInterface *p_backend_interface, const
 			job.type = FFX_GPU_JOB_COPY;
 			job.source = p_job->copyJobDescriptor.src.internalIndex;
 			job.target = p_job->copyJobDescriptor.dst.internalIndex;
+			if (fsr3_debug()) {
+				print_line(vformat("FSR3_DEBUG schedule copy #%d -> #%d \"%s\"", job.source, job.target, String(p_job->jobLabel)));
+			}
 			scratch.jobs.push_back(job);
 		} break;
 		case FFX_GPU_JOB_COMPUTE: {
@@ -698,7 +724,11 @@ static FfxErrorCode execute_gpu_jobs_rd(FfxInterface *p_backend_interface, FfxCo
 					break;
 				}
 				const FfxResourceDescription &desc = resources.descriptions[job.target];
-				rd->texture_clear(resources.rids[job.target], job.color, 0, MAX(desc.mipCount, 1u), 0, 1);
+				const uint32_t texture_mips = fsr3_texture_mips(resources.rids[job.target]);
+				if (fsr3_debug() || MAX(desc.mipCount, 1u) > texture_mips) {
+					print_line(vformat("FSR3_DEBUG clear #%d mips %d (texture %d)", job.target, desc.mipCount, texture_mips));
+				}
+				rd->texture_clear(resources.rids[job.target], job.color, 0, MIN(MAX(desc.mipCount, 1u), MAX(texture_mips, 1u)), 0, 1);
 			} break;
 			case FFX_GPU_JOB_COPY: {
 				if (job.target < 0 || job.source < 0 || uint32_t(job.target) >= resources.size() || uint32_t(job.source) >= resources.size()) {
@@ -990,6 +1020,9 @@ FSR3Context *FSR3Effect::create_context(Size2i p_internal_size, Size2i p_target_
 	functions.scratchBufferSize = sizeof(context->scratch);
 	functions.device = device;
 
+	if (fsr3_debug()) {
+		print_line(vformat("FSR3_DEBUG context %s -> %s (context %d bytes, scratch %d bytes)", p_internal_size, p_target_size, int64_t(sizeof(FfxFsr3UpscalerContext)), int64_t(sizeof(context->scratch))));
+	}
 	context->fsr_context = reinterpret_cast<FfxFsr3UpscalerContext *>(memalloc(sizeof(FfxFsr3UpscalerContext)));
 	FfxErrorCode result = ffxFsr3UpscalerContextCreate(context->fsr_context, &desc);
 	if (result != FFX_OK) {
@@ -1080,6 +1113,9 @@ void FSR3Effect::upscale(const Parameters &p_params, const Tuning &p_tuning, boo
 	dispatch.flags = p_debug_view ? FFX_FSR3UPSCALER_DISPATCH_DRAW_DEBUG_VIEW : 0;
 	MaterialStorage::store_camera(p_params.reprojection, dispatch.reprojectionMatrix);
 
+	if (fsr3_debug()) {
+		print_line(vformat("FSR3_DEBUG dispatch %dx%d -> %dx%d reset %d", dispatch.renderSize.width, dispatch.renderSize.height, dispatch.upscaleSize.width, dispatch.upscaleSize.height, int(dispatch.reset)));
+	}
 	FfxErrorCode result = ffxFsr3UpscalerContextDispatch(context->fsr_context, &dispatch);
 	ERR_FAIL_COND_MSG(result != FFX_OK, vformat("FSR 3.1: dispatch failed (error 0x%x).", uint32_t(result)));
 }
