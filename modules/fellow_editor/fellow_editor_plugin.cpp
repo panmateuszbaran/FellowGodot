@@ -45,13 +45,16 @@
 #include "editor/scene/3d/node_3d_editor_plugin.h"
 #include "editor/settings/editor_settings.h"
 #include "editor/themes/editor_scale.h"
+#include "scene/3d/mesh_instance_3d.h"
 #include "scene/3d/node_3d.h"
 #include "scene/gui/box_container.h"
 #include "scene/gui/button.h"
 #include "scene/gui/dialogs.h"
 #include "scene/gui/label.h"
 #include "scene/gui/line_edit.h"
+#include "scene/gui/menu_button.h"
 #include "scene/gui/spin_box.h"
+#include "scene/resources/3d/primitive_meshes.h"
 #include "scene/resources/animation.h"
 #include "scene/scene_string_names.h"
 #include "servers/rendering/fellow_settings.h"
@@ -624,14 +627,130 @@ void FellowEditorPlugin::_editor_settings_changed() {
 	}
 }
 
+// Ready-made setups (milestone 53), wired up so that none has a configuration warning: added to the selected Node3D
+// (or the scene's root), undoable, selected. Nodes made by class name: the plugin needs none of the modules' headers.
+static Node *_fellow_make(const StringName &p_class, const String &p_name, Node *p_parent, const Dictionary &p_properties = Dictionary()) {
+	Node *n = Object::cast_to<Node>(ClassDB::instantiate(p_class));
+	ERR_FAIL_NULL_V_MSG(n, nullptr, vformat("FellowEngine: no %s in this build.", p_class));
+	n->set_name(p_name);
+	for (const KeyValue<Variant, Variant> &kv : p_properties) {
+		n->set(kv.key, kv.value);
+	}
+	if (p_parent) {
+		p_parent->add_child(n);
+	}
+	return n;
+}
+
+static bool _fellow_scene_has(const Node *p_root, const String &p_class) {
+	return p_root && (p_root->is_class(p_class) || !p_root->find_children("*", p_class, true, false).is_empty());
+}
+
+Node3D *FellowEditorPlugin::make_preset(int p_preset, const Node *p_root) {
+	Node3D *top = nullptr;
+	switch (p_preset) {
+		case PRESET_WEATHER: {
+			// The weather drives the scene's rain, wind and lightning; those it lacks are added beside it.
+			top = memnew(Node3D);
+			top->set_name("Weather");
+			_fellow_make("FellowWeather3D", "FellowWeather3D", top);
+			if (!_fellow_scene_has(p_root, "FellowRain3D")) {
+				_fellow_make("FellowRain3D", "Rain", top);
+			}
+			if (!_fellow_scene_has(p_root, "FellowWind3D")) {
+				_fellow_make("FellowWind3D", "Wind", top);
+			}
+			if (!_fellow_scene_has(p_root, "FellowLightning3D")) {
+				_fellow_make("FellowLightning3D", "Lightning", top);
+			}
+		} break;
+		case PRESET_FIRE:
+		case PRESET_SMOKE: {
+			top = Object::cast_to<Node3D>(_fellow_make("FellowGasVolume3D", p_preset == PRESET_FIRE ? "Fire" : "Smoke", nullptr, Dictionary{ { "size", Vector3(2, 4, 2) } }));
+			ERR_FAIL_NULL_V(top, nullptr);
+			Dictionary emitter{ { "position", Vector3(0, -1.6, 0) } };
+			if (p_preset == PRESET_SMOKE) {
+				emitter["fuel"] = 0.0;
+				emitter["temperature"] = 400.0;
+				emitter["smoke"] = 1.0;
+			}
+			_fellow_make("FellowGasEmitter3D", "Emitter", top, emitter);
+		} break;
+		case PRESET_BURNING_BOX: {
+			// A box that catches fire from a small flame under it, its flames and smoke in a gas volume around it.
+			top = memnew(Node3D);
+			top->set_name("BurningBox");
+			MeshInstance3D *box = memnew(MeshInstance3D);
+			box->set_name("Box");
+			Ref<BoxMesh> mesh;
+			mesh.instantiate();
+			box->set_mesh(mesh);
+			box->set_position(Vector3(0, 0.5, 0));
+			top->add_child(box);
+			_fellow_make("FellowBurnable3D", "FellowBurnable3D", box);
+			Node *volume = _fellow_make("FellowGasVolume3D", "GasVolume", top, Dictionary{ { "size", Vector3(3, 4, 3) }, { "position", Vector3(0, 2, 0) } });
+			_fellow_make("FellowGasEmitter3D", "Flame", volume, Dictionary{ { "position", Vector3(0, -1.85, 0) }, { "radius", 0.15 } });
+		} break;
+		case PRESET_OCEAN: {
+			top = Object::cast_to<Node3D>(_fellow_make("FellowWater3D", "Ocean", nullptr)); // to the horizon
+		} break;
+		case PRESET_LAKE: {
+			top = Object::cast_to<Node3D>(_fellow_make("FellowWater3D", "Lake", nullptr, Dictionary{ { "extent", Vector2(20, 20) } }));
+		} break;
+		case PRESET_POOL: {
+			// Shallow water that flows and splashes, drawn by a water body over it.
+			top = Object::cast_to<Node3D>(_fellow_make("FellowShallowWater3D", "Pool", nullptr, Dictionary{ { "domain_size", Vector2(8, 8) }, { "initial_water_level", 0.3 }, { "inflow_velocity", Vector2(1, 0) }, { "inflow_depth", 0.4 } }));
+			ERR_FAIL_NULL_V(top, nullptr);
+			_fellow_make("FellowWater3D", "Surface", top, Dictionary{ { "extent", Vector2(8, 8) }, { "simulation_path", NodePath("..") } });
+		} break;
+		default:
+			break;
+	}
+	return top;
+}
+
+static void _fellow_set_owner_do(EditorUndoRedoManager *p_ur, Node *p_node, Node *p_owner) {
+	p_ur->add_do_method(p_node, "set_owner", p_owner);
+	for (int i = 0; i < p_node->get_child_count(); i++) {
+		_fellow_set_owner_do(p_ur, p_node->get_child(i), p_owner);
+	}
+}
+
+void FellowEditorPlugin::_add_preset(int p_preset) {
+	Node *root = EditorNode::get_singleton()->get_edited_scene();
+	if (!root) {
+		EditorNode::get_singleton()->show_warning(TTR("Open or create a 3D scene first."));
+		return;
+	}
+	Node *parent = root;
+	EditorSelection *selection = EditorNode::get_singleton()->get_editor_selection();
+	const List<Node *> selected = selection->get_top_selected_node_list();
+	if (selected.size() == 1 && Object::cast_to<Node3D>(selected.front()->get())) {
+		parent = selected.front()->get();
+	}
+	Node3D *made = make_preset(p_preset, root);
+	ERR_FAIL_NULL(made);
+	EditorUndoRedoManager *ur = EditorUndoRedoManager::get_singleton();
+	ur->create_action(vformat(TTR("Add %s (FellowEngine)"), made->get_name()), UndoRedo::MERGE_DISABLE, root);
+	ur->add_do_method(parent, "add_child", made, true);
+	_fellow_set_owner_do(ur, made, root);
+	ur->add_do_method(selection, "clear");
+	ur->add_do_method(selection, "add_node", made);
+	ur->add_do_reference(made);
+	ur->add_undo_method(parent, "remove_child", made);
+	ur->commit_action();
+}
+
 void FellowEditorPlugin::_notification(int p_what) {
 	if (p_what == NOTIFICATION_ENTER_TREE) {
 		add_tool_menu_item(TTR("Split into Streaming Cells (FellowEngine)..."), callable_mp(this, &FellowEditorPlugin::_split_menu));
+		add_control_to_container(CONTAINER_SPATIAL_EDITOR_MENU, add_menu);
 		add_control_to_container(CONTAINER_SPATIAL_EDITOR_MENU, animate_button);
 		EditorSettings::get_singleton()->connect("settings_changed", callable_mp(this, &FellowEditorPlugin::_editor_settings_changed));
 	} else if (p_what == NOTIFICATION_EXIT_TREE) {
 		remove_tool_menu_item(TTR("Split into Streaming Cells (FellowEngine)..."));
 		remove_control_from_container(CONTAINER_SPATIAL_EDITOR_MENU, animate_button);
+		remove_control_from_container(CONTAINER_SPATIAL_EDITOR_MENU, add_menu);
 		EditorSettings::get_singleton()->disconnect("settings_changed", callable_mp(this, &FellowEditorPlugin::_editor_settings_changed));
 	}
 }
@@ -680,11 +799,32 @@ FellowEditorPlugin::FellowEditorPlugin() {
 	animate_button->set_tooltip_text(TTR("Animate FellowEngine's nodes in the editor: the water's waves, the rain, lightning, the wind, gas and shallow water, as in the running game.\nOff: they stand still, and the editor redraws only when something changes (less GPU and power use)."));
 	animate_button->connect(SceneStringName(toggled), callable_mp(this, &FellowEditorPlugin::_animate_toggled));
 	animate_button->connect(SceneStringName(theme_changed), callable_mp(this, &FellowEditorPlugin::_update_animate_icon));
+
+	add_menu = memnew(MenuButton);
+	add_menu->set_name("FellowAddMenu");
+	add_menu->set_text(TTR("FellowEngine"));
+	add_menu->set_flat(false);
+	add_menu->set_theme_type_variation("FlatMenuButton");
+	add_menu->set_tooltip_text(TTR("Add a FellowEngine setup, its nodes wired up, to the selected 3D node (or the scene's root)."));
+	PopupMenu *popup = add_menu->get_popup();
+	popup->add_item(TTR("Add Weather (Rain, Wind, Lightning)"), PRESET_WEATHER);
+	popup->add_separator();
+	popup->add_item(TTR("Add Fire"), PRESET_FIRE);
+	popup->add_item(TTR("Add Smoke"), PRESET_SMOKE);
+	popup->add_item(TTR("Add Burning Box"), PRESET_BURNING_BOX);
+	popup->add_separator();
+	popup->add_item(TTR("Add Ocean"), PRESET_OCEAN);
+	popup->add_item(TTR("Add Lake (20 x 20 m)"), PRESET_LAKE);
+	popup->add_item(TTR("Add Flowing Pool (8 x 8 m)"), PRESET_POOL);
+	popup->connect(SceneStringName(id_pressed), callable_mp(this, &FellowEditorPlugin::_add_preset));
 }
 
 FellowEditorPlugin::~FellowEditorPlugin() {
 	if (animate_button && !animate_button->get_parent()) {
 		memdelete(animate_button); // taken out of the toolbar on exit
+	}
+	if (add_menu && !add_menu->get_parent()) {
+		memdelete(add_menu);
 	}
 	if (ResourceFormatImporter::get_singleton()) {
 		ResourceFormatImporter::get_singleton()->remove_importer(bvh_importer);

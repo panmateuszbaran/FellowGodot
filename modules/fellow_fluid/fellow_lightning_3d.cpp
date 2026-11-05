@@ -31,6 +31,7 @@
 #include "fellow_lightning_3d.h"
 
 #include "fellow_editor_still.h"
+#include "fellow_shared_shaders.h"
 
 #include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
@@ -102,8 +103,7 @@ void FellowLightning3D::_build_children() {
 	flash->set_meta("_fellow_lightning", true); // not a sun (FellowWater3D's glitter, ...)
 	add_child(flash, false, INTERNAL_MODE_FRONT);
 
-	bolt_shader.instantiate();
-	bolt_shader->set_code(lightning_bolt_shader_code);
+	bolt_shader = FellowSharedShaders::shader(lightning_bolt_shader_code); // milestone 53: one per session
 	bolt_material.instantiate();
 	bolt_material->set_shader(bolt_shader);
 	bolt_mesh.instantiate();
@@ -115,9 +115,7 @@ void FellowLightning3D::_build_children() {
 	bolt->set_visible(false);
 	add_child(bolt, false, INTERNAL_MODE_FRONT);
 
-	Ref<Shader> gs;
-	gs.instantiate();
-	gs->set_code(lightning_glow_shader_code);
+	Ref<Shader> gs = FellowSharedShaders::shader(lightning_glow_shader_code);
 	glow_material.instantiate();
 	glow_material->set_shader(gs);
 	Ref<QuadMesh> q;
@@ -464,18 +462,22 @@ void FellowLightning3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_time_auto", "enabled"), &FellowLightning3D::set_time_auto);
 	ClassDB::bind_method(D_METHOD("is_time_auto"), &FellowLightning3D::is_time_auto);
 
+	// Milestone 53: grouped in the inspector.
+	ADD_GROUP("Strikes", "");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "strikes_per_minute", PROPERTY_HINT_RANGE, "0,60,0.01"), "set_strikes_per_minute", "get_strikes_per_minute");
 	ADD_PROPERTY(PropertyInfo(Variant::VECTOR2, "distance_range", PROPERTY_HINT_NONE, "suffix:m"), "set_distance_range", "get_distance_range");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "cloud_height", PROPERTY_HINT_RANGE, "10,5000,1,suffix:m"), "set_cloud_height", "get_cloud_height");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "seed"), "set_seed", "get_seed");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "time", PROPERTY_HINT_NONE, "suffix:s", PROPERTY_USAGE_NONE), "set_time", "get_time");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "time_auto"), "set_time_auto", "is_time_auto");
+	ADD_GROUP("Look", "");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "energy", PROPERTY_HINT_RANGE, "0,100,0.01"), "set_energy", "get_energy");
 	ADD_PROPERTY(PropertyInfo(Variant::COLOR, "color", PROPERTY_HINT_COLOR_NO_ALPHA), "set_color", "get_color");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "bolt_brightness", PROPERTY_HINT_RANGE, "0,1000,0.1"), "set_bolt_brightness", "get_bolt_brightness");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "bolt_width", PROPERTY_HINT_RANGE, "0.0001,0.05,0.0001,suffix:rad"), "set_bolt_width", "get_bolt_width");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "cloud_glow", PROPERTY_HINT_RANGE, "0,10,0.01"), "set_cloud_glow", "get_cloud_glow");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "shadows"), "set_shadows", "get_shadows");
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "seed"), "set_seed", "get_seed");
-	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "time", PROPERTY_HINT_NONE, "suffix:s", PROPERTY_USAGE_NONE), "set_time", "get_time");
-	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "time_auto"), "set_time_auto", "is_time_auto");
+	ADD_GROUP("", "");
 
 	ADD_SIGNAL(MethodInfo("struck", PropertyInfo(Variant::VECTOR3, "position"), PropertyInfo(Variant::FLOAT, "distance")));
 }

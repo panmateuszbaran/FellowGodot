@@ -35,6 +35,7 @@
 #include "editor/scene/3d/node_3d_editor_gizmos.h"
 
 class Button;
+class MenuButton;
 class ConfirmationDialog;
 class Gizmo3DHelper;
 class LineEdit;
@@ -130,6 +131,24 @@ class FellowEditorPlugin : public EditorPlugin {
 	LineEdit *split_directory = nullptr;
 	ObjectID split_streamer;
 	Button *animate_button = nullptr; // milestone 52: the 3D editor's toolbar toggle
+	MenuButton *add_menu = nullptr; // milestone 53: ready-made, wired-up setups
+
+public:
+	enum Preset {
+		PRESET_WEATHER,
+		PRESET_FIRE,
+		PRESET_SMOKE,
+		PRESET_BURNING_BOX,
+		PRESET_OCEAN,
+		PRESET_LAKE,
+		PRESET_POOL,
+	};
+	// The setup's nodes, not in the tree yet (nullptr for an unknown preset); p_root is the edited scene, where it looks
+	// for what the setup can share (the rain, wind and lightning: one of each works at a time).
+	static Node3D *make_preset(int p_preset, const Node *p_root);
+
+private:
+	void _add_preset(int p_preset);
 
 	void _split_menu();
 	void _split_confirmed();

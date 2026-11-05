@@ -129,6 +129,8 @@ Monitors tab shows texture streaming, world streaming and motion matching. From 
 ([decision 0153](docs/decisions/0153-editor-idle-warnings-handles.md)) an untouched editor costs nothing unless
 something in the scene moves (the 3D toolbar's **Animate** toggle stills FellowEngine's nodes), the nodes warn when they
 cannot work where they are, every node's shape has handles, and every `rendering/fellow/*` setting has a tooltip.
+Milestone 53 ([decision 0154](docs/decisions/0154-editor-scene-open-presets.md)): scenes with FellowEngine's nodes open
+again without recompiling their shaders, and the 3D toolbar's **FellowEngine** menu adds ready-made, wired-up setups.
 
 ## Building
 

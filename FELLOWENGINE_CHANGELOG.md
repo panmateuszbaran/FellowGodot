@@ -9,6 +9,16 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 53 — the editor: scene opening, ready-made setups, grouped inspectors (2026-11-05)
+
+- FellowEngine's nodes make the shaders, compute kernels, meshes and textures they all share once per session
+  (`FellowSharedShaders`, decision 0154): a scene with water opened again in the editor 492 -> 4.9 ms, a second water
+  body 270 -> 0.1 ms; rain, lightning, shallow water likewise. Exact.
+- A FellowEngine menu on the 3D editor's toolbar: Weather, Fire, Smoke, Burning Box, Ocean, Lake, Flowing Pool, added
+  wired up (no configuration warning), undoable.
+- Inspector groups for shallow water, lightning, the world streamer, the motion matcher and the motion character.
+- Measured: FellowEngine adds nothing to the editor's start (15.1 s on, 15.3 s off, lavapipe).
+
 ## Milestone 52 — the editor: idle, warnings, handles, tooltips (2026-11-05)
 
 - An untouched editor draws nothing for FellowEngine's nodes unless they move (decision 0153): values written to the

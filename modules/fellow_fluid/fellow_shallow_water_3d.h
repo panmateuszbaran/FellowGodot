@@ -152,6 +152,7 @@ private:
 
 	Ref<Image> _make_terrain(int p_res) const;
 	void _update_mesh();
+	Ref<ArrayMesh> _build_grid(int n) const;
 	void _update_material();
 
 	void _rt_create();

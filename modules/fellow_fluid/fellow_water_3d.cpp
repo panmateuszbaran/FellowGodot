@@ -34,6 +34,7 @@
 #include "fellow_node_warnings.h"
 #include "fellow_rain_3d.h"
 #include "fellow_shallow_water_3d.h"
+#include "fellow_shared_shaders.h"
 #include "fellow_water_shader.h"
 #include "fellow_water_waves.glsl.gen.h"
 #include "fellow_wind_3d.h"
@@ -204,7 +205,12 @@ Ref<Image> FellowWater3D::debug_get_displacement_image(int p_cascade) {
 // ------------------------------------------------------------------ main thread
 
 void FellowWater3D::_make_foam_noise() {
-	// Tileable cellular noise (two octaves of distance to jittered points): the foam's bubbles and streaks.
+	// Tileable cellular noise (two octaves of distance to jittered points): the foam's bubbles and streaks. The same
+	// for every water body: made once per session (milestone 53).
+	foam_noise = FellowSharedShaders::resource("FellowWater3D foam noise");
+	if (foam_noise.is_valid()) {
+		return;
+	}
 	const int n = 256;
 	Ref<Image> img = Image::create_empty(n, n, false, Image::FORMAT_L8);
 	auto octave = [](int p_cells, uint32_t p_seed, float p_x, float p_y) {
@@ -246,12 +252,20 @@ void FellowWater3D::_make_foam_noise() {
 	}
 	img->generate_mipmaps();
 	foam_noise = ImageTexture::create_from_image(img);
+	FellowSharedShaders::store("FellowWater3D foam noise", foam_noise);
 }
 
 void FellowWater3D::_update_mesh() {
 	// Polar grid around the camera: rings growing by (1 + 2 pi / segments), so cells stay square; UV.x is the
 	// vertex spacing (the band limit of the displacement).
 	int segs = grid_segments;
+	// The same grid for every water body with these settings: built once per session (milestone 53).
+	const String key = vformat("FellowWater3D grid %d %f %f", segs, grid_near, grid_far);
+	Ref<ArrayMesh> shared = FellowSharedShaders::resource(key);
+	if (shared.is_valid()) {
+		_set_surface_mesh(shared);
+		return;
+	}
 	double q = 1.0 + 2.0 * Math::PI / segs;
 	int rings = MAX(2, int(Math::ceil(Math::log(double(grid_far) / double(grid_near)) / Math::log(q))) + 1);
 	PackedVector3Array verts;
@@ -309,6 +323,11 @@ void FellowWater3D::_update_mesh() {
 	mesh.instantiate();
 	mesh->add_surface_from_arrays(Mesh::PRIMITIVE_TRIANGLES, arrays);
 	mesh->set_custom_aabb(AABB(Vector3(-1e6f, -1e4f, -1e6f), Vector3(2e6f, 2e4f, 2e6f)));
+	FellowSharedShaders::store(key, mesh);
+	_set_surface_mesh(mesh);
+}
+
+void FellowWater3D::_set_surface_mesh(const Ref<ArrayMesh> &p_mesh) {
 	if (!mesh_instance) {
 		mesh_instance = memnew(MeshInstance3D);
 		mesh_instance->set_name("FellowWaterSurface");
@@ -316,7 +335,7 @@ void FellowWater3D::_update_mesh() {
 		mesh_instance->set_ignore_occlusion_culling(true);
 		add_child(mesh_instance, false, INTERNAL_MODE_FRONT);
 	}
-	mesh_instance->set_mesh(mesh);
+	mesh_instance->set_mesh(p_mesh);
 	mesh_dirty = false;
 	_update_material();
 }
@@ -325,15 +344,15 @@ void FellowWater3D::_update_material() {
 	// The depth texture's nearest-depth mip levels (decision 0126) are asked for only while reflections are traced:
 	// without them the renderer does not build the pyramid.
 	if (shader.is_null() || shader_hierarchical != screen_space_reflections) {
-		if (shader.is_null()) {
-			shader.instantiate();
-		}
 		String code = String::utf8(fellow_water_shader_code);
 		if (!screen_space_reflections) {
 			code = code.replace("hint_depth_texture, filter_nearest_mipmap,", "hint_depth_texture, filter_nearest,");
 		}
-		shader->set_code(code);
+		shader = FellowSharedShaders::shader(code); // milestone 53: one per session, not one per water body
 		shader_hierarchical = screen_space_reflections;
+		if (material.is_valid()) {
+			material->set_shader(shader);
+		}
 	}
 	if (material.is_null()) {
 		material.instantiate();
@@ -605,10 +624,8 @@ void FellowWater3D::_rt_create(int p_size, int p_cascades) {
 		return;
 	}
 	if (shader_file.is_null()) {
-		shader_file.instantiate();
-		Error err = shader_file->parse_versions_from_text(fellow_water_waves_shader_glsl);
-		if (err != OK) {
-			shader_file->print_errors("fellow_water_waves");
+		shader_file = FellowSharedShaders::file(fellow_water_waves_shader_glsl, "fellow_water_waves"); // milestone 53
+		if (shader_file.is_null()) {
 			gpu_failed = true;
 			return;
 		}

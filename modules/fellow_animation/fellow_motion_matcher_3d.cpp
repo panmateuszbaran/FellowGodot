@@ -918,21 +918,26 @@ void FellowMotionMatcher3D::_bind_methods() {
 	ClassDB::bind_static_method("FellowMotionMatcher3D", D_METHOD("get_global_stats"), &FellowMotionMatcher3D::get_global_stats);
 	ClassDB::bind_static_method("FellowMotionMatcher3D", D_METHOD("reset_global_stats"), &FellowMotionMatcher3D::reset_global_stats);
 
+	// Milestone 53: grouped in the inspector.
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "database", PROPERTY_HINT_RESOURCE_TYPE, "FellowMotionDatabase"), "set_database", "get_database");
 	ADD_PROPERTY(PropertyInfo(Variant::NODE_PATH, "root_path", PROPERTY_HINT_NODE_PATH_VALID_TYPES, "Node3D"), "set_root_path", "get_root_path");
 	ADD_PROPERTY(PropertyInfo(Variant::VECTOR3, "desired_velocity", PROPERTY_HINT_NONE, "suffix:m/s"), "set_desired_velocity", "get_desired_velocity");
 	ADD_PROPERTY(PropertyInfo(Variant::VECTOR3, "desired_facing"), "set_desired_facing", "get_desired_facing");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "auto_update"), "set_auto_update", "is_auto_update");
+	ADD_GROUP("Search", "");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "search_interval", PROPERTY_HINT_RANGE, "0,1,0.01,suffix:s"), "set_search_interval", "get_search_interval");
+	ADD_PROPERTY(PropertyInfo(Variant::PACKED_FLOAT32_ARRAY, "lod_distances"), "set_lod_distances", "get_lod_distances");
+	ADD_GROUP("Blending", "");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "inertialization"), "set_inertialization", "is_inertialization");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "inertialization_halflife", PROPERTY_HINT_RANGE, "0,1,0.01,suffix:s"), "set_inertialization_halflife", "get_inertialization_halflife");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "velocity_halflife", PROPERTY_HINT_RANGE, "0.01,2,0.01,suffix:s"), "set_velocity_halflife", "get_velocity_halflife");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rotation_halflife", PROPERTY_HINT_RANGE, "0.01,2,0.01,suffix:s"), "set_rotation_halflife", "get_rotation_halflife");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "adjustment_halflife", PROPERTY_HINT_RANGE, "0.01,2,0.01,suffix:s"), "set_adjustment_halflife", "get_adjustment_halflife");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "clamp_distance", PROPERTY_HINT_RANGE, "0,2,0.01,suffix:m"), "set_clamp_distance", "get_clamp_distance");
-	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "unlock_radius", PROPERTY_HINT_RANGE, "0,1,0.01,suffix:m"), "set_unlock_radius", "get_unlock_radius");
-	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "inertialization"), "set_inertialization", "is_inertialization");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "synchronization"), "set_synchronization", "is_synchronization");
+	ADD_GROUP("Feet", "");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "foot_locking"), "set_foot_locking", "is_foot_locking");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "foot_ik"), "set_foot_ik", "is_foot_ik");
-	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "auto_update"), "set_auto_update", "is_auto_update");
-	ADD_PROPERTY(PropertyInfo(Variant::PACKED_FLOAT32_ARRAY, "lod_distances"), "set_lod_distances", "get_lod_distances");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "unlock_radius", PROPERTY_HINT_RANGE, "0,1,0.01,suffix:m"), "set_unlock_radius", "get_unlock_radius");
+	ADD_GROUP("", "");
 }

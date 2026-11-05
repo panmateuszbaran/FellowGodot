@@ -465,6 +465,15 @@ domain, cell bounds, snow tracker, lightning distances (undoable). Every `render
 (`doc/tools/fellow_settings_docs.py`). Decision 0153; check `benchmarks/tools/editor_check/run_editor_check.py`
 (`--perf <scene> --perf-idle [--perf-still]` measures the idle editor).
 
+## The editor: scene opening, ready-made setups (milestone 53)
+
+FellowEngine's nodes share what they make from code — shaders, compute kernels, the water's grid and foam texture —
+once per session (`modules/fellow_fluid/fellow_shared_shaders.h`): opening a scene again, or adding another instance,
+compiles nothing. The 3D editor's toolbar has a **FellowEngine** menu: *Add Weather* (a FellowWeather3D and the rain,
+wind and lightning the scene lacks), *Add Fire*, *Add Smoke*, *Add Burning Box*, *Add Ocean*, *Add Lake (20 x 20 m)*,
+*Add Flowing Pool (8 x 8 m)* — added to the selected 3D node (or the scene's root), undoable, with no configuration
+warning. Decision 0154.
+
 ## Agent toolkit (milestone 51)
 
 `tools/fellow_agent/fellow_agent.py capture|describe|check|run|compare|import|api|init` (Python 3; JSON out, exit

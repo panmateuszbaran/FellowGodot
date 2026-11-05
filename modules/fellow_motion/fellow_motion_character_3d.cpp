@@ -682,23 +682,27 @@ void FellowMotionCharacter3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_stats"), &FellowMotionCharacter3D::get_stats);
 	ClassDB::bind_static_method("FellowMotionCharacter3D", D_METHOD("get_service_stats", "model_path"), &FellowMotionCharacter3D::get_service_stats);
 
+	// Milestone 53: grouped in the inspector.
 	ADD_PROPERTY(PropertyInfo(Variant::STRING, "model_path", PROPERTY_HINT_FILE, "*.fmb"), "set_model_path", "get_model_path");
 	ADD_PROPERTY(PropertyInfo(Variant::STRING, "body_path", PROPERTY_HINT_FILE, "*.glb,*.gltf"), "set_body_path", "get_body_path");
+	ADD_PROPERTY(PropertyInfo(Variant::COLOR, "body_color"), "set_body_color", "get_body_color");
 	ADD_PROPERTY(PropertyInfo(Variant::VECTOR3, "desired_velocity", PROPERTY_HINT_NONE, "suffix:m/s"), "set_desired_velocity", "get_desired_velocity");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "max_speed", PROPERTY_HINT_RANGE, "0.1,8,0.01,suffix:m/s"), "set_max_speed", "get_max_speed");
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "transition_early_frames", PROPERTY_HINT_RANGE, "0,20,1"), "set_transition_early_frames", "get_transition_early_frames");
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "min_tokens", PROPERTY_HINT_RANGE, "6,16,1"), "set_min_tokens", "get_min_tokens");
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "max_tokens", PROPERTY_HINT_RANGE, "6,16,1"), "set_max_tokens", "get_max_tokens");
-	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "lead_time", PROPERTY_HINT_RANGE, "0.1,3,0.01,suffix:s"), "set_lead_time", "get_lead_time");
-	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "catch_up"), "set_catch_up", "is_catch_up");
-	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "speed_halflife", PROPERTY_HINT_RANGE, "0.01,2,0.01,suffix:s"), "set_speed_halflife", "get_speed_halflife");
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "inference_mode", PROPERTY_HINT_ENUM, "Async,Flush,Immediate"), "set_inference_mode", "get_inference_mode");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "auto_process"), "set_auto_process", "is_auto_process");
-	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "crossfade_time", PROPERTY_HINT_RANGE, "0,1,0.01,suffix:s"), "set_crossfade_time", "get_crossfade_time");
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "max_batch", PROPERTY_HINT_RANGE, "1,256,1"), "set_max_batch", "get_max_batch");
-	ADD_PROPERTY(PropertyInfo(Variant::COLOR, "body_color"), "set_body_color", "get_body_color");
+	ADD_GROUP("Motion", "");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "idle_motion"), "set_idle_motion", "is_idle_motion");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "get_up"), "set_get_up", "is_get_up");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "catch_up"), "set_catch_up", "is_catch_up");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "speed_halflife", PROPERTY_HINT_RANGE, "0.01,2,0.01,suffix:s"), "set_speed_halflife", "get_speed_halflife");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "crossfade_time", PROPERTY_HINT_RANGE, "0,1,0.01,suffix:s"), "set_crossfade_time", "get_crossfade_time");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "lead_time", PROPERTY_HINT_RANGE, "0.1,3,0.01,suffix:s"), "set_lead_time", "get_lead_time");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "transition_early_frames", PROPERTY_HINT_RANGE, "0,20,1"), "set_transition_early_frames", "get_transition_early_frames");
+	ADD_GROUP("Inference", "");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "inference_mode", PROPERTY_HINT_ENUM, "Async,Flush,Immediate"), "set_inference_mode", "get_inference_mode");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "min_tokens", PROPERTY_HINT_RANGE, "6,16,1"), "set_min_tokens", "get_min_tokens");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "max_tokens", PROPERTY_HINT_RANGE, "6,16,1"), "set_max_tokens", "get_max_tokens");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "max_batch", PROPERTY_HINT_RANGE, "1,256,1"), "set_max_batch", "get_max_batch");
+	ADD_GROUP("", "");
 
 	BIND_ENUM_CONSTANT(STATE_IDLE);
 	BIND_ENUM_CONSTANT(STATE_LOCOMOTION);

@@ -64,6 +64,7 @@ func _run() -> void:
 	_check_monitors()
 	_check_animate_toggle()
 	await _check_warnings()
+	await _check_presets()
 	out["failures"] = failures
 	print("EDITOR_CHECK ", JSON.stringify(out))
 	get_tree().quit(0 if failures.is_empty() else 1)
@@ -83,10 +84,26 @@ func _perf(scene: String, seconds: float) -> void:
 	settings.set_setting("editors/3d/fellow/animate_nodes", animate)
 	settings.mark_setting_changed("editors/3d/fellow/animate_nodes")
 	settings.emit_signal("settings_changed")
-	EditorInterface.open_scene_from_path(scene)
 	EditorInterface.set_main_screen_editor("3D")
+	await _frames(5)
+	# Opening the scene (milestone 53): the call, then the first frame drawn with it.
+	var t_open := Time.get_ticks_usec()
+	EditorInterface.open_scene_from_path(scene)
+	var open_ms := (Time.get_ticks_usec() - t_open) / 1000.0
 	var vp := EditorInterface.get_editor_viewport_3d(0)
 	RenderingServer.viewport_set_measure_render_time(vp.get_viewport_rid(), true)
+	await RenderingServer.frame_post_draw
+	var first_frame_ms := (Time.get_ticks_usec() - t_open) / 1000.0
+	var reopen_ms := -1.0
+	if _arg("perf_reopen", "false") == "true":
+		# Closed and opened again in the same session (milestone 53: the shaders and meshes made once are kept).
+		await _frames(10)
+		EditorInterface.close_scene()
+		await _frames(10)
+		var t_re := Time.get_ticks_usec()
+		EditorInterface.open_scene_from_path(scene)
+		reopen_ms = (Time.get_ticks_usec() - t_re) / 1000.0
+		vp = EditorInterface.get_editor_viewport_3d(0)
 	await _frames(int(_arg("perf_warmup", "60")))
 	var deltas := []
 	var cpu := 0.0
@@ -115,6 +132,7 @@ func _perf(scene: String, seconds: float) -> void:
 		"frame_ms_p95": snappedf(sorted[mini(int(sorted.size() * 0.95), sorted.size() - 1)] if not sorted.is_empty() else 0.0, 0.001),
 		"viewport_cpu_ms": snappedf(cpu / n, 0.001), "viewport_gpu_ms": snappedf(gpu / n, 0.001),
 		"frames_drawn": Engine.get_frames_drawn() - drawn0, "continuous": continuous, "animate": animate,
+		"open_ms": snappedf(open_ms, 0.1), "open_to_first_frame_ms": snappedf(first_frame_ms, 0.1), "reopen_ms": snappedf(reopen_ms, 0.1),
 		"fellow_enabled": ProjectSettings.get_setting("rendering/fellow/enabled", true),
 		"adapter": RenderingServer.get_video_adapter_name(), "viewport_size": var_to_str(vp.size)}
 	if subject_time0 != null:
@@ -256,6 +274,53 @@ func _check_animate_toggle() -> void:
 	out["animate_toggle"] = r
 	if not r["pressed"] or r["setting_after_off"] != false or r["setting_after_on"] != true:
 		_fail("the Animate Nodes toggle: %s" % [r])
+
+
+# The 3D toolbar's FellowEngine menu (milestone 53): each ready-made setup added to an open scene, selected, without
+# a configuration warning anywhere in it, and undone.
+func _check_presets() -> void:
+	var found := EditorInterface.get_base_control().find_children("FellowAddMenu", "MenuButton", true, false)
+	if found.is_empty():
+		_fail("the FellowEngine menu is not in the 3D editor's toolbar")
+		return
+	var popup: PopupMenu = (found[0] as MenuButton).get_popup()
+	EditorInterface.open_scene_from_path("res://idle/Node3D.tscn")
+	await _frames(5)
+	var root := EditorInterface.get_edited_scene_root()
+	var results := {}
+	for i in popup.item_count:
+		if popup.is_item_separator(i):
+			continue
+		var label := popup.get_item_text(i)
+		var before := root.get_child_count()
+		EditorInterface.get_selection().clear()
+		popup.id_pressed.emit(popup.get_item_id(i))
+		await _frames(5)
+		var sel := EditorInterface.get_selection().get_selected_nodes()
+		var r := {"added": root.get_child_count() - before}
+		if sel.size() != 1:
+			_fail("preset %s: %d nodes selected after adding it" % [label, sel.size()])
+			results[label] = r
+			continue
+		var top: Node = sel[0]
+		var nodes := [top] + top.find_children("*", "", true, true)
+		r["nodes"] = nodes.map(func(n): return "%s (%s)" % [n.name, n.get_class()])
+		var owned := nodes.all(func(n): return n.owner == root)
+		var warnings := []
+		for n in nodes:
+			for w in ClassDB.class_call_static("FellowEditorTools", "get_configuration_warnings", n):
+				warnings.append("%s: %s" % [n.name, w])
+		r["warnings"] = warnings
+		if not warnings.is_empty():
+			_fail("preset %s: warnings %s" % [label, warnings])
+		if not owned:
+			_fail("preset %s: not every node is owned by the scene (it would not be saved)" % label)
+		await _undo(root)
+		r["undone"] = root.get_child_count() == before and (not is_instance_valid(top) or top.get_parent() == null)
+		if not r["undone"]:
+			_fail("preset %s: undo left it in the scene" % label)
+		results[label] = r
+	out["presets"] = results
 
 
 func _check_icons() -> void:

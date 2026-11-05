@@ -32,6 +32,7 @@
 
 #include "fellow_editor_still.h"
 #include "fellow_node_warnings.h"
+#include "fellow_shared_shaders.h"
 #include "fellow_swe.glsl.gen.h"
 
 #include "core/object/callable_mp.h"
@@ -249,6 +250,26 @@ void FellowShallowWater3D::_update_mesh() {
 		mesh_instance->set_custom_aabb(AABB(Vector3(-domain_size.x * 0.5f, -64.0f, -domain_size.y * 0.5f), Vector3(domain_size.x, 128.0f, domain_size.y)));
 		return;
 	}
+	// The same grid for every domain of this size and grid: built once per session (milestone 53).
+	const String key = vformat("FellowShallowWater3D grid %d %f %f", n, domain_size.x, domain_size.y);
+	Ref<ArrayMesh> mesh = FellowSharedShaders::resource(key);
+	if (mesh.is_null()) {
+		mesh = _build_grid(n);
+		FellowSharedShaders::store(key, mesh);
+	}
+	if (!mesh_instance) {
+		mesh_instance = memnew(MeshInstance3D);
+		mesh_instance->set_name("FellowWaterSurface");
+		mesh_instance->set_cast_shadows_setting(GeometryInstance3D::SHADOW_CASTING_SETTING_OFF);
+		add_child(mesh_instance, false, INTERNAL_MODE_FRONT);
+	}
+	mesh_instance->set_mesh(mesh);
+	mesh_instance->set_custom_aabb(AABB(Vector3(-domain_size.x * 0.5f, -64.0f, -domain_size.y * 0.5f), Vector3(domain_size.x, 128.0f, domain_size.y)));
+	mesh_grid = n;
+	_update_material();
+}
+
+Ref<ArrayMesh> FellowShallowWater3D::_build_grid(int n) const {
 	PackedVector3Array verts;
 	PackedVector3Array normals;
 	PackedVector2Array uvs;
@@ -295,22 +316,12 @@ void FellowShallowWater3D::_update_mesh() {
 	Ref<ArrayMesh> mesh;
 	mesh.instantiate();
 	mesh->add_surface_from_arrays(Mesh::PRIMITIVE_TRIANGLES, arrays);
-	if (!mesh_instance) {
-		mesh_instance = memnew(MeshInstance3D);
-		mesh_instance->set_name("FellowWaterSurface");
-		mesh_instance->set_cast_shadows_setting(GeometryInstance3D::SHADOW_CASTING_SETTING_OFF);
-		add_child(mesh_instance, false, INTERNAL_MODE_FRONT);
-	}
-	mesh_instance->set_mesh(mesh);
-	mesh_instance->set_custom_aabb(AABB(Vector3(-domain_size.x * 0.5f, -64.0f, -domain_size.y * 0.5f), Vector3(domain_size.x, 128.0f, domain_size.y)));
-	mesh_grid = n;
-	_update_material();
+	return mesh;
 }
 
 void FellowShallowWater3D::_update_material() {
 	if (water_shader.is_null()) {
-		water_shader.instantiate();
-		water_shader->set_code(fellow_water_shader_code);
+		water_shader = FellowSharedShaders::shader(fellow_water_shader_code); // milestone 53
 	}
 	if (material.is_null()) {
 		material.instantiate();
@@ -345,10 +356,8 @@ void FellowShallowWater3D::_rt_create() {
 		return;
 	}
 	if (shader_file.is_null()) {
-		shader_file.instantiate();
-		Error err = shader_file->parse_versions_from_text(fellow_swe_shader_glsl);
-		if (err != OK) {
-			shader_file->print_errors("fellow_swe");
+		shader_file = FellowSharedShaders::file(fellow_swe_shader_glsl, "fellow_swe"); // milestone 53
+		if (shader_file.is_null()) {
 			gpu_failed = true;
 			return;
 		}
@@ -671,20 +680,25 @@ void FellowShallowWater3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_flow_texture"), &FellowShallowWater3D::get_flow_texture);
 	ClassDB::bind_method(D_METHOD("get_water_mesh_instance"), &FellowShallowWater3D::get_water_mesh_instance);
 
+	// Milestone 53: grouped in the inspector.
+	ADD_GROUP("Domain", "");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "resolution", PROPERTY_HINT_RANGE, "16,4096,1"), "set_resolution", "get_resolution");
 	ADD_PROPERTY(PropertyInfo(Variant::VECTOR2, "domain_size", PROPERTY_HINT_NONE, "suffix:m"), "set_domain_size", "get_domain_size");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "render_grid", PROPERTY_HINT_RANGE, "8,2048,1"), "set_render_grid", "get_render_grid");
+	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "terrain_image", PROPERTY_HINT_RESOURCE_TYPE, "Image"), "set_terrain_image", "get_terrain_image");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "initial_water_level", PROPERTY_HINT_NONE, "suffix:m"), "set_initial_water_level", "get_initial_water_level");
+	ADD_GROUP("Simulation", "");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "simulation_enabled"), "set_simulation_enabled", "is_simulation_enabled");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "substeps", PROPERTY_HINT_RANGE, "0,32,1"), "set_substeps", "get_substeps");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "time_step", PROPERTY_HINT_RANGE, "0.0005,0.05,0.0001,suffix:s"), "set_time_step", "get_time_step");
-	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "gravity", PROPERTY_HINT_RANGE, "0,30,0.01"), "set_gravity", "get_gravity");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "gravity", PROPERTY_HINT_RANGE, "0,30,0.01,suffix:m/s²"), "set_gravity", "get_gravity");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "damping", PROPERTY_HINT_RANGE, "0,5,0.001"), "set_damping", "get_damping");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "foam_decay", PROPERTY_HINT_RANGE, "0,10,0.01"), "set_foam_decay", "get_foam_decay");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "solid_height", PROPERTY_HINT_NONE, "suffix:m"), "set_solid_height", "get_solid_height");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "collider_drag", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_collider_drag", "get_collider_drag");
+	ADD_GROUP("Inflow", "inflow_");
 	ADD_PROPERTY(PropertyInfo(Variant::VECTOR2, "inflow_velocity", PROPERTY_HINT_NONE, "suffix:m/s"), "set_inflow_velocity", "get_inflow_velocity");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "inflow_depth", PROPERTY_HINT_NONE, "suffix:m"), "set_inflow_depth", "get_inflow_depth");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "inflow_cells", PROPERTY_HINT_RANGE, "1,64,1"), "set_inflow_cells", "get_inflow_cells");
-	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "initial_water_level", PROPERTY_HINT_NONE, "suffix:m"), "set_initial_water_level", "get_initial_water_level");
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "render_grid", PROPERTY_HINT_RANGE, "8,2048,1"), "set_render_grid", "get_render_grid");
-	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "simulation_enabled"), "set_simulation_enabled", "is_simulation_enabled");
-	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "terrain_image", PROPERTY_HINT_RESOURCE_TYPE, "Image"), "set_terrain_image", "get_terrain_image");
+	ADD_GROUP("", "");
 }

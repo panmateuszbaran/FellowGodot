@@ -203,6 +203,7 @@ private:
 	int _cascade_count() const;
 	Vector<uint8_t> _build_spectrum(int p_size, int p_cascades) const;
 	void _update_mesh();
+	void _set_surface_mesh(const Ref<ArrayMesh> &p_mesh);
 	void _update_material();
 	void _update_simulation_link();
 	DirectionalLight3D *_find_sun() const;

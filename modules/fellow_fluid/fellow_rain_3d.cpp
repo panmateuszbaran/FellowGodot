@@ -33,6 +33,7 @@
 #include "fellow_editor_still.h"
 #include "fellow_node_warnings.h"
 #include "fellow_rain.glsl.gen.h"
+#include "fellow_shared_shaders.h"
 #include "fellow_snow_tracker_3d.h"
 #include "fellow_snow_tracks.glsl.gen.h"
 #include "fellow_wind_3d.h"
@@ -180,8 +181,7 @@ void FellowRain3D::_build_children() {
 	drop_process->set_particle_flag(ParticleProcessMaterial::PARTICLE_FLAG_ALIGN_Y_TO_VELOCITY, true);
 	drop_process->set_collision_mode(ParticleProcessMaterial::COLLISION_HIDE_ON_CONTACT);
 
-	drop_shader.instantiate();
-	drop_shader->set_code(rain_drop_shader_code);
+	drop_shader = FellowSharedShaders::shader(rain_drop_shader_code); // milestone 53: one per session
 	drop_material.instantiate();
 	drop_material->set_shader(drop_shader);
 	drop_material->set_shader_parameter("splash", false);
@@ -189,8 +189,7 @@ void FellowRain3D::_build_children() {
 	// The snowflakes' (decision 0128): the same code, opaque with hashed alpha (drawn in the opaque pass with the
 	// particles' motion vectors: TAA reprojects them; blended, TAA wiped out flakes that move more than their size in
 	// a frame), receiving shadows.
-	flake_shader.instantiate();
-	flake_shader->set_code(String(rain_drop_shader_code).replace("render_mode blend_mix, depth_draw_never, cull_disabled, shadows_disabled,", "render_mode cull_disabled,").replace("// FLAKE_ALPHA_HASH", "ALPHA_HASH_SCALE = 1.0;"));
+	flake_shader = FellowSharedShaders::shader(String(rain_drop_shader_code).replace("render_mode blend_mix, depth_draw_never, cull_disabled, shadows_disabled,", "render_mode cull_disabled,").replace("// FLAKE_ALPHA_HASH", "ALPHA_HASH_SCALE = 1.0;"));
 	flake_material.instantiate();
 	flake_material->set_shader(flake_shader);
 	flake_material->set_shader_parameter("flake", true);
@@ -660,9 +659,8 @@ void FellowRain3D::_rt_create() {
 		return;
 	}
 	if (shader_file.is_null()) {
-		shader_file.instantiate();
-		if (shader_file->parse_versions_from_text(fellow_rain_shader_glsl) != OK) {
-			shader_file->print_errors("fellow_rain");
+		shader_file = FellowSharedShaders::file(fellow_rain_shader_glsl, "fellow_rain"); // milestone 53
+		if (shader_file.is_null()) {
 			gpu_failed = true;
 			return;
 		}
@@ -794,9 +792,8 @@ void FellowRain3D::_rt_tracks(RendererRD::FellowWeather::State &r_state, const P
 		return;
 	}
 	if (tracks_shader.is_null()) {
-		tracks_shader_file.instantiate();
-		if (tracks_shader_file->parse_versions_from_text(fellow_snow_tracks_shader_glsl) != OK) {
-			tracks_shader_file->print_errors("fellow_snow_tracks");
+		tracks_shader_file = FellowSharedShaders::file(fellow_snow_tracks_shader_glsl, "fellow_snow_tracks"); // milestone 53
+		if (tracks_shader_file.is_null()) {
 			return;
 		}
 		tracks_shader = rd->shader_create_from_spirv(tracks_shader_file->get_spirv_stages(), "FellowRain snow tracks");

@@ -47,7 +47,10 @@ Other platforms build in containers: `benchmarks/tools/platforms/platforms.sh bu
   dispatches GPU work without asking for a frame (`Fellow::request_redraw()`), is a bug).
 * **A new node**: give it configuration warnings (`get_configuration_warnings()`, shared phrasing in
   `modules/fellow_fluid/fellow_node_warnings.h`) for what stops it working, and handles in `modules/fellow_editor` if it
-  has a shape; `fellow_agent.py check` reports the warnings.
+  has a shape; `fellow_agent.py check` reports the warnings. Shaders it makes from code, compute kernels and meshes or
+  textures that do not depend on the instance come from `FellowSharedShaders` (`fellow_shared_shaders.h`): made once
+  per session, not once per instance; and a ready-made setup of it belongs in the 3D toolbar's FellowEngine menu
+  (`FellowEditorPlugin::make_preset`), without a configuration warning.
 * **A new project setting**: add its description to `doc/tools/fellow_settings_docs.py` and run it (it fails on a
   setting without one).
 * **Bound API**: every new bound member, method, signal or constant gets a description in its class XML; check with

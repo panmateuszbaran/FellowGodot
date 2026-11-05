@@ -38,6 +38,7 @@
 #include "fellow_rain_3d.h"
 #include "fellow_wind_3d.h"
 #include "fellow_shallow_water_3d.h"
+#include "fellow_shared_shaders.h"
 #include "fellow_snow_tracker_3d.h"
 #include "fellow_water_3d.h"
 #include "fellow_weather_3d.h"
@@ -61,4 +62,7 @@ void initialize_fellow_fluid_module(ModuleInitializationLevel p_level) {
 }
 
 void uninitialize_fellow_fluid_module(ModuleInitializationLevel p_level) {
+	if (p_level == MODULE_INITIALIZATION_LEVEL_SCENE) {
+		FellowSharedShaders::clear(); // milestone 53: while the RenderingServer lives
+	}
 }
