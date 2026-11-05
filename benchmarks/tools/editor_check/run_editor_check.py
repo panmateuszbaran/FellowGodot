@@ -28,6 +28,9 @@ def main() -> int:
     ap.add_argument("--headless", action="store_true", help="no window (no picture of the gizmos)")
     ap.add_argument("--driver", default="", help="--rendering-driver for the editor (vulkan, opengl3)")
     ap.add_argument("--timeout", type=float, default=900.0, help="seconds before the editor is stopped")
+    ap.add_argument("--editor-args", default="", help="more arguments for the editor (e.g. --verbose)")
+    ap.add_argument("--plain", type=int, default=0, metavar="FRAMES",
+                    help="no check: the project without its plugin, the editor quit after FRAMES frames (its log only)")
     args = ap.parse_args()
 
     out = os.path.abspath(args.out)
@@ -37,8 +40,16 @@ def main() -> int:
         return 2
     os.makedirs(out, exist_ok=True)
     shutil.copytree(os.path.join(HERE, "project"), project)
+    if args.plain:
+        cfg = os.path.join(project, "project.godot")
+        with open(cfg, encoding="utf-8") as f:
+            text = f.read()
+        with open(cfg, "w", encoding="utf-8") as f:
+            f.write(text.split("[editor_plugins]")[0])
 
-    cmd = [args.godot, "--editor", "--path", project]
+    cmd = [args.godot, "--editor", "--path", project] + args.editor_args.split()
+    if args.plain:
+        cmd += ["--quit-after", str(args.plain)]
     if args.headless:
         cmd.append("--headless")
     if args.driver:
@@ -60,6 +71,13 @@ def main() -> int:
         if line.startswith("EDITOR_CHECK {"):
             result = json.loads(line[len("EDITOR_CHECK "):])
     errors = [line for line in lines if line.startswith("ERROR:") or line.startswith("SCRIPT ERROR:")]
+    if args.plain:
+        summary = {"returncode": rc, "seconds": round(seconds, 1), "errors": len(errors), "first_errors": errors[:10],
+                   "warnings": [line for line in lines if line.startswith("WARNING:")][:10]}
+        with open(os.path.join(out, "editor_check.json"), "w", encoding="utf-8") as f:
+            json.dump(summary, f, indent=1)
+        print(json.dumps(summary, indent=1))
+        return 0
 
     # The level the editor split and saved, loaded as a game would and streamed back.
     back_log = os.path.join(out, "stream_back.log")
