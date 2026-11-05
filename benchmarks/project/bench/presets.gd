@@ -78,11 +78,12 @@ static func build(name: String, overrides: Dictionary) -> Dictionary:
 
 
 static func parse_overrides(s: String) -> Dictionary:
-	# "vp.use_taa=false,env.glow_enabled=true,rs.ssao_quality=2"
+	# "vp.use_taa=false,env.glow_enabled=true,rs.ssao_quality=2" (or ';' between them: run_benchmarks.py's --builds
+	# separates its builds with commas)
 	var out := {}
 	if s.is_empty():
 		return out
-	for kv in s.split(",", false):
+	for kv in s.replace(";", ",").split(",", false):
 		var parts := kv.split("=", false, 1)
 		if parts.size() == 2:
 			out[parts[0].strip_edges()] = parse_value(parts[1].strip_edges())
