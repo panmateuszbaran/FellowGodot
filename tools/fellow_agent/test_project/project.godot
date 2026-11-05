@@ -1,0 +1,7 @@
+; The agent toolkit's test project (milestone 51): tools/fellow_agent/selftest.py runs every command on it.
+
+config_version=5
+
+[application]
+
+config/name="fellow_agent self-test"

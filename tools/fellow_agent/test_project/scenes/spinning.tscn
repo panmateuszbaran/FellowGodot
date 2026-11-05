@@ -1,0 +1,12 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/spinner.gd" id="1"]
+
+[sub_resource type="TorusMesh" id="T"]
+
+[node name="Spinning" type="Node3D"]
+script = ExtResource("1")
+speed = 2.0
+
+[node name="Torus" type="MeshInstance3D" parent="."]
+mesh = SubResource("T")
