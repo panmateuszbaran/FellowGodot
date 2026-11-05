@@ -423,6 +423,17 @@ database (60 Hz; bone roles by name, feature weights, contact thresholds in `opt
 `get_stats()`, `get_global_stats()`, `get_last_search()`. Nothing changes without the nodes. Decision 0149; bench
 Matching Lab (`--scene=matching`, data from `benchmarks/scripts/get_cmu_locomotion.sh`, `bench/matching_eval.gd`).
 
+## Simulated GPUs (milestone 49)
+
+The environment's `FELLOW_VULKAN_PROFILE=<name>` (read once by the Vulkan driver; a diagnostic, nothing changes
+without it) makes the device present itself as another: `android_2022`, `android_2025` (Android's baseline
+profiles), `intel_uhd620`, `intel_arc_a770`, `gtx1060`, `rtx4070`, `rx580`, `rx7800xt`, `apple_m1` (MoltenVK), or
+`no_ray_tracing`, `no_float16`, `subgroup_basic`. Extensions, features, limits, subgroup operations and compressed
+formats the other device lacks are hidden; every shader is checked against it, and what it could not run is printed
+once a pipeline is made from it, as `FELLOW_PORTABILITY <profile>: ...`. An unknown name prints the known ones and
+leaves the device as it is. Decision 0150; bench `tools/platforms/` (`renderer_matrix.sh`, `profile_matrix.sh`,
+`platforms.sh` for the Windows and arm64 builds under Wine and qemu).
+
 ## Options that change the image (off by default)
 
 | setting | what it does | image cost | record |

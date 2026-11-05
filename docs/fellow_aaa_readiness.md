@@ -46,10 +46,10 @@ measured, but short of AAA scale or breadth. Gap: not addressed by FellowEngine 
 | Physics | **Partial** | GodotPhysics3D and Jolt faster and exactly stock's (pile × 2.27, rays × 8.6 on GodotPhysics; Jolt areas −42 %), deterministic fast modes | no destruction, vehicles or cloth beyond stock; thousands of bodies not measured |
 | CPU and threading | **Partial** | the render thread parallel; worker counts tuned; animation and physics multi-threaded where stock is | gameplay on GDScript's main thread (Crowd Lab's frame is the main thread animating); no data-oriented job system for game code |
 | Upscaling, frame generation, HDR | **Partial** (M47) | TAA improved, contrast-adaptive sharpening, motion blur, FSR 3.1 upscaler (opt-in) | no DLSS or XeSS, no frame generation; FSR 3.1 not yet measured on a GPU; HDR output not addressed by FellowEngine |
-| Platforms and GPUs | **Gap** (the largest) | Windows, Vulkan, Forward+, one NVIDIA laptop GPU; Linux builds tested on lavapipe | no consoles (Godot's console ports are third-party; FellowEngine's RenderingDevice and driver changes would need porting to each); Direct3D 12 and Metal untouched by FellowEngine's work (ray queries and cooperative matrices are Vulkan-only here); AMD and Intel GPUs never measured; Mobile and Compatibility renderers unchanged |
+| Platforms and GPUs | **Gap** (the largest; checked without the hardware in M49) | Windows, Vulkan, Forward+, one NVIDIA laptop GPU measured; milestone 49 without other hardware: the labs on Godot's three renderers (Mobile's lighting stock's again, FellowEngine's RenderingDevice nodes stepping aside in Compatibility), on nine simulated GPUs (Android's 2022 and 2025 baselines, Intel UHD 620 and Arc A770, GTX 1060, RTX 4070, RX 580, RX 7800 XT, Apple M1 through MoltenVK) with no crash, ray tracing falling back cleanly, what each device could not run reported and fixed where FellowEngine's; Windows (MinGW) and Linux arm64 templates built in containers and run under Wine and qemu with Linux's images | no consoles (Godot's console ports are third-party; FellowEngine's RenderingDevice and driver changes would need porting to each); Android, web, macOS and iOS templates not built (toolchains not downloaded; Apple's SDK); no other GPU's performance or driver bugs (a simulated device hides features, it does not reproduce a driver); Direct3D 12 and Metal untouched by FellowEngine's work (ray queries and cooperative matrices are Vulkan-only here); the Mobile renderer draws no gas volumes |
 | Editor, tools, content pipeline | **Gap** | the editor builds and opens projects; a headless import crash fixed; the bench (A/B with heat soak, telemetry, per-pass timestamps), autotune | FellowEngine's work is in the runtime: few editor previews or gizmos for its nodes, HLOD and impostors baked at run time, no DCC round-trip, no profiler UI for its passes, no asset validation or cooking pipeline for a large team |
 | Audio, networking, UI, localization | **Gap** | not touched (stock Godot) | no Wwise/FMOD-class middleware in the engine, no large-scale multiplayer stack, no platform online services |
-| Quality and validation | **Partial** | a strict method: every option against its absence bit for bit on lavapipe, A/B in alternating order with heat soak, Vulkan synchronization validation | one test machine; no farm across GPUs, drivers and OS versions; no long soak or memory-leak runs; no crash reporting |
+| Quality and validation | **Partial** | a strict method: every option against its absence bit for bit on lavapipe, A/B in alternating order with heat soak, Vulkan synchronization validation; the labs on simulated GPUs, Godot's three renderers, Wine and qemu (milestone 49) | one test machine; no farm across GPUs, drivers and OS versions; no long soak or memory-leak runs; no crash reporting |
 
 ## 3. What an AAA project would hit first
 
@@ -58,7 +58,10 @@ measured, but short of AAA scale or breadth. Gap: not addressed by FellowEngine 
    — and measurements on a GPU and a real drive.
 2. **Platforms.** A console version needs a RenderingDevice backend per console (third-party ports exist for stock
    Godot, none carries FellowEngine's changes), and every Vulkan-only feature (ray queries, cooperative matrices,
-   async compute choices) needs its counterpart or a fallback.
+   async compute choices) needs its counterpart or a fallback. Milestone 49 checked what can be checked without the
+   hardware (simulated GPUs, the three renderers, Windows and arm64 builds under Wine and qemu) and fixed what it
+   found (a crash without buffer device addresses, Mobile's lights, limits of Android's and Apple's devices); Android
+   and the web need their toolchains, Apple's platforms a Mac.
 3. **GPU breadth.** Autotune and every default were chosen on one NVIDIA GPU; AMD's and Intel's drivers differ in
    exactly the areas FellowEngine tuned (barriers, async compute, subgroup sizes, ray tracing).
 4. **4K and upscaling.** Without DLSS/XeSS and frame generation, the ray-traced feature set's +53-66 % GPU cost is
@@ -78,7 +81,8 @@ measured, but short of AAA scale or breadth. Gap: not addressed by FellowEngine 
 
 ## 5. A path towards AAA, in order of what blocks most
 
-1. **Hardware and platform breadth**: measure on AMD and Intel GPUs and on the Steam Deck/Linux; decide Vulkan-only
+1. **Hardware and platform breadth** (milestone 49: checked in simulation, containers and emulators): measure on AMD
+   and Intel GPUs and on the Steam Deck/Linux; build and run Android's and the web's templates; decide Vulkan-only
    (PC/Linux) or bring the features to Direct3D 12; a console strategy (a partner port that carries the
    RenderingDevice changes).
 2. **Streaming**: texture mip streaming (milestone 45: done, CPU-estimated, within a budget), cell-based world
@@ -100,7 +104,7 @@ The order agreed for the next milestones (2026-11-04): streaming (textures in mi
 and frame generation, animation, platforms (Godot's own exports, checked in emulated and containerised environments
 for want of other machines: Linux containers, other GPU drivers), and the editor and tools last. Done so far: texture
 streaming (45), world streaming (46), the FSR 3.1 upscaler (47), motion matching (48); DLSS, XeSS and frame
-generation wait for the GPU.
+generation wait for the GPU; platform checks without the hardware (49).
 
 ## 6. Neural motion's state (milestones 43-44)
 

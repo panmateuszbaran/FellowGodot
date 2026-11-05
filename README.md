@@ -114,7 +114,11 @@ to −21 %. They are listed in the [options](docs/FELLOWENGINE_OPTIONS.md).
 | `raytracing/*` | hardware ray tracing (`VK_KHR_ray_query`): ambient occlusion, sun shadows, dynamic diffuse GI with probes, reflections | — |
 | `post/*` | motion blur, histogram and local exposure, contact shadows, sky atmosphere with aerial perspective, volumetric clouds with their shadows on the scene, bloom with lens dirt and flare, light shafts, sharpening, white balance, lens effects | the clouds' shadows 0.17 ms (Bistro) |
 
-Forward+ only: the Mobile and Compatibility renderers are unchanged.
+FellowEngine's work is in the Forward+ renderer. The Mobile and Compatibility renderers run every lab (milestone 49):
+the Mobile renderer gives stock's images in stock's labs and runs FellowEngine's nodes, but draws no gas volumes; with
+Compatibility the nodes that need a RenderingDevice step aside with a warning. Other GPUs are checked by simulating
+them (`FELLOW_VULKAN_PROFILE`: Android's baselines, Intel, AMD, older NVIDIA, Apple M1), the Windows and Linux arm64
+templates by running them under Wine and qemu ([decision 0150](docs/decisions/0150-platform-checks.md)).
 
 ## Building
 
@@ -124,6 +128,9 @@ FellowEngine builds like Godot 4.7 ([compiling docs](https://docs.godotengine.or
 scons platform=windows target=editor           # the editor
 scons platform=windows target=template_release # an export template
 ```
+
+Windows templates also build with MinGW-w64, and Linux arm64 ones with GCC's cross-compiler, in containers:
+`benchmarks/tools/platforms/platforms.sh build windows|linux-arm64` (see its README).
 
 The work happens on the `fellow/geometry` branch. The other `fellow/*` branches are earlier stages it grew from.
 

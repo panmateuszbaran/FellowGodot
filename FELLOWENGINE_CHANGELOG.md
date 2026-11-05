@@ -9,6 +9,25 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 49 — platforms without their hardware (2026-11-05)
+
+- `FELLOW_VULKAN_PROFILE` (a diagnostic, decision 0150): the Vulkan driver presents its device as another — Android's
+  2022 and 2025 baselines, Intel UHD 620 and Arc A770, GTX 1060, RTX 4070, RX 580, RX 7800 XT, Apple M1 through
+  MoltenVK, or with ray tracing, half floats or subgroup operations removed — from the Khronos Vulkan-Profiles data;
+  every shader checked against it and what the device could not run reported with the pipeline.
+- Checks (`benchmarks/tools/platforms/`): every lab with Godot's three renderers (lavapipe, llvmpipe; `renderer_matrix`
+  in bash and Python), eight labs on the nine devices, the Windows template built with MinGW and run under Wine, the
+  Linux arm64 template cross-built and run under qemu, a clang build. No crash; Linux's images everywhere.
+- Fixed: a crash on GPUs without buffer device addresses (index buffers' uninitialized creation flags); the Mobile
+  renderer losing positional lights (Lights Lab 9.3 → 36.6, stock's); stock's DirectInput hook calling
+  `VirtualProtect()` with a null pointer (a crash under Wine); fragment-to-light varyings counted as interpolants (stock)
+  and the water's two in one; gas volumes dense where the sparse kernels' 11 storage images do not fit, the trace pass
+  on textures and one sampler (27 samplers before); the glow's 16 × 16 tiles only on devices with 256 invocations a
+  workgroup; MultiMesh culling's buffer leaked at exit; MinGW's and clang's build errors and warnings; warnings instead
+  of errors from FellowEngine's nodes with the Compatibility renderer.
+- On Android's 2025 baseline and every desktop profile FellowEngine needs nothing the device lacks; ray tracing falls
+  back to the same image without it.
+
 ## Milestone 48 — motion matching (2026-11-04)
 
 - `FellowMotionDatabase` and `FellowMotionMatcher3D` (new module `fellow_animation`, decision 0149): clips sampled into
