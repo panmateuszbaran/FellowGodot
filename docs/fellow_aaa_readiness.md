@@ -111,6 +111,12 @@ for want of other machines: Linux containers, other GPU drivers), and the editor
 streaming (45), world streaming (46), the FSR 3.1 upscaler (47), motion matching (48); DLSS, XeSS and frame
 generation wait for the GPU; platform checks without the hardware (49); the editor tools (50) — the agreed order done.
 
+**Out of scope by the owner's decision (2026-11-05).** FellowEngine is developed for its owner's own work, much of it
+with AI agents, not for a large team: a content pipeline for large teams (asset validation, cooking, DCC round-trips,
+team workflows; point 4's pipeline items) is not pursued, and neither are DLSS and XeSS (neural upscalers) or frame
+generation for now (point 3); FSR 3.1's hand-written upscaler stays. The rows above still say what an AAA studio
+would miss.
+
 ## 6. Neural motion's state (milestones 43-44)
 
 * GPU: a request 4.0 ms, 16 at once 12.6 ms, 64 at once 41 ms on the RTX's tensor cores (milestone 44, the laptop

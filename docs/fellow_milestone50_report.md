@@ -90,6 +90,7 @@ templates in 37 minutes each on the cloud's two cores.
 
 ## 5. Next
 
-The agreed order is done. What the assessment still lists: measurements on other GPUs when hardware is available, a
-content pipeline for a large team (asset validation, cooking), HLOD baked offline, the transient VRAM of texture
-streaming's swaps, DLSS, XeSS and frame generation (SDKs to approve).
+The agreed order is done. What the assessment still lists: measurements on other GPUs when hardware is available, HLOD
+baked offline, the transient VRAM of texture streaming's swaps. Not pursued, by the owner's decision (2026-11-05): a
+content pipeline for large teams, and DLSS, XeSS and frame generation for now — FellowEngine is for its owner's work,
+much of it with AI agents.
