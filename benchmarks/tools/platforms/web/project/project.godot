@@ -1,0 +1,19 @@
+; FellowEngine's web check (milestone 50, benchmarks/tools/platforms/web): a small scene with FellowEngine nodes run
+; by the web template in a headless browser.
+
+config_version=5
+
+[application]
+
+config/name="FellowEngine web check"
+run/main_scene="res://main.tscn"
+
+[display]
+
+window/size/viewport_width=960
+window/size/viewport_height=540
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"

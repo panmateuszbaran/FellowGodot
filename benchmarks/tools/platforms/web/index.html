@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>FellowEngine web check</title></head>
+<body style="margin:0;background:#000">
+<canvas id="canvas" width="960" height="540" style="display:block"></canvas>
+<script src="godot.js"></script>
+<script>
+// FellowEngine's web check (milestone 50): the web template with godot.pck, no export step.
+const engine = new Engine({ executable: 'godot', canvas: document.getElementById('canvas'), canvasResizePolicy: 0, args: [] });
+engine.startGame().then(() => console.log('WEB_STARTED'), (e) => console.error('WEB_FAILED ' + e));
+</script>
+</body>
+</html>

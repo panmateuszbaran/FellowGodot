@@ -807,6 +807,7 @@ void FellowWeather3D::_validate_property(PropertyInfo &p_property) const {
 
 void FellowWeather3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_weather", "weather", "transition"), &FellowWeather3D::set_weather, DEFVAL(-1.0f));
+	ClassDB::bind_method(D_METHOD("_set_weather_property", "weather"), &FellowWeather3D::_set_weather_property);
 	ClassDB::bind_method(D_METHOD("get_weather"), &FellowWeather3D::get_weather);
 	ClassDB::bind_method(D_METHOD("is_transitioning"), &FellowWeather3D::is_transitioning);
 	ClassDB::bind_method(D_METHOD("get_transition_progress"), &FellowWeather3D::get_transition_progress);
@@ -867,7 +868,7 @@ void FellowWeather3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_lightning_node"), &FellowWeather3D::get_lightning_node);
 	ClassDB::bind_method(D_METHOD("get_sun_node"), &FellowWeather3D::get_sun_node);
 
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "weather", PROPERTY_HINT_ENUM, "Clear,Cloudy,Overcast,Rain,Storm,Snow,Blizzard,Custom"), "set_weather", "get_weather");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "weather", PROPERTY_HINT_ENUM, "Clear,Cloudy,Overcast,Rain,Storm,Snow,Blizzard,Custom"), "_set_weather_property", "get_weather");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "transition_time", PROPERTY_HINT_RANGE, "0,600,0.1,or_greater,suffix:s"), "set_transition_time", "get_transition_time");
 
 	ADD_GROUP("State", "");

@@ -145,7 +145,7 @@
 		<member name="transition_time" type="float" setter="set_transition_time" getter="get_transition_time" default="30.0">
 			Seconds a change of weather takes when none is given ([member weather] set, a state's value set).
 		</member>
-		<member name="weather" type="int" setter="set_weather" getter="get_weather" enum="FellowWeather3D.Weather" default="0">
+		<member name="weather" type="int" setter="_set_weather_property" getter="get_weather" enum="FellowWeather3D.Weather" default="0">
 			The weather. Setting it turns to it over [member transition_time].
 		</member>
 		<member name="wind_path" type="NodePath" setter="set_wind_path" getter="get_wind_path" default="NodePath(&quot;&quot;)">

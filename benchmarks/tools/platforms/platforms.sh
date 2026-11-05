@@ -23,8 +23,11 @@ fi
 
 sync_tree() {
 	mkdir -p "$TREE"
+	# Generated sources (*.gen.*) are the container's: the host's (another platform's modules_enabled.gen.h, say)
+	# would replace them with an older time stamp, and SCons does not regenerate a target that changed (milestone 50:
+	# a web link with Linux's modules).
 	rsync -a --delete --exclude=/.git --exclude=/bin --exclude='/.sconsign*' --exclude='*.o' --exclude='*.a' \
-		--exclude=/benchmarks/project/external --exclude=/benchmarks/project/.godot "$REPO/" "$TREE/"
+		--exclude='*.gen.*' --exclude=/benchmarks/project/external --exclude=/benchmarks/project/.godot "$REPO/" "$TREE/"
 }
 
 run_in() {

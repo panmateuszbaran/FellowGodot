@@ -10,4 +10,6 @@ RUN git clone --depth 1 https://github.com/emscripten-core/emsdk.git /opt/emsdk 
 	&& cd /opt/emsdk && ./emsdk install ${EMSDK_VERSION} && ./emsdk activate ${EMSDK_VERSION} \
 	&& rm -rf /opt/emsdk/downloads
 ENV EMSDK=/opt/emsdk EM_CONFIG=/opt/emsdk/.emscripten PATH=/opt/emsdk:/opt/emsdk/upstream/emscripten:$PATH
+# Binaryen's wasm-opt (the link's last step) needs libatomic (milestone 50).
+RUN apt-get update && apt-get install -y --no-install-recommends libatomic1 && rm -rf /var/lib/apt/lists/*
 WORKDIR /src

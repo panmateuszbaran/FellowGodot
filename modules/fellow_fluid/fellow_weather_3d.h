@@ -176,6 +176,9 @@ public:
 	static FellowWeather3D *get_active() { return active; }
 
 	void set_weather(Weather p_weather, float p_transition = -1.0f);
+	// The property's setter (one argument: a setter with two was refused by debug builds' ClassDB, and the editor had
+	// no "weather" property; milestone 50).
+	void _set_weather_property(Weather p_weather) { set_weather(p_weather); }
 	Weather get_weather() const { return weather; }
 	bool is_transitioning() const { return transitioning; }
 	float get_transition_progress() const;
