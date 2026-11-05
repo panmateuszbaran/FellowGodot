@@ -41,6 +41,16 @@
 				Cells within [param radius] of [param position] (and within the load distance of it) load as if a camera were there: a teleport's destination, before the camera arrives.
 			</description>
 		</method>
+		<method name="split_into_cells">
+			<return type="Array" />
+			<param index="0" name="root" type="Node3D" />
+			<param index="1" name="cell_size" type="float" />
+			<param index="2" name="directory" type="String" />
+			<param index="3" name="options" type="Dictionary" default="{}" />
+			<description>
+				Splits [param root]'s 3D children into cells of [param cell_size] metres on this streamer's XZ grid: each cell's nodes are moved into a new scene saved in [param directory] ([code]cell_X_Z.scn[/code]) and replaced by a [FellowStreamingCell3D] under this streamer, placed at the cell's centre with the nodes' bounds; the nodes keep their global transforms when the cell loads. Both nodes must be in the scene tree. Left where they are: nodes of the classes in [code]options["exclude_classes"][/code] (by default [Camera3D], [DirectionalLight3D], [WorldEnvironment] and the streamers and cells themselves) and nodes wider than [code]options["max_span"][/code] cells (2: terrain, large structures). [code]options["load_distance"][/code] sets the cells' load distance (0: the streamer's), [code]options["extension"][/code] the scenes' format ([code]"scn"[/code] or [code]"tscn"[/code]), [code]options["owner"][/code] the new cells' owner (the root's owner by default, so that the editor saves them with the scene). Returns the cells made. The editor's [b]Scene > Split into Streaming Cells[/b] menu calls it on the selected streamer.
+			</description>
+		</method>
 	</methods>
 	<members>
 		<member name="load_distance" type="float" setter="set_load_distance" getter="get_load_distance" default="200.0">

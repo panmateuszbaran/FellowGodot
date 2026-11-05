@@ -31,11 +31,14 @@
 #include "fellow_world_streamer_3d.h"
 
 #include "core/config/engine.h"
+#include "core/io/dir_access.h"
 #include "core/io/resource_loader.h"
+#include "core/io/resource_saver.h"
 #include "core/object/class_db.h"
 #include "core/os/os.h"
 #include "core/templates/sort_array.h"
 #include "scene/3d/camera_3d.h"
+#include "scene/3d/visual_instance_3d.h"
 #include "scene/main/viewport.h"
 
 static float _point_aabb_distance(const Vector3 &p_point, const AABB &p_box) {
@@ -88,13 +91,21 @@ void FellowStreamingCell3D::_notification(int p_what) {
 				streamer->_unregister_cell(this);
 			}
 		} break;
+		case NOTIFICATION_PREDELETE: {
+			// Before Node frees the children: content in the tree is one of them (freed with them); content
+			// instantiated but never added is this cell's to free. In the destructor the pointer could already be
+			// dangling (a double free at exit, found in milestone 50).
+			if (content) {
+				if (content->get_parent() == nullptr) {
+					memdelete(content);
+				}
+				content = nullptr;
+			}
+		} break;
 	}
 }
 
 FellowStreamingCell3D::~FellowStreamingCell3D() {
-	if (content && content->get_parent() == nullptr) {
-		memdelete(content); // instantiated, never entered the tree
-	}
 }
 
 void FellowStreamingCell3D::_bind_methods() {
@@ -524,6 +535,7 @@ void FellowWorldStreamer3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("is_settled"), &FellowWorldStreamer3D::is_settled);
 	ClassDB::bind_method(D_METHOD("load_now"), &FellowWorldStreamer3D::load_now);
 	ClassDB::bind_method(D_METHOD("get_stats"), &FellowWorldStreamer3D::get_stats);
+	ClassDB::bind_method(D_METHOD("split_into_cells", "root", "cell_size", "directory", "options"), &FellowWorldStreamer3D::split_into_cells, DEFVAL(Dictionary()));
 
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "load_distance", PROPERTY_HINT_RANGE, "0,10000,0.1,or_greater,suffix:m"), "set_load_distance", "get_load_distance");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "unload_margin", PROPERTY_HINT_RANGE, "0,1000,0.1,or_greater,suffix:m"), "set_unload_margin", "get_unload_margin");
@@ -534,6 +546,156 @@ void FellowWorldStreamer3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "streaming"), "set_streaming", "is_streaming");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "use_camera"), "set_use_camera", "is_using_camera");
 	ADD_PROPERTY(PropertyInfo(Variant::ARRAY, "targets", PROPERTY_HINT_ARRAY_TYPE, "NodePath"), "set_targets", "get_targets");
+}
+
+// The bounds of a node's visible descendants in p_space (the node's origin where it has none).
+static AABB _fellow_split_bounds(Node3D *p_node, const Transform3D &p_space_inv) {
+	AABB box;
+	bool any = false;
+	LocalVector<Node *> stack;
+	stack.push_back(p_node);
+	while (!stack.is_empty()) {
+		Node *n = stack[stack.size() - 1];
+		stack.resize(stack.size() - 1);
+		if (VisualInstance3D *vi = Object::cast_to<VisualInstance3D>(n)) {
+			const AABB local = vi->get_aabb();
+			if (local.has_volume() || local.has_surface()) {
+				const AABB b = (p_space_inv * vi->get_global_transform()).xform(local);
+				box = any ? box.merge(b) : b;
+				any = true;
+			}
+		}
+		for (int i = 0; i < n->get_child_count(); i++) {
+			stack.push_back(n->get_child(i));
+		}
+	}
+	if (!any) {
+		box = AABB((p_space_inv * p_node->get_global_transform()).origin, Vector3());
+	}
+	return box;
+}
+
+// Hands the nodes the old scene owned (or none owned) to p_new, keeping instanced scenes' own nodes theirs.
+static void _fellow_split_reown(Node *p_node, Node *p_old_owner, Node *p_new_owner) {
+	if (p_node != p_new_owner && (p_node->get_owner() == p_old_owner || p_node->get_owner() == nullptr)) {
+		p_node->set_owner(p_new_owner);
+	}
+	for (int i = 0; i < p_node->get_child_count(); i++) {
+		_fellow_split_reown(p_node->get_child(i), p_old_owner, p_new_owner);
+	}
+}
+
+Array FellowWorldStreamer3D::split_into_cells(Node3D *p_root, real_t p_cell_size, const String &p_directory, const Dictionary &p_options) {
+	Array made;
+	ERR_FAIL_NULL_V(p_root, made);
+	ERR_FAIL_COND_V_MSG(p_cell_size <= 0.0, made, "The cell size must be positive.");
+	ERR_FAIL_COND_V_MSG(!is_inside_tree() || !p_root->is_inside_tree(), made, "The streamer and the root must be in the scene tree.");
+	ERR_FAIL_COND_V_MSG(p_root == this || is_ancestor_of(p_root), made, "The root cannot be the streamer or under it.");
+
+	PackedStringArray exclude;
+	if (p_options.has("exclude_classes")) {
+		exclude = p_options["exclude_classes"];
+	} else {
+		exclude = { "Camera3D", "DirectionalLight3D", "WorldEnvironment", "FellowWorldStreamer3D", "FellowStreamingCell3D" };
+	}
+	const real_t max_span = p_options.get("max_span", 2.0);
+	const real_t cell_load_distance = p_options.get("load_distance", 0.0);
+	const String extension = p_options.get("extension", "scn");
+	Node *old_owner = p_root->get_owner() ? p_root->get_owner() : p_root;
+	Node *cell_owner = Object::cast_to<Node>(p_options.get("owner", Variant()).get_validated_object());
+	if (!cell_owner) {
+		cell_owner = get_owner() ? get_owner() : (p_root->get_owner() ? p_root->get_owner() : nullptr);
+	}
+
+	const Error dir_err = DirAccess::make_dir_recursive_absolute(p_directory);
+	ERR_FAIL_COND_V_MSG(dir_err != OK && dir_err != ERR_ALREADY_EXISTS, made, vformat("Cannot create the directory \"%s\".", p_directory));
+
+	// The children by cell, in the streamer's space.
+	const Transform3D streamer_global = get_global_transform();
+	const Transform3D space_inv = streamer_global.affine_inverse();
+	struct Group {
+		LocalVector<Node3D *> nodes;
+		AABB bounds;
+	};
+	HashMap<Vector2i, Group> groups;
+	LocalVector<Vector2i> keys;
+	LocalVector<Node *> children;
+	for (int i = 0; i < p_root->get_child_count(); i++) {
+		children.push_back(p_root->get_child(i));
+	}
+	for (Node *child : children) {
+		Node3D *n = Object::cast_to<Node3D>(child);
+		if (!n || n == this || n->is_ancestor_of(this)) {
+			continue;
+		}
+		bool skip = false;
+		for (const String &c : exclude) {
+			if (n->is_class(c)) {
+				skip = true;
+				break;
+			}
+		}
+		if (skip) {
+			continue;
+		}
+		const AABB box = _fellow_split_bounds(n, space_inv);
+		if (box.size.x > max_span * p_cell_size || box.size.z > max_span * p_cell_size) {
+			continue; // Terrain and the like: larger than a few cells, it stays loaded.
+		}
+		const Vector3 c = box.get_center();
+		const Vector2i key(int(Math::floor(c.x / p_cell_size)), int(Math::floor(c.z / p_cell_size)));
+		Group *g = groups.getptr(key);
+		if (!g) {
+			g = &groups.insert(key, Group())->value;
+			g->bounds = box;
+			keys.push_back(key);
+		} else {
+			g->bounds = g->bounds.merge(box);
+		}
+		g->nodes.push_back(n);
+	}
+
+	keys.sort();
+	for (const Vector2i &key : keys) {
+		Group &g = groups[key];
+		const String name = vformat("cell_%d_%d", key.x, key.y);
+		const Vector3 centre((key.x + 0.5) * p_cell_size, 0.0, (key.y + 0.5) * p_cell_size);
+		const Transform3D cell_global = streamer_global * Transform3D(Basis(), centre);
+		const Transform3D cell_inv = cell_global.affine_inverse();
+
+		// The cell's content: its nodes moved under a new root at the cell's origin, saved, then freed.
+		Node3D *content = memnew(Node3D);
+		content->set_name(name);
+		for (Node3D *n : g.nodes) {
+			const Transform3D global = n->get_global_transform();
+			n->get_parent()->remove_child(n);
+			content->add_child(n);
+			n->set_transform(cell_inv * global);
+			_fellow_split_reown(n, old_owner, content);
+		}
+		Ref<PackedScene> scene;
+		scene.instantiate();
+		const Error pack_err = scene->pack(content);
+		const String path = p_directory.path_join(name + "." + extension);
+		const Error save_err = pack_err == OK ? ResourceSaver::save(scene, path) : pack_err;
+		memdelete(content);
+		ERR_CONTINUE_MSG(save_err != OK, vformat("Cannot save the cell \"%s\" (error %d).", path, int(save_err)));
+
+		FellowStreamingCell3D *cell = memnew(FellowStreamingCell3D);
+		cell->set_name(vformat("Cell_%d_%d", key.x, key.y));
+		cell->set_scene_path(path);
+		cell->set_load_distance(cell_load_distance);
+		AABB local_bounds = g.bounds;
+		local_bounds.position -= centre;
+		cell->set_bounds(local_bounds.grow(0.01));
+		add_child(cell, true);
+		cell->set_transform(Transform3D(Basis(), centre));
+		if (cell_owner) {
+			cell->set_owner(cell_owner);
+		}
+		made.push_back(cell);
+	}
+	return made;
 }
 
 FellowWorldStreamer3D::FellowWorldStreamer3D() {
