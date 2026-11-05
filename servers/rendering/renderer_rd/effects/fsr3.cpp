@@ -144,12 +144,22 @@ struct FSR3Effect::Device {
 	}
 };
 
+namespace {
+// The SDK's resource description in a type of this file's own. FSR 2.2's SDK (thirdparty/amd-fsr2, the stock FSR 2
+// backend) has another FfxResourceDescription (28 bytes, FSR 3.1's 32), and a LocalVector of either is the same
+// LocalVector<FfxResourceDescription> to the linker (an ODR violation): one backend's reserve() serves both, and FSR 2.2's
+// allocated FSR 3.1's table too small — a heap overflow at the context's creation, a crash in MSVC's build.
+struct FSR3ResourceDescription {
+	FfxResourceDescription d = {};
+};
+} // namespace
+
 class RendererRD::FSR3Context {
 public:
 	struct Resources {
 		LocalVector<RID> rids;
 		LocalVector<LocalVector<RID>> mip_slice_rids;
-		LocalVector<FfxResourceDescription> descriptions;
+		LocalVector<FSR3ResourceDescription> descriptions;
 		LocalVector<bool> owned;
 		LocalVector<uint32_t> dynamic_list;
 		LocalVector<uint32_t> free_list;
@@ -168,7 +178,7 @@ public:
 			}
 			rids[index] = p_rid;
 			mip_slice_rids[index].clear();
-			descriptions[index] = p_description;
+			descriptions[index].d = p_description;
 			owned[index] = p_owned;
 			if (p_dynamic) {
 				dynamic_list.push_back(index);
@@ -181,7 +191,7 @@ public:
 			free_list.push_back(p_index);
 			rids[p_index] = RID();
 			mip_slice_rids[p_index].clear();
-			descriptions[p_index] = {};
+			descriptions[p_index].d = {};
 			owned[p_index] = false;
 			dynamic_list.erase(p_index);
 		}
@@ -191,7 +201,7 @@ public:
 		}
 
 		RID get_mip(uint32_t p_index, uint32_t p_mip) {
-			const FfxResourceDescription &desc = descriptions[p_index];
+			const FfxResourceDescription &desc = descriptions[p_index].d;
 			if (desc.mipCount <= 1) {
 				return rids[p_index];
 			}
@@ -501,7 +511,7 @@ static FfxErrorCode unregister_resources_rd(FfxInterface *p_backend_interface, F
 static FfxResourceDescription get_resource_description_rd(FfxInterface *p_backend_interface, FfxResourceInternal p_resource) {
 	FSR3Context::Resources &resources = get_scratch(p_backend_interface).resources;
 	if (p_resource.internalIndex >= 0 && uint32_t(p_resource.internalIndex) < resources.size()) {
-		return resources.descriptions[p_resource.internalIndex];
+		return resources.descriptions[p_resource.internalIndex].d;
 	}
 	return {};
 }
@@ -723,7 +733,7 @@ static FfxErrorCode execute_gpu_jobs_rd(FfxInterface *p_backend_interface, FfxCo
 					error = FFX_ERROR_INVALID_ARGUMENT;
 					break;
 				}
-				const FfxResourceDescription &desc = resources.descriptions[job.target];
+				const FfxResourceDescription &desc = resources.descriptions[job.target].d;
 				const uint32_t texture_mips = fsr3_texture_mips(resources.rids[job.target]);
 				if (fsr3_debug() || MAX(desc.mipCount, 1u) > texture_mips) {
 					print_line(vformat("FSR3_DEBUG clear #%d mips %d (texture %d)", job.target, desc.mipCount, texture_mips));
@@ -735,7 +745,7 @@ static FfxErrorCode execute_gpu_jobs_rd(FfxInterface *p_backend_interface, FfxCo
 					error = FFX_ERROR_INVALID_ARGUMENT;
 					break;
 				}
-				const FfxResourceDescription &desc = resources.descriptions[job.source];
+				const FfxResourceDescription &desc = resources.descriptions[job.source].d;
 				for (uint32_t mip = 0; mip < MAX(desc.mipCount, 1u); mip++) {
 					rd->texture_copy(resources.rids[job.source], resources.rids[job.target], Vector3(), Vector3(), Vector3(MAX(desc.width >> mip, 1u), MAX(desc.height >> mip, 1u), 1), mip, mip, 0, 0);
 				}
