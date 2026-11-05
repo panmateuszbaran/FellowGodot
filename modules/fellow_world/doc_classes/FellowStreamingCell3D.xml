@@ -4,7 +4,7 @@
 		FellowEngine: a cell of a streamed world, its content a [PackedScene] loaded and freed by a [FellowWorldStreamer3D].
 	</brief_description>
 	<description>
-		Placed below a [FellowWorldStreamer3D], the cell's [member scene_path] is loaded on the [ResourceLoader]'s threads when a camera or target comes within [member load_distance] of its [member bounds] (the streamer's distance if 0), instantiated on a worker thread and added as the cell's child; beyond the distance plus the streamer's [member FellowWorldStreamer3D.unload_margin] it is freed. The cell's own [Node3D] children are its proxy: shown while the content is not in the tree (an HLOD mesh, a low-detail stand-in), hidden while it is. In the editor nothing is loaded. See [code]docs/decisions/0147-world-streaming.md[/code].
+		Placed below a [FellowWorldStreamer3D], the cell's [member scene_path] is loaded on the [ResourceLoader]'s threads when a camera or target comes within [member load_distance] of its [member bounds] (the streamer's distance if 0), instantiated on a worker thread and added as the cell's child; beyond the distance plus the streamer's [member FellowWorldStreamer3D.unload_margin] it is freed. The cell's own [Node3D] children are its proxy: shown while the content is not in the tree (an HLOD mesh, a low-detail stand-in), hidden while it is. In the editor the content is shown, not loaded into the level (see [member FellowWorldStreamer3D.editor_preview]). See [code]docs/decisions/0147-world-streaming.md[/code].
 	</description>
 	<tutorials>
 	</tutorials>

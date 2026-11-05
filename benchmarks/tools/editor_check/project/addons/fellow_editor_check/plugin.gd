@@ -3,8 +3,8 @@ extends EditorPlugin
 ## FellowEngine's editor check (milestone 50). Run by benchmarks/tools/editor_check/run_editor_check.py, which opens a
 ## copy of this project in the editor: once the first import is done it checks the fellow_editor module — the class
 ## icons, the .bvh importer, the gizmos of FellowEngine's nodes (and a picture of them where the editor renders), the
-## "Split into Streaming Cells" tool run through its menu item and dialog, the scene it leaves saved and streamed back,
-## and the Performance monitors — prints one line, EDITOR_CHECK {json}, and quits (exit code 1 on a failure).
+## "Split into Streaming Cells" tool run through its menu item and dialog (the cells' content shown in the editor, not
+## saved with the level), and the Performance monitors — prints one line, EDITOR_CHECK {json}, and quits (exit code 1 on a failure).
 ##   godot --editor --path <copy> -- --out=<directory for the picture>
 
 const ICON_CLASSES := ["FellowBurnable3D", "FellowGasEmitter3D", "FellowGasVolume3D", "FellowLightning3D",
@@ -202,26 +202,26 @@ func _check_split() -> void:
 		"report": report, "split_ms": split_ms}
 	if cells.is_empty() or files.size() != cells.size() or unowned != 0 or left.size() != 2 or report == "":
 		_fail("split: %s" % [split])
-	# Saved, opened again as a game would, and streamed back: every box where it was.
+	# In the editor the cells show their content (internal children, not saved): every box still in view.
+	await _frames(5)
+	var preview_boxes := 0
+	for c in cells:
+		for i in range(c.get_child_count(false), c.get_child_count(true)):
+			for n in c.get_child(i, true).get_children():
+				if n is MeshInstance3D:
+					preview_boxes += 1
+	split["preview_boxes"] = preview_boxes
+	if preview_boxes != 40:
+		_fail("split: %d of 40 boxes shown in the editor" % preview_boxes)
+	# Saved without them: stream_back.gd then loads the level as a game would (run_editor_check.py runs it).
 	EditorInterface.save_scene()
 	await _frames(3)
-	var packed: PackedScene = ResourceLoader.load("res://split.tscn", "", ResourceLoader.CACHE_MODE_IGNORE)
-	var level: Node3D = packed.instantiate()
-	base.add_child(level)
-	var st = level.get_node("Streamer")
-	st.prefetch(Vector3.ZERO, 1000.0)
-	split["loaded_from_saved"] = st.load_now()
-	var boxes := 0
-	for c in st.get_children():
-		if c.has_method("get_content") and c.get_content() != null:
-			for n in c.get_content().get_children():
-				if n is MeshInstance3D:
-					boxes += 1
-	split["boxes_back"] = boxes
-	level.queue_free()
+	var saved := FileAccess.get_file_as_string("res://split.tscn")
+	split["saved_boxes"] = saved.count("type=\"MeshInstance3D\"")
+	split["saved_cells"] = saved.count("type=\"FellowStreamingCell3D\"")
+	if split["saved_boxes"] != 0 or split["saved_cells"] != cells.size():
+		_fail("split: the saved level has %d boxes and %d cells" % [split["saved_boxes"], split["saved_cells"]])
 	out["split"] = split
-	if boxes != 40:
-		_fail("split: %d of 40 boxes streamed back from the saved scene" % boxes)
 
 
 func _check_monitors() -> void:

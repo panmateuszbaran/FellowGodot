@@ -4,7 +4,8 @@
 Copies benchmarks/tools/editor_check/project to a new directory, opens it in a FellowEngine editor build, and lets the
 project's editor plugin check the fellow_editor module: the class icons, the .bvh importer, the nodes' gizmos (and a
 picture of them where the editor renders), the "Split into Streaming Cells" tool through its menu item and dialog, and
-the Performance monitors. Writes editor.log, editor_check.json and gizmos.png to --out.
+the Performance monitors; then loads the level the editor split as a game would (stream_back.gd). Writes editor.log,
+stream_back.log, editor_check.json and gizmos.png to --out.
 
     python run_editor_check.py --godot bin/godot.linuxbsd.editor.x86_64 --out /tmp/editor_check [--headless]
 """
@@ -59,12 +60,26 @@ def main() -> int:
         if line.startswith("EDITOR_CHECK {"):
             result = json.loads(line[len("EDITOR_CHECK "):])
     errors = [line for line in lines if line.startswith("ERROR:") or line.startswith("SCRIPT ERROR:")]
+
+    # The level the editor split and saved, loaded as a game would and streamed back.
+    back_log = os.path.join(out, "stream_back.log")
+    with open(back_log, "w", encoding="utf-8", errors="replace") as log:
+        try:
+            back_rc = subprocess.run([args.godot, "--headless", "--path", project, "-s", "res://stream_back.gd"],
+                                     stdout=log, stderr=subprocess.STDOUT, timeout=300).returncode
+        except subprocess.TimeoutExpired:
+            back_rc = "timeout"
+    back = None
+    with open(back_log, encoding="utf-8", errors="replace") as f:
+        for line in f.read().splitlines():
+            if line.startswith("STREAM_BACK {"):
+                back = json.loads(line[len("STREAM_BACK "):])
     summary = {"returncode": rc, "seconds": round(seconds, 1), "errors": len(errors), "first_errors": errors[:10],
-               "check": result}
+               "check": result, "stream_back_returncode": back_rc, "stream_back": back}
     with open(os.path.join(out, "editor_check.json"), "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=1)
     print(json.dumps(summary, indent=1))
-    ok = rc == 0 and result is not None and not result.get("failures")
+    ok = rc == 0 and result is not None and not result.get("failures") and back_rc == 0
     print("EDITOR_CHECK_OK" if ok else "EDITOR_CHECK_FAILED")
     return 0 if ok else 1
 

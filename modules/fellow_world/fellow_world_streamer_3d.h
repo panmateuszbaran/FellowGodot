@@ -65,6 +65,7 @@ private:
 	FellowWorldStreamer3D *streamer = nullptr;
 	uint64_t request_usec = 0;
 	float distance = 0.0f; // the streamer's last measure
+	Node *editor_preview = nullptr; // milestone 50: the content shown in the editor (internal, not saved)
 
 	void _set_proxy_visible(bool p_visible);
 
@@ -84,6 +85,10 @@ public:
 	bool is_loaded() const { return state == STATE_LOADED; }
 	Node *get_content() const { return content; }
 	AABB get_global_bounds() const;
+
+	// Milestone 50 (tools): in the editor, the content as an internal child that is not saved with the level, where
+	// the cell's FellowWorldStreamer3D has editor_preview on; nothing in a game.
+	void _update_editor_preview();
 
 	FellowStreamingCell3D() {}
 	~FellowStreamingCell3D();
@@ -105,6 +110,7 @@ class FellowWorldStreamer3D : public Node3D {
 	bool threaded_instancing = true;
 	bool streaming = true;
 	bool use_camera = true;
+	bool editor_preview = true; // milestone 50
 	TypedArray<NodePath> targets;
 	LocalVector<Vector3> prefetch_points;
 	real_t prefetch_radius = 0.0;
@@ -166,6 +172,8 @@ public:
 	bool is_threaded_instancing() const { return threaded_instancing; }
 	void set_streaming(bool p_enable);
 	bool is_streaming() const { return streaming; }
+	void set_editor_preview(bool p_enable);
+	bool is_editor_preview() const { return editor_preview; }
 	void set_use_camera(bool p_enable) { use_camera = p_enable; }
 	bool is_using_camera() const { return use_camera; }
 	void set_targets(const TypedArray<NodePath> &p_targets) { targets = p_targets; }

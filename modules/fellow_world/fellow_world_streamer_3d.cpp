@@ -34,11 +34,13 @@
 #include "core/io/dir_access.h"
 #include "core/io/resource_loader.h"
 #include "core/io/resource_saver.h"
+#include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
 #include "core/os/os.h"
 #include "core/templates/sort_array.h"
 #include "scene/3d/camera_3d.h"
 #include "scene/3d/visual_instance_3d.h"
+#include "scene/main/scene_tree.h"
 #include "scene/main/viewport.h"
 
 static float _point_aabb_distance(const Vector3 &p_point, const AABB &p_box) {
@@ -52,6 +54,53 @@ static float _point_aabb_distance(const Vector3 &p_point, const AABB &p_box) {
 
 void FellowStreamingCell3D::set_scene_path(const String &p_path) {
 	scene_path = p_path;
+	if (is_inside_tree()) {
+		_update_editor_preview();
+	}
+}
+
+void FellowStreamingCell3D::_update_editor_preview() {
+#ifdef TOOLS_ENABLED
+	if (!Engine::get_singleton()->is_editor_hint() || !is_inside_tree()) {
+		return;
+	}
+	bool show = false;
+	const Node *edited = get_tree()->get_edited_scene_root();
+	if (!scene_path.is_empty() && edited && (edited == this || edited->is_ancestor_of(this))) {
+		for (Node *p = get_parent(); p; p = p->get_parent()) {
+			const FellowWorldStreamer3D *s = Object::cast_to<FellowWorldStreamer3D>(p);
+			if (s) {
+				show = s->is_editor_preview();
+				break;
+			}
+		}
+	}
+	const String shown = editor_preview ? String(editor_preview->get_meta(SNAME("_fellow_preview_path"), String())) : String();
+	if (show && editor_preview && shown == scene_path) {
+		return;
+	}
+	if (editor_preview) {
+		remove_child(editor_preview);
+		memdelete(editor_preview);
+		editor_preview = nullptr;
+	}
+	if (!show) {
+		return;
+	}
+	Ref<PackedScene> scene = ResourceLoader::load(scene_path, "PackedScene");
+	if (scene.is_null()) {
+		return;
+	}
+	Node *n = scene->instantiate(PackedScene::GEN_EDIT_STATE_DISABLED);
+	if (!n) {
+		return;
+	}
+	n->set_meta(SNAME("_fellow_preview_path"), scene_path);
+	// Internal and owned by nobody in the edited scene: not in the Scene dock, not saved; a click on it selects the
+	// cell.
+	add_child(n, false, INTERNAL_MODE_BACK);
+	editor_preview = n;
+#endif
 }
 
 void FellowStreamingCell3D::set_bounds(const AABB &p_bounds) {
@@ -76,6 +125,7 @@ void FellowStreamingCell3D::_notification(int p_what) {
 	switch (p_what) {
 		case NOTIFICATION_ENTER_TREE: {
 			if (Engine::get_singleton()->is_editor_hint()) {
+				callable_mp(this, &FellowStreamingCell3D::_update_editor_preview).call_deferred();
 				break;
 			}
 			for (Node *p = get_parent(); p; p = p->get_parent()) {
@@ -497,6 +547,24 @@ Dictionary FellowWorldStreamer3D::get_stats() const {
 
 LocalVector<FellowWorldStreamer3D *> FellowWorldStreamer3D::in_tree;
 
+static void _fellow_update_previews(Node *p_node) {
+	for (int i = 0; i < p_node->get_child_count(false); i++) {
+		Node *c = p_node->get_child(i, false);
+		FellowStreamingCell3D *cell = Object::cast_to<FellowStreamingCell3D>(c);
+		if (cell) {
+			cell->_update_editor_preview();
+		}
+		_fellow_update_previews(c);
+	}
+}
+
+void FellowWorldStreamer3D::set_editor_preview(bool p_enable) {
+	editor_preview = p_enable;
+	if (is_inside_tree()) {
+		_fellow_update_previews(this);
+	}
+}
+
 void FellowWorldStreamer3D::get_totals(int &r_cells, int &r_loaded, int &r_loading) {
 	r_cells = 0;
 	r_loaded = 0;
@@ -548,6 +616,8 @@ void FellowWorldStreamer3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("is_threaded_instancing"), &FellowWorldStreamer3D::is_threaded_instancing);
 	ClassDB::bind_method(D_METHOD("set_streaming", "enable"), &FellowWorldStreamer3D::set_streaming);
 	ClassDB::bind_method(D_METHOD("is_streaming"), &FellowWorldStreamer3D::is_streaming);
+	ClassDB::bind_method(D_METHOD("set_editor_preview", "enable"), &FellowWorldStreamer3D::set_editor_preview);
+	ClassDB::bind_method(D_METHOD("is_editor_preview"), &FellowWorldStreamer3D::is_editor_preview);
 	ClassDB::bind_method(D_METHOD("set_use_camera", "enable"), &FellowWorldStreamer3D::set_use_camera);
 	ClassDB::bind_method(D_METHOD("is_using_camera"), &FellowWorldStreamer3D::is_using_camera);
 	ClassDB::bind_method(D_METHOD("set_targets", "targets"), &FellowWorldStreamer3D::set_targets);
@@ -567,6 +637,7 @@ void FellowWorldStreamer3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "threaded_instancing"), "set_threaded_instancing", "is_threaded_instancing");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "streaming"), "set_streaming", "is_streaming");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "use_camera"), "set_use_camera", "is_using_camera");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "editor_preview"), "set_editor_preview", "is_editor_preview");
 	ADD_PROPERTY(PropertyInfo(Variant::ARRAY, "targets", PROPERTY_HINT_ARRAY_TYPE, "NodePath"), "set_targets", "get_targets");
 }
 

@@ -53,6 +53,9 @@
 		</method>
 	</methods>
 	<members>
+		<member name="editor_preview" type="bool" setter="set_editor_preview" getter="is_editor_preview" default="true">
+			In the editor, every [FellowStreamingCell3D] below the streamer shows its [member FellowStreamingCell3D.scene_path] as an internal child: not in the Scene dock, not saved with the level, and a click on it selects the cell. Off for a world too large to show whole. Nothing in a game.
+		</member>
 		<member name="load_distance" type="float" setter="set_load_distance" getter="get_load_distance" default="200.0">
 			The distance from a cell's box at which it loads (a cell's own [member FellowStreamingCell3D.load_distance] wins).
 		</member>
