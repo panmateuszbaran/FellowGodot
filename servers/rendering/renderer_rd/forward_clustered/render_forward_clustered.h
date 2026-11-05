@@ -1052,7 +1052,7 @@ private:
 	HashMap<Size2i, RID> sdfgi_framebuffer_size_cache;
 
 	struct GeometryInstanceData;
-	class GeometryInstanceForwardClustered;
+	// (GeometryInstanceForwardClustered is declared above, for FellowEngine's parallel render lists.)
 
 	struct GeometryInstanceLightmapSH {
 		Color sh[9];

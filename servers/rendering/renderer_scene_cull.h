@@ -1139,7 +1139,7 @@ public:
 	LocalVector<RID> fellow_stream_scenarios;
 	uint32_t fellow_stream_scenario_index = 0;
 	uint32_t fellow_stream_instance_index = 0;
-	virtual void fellow_texture_streaming_update() override;
+	virtual void fellow_texture_streaming_update(); // no `override`: the class has none (clang's -Winconsistent-missing-override)
 	virtual void fellow_instance_set_instance_range(RID p_instance, float p_begin, float p_end, bool p_vertices_bounded);
 
 	bool _update_instance_visibility_depth(Instance *p_instance);
