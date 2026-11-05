@@ -119,3 +119,13 @@ process against v1 (`m10_f149_cl2_ab`, GPU): Lights Lab **−0.9 %** (p 0.0009; 
 read is word for word the one stock's build and 0014's pack produce (RTX, four scenes, every frame of the runs), and
 the images are at their floors or bit for bit. The frame is faster wherever lights, decals or probes are in view, most
 where there are many (Lights Lab −2.3 %); the clear it saves costs every such scene.
+
+## Milestone 51: debug builds skipped the store pass
+
+The element-parallel store pass's shader declares the render buffer (binding 1) writable — it clears what it reads —
+and it was bound with the uniform set made for the stock variant, where binding 1 is read-only. Release builds do not
+compare the formats (the Vulkan descriptors are the same), so every measurement here, all on release templates, drew
+correctly; debug builds compare them and refused the dispatch every frame, so from `fellow130` the editor's viewport
+and debug exports drew no omni lights, spot lights, decals or reflection probes. Found by the agent toolkit's first
+run on Sponza in an editor build (decision 0152); the variant has its own uniform set now
+(`cluster_store_pack_uniform_set`).

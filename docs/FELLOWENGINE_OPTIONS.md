@@ -452,6 +452,14 @@ Monitors tab, *FellowEngine*; in every build): `Texture streaming resident` / `w
 cells loaded` / `loading`; `Motion matching time` (CPU seconds a frame, summed over the threads) / `updates` (a
 frame). Decision 0151; check `benchmarks/tools/editor_check/run_editor_check.py`.
 
+## Agent toolkit (milestone 51)
+
+`tools/fellow_agent/fellow_agent.py capture|describe|check|run|compare|import|api|init` (Python 3; JSON out, exit
+codes 0, 1, 2): a scene rendered to PNGs from its camera or framed views with statistics and errors, its tree as
+data, a project's scenes and scripts checked, frame times measured, two renders compared, the class reference
+printed, an `AGENTS.md` written for a game project. No engine setting; `AGENTS.md` at the root for agents working on
+the engine. Decision 0152; `tools/fellow_agent/README.md`.
+
 ## Options that change the image (off by default)
 
 | setting | what it does | image cost | record |
@@ -472,7 +480,7 @@ frame). Decision 0151; check `benchmarks/tools/editor_check/run_editor_check.py`
 | Shadows | `shadows/atlas_simulated_time` (from `fellow160`: at a fixed frame rate — `--fixed-fps`, Movie Maker — the positional shadow atlas waits 500 ms of the scene's time, not of the wall clock, before giving a light a shadow of another size: the same frames on every run) | 0071 |
 | Geometry | `geometry/mesh_clusters` (frustum culling inside large static surfaces) | 0007 |
 | Geometry | `geometry/multimesh_culling` (from `fellow93`: MultiMesh instances culled one by one per pass on the GPU; an autotune tunable), `geometry/multimesh_cull_min_instances`, `geometry/multimesh_cull_min_indices` | 0034 |
-| Lights | `lights/cluster_depth_slices`, `lights/zero_attenuation_skip`, `lights/cluster_pack_parallel`, `lights/fields_early` (from `fellow115`, v2 `fellow117`: Bistro interior −3.1 %, Lights Lab −3.0 %), `lights/tile_cull` (from `fellow127`, under autotune: Lights Lab −5.6 %; from `fellow132` split around the async compute part, `debug/tile_cull_split`: Bistro interior −1.9 %), `lights/cluster_pack_elements` and `lights/cluster_instanced_draws` (from `fellow130`: the cluster build without its 21.5 MB clear per frame, GPU −1 to −2.3 % where lights, decals or probes are in view) | 0008, 0014, 0045, 0049, 0051 |
+| Lights | `lights/cluster_depth_slices`, `lights/zero_attenuation_skip`, `lights/cluster_pack_parallel`, `lights/fields_early` (from `fellow115`, v2 `fellow117`: Bistro interior −3.1 %, Lights Lab −3.0 %), `lights/tile_cull` (from `fellow127`, under autotune: Lights Lab −5.6 %; from `fellow132` split around the async compute part, `debug/tile_cull_split`: Bistro interior −1.9 %), `lights/cluster_pack_elements` and `lights/cluster_instanced_draws` (from `fellow130`: the cluster build without its 21.5 MB clear per frame, GPU −1 to −2.3 % where lights, decals or probes are in view; until milestone 51 debug builds — the editor — skipped its store pass and drew no positional lights) | 0008, 0014, 0045, 0049, 0051 |
 | Shading | `shading/blended_alpha_zero_skip`, `shading/absent_features_specialized` (from `fellow142`, 63: the colour passes compiled without the decal, probe, directional, omni, spot and positional shadow code the frame cannot run; GPU −9 % Sponza, −5 to −6 % Bistros and City Lab) | 0010, 0057 |
 | Post | `postfx/screen_copy_mipmaps_on_demand` (milestone 24: the screen texture's copy builds its mip chain only when a material drawn this frame samples its mips) | 0123 |
 | Post | `postfx/depth_copy_nearest_mipmaps` (milestone 26: a material sampling `hint_depth_texture` with a mipmap filter written out gets the copy with mip levels of the nearest depth of their cells — a Hi-Z pyramid; its base level the same copy; FellowWater3D's reflections traced over it; off: stock's single level) | 0126 |

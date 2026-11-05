@@ -9,6 +9,20 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 51 — tools for AI agents (2026-11-05)
+
+- `tools/fellow_agent/fellow_agent.py` (decision 0152): `capture` (a scene to PNGs from its camera or framed views,
+  lit where it has no light, with image and rendering statistics and the share of the picture the scene covers),
+  `describe` (the node tree as data), `check` (every scene and script loaded, instantiated and run), `run` (frame time
+  percentiles), `compare` (two PNGs), `import`, `api` (the class reference), `init` (an `AGENTS.md` for a game
+  project). JSON out, exit codes 0/1/2, errors with file, line and the script's backtrace (a `Logger`).
+- `AGENTS.md` (and `CLAUDE.md`) at the root: where things are, how to build and check, the fork's rules and scope.
+- A self-test with planted faults: 26 of 26 checks on the cloud's CPU, 22 of 22 on the RTX.
+- Fixed: debug builds — the editor's viewport, debug exports — drew no omni lights, spot lights, decals or reflection
+  probes since milestone 10 (the element-parallel cluster pass bound with the stock variant's uniform set; release
+  builds unaffected).
+- A Linux editor build in the cloud.
+
 ## Milestone 50 — tools (2026-11-05)
 
 - An editor module (`fellow_editor`, editor builds only; decision 0151): gizmos for FellowEngine's nodes — a gas

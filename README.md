@@ -158,6 +158,8 @@ timestamps, plus analysis tools. See [benchmarks/README.md](benchmarks/README.md
 * `docs/fellow_milestoneN_report.md`: the milestone reports.
 * [docs/fellow_aaa_readiness.md](docs/fellow_aaa_readiness.md): an assessment of FellowEngine's readiness for AAA
   production — what is ready, what is missing, and a path.
+* [AGENTS.md](AGENTS.md): for AI agents working on the engine; [tools/fellow_agent/](tools/fellow_agent/README.md):
+  the toolkit agents use to render, describe, check and measure a project's scenes from the command line.
 
 ## Credits and license
 
