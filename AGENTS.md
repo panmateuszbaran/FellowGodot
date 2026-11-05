@@ -42,7 +42,14 @@ Other platforms build in containers: `benchmarks/tools/platforms/platforms.sh bu
   `benchmarks/tools/platforms/renderer_matrix.py`.
 * **Performance**: `benchmarks/run_benchmarks.py` (A/B with alternating order, heat soak, statistics); timings only
   mean something on a real GPU, not on lavapipe.
-* **Editor features**: `benchmarks/tools/editor_check/run_editor_check.py`.
+* **Editor features**: `benchmarks/tools/editor_check/run_editor_check.py` (`--perf <scene> --perf-idle` counts the
+  frames an untouched editor draws: a node that writes to the RenderingServer every frame without a visible change, or
+  dispatches GPU work without asking for a frame (`Fellow::request_redraw()`), is a bug).
+* **A new node**: give it configuration warnings (`get_configuration_warnings()`, shared phrasing in
+  `modules/fellow_fluid/fellow_node_warnings.h`) for what stops it working, and handles in `modules/fellow_editor` if it
+  has a shape; `fellow_agent.py check` reports the warnings.
+* **A new project setting**: add its description to `doc/tools/fellow_settings_docs.py` and run it (it fails on a
+  setting without one).
 * **Bound API**: every new bound member, method, signal or constant gets a description in its class XML; check with
   `xmllint --noout --schema doc/class.xsd <file>` and `python doc/tools/make_rst.py --dry-run doc/classes modules platform`
   (no errors; no warnings in FellowEngine's classes). A class of a module is listed in its `config.py`'s

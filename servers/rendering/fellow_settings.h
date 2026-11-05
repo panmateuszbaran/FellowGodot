@@ -46,6 +46,17 @@ namespace Fellow {
 
 void register_settings();
 
+// Milestone 52: whether FellowEngine's time-driven nodes (water, rain, lightning, wind, shallow water, gas) animate in
+// the editor, as in a running game (true, the default) or stand still, the editor redrawing only when something
+// changes. Set by the editor (modules/fellow_editor: Editor Settings > Editors > 3D > FellowEngine > Animate Nodes, and
+// the 3D editor's toolbar); games always animate.
+void set_editor_animate(bool p_animate);
+bool is_editor_animate();
+// A frame asked for, as a write to the RenderingServer does: for a node whose GPU work changes what is drawn without
+// such a write (a simulation's step). Where frames are drawn only on a change (the editor, low processor mode), its work
+// would otherwise wait, unseen, for the next frame drawn.
+void request_redraw();
+
 inline bool enabled() {
 	return GLOBAL_GET_CACHED(bool, "rendering/fellow/enabled");
 }

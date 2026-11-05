@@ -648,7 +648,7 @@ PackedStringArray FellowGasVolume3D::get_configuration_warnings() const {
 	}
 	if (FellowWarnings::compatibility()) {
 		warnings.push_back(RTR("The Compatibility renderer neither simulates nor draws gas: use Forward+."));
-	} else if (!FellowWarnings::forward_plus()) {
+	} else if (FellowWarnings::mobile()) {
 		warnings.push_back(RTR("The Mobile renderer simulates the gas but does not draw it: use Forward+."));
 	}
 	bool emitter = false;
@@ -707,12 +707,26 @@ void FellowGasVolume3D::_notification(int p_what) {
 				_queue_step(false);
 			}
 			prewarm_left -= batch;
-			// Still in the editor unless it updates continuously (milestone 52): prewarmed, then not stepped.
+			// Still in the editor with its Animate Nodes toggle off (milestone 52): prewarmed, then not stepped.
 			if (fellow_editor_still()) {
 				return;
 			}
 			for (int i = 0; i < substeps; i++) {
 				_queue_step(i == substeps - 1 && fire_light);
+			}
+			// The gas moved: drawn (milestone 52; the editor draws only on a change) — while something emits or burns,
+			// and the 20 s after, as the smoke clears; an empty box asks for nothing.
+			bool emitting = fire_power > 0.0f;
+			for (int i = 0; i < get_child_count() && !emitting; i++) {
+				const FellowGasEmitter3D *e = Object::cast_to<FellowGasEmitter3D>(get_child(i));
+				emitting = e && e->is_emitting() && e->is_visible_in_tree();
+			}
+			if (emitting) {
+				redraw_ticks = 20 * Engine::get_singleton()->get_physics_ticks_per_second();
+			}
+			if (substeps > 0 && render_enabled && is_visible_in_tree() && redraw_ticks > 0) {
+				redraw_ticks--;
+				Fellow::request_redraw();
 			}
 		} break;
 		case NOTIFICATION_INTERNAL_PROCESS: {

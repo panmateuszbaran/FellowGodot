@@ -31,16 +31,15 @@
 #pragma once
 
 #include "core/config/engine.h"
-#include "core/os/os.h"
+#include "servers/rendering/fellow_settings.h"
 
 // FellowEngine (milestone 52): in the editor, the nodes that advance with time — the water's waves, the rain, lightning,
-// the gas and shallow-water simulations — animate only while the editor updates continuously (Editor Settings >
-// Interface > Editor > Display > Update Continuously), as shaders using TIME do in Godot. The editor's default redraws
-// only when something changes; nodes that changed their state every frame made it redraw (or simulate on the GPU) all
-// the time, the scene untouched. Games are not affected.
+// the wind, the gas and shallow-water simulations — animate as in a running game unless the editor's "Animate Nodes"
+// toggle (the 3D editor's toolbar; Editor Settings > Editors > 3D > FellowEngine) is off: then they stand still, and
+// the editor, which redraws only when something changes, does not redraw or simulate for them. Games always animate.
 inline bool fellow_editor_still() {
 #ifdef TOOLS_ENABLED
-	return Engine::get_singleton()->is_editor_hint() && OS::get_singleton()->is_in_low_processor_usage_mode();
+	return Engine::get_singleton()->is_editor_hint() && !Fellow::is_editor_animate();
 #else
 	return false;
 #endif

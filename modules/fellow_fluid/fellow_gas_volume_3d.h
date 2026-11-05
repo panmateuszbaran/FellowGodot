@@ -160,6 +160,7 @@ private:
 	Vector3 fire_light_position;
 	Color fire_light_rgb;
 	float fire_power = 0.0f;
+	int redraw_ticks = 0; // milestone 52: physics ticks left asking for frames after the last emission
 
 	void _update_grid();
 	Transform3D _grid_to_world() const;

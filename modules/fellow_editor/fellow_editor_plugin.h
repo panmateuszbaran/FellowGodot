@@ -34,6 +34,7 @@
 #include "editor/plugins/editor_plugin.h"
 #include "editor/scene/3d/node_3d_editor_gizmos.h"
 
+class Button;
 class ConfirmationDialog;
 class Gizmo3DHelper;
 class LineEdit;
@@ -117,7 +118,8 @@ public:
 
 // The editor's side of FellowEngine (milestone 50): the gizmos, the BVH importer, and Project > Tools > "Split into
 // Streaming Cells..." for the selected FellowWorldStreamer3D (FellowWorldStreamer3D.split_into_cells() on its
-// parent's other children).
+// parent's other children). Milestone 52: the 3D editor's toolbar toggle (and editor setting
+// editors/3d/fellow/animate_nodes) that lets FellowEngine's nodes animate in the editor or stand still.
 class FellowEditorPlugin : public EditorPlugin {
 	GDCLASS(FellowEditorPlugin, EditorPlugin);
 
@@ -127,9 +129,13 @@ class FellowEditorPlugin : public EditorPlugin {
 	SpinBox *split_cell_size = nullptr;
 	LineEdit *split_directory = nullptr;
 	ObjectID split_streamer;
+	Button *animate_button = nullptr; // milestone 52: the 3D editor's toolbar toggle
 
 	void _split_menu();
 	void _split_confirmed();
+	void _animate_toggled(bool p_animate);
+	void _editor_settings_changed();
+	void _update_animate_icon();
 
 protected:
 	void _notification(int p_what);

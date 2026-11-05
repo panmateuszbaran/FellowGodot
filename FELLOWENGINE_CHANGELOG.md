@@ -9,6 +9,22 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 52 — the editor: idle, warnings, handles, tooltips (2026-11-05)
+
+- An untouched editor draws nothing for FellowEngine's nodes unless they move (decision 0153): values written to the
+  RenderingServer only when they change (lightning no longer redraws between strikes, rain no longer rewrites its
+  drops' positions), passes not dispatched again with the same inputs, simulations asking for a frame per step
+  instead of piling up work the editor never drew. The 3D toolbar's **Animate** toggle (editor setting
+  `editors/3d/fellow/animate_nodes`) stills water, rain, lightning, wind, gas and shallow water in the editor.
+- Configuration warnings for FellowEngine's nodes; `FellowEditorTools.get_configuration_warnings()`; fellow_agent's
+  `check` reports every node's warnings.
+- Handles (undoable) for emitters, water extent, shallow-water domain, streaming cell bounds, snow trackers and
+  lightning; gizmos redraw when their properties change.
+- Tooltips for all 296 `rendering/fellow/*` project settings (`doc/tools/fellow_settings_docs.py`).
+- Fixed: the rain's shelter heightfield bound in the pass rendering it (debug builds skipped those draws: no shelter in
+  the editor); shallow water's timestamps overflowing between frames; Update Continuously set in Editor Settings
+  applying only after a restart (stock); a still capture hanging in a project with low processor mode.
+
 ## Milestone 51 — tools for AI agents (2026-11-05)
 
 - `tools/fellow_agent/fellow_agent.py` (decision 0152): `capture` (a scene to PNGs from its camera or framed views,

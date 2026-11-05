@@ -76,13 +76,14 @@ inline const Node *scene_root(const Node *p_node) {
 	return p_node->get_tree()->get_root();
 }
 
-inline bool forward_plus() {
-	return OS::get_singleton()->get_current_rendering_method() == "forward_plus";
+// The renderer the project draws with. Neither is true without one (headless, the dummy renderer: nothing is drawn, and
+// nothing said about it).
+inline bool compatibility() {
+	return OS::get_singleton()->get_current_rendering_method() == "gl_compatibility";
 }
 
-inline bool compatibility() {
-	const String m = OS::get_singleton()->get_current_rendering_method();
-	return m == "gl_compatibility" || m == "dummy";
+inline bool mobile() {
+	return OS::get_singleton()->get_current_rendering_method() == "mobile";
 }
 
 } // namespace FellowWarnings

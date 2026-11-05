@@ -396,7 +396,7 @@ void FellowRain3D::_push_state() {
 		tp.origin[1] = int32_t(Math::floor(c.z / cell + 0.5f));
 		tp.size = size;
 		tp.cell = cell;
-		if (_is_snow() && rain > 0.0f && track_refill_time > 0.0f) {
+		if (_is_snow() && rain > 0.0f && track_refill_time > 0.0f && !fellow_editor_still()) {
 			track_refill_accum += double(rain * rain_here) * snow_depth / track_refill_time * MIN(get_process_delta_time(), 1.0);
 		}
 		if (track_refill_accum >= 1e-4) {
@@ -436,14 +436,27 @@ void FellowRain3D::_push_state() {
 		st.tracks_window = track_window;
 		memcpy(state.ptrw(), &st, sizeof(st));
 	}
-	// Still in the editor (milestone 52): nothing sent when nothing changed (the ripples' pass would run again).
-	if (fellow_editor_still() && tracks_data.is_empty() && sent_enabled == int(enabled) && push == sent_push && state == sent_state) {
+	// Milestone 52: the ripples' pass only while it rains, and once more when it stops (they flatten): a wet scene
+	// without rain dispatched it every frame, for the same flat ripples (in the editor, between the frames it drew).
+	const bool ripples = enabled && (pc.rain > 0.0f || sent_ripple_rain > 0.0f);
+	sent_ripple_rain = enabled ? pc.rain : 0.0f;
+	// The tracks' pass with nothing to do: no stamp, no refill, the window where it was.
+	bool tracks_idle = tracks_data.is_empty();
+	if (!tracks_idle) {
+		TracksPush tp;
+		memcpy(&tp, tracks_data.ptr(), sizeof(tp));
+		tracks_idle = tp.stamp_count == 0 && tp.refill <= 0.0f && tp.origin[0] == sent_tracks_origin[0] && tp.origin[1] == sent_tracks_origin[1];
+		sent_tracks_origin[0] = tp.origin[0];
+		sent_tracks_origin[1] = tp.origin[1];
+	}
+	// Still in the editor (milestone 52): nothing sent when nothing changed.
+	if (fellow_editor_still() && tracks_idle && sent_enabled == int(enabled) && push == sent_push && state == sent_state) {
 		return;
 	}
 	sent_enabled = int(enabled);
 	sent_push = push;
 	sent_state = state;
-	RS::get_singleton()->call_on_render_thread(callable_mp(this, &FellowRain3D::_rt_update).bind(push, enabled, state, tracks_data));
+	RS::get_singleton()->call_on_render_thread(callable_mp(this, &FellowRain3D::_rt_update).bind(push, enabled, ripples, state, tracks_data));
 }
 
 bool FellowRain3D::_tracks_active() const {
@@ -492,7 +505,7 @@ PackedStringArray FellowRain3D::get_configuration_warnings() const {
 	}
 	if (!Fellow::fluid_enabled()) {
 		warnings.push_back(RTR("FellowEngine's fluids are off in the Project Settings (Rendering > Fellow > Enabled, or Rendering > Fellow > Fluid > Enabled): only the falling drops are drawn."));
-	} else if (!FellowWarnings::forward_plus()) {
+	} else if (FellowWarnings::mobile() || FellowWarnings::compatibility()) {
 		warnings.push_back(RTR("Wet, snowy and frosted surfaces, puddles, ripples and shelter are drawn only with the Forward+ renderer: this one draws the falling drops alone."));
 	}
 	return warnings;
@@ -517,8 +530,8 @@ void FellowRain3D::_notification(int p_what) {
 		} break;
 		case NOTIFICATION_INTERNAL_PROCESS: {
 			double dt = get_process_delta_time();
-			// Still in the editor unless it updates continuously (milestone 52): no time, no falling drops, nothing
-			// written or sent that did not change.
+			// Still in the editor with its Animate Nodes toggle off (milestone 52): no time, no falling drops. Nothing
+			// written that did not change (each write had the renderer redraw).
 			const bool still = fellow_editor_still();
 			if (time_auto && !still) {
 				time += dt;
@@ -631,6 +644,8 @@ void FellowRain3D::_notification(int p_what) {
 			}
 			last_time = -1.0;
 			sent_enabled = -1;
+			sent_ripple_rain = 1.0f;
+			sent_tracks_origin[0] = INT32_MAX;
 		} break;
 	}
 }
@@ -730,7 +745,7 @@ void FellowRain3D::_rt_disable() {
 	}
 }
 
-void FellowRain3D::_rt_update(PackedByteArray p_push, bool p_enabled, PackedByteArray p_state, PackedByteArray p_tracks) {
+void FellowRain3D::_rt_update(PackedByteArray p_push, bool p_enabled, bool p_ripples, PackedByteArray p_state, PackedByteArray p_tracks) {
 	RendererRD::FellowWeather *w = RendererRD::FellowWeather::get_singleton();
 	if (!w || gpu_failed || p_state.size() != int64_t(sizeof(RendererRD::FellowWeather::State)) || p_push.size() != int64_t(sizeof(PushConstant))) {
 		return;
@@ -745,7 +760,7 @@ void FellowRain3D::_rt_update(PackedByteArray p_push, bool p_enabled, PackedByte
 	memcpy(&st, p_state.ptr(), sizeof(st));
 	st.ripple_texture = ripple_tex;
 	st.enabled = p_enabled;
-	if (p_enabled) {
+	if (p_ripples) {
 		PushConstant pc;
 		memcpy(&pc, p_push.ptr(), sizeof(pc));
 		int n = ripple_size;

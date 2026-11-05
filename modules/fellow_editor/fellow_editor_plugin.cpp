@@ -43,15 +43,18 @@
 #include "editor/file_system/editor_file_system.h"
 #include "editor/scene/3d/gizmos/gizmo_3d_helper.h"
 #include "editor/scene/3d/node_3d_editor_plugin.h"
+#include "editor/settings/editor_settings.h"
 #include "editor/themes/editor_scale.h"
 #include "scene/3d/node_3d.h"
 #include "scene/gui/box_container.h"
+#include "scene/gui/button.h"
 #include "scene/gui/dialogs.h"
 #include "scene/gui/label.h"
 #include "scene/gui/line_edit.h"
 #include "scene/gui/spin_box.h"
 #include "scene/resources/animation.h"
 #include "scene/scene_string_names.h"
+#include "servers/rendering/fellow_settings.h"
 
 // ------------------------------------------------------------------ gizmos
 
@@ -603,11 +606,39 @@ void FellowEditorPlugin::_split_confirmed() {
 	EditorNode::get_singleton()->show_accept(vformat(TTR("%d streaming cells made; their scenes are in %s."), cells.size(), split_directory->get_text()), TTR("OK"));
 }
 
+// FellowEngine's nodes animate in the editor (milestone 52), or stand still: the toolbar's toggle and the editor setting
+// keep each other in step.
+static const char *FELLOW_ANIMATE_SETTING = "editors/3d/fellow/animate_nodes";
+
+void FellowEditorPlugin::_animate_toggled(bool p_animate) {
+	Fellow::set_editor_animate(p_animate);
+	EditorSettings::get_singleton()->set_setting(FELLOW_ANIMATE_SETTING, p_animate);
+	EditorSettings::get_singleton()->mark_setting_changed(FELLOW_ANIMATE_SETTING);
+}
+
+void FellowEditorPlugin::_editor_settings_changed() {
+	const bool animate = EDITOR_GET(FELLOW_ANIMATE_SETTING);
+	Fellow::set_editor_animate(animate);
+	if (animate_button && animate_button->is_pressed() != animate) {
+		animate_button->set_pressed_no_signal(animate);
+	}
+}
+
 void FellowEditorPlugin::_notification(int p_what) {
 	if (p_what == NOTIFICATION_ENTER_TREE) {
 		add_tool_menu_item(TTR("Split into Streaming Cells (FellowEngine)..."), callable_mp(this, &FellowEditorPlugin::_split_menu));
+		add_control_to_container(CONTAINER_SPATIAL_EDITOR_MENU, animate_button);
+		EditorSettings::get_singleton()->connect("settings_changed", callable_mp(this, &FellowEditorPlugin::_editor_settings_changed));
 	} else if (p_what == NOTIFICATION_EXIT_TREE) {
 		remove_tool_menu_item(TTR("Split into Streaming Cells (FellowEngine)..."));
+		remove_control_from_container(CONTAINER_SPATIAL_EDITOR_MENU, animate_button);
+		EditorSettings::get_singleton()->disconnect("settings_changed", callable_mp(this, &FellowEditorPlugin::_editor_settings_changed));
+	}
+}
+
+void FellowEditorPlugin::_update_animate_icon() {
+	if (animate_button && animate_button->has_theme_icon(SNAME("Play"), EditorStringName(EditorIcons))) {
+		animate_button->set_button_icon(animate_button->get_theme_icon(SNAME("Play"), EditorStringName(EditorIcons)));
 	}
 }
 
@@ -638,9 +669,23 @@ FellowEditorPlugin::FellowEditorPlugin() {
 	vb->add_margin_child(TTR("Directory for the cells' scenes:"), split_directory);
 	split_dialog->connect(SceneStringName(confirmed), callable_mp(this, &FellowEditorPlugin::_split_confirmed));
 	EditorNode::get_singleton()->get_gui_base()->add_child(split_dialog);
+
+	EDITOR_DEF(FELLOW_ANIMATE_SETTING, true);
+	Fellow::set_editor_animate(EDITOR_GET(FELLOW_ANIMATE_SETTING));
+	animate_button = memnew(Button);
+	animate_button->set_name("FellowAnimateNodes");
+	animate_button->set_theme_type_variation(SceneStringName(FlatButton));
+	animate_button->set_toggle_mode(true);
+	animate_button->set_pressed(Fellow::is_editor_animate());
+	animate_button->set_tooltip_text(TTR("Animate FellowEngine's nodes in the editor: the water's waves, the rain, lightning, the wind, gas and shallow water, as in the running game.\nOff: they stand still, and the editor redraws only when something changes (less GPU and power use)."));
+	animate_button->connect(SceneStringName(toggled), callable_mp(this, &FellowEditorPlugin::_animate_toggled));
+	animate_button->connect(SceneStringName(theme_changed), callable_mp(this, &FellowEditorPlugin::_update_animate_icon));
 }
 
 FellowEditorPlugin::~FellowEditorPlugin() {
+	if (animate_button && !animate_button->get_parent()) {
+		memdelete(animate_button); // taken out of the toolbar on exit
+	}
 	if (ResourceFormatImporter::get_singleton()) {
 		ResourceFormatImporter::get_singleton()->remove_importer(bvh_importer);
 	}

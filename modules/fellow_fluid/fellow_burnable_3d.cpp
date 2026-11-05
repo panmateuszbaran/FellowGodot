@@ -2094,7 +2094,7 @@ PackedStringArray FellowBurnable3D::get_configuration_warnings() const {
 	}
 	if (FellowWarnings::compatibility()) {
 		warnings.push_back(RTR("The Compatibility renderer does not burn objects: use Forward+."));
-	} else if (!FellowWarnings::forward_plus()) {
+	} else if (FellowWarnings::mobile()) {
 		warnings.push_back(RTR("The Mobile renderer does not draw the flames and smoke (a gas volume's): use Forward+."));
 	}
 	const MeshInstance3D *target = _get_target();

@@ -36,6 +36,7 @@
 #include "servers/rendering/fellow_parallel.h"
 #include "servers/rendering/renderer_compositor.h"
 #include "servers/rendering/rendering_device.h"
+#include "servers/rendering/rendering_server_default.h"
 #include "servers/rendering/rendering_server_globals.h"
 
 #include <atomic>
@@ -439,6 +440,20 @@ bool Fellow::raytracing_active() {
 		print_verbose("FellowEngine: ray tracing on (ray queries).");
 	}
 	return s == 1;
+}
+
+static std::atomic<bool> fellow_editor_animate{ true };
+
+void Fellow::set_editor_animate(bool p_animate) {
+	fellow_editor_animate.store(p_animate, std::memory_order_relaxed);
+}
+
+bool Fellow::is_editor_animate() {
+	return fellow_editor_animate.load(std::memory_order_relaxed);
+}
+
+void Fellow::request_redraw() {
+	RenderingServerDefault::redraw_request();
 }
 
 bool Fellow::cpu_hot_workers_gate_open() {

@@ -36,8 +36,8 @@
 #include "scene/resources/material.h"
 #include "scene/resources/particle_process_material.h"
 #include "scene/resources/texture_rd.h"
-#include "servers/rendering/rendering_device.h"
 #include "servers/rendering/renderer_rd/effects/fellow_weather.h"
+#include "servers/rendering/rendering_device.h"
 #include "servers/rendering/rendering_device_binds.h"
 
 // FellowEngine rain (docs/decisions/0124-rain.md): drops falling around the camera (GPU particles colliding with the
@@ -173,6 +173,8 @@ private:
 	int sent_enabled = -1;
 	PackedByteArray sent_push;
 	PackedByteArray sent_state;
+	float sent_ripple_rain = 1.0f; // the ripples' last pass: its rain (a first pass, then none while it is 0)
+	int32_t sent_tracks_origin[2] = { INT32_MAX, INT32_MAX };
 
 	// Render thread.
 	RenderingDevice *rd = nullptr;
@@ -210,7 +212,7 @@ private:
 	void _push_state();
 	void _rt_create();
 	void _rt_free();
-	void _rt_update(PackedByteArray p_push, bool p_enabled, PackedByteArray p_state, PackedByteArray p_tracks);
+	void _rt_update(PackedByteArray p_push, bool p_enabled, bool p_ripples, PackedByteArray p_state, PackedByteArray p_tracks);
 	void _rt_tracks(RendererRD::FellowWeather::State &r_state, const PackedByteArray &p_tracks);
 	void _rt_free_tracks();
 	bool _tracks_active() const;

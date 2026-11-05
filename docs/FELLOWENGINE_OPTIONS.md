@@ -452,6 +452,19 @@ Monitors tab, *FellowEngine*; in every build): `Texture streaming resident` / `w
 cells loaded` / `loading`; `Motion matching time` (CPU seconds a frame, summed over the threads) / `updates` (a
 frame). Decision 0151; check `benchmarks/tools/editor_check/run_editor_check.py`.
 
+## The editor: animate or still, warnings, handles (milestone 52)
+
+In the editor FellowEngine's time-driven nodes animate as in the game (the water's waves, rain, lightning, wind, gas
+and shallow water), and ask for frames only for what moves: nothing they give the renderer is written again unchanged
+(lightning between strikes, rain's drops, the water's clock), simulations ask for a frame per step (gas while it emits
+and 20 s after). The 3D editor's toolbar toggle **Animate** — the editor setting `editors/3d/fellow/animate_nodes` (on)
+— stills them: the editor then redraws only when something changes. Games always animate. The nodes' configuration
+warnings (the Scene dock's icon) say when one cannot work where it is; `FellowEditorTools.get_configuration_warnings()`
+returns them to scripts and fellow_agent's `check` reports them. Handles for emitters, water extent, shallow-water
+domain, cell bounds, snow tracker, lightning distances (undoable). Every `rendering/fellow/*` setting has a tooltip
+(`doc/tools/fellow_settings_docs.py`). Decision 0153; check `benchmarks/tools/editor_check/run_editor_check.py`
+(`--perf <scene> --perf-idle [--perf-still]` measures the idle editor).
+
 ## Agent toolkit (milestone 51)
 
 `tools/fellow_agent/fellow_agent.py capture|describe|check|run|compare|import|api|init` (Python 3; JSON out, exit

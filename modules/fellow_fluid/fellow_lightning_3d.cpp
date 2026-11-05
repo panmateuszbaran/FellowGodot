@@ -356,8 +356,8 @@ void FellowLightning3D::_notification(int p_what) {
 			set_process_internal(true);
 		} break;
 		case NOTIFICATION_INTERNAL_PROCESS: {
-			// Still in the editor unless it updates continuously (milestone 52): no time, no strikes (a flash under way
-			// ends: it could not fade).
+			// Still in the editor with its Animate Nodes toggle off (milestone 52): no time, no strikes (a flash under
+			// way ends: it could not fade).
 			const bool still = fellow_editor_still();
 			if (time_auto && !still) {
 				time += get_process_delta_time();

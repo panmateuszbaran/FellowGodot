@@ -1163,6 +1163,9 @@ void EditorNode::_notification(int p_what) {
 			if (EditorSettings::get_singleton()->check_changed_settings_in_group("interface/editor/display")) {
 				_update_vsync_mode();
 				DisplayServer::get_singleton()->screen_set_keep_on(EDITOR_GET("interface/editor/display/keep_screen_on"));
+				// FellowEngine (milestone 52): Update Continuously moved to this group; changed in the Editor Settings it
+				// applied only after a restart (or a change in the appearance group).
+				_update_update_spinner();
 			}
 
 #if defined(MODULE_GDSCRIPT_ENABLED) || defined(MODULE_MONO_ENABLED)

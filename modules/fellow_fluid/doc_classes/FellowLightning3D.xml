@@ -6,7 +6,7 @@
 	<description>
 		Strikes come at random times ([member strikes_per_minute]) and distances ([member distance_range]) around the current camera, or when [method strike] is called. A strike is two to four return strokes, each a flash that decays in about 40 ms: a [DirectionalLight3D] shining from the bolt's direction lights the scene (with [member shadows]), the bolt — a branching channel of [member cloud_height], built when it strikes and turned to the camera — glows, and the cloud above it lights up. Bloom makes the bolt's glow. The strikes are a function of [member seed] and [member time], so the same clock gives the same storm.
 		[signal struck] gives the bolt's foot and its distance, for the thunder: it arrives [code]distance / 343[/code] seconds later. Decision record [code]docs/decisions/0129-lightning.md[/code].
-		In the editor it strikes only while the editor updates continuously (Editor Settings > Interface > Editor > Update Continuously); by default the editor redraws only when something changes (milestone 52).
+		In the editor it strikes as in the running game; the 3D editor's toolbar toggle [b]Animate[/b] (the editor setting [code]editors/3d/fellow/animate_nodes[/code]) off stops it. Between flashes the node writes nothing to the renderer, so an idle editor does not redraw for it (milestone 52).
 	</description>
 	<tutorials>
 	</tutorials>

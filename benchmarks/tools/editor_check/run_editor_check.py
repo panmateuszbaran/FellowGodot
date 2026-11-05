@@ -33,6 +33,7 @@ def main() -> int:
                     help="no check: the 3D view of SCENE (res://) redrawn every frame and measured (EDITOR_PERF)")
     ap.add_argument("--perf-seconds", type=float, default=10.0)
     ap.add_argument("--perf-idle", action="store_true", help="with --perf: the editor's default (redraw only on a change): how often it redraws")
+    ap.add_argument("--perf-still", action="store_true", help="with --perf: FellowEngine's nodes still (the 3D toolbar's Animate toggle off)")
     ap.add_argument("--setting", action="append", default=[], metavar="SECTION/KEY=VALUE",
                     help="a project setting written into the copy's project.godot, e.g. rendering/fellow/enabled=false")
     ap.add_argument("--plain", type=int, default=0, metavar="FRAMES",
@@ -76,7 +77,8 @@ def main() -> int:
         cmd += ["--rendering-driver", args.driver]
     cmd += ["--", f"--out={out}"]
     if args.perf:
-        cmd += [f"--perf={args.perf}", f"--perf_seconds={args.perf_seconds}", f"--perf_continuous={'false' if args.perf_idle else 'true'}"]
+        cmd += [f"--perf={args.perf}", f"--perf_seconds={args.perf_seconds}", f"--perf_continuous={'false' if args.perf_idle else 'true'}",
+                f"--perf_animate={'false' if args.perf_still else 'true'}"]
     log_path = os.path.join(out, "editor.log")
     t0 = time.time()
     with open(log_path, "w", encoding="utf-8", errors="replace") as log:

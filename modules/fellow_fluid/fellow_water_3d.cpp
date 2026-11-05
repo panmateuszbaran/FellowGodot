@@ -455,8 +455,8 @@ void FellowWater3D::_notification(int p_what) {
 		} break;
 		case NOTIFICATION_INTERNAL_PROCESS: {
 			double dt = get_process_delta_time();
-			// Still in the editor unless it updates continuously (milestone 52): no time, nothing written or
-			// dispatched that did not change.
+			// Still in the editor with its Animate Nodes toggle off (milestone 52): no time. Nothing written or
+			// dispatched that did not change (each write had the renderer redraw).
 			const bool still = fellow_editor_still();
 			if (time_auto && !still) {
 				time += dt;
@@ -570,8 +570,8 @@ void FellowWater3D::_notification(int p_what) {
 			PackedByteArray bytes;
 			bytes.resize(sizeof(PushConstant));
 			memcpy(bytes.ptrw(), &pc, sizeof(PushConstant));
-			if (still && !spectrum_sent && bytes == last_dispatch) {
-				break; // the same waves as the last pass
+			if (!spectrum_sent && bytes == last_dispatch) {
+				break; // the same waves as the last pass (milestone 52: a clock standing still, the editor's or a game's)
 			}
 			last_dispatch = bytes;
 			RS::get_singleton()->call_on_render_thread(callable_mp(this, &FellowWater3D::_rt_dispatch).bind(bytes));

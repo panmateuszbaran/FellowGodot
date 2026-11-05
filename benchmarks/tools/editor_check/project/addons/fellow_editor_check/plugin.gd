@@ -62,19 +62,26 @@ func _run() -> void:
 	await _check_handles()
 	await _check_split()
 	_check_monitors()
+	_check_animate_toggle()
 	await _check_warnings()
 	out["failures"] = failures
 	print("EDITOR_CHECK ", JSON.stringify(out))
 	get_tree().quit(0 if failures.is_empty() else 1)
 
 
-# The editor's 3D view of a scene redrawn every frame (update continuously), measured (milestone 52): the frames'
-# times, the 3D viewport's CPU and GPU render times. Prints EDITOR_PERF {json}.
+# The editor's 3D view of a scene, measured (milestone 52): redrawn every frame (Update Continuously) or as the editor
+# does by default (only when something changes: how often it redraws), with FellowEngine's nodes animating or still
+# (the 3D toolbar's toggle, editors/3d/fellow/animate_nodes); the frames' times, the frames drawn, the 3D viewport's CPU
+# and GPU render times. Prints EDITOR_PERF {json}.
 func _perf(scene: String, seconds: float) -> void:
 	var settings := EditorInterface.get_editor_settings()
 	var continuous := _arg("perf_continuous", "true") == "true"
+	var animate := _arg("perf_animate", "true") == "true"
 	settings.set_setting("interface/editor/display/update_continuously", continuous)
 	settings.mark_setting_changed("interface/editor/display/update_continuously")
+	OS.low_processor_usage_mode = not continuous # the editor applies the setting through its update spinner only
+	settings.set_setting("editors/3d/fellow/animate_nodes", animate)
+	settings.mark_setting_changed("editors/3d/fellow/animate_nodes")
 	settings.emit_signal("settings_changed")
 	EditorInterface.open_scene_from_path(scene)
 	EditorInterface.set_main_screen_editor("3D")
@@ -107,7 +114,7 @@ func _perf(scene: String, seconds: float) -> void:
 		"frame_ms_p50": snappedf(sorted[int(sorted.size() * 0.5)] if not sorted.is_empty() else 0.0, 0.001),
 		"frame_ms_p95": snappedf(sorted[mini(int(sorted.size() * 0.95), sorted.size() - 1)] if not sorted.is_empty() else 0.0, 0.001),
 		"viewport_cpu_ms": snappedf(cpu / n, 0.001), "viewport_gpu_ms": snappedf(gpu / n, 0.001),
-		"frames_drawn": Engine.get_frames_drawn() - drawn0, "continuous": continuous,
+		"frames_drawn": Engine.get_frames_drawn() - drawn0, "continuous": continuous, "animate": animate,
 		"fellow_enabled": ProjectSettings.get_setting("rendering/fellow/enabled", true),
 		"adapter": RenderingServer.get_video_adapter_name(), "viewport_size": var_to_str(vp.size)}
 	if subject_time0 != null:
@@ -125,6 +132,8 @@ func _perf(scene: String, seconds: float) -> void:
 	print("EDITOR_PERF ", JSON.stringify(r))
 	settings.set_setting("interface/editor/display/update_continuously", false)
 	settings.mark_setting_changed("interface/editor/display/update_continuously")
+	settings.set_setting("editors/3d/fellow/animate_nodes", true)
+	settings.mark_setting_changed("editors/3d/fellow/animate_nodes")
 	get_tree().quit(0)
 
 
@@ -229,6 +238,24 @@ func _check_warnings() -> void:
 	await _frames(2)
 	box.queue_free()
 	await _frames(2)
+
+
+# The 3D editor's toolbar toggle for FellowEngine's nodes animating in the editor (milestone 52), and its setting.
+func _check_animate_toggle() -> void:
+	var found := EditorInterface.get_base_control().find_children("FellowAnimateNodes", "Button", true, false)
+	if found.is_empty():
+		_fail("the Animate Nodes toggle is not in the 3D editor's toolbar")
+		return
+	var button: Button = found[0]
+	var settings := EditorInterface.get_editor_settings()
+	var r := {"pressed": button.button_pressed, "setting": settings.get_setting("editors/3d/fellow/animate_nodes")}
+	button.button_pressed = false
+	r["setting_after_off"] = settings.get_setting("editors/3d/fellow/animate_nodes")
+	button.button_pressed = true
+	r["setting_after_on"] = settings.get_setting("editors/3d/fellow/animate_nodes")
+	out["animate_toggle"] = r
+	if not r["pressed"] or r["setting_after_off"] != false or r["setting_after_on"] != true:
+		_fail("the Animate Nodes toggle: %s" % [r])
 
 
 func _check_icons() -> void:

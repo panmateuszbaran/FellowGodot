@@ -42,7 +42,7 @@ PackedStringArray FellowSnowTracker3D::get_configuration_warnings() const {
 		warnings.push_back(RTR("Tracks are pressed into a FellowRain3D's snow: the scene has no FellowRain3D."));
 	} else if (!rain->get_tracks()) {
 		warnings.push_back(RTR("The FellowRain3D's Tracks are off: no tracks are pressed into its snow."));
-	} else if (!FellowWarnings::forward_plus()) {
+	} else if (FellowWarnings::mobile() || FellowWarnings::compatibility()) {
 		warnings.push_back(RTR("Snow and its tracks are drawn only with the Forward+ renderer."));
 	}
 	return warnings;

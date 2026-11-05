@@ -125,7 +125,10 @@ In the editor (milestone 50, [decision 0151](docs/decisions/0151-editor-tools.md
 gizmos (a gas volume's box with handles, emitters, water extents, shallow-water domains, streaming cells, the wind's
 arrow, lightning's band, snow trackers), `.bvh` motion capture imports as animations, **Project > Tools > Split into
 Streaming Cells** turns a level into a streamed world whose cells still show in the editor, and the debugger's
-Monitors tab shows texture streaming, world streaming and motion matching.
+Monitors tab shows texture streaming, world streaming and motion matching. From milestone 52
+([decision 0153](docs/decisions/0153-editor-idle-warnings-handles.md)) an untouched editor costs nothing unless
+something in the scene moves (the 3D toolbar's **Animate** toggle stills FellowEngine's nodes), the nodes warn when they
+cannot work where they are, every node's shape has handles, and every `rendering/fellow/*` setting has a tooltip.
 
 ## Building
 

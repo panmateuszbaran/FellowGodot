@@ -604,7 +604,7 @@ void FellowShallowWater3D::_notification(int p_what) {
 			bytes.resize(sizeof(InteractionBuffer));
 			memcpy(bytes.ptrw(), &ib, sizeof(InteractionBuffer));
 			pending_impulses.clear();
-			// Still in the editor unless it updates continuously (milestone 52): the state shown, not stepped.
+			// Still in the editor with its Animate Nodes toggle off (milestone 52): the state shown, not stepped.
 			int steps = (simulation_enabled && !fellow_editor_still()) ? substeps : 0;
 			const uint64_t drawn = Engine::get_singleton()->get_frames_drawn();
 			const bool timestamps = drawn != timestamps_frame;
@@ -612,6 +612,9 @@ void FellowShallowWater3D::_notification(int p_what) {
 				timestamps_frame = drawn;
 			}
 			RS::get_singleton()->call_on_render_thread(callable_mp(this, &FellowShallowWater3D::_rt_step).bind(steps, bytes, nc, ni, timestamps && steps > 0));
+			if (steps > 0) {
+				Fellow::request_redraw(); // the water moved: drawn (milestone 52; the editor drew it only on a change)
+			}
 		} break;
 		case NOTIFICATION_EXIT_TREE: {
 			if (gpu_ready) {

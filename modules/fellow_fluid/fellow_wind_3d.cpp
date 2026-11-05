@@ -185,7 +185,7 @@ void FellowWind3D::_notification(int p_what) {
 			set_process_internal(true);
 		} break;
 		case NOTIFICATION_INTERNAL_PROCESS: {
-			// Still in the editor unless it updates continuously (milestone 52): the sway and the gusts hold.
+			// Still in the editor with its Animate Nodes toggle off (milestone 52): the sway and the gusts hold.
 			if (time_auto && !fellow_editor_still()) {
 				time += get_process_delta_time();
 			}

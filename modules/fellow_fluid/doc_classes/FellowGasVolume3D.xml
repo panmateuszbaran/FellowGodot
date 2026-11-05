@@ -6,7 +6,7 @@
 	<description>
 		Simulates gas on a regular grid in a box (its floor centred on the node, [member size] metres, [member resolution] cells along its longest side): smoke, temperature and fuel advected by a staggered velocity field (MacCormack), fuel burning above [member ignition_temperature] into heat and soot, buoyancy, vorticity confinement, the physics bodies inside the box as obstacles, a pressure projection. [FellowGasEmitter3D] children emit smoke, fuel and heat. One step per physics tick (deterministic at a fixed tick rate).
 		The Forward+ renderer draws the volume with self-shadowing, the sun's shadow on the scene and the fire's blackbody emission; an [OmniLight3D] the node owns lights the scene from the fire. Requires a RenderingDevice renderer. See [code]docs/decisions/0117-gas-simulation.md[/code] and [code]0118-gas-rendering.md[/code].
-		In the editor the simulation steps only while the editor updates continuously (Editor Settings > Interface > Editor > Update Continuously), after its [member prewarm_steps]; by default the editor redraws only when something changes (milestone 52).
+		In the editor the simulation steps as in the running game (each step asks for a frame); the 3D editor's toolbar toggle [b]Animate[/b] (the editor setting [code]editors/3d/fellow/animate_nodes[/code]) off holds it after its [member prewarm_steps] (milestone 52).
 	</description>
 	<tutorials>
 	</tutorials>
