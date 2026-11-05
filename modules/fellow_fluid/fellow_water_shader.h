@@ -131,8 +131,19 @@ void vertex() {
 	VERTEX = vec3(xz.x + d.x, level + d.y, xz.y + d.z);
 }
 
+// The depth texture's value as normalized device z: the RenderingDevice's [0, 1] (reversed) as it is; the
+// Compatibility renderer's OpenGL window depth from [0, 1] to [-1, 1] (without it the water's thickness was 0 there
+// and the water transparent; found by the web check, milestone 50).
+float ndc_z(float d) {
+#if CURRENT_RENDERER == RENDERER_COMPATIBILITY
+	return d * 2.0 - 1.0;
+#else
+	return d;
+#endif
+}
+
 vec3 view_position(vec2 uv, float depth, mat4 inv_projection) {
-	vec4 p = inv_projection * vec4(uv * 2.0 - 1.0, depth, 1.0);
+	vec4 p = inv_projection * vec4(uv * 2.0 - 1.0, ndc_z(depth), 1.0);
 	return p.xyz / p.w;
 }
 
@@ -377,7 +388,7 @@ void fragment() {
 				if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
 					break;
 				}
-				float d = textureLod(depth_tex, uv, 0.0).r;
+				float d = ndc_z(textureLod(depth_tex, uv, 0.0).r);
 				float dz = (iz.x * d + iz.y) / (iw.x * d + iw.y) - pz;
 				if (dz > 0.0 && dz < max(0.4, (t - t_prev) * 1.5)) {
 					// Refine between the last two samples.
@@ -388,7 +399,7 @@ void fragment() {
 						float mid = 0.5 * (lo + hi);
 						vec4 cm = c0 + c1 * mid;
 						vec2 um = cm.xy / cm.w * 0.5 + 0.5;
-						float dm = textureLod(depth_tex, um, 0.0).r;
+						float dm = ndc_z(textureLod(depth_tex, um, 0.0).r);
 						if ((iz.x * dm + iz.y) / (iw.x * dm + iw.y) > p0.z + r.z * mid) {
 							hi = mid;
 						} else {

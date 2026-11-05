@@ -703,8 +703,13 @@ inline bool shadow_batched_taps() {
 // colour pass's light loops visit only those (exact: the others fail the range test of every fragment there;
 // docs/decisions/0049-light-tile-cull.md). Runtime; with lights/zero_attenuation_skip, without MSAA, multiview or VRS.
 // The largest pipeline cache file loaded at start-up, in bytes (decision 0050).
+// Read when the RenderingDevice starts, before register_settings() defines the setting: without one in the project
+// GLOBAL_GET found nothing (a warning) and the limit was the clamp's 64 MiB, every larger cache thrown away at start
+// (found by the editor check, milestone 50); the default is the setting's, 1024 MiB.
 inline uint64_t pipeline_cache_max_bytes() {
-	return uint64_t(CLAMP(int(GLOBAL_GET("rendering/fellow/frame/pipeline_cache_max_mb")), 64, 2000)) * 1024 * 1024;
+	const char *name = "rendering/fellow/frame/pipeline_cache_max_mb";
+	const int mb = ProjectSettings::get_singleton()->has_setting(name) ? int(GLOBAL_GET(name)) : 1024;
+	return uint64_t(CLAMP(mb, 64, 2000)) * 1024 * 1024;
 }
 inline bool light_tile_cull_setting() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/lights/enabled") && GLOBAL_GET_CACHED(bool, "rendering/fellow/lights/tile_cull");

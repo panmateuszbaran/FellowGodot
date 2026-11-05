@@ -345,7 +345,10 @@ void FellowWater3D::_update_material() {
 	material->set_shader_parameter("wave_slope", slope_texture);
 	material->set_shader_parameter("wave_caustics", caustics_texture);
 	material->set_shader_parameter("cascade_lengths", Vector4(cascade_lengths.x, cascade_lengths.y, cascade_lengths.z, MAX(cascade_lengths.w, 1.0f)));
-	material->set_shader_parameter("cascade_count", cascades);
+	// Without a RenderingDevice (the Compatibility renderer) there are no wave textures: no cascade is sampled, and
+	// the surface is flat (an unbound array samples white: every vertex 1 m up and across a cascade, the water out
+	// of sight; found by the web check, milestone 50).
+	material->set_shader_parameter("cascade_count", RS::get_singleton()->get_rendering_device() ? cascades : 0);
 	material->set_shader_parameter("wave_texels", float(wave_resolution));
 	material->set_shader_parameter("wave_scale", wave_scale);
 	material->set_shader_parameter("foam_noise", foam_noise);

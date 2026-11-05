@@ -72,12 +72,18 @@ void fragment() {
 
 	vec2 ruv = clamp(SCREEN_UV + n_world.xz * refraction_strength, vec2(0.001), vec2(0.999));
 	float d = textureLod(depth_tex, ruv, 0.0).r;
+#if CURRENT_RENDERER == RENDERER_COMPATIBILITY
+	d = d * 2.0 - 1.0; // OpenGL's window depth to normalized device z (milestone 50)
+#endif
 	vec4 vp = INV_PROJECTION_MATRIX * vec4(ruv * 2.0 - 1.0, d, 1.0);
 	vp.xyz /= vp.w;
 	if (-vp.z < -VERTEX.z) {
 		// Refracted sample lies in front of the surface: use the undistorted position.
 		ruv = SCREEN_UV;
 		d = textureLod(depth_tex, ruv, 0.0).r;
+#if CURRENT_RENDERER == RENDERER_COMPATIBILITY
+		d = d * 2.0 - 1.0;
+#endif
 		vp = INV_PROJECTION_MATRIX * vec4(ruv * 2.0 - 1.0, d, 1.0);
 		vp.xyz /= vp.w;
 	}

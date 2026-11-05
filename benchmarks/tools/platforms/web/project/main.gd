@@ -48,4 +48,10 @@ func _report() -> void:
 		"size": [img.get_width(), img.get_height()] if img != null else [],
 		"fellow_classes": ClassDB.class_exists("FellowWater3D") and ClassDB.class_exists("FellowWorldStreamer3D"),
 	}
+	# On a desktop build, --shot=<file.png> keeps the picture (the web check's screenshot is the browser's).
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--shot=") and img != null:
+			img.save_png(a.substr(7))
 	print("WEB_CHECK ", JSON.stringify(r))
+	if OS.get_name() != "Web":
+		get_tree().quit()
