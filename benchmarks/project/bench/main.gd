@@ -426,38 +426,48 @@ func _texture_streaming_info() -> Dictionary:
 
 
 ## FellowEngine world streaming (milestone 46): waits until the scene's FellowWorldStreamer3D (its `streamer`) has
-## every cell in range in the tree (at most --streaming_wait frames). Nothing without one.
+## every cell in range in the tree (at most --streaming_wait frames, or --streaming_wait_s seconds, 20, where those
+## frames pass sooner). Nothing without one.
 func _wait_world_streaming() -> void:
 	var st = scene.get("streamer") if "streamer" in scene else null
 	if st == null or not st.has_method("is_settled"):
 		return
 	var limit := int(args.get("streaming_wait", "1200"))
+	var limit_usec := int(float(args.get("streaming_wait_s", "20")) * 1e6)
+	var t0 := Time.get_ticks_usec()
 	var waited := 0
-	while waited < limit and not st.is_settled():
+	# At most --streaming_wait frames, or --streaming_wait_s seconds where those frames pass sooner (a GPU at
+	# 1000 fps runs 1200 frames in a second, before the loads from disk land).
+	while (waited < limit or Time.get_ticks_usec() - t0 < limit_usec) and not st.is_settled():
 		await get_tree().process_frame
 		waited += 1
 	result["world_streaming_wait_frames"] = int(result.get("world_streaming_wait_frames", 0)) + waited
+	result["world_streaming_wait_s"] = float(result.get("world_streaming_wait_s", 0.0)) + (Time.get_ticks_usec() - t0) / 1e6
 	if not result.has("world_streaming"):
 		result["world_streaming"] = {}
 	result["world_streaming"][str(result["world_streaming"].size())] = st.get_stats()
 
 
 ## Waits until texture streaming has evaluated the current view twice and has nothing left to load (at most
-## --streaming_wait frames, 1200 by default). True if it had to wait (the caller renders its settle frames again).
+## --streaming_wait frames, 1200 by default, or --streaming_wait_s seconds, 20, where those frames pass sooner). True if
+## it had to wait (the caller renders its settle frames again).
 func _wait_texture_streaming() -> bool:
 	var d := _texture_streaming_info()
 	if d.is_empty():
 		return false
 	var c0 := int(d.get("cycles", 0))
 	var limit := int(args.get("streaming_wait", "1200"))
+	var limit_usec := int(float(args.get("streaming_wait_s", "20")) * 1e6)
+	var t0 := Time.get_ticks_usec()
 	var waited := 0
-	while waited < limit:
+	while waited < limit or Time.get_ticks_usec() - t0 < limit_usec:
 		d = _texture_streaming_info()
 		if int(d.get("cycles", 0)) >= c0 + 2 and int(d.get("pending", 1)) == 0 and int(d.get("jobs", 1)) == 0:
 			break
 		await get_tree().process_frame
 		waited += 1
 	result["texture_streaming_wait_frames"] = int(result.get("texture_streaming_wait_frames", 0)) + waited
+	result["texture_streaming_wait_s"] = float(result.get("texture_streaming_wait_s", 0.0)) + (Time.get_ticks_usec() - t0) / 1e6
 	return waited > 0
 
 
