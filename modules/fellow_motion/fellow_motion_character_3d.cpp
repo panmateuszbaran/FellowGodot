@@ -31,6 +31,7 @@
 #include "fellow_motion_character_3d.h"
 
 #include "core/config/engine.h"
+#include "core/io/file_access.h"
 #include "core/object/class_db.h"
 #include "scene/3d/mesh_instance_3d.h"
 #include "scene/3d/skeleton_3d.h"
@@ -100,10 +101,26 @@ void fellow_motion_clear_body_cache() {
 
 void FellowMotionCharacter3D::set_model_path(const String &p_path) {
 	model_path = p_path;
+	update_configuration_warnings();
 }
 
 void FellowMotionCharacter3D::set_body_path(const String &p_path) {
 	body_path = p_path;
+	update_configuration_warnings();
+}
+
+// Milestone 52: what the Scene dock's warning icon says.
+PackedStringArray FellowMotionCharacter3D::get_configuration_warnings() const {
+	PackedStringArray warnings = Node3D::get_configuration_warnings();
+	if (model_path.is_empty()) {
+		warnings.push_back(RTR("Model Path is empty: the character needs a motion model (a .fmb file) to move."));
+	} else if (!FileAccess::exists(model_path)) {
+		warnings.push_back(vformat(RTR("Model Path (%s) does not exist."), model_path));
+	}
+	if (!body_path.is_empty() && !FileAccess::exists(body_path)) {
+		warnings.push_back(vformat(RTR("Body Path (%s) does not exist."), body_path));
+	}
+	return warnings;
 }
 
 void FellowMotionCharacter3D::set_body_color(const Color &p_c) {

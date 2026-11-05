@@ -9407,7 +9407,10 @@ RID RenderForwardClustered::_setup_render_pass_uniform_set(RenderListType p_rend
 		u_ubo.uniform_type = RD::UNIFORM_TYPE_UNIFORM_BUFFER;
 		u_ubo.append_id(active ? weather->get_uniform_buffer() : fellow_weather_default_ubo);
 		uniforms.push_back(u_ubo);
-		RID occ = active ? weather->get_occlusion_texture() : RID();
+		// The rain's heightfield only in the camera's passes (the only ones that read it): the secondary passes
+		// include the one rendering into it, where binding it as well was a feedback loop that debug builds refused
+		// (the heightfield's draws skipped: no shelter from the rain in the editor; milestone 52).
+		RID occ = (active && p_render_data) ? weather->get_occlusion_texture() : RID();
 		RD::Uniform u_occ;
 		u_occ.binding = 50;
 		u_occ.uniform_type = RD::UNIFORM_TYPE_TEXTURE;

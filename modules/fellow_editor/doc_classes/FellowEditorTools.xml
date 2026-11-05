@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="FellowEditorTools" inherits="Object" api_type="editor" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+	<brief_description>
+		FellowEngine: what the editor knows about a node that scripts cannot otherwise ask.
+	</brief_description>
+	<description>
+		Static methods, in editor builds only (the editor and anything run with an editor build, such as [code]tools/fellow_agent[/code]'s [code]check[/code], which reports every node's configuration warnings with it). See [code]docs/decisions/0153-editor-idle-and-warnings.md[/code].
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="get_configuration_warnings" qualifiers="static">
+			<return type="PackedStringArray" />
+			<param index="0" name="node" type="Node" />
+			<description>
+				The node's configuration warnings, the text the Scene dock's warning icon shows: those of its class (stock Godot's nodes' and FellowEngine's) and its script's [method Node._get_configuration_warnings]. Some depend on the node's place in the tree (its parent, the nodes a path leads to): ask once it is in the tree.
+			</description>
+		</method>
+	</methods>
+</class>

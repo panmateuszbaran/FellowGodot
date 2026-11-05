@@ -173,6 +173,8 @@ protected:
 	static void _bind_methods();
 
 public:
+	PackedStringArray get_configuration_warnings() const override;
+
 	static FellowWeather3D *get_active() { return active; }
 
 	void set_weather(Weather p_weather, float p_transition = -1.0f);

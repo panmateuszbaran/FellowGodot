@@ -68,17 +68,30 @@ private:
 protected:
 	static void _bind_methods();
 	void _validate_property(PropertyInfo &p_property) const;
+	void _notification(int p_what);
 
 public:
+	PackedStringArray get_configuration_warnings() const override;
+
 	void set_emitting(bool p_emitting) { emitting = p_emitting; }
 	bool is_emitting() const { return emitting; }
 	void set_shape(Shape p_shape);
 	Shape get_shape() const { return shape; }
-	void set_radius(float p_radius) { radius = MAX(p_radius, 0.0f); }
+	// The setters of what the gizmo draws redraw it (milestone 52).
+	void set_radius(float p_radius) {
+		radius = MAX(p_radius, 0.0f);
+		update_gizmos();
+	}
 	float get_radius() const { return radius; }
-	void set_box_size(const Vector3 &p_size) { box_size = p_size.max(Vector3()); }
+	void set_box_size(const Vector3 &p_size) {
+		box_size = p_size.max(Vector3());
+		update_gizmos();
+	}
 	Vector3 get_box_size() const { return box_size; }
-	void set_height(float p_height) { height = MAX(p_height, 0.0f); }
+	void set_height(float p_height) {
+		height = MAX(p_height, 0.0f);
+		update_gizmos();
+	}
 	float get_height() const { return height; }
 	void set_smoke(float p_smoke) { smoke = MAX(p_smoke, 0.0f); }
 	float get_smoke() const { return smoke; }

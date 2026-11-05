@@ -83,6 +83,9 @@ func _initialize() -> void:
 	if out_dir != "":
 		DirAccess.make_dir_recursive_absolute(out_dir)
 	OS.add_logger(logger)
+	# A project in low processor mode draws only when something changes: the frames this script waits for would not
+	# come for a still scene (milestone 52).
+	OS.low_processor_usage_mode = false
 	process_frame.connect(_main, CONNECT_ONE_SHOT)
 
 
@@ -581,6 +584,23 @@ func _collect(dir: String, exts: Array, out: Array) -> void:
 			_collect(dir.path_join(d), exts, out)
 
 
+# Every node's configuration warnings (the Scene dock's warning icons), once the scene is in the tree and has run:
+# FellowEditorTools, in editor builds (milestone 52). They are reported, and do not fail the check.
+func _configuration_warnings(root: Node) -> Array:
+	if not ClassDB.class_exists("FellowEditorTools"):
+		return []
+	var found := []
+	var stack: Array[Node] = [root]
+	while not stack.is_empty():
+		var n: Node = stack.pop_back()
+		var w: PackedStringArray = ClassDB.class_call_static("FellowEditorTools", "get_configuration_warnings", n)
+		for t in w:
+			found.append({"node": String(root.get_path_to(n)), "class": n.get_class(), "warning": t})
+		for c in n.get_children():
+			stack.append(c)
+	return found
+
+
 func _check() -> void:
 	var frames := int(args.get("frames", "5"))
 	var result := {"command": "check"}
@@ -620,6 +640,9 @@ func _check() -> void:
 			get_root().add_child(root)
 			await _frames(frames)
 			r["nodes"] = _scene_summary(root)["nodes"]
+			var warnings := _configuration_warnings(root)
+			if not warnings.is_empty():
+				r["configuration_warnings"] = warnings
 			root.queue_free()
 			await _frames(1)
 		var errs := logger.take()
@@ -631,8 +654,13 @@ func _check() -> void:
 	result["scenes"] = scene_results
 	var bad_scripts := script_results.filter(func(r): return not r["ok"]).size()
 	var bad_scenes := scene_results.filter(func(r): return not r["ok"]).size()
+	var warned := 0
+	for r in scene_results:
+		warned += r.get("configuration_warnings", []).size()
 	result["summary"] = {"scripts": script_results.size(), "scripts_failed": bad_scripts, "scenes": scene_results.size(),
-		"scenes_failed": bad_scenes}
+		"scenes_failed": bad_scenes, "configuration_warnings": warned}
+	if not ClassDB.class_exists("FellowEditorTools"):
+		result["hint_configuration_warnings"] = "not available: a release template (an editor build reports them)"
 	result["ok"] = bad_scripts == 0 and bad_scenes == 0
 	_finish(result, 0 if result["ok"] else 1)
 

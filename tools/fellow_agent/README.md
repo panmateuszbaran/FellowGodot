@@ -12,7 +12,7 @@ python tools/fellow_agent/fellow_agent.py <command> --help
 |---|---|---|
 | `capture --project P --scene res://x.tscn [--views iso,top,front] [--size 1280x720] --out D` | renders the scene from its camera or framed views; `view_*.png`, `sheet.png`, `report.json` (image and rendering statistics, errors) | a renderer (a display, or xvfb-run on Linux) |
 | `describe --project P --scene res://x.tscn` | the node tree as data: classes, transforms, bounds, non-default properties | headless |
-| `check --project P [--scenes a,b]` | loads every script and scene, runs each scene 5 frames; errors per file with line and backtrace | headless (`--render` to run RenderingDevice nodes) |
+| `check --project P [--scenes a,b]` | loads every script and scene, runs each scene 5 frames; errors per file with line and backtrace; every node's configuration warnings (the Scene dock's warning icons: a gas emitter outside its volume, a CollisionShape3D without a shape), reported without failing the check | headless (`--render` to run RenderingDevice nodes); the warnings need an editor build |
 | `run --project P --scene res://x.tscn --seconds 10` | frame time mean and percentiles, GPU time, errors, the last frame | a renderer |
 | `compare a.png b.png [--out diff.png]` | mean and largest difference, pixels over a threshold, PSNR | Python only |
 | `import --project P` | imports the project's assets | an editor build |
@@ -27,4 +27,5 @@ the script is the main loop, catches errors through a `Logger`, and prints `FELL
 the log's other error lines and writes `report.json` and `engine.log` to `--out`.
 
 Self-test: `python tools/fellow_agent/selftest.py --godot <editor build> --out <new directory>` (every command on
-`test_project/`, with three planted faults).
+`test_project/`, with three planted faults and, from milestone 52, a misplaced gas emitter whose configuration warning
+must be reported).

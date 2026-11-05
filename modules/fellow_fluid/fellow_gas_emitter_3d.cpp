@@ -30,11 +30,28 @@
 
 #include "fellow_gas_emitter_3d.h"
 
+#include "fellow_gas_volume_3d.h"
+
 #include "core/object/class_db.h"
+
+void FellowGasEmitter3D::_notification(int p_what) {
+	if (p_what == NOTIFICATION_PARENTED || p_what == NOTIFICATION_UNPARENTED) {
+		update_configuration_warnings();
+	}
+}
+
+PackedStringArray FellowGasEmitter3D::get_configuration_warnings() const {
+	PackedStringArray warnings = Node3D::get_configuration_warnings();
+	if (!Object::cast_to<FellowGasVolume3D>(get_parent())) {
+		warnings.push_back(RTR("A FellowGasEmitter3D emits only as a direct child of a FellowGasVolume3D."));
+	}
+	return warnings;
+}
 
 void FellowGasEmitter3D::set_shape(Shape p_shape) {
 	shape = p_shape;
 	notify_property_list_changed();
+	update_gizmos();
 }
 
 void FellowGasEmitter3D::_validate_property(PropertyInfo &p_property) const {

@@ -30,6 +30,8 @@
 
 #include "fellow_wind_3d.h"
 
+#include "fellow_editor_still.h"
+
 #include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
 #include "servers/rendering/fellow_settings.h"
@@ -162,15 +164,29 @@ void FellowWind3D::_rt_set(PackedByteArray p_state, RID p_texture) {
 	w->set_wind_state(st);
 }
 
+PackedStringArray FellowWind3D::get_configuration_warnings() const {
+	PackedStringArray warnings = Node3D::get_configuration_warnings();
+	if (is_inside_tree() && active != this) {
+		warnings.push_back(RTR("Another FellowWind3D is the wind: one wind node works at a time (the last to enter the tree)."));
+	}
+	return warnings;
+}
+
 void FellowWind3D::_notification(int p_what) {
 	switch (p_what) {
 		case NOTIFICATION_ENTER_TREE: {
+			if (active && active != this) {
+				FellowWind3D *previous = active;
+				active = this;
+				previous->update_configuration_warnings(); // no longer the wind
+			}
 			active = this;
 			_build_gusts();
 			set_process_internal(true);
 		} break;
 		case NOTIFICATION_INTERNAL_PROCESS: {
-			if (time_auto) {
+			// Still in the editor unless it updates continuously (milestone 52): the sway and the gusts hold.
+			if (time_auto && !fellow_editor_still()) {
 				time += get_process_delta_time();
 			}
 			// The gusts travel with the mean wind, by the wind's clock (a jump of the clock, as a bench's, moves them

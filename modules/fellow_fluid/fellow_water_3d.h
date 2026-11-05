@@ -166,6 +166,11 @@ private:
 	ObjectID last_wind_id;
 	float last_gust_strength = 0.0f;
 	double last_dispatch_time = -1.0;
+	// What was last written and dispatched (milestone 52: nothing written again unless it changed).
+	float last_water_time = -1.0f;
+	Vector4 last_gust_map = Vector4(-1, -1, -1, -1);
+	Transform3D last_sim_transform = Transform3D(Basis(), Vector3(Math::NaN, 0, 0));
+	PackedByteArray last_dispatch;
 
 	// Render-thread state.
 	RenderingDevice *rd = nullptr;
@@ -216,6 +221,8 @@ protected:
 	static void _bind_methods();
 
 public:
+	PackedStringArray get_configuration_warnings() const override;
+
 	void set_wind_speed(float p_speed);
 	float get_wind_speed() const { return wind_speed; }
 	void set_wind_direction(float p_degrees);

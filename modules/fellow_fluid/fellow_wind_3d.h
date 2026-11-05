@@ -65,9 +65,14 @@ protected:
 	static void _bind_methods();
 
 public:
+	PackedStringArray get_configuration_warnings() const override;
+
 	static FellowWind3D *get_active() { return active; }
 
-	void set_speed(float p_speed) { speed = MAX(0.0f, p_speed); }
+	void set_speed(float p_speed) {
+		speed = MAX(0.0f, p_speed);
+		update_gizmos(); // milestone 52: its arrow
+	}
 	float get_speed() const { return speed; }
 	void set_gustiness(float p_gustiness) { gustiness = CLAMP(p_gustiness, 0.0f, 1.0f); }
 	float get_gustiness() const { return gustiness; }

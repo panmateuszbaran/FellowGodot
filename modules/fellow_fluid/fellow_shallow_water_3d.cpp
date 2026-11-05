@@ -30,6 +30,8 @@
 
 #include "fellow_shallow_water_3d.h"
 
+#include "fellow_editor_still.h"
+#include "fellow_node_warnings.h"
 #include "fellow_swe.glsl.gen.h"
 
 #include "core/object/callable_mp.h"
@@ -153,6 +155,7 @@ void FellowShallowWater3D::set_domain_size(const Vector2 &p_size) {
 	if (is_inside_tree()) {
 		_update_mesh();
 	}
+	update_gizmos(); // milestone 52
 }
 
 void FellowShallowWater3D::set_substeps(int p_substeps) {
@@ -473,9 +476,10 @@ void FellowShallowWater3D::_rt_reset() {
 		rd->texture_update(state[i], 0, bytes);
 	}
 	steps_simulated = 0;
+	surface_pending = true; // the reset state's surface, even when nothing steps (milestone 52: the still editor)
 }
 
-void FellowShallowWater3D::_rt_step(int p_steps, PackedByteArray p_interaction, int p_colliders, int p_impulses) {
+void FellowShallowWater3D::_rt_step(int p_steps, PackedByteArray p_interaction, int p_colliders, int p_impulses, bool p_timestamps) {
 	if (gpu_failed) {
 		return;
 	}
@@ -494,9 +498,12 @@ void FellowShallowWater3D::_rt_step(int p_steps, PackedByteArray p_interaction, 
 		_rt_reset();
 		needs_reset = false;
 	}
-	_rt_read_timestamps();
-	if (p_steps <= 0) {
+	if (p_steps <= 0 && !surface_pending) {
 		return;
+	}
+	surface_pending = false;
+	if (p_timestamps) {
+		_rt_read_timestamps();
 	}
 	rd->buffer_update(interaction_buffer, 0, p_interaction.size(), p_interaction.ptr());
 
@@ -519,7 +526,11 @@ void FellowShallowWater3D::_rt_step(int p_steps, PackedByteArray p_interaction, 
 	pc.collider_drag = collider_drag;
 
 	rd->draw_command_begin_label("FellowEngine shallow water");
-	rd->capture_timestamp("FellowFluid:SimBegin");
+	// Timestamps once per frame drawn (milestone 52): steps between two frames (the editor not redrawing) went
+	// past the renderer's 256.
+	if (p_timestamps) {
+		rd->capture_timestamp("FellowFluid:SimBegin");
+	}
 	for (int s = 0; s < p_steps; s++) {
 		pc.impulse_count = s == 0 ? p_impulses : 0;
 		for (int k = KERNEL_ADVECT; k <= KERNEL_VELOCITY; k++) {
@@ -528,19 +539,34 @@ void FellowShallowWater3D::_rt_step(int p_steps, PackedByteArray p_interaction, 
 			rd->compute_list_end();
 		}
 	}
-	rd->capture_timestamp("FellowFluid:SurfaceBegin");
+	if (p_timestamps) {
+		rd->capture_timestamp("FellowFluid:SurfaceBegin");
+	}
 	{
 		RD::ComputeListID list = rd->compute_list_begin();
 		_dispatch(list, KERNEL_SURFACE, pc);
 		rd->compute_list_end();
 	}
-	rd->capture_timestamp("FellowFluid:SurfaceEnd");
+	if (p_timestamps) {
+		rd->capture_timestamp("FellowFluid:SurfaceEnd");
+	}
 	rd->draw_command_end_label();
 	steps_simulated += p_steps;
 	frames_dispatched++;
 }
 
 // ------------------------------------------------------------------ main thread
+
+PackedStringArray FellowShallowWater3D::get_configuration_warnings() const {
+	PackedStringArray warnings = Node3D::get_configuration_warnings();
+	if (FellowWarnings::fluids_off(warnings)) {
+		return warnings;
+	}
+	if (FellowWarnings::compatibility()) {
+		warnings.push_back(RTR("The Compatibility renderer does not simulate shallow water: use Forward+ or Mobile."));
+	}
+	return warnings;
+}
 
 void FellowShallowWater3D::_notification(int p_what) {
 	switch (p_what) {
@@ -578,8 +604,14 @@ void FellowShallowWater3D::_notification(int p_what) {
 			bytes.resize(sizeof(InteractionBuffer));
 			memcpy(bytes.ptrw(), &ib, sizeof(InteractionBuffer));
 			pending_impulses.clear();
-			int steps = simulation_enabled ? substeps : 0;
-			RS::get_singleton()->call_on_render_thread(callable_mp(this, &FellowShallowWater3D::_rt_step).bind(steps, bytes, nc, ni));
+			// Still in the editor unless it updates continuously (milestone 52): the state shown, not stepped.
+			int steps = (simulation_enabled && !fellow_editor_still()) ? substeps : 0;
+			const uint64_t drawn = Engine::get_singleton()->get_frames_drawn();
+			const bool timestamps = drawn != timestamps_frame;
+			if (timestamps && steps > 0) {
+				timestamps_frame = drawn;
+			}
+			RS::get_singleton()->call_on_render_thread(callable_mp(this, &FellowShallowWater3D::_rt_step).bind(steps, bytes, nc, ni, timestamps && steps > 0));
 		} break;
 		case NOTIFICATION_EXIT_TREE: {
 			if (gpu_ready) {

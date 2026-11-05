@@ -73,6 +73,11 @@ def main():
     expect("check: the runtime error found, with its line", rt and not rt.get("ok") and any(l.endswith("fails_at_ready.gd:7") for l in rt_loc), str(rt_loc))
     md = by_path.get("res://scenes/missing_dependency.tscn", {})
     expect("check: the missing dependency found", md and not md.get("ok") and "res://scenes/gone.tscn" in md.get("missing_dependencies", []), str(md.get("missing_dependencies")))
+    # Configuration warnings (milestone 52): an emitter beside its volume, not in it — reported, not a failure.
+    me = by_path.get("res://scenes/misplaced_emitter.tscn", {})
+    me_w = me.get("configuration_warnings", [])
+    expect("check: the misplaced emitter's warning, on its node", me.get("ok") and any(w.get("node") == "Emitter" and "FellowGasVolume3D" in w.get("warning", "") for w in me_w), json.dumps(me_w)[:300])
+    expect("check: the volume nothing fills warned too", any(w.get("node") == "Volume" for w in me_w), json.dumps(me_w)[:300])
 
     # capture: framed views of a scene without a camera or light.
     rc, d = tool("capture", "--project", project, "--scene", "res://scenes/fellow_3d.tscn", "--views", "iso,top,front", "--size", a.size, "--out", os.path.join(out, "views"))

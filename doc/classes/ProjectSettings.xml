@@ -2992,6 +2992,894 @@
 		<member name="rendering/environment/volumetric_fog/volume_size" type="int" setter="" getter="" default="64">
 			Base size used to determine size of froxel buffer in the camera X-axis and Y-axis. The final size is scaled by the aspect ratio of the screen, so actual values may differ from what is set. Set a larger size for more detailed fog, set a smaller size for better performance.
 		</member>
+		<member name="rendering/fellow/animation/batched_skin_transforms" type="bool" setter="" getter="" default="true">
+			A skin's bone transforms handed to the RenderingServer in one call instead of one per bone (with the separate render thread, animated crowds much faster). Exact: the same image or results as stock Godot. Decision 0077.
+		</member>
+		<member name="rendering/fellow/animation/elide_modifier_backup" type="bool" setter="" getter="" default="true">
+			Skeletons skip the bone backup around modifiers that change nothing. Exact: the same image or results as stock Godot. Decision 0076.
+		</member>
+		<member name="rendering/fellow/animation/full_weight_slerp" type="bool" setter="" getter="" default="true">
+			A rotation blended at weight 1 is copied, without the slerp's trigonometry. Exact: the same image or results as stock Godot. Decision 0076.
+		</member>
+		<member name="rendering/fellow/animation/key_hints" type="bool" setter="" getter="" default="true">
+			Animation tracks start their key search where the last one ended. Exact: the same image or results as stock Godot. Decision 0076.
+		</member>
+		<member name="rendering/fellow/animation/track_shortcuts" type="bool" setter="" getter="" default="true">
+			Animation tracks' lookups done once per track instead of per key. Exact: the same image or results as stock Godot. Decision 0076.
+		</member>
+		<member name="rendering/fellow/autotune/block_frames" type="int" setter="" getter="" default="16">
+			Frames in each block of an evaluation.
+		</member>
+		<member name="rendering/fellow/autotune/continue_undecided" type="bool" setter="" getter="" default="true">
+			An undecided evaluation of an option that starts off is continued next when it leans on. Decision 0064.
+		</member>
+		<member name="rendering/fellow/autotune/enabled" type="bool" setter="" getter="" default="true">
+			Autotune: the scene-dependent exact options switched on and off in alternating blocks of frames and kept the faster way, checked again when the frame time changes. Decision 0020.
+		</member>
+		<member name="rendering/fellow/autotune/interval_frames" type="int" setter="" getter="" default="600">
+			Frames between evaluations.
+		</member>
+		<member name="rendering/fellow/autotune/max_duty_percent" type="float" setter="" getter="" default="20.0">
+			The most of the frames evaluations may take.
+		</member>
+		<member name="rendering/fellow/autotune/max_interval_sec" type="float" setter="" getter="" default="30.0">
+			The longest time between evaluations, in seconds.
+		</member>
+		<member name="rendering/fellow/autotune/min_gain_percent" type="float" setter="" getter="" default="0.5">
+			The least gain, as a share of the frame's GPU time, for an option to be switched.
+		</member>
+		<member name="rendering/fellow/autotune/prepare_pipelines" type="bool" setter="" getter="" default="true">
+			An evaluation that switches a pipeline bit waits until the pipelines of the materials in view are compiled the other way. Decision 0068.
+		</member>
+		<member name="rendering/fellow/autotune/skip_creation_frames" type="bool" setter="" getter="" default="true">
+			Frames that compile pipelines or shaders are not counted. Decision 0064.
+		</member>
+		<member name="rendering/fellow/cpu/batched_shadow_lists" type="bool" setter="" getter="" default="true">
+			Shadow passes' render lists built together. Exact: the same image or results as stock Godot. Decision 0016.
+		</member>
+		<member name="rendering/fellow/cpu/compact_list_sort" type="bool" setter="" getter="" default="true">
+			Render lists sorted on compact records copied out of the surfaces (the same sort). Exact: the same image or results as stock Godot. Decision 0016.
+		</member>
+		<member name="rendering/fellow/cpu/compact_shadow_instances" type="bool" setter="" getter="" default="true">
+			Shadow passes' instance data compacted. Exact: the same image or results as stock Godot. Decision 0016.
+		</member>
+		<member name="rendering/fellow/cpu/cull_ranges_per_thread" type="int" setter="" getter="" default="1">
+			Ranges of instances each thread culls (measured slower above 1).
+		</member>
+		<member name="rendering/fellow/cpu/debug_instance_scratch" type="bool" setter="" getter="" default="false">
+			Debug: instance data written to system memory instead of the GPU buffer (wrong images).
+		</member>
+		<member name="rendering/fellow/cpu/enabled" type="bool" setter="" getter="" default="true">
+			FellowEngine's render-thread optimizations ([code]cpu/*[/code]: render lists, culling and recording on worker threads). Exact: the same image or results as stock Godot. Decisions 0016-0018.
+		</member>
+		<member name="rendering/fellow/cpu/hot_workers_gate" type="bool" setter="" getter="" default="true">
+			The hot workers go cold while the render thread waits for the GPU.
+		</member>
+		<member name="rendering/fellow/cpu/hot_workers_idle_priority" type="bool" setter="" getter="" default="false">
+			Experiment, off: hot workers at idle priority. Decision 0065.
+		</member>
+		<member name="rendering/fellow/cpu/hot_workers_usec" type="int" setter="" getter="" default="30">
+			How long, in microseconds, worker threads keep spinning for more of the render thread's work after their last chunk. Decision 0065.
+		</member>
+		<member name="rendering/fellow/cpu/hot_workers_wait" type="int" setter="" getter="" default="0">
+			How idle hot workers wait: 0 a pause loop, 1-2 UMWAIT (x86 CPUs that have it).
+		</member>
+		<member name="rendering/fellow/cpu/hot_workers_yield" type="bool" setter="" getter="" default="false">
+			Experiment, off: hot workers yield while they spin. Decision 0065.
+		</member>
+		<member name="rendering/fellow/cpu/instance_buffer_memory" type="int" setter="" getter="" default="0">
+			Measured and rejected: per-frame instance buffers in system memory (0 device memory, as stock). Decision 0021.
+		</member>
+		<member name="rendering/fellow/cpu/parallel_cull" type="bool" setter="" getter="" default="true">
+			The scene cull by worker tasks. Exact: the same image or results as stock Godot. Decision 0016.
+		</member>
+		<member name="rendering/fellow/cpu/parallel_instance_data" type="bool" setter="" getter="" default="true">
+			Instance data written by worker tasks. Exact: the same image or results as stock Godot. Decision 0016.
+		</member>
+		<member name="rendering/fellow/cpu/parallel_list_fill" type="bool" setter="" getter="" default="true">
+			Render lists filled by worker tasks. Exact: the same image or results as stock Godot. Decision 0016.
+		</member>
+		<member name="rendering/fellow/cpu/parallel_list_sort" type="bool" setter="" getter="" default="true">
+			Render lists sorted by worker tasks. Exact: the same image or results as stock Godot. Decision 0016.
+		</member>
+		<member name="rendering/fellow/cpu/parallel_partition" type="bool" setter="" getter="" default="false">
+			Off: the sort's partitions split across worker tasks. Decision 0016.
+		</member>
+		<member name="rendering/fellow/cpu/parallel_partition_min" type="int" setter="" getter="" default="4096">
+			With [member rendering/fellow/cpu/parallel_partition]: the smallest partition split.
+		</member>
+		<member name="rendering/fellow/cpu/parallel_recording" type="bool" setter="" getter="" default="true">
+			Large draw lists recorded by several threads, joined in order. Exact: the same image or results as stock Godot. Decision 0018.
+		</member>
+		<member name="rendering/fellow/cpu/persistent_instances" type="bool" setter="" getter="" default="true">
+			One instance data entry per surface kept in device memory and rewritten only when it changes. Exact: the same image or results as stock Godot. Decision 0022.
+		</member>
+		<member name="rendering/fellow/cpu/prefetch" type="bool" setter="" getter="" default="false">
+			Off: the list loops load instances and surfaces a few iterations ahead.
+		</member>
+		<member name="rendering/fellow/cpu/recording_segments_per_thread" type="int" setter="" getter="" default="1">
+			Segments per thread a draw list is recorded in.
+		</member>
+		<member name="rendering/fellow/cpu/verify" type="bool" setter="" getter="" default="false">
+			Debug: stock's results computed beside every list build and compared.
+		</member>
+		<member name="rendering/fellow/cpu/worker_tasks" type="int" setter="" getter="" default="-1">
+			Worker tasks of the render thread's parallel loops; -1: automatic (half the logical processors less two, 1-6). Decision 0073.
+		</member>
+		<member name="rendering/fellow/debug/batched_taps_kinds" type="int" setter="" getter="" default="3">
+			Diagnostics: the lights [member rendering/fellow/shadows/batched_taps] applies to (bits: directional, positional).
+		</member>
+		<member name="rendering/fellow/debug/cluster_keep_depth_words" type="bool" setter="" getter="" default="false">
+			Diagnostics: the light clusters keep their first version's depth words.
+		</member>
+		<member name="rendering/fellow/debug/cluster_size" type="int" setter="" getter="" default="32">
+			Diagnostics: the light cluster tile's side in pixels (32: stock's). Decision 0038.
+		</member>
+		<member name="rendering/fellow/debug/cluster_verify" type="int" setter="" getter="" default="0">
+			Diagnostics: the light cluster build checked against stock's (2: with a negative control).
+		</member>
+		<member name="rendering/fellow/debug/multimesh_stats" type="bool" setter="" getter="" default="false">
+			Diagnostics: MultiMesh culling's instance counts read back (a readback per frame).
+		</member>
+		<member name="rendering/fellow/debug/occlusion_cull_approx" type="bool" setter="" getter="" default="false">
+			Diagnostics: occlusion culling's per-surface visibility read back.
+		</member>
+		<member name="rendering/fellow/debug/occlusion_stats" type="bool" setter="" getter="" default="false">
+			Diagnostics: occlusion culling's counts read back.
+		</member>
+		<member name="rendering/fellow/debug/raytracing_decode_positions" type="bool" setter="" getter="" default="false">
+			Diagnostics: compressed vertex positions decoded for the acceleration structures even where the device builds from them.
+		</member>
+		<member name="rendering/fellow/debug/raytracing_gi_dump_every" type="int" setter="" getter="" default="0">
+			Diagnostics: the DDGI probes written to [code]user://fellow_ddgi_dump.bin[/code] every n updates (stalls the GPU; 0: never).
+		</member>
+		<member name="rendering/fellow/debug/raytracing_gi_in_shader" type="bool" setter="" getter="" default="false">
+			Diagnostics: DDGI looked up by the opaque passes themselves instead of a screen pass.
+		</member>
+		<member name="rendering/fellow/debug/raytracing_gi_reference" type="int" setter="" getter="" default="0">
+			Diagnostics: n > 0, a path traced per pixel (n bounces, accumulated while the camera stands still) in place of the probes: a reference for DDGI.
+		</member>
+		<member name="rendering/fellow/debug/raytracing_view" type="int" setter="" getter="" default="0">
+			Diagnostics: with the viewport's SSAO debug draw, the ray tracing scene seen from the camera instead (1 its hit distances, 2 where it matches the depth buffer).
+		</member>
+		<member name="rendering/fellow/debug/scene_shader_experiments" type="int" setter="" getter="" default="0">
+			Diagnostics: experiments on the compiled scene shaders, bits. Read at start-up. Decision 0037.
+		</member>
+		<member name="rendering/fellow/debug/segment_barriers" type="int" setter="" getter="" default="1">
+			The render graph's barriers for a resource used again with the same usage after an earlier command buffer of the frame wrote it (0 off, 1 resources, 2 resources and full barriers). Decision 0054.
+		</member>
+		<member name="rendering/fellow/debug/tile_cull_pass_only" type="bool" setter="" getter="" default="false">
+			Diagnostics: light tile culling's pass runs, but the opaque pass does not read its masks.
+		</member>
+		<member name="rendering/fellow/debug/tile_cull_passthrough" type="bool" setter="" getter="" default="false">
+			Diagnostics: light tile culling keeps every candidate (its code path without its effect).
+		</member>
+		<member name="rendering/fellow/debug/tile_cull_split" type="int" setter="" getter="" default="0">
+			Diagnostics: light tile culling split around the async compute part (0 when async compute runs, 1 always, 2 never).
+		</member>
+		<member name="rendering/fellow/debug/visibility_barriers" type="bool" setter="" getter="" default="true">
+			The render graph's barriers for a read from a stage the last write was not made visible to (a correctness fix). Decision 0062.
+		</member>
+		<member name="rendering/fellow/enabled" type="bool" setter="" getter="" default="true">
+			FellowEngine's master switch: off, every FellowEngine setting below is off and the engine behaves as stock Godot 4.7.2 (the nodes FellowEngine adds do nothing where they need its renderer).
+		</member>
+		<member name="rendering/fellow/fluid/burn_vertices_cached" type="bool" setter="" getter="" default="true">
+			A burning mesh's vertices march into its voxels once per frame in a compute pass, instead of in every pass that draws it. Decision 0120.
+		</member>
+		<member name="rendering/fellow/fluid/enabled" type="bool" setter="" getter="" default="true">
+			FellowEngine's simulations: FellowWater3D's waves, FellowShallowWater3D, FellowRain3D's wet surfaces and ripples, FellowGasVolume3D and FellowBurnable3D. Off: the nodes stay, nothing is simulated.
+		</member>
+		<member name="rendering/fellow/fluid/gas_mg_tail_cells" type="int" setter="" getter="" default="0">
+			For measurements: multigrid levels of at most this many cells solved in one workgroup (0: off; measured slower). Decision 0119.
+		</member>
+		<member name="rendering/fellow/fluid/gas_profile_passes" type="bool" setter="" getter="" default="false">
+			Profiling: a GPU timestamp before each group of a gas step's passes.
+		</member>
+		<member name="rendering/fellow/fluid/gas_rendering" type="bool" setter="" getter="" default="true">
+			FellowGasVolume3D's smoke and fire drawn (Forward+). Off: simulated, not drawn.
+		</member>
+		<member name="rendering/fellow/fluid/gas_scene_shadows" type="bool" setter="" getter="" default="true">
+			The sun's shadow map darkens the smoke.
+		</member>
+		<member name="rendering/fellow/fluid/gas_solver" type="int" setter="" getter="" default="0">
+			For measurements: the gas's pressure solver, 0 each node's own, 1 SOR, 2 multigrid.
+		</member>
+		<member name="rendering/fellow/fluid/gas_sparse" type="int" setter="" getter="" default="0">
+			For measurements: 0 each node's own sparse setting, 1 every gas cell simulated, 2 only the bricks near smoke, heat or an emitter. Decision 0119.
+		</member>
+		<member name="rendering/fellow/fluid/gas_sparse_margin" type="int" setter="" getter="" default="0">
+			For measurements: the sparse simulation's margin in bricks (0: each node's own).
+		</member>
+		<member name="rendering/fellow/frame/async_compute" type="int" setter="" getter="" default="2">
+			Async compute (SSAO, SSIL, SSR on a second queue beside shadows, clusters and fog): 0 off, 1 on, 2 on NVIDIA GPUs. Read when the device is created (project.godot or override.cfg only). Decision 0015.
+		</member>
+		<member name="rendering/fellow/frame/async_compute_family" type="int" setter="" getter="" default="0">
+			Diagnostics: 0 a dedicated compute queue family, 1 a second queue of the main family, 2 the main queue itself (the same submissions, nothing concurrent).
+		</member>
+		<member name="rendering/fellow/frame/async_ss_split" type="int" setter="" getter="" default="3">
+			With async compute: 0 stock's split, 1 SSIL on the main queue beside the async SSAO, 2 SSR too, 3 autotune decides SSR. Decision 0060.
+		</member>
+		<member name="rendering/fellow/frame/clear_new_textures" type="bool" setter="" getter="" default="true">
+			A texture a pass can write, created without data, is cleared before its first use (as stock on Direct3D 12): no image depends on what memory held. Decision 0070.
+		</member>
+		<member name="rendering/fellow/frame/depth_pipeline_keys" type="bool" setter="" getter="" default="true">
+			The depth passes' pipeline keys without bits their code does not read: fewer duplicate pipelines. Decision 0069.
+		</member>
+		<member name="rendering/fellow/frame/early_submit" type="bool" setter="" getter="" default="false">
+			Measured and rejected: the frame's command buffers submitted early. Decision 0009.
+		</member>
+		<member name="rendering/fellow/frame/lazy_shader_variants" type="bool" setter="" getter="" default="true">
+			Shader variants created only when first asked for: scenes load faster. Decision 0061.
+		</member>
+		<member name="rendering/fellow/frame/movie_wait_pipelines" type="bool" setter="" getter="" default="true">
+			While Movie Maker mode writes a video, a 3D draw waits for its pipeline instead of drawing with the ubershader: the same recording every run. Decision 0072.
+		</member>
+		<member name="rendering/fellow/frame/parallel_replay" type="bool" setter="" getter="" default="true">
+			The frame's draw lists replayed into secondary command buffers by worker threads (CPU-bound frames). Decision 0017.
+		</member>
+		<member name="rendering/fellow/frame/parallel_shader_create" type="bool" setter="" getter="" default="true">
+			Shaders read from the shader cache created in parallel: scenes load faster. Decision 0061.
+		</member>
+		<member name="rendering/fellow/frame/pipeline_cache_max_mb" type="int" setter="" getter="" default="1024">
+			The pipeline cache file is ignored at start-up (and replaced by the next save) when larger than this: stock lets it grow, and at 2 GiB its checksum crashed. Decision 0050.
+		</member>
+		<member name="rendering/fellow/frame/pipeline_fallback" type="bool" setter="" getter="" default="false">
+			Measured and rejected: while a pipeline compiles, a compiled one differing in bits that give the same image drawn instead of the ubershader. Decision 0059.
+		</member>
+		<member name="rendering/fellow/frame/present_thread" type="bool" setter="" getter="" default="true">
+			Presentation on a thread of its own. Decision 0017.
+		</member>
+		<member name="rendering/fellow/frame/replay_frame_plan" type="bool" setter="" getter="" default="false">
+			Off: the frame's draw lists split before the primary command buffer is recorded and replayed by the workers at once. Decision 0019.
+		</member>
+		<member name="rendering/fellow/frame/replay_max_segments" type="int" setter="" getter="" default="12">
+			The most segments a draw list is replayed in.
+		</member>
+		<member name="rendering/fellow/frame/replay_plan_min_draws" type="int" setter="" getter="" default="16">
+			With [member rendering/fellow/frame/replay_frame_plan]: lists with at least this many draws replayed as one segment.
+		</member>
+		<member name="rendering/fellow/frame/separate_present_queue" type="bool" setter="" getter="" default="false">
+			Measured and rejected: presentation from a second queue. Decision 0009.
+		</member>
+		<member name="rendering/fellow/frame/submit_thread" type="bool" setter="" getter="" default="true">
+			Command buffer submission on a thread of its own. Decision 0017.
+		</member>
+		<member name="rendering/fellow/geometry/cluster_blended_surfaces" type="bool" setter="" getter="" default="true">
+			Transparent surfaces clustered too, their draw order kept.
+		</member>
+		<member name="rendering/fellow/geometry/cluster_front_to_back" type="int" setter="" getter="" default="0">
+			Measured and rejected (no frame gain): large surfaces' clusters drawn front to back. Decision 0058.
+		</member>
+		<member name="rendering/fellow/geometry/cluster_lod" type="bool" setter="" getter="" default="false">
+			Changes the image, off: each cluster of a large surface drawn at the mesh LOD it would get as an instance of its own, without cracks. Decision 0063.
+		</member>
+		<member name="rendering/fellow/geometry/cluster_min_surface_triangles" type="int" setter="" getter="" default="32768">
+			Surfaces with at least this many triangles are clustered.
+		</member>
+		<member name="rendering/fellow/geometry/cluster_triangles" type="int" setter="" getter="" default="4096">
+			The most triangles in a cluster.
+		</member>
+		<member name="rendering/fellow/geometry/contribution_cull_instances" type="int" setter="" getter="" default="1">
+			MultiMesh instances below [member rendering/fellow/geometry/contribution_cull_pixels]: 0 culled, 1 thinned (a share kept and grown so their coverage stays).
+		</member>
+		<member name="rendering/fellow/geometry/contribution_cull_pixels" type="float" setter="" getter="" default="0.0">
+			Changes the image, off: nodes and MultiMesh instances whose bounding sphere covers fewer than this many pixels of the viewport's width are not drawn (0: off). Decision 0121.
+		</member>
+		<member name="rendering/fellow/geometry/enabled" type="bool" setter="" getter="" default="true">
+			FellowEngine's geometry optimizations ([code]geometry/*[/code]: mesh clusters, MultiMesh culling, contribution culling); off: stock's.
+		</member>
+		<member name="rendering/fellow/geometry/mesh_clusters" type="bool" setter="" getter="" default="true">
+			Large static surfaces split into clusters culled one by one against the view. Exact: the same image or results as stock Godot. Decision 0007.
+		</member>
+		<member name="rendering/fellow/geometry/multimesh_cull_min_indices" type="int" setter="" getter="" default="300000">
+			A pass's culled MultiMeshes drawing fewer indices than this with every instance are drawn the stock way (culling them would cost about what it saves).
+		</member>
+		<member name="rendering/fellow/geometry/multimesh_cull_min_instances" type="int" setter="" getter="" default="64">
+			MultiMeshes with fewer instances are not culled per instance.
+		</member>
+		<member name="rendering/fellow/geometry/multimesh_cull_vertex_motion" type="bool" setter="" getter="" default="false">
+			Changes the image where a material moves vertices beyond its node's extra cull margin, off: MultiMeshes whose material moves vertices (wind) culled too, the margin taken as how far they move. Decision 0036.
+		</member>
+		<member name="rendering/fellow/geometry/multimesh_culling" type="bool" setter="" getter="" default="true">
+			MultiMesh instances culled one by one on the GPU for each pass (camera, shadows) and drawn indirectly. Exact: the same image or results as stock Godot. Decision 0034.
+		</member>
+		<member name="rendering/fellow/geometry/multimesh_instance_lod" type="bool" setter="" getter="" default="false">
+			Changes the image, off: each culled MultiMesh instance gets its own mesh LOD level instead of its MultiMesh's. Decision 0035.
+		</member>
+		<member name="rendering/fellow/geometry/occlusion_culling" type="bool" setter="" getter="" default="false">
+			Measured and rejected (slower in most scenes): the opaque pass culled against a depth pyramid. Decision 0026.
+		</member>
+		<member name="rendering/fellow/geometry/prepass_simple_first" type="bool" setter="" getter="" default="false">
+			Measured and rejected (no gain): the depth pre-pass draws the shared-depth-material elements first. Decision 0029.
+		</member>
+		<member name="rendering/fellow/lights/cluster_depth_slices" type="bool" setter="" getter="" default="true">
+			Light clusters with logarithmic depth slices and per-element depth ranges. Exact: the same image or results as stock Godot. Decision 0008.
+		</member>
+		<member name="rendering/fellow/lights/cluster_instanced_draws" type="bool" setter="" getter="" default="true">
+			The light cluster build's proxy draws instanced. Exact: the same image or results as stock Godot. Decision 0051.
+		</member>
+		<member name="rendering/fellow/lights/cluster_pack_elements" type="bool" setter="" getter="" default="true">
+			The cluster build packs one invocation per element and leaves its 21.5 MB buffer cleared, instead of clearing it every frame. Exact: the same image or results as stock Godot. Decision 0051.
+		</member>
+		<member name="rendering/fellow/lights/cluster_pack_parallel" type="bool" setter="" getter="" default="true">
+			The cluster pack pass with one workgroup per tile. Exact: the same image or results as stock Godot. Decision 0014.
+		</member>
+		<member name="rendering/fellow/lights/enabled" type="bool" setter="" getter="" default="true">
+			FellowEngine's light optimizations ([code]lights/*[/code]: the light cluster build, tile culling); off: stock's.
+		</member>
+		<member name="rendering/fellow/lights/fields_early" type="bool" setter="" getter="" default="true">
+			Omni and spot lights' fields read together at the start of the light's function. Exact: the same image or results as stock Godot. Decision 0045.
+		</member>
+		<member name="rendering/fellow/lights/hot_fields_buffer" type="int" setter="" getter="" default="0">
+			Measured and rejected: the light loop's fields from a copy in a storage or uniform buffer. Decision 0047.
+		</member>
+		<member name="rendering/fellow/lights/prefetch_next" type="int" setter="" getter="" default="0">
+			Measured and rejected (more registers, slower): the next light's fields read while the current one is processed. Decision 0046.
+		</member>
+		<member name="rendering/fellow/lights/tile_cull" type="bool" setter="" getter="" default="true">
+			Per 8 x 8 tile, after the depth pre-pass, the omni and spot lights that can reach its geometry; the opaque pass visits only those. Under autotune: off until measured faster. Exact: the same image or results as stock Godot. Decision 0049.
+		</member>
+		<member name="rendering/fellow/lights/zero_attenuation_skip" type="bool" setter="" getter="" default="true">
+			Lights with zero attenuation at a pixel skipped. Exact: the same image or results as stock Godot. Decision 0008.
+		</member>
+		<member name="rendering/fellow/physics/convex_vertex_cache" type="bool" setter="" getter="" default="true">
+			GodotPhysics3D's separating-axis tests transform a convex shape's vertices once per test instead of once per axis. Exact: the same image or results as stock Godot. Decision 0086.
+		</member>
+		<member name="rendering/fellow/physics/distance_face_batch" type="int" setter="" getter="" default="8">
+			Faces tested together by [member rendering/fellow/physics/distance_face_cull].
+		</member>
+		<member name="rendering/fellow/physics/distance_face_cull" type="bool" setter="" getter="" default="true">
+			GodotPhysics3D's shape casts and motion tests skip the trimesh faces a conservative test proves out of reach. Exact: the same image or results as stock Godot. Decision 0085.
+		</member>
+		<member name="rendering/fellow/physics/distance_face_cull_cache" type="bool" setter="" getter="" default="true">
+			A concave shape's faces culled once per box within one motion query. Exact: the same image or results as stock Godot. Decision 0097.
+		</member>
+		<member name="rendering/fellow/physics/distance_face_order" type="bool" setter="" getter="" default="true">
+			The faces left by [member rendering/fellow/physics/distance_face_cull] tested in an order that finds a contact sooner. Exact: the same image or results as stock Godot. Decision 0085.
+		</member>
+		<member name="rendering/fellow/physics/distance_face_shape_axes" type="bool" setter="" getter="" default="true">
+			The face test of [member rendering/fellow/physics/distance_face_cull] uses a capsule or sphere itself, not its box, and the faces' edge axes. Exact: the same image or results as stock Godot. Decision 0096.
+		</member>
+		<member name="rendering/fellow/physics/distance_face_sweep_reuse" type="bool" setter="" getter="" default="true">
+			Faces proven out of reach of a sweep are not tested again for the sweeps within it. Exact: the same image or results as stock Godot. Decision 0100.
+		</member>
+		<member name="rendering/fellow/physics/fast/godot_toi" type="bool" setter="" getter="" default="false">
+			Fast mode, not stock's results: GodotPhysics3D's motion queries by the time of impact instead of an 8-step bisection. Deterministic. Decision 0102.
+		</member>
+		<member name="rendering/fellow/physics/fast/jolt_shape_cast" type="bool" setter="" getter="" default="false">
+			Fast mode, not stock's results: Jolt's motion queries ([ShapeCast3D], [code]move_and_slide()[/code]) by one shape cast per body instead of a bisection of collision tests. Deterministic. Decision 0095.
+		</member>
+		<member name="rendering/fellow/physics/island_constraint_lists" type="bool" setter="" getter="" default="true">
+			GodotPhysics3D builds islands from a contiguous list of each body's constraints. Exact: the same image or results as stock Godot. Decision 0091.
+		</member>
+		<member name="rendering/fellow/physics/jolt_bodies_per_job" type="int" setter="" getter="" default="128">
+			Jolt: active rigid bodies per job when [member rendering/fellow/physics/jolt_max_jobs] is -1.
+		</member>
+		<member name="rendering/fellow/physics/jolt_deferred_sensor_contacts" type="bool" setter="" getter="" default="true">
+			Jolt: Area3D contacts recorded per thread during the step and evaluated after it, instead of under one lock. Decision 0088.
+		</member>
+		<member name="rendering/fellow/physics/jolt_job_pumps" type="bool" setter="" getter="" default="false">
+			Measured and rejected (no consistent gain): Jolt's jobs through a lock-free queue drained by pump tasks. Decision 0092.
+		</member>
+		<member name="rendering/fellow/physics/jolt_max_jobs" type="int" setter="" getter="" default="-1">
+			Jolt: the most jobs per phase of its step; -1: by the work (one per [member rendering/fellow/physics/jolt_bodies_per_job] active bodies, at least 4). Jolt's results do not depend on it. Decision 0090.
+		</member>
+		<member name="rendering/fellow/physics/jolt_pump_spins" type="int" setter="" getter="" default="2000">
+			Spins of a pump task with [member rendering/fellow/physics/jolt_job_pumps] before it sleeps.
+		</member>
+		<member name="rendering/fellow/physics/motion_query_cache" type="bool" setter="" getter="" default="true">
+			A motion test repeated within one [code]move_and_slide()[/code] is answered from the first. Exact: the same image or results as stock Godot. Decision 0093.
+		</member>
+		<member name="rendering/fellow/physics/parallel_island_solve" type="bool" setter="" getter="" default="true">
+			GodotPhysics3D: a large island solved on every thread, each body updated in stock's order. Exact: the same image or results as stock Godot. Decision 0089.
+		</member>
+		<member name="rendering/fellow/physics/parallel_island_solve_grab" type="int" setter="" getter="" default="16">
+			Constraints a thread takes at a time in [member rendering/fellow/physics/parallel_island_solve].
+		</member>
+		<member name="rendering/fellow/physics/parallel_pair_culls" type="bool" setter="" getter="" default="true">
+			GodotPhysics3D's broadphase culls run on worker threads; the pairs are then made in stock's order. Exact: the same image or results as stock Godot. Decision 0087.
+		</member>
+		<member name="rendering/fellow/physics/ray_prune" type="bool" setter="" getter="" default="true">
+			A raycast through a concave shape skips the tree's nodes beyond its closest hit. Exact: the same image or results as stock Godot. Decision 0098.
+		</member>
+		<member name="rendering/fellow/physics/verify" type="bool" setter="" getter="" default="false">
+			Debug: every face [member rendering/fellow/physics/distance_face_cull] skips is tested anyway, and those found touching are counted.
+		</member>
+		<member name="rendering/fellow/post/atmosphere/aerial_distance_scale" type="float" setter="" getter="" default="1.0">
+			Scales the distances the aerial perspective uses: above 1, a hazier world at the same size.
+		</member>
+		<member name="rendering/fellow/post/atmosphere/aerial_perspective" type="bool" setter="" getter="" default="true">
+			Distant surfaces hazed and tinted by the air between them and the camera.
+		</member>
+		<member name="rendering/fellow/post/atmosphere/enabled" type="bool" setter="" getter="" default="false">
+			A physically based sky atmosphere (Hillaire 2020): tables for a sky shader (global shader parameters [code]fellow_atmosphere_*[/code]), aerial perspective on the opaque surfaces, the sun's colour through the air. Decision 0108.
+		</member>
+		<member name="rendering/fellow/post/atmosphere/ground_albedo" type="float" setter="" getter="" default="0.3">
+			The ground's reflectance the atmosphere's multiple scattering sees.
+		</member>
+		<member name="rendering/fellow/post/atmosphere/mie_scale" type="float" setter="" getter="" default="1.0">
+			Scales the aerosols' (Mie) scattering: 10-30 for a typical day's haze.
+		</member>
+		<member name="rendering/fellow/post/atmosphere/rayleigh_scale" type="float" setter="" getter="" default="1.0">
+			Scales the air's (Rayleigh) scattering: the sky's blue.
+		</member>
+		<member name="rendering/fellow/post/atmosphere/srgb_rayleigh" type="bool" setter="" getter="" default="true">
+			Rayleigh coefficients for sRGB primaries; off: Unreal's, a bluer sky.
+		</member>
+		<member name="rendering/fellow/post/atmosphere/sun_transmittance" type="bool" setter="" getter="" default="true">
+			The sun's light coloured by the atmosphere it passes through (reddened low on the horizon).
+		</member>
+		<member name="rendering/fellow/post/bloom/enabled" type="bool" setter="" getter="" default="false">
+			An energy-conserving bloom of the whole image (no threshold: bright sources glow in proportion), independent of Godot's glow. Decision 0112.
+		</member>
+		<member name="rendering/fellow/post/bloom/intensity" type="float" setter="" getter="" default="0.05">
+			How much of the bloom is mixed into the image.
+		</member>
+		<member name="rendering/fellow/post/bloom/lens_dirt" type="float" setter="" getter="" default="0.0">
+			The environment's glow map used as a lens dirt mask, added where the bloom (or Godot's glow) is. Needs a glow map. 0: off. Decision 0111.
+		</member>
+		<member name="rendering/fellow/post/bloom/lens_flare" type="float" setter="" getter="" default="0.0">
+			Lens flare ghosts and a halo of the sources brighter than [member rendering/fellow/post/bloom/lens_flare_threshold]. Needs the bloom. 0: off. Decision 0113.
+		</member>
+		<member name="rendering/fellow/post/bloom/lens_flare_threshold" type="float" setter="" getter="" default="8.0">
+			The scene-linear brightness above which a source makes lens flares.
+		</member>
+		<member name="rendering/fellow/post/bloom/scatter" type="float" setter="" getter="" default="0.7">
+			How wide the bloom spreads (the weight of its larger levels).
+		</member>
+		<member name="rendering/fellow/post/clouds/altitude" type="float" setter="" getter="" default="1.5">
+			The cloud layer's base, in kilometres.
+		</member>
+		<member name="rendering/fellow/post/clouds/coverage" type="float" setter="" getter="" default="0.45">
+			The share of the sky the clouds cover (0-1).
+		</member>
+		<member name="rendering/fellow/post/clouds/density" type="float" setter="" getter="" default="1.0">
+			The clouds' density: thicker, darker clouds above 1.
+		</member>
+		<member name="rendering/fellow/post/clouds/enabled" type="bool" setter="" getter="" default="false">
+			Volumetric clouds over the sky's pixels (ray-marched at half resolution, temporal), lit through the atmosphere when it is on, with their shadows on the scene. A FellowWeather3D sets their coverage and density. Decision 0109.
+		</member>
+		<member name="rendering/fellow/post/clouds/interleaved" type="bool" setter="" getter="" default="true">
+			A quarter of the clouds' pixels traced per frame, the rest from the history: about a quarter of the cost. Decision 0115.
+		</member>
+		<member name="rendering/fellow/post/clouds/shadows" type="float" setter="" getter="" default="1.0">
+			The clouds' shadows on the scene's surfaces (a map of the sun through the layer, 16 km around the camera). 0: none. Decision 0133.
+		</member>
+		<member name="rendering/fellow/post/clouds/sky_light" type="float" setter="" getter="" default="1.0">
+			The sky's ambient light and reflections greyed where the clouds cover it (0: not). Decision 0133.
+		</member>
+		<member name="rendering/fellow/post/clouds/thickness" type="float" setter="" getter="" default="2.5">
+			The cloud layer's thickness, in kilometres.
+		</member>
+		<member name="rendering/fellow/post/clouds/wind" type="float" setter="" getter="" default="0.01">
+			How fast the clouds drift, in kilometres per second.
+		</member>
+		<member name="rendering/fellow/post/contact_shadows/enabled" type="bool" setter="" getter="" default="false">
+			Screen-space contact shadows of the first directional light: what its shadow map misses where objects touch. Needs the depth pre-pass, no MSAA. Decision 0107.
+		</member>
+		<member name="rendering/fellow/post/contact_shadows/length" type="float" setter="" getter="" default="0.3">
+			How far each pixel marches towards the sun, in metres.
+		</member>
+		<member name="rendering/fellow/post/contact_shadows/steps" type="int" setter="" getter="" default="8">
+			Steps of the march.
+		</member>
+		<member name="rendering/fellow/post/contact_shadows/thickness" type="float" setter="" getter="" default="0.02">
+			The thickness assumed for what the march passes behind, in metres.
+		</member>
+		<member name="rendering/fellow/post/exposure/high_percent" type="float" setter="" getter="" default="90.0">
+			The share of the pixels below the brightest ones the histogram ignores (90: the brightest 10 %).
+		</member>
+		<member name="rendering/fellow/post/exposure/histogram" type="bool" setter="" getter="" default="false">
+			With auto exposure on (the camera attributes): eye adaptation from a histogram of the image's luminance, the darkest and brightest pixels ignored, adapted in stops. Decision 0105.
+		</member>
+		<member name="rendering/fellow/post/exposure/low_percent" type="float" setter="" getter="" default="10.0">
+			The darkest share of the pixels the histogram ignores.
+		</member>
+		<member name="rendering/fellow/post/exposure/speed_down" type="float" setter="" getter="" default="1.0">
+			How fast the exposure falls (in stops per second) when the scene gets brighter.
+		</member>
+		<member name="rendering/fellow/post/exposure/speed_up" type="float" setter="" getter="" default="3.0">
+			How fast the exposure rises (in stops per second) when the scene gets darker.
+		</member>
+		<member name="rendering/fellow/post/lens/chromatic_aberration" type="float" setter="" getter="" default="0.0">
+			Colour fringes towards the screen's edges, in the tone mapping pass. 0: off. Decision 0079.
+		</member>
+		<member name="rendering/fellow/post/lens/film_grain" type="float" setter="" getter="" default="0.0">
+			Per-frame grain in the mid-tones, in the tone mapping pass. 0: off.
+		</member>
+		<member name="rendering/fellow/post/lens/vignette" type="float" setter="" getter="" default="0.0">
+			Darker corners, in the tone mapping pass. 0: off.
+		</member>
+		<member name="rendering/fellow/post/lens/vignette_smoothness" type="float" setter="" getter="" default="0.5">
+			How gradually the vignette darkens.
+		</member>
+		<member name="rendering/fellow/post/light_shafts/intensity" type="float" setter="" getter="" default="0.0">
+			Rays from the sun: the bright sky around it blurred towards it, broken by roofs, trees and clouds. 0: off. Decision 0116.
+		</member>
+		<member name="rendering/fellow/post/light_shafts/length" type="float" setter="" getter="" default="0.9">
+			How far the shafts reach across the screen (0-1).
+		</member>
+		<member name="rendering/fellow/post/light_shafts/threshold" type="float" setter="" getter="" default="0.5">
+			The sky's brightness from which it casts shafts.
+		</member>
+		<member name="rendering/fellow/post/local_exposure/blur_size" type="float" setter="" getter="" default="0.5">
+			The wide blur's size, as a share of the screen.
+		</member>
+		<member name="rendering/fellow/post/local_exposure/blurred_blend" type="float" setter="" getter="" default="0.6">
+			The blend between the bilateral grid (0) and the wide blur (1) for each pixel's surroundings.
+		</member>
+		<member name="rendering/fellow/post/local_exposure/detail_strength" type="float" setter="" getter="" default="1.0">
+			Local detail's strength (1: as it is).
+		</member>
+		<member name="rendering/fellow/post/local_exposure/enabled" type="bool" setter="" getter="" default="false">
+			Local exposure (Unreal 5's): large-scale contrast compressed around middle grey, local detail kept. Decision 0106.
+		</member>
+		<member name="rendering/fellow/post/local_exposure/highlight_contrast" type="float" setter="" getter="" default="0.8">
+			The contrast kept above middle grey (below 1 compresses the highlights).
+		</member>
+		<member name="rendering/fellow/post/local_exposure/shadow_contrast" type="float" setter="" getter="" default="0.8">
+			The contrast kept below middle grey (below 1 lifts the shadows).
+		</member>
+		<member name="rendering/fellow/post/motion_blur/amount" type="float" setter="" getter="" default="0.5">
+			The share of the frame the shutter is open (0.5: half a frame's motion).
+		</member>
+		<member name="rendering/fellow/post/motion_blur/enabled" type="bool" setter="" getter="" default="false">
+			Motion blur after TAA: a reconstruction filter over the velocity buffer, the sky blurred by the camera's motion. Works with TAA, MSAA or no anti-aliasing; not with FSR 2 or in XR. Decision 0078.
+		</member>
+		<member name="rendering/fellow/post/motion_blur/max_radius" type="float" setter="" getter="" default="32.0">
+			The longest blur, in pixels.
+		</member>
+		<member name="rendering/fellow/post/motion_blur/samples" type="int" setter="" getter="" default="12">
+			Samples along each pixel's motion: more, smoother blur, more cost.
+		</member>
+		<member name="rendering/fellow/post/sharpen/strength" type="float" setter="" getter="" default="0.0">
+			Contrast-adaptive sharpening (RCAS) of the TAA output, in the tone mapping pass; only with TAA. 0: off. Decision 0110.
+		</member>
+		<member name="rendering/fellow/post/white_balance/temperature" type="float" setter="" getter="" default="6500.0">
+			White balance in kelvin, as a camera's: 6500 K is neutral, 8000 K warms a sky-lit scene, 5000 K cools it. Decision 0114.
+		</member>
+		<member name="rendering/fellow/post/white_balance/tint" type="float" setter="" getter="" default="0.0">
+			White balance's tint: positive towards magenta, negative towards green.
+		</member>
+		<member name="rendering/fellow/postfx/depth_copy_nearest_mipmaps" type="bool" setter="" getter="" default="true">
+			A material sampling [code]hint_depth_texture[/code] with a mipmap filter gets mip levels of the nearest depth of their cells (a Hi-Z pyramid; FellowWater3D's reflections trace over it); off: stock's single level. Decision 0126.
+		</member>
+		<member name="rendering/fellow/postfx/enabled" type="bool" setter="" getter="" default="true">
+			FellowEngine's post-processing optimizations and effects ([code]postfx/*[/code], [code]post/*[/code]); off: stock's.
+		</member>
+		<member name="rendering/fellow/postfx/fast_luminance_reduce" type="bool" setter="" getter="" default="true">
+			Auto exposure's luminance reduction with two barriers per workgroup instead of seven (the same sums). Exact: the same image or results as stock Godot. Decision 0025.
+		</member>
+		<member name="rendering/fellow/postfx/fog_half_rate" type="bool" setter="" getter="" default="false">
+			Visually lossless, off by default: volumetric fog lights half its froxels per frame (a checkerboard), the rest reprojected. Decision 0031.
+		</member>
+		<member name="rendering/fellow/postfx/fog_light_loop" type="int" setter="" getter="" default="0">
+			Measured and rejected (no frame gain): volumetric fog's light loops walked by the subgroup. Decision 0053.
+		</member>
+		<member name="rendering/fellow/postfx/fog_specialized" type="bool" setter="" getter="" default="true">
+			Volumetric fog's density pass without the loops the frame does not run: the pass 21-27 % faster. Exact: the same image or results as stock Godot. Decision 0056.
+		</member>
+		<member name="rendering/fellow/postfx/glow_blur" type="int" setter="" getter="" default="2">
+			Glow's blur: 0 stock's, 1 padded shared memory, 2 16 x 16 tiles without bank conflicts (glow about 60 % faster). Exact: the same image or results as stock Godot. Decision 0052.
+		</member>
+		<member name="rendering/fellow/postfx/screen_copy_mipmaps_on_demand" type="bool" setter="" getter="" default="true">
+			The screen texture's copy builds its mipmaps only when a material drawn this frame samples them. Exact: the same image or results as stock Godot. Decision 0123.
+		</member>
+		<member name="rendering/fellow/postfx/ss_coherent_gather" type="bool" setter="" getter="" default="false">
+			Measured and rejected (slower): SSAO and SSIL gathers with one sample rotation per workgroup. Decision 0024.
+		</member>
+		<member name="rendering/fellow/postfx/ss_depth_mips_exact" type="bool" setter="" getter="" default="true">
+			SSAO and SSIL depth mipmaps without stock's racing stores (a correctness fix). Decision 0067.
+		</member>
+		<member name="rendering/fellow/postfx/ss_interleave_exact_bounds" type="bool" setter="" getter="" default="true">
+			SSAO and SSIL write their last column at widths such as 1920, which stock leaves unwritten (a correctness fix). Decision 0067.
+		</member>
+		<member name="rendering/fellow/postfx/ss_last_frame_direct" type="bool" setter="" getter="" default="true">
+			SSIL's copy of the last frame without its unread full-size level. Exact: the same image or results as stock Godot. Decision 0044.
+		</member>
+		<member name="rendering/fellow/postfx/ss_tap_batch" type="int" setter="" getter="" default="0">
+			Measured and rejected (no gain): SSAO and SSIL taps fetched a few at a time (0 or 1: stock's loop). Read at start-up. Decision 0041.
+		</member>
+		<member name="rendering/fellow/postfx/ssao_shared_tile" type="bool" setter="" getter="" default="false">
+			Measured and rejected (no effect): SSAO's gather from a tile in shared memory. Decision 0011.
+		</member>
+		<member name="rendering/fellow/postfx/ssao_temporal" type="bool" setter="" getter="" default="false">
+			Visually lossless, off by default: SSAO takes half its taps per frame, the other half from the previous frame (reprojected, depth-checked). Decision 0028.
+		</member>
+		<member name="rendering/fellow/postfx/ssil_temporal" type="bool" setter="" getter="" default="false">
+			Visually lossless, off by default: SSIL takes half its taps per frame, the other half from the previous frame. Decision 0030.
+		</member>
+		<member name="rendering/fellow/postfx/ssr_filter_padded" type="bool" setter="" getter="" default="false">
+			Measured and rejected (no gain): SSR's roughness filter with a padded shared layout. Decision 0052.
+		</member>
+		<member name="rendering/fellow/postfx/ssr_resolve_shared" type="bool" setter="" getter="" default="false">
+			Measured and rejected (no gain): SSR's resolve with its samples shared per workgroup. Decision 0074.
+		</member>
+		<member name="rendering/fellow/postfx/taa_camera_motion_vectors" type="bool" setter="" getter="" default="false">
+			Measured and rejected (within noise, not exact): static geometry's motion vectors from the depth buffer. Decision 0013.
+		</member>
+		<member name="rendering/fellow/postfx/taa_direct_output" type="bool" setter="" getter="" default="true">
+			Post-processing reads the TAA resolve's output directly (one full-resolution copy less). Exact: the same image or results as stock Godot. Decision 0033.
+		</member>
+		<member name="rendering/fellow/postfx/taa_history_pingpong" type="bool" setter="" getter="" default="true">
+			TAA alternates two history textures instead of copying the history and velocity each frame. Exact: the same image or results as stock Godot. Decision 0002.
+		</member>
+		<member name="rendering/fellow/postfx/taa_resolve_v2" type="bool" setter="" getter="" default="true">
+			FellowEngine's TAA resolve (reverse-Z dilation, YCoCg variance clipping): a look change from stock's TAA, on from the first milestone. Decision 0001.
+		</member>
+		<member name="rendering/fellow/postfx/taa_shared_velocity" type="bool" setter="" getter="" default="true">
+			The TAA resolve reads its tile's velocities from shared memory. Exact: the same image or results as stock Godot. Read at start-up. Decision 0044.
+		</member>
+		<member name="rendering/fellow/postfx/taa_strided_load" type="bool" setter="" getter="" default="false">
+			Measured and rejected (no gain): TAA's tile loaded by all 64 invocations of a workgroup. Decision 0075.
+		</member>
+		<member name="rendering/fellow/postfx/taa_tile16" type="bool" setter="" getter="" default="false">
+			Measured and rejected (slower): the TAA resolve in 16 x 16 workgroups. Decision 0023.
+		</member>
+		<member name="rendering/fellow/postfx/taa_v2_antiflicker" type="float" setter="" getter="" default="0.0">
+			TAA v2: more history where the neighbourhood's contrast is high, against flicker (0: off).
+		</member>
+		<member name="rendering/fellow/postfx/taa_v2_feedback_max" type="float" setter="" getter="" default="0.9375">
+			TAA v2's most history weight (still pixels).
+		</member>
+		<member name="rendering/fellow/postfx/taa_v2_feedback_min" type="float" setter="" getter="" default="0.88">
+			TAA v2's least history weight (moving or changing pixels).
+		</member>
+		<member name="rendering/fellow/postfx/taa_v2_gamma" type="float" setter="" getter="" default="1.25">
+			TAA v2's variance clipping box, in standard deviations: smaller, less ghosting and more flicker.
+		</member>
+		<member name="rendering/fellow/postfx/taa_v2_motion_soften" type="float" setter="" getter="" default="0.35">
+			TAA v2: how much moving pixels soften towards the current frame.
+		</member>
+		<member name="rendering/fellow/postfx/taa_v2_soften_contrast" type="float" setter="" getter="" default="0.45">
+			TAA v2: the contrast from which motion softening applies.
+		</member>
+		<member name="rendering/fellow/postfx/taa_v2_velocity_dilation" type="bool" setter="" getter="" default="true">
+			TAA v2 takes the nearest neighbour's velocity (reverse-Z dilation): edges move with their objects.
+		</member>
+		<member name="rendering/fellow/postfx/tonemap_specialized" type="bool" setter="" getter="" default="true">
+			Tone mapping compiled for the frame's paths only (FXAA, glow, tone mapper, ...): the pass 12-14 % faster. Exact: the same image or results as stock Godot. Decision 0055.
+		</member>
+		<member name="rendering/fellow/postfx/verify_luminance_reduce" type="bool" setter="" getter="" default="false">
+			Debug: stock's luminance reduction also runs every frame and is compared with FellowEngine's.
+		</member>
+		<member name="rendering/fellow/profiling/list_markers" type="bool" setter="" getter="" default="false">
+			Profiling: extra timestamps inside the render list and cull steps (they split stock's regions).
+		</member>
+		<member name="rendering/fellow/profiling/pass_timestamps" type="bool" setter="" getter="" default="false">
+			Profiling: the renderer's per-pass timestamps kept on (the visual profiler's and the benchmarks' pass times).
+		</member>
+		<member name="rendering/fellow/raytracing/ambient_occlusion" type="bool" setter="" getter="" default="false">
+			Ray-traced ambient occlusion in place of SSAO where the environment enables SSAO (its radius, intensity, power). Decision 0081.
+		</member>
+		<member name="rendering/fellow/raytracing/ao_interleaved" type="bool" setter="" getter="" default="true">
+			A quarter of the pixels traced per frame, the others from the history.
+		</member>
+		<member name="rendering/fellow/raytracing/ao_rays" type="int" setter="" getter="" default="2">
+			Ambient occlusion rays per pixel.
+		</member>
+		<member name="rendering/fellow/raytracing/enabled" type="bool" setter="" getter="" default="false">
+			Hardware ray tracing with ray queries (a GPU with [code]VK_KHR_ray_query[/code]): acceleration structures for the meshes and MultiMesh instances near the camera. Alone it changes nothing; the effects below use it. Read at start-up. Decision 0080.
+		</member>
+		<member name="rendering/fellow/raytracing/gi" type="bool" setter="" getter="" default="false">
+			Dynamic diffuse global illumination: a volume of ray-traced probes around the camera (sun, sky, emission, several bounces) in place of the ambient light. Decision 0083.
+		</member>
+		<member name="rendering/fellow/raytracing/gi_cascades" type="int" setter="" getter="" default="2">
+			2: a coarser volume (4 times the spacing, updated half as often) around the fine one, read where the fine one ends.
+		</member>
+		<member name="rendering/fellow/raytracing/gi_energy" type="float" setter="" getter="" default="1.0">
+			Scales the probes' light.
+		</member>
+		<member name="rendering/fellow/raytracing/gi_hysteresis" type="float" setter="" getter="" default="0.97">
+			How much of a probe's previous irradiance each update keeps: higher, steadier and slower to change.
+		</member>
+		<member name="rendering/fellow/raytracing/gi_probe_relocation" type="bool" setter="" getter="" default="true">
+			Probes moved out of geometry and away from surfaces, within their cell.
+		</member>
+		<member name="rendering/fellow/raytracing/gi_probe_spacing" type="float" setter="" getter="" default="2.0">
+			The distance between the probes, in metres.
+		</member>
+		<member name="rendering/fellow/raytracing/gi_probes_xz" type="int" setter="" getter="" default="24">
+			Probes along each horizontal side of the volume.
+		</member>
+		<member name="rendering/fellow/raytracing/gi_probes_y" type="int" setter="" getter="" default="8">
+			Probes along the volume's height.
+		</member>
+		<member name="rendering/fellow/raytracing/gi_rays" type="int" setter="" getter="" default="128">
+			Rays per probe update.
+		</member>
+		<member name="rendering/fellow/raytracing/gi_sky_leak" type="float" setter="" getter="" default="0.1">
+			The share of the ambient light kept where the probes are dark.
+		</member>
+		<member name="rendering/fellow/raytracing/gi_update_interval" type="int" setter="" getter="" default="4">
+			Frames between a probe's updates (a share of the probes traced per frame).
+		</member>
+		<member name="rendering/fellow/raytracing/multimesh" type="bool" setter="" getter="" default="true">
+			MultiMesh instances in the ray tracing scene.
+		</member>
+		<member name="rendering/fellow/raytracing/multimesh_min_angle" type="float" setter="" getter="" default="1.0">
+			MultiMesh instances seen under a smaller angle from the camera are left out of the ray tracing scene.
+		</member>
+		<member name="rendering/fellow/raytracing/radius" type="float" setter="" getter="" default="200.0">
+			Instances within this distance of the camera are in the ray tracing scene.
+		</member>
+		<member name="rendering/fellow/raytracing/reflections" type="bool" setter="" getter="" default="false">
+			Reflections traced against the ray tracing scene in place of SSR where the environment enables SSR: off-screen and hidden objects reflected. Decision 0084.
+		</member>
+		<member name="rendering/fellow/raytracing/reflections_interleaved" type="bool" setter="" getter="" default="true">
+			Surfaces rougher than 0.3 traced in a quarter of their pixels per frame.
+		</member>
+		<member name="rendering/fellow/raytracing/reflections_max_roughness" type="float" setter="" getter="" default="0.7">
+			Surfaces up to this roughness get traced reflections.
+		</member>
+		<member name="rendering/fellow/raytracing/skinned" type="bool" setter="" getter="" default="true">
+			Skinned and blend shape meshes in the ray tracing scene, rebuilt when they change.
+		</member>
+		<member name="rendering/fellow/raytracing/sun_shadow_rays" type="int" setter="" getter="" default="1">
+			Shadow rays per pixel and frame.
+		</member>
+		<member name="rendering/fellow/raytracing/sun_shadows" type="bool" setter="" getter="" default="false">
+			The first directional light's shadow traced per pixel within half the ray tracing radius, soft over the light's angular size, in place of its shadow map there. Decision 0082.
+		</member>
+		<member name="rendering/fellow/raytracing/sun_shadows_interleaved" type="bool" setter="" getter="" default="true">
+			A quarter of the pixels traced per frame, the others from the history clamped to their traced neighbours.
+		</member>
+		<member name="rendering/fellow/shading/absent_features_specialized" type="int" setter="" getter="" default="63">
+			The colour passes compiled without the decal, probe, directional, omni, spot and positional shadow code the frame cannot run (bits per feature; 63: all): GPU 5-9 % faster. Exact: the same image or results as stock Godot. Decision 0057.
+		</member>
+		<member name="rendering/fellow/shading/adaptive_vrs" type="bool" setter="" getter="" default="false">
+			Visually lossless, off by default: variable rate shading per 16 x 16 tile, chosen from the previous frame's image; autotune keeps it only where it saves time. Needs [code]VK_KHR_fragment_shading_rate[/code], one view, the depth pre-pass, no MSAA. Read at start-up. Decision 0027.
+		</member>
+		<member name="rendering/fellow/shading/adaptive_vrs_autotune" type="bool" setter="" getter="" default="true">
+			Autotune decides per scene: adaptive shading starts off and is turned on where measured faster.
+		</member>
+		<member name="rendering/fellow/shading/adaptive_vrs_gloss_guard" type="bool" setter="" getter="" default="true">
+			Glossy, curved surfaces kept at full rate.
+		</member>
+		<member name="rendering/fellow/shading/adaptive_vrs_max_rate" type="int" setter="" getter="" default="1">
+			The coarsest rate: 0 2 x 2, 1 4 x 4.
+		</member>
+		<member name="rendering/fellow/shading/adaptive_vrs_max_step" type="float" setter="" getter="" default="0.02">
+			The largest step between neighbouring pixels a coarse tile may have; 0.01 is the strict setting.
+		</member>
+		<member name="rendering/fellow/shading/adaptive_vrs_motion_px" type="float" setter="" getter="" default="0.0">
+			Tiles moving faster than this many pixels per frame shaded at finer rates (0: off).
+		</member>
+		<member name="rendering/fellow/shading/adaptive_vrs_refresh" type="int" setter="" getter="" default="8">
+			Every tile shaded at full rate one frame in this many, so detail lost to coarse shading is seen again (0: never).
+		</member>
+		<member name="rendering/fellow/shading/adaptive_vrs_threshold" type="float" setter="" getter="" default="0.006">
+			Adaptive shading's error budget per tile (luma 0-1); 0: every tile at full rate.
+		</member>
+		<member name="rendering/fellow/shading/blended_alpha_zero_skip" type="bool" setter="" getter="" default="true">
+			Mix-blended pixels with alpha 0 skip their lighting. Exact: the same image or results as stock Godot. Decision 0010.
+		</member>
+		<member name="rendering/fellow/shadows/atlas_simulated_time" type="bool" setter="" getter="" default="true">
+			At a fixed frame rate ([code]--fixed-fps[/code], Movie Maker) the positional shadow atlas waits 500 ms of the scene's time, not the wall clock, before resizing a light's shadow: the same frames every run. Decision 0071.
+		</member>
+		<member name="rendering/fellow/shadows/batched_taps" type="bool" setter="" getter="" default="true">
+			Soft shadow filter taps fetched four at a time, added in stock's order: frame 2-5 % faster. Exact: the same image or results as stock Godot. Decision 0040.
+		</member>
+		<member name="rendering/fellow/shadows/contribution_cull_texels" type="float" setter="" getter="" default="0.0">
+			Changes the image, off: a caster whose box spans fewer than this many texels of a directional cascade is not drawn into it (0: off). Decision 0121.
+		</member>
+		<member name="rendering/fellow/shadows/debug_disable_caster_culling" type="bool" setter="" getter="" default="false">
+			Debug: shadow casters drawn without FellowEngine's culling.
+		</member>
+		<member name="rendering/fellow/shadows/directional_cache" type="bool" setter="" getter="" default="true">
+			Directional shadows: each cascade's static casters cached in a guard-banded map, the moving ones drawn over a copy each frame. Exact: the same image or results as stock Godot. Decision 0004.
+		</member>
+		<member name="rendering/fellow/shadows/directional_cache_debug_mode" type="int" setter="" getter="" default="0">
+			Debug: 0 normal, 1 the lattice without the cache, 2 every cache rebuilt every frame.
+		</member>
+		<member name="rendering/fellow/shadows/directional_cache_guard_texels" type="int" setter="" getter="" default="256">
+			The cached cascade's guard band on each side, in texels: how far the cascade moves before its cache is rebuilt (and its memory).
+		</member>
+		<member name="rendering/fellow/shadows/directional_cache_lod_travel" type="float" setter="" getter="" default="0.0">
+			0: cached casters' LODs from the shadow map's texel size ([member rendering/fellow/shadows/directional_cache_texel_lod]); above 0, stock's camera-distance LODs as if the camera were that much closer, the cache rebuilt after that much travel.
+		</member>
+		<member name="rendering/fellow/shadows/directional_cache_max_rebuilds_per_frame" type="int" setter="" getter="" default="1">
+			The most cascade caches rebuilt in one frame.
+		</member>
+		<member name="rendering/fellow/shadows/directional_cache_min_cost_per_texel" type="float" setter="" getter="" default="0.125">
+			A cascade is served from the cache only when the static casters it saves cost more than the copy (their primitives and draws against this many per cascade texel): cheap cascades are drawn as stock does.
+		</member>
+		<member name="rendering/fellow/shadows/directional_cache_static_frames" type="int" setter="" getter="" default="60">
+			Frames a caster must stay unchanged to count as static (cached).
+		</member>
+		<member name="rendering/fellow/shadows/directional_cache_texel_lod" type="float" setter="" getter="" default="1.0">
+			Cached casters use the coarsest LOD whose error is below this many shadow-map texels.
+		</member>
+		<member name="rendering/fellow/shadows/directional_max_mip" type="bool" setter="" getter="" default="true">
+			Soft directional shadows: a min/max pyramid of the shadow map lets fully lit and fully shadowed pixels skip the filter. Exact: the same image or results as stock Godot. Decision 0005.
+		</member>
+		<member name="rendering/fellow/shadows/enabled" type="bool" setter="" getter="" default="true">
+			FellowEngine's shadow optimizations ([code]shadows/*[/code]); off: stock's.
+		</member>
+		<member name="rendering/fellow/shadows/max_mip_visible_region" type="bool" setter="" getter="" default="false">
+			The directional pyramid built only over the part of each cascade the camera can look up. Exact: the same image or results as stock Godot. Decision 0005.
+		</member>
+		<member name="rendering/fellow/shadows/pcss_blend_band" type="bool" setter="" getter="" default="false">
+			A look change, off: soft directional shadows blended across cascades in a band. Decision 0005.
+		</member>
+		<member name="rendering/fellow/shadows/pcss_directional_penumbra" type="bool" setter="" getter="" default="false">
+			A look change, off: the directional light's soft shadow penumbra as a parallel light's. Decision 0005.
+		</member>
+		<member name="rendering/fellow/shadows/pcss_filter_early_out" type="bool" setter="" getter="" default="false">
+			Measured and rejected (no gain): directional PCSS decided from the pyramid after the blocker search. Decision 0039.
+		</member>
+		<member name="rendering/fellow/shadows/pcss_quad_search" type="bool" setter="" getter="" default="false">
+			Measured and rejected (not visually lossless): the PCSS blocker search shared by 2 x 2 pixel quads. Decision 0042.
+		</member>
+		<member name="rendering/fellow/shadows/positional_max_mip" type="bool" setter="" getter="" default="true">
+			The same pyramid for omni and spot shadows. Exact: the same image or results as stock Godot. Decision 0005.
+		</member>
+		<member name="rendering/fellow/shadows/skip_backfacing_directional" type="bool" setter="" getter="" default="true">
+			Directional shadow lookups skipped where the surface faces away from the light. Exact: the same image or results as stock Godot. Decision 0005.
+		</member>
+		<member name="rendering/fellow/shadows/skip_backfacing_positional" type="bool" setter="" getter="" default="true">
+			Omni and spot shadow lookups skipped where the surface faces away from the light. Exact: the same image or results as stock Godot. Decision 0005.
+		</member>
+		<member name="rendering/fellow/shadows/skip_unblended_cascade" type="bool" setter="" getter="" default="true">
+			The second cascade's lookup skipped outside the blend band. Exact: the same image or results as stock Godot. Decision 0005.
+		</member>
+		<member name="rendering/fellow/shadows/wind_cached_from_cascade" type="int" setter="" getter="" default="2">
+			Casters moved only by the wind are cached from this directional cascade on (their far shadows keep the pose of the cache's last build); -1: never. Decision 0125.
+		</member>
+		<member name="rendering/fellow/streaming/texture_budget_mb" type="int" setter="" getter="" default="0">
+			The streamed textures' memory (0: no limit); over it every streamed texture is coarsened by the same bias.
+		</member>
+		<member name="rendering/fellow/streaming/texture_info_details" type="bool" setter="" getter="" default="false">
+			[method RenderingServer.fellow_get_texture_streaming_info] also lists every streamed texture.
+		</member>
+		<member name="rendering/fellow/streaming/texture_instances_per_frame" type="int" setter="" getter="" default="2048">
+			Instances evaluated per frame for the levels their textures need.
+		</member>
+		<member name="rendering/fellow/streaming/texture_lod_bias" type="float" setter="" getter="" default="-1.0">
+			Added to the estimated level: negative finer (a margin), positive coarser.
+		</member>
+		<member name="rendering/fellow/streaming/texture_max_jobs" type="int" setter="" getter="" default="4">
+			Texture loads at a time.
+		</member>
+		<member name="rendering/fellow/streaming/texture_release_hold_s" type="float" setter="" getter="" default="2.0">
+			A texture needing fewer mips keeps them this long before they are released (unless over the budget).
+		</member>
+		<member name="rendering/fellow/streaming/texture_resident_size" type="int" setter="" getter="" default="128">
+			Mips at or below this size (the larger side) are always resident; smaller textures are not streamed.
+		</member>
+		<member name="rendering/fellow/streaming/texture_unreferenced_hold_s" type="float" setter="" getter="" default="5.0">
+			A streamed texture no instance uses keeps its mips this long, then falls back to its resident mips.
+		</member>
+		<member name="rendering/fellow/streaming/texture_upload_mb_per_frame" type="int" setter="" getter="" default="64">
+			The most texture data uploaded per frame.
+		</member>
+		<member name="rendering/fellow/streaming/textures" type="bool" setter="" getter="" default="false">
+			Texture streaming: a VRAM-compressed texture with mipmaps loads only its small mips, the rest as the cameras need them, on worker threads. Off: textures load whole, as stock. Read at start-up. Decision 0146.
+		</member>
+		<member name="rendering/fellow/upscaling/fsr3" type="bool" setter="" getter="" default="true">
+			A viewport in Godot's FSR 2 scaling mode runs AMD's FidelityFX Super Resolution 3.1 upscaler instead of FSR 2.2: less error and flicker in motion. Decision 0148.
+		</member>
+		<member name="rendering/fellow/upscaling/fsr3_accumulation_added_per_frame" type="float" setter="" getter="" default="0.33333334">
+			FSR 3.1's accumulation added per frame: less ghosts less where the history is rejected.
+		</member>
+		<member name="rendering/fellow/upscaling/fsr3_debug_view" type="bool" setter="" getter="" default="false">
+			FSR 3.1's debug view over the output (motion vectors, depth, reactive masks, the history).
+		</member>
+		<member name="rendering/fellow/upscaling/fsr3_half_precision" type="bool" setter="" getter="" default="true">
+			Half precision in FSR 3.1's passes that have it, where the GPU supports it. Read at start-up.
+		</member>
+		<member name="rendering/fellow/upscaling/fsr3_min_disocclusion_accumulation" type="float" setter="" getter="" default="-0.33333334">
+			FSR 3.1's least accumulation on disocclusion.
+		</member>
+		<member name="rendering/fellow/upscaling/fsr3_reactiveness_scale" type="float" setter="" getter="" default="1.0">
+			FSR 3.1's reactiveness scale: larger reacts faster.
+		</member>
+		<member name="rendering/fellow/upscaling/fsr3_shading_change_scale" type="float" setter="" getter="" default="1.0">
+			FSR 3.1's shading change scale: larger reacts faster to lighting changes.
+		</member>
+		<member name="rendering/fellow/upscaling/fsr3_velocity_factor" type="float" setter="" getter="" default="1.0">
+			FSR 3.1's velocity factor: 0 steadies bright pixels.
+		</member>
 		<member name="rendering/gl_compatibility/driver" type="String" setter="" getter="" default="&quot;opengl3&quot;">
 			Sets the driver to be used by the renderer when using the Compatibility renderer. Editing this property has no effect in the default configuration, as first-party platforms each have platform-specific overrides. Use those overrides to configure the driver for each platform.
 			This can be overridden using the [code]--rendering-driver &lt;driver&gt;[/code] command line argument.

@@ -50,6 +50,21 @@ void FellowMotionMatcher3D::set_database(const Ref<FellowMotionDatabase> &p_data
 	database = p_database;
 	started = false;
 	pose_ready = false;
+	update_configuration_warnings();
+}
+
+// Milestone 52: what the Scene dock's warning icon says (the parent skeleton's is SkeletonModifier3D's).
+PackedStringArray FellowMotionMatcher3D::get_configuration_warnings() const {
+	PackedStringArray warnings = SkeletonModifier3D::get_configuration_warnings();
+	if (database.is_null()) {
+		warnings.push_back(RTR("A FellowMotionMatcher3D needs a FellowMotionDatabase (Database) to match motion from."));
+	} else if (!database->is_valid()) {
+		warnings.push_back(RTR("The FellowMotionDatabase is empty: build it from animations first (FellowMotionDatabase.build())."));
+	}
+	if (!root_path.is_empty() && is_inside_tree() && !Object::cast_to<Node3D>(get_node_or_null(root_path))) {
+		warnings.push_back(vformat(RTR("Root Path (%s) leads to no Node3D."), String(root_path)));
+	}
+	return warnings;
 }
 
 void FellowMotionMatcher3D::set_auto_update(bool p_enable) {

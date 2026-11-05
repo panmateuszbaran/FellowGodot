@@ -32,12 +32,14 @@
 
 #include "core/io/resource_importer.h"
 #include "core/io/resource_saver.h"
+#include "core/math/geometry_3d.h"
 #include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
 #include "editor/editor_data.h"
 #include "editor/editor_interface.h"
 #include "editor/editor_node.h"
 #include "editor/editor_string_names.h"
+#include "editor/editor_undo_redo_manager.h"
 #include "editor/file_system/editor_file_system.h"
 #include "editor/scene/3d/gizmos/gizmo_3d_helper.h"
 #include "editor/scene/3d/node_3d_editor_plugin.h"
@@ -241,8 +243,9 @@ void FellowGizmoPlugin::redraw(EditorNode3DGizmo *p_gizmo) {
 		p_gizmo->add_lines(lines, get_material(cls == SNAME("FellowStreamingCell3D") ? "fellow_cell" : "fellow_lines", p_gizmo));
 		p_gizmo->add_collision_segments(lines);
 	}
-	if (cls == SNAME("FellowGasVolume3D")) {
-		p_gizmo->add_handles(helper->box_get_handles(node->get("size")), get_material("handles"));
+	const Vector<Vector3> handles = _handle_positions(node, cls);
+	if (!handles.is_empty()) {
+		p_gizmo->add_handles(handles, get_material("handles"));
 	}
 	const String icon = String("icon_") + String(cls);
 	if (materials.has(icon)) {
@@ -250,31 +253,264 @@ void FellowGizmoPlugin::redraw(EditorNode3DGizmo *p_gizmo) {
 	}
 }
 
+// Handles (milestone 50: the gas volume's box; milestone 52: the rest). Boxes and cylinders through Gizmo3DHelper
+// (they move the node as one side is dragged, as Godot's shapes do); the others move along one of the node's axes and
+// set one number of a property, the node left in place.
+FellowGizmoPlugin::HandleKind FellowGizmoPlugin::_handle_kind(const Node3D *p_node, const StringName &p_class, StringName &r_size_property) {
+	if (p_class == SNAME("FellowGasVolume3D")) {
+		r_size_property = SNAME("size");
+		return HANDLES_BOX;
+	}
+	if (p_class == SNAME("FellowGasEmitter3D")) {
+		const int shape = p_node->get(SNAME("shape"));
+		if (shape == 1) {
+			r_size_property = SNAME("box_size");
+			return HANDLES_BOX;
+		}
+		return shape == 2 ? HANDLES_CYLINDER : HANDLES_AXES;
+	}
+	if (p_class == SNAME("FellowStreamingCell3D")) {
+		return HANDLES_BOUNDS;
+	}
+	if (p_class == SNAME("FellowWater3D") || p_class == SNAME("FellowShallowWater3D") || p_class == SNAME("FellowSnowTracker3D") || p_class == SNAME("FellowLightning3D")) {
+		return HANDLES_AXES;
+	}
+	return HANDLES_NONE;
+}
+
+Vector<FellowGizmoPlugin::AxisHandle> FellowGizmoPlugin::axis_handles_for(const StringName &p_class, const Dictionary &p_properties) {
+	Vector<AxisHandle> handles;
+	auto add = [&](const StringName &p_property, int p_component, int p_axis, real_t p_sign, real_t p_scale, real_t p_offset, const Vector3 &p_base, const String &p_name) {
+		AxisHandle h;
+		h.property = p_property;
+		h.component = p_component;
+		h.axis = p_axis;
+		h.sign = p_sign;
+		h.scale = p_scale;
+		h.offset = p_offset;
+		h.base = p_base;
+		h.name = p_name;
+		const Variant v = p_properties.get(p_property, 0.0);
+		const real_t value = p_component < 0 ? real_t(v) : real_t(Vector2(v)[p_component]);
+		h.position = p_base;
+		h.position[p_axis] += p_sign * (value / p_scale + p_offset);
+		handles.push_back(h);
+	};
+	if (p_class == SNAME("FellowGasEmitter3D")) {
+		add(SNAME("radius"), -1, 0, 1, 1, 0, Vector3(), TTR("Radius"));
+	} else if (p_class == SNAME("FellowWater3D") || p_class == SNAME("FellowShallowWater3D")) {
+		const StringName prop = p_class == SNAME("FellowWater3D") ? SNAME("extent") : SNAME("domain_size");
+		const Vector2 e = p_properties.get(prop, Vector2());
+		if (e.x > 0 && e.y > 0) { // a water body without an extent has no edge
+			add(prop, 0, 0, 1, 2, 0, Vector3(), TTR("Width (X)"));
+			add(prop, 1, 2, 1, 2, 0, Vector3(), TTR("Depth (Z)"));
+		}
+	} else if (p_class == SNAME("FellowSnowTracker3D")) {
+		const real_t r = p_properties.get("radius", 0.1);
+		add(SNAME("radius"), -1, 0, 1, 1, 0, Vector3(), TTR("Radius"));
+		add(SNAME("length"), -1, 2, -1, 2, r, Vector3(), TTR("Length")); // at the capsule's front tip
+	} else if (p_class == SNAME("FellowLightning3D")) {
+		const Vector2 range = p_properties.get("distance_range", Vector2(400, 3000));
+		add(SNAME("distance_range"), 0, 0, 1, 1, 0, Vector3(), TTR("Nearest Strike"));
+		add(SNAME("distance_range"), 1, 0, 1, 1, 0, Vector3(), TTR("Farthest Strike"));
+		add(SNAME("cloud_height"), -1, 1, 1, 1, 0, Vector3(range.x, 0, 0), TTR("Cloud Height"));
+	}
+	return handles;
+}
+
+Vector<Vector3> FellowGizmoPlugin::_handle_positions(const Node3D *p_node, const StringName &p_class) const {
+	StringName size_property;
+	switch (_handle_kind(p_node, p_class, size_property)) {
+		case HANDLES_BOX:
+			return helper->box_get_handles(p_node->get(size_property));
+		case HANDLES_CYLINDER:
+			return helper->cylinder_get_handles(p_node->get(SNAME("height")), p_node->get(SNAME("radius")));
+		case HANDLES_BOUNDS: {
+			const AABB b = p_node->get(SNAME("bounds"));
+			Vector<Vector3> faces;
+			for (int i = 0; i < 6; i++) {
+				Vector3 c = b.get_center();
+				c[i / 2] = (i % 2) ? b.position[i / 2] + b.size[i / 2] : b.position[i / 2];
+				faces.push_back(c);
+			}
+			return faces;
+		}
+		case HANDLES_AXES: {
+			Vector<Vector3> positions;
+			for (const AxisHandle &h : axis_handles_for(p_class, _gizmo_properties(p_node, p_class))) {
+				positions.push_back(h.position);
+			}
+			return positions;
+		}
+		default:
+			return Vector<Vector3>();
+	}
+}
+
+Dictionary FellowGizmoPlugin::_gizmo_properties(const Node3D *p_node, const StringName &p_class) {
+	Dictionary props;
+	for (const StringName &p : _fellow_gizmo_properties(p_class)) {
+		props[p] = p_node->get(p);
+	}
+	return props;
+}
+
 String FellowGizmoPlugin::get_handle_name(const EditorNode3DGizmo *p_gizmo, int p_id, bool p_secondary) const {
-	return helper->box_get_handle_name(p_id);
+	const Node3D *node = p_gizmo->get_node_3d();
+	const StringName cls = _fellow_gizmo_class(node);
+	StringName size_property;
+	switch (_handle_kind(node, cls, size_property)) {
+		case HANDLES_BOX:
+			return helper->box_get_handle_name(p_id);
+		case HANDLES_CYLINDER:
+			return helper->cylinder_get_handle_name(p_id);
+		case HANDLES_BOUNDS: {
+			static const char *faces[6] = { "-X", "+X", "-Y", "+Y", "-Z", "+Z" };
+			return vformat(TTR("Bounds %s"), faces[CLAMP(p_id, 0, 5)]);
+		}
+		case HANDLES_AXES: {
+			const Vector<AxisHandle> handles = axis_handles_for(cls, _gizmo_properties(node, cls));
+			return p_id >= 0 && p_id < handles.size() ? handles[p_id].name : String();
+		}
+		default:
+			return String();
+	}
 }
 
 Variant FellowGizmoPlugin::get_handle_value(const EditorNode3DGizmo *p_gizmo, int p_id, bool p_secondary) const {
-	return p_gizmo->get_node_3d()->get("size");
+	const Node3D *node = p_gizmo->get_node_3d();
+	const StringName cls = _fellow_gizmo_class(node);
+	StringName size_property;
+	switch (_handle_kind(node, cls, size_property)) {
+		case HANDLES_BOX:
+			return node->get(size_property);
+		case HANDLES_CYLINDER:
+			return Vector2(node->get(SNAME("radius")), node->get(SNAME("height")));
+		case HANDLES_BOUNDS:
+			return node->get(SNAME("bounds"));
+		case HANDLES_AXES: {
+			const Vector<AxisHandle> handles = axis_handles_for(cls, _gizmo_properties(node, cls));
+			return p_id >= 0 && p_id < handles.size() ? node->get(handles[p_id].property) : Variant();
+		}
+		default:
+			return Variant();
+	}
 }
 
 void FellowGizmoPlugin::begin_handle_action(const EditorNode3DGizmo *p_gizmo, int p_id, bool p_secondary) {
 	helper->initialize_handle_action(get_handle_value(p_gizmo, p_id, p_secondary), p_gizmo->get_node_3d()->get_global_transform());
 }
 
+// The point of the line through p_base along p_axis nearest the mouse's ray (the node's space).
+static Vector3 _fellow_on_axis(const Vector3 p_segment[2], const Vector3 &p_base, int p_axis) {
+	Vector3 dir;
+	dir[p_axis] = 1.0;
+	Vector3 on_axis, on_ray;
+	Geometry3D::get_closest_points_between_segments(p_base - dir * 16384.0, p_base + dir * 16384.0, p_segment[0], p_segment[1], on_axis, on_ray);
+	return on_axis;
+}
+
+static real_t _fellow_snapped(real_t p_value) {
+	if (Node3DEditor::get_singleton() && Node3DEditor::get_singleton()->is_snap_enabled()) {
+		return Math::snapped(p_value, Node3DEditor::get_singleton()->get_translate_snap());
+	}
+	return p_value;
+}
+
 void FellowGizmoPlugin::set_handle(const EditorNode3DGizmo *p_gizmo, int p_id, bool p_secondary, Camera3D *p_camera, const Point2 &p_point) {
 	Node3D *node = p_gizmo->get_node_3d();
-	Vector3 size = node->get("size");
+	const StringName cls = _fellow_gizmo_class(node);
 	Vector3 sg[2];
 	helper->get_segment(p_camera, p_point, sg);
-	Vector3 position;
-	helper->box_set_handle(sg, p_id, size, position);
-	node->set("size", size);
-	node->set_global_position(position);
+	StringName size_property;
+	switch (_handle_kind(node, cls, size_property)) {
+		case HANDLES_BOX: {
+			Vector3 size = node->get(size_property);
+			Vector3 position;
+			helper->box_set_handle(sg, p_id, size, position);
+			node->set(size_property, size);
+			node->set_global_position(position);
+		} break;
+		case HANDLES_CYLINDER: {
+			real_t height = node->get(SNAME("height"));
+			real_t radius = node->get(SNAME("radius"));
+			Vector3 position;
+			helper->cylinder_set_handle(sg, p_id, height, radius, position);
+			node->set(SNAME("height"), height);
+			node->set(SNAME("radius"), radius);
+			node->set_global_position(position);
+		} break;
+		case HANDLES_BOUNDS: {
+			AABB b = node->get(SNAME("bounds"));
+			const int axis = CLAMP(p_id / 2, 0, 2);
+			Vector3 base = b.get_center();
+			base[axis] = 0.0;
+			const real_t c = _fellow_snapped(_fellow_on_axis(sg, base, axis)[axis]);
+			const real_t lo = b.position[axis];
+			const real_t hi = lo + b.size[axis];
+			if (p_id % 2) {
+				b.size[axis] = MAX(c - lo, real_t(0.01));
+			} else {
+				const real_t new_lo = MIN(c, hi - real_t(0.01));
+				b.position[axis] = new_lo;
+				b.size[axis] = hi - new_lo;
+			}
+			node->set(SNAME("bounds"), b);
+		} break;
+		case HANDLES_AXES: {
+			const Vector<AxisHandle> handles = axis_handles_for(cls, _gizmo_properties(node, cls));
+			ERR_FAIL_INDEX(p_id, handles.size());
+			const AxisHandle &h = handles[p_id];
+			const real_t c = (_fellow_on_axis(sg, h.base, h.axis)[h.axis] - h.base[h.axis]) * h.sign;
+			const real_t v = _fellow_snapped(MAX((c - h.offset) * h.scale, real_t(0.0)));
+			if (h.component < 0) {
+				node->set(h.property, v);
+			} else {
+				Vector2 value = node->get(h.property);
+				value[h.component] = v;
+				node->set(h.property, value);
+			}
+		} break;
+		default:
+			break;
+	}
 }
 
 void FellowGizmoPlugin::commit_handle(const EditorNode3DGizmo *p_gizmo, int p_id, bool p_secondary, const Variant &p_restore, bool p_cancel) {
-	helper->box_commit_handle(TTR("Change Gas Volume Size"), p_cancel, p_gizmo->get_node_3d());
+	Node3D *node = p_gizmo->get_node_3d();
+	const StringName cls = _fellow_gizmo_class(node);
+	StringName size_property;
+	StringName property;
+	String action;
+	switch (_handle_kind(node, cls, size_property)) {
+		case HANDLES_BOX:
+			helper->box_commit_handle(cls == SNAME("FellowGasVolume3D") ? TTR("Change Gas Volume Size") : TTR("Change Emitter Size"), p_cancel, node, node, SNAME("global_position"), size_property);
+			return;
+		case HANDLES_CYLINDER:
+			helper->cylinder_commit_handle(p_id, TTR("Change Emitter Radius"), TTR("Change Emitter Height"), p_cancel, node);
+			return;
+		case HANDLES_BOUNDS:
+			property = SNAME("bounds");
+			action = TTR("Change Cell Bounds");
+			break;
+		case HANDLES_AXES: {
+			const Vector<AxisHandle> handles = axis_handles_for(cls, _gizmo_properties(node, cls));
+			ERR_FAIL_INDEX(p_id, handles.size());
+			property = handles[p_id].property;
+			action = vformat(TTR("Change %s"), handles[p_id].name);
+		} break;
+		default:
+			return;
+	}
+	if (p_cancel) {
+		node->set(property, p_restore);
+		return;
+	}
+	EditorUndoRedoManager *ur = EditorUndoRedoManager::get_singleton();
+	ur->create_action(action);
+	ur->add_do_property(node, property, node->get(property));
+	ur->add_undo_property(node, property, p_restore);
+	ur->commit_action();
 }
 
 // ------------------------------------------------------------------ BVH importer

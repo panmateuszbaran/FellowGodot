@@ -30,6 +30,8 @@
 
 #include "fellow_burnable_3d.h"
 
+#include "fellow_node_warnings.h"
+
 #include "core/config/engine.h"
 #include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
@@ -1975,6 +1977,7 @@ void FellowBurnable3D::_restore_collision() {
 
 void FellowBurnable3D::set_mesh_path(const NodePath &p_path) {
 	mesh_path = p_path;
+	update_configuration_warnings();
 	if (configured) {
 		_unconfigure();
 	}
@@ -2084,8 +2087,42 @@ Dictionary FellowBurnable3D::get_last_step_info() const {
 	return last_step;
 }
 
+PackedStringArray FellowBurnable3D::get_configuration_warnings() const {
+	PackedStringArray warnings = Node3D::get_configuration_warnings();
+	if (FellowWarnings::fluids_off(warnings)) {
+		return warnings;
+	}
+	if (FellowWarnings::compatibility()) {
+		warnings.push_back(RTR("The Compatibility renderer does not burn objects: use Forward+."));
+	} else if (!FellowWarnings::forward_plus()) {
+		warnings.push_back(RTR("The Mobile renderer does not draw the flames and smoke (a gas volume's): use Forward+."));
+	}
+	const MeshInstance3D *target = _get_target();
+	if (!target) {
+		if (mesh_path.is_empty()) {
+			warnings.push_back(RTR("A FellowBurnable3D burns its parent MeshInstance3D, or the one Mesh Path leads to: it has neither."));
+		} else {
+			FellowWarnings::path(warnings, this, mesh_path, "Mesh Path", "MeshInstance3D");
+		}
+	} else if (target->get_mesh().is_null()) {
+		warnings.push_back(RTR("The MeshInstance3D to burn has no mesh."));
+	}
+	if (!gas_volume_path.is_empty()) {
+		FellowWarnings::path(warnings, this, gas_volume_path, "Gas Volume Path", "FellowGasVolume3D");
+	} else if (is_inside_tree()) {
+		const Node *root = FellowWarnings::scene_root(this);
+		if (root && root->find_children("*", "FellowGasVolume3D", true, false).is_empty()) {
+			warnings.push_back(RTR("No FellowGasVolume3D in the scene: the object chars without flames or smoke (they burn in a gas volume around it)."));
+		}
+	}
+	return warnings;
+}
+
 void FellowBurnable3D::_notification(int p_what) {
 	switch (p_what) {
+		case NOTIFICATION_PARENTED: {
+			update_configuration_warnings();
+		} break;
 		case NOTIFICATION_ENTER_TREE: {
 			if (Engine::get_singleton()->is_editor_hint()) {
 				return;

@@ -30,6 +30,8 @@
 
 #include "fellow_rain_3d.h"
 
+#include "fellow_editor_still.h"
+#include "fellow_node_warnings.h"
 #include "fellow_rain.glsl.gen.h"
 #include "fellow_snow_tracker_3d.h"
 #include "fellow_snow_tracks.glsl.gen.h"
@@ -328,7 +330,9 @@ void FellowRain3D::_update_children() {
 
 void FellowRain3D::_push_state() {
 	bool enabled = is_visible_in_tree() && active == this && (wetness > 0.0f || rain > 0.0f || snow > 0.0f || frost > 0.0f) && Fellow::fluid_enabled();
-	RendererRD::FellowWeather::State st;
+	// Built in zeroed memory, its padding the same every time: the bytes are compared with those last sent.
+	alignas(RendererRD::FellowWeather::State) uint8_t st_bytes[sizeof(RendererRD::FellowWeather::State)] = {};
+	RendererRD::FellowWeather::State &st = *::new (st_bytes) RendererRD::FellowWeather::State;
 	st.enabled = enabled;
 	st.wetness = wetness;
 	st.puddles = puddles;
@@ -432,6 +436,13 @@ void FellowRain3D::_push_state() {
 		st.tracks_window = track_window;
 		memcpy(state.ptrw(), &st, sizeof(st));
 	}
+	// Still in the editor (milestone 52): nothing sent when nothing changed (the ripples' pass would run again).
+	if (fellow_editor_still() && tracks_data.is_empty() && sent_enabled == int(enabled) && push == sent_push && state == sent_state) {
+		return;
+	}
+	sent_enabled = int(enabled);
+	sent_push = push;
+	sent_state = state;
 	RS::get_singleton()->call_on_render_thread(callable_mp(this, &FellowRain3D::_rt_update).bind(push, enabled, state, tracks_data));
 }
 
@@ -458,6 +469,13 @@ void FellowRain3D::add_track_stamp(const TrackStamp &p_stamp) {
 	}
 }
 
+void FellowRain3D::set_tracks(bool p_enable) {
+	tracks = p_enable;
+	for (FellowSnowTracker3D *t : FellowSnowTracker3D::get_trackers()) {
+		t->update_configuration_warnings();
+	}
+}
+
 void FellowRain3D::set_track_resolution(int p_resolution) {
 	// A power of two (the pass wraps the texels with a mask).
 	int r = 256;
@@ -467,10 +485,30 @@ void FellowRain3D::set_track_resolution(int p_resolution) {
 	track_resolution = r;
 }
 
+PackedStringArray FellowRain3D::get_configuration_warnings() const {
+	PackedStringArray warnings = Node3D::get_configuration_warnings();
+	if (is_inside_tree() && active != this) {
+		warnings.push_back(RTR("Another FellowRain3D is the rain: one rain node works at a time (the last to enter the tree)."));
+	}
+	if (!Fellow::fluid_enabled()) {
+		warnings.push_back(RTR("FellowEngine's fluids are off in the Project Settings (Rendering > Fellow > Enabled, or Rendering > Fellow > Fluid > Enabled): only the falling drops are drawn."));
+	} else if (!FellowWarnings::forward_plus()) {
+		warnings.push_back(RTR("Wet, snowy and frosted surfaces, puddles, ripples and shelter are drawn only with the Forward+ renderer: this one draws the falling drops alone."));
+	}
+	return warnings;
+}
+
 void FellowRain3D::_notification(int p_what) {
 	switch (p_what) {
 		case NOTIFICATION_ENTER_TREE: {
+			FellowRain3D *previous = active;
 			active = this;
+			if (previous && previous != this) {
+				previous->update_configuration_warnings(); // no longer the rain
+			}
+			for (FellowSnowTracker3D *t : FellowSnowTracker3D::get_trackers()) {
+				t->update_configuration_warnings();
+			}
 			_build_children();
 			set_process_internal(true);
 		} break;
@@ -479,7 +517,10 @@ void FellowRain3D::_notification(int p_what) {
 		} break;
 		case NOTIFICATION_INTERNAL_PROCESS: {
 			double dt = get_process_delta_time();
-			if (time_auto) {
+			// Still in the editor unless it updates continuously (milestone 52): no time, no falling drops, nothing
+			// written or sent that did not change.
+			const bool still = fellow_editor_still();
+			if (time_auto && !still) {
 				time += dt;
 			}
 			double step = last_time < 0.0 ? 0.0 : CLAMP(time - last_time, 0.0, 1.0);
@@ -544,8 +585,12 @@ void FellowRain3D::_notification(int p_what) {
 				} else {
 					at = c + Vector3(0, fall_height, 0) - wind_applied * (fall_height / MAX(drop_speed, 0.1f));
 				}
-				drops->set_global_position(at);
-				splash->set_global_position(c);
+				if (!drops->get_global_position().is_equal_approx(at)) {
+					drops->set_global_position(at);
+				}
+				if (!splash->get_global_position().is_equal_approx(c)) {
+					splash->set_global_position(c);
+				}
 			}
 			if (occlusion) {
 				Vector3 at = get_global_position();
@@ -560,8 +605,14 @@ void FellowRain3D::_notification(int p_what) {
 				}
 			}
 			if (drops) {
-				drops->set_amount_ratio(CLAMP(falling, 0.0f, 1.0f));
-				drops->set_emitting(falling > 0.0f && is_visible_in_tree());
+				const float ratio = CLAMP(falling, 0.0f, 1.0f);
+				if (drops->get_amount_ratio() != ratio) {
+					drops->set_amount_ratio(ratio);
+				}
+				const bool emit = falling > 0.0f && is_visible_in_tree() && !still;
+				if (drops->is_emitting() != emit) {
+					drops->set_emitting(emit);
+				}
 			}
 			if (active == this) {
 				_push_state();
@@ -571,11 +622,15 @@ void FellowRain3D::_notification(int p_what) {
 			if (active == this) {
 				active = nullptr;
 				RS::get_singleton()->call_on_render_thread(callable_mp(this, &FellowRain3D::_rt_disable));
+				for (FellowSnowTracker3D *t : FellowSnowTracker3D::get_trackers()) {
+					t->update_configuration_warnings();
+				}
 			}
 			if (gpu_ready) {
 				RS::get_singleton()->call_on_render_thread(callable_mp(this, &FellowRain3D::_rt_free));
 			}
 			last_time = -1.0;
+			sent_enabled = -1;
 		} break;
 	}
 }

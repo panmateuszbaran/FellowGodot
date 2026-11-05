@@ -30,6 +30,8 @@
 
 #include "fellow_lightning_3d.h"
 
+#include "fellow_editor_still.h"
+
 #include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
 #include "scene/3d/camera_3d.h"
@@ -354,8 +356,14 @@ void FellowLightning3D::_notification(int p_what) {
 			set_process_internal(true);
 		} break;
 		case NOTIFICATION_INTERNAL_PROCESS: {
-			if (time_auto) {
+			// Still in the editor unless it updates continuously (milestone 52): no time, no strikes (a flash under way
+			// ends: it could not fade).
+			const bool still = fellow_editor_still();
+			if (time_auto && !still) {
 				time += get_process_delta_time();
+			}
+			if (still) {
+				current.active = false;
 			}
 			// Strikes at random: in each second of the clock one with a probability of strikes_per_minute / 60, at a
 			// moment within it — a function of the seed and the second, so the same clock gives the same storm.
@@ -391,19 +399,31 @@ void FellowLightning3D::_notification(int p_what) {
 			if (flash) {
 				// Brighter near, as a lit cloud is: by the inverse of the distance, 1 km as the reference.
 				float closeness = CLAMP(1000.0f / MAX(current.distance, 1.0f), 0.3f, 2.5f);
-				flash->set_param(Light3D::PARAM_ENERGY, energy * closeness * env);
-				flash->set_color(color);
-				if (flash->is_visible() != on) {
-					flash->set_visible(on);
+				const float light_energy = energy * closeness * env;
+				// Written when they change (milestone 52): between flashes, nothing (each write had the renderer
+				// redraw).
+				if (!shown_valid || on != shown_on || light_energy != shown_energy || env != shown_env || closeness != shown_closeness || color != shown_color || bolt_brightness != shown_brightness) {
+					flash->set_param(Light3D::PARAM_ENERGY, light_energy);
+					flash->set_color(color);
+					if (flash->is_visible() != on) {
+						flash->set_visible(on);
+					}
+					bolt->set_visible(on);
+					glow->set_visible(on);
+					bolt_material->set_shader_parameter("flash", env);
+					bolt_material->set_shader_parameter("bolt_color", color);
+					bolt_material->set_shader_parameter("brightness", bolt_brightness);
+					glow_material->set_shader_parameter("flash", env * closeness);
+					glow_material->set_shader_parameter("glow_color", color);
+					shown_valid = true;
+					shown_on = on;
+					shown_energy = light_energy;
+					shown_env = env;
+					shown_closeness = closeness;
+					shown_color = color;
+					shown_brightness = bolt_brightness;
 				}
-				bolt->set_visible(on);
-				glow->set_visible(on);
-				bolt_material->set_shader_parameter("flash", env);
-				bolt_material->set_shader_parameter("bolt_color", color);
-				bolt_material->set_shader_parameter("brightness", bolt_brightness);
-				glow_material->set_shader_parameter("flash", env * closeness);
-				glow_material->set_shader_parameter("glow_color", color);
-				_push_cloud_flash(on, energy * closeness * env);
+				_push_cloud_flash(on, light_energy);
 			}
 		} break;
 		case NOTIFICATION_EXIT_TREE: {

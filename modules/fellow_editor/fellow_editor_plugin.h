@@ -39,19 +39,46 @@ class Gizmo3DHelper;
 class LineEdit;
 class SpinBox;
 
-// FellowEngine's 3D nodes in the 3D view (milestone 50): what they cover — a gas volume's box (with handles), an
-// emitter's shape, a water body's extent, a shallow-water domain, a streaming cell's bounds, the wind's direction and
-// speed, lightning's distance band, a snow tracker's radius. Read through their properties, so the plugin needs none
-// of the modules' headers.
+// FellowEngine's 3D nodes in the 3D view (milestone 50): what they cover — a gas volume's box, an emitter's shape, a
+// water body's extent, a shallow-water domain, a streaming cell's bounds, the wind's direction and speed, lightning's
+// distance band, a snow tracker's radius. Read through their properties, so the plugin needs none of the modules'
+// headers. Handles to drag them (milestone 50: the gas volume's; milestone 52: the emitters', the water's, the cells',
+// the tracker's and lightning's), undoable.
 class FellowGizmoPlugin : public EditorNode3DGizmoPlugin {
 	GDCLASS(FellowGizmoPlugin, EditorNode3DGizmoPlugin);
 
 	Ref<Gizmo3DHelper> helper;
 
+	enum HandleKind {
+		HANDLES_NONE,
+		HANDLES_BOX, // a centred box (Gizmo3DHelper)
+		HANDLES_CYLINDER, // a vertical cylinder (Gizmo3DHelper)
+		HANDLES_BOUNDS, // an AABB property: a handle on each face, the opposite face kept
+		HANDLES_AXES, // AxisHandles
+	};
+
 	static void _box_lines(const AABB &p_box, Vector<Vector3> &r_lines);
 	static void _circle_lines(const Vector3 &p_centre, real_t p_radius, int p_segments, Vector<Vector3> &r_lines);
+	static HandleKind _handle_kind(const Node3D *p_node, const StringName &p_class, StringName &r_size_property);
+	static Dictionary _gizmo_properties(const Node3D *p_node, const StringName &p_class);
+	Vector<Vector3> _handle_positions(const Node3D *p_node, const StringName &p_class) const;
 
 public:
+	// Milestone 52: a handle moving along one of the node's axes, setting one number of a property: the handle sits at
+	// base + axis * sign * (value / scale + offset).
+	struct AxisHandle {
+		StringName property;
+		int component = -1; // of a Vector2 property; -1: a float
+		int axis = 0;
+		real_t sign = 1.0;
+		real_t scale = 1.0; // 2: a size centred on the node
+		real_t offset = 0.0;
+		Vector3 base;
+		Vector3 position;
+		String name;
+	};
+	static Vector<AxisHandle> axis_handles_for(const StringName &p_class, const Dictionary &p_properties);
+
 	bool has_gizmo(Node3D *p_node) override;
 	String get_gizmo_name() const override;
 	int get_priority() const override;

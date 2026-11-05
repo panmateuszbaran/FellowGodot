@@ -30,7 +30,23 @@
 
 #include "fellow_snow_tracker_3d.h"
 
+#include "fellow_node_warnings.h"
+#include "fellow_rain_3d.h"
+
 #include "core/object/class_db.h"
+
+PackedStringArray FellowSnowTracker3D::get_configuration_warnings() const {
+	PackedStringArray warnings = Node3D::get_configuration_warnings();
+	const FellowRain3D *rain = FellowRain3D::get_active();
+	if (!rain) {
+		warnings.push_back(RTR("Tracks are pressed into a FellowRain3D's snow: the scene has no FellowRain3D."));
+	} else if (!rain->get_tracks()) {
+		warnings.push_back(RTR("The FellowRain3D's Tracks are off: no tracks are pressed into its snow."));
+	} else if (!FellowWarnings::forward_plus()) {
+		warnings.push_back(RTR("Snow and its tracks are drawn only with the Forward+ renderer."));
+	}
+	return warnings;
+}
 
 LocalVector<FellowSnowTracker3D *> FellowSnowTracker3D::trackers;
 

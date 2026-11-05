@@ -68,17 +68,23 @@ private:
 	Node *editor_preview = nullptr; // milestone 50: the content shown in the editor (internal, not saved)
 
 	void _set_proxy_visible(bool p_visible);
+	FellowWorldStreamer3D *_find_streamer() const;
 
 protected:
 	void _notification(int p_what);
 	static void _bind_methods();
 
 public:
+	PackedStringArray get_configuration_warnings() const override;
+
 	void set_scene_path(const String &p_path);
 	String get_scene_path() const { return scene_path; }
 	void set_bounds(const AABB &p_bounds);
 	AABB get_bounds() const { return bounds; }
-	void set_load_distance(real_t p_distance) { load_distance = p_distance; }
+	void set_load_distance(real_t p_distance) {
+		load_distance = p_distance;
+		update_gizmos(); // milestone 52
+	}
 	real_t get_load_distance() const { return load_distance; }
 
 	State get_state() const { return state; }
@@ -155,6 +161,8 @@ protected:
 	static void _bind_methods();
 
 public:
+	PackedStringArray get_configuration_warnings() const override;
+
 	void _register_cell(FellowStreamingCell3D *p_cell);
 	void _unregister_cell(FellowStreamingCell3D *p_cell);
 
@@ -174,9 +182,15 @@ public:
 	bool is_streaming() const { return streaming; }
 	void set_editor_preview(bool p_enable);
 	bool is_editor_preview() const { return editor_preview; }
-	void set_use_camera(bool p_enable) { use_camera = p_enable; }
+	void set_use_camera(bool p_enable) {
+		use_camera = p_enable;
+		update_configuration_warnings();
+	}
 	bool is_using_camera() const { return use_camera; }
-	void set_targets(const TypedArray<NodePath> &p_targets) { targets = p_targets; }
+	void set_targets(const TypedArray<NodePath> &p_targets) {
+		targets = p_targets;
+		update_configuration_warnings();
+	}
 	TypedArray<NodePath> get_targets() const { return targets; }
 
 	// Cells around a point load as if a camera were there (a teleport's destination, behind a loading screen).

@@ -55,15 +55,23 @@ protected:
 	static void _bind_methods();
 
 public:
+	PackedStringArray get_configuration_warnings() const override;
+
 	static const LocalVector<FellowSnowTracker3D *> &get_trackers() { return trackers; }
 	// Its capsule for this frame (false: none): x0, z0, x1, z1; radius, depth, height, contact height.
 	bool take_stamp(float r_segment[4], float r_shape[4], float p_snow_depth);
 
 	void set_enabled(bool p_enabled) { enabled = p_enabled; }
 	bool is_enabled() const { return enabled; }
-	void set_radius(float p_radius) { radius = MAX(0.005f, p_radius); }
+	void set_radius(float p_radius) {
+		radius = MAX(0.005f, p_radius);
+		update_gizmos(); // milestone 52
+	}
 	float get_radius() const { return radius; }
-	void set_length(float p_length) { length = MAX(0.0f, p_length); }
+	void set_length(float p_length) {
+		length = MAX(0.0f, p_length);
+		update_gizmos();
+	}
 	float get_length() const { return length; }
 	void set_depth(float p_depth) { depth = p_depth; }
 	float get_depth() const { return depth; }

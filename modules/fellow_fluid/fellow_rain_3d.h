@@ -169,6 +169,10 @@ private:
 	Ref<Shader> flake_shader;
 	Ref<ShaderMaterial> flake_material;
 	double last_time = -1.0;
+	// The state last sent to the renderer (milestone 52: not sent again in the still editor).
+	int sent_enabled = -1;
+	PackedByteArray sent_push;
+	PackedByteArray sent_state;
 
 	// Render thread.
 	RenderingDevice *rd = nullptr;
@@ -217,6 +221,8 @@ protected:
 	static void _bind_methods();
 
 public:
+	PackedStringArray get_configuration_warnings() const override;
+
 	static FellowRain3D *get_active() { return active; }
 
 	void set_precipitation(Precipitation p_precipitation);
@@ -307,7 +313,7 @@ public:
 	float get_flake_wind_influence() const { return flake_wind_influence; }
 	void set_flake_color(const Color &p_color);
 	Color get_flake_color() const { return flake_color; }
-	void set_tracks(bool p_enable) { tracks = p_enable; }
+	void set_tracks(bool p_enable);
 	bool get_tracks() const { return tracks; }
 	void set_track_window(float p_metres) { track_window = CLAMP(p_metres, 4.0f, 1024.0f); }
 	float get_track_window() const { return track_window; }

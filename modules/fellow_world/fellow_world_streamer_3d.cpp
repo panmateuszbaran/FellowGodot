@@ -52,8 +52,32 @@ static float _point_aabb_distance(const Vector3 &p_point, const AABB &p_box) {
 
 /* CELL */
 
+FellowWorldStreamer3D *FellowStreamingCell3D::_find_streamer() const {
+	for (Node *p = get_parent(); p; p = p->get_parent()) {
+		if (FellowWorldStreamer3D *s = Object::cast_to<FellowWorldStreamer3D>(p)) {
+			return s;
+		}
+	}
+	return nullptr;
+}
+
+// Milestone 52: what the Scene dock's warning icon says.
+PackedStringArray FellowStreamingCell3D::get_configuration_warnings() const {
+	PackedStringArray warnings = Node3D::get_configuration_warnings();
+	if (!_find_streamer()) {
+		warnings.push_back(RTR("A FellowStreamingCell3D streams only under a FellowWorldStreamer3D."));
+	}
+	if (scene_path.is_empty()) {
+		warnings.push_back(RTR("Scene Path is empty: the cell has nothing to stream."));
+	} else if (!ResourceLoader::exists(scene_path)) {
+		warnings.push_back(vformat(RTR("Scene Path (%s) does not exist."), scene_path));
+	}
+	return warnings;
+}
+
 void FellowStreamingCell3D::set_scene_path(const String &p_path) {
 	scene_path = p_path;
+	update_configuration_warnings();
 	if (is_inside_tree()) {
 		_update_editor_preview();
 	}
@@ -123,9 +147,15 @@ void FellowStreamingCell3D::_set_proxy_visible(bool p_visible) {
 
 void FellowStreamingCell3D::_notification(int p_what) {
 	switch (p_what) {
+		case NOTIFICATION_PARENTED: {
+			update_configuration_warnings();
+		} break;
 		case NOTIFICATION_ENTER_TREE: {
 			if (Engine::get_singleton()->is_editor_hint()) {
 				callable_mp(this, &FellowStreamingCell3D::_update_editor_preview).call_deferred();
+				if (FellowWorldStreamer3D *s = _find_streamer()) {
+					s->update_configuration_warnings(); // it has a cell now
+				}
 				break;
 			}
 			for (Node *p = get_parent(); p; p = p->get_parent()) {
@@ -581,8 +611,31 @@ void FellowWorldStreamer3D::get_totals(int &r_cells, int &r_loaded, int &r_loadi
 	}
 }
 
+// Milestone 52: what the Scene dock's warning icon says.
+PackedStringArray FellowWorldStreamer3D::get_configuration_warnings() const {
+	PackedStringArray warnings = Node3D::get_configuration_warnings();
+	if (find_children("*", "FellowStreamingCell3D", true, false).is_empty()) {
+		warnings.push_back(RTR("No FellowStreamingCell3D under this node: nothing to stream. Project > Tools > Split into Streaming Cells (FellowEngine)... makes them from a level."));
+	}
+	if (!use_camera && targets.is_empty()) {
+		warnings.push_back(RTR("Neither Use Camera nor Targets: no cell ever comes within range."));
+	}
+	if (is_inside_tree()) {
+		for (int i = 0; i < targets.size(); i++) {
+			const NodePath path = targets[i];
+			if (!Object::cast_to<Node3D>(get_node_or_null(path))) {
+				warnings.push_back(vformat(RTR("Target %d (%s) leads to no Node3D."), i, String(path)));
+			}
+		}
+	}
+	return warnings;
+}
+
 void FellowWorldStreamer3D::_notification(int p_what) {
 	switch (p_what) {
+		case NOTIFICATION_CHILD_ORDER_CHANGED: {
+			update_configuration_warnings();
+		} break;
 		case NOTIFICATION_ENTER_TREE: {
 			in_tree.push_back(this);
 		} break;

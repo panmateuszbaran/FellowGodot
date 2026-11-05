@@ -1,0 +1,7 @@
+[gd_scene format=3]
+
+[node name="MisplacedEmitter" type="Node3D"]
+
+[node name="Volume" type="FellowGasVolume3D" parent="."]
+
+[node name="Emitter" type="FellowGasEmitter3D" parent="."]

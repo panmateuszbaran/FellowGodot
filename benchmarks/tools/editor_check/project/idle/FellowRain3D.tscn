@@ -1,0 +1,10 @@
+[gd_scene load_steps=2 format=3]
+
+[sub_resource type="BoxMesh" id="Box"]
+
+[node name="Idle" type="Node3D"]
+
+[node name="Box" type="MeshInstance3D" parent="."]
+mesh = SubResource("Box")
+
+[node name="Subject" type="FellowRain3D" parent="."]

@@ -72,6 +72,14 @@ class FellowLightning3D : public Node3D {
 	};
 	Strike current;
 	double last_time = -1.0;
+	// What the flash's light and meshes were last given (milestone 52: written again only when it changes).
+	bool shown_valid = false;
+	bool shown_on = false;
+	float shown_energy = 0.0f;
+	float shown_env = 0.0f;
+	float shown_closeness = 0.0f;
+	Color shown_color;
+	float shown_brightness = 0.0f;
 
 	DirectionalLight3D *flash = nullptr;
 	MeshInstance3D *bolt = nullptr;
@@ -102,9 +110,15 @@ public:
 
 	void set_strikes_per_minute(float p_rate) { strikes_per_minute = MAX(0.0f, p_rate); }
 	float get_strikes_per_minute() const { return strikes_per_minute; }
-	void set_distance_range(const Vector2 &p_range) { distance_range = Vector2(MAX(10.0f, p_range.x), MAX(MAX(10.0f, p_range.x), p_range.y)); }
+	void set_distance_range(const Vector2 &p_range) {
+		distance_range = Vector2(MAX(10.0f, p_range.x), MAX(MAX(10.0f, p_range.x), p_range.y));
+		update_gizmos(); // milestone 52
+	}
 	Vector2 get_distance_range() const { return distance_range; }
-	void set_cloud_height(float p_height) { cloud_height = MAX(10.0f, p_height); }
+	void set_cloud_height(float p_height) {
+		cloud_height = MAX(10.0f, p_height);
+		update_gizmos();
+	}
 	float get_cloud_height() const { return cloud_height; }
 	void set_energy(float p_energy) { energy = MAX(0.0f, p_energy); }
 	float get_energy() const { return energy; }

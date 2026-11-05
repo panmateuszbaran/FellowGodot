@@ -180,6 +180,7 @@ protected:
 
 public:
 	virtual bool has_process() const override { return true; }
+	PackedStringArray get_configuration_warnings() const override;
 
 	void advance(double p_delta);
 	// Several matchers' updates on the WorkerThreadPool (their roots and skeletons are then set on this thread).
@@ -189,7 +190,10 @@ public:
 
 	void set_database(const Ref<FellowMotionDatabase> &p_database);
 	Ref<FellowMotionDatabase> get_database() const { return database; }
-	void set_root_path(const NodePath &p_path) { root_path = p_path; }
+	void set_root_path(const NodePath &p_path) {
+		root_path = p_path;
+		update_configuration_warnings();
+	}
 	NodePath get_root_path() const { return root_path; }
 	void set_desired_velocity(const Vector3 &p_velocity) { desired_velocity = Vector3(p_velocity.x, 0.0f, p_velocity.z); }
 	Vector3 get_desired_velocity() const { return desired_velocity; }

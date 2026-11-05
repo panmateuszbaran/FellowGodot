@@ -31,6 +31,7 @@
 #include "fellow_weather_3d.h"
 
 #include "fellow_lightning_3d.h"
+#include "fellow_node_warnings.h"
 #include "fellow_rain_3d.h"
 #include "fellow_wind_3d.h"
 
@@ -292,6 +293,7 @@ Node *FellowWeather3D::_scene_root() const {
 	void FellowWeather3D::m_func(const NodePath &p_path) { \
 		m_member = p_path; \
 		m_id = ObjectID(); \
+		update_configuration_warnings(); \
 	}
 
 WEATHER_PATH_SETTER(set_wind_path, wind_path, wind_id)
@@ -300,12 +302,14 @@ WEATHER_PATH_SETTER(set_lightning_path, lightning_path, lightning_id)
 
 void FellowWeather3D::set_sun_path(const NodePath &p_path) {
 	sun_path = p_path;
+	update_configuration_warnings();
 	sun_id = ObjectID();
 	sun_searched = false;
 }
 
 void FellowWeather3D::set_environment_path(const NodePath &p_path) {
 	environment_path = p_path;
+	update_configuration_warnings();
 	_restore_environment();
 }
 
@@ -788,6 +792,16 @@ void FellowWeather3D::_notification(int p_what) {
 			lightning_searched = false;
 		} break;
 	}
+}
+
+PackedStringArray FellowWeather3D::get_configuration_warnings() const {
+	PackedStringArray warnings = Node::get_configuration_warnings();
+	FellowWarnings::path(warnings, this, wind_path, "Wind Path", "FellowWind3D");
+	FellowWarnings::path(warnings, this, rain_path, "Rain Path", "FellowRain3D");
+	FellowWarnings::path(warnings, this, lightning_path, "Lightning Path", "FellowLightning3D");
+	FellowWarnings::path(warnings, this, sun_path, "Sun Path", "DirectionalLight3D");
+	FellowWarnings::path(warnings, this, environment_path, "Environment Path", "WorldEnvironment");
+	return warnings;
 }
 
 void FellowWeather3D::_validate_property(PropertyInfo &p_property) const {

@@ -167,12 +167,17 @@ protected:
 	static void _bind_methods();
 
 public:
+	PackedStringArray get_configuration_warnings() const override;
+
 	// Whether a physics body belongs to a burning object (the gas volumes skip it as an obstacle).
 	static bool is_burnable_body(uint64_t p_object_id);
 
 	void set_mesh_path(const NodePath &p_path);
 	NodePath get_mesh_path() const { return mesh_path; }
-	void set_gas_volume_path(const NodePath &p_path) { gas_volume_path = p_path; }
+	void set_gas_volume_path(const NodePath &p_path) {
+		gas_volume_path = p_path;
+		update_configuration_warnings();
+	}
 	NodePath get_gas_volume_path() const { return gas_volume_path; }
 	void set_resolution(int p_resolution);
 	int get_resolution() const { return resolution; }

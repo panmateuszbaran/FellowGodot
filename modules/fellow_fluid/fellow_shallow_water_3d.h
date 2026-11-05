@@ -122,6 +122,8 @@ private:
 	int allocated_resolution = 0;
 	bool gpu_ready = false;
 	bool needs_reset = true;
+	bool surface_pending = true; // render thread: the surface pass owed after a reset
+	uint64_t timestamps_frame = UINT64_MAX; // main thread: the frame drawn whose step captured timestamps
 	bool gpu_failed = false;
 
 	Ref<Texture2DRD> surface_texture;
@@ -155,7 +157,7 @@ private:
 	void _rt_create();
 	void _rt_free();
 	void _rt_reset();
-	void _rt_step(int p_steps, PackedByteArray p_interaction, int p_colliders, int p_impulses);
+	void _rt_step(int p_steps, PackedByteArray p_interaction, int p_colliders, int p_impulses, bool p_timestamps);
 	void _rt_read_timestamps();
 	void _dispatch(RD::ComputeListID p_list, Kernel p_kernel, const PushConstant &p_pc);
 	RID _get_uniform_set(Kernel p_kernel, RID p_in, RID p_out);
@@ -165,6 +167,8 @@ protected:
 	static void _bind_methods();
 
 public:
+	PackedStringArray get_configuration_warnings() const override;
+
 	void set_resolution(int p_resolution);
 	int get_resolution() const { return resolution; }
 	void set_domain_size(const Vector2 &p_size);

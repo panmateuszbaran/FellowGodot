@@ -186,6 +186,8 @@ protected:
 	static void _bind_methods();
 
 public:
+	PackedStringArray get_configuration_warnings() const override;
+
 	void set_size(const Vector3 &p_size);
 	Vector3 get_size() const { return size; }
 	void set_resolution(int p_resolution);

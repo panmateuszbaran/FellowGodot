@@ -30,11 +30,13 @@
 
 #include "fellow_water_3d.h"
 
+#include "fellow_editor_still.h"
+#include "fellow_node_warnings.h"
 #include "fellow_rain_3d.h"
 #include "fellow_shallow_water_3d.h"
-#include "fellow_wind_3d.h"
 #include "fellow_water_shader.h"
 #include "fellow_water_waves.glsl.gen.h"
+#include "fellow_wind_3d.h"
 
 #include "core/math/projection.h"
 #include "core/object/callable_mp.h"
@@ -453,7 +455,10 @@ void FellowWater3D::_notification(int p_what) {
 		} break;
 		case NOTIFICATION_INTERNAL_PROCESS: {
 			double dt = get_process_delta_time();
-			if (time_auto) {
+			// Still in the editor unless it updates continuously (milestone 52): no time, nothing written or
+			// dispatched that did not change.
+			const bool still = fellow_editor_still();
+			if (time_auto && !still) {
 				time += dt;
 			}
 			if (mesh_dirty) {
@@ -462,7 +467,11 @@ void FellowWater3D::_notification(int p_what) {
 			if (material.is_null()) {
 				return;
 			}
-			material->set_shader_parameter("water_time", float(Math::fmod(time, 3600.0)));
+			const float water_time = float(Math::fmod(time, 3600.0));
+			if (water_time != last_water_time) {
+				material->set_shader_parameter("water_time", water_time);
+				last_water_time = water_time;
+			}
 			Vector3 sun = _sun_direction();
 			if (!sun.is_equal_approx(last_sun_direction)) {
 				material->set_shader_parameter("sun_direction", sun);
@@ -496,7 +505,11 @@ void FellowWater3D::_notification(int p_what) {
 					spectrum_dirty = true;
 				}
 				gust_strength = wind_node->get_gustiness() * gust_ripples;
-				material->set_shader_parameter("wind_gust_map", wind_node->get_gust_mapping());
+				const Vector4 gust_map = wind_node->get_gust_mapping();
+				if (gust_map != last_gust_map) {
+					material->set_shader_parameter("wind_gust_map", gust_map);
+					last_gust_map = gust_map;
+				}
 				if (wind_node->get_instance_id() != last_wind_id) {
 					material->set_shader_parameter("wind_gusts", wind_node->get_gust_texture());
 					last_wind_id = wind_node->get_instance_id();
@@ -509,8 +522,11 @@ void FellowWater3D::_notification(int p_what) {
 			FellowShallowWater3D *sim = Object::cast_to<FellowShallowWater3D>(ObjectDB::get_instance(sim_id));
 			if (sim && sim->is_inside_tree()) {
 				Transform3D st = sim->get_global_transform();
-				material->set_shader_parameter("sim_world_to_local", Projection(st.affine_inverse()));
-				material->set_shader_parameter("sim_level_offset", st.origin.y);
+				if (st != last_sim_transform) {
+					material->set_shader_parameter("sim_world_to_local", Projection(st.affine_inverse()));
+					material->set_shader_parameter("sim_level_offset", st.origin.y);
+					last_sim_transform = st;
+				}
 				if (sim->get_water_mesh_instance() && sim->get_water_mesh_instance()->is_visible()) {
 					sim->get_water_mesh_instance()->set_visible(false); // this node draws the simulated surface
 				}
@@ -519,10 +535,12 @@ void FellowWater3D::_notification(int p_what) {
 				return;
 			}
 			int cascades = _cascade_count();
+			bool spectrum_sent = false;
 			if (spectrum_dirty) {
 				Vector<uint8_t> spectrum = _build_spectrum(wave_resolution, cascades);
 				RS::get_singleton()->call_on_render_thread(callable_mp(this, &FellowWater3D::_rt_upload_spectrum).bind(spectrum));
 				spectrum_dirty = false;
+				spectrum_sent = true;
 			}
 			double step = last_dispatch_time < 0.0 ? 1.0 / 60.0 : CLAMP(time - last_dispatch_time, 0.0, 0.25);
 			last_dispatch_time = time;
@@ -552,6 +570,10 @@ void FellowWater3D::_notification(int p_what) {
 			PackedByteArray bytes;
 			bytes.resize(sizeof(PushConstant));
 			memcpy(bytes.ptrw(), &pc, sizeof(PushConstant));
+			if (still && !spectrum_sent && bytes == last_dispatch) {
+				break; // the same waves as the last pass
+			}
+			last_dispatch = bytes;
 			RS::get_singleton()->call_on_render_thread(callable_mp(this, &FellowWater3D::_rt_dispatch).bind(bytes));
 		} break;
 		case NOTIFICATION_EXIT_TREE: {
@@ -559,6 +581,7 @@ void FellowWater3D::_notification(int p_what) {
 				RS::get_singleton()->call_on_render_thread(callable_mp(this, &FellowWater3D::_rt_free));
 			}
 			last_dispatch_time = -1.0;
+			last_dispatch.clear();
 			spectrum_dirty = true;
 		} break;
 	}
@@ -855,7 +878,6 @@ WATER_MATERIAL_SETTER(set_reflection_min_fresnel, float, reflection_min_fresnel)
 WATER_MATERIAL_SETTER(set_simulation_wave_scale, float, simulation_wave_scale)
 WATER_MATERIAL_SETTER(set_simulation_blend, float, simulation_blend)
 WATER_MATERIAL_SETTER(set_flow_period, float, flow_period)
-WATER_MATERIAL_SETTER(set_extent, const Vector2 &, extent)
 WATER_MATERIAL_SETTER(set_debug_view, DebugView, debug_view)
 
 void FellowWater3D::set_reflection_steps(int p_steps) {
@@ -880,8 +902,17 @@ void FellowWater3D::set_grid_far(float p_far) {
 	mesh_dirty = true;
 }
 
+void FellowWater3D::set_extent(const Vector2 &p_extent) {
+	extent = p_extent;
+	if (material.is_valid()) {
+		_update_material();
+	}
+	update_gizmos(); // milestone 52
+}
+
 void FellowWater3D::set_simulation_path(const NodePath &p_path) {
 	simulation_path = p_path;
+	update_configuration_warnings();
 	if (is_inside_tree()) {
 		_update_simulation_link();
 	}
@@ -889,8 +920,21 @@ void FellowWater3D::set_simulation_path(const NodePath &p_path) {
 
 void FellowWater3D::set_sun_path(const NodePath &p_path) {
 	sun_path = p_path;
+	update_configuration_warnings();
 	sun_id = ObjectID();
 	last_sun_direction = Vector3();
+}
+
+PackedStringArray FellowWater3D::get_configuration_warnings() const {
+	PackedStringArray warnings = Node3D::get_configuration_warnings();
+	if (!Fellow::fluid_enabled()) {
+		warnings.push_back(RTR("FellowEngine's fluids are off in the Project Settings (Rendering > Fellow > Enabled, or Rendering > Fellow > Fluid > Enabled): the waves are not simulated."));
+	} else if (FellowWarnings::compatibility()) {
+		warnings.push_back(RTR("The Compatibility renderer does not simulate the waves: the surface is flat. Use Forward+ or Mobile."));
+	}
+	FellowWarnings::path(warnings, this, simulation_path, "Simulation Path", "FellowShallowWater3D");
+	FellowWarnings::path(warnings, this, sun_path, "Sun Path", "DirectionalLight3D");
+	return warnings;
 }
 
 void FellowWater3D::_bind_methods() {

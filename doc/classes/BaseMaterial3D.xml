@@ -487,7 +487,7 @@
 			If [code]true[/code], the vertex color is used as albedo color.
 		</member>
 		<member name="wind" type="bool" setter="set_wind_enabled" getter="is_wind_enabled" default="false">
-			If [code]true[/code], the scene's [code]FellowWind3D[/code] moves the vertices (FellowEngine, Forward+): the mesh is a plant standing at its origin, [member wind_height] tall, which bends with the wind and its gusts, sways, and whose leaves flutter. The shadows and the motion vectors follow. See also [member wind_bend] and [member wind_flutter]. Without a [code]FellowWind3D[/code] in the scene nothing moves.
+			If [code]true[/code], the scene's [FellowWind3D] moves the vertices (FellowEngine, Forward+): the mesh is a plant standing at its origin, [member wind_height] tall, which bends with the wind and its gusts, sways, and whose leaves flutter. The shadows and the motion vectors follow. See also [member wind_bend] and [member wind_flutter]. Without a [FellowWind3D] in the scene nothing moves.
 		</member>
 		<member name="wind_bend" type="float" setter="set_wind_bend" getter="get_wind_bend" default="0.3">
 			How far the plant bends in a wind of 10 m/s, as a share of its height (the force grows with the square of the speed; the bend is limited to three quarters of the height). Grass about [code]1.0[/code], bushes [code]0.3[/code], trees [code]0.05[/code]-[code]0.1[/code].

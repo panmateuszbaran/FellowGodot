@@ -31,7 +31,9 @@
 #include "fellow_gas_volume_3d.h"
 
 #include "fellow_burnable_3d.h"
+#include "fellow_editor_still.h"
 #include "fellow_gas_emitter_3d.h"
+#include "fellow_node_warnings.h"
 #include "fellow_wind_3d.h"
 
 #include "core/config/engine.h"
@@ -639,8 +641,35 @@ PackedByteArray FellowGasVolume3D::get_debug_data() const {
 	return debug->data;
 }
 
+PackedStringArray FellowGasVolume3D::get_configuration_warnings() const {
+	PackedStringArray warnings = Node3D::get_configuration_warnings();
+	if (FellowWarnings::fluids_off(warnings)) {
+		return warnings;
+	}
+	if (FellowWarnings::compatibility()) {
+		warnings.push_back(RTR("The Compatibility renderer neither simulates nor draws gas: use Forward+."));
+	} else if (!FellowWarnings::forward_plus()) {
+		warnings.push_back(RTR("The Mobile renderer simulates the gas but does not draw it: use Forward+."));
+	}
+	bool emitter = false;
+	for (int i = 0; i < get_child_count() && !emitter; i++) {
+		emitter = Object::cast_to<FellowGasEmitter3D>(get_child(i)) != nullptr;
+	}
+	if (!emitter && is_inside_tree()) {
+		// A burning object fills a volume around it without emitters.
+		const Node *root = FellowWarnings::scene_root(this);
+		if (!root || root->find_children("*", "FellowBurnable3D", true, false).is_empty()) {
+			warnings.push_back(RTR("Nothing fills this volume: add a FellowGasEmitter3D as its child (or a FellowBurnable3D inside it)."));
+		}
+	}
+	return warnings;
+}
+
 void FellowGasVolume3D::_notification(int p_what) {
 	switch (p_what) {
+		case NOTIFICATION_CHILD_ORDER_CHANGED: {
+			update_configuration_warnings();
+		} break;
 		case NOTIFICATION_ENTER_TREE: {
 			add_to_group(SNAME("fellow_gas_volumes"));
 			if (query_shape.is_null() && PhysicsServer3D::get_singleton()) {
@@ -678,6 +707,10 @@ void FellowGasVolume3D::_notification(int p_what) {
 				_queue_step(false);
 			}
 			prewarm_left -= batch;
+			// Still in the editor unless it updates continuously (milestone 52): prewarmed, then not stepped.
+			if (fellow_editor_still()) {
+				return;
+			}
 			for (int i = 0; i < substeps; i++) {
 				_queue_step(i == substeps - 1 && fire_light);
 			}

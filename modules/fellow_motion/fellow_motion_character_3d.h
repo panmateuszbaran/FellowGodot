@@ -162,6 +162,8 @@ protected:
 	static void _bind_methods();
 
 public:
+	PackedStringArray get_configuration_warnings() const override;
+
 	void set_model_path(const String &p_path);
 	String get_model_path() const { return model_path; }
 	void set_body_path(const String &p_path);
