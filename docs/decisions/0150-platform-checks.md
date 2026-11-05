@@ -121,11 +121,20 @@ stock's 150.9 mean, the spread 40.8 against 41.0; the others within 0.9). The Mo
 (The luma's mean / spread, 0-255.) Mobile's images on lavapipe are darker than Forward+'s in several labs (Crowd 65.5
 against 129.3, Matching 79.3 against 155.5) — stock's too: it is lavapipe's half floats, which Godot's Mobile renderer
 uses where the device has them; with them hidden (`no_float16`, Android's baselines) its images are Forward+'s (Crowd
-129.3, Matching 154.8). Not a FellowEngine fault; whether a GPU's half floats do the same is the RTX's to show.
+129.3, Matching 154.8). Not a FellowEngine fault, and not a GPU's: the RTX's Mobile renderer, with half floats,
+gives Forward+'s images (below).
 
 Compatibility: the labs of stock nodes give stock's images (PBR 166.1 / 50.1, City 133.4, the Lights Lab black in
 stock too: Compatibility draws no light there); FellowEngine's RenderingDevice nodes step aside with one warning each
 (smoke, fire, burning, water's simulation, rain's ripples) and the rest of the scene renders.
+
+**On the RTX** (job f334: `renderer_matrix.py`, 1280 × 720, 60 frames; Windows, NVIDIA's driver; stock Godot's 9
+labs and FellowEngine's 17, each with the three renderers): no error and exit 0 in all 78 runs. Against stock in the
+labs both run, **the Mobile and Compatibility renderers give stock's images** (mean luma difference 0.00, the largest
+pixel's 0-1 of 255), and Forward+ differs by 0.07-1.03 on average (FellowEngine's default image changes, as on
+lavapipe). The Mobile renderer on the RTX, half floats and all, draws Forward+'s brightness (Crowd 129.5 against 129.1,
+Lights 38.2), so its darkness on lavapipe is lavapipe's half floats; the gas volumes are absent from its frames (Fire
+Lab 120.4 against Forward+'s 121.9), as the warning says.
 
 **Simulated GPUs** (`profile_matrix.sh`: 8 labs — PBR, Fire, Water, the storm, Wind, Crowd, Streaming, Matching — on
 each device; Android's with Mobile, the others with Forward+). No crash and no error on any device (but the one
@@ -183,5 +192,4 @@ and warnings. On Android's 2025 baseline and on every desktop profile FellowEngi
 on Vulkan's minimums (Android's 2022 baseline) stock's Mobile renderer does not fit either. `FELLOW_VULKAN_PROFILE`
 stays as a diagnostic, the scripts as the platform checks to run after a change. What simulation cannot give — other
 GPUs' speed and drivers, the subgroup sizes, Android's, the web's and Apple's builds, consoles — stays open: next, with
-approval, the NDK and Emscripten builds in an emulator and a headless browser, and the RTX's run of the three
-renderers (milestone 49's job f334).
+approval, the NDK and Emscripten builds in an emulator and a headless browser.

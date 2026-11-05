@@ -1,7 +1,7 @@
 # FellowEngine — milestone 49 report (platforms)
 
-Status: **checked on the cloud's CPU, in containers and emulators** (2026-11-04; no GPU work, the RTX not used, no
-other hardware). Branch `fellow/geometry`. Decision record `docs/decisions/0150-platform-checks.md`.
+Status: **checked on the cloud's CPU, in containers and emulators, and the three renderers on the RTX** (2026-11-05;
+no other hardware). Branch `fellow/geometry`. Decision record `docs/decisions/0150-platform-checks.md`.
 
 ## 0. Result
 
@@ -20,7 +20,9 @@ nothing the device lacks** (the eight labs, no error, no finding); on Apple's M1
 shader's 18 samplers; on Vulkan's minimums (Android's 2022 baseline) stock's Mobile renderer does not fit either.
 Ray tracing turns itself off on devices without ray queries, and the image is the one without it exactly. The Windows
 build under Wine renders the PBR Lab as Linux does (150.6 / 40.8 luma mean / spread), on Vulkan and on its OpenGL
-fallback; the arm64 and clang builds give Linux's results (Matching Lab's statistics, the labs' images).
+fallback; the arm64 and clang builds give Linux's results (Matching Lab's statistics, the labs' images). On the RTX,
+the Mobile and Compatibility renderers give stock Godot's images in every lab both run (no pixel more than 1 of 255
+apart), with FellowEngine's 17 labs running without an error in all three.
 
 ## 1. Development
 
@@ -64,6 +66,7 @@ decision record.
 | Windows (MinGW, Wine): `--version`, Matching Lab, PBR Lab on Vulkan and OpenGL | 4 | the same searches and transitions; PBR 150.6 / 40.8 and 166.1 / 50.1, Linux's |
 | Linux arm64 (qemu): `--version`, Matching Lab | 2 | the same searches, transitions and frames checked; floats within FMA's rounding |
 | clang 18 + lld build, PBR and Fire Labs, Matching Lab | 5 | no error, two warnings fixed; GCC's images and statistics |
+| **the RTX** (Windows, NVIDIA): stock's 9 labs and FellowEngine's 17 on the three renderers | 78 | no error; Mobile and Compatibility give stock's images (mean difference 0.00), Forward+ within 0.07-1.03 |
 
 Build times on the cloud's two cores: the Windows template 1 h 14 min, the arm64 template 1 h 20 min, clang's Linux
 template 1 h 44 min.
