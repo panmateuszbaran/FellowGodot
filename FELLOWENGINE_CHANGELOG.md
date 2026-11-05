@@ -9,6 +9,29 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 50 — tools (2026-11-05)
+
+- An editor module (`fellow_editor`, editor builds only; decision 0151): gizmos for FellowEngine's nodes — a gas
+  volume's box with resize handles, emitters' shapes, water extents, shallow-water domains, streaming cells' bounds,
+  the wind's arrow, lightning's distance band, snow trackers — and their icons as billboards; `.bvh` motion capture
+  imported as `Animation` resources (scale, the T-pose frame; a CMU preset); Project > Tools > **Split into Streaming
+  Cells** for the selected `FellowWorldStreamer3D` (`split_into_cells()`: the level's nodes grouped on a grid, saved as
+  cell scenes, replaced by `FellowStreamingCell3D`s).
+- `FellowWorldStreamer3D.editor_preview` (on): the cells show their content in the editor, not saved with the level.
+- Icons for the 17 FellowEngine classes; Performance monitors for texture streaming, world streaming and motion
+  matching (the debugger's Monitors tab); the class reference complete (184 entries of the nodes were missing or
+  empty; three classes outside the module's documented list).
+- Checks: an editor check (`benchmarks/tools/editor_check/`: an editor plugin exercises all of it, then the split
+  level is streamed back in a game; on the RTX with the editor's window and headless: every check passes), and the
+  web template in headless Chromium (`benchmarks/tools/platforms/web/`).
+- Android's (NDK r29, arm64) and the web's (Emscripten 4.0.10, threads) templates built; the web one runs with its
+  cells streamed on worker threads and desktop OpenGL's image.
+- Fixed: `FellowWeather3D.weather` missing in the editor (a two-argument setter, refused by debug builds); the pipeline
+  cache's limit read before its setting existed (64 MiB, not 1024: caches over it discarded at start since milestone
+  9); the water invisible with the Compatibility renderer (OpenGL's depth read as Vulkan's, an unbound wave array
+  lifting it), and the shallow water's refraction there; a streaming cell's double free at exit; the web image's
+  missing `libatomic`; the platform builds' copies of the host's generated sources.
+
 ## Milestone 49 — platforms without their hardware (2026-11-05)
 
 - `FELLOW_VULKAN_PROFILE` (a diagnostic, decision 0150): the Vulkan driver presents its device as another — Android's

@@ -12,11 +12,13 @@ with containers, emulators and Mesa's software drivers, without the hardware (de
 | the Windows build running | Wine, with lavapipe behind winevulkan | `platforms.sh shell wine ...` |
 | Linux arm64 export template | GCC's aarch64 cross-compiler in a container | `platforms.sh build linux-arm64` |
 | the arm64 build running | qemu-user: headless with the cross-compiler's libraries, rendering with Ubuntu's arm64 Mesa (lavapipe, llvmpipe) | `platforms.sh shell cross qemu-aarch64 -L /usr/aarch64-linux-gnu ...`, `shell arm64 qemu-aarch64 -L / ...` |
-| Android and web export templates | the Android NDK and Emscripten (downloaded toolchains) | `platforms.sh build android`, `build web` |
+| Android and web export templates | the Android NDK and Emscripten (downloaded toolchains; built in milestone 50) | `platforms.sh build android`, `build web` |
+| the web template running | headless Chromium (Playwright's; WebGL 2 on SwiftShader), a `.pck` packed by a desktop build, a server with the cross-origin isolation headers the threads need | `web/web_check.sh <template zip> <desktop godot> <out>` |
 
 `platforms.sh image <cross|wine|arm64|android|web>` builds the container images (`Dockerfile.*`; Ubuntu 24.04 packages,
 plus the NDK from Google and emsdk from GitHub for the last two). Builds run in a copy of the repository
-(`$FELLOW_PLATFORMS_TREE`, rsync) so that the containers' SCons keeps its own objects.
+(`$FELLOW_PLATFORMS_TREE`, rsync) so that the containers' SCons keeps its own objects and generated sources (the
+host's `*.gen.*` are not copied: an older copy of another platform's would not be regenerated).
 
 ## Simulated GPUs: FELLOW_VULKAN_PROFILE
 

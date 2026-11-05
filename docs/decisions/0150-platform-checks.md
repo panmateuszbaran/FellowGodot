@@ -181,11 +181,21 @@ template, 1 h 44 min): it builds with no error; two warnings of FellowEngine's h
 overrides lack, 228 times; a class declared twice) are fixed; the build's images are GCC's (PBR and Fire Labs, Forward+
 and Mobile: 150.6 / 40.8, 120.4 / 22.5, 149.7 / 49.8) and Matching Lab's statistics GCC's to the last digit.
 
+**Android and the web** (milestone 50, the toolchains approved: the NDK r29, Emscripten 4.0.10; decision 0151). The
+Android arm64 template builds (`libgodot_android.so`, 76 MB; 37 minutes on two cores); there is no emulator to run it
+on the cloud's CPU. The web template (threads) builds once the web image has `libatomic` for Binaryen and the build
+tree keeps its own generated sources, and runs in headless Chromium (`benchmarks/tools/platforms/web/web_check.sh`:
+a `.pck` packed by a desktop build, a server with the cross-origin isolation headers): isolated, threads on, a
+`FellowWorldStreamer3D`'s two cells loaded on worker threads by frame 9, the water and the wind in the scene, 129
+frames in 74 s on SwiftShader, and the image the Linux template's on desktop OpenGL with the same `.pck` (mean
+difference 0.46 of 255). That run found the **water invisible with the Compatibility renderer** — on the web and on
+desktop OpenGL, Water Lab included: the matrix above reported its run without an error, and its image had the lake
+bed without the lake. The shader read OpenGL's depth as Vulkan's; fixed in decision 0151.
+
 **Not checked**: performance anywhere but the RTX (a simulated device runs at lavapipe's speed), driver bugs, the
 subgroup's size (lavapipe's 8 lanes; FellowEngine's subgroup paths were tuned on NVIDIA's 32), memory sizes,
 Direct3D 12 and Metal (FellowEngine's changes are in the Vulkan driver and RenderingDevice; Godot's Metal driver is
-the default on Apple's platforms), Android and web templates (their toolchains not downloaded), macOS and iOS (Apple's
-SDK), consoles.
+the default on Apple's platforms), Android on a device or an emulator, macOS and iOS (Apple's SDK), consoles.
 
 ## Decision
 
@@ -198,4 +208,5 @@ and warnings. On Android's 2025 baseline and on every desktop profile FellowEngi
 on Vulkan's minimums (Android's 2022 baseline) stock's Mobile renderer does not fit either. `FELLOW_VULKAN_PROFILE`
 stays as a diagnostic, the scripts as the platform checks to run after a change. What simulation cannot give — other
 GPUs' speed and drivers, the subgroup sizes, Android's, the web's and Apple's builds, consoles — stays open: next, with
-approval, the NDK and Emscripten builds in an emulator and a headless browser.
+approval, the NDK and Emscripten builds in an emulator and a headless browser. (Milestone 50: both built, the web one
+run in a headless browser — above.)

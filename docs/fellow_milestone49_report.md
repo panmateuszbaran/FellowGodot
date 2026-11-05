@@ -85,7 +85,8 @@ characters.
   subgroup size (8 lanes on lavapipe, 32 on NVIDIA, 32 or 64 on AMD, 8-32 on Intel); what lavapipe lacks (cooperative
   matrices) is missing under every profile.
 * Android's and the web's templates are not built (the NDK and Emscripten are downloads not made); macOS and iOS need
-  Apple's SDK; consoles a third-party port. Godot's Metal and Direct3D 12 drivers carry none of FellowEngine's driver
+  Apple's SDK; consoles a third-party port. (Milestone 50: both built with the toolchains approved, the web one run in
+  headless Chromium; it found the water invisible with the Compatibility renderer, which the images here had missed.) Godot's Metal and Direct3D 12 drivers carry none of FellowEngine's driver
   work.
 * The Mobile renderer simulates FellowGasVolume3D but does not draw it; the Compatibility renderer runs none of the
   RenderingDevice nodes (gas, burning, water's simulation, shallow water, rain's ripples).

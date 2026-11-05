@@ -29,3 +29,12 @@ first frames some compilations, which the bench's warm-up and heat soak absorb.
 ## Decision
 
 **KEEP** (`fellow125`). `m9_f143` repeats `m9_f141`'s measurement with it.
+
+## Milestone 50: the limit was 64 MiB
+
+The editor check's log (decision 0151) showed "Property not found: rendering/fellow/frame/pipeline_cache_max_mb":
+the RenderingDevice loads the cache before `RenderingServer::init()` defines FellowEngine's settings, so without the
+setting in a project `GLOBAL_GET` found nothing and the clamp made the limit 64 MiB instead of 1024. The laptop's
+runs have been discarding their 67-77 MiB caches at start (a few runs a session from milestone 9: `m9_f145_final`
+through `m49_f334_final`), each then rebuilding its pipelines; the frame times, measured after warm-up, are not
+affected. The default applies now until the setting exists (`Fellow::pipeline_cache_max_bytes()`).

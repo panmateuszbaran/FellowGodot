@@ -118,7 +118,14 @@ FellowEngine's work is in the Forward+ renderer. The Mobile and Compatibility re
 the Mobile renderer gives stock's images in stock's labs and runs FellowEngine's nodes, but draws no gas volumes; with
 Compatibility the nodes that need a RenderingDevice step aside with a warning. Other GPUs are checked by simulating
 them (`FELLOW_VULKAN_PROFILE`: Android's baselines, Intel, AMD, older NVIDIA, Apple M1), the Windows and Linux arm64
-templates by running them under Wine and qemu ([decision 0150](docs/decisions/0150-platform-checks.md)).
+templates by running them under Wine and qemu ([decision 0150](docs/decisions/0150-platform-checks.md)); the web
+template runs in a headless browser with threads, its image desktop OpenGL's.
+
+In the editor (milestone 50, [decision 0151](docs/decisions/0151-editor-tools.md)) FellowEngine's nodes have icons and
+gizmos (a gas volume's box with handles, emitters, water extents, shallow-water domains, streaming cells, the wind's
+arrow, lightning's band, snow trackers), `.bvh` motion capture imports as animations, **Project > Tools > Split into
+Streaming Cells** turns a level into a streamed world whose cells still show in the editor, and the debugger's
+Monitors tab shows texture streaming, world streaming and motion matching.
 
 ## Building
 
@@ -129,8 +136,9 @@ scons platform=windows target=editor           # the editor
 scons platform=windows target=template_release # an export template
 ```
 
-Windows templates also build with MinGW-w64, and Linux arm64 ones with GCC's cross-compiler, in containers:
-`benchmarks/tools/platforms/platforms.sh build windows|linux-arm64` (see its README).
+Windows templates also build with MinGW-w64, Linux arm64 ones with GCC's cross-compiler, and Android's and the web's
+with the NDK and Emscripten, in containers: `benchmarks/tools/platforms/platforms.sh build windows|linux-arm64|android|web`
+(see its README).
 
 The work happens on the `fellow/geometry` branch. The other `fellow/*` branches are earlier stages it grew from.
 
