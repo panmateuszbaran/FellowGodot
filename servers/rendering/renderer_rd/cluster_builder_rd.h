@@ -106,6 +106,7 @@ class ClusterBuilderSharedDataRD {
 		RID shader_pipeline;
 		RID fellow_parallel_pipeline; // FellowEngine (decision 0014).
 		RID fellow_pack_elements_pipeline; // FellowEngine (decision 0051).
+		RID fellow_pack_elements_shader; // its variant: ClusterRender writable (it clears the buffer it reads)
 	} cluster_store;
 
 	struct ClusterDebug {
@@ -262,6 +263,10 @@ private:
 
 	RID cluster_render_uniform_set;
 	RID cluster_store_uniform_set;
+	// FellowEngine (milestone 51): the same buffers for the FELLOW_PACK_ELEMENTS variant, whose binding 1 is writable; with
+	// the stock variant's set every frame failed debug builds' format check ("Uniforms supplied for set (0) ... are not
+	// the same format"), unseen in release templates, which do not check.
+	RID cluster_store_pack_uniform_set;
 
 	// Persistent data.
 

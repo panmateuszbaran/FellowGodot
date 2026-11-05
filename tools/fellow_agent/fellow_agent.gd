@@ -184,7 +184,9 @@ func _visual_bounds(root: Node) -> AABB:
 	var have := false
 	var box := AABB()
 	for n in nodes:
-		if n is VisualInstance3D and n.is_visible_in_tree():
+		# Geometry only: a light's bounds are its range (a directional light's thousands of metres), a probe's its
+		# extent (found framing Sponza from 12 km, milestone 51).
+		if n is GeometryInstance3D and n.is_visible_in_tree():
 			var b: AABB = n.global_transform * n.get_aabb()
 			# Things as large as the sky (a world boundary, a sea to the horizon) would frame nothing.
 			if b.size.length() > 20000.0 or not b.size.is_finite():
@@ -298,6 +300,37 @@ func _image_stats(img: Image) -> Dictionary:
 		"blank": spread * 255.0 < 1.0}
 
 
+func _set_scene_visible(root: Node, visible: bool) -> void:
+	if root is Node3D or root is CanvasItem:
+		root.visible = visible
+	else:
+		for c in root.get_children():
+			if c is Node3D or c is CanvasItem:
+				c.visible = visible
+
+
+func _coverage(a: Image, b: Image) -> float:
+	if a == null or b == null or a.get_size() != b.get_size():
+		return -1.0
+	var ia: Image = a.duplicate()
+	var ib: Image = b.duplicate()
+	ia.convert(Image.FORMAT_RGB8)
+	ib.convert(Image.FORMAT_RGB8)
+	var w := ia.get_width()
+	var h := ia.get_height()
+	var step := maxi(1, int(sqrt(float(w * h) / 40000.0)))
+	var n := 0
+	var changed := 0
+	for y in range(0, h, step):
+		for x in range(0, w, step):
+			var ca := ia.get_pixel(x, y)
+			var cb := ib.get_pixel(x, y)
+			if maxf(absf(ca.r - cb.r), maxf(absf(ca.g - cb.g), absf(ca.b - cb.b))) > 8.0 / 255.0:
+				changed += 1
+			n += 1
+	return snappedf(float(changed) / maxi(n, 1), 0.0001)
+
+
 func _render_stats() -> Dictionary:
 	var vp := get_root().get_viewport_rid()
 	var d := {
@@ -405,6 +438,18 @@ func _capture() -> void:
 		vr["image"] = _save(img, "view_%s.png" % v)
 		vr["stats"] = _image_stats(img)
 		vr["render"] = _render_stats()
+		if is_3d and img != null and args.get("coverage", "true") == "true":
+			# The same view with the scene hidden: the share of pixels the scene changes (0: the camera does not see
+			# it — too far, behind it, or nothing drawn).
+			_set_scene_visible(root, false)
+			await _frames(3)
+			await RenderingServer.frame_post_draw
+			var empty := get_root().get_texture().get_image()
+			_set_scene_visible(root, true)
+			vr["scene_coverage"] = _coverage(img, empty)
+			if vr["scene_coverage"] < 0.01:
+				vr["warning"] = "the scene covers %.2f %% of the picture: the camera may not see it" % (vr["scene_coverage"] * 100.0)
+			await _frames(3)
 		view_results.append(vr)
 		if img != null:
 			images.append(img)

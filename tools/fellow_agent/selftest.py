@@ -63,7 +63,7 @@ def main():
     r = report(d)
     by_path = {x["path"]: x for x in r.get("scenes", []) + r.get("scripts", [])}
     expect("check: exits 1 (faults planted)", rc == 1, f"rc {rc}")
-    for good in ("res://scenes/fellow_3d.tscn", "res://scenes/with_camera.tscn", "res://scenes/ui.tscn", "res://scenes/spinning.tscn", "res://scripts/spinner.gd"):
+    for good in ("res://scenes/fellow_3d.tscn", "res://scenes/with_camera.tscn", "res://scenes/ui.tscn", "res://scenes/spinning.tscn", "res://scenes/lights.tscn", "res://scripts/spinner.gd"):
         expect(f"check: {good} ok", by_path.get(good, {}).get("ok"), json.dumps(by_path.get(good, {}).get("errors", []))[:200])
     parse = by_path.get("res://scripts/does_not_parse.gd", {})
     expect("check: the parse error found", parse and not parse.get("ok") and any("does_not_parse.gd" in (e.get("file", "") + e.get("message", "")) for e in parse.get("errors", [])),
@@ -81,6 +81,7 @@ def main():
     expect("capture views: exit 0", rc == 0, f"rc {rc} {r.get('error', '')}")
     expect("capture views: three pictures and a sheet", len(views) == 3 and all(v.get("image") and os.path.exists(v["image"]) for v in views) and os.path.exists(r.get("sheet", "")))
     expect("capture views: none blank", views and all(not v.get("stats", {}).get("blank", True) for v in views), str([v.get("stats", {}).get("luma_spread") for v in views]))
+    expect("capture views: the scene seen in every view (coverage over 5 %)", views and all(v.get("scene_coverage", 0) > 0.05 for v in views), str([v.get("scene_coverage") for v in views]))
     expect("capture views: preview lighting added", r.get("preview_lighting_added") == ["sun", "environment"], str(r.get("preview_lighting_added")))
     # capture: the scene's camera, twice — the same picture.
     shots = []
@@ -91,10 +92,22 @@ def main():
         shots.append(v.get("image", ""))
         if i == 0:
             expect("capture camera: the scene's camera used", v.get("view") == "camera" and v.get("camera", {}).get("path") == "Camera" and not r.get("preview_lighting_added"), str(v.get("camera")))
+    # capture: framed on the geometry, not on the sun's bounds (a scene with a directional light).
+    rc, d = tool("capture", "--project", project, "--scene", "res://scenes/with_camera.tscn", "--views", "iso", "--size", a.size, "--out", os.path.join(out, "camera_iso"))
+    r = report(d)
+    size = r.get("bounds", {}).get("size", "")
+    expect("capture iso: framed on the geometry (10 m), not the sun", size == "Vector3(10, 1, 10)", size)
     rc, d = tool("compare", shots[0], shots[1])
     expect("compare: two captures identical (deterministic)", rc == 0 and d.get("identical"), f"max diff {d.get('max_diff')}")
     rc, d = tool("compare", views[0]["image"] if views else "", views[2]["image"] if len(views) > 2 else "", "--out", os.path.join(out, "diff.png"))
     expect("compare: different views differ", rc == 1 and not d.get("ok") and os.path.exists(os.path.join(out, "diff.png")), f"over {d.get('pixels_over_threshold')}")
+    # capture: positional lights (the light clusters' passes) — no error in a debug build (milestone 51's fix).
+    rc, d = tool("capture", "--project", project, "--scene", "res://scenes/lights.tscn", "--size", a.size, "--out", os.path.join(out, "lights"))
+    r = report(d)
+    errs = [e for e in r.get("errors", []) if e.get("type") != "warning"]
+    v = (r.get("views") or [{}])[0]
+    expect("capture lights: no error, lit", rc == 0 and not errs and not v.get("stats", {}).get("blank", True),
+           (errs[0].get("message", "")[:160] if errs else str(v.get("stats", {}).get("luma_mean"))))
     # capture: a 2D scene.
     rc, d = tool("capture", "--project", project, "--scene", "res://scenes/ui.tscn", "--size", a.size, "--out", os.path.join(out, "ui"))
     r = report(d)

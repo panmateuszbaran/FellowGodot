@@ -113,7 +113,8 @@ ClusterBuilderSharedDataRD::ClusterBuilderSharedDataRD() {
 		cluster_store.shader = cluster_store.cluster_store_shader.version_get_shader(cluster_store.shader_version, 0);
 		cluster_store.shader_pipeline = RD::get_singleton()->compute_pipeline_create(cluster_store.shader);
 		cluster_store.fellow_parallel_pipeline = RD::get_singleton()->compute_pipeline_create(cluster_store.cluster_store_shader.version_get_shader(cluster_store.shader_version, 1));
-		cluster_store.fellow_pack_elements_pipeline = RD::get_singleton()->compute_pipeline_create(cluster_store.cluster_store_shader.version_get_shader(cluster_store.shader_version, 2));
+		cluster_store.fellow_pack_elements_shader = cluster_store.cluster_store_shader.version_get_shader(cluster_store.shader_version, 2);
+		cluster_store.fellow_pack_elements_pipeline = RD::get_singleton()->compute_pipeline_create(cluster_store.fellow_pack_elements_shader);
 	}
 	{
 		Vector<String> versions;
@@ -290,6 +291,7 @@ void ClusterBuilderRD::_clear() {
 
 	cluster_render_uniform_set = RID();
 	cluster_store_uniform_set = RID();
+	cluster_store_pack_uniform_set = RID();
 }
 
 void ClusterBuilderRD::setup(Size2i p_screen_size, uint32_t p_max_elements, RID p_depth_buffer, RID p_depth_buffer_sampler, RID p_color_buffer) {
@@ -396,6 +398,7 @@ void ClusterBuilderRD::setup(Size2i p_screen_size, uint32_t p_max_elements, RID 
 		}
 
 		cluster_store_uniform_set = RD::get_singleton()->uniform_set_create(uniforms, shared->cluster_store.shader, 0);
+		cluster_store_pack_uniform_set = RD::get_singleton()->uniform_set_create(uniforms, shared->cluster_store.fellow_pack_elements_shader, 0);
 	}
 
 	if (p_color_buffer.is_valid()) {
@@ -529,7 +532,7 @@ void ClusterBuilderRD::_fellow_pack(FellowPackMode p_mode, bool p_range_depth_sk
 	{
 		RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
 		RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, p_mode == FELLOW_PACK_ELEMENTS ? shared->cluster_store.fellow_pack_elements_pipeline : (p_mode == FELLOW_PACK_PARALLEL ? shared->cluster_store.fellow_parallel_pipeline : shared->cluster_store.shader_pipeline));
-		RD::get_singleton()->compute_list_bind_uniform_set(compute_list, cluster_store_uniform_set, 0);
+		RD::get_singleton()->compute_list_bind_uniform_set(compute_list, p_mode == FELLOW_PACK_ELEMENTS ? cluster_store_pack_uniform_set : cluster_store_uniform_set, 0);
 
 		ClusterBuilderSharedDataRD::ClusterStore::PushConstant push_constant;
 		push_constant.cluster_render_data_size = render_element_max / 32 + render_element_max;
