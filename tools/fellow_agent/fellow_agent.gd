@@ -615,6 +615,17 @@ func _run() -> void:
 	var root: Node = loaded["node"]
 	get_root().add_child(root)
 	RenderingServer.viewport_set_measure_render_time(get_root().get_viewport_rid(), true)
+	await _frames(int(args.get("build_frames", "10")))
+	# A 3D scene without a camera of its own is run from the iso view, lit as capture lights it.
+	if (root is Node3D or _has_class(root, "VisualInstance3D")) and get_root().get_camera_3d() == null:
+		if args.get("preview_lighting", "auto") != "off":
+			result["preview_lighting_added"] = _add_preview_lighting(root)
+		var cam := Camera3D.new()
+		cam.name = "_FellowAgentCamera"
+		get_root().add_child(cam)
+		_place_camera(cam, _visual_bounds(root), "iso")
+		cam.make_current()
+		result["camera"] = {"view": "iso", "position": var_to_str(cam.global_position)}
 	await _frames(warmup)
 	var frame_ms := []
 	var gpu_ms := []
