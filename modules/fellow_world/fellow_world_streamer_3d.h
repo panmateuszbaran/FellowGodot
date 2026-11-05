@@ -135,6 +135,8 @@ class FellowWorldStreamer3D : public Node3D {
 	uint64_t update_usec = 0;
 	uint64_t frames = 0;
 
+	static LocalVector<FellowWorldStreamer3D *> in_tree; // milestone 50: for get_totals()
+
 	static void _instance_task(void *p_data);
 	void _update();
 	void _gather_points(LocalVector<Vector3> &r_points) const;
@@ -177,6 +179,10 @@ public:
 	// Loads and activates synchronously every cell in range now (a loading screen); returns how many entered.
 	int load_now();
 	Dictionary get_stats() const;
+
+	// Milestone 50 (tools): every streamer in the tree's cells, summed, for the Performance monitors (FellowEngine's
+	// "World cells loaded" / "World cells loading"). Main thread.
+	static void get_totals(int &r_cells, int &r_loaded, int &r_loading);
 
 	// Milestone 50 (tools): splits p_root's 3D children into cells of p_cell_size metres on this streamer's XZ grid,
 	// each cell's nodes saved as a PackedScene in p_directory and replaced by a FellowStreamingCell3D under this

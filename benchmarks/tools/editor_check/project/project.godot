@@ -1,0 +1,12 @@
+; FellowEngine's editor check (milestone 50): an editor plugin checks the fellow_editor module and quits.
+; benchmarks/tools/editor_check/run_editor_check.py runs it.
+
+config_version=5
+
+[application]
+
+config/name="FellowEngine editor check"
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/fellow_editor_check/plugin.cfg")

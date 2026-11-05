@@ -33,14 +33,66 @@
 #include "fellow_motion_database.h"
 #include "fellow_motion_matcher_3d.h"
 
+#include "core/config/engine.h"
+#include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
+#include "main/performance.h"
+
+// Milestone 50 (tools): motion matching in the debugger's Monitors tab: the matchers' CPU time a frame (summed over
+// the worker threads) and their updates a frame, averaged since the debugger's previous sample.
+static const char *FELLOW_ANIMATION_MONITORS[] = {
+	"FellowEngine/Motion matching time",
+	"FellowEngine/Motion matching updates",
+};
+
+static Variant _fellow_animation_monitor(int p_which) {
+	static uint64_t last_frame = 0;
+	static int64_t last_usec = 0;
+	static int64_t last_updates = 0;
+	static double time_per_frame = 0.0;
+	static double updates_per_frame = 0.0;
+	const uint64_t frame = Engine::get_singleton()->get_process_frames();
+	if (frame != last_frame) {
+		const Dictionary d = FellowMotionMatcher3D::get_global_stats();
+		const int64_t usec = d.get("update_usec", 0);
+		const int64_t updates = d.get("updates", 0);
+		const double frames = double(frame - last_frame);
+		// Counters reset by reset_global_stats() start again from zero.
+		time_per_frame = usec >= last_usec ? (usec - last_usec) / frames / 1e6 : 0.0;
+		updates_per_frame = updates >= last_updates ? (updates - last_updates) / frames : 0.0;
+		last_frame = frame;
+		last_usec = usec;
+		last_updates = updates;
+	}
+	return p_which == 0 ? time_per_frame : updates_per_frame;
+}
 
 void initialize_fellow_animation_module(ModuleInitializationLevel p_level) {
 	if (p_level == MODULE_INITIALIZATION_LEVEL_SCENE) {
 		GDREGISTER_CLASS(FellowMotionDatabase);
 		GDREGISTER_CLASS(FellowMotionMatcher3D);
+
+		Performance *performance = Performance::get_singleton();
+		if (performance) {
+			static const Performance::MonitorType types[2] = { Performance::MONITOR_TYPE_TIME, Performance::MONITOR_TYPE_QUANTITY };
+			for (int i = 0; i < 2; i++) {
+				if (!performance->has_custom_monitor(FELLOW_ANIMATION_MONITORS[i])) {
+					performance->add_custom_monitor(FELLOW_ANIMATION_MONITORS[i], callable_mp_static(&_fellow_animation_monitor).bind(i), Vector<Variant>(), types[i]);
+				}
+			}
+		}
 	}
 }
 
 void uninitialize_fellow_animation_module(ModuleInitializationLevel p_level) {
+	if (p_level == MODULE_INITIALIZATION_LEVEL_SCENE) {
+		Performance *performance = Performance::get_singleton();
+		if (performance) {
+			for (const char *id : FELLOW_ANIMATION_MONITORS) {
+				if (performance->has_custom_monitor(id)) {
+					performance->remove_custom_monitor(id);
+				}
+			}
+		}
+	}
 }

@@ -495,8 +495,29 @@ Dictionary FellowWorldStreamer3D::get_stats() const {
 	return d;
 }
 
+LocalVector<FellowWorldStreamer3D *> FellowWorldStreamer3D::in_tree;
+
+void FellowWorldStreamer3D::get_totals(int &r_cells, int &r_loaded, int &r_loading) {
+	r_cells = 0;
+	r_loaded = 0;
+	r_loading = 0;
+	for (const FellowWorldStreamer3D *streamer : in_tree) {
+		for (const FellowStreamingCell3D *cell : streamer->cells) {
+			r_cells++;
+			if (cell->state == FellowStreamingCell3D::STATE_LOADED) {
+				r_loaded++;
+			} else if (cell->state != FellowStreamingCell3D::STATE_UNLOADED) {
+				r_loading++;
+			}
+		}
+	}
+}
+
 void FellowWorldStreamer3D::_notification(int p_what) {
 	switch (p_what) {
+		case NOTIFICATION_ENTER_TREE: {
+			in_tree.push_back(this);
+		} break;
 		case NOTIFICATION_READY: {
 			if (!Engine::get_singleton()->is_editor_hint()) {
 				set_process_internal(true);
@@ -506,6 +527,7 @@ void FellowWorldStreamer3D::_notification(int p_what) {
 			_update();
 		} break;
 		case NOTIFICATION_EXIT_TREE: {
+			in_tree.erase(this);
 			_cancel_all();
 		} break;
 	}
