@@ -56,7 +56,9 @@ database: import 2.6-2.9 s, build 0.8-0.9 s, load 15-49 ms.
   relative to the moved root is taken as identity.
 * LOD switches the IK on and off at its first distance (popping's p99.9 rises to 145 mm in the LOD run).
 * No AnimationTree node: the matcher is a skeleton modifier (other modifiers, such as Godot's IK nodes, run after it).
-* Timings are the cloud's shared CPU; the laptop's are to come.
+* Timings above are the cloud's shared CPU. On the laptop (milestone 49's job f336, Windows): the matchers' wall time a
+  step 0.12 ms for 16 characters, 0.25 ms for 64, 0.89 ms for 256 on the worker threads (0.73 ms with LOD, 7.0 ms on
+  the main thread alone); Matching Lab at 1080p on the RTX 1.37 ms a frame with 16 characters, 1.88 ms with 64.
 
 ## 5. Next
 

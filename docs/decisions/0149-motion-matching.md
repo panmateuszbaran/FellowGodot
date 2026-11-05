@@ -87,6 +87,14 @@ worst 0.37-5.6 ms (the full scan's cost, on a shared CPU).
 The database: 158 clips imported from BVH in 2.6-2.9 s, built in 0.8-0.9 s, 35.9 MB (116.5 MB with every bone and full
 floats), saved in 0.2 s, loaded in 15-49 ms.
 
+**On the laptop** (milestone 49's job f336: the RTX 5070 Ti Laptop's machine, Windows, MSVC's build, the database
+above): the same statistics to the measurement's noise (16 characters: foot sliding 0.109 m/s, the trajectory within
+3.85 cm, popping's p99 35.8 mm); the matchers' wall time a step on the worker threads **0.12 ms for 16 characters,
+0.25 ms for 64, 0.89 ms for 256** (0.73 ms with LOD at 10 and 25 m), and 7.0 ms for 256 on the main thread alone — the
+laptop's many cores, where the cloud's two gave 3.26 ms. A search's median 52-82 µs, its p99 132-312 µs (busier
+threads than the cloud's). Matching Lab rendered at 1080p on the RTX: 1.37 ms a frame with 16 characters, 1.88 ms with
+64 (the main thread's GDScript steering, not the matching, is the rest of the frame).
+
 ## Decision
 
 **KEEP.** Characters move by matching 27 minutes of motion capture with no state machine, transition or blend space
