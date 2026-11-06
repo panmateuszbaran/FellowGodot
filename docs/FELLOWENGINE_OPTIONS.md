@@ -26,7 +26,15 @@ Separate, or `--render-thread separate`; experimental in Godot). With FellowEngi
 thread does real work: Stress Lab −6.7 %, City Lab −4.5 %, Bistro exterior −1.6 % (`m14_f204`). FellowEngine does not
 change the setting; from `fellow170` (0077) a Skeleton3D hands its skin to the render thread in one command instead of
 one per bone, which made Crowd Lab (256 animated characters) 25 % faster with the separate thread and the separate
-thread faster than the default there (3.47 against 4.34 ms, `m15_f227`).
+thread faster than the default there (3.47 against 4.34 ms, `m15_f227`). Milestone 60 (decision 0165): the water, rain
+and shallow water nodes free their GPU resources on the render thread (they leaked with a separate one), and a deadlock
+in Godot's shader compilation that a two-thread worker pool reached with it is fixed. Measure with
+`--rs_metrics=render_thread` (the bench's reads of render times otherwise wait for the render thread every frame).
+
+**Crowds on worker threads** (decision 0164): characters under a node whose `process_thread_group` is Sub-Thread are
+posed, and their skeletons updated, on a worker thread in parallel with the other groups; FellowEngine's animation
+settings give the same poses there bit for bit. A scene's choice (Crowd Lab `--crowd_groups`, Slice Lab
+`--slice_crowd_groups`).
 
 ## Visually lossless options (off by default)
 
