@@ -15,7 +15,8 @@ extends "res://bench/scene_base.gd"
 ## cycled), --slice_day=<seconds>, --slice_daytime=<0..1> (the time of day at t = 0: 0.35 mid-morning),
 ## --slice_crowd=<n> (48), --slice_trees=<n> (9000), --slice_grass=<clumps per m2 in the meadows> (1.0),
 ## --slice_without=town,forest,water,weather,fire,crowd (parts left out), --slice_weather_seconds=<s> (120: each
-## weather of the soak's cycle), --slice_fire_seconds=<s> (240: the campfire's log burns again).
+## weather of the soak's cycle), --slice_fire_seconds=<s> (240: the campfire's log burns again), --slice_terrain=node
+## (FellowTerrain3D at --slice_terrain_spacing=<m>, 1, instead of the 4 m chunks).
 ## Stock Godot: the FellowEngine nodes are left out (load_error is not set; the slice is the terrain, town, crowd and
 ## forest).
 
@@ -129,6 +130,11 @@ func _in_town(x: float, z: float, margin := 0.0) -> bool:
 
 
 func _build_terrain() -> void:
+	# --slice_terrain=node (milestone 57): FellowTerrain3D, a 1 m grid (--slice_terrain_spacing) with levels of detail,
+	# its own collision; the default, chunks: 64 meshes of a 4 m grid.
+	if str(args.get("slice_terrain", "chunks")) == "node" and ClassDB.class_exists("FellowTerrain3D"):
+		_build_terrain_node()
+		return
 	var mat := StandardMaterial3D.new()
 	mat.vertex_color_use_as_albedo = true
 	mat.roughness = 0.9
@@ -184,6 +190,56 @@ func _build_terrain() -> void:
 	shape.shape = WorldBoundaryShape3D.new()
 	body.add_child(shape)
 	add_child(body)
+
+
+func _build_terrain_node() -> void:
+	var spacing := maxf(0.25, float(args.get("slice_terrain_spacing", "1")))
+	var n := int(SIZE / spacing) + 1
+	var t0 := Time.get_ticks_usec()
+	var heights := PackedFloat32Array()
+	heights.resize(n * n)
+	for j in n:
+		var z := -SIZE * 0.5 + j * spacing
+		for i in n:
+			heights[j * n + i] = height(-SIZE * 0.5 + i * spacing, z)
+	var img := Image.create_from_data(n, n, false, Image.FORMAT_RF, heights.to_byte_array())
+	# The chunks' colours as layers: grass the base, rock on the slopes (1), paving in the town (2), sand at the shore
+	# (3); the splat at a quarter of the heights' resolution.
+	var sn := (n - 1) / 4 + 1
+	var splat := Image.create(sn, sn, false, Image.FORMAT_RGBA8)
+	for j in sn:
+		for i in sn:
+			var x := -SIZE * 0.5 + i * spacing * 4.0
+			var z := -SIZE * 0.5 + j * spacing * 4.0
+			var nrm := normal_at(x, z)
+			var c := Color(0, 0, 0, 0)
+			if _in_town(x, z, 4.0):
+				c.g = 1.0
+			elif height(x, z) < WATER_LEVEL + 1.0:
+				c.b = 1.0
+			elif nrm.y < 0.86:
+				c.r = 1.0
+			splat.set_pixel(i, j, c)
+	var t := ClassDB.instantiate("FellowTerrain3D")
+	t.name = "Terrain"
+	t.position = Vector3(-SIZE * 0.5, 0.0, -SIZE * 0.5)
+	t.vertex_spacing = spacing
+	var layers := []
+	for c in [Color(0.27, 0.36, 0.17), Color(0.4, 0.38, 0.35), Color(0.36, 0.35, 0.33), Color(0.42, 0.38, 0.29)]:
+		var l = ClassDB.instantiate("FellowTerrainLayer")
+		# A layer's colour is sRGB (as a material's); the chunks' vertex colours are taken as linear.
+		l.albedo_color = c.linear_to_srgb()
+		l.roughness = 0.9
+		layers.append(l)
+	layers[1].triplanar = true
+	t.layers = layers
+	t.heightmap = img
+	t.splat_map = splat
+	add_child(t)
+	_counts["terrain"] = "node"
+	_counts["terrain_spacing"] = spacing
+	_counts["terrain_build_ms"] = (Time.get_ticks_usec() - t0) / 1000.0
+	_counts["terrain_stats"] = t.get_stats()
 
 
 func _build_town() -> void:

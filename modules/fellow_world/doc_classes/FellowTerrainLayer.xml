@@ -10,7 +10,7 @@
 	</tutorials>
 	<members>
 		<member name="albedo_color" type="Color" setter="set_albedo_color" getter="get_albedo_color" default="Color(1, 1, 1, 1)">
-			Multiplies the albedo texture.
+			Multiplies the albedo texture (an sRGB colour, as a material's albedo colour).
 		</member>
 		<member name="albedo_texture" type="Texture2D" setter="set_albedo_texture" getter="get_albedo_texture">
 			The layer's albedo (white without one). With [member height_in_albedo_alpha], its alpha is the layer's height for [member FellowTerrain3D.height_blend].
