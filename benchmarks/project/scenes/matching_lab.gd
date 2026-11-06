@@ -43,7 +43,9 @@ func build(p_args: Dictionary) -> void:
 	data_dir = str(args.get("matching_data", OS.get_environment("FELLOW_MATCHING_DATA")))
 	if data_dir == "":
 		data_dir = ProjectSettings.globalize_path("res://external/matching/cmu")
-	db_path = str(args.get("matching_db", "res://external/matching/cmu.res"))
+	# --matching_mirror=1: the clips mirrored too (milestone 56; twice the frames), its own saved database.
+	var mirror := str(args.get("matching_mirror", "0")) == "1"
+	db_path = str(args.get("matching_db", "res://external/matching/cmu_mirror.res" if mirror else "res://external/matching/cmu.res"))
 	_area = clampf(sqrt(float(crowd)) * 4.0, 12.0, 60.0)
 	_setup_common()
 	_setup_environment()
@@ -108,7 +110,15 @@ func _load_database() -> bool:
 	var t1 := Time.get_ticks_usec()
 	var skel: Skeleton3D = ClassDB.class_call_static("FellowMotionDatabase", "create_skeleton", bvh_skeleton)
 	database = ClassDB.instantiate("FellowMotionDatabase")
-	var err: int = database.build(skel, anims, {})
+	# Tags by subject (milestone 56): "s016", "s035", "s069"; mirrored clips also "mirrored".
+	var tags := {}
+	for a in anims:
+		var clip: String = a.resource_name
+		tags[clip] = PackedStringArray(["s" + clip.get_slice("_", 0).pad_zeros(3)])
+	var opts := {"tags": tags}
+	if str(args.get("matching_mirror", "0")) == "1":
+		opts["mirror"] = true
+	var err: int = database.build(skel, anims, opts)
 	skel.free()
 	var t2 := Time.get_ticks_usec()
 	if err != OK:
@@ -291,6 +301,10 @@ func _build_crowd() -> void:
 		mm.inertialization = args.get("matching_inertialization", "1") == "1"
 		mm.synchronization = args.get("matching_sync", "1") == "1"
 		mm.search_interval = float(args.get("matching_interval", "0.1"))
+		if args.has("matching_require"):
+			mm.tags_required = str(args["matching_require"]).split("+", false)
+		if args.has("matching_exclude"):
+			mm.tags_excluded = str(args["matching_exclude"]).split("+", false)
 		if lod.size() > 0:
 			mm.lod_distances = PackedFloat32Array(Array(lod))
 		skel.add_child(mm)

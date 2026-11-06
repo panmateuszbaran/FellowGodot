@@ -91,6 +91,13 @@ class FellowMotionMatcher3D : public SkeletonModifier3D {
 	bool foot_ik = true;
 	bool auto_update = true;
 	PackedFloat32Array lod_distances;
+	// Tags (milestone 56): the clips searched — every required tag, none of the excluded ones.
+	PackedStringArray tags_required;
+	PackedStringArray tags_excluded;
+	uint32_t tags_required_mask = 0;
+	uint32_t tags_excluded_mask = 0;
+	bool tags_dirty = true;
+	void _update_tag_masks();
 	// Ground adaptation (milestone 56): rays down against the physics world under the root and each foot, cast on the
 	// main thread before an update (the update itself touches nothing outside the matcher).
 	bool ground_adaptation = false;
@@ -250,6 +257,16 @@ public:
 	bool is_foot_ik() const { return foot_ik; }
 	void set_auto_update(bool p_enable);
 	bool is_auto_update() const { return auto_update; }
+	void set_tags_required(const PackedStringArray &p_tags) {
+		tags_required = p_tags;
+		tags_dirty = true;
+	}
+	PackedStringArray get_tags_required() const { return tags_required; }
+	void set_tags_excluded(const PackedStringArray &p_tags) {
+		tags_excluded = p_tags;
+		tags_dirty = true;
+	}
+	PackedStringArray get_tags_excluded() const { return tags_excluded; }
 	void set_ground_adaptation(bool p_enable);
 	bool is_ground_adaptation() const { return ground_adaptation; }
 	void set_ground_collision_mask(uint32_t p_mask) { ground_collision_mask = p_mask; }

@@ -52,6 +52,7 @@ void FellowMotionMatcher3D::set_database(const Ref<FellowMotionDatabase> &p_data
 	database = p_database;
 	started = false;
 	pose_ready = false;
+	tags_dirty = true;
 	update_configuration_warnings();
 }
 
@@ -139,7 +140,8 @@ void FellowMotionMatcher3D::_start() {
 		// The first frame: the trajectory of standing still at the root's facing, without a pose to continue.
 		float query[FellowMotionDatabase::FEATURE_COUNT];
 		_build_query(query);
-		const int first = database->search_trajectory(query);
+		_update_tag_masks();
+		const int first = database->search_trajectory(query, tags_required_mask, tags_excluded_mask);
 		if (first >= 0) {
 			frame_time = first;
 			range = database->get_range_of(first);
@@ -502,6 +504,17 @@ void FellowMotionMatcher3D::advance(double p_delta) {
 	_apply_root();
 }
 
+// The tags' masks in the database's names (milestone 56). Thread-safe: an update reads only its own matcher; a change
+// of the tags or the database marks them dirty.
+void FellowMotionMatcher3D::_update_tag_masks() {
+	if (!tags_dirty || database.is_null()) {
+		return;
+	}
+	tags_required_mask = database->get_tag_mask(tags_required);
+	tags_excluded_mask = database->get_tag_mask(tags_excluded) & ~(1u << 31); // an unknown tag excludes nothing
+	tags_dirty = false;
+}
+
 void FellowMotionMatcher3D::set_ground_adaptation(bool p_enable) {
 	ground_adaptation = p_enable;
 	ground_root_init = false;
@@ -637,12 +650,18 @@ void FellowMotionMatcher3D::_update(float p_dt, int p_lod) {
 	if ((desired_velocity - searched_velocity).length() > force_search_velocity_change) {
 		force_search = true;
 	}
+	_update_tag_masks();
+	const int playing = CLAMP(int(Math::round(frame_time)), database->get_range_start(range), stop - 1);
+	const bool tags_ok = FellowMotionDatabase::tags_match(database->get_frame_tags(playing), tags_required_mask, tags_excluded_mask);
+	if (!tags_ok) {
+		force_search = true; // The clip playing has left the tags asked for: another one now.
+	}
 	if (force_search || search_timer <= 0.0f || end_of_range) {
 		float query[FellowMotionDatabase::FEATURE_COUNT];
 		_build_query(query);
 		const int current = CLAMP(int(Math::round(frame_time)), database->get_range_start(range), stop - 1);
 		const uint64_t s0 = OS::get_singleton()->get_ticks_usec();
-		const FellowMotionDatabase::SearchResult result = database->search(query, current, !end_of_range);
+		const FellowMotionDatabase::SearchResult result = database->search(query, current, !end_of_range && tags_ok, tags_required_mask, tags_excluded_mask);
 		const uint64_t us = OS::get_singleton()->get_ticks_usec() - s0;
 		searches++;
 		search_usec += us;
@@ -1016,6 +1035,10 @@ void FellowMotionMatcher3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_clamp_distance"), &FellowMotionMatcher3D::get_clamp_distance);
 	ClassDB::bind_method(D_METHOD("set_unlock_radius", "radius"), &FellowMotionMatcher3D::set_unlock_radius);
 	ClassDB::bind_method(D_METHOD("get_unlock_radius"), &FellowMotionMatcher3D::get_unlock_radius);
+	ClassDB::bind_method(D_METHOD("set_tags_required", "tags"), &FellowMotionMatcher3D::set_tags_required);
+	ClassDB::bind_method(D_METHOD("get_tags_required"), &FellowMotionMatcher3D::get_tags_required);
+	ClassDB::bind_method(D_METHOD("set_tags_excluded", "tags"), &FellowMotionMatcher3D::set_tags_excluded);
+	ClassDB::bind_method(D_METHOD("get_tags_excluded"), &FellowMotionMatcher3D::get_tags_excluded);
 	ClassDB::bind_method(D_METHOD("set_ground_adaptation", "enable"), &FellowMotionMatcher3D::set_ground_adaptation);
 	ClassDB::bind_method(D_METHOD("is_ground_adaptation"), &FellowMotionMatcher3D::is_ground_adaptation);
 	ClassDB::bind_method(D_METHOD("set_ground_collision_mask", "mask"), &FellowMotionMatcher3D::set_ground_collision_mask);
@@ -1066,6 +1089,8 @@ void FellowMotionMatcher3D::_bind_methods() {
 	ADD_GROUP("Search", "");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "search_interval", PROPERTY_HINT_RANGE, "0,1,0.01,suffix:s"), "set_search_interval", "get_search_interval");
 	ADD_PROPERTY(PropertyInfo(Variant::PACKED_FLOAT32_ARRAY, "lod_distances"), "set_lod_distances", "get_lod_distances");
+	ADD_PROPERTY(PropertyInfo(Variant::PACKED_STRING_ARRAY, "tags_required"), "set_tags_required", "get_tags_required");
+	ADD_PROPERTY(PropertyInfo(Variant::PACKED_STRING_ARRAY, "tags_excluded"), "set_tags_excluded", "get_tags_excluded");
 	ADD_GROUP("Blending", "");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "inertialization"), "set_inertialization", "is_inertialization");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "inertialization_halflife", PROPERTY_HINT_RANGE, "0,1,0.01,suffix:s"), "set_inertialization_halflife", "get_inertialization_halflife");

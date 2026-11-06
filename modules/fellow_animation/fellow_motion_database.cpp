@@ -255,6 +255,103 @@ Error FellowMotionDatabase::build(Object *p_skeleton, const TypedArray<Animation
 		stops.push_back(all_positions.size() / bone_count);
 		names.push_back(anim->get_name().is_empty() ? anim->get_path().get_file().get_basename() : anim->get_name());
 	}
+	// Mirroring (milestone 56, option "mirror"): each clip again, reflected across the skeleton's YZ plane with the
+	// left and right bones swapped (a left turn becomes a right turn, a step off the left foot one off the right): twice
+	// the motion to match. A bone's pair is found by its name ("Left"/"Right", ".L"/".R", "_l"/"_r"... or the
+	// "mirror_pairs" option, a Dictionary of names), else it is its own (the spine). Each mirrored global rotation is
+	// corrected by the rests (the pair's rest against the bone's rest reflected), so rigs whose two sides' bone axes are
+	// not mirror images of each other mirror too.
+	LocalVector<bool> mirrored_range;
+	for (uint32_t r = 0; r < starts.size(); r++) {
+		mirrored_range.push_back(false);
+	}
+	if (bool(p_options.get("mirror", false))) {
+		LocalVector<int> pair;
+		pair.resize(bone_count);
+		const Dictionary explicit_pairs = p_options.get("mirror_pairs", Dictionary());
+		const char *subs[][2] = { { "Left", "Right" }, { "left", "right" }, { "LEFT", "RIGHT" }, { ".L", ".R" }, { ".l", ".r" }, { "_L", "_R" }, { "_l", "_r" }, { "L_", "R_" }, { "l_", "r_" } };
+		for (int b = 0; b < bone_count; b++) {
+			pair[b] = b;
+			const String n = bone_names[b];
+			if (explicit_pairs.has(n)) {
+				const String other = explicit_pairs[n];
+				if (bone_index.has(other)) {
+					pair[b] = bone_index[other];
+				}
+				continue;
+			}
+			for (const auto &sub : subs) {
+				for (int dir = 0; dir < 2 && pair[b] == b; dir++) {
+					const String from = sub[dir];
+					const String to = sub[1 - dir];
+					if (n.contains(from)) {
+						const String other = n.replace(from, to);
+						if (bone_index.has(other)) {
+							pair[b] = bone_index[other];
+						}
+					}
+				}
+			}
+		}
+		for (const KeyValue<Variant, Variant> &kv : explicit_pairs) {
+			const String a_name = kv.key;
+			const String b_name = kv.value;
+			if (bone_index.has(a_name) && bone_index.has(b_name)) {
+				pair[bone_index[b_name]] = bone_index[a_name]; // both ways
+			}
+		}
+		auto reflect = [](const Quaternion &q) { return Quaternion(q.x, -q.y, -q.z, q.w); };
+		// The rests' globals, for the correction.
+		LocalVector<Quaternion> rest_gq;
+		rest_gq.resize(bone_count);
+		for (int b = 0; b < bone_count; b++) {
+			const Quaternion lq = get_bone_rest_rotation(b);
+			rest_gq[b] = bone_parents[b] < 0 ? lq : rest_gq[bone_parents[b]] * lq;
+		}
+		LocalVector<Quaternion> correction;
+		correction.resize(bone_count);
+		for (int b = 0; b < bone_count; b++) {
+			correction[b] = (reflect(rest_gq[b]).inverse() * rest_gq[pair[b]]).normalized();
+		}
+		LocalVector<Vector3> gp, mp;
+		LocalVector<Quaternion> gq, mq;
+		gp.resize(bone_count);
+		gq.resize(bone_count);
+		mp.resize(bone_count);
+		mq.resize(bone_count);
+		const uint32_t originals = starts.size();
+		for (uint32_t r = 0; r < originals; r++) {
+			starts.push_back(all_positions.size() / bone_count);
+			for (int f = starts[r]; f < stops[r]; f++) {
+				for (int b = 0; b < bone_count; b++) {
+					const Vector3 &lp = all_positions[f * bone_count + b];
+					const Quaternion &lq = all_rotations[f * bone_count + b];
+					const int parent = bone_parents[b];
+					gp[b] = parent < 0 ? lp : gp[parent] + gq[parent].xform(lp);
+					gq[b] = parent < 0 ? lq : gq[parent] * lq;
+				}
+				for (int b = 0; b < bone_count; b++) {
+					mp[pair[b]] = Vector3(-gp[b].x, gp[b].y, gp[b].z);
+					mq[pair[b]] = (reflect(gq[b]) * correction[b]).normalized();
+				}
+				for (int b = 0; b < bone_count; b++) {
+					const int parent = bone_parents[b];
+					if (parent < 0) {
+						all_positions.push_back(mp[b]);
+						all_rotations.push_back(mq[b]);
+					} else {
+						const Quaternion inv = mq[parent].inverse();
+						all_positions.push_back(inv.xform(mp[b] - mp[parent]));
+						all_rotations.push_back((inv * mq[b]).normalized());
+					}
+				}
+			}
+			stops.push_back(all_positions.size() / bone_count);
+			names.push_back(names[r] + " (mirrored)");
+			mirrored_range.push_back(true);
+		}
+	}
+
 	frame_count = all_positions.size() / bone_count;
 	ERR_FAIL_COND_V_MSG(frame_count == 0, ERR_INVALID_DATA, "FellowMotionDatabase.build(): no clip long enough.");
 
@@ -374,6 +471,34 @@ Error FellowMotionDatabase::build(Object *p_skeleton, const TypedArray<Animation
 		range_stops.set(r, stops[r]);
 		range_names.set(r, names[r]);
 	}
+	// Tags (milestone 56, option "tags": a Dictionary of a clip's name to its tags; a mirrored clip has its clip's and
+	// "mirrored"): at most 31 names.
+	tag_names.clear();
+	range_tags.resize(starts.size());
+	{
+		const Dictionary tags = p_options.get("tags", Dictionary());
+		for (uint32_t r = 0; r < starts.size(); r++) {
+			String base = names[r];
+			if (mirrored_range[r]) {
+				base = base.trim_suffix(" (mirrored)");
+			}
+			PackedStringArray t = tags.has(base) ? PackedStringArray(tags[base]) : PackedStringArray();
+			if (mirrored_range[r]) {
+				t.push_back("mirrored");
+			}
+			uint32_t mask = 0;
+			for (const String &name : t) {
+				int i = tag_names.find(name);
+				if (i < 0 && tag_names.size() < 31) {
+					tag_names.push_back(name);
+					i = tag_names.size() - 1;
+				}
+				ERR_CONTINUE_MSG(i < 0, "FellowMotionDatabase.build(): more than 31 tags.");
+				mask |= 1u << i;
+			}
+			range_tags.set(r, int32_t(mask));
+		}
+	}
 
 	// Contacts: a toe low and slow.
 	contacts.resize(frame_count * 2);
@@ -485,6 +610,16 @@ void FellowMotionDatabase::normalize_query(float *r_query) const {
 }
 
 void FellowMotionDatabase::_rebuild_acceleration() {
+	frame_tags.resize(frame_count);
+	for (int f = 0; f < frame_count; f++) {
+		frame_tags[f] = 0;
+	}
+	for (int r = 0; r < range_starts.size(); r++) {
+		const uint32_t tags = r < range_tags.size() ? uint32_t(range_tags[r]) : 0u;
+		for (int f = range_starts[r]; f < range_stops[r] && f < frame_count; f++) {
+			frame_tags[f] = tags;
+		}
+	}
 	searchable.resize(frame_count);
 	for (int f = 0; f < frame_count; f++) {
 		searchable[f] = 0;
@@ -535,14 +670,28 @@ static inline float box_distance(const float *p_query, const float *p_min, const
 	return cost; // A box with no searchable frame has min > max: its clamp still bounds nothing below (FLT_MAX away).
 }
 
-FellowMotionDatabase::SearchResult FellowMotionDatabase::search(const float *p_query, int p_current_frame, bool p_include_current) const {
+uint32_t FellowMotionDatabase::get_tag_mask(const PackedStringArray &p_tags) const {
+	uint32_t mask = 0;
+	for (const String &t : p_tags) {
+		const int i = tag_names.find(t);
+		if (i >= 0) {
+			mask |= 1u << i;
+		} else if (!t.is_empty()) {
+			mask |= 1u << 31; // A tag no clip has: required, nothing matches; excluded, nothing is left out.
+		}
+	}
+	return mask;
+}
+
+FellowMotionDatabase::SearchResult FellowMotionDatabase::search(const float *p_query, int p_current_frame, bool p_include_current, uint32_t p_required, uint32_t p_excluded) const {
 	SearchResult result;
 	result.cost = FLT_MAX;
 	if (!is_valid() || searchable.size() != uint32_t(frame_count)) {
 		return result;
 	}
 	const float *x = features.ptr();
-	if (p_include_current && p_current_frame >= 0 && p_current_frame < frame_count) {
+	const bool filtered = p_required != 0 || p_excluded != 0;
+	if (p_include_current && p_current_frame >= 0 && p_current_frame < frame_count && (!filtered || tags_match(frame_tags[p_current_frame], p_required, p_excluded))) {
 		float cost = 0.0f;
 		for (int d = 0; d < FEATURE_COUNT; d++) {
 			const float e = p_query[d] - x[p_current_frame * FEATURE_COUNT + d];
@@ -567,7 +716,7 @@ FellowMotionDatabase::SearchResult FellowMotionDatabase::search(const float *p_q
 				continue;
 			}
 			for (; i < small_end; i++) {
-				if (!searchable[i]) {
+				if (!searchable[i] || (filtered && !tags_match(frame_tags[i], p_required, p_excluded))) {
 					continue;
 				}
 				result.frames_checked++;
@@ -590,12 +739,15 @@ FellowMotionDatabase::SearchResult FellowMotionDatabase::search(const float *p_q
 	return result;
 }
 
-int FellowMotionDatabase::search_trajectory(const float *p_query) const {
+int FellowMotionDatabase::search_trajectory(const float *p_query, uint32_t p_required, uint32_t p_excluded) const {
 	int best = -1;
 	float best_cost = FLT_MAX;
 	const float *x = features.ptr();
 	for (int f = 0; f < frame_count; f++) {
 		if (searchable.size() == uint32_t(frame_count) && !searchable[f]) {
+			continue;
+		}
+		if ((p_required || p_excluded) && !tags_match(frame_tags[f], p_required, p_excluded)) {
 			continue;
 		}
 		float cost = 0.0f;
@@ -664,6 +816,8 @@ Dictionary FellowMotionDatabase::get_data() const {
 	d["range_starts"] = range_starts;
 	d["range_stops"] = range_stops;
 	d["range_names"] = range_names;
+	d["tag_names"] = tag_names;
+	d["range_tags"] = range_tags;
 	d["features"] = features;
 	d["feature_offset"] = feature_offset;
 	d["feature_scale"] = feature_scale;
@@ -708,6 +862,8 @@ void FellowMotionDatabase::set_data(const Dictionary &p_data) {
 	range_starts = p_data.get("range_starts", PackedInt32Array());
 	range_stops = p_data.get("range_stops", PackedInt32Array());
 	range_names = p_data.get("range_names", PackedStringArray());
+	tag_names = p_data.get("tag_names", PackedStringArray());
+	range_tags = p_data.get("range_tags", PackedInt32Array());
 	features = p_data.get("features", PackedFloat32Array());
 	feature_offset = p_data.get("feature_offset", PackedFloat32Array());
 	feature_scale = p_data.get("feature_scale", PackedFloat32Array());

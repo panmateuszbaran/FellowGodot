@@ -97,6 +97,9 @@ private:
 	PackedInt32Array range_starts;
 	PackedInt32Array range_stops;
 	PackedStringArray range_names;
+	// Tags (milestone 56): names, and per clip a mask of them (bit i: tag_names[i]); "mirrored" on mirrored clips.
+	PackedStringArray tag_names;
+	PackedInt32Array range_tags;
 
 	// Features, normalised and weighted.
 	PackedFloat32Array features; // frame_count * FEATURE_COUNT
@@ -111,6 +114,7 @@ private:
 	LocalVector<float> bound_large_min;
 	LocalVector<float> bound_large_max;
 	LocalVector<uint8_t> searchable;
+	LocalVector<uint32_t> frame_tags; // per frame: its clip's tags
 
 	void _rebuild_acceleration();
 	static void _bind_methods();
@@ -121,9 +125,14 @@ public:
 	static Node *create_skeleton(const Dictionary &p_bvh);
 
 	// Search: the frame whose features are nearest the query (normalised with normalize_query), at most p_best_cost.
-	SearchResult search(const float *p_query, int p_current_frame, bool p_include_current) const;
+	// Only frames whose clip has every tag of p_required and none of p_excluded (masks of get_tag_mask()).
+	SearchResult search(const float *p_query, int p_current_frame, bool p_include_current, uint32_t p_required = 0, uint32_t p_excluded = 0) const;
 	// Brute force over the trajectory dimensions only (a start without a pose).
-	int search_trajectory(const float *p_query) const;
+	int search_trajectory(const float *p_query, uint32_t p_required = 0, uint32_t p_excluded = 0) const;
+	uint32_t get_tag_mask(const PackedStringArray &p_tags) const;
+	PackedStringArray get_tag_names() const { return tag_names; }
+	uint32_t get_frame_tags(int p_frame) const { return p_frame >= 0 && p_frame < int(frame_tags.size()) ? frame_tags[p_frame] : 0; }
+	static bool tags_match(uint32_t p_tags, uint32_t p_required, uint32_t p_excluded) { return (p_tags & p_required) == p_required && (p_tags & p_excluded) == 0; }
 	void normalize_query(float *r_query) const;
 	const float *get_features(int p_frame) const { return features.ptr() + p_frame * FEATURE_COUNT; }
 	float get_feature_scale(int p_dim) const { return feature_scale[p_dim]; }

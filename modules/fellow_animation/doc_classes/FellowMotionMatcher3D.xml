@@ -175,6 +175,12 @@
 		<member name="synchronization" type="bool" setter="set_synchronization" getter="is_synchronization" default="true">
 			Pull the character towards the simulation (and clamp it); off: the root follows the animation alone.
 		</member>
+		<member name="tags_excluded" type="PackedStringArray" setter="set_tags_excluded" getter="get_tags_excluded" default="PackedStringArray()">
+			Clips with any of these tags (the database's [code]tags[/code] build option; [code]"mirrored"[/code] for mirrored clips) are not searched (milestone 56).
+		</member>
+		<member name="tags_required" type="PackedStringArray" setter="set_tags_required" getter="get_tags_required" default="PackedStringArray()">
+			Only clips with all of these tags are searched (milestone 56): gameplay states as sets of clips (e.g. [code]["crouch"][/code]). When the clip playing leaves them, the next update searches at once. A tag no clip has matches nothing.
+		</member>
 		<member name="unlock_radius" type="float" setter="set_unlock_radius" getter="get_unlock_radius" default="0.2">
 			A locked foot is released when the animation's foot is this far from it.
 		</member>
