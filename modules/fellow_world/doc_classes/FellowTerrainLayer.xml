@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="FellowTerrainLayer" inherits="Resource" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+	<brief_description>
+		A material of a [FellowTerrain3D].
+	</brief_description>
+	<description>
+		A [FellowTerrain3D] layer: an albedo and a normal map tiled over the ground every [member texture_size] metres (seen from above, or from three sides with [member triplanar]), a tint and a roughness. Changing it updates the terrains that use it.
+	</description>
+	<tutorials>
+	</tutorials>
+	<members>
+		<member name="albedo_color" type="Color" setter="set_albedo_color" getter="get_albedo_color" default="Color(1, 1, 1, 1)">
+			Multiplies the albedo texture.
+		</member>
+		<member name="albedo_texture" type="Texture2D" setter="set_albedo_texture" getter="get_albedo_texture">
+			The layer's albedo (white without one). With [member height_in_albedo_alpha], its alpha is the layer's height for [member FellowTerrain3D.height_blend].
+		</member>
+		<member name="height_in_albedo_alpha" type="bool" setter="set_height_in_albedo_alpha" getter="is_height_in_albedo_alpha" default="false">
+			If [code]true[/code], the albedo texture's alpha is the layer's height (0..1) for the height blend; otherwise the layer is flat (0.5).
+		</member>
+		<member name="normal_strength" type="float" setter="set_normal_strength" getter="get_normal_strength" default="1.0">
+			Scales the normal map's slope.
+		</member>
+		<member name="normal_texture" type="Texture2D" setter="set_normal_texture" getter="get_normal_texture">
+			The layer's normal map (OpenGL convention, as Godot imports normal maps; only its red and green channels are read).
+		</member>
+		<member name="roughness" type="float" setter="set_roughness" getter="get_roughness" default="0.9">
+			The layer's roughness.
+		</member>
+		<member name="texture_size" type="float" setter="set_texture_size" getter="get_texture_size" default="4.0">
+			The metres one repeat of the textures covers.
+		</member>
+		<member name="triplanar" type="bool" setter="set_triplanar" getter="is_triplanar" default="false">
+			If [code]true[/code], the textures are projected from the three axes and blended by the ground's normal (for cliffs: no stretching on steep slopes), at three times the texture reads.
+		</member>
+	</members>
+</class>

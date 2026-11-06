@@ -1,0 +1,244 @@
+/**************************************************************************/
+/*  fellow_terrain_3d.h                                                   */
+/**************************************************************************/
+/*                         This file is part of:                          */
+/*                             GODOT ENGINE                               */
+/*                        https://godotengine.org                         */
+/**************************************************************************/
+/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
+/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
+/*                                                                        */
+/* Permission is hereby granted, free of charge, to any person obtaining  */
+/* a copy of this software and associated documentation files (the        */
+/* "Software"), to deal in the Software without restriction, including    */
+/* without limitation the rights to use, copy, modify, merge, publish,    */
+/* distribute, sublicense, and/or sell copies of the Software, and to     */
+/* permit persons to whom the Software is furnished to do so, subject to  */
+/* the following conditions:                                              */
+/*                                                                        */
+/* The above copyright notice and this permission notice shall be         */
+/* included in all copies or substantial portions of the Software.        */
+/*                                                                        */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
+/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
+/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
+/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
+/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
+/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
+/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
+/**************************************************************************/
+
+#pragma once
+
+#include "core/io/image.h"
+#include "core/io/resource.h"
+#include "core/templates/local_vector.h"
+#include "scene/3d/node_3d.h"
+#include "scene/resources/image_texture.h"
+#include "scene/resources/material.h"
+#include "scene/resources/mesh.h"
+
+class Camera3D;
+
+// One material of a FellowTerrain3D: its textures and how they tile (docs/decisions/0158-terrain.md).
+class FellowTerrainLayer : public Resource {
+	GDCLASS(FellowTerrainLayer, Resource);
+
+	Ref<Texture2D> albedo_texture;
+	Color albedo_color = Color(1, 1, 1);
+	bool height_in_albedo_alpha = false;
+	Ref<Texture2D> normal_texture;
+	float normal_strength = 1.0f;
+	float roughness = 0.9f;
+	float texture_size = 4.0f; // metres a texture repeat covers
+	bool triplanar = false;
+
+protected:
+	static void _bind_methods();
+
+public:
+	void set_albedo_texture(const Ref<Texture2D> &p_texture);
+	Ref<Texture2D> get_albedo_texture() const { return albedo_texture; }
+	void set_albedo_color(const Color &p_color);
+	Color get_albedo_color() const { return albedo_color; }
+	void set_height_in_albedo_alpha(bool p_enable);
+	bool is_height_in_albedo_alpha() const { return height_in_albedo_alpha; }
+	void set_normal_texture(const Ref<Texture2D> &p_texture);
+	Ref<Texture2D> get_normal_texture() const { return normal_texture; }
+	void set_normal_strength(float p_strength);
+	float get_normal_strength() const { return normal_strength; }
+	void set_roughness(float p_roughness);
+	float get_roughness() const { return roughness; }
+	void set_texture_size(float p_metres);
+	float get_texture_size() const { return texture_size; }
+	void set_triplanar(bool p_enable);
+	bool is_triplanar() const { return triplanar; }
+};
+
+// FellowEngine terrain (docs/decisions/0158-terrain.md): a height field drawn with continuous distance-dependent levels
+// of detail (CDLOD: a quadtree of square patches whose vertices morph to the next coarser grid before it takes over, so
+// neighbouring levels meet without cracks or popping), up to 9 materials blended by two splat maps and their heights,
+// collision through height-map shapes, and height, normal and material queries for gameplay.
+//
+// The heights are an Image (FORMAT_RF, metres; one texel a vertex, `vertex_spacing` metres apart). The patches are the
+// instances of one MultiMesh (one draw a pass; FellowEngine's MultiMesh culling culls them one by one): written into a
+// second MultiMesh, hidden, when the selection changes and shown three frames later, so that the motion vectors of a
+// patch always come from its own transforms (TAA and FSR see a static ground).
+class FellowTerrain3D : public Node3D {
+	GDCLASS(FellowTerrain3D, Node3D);
+
+public:
+	static constexpr int MAX_LAYERS = 9;
+	static constexpr int MAX_LEVELS = 16;
+
+	enum DebugView {
+		DEBUG_VIEW_OFF,
+		DEBUG_VIEW_LEVELS, // the ground coloured by its level of detail, blended as it morphs to the next
+	};
+
+private:
+	Ref<Image> heightmap;
+	Ref<Image> splat_map;
+	Ref<Image> splat_map_2;
+	TypedArray<FellowTerrainLayer> layers;
+	float vertex_spacing = 1.0f;
+	int patch_size = 16; // quads along a patch's side
+	float lod_distance = 0.0f; // the finest level's range (0: three times its node's size)
+	float morph_ratio = 0.7f;
+	float height_blend = 0.3f;
+	float macro_variation = 0.15f;
+	bool cast_shadows = true;
+	uint32_t render_layer_mask = 1;
+	DebugView debug_view = DEBUG_VIEW_OFF;
+	bool collision_enabled = true;
+	uint32_t collision_layer = 1;
+	uint32_t collision_mask = 1;
+	int collision_region_size = 256;
+
+	// CPU copies.
+	int map_w = 0;
+	int map_h = 0;
+	LocalVector<float> heights; // map_w * map_h
+	float height_min = 0.0f;
+	float height_max = 0.0f;
+	LocalVector<LocalVector<Vector2>> minmax; // per block level k (blocks of patch_size << k texels): (min, max)
+	LocalVector<Vector2i> minmax_size;
+	int top_level = 0;
+	float ranges[MAX_LEVELS] = {};
+
+	// Rendering.
+	Ref<ImageTexture> height_texture;
+	Ref<ImageTexture> normal_texture;
+	Ref<ImageTexture> splat_texture;
+	Ref<ImageTexture> splat_texture_2;
+	Ref<ArrayMesh> patch_mesh;
+	Ref<ShaderMaterial> material;
+	RID multimesh[2];
+	RID instance[2];
+	int capacity[2] = { 0, 0 };
+	int shown = -1;
+	int pending = -1;
+	uint64_t pending_frame = 0;
+	Vector3 selected_camera;
+	bool selection_valid = false;
+	bool data_dirty = true;
+	bool material_dirty = true;
+
+	struct Patch {
+		int32_t x = 0; // block coordinates at the patch's level
+		int32_t z = 0;
+		int32_t level = 0;
+		bool operator==(const Patch &p_other) const { return x == p_other.x && z == p_other.z && level == p_other.level; }
+	};
+	LocalVector<Patch> patches[2];
+	LocalVector<Patch> scratch;
+	LocalVector<float> buffer;
+
+	// Collision.
+	RID body;
+	LocalVector<RID> shapes;
+
+	// Statistics.
+	uint64_t selections = 0;
+	uint64_t swaps = 0;
+	uint64_t last_select_usec = 0;
+
+	void _rebuild_data();
+	void _ensure_data() const;
+	void _build_minmax();
+	void _build_normals(Ref<Image> &r_normals) const;
+	void _build_mesh();
+	void _update_material();
+	void _update_collision();
+	void _free_collision();
+	void _create_instances();
+	void _free_instances();
+	void _update_instance_settings();
+	void _update_transforms();
+	void _process_lod();
+	Camera3D *_find_camera() const;
+	bool _select_node(int p_level, int p_x, int p_z, const Vector3 &p_camera, LocalVector<Patch> &r_out) const;
+	void _select(const Vector3 &p_camera, LocalVector<Patch> &r_out) const;
+	void _write_patches(int p_which, const LocalVector<Patch> &p_patches, const Vector3 &p_camera);
+	AABB _node_box(int p_level, int p_x, int p_z) const;
+	void _layer_changed();
+	float _height_local(float p_x, float p_z) const;
+	float _node_size(int p_level) const { return float(patch_size << (p_level + 1)) * vertex_spacing; }
+
+protected:
+	void _notification(int p_what);
+	static void _bind_methods();
+
+public:
+	void set_heightmap(const Ref<Image> &p_image);
+	Ref<Image> get_heightmap() const { return heightmap; }
+	void set_splat_map(const Ref<Image> &p_image);
+	Ref<Image> get_splat_map() const { return splat_map; }
+	void set_splat_map_2(const Ref<Image> &p_image);
+	Ref<Image> get_splat_map_2() const { return splat_map_2; }
+	void set_layers(const TypedArray<FellowTerrainLayer> &p_layers);
+	TypedArray<FellowTerrainLayer> get_layers() const { return layers; }
+	void set_vertex_spacing(float p_spacing);
+	float get_vertex_spacing() const { return vertex_spacing; }
+	void set_patch_size(int p_size);
+	int get_patch_size() const { return patch_size; }
+	void set_lod_distance(float p_distance);
+	float get_lod_distance() const { return lod_distance; }
+	void set_morph_ratio(float p_ratio);
+	float get_morph_ratio() const { return morph_ratio; }
+	void set_height_blend(float p_blend);
+	float get_height_blend() const { return height_blend; }
+	void set_macro_variation(float p_variation);
+	float get_macro_variation() const { return macro_variation; }
+	void set_debug_view(DebugView p_view);
+	DebugView get_debug_view() const { return debug_view; }
+	void set_cast_shadows(bool p_enable);
+	bool is_casting_shadows() const { return cast_shadows; }
+	void set_render_layer_mask(uint32_t p_mask);
+	uint32_t get_render_layer_mask() const { return render_layer_mask; }
+	void set_collision_enabled(bool p_enable);
+	bool is_collision_enabled() const { return collision_enabled; }
+	void set_collision_layer(uint32_t p_layer);
+	uint32_t get_collision_layer() const { return collision_layer; }
+	void set_collision_mask(uint32_t p_mask);
+	uint32_t get_collision_mask() const { return collision_mask; }
+	void set_collision_region_size(int p_size);
+	int get_collision_region_size() const { return collision_region_size; }
+
+	void update_heightmap();
+	float get_height(const Vector3 &p_global) const;
+	Vector3 get_normal(const Vector3 &p_global) const;
+	PackedFloat32Array get_layer_weights(const Vector3 &p_global) const;
+	AABB get_aabb() const;
+	Ref<ShaderMaterial> get_material() const { return material; }
+	Dictionary get_stats() const;
+
+	static Ref<Image> heightmap_from_image(const Ref<Image> &p_image, float p_min_height, float p_max_height);
+
+	PackedStringArray get_configuration_warnings() const override;
+
+	FellowTerrain3D();
+	~FellowTerrain3D();
+};
+
+VARIANT_ENUM_CAST(FellowTerrain3D::DebugView);

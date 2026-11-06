@@ -1,5 +1,7 @@
 def can_build(env, platform):
-    # Scene-level world tools (automatic HLOD); disabled together with 3D.
+    # Scene-level world tools (automatic HLOD, streaming, terrain); disabled together with 3D. The terrain's shader
+    # comes from fellow_fluid's shared shaders.
+    env.module_add_dependencies("fellow_world", ["fellow_fluid"])
     return not env["disable_3d"]
 
 
@@ -11,6 +13,8 @@ def get_doc_classes():
     return [
         "FellowHLOD3D",
         "FellowStreamingCell3D",
+        "FellowTerrain3D",
+        "FellowTerrainLayer",
         "FellowWorldStreamer3D",
     ]
 

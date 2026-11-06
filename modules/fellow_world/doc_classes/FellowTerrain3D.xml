@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="FellowTerrain3D" inherits="Node3D" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+	<brief_description>
+		A height field terrain with continuous levels of detail, blended materials, collision and height queries (FellowEngine).
+	</brief_description>
+	<description>
+		A terrain made from [member heightmap], an [Image] of heights in metres ([constant Image.FORMAT_RF]), one texel per vertex, [member vertex_spacing] metres apart: a 1025 × 1025 image at 1 m is a 1 km square. Its local origin is the heightmap's first texel; x runs along the image's width, z along its height.
+		It is drawn with continuous distance-dependent levels of detail (CDLOD): a quadtree of square patches of [member patch_size] × [member patch_size] quads, each level's cells twice the size of the finer one's, chosen around the camera every frame it moves. Before a coarser level takes over, a patch's vertices morph onto the coarser grid, and its heights are read from a coarser mipmap of the heightmap as they do, so neighbouring levels meet without cracks and change without popping. All patches are instances of one [MultiMesh] (one draw per pass); FellowEngine's MultiMesh culling ([member ProjectSettings.rendering/fellow/geometry/multimesh_culling]) culls them one by one in the camera's and the shadows' passes. When the selection changes, the new patches are written into a second, hidden MultiMesh and shown three drawn frames later, so the motion vectors (TAA, FSR) of the ground are always those of a static surface.
+		Up to 9 [member layers] are blended: layer 0 is the base, [member splat_map]'s red, green, blue and alpha channels the weights of layers 1 to 4 and [member splat_map_2]'s those of layers 5 to 8 (the base takes what they leave). With [member height_blend], a layer with a height in its albedo's alpha shows through where it is higher. FellowEngine's weather (wetness, puddles, snow cover, [FellowRain3D]) applies to the terrain as to any material.
+		With [member collision_enabled], the terrain is a static physics body of height map shapes, one per region of [member collision_region_size] cells, the same triangles as its finest level of detail. [method get_height], [method get_normal] and [method get_layer_weights] answer from the CPU's copy of the data.
+		After changing the [member heightmap] image's pixels in place, call [method update_heightmap]. A large heightmap is best saved as its own resource ([code].res[/code]) rather than inside the scene.
+		In the editor, the levels of detail follow the 3D editor's camera.
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="get_aabb" qualifiers="const">
+			<return type="AABB" />
+			<description>
+				The terrain's box in its local space: from its origin to the far corner of the heightmap, from the lowest height to the highest.
+			</description>
+		</method>
+		<method name="get_height" qualifiers="const">
+			<return type="float" />
+			<param index="0" name="global_position" type="Vector3" />
+			<description>
+				The ground's height (global y) under [param global_position], on the triangles of the finest level of detail (and of the collision shapes). NaN outside the heightmap.
+			</description>
+		</method>
+		<method name="get_layer_weights" qualifiers="const">
+			<return type="PackedFloat32Array" />
+			<param index="0" name="global_position" type="Vector3" />
+			<description>
+				The 9 layers' weights at [param global_position], from the splat maps (nearest texel, before the height blend): layer 0's is what the others leave of 1.
+			</description>
+		</method>
+		<method name="get_material" qualifiers="const">
+			<return type="ShaderMaterial" />
+			<description>
+				The [ShaderMaterial] the terrain draws with (shared code; its parameters are set from the node's properties and layers). Read only: changes are overwritten.
+			</description>
+		</method>
+		<method name="get_normal" qualifiers="const">
+			<return type="Vector3" />
+			<param index="0" name="global_position" type="Vector3" />
+			<description>
+				The ground's normal (global) at [param global_position], from central differences of the heights one [member vertex_spacing] apart. A zero vector outside the heightmap.
+			</description>
+		</method>
+		<method name="get_stats" qualifiers="const">
+			<return type="Dictionary" />
+			<description>
+				The current selection and data: [code]patches[/code], [code]triangles[/code], [code]patches_per_level[/code], [code]levels[/code], [code skip-lint]lod_distance[/code] (the finest level's range in metres), [code]selections[/code] and [code]swaps[/code] (the selections computed and the MultiMesh switches since the start), [code]last_select_usec[/code], [code]collision_shapes[/code], [code]map_size[/code].
+			</description>
+		</method>
+		<method name="heightmap_from_image" qualifiers="static">
+			<return type="Image" />
+			<param index="0" name="image" type="Image" />
+			<param index="1" name="min_height" type="float" />
+			<param index="2" name="max_height" type="float" />
+			<description>
+				A heightmap for [member heightmap] from [param image]: a grey image ([constant Image.FORMAT_L8], 16-bit, any colour format: its red channel) mapped from 0..1 to [param min_height]..[param max_height] metres, or a [constant Image.FORMAT_RF] or [constant Image.FORMAT_RH] image of metres kept as it is. Mipmaps are dropped; compressed images are decompressed.
+			</description>
+		</method>
+		<method name="update_heightmap">
+			<return type="void" />
+			<description>
+				Builds the terrain's data again from [member heightmap], [member splat_map] and [member splat_map_2]: the textures, the normals, the levels' bounds, the collision shapes. Call it after editing an image in place.
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="cast_shadows" type="bool" setter="set_cast_shadows" getter="is_casting_shadows" default="true">
+			If [code]true[/code], the terrain casts shadows.
+		</member>
+		<member name="collision_enabled" type="bool" setter="set_collision_enabled" getter="is_collision_enabled" default="true">
+			If [code]true[/code], the terrain is a static physics body (height map shapes, one per [member collision_region_size] region).
+		</member>
+		<member name="collision_layer" type="int" setter="set_collision_layer" getter="get_collision_layer" default="1">
+			The physics layers the terrain is in.
+		</member>
+		<member name="collision_mask" type="int" setter="set_collision_mask" getter="get_collision_mask" default="1">
+			The physics layers the terrain scans.
+		</member>
+		<member name="collision_region_size" type="int" setter="set_collision_region_size" getter="get_collision_region_size" default="256">
+			The cells along a collision shape's side: the heightmap is cut into regions of this size, each its own height map shape.
+		</member>
+		<member name="debug_view" type="int" setter="set_debug_view" getter="get_debug_view" enum="FellowTerrain3D.DebugView" default="0">
+			Draws the terrain in a diagnostic view instead of its layers.
+		</member>
+		<member name="height_blend" type="float" setter="set_height_blend" getter="get_height_blend" default="0.3">
+			How much the layers' heights (their albedo's alpha, with [member FellowTerrainLayer.height_in_albedo_alpha]) decide where they show: 0 blends by the weights alone; higher values give sharper transitions where the higher layer wins.
+		</member>
+		<member name="heightmap" type="Image" setter="set_heightmap" getter="get_heightmap">
+			The heights in metres, one texel per vertex ([constant Image.FORMAT_RF]; another format is converted as [method heightmap_from_image] does with 0..1 metres). At least 2 × 2 texels.
+		</member>
+		<member name="layers" type="FellowTerrainLayer[]" setter="set_layers" getter="get_layers" default="[]">
+			The terrain's materials, at most 9: layer 0 is the base, layers 1 to 8 are weighted by [member splat_map] and [member splat_map_2].
+		</member>
+		<member name="lod_distance" type="float" setter="set_lod_distance" getter="get_lod_distance" default="0.0">
+			The range of the finest level of detail in metres (each coarser level's twice the one before). 0: three times the finest level's node (two patches). At least two and a half times it.
+		</member>
+		<member name="macro_variation" type="float" setter="set_macro_variation" getter="get_macro_variation" default="0.15">
+			A large-scale variation of the albedo's brightness (two octaves of noise, 75 m and 14 m), against visible tiling at a distance.
+		</member>
+		<member name="morph_ratio" type="float" setter="set_morph_ratio" getter="get_morph_ratio" default="0.7">
+			Where between a level's range and the finer level's its vertices begin to morph onto the coarser grid (0.7: in the last 30 % of the way).
+		</member>
+		<member name="patch_size" type="int" setter="set_patch_size" getter="get_patch_size" default="16">
+			The quads along a patch's side (8, 16, 32 or 64): smaller patches follow the distance more closely, larger ones make fewer instances.
+		</member>
+		<member name="render_layer_mask" type="int" setter="set_render_layer_mask" getter="get_render_layer_mask" default="1">
+			The render layers the terrain is drawn in ([member VisualInstance3D.layers]).
+		</member>
+		<member name="splat_map" type="Image" setter="set_splat_map" getter="get_splat_map">
+			The weights of layers 1 to 4 in its red, green, blue and alpha channels, stretched over the whole terrain (any resolution).
+		</member>
+		<member name="splat_map_2" type="Image" setter="set_splat_map_2" getter="get_splat_map_2">
+			The weights of layers 5 to 8 in its red, green, blue and alpha channels.
+		</member>
+		<member name="vertex_spacing" type="float" setter="set_vertex_spacing" getter="get_vertex_spacing" default="1.0">
+			The distance between two vertices (two heightmap texels) in metres.
+		</member>
+	</members>
+	<constants>
+		<constant name="DEBUG_VIEW_OFF" value="0" enum="DebugView">
+			The terrain's layers.
+		</constant>
+		<constant name="DEBUG_VIEW_LEVELS" value="1" enum="DebugView">
+			The ground coloured by its level of detail (red the finest, then yellow, green, blue, purple, grey), blended towards the next colour as it morphs to the next level.
+		</constant>
+	</constants>
+</class>
