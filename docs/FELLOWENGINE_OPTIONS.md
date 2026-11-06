@@ -537,6 +537,22 @@ terrain brush.
 `FellowGasVolume3D` no longer reads the data of concave, height map and custom shapes in its box (not its obstacles),
 and the directional shadow cache ignores changes of instances that cast no shadows (both exact).
 
+## Pipelines compiled ahead (milestone 59)
+
+`rendering/fellow/frame/stable_scene_bits` (on, exact; decision 0161): the colour passes' specialization bits that
+follow what a frame holds — decision 0057's absent decals, reflection probes and lights, the positional lights' loop
+variants and tile culling, the weather's wetness, the clouds' shadow — keep the feature's code once the feature exists
+(a hidden light counts) or has been in a frame, so that a light switched on, the rain starting or a lightning flash
+no longer asks for new pipelines for every material in view. `FELLOW_SPECIALIZATION_LOG=1` (environment) prints each
+specialized pipeline a draw asked for before it was compiled, with its key's bits; `bench/pipeline_states_check.gd`.
+
+`FellowPipelineWarmer3D` (decision 0162): while a scene loads, draws its world from the camera's place in the six
+directions of a cube into a small viewport set up as the game's (MSAA, TAA, scaling, shadow atlas, the camera's
+environment and layers), waits until nothing more compiles and emits `finished` — the materials around no longer
+compile their pipelines when the camera first turns to them. `autostart`, `from_camera`, `view_size` (128 px),
+`frames_per_view` (3), `settle_frames` (15), `max_frames` (900); `start()`, `is_finished()`, `get_stats()`. The
+FellowEngine menu's "Add Pipeline Warm-up"; Slice Lab `--slice_warmup=node`; `bench/pipeline_warmup_check.gd`.
+
 ## Options that change the image (off by default)
 
 | setting | what it does | image cost | record |

@@ -19,6 +19,7 @@ extends "res://bench/scene_base.gd"
 ## (FellowTerrain3D at --slice_terrain_spacing=<m>, 1, instead of the 4 m chunks; --slice_terrain_lod=<m> its
 ## lod_distance, --slice_terrain_patch=<quads> its patch_size); with it, --slice_foliage=node: the trees and grass
 ## scattered by the terrain (FellowTerrainFoliage) over two more layers instead of placed by this script.
+## --slice_warmup=node: a FellowPipelineWarmer3D compiles the pipelines around the first camera while it loads.
 ## Stock Godot: the FellowEngine nodes are left out (load_error is not set; the slice is the terrain, town, crowd and
 ## forest).
 
@@ -55,6 +56,7 @@ var _fire_seconds := 240.0
 var _day_t := 0.0 # the day's clock: advanced by soak_update() only (perf and capture modes keep --slice_daytime)
 var _counts := {}
 var terrain_node: Node3D = null # FellowTerrain3D with --slice_terrain=node
+var warmer_node: Node3D = null # FellowPipelineWarmer3D with --slice_warmup=node
 
 
 func build(p_args: Dictionary) -> void:
@@ -92,6 +94,12 @@ func build(p_args: Dictionary) -> void:
 	_counts["without"] = without
 	_define_cameras()
 	set_time(0.0)
+	# --slice_warmup=node (decision 0162): a FellowPipelineWarmer3D compiles the pipelines around the first camera while
+	# the slice loads (the soak's warm-up minute covers it).
+	if str(args.get("slice_warmup", "")) == "node" and ClassDB.class_exists("FellowPipelineWarmer3D"):
+		warmer_node = ClassDB.instantiate("FellowPipelineWarmer3D")
+		warmer_node.name = "PipelineWarmup"
+		add_child(warmer_node)
 	info = {"stats": scene_stats(self), "fellow_nodes": fellow, "counts": _counts,
 		"build_ms": (Time.get_ticks_usec() - t0) / 1000.0,
 		"notes": "Vertical slice: 1 km valley, HLOD town of 711 buildings, 99 street lights, crowd, campfire, lake, forest in the wind, weather, day cycle."}
@@ -528,11 +536,16 @@ func _build_vegetation_node() -> void:
 ## The bench's per-frame extra metrics (perf mode): with --slice_terrain=node, the terrain's patches, its main-thread
 ## time in the frame (levels of detail and foliage) and its foliage.
 func sample_extra() -> Dictionary:
+	var extra := {}
+	if warmer_node:
+		var w: Dictionary = warmer_node.get_stats()
+		extra = {"warmup_finished": w.get("finished", false), "warmup_frames": w.get("frames", 0), "warmup_ms": w.get("msec", 0.0),
+			"warmup_pipelines": w.get("pipelines", 0)}
 	if terrain_node == null:
-		return {}
+		return extra
 	var st: Dictionary = terrain_node.get_stats()
-	return {"terrain_patches": st.get("patches", 0), "terrain_usec": st.get("process_usec_last", 0),
-		"foliage_cells": st.get("foliage_cells", 0), "foliage_instances": st.get("foliage_instances", 0)}
+	return extra.merged({"terrain_patches": st.get("patches", 0), "terrain_usec": st.get("process_usec_last", 0),
+		"foliage_cells": st.get("foliage_cells", 0), "foliage_instances": st.get("foliage_instances", 0)})
 
 
 func _build_lights() -> void:

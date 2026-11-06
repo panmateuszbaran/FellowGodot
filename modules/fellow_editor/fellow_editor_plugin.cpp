@@ -740,6 +740,9 @@ Node3D *FellowEditorPlugin::make_preset(int p_preset, const Node *p_root) {
 			}
 			top = Object::cast_to<Node3D>(_fellow_make("FellowTerrain3D", "Terrain", nullptr, Dictionary{ { "position", Vector3(-128, 0, -128) }, { "heightmap", heights }, { "layers", layers } }));
 		} break;
+		case PRESET_PIPELINE_WARMUP: {
+			top = Object::cast_to<Node3D>(_fellow_make("FellowPipelineWarmer3D", "PipelineWarmup", nullptr, Dictionary()));
+		} break;
 		default:
 			break;
 	}
@@ -855,6 +858,7 @@ FellowEditorPlugin::FellowEditorPlugin() {
 	popup->add_item(TTR("Add Flowing Pool (8 x 8 m)"), PRESET_POOL);
 	popup->add_separator();
 	popup->add_item(TTR("Add Terrain (256 x 256 m, to sculpt)"), PRESET_TERRAIN);
+	popup->add_item(TTR("Add Pipeline Warm-up (compiles while loading)"), PRESET_PIPELINE_WARMUP);
 	popup->connect(SceneStringName(id_pressed), callable_mp(this, &FellowEditorPlugin::_add_preset));
 }
 

@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="FellowPipelineWarmer3D" inherits="Node3D" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+	<brief_description>
+		Compiles the pipelines a scene's materials will need while the scene loads (FellowEngine).
+	</brief_description>
+	<description>
+		The Forward+ renderer draws a material with its ubershader while the material's specialized pipeline compiles in the background, so a material coming into view for the first time costs slower frames and a burst of work on the worker threads (with MSAA, even pipelines compiled while the frame waits). This node moves that work to the loading screen: for a few frames it draws its world from the viewport camera's place (or its own, [member from_camera] off) in the six directions of a cube, into a small internal viewport set up as its own viewport is (MSAA, screen-space anti-aliasing, TAA, debanding, the 3D scaling mode and scale, the positional shadow atlas, HDR 2D) with the camera's layers, range, environment, attributes and compositor, so that every material around asks for the pipelines the game's frames will ask for. It then waits until [member settle_frames] frames compile nothing, frees the viewport and emits [signal finished].
+		Add it to the scene (it starts by itself, [member autostart]) and keep a loading screen up until [signal finished]. With [code]rendering/fellow/frame/stable_scene_bits[/code] (on), lights, decals, reflection probes or rain that appear later need no new pipelines either if they exist, hidden, when the warm-up runs. Not covered: what is not drawn from the camera's place (beyond its range, hidden, or streamed in later), particles' process materials, a reflection probe's own passes. Decision record [code]docs/decisions/0162-pipeline-warmup.md[/code].
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="get_stats" qualifiers="const">
+			<return type="Dictionary" />
+			<description>
+				The warm-up so far, or the last one: [code]running[/code], [code skip-lint]finished[/code], [code]frames[/code], [code]msec[/code], [code]pipelines[/code] (compiled since it started, every kind) and [code]timed_out[/code] ([member max_frames] reached first).
+			</description>
+		</method>
+		<method name="is_finished" qualifiers="const">
+			<return type="bool" />
+			<description>
+				Whether a warm-up has finished (and [signal finished] been emitted).
+			</description>
+		</method>
+		<method name="is_running" qualifiers="const">
+			<return type="bool" />
+			<description>
+				Whether a warm-up is under way.
+			</description>
+		</method>
+		<method name="start">
+			<return type="void" />
+			<description>
+				Starts a warm-up (with [member autostart], once the node is ready). Does nothing in the editor or while one runs.
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="autostart" type="bool" setter="set_autostart" getter="get_autostart" default="true">
+			Starts the warm-up when the node is ready. Off: call [method start].
+		</member>
+		<member name="frames_per_view" type="int" setter="set_frames_per_view" getter="get_frames_per_view" default="3">
+			Frames drawn in each of the six directions.
+		</member>
+		<member name="from_camera" type="bool" setter="set_from_camera" getter="get_from_camera" default="true">
+			Draws from the viewport's current camera's position; off, or without a camera, from this node's position.
+		</member>
+		<member name="max_frames" type="int" setter="set_max_frames" getter="get_max_frames" default="900">
+			The most frames a warm-up lasts: it finishes then even if pipelines are still compiling.
+		</member>
+		<member name="settle_frames" type="int" setter="set_settle_frames" getter="get_settle_frames" default="15">
+			Once every direction has been drawn, the warm-up finishes after this many frames in a row that compiled no pipeline.
+		</member>
+		<member name="view_size" type="int" setter="set_view_size" getter="get_view_size" default="128">
+			The side of the internal viewport in pixels. The pipelines do not depend on it; a small one costs the warm-up little.
+		</member>
+	</members>
+	<signals>
+		<signal name="finished">
+			<description>
+				Emitted when the warm-up has finished: the pipelines it asked for are compiled (or [member max_frames] was reached).
+			</description>
+		</signal>
+	</signals>
+</class>

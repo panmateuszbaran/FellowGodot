@@ -12,6 +12,7 @@ def configure(env):
 def get_doc_classes():
     return [
         "FellowHLOD3D",
+        "FellowPipelineWarmer3D",
         "FellowStreamingCell3D",
         "FellowTerrain3D",
         "FellowTerrainFoliage",

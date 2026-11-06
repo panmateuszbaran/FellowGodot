@@ -11,7 +11,7 @@ node.
 
 | what | where |
 |---|---|
-| FellowEngine's nodes | `modules/fellow_fluid` (water, rain, snow, wind, lightning, weather, gas, burning), `modules/fellow_world` (HLOD, streaming, terrain and its foliage), `modules/fellow_animation` (motion matching), `modules/fellow_motion` (neural motion), `modules/fellow_editor` (editor only) |
+| FellowEngine's nodes | `modules/fellow_fluid` (water, rain, snow, wind, lightning, weather, gas, burning), `modules/fellow_world` (HLOD, streaming, terrain and its foliage, pipeline warm-up), `modules/fellow_animation` (motion matching), `modules/fellow_motion` (neural motion), `modules/fellow_editor` (editor only) |
 | renderer work | `servers/rendering/renderer_rd/` (files and blocks marked `fellow` / `FellowEngine`), effects in `renderer_rd/effects/fellow_*`, settings in `servers/rendering/fellow_settings.{h,cpp}` |
 | Vulkan driver work | `drivers/vulkan/` (`FELLOW_VULKAN_PROFILE` in `fellow_vulkan_profile.*`) |
 | the class reference | `doc/classes/*.xml`, `modules/*/doc_classes/*.xml` |
