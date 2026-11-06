@@ -47,7 +47,9 @@ slice's profile without rendering puts first.
   release template against the editor build); Fire Lab with the multigrid's small levels in one workgroup
   (`fluid/gas_mg_tail_cells=2048`) at the slice's 48 cells, 0 pixels differ (for job f361).
 * lavapipe with the separate render thread: the slice with crowd groups for two minutes without an error; its water
-  and rain freed at exit without an error or a leak.
+  and rain freed at exit without an error or a leak; with the shader compilation fix four runs of four to the end
+  (before: two hung), and three minutes with every milestone-60 feature at once (the warm-up, the foliage, the crowd in
+  4 groups, the weather every 20 s, the fire every 30 s) without an engine error.
 * The editor check (milestone 60's editor build, a 1920 × 1080 virtual screen): passed — the water, rain and gas
   nodes added, dragged and freed in the editor, the presets added and undone.
 * CPU time measured with `perf stat -e task-clock` and instructions with callgrind (the cloud's frame timings vary
@@ -66,9 +68,10 @@ The slice's main thread headless (`perf`, 1 minute): the crowd's animation and s
 the bench's own scripts (the flythrough, the weather's schedule, the street lights), the terrain's selection and
 foliage (under 1 %), transforms.
 
-To measure on the RTX (job f361): Crowd Lab and Slice Lab with the two settings off against on; Crowd Lab with 8 and
+To measure on the RTX (jobs f361, f362): Crowd Lab and Slice Lab with the two settings off against on; Crowd Lab with 8 and
 24 groups, the slice's crowd with 8; the slice's scene process and draw split; the campfire's gas solver with its
-small levels in one workgroup (the gas simulation is 0.84 ms of the slice's 3.6 ms GPU frame, f354).
+small levels in one workgroup (the gas simulation is 0.84 ms of the slice's 3.6 ms GPU frame, f354); the separate
+render thread in Crowd Lab and Slice Lab, and 10 minutes of the slice's soak with it.
 
 ## 4. Limits
 
