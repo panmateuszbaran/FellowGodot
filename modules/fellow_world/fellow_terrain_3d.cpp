@@ -261,19 +261,18 @@ void fragment() {
 	vec3 dpdy = dFdy(v_local);
 	vec3 blend = pow(abs(nw), vec3(4.0));
 	blend /= max(dot(blend, vec3(1.0)), 1e-5);
-	vec4 alb[9];
-	vec3 nrm[9];
-	float v[9];
 	float top = -1e9;
 )";
+	// Each layer's albedo, normal and blend value in its own variables (no array indexed at run time: kept in
+	// registers), sampled only where its weight is above 0.002.
 	for (int i = 0; i < FellowTerrain3D::MAX_LAYERS; i++) {
-		code += vformat(R"(	v[%d] = -1e9;
-	alb[%d] = vec4(0.0);
-	nrm[%d] = nw;
+		code += vformat(R"(	vec4 alb_%d = vec4(0.0);
+	vec3 nrm_%d = nw;
+	float v_%d = -1e9;
 	if (w[%d] > 0.002) {
-		layer_%d(v_local, dpdx, dpdy, nw, blend, alb[%d], nrm[%d]);
-		v[%d] = w[%d] + alb[%d].a * height_blend;
-		top = max(top, v[%d]);
+		layer_%d(v_local, dpdx, dpdy, nw, blend, alb_%d, nrm_%d);
+		v_%d = w[%d] + alb_%d.a * height_blend;
+		top = max(top, v_%d);
 	}
 )",
 				i, i, i, i, i, i, i, i, i, i, i);
@@ -282,16 +281,18 @@ void fragment() {
 	vec3 n = vec3(0.0);
 	float rough = 0.0;
 	float total = 0.0;
-	for (int i = 0; i < 9; i++) {
-		if (v[i] > -1e8) {
-			float b = height_blend > 0.0 ? max(v[i] - (top - 0.15), 0.0) * w[i] : w[i];
-			albedo += alb[i].rgb * layer_color[i].rgb * b;
-			n += nrm[i] * b;
-			rough += layer_params[i].y * b;
-			total += b;
-		}
+	float b;
+)";
+	for (int i = 0; i < FellowTerrain3D::MAX_LAYERS; i++) {
+		code += vformat(R"(	b = v_%d > -1e8 ? (height_blend > 0.0 ? max(v_%d - (top - 0.15), 0.0) * w[%d] : w[%d]) : 0.0;
+	albedo += alb_%d.rgb * layer_color[%d].rgb * b;
+	n += nrm_%d * b;
+	rough += layer_params[%d].y * b;
+	total += b;
+)",
+				i, i, i, i, i, i, i, i);
 	}
-	total = max(total, 1e-5);
+	code += R"(	total = max(total, 1e-5);
 	albedo /= total;
 	rough /= total;
 	float mv = value_noise(v_local.xz * 0.013) * 0.6 + value_noise(v_local.xz * 0.071) * 0.4;

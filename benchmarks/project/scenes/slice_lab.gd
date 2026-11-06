@@ -16,7 +16,8 @@ extends "res://bench/scene_base.gd"
 ## --slice_crowd=<n> (48), --slice_trees=<n> (9000), --slice_grass=<clumps per m2 in the meadows> (1.0),
 ## --slice_without=town,forest,water,weather,fire,crowd (parts left out), --slice_weather_seconds=<s> (120: each
 ## weather of the soak's cycle), --slice_fire_seconds=<s> (240: the campfire's log burns again), --slice_terrain=node
-## (FellowTerrain3D at --slice_terrain_spacing=<m>, 1, instead of the 4 m chunks).
+## (FellowTerrain3D at --slice_terrain_spacing=<m>, 1, instead of the 4 m chunks; --slice_terrain_lod=<m> its
+## lod_distance, --slice_terrain_patch=<quads> its patch_size).
 ## Stock Godot: the FellowEngine nodes are left out (load_error is not set; the slice is the terrain, town, crowd and
 ## forest).
 
@@ -224,6 +225,10 @@ func _build_terrain_node() -> void:
 	t.name = "Terrain"
 	t.position = Vector3(-SIZE * 0.5, 0.0, -SIZE * 0.5)
 	t.vertex_spacing = spacing
+	if args.has("slice_terrain_lod"):
+		t.lod_distance = float(args["slice_terrain_lod"])
+	if args.has("slice_terrain_patch"):
+		t.patch_size = int(args["slice_terrain_patch"])
 	var layers := []
 	for c in [Color(0.27, 0.36, 0.17), Color(0.4, 0.38, 0.35), Color(0.36, 0.35, 0.33), Color(0.42, 0.38, 0.29)]:
 		var l = ClassDB.instantiate("FellowTerrainLayer")

@@ -2,7 +2,7 @@ extends SceneTree
 ## FellowEngine terrain check (decision 0158): a FellowTerrain3D built from noise, looked at and measured.
 ##
 ##   godot --path benchmarks/project --fixed-fps 60 --resolution 640x360 -s res://bench/terrain_check.gd
-##       -- --out=<dir> [--size=1025] [--spacing=1] [--patch=16] [--frames=12] [--debug_view=1]
+##       -- --out=<dir> [--size=1025] [--spacing=1] [--patch=16] [--frames=12] [--debug_view=1] [--snow=<0..1>]
 ##
 ## For each camera: a PNG, and the share of the ground's pixels where the sky (pure red) shows through (cracks between
 ## levels of detail; the camera looks down, so every pixel below the horizon should be ground). Then physics rays cast
@@ -99,6 +99,14 @@ func _initialize() -> void:
 	root3d.add_child(terrain)
 	result["enter_tree_ms"] = (Time.get_ticks_usec() - t0) / 1000.0
 
+	# --snow=<0..1>: FellowEngine's snow cover over the terrain (the weather reaches it as any material).
+	var snow := float(args.get("snow", "0"))
+	if snow > 0.0 and ClassDB.class_exists("FellowRain3D"):
+		var r = ClassDB.instantiate("FellowRain3D")
+		r.precipitation = 1
+		r.rain = 0.5
+		r.snow = snow
+		root3d.add_child(r)
 	cam = Camera3D.new()
 	cam.far = 4000.0
 	root3d.add_child(cam)
