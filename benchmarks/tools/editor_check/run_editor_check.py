@@ -8,6 +8,10 @@ the Performance monitors; then loads the level the editor split as a game would 
 stream_back.log, editor_check.json and gizmos.png to --out.
 
     python run_editor_check.py --godot bin/godot.linuxbsd.editor.x86_64 --out /tmp/editor_check [--headless]
+
+On Linux without a display: xvfb-run -a -s "-screen 0 1920x1080x24" python run_editor_check.py ... — the handles are
+dragged in the 3D view from its default camera, and on xvfb-run's default 1280 x 1024 screen the 3D view is 709 px wide:
+a water handle's drag ends outside it ("off the screen"; editor_check.json's "layout" has the window and the docks).
 """
 
 import argparse

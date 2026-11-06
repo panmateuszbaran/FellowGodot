@@ -56,6 +56,9 @@ func _run() -> void:
 		await _perf(_arg("perf", ""), float(_arg("perf_seconds", "10")))
 		return
 	out["editor"] = Engine.get_version_info().string
+	var base := EditorInterface.get_base_control()
+	out["layout"] = {"window": var_to_str(base.get_viewport().get_visible_rect().size), "main_screen": var_to_str(EditorInterface.get_editor_main_screen().get_global_rect()),
+		"inspector": var_to_str(EditorInterface.get_inspector().get_global_rect()), "screen": var_to_str(DisplayServer.screen_get_size())}
 	out["display"] = DisplayServer.get_name()
 	_check_icons()
 	_check_bvh()
@@ -433,6 +436,7 @@ func _drag(node: Node3D, from_local: Vector3, to_local: Vector3) -> bool:
 	var b := _screen_of(vp, cam, node.global_transform * to_local)
 	var rect := (vp.get_parent() as Control).get_global_rect()
 	if not rect.has_point(a) or not rect.has_point(b):
+		print("EDITOR_CHECK off the screen: %s %s, the view %s, the camera at %s" % [a, b, rect, cam.global_transform.origin])
 		return false
 	await _mouse(a, -1, false)
 	await _mouse(a, 1, true)
