@@ -16,9 +16,18 @@ albedo_color = Color(0.3, 0.42, 0.2, 1)
 albedo_color = Color(0.45, 0.43, 0.4, 1)
 triplanar = true
 
-[node name="Idle" type="Node3D" unique_id=495313837]
+[sub_resource type="BoxMesh" id="BoxMesh_h7y0j"]
+size = Vector3(0.1, 0.4, 0.1)
 
-[node name="Subject" type="FellowTerrain3D" parent="." unique_id=822943572]
+[sub_resource type="FellowTerrainFoliage" id="FellowTerrainFoliage_io6ml"]
+mesh = SubResource("BoxMesh_h7y0j")
+range = 30.0
+sink = -0.2
+
+[node name="Idle" type="Node3D" unique_id=1533971640]
+
+[node name="Subject" type="FellowTerrain3D" parent="." unique_id=588074622]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -32, 0, -32)
 heightmap = SubResource("Image_7pusi")
 layers = Array[FellowTerrainLayer]([SubResource("FellowTerrainLayer_urdxo"), SubResource("FellowTerrainLayer_eqtfi")])
+foliage = Array[FellowTerrainFoliage]([SubResource("FellowTerrainFoliage_io6ml")])
