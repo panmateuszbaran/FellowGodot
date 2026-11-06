@@ -847,6 +847,9 @@ func _run_soak() -> void:
 	var pc_total := 0
 	var pc_after_warm := 0
 	var pc_after_warm_by := {}
+	# --soak_fellow_stats=1 (diagnostics): FellowEngine's counters read every frame, a hitch's nonzero changes kept with it.
+	var per_frame_stats := str(args.get("soak_fellow_stats", "0")) == "1"
+	var fs_prev := _fellow_stats() if per_frame_stats else {}
 	var t0 := Time.get_ticks_usec()
 	var last := t0
 	var next_row := 1.0
@@ -879,6 +882,14 @@ func _run_soak() -> void:
 		if (Time.get_ticks_usec() - t0) / 1e6 >= warm:
 			for k in pc_by:
 				pc_after_warm_by[k] = int(pc_after_warm_by.get(k, 0)) + pc_by[k]
+		var fs_delta := {}
+		if per_frame_stats:
+			var fs_now := _fellow_stats()
+			for k in fs_now:
+				var v = fs_now[k]
+				if (v is int or v is float) and v != fs_prev.get(k, v):
+					fs_delta[k] = v - fs_prev.get(k, 0)
+			fs_prev = fs_now
 		sec_gpu += RenderingServer.viewport_get_measured_render_time_gpu(vrid)
 		sec_cpu += RenderingServer.viewport_get_measured_render_time_cpu(vrid)
 		if recent.size() >= 30:
@@ -886,7 +897,7 @@ func _run_soak() -> void:
 			sorted.sort()
 			var med := sorted[sorted.size() / 2]
 			if ft > 2.0 * med and ft > med + 10.0:
-				hitches.append({"t": snappedf(t, 0.001), "ms": snappedf(ft, 0.01), "median_ms": snappedf(med, 0.01), "pipelines": pc_frame, "pipelines_by": pc_by, "state": state.duplicate()})
+				hitches.append({"t": snappedf(t, 0.001), "ms": snappedf(ft, 0.01), "median_ms": snappedf(med, 0.01), "pipelines": pc_frame, "pipelines_by": pc_by, "fellow": fs_delta, "gpu_ms": snappedf(RenderingServer.viewport_get_measured_render_time_gpu(vrid), 0.01), "render_cpu_ms": snappedf(RenderingServer.viewport_get_measured_render_time_cpu(vrid), 0.01), "state": state.duplicate()})
 		recent.append(ft)
 		if recent.size() > 120:
 			recent.remove_at(0)
