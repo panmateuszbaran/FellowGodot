@@ -1,0 +1,338 @@
+[gd_scene format=3]
+
+[sub_resource type="PlaneMesh" id="Ground"]
+size = Vector2(200, 200)
+
+[sub_resource type="BoxMesh" id="Box"]
+size = Vector3(1, 3, 1)
+
+[sub_resource type="CylinderMesh" id="Pillar"]
+top_radius = 0.3
+bottom_radius = 0.3
+height = 6.0
+
+[sub_resource type="ProceduralSkyMaterial" id="SkyMat"]
+
+[sub_resource type="Sky" id="Sky"]
+sky_material = SubResource("SkyMat")
+
+[sub_resource type="Environment" id="Env"]
+background_mode = 2
+sky = SubResource("Sky")
+tonemap_mode = 2
+
+[node name="Shadows" type="Node3D"]
+
+[node name="Env" type="WorldEnvironment" parent="."]
+environment = SubResource("Env")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.866, -0.354, 0.354, 0, 0.707, 0.707, -0.5, -0.612, 0.612, 0, 10, 0)
+shadow_enabled = true
+directional_shadow_max_distance = 120.0
+
+[node name="Camera" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.94, 0.342, 0, -0.342, 0.94, 0, 4, 10)
+
+[node name="Ground" type="MeshInstance3D" parent="."]
+mesh = SubResource("Ground")
+
+[node name="C1" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -8.0, 1.5, 0)
+mesh = SubResource("Box")
+
+[node name="C2" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4.0, 1.5, 0)
+mesh = SubResource("Box")
+
+[node name="C3" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.0, 1.5, 0)
+mesh = SubResource("Box")
+
+[node name="C4" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.0, 1.5, 0)
+mesh = SubResource("Box")
+
+[node name="C5" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8.0, 1.5, 0)
+mesh = SubResource("Box")
+
+[node name="C6" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6.0, 3.0, -6)
+mesh = SubResource("Pillar")
+
+[node name="C7" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.0, 3.0, -6)
+mesh = SubResource("Pillar")
+
+[node name="C8" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.0, 3.0, -6)
+mesh = SubResource("Pillar")
+
+[node name="C9" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6.0, 3.0, -6)
+mesh = SubResource("Pillar")
+
+[node name="C10" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10.0, 3.0, -6)
+mesh = SubResource("Pillar")
+
+[node name="C11" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6.5, 1.5, -12)
+mesh = SubResource("Box")
+
+[node name="C12" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.5, 1.5, -12)
+mesh = SubResource("Box")
+
+[node name="C13" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.5, 1.5, -12)
+mesh = SubResource("Box")
+
+[node name="C14" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5.5, 1.5, -12)
+mesh = SubResource("Box")
+
+[node name="C15" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9.5, 1.5, -12)
+mesh = SubResource("Box")
+
+[node name="C16" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -7.0, 3.0, -18)
+mesh = SubResource("Pillar")
+
+[node name="C17" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.0, 3.0, -18)
+mesh = SubResource("Pillar")
+
+[node name="C18" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.0, 3.0, -18)
+mesh = SubResource("Pillar")
+
+[node name="C19" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5.0, 3.0, -18)
+mesh = SubResource("Pillar")
+
+[node name="C20" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9.0, 3.0, -18)
+mesh = SubResource("Pillar")
+
+[node name="C21" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -7.5, 1.5, -24)
+mesh = SubResource("Box")
+
+[node name="C22" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.5, 1.5, -24)
+mesh = SubResource("Box")
+
+[node name="C23" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.5, 1.5, -24)
+mesh = SubResource("Box")
+
+[node name="C24" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.5, 1.5, -24)
+mesh = SubResource("Box")
+
+[node name="C25" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8.5, 1.5, -24)
+mesh = SubResource("Box")
+
+[node name="C26" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -8.0, 3.0, -30)
+mesh = SubResource("Pillar")
+
+[node name="C27" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4.0, 3.0, -30)
+mesh = SubResource("Pillar")
+
+[node name="C28" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.0, 3.0, -30)
+mesh = SubResource("Pillar")
+
+[node name="C29" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.0, 3.0, -30)
+mesh = SubResource("Pillar")
+
+[node name="C30" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8.0, 3.0, -30)
+mesh = SubResource("Pillar")
+
+[node name="C31" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6.0, 1.5, -36)
+mesh = SubResource("Box")
+
+[node name="C32" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.0, 1.5, -36)
+mesh = SubResource("Box")
+
+[node name="C33" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.0, 1.5, -36)
+mesh = SubResource("Box")
+
+[node name="C34" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6.0, 1.5, -36)
+mesh = SubResource("Box")
+
+[node name="C35" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10.0, 1.5, -36)
+mesh = SubResource("Box")
+
+[node name="C36" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6.5, 3.0, -42)
+mesh = SubResource("Pillar")
+
+[node name="C37" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.5, 3.0, -42)
+mesh = SubResource("Pillar")
+
+[node name="C38" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.5, 3.0, -42)
+mesh = SubResource("Pillar")
+
+[node name="C39" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5.5, 3.0, -42)
+mesh = SubResource("Pillar")
+
+[node name="C40" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9.5, 3.0, -42)
+mesh = SubResource("Pillar")
+
+[node name="C41" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -7.0, 1.5, -48)
+mesh = SubResource("Box")
+
+[node name="C42" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.0, 1.5, -48)
+mesh = SubResource("Box")
+
+[node name="C43" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.0, 1.5, -48)
+mesh = SubResource("Box")
+
+[node name="C44" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5.0, 1.5, -48)
+mesh = SubResource("Box")
+
+[node name="C45" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9.0, 1.5, -48)
+mesh = SubResource("Box")
+
+[node name="C46" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -7.5, 3.0, -54)
+mesh = SubResource("Pillar")
+
+[node name="C47" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.5, 3.0, -54)
+mesh = SubResource("Pillar")
+
+[node name="C48" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.5, 3.0, -54)
+mesh = SubResource("Pillar")
+
+[node name="C49" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.5, 3.0, -54)
+mesh = SubResource("Pillar")
+
+[node name="C50" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8.5, 3.0, -54)
+mesh = SubResource("Pillar")
+
+[node name="C51" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -8.0, 1.5, -60)
+mesh = SubResource("Box")
+
+[node name="C52" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4.0, 1.5, -60)
+mesh = SubResource("Box")
+
+[node name="C53" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.0, 1.5, -60)
+mesh = SubResource("Box")
+
+[node name="C54" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.0, 1.5, -60)
+mesh = SubResource("Box")
+
+[node name="C55" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8.0, 1.5, -60)
+mesh = SubResource("Box")
+
+[node name="C56" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6.0, 3.0, -66)
+mesh = SubResource("Pillar")
+
+[node name="C57" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.0, 3.0, -66)
+mesh = SubResource("Pillar")
+
+[node name="C58" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.0, 3.0, -66)
+mesh = SubResource("Pillar")
+
+[node name="C59" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6.0, 3.0, -66)
+mesh = SubResource("Pillar")
+
+[node name="C60" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10.0, 3.0, -66)
+mesh = SubResource("Pillar")
+
+[node name="C61" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6.5, 1.5, -72)
+mesh = SubResource("Box")
+
+[node name="C62" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.5, 1.5, -72)
+mesh = SubResource("Box")
+
+[node name="C63" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.5, 1.5, -72)
+mesh = SubResource("Box")
+
+[node name="C64" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5.5, 1.5, -72)
+mesh = SubResource("Box")
+
+[node name="C65" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9.5, 1.5, -72)
+mesh = SubResource("Box")
+
+[node name="C66" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -7.0, 3.0, -78)
+mesh = SubResource("Pillar")
+
+[node name="C67" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.0, 3.0, -78)
+mesh = SubResource("Pillar")
+
+[node name="C68" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.0, 3.0, -78)
+mesh = SubResource("Pillar")
+
+[node name="C69" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5.0, 3.0, -78)
+mesh = SubResource("Pillar")
+
+[node name="C70" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9.0, 3.0, -78)
+mesh = SubResource("Pillar")
+
+[node name="C71" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -7.5, 1.5, -84)
+mesh = SubResource("Box")
+
+[node name="C72" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.5, 1.5, -84)
+mesh = SubResource("Box")
+
+[node name="C73" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.5, 1.5, -84)
+mesh = SubResource("Box")
+
+[node name="C74" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.5, 1.5, -84)
+mesh = SubResource("Box")
+
+[node name="C75" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8.5, 1.5, -84)
+mesh = SubResource("Box")

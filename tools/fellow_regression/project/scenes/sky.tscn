@@ -1,0 +1,36 @@
+[gd_scene format=3]
+
+[sub_resource type="PlaneMesh" id="Ground"]
+size = Vector2(400, 400)
+
+[sub_resource type="BoxMesh" id="Tower"]
+size = Vector3(3, 20, 3)
+
+[sub_resource type="ProceduralSkyMaterial" id="SkyMat"]
+
+[sub_resource type="Sky" id="Sky"]
+sky_material = SubResource("SkyMat")
+
+[sub_resource type="Environment" id="Env"]
+background_mode = 2
+sky = SubResource("Sky")
+tonemap_mode = 2
+
+[node name="Sky" type="Node3D"]
+
+[node name="Env" type="WorldEnvironment" parent="."]
+environment = SubResource("Env")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.94, -0.087, 0.33, 0, 0.966, 0.259, -0.342, -0.24, 0.906, 0, 10, 0)
+shadow_enabled = true
+
+[node name="Camera" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.985, -0.174, 0, 0.174, 0.985, 0, 3, 30)
+
+[node name="Ground" type="MeshInstance3D" parent="."]
+mesh = SubResource("Ground")
+
+[node name="Tower" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6, 10, -10)
+mesh = SubResource("Tower")

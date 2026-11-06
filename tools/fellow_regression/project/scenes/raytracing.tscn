@@ -1,0 +1,68 @@
+[gd_scene format=3]
+
+[sub_resource type="PlaneMesh" id="Floor"]
+size = Vector2(10, 10)
+
+[sub_resource type="BoxMesh" id="Wall"]
+size = Vector3(10, 4, 0.2)
+
+[sub_resource type="BoxMesh" id="Box"]
+
+[sub_resource type="SphereMesh" id="Ball"]
+
+[sub_resource type="StandardMaterial3D" id="Mirror"]
+metallic = 1.0
+roughness = 0.05
+
+[sub_resource type="StandardMaterial3D" id="Red"]
+albedo_color = Color(0.9, 0.15, 0.1, 1)
+
+[sub_resource type="ProceduralSkyMaterial" id="SkyMat"]
+
+[sub_resource type="Sky" id="Sky"]
+sky_material = SubResource("SkyMat")
+
+[sub_resource type="Environment" id="Env"]
+background_mode = 2
+sky = SubResource("Sky")
+tonemap_mode = 2
+ssao_enabled = true
+ssr_enabled = true
+
+[node name="Raytracing" type="Node3D"]
+
+[node name="Env" type="WorldEnvironment" parent="."]
+environment = SubResource("Env")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.866, -0.354, 0.354, 0, 0.707, 0.707, -0.5, -0.612, 0.612, 0, 10, 0)
+shadow_enabled = true
+
+[node name="Camera" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.966, 0.259, 0, -0.259, 0.966, 0, 2.5, 4.5)
+
+[node name="Floor" type="MeshInstance3D" parent="."]
+mesh = SubResource("Floor")
+
+[node name="Back" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, -2)
+mesh = SubResource("Wall")
+
+[node name="Side" type="MeshInstance3D" parent="."]
+transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, -3, 2, 0)
+mesh = SubResource("Wall")
+
+[node name="Box" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.2, 0.5, 0)
+mesh = SubResource("Box")
+surface_material_override/0 = SubResource("Red")
+
+[node name="Ball" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.2, 0.5, 0)
+mesh = SubResource("Ball")
+surface_material_override/0 = SubResource("Mirror")
+
+[node name="Lamp" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3, 1)
+light_energy = 2.0
+omni_range = 8.0

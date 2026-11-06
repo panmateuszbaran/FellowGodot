@@ -18,6 +18,7 @@ decision, what was rejected) and `docs/FELLOWENGINE_OPTIONS.md` every setting an
 | checks without a GPU | `benchmarks/tools/lavapipe/`, `benchmarks/tools/platforms/` (renderers, simulated GPUs, Windows/arm64/Android/web builds) |
 | editor check | `benchmarks/tools/editor_check/` |
 | agent toolkit | `tools/fellow_agent/` (below) |
+| image regression suite | `tools/fellow_regression/` (below) |
 
 ## Building
 
@@ -40,6 +41,10 @@ Other platforms build in containers: `benchmarks/tools/platforms/platforms.sh bu
   otherwise. Compare captures before and after (`compare`; on lavapipe, Mesa's CPU Vulkan driver, renders are
   deterministic: `benchmarks/tools/lavapipe/`), and the three renderers with
   `benchmarks/tools/platforms/renderer_matrix.py`.
+* **Before committing a change to rendering or a node**: `tools/fellow_regression/regression.py run` (under
+  `xvfb-run -a` on Linux; `--template` with a release template too): FellowEngine's features rendered on lavapipe
+  against their goldens, the release template against the editor build, FellowEngine off against on. Every picture is
+  exact; a difference you meant gets new goldens (`bless`, look at them, commit them with the reason).
 * **Performance**: `benchmarks/run_benchmarks.py` (A/B with alternating order, heat soak, statistics); timings only
   mean something on a real GPU, not on lavapipe.
 * **Editor features**: `benchmarks/tools/editor_check/run_editor_check.py` (`--perf <scene> --perf-idle` counts the

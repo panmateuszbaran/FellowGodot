@@ -1,0 +1,54 @@
+[gd_scene format=3]
+
+[sub_resource type="PlaneMesh" id="Ground"]
+size = Vector2(30, 30)
+
+[sub_resource type="BoxMesh" id="Roof"]
+size = Vector3(4, 0.2, 4)
+
+[sub_resource type="BoxMesh" id="Post"]
+size = Vector3(0.2, 3, 0.2)
+
+[sub_resource type="StandardMaterial3D" id="Stone"]
+albedo_color = Color(0.45, 0.42, 0.4, 1)
+roughness = 0.8
+
+[sub_resource type="ProceduralSkyMaterial" id="SkyMat"]
+
+[sub_resource type="Sky" id="Sky"]
+sky_material = SubResource("SkyMat")
+
+[sub_resource type="Environment" id="Env"]
+background_mode = 2
+sky = SubResource("Sky")
+tonemap_mode = 2
+
+[node name="Rain" type="Node3D"]
+
+[node name="Env" type="WorldEnvironment" parent="."]
+environment = SubResource("Env")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.866, -0.354, 0.354, 0, 0.707, 0.707, -0.5, -0.612, 0.612, 0, 10, 0)
+shadow_enabled = true
+
+[node name="Camera" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.906, 0.423, 0, -0.423, 0.906, 0, 4, 8)
+
+[node name="Ground" type="MeshInstance3D" parent="."]
+mesh = SubResource("Ground")
+surface_material_override/0 = SubResource("Stone")
+
+[node name="Roof" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3, 0)
+mesh = SubResource("Roof")
+
+[node name="Post" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.8, 1.5, 1.8)
+mesh = SubResource("Post")
+
+[node name="Weather" type="FellowRain3D" parent="."]
+rain = 1.0
+wetness = 1.0
+puddles = 0.8
+splashes = false

@@ -103,6 +103,9 @@ func _finish(result: Dictionary, code: int) -> void:
 
 
 func _main() -> void:
+	# The global random sequence fixed (milestone 54): particles' seeds and scripts' randf() the same every run, so two
+	# captures of one scene are the same picture.
+	seed(int(args.get("seed", "1")))
 	match args.get("cmd", ""):
 		"capture":
 			await _capture()

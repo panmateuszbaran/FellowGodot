@@ -513,6 +513,29 @@ void main() {
 		}
 	}
 	vec4 result = (fresh || count == 0.0) ? cur : sum / count;
+	if (interleaved) {
+		// The history's bounds from this frame's traces in the 3 x 3 blocks around (decision 0155): within the 3 x 3
+		// pixels a traced pixel has no other trace of this frame, so its history was clamped to its own trace and
+		// discarded — every pixel showed one trace, each of a 2 x 2 block's from another frame (a checker of noise).
+		ivec2 b = (pos & ~1) + o;
+		first = true;
+		for (int y = -1; y <= 1; y++) {
+			for (int x = -1; x <= 1; x++) {
+				ivec2 q = b + ivec2(x, y) * 2;
+				if (any(lessThan(q, ivec2(0))) || any(greaterThanEqual(q, params.sizes.xy))) {
+					continue;
+				}
+				vec4 n = texelFetch(trace_tex, q, 0);
+				if (first) {
+					lo = n;
+					hi = n;
+					first = false;
+				}
+				lo = min(lo, n);
+				hi = max(hi, n);
+			}
+		}
+	}
 	// The clouds' far point reprojected: rotation and slow translation (the clouds are kilometres away).
 	vec4 wp = params.inv_view_projection * vec4(uv * 2.0 - 1.0, 0.5, 1.0);
 	vec3 dir = normalize(wp.xyz / wp.w - params.camera_position.xyz);

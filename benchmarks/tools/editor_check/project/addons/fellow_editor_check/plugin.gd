@@ -198,6 +198,10 @@ func _check_warnings() -> void:
 	_expect_warning("emitter in a volume", emitter, "")
 	_expect_warning("volume with an emitter", volume, "")
 	_expect_warning("volume alone", mk.call("FellowGasVolume3D", box), "Nothing fills this volume")
+	var low_volume: Node = mk.call("FellowGasVolume3D", box)
+	var low: Node3D = mk.call("FellowGasEmitter3D", low_volume)
+	low.position = Vector3(0, -0.5, 0)
+	_expect_warning("emitter below its volume's floor", low, "outside its FellowGasVolume3D's box")
 	# Burning: no mesh; a mesh but no gas volume in the edited scene.
 	_expect_warning("burnable without a mesh", mk.call("FellowBurnable3D", box), "burns its parent MeshInstance3D")
 	var mesh := MeshInstance3D.new()
@@ -454,6 +458,8 @@ func _check_handles() -> void:
 		["ShallowWater", Vector3(0, 0, 0.5), Vector3(0, 0, 0.75), "domain_size", Vector2(1.0, 1.5)],
 		["Cell", Vector3(0.4, 0.4, 0), Vector3(0.8, 0.4, 0), "bounds", AABB(Vector3(-0.4, 0, -0.4), Vector3(1.2, 0.8, 0.8))],
 		["SnowTracker", Vector3(0.2, 0, 0), Vector3(0.5, 0, 0), "radius", 0.5],
+		# milestone 54: the gas volume's box has its floor on the node; the height's handle on its top
+		["GasVolume", Vector3(0, 1, 0), Vector3(0, 1.5, 0), "size", Vector3(1, 1.5, 1)],
 	]
 	for c in cases:
 		var node: Node3D = root.get_node(c[0])
@@ -466,6 +472,8 @@ func _check_handles() -> void:
 		match typeof(c[4]):
 			TYPE_VECTOR2:
 				ok = (after as Vector2).distance_to(c[4]) < 0.02
+			TYPE_VECTOR3:
+				ok = (after as Vector3).distance_to(c[4]) < 0.02
 			TYPE_AABB:
 				ok = (after as AABB).position.distance_to(c[4].position) < 0.02 and (after as AABB).size.distance_to(c[4].size) < 0.02
 			_:

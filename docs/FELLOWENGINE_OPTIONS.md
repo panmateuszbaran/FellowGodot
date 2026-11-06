@@ -474,6 +474,15 @@ wind and lightning the scene lacks), *Add Fire*, *Add Smoke*, *Add Burning Box*,
 *Add Flowing Pool (8 x 8 m)* — added to the selected 3D node (or the scene's root), undoable, with no configuration
 warning. Decision 0154.
 
+## Image regression suite (milestone 54)
+
+`tools/fellow_regression/regression.py run|bless` renders each group of FellowEngine's features (the defaults,
+FellowEngine off, post-processing, ray tracing) on lavapipe and fails on a picture that differs from its golden, an
+error, a release template drawing differently from the editor build (`--template`), or FellowEngine's defaults leaving
+stock's frame. Exact on lavapipe; `--goldens DIR` keeps another GPU's own. No engine setting. In the editor, a
+FellowGasVolume3D's gizmo and handles now show its box as it is, its floor on the node, and an emitter that does not
+reach into its volume's box has a configuration warning. Decision 0155; `tools/fellow_regression/README.md`.
+
 ## Agent toolkit (milestone 51)
 
 `tools/fellow_agent/fellow_agent.py capture|describe|check|run|compare|import|api|init` (Python 3; JSON out, exit

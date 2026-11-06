@@ -129,8 +129,9 @@ void FellowGizmoPlugin::_circle_lines(const Vector3 &p_centre, real_t p_radius, 
 Vector<Vector3> FellowGizmoPlugin::lines_for(const StringName &p_class, const Dictionary &p_properties) {
 	Vector<Vector3> lines;
 	if (p_class == SNAME("FellowGasVolume3D")) {
+		// The box's floor is centred on the node (milestone 54: drawn centred before, half its height too low).
 		const Vector3 size = p_properties.get("size", Vector3(1, 1, 1));
-		_box_lines(AABB(-size * 0.5, size), lines);
+		_box_lines(AABB(Vector3(-size.x * 0.5, 0, -size.z * 0.5), size), lines);
 	} else if (p_class == SNAME("FellowGasEmitter3D")) {
 		const int shape = p_properties.get("shape", 0);
 		const real_t radius = p_properties.get("radius", 0.5);
@@ -264,8 +265,7 @@ void FellowGizmoPlugin::redraw(EditorNode3DGizmo *p_gizmo) {
 // set one number of a property, the node left in place.
 FellowGizmoPlugin::HandleKind FellowGizmoPlugin::_handle_kind(const Node3D *p_node, const StringName &p_class, StringName &r_size_property) {
 	if (p_class == SNAME("FellowGasVolume3D")) {
-		r_size_property = SNAME("size");
-		return HANDLES_BOX;
+		return HANDLES_AXES; // its floor stays on the node: width and depth about it, the height up from it
 	}
 	if (p_class == SNAME("FellowGasEmitter3D")) {
 		const int shape = p_node->get(SNAME("shape"));
@@ -297,12 +297,24 @@ Vector<FellowGizmoPlugin::AxisHandle> FellowGizmoPlugin::axis_handles_for(const 
 		h.base = p_base;
 		h.name = p_name;
 		const Variant v = p_properties.get(p_property, 0.0);
-		const real_t value = p_component < 0 ? real_t(v) : real_t(Vector2(v)[p_component]);
+		real_t value = 0.0;
+		if (p_component < 0) {
+			value = v;
+		} else if (v.get_type() == Variant::VECTOR3) {
+			value = Vector3(v)[p_component];
+		} else {
+			value = Vector2(v)[p_component];
+		}
 		h.position = p_base;
 		h.position[p_axis] += p_sign * (value / p_scale + p_offset);
 		handles.push_back(h);
 	};
-	if (p_class == SNAME("FellowGasEmitter3D")) {
+	if (p_class == SNAME("FellowGasVolume3D")) {
+		const Vector3 size = p_properties.get("size", Vector3(2, 4, 2));
+		add(SNAME("size"), 0, 0, 1, 2, 0, Vector3(0, size.y * 0.5, 0), TTR("Width (X)"));
+		add(SNAME("size"), 2, 2, 1, 2, 0, Vector3(0, size.y * 0.5, 0), TTR("Depth (Z)"));
+		add(SNAME("size"), 1, 1, 1, 1, 0, Vector3(), TTR("Height (Y)"));
+	} else if (p_class == SNAME("FellowGasEmitter3D")) {
 		add(SNAME("radius"), -1, 0, 1, 1, 0, Vector3(), TTR("Radius"));
 	} else if (p_class == SNAME("FellowWater3D") || p_class == SNAME("FellowShallowWater3D")) {
 		const StringName prop = p_class == SNAME("FellowWater3D") ? SNAME("extent") : SNAME("domain_size");
@@ -469,10 +481,15 @@ void FellowGizmoPlugin::set_handle(const EditorNode3DGizmo *p_gizmo, int p_id, b
 			const AxisHandle &h = handles[p_id];
 			const real_t c = (_fellow_on_axis(sg, h.base, h.axis)[h.axis] - h.base[h.axis]) * h.sign;
 			const real_t v = _fellow_snapped(MAX((c - h.offset) * h.scale, real_t(0.0)));
+			const Variant current = node->get(h.property);
 			if (h.component < 0) {
 				node->set(h.property, v);
+			} else if (current.get_type() == Variant::VECTOR3) {
+				Vector3 value = current;
+				value[h.component] = MAX(v, real_t(0.01)); // a gas volume's size must stay above 0
+				node->set(h.property, value);
 			} else {
-				Vector2 value = node->get(h.property);
+				Vector2 value = current;
 				value[h.component] = v;
 				node->set(h.property, value);
 			}
@@ -490,7 +507,7 @@ void FellowGizmoPlugin::commit_handle(const EditorNode3DGizmo *p_gizmo, int p_id
 	String action;
 	switch (_handle_kind(node, cls, size_property)) {
 		case HANDLES_BOX:
-			helper->box_commit_handle(cls == SNAME("FellowGasVolume3D") ? TTR("Change Gas Volume Size") : TTR("Change Emitter Size"), p_cancel, node, node, SNAME("global_position"), size_property);
+			helper->box_commit_handle(TTR("Change Emitter Size"), p_cancel, node, node, SNAME("global_position"), size_property);
 			return;
 		case HANDLES_CYLINDER:
 			helper->cylinder_commit_handle(p_id, TTR("Change Emitter Radius"), TTR("Change Emitter Height"), p_cancel, node);
@@ -666,9 +683,11 @@ Node3D *FellowEditorPlugin::make_preset(int p_preset, const Node *p_root) {
 		} break;
 		case PRESET_FIRE:
 		case PRESET_SMOKE: {
+			// The volume's floor is on its node: the emitter just above it (milestone 54: below it before, emitting
+			// nothing).
 			top = Object::cast_to<Node3D>(_fellow_make("FellowGasVolume3D", p_preset == PRESET_FIRE ? "Fire" : "Smoke", nullptr, Dictionary{ { "size", Vector3(2, 4, 2) } }));
 			ERR_FAIL_NULL_V(top, nullptr);
-			Dictionary emitter{ { "position", Vector3(0, -1.6, 0) } };
+			Dictionary emitter{ { "position", Vector3(0, 0.4, 0) } };
 			if (p_preset == PRESET_SMOKE) {
 				emitter["fuel"] = 0.0;
 				emitter["temperature"] = 400.0;
@@ -688,8 +707,8 @@ Node3D *FellowEditorPlugin::make_preset(int p_preset, const Node *p_root) {
 			box->set_position(Vector3(0, 0.5, 0));
 			top->add_child(box);
 			_fellow_make("FellowBurnable3D", "FellowBurnable3D", box);
-			Node *volume = _fellow_make("FellowGasVolume3D", "GasVolume", top, Dictionary{ { "size", Vector3(3, 4, 3) }, { "position", Vector3(0, 2, 0) } });
-			_fellow_make("FellowGasEmitter3D", "Flame", volume, Dictionary{ { "position", Vector3(0, -1.85, 0) }, { "radius", 0.15 } });
+			Node *volume = _fellow_make("FellowGasVolume3D", "GasVolume", top, Dictionary{ { "size", Vector3(3, 4, 3) } });
+			_fellow_make("FellowGasEmitter3D", "Flame", volume, Dictionary{ { "position", Vector3(0, 0.15, 0.65) }, { "radius", 0.15 } });
 		} break;
 		case PRESET_OCEAN: {
 			top = Object::cast_to<Node3D>(_fellow_make("FellowWater3D", "Ocean", nullptr)); // to the horizon

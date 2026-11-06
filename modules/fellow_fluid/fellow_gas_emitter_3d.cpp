@@ -32,18 +32,39 @@
 
 #include "fellow_gas_volume_3d.h"
 
+#include "core/config/engine.h"
 #include "core/object/class_db.h"
 
 void FellowGasEmitter3D::_notification(int p_what) {
-	if (p_what == NOTIFICATION_PARENTED || p_what == NOTIFICATION_UNPARENTED) {
+	if (p_what == NOTIFICATION_PARENTED || p_what == NOTIFICATION_UNPARENTED || p_what == NOTIFICATION_LOCAL_TRANSFORM_CHANGED) {
 		update_configuration_warnings();
+	} else if (p_what == NOTIFICATION_ENTER_TREE && Engine::get_singleton()->is_editor_hint()) {
+		set_notify_local_transform(true); // moved out of its volume's box: the warning follows (milestone 54)
 	}
 }
 
 PackedStringArray FellowGasEmitter3D::get_configuration_warnings() const {
 	PackedStringArray warnings = Node3D::get_configuration_warnings();
-	if (!Object::cast_to<FellowGasVolume3D>(get_parent())) {
+	const FellowGasVolume3D *volume = Object::cast_to<FellowGasVolume3D>(get_parent());
+	if (!volume) {
 		warnings.push_back(RTR("A FellowGasEmitter3D emits only as a direct child of a FellowGasVolume3D."));
+	} else {
+		// Milestone 54: the volume's box has its floor on the volume's node; an emitter whose shape (its bounding
+		// sphere) does not reach into the box emits nothing.
+		const Transform3D t = get_transform();
+		const Vector3 s = volume->get_size();
+		const Vector3 nearest = t.origin.clamp(Vector3(-s.x * 0.5f, 0.0f, -s.z * 0.5f), Vector3(s.x * 0.5f, s.y, s.z * 0.5f));
+		real_t reach = radius;
+		if (shape == SHAPE_BOX) {
+			reach = (box_size * 0.5f).length();
+		} else if (shape == SHAPE_CYLINDER) {
+			reach = Math::sqrt(radius * radius + height * height * 0.25f);
+		}
+		const Vector3 scale = t.basis.get_scale().abs();
+		reach *= MAX(scale.x, MAX(scale.y, scale.z));
+		if (t.origin.distance_to(nearest) > reach) {
+			warnings.push_back(RTR("The emitter is outside its FellowGasVolume3D's box (whose floor is at the volume's origin, its height upwards): it emits nothing."));
+		}
 	}
 	return warnings;
 }

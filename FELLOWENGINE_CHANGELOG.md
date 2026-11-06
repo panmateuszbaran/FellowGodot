@@ -9,6 +9,19 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 54 — an image regression suite (2026-11-06)
+
+- `tools/fellow_regression/regression.py` (decision 0155): FellowEngine's features in twelve scenes (lights, shadows,
+  materials, water, rain, snow, lightning, fire, HLOD and MultiMesh geometry, sky and clouds, ray tracing) rendered on
+  lavapipe and checked against goldens, the release template against the editor build, and FellowEngine off against
+  on; every picture bit-exact between runs and between the two builds. `--goldens` keeps another GPU's own.
+- Found and fixed: a FellowGasVolume3D's gizmo and handles showed its box centred on the node (its floor is there);
+  the FellowEngine menu's Fire, Smoke and Burning Box put their emitters below the box, emitting nothing. An emitter
+  that does not reach into its volume's box now has a configuration warning. The clouds traced a quarter of the
+  pixels per frame showed a checker of noise (each pixel's history lost): fixed, 45.3 -> 51.5 dB against the full
+  trace (a pan 44.4 -> 47.5 dB).
+- fellow_agent seeds the global random sequence (`--seed`): two captures of a scene are the same picture.
+
 ## Milestone 53 — the editor: scene opening, ready-made setups, grouped inspectors (2026-11-05)
 
 - FellowEngine's nodes make the shaders, compute kernels, meshes and textures they all share once per session

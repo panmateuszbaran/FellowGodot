@@ -81,16 +81,19 @@ public:
 	void set_radius(float p_radius) {
 		radius = MAX(p_radius, 0.0f);
 		update_gizmos();
+		update_configuration_warnings(); // reaching into the volume's box or not (milestone 54)
 	}
 	float get_radius() const { return radius; }
 	void set_box_size(const Vector3 &p_size) {
 		box_size = p_size.max(Vector3());
 		update_gizmos();
+		update_configuration_warnings();
 	}
 	Vector3 get_box_size() const { return box_size; }
 	void set_height(float p_height) {
 		height = MAX(p_height, 0.0f);
 		update_gizmos();
+		update_configuration_warnings();
 	}
 	float get_height() const { return height; }
 	void set_smoke(float p_smoke) { smoke = MAX(p_smoke, 0.0f); }

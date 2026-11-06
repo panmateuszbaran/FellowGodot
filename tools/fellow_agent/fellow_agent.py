@@ -114,7 +114,7 @@ def engine_command(a, script_args, rendering):
         engine_args += ["--rendering-method", a.renderer]
     if getattr(a, "driver", None):
         engine_args += ["--rendering-driver", a.driver]
-    engine_args += ["-s", GD_SCRIPT, "--", f"--out={out_dir}"] + script_args
+    engine_args += ["-s", GD_SCRIPT, "--", f"--out={out_dir}", f"--seed={getattr(a, 'seed', 1)}"] + script_args
     info, err, out = run_engine(godot, engine_args, a.timeout, rendering, getattr(a, "size", "1280x720"))
     if err:
         return fail(err)
@@ -442,6 +442,7 @@ def main():
         p.add_argument("--out", help="a directory for the report and pictures (default: a new temporary one)")
         p.add_argument("--timeout", type=float, default=600.0)
         p.add_argument("--quiet", action="store_true", help="print a short summary; the full report is in report.json")
+        p.add_argument("--seed", type=int, default=1, help="the global random sequence's seed (randf(), particles without a fixed seed)")
         if rendering:
             p.add_argument("--size", default="1280x720", help="the window's size")
             p.add_argument("--renderer", choices=["forward_plus", "mobile", "gl_compatibility"])

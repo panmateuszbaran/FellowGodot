@@ -20,7 +20,9 @@ python tools/fellow_agent/fellow_agent.py <command> --help
 | `init --project P` | writes `AGENTS.md` into a game project (from `AGENTS.project.md`) | Python only |
 
 The engine: `--godot`, `$FELLOW_GODOT`, or the newest `bin/godot.*` (editor builds first). Use an editor build for
-`check` and `run`: release templates do not check scripts' errors.
+`check` and `run`: release templates do not check scripts' errors. A capture renders at a fixed frame rate (`--fps`,
+60) with the global random sequence seeded (`--seed`, 1): the same picture every run of a build on one machine (on
+lavapipe bit for bit; `tools/fellow_regression/` relies on it).
 
 How it works: `fellow_agent.py` runs `godot --path <project> -s tools/fellow_agent/fellow_agent.gd -- --cmd=...`;
 the script is the main loop, catches errors through a `Logger`, and prints `FELLOW_AGENT {json}`; the wrapper adds

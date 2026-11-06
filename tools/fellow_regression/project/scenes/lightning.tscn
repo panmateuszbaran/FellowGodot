@@ -1,0 +1,35 @@
+[gd_scene format=3]
+
+[sub_resource type="PlaneMesh" id="Ground"]
+size = Vector2(60, 60)
+
+[sub_resource type="BoxMesh" id="Box"]
+size = Vector3(2, 4, 2)
+
+[sub_resource type="Environment" id="Env"]
+background_mode = 1
+background_color = Color(0.02, 0.02, 0.04, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.05, 0.05, 0.07, 1)
+tonemap_mode = 3
+
+[node name="Lightning" type="Node3D"]
+
+[node name="Env" type="WorldEnvironment" parent="."]
+environment = SubResource("Env")
+
+[node name="Camera" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.966, 0.259, 0, -0.259, 0.966, 0, 3, 10)
+
+[node name="Ground" type="MeshInstance3D" parent="."]
+mesh = SubResource("Ground")
+
+[node name="Box" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 0)
+mesh = SubResource("Box")
+
+[node name="Storm" type="FellowLightning3D" parent="."]
+strikes_per_minute = 1200.0
+distance_range = Vector2(250, 400)
+energy = 0.4
+seed = 7

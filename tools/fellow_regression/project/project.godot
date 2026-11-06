@@ -1,0 +1,11 @@
+; FellowEngine's image regression scenes (milestone 54): tools/fellow_regression/regression.py renders each from its
+; camera on lavapipe and compares it with its golden image.
+config_version=5
+
+[application]
+
+config/name="FellowEngine regression"
+
+[rendering]
+
+renderer/rendering_method="forward_plus"

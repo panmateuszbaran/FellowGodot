@@ -1,0 +1,68 @@
+{
+ "comment": "FellowEngine's image regression suite (milestone 54): groups of settings (an override.cfg each) and the scenes rendered with them. tolerance: a picture passes when identical, or within max_diff levels, or (share_over above 0) with at most share_over of its pixels more than 8 levels off.",
+ "size": "512x288",
+ "size_comment": "Not 480x270: at widths like 480, 960 and 1920 stock leaves the last column of SSAO's and SSIL's output unwritten (decision 0067; FellowEngine writes it), so stock's frame there is not defined and FellowEngine's differs from it in that column.",
+ "frames": 40,
+ "fps": 60,
+ "tolerance": {
+  "max_diff": 0,
+  "share_over": 0.0
+ },
+ "scene_tolerance": {},
+ "groups": {
+  "base": {
+   "settings": {},
+   "scenes": [
+    "lights",
+    "shadows",
+    "materials",
+    "water",
+    "rain",
+    "snow",
+    "lightning",
+    "fire",
+    "geometry",
+    "instances"
+   ]
+  },
+  "stock": {
+   "comment": "FellowEngine off: the same scenes of stock features must render exactly as with it on (its default options are exact).",
+   "settings": {
+    "rendering/fellow/enabled": false
+   },
+   "scenes": [
+    "lights",
+    "shadows",
+    "materials",
+    "instances"
+   ],
+   "same_as": "base"
+  },
+  "post": {
+   "settings": {
+    "rendering/fellow/post/atmosphere/enabled": true,
+    "rendering/fellow/post/clouds/enabled": true,
+    "rendering/fellow/post/bloom/enabled": true,
+    "rendering/fellow/post/light_shafts/intensity": 0.5,
+    "rendering/fellow/post/lens/vignette": 0.3,
+    "rendering/fellow/post/local_exposure/enabled": true
+   },
+   "scenes": [
+    "sky"
+   ]
+  },
+  "rt": {
+   "settings": {
+    "rendering/fellow/raytracing/enabled": true,
+    "rendering/fellow/raytracing/ambient_occlusion": true,
+    "rendering/fellow/raytracing/sun_shadows": true,
+    "rendering/fellow/raytracing/reflections": true,
+    "rendering/fellow/raytracing/gi": true
+   },
+   "scenes": [
+    "raytracing"
+   ]
+  }
+ },
+ "scene_tolerance_comment": "A scene's own tolerance, e.g. \"rain\": {\"max_diff\": 0, \"share_over\": 0.001}: the larger of it and the run's, field by field. None needed on lavapipe: the rain scene has no splashes (stock's GPU sub-emitter particles, emitted through an atomic counter in an order that changes between runs: 20 of 147 456 pixels differed between two runs, none without them)."
+}

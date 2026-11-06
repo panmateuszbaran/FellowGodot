@@ -2,7 +2,10 @@
 
 Status: **KEEP**, on (part of the clouds, decision 0109, off by default) · Branch `fellow/geometry` · Setting
 `rendering/fellow/post/clouds/interleaved` (true) · Code: `shaders/effects/fellow_clouds.glsl` (`MODE_TRACE`,
-`MODE_TEMPORAL`), `effects/fellow_clouds.*`.
+`MODE_TEMPORAL`), `effects/fellow_clouds.*`. **Fixed in decision 0155** (milestone 54): a traced pixel's history was
+clamped to its own trace (no other trace of the frame in its 3 × 3 pixels) and lost — a checker of noise; the bounds
+now come from the traces of the 3 × 3 blocks around (a still camera 45.3 → 51.5 dB, a pan 44.4 → 47.5 dB against the
+full trace).
 
 ## Problem
 

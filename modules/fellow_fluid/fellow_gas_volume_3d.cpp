@@ -102,6 +102,11 @@ void FellowGasVolume3D::set_size(const Vector3 &p_size) {
 	_update_grid();
 	configured = false;
 	update_gizmos();
+	for (int i = 0; i < get_child_count(); i++) {
+		if (Node *e = Object::cast_to<FellowGasEmitter3D>(get_child(i))) {
+			e->update_configuration_warnings(); // inside the box or not (milestone 54)
+		}
+	}
 }
 
 void FellowGasVolume3D::set_resolution(int p_resolution) {
