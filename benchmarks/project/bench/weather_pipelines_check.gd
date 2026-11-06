@@ -1,5 +1,5 @@
 extends SceneTree
-## FellowEngine weather pipelines check (milestone 57): the pipelines compiled in the frames after a FellowRain3D's
+## FellowEngine weather pipelines check (decision 0156): the pipelines compiled in the frames after a FellowRain3D's
 ## precipitation changes (rain -> snow -> rain), by kind. A node that compiles pipelines mid-game makes a hitch; the
 ## rain node's are compiled when it is set up, and none should compile when it starts or stops snowing.
 ##

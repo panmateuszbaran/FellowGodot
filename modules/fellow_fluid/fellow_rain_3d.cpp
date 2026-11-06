@@ -217,7 +217,7 @@ void FellowRain3D::_build_children() {
 	add_child(drops, false, INTERNAL_MODE_FRONT);
 
 	// The flakes' material on a hidden quad, so that its pipelines compile when the node is set up, not in the frame it
-	// starts to snow (milestone 57: 6 surface pipelines, 51 ms on the RTX, when Slice Lab's weather first turned to
+	// starts to snow (decision 0156: 6 surface pipelines, 51 ms on the RTX, when Slice Lab's weather first turned to
 	// snow). The drops' need none: the splashes wear their shader from the start.
 	Ref<QuadMesh> flake_pipelines_mesh;
 	flake_pipelines_mesh.instantiate();
