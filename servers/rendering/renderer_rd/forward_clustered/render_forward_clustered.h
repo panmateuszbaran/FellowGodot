@@ -1485,6 +1485,16 @@ private:
 	void _fellow_process_cloud_shadow(RenderDataRD *p_render_data, bool p_allowed); // decision 0133
 	void _fellow_process_rainbow(RenderDataRD *p_render_data, const Ref<RenderSceneBuffersRD> &p_render_buffers); // decision 0134
 	bool fellow_cloud_shadow_frame = false; // this render's colour passes read the clouds' shadow map
+	// Decision 0161 (frame/stable_scene_bits): the scene-dependent features that have existed or been in a frame this
+	// session (bits: 1 decals, 2 reflection probes, 4 directional lights, 8 omni lights, 16 spot lights, 32 shadowed omni
+	// or spot lights, 64 omni or spot lights, 128 the clouds' shadow, 256 light tile culling); their pipelines keep the
+	// features' code.
+	enum {
+		FELLOW_STABLE_POSITIONAL = 64,
+		FELLOW_STABLE_CLOUD_SHADOW = 128,
+		FELLOW_STABLE_TILE_CULL = 256,
+	};
+	uint32_t fellow_stable_seen = 0;
 	// FellowEngine gas volumes (decision 0118): this render's volumes (begin_frame() done), their shadow in the mask.
 	bool fellow_gas_frame = false;
 	// FellowEngine (decision 0126): the depth texture's copy with the nearest depth's mip levels, bound for the transparent

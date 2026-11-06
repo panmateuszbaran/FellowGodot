@@ -815,6 +815,7 @@ void FellowRain3D::_rt_update(PackedByteArray p_push, bool p_enabled, bool p_rip
 	memcpy(&st, p_state.ptr(), sizeof(st));
 	st.ripple_texture = ripple_tex;
 	st.enabled = p_enabled;
+	w->fellow_note_wetting_node(); // decision 0161: materials keep the wetting code from now on
 	if (p_ripples) {
 		PushConstant pc;
 		memcpy(&pc, p_push.ptr(), sizeof(pc));

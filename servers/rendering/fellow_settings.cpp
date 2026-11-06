@@ -224,6 +224,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/frame/depth_pipeline_keys", true); // decision 0069
 	GLOBAL_DEF("rendering/fellow/frame/clear_new_textures", true); // decision 0070
 	GLOBAL_DEF("rendering/fellow/frame/movie_wait_pipelines", true); // decision 0072
+	GLOBAL_DEF("rendering/fellow/frame/stable_scene_bits", true); // decision 0161
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/frame/async_ss_split", PROPERTY_HINT_ENUM, "Stock,SSIL On Main Queue,SSIL And SSR On Main Queue,Autotune"), 3); // decision 0060 (3 from fellow147)
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/geometry/cluster_front_to_back", PROPERTY_HINT_RANGE, "0,1048576,1"), 0); // decision 0058 (rejected, off)
 	GLOBAL_DEF("rendering/fellow/geometry/cluster_lod", false); // decision 0063 (changes the image; off until measured)
@@ -487,6 +488,10 @@ uint64_t Fellow::shadow_atlas_tick_msec() {
 bool Fellow::frame_movie_wait_pipelines() {
 	static const bool writing_movie = !Engine::get_singleton()->get_write_movie_path().is_empty();
 	return writing_movie && enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/frame/movie_wait_pipelines");
+}
+
+bool Fellow::frame_stable_scene_bits() {
+	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/frame/stable_scene_bits");
 }
 
 int Fellow::cpu_worker_tasks_auto() {

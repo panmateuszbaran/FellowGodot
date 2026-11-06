@@ -6658,6 +6658,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 	bool depth_pre_pass = (force_depth_pre_pass || bool(GLOBAL_GET_CACHED(bool, "rendering/driver/depth_prepass/enable"))) && depth_framebuffer.is_valid();
 
 	SceneShaderForwardClustered::ShaderSpecialization base_specialization = scene_shader.default_specialization;
+	const bool fellow_stable_bits = Fellow::frame_stable_scene_bits(); // decision 0161
 	base_specialization.use_depth_fog = p_render_data->environment.is_valid() && environment_get_fog_mode(p_render_data->environment) == RSE::EnvironmentFogMode::ENV_FOG_MODE_DEPTH;
 	base_specialization.fellow_pcss_blend_band = Fellow::shadow_pcss_blend_band();
 	base_specialization.fellow_directional_max_mip = Fellow::shadow_directional_max_mip();
@@ -6678,6 +6679,15 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		// The snow's cover too (decision 0128).
 		base_specialization.fellow_wetness = weather && weather->get_state().enabled && (weather->get_state().wetness > 0.0f || weather->get_state().snow > 0.0f || weather->get_state().frost > 0.0f);
 		base_specialization.fellow_cloud_shadow = fellow_cloud_shadow_frame; // decision 0133
+		if (fellow_stable_bits) {
+			// Decision 0161: wet as soon as a node that can wet the scene exists (the weather's data is zero while dry: the
+			// code returns at once); the clouds' shadow once it has been on (zero strength and a white map while off).
+			base_specialization.fellow_wetness = base_specialization.fellow_wetness || (weather && weather->fellow_wetting_node_seen() && Fellow::fluid_enabled());
+			if (fellow_cloud_shadow_frame) {
+				fellow_stable_seen |= FELLOW_STABLE_CLOUD_SHADOW;
+			}
+			base_specialization.fellow_cloud_shadow = weather && (fellow_stable_seen & FELLOW_STABLE_CLOUD_SHADOW);
+		}
 	}
 	base_specialization.fellow_light_fields_early = false; // set after the lights are set up (below)
 	base_specialization.fellow_light_prefetch_next = false;
@@ -6825,16 +6835,23 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		}
 	}
 	// FellowEngine (lights/fields_early, decision 0045): only where omni or spot lights are in view (the colour passes
-	// below; the depth pre-pass above does not light).
-	base_specialization.fellow_light_fields_early = Fellow::light_fields_early() && fellow_positional_light_count > 0;
+	// below; the depth pre-pass above does not light). Decision 0161: or wherever they exist, or have been in view.
+	if (fellow_stable_bits) {
+		RendererRD::LightStorage *ls = RendererRD::LightStorage::get_singleton();
+		if (fellow_positional_light_count > 0 || ls->fellow_get_lights_allocated(RSE::LIGHT_OMNI) > 0 || ls->fellow_get_lights_allocated(RSE::LIGHT_SPOT) > 0) {
+			fellow_stable_seen |= FELLOW_STABLE_POSITIONAL;
+		}
+	}
+	const bool fellow_positional_code = fellow_positional_light_count > 0 || (fellow_stable_bits && (fellow_stable_seen & FELLOW_STABLE_POSITIONAL));
+	base_specialization.fellow_light_fields_early = Fellow::light_fields_early() && fellow_positional_code;
 	{
 		// lights/prefetch_next (decision 0046): 1 range test fields, 2 all hot fields, 3 and 4 the same with the words.
-		const int fellow_pf = fellow_positional_light_count > 0 ? Fellow::light_prefetch_next() : 0;
+		const int fellow_pf = fellow_positional_code ? Fellow::light_prefetch_next() : 0;
 		base_specialization.fellow_light_prefetch_next = fellow_pf >= 1;
 		base_specialization.fellow_light_prefetch_all = fellow_pf == 2 || fellow_pf == 4;
 		base_specialization.fellow_light_prefetch_words = fellow_pf >= 3;
 		// lights/hot_fields_buffer (decision 0047): 1 the storage buffer, 2 the uniform buffer (if every light fits).
-		int fellow_hot = fellow_positional_light_count > 0 ? Fellow::light_hot_fields_buffer() : 0;
+		int fellow_hot = fellow_positional_code ? Fellow::light_hot_fields_buffer() : 0;
 		if (fellow_hot == 2 && !RendererRD::LightStorage::get_singleton()->fellow_hot_ubo_supported()) {
 			fellow_hot = 0;
 		}
@@ -6856,6 +6873,23 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		base_specialization.fellow_no_omni_lights = (fellow_absent & 8) && current_cluster_builder != nullptr && current_cluster_builder->get_cluster_count_by_type(ClusterBuilderRD::ELEMENT_TYPE_OMNI_LIGHT) == 0;
 		base_specialization.fellow_no_spot_lights = (fellow_absent & 16) && current_cluster_builder != nullptr && current_cluster_builder->get_cluster_count_by_type(ClusterBuilderRD::ELEMENT_TYPE_SPOT_LIGHT) == 0;
 		base_specialization.fellow_no_positional_shadows = (fellow_absent & 32) && RendererRD::LightStorage::get_singleton()->fellow_get_positional_shadowed() == 0;
+		if (fellow_stable_bits && fellow_absent) {
+			// Decision 0161: a kind that exists anywhere, or has been in a frame, keeps its code compiled.
+			RendererRD::LightStorage *ls = RendererRD::LightStorage::get_singleton();
+			const uint32_t present = (!base_specialization.fellow_no_decals || RendererRD::TextureStorage::get_singleton()->fellow_get_decals_allocated() > 0 ? 1 : 0) |
+					(!base_specialization.fellow_no_reflection_probes || ls->fellow_get_reflection_probes_allocated() > 0 ? 2 : 0) |
+					(!base_specialization.fellow_no_directional_lights || ls->fellow_get_lights_allocated(RSE::LIGHT_DIRECTIONAL) > 0 ? 4 : 0) |
+					(!base_specialization.fellow_no_omni_lights || ls->fellow_get_lights_allocated(RSE::LIGHT_OMNI) > 0 ? 8 : 0) |
+					(!base_specialization.fellow_no_spot_lights || ls->fellow_get_lights_allocated(RSE::LIGHT_SPOT) > 0 ? 16 : 0) |
+					(!base_specialization.fellow_no_positional_shadows || ls->fellow_get_shadowed_positional_allocated() > 0 ? 32 : 0);
+			fellow_stable_seen |= present;
+			base_specialization.fellow_no_decals = base_specialization.fellow_no_decals && !(fellow_stable_seen & 1);
+			base_specialization.fellow_no_reflection_probes = base_specialization.fellow_no_reflection_probes && !(fellow_stable_seen & 2);
+			base_specialization.fellow_no_directional_lights = base_specialization.fellow_no_directional_lights && !(fellow_stable_seen & 4);
+			base_specialization.fellow_no_omni_lights = base_specialization.fellow_no_omni_lights && !(fellow_stable_seen & 8);
+			base_specialization.fellow_no_spot_lights = base_specialization.fellow_no_spot_lights && !(fellow_stable_seen & 16);
+			base_specialization.fellow_no_positional_shadows = base_specialization.fellow_no_positional_shadows && !(fellow_stable_seen & 32);
+		}
 	}
 
 	// FellowEngine occlusion culling (decision 0026): the opaque colour pass's runs tested against the full pre-pass's depth.
@@ -6922,6 +6956,15 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			// Light tile culling (decision 0049): only this pass's pipelines read the masks.
 			SceneShaderForwardClustered::ShaderSpecialization fellow_opaque_specialization = base_specialization;
 			fellow_opaque_specialization.fellow_light_tile_cull = fellow_tile_cull.pass_active;
+			if (fellow_tile_cull.pass_active || (fellow_stable_bits && (fellow_stable_seen & FELLOW_STABLE_POSITIONAL) && fellow_tile_cull.frame_ok && fellow_tile_cull.frame_on && !Fellow::light_tile_cull_pass_only())) {
+				// Ran, or would run with an omni or spot light in view (one exists).
+				fellow_stable_seen |= FELLOW_STABLE_TILE_CULL;
+			}
+			if (!fellow_tile_cull.pass_active && fellow_stable_bits && (fellow_stable_seen & FELLOW_STABLE_TILE_CULL) && fellow_positional_light_count == 0) {
+				// Decision 0161: with no omni or spot light in the frame the masks are never read (the cluster's words are
+				// zero): the pipelines that read them draw the same.
+				fellow_opaque_specialization.fellow_light_tile_cull = true;
+			}
 			fellow_opaque_specialization.fellow_rt_sun_shadow = fellow_rt_shadow_mask.is_valid();
 			fellow_opaque_specialization.fellow_contact_shadow = fellow_contact_shadow_mask.is_valid();
 			fellow_opaque_specialization.fellow_rt_reflections = fellow_rt_reflection_texture.is_valid();

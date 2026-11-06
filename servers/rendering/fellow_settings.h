@@ -608,6 +608,14 @@ uint64_t shadow_atlas_tick_msec();
 // specialized pipeline is not compiled yet waits for it instead of drawing with the ubershader, as the 2D renderer
 // always does. The recorded frames are drawn by the same pipelines on every run. Read every frame.
 bool frame_movie_wait_pipelines();
+// frame/stable_scene_bits (decision 0161): the colour passes' specialization bits that follow what a frame holds —
+// decision 0057's absent features, the positional lights' loop variants (0045-0047) and tile culling (0049), the
+// weather's wetness (0124) and the clouds' shadow (0133) — take the value that compiles the feature's code as soon as the feature exists in the
+// RenderingServer (a light of the kind, a decal, a reflection probe, a shadowed omni or spot light, an enabled weather)
+// or has been in a frame, and keep it: a light switched on, the rain starting or a lightning flash no longer asks for
+// new pipelines for every material in view in the middle of the game. Every value gives the same image (the code runs
+// no iteration, or returns at once). Read every frame.
+bool frame_stable_scene_bits();
 
 // Directional shadow static cache (docs/decisions/0004-directional-shadow-cache.md): static casters of every
 // cascade are rendered into a cache with a guard band and only re-rendered when the cascade leaves the guard band,

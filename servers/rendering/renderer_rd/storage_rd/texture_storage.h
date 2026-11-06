@@ -712,6 +712,7 @@ public:
 	void update_decal_atlas();
 
 	bool owns_decal(RID p_rid) const { return decal_owner.owns(p_rid); }
+	uint32_t fellow_get_decals_allocated() const { return decal_owner.get_rid_count(); } // decision 0161
 
 	RID decal_atlas_get_texture() const;
 	RID decal_atlas_get_texture_srgb() const;

@@ -3241,6 +3241,9 @@
 		<member name="rendering/fellow/frame/separate_present_queue" type="bool" setter="" getter="" default="false">
 			Measured and rejected: presentation from a second queue. Decision 0009.
 		</member>
+		<member name="rendering/fellow/frame/stable_scene_bits" type="bool" setter="" getter="" default="true">
+			The colour passes' specialization bits that follow what a frame holds (absent decals, probes and lights, the positional lights' loop variants and tile culling, the weather's wetness, the clouds' shadow) take the value that compiles the feature's code once the feature exists or has been in a frame, and keep it: no new pipelines for every material in view when a light switches on or the rain starts. The same image either way. Decision 0161.
+		</member>
 		<member name="rendering/fellow/frame/submit_thread" type="bool" setter="" getter="" default="true">
 			Command buffer submission on a thread of its own. Decision 0017.
 		</member>

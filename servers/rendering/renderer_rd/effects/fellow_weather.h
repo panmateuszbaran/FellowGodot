@@ -50,6 +50,7 @@ namespace RendererRD {
 // BaseMaterial3D's Wind group) are displaced in the vertex shader by the wind and its gusts, a noise field travelling
 // with the wind; the previous frame's wind is kept for the motion vectors.
 class FellowWeather {
+	bool wetting_node_seen = false;
 	static FellowWeather *singleton;
 
 public:
@@ -167,6 +168,9 @@ private:
 public:
 	static FellowWeather *get_singleton();
 	static FellowWeather *get_singleton_if_exists() { return singleton; }
+	// Decision 0161: a node that can wet the scene (a FellowRain3D) has existed, dry or not.
+	void fellow_note_wetting_node() { wetting_node_seen = true; }
+	bool fellow_wetting_node_seen() const { return wetting_node_seen; }
 	static void finalize();
 
 	void set_state(const State &p_state);

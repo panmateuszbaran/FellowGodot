@@ -143,6 +143,7 @@ ForwardIDType LightStorage::_light_type_to_forward_id_type(RSE::LightType p_type
 void LightStorage::_light_initialize(RID p_light, RSE::LightType p_type) {
 	Light light;
 	light.type = p_type;
+	fellow_lights_allocated[p_type]++; // decision 0161
 
 	light.param[RSE::LIGHT_PARAM_ENERGY] = 1.0;
 	light.param[RSE::LIGHT_PARAM_INDIRECT_ENERGY] = 1.0;
@@ -207,6 +208,10 @@ void LightStorage::light_free(RID p_rid) {
 
 	// delete the texture
 	Light *light = light_owner.get_or_null(p_rid);
+	fellow_lights_allocated[light->type]--; // decision 0161
+	if (light->shadow && (light->type == RSE::LIGHT_OMNI || light->type == RSE::LIGHT_SPOT)) {
+		fellow_shadowed_positional_allocated--;
+	}
 	light->dependency.deleted_notify(p_rid);
 	light_owner.free(p_rid);
 }
@@ -256,6 +261,9 @@ void LightStorage::light_set_param(RID p_light, RSE::LightParam p_param, float p
 void LightStorage::light_set_shadow(RID p_light, bool p_enabled) {
 	Light *light = light_owner.get_or_null(p_light);
 	ERR_FAIL_NULL(light);
+	if ((light->type == RSE::LIGHT_OMNI || light->type == RSE::LIGHT_SPOT) && light->shadow != p_enabled) {
+		fellow_shadowed_positional_allocated += p_enabled ? 1 : -1; // decision 0161
+	}
 	light->shadow = p_enabled;
 
 	light->version++;

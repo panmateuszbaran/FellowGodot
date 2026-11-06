@@ -223,6 +223,7 @@ D = {
     "frame/pipeline_fallback": "Measured and rejected: while a pipeline compiles, a compiled one differing in bits that give the same image drawn instead of the ubershader. Decision 0059.",
     "frame/depth_pipeline_keys": "The depth passes' pipeline keys without bits their code does not read: fewer duplicate pipelines. Decision 0069.",
     "frame/clear_new_textures": "A texture a pass can write, created without data, is cleared before its first use (as stock on Direct3D 12): no image depends on what memory held. Decision 0070.",
+    "frame/stable_scene_bits": "The colour passes' specialization bits that follow what a frame holds (absent decals, probes and lights, the positional lights' loop variants and tile culling, the weather's wetness, the clouds' shadow) take the value that compiles the feature's code once the feature exists or has been in a frame, and keep it: no new pipelines for every material in view when a light switches on or the rain starts. The same image either way. Decision 0161.",
     "frame/movie_wait_pipelines": "While Movie Maker mode writes a video, a 3D draw waits for its pipeline instead of drawing with the ubershader: the same recording every run. Decision 0072.",
     "frame/async_ss_split": "With async compute: 0 stock's split, 1 SSIL on the main queue beside the async SSAO, 2 SSR too, 3 autotune decides SSR. Decision 0060.",
     "frame/early_submit": "Measured and rejected: the frame's command buffers submitted early. Decision 0009.",
