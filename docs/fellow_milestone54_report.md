@@ -1,6 +1,6 @@
 # FellowEngine — milestone 54 report (an image regression suite)
 
-Status: **checked on the cloud's CPU** (lavapipe, 2026-11-06). Branch `fellow/geometry`. Decision record
+Status: **checked on the cloud's CPU** (lavapipe) **and on the RTX** (2026-11-06). Branch `fellow/geometry`. Decision record
 `docs/decisions/0155-image-regression-suite.md`.
 
 ## 0. Result
@@ -40,7 +40,8 @@ builds other proxies with FellowEngine off.
 * The suite blessed and run with the release template after each fix (Linux editor and template builds, lavapipe
   under xvfb); the goldens looked at one by one.
 * The clouds: still and panning, interleaved against the full trace, before and after.
-* The editor check and fellow_agent's self-test.
+* The editor check and fellow_agent's self-test, on lavapipe and on the RTX (the Windows editor rebuilt with
+  milestones 52-54); the suite on the RTX with its own goldens.
 
 ## 3. Measurements
 
@@ -78,10 +79,21 @@ the HLOD town, the template's script cache).
 | editor check (lavapipe, X11 under xvfb) | **passed**: the gas volume's height handle 1 → 1.5 m and undone, its box drawn up from the node; the emitter below its volume's floor warned; the seven setups added, owned, **without a warning**, undone; every earlier check |
 | fellow_agent self-test | **28 of 28** |
 
+On the RTX 5070 Ti Laptop (job f343: the Windows editor built from 5fb45ba; 2026-11-06):
+
+| check | result |
+|---|---|
+| fellow_agent self-test | **28 of 28** |
+| editor check, window and headless | **EDITOR_CHECK_OK** both |
+| the suite, blessed into the RTX's own goldens (`--goldens`), then run against them | **every picture identical**: the GPU's frames are the same between runs too (16 captures in 32 s) |
+| FellowEngine off against on, on the RTX | identical but `stock/shadows`: **one pixel** one level apart (7 × 10⁻⁶ of the pixels; lavapipe: identical); cause not found |
+| the RTX's pictures against lavapipe's goldens | lights, shadows, materials, lightning, rain within 2-8 levels (4-13 % of the pixels differ at all, none by more than 8); fire, geometry, snow up to 19-158 levels in 0.02-0.05 % of the pixels; sky 1.8 %, water 7.3 %, ray tracing 16.7 % of the pixels more than 8 levels off — lavapipe's goldens are lavapipe's, a GPU keeps its own |
+
 ## 4. Limits
 
-* Goldens are lavapipe's (Mesa 25.2, LLVM 20): another driver or GPU renders differently; `--goldens` keeps its own,
-  checking that GPU's run-to-run determinism and FellowEngine off against on there.
+* Goldens are lavapipe's (Mesa 25.2, LLVM 20): the RTX renders 2-8 levels apart in lit scenes and up to 17 % of the
+  pixels apart in ray tracing; `--goldens` keeps a GPU's own (on the RTX: identical between runs). On the RTX one pixel
+  of the shadow scene differs by one level between FellowEngine on and off (lavapipe: identical; cause not found).
 * The rain's splashes are not covered (stock Godot's sub-emitter emission order is not deterministic); nor is every
   option: each group of features is rendered once, with its defaults.
 * lavapipe is slow: the scenes are small (512 × 288, a few hundred thousand triangles); the suite says whether a frame
@@ -91,6 +103,5 @@ the HLOD town, the template's script cache).
 
 ## 5. Next
 
-The laptop's Windows editor rebuilt with milestones 51-54, its self-test, editor check and the suite with the RTX's
-own goldens (determinism on a GPU); then the vertical slice: one large level with every system, played for an hour
-with frame times, hitches and memory recorded.
+The vertical slice: one large level with every system, played for an hour on the RTX with frame times, hitches and
+memory recorded.

@@ -127,6 +127,16 @@ the HLOD town, the template's script cache).
 | editor check (lavapipe, X11 under xvfb) | **passed**: the gas volume's height handle 1 → 1.5 m and undone, its box drawn up from the node; the emitter below its volume's floor warned; the seven setups added, owned, **without a warning**, undone; every earlier check |
 | fellow_agent self-test | **28 of 28** |
 
+On the RTX 5070 Ti Laptop (job f343: the Windows editor built from 5fb45ba; 2026-11-06):
+
+| check | result |
+|---|---|
+| fellow_agent self-test | **28 of 28** |
+| editor check, window and headless | **EDITOR_CHECK_OK** both |
+| the suite, blessed into the RTX's own goldens (`--goldens`), then run against them | **every picture identical**: the GPU's frames are the same between runs too (16 captures in 32 s) |
+| FellowEngine off against on, on the RTX | identical but `stock/shadows`: **one pixel** one level apart (7 × 10⁻⁶ of the pixels; lavapipe: identical); cause not found |
+| the RTX's pictures against lavapipe's goldens | lights, shadows, materials, lightning, rain within 2-8 levels (4-13 % of the pixels differ at all, none by more than 8); fire, geometry, snow up to 19-158 levels in 0.02-0.05 % of the pixels; sky 1.8 %, water 7.3 %, ray tracing 16.7 % of the pixels more than 8 levels off — lavapipe's goldens are lavapipe's, a GPU keeps its own |
+
 ## Decision
 
 **KEEP.** One command renders FellowEngine's features — base, stock, post-processing, ray tracing — and fails on a
@@ -134,6 +144,7 @@ changed picture, an error, a release template drawing differently from the edito
 leaving stock's frame; on lavapipe every scene is bit-exact between runs and between the two builds. Run it before a
 commit that touches rendering or a node (`AGENTS.md`). Building it found the gas volume's editor side wrong since
 milestone 50, the fire setups emitting nothing since milestone 53 and the interleaved clouds losing their history since
-milestone 19, all fixed. Not done: goldens of the RTX
-(lavapipe's are the reference; `--goldens` keeps a GPU's own), the rain's splashes made deterministic (stock's
-particle emission order), scenes for every option (the suite covers each group of features once).
+milestone 19, all fixed. Not done: the RTX's goldens committed (lavapipe's are the reference; the RTX's own,
+identical between its runs, stay on the laptop), the shadow scene's one pixel on the RTX explained, the rain's
+splashes made deterministic (stock's particle emission order), scenes for every option (the suite covers each group
+of features once).
