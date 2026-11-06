@@ -17,9 +17,8 @@ extends "res://bench/scene_base.gd"
 ## --slice_without=town,forest,water,weather,fire,crowd (parts left out), --slice_weather_seconds=<s> (120: each
 ## weather of the soak's cycle), --slice_fire_seconds=<s> (240: the campfire's log burns again), --slice_terrain=node
 ## (FellowTerrain3D at --slice_terrain_spacing=<m>, 1, instead of the 4 m chunks; --slice_terrain_lod=<m> its
-## lod_distance, --slice_terrain_patch=<quads> its patch_size, --slice_terrain_shadows=view|stable its
-## shadow_casters); with it, --slice_foliage=node: the trees and grass scattered by the terrain (FellowTerrainFoliage)
-## over two more layers instead of placed by this script.
+## lod_distance, --slice_terrain_patch=<quads> its patch_size); with it, --slice_foliage=node: the trees and grass
+## scattered by the terrain (FellowTerrainFoliage) over two more layers instead of placed by this script.
 ## Stock Godot: the FellowEngine nodes are left out (load_error is not set; the slice is the terrain, town, crowd and
 ## forest).
 
@@ -246,8 +245,6 @@ func _build_terrain_node() -> void:
 		t.lod_distance = float(args["slice_terrain_lod"])
 	if args.has("slice_terrain_patch"):
 		t.patch_size = int(args["slice_terrain_patch"])
-	if args.has("slice_terrain_shadows"):
-		t.shadow_casters = 0 if str(args["slice_terrain_shadows"]) == "view" else 1
 	var layers := []
 	var colours := [Color(0.27, 0.36, 0.17), Color(0.4, 0.38, 0.35), Color(0.36, 0.35, 0.33), Color(0.42, 0.38, 0.29)]
 	if foliage_layers:

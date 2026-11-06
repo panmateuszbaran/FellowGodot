@@ -161,11 +161,6 @@ public:
 		DEBUG_VIEW_LEVELS, // the ground coloured by its level of detail, blended as it morphs to the next
 	};
 
-	enum ShadowCasters {
-		SHADOW_CASTERS_VIEW, // the camera's patches cast the shadows
-		SHADOW_CASTERS_STABLE, // patches of their own, chosen again after a tenth of lod_distance of travel
-	};
-
 private:
 	Ref<Image> heightmap;
 	Ref<Image> splat_map;
@@ -180,7 +175,6 @@ private:
 	bool cast_shadows = true;
 	uint32_t render_layer_mask = 1;
 	DebugView debug_view = DEBUG_VIEW_OFF;
-	ShadowCasters shadow_casters = SHADOW_CASTERS_STABLE;
 	bool collision_enabled = true;
 	uint32_t collision_layer = 1;
 	uint32_t collision_mask = 1;
@@ -213,8 +207,8 @@ private:
 		int32_t level = 0;
 		bool operator==(const Patch &p_other) const { return x == p_other.x && z == p_other.z && level == p_other.level; }
 	};
-	// A set of patches: two MultiMeshes, one shown, the other written when the selection changes and shown three drawn
-	// frames later. Set 0 is the camera's; set 1 casts the shadows with SHADOW_CASTERS_STABLE.
+	// The patches: two MultiMeshes, one shown, the other written when the selection changes and shown three drawn
+	// frames later.
 	struct LodSet {
 		RID multimesh[2];
 		RID instance[2];
@@ -225,9 +219,8 @@ private:
 		Vector3 selected_camera;
 		bool selection_valid = false;
 		LocalVector<Patch> patches[2];
-		float scale = 1.0f; // the levels' ranges multiplied by it
 	};
-	LodSet sets[2];
+	LodSet set;
 	LocalVector<Patch> scratch;
 	LocalVector<float> buffer;
 
@@ -306,11 +299,9 @@ private:
 	void _update_transforms();
 	void _process_lod();
 	Camera3D *_find_camera() const;
-	bool _select_node(int p_level, int p_x, int p_z, const Vector3 &p_camera, float p_scale, LocalVector<Patch> &r_out) const;
-	void _select(const Vector3 &p_camera, float p_scale, LocalVector<Patch> &r_out) const;
-	void _write_patches(LodSet &r_set, int p_which, const LocalVector<Patch> &p_patches, const Vector3 &p_camera);
-	bool _process_set(LodSet &r_set, const Vector3 &p_camera, float p_update_distance, bool p_used);
-	bool _shadow_set_used() const { return cast_shadows && shadow_casters == SHADOW_CASTERS_STABLE; }
+	bool _select_node(int p_level, int p_x, int p_z, const Vector3 &p_camera, LocalVector<Patch> &r_out) const;
+	void _select(const Vector3 &p_camera, LocalVector<Patch> &r_out) const;
+	void _write_patches(int p_which, const LocalVector<Patch> &p_patches, const Vector3 &p_camera);
 	AABB _node_box(int p_level, int p_x, int p_z) const;
 	void _layer_changed();
 	float _height_local(float p_x, float p_z) const;
@@ -341,8 +332,6 @@ public:
 	float get_height_blend() const { return height_blend; }
 	void set_macro_variation(float p_variation);
 	float get_macro_variation() const { return macro_variation; }
-	void set_shadow_casters(ShadowCasters p_casters);
-	ShadowCasters get_shadow_casters() const { return shadow_casters; }
 	void set_debug_view(DebugView p_view);
 	DebugView get_debug_view() const { return debug_view; }
 	void set_cast_shadows(bool p_enable);
@@ -379,4 +368,3 @@ public:
 };
 
 VARIANT_ENUM_CAST(FellowTerrain3D::DebugView);
-VARIANT_ENUM_CAST(FellowTerrain3D::ShadowCasters);

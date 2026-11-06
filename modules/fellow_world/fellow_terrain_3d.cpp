@@ -230,7 +230,6 @@ uniform vec4 layer_color[9];
 uniform vec4 layer_params[9];
 uniform vec4 layer_flags[9];
 instance uniform vec3 lod_camera;
-instance uniform float lod_scale = 1.0;
 )";
 	for (int i = 0; i < FellowTerrain3D::MAX_LAYERS; i++) {
 		code += vformat("uniform sampler2D albedo_%d : source_color, hint_default_white, filter_linear_mipmap_anisotropic, repeat_enable;\n", i);
@@ -252,7 +251,7 @@ void vertex() {
 	vec2 p = base + g * cell;
 	float h0 = textureLod(heightmap, map_uv(p), level).r;
 	vec4 m = morph[int(level)];
-	float k = clamp((distance(vec3(p.x, h0, p.y), lod_camera) * lod_scale - m.x) * m.y, 0.0, 1.0);
+	float k = clamp((distance(vec3(p.x, h0, p.y), lod_camera) - m.x) * m.y, 0.0, 1.0);
 	g -= fract(g * 0.5) * 2.0 * k;
 	g = min(g, (map_extent - base) / cell);
 	p = base + g * cell;
@@ -666,8 +665,7 @@ void FellowTerrain3D::_rebuild_data() {
 	}
 	_build_mesh();
 	material_dirty = true;
-	sets[0].selection_valid = false;
-	sets[1].selection_valid = false;
+	set.selection_valid = false;
 	if (is_inside_tree()) {
 		_update_collision();
 	}
@@ -749,75 +747,58 @@ void FellowTerrain3D::_layer_changed() {
 // Rendering
 
 void FellowTerrain3D::_create_instances() {
-	if (sets[0].instance[0].is_valid() || !is_inside_tree()) {
+	if (set.instance[0].is_valid() || !is_inside_tree()) {
 		return;
 	}
 	RenderingServer *rs = RenderingServer::get_singleton();
 	const RID scenario = get_world_3d()->get_scenario();
-	for (int si = 0; si < 2; si++) {
-		LodSet &set = sets[si];
-		set.scale = 1.0f; // (doubled, the shadow casters were finer than the ground they shadowed: false shadows)
-		for (int i = 0; i < 2; i++) {
-			set.multimesh[i] = rs->multimesh_create();
-			rs->multimesh_set_mesh(set.multimesh[i], patch_mesh.is_valid() ? patch_mesh->get_rid() : RID());
-			set.capacity[i] = 0;
-			set.instance[i] = rs->instance_create2(set.multimesh[i], scenario);
-			rs->instance_attach_object_instance_id(set.instance[i], get_instance_id());
-			rs->instance_set_visible(set.instance[i], false);
-			// The terrain's shader moves its vertices, but within the mesh's box (the heights' range): the GPU may
-			// cull its patches one by one (decision 0034).
-			rs->fellow_instance_set_instance_range(set.instance[i], 0.0f, 0.0f, true);
-			rs->instance_geometry_set_shader_parameter(set.instance[i], "lod_scale", 1.0f / set.scale);
-			set.patches[i].clear();
-		}
-		set.shown = -1;
-		set.pending = -1;
-		set.selection_valid = false;
+	for (int i = 0; i < 2; i++) {
+		set.multimesh[i] = rs->multimesh_create();
+		rs->multimesh_set_mesh(set.multimesh[i], patch_mesh.is_valid() ? patch_mesh->get_rid() : RID());
+		set.capacity[i] = 0;
+		set.instance[i] = rs->instance_create2(set.multimesh[i], scenario);
+		rs->instance_attach_object_instance_id(set.instance[i], get_instance_id());
+		rs->instance_set_visible(set.instance[i], false);
+		// The terrain's shader moves its vertices, but within the mesh's box (the heights' range): the GPU may cull
+		// its patches one by one (decision 0034).
+		rs->fellow_instance_set_instance_range(set.instance[i], 0.0f, 0.0f, true);
+		set.patches[i].clear();
 	}
+	set.shown = -1;
+	set.pending = -1;
+	set.selection_valid = false;
 	_update_instance_settings();
 	_update_transforms();
 }
 
 void FellowTerrain3D::_free_instances() {
 	RenderingServer *rs = RenderingServer::get_singleton();
-	for (LodSet &set : sets) {
-		for (int i = 0; i < 2; i++) {
-			if (set.instance[i].is_valid()) {
-				rs->free_rid(set.instance[i]);
-				set.instance[i] = RID();
-			}
-			if (set.multimesh[i].is_valid()) {
-				rs->free_rid(set.multimesh[i]);
-				set.multimesh[i] = RID();
-			}
-			set.capacity[i] = 0;
-			set.patches[i].clear();
+	for (int i = 0; i < 2; i++) {
+		if (set.instance[i].is_valid()) {
+			rs->free_rid(set.instance[i]);
+			set.instance[i] = RID();
 		}
-		set.shown = -1;
-		set.pending = -1;
-		set.selection_valid = false;
+		if (set.multimesh[i].is_valid()) {
+			rs->free_rid(set.multimesh[i]);
+			set.multimesh[i] = RID();
+		}
+		set.capacity[i] = 0;
+		set.patches[i].clear();
 	}
+	set.shown = -1;
+	set.pending = -1;
+	set.selection_valid = false;
 }
 
 void FellowTerrain3D::_update_instance_settings() {
 	RenderingServer *rs = RenderingServer::get_singleton();
-	const bool stable = _shadow_set_used();
-	for (int si = 0; si < 2; si++) {
-		LodSet &set = sets[si];
-		for (int i = 0; i < 2; i++) {
-			if (set.instance[i].is_null()) {
-				continue;
-			}
-			RSE::ShadowCastingSetting shadows = RSE::SHADOW_CASTING_SETTING_OFF;
-			if (si == 0 && cast_shadows && !stable) {
-				shadows = RSE::SHADOW_CASTING_SETTING_ON;
-			} else if (si == 1) {
-				shadows = RSE::SHADOW_CASTING_SETTING_SHADOWS_ONLY;
-			}
-			rs->instance_geometry_set_cast_shadows_setting(set.instance[i], shadows);
-			rs->instance_set_layer_mask(set.instance[i], render_layer_mask);
-			rs->instance_set_visible(set.instance[i], i == set.shown && is_visible_in_tree() && (si == 0 || stable));
+	for (int i = 0; i < 2; i++) {
+		if (set.instance[i].is_null()) {
+			continue;
 		}
+		rs->instance_geometry_set_cast_shadows_setting(set.instance[i], cast_shadows ? RSE::SHADOW_CASTING_SETTING_ON : RSE::SHADOW_CASTING_SETTING_OFF);
+		rs->instance_set_layer_mask(set.instance[i], render_layer_mask);
+		rs->instance_set_visible(set.instance[i], i == set.shown && is_visible_in_tree());
 	}
 	for (KeyValue<uint64_t, FoliageCell *> &kv : foliage_cells) {
 		if (kv.value->instance.is_valid()) {
@@ -833,14 +814,12 @@ void FellowTerrain3D::_update_transforms() {
 	}
 	const Transform3D xf = get_global_transform();
 	RenderingServer *rs = RenderingServer::get_singleton();
-	for (LodSet &set : sets) {
-		for (int i = 0; i < 2; i++) {
-			if (set.instance[i].is_valid()) {
-				rs->instance_set_transform(set.instance[i], xf);
-			}
+	for (int i = 0; i < 2; i++) {
+		if (set.instance[i].is_valid()) {
+			rs->instance_set_transform(set.instance[i], xf);
 		}
-		set.selection_valid = false;
 	}
+	set.selection_valid = false;
 	if (material.is_valid()) {
 		material->set_shader_parameter("terrain_basis", xf.basis.orthonormalized());
 	}
@@ -893,17 +872,17 @@ static inline float _box_distance_squared(const AABB &p_box, const Vector3 &p_po
 	return c.distance_squared_to(p_point);
 }
 
-bool FellowTerrain3D::_select_node(int p_level, int p_x, int p_z, const Vector3 &p_camera, float p_scale, LocalVector<Patch> &r_out) const {
+bool FellowTerrain3D::_select_node(int p_level, int p_x, int p_z, const Vector3 &p_camera, LocalVector<Patch> &r_out) const {
 	const AABB box = _node_box(p_level, p_x, p_z);
 	if (box.size.x <= 0.0f || box.size.z <= 0.0f) {
 		return true; // outside the map: nothing to draw, nothing for the parent to draw either
 	}
 	const float d2 = _box_distance_squared(box, p_camera);
-	const float r = ranges[p_level] * p_scale;
+	const float r = ranges[p_level];
 	if (d2 > r * r) {
 		return false; // beyond this level's range: the parent draws the area
 	}
-	const float rf = p_level == 0 ? 0.0f : ranges[p_level - 1] * p_scale;
+	const float rf = p_level == 0 ? 0.0f : ranges[p_level - 1];
 	if (p_level == 0 || d2 > rf * rf) {
 		for (int i = 0; i < 4; i++) {
 			const int qx = p_x * 2 + (i & 1);
@@ -917,19 +896,19 @@ bool FellowTerrain3D::_select_node(int p_level, int p_x, int p_z, const Vector3 
 	for (int i = 0; i < 4; i++) {
 		const int cx = p_x * 2 + (i & 1);
 		const int cz = p_z * 2 + (i >> 1);
-		if (!_select_node(p_level - 1, cx, cz, p_camera, p_scale, r_out)) {
+		if (!_select_node(p_level - 1, cx, cz, p_camera, r_out)) {
 			r_out.push_back({ cx, cz, p_level }); // the child's area, at this level
 		}
 	}
 	return true;
 }
 
-void FellowTerrain3D::_select(const Vector3 &p_camera, float p_scale, LocalVector<Patch> &r_out) const {
+void FellowTerrain3D::_select(const Vector3 &p_camera, LocalVector<Patch> &r_out) const {
 	r_out.clear();
 	if (map_w < 2 || map_h < 2) {
 		return;
 	}
-	if (!_select_node(top_level, 0, 0, p_camera, p_scale, r_out)) {
+	if (!_select_node(top_level, 0, 0, p_camera, r_out)) {
 		for (int i = 0; i < 4; i++) {
 			const int qx = i & 1;
 			const int qz = i >> 1;
@@ -940,14 +919,14 @@ void FellowTerrain3D::_select(const Vector3 &p_camera, float p_scale, LocalVecto
 	}
 }
 
-void FellowTerrain3D::_write_patches(LodSet &r_set, int p_which, const LocalVector<Patch> &p_patches, const Vector3 &p_camera) {
+void FellowTerrain3D::_write_patches(int p_which, const LocalVector<Patch> &p_patches, const Vector3 &p_camera) {
 	RenderingServer *rs = RenderingServer::get_singleton();
 	const int n = p_patches.size();
-	if (n > r_set.capacity[p_which]) {
-		r_set.capacity[p_which] = MAX(256, int(Math::next_power_of_2(uint32_t(n))));
-		rs->multimesh_allocate_data(r_set.multimesh[p_which], r_set.capacity[p_which], RSE::MULTIMESH_TRANSFORM_3D, false, true);
+	if (n > set.capacity[p_which]) {
+		set.capacity[p_which] = MAX(256, int(Math::next_power_of_2(uint32_t(n))));
+		rs->multimesh_allocate_data(set.multimesh[p_which], set.capacity[p_which], RSE::MULTIMESH_TRANSFORM_3D, false, true);
 	}
-	const int cap = r_set.capacity[p_which];
+	const int cap = set.capacity[p_which];
 	Vector<float> data;
 	data.resize(cap * 16);
 	float *w = data.ptrw();
@@ -979,84 +958,69 @@ void FellowTerrain3D::_write_patches(LodSet &r_set, int p_which, const LocalVect
 	for (int i = n * 16; i < cap * 16; i++) {
 		w[i] = 0.0f;
 	}
-	rs->multimesh_set_buffer(r_set.multimesh[p_which], data);
-	rs->multimesh_set_visible_instances(r_set.multimesh[p_which], n);
-	rs->instance_geometry_set_shader_parameter(r_set.instance[p_which], "lod_camera", p_camera);
-	r_set.patches[p_which] = p_patches;
-}
-
-// One set's frame: its pending MultiMesh shown once three drawn frames old, a new selection once the camera moved
-// p_update_distance from the last. True while it waits on a pending MultiMesh.
-bool FellowTerrain3D::_process_set(LodSet &r_set, const Vector3 &p_camera, float p_update_distance, bool p_used) {
-	RenderingServer *rs = RenderingServer::get_singleton();
-	const uint64_t frame = Engine::get_singleton()->get_frames_drawn();
-	if (r_set.pending >= 0) {
-		// Shown once its buffer is three drawn frames old: its previous transforms are its current ones by then (the
-		// MultiMesh's motion vectors), and the GPU culls it again (decision 0034 skips a MultiMesh written this frame).
-		if (frame >= r_set.pending_frame + 3 || r_set.shown < 0) {
-			rs->instance_set_visible(r_set.instance[r_set.pending], is_visible_in_tree() && p_used);
-			if (r_set.shown >= 0) {
-				rs->instance_set_visible(r_set.instance[r_set.shown], false);
-			}
-			r_set.shown = r_set.pending;
-			r_set.pending = -1;
-			swaps++;
-		} else {
-			return true;
-		}
-	}
-	if (!p_used) {
-		return false;
-	}
-	if (r_set.selection_valid && p_camera.distance_squared_to(r_set.selected_camera) < p_update_distance * p_update_distance) {
-		return false;
-	}
-	const uint64_t t0 = OS::get_singleton()->get_ticks_usec();
-	_select(p_camera, r_set.scale, scratch);
-	last_select_usec = OS::get_singleton()->get_ticks_usec() - t0;
-	selections++;
-	r_set.selected_camera = p_camera;
-	r_set.selection_valid = true;
-	if (r_set.shown >= 0 && scratch.size() == r_set.patches[r_set.shown].size()) {
-		bool same = true;
-		for (uint32_t i = 0; i < scratch.size() && same; i++) {
-			same = scratch[i] == r_set.patches[r_set.shown][i];
-		}
-		if (same) {
-			// The same patches: only the morph's camera moves (the same in both of a frame's vertex passes).
-			rs->instance_geometry_set_shader_parameter(r_set.instance[r_set.shown], "lod_camera", p_camera);
-			return false;
-		}
-	}
-	const int target = r_set.shown < 0 ? 0 : 1 - r_set.shown;
-	_write_patches(r_set, target, scratch, p_camera);
-	r_set.pending = target;
-	r_set.pending_frame = frame;
-	if (r_set.shown < 0) {
-		return _process_set(r_set, p_camera, p_update_distance, p_used); // nothing shown yet: show it now
-	}
-	return true;
+	rs->multimesh_set_buffer(set.multimesh[p_which], data);
+	rs->multimesh_set_visible_instances(set.multimesh[p_which], n);
+	rs->instance_geometry_set_shader_parameter(set.instance[p_which], "lod_camera", p_camera);
+	set.patches[p_which] = p_patches;
 }
 
 void FellowTerrain3D::_process_lod() {
-	if (sets[0].instance[0].is_null() || map_w < 2) {
+	if (set.instance[0].is_null() || map_w < 2) {
 		return;
 	}
 	if (material_dirty) {
 		_update_material();
+	}
+	RenderingServer *rs = RenderingServer::get_singleton();
+	const uint64_t frame = Engine::get_singleton()->get_frames_drawn();
+	if (set.pending >= 0) {
+		// Shown once its buffer is three drawn frames old: its previous transforms are its current ones by then (the
+		// MultiMesh's motion vectors), and the GPU culls it again (decision 0034 skips a MultiMesh written this frame).
+		if (frame >= set.pending_frame + 3 || set.shown < 0) {
+			rs->instance_set_visible(set.instance[set.pending], is_visible_in_tree());
+			if (set.shown >= 0) {
+				rs->instance_set_visible(set.instance[set.shown], false);
+			}
+			set.shown = set.pending;
+			set.pending = -1;
+			swaps++;
+		} else {
+			Fellow::request_redraw();
+			return;
+		}
 	}
 	Camera3D *cam = _find_camera();
 	if (!cam) {
 		return;
 	}
 	const Vector3 c = get_global_transform().affine_inverse().xform(cam->get_global_position());
-	bool waiting = _process_set(sets[0], c, 0.05f * vertex_spacing, true);
-	// The stable shadow casters: the same levels, chosen again (with their morph) only once the camera moved a tenth of
-	// the finest level's range. Between, they do not change, and the directional shadow cache keeps them (decision
-	// 0004: an instance changed within the last 60 frames is drawn into every cascade every frame); they differ from the
-	// ground they shadow by a tenth of a level's morph at most, and not at all while the camera stands still.
-	waiting = _process_set(sets[1], c, 0.1f * ranges[0], _shadow_set_used()) || waiting;
-	if (waiting) {
+	if (set.selection_valid && c.distance_squared_to(set.selected_camera) < (0.05f * vertex_spacing) * (0.05f * vertex_spacing)) {
+		return;
+	}
+	const uint64_t t0 = OS::get_singleton()->get_ticks_usec();
+	_select(c, scratch);
+	last_select_usec = OS::get_singleton()->get_ticks_usec() - t0;
+	selections++;
+	set.selected_camera = c;
+	set.selection_valid = true;
+	if (set.shown >= 0 && scratch.size() == set.patches[set.shown].size()) {
+		bool same = true;
+		for (uint32_t i = 0; i < scratch.size() && same; i++) {
+			same = scratch[i] == set.patches[set.shown][i];
+		}
+		if (same) {
+			// The same patches: only the morph's camera moves (the same in both of a frame's vertex passes).
+			rs->instance_geometry_set_shader_parameter(set.instance[set.shown], "lod_camera", c);
+			return;
+		}
+	}
+	const int target = set.shown < 0 ? 0 : 1 - set.shown;
+	_write_patches(target, scratch, c);
+	set.pending = target;
+	set.pending_frame = frame;
+	if (set.shown < 0) {
+		_process_lod(); // nothing shown yet: show it now
+	} else {
 		Fellow::request_redraw();
 	}
 }
@@ -1536,9 +1500,7 @@ AABB FellowTerrain3D::get_aabb() const {
 
 Dictionary FellowTerrain3D::get_stats() const {
 	Dictionary d;
-	const int n = sets[0].shown >= 0 ? int(sets[0].patches[sets[0].shown].size()) : 0;
-	const int ns = _shadow_set_used() && sets[1].shown >= 0 ? int(sets[1].patches[sets[1].shown].size()) : 0;
-	d["shadow_patches"] = ns;
+	const int n = set.shown >= 0 ? int(set.patches[set.shown].size()) : 0;
 	d["patches"] = n;
 	d["triangles"] = n * patch_size * patch_size * 2;
 	d["levels"] = top_level + 1;
@@ -1553,8 +1515,8 @@ Dictionary FellowTerrain3D::get_stats() const {
 	PackedInt32Array per_level;
 	per_level.resize(top_level + 1);
 	per_level.fill(0);
-	if (sets[0].shown >= 0) {
-		for (const Patch &p : sets[0].patches[sets[0].shown]) {
+	if (set.shown >= 0) {
+		for (const Patch &p : set.patches[set.shown]) {
 			per_level.write[p.level]++;
 		}
 	}
@@ -1566,14 +1528,12 @@ void FellowTerrain3D::update_heightmap() {
 	data_dirty = true;
 	if (is_inside_tree()) {
 		_rebuild_data();
-		if (sets[0].instance[0].is_valid()) {
+		if (set.instance[0].is_valid()) {
 			RenderingServer *rs = RenderingServer::get_singleton();
-			for (LodSet &set : sets) {
-				for (int i = 0; i < 2; i++) {
-					rs->multimesh_set_mesh(set.multimesh[i], patch_mesh->get_rid());
-				}
-				set.selection_valid = false;
+			for (int i = 0; i < 2; i++) {
+				rs->multimesh_set_mesh(set.multimesh[i], patch_mesh->get_rid());
 			}
+			set.selection_valid = false;
 		}
 		_update_material();
 	}
@@ -1636,15 +1596,13 @@ void FellowTerrain3D::set_patch_size(int p_size) {
 void FellowTerrain3D::set_lod_distance(float p_distance) {
 	lod_distance = MAX(0.0f, p_distance);
 	material_dirty = true;
-	sets[0].selection_valid = false;
-	sets[1].selection_valid = false;
+	set.selection_valid = false;
 }
 
 void FellowTerrain3D::set_morph_ratio(float p_ratio) {
 	morph_ratio = CLAMP(p_ratio, 0.05f, 0.95f);
 	material_dirty = true;
-	sets[0].selection_valid = false;
-	sets[1].selection_valid = false;
+	set.selection_valid = false;
 }
 
 void FellowTerrain3D::set_height_blend(float p_blend) {
@@ -1666,12 +1624,6 @@ void FellowTerrain3D::set_debug_view(DebugView p_view) {
 	if (material.is_valid()) {
 		material->set_shader_parameter("debug_view", int(debug_view));
 	}
-}
-
-void FellowTerrain3D::set_shadow_casters(ShadowCasters p_casters) {
-	shadow_casters = p_casters;
-	sets[1].selection_valid = false;
-	_update_instance_settings();
 }
 
 void FellowTerrain3D::set_cast_shadows(bool p_enable) {
@@ -1785,8 +1737,6 @@ void FellowTerrain3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_macro_variation"), &FellowTerrain3D::get_macro_variation);
 	ClassDB::bind_method(D_METHOD("set_debug_view", "view"), &FellowTerrain3D::set_debug_view);
 	ClassDB::bind_method(D_METHOD("get_debug_view"), &FellowTerrain3D::get_debug_view);
-	ClassDB::bind_method(D_METHOD("set_shadow_casters", "casters"), &FellowTerrain3D::set_shadow_casters);
-	ClassDB::bind_method(D_METHOD("get_shadow_casters"), &FellowTerrain3D::get_shadow_casters);
 	ClassDB::bind_method(D_METHOD("set_cast_shadows", "enable"), &FellowTerrain3D::set_cast_shadows);
 	ClassDB::bind_method(D_METHOD("is_casting_shadows"), &FellowTerrain3D::is_casting_shadows);
 	ClassDB::bind_method(D_METHOD("set_render_layer_mask", "mask"), &FellowTerrain3D::set_render_layer_mask);
@@ -1832,7 +1782,6 @@ void FellowTerrain3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "morph_ratio", PROPERTY_HINT_RANGE, "0.05,0.95,0.01"), "set_morph_ratio", "get_morph_ratio");
 	ADD_GROUP("Rendering", "");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "cast_shadows"), "set_cast_shadows", "is_casting_shadows");
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "shadow_casters", PROPERTY_HINT_ENUM, "View,Stable"), "set_shadow_casters", "get_shadow_casters");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "render_layer_mask", PROPERTY_HINT_LAYERS_3D_RENDER), "set_render_layer_mask", "get_render_layer_mask");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "debug_view", PROPERTY_HINT_ENUM, "Off,Levels of Detail"), "set_debug_view", "get_debug_view");
 	ADD_GROUP("Collision", "collision_");
@@ -1843,8 +1792,6 @@ void FellowTerrain3D::_bind_methods() {
 
 	BIND_ENUM_CONSTANT(DEBUG_VIEW_OFF);
 	BIND_ENUM_CONSTANT(DEBUG_VIEW_LEVELS);
-	BIND_ENUM_CONSTANT(SHADOW_CASTERS_VIEW);
-	BIND_ENUM_CONSTANT(SHADOW_CASTERS_STABLE);
 }
 
 FellowTerrain3D::FellowTerrain3D() {

@@ -118,9 +118,6 @@
 		<member name="render_layer_mask" type="int" setter="set_render_layer_mask" getter="get_render_layer_mask" default="1">
 			The render layers the terrain is drawn in ([member VisualInstance3D.layers]).
 		</member>
-		<member name="shadow_casters" type="int" setter="set_shadow_casters" getter="get_shadow_casters" enum="FellowTerrain3D.ShadowCasters" default="1">
-			Which patches cast the terrain's shadows. With [constant SHADOW_CASTERS_STABLE] (the default) a set of its own, chosen like the camera's but again only after the camera moved a tenth of [member lod_distance]: between, it does not change, so FellowEngine's directional shadow cache keeps it (an instance that changed within its last 60 frames is drawn into every cascade every frame, and the camera's patches change whenever it moves). It differs from the ground it shadows by a tenth of a level's morph at most, and not at all while the camera stands still.
-		</member>
 		<member name="splat_map" type="Image" setter="set_splat_map" getter="get_splat_map">
 			The weights of layers 1 to 4 in its red, green, blue and alpha channels, stretched over the whole terrain (any resolution).
 		</member>
@@ -137,12 +134,6 @@
 		</constant>
 		<constant name="DEBUG_VIEW_LEVELS" value="1" enum="DebugView">
 			The ground coloured by its level of detail (red the finest, then yellow, green, blue, purple, grey), blended towards the next colour as it morphs to the next level.
-		</constant>
-		<constant name="SHADOW_CASTERS_VIEW" value="0" enum="ShadowCasters">
-			The patches the camera sees cast the shadows (they change as the camera moves, and are drawn into every cascade every frame while it does).
-		</constant>
-		<constant name="SHADOW_CASTERS_STABLE" value="1" enum="ShadowCasters">
-			Patches of their own cast the shadows, chosen again after a tenth of [member lod_distance] of travel.
 		</constant>
 	</constants>
 </class>
