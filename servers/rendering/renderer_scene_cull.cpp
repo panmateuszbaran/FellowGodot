@@ -1512,6 +1512,7 @@ void RendererSceneCull::instance_geometry_set_cast_shadows_setting(RID p_instanc
 
 	_fellow_shadow_instance_changed(instance);
 	instance->cast_shadows = p_shadow_casting_setting;
+	_fellow_shadow_instance_changed(instance); // FellowEngine: a non-caster that starts casting (skipped before)
 
 	if (instance->scenario && instance->array_index >= 0) {
 		InstanceData &idata = instance->scenario->instance_data[instance->array_index];
@@ -2599,6 +2600,12 @@ static constexpr uint64_t FELLOW_UNECONOMIC_FRAMES = 600;
 
 void RendererSceneCull::_fellow_shadow_instance_changed(Instance *p_instance) const {
 	if (!((1 << p_instance->base_type) & RSE::INSTANCE_GEOMETRY_MASK)) {
+		return;
+	}
+	if (p_instance->cast_shadows == RSE::SHADOW_CASTING_SETTING_OFF) {
+		// Not in any shadow map, so in no shadow cache (decision 0158: a terrain's patches the camera sees change as it
+		// moves while other patches cast its shadows). Its change frame is left as it is: when it starts casting,
+		// instance_geometry_set_cast_shadows_setting() logs it (it is then new to the caches).
 		return;
 	}
 	const uint64_t frame = RSG::rasterizer->get_frame_number();
