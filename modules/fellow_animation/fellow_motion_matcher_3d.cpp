@@ -37,6 +37,8 @@
 #include "core/os/os.h"
 #include "scene/3d/camera_3d.h"
 #include "scene/main/viewport.h"
+#include "scene/resources/3d/world_3d.h"
+#include "servers/physics_3d/physics_server_3d.h"
 
 using namespace FellowMotionMath;
 
@@ -320,6 +322,26 @@ void FellowMotionMatcher3D::_forward_kinematics(LocalVector<Vector3> &r_gp, Loca
 void FellowMotionMatcher3D::_solve_feet(float p_dt) {
 	thread_local LocalVector<Vector3> gp;
 	thread_local LocalVector<Quaternion> gq;
+	// Ground adaptation (milestone 56): each foot placed on the ground under it — its height over the root's ground
+	// added to the animated foot's — and the hips lowered as far as the lower foot must reach down, so that the leg
+	// over the higher ground bends rather than the lower one overstretching.
+	const bool place = ground_adaptation && ground_foot_placement;
+	if (place) {
+		for (int s = 0; s < 2; s++) {
+			const float goal = ground_feet[s].hit ? CLAMP(ground_feet[s].y - char_position.y, -ground_probe_height, ground_probe_height) : 0.0f;
+			float d = ground_foot_offset[s] - goal;
+			// Up onto higher ground four times as fast as down: a foot landing on a step must not sink into it.
+			decay_spring_damper_exact(d, ground_foot_offset_velocity[s], d < 0.0f ? ground_halflife * 0.25f : ground_halflife, p_dt);
+			ground_foot_offset[s] = goal + d;
+		}
+		const float drop_goal = MIN(0.0f, MIN(ground_foot_offset[0], ground_foot_offset[1]));
+		float d = hips_drop - drop_goal;
+		decay_spring_damper_exact(d, hips_drop_velocity, ground_halflife, p_dt);
+		hips_drop = MIN(drop_goal + d, 0.0f);
+		hips_drop_min = MIN(hips_drop_min, hips_drop);
+		const int hips_bone = database->get_bone_role(FellowMotionDatabase::ROLE_HIPS);
+		out_positions[hips_bone].y += hips_drop; // The hips are in the root's space (turned about the vertical only).
+	}
 	_forward_kinematics(gp, gq);
 	const Transform3D character(Basis(char_rotation), char_position);
 	const Transform3D character_inv = character.affine_inverse();
@@ -334,7 +356,18 @@ void FellowMotionMatcher3D::_solve_feet(float p_dt) {
 		const int lower = database->get_bone_role(roles[s][1]);
 		const int ankle = database->get_bone_role(roles[s][2]);
 		const bool contact = database->get_contact(current, s);
-		const Vector3 animated = character.xform(gp[ankle]);
+		// The animated foot, on the ground under it with ground adaptation (gp has the hips lowered: undone here).
+		const Vector3 shown = character.xform(gp[ankle]);
+		const Vector3 animated = place ? shown + Vector3(0.0f, ground_foot_offset[s] - hips_drop, 0.0f) : shown;
+		bool tilted = false;
+		if (place) {
+			// Turned to the ground only where it slopes (a turn of nothing would still run the IK's soft limit).
+			tilted = ground_alignment && ground_feet[s].hit && ground_feet[s].normal.y < 0.9998f;
+			const float goal = (contact && tilted) ? 1.0f : 0.0f;
+			float d = ground_align_weight[s] - goal;
+			decay_spring_damper_exact(d, ground_align_weight_velocity[s], ground_halflife * 2.0f, p_dt);
+			ground_align_weight[s] = CLAMP(goal + d, 0.0f, 1.0f);
+		}
 
 		const bool lock = foot_locking && contact;
 		if (lock && !foot.locked) {
@@ -357,7 +390,7 @@ void FellowMotionMatcher3D::_solve_feet(float p_dt) {
 		}
 
 		Vector3 output = animated;
-		if (foot_ik && (foot.locked || foot.offset.length_squared() > 1e-8f)) {
+		if (foot_ik && (foot.locked || foot.offset.length_squared() > 1e-8f || (place && !animated.is_equal_approx(shown)) || (place && ground_align_weight[s] > 1e-3f))) {
 			// Two-bone IK (D. Holden, "Simple Two Joint IK"), in the character's space.
 			const Vector3 t = character_inv.xform(target);
 			const Vector3 a = gp[upper];
@@ -402,7 +435,19 @@ void FellowMotionMatcher3D::_solve_feet(float p_dt) {
 			if (axis1.length() > 1e-6f) {
 				r2 = Quaternion(a_gr.inverse().xform(axis1.normalized()), ac_at_0);
 			}
-			const Quaternion ankle_global = gq[ankle];
+			Quaternion ankle_global = gq[ankle];
+			if (place && ground_align_weight[s] > 1e-3f) {
+				// The foot turned to the ground's slope while it is down (at most 35 degrees).
+				const Vector3 n = character_inv.basis.xform(ground_feet[s].normal).normalized();
+				Quaternion tilt(Vector3(0, 1, 0), n);
+				Vector3 aa = quat_to_scaled_angle_axis(quat_abs(tilt));
+				const float limit = Math::deg_to_rad(35.0f); // (the scaled angle-axis: the axis times the angle)
+				if (aa.length() > limit) {
+					aa = aa.normalized() * limit;
+				}
+				tilt = quat_from_scaled_angle_axis(aa * ground_align_weight[s]);
+				ankle_global = (tilt * ankle_global).normalized();
+			}
 			out_rotations[upper] = (out_rotations[upper] * (r0 * r2)).normalized();
 			out_rotations[lower] = (out_rotations[lower] * r1).normalized();
 			// The chain again, the ankle keeping its animated orientation.
@@ -430,6 +475,10 @@ void FellowMotionMatcher3D::_solve_feet(float p_dt) {
 			foot_contact_time += p_dt;
 		}
 		foot.last_output = output;
+		{
+			const int toe_bone = database->get_bone_role(roles[s][3]);
+			foot.last_toe = toe_bone >= 0 ? output + character.basis.xform(gp[toe_bone] - gp[ankle]) : output;
+		}
 		foot.last_animated = animated;
 		foot.last_contact = contact;
 		foot.has_last = true;
@@ -446,8 +495,65 @@ void FellowMotionMatcher3D::advance(double p_delta) {
 	if (p_delta <= 0.0) {
 		return;
 	}
+	if (ground_adaptation) {
+		_probe_ground();
+	}
 	_update(float(p_delta), _compute_lod());
 	_apply_root();
+}
+
+void FellowMotionMatcher3D::set_ground_adaptation(bool p_enable) {
+	ground_adaptation = p_enable;
+	ground_root_init = false;
+	for (int s = 0; s < 2; s++) {
+		ground_foot_offset[s] = 0.0f;
+		ground_foot_offset_velocity[s] = 0.0f;
+		ground_align_weight[s] = 0.0f;
+		ground_align_weight_velocity[s] = 0.0f;
+	}
+	hips_drop = 0.0f;
+	hips_drop_velocity = 0.0f;
+}
+
+// Milestone 56: the ground under the root and under each foot (where it was shown last), from rays down against the
+// physics world: from ground_probe_height above the character's ground to as far below it. On the main thread, before
+// the update (a worker thread must not query the physics space).
+void FellowMotionMatcher3D::_probe_ground() {
+	Skeleton3D *skeleton = get_skeleton();
+	if (!skeleton || !skeleton->is_inside_tree()) {
+		return;
+	}
+	Ref<World3D> world = skeleton->get_world_3d();
+	PhysicsDirectSpaceState3D *space = world.is_valid() ? world->get_direct_space_state() : nullptr;
+	if (!space) {
+		return;
+	}
+	const float base = ground_root_init ? ground_root_y : char_position.y;
+	auto probe = [&](const Vector3 &p_at, GroundProbe &r_probe) {
+		PhysicsDirectSpaceState3D::RayParameters params;
+		params.from = Vector3(p_at.x, base + ground_probe_height, p_at.z);
+		params.to = Vector3(p_at.x, base - ground_probe_height, p_at.z);
+		params.collision_mask = ground_collision_mask;
+		params.collide_with_areas = false;
+		PhysicsDirectSpaceState3D::RayResult hit;
+		r_probe.hit = space->intersect_ray(params, hit);
+		if (r_probe.hit) {
+			r_probe.y = hit.position.y;
+			r_probe.normal = hit.normal.normalized();
+		}
+	};
+	probe(char_position, ground_root);
+	for (int s = 0; s < 2; s++) {
+		probe(feet[s].has_last ? feet[s].last_output : char_position, ground_feet[s]);
+		if (feet[s].has_last) {
+			// A foot rests on the highest ground under it: its heel's or its toe's (a step's edge under the toe).
+			GroundProbe toe;
+			probe(feet[s].last_toe, toe);
+			if (toe.hit && (!ground_feet[s].hit || toe.y > ground_feet[s].y)) {
+				ground_feet[s] = toe;
+			}
+		}
+	}
 }
 
 void FellowMotionMatcher3D::_group_update(uint32_t p_index, const LocalVector<FellowMotionMatcher3D *> *p_matchers) {
@@ -473,6 +579,9 @@ void FellowMotionMatcher3D::advance_group(const TypedArray<FellowMotionMatcher3D
 		}
 		m->lod = m->_compute_lod();
 		m->group_dt = float(p_delta);
+		if (m->ground_adaptation) {
+			m->_probe_ground(); // Here: the physics space is not for worker threads.
+		}
 		matchers.push_back(m);
 	}
 	if (matchers.is_empty()) {
@@ -619,6 +728,19 @@ void FellowMotionMatcher3D::_update(float p_dt, int p_lod) {
 		}
 	}
 	char_position.y = sim_position.y;
+	if (ground_adaptation && ground_root.hit) {
+		// The root on the ground under it (milestone 56), eased: steps and slopes lift and lower the character.
+		if (!ground_root_init) {
+			ground_root_y = ground_root.y;
+			ground_root_velocity = 0.0f;
+			ground_root_init = true;
+		}
+		float d = ground_root_y - ground_root.y;
+		decay_spring_damper_exact(d, ground_root_velocity, ground_halflife * 2.0f, dt);
+		ground_root_y = ground_root.y + d;
+		sim_position.y = ground_root_y;
+		char_position.y = ground_root_y;
+	}
 	trajectory_error_sum += Vector2(char_position.x - sim_position.x, char_position.z - sim_position.z).length() * dt;
 	trajectory_time += dt;
 
@@ -732,6 +854,10 @@ Dictionary FellowMotionMatcher3D::get_stats() const {
 	d["foot_contact_time"] = foot_contact_time;
 	d["foot_slide_locked"] = foot_slide_locked;
 	d["foot_slide_speed"] = foot_contact_time > 0.0 ? foot_slide_distance / foot_contact_time : 0.0;
+	d["hips_drop_mm"] = hips_drop * 1000.0f;
+	d["hips_drop_min_mm"] = hips_drop_min * 1000.0f;
+	d["ground_offsets_mm"] = Vector2(ground_foot_offset[0], ground_foot_offset[1]) * 1000.0f;
+	d["toe_positions"] = PackedVector3Array({ feet[0].last_toe, feet[1].last_toe });
 	d["trajectory_error"] = trajectory_time > 0.0 ? trajectory_error_sum / trajectory_time : 0.0;
 	// Popping percentiles (mm a frame²).
 	auto percentile = [&](double p_q) {
@@ -800,6 +926,7 @@ void FellowMotionMatcher3D::reset_stats() {
 	search_usec = 0;
 	search_usec_max = 0;
 	foot_slide_distance = 0.0;
+	hips_drop_min = 0.0f;
 	foot_slide_locked = 0.0;
 	foot_contact_time = 0.0;
 	trajectory_error_sum = 0.0;
@@ -889,6 +1016,18 @@ void FellowMotionMatcher3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_clamp_distance"), &FellowMotionMatcher3D::get_clamp_distance);
 	ClassDB::bind_method(D_METHOD("set_unlock_radius", "radius"), &FellowMotionMatcher3D::set_unlock_radius);
 	ClassDB::bind_method(D_METHOD("get_unlock_radius"), &FellowMotionMatcher3D::get_unlock_radius);
+	ClassDB::bind_method(D_METHOD("set_ground_adaptation", "enable"), &FellowMotionMatcher3D::set_ground_adaptation);
+	ClassDB::bind_method(D_METHOD("is_ground_adaptation"), &FellowMotionMatcher3D::is_ground_adaptation);
+	ClassDB::bind_method(D_METHOD("set_ground_collision_mask", "mask"), &FellowMotionMatcher3D::set_ground_collision_mask);
+	ClassDB::bind_method(D_METHOD("get_ground_collision_mask"), &FellowMotionMatcher3D::get_ground_collision_mask);
+	ClassDB::bind_method(D_METHOD("set_ground_probe_height", "height"), &FellowMotionMatcher3D::set_ground_probe_height);
+	ClassDB::bind_method(D_METHOD("get_ground_probe_height"), &FellowMotionMatcher3D::get_ground_probe_height);
+	ClassDB::bind_method(D_METHOD("set_ground_halflife", "seconds"), &FellowMotionMatcher3D::set_ground_halflife);
+	ClassDB::bind_method(D_METHOD("get_ground_halflife"), &FellowMotionMatcher3D::get_ground_halflife);
+	ClassDB::bind_method(D_METHOD("set_ground_alignment", "enable"), &FellowMotionMatcher3D::set_ground_alignment);
+	ClassDB::bind_method(D_METHOD("is_ground_alignment"), &FellowMotionMatcher3D::is_ground_alignment);
+	ClassDB::bind_method(D_METHOD("set_ground_foot_placement", "enable"), &FellowMotionMatcher3D::set_ground_foot_placement);
+	ClassDB::bind_method(D_METHOD("is_ground_foot_placement"), &FellowMotionMatcher3D::is_ground_foot_placement);
 	ClassDB::bind_method(D_METHOD("set_inertialization", "enable"), &FellowMotionMatcher3D::set_inertialization);
 	ClassDB::bind_method(D_METHOD("is_inertialization"), &FellowMotionMatcher3D::is_inertialization);
 	ClassDB::bind_method(D_METHOD("set_synchronization", "enable"), &FellowMotionMatcher3D::set_synchronization);
@@ -939,5 +1078,12 @@ void FellowMotionMatcher3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "foot_locking"), "set_foot_locking", "is_foot_locking");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "foot_ik"), "set_foot_ik", "is_foot_ik");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "unlock_radius", PROPERTY_HINT_RANGE, "0,1,0.01,suffix:m"), "set_unlock_radius", "get_unlock_radius");
+	ADD_GROUP("Ground", "ground_");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "ground_adaptation"), "set_ground_adaptation", "is_ground_adaptation");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "ground_collision_mask", PROPERTY_HINT_LAYERS_3D_PHYSICS), "set_ground_collision_mask", "get_ground_collision_mask");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "ground_probe_height", PROPERTY_HINT_RANGE, "0.01,2,0.01,suffix:m"), "set_ground_probe_height", "get_ground_probe_height");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "ground_halflife", PROPERTY_HINT_RANGE, "0.001,1,0.001,suffix:s"), "set_ground_halflife", "get_ground_halflife");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "ground_foot_placement"), "set_ground_foot_placement", "is_ground_foot_placement");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "ground_alignment"), "set_ground_alignment", "is_ground_alignment");
 	ADD_GROUP("", "");
 }

@@ -81,7 +81,7 @@
 		<method name="get_stats" qualifiers="const">
 			<return type="Dictionary" />
 			<description>
-				This matcher's searches, transitions, search microseconds, foot sliding while in contact ([code]foot_slide_distance[/code], [code]foot_slide_locked[/code], [code]foot_contact_time[/code], [code]foot_slide_speed[/code]), [code]trajectory_error[/code] (the mean distance between the character and the simulation), popping ([code]pop_p50_mm[/code], [code]pop_p99_mm[/code], [code]pop_p999_mm[/code], [code]pop_max_mm[/code]: per frame the largest second difference of the hips' and legs' joints), the clip, frame and LOD.
+				This matcher's searches, transitions, search microseconds, foot sliding while in contact ([code]foot_slide_distance[/code], [code]foot_slide_locked[/code], [code]foot_contact_time[/code], [code]foot_slide_speed[/code]), [code]trajectory_error[/code] (the mean distance between the character and the simulation), popping ([code]pop_p50_mm[/code], [code]pop_p99_mm[/code], [code]pop_p999_mm[/code], [code]pop_max_mm[/code]: per frame the largest second difference of the hips' and legs' joints), the clip, frame and LOD. With [member ground_adaptation]: [code]hips_drop_mm[/code] (how far the hips are lowered now) and [code]hips_drop_min_mm[/code] (the lowest since [method reset_stats]), [code]ground_offsets_mm[/code] (each foot's ground over the root's, as a [Vector2]: left, right), and [code]toe_positions[/code] (where the toes were shown, global).
 			</description>
 		</method>
 		<method name="reset">
@@ -135,6 +135,24 @@
 		</member>
 		<member name="foot_locking" type="bool" setter="set_foot_locking" getter="is_foot_locking" default="true">
 			A foot in contact (the database's contacts) stays where it landed until it lifts or the animation pulls it [member unlock_radius] away.
+		</member>
+		<member name="ground_adaptation" type="bool" setter="set_ground_adaptation" getter="is_ground_adaptation" default="false">
+			Fits the character to uneven ground (milestone 56): rays straight down against the physics world (the bodies of [member ground_collision_mask]) under the root and under each foot's heel and toe, cast on the main thread before each update. The root follows the ground's height under it (eased), each foot is placed on the highest ground under it — its height over the root's ground added to the animated foot's — by the leg's two-bone IK (onto higher ground four times as fast as down: a foot landing on a step does not sink into it), the hips are lowered as far as the lower foot must reach down (so that the leg over higher ground bends instead of the other overstretching), and a foot that is down turns to the ground's slope ([member ground_alignment], at most 35 degrees). On flat ground the pose is the one without it. Needs [member foot_ik] for the feet.
+		</member>
+		<member name="ground_alignment" type="bool" setter="set_ground_alignment" getter="is_ground_alignment" default="true">
+			With [member ground_adaptation], a foot in contact turns to the slope of the ground under it.
+		</member>
+		<member name="ground_collision_mask" type="int" setter="set_ground_collision_mask" getter="get_ground_collision_mask" default="1">
+			The physics layers [member ground_adaptation]'s rays hit (leave the characters' own bodies out).
+		</member>
+		<member name="ground_foot_placement" type="bool" setter="set_ground_foot_placement" getter="is_ground_foot_placement" default="true">
+			With [member ground_adaptation], the feet placed on the ground and the hips lowered; [code]false[/code]: only the root follows the ground's height.
+		</member>
+		<member name="ground_halflife" type="float" setter="set_ground_halflife" getter="get_ground_halflife" default="0.05">
+			How fast the feet's ground offsets and the hips follow the ground (the root at twice this), in seconds to halve the difference.
+		</member>
+		<member name="ground_probe_height" type="float" setter="set_ground_probe_height" getter="get_ground_probe_height" default="0.6">
+			How far above and below the character's ground [member ground_adaptation] looks for ground, in metres: the highest step up or down it follows in a frame, and the farthest a foot is moved.
 		</member>
 		<member name="inertialization" type="bool" setter="set_inertialization" getter="is_inertialization" default="true">
 			Transitions blended by inertialization (the offset between the poses decays); off: hard cuts.

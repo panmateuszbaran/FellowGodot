@@ -50,6 +50,7 @@ class FellowMotionMatcher3D : public SkeletonModifier3D {
 		Vector3 offset_velocity;
 		Vector3 last_animated;
 		Vector3 last_output;
+		Vector3 last_toe; // World, where the toe was shown (the ground under the foot: its ankle's and its toe's).
 		bool last_contact = false;
 		bool has_last = false;
 	};
@@ -90,6 +91,32 @@ class FellowMotionMatcher3D : public SkeletonModifier3D {
 	bool foot_ik = true;
 	bool auto_update = true;
 	PackedFloat32Array lod_distances;
+	// Ground adaptation (milestone 56): rays down against the physics world under the root and each foot, cast on the
+	// main thread before an update (the update itself touches nothing outside the matcher).
+	bool ground_adaptation = false;
+	uint32_t ground_collision_mask = 1;
+	float ground_probe_height = 0.6f; // Metres above and below the character's ground.
+	float ground_halflife = 0.05f;
+	bool ground_alignment = true;
+	bool ground_foot_placement = true; // false: only the root follows the ground
+	struct GroundProbe {
+		bool hit = false;
+		float y = 0.0f;
+		Vector3 normal = Vector3(0, 1, 0);
+	};
+	GroundProbe ground_root;
+	GroundProbe ground_feet[2];
+	bool ground_root_init = false;
+	float ground_root_y = 0.0f;
+	float ground_root_velocity = 0.0f;
+	float ground_foot_offset[2] = {};
+	float ground_foot_offset_velocity[2] = {};
+	float ground_align_weight[2] = {};
+	float ground_align_weight_velocity[2] = {};
+	float hips_drop = 0.0f;
+	float hips_drop_velocity = 0.0f;
+	float hips_drop_min = 0.0f;
+	void _probe_ground(); // Main thread.
 
 	// State.
 	bool started = false;
@@ -223,6 +250,18 @@ public:
 	bool is_foot_ik() const { return foot_ik; }
 	void set_auto_update(bool p_enable);
 	bool is_auto_update() const { return auto_update; }
+	void set_ground_adaptation(bool p_enable);
+	bool is_ground_adaptation() const { return ground_adaptation; }
+	void set_ground_collision_mask(uint32_t p_mask) { ground_collision_mask = p_mask; }
+	uint32_t get_ground_collision_mask() const { return ground_collision_mask; }
+	void set_ground_probe_height(float p_height) { ground_probe_height = MAX(p_height, 0.01f); }
+	float get_ground_probe_height() const { return ground_probe_height; }
+	void set_ground_halflife(float p_seconds) { ground_halflife = MAX(p_seconds, 0.001f); }
+	float get_ground_halflife() const { return ground_halflife; }
+	void set_ground_alignment(bool p_enable) { ground_alignment = p_enable; }
+	bool is_ground_alignment() const { return ground_alignment; }
+	void set_ground_foot_placement(bool p_enable) { ground_foot_placement = p_enable; }
+	bool is_ground_foot_placement() const { return ground_foot_placement; }
 	void set_lod_distances(const PackedFloat32Array &p_distances) { lod_distances = p_distances; }
 	PackedFloat32Array get_lod_distances() const { return lod_distances; }
 
