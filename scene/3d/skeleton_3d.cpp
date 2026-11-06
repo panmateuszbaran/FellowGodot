@@ -602,6 +602,7 @@ void Skeleton3D::_update_bone_global_pose(int p_bone) const {
 
 		bone.global_pose = global_pose;
 		bone_global_pose_dirty[bone.nested_set_offset] = false;
+		fellow_no_override_equal = false; // decision 0163: the global pose without overrides is not updated here
 	}
 }
 
@@ -1139,6 +1140,23 @@ void Skeleton3D::_force_update_bone_children_transforms(int p_bone_idx) const {
 
 	Bone *bonesptr = bones.ptr();
 
+#ifndef DISABLE_DEPRECATED
+	// FellowEngine (rendering/fellow/animation/shared_no_override_pose, decision 0163): without any override this update,
+	// each bone's global pose without overrides is the product of the same operands as its global pose (its parent's
+	// two are the same bits, by induction from the roots) when they were the same bits after the last full update, or
+	// when every bone is computed again now: a copy gives the same value.
+	bool fellow_share = false;
+	if (Fellow::animation_shared_no_override_pose()) {
+		bool overrides = false;
+		bool all_dirty = true;
+		for (int i = 0; i < bone_size; i++) {
+			overrides = overrides || bonesptr[i].global_pose_override_amount >= CMP_EPSILON;
+			all_dirty = all_dirty && bone_global_pose_dirty[i];
+		}
+		fellow_share = !overrides && (fellow_no_override_equal || all_dirty);
+	}
+#endif
+
 	// Loop through nested set.
 	for (int offset = 0; offset < bone_size; offset++) {
 		if (rest_dirty) {
@@ -1173,7 +1191,9 @@ void Skeleton3D::_force_update_bone_children_transforms(int p_bone_idx) const {
 		}
 
 #ifndef DISABLE_DEPRECATED
-		if (bone_enabled) {
+		if (fellow_share) {
+			b.pose_global_no_override = b.global_pose; // decision 0163 (no override: global_pose is not changed below)
+		} else if (bone_enabled) {
 			Transform3D pose = b.pose_cache;
 			if (b.parent >= 0) {
 				b.pose_global_no_override = bonesptr[b.parent].pose_global_no_override * pose;
@@ -1197,6 +1217,9 @@ void Skeleton3D::_force_update_bone_children_transforms(int p_bone_idx) const {
 
 		bone_global_pose_dirty[offset] = false;
 	}
+#ifndef DISABLE_DEPRECATED
+	fellow_no_override_equal = fellow_share; // decision 0163: the same bits again (or not known to be)
+#endif
 }
 
 void Skeleton3D::_find_modifiers() {

@@ -201,6 +201,9 @@ private:
 	// Global bone pose calculation.
 	mutable LocalVector<int> nested_set_offset_to_bone_index; // Map from Bone::nested_set_offset to bone index.
 	mutable LocalVector<bool> bone_global_pose_dirty; // Indexable with Bone::nested_set_offset.
+	// FellowEngine (rendering/fellow/animation/shared_no_override_pose, decision 0163): every bone's global pose without
+	// overrides holds the same bits as its global pose (both were last computed alike by the full update).
+	mutable bool fellow_no_override_equal = false;
 	void _update_bones_nested_set() const;
 	int _update_bone_nested_set(int p_bone, int p_offset) const;
 	void _make_bone_global_poses_dirty() const;

@@ -136,6 +136,9 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/animation/track_shortcuts", true); // decision 0076 (exact; on from fellow168)
 	GLOBAL_DEF("rendering/fellow/animation/key_hints", true); // decision 0076 (exact; from fellow170)
 	GLOBAL_DEF("rendering/fellow/animation/batched_skin_transforms", true); // decision 0077 (exact; on from fellow170)
+	GLOBAL_DEF("rendering/fellow/animation/slerp_key_cache", true); // decision 0163 (exact)
+	GLOBAL_DEF("rendering/fellow/animation/shared_no_override_pose", true); // decision 0163 (exact)
+	GLOBAL_DEF("rendering/fellow/animation/lazy_simulator_poses", true); // decision 0163
 	GLOBAL_DEF("rendering/fellow/physics/distance_face_cull", true); // decision 0085 (exact)
 	GLOBAL_DEF("rendering/fellow/physics/distance_face_order", true); // decision 0085 (exact)
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/physics/distance_face_batch", PROPERTY_HINT_RANGE, "1,32,1"), 8);

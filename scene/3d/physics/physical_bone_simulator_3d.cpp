@@ -82,9 +82,27 @@ void PhysicalBoneSimulator3D::_pose_updated() {
 		// NOTE: this is re-entrant and will call _pose_updated again.
 		_bone_list_changed();
 	} else {
+		if (fellow_physical_bone_count == 0 && Fellow::animation_lazy_simulator_poses()) {
+			// FellowEngine (decision 0163): nothing reads the copies until a physical bone is bound or a copy is asked for.
+			fellow_poses_stale = true;
+			return;
+		}
 		for (int i = 0; i < skeleton->get_bone_count(); i++) {
 			_bone_pose_updated(skeleton, i);
 		}
+		fellow_poses_stale = false;
+	}
+}
+
+void PhysicalBoneSimulator3D::_fellow_refresh_poses() const {
+	fellow_poses_stale = false;
+	Skeleton3D *skeleton = get_skeleton();
+	if (!skeleton || skeleton->get_bone_count() != (int)bones.size()) {
+		return;
+	}
+	PhysicalBoneSimulator3D *self = const_cast<PhysicalBoneSimulator3D *>(this);
+	for (int i = 0; i < skeleton->get_bone_count(); i++) {
+		self->_bone_pose_updated(skeleton, i);
 	}
 }
 
@@ -193,6 +211,9 @@ PhysicalBone3D *PhysicalBoneSimulator3D::_get_physical_bone_parent(int p_bone) {
 }
 
 void PhysicalBoneSimulator3D::_rebuild_physical_bones_cache() {
+	if (fellow_poses_stale) {
+		_fellow_refresh_poses(); // decision 0163: a physical bone bound now reads them
+	}
 	const int b_size = bones.size();
 	fellow_physical_bone_count = 0; // Decision 0076: bones[].physical_bone changes only in the callers of this function.
 	for (int i = 0; i < b_size; ++i) {
@@ -363,12 +384,18 @@ void PhysicalBoneSimulator3D::physical_bones_remove_collision_exception(RID p_ex
 Transform3D PhysicalBoneSimulator3D::get_bone_global_pose(int p_bone) const {
 	const int bone_size = bones.size();
 	ERR_FAIL_INDEX_V(p_bone, bone_size, Transform3D());
+	if (fellow_poses_stale) {
+		_fellow_refresh_poses(); // decision 0163
+	}
 	return bones[p_bone].global_pose;
 }
 
 void PhysicalBoneSimulator3D::set_bone_global_pose(int p_bone, const Transform3D &p_pose) {
 	const int bone_size = bones.size();
 	ERR_FAIL_INDEX(p_bone, bone_size);
+	if (fellow_poses_stale) {
+		_fellow_refresh_poses(); // decision 0163: the other bones' copies as they would be
+	}
 	bones[p_bone].global_pose = p_pose;
 }
 

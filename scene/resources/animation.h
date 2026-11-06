@@ -287,6 +287,11 @@ private:
 
 	template <typename T>
 	_FORCE_INLINE_ T _interpolate(const LocalVector<TKey<T>> &p_keys, double p_time, InterpolationType p_interp, bool p_loop_wrap, bool *p_ok, bool p_backward = false, int *r_fellow_key_hint = nullptr) const;
+	// FellowEngine (decision 0163): the linear interpolation between two keys; for rotations, with the keys' part of the
+	// slerp kept per thread (animation/slerp_key_cache).
+	template <typename T>
+	_FORCE_INLINE_ T _fellow_interpolate_linear(const T &p_a, const T &p_b, real_t p_c) const { return _interpolate(p_a, p_b, p_c); }
+	Quaternion _fellow_interpolate_linear(const Quaternion &p_a, const Quaternion &p_b, real_t p_c) const;
 
 	template <typename T>
 	_FORCE_INLINE_ void _track_get_key_indices_in_range(const LocalVector<T> &p_array, double from_time, double to_time, LocalVector<int> *r_indices, bool p_is_backward) const;
@@ -588,6 +593,7 @@ public:
 		FELLOW_FULL_WEIGHT_SLERP = 1,
 		FELLOW_TRACK_SHORTCUTS = 2,
 		FELLOW_KEY_HINTS = 4,
+		FELLOW_SLERP_KEY_CACHE = 8, // decision 0163
 	};
 	static inline std::atomic<uint32_t> fellow_shortcuts{ 0 };
 

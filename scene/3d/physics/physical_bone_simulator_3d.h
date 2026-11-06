@@ -58,6 +58,10 @@ class PhysicalBoneSimulator3D : public SkeletonModifier3D {
 
 	LocalVector<SimulatedBone> bones;
 	int fellow_physical_bone_count = 0; // FellowEngine (decision 0076): bones with a physical bone.
+	// FellowEngine (rendering/fellow/animation/lazy_simulator_poses, decision 0163): without physical bones the bones'
+	// global poses are not copied after each update; they are read when needed.
+	mutable bool fellow_poses_stale = false;
+	void _fellow_refresh_poses() const;
 
 	/// This is a slow API, so it's cached
 	PhysicalBone3D *_get_physical_bone_parent(int p_bone);

@@ -246,6 +246,24 @@ inline bool animation_batched_skin_transforms() {
 inline bool animation_key_hints() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/animation/key_hints");
 }
+// animation/slerp_key_cache (decision 0163): a rotation track's linear interpolation between two keys keeps, per thread,
+// the part of Quaternion::slerp() that depends only on the keys (the sign, acos() of their dot product and its sine),
+// found again by the keys' address and checked against their values: the same results bit for bit.
+inline bool animation_slerp_key_cache() {
+	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/animation/slerp_key_cache");
+}
+// animation/shared_no_override_pose (decision 0163): a skeleton whose bones have no global pose override, and whose
+// global poses and global poses without overrides were computed alike since its last full update, copies each bone's
+// global pose into the one without overrides instead of computing the same product again: the same values.
+inline bool animation_shared_no_override_pose() {
+	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/animation/shared_no_override_pose");
+}
+// animation/lazy_simulator_poses (decision 0163): the compatibility PhysicalBoneSimulator3D of a skeleton without physical
+// bones no longer copies every bone's global pose after each update; it reads them when a physical bone is bound or its
+// copy is asked for.
+inline bool animation_lazy_simulator_poses() {
+	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/animation/lazy_simulator_poses");
+}
 // physics/* (milestone 17): GodotPhysics3D. physics/distance_face_cull (decision 0085): the motion queries' yes/no distance
 // tests against a concave shape (cast_motion(), test_body_motion(): only whether the shapes are apart is used) do not give
 // GJK the faces a conservative separating-axis test in double precision proves farther from the moving shape's swept box
