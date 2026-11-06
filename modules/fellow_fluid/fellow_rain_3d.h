@@ -220,6 +220,7 @@ private:
 	void _push_state();
 	void _rt_create();
 	void _rt_free();
+	void _rt_destroy();
 	void _rt_update(PackedByteArray p_push, bool p_enabled, bool p_ripples, PackedByteArray p_state, PackedByteArray p_tracks);
 	void _rt_tracks(RendererRD::FellowWeather::State &r_state, const PackedByteArray &p_tracks);
 	void _rt_free_tracks();

@@ -212,6 +212,7 @@ private:
 
 	void _rt_create(int p_size, int p_cascades);
 	void _rt_free();
+	void _rt_destroy();
 	void _rt_upload_spectrum(Vector<uint8_t> p_data);
 	void _rt_dispatch(PackedByteArray p_push);
 	void _rt_read_timestamps();

@@ -114,18 +114,28 @@ FellowShallowWater3D::FellowShallowWater3D() {
 	flow_texture.instantiate();
 }
 
+void FellowShallowWater3D::_rt_destroy() {
+	if (gpu_ready) {
+		_rt_free();
+	}
+	for (int k = 0; k < KERNEL_MAX; k++) {
+		// Freeing a shader also frees the pipelines created from it.
+		if (shaders[k].is_valid()) {
+			rd->free_rid(shaders[k]);
+			shaders[k] = RID();
+			pipelines[k] = RID();
+		}
+	}
+}
+
 FellowShallowWater3D::~FellowShallowWater3D() {
 	if (RS::get_singleton() && rd) {
-		if (gpu_ready) {
-			_rt_free();
-		}
-		for (int k = 0; k < KERNEL_MAX; k++) {
-			// Freeing a shader also frees the pipelines created from it.
-			if (shaders[k].is_valid()) {
-				rd->free_rid(shaders[k]);
-				shaders[k] = RID();
-				pipelines[k] = RID();
-			}
+	// FellowEngine: the RenderingDevice's resources are freed on the render thread. With a separate one
+	// (--render-thread separate) this waits for it: the calls queued before for this node run first, and none of them
+	// runs on a node half destroyed.
+		RS::get_singleton()->call_on_render_thread(callable_mp(this, &FellowShallowWater3D::_rt_destroy));
+		if (!RS::get_singleton()->is_on_render_thread()) {
+			RS::get_singleton()->sync();
 		}
 	}
 }

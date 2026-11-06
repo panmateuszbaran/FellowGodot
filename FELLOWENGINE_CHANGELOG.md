@@ -27,6 +27,10 @@ Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.m
   skeletons on a worker thread. The same bone poses bit for bit as on the main thread (AnimationPlayers and blending
   AnimationTrees, every FellowEngine animation shortcut on; `animation_check.gd --groups=N`), the same pictures on
   lavapipe, no error in a debug build.
+- With the separate render thread (decision 0165): `FellowWater3D`, `FellowRain3D` and `FellowShallowWater3D` free their
+  RenderingDevice resources on the render thread (before: 80 errors and leaked textures, uniform sets and shaders at
+  the slice's exit, and the same for any of them freed during play). Found too: a deadlock in Godot's shader
+  compilation when the worker pool has two threads (the cloud's) and one is the render thread — documented.
 
 ## Milestone 59 — pipelines compiled ahead (2026-11-06)
 

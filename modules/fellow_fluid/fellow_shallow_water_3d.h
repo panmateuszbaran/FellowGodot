@@ -157,6 +157,7 @@ private:
 
 	void _rt_create();
 	void _rt_free();
+	void _rt_destroy();
 	void _rt_reset();
 	void _rt_step(int p_steps, PackedByteArray p_interaction, int p_colliders, int p_impulses, bool p_timestamps);
 	void _rt_read_timestamps();

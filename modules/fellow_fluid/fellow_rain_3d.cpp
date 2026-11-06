@@ -1244,29 +1244,39 @@ FellowRain3D::FellowRain3D() {
 	wind_applied = wind;
 }
 
+void FellowRain3D::_rt_destroy() {
+	if (gpu_ready) {
+		_rt_free();
+	}
+	if (shader_ripples.is_valid()) {
+		rd->free_rid(shader_ripples);
+	}
+	if (shader_tail.is_valid()) {
+		rd->free_rid(shader_tail);
+	}
+	_rt_free_tracks();
+	if (tracks_stamps.is_valid()) {
+		rd->free_rid(tracks_stamps);
+	}
+	if (tracks_sampler.is_valid()) {
+		rd->free_rid(tracks_sampler);
+	}
+	if (tracks_shader.is_valid()) {
+		rd->free_rid(tracks_shader);
+	}
+}
+
 FellowRain3D::~FellowRain3D() {
 	if (active == this) {
 		active = nullptr;
 	}
 	if (RS::get_singleton() && rd) {
-		if (gpu_ready) {
-			_rt_free();
-		}
-		if (shader_ripples.is_valid()) {
-			rd->free_rid(shader_ripples);
-		}
-		if (shader_tail.is_valid()) {
-			rd->free_rid(shader_tail);
-		}
-		_rt_free_tracks();
-		if (tracks_stamps.is_valid()) {
-			rd->free_rid(tracks_stamps);
-		}
-		if (tracks_sampler.is_valid()) {
-			rd->free_rid(tracks_sampler);
-		}
-		if (tracks_shader.is_valid()) {
-			rd->free_rid(tracks_shader);
+	// FellowEngine: the RenderingDevice's resources are freed on the render thread. With a separate one
+	// (--render-thread separate) this waits for it: the calls queued before for this node run first, and none of them
+	// runs on a node half destroyed.
+		RS::get_singleton()->call_on_render_thread(callable_mp(this, &FellowRain3D::_rt_destroy));
+		if (!RS::get_singleton()->is_on_render_thread()) {
+			RS::get_singleton()->sync();
 		}
 	}
 }
