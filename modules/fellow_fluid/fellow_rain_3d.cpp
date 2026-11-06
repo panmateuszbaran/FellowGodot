@@ -41,6 +41,7 @@
 #include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
 #include "scene/3d/camera_3d.h"
+#include "scene/3d/mesh_instance_3d.h"
 #include "scene/main/viewport.h"
 #include "scene/resources/3d/primitive_meshes.h"
 #include "scene/resources/particle_process_material.h"
@@ -214,6 +215,19 @@ void FellowRain3D::_build_children() {
 	drops->set_use_fixed_seed(true);
 	drops->set_seed(20261029);
 	add_child(drops, false, INTERNAL_MODE_FRONT);
+
+	// The flakes' material on a hidden quad, so that its pipelines compile when the node is set up, not in the frame it
+	// starts to snow (milestone 57: 6 surface pipelines, 51 ms on the RTX, when Slice Lab's weather first turned to
+	// snow). The drops' need none: the splashes wear their shader from the start.
+	Ref<QuadMesh> flake_pipelines_mesh;
+	flake_pipelines_mesh.instantiate();
+	flake_pipelines_mesh->set_material(flake_material);
+	MeshInstance3D *flake_pipelines = memnew(MeshInstance3D);
+	flake_pipelines->set_name("SnowFlakesPipelines");
+	flake_pipelines->set_mesh(flake_pipelines_mesh);
+	flake_pipelines->set_cast_shadows_setting(GeometryInstance3D::SHADOW_CASTING_SETTING_OFF);
+	flake_pipelines->set_visible(false);
+	add_child(flake_pipelines, false, INTERNAL_MODE_FRONT);
 
 	splash_process.instantiate();
 	splash_process->set_direction(Vector3(0, 1, 0));
