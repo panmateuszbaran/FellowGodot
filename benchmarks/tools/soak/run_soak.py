@@ -26,7 +26,15 @@ def rss_mb(pid):
     try:
         import psutil  # noqa: PLC0415
 
-        return psutil.Process(pid).memory_info().rss / 1048576.0
+        # With its children: Windows' *.console.exe is a small wrapper that starts the engine's own executable.
+        proc = psutil.Process(pid)
+        total = proc.memory_info().rss
+        for child in proc.children(recursive=True):
+            try:
+                total += child.memory_info().rss
+            except psutil.Error:
+                pass
+        return total / 1048576.0
     except Exception:  # noqa: BLE001
         pass
     status = f"/proc/{pid}/status"
