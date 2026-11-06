@@ -850,6 +850,10 @@ func _run_soak() -> void:
 	# --soak_fellow_stats=1 (diagnostics): FellowEngine's counters read every frame, a hitch's nonzero changes kept with it.
 	var per_frame_stats := str(args.get("soak_fellow_stats", "0")) == "1"
 	var fs_prev := _fellow_stats() if per_frame_stats else {}
+	# --rs_metrics=render_thread (milestone 60): the viewport's render times read by a call on the render thread (the
+	# last frame drawn there), not by the main thread, whose reads wait for a separate render thread every frame.
+	var rs_async := str(args.get("rs_metrics", "")) == "render_thread"
+	var rs_times := {"gpu": 0.0, "cpu": 0.0} # written by the render thread
 	var t0 := Time.get_ticks_usec()
 	var last := t0
 	var next_row := 1.0
@@ -890,14 +894,25 @@ func _run_soak() -> void:
 				if (v is int or v is float) and v != fs_prev.get(k, v):
 					fs_delta[k] = v - fs_prev.get(k, 0)
 			fs_prev = fs_now
-		sec_gpu += RenderingServer.viewport_get_measured_render_time_gpu(vrid)
-		sec_cpu += RenderingServer.viewport_get_measured_render_time_cpu(vrid)
+		var gpu_ms := 0.0
+		var cpu_ms := 0.0
+		if rs_async:
+			RenderingServer.call_on_render_thread(func() -> void:
+				rs_times["gpu"] = RenderingServer.viewport_get_measured_render_time_gpu(vrid)
+				rs_times["cpu"] = RenderingServer.viewport_get_measured_render_time_cpu(vrid))
+			gpu_ms = rs_times["gpu"]
+			cpu_ms = rs_times["cpu"]
+		else:
+			gpu_ms = RenderingServer.viewport_get_measured_render_time_gpu(vrid)
+			cpu_ms = RenderingServer.viewport_get_measured_render_time_cpu(vrid)
+		sec_gpu += gpu_ms
+		sec_cpu += cpu_ms
 		if recent.size() >= 30:
 			var sorted := recent.duplicate()
 			sorted.sort()
 			var med := sorted[sorted.size() / 2]
 			if ft > 2.0 * med and ft > med + 10.0:
-				hitches.append({"t": snappedf(t, 0.001), "ms": snappedf(ft, 0.01), "median_ms": snappedf(med, 0.01), "pipelines": pc_frame, "pipelines_by": pc_by, "fellow": fs_delta, "gpu_ms": snappedf(RenderingServer.viewport_get_measured_render_time_gpu(vrid), 0.01), "render_cpu_ms": snappedf(RenderingServer.viewport_get_measured_render_time_cpu(vrid), 0.01), "state": state.duplicate()})
+				hitches.append({"t": snappedf(t, 0.001), "ms": snappedf(ft, 0.01), "median_ms": snappedf(med, 0.01), "pipelines": pc_frame, "pipelines_by": pc_by, "fellow": fs_delta, "gpu_ms": snappedf(gpu_ms, 0.01), "render_cpu_ms": snappedf(cpu_ms, 0.01), "state": state.duplicate()})
 		recent.append(ft)
 		if recent.size() > 120:
 			recent.remove_at(0)
