@@ -1246,6 +1246,13 @@ void FellowTerrain3D::_update_foliage_kinds() {
 			k.sink = f->get_sink();
 			k.shadows = f->is_casting_shadows();
 			k.seed = uint32_t(f->get_seed()) * 2654435761u + uint32_t(i) * 40503u + 17u;
+			if (is_inside_tree()) {
+				RenderingServer *rs = RenderingServer::get_singleton();
+				const RID warm = rs->instance_create2(k.mesh, get_world_3d()->get_scenario());
+				rs->instance_geometry_set_cast_shadows_setting(warm, k.shadows ? RSE::SHADOW_CASTING_SETTING_ON : RSE::SHADOW_CASTING_SETTING_OFF);
+				rs->instance_set_visible(warm, false);
+				foliage_warm.push_back(warm);
+			}
 		} else {
 			k.density = 0.0f; // no mesh: nothing to scatter
 		}
@@ -1270,10 +1277,20 @@ void FellowTerrain3D::_free_foliage_cell(FoliageCell *p_cell) {
 }
 
 void FellowTerrain3D::_clear_foliage() {
+	// (Waits for running tasks: only when the data or the kinds change, or the terrain leaves the world.)
 	for (KeyValue<uint64_t, FoliageCell *> &kv : foliage_cells) {
 		_free_foliage_cell(kv.value);
 	}
 	foliage_cells.clear();
+	for (FoliageCell *cell : foliage_retired) {
+		_free_foliage_cell(cell);
+	}
+	foliage_retired.clear();
+	RenderingServer *rs = RenderingServer::get_singleton();
+	for (const RID &rid : foliage_warm) {
+		rs->free_rid(rid);
+	}
+	foliage_warm.clear();
 	foliage_instances = 0;
 }
 
@@ -1373,8 +1390,22 @@ void FellowTerrain3D::_process_foliage(const Vector3 &p_camera) {
 		}
 	}
 	for (const uint64_t key : dropped) {
-		_free_foliage_cell(foliage_cells[key]);
+		FoliageCell *cell = foliage_cells[key];
 		foliage_cells.erase(key);
+		if (cell->task != WorkerThreadPool::INVALID_TASK_ID && !WorkerThreadPool::get_singleton()->is_task_completed(cell->task)) {
+			foliage_retired.push_back(cell); // freed once its task has run
+		} else {
+			_free_foliage_cell(cell);
+		}
+	}
+	for (uint32_t i = 0; i < foliage_retired.size();) {
+		FoliageCell *cell = foliage_retired[i];
+		if (WorkerThreadPool::get_singleton()->is_task_completed(cell->task)) {
+			_free_foliage_cell(cell);
+			foliage_retired.remove_at_unordered(i);
+		} else {
+			i++;
+		}
 	}
 	if (launched > 0) {
 		Fellow::request_redraw(); // the editor draws again to see the new cells finished

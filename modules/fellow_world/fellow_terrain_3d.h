@@ -265,6 +265,12 @@ private:
 		RID instance;
 	};
 	HashMap<uint64_t, FoliageCell *> foliage_cells;
+	// Cells dropped while their task was still to run: freed once it has (the main thread never waits for one: a
+	// wait may run other queued work on it, a pipeline's compilation among them).
+	LocalVector<FoliageCell *> foliage_retired;
+	// A hidden instance of each kind's mesh from the start: its pipelines compile when the terrain is set up, not when
+	// the kind's first cell appears.
+	LocalVector<RID> foliage_warm;
 	LocalVector<uint8_t> splat_cpu[2]; // RGBA8 copies of the splat maps, read by the foliage's tasks
 	Vector2i splat_cpu_size[2];
 	bool foliage_dirty = true;
