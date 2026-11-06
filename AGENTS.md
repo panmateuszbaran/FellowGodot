@@ -2,15 +2,16 @@
 
 FellowEngine is a fork of Godot 4.7.2-stable (branch `fellow/geometry`): a faster Forward+ renderer and new systems —
 water, rain, snow, wind, lightning, weather, GPU smoke and fire, burning objects, HLOD, texture and world streaming,
-FSR 3.1, motion matching, neural motion, editor tools. `README.md` lists them, `FELLOWENGINE_CHANGELOG.md` says what
-each milestone added, `docs/decisions/` has one record per change (the problem, the change, the measurements, the
-decision, what was rejected) and `docs/FELLOWENGINE_OPTIONS.md` every setting and node.
+terrain and foliage, FSR 3.1, motion matching, neural motion, editor tools. `README.md` lists them,
+`FELLOWENGINE_CHANGELOG.md` says what each milestone added, `docs/decisions/` has one record per change (the problem,
+the change, the measurements, the decision, what was rejected) and `docs/FELLOWENGINE_OPTIONS.md` every setting and
+node.
 
 ## Where things are
 
 | what | where |
 |---|---|
-| FellowEngine's nodes | `modules/fellow_fluid` (water, rain, snow, wind, lightning, weather, gas, burning), `modules/fellow_world` (HLOD, streaming), `modules/fellow_animation` (motion matching), `modules/fellow_motion` (neural motion), `modules/fellow_editor` (editor only) |
+| FellowEngine's nodes | `modules/fellow_fluid` (water, rain, snow, wind, lightning, weather, gas, burning), `modules/fellow_world` (HLOD, streaming, terrain and its foliage), `modules/fellow_animation` (motion matching), `modules/fellow_motion` (neural motion), `modules/fellow_editor` (editor only) |
 | renderer work | `servers/rendering/renderer_rd/` (files and blocks marked `fellow` / `FellowEngine`), effects in `renderer_rd/effects/fellow_*`, settings in `servers/rendering/fellow_settings.{h,cpp}` |
 | Vulkan driver work | `drivers/vulkan/` (`FELLOW_VULKAN_PROFILE` in `fellow_vulkan_profile.*`) |
 | the class reference | `doc/classes/*.xml`, `modules/*/doc_classes/*.xml` |

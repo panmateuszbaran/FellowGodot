@@ -9,6 +9,29 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 57 — terrain and foliage (2026-11-06)
+
+- `FellowTerrain3D` (decision 0158, module `fellow_world`): a height field (an `Image` of metres) drawn with
+  continuous levels of detail — patches whose vertices morph onto the next coarser grid, reading a coarser mip as they
+  do: no cracks, no popping — as one MultiMesh the GPU culls patch by patch, written into a second hidden one when the
+  selection changes (TAA and FSR see a static ground). Up to 9 `FellowTerrainLayer` materials blended by two splat
+  maps and their heights, triplanar per layer; collision (height map shapes, the finest level's triangles); height,
+  normal and weight queries; a level-of-detail debug view; the editor's camera in the editor. Slice Lab's 1 km valley at
+  1 m (16 times its 4 m chunks' vertices near the camera) on the RTX at 1080p: GPU 3.36 → 3.59 ms (+0.23), the render
+  thread 0.16 ms shorter, the terrain's own main-thread time 17 µs a frame; no crack in any view of a 1 km or a 4 km
+  map, physics rays within 0.08 mm of `get_height()`.
+- `FellowTerrainFoliage` (decision 0159): plants and rocks scattered by the terrain over a layer, its slopes and
+  heights, in cells around the camera made on worker threads, each its own MultiMesh culled per instance by distance:
+  Slice Lab's trees and grass scattered by the terrain cost the same GPU time as placed by its script, the render thread
+  0.12 ms less.
+- Exact fixes found with the terrain: `FellowGasVolume3D` no longer copies the data of height map and concave shapes in
+  its box every step; the directional shadow cache ignores changes of instances that cast no shadows.
+- Slice Lab `--slice_terrain=node`, `--slice_foliage=node`; `bench/terrain_check.gd`; the image regression suite's
+  `terrain` scene.
+- After milestone 55 (decision 0156): the first snow's pipelines and particles shader and a relit burnable's mesh
+  readbacks moved to the nodes' setup — on the RTX the first snow's worst frame 51 → 10.1 ms, a relighting's 17-22 →
+  6-9 ms, 2 hitches in 5 minutes (both the GPU's fence).
+
 ## Milestone 56 — motion matching on uneven ground; mirrored and tagged clips (2026-11-06)
 
 - `FellowMotionMatcher3D.ground_adaptation` (decision 0157, off by default): rays under the root and each foot's heel

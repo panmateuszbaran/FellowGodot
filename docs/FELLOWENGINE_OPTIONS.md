@@ -499,6 +499,33 @@ data, a project's scenes and scripts checked, frame times measured, two renders 
 printed, an `AGENTS.md` written for a game project. No engine setting; `AGENTS.md` at the root for agents working on
 the engine. Decision 0152; `tools/fellow_agent/README.md`.
 
+## Terrain (milestone 57)
+
+A `FellowTerrain3D` node (module `fellow_world`) draws `heightmap` (an `Image` of heights in metres, `FORMAT_RF`, one
+texel a vertex `vertex_spacing` apart; `heightmap_from_image()` converts a grey image) with continuous levels of
+detail: a quadtree of patches of `patch_size` quads (16) whose vertices morph onto the next coarser grid before it
+takes over, the finest level to `lod_distance` (0: three times its node's size), each further level twice as far
+(`morph_ratio` 0.7: where the morph begins). The patches are one MultiMesh, written into a second hidden one when the
+selection changes and shown three drawn frames later (motion vectors of a static ground); FellowEngine's MultiMesh
+culling culls them one by one. Up to 9 `layers` (`FellowTerrainLayer`: albedo and normal textures every
+`texture_size` metres, `triplanar`, `albedo_color` in sRGB, roughness, `height_in_albedo_alpha`): layer 0 the base,
+`splat_map` and `splat_map_2` the weights of layers 1-4 and 5-8; `height_blend` (0.3), `macro_variation` (0.15).
+`collision_enabled` (on): height map shapes of `collision_region_size` cells (256), the finest level's triangles.
+`get_height()`, `get_normal()`, `get_layer_weights()`; `update_heightmap()` after editing the images in place;
+`debug_view` colours the levels of detail. FellowEngine's weather (wetness, snow cover) reaches it as any material. In
+the editor the levels follow the 3D view's camera. Nothing changes without the node. Decision 0158; bench
+`bench/terrain_check.gd`, Slice Lab `--slice_terrain=node`.
+
+Its `foliage` (`FellowTerrainFoliage`, decision 0159): a `mesh` scattered over a `layer` by `density` per square metre
+where its weight is 1 (none below `min_weight`), within `slope_min`/`slope_max` and `height_min`/`height_max`, scaled
+(`scale_min`, `scale_max`), turned (`random_yaw`), tilted (`align_to_normal`), sunk (`sink`), up to `range` from the
+camera in cells of `cell_size` (0: a quarter of the range), each cell made once on a worker thread
+(`foliage_cells_per_frame`, 8, started a frame) into a MultiMesh of its own whose instances the GPU culls by distance;
+`cast_shadows`, `seed`. Slice Lab `--slice_foliage=node`; `terrain_check.gd --foliage=1`.
+
+`FellowGasVolume3D` no longer reads the data of concave, height map and custom shapes in its box (not its obstacles),
+and the directional shadow cache ignores changes of instances that cast no shadows (both exact).
+
 ## Options that change the image (off by default)
 
 | setting | what it does | image cost | record |

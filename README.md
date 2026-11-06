@@ -7,7 +7,8 @@
 **FellowEngine is a fork of [Godot Engine](https://github.com/godotengine/godot) 4.7.2-stable** that makes the
 Forward+ renderer faster and adds real-time effects that stock Godot does not have: water with FFT waves, rain and wet
 surfaces, snow, lightning, wind with gusts and a weather controller that changes them all over time, GPU smoke and
-fire, wood that burns to char and ash, automatic HLOD, ray tracing and a set of post-processing effects.
+fire, wood that burns to char and ash, automatic HLOD, a terrain with scattered foliage, ray tracing and a set of
+post-processing effects.
 
 * **Faster with the same image.** With the default settings FellowEngine renders eight of the nine benchmark scenes
   16-54 % faster than stock Godot, the ninth 3-12 % (table below). The changes that are on by default are *exact*:
@@ -109,6 +110,7 @@ to −21 %. They are listed in the [options](docs/FELLOWENGINE_OPTIONS.md).
 | `FellowBurnable3D` | a mesh burns like wood in the gas's fire: voxels pyrolyse to char and glowing embers, the surface recedes, burns through and falls as a heap of ash and charcoal | drawing 0.35 ms (Burn Lab) |
 | `FellowHLOD3D` | automatic HLOD: repeated far meshes instanced and culled on the GPU, the rest merged per cell with LODs, optional octahedral impostors | City Lab: render thread −23 to −42 % |
 | `FellowWorldStreamer3D` | world streaming: a level in cells (`FellowStreamingCell3D`, each a PackedScene) loaded on worker threads and freed around the camera, a few a frame, the same images as the whole level | World Lab at 1080p: 289-612 MiB of video memory instead of 740 MiB with texture streaming (lavapipe) |
+| `FellowTerrain3D` | terrain: a height field with continuous levels of detail (patches morphing onto the next coarser grid, one MultiMesh culled patch by patch, motion vectors of a static ground), 9 layers blended by splat maps and their heights, triplanar, collision, height queries; `FellowTerrainFoliage` scatters plants and rocks over its layers around the camera | Slice Lab's 1 km valley at 1 m (16× its 4 m chunks' vertices near the camera): +0.26 ms of GPU at 1080p, the render thread unchanged; no crack in any view of a 4 km map |
 | `upscaling/fsr3` | AMD FSR 3.1 upscaler in Godot's FSR 2 scaling mode (built from the FidelityFX SDK's source on the RenderingDevice): less ghosting and flicker than FSR 2.2, a quality mode within about 0.5 dB of native TAA | FSR 2.2's cost (Bistro at 50 %: 2.72 ms, TAA 4.13 ms); in motion at 2× error −9 to −24 %, flicker −10 to −14 % against FSR 2.2 (lavapipe) |
 | `streaming/textures` | texture streaming: VRAM-compressed textures load only their small mips; the rest is loaded on worker threads as the cameras need it and released when they no longer do, within a budget; the same images once loaded | Streaming Lab at 1080p: 3-77 MiB of its 384 MiB of textures resident, video memory 377-457 instead of 667 MiB, the first frame 838 → 103 ms |
 | `raytracing/*` | hardware ray tracing (`VK_KHR_ray_query`): ambient occlusion, sun shadows, dynamic diffuse GI with probes, reflections | — |

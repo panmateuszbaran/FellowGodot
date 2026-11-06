@@ -1,6 +1,6 @@
 # FellowEngine — readiness for AAA production (assessment, 2026-11-04)
 
-Status: an assessment after milestone 44 (its rows updated through milestone 56), from the milestones' measurements (the RTX 5070 Ti Laptop and lavapipe) and
+Status: an assessment after milestone 44 (its rows updated through milestone 57), from the milestones' measurements (the RTX 5070 Ti Laptop and lavapipe) and
 what they did not cover. It is a judgement, not a measurement: where it says "not measured", nothing in the 44
 milestones measured it.
 
@@ -38,7 +38,7 @@ measured, but short of AAA scale or breadth. Gap: not addressed by FellowEngine 
 |---|---|---|---|
 | Frame time (render thread and GPU) | **Ready** (on its platform) | −15 to −54 % against stock in 8 of 9 scenes (`m41_f317_final`); parallel culling and recording, persistent instance data, shadow caches, GPU culling of MultiMesh instances, specialized colour passes, async compute; autotune per scene; bit-for-bit runs | measured on one laptop GPU at 1080p (1440p in milestone 1); Stress Lab (render-thread bound) −1.8 %, within the spread; no 4K, no AMD/Intel numbers |
 | Lighting and GI | **Ready / Partial** | ray-traced AO, sun shadows, DDGI (two cascades of probes), reflections (`raytracing/*`, milestone 16): all four +53-66 % GPU (Bistro exterior 4.07 → 6.45 ms); sky atmosphere, volumetric clouds with shadows | RT only through `VK_KHR_ray_query`; a device loss with DDGI and the cloud shadow map was worked around (double-buffered), its cause not found (milestone 33); no RT fallback chain tuned per GPU tier |
-| Environment and VFX | **Ready** (a strength) | FFT water with SSR over Hi-Z, shallow-water simulation, rain (puddles, ripples, wet and drying ground, shafts, showers, wind-driven, thin streaks), snow with tracks, ice and hoarfrost, slush, rainbows, wind for plants, water, gas and particles, lightning, a weather controller; GPU smoke and fire, burning objects; each measured (e.g. Rain Lab 0.36 ms, the wind +0.56 ms); in the editor (milestones 52-53) the nodes animate, ask only for the frames they need, have handles, say what stops them working, and come as ready-made setups | not combined at AAA scale (all systems in one large level); no terrain or foliage system of FellowEngine's (stock's MultiMesh) |
+| Environment and VFX | **Ready** (a strength) | FFT water with SSR over Hi-Z, shallow-water simulation, rain (puddles, ripples, wet and drying ground, shafts, showers, wind-driven, thin streaks), snow with tracks, ice and hoarfrost, slush, rainbows, wind for plants, water, gas and particles, lightning, a weather controller; GPU smoke and fire, burning objects; each measured (e.g. Rain Lab 0.36 ms, the wind +0.56 ms); in the editor (milestones 52-53) the nodes animate, ask only for the frames they need, have handles, say what stops them working, and come as ready-made setups | not combined at AAA scale (all systems in one large level; Slice Lab's 1 km valley, milestone 55, is the largest); terrain (`FellowTerrain3D`, milestone 57: continuous LOD, 9 blended layers, collision, scattered foliage) without sculpting or painting in the editor, streamed regions, holes or virtual texturing; foliage without distance fades or impostors |
 | Geometry scale | **Partial** | cluster culling of large surfaces, LOD of their parts (option), contribution culling, `FellowHLOD3D` (City Lab's 18 800 nodes in 14 proxies, render thread −26 %), impostors (option); Sponza's 12.8 M triangles in 6.2 ms | no virtualized geometry (Nanite-class), no mesh or LOD streaming; the largest scene 12.8 M triangles and 18 800 nodes; single-precision coordinates (Godot's double-precision builds not tested) |
 | Streaming and memory | **Partial** (milestones 45-46) | loading to the first frame 12-62 % faster (parallel, lazy shader creation; milestone 12); texture streaming (`streaming/textures`, opt-in): VRAM-compressed textures keep only the mips the cameras can see, loaded on worker threads within a budget — Streaming Lab at 1080p 3-77 MiB of 384 MiB resident; world streaming (`FellowWorldStreamer3D`): cells loaded on worker threads and freed around the camera — World Lab 289-612 MiB of video memory a view instead of 740 MiB, the same images (lavapipe); on the RTX (milestone 49) the same per-view residency, video memory 377-457 instead of 667 MiB, the first frame 838 → 103 ms, no frame-time cost | no baked proxies for unloaded cells (a level is split into cells from the editor since milestone 50), no mesh LOD streaming; DDS and uncompressed textures load whole; the streamers' reports are the only residency tooling; without a budget a flythrough's peak video memory is higher with texture streaming (its swaps' transient copies); Sponza not yet streamed on the RTX |
 | Shader compilation and stutter | **Partial** | pipelines created lazily and in parallel, the ubershader while a specialization compiles, a pipeline cache that no longer crashes at 2 GiB, frame pacing (worker counts, hot workers, presentation stalls); the nodes' shaders and kernels made once per session (milestone 53: a second water body 270 → 0.1 ms in the editor); hitches measured over an hour's play (milestone 55: a burning object compiling its pipelines when lit again or at its first ash — fixed; the slice now starts without a hitch, caches warm or off) | no offline PSO collection and pre-warming for shipping builds; a few unexplained hitches an hour |
@@ -106,7 +106,10 @@ measured, but short of AAA scale or breadth. Gap: not addressed by FellowEngine 
    together), hour-long play sessions, memory and hitch tracking, an automated perf farm (milestone 54: an image
    regression suite on lavapipe, the first standing check; milestone 55: Slice Lab, every system in one valley,
    played for an hour with frame times, hitches and memory recorded).
-7. **Middleware**: audio (Wwise/FMOD) and online services through plugins.
+7. **Open-world ground**: a terrain with continuous levels of detail, layered materials, collision and foliage
+   scattered over its layers (milestone 57: `FellowTerrain3D`, `FellowTerrainFoliage`); next sculpting and painting in
+   the editor, terrain regions streamed with the world's cells, holes, virtual texturing.
+8. **Middleware**: audio (Wwise/FMOD) and online services through plugins.
 
 The order agreed for the next milestones (2026-11-04): streaming (textures in milestone 45, then the world), upscaling
 and frame generation, animation, platforms (Godot's own exports, checked in emulated and containerised environments
@@ -116,11 +119,12 @@ generation wait for the GPU; platform checks without the hardware (49); the edit
 
 **The next order (2026-11-06)**, the owner's large-team and neural-upscaling items set aside: (1) an image regression
 suite run before each change (milestone 54: done); (2) a vertical slice — one large level with every system at once,
-played for an hour with frame times, hitches and memory recorded (milestone 55: done); (3) terrain and foliage; (4)
-pipeline pre-warming against first-use stutter (milestone 55 found and fixed the slice's); (5) animation: ground
-adaptation, tags, mirroring (milestone 56: done); (6) other GPUs (AMD, Intel, the Steam
-Deck) when the hardware is at hand. Consoles, FellowEngine's own audio and networking, and Nanite-class geometry are
-not on it.
+played for an hour with frame times, hitches and memory recorded (milestone 55: done); (3) terrain and foliage
+(milestone 57: the terrain node and its scattered foliage; editing tools next); (4) pipeline pre-warming against
+first-use stutter (milestones 55 and 57: the slice's fire, snow and foliage now compile when they are set up; Godot's
+own specializations compile in the background); (5) animation: ground adaptation, tags, mirroring (milestone 56: done);
+(6) other GPUs (AMD, Intel, the Steam Deck) when the hardware is at hand. Consoles, FellowEngine's own audio and
+networking, and Nanite-class geometry are not on it.
 
 **Out of scope by the owner's decision (2026-11-05).** FellowEngine is developed for its owner's own work, much of it
 with AI agents, not for a large team: a content pipeline for large teams (asset validation, cooking, DCC round-trips,
