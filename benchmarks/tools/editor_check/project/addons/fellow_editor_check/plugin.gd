@@ -65,6 +65,7 @@ func _run() -> void:
 	_check_animate_toggle()
 	await _check_warnings()
 	await _check_presets()
+	await _check_terrain_brush()
 	out["failures"] = failures
 	print("EDITOR_CHECK ", JSON.stringify(out))
 	get_tree().quit(0 if failures.is_empty() else 1)
@@ -603,3 +604,112 @@ func _check_monitors() -> void:
 		else:
 			_fail("no Performance monitor %s" % m)
 	out["monitors"] = values
+
+
+# Milestone 58: FellowTerrain3D's brushes in the 3D view (decision 0160). The terrain selected, its toolbar shown; a
+# stroke of the Raise tool dragged with the mouse, as a person's would be; paint strokes through the plugin's stroke()
+# (the first makes the splat map: the property both ways; the next writes a rectangle both ways); each undone and redone.
+func _check_terrain_brush() -> void:
+	EditorInterface.open_scene_from_path("res://idle/FellowTerrain3D.tscn")
+	await _frames(20)
+	var root := EditorInterface.get_edited_scene_root()
+	var terrain = root.get_node_or_null("Subject") if root else null
+	if terrain == null:
+		_fail("terrain brush: idle/FellowTerrain3D.tscn is not open")
+		return
+	var plugin = null
+	for c in EditorInterface.get_base_control().get_parent().get_children():
+		if c.get_class() == "FellowTerrainEditorPlugin":
+			plugin = c
+	var selection := EditorInterface.get_selection()
+	selection.clear()
+	selection.add_node(terrain)
+	await _frames(10)
+	var toolbar: Control = EditorInterface.get_base_control().find_child("FellowTerrainToolbar", true, false)
+	if plugin == null or toolbar == null:
+		_fail("terrain brush: no plugin (%s) or toolbar (%s)" % [plugin, toolbar])
+		return
+	var results := {"toolbar_visible": toolbar.is_visible_in_tree()}
+	if not toolbar.is_visible_in_tree():
+		_fail("terrain brush: the toolbar is hidden with a terrain selected")
+	var ur := EditorInterface.get_editor_undo_redo()
+	var history: UndoRedo = ur.get_history_undo_redo(ur.get_object_history_id(terrain))
+
+	# 1. Raise, dragged with the mouse across the middle.
+	(toolbar.get_node("Raise") as Button).button_pressed = true
+	(toolbar.get_node("Size") as Range).value = 12.0
+	(toolbar.get_node("Strength") as Range).value = 1.0
+	results["tool"] = plugin.get_tool()
+	var vp := EditorInterface.get_editor_viewport_3d(0)
+	var cam := vp.get_camera_3d()
+	cam.global_transform = Transform3D(Basis(), Vector3(0, 45, 35)).looking_at(Vector3.ZERO, Vector3.UP)
+	await _frames(5)
+	var heights_before: PackedByteArray = terrain.heightmap.get_data()
+	var h0: float = terrain.get_height(Vector3.ZERO)
+	var a := _screen_of(vp, cam, Vector3(-6, terrain.get_height(Vector3(-6, 0, 0)), 0))
+	var b := _screen_of(vp, cam, Vector3(6, terrain.get_height(Vector3(6, 0, 0)), 0))
+	await _mouse(a, -1, false)
+	await _mouse(a, 1, true)
+	for i in range(1, 9):
+		await _mouse(a.lerp(b, i / 8.0), -1, true)
+	await _mouse(b, 0, false)
+	var h1: float = terrain.get_height(Vector3.ZERO)
+	var heights_after: PackedByteArray = terrain.heightmap.get_data()
+	results["raise"] = {"before": h0, "after": h1}
+	if not h1 > h0 + 0.5:
+		_fail("terrain brush: the Raise stroke moved the middle from %.3f to %.3f m" % [h0, h1])
+	history.undo()
+	await _frames(2)
+	results["raise"]["undone"] = terrain.get_height(Vector3.ZERO)
+	if terrain.heightmap.get_data() != heights_before:
+		_fail("terrain brush: undoing the Raise stroke left other heights")
+	history.redo()
+	await _frames(2)
+	if terrain.heightmap.get_data() != heights_after:
+		_fail("terrain brush: redoing the Raise stroke made other heights")
+
+	# 2. Paint layer 1 (no splat map yet: the stroke makes it).
+	plugin.set_tool(4)
+	(toolbar.get_node("Layer") as OptionButton).select(1)
+	var line := PackedVector3Array()
+	for i in 11:
+		line.append(Vector3(-5 + i, 0, 8))
+	plugin.stroke(line)
+	var w: float = terrain.get_layer_weights(Vector3(0, 0, 8))[1]
+	results["paint"] = {"weight": w, "made_map": terrain.splat_map != null}
+	if not w > 0.8:
+		_fail("terrain brush: painting layer 1 left its weight at %.3f" % w)
+	history.undo()
+	await _frames(2)
+	results["paint"]["undone_map"] = terrain.splat_map != null
+	if terrain.splat_map != null:
+		_fail("terrain brush: undoing the first paint stroke left a splat map")
+	history.redo()
+	await _frames(2)
+	var w_redo: float = terrain.get_layer_weights(Vector3(0, 0, 8))[1]
+	if absf(w_redo - w) > 0.01:
+		_fail("terrain brush: redoing the first paint stroke gave the weight %.3f, not %.3f" % [w_redo, w])
+
+	# 3. A second paint stroke elsewhere: a rectangle of the same image both ways.
+	var map: Image = terrain.splat_map
+	var splat_before: PackedByteArray = map.get_data()
+	var line2 := PackedVector3Array()
+	for i in 9:
+		line2.append(Vector3(-4 + i, 0, -10))
+	plugin.stroke(line2)
+	var w2: float = terrain.get_layer_weights(Vector3(0, 0, -10))[1]
+	var splat_after: PackedByteArray = map.get_data()
+	history.undo()
+	await _frames(2)
+	results["paint2"] = {"weight": w2, "undone_weight": terrain.get_layer_weights(Vector3(0, 0, -10))[1],
+			"same_image": terrain.splat_map == map}
+	if not w2 > 0.8 or terrain.splat_map != map or map.get_data() != splat_before:
+		_fail("terrain brush: the second paint stroke and its undo: %s" % results["paint2"])
+	history.redo()
+	await _frames(2)
+	if map.get_data() != splat_after:
+		_fail("terrain brush: redoing the second paint stroke made other weights")
+	plugin.set_tool(-1)
+	results["tool_after"] = plugin.get_tool()
+	out["terrain_brush"] = results
+	selection.clear()

@@ -9,6 +9,21 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 58 — sculpting and painting the terrain (2026-11-06)
+
+- `FellowTerrain3D.sculpt()` (raise, lower, smooth, flatten) and `paint()` (a layer's weight, the weights still adding
+  up to 1; the splat maps made when there are none), decision 0160: only the region under the brush is updated — the
+  queries at once, the textures and collision shapes once at the frame's end, the foliage over it scattered again —
+  and the result is the terrain a rebuild from the edited images makes, every texture and mip bit for bit (lavapipe,
+  read back). `blit_heightmap_region()`, `blit_splat_region()` write rectangles back (undo, stamps). __F359_CHANGELOG__
+- In the editor: a selected terrain's toolbar in the 3D view (Raise, Lower, Smooth, Flatten, Paint, the layer, the
+  brush's size and strength), the brush drawn on the ground, one undoable action a stroke; the FellowEngine menu's
+  "Add Terrain (256 x 256 m, to sculpt)".
+- Fixes found with it: a data rebuild of a drawn terrain freed the patches' mesh under them (errors, nothing drawn);
+  the foliage cells' tasks now read their own copies of the heights and weights, so edits never race them and a
+  rebuild no longer waits for them (a first paint stroke over grown foliage: 3.6 s → 9 ms on lavapipe).
+- `bench/terrain_edit_check.gd`; the editor check's terrain brush and setup.
+
 ## Milestone 57 — terrain and foliage (2026-11-06)
 
 - `FellowTerrain3D` (decision 0158, module `fellow_world`): a height field (an `Image` of metres) drawn with

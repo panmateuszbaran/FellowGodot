@@ -523,6 +523,17 @@ camera in cells of `cell_size` (0: a quarter of the range), each cell made once 
 (`foliage_cells_per_frame`, 8, started a frame) into a MultiMesh of its own whose instances the GPU culls by distance;
 `cast_shadows`, `seed`. Slice Lab `--slice_foliage=node`; `terrain_check.gd --foliage=1`.
 
+Editing (milestone 58, decision 0160): `sculpt(global_position, radius, strength, mode, target_height)` — `SCULPT_RAISE`
+and `SCULPT_LOWER` by `strength` metres at the brush's centre, `SCULPT_SMOOTH` and `SCULPT_FLATTEN` (towards
+`target_height`) by `strength` of the way — and `paint(global_position, radius, layer, strength)` (the weights still add
+up to 1; the splat maps are made, RGBA8, when there are none) change only the region under the brush: the queries at
+once, the textures and collision shapes at the frame's end (once for the frame's edits), the foliage over it scattered
+again; the result is the terrain a rebuild from the edited images makes, texel for texel. `blit_heightmap_region()` and
+`blit_splat_region()` write a rectangle back (undo; stamps). In the editor, a selected terrain's toolbar in the 3D view
+(Raise, Lower, Smooth, Flatten, Paint; the layer, the brush's size and strength; Shift inverts Raise and Lower) sculpts
+and paints with the mouse, one undoable action a stroke. Bench `bench/terrain_edit_check.gd`; the editor check's
+terrain brush.
+
 `FellowGasVolume3D` no longer reads the data of concave, height map and custom shapes in its box (not its obstacles),
 and the directional shadow cache ignores changes of instances that cast no shadows (both exact).
 

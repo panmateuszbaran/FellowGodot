@@ -16,7 +16,11 @@ copies `project/` to `<out>/project`, opens it in the editor, and lets its plugi
 * `split.tscn`: Project > Tools > Split into Streaming Cells run through its menu item and dialog on 40 boxes; the
   cells, their scenes, their owner, what is left in the level; the cells' content shown in the editor; the saved
   level (no box in it);
-* the Performance monitors.
+* the Performance monitors;
+* milestone 58: the terrain's brush on `idle/FellowTerrain3D.tscn` — its toolbar shown with the terrain selected, a
+  Raise stroke dragged with the mouse, paint strokes (the first making the splat map), each undone and redone (the
+  images exactly as before and after); the FellowEngine menu's setups, the terrain's among them, added without a
+  configuration warning and undone.
 
 It prints `EDITOR_CHECK {json}` and quits; then `stream_back.gd` loads the saved level in a game and streams it back
 (`STREAM_BACK {json}`: every box where it was). `editor_check.json` in `--out` has both, the editor's errors and the

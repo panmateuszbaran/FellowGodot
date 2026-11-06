@@ -30,6 +30,7 @@
 
 #include "fellow_editor_plugin.h"
 
+#include "core/io/image.h"
 #include "core/io/resource_importer.h"
 #include "core/io/resource_saver.h"
 #include "core/math/geometry_3d.h"
@@ -722,6 +723,23 @@ Node3D *FellowEditorPlugin::make_preset(int p_preset, const Node *p_root) {
 			ERR_FAIL_NULL_V(top, nullptr);
 			_fellow_make("FellowWater3D", "Surface", top, Dictionary{ { "extent", Vector2(8, 8) }, { "simulation_path", NodePath("..") } });
 		} break;
+		case PRESET_TERRAIN: {
+			// A flat 256 m square at 1 m, centred on its parent, a grass and a rock layer: to sculpt and paint with the
+			// terrain's toolbar (milestone 58).
+			Ref<Image> heights = Image::create_empty(257, 257, false, Image::FORMAT_RF);
+			heights->fill(Color(0, 0, 0));
+			Array layers;
+			const Color colors[2] = { Color(0.3, 0.42, 0.2), Color(0.45, 0.43, 0.4) };
+			for (int i = 0; i < 2; i++) {
+				Ref<Resource> layer = Object::cast_to<Resource>(ClassDB::instantiate("FellowTerrainLayer"));
+				ERR_FAIL_COND_V(layer.is_null(), nullptr);
+				layer->set_name(i == 0 ? "Grass" : "Rock");
+				layer->set("albedo_color", colors[i]);
+				layer->set("triplanar", i == 1);
+				layers.push_back(layer);
+			}
+			top = Object::cast_to<Node3D>(_fellow_make("FellowTerrain3D", "Terrain", nullptr, Dictionary{ { "position", Vector3(-128, 0, -128) }, { "heightmap", heights }, { "layers", layers } }));
+		} break;
 		default:
 			break;
 	}
@@ -835,6 +853,8 @@ FellowEditorPlugin::FellowEditorPlugin() {
 	popup->add_item(TTR("Add Ocean"), PRESET_OCEAN);
 	popup->add_item(TTR("Add Lake (20 x 20 m)"), PRESET_LAKE);
 	popup->add_item(TTR("Add Flowing Pool (8 x 8 m)"), PRESET_POOL);
+	popup->add_separator();
+	popup->add_item(TTR("Add Terrain (256 x 256 m, to sculpt)"), PRESET_TERRAIN);
 	popup->connect(SceneStringName(id_pressed), callable_mp(this, &FellowEditorPlugin::_add_preset));
 }
 

@@ -44,6 +44,8 @@
 
 #include "modules/fellow_fluid/fellow_shared_shaders.h"
 
+#include <type_traits>
+
 #ifdef TOOLS_ENABLED
 #include "editor/scene/3d/node_3d_editor_plugin.h"
 #endif
@@ -590,9 +592,39 @@ void FellowTerrain3D::_build_mesh() {
 	}
 }
 
+void FellowTerrain3D::_build_splat(int p_map) {
+	Ref<Image> s = p_map == 0 ? splat_map : splat_map_2;
+	Ref<ImageTexture> &t = p_map == 0 ? splat_texture : splat_texture_2;
+	if (s.is_valid() && !s->is_empty()) {
+		Ref<Image> c = s->duplicate();
+		if (c->is_compressed()) {
+			c->decompress();
+		}
+		c->convert(Image::FORMAT_RGBA8);
+		// The foliage's copy (the first mip): read by its tasks.
+		splat_cpu_size[p_map] = Vector2i(c->get_width(), c->get_height());
+		splat_cpu[p_map].resize(c->get_width() * c->get_height() * 4);
+		memcpy(splat_cpu[p_map].ptr(), c->get_data().ptr(), splat_cpu[p_map].size());
+		if (!c->has_mipmaps()) {
+			c->generate_mipmaps();
+		}
+		t = ImageTexture::create_from_image(c);
+		splat_image[p_map] = c;
+	} else {
+		Ref<Image> c = Image::create_empty(1, 1, false, Image::FORMAT_RGBA8);
+		c->fill(Color(0, 0, 0, 0));
+		t = ImageTexture::create_from_image(c);
+		splat_cpu[p_map].clear();
+		splat_cpu_size[p_map] = Vector2i();
+		splat_image[p_map].unref();
+	}
+}
+
 void FellowTerrain3D::_rebuild_data() {
 	data_dirty = false;
-	_clear_foliage(); // its tasks read the data
+	edit_heights = Rect2i(); // a rebuild makes everything again
+	edit_splat[0] = edit_splat[1] = false;
+	_clear_foliage(false); // scattered again over the new data
 	foliage_dirty = true;
 	heights.clear();
 	map_w = 0;
@@ -628,42 +660,28 @@ void FellowTerrain3D::_rebuild_data() {
 		Vector<uint8_t> hdata;
 		hdata.resize(sizeof(float) * map_w * map_h);
 		memcpy(hdata.ptrw(), heights.ptr(), hdata.size());
-		Ref<Image> himg = Image::create_from_data(map_w, map_h, false, Image::FORMAT_RF, hdata);
-		himg->generate_mipmaps();
-		height_texture = ImageTexture::create_from_image(himg);
-		Ref<Image> nimg;
-		_build_normals(nimg);
-		normal_texture = ImageTexture::create_from_image(nimg);
+		height_image = Image::create_from_data(map_w, map_h, false, Image::FORMAT_RF, hdata);
+		height_image->generate_mipmaps();
+		height_texture = ImageTexture::create_from_image(height_image);
+		_build_normals(normal_image);
+		normal_texture = ImageTexture::create_from_image(normal_image);
 	} else {
 		height_texture.unref();
 		normal_texture.unref();
+		height_image.unref();
+		normal_image.unref();
 	}
 	for (int i = 0; i < 2; i++) {
-		Ref<Image> s = i == 0 ? splat_map : splat_map_2;
-		Ref<ImageTexture> &t = i == 0 ? splat_texture : splat_texture_2;
-		if (s.is_valid() && !s->is_empty()) {
-			Ref<Image> c = s->duplicate();
-			if (c->is_compressed()) {
-				c->decompress();
-			}
-			c->convert(Image::FORMAT_RGBA8);
-			// The foliage's copy (the first mip): read by its tasks.
-			splat_cpu_size[i] = Vector2i(c->get_width(), c->get_height());
-			splat_cpu[i].resize(c->get_width() * c->get_height() * 4);
-			memcpy(splat_cpu[i].ptr(), c->get_data().ptr(), splat_cpu[i].size());
-			if (!c->has_mipmaps()) {
-				c->generate_mipmaps();
-			}
-			t = ImageTexture::create_from_image(c);
-		} else {
-			Ref<Image> c = Image::create_empty(1, 1, false, Image::FORMAT_RGBA8);
-			c->fill(Color(0, 0, 0, 0));
-			t = ImageTexture::create_from_image(c);
-			splat_cpu[i].clear();
-			splat_cpu_size[i] = Vector2i();
-		}
+		_build_splat(i);
 	}
 	_build_mesh();
+	if (set.instance[0].is_valid()) {
+		// The instances' MultiMeshes onto the new mesh (the old one is freed with its last reference).
+		RenderingServer *rs = RenderingServer::get_singleton();
+		for (int i = 0; i < 2; i++) {
+			rs->multimesh_set_mesh(set.multimesh[i], patch_mesh->get_rid());
+		}
+	}
 	material_dirty = true;
 	set.selection_valid = false;
 	if (is_inside_tree()) {
@@ -1151,15 +1169,122 @@ float FellowTerrain3D::_layer_weight_local(int p_layer, float p_x, float p_z) co
 	return sample((p_layer - 1) / 4, (p_layer - 1) % 4);
 }
 
+// The cell's copies of the heights and the splat maps (the same arithmetic as _height_local() and
+// _layer_weight_local() over the whole maps: the same instances).
+float FellowTerrain3D::_cell_height(const FoliageCell &p_cell, float p_x, float p_z) {
+	const float fx = p_x / p_cell.spacing;
+	const float fz = p_z / p_cell.spacing;
+	if (p_cell.map_w < 2 || fx < 0.0f || fz < 0.0f || fx > float(p_cell.map_w - 1) || fz > float(p_cell.map_h - 1)) {
+		return Math::NaN;
+	}
+	const int x = MIN(int(fx), p_cell.map_w - 2);
+	const int z = MIN(int(fz), p_cell.map_h - 2);
+	const float tx = fx - x;
+	const float tz = fz - z;
+	const Rect2i &r = p_cell.heights_rect;
+	const int lx = CLAMP(x - r.position.x, 0, r.size.x - 2);
+	const int lz = CLAMP(z - r.position.y, 0, r.size.y - 2);
+	const float *h = p_cell.heights.ptr();
+	const float a = h[lz * r.size.x + lx];
+	const float b = h[lz * r.size.x + lx + 1];
+	const float c = h[(lz + 1) * r.size.x + lx];
+	const float d = h[(lz + 1) * r.size.x + lx + 1];
+	if (tx + tz <= 1.0f) {
+		return a + (b - a) * tx + (c - a) * tz;
+	}
+	return d + (c - d) * (1.0f - tx) + (b - d) * (1.0f - tz);
+}
+
+float FellowTerrain3D::_cell_weight(const FoliageCell &p_cell, int p_layer, float p_x, float p_z) {
+	const float u = (p_x / p_cell.spacing + 0.5f) / float(MAX(1, p_cell.map_w));
+	const float v = (p_z / p_cell.spacing + 0.5f) / float(MAX(1, p_cell.map_h));
+	auto sample = [&](int p_map, int p_channel) -> float {
+		if (p_cell.splat[p_map].is_empty()) {
+			return 0.0f;
+		}
+		const Vector2i sz = p_cell.splat_size[p_map];
+		const Rect2i &r = p_cell.splat_rect[p_map];
+		const float fx = CLAMP(u * sz.x - 0.5f, 0.0f, float(sz.x - 1));
+		const float fz = CLAMP(v * sz.y - 0.5f, 0.0f, float(sz.y - 1));
+		const int x0 = int(fx);
+		const int z0 = int(fz);
+		const int x1 = MIN(x0 + 1, sz.x - 1);
+		const int z1 = MIN(z0 + 1, sz.y - 1);
+		const float tx = fx - x0;
+		const float tz = fz - z0;
+		const int lx0 = CLAMP(x0 - r.position.x, 0, r.size.x - 1);
+		const int lx1 = CLAMP(x1 - r.position.x, 0, r.size.x - 1);
+		const int lz0 = CLAMP(z0 - r.position.y, 0, r.size.y - 1);
+		const int lz1 = CLAMP(z1 - r.position.y, 0, r.size.y - 1);
+		const uint8_t *d = p_cell.splat[p_map].ptr();
+		const float a = d[(lz0 * r.size.x + lx0) * 4 + p_channel];
+		const float b = d[(lz0 * r.size.x + lx1) * 4 + p_channel];
+		const float c = d[(lz1 * r.size.x + lx0) * 4 + p_channel];
+		const float e = d[(lz1 * r.size.x + lx1) * 4 + p_channel];
+		return Math::lerp(Math::lerp(a, b, tx), Math::lerp(c, e, tx), tz) * (1.0f / 255.0f);
+	};
+	if (p_layer == 0) {
+		float sum = 0.0f;
+		for (int m = 0; m < 2; m++) {
+			for (int ch = 0; ch < 4; ch++) {
+				sum += sample(m, ch);
+			}
+		}
+		return MAX(0.0f, 1.0f - sum);
+	}
+	return sample((p_layer - 1) / 4, (p_layer - 1) % 4);
+}
+
+void FellowTerrain3D::_copy_foliage_data(FoliageCell *p_cell) const {
+	FoliageCell &c = *p_cell;
+	c.k = foliage_kinds[c.kind];
+	c.map_w = map_w;
+	c.map_h = map_h;
+	c.spacing = vertex_spacing;
+	// The cell's square (its points lie in it, their neighbours a texel around), two texels more on each side.
+	const float cs = c.k.cell;
+	const float x0 = c.cx * cs;
+	const float z0 = c.cz * cs;
+	{
+		const Point2i a(int(Math::floor(x0 / vertex_spacing)) - 2, int(Math::floor(z0 / vertex_spacing)) - 2);
+		const Point2i b(int(Math::ceil((x0 + cs) / vertex_spacing)) + 3, int(Math::ceil((z0 + cs) / vertex_spacing)) + 3);
+		const Rect2i r = Rect2i(a, b - a).intersection(Rect2i(0, 0, map_w, map_h));
+		c.heights_rect = r;
+		c.heights.resize(MAX(0, r.size.x * r.size.y));
+		for (int z = 0; z < r.size.y; z++) {
+			memcpy(c.heights.ptr() + z * r.size.x, heights.ptr() + (r.position.y + z) * map_w + r.position.x, sizeof(float) * r.size.x);
+		}
+	}
+	for (int m = 0; m < 2; m++) {
+		c.splat_size[m] = splat_cpu_size[m];
+		c.splat[m].clear();
+		if (splat_cpu[m].is_empty()) {
+			continue;
+		}
+		// The texels the weights are sampled between (as _cell_weight() maps a point), two more on each side.
+		const Vector2i sz = splat_cpu_size[m];
+		auto texel = [&](float p_metres, int p_texels, int p_map) -> float {
+			return (p_metres / vertex_spacing + 0.5f) / float(MAX(1, p_map)) * p_texels - 0.5f;
+		};
+		const Point2i a(int(Math::floor(texel(x0, sz.x, map_w))) - 2, int(Math::floor(texel(z0, sz.y, map_h))) - 2);
+		const Point2i b(int(Math::ceil(texel(x0 + cs, sz.x, map_w))) + 3, int(Math::ceil(texel(z0 + cs, sz.y, map_h))) + 3);
+		const Rect2i r = Rect2i(a, b - a).intersection(Rect2i(Point2i(), sz));
+		c.splat_rect[m] = r;
+		c.splat[m].resize(MAX(0, r.size.x * r.size.y * 4));
+		for (int z = 0; z < r.size.y; z++) {
+			memcpy(c.splat[m].ptr() + z * r.size.x * 4, splat_cpu[m].ptr() + ((r.position.y + z) * sz.x + r.position.x) * 4, r.size.x * 4);
+		}
+	}
+}
+
 void FellowTerrain3D::_generate_foliage_cell(void *p_cell) {
 	FoliageCell *cell = static_cast<FoliageCell *>(p_cell);
-	const FellowTerrain3D *t = cell->terrain;
-	const FoliageKind &k = t->foliage_kinds[cell->kind];
-	const float ex = float(t->map_w - 1) * t->vertex_spacing;
-	const float ez = float(t->map_h - 1) * t->vertex_spacing;
+	const FoliageKind &k = cell->k;
+	const float ex = float(cell->map_w - 1) * cell->spacing;
+	const float ez = float(cell->map_h - 1) * cell->spacing;
 	const int side = MAX(1, int(Math::ceil(k.cell * Math::sqrt(k.density))));
 	const float step = k.cell / float(side);
-	const float e = t->vertex_spacing;
+	const float e = cell->spacing;
 	LocalVector<float> out;
 	out.reserve(side * side * 6);
 	int count = 0;
@@ -1175,7 +1300,7 @@ void FellowTerrain3D::_generate_foliage_cell(void *p_cell) {
 			if (x < 0.0f || z < 0.0f || x > ex || z > ez) {
 				continue;
 			}
-			const float w = t->_layer_weight_local(k.layer, x, z);
+			const float w = _cell_weight(*cell, k.layer, x, z);
 			if (w < k.min_weight) {
 				continue;
 			}
@@ -1183,11 +1308,11 @@ void FellowTerrain3D::_generate_foliage_cell(void *p_cell) {
 			if (_foliage_u01(h2) > (w - k.min_weight) / MAX(1e-4f, 1.0f - k.min_weight) && w < 0.9999f) {
 				continue;
 			}
-			const float y = t->_height_local(x, z);
-			const float hl = t->_height_local(MAX(0.0f, x - e), z);
-			const float hr = t->_height_local(MIN(ex, x + e), z);
-			const float hd = t->_height_local(x, MAX(0.0f, z - e));
-			const float hu = t->_height_local(x, MIN(ez, z + e));
+			const float y = _cell_height(*cell, x, z);
+			const float hl = _cell_height(*cell, MAX(0.0f, x - e), z);
+			const float hr = _cell_height(*cell, MIN(ex, x + e), z);
+			const float hd = _cell_height(*cell, x, MAX(0.0f, z - e));
+			const float hu = _cell_height(*cell, x, MIN(ez, z + e));
 			const Vector3 n = Vector3((hl - hr) / (2.0f * e), 1.0f, (hd - hu) / (2.0f * e)).normalized();
 			if (n.y > k.cos_slope_min + 1e-6f || n.y < k.cos_slope_max - 1e-6f || y < k.height_min || y > k.height_max) {
 				continue;
@@ -1217,6 +1342,9 @@ void FellowTerrain3D::_generate_foliage_cell(void *p_cell) {
 		memcpy(cell->buffer.ptrw(), out.ptr(), out.size() * sizeof(float));
 	}
 	cell->count = count;
+	cell->heights.reset(); // the copies are done with
+	cell->splat[0].reset();
+	cell->splat[1].reset();
 }
 
 void FellowTerrain3D::_foliage_changed() {
@@ -1276,16 +1404,24 @@ void FellowTerrain3D::_free_foliage_cell(FoliageCell *p_cell) {
 	memdelete(p_cell);
 }
 
-void FellowTerrain3D::_clear_foliage() {
-	// (Waits for running tasks: only when the data or the kinds change, or the terrain leaves the world.)
+void FellowTerrain3D::_clear_foliage(bool p_wait) {
+	// The cells' tasks read their own copies: when the data or the kinds change, a cell whose task has not run yet is
+	// retired (freed once it has); only leaving the world waits for them.
 	for (KeyValue<uint64_t, FoliageCell *> &kv : foliage_cells) {
-		_free_foliage_cell(kv.value);
+		FoliageCell *cell = kv.value;
+		if (!p_wait && cell->task != WorkerThreadPool::INVALID_TASK_ID && !WorkerThreadPool::get_singleton()->is_task_completed(cell->task)) {
+			foliage_retired.push_back(cell);
+		} else {
+			_free_foliage_cell(cell);
+		}
 	}
 	foliage_cells.clear();
-	for (FoliageCell *cell : foliage_retired) {
-		_free_foliage_cell(cell);
+	if (p_wait) {
+		for (FoliageCell *cell : foliage_retired) {
+			_free_foliage_cell(cell);
+		}
+		foliage_retired.clear();
 	}
-	foliage_retired.clear();
 	RenderingServer *rs = RenderingServer::get_singleton();
 	for (const RID &rid : foliage_warm) {
 		rs->free_rid(rid);
@@ -1321,7 +1457,7 @@ void FellowTerrain3D::_make_foliage_cell_visible(FoliageCell *p_cell) {
 
 void FellowTerrain3D::_process_foliage(const Vector3 &p_camera) {
 	if (foliage_dirty) {
-		_clear_foliage();
+		_clear_foliage(false);
 		_update_foliage_kinds();
 		foliage_dirty = false;
 	}
@@ -1358,10 +1494,10 @@ void FellowTerrain3D::_process_foliage(const Vector3 &p_camera) {
 						continue; // next frame
 					}
 					cell = memnew(FoliageCell);
-					cell->terrain = this;
 					cell->kind = ki;
 					cell->cx = cx;
 					cell->cz = cz;
+					_copy_foliage_data(cell);
 					cell->task = WorkerThreadPool::get_singleton()->add_native_task(&FellowTerrain3D::_generate_foliage_cell, cell, false, SNAME("FellowTerrain3D foliage"));
 					foliage_cells.insert(key, cell);
 					launched++;
@@ -1432,6 +1568,475 @@ void FellowTerrain3D::set_foliage(const TypedArray<FellowTerrainFoliage> &p_foli
 
 void FellowTerrain3D::set_foliage_cells_per_frame(int p_cells) {
 	foliage_cells_per_frame = CLAMP(p_cells, 1, 256);
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Editing (decision 0160): brushes over the heights and the splat maps, and the update of only what they touched — the
+// heights' CPU copy, the levels' bounds, the normals, the textures (their mips again), the collision shapes and the
+// foliage cells over the region.
+
+// The mips over a region of the first, as Image::generate_mipmaps() makes them (the same 2 × 2 box, the same rounding):
+// an edited texture is the one a rebuild would make.
+template <typename T, int CC>
+static void _terrain_mips_region(const Ref<Image> &p_image, const Rect2i &p_rect) {
+	const int count = p_image->get_mipmap_count();
+	uint8_t *base = p_image->ptrw();
+	int w = p_image->get_width();
+	int h = p_image->get_height();
+	Point2i a = p_rect.position;
+	Point2i b = p_rect.position + p_rect.size - Point2i(1, 1);
+	for (int m = 1; m <= count; m++) {
+		const int dw = MAX(w >> 1, 1);
+		const int dh = MAX(h >> 1, 1);
+		const int rs = w == 1 ? 0 : 1;
+		const int ds = h == 1 ? 0 : w;
+		const T *src = reinterpret_cast<const T *>(base + p_image->get_mipmap_offset(m - 1));
+		T *dst = reinterpret_cast<T *>(base + p_image->get_mipmap_offset(m));
+		a = Point2i(MIN(a.x >> 1, dw - 1), MIN(a.y >> 1, dh - 1));
+		b = Point2i(MIN(b.x >> 1, dw - 1), MIN(b.y >> 1, dh - 1));
+		for (int y = a.y; y <= b.y; y++) {
+			for (int x = a.x; x <= b.x; x++) {
+				const T *up = src + (y * 2 * ds + x * 2 * rs) * CC;
+				const T *down = up + ds * CC;
+				T *out = dst + (y * dw + x) * CC;
+				for (int c = 0; c < CC; c++) {
+					if constexpr (std::is_same_v<T, float>) {
+						out[c] = (up[c] + up[c + rs * CC] + down[c] + down[c + rs * CC]) * 0.25f;
+					} else {
+						out[c] = T((up[c] + up[c + rs * CC] + down[c] + down[c + rs * CC] + 2) >> 2);
+					}
+				}
+			}
+		}
+		w = dw;
+		h = dh;
+	}
+}
+
+void FellowTerrain3D::_drop_foliage_in(const Rect2 &p_local) {
+	LocalVector<uint64_t> dropped;
+	for (KeyValue<uint64_t, FoliageCell *> &kv : foliage_cells) {
+		const FoliageCell *c = kv.value;
+		const float cs = foliage_kinds[c->kind].cell;
+		if (Rect2(c->cx * cs, c->cz * cs, cs, cs).intersects(p_local)) {
+			dropped.push_back(kv.key);
+		}
+	}
+	for (const uint64_t key : dropped) {
+		FoliageCell *cell = foliage_cells[key];
+		foliage_cells.erase(key);
+		if (cell->task != WorkerThreadPool::INVALID_TASK_ID && !WorkerThreadPool::get_singleton()->is_task_completed(cell->task)) {
+			foliage_retired.push_back(cell);
+		} else {
+			_free_foliage_cell(cell);
+		}
+	}
+}
+
+void FellowTerrain3D::_update_heights_region(const Rect2i &p_rect) {
+	const Rect2i r = p_rect.intersection(Rect2i(0, 0, map_w, map_h));
+	if (r.size.x <= 0 || r.size.y <= 0 || heightmap.is_null() || heightmap->get_format() != Image::FORMAT_RF) {
+		return;
+	}
+	// The CPU copy; its range only widens (the boxes stay bounds).
+	const float *src = reinterpret_cast<const float *>(heightmap->ptr());
+	bool widened = false;
+	for (int z = r.position.y; z < r.position.y + r.size.y; z++) {
+		for (int x = r.position.x; x < r.position.x + r.size.x; x++) {
+			const float v = src[z * map_w + x];
+			heights[z * map_w + x] = v;
+			if (v < height_min || v > height_max) {
+				height_min = MIN(height_min, v);
+				height_max = MAX(height_max, v);
+				widened = true;
+			}
+		}
+	}
+	if (widened && patch_mesh.is_valid()) {
+		patch_mesh->set_custom_aabb(AABB(Vector3(0, height_min - 1.0f, 0), Vector3(patch_size, height_max - height_min + 2.0f, patch_size)));
+		if (set.shown >= 0) {
+			set.patches[set.shown].clear(); // written again (the MultiMesh's bounds with the mesh's)
+		}
+	}
+	// The levels' bounds: the blocks over the region (and their neighbours, whose edges it shares), then their parents.
+	if (!minmax.is_empty()) {
+		const int p = patch_size;
+		Vector2i b0(MAX(0, (r.position.x - 1) / p), MAX(0, (r.position.y - 1) / p));
+		Vector2i b1(MIN(minmax_size[0].x - 1, (r.position.x + r.size.x) / p), MIN(minmax_size[0].y - 1, (r.position.y + r.size.y) / p));
+		for (int bz = b0.y; bz <= b1.y; bz++) {
+			for (int bx = b0.x; bx <= b1.x; bx++) {
+				float lo = 1e30f;
+				float hi = -1e30f;
+				for (int z = bz * p; z <= MIN(map_h - 1, (bz + 1) * p); z++) {
+					for (int x = bx * p; x <= MIN(map_w - 1, (bx + 1) * p); x++) {
+						lo = MIN(lo, heights[z * map_w + x]);
+						hi = MAX(hi, heights[z * map_w + x]);
+					}
+				}
+				minmax[0][bz * minmax_size[0].x + bx] = Vector2(lo, hi);
+			}
+		}
+		for (uint32_t k = 1; k < minmax.size(); k++) {
+			b0 = Vector2i(b0.x / 2, b0.y / 2);
+			b1 = Vector2i(b1.x / 2, b1.y / 2);
+			const Vector2i ps = minmax_size[k - 1];
+			for (int z = b0.y; z <= b1.y; z++) {
+				for (int x = b0.x; x <= b1.x; x++) {
+					Vector2 m(1e30f, -1e30f);
+					for (int d = 0; d < 4; d++) {
+						const int sx = x * 2 + (d & 1);
+						const int sz = z * 2 + (d >> 1);
+						if (sx < ps.x && sz < ps.y) {
+							const Vector2 &v = minmax[k - 1][sz * ps.x + sx];
+							m.x = MIN(m.x, v.x);
+							m.y = MAX(m.y, v.y);
+						}
+					}
+					minmax[k][z * minmax_size[k].x + x] = m;
+				}
+			}
+		}
+	}
+	// The textures: the region in the first mip, the mips again.
+	if (height_image.is_valid()) {
+		float *hw = reinterpret_cast<float *>(height_image->ptrw());
+		for (int z = r.position.y; z < r.position.y + r.size.y; z++) {
+			memcpy(hw + z * map_w + r.position.x, heights.ptr() + z * map_w + r.position.x, sizeof(float) * r.size.x);
+		}
+		_terrain_mips_region<float, 1>(height_image, r);
+	}
+	if (normal_image.is_valid()) {
+		uint8_t *nw = normal_image->ptrw();
+		const float inv = 1.0f / (2.0f * vertex_spacing);
+		for (int z = MAX(0, r.position.y - 1); z < MIN(map_h, r.position.y + r.size.y + 1); z++) {
+			for (int x = MAX(0, r.position.x - 1); x < MIN(map_w, r.position.x + r.size.x + 1); x++) {
+				const float hl = heights[z * map_w + MAX(0, x - 1)];
+				const float hr = heights[z * map_w + MIN(map_w - 1, x + 1)];
+				const float hd = heights[MAX(0, z - 1) * map_w + x];
+				const float hu = heights[MIN(map_h - 1, z + 1) * map_w + x];
+				Vector3 n((hl - hr) * inv, 1.0f, (hd - hu) * inv);
+				n.normalize();
+				nw[(z * map_w + x) * 2 + 0] = uint8_t(CLAMP(Math::round((n.x * 0.5f + 0.5f) * 255.0f), 0.0f, 255.0f));
+				nw[(z * map_w + x) * 2 + 1] = uint8_t(CLAMP(Math::round((n.z * 0.5f + 0.5f) * 255.0f), 0.0f, 255.0f));
+			}
+		}
+		_terrain_mips_region<uint8_t, 2>(normal_image, r.grow(1).intersection(Rect2i(0, 0, map_w, map_h)));
+	}
+	_drop_foliage_in(Rect2(Vector2(r.position) * vertex_spacing, Vector2(r.size) * vertex_spacing));
+	set.selection_valid = false;
+	// The textures and the collision shapes at the frame's end, once for all its edits.
+	edit_heights = edit_heights.size.x > 0 ? edit_heights.merge(r) : r;
+	_queue_edit_flush();
+}
+
+void FellowTerrain3D::_queue_edit_flush() {
+	if (!edit_flush_queued) {
+		edit_flush_queued = true;
+		callable_mp(this, &FellowTerrain3D::_flush_edits).call_deferred();
+	}
+}
+
+void FellowTerrain3D::_flush_edits() {
+	edit_flush_queued = false;
+	const uint64_t t0 = OS::get_singleton()->get_ticks_usec();
+	const Rect2i r = edit_heights;
+	edit_heights = Rect2i();
+	for (int i = 0; i < 2; i++) {
+		if (edit_splat[i] && splat_image[i].is_valid()) {
+			(i == 0 ? splat_texture : splat_texture_2)->update(splat_image[i]);
+		}
+		edit_splat[i] = false;
+	}
+	Fellow::request_redraw();
+	if (r.size.x <= 0 || map_w < 2) {
+		edit_flush_usec = OS::get_singleton()->get_ticks_usec() - t0;
+		return;
+	}
+	if (height_image.is_valid() && height_texture.is_valid()) {
+		height_texture->update(height_image);
+	}
+	if (normal_image.is_valid() && normal_texture.is_valid()) {
+		normal_texture->update(normal_image);
+	}
+	// The collision shapes over the region.
+	if (body.is_valid() && !shapes.is_empty()) {
+		PhysicsServer3D *ps = PhysicsServer3D::get_singleton();
+		const int rs = collision_region_size;
+		const int nx = (map_w - 1 + rs - 1) / rs;
+		for (int z0 = 0; z0 < map_h - 1; z0 += rs) {
+			for (int x0 = 0; x0 < map_w - 1; x0 += rs) {
+				const int w = MIN(rs, map_w - 1 - x0) + 1;
+				const int d = MIN(rs, map_h - 1 - z0) + 1;
+				if (!Rect2i(x0, z0, w, d).intersects(r)) {
+					continue;
+				}
+				PackedFloat32Array h;
+				h.resize(w * d);
+				float *hp = h.ptrw();
+				float lo = 1e30f;
+				float hi = -1e30f;
+				for (int z = 0; z < d; z++) {
+					for (int x = 0; x < w; x++) {
+						const float v = heights[(z0 + z) * map_w + x0 + x];
+						hp[z * w + x] = v;
+						lo = MIN(lo, v);
+						hi = MAX(hi, v);
+					}
+				}
+				Dictionary data;
+				data["width"] = w;
+				data["depth"] = d;
+				data["heights"] = h;
+				data["min_height"] = lo;
+				data["max_height"] = hi;
+				const int index = (z0 / rs) * nx + x0 / rs;
+				if (index < int(shapes.size())) {
+					ps->shape_set_data(shapes[index], data);
+				}
+			}
+		}
+	}
+	edit_flush_usec = OS::get_singleton()->get_ticks_usec() - t0;
+}
+
+void FellowTerrain3D::_update_splat_region(int p_map, const Rect2i &p_rect) {
+	Ref<Image> src = p_map == 0 ? splat_map : splat_map_2;
+	if (src.is_null() || splat_image[p_map].is_null() || splat_cpu[p_map].is_empty()) {
+		data_dirty = true; // a new splat map: everything again
+		_rebuild_data();
+		_update_material();
+		return;
+	}
+	const Vector2i sz = splat_cpu_size[p_map];
+	const Rect2i r = p_rect.intersection(Rect2i(Point2i(), sz));
+	if (r.size.x <= 0 || r.size.y <= 0) {
+		return;
+	}
+	const uint8_t *sp = src->ptr();
+	uint8_t *ip = splat_image[p_map]->ptrw();
+	for (int z = r.position.y; z < r.position.y + r.size.y; z++) {
+		memcpy(splat_cpu[p_map].ptr() + (z * sz.x + r.position.x) * 4, sp + (z * sz.x + r.position.x) * 4, r.size.x * 4);
+		memcpy(ip + (z * sz.x + r.position.x) * 4, sp + (z * sz.x + r.position.x) * 4, r.size.x * 4);
+	}
+	if (splat_image[p_map]->has_mipmaps()) {
+		_terrain_mips_region<uint8_t, 4>(splat_image[p_map], r);
+	}
+	edit_splat[p_map] = true; // the texture at the frame's end
+	_queue_edit_flush();
+	// In the terrain's metres: the splat map is stretched over it.
+	const Vector2 scale = Vector2(float(map_w) / sz.x, float(map_h) / sz.y) * vertex_spacing;
+	_drop_foliage_in(Rect2(Vector2(r.position) * scale - Vector2(0.5f, 0.5f) * vertex_spacing, Vector2(r.size) * scale));
+}
+
+Rect2i FellowTerrain3D::_brush_texels(const Vector3 &p_global, float p_radius, Vector2 &r_centre, float &r_radius) const {
+	const Transform3D xf = is_inside_tree() ? get_global_transform() : get_transform();
+	const Vector3 l = xf.affine_inverse().xform(p_global);
+	r_centre = Vector2(l.x, l.z) / vertex_spacing;
+	r_radius = MAX(0.5f, p_radius / vertex_spacing);
+	const Point2i a(int(Math::floor(r_centre.x - r_radius)), int(Math::floor(r_centre.y - r_radius)));
+	const Point2i b(int(Math::ceil(r_centre.x + r_radius)), int(Math::ceil(r_centre.y + r_radius)));
+	return Rect2i(a, b - a + Point2i(1, 1)).intersection(Rect2i(0, 0, map_w, map_h));
+}
+
+static inline float _brush_falloff(float p_d) {
+	const float t = 1.0f - p_d * p_d;
+	return t <= 0.0f ? 0.0f : t * t;
+}
+
+void FellowTerrain3D::sculpt(const Vector3 &p_global, float p_radius, float p_strength, SculptMode p_mode, float p_target_height) {
+	_ensure_data();
+	if (map_w < 2 || heightmap.is_null()) {
+		return;
+	}
+	_make_heightmap_editable();
+	Vector2 c;
+	float rr;
+	const Rect2i r = _brush_texels(p_global, p_radius, c, rr);
+	if (r.size.x <= 0 || r.size.y <= 0) {
+		return;
+	}
+	float *h = reinterpret_cast<float *>(heightmap->ptrw());
+	const float a = CLAMP(p_strength, 0.0f, 1.0f);
+	for (int z = r.position.y; z < r.position.y + r.size.y; z++) {
+		for (int x = r.position.x; x < r.position.x + r.size.x; x++) {
+			const float w = _brush_falloff(Vector2(x, z).distance_to(c) / rr);
+			if (w <= 0.0f) {
+				continue;
+			}
+			float &v = h[z * map_w + x];
+			switch (p_mode) {
+				case SCULPT_RAISE:
+					v += p_strength * w;
+					break;
+				case SCULPT_LOWER:
+					v -= p_strength * w;
+					break;
+				case SCULPT_SMOOTH: {
+					// The neighbours' mean before this dab (the CPU copy is updated after).
+					float sum = 0.0f;
+					int n = 0;
+					for (int dz = -1; dz <= 1; dz++) {
+						for (int dx = -1; dx <= 1; dx++) {
+							const int sx = CLAMP(x + dx, 0, map_w - 1);
+							const int sz = CLAMP(z + dz, 0, map_h - 1);
+							sum += heights[sz * map_w + sx];
+							n++;
+						}
+					}
+					v = Math::lerp(v, sum / n, a * w);
+				} break;
+				case SCULPT_FLATTEN:
+					v = Math::lerp(v, p_target_height, a * w);
+					break;
+			}
+		}
+	}
+	_update_heights_region(r);
+}
+
+void FellowTerrain3D::paint(const Vector3 &p_global, float p_radius, int p_layer, float p_strength) {
+	_ensure_data();
+	if (map_w < 2 || p_layer < 0 || p_layer >= MAX_LAYERS) {
+		return;
+	}
+	// Both splat maps as RGBA8 at the heights' resolution when there are none yet (and the second only when a layer
+	// above 4 is painted, or it has one).
+	bool created[2] = {};
+	for (int m = 0; m < 2; m++) {
+		Ref<Image> &img = m == 0 ? splat_map : splat_map_2;
+		if (img.is_null() || img->is_empty()) {
+			if (m == 1 && p_layer < 5) {
+				continue;
+			}
+			img = Image::create_empty(map_w, map_h, false, Image::FORMAT_RGBA8);
+			img->fill(Color(0, 0, 0, 0));
+			created[m] = true;
+		} else if (img->get_format() != Image::FORMAT_RGBA8 || img->has_mipmaps() || (m == 1 && img->get_size() != splat_map->get_size())) {
+			Ref<Image> c = img->duplicate();
+			if (c->is_compressed()) {
+				c->decompress();
+			}
+			c->clear_mipmaps();
+			c->convert(Image::FORMAT_RGBA8);
+			if (m == 1 && c->get_size() != splat_map->get_size()) {
+				c->resize(splat_map->get_width(), splat_map->get_height(), Image::INTERPOLATE_BILINEAR);
+			}
+			img = c;
+			created[m] = true;
+		}
+	}
+	if (created[0] || created[1]) {
+		// The weights are those the terrain had (none is the base layer everywhere; a conversion keeps them): only the
+		// splat maps' copies and textures are made, the foliage kept (a rebuild would wait for its tasks).
+		if (data_dirty) {
+			_rebuild_data();
+		} else {
+			for (int m = 0; m < 2; m++) {
+				if (created[m]) {
+					_build_splat(m);
+				}
+			}
+		}
+		_update_material();
+	}
+	const Transform3D xf = is_inside_tree() ? get_global_transform() : get_transform();
+	const Vector3 l = xf.affine_inverse().xform(p_global);
+	const Vector2i sz = Vector2i(splat_map->get_width(), splat_map->get_height());
+	const bool two = splat_map_2.is_valid() && !splat_map_2->is_empty() && splat_map_2->get_width() == sz.x && splat_map_2->get_height() == sz.y;
+	// The brush in the splat map's texels (stretched over the terrain).
+	const Vector2 c((l.x / vertex_spacing + 0.5f) / map_w * sz.x - 0.5f, (l.z / vertex_spacing + 0.5f) / map_h * sz.y - 0.5f);
+	const float rr = MAX(0.5f, p_radius / vertex_spacing / map_w * sz.x);
+	const Point2i a(int(Math::floor(c.x - rr)), int(Math::floor(c.y - rr)));
+	const Point2i b(int(Math::ceil(c.x + rr)), int(Math::ceil(c.y + rr)));
+	const Rect2i r = Rect2i(a, b - a + Point2i(1, 1)).intersection(Rect2i(Point2i(), sz));
+	if (r.size.x <= 0 || r.size.y <= 0 || (p_layer >= 5 && !two)) {
+		return;
+	}
+	uint8_t *s0 = splat_map->ptrw();
+	uint8_t *s1 = two ? splat_map_2->ptrw() : nullptr;
+	const float strength = CLAMP(p_strength, 0.0f, 1.0f);
+	for (int z = r.position.y; z < r.position.y + r.size.y; z++) {
+		for (int x = r.position.x; x < r.position.x + r.size.x; x++) {
+			const float t = strength * _brush_falloff(Vector2(x, z).distance_to(c) / rr);
+			if (t <= 0.0f) {
+				continue;
+			}
+			// Every layer's weight moves towards 0, the painted one's towards 1: the sum stays 1 (layer 0 the rest).
+			uint8_t *p0 = s0 + (z * sz.x + x) * 4;
+			uint8_t *p1 = s1 ? s1 + (z * sz.x + x) * 4 : nullptr;
+			for (int ch = 0; ch < 8; ch++) {
+				uint8_t *p = ch < 4 ? p0 + ch : (p1 ? p1 + (ch - 4) : nullptr);
+				if (!p) {
+					continue;
+				}
+				const float w = *p / 255.0f;
+				const float target = (ch + 1 == p_layer) ? 1.0f : 0.0f;
+				*p = uint8_t(CLAMP(Math::round(Math::lerp(w, target, t) * 255.0f), 0.0f, 255.0f));
+			}
+		}
+	}
+	_update_splat_region(0, r);
+	if (two) {
+		_update_splat_region(1, r);
+	}
+}
+
+void FellowTerrain3D::_make_heightmap_editable() {
+	if (heightmap.is_valid() && (heightmap->get_format() != Image::FORMAT_RF || heightmap->has_mipmaps())) {
+		// In metres from now on: the heights as drawn.
+		Vector<uint8_t> data;
+		data.resize(sizeof(float) * heights.size());
+		memcpy(data.ptrw(), heights.ptr(), data.size());
+		heightmap = Image::create_from_data(map_w, map_h, false, Image::FORMAT_RF, data);
+	}
+}
+
+void FellowTerrain3D::blit_heightmap_region(const Ref<Image> &p_region, const Vector2i &p_position) {
+	ERR_FAIL_COND(p_region.is_null() || p_region->is_empty());
+	_ensure_data();
+	ERR_FAIL_COND_MSG(map_w < 2 || heightmap.is_null(), "The terrain has no heightmap to write into.");
+	_make_heightmap_editable();
+	Ref<Image> src = p_region;
+	if (src->get_format() != Image::FORMAT_RF || src->has_mipmaps()) {
+		src = heightmap_from_image(p_region, 0.0f, 1.0f);
+	}
+	const Rect2i r = Rect2i(p_position, src->get_size()).intersection(Rect2i(0, 0, map_w, map_h));
+	if (r.size.x <= 0 || r.size.y <= 0) {
+		return;
+	}
+	const float *sp = reinterpret_cast<const float *>(src->ptr());
+	float *hp = reinterpret_cast<float *>(heightmap->ptrw());
+	for (int z = r.position.y; z < r.position.y + r.size.y; z++) {
+		memcpy(hp + z * map_w + r.position.x, sp + (z - p_position.y) * src->get_width() + (r.position.x - p_position.x), sizeof(float) * r.size.x);
+	}
+	_update_heights_region(r);
+}
+
+void FellowTerrain3D::blit_splat_region(int p_map, const Ref<Image> &p_region, const Vector2i &p_position) {
+	ERR_FAIL_INDEX(p_map, 2);
+	ERR_FAIL_COND(p_region.is_null() || p_region->is_empty());
+	_ensure_data();
+	Ref<Image> &img = p_map == 0 ? splat_map : splat_map_2;
+	ERR_FAIL_COND_MSG(img.is_null() || img->is_empty() || img->get_format() != Image::FORMAT_RGBA8 || img->has_mipmaps(), "The splat map to write into is not an RGBA8 image without mipmaps (paint() makes it one).");
+	Ref<Image> src = p_region;
+	if (src->get_format() != Image::FORMAT_RGBA8 || src->has_mipmaps()) {
+		src = p_region->duplicate();
+		if (src->is_compressed()) {
+			src->decompress();
+		}
+		src->clear_mipmaps();
+		src->convert(Image::FORMAT_RGBA8);
+	}
+	const Rect2i r = Rect2i(p_position, src->get_size()).intersection(Rect2i(Point2i(), img->get_size()));
+	if (r.size.x <= 0 || r.size.y <= 0) {
+		return;
+	}
+	const uint8_t *sp = src->ptr();
+	uint8_t *dp = img->ptrw();
+	for (int z = r.position.y; z < r.position.y + r.size.y; z++) {
+		memcpy(dp + (z * img->get_width() + r.position.x) * 4, sp + ((z - p_position.y) * src->get_width() + (r.position.x - p_position.x)) * 4, r.size.x * 4);
+	}
+	_update_splat_region(p_map, r);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -1545,6 +2150,7 @@ Dictionary FellowTerrain3D::get_stats() const {
 	d["process_usec_max"] = int64_t(process_usec_max);
 	d["process_usec_last"] = int64_t(process_usec_last);
 	d["collision_shapes"] = int(shapes.size());
+	d["edit_flush_usec"] = int64_t(edit_flush_usec);
 	d["foliage_cells"] = int(foliage_cells.size());
 	d["foliage_instances"] = foliage_instances;
 	d["map_size"] = Vector2i(map_w, map_h);
@@ -1564,13 +2170,6 @@ void FellowTerrain3D::update_heightmap() {
 	data_dirty = true;
 	if (is_inside_tree()) {
 		_rebuild_data();
-		if (set.instance[0].is_valid()) {
-			RenderingServer *rs = RenderingServer::get_singleton();
-			for (int i = 0; i < 2; i++) {
-				rs->multimesh_set_mesh(set.multimesh[i], patch_mesh->get_rid());
-			}
-			set.selection_valid = false;
-		}
 		_update_material();
 	}
 }
@@ -1727,7 +2326,7 @@ void FellowTerrain3D::_notification(int p_what) {
 		} break;
 		case NOTIFICATION_EXIT_WORLD: {
 			set_process_internal(false);
-			_clear_foliage();
+			_clear_foliage(true);
 			foliage_dirty = true;
 			_free_instances();
 			_free_collision();
@@ -1798,6 +2397,10 @@ void FellowTerrain3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_foliage_cells_per_frame"), &FellowTerrain3D::get_foliage_cells_per_frame);
 
 	ClassDB::bind_method(D_METHOD("update_heightmap"), &FellowTerrain3D::update_heightmap);
+	ClassDB::bind_method(D_METHOD("sculpt", "global_position", "radius", "strength", "mode", "target_height"), &FellowTerrain3D::sculpt, DEFVAL(0.0f));
+	ClassDB::bind_method(D_METHOD("paint", "global_position", "radius", "layer", "strength"), &FellowTerrain3D::paint);
+	ClassDB::bind_method(D_METHOD("blit_heightmap_region", "region", "position"), &FellowTerrain3D::blit_heightmap_region);
+	ClassDB::bind_method(D_METHOD("blit_splat_region", "map", "region", "position"), &FellowTerrain3D::blit_splat_region);
 	ClassDB::bind_method(D_METHOD("get_height", "global_position"), &FellowTerrain3D::get_height);
 	ClassDB::bind_method(D_METHOD("get_normal", "global_position"), &FellowTerrain3D::get_normal);
 	ClassDB::bind_method(D_METHOD("get_layer_weights", "global_position"), &FellowTerrain3D::get_layer_weights);
@@ -1832,6 +2435,10 @@ void FellowTerrain3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "collision_mask", PROPERTY_HINT_LAYERS_3D_PHYSICS), "set_collision_mask", "get_collision_mask");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "collision_region_size", PROPERTY_HINT_RANGE, "16,4096,1,suffix:cells"), "set_collision_region_size", "get_collision_region_size");
 
+	BIND_ENUM_CONSTANT(SCULPT_RAISE);
+	BIND_ENUM_CONSTANT(SCULPT_LOWER);
+	BIND_ENUM_CONSTANT(SCULPT_SMOOTH);
+	BIND_ENUM_CONSTANT(SCULPT_FLATTEN);
 	BIND_ENUM_CONSTANT(DEBUG_VIEW_OFF);
 	BIND_ENUM_CONSTANT(DEBUG_VIEW_LEVELS);
 }
@@ -1841,7 +2448,7 @@ FellowTerrain3D::FellowTerrain3D() {
 }
 
 FellowTerrain3D::~FellowTerrain3D() {
-	_clear_foliage();
+	_clear_foliage(true);
 	_free_instances();
 	_free_collision();
 }

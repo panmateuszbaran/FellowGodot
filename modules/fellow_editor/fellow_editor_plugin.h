@@ -142,6 +142,7 @@ public:
 		PRESET_OCEAN,
 		PRESET_LAKE,
 		PRESET_POOL,
+		PRESET_TERRAIN, // milestone 58: flat, ready to sculpt and paint
 	};
 	// The setup's nodes, not in the tree yet (nullptr for an unknown preset); p_root is the edited scene, where it looks
 	// for what the setup can share (the rain, wind and lightning: one of each works at a time).

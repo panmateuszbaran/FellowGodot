@@ -156,6 +156,13 @@ public:
 	static constexpr int MAX_LAYERS = 9;
 	static constexpr int MAX_LEVELS = 16;
 
+	enum SculptMode {
+		SCULPT_RAISE, // up by the strength in metres at the brush's centre
+		SCULPT_LOWER,
+		SCULPT_SMOOTH, // towards the neighbours' mean, by the strength (0..1)
+		SCULPT_FLATTEN, // towards the target height, by the strength (0..1)
+	};
+
 	enum DebugView {
 		DEBUG_VIEW_OFF,
 		DEBUG_VIEW_LEVELS, // the ground coloured by its level of detail, blended as it morphs to the next
@@ -193,6 +200,13 @@ private:
 
 	// Rendering.
 	Ref<ImageTexture> height_texture;
+	Ref<Image> height_image; // the textures' images (with their mips), kept for edits of a region
+	Ref<Image> normal_image;
+	Ref<Image> splat_image[2];
+	Rect2i edit_heights; // edited since the frame's start: textures and collision shapes to update at its end
+	bool edit_splat[2] = {};
+	bool edit_flush_queued = false;
+	uint64_t edit_flush_usec = 0; // the last update at a frame's end
 	Ref<ImageTexture> normal_texture;
 	Ref<ImageTexture> splat_texture;
 	Ref<ImageTexture> splat_texture_2;
@@ -252,7 +266,6 @@ private:
 	};
 	LocalVector<FoliageKind> foliage_kinds;
 	struct FoliageCell {
-		const FellowTerrain3D *terrain = nullptr;
 		int kind = 0;
 		int cx = 0;
 		int cz = 0;
@@ -263,6 +276,17 @@ private:
 		uint64_t seen = 0;
 		RID multimesh;
 		RID instance;
+		// What its task reads, copied for it on the main thread when it starts (decision 0160): the terrain's edits and
+		// rebuilds never race it, and nothing waits for it.
+		FoliageKind k;
+		int map_w = 0;
+		int map_h = 0;
+		float spacing = 1.0f;
+		Rect2i heights_rect; // in the heightmap's texels
+		LocalVector<float> heights;
+		Vector2i splat_size[2];
+		Rect2i splat_rect[2]; // in the splat maps' texels
+		LocalVector<uint8_t> splat[2];
 	};
 	HashMap<uint64_t, FoliageCell *> foliage_cells;
 	// Cells dropped while their task was still to run: freed once it has (the main thread never waits for one: a
@@ -271,7 +295,7 @@ private:
 	// A hidden instance of each kind's mesh from the start: its pipelines compile when the terrain is set up, not when
 	// the kind's first cell appears.
 	LocalVector<RID> foliage_warm;
-	LocalVector<uint8_t> splat_cpu[2]; // RGBA8 copies of the splat maps, read by the foliage's tasks
+	LocalVector<uint8_t> splat_cpu[2]; // RGBA8 copies of the splat maps (the queries; the foliage cells' copies)
 	Vector2i splat_cpu_size[2];
 	bool foliage_dirty = true;
 	uint64_t foliage_frame = 0;
@@ -279,11 +303,14 @@ private:
 
 	void _foliage_changed();
 	void _update_foliage_kinds();
-	void _clear_foliage();
+	void _clear_foliage(bool p_wait);
+	void _copy_foliage_data(FoliageCell *p_cell) const;
 	void _process_foliage(const Vector3 &p_camera);
 	void _make_foliage_cell_visible(FoliageCell *p_cell);
 	void _free_foliage_cell(FoliageCell *p_cell);
 	static void _generate_foliage_cell(void *p_cell);
+	static float _cell_height(const FoliageCell &p_cell, float p_x, float p_z);
+	static float _cell_weight(const FoliageCell &p_cell, int p_layer, float p_x, float p_z);
 	float _layer_weight_local(int p_layer, float p_x, float p_z) const;
 
 	// Statistics.
@@ -296,6 +323,14 @@ private:
 	uint64_t process_usec_last = 0;
 
 	void _rebuild_data();
+	void _build_splat(int p_map);
+	void _update_heights_region(const Rect2i &p_rect);
+	void _update_splat_region(int p_map, const Rect2i &p_rect);
+	void _drop_foliage_in(const Rect2 &p_local);
+	void _make_heightmap_editable();
+	void _queue_edit_flush();
+	void _flush_edits();
+	Rect2i _brush_texels(const Vector3 &p_global, float p_radius, Vector2 &r_centre, float &r_radius) const;
 	void _ensure_data() const;
 	void _build_minmax();
 	void _build_normals(Ref<Image> &r_normals) const;
@@ -362,6 +397,10 @@ public:
 	int get_foliage_cells_per_frame() const { return foliage_cells_per_frame; }
 
 	void update_heightmap();
+	void sculpt(const Vector3 &p_global, float p_radius, float p_strength, SculptMode p_mode, float p_target_height = 0.0f);
+	void paint(const Vector3 &p_global, float p_radius, int p_layer, float p_strength);
+	void blit_heightmap_region(const Ref<Image> &p_region, const Vector2i &p_position);
+	void blit_splat_region(int p_map, const Ref<Image> &p_region, const Vector2i &p_position);
 	float get_height(const Vector3 &p_global) const;
 	Vector3 get_normal(const Vector3 &p_global) const;
 	PackedFloat32Array get_layer_weights(const Vector3 &p_global) const;
@@ -378,3 +417,4 @@ public:
 };
 
 VARIANT_ENUM_CAST(FellowTerrain3D::DebugView);
+VARIANT_ENUM_CAST(FellowTerrain3D::SculptMode);
