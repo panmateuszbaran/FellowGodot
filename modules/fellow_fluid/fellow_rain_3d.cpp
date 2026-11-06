@@ -181,6 +181,13 @@ void FellowRain3D::_build_children() {
 	drop_process->set_gravity(Vector3());
 	drop_process->set_particle_flag(ParticleProcessMaterial::PARTICLE_FLAG_ALIGN_Y_TO_VELOCITY, true);
 	drop_process->set_collision_mode(ParticleProcessMaterial::COLLISION_HIDE_ON_CONTACT);
+	// The flakes' own (decision 0156): before, the drops' process material changed its flags when it started to snow
+	// (the scene's wind on, the splashes off) and compiled a new shader in that frame (12 ms on the RTX).
+	for (int i = 0; i < 2; i++) {
+		flake_process[i] = drop_process->duplicate();
+		flake_process[i]->set_sub_emitter_mode(ParticleProcessMaterial::SUB_EMITTER_DISABLED);
+		flake_process[i]->set_wind_enabled(i == 1);
+	}
 
 	drop_shader = FellowSharedShaders::shader(rain_drop_shader_code); // milestone 53: one per session
 	drop_material.instantiate();
@@ -265,7 +272,36 @@ void FellowRain3D::_build_children() {
 	splash->set_use_fixed_seed(true);
 	splash->set_seed(20261030);
 	add_child(splash, false, INTERNAL_MODE_FRONT);
+
+	// The process materials run once (one particle each, no draw pass, always in view) while the node is set up, so
+	// that their shaders compile then, not when it first rains or snows (decision 0156: a particles shader is compiled
+	// when particles first use it; 12 ms on the RTX when Slice Lab's weather first turned to snow).
+	const Ref<ParticleProcessMaterial> warm[4] = { drop_process, splash_process, flake_process[0], flake_process[1] };
+	for (int i = 0; i < 4; i++) {
+		GPUParticles3D *w = memnew(GPUParticles3D);
+		w->set_name(vformat("ProcessWarmer%d", i));
+		w->set_as_top_level(true);
+		w->set_amount(1);
+		w->set_lifetime(0.05);
+		w->set_one_shot(true);
+		w->set_process_material(warm[i]);
+		w->set_draw_pass_mesh(0, Ref<Mesh>());
+		w->set_visibility_aabb(AABB(Vector3(-1e6, -1e6, -1e6), Vector3(2e6, 2e6, 2e6)));
+		w->set_cast_shadows_setting(GeometryInstance3D::SHADOW_CASTING_SETTING_OFF);
+		add_child(w, false, INTERNAL_MODE_FRONT);
+		w->set_emitting(true);
+		process_warmers.push_back(w);
+	}
+	process_warm_frames = 0;
 	_update_children();
+}
+
+void FellowRain3D::_free_process_warmers() {
+	for (GPUParticles3D *w : process_warmers) {
+		remove_child(w);
+		memdelete(w);
+	}
+	process_warmers.clear();
 }
 
 void FellowRain3D::_update_children() {
@@ -284,22 +320,25 @@ void FellowRain3D::_update_children() {
 	const float fall_speed = flakes ? flake_speed : drop_speed;
 	Vector3 v = wind_applied - Vector3(0, fall_speed, 0);
 	float speed = v.length();
-	drop_process->set_direction(v / MAX(speed, 0.01f));
-	drop_process->set_param_min(ParticleProcessMaterial::PARAM_INITIAL_LINEAR_VELOCITY, speed * 0.95);
-	drop_process->set_param_max(ParticleProcessMaterial::PARAM_INITIAL_LINEAR_VELOCITY, speed * 1.05);
-	drop_process->set_param_min(ParticleProcessMaterial::PARAM_SCALE, flakes ? 0.5 : 0.8);
-	drop_process->set_param_max(ParticleProcessMaterial::PARAM_SCALE, flakes ? 1.5 : 1.2);
+	const bool flake_wind = flakes && wind_from_scene && FellowWind3D::get_active() != nullptr;
+	const Ref<ParticleProcessMaterial> pm = flakes ? flake_process[flake_wind ? 1 : 0] : drop_process;
+	pm->set_direction(v / MAX(speed, 0.01f));
+	pm->set_param_min(ParticleProcessMaterial::PARAM_INITIAL_LINEAR_VELOCITY, speed * 0.95);
+	pm->set_param_max(ParticleProcessMaterial::PARAM_INITIAL_LINEAR_VELOCITY, speed * 1.05);
+	pm->set_param_min(ParticleProcessMaterial::PARAM_SCALE, flakes ? 0.5 : 0.8);
+	pm->set_param_max(ParticleProcessMaterial::PARAM_SCALE, flakes ? 1.5 : 1.2);
 	// The flakes live in a box around the camera (from 3 m below it to fall_height above), and take the scene's wind
 	// where they are, gusts included (decision 0127).
 	float box_height = fall_height + 6.0f;
-	drop_process->set_emission_box_extents(Vector3(area * 0.5f, flakes ? box_height * 0.5f : 0.5f, area * 0.5f));
-	bool flake_wind = flakes && wind_from_scene && FellowWind3D::get_active() != nullptr;
-	if (drop_process->is_wind_enabled() != flake_wind) {
-		drop_process->set_wind_enabled(flake_wind);
-	}
-	drop_process->set_wind_influence(flake_wind_influence);
-	drop_process->set_sub_emitter_mode(splashing ? ParticleProcessMaterial::SUB_EMITTER_AT_COLLISION : ParticleProcessMaterial::SUB_EMITTER_DISABLED);
+	pm->set_emission_box_extents(Vector3(area * 0.5f, flakes ? box_height * 0.5f : 0.5f, area * 0.5f));
+	pm->set_wind_influence(flake_wind_influence);
+	// The drops' process material is the rain's alone: its splashes whatever the precipitation now (its code, and so its
+	// shader, the same when it snows; decision 0156).
+	drop_process->set_sub_emitter_mode(splashes ? ParticleProcessMaterial::SUB_EMITTER_AT_COLLISION : ParticleProcessMaterial::SUB_EMITTER_DISABLED);
 	drop_process->set_sub_emitter_amount_at_collision(2);
+	if (drops->get_process_material() != pm) {
+		drops->set_process_material(pm);
+	}
 	drop_material->set_shader_parameter("drop_color", drop_color);
 	drop_material->set_shader_parameter("streak_width", streak_width);
 	drop_material->set_shader_parameter("quad_width", drop_size.x);
@@ -542,6 +581,9 @@ void FellowRain3D::_notification(int p_what) {
 			_update_children();
 		} break;
 		case NOTIFICATION_INTERNAL_PROCESS: {
+			if (!process_warmers.is_empty() && ++process_warm_frames > 8) {
+				_free_process_warmers();
+			}
 			double dt = get_process_delta_time();
 			// Still in the editor with its Animate Nodes toggle off (milestone 52): no time, no falling drops. Nothing
 			// written that did not change (each write had the renderer redraw).
@@ -600,7 +642,8 @@ void FellowRain3D::_notification(int p_what) {
 					w = FellowWind3D::get_active()->get_velocity_at(c);
 				}
 				bool flake_wind = _is_snow() && wind_from_scene && FellowWind3D::get_active() != nullptr;
-				if ((!w.is_equal_approx(wind_applied) && w.distance_to(wind_applied) > 0.25f) || drop_process->is_wind_enabled() != flake_wind) {
+				const Ref<Material> want = _is_snow() ? flake_process[flake_wind ? 1 : 0] : drop_process;
+				if ((!w.is_equal_approx(wind_applied) && w.distance_to(wind_applied) > 0.25f) || drops->get_process_material() != want) {
 					wind_applied = w;
 					_update_children();
 				}

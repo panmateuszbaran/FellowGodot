@@ -162,6 +162,14 @@ private:
 	GPUParticles3D *drops = nullptr;
 	GPUParticles3D *splash = nullptr;
 	Ref<ParticleProcessMaterial> drop_process;
+	// The flakes' process materials, without and with the scene's wind (decision 0156): made with the drops', so their
+	// shaders compile when the node is set up (a process material whose flags change compiles a new shader).
+	Ref<ParticleProcessMaterial> flake_process[2];
+	// One particle each of the process materials (the drops', the splashes', the flakes' two), drawing nothing, for the
+	// first frames: a particles shader is compiled when particles first use it (decision 0156).
+	LocalVector<GPUParticles3D *> process_warmers;
+	int process_warm_frames = 0;
+	void _free_process_warmers();
 	Ref<ParticleProcessMaterial> splash_process;
 	Ref<Shader> drop_shader;
 	Ref<ShaderMaterial> drop_material;

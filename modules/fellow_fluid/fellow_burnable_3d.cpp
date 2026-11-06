@@ -127,13 +127,36 @@ FellowGasVolume3D *FellowBurnable3D::_find_gas_volume() const {
 // The mesh's volume fraction per voxel: along each axis, rays through 2 x 2 points per voxel column, the inside
 // intervals between their crossings (parity) give each voxel's covered length; the voxel's fill is the median of the
 // three axes' estimates (a hole in the mesh spoils at most the rays along one axis).
+Array FellowBurnable3D::_surface_arrays(const Ref<Mesh> &p_mesh, int p_surface) {
+	if (arrays_mesh != p_mesh || int(arrays_cache.size()) != p_mesh->get_surface_count()) {
+		const Callable cb = callable_mp(this, &FellowBurnable3D::_arrays_changed);
+		if (arrays_mesh.is_valid() && arrays_mesh->is_connected(CoreStringName(changed), cb)) {
+			arrays_mesh->disconnect(CoreStringName(changed), cb);
+		}
+		arrays_mesh = p_mesh;
+		arrays_cache.clear();
+		arrays_cache.resize(p_mesh->get_surface_count());
+		if (!p_mesh->is_connected(CoreStringName(changed), cb)) {
+			p_mesh->connect(CoreStringName(changed), cb);
+		}
+	}
+	if (arrays_cache[p_surface].is_empty()) {
+		arrays_cache[p_surface] = p_mesh->surface_get_arrays(p_surface);
+	}
+	return arrays_cache[p_surface];
+}
+
+void FellowBurnable3D::_arrays_changed() {
+	arrays_cache.clear(); // read again when next needed
+}
+
 bool FellowBurnable3D::_voxelize(const Ref<Mesh> &p_mesh) {
 	LocalVector<Vector3> tris;
 	for (int s = 0; s < p_mesh->get_surface_count(); s++) {
 		if (p_mesh->surface_get_primitive_type(s) != Mesh::PRIMITIVE_TRIANGLES) {
 			continue;
 		}
-		const Array arrays = p_mesh->surface_get_arrays(s);
+		const Array arrays = _surface_arrays(p_mesh, s);
 		const PackedVector3Array v = arrays[Mesh::ARRAY_VERTEX];
 		const PackedInt32Array idx = arrays[Mesh::ARRAY_INDEX];
 		if (idx.is_empty()) {
@@ -1313,7 +1336,7 @@ void FellowBurnable3D::_build_display(MeshInstance3D *p_target) {
 		if (mesh->surface_get_primitive_type(s) != Mesh::PRIMITIVE_TRIANGLES) {
 			continue;
 		}
-		const Array arrays = mesh->surface_get_arrays(s);
+		const Array arrays = _surface_arrays(mesh, s);
 		const PackedVector3Array v = arrays[Mesh::ARRAY_VERTEX];
 		if (v.is_empty()) {
 			continue;

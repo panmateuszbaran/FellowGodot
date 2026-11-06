@@ -93,6 +93,10 @@ private:
 	bool failed = false;
 	ObjectID target_id;
 	Ref<Mesh> original_mesh;
+	// The target mesh's surfaces' arrays, read once (decision 0156): a mesh's arrays come back from the GPU, and
+	// reset_burning() configures again (6 readbacks, 6-7 ms on the RTX, every time Slice Lab's log was lit again).
+	Ref<Mesh> arrays_mesh;
+	LocalVector<Array> arrays_cache;
 	Vector<Ref<Material>> original_overrides;
 	Ref<Material> original_material_override;
 	Ref<ArrayMesh> display_mesh;
@@ -141,6 +145,8 @@ private:
 	MeshInstance3D *_get_target() const;
 	FellowGasVolume3D *_find_gas_volume() const;
 	bool _voxelize(const Ref<Mesh> &p_mesh);
+	Array _surface_arrays(const Ref<Mesh> &p_mesh, int p_surface);
+	void _arrays_changed();
 	bool _ground_distance(MeshInstance3D *p_target, const AABB &p_box, int &r_axis, int &r_sign, float &r_below) const; // the ground below the box
 	void _build_display(MeshInstance3D *p_target);
 	Ref<ShaderMaterial> _make_burn_material(const Ref<Material> &p_source, int p_custom, bool p_cached, bool &r_cached) const;

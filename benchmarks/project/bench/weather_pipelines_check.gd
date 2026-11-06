@@ -6,7 +6,8 @@ extends SceneTree
 ##   godot --path benchmarks/project --fixed-fps 60 --resolution 320x180 -s res://bench/weather_pipelines_check.gd
 ##       [-- --start=rain|snow --frames=40]
 ##
-## Prints one JSON line: the pipelines by kind during the set-up frames and after each change.
+## Prints one JSON line: the pipelines by kind during the set-up frames and after each change, and FellowEngine's costs
+## of making shaders in them (variants compiled and waited for: a material whose code changed).
 
 var args := {}
 var rain
@@ -16,6 +17,7 @@ var phase := 0
 var phases := []
 var before := {}
 var result := {}
+var costs := {}
 
 
 func _counts() -> Dictionary:
@@ -26,6 +28,16 @@ func _counts() -> Dictionary:
 		"draw": RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_PIPELINE_COMPILATIONS_DRAW),
 		"specialization": RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_PIPELINE_COMPILATIONS_SPECIALIZATION),
 	}
+
+
+func _costs() -> Dictionary:
+	var o := {}
+	if RenderingServer.has_method("fellow_get_stats"):
+		var st: Dictionary = RenderingServer.call("fellow_get_stats")
+		for k in st:
+			if str(k).begins_with("cost_shader"):
+				o[k] = st[k]
+	return o
 
 
 func _diff(a: Dictionary, b: Dictionary) -> Dictionary:
@@ -70,6 +82,7 @@ func _initialize() -> void:
 	rain.precipitation = 1 if snow_first else 0
 	root3d.add_child(rain)
 	before = _counts()
+	costs = _costs()
 
 
 func _process(_delta: float) -> bool:
@@ -78,6 +91,14 @@ func _process(_delta: float) -> bool:
 		return false
 	var now := _counts()
 	result[phases[phase]] = _diff(before, now)
+	# FellowEngine's costs of making shaders in the phase (variants compiled, waited for), from its running totals.
+	var c := _costs()
+	var d := {}
+	for k in c:
+		if c[k] - costs.get(k, 0) != 0:
+			d[k] = c[k] - costs.get(k, 0)
+	result[phases[phase] + "_shader_costs"] = d
+	costs = c
 	phase += 1
 	if phase >= phases.size():
 		print("WEATHER_PIPELINES ", JSON.stringify(result))
