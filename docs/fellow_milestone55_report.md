@@ -65,9 +65,11 @@ Decision 0156 has the details (the pipelines a minute, the memory's curve, the v
 
 * One machine and one GPU; an hour, not a day.
 * A release template counts no static memory: the process's memory is sampled from outside (`run_soak.py`).
-* Hitches without a pipeline compiled (three an hour of 120-240 ms, with the GPU and the render thread idle: the
-  main thread's) are not yet explained (`--soak_fellow_stats=1` records FellowEngine's counters with each); a snow's
-  first fall compiles 6 surface pipelines (51 ms).
+* Hitches without a pipeline compiled: three an hour of 120-240 ms with the GPU and the render thread idle (the main
+  thread's; not seen again in 20 minutes with FellowEngine's counters, f348), and 18-22 ms ones spent waiting on the
+  GPU's fence (the GPU's own pauses). After the report, the snow's first fall (6 surface pipelines and a particles
+  shader) and a relighting's readbacks were moved to the nodes' setup (decision 0156, "Afterwards"): the first snow's
+  frame 51 → 19.6 ms on the RTX with the first of those fixes.
 * The process's memory after the first twenty minutes: +97 MB in 45 minutes, within its swings; a longer soak would
   show whether it stops.
 * The slice is built in code: no streamed cells (World Lab's) and no texture streaming (Streaming Lab's textures) in it

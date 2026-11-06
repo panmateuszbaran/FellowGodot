@@ -22,7 +22,8 @@
     "lightning",
     "fire",
     "geometry",
-    "instances"
+    "instances",
+    "terrain"
    ]
   },
   "stock": {

@@ -10,7 +10,7 @@ extends EditorPlugin
 const ICON_CLASSES := ["FellowBurnable3D", "FellowGasEmitter3D", "FellowGasVolume3D", "FellowLightning3D",
 	"FellowRain3D", "FellowShallowWater3D", "FellowSnowTracker3D", "FellowWater3D", "FellowWeather3D", "FellowWind3D",
 	"FellowHLOD3D", "FellowImpostorBaker", "FellowStreamingCell3D", "FellowWorldStreamer3D", "FellowMotionCharacter3D",
-	"FellowMotionDatabase", "FellowMotionMatcher3D"]
+	"FellowMotionDatabase", "FellowMotionMatcher3D", "FellowTerrain3D", "FellowTerrainLayer"]
 const MONITORS := ["FellowEngine/Texture streaming resident", "FellowEngine/Texture streaming wanted",
 	"FellowEngine/Texture streaming pending", "FellowEngine/World cells loaded", "FellowEngine/World cells loading",
 	"FellowEngine/Motion matching time", "FellowEngine/Motion matching updates"]

@@ -28,7 +28,7 @@ game's project is before it runs on a template. On the cloud's two CPUs a run ta
 
 | group | settings (`suite.json`) | scenes |
 |---|---|---|
-| `base` | the defaults | `lights` (omni and spot lights with shadows, a decal, a reflection probe), `shadows` (cascades over a 90 m street of casters), `materials` (SSR, SSAO, SSIL, glow, volumetric fog, metal, emission, glass), `water` (FFT ocean), `rain` (drops, wet ground, puddles, a roof's shelter, a rainbow), `snow` (snow cover, a tracker), `lightning` (a night storm's flash), `fire` (a gas volume burning), `geometry` (a FellowHLOD3D town, a MultiMesh of 4000, a large subdivided ground), `instances` (the same without the FellowHLOD3D) |
+| `base` | the defaults | `lights` (omni and spot lights with shadows, a decal, a reflection probe), `shadows` (cascades over a 90 m street of casters), `materials` (SSR, SSAO, SSIL, glow, volumetric fog, metal, emission, glass), `water` (FFT ocean), `rain` (drops, wet ground, puddles, a roof's shelter, a rainbow), `snow` (snow cover, a tracker), `lightning` (a night storm's flash), `fire` (a gas volume burning), `geometry` (a FellowHLOD3D town, a MultiMesh of 4000, a large subdivided ground), `instances` (the same without the FellowHLOD3D), `terrain` (a FellowTerrain3D: five levels of detail, four layers, triplanar, height blend) |
 | `stock` | `rendering/fellow/enabled=false` | `lights`, `shadows`, `materials`, `instances` — stock features only, which must match `base` exactly (a FellowHLOD3D builds merged proxies with FellowEngine off, instanced ones with it on) |
 | `post` | atmosphere, clouds, bloom, light shafts, vignette, local exposure | `sky` |
 | `rt` | ray-traced AO, sun shadows, reflections, GI (lavapipe has `VK_KHR_ray_query`) | `raytracing` |

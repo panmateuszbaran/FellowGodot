@@ -110,13 +110,37 @@ The first 25 seconds of the slice (job f345 before the heap fix, f346 after; war
 | with Godot's shader and pipeline caches off (whole slice; without fire, town, weather) | — | no hitch; largest frame 13-16 ms; 2.8-3.8 s to the first frame |
 | without every part | largest frame 4.3 ms | — |
 
+## Afterwards: the remaining hitches (jobs f348, f349)
+
+**f348** (20 minutes, the weather turning every minute and the log lit again every two, FellowEngine's counters kept
+with each hitch): 5 hitches (0.26 a minute), the largest frame 30 ms, no error.
+
+* Three of 18-22 ms compiled nothing and spent 16-19 ms waiting on the GPU's fence (`rd_fence_wait_usec`) with the
+  main thread's and render thread's work as usual: the GPU itself paused (the laptop's GPU or its path to the display),
+  not FellowEngine. The hour's three main-thread hitches of 120-240 ms (f347) did not occur in these 20 minutes.
+* The 30 ms one was the first snow in the same second as a relighting: 6 surface pipelines and 21 ms creating shader
+  variants, then 6 readbacks (5 ms) in the next frame.
+
+Three fixes, each where its node is set up:
+
+| | before | after |
+|---|---|---|
+| the flakes' draw material (FellowRain3D) | its pipelines compiled when it first snowed (6 surface, 51 ms on the RTX) | worn by a hidden quad from the start: none when it snows (lavapipe and RTX: rain → snow 4 surface → 0; set-up 6 → 10) |
+| the flakes' particles (FellowRain3D) | the drops' process material changed its flags (the scene's wind on, the splashes off): a new particles shader compiled in that frame (12 ms on the RTX, f349) | the flakes have their own two process materials (without and with the wind), and the four process materials run once with one particle each while the node is set up (a particles shader is compiled when particles first use it): lavapipe, rain → snow no shader compiled, one shader object created (the rest of a lazily created variant) |
+| a relit FellowBurnable3D | its mesh's arrays read back from the GPU twice (voxels, display): 6 readbacks, 6-7 ms on the RTX | read once and kept: 3 readbacks at its first configuration, none at the relightings |
+
+**f349** (the first fix's template; 5 minutes, the weather every 30 s, the log every 60 s): the first snow's frame 51 →
+19.6 ms (no surface pipeline; the 12 ms particles shader the second fix removes), the largest frame of the run 22 ms;
+the pipelines compiled after the warm-up by kind: 170 specialization (in the background), 2 surface.
+
 ## Decision
 
 **KEEP.** Slice Lab and the soak are the first measurements of FellowEngine as a game runs it: every system at once,
 for an hour. The first hour on the RTX ran at 251 fps with nothing growing in Godot's or FellowEngine's accounts, and
 found what no lab had — a burning object that freed invalid IDs and compiled its shaders anew each time it was lit,
 and made its ash heap's material mid-fire (a 4.8 s freeze the first time). Fixed: the hour's hitches 61 → 25, those
-compiling pipelines 31 → 2, the start without a hitch. Not done: three hitches an hour of 120-240 ms that compile
-nothing and leave the GPU and render thread idle (the main thread's; `--soak_fellow_stats=1` records FellowEngine's
-counters with them), a snow's first fall compiling 6 surface pipelines (51 ms), pre-warming the specializations a
-session compiles over its first twenty minutes, days rather than hours, other GPUs.
+compiling pipelines 31 → 2, the start without a hitch. Afterwards, the first snow's pipelines and particles shader and a relighting's readbacks
+moved to the nodes' setup (the first snow's frame 51 → 19.6 ms with the first fix). Not done: three hitches an hour of
+120-240 ms that compile nothing and leave the GPU and render thread idle (the main thread's; not seen in 20 minutes
+with FellowEngine's counters), pre-warming the specializations a session compiles over its first twenty minutes (in
+the background, without a hitch), days rather than hours, other GPUs.
