@@ -140,12 +140,12 @@ shader loaded from the cache and two shader objects, 4.8 ms).
 
 ## Decision
 
-**KEEP.** Slice Lab and the soak are the first measurements of FellowEngine as a game runs it: every system at once,
-for an hour. The first hour on the RTX ran at 251 fps with nothing growing in Godot's or FellowEngine's accounts, and
-found what no lab had — a burning object that freed invalid IDs and compiled its shaders anew each time it was lit,
-and made its ash heap's material mid-fire (a 4.8 s freeze the first time). Fixed: the hour's hitches 61 → 25, those
-compiling pipelines 31 → 2, the start without a hitch. Afterwards, the first snow's pipelines and particles shader and a relighting's readbacks
-moved to the nodes' setup (the first snow's worst frame 51 → 10.1 ms, a relighting's 17-22 → 6-9 ms). Not done: three hitches an hour of
-120-240 ms that compile nothing and leave the GPU and render thread idle (the main thread's; not seen in 20 minutes
-with FellowEngine's counters), pre-warming the specializations a session compiles over its first twenty minutes (in
-the background, without a hitch), days rather than hours, other GPUs.
+**KEEP.** Slice Lab and the soak are the first measurements of FellowEngine as a game runs it: every system at once, for
+an hour. The first hour on the RTX ran at 251 fps with nothing growing in Godot's or FellowEngine's accounts, and found
+what no lab had — a burning object that freed invalid IDs and compiled its shaders anew each time it was lit, and made
+its ash heap's material mid-fire (a 4.8 s freeze the first time). Fixed: the hour's hitches 61 → 25, those compiling
+pipelines 31 → 2, the start without a hitch. Afterwards, the first snow's pipelines and particles shader and a
+relighting's readbacks moved to the nodes' setup (the first snow's worst frame 51 → 10.1 ms, a relighting's 17-22 → 6-9
+ms). Not done: three hitches an hour of 120-240 ms that compile nothing and leave the GPU and render thread idle (the
+main thread's; not seen in 20 minutes with FellowEngine's counters), pre-warming the specializations a session compiles
+over its first twenty minutes (in the background, without a hitch), days rather than hours, other GPUs.
