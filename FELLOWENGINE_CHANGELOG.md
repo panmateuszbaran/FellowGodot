@@ -29,8 +29,11 @@ Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.m
   lavapipe, no error in a debug build.
 - With the separate render thread (decision 0165): `FellowWater3D`, `FellowRain3D` and `FellowShallowWater3D` free their
   RenderingDevice resources on the render thread (before: 80 errors and leaked textures, uniform sets and shaders at
-  the slice's exit, and the same for any of them freed during play). Found too: a deadlock in Godot's shader
-  compilation when the worker pool has two threads (the cloud's) and one is the render thread — documented.
+  the slice's exit, and the same for any of them freed during play). And a deadlock in Godot's shader compilation
+  fixed: a thread waiting for a version's compile group while holding the version's mutex, with every worker blocked on
+  that mutex or busy (the cloud's two-thread pool, one of them the render thread: two runs of four hung); the waiter now
+  compiles the group's variants no task has started itself. The same shaders; the image regression suite exact with
+  its shader cache warm and cold.
 
 ## Milestone 59 — pipelines compiled ahead (2026-11-06)
 

@@ -19,7 +19,8 @@ slice's profile without rendering puts first.
   process groups; FellowEngine's animation code gives the same poses there bit for bit.
 * The separate render thread (decision 0165), which overlaps the main thread's scene work with the rendering: water,
   rain and shallow water freed their GPU resources on the main thread (errors and leaks at exit); fixed. A deadlock in
-  Godot's own shader compilation with a two-thread worker pool found and documented.
+  Godot's own shader compilation (a waiter holding a version's mutex while every worker is blocked) fixed: the waiter
+  compiles the variants no task has started.
 * A measurement fixed: `Performance.TIME_PROCESS`, which the bench reported as "the main thread's process time", is the
   largest of each second's main-loop steps with the RenderingServer's sync and draw — with the default thread model the
   frame's rendering and its waits for the GPU. The slice's 5.3 ms on the RTX was not its scene's cost. FellowEngine's
@@ -35,7 +36,8 @@ slice's profile without rendering puts first.
   `bench/metrics.gd`: reported.
 * `benchmarks/project/scenes/crowd_lab.gd`, `crowd_group.gd`, `slice_lab.gd`: `--crowd_groups`,
   `--slice_crowd_groups`; `bench/animation_check.gd`: `--groups`, `scene_ms`.
-* `modules/fellow_fluid/fellow_water_3d.*`, `fellow_rain_3d.*`, `fellow_shallow_water_3d.*`: `_rt_destroy()`.
+* `modules/fellow_fluid/fellow_water_3d.*`, `fellow_rain_3d.*`, `fellow_shallow_water_3d.*`: `_rt_destroy()`;
+  `servers/rendering/renderer_rd/shader_rd.{h,cpp}`: a version group's variants claimed by its tasks or its waiter.
 
 ## 2. Verification
 

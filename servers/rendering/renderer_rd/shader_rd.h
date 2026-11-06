@@ -68,6 +68,8 @@ private:
 	Vector<RD::PipelineImmutableSampler> immutable_samplers;
 	Vector<uint64_t> dynamic_buffers;
 
+	struct FellowGroupClaims;
+
 	struct Version {
 		Mutex *mutex = nullptr;
 		CharString uniforms;
@@ -82,6 +84,8 @@ private:
 		HashMap<StringName, CharString> code_sections;
 		Vector<CharString> custom_defines;
 		Vector<WorkerThreadPool::GroupID> group_compilation_tasks;
+		// FellowEngine (decision 0165): each compiling group's claims, shared with its tasks (nullptr when none).
+		LocalVector<FellowGroupClaims *> fellow_claims;
 
 		Vector<Vector<uint8_t>> variant_data;
 		Vector<RID> variants;
@@ -99,6 +103,25 @@ private:
 		Version *version;
 		int group = 0;
 	};
+
+	// FellowEngine (decision 0165): a group's variants claimed one by one, by the group's tasks or by the thread that waits
+	// for the group, which compiles those not started yet itself instead of waiting for a worker thread: a thread that
+	// waits holding the version's mutex no longer depends on a free worker (with every worker blocked on that mutex, or
+	// the render thread one of two workers, the wait never ended). The same variants, compiled by other threads.
+	struct FellowGroupClaims {
+		CompileData data;
+		uint32_t count = 0;
+		std::atomic<uint8_t> *claimed = nullptr;
+		SafeNumeric<uint32_t> done;
+	};
+	struct FellowReap {
+		WorkerThreadPool::GroupID group;
+		FellowGroupClaims *claims;
+	};
+	Mutex fellow_reap_mutex;
+	LocalVector<FellowReap> fellow_reap;
+	void _fellow_compile_claimed(uint32_t p_index, FellowGroupClaims *p_claims);
+	void _fellow_reap(bool p_wait);
 
 	// Vector will have the size of SHADER_STAGE_MAX and unused stages will have empty strings.
 	void _compile_variant(uint32_t p_variant, CompileData p_data);

@@ -262,6 +262,10 @@ void ShaderRD::_initialize_version(Version *p_version) {
 	p_version->fellow_lazy.resize_initialized(variant_defines.size());
 	p_version->fellow_lazy_count = 0;
 	p_version->group_compilation_tasks.resize_initialized(group_enabled.size());
+	p_version->fellow_claims.resize(group_enabled.size());
+	for (FellowGroupClaims *&c : p_version->fellow_claims) {
+		c = nullptr;
+	}
 }
 
 void ShaderRD::_clear_version(Version *p_version) {
@@ -843,8 +847,42 @@ void ShaderRD::_compile_version_start(Version *p_version, int p_group) {
 	compile_data.version = p_version;
 	compile_data.group = p_group;
 
-	WorkerThreadPool::GroupID group_task = WorkerThreadPool::get_singleton()->add_template_group_task(this, &ShaderRD::_compile_variant, compile_data, group_to_variant_map[p_group].size(), -1, true, SNAME("ShaderCompilation"));
+	_fellow_reap(false);
+	FellowGroupClaims *claims = memnew(FellowGroupClaims);
+	claims->data = compile_data;
+	claims->count = group_to_variant_map[p_group].size();
+	claims->claimed = memnew_arr(std::atomic<uint8_t>, MAX(claims->count, 1u));
+	for (uint32_t i = 0; i < claims->count; i++) {
+		claims->claimed[i].store(0, std::memory_order_relaxed);
+	}
+	p_version->fellow_claims[p_group] = claims;
+	WorkerThreadPool::GroupID group_task = WorkerThreadPool::get_singleton()->add_template_group_task(this, &ShaderRD::_fellow_compile_claimed, claims, claims->count, -1, true, SNAME("ShaderCompilation"));
 	p_version->group_compilation_tasks.write[p_group] = group_task;
+}
+
+void ShaderRD::_fellow_compile_claimed(uint32_t p_index, FellowGroupClaims *p_claims) {
+	if (p_claims->claimed[p_index].exchange(1, std::memory_order_acq_rel) != 0) {
+		return; // compiled by the thread that waited for the group
+	}
+	_compile_variant(p_index, p_claims->data);
+	p_claims->done.increment();
+}
+
+void ShaderRD::_fellow_reap(bool p_wait) {
+	// The groups whose waiter compiled their last variants: their tasks not started then return at once, whenever a
+	// worker runs them; the group is waited for (which frees it) and its claims freed once they all have.
+	MutexLock lock(fellow_reap_mutex);
+	for (uint32_t i = 0; i < fellow_reap.size();) {
+		const FellowReap r = fellow_reap[i];
+		if (p_wait || WorkerThreadPool::get_singleton()->is_group_task_completed(r.group)) {
+			WorkerThreadPool::get_singleton()->wait_for_group_task_completion(r.group);
+			memdelete_arr(r.claims->claimed);
+			memdelete(r.claims);
+			fellow_reap.remove_at_unordered(i);
+		} else {
+			i++;
+		}
+	}
 }
 
 void ShaderRD::_compile_version_end(Version *p_version, int p_group) {
@@ -852,7 +890,27 @@ void ShaderRD::_compile_version_end(Version *p_version, int p_group) {
 		return;
 	}
 	WorkerThreadPool::GroupID group_task = p_version->group_compilation_tasks[p_group];
-	{
+	FellowGroupClaims *claims = uint32_t(p_group) < p_version->fellow_claims.size() ? p_version->fellow_claims[p_group] : nullptr;
+	if (claims) {
+		// FellowEngine (decision 0165): the variants no task has started are compiled here; then the ones started finish
+		// on their threads, which wait for nothing.
+		Fellow::CostScope fellow_cost(Fellow::stats().cost_shader_wait_usec, Fellow::stats().cost_shader_waits);
+		for (uint32_t i = 0; i < claims->count; i++) {
+			if (claims->claimed[i].exchange(1, std::memory_order_acq_rel) == 0) {
+				_compile_variant(i, claims->data);
+				claims->done.increment();
+			}
+		}
+		while (claims->done.get() < claims->count) {
+			OS::get_singleton()->delay_usec(50);
+		}
+		p_version->fellow_claims[p_group] = nullptr;
+		{
+			MutexLock lock(fellow_reap_mutex);
+			fellow_reap.push_back({ group_task, claims });
+		}
+		_fellow_reap(false);
+	} else {
 		Fellow::CostScope fellow_cost(Fellow::stats().cost_shader_wait_usec, Fellow::stats().cost_shader_waits);
 		WorkerThreadPool::get_singleton()->wait_for_group_task_completion(group_task);
 	}
@@ -1352,4 +1410,5 @@ ShaderRD::~ShaderRD() {
 			version_free(version_rid);
 		}
 	}
+	_fellow_reap(true);
 }
