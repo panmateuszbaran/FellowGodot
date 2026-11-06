@@ -13,12 +13,13 @@ extends "res://bench/scene_base.gd"
 ##     the run turns them on (--fellow=post/atmosphere/enabled=true,post/clouds/enabled=true --sky=atmosphere)
 ## Options: --slice_weather=clear|cloudy|overcast|rain|storm|snow|blizzard (perf and capture modes: fixed; soak:
 ## cycled), --slice_day=<seconds>, --slice_daytime=<0..1> (the time of day at t = 0: 0.35 mid-morning),
-## --slice_crowd=<n> (48), --slice_trees=<n> (9000), --slice_grass=<clumps per m2 in the meadows> (1.0),
-## --slice_without=town,forest,water,weather,fire,crowd (parts left out), --slice_weather_seconds=<s> (120: each
-## weather of the soak's cycle), --slice_fire_seconds=<s> (240: the campfire's log burns again), --slice_terrain=node
-## (FellowTerrain3D at --slice_terrain_spacing=<m>, 1, instead of the 4 m chunks; --slice_terrain_lod=<m> its
-## lod_distance, --slice_terrain_patch=<quads> its patch_size); with it, --slice_foliage=node: the trees and grass
-## scattered by the terrain (FellowTerrainFoliage) over two more layers instead of placed by this script.
+## --slice_crowd=<n> (48), --slice_crowd_groups=<n> (0: Crowd Lab's --crowd_groups), --slice_trees=<n> (9000),
+## --slice_grass=<clumps per m2 in the meadows> (1.0), --slice_without=town,forest,water,weather,fire,crowd (parts left
+## out), --slice_weather_seconds=<s> (120: each weather of the soak's cycle), --slice_fire_seconds=<s> (240: the
+## campfire's log burns again), --slice_terrain=node (FellowTerrain3D at --slice_terrain_spacing=<m>, 1, instead of
+## the 4 m chunks; --slice_terrain_lod=<m> its lod_distance, --slice_terrain_patch=<quads> its patch_size); with it,
+## --slice_foliage=node: the trees and grass scattered by the terrain (FellowTerrainFoliage) over two more layers
+## instead of placed by this script.
 ## --slice_warmup=node: a FellowPipelineWarmer3D compiles the pipelines around the first camera while it loads.
 ## Stock Godot: the FellowEngine nodes are left out (load_error is not set; the slice is the terrain, town, crowd and
 ## forest).
@@ -654,6 +655,7 @@ func _build_crowd() -> void:
 	add_child(crowd)
 	crowd.args = {}
 	crowd.crowd = int(args.get("slice_crowd", "48"))
+	crowd.groups = int(args.get("slice_crowd_groups", "0"))
 	crowd._area = 20.0
 	crowd._define_bones()
 	crowd._build_mesh()

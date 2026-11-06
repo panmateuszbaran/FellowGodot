@@ -15,6 +15,9 @@ extends "res://bench/scene_base.gd"
 ## each to its time with an update, which evaluates and applies the clip exactly as the idle process would.
 ## --crowd_blend=1: instead, an AnimationTree per character blends idle, walk and run (a BlendSpace1D whose position
 ## set_time() moves), advanced by set_time()'s step: two clips with fractional weights per character.
+## --crowd_groups=N (milestone 60): the characters split into N process thread groups (Node.PROCESS_THREAD_GROUP_SUB_THREAD,
+## crowd_group.gd), each seeking its characters in its own _process() on a worker thread; their skeletons update on the
+## same thread (deferred thread-group notifications). The same poses as without groups.
 
 const CROWD := 256
 const SPACING := 2.4
@@ -35,6 +38,9 @@ var _lane: PackedFloat32Array = PackedFloat32Array()
 var _start: PackedFloat32Array = PackedFloat32Array()
 var _dir: PackedFloat32Array = PackedFloat32Array()
 var _area := 60.0
+var groups := 0 # --crowd_groups=N: the characters processed in N sub-thread process groups
+var _groups: Array[Node3D] = []
+var _t := 0.0
 
 # Bone table: name, parent index, head and tail (skeleton space, rest pose), radius.
 var _bone_names: PackedStringArray = PackedStringArray()
@@ -58,6 +64,7 @@ func build(p_args: Dictionary) -> void:
 	bench_name = "crowd"
 	crowd = int(args.get("crowd", str(CROWD)))
 	blend = str(args.get("crowd_blend", "0")) == "1"
+	groups = int(args.get("crowd_groups", "0"))
 	_area = maxf(20.0, sqrt(float(crowd)) * SPACING * 1.6)
 	_setup_common()
 	_setup_environment()
@@ -261,7 +268,19 @@ func _build_crowd() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 23
 	var side := int(ceil(sqrt(float(crowd))))
+	for g in groups:
+		var gn := Node3D.new()
+		gn.name = "group_%d" % g
+		gn.set_script(load("res://scenes/crowd_group.gd"))
+		gn.set("crowd", self)
+		gn.set("first", g * crowd / groups)
+		gn.set("last", (g + 1) * crowd / groups)
+		gn.process_thread_group = Node.PROCESS_THREAD_GROUP_SUB_THREAD
+		gn.process_thread_group_order = 1 # after the main thread's group, which sets the time
+		add_child(gn)
+		_groups.append(gn)
 	for i in crowd:
+		var parent: Node = _groups[i * groups / crowd] if groups > 0 else self
 		var root := Node3D.new()
 		root.name = "character_%d" % i
 		var sk := Skeleton3D.new()
@@ -297,7 +316,7 @@ func _build_crowd() -> void:
 				bs.add_blend_point(an, float(j))
 			at.tree_root = bs
 			at.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_MANUAL
-			add_child(root)
+			parent.add_child(root)
 			at.active = true
 			_trees.append(at)
 			_last_t.append(-phase)
@@ -308,7 +327,7 @@ func _build_crowd() -> void:
 			ap.root_node = NodePath("..")
 			ap.add_animation_library("", _library)
 			ap.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_MANUAL
-			add_child(root)
+			parent.add_child(root)
 			ap.play(CLIPS[clip])
 			_players.append(ap)
 		_chars.append(root)
@@ -355,8 +374,17 @@ func _define_cameras() -> void:
 
 
 func set_time(t: float) -> void:
+	_t = t
+	if _groups.is_empty():
+		apply_time(0, _chars.size())
+
+
+## Poses characters [p_from, p_to) at the time set_time() gave: from set_time() itself, or from the characters' process
+## group on its worker thread (--crowd_groups).
+func apply_time(p_from: int, p_to: int) -> void:
+	var t := _t
 	var span := _area * 1.2
-	for i in _chars.size():
+	for i in range(p_from, p_to):
 		var clip := _clip_of[i]
 		var speed: float = CLIP_SPEED[clip] if not blend else 1.4
 		var x := fposmod(_start[i] + _dir[i] * speed * t + span * 0.5, span) - span * 0.5

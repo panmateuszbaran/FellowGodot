@@ -8,7 +8,10 @@ extends SceneTree
 ## `perf stat -e task-clock` or instructions with callgrind there, decision 0163).
 ##
 ##   godot --headless --path benchmarks/project -s res://bench/animation_check.gd -- [--crowd=128] [--frames=400]
-##       [--set=<setting>=<value>,...] [--blend=0] [--hash=1]
+##       [--set=<setting>=<value>,...] [--blend=0] [--hash=1] [--groups=0]
+##
+## --groups=N: the characters in N sub-thread process groups (Crowd Lab's --crowd_groups), posed on worker threads; the
+## hashes must be those without groups.
 ##
 ## --set takes rendering/fellow/animation/* settings (without the prefix), e.g. --set=lazy_simulator_poses=false.
 ## One JSON line: ANIMATION_CHECK {"hashes": [...], "scene_ms": ..., "process_ms": ..., "set_time_ms": ...}
@@ -47,6 +50,7 @@ func _initialize() -> void:
 	crowd.args = {}
 	crowd.crowd = int(args.get("crowd", "128"))
 	crowd.blend = args.get("blend", "0") == "1"
+	crowd.groups = int(args.get("groups", "0"))
 	crowd._area = 30.0
 	crowd._define_bones()
 	crowd._build_mesh()
@@ -97,7 +101,7 @@ func _process(_delta: float) -> bool:
 			scene_ms = (s1["main_process_usec"] - stats0["main_process_usec"]) / 1000.0 / maxf(1, s1["main_frames"] - stats0["main_frames"])
 		print("ANIMATION_CHECK ", JSON.stringify({"hashes": hashes, "scene_ms": scene_ms, "process_ms": mean,
 				"process_ms_median": process_ms[process_ms.size() / 2], "set_time_ms": st,
-				"crowd": crowd.crowd, "frames": frames, "set": args.get("set", "")}))
+				"crowd": crowd.crowd, "frames": frames, "set": args.get("set", ""), "groups": crowd.groups}))
 		quit(0)
 		return false
 	t += step

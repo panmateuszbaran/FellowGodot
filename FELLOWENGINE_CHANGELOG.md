@@ -22,6 +22,11 @@ Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.m
   `Performance.TIME_PROCESS`, which the bench reported as the main thread's process time, is the largest of each
   second's steps with the RenderingServer's sync and draw — the frame's rendering and its waits for the GPU with the
   default thread model. `run_benchmarks.py` reports `scene_process_ms` and `main_draw_ms`.
+- Crowds on worker threads: Crowd Lab `--crowd_groups=N` (Slice Lab `--slice_crowd_groups`) puts the characters in N
+  sub-thread process groups (Godot's `Node.process_thread_group`), each posing its characters and updating their
+  skeletons on a worker thread. The same bone poses bit for bit as on the main thread (AnimationPlayers and blending
+  AnimationTrees, every FellowEngine animation shortcut on; `animation_check.gd --groups=N`), the same pictures on
+  lavapipe, no error in a debug build.
 
 ## Milestone 59 — pipelines compiled ahead (2026-11-06)
 
