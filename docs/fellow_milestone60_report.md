@@ -48,6 +48,8 @@ slice's profile without rendering puts first.
   (`fluid/gas_mg_tail_cells=2048`) at the slice's 48 cells, 0 pixels differ (for job f361).
 * lavapipe with the separate render thread: the slice with crowd groups for two minutes without an error; its water
   and rain freed at exit without an error or a leak.
+* The editor check (milestone 60's editor build, a 1920 × 1080 virtual screen): passed — the water, rain and gas
+  nodes added, dragged and freed in the editor, the presets added and undone.
 * CPU time measured with `perf stat -e task-clock` and instructions with callgrind (the cloud's frame timings vary
   ±40 % between runs).
 
