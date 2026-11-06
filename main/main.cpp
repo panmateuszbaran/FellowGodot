@@ -5090,6 +5090,8 @@ bool Main::iteration() {
 	NavigationServer3D::get_singleton()->process(process_step * time_scale);
 #endif // NAVIGATION_3D_DISABLED
 
+	const uint64_t fellow_draw_begin = OS::get_singleton()->get_ticks_usec(); // FellowEngine (milestone 60)
+
 	GodotProfileZoneGrouped(_profile_zone, "RenderingServer::sync");
 	RenderingServer::get_singleton()->sync(); //sync if still drawing from previous frames.
 
@@ -5115,6 +5117,10 @@ bool Main::iteration() {
 
 	process_ticks = OS::get_singleton()->get_ticks_usec() - process_begin;
 	process_max = MAX(process_ticks, process_max);
+	// FellowEngine (milestone 60): the frame step split into the scene's process and the RenderingServer's sync and draw.
+	Fellow::stats().main_frames.increment();
+	Fellow::stats().main_process_usec.add(fellow_draw_begin - process_begin);
+	Fellow::stats().main_draw_usec.add(process_begin + process_ticks - fellow_draw_begin);
 	uint64_t frame_time = OS::get_singleton()->get_ticks_usec() - ticks;
 
 	GodotProfileZoneGrouped(_profile_zone, "GDExtensionManager::frame");

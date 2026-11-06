@@ -9,6 +9,20 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 60 — the main thread's CPU (2026-11-06)
+
+- `rendering/fellow/animation/shared_no_override_pose`, `animation/lazy_simulator_poses` (on, exact), decision 0163:
+  a skeleton without overrides copies each bone's global pose into the deprecated one without overrides instead of
+  multiplying again; the compatibility PhysicalBoneSimulator3D of a skeleton without physical bones copies the bones'
+  poses only when one is bound or read. Crowd Lab headless (128 characters, release template): the main thread's
+  instructions −10.4 % (AnimationTrees blending −6.4 %), its CPU time a frame −7.3 % (−4.4 %), the same bone poses bit
+  for bit. Rejected: the keys' part of each rotation track's slerp kept per thread — fewer instructions, but more CPU
+  time (its table's cache misses cost more than the `acosf()` it saved).
+- The main loop's frame step split in FellowEngine's stats (`main_frames`, `main_process_usec`, `main_draw_usec`):
+  `Performance.TIME_PROCESS`, which the bench reported as the main thread's process time, is the largest of each
+  second's steps with the RenderingServer's sync and draw — the frame's rendering and its waits for the GPU with the
+  default thread model. `run_benchmarks.py` reports `scene_process_ms` and `main_draw_ms`.
+
 ## Milestone 59 — pipelines compiled ahead (2026-11-06)
 
 - `rendering/fellow/frame/stable_scene_bits` (on, exact), decision 0161: the colour passes' specialization bits that

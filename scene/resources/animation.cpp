@@ -2508,69 +2508,6 @@ Quaternion Animation::_interpolate(const Quaternion &p_a, const Quaternion &p_b,
 	return p_a.slerp(p_b, p_c);
 }
 
-// FellowEngine (rendering/fellow/animation/slerp_key_cache, decision 0163): Quaternion::slerp() between two keys of a
-// rotation track. Its sign, acos() and sin(omega) depend only on the two keys; a thread keeps them, found again by the
-// first key's address and used only if both keys hold the same bits as when they were computed (an edited or moved key
-// is computed again). The weight's part is computed every time with slerp()'s own expressions and types: the same
-// result bit for bit.
-struct FellowSlerpKeys {
-	const Quaternion *key = nullptr;
-	Quaternion a;
-	Quaternion b;
-	Quaternion to1;
-	real_t omega = 0.0f;
-	real_t sinom = 0.0f;
-	bool trig = false;
-};
-
-Quaternion Animation::_fellow_interpolate_linear(const Quaternion &p_a, const Quaternion &p_b, real_t p_c) const {
-	if (!(fellow_shortcuts.load(std::memory_order_relaxed) & FELLOW_SLERP_KEY_CACHE)) {
-		return _interpolate(p_a, p_b, p_c);
-	}
-	static constexpr uint32_t CACHE_BITS = 14;
-	thread_local LocalVector<FellowSlerpKeys> cache;
-	if (cache.is_empty()) {
-		cache.resize(1u << CACHE_BITS);
-	}
-	const uint32_t slot = uint32_t((uint64_t(uintptr_t(&p_a)) >> 4) * 0x9E3779B97F4A7C15ull >> (64 - CACHE_BITS));
-	FellowSlerpKeys &e = cache[slot];
-	if (e.key != &p_a || memcmp(&e.a, &p_a, sizeof(Quaternion)) != 0 || memcmp(&e.b, &p_b, sizeof(Quaternion)) != 0) {
-#ifdef MATH_CHECKS
-		if (!p_a.is_normalized() || !p_b.is_normalized()) {
-			return p_a.slerp(p_b, p_c); // its errors; not kept
-		}
-#endif
-		real_t cosom = p_a.dot(p_b);
-		if (cosom < 0.0f) {
-			cosom = -cosom;
-			e.to1 = -p_b;
-		} else {
-			e.to1 = p_b;
-		}
-		e.trig = (1.0f - cosom) > (real_t)CMP_EPSILON;
-		if (e.trig) {
-			e.omega = Math::acos(cosom);
-			e.sinom = Math::sin(e.omega);
-		}
-		e.key = &p_a;
-		e.a = p_a;
-		e.b = p_b;
-	}
-	real_t scale0, scale1;
-	if (e.trig) {
-		scale0 = Math::sin((1.0 - p_c) * e.omega) / e.sinom;
-		scale1 = Math::sin(p_c * e.omega) / e.sinom;
-	} else {
-		scale0 = 1.0f - p_c;
-		scale1 = p_c;
-	}
-	return Quaternion(
-			scale0 * p_a.x + scale1 * e.to1.x,
-			scale0 * p_a.y + scale1 * e.to1.y,
-			scale0 * p_a.z + scale1 * e.to1.z,
-			scale0 * p_a.w + scale1 * e.to1.w);
-}
-
 Variant Animation::_interpolate(const Variant &p_a, const Variant &p_b, real_t p_c) const {
 	return interpolate_variant(p_a, p_b, p_c);
 }
@@ -2810,7 +2747,7 @@ T Animation::_interpolate(const LocalVector<TKey<T>> &p_keys, double p_time, Int
 			return p_keys[idx].value;
 		} break;
 		case INTERPOLATION_LINEAR: {
-			return _fellow_interpolate_linear(p_keys[idx].value, p_keys[next].value, c); // decision 0163
+			return _interpolate(p_keys[idx].value, p_keys[next].value, c);
 		} break;
 		case INTERPOLATION_LINEAR_ANGLE: {
 			return _interpolate_angle(p_keys[idx].value, p_keys[next].value, c);

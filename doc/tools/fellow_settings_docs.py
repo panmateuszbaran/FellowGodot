@@ -109,7 +109,6 @@ D = {
     "animation/elide_modifier_backup": "Skeletons skip the bone backup around modifiers that change nothing. " + EXACT + " Decision 0076.",
     "animation/full_weight_slerp": "A rotation blended at weight 1 is copied, without the slerp's trigonometry. " + EXACT + " Decision 0076.",
     "animation/track_shortcuts": "Animation tracks' lookups done once per track instead of per key. " + EXACT + " Decision 0076.",
-    "animation/slerp_key_cache": "A rotation track's interpolation between two keys keeps the part of the slerp that depends only on the keys (found again by the keys' address, checked against their values). " + EXACT + " Decision 0163.",
     "animation/shared_no_override_pose": "A skeleton without global pose overrides copies each bone's global pose into the one without overrides instead of computing it again. " + EXACT + " Decision 0163.",
     "animation/lazy_simulator_poses": "The compatibility PhysicalBoneSimulator3D of a skeleton without physical bones reads the bones' global poses when a physical bone is bound instead of copying them after every update. The same physical bone poses, except for one bound and simulated before the skeleton's next update in the frame it was bound. Decision 0163.",
     "animation/key_hints": "Animation tracks start their key search where the last one ended. " + EXACT + " Decision 0076.",

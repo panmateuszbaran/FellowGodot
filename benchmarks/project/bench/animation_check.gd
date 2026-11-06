@@ -2,14 +2,17 @@ extends SceneTree
 ## FellowEngine skeletal animation check (decisions 0076, 0163): Crowd Lab's characters (52 bones, a rotation track per
 ## bone, each its own AnimationPlayer and Skeleton3D) stepped by a time step that is not a multiple of the clips' key
 ## spacing; every 25 frames a hash of every character's bones — pose rotation, global pose, global pose without
-## overrides — and the main thread's process time. Runs with FellowEngine's animation settings off and on must give the
-## same hashes; the process times compare their cost (headless: the dummy renderer, the main thread's work only).
+## overrides — and the main thread's time. Runs with FellowEngine's animation settings off and on must give the same
+## hashes; scene_ms (the scene's process step a frame, from FellowEngine's stats) compares their cost (headless: the
+## dummy renderer, the main thread's work only; the cloud's timings vary between runs: compare CPU time with
+## `perf stat -e task-clock` or instructions with callgrind there, decision 0163).
 ##
 ##   godot --headless --path benchmarks/project -s res://bench/animation_check.gd -- [--crowd=128] [--frames=400]
 ##       [--set=<setting>=<value>,...] [--blend=0] [--hash=1]
 ##
-## --set takes rendering/fellow/animation/* settings (without the prefix), e.g. --set=slerp_key_cache=false.
-## One JSON line: ANIMATION_CHECK {"hashes": [...], "process_ms": ..., "set_time_ms": ...}.
+## --set takes rendering/fellow/animation/* settings (without the prefix), e.g. --set=lazy_simulator_poses=false.
+## One JSON line: ANIMATION_CHECK {"hashes": [...], "scene_ms": ..., "process_ms": ..., "set_time_ms": ...}
+## (process_ms: Performance.TIME_PROCESS, each second's largest frame step, averaged).
 
 var args := {}
 var crowd
@@ -20,6 +23,7 @@ var t := 0.0
 var hashes := []
 var process_ms := []
 var set_time_ms := []
+var stats0 := {}
 
 
 func _initialize() -> void:
@@ -70,6 +74,8 @@ func _hash() -> String:
 
 func _process(_delta: float) -> bool:
 	frame += 1
+	if frame == 20:
+		stats0 = RenderingServer.call("fellow_get_stats") if RenderingServer.has_method("fellow_get_stats") else {}
 	if frame > 20:
 		process_ms.append(Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0)
 	if args.get("hash", "1") == "1" and frame % 25 == 0:
@@ -85,7 +91,11 @@ func _process(_delta: float) -> bool:
 		for v in set_time_ms:
 			st += v
 		st /= maxf(1, set_time_ms.size())
-		print("ANIMATION_CHECK ", JSON.stringify({"hashes": hashes, "process_ms": mean,
+		var scene_ms := -1.0
+		if stats0.has("main_frames"):
+			var s1: Dictionary = RenderingServer.call("fellow_get_stats")
+			scene_ms = (s1["main_process_usec"] - stats0["main_process_usec"]) / 1000.0 / maxf(1, s1["main_frames"] - stats0["main_frames"])
+		print("ANIMATION_CHECK ", JSON.stringify({"hashes": hashes, "scene_ms": scene_ms, "process_ms": mean,
 				"process_ms_median": process_ms[process_ms.size() / 2], "set_time_ms": st,
 				"crowd": crowd.crowd, "frames": frames, "set": args.get("set", "")}))
 		quit(0)

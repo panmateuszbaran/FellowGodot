@@ -282,6 +282,13 @@ def aggregate(runs: list[dict]) -> dict:
     out["buffer_mem_peak_bytes"] = max(r["memory_peak"]["buffer_mem_used"] for r in ok)
     out["process_peak_working_set_bytes"] = max(r.get("_proc", {}).get("peak_working_set", 0) for r in ok)
     out["load_time_ms"] = mean_std_cv([r["load_time_ms"] for r in ok])
+    # Milestone 60: the main loop's frame step split (FellowEngine's stats): the scene's process (scripts, animation,
+    # nodes) and the RenderingServer's sync and draw. process_ms (Performance.TIME_PROCESS) is the largest of each
+    # second's whole steps, the rendering included with the default thread model.
+    fs = [r["fellow_stats"] for r in ok if r.get("fellow_stats", {}).get("main_frames")]
+    if fs:
+        out["scene_process_ms_run_means"] = mean_std_cv([x["main_process_usec"] / x["main_frames"] / 1000.0 for x in fs])
+        out["main_draw_ms_run_means"] = mean_std_cv([x["main_draw_usec"] / x["main_frames"] / 1000.0 for x in fs])
     if any("gpu_passes_ms" in r for r in ok):
         names = sorted({n for r in ok for n in r.get("gpu_passes_ms", {})})
         out["gpu_passes_ms"] = {n: statistics.fmean([r["gpu_passes_ms"].get(n, 0.0) for r in ok if "gpu_passes_ms" in r]) for n in names}
@@ -611,7 +618,8 @@ def main() -> int:
             w.writerow(["scene", "resolution", "build", "preset", "fellow", "runs_valid", "noisy", "avg_fps", "frame_ms_mean", "frame_ms_std", "frame_ms_cv",
                         "gpu_ms_mean", "gpu_ms_cv", "render_cpu_ms_mean", "setup_cpu_ms_mean", "p50_ms", "p90_ms", "p95_ms", "p99_ms", "p99_9_ms",
                         "fps_1pct_low", "gpu_p95_ms", "gpu_p99_ms", "draw_calls", "primitives", "objects", "stutter_frames", "frames",
-                        "pipeline_compiles_measure", "vram_peak_MB", "tex_mem_peak_MB", "proc_peak_wset_MB", "load_ms", "gpu_clock_MHz_mean", "gpu_temp_C_mean"])
+                        "pipeline_compiles_measure", "vram_peak_MB", "tex_mem_peak_MB", "proc_peak_wset_MB", "load_ms", "gpu_clock_MHz_mean", "gpu_temp_C_mean",
+                        "scene_process_ms", "main_draw_ms"])
             for e in all_results.values():
                 a = e.get("aggregate", {})
                 if not a.get("runs_valid"):
@@ -629,6 +637,8 @@ def main() -> int:
                     round(a["load_time_ms"]["mean"], 1),
                     round(statistics.fmean([r["_gpu_telemetry"]["clocks.gr"]["mean"] for r in e["runs"] if "clocks.gr" in r.get("_gpu_telemetry", {})] or [float("nan")]), 0),
                     round(statistics.fmean([r["_gpu_telemetry"]["temperature.gpu"]["mean"] for r in e["runs"] if "temperature.gpu" in r.get("_gpu_telemetry", {})] or [float("nan")]), 1),
+                    round(a["scene_process_ms_run_means"]["mean"], 4) if "scene_process_ms_run_means" in a else "",
+                    round(a["main_draw_ms_run_means"]["mean"], 4) if "main_draw_ms_run_means" in a else "",
                 ])
         log(f"wrote {cpath}")
     log(f"wrote {jpath}")

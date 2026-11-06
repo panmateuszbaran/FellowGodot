@@ -7,7 +7,11 @@ extends RefCounted
 ##                   (GPU timestamps around the 3D+2D render of the viewport; excludes swapchain blit/present)
 ##   render_cpu_ms   RenderingServer.viewport_get_measured_render_time_cpu() (CPU time spent rendering the viewport)
 ##   setup_cpu_ms    RenderingServer.get_frame_setup_time_cpu() (CPU frame setup: culling, instance updates...)
-##   process_ms      Performance.TIME_PROCESS (script/node _process time on the main thread)
+##   process_ms      Performance.TIME_PROCESS: the largest, in the last second, of the main loop's frame steps —
+##                   SceneTree::process() (scripts, animation, nodes) AND the RenderingServer's sync() and draw(): with
+##                   the default thread model the frame's rendering and its waits for the GPU. Not the scene's own
+##                   cost: FellowEngine's stats split it (main_process_usec, main_draw_usec over main_frames; the
+##                   run's "fellow_stats", run_benchmarks' scene_process_ms and main_draw_ms).
 ##   draw_calls / primitives / objects  RenderingServer.get_rendering_info(TOTAL_*_IN_FRAME)
 ##   shadow_draw_calls  viewport render info (shadow pass) of the root viewport
 ## Note: GPU/CPU measured times are reported by the engine with a few frames of latency;

@@ -1227,7 +1227,7 @@ void AnimationMixer::_blend_calc_total_weight() {
 void AnimationMixer::_blend_process(double p_delta, bool p_update_only) {
 	// Apply value/transform/blend/bezier blends to track caches and execute method/audio/animation tracks.
 	// FellowEngine (decision 0076): the exact animation shortcuts, read once per blend.
-	const uint32_t fellow_shortcuts = (Fellow::animation_full_weight_slerp() ? uint32_t(Animation::FELLOW_FULL_WEIGHT_SLERP) : 0u) | (Fellow::animation_track_shortcuts() ? uint32_t(Animation::FELLOW_TRACK_SHORTCUTS) : 0u) | (Fellow::animation_key_hints() ? uint32_t(Animation::FELLOW_KEY_HINTS) : 0u) | (Fellow::animation_slerp_key_cache() ? uint32_t(Animation::FELLOW_SLERP_KEY_CACHE) : 0u);
+	const uint32_t fellow_shortcuts = (Fellow::animation_full_weight_slerp() ? uint32_t(Animation::FELLOW_FULL_WEIGHT_SLERP) : 0u) | (Fellow::animation_track_shortcuts() ? uint32_t(Animation::FELLOW_TRACK_SHORTCUTS) : 0u) | (Fellow::animation_key_hints() ? uint32_t(Animation::FELLOW_KEY_HINTS) : 0u);
 	Animation::fellow_shortcuts.store(fellow_shortcuts, std::memory_order_relaxed);
 	const bool fellow_track_shortcuts = fellow_shortcuts & Animation::FELLOW_TRACK_SHORTCUTS;
 #ifdef TOOLS_ENABLED

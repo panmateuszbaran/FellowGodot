@@ -246,12 +246,6 @@ inline bool animation_batched_skin_transforms() {
 inline bool animation_key_hints() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/animation/key_hints");
 }
-// animation/slerp_key_cache (decision 0163): a rotation track's linear interpolation between two keys keeps, per thread,
-// the part of Quaternion::slerp() that depends only on the keys (the sign, acos() of their dot product and its sine),
-// found again by the keys' address and checked against their values: the same results bit for bit.
-inline bool animation_slerp_key_cache() {
-	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/animation/slerp_key_cache");
-}
 // animation/shared_no_override_pose (decision 0163): a skeleton whose bones have no global pose override, and whose
 // global poses and global poses without overrides were computed alike since its last full update, copies each bone's
 // global pose into the one without overrides instead of computing the same product again: the same values.
@@ -1320,6 +1314,12 @@ struct Stats {
 	SafeNumeric<uint64_t> physics_process_usec; // the scene's _physics_process() (and navigation)
 	SafeNumeric<uint64_t> physics_step_usec; // PhysicsServer3D::end_sync() and step(): the simulation
 	SafeNumeric<uint64_t> physics_end_usec; // the message queue's flush and iteration_end()
+	// Milestone 60: the main loop's frame step (Main::iteration). Performance.TIME_PROCESS is the largest of the last
+	// second's steps, the RenderingServer's sync() and draw() included (with the default thread model, the frame's
+	// rendering and its waits for the GPU); these split the step and sum it over frames.
+	SafeNumeric<uint64_t> main_frames; // frame steps
+	SafeNumeric<uint64_t> main_process_usec; // SceneTree::process() (scripts, animation, nodes), the message queue, navigation
+	SafeNumeric<uint64_t> main_draw_usec; // RenderingServer::sync() and draw()
 	// GodotPhysics3D's step by phase (GodotSpace3D's elapsed times: integrate forces, the broadphase update, islands, pair
 	// setup (worker threads), pre-solve and solve, integrate velocities and sleep); Jolt's (pre-step, PhysicsSystem::Update,
 	// post-step).
