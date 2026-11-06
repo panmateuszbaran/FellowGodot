@@ -284,6 +284,10 @@ private:
 	uint64_t selections = 0;
 	uint64_t swaps = 0;
 	uint64_t last_select_usec = 0;
+	uint64_t process_usec_total = 0; // the main thread's time in the terrain's frames (levels and foliage)
+	uint64_t process_frames = 0;
+	uint64_t process_usec_max = 0;
+	uint64_t process_usec_last = 0;
 
 	void _rebuild_data();
 	void _ensure_data() const;

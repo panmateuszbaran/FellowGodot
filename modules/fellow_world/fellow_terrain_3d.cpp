@@ -976,7 +976,9 @@ void FellowTerrain3D::_process_lod() {
 	if (set.pending >= 0) {
 		// Shown once its buffer is three drawn frames old: its previous transforms are its current ones by then (the
 		// MultiMesh's motion vectors), and the GPU culls it again (decision 0034 skips a MultiMesh written this frame).
-		if (frame >= set.pending_frame + 3 || set.shown < 0) {
+		// Without a RenderingDevice (headless, the Compatibility renderer) there are no motion vectors, and no frames
+		// may be drawn at all: shown at once.
+		if (frame >= set.pending_frame + 3 || set.shown < 0 || rs->get_rendering_device() == nullptr) {
 			rs->instance_set_visible(set.instance[set.pending], is_visible_in_tree());
 			if (set.shown >= 0) {
 				rs->instance_set_visible(set.instance[set.shown], false);
@@ -1508,6 +1510,9 @@ Dictionary FellowTerrain3D::get_stats() const {
 	d["selections"] = int64_t(selections);
 	d["swaps"] = int64_t(swaps);
 	d["last_select_usec"] = int64_t(last_select_usec);
+	d["process_usec_mean"] = process_frames > 0 ? double(process_usec_total) / double(process_frames) : 0.0;
+	d["process_usec_max"] = int64_t(process_usec_max);
+	d["process_usec_last"] = int64_t(process_usec_last);
 	d["collision_shapes"] = int(shapes.size());
 	d["foliage_cells"] = int(foliage_cells.size());
 	d["foliage_instances"] = foliage_instances;
@@ -1703,6 +1708,7 @@ void FellowTerrain3D::_notification(int p_what) {
 			_update_instance_settings();
 		} break;
 		case NOTIFICATION_INTERNAL_PROCESS: {
+			const uint64_t t0 = OS::get_singleton()->get_ticks_usec();
 			_process_lod();
 			if (!foliage.is_empty() || !foliage_cells.is_empty()) {
 				Camera3D *cam = _find_camera();
@@ -1710,6 +1716,11 @@ void FellowTerrain3D::_notification(int p_what) {
 					_process_foliage(get_global_transform().affine_inverse().xform(cam->get_global_position()));
 				}
 			}
+			const uint64_t dt = OS::get_singleton()->get_ticks_usec() - t0;
+			process_usec_total += dt;
+			process_usec_max = MAX(process_usec_max, dt);
+			process_usec_last = dt;
+			process_frames++;
 		} break;
 	}
 }

@@ -372,6 +372,11 @@ void FellowGasVolume3D::_gather_obstacles(void *r_step) const {
 		}
 		const RID shape = ps->body_get_shape(body, shape_idx);
 		const PhysicsServer3D::ShapeType type = ps->shape_get_type(shape);
+		if (type == PhysicsServer3D::SHAPE_CONCAVE_POLYGON || type == PhysicsServer3D::SHAPE_HEIGHTMAP || type == PhysicsServer3D::SHAPE_SOFT_BODY || type == PhysicsServer3D::SHAPE_CUSTOM) {
+			// Not obstacles of the gas (below), and their data is large: not read (milestone 57: a FellowTerrain3D's
+			// height map shape under a campfire copied 66 000 heights every step).
+			continue;
+		}
 		const Variant shape_data = ps->shape_get_data(shape);
 		const Transform3D body_xform = ps->body_get_state(body, PhysicsServer3D::BODY_STATE_TRANSFORM);
 		Transform3D xform = body_xform * ps->body_get_shape_transform(body, shape_idx);

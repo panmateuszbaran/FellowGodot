@@ -525,6 +525,16 @@ func _build_vegetation_node() -> void:
 	_counts["foliage"] = "node"
 
 
+## The bench's per-frame extra metrics (perf mode): with --slice_terrain=node, the terrain's patches, its main-thread
+## time in the frame (levels of detail and foliage) and its foliage.
+func sample_extra() -> Dictionary:
+	if terrain_node == null:
+		return {}
+	var st: Dictionary = terrain_node.get_stats()
+	return {"terrain_patches": st.get("patches", 0), "terrain_usec": st.get("process_usec_last", 0),
+		"foliage_cells": st.get("foliage_cells", 0), "foliage_instances": st.get("foliage_instances", 0)}
+
+
 func _build_lights() -> void:
 	sun = DirectionalLight3D.new()
 	sun.name = "sun"

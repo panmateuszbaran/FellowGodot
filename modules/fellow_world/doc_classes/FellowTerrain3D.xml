@@ -50,7 +50,7 @@
 		<method name="get_stats" qualifiers="const">
 			<return type="Dictionary" />
 			<description>
-				The current selection and data: [code]patches[/code], [code]triangles[/code], [code]patches_per_level[/code], [code]levels[/code], [code skip-lint]lod_distance[/code] (the finest level's range in metres), [code]selections[/code] and [code]swaps[/code] (the selections computed and the MultiMesh switches since the start), [code]last_select_usec[/code], [code]collision_shapes[/code], [code]map_size[/code], [code]foliage_cells[/code] and [code]foliage_instances[/code] (the foliage's cells made and the instances drawn in them).
+				The current selection and data: [code]patches[/code], [code]triangles[/code], [code]patches_per_level[/code], [code]levels[/code], [code skip-lint]lod_distance[/code] (the finest level's range in metres), [code]selections[/code] and [code]swaps[/code] (the selections computed and the MultiMesh switches since the start), [code]last_select_usec[/code], [code]collision_shapes[/code], [code]map_size[/code], [code]process_usec_mean[/code], [code]process_usec_max[/code] and [code]process_usec_last[/code] (the main thread's time in the terrain's frames: its levels of detail and foliage), [code]foliage_cells[/code] and [code]foliage_instances[/code] (the foliage's cells made and the instances drawn in them).
 			</description>
 		</method>
 		<method name="heightmap_from_image" qualifiers="static">
