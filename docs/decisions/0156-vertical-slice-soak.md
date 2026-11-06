@@ -133,6 +133,11 @@ Three fixes, each where its node is set up:
 19.6 ms (no surface pipeline; the 12 ms particles shader the second fix removes), the largest frame of the run 22 ms;
 the pipelines compiled after the warm-up by kind: 170 specialization (in the background), 2 surface.
 
+**f350** (all three fixes; the same 5 minutes): 2 hitches, both the GPU's fence (17-19 ms), none compiling a pipeline;
+the first snow's second 10.1 ms at most (51 ms before the fixes), the relightings' 6.1-8.7 ms (17-22 ms before); in
+`weather_pipelines_check.gd` on the RTX, rain → snow compiles and creates nothing (snow → rain, starting in snow: a
+shader loaded from the cache and two shader objects, 4.8 ms).
+
 ## Decision
 
 **KEEP.** Slice Lab and the soak are the first measurements of FellowEngine as a game runs it: every system at once,
@@ -140,7 +145,7 @@ for an hour. The first hour on the RTX ran at 251 fps with nothing growing in Go
 found what no lab had — a burning object that freed invalid IDs and compiled its shaders anew each time it was lit,
 and made its ash heap's material mid-fire (a 4.8 s freeze the first time). Fixed: the hour's hitches 61 → 25, those
 compiling pipelines 31 → 2, the start without a hitch. Afterwards, the first snow's pipelines and particles shader and a relighting's readbacks
-moved to the nodes' setup (the first snow's frame 51 → 19.6 ms with the first fix). Not done: three hitches an hour of
+moved to the nodes' setup (the first snow's worst frame 51 → 10.1 ms, a relighting's 17-22 → 6-9 ms). Not done: three hitches an hour of
 120-240 ms that compile nothing and leave the GPU and render thread idle (the main thread's; not seen in 20 minutes
 with FellowEngine's counters), pre-warming the specializations a session compiles over its first twenty minutes (in
 the background, without a hitch), days rather than hours, other GPUs.
