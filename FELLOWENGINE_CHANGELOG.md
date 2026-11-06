@@ -9,6 +9,18 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 56 — motion matching on uneven ground; mirrored and tagged clips (2026-11-06)
+
+- `FellowMotionMatcher3D.ground_adaptation` (decision 0157, off by default): rays under the root and each foot's heel
+  and toe; the root follows the ground, the feet are placed on it by the legs' IK, the hips lowered for the lower foot,
+  a foot that is down turns to the slope. Against the root alone following the ground, a walking character's stance
+  feet: 8° slope 28 -> 3 mm off (in the ground in 49 % -> 0 % of the frames), stairs 56 -> 13 mm, uneven ground
+  27 -> 10 mm.
+- `FellowMotionDatabase.build()` options `mirror` (each clip mirrored, left and right swapped: Matching Lab's foot
+  sliding -18 %, trajectory error -6 %, a search twice as long) and `tags`; the matcher's `tags_required`,
+  `tags_excluded`.
+- Checks: `bench/ground_check.gd`, `bench/matching_tags_check.gd`.
+
 ## Milestone 54 — an image regression suite (2026-11-06)
 
 - `tools/fellow_regression/regression.py` (decision 0155): FellowEngine's features in twelve scenes (lights, shadows,

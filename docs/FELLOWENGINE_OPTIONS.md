@@ -428,6 +428,14 @@ database (60 Hz; bone roles by name, feature weights, contact thresholds in `opt
 `get_stats()`, `get_global_stats()`, `get_last_search()`. Nothing changes without the nodes. Decision 0149; bench
 Matching Lab (`--scene=matching`, data from `benchmarks/scripts/get_cmu_locomotion.sh`, `bench/matching_eval.gd`).
 
+Milestone 56, off by default: `ground_adaptation` (rays down under the root and each foot's heel and toe against
+`ground_collision_mask`, within `ground_probe_height` 0.6 m: the root follows the ground, the feet are placed on it,
+the hips lowered for the lower foot, `ground_alignment` turns a foot to the slope, `ground_halflife` 0.05 s;
+`ground_foot_placement` off: the root alone); the database's `mirror` (each clip mirrored, its left and right bones
+swapped; pairs by name or `mirror_pairs`) and `tags` (a clip's name to its tags, `"mirrored"` on mirrored clips) build
+options, the matcher's `tags_required` and `tags_excluded`. Decision 0157; `bench/ground_check.gd`,
+`bench/matching_tags_check.gd`, Matching Lab's `--matching_mirror=1`.
+
 ## Simulated GPUs (milestone 49)
 
 The environment's `FELLOW_VULKAN_PROFILE=<name>` (read once by the Vulkan driver; a diagnostic, nothing changes
