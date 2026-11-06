@@ -13,7 +13,8 @@ extends "res://bench/scene_base.gd"
 ##     the run turns them on (--fellow=post/atmosphere/enabled=true,post/clouds/enabled=true --sky=atmosphere)
 ## Options: --slice_weather=clear|cloudy|overcast|rain|storm|snow|blizzard (perf and capture modes: fixed; soak:
 ## cycled), --slice_day=<seconds>, --slice_daytime=<0..1> (the time of day at t = 0: 0.35 mid-morning),
-## --slice_crowd=<n> (48), --slice_trees=<n> (9000), --slice_grass=<clumps per m2 in the meadows> (1.0).
+## --slice_crowd=<n> (48), --slice_trees=<n> (9000), --slice_grass=<clumps per m2 in the meadows> (1.0),
+## --slice_without=town,forest,water,weather,fire,crowd (parts left out).
 ## Stock Godot: the FellowEngine nodes are left out (load_error is not set; the slice is the terrain, town, crowd and
 ## forest).
 
@@ -61,16 +62,25 @@ func build(p_args: Dictionary) -> void:
 	camera.far = 1500.0
 	_setup_environment()
 	var t0 := Time.get_ticks_usec()
+	# --slice_without=town,forest,water,weather,fire,crowd: parts left out (what a hitch or a cost comes from).
+	var without := str(args.get("slice_without", "")).replace("+", ",").split(",", false)
 	_build_terrain()
-	_build_town()
-	_build_vegetation()
+	if not without.has("town"):
+		_build_town()
+	if not without.has("forest"):
+		_build_vegetation()
 	_build_lights()
 	var fellow := ClassDB.class_exists("FellowWeather3D")
 	if fellow:
-		_build_water()
-		_build_weather()
-		_build_fire()
-	_build_crowd()
+		if not without.has("water"):
+			_build_water()
+		if not without.has("weather"):
+			_build_weather()
+		if not without.has("fire"):
+			_build_fire()
+	if not without.has("crowd"):
+		_build_crowd()
+	_counts["without"] = without
 	_define_cameras()
 	set_time(0.0)
 	info = {"stats": scene_stats(self), "fellow_nodes": fellow, "counts": _counts,
@@ -423,6 +433,12 @@ func _build_weather() -> void:
 	add_child(wind)
 	rain = ClassDB.instantiate("FellowRain3D")
 	rain.name = "Rain"
+	# Dry, without snow, not raining yet, as FellowWeather3D makes its own rain node: the weather sets it in (a rain
+	# node's own wet ground is kept, and its default is wet).
+	rain.set("rain", 0.0)
+	rain.set("wetness", 0.0)
+	rain.set("snow", 0.0)
+	rain.set("streak_width", 0.004)
 	add_child(rain)
 	lightning = ClassDB.instantiate("FellowLightning3D")
 	lightning.name = "Lightning"

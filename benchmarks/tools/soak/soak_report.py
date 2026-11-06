@@ -4,7 +4,8 @@
     python benchmarks/tools/soak/soak_report.py <result .json> [--out DIR]
 
 Writes <out>/soak.csv (one row a second), <out>/soak.png (frame time a second — mean, 99th percentile, max — with
-the hitches marked and the weather as bands; memory below: static, video), <out>/soak_summary.json, and prints the
+the hitches marked and the weather as bands; memory below: static, video, and with run_soak.py's process_memory.csv
+beside the result the process's resident memory and the GPU's memory in use), <out>/soak_summary.json, and prints the
 summary. Pillow draws the chart; without it there is no picture.
 """
 
@@ -18,7 +19,33 @@ WEATHER_COLOURS = {"clear": (250, 236, 180), "cloudy": (225, 228, 232), "overcas
                    "rain": (180, 200, 225), "storm": (150, 160, 200), "snow": (235, 240, 250), "blizzard": (210, 220, 240)}
 
 
-def chart(rows, hitches, path, title):
+def fit(samples, warm):
+    """Start, end, min, max and growth per hour (least squares) of (t, value) samples after warm seconds."""
+    pts = [(t, v) for t, v in samples if t >= warm and v is not None]
+    if len(pts) < 3:
+        return None
+    n = float(len(pts))
+    sx = sum(t for t, _ in pts)
+    sy = sum(v for _, v in pts)
+    sxx = sum(t * t for t, _ in pts)
+    sxy = sum(t * v for t, v in pts)
+    slope = (n * sxy - sx * sy) / max(n * sxx - sx * sx, 1e-9)
+    vals = [v for _, v in pts]
+    return {"start": pts[0][1], "end": pts[-1][1], "min": min(vals), "max": max(vals), "per_hour": round(slope * 3600.0, 2)}
+
+
+def read_process_memory(path):
+    """run_soak.py's samples: [(t, process_mb, gpu_used_mb)] (None where not sampled)."""
+    if not os.path.exists(path):
+        return []
+    out = []
+    with open(path, encoding="utf-8") as f:
+        for r in csv.DictReader(f):
+            out.append((float(r["t"]), float(r["process_mb"]) if r["process_mb"] else None, float(r["gpu_used_mb"]) if r["gpu_used_mb"] else None))
+    return out
+
+
+def chart(rows, hitches, path, title, process=None):
     try:
         from PIL import Image, ImageDraw  # noqa: PLC0415
     except ImportError:
@@ -60,11 +87,19 @@ def chart(rows, hitches, path, title):
     m_top = PAD + top_h + 50
     m_h = H - m_top - 40
     mems = [("static_mb", (40, 120, 40)), ("video_mb", (120, 40, 160))]
-    m_max = max(max(r[k] for r in rows) for k, _ in mems) * 1.1 or 1.0
-    for key, colour in mems:
-        pts = [(x_of(r["t"]), m_top + m_h - m_h * r[key] / m_max) for r in rows]
-        d.line(pts, fill=colour, width=2)
-    d.text((PAD, m_top - 18), f"memory (MiB, top {m_max:.0f}): static (green), video (purple)", fill=(0, 0, 0))
+    series = [([(r["t"], r[k]) for r in rows], colour) for k, colour in mems]
+    labels = "static (green), video (purple)"
+    if process:
+        # run_soak.py's samples are timed from the process's start; the rows from the soak's (after the scene's build).
+        shift = max(0.0, process[-1][0] - t_max) if process else 0.0
+        series.append(([(t - shift, p) for t, p, _ in process if p is not None and t >= shift], (230, 120, 20)))
+        series.append(([(t - shift, g) for t, _, g in process if g is not None and t >= shift], (120, 120, 120)))
+        labels += ", the process's resident memory (orange), the GPU's memory in use (grey)"
+    m_max = max([max(v for _, v in sr) for sr, _ in series if sr] + [1.0]) * 1.1
+    for sr, colour in series:
+        if len(sr) > 1:
+            d.line([(x_of(t), m_top + m_h - m_h * v / m_max) for t, v in sr], fill=colour, width=2)
+    d.text((PAD, m_top - 18), f"memory (MiB, top {m_max:.0f}): {labels}", fill=(0, 0, 0))
     for k in range(0, int(t_max) + 1, max(60, int(t_max / 12) // 60 * 60 or 60)):
         d.text((x_of(k) - 10, H - 25), f"{k // 60} min", fill=(0, 0, 0))
     im.save(path)
@@ -99,8 +134,16 @@ def main() -> int:
     summary["worst_hitches"] = soak.get("worst_hitches", [])[:10]
     with open(os.path.join(out, "soak_summary.json"), "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=1)
+    process = read_process_memory(os.path.join(os.path.dirname(os.path.abspath(a.result)), "process_memory.csv"))
+    if process:
+        warm = float(summary.get("warmup_s", 60.0))
+        shift = max(0.0, process[-1][0] - max(r["t"] for r in rows))  # the build before the soak's clock starts
+        summary["process_mb"] = fit([(t - shift, p) for t, p, _ in process], warm)
+        summary["gpu_used_mb"] = fit([(t - shift, g) for t, _, g in process], warm)
+        with open(os.path.join(out, "soak_summary.json"), "w", encoding="utf-8") as f:
+            json.dump(summary, f, indent=1)
     title = f"{res.get('scene')} {res.get('resolution')} on {summary['adapter']}"
-    summary["chart"] = os.path.join(out, "soak.png") if chart(rows, soak.get("hitches", soak.get("worst_hitches", [])), os.path.join(out, "soak.png"), title) else None
+    summary["chart"] = os.path.join(out, "soak.png") if chart(rows, soak.get("hitches", soak.get("worst_hitches", [])), os.path.join(out, "soak.png"), title, process) else None
     print(json.dumps(summary, indent=1))
     return 0
 

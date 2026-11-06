@@ -825,6 +825,13 @@ func _file_stem() -> String:
 ## frames longer than twice the median of the 120 before and 10 ms over it. The summary (after the first
 ## --soak_warmup seconds, 60): frame time percentiles, hitches per minute, memory and count growth per hour (a least
 ## squares fit), pipelines compiled.
+func _pipelines_total() -> int:
+	var n := 0
+	for v in _pipeline_compilations().values():
+		n += int(v)
+	return n
+
+
 func _run_soak() -> void:
 	var minutes := float(args.get("soak_minutes", "10"))
 	var warm := float(args.get("soak_warmup", "60"))
@@ -841,7 +848,8 @@ func _run_soak() -> void:
 	var sec_gpu := 0.0
 	var sec_cpu := 0.0
 	var state := {}
-	var pc_prev := _pipeline_compilations()
+	var pc_frame_prev := _pipelines_total()
+	var pc_sec := 0
 	var pc_total := 0
 	var pc_after_warm := 0
 	var t0 := Time.get_ticks_usec()
@@ -861,6 +869,11 @@ func _run_soak() -> void:
 		var ft := (now - last) / 1000.0
 		last = now
 		sec_ms.append(ft)
+		# Pipelines compiled in this frame (the likeliest cause of a hitch: a new material, effect or variant).
+		var pc_now := _pipelines_total()
+		var pc_frame := pc_now - pc_frame_prev
+		pc_frame_prev = pc_now
+		pc_sec += pc_frame
 		sec_gpu += RenderingServer.viewport_get_measured_render_time_gpu(vrid)
 		sec_cpu += RenderingServer.viewport_get_measured_render_time_cpu(vrid)
 		if recent.size() >= 30:
@@ -868,7 +881,7 @@ func _run_soak() -> void:
 			sorted.sort()
 			var med := sorted[sorted.size() / 2]
 			if ft > 2.0 * med and ft > med + 10.0:
-				hitches.append({"t": snappedf(t, 0.001), "ms": snappedf(ft, 0.01), "median_ms": snappedf(med, 0.01), "state": state.duplicate()})
+				hitches.append({"t": snappedf(t, 0.001), "ms": snappedf(ft, 0.01), "median_ms": snappedf(med, 0.01), "pipelines": pc_frame, "state": state.duplicate()})
 		recent.append(ft)
 		if recent.size() > 120:
 			recent.remove_at(0)
@@ -882,11 +895,8 @@ func _run_soak() -> void:
 			var sum := 0.0
 			for v in sec_ms:
 				sum += v
-			var pc := _pipeline_compilations()
-			var pc_new := 0
-			for k in pc:
-				pc_new += int(pc[k]) - int(pc_prev.get(k, 0))
-			pc_prev = pc
+			var pc_new := pc_sec
+			pc_sec = 0
 			pc_total += pc_new
 			if t >= warm:
 				pc_after_warm += pc_new
@@ -917,7 +927,8 @@ func _run_soak() -> void:
 		var span_min := maxf((minutes * 60.0 - warm) / 60.0, 1e-3)
 		summary.merge({"frames": srt.size(), "fps_mean": snappedf(srt.size() / (total / 1000.0), 0.01), "frame_ms_mean": snappedf(total / srt.size(), 0.001),
 			"frame_ms_p50": q.call(0.5), "frame_ms_p90": q.call(0.9), "frame_ms_p99": q.call(0.99), "frame_ms_p999": q.call(0.999), "frame_ms_max": snappedf(srt[srt.size() - 1], 0.001),
-			"hitches": late.size(), "hitches_per_minute": snappedf(late.size() / span_min, 0.01), "hitches_during_warmup": hitches.size() - late.size()})
+			"hitches": late.size(), "hitches_per_minute": snappedf(late.size() / span_min, 0.01), "hitches_during_warmup": hitches.size() - late.size(),
+			"hitches_compiling_pipelines": late.filter(func(h): return h["pipelines"] > 0).size()})
 	# Growth per hour after the warm-up: a least squares line through the per-second values.
 	for key in ["static_mb", "video_mb", "texture_mb", "buffer_mb", "objects", "nodes", "orphans", "resources"]:
 		if measured.size() < 10:
