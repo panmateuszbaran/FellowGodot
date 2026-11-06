@@ -21,6 +21,21 @@ Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.m
   `tags_excluded`.
 - Checks: `bench/ground_check.gd`, `bench/matching_tags_check.gd`.
 
+## Milestone 55 — a vertical slice played for an hour (2026-11-06)
+
+- Slice Lab (`--scene=slice`, decision 0156): a 1 km valley with a town of 711 buildings under HLOD and its street
+  lights, a campfire with a burning log, a crowd, a lake, 9 000 trees and grass in the wind, weather turning through
+  rain, storm and snow, a day turning to night. The bench's `--mode=soak` plays a scene in real time for minutes or
+  hours: per second the frame times, the GPU's and render thread's time, memory and counts, pipelines compiled; the
+  hitches with what compiled in them; growth per hour. `benchmarks/tools/soak/run_soak.py` samples the process's and
+  the GPU's memory from outside, `soak_report.py` writes the CSV, a chart and the summary.
+- The first hour on the RTX at 1080p: 251 fps, Godot's video memory 394 -> 395 MB, objects +2 — and 61 hitches, an
+  error every four minutes and a 4.8 s freeze at the first start, all from the burning log. Fixed in
+  `FellowBurnable3D`: lit again, it freed invalid texture IDs (new texture objects now) and compiled its shaders anew
+  (from `FellowSharedShaders` now); its ash heap made its material at the first ash (now when it is configured,
+  hidden). The hour again: 252 fps, 25 hitches (2 compiling pipelines, 31 before), no error, no frame over 21 ms in
+  the first 25 s.
+
 ## Milestone 54 — an image regression suite (2026-11-06)
 
 - `tools/fellow_regression/regression.py` (decision 0155): FellowEngine's features in twelve scenes (lights, shadows,

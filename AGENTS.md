@@ -47,6 +47,12 @@ Other platforms build in containers: `benchmarks/tools/platforms/platforms.sh bu
   exact; a difference you meant gets new goldens (`bless`, look at them, commit them with the reason).
 * **Performance**: `benchmarks/run_benchmarks.py` (A/B with alternating order, heat soak, statistics); timings only
   mean something on a real GPU, not on lavapipe.
+* **Long play** (a node that runs for minutes: its errors, hitches, memory): Slice Lab's soak,
+  `benchmarks/tools/soak/run_soak.py --godot <template> --out <dir> --minutes 60` and `soak_report.py` (on a GPU; on
+  lavapipe a few minutes at 160x90 with `-- --slice_weather_seconds=15 --slice_fire_seconds=10` still shows errors and
+  growth). A node that makes materials, meshes or kernels after it has started (a fire lit again, its first ash)
+  compiles pipelines mid-game: make them when the node is set up, and shaders from code through
+  `FellowSharedShaders`.
 * **Editor features**: `benchmarks/tools/editor_check/run_editor_check.py` (`--perf <scene> --perf-idle` counts the
   frames an untouched editor draws: a node that writes to the RenderingServer every frame without a visible change, or
   dispatches GPU work without asking for a frame (`Fellow::request_redraw()`), is a bug).

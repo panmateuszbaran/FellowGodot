@@ -12,6 +12,7 @@ a Python runner (`benchmarks/run_benchmarks.py`) and offline analysis tools (`be
 | `bistro_exterior` | **Amazon Lumberyard Bistro v5.2** exterior (FBX) | 2.8 M triangles, 1296 instances, 132 materials, vegetation, long shadows, many props |
 | `bistro_interior` | Bistro interior (FBX) | 1.0 M triangles, 2062 surfaces, shadowed omni lights, glass, dense props |
 | `fluid` | **Fluid Lab** (FellowEngine only) | GPU shallow-water simulation 256² / 512² / 1024², surface reconstruction, water rendering |
+| `slice` | **Slice Lab** (FellowEngine only, built in code) | a 1 km valley with every system at once: a town of 711 buildings under HLOD, street lights, a campfire with a burning log, a crowd, a lake, 9 000 trees and grass in the wind, turning weather, a day and night; the soak's scene (decision 0156) |
 
 Every scene defines fixed cameras (`*_cam_NN`), a deterministic flythrough and short temporal sequences.
 Sponza's fixed cameras are the six artist cameras shipped in Intel's glTF (`PhysCamera001-006`); Bistro's
@@ -108,6 +109,10 @@ REM temporal sequences and accumulated ground truth
 REM offline Cycles reference for the PBR lab
 godot ... -- --scene=pbr --mode=list --lighting=ref --export-ref=<dir>
 blender --background --factory-startup --python-exit-code 1 --python benchmarks\reference\pbr_lab_cycles.py -- --scene <dir>\pbr_lab_scene.json --out <dir>
+REM a soak: Slice Lab played in real time for an hour (frame times, hitches, memory per second; the process's memory
+REM sampled from outside), then its CSV, chart and summary
+.tools\venv\Scripts\python.exe benchmarks\tools\soak\run_soak.py --godot <template> --out <dir> --minutes 60
+.tools\venv\Scripts\python.exe benchmarks\tools\soak\soak_report.py <dir>\slice_soak_<date>.json --out <dir>\report
 REM whole plans (baseline = perf + profile + captures + temporal + references; ab = the same without references)
 .tools\venv\Scripts\python.exe benchmarks\run_suite.py baseline --build stock --tag godot-4.7.2
 REM report (HTML with sliders, graphs, tables) -> reports/<date>_<commit>/ and reports/latest/
