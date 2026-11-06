@@ -1291,6 +1291,7 @@ void FellowBurnable3D::_build_heap(MeshInstance3D *p_target) {
 	mesh->surface_set_material(0, heap_material);
 	MeshInstance3D *heap = memnew(MeshInstance3D);
 	heap->set_name("FellowAshHeap");
+	heap->set_visible(false); // shown once there is ash (_read_totals)
 	heap->set_mesh(mesh);
 	heap->set_cast_shadows_setting(p_target->get_cast_shadows_setting());
 	heap->set_layer_mask(p_target->get_layer_mask());
@@ -1648,7 +1649,10 @@ void FellowBurnable3D::_configure() {
 		heap_floor = ground_floor;
 	}
 	if (draw_burning) {
-		_build_display(target); // the ash heap's mesh once there is ash (_read_totals)
+		_build_display(target);
+		// The ash heap made now, hidden until there is ash (_read_totals): its pipelines compile with the scene's,
+		// not seconds into the fire (milestone 55: a 45-310 ms hitch about 3 s after a fire was lit).
+		_build_heap(target);
 	}
 	if (display_mesh.is_valid()) {
 		_swap_in(target);
@@ -1926,9 +1930,16 @@ void FellowBurnable3D::_read_totals() {
 		has_burned_out = true;
 		emit_signal(SNAME("burned_out"));
 	}
-	if (draw_burning && heap_id.is_null() && ash_fraction > 0.001f) {
-		if (MeshInstance3D *target = Object::cast_to<MeshInstance3D>(ObjectDB::get_instance(target_id))) {
-			_build_heap(target);
+	if (draw_burning && ash_fraction > 0.001f) {
+		MeshInstance3D *heap = Object::cast_to<MeshInstance3D>(ObjectDB::get_instance(heap_id));
+		if (!heap) {
+			if (MeshInstance3D *target = Object::cast_to<MeshInstance3D>(ObjectDB::get_instance(target_id))) {
+				_build_heap(target);
+				heap = Object::cast_to<MeshInstance3D>(ObjectDB::get_instance(heap_id));
+			}
+		}
+		if (heap && !heap->is_visible()) {
+			heap->set_visible(true);
 		}
 	}
 	if (has_ignited && !has_collapsed && collapse_fraction > 0.0f && wood_fraction + char_fraction <= collapse_fraction) {
