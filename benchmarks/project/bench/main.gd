@@ -83,6 +83,7 @@ const SCENES := {
 	"matching": "res://scenes/matching_lab.gd",
 	"streaming": "res://scenes/streaming_lab.gd",
 	"world": "res://scenes/world_lab.gd",
+	"slice": "res://scenes/slice_lab.gd",
 }
 const DT := 1.0 / 60.0
 
@@ -393,6 +394,8 @@ func _ready() -> void:
 			await _run_reference()
 		"physics":
 			await _run_physics()
+		"soak":
+			await _run_soak()
 		"list":
 			pass
 		"geodump":
@@ -813,6 +816,145 @@ func _file_stem() -> String:
 ## tick); every --hash_every ticks (default 30) the SHA-256 of
 ## every moving body's transform (and the queries' results): two builds of one engine simulate the same when their
 ## hashes agree tick for tick.
+# ---------------------------------------------------------------- soak (milestone 55)
+
+## --mode=soak: the scene played in real time for --soak_minutes (10), its flythrough looping, its own schedule
+## (scene.soak_update(t): weather, time of day) running. Per second: frames, frame time (mean, 99th percentile, max:
+## the main loop's wall clock between frames, what a player sees), the GPU's and the render thread's time, memory
+## (static, video, textures, buffers), object, node, orphan node and resource counts, pipelines compiled. Hitches:
+## frames longer than twice the median of the 120 before and 10 ms over it. The summary (after the first
+## --soak_warmup seconds, 60): frame time percentiles, hitches per minute, memory and count growth per hour (a least
+## squares fit), pipelines compiled.
+func _run_soak() -> void:
+	var minutes := float(args.get("soak_minutes", "10"))
+	var warm := float(args.get("soak_warmup", "60"))
+	watchdog_s = maxf(watchdog_s, minutes * 60.0 + 600.0)
+	var dur: float = scene.flythrough.duration()
+	var vrid := vp.get_viewport_rid()
+	RenderingServer.viewport_set_measure_render_time(vrid, true)
+	var has_schedule: bool = scene.has_method("soak_update")
+	var rows := []
+	var hitches := []
+	var all_ms := PackedFloat32Array()
+	var recent := PackedFloat32Array()
+	var sec_ms := PackedFloat32Array()
+	var sec_gpu := 0.0
+	var sec_cpu := 0.0
+	var state := {}
+	var pc_prev := _pipeline_compilations()
+	var pc_total := 0
+	var pc_after_warm := 0
+	var t0 := Time.get_ticks_usec()
+	var last := t0
+	var next_row := 1.0
+	_log("soak: %.0f minutes" % minutes)
+	while true:
+		var t := (Time.get_ticks_usec() - t0) / 1e6
+		if t >= minutes * 60.0:
+			break
+		if has_schedule:
+			state = scene.soak_update(t)
+		scene.set_time(t)
+		scene.apply_path_sample(scene.flythrough.sample(fposmod(t, dur)))
+		await get_tree().process_frame
+		var now := Time.get_ticks_usec()
+		var ft := (now - last) / 1000.0
+		last = now
+		sec_ms.append(ft)
+		sec_gpu += RenderingServer.viewport_get_measured_render_time_gpu(vrid)
+		sec_cpu += RenderingServer.viewport_get_measured_render_time_cpu(vrid)
+		if recent.size() >= 30:
+			var sorted := recent.duplicate()
+			sorted.sort()
+			var med := sorted[sorted.size() / 2]
+			if ft > 2.0 * med and ft > med + 10.0:
+				hitches.append({"t": snappedf(t, 0.001), "ms": snappedf(ft, 0.01), "median_ms": snappedf(med, 0.01), "state": state.duplicate()})
+		recent.append(ft)
+		if recent.size() > 120:
+			recent.remove_at(0)
+		if t >= warm:
+			all_ms.append(ft)
+		if t >= next_row:
+			next_row += 1.0
+			var n := sec_ms.size()
+			var sorted_s := sec_ms.duplicate()
+			sorted_s.sort()
+			var sum := 0.0
+			for v in sec_ms:
+				sum += v
+			var pc := _pipeline_compilations()
+			var pc_new := 0
+			for k in pc:
+				pc_new += int(pc[k]) - int(pc_prev.get(k, 0))
+			pc_prev = pc
+			pc_total += pc_new
+			if t >= warm:
+				pc_after_warm += pc_new
+			var mem := _mem()
+			rows.append({"t": snappedf(t, 0.01), "frames": n, "mean_ms": snappedf(sum / maxf(n, 1), 0.001),
+				"p99_ms": snappedf(sorted_s[mini(n - 1, int(n * 0.99))], 0.001), "max_ms": snappedf(sorted_s[n - 1], 0.001),
+				"gpu_ms": snappedf(sec_gpu / maxf(n, 1), 0.001), "render_cpu_ms": snappedf(sec_cpu / maxf(n, 1), 0.001),
+				"static_mb": snappedf(mem["static_mem"] / 1048576.0, 0.01), "video_mb": snappedf(mem["video_mem_used"] / 1048576.0, 0.01),
+				"texture_mb": snappedf(mem["texture_mem_used"] / 1048576.0, 0.01), "buffer_mb": snappedf(mem["buffer_mem_used"] / 1048576.0, 0.01),
+				"objects": int(Performance.get_monitor(Performance.OBJECT_COUNT)), "nodes": int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT)),
+				"orphans": int(Performance.get_monitor(Performance.OBJECT_ORPHAN_NODE_COUNT)), "resources": int(Performance.get_monitor(Performance.OBJECT_RESOURCE_COUNT)),
+				"pipelines": pc_new, "state": state.duplicate()})
+			sec_ms.clear()
+			sec_gpu = 0.0
+			sec_cpu = 0.0
+	RenderingServer.viewport_set_measure_render_time(vrid, false)
+	var measured := rows.filter(func(r): return r["t"] >= warm)
+	var summary := {"minutes": minutes, "warmup_s": warm, "seconds": rows.size(), "flythrough_s": dur,
+		"pipelines_compiled": pc_total, "pipelines_compiled_after_warmup": pc_after_warm}
+	if all_ms.size() > 0:
+		var srt := all_ms.duplicate()
+		srt.sort()
+		var total := 0.0
+		for v in all_ms:
+			total += v
+		var q := func(p: float) -> float: return snappedf(srt[mini(srt.size() - 1, int(srt.size() * p))], 0.001)
+		var late := hitches.filter(func(h): return h["t"] >= warm)
+		var span_min := maxf((minutes * 60.0 - warm) / 60.0, 1e-3)
+		summary.merge({"frames": srt.size(), "fps_mean": snappedf(srt.size() / (total / 1000.0), 0.01), "frame_ms_mean": snappedf(total / srt.size(), 0.001),
+			"frame_ms_p50": q.call(0.5), "frame_ms_p90": q.call(0.9), "frame_ms_p99": q.call(0.99), "frame_ms_p999": q.call(0.999), "frame_ms_max": snappedf(srt[srt.size() - 1], 0.001),
+			"hitches": late.size(), "hitches_per_minute": snappedf(late.size() / span_min, 0.01), "hitches_during_warmup": hitches.size() - late.size()})
+	# Growth per hour after the warm-up: a least squares line through the per-second values.
+	for key in ["static_mb", "video_mb", "texture_mb", "buffer_mb", "objects", "nodes", "orphans", "resources"]:
+		if measured.size() < 10:
+			break
+		var sx := 0.0
+		var sy := 0.0
+		var sxx := 0.0
+		var sxy := 0.0
+		for r in measured:
+			var x: float = r["t"]
+			var y := float(r[key])
+			sx += x
+			sy += y
+			sxx += x * x
+			sxy += x * y
+		var nn := float(measured.size())
+		var slope := (nn * sxy - sx * sy) / maxf(nn * sxx - sx * sx, 1e-9)
+		summary[key] = {"start": measured[0][key], "end": measured[measured.size() - 1][key], "min": measured.map(func(r): return r[key]).min(), "max": measured.map(func(r): return r[key]).max(), "per_hour": snappedf(slope * 3600.0, 0.01)}
+	# The frame time by the scene's state (the weather) after the warm-up.
+	var by_state := {}
+	for r in measured:
+		var k := str(r["state"].get("weather", ""))
+		if not by_state.has(k):
+			by_state[k] = [0.0, 0, 0.0]
+		by_state[k][0] += r["mean_ms"] * r["frames"]
+		by_state[k][1] += r["frames"]
+		by_state[k][2] = maxf(by_state[k][2], r["p99_ms"])
+	var per_state := {}
+	for k in by_state:
+		per_state[k] = {"frame_ms_mean": snappedf(by_state[k][0] / maxf(by_state[k][1], 1), 0.001), "seconds_p99_max_ms": by_state[k][2], "frames": by_state[k][1]}
+	summary["by_weather"] = per_state
+	var worst := hitches.duplicate()
+	worst.sort_custom(func(a, b): return a["ms"] > b["ms"])
+	result["soak"] = {"summary": summary, "worst_hitches": worst.slice(0, 40), "hitches": hitches.slice(0, 5000), "rows": rows}
+	_log("soak done: %s" % JSON.stringify(summary))
+
+
 func _run_physics() -> void:
 	if not scene.has_method("physics_state_bytes"):
 		_fail("mode physics needs the physics scene")
