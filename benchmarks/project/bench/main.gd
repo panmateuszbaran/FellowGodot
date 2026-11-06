@@ -825,13 +825,6 @@ func _file_stem() -> String:
 ## frames longer than twice the median of the 120 before and 10 ms over it. The summary (after the first
 ## --soak_warmup seconds, 60): frame time percentiles, hitches per minute, memory and count growth per hour (a least
 ## squares fit), pipelines compiled.
-func _pipelines_total() -> int:
-	var n := 0
-	for v in _pipeline_compilations().values():
-		n += int(v)
-	return n
-
-
 func _run_soak() -> void:
 	var minutes := float(args.get("soak_minutes", "10"))
 	var warm := float(args.get("soak_warmup", "60"))
@@ -848,10 +841,12 @@ func _run_soak() -> void:
 	var sec_gpu := 0.0
 	var sec_cpu := 0.0
 	var state := {}
-	var pc_frame_prev := _pipelines_total()
+	var pc_frame_prev := _pipeline_compilations()
 	var pc_sec := 0
+	var pc_sec_draw := 0
 	var pc_total := 0
 	var pc_after_warm := 0
+	var pc_after_warm_by := {}
 	var t0 := Time.get_ticks_usec()
 	var last := t0
 	var next_row := 1.0
@@ -870,10 +865,20 @@ func _run_soak() -> void:
 		last = now
 		sec_ms.append(ft)
 		# Pipelines compiled in this frame (the likeliest cause of a hitch: a new material, effect or variant).
-		var pc_now := _pipelines_total()
-		var pc_frame := pc_now - pc_frame_prev
+		var pc_now := _pipeline_compilations()
+		var pc_frame := 0
+		var pc_by := {}
+		for k in pc_now:
+			var dk := int(pc_now[k]) - int(pc_frame_prev.get(k, 0))
+			if dk != 0:
+				pc_by[k] = dk
+				pc_frame += dk
 		pc_frame_prev = pc_now
 		pc_sec += pc_frame
+		pc_sec_draw += int(pc_by.get("draw", 0))
+		if (Time.get_ticks_usec() - t0) / 1e6 >= warm:
+			for k in pc_by:
+				pc_after_warm_by[k] = int(pc_after_warm_by.get(k, 0)) + pc_by[k]
 		sec_gpu += RenderingServer.viewport_get_measured_render_time_gpu(vrid)
 		sec_cpu += RenderingServer.viewport_get_measured_render_time_cpu(vrid)
 		if recent.size() >= 30:
@@ -881,7 +886,7 @@ func _run_soak() -> void:
 			sorted.sort()
 			var med := sorted[sorted.size() / 2]
 			if ft > 2.0 * med and ft > med + 10.0:
-				hitches.append({"t": snappedf(t, 0.001), "ms": snappedf(ft, 0.01), "median_ms": snappedf(med, 0.01), "pipelines": pc_frame, "state": state.duplicate()})
+				hitches.append({"t": snappedf(t, 0.001), "ms": snappedf(ft, 0.01), "median_ms": snappedf(med, 0.01), "pipelines": pc_frame, "pipelines_by": pc_by, "state": state.duplicate()})
 		recent.append(ft)
 		if recent.size() > 120:
 			recent.remove_at(0)
@@ -896,7 +901,9 @@ func _run_soak() -> void:
 			for v in sec_ms:
 				sum += v
 			var pc_new := pc_sec
+			var pc_new_draw := pc_sec_draw
 			pc_sec = 0
+			pc_sec_draw = 0
 			pc_total += pc_new
 			if t >= warm:
 				pc_after_warm += pc_new
@@ -908,14 +915,14 @@ func _run_soak() -> void:
 				"texture_mb": snappedf(mem["texture_mem_used"] / 1048576.0, 0.01), "buffer_mb": snappedf(mem["buffer_mem_used"] / 1048576.0, 0.01),
 				"objects": int(Performance.get_monitor(Performance.OBJECT_COUNT)), "nodes": int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT)),
 				"orphans": int(Performance.get_monitor(Performance.OBJECT_ORPHAN_NODE_COUNT)), "resources": int(Performance.get_monitor(Performance.OBJECT_RESOURCE_COUNT)),
-				"pipelines": pc_new, "state": state.duplicate()})
+				"pipelines": pc_new, "pipelines_draw": pc_new_draw, "state": state.duplicate()})
 			sec_ms.clear()
 			sec_gpu = 0.0
 			sec_cpu = 0.0
 	RenderingServer.viewport_set_measure_render_time(vrid, false)
 	var measured := rows.filter(func(r): return r["t"] >= warm)
 	var summary := {"minutes": minutes, "warmup_s": warm, "seconds": rows.size(), "flythrough_s": dur,
-		"pipelines_compiled": pc_total, "pipelines_compiled_after_warmup": pc_after_warm}
+		"pipelines_compiled": pc_total, "pipelines_compiled_after_warmup": pc_after_warm, "pipelines_after_warmup_by_kind": pc_after_warm_by}
 	if all_ms.size() > 0:
 		var srt := all_ms.duplicate()
 		srt.sort()
