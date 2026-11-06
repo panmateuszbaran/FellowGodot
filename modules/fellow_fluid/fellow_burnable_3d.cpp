@@ -30,9 +30,8 @@
 
 #include "fellow_burnable_3d.h"
 
-#include "fellow_shared_shaders.h"
-
 #include "fellow_node_warnings.h"
+#include "fellow_shared_shaders.h"
 
 #include "core/config/engine.h"
 #include "core/object/callable_mp.h"
