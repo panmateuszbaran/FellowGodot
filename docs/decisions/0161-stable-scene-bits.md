@@ -62,15 +62,16 @@ each held until 20 frames compile nothing:
 Each state's picture is the same, bit for bit, with the setting on and off (21 of 21). The image regression suite:
 every picture exact with the setting on (its default).
 
-Not measured yet (no GPU this time): what the general pipelines cost on the RTX in frames without the features, and
-the slice's specializations and hitches with it on — job f360 once the GPU is free.
+On the RTX (f360): the same check gives the same counts (28 off, 5 on, the same states). Slice Lab on the terrain with
+its foliage, 1080p, frame-locked and interleaved (six runs each, the first of each left out: it compiled its own
+pipelines): frame 5.484 ms on against 5.450 off, GPU 4.214 against 4.170 ms (medians; +0.6 % and +1.0 %, within the
+runs' spread of 4.12-4.49 ms), the 99th percentile 7.29 against 7.25 ms. (That night the GPU ran at 67 W and 1.7 GHz.)
 
 ## Decision
 
 **KEEP, on.** A scene's features no longer recompile its materials when they come and go: on lavapipe 28 compilations
-across a scene's changes become the 5 of a pass that had never run, at the same image. Its GPU cost is to measure on
-the RTX before it is final (if any feature's general pipeline costs more than its bursts are worth, that feature's
-bit can be left out of the latch).
+across a scene's changes become the 5 of a pass that had never run, at the same image. On the RTX the general pipelines cost the slice
+about 1 % of its GPU time, within the runs' spread.
 
 Not done: reflection probes' and other passes' first draws (their pipelines are new: rendering them once at load would
 compile them); autotune's evaluations (decision 0068 prepares those); Godot's own scene bits (soft shadows per light,

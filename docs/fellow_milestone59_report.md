@@ -1,6 +1,6 @@
 # FellowEngine — milestone 59 report (pipelines compiled ahead)
 
-Status: **checked on lavapipe** (2026-11-06); the RTX's measurements wait for the GPU. Branch `fellow/geometry`.
+Status: **FINAL** (2026-11-06): checked on lavapipe, measured on the RTX (job f360). Branch `fellow/geometry`.
 Decision records `docs/decisions/0161-stable-scene-bits.md`, `0162-pipeline-warmup.md`.
 
 ## 0. Result
@@ -36,9 +36,8 @@ unseen objects 0 instead of 7 — with MSAA 0 instead of 13, six of which a fram
 * lavapipe: both checks (below); every state's picture with the setting on and off, bit for bit (21 of 21); the image
   regression suite (exact, the setting on); the editor check (the new class's icon, the menu's setup without a warning,
   undone); a 2-minute slice soak with the warm-up (no error).
-* RTX 5070 Ti Laptop: not yet (the GPU was not available). To measure: what the general pipelines cost in frames
-  without the features (Slice Lab, the setting on against off, frame-locked, interleaved), and the slice's soak with
-  both (its specializations after the warm-up and the hitches during their bursts), with milestone 58's job f359.
+* RTX 5070 Ti Laptop (job f360): both checks; Slice Lab with the setting on against off (frame-locked, interleaved,
+  six runs each); the slice's 20-minute soak with the warm-up and the setting (as f358's).
 
 ## 3. Measurements
 
@@ -60,9 +59,21 @@ once around after the load), the pipelines compiled during the turn:
 | TAA | 7 | 0 |
 | MSAA 4× | 13 (6 while the frame waited) | 0 |
 
+On the RTX (f360; the GPU at 67 W and 1.7 GHz that night, against 81 W and 1.9 GHz in f356):
+
+| | result |
+|---|---|
+| `pipeline_states_check.gd` (1280 × 720) | off 28, **on 5** (the probe's first capture), as on lavapipe |
+| `pipeline_warmup_check.gd`, TAA | the turn: 7 without the warm-up, **0** with it; the warm-up 33 frames, 341 ms, 41 pipelines |
+| Slice Lab, the setting on against off (medians of five runs) | frame 5.484 against 5.450 ms, GPU 4.214 against 4.170 ms (+1.0 %, within the spread) |
+| the slice's 20-minute soak, warm-up and setting on | 122 pipelines after the warm-up (6.1 a minute; f358: 10.3-11), 16 hitches |
+
+The soak's five hitches of 167-396 ms (none compiling on the main thread, each during a burst of background
+compilation): the likely cause, the pipeline cache's saves holding the RenderingDevice's lock, is decision 0166's
+(milestone 60; job f363 to confirm).
+
 ## 4. Limits
 
-* No GPU measurement yet: the general pipelines' cost (registers, loops entered for nothing) and the slice's hitches.
 * A reflection probe's first capture, particles' process materials, what the camera's place does not show (far away,
   hidden, streamed in later) and a split screen's other viewports still compile when they first draw; autotune's
   evaluations switch bits of their own (decision 0068 prepares those); Godot's own scene bits (per-light soft shadows,
@@ -70,6 +81,4 @@ once around after the load), the pipelines compiled during the turn:
 
 ## 5. Next
 
-The RTX's measurements of milestones 58 and 59 (jobs f359, f360) when the GPU is free; other GPUs (point 6 of the
-plan) when the hardware is at hand; the slice's three long hitches with the foliage (f358) once the GPU shows whether
-these changes remove them.
+Other GPUs (point 6 of the plan) when the hardware is at hand; the slice's long hitches: decision 0166.

@@ -45,8 +45,13 @@ Slice Lab `--slice_warmup=node` (lavapipe, 160 × 90, a 2-minute soak at 0.6 fra
 error; whether it covers the slice is the RTX's to measure. The editor check: the class's icon; the menu's setup added
 without a configuration warning and undone.
 
-Not measured yet (no GPU this time): the slice on the RTX with the warm-up and decision 0161 — the specializations its
-soak still compiles after the warm-up (310-330 in 30 minutes before, f358) and the hitches during their bursts.
+On the RTX (f360, 1280 × 720, TAA): during the turn 7 specialized pipelines without the warm-up, **0** with it; the
+warm-up 33 frames, 341 ms, 41 pipelines. The slice's 20-minute soak with the warm-up and decision 0161 (f360, as f358's
+with the foliage): 122 pipelines after the warm-up (120 specialized, 2 surface) — 6.1 a minute against 10.3-11 a
+minute in f358 — and 16 hitches (0.84 a minute), one compiling a pipeline on the main thread. Five of them, 167-396
+ms, came during bursts of background compilation without compiling anything on the main thread: the likely cause,
+the pipeline cache's saves holding the device's lock, is decision 0166's (job f363 to confirm). What still compiles after the warm-up: weather changes (snow's first
+fall), the fire's relighting, autotune's evaluations (decision 0068), what comes into view later.
 
 ## Decision
 

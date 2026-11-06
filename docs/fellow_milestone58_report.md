@@ -1,7 +1,6 @@
 # FellowEngine — milestone 58 report (sculpting and painting the terrain)
 
-Status: **checked on lavapipe and headless** (2026-11-06); the RTX's measurement (job f359) is built and waits for
-the GPU. Branch `fellow/geometry`. Decision record
+Status: **FINAL** (2026-11-06): checked on lavapipe and headless, measured on the RTX (job f360). Branch `fellow/geometry`. Decision record
 `docs/decisions/0160-terrain-editing.md`.
 
 ## 0. Result
@@ -39,8 +38,8 @@ them and a rebuild never waits for them (a first paint stroke over grown foliage
 * lavapipe and headless: `terrain_edit_check.gd` (every check; the textures against a rebuild and, after the blits,
   against the originals, bit for bit); the editor check (the toolbar, a mouse stroke, paint strokes, undo and redo, the
   setup); the image regression suite (bit-exact).
-* RTX 5070 Ti Laptop: job f359 (the check at 1025², 2049² and 4097², strokes held 10 s with a dab a frame), built
-  and ready, not run yet.
+* RTX 5070 Ti Laptop: job f360 (the check at 1025², 2049² and 4097², strokes held 10 s with a dab a frame): every
+  check passes.
 
 ## 3. Measurements
 
@@ -55,6 +54,16 @@ them and a rebuild never waits for them (a first paint stroke over grown foliage
 | building the terrain again (before: every edit) | 28 ms | 150 ms (lavapipe) | 455 ms |
 | the textures uploaded a frame with an edit (heights and normals; a splat map) | 8; 6 MB | 34; 22 MB | 134; 89 MB |
 
+| RTX 5070 Ti Laptop, 1080p (f360) | 1025² | 2049² | 4097² |
+|---|---|---|---|
+| a frame while a raise stroke is held (a dab a frame): mean; 99th percentile | 3.9; 5.1 ms | 12.3; 17.1 ms | 76; 101 ms |
+| the same, painting | 2.3; 3.9 ms | 9.2; 15.3 ms | 36; 47 ms |
+| the frame's update after a stroke: heights and normals; a splat map | 2.7; 1.5 ms | 10.0; 6.2 ms | 64.6; 24.3 ms |
+| the first paint stroke (making the splat maps) | 6 ms | 34 ms | 98 ms |
+| building the terrain again (before: every edit) | 19 ms | 76 ms | 298 ms |
+
+(In f360 the RTX ran at 67 W and 1.7 GHz, against 81 W and 1.9 GHz in f356.)
+
 Every check passes, every texture bit-exact with a rebuild's (lavapipe, read back from the GPU), the foliage regrown
 over the edits as a rebuild grows it (162 instances both); the editor check's stroke raised the idle terrain's middle
 1.36 → 3.92 m, and its undo restored every height.
@@ -62,7 +71,8 @@ over the edits as a rebuild grows it (162 instances both); the editor check's st
 ## 4. Limits
 
 * The textures are uploaded whole each frame something was edited (the RenderingServer has no partial update of a
-  texture): 8-134 MB a frame by the map's size; what it costs on a GPU is job f359's to measure.
+  texture): 8-134 MB a frame by the map's size. On the RTX editing runs at 260-430 frames a second at 1025², 80-110 at
+  2049² and 13-28 at 4097², where the upload is 65 ms for the heights and normals: large maps need a partial upload.
 * No brushes for holes, noise or erosion; no stamping from the editor (`blit_heightmap_region()` from code); no
   painting of the foliage's density apart from the layers' weights.
 * A stroke's undo keeps a copy of the whole image it changes from the stroke's start.

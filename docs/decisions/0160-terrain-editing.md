@@ -63,8 +63,8 @@ flat 256 m terrain with a grass and a rock layer, ready to sculpt.
   mouse across the idle terrain raises it; undo restores every height, redo gives the stroke's; a first paint stroke
   makes the splat map and its undo removes it; a second writes a rectangle both ways; the Terrain setup adds without a
   configuration warning and undoes.
-* RTX 5070 Ti Laptop (job f359, built and ready; not run yet: the GPU was not available): the same check at 1025²,
-  2049² and 4097² with a raise and a paint stroke held for 10 seconds, a dab a frame, the frame times meanwhile.
+* RTX 5070 Ti Laptop (job f360, replacing f359): the same check at 1025², 2049² and 4097² with a raise and a paint
+  stroke held for 10 seconds, a dab a frame, the frame times meanwhile: every check passes.
 
 ## Results
 
@@ -79,8 +79,19 @@ height image the dummy renderer holds: 2-60 ms, by the map's size; a GPU's rende
 
 The textures' upload is the open cost: the RenderingServer updates a texture whole, so a frame with an edit uploads the
 heights' and normals' textures with their mips (8 MB at 1025², 34 MB at 2049², 134 MB at 4097²) and the edited splat
-map's (6, 22, 89 MB). What that costs on a GPU, and what sculpting and painting feel like on the larger maps, is job
-f359's measurement, still to run.
+map's (6, 22, 89 MB). On the RTX (f360; the GPU at 67 W and 1.7 GHz that night, against 81 W and 1.9 GHz in f356):
+
+| RTX 5070 Ti Laptop, 1080p (f360) | 1025² | 2049² | 4097² |
+|---|---|---|---|
+| a frame while a raise stroke is held (a dab a frame): mean; 99th percentile | 3.9; 5.1 ms | 12.3; 17.1 ms | 76; 101 ms |
+| the same, painting | 2.3; 3.9 ms | 9.2; 15.3 ms | 36; 47 ms |
+| the frame's update after a stroke: heights and normals; a splat map | 2.7; 1.5 ms | 10.0; 6.2 ms | 64.6; 24.3 ms |
+| the first paint stroke (making the splat maps) | 6 ms | 34 ms | 98 ms |
+| building the terrain again (before: every edit) | 19 ms | 76 ms | 298 ms |
+
+At 1025² sculpting and painting run at 260-430 frames a second, at 2049² at 80-110; at 4097² the whole textures'
+upload at each frame's end (64.6 ms for the heights and normals, 24.3 ms for a splat map) leaves 13-28: there a partial
+upload is needed.
 
 ## Decision
 
@@ -88,6 +99,7 @@ f359's measurement, still to run.
 milliseconds a dab on the main thread, leaving exactly the terrain its images make.
 
 Not done: brushes for holes, noise or erosion; stamping a heightmap from the editor (the blits do it from code);
-painting the foliage's density apart from the layers; a partial upload of the textures (above: the whole texture is
-uploaded again each frame something was edited); the RTX's measurement (job f359); the heightmap's undo snapshot is a
-copy of the whole image a stroke.
+painting the foliage's density apart from the layers; a partial upload of the textures (the whole texture is uploaded
+again each frame something was edited: 13-28 frames a second while editing a 4097² map on the RTX; the
+RenderingServer's textures cannot be copied into, so the terrain would need textures of its own on the device); the
+heightmap's undo snapshot is a copy of the whole image a stroke.
