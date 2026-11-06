@@ -11,8 +11,8 @@ brush), `modules/fellow_editor/fellow_editor_plugin.cpp` (the Terrain setup) · 
 Decision 0158's terrain draws heights and splat maps made elsewhere: a person had nothing to shape the ground with in
 the editor, and a game nothing to change it with while it runs (a crater, a road's bed). The only way to change it was
 to edit the images and call `update_heightmap()`, which builds everything again — the CPU copy, the levels' bounds,
-the normals, every texture and mip, every collision shape, every foliage cell: 150 ms for a 2 km map at 1 m on the
-cloud CPU, 440 ms for 4 km — far too slow for a brush that dabs every frame.
+the normals, every texture and mip, every collision shape, every foliage cell: 28 ms for a 1 km map at 1 m on the
+cloud CPU, 150 ms for 2 km, 455 ms for 4 km — far too slow for a brush that dabs every frame.
 
 ## Change
 
@@ -63,19 +63,24 @@ flat 256 m terrain with a grass and a rock layer, ready to sculpt.
   mouse across the idle terrain raises it; undo restores every height, redo gives the stroke's; a first paint stroke
   makes the splat map and its undo removes it; a second writes a rectangle both ways; the Terrain setup adds without a
   configuration warning and undoes.
-* RTX 5070 Ti Laptop (job f359): the same check at 1025², 2049² and 4097² with a raise and a paint stroke held for
-  10 seconds, a dab a frame, the frame times meanwhile.
+* RTX 5070 Ti Laptop (job f359, built and ready; not run yet: the GPU was not available): the same check at 1025²,
+  2049² and 4097² with a raise and a paint stroke held for 10 seconds, a dab a frame, the frame times meanwhile.
 
 ## Results
 
 Every check passes on lavapipe and headless; every texture of the edited terrain is bit-exact with a rebuild's, and the
 foliage over it the same (162 instances both). On the cloud CPU, a dab's own time (the CPU's copy, bounds, normals,
-mipmaps of the region): sculpting 0.02-0.4 ms at 513² and 0.03-0.08 ms at 2049² (a 12-16 m brush at 1 m); painting
-0.03 ms (the first stroke, making the splat maps: 9 ms at 513², 34 ms at 2049²); the update at the frame's end
-(lavapipe: the textures copied into its memory, the collision shapes) 7-9 ms at 2049²; building the terrain again,
-what an edit cost before: 150 ms at 2049², 440 ms at 4097² (headless).
+mipmaps of the region): 0.02-0.08 ms for a 12-16 m brush at 1 m, whatever the map's size (513² to 4097²); painting
+0.03-0.06 ms (the first stroke, making the splat maps: 6 ms at 1025², 34 ms at 2049², 187 ms at 4097²); the update at
+the frame's end without a GPU (headless: the collision shapes) 0.3-0.5 ms, and on lavapipe (the textures copied into
+its memory too) 6-9 ms at 2049²; undoing a 340 × 230 rectangle 10-13 ms headless. Building the terrain again, what an
+edit cost before: 28 ms at 1025², 150 ms at 2049², 455 ms at 4097². (Headless, a stroke's first dab also copies the
+height image the dummy renderer holds: 2-60 ms, by the map's size; a GPU's renderer holds no copy.)
 
-__F359__
+The textures' upload is the open cost: the RenderingServer updates a texture whole, so a frame with an edit uploads the
+heights' and normals' textures with their mips (8 MB at 1025², 34 MB at 2049², 134 MB at 4097²) and the edited splat
+map's (6, 22, 89 MB). What that costs on a GPU, and what sculpting and painting feel like on the larger maps, is job
+f359's measurement, still to run.
 
 ## Decision
 
@@ -83,6 +88,6 @@ __F359__
 milliseconds a dab on the main thread, leaving exactly the terrain its images make.
 
 Not done: brushes for holes, noise or erosion; stamping a heightmap from the editor (the blits do it from code);
-painting the foliage's density apart from the layers; a partial upload of the textures (the whole texture is uploaded
-again each frame something was edited: __F359_UPLOAD__); the heightmap's undo snapshot is a copy of the whole image a
-stroke.
+painting the foliage's density apart from the layers; a partial upload of the textures (above: the whole texture is
+uploaded again each frame something was edited); the RTX's measurement (job f359); the heightmap's undo snapshot is a
+copy of the whole image a stroke.

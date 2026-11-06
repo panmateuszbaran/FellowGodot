@@ -49,7 +49,8 @@ the slope), `sink`, `cast_shadows`, `seed`.
   grass-coloured layers (forest, meadow) the terrain scatters over.
 * RTX 5070 Ti Laptop: Slice Lab's frame time with the script's trees and grass against the terrain's (frame-locked,
   interleaved, three runs each; jobs f354-f356); 10 minutes of its soak on the terrain with scattered foliage (f355,
-  then with the fixes f357).
+  then with the fixes f357); 30 minutes with it and 30 on the terrain with the script's trees and grass (f358), the
+  process's memory sampled every 5 s.
 * Cloud CPU, headless: the terrain's own time a frame with a camera flying over Slice Lab's valley at 12 m/s.
 
 ## Results
@@ -72,13 +73,23 @@ waiting for a dropped cell's queued task, and running other queued work meanwhil
 hitch; video memory 400 → 401 MB, objects +2, nodes and orphans constant. The process's resident memory rose 2 262 →
 2 600 MB from the first to the tenth minute (the chunks' slice: 1 457 → 1 620 MB in 19 minutes); headless on the cloud
 CPU (no GPU driver) it stays at 133 MB through 36 000 frames of the same flight with 90 cells made and freed around
-the camera: __F358__
+the camera. Thirty minutes of each (f358): with the scattered foliage the process's memory rose from 1.74 GB (the first
+five minutes' mean) to 2.25 GB by the 20th minute and stayed there (2.23-2.28 GB to the 30th, the largest 2.35 GB at
+the 17th); on the terrain with the script's trees and grass instead, from 1.66 to 2.11 GB, still rising 30-60 MB every
+five minutes at its end. Video memory, objects, nodes and orphans stayed flat in both (400 → 401 MB, +2 objects). So
+the foliage's own memory does not grow: the process's rise comes with the terrain node, with its foliage or without
+(the chunks' slice rose less: 1.46 → 1.62 GB in 19 minutes, f348), outside FellowEngine's own allocations (headless it
+stays flat), and is left open. The thirty minutes with the foliage also had three hitches of 202-262 ms (at 2, 16 and
+17 minutes) that compiled nothing on the main thread while 0.6-1.9 s of Godot's specialization pipelines compiled on
+the worker threads, and the render thread and the GPU were short (0.45 ms, 3.3 ms): the ten minutes of f357 had none,
+the thirty without the foliage none over 21 ms (13 hitches of 16-21 ms, the GPU's fence). Still to explain (with the
+pipelines' pre-warming, point 4 of the plan).
 
 ## Decision
 
 **KEEP.** The terrain scatters what Slice Lab's script placed, at the same GPU cost and a shorter render thread, a few
 microseconds a frame on the main thread, deterministic, and only around the camera; with its two hitch fixes it plays
-ten minutes with one hitch.
+ten minutes with one hitch (thirty with three long ones, still to explain), its memory flat.
 
 Not done: a fade at the range's end (instances appear and disappear there; the kinds' materials can fade
 themselves), impostors for far kinds (decision 0122's are FellowHLOD3D's), foliage that collides, painting density

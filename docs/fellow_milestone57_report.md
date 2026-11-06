@@ -1,6 +1,6 @@
 # FellowEngine — milestone 57 report (terrain and foliage)
 
-Status: **measured on the RTX** (2026-11-06) and checked on lavapipe. Branch `fellow/geometry`. Decision records
+Status: **measured on the RTX** (2026-11-06; the 30-minute soaks f358) and checked on lavapipe. Branch `fellow/geometry`. Decision records
 `docs/decisions/0158-terrain.md` (the terrain), `0159-terrain-foliage.md` (its foliage); the slice's remaining hitches
 in `0156-vertical-slice-soak.md` ("Afterwards").
 
@@ -44,8 +44,9 @@ within 0.08 mm. Also: the slice's first snow and a relit log no longer hitch (51
   scene (bit-exact, blessed; the whole suite bit-exact after the shadow cache's change); the editor's idle frames with
   a terrain and its foliage; Slice Lab's cameras with chunks, with the node and with its foliage.
 * RTX 5070 Ti Laptop: `terrain_check.gd` at 1080p, a 1 km and a 4 km map, Slice Lab's cameras on the node (f350);
-  Slice Lab's frame time, chunks against the node, frame-locked and interleaved (f352-f355); a 10-minute soak on the
-  terrain with its foliage (f355); the slice's hitch fixes (f349, f350).
+  Slice Lab's frame time, chunks against the node, frame-locked and interleaved (f352-f355); 10-minute soaks on the
+  terrain with its foliage (f355, f357); 30 minutes with it and 30 without it (f358); the slice's hitch fixes (f349,
+  f350).
 
 ## 3. Measurements
 
@@ -80,7 +81,11 @@ every two): before the foliage's two fixes (f355) 10 hitches — 6 surface pipel
 (21.5 ms), four of 139-274 ms that compiled nothing on the main thread; with them (f357) 1 hitch (17 ms, the GPU's
 fence), the largest frame 17 ms, 236 fps, video memory 400 → 401 MB, objects +2. The process's resident memory rose
 338 MB from the first to the tenth minute (the chunks' slice: 163 MB in 19 minutes; our own allocations, headless, do
-not grow): __F358__
+not grow). In 30 minutes (f358) it stopped growing at 2.25 GB from the 20th minute with the foliage, and rose 1.66 →
+2.11 GB without it (the script's trees and grass instead), still rising at the end; video memory and objects flat in
+both. The 30 minutes with the foliage had three hitches of 202-262 ms that compiled nothing on the main thread while
+0.6-1.9 s of Godot's specialization pipelines compiled on the worker threads (the render thread 0.45 ms, the GPU
+3.3 ms); without the foliage, 13 hitches, none over 21 ms.
 
 ## 4. Limits
 
@@ -92,6 +97,9 @@ not grow): __F358__
 * One heightmap in memory (a 4 km map at 1 m: 64 MB of heights, 85 MB with mips on the GPU); no streaming of regions,
   no holes, no virtual texturing.
 * The splat maps blend weights (two RGBA8 images): 9 layers at most.
+* Over 30 minutes on the RTX: the process's memory rises with the terrain node (to a plateau with its foliage, still
+  rising slowly without it; FellowEngine's own allocations and video memory flat), and the foliage's slice had three
+  hitches of 202-262 ms during bursts of background pipeline compilation — both still to explain.
 
 ## 5. Next
 

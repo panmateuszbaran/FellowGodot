@@ -15,7 +15,8 @@ Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.m
   up to 1; the splat maps made when there are none), decision 0160: only the region under the brush is updated — the
   queries at once, the textures and collision shapes once at the frame's end, the foliage over it scattered again —
   and the result is the terrain a rebuild from the edited images makes, every texture and mip bit for bit (lavapipe,
-  read back). `blit_heightmap_region()`, `blit_splat_region()` write rectangles back (undo, stamps). __F359_CHANGELOG__
+  read back). `blit_heightmap_region()`, `blit_splat_region()` write rectangles back (undo, stamps). A dab costs 0.02-0.08 ms of the main thread on the cloud CPU whatever the
+  map's size (a rebuild, what an edit cost before: 28-455 ms for 1-4 km); the RTX's measurement is still to run.
 - In the editor: a selected terrain's toolbar in the 3D view (Raise, Lower, Smooth, Flatten, Paint, the layer, the
   brush's size and strength), the brush drawn on the ground, one undoable action a stroke; the FellowEngine menu's
   "Add Terrain (256 x 256 m, to sculpt)".
