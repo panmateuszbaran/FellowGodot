@@ -14,7 +14,8 @@ extends "res://bench/scene_base.gd"
 ## Options: --slice_weather=clear|cloudy|overcast|rain|storm|snow|blizzard (perf and capture modes: fixed; soak:
 ## cycled), --slice_day=<seconds>, --slice_daytime=<0..1> (the time of day at t = 0: 0.35 mid-morning),
 ## --slice_crowd=<n> (48), --slice_trees=<n> (9000), --slice_grass=<clumps per m2 in the meadows> (1.0),
-## --slice_without=town,forest,water,weather,fire,crowd (parts left out).
+## --slice_without=town,forest,water,weather,fire,crowd (parts left out), --slice_weather_seconds=<s> (120: each
+## weather of the soak's cycle), --slice_fire_seconds=<s> (240: the campfire's log burns again).
 ## Stock Godot: the FellowEngine nodes are left out (load_error is not set; the slice is the terrain, town, crowd and
 ## forest).
 
@@ -46,6 +47,8 @@ var _day := 600.0
 var _daytime := 0.35
 var _soak_weather := -1
 var _last_fire := 0.0
+var _weather_seconds := SOAK_WEATHER_SECONDS
+var _fire_seconds := 240.0
 var _day_t := 0.0 # the day's clock: advanced by soak_update() only (perf and capture modes keep --slice_daytime)
 var _counts := {}
 
@@ -55,6 +58,8 @@ func build(p_args: Dictionary) -> void:
 	bench_name = "slice"
 	_day = maxf(10.0, float(args.get("slice_day", "600")))
 	_daytime = float(args.get("slice_daytime", "0.35"))
+	_weather_seconds = maxf(5.0, float(args.get("slice_weather_seconds", str(SOAK_WEATHER_SECONDS))))
+	_fire_seconds = maxf(2.0, float(args.get("slice_fire_seconds", "240")))
 	noise.seed = 55
 	noise.frequency = 0.004
 	noise.fractal_octaves = 4
@@ -565,12 +570,15 @@ func set_time(t: float) -> void:
 func soak_update(t: float) -> Dictionary:
 	_day_t = t
 	if weather:
-		var w: int = SOAK_WEATHER[int(t / SOAK_WEATHER_SECONDS) % SOAK_WEATHER.size()]
+		var w: int = SOAK_WEATHER[int(t / _weather_seconds) % SOAK_WEATHER.size()]
 		if w != _soak_weather:
 			_soak_weather = w
-			weather.call("set_weather", w, 40.0)
-	if log_burn and t - _last_fire >= 240.0:
+			weather.call("set_weather", w, minf(40.0, _weather_seconds / 3.0))
+	if log_burn and t - _last_fire >= _fire_seconds:
 		_last_fire = t
 		log_burn.call("reset_burning")
-	return {"weather": WEATHERS[_soak_weather] if _soak_weather >= 0 else str(args.get("slice_weather", "clear")),
+	var st := {"weather": WEATHERS[_soak_weather] if _soak_weather >= 0 else str(args.get("slice_weather", "clear")),
 		"daytime": snappedf(fposmod(_daytime + _day_t / _day, 1.0), 0.001)}
+	if log_burn:
+		st["log_burning_voxels"] = int(log_burn.call("get_burning_voxels"))
+	return st

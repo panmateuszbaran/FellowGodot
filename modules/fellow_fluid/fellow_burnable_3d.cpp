@@ -1727,6 +1727,11 @@ void FellowBurnable3D::_unconfigure() {
 	heap_material.unref();
 	// The voxels last, once no material samples them.
 	RS::get_singleton()->call_on_render_thread(callable_mp_static(&FellowBurnable3D::_rt_free).bind(burn_id));
+	// New texture objects for the next configuration (milestone 55): pointed at new voxels, the old ones would replace
+	// their RenderingServer texture, whose views died with the voxels freed above — RenderingServer's texture_replace
+	// frees them again without asking ("Attempted to free invalid ID", twice each time reset_burning() ran).
+	display_texture.instantiate();
+	vertex_texture.instantiate();
 	target_id = ObjectID();
 	configured = false;
 }
