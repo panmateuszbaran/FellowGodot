@@ -41,9 +41,9 @@ Autotune off (its evaluations switch bits of their own, decision 0068).
 | TAA | 7 specialization | **0** | 33 frames |
 | MSAA 4× | 7 specialization, **6 compiled while a frame waited** (`draw`) | **0** | 33 frames |
 
-Slice Lab `--slice_warmup=node` (lavapipe, 160 × 90, a 2-minute soak): the warm-up finishes during the soak's
-warm-up minute, without an error. The editor check: the class's icon; the menu's setup added without a configuration
-warning and undone.
+Slice Lab `--slice_warmup=node` (lavapipe, 160 × 90, a 2-minute soak at 0.6 frames a second): it runs without an
+error; whether it covers the slice is the RTX's to measure. The editor check: the class's icon; the menu's setup added
+without a configuration warning and undone.
 
 Not measured yet (no GPU this time): the slice on the RTX with the warm-up and decision 0161 — the specializations its
 soak still compiles after the warm-up (310-330 in 30 minutes before, f358) and the hitches during their bursts.

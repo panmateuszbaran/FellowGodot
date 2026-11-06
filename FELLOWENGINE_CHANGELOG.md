@@ -9,6 +9,21 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 59 — pipelines compiled ahead (2026-11-06)
+
+- `rendering/fellow/frame/stable_scene_bits` (on, exact), decision 0161: the colour passes' specialization bits that
+  follow what a frame holds (absent decals, probes and lights, the positional lights' loop variants and tile culling,
+  the weather's wetness, the clouds' shadow) keep the feature's code once the feature exists or has been in a frame.
+  lavapipe: a scene's 21 changes (rain, lights, decal, probe, night) compile 5 specialized pipelines instead of 28,
+  every state's picture bit-exact; the image regression suite exact. `FELLOW_SPECIALIZATION_LOG` lists the pipelines
+  a draw asked for before they were compiled.
+- `FellowPipelineWarmer3D`, decision 0162: while a scene loads, its world drawn from the camera's place in six
+  directions into a small viewport set up as the game's, until nothing more compiles. lavapipe: a camera turning to
+  24 unseen objects compiles 0 pipelines instead of 7 (MSAA: 0 instead of 13, 6 of them compiled while the frame
+  waited). The FellowEngine menu's "Add Pipeline Warm-up"; Slice Lab `--slice_warmup=node`.
+- `bench/pipeline_states_check.gd`, `bench/pipeline_warmup_check.gd`. The RTX's measurements (the general pipelines'
+  cost, the slice's soak) wait for the GPU.
+
 ## Milestone 58 — sculpting and painting the terrain (2026-11-06)
 
 - `FellowTerrain3D.sculpt()` (raise, lower, smooth, flatten) and `paint()` (a layer's weight, the weights still adding
