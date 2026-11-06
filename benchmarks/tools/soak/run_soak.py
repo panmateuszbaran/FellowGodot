@@ -7,7 +7,7 @@ Windows) and, where nvidia-smi exists, the GPU's memory in use, every --every se
 to the result. soak_report.py adds both to the summary (start, end, growth per hour after the warm-up).
 
     python benchmarks/tools/soak/run_soak.py --godot <binary> --out <dir> [--minutes 60] [--res 1920x1080]
-        [--warmup 60] [-- <more bench arguments, e.g. --slice_without=fire>]
+        [--warmup 60] [--engine-args="--render-thread separate"] [-- <more bench arguments, e.g. --slice_without=fire>]
 """
 
 import argparse
@@ -75,6 +75,7 @@ def main() -> int:
     ap.add_argument("--every", type=float, default=5.0, help="seconds between memory samples")
     ap.add_argument("--fellow", default="post/atmosphere/enabled=true,post/clouds/enabled=true", help="the bench's --fellow (empty: none)")
     ap.add_argument("--sky", default="atmosphere")
+    ap.add_argument("--engine-args", default="", help="engine arguments before '--', e.g. \"--render-thread separate\"")
     ap.add_argument("rest", nargs="*", help="more bench arguments (after --)")
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
@@ -84,7 +85,7 @@ def main() -> int:
         user.append(f"--fellow={a.fellow}")
     if a.sky:
         user.append(f"--sky={a.sky}")
-    cmd = [a.godot, "--path", PROJECT, "--rendering-driver", "vulkan", "--resolution", a.res, "--position", "0,0", "--"] + user + a.rest
+    cmd = [a.godot, "--path", PROJECT, "--rendering-driver", "vulkan", "--resolution", a.res, "--position", "0,0"] + a.engine_args.split() + ["--"] + user + a.rest
     log = open(os.path.join(a.out, "engine.log"), "w", encoding="utf-8")
     t0 = time.time()
     proc = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT)
