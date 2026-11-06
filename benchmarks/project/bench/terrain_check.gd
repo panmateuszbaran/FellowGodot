@@ -3,6 +3,7 @@ extends SceneTree
 ##
 ##   godot --path benchmarks/project --fixed-fps 60 --resolution 640x360 -s res://bench/terrain_check.gd
 ##       -- --out=<dir> [--size=1025] [--spacing=1] [--patch=16] [--frames=12] [--debug_view=1] [--snow=<0..1>]
+##       [--foliage=1]
 ##
 ## For each camera: a PNG, and the share of the ground's pixels where the sky (pure red) shows through (cracks between
 ## levels of detail; the camera looks down, so every pixel below the horizon should be ground). Then physics rays cast
@@ -95,6 +96,53 @@ func _initialize() -> void:
 	terrain.heightmap = img
 	terrain.splat_map = splat
 	result["set_heightmap_ms"] = (Time.get_ticks_usec() - t0) / 1000.0
+	# --foliage=1 (decision 0159): grass on the base layer, trees, rocks on the rock layer aligned to its slope.
+	if args.get("foliage", "0") == "1" and ClassDB.class_exists("FellowTerrainFoliage"):
+		var grass_mesh := BoxMesh.new()
+		grass_mesh.size = Vector3(0.15, 0.5, 0.15)
+		var grass_mat := StandardMaterial3D.new()
+		grass_mat.albedo_color = Color(0.3, 0.55, 0.2)
+		grass_mesh.material = grass_mat
+		var tree_mesh := CylinderMesh.new()
+		tree_mesh.top_radius = 0.0
+		tree_mesh.bottom_radius = 1.6
+		tree_mesh.height = 7.0
+		var tree_mat := StandardMaterial3D.new()
+		tree_mat.albedo_color = Color(0.12, 0.3, 0.12)
+		tree_mesh.material = tree_mat
+		var rock_mesh := SphereMesh.new()
+		rock_mesh.radius = 0.8
+		rock_mesh.height = 0.9
+		var rock_mat := StandardMaterial3D.new()
+		rock_mat.albedo_color = Color(0.5, 0.48, 0.45)
+		rock_mesh.material = rock_mat
+		var kinds := []
+		var g = ClassDB.instantiate("FellowTerrainFoliage")
+		g.mesh = grass_mesh
+		g.layer = 0
+		g.density = 2.0
+		g.range = 60.0
+		g.sink = -0.25
+		g.slope_max = 35.0
+		kinds.append(g)
+		var tr = ClassDB.instantiate("FellowTerrainFoliage")
+		tr.mesh = tree_mesh
+		tr.layer = 0
+		tr.density = 0.01
+		tr.range = 500.0
+		tr.sink = -3.4
+		tr.slope_max = 30.0
+		kinds.append(tr)
+		var rk = ClassDB.instantiate("FellowTerrainFoliage")
+		rk.mesh = rock_mesh
+		rk.layer = 1
+		rk.density = 0.05
+		rk.min_weight = 0.5
+		rk.range = 200.0
+		rk.align_to_normal = 1.0
+		rk.sink = 0.2
+		kinds.append(rk)
+		terrain.foliage = kinds
 	t0 = Time.get_ticks_usec()
 	root3d.add_child(terrain)
 	result["enter_tree_ms"] = (Time.get_ticks_usec() - t0) / 1000.0

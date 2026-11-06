@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="FellowTerrainFoliage" inherits="Resource" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+	<brief_description>
+		A kind of plant or rock a [FellowTerrain3D] scatters over one of its layers.
+	</brief_description>
+	<description>
+		One entry of [member FellowTerrain3D.foliage]: the terrain places instances of [member mesh] where [member layer] is, in square cells of [member cell_size] metres around the camera up to [member range], and frees them beyond it. A cell's instances are made once, on a worker thread: points jittered on a grid of [member density], kept with a likelihood that rises from 0 at [member min_weight] to 1 where the layer's weight is 1, where the slope is between [member slope_min] and [member slope_max] and the height between [member height_min] and [member height_max]; each turned, tilted, scaled and sunk as the other properties say. Each cell is a [MultiMesh] of its own (its buffer is written once), and FellowEngine's MultiMesh culling culls its instances one by one beyond [member range]. The same terrain, camera position and seed give the same instances. The mesh's own materials are used (a material with FellowEngine's wind sways as it would in a [MultiMeshInstance3D]). Changing a property scatters the kind again.
+	</description>
+	<tutorials>
+	</tutorials>
+	<members>
+		<member name="align_to_normal" type="float" setter="set_align_to_normal" getter="get_align_to_normal" default="0.0">
+			How much an instance is tilted from upright towards the ground's normal (0 upright, as a tree; 1 on the slope, as a rock or a flower).
+		</member>
+		<member name="cast_shadows" type="bool" setter="set_cast_shadows" getter="is_casting_shadows" default="true">
+			If [code]true[/code], the instances cast shadows.
+		</member>
+		<member name="cell_size" type="float" setter="set_cell_size" getter="get_cell_size" default="0.0">
+			The side of the square cells the kind is scattered in, made and freed as the camera moves. 0: a quarter of [member range], between 8 and 256 m.
+		</member>
+		<member name="density" type="float" setter="set_density" getter="get_density" default="1.0">
+			Instances per square metre where the layer's weight is 1 (and the slope and height allow).
+		</member>
+		<member name="height_max" type="float" setter="set_height_max" getter="get_height_max" default="100000.0">
+			The highest ground (the terrain's local height) the kind grows on.
+		</member>
+		<member name="height_min" type="float" setter="set_height_min" getter="get_height_min" default="-100000.0">
+			The lowest ground (the terrain's local height) the kind grows on.
+		</member>
+		<member name="layer" type="int" setter="set_layer" getter="get_layer" default="0">
+			The terrain layer (0 to 8) whose weight gives the kind's density.
+		</member>
+		<member name="mesh" type="Mesh" setter="set_mesh" getter="get_mesh">
+			The mesh each instance draws, with its own materials. Without one, nothing is scattered.
+		</member>
+		<member name="min_weight" type="float" setter="set_min_weight" getter="get_min_weight" default="0.3">
+			The layer's weight below which there are no instances; from it to 1 the density rises from 0 to [member density].
+		</member>
+		<member name="random_yaw" type="bool" setter="set_random_yaw" getter="is_random_yaw" default="true">
+			If [code]true[/code], each instance is turned by a random angle about the vertical.
+		</member>
+		<member name="range" type="float" setter="set_range" getter="get_range" default="100.0">
+			The distance from the camera in metres up to which the instances are made and drawn.
+		</member>
+		<member name="scale_max" type="float" setter="set_scale_max" getter="get_scale_max" default="1.2">
+			The largest of the instances' random uniform scales.
+		</member>
+		<member name="scale_min" type="float" setter="set_scale_min" getter="get_scale_min" default="0.8">
+			The smallest of the instances' random uniform scales.
+		</member>
+		<member name="seed" type="int" setter="set_seed" getter="get_seed" default="0">
+			Another seed gives other positions, angles and scales.
+		</member>
+		<member name="sink" type="float" setter="set_sink" getter="get_sink" default="0.0">
+			How far below the ground an instance is placed, in metres at scale 1 (a negative value lifts it: a mesh centred on its origin).
+		</member>
+		<member name="slope_max" type="float" setter="set_slope_max" getter="get_slope_max" default="90.0">
+			The steepest slope in degrees the kind grows on.
+		</member>
+		<member name="slope_min" type="float" setter="set_slope_min" getter="get_slope_min" default="0.0">
+			The gentlest slope in degrees the kind grows on (rocks on cliffs: a high value).
+		</member>
+	</members>
+</class>

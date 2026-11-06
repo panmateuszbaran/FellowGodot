@@ -120,6 +120,90 @@ void FellowTerrainLayer::_bind_methods() {
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
+// FellowTerrainFoliage
+
+#define FOLIAGE_SETTER(m_setter, m_type, m_member, m_value) \
+	void FellowTerrainFoliage::m_setter(m_type p_value) { \
+		m_member = m_value; \
+		emit_changed(); \
+	}
+
+FOLIAGE_SETTER(set_mesh, const Ref<Mesh> &, mesh, p_value)
+FOLIAGE_SETTER(set_layer, int, layer, CLAMP(p_value, 0, FellowTerrain3D::MAX_LAYERS - 1))
+FOLIAGE_SETTER(set_density, float, density, CLAMP(p_value, 0.0f, 100.0f))
+FOLIAGE_SETTER(set_min_weight, float, min_weight, CLAMP(p_value, 0.0f, 1.0f))
+FOLIAGE_SETTER(set_range, float, range, MAX(1.0f, p_value))
+FOLIAGE_SETTER(set_cell_size, float, cell_size, MAX(0.0f, p_value))
+FOLIAGE_SETTER(set_slope_min, float, slope_min, CLAMP(p_value, 0.0f, 90.0f))
+FOLIAGE_SETTER(set_slope_max, float, slope_max, CLAMP(p_value, 0.0f, 90.0f))
+FOLIAGE_SETTER(set_height_min, float, height_min, p_value)
+FOLIAGE_SETTER(set_height_max, float, height_max, p_value)
+FOLIAGE_SETTER(set_scale_min, float, scale_min, MAX(0.001f, p_value))
+FOLIAGE_SETTER(set_scale_max, float, scale_max, MAX(0.001f, p_value))
+FOLIAGE_SETTER(set_random_yaw, bool, random_yaw, p_value)
+FOLIAGE_SETTER(set_align_to_normal, float, align_to_normal, CLAMP(p_value, 0.0f, 1.0f))
+FOLIAGE_SETTER(set_sink, float, sink, p_value)
+FOLIAGE_SETTER(set_cast_shadows, bool, cast_shadows, p_value)
+FOLIAGE_SETTER(set_seed, int, seed, p_value)
+
+#undef FOLIAGE_SETTER
+
+void FellowTerrainFoliage::_bind_methods() {
+	ClassDB::bind_method(D_METHOD("set_mesh", "mesh"), &FellowTerrainFoliage::set_mesh);
+	ClassDB::bind_method(D_METHOD("get_mesh"), &FellowTerrainFoliage::get_mesh);
+	ClassDB::bind_method(D_METHOD("set_layer", "layer"), &FellowTerrainFoliage::set_layer);
+	ClassDB::bind_method(D_METHOD("get_layer"), &FellowTerrainFoliage::get_layer);
+	ClassDB::bind_method(D_METHOD("set_density", "density"), &FellowTerrainFoliage::set_density);
+	ClassDB::bind_method(D_METHOD("get_density"), &FellowTerrainFoliage::get_density);
+	ClassDB::bind_method(D_METHOD("set_min_weight", "weight"), &FellowTerrainFoliage::set_min_weight);
+	ClassDB::bind_method(D_METHOD("get_min_weight"), &FellowTerrainFoliage::get_min_weight);
+	ClassDB::bind_method(D_METHOD("set_range", "metres"), &FellowTerrainFoliage::set_range);
+	ClassDB::bind_method(D_METHOD("get_range"), &FellowTerrainFoliage::get_range);
+	ClassDB::bind_method(D_METHOD("set_cell_size", "metres"), &FellowTerrainFoliage::set_cell_size);
+	ClassDB::bind_method(D_METHOD("get_cell_size"), &FellowTerrainFoliage::get_cell_size);
+	ClassDB::bind_method(D_METHOD("set_slope_min", "degrees"), &FellowTerrainFoliage::set_slope_min);
+	ClassDB::bind_method(D_METHOD("get_slope_min"), &FellowTerrainFoliage::get_slope_min);
+	ClassDB::bind_method(D_METHOD("set_slope_max", "degrees"), &FellowTerrainFoliage::set_slope_max);
+	ClassDB::bind_method(D_METHOD("get_slope_max"), &FellowTerrainFoliage::get_slope_max);
+	ClassDB::bind_method(D_METHOD("set_height_min", "metres"), &FellowTerrainFoliage::set_height_min);
+	ClassDB::bind_method(D_METHOD("get_height_min"), &FellowTerrainFoliage::get_height_min);
+	ClassDB::bind_method(D_METHOD("set_height_max", "metres"), &FellowTerrainFoliage::set_height_max);
+	ClassDB::bind_method(D_METHOD("get_height_max"), &FellowTerrainFoliage::get_height_max);
+	ClassDB::bind_method(D_METHOD("set_scale_min", "scale"), &FellowTerrainFoliage::set_scale_min);
+	ClassDB::bind_method(D_METHOD("get_scale_min"), &FellowTerrainFoliage::get_scale_min);
+	ClassDB::bind_method(D_METHOD("set_scale_max", "scale"), &FellowTerrainFoliage::set_scale_max);
+	ClassDB::bind_method(D_METHOD("get_scale_max"), &FellowTerrainFoliage::get_scale_max);
+	ClassDB::bind_method(D_METHOD("set_random_yaw", "enable"), &FellowTerrainFoliage::set_random_yaw);
+	ClassDB::bind_method(D_METHOD("is_random_yaw"), &FellowTerrainFoliage::is_random_yaw);
+	ClassDB::bind_method(D_METHOD("set_align_to_normal", "amount"), &FellowTerrainFoliage::set_align_to_normal);
+	ClassDB::bind_method(D_METHOD("get_align_to_normal"), &FellowTerrainFoliage::get_align_to_normal);
+	ClassDB::bind_method(D_METHOD("set_sink", "metres"), &FellowTerrainFoliage::set_sink);
+	ClassDB::bind_method(D_METHOD("get_sink"), &FellowTerrainFoliage::get_sink);
+	ClassDB::bind_method(D_METHOD("set_cast_shadows", "enable"), &FellowTerrainFoliage::set_cast_shadows);
+	ClassDB::bind_method(D_METHOD("is_casting_shadows"), &FellowTerrainFoliage::is_casting_shadows);
+	ClassDB::bind_method(D_METHOD("set_seed", "seed"), &FellowTerrainFoliage::set_seed);
+	ClassDB::bind_method(D_METHOD("get_seed"), &FellowTerrainFoliage::get_seed);
+
+	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "mesh", PROPERTY_HINT_RESOURCE_TYPE, "Mesh"), "set_mesh", "get_mesh");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "layer", PROPERTY_HINT_RANGE, "0,8,1"), "set_layer", "get_layer");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "density", PROPERTY_HINT_RANGE, "0,100,0.001,or_greater,suffix:/m\u00b2"), "set_density", "get_density");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "min_weight", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_min_weight", "get_min_weight");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "range", PROPERTY_HINT_RANGE, "1,2000,0.1,or_greater,suffix:m"), "set_range", "get_range");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "cell_size", PROPERTY_HINT_RANGE, "0,512,0.1,or_greater,suffix:m"), "set_cell_size", "get_cell_size");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "slope_min", PROPERTY_HINT_RANGE, "0,90,0.1,degrees"), "set_slope_min", "get_slope_min");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "slope_max", PROPERTY_HINT_RANGE, "0,90,0.1,degrees"), "set_slope_max", "get_slope_max");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "height_min", PROPERTY_HINT_NONE, "suffix:m"), "set_height_min", "get_height_min");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "height_max", PROPERTY_HINT_NONE, "suffix:m"), "set_height_max", "get_height_max");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "scale_min", PROPERTY_HINT_RANGE, "0.001,10,0.001,or_greater"), "set_scale_min", "get_scale_min");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "scale_max", PROPERTY_HINT_RANGE, "0.001,10,0.001,or_greater"), "set_scale_max", "get_scale_max");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "random_yaw"), "set_random_yaw", "is_random_yaw");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "align_to_normal", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_align_to_normal", "get_align_to_normal");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "sink", PROPERTY_HINT_RANGE, "-10,10,0.001,or_greater,or_less,suffix:m"), "set_sink", "get_sink");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "cast_shadows"), "set_cast_shadows", "is_casting_shadows");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "seed"), "set_seed", "get_seed");
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
 // The shader. One code for every terrain (FellowSharedShaders: compiled once a session). The vertex stage places a
 // patch's grid (VERTEX.xz: grid units, 0..patch_size) at INSTANCE_CUSTOM.xy (terrain-local metres) with its level's
 // cell (INSTANCE_CUSTOM.z: the level), morphs its odd vertices onto the next coarser grid between the level's morph
@@ -488,6 +572,8 @@ void FellowTerrain3D::_build_mesh() {
 
 void FellowTerrain3D::_rebuild_data() {
 	data_dirty = false;
+	_clear_foliage(); // its tasks read the data
+	foliage_dirty = true;
 	heights.clear();
 	map_w = 0;
 	map_h = 0;
@@ -541,6 +627,10 @@ void FellowTerrain3D::_rebuild_data() {
 				c->decompress();
 			}
 			c->convert(Image::FORMAT_RGBA8);
+			// The foliage's copy (the first mip): read by its tasks.
+			splat_cpu_size[i] = Vector2i(c->get_width(), c->get_height());
+			splat_cpu[i].resize(c->get_width() * c->get_height() * 4);
+			memcpy(splat_cpu[i].ptr(), c->get_data().ptr(), splat_cpu[i].size());
 			if (!c->has_mipmaps()) {
 				c->generate_mipmaps();
 			}
@@ -549,6 +639,8 @@ void FellowTerrain3D::_rebuild_data() {
 			Ref<Image> c = Image::create_empty(1, 1, false, Image::FORMAT_RGBA8);
 			c->fill(Color(0, 0, 0, 0));
 			t = ImageTexture::create_from_image(c);
+			splat_cpu[i].clear();
+			splat_cpu_size[i] = Vector2i();
 		}
 	}
 	_build_mesh();
@@ -687,6 +779,12 @@ void FellowTerrain3D::_update_instance_settings() {
 		rs->instance_set_layer_mask(instance[i], render_layer_mask);
 		rs->instance_set_visible(instance[i], i == shown && is_visible_in_tree());
 	}
+	for (KeyValue<uint64_t, FoliageCell *> &kv : foliage_cells) {
+		if (kv.value->instance.is_valid()) {
+			rs->instance_set_layer_mask(kv.value->instance, render_layer_mask);
+			rs->instance_set_visible(kv.value->instance, is_visible_in_tree());
+		}
+	}
 }
 
 void FellowTerrain3D::_update_transforms() {
@@ -705,6 +803,11 @@ void FellowTerrain3D::_update_transforms() {
 	}
 	if (body.is_valid()) {
 		PhysicsServer3D::get_singleton()->body_set_state(body, PhysicsServer3D::BODY_STATE_TRANSFORM, xf);
+	}
+	for (KeyValue<uint64_t, FoliageCell *> &kv : foliage_cells) {
+		if (kv.value->instance.is_valid()) {
+			rs->instance_set_transform(kv.value->instance, xf);
+		}
 	}
 	selection_valid = false;
 }
@@ -970,6 +1073,317 @@ void FellowTerrain3D::_update_collision() {
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
+// Foliage (decision 0159): each kind scattered in square cells around the camera. A cell's instances are made once, on a
+// worker thread (jittered points on a grid of the kind's density, kept where the layer's weight, the slope and the
+// height allow), into a MultiMesh of its own: a cell's buffer is never rewritten (no motion vectors from another
+// cell's instances), and the GPU culls its instances one by one beyond the kind's range.
+
+static inline uint32_t _foliage_hash(uint32_t p_a, uint32_t p_b, uint32_t p_c) {
+	uint32_t h = p_a * 0x9E3779B1u ^ (p_b + 0x7F4A7C15u) * 0x85EBCA77u ^ (p_c + 0x165667B1u) * 0xC2B2AE3Du;
+	h ^= h >> 15;
+	h *= 0x2C1B3C6Du;
+	h ^= h >> 12;
+	h *= 0x297A2D39u;
+	h ^= h >> 15;
+	return h;
+}
+
+static inline float _foliage_u01(uint32_t p_h) {
+	return float(p_h >> 8) * (1.0f / 16777216.0f);
+}
+
+static inline uint64_t _foliage_key(int p_kind, int p_cx, int p_cz) {
+	return (uint64_t(p_kind) << 56) | (uint64_t(uint32_t(p_cx) & 0xFFFFFFFu) << 28) | uint64_t(uint32_t(p_cz) & 0xFFFFFFFu);
+}
+
+float FellowTerrain3D::_layer_weight_local(int p_layer, float p_x, float p_z) const {
+	const float u = (p_x / vertex_spacing + 0.5f) / float(MAX(1, map_w));
+	const float v = (p_z / vertex_spacing + 0.5f) / float(MAX(1, map_h));
+	auto sample = [&](int p_map, int p_channel) -> float {
+		if (splat_cpu[p_map].is_empty()) {
+			return 0.0f;
+		}
+		const Vector2i sz = splat_cpu_size[p_map];
+		const float fx = CLAMP(u * sz.x - 0.5f, 0.0f, float(sz.x - 1));
+		const float fz = CLAMP(v * sz.y - 0.5f, 0.0f, float(sz.y - 1));
+		const int x0 = int(fx);
+		const int z0 = int(fz);
+		const int x1 = MIN(x0 + 1, sz.x - 1);
+		const int z1 = MIN(z0 + 1, sz.y - 1);
+		const float tx = fx - x0;
+		const float tz = fz - z0;
+		const uint8_t *d = splat_cpu[p_map].ptr();
+		const float a = d[(z0 * sz.x + x0) * 4 + p_channel];
+		const float b = d[(z0 * sz.x + x1) * 4 + p_channel];
+		const float c = d[(z1 * sz.x + x0) * 4 + p_channel];
+		const float e = d[(z1 * sz.x + x1) * 4 + p_channel];
+		return Math::lerp(Math::lerp(a, b, tx), Math::lerp(c, e, tx), tz) * (1.0f / 255.0f);
+	};
+	if (p_layer == 0) {
+		float sum = 0.0f;
+		for (int m = 0; m < 2; m++) {
+			for (int ch = 0; ch < 4; ch++) {
+				sum += sample(m, ch);
+			}
+		}
+		return MAX(0.0f, 1.0f - sum);
+	}
+	return sample((p_layer - 1) / 4, (p_layer - 1) % 4);
+}
+
+void FellowTerrain3D::_generate_foliage_cell(void *p_cell) {
+	FoliageCell *cell = static_cast<FoliageCell *>(p_cell);
+	const FellowTerrain3D *t = cell->terrain;
+	const FoliageKind &k = t->foliage_kinds[cell->kind];
+	const float ex = float(t->map_w - 1) * t->vertex_spacing;
+	const float ez = float(t->map_h - 1) * t->vertex_spacing;
+	const int side = MAX(1, int(Math::ceil(k.cell * Math::sqrt(k.density))));
+	const float step = k.cell / float(side);
+	const float e = t->vertex_spacing;
+	LocalVector<float> out;
+	out.reserve(side * side * 6);
+	int count = 0;
+	for (int j = 0; j < side; j++) {
+		for (int i = 0; i < side; i++) {
+			const uint32_t gx = uint32_t(cell->cx * side + i);
+			const uint32_t gz = uint32_t(cell->cz * side + j);
+			const uint32_t h0 = _foliage_hash(k.seed, gx, gz);
+			const uint32_t h1 = _foliage_hash(h0, 1, 0);
+			const uint32_t h2 = _foliage_hash(h0, 2, 0);
+			const float x = cell->cx * k.cell + (float(i) + _foliage_u01(h0)) * step;
+			const float z = cell->cz * k.cell + (float(j) + _foliage_u01(h1)) * step;
+			if (x < 0.0f || z < 0.0f || x > ex || z > ez) {
+				continue;
+			}
+			const float w = t->_layer_weight_local(k.layer, x, z);
+			if (w < k.min_weight) {
+				continue;
+			}
+			// Fewer where the layer's weight is lower: all at weight 1, none at min_weight.
+			if (_foliage_u01(h2) > (w - k.min_weight) / MAX(1e-4f, 1.0f - k.min_weight) && w < 0.9999f) {
+				continue;
+			}
+			const float y = t->_height_local(x, z);
+			const float hl = t->_height_local(MAX(0.0f, x - e), z);
+			const float hr = t->_height_local(MIN(ex, x + e), z);
+			const float hd = t->_height_local(x, MAX(0.0f, z - e));
+			const float hu = t->_height_local(x, MIN(ez, z + e));
+			const Vector3 n = Vector3((hl - hr) / (2.0f * e), 1.0f, (hd - hu) / (2.0f * e)).normalized();
+			if (n.y > k.cos_slope_min + 1e-6f || n.y < k.cos_slope_max - 1e-6f || y < k.height_min || y > k.height_max) {
+				continue;
+			}
+			const uint32_t h3 = _foliage_hash(h0, 3, 0);
+			const uint32_t h4 = _foliage_hash(h0, 4, 0);
+			const float sc = Math::lerp(k.scale_min, k.scale_max, _foliage_u01(h3));
+			Basis b;
+			if (k.random_yaw) {
+				b = Basis(Vector3(0, 1, 0), _foliage_u01(h4) * Math::TAU);
+			}
+			if (k.align > 0.0f) {
+				const Vector3 up = Vector3(0, 1, 0).lerp(n, k.align).normalized();
+				b = Basis(Quaternion(Vector3(0, 1, 0), up)) * b;
+			}
+			b = b * Basis::from_scale(Vector3(sc, sc, sc));
+			const Vector3 o(x, y - k.sink * sc, z);
+			const float row[12] = { b.rows[0].x, b.rows[0].y, b.rows[0].z, o.x, b.rows[1].x, b.rows[1].y, b.rows[1].z, o.y, b.rows[2].x, b.rows[2].y, b.rows[2].z, o.z };
+			for (int r = 0; r < 12; r++) {
+				out.push_back(row[r]);
+			}
+			count++;
+		}
+	}
+	cell->buffer.resize(out.size());
+	if (!out.is_empty()) {
+		memcpy(cell->buffer.ptrw(), out.ptr(), out.size() * sizeof(float));
+	}
+	cell->count = count;
+}
+
+void FellowTerrain3D::_foliage_changed() {
+	foliage_dirty = true;
+}
+
+void FellowTerrain3D::_update_foliage_kinds() {
+	foliage_kinds.clear();
+	for (int i = 0; i < foliage.size(); i++) {
+		Ref<FellowTerrainFoliage> f = foliage[i];
+		FoliageKind k;
+		if (f.is_valid() && f->get_mesh().is_valid()) {
+			k.mesh = f->get_mesh()->get_rid();
+			k.layer = f->get_layer();
+			k.density = f->get_density();
+			k.min_weight = f->get_min_weight();
+			k.range = f->get_range();
+			k.cell = f->get_effective_cell_size();
+			k.cos_slope_min = Math::cos(Math::deg_to_rad(MIN(f->get_slope_min(), f->get_slope_max())));
+			k.cos_slope_max = Math::cos(Math::deg_to_rad(MAX(f->get_slope_min(), f->get_slope_max())));
+			k.height_min = f->get_height_min();
+			k.height_max = f->get_height_max();
+			k.scale_min = f->get_scale_min();
+			k.scale_max = f->get_scale_max();
+			k.random_yaw = f->is_random_yaw();
+			k.align = f->get_align_to_normal();
+			k.sink = f->get_sink();
+			k.shadows = f->is_casting_shadows();
+			k.seed = uint32_t(f->get_seed()) * 2654435761u + uint32_t(i) * 40503u + 17u;
+		} else {
+			k.density = 0.0f; // no mesh: nothing to scatter
+		}
+		foliage_kinds.push_back(k);
+	}
+}
+
+void FellowTerrain3D::_free_foliage_cell(FoliageCell *p_cell) {
+	if (p_cell->task != WorkerThreadPool::INVALID_TASK_ID) {
+		WorkerThreadPool::get_singleton()->wait_for_task_completion(p_cell->task);
+		p_cell->task = WorkerThreadPool::INVALID_TASK_ID;
+	}
+	RenderingServer *rs = RenderingServer::get_singleton();
+	if (p_cell->instance.is_valid()) {
+		rs->free_rid(p_cell->instance);
+		foliage_instances -= p_cell->count;
+	}
+	if (p_cell->multimesh.is_valid()) {
+		rs->free_rid(p_cell->multimesh);
+	}
+	memdelete(p_cell);
+}
+
+void FellowTerrain3D::_clear_foliage() {
+	for (KeyValue<uint64_t, FoliageCell *> &kv : foliage_cells) {
+		_free_foliage_cell(kv.value);
+	}
+	foliage_cells.clear();
+	foliage_instances = 0;
+}
+
+void FellowTerrain3D::_make_foliage_cell_visible(FoliageCell *p_cell) {
+	p_cell->ready = true;
+	if (p_cell->count == 0 || !is_inside_tree()) {
+		p_cell->buffer.clear();
+		return;
+	}
+	const FoliageKind &k = foliage_kinds[p_cell->kind];
+	RenderingServer *rs = RenderingServer::get_singleton();
+	p_cell->multimesh = rs->multimesh_create();
+	rs->multimesh_set_mesh(p_cell->multimesh, k.mesh);
+	rs->multimesh_allocate_data(p_cell->multimesh, p_cell->count, RSE::MULTIMESH_TRANSFORM_3D, false, false);
+	rs->multimesh_set_buffer(p_cell->multimesh, p_cell->buffer);
+	p_cell->buffer.clear();
+	p_cell->instance = rs->instance_create2(p_cell->multimesh, get_world_3d()->get_scenario());
+	rs->instance_set_transform(p_cell->instance, get_global_transform());
+	rs->instance_attach_object_instance_id(p_cell->instance, get_instance_id());
+	rs->instance_geometry_set_cast_shadows_setting(p_cell->instance, k.shadows ? RSE::SHADOW_CASTING_SETTING_ON : RSE::SHADOW_CASTING_SETTING_OFF);
+	rs->instance_set_layer_mask(p_cell->instance, render_layer_mask);
+	rs->instance_set_visible(p_cell->instance, is_visible_in_tree());
+	// Each instance drawn by the camera up to the kind's range (culled one by one on the GPU, decision 0122's range).
+	rs->fellow_instance_set_instance_range(p_cell->instance, 0.0f, k.range, false);
+	foliage_instances += p_cell->count;
+	Fellow::request_redraw();
+}
+
+void FellowTerrain3D::_process_foliage(const Vector3 &p_camera) {
+	if (foliage_dirty) {
+		_clear_foliage();
+		_update_foliage_kinds();
+		foliage_dirty = false;
+	}
+	if (foliage_kinds.is_empty() || map_w < 2) {
+		return;
+	}
+	foliage_frame++;
+	const float ex = float(map_w - 1) * vertex_spacing;
+	const float ez = float(map_h - 1) * vertex_spacing;
+	int launched = 0;
+	for (uint32_t ki = 0; ki < foliage_kinds.size(); ki++) {
+		const FoliageKind &k = foliage_kinds[ki];
+		if (k.density <= 0.0f) {
+			continue;
+		}
+		const float cs = k.cell;
+		const float r = k.range;
+		const int x0 = MAX(0, int(Math::floor((p_camera.x - r) / cs)));
+		const int x1 = MIN(int(Math::ceil(ex / cs)) - 1, int(Math::floor((p_camera.x + r) / cs)));
+		const int z0 = MAX(0, int(Math::floor((p_camera.z - r) / cs)));
+		const int z1 = MIN(int(Math::ceil(ez / cs)) - 1, int(Math::floor((p_camera.z + r) / cs)));
+		for (int cz = z0; cz <= z1; cz++) {
+			for (int cx = x0; cx <= x1; cx++) {
+				const float dx = MAX(0.0f, MAX(cx * cs - p_camera.x, p_camera.x - (cx + 1) * cs));
+				const float dz = MAX(0.0f, MAX(cz * cs - p_camera.z, p_camera.z - (cz + 1) * cs));
+				if (dx * dx + dz * dz > r * r) {
+					continue;
+				}
+				const uint64_t key = _foliage_key(ki, cx, cz);
+				FoliageCell **found = foliage_cells.getptr(key);
+				FoliageCell *cell = found ? *found : nullptr;
+				if (!cell) {
+					if (launched >= foliage_cells_per_frame) {
+						continue; // next frame
+					}
+					cell = memnew(FoliageCell);
+					cell->terrain = this;
+					cell->kind = ki;
+					cell->cx = cx;
+					cell->cz = cz;
+					cell->task = WorkerThreadPool::get_singleton()->add_native_task(&FellowTerrain3D::_generate_foliage_cell, cell, false, SNAME("FellowTerrain3D foliage"));
+					foliage_cells.insert(key, cell);
+					launched++;
+				}
+				cell->seen = foliage_frame;
+			}
+		}
+	}
+	LocalVector<uint64_t> dropped;
+	for (KeyValue<uint64_t, FoliageCell *> &kv : foliage_cells) {
+		FoliageCell *cell = kv.value;
+		if (!cell->ready && cell->task != WorkerThreadPool::INVALID_TASK_ID && WorkerThreadPool::get_singleton()->is_task_completed(cell->task)) {
+			WorkerThreadPool::get_singleton()->wait_for_task_completion(cell->task);
+			cell->task = WorkerThreadPool::INVALID_TASK_ID;
+			_make_foliage_cell_visible(cell);
+		}
+		if (cell->seen != foliage_frame) {
+			// Out of range: dropped 15 % beyond it (so that a camera on a cell's edge does not make and free it in turn).
+			const FoliageKind &k = foliage_kinds[cell->kind];
+			const float cs = k.cell;
+			const float dx = MAX(0.0f, MAX(cell->cx * cs - p_camera.x, p_camera.x - (cell->cx + 1) * cs));
+			const float dz = MAX(0.0f, MAX(cell->cz * cs - p_camera.z, p_camera.z - (cell->cz + 1) * cs));
+			if (dx * dx + dz * dz > k.range * k.range * 1.3225f) {
+				dropped.push_back(kv.key);
+			}
+		}
+	}
+	for (const uint64_t key : dropped) {
+		_free_foliage_cell(foliage_cells[key]);
+		foliage_cells.erase(key);
+	}
+	if (launched > 0) {
+		Fellow::request_redraw(); // the editor draws again to see the new cells finished
+	}
+}
+
+void FellowTerrain3D::set_foliage(const TypedArray<FellowTerrainFoliage> &p_foliage) {
+	const Callable cb = callable_mp(this, &FellowTerrain3D::_foliage_changed);
+	for (int i = 0; i < foliage.size(); i++) {
+		Ref<FellowTerrainFoliage> f = foliage[i];
+		if (f.is_valid() && f->is_connected(CoreStringName(changed), cb)) {
+			f->disconnect(CoreStringName(changed), cb);
+		}
+	}
+	foliage = p_foliage;
+	for (int i = 0; i < foliage.size(); i++) {
+		Ref<FellowTerrainFoliage> f = foliage[i];
+		if (f.is_valid() && !f->is_connected(CoreStringName(changed), cb)) {
+			f->connect(CoreStringName(changed), cb);
+		}
+	}
+	foliage_dirty = true;
+}
+
+void FellowTerrain3D::set_foliage_cells_per_frame(int p_cells) {
+	foliage_cells_per_frame = CLAMP(p_cells, 1, 256);
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
 // Queries
 
 float FellowTerrain3D::_height_local(float p_x, float p_z) const {
@@ -1077,6 +1491,8 @@ Dictionary FellowTerrain3D::get_stats() const {
 	d["swaps"] = int64_t(swaps);
 	d["last_select_usec"] = int64_t(last_select_usec);
 	d["collision_shapes"] = int(shapes.size());
+	d["foliage_cells"] = int(foliage_cells.size());
+	d["foliage_instances"] = foliage_instances;
 	d["map_size"] = Vector2i(map_w, map_h);
 	PackedInt32Array per_level;
 	per_level.resize(top_level + 1);
@@ -1256,6 +1672,8 @@ void FellowTerrain3D::_notification(int p_what) {
 		} break;
 		case NOTIFICATION_EXIT_WORLD: {
 			set_process_internal(false);
+			_clear_foliage();
+			foliage_dirty = true;
 			_free_instances();
 			_free_collision();
 		} break;
@@ -1267,6 +1685,12 @@ void FellowTerrain3D::_notification(int p_what) {
 		} break;
 		case NOTIFICATION_INTERNAL_PROCESS: {
 			_process_lod();
+			if (!foliage.is_empty() || !foliage_cells.is_empty()) {
+				Camera3D *cam = _find_camera();
+				if (cam && map_w >= 2) {
+					_process_foliage(get_global_transform().affine_inverse().xform(cam->get_global_position()));
+				}
+			}
 		} break;
 	}
 }
@@ -1307,6 +1731,11 @@ void FellowTerrain3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_collision_region_size", "cells"), &FellowTerrain3D::set_collision_region_size);
 	ClassDB::bind_method(D_METHOD("get_collision_region_size"), &FellowTerrain3D::get_collision_region_size);
 
+	ClassDB::bind_method(D_METHOD("set_foliage", "foliage"), &FellowTerrain3D::set_foliage);
+	ClassDB::bind_method(D_METHOD("get_foliage"), &FellowTerrain3D::get_foliage);
+	ClassDB::bind_method(D_METHOD("set_foliage_cells_per_frame", "cells"), &FellowTerrain3D::set_foliage_cells_per_frame);
+	ClassDB::bind_method(D_METHOD("get_foliage_cells_per_frame"), &FellowTerrain3D::get_foliage_cells_per_frame);
+
 	ClassDB::bind_method(D_METHOD("update_heightmap"), &FellowTerrain3D::update_heightmap);
 	ClassDB::bind_method(D_METHOD("get_height", "global_position"), &FellowTerrain3D::get_height);
 	ClassDB::bind_method(D_METHOD("get_normal", "global_position"), &FellowTerrain3D::get_normal);
@@ -1325,6 +1754,9 @@ void FellowTerrain3D::_bind_methods() {
 	ADD_GROUP("Material", "");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "height_blend", PROPERTY_HINT_RANGE, "0,2,0.01"), "set_height_blend", "get_height_blend");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "macro_variation", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_macro_variation", "get_macro_variation");
+	ADD_GROUP("Foliage", "foliage");
+	ADD_PROPERTY(PropertyInfo(Variant::ARRAY, "foliage", PROPERTY_HINT_ARRAY_TYPE, MAKE_RESOURCE_TYPE_HINT("FellowTerrainFoliage")), "set_foliage", "get_foliage");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "foliage_cells_per_frame", PROPERTY_HINT_RANGE, "1,256,1"), "set_foliage_cells_per_frame", "get_foliage_cells_per_frame");
 	ADD_GROUP("Level of Detail", "");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "patch_size", PROPERTY_HINT_ENUM, "8:8,16:16,32:32,64:64"), "set_patch_size", "get_patch_size");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "lod_distance", PROPERTY_HINT_RANGE, "0,1000,0.1,or_greater,suffix:m"), "set_lod_distance", "get_lod_distance");
@@ -1348,6 +1780,7 @@ FellowTerrain3D::FellowTerrain3D() {
 }
 
 FellowTerrain3D::~FellowTerrain3D() {
+	_clear_foliage();
 	_free_instances();
 	_free_collision();
 }

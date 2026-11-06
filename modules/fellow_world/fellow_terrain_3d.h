@@ -32,6 +32,8 @@
 
 #include "core/io/image.h"
 #include "core/io/resource.h"
+#include "core/object/worker_thread_pool.h"
+#include "core/templates/hash_map.h"
 #include "core/templates/local_vector.h"
 #include "scene/3d/node_3d.h"
 #include "scene/resources/image_texture.h"
@@ -73,6 +75,69 @@ public:
 	float get_texture_size() const { return texture_size; }
 	void set_triplanar(bool p_enable);
 	bool is_triplanar() const { return triplanar; }
+};
+
+// A kind of plant or rock a FellowTerrain3D scatters over one of its layers (docs/decisions/0159-terrain-foliage.md).
+class FellowTerrainFoliage : public Resource {
+	GDCLASS(FellowTerrainFoliage, Resource);
+
+	Ref<Mesh> mesh;
+	int layer = 0;
+	float density = 1.0f; // instances per square metre where the layer's weight is 1
+	float min_weight = 0.3f;
+	float range = 100.0f;
+	float cell_size = 0.0f; // 0: a quarter of the range, 8-256 m
+	float slope_min = 0.0f; // degrees
+	float slope_max = 90.0f;
+	float height_min = -100000.0f;
+	float height_max = 100000.0f;
+	float scale_min = 0.8f;
+	float scale_max = 1.2f;
+	bool random_yaw = true;
+	float align_to_normal = 0.0f;
+	float sink = 0.0f; // metres below the ground (at scale 1)
+	bool cast_shadows = true;
+	int seed = 0;
+
+protected:
+	static void _bind_methods();
+
+public:
+	void set_mesh(const Ref<Mesh> &p_mesh);
+	Ref<Mesh> get_mesh() const { return mesh; }
+	void set_layer(int p_layer);
+	int get_layer() const { return layer; }
+	void set_density(float p_density);
+	float get_density() const { return density; }
+	void set_min_weight(float p_weight);
+	float get_min_weight() const { return min_weight; }
+	void set_range(float p_range);
+	float get_range() const { return range; }
+	void set_cell_size(float p_size);
+	float get_cell_size() const { return cell_size; }
+	float get_effective_cell_size() const { return cell_size > 0.0f ? cell_size : CLAMP(range * 0.25f, 8.0f, 256.0f); }
+	void set_slope_min(float p_degrees);
+	float get_slope_min() const { return slope_min; }
+	void set_slope_max(float p_degrees);
+	float get_slope_max() const { return slope_max; }
+	void set_height_min(float p_height);
+	float get_height_min() const { return height_min; }
+	void set_height_max(float p_height);
+	float get_height_max() const { return height_max; }
+	void set_scale_min(float p_scale);
+	float get_scale_min() const { return scale_min; }
+	void set_scale_max(float p_scale);
+	float get_scale_max() const { return scale_max; }
+	void set_random_yaw(bool p_enable);
+	bool is_random_yaw() const { return random_yaw; }
+	void set_align_to_normal(float p_amount);
+	float get_align_to_normal() const { return align_to_normal; }
+	void set_sink(float p_metres);
+	float get_sink() const { return sink; }
+	void set_cast_shadows(bool p_enable);
+	bool is_casting_shadows() const { return cast_shadows; }
+	void set_seed(int p_seed);
+	int get_seed() const { return seed; }
 };
 
 // FellowEngine terrain (docs/decisions/0158-terrain.md): a height field drawn with continuous distance-dependent levels
@@ -158,6 +223,58 @@ private:
 	RID body;
 	LocalVector<RID> shapes;
 
+	// Foliage (decision 0159): per kind, cells around the camera, each a MultiMesh made once on a worker thread.
+	TypedArray<FellowTerrainFoliage> foliage;
+	int foliage_cells_per_frame = 8;
+	struct FoliageKind {
+		RID mesh;
+		int layer = 0;
+		float density = 1.0f;
+		float min_weight = 0.3f;
+		float range = 100.0f;
+		float cell = 25.0f;
+		float cos_slope_min = 1.0f; // the normal's y at the smallest slope
+		float cos_slope_max = 0.0f;
+		float height_min = -100000.0f;
+		float height_max = 100000.0f;
+		float scale_min = 0.8f;
+		float scale_max = 1.2f;
+		bool random_yaw = true;
+		float align = 0.0f;
+		float sink = 0.0f;
+		bool shadows = true;
+		uint32_t seed = 0;
+	};
+	LocalVector<FoliageKind> foliage_kinds;
+	struct FoliageCell {
+		const FellowTerrain3D *terrain = nullptr;
+		int kind = 0;
+		int cx = 0;
+		int cz = 0;
+		WorkerThreadPool::TaskID task = WorkerThreadPool::INVALID_TASK_ID;
+		Vector<float> buffer; // written by the task
+		int count = 0;
+		bool ready = false;
+		uint64_t seen = 0;
+		RID multimesh;
+		RID instance;
+	};
+	HashMap<uint64_t, FoliageCell *> foliage_cells;
+	LocalVector<uint8_t> splat_cpu[2]; // RGBA8 copies of the splat maps, read by the foliage's tasks
+	Vector2i splat_cpu_size[2];
+	bool foliage_dirty = true;
+	uint64_t foliage_frame = 0;
+	int foliage_instances = 0;
+
+	void _foliage_changed();
+	void _update_foliage_kinds();
+	void _clear_foliage();
+	void _process_foliage(const Vector3 &p_camera);
+	void _make_foliage_cell_visible(FoliageCell *p_cell);
+	void _free_foliage_cell(FoliageCell *p_cell);
+	static void _generate_foliage_cell(void *p_cell);
+	float _layer_weight_local(int p_layer, float p_x, float p_z) const;
+
 	// Statistics.
 	uint64_t selections = 0;
 	uint64_t swaps = 0;
@@ -224,6 +341,10 @@ public:
 	uint32_t get_collision_mask() const { return collision_mask; }
 	void set_collision_region_size(int p_size);
 	int get_collision_region_size() const { return collision_region_size; }
+	void set_foliage(const TypedArray<FellowTerrainFoliage> &p_foliage);
+	TypedArray<FellowTerrainFoliage> get_foliage() const { return foliage; }
+	void set_foliage_cells_per_frame(int p_cells);
+	int get_foliage_cells_per_frame() const { return foliage_cells_per_frame; }
 
 	void update_heightmap();
 	float get_height(const Vector3 &p_global) const;

@@ -70,6 +70,7 @@ void initialize_fellow_world_module(ModuleInitializationLevel p_level) {
 		GDREGISTER_CLASS(FellowStreamingCell3D);
 		GDREGISTER_CLASS(FellowTerrain3D);
 		GDREGISTER_CLASS(FellowTerrainLayer);
+		GDREGISTER_CLASS(FellowTerrainFoliage);
 		GDREGISTER_CLASS(FellowWorldStreamer3D);
 
 		Performance *performance = Performance::get_singleton();

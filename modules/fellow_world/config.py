@@ -14,6 +14,7 @@ def get_doc_classes():
         "FellowHLOD3D",
         "FellowStreamingCell3D",
         "FellowTerrain3D",
+        "FellowTerrainFoliage",
         "FellowTerrainLayer",
         "FellowWorldStreamer3D",
     ]

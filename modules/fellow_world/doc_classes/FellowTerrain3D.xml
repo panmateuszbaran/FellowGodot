@@ -50,7 +50,7 @@
 		<method name="get_stats" qualifiers="const">
 			<return type="Dictionary" />
 			<description>
-				The current selection and data: [code]patches[/code], [code]triangles[/code], [code]patches_per_level[/code], [code]levels[/code], [code skip-lint]lod_distance[/code] (the finest level's range in metres), [code]selections[/code] and [code]swaps[/code] (the selections computed and the MultiMesh switches since the start), [code]last_select_usec[/code], [code]collision_shapes[/code], [code]map_size[/code].
+				The current selection and data: [code]patches[/code], [code]triangles[/code], [code]patches_per_level[/code], [code]levels[/code], [code skip-lint]lod_distance[/code] (the finest level's range in metres), [code]selections[/code] and [code]swaps[/code] (the selections computed and the MultiMesh switches since the start), [code]last_select_usec[/code], [code]collision_shapes[/code], [code]map_size[/code], [code]foliage_cells[/code] and [code]foliage_instances[/code] (the foliage's cells made and the instances drawn in them).
 			</description>
 		</method>
 		<method name="heightmap_from_image" qualifiers="static">
@@ -87,6 +87,12 @@
 		</member>
 		<member name="debug_view" type="int" setter="set_debug_view" getter="get_debug_view" enum="FellowTerrain3D.DebugView" default="0">
 			Draws the terrain in a diagnostic view instead of its layers.
+		</member>
+		<member name="foliage" type="FellowTerrainFoliage[]" setter="set_foliage" getter="get_foliage" default="[]">
+			The kinds of plants and rocks the terrain scatters over its layers around the camera ([FellowTerrainFoliage]).
+		</member>
+		<member name="foliage_cells_per_frame" type="int" setter="set_foliage_cells_per_frame" getter="get_foliage_cells_per_frame" default="8">
+			At most this many foliage cells are started a frame (each made on a worker thread): fewer spread a fast camera's new cells over more frames.
 		</member>
 		<member name="height_blend" type="float" setter="set_height_blend" getter="get_height_blend" default="0.3">
 			How much the layers' heights (their albedo's alpha, with [member FellowTerrainLayer.height_in_albedo_alpha]) decide where they show: 0 blends by the weights alone; higher values give sharper transitions where the higher layer wins.
