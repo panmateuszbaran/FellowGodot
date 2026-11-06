@@ -736,6 +736,19 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 					}
 					pipeline_key.ubershader++;
 				} else {
+					if (!pipeline_key.ubershader) {
+						// Diagnostics (FELLOW_SPECIALIZATION_LOG): each specialized pipeline a draw asked for before it was compiled,
+						// once, with its key (which scene-dependent bits make new pipelines mid-game).
+						static const bool fellow_spec_log = OS::get_singleton()->has_environment("FELLOW_SPECIALIZATION_LOG");
+						if (unlikely(fellow_spec_log)) {
+							static HashSet<uint64_t> fellow_spec_logged;
+							const uint64_t id = (uint64_t(uintptr_t(shader)) * 0x9E3779B97F4A7C15ull) ^ pipeline_hash;
+							if (!fellow_spec_logged.has(id)) {
+								fellow_spec_logged.insert(id);
+								print_line(vformat("FELLOW_SPEC frame=%d shader=%x version=%d flags=%d cull=%d vf=%d spec=%08x,%08x,%08x", (int64_t)Engine::get_singleton()->get_frames_drawn(), int64_t(uint64_t(uintptr_t(shader)) & 0xFFFFFFFF), int(pipeline_key.version), int(pipeline_key.color_pass_flags), int(pipeline_key.cull_mode), int64_t(pipeline_key.vertex_format_id), pipeline_specialization.packed_0, pipeline_specialization.packed_1, pipeline_specialization.packed_2));
+							}
+						}
+					}
 					pipeline_key.ubershader++;
 				}
 			} else {
