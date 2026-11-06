@@ -228,7 +228,7 @@ uniform float macro_variation = 0.15;
 uniform int debug_view = 0;
 uniform vec4 layer_color[9];
 uniform vec4 layer_params[9];
-uniform float layer_height_alpha[9];
+uniform vec4 layer_flags[9];
 instance uniform vec3 lod_camera;
 instance uniform float lod_scale = 1.0;
 )";
@@ -286,44 +286,64 @@ vec2 unpack_normal(vec4 t, float strength) {
 }
 )";
 	// A layer: its albedo (alpha: its height, or 0.5) and its normal in terrain space, from the top (x, -z) or three
-	// projections (UDN blend), with explicit gradients (sampled inside branches).
+	// projections (UDN blend), with explicit gradients (sampled inside branches). A texture the layer has not got is not
+	// read (layer_flags: albedo, normal, height in the albedo's alpha), nor a projection that weighs under 1 %.
 	for (int i = 0; i < FellowTerrain3D::MAX_LAYERS; i++) {
-		code += vformat(R"(
-void layer_%d(vec3 pl, vec3 dpdx, vec3 dpdy, vec3 nw, vec3 blend, out vec4 r_albedo, out vec3 r_normal) {
-	float s = layer_params[%d].x;
-	float strength = layer_params[%d].z;
-	if (layer_params[%d].w > 0.5) {
+		String f = R"(
+void layer_#(vec3 pl, vec3 dpdx, vec3 dpdy, vec3 nw, vec3 blend, out vec4 r_albedo, out vec3 r_normal) {
+	float s = layer_params[#].x;
+	float strength = layer_params[#].z;
+	vec4 f = layer_flags[#];
+	if (layer_params[#].w > 0.5) {
 		vec3 sgn = sign(nw + vec3(1e-6));
-		vec2 ux = vec2(pl.z * sgn.x, -pl.y) * s;
-		vec2 uy = vec2(pl.x, -pl.z) * s;
-		vec2 uz = vec2(-pl.x * sgn.z, -pl.y) * s;
-		vec4 ax = textureGrad(albedo_%d, ux, vec2(dpdx.z * sgn.x, -dpdx.y) * s, vec2(dpdy.z * sgn.x, -dpdy.y) * s);
-		vec4 ay = textureGrad(albedo_%d, uy, vec2(dpdx.x, -dpdx.z) * s, vec2(dpdy.x, -dpdy.z) * s);
-		vec4 az = textureGrad(albedo_%d, uz, vec2(-dpdx.x * sgn.z, -dpdx.y) * s, vec2(-dpdy.x * sgn.z, -dpdy.y) * s);
-		vec2 tx = unpack_normal(textureGrad(normal_%d, ux, vec2(dpdx.z * sgn.x, -dpdx.y) * s, vec2(dpdy.z * sgn.x, -dpdy.y) * s), strength);
-		vec2 ty = unpack_normal(textureGrad(normal_%d, uy, vec2(dpdx.x, -dpdx.z) * s, vec2(dpdy.x, -dpdy.z) * s), strength);
-		vec2 tz = unpack_normal(textureGrad(normal_%d, uz, vec2(-dpdx.x * sgn.z, -dpdx.y) * s, vec2(-dpdy.x * sgn.z, -dpdy.y) * s), strength);
-		tx.x *= sgn.x;
-		tz.x *= -sgn.z;
-		vec3 nx = vec3(nw.x, tx.y + nw.y, tx.x + nw.z);
-		vec3 ny = vec3(ty.x + nw.x, nw.y, ty.y + nw.z);
-		vec3 nz = vec3(tz.x + nw.x, tz.y + nw.y, nw.z);
-		r_albedo = ax * blend.x + ay * blend.y + az * blend.z;
-		r_normal = normalize(nx * blend.x + ny * blend.y + nz * blend.z);
+		vec4 a = vec4(0.0);
+		vec3 n = vec3(0.0);
+		float wsum = 0.0;
+		if (blend.x > 0.01) {
+			vec2 u = vec2(pl.z * sgn.x, -pl.y) * s;
+			vec2 gx = vec2(dpdx.z * sgn.x, -dpdx.y) * s;
+			vec2 gy = vec2(dpdy.z * sgn.x, -dpdy.y) * s;
+			a += (f.x > 0.5 ? textureGrad(albedo_#, u, gx, gy) : vec4(1.0)) * blend.x;
+			vec2 t = f.y > 0.5 ? unpack_normal(textureGrad(normal_#, u, gx, gy), strength) : vec2(0.0);
+			t.x *= sgn.x;
+			n += vec3(nw.x, t.y + nw.y, t.x + nw.z) * blend.x;
+			wsum += blend.x;
+		}
+		if (blend.y > 0.01) {
+			vec2 u = vec2(pl.x, -pl.z) * s;
+			vec2 gx = vec2(dpdx.x, -dpdx.z) * s;
+			vec2 gy = vec2(dpdy.x, -dpdy.z) * s;
+			a += (f.x > 0.5 ? textureGrad(albedo_#, u, gx, gy) : vec4(1.0)) * blend.y;
+			vec2 t = f.y > 0.5 ? unpack_normal(textureGrad(normal_#, u, gx, gy), strength) : vec2(0.0);
+			n += vec3(t.x + nw.x, nw.y, t.y + nw.z) * blend.y;
+			wsum += blend.y;
+		}
+		if (blend.z > 0.01) {
+			vec2 u = vec2(-pl.x * sgn.z, -pl.y) * s;
+			vec2 gx = vec2(-dpdx.x * sgn.z, -dpdx.y) * s;
+			vec2 gy = vec2(-dpdy.x * sgn.z, -dpdy.y) * s;
+			a += (f.x > 0.5 ? textureGrad(albedo_#, u, gx, gy) : vec4(1.0)) * blend.z;
+			vec2 t = f.y > 0.5 ? unpack_normal(textureGrad(normal_#, u, gx, gy), strength) : vec2(0.0);
+			t.x *= -sgn.z;
+			n += vec3(t.x + nw.x, t.y + nw.y, nw.z) * blend.z;
+			wsum += blend.z;
+		}
+		r_albedo = a / max(wsum, 1e-5);
+		r_normal = normalize(n + nw * 1e-5);
 	} else {
-		vec2 uy = vec2(pl.x, -pl.z) * s;
+		vec2 u = vec2(pl.x, -pl.z) * s;
 		vec2 gx = vec2(dpdx.x, -dpdx.z) * s;
 		vec2 gy = vec2(dpdy.x, -dpdy.z) * s;
-		r_albedo = textureGrad(albedo_%d, uy, gx, gy);
-		vec2 ty = unpack_normal(textureGrad(normal_%d, uy, gx, gy), strength);
-		r_normal = normalize(vec3(ty.x + nw.x, nw.y, ty.y + nw.z));
+		r_albedo = f.x > 0.5 ? textureGrad(albedo_#, u, gx, gy) : vec4(1.0);
+		vec2 t = f.y > 0.5 ? unpack_normal(textureGrad(normal_#, u, gx, gy), strength) : vec2(0.0);
+		r_normal = normalize(vec3(t.x + nw.x, nw.y, t.y + nw.z));
 	}
-	if (layer_height_alpha[%d] < 0.5) {
+	if (f.z < 0.5) {
 		r_albedo.a = 0.5;
 	}
 }
-)",
-				i, i, i, i, i, i, i, i, i, i, i, i, i);
+)";
+		code += f.replace("#", itos(i));
 	}
 	code += R"(
 void fragment() {
@@ -692,29 +712,29 @@ void FellowTerrain3D::_update_material() {
 
 	PackedColorArray colors;
 	PackedVector4Array params;
-	PackedFloat32Array height_alpha;
+	PackedVector4Array flags;
 	colors.resize(MAX_LAYERS);
 	params.resize(MAX_LAYERS);
-	height_alpha.resize(MAX_LAYERS);
+	flags.resize(MAX_LAYERS);
 	for (int i = 0; i < MAX_LAYERS; i++) {
 		Ref<FellowTerrainLayer> l = i < layers.size() ? Ref<FellowTerrainLayer>(layers[i]) : Ref<FellowTerrainLayer>();
 		if (l.is_valid()) {
 			colors.write[i] = l->get_albedo_color();
 			params.write[i] = Vector4(1.0f / l->get_texture_size(), l->get_roughness(), l->get_normal_strength(), l->is_triplanar() ? 1.0f : 0.0f);
-			height_alpha.write[i] = l->is_height_in_albedo_alpha() ? 1.0f : 0.0f;
+			flags.write[i] = Vector4(l->get_albedo_texture().is_valid() ? 1.0f : 0.0f, l->get_normal_texture().is_valid() ? 1.0f : 0.0f, l->is_height_in_albedo_alpha() ? 1.0f : 0.0f, 0.0f);
 			material->set_shader_parameter(vformat("albedo_%d", i), l->get_albedo_texture());
 			material->set_shader_parameter(vformat("normal_%d", i), l->get_normal_texture());
 		} else {
 			colors.write[i] = Color(1, 1, 1);
 			params.write[i] = Vector4(0.25f, 0.9f, 1.0f, 0.0f);
-			height_alpha.write[i] = 0.0f;
+			flags.write[i] = Vector4();
 			material->set_shader_parameter(vformat("albedo_%d", i), Variant());
 			material->set_shader_parameter(vformat("normal_%d", i), Variant());
 		}
 	}
 	material->set_shader_parameter("layer_color", colors);
 	material->set_shader_parameter("layer_params", params);
-	material->set_shader_parameter("layer_height_alpha", height_alpha);
+	material->set_shader_parameter("layer_flags", flags);
 	_update_transforms();
 }
 

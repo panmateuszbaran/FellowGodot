@@ -18,7 +18,8 @@ extends "res://bench/scene_base.gd"
 ## weather of the soak's cycle), --slice_fire_seconds=<s> (240: the campfire's log burns again), --slice_terrain=node
 ## (FellowTerrain3D at --slice_terrain_spacing=<m>, 1, instead of the 4 m chunks; --slice_terrain_lod=<m> its
 ## lod_distance, --slice_terrain_patch=<quads> its patch_size, --slice_terrain_shadows=view|stable its
-## shadow_casters).
+## shadow_casters); with it, --slice_foliage=node: the trees and grass scattered by the terrain (FellowTerrainFoliage)
+## over two more layers instead of placed by this script.
 ## Stock Godot: the FellowEngine nodes are left out (load_error is not set; the slice is the terrain, town, crowd and
 ## forest).
 
@@ -54,6 +55,7 @@ var _weather_seconds := SOAK_WEATHER_SECONDS
 var _fire_seconds := 240.0
 var _day_t := 0.0 # the day's clock: advanced by soak_update() only (perf and capture modes keep --slice_daytime)
 var _counts := {}
+var terrain_node: Node3D = null # FellowTerrain3D with --slice_terrain=node
 
 
 func build(p_args: Dictionary) -> void:
@@ -209,19 +211,33 @@ func _build_terrain_node() -> void:
 	# (3); the splat at a quarter of the heights' resolution.
 	var sn := (n - 1) / 4 + 1
 	var splat := Image.create(sn, sn, false, Image.FORMAT_RGBA8)
+	var foliage_layers := str(args.get("slice_foliage", "script")) == "node"
+	var splat2 := Image.create(sn, sn, false, Image.FORMAT_RGBA8) if foliage_layers else null
 	for j in sn:
 		for i in sn:
 			var x := -SIZE * 0.5 + i * spacing * 4.0
 			var z := -SIZE * 0.5 + j * spacing * 4.0
 			var nrm := normal_at(x, z)
 			var c := Color(0, 0, 0, 0)
+			var c2 := Color(0, 0, 0, 0)
 			if _in_town(x, z, 4.0):
 				c.g = 1.0
 			elif height(x, z) < WATER_LEVEL + 1.0:
 				c.b = 1.0
 			elif nrm.y < 0.86:
 				c.r = 1.0
+			elif foliage_layers:
+				# --slice_foliage=node: the meadows (layer 4) and the forest (layer 5) as grass-coloured layers the terrain
+				# scatters its grass and trees over (the GDScript placement's rules as weights).
+				var lake := Vector2(x - LAKE.x, z - LAKE.z).length()
+				var meadow := x > -60.0 and x < 300.0 and z > -40.0 and z < 250.0 and noise.get_noise_2d(x * 3.0, z * 3.0) > -0.1
+				if meadow and not _in_town(x, z, 6.0) and lake > LAKE_RADIUS - 8.0 and height(x, z) > WATER_LEVEL + 0.3:
+					c.a = 1.0
+				elif not _in_town(x, z, 12.0) and lake > LAKE_RADIUS + 12.0 and nrm.y >= 0.8:
+					c2.r = 1.0 if Vector2(x, z).length() >= 220.0 else 0.15
 			splat.set_pixel(i, j, c)
+			if foliage_layers:
+				splat2.set_pixel(i, j, c2)
 	var t := ClassDB.instantiate("FellowTerrain3D")
 	t.name = "Terrain"
 	t.position = Vector3(-SIZE * 0.5, 0.0, -SIZE * 0.5)
@@ -233,7 +249,10 @@ func _build_terrain_node() -> void:
 	if args.has("slice_terrain_shadows"):
 		t.shadow_casters = 0 if str(args["slice_terrain_shadows"]) == "view" else 1
 	var layers := []
-	for c in [Color(0.27, 0.36, 0.17), Color(0.4, 0.38, 0.35), Color(0.36, 0.35, 0.33), Color(0.42, 0.38, 0.29)]:
+	var colours := [Color(0.27, 0.36, 0.17), Color(0.4, 0.38, 0.35), Color(0.36, 0.35, 0.33), Color(0.42, 0.38, 0.29)]
+	if foliage_layers:
+		colours.append_array([Color(0.27, 0.36, 0.17), Color(0.27, 0.36, 0.17)]) # meadow, forest: the grass's colour
+	for c in colours:
 		var l = ClassDB.instantiate("FellowTerrainLayer")
 		# A layer's colour is sRGB (as a material's); the chunks' vertex colours are taken as linear.
 		l.albedo_color = c.linear_to_srgb()
@@ -243,7 +262,10 @@ func _build_terrain_node() -> void:
 	t.layers = layers
 	t.heightmap = img
 	t.splat_map = splat
+	if foliage_layers:
+		t.splat_map_2 = splat2
 	add_child(t)
+	terrain_node = t
 	_counts["terrain"] = "node"
 	_counts["terrain_spacing"] = spacing
 	_counts["terrain_build_ms"] = (Time.get_ticks_usec() - t0) / 1000.0
@@ -420,6 +442,9 @@ func _place(x: float, z: float, yaw: float, s: float) -> Transform3D:
 
 
 func _build_vegetation() -> void:
+	if terrain_node and str(args.get("slice_foliage", "script")) == "node":
+		_build_vegetation_node()
+		return
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 552
 	# Trees: on the hills and around the valley, not in the town or the lake.
@@ -474,6 +499,33 @@ func _build_vegetation() -> void:
 	for key in chunks:
 		_multimesh("grass_%d_%d" % [key.x, key.y], grass_mesh, chunks[key], 90.0, 0.2)
 	_counts["grass_clumps"] = clumps
+
+
+func _build_vegetation_node() -> void:
+	# --slice_foliage=node (decision 0159): the same trees and grass scattered by the terrain around the camera: trees
+	# over the forest layer to the far plane (about the script's 9 000 over the map), grass over the meadows to 90 m.
+	var trees = ClassDB.instantiate("FellowTerrainFoliage")
+	trees.mesh = _tree_mesh()
+	trees.layer = 5
+	trees.min_weight = 0.0
+	trees.density = float(args.get("slice_trees", "9000")) / 870000.0
+	trees.range = camera.far
+	trees.scale_min = 0.8
+	trees.scale_max = 1.3
+	trees.sink = 0.05
+	trees.seed = 552
+	var grass = ClassDB.instantiate("FellowTerrainFoliage")
+	grass.mesh = _grass_mesh()
+	grass.layer = 4
+	grass.min_weight = 0.5
+	grass.density = float(args.get("slice_grass", "1.0"))
+	grass.range = 90.0
+	grass.scale_min = 0.8
+	grass.scale_max = 1.2
+	grass.sink = 0.05
+	grass.seed = 553
+	terrain_node.foliage = [trees, grass]
+	_counts["foliage"] = "node"
 
 
 func _build_lights() -> void:
