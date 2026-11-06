@@ -659,6 +659,7 @@ public:
 	virtual void pipeline_cache_free() override final;
 	virtual size_t pipeline_cache_query_size() override final;
 	virtual Vector<uint8_t> pipeline_cache_serialize() override final;
+	void _fellow_keep_cache_header(); // decision 0166
 
 	/*******************/
 	/**** RENDERING ****/

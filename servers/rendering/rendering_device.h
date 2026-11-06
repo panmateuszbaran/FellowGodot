@@ -1240,6 +1240,9 @@ private:
 	size_t pipeline_cache_size = 0;
 	String pipeline_cache_file_path;
 	WorkerThreadPool::TaskID pipeline_cache_save_task = WorkerThreadPool::INVALID_TASK_ID;
+	// FellowEngine (decision 0166): the pipeline cache's state and its saves under a mutex of their own, not the
+	// device's: a save copies and checksums the whole cache (hundreds of MB), and every thread's device call waited.
+	Mutex fellow_pipeline_cache_mutex;
 
 	Vector<uint8_t> _load_pipeline_cache();
 	static void _save_pipeline_cache(void *p_data);

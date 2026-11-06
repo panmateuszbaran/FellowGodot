@@ -9555,7 +9555,26 @@ Vector<uint8_t> RenderingDevice::_load_pipeline_cache() {
 }
 
 void RenderingDevice::update_pipeline_cache(bool p_closing) {
-	_THREAD_SAFE_METHOD_
+	// FellowEngine (decision 0166): not the device's lock, which a save held while it copied and checksummed the whole
+	// cache, every other thread's device call waiting (hitches of 170-400 ms while pipelines compiled in the background).
+	// A pipeline made while a save or another query runs does not wait for it: the next one queries again.
+	if (p_closing) {
+		// A save still running is waited for without the mutex, which it takes.
+		fellow_pipeline_cache_mutex.lock();
+		const WorkerThreadPool::TaskID running = pipeline_cache_save_task;
+		pipeline_cache_save_task = WorkerThreadPool::INVALID_TASK_ID;
+		fellow_pipeline_cache_mutex.unlock();
+		if (running != WorkerThreadPool::INVALID_TASK_ID) {
+			WorkerThreadPool::get_singleton()->wait_for_task_completion(running);
+		}
+		fellow_pipeline_cache_mutex.lock();
+	} else if (!fellow_pipeline_cache_mutex.try_lock()) {
+		return;
+	}
+	struct FellowUnlock {
+		Mutex &m;
+		~FellowUnlock() { m.unlock(); }
+	} fellow_unlock{ fellow_pipeline_cache_mutex };
 
 	{
 		bool still_saving = pipeline_cache_save_task != WorkerThreadPool::INVALID_TASK_ID && !WorkerThreadPool::get_singleton()->is_task_completed(pipeline_cache_save_task);
@@ -9601,9 +9620,9 @@ void RenderingDevice::update_pipeline_cache(bool p_closing) {
 void RenderingDevice::_save_pipeline_cache(void *p_data) {
 	RenderingDevice *self = static_cast<RenderingDevice *>(p_data);
 
-	self->_thread_safe_.lock();
+	self->fellow_pipeline_cache_mutex.lock(); // FellowEngine (decision 0166): not the device's lock
 	Vector<uint8_t> cache_blob = self->driver->pipeline_cache_serialize();
-	self->_thread_safe_.unlock();
+	self->fellow_pipeline_cache_mutex.unlock();
 
 	if (cache_blob.is_empty()) {
 		return;

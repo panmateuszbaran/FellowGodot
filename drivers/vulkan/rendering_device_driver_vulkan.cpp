@@ -5667,8 +5667,20 @@ bool RenderingDeviceDriverVulkan::pipeline_cache_create(const Vector<uint8_t> &p
 			return false;
 		}
 	}
+	// FellowEngine (decision 0166): the loaded file's data is in the driver's cache now; only its header is kept (the
+	// whole file stayed in memory for the process's life).
+	_fellow_keep_cache_header();
 
 	return true;
+}
+
+void RenderingDeviceDriverVulkan::_fellow_keep_cache_header() {
+	if (pipelines_cache.buffer.size() > int(sizeof(PipelineCacheHeader))) {
+		Vector<uint8_t> header;
+		header.resize(sizeof(PipelineCacheHeader));
+		memcpy(header.ptrw(), pipelines_cache.buffer.ptr(), sizeof(PipelineCacheHeader));
+		pipelines_cache.buffer = header;
+	}
 }
 
 void RenderingDeviceDriverVulkan::pipeline_cache_free() {
@@ -5716,7 +5728,11 @@ Vector<uint8_t> RenderingDeviceDriverVulkan::pipeline_cache_serialize() {
 	header->data_size = pipelines_cache.current_size;
 	header->data_hash = hash_murmur3_buffer(pipelines_cache.buffer.ptr() + sizeof(PipelineCacheHeader), pipelines_cache.current_size);
 
-	return pipelines_cache.buffer;
+	// FellowEngine (decision 0166): the copy goes to the file; only its header stays here (the largest copy of the cache
+	// stayed in memory before, until the next save).
+	Vector<uint8_t> blob = pipelines_cache.buffer;
+	_fellow_keep_cache_header();
+	return blob;
 }
 
 /*******************/
