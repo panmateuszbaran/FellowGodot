@@ -30,6 +30,8 @@
 
 #include "fellow_burnable_3d.h"
 
+#include "fellow_shared_shaders.h"
+
 #include "fellow_node_warnings.h"
 
 #include "core/config/engine.h"
@@ -1151,9 +1153,8 @@ Ref<ShaderMaterial> FellowBurnable3D::_make_burn_material(const Ref<Material> &p
 	if (burn_code.is_empty()) {
 		return Ref<ShaderMaterial>();
 	}
-	Ref<Shader> shader;
-	shader.instantiate();
-	shader->set_code(burn_code);
+	// Shared by code (milestone 55): a burnable lit again, or another of the same material, compiles nothing.
+	Ref<Shader> shader = FellowSharedShaders::shader(burn_code);
 	Ref<ShaderMaterial> m;
 	m.instantiate();
 	m->set_shader(shader);
@@ -1265,9 +1266,7 @@ void FellowBurnable3D::_build_heap(MeshInstance3D *p_target) {
 	mesh->add_surface_from_arrays(Mesh::PRIMITIVE_TRIANGLES, arrays);
 	// The heap's vertices rise up to the box's height: a custom box so it is not culled.
 	mesh->set_custom_aabb(AABB(origin, Vector3(res) * voxel));
-	Ref<Shader> shader;
-	shader.instantiate();
-	shader->set_code(String("shader_type spatial;\nrender_mode cull_disabled;\n") + FELLOW_BURN_DECLARATIONS + FELLOW_HEAP_CODE);
+	Ref<Shader> shader = FellowSharedShaders::shader(String("shader_type spatial;\nrender_mode cull_disabled;\n") + FELLOW_BURN_DECLARATIONS + FELLOW_HEAP_CODE);
 	heap_material.instantiate();
 	heap_material->set_shader(shader);
 	heap_material->set_shader_parameter("fellow_burn_state", display_texture);
