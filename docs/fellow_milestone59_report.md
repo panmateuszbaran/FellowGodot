@@ -69,8 +69,8 @@ On the RTX (f360; the GPU at 67 W and 1.7 GHz that night, against 81 W and 1.9 G
 | the slice's 20-minute soak, warm-up and setting on | 122 pipelines after the warm-up (6.1 a minute; f358: 10.3-11), 16 hitches |
 
 The soak's five hitches of 167-396 ms (none compiling on the main thread, each during a burst of background
-compilation): the likely cause, the pipeline cache's saves holding the RenderingDevice's lock, is decision 0166's
-(milestone 60; job f363 to confirm).
+compilation) were the pipeline cache's saves holding the RenderingDevice's lock: decision 0166 (milestone 60) fixed
+them — the same soak's largest frame 397 → 20 ms (f363).
 
 ## 4. Limits
 

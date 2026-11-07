@@ -1,6 +1,6 @@
 # 0166 — The pipeline cache saved without the device's lock, its copies not kept
 
-Status: **measuring** (a fix: the same pipelines and frames) · Branch `fellow/geometry` · Code:
+Status: **KEEP** (a fix: the same pipelines and frames) · Branch `fellow/geometry` · Code:
 `servers/rendering/rendering_device.{h,cpp}` (`update_pipeline_cache()`, `_save_pipeline_cache()`,
 `fellow_pipeline_cache_mutex`), `drivers/vulkan/rendering_device_driver_vulkan.{h,cpp}` (`_fellow_keep_cache_header()`).
 
@@ -41,9 +41,32 @@ The cache's contents, the pipelines and the file are the same: the driver's pipe
 ## Verification
 
 * lavapipe: runs and exits clean (lavapipe's pipeline cache does not grow, so its saves are not reached there).
-* RTX (job f363): f360's 20-minute soak again with the fix — the hitches during background compilation, the process's
-  memory.
+* RTX (job f363): f360's 20-minute soak again with the fix, the same arguments (the terrain with its foliage, the
+  warm-up, the weather every minute, the fire every two):
+
+| the slice's 20-minute soak, 1080p | f360 (before) | f363 (the fix) |
+|---|---|---|
+| pipelines compiled after the warm-up | 122 | 151 |
+| hitches (twice the median and 10 ms over it) | 16 | **4** |
+| hitches over 100 ms | 5 (167-396 ms, in frames whose workers compiled 0.6-4.2 s) | **0** |
+| the largest frame | 397 ms | **20.3 ms** |
+| 99th, 99.9th percentile | 7.71, 8.81 ms | 6.68, 7.57 ms |
+| video memory; objects | 405 → 414 MB; +2 | 405 → 414 MB; +2 |
+| the process's memory, start → end (largest) | 1 706 → 2 175 MB (2 178) | 2 176 → 2 577 MB (2 995) |
+
+More pipelines compiled in the background than before, and none held the main thread: every remaining hitch is the
+GPU's fence (16-21 ms waited in `rd_fence_wait_usec`), but for one frame of 29 ms drawing in the first half minute.
+
+The memory did not fall. Likely most of the process's memory is the driver's pipeline cache, which FellowBench's
+cache file fills at start and which only grows: between the soaks two more builds' pipelines were compiled (f360's
+soak, f361's runs), and the start rose from 1.7 to 2.2 GB; the saves' copies now come and go (the largest sample
+3.0 GB) instead of one staying. The file's size is not in this measurement (it lives outside the folders the jobs
+read). A
+game's cache holds its own pipelines only; the bench's holds every build's (decision 0050's limit, 1 GB, starts it
+again).
 
 ## Decision
 
-Pending f363.
+**KEEP.** The slice's long hitches during background compilation are gone: the largest frame of 20 minutes 397 → 20
+ms, with more pipelines compiled than before. Not done: a smaller limit for the bench's ever-growing cache file
+(`frame/pipeline_cache_max_mb`), a save that does not copy the whole cache (the driver gives it whole).

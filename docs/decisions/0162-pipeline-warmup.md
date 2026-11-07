@@ -49,8 +49,8 @@ On the RTX (f360, 1280 × 720, TAA): during the turn 7 specialized pipelines wit
 warm-up 33 frames, 341 ms, 41 pipelines. The slice's 20-minute soak with the warm-up and decision 0161 (f360, as f358's
 with the foliage): 122 pipelines after the warm-up (120 specialized, 2 surface) — 6.1 a minute against 10.3-11 a
 minute in f358 — and 16 hitches (0.84 a minute), one compiling a pipeline on the main thread. Five of them, 167-396
-ms, came during bursts of background compilation without compiling anything on the main thread: the likely cause,
-the pipeline cache's saves holding the device's lock, is decision 0166's (job f363 to confirm). What still compiles after the warm-up: weather changes (snow's first
+ms, came during bursts of background compilation without compiling anything on the main thread: the pipeline cache's
+saves holding the device's lock, fixed by decision 0166 (f363: the largest frame of the same soak 20 ms). What still compiles after the warm-up: weather changes (snow's first
 fall), the fire's relighting, autotune's evaluations (decision 0068), what comes into view later.
 
 ## Decision

@@ -34,6 +34,10 @@ Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.m
   that mutex or busy (the cloud's two-thread pool, one of them the render thread: two runs of four hung); the waiter now
   compiles the group's variants no task has started itself. The same shaders; the image regression suite exact with
   its shader cache warm and cold.
+- The pipeline cache's size queries and saves off the RenderingDevice's lock (decision 0166): a save copies and
+  checksums the whole Vulkan pipeline cache (hundreds of MB in FellowBench) and held every thread's device calls while
+  pipelines compiled in the background. The slice's 20-minute soak on the RTX: the largest frame 397 → 20 ms, hitches
+  16 → 4, none over 30 ms, with more pipelines compiled than before.
 
 ## Milestone 59 — pipelines compiled ahead (2026-11-06)
 
