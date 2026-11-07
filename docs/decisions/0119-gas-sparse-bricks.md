@@ -107,3 +107,8 @@ levels in one atlas texture per field, addressed by an x offset). The same state
 (`m20_f262`) it does not pay: at 64 cells the frame −2.0 % with 2048, +21 % with 8192, +66 % with 32768; at 128 cells
 +7.8 %, +21 %, +38 % — one workgroup works through a level of a few thousand cells more slowly than the dispatches
 it replaces wait for each other. Kept as an option (0).
+
+Milestone 60 measured it again at the slice's campfire (48 cells along its height, 38 × 48 × 38, sparse; f361b, RTX,
+1080p, six runs each, the gas step's groups timed in a profiled run): the frame −1.6 % with 2048 and −2.4 % with 512
+(medians), the GPU's time the same (+0.1 %, +0.6 %), the render thread −6 % and −2 % (fewer dispatches recorded); the
+pressure group 0.535 → 0.536 ms. At this size the fine levels are the solve's cost, not the coarse ones: still off.

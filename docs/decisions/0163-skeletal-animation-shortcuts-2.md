@@ -1,6 +1,6 @@
 # 0163 — Skeletal animation on the main thread: two more exact shortcuts
 
-Status: **KEEP, on** (exact; the RTX's timing to come) · Branch `fellow/geometry` · Settings
+Status: **KEEP, on** (exact; measured on the RTX) · Branch `fellow/geometry` · Settings
 `rendering/fellow/animation/shared_no_override_pose`, `animation/lazy_simulator_poses` · Code:
 `scene/3d/skeleton_3d.{h,cpp}`, `scene/3d/physics/physical_bone_simulator_3d.{h,cpp}`, `fellow_settings.*` · Check:
 `bench/animation_check.gd`.
@@ -62,6 +62,15 @@ moves and seeks every character included.)
 update in the frame it was bound, while the bones' poses changed since the last update: its first transform is then
 the pose of the current frame instead of the last update's.
 
+On the RTX laptop (Core Ultra 9 275HX; release template, 1080p, frame-locked, interleaved, six runs each; the main
+thread's scene process from FellowEngine's stats, `main_process_usec`):
+
+| | the scene's process a frame: off → on | the frame: off → on |
+|---|---|---|
+| Crowd Lab, 256 characters, AnimationPlayers (f361) | 3.35 → 3.07 ms (**−8.5 %**) | 5.05 → 4.79 ms (−5.2 %, medians) |
+| Crowd Lab, AnimationTrees blending (f361) | 5.55 → 5.25 ms (−5.4 %) | 7.32 → 7.09 ms (−3.1 %) |
+| Slice Lab, 48 characters, the terrain with its foliage (f361b) | 0.731 → 0.664 ms (−9 %) | 4.549 → 4.497 ms (within the spread: the GPU's frame) |
+
 ## Rejected: the keys' part of the slerp kept per thread (`animation/slerp_key_cache`)
 
 Built, exact (the same hashes), and fewer instructions — but slower. A per-thread table of the keys' sign, `acos()`
@@ -76,8 +85,7 @@ what decides.
 ## Decision
 
 **KEEP, on.** A tenth of a crowd's animation instructions on the main thread go (6 % blending), 4-7 % of its CPU
-time, with the same poses bit for bit. The RTX's timing (Crowd Lab and Slice Lab, the settings off against on) is job
-f361's.
+time, with the same poses bit for bit; on the RTX laptop 5-9 % of the scene's process.
 
 Not done: the track's key search and edge bookkeeping (253 instructions a track and frame, now the largest self cost),
 `interpolate_via_rest()`'s normalization, animation LOD for AnimationPlayer crowds (not exact: a game's choice).

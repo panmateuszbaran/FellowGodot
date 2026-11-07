@@ -53,5 +53,7 @@ thread model too (the main thread waiting, every worker blocked on the mutex).
 
 ## Decision
 
-**KEEP.** The separate render thread is measured on the RTX in job f361 (Crowd Lab and Slice Lab,
-`--rs_metrics=render_thread`).
+**KEEP.** On the RTX (f361, f361b; `--rs_metrics=render_thread`): Crowd Lab's frame 4.79 → 3.28 ms (−32 %; the
+rendering off the main thread, whose draw step falls from 1.76 to 0.26 ms a frame), with its crowd in 8 groups too 3.10
+ms; Slice Lab's frame, the GPU's already, 4.497 → 4.597 ms (+2 %, about the spread). FellowEngine still leaves the
+thread model as the project sets it (decision 0077's advice stands: a CPU-bound game should measure it).

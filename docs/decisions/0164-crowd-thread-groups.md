@@ -1,6 +1,6 @@
 # 0164 — Crowds on worker threads: process thread groups
 
-Status: **measuring** (a scene's choice: nothing changes unless a scene puts its characters in groups; exact) · Branch
+Status: **KEEP** (a scene's choice: nothing changes unless a scene puts its characters in groups; exact) · Branch
 `fellow/geometry` · Code: `benchmarks/project/scenes/crowd_lab.gd` (`--crowd_groups`), `crowd_group.gd`,
 `slice_lab.gd` (`--slice_crowd_groups`) · Check: `bench/animation_check.gd --groups=N`.
 
@@ -33,9 +33,22 @@ scene is as before.
   1.66-1.71 ms a frame on the main thread, 1.43-1.51 ms with 2 groups, 1.55-1.62 ms with 4; the process's CPU time
   +16 % with 2 (the two vCPUs seem to share a core: the same functions take ~20 % longer each).
 
-To measure on the RTX laptop's 24 cores (job f361): Crowd Lab with 256 characters, 8 and 24 groups, AnimationPlayers
-and AnimationTrees; Slice Lab with its 48 characters in 8 groups.
+On the RTX laptop (24 cores; release template, 1080p, frame-locked, interleaved, six runs each; jobs f361, f361b):
+
+| | the scene's process a frame | the frame (median) |
+|---|---|---|
+| Crowd Lab, 256 characters, AnimationPlayers, on the main thread | 3.07 ms | 4.79 ms |
+| the same in 8 groups | **1.04 ms (−66 %)** | **3.19 ms (−33 %)** |
+| in 24 groups | 1.09 ms | 3.23 ms |
+| AnimationTrees blending, on the main thread | 5.25 ms | 7.09 ms |
+| the same in 8 groups | **1.40 ms (−73 %)** | **3.32 ms (−53 %)** |
+| Slice Lab's 48 characters, on the main thread → 8 groups | 0.664 → 0.490 ms (−26 %) | 4.497 → 4.555 ms (the GPU's frame) |
+
+With the characters in groups the crowd's frame is the GPU's and the presentation's (2.6-2.7 ms of GPU): 24 groups
+gain nothing over 8. The slice's frame was already the GPU's; its main thread gains a quarter.
 
 ## Decision
 
-Pending the laptop's measurement.
+**KEEP** (as a way to build a crowd; a scene's choice). A crowd of 256 animated characters takes a third of the main
+thread it took, the same poses bit for bit. Not done: grouping automatically (a mixer may animate anything in the
+tree; Godot's groups are the scene's statement that its nodes are independent).
