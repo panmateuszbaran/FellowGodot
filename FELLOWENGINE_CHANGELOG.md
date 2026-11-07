@@ -9,7 +9,7 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
-## Milestone 60 — the main thread's CPU (2026-11-06)
+## Milestone 60 — the main thread's CPU, and the hitches it waited through (2026-11-07)
 
 - `rendering/fellow/animation/shared_no_override_pose`, `animation/lazy_simulator_poses` (on, exact), decision 0163:
   a skeleton without overrides copies each bone's global pose into the deprecated one without overrides instead of
@@ -38,6 +38,10 @@ Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.m
   checksums the whole Vulkan pipeline cache (hundreds of MB in FellowBench) and held every thread's device calls while
   pipelines compiled in the background. The slice's 20-minute soak on the RTX: the largest frame 397 → 20 ms, hitches
   16 → 4, none over 30 ms, with more pipelines compiled than before.
+- Measured on the RTX laptop: decision 0163's settings −8.5 % of Crowd Lab's scene process (256 characters), −9 % in
+  the slice; Crowd Lab in 8 process groups 3.07 → 1.04 ms of scene process, the frame −33 % (blending −53 %); the
+  separate render thread −32 % in Crowd Lab, nothing in the GPU-bound slice; 10 minutes of the slice with both, no
+  error, the largest frame 22 ms. The slice's scene process is 0.66 ms a frame (its "5.3 ms" was the draw's).
 
 ## Milestone 59 — pipelines compiled ahead (2026-11-06)
 
