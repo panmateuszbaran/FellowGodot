@@ -51,6 +51,8 @@ class FellowShallowWater3D : public Node3D {
 	GDCLASS(FellowShallowWater3D, Node3D);
 
 public:
+	static void fellow_bake_shader_codes(Vector<String> &r_codes); // milestone 61: the surface's code
+
 	static constexpr int MAX_COLLIDERS = 16;
 	static constexpr int MAX_IMPULSES = 16;
 

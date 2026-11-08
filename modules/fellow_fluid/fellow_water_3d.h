@@ -59,6 +59,7 @@ class FellowWater3D : public Node3D {
 	GDCLASS(FellowWater3D, Node3D);
 
 public:
+	static void fellow_bake_shader_codes(Vector<String> &r_codes); // milestone 61: the surface's two codes
 	static constexpr int MAX_CASCADES = 4;
 
 	enum DebugView {

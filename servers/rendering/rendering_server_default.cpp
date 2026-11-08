@@ -47,7 +47,7 @@
 
 // careful, these may run in different threads than the rendering server
 
-int RenderingServerDefault::changes = 0;
+std::atomic<int> RenderingServerDefault::changes = 0;
 
 /* FREE */
 
@@ -262,7 +262,7 @@ double RenderingServerDefault::get_frame_setup_time_cpu() const {
 }
 
 bool RenderingServerDefault::has_changed() const {
-	return changes > 0;
+	return changes.load(std::memory_order_relaxed) > 0;
 }
 
 void RenderingServerDefault::_init() {
@@ -480,7 +480,7 @@ void RenderingServerDefault::draw(bool p_present, double frame_step) {
 	ERR_FAIL_COND_MSG(!Thread::is_main_thread(), "Manually triggering the draw function from the RenderingServer can only be done on the main thread. Call this function from the main thread or use call_deferred().");
 	// Needs to be done before changes is reset to 0, to not force the editor to redraw.
 	RS::get_singleton()->emit_signal(SNAME("frame_pre_draw"));
-	changes = 0;
+	changes.store(0, std::memory_order_relaxed);
 	if (create_thread) {
 		command_queue.push(this, &RenderingServerDefault::_draw, p_present, frame_step);
 	} else {

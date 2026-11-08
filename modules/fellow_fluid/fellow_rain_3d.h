@@ -52,6 +52,7 @@ class FellowRain3D : public Node3D {
 	GDCLASS(FellowRain3D, Node3D);
 
 public:
+	static void fellow_bake_shader_codes(Vector<String> &r_codes); // milestone 61: the drops' and the flakes' codes
 	enum Precipitation {
 		PRECIPITATION_RAIN,
 		PRECIPITATION_SNOW,

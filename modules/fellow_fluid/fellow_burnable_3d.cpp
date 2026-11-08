@@ -872,6 +872,14 @@ void fragment() {
 }
 )";
 
+static String _heap_code() {
+	return String("shader_type spatial;\nrender_mode cull_disabled;\n") + FELLOW_BURN_DECLARATIONS + FELLOW_HEAP_CODE;
+}
+
+void FellowBurnable3D::fellow_bake_shader_codes(Vector<String> &r_codes) {
+	r_codes.push_back(_heap_code());
+}
+
 static const char *FELLOW_BURN_FRAGMENT = R"(
 	// FellowEngine burning: scorched brown, then charred black (alligator cracks along the grain, each block a little
 	// different, a faint sheen), a white-grey film of ash on the char about to crumble; the embers glow in the cracks,
@@ -1288,7 +1296,7 @@ void FellowBurnable3D::_build_heap(MeshInstance3D *p_target) {
 	mesh->add_surface_from_arrays(Mesh::PRIMITIVE_TRIANGLES, arrays);
 	// The heap's vertices rise up to the box's height: a custom box so it is not culled.
 	mesh->set_custom_aabb(AABB(origin, Vector3(res) * voxel));
-	Ref<Shader> shader = FellowSharedShaders::shader(String("shader_type spatial;\nrender_mode cull_disabled;\n") + FELLOW_BURN_DECLARATIONS + FELLOW_HEAP_CODE);
+	Ref<Shader> shader = FellowSharedShaders::shader(_heap_code());
 	heap_material.instantiate();
 	heap_material->set_shader(shader);
 	heap_material->set_shader_parameter("fellow_burn_state", display_texture);

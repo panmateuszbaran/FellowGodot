@@ -82,6 +82,11 @@ void fragment() {
 }
 )";
 
+void FellowLightning3D::fellow_bake_shader_codes(Vector<String> &r_codes) {
+	r_codes.push_back(String(lightning_bolt_shader_code));
+	r_codes.push_back(String(lightning_glow_shader_code));
+}
+
 uint64_t FellowLightning3D::_hash(uint64_t p_x) {
 	// splitmix64
 	p_x += 0x9E3779B97F4A7C15ull;

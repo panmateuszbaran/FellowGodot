@@ -173,6 +173,8 @@ protected:
 	static void _bind_methods();
 
 public:
+	static void fellow_bake_shader_codes(Vector<String> &r_codes); // milestone 61: the ash heap's code
+
 	PackedStringArray get_configuration_warnings() const override;
 
 	// Whether a physics body belongs to a burning object (the gas volumes skip it as an obstacle).

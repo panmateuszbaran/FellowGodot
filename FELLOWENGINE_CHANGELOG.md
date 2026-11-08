@@ -30,8 +30,15 @@ Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.m
   water) kept as SPIR-V in `user://fellow_kernel_cache` after their first compilation (`frame/kernel_spirv_cache`):
   glslang runs once per machine and build, not once per session (28 → 0.5 ms on the cloud's CPU, on the thread adding
   the first such node); the same pictures. And Godot's shader baker now finds FellowEngine's effects, which are made
-  when first used: an export starts by making them (`RendererSceneRenderRD::fellow_create_versions_for_baking()`), so a
-  baked export of the fire scene compiles no shader at its first start instead of 3 (72 without the baker).
+  when first used, and the materials its nodes make from code (water, rain, snow, lightning, shallow water, ash,
+  terrain): an export starts by making them (`RendererSceneRenderRD::fellow_create_versions_for_baking()`,
+  `fellow_bake_shaders.h`), so baked exports of the fire and water scenes compile no shader at their first start
+  instead of 3 and 1 (70-72 without the baker).
+- ThreadSanitizer over milestone 60's threading (decision 0170; a debug template with `use_tsan`, lavapipe): the crowd in
+  process groups with the separate render thread, water, rain and fire with it, Jolt's and GodotPhysics' piles, the
+  slice. Three data races, all in stock Godot code, fixed — the RenderingServer's change counter (now atomic),
+  ProjectSettings' flag setters (now under the settings' lock), Jolt's job timings (reset under their lock); none in
+  FellowEngine's own threading.
 - Measurements prepared for the GPU: `fluid/gas_mg_fine_sweeps` (2, as before) — the campfire's multigrid with one
   sweep at its finest level keeps the flame within 0.2 % of the reference after 180 steps (lavapipe), its residual 20
   times decision 0117's, for about 29 % less of the solve's work, to be timed on the RTX; FellowEngine's stats report

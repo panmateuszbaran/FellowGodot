@@ -149,6 +149,20 @@ void light() {
 }
 )";
 
+static String _drop_code() {
+	return String(rain_drop_shader_code);
+}
+
+// The snowflakes' (decision 0128): the same code, opaque with hashed alpha, receiving shadows.
+static String _flake_code() {
+	return String(rain_drop_shader_code).replace("render_mode blend_mix, depth_draw_never, cull_disabled, shadows_disabled,", "render_mode cull_disabled,").replace("// FLAKE_ALPHA_HASH", "ALPHA_HASH_SCALE = 1.0;");
+}
+
+void FellowRain3D::fellow_bake_shader_codes(Vector<String> &r_codes) {
+	r_codes.push_back(_drop_code());
+	r_codes.push_back(_flake_code());
+}
+
 static GPUParticlesCollisionHeightField3D::Resolution rain_occlusion_resolution(int p_res) {
 	switch (p_res) {
 		case 256:
@@ -189,7 +203,7 @@ void FellowRain3D::_build_children() {
 		flake_process[i]->set_wind_enabled(i == 1);
 	}
 
-	drop_shader = FellowSharedShaders::shader(rain_drop_shader_code); // milestone 53: one per session
+	drop_shader = FellowSharedShaders::shader(_drop_code()); // milestone 53: one per session
 	drop_material.instantiate();
 	drop_material->set_shader(drop_shader);
 	drop_material->set_shader_parameter("splash", false);
@@ -197,7 +211,7 @@ void FellowRain3D::_build_children() {
 	// The snowflakes' (decision 0128): the same code, opaque with hashed alpha (drawn in the opaque pass with the
 	// particles' motion vectors: TAA reprojects them; blended, TAA wiped out flakes that move more than their size in
 	// a frame), receiving shadows.
-	flake_shader = FellowSharedShaders::shader(String(rain_drop_shader_code).replace("render_mode blend_mix, depth_draw_never, cull_disabled, shadows_disabled,", "render_mode cull_disabled,").replace("// FLAKE_ALPHA_HASH", "ALPHA_HASH_SCALE = 1.0;"));
+	flake_shader = FellowSharedShaders::shader(_flake_code());
 	flake_material.instantiate();
 	flake_material->set_shader(flake_shader);
 	flake_material->set_shader_parameter("flake", true);

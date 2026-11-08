@@ -2411,6 +2411,10 @@ void FellowTerrain3D::_notification(int p_what) {
 	}
 }
 
+void FellowTerrain3D::fellow_bake_shader_codes(Vector<String> &r_codes) {
+	r_codes.push_back(_terrain_shader_code());
+}
+
 void FellowTerrain3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_heightmap", "image"), &FellowTerrain3D::set_heightmap);
 	ClassDB::bind_method(D_METHOD("get_heightmap"), &FellowTerrain3D::get_heightmap);

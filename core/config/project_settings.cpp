@@ -221,6 +221,9 @@ String ProjectSettings::localize_path(const String &p_path) const {
 }
 
 void ProjectSettings::set_initial_value(const String &p_name, const Variant &p_value) {
+	// FellowEngine (milestone 61): locked as _get_property_list() is, which a render thread may run meanwhile.
+	_THREAD_SAFE_METHOD_
+
 	ERR_FAIL_COND_MSG(!props.has(p_name), vformat("Request for nonexistent project setting: '%s'.", p_name));
 
 	// Duplicate so that if value is array or dictionary, changing the setting will not change the stored initial value.
@@ -228,21 +231,33 @@ void ProjectSettings::set_initial_value(const String &p_name, const Variant &p_v
 }
 
 void ProjectSettings::set_restart_if_changed(const String &p_name, bool p_restart) {
+	// FellowEngine (milestone 61): locked as _get_property_list() is, which a render thread may run meanwhile.
+	_THREAD_SAFE_METHOD_
+
 	ERR_FAIL_COND_MSG(!props.has(p_name), vformat("Request for nonexistent project setting: '%s'.", p_name));
 	props[p_name].restart_if_changed = p_restart;
 }
 
 void ProjectSettings::set_as_basic(const String &p_name, bool p_basic) {
+	// FellowEngine (milestone 61): locked as _get_property_list() is, which a render thread may run meanwhile.
+	_THREAD_SAFE_METHOD_
+
 	ERR_FAIL_COND_MSG(!props.has(p_name), vformat("Request for nonexistent project setting: '%s'.", p_name));
 	props[p_name].basic = p_basic;
 }
 
 void ProjectSettings::set_as_internal(const String &p_name, bool p_internal) {
+	// FellowEngine (milestone 61): locked as _get_property_list() is, which a render thread may run meanwhile.
+	_THREAD_SAFE_METHOD_
+
 	ERR_FAIL_COND_MSG(!props.has(p_name), vformat("Request for nonexistent project setting: '%s'.", p_name));
 	props[p_name].internal = p_internal;
 }
 
 void ProjectSettings::set_ignore_value_in_docs(const String &p_name, bool p_ignore) {
+	// FellowEngine (milestone 61): locked as _get_property_list() is, which a render thread may run meanwhile.
+	_THREAD_SAFE_METHOD_
+
 	ERR_FAIL_COND_MSG(!props.has(p_name), vformat("Request for nonexistent project setting: '%s'.", p_name));
 #ifdef DEBUG_ENABLED
 	props[p_name].ignore_value_in_docs = p_ignore;

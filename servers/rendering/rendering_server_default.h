@@ -44,6 +44,8 @@
 #include "servers/rendering/rendering_server_types.h"
 #include "servers/server_wrap_mt_common.h"
 
+#include <atomic>
+
 class RenderingServerDefault : public RenderingServer {
 	GDSOFTCLASS(RenderingServerDefault, RenderingServer);
 
@@ -59,7 +61,9 @@ class RenderingServerDefault : public RenderingServer {
 
 	};
 
-	static int changes;
+	// FellowEngine (milestone 61): atomic — the server's calls (WRITE_ACTION) come from several threads at once with process
+	// thread groups (decision 0164; ThreadSanitizer).
+	static std::atomic<int> changes;
 	RID test_cube;
 
 	List<Callable> frame_drawn_callbacks;
@@ -109,7 +113,7 @@ public:
 
 #else
 	_FORCE_INLINE_ static void redraw_request() {
-		changes++;
+		changes.fetch_add(1, std::memory_order_relaxed);
 	}
 #endif
 

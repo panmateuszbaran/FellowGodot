@@ -153,6 +153,7 @@ class FellowTerrain3D : public Node3D {
 	GDCLASS(FellowTerrain3D, Node3D);
 
 public:
+	static void fellow_bake_shader_codes(Vector<String> &r_codes); // milestone 61: the terrain's code
 	static constexpr int MAX_LAYERS = 9;
 	static constexpr int MAX_LEVELS = 16;
 

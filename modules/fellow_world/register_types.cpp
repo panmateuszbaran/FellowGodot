@@ -38,6 +38,7 @@
 #include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
 #include "main/performance.h"
+#include "servers/rendering/fellow_bake_shaders.h"
 #include "servers/rendering/rendering_server.h"
 
 // Milestone 50 (tools): the streaming systems in the debugger's Monitors tab, under "FellowEngine" (and to
@@ -74,6 +75,7 @@ void initialize_fellow_world_module(ModuleInitializationLevel p_level) {
 		GDREGISTER_CLASS(FellowTerrainLayer);
 		GDREGISTER_CLASS(FellowTerrainFoliage);
 		GDREGISTER_CLASS(FellowWorldStreamer3D);
+		FellowBakeShaders::register_provider(&FellowTerrain3D::fellow_bake_shader_codes); // milestone 61
 
 		Performance *performance = Performance::get_singleton();
 		if (performance) {

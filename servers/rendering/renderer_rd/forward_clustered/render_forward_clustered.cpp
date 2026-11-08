@@ -35,6 +35,7 @@
 #include "core/io/file_access.h"
 #include "core/object/callable_mp.h"
 #include "core/os/os.h"
+#include "servers/rendering/fellow_bake_shaders.h"
 #include "servers/rendering/fellow_settings.h"
 #include "servers/rendering/fellow_settings_look.h"
 #include "servers/rendering/renderer_rd/effects/fellow_gas.h"
@@ -48,6 +49,7 @@
 #include "servers/rendering/renderer_rd/uniform_set_cache_rd.h"
 #include "servers/rendering/rendering_device.h"
 #include "servers/rendering/rendering_server_default.h"
+#include "servers/rendering/shader_preprocessor.h"
 #include "servers/rendering/storage/ltc_lut.gen.h"
 
 using namespace RendererSceneRenderImplementation;
@@ -756,7 +758,7 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 									}
 									print_line(vformat("FELLOW_SPEC_SHADER code=%08x len=%d %s", int64_t(code_hash), shader->code.length(), hint));
 								}
-								print_line(vformat("FELLOW_SPEC frame=%d shader=%x code=%08x version=%d flags=%d cull=%d vf=%d spec=%08x,%08x,%08x", (int64_t)Engine::get_singleton()->get_frames_drawn(), int64_t(uint64_t(uintptr_t(shader)) & 0xFFFFFFFF), int64_t(code_hash), int(pipeline_key.version), int(pipeline_key.color_pass_flags), int(pipeline_key.cull_mode), int64_t(pipeline_key.vertex_format_id), pipeline_specialization.packed_0, pipeline_specialization.packed_1, pipeline_specialization.packed_2));
+								print_line(vformat("FELLOW_SPEC frame=%d shader=%x code=%08x version=%d flags=%d cull=%d vf=%d fb=%d prim=%d spec=%08x,%08x,%08x", (int64_t)Engine::get_singleton()->get_frames_drawn(), int64_t(uint64_t(uintptr_t(shader)) & 0xFFFFFFFF), int64_t(code_hash), int(pipeline_key.version), int(pipeline_key.color_pass_flags), int(pipeline_key.cull_mode), int64_t(pipeline_key.vertex_format_id), int64_t(pipeline_key.framebuffer_format_id), int(pipeline_key.primitive_type), pipeline_specialization.packed_0, pipeline_specialization.packed_1, pipeline_specialization.packed_2));
 							}
 						}
 					}
@@ -1725,6 +1727,25 @@ void RenderForwardClustered::fellow_create_versions_for_baking() {
 	}
 	if (RendererRD::FellowGas *gas = RendererRD::FellowGas::get_singleton()) {
 		gas->fellow_create_versions_for_baking();
+	}
+	// The spatial shaders FellowEngine's nodes make from code, created as embedded shaders: the baker bakes those of
+	// the material storage, as it bakes the engine's own (once per session; freed with the renderer).
+	if (fellow_baking_shaders.is_empty()) {
+		Vector<String> codes;
+		FellowBakeShaders::get_codes(codes);
+		RendererRD::MaterialStorage *material_storage = RendererRD::MaterialStorage::get_singleton();
+		for (const String &code : codes) {
+			// Preprocessed as a Shader resource's code is (the codes use #define).
+			String preprocessed;
+			ShaderPreprocessor preprocessor;
+			if (preprocessor.preprocess(code, String(), preprocessed) != OK) {
+				continue;
+			}
+			const RID shader = material_storage->shader_allocate();
+			material_storage->shader_initialize(shader, true);
+			material_storage->shader_set_code(shader, preprocessed);
+			fellow_baking_shaders.push_back(shader);
+		}
 	}
 }
 
@@ -11204,6 +11225,10 @@ RenderForwardClustered::RenderForwardClustered() {
 }
 
 RenderForwardClustered::~RenderForwardClustered() {
+	for (const RID &shader : fellow_baking_shaders) {
+		RendererRD::MaterialStorage::get_singleton()->shader_free(shader);
+	}
+	fellow_baking_shaders.clear();
 	FellowParallelFor::shared_release();
 	fellow_parallel = nullptr;
 	if (ss_effects != nullptr) {

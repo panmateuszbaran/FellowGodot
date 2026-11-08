@@ -325,22 +325,24 @@ void JoltJobSystem::flush_timings() {
 	const StringName profiler_name = SNAME("servers");
 
 	EngineDebugger *engine_debugger = EngineDebugger::get_singleton();
+	const bool profiling = engine_debugger->is_profiling(profiler_name);
+	Array timings;
 
-	if (engine_debugger->is_profiling(profiler_name)) {
-		Array timings;
-
-		for (const KeyValue<const void *, uint64_t> &E : timings_by_job) {
+	// FellowEngine (milestone 61): read and reset under the jobs' lock — a job thread adds its time after its job's
+	// barrier, while this runs (ThreadSanitizer); the profiler is called after.
+	timings_lock.lock();
+	for (KeyValue<const void *, uint64_t> &E : timings_by_job) {
+		if (profiling) {
 			timings.push_back(static_cast<const char *>(E.key));
 			timings.push_back(USEC_TO_SEC(E.value));
 		}
-
-		timings.push_front("physics_3d");
-
-		engine_debugger->profiler_add_frame_data(profiler_name, timings);
-	}
-
-	for (KeyValue<const void *, uint64_t> &E : timings_by_job) {
 		E.value = 0;
+	}
+	timings_lock.unlock();
+
+	if (profiling) {
+		timings.push_front("physics_3d");
+		engine_debugger->profiler_add_frame_data(profiler_name, timings);
 	}
 }
 

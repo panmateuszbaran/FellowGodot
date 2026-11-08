@@ -1685,6 +1685,7 @@ public:
 	virtual void enable_features(BitField<FeatureBits> p_feature_bits) override;
 	virtual String get_name() const override;
 	virtual void fellow_create_versions_for_baking() override; // milestone 61
+	LocalVector<RID> fellow_baking_shaders; // the nodes' code shaders made for the baker
 
 	virtual bool free(RID p_rid) override;
 

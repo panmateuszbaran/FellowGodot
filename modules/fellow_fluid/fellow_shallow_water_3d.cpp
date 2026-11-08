@@ -329,6 +329,10 @@ Ref<ArrayMesh> FellowShallowWater3D::_build_grid(int n) const {
 	return mesh;
 }
 
+void FellowShallowWater3D::fellow_bake_shader_codes(Vector<String> &r_codes) {
+	r_codes.push_back(String(fellow_water_shader_code));
+}
+
 void FellowShallowWater3D::_update_material() {
 	if (water_shader.is_null()) {
 		water_shader = FellowSharedShaders::shader(fellow_water_shader_code); // milestone 53

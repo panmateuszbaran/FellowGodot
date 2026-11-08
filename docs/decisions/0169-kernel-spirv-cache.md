@@ -1,10 +1,11 @@
-# 0169 — Compiling less at load: FellowEngine's kernels cached, its effects baked into exports
+# 0169 — Compiling less at load: FellowEngine's kernels cached, its effects and node materials baked into exports
 
 Status: **KEEP, on** (exact: the same SPIR-V) · Branch `fellow/geometry` · Setting
 `rendering/fellow/frame/kernel_spirv_cache` (on) · Code: `modules/fellow_fluid/fellow_shared_shaders.cpp`
 (`FellowSharedShaders::file()`); `RendererSceneRenderRD::fellow_create_versions_for_baking()`
 (`renderer_scene_render_rd.{h,cpp}`, `forward_clustered/render_forward_clustered.{h,cpp}`, `effects/fellow_gas.h`),
-called by `editor/export/shader_baker_export_plugin.cpp`; `servers/rendering/fellow_settings.{h,cpp}` (the stats
+called by `editor/export/shader_baker_export_plugin.cpp`; `servers/rendering/fellow_bake_shaders.h` and the nodes'
+`fellow_bake_shader_codes()` (water, rain, lightning, shallow water, burnable, terrain); `servers/rendering/fellow_settings.{h,cpp}` (the stats
 `cost_glsl_compile_usec`, `cost_glsl_compiles`, `cost_glsl_cached_usec`, `cost_glsl_cached`).
 
 ## Problem
@@ -34,6 +35,11 @@ Milestone 61's look at load time and cold shader compilation, two gaps:
   bloom, atmosphere, clouds, rainbow, contact shadows, the gas volumes' simulation (both precisions), rendering and
   burning, light tile culling, occlusion and MultiMesh culling — so that their versions are baked. Not the ray-traced
   effects without ray tracing, nor adaptive VRS without VRS.
+* The spatial shaders FellowEngine's nodes make from code (`servers/rendering/fellow_bake_shaders.h`): each module
+  registers a function giving them — the water's surface with and without screen-space reflections, the rain's drops
+  and snowflakes, the lightning's bolt and glow, the shallow water's surface, a burnable's ash heap, the terrain — and
+  the same hook creates them, preprocessed as a Shader resource's code is, as embedded shaders, which the baker bakes as
+  it bakes the engine's own (freed with the renderer).
 
 ## Verification
 
@@ -41,14 +47,21 @@ Milestone 61's look at load time and cold shader compilation, two gaps:
   directory empty and then again: the first session compiles 3 files in 28.1 ms, the second reads 3 in 0.5 ms.
 * The image regression suite's water, rain and snow scenes (the waves, the ripples, the snow's tracks), their kernels
   compiled and then read from the cache: the same pictures as their goldens, bit for bit, no error.
-* Exports (Linux, release template, the baker on) of the regression suite's fire and water scenes, each run twice on
-  lavapipe from an empty user directory (`--verbose`: "Shader cache miss" lines): fire 3 → **0** shaders compiled at
-  the first start (72 without the baker), water 1 (70 without): the water's surface, a material its node makes from
-  code.
+* Exports (Linux, release template, the baker on) of the regression suite's scenes, each run twice on lavapipe from an
+  empty user directory (`--verbose`: "Shader cache miss" lines), the shaders compiled at the first start:
+
+| export | baker off | baker on, before | 0169 |
+|---|---|---|---|
+| fire (gas, burning) | 72 | 3 (the gas's simulation and rendering, light tile culling) | **0** |
+| water | 70 | 1 (the water's surface, made from code) | **0** |
+| rain, lightning, terrain | — | — | 3 (the rain's particle process materials); 0; 0 |
+
+  None at the second start. The image regression suite: 24 pictures exact.
 
 ## Decision
 
-**KEEP, on.** Not done: materials FellowEngine's nodes make from code (the water's surface, the rain's drops) — not
-resources of the export, the baker does not see them; the neural motion model's kernels (`FellowMotionModel`, compiled
+**KEEP, on.** Not done: the particle process materials FellowEngine's nodes make (the rain's drops, splashes and
+flakes: Godot's ParticleProcessMaterial writes their code from properties the node changes at run time); a burnable's
+burning material (written from its object's own material); the neural motion model's kernels (`FellowMotionModel`, compiled
 with the GPU's subgroup size in their defines); shipping the kernel cache with an export (a game's first session
 still compiles its kernels, 28 ms here).

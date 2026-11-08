@@ -103,6 +103,8 @@ protected:
 	static void _bind_methods();
 
 public:
+	static void fellow_bake_shader_codes(Vector<String> &r_codes); // milestone 61: the bolt's and the glow's codes
+
 	// Strikes now (distance < 0: at random within distance_range; azimuth < -360: at random), returns its position.
 	Vector3 strike(float p_distance = -1.0f, float p_azimuth_degrees = -1000.0f);
 	bool is_striking() const { return current.active; }

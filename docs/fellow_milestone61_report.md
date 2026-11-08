@@ -2,7 +2,7 @@
 
 Status: **FINAL for the cloud's part** (2026-11-08): checked in the cloud (lavapipe, headless); the RTX laptop's
 measurements (job f364) prepared, not run — the GPU was not to be used. Branch `fellow/geometry`. Decision records `docs/decisions/0167-late-pipelines.md`,
-`0168-terrain-region-uploads.md`, `0169-kernel-spirv-cache.md`.
+`0168-terrain-region-uploads.md`, `0169-kernel-spirv-cache.md`, `0170-thread-sanitizer.md`.
 
 ## 0. Result
 
@@ -20,8 +20,12 @@ GPU (the campfire's solver, the process's memory), with the regression suite ext
   upload was 10-89 ms a frame with an edit (f360).
 * **Compiling less at load** (decision 0169): the water's, rain's and shallow water's GLSL kept as SPIR-V after its
   first compilation (28 → 0.5 ms here; on the thread adding the first such node, at load or in play); and Godot's
-  shader baker now bakes FellowEngine's effects, which are made when first used: a baked export of the fire scene
-  compiles no shader at its first start instead of 3 (72 unbaked).
+  shader baker now bakes FellowEngine's effects, which are made when first used, and the materials its nodes make from
+  code: baked exports of the fire and water scenes compile no shader at their first start instead of 3 and 1 (70-72
+  unbaked).
+* **ThreadSanitizer** (decision 0170): milestone 60's threading run under the sanitizer on lavapipe — three data races,
+  all in stock Godot code (the RenderingServer's change counter written from the crowd's worker threads, project
+  settings' flags set while the render thread lists them, Jolt's job timings), fixed; none in FellowEngine's own.
 * **Prepared for the GPU**: the campfire's multigrid with one sweep at its finest level (`fluid/gas_mg_fine_sweeps`)
   — the flame within 0.2 % of the reference, about 29 % less of the solve's cell updates; the driver's pipeline cache
   in the stats beside the process's memory (the soaks' growth); job f364.
@@ -42,7 +46,12 @@ GPU (the campfire's solver, the process's memory), with the regression suite ext
 * `modules/fellow_fluid/fellow_shared_shaders.cpp`: decision 0169, `frame/kernel_spirv_cache`; stats
   `cost_glsl_compile_usec`, `cost_glsl_compiles`, `cost_glsl_cached_usec`, `cost_glsl_cached`;
   `RendererSceneRenderRD::fellow_create_versions_for_baking()` (`renderer_scene_render_rd.{h,cpp}`,
-  `render_forward_clustered.{h,cpp}`, `effects/fellow_gas.h`), called by `editor/export/shader_baker_export_plugin.cpp`.
+  `render_forward_clustered.{h,cpp}`, `effects/fellow_gas.h`), called by `editor/export/shader_baker_export_plugin.cpp`;
+  `servers/rendering/fellow_bake_shaders.h` and the nodes' `fellow_bake_shader_codes()` (water, rain, lightning, shallow
+  water, burnable, terrain), registered by the modules.
+* Decision 0170: `servers/rendering/rendering_server_default.{h,cpp}` (`changes` atomic),
+  `core/config/project_settings.cpp` (the flag setters locked), `modules/jolt_physics/spaces/jolt_job_system.cpp`
+  (`flush_timings()` under the jobs' lock).
 * `servers/rendering/renderer_rd/effects/fellow_gas.cpp`: `fluid/gas_mg_fine_sweeps` (2: as before).
 * `servers/rendering/fellow_settings.{h,cpp}`, `rendering_device.cpp`: `pipeline_cache_bytes`;
   `bench/main.gd`: the soak's `pipeline_cache_mb` a second and its growth; `tools/soak/soak_report.py`: in the chart.
@@ -66,6 +75,10 @@ GPU (the campfire's solver, the process's memory), with the regression suite ext
   drew a copy of the burning log with the material the log had freed: errors during the warm-up, fixed by copies that
   follow their sources).
 * Physics Lab headless (release template): every case at three or four scales, both engines, to the end.
+* ThreadSanitizer (a debug template with `use_tsan`, lavapipe): the regression crowd in 4 process groups with the
+  separate render thread, water, rain and fire with it, Jolt's and GodotPhysics' piles, the slice (40 minutes, in its
+  warm-up). Three races in stock Godot code, fixed; then no report with an access in Godot's code (the rest are inside
+  lavapipe, which is not instrumented). The image regression suite after the fixes: 24 pictures exact.
 
 ## 3. Measurements
 
@@ -122,7 +135,8 @@ twice from an empty user directory, the shaders compiled at the start ("Shader c
 | export | baker off: first start; second | baker on, before | baker on, 0169 |
 |---|---|---|---|
 | fire (gas, burning) | 72; 0 | 3 (the gas's simulation and rendering, light tile culling) | **0** |
-| water | 70; 0 | 1 (the water's surface, a material made from code) | 1 |
+| water | 70; 0 | 1 (the water's surface, a material made from code) | **0** |
+| rain; lightning; terrain | — | — | 3 (the rain's particle process materials); 0; 0 |
 
 Without the baker the first start took 1.3-1.6 s longer on the cloud's CPU (the water 15.2 against 13.6 s, the fire
 12.3 against 11.0 s, lavapipe's own pipeline compilation in both): the GLSL compiled at start, which a GPU does not
@@ -135,13 +149,9 @@ shorten.
   follows the pipelines compiled. The bench's Forward+ cache file on the laptop is 364.5 MB (saved at f363's end), so
   the cache alone is not most of the process's 2.2 GB at start, as decision 0166 supposed. The cloud cannot: lavapipe's cache does not grow, and the editor build's own
   allocations stayed flat in the lavapipe soaks (static memory 112 → 106 MB in 4 minutes).
-* ThreadSanitizer: not run. The cloud's disk allowance has 2.8 GB free, not enough for a sanitizer build beside the
-  editor's and the template's objects without deleting the platform checks' containers and toolchains (milestone 50,
-  15 GB), and the build would take about two hours of the two vCPUs. Milestone 60's threading (process groups, the
-  separate render thread) is covered instead by the regression suite's new groups, decision 0165's runs and the slice
-  with both on lavapipe.
-* Materials FellowEngine's nodes make from code (the water's surface, the rain's drops) are not baked into exports:
-  the baker sees resources and the editor's existing shaders only.
+* Not baked into exports: the particle process materials FellowEngine's nodes make (Godot writes their code from
+  properties the node changes in play: the rain's 3), a burnable's burning material (written from its object's).
+* ThreadSanitizer saw lavapipe, not a GPU's driver, and not the whole slice.
 * The shelf's copies are lit by the directional lights only; skinned meshes, hidden nodes and particles are not on it.
 
 ## 5. Next

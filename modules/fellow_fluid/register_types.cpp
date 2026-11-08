@@ -44,6 +44,7 @@
 #include "fellow_weather_3d.h"
 
 #include "core/object/class_db.h"
+#include "servers/rendering/fellow_bake_shaders.h"
 
 void initialize_fellow_fluid_module(ModuleInitializationLevel p_level) {
 	if (p_level == MODULE_INITIALIZATION_LEVEL_SCENE) {
@@ -58,6 +59,12 @@ void initialize_fellow_fluid_module(ModuleInitializationLevel p_level) {
 		GDREGISTER_CLASS(FellowGasEmitter3D);
 		GDREGISTER_CLASS(FellowBurnable3D);
 		GDREGISTER_INTERNAL_CLASS(FellowGasReadback);
+		// Milestone 61: the nodes' code shaders for Godot's shader baker.
+		FellowBakeShaders::register_provider(&FellowWater3D::fellow_bake_shader_codes);
+		FellowBakeShaders::register_provider(&FellowRain3D::fellow_bake_shader_codes);
+		FellowBakeShaders::register_provider(&FellowLightning3D::fellow_bake_shader_codes);
+		FellowBakeShaders::register_provider(&FellowShallowWater3D::fellow_bake_shader_codes);
+		FellowBakeShaders::register_provider(&FellowBurnable3D::fellow_bake_shader_codes);
 	}
 }
 

@@ -340,6 +340,13 @@ void FellowWater3D::_set_surface_mesh(const Ref<ArrayMesh> &p_mesh) {
 	_update_material();
 }
 
+void FellowWater3D::fellow_bake_shader_codes(Vector<String> &r_codes) {
+	// As _update_material() makes them: with screen-space reflections (the depth's nearest mips) and without.
+	const String code = String::utf8(fellow_water_shader_code);
+	r_codes.push_back(code);
+	r_codes.push_back(code.replace("hint_depth_texture, filter_nearest_mipmap,", "hint_depth_texture, filter_nearest,"));
+}
+
 void FellowWater3D::_update_material() {
 	// The depth texture's nearest-depth mip levels (decision 0126) are asked for only while reflections are traced:
 	// without them the renderer does not build the pyramid.
