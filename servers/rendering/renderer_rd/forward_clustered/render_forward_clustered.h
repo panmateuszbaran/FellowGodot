@@ -947,6 +947,7 @@ private:
 	void _fellow_adaptive_vrs_apply(const Ref<RenderSceneBuffersRD> &p_render_buffers, const RenderSceneDataRD *p_scene_data, bool p_depth_ready);
 	static void _fellow_adaptive_vrs_readback(const Vector<uint8_t> &p_data);
 	void _fellow_occlusion_init();
+	void _fellow_tile_cull_init();
 	bool _fellow_occlusion_pyramid(const Ref<RenderSceneBuffersRD> &p_render_buffers);
 	bool _fellow_occlusion_cull(RenderDataRD *p_render_data, uint32_t p_color_pass_flags);
 	void _fellow_occlusion_set_slot_bounds(uint32_t p_slot, void *p_mesh_surface);
@@ -1683,6 +1684,7 @@ public:
 
 	virtual void enable_features(BitField<FeatureBits> p_feature_bits) override;
 	virtual String get_name() const override;
+	virtual void fellow_create_versions_for_baking() override; // milestone 61
 
 	virtual bool free(RID p_rid) override;
 

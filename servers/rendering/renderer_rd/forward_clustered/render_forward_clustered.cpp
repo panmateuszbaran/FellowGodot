@@ -1687,6 +1687,47 @@ void RenderForwardClustered::_fellow_occlusion_filter(RenderListType p_list) {
 	rl.element_info.resize(kept);
 }
 
+void RenderForwardClustered::_fellow_tile_cull_init() {
+	FellowTileCull &t = fellow_tile_cull;
+	if (t.version.is_valid()) {
+		return;
+	}
+	Vector<String> modes;
+	modes.push_back("\n");
+	modes.push_back("\n#define MODE_DEPTH_BOUNDS\n");
+	modes.push_back("\n#define MODE_FROM_BOUNDS\n");
+	t.shader.initialize(modes);
+	t.version = t.shader.version_create();
+	for (int i = 0; i < 3; i++) {
+		t.pipelines[i] = RD::get_singleton()->compute_pipeline_create(t.shader.version_get_shader(t.version, i));
+	}
+}
+
+void RenderForwardClustered::fellow_create_versions_for_baking() {
+	// Milestone 61: the effects FellowEngine makes when first used, made now so that Godot's shader baker bakes their
+	// shaders into an export (a game's first start compiled them: the gas volume's simulation and rendering, light tile
+	// culling). Not the ray-traced effects without ray tracing, nor adaptive VRS without VRS.
+	RendererSceneRenderRD::fellow_create_versions_for_baking();
+	_fellow_tile_cull_init();
+	_fellow_occlusion_init();
+	_fellow_multimesh_cull_init();
+	if (!fellow_atmosphere) {
+		fellow_atmosphere = memnew(RendererRD::FellowAtmosphere);
+	}
+	if (!fellow_clouds) {
+		fellow_clouds = memnew(RendererRD::FellowClouds);
+	}
+	if (!fellow_rainbow) {
+		fellow_rainbow = memnew(RendererRD::FellowRainbow);
+	}
+	if (!fellow_contact_shadow) {
+		fellow_contact_shadow = memnew(RendererRD::FellowContactShadow);
+	}
+	if (RendererRD::FellowGas *gas = RendererRD::FellowGas::get_singleton()) {
+		gas->fellow_create_versions_for_baking();
+	}
+}
+
 void RenderForwardClustered::_fellow_occlusion_init() {
 	FellowOcclusion &o = fellow_occlusion;
 	if (o.hzb_version.is_valid()) {
@@ -1753,17 +1794,7 @@ bool RenderForwardClustered::_fellow_light_tile_cull(const RenderDataRD *p_rende
 	if (screen.x <= 0 || screen.y <= 0 || p_words == 0 || p_words > 32 || current_cluster_builder == nullptr || current_cluster_builder->get_cluster_size() < 16) {
 		return false;
 	}
-	if (t.version.is_null()) {
-		Vector<String> modes;
-		modes.push_back("\n");
-		modes.push_back("\n#define MODE_DEPTH_BOUNDS\n");
-		modes.push_back("\n#define MODE_FROM_BOUNDS\n");
-		t.shader.initialize(modes);
-		t.version = t.shader.version_create();
-		for (int i = 0; i < 3; i++) {
-			t.pipelines[i] = rd->compute_pipeline_create(t.shader.version_get_shader(t.version, i));
-		}
-	}
+	_fellow_tile_cull_init();
 	const uint32_t tiles_x = (screen.x + 7) / 8;
 	const uint32_t tiles_y = (screen.y + 7) / 8;
 	const uint32_t size = tiles_x * tiles_y * 2 * p_words * 4;

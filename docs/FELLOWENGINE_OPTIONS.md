@@ -571,6 +571,12 @@ world's visible `MeshInstance3D`, `MultiMeshInstance3D` and `FellowTerrain3D` fo
 copies' 40 m visibility range hides them from every other camera, and each follows its source's mesh and materials
 while shown); `get_stats()` adds `shelf_items`, `shelf_pages`; Slice Lab `--slice_warmup_shelf=0` leaves it out.
 
+`rendering/fellow/frame/kernel_spirv_cache` (on, exact; decision 0169): FellowEngine nodes' compute kernels (water,
+rain, snow tracks, shallow water) kept as SPIR-V in `user://fellow_kernel_cache` after their first compilation, named
+by their source and the engine's build. An export with Godot's shader baker (`shader_baker/enabled`) bakes FellowEngine's
+effects too (they are made when the export starts). `fluid/gas_mg_fine_sweeps` (2): the gas multigrid's sweeps before
+and after the finest level's correction (1 halves that level's smoothing; not exact; for measurements, milestone 61).
+
 ## Options that change the image (off by default)
 
 | setting | what it does | image cost | record |

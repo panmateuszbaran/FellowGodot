@@ -2233,3 +2233,15 @@ RendererSceneRenderRD::~RendererSceneRenderRD() {
 	RSG::light_storage->directional_shadow_atlas_set_size(0);
 	cull_argument.reset(); //avoid exit error
 }
+
+void RendererSceneRenderRD::fellow_create_versions_for_baking() {
+	if (!fellow_motion_blur) {
+		fellow_motion_blur = memnew(RendererRD::FellowMotionBlur);
+	}
+	if (!fellow_exposure) {
+		fellow_exposure = memnew(RendererRD::FellowExposure);
+	}
+	if (!fellow_bloom) {
+		fellow_bloom = memnew(RendererRD::FellowBloom);
+	}
+}

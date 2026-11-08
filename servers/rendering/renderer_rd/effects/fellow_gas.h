@@ -462,6 +462,12 @@ private:
 
 public:
 	static FellowGas *get_singleton(); // created on first use (render thread); nullptr without a RenderingDevice
+	// Milestone 61: every version made (both precisions, the burn), for Godot's shader baker.
+	void fellow_create_versions_for_baking() {
+		_ensure_sim(0);
+		_ensure_sim(1);
+		_ensure_burn();
+	}
 	static FellowGas *get_singleton_if_exists() { return singleton; }
 	static bool rendering_enabled(); // rendering/fellow/fluid/gas_rendering (and FellowEngine on)
 	static void finalize();

@@ -139,6 +139,7 @@ bool ShaderBakerExportPlugin::_begin_customize_resources(const Ref<EditorExportP
 	renderer_features.set_flag(RenderingShaderLibrary::FEATURE_FP32_BIT);
 
 	RendererSceneRenderRD::get_singleton()->enable_features(renderer_features);
+	RendererSceneRenderRD::get_singleton()->fellow_create_versions_for_baking(); // FellowEngine (milestone 61)
 
 	// Included all shaders created by renderers and effects.
 	ShaderRD::shaders_embedded_set_lock();

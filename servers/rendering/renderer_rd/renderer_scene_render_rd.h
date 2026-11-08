@@ -182,6 +182,10 @@ private:
 public:
 	static RendererSceneRenderRD *get_singleton() { return singleton; }
 
+	// FellowEngine (milestone 61): Godot's shader baker bakes the ShaderRD versions that exist when an export starts;
+	// FellowEngine makes most of its effects when they are first used. This makes them (in the editor, for an export).
+	virtual void fellow_create_versions_for_baking();
+
 	/* LIGHTING */
 
 	virtual void setup_added_reflection_probe(const Transform3D &p_transform, const Vector3 &p_half_size) {}

@@ -9,6 +9,36 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 61 — what the CPU could still do without a GPU (2026-11-08)
+
+- Fewer pipelines compiled after the warm-up (decision 0167). `frame/stable_scene_bits` also keeps Godot's directional
+  soft-shadow bit and the sun's traced and contact shadow masks' bits in frames without a directional light (the sun
+  set: the directional loops run no iteration), and light tile culling's kept bit only while tile culling is on
+  (autotune's choice off: the frames with and without omni lights share pipelines). `FellowPipelineWarmer3D.shelf`
+  (on): after its six directions the warmer draws a copy of each distinct mesh and material set of the world's
+  visible MeshInstance3D, MultiMeshInstance3D and terrain foliage from a view 4 km above the camera, 36 a page, the
+  copies hidden from every other camera by a 40 m visibility range and following their sources' meshes and materials
+  while shown. Slice Lab's 4-minute soak on lavapipe (weather every 10 s, fire every 15 s, an 80 s day): the draws
+  that waited for a pipeline after the warm-up 9 → 1, pipelines compiled after it 23 → 9 (8 of them autotune's,
+  prepared ahead), the same image (decision 0161's 21 states with soft and contact shadows: 21 of 21 identical).
+- The terrain's edits upload only the texels they changed (decision 0168): `RenderingDevice::
+  fellow_texture_update_region()` and `RenderingServer::fellow_texture_2d_update_region()` write one mip's rectangle;
+  `FellowTerrain3D` uploads the edited region of its heights, normals and splat maps and the mips over it
+  (`streaming/terrain_region_uploads`, on). A 2049² map's update after a stroke 8.78 → 0.36 ms (heights and normals),
+  4.62 → 0.03 ms (a splat map) on lavapipe; every texture bit-exact with a rebuilt terrain's.
+- Compiling less at load (decision 0169): FellowEngine nodes' compute kernels (water, rain, snow tracks, shallow
+  water) kept as SPIR-V in `user://fellow_kernel_cache` after their first compilation (`frame/kernel_spirv_cache`):
+  glslang runs once per machine and build, not once per session (28 → 0.5 ms on the cloud's CPU, on the thread adding
+  the first such node); the same pictures. And Godot's shader baker now finds FellowEngine's effects, which are made
+  when first used: an export starts by making them (`RendererSceneRenderRD::fellow_create_versions_for_baking()`), so a
+  baked export of the fire scene compiles no shader at its first start instead of 3 (72 without the baker).
+- Measurements prepared for the GPU: `fluid/gas_mg_fine_sweeps` (2, as before) — the campfire's multigrid with one
+  sweep at its finest level keeps the flame within 0.2 % of the reference after 180 steps (lavapipe), its residual 20
+  times decision 0117's, for about 29 % less of the solve's work, to be timed on the RTX; FellowEngine's stats report
+  the driver's pipeline cache (`pipeline_cache_bytes`), the soak its size a second beside the process's memory.
+- The image regression suite: a skinned crowd, the separate render thread's group (lights, water, rain, fire, the
+  crowd) and the crowd in process groups, each the same picture as the default's; 24 pictures exact.
+
 ## Milestone 60 — the main thread's CPU, and the hitches it waited through (2026-11-07)
 
 - `rendering/fellow/animation/shared_no_override_pose`, `animation/lazy_simulator_poses` (on, exact), decision 0163:
