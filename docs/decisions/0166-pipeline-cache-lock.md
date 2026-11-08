@@ -61,7 +61,8 @@ The memory did not fall. Likely most of the process's memory is the driver's pip
 cache file fills at start and which only grows: between the soaks two more builds' pipelines were compiled (f360's
 soak, f361's runs), and the start rose from 1.7 to 2.2 GB; the saves' copies now come and go (the largest sample
 3.0 GB) instead of one staying. The file's size is not in this measurement (it lives outside the folders the jobs
-read). A
+read; read later, milestone 61: 364.5 MB for Forward+, saved at f363's end — so the cache is a part of the process's
+memory at start, not most of it). A
 game's cache holds its own pipelines only; the bench's holds every build's (decision 0050's limit, 1 GB, starts it
 again).
 

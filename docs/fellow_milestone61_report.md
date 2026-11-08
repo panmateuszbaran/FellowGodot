@@ -132,7 +132,8 @@ shorten.
 
 * The process's memory growth in the RTX soaks (about 1.1 GB an hour from 1.7-2.2 GB) is still not explained: the
   driver's pipeline cache is now in the stats and the soak's rows (`pipeline_cache_mb`) for f364 to show whether it
-  follows the pipelines compiled. The cloud cannot: lavapipe's cache does not grow, and the editor build's own
+  follows the pipelines compiled. The bench's Forward+ cache file on the laptop is 364.5 MB (saved at f363's end), so
+  the cache alone is not most of the process's 2.2 GB at start, as decision 0166 supposed. The cloud cannot: lavapipe's cache does not grow, and the editor build's own
   allocations stayed flat in the lavapipe soaks (static memory 112 → 106 MB in 4 minutes).
 * ThreadSanitizer: not run. The cloud's disk allowance has 2.8 GB free, not enough for a sanitizer build beside the
   editor's and the template's objects without deleting the platform checks' containers and toolchains (milestone 50,
