@@ -934,6 +934,7 @@ func _run_soak() -> void:
 			if t >= warm:
 				pc_after_warm += pc_new
 			var mem := _mem()
+			var fs: Dictionary = RenderingServer.call("fellow_get_stats") if RenderingServer.has_method("fellow_get_stats") else {}
 			rows.append({"t": snappedf(t, 0.01), "frames": n, "mean_ms": snappedf(sum / maxf(n, 1), 0.001),
 				"p99_ms": snappedf(sorted_s[mini(n - 1, int(n * 0.99))], 0.001), "max_ms": snappedf(sorted_s[n - 1], 0.001),
 				"gpu_ms": snappedf(sec_gpu / maxf(n, 1), 0.001), "render_cpu_ms": snappedf(sec_cpu / maxf(n, 1), 0.001),
@@ -941,7 +942,8 @@ func _run_soak() -> void:
 				"texture_mb": snappedf(mem["texture_mem_used"] / 1048576.0, 0.01), "buffer_mb": snappedf(mem["buffer_mem_used"] / 1048576.0, 0.01),
 				"objects": int(Performance.get_monitor(Performance.OBJECT_COUNT)), "nodes": int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT)),
 				"orphans": int(Performance.get_monitor(Performance.OBJECT_ORPHAN_NODE_COUNT)), "resources": int(Performance.get_monitor(Performance.OBJECT_RESOURCE_COUNT)),
-				"pipelines": pc_new, "pipelines_draw": pc_new_draw, "state": state.duplicate()})
+				"pipelines": pc_new, "pipelines_draw": pc_new_draw, "pipeline_cache_mb": snappedf(fs.get("pipeline_cache_bytes", 0) / 1048576.0, 0.01),
+				"state": state.duplicate()})
 			sec_ms.clear()
 			sec_gpu = 0.0
 			sec_cpu = 0.0
@@ -963,7 +965,7 @@ func _run_soak() -> void:
 			"hitches": late.size(), "hitches_per_minute": snappedf(late.size() / span_min, 0.01), "hitches_during_warmup": hitches.size() - late.size(),
 			"hitches_compiling_pipelines": late.filter(func(h): return h["pipelines"] > 0).size()})
 	# Growth per hour after the warm-up: a least squares line through the per-second values.
-	for key in ["static_mb", "video_mb", "texture_mb", "buffer_mb", "objects", "nodes", "orphans", "resources"]:
+	for key in ["static_mb", "video_mb", "texture_mb", "buffer_mb", "pipeline_cache_mb", "objects", "nodes", "orphans", "resources"]:
 		if measured.size() < 10:
 			break
 		var sx := 0.0

@@ -7,8 +7,10 @@ extends SceneTree
 ## start: no state compiles anything; without it each new combination compiles the materials in view again.
 ##
 ##   godot --path benchmarks/project --resolution 320x180 -s res://bench/pipeline_states_check.gd
-##       -- [--stable=1] [--out=<dir>] [--late=0] [--autotune=0]
+##       -- [--stable=1] [--out=<dir>] [--late=0] [--autotune=0] [--sun_size=0] [--contact=0]
 ##
+## --sun_size=<deg>: the sun's angular size (soft shadows: PCSS); --contact=1: FellowEngine's contact shadows (decision
+## 0107) — with both, the sun setting changes Godot's soft-shadow bit and the contact mask's (decision 0167).
 ## --late=1 creates the omni light only when its state comes (it did not exist at the start: one compilation then, none
 ## the second time). Each state's picture is saved once its frames compile nothing more (images: <out>/<state>.png), so
 ## that a run with --stable=1 and one with --stable=0 can be compared pixel for pixel. One JSON line:
@@ -64,6 +66,8 @@ func _initialize() -> void:
 	ProjectSettings.set_setting("rendering/fellow/frame/stable_scene_bits", args.get("stable", "1") == "1")
 	# Autotune's evaluations switch pipeline bits of their own (decision 0068 prepares those): off unless asked for.
 	ProjectSettings.set_setting("rendering/fellow/autotune/enabled", args.get("autotune", "0") == "1")
+	if args.get("contact", "0") == "1":
+		ProjectSettings.set_setting("rendering/fellow/post/contact_shadows/enabled", true)
 	out_dir = args.get("out", "")
 	if out_dir != "":
 		DirAccess.make_dir_recursive_absolute(out_dir)
@@ -79,6 +83,7 @@ func _initialize() -> void:
 	sun = DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(-45, 30, 0)
 	sun.shadow_enabled = true
+	sun.light_angular_distance = float(args.get("sun_size", "0"))
 	root3d.add_child(sun)
 	var cam := Camera3D.new()
 	cam.position = Vector3(0, 5, 9)

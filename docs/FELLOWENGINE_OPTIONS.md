@@ -389,7 +389,8 @@ memory (every texture coarsened by the same bias over it). `texture_instances_pe
 evaluated a frame; `texture_max_jobs` (4), `texture_upload_mb_per_frame` (64), `texture_release_hold_s` (2),
 `texture_unreferenced_hold_s` (5); `texture_info_details` lists every texture in
 `RenderingServer.fellow_get_texture_streaming_info()`, which reports the streamer's state (resident, target, wanted and
-full bytes, pending, loads, releases, `settled`). Loaded, the same images as without it (lavapipe, bit for bit);
+full bytes, pending, loads, releases, `settled`). `terrain_region_uploads` (on, exact; milestone 61, decision 0168):
+`FellowTerrain3D`'s sculpting, painting and blits upload only the texels they changed and the mips over them. Loaded, the same images as without it (lavapipe, bit for bit);
 until the loads land, coarser mips. Not streamed: lossless or uncompressed textures, DDS (`ImageTexture`), texture
 arrays and cubemaps; a texture drawn in 2D, in a decal or area light atlas, or by a material that is not a
 BaseMaterial3D-style 3D shader (sky, canvas, fog, particles, custom shaders) stays at full resolution; one not used
@@ -560,6 +561,15 @@ environment and layers), waits until nothing more compiles and emits `finished` 
 compile their pipelines when the camera first turns to them. `autostart`, `from_camera`, `view_size` (128 px),
 `frames_per_view` (3), `settle_frames` (15), `max_frames` (900); `start()`, `is_finished()`, `get_stats()`. The
 FellowEngine menu's "Add Pipeline Warm-up"; Slice Lab `--slice_warmup=node`; `bench/pipeline_warmup_check.gd`.
+
+Milestone 61 (decision 0167): `stable_scene_bits` also keeps Godot's directional soft-shadow bit and the first
+directional light's traced and contact shadow masks' bits in frames without a directional light (the sun set: the
+directional loops run no iteration), and light tile culling's bit in frames without omni and spot lights only while
+tile culling is on (autotune's choice off: the frames with and without lights share pipelines). The warmer's `shelf`
+(on): after the six directions it draws, from a view 4 km above, a copy of each distinct mesh and material set of the
+world's visible `MeshInstance3D`, `MultiMeshInstance3D` and `FellowTerrain3D` foliage (36 a page, at most 576; the
+copies' 40 m visibility range hides them from every other camera, and each follows its source's mesh and materials
+while shown); `get_stats()` adds `shelf_items`, `shelf_pages`; Slice Lab `--slice_warmup_shelf=0` leaves it out.
 
 ## Options that change the image (off by default)
 

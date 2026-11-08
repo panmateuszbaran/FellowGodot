@@ -75,6 +75,9 @@ public:
 	virtual RID texture_create_from_native_handle(RSE::TextureType p_type, Image::Format p_format, uint64_t p_native_handle, int p_width, int p_height, int p_depth, int p_layers = 1, RSE::TextureLayeredType p_layered_type = RSE::TEXTURE_LAYERED_2D_ARRAY) = 0;
 
 	virtual void texture_2d_update(RID p_texture, const Ref<Image> &p_image, int p_layer = 0) = 0;
+	// FellowEngine (milestone 61): a rectangle of one mipmap level of a 2D texture, its texels tightly packed in the
+	// texture's format. Only the RenderingDevice's renderers implement it (here: nothing).
+	virtual void fellow_texture_2d_update_region(RID p_texture, int p_mipmap, const Rect2i &p_rect, const Vector<uint8_t> &p_data) {}
 	virtual void texture_3d_update(RID p_texture, const Vector<Ref<Image>> &p_data) = 0;
 	virtual void texture_external_update(RID p_proxy, int p_width, int p_height, uint64_t p_external_buffer) = 0;
 	virtual void texture_proxy_update(RID p_proxy, RID p_base) = 0;

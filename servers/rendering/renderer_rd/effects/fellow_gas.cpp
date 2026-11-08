@@ -631,6 +631,8 @@ void FellowGas::_run_step(uint32_t p_id, Volume &r_v, const StepParams &p_step) 
 		const int cycles = CLAMP(p_step.multigrid_cycles, 1, 8);
 		const int L = int(r_v.levels.size());
 		const int tail_cells = GLOBAL_GET_CACHED(int, "rendering/fellow/fluid/gas_mg_tail_cells");
+		// The finest level's sweeps before and after its correction (milestone 61: 1 halves its smoothing).
+		const int fine_sweeps = CLAMP(GLOBAL_GET_CACHED(int, "rendering/fellow/fluid/gas_mg_fine_sweeps"), 1, 4);
 		int tail = 0; // the first level MG_TAIL solves (0: none, MG_COARSE solves the coarsest)
 		if (tail_cells > 0) {
 			tail = L;
@@ -651,7 +653,7 @@ void FellowGas::_run_step(uint32_t p_id, Volume &r_v, const StepParams &p_step) 
 				RID fq = l == 0 ? r_v.pressure : r_v.levels[l - 1].pressure;
 				RID fr = l == 0 ? r_v.rhs : r_v.levels[l - 1].rhs;
 				RID fsolid = l == 0 ? r_v.solid : r_v.levels[l - 1].solid;
-				_smooth(r_v, fs, l, fq, fr, fsolid, fdx * fdx, omega, 2);
+				_smooth(r_v, fs, l, fq, fr, fsolid, fdx * fdx, omega, l == 0 ? fine_sweeps : 2);
 				const Level &c = r_v.levels[l];
 				MGPush push = { { fs.x, fs.y, fs.z, 0 }, { fdx * fdx, omega, 0.0f, 0.0f }, { c.size.x, c.size.y, c.size.z, 0 }, {}, {}, { foff, c.offset_x, (sparse && l == 0) ? 1 : 0, 0 } };
 				_open_weights(n, l, push);
@@ -678,7 +680,7 @@ void FellowGas::_run_step(uint32_t p_id, Volume &r_v, const StepParams &p_step) 
 				const int sparse_level = (sparse && l <= 1) ? l + 1 : 0;
 				MGPush push = { { fs.x, fs.y, fs.z, 0 }, { fdx * fdx, omega, 0.0f, 0.0f }, { c.size.x, c.size.y, c.size.z, 0 }, {}, {}, { foff, c.offset_x, sparse_level, 0 } };
 				_dispatch_sim(r_v, SIM_MG_PROLONG, { image(2, c.pressure), image(4, fq), image(5, fsolid) }, fs, &push, false, sparse_level == 1 ? LIST_A : (sparse_level == 2 ? LIST_L1 : LIST_NONE));
-				_smooth(r_v, fs, l, fq, fr, fsolid, fdx * fdx, omega, 2);
+				_smooth(r_v, fs, l, fq, fr, fsolid, fdx * fdx, omega, l == 0 ? fine_sweeps : 2);
 			}
 		}
 	} else {

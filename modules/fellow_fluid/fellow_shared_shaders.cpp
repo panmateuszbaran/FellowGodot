@@ -30,9 +30,16 @@
 
 #include "fellow_shared_shaders.h"
 
+#include "core/config/engine.h"
+#include "core/config/project_settings.h"
+#include "core/io/dir_access.h"
+#include "core/io/file_access.h"
+#include "core/io/resource_loader.h"
+#include "core/io/resource_saver.h"
 #include "core/os/mutex.h"
 #include "core/templates/hash_map.h"
 #include "scene/resources/shader.h"
+#include "servers/rendering/fellow_settings.h"
 #include "servers/rendering/rendering_device_binds.h"
 
 static Mutex fellow_shared_mutex;
@@ -87,12 +94,45 @@ Ref<RDShaderFile> FellowSharedShaders::file(const char *p_glsl, const char *p_na
 	if (fellow_shared_failed->has(p_glsl)) {
 		return Ref<RDShaderFile>();
 	}
+	// Milestone 61 (frame/kernel_spirv_cache): the SPIR-V of an earlier session's compilation of the same source by the
+	// same build, if there is one (glslang: tens to hundreds of milliseconds a file, on the thread setting the node up).
+	const bool use_cache = GLOBAL_GET("rendering/fellow/frame/kernel_spirv_cache");
+	String cache_path;
+	if (use_cache) {
+		const String build = Engine::get_singleton()->get_version_info()["hash"];
+		cache_path = vformat("user://fellow_kernel_cache/%s_%s.res", String(p_name).validate_filename(), (String(p_glsl) + build).md5_text());
+		if (FileAccess::exists(cache_path)) {
+			Fellow::CostScope cost(Fellow::stats().cost_glsl_cached_usec, Fellow::stats().cost_glsl_cached);
+			Ref<RDShaderFile> cached = ResourceLoader::load(cache_path, "RDShaderFile", ResourceFormatLoader::CACHE_MODE_IGNORE);
+			if (cached.is_valid() && cached->get_base_error().is_empty() && !cached->get_version_list().is_empty()) {
+				fellow_shared_files->insert(p_glsl, cached);
+				return cached;
+			}
+		}
+	}
 	Ref<RDShaderFile> f;
 	f.instantiate();
-	if (f->parse_versions_from_text(p_glsl) != OK) {
+	Error err;
+	{
+		Fellow::CostScope cost(Fellow::stats().cost_glsl_compile_usec, Fellow::stats().cost_glsl_compiles);
+		err = f->parse_versions_from_text(p_glsl);
+	}
+	if (err != OK) {
 		f->print_errors(p_name);
 		fellow_shared_failed->insert(p_glsl, true);
 		return Ref<RDShaderFile>();
+	}
+	// Kept only when every version and stage compiled (a failing kernel's errors are printed where it is used).
+	bool compiled = f->get_base_error().is_empty();
+	const TypedArray<StringName> versions = f->get_version_list();
+	for (int i = 0; i < versions.size() && compiled; i++) {
+		for (int stage = 0; stage < RD::SHADER_STAGE_MAX; stage++) {
+			compiled = compiled && f->get_spirv(versions[i])->get_stage_compile_error(RD::ShaderStage(stage)).is_empty();
+		}
+	}
+	if (use_cache && compiled) {
+		DirAccess::make_dir_recursive_absolute(cache_path.get_base_dir());
+		ResourceSaver::save(f, cache_path);
 	}
 	fellow_shared_files->insert(p_glsl, f);
 	return f;

@@ -4,7 +4,9 @@ extends SceneTree
 ##
 ##   godot --path benchmarks/project --fixed-fps 60 -s res://bench/gas_check.gd -- --out=<dir> --steps=<n>
 ##         [--res=48] [--high_precision=1] [--maccormack=1] [--iterations=20] [--case=campfire|closed|wind|shift|sphere]
-##         [--multigrid=1] [--cycles=2] [--sparse=0] [--margin=2] [--flame_limit=0]
+##         [--multigrid=1] [--cycles=2] [--sparse=0] [--margin=2] [--flame_limit=0] [--fine_sweeps=2]
+##
+## --fine_sweeps: rendering/fellow/fluid/gas_mg_fine_sweeps (the multigrid's sweeps at the finest level, milestone 61).
 ##
 ## Writes <out>/scalars.bin, velocity.bin, pressure.bin, residual.bin, solid.bin (raw texels, x fastest) and
 ## <out>/info.json (the grid, the parameters).
@@ -25,6 +27,8 @@ func _initialize() -> void:
 		if a.begins_with("--") and a.contains("="):
 			var kv: PackedStringArray = a.substr(2).split("=", true, 1)
 			args[kv[0]] = kv[1]
+	if args.has("fine_sweeps"):
+		ProjectSettings.set_setting("rendering/fellow/fluid/gas_mg_fine_sweeps", int(args["fine_sweeps"]))
 	out_dir = args.get("out", "user://gas_check")
 	DirAccess.make_dir_recursive_absolute(out_dir)
 	steps = int(args.get("steps", "60"))

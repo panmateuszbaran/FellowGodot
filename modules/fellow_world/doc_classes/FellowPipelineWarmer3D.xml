@@ -5,7 +5,7 @@
 	</brief_description>
 	<description>
 		The Forward+ renderer draws a material with its ubershader while the material's specialized pipeline compiles in the background, so a material coming into view for the first time costs slower frames and a burst of work on the worker threads (with MSAA, even pipelines compiled while the frame waits). This node moves that work to the loading screen: for a few frames it draws its world from the viewport camera's place (or its own, [member from_camera] off) in the six directions of a cube, into a small internal viewport set up as its own viewport is (MSAA, screen-space anti-aliasing, TAA, debanding, the 3D scaling mode and scale, the positional shadow atlas, HDR 2D) with the camera's layers, range, environment, attributes and compositor, so that every material around asks for the pipelines the game's frames will ask for. It then waits until [member settle_frames] frames compile nothing, frees the viewport and emits [signal finished].
-		Add it to the scene (it starts by itself, [member autostart]) and keep a loading screen up until [signal finished]. With [code]rendering/fellow/frame/stable_scene_bits[/code] (on), lights, decals, reflection probes or rain that appear later need no new pipelines either if they exist, hidden, when the warm-up runs. Not covered: what is not drawn from the camera's place (beyond its range, hidden, or streamed in later), particles' process materials, a reflection probe's own passes. Decision record [code]docs/decisions/0162-pipeline-warmup.md[/code].
+		Add it to the scene (it starts by itself, [member autostart]) and keep a loading screen up until [signal finished]. With [code]rendering/fellow/frame/stable_scene_bits[/code] (on), lights, decals, reflection probes or rain that appear later need no new pipelines either if they exist, hidden, when the warm-up runs. With [member shelf] (on) it also draws a copy of every mesh, with its materials, that the world's visible [MeshInstance3D], [MultiMeshInstance3D] and [FellowTerrain3D] foliage hold — beyond the camera's range, out of the six views or not yet scattered around it — from a view of its own far above. Not covered: what is hidden, streamed in or created later, skinned meshes out of the six views, particles, a reflection probe's own passes. Decision records [code]docs/decisions/0162-pipeline-warmup.md[/code], [code]0167-late-pipelines.md[/code].
 	</description>
 	<tutorials>
 	</tutorials>
@@ -13,7 +13,7 @@
 		<method name="get_stats" qualifiers="const">
 			<return type="Dictionary" />
 			<description>
-				The warm-up so far, or the last one: [code]running[/code], [code skip-lint]finished[/code], [code]frames[/code], [code]msec[/code], [code]pipelines[/code] (compiled since it started, every kind) and [code]timed_out[/code] ([member max_frames] reached first).
+				The warm-up so far, or the last one: [code]running[/code], [code skip-lint]finished[/code], [code]frames[/code], [code]msec[/code], [code]pipelines[/code] (compiled since it started, every kind), [code]timed_out[/code] ([member max_frames] reached first), [code]shelf_items[/code] and [code]shelf_pages[/code] (the copies [member shelf] drew, 36 a page).
 			</description>
 		</method>
 		<method name="is_finished" qualifiers="const">
@@ -50,6 +50,9 @@
 		</member>
 		<member name="settle_frames" type="int" setter="set_settle_frames" getter="get_settle_frames" default="15">
 			Once every direction has been drawn, the warm-up finishes after this many frames in a row that compiled no pipeline.
+		</member>
+		<member name="shelf" type="bool" setter="set_shelf" getter="get_shelf" default="true">
+			After the six directions, also draws a copy of each distinct mesh and material set (and kind of instance: MultiMesh format, shadow casting, GI mode, layers, transparency) that the world's visible [MeshInstance3D], [MultiMeshInstance3D] and [FellowTerrain3D] foliage hold, 36 to a page, for [member frames_per_view] frames a page (at most 576). The copies are placed 4 km above the camera and given a visibility range of 40 m: no other camera draws them, nor their shadows. They are lit by the scene's directional lights and none of its positional lights. Hidden nodes are left out (one may not be ready to draw: its material's textures made when it is shown), and skinned meshes. Off: only the six directions.
 		</member>
 		<member name="view_size" type="int" setter="set_view_size" getter="get_view_size" default="128">
 			The side of the internal viewport in pixels. The pipelines do not depend on it; a small one costs the warm-up little.

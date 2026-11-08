@@ -624,6 +624,7 @@ void FellowTerrain3D::_rebuild_data() {
 	data_dirty = false;
 	edit_heights = Rect2i(); // a rebuild makes everything again
 	edit_splat[0] = edit_splat[1] = false;
+	edit_splat_rect[0] = edit_splat_rect[1] = Rect2i();
 	_clear_foliage(false); // scattered again over the new data
 	foliage_dirty = true;
 	heights.clear();
@@ -1736,6 +1737,58 @@ void FellowTerrain3D::_queue_edit_flush() {
 	}
 }
 
+// The texels of p_rect in p_image's mip p_mip, their rows packed.
+static Vector<uint8_t> _terrain_mip_texels(const Ref<Image> &p_image, int p_mip, const Rect2i &p_rect) {
+	int64_t ofs = 0;
+	int64_t size = 0;
+	int w = 0;
+	int h = 0;
+	p_image->get_mipmap_offset_size_and_dimensions(p_mip, ofs, size, w, h);
+	const int ps = Image::get_format_pixel_size(p_image->get_format());
+	const int row = p_rect.size.x * ps;
+	Vector<uint8_t> out;
+	out.resize(row * p_rect.size.y);
+	const uint8_t *src = p_image->ptr() + ofs;
+	uint8_t *dst = out.ptrw();
+	for (int y = 0; y < p_rect.size.y; y++) {
+		memcpy(dst + y * row, src + (int64_t(p_rect.position.y + y) * w + p_rect.position.x) * ps, row);
+	}
+	return out;
+}
+
+void FellowTerrain3D::_upload_texture(const Ref<ImageTexture> &p_texture, const Ref<Image> &p_image, const Rect2i &p_rect) {
+	if (p_texture.is_null() || p_image.is_null()) {
+		return;
+	}
+	const int w = p_image->get_width();
+	const int h = p_image->get_height();
+	const Rect2i r = p_rect.intersection(Rect2i(0, 0, w, h));
+	// The region and the mips over it (the texels _terrain_mips_region() wrote) where the device takes uploads of a
+	// region and the region is a small part; else the whole texture, as stock.
+	if (r.size.x <= 0 || int64_t(r.size.x) * r.size.y * 4 > int64_t(w) * h || RenderingServer::get_singleton()->get_rendering_device() == nullptr ||
+			!GLOBAL_GET_CACHED(bool, "rendering/fellow/streaming/terrain_region_uploads")) {
+		p_texture->update(p_image);
+		return;
+	}
+	RenderingServer *rs = RenderingServer::get_singleton();
+	const RID rid = p_texture->get_rid();
+	Point2i a = r.position;
+	Point2i b = r.position + r.size - Point2i(1, 1);
+	int mw = w;
+	int mh = h;
+	const int mips = p_image->has_mipmaps() ? p_image->get_mipmap_count() : 0;
+	for (int m = 0; m <= mips; m++) {
+		if (m > 0) {
+			mw = MAX(mw >> 1, 1);
+			mh = MAX(mh >> 1, 1);
+			a = Point2i(MIN(a.x >> 1, mw - 1), MIN(a.y >> 1, mh - 1));
+			b = Point2i(MIN(b.x >> 1, mw - 1), MIN(b.y >> 1, mh - 1));
+		}
+		const Rect2i mr(a, b - a + Point2i(1, 1));
+		rs->fellow_texture_2d_update_region(rid, m, mr, _terrain_mip_texels(p_image, m, mr));
+	}
+}
+
 void FellowTerrain3D::_flush_edits() {
 	edit_flush_queued = false;
 	const uint64_t t0 = OS::get_singleton()->get_ticks_usec();
@@ -1743,9 +1796,10 @@ void FellowTerrain3D::_flush_edits() {
 	edit_heights = Rect2i();
 	for (int i = 0; i < 2; i++) {
 		if (edit_splat[i] && splat_image[i].is_valid()) {
-			(i == 0 ? splat_texture : splat_texture_2)->update(splat_image[i]);
+			_upload_texture(i == 0 ? splat_texture : splat_texture_2, splat_image[i], edit_splat_rect[i]);
 		}
 		edit_splat[i] = false;
+		edit_splat_rect[i] = Rect2i();
 	}
 	Fellow::request_redraw();
 	if (r.size.x <= 0 || map_w < 2) {
@@ -1753,10 +1807,11 @@ void FellowTerrain3D::_flush_edits() {
 		return;
 	}
 	if (height_image.is_valid() && height_texture.is_valid()) {
-		height_texture->update(height_image);
+		_upload_texture(height_texture, height_image, r);
 	}
 	if (normal_image.is_valid() && normal_texture.is_valid()) {
-		normal_texture->update(normal_image);
+		// The normals of the region's edge texels changed too (central differences).
+		_upload_texture(normal_texture, normal_image, r.grow(1));
 	}
 	// The collision shapes over the region.
 	if (body.is_valid() && !shapes.is_empty()) {
@@ -1822,6 +1877,7 @@ void FellowTerrain3D::_update_splat_region(int p_map, const Rect2i &p_rect) {
 		_terrain_mips_region<uint8_t, 4>(splat_image[p_map], r);
 	}
 	edit_splat[p_map] = true; // the texture at the frame's end
+	edit_splat_rect[p_map] = edit_splat_rect[p_map].size.x > 0 ? edit_splat_rect[p_map].merge(r) : r;
 	_queue_edit_flush();
 	// In the terrain's metres: the splat map is stretched over it.
 	const Vector2 scale = Vector2(float(map_w) / sz.x, float(map_h) / sz.y) * vertex_spacing;

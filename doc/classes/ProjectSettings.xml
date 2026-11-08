@@ -3175,6 +3175,9 @@
 		<member name="rendering/fellow/fluid/enabled" type="bool" setter="" getter="" default="true">
 			FellowEngine's simulations: FellowWater3D's waves, FellowShallowWater3D, FellowRain3D's wet surfaces and ripples, FellowGasVolume3D and FellowBurnable3D. Off: the nodes stay, nothing is simulated.
 		</member>
+		<member name="rendering/fellow/fluid/gas_mg_fine_sweeps" type="int" setter="" getter="" default="2">
+			The gas multigrid's red-black Gauss-Seidel sweeps before and after the finest level's correction (2 as decision 0117; 1 halves the finest level's smoothing, the cost at small grids, for a larger residual). Not exact unless 2. Milestone 61.
+		</member>
 		<member name="rendering/fellow/fluid/gas_mg_tail_cells" type="int" setter="" getter="" default="0">
 			For measurements: multigrid levels of at most this many cells solved in one workgroup (0: off; measured slower). Decision 0119.
 		</member>
@@ -3213,6 +3216,9 @@
 		</member>
 		<member name="rendering/fellow/frame/early_submit" type="bool" setter="" getter="" default="false">
 			Measured and rejected: the frame's command buffers submitted early. Decision 0009.
+		</member>
+		<member name="rendering/fellow/frame/kernel_spirv_cache" type="bool" setter="" getter="" default="true">
+			FellowEngine nodes' compute kernels (water, rain, snow tracks, shallow water) kept as SPIR-V in user://fellow_kernel_cache after they are first compiled, keyed by their source and the engine's build: GLSL is compiled once per machine and build instead of once per session. The same kernels. Milestone 61.
 		</member>
 		<member name="rendering/fellow/frame/lazy_shader_variants" type="bool" setter="" getter="" default="true">
 			Shader variants created only when first asked for: scenes load faster. Decision 0061.
@@ -3834,6 +3840,9 @@
 		</member>
 		<member name="rendering/fellow/shadows/wind_cached_from_cascade" type="int" setter="" getter="" default="2">
 			Casters moved only by the wind are cached from this directional cascade on (their far shadows keep the pose of the cache's last build); -1: never. Decision 0125.
+		</member>
+		<member name="rendering/fellow/streaming/terrain_region_uploads" type="bool" setter="" getter="" default="true">
+			FellowTerrain3D's sculpting, painting and blits upload to the GPU only the texels they changed and the mips over them (the heights, the normals, the splat maps), not the whole textures: the same textures. Read once. Decision 0168.
 		</member>
 		<member name="rendering/fellow/streaming/texture_budget_mb" type="int" setter="" getter="" default="0">
 			The streamed textures' memory (0: no limit); over it every streamed texture is coarsened by the same bias.

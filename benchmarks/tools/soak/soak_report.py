@@ -86,9 +86,9 @@ def chart(rows, hitches, path, title, process=None):
     # Memory.
     m_top = PAD + top_h + 50
     m_h = H - m_top - 40
-    mems = [("static_mb", (40, 120, 40)), ("video_mb", (120, 40, 160))]
-    series = [([(r["t"], r[k]) for r in rows], colour) for k, colour in mems]
-    labels = "static (green), video (purple)"
+    mems = [("static_mb", (40, 120, 40)), ("video_mb", (120, 40, 160)), ("pipeline_cache_mb", (40, 140, 200))]
+    series = [([(r["t"], r[k]) for r in rows if k in r], colour) for k, colour in mems]
+    labels = "static (green), video (purple), the driver's pipeline cache (blue, milestone 61)"
     if process:
         # run_soak.py's samples are timed from the process's start; the rows from the soak's (after the scene's build).
         shift = max(0.0, process[-1][0] - t_max) if process else 0.0

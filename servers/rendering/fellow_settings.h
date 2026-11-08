@@ -1320,6 +1320,9 @@ struct Stats {
 	SafeNumeric<uint64_t> main_frames; // frame steps
 	SafeNumeric<uint64_t> main_process_usec; // SceneTree::process() (scripts, animation, nodes), the message queue, navigation
 	SafeNumeric<uint64_t> main_draw_usec; // RenderingServer::sync() and draw()
+	// Milestone 61: the driver's pipeline cache, in bytes, at its last query (at start: the file's pipelines; then after
+	// pipelines are made, every one since) — a gauge, not a sum.
+	SafeNumeric<uint64_t> pipeline_cache_bytes;
 	// GodotPhysics3D's step by phase (GodotSpace3D's elapsed times: integrate forces, the broadphase update, islands, pair
 	// setup (worker threads), pre-solve and solve, integrate velocities and sleep); Jolt's (pre-step, PhysicsSystem::Update,
 	// post-step).
@@ -1383,6 +1386,11 @@ struct Stats {
 	SafeNumeric<uint64_t> cost_readbacks;
 	SafeNumeric<uint64_t> cost_texture_create_usec;
 	SafeNumeric<uint64_t> cost_texture_creates;
+	// Milestone 61: FellowEngine nodes' compute kernels compiled from GLSL (glslang) and read from their SPIR-V cache.
+	SafeNumeric<uint64_t> cost_glsl_compile_usec;
+	SafeNumeric<uint64_t> cost_glsl_compiles;
+	SafeNumeric<uint64_t> cost_glsl_cached_usec;
+	SafeNumeric<uint64_t> cost_glsl_cached;
 	SafeNumeric<uint64_t> geometry_cluster_triangles_drawn; // triangles of clustered surfaces drawn
 	SafeNumeric<uint64_t> geometry_cluster_triangles_culled; // triangles of clustered surfaces skipped (outside the frustum)
 	SafeNumeric<uint64_t> geometry_cluster_lod_coarser_ranges; // geometry/cluster_lod: ranges drawn at a coarser level than the instance's (decision 0063)

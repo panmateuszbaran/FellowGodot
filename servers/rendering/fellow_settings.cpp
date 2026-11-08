@@ -179,6 +179,8 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/fluid/gas_scene_shadows", true);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/fluid/gas_solver", PROPERTY_HINT_ENUM, "Node's,SOR,Multigrid"), 0);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/fluid/gas_mg_tail_cells", PROPERTY_HINT_RANGE, "0,65536,1"), 0);
+	// Milestone 61: the multigrid's red-black sweeps before and after the finest level's correction (2: decision 0117's).
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/fluid/gas_mg_fine_sweeps", PROPERTY_HINT_RANGE, "1,4,1"), 2);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/fluid/gas_sparse", PROPERTY_HINT_ENUM, "Node's,Off,On"), 0);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/fluid/gas_sparse_margin", PROPERTY_HINT_RANGE, "0,4,1"), 0);
 	GLOBAL_DEF("rendering/fellow/fluid/gas_profile_passes", false);
@@ -227,6 +229,9 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/frame/clear_new_textures", true); // decision 0070
 	GLOBAL_DEF("rendering/fellow/frame/movie_wait_pipelines", true); // decision 0072
 	GLOBAL_DEF("rendering/fellow/frame/stable_scene_bits", true); // decision 0161
+	// Milestone 61: FellowEngine nodes' compute kernels (water, rain, shallow water) kept as SPIR-V in
+	// user://fellow_kernel_cache after their first compilation: glslang runs once per machine and build, not per session.
+	GLOBAL_DEF("rendering/fellow/frame/kernel_spirv_cache", true);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/frame/async_ss_split", PROPERTY_HINT_ENUM, "Stock,SSIL On Main Queue,SSIL And SSR On Main Queue,Autotune"), 3); // decision 0060 (3 from fellow147)
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/geometry/cluster_front_to_back", PROPERTY_HINT_RANGE, "0,1048576,1"), 0); // decision 0058 (rejected, off)
 	GLOBAL_DEF("rendering/fellow/geometry/cluster_lod", false); // decision 0063 (changes the image; off until measured)
@@ -412,6 +417,8 @@ void Fellow::register_settings() {
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/streaming/texture_unreferenced_hold_s", PROPERTY_HINT_RANGE, "0,600,0.1,suffix:s"), 5.0);
 	// RenderingServer.fellow_get_texture_streaming_info() also lists every streamed texture (path, levels, bytes).
 	GLOBAL_DEF("rendering/fellow/streaming/texture_info_details", false);
+	// FellowTerrain3D's edits upload the texels they changed (and the mips over them) instead of whole textures.
+	GLOBAL_DEF("rendering/fellow/streaming/terrain_region_uploads", true);
 }
 
 // Hot workers' gate (render thread only): exponential averages of the fence wait and the frame interval; the gate
@@ -542,6 +549,7 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["main_frames"] = s.main_frames.get();
 	d["main_process_usec"] = s.main_process_usec.get();
 	d["main_draw_usec"] = s.main_draw_usec.get();
+	d["pipeline_cache_bytes"] = s.pipeline_cache_bytes.get();
 	{
 		static const char *godot_phases[6] = { "integrate_forces", "broadphase", "islands", "setup", "solve", "integrate_velocities" };
 		for (int i = 0; i < 6; i++) {
@@ -586,6 +594,10 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["cost_pipeline_waits"] = s.cost_pipeline_waits.get();
 	d["cost_readback_usec"] = s.cost_readback_usec.get();
 	d["cost_readbacks"] = s.cost_readbacks.get();
+	d["cost_glsl_compile_usec"] = s.cost_glsl_compile_usec.get();
+	d["cost_glsl_compiles"] = s.cost_glsl_compiles.get();
+	d["cost_glsl_cached_usec"] = s.cost_glsl_cached_usec.get();
+	d["cost_glsl_cached"] = s.cost_glsl_cached.get();
 	d["cost_texture_create_usec"] = s.cost_texture_create_usec.get();
 	d["cost_texture_creates"] = s.cost_texture_creates.get();
 	d["geometry_cluster_triangles_drawn"] = s.geometry_cluster_triangles_drawn.get();

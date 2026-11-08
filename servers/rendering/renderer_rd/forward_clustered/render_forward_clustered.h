@@ -1493,8 +1493,13 @@ private:
 		FELLOW_STABLE_POSITIONAL = 64,
 		FELLOW_STABLE_CLOUD_SHADOW = 128,
 		FELLOW_STABLE_TILE_CULL = 256,
+		// Decision 0167: the directional light's soft shadows, its traced and contact shadow masks.
+		FELLOW_STABLE_DIRECTIONAL_SOFT = 512,
+		FELLOW_STABLE_RT_SUN_SHADOW = 1024,
+		FELLOW_STABLE_CONTACT_SHADOW = 2048,
 	};
 	uint32_t fellow_stable_seen = 0;
+	void _fellow_stable_sun_masks(const RenderDataRD *p_render_data, SceneShaderForwardClustered::ShaderSpecialization &r_specialization);
 	// FellowEngine gas volumes (decision 0118): this render's volumes (begin_frame() done), their shadow in the mask.
 	bool fellow_gas_frame = false;
 	// FellowEngine (decision 0126): the depth texture's copy with the nearest depth's mip levels, bound for the transparent

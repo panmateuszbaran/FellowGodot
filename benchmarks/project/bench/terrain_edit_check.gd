@@ -3,12 +3,13 @@ extends SceneTree
 ## they touch, and what they leave is what a terrain built from the edited images makes.
 ##
 ##   godot --path benchmarks/project --fixed-fps 60 --resolution 640x360 -s res://bench/terrain_edit_check.gd
-##       -- [--out=<dir>] [--size=513] [--timing_size=2049] [--foliage=1] [--stroke_seconds=0]
+##       -- [--out=<dir>] [--size=513] [--timing_size=2049] [--foliage=1] [--stroke_seconds=0] [--region_uploads=1]
 ##
 ## With a RenderingDevice (lavapipe, a GPU) the textures are compared bit for bit (the heights, the normals and the
 ## splat maps with all their mips, read back); headless only the CPU side (heights, collision, weights, timing) is.
 ## Then the cost of an edit on a map of --timing_size: a dab's time, the update at the frame's end; with
 ## --stroke_seconds, a raise and a paint stroke held that long (a dab a frame) and the frames' times meanwhile.
+## --region_uploads=0: rendering/fellow/streaming/terrain_region_uploads off (decision 0168: the textures updated whole).
 ## One JSON line: TERRAIN_EDIT_CHECK {...}; the exit code is 1 when a check fails.
 
 var args := {}
@@ -117,6 +118,8 @@ func _initialize() -> void:
 		if arg.begins_with("--") and arg.contains("="):
 			var kv: PackedStringArray = arg.substr(2).split("=", true, 1)
 			args[kv[0]] = kv[1]
+	if args.get("region_uploads", "1") == "0":
+		ProjectSettings.set_setting("rendering/fellow/streaming/terrain_region_uploads", false)
 	out_dir = args.get("out", "user://terrain_edit_check")
 	DirAccess.make_dir_recursive_absolute(out_dir)
 	size = int(args.get("size", "513"))

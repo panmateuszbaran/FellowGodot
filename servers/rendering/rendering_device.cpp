@@ -2469,6 +2469,100 @@ Error RenderingDevice::texture_update(RID p_texture, uint32_t p_layer, const Vec
 	return OK;
 }
 
+Error RenderingDevice::fellow_texture_update_region(RID p_texture, uint32_t p_layer, uint32_t p_mipmap, const Rect2i &p_rect, const Vector<uint8_t> &p_data) {
+	ERR_RENDER_THREAD_GUARD_V(ERR_UNAVAILABLE);
+
+	ERR_FAIL_COND_V_MSG(draw_list.active, ERR_INVALID_PARAMETER, "Updating textures is forbidden during creation of a draw list.");
+	ERR_FAIL_COND_V_MSG(compute_list.active, ERR_INVALID_PARAMETER, "Updating textures is forbidden during creation of a compute list.");
+	ERR_FAIL_COND_V_MSG(raytracing_list.active, ERR_INVALID_PARAMETER, "Updating textures is forbidden during creation of a raytracing list.");
+
+	Texture *texture = texture_owner.get_or_null(p_texture);
+	ERR_FAIL_NULL_V(texture, ERR_INVALID_PARAMETER);
+	if (texture->owner != RID()) {
+		p_texture = texture->owner;
+		texture = texture_owner.get_or_null(texture->owner);
+		ERR_FAIL_NULL_V(texture, ERR_BUG);
+	}
+	ERR_FAIL_COND_V(texture->bound, ERR_CANT_ACQUIRE_RESOURCE);
+	ERR_FAIL_COND_V(!(texture->usage_flags & TEXTURE_USAGE_CAN_UPDATE_BIT), ERR_INVALID_PARAMETER);
+	ERR_FAIL_COND_V(p_layer >= _texture_layer_count(texture), ERR_INVALID_PARAMETER);
+	ERR_FAIL_COND_V(p_mipmap >= texture->mipmaps, ERR_INVALID_PARAMETER);
+	ERR_FAIL_COND_V(texture->depth > 1, ERR_INVALID_PARAMETER);
+
+	uint32_t block_w, block_h;
+	get_compressed_image_format_block_dimensions(texture->format, block_w, block_h);
+	ERR_FAIL_COND_V_MSG(block_w != 1 || block_h != 1, ERR_INVALID_PARAMETER, "Region updates take uncompressed formats only.");
+
+	const uint32_t mip_w = MAX(1u, texture->width >> p_mipmap);
+	const uint32_t mip_h = MAX(1u, texture->height >> p_mipmap);
+	ERR_FAIL_COND_V(p_rect.position.x < 0 || p_rect.position.y < 0 || p_rect.size.x <= 0 || p_rect.size.y <= 0, ERR_INVALID_PARAMETER);
+	ERR_FAIL_COND_V(uint32_t(p_rect.position.x + p_rect.size.x) > mip_w || uint32_t(p_rect.position.y + p_rect.size.y) > mip_h, ERR_INVALID_PARAMETER);
+
+	const uint32_t pixel_size = get_image_format_pixel_size(texture->format);
+	const uint32_t src_pitch = p_rect.size.x * pixel_size;
+	ERR_FAIL_COND_V_MSG(uint32_t(p_data.size()) != src_pitch * p_rect.size.y, ERR_INVALID_PARAMETER, "The data does not hold the rectangle's texels.");
+
+	_texture_check_pending_clear(p_texture, texture);
+	_check_transfer_worker_texture(texture);
+	_texture_update_shared_fallback(p_texture, texture, true);
+
+	const uint32_t required_align = _texture_alignment(texture);
+	const uint32_t region_size = texture_upload_region_size_px;
+	const uint32_t pitch_step = driver->api_trait_get(RDD::API_TRAIT_TEXTURE_DATA_ROW_PITCH_STEP);
+	const uint8_t *read_ptr = p_data.ptr();
+
+	thread_local LocalVector<RDG::RecordedBufferToTextureCopy> copies;
+	copies.clear();
+
+	for (uint32_t y = 0; y < uint32_t(p_rect.size.y); y += region_size) {
+		for (uint32_t x = 0; x < uint32_t(p_rect.size.x); x += region_size) {
+			const uint32_t region_w = MIN(region_size, p_rect.size.x - x);
+			const uint32_t region_h = MIN(region_size, p_rect.size.y - y);
+			const uint32_t region_pitch = STEPIFY(region_w * pixel_size, pitch_step);
+			uint32_t alloc_offset = 0, alloc_size = 0;
+			StagingRequiredAction required_action;
+			Error err = _staging_buffer_allocate(upload_staging_buffers, region_pitch * region_h, required_align, alloc_offset, alloc_size, required_action, false);
+			ERR_FAIL_COND_V(err, ERR_CANT_CREATE);
+
+			if (!copies.is_empty() && required_action == STAGING_REQUIRED_ACTION_FLUSH_AND_STALL_ALL) {
+				if (_texture_make_mutable(texture, p_texture)) {
+					draw_graph.add_synchronization();
+				}
+				draw_graph.add_texture_update(texture->driver_id, texture->draw_tracker, copies);
+				copies.clear();
+			}
+			_staging_buffer_execute_required_action(upload_staging_buffers, required_action);
+
+			uint8_t *write_ptr = upload_staging_buffers.blocks[upload_staging_buffers.current].data_ptr + alloc_offset;
+			for (uint32_t row = 0; row < region_h; row++) {
+				memcpy(write_ptr + row * region_pitch, read_ptr + (y + row) * src_pitch + x * pixel_size, region_w * pixel_size);
+			}
+
+			RDD::BufferTextureCopyRegion copy_region;
+			copy_region.buffer_offset = alloc_offset;
+			copy_region.row_pitch = region_pitch;
+			copy_region.texture_subresource.aspect = texture->read_aspect_flags.has_flag(RDD::TEXTURE_ASPECT_DEPTH_BIT) ? RDD::TEXTURE_ASPECT_DEPTH : RDD::TEXTURE_ASPECT_COLOR;
+			copy_region.texture_subresource.mipmap = p_mipmap;
+			copy_region.texture_subresource.layer = p_layer;
+			copy_region.texture_offset = Vector3i(p_rect.position.x + x, p_rect.position.y + y, 0);
+			copy_region.texture_region_size = Vector3i(region_w, region_h, 1);
+
+			RDG::RecordedBufferToTextureCopy copy;
+			copy.from_buffer = upload_staging_buffers.blocks[upload_staging_buffers.current].driver_id;
+			copy.region = copy_region;
+			copies.push_back(copy);
+
+			upload_staging_buffers.blocks.write[upload_staging_buffers.current].fill_amount = alloc_offset + alloc_size;
+		}
+	}
+
+	if (_texture_make_mutable(texture, p_texture)) {
+		draw_graph.add_synchronization();
+	}
+	draw_graph.add_texture_update(texture->driver_id, texture->draw_tracker, copies);
+	return OK;
+}
+
 void RenderingDevice::_texture_check_shared_fallback(Texture *p_texture) {
 	if (p_texture->shared_fallback == nullptr) {
 		p_texture->shared_fallback = memnew(Texture::SharedFallback);
@@ -9522,6 +9616,7 @@ Error RenderingDevice::initialize(RenderingContextDriver *p_context, DisplayServ
 		pipeline_cache_enabled = driver->pipeline_cache_create(cache_data);
 		if (pipeline_cache_enabled) {
 			pipeline_cache_size = driver->pipeline_cache_query_size();
+			Fellow::stats().pipeline_cache_bytes.set(pipeline_cache_size);
 			print_verbose(vformat("Startup PSO cache (%.1f MiB)", pipeline_cache_size / (1024.0f * 1024.0f)));
 		}
 	}
@@ -9592,6 +9687,7 @@ void RenderingDevice::update_pipeline_cache(bool p_closing) {
 	{
 		size_t new_pipelines_cache_size = driver->pipeline_cache_query_size();
 		ERR_FAIL_COND(!new_pipelines_cache_size);
+		Fellow::stats().pipeline_cache_bytes.set(new_pipelines_cache_size);
 		size_t difference = new_pipelines_cache_size - pipeline_cache_size;
 
 		bool must_save = false;

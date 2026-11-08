@@ -1652,6 +1652,17 @@ void TextureStorage::texture_2d_update(RID p_texture, const Ref<Image> &p_image,
 	_texture_2d_update(p_texture, p_image, p_layer, false);
 }
 
+void TextureStorage::fellow_texture_2d_update_region(RID p_texture, int p_mipmap, const Rect2i &p_rect, const Vector<uint8_t> &p_data) {
+	Texture *tex = texture_owner.get_or_null(p_texture);
+	ERR_FAIL_NULL(tex);
+	ERR_FAIL_COND(tex->is_render_target || tex->type != TextureStorage::TYPE_2D);
+	ERR_FAIL_COND_MSG(tex->validated_format != tex->format, "Region updates need a texture whose format the device takes as it is.");
+#ifdef TOOLS_ENABLED
+	tex->image_cache_2d.unref();
+#endif
+	RD::get_singleton()->fellow_texture_update_region(tex->rd_texture, 0, p_mipmap, p_rect, p_data);
+}
+
 void TextureStorage::texture_3d_update(RID p_texture, const Vector<Ref<Image>> &p_data) {
 	Texture *tex = texture_owner.get_or_null(p_texture);
 	ERR_FAIL_NULL(tex);

@@ -205,6 +205,7 @@ private:
 	Ref<Image> splat_image[2];
 	Rect2i edit_heights; // edited since the frame's start: textures and collision shapes to update at its end
 	bool edit_splat[2] = {};
+	Rect2i edit_splat_rect[2]; // the splat maps' texels edited since the frame's start
 	bool edit_flush_queued = false;
 	uint64_t edit_flush_usec = 0; // the last update at a frame's end
 	Ref<ImageTexture> normal_texture;
@@ -330,6 +331,7 @@ private:
 	void _make_heightmap_editable();
 	void _queue_edit_flush();
 	void _flush_edits();
+	void _upload_texture(const Ref<ImageTexture> &p_texture, const Ref<Image> &p_image, const Rect2i &p_rect);
 	Rect2i _brush_texels(const Vector3 &p_global, float p_radius, Vector2 &r_centre, float &r_radius) const;
 	void _ensure_data() const;
 	void _build_minmax();

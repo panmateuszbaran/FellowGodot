@@ -225,6 +225,7 @@ public:
 
 	//these go through command queue if they are in another thread
 	FUNC3(texture_2d_update, RID, const Ref<Image> &, int)
+	FUNC4(fellow_texture_2d_update_region, RID, int, const Rect2i &, const Vector<uint8_t> &) // milestone 61
 	FUNC2(texture_3d_update, RID, const Vector<Ref<Image>> &)
 	FUNC4(texture_external_update, RID, int, int, uint64_t)
 	FUNC2(texture_proxy_update, RID, RID)

@@ -23,7 +23,8 @@
     "fire",
     "geometry",
     "instances",
-    "terrain"
+    "terrain",
+    "crowd"
    ]
   },
   "stock": {
@@ -63,6 +64,30 @@
    "scenes": [
     "raytracing"
    ]
+  },
+  "render_thread": {
+   "comment": "Godot's separate render thread (decision 0165): the same pictures as the default thread model, no error (the nodes' GPU resources freed on the render thread at their exit).",
+   "settings": {
+    "rendering/driver/threads/thread_model": 2
+   },
+   "scenes": [
+    "lights",
+    "water",
+    "rain",
+    "fire",
+    "crowd"
+   ],
+   "same_as": "base"
+  },
+  "crowd_groups": {
+   "comment": "The crowd posed in 4 sub-thread process groups, on worker threads (decision 0164): the picture without groups.",
+   "settings": {
+    "fellow_regression/crowd_groups": 4
+   },
+   "scenes": [
+    "crowd"
+   ],
+   "same_as": "base"
   }
  },
  "scene_tolerance_comment": "A scene's own tolerance, e.g. \"rain\": {\"max_diff\": 0, \"share_over\": 0.001}: the larger of it and the run's, field by field. None needed on lavapipe: the rain scene has no splashes (stock's GPU sub-emitter particles, emitted through an atomic counter in an order that changes between runs: 20 of 147 456 pixels differed between two runs, none without them)."

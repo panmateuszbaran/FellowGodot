@@ -174,6 +174,7 @@ D = {
     "fluid/gas_scene_shadows": "The sun's shadow map darkens the smoke.",
     "fluid/gas_solver": "For measurements: the gas's pressure solver, 0 each node's own, 1 SOR, 2 multigrid.",
     "fluid/gas_mg_tail_cells": "For measurements: multigrid levels of at most this many cells solved in one workgroup (0: off; measured slower). Decision 0119.",
+    "fluid/gas_mg_fine_sweeps": "The gas multigrid's red-black Gauss-Seidel sweeps before and after the finest level's correction (2 as decision 0117; 1 halves the finest level's smoothing, the cost at small grids, for a larger residual). Not exact unless 2. Milestone 61.",
     "fluid/gas_sparse": "For measurements: 0 each node's own sparse setting, 1 every gas cell simulated, 2 only the bricks near smoke, heat or an emitter. Decision 0119.",
     "fluid/gas_sparse_margin": "For measurements: the sparse simulation's margin in bricks (0: each node's own).",
     "fluid/gas_profile_passes": "Profiling: a GPU timestamp before each group of a gas step's passes.",
@@ -240,6 +241,7 @@ D = {
     "frame/separate_present_queue": "Measured and rejected: presentation from a second queue. Decision 0009.",
     "frame/async_compute": "Async compute (SSAO, SSIL, SSR on a second queue beside shadows, clusters and fog): 0 off, 1 on, 2 on NVIDIA GPUs. Read when the device is created (project.godot or override.cfg only). Decision 0015.",
     "frame/async_compute_family": "Diagnostics: 0 a dedicated compute queue family, 1 a second queue of the main family, 2 the main queue itself (the same submissions, nothing concurrent).",
+    "frame/kernel_spirv_cache": "FellowEngine nodes' compute kernels (water, rain, snow tracks, shallow water) kept as SPIR-V in user://fellow_kernel_cache after they are first compiled, keyed by their source and the engine's build: GLSL is compiled once per machine and build instead of once per session. The same kernels. Milestone 61.",
     "frame/pipeline_cache_max_mb": "The pipeline cache file is ignored at start-up (and replaced by the next save) when larger than this: stock lets it grow, and at 2 GiB its checksum crashed. Decision 0050.",
     # ---------------------------------------------------------------- lights
     "lights/cluster_depth_slices": "Light clusters with logarithmic depth slices and per-element depth ranges. " + EXACT + " Decision 0008.",
@@ -316,6 +318,7 @@ D = {
     "streaming/texture_release_hold_s": "A texture needing fewer mips keeps them this long before they are released (unless over the budget).",
     "streaming/texture_unreferenced_hold_s": "A streamed texture no instance uses keeps its mips this long, then falls back to its resident mips.",
     "streaming/texture_info_details": "[method RenderingServer.fellow_get_texture_streaming_info] also lists every streamed texture.",
+    "streaming/terrain_region_uploads": "FellowTerrain3D's sculpting, painting and blits upload to the GPU only the texels they changed and the mips over them (the heights, the normals, the splat maps), not the whole textures: the same textures. Read once. Decision 0168.",
     # ---------------------------------------------------------------- diagnostics (debug/*)
     "debug/raytracing_decode_positions": "Diagnostics: compressed vertex positions decoded for the acceleration structures even where the device builds from them.",
     "debug/raytracing_gi_dump_every": "Diagnostics: the DDGI probes written to [code]user://fellow_ddgi_dump.bin[/code] every n updates (stalls the GPU; 0: never).",

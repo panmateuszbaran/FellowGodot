@@ -20,7 +20,8 @@ extends "res://bench/scene_base.gd"
 ## the 4 m chunks; --slice_terrain_lod=<m> its lod_distance, --slice_terrain_patch=<quads> its patch_size); with it,
 ## --slice_foliage=node: the trees and grass scattered by the terrain (FellowTerrainFoliage) over two more layers
 ## instead of placed by this script.
-## --slice_warmup=node: a FellowPipelineWarmer3D compiles the pipelines around the first camera while it loads.
+## --slice_warmup=node: a FellowPipelineWarmer3D compiles the pipelines around the first camera while it loads
+## (--slice_warmup_shelf=0: without its shelf of the scene's other meshes, decision 0167).
 ## Stock Godot: the FellowEngine nodes are left out (load_error is not set; the slice is the terrain, town, crowd and
 ## forest).
 
@@ -100,7 +101,11 @@ func build(p_args: Dictionary) -> void:
 	if str(args.get("slice_warmup", "")) == "node" and ClassDB.class_exists("FellowPipelineWarmer3D"):
 		warmer_node = ClassDB.instantiate("FellowPipelineWarmer3D")
 		warmer_node.name = "PipelineWarmup"
+		warmer_node.set("shelf", str(args.get("slice_warmup_shelf", "1")) == "1") # decision 0167
 		add_child(warmer_node)
+		warmer_node.connect("finished", func() -> void:
+			var w: Dictionary = warmer_node.get_stats()
+			print("[slice] warm-up finished at frame %d: %d frames, %d pipelines, %d shelf items" % [Engine.get_frames_drawn(), w.get("frames", 0), w.get("pipelines", 0), w.get("shelf_items", 0)]))
 	info = {"stats": scene_stats(self), "fellow_nodes": fellow, "counts": _counts,
 		"build_ms": (Time.get_ticks_usec() - t0) / 1000.0,
 		"notes": "Vertical slice: 1 km valley, HLOD town of 711 buildings, 99 street lights, crowd, campfire, lake, forest in the wind, weather, day cycle."}
@@ -541,7 +546,7 @@ func sample_extra() -> Dictionary:
 	if warmer_node:
 		var w: Dictionary = warmer_node.get_stats()
 		extra = {"warmup_finished": w.get("finished", false), "warmup_frames": w.get("frames", 0), "warmup_ms": w.get("msec", 0.0),
-			"warmup_pipelines": w.get("pipelines", 0)}
+			"warmup_pipelines": w.get("pipelines", 0), "warmup_shelf_items": w.get("shelf_items", 0)}
 	if terrain_node == null:
 		return extra
 	var st: Dictionary = terrain_node.get_stats()

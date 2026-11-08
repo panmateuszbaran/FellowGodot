@@ -745,7 +745,18 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 							const uint64_t id = (uint64_t(uintptr_t(shader)) * 0x9E3779B97F4A7C15ull) ^ pipeline_hash;
 							if (!fellow_spec_logged.has(id)) {
 								fellow_spec_logged.insert(id);
-								print_line(vformat("FELLOW_SPEC frame=%d shader=%x version=%d flags=%d cull=%d vf=%d spec=%08x,%08x,%08x", (int64_t)Engine::get_singleton()->get_frames_drawn(), int64_t(uint64_t(uintptr_t(shader)) & 0xFFFFFFFF), int(pipeline_key.version), int(pipeline_key.color_pass_flags), int(pipeline_key.cull_mode), int64_t(pipeline_key.vertex_format_id), pipeline_specialization.packed_0, pipeline_specialization.packed_1, pipeline_specialization.packed_2));
+								// The shader by its code's hash; its path and first distinctive line once (milestone 61).
+								static HashSet<uint32_t> fellow_spec_named;
+								const uint32_t code_hash = shader->code.hash();
+								if (!fellow_spec_named.has(code_hash)) {
+									fellow_spec_named.insert(code_hash);
+									String hint = shader->path;
+									if (hint.is_empty()) {
+										hint = shader->code.substr(0, 160).replace("\n", " ").replace("\t", " ");
+									}
+									print_line(vformat("FELLOW_SPEC_SHADER code=%08x len=%d %s", int64_t(code_hash), shader->code.length(), hint));
+								}
+								print_line(vformat("FELLOW_SPEC frame=%d shader=%x code=%08x version=%d flags=%d cull=%d vf=%d spec=%08x,%08x,%08x", (int64_t)Engine::get_singleton()->get_frames_drawn(), int64_t(uint64_t(uintptr_t(shader)) & 0xFFFFFFFF), int64_t(code_hash), int(pipeline_key.version), int(pipeline_key.color_pass_flags), int(pipeline_key.cull_mode), int64_t(pipeline_key.vertex_format_id), pipeline_specialization.packed_0, pipeline_specialization.packed_1, pipeline_specialization.packed_2));
 							}
 						}
 					}
@@ -6086,6 +6097,15 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 	texture_storage->update_decal_buffer(*p_render_data->decals, p_render_data->scene_data->cam_transform);
 
 	p_render_data->directional_light_count = directional_light_count;
+	if (Fellow::frame_stable_scene_bits()) {
+		// Decision 0167: with no directional light in the frame (the sun set) the directional loops run no iteration:
+		// the soft shadows' code, compiled in once it has been used, draws the same.
+		if (p_render_data->directional_light_soft_shadows) {
+			fellow_stable_seen |= FELLOW_STABLE_DIRECTIONAL_SOFT;
+		} else if (directional_light_count == 0 && (fellow_stable_seen & FELLOW_STABLE_DIRECTIONAL_SOFT)) {
+			p_render_data->directional_light_soft_shadows = true;
+		}
+	}
 
 	if (current_cluster_builder) {
 		current_cluster_builder->bake_cluster();
@@ -6129,6 +6149,25 @@ void RenderForwardClustered::_process_sss(Ref<RenderSceneBuffersRD> p_render_buf
 		RID internal_texture = p_render_buffers->get_internal_texture(v);
 		RID depth_texture = p_render_buffers->get_depth_texture(v);
 		ss_effects->sub_surface_scattering(p_render_buffers, internal_texture, depth_texture, p_camera, internal_size);
+	}
+}
+
+void RenderForwardClustered::_fellow_stable_sun_masks(const RenderDataRD *p_render_data, SceneShaderForwardClustered::ShaderSpecialization &r_specialization) {
+	// Decision 0167 (frame/stable_scene_bits): the first directional light's traced or contact shadow mask, compiled in
+	// once it has been used, kept in frames without a directional light — the code reading it is in the directional
+	// loop, which runs no iteration (the mask's binding falls back to a default texture).
+	if (!Fellow::frame_stable_scene_bits()) {
+		return;
+	}
+	if (r_specialization.fellow_rt_sun_shadow) {
+		fellow_stable_seen |= FELLOW_STABLE_RT_SUN_SHADOW;
+	}
+	if (r_specialization.fellow_contact_shadow) {
+		fellow_stable_seen |= FELLOW_STABLE_CONTACT_SHADOW;
+	}
+	if (p_render_data->directional_light_count == 0) {
+		r_specialization.fellow_rt_sun_shadow = r_specialization.fellow_rt_sun_shadow || (fellow_stable_seen & FELLOW_STABLE_RT_SUN_SHADOW);
+		r_specialization.fellow_contact_shadow = r_specialization.fellow_contact_shadow || (fellow_stable_seen & FELLOW_STABLE_CONTACT_SHADOW);
 	}
 }
 
@@ -6960,13 +6999,16 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 				// Ran, or would run with an omni or spot light in view (one exists).
 				fellow_stable_seen |= FELLOW_STABLE_TILE_CULL;
 			}
-			if (!fellow_tile_cull.pass_active && fellow_stable_bits && (fellow_stable_seen & FELLOW_STABLE_TILE_CULL) && fellow_positional_light_count == 0) {
+			if (!fellow_tile_cull.pass_active && fellow_stable_bits && (fellow_stable_seen & FELLOW_STABLE_TILE_CULL) && fellow_positional_light_count == 0 && fellow_tile_cull.frame_ok && fellow_tile_cull.frame_on && !Fellow::light_tile_cull_pass_only()) {
 				// Decision 0161: with no omni or spot light in the frame the masks are never read (the cluster's words are
-				// zero): the pipelines that read them draw the same.
+				// zero): the pipelines that read them draw the same. Decision 0167: only while tile culling is on (as a frame
+				// with such a light would draw); while it is off (autotune's choice) the frames with and without lights
+				// share the pipelines without the masks.
 				fellow_opaque_specialization.fellow_light_tile_cull = true;
 			}
 			fellow_opaque_specialization.fellow_rt_sun_shadow = fellow_rt_shadow_mask.is_valid();
 			fellow_opaque_specialization.fellow_contact_shadow = fellow_contact_shadow_mask.is_valid();
+			_fellow_stable_sun_masks(p_render_data, fellow_opaque_specialization);
 			fellow_opaque_specialization.fellow_rt_reflections = fellow_rt_reflection_texture.is_valid();
 			fellow_opaque_specialization.fellow_ddgi_screen = fellow_ddgi_screen.is_valid();
 			RenderListParameters render_list_params(render_list[RENDER_LIST_OPAQUE].elements.ptr(), render_list[RENDER_LIST_OPAQUE].element_info.ptr(), render_list[RENDER_LIST_OPAQUE].elements.size(), reverse_cull, PASS_MODE_COLOR, opaque_color_pass_flags, rb_data.is_null(), p_render_data->directional_light_soft_shadows, rp_uniform_set, get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_WIREFRAME, Vector2(), p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, p_render_data->scene_data->view_count, 0, fellow_opaque_specialization);
@@ -7020,6 +7062,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			SceneShaderForwardClustered::ShaderSpecialization fellow_motion_specialization = base_specialization;
 			fellow_motion_specialization.fellow_rt_sun_shadow = fellow_rt_shadow_mask.is_valid(); // in the depth pre-pass too
 			fellow_motion_specialization.fellow_contact_shadow = fellow_contact_shadow_mask.is_valid();
+			_fellow_stable_sun_masks(p_render_data, fellow_motion_specialization);
 			fellow_motion_specialization.fellow_rt_reflections = fellow_rt_reflection_texture.is_valid();
 			fellow_motion_specialization.fellow_ddgi_screen = fellow_ddgi_screen.is_valid();
 			RenderListParameters render_list_params(render_list[RENDER_LIST_MOTION].elements.ptr(), render_list[RENDER_LIST_MOTION].element_info.ptr(), render_list[RENDER_LIST_MOTION].elements.size(), reverse_cull, PASS_MODE_COLOR, color_pass_flags, rb_data.is_null(), p_render_data->directional_light_soft_shadows, rp_uniform_set, get_debug_draw_mode() == RSE::VIEWPORT_DEBUG_DRAW_WIREFRAME, Vector2(), p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, p_render_data->scene_data->view_count, 0, fellow_motion_specialization);
