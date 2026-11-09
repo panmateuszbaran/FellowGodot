@@ -3400,6 +3400,15 @@
 		<member name="rendering/fellow/physics/verify" type="bool" setter="" getter="" default="false">
 			Debug: every face [member rendering/fellow/physics/distance_face_cull] skips is tested anyway, and those found touching are counted.
 		</member>
+		<member name="rendering/fellow/pipelines/path" type="String" setter="" getter="" default="&quot;res://fellow_pipelines.json&quot;">
+			The recorded pipelines' file (JSON), read to replay and written to record. In [code]res://[/code] it is exported with the game. Decision 0171.
+		</member>
+		<member name="rendering/fellow/pipelines/record" type="bool" setter="" getter="" default="false">
+			Records the pipelines the materials' shaders compile while the game runs (Forward+), each with its shader's code hash and its key's vertex and framebuffer formats described, into [member rendering/fellow/pipelines/path], merged with what the file holds and written a few seconds after something new (a game stopped from the editor is killed, not quit). Not in the editor itself; an exported game that cannot write its own files records into [code]user://[/code]. Play the game through its weathers, lights and places once with it on, then turn it off. Decision 0171.
+		</member>
+		<member name="rendering/fellow/pipelines/replay" type="bool" setter="" getter="" default="true">
+			When a material's shader is created at load, compiles the pipelines a recorded run compiled for it ([member rendering/fellow/pipelines/path], when it exists), in the background before a draw asks for them: what a play-through met later (another weather, a light, autotune's variants) is ready at its first frame. A file recorded with another scene shader (another version of the engine) or other rendering settings (its source and defines differ) is not replayed. Nothing without the file. Decision 0171.
+		</member>
 		<member name="rendering/fellow/post/atmosphere/aerial_distance_scale" type="float" setter="" getter="" default="1.0">
 			Scales the distances the aerial perspective uses: above 1, a hazier world at the same size.
 		</member>

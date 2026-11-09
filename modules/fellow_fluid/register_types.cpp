@@ -65,6 +65,7 @@ void initialize_fellow_fluid_module(ModuleInitializationLevel p_level) {
 		FellowBakeShaders::register_provider(&FellowLightning3D::fellow_bake_shader_codes);
 		FellowBakeShaders::register_provider(&FellowShallowWater3D::fellow_bake_shader_codes);
 		FellowBakeShaders::register_provider(&FellowBurnable3D::fellow_bake_shader_codes);
+		FellowBakeShaders::register_object_provider(&FellowBurnable3D::fellow_bake_object_codes); // milestone 63
 	}
 }
 

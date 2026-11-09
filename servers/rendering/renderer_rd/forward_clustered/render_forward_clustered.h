@@ -1686,6 +1686,8 @@ public:
 	virtual String get_name() const override;
 	virtual void fellow_create_versions_for_baking() override; // milestone 61
 	LocalVector<RID> fellow_baking_shaders; // the nodes' code shaders made for the baker
+	virtual RID fellow_create_version_for_baking(const String &p_code) override; // milestone 63
+	HashMap<String, RID> fellow_baking_codes; // the codes made by that, and their shaders (also in the list above)
 
 	virtual bool free(RID p_rid) override;
 

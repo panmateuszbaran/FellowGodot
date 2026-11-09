@@ -258,9 +258,11 @@ public:
 		};
 
 		void _create_pipeline(PipelineKey p_pipeline_key);
+		void _fellow_replay_pipelines(); // decision 0171
 		PipelineHashMapRD<PipelineKey, ShaderData, void (ShaderData::*)(PipelineKey)> pipeline_hash_map;
 
 		RID version;
+		uint64_t fellow_code_hash = 0; // the code's hash: its pipelines' key in recorded pipelines (decision 0171)
 
 		static const uint32_t VERTEX_INPUT_MASKS_SIZE = ShaderVersion::SHADER_VERSION_COLOR_PASS * 2 + SHADER_COLOR_PASS_FLAG_COUNT;
 		std::atomic<uint64_t> vertex_input_masks[VERTEX_INPUT_MASKS_SIZE] = {};

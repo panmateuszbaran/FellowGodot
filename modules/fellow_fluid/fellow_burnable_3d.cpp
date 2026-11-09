@@ -1153,6 +1153,67 @@ static String _fellow_burn_code(const String &p_code, int p_custom, bool p_cache
 	return code;
 }
 
+void FellowBurnable3D::fellow_bake_object_codes(Object *p_object, Vector<String> &r_codes) {
+	FellowBurnable3D *burnable = Object::cast_to<FellowBurnable3D>(p_object);
+	if (burnable == nullptr) {
+		return;
+	}
+	MeshInstance3D *target = burnable->_get_target();
+	if (target == nullptr || target->get_mesh().is_null()) {
+		return;
+	}
+	// As _build_display() and _make_burn_material() make them: one material per source material, on the triangle
+	// surfaces of a mesh without skinning, with the first custom channel the surface does not use.
+	const Ref<Mesh> mesh = target->get_mesh();
+	const bool cache = GLOBAL_GET("rendering/fellow/fluid/burn_vertices_cached");
+	for (int s = 0; s < mesh->get_surface_count(); s++) {
+		if (mesh->surface_get_primitive_type(s) != Mesh::PRIMITIVE_TRIANGLES) {
+			continue;
+		}
+		const uint64_t format = mesh->surface_get_format(s);
+		if (format & (Mesh::ARRAY_FORMAT_BONES | Mesh::ARRAY_FORMAT_WEIGHTS)) {
+			return;
+		}
+		int custom = -1;
+		for (int c = 0; c < 4; c++) {
+			if (!(format & (uint64_t(Mesh::ARRAY_FORMAT_CUSTOM0) << c))) {
+				custom = c;
+				break;
+			}
+		}
+		if (custom < 0) {
+			continue;
+		}
+		Ref<Material> src = target->get_active_material(s);
+		if (src.is_null()) {
+			Ref<StandardMaterial3D> def;
+			def.instantiate();
+			src = def;
+		}
+		String code;
+		const Ref<ShaderMaterial> sm = src;
+		if (sm.is_valid()) {
+			if (sm->get_shader().is_null()) {
+				continue;
+			}
+			code = sm->get_shader()->get_code();
+		} else if (Object::cast_to<BaseMaterial3D>(src.ptr())) {
+			const RID shader = src->get_shader_rid();
+			if (shader.is_null()) {
+				continue;
+			}
+			code = RS::get_singleton()->shader_get_code(shader);
+		} else {
+			continue;
+		}
+		bool cached = false;
+		const String burn_code = _fellow_burn_code(code, custom, cache, cached);
+		if (!burn_code.is_empty() && !r_codes.has(burn_code)) {
+			r_codes.push_back(burn_code);
+		}
+	}
+}
+
 Ref<ShaderMaterial> FellowBurnable3D::_make_burn_material(const Ref<Material> &p_source, int p_custom, bool p_cached, bool &r_cached) const {
 	r_cached = false;
 	Ref<Material> src = p_source;

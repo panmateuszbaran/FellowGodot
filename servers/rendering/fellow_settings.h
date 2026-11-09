@@ -1360,6 +1360,8 @@ struct Stats {
 	SafeNumeric<uint64_t> geometry_cluster_draws; // draw calls issued for clustered surfaces
 	SafeNumeric<uint64_t> pipeline_fallback_draws; // draws with the defaults' pipeline while theirs compiled (decision 0059)
 	SafeNumeric<uint64_t> pipeline_ubershader_draws; // draws with the ubershader while theirs compiled (stock's fallback)
+	SafeNumeric<uint64_t> pipelines_recorded; // pipelines/record (decision 0171): new pipelines added to the file
+	SafeNumeric<uint64_t> pipelines_replayed; // pipelines/replay: recorded pipelines asked for when their shader was made
 	// Where loading spends its time (process totals, every build: the bench snapshots them when its scene is built and
 	// after the first frame). Shader versions: the calling thread's start (cache reads, task posting) and wait, the
 	// variants compiled on the workers (from source where not cached), the shader objects created from their SPIR-V.

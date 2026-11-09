@@ -229,6 +229,10 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/frame/clear_new_textures", true); // decision 0070
 	GLOBAL_DEF("rendering/fellow/frame/movie_wait_pipelines", true); // decision 0072
 	GLOBAL_DEF("rendering/fellow/frame/stable_scene_bits", true); // decision 0161
+	// Recorded pipelines (decision 0171): read once, when the renderer starts.
+	GLOBAL_DEF_RST("rendering/fellow/pipelines/record", false);
+	GLOBAL_DEF_RST("rendering/fellow/pipelines/replay", true);
+	GLOBAL_DEF_RST(PropertyInfo(Variant::STRING, "rendering/fellow/pipelines/path", PROPERTY_HINT_FILE, "*.json"), "res://fellow_pipelines.json");
 	// Milestone 61: FellowEngine nodes' compute kernels (water, rain, shallow water) kept as SPIR-V in
 	// user://fellow_kernel_cache after their first compilation: glslang runs once per machine and build, not per session.
 	GLOBAL_DEF("rendering/fellow/frame/kernel_spirv_cache", true);
@@ -576,6 +580,8 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["geometry_cluster_draws"] = s.geometry_cluster_draws.get();
 	d["pipeline_fallback_draws"] = s.pipeline_fallback_draws.get();
 	d["pipeline_ubershader_draws"] = s.pipeline_ubershader_draws.get();
+	d["pipelines_recorded"] = s.pipelines_recorded.get();
+	d["pipelines_replayed"] = s.pipelines_replayed.get();
 	d["cost_shader_start_usec"] = s.cost_shader_start_usec.get();
 	d["cost_shader_starts"] = s.cost_shader_starts.get();
 	d["cost_shader_wait_usec"] = s.cost_shader_wait_usec.get();

@@ -3778,6 +3778,21 @@ RenderingDevice::TextureSamples RenderingDevice::framebuffer_format_get_texture_
 	return E->value.pass_samples[p_pass];
 }
 
+bool RenderingDevice::fellow_framebuffer_format_get_description(FramebufferFormatID p_format, Vector<AttachmentFormat> &r_attachments, Vector<FramebufferPass> &r_passes, uint32_t &r_view_count, int32_t &r_vrs_attachment) {
+	_THREAD_SAFE_METHOD_
+
+	HashMap<FramebufferFormatID, FramebufferFormat>::Iterator E = framebuffer_formats.find(p_format);
+	if (!E || E->value.E == nullptr) {
+		return false;
+	}
+	const FramebufferFormatKey &key = E->value.E->key();
+	r_attachments = key.attachments;
+	r_passes = key.passes;
+	r_view_count = key.view_count;
+	r_vrs_attachment = key.vrs_attachment;
+	return true;
+}
+
 RID RenderingDevice::framebuffer_create_empty(const Size2i &p_size, TextureSamples p_samples, FramebufferFormatID p_format_check) {
 	_THREAD_SAFE_METHOD_
 
@@ -4044,6 +4059,13 @@ RID RenderingDevice::vertex_buffer_create(uint32_t p_size_bytes, Span<uint8_t> p
 }
 
 // Internally reference counted, this ID is warranted to be unique for the same description, but needs to be freed as many times as it was allocated.
+Vector<RenderingDevice::VertexAttribute> RenderingDevice::fellow_vertex_format_get_attributes(VertexFormatID p_format) {
+	_THREAD_SAFE_METHOD_
+
+	const VertexDescriptionCache *cache = vertex_formats.getptr(p_format);
+	return cache ? cache->vertex_formats : Vector<VertexAttribute>();
+}
+
 RenderingDevice::VertexFormatID RenderingDevice::vertex_format_create(const Vector<VertexAttribute> &p_vertex_descriptions) {
 	_THREAD_SAFE_METHOD_
 

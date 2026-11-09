@@ -152,6 +152,9 @@ void ShaderRD::_add_stage(const char *p_code, StageType p_stage_type) {
 
 void ShaderRD::setup(const char *p_vertex_code, const char *p_fragment_code, const char *p_compute_code, const char *p_name) {
 	name = p_name;
+	fellow_source[0] = p_vertex_code;
+	fellow_source[1] = p_fragment_code;
+	fellow_source[2] = p_compute_code;
 
 	if (p_compute_code) {
 		_add_stage(p_compute_code, STAGE_TYPE_COMPUTE);
@@ -181,6 +184,19 @@ void ShaderRD::setup(const char *p_vertex_code, const char *p_fragment_code, con
 	tohash.append(Engine::get_singleton()->is_generate_spirv_debug_info_enabled() ? "1" : "0");
 
 	base_sha256 = tohash.as_string().sha256_text();
+}
+
+String ShaderRD::fellow_source_sha256(const String &p_defines) const {
+	StringBuilder tohash;
+	tohash.append("[Vertex]");
+	tohash.append(fellow_source[0] ? fellow_source[0] : "");
+	tohash.append("[Fragment]");
+	tohash.append(fellow_source[1] ? fellow_source[1] : "");
+	tohash.append("[Compute]");
+	tohash.append(fellow_source[2] ? fellow_source[2] : "");
+	tohash.append("[Defines]");
+	tohash.append(p_defines);
+	return tohash.as_string().sha256_text();
 }
 
 void ShaderRD::setup_raytracing(const char *p_raygen_code, const char *p_any_hit_code, const char *p_closest_hit_code, const char *p_miss_code, const char *p_intersection_code, const char *p_name) {

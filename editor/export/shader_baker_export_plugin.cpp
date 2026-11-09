@@ -38,6 +38,7 @@
 #include "editor/editor_node.h"
 #include "scene/3d/label_3d.h"
 #include "scene/3d/sprite_3d.h"
+#include "servers/rendering/fellow_bake_shaders.h"
 #include "servers/rendering/renderer_rd/renderer_scene_render_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
 #include "servers/rendering/rendering_shader_container.h"
@@ -354,6 +355,21 @@ Node *ShaderBakerExportPlugin::_customize_scene(Node *p_root, const String &p_pa
 				// Generate variants with and without MSDF support since we don't have access to the font here.
 				Ref<Material> label_3d_material = StandardMaterial3D::get_material_for_2d(bool(properties["shaded"]), mat_transparency, bool(properties["double_sided"]), billboard_mode == StandardMaterial3D::BILLBOARD_ENABLED, billboard_mode == StandardMaterial3D::BILLBOARD_FIXED_Y, true, bool(properties["no_depth_test"]), bool(properties["fixed_size"]), BaseMaterial3D::TextureFilter(int(properties["texture_filter"])), BaseMaterial3D::AlphaAntiAliasing(int(properties["alpha_antialiasing_mode"])));
 				_customize_resource(label_3d_material, String());
+			}
+		}
+
+		// FellowEngine (milestone 63): the shaders a node makes at run time from its own setup (a burnable's burning
+		// material from its mesh's materials).
+		Vector<String> fellow_codes;
+		FellowBakeShaders::get_object_codes(node, fellow_codes);
+		for (const String &code : fellow_codes) {
+			const RID shader = RendererSceneRenderRD::get_singleton()->fellow_create_version_for_baking(code);
+			RendererRD::MaterialStorage::ShaderData *shader_data = shader.is_valid() ? RendererRD::MaterialStorage::get_singleton()->shader_get_data(shader) : nullptr;
+			if (shader_data != nullptr) {
+				Pair<ShaderRD *, RID> shader_version_pair = shader_data->get_native_shader_and_version();
+				if (shader_version_pair.first != nullptr) {
+					_customize_shader_version(shader_version_pair.first, shader_version_pair.second);
+				}
 			}
 		}
 

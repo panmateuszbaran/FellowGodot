@@ -32,6 +32,7 @@
 
 #include "core/config/project_settings.h"
 #include "core/math/math_defs.h"
+#include "servers/rendering/renderer_rd/fellow_pipeline_record.h"
 #include "servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.h"
 #include "servers/rendering/renderer_rd/renderer_compositor_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
@@ -42,6 +43,7 @@ void SceneShaderForwardClustered::ShaderData::set_code(const String &p_code) {
 	//compile
 
 	code = p_code;
+	fellow_code_hash = code.hash64();
 	ubo_size = 0;
 	uniforms.clear();
 	_clear_vertex_input_mask_cache();
@@ -270,6 +272,39 @@ void SceneShaderForwardClustered::ShaderData::set_code(const String &p_code) {
 	}
 
 	uses_blend_alpha = blend_mode_uses_blend_alpha(BlendMode(blend_mode));
+
+	_fellow_replay_pipelines();
+}
+
+// FellowEngine recorded pipelines (decision 0171): what a recorded run compiled for this code, compiled now in the
+// background, before a draw asks for it (when the code is set, and again when the default specialization clears the
+// pipelines: the renderer sets it once after the default materials are made).
+void SceneShaderForwardClustered::ShaderData::_fellow_replay_pipelines() {
+	if (!FellowPipelineRecord::is_replaying() || code.is_empty() || version.is_null()) {
+		return;
+	}
+	LocalVector<FellowPipelineRecord::Entry> entries;
+	if (!FellowPipelineRecord::get_replay(fellow_code_hash, entries)) {
+		return;
+	}
+	for (const FellowPipelineRecord::Entry &e : entries) {
+		PipelineKey key;
+		key.vertex_format_id = e.vertex_format;
+		key.framebuffer_format_id = e.framebuffer_format;
+		key.cull_mode = RD::PolygonCullMode(e.fields[FellowPipelineRecord::FIELD_CULL]);
+		key.primitive_type = RSE::PrimitiveType(e.fields[FellowPipelineRecord::FIELD_PRIMITIVE]);
+		key.version = PipelineVersion(e.fields[FellowPipelineRecord::FIELD_VERSION]);
+		key.color_pass_flags = e.fields[FellowPipelineRecord::FIELD_COLOR_PASS_FLAGS];
+		key.shader_specialization.packed_0 = e.fields[FellowPipelineRecord::FIELD_SPECIALIZATION_0];
+		key.shader_specialization.packed_1 = e.fields[FellowPipelineRecord::FIELD_SPECIALIZATION_1];
+		key.shader_specialization.packed_2 = e.fields[FellowPipelineRecord::FIELD_SPECIALIZATION_2];
+		key.wireframe = e.fields[FellowPipelineRecord::FIELD_WIREFRAME];
+		key.ubershader = e.fields[FellowPipelineRecord::FIELD_UBERSHADER];
+		if (key.cull_mode > RD::POLYGON_CULL_MAX || key.primitive_type > RSE::PRIMITIVE_MAX || key.version >= PIPELINE_VERSION_MAX) {
+			continue;
+		}
+		pipeline_hash_map.compile_pipeline(key, key.hash(), RSE::PIPELINE_SOURCE_MESH, false);
+	}
 }
 
 bool SceneShaderForwardClustered::ShaderData::fellow_shadow_cacheable() const {
@@ -378,6 +413,22 @@ uint16_t SceneShaderForwardClustered::ShaderData::_get_shader_version(PipelineVe
 }
 
 void SceneShaderForwardClustered::ShaderData::_create_pipeline(PipelineKey p_pipeline_key) {
+	if (FellowPipelineRecord::is_recording()) {
+		// Decision 0171: this run's pipelines, for the next runs to compile at load.
+		FellowPipelineRecord::Entry e;
+		e.vertex_format = p_pipeline_key.vertex_format_id;
+		e.framebuffer_format = p_pipeline_key.framebuffer_format_id;
+		e.fields[FellowPipelineRecord::FIELD_CULL] = p_pipeline_key.cull_mode;
+		e.fields[FellowPipelineRecord::FIELD_PRIMITIVE] = p_pipeline_key.primitive_type;
+		e.fields[FellowPipelineRecord::FIELD_VERSION] = p_pipeline_key.version;
+		e.fields[FellowPipelineRecord::FIELD_COLOR_PASS_FLAGS] = p_pipeline_key.color_pass_flags;
+		e.fields[FellowPipelineRecord::FIELD_SPECIALIZATION_0] = p_pipeline_key.shader_specialization.packed_0;
+		e.fields[FellowPipelineRecord::FIELD_SPECIALIZATION_1] = p_pipeline_key.shader_specialization.packed_1;
+		e.fields[FellowPipelineRecord::FIELD_SPECIALIZATION_2] = p_pipeline_key.shader_specialization.packed_2;
+		e.fields[FellowPipelineRecord::FIELD_WIREFRAME] = p_pipeline_key.wireframe;
+		e.fields[FellowPipelineRecord::FIELD_UBERSHADER] = p_pipeline_key.ubershader;
+		FellowPipelineRecord::record(fellow_code_hash, e);
+	}
 #if PRINT_PIPELINE_COMPILATION_KEYS
 	print_line(
 			"HASH:", p_pipeline_key.hash(),
@@ -753,6 +804,8 @@ void SceneShaderForwardClustered::init(const String p_defines) {
 		dynamic_buffers.push_back(ShaderRD::DynamicBuffer::encode(RenderForwardClustered::RENDER_PASS_UNIFORM_SET, 39));
 		dynamic_buffers.push_back(ShaderRD::DynamicBuffer::encode(RenderForwardClustered::RENDER_PASS_UNIFORM_SET, 40));
 		shader.initialize(shader_versions, p_defines, Vector<RD::PipelineImmutableSampler>(), dynamic_buffers);
+		// Recorded pipelines (decision 0171): tied to this shader's source and defines.
+		FellowPipelineRecord::initialize(shader.fellow_source_sha256(p_defines));
 
 		if (RendererCompositorRD::get_singleton()->is_xr_enabled()) {
 			shader.enable_group(SHADER_GROUP_MULTIVIEW);
@@ -1085,6 +1138,7 @@ void SceneShaderForwardClustered::set_default_specialization(const ShaderSpecial
 
 	for (SelfList<ShaderData> *E = shader_list.first(); E; E = E->next()) {
 		E->self()->pipeline_hash_map.clear_pipelines();
+		E->self()->_fellow_replay_pipelines();
 	}
 }
 

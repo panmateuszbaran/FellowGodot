@@ -580,6 +580,20 @@ codes with `FellowBakeShaders::register_provider()`, `servers/rendering/fellow_b
 and after the finest level's correction (1 halves that level's smoothing, not exact: on the RTX the slice's pressure
 solve 0.65 → 0.57 ms, its residual 20 times larger; milestone 61).
 
+Milestone 63 (decision 0171), **recorded pipelines**: `rendering/fellow/pipelines/record` (off) writes the pipelines
+the scene shaders (Forward+) compile while the game runs — each under a hash of its material shader's code, its key's
+vertex and framebuffer formats described — to `rendering/fellow/pipelines/path` (`res://fellow_pipelines.json`, merged
+with what is there, written three seconds after something new and at the end; not in the editor itself; `user://` when
+an exported game cannot write `res://`). `rendering/fellow/pipelines/replay` (on; nothing without the file): when a
+shader is made at load, its recorded pipelines compile in the background before a draw asks for them. A file recorded
+with another scene shader (its source and the rendering settings' defines) is not replayed; recording starts it again.
+Play the game through its weathers, lights and places once with `record` on, keep the file in the project, turn
+`record` off. All three are read when the renderer starts; `FELLOW_PIPELINES_RECORD`, `FELLOW_PIPELINES_REPLAY`
+(0/1) and `FELLOW_PIPELINES_PATH` override them (tests), `FELLOW_PIPELINES_DEBUG` names the pipelines not kept;
+`RenderingServer.fellow_get_stats()` counts `pipelines_recorded`, `pipelines_replayed`. The shader baker also asks
+each node of an exported scene for the shaders it makes from its setup (`FellowBakeShaders::register_object_provider()`:
+a burnable's burning materials).
+
 ## Options that change the image (off by default)
 
 | setting | what it does | image cost | record |

@@ -174,6 +174,8 @@ protected:
 
 public:
 	static void fellow_bake_shader_codes(Vector<String> &r_codes); // milestone 61: the ash heap's code
+	// Milestone 63: a burnable of an exported scene: the burning materials' codes it will make from its mesh's materials.
+	static void fellow_bake_object_codes(Object *p_object, Vector<String> &r_codes);
 
 	PackedStringArray get_configuration_warnings() const override;
 

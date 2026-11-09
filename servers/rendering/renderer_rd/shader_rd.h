@@ -180,6 +180,8 @@ private:
 
 	String base_sha256;
 	LocalVector<String> group_sha256;
+	// FellowEngine (decision 0171): the source given to setup() (static strings), for fellow_source_sha256().
+	const char *fellow_source[3] = { nullptr, nullptr, nullptr };
 
 	static inline ShaderVersionPairSet shader_versions_embedded_set;
 	static inline Mutex shader_versions_embedded_set_mutex;
@@ -297,6 +299,9 @@ public:
 	// FellowEngine (decision 0169): starts a version's compilation (or its read from the shader cache) without waiting
 	// for it, for an effect made ahead of its first use; version_get_shader() then waits only for what is not done.
 	void fellow_version_compile_start(RID p_version);
+	// FellowEngine (decision 0171): a hash of the shader's source and of the defines given to initialize(), without the
+	// engine's version (base_sha256 has it): the same as long as neither changes.
+	String fellow_source_sha256(const String &p_defines) const;
 	static const String &get_shader_cache_user_dir();
 	static void set_shader_cache_res_dir(const String &p_dir);
 	static const String &get_shader_cache_res_dir();

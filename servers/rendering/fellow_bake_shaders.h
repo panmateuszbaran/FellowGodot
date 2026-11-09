@@ -34,6 +34,8 @@
 #include "core/templates/local_vector.h"
 #include "core/templates/vector.h"
 
+class Object;
+
 // FellowEngine (milestone 61): the spatial shaders FellowEngine's nodes make from code (a water's surface, rain's drops,
 // a terrain's layers) are not resources of an export, so Godot's shader baker does not see them. Modules register a
 // function giving their codes; the renderer creates them when the baker starts an export
@@ -56,6 +58,28 @@ inline void register_provider(Provider p_provider) {
 inline void get_codes(Vector<String> &r_codes) {
 	for (Provider p : providers()) {
 		p(r_codes);
+	}
+}
+
+// Milestone 63: codes a node of a scene being exported makes from its own setup (a burnable's burning material, from
+// its mesh's materials). The shader baker asks each node of each exported scene (an Object: servers do not know
+// nodes); a provider that does not know the object adds nothing.
+typedef void (*ObjectProvider)(Object *p_object, Vector<String> &r_codes);
+
+inline LocalVector<ObjectProvider> &object_providers() {
+	static LocalVector<ObjectProvider> list;
+	return list;
+}
+
+inline void register_object_provider(ObjectProvider p_provider) {
+	if (!object_providers().has(p_provider)) {
+		object_providers().push_back(p_provider);
+	}
+}
+
+inline void get_object_codes(Object *p_object, Vector<String> &r_codes) {
+	for (ObjectProvider p : object_providers()) {
+		p(p_object, r_codes);
 	}
 }
 

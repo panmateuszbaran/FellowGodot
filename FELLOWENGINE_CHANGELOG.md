@@ -9,6 +9,24 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 63 — recorded pipelines, the burning material baked (2026-11-10)
+
+- Recorded pipelines (decision 0171, `rendering/fellow/pipelines/record`, `replay`, `path`): a run with `record` on
+  writes every pipeline the Forward+ scene shaders compile to `res://fellow_pipelines.json` — each under its material
+  shader's code hash, with its key and its vertex and framebuffer formats described (their IDs depend on the run) —
+  merged with what the file holds, written three seconds after something new and at the end (a game stopped from the
+  editor is killed); `user://` when `res://` is read-only, nothing in the editor itself. With the file (`replay` is on
+  by default) a shader's recorded pipelines are compiled in the background when its code is set at load, and again
+  after the default specialization clears them. The file is tied to the scene shader's source and the project's
+  defines, not to the engine's commit. The states check: 28 pipelines after the warm-up → 0, the 21 pictures the same
+  bit for bit; Slice Lab's 8-minute soak on lavapipe: 18 pipelines compiled in play → 0, ubershader draws 268 → 7.
+  Without the file nothing changes.
+- The burning material baked into exports: Godot's shader baker now asks each node of an exported scene for the
+  shaders it will make from its setup (`FellowBakeShaders::register_object_provider()`); `FellowBurnable3D` gives its
+  burning materials' codes. A baked export with a burnable compiles no shader at its first start (1 before), also for a
+  burnable a script adds with the same mesh's materials.
+- `RenderingServer.fellow_get_stats()`: `pipelines_recorded`, `pipelines_replayed`.
+
 ## Milestone 62 — milestone 61's open topics, without a GPU (2026-11-09)
 
 - The pipelines the slice still compiled after its warm-up, named (decision 0167): Slice Lab's soak on the RTX's

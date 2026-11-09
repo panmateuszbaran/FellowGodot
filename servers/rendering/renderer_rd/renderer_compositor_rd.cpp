@@ -35,6 +35,7 @@
 #include "core/io/dir_access.h"
 #include "core/os/os.h"
 #include "servers/display/display_server.h"
+#include "servers/rendering/renderer_rd/fellow_pipeline_record.h"
 #include "servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.h"
 #include "servers/rendering/renderer_rd/forward_mobile/render_forward_mobile.h"
 #include "servers/rendering/rendering_server_types.h"
@@ -130,6 +131,7 @@ void RendererCompositorRD::begin_frame(double frame_step) {
 
 	canvas->set_time(time);
 	scene->set_time(time, frame_step);
+	FellowPipelineRecord::process(); // decision 0171: writes newly recorded pipelines now and then
 }
 
 void RendererCompositorRD::end_frame(bool p_present) {
@@ -171,6 +173,7 @@ void RendererCompositorRD::initialize() {
 uint64_t RendererCompositorRD::frame = 1;
 
 void RendererCompositorRD::finalize() {
+	FellowPipelineRecord::finalize();
 	ShaderRD::fellow_finalize();
 	texture_storage->_tex_blit_shader_free();
 	memdelete(scene);

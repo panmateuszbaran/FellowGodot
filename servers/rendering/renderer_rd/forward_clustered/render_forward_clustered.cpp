@@ -1749,6 +1749,25 @@ void RenderForwardClustered::fellow_create_versions_for_baking() {
 	}
 }
 
+RID RenderForwardClustered::fellow_create_version_for_baking(const String &p_code) {
+	if (const RID *existing = fellow_baking_codes.getptr(p_code)) {
+		return *existing;
+	}
+	String preprocessed;
+	ShaderPreprocessor preprocessor;
+	if (preprocessor.preprocess(p_code, String(), preprocessed) != OK) {
+		fellow_baking_codes[p_code] = RID();
+		return RID();
+	}
+	RendererRD::MaterialStorage *material_storage = RendererRD::MaterialStorage::get_singleton();
+	const RID shader = material_storage->shader_allocate();
+	material_storage->shader_initialize(shader, true);
+	material_storage->shader_set_code(shader, preprocessed);
+	fellow_baking_shaders.push_back(shader);
+	fellow_baking_codes[p_code] = shader;
+	return shader;
+}
+
 void RenderForwardClustered::_fellow_occlusion_init() {
 	FellowOcclusion &o = fellow_occlusion;
 	if (o.hzb_version.is_valid()) {
@@ -11238,6 +11257,7 @@ RenderForwardClustered::~RenderForwardClustered() {
 		RendererRD::MaterialStorage::get_singleton()->shader_free(shader);
 	}
 	fellow_baking_shaders.clear();
+	fellow_baking_codes.clear();
 	FellowParallelFor::shared_release();
 	fellow_parallel = nullptr;
 	if (ss_effects != nullptr) {

@@ -710,6 +710,9 @@ public:
 	FramebufferFormatID framebuffer_format_create_multipass(const Vector<AttachmentFormat> &p_attachments, const Vector<FramebufferPass> &p_passes, uint32_t p_view_count = 1, int32_t p_vrs_attachment = -1);
 	FramebufferFormatID framebuffer_format_create_empty(TextureSamples p_samples = TEXTURE_SAMPLES_1);
 	TextureSamples framebuffer_format_get_texture_samples(FramebufferFormatID p_format, uint32_t p_pass = 0);
+	// FellowEngine (decision 0171): what a format was created from, to make the same one in another run (recorded
+	// pipelines). False for an unknown ID; an empty format has no attachments and its one pass.
+	bool fellow_framebuffer_format_get_description(FramebufferFormatID p_format, Vector<AttachmentFormat> &r_attachments, Vector<FramebufferPass> &r_passes, uint32_t &r_view_count, int32_t &r_vrs_attachment);
 
 	RID framebuffer_create(const Vector<RID> &p_texture_attachments, FramebufferFormatID p_format_check = INVALID_ID, uint32_t p_view_count = 1);
 	RID framebuffer_create_multipass(const Vector<RID> &p_texture_attachments, const Vector<FramebufferPass> &p_passes, FramebufferFormatID p_format_check = INVALID_ID, uint32_t p_view_count = 1);
@@ -879,6 +882,9 @@ public:
 
 	// This ID is warranted to be unique for the same formats, does not need to be freed
 	VertexFormatID vertex_format_create(const Vector<VertexAttribute> &p_vertex_descriptions);
+	// FellowEngine (decision 0171): the attributes a vertex format was created with (their bindings explicit); empty for
+	// an unknown ID.
+	Vector<VertexAttribute> fellow_vertex_format_get_attributes(VertexFormatID p_format);
 	RID vertex_array_create(uint32_t p_vertex_count, VertexFormatID p_vertex_format, const Vector<RID> &p_src_buffers, const Vector<uint64_t> &p_offsets = Vector<uint64_t>());
 
 	RID index_buffer_create(uint32_t p_index_count, IndexBufferFormat p_format, Span<uint8_t> p_data = {}, bool p_use_restart_indices = false, BitField<BufferCreationBits> p_creation_bits = 0);

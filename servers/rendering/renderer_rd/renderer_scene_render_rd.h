@@ -185,6 +185,9 @@ public:
 	// FellowEngine (milestone 61): Godot's shader baker bakes the ShaderRD versions that exist when an export starts;
 	// FellowEngine makes most of its effects when they are first used. This makes them (in the editor, for an export).
 	virtual void fellow_create_versions_for_baking();
+	// Milestone 63: a spatial shader of this code made for the baker (a node of an exported scene makes it at run time:
+	// FellowBakeShaders::get_object_codes()), kept for the session; an invalid RID where the renderer bakes none.
+	virtual RID fellow_create_version_for_baking(const String &p_code) { return RID(); }
 
 	/* LIGHTING */
 
