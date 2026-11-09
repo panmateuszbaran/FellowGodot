@@ -163,6 +163,8 @@ public:
 		float self_shadow = 1.0f;
 		float scene_shadow = 1.0f;
 		float step_cells = 1.0f;
+		float edge_fade = 0.0f; // metres from the box's faces over which the smoke is drawn faded out (0: none)
+		int32_t edge_fade_faces = 0; // the faces it fades at (closed_faces' bits)
 		float fire_light_position[3] = { 0.0f, 0.0f, 0.0f };
 		float fire_light_intensity[3] = { 0.0f, 0.0f, 0.0f };
 		int32_t fire_light = 0;

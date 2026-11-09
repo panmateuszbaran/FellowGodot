@@ -32,6 +32,17 @@ Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.m
   `showcase/external` (not part of the repository), else a humanoid made in code with blended clips.
 - `FellowMotionCharacter3D.set_ground_height()` / `get_ground_height()`: the network's motion is on a plane; a game
   sets the ground's height under the character every frame to walk it over uneven ground (the showcase's terrain).
+- `FellowGasVolume3D.edge_fade` (metres, 0 by default: the same pictures): the smoke drawn faded out near the box's
+  faces (all but a closed floor) — where it leaves through an open face or piles against a wall the box no longer
+  shows as a hard edge. Only the drawing and the smoke's shadows; the simulation is unchanged.
+- `FellowGasVolume3D.prewarm_steps` no longer overflows the GPU's queue of steps when several physics ticks come
+  before a frame (a slow first frame, Movie Maker below the physics rate): a tick prewarms what the queue still holds.
+- The showcase after a first play (report 62, section 6): the campfire's smoke rises 6.5 m through open sides and
+  top, thinning out and faded at the box's faces, burning from the start; the cameras keep 0.9 m over the terrain (looking
+  up had swung them into the grass: one-frame dark flashes); F3 turns the effects off one at a time; MotionBricks'
+  character plays the network's motion 1.3 times faster while it moves (walking about 2 m/s, running 4.3 m/s), jumps
+  (Space) and rolls (C) — both drawn over the network's motion, which has neither — and the README tells where its
+  files come from.
 
 ## Milestone 61 — what the CPU could still do without a GPU, then the RTX's measurements (2026-11-09)
 

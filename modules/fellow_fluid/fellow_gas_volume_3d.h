@@ -133,6 +133,7 @@ private:
 	bool cast_shadows = true;
 	float shadow_strength = 1.0f;
 	float render_step = 1.0f;
+	float edge_fade = 0.0f;
 	// Fire light.
 	bool fire_light = true;
 	float fire_light_energy = 1.0f;
@@ -152,6 +153,8 @@ private:
 	uint64_t ticks = 0;
 	double sim_time = 0.0;
 	int prewarm_left = 0;
+	uint64_t queued_frame = 0; // the frame (Engine::get_frames_drawn()) the steps below were queued for
+	int queued_steps = 0; // steps queued since that frame was drawn (the GPU queue holds 64)
 	RID query_shape;
 	OmniLight3D *light = nullptr;
 	Ref<FellowGasReadback> emission;
@@ -279,6 +282,8 @@ public:
 	float get_shadow_strength() const { return shadow_strength; }
 	void set_render_step(float p_value) { render_step = CLAMP(p_value, 0.25f, 4.0f); }
 	float get_render_step() const { return render_step; }
+	void set_edge_fade(float p_metres) { edge_fade = MAX(p_metres, 0.0f); }
+	float get_edge_fade() const { return edge_fade; }
 
 	void set_fire_light(bool p_enable);
 	bool is_fire_light() const { return fire_light; }

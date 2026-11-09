@@ -980,7 +980,7 @@ bool FellowGas::begin_frame(const FrameParams &p_frame) {
 		u.volumes[i].size[0] = v.res.x;
 		u.volumes[i].size[1] = v.res.y;
 		u.volumes[i].size[2] = v.res.z;
-		u.volumes[i].size[3] = (r.casts_shadows ? 1 : 0) | (candidates[i].in_view ? 2 : 0);
+		u.volumes[i].size[3] = (r.casts_shadows ? 1 : 0) | (candidates[i].in_view ? 2 : 0) | ((r.edge_fade > 0.0f ? (r.edge_fade_faces & 63) : 0) << 2);
 		const Vector3i ls = _fellow_gas_light_size(v.res);
 		u.volumes[i].light_size[0] = ls.x;
 		u.volumes[i].light_size[1] = ls.y;
@@ -1007,6 +1007,7 @@ bool FellowGas::begin_frame(const FrameParams &p_frame) {
 		u.volumes[i].misc[2] = r.scene_shadow;
 		u.volumes[i].misc[3] = mpc;
 		u.volumes[i].fire[0] = r.emission_temperature_scale;
+		u.volumes[i].fire[1] = r.edge_fade > 0.0f ? r.edge_fade / MAX(mpc, 1e-4f) : 0.0f; // cells
 		frame_volumes.push_back(candidates[i].id);
 	}
 	RD::get_singleton()->buffer_update(render_ubo, 0, sizeof(RenderUBO), &u);

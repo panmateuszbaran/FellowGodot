@@ -16,7 +16,7 @@ var _help_t := 25.0
 const HELP := """WASD  walk    Shift  run    JUMP    Mouse  look    Wheel  zoom
 1-7  weather (clear, cloudy, overcast, rain, storm, snow, blizzard)    0  weather changes by itself
 T  clock on/off    [ ]  an hour back/forward    F  light the fire again
-F1  help    F2  HUD    F11  full screen    F12  screenshot    Esc  free the mouse"""
+F1  help    F2  HUD    F3  one effect off at a time    F11  full screen    F12  screenshot    Esc  free the mouse"""
 
 
 func _label(p_size: int, p_alpha := 1.0) -> Label:
@@ -84,13 +84,16 @@ func _unhandled_input(event: InputEvent) -> void:
 func _process(delta: float) -> void:
 	var showcase := get_node_or_null(showcase_path)
 	if _help.text == HELP and showcase and showcase.get("player"):
-		# The MotionBricks character does not jump.
-		_help.text = HELP.replace("JUMP    ", "" if showcase.get("player").has_method("get_status") else "Space  jump    ")
+		# The MotionBricks character rolls too.
+		_help.text = HELP.replace("JUMP    ", "Space  jump    C  roll    " if showcase.get("player").has_method("get_status") else "Space  jump    ")
 	var parts := PackedStringArray()
 	if showcase:
 		parts.append(showcase.call("get_clock_text") + ("" if showcase.get("time_running") else " (stopped)"))
 		parts.append(showcase.call("get_weather_text"))
 		parts.append(showcase.call("get_character_text"))
+		var off: String = showcase.call("get_effect_text")
+		if off != "":
+			parts.append(off)
 	parts.append("%d fps" % Engine.get_frames_per_second())
 	_info.text = "   ".join(parts)
 	var warmer := get_node_or_null(warmer_path)

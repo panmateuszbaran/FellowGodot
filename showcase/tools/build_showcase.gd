@@ -615,13 +615,18 @@ func _build_village(p_root: Node3D, p_window: Material) -> Node3D:
 func _build_campfire(p_village: Node3D) -> void:
 	# A gas volume with kindling (Burn Lab's), a log burning on it, a ring of stones.
 	var fire: Node3D = ClassDB.instantiate("FellowGasVolume3D")
-	fire.set("size", Vector3(3.2, 4.0, 3.2))
-	fire.set("resolution", 48)
+	# Tall enough for the smoke to thin out before it leaves through the top (it fades out at the box's sides and top:
+	# edge_fade, so the box does not show).
+	fire.set("size", Vector3(4.0, 6.5, 4.0))
+	fire.set("resolution", 72)
+	fire.set("smoke_dissipation", 0.22)
+	fire.set("edge_fade", 0.7)
+	fire.set("prewarm_steps", 240) # burning when the game starts
 	fire.set("turbulence", 5.0)
 	fire.set("vorticity", 0.35)
 	fire.set("fire_intensity", 18.0)
 	fire.set("physics_obstacles", false)
-	fire.set("closed_faces", 55)
+	fire.set("closed_faces", 4) # the floor: the smoke leaves through the sides as well as the top
 	fire.set("fire_light_shadows", true)
 	_add(p_village, fire, "Campfire")
 	var kindling: Node3D = ClassDB.instantiate("FellowGasEmitter3D")
@@ -732,7 +737,7 @@ func _build_player() -> void:
 	_add(player, pivot, "CameraPivot")
 	var arm := SpringArm3D.new()
 	arm.spring_length = 4.5
-	arm.collision_mask = 3
+	arm.collision_mask = 2 # the buildings (the script keeps the camera over the terrain and its grass)
 	arm.margin = 0.2
 	arm.rotation.x = deg_to_rad(-14.0)
 	var sphere := SphereShape3D.new()
@@ -769,7 +774,7 @@ func _build_neural_player() -> void:
 	_add(root, pivot, "CameraPivot")
 	var arm := SpringArm3D.new()
 	arm.spring_length = 4.5
-	arm.collision_mask = 3
+	arm.collision_mask = 2 # the buildings (the script keeps the camera over the terrain and its grass)
 	arm.margin = 0.2
 	arm.rotation.x = deg_to_rad(-14.0)
 	var sphere := SphereShape3D.new()

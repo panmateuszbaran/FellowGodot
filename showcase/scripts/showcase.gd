@@ -3,10 +3,23 @@ extends Node3D
 ## has burned, and the keys (the HUD lists them):
 ##   1-7  weather: clear, cloudy, overcast, rain, storm, snow, blizzard; 0: the weather changes by itself
 ##   T    the day's clock runs or stops; [ and ]: an hour back or forward
-##   F    the campfire lit again; F1 the help, F2 the HUD, F11 full screen, F12 a screenshot (user://)
+##   F    the campfire lit again; F1 the help, F2 the HUD, F3 one effect off at a time, F11 full screen, F12 a
+##        screenshot (user://)
 ##   Esc  frees the mouse (a click captures it again)
 
 const WEATHER_NAMES := ["Clear", "Cloudy", "Overcast", "Rain", "Storm", "Snow", "Blizzard"]
+## F3: one effect off at a time, to see what each adds (or which one does something you do not like): a project
+## setting (rendering/fellow/*, read every frame), the environment's ("env:") or the viewport's ("viewport:").
+const EFFECTS := [
+	["contact shadows", "rendering/fellow/post/contact_shadows/enabled", false],
+	["light shafts", "rendering/fellow/post/light_shafts/intensity", 0.0],
+	["bloom", "rendering/fellow/post/bloom/enabled", false],
+	["clouds and their shadows", "rendering/fellow/post/clouds/enabled", false],
+	["aerial perspective", "rendering/fellow/post/atmosphere/aerial_perspective", false],
+	["ambient occlusion (SSAO)", "env:ssao_enabled", false],
+	["temporal antialiasing (TAA)", "viewport:use_taa", false],
+	["autotune", "rendering/fellow/autotune/enabled", false],
+]
 const AUTO_SEQUENCE := [0, 1, 3, 4, 2, 0, 1, 5, 6, 1]
 
 @export var day_length := 720.0 ## seconds of play for a whole day
@@ -32,6 +45,11 @@ var _lamps: Array[OmniLight3D] = []
 var _window_material: StandardMaterial3D
 var _sun_energy := 1.0
 var _moon_energy := 0.08
+var _spin := 0.0
+var _effect := -1 # the effect F3 turned off (-1: none)
+var _effect_defaults := []
+var _tilt := 0.0
+var _tilt_t := 0.0
 
 
 func _ready() -> void:
@@ -45,7 +63,10 @@ func _ready() -> void:
 	var start_weather := 0
 	# Options for pictures and tests (after -- on the command line): --showcase_time=<0..1>, --showcase_weather=<0..6>,
 	# --showcase_stop (the clock stopped), --showcase_at=<x>,<z>,<heading°>[,<zoom>[,<pitch°>]] (the player and its
-	# camera), --showcase_walk=<seconds> (walking forward), --showcase_run=1 (running).
+	# camera), --showcase_walk=<seconds> (walking forward), --showcase_run=1 (running), --showcase_spin=<°/s> (the camera
+	# turning round the player), --showcase_tilt=<°/s> (its pitch swept from -70° to 35° and back), --showcase_jump=<s>,
+	# --showcase_roll=<s> (a jump or a roll that many seconds in), --showcase_off=<n> (EFFECTS[n] off, as F3),
+	# --showcase_autowalk=<heading°> (MotionBricks' character walking that way whatever the camera does).
 	for a in OS.get_cmdline_user_args():
 		var kv := a.trim_prefix("--").split("=", true, 1)
 		match kv[0]:
@@ -72,6 +93,21 @@ func _ready() -> void:
 				get_tree().create_timer(float(kv[1])).timeout.connect(func() -> void: Input.action_release("move_forward"))
 			"showcase_run":
 				Input.action_press("run")
+			"showcase_spin":
+				_spin = float(kv[1])
+			"showcase_autowalk":
+				# Walking towards a heading (degrees, as the camera's) whatever the camera does.
+				var h := deg_to_rad(float(kv[1]))
+				player.set("autopilot", Vector3(-sin(h), 0.0, -cos(h)))
+			"showcase_off":
+				for i in int(kv[1]) + 1:
+					_next_effect()
+			"showcase_tilt":
+				_tilt = float(kv[1])
+			"showcase_jump":
+				get_tree().create_timer(float(kv[1])).timeout.connect(func() -> void: _tap("jump"))
+			"showcase_roll":
+				get_tree().create_timer(float(kv[1])).timeout.connect(func() -> void: _tap("roll"))
 	_set_weather(start_weather, 0.0)
 	_apply_time()
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
@@ -129,6 +165,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		_relight()
 	elif k == KEY_ESCAPE:
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	elif k == KEY_F3:
+		_next_effect()
 	elif k == KEY_F11:
 		var full := DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED if full else DisplayServer.WINDOW_MODE_FULLSCREEN)
@@ -139,7 +177,30 @@ func _unhandled_input(event: InputEvent) -> void:
 		hud.call("flash", "Screenshot: " + ProjectSettings.globalize_path(path))
 
 
+## An action pressed for a frame (the command line's jump and roll).
+func _tap(p_action: String) -> void:
+	var e := InputEventAction.new()
+	e.action = p_action
+	e.pressed = true
+	Input.parse_input_event(e)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var r := InputEventAction.new()
+	r.action = p_action
+	Input.parse_input_event(r)
+
+
 func _process(delta: float) -> void:
+	if _spin != 0.0:
+		var pivot := player.get_node_or_null("CameraPivot") as Node3D
+		if pivot:
+			pivot.rotation.y += deg_to_rad(_spin) * delta
+	if _tilt != 0.0:
+		# The camera's pitch from -70° to 35° and back (the mouse's limits).
+		var arm := player.get_node_or_null("CameraPivot/SpringArm3D") as Node3D
+		if arm:
+			_tilt_t += _tilt * delta
+			arm.rotation.x = deg_to_rad(-70.0 + pingpong(_tilt_t, 105.0))
 	if time_running:
 		time_of_day = fposmod(time_of_day + delta / day_length, 1.0)
 	_apply_time()
@@ -156,6 +217,43 @@ func _process(delta: float) -> void:
 			_relight()
 	else:
 		_burned_out_t = 0.0
+
+
+func _effect_get(p_key: String) -> Variant:
+	if p_key.begins_with("env:"):
+		return world_env.environment.get(p_key.trim_prefix("env:"))
+	if p_key.begins_with("viewport:"):
+		return get_viewport().get(p_key.trim_prefix("viewport:"))
+	return ProjectSettings.get_setting(p_key)
+
+
+func _effect_set(p_key: String, p_value: Variant) -> void:
+	if p_key.begins_with("env:"):
+		world_env.environment.set(p_key.trim_prefix("env:"), p_value)
+	elif p_key.begins_with("viewport:"):
+		get_viewport().set(p_key.trim_prefix("viewport:"), p_value)
+	else:
+		ProjectSettings.set_setting(p_key, p_value)
+
+
+## F3: the next effect off (the one before back on); after the last, all on again.
+func _next_effect() -> void:
+	if _effect_defaults.is_empty():
+		for e in EFFECTS:
+			_effect_defaults.append(_effect_get(e[1]))
+	if _effect >= 0:
+		_effect_set(EFFECTS[_effect][1], _effect_defaults[_effect])
+	_effect += 1
+	if _effect >= EFFECTS.size():
+		_effect = -1
+		hud.call("flash", "All effects on")
+		return
+	_effect_set(EFFECTS[_effect][1], EFFECTS[_effect][2])
+	hud.call("flash", "Off: %s  (F3: the next one)" % EFFECTS[_effect][0])
+
+
+func get_effect_text() -> String:
+	return "" if _effect < 0 else "off: " + EFFECTS[_effect][0]
 
 
 func _relight() -> void:

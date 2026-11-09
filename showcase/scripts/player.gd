@@ -16,6 +16,8 @@ const Humanoid := preload("res://tools/humanoid_builder.gd")
 @export var min_zoom := 1.6
 @export var max_zoom := 9.0
 @export var start_yaw := 0.0 ## the camera's heading at the start (radians); the character faces the same way
+@export var terrain_path := NodePath("../Terrain")
+@export var camera_clearance := 0.9 ## the camera kept this high over the terrain, out of the grass
 
 @onready var model: Node3D = $Model
 @onready var pivot: Node3D = $CameraPivot
@@ -28,12 +30,13 @@ var _blend := 0.0
 var _air := 0.0
 var _zoom := 4.5
 var _swimming := false
+var _terrain: Node
 
 
 static func ensure_actions() -> void:
 	var keys := {
 		"move_forward": [KEY_W, KEY_UP], "move_back": [KEY_S, KEY_DOWN], "move_left": [KEY_A, KEY_LEFT],
-		"move_right": [KEY_D, KEY_RIGHT], "jump": [KEY_SPACE], "run": [KEY_SHIFT],
+		"move_right": [KEY_D, KEY_RIGHT], "jump": [KEY_SPACE], "run": [KEY_SHIFT], "roll": [KEY_C, KEY_CTRL],
 	}
 	for action in keys:
 		if InputMap.has_action(action):
@@ -55,6 +58,9 @@ static func ensure_actions() -> void:
 	var rb := InputEventJoypadButton.new()
 	rb.button_index = JOY_BUTTON_LEFT_SHOULDER
 	InputMap.action_add_event("run", rb)
+	var bb := InputEventJoypadButton.new()
+	bb.button_index = JOY_BUTTON_B
+	InputMap.action_add_event("roll", bb)
 
 
 func _ready() -> void:
@@ -65,6 +71,7 @@ func _ready() -> void:
 	model.rotation.y = start_yaw + PI
 	_zoom = arm.spring_length
 	tree.active = true
+	_terrain = get_node_or_null(terrain_path)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -135,6 +142,15 @@ func _physics_process(delta: float) -> void:
 	tree.set("parameters/locomotion/blend_position", _blend)
 	tree.set("parameters/speed/scale", time_scale)
 	tree.set("parameters/air/blend_amount", _air)
+
+
+func _process(_delta: float) -> void:
+	# Looking up swings the camera down to the ground: it slides over it instead, out of the grass.
+	if _terrain:
+		var cp := camera.global_position
+		var h: float = _terrain.call("get_height", cp)
+		if not is_nan(h) and cp.y < h + camera_clearance:
+			camera.global_position = Vector3(cp.x, h + camera_clearance, cp.z)
 
 
 func place(p_position: Vector3, p_yaw: float) -> void:

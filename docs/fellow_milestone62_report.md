@@ -80,3 +80,37 @@ its tunables again and compiles their other variant of the pipelines in view, ah
 
 The RTX's soak with milestone 62's template (the pipelines after the warm-up, against f364's 88); the burning
 material in baked exports.
+
+## 6. Addendum: the showcase after the owner's first play
+
+The owner played the showcase on the laptop and reported four things; each answered on lavapipe.
+
+* **The campfire's smoke ended in a hard edge** (the top of its 4 m box). `FellowGasVolume3D.edge_fade` (new, metres,
+  0 by default — every existing picture the same): the smoke is drawn faded out within that distance of the box's
+  faces, all but a closed floor — in the camera's march and in the light volume that shadows it, not in the
+  simulation. The showcase's campfire: a 4 × 6.5 × 4 m box (72 cells up) open at the sides and the top, the smoke
+  dissipating at 0.22 /s, faded over 0.7 m: it billows, thins and is gone before any face; no edge shows (pictures
+  from 16 m, lavapipe).
+* **"At some angles the screen is darker and flickers."** A 360° turn of the camera at 36 °/s (lavapipe, the clock
+  stopped, the picture's mean luminance per frame): it changes smoothly with the view — 0.39 towards the sun (the
+  houses' shaded sides), 0.52 with the sun behind — at most 0.004 from one frame to the next. Sweeping the camera's
+  pitch over the mouse's range at 30 °/s: one-frame dips of 0.016-0.023 (the 10th percentile 0.37 → 0.29) at the same
+  pitch both ways, about 15° up — looking up swung the camera down until its spring arm met the ground, among the
+  grass, and blades next to the lens filled the picture for a frame and left it. The cameras of both characters now
+  keep 0.9 m over the terrain (they slide over it) and their spring arms collide with the buildings only: the same
+  sweep, at most 0.004 between frames. F3 turns FellowEngine's effects off one at a time (contact shadows, light
+  shafts, bloom, clouds, aerial perspective, SSAO, TAA, autotune), for anything the RTX shows that lavapipe does not.
+* **The character was slow.** MotionBricks' network walks at about 1.4 m/s and runs up to about 3.5 m/s (faster, it
+  stumbles). The showcase now plays its motion 1.3 times faster than recorded while it moves (the feet stay planted:
+  the same motion, quicker): walking about 2 m/s, running 4.3 m/s.
+* **A roll and a jump.** The network makes neither; the script draws them over its pose. A jump (Space): the body
+  raised on a parabola (4 m/s up, 0.73 m at the top), the legs drawn up and the arms forward on the way up, down again
+  for the landing. A roll (C, the gamepad's B): the stride undone, the body tucked into a ball (hips, knees, spine,
+  neck), lowered until the ball's lowest point is on the ground and turned once about its centre in 0.95 s while the
+  network runs on underneath; every rotation is about the body's right axis, set through the parents' poses.
+
+Also: the campfire burns from the start (`prewarm_steps` 240), and `prewarm_steps` no longer overflows the GPU's queue
+of steps (64 until the next frame) when several physics ticks come before a frame — a slow first frame, or a fixed
+frame rate below the physics' (Movie Maker at 30 fps: 2 × 33 steps a frame, the oldest dropped with a warning): a
+tick's prewarm batch is what the queue still holds since the last frame drawn, and the node asks for frames while it
+prewarms.

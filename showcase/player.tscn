@@ -52,19 +52,19 @@ node_connections = [&"output", 0, &"air", &"speed", 0, &"locomotion", &"air", 0,
 [sub_resource type="SphereShape3D" id="SphereShape3D_op7ga"]
 radius = 0.25
 
-[node name="Player" type="CharacterBody3D" unique_id=44472884]
+[node name="Player" type="CharacterBody3D" unique_id=1713481656]
 collision_mask = 3
 floor_max_angle = 0.87266463
 floor_snap_length = 0.4
 script = ExtResource("1_hqtel")
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=1936873345]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=101420131]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.875, 0)
 shape = SubResource("CapsuleShape3D_dw050")
 
-[node name="Model" type="Node3D" parent="." unique_id=1700597179]
+[node name="Model" type="Node3D" parent="." unique_id=1516638650]
 
-[node name="Skeleton3D" type="Skeleton3D" parent="Model" unique_id=32211042]
+[node name="Skeleton3D" type="Skeleton3D" parent="Model" unique_id=1091693213]
 bones/0/name = "hips"
 bones/0/parent = -1
 bones/0/rest = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 0.95, 0)
@@ -430,32 +430,32 @@ bones/51/position = Vector3(0, 0.1456022, 0)
 bones/51/rotation = Quaternion(0, 0, -0.107730955, 0.9941801)
 bones/51/scale = Vector3(1, 1, 1)
 
-[node name="Body" type="MeshInstance3D" parent="Model/Skeleton3D" unique_id=2004831071]
+[node name="Body" type="MeshInstance3D" parent="Model/Skeleton3D" unique_id=1103655561]
 mesh = ExtResource("2_sweqy")
 skin = ExtResource("3_2hs0m")
 skeleton = NodePath("..")
 
-[node name="Foot_l" type="BoneAttachment3D" parent="Model/Skeleton3D" unique_id=544648900]
+[node name="Foot_l" type="BoneAttachment3D" parent="Model/Skeleton3D" unique_id=1880494106]
 transform = Transform3D(-1.1920929e-07, -5.9604645e-08, 1.0000001, 0.961524, -0.2747211, 5.9604645e-08, 0.27472118, 0.961524, 1.1920929e-07, -0.1, 0.07999998, -0.02)
 bone_name = "foot_l"
 bone_idx = 46
 
-[node name="SnowTracker" type="FellowSnowTracker3D" parent="Model/Skeleton3D/Foot_l" unique_id=673001778]
+[node name="SnowTracker" type="FellowSnowTracker3D" parent="Model/Skeleton3D/Foot_l" unique_id=1337132022]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.04, 0)
 radius = 0.07
 contact_height = 0.12
 
-[node name="Foot_r" type="BoneAttachment3D" parent="Model/Skeleton3D" unique_id=1951048582]
+[node name="Foot_r" type="BoneAttachment3D" parent="Model/Skeleton3D" unique_id=1503681786]
 transform = Transform3D(-1.1920929e-07, -5.9604645e-08, 1.0000001, 0.961524, -0.2747211, 5.9604645e-08, 0.27472118, 0.961524, 1.1920929e-07, 0.1, 0.07999998, -0.02)
 bone_name = "foot_r"
 bone_idx = 50
 
-[node name="SnowTracker" type="FellowSnowTracker3D" parent="Model/Skeleton3D/Foot_r" unique_id=183327045]
+[node name="SnowTracker" type="FellowSnowTracker3D" parent="Model/Skeleton3D/Foot_r" unique_id=69005962]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.04, 0)
 radius = 0.07
 contact_height = 0.12
 
-[node name="AnimationTree" type="AnimationTree" parent="." unique_id=2034844056]
+[node name="AnimationTree" type="AnimationTree" parent="." unique_id=1717616701]
 root_node = NodePath("../Model")
 libraries/ = ExtResource("4_1jxqw")
 tree_root = SubResource("AnimationNodeBlendTree_u1c27")
@@ -463,17 +463,17 @@ parameters/locomotion/blend_position = 0.0
 parameters/speed/scale = 1.0
 parameters/air/blend_amount = 0.0
 
-[node name="CameraPivot" type="Node3D" parent="." unique_id=1513206486]
+[node name="CameraPivot" type="Node3D" parent="." unique_id=1542652607]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.55, 0)
 
-[node name="SpringArm3D" type="SpringArm3D" parent="CameraPivot" unique_id=1244333894]
+[node name="SpringArm3D" type="SpringArm3D" parent="CameraPivot" unique_id=1767466330]
 transform = Transform3D(1, 0, 0, 0, 0.9702957, 0.2419219, 0, -0.2419219, 0.9702957, 0, 0, 0)
-collision_mask = 3
+collision_mask = 2
 shape = SubResource("SphereShape3D_op7ga")
 spring_length = 4.5
 margin = 0.2
 
-[node name="Camera3D" type="Camera3D" parent="CameraPivot/SpringArm3D" unique_id=2137531005]
+[node name="Camera3D" type="Camera3D" parent="CameraPivot/SpringArm3D" unique_id=272784040]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.45, 0, 0)
 current = true
 fov = 68.0

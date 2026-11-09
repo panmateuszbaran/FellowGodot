@@ -29,14 +29,14 @@ struct Volume {
 	vec4 w2g0; // world -> grid (cells), rows; w: translation
 	vec4 w2g1;
 	vec4 w2g2;
-	ivec4 size; // nx, ny, nz, flags (bit 0: casts shadows)
+	ivec4 size; // nx, ny, nz, flags (bit 0: casts shadows, 1: in view, 2-7: the faces the smoke fades at, closed_faces' order)
 	ivec4 light_size; // the light volume's size; w: coarse bricks per axis (x)
 	vec4 albedo_density; // rgb scattering albedo, w: extinction per unit smoke per metre
 	vec4 emission; // x intensity, y ambient temperature (K), z march step (m), w anisotropy (g)
 	vec4 fire_light_position; // world; w: 1 when the fire light is on
 	vec4 fire_light_intensity; // rgb radiant intensity (the scene's units)
 	vec4 misc; // x ambient factor, y self-shadow density factor, z scene shadow factor, w metres per cell
-	vec4 fire; // x the colour temperature's scale (the emission's colour from temperature * this), yzw unused
+	vec4 fire; // x the colour temperature's scale (the emission's colour from temperature * this), y edge fade (cells), zw unused
 };
 
 layout(set = 0, binding = 0, std140) uniform Params {
@@ -75,6 +75,28 @@ vec2 slab(vec3 p_o, vec3 p_d, vec3 p_n) {
 	vec3 tmin = min(ta, tb);
 	vec3 tmax = max(ta, tb);
 	return vec2(max(max(tmin.x, tmin.y), max(tmin.z, 0.0)), min(tmax.x, min(tmax.y, tmax.z)));
+}
+
+// The smoke drawn faded out within fire.y cells of the faces flagged in size.w (bits 2-7: -X, +X, -Y, +Y, -Z, +Z), so
+// the box does not show where the gas leaves it or piles against a wall; 1 everywhere without.
+float edge_fade(int p_v, vec3 p_g) {
+	Volume v = params.volumes[p_v];
+	int m = (v.size.w >> 2) & 63;
+	if (m == 0) {
+		return 1.0;
+	}
+	float f = max(v.fire.y, 1e-3);
+	vec3 n = vec3(v.size.xyz);
+	vec3 lo = clamp(p_g / f, 0.0, 1.0);
+	vec3 hi = clamp((n - p_g) / f, 0.0, 1.0);
+	float k = 1.0;
+	k *= (m & 1) != 0 ? lo.x : 1.0;
+	k *= (m & 2) != 0 ? hi.x : 1.0;
+	k *= (m & 4) != 0 ? lo.y : 1.0;
+	k *= (m & 8) != 0 ? hi.y : 1.0;
+	k *= (m & 16) != 0 ? lo.z : 1.0;
+	k *= (m & 32) != 0 ? hi.z : 1.0;
+	return k * k * (3.0 - 2.0 * k);
 }
 
 #if defined(MODE_TRACE)
@@ -152,7 +174,7 @@ void main() {
 			s += max(exit_t, 0.0) + 0.01;
 			continue;
 		}
-		tau += textureLod(scalars, p / n, 0.0).x * density * STEP;
+		tau += textureLod(scalars, p / n, 0.0).x * edge_fade(vi, p) * density * STEP;
 		s += STEP;
 	}
 	imageStore(light_out, l, vec4(tau));
@@ -329,8 +351,9 @@ void main() {
 				ambient_done = true;
 			}
 			vec4 sc = textureLod(sampler3D(scalars[i], linear_clamp), gp / n, 0.0);
-			float sigma_t = sc.x * density;
-			vec3 eps = sc.y > 300.0 ? emission_rgb(i, sc.y) : vec3(0.0);
+			float fade = edge_fade(i, gp);
+			float sigma_t = sc.x * density * fade;
+			vec3 eps = sc.y > 300.0 ? emission_rgb(i, sc.y) * fade : vec3(0.0);
 			if (sigma_t > 1e-5 || dot(eps, vec3(1.0)) > 0.0) {
 				vec3 in_scatter = vec3(0.0);
 				if (sigma_t > 1e-5) {

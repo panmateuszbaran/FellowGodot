@@ -104,6 +104,9 @@
 		<member name="cooling" type="float" setter="set_cooling" getter="get_cooling" default="1.2">
 			How fast hot gas cools towards the ambient temperature, per second.
 		</member>
+		<member name="edge_fade" type="float" setter="set_edge_fade" getter="get_edge_fade" default="0.0">
+			Draws the smoke faded out within this distance (metres) of the box's faces, all but a closed floor ([member closed_faces]), so the box does not show where the smoke leaves through an open face or piles against a wall. It changes only the drawing (and the smoke's shadows), not the simulation. 0: none.
+		</member>
 		<member name="expansion" type="float" setter="set_expansion" getter="get_expansion" default="0.4">
 			How much burning fuel expands the gas (a source in the pressure projection): flames that push outwards.
 		</member>
@@ -153,7 +156,7 @@
 			How the pressure projection is solved: multigrid V-cycles (faster to converge) or red-black SOR.
 		</member>
 		<member name="prewarm_steps" type="int" setter="set_prewarm_steps" getter="get_prewarm_steps" default="0">
-			Steps simulated at once when the simulation starts or resets, so the fire is already burning.
+			Steps simulated when the simulation starts or resets, so the fire is already burning: up to 32 a physics tick over the first frames, as many as the GPU's queue of steps takes before each frame is drawn.
 		</member>
 		<member name="render_enabled" type="bool" setter="set_render_enabled" getter="is_render_enabled" default="true">
 			Draws the volume (Forward+ and Mobile simulate it; only Forward+ draws it).

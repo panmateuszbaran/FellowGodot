@@ -618,6 +618,9 @@ void FellowGasVolume3D::_send_render() {
 	rp.self_shadow = self_shadow;
 	rp.scene_shadow = shadow_strength;
 	rp.step_cells = render_step;
+	rp.edge_fade = edge_fade;
+	// Every face but a closed floor: the smoke sits on that one, and the fire burns there.
+	rp.edge_fade_faces = int32_t(63u & ~(closed_faces & FACE_NEG_Y));
 	rp.fire_light_position[0] = fire_light_position.x;
 	rp.fire_light_position[1] = fire_light_position.y;
 	rp.fire_light_position[2] = fire_light_position.z;
@@ -711,12 +714,22 @@ void FellowGasVolume3D::_notification(int p_what) {
 			if (!simulation_enabled) {
 				return;
 			}
-			// Prewarm in batches (the GPU queue holds 64 steps), then one tick's steps.
-			const int batch = MIN(prewarm_left, 32);
+			// Prewarm in batches, then one tick's steps. The GPU queue holds 64 steps until the next frame is drawn:
+			// several ticks before a frame (a slow one, a fixed frame rate below the physics') share that room.
+			const uint64_t frame = Engine::get_singleton()->get_frames_drawn();
+			if (frame != queued_frame) {
+				queued_frame = frame;
+				queued_steps = 0;
+			}
+			const int batch = MIN(prewarm_left, MIN(32, MAX(0, 64 - 8 - substeps - queued_steps)));
 			for (int i = 0; i < batch; i++) {
 				_queue_step(false);
 			}
 			prewarm_left -= batch;
+			queued_steps += batch + substeps;
+			if (prewarm_left > 0) {
+				Fellow::request_redraw(); // the frames that take the queued steps (the editor draws only on a change)
+			}
 			// Still in the editor with its Animate Nodes toggle off (milestone 52): prewarmed, then not stepped.
 			if (fellow_editor_still()) {
 				return;
@@ -838,6 +851,8 @@ void FellowGasVolume3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_shadow_strength"), &FellowGasVolume3D::get_shadow_strength);
 	ClassDB::bind_method(D_METHOD("set_render_step", "cells"), &FellowGasVolume3D::set_render_step);
 	ClassDB::bind_method(D_METHOD("get_render_step"), &FellowGasVolume3D::get_render_step);
+	ClassDB::bind_method(D_METHOD("set_edge_fade", "metres"), &FellowGasVolume3D::set_edge_fade);
+	ClassDB::bind_method(D_METHOD("get_edge_fade"), &FellowGasVolume3D::get_edge_fade);
 	ClassDB::bind_method(D_METHOD("set_fire_light", "enable"), &FellowGasVolume3D::set_fire_light);
 	ClassDB::bind_method(D_METHOD("is_fire_light"), &FellowGasVolume3D::is_fire_light);
 	ClassDB::bind_method(D_METHOD("set_fire_light_energy", "energy"), &FellowGasVolume3D::set_fire_light_energy);
@@ -913,6 +928,7 @@ void FellowGasVolume3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "cast_shadows"), "set_cast_shadows", "is_casting_shadows");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "shadow_strength", PROPERTY_HINT_RANGE, "0,4,0.01"), "set_shadow_strength", "get_shadow_strength");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "render_step", PROPERTY_HINT_RANGE, "0.25,4,0.01,suffix:cells"), "set_render_step", "get_render_step");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "edge_fade", PROPERTY_HINT_RANGE, "0,4,0.01,or_greater,suffix:m"), "set_edge_fade", "get_edge_fade");
 	ADD_GROUP("Fire Light", "fire_light_");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "fire_light"), "set_fire_light", "is_fire_light");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "fire_light_energy", PROPERTY_HINT_RANGE, "0,16,0.01,or_greater"), "set_fire_light_energy", "get_fire_light_energy");

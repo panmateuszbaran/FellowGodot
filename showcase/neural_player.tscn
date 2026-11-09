@@ -5,23 +5,23 @@
 [sub_resource type="SphereShape3D" id="SphereShape3D_6qp1v"]
 radius = 0.25
 
-[node name="Player" type="Node3D" unique_id=115525460]
+[node name="Player" type="Node3D" unique_id=2083173726]
 script = ExtResource("1_c2tb1")
 
-[node name="Character" type="FellowMotionCharacter3D" parent="." unique_id=1152891612]
+[node name="Character" type="FellowMotionCharacter3D" parent="." unique_id=388509796]
 body_color = Color(0.5, 0.52, 0.56, 1)
 
-[node name="CameraPivot" type="Node3D" parent="." unique_id=245152442]
+[node name="CameraPivot" type="Node3D" parent="." unique_id=2017323429]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.55, 0)
 
-[node name="SpringArm3D" type="SpringArm3D" parent="CameraPivot" unique_id=1031259690]
+[node name="SpringArm3D" type="SpringArm3D" parent="CameraPivot" unique_id=1979977660]
 transform = Transform3D(1, 0, 0, 0, 0.9702957, 0.2419219, 0, -0.2419219, 0.9702957, 0, 0, 0)
-collision_mask = 3
+collision_mask = 2
 shape = SubResource("SphereShape3D_6qp1v")
 spring_length = 4.5
 margin = 0.2
 
-[node name="Camera3D" type="Camera3D" parent="CameraPivot/SpringArm3D" unique_id=274309129]
+[node name="Camera3D" type="Camera3D" parent="CameraPivot/SpringArm3D" unique_id=1733546725]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.45, 0, 0)
 current = true
 fov = 68.0

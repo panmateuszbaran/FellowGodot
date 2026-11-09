@@ -105,6 +105,7 @@ the node places at the fire lights the scene. Without such a node nothing of it 
 | `sparse` (on), `sparse_margin` (2 bricks) | only the 4³ bricks within the margin of smoke, heat, fuel or an emitter simulated (the velocity one brick further), the air beyond still (the wind, zero pressure) — 0119: Fire Lab's simulation −51 % at 128 cells, −11 % at 64 |
 | `physics_obstacles`, `collision_mask` | the bodies inside the box as obstacles (spheres, boxes, capsules, cylinders, world boundaries; convex shapes as their box; at most 16); a body moved faster than six cells per step counts as teleported |
 | `smoke_color`, `smoke_density` (4 / m), `anisotropy`, `ambient_strength`, `self_shadow`, `render_step` | the smoke's look |
+| `edge_fade` (0 m) | the smoke drawn faded out within this distance of the box's faces (all but a closed floor), so the box does not show where the smoke leaves it or piles against a wall; only the drawing (and the smoke's shadows) |
 | `fire_intensity` (20), `fire_temperature_scale` (1.4) | the fire's blackbody emission (brightness by the fourth power of the temperature) and its colour's temperature |
 | `cast_shadows`, `shadow_strength` | the sun's shadow through the smoke on the scene (in the contact shadow mask; not with the ray-traced sun shadows) |
 | `fire_light`, `fire_light_energy`, `fire_light_range`, `fire_light_shadows` | the omni light at the fire, from the simulated emission (2-3 frames late) |
