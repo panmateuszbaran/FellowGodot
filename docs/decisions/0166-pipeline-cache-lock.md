@@ -66,8 +66,20 @@ memory at start, not most of it). A
 game's cache holds its own pipelines only; the bench's holds every build's (decision 0050's limit, 1 GB, starts it
 again).
 
+**Milestone 61 (job f364):** FellowEngine's stats now give the driver's pipeline cache (`pipeline_cache_bytes`) and the
+soak writes it each second. The same 20-minute soak with milestone 61's build: the cache 370.7 MB at the start and
+371.2 MB at the end — flat — while the process grew 1 348 → 1 589 MB after the warm-up (video memory 405 → 414 MB and
+the objects flat, as before). The growth follows the pipelines compiled: 88 after the warm-up, +241 MB (2.7 MB each);
+f363's 151, +408 MB (2.7 MB each); in the minutes without pipelines compiled the process stayed level (from the 6th to
+the 16th minute 5 pipelines, the process between 1 499 and 1 562 MB). So it is not a leak nor the cache file: each pipeline the driver compiles
+keeps its own memory in the process (the cache's data hardly grows: they were in it already). Fewer pipelines after the
+warm-up (decision 0167) is less growth. The process's memory at the start is not the build's: 1.25 GB in f362b and
+1.98 GB in f363 with the same build, 1.24 GB in f364 (what else the laptop ran: the GPU's memory in use 3.8 GB in f363,
+2.7 GB in f364).
+
 ## Decision
 
 **KEEP.** The slice's long hitches during background compilation are gone: the largest frame of 20 minutes 397 → 20
-ms, with more pipelines compiled than before. Not done: a smaller limit for the bench's ever-growing cache file
+ms, with more pipelines compiled than before. The soaks' memory growth is the pipelines compiled, about 2.7 MB each on
+the RTX (milestone 61). Not done: a smaller limit for the bench's ever-growing cache file
 (`frame/pipeline_cache_max_mb`), a save that does not copy the whole cache (the driver gives it whole).

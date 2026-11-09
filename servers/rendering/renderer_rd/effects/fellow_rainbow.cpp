@@ -124,7 +124,9 @@ FellowRainbow::FellowRainbow() {
 	modes.push_back("\n");
 	shader.initialize(modes);
 	shader_version = shader.version_create();
-	pipeline = RD::get_singleton()->compute_pipeline_create(shader.version_get_shader(shader_version, 0));
+	// Compiled on the worker threads (decision 0169): the renderer makes the rainbow when a rain node that can show one is
+	// active, before its first bow; the pipeline is made at the first.
+	shader.fellow_version_compile_start(shader_version);
 	Vector<uint8_t> zeros;
 	zeros.resize(sizeof(UBO));
 	zeros.fill(0);
@@ -189,8 +191,12 @@ void FellowRainbow::process(const Params &p_params) {
 	u.size[1] = p_params.size.y;
 	RD::get_singleton()->buffer_update(ubo, 0, sizeof(UBO), &u);
 
-	RD::get_singleton()->draw_command_begin_label("FellowEngine Rainbow");
 	RID shader_rd = shader.version_get_shader(shader_version, 0);
+	ERR_FAIL_COND(shader_rd.is_null());
+	if (pipeline.is_null()) {
+		pipeline = RD::get_singleton()->compute_pipeline_create(shader_rd);
+	}
+	RD::get_singleton()->draw_command_begin_label("FellowEngine Rainbow");
 	RD::ComputeListID list = RD::get_singleton()->compute_list_begin();
 	RD::get_singleton()->compute_list_bind_compute_pipeline(list, pipeline);
 	RD::Uniform u_params(RD::UNIFORM_TYPE_UNIFORM_BUFFER, 0, ubo);

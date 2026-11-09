@@ -294,6 +294,9 @@ public:
 
 	static void set_shader_cache_user_dir(const String &p_dir);
 	static void fellow_finalize(); // FellowEngine (decision 0061): releases the helpers of the parallel cache loads
+	// FellowEngine (decision 0169): starts a version's compilation (or its read from the shader cache) without waiting
+	// for it, for an effect made ahead of its first use; version_get_shader() then waits only for what is not done.
+	void fellow_version_compile_start(RID p_version);
 	static const String &get_shader_cache_user_dir();
 	static void set_shader_cache_res_dir(const String &p_dir);
 	static const String &get_shader_cache_res_dir();

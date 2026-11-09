@@ -422,6 +422,7 @@ void FellowRain3D::_push_state() {
 	}
 	st.showers = (is_visible_in_tree() && active == this && rain > 0.0f) ? showers : 0.0f;
 	st.rainbow = is_visible_in_tree() && active == this ? rainbow * rain_seen : 0.0f;
+	st.rainbow_enabled = is_visible_in_tree() && active == this && rainbow > 0.0f;
 	st.shafts = is_visible_in_tree() && active == this ? MIN(shafts * rain, 1.0f) : 0.0f;
 	st.shafts_snow = _is_snow();
 	st.time = float(Math::fmod(time, 3600.0));
@@ -1285,9 +1286,9 @@ FellowRain3D::~FellowRain3D() {
 		active = nullptr;
 	}
 	if (RS::get_singleton() && rd) {
-	// FellowEngine: the RenderingDevice's resources are freed on the render thread. With a separate one
-	// (--render-thread separate) this waits for it: the calls queued before for this node run first, and none of them
-	// runs on a node half destroyed.
+		// FellowEngine: the RenderingDevice's resources are freed on the render thread. With a separate one
+		// (--render-thread separate) this waits for it: the calls queued before for this node run first, and none of them
+		// runs on a node half destroyed.
 		RS::get_singleton()->call_on_render_thread(callable_mp(this, &FellowRain3D::_rt_destroy));
 		if (!RS::get_singleton()->is_on_render_thread()) {
 			RS::get_singleton()->sync();

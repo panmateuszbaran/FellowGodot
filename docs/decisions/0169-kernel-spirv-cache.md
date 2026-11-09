@@ -1,4 +1,4 @@
-# 0169 — Compiling less at load: FellowEngine's kernels cached, its effects and node materials baked into exports
+# 0169 — Compiling less at load: FellowEngine's kernels cached, its effects and node materials baked into exports, the rainbow made ahead
 
 Status: **KEEP, on** (exact: the same SPIR-V) · Branch `fellow/geometry` · Setting
 `rendering/fellow/frame/kernel_spirv_cache` (on) · Code: `modules/fellow_fluid/fellow_shared_shaders.cpp`
@@ -6,7 +6,9 @@ Status: **KEEP, on** (exact: the same SPIR-V) · Branch `fellow/geometry` · Set
 (`renderer_scene_render_rd.{h,cpp}`, `forward_clustered/render_forward_clustered.{h,cpp}`, `effects/fellow_gas.h`),
 called by `editor/export/shader_baker_export_plugin.cpp`; `servers/rendering/fellow_bake_shaders.h`, `fellow_kernel_cache.{h,cpp}`,
 `modules/fellow_motion/fellow_motion_model.cpp` and the nodes'
-`fellow_bake_shader_codes()` (water, rain, lightning, shallow water, burnable, terrain); `servers/rendering/fellow_settings.{h,cpp}` (the stats
+`fellow_bake_shader_codes()` (water, rain, lightning, shallow water, burnable, terrain); the rainbow made ahead:
+`renderer_rd/shader_rd.{h,cpp}` (`fellow_version_compile_start()`), `effects/fellow_rainbow.cpp`, `effects/fellow_weather.h`
+(`State::rainbow_enabled`), `modules/fellow_fluid/fellow_rain_3d.cpp`; `servers/rendering/fellow_settings.{h,cpp}` (the stats
 `cost_glsl_compile_usec`, `cost_glsl_compiles`, `cost_glsl_cached_usec`, `cost_glsl_cached`).
 
 ## Problem
@@ -43,6 +45,15 @@ Milestone 61's look at load time and cold shader compilation, two gaps:
   and snowflakes, the lightning's bolt and glow, the shallow water's surface, a burnable's ash heap, the terrain — and
   the same hook creates them, preprocessed as a Shader resource's code is, as embedded shaders, which the baker bakes as
   it bakes the engine's own (freed with the renderer).
+* **The rainbow made ahead** (found by the RTX's soak, job f364): FellowEngine's effects are made when first used, and
+  in a game all are used from its first frames but the rainbow, made at the first bow — in the middle of play, its
+  shader compiled on the drawing thread (`FellowRainbow`'s constructor waited for it). With the shader cache it is read
+  without a hitch (f363's first rain: no frame over 6 ms); without — the first session of a new build, whose shaders all miss Godot's shader cache (its key
+  holds the build's hash), or a player's first without a baked export — glslang ran 77 ms on the RTX laptop: f364's
+  frame of 89.6 ms at the first rain. Now the renderer makes the rainbow as soon as an active `FellowRain3D` with a
+  `rainbow` is in the scene (`FellowWeather::State::rainbow_enabled`), its shader compiled on the worker threads
+  (`ShaderRD::fellow_version_compile_start()`: a version's compilation, or its read from the cache, started without
+  waiting for it), its pipeline made at the first bow.
 
 ## Verification
 
@@ -63,6 +74,12 @@ Milestone 61's look at load time and cold shader compilation, two gaps:
 | rain, lightning, terrain | — | — | 3 (the rain's particle process materials); 0; 0 |
 
   None at the second start. The image regression suite: 24 pictures exact.
+* The rainbow (lavapipe, the slice's soak with its weather every 15 s, from an empty shader cache, `--verbose`): before,
+  its shader was the one compiled after the soak had started — at the first rain (with the cache, read there; f364's
+  89.6 ms on the RTX without); with the change it compiles in the warm-up's first frames with the clouds' and the
+  atmosphere's, and no shader is compiled in play. The regression suite's rain scene (with a rainbow): exact. On the
+  RTX (f365) the same build's next soak, its shader cache warm, had its first rain's largest frame at 9.8 ms, no
+  hitch: the 89.6 ms was the cold cache's compilation, which the change moves to the worker threads at the start.
 
 ## Decision
 

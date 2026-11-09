@@ -1034,6 +1034,25 @@ void ShaderRD::version_set_raytracing_code(RID p_version, const HashMap<String, 
 	_version_set(version, p_code, p_custom_defines);
 }
 
+void ShaderRD::fellow_version_compile_start(RID p_version) {
+	Version *version = version_owner.get_or_null(p_version);
+	ERR_FAIL_NULL(version);
+
+	MutexLock lock(*version->mutex);
+
+	if (!version->dirty) {
+		return;
+	}
+	_initialize_version(version);
+	for (int i = 0; i < group_enabled.size(); i++) {
+		if (!group_enabled[i]) {
+			_allocate_placeholders(version, i);
+			continue;
+		}
+		_compile_version_start(version, i);
+	}
+}
+
 bool ShaderRD::version_is_valid(RID p_version) {
 	Version *version = version_owner.get_or_null(p_version);
 	ERR_FAIL_NULL_V(version, false);

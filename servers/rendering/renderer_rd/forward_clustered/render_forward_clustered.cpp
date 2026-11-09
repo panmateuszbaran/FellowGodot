@@ -4917,7 +4917,15 @@ void RenderForwardClustered::_fellow_process_cloud_shadow(RenderDataRD *p_render
 // scene's lights are), less the clouds' shadow at the camera, or a FellowWeather3D's sunlight without them.
 void RenderForwardClustered::_fellow_process_rainbow(RenderDataRD *p_render_data, const Ref<RenderSceneBuffersRD> &p_render_buffers) {
 	RendererRD::FellowWeather *weather = RendererRD::FellowWeather::get_singleton_if_exists();
-	if (!weather || weather->get_state().rainbow <= 0.0f || !p_render_data->lights) {
+	if (!weather) {
+		return;
+	}
+	if (!fellow_rainbow && weather->get_state().rainbow_enabled) {
+		// Made (its shader compiled on the worker threads) while the rain node that may show it is active, not at the
+		// first bow: f364's first rain of a build waited 77 ms for the shader on the RTX (decision 0169).
+		fellow_rainbow = memnew(RendererRD::FellowRainbow);
+	}
+	if (weather->get_state().rainbow <= 0.0f || !p_render_data->lights) {
 		return;
 	}
 	RendererRD::LightStorage *light_storage = RendererRD::LightStorage::get_singleton();
