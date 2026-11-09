@@ -35,6 +35,11 @@ Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.m
 - `FellowGasVolume3D.edge_fade` (metres, 0 by default: the same pictures): the smoke drawn faded out near the box's
   faces (all but a closed floor) — where it leaves through an open face or piles against a wall the box no longer
   shows as a hard edge. Only the drawing and the smoke's shadows; the simulation is unchanged.
+- The bench's and the showcase's atmosphere sky shaders draw the sun's disk only outside the radiance pass
+  (`AT_CUBEMAP_PASS`): in the radiance map the moving disk was caught or missed by its roughest layer's filtering, and
+  with the day's clock running the ambient light jumped by about half every second (decision 0108).
+- `FellowGasVolume3D.fire_light_smoothing` (seconds, 0 by default: as before): the fire light eased towards the
+  simulated emission, its range four times slower, instead of following every step's sum of the turbulent flames.
 - `FellowGasVolume3D.prewarm_steps` no longer overflows the GPU's queue of steps when several physics ticks come
   before a frame (a slow first frame, Movie Maker below the physics rate): a tick prewarms what the queue still holds.
 - The showcase after a first play (report 62, section 6): the campfire's smoke rises 6.5 m through open sides and

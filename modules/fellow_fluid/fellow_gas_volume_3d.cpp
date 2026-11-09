@@ -554,38 +554,66 @@ void FellowGasVolume3D::_queue_step(bool p_read_emission) {
 
 void FellowGasVolume3D::_update_fire_light() {
 	PackedByteArray light_data;
+	bool fresh = false;
 	{
 		MutexLock lock(emission->mutex);
-		if (!emission->fresh) {
+		if (emission->fresh) {
+			light_data = emission->data;
+			emission->fresh = false;
+			fresh = true;
+		}
+	}
+	if (fresh) {
+		const float *f = reinterpret_cast<const float *>(light_data.ptr());
+		const int groups = int(light_data.size() / 32);
+		// Summed in a fixed order: the same light on every run.
+		double l = 0.0;
+		Vector3 p;
+		double rgb[3] = { 0.0, 0.0, 0.0 };
+		for (int i = 0; i < groups; i++) {
+			l += f[i * 8 + 0];
+			p += Vector3(f[i * 8 + 1], f[i * 8 + 2], f[i * 8 + 3]);
+			rgb[0] += f[i * 8 + 4];
+			rgb[1] += f[i * 8 + 5];
+			rgb[2] += f[i * 8 + 6];
+		}
+		fire_power = float(l);
+		if (l > 1e-6) {
+			fire_light_position = _grid_to_world().xform(p / float(l));
+			fire_light_rgb = Color(rgb[0], rgb[1], rgb[2]);
+		} else {
+			fire_light_rgb = Color(0, 0, 0);
+		}
+	}
+	const float raw_m = MAX(fire_light_rgb.r, MAX(fire_light_rgb.g, fire_light_rgb.b));
+	if (fire_light_smoothing <= 0.0f || !shown_valid) {
+		// As simulated (the summed emission changes every step with the flames' turbulence).
+		if (!fresh) {
 			return;
 		}
-		light_data = emission->data;
-		emission->fresh = false;
-	}
-	const float *f = reinterpret_cast<const float *>(light_data.ptr());
-	const int groups = int(light_data.size() / 32);
-	// Summed in a fixed order: the same light on every run.
-	double l = 0.0;
-	Vector3 p;
-	double rgb[3] = { 0.0, 0.0, 0.0 };
-	for (int i = 0; i < groups; i++) {
-		l += f[i * 8 + 0];
-		p += Vector3(f[i * 8 + 1], f[i * 8 + 2], f[i * 8 + 3]);
-		rgb[0] += f[i * 8 + 4];
-		rgb[1] += f[i * 8 + 5];
-		rgb[2] += f[i * 8 + 6];
-	}
-	fire_power = float(l);
-	if (l > 1e-6) {
-		fire_light_position = _grid_to_world().xform(p / float(l));
-		fire_light_rgb = Color(rgb[0], rgb[1], rgb[2]);
+		shown_light_rgb = fire_light_rgb;
+		shown_light_position = fire_light_position;
+		shown_range_m = raw_m;
+		shown_valid = fire_light_smoothing > 0.0f;
 	} else {
-		fire_light_rgb = Color(0, 0, 0);
+		// Eased: the light flickers as a fire's does, not with every step's sum.
+		const float dt = float(get_process_delta_time());
+		const float k = 1.0f - Math::exp(-dt / fire_light_smoothing);
+		const float k_range = 1.0f - Math::exp(-dt / (fire_light_smoothing * 4.0f));
+		const Color before_rgb = shown_light_rgb;
+		const Vector3 before_position = shown_light_position;
+		shown_light_rgb = shown_light_rgb.lerp(fire_light_rgb, k);
+		shown_light_position = shown_light_position.lerp(fire_light_position, k);
+		shown_range_m = Math::lerp(shown_range_m, raw_m, k_range);
+		const float change = MAX(MAX(Math::abs(shown_light_rgb.r - before_rgb.r), Math::abs(shown_light_rgb.g - before_rgb.g)), Math::abs(shown_light_rgb.b - before_rgb.b));
+		if (!fresh && change <= 1e-4f * MAX(raw_m, 1e-3f) && shown_light_position.distance_squared_to(before_position) < 1e-8f) {
+			return; // settled: nothing new to draw
+		}
 	}
 	if (!light) {
 		return;
 	}
-	const float m = MAX(fire_light_rgb.r, MAX(fire_light_rgb.g, fire_light_rgb.b));
+	const float m = MAX(shown_light_rgb.r, MAX(shown_light_rgb.g, shown_light_rgb.b));
 	const bool on = fire_light && m > 1e-5f && is_visible_in_tree();
 	light->set_visible(on);
 	if (!on) {
@@ -594,13 +622,14 @@ void FellowGasVolume3D::_update_fire_light() {
 	// A point source of the fire's radiant intensity: the omni light's energy is it / pi (Lambert surfaces), with
 	// inverse-square attenuation.
 	const float energy = m / Math::PI * fire_light_energy;
-	light->set_color(Color(fire_light_rgb.r / m, fire_light_rgb.g / m, fire_light_rgb.b / m));
+	light->set_color(Color(shown_light_rgb.r / m, shown_light_rgb.g / m, shown_light_rgb.b / m));
 	light->set_param(Light3D::PARAM_ENERGY, energy);
 	light->set_param(Light3D::PARAM_ATTENUATION, 2.0f);
-	const float range = fire_light_range > 0.0f ? fire_light_range : CLAMP(Math::sqrt(energy / 0.004f), 2.0f, 60.0f);
+	const float range_energy = MAX(shown_range_m, m) / Math::PI * fire_light_energy;
+	const float range = fire_light_range > 0.0f ? fire_light_range : CLAMP(Math::sqrt(range_energy / 0.004f), 2.0f, 60.0f);
 	light->set_param(Light3D::PARAM_RANGE, range);
 	light->set_shadow(fire_light_shadows);
-	light->set_global_position(fire_light_position);
+	light->set_global_position(shown_light_position);
 }
 
 void FellowGasVolume3D::_send_render() {
@@ -621,12 +650,12 @@ void FellowGasVolume3D::_send_render() {
 	rp.edge_fade = edge_fade;
 	// Every face but a closed floor: the smoke sits on that one, and the fire burns there.
 	rp.edge_fade_faces = int32_t(63u & ~(closed_faces & FACE_NEG_Y));
-	rp.fire_light_position[0] = fire_light_position.x;
-	rp.fire_light_position[1] = fire_light_position.y;
-	rp.fire_light_position[2] = fire_light_position.z;
-	rp.fire_light_intensity[0] = fire_light_rgb.r;
-	rp.fire_light_intensity[1] = fire_light_rgb.g;
-	rp.fire_light_intensity[2] = fire_light_rgb.b;
+	rp.fire_light_position[0] = shown_light_position.x;
+	rp.fire_light_position[1] = shown_light_position.y;
+	rp.fire_light_position[2] = shown_light_position.z;
+	rp.fire_light_intensity[0] = shown_light_rgb.r;
+	rp.fire_light_intensity[1] = shown_light_rgb.g;
+	rp.fire_light_intensity[2] = shown_light_rgb.b;
 	rp.fire_light = (fire_light && fire_power > 0.0f) ? 1 : 0;
 	rp.casts_shadows = cast_shadows ? 1 : 0;
 	rp.visible = (render_enabled && is_visible_in_tree()) ? 1 : 0;
@@ -861,6 +890,8 @@ void FellowGasVolume3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_fire_light_range"), &FellowGasVolume3D::get_fire_light_range);
 	ClassDB::bind_method(D_METHOD("set_fire_light_shadows", "enable"), &FellowGasVolume3D::set_fire_light_shadows);
 	ClassDB::bind_method(D_METHOD("is_fire_light_shadows"), &FellowGasVolume3D::is_fire_light_shadows);
+	ClassDB::bind_method(D_METHOD("set_fire_light_smoothing", "seconds"), &FellowGasVolume3D::set_fire_light_smoothing);
+	ClassDB::bind_method(D_METHOD("get_fire_light_smoothing"), &FellowGasVolume3D::get_fire_light_smoothing);
 
 	ClassDB::bind_method(D_METHOD("set_velocity_texture_enabled", "enable"), &FellowGasVolume3D::set_velocity_texture_enabled);
 	ClassDB::bind_method(D_METHOD("is_velocity_texture_enabled"), &FellowGasVolume3D::is_velocity_texture_enabled);
@@ -934,6 +965,7 @@ void FellowGasVolume3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "fire_light_energy", PROPERTY_HINT_RANGE, "0,16,0.01,or_greater"), "set_fire_light_energy", "get_fire_light_energy");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "fire_light_range", PROPERTY_HINT_RANGE, "0,100,0.01,or_greater,suffix:m"), "set_fire_light_range", "get_fire_light_range");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "fire_light_shadows"), "set_fire_light_shadows", "is_fire_light_shadows");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "fire_light_smoothing", PROPERTY_HINT_RANGE, "0,2,0.01,suffix:s"), "set_fire_light_smoothing", "get_fire_light_smoothing");
 
 	ADD_GROUP("Velocity Texture", "velocity_texture_");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "velocity_texture_enabled"), "set_velocity_texture_enabled", "is_velocity_texture_enabled");

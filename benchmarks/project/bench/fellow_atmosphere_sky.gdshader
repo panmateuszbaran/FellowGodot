@@ -50,7 +50,11 @@ void sky() {
 	float u = az / (2.0 * PI) + 0.5;
 	vec3 sun = LIGHT0_COLOR * LIGHT0_ENERGY * energy_scale;
 	vec3 col = texture(fellow_atmosphere_sky_view, vec2(u, v)).rgb * sun;
-	if (LIGHT0_ENABLED) {
+	// The sun's disk only where the sky is seen, not in its radiance map (AT_CUBEMAP_PASS: the ambient light and the
+	// reflections): the directional light already lights the scene, and a disk this bright and small is caught or missed
+	// by the map's filtering as it moves — the ambient light jumped by half every second or so with the day's clock
+	// running (FellowEngine milestone 62's showcase, report section 6).
+	if (LIGHT0_ENABLED && !AT_CUBEMAP_PASS) {
 		// The sun's disk: its illuminance over its solid angle, through the atmosphere, limb-darkened.
 		float half_angle = max(LIGHT0_SIZE * 0.5 * sun_disk_scale, 0.0005);
 		float cos_sun = dot(d, LIGHT0_DIRECTION);

@@ -89,3 +89,17 @@ engine each frame; the sky's radiance is redrawn when the light changes (Godot's
 atmosphere's settings change or the camera's height moves by more than 100 m (FellowEngine marks it). The sky drawn
 behind the scene is the same computation, the height from the parameter instead of `POSITION` (a frame late). RTX
 (`m19_f258`): "Setup Sky" 0.002 ms in City Lab and Sponza.
+
+**The sun's disk out of the radiance (milestone 62's showcase).** With the day's clock running the showcase's ambient
+light jumped: every second or so the shaded ground lost about 60 % of its light for 8 frames (one turn of Godot's
+incremental radiance update), then came back — the owner saw the picture flicker whatever the camera did. Lavapipe, a
+still camera, the clock running at 0.5°/s: the scene's mean luminance 0.50 ↔ 0.44 in 8-frame steps, a shaded patch
+0.35 ↔ 0.14. Neither FellowEngine's settings (all off: the same), the sky's colour (a constant one: the same), the
+sky-view table, `LIGHT0`'s energy nor NaN guards changed it; Godot's radiance without texture arrays
+(`reflections/sky_reflections/texture_array_reflections` off) did not flicker. The cause was the bench's and the
+showcase's sky shaders drawing the sun's disk into the radiance map as well as behind the scene: a disk 0.5° wide and
+tens of thousands of times brighter than the sky, caught or missed by the roughest layer's 64 GGX samples as it moves,
+is most of the ambient light when caught. Both shaders now draw the disk (and the showcase's stars) only where
+`AT_CUBEMAP_PASS` is false, as Godot's own sky materials do: the same test, every frame within 0.003 of the one before.
+The ambient light is the sky's alone (the directional light lights the scene; with the disk in the map it lit it twice
+in the frames that caught it).

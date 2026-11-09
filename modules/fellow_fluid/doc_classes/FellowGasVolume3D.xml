@@ -125,6 +125,9 @@
 		<member name="fire_light_shadows" type="bool" setter="set_fire_light_shadows" getter="is_fire_light_shadows" default="false">
 			The fire light casts shadows (an omni shadow: costly).
 		</member>
+		<member name="fire_light_smoothing" type="float" setter="set_fire_light_smoothing" getter="get_fire_light_smoothing" default="0.0">
+			Seconds over which the fire light (its colour, intensity and position, the scene's omni light's and the smoke's) eases towards the simulated emission, its range over four times as long: the light flickers as a fire's does instead of with every step's sum of the turbulent flames (which can make the lit ground flicker frame by frame). 0: as simulated.
+		</member>
 		<member name="fire_temperature_scale" type="float" setter="set_fire_temperature_scale" getter="get_fire_temperature_scale" default="1.4">
 			The flames' colour temperature: the gas's temperature times this is the blackbody's (higher is whiter).
 		</member>

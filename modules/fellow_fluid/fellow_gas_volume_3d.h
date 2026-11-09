@@ -139,6 +139,7 @@ private:
 	float fire_light_energy = 1.0f;
 	float fire_light_range = 0.0f;
 	bool fire_light_shadows = false;
+	float fire_light_smoothing = 0.0f;
 	// The velocity for GPU particles.
 	bool velocity_texture_enabled = false;
 	float velocity_texture_scale = 5.0f;
@@ -162,6 +163,12 @@ private:
 	bool debug_pending = false;
 	Vector3 fire_light_position;
 	Color fire_light_rgb;
+	// The light shown (the scene's omni light and the smoke's fire light): the simulation's eased towards over
+	// fire_light_smoothing seconds, its range from a four times slower average.
+	Vector3 shown_light_position;
+	Color shown_light_rgb;
+	float shown_range_m = 0.0f;
+	bool shown_valid = false;
 	float fire_power = 0.0f;
 	int redraw_ticks = 0; // milestone 52: physics ticks left asking for frames after the last emission
 
@@ -293,6 +300,8 @@ public:
 	float get_fire_light_range() const { return fire_light_range; }
 	void set_fire_light_shadows(bool p_enable) { fire_light_shadows = p_enable; }
 	bool is_fire_light_shadows() const { return fire_light_shadows; }
+	void set_fire_light_smoothing(float p_seconds) { fire_light_smoothing = CLAMP(p_seconds, 0.0f, 2.0f); }
+	float get_fire_light_smoothing() const { return fire_light_smoothing; }
 
 	void set_velocity_texture_enabled(bool p_enable);
 	bool is_velocity_texture_enabled() const { return velocity_texture_enabled; }

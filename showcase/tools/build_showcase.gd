@@ -628,6 +628,7 @@ func _build_campfire(p_village: Node3D) -> void:
 	fire.set("physics_obstacles", false)
 	fire.set("closed_faces", 4) # the floor: the smoke leaves through the sides as well as the top
 	fire.set("fire_light_shadows", true)
+	fire.set("fire_light_smoothing", 0.15) # the light flickers as a fire's, not with every step's flames
 	_add(p_village, fire, "Campfire")
 	var kindling: Node3D = ClassDB.instantiate("FellowGasEmitter3D")
 	kindling.set("shape", 2)

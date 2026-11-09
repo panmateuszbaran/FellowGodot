@@ -100,6 +100,14 @@ The owner played the showcase on the laptop and reported four things; each answe
   keep 0.9 m over the terrain (they slide over it) and their spring arms collide with the buildings only: the same
   sweep, at most 0.004 between frames. F3 turns FellowEngine's effects off one at a time (contact shadows, light
   shafts, bloom, clouds, aerial perspective, SSAO, TAA, autotune), for anything the RTX shows that lavapipe does not.
+* **"The lighting flickers, whatever the camera does"** (the owner, after the fix above). With the day's clock running
+  (the tests above had it stopped) the ambient light jumped every second or so: the shaded ground lost about 60 % of
+  its light for 8 frames, one turn of Godot's incremental radiance update. The sky shaders (the bench's, which the
+  showcase's copies) drew the sun's disk into the radiance map too, and its roughest layer's 64 GGX samples caught or
+  missed that tiny, very bright disk as it moved. The disk (and the stars) are now drawn only outside the radiance
+  pass (`AT_CUBEMAP_PASS`), as Godot's own sky materials do; the clock-running test: every frame within 0.003 of the
+  one before (0.06 before). Decision 0108 has the search. `FellowGasVolume3D.fire_light_smoothing` (new, 0 by
+  default) also eases the campfire's light, which followed every step's sum of the flames (the showcase: 0.15 s).
 * **The character was slow.** MotionBricks' network walks at about 1.4 m/s and runs up to about 3.5 m/s (faster, it
   stumbles). The showcase now plays its motion 1.3 times faster than recorded while it moves (the feet stay planted:
   the same motion, quicker): walking about 2 m/s, running 4.3 m/s.
