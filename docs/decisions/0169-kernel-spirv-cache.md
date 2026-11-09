@@ -81,9 +81,20 @@ Milestone 61's look at load time and cold shader compilation, two gaps:
   RTX (f365) the same build's next soak, its shader cache warm, had its first rain's largest frame at 9.8 ms, no
   hitch: the 89.6 ms was the cold cache's compilation, which the change moves to the worker threads at the start.
 
+## Milestone 62: the rain's particle process materials baked
+
+The 3 shaders a baked rain export still compiled at its first start were the particles shaders of its process
+materials: Godot's `ParticleProcessMaterial` writes a shader from its flags (emission shape, collision, sub-emitter,
+the scene's wind; its other properties are uniforms) when the node sets it up, so the baker never saw them. The rain's
+four — the drops' (with and without splashes: `splashes` changes the sub-emitter), the splashes', the flakes' without
+and with the scene's wind — are made by one function, `_make_process_materials()`, for the node and for its baking
+provider, which adds their codes (from the RenderingServer) to the drops' and flakes' spatial shaders: the renderer's
+hook creates them as embedded shaders, the particles shader's versions among them.
+
+The same export (Linux, release template, the baker on), started twice on lavapipe from an empty user directory:
+**0** shaders compiled at its first start (3 before), none at the second. The image regression suite: exact.
+
 ## Decision
 
-**KEEP, on.** Not done: the particle process materials FellowEngine's nodes make (the rain's drops, splashes and
-flakes: Godot's ParticleProcessMaterial writes their code from properties the node changes at run time); a burnable's
-burning material (written from its object's own material); shipping the kernel cache with an export (a game's first session
-still compiles its kernels, 28 ms here).
+**KEEP, on.** Not done: a burnable's burning material (written from its object's own material); shipping the kernel
+cache with an export (a game's first session still compiles its kernels, 28 ms here).

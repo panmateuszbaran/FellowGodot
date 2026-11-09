@@ -158,9 +158,68 @@ static String _flake_code() {
 	return String(rain_drop_shader_code).replace("render_mode blend_mix, depth_draw_never, cull_disabled, shadows_disabled,", "render_mode cull_disabled,").replace("// FLAKE_ALPHA_HASH", "ALPHA_HASH_SCALE = 1.0;");
 }
 
+// The process materials' flags, which make their code (their other properties are uniforms): the drops', the splashes'
+// and the flakes' without and with the scene's wind. Shared by the node and the shader baker's provider.
+static void _make_process_materials(Ref<ParticleProcessMaterial> &r_drop, Ref<ParticleProcessMaterial> &r_splash, Ref<ParticleProcessMaterial> r_flakes[2]) {
+	r_drop.instantiate();
+	r_drop->set_emission_shape(ParticleProcessMaterial::EMISSION_SHAPE_BOX);
+	r_drop->set_param_min(ParticleProcessMaterial::PARAM_SCALE, 0.8);
+	r_drop->set_param_max(ParticleProcessMaterial::PARAM_SCALE, 1.2);
+	r_drop->set_spread(0.0);
+	r_drop->set_gravity(Vector3());
+	r_drop->set_particle_flag(ParticleProcessMaterial::PARTICLE_FLAG_ALIGN_Y_TO_VELOCITY, true);
+	r_drop->set_collision_mode(ParticleProcessMaterial::COLLISION_HIDE_ON_CONTACT);
+	// The flakes' own (decision 0156): before, the drops' process material changed its flags when it started to snow
+	// (the scene's wind on, the splashes off) and compiled a new shader in that frame (12 ms on the RTX).
+	for (int i = 0; i < 2; i++) {
+		r_flakes[i] = r_drop->duplicate();
+		r_flakes[i]->set_sub_emitter_mode(ParticleProcessMaterial::SUB_EMITTER_DISABLED);
+		r_flakes[i]->set_wind_enabled(i == 1);
+	}
+
+	r_splash.instantiate();
+	r_splash->set_direction(Vector3(0, 1, 0));
+	r_splash->set_spread(40.0);
+	r_splash->set_param_min(ParticleProcessMaterial::PARAM_INITIAL_LINEAR_VELOCITY, 0.6);
+	r_splash->set_param_max(ParticleProcessMaterial::PARAM_INITIAL_LINEAR_VELOCITY, 1.4);
+	r_splash->set_param_min(ParticleProcessMaterial::PARAM_SCALE, 0.5);
+	r_splash->set_param_max(ParticleProcessMaterial::PARAM_SCALE, 1.0);
+	r_splash->set_gravity(Vector3(0, -9.8, 0));
+	// A drop is stopped a step below the surface it hits (hide on contact does not move it out) and its splash is
+	// emitted there: colliding, the splash is put back on the surface (a roof's splashes stay above its ceiling).
+	r_splash->set_collision_mode(ParticleProcessMaterial::COLLISION_RIGID);
+	r_splash->set_collision_bounce(0.1);
+	r_splash->set_collision_friction(0.5);
+}
+
+static void _set_drop_splashes(const Ref<ParticleProcessMaterial> &p_drop, bool p_splashes) {
+	p_drop->set_sub_emitter_mode(p_splashes ? ParticleProcessMaterial::SUB_EMITTER_AT_COLLISION : ParticleProcessMaterial::SUB_EMITTER_DISABLED);
+	p_drop->set_sub_emitter_amount_at_collision(2);
+}
+
 void FellowRain3D::fellow_bake_shader_codes(Vector<String> &r_codes) {
 	r_codes.push_back(_drop_code());
 	r_codes.push_back(_flake_code());
+	// The particles shaders of the process materials (milestone 61: written by ParticleProcessMaterial from its flags
+	// when the node is set up, they were the 3 shaders a baked rain export still compiled at its first start).
+	RenderingServer *rs = RenderingServer::get_singleton();
+	if (!rs) {
+		return;
+	}
+	Ref<ParticleProcessMaterial> drop, splash, flakes[2];
+	_make_process_materials(drop, splash, flakes);
+	Vector<Ref<ParticleProcessMaterial>> materials = { splash, flakes[0], flakes[1] };
+	for (int s = 0; s < 2; s++) {
+		Ref<ParticleProcessMaterial> d = drop->duplicate();
+		_set_drop_splashes(d, s == 0);
+		materials.push_back(d);
+	}
+	for (const Ref<ParticleProcessMaterial> &m : materials) {
+		const String code = rs->shader_get_code(m->get_shader_rid());
+		if (!code.is_empty() && !r_codes.has(code)) {
+			r_codes.push_back(code);
+		}
+	}
 }
 
 static GPUParticlesCollisionHeightField3D::Resolution rain_occlusion_resolution(int p_res) {
@@ -187,21 +246,7 @@ void FellowRain3D::_build_children() {
 	occlusion->set_as_top_level(true);
 	add_child(occlusion, false, INTERNAL_MODE_FRONT);
 
-	drop_process.instantiate();
-	drop_process->set_emission_shape(ParticleProcessMaterial::EMISSION_SHAPE_BOX);
-	drop_process->set_param_min(ParticleProcessMaterial::PARAM_SCALE, 0.8);
-	drop_process->set_param_max(ParticleProcessMaterial::PARAM_SCALE, 1.2);
-	drop_process->set_spread(0.0);
-	drop_process->set_gravity(Vector3());
-	drop_process->set_particle_flag(ParticleProcessMaterial::PARTICLE_FLAG_ALIGN_Y_TO_VELOCITY, true);
-	drop_process->set_collision_mode(ParticleProcessMaterial::COLLISION_HIDE_ON_CONTACT);
-	// The flakes' own (decision 0156): before, the drops' process material changed its flags when it started to snow
-	// (the scene's wind on, the splashes off) and compiled a new shader in that frame (12 ms on the RTX).
-	for (int i = 0; i < 2; i++) {
-		flake_process[i] = drop_process->duplicate();
-		flake_process[i]->set_sub_emitter_mode(ParticleProcessMaterial::SUB_EMITTER_DISABLED);
-		flake_process[i]->set_wind_enabled(i == 1);
-	}
+	_make_process_materials(drop_process, splash_process, flake_process);
 
 	drop_shader = FellowSharedShaders::shader(_drop_code()); // milestone 53: one per session
 	drop_material.instantiate();
@@ -249,20 +294,6 @@ void FellowRain3D::_build_children() {
 	flake_pipelines->set_cast_shadows_setting(GeometryInstance3D::SHADOW_CASTING_SETTING_OFF);
 	flake_pipelines->set_visible(false);
 	add_child(flake_pipelines, false, INTERNAL_MODE_FRONT);
-
-	splash_process.instantiate();
-	splash_process->set_direction(Vector3(0, 1, 0));
-	splash_process->set_spread(40.0);
-	splash_process->set_param_min(ParticleProcessMaterial::PARAM_INITIAL_LINEAR_VELOCITY, 0.6);
-	splash_process->set_param_max(ParticleProcessMaterial::PARAM_INITIAL_LINEAR_VELOCITY, 1.4);
-	splash_process->set_param_min(ParticleProcessMaterial::PARAM_SCALE, 0.5);
-	splash_process->set_param_max(ParticleProcessMaterial::PARAM_SCALE, 1.0);
-	splash_process->set_gravity(Vector3(0, -9.8, 0));
-	// A drop is stopped a step below the surface it hits (hide on contact does not move it out) and its splash is
-	// emitted there: colliding, the splash is put back on the surface (a roof's splashes stay above its ceiling).
-	splash_process->set_collision_mode(ParticleProcessMaterial::COLLISION_RIGID);
-	splash_process->set_collision_bounce(0.1);
-	splash_process->set_collision_friction(0.5);
 
 	splash_material.instantiate();
 	splash_material->set_shader(drop_shader);
@@ -348,8 +379,7 @@ void FellowRain3D::_update_children() {
 	pm->set_wind_influence(flake_wind_influence);
 	// The drops' process material is the rain's alone: its splashes whatever the precipitation now (its code, and so its
 	// shader, the same when it snows; decision 0156).
-	drop_process->set_sub_emitter_mode(splashes ? ParticleProcessMaterial::SUB_EMITTER_AT_COLLISION : ParticleProcessMaterial::SUB_EMITTER_DISABLED);
-	drop_process->set_sub_emitter_amount_at_collision(2);
+	_set_drop_splashes(drop_process, splashes);
 	if (drops->get_process_material() != pm) {
 		drops->set_process_material(pm);
 	}

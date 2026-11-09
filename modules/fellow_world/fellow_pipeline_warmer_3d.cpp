@@ -167,10 +167,10 @@ void FellowPipelineWarmer3D::_build_shelf(Node *p_root) {
 		for (int i = n->get_child_count() - 1; i >= 0; i--) {
 			stack.push_back(n->get_child(i));
 		}
-		// Visible nodes only: a hidden one may not be ready to draw (a burnable's ash heap before its ash: its material's
-		// textures are made then).
+		// Visible nodes only (a hidden one may not be ready to draw), and the hidden ones a node marks as ready to be drawn
+		// (meta _fellow_shelf: a burnable's ash heap, hidden until its first ash, decision 0167).
 		GeometryInstance3D *gi = Object::cast_to<GeometryInstance3D>(n);
-		if (gi && gi->is_inside_tree() && gi->is_visible_in_tree() && gi->get_world_3d() == world) {
+		if (gi && gi->is_inside_tree() && (gi->is_visible_in_tree() || gi->has_meta(SNAME("_fellow_shelf"))) && gi->get_world_3d() == world) {
 			// Skinned meshes are drawn from their skeleton's vertices (another format): left out.
 			MeshInstance3D *mi = Object::cast_to<MeshInstance3D>(n);
 			MultiMeshInstance3D *mmi = Object::cast_to<MultiMeshInstance3D>(n);

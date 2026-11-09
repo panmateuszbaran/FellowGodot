@@ -6158,11 +6158,12 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 
 	p_render_data->directional_light_count = directional_light_count;
 	if (Fellow::frame_stable_scene_bits()) {
-		// Decision 0167: with no directional light in the frame (the sun set) the directional loops run no iteration:
-		// the soft shadows' code, compiled in once it has been used, draws the same.
+		// Decision 0167: with no directional light in the frame (the sun set) the directional loops run no iteration, and
+		// with directional lights without an angular size (a lightning's flash at night) the soft shadows' code takes the
+		// hard shadows' path with a size of zero: compiled in once it has been used, it draws the same.
 		if (p_render_data->directional_light_soft_shadows) {
 			fellow_stable_seen |= FELLOW_STABLE_DIRECTIONAL_SOFT;
-		} else if (directional_light_count == 0 && (fellow_stable_seen & FELLOW_STABLE_DIRECTIONAL_SOFT)) {
+		} else if ((directional_light_count == 0 || !light_storage->fellow_get_directional_sized()) && (fellow_stable_seen & FELLOW_STABLE_DIRECTIONAL_SOFT)) {
 			p_render_data->directional_light_soft_shadows = true;
 		}
 	}

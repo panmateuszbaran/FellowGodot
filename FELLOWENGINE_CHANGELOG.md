@@ -9,6 +9,21 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 62 — milestone 61's open topics, without a GPU (2026-11-09)
+
+- The pipelines the slice still compiled after its warm-up, named (decision 0167): Slice Lab's soak on the RTX's
+  timeline on lavapipe with `FELLOW_SPECIALIZATION_LOG=1` — of milestone 61's 20 draws that asked for a pipeline not
+  compiled yet, 15 were a lightning's flash at night (the only directional light, without an angular size: Godot's
+  soft-shadow bit fell), 2 a burnable's ash heap at its first ash, 3 autotune's evaluations. `frame/stable_scene_bits`
+  keeps the soft-shadow bit with directional lights without a size (their soft path is the hard one: the same image;
+  `pipeline_states_check.gd --flash=1`: the flash at night 3 → 0 pipelines, 27 pictures identical), and the warmer's
+  shelf copies hidden meshes their nodes mark with the metadata `_fellow_shelf` (FellowBurnable3D's ash heap,
+  FellowLightning3D's bolt — a degenerate triangle in its format until the first strike — and glow). After the warm-up
+  37 → 20 pipelines (autotune's evaluations, prepared ahead), 2 with autotune off; draws that asked 20 → 3.
+- The rain's particle process materials baked into exports (decision 0169): `FellowRain3D`'s baking provider gives
+  the particles shaders of its four process materials (made by one function for the node and the provider); a baked
+  rain export compiles no shader at its first start (3 before).
+
 ## Milestone 61 — what the CPU could still do without a GPU, then the RTX's measurements (2026-11-09)
 
 - Fewer pipelines compiled after the warm-up (decision 0167). `frame/stable_scene_bits` also keeps Godot's directional

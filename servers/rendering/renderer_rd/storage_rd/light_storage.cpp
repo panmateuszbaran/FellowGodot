@@ -802,6 +802,7 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 	r_directional_light_count = 0;
 	r_positional_light_count = 0;
 	fellow_positional_shadowed = 0;
+	fellow_directional_sized = false;
 
 	omni_light_count = 0;
 	spot_light_count = 0;
@@ -876,6 +877,7 @@ void LightStorage::update_light_buffers(RenderDataRD *p_render_data, const Paged
 				float size = light->param[RSE::LIGHT_PARAM_SIZE];
 
 				light_data.size = 1.0 - Math::cos(Math::deg_to_rad(size)); //angle to cosine offset
+				fellow_directional_sized = fellow_directional_sized || size > 0.0f; // FellowEngine (decision 0167)
 
 				light_data.shadow_opacity = (p_using_shadows && light->shadow)
 						? light->param[RSE::LIGHT_PARAM_SHADOW_OPACITY]

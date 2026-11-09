@@ -1323,6 +1323,7 @@ void FellowBurnable3D::_build_heap(MeshInstance3D *p_target) {
 	MeshInstance3D *heap = memnew(MeshInstance3D);
 	heap->set_name("FellowAshHeap");
 	heap->set_visible(false); // shown once there is ash (_read_totals)
+	heap->set_meta(SNAME("_fellow_shelf"), true); // a FellowPipelineWarmer3D's shelf draws it while hidden (decision 0167)
 	heap->set_mesh(mesh);
 	heap->set_cast_shadows_setting(p_target->get_cast_shadows_setting());
 	heap->set_layer_mask(p_target->get_layer_mask());

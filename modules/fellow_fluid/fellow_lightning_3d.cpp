@@ -112,12 +112,25 @@ void FellowLightning3D::_build_children() {
 	bolt_material.instantiate();
 	bolt_material->set_shader(bolt_shader);
 	bolt_mesh.instantiate();
+	{
+		// Until the first strike, a degenerate triangle in the bolt's vertex format: a FellowPipelineWarmer3D's shelf
+		// draws the hidden bolt (meta _fellow_shelf), so that its pipelines compile with the scene's, not at the first
+		// strike (decision 0167). Replaced by the first bolt (_build_bolt()).
+		Array arrays;
+		arrays.resize(Mesh::ARRAY_MAX);
+		arrays[Mesh::ARRAY_VERTEX] = PackedVector3Array({ Vector3(), Vector3(), Vector3() });
+		arrays[Mesh::ARRAY_TEX_UV] = PackedVector2Array({ Vector2(), Vector2(), Vector2() });
+		arrays[Mesh::ARRAY_COLOR] = PackedColorArray({ Color(), Color(), Color() });
+		bolt_mesh->add_surface_from_arrays(Mesh::PRIMITIVE_TRIANGLES, arrays);
+		bolt_mesh->surface_set_material(0, bolt_material);
+	}
 	bolt = memnew(MeshInstance3D);
 	bolt->set_name("LightningBolt");
 	bolt->set_as_top_level(true);
 	bolt->set_cast_shadows_setting(GeometryInstance3D::SHADOW_CASTING_SETTING_OFF);
 	bolt->set_mesh(bolt_mesh);
 	bolt->set_visible(false);
+	bolt->set_meta(SNAME("_fellow_shelf"), true);
 	add_child(bolt, false, INTERNAL_MODE_FRONT);
 
 	Ref<Shader> gs = FellowSharedShaders::shader(lightning_glow_shader_code);
@@ -133,6 +146,7 @@ void FellowLightning3D::_build_children() {
 	glow->set_cast_shadows_setting(GeometryInstance3D::SHADOW_CASTING_SETTING_OFF);
 	glow->set_mesh(q);
 	glow->set_visible(false);
+	glow->set_meta(SNAME("_fellow_shelf"), true);
 	add_child(glow, false, INTERNAL_MODE_FRONT);
 }
 

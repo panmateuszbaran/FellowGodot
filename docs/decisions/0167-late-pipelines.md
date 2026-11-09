@@ -2,9 +2,11 @@
 
 Status: **KEEP** (the bits: exact, under `frame/stable_scene_bits`, on; the shelf: a property of a node, on) · Branch
 `fellow/geometry` · Code: `servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.{h,cpp}`
-(`_fellow_stable_sun_masks()`, the soft-shadow and tile-culling bits),
-`modules/fellow_world/fellow_pipeline_warmer_3d.{h,cpp}` (`shelf`), `FellowPipelineWarmer3D.xml` · Checks:
-`benchmarks/project/bench/pipeline_states_check.gd` (`--sun_size`, `--contact`); Slice Lab's soak with
+(`_fellow_stable_sun_masks()`, the soft-shadow and tile-culling bits), `renderer_rd/storage_rd/light_storage.{h,cpp}`
+(`fellow_directional_sized`, milestone 62), `modules/fellow_world/fellow_pipeline_warmer_3d.{h,cpp}` (`shelf`),
+`FellowPipelineWarmer3D.xml`, `modules/fellow_fluid/fellow_burnable_3d.cpp` and `fellow_lightning_3d.cpp` (their hidden
+meshes on the shelf, milestone 62) · Checks: `benchmarks/project/bench/pipeline_states_check.gd` (`--sun_size`,
+`--contact`, `--flash`); Slice Lab's soak with
 `FELLOW_SPECIALIZATION_LOG=1` (`--slice_warmup_shelf=0` for the warm-up without the shelf).
 
 ## Problem
@@ -96,9 +98,54 @@ rain: not a pipeline but the rainbow's shader, compiled on the main thread as th
 first session of a new build, whose shaders miss Godot's shader cache — f363's build had been run with rain before);
 decision 0169 makes it ahead, on the worker threads.
 
+## Milestone 62: naming the rest
+
+What the RTX's 88 are was looked for on lavapipe (the RTX's own soak does not log their keys): Slice Lab's soak on the RTX's timeline (20 minutes, the weather every minute, the
+fire every two, the day 10 minutes; 160 × 90, release template) with `FELLOW_SPECIALIZATION_LOG=1`, which prints each
+specialized pipeline a draw asks for before it is compiled, with its key. None was a draw waiting: specialized
+pipelines compile beside the ubershader, which draws meanwhile (on the RTX `pipelines_draw`, those compiled for a draw,
+was 0 for all 88). What they were, in milestone 61's build:
+
+* **A lightning's flash at night** (15 of the 20 draws that asked): FellowLightning3D's flash is a second directional
+  light, with a shadow and no angular size. At night it is the frame's only directional light, so Godot's soft-shadow
+  bit fell (no light with soft shadows) where 0167's rule kept it only with no directional light at all: every
+  material in view compiled again, once for the flash and once more with autotune's pyramid the other way.
+* **Hidden meshes shown in play**: a burnable's ash heap at its first ash (its colour and depth pipelines), the
+  lightning's bolt and glow at the first strike (the 2 surface pipelines: the bolt's mesh had no surface before).
+* **Autotune's evaluations**: each change of the weather moves the frame time, autotune evaluates its tunables again
+  and compiles their other variant of the pipelines in view — ahead, for the evaluation's frames (decision 0068); the
+  directional and positional shadow pyramids' bits.
+
+The changes:
+
+* `stable_scene_bits` keeps the soft-shadow bit also in frames whose directional lights have no angular size
+  (`LightStorage::fellow_get_directional_sized()`): with the bit, a light's size of zero and soft-shadow angle of zero
+  take the hard shadows' path and give the specular the same zero size — the same image.
+* The shelf also copies a hidden mesh that its node marks as ready to draw (metadata `_fellow_shelf`): the ash heap,
+  and the lightning's bolt (until the first strike its mesh holds a degenerate triangle in the bolt's vertex format)
+  and glow.
+
+`pipeline_states_check.gd --flash=1` (six more states: the flash by day and at night, the sun 0.5° with soft and
+contact shadows): the flash alone at night compiled 3 pipelines, now none (5 after the warm-up in all, the probe's);
+the 27 pictures the same with `stable_scene_bits` on and off, bit for bit. The slice's soak:
+
+| lavapipe, the slice's soak on the RTX's timeline | pipelines after the warm-up | draws that asked for one |
+|---|---|---|
+| milestone 61 | 37 (35 specialized, 2 surface) | 20 |
+| the flash's bit, the heap on the shelf | 22 (20, 2) | 5 (4 autotune's, the heap's shadow) |
+| the same, autotune off | 5 (3, 2) | 2 (the bolt, the heap's shadow) |
+| with the bolt and glow on the shelf, autotune off | **2** (2, 0) | **1** (the heap's shadow) |
+| with the bolt and glow on the shelf, autotune on | **20** (20, 0) | **3** (2 autotune's, the heap's shadow) |
+
+Left: autotune's evaluations (prepared ahead: no hitch, at about 2.7 MB a pipeline on the RTX — a game that wants none
+turns autotune off or keeps its choices), the ash heap in the campfire's light's shadow (the shelf's copies are lit by
+directional lights only), and one more without a draw asking.
+
 ## Decision
 
 **KEEP.** On lavapipe's slice the draws that waited for a pipeline after the warm-up fall from 9 to 1, at the same
 image; on the RTX the slice's soak compiles 88 pipelines after its warm-up instead of 151 (while it snowed 66 → 8); the
-warm-up costs 2 frames more for its shelf. Not done: positional lights near shelf copies (materials lit by omni and spot lights
-compile those variants when first seen), skinned meshes out of the six views, hidden nodes, particles.
+warm-up costs 2 frames more for its shelf. Milestone 62: the lightning at night and the meshes hidden until play no
+longer compile; with autotune off the slice's 20 minutes compile 2 pipelines after the warm-up. Not done: positional
+lights near shelf copies (materials lit by omni and spot lights compile those variants when first seen), skinned meshes
+out of the six views, hidden nodes not marked, particles, autotune's evaluations.

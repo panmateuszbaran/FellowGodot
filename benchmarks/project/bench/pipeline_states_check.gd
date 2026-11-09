@@ -7,10 +7,12 @@ extends SceneTree
 ## start: no state compiles anything; without it each new combination compiles the materials in view again.
 ##
 ##   godot --path benchmarks/project --resolution 320x180 -s res://bench/pipeline_states_check.gd
-##       -- [--stable=1] [--out=<dir>] [--late=0] [--autotune=0] [--sun_size=0] [--contact=0]
+##       -- [--stable=1] [--out=<dir>] [--late=0] [--autotune=0] [--sun_size=0] [--contact=0] [--flash=0]
 ##
 ## --sun_size=<deg>: the sun's angular size (soft shadows: PCSS); --contact=1: FellowEngine's contact shadows (decision
 ## 0107) — with both, the sun setting changes Godot's soft-shadow bit and the contact mask's (decision 0167).
+## --flash=1: six more states, a lightning's flash (a second directional light with a shadow and no angular size, as
+## FellowLightning3D's) by day and at night — with --sun_size, the flash alone at night changes the soft-shadow bit.
 ## --late=1 creates the omni light only when its state comes (it did not exist at the start: one compilation then, none
 ## the second time). Each state's picture is saved once its frames compile nothing more (images: <out>/<state>.png), so
 ## that a run with --stable=1 and one with --stable=0 can be compared pixel for pixel. One JSON line:
@@ -25,6 +27,7 @@ var spot: SpotLight3D
 var decal: Decal
 var probe: ReflectionProbe
 var sun: DirectionalLight3D
+var flash: DirectionalLight3D
 var states := []
 var state_i := -1
 var frame := 0
@@ -156,6 +159,16 @@ func _initialize() -> void:
 	root3d.add_child(probe)
 	states = ["start", "rain", "dry", "omni", "omni_off", "spot", "spot_off", "decal", "decal_off", "probe", "probe_off",
 			"night", "day", "rain", "omni", "dry", "omni_off", "spot", "rain", "spot_off", "dry"]
+	if args.get("flash", "0") == "1":
+		# As FellowLightning3D's flash: hidden, shown for a strike (decision 0167).
+		flash = DirectionalLight3D.new()
+		flash.rotation_degrees = Vector3(-70, -40, 0)
+		flash.shadow_enabled = true
+		flash.light_energy = 2.0
+		flash.sky_mode = DirectionalLight3D.SKY_MODE_LIGHT_ONLY
+		flash.visible = false
+		root3d.add_child(flash)
+		states.append_array(["flash", "flash_off", "night", "flash", "flash_off", "day"])
 
 
 func _make_omni() -> void:
@@ -198,6 +211,10 @@ func _apply(s: String) -> void:
 			sun.visible = false
 		"day":
 			sun.visible = true
+		"flash":
+			flash.visible = true
+		"flash_off":
+			flash.visible = false
 
 
 func _process(_delta: float) -> bool:

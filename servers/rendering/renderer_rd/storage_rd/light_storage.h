@@ -879,6 +879,10 @@ public:
 	// FellowEngine (decision 0057): omni and spot lights of the last update_light_buffers() with a nonzero shadow opacity.
 	uint32_t fellow_positional_shadowed = 0;
 	uint32_t fellow_get_positional_shadowed() const { return fellow_positional_shadowed; }
+	// Decision 0167: a directional light of the last update_light_buffers() with an angular size (the soft shadows' code
+	// reads it; without one that code draws as the hard shadows' does).
+	bool fellow_directional_sized = false;
+	bool fellow_get_directional_sized() const { return fellow_directional_sized; }
 	// Decision 0161: the lights that exist, by type, and the omni and spot lights with shadows (whether or not in view).
 	uint32_t fellow_lights_allocated[4] = {}; // RSE::LightType
 	uint32_t fellow_shadowed_positional_allocated = 0;
