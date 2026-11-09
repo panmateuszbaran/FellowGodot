@@ -12,6 +12,8 @@ var _flash: Label
 var _flash_t := 0.0
 var _root: Control
 var _help_t := 25.0
+var _fade: ColorRect
+var _fade_t := 0.0
 
 const HELP := """WASD  walk    Shift  run    JUMP    Mouse  look    Wheel  zoom
 1-7  weather (clear, cloudy, overcast, rain, storm, snow, blizzard)    0  weather changes by itself
@@ -65,6 +67,12 @@ func _ready() -> void:
 	_flash.position.y = 24
 	_root.add_child(_flash)
 	_help.visible = true
+	# The first frames fade in from black: the sky's light is ready over its first 8 frames (Sky's incremental mode).
+	_fade = ColorRect.new()
+	_fade.color = Color.BLACK
+	_fade.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_fade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_fade)
 
 
 func flash(p_text: String) -> void:
@@ -82,6 +90,14 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _process(delta: float) -> void:
+	if _fade:
+		_fade_t += delta
+		# Black for 10 frames (at least), then 0.6 s to clear.
+		if Engine.get_process_frames() > 10:
+			_fade.color.a = clampf(1.0 - (_fade_t - 0.15) / 0.6, 0.0, 1.0)
+		if _fade.color.a <= 0.0:
+			_fade.queue_free()
+			_fade = null
 	var showcase := get_node_or_null(showcase_path)
 	if _help.text == HELP and showcase and showcase.get("player"):
 		# The MotionBricks character rolls too.

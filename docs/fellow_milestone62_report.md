@@ -109,7 +109,10 @@ The owner played the showcase on the laptop and reported four things; each answe
   neck), lowered until the ball's lowest point is on the ground and turned once about its centre in 0.95 s while the
   network runs on underneath; every rotation is about the body's right axis, set through the parents' poses.
 
-Also: the campfire burns from the start (`prewarm_steps` 240), and `prewarm_steps` no longer overflows the GPU's queue
+Also: the showcase fades in from black over its first frames — with the sky in Godot's incremental mode its rough
+radiance layers, the ambient light, are ready only 7 frames after the first (the atmosphere's tables, set after the
+first frame, dirty the sky once more), and until then the scene looked washed out (each colour about 0.53 × itself +
+0.5); the campfire burns from the start (`prewarm_steps` 240), and `prewarm_steps` no longer overflows the GPU's queue
 of steps (64 until the next frame) when several physics ticks come before a frame — a slow first frame, or a fixed
 frame rate below the physics' (Movie Maker at 30 fps: 2 × 33 steps a frame, the oldest dropped with a warning): a
 tick's prewarm batch is what the queue still holds since the last frame drawn, and the node asks for frames while it
