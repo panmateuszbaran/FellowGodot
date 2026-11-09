@@ -36,6 +36,12 @@
 				Why the character does not move (no model, a model without a skeleton...), or empty.
 			</description>
 		</method>
+		<method name="get_ground_height" qualifiers="const">
+			<return type="float" />
+			<description>
+				The ground's height (global y) the character walks on: the node's own when it started, or the last [method set_ground_height].
+			</description>
+		</method>
 		<method name="get_joint_positions" qualifiers="const">
 			<return type="PackedVector3Array" />
 			<description>
@@ -65,6 +71,13 @@
 			<return type="bool" />
 			<description>
 				Whether the model is loaded and the character placed.
+			</description>
+		</method>
+		<method name="set_ground_height">
+			<return type="void" />
+			<param index="0" name="height" type="float" />
+			<description>
+				Sets the ground's height (global y) under the character. The network's motion is on a plane at the height the node started at: over uneven ground (a [FellowTerrain3D]'s [method FellowTerrain3D.get_height] under it, say) set it every frame; the whole body moves up or down with it.
 			</description>
 		</method>
 	</methods>

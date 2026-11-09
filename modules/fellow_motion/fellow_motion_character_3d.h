@@ -201,6 +201,10 @@ public:
 	void set_get_up(bool p_v) { get_up = p_v; }
 	bool is_get_up() const { return get_up; }
 
+	// The ground's height under the character (global y): taken from the node's position when it starts; a game sets it
+	// every frame to walk over uneven ground (the model's motion is on a plane).
+	void set_ground_height(float p_y) { ground_y = p_y; }
+	float get_ground_height() const { return ground_y; }
 	Vector3 get_actual_velocity() const { return actual_velocity; }
 	MotionState get_state() const { return state; }
 	bool is_ready() const { return started && rig != nullptr; }

@@ -23,6 +23,15 @@ Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.m
 - The rain's particle process materials baked into exports (decision 0169): `FellowRain3D`'s baking provider gives
   the particles shaders of its four process materials (made by one function for the node and the provider); a baked
   rain export compiles no shader at its first start (3 before).
+- A playable showcase, `showcase/` (README.md): a 512 m valley built by code — `FellowTerrain3D` with six painted
+  layers and its foliage (grass, flowers, bushes, broadleaf trees, pines, rocks), a lake (`FellowWater3D`), a village
+  of six houses round a campfire (`FellowGasVolume3D`, a log burning with `FellowBurnable3D`), the weather from sun to
+  blizzard (`FellowWeather3D`, keys 1-7), a 12-minute day with the atmosphere's sky, clouds and stars, lamps and lit
+  windows at night, `FellowPipelineWarmer3D` at the start — and a third-person character: NVIDIA's SOMA mannequin moved
+  by `FellowMotionCharacter3D` (MotionBricks on the GPU, no clips) when its weights and mannequin are in
+  `showcase/external` (not part of the repository), else a humanoid made in code with blended clips.
+- `FellowMotionCharacter3D.set_ground_height()` / `get_ground_height()`: the network's motion is on a plane; a game
+  sets the ground's height under the character every frame to walk it over uneven ground (the showcase's terrain).
 
 ## Milestone 61 — what the CPU could still do without a GPU, then the RTX's measurements (2026-11-09)
 

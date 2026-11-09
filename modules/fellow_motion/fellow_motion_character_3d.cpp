@@ -674,6 +674,8 @@ void FellowMotionCharacter3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("is_idle_motion"), &FellowMotionCharacter3D::is_idle_motion);
 	ClassDB::bind_method(D_METHOD("set_get_up", "enable"), &FellowMotionCharacter3D::set_get_up);
 	ClassDB::bind_method(D_METHOD("is_get_up"), &FellowMotionCharacter3D::is_get_up);
+	ClassDB::bind_method(D_METHOD("set_ground_height", "height"), &FellowMotionCharacter3D::set_ground_height);
+	ClassDB::bind_method(D_METHOD("get_ground_height"), &FellowMotionCharacter3D::get_ground_height);
 	ClassDB::bind_method(D_METHOD("get_actual_velocity"), &FellowMotionCharacter3D::get_actual_velocity);
 	ClassDB::bind_method(D_METHOD("get_state"), &FellowMotionCharacter3D::get_state);
 	ClassDB::bind_method(D_METHOD("is_ready"), &FellowMotionCharacter3D::is_ready);

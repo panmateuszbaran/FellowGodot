@@ -15,6 +15,7 @@ node.
 | renderer work | `servers/rendering/renderer_rd/` (files and blocks marked `fellow` / `FellowEngine`), effects in `renderer_rd/effects/fellow_*`, settings in `servers/rendering/fellow_settings.{h,cpp}` |
 | Vulkan driver work | `drivers/vulkan/` (`FELLOW_VULKAN_PROFILE` in `fellow_vulkan_profile.*`) |
 | the class reference | `doc/classes/*.xml`, `modules/*/doc_classes/*.xml` |
+| a playable showcase | `showcase/` (a Godot project; its scenes are written by `showcase/tools/build_showcase.gd`, README.md) |
 | benchmarks | `benchmarks/` (FellowBench project, `run_benchmarks.py`, analysis tools) |
 | checks without a GPU | `benchmarks/tools/lavapipe/`, `benchmarks/tools/platforms/` (renderers, simulated GPUs, Windows/arm64/Android/web builds) |
 | editor check | `benchmarks/tools/editor_check/` |

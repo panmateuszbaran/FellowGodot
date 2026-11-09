@@ -1,0 +1,58 @@
+; FellowEngine Showcase: a valley with FellowEngine's terrain and foliage, water, weather, fire and sky, and a
+; character to walk it. Open it with a FellowEngine editor build (it needs FellowEngine's nodes); README.md.
+
+config_version=5
+
+[application]
+
+config/name="FellowEngine Showcase"
+config/description="A valley built with FellowEngine: terrain and foliage, a lake, a village with a campfire, weather from sun to blizzard, a day's sky with clouds, and a character to walk it."
+run/main_scene="res://main.tscn"
+config/features=PackedStringArray("4.7", "Forward Plus")
+config/icon="res://icon.svg"
+config/use_custom_user_dir=true
+config/custom_user_dir_name="FellowShowcase"
+
+[debug]
+
+gdscript/warnings/integer_division=0
+
+[display]
+
+window/size/viewport_width=1600
+window/size/viewport_height=900
+window/vsync/vsync_mode=1
+
+[physics]
+
+common/physics_ticks_per_second=60
+
+[rendering]
+
+renderer/rendering_method="forward_plus"
+anti_aliasing/quality/use_taa=true
+lights_and_shadows/directional_shadow/size=4096
+lights_and_shadows/directional_shadow/soft_shadow_filter_quality=3
+lights_and_shadows/positional_shadow/soft_shadow_filter_quality=3
+environment/ssao/quality=2
+textures/default_filters/anisotropic_filtering_level=4
+fellow/post/atmosphere/enabled=true
+fellow/post/clouds/enabled=true
+fellow/post/light_shafts/intensity=0.6
+fellow/post/contact_shadows/enabled=true
+fellow/post/bloom/enabled=true
+
+[shader_globals]
+
+fellow_atmosphere_sky_view={
+"type": "sampler2D",
+"value": ""
+}
+fellow_atmosphere_transmittance={
+"type": "sampler2D",
+"value": ""
+}
+fellow_atmosphere_camera_height={
+"type": "float",
+"value": 0.0
+}

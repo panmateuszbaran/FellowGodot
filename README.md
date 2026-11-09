@@ -57,6 +57,11 @@ These are real-time captures from the benchmark scenes on an RTX 5070 Ti Laptop 
 features, nodes and (in Bistro) ray tracing on. Captions, settings and more images are in
 [docs/SHOWCASE.md](docs/SHOWCASE.md).
 
+To try it yourself: [showcase/](showcase/README.md) is a small playable valley built with these nodes — terrain and
+foliage, a lake, a village with a campfire, weather from sun to blizzard, a day's sky — with a character to walk it
+(MotionBricks' mannequin moved by the neural network when its files are installed, a simple one otherwise). Open it in
+a FellowEngine editor build and press F5.
+
 ## Performance
 
 Stock Godot 4.7.2 against FellowEngine with its defaults, frame time in ms. Measured on an Acer Predator PHN16S-71
