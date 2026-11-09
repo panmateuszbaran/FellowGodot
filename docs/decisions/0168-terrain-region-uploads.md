@@ -45,11 +45,21 @@ setting off → on:
 | after a paint stroke (a splat map) | 4.62 → **0.03 ms** |
 | a frame while a stroke is held (a dab a frame; lavapipe's frame, 320 × 180): raise; paint | 54.1 → 45.1 ms; 53.9 → 44.7 ms |
 
-On the RTX the whole textures' upload was 10 ms (2049²) and 89 ms (4097², heights, normals and a splat map) of a
-frame with an edit: what is uploaded now is the region's size, not the map's.
+On the RTX laptop (job f364; release template, 1920 × 1080, a stroke held 10 s, a dab a frame), the setting off → on:
+
+| | 2049² | 4097² |
+|---|---|---|
+| the frame's update after a raise stroke (heights and normals) | 12.83 → **0.65 ms** | 71.16 → **0.81 ms** |
+| after a paint stroke (a splat map) | 8.81 → **0.02 ms** | 34.42 → **0.02 ms** |
+| a frame while raising (mean; 99th percentile) | 12.31 → 0.98 ms (15.75 → 2.65) | 63.27 → **0.87 ms** (77.13 → 1.33) |
+| a frame while painting | 8.06 → 1.11 ms (9.71 → 3.15) | 29.16 → **0.98 ms** (34.24 → 1.62) |
+
+Sculpting a 4 km map at 4097² went from 16 frames a second to the frame's own cost: the update is the region's size,
+not the map's. Every check of the edit passed on the RTX too (the textures read back equal to a rebuild's).
 
 ## Decision
 
-**KEEP, on.** An edit costs the texels it changes, not the map: the same textures. Not done: compressed textures
+**KEEP, on.** An edit costs the texels it changes, not the map: the same textures; on the RTX a 4097² map's stroke
+frame 63 → 0.9 ms. Not done: compressed textures
 (the terrain's are not); the collision shapes over the region are still rebuilt whole (one per 128 m region, 0.3-0.5 ms
 headless).

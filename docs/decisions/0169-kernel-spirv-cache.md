@@ -4,7 +4,8 @@ Status: **KEEP, on** (exact: the same SPIR-V) · Branch `fellow/geometry` · Set
 `rendering/fellow/frame/kernel_spirv_cache` (on) · Code: `modules/fellow_fluid/fellow_shared_shaders.cpp`
 (`FellowSharedShaders::file()`); `RendererSceneRenderRD::fellow_create_versions_for_baking()`
 (`renderer_scene_render_rd.{h,cpp}`, `forward_clustered/render_forward_clustered.{h,cpp}`, `effects/fellow_gas.h`),
-called by `editor/export/shader_baker_export_plugin.cpp`; `servers/rendering/fellow_bake_shaders.h` and the nodes'
+called by `editor/export/shader_baker_export_plugin.cpp`; `servers/rendering/fellow_bake_shaders.h`, `fellow_kernel_cache.{h,cpp}`,
+`modules/fellow_motion/fellow_motion_model.cpp` and the nodes'
 `fellow_bake_shader_codes()` (water, rain, lightning, shallow water, burnable, terrain); `servers/rendering/fellow_settings.{h,cpp}` (the stats
 `cost_glsl_compile_usec`, `cost_glsl_compiles`, `cost_glsl_cached_usec`, `cost_glsl_cached`).
 
@@ -25,9 +26,11 @@ Milestone 61's look at load time and cold shader compilation, two gaps:
 
 ## Change
 
-* `FellowSharedShaders::file()` keeps the compiled file as a resource in `user://fellow_kernel_cache/`, named by the
-  kernel and the MD5 of its source with the engine build's hash: a later session of the same build reads it instead of
-  compiling (a changed source or build is a new name). Only a file whose every version and stage compiled is kept; one
+* `FellowKernelCache::parse()` (`servers/rendering/fellow_kernel_cache.{h,cpp}`), used by `FellowSharedShaders::file()`
+  and by the neural motion model (`FellowMotionModel`, its kernels compiled with the GPU's subgroup size in their
+  defines), keeps the compiled file as a resource in `user://fellow_kernel_cache/`, named by the kernel and the MD5 of
+  its source and defines with the engine build's hash: a later session of the same build reads it instead of
+  compiling (a changed source, define or build is a new name). Only a file whose every version and stage compiled is kept; one
   that does not load, or holds an error, is compiled again. FellowEngine's stats count the compilations and the reads
   with their time.
 * `RendererSceneRenderRD::fellow_create_versions_for_baking()`, called by the shader baker when an export starts (after
@@ -45,6 +48,9 @@ Milestone 61's look at load time and cold shader compilation, two gaps:
 
 * lavapipe, the editor build (the cloud's CPU): a water, a rain and a shallow water added to an empty scene, the user
   directory empty and then again: the first session compiles 3 files in 28.1 ms, the second reads 3 in 0.5 ms.
+* The neural motion model (`modules/fellow_motion/tests/fmb_gpu_run.gd`, MotionBricks' f16 weights, lavapipe): its
+  load 26.4 s with the kernels compiled, **0.86 s** with them read from the cache; every output and activation the
+  same bit for bit.
 * The image regression suite's water, rain and snow scenes (the waves, the ripples, the snow's tracks), their kernels
   compiled and then read from the cache: the same pictures as their goldens, bit for bit, no error.
 * Exports (Linux, release template, the baker on) of the regression suite's scenes, each run twice on lavapipe from an
@@ -62,6 +68,5 @@ Milestone 61's look at load time and cold shader compilation, two gaps:
 
 **KEEP, on.** Not done: the particle process materials FellowEngine's nodes make (the rain's drops, splashes and
 flakes: Godot's ParticleProcessMaterial writes their code from properties the node changes at run time); a burnable's
-burning material (written from its object's own material); the neural motion model's kernels (`FellowMotionModel`, compiled
-with the GPU's subgroup size in their defines); shipping the kernel cache with an export (a game's first session
+burning material (written from its object's own material); shipping the kernel cache with an export (a game's first session
 still compiles its kernels, 28 ms here).

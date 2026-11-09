@@ -38,6 +38,7 @@
 #include "core/object/worker_thread_pool.h"
 #include "core/os/os.h"
 #include "core/os/time.h"
+#include "servers/rendering/fellow_kernel_cache.h"
 #include "servers/rendering/rendering_device_binds.h"
 #include "servers/rendering/rendering_server.h"
 
@@ -503,12 +504,11 @@ Error FellowMotionModel::load(const String &p_path, int p_max_batch) {
 		}
 	}
 
-	shader_file.instantiate();
-	Error err = shader_file->parse_versions_from_text(fellow_motion_shader_glsl, "#define SGSIZE " + itos(MAX(sg, 8)) + "\n");
-	if (err != OK) {
-		shader_file->print_errors("fellow_motion");
+	// Milestone 61 (decision 0169): compiled once per machine, build and subgroup size, not once per session.
+	shader_file = FellowKernelCache::parse(String(fellow_motion_shader_glsl), "#define SGSIZE " + itos(MAX(sg, 8)) + "\n", "fellow_motion");
+	if (shader_file.is_null()) {
 		_free();
-		return err;
+		return ERR_COMPILATION_FAILED;
 	}
 	const char *names_h[V_MAX] = { "gemm_h16", "gemm_h32", "gemm_h64", "reduce", "attn", "ln", "glue" };
 	const char *names_f[V_MAX] = { "gemm_f16", "gemm_f32", "gemm_f64", "reduce", "attn", "ln", "glue" };
