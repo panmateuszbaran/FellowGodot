@@ -15,11 +15,12 @@ GPU (the campfire's solver, the process's memory), with the regression suite ext
   culling's bit no longer flipping while autotune has it off, and the warmer's new shelf: a copy of every visible
   mesh, MultiMesh and terrain foliage kind drawn from a view 4 km up, hidden from other cameras by its range. The same
   image.
-* **The terrain's edits upload only what they changed** (decision 0168): a 2049² map's update after a stroke 8.78 →
-  0.36 ms (heights and normals), 4.62 → 0.03 ms (a splat map) on lavapipe, bit-exact; on the RTX the whole textures'
-  upload was 10-89 ms a frame with an edit (f360).
-* **Compiling less at load** (decision 0169): the water's, rain's and shallow water's GLSL kept as SPIR-V after its
-  first compilation (28 → 0.5 ms here; on the thread adding the first such node, at load or in play); and Godot's
+* **The terrain's edits upload only what they changed** (decision 0168): on the RTX a 4097² map's frame while
+  sculpting 63.3 → 0.9 ms, while painting 29.2 → 1.0 ms (the update after a stroke 71.2 → 0.8 ms and 34.4 → 0.02 ms),
+  the same textures bit for bit.
+* **Compiling less at load** (decision 0169): the water's, rain's, shallow water's and the neural motion model's GLSL
+  kept as SPIR-V after its first compilation (the motion model's load 26.4 → 0.86 s on the cloud's CPU, the others' 28 →
+  0.5 ms; on the thread adding the first such node, at load or in play); and Godot's
   shader baker now bakes FellowEngine's effects, which are made when first used, and the materials its nodes make from
   code: baked exports of the fire and water scenes compile no shader at their first start instead of 3 and 1 (70-72
   unbaked).
@@ -91,8 +92,14 @@ day; decision 0167):
 | specialized pipelines a draw waited for after the warm-up | 9 | **1** |
 | pipelines compiled after the warm-up | 23 | 9 (8 of them autotune's, prepared ahead) |
 
-**The terrain's edits** (lavapipe, 2049²; decision 0168): the frame's update 8.78 → 0.36 ms after a raise stroke,
-4.62 → 0.03 ms after a paint stroke; lavapipe's frame during a stroke 54 → 45 ms.
+**The terrain's edits** (decision 0168), the setting off → on: on lavapipe at 2049² the frame's update 8.78 → 0.36 ms
+after a raise stroke, 4.62 → 0.03 ms after a paint stroke. On the RTX laptop (f364, 1920 × 1080):
+
+| | 2049² | 4097² |
+|---|---|---|
+| the update after a raise stroke (heights and normals) | 12.83 → 0.65 ms | 71.16 → **0.81 ms** |
+| the update after a paint stroke (a splat map) | 8.81 → 0.02 ms | 34.42 → **0.02 ms** |
+| a frame while raising; while painting (means) | 12.31 → 0.98; 8.06 → 1.11 ms | 63.27 → **0.87**; 29.16 → **0.98 ms** |
 
 **The campfire's pressure solve** (lavapipe, `gas_check.gd`, 32 × 48 × 32 cells, sparse, 180 steps; the residual's RMS
 after the last step, and the state's difference from 8 V-cycles'; the work is the solve's cell updates, the finest level
