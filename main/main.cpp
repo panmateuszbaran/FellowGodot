@@ -5094,6 +5094,7 @@ bool Main::iteration() {
 
 	GodotProfileZoneGrouped(_profile_zone, "RenderingServer::sync");
 	RenderingServer::get_singleton()->sync(); //sync if still drawing from previous frames.
+	Fellow::stats().main_sync_usec.add(OS::get_singleton()->get_ticks_usec() - fellow_draw_begin); // FellowEngine (milestone 69)
 
 	GodotProfileZoneGrouped(_profile_zone, "RenderingServer::draw");
 	const bool has_pending_resources_for_processing = RD::get_singleton() && RD::get_singleton()->has_pending_resources_for_processing();

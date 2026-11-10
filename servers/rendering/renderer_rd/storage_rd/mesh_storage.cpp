@@ -285,6 +285,7 @@ void MeshStorage::mesh_set_blend_shape_count(RID p_mesh, int p_blend_shape_count
 
 /// Returns stride
 void MeshStorage::mesh_add_surface(RID p_mesh, const RenderingServerTypes::SurfaceData &p_surface) {
+	Fellow::CostScope fellow_cost(Fellow::stats().cost_mesh_surface_usec, Fellow::stats().cost_mesh_surfaces); // FellowEngine (milestone 69)
 	Mesh *mesh = mesh_owner.get_or_null(p_mesh);
 	ERR_FAIL_NULL(mesh);
 
@@ -2458,6 +2459,7 @@ Color MeshStorage::_multimesh_instance_get_custom_data(RID p_multimesh, int p_in
 }
 
 void MeshStorage::_multimesh_set_buffer(RID p_multimesh, const Vector<float> &p_buffer) {
+	Fellow::CostScope fellow_cost(Fellow::stats().cost_multimesh_buffer_usec, Fellow::stats().cost_multimesh_buffers); // FellowEngine (milestone 69)
 	MultiMesh *multimesh = multimesh_owner.get_or_null(p_multimesh);
 	ERR_FAIL_NULL(multimesh);
 	ERR_FAIL_COND(p_buffer.size() != (multimesh->instances * (int)multimesh->stride_cache));

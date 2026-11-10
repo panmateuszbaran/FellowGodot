@@ -119,6 +119,15 @@ class CommandQueueMT {
 	uint64_t flush_read_ptr = 0;
 	std::atomic<bool> pending{ false };
 
+public:
+	// FellowEngine (milestone 69): when set, _flush() counts the commands it runs and their time (the RenderingServer:
+	// commands pushed by other threads, run by the thread that flushes — the main thread when it is not threaded).
+	uint64_t (*fellow_ticks)() = nullptr;
+	SafeNumeric<uint64_t> *fellow_flush_usec = nullptr;
+	SafeNumeric<uint64_t> *fellow_flush_commands = nullptr;
+
+private:
+
 	template <typename T, typename... Args>
 	_FORCE_INLINE_ void create_command(Args &&...p_args) {
 		// alloc size is size+T+safeguard
@@ -177,7 +186,10 @@ class CommandQueueMT {
 
 		alignas(uint64_t) char cmd_local_mem[MAX_COMMAND_SIZE];
 
+		const uint64_t fellow_from = fellow_ticks ? fellow_ticks() : 0; // FellowEngine (milestone 69)
+		uint64_t fellow_commands = 0;
 		while (flush_read_ptr < command_mem.size()) {
+			fellow_commands++;
 			uint64_t size = *(uint64_t *)&command_mem[flush_read_ptr];
 			flush_read_ptr += sizeof(uint64_t);
 
@@ -207,6 +219,10 @@ class CommandQueueMT {
 		command_mem.clear();
 		pending.store(false);
 		flush_read_ptr = 0;
+		if (fellow_ticks && fellow_commands) {
+			fellow_flush_usec->add(fellow_ticks() - fellow_from);
+			fellow_flush_commands->add(fellow_commands);
+		}
 
 		_prevent_sync_wraparound();
 

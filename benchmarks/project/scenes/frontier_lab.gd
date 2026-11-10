@@ -983,6 +983,10 @@ func soak_after_frame() -> Dictionary:
 		"cell_release_usec": cs.get("release_usec", 0), "region_release_usec": gs.get("release_usec", 0),
 		"cell_loads": cs.get("loads", 0), "region_loads": gs.get("loads", 0), "mesh_swap_usec": cs.get("mesh_swap_usec", 0),
 		"streamer_update_usec": int(cs.get("update_usec", 0)) + int(gs.get("update_usec", 0))}
+	# The update by step (milestone 69).
+	for step in ["instanced", "meshes", "loaded", "requests"]:
+		var key := "update_%s_usec" % step
+		now["streamer_" + step + "_usec"] = int(cs.get(key, 0)) + int(gs.get(key, 0))
 	for k in now:
 		st[k] = int(now[k]) - int(_soak_prev.get(k, now[k]))
 	_soak_prev = now

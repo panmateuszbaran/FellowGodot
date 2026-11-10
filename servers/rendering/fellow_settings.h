@@ -1324,6 +1324,15 @@ struct Stats {
 	SafeNumeric<uint64_t> main_frames; // frame steps
 	SafeNumeric<uint64_t> main_process_usec; // SceneTree::process() (scripts, animation, nodes), the message queue, navigation
 	SafeNumeric<uint64_t> main_draw_usec; // RenderingServer::sync() and draw()
+	SafeNumeric<uint64_t> main_sync_usec; // of it, RenderingServer::sync() (milestone 69)
+	SafeNumeric<uint64_t> rs_queue_flush_usec; // the RenderingServer's queue run: commands pushed by other threads (milestone 69)
+	SafeNumeric<uint64_t> rs_queue_flush_commands; // its commands
+	SafeNumeric<uint64_t> draw_begin_frame_usec; // RenderingServer::draw() by phase (milestone 69): the RenderingDevice's frame begun (fences, frees)
+	SafeNumeric<uint64_t> draw_setup_usec; // texture streaming, the scene's and canvas's updates
+	SafeNumeric<uint64_t> draw_particles_probes_usec; // particles, reflection probes
+	SafeNumeric<uint64_t> draw_viewports_usec; // the viewports drawn
+	SafeNumeric<uint64_t> draw_end_frame_usec; // the frame ended (graph replay, submission, presentation)
+	SafeNumeric<uint64_t> draw_post_usec; // visibility notifiers, post-draw steps, timestamps, memory info
 	// Milestone 61: the driver's pipeline cache, in bytes, at its last query (at start: the file's pipelines; then after
 	// pipelines are made, every one since) — a gauge, not a sum.
 	SafeNumeric<uint64_t> pipeline_cache_bytes;
@@ -1393,6 +1402,13 @@ struct Stats {
 	SafeNumeric<uint64_t> cost_readbacks;
 	SafeNumeric<uint64_t> cost_texture_create_usec;
 	SafeNumeric<uint64_t> cost_texture_creates;
+	SafeNumeric<uint64_t> cost_buffer_init_usec; // RenderingDevice buffers created with data (their upload; milestone 69)
+	SafeNumeric<uint64_t> cost_buffer_inits;
+	SafeNumeric<uint64_t> cost_buffer_init_bytes;
+	SafeNumeric<uint64_t> cost_mesh_surface_usec; // MeshStorage::mesh_add_surface()
+	SafeNumeric<uint64_t> cost_mesh_surfaces;
+	SafeNumeric<uint64_t> cost_multimesh_buffer_usec; // a MultiMesh's whole buffer set
+	SafeNumeric<uint64_t> cost_multimesh_buffers;
 	// Milestone 61: FellowEngine nodes' compute kernels compiled from GLSL (glslang) and read from their SPIR-V cache.
 	SafeNumeric<uint64_t> cost_glsl_compile_usec;
 	SafeNumeric<uint64_t> cost_glsl_compiles;
@@ -1471,6 +1487,8 @@ struct Stats {
 	SafeNumeric<uint64_t> rd_fence_wait_usec; // time the render thread waited for frame fences (GPU behind the CPU)
 	SafeNumeric<uint64_t> rd_vk_submit_usec; // Vulkan: time in vkQueueSubmit (frame submissions)
 	SafeNumeric<uint64_t> rd_vk_present_usec; // Vulkan: time in vkQueuePresentKHR
+	SafeNumeric<uint64_t> rd_free_pending_usec; // resources freed when their frame came round again (milestone 69)
+	SafeNumeric<uint64_t> rd_free_pendings;
 	SafeNumeric<uint64_t> rd_vk_presents; // Vulkan: presentations
 	SafeNumeric<uint64_t> frame_present_thread_uses; // presentations handed to the present thread
 	SafeNumeric<uint64_t> frame_present_thread_wait_usec; // time the render thread waited for the present thread

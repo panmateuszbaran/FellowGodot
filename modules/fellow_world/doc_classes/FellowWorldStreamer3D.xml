@@ -28,7 +28,7 @@
 		<method name="get_stats" qualifiers="const">
 			<return type="Dictionary" />
 			<description>
-				The cells by state, loads and releases, failures, the main thread's time adding and removing cells (total and the largest), the worker threads' instantiation time, the time from request to the tree (total and the largest), the streamer's own time, frames, [code]settled[/code]; the streamed meshes of the loaded cells ([code]streamed_meshes[/code], [code]streamed_meshes_full[/code]: those with their full mesh), their loads and releases ([code]mesh_loads[/code], [code]mesh_releases[/code]) and the main thread's time swapping meshes ([code]mesh_swap_usec[/code], [code]mesh_swap_usec_max[/code]).
+				The cells by state, loads and releases, failures, the main thread's time adding and removing cells (total and the largest), the worker threads' instantiation time, the time from request to the tree (total and the largest), the streamer's own time (total, the largest, and by step: [code]update_instanced_usec[/code] for instanced content taken or dropped, [code]update_meshes_usec[/code] for the streamed meshes, [code]update_loaded_usec[/code] for the distances and the loads that ended, [code]update_requests_usec[/code] for the loads requested), frames, [code]settled[/code]; the streamed meshes of the loaded cells ([code]streamed_meshes[/code], [code]streamed_meshes_full[/code]: those with their full mesh), their loads and releases ([code]mesh_loads[/code], [code]mesh_releases[/code]) and the main thread's time swapping meshes ([code]mesh_swap_usec[/code], [code]mesh_swap_usec_max[/code]).
 			</description>
 		</method>
 		<method name="is_settled" qualifiers="const">

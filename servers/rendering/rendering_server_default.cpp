@@ -79,8 +79,16 @@ void RenderingServerDefault::request_frame_drawn_callback(const Callable &p_call
 }
 
 void RenderingServerDefault::_draw(bool p_swap_buffers, double frame_step) {
+	// FellowEngine (milestone 69): the draw's phases timed (Fellow::stats().draw_*_usec).
+	uint64_t fellow_phase = OS::get_singleton()->get_ticks_usec();
+	auto fellow_lap = [&fellow_phase](SafeNumeric<uint64_t> &r_usec) {
+		const uint64_t t = OS::get_singleton()->get_ticks_usec();
+		r_usec.add(t - fellow_phase);
+		fellow_phase = t;
+	};
 	GodotProfileZoneGroupedFirst(_profile_zone, "rasterizer->begin_frame");
 	RSG::rasterizer->begin_frame(frame_step);
+	fellow_lap(Fellow::stats().draw_begin_frame_usec);
 
 	if (Fellow::pass_timestamps()) {
 		// FellowEngine: keep per-pass RENDER_TIMESTAMP markers enabled (only ever forces them on).
@@ -115,6 +123,7 @@ void RenderingServerDefault::_draw(bool p_swap_buffers, double frame_step) {
 	RSG::canvas->update();
 
 	frame_setup_time = double(OS::get_singleton()->get_ticks_usec() - time_usec) / 1000.0;
+	fellow_lap(Fellow::stats().draw_setup_usec);
 
 	if (Fellow::list_markers()) {
 		RENDER_TIMESTAMP("FellowEngine Particles and Probes");
@@ -129,6 +138,7 @@ void RenderingServerDefault::_draw(bool p_swap_buffers, double frame_step) {
 		RENDER_TIMESTAMP("FellowEngine Draw Viewports");
 	}
 
+	fellow_lap(Fellow::stats().draw_particles_probes_usec);
 	GodotProfileZoneGrouped(_profile_zone, "viewport->draw_viewports");
 	Fellow::autotune_frame_begin();
 	RSG::viewport->draw_viewports(p_swap_buffers);
@@ -136,9 +146,11 @@ void RenderingServerDefault::_draw(bool p_swap_buffers, double frame_step) {
 
 	GodotProfileZoneGrouped(_profile_zone, "canvas_render->update");
 	RSG::canvas_render->update();
+	fellow_lap(Fellow::stats().draw_viewports_usec);
 
 	GodotProfileZoneGrouped(_profile_zone, "rasterizer->end_frame");
 	RSG::rasterizer->end_frame(p_swap_buffers);
+	fellow_lap(Fellow::stats().draw_end_frame_usec);
 
 #ifndef XR_DISABLED
 	if (xr_server != nullptr) {
@@ -238,6 +250,7 @@ void RenderingServerDefault::_draw(bool p_swap_buffers, double frame_step) {
 
 	GodotProfileZoneGrouped(_profile_zone, "memory_info");
 	RSG::utilities->update_memory_info();
+	fellow_lap(Fellow::stats().draw_post_usec);
 }
 
 void RenderingServerDefault::_run_post_draw_steps() {
@@ -505,6 +518,10 @@ RenderingServerDefault::RenderingServerDefault(bool p_create_thread) {
 	RenderingServer::init();
 
 	create_thread = p_create_thread;
+	// FellowEngine (milestone 69): the queue's commands (pushed by other threads) and their time where they run.
+	command_queue.fellow_ticks = []() -> uint64_t { return OS::get_singleton()->get_ticks_usec(); };
+	command_queue.fellow_flush_usec = &Fellow::stats().rs_queue_flush_usec;
+	command_queue.fellow_flush_commands = &Fellow::stats().rs_queue_flush_commands;
 }
 
 RenderingServerDefault::~RenderingServerDefault() {

@@ -872,6 +872,8 @@ RenderingDevice::Buffer *RenderingDevice::_get_buffer_from_owner(RID p_buffer) {
 }
 
 Error RenderingDevice::_buffer_initialize(Buffer *p_buffer, Span<uint8_t> p_data, uint32_t p_required_align) {
+	Fellow::CostScope fellow_cost(Fellow::stats().cost_buffer_init_usec, Fellow::stats().cost_buffer_inits); // FellowEngine (milestone 69)
+	Fellow::stats().cost_buffer_init_bytes.add(p_data.size());
 	uint32_t transfer_worker_offset;
 	TransferWorker *transfer_worker = _acquire_transfer_worker(p_data.size(), p_required_align, transfer_worker_offset);
 	p_buffer->transfer_worker_index = transfer_worker->index;
@@ -8550,7 +8552,10 @@ void RenderingDevice::_begin_frame(bool p_presented) {
 
 	// Erase pending resources.
 	GodotProfileZoneGrouped(_profile_zone, "_free_pending_resources");
-	_free_pending_resources(frame);
+	{
+		Fellow::CostScope fellow_cost(Fellow::stats().rd_free_pending_usec, Fellow::stats().rd_free_pendings); // FellowEngine (milestone 69)
+		_free_pending_resources(frame);
+	}
 
 	// Advance staging buffers if used.
 	if (upload_staging_buffers.used) {

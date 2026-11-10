@@ -589,7 +589,10 @@ void FellowTerrain3D::_build_normals(Ref<Image> &r_normals) const {
 	job.w = map_w;
 	job.d = map_h;
 	job.inv = 1.0f / (2.0f * vertex_spacing);
-	if (map_h >= 256) {
+	// On a pool thread (a region instanced by the world streamer, or loaded) the rows are built here: a pool thread
+	// waiting for a group blocks on a semaphore, and with every pool thread waiting so the group's rows never run
+	// (milestone 69: a hang on a machine of two threads).
+	if (map_h >= 256 && WorkerThreadPool::get_singleton()->get_thread_index() < 0) {
 		WorkerThreadPool::GroupID group = WorkerThreadPool::get_singleton()->add_native_group_task(&_normals_row, &job, map_h, -1, true, SNAME("FellowTerrain3D normals"));
 		WorkerThreadPool::get_singleton()->wait_for_group_task_completion(group);
 	} else {

@@ -148,6 +148,12 @@ class FellowWorldStreamer3D : public Node3D {
 	uint64_t latency_usec = 0; // request to in the tree
 	uint64_t latency_usec_max = 0;
 	uint64_t update_usec = 0;
+	// Its steps (milestone 69): instancing finished (content dropped), streamed meshes, loads finished, loads requested.
+	uint64_t update_instanced_usec = 0;
+	uint64_t update_meshes_usec = 0;
+	uint64_t update_loaded_usec = 0;
+	uint64_t update_requests_usec = 0;
+	uint64_t update_usec_max = 0;
 	uint64_t frames = 0;
 
 	static LocalVector<FellowWorldStreamer3D *> in_tree; // milestone 50: for get_totals()

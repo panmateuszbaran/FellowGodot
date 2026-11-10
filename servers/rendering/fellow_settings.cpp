@@ -554,6 +554,15 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["main_frames"] = s.main_frames.get();
 	d["main_process_usec"] = s.main_process_usec.get();
 	d["main_draw_usec"] = s.main_draw_usec.get();
+	d["main_sync_usec"] = s.main_sync_usec.get();
+	d["rs_queue_flush_usec"] = s.rs_queue_flush_usec.get();
+	d["rs_queue_flush_commands"] = s.rs_queue_flush_commands.get();
+	d["draw_begin_frame_usec"] = s.draw_begin_frame_usec.get();
+	d["draw_setup_usec"] = s.draw_setup_usec.get();
+	d["draw_particles_probes_usec"] = s.draw_particles_probes_usec.get();
+	d["draw_viewports_usec"] = s.draw_viewports_usec.get();
+	d["draw_end_frame_usec"] = s.draw_end_frame_usec.get();
+	d["draw_post_usec"] = s.draw_post_usec.get();
 	d["pipeline_cache_bytes"] = s.pipeline_cache_bytes.get();
 	{
 		static const char *godot_phases[6] = { "integrate_forces", "broadphase", "islands", "setup", "solve", "integrate_velocities" };
@@ -608,6 +617,13 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["cost_glsl_cached"] = s.cost_glsl_cached.get();
 	d["cost_texture_create_usec"] = s.cost_texture_create_usec.get();
 	d["cost_texture_creates"] = s.cost_texture_creates.get();
+	d["cost_buffer_init_usec"] = s.cost_buffer_init_usec.get();
+	d["cost_buffer_inits"] = s.cost_buffer_inits.get();
+	d["cost_buffer_init_bytes"] = s.cost_buffer_init_bytes.get();
+	d["cost_mesh_surface_usec"] = s.cost_mesh_surface_usec.get();
+	d["cost_mesh_surfaces"] = s.cost_mesh_surfaces.get();
+	d["cost_multimesh_buffer_usec"] = s.cost_multimesh_buffer_usec.get();
+	d["cost_multimesh_buffers"] = s.cost_multimesh_buffers.get();
 	d["geometry_cluster_triangles_drawn"] = s.geometry_cluster_triangles_drawn.get();
 	d["geometry_cluster_triangles_culled"] = s.geometry_cluster_triangles_culled.get();
 	d["geometry_cluster_lod_coarser_ranges"] = s.geometry_cluster_lod_coarser_ranges.get();
@@ -680,6 +696,8 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["rd_execute_usec"] = s.rd_execute_usec.get();
 	d["rd_fence_wait_usec"] = s.rd_fence_wait_usec.get();
 	d["rd_vk_submit_usec"] = s.rd_vk_submit_usec.get();
+	d["rd_free_pending_usec"] = s.rd_free_pending_usec.get();
+	d["rd_free_pendings"] = s.rd_free_pendings.get();
 	d["rd_vk_present_usec"] = s.rd_vk_present_usec.get();
 	d["rd_vk_presents"] = s.rd_vk_presents.get();
 	d["frame_present_thread_uses"] = s.frame_present_thread_uses.get();

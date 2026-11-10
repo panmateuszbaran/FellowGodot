@@ -376,10 +376,18 @@ void FellowWorldStreamer3D::_update() {
 		instancing.remove_at_unordered(i);
 	}
 
+	uint64_t t_step = OS::get_singleton()->get_ticks_usec();
+	update_instanced_usec += t_step - t0;
+
 	// 2. Distances.
 	LocalVector<Vector3> points;
 	_gather_points(points);
 	_update_meshes(points);
+	{
+		const uint64_t t = OS::get_singleton()->get_ticks_usec();
+		update_meshes_usec += t - t_step;
+		t_step = t;
+	}
 	for (FellowStreamingCell3D *cell : cells) {
 		float d = 1e30f;
 		const AABB box = cell->get_global_bounds();
@@ -446,6 +454,12 @@ void FellowWorldStreamer3D::_update() {
 		}
 	}
 
+	{
+		const uint64_t t = OS::get_singleton()->get_ticks_usec();
+		update_loaded_usec += t - t_step; // with the distances
+		t_step = t;
+	}
+
 	struct Item {
 		FellowStreamingCell3D *cell;
 		float key;
@@ -490,6 +504,7 @@ void FellowWorldStreamer3D::_update() {
 		_activate(in[i].cell, c);
 	}
 	start.sort();
+	const uint64_t t_requests = OS::get_singleton()->get_ticks_usec();
 	for (const Item &it : start) {
 		if (loading + int(instancing.size()) >= max_loading) {
 			break;
@@ -503,7 +518,10 @@ void FellowWorldStreamer3D::_update() {
 		cell->request_usec = OS::get_singleton()->get_ticks_usec();
 		loading++;
 	}
-	update_usec += OS::get_singleton()->get_ticks_usec() - t0;
+	const uint64_t t_end = OS::get_singleton()->get_ticks_usec();
+	update_requests_usec += t_end - t_requests;
+	update_usec += t_end - t0;
+	update_usec_max = MAX(update_usec_max, t_end - t0);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -871,6 +889,11 @@ Dictionary FellowWorldStreamer3D::get_stats() const {
 	d["latency_usec"] = latency_usec;
 	d["latency_usec_max"] = latency_usec_max;
 	d["update_usec"] = update_usec;
+	d["update_usec_max"] = update_usec_max;
+	d["update_instanced_usec"] = update_instanced_usec;
+	d["update_meshes_usec"] = update_meshes_usec;
+	d["update_loaded_usec"] = update_loaded_usec;
+	d["update_requests_usec"] = update_requests_usec;
 	d["frames"] = frames;
 	d["settled"] = is_settled();
 	int full = 0;
