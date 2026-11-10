@@ -202,13 +202,31 @@ void FellowTerrainEditorPlugin::_begin_stroke(const Vector3 &p_position, bool p_
 	stroking = true;
 	stroke_inverted = p_inverted;
 	touched = Rect2i();
-	for (int i = 0; i < 4; i++) {
-		// Only the images this tool changes.
-		const bool used = _tool_uses_image(tool, i);
-		Ref<Image> img = t->get(_image_props[i]);
-		before[i] = used && img.is_valid() ? Ref<Image>(img->duplicate()) : Ref<Image>();
-		// The object itself, to tell an image the terrain replaced (made editable, or made) from one it changed.
-		before_object[i] = img;
+	snapshots.clear();
+	// The selected terrain and, for a region (decision 0173), its neighbours: the brush reaches them too.
+	LocalVector<Node3D *> terrains;
+	terrains.push_back(t);
+	const Array neighbors = t->call("get_region_neighbors");
+	for (const Variant &v : neighbors) {
+		if (Node3D *n = Object::cast_to<Node3D>(v)) {
+			terrains.push_back(n);
+		}
+	}
+	const float spacing = float(t->get("vertex_spacing"));
+	for (Node3D *terrain : terrains) {
+		Snapshot s;
+		s.terrain = terrain->get_instance_id();
+		const Vector3 d = terrain->get_global_transform().affine_inverse().xform(t->get_global_transform().origin);
+		s.offset = Vector2i(int(Math::round(d.x / spacing)), int(Math::round(d.z / spacing)));
+		for (int i = 0; i < 4; i++) {
+			// Only the images this tool changes.
+			const bool used = _tool_uses_image(tool, i);
+			Ref<Image> img = terrain->get(_image_props[i]);
+			s.before[i] = used && img.is_valid() ? Ref<Image>(img->duplicate()) : Ref<Image>();
+			// The object itself, to tell an image the terrain replaced (made editable, or made) from one it changed.
+			s.before_object[i] = img;
+		}
+		snapshots.push_back(s);
 	}
 	const float h = float(t->call("get_height", p_position));
 	flatten_height = Math::is_nan(h) ? 0.0f : h;
@@ -222,64 +240,72 @@ void FellowTerrainEditorPlugin::_end_stroke() {
 	stroking = false;
 	Node3D *t = _terrain();
 	if (!t || touched.size.x <= 0) {
-		for (int i = 0; i < 4; i++) {
-			before[i].unref();
-			before_object[i].unref();
-		}
+		snapshots.clear();
 		return;
 	}
 	EditorUndoRedoManager *ur = get_undo_redo();
 	ur->create_action(tool == TOOL_PAINT ? TTR("Paint Terrain") : (tool == TOOL_HOLE ? TTR("Cut Terrain Holes") : TTR("Sculpt Terrain")), UndoRedo::MERGE_DISABLE, t);
-	Ref<Image> hm = t->get("heightmap");
-	const Vector2i map = hm.is_valid() ? hm->get_size() : Vector2i(1, 1);
-	for (int i = 0; i < 4; i++) {
-		if (!_tool_uses_image(tool, i)) {
+	for (const Snapshot &s : snapshots) {
+		Node3D *terrain = ObjectDB::get_instance<Node3D>(s.terrain);
+		if (!terrain) {
 			continue;
 		}
-		Ref<Image> was = before_object[i];
-		Ref<Image> now = t->get(_image_props[i]);
-		if (now.is_null()) {
+		Ref<Image> hm = terrain->get("heightmap");
+		const Vector2i map = hm.is_valid() ? hm->get_size() : Vector2i(1, 1);
+		// The stroke's rectangle in this terrain's texels.
+		const Rect2i touched_here(touched.position + s.offset, touched.size);
+		if (!touched_here.intersects(Rect2i(Point2i(), map))) {
 			continue;
 		}
-		if (was != now) {
-			// The terrain replaced the image (its first edit): the property, both ways (a rebuild).
-			ur->add_do_property(t, _image_props[i], now);
-			ur->add_undo_property(t, _image_props[i], was);
-			continue;
-		}
-		// The rectangle in this image's texels (a splat map is stretched over the terrain), both ways.
-		Rect2i r = touched;
-		if (i == 1 || i == 2) {
-			const Vector2 s = Vector2(now->get_size()) / Vector2(MAX(1, map.x), MAX(1, map.y));
-			const Point2i a(int(Math::floor(touched.position.x * s.x)) - 2, int(Math::floor(touched.position.y * s.y)) - 2);
-			const Point2i b(int(Math::ceil((touched.position.x + touched.size.x) * s.x)) + 2, int(Math::ceil((touched.position.y + touched.size.y) * s.y)) + 2);
-			r = Rect2i(a, b - a);
-		}
-		r = r.intersection(Rect2i(Point2i(), now->get_size()));
-		if (r.size.x <= 0 || r.size.y <= 0 || before[i].is_null()) {
-			continue;
-		}
-		Ref<Image> after_region = now->get_region(r);
-		Ref<Image> before_region = before[i]->get_region(r);
-		if (i == 0) {
-			ur->add_do_method(t, "blit_heightmap_region", after_region, r.position);
-			ur->add_undo_method(t, "blit_heightmap_region", before_region, r.position);
-		} else if (i == 3) {
-			ur->add_do_method(t, "blit_hole_region", after_region, r.position);
-			ur->add_undo_method(t, "blit_hole_region", before_region, r.position);
-		} else {
-			ur->add_do_method(t, "blit_splat_region", i - 1, after_region, r.position);
-			ur->add_undo_method(t, "blit_splat_region", i - 1, before_region, r.position);
-		}
+		for (int i = 0; i < 4; i++) {
+			if (!_tool_uses_image(tool, i)) {
+				continue;
+			}
+			Ref<Image> was = s.before_object[i];
+			Ref<Image> now = terrain->get(_image_props[i]);
+			if (now.is_null()) {
+				continue;
+			}
+			if (was != now) {
+				// The terrain replaced the image (its first edit): the property, both ways (a rebuild).
+				ur->add_do_property(terrain, _image_props[i], now);
+				ur->add_undo_property(terrain, _image_props[i], was);
+				continue;
+			}
+			// The rectangle in this image's texels (a splat map is stretched over the terrain), both ways.
+			Rect2i r = touched_here;
+			if (i == 1 || i == 2) {
+				const Vector2 sc = Vector2(now->get_size()) / Vector2(MAX(1, map.x), MAX(1, map.y));
+				const Point2i a(int(Math::floor(touched_here.position.x * sc.x)) - 2, int(Math::floor(touched_here.position.y * sc.y)) - 2);
+				const Point2i b(int(Math::ceil((touched_here.position.x + touched_here.size.x) * sc.x)) + 2, int(Math::ceil((touched_here.position.y + touched_here.size.y) * sc.y)) + 2);
+				r = Rect2i(a, b - a);
+			}
+			r = r.intersection(Rect2i(Point2i(), now->get_size()));
+			if (r.size.x <= 0 || r.size.y <= 0 || s.before[i].is_null()) {
+				continue;
+			}
+			Ref<Image> after_region = now->get_region(r);
+			Ref<Image> before_region = s.before[i]->get_region(r);
+			if (after_region->get_data() == before_region->get_data()) {
+				continue; // a neighbour the brush did not reach
+			}
+			if (i == 0) {
+				ur->add_do_method(terrain, "blit_heightmap_region", after_region, r.position);
+				ur->add_undo_method(terrain, "blit_heightmap_region", before_region, r.position);
+			} else if (i == 3) {
+				ur->add_do_method(terrain, "blit_hole_region", after_region, r.position);
+				ur->add_undo_method(terrain, "blit_hole_region", before_region, r.position);
+			} else {
+				ur->add_do_method(terrain, "blit_splat_region", i - 1, after_region, r.position);
+				ur->add_undo_method(terrain, "blit_splat_region", i - 1, before_region, r.position);
+			}
 #ifdef TOOLS_ENABLED
-		now->set_edited(true); // an image saved on its own is saved with the scene
+			now->set_edited(true); // an image saved on its own is saved with the scene
 #endif
+		}
 	}
 	ur->commit_action(false); // done already
-	for (int i = 0; i < 4; i++) {
-		before[i].unref();
-		before_object[i].unref();
-	}
+	snapshots.clear();
 }
 
 // Decision 0172: the selected terrain's foliage impostors baked into resources next to the scene (impostors/), each

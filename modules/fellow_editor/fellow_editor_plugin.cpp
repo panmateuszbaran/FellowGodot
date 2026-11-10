@@ -621,6 +621,7 @@ void FellowEditorPlugin::_split_confirmed() {
 	ERR_FAIL_NULL(root);
 	Dictionary options;
 	options["owner"] = EditorInterface::get_singleton()->get_edited_scene_root();
+	options["split_terrains"] = true; // milestone 65: a terrain into regions, each a cell
 	const Array cells = streamer->call("split_into_cells", root, split_cell_size->get_value(), split_directory->get_text(), options);
 	EditorFileSystem::get_singleton()->scan_changes();
 	EditorInterface::get_singleton()->mark_scene_as_unsaved();

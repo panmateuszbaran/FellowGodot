@@ -560,6 +560,15 @@ instance on the GPU, the shadows per directional cascade as an HLOD's; needs `ge
 its atlases lossless) and sets it; signal `foliage_impostors_baked`. In the editor: the terrain toolbar's Bake
 Impostors button (next to the scene, `impostors/`, undoable). Bench `bench/terrain_holes_check.gd`.
 
+Milestone 65 (decision 0173), **regions**: `region_group` (empty: a terrain on its own) makes terrains of one group,
+the same spacing, edge to edge, tiles of one height field — their border vertices drawn from the exact heights, their
+border normals from the neighbours' heights, the layers' textures and macro variation in the group's space, the brushes
+carried across (the shared edges made equal; the editor's undo covers every region a stroke changed), the foliage on the
+group's grid. `split_into_regions(region_quads, directory, streamer)` cuts a terrain into such regions (a power-of-two
+multiple of `patch_size` quads, padded with holes past the map), each a `FellowStreamingCell3D` of `streamer`; the
+streamer's `split_into_cells()` does it for terrains with the option `split_terrains` (the editor's Split into
+Streaming Cells). A region's data is built on the streaming worker thread. Bench `bench/terrain_regions_check.gd`.
+
 `FellowGasVolume3D` no longer reads the data of concave, height map and custom shapes in its box (not its obstacles),
 and the directional shadow cache ignores changes of instances that cast no shadows (both exact).
 

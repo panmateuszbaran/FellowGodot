@@ -30,6 +30,8 @@
 
 #include "fellow_world_streamer_3d.h"
 
+#include "fellow_terrain_3d.h"
+
 #include "core/config/engine.h"
 #include "core/io/dir_access.h"
 #include "core/io/resource_loader.h"
@@ -236,10 +238,31 @@ void FellowWorldStreamer3D::_unregister_cell(FellowStreamingCell3D *p_cell) {
 	}
 }
 
+// A cell's content made ready on the worker thread that instanced it, before it enters the tree (decision 0173): a
+// terrain region builds its data (heights, mips, normals, splat maps, textures) here, not on the main thread.
+static void _fellow_prepare_content(Node *p_node) {
+	if (p_node == nullptr) {
+		return;
+	}
+	LocalVector<Node *> stack;
+	stack.push_back(p_node);
+	while (!stack.is_empty()) {
+		Node *n = stack[stack.size() - 1];
+		stack.resize(stack.size() - 1);
+		if (FellowTerrain3D *t = Object::cast_to<FellowTerrain3D>(n)) {
+			t->prepare_data();
+		}
+		for (int i = 0; i < n->get_child_count(); i++) {
+			stack.push_back(n->get_child(i));
+		}
+	}
+}
+
 void FellowWorldStreamer3D::_instance_task(void *p_data) {
 	Instancing *inst = static_cast<Instancing *>(p_data);
 	const uint64_t t0 = OS::get_singleton()->get_ticks_usec();
 	inst->result = inst->scene->instantiate();
+	_fellow_prepare_content(inst->result);
 	inst->usec = OS::get_singleton()->get_ticks_usec() - t0;
 	inst->done.store(true, std::memory_order_release);
 }
@@ -749,6 +772,7 @@ Array FellowWorldStreamer3D::split_into_cells(Node3D *p_root, real_t p_cell_size
 		exclude = { "Camera3D", "DirectionalLight3D", "WorldEnvironment", "FellowWorldStreamer3D", "FellowStreamingCell3D" };
 	}
 	const real_t max_span = p_options.get("max_span", 2.0);
+	const bool split_terrains = p_options.get("split_terrains", false);
 	const real_t cell_load_distance = p_options.get("load_distance", 0.0);
 	const String extension = p_options.get("extension", "scn");
 	Node *old_owner = p_root->get_owner() ? p_root->get_owner() : p_root;
@@ -786,6 +810,22 @@ Array FellowWorldStreamer3D::split_into_cells(Node3D *p_root, real_t p_cell_size
 			}
 		}
 		if (skip) {
+			continue;
+		}
+		if (FellowTerrain3D *terrain = split_terrains ? Object::cast_to<FellowTerrain3D>(n) : nullptr) {
+			// Decision 0173: a terrain into regions of about the cells' size, each a cell of its own; the terrain goes.
+			const int quads = MAX(1, int(Math::round(p_cell_size / MAX(terrain->get_vertex_spacing(), 0.001f))));
+			const Array regions = terrain->split_into_regions(quads, p_directory, this);
+			if (!regions.is_empty()) {
+				for (const Variant &r : regions) {
+					if (Node *cell = Object::cast_to<Node>(r); cell && cell_owner) {
+						cell->set_owner(cell_owner);
+					}
+					made.push_back(r);
+				}
+				terrain->get_parent()->remove_child(terrain);
+				memdelete(terrain);
+			}
 			continue;
 		}
 		const AABB box = _fellow_split_bounds(n, space_inv);

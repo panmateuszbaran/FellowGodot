@@ -198,6 +198,23 @@ private:
 	uint32_t collision_layer = 1;
 	uint32_t collision_mask = 1;
 	int collision_region_size = 256;
+	// Decision 0173: a region of a larger terrain (the terrains of a group are tiles of one height field, loaded with
+	// the world's cells): their shared edges drawn from the exact heights, their edge normals from the neighbours'
+	// heights, edits carried across, foliage scattered on the group's grid.
+	StringName region_group;
+	static HashMap<StringName, LocalVector<FellowTerrain3D *>> region_groups;
+	bool region_registered = false;
+	bool region_forwarding = false;
+	FellowTerrain3D *_region_neighbor(int p_dx, int p_dz) const;
+	float _region_height(int p_x, int p_z) const; // a texel of this map or, beyond its edges, of a neighbour's
+	void _region_register();
+	void _region_unregister();
+	void _region_neighbors_changed();
+	void _refresh_border_normals();
+	template <typename F>
+	void _region_each_touched(const Vector3 &p_global, float p_radius, F p_edit);
+	void _sync_region_edges(const Vector3 &p_global, float p_radius);
+	Vector2 _region_global_xz(int p_x, int p_z) const;
 
 	// CPU copies.
 	int map_w = 0;
@@ -316,6 +333,7 @@ private:
 		float spacing = 1.0f;
 		Rect2i heights_rect; // in the heightmap's texels
 		LocalVector<float> heights; // NaN at holes
+		Vector2i grid_offset; // a region's cells on its group's grid (decision 0173)
 		Vector2i splat_size[2];
 		Rect2i splat_rect[2]; // in the splat maps' texels
 		LocalVector<uint8_t> splat[2];
@@ -360,6 +378,7 @@ private:
 	uint64_t process_frames = 0;
 	uint64_t process_usec_max = 0;
 	uint64_t process_usec_last = 0;
+	uint64_t enter_usec = 0; // the main thread's time entering the world (its data built, decision 0173)
 
 	void _rebuild_data();
 	void _build_splat(int p_map);
@@ -445,14 +464,24 @@ public:
 	uint32_t get_collision_mask() const { return collision_mask; }
 	void set_collision_region_size(int p_size);
 	int get_collision_region_size() const { return collision_region_size; }
+	void set_region_group(const StringName &p_group);
+	StringName get_region_group() const { return region_group; }
+	Array get_region_neighbors() const;
+	Array split_into_regions(int p_region_quads, const String &p_directory, Node *p_streamer = nullptr);
 	void set_foliage(const TypedArray<FellowTerrainFoliage> &p_foliage);
 	TypedArray<FellowTerrainFoliage> get_foliage() const { return foliage; }
 	void set_foliage_cells_per_frame(int p_cells);
 	int get_foliage_cells_per_frame() const { return foliage_cells_per_frame; }
 
 	void update_heightmap();
+	// Builds the terrain's data now, out of the tree (any thread: a streaming cell's worker thread, decision 0173), so
+	// that entering the world makes only its collision and instances.
+	void prepare_data();
 	void sculpt(const Vector3 &p_global, float p_radius, float p_strength, SculptMode p_mode, float p_target_height = 0.0f);
 	void paint(const Vector3 &p_global, float p_radius, int p_layer, float p_strength);
+	void _sculpt_local(const Vector3 &p_global, float p_radius, float p_strength, SculptMode p_mode, float p_target_height);
+	void _paint_local(const Vector3 &p_global, float p_radius, int p_layer, float p_strength);
+	void _paint_holes_local(const Vector3 &p_global, float p_radius, bool p_hole);
 	void blit_heightmap_region(const Ref<Image> &p_region, const Vector2i &p_position);
 	void blit_splat_region(int p_map, const Ref<Image> &p_region, const Vector2i &p_position);
 	void paint_holes(const Vector3 &p_global, float p_radius, bool p_hole);

@@ -211,7 +211,8 @@ public:
 	// streamer. Options: "exclude_classes" (classes left where they are: cameras, directional lights, environments,
 	// streamers and cells by default), "max_span" (a node wider than this many cells stays, 2), "load_distance" (the
 	// cells', 0: the streamer's), "extension" ("scn" or "tscn"), "owner" (the new cells' owner; the root's owner by
-	// default, so that the editor saves them). Returns the cells made.
+	// default, so that the editor saves them), "split_terrains" (milestone 65: a FellowTerrain3D split into regions of
+	// about a cell's size, each a cell, the terrain removed; false). Returns the cells made.
 	Array split_into_cells(Node3D *p_root, real_t p_cell_size, const String &p_directory, const Dictionary &p_options = Dictionary());
 
 	FellowWorldStreamer3D();

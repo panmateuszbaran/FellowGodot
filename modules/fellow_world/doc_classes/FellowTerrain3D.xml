@@ -10,6 +10,7 @@
 		With [member collision_enabled], the terrain is a static physics body of height map shapes, one per region of [member collision_region_size] cells, the same triangles as its finest level of detail. [method get_height], [method get_normal] and [method get_layer_weights] answer from the CPU's copy of the data.
 		[member hole_map] cuts holes (a cave's mouth, a tunnel's portal): a triangle touching a marked vertex is neither drawn nor collides, and no foliage grows on it. The patches over holes are drawn with a second material that discards those triangles; the rest of the terrain keeps the material without a discard. [method paint_holes] cuts and fills them with a brush.
 		[method sculpt] and [method paint] change the heights and the layers' weights around a point and update only that region (the editor's toolbar for a selected terrain sculpts and paints with them, with undo). After changing the [member heightmap] image's pixels in place yourself, call [method update_heightmap]. A large heightmap is best saved as its own resource ([code].res[/code]) rather than inside the scene.
+		A large terrain is split into regions ([method split_into_regions]): terrains of a [member region_group], each a tile of the same height field loaded with the world's cells by a [FellowWorldStreamer3D]. Their shared edges match — the same levels of detail, the edge vertices drawn from the exact heights, the edge normals from the neighbours' heights, the layers' textures continuous — and the brushes reach across them.
 		In the editor, the levels of detail follow the 3D editor's camera.
 	</description>
 	<tutorials>
@@ -82,6 +83,12 @@
 				The ground's normal (global) at [param global_position], from central differences of the heights one [member vertex_spacing] apart. A zero vector outside the heightmap.
 			</description>
 		</method>
+		<method name="get_region_neighbors" qualifiers="const">
+			<return type="Array" />
+			<description>
+				The terrains of this terrain's [member region_group] in the tree that touch it, edge to edge or corner to corner (up to 8).
+			</description>
+		</method>
 		<method name="get_stats" qualifiers="const">
 			<return type="Dictionary" />
 			<description>
@@ -141,6 +148,15 @@
 				Only what the brush touched is updated: at once the heights' CPU copy (the queries answer from it), the levels' bounds, the normals and the mipmaps over the region (as [method Image.generate_mipmaps] makes them), and the foliage cells over it (scattered again); at the frame's end, once for all the frame's edits, the height and normal textures (uploaded again whole) and the collision shapes over the edited region. The result is the terrain a rebuild from the edited [member heightmap] makes, texel for texel. Usable in a game (craters, paths); in the editor, the terrain's toolbar in the 3D view sculpts and paints with undo.
 			</description>
 		</method>
+		<method name="split_into_regions">
+			<return type="Array" />
+			<param index="0" name="region_quads" type="int" />
+			<param index="1" name="directory" type="String" />
+			<param index="2" name="streamer" type="Node" default="null" />
+			<description>
+				Splits the terrain into regions of [param region_quads] quads a side (made a power-of-two multiple of [member patch_size], so that each region's levels of detail are those of the whole along their edges): each a [FellowTerrain3D] of the same settings, layers and foliage with its part of the heightmap, splat maps and hole map (one texel more, the edge shared with its neighbour), in the [member region_group] of this terrain (its name if it has none). Regions past the map's end are padded with holes, so that all have the same size. With [param streamer] (a [FellowWorldStreamer3D]), each region is saved as a scene in [param directory] and becomes a [FellowStreamingCell3D] of that streamer, at the region's centre with its bounds; without, the regions are added beside this terrain. This terrain is left as it is (remove it). Returns the cells or the regions made. The editor's [b]Split into Streaming Cells[/b] splits terrains into regions of about the cells' size.
+			</description>
+		</method>
 		<method name="update_heightmap">
 			<return type="void" />
 			<description>
@@ -196,6 +212,9 @@
 		</member>
 		<member name="patch_size" type="int" setter="set_patch_size" getter="get_patch_size" default="16">
 			The quads along a patch's side (8, 16, 32 or 64): smaller patches follow the distance more closely, larger ones make fewer instances.
+		</member>
+		<member name="region_group" type="StringName" setter="set_region_group" getter="get_region_group" default="&amp;&quot;&quot;">
+			The group of terrains this one is a region of (decision 0173; empty: a terrain on its own). The terrains of a group with the same [member vertex_spacing], edge to edge, are tiles of one height field: their border vertices are drawn from the exact heights (a mip sees one side of an edge only), their border normals from the neighbours' heights when those are in the tree, the layers' textures and the macro variation in the group's space; [method sculpt], [method paint] and [method paint_holes] reach the regions under the brush and the shared edges are made equal; the foliage is scattered on the group's grid. Their levels of detail match along the edges when they have the same size, [member patch_size], [member lod_distance] and [member morph_ratio] ([method split_into_regions] makes them so). A region in a [FellowStreamingCell3D] builds its data on the worker thread that instances it; entering the world it makes only its collision and instances.
 		</member>
 		<member name="render_layer_mask" type="int" setter="set_render_layer_mask" getter="get_render_layer_mask" default="1">
 			The render layers the terrain is drawn in ([member VisualInstance3D.layers]).

@@ -748,6 +748,58 @@ func _check_terrain_brush() -> void:
 	await _frames(2)
 	if not second or terrain.is_hole(Vector3(12, 0, 4.5)) or terrain.hole_map != holes_map or holes_map.get_data() != holes_before:
 		_fail("terrain brush: the second hole, its filling and their undo: %s" % results["holes"])
+
+	# 5. Milestone 65 (decision 0173): the terrain split into regions beside it (hidden itself); a Raise stroke over the
+	# edge between two regions changes both, their edge equal; one undo restores both, one redo both again.
+	var quads: int = terrain.heightmap.get_width() - 1
+	var regions: Array = terrain.split_into_regions(quads / 2, "", null)
+	terrain.visible = false
+	await _frames(5)
+	var reg := {"made": regions.size()}
+	if regions.size() < 2:
+		_fail("terrain brush: split_into_regions made %d regions" % regions.size())
+	else:
+		var r0: Node3D = regions[0]
+		var r1: Node3D = null
+		for r in regions:
+			if r != r0 and is_equal_approx(r.global_position.z, r0.global_position.z):
+				r1 = r
+		selection.clear()
+		selection.add_node(r0)
+		await _frames(5)
+		plugin.set_tool(0) # Raise
+		(toolbar.get_node("Size") as Range).value = 8.0
+		(toolbar.get_node("Strength") as Range).value = 1.0
+		var spacing: float = r0.vertex_spacing
+		var edge_x: float = r0.global_position.x + (quads / 2) * spacing
+		var z: float = r0.global_position.z + (quads / 4) * spacing
+		var e := Vector3(edge_x, 0, z)
+		var r0_before: PackedByteArray = r0.heightmap.get_data()
+		var r1_before: PackedByteArray = r1.heightmap.get_data()
+		var h_edge: float = r0.get_height(e)
+		plugin.stroke(PackedVector3Array([e - Vector3(1, 0, 0), e, e + Vector3(1, 0, 0)]))
+		reg["neighbors"] = r0.get_region_neighbors().size()
+		reg["edge_raised"] = r0.get_height(e) - h_edge
+		reg["edge_difference"] = absf(r0.get_height(e) - r1.get_height(e))
+		reg["right_raised"] = r1.heightmap.get_data() != r1_before
+		if not (reg["edge_raised"] > 0.1 and reg["edge_difference"] < 0.001 and reg["right_raised"]):
+			_fail("terrain brush: a stroke over two regions' edge: %s" % reg)
+		var ur_r0: UndoRedo = ur.get_history_undo_redo(ur.get_object_history_id(r0))
+		ur_r0.undo()
+		await _frames(2)
+		reg["undone_both"] = r0.heightmap.get_data() == r0_before and r1.heightmap.get_data() == r1_before
+		if not reg["undone_both"]:
+			_fail("terrain brush: undoing the stroke over two regions left heights: %s" % reg)
+		ur_r0.redo()
+		await _frames(2)
+		reg["redone_edge_difference"] = absf(r0.get_height(e) - r1.get_height(e))
+		if not (r0.get_height(e) - h_edge > 0.1 and reg["redone_edge_difference"] < 0.001):
+			_fail("terrain brush: redoing the stroke over two regions: %s" % reg)
+	results["regions"] = reg
+	for r in regions:
+		r.get_parent().remove_child(r)
+		r.free()
+	terrain.visible = true
 	plugin.set_tool(-1)
 	results["tool_after"] = plugin.get_tool()
 	out["terrain_brush"] = results

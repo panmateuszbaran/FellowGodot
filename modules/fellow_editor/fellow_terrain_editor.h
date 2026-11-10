@@ -80,8 +80,15 @@ private:
 	bool stroke_inverted = false;
 	Vector3 last_dab;
 	float flatten_height = 0.0f;
-	Ref<Image> before[4]; // heightmap, splat_map, splat_map_2, hole_map: copies
-	Ref<Image> before_object[4]; // the images themselves
+	// Per terrain the stroke may change (the selected one, and its region neighbours: decision 0173): heightmap,
+	// splat_map, splat_map_2, hole_map — copies, and the images themselves.
+	struct Snapshot {
+		ObjectID terrain;
+		Vector2i offset; // its texels from the selected terrain's
+		Ref<Image> before[4];
+		Ref<Image> before_object[4];
+	};
+	LocalVector<Snapshot> snapshots;
 
 	// Baking the foliage's impostors (decision 0172): the kinds' impostors before, for the undo.
 	Button *bake_button = nullptr;

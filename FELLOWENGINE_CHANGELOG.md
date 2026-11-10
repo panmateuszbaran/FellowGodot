@@ -9,6 +9,19 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 65 — terrain regions streamed with the world's cells (2026-11-10)
+
+- `FellowTerrain3D.region_group` (decision 0173): terrains of one group are tiles of one height field, joined without a
+  seam — the same levels of detail along an edge, the border vertices from the exact heights, the border normals from
+  the neighbours' heights, the layers' textures and macro variation in the group's space, the foliage on the group's
+  grid; the brushes reach the regions under them and make the shared edges equal, and the editor's undo restores every
+  region a stroke changed. Lavapipe: along 474 shared edges of a 4 km map both sides' heights within 7.6 µm, no crack.
+- `split_into_regions(region_quads, directory, streamer)`: a terrain cut into regions, each a streaming cell;
+  `FellowWorldStreamer3D.split_into_cells()`'s option `split_terrains` (the editor's Split into Streaming Cells). A 4 km
+  map at 1 m keeps 17.6 MB of terrain textures around the camera instead of 213 MB.
+- A streaming cell's terrains build their data (heights, mips, normals, splat maps, textures) on the worker thread that
+  instances the cell: a region enters the world in 2.4 ms of the main thread (6.2 at most) instead of 46-60.
+
 ## Milestone 64 — the terrain's holes, foliage fading out, tree impostors in files (2026-11-10)
 
 - Holes in `FellowTerrain3D` (decision 0172): `hole_map` (an image of the heightmap's size, a texel above half marks a

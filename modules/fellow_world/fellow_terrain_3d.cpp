@@ -42,6 +42,7 @@
 #include "scene/3d/camera_3d.h"
 #include "scene/main/viewport.h"
 #include "scene/resources/3d/world_3d.h"
+#include "scene/resources/packed_scene.h"
 #include "servers/physics_3d/physics_server_3d.h"
 #include "servers/rendering/fellow_settings.h"
 #include "servers/rendering/rendering_server.h"
@@ -245,6 +246,8 @@ uniform mat3 terrain_basis = mat3(1.0);
 uniform float height_blend = 0.3;
 uniform float macro_variation = 0.15;
 uniform int debug_view = 0;
+uniform float edge_exact = 0.0;
+uniform vec2 world_offset = vec2(0.0);
 uniform vec4 layer_color[9];
 uniform vec4 layer_params[9];
 uniform vec4 layer_flags[9];
@@ -280,6 +283,11 @@ void vertex() {
 	p = base + g * cell;
 	vec2 uv = map_uv(p);
 	float lod = level + k;
+	// A region's border (decision 0173): the exact heights and normals, as its neighbour draws the same vertices (a
+	// mip sees one side of the edge only).
+	if (edge_exact > 0.5 && (p.x < 0.25 * spacing || p.y < 0.25 * spacing || p.x > map_extent.x - 0.25 * spacing || p.y > map_extent.y - 0.25 * spacing)) {
+		lod = 0.0;
+	}
 	float h = textureLod(heightmap, uv, lod).r;
 	VERTEX = vec3(g.x, h, g.y);
 	vec2 n2 = textureLod(normalmap, uv, lod).rg * 2.0 - 1.0;
@@ -407,6 +415,9 @@ void fragment() {
 	vec3 dpdy = dFdy(v_local);
 	vec3 blend = pow(abs(nw), vec3(4.0));
 	blend /= max(dot(blend, vec3(1.0)), 1e-5);
+	// The layers' textures and the macro variation in the region group's space (decision 0173: 0 for a lone terrain),
+	// continuous from one region to the next.
+	vec3 pw = v_local + vec3(world_offset.x, 0.0, world_offset.y);
 	float top = -1e9;
 )";
 	// Each layer's albedo, normal and blend value in its own variables (no array indexed at run time: kept in
@@ -416,7 +427,7 @@ void fragment() {
 	vec3 nrm_%d = nw;
 	float v_%d = -1e9;
 	if (w[%d] > 0.002) {
-		layer_%d(v_local, dpdx, dpdy, nw, blend, alb_%d, nrm_%d);
+		layer_%d(pw, dpdx, dpdy, nw, blend, alb_%d, nrm_%d);
 		v_%d = w[%d] + alb_%d.a * height_blend;
 		top = max(top, v_%d);
 	}
@@ -441,7 +452,7 @@ void fragment() {
 	code += R"(	total = max(total, 1e-5);
 	albedo /= total;
 	rough /= total;
-	float mv = value_noise(v_local.xz * 0.013) * 0.6 + value_noise(v_local.xz * 0.071) * 0.4;
+	float mv = value_noise(pw.xz * 0.013) * 0.6 + value_noise(pw.xz * 0.071) * 0.4;
 	albedo *= mix(1.0, 0.7 + 0.6 * mv, macro_variation);
 	vec3 nf = normalize(terrain_basis * normalize(n + vec3(0.0, 1e-5, 0.0)));
 	if (debug_view == 1) {
@@ -661,6 +672,15 @@ void FellowTerrain3D::_build_splat(int p_map) {
 }
 
 void FellowTerrain3D::_rebuild_data() {
+	static const bool timing = OS::get_singleton()->has_environment("FELLOW_TERRAIN_TIMING");
+	uint64_t tt = OS::get_singleton()->get_ticks_usec();
+	auto lap = [&](const char *p_what) {
+		if (timing) {
+			const uint64_t now = OS::get_singleton()->get_ticks_usec();
+			print_line(vformat("  rebuild %s: %d us", p_what, int64_t(now - tt)));
+			tt = now;
+		}
+	};
 	data_dirty = false;
 	edit_heights = Rect2i(); // a rebuild makes everything again
 	edit_splat[0] = edit_splat[1] = false;
@@ -691,7 +711,9 @@ void FellowTerrain3D::_rebuild_data() {
 			height_max = MAX(height_max, heights[i]);
 		}
 	}
+	lap("heights");
 	_build_minmax();
+	lap("minmax");
 	top_level = 0;
 	while (top_level < MAX_LEVELS - 1 && float(patch_size << (top_level + 1)) < float(MAX(map_w, map_h) - 1)) {
 		top_level++;
@@ -703,9 +725,13 @@ void FellowTerrain3D::_rebuild_data() {
 		memcpy(hdata.ptrw(), heights.ptr(), hdata.size());
 		height_image = Image::create_from_data(map_w, map_h, false, Image::FORMAT_RF, hdata);
 		height_image->generate_mipmaps();
+		lap("height mips");
 		height_texture = ImageTexture::create_from_image(height_image);
+		lap("height texture");
 		_build_normals(normal_image);
+		lap("normals");
 		normal_texture = ImageTexture::create_from_image(normal_image);
+		lap("normal texture");
 	} else {
 		height_texture.unref();
 		normal_texture.unref();
@@ -715,8 +741,10 @@ void FellowTerrain3D::_rebuild_data() {
 	for (int i = 0; i < 2; i++) {
 		_build_splat(i);
 	}
+	lap("splats");
 	_build_holes();
 	_build_mesh();
+	lap("holes and mesh");
 	if (set.instance[0].is_valid()) {
 		// The instances' MultiMeshes onto the new mesh (the old one is freed with its last reference).
 		RenderingServer *rs = RenderingServer::get_singleton();
@@ -736,6 +764,14 @@ void FellowTerrain3D::_rebuild_data() {
 	set.selection_valid = false;
 	if (is_inside_tree()) {
 		_update_collision();
+	}
+	lap("collision");
+	if (region_registered) {
+		// New heights: this region's border normals and its neighbours'.
+		_refresh_border_normals();
+		for (const Variant &n : get_region_neighbors()) {
+			Object::cast_to<FellowTerrain3D>(n)->_refresh_border_normals();
+		}
 	}
 	update_configuration_warnings();
 }
@@ -766,6 +802,7 @@ void FellowTerrain3D::_update_material() {
 	_set_material_parameter("height_blend", height_blend);
 	_set_material_parameter("macro_variation", macro_variation);
 	_set_material_parameter("debug_view", int(debug_view));
+	_set_material_parameter("edge_exact", region_group.is_empty() ? 0.0f : 1.0f);
 
 	// The levels' ranges (CDLOD): a level's vertices morph onto the next coarser grid from morph_ratio of the way
 	// between the finer level's range and its own to its own range, where the coarser level takes over.
@@ -972,6 +1009,7 @@ void FellowTerrain3D::_update_transforms() {
 	}
 	set.selection_valid = false;
 	_set_material_parameter("terrain_basis", xf.basis.orthonormalized());
+	_set_material_parameter("world_offset", region_group.is_empty() ? Vector2() : Vector2(xf.origin.x, xf.origin.z));
 	if (body.is_valid()) {
 		PhysicsServer3D::get_singleton()->body_set_state(body, PhysicsServer3D::BODY_STATE_TRANSFORM, xf);
 	}
@@ -1416,6 +1454,12 @@ float FellowTerrain3D::_cell_weight(const FoliageCell &p_cell, int p_layer, floa
 void FellowTerrain3D::_copy_foliage_data(FoliageCell *p_cell) const {
 	FoliageCell &c = *p_cell;
 	c.k = foliage_kinds[c.kind];
+	// A region's cells on its group's grid (decision 0173): its neighbours' plants not a copy of its own.
+	c.grid_offset = Vector2i();
+	if (!region_group.is_empty() && is_inside_tree()) {
+		const Vector3 o = get_global_transform().origin;
+		c.grid_offset = Vector2i(int(Math::round(o.x / c.k.cell)), int(Math::round(o.z / c.k.cell)));
+	}
 	c.map_w = map_w;
 	c.map_h = map_h;
 	c.spacing = vertex_spacing;
@@ -1480,8 +1524,8 @@ void FellowTerrain3D::_generate_foliage_cell(void *p_cell) {
 	int count = 0;
 	for (int j = 0; j < side; j++) {
 		for (int i = 0; i < side; i++) {
-			const uint32_t gx = uint32_t(cell->cx * side + i);
-			const uint32_t gz = uint32_t(cell->cz * side + j);
+			const uint32_t gx = uint32_t((cell->cx + cell->grid_offset.x) * side + i);
+			const uint32_t gz = uint32_t((cell->cz + cell->grid_offset.y) * side + j);
 			const uint32_t h0 = _foliage_hash(k.seed, gx, gz);
 			const uint32_t h1 = _foliage_hash(h0, 1, 0);
 			const uint32_t h2 = _foliage_hash(h0, 2, 0);
@@ -1970,6 +2014,13 @@ void FellowTerrain3D::_update_heights_region(const Rect2i &p_rect) {
 	// The textures and the collision shapes at the frame's end, once for all its edits.
 	edit_heights = edit_heights.size.x > 0 ? edit_heights.merge(r) : r;
 	_queue_edit_flush();
+	// A region's edge (decision 0173): its border normals, and its neighbours' (they read these heights).
+	if (region_registered && (r.position.x <= 1 || r.position.y <= 1 || r.position.x + r.size.x >= map_w - 1 || r.position.y + r.size.y >= map_h - 1)) {
+		_refresh_border_normals();
+		for (const Variant &n : get_region_neighbors()) {
+			Object::cast_to<FellowTerrain3D>(n)->_refresh_border_normals();
+		}
+	}
 }
 
 void FellowTerrain3D::_queue_edit_flush() {
@@ -2114,6 +2165,425 @@ void FellowTerrain3D::_update_splat_region(int p_map, const Rect2i &p_rect) {
 	_drop_foliage_in(Rect2(Vector2(r.position) * scale - Vector2(0.5f, 0.5f) * vertex_spacing, Vector2(r.size) * scale));
 }
 
+// ---------------------------------------------------------------------------------------------------------------------
+// Regions (decision 0173): the terrains of a region group are tiles of one height field, each in its own streaming cell.
+// Neighbours (the same spacing, axis-aligned, edge to edge) share their edge texels. The shader draws a region's border
+// vertices from the exact heights (not the mips, which see one side only); the border normals are made from the
+// neighbours' heights when they are in the tree; the brushes reach the regions under them and make the shared edges
+// equal; the foliage is scattered on the group's grid.
+
+HashMap<StringName, LocalVector<FellowTerrain3D *>> FellowTerrain3D::region_groups;
+
+FellowTerrain3D *FellowTerrain3D::_region_neighbor(int p_dx, int p_dz) const {
+	if (!region_registered || map_w < 2) {
+		return nullptr;
+	}
+	const LocalVector<FellowTerrain3D *> *list = region_groups.getptr(region_group);
+	if (!list) {
+		return nullptr;
+	}
+	const Transform3D inv = get_global_transform().affine_inverse();
+	const float ex = float(map_w - 1) * vertex_spacing;
+	const float ez = float(map_h - 1) * vertex_spacing;
+	const float eps = 0.01f * vertex_spacing;
+	for (FellowTerrain3D *t : *list) {
+		if (t == this || t->map_w < 2 || Math::abs(t->vertex_spacing - vertex_spacing) > 1e-5f) {
+			continue;
+		}
+		const Vector3 o = inv.xform(t->get_global_transform().origin);
+		const float tex = float(t->map_w - 1) * t->vertex_spacing;
+		const float tez = float(t->map_h - 1) * t->vertex_spacing;
+		const bool x_ok = p_dx == 0 ? Math::abs(o.x) < eps : (p_dx > 0 ? Math::abs(o.x - ex) < eps : Math::abs(o.x + tex) < eps);
+		const bool z_ok = p_dz == 0 ? Math::abs(o.z) < eps : (p_dz > 0 ? Math::abs(o.z - ez) < eps : Math::abs(o.z + tez) < eps);
+		if (x_ok && z_ok && Math::abs(o.y) < eps) {
+			return t;
+		}
+	}
+	return nullptr;
+}
+
+Vector2 FellowTerrain3D::_region_global_xz(int p_x, int p_z) const {
+	const Vector3 g = get_global_transform().xform(Vector3(p_x * vertex_spacing, 0.0f, p_z * vertex_spacing));
+	return Vector2(g.x, g.z);
+}
+
+float FellowTerrain3D::_region_height(int p_x, int p_z) const {
+	const int cx = CLAMP(p_x, 0, map_w - 1);
+	const int cz = CLAMP(p_z, 0, map_h - 1);
+	if (cx == p_x && cz == p_z) {
+		return heights[p_z * map_w + p_x];
+	}
+	const int dx = p_x < 0 ? -1 : (p_x > map_w - 1 ? 1 : 0);
+	const int dz = p_z < 0 ? -1 : (p_z > map_h - 1 ? 1 : 0);
+	const FellowTerrain3D *n = _region_neighbor(dx, dz);
+	if (n) {
+		// The texel in the neighbour's map (its first texel is our last along a shared edge).
+		const Vector3 l = n->get_global_transform().affine_inverse().xform(get_global_transform().xform(Vector3(p_x * vertex_spacing, 0.0f, p_z * vertex_spacing)));
+		const int nx = int(Math::round(l.x / n->vertex_spacing));
+		const int nz = int(Math::round(l.z / n->vertex_spacing));
+		if (nx >= 0 && nz >= 0 && nx < n->map_w && nz < n->map_h && !n->heights.is_empty()) {
+			return n->heights[nz * n->map_w + nx];
+		}
+	}
+	return heights[cz * map_w + cx];
+}
+
+void FellowTerrain3D::_refresh_border_normals() {
+	if (map_w < 2 || normal_image.is_null() || heights.is_empty()) {
+		return;
+	}
+	uint8_t *nw = normal_image->ptrw();
+	const float inv = 1.0f / (2.0f * vertex_spacing);
+	auto normal_at = [&](int p_x, int p_z) {
+		const float hl = _region_height(p_x - 1, p_z);
+		const float hr = _region_height(p_x + 1, p_z);
+		const float hd = _region_height(p_x, p_z - 1);
+		const float hu = _region_height(p_x, p_z + 1);
+		Vector3 n((hl - hr) * inv, 1.0f, (hd - hu) * inv);
+		n.normalize();
+		nw[(p_z * map_w + p_x) * 2 + 0] = uint8_t(CLAMP(Math::round((n.x * 0.5f + 0.5f) * 255.0f), 0.0f, 255.0f));
+		nw[(p_z * map_w + p_x) * 2 + 1] = uint8_t(CLAMP(Math::round((n.z * 0.5f + 0.5f) * 255.0f), 0.0f, 255.0f));
+	};
+	for (int x = 0; x < map_w; x++) {
+		normal_at(x, 0);
+		normal_at(x, map_h - 1);
+	}
+	for (int z = 1; z < map_h - 1; z++) {
+		normal_at(0, z);
+		normal_at(map_w - 1, z);
+	}
+	const Rect2i strips[4] = { Rect2i(0, 0, map_w, 1), Rect2i(0, map_h - 1, map_w, 1), Rect2i(0, 0, 1, map_h), Rect2i(map_w - 1, 0, 1, map_h) };
+	for (const Rect2i &s : strips) {
+		_terrain_mips_region<uint8_t, 2>(normal_image, s);
+		if (normal_texture.is_valid()) {
+			_upload_texture(normal_texture, normal_image, s);
+		}
+	}
+	Fellow::request_redraw();
+}
+
+void FellowTerrain3D::_region_register() {
+	if (region_registered || region_group.is_empty() || !is_inside_tree()) {
+		return;
+	}
+	if (!region_groups.has(region_group)) {
+		region_groups.insert(region_group, LocalVector<FellowTerrain3D *>());
+	}
+	region_groups[region_group].push_back(this);
+	region_registered = true;
+	_region_neighbors_changed();
+	for (int dz = -1; dz <= 1; dz++) {
+		for (int dx = -1; dx <= 1; dx++) {
+			if (FellowTerrain3D *n = (dx || dz) ? _region_neighbor(dx, dz) : nullptr) {
+				n->_region_neighbors_changed();
+			}
+		}
+	}
+}
+
+void FellowTerrain3D::_region_unregister() {
+	if (!region_registered) {
+		return;
+	}
+	LocalVector<FellowTerrain3D *> neighbors;
+	for (int dz = -1; dz <= 1; dz++) {
+		for (int dx = -1; dx <= 1; dx++) {
+			if (FellowTerrain3D *n = (dx || dz) ? _region_neighbor(dx, dz) : nullptr) {
+				neighbors.push_back(n);
+			}
+		}
+	}
+	LocalVector<FellowTerrain3D *> *list = region_groups.getptr(region_group);
+	if (list) {
+		list->erase(this);
+		if (list->is_empty()) {
+			region_groups.erase(region_group);
+		}
+	}
+	region_registered = false;
+	for (FellowTerrain3D *n : neighbors) {
+		n->_region_neighbors_changed(); // their edges from their own heights again
+	}
+}
+
+void FellowTerrain3D::_region_neighbors_changed() {
+	if (!data_dirty) {
+		_refresh_border_normals();
+	}
+}
+
+template <typename F>
+void FellowTerrain3D::_region_each_touched(const Vector3 &p_global, float p_radius, F p_edit) {
+	const LocalVector<FellowTerrain3D *> *list = region_groups.getptr(region_group);
+	if (!list) {
+		return;
+	}
+	LocalVector<FellowTerrain3D *> others;
+	others.reserve(list->size());
+	for (FellowTerrain3D *t : *list) {
+		others.push_back(t); // a copy: an edit does not change the group, but be safe
+	}
+	for (FellowTerrain3D *t : others) {
+		if (t == this || t->map_w < 2) {
+			continue;
+		}
+		const AABB box = t->get_global_transform().xform(t->get_aabb());
+		const Rect2 r(box.position.x - p_radius, box.position.z - p_radius, box.size.x + 2.0f * p_radius, box.size.z + 2.0f * p_radius);
+		if (!r.has_point(Vector2(p_global.x, p_global.z))) {
+			continue;
+		}
+		t->region_forwarding = true;
+		p_edit(t);
+		t->region_forwarding = false;
+	}
+}
+
+void FellowTerrain3D::_sync_region_edges(const Vector3 &p_global, float p_radius) {
+	// Each border texel under the brush: the regions holding its vertex take the mean of their heights (the smoothing
+	// brush sees each region's own side; the others give the same height everywhere).
+	Vector2 c;
+	float rr = 0.0f;
+	const Rect2i r = _brush_texels(p_global, p_radius + 2.0f * vertex_spacing, c, rr);
+	if (r.size.x <= 0 || r.size.y <= 0) {
+		return;
+	}
+	FellowTerrain3D *nb[3][3] = {};
+	for (int dz = -1; dz <= 1; dz++) {
+		for (int dx = -1; dx <= 1; dx++) {
+			nb[dz + 1][dx + 1] = (dx || dz) ? _region_neighbor(dx, dz) : this;
+		}
+	}
+	HashMap<FellowTerrain3D *, Rect2i> changed;
+	for (int z = r.position.y; z < r.position.y + r.size.y; z++) {
+		for (int x = r.position.x; x < r.position.x + r.size.x; x++) {
+			if (x != 0 && z != 0 && x != map_w - 1 && z != map_h - 1) {
+				continue;
+			}
+			const Vector3 g = get_global_transform().xform(Vector3(x * vertex_spacing, 0.0f, z * vertex_spacing));
+			FellowTerrain3D *holders[9];
+			Vector2i texels[9];
+			int count = 0;
+			float sum = 0.0f;
+			for (int i = 0; i < 9; i++) {
+				FellowTerrain3D *t = nb[i / 3][i % 3];
+				if (!t || t->heightmap.is_null() || t->heights.is_empty()) {
+					continue;
+				}
+				const Vector3 l = t->get_global_transform().affine_inverse().xform(g);
+				const int tx = int(Math::round(l.x / t->vertex_spacing));
+				const int tz = int(Math::round(l.z / t->vertex_spacing));
+				if (tx < 0 || tz < 0 || tx >= t->map_w || tz >= t->map_h || Math::abs(l.x - tx * t->vertex_spacing) > 0.01f * t->vertex_spacing || Math::abs(l.z - tz * t->vertex_spacing) > 0.01f * t->vertex_spacing) {
+					continue;
+				}
+				holders[count] = t;
+				texels[count] = Vector2i(tx, tz);
+				sum += t->heights[tz * t->map_w + tx];
+				count++;
+			}
+			if (count < 2) {
+				continue;
+			}
+			const float mean = sum / count;
+			for (int i = 0; i < count; i++) {
+				FellowTerrain3D *t = holders[i];
+				const Vector2i p = texels[i];
+				if (t->heights[p.y * t->map_w + p.x] == mean) {
+					continue;
+				}
+				t->_make_heightmap_editable();
+				reinterpret_cast<float *>(t->heightmap->ptrw())[p.y * t->map_w + p.x] = mean;
+				Rect2i *rect = changed.getptr(t);
+				if (rect) {
+					*rect = rect->expand(p).expand(p + Vector2i(1, 1));
+				} else {
+					changed.insert(t, Rect2i(p, Vector2i(1, 1)));
+				}
+			}
+		}
+	}
+	for (KeyValue<FellowTerrain3D *, Rect2i> &kv : changed) {
+		kv.key->_update_heights_region(kv.value);
+	}
+}
+
+void FellowTerrain3D::set_region_group(const StringName &p_group) {
+	if (p_group == region_group) {
+		return;
+	}
+	_region_unregister();
+	region_group = p_group;
+	material_dirty = true;
+	foliage_dirty = true; // scattered on the group's grid
+	if (is_inside_tree()) {
+		_region_register();
+	}
+	update_configuration_warnings();
+}
+
+Array FellowTerrain3D::get_region_neighbors() const {
+	Array out;
+	for (int dz = -1; dz <= 1; dz++) {
+		for (int dx = -1; dx <= 1; dx++) {
+			if (FellowTerrain3D *n = (dx || dz) ? _region_neighbor(dx, dz) : nullptr) {
+				out.push_back(n);
+			}
+		}
+	}
+	return out;
+}
+
+Array FellowTerrain3D::split_into_regions(int p_region_quads, const String &p_directory, Node *p_streamer) {
+	Array made;
+	_ensure_data();
+	ERR_FAIL_COND_V_MSG(map_w < 2 || map_h < 2, made, "The terrain has no heightmap to split.");
+	ERR_FAIL_COND_V_MSG(p_region_quads < patch_size, made, vformat("A region must have at least patch_size (%d) quads a side.", patch_size));
+	// A region's side: patch_size << k quads, so that its quadtree is a subtree of the whole's (the same levels of detail
+	// along the shared edges).
+	int quads = patch_size;
+	while (quads * 2 <= p_region_quads && quads < 65536) {
+		quads *= 2;
+	}
+	if (quads != p_region_quads) {
+		WARN_PRINT(vformat("FellowTerrain3D: regions of %d quads (a power-of-two multiple of patch_size), not %d.", quads, p_region_quads));
+	}
+	const StringName group = region_group.is_empty() ? StringName(String(get_name())) : region_group;
+	Node3D *streamer = Object::cast_to<Node3D>(p_streamer);
+	if (streamer) {
+		const Error dir_err = DirAccess::make_dir_recursive_absolute(p_directory);
+		ERR_FAIL_COND_V_MSG(dir_err != OK && dir_err != ERR_ALREADY_EXISTS, made, vformat("Cannot create the directory \"%s\".", p_directory));
+	}
+	const int nx = (map_w - 1 + quads - 1) / quads;
+	const int nz = (map_h - 1 + quads - 1) / quads;
+	// The splat maps at the heights' size (a region's texels the same vertices).
+	Ref<Image> splats[2];
+	for (int m = 0; m < 2; m++) {
+		const Ref<Image> &s = m == 0 ? splat_map : splat_map_2;
+		if (s.is_valid() && !s->is_empty()) {
+			Ref<Image> c = s->duplicate();
+			if (c->is_compressed()) {
+				c->decompress();
+			}
+			c->clear_mipmaps();
+			c->convert(Image::FORMAT_RGBA8);
+			if (c->get_size() != Vector2i(map_w, map_h)) {
+				c->resize(map_w, map_h, Image::INTERPOLATE_BILINEAR);
+			}
+			splats[m] = c;
+		}
+	}
+	const Transform3D xf = get_global_transform();
+	const int side = quads + 1;
+	for (int rz = 0; rz < nz; rz++) {
+		for (int rx = 0; rx < nx; rx++) {
+			const int x0 = rx * quads;
+			const int z0 = rz * quads;
+			// Heights, padded beyond the map with its edge (those vertices holes: the regions all the same size).
+			Vector<uint8_t> hdata;
+			hdata.resize(side * side * sizeof(float));
+			float *hw = reinterpret_cast<float *>(hdata.ptrw());
+			Vector<uint8_t> holes_data;
+			holes_data.resize(side * side);
+			uint8_t *ow = holes_data.ptrw();
+			bool any_hole = false;
+			for (int z = 0; z < side; z++) {
+				for (int x = 0; x < side; x++) {
+					const int sx = MIN(x0 + x, map_w - 1);
+					const int sz = MIN(z0 + z, map_h - 1);
+					hw[z * side + x] = heights[sz * map_w + sx];
+					const bool pad = x0 + x > map_w - 1 || z0 + z > map_h - 1;
+					const bool hole = pad || (!holes.is_empty() && holes[sz * map_w + sx]);
+					ow[z * side + x] = hole ? 255 : 0;
+					any_hole = any_hole || hole;
+				}
+			}
+			FellowTerrain3D *t = memnew(FellowTerrain3D);
+			t->set_name(vformat("%s_r%d_%d", String(get_name()), rx, rz));
+			t->vertex_spacing = vertex_spacing;
+			t->patch_size = patch_size;
+			t->lod_distance = lod_distance;
+			t->morph_ratio = morph_ratio;
+			t->height_blend = height_blend;
+			t->macro_variation = macro_variation;
+			t->cast_shadows = cast_shadows;
+			t->render_layer_mask = render_layer_mask;
+			t->collision_enabled = collision_enabled;
+			t->collision_layer = collision_layer;
+			t->collision_mask = collision_mask;
+			t->collision_region_size = collision_region_size;
+			t->foliage_cells_per_frame = foliage_cells_per_frame;
+			t->set_layers(layers);
+			t->set_foliage(foliage);
+			t->region_group = group;
+			t->heightmap = Image::create_from_data(side, side, false, Image::FORMAT_RF, hdata);
+			if (any_hole) {
+				t->hole_map = Image::create_from_data(side, side, false, Image::FORMAT_L8, holes_data);
+			}
+			for (int m = 0; m < 2; m++) {
+				if (splats[m].is_valid()) {
+					Ref<Image> crop = Image::create_empty(side, side, false, Image::FORMAT_RGBA8);
+					crop->blit_rect(splats[m], Rect2i(x0, z0, side, side), Point2i());
+					// Beyond the map: its edge (blit_rect leaves those texels empty).
+					for (int z = 0; z < side; z++) {
+						for (int x = 0; x < side; x++) {
+							if (x0 + x > map_w - 1 || z0 + z > map_h - 1) {
+								crop->set_pixel(x, z, splats[m]->get_pixel(MIN(x0 + x, map_w - 1), MIN(z0 + z, map_h - 1)));
+							}
+						}
+					}
+					if (m == 0) {
+						t->splat_map = crop;
+					} else {
+						t->splat_map_2 = crop;
+					}
+				}
+			}
+			t->data_dirty = true;
+			const Transform3D region_global = xf * Transform3D(Basis(), Vector3(x0 * vertex_spacing, 0.0f, z0 * vertex_spacing));
+			const AABB region_box(Vector3(0, height_min, 0), Vector3(quads * vertex_spacing, MAX(height_max - height_min, 0.01f), quads * vertex_spacing));
+			if (!streamer) {
+				// Beside this terrain, in its parent.
+				Node *parent = get_parent();
+				ERR_FAIL_NULL_V(parent, made);
+				parent->add_child(t, true);
+				t->set_global_transform(region_global);
+				if (get_owner()) {
+					t->set_owner(get_owner());
+				}
+				made.push_back(t);
+				continue;
+			}
+			// Into a streaming cell of the streamer: the region saved as the cell's scene, at the region's centre.
+			const Transform3D streamer_global = streamer->get_global_transform();
+			const Vector3 centre_local = streamer_global.affine_inverse().xform(region_global.xform(region_box.get_center()));
+			const Vector3 centre(centre_local.x, 0.0f, centre_local.z);
+			const Transform3D cell_global = streamer_global * Transform3D(Basis(), centre);
+			t->set_transform(cell_global.affine_inverse() * region_global);
+			Ref<PackedScene> scene;
+			scene.instantiate();
+			const Error pack_err = scene->pack(t);
+			const String path = p_directory.path_join(String(t->get_name()) + ".scn");
+			const Error save_err = pack_err == OK ? ResourceSaver::save(scene, path) : pack_err;
+			const AABB cell_box = (cell_global.affine_inverse() * region_global).xform(region_box);
+			memdelete(t);
+			ERR_CONTINUE_MSG(save_err != OK, vformat("Cannot save the region \"%s\" (error %d).", path, int(save_err)));
+			Node3D *cell = Object::cast_to<Node3D>(ClassDB::instantiate("FellowStreamingCell3D"));
+			ERR_FAIL_NULL_V(cell, made);
+			cell->set_name(vformat("Region_%d_%d", rx, rz));
+			cell->set("scene_path", path);
+			cell->set("bounds", cell_box.grow(0.01f));
+			streamer->add_child(cell, true);
+			cell->set_transform(Transform3D(Basis(), centre));
+			if (streamer->get_owner()) {
+				cell->set_owner(streamer->get_owner());
+			} else if (get_owner()) {
+				cell->set_owner(get_owner());
+			}
+			made.push_back(cell);
+		}
+	}
+	return made;
+}
+
 Rect2i FellowTerrain3D::_brush_texels(const Vector3 &p_global, float p_radius, Vector2 &r_centre, float &r_radius) const {
 	const Transform3D xf = is_inside_tree() ? get_global_transform() : get_transform();
 	const Vector3 l = xf.affine_inverse().xform(p_global);
@@ -2130,6 +2600,15 @@ static inline float _brush_falloff(float p_d) {
 }
 
 void FellowTerrain3D::sculpt(const Vector3 &p_global, float p_radius, float p_strength, SculptMode p_mode, float p_target_height) {
+	_sculpt_local(p_global, p_radius, p_strength, p_mode, p_target_height);
+	if (region_registered && !region_forwarding) {
+		// Decision 0173: the brush on the group's other regions under it, then their shared edges made equal.
+		_region_each_touched(p_global, p_radius, [&](FellowTerrain3D *p_t) { p_t->_sculpt_local(p_global, p_radius, p_strength, p_mode, p_target_height); });
+		_sync_region_edges(p_global, p_radius);
+	}
+}
+
+void FellowTerrain3D::_sculpt_local(const Vector3 &p_global, float p_radius, float p_strength, SculptMode p_mode, float p_target_height) {
 	_ensure_data();
 	if (map_w < 2 || heightmap.is_null()) {
 		return;
@@ -2181,6 +2660,13 @@ void FellowTerrain3D::sculpt(const Vector3 &p_global, float p_radius, float p_st
 }
 
 void FellowTerrain3D::paint(const Vector3 &p_global, float p_radius, int p_layer, float p_strength) {
+	_paint_local(p_global, p_radius, p_layer, p_strength);
+	if (region_registered && !region_forwarding) {
+		_region_each_touched(p_global, p_radius, [&](FellowTerrain3D *p_t) { p_t->_paint_local(p_global, p_radius, p_layer, p_strength); });
+	}
+}
+
+void FellowTerrain3D::_paint_local(const Vector3 &p_global, float p_radius, int p_layer, float p_strength) {
 	_ensure_data();
 	if (map_w < 2 || p_layer < 0 || p_layer >= MAX_LAYERS) {
 		return;
@@ -2519,6 +3005,13 @@ void FellowTerrain3D::_holes_changed(const Rect2i &p_rect, bool p_rebuilt) {
 }
 
 void FellowTerrain3D::paint_holes(const Vector3 &p_global, float p_radius, bool p_hole) {
+	_paint_holes_local(p_global, p_radius, p_hole);
+	if (region_registered && !region_forwarding) {
+		_region_each_touched(p_global, p_radius, [&](FellowTerrain3D *p_t) { p_t->_paint_holes_local(p_global, p_radius, p_hole); });
+	}
+}
+
+void FellowTerrain3D::_paint_holes_local(const Vector3 &p_global, float p_radius, bool p_hole) {
 	_ensure_data();
 	if (map_w < 2) {
 		return;
@@ -2708,6 +3201,7 @@ Dictionary FellowTerrain3D::get_stats() const {
 	d["process_usec_last"] = int64_t(process_usec_last);
 	d["collision_shapes"] = int(shapes.size());
 	d["edit_flush_usec"] = int64_t(edit_flush_usec);
+	d["enter_usec"] = int64_t(enter_usec);
 	d["foliage_cells"] = int(foliage_cells.size());
 	d["foliage_instances"] = foliage_instances;
 	d["foliage_impostor_instances"] = foliage_impostor_instances;
@@ -2724,6 +3218,12 @@ Dictionary FellowTerrain3D::get_stats() const {
 	}
 	d["patches_per_level"] = per_level;
 	return d;
+}
+
+void FellowTerrain3D::prepare_data() {
+	if (data_dirty && !is_inside_tree()) {
+		_rebuild_data();
+	}
 }
 
 void FellowTerrain3D::update_heightmap() {
@@ -2956,16 +3456,26 @@ PackedStringArray FellowTerrain3D::get_configuration_warnings() const {
 void FellowTerrain3D::_notification(int p_what) {
 	switch (p_what) {
 		case NOTIFICATION_ENTER_WORLD: {
+			const uint64_t t0 = OS::get_singleton()->get_ticks_usec();
 			if (data_dirty) {
 				_rebuild_data();
 			} else {
 				_update_collision();
 			}
+			const uint64_t t1 = OS::get_singleton()->get_ticks_usec();
 			_update_material();
 			_create_instances();
+			const uint64_t t2 = OS::get_singleton()->get_ticks_usec();
+			_region_register(); // decision 0173: its edges with its neighbours'
 			set_process_internal(true);
+			enter_usec = OS::get_singleton()->get_ticks_usec() - t0;
+			static const bool timing = OS::get_singleton()->has_environment("FELLOW_TERRAIN_TIMING");
+			if (timing) {
+				print_line(vformat("FellowTerrain3D %s entered: data %d us, material and instances %d us, regions %d us", get_name(), int64_t(t1 - t0), int64_t(t2 - t1), int64_t(enter_usec - (t2 - t0))));
+			}
 		} break;
 		case NOTIFICATION_EXIT_WORLD: {
+			_region_unregister();
 			set_process_internal(false);
 			_clear_foliage(true);
 			foliage_dirty = true;
@@ -3039,6 +3549,10 @@ void FellowTerrain3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_collision_region_size", "cells"), &FellowTerrain3D::set_collision_region_size);
 	ClassDB::bind_method(D_METHOD("get_collision_region_size"), &FellowTerrain3D::get_collision_region_size);
 
+	ClassDB::bind_method(D_METHOD("set_region_group", "group"), &FellowTerrain3D::set_region_group);
+	ClassDB::bind_method(D_METHOD("get_region_group"), &FellowTerrain3D::get_region_group);
+	ClassDB::bind_method(D_METHOD("get_region_neighbors"), &FellowTerrain3D::get_region_neighbors);
+	ClassDB::bind_method(D_METHOD("split_into_regions", "region_quads", "directory", "streamer"), &FellowTerrain3D::split_into_regions, DEFVAL(Variant()));
 	ClassDB::bind_method(D_METHOD("set_foliage", "foliage"), &FellowTerrain3D::set_foliage);
 	ClassDB::bind_method(D_METHOD("get_foliage"), &FellowTerrain3D::get_foliage);
 	ClassDB::bind_method(D_METHOD("set_foliage_cells_per_frame", "cells"), &FellowTerrain3D::set_foliage_cells_per_frame);
@@ -3069,6 +3583,7 @@ void FellowTerrain3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "splat_map_2", PROPERTY_HINT_RESOURCE_TYPE, "Image"), "set_splat_map_2", "get_splat_map_2");
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "hole_map", PROPERTY_HINT_RESOURCE_TYPE, "Image"), "set_hole_map", "get_hole_map");
 	ADD_PROPERTY(PropertyInfo(Variant::ARRAY, "layers", PROPERTY_HINT_ARRAY_TYPE, MAKE_RESOURCE_TYPE_HINT("FellowTerrainLayer")), "set_layers", "get_layers");
+	ADD_PROPERTY(PropertyInfo(Variant::STRING_NAME, "region_group"), "set_region_group", "get_region_group");
 	ADD_GROUP("Material", "");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "height_blend", PROPERTY_HINT_RANGE, "0,2,0.01"), "set_height_blend", "get_height_blend");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "macro_variation", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_macro_variation", "get_macro_variation");
@@ -3104,6 +3619,7 @@ FellowTerrain3D::FellowTerrain3D() {
 }
 
 FellowTerrain3D::~FellowTerrain3D() {
+	_region_unregister(); // (left the world before: a safeguard)
 	_clear_foliage(true);
 	_free_instances();
 	_free_collision();
