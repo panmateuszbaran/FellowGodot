@@ -20,7 +20,8 @@ Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.m
 - Streamed meshes: with the bake's `stream_meshes`, a cell's meshes of 2000+ triangles become stand-ins (15 % of their
   triangles, their materials kept) in its scene, their full meshes saved apart and loaded on the ResourceLoader's
   threads within the streamer's `mesh_distance` (`max_mesh_loads` at once), freed beyond it. A flight across the world:
-  mesh memory 42.2 → 24.6 MB on average, 51.4 → 28.2 MB at most.
+  mesh memory 42.2 → 24.6 MB on average, 51.4 → 28.2 MB at most. On the RTX (job f373): 62.0 → 44.4 MB, frames 1.8 →
+  1.6 ms at the 99th percentile, a swap 18 µs on average; the picture 7.6 → 1.9 % off with proxies.
 - Project > Tools > Bake Streaming Proxies; the editor check bakes the split level's proxies and a game shows them.
 - Milestones 64-65 measured on the RTX (job f372): a terrain region enters in 1.07 ms of the main thread (2.67 at most),
   a flight across a 4 km map at 1.91 ms a frame at the 99th percentile.

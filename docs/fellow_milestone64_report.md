@@ -1,6 +1,6 @@
 # FellowEngine — milestone 64 report (the terrain's holes, foliage fading out, tree impostors in files)
 
-Status: **FINAL** (2026-11-10): checked on lavapipe; the RTX's holes and impostors in section 3a (job f372). Branch
+Status: **FINAL** (2026-11-10): checked on lavapipe; the RTX's numbers in section 3a (jobs f372, f373). Branch
 `fellow/geometry`. Decision record: `docs/decisions/0172-terrain-holes-foliage-fades-impostors.md`.
 
 ## 0. Result
@@ -76,8 +76,9 @@ average. The bake: 8 × 8 views of 128 px, 13.6 s (a view a frame), a 553 KB fil
 * **Impostors** (323 trees to 400 m): the GPU's frame 0.60 → 0.57 ms without shadows, 0.78 → 0.75 ms with the sun's
   (the CPU's 0.07-0.15 ms either way); the far trees 0.0032 a channel from the meshes. 323 trees are little work for
   this GPU: the impostors pay off with many more (lavapipe's −38 % is the work saved).
-* **Fading out**: not measured — the check counted the grass in rows of a 360-row picture, at 1080 rows the sky (the
-  check now scales its rows to the picture; for the next job).
+* **Fading out** (job f373, the check's rows scaled to the picture): the grass's share of the rows near the horizon
+  0.43, 0.62, 0.68 without a fade, 0.30, 0.46, 0.57 with 15 m; the nearer rows the same (at 1080 rows; f372 had
+  counted rows of a 360-row picture, the sky).
 
 ## 4. Limits
 
@@ -86,7 +87,6 @@ average. The bake: 8 × 8 views of 128 px, 13.6 s (a view a frame), a 553 KB fil
   little in the shadows. The range in the shadow passes would make the cached cascades depend on the camera.
 * The impostors' hand-over is a switch at the distance (no cross-fade: the instances carry no alpha).
 * A hole's edge follows the triangles (1 m steps at 1 m spacing).
-* The RTX's measure of the fade is for its next job.
 
 ## 5. Next
 

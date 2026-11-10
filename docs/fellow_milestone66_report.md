@@ -1,6 +1,6 @@
 # FellowEngine — milestone 66 report (proxies for unloaded cells, streamed meshes)
 
-Status: **FINAL** for the cloud's part (2026-11-10): checked on lavapipe; the RTX's run with its next job. Branch
+Status: **FINAL** (2026-11-10): checked on lavapipe and on the RTX (job f373, section 3a). Branch
 `fellow/geometry`. Decision record: `docs/decisions/0174-cell-proxies.md`.
 
 ## 0. Result
@@ -63,6 +63,14 @@ buildings 1.63 M → 203 k as stand-ins (9.4 s).
 full meshes whenever loaded, 24.6 and 28.2 MB streamed by 70 m (54 full meshes loaded on the way); the main thread's
 swap 60 µs on average, 4.7 ms at most (freeing a full mesh, on lavapipe); lavapipe's frames 394 → 279 ms at the median.
 
+## 3a. On the RTX (job f373, 1920 × 1080, the release template from `52b8408`)
+
+The same world: 7.6 % of the streamed picture off the whole's → **1.9 %** with proxies (mean 0.050 → 0.0053 a channel);
+mesh memory 167.8 MB all loaded, 39.8 streamed, 41.8 with proxies, 36.9 with streamed meshes. The bakes 4.0 s (cells),
+0.41 s (regions), 6.8 s (stand-ins). **Flights**: mesh memory 62.0 MB on average and 71.2 at most with the full meshes,
+**44.4 and 48.0 MB** streamed by 70 m; frames 1.1 → 1.0 ms at the median, 1.8 → 1.6 ms at the 99th percentile, the
+longest 2.3 and 2.2 ms; a swap 18 µs on average, 36 µs at most; a cell's entry 145 µs at most.
+
 ## 4. Limits
 
 * A proxy is a draw: 270 in view here. One proxy per group of far cells (HLOD's cascades over the proxies) would cut
@@ -72,9 +80,8 @@ swap 60 µs on average, 4.7 ms at most (freeing a full mesh, on lavapipe); lavap
   distance.
 * Skinned meshes, blend shapes and custom arrays are not streamed; a cell's scene is baked again after its meshes
   change.
-* Measured on lavapipe.
 
 ## 5. Next
 
-The plan agreed on 2026-11-10 is done. Next for the engine: the RTX's run of this milestone; then what the readiness
-assessment lists first — the far terrain's and proxies' draws grouped, virtual texturing, other GPUs.
+The plan agreed on 2026-11-10 is done. Next for the engine, from the readiness assessment: the far cells' proxies
+grouped (fewer draws), virtual texturing, other GPUs.

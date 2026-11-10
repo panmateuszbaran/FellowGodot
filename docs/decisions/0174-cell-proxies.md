@@ -90,6 +90,11 @@ The proxies cost 2 MB and 63 k triangles here, and a draw each (270 for the unlo
 pictures show the buildings' masses and the ground to the end of the world, in their materials' mean colours, without
 shadows.
 
+**On the RTX** (job f373, 1920 × 1080, the release template): the picture 7.6 → 1.9 % off with proxies; mesh memory
+39.8 → 41.8 MB with them, 36.9 MB with streamed meshes; the flights' mesh memory 62.0 → 44.4 MB on average (71.2 → 48.0
+at most), frames 1.8 → 1.6 ms at the 99th percentile, the longest 2.3 and 2.2 ms; a swap 18 µs on average, 36 µs at
+most.
+
 ## Decision
 
 Keep: a streamed world keeps its horizon — buildings and ground beyond the streamer's distance — from proxies baked in

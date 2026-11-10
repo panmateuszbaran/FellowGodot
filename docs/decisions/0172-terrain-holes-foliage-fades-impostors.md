@@ -99,8 +99,8 @@ rasterizing, a relative measure of the work):
 **On the RTX** (job f372, 1920 × 1080, the release template): the holes the same (the ball through at −33.8 m, the
 sky through all of the disc, no crack); 323 trees with impostors from 50 m: the GPU's frame 0.60 → 0.57 ms without
 shadows, 0.78 → 0.75 ms with the sun's — little for this GPU to save with 323 trees; the far trees 0.0032 a channel
-from the meshes. The fade's measure counted rows of a 360-row picture (at 1080 rows, the sky): fixed in the check, for
-the next job.
+from the meshes. The fade (job f373, the check's rows now scaled to the picture's height): the grass's share of the rows near the
+horizon 0.43, 0.62, 0.68 without, 0.30, 0.46, 0.57 with 15 m, the nearer rows the same.
 
 ## Decision
 
