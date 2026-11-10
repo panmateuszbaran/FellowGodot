@@ -9,6 +9,21 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 68 — what Frontier Lab found (2026-11-10)
+
+- `FellowGasVolume3D.sleep_distance` (decision 0176, 0: never): beyond it from the camera a gas volume takes no steps —
+  its smoke and fire kept and drawn — and its burning objects wait with it. Frontier Lab's campfire sleeps past 250 m:
+  the gas simulation over the flight 0.93 → 0.18 ms of GPU; the flight at 1080p 5.06 → 3.9-4.3 ms (198 → 234-259 fps
+  over seven flights, with the laptop's power state).
+- `rendering/fellow/frame/lazy_shader_variants_fill` (on): the variants a shader-cache load leaves for later (decision
+  0061) made one by one on a worker thread after it, outside the version's lock; the snow tracks' kernel made when the
+  rain node is set up. Twenty minutes of play: no shader variant or kernel made in play (10 variants and a kernel
+  before), the largest frame 92 → 21.5 ms, frames over 15 ms 9 → 5 (none in the first minute).
+- Fixed: "Attempting to use an uninitialized RID" (MultiMesh), printed in some flights: MultiMesh culling's pool looked
+  up members freed since (the result right, the error false); in three of seven flights before, none of nine after.
+- `FELLOW_LOG_COMPILES=1` prints each shader variant made at its first use and each kernel compiled from GLSL, with
+  its frame.
+
 ## Milestone 67 — Frontier Lab: an open world at AAA scale on the RTX (2026-11-10)
 
 - Frontier Lab (`--scene=frontier`, decision 0175): a 4 km world generated once into `external/frontier_<size>/` —
