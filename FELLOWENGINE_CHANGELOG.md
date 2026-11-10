@@ -36,8 +36,9 @@ Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.m
   by default) a shader's recorded pipelines are compiled in the background when its code is set at load, and again
   after the default specialization clears them. The file is tied to the scene shader's source and the project's
   defines, not to the engine's commit. The states check: 28 pipelines after the warm-up → 0, the 21 pictures the same
-  bit for bit; Slice Lab's 8-minute soak on lavapipe: 18 pipelines compiled in play → 0, ubershader draws 268 → 7.
-  Without the file nothing changes.
+  bit for bit; Slice Lab's 8-minute soak on lavapipe: 18 pipelines compiled in play → 0, ubershader draws 268 → 7;
+  on the RTX (20 minutes): load 1251 → 947 ms, the warm-up's 82 pipelines → 0, 67 → 33 compiled after it, the first
+  frame's ubershader draws 22 → 0. Without the file nothing changes.
 - The burning material baked into exports: Godot's shader baker now asks each node of an exported scene for the
   shaders it will make from its setup (`FellowBakeShaders::register_object_provider()`); `FellowBurnable3D` gives its
   burning materials' codes. A baked export with a burnable compiles no shader at its first start (1 before), also for a

@@ -1,7 +1,7 @@
 # FellowEngine — milestone 63 report (recorded pipelines, the burning material baked)
 
-Status: **FINAL** for the cloud's part (2026-11-10): checked on lavapipe, headless; the RTX's confirmation is a soak
-when the laptop's GPU may be used. Branch `fellow/geometry`. Decision record: `docs/decisions/0171-recorded-pipelines.md`.
+Status: **FINAL** (2026-11-10): checked on lavapipe, headless, and on the RTX 5070 Ti Laptop (section 3a). Branch
+`fellow/geometry`. Decision record: `docs/decisions/0171-recorded-pipelines.md`.
 
 ## 0. Result
 
@@ -76,8 +76,31 @@ second replayed them.
 | replayed | **0** | **0** | **7** | 5, 14.6 s | 47.9 s |
 
 The replayed pipelines compile while the scene loads: on lavapipe's two vCPUs, with an LLVM compiler, the load took
-6.4 s longer and the first frame waited 4.3 s less. On the RTX laptop's 24 cores they compile beside the load on
-worker threads; its numbers are for its next soak.
+6.4 s longer and the first frame waited 4.3 s less.
+
+## 3a. Addendum: the RTX
+
+**On the RTX 5070 Ti Laptop** (job f371, the owner's go-ahead for the GPU on 2026-11-10; Slice Lab's 20-minute soak on
+milestone 62's timeline at 1920 × 1080, release template; three runs one after the other: recording, then without the
+file — the drivers' caches warm from the first — then replaying the 191 pipelines of 12 shaders the first recorded):
+
+| | without the file | replayed |
+|---|---|---|
+| load (the bench's `load_time_ms`) | 1251 ms | **947 ms** (−24 %) |
+| start to the first frame | 1295 ms | **965 ms** |
+| the first frame's draws with the ubershader | 22 | **0** |
+| pipelines the warm-up compiled | 82 | **0** |
+| pipelines compiled in the 20 minutes, after the warm-up | 145, 67 | **37, 33** |
+| draws with the ubershader, all frames | 58 | **12** |
+| autotune's preparations (variants compiled ahead) | 133 | **5** |
+| frame time, mean (p99) | 4.46 (7.09) ms | 2.88 (5.10) ms |
+
+The load is shorter on the RTX (its 24 cores compile the replayed pipelines beside the load; the warm-up then finds
+them compiled). The 33 pipelines still compiled after the warm-up are states the recording run did not meet
+(autotune's choices follow the frame times and differ from run to run): a longer play-through, or a second recording
+merged into the file, covers them. The mean frame time is lower with the replay, but autotune evaluated 397 times
+instead of 275 (it no longer waited for its variants to compile) and kept other choices: that difference is autotune's,
+not measured apart here.
 
 ## 4. Limits
 
@@ -87,8 +110,8 @@ worker threads; its numbers are for its next soak.
   pipelines compile in play as without the file. A file recorded with another scene shader source or other rendering
   settings is not replayed (a warning).
 * The record is as good as the play-through: a weather, light or place it did not visit is compiled in play.
-* Measured on lavapipe; the RTX's soak (load time and late pipelines with the record) waits for permission to use its
-  GPU.
+* The record covers what its play-through met: on the RTX, 33 pipelines after the warm-up were states the recording
+  run did not reach (autotune's choices differ from run to run).
 
 ## 5. Next
 
