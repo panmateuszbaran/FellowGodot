@@ -2952,10 +2952,13 @@ void MeshStorage::skeleton_update_dependency(RID p_skeleton, DependencyTracker *
 void MeshStorage::_fellow_multimesh_pool_grow(uint64_t p_needed) {
 	// A new buffer large enough for every live member and the request; members get new slots and are copied again from
 	// their own buffers (regions of freed or resized MultiMeshes are dropped here).
+	// Members freed since they took a slot are stale RIDs: owns() first, as get_or_null() reports a stale RID as "an
+	// uninitialized RID" when its index was meanwhile taken by a MultiMesh created on another thread whose
+	// initialization is still queued (cells loading while the frame is drawn).
 	uint64_t live = 0;
 	LocalVector<RID> alive;
 	for (const RID &rid : fellow_mm_pool.members) {
-		MultiMesh *mm = multimesh_owner.get_or_null(rid);
+		MultiMesh *mm = multimesh_owner.owns(rid) ? multimesh_owner.get_or_null(rid) : nullptr;
 		if (mm && mm->fellow_pool_offset >= 0) {
 			live += (mm->fellow_pool_floats + 3) & ~3u;
 			alive.push_back(rid);
