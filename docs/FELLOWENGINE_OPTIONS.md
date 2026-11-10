@@ -413,6 +413,17 @@ children grouped on the streamer's XZ grid, each group saved as `cell_X_Z.scn` a
 `exclude_classes`, `max_span` 2, `load_distance`, `extension`, `owner`); the editor runs it from Project > Tools.
 `editor_preview` (on): in the editor the cells show their scenes (internal, not saved). Decision 0151.
 
+Milestone 66 (decision 0174), **proxies and streamed meshes**: `bake_proxies(directory, options)` bakes a proxy for each
+cell — its meshes, MultiMesh instances (up to 256 a node) and terrain regions (`FellowTerrain3D.make_proxy_arrays(quads)`)
+merged, simplified (meshoptimizer) and coloured by their materials' mean albedo per vertex — saved as `<cell>_proxy.res`
+and added as the cell's `FellowProxy` child (shown while unloaded; hidden in the editor while the cell's scene is
+shown). Options `ratio` 0.05, `terrain_quads` 32, `proxy_distance` 0 (always drawn), `proxy_shadows` off, `owner`;
+`stream_meshes` (off): the cells' meshes of at least `mesh_min_triangles` 2000 triangles replaced in their scenes by
+stand-ins of `mesh_ratio` 0.15 of their triangles, the full meshes saved apart (`meshes/`) and loaded on the
+ResourceLoader's threads within the streamer's `mesh_distance` (0: whenever the cell is loaded; released beyond it
+plus `unload_margin`), `max_mesh_loads` 2 at once. The editor runs it from Project > Tools > **Bake Streaming
+Proxies**. Bench `bench/world_proxies_check.gd`.
+
 ## FSR 3.1 upscaler (milestone 47)
 
 `rendering/fellow/upscaling/fsr3` (on from milestone 49; read every frame): a viewport in Godot's FSR 2 scaling mode

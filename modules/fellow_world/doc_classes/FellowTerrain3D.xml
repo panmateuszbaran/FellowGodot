@@ -117,6 +117,13 @@
 				A heightmap for [member heightmap] from [param image]: a grey image ([constant Image.FORMAT_L8], 16-bit, any colour format: its red channel) mapped from 0..1 to [param min_height]..[param max_height] metres, or a [constant Image.FORMAT_RF] or [constant Image.FORMAT_RH] image of metres kept as it is. Mipmaps are dropped; compressed images are decompressed.
 			</description>
 		</method>
+		<method name="make_proxy_arrays">
+			<return type="Array" />
+			<param index="0" name="quads" type="int" />
+			<description>
+				The terrain as a coarse mesh's arrays ([constant Mesh.ARRAY_MAX] long, for [method ArrayMesh.add_surface_from_arrays]) in its local space: a grid of about [param quads] quads along its longer side, its normals, and vertex colours from the layers' colours and textures' mean colours weighted by the splat maps; triangles on holes left out. [method FellowWorldStreamer3D.bake_proxies] makes a region's proxy from it.
+			</description>
+		</method>
 		<method name="paint">
 			<return type="void" />
 			<param index="0" name="global_position" type="Vector3" />

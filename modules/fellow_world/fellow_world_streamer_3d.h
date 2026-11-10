@@ -31,7 +31,9 @@
 #pragma once
 
 #include "core/object/worker_thread_pool.h"
+#include "core/templates/hash_set.h"
 #include "scene/3d/node_3d.h"
+#include "scene/resources/mesh.h"
 #include "scene/resources/packed_scene.h"
 
 #include <atomic>
@@ -95,6 +97,7 @@ public:
 	// Milestone 50 (tools): in the editor, the content as an internal child that is not saved with the level, where
 	// the cell's FellowWorldStreamer3D has editor_preview on; nothing in a game.
 	void _update_editor_preview();
+	void _editor_hide_proxies();
 
 	FellowStreamingCell3D() {}
 	~FellowStreamingCell3D();
@@ -149,6 +152,34 @@ class FellowWorldStreamer3D : public Node3D {
 
 	static LocalVector<FellowWorldStreamer3D *> in_tree; // milestone 50: for get_totals()
 
+	// Decision 0174: streamed meshes — stand-ins in the cells' content (bake_proxies() with "stream_meshes"), their
+	// full meshes loaded on the ResourceLoader's threads within mesh_distance and dropped beyond it.
+	real_t mesh_distance = 0.0; // 0: the full meshes whenever their cell is loaded
+	int max_mesh_loads = 2;
+	enum MeshState : uint8_t {
+		MESH_STAND_IN,
+		MESH_LOADING,
+		MESH_FULL,
+		MESH_FAILED,
+	};
+	struct StreamedMesh {
+		ObjectID node;
+		FellowStreamingCell3D *cell = nullptr;
+		String path;
+		Ref<Mesh> stand_in;
+		Ref<Mesh> full;
+		MeshState state = MESH_STAND_IN;
+	};
+	LocalVector<StreamedMesh> streamed_meshes;
+	HashSet<String> mesh_pending; // paths requested from the ResourceLoader
+	uint64_t mesh_loads = 0;
+	uint64_t mesh_releases = 0;
+	uint64_t mesh_swap_usec = 0;
+	uint64_t mesh_swap_usec_max = 0;
+	void _register_meshes(FellowStreamingCell3D *p_cell, Node *p_content);
+	void _unregister_meshes(FellowStreamingCell3D *p_cell);
+	void _update_meshes(const LocalVector<Vector3> &p_points);
+
 	static void _instance_task(void *p_data);
 	void _update();
 	void _gather_points(LocalVector<Vector3> &r_points) const;
@@ -200,6 +231,16 @@ public:
 	bool is_settled() const;
 	// Loads and activates synchronously every cell in range now (a loading screen); returns how many entered.
 	int load_now();
+
+	void set_mesh_distance(real_t p_distance) { mesh_distance = MAX(p_distance, real_t(0.0)); }
+	real_t get_mesh_distance() const { return mesh_distance; }
+	void set_max_mesh_loads(int p_count) { max_mesh_loads = CLAMP(p_count, 1, 64); }
+	int get_max_mesh_loads() const { return max_mesh_loads; }
+	// Decision 0174: for each cell, a proxy baked from its content (merged, simplified, coloured by its materials) saved in
+	// p_directory and added under the cell, shown while the cell is not loaded; with "stream_meshes", its large meshes'
+	// stand-ins written into a copy of its scene, their full meshes saved apart and streamed by mesh_distance. Returns
+	// the bake's counts.
+	Dictionary bake_proxies(const String &p_directory, const Dictionary &p_options = Dictionary());
 	Dictionary get_stats() const;
 
 	// Milestone 50 (tools): every streamer in the tree's cells, summed, for the Performance monitors (FellowEngine's

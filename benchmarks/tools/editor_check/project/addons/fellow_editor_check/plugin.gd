@@ -4,7 +4,7 @@ extends EditorPlugin
 ## copy of this project in the editor: once the first import is done it checks the fellow_editor module — the class
 ## icons, the .bvh importer, the gizmos of FellowEngine's nodes (and a picture of them where the editor renders), the
 ## "Split into Streaming Cells" tool run through its menu item and dialog (the cells' content shown in the editor, not
-## saved with the level), and the Performance monitors — prints one line, EDITOR_CHECK {json}, and quits (exit code 1 on a failure).
+## saved with the level), the "Bake Streaming Proxies" tool after it (milestone 66), and the Performance monitors — prints one line, EDITOR_CHECK {json}, and quits (exit code 1 on a failure).
 ##   godot --editor --path <copy> -- --out=<directory for the picture>
 
 const ICON_CLASSES := ["FellowBurnable3D", "FellowGasEmitter3D", "FellowGasVolume3D", "FellowLightning3D",
@@ -16,6 +16,7 @@ const MONITORS := ["FellowEngine/Texture streaming resident", "FellowEngine/Text
 	"FellowEngine/Texture streaming pending", "FellowEngine/World cells loaded", "FellowEngine/World cells loading",
 	"FellowEngine/Motion matching time", "FellowEngine/Motion matching updates"]
 const SPLIT_MENU := "Split into Streaming Cells (FellowEngine)..."
+const PROXIES_MENU := "Bake Streaming Proxies (FellowEngine)..."
 
 var out := {}
 var failures := []
@@ -65,6 +66,7 @@ func _run() -> void:
 	await _check_gizmos()
 	await _check_handles()
 	await _check_split()
+	await _check_proxies()
 	_check_monitors()
 	_check_animate_toggle()
 	await _check_warnings()
@@ -596,6 +598,66 @@ func _check_split() -> void:
 	if split["saved_boxes"] != 0 or split["saved_cells"] != cells.size():
 		_fail("split: the saved level has %d boxes and %d cells" % [split["saved_boxes"], split["saved_cells"]])
 	out["split"] = split
+
+
+# Milestone 66: Project > Tools > Bake Streaming Proxies on the cells the split made: a proxy for each cell, owned by
+# the level and saved with it (stream_back.gd then sees them shown while their cells are unloaded, hidden once loaded).
+func _check_proxies() -> void:
+	var root := EditorInterface.get_edited_scene_root()
+	if root == null or root.name != "Level" or not root.has_node("Streamer"):
+		_fail("proxies: no split level")
+		return
+	var streamer := root.get_node("Streamer")
+	var selection := EditorInterface.get_selection()
+	selection.clear()
+	selection.add_node(streamer)
+	await _frames(2)
+	var base := EditorInterface.get_base_control()
+	var menu := _find_menu(base, PROXIES_MENU)
+	if menu == null:
+		_fail("no \"%s\" menu item" % PROXIES_MENU)
+		return
+	for i in menu.item_count:
+		if menu.get_item_text(i) == PROXIES_MENU:
+			menu.index_pressed.emit(i)
+	await _frames(3)
+	var dialog := _find_dialog(base, "Bake Streaming Proxies")
+	if dialog == null or not dialog.visible:
+		_fail("the proxies dialog did not open")
+		return
+	for e in dialog.find_children("*", "LineEdit", true, false):
+		if e.text.begins_with("res://"):
+			e.text = "res://split_proxies"
+	var t0 := Time.get_ticks_usec()
+	dialog.confirmed.emit()
+	dialog.hide()
+	var bake_ms := (Time.get_ticks_usec() - t0) / 1000.0
+	await _frames(5)
+	var report := ""
+	for d in base.find_children("*", "AcceptDialog", true, false):
+		if d.visible and d.dialog_text.contains("proxies baked"):
+			report = d.dialog_text
+			d.hide()
+	var cells := 0
+	var proxies := 0
+	var owned := 0
+	for c in streamer.get_children():
+		if c.get_class() != "FellowStreamingCell3D":
+			continue
+		cells += 1
+		for n in c.get_children():
+			if n is MeshInstance3D and n.has_meta("_fellow_cell_proxy"):
+				proxies += 1
+				owned += 1 if n.owner == root else 0
+	var files := DirAccess.get_files_at("res://split_proxies")
+	EditorInterface.save_scene()
+	await _frames(3)
+	var saved := FileAccess.get_file_as_string("res://split.tscn")
+	var result := {"cells": cells, "proxies": proxies, "owned": owned, "files": files.size(), "report": report,
+		"bake_ms": bake_ms, "saved_meshes": saved.count("type=\"MeshInstance3D\"")}
+	if cells == 0 or proxies != cells or owned != cells or files.size() != cells + 1 or report == "" or result["saved_meshes"] != cells:
+		_fail("proxies: %s" % [result])
+	out["proxies"] = result
 
 
 func _check_monitors() -> void:

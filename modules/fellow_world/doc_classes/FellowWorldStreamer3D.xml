@@ -4,11 +4,21 @@
 		FellowEngine: keeps the [FellowStreamingCell3D] nodes below it loaded around the camera.
 	</brief_description>
 	<description>
-		Every frame the streamer measures the distance from the viewport's camera (with [member use_camera]), its [member targets] and the [method prefetch] points to each cell's box. Cells within their load distance are requested from the [ResourceLoader]'s threads (the nearest first, at most [member max_loading] loading or being instantiated at once), instantiated on a worker thread ([member threaded_instancing]) and added to the tree, at most [member max_activations_per_frame] a frame; loaded cells beyond the distance plus [member unload_margin] are freed, the farthest first, at most [member max_releases_per_frame] a frame. With [member streaming] off every cell loads (the whole level resident). With FellowEngine's texture streaming ([code]rendering/fellow/streaming/textures[/code]) the cells' textures load with only their small mips. See [code]docs/decisions/0147-world-streaming.md[/code].
+		Every frame the streamer measures the distance from the viewport's camera (with [member use_camera]), its [member targets] and the [method prefetch] points to each cell's box. Cells within their load distance are requested from the [ResourceLoader]'s threads (the nearest first, at most [member max_loading] loading or being instantiated at once), instantiated on a worker thread ([member threaded_instancing]) and added to the tree, at most [member max_activations_per_frame] a frame; loaded cells beyond the distance plus [member unload_margin] are freed, the farthest first, at most [member max_releases_per_frame] a frame. With [member streaming] off every cell loads (the whole level resident). With FellowEngine's texture streaming ([code]rendering/fellow/streaming/textures[/code]) the cells' textures load with only their small mips. Proxies baked offline ([method bake_proxies]) stand in for the cells that are not loaded, and a cell's large meshes can be streamed by distance ([member mesh_distance]). See [code]docs/decisions/0147-world-streaming.md[/code] and [code]docs/decisions/0174-cell-proxies.md[/code].
 	</description>
 	<tutorials>
 	</tutorials>
 	<methods>
+		<method name="bake_proxies">
+			<return type="Dictionary" />
+			<param index="0" name="directory" type="String" />
+			<param index="1" name="options" type="Dictionary" default="{}" />
+			<description>
+				Bakes a proxy for each cell below the streamer: its scene's meshes, [MultiMeshInstance3D] instances (up to 256 a node) and [FellowTerrain3D] regions ([method FellowTerrain3D.make_proxy_arrays]) merged and simplified into one mesh whose vertex colours are its materials' albedo (a texture's mean colour times the material's colour), saved in [param directory] ([code]&lt;cell&gt;_proxy.res[/code], with one shared [code]fellow_proxy_material.tres[/code]) and added to the cell as a [MeshInstance3D] child named [code]FellowProxy[/code], shown while the cell is not loaded and hidden while it is. A proxy baked again replaces the cell's earlier one. [code]options["ratio"][/code] (0.05) is the share of the meshes' triangles kept, [code]options["terrain_quads"][/code] (32) the quads along a terrain region's side, [code]options["proxy_distance"][/code] (0: always) the distance beyond which a proxy is not drawn either, [code]options["proxy_shadows"][/code] ([code]false[/code]) whether proxies cast shadows, [code]options["owner"][/code] the proxies' owner (the streamer's owner by default, so that the editor saves them with the scene).
+				With [code]options["stream_meshes"][/code] ([code]true[/code]), the cells' meshes of at least [code]options["mesh_min_triangles"][/code] (2000) triangles are also streamed: each is replaced in the cell's scene by a simplified stand-in ([code]options["mesh_ratio"][/code], 0.15, of its triangles, its materials kept), the full mesh saved apart ([code]meshes/&lt;cell&gt;_&lt;n&gt;.res[/code], unless it is a file of its own already), the cell's scene saved again into [param directory] and the cell's [member FellowStreamingCell3D.scene_path] changed to it; once loaded, the stand-ins take their full meshes within [member mesh_distance].
+				Returns [code]cells[/code], [code]proxies[/code], [code]source_triangles[/code], [code]proxy_triangles[/code], [code]streamed_meshes[/code], [code]streamed_triangles[/code], [code]stand_in_triangles[/code] and [code]bake_ms[/code]. The editor's [b]Project &gt; Tools &gt; Bake Streaming Proxies[/b] calls it on the selected streamer. See [code]docs/decisions/0174-cell-proxies.md[/code].
+			</description>
+		</method>
 		<method name="clear_prefetch">
 			<return type="void" />
 			<description>
@@ -18,7 +28,7 @@
 		<method name="get_stats" qualifiers="const">
 			<return type="Dictionary" />
 			<description>
-				The cells by state, loads and releases, failures, the main thread's time adding and removing cells (total and the largest), the worker threads' instantiation time, the time from request to the tree (total and the largest), the streamer's own time, frames, [code]settled[/code].
+				The cells by state, loads and releases, failures, the main thread's time adding and removing cells (total and the largest), the worker threads' instantiation time, the time from request to the tree (total and the largest), the streamer's own time, frames, [code]settled[/code]; the streamed meshes of the loaded cells ([code]streamed_meshes[/code], [code]streamed_meshes_full[/code]: those with their full mesh), their loads and releases ([code]mesh_loads[/code], [code]mesh_releases[/code]) and the main thread's time swapping meshes ([code]mesh_swap_usec[/code], [code]mesh_swap_usec_max[/code]).
 			</description>
 		</method>
 		<method name="is_settled" qualifiers="const">
@@ -65,8 +75,14 @@
 		<member name="max_loading" type="int" setter="set_max_loading" getter="get_max_loading" default="2">
 			Cells loading or being instantiated at once.
 		</member>
+		<member name="max_mesh_loads" type="int" setter="set_max_mesh_loads" getter="get_max_mesh_loads" default="2">
+			Streamed meshes loading at once (see [method bake_proxies]).
+		</member>
 		<member name="max_releases_per_frame" type="int" setter="set_max_releases_per_frame" getter="get_max_releases_per_frame" default="2">
 			Cells freed a frame.
+		</member>
+		<member name="mesh_distance" type="float" setter="set_mesh_distance" getter="get_mesh_distance" default="0.0">
+			A loaded cell's streamed meshes (see [method bake_proxies]) are loaded on the [ResourceLoader]'s threads and take the place of their stand-ins within this distance of their boxes, and go back to their stand-ins, the full meshes freed, beyond it plus [member unload_margin]. 0: the full meshes whenever their cells are loaded.
 		</member>
 		<member name="streaming" type="bool" setter="set_streaming" getter="is_streaming" default="true">
 			Off: every cell loads, whatever the distance.

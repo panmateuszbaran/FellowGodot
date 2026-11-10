@@ -35,6 +35,7 @@
 #include "editor/scene/3d/node_3d_editor_gizmos.h"
 
 class Button;
+class CheckBox;
 class MenuButton;
 class ConfirmationDialog;
 class Gizmo3DHelper;
@@ -130,6 +131,11 @@ class FellowEditorPlugin : public EditorPlugin {
 	SpinBox *split_cell_size = nullptr;
 	LineEdit *split_directory = nullptr;
 	ObjectID split_streamer;
+	// Milestone 66: Project > Tools > "Bake Streaming Proxies..." (FellowWorldStreamer3D.bake_proxies()).
+	ConfirmationDialog *proxies_dialog = nullptr;
+	LineEdit *proxies_directory = nullptr;
+	CheckBox *proxies_stream_meshes = nullptr;
+	ObjectID proxies_streamer;
 	Button *animate_button = nullptr; // milestone 52: the 3D editor's toolbar toggle
 	MenuButton *add_menu = nullptr; // milestone 53: ready-made, wired-up setups
 
@@ -154,6 +160,8 @@ private:
 
 	void _split_menu();
 	void _split_confirmed();
+	void _proxies_menu();
+	void _proxies_confirmed();
 	void _animate_toggled(bool p_animate);
 	void _editor_settings_changed();
 	void _update_animate_icon();

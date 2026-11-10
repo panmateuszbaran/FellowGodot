@@ -281,16 +281,20 @@ func _fade() -> void:
 		await _wait_foliage()
 		await _settle(frames)
 		var img := await _shot("fade_%d_%d" % [i, int(fade)])
-		# The grass's share of each band of 8 rows from the horizon down (TAA's jitter moves single pixels, not this).
+		# The grass's share of each band of 8 rows from the horizon down (TAA's jitter moves single pixels, not this);
+		# rows of a 360-row picture, scaled to the picture's height.
 		var bands := []
-		for y0 in range(144, 232, 8):
+		var k := img.get_height() / 360.0
+		var band := maxi(1, int(round(8 * k)))
+		for b in 11:
+			var y0 := int(round((144 + 8 * b) * k))
 			var grass_px := 0
-			for y in range(y0, y0 + 8):
+			for y in range(y0, y0 + band):
 				for x in img.get_width():
 					var c := img.get_pixel(x, y)
 					if c.g > c.r * 1.8 and c.g > 0.43:
 						grass_px += 1
-			bands.append(snappedf(float(grass_px) / (8.0 * img.get_width()), 0.01))
+			bands.append(snappedf(float(grass_px) / (band * img.get_width()), 0.01))
 		result["fade"]["fade_%d_%d" % [i, int(fade)]] = {
 			"grass_share_by_band": bands,
 			"foliage_instances": terrain.get_stats().get("foliage_instances", -1),

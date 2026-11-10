@@ -477,6 +477,10 @@ public:
 	// Builds the terrain's data now, out of the tree (any thread: a streaming cell's worker thread, decision 0173), so
 	// that entering the world makes only its collision and instances.
 	void prepare_data();
+	// Decision 0174: a coarse grid of the terrain (about p_quads quads a side, its own local space) for a streaming
+	// cell's proxy: positions, normals, linear vertex colours (the layers' colours and textures' means by their weights)
+	// and indices, without the triangles at holes.
+	Array make_proxy_arrays(int p_quads);
 	void sculpt(const Vector3 &p_global, float p_radius, float p_strength, SculptMode p_mode, float p_target_height = 0.0f);
 	void paint(const Vector3 &p_global, float p_radius, int p_layer, float p_strength);
 	void _sculpt_local(const Vector3 &p_global, float p_radius, float p_strength, SculptMode p_mode, float p_target_height);

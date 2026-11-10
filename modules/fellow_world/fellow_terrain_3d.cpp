@@ -30,6 +30,7 @@
 
 #include "fellow_terrain_3d.h"
 
+#include "fellow_cell_proxies.h"
 #include "fellow_impostor_baker.h"
 
 #include "core/config/engine.h"
@@ -3220,6 +3221,85 @@ Dictionary FellowTerrain3D::get_stats() const {
 	return d;
 }
 
+Array FellowTerrain3D::make_proxy_arrays(int p_quads) {
+	_ensure_data();
+	Array arrays;
+	if (map_w < 2 || map_h < 2) {
+		return arrays;
+	}
+	const int step = MAX(1, (MAX(map_w, map_h) - 1) / MAX(1, p_quads));
+	LocalVector<int> xs;
+	LocalVector<int> zs;
+	for (int x = 0; x < map_w - 1; x += step) {
+		xs.push_back(x);
+	}
+	xs.push_back(map_w - 1);
+	for (int z = 0; z < map_h - 1; z += step) {
+		zs.push_back(z);
+	}
+	zs.push_back(map_h - 1);
+	// The layers' mean colours, linear: the colour times the albedo texture's mean (as the shader multiplies them).
+	Color layer_mean[MAX_LAYERS];
+	for (int i = 0; i < MAX_LAYERS; i++) {
+		Ref<FellowTerrainLayer> l = i < layers.size() ? Ref<FellowTerrainLayer>(layers[i]) : Ref<FellowTerrainLayer>();
+		layer_mean[i] = l.is_valid() ? l->get_albedo_color() * FellowCellProxies::texture_average(l->get_albedo_texture()) : Color(1, 1, 1);
+	}
+	PackedVector3Array verts;
+	PackedVector3Array normals;
+	PackedColorArray colors;
+	const int nx = xs.size();
+	const int nz = zs.size();
+	const float inv = 1.0f / (2.0f * vertex_spacing);
+	for (int j = 0; j < nz; j++) {
+		for (int i = 0; i < nx; i++) {
+			const int x = xs[i];
+			const int z = zs[j];
+			verts.push_back(Vector3(x * vertex_spacing, heights[z * map_w + x], z * vertex_spacing));
+			const float hl = heights[z * map_w + MAX(0, x - 1)];
+			const float hr = heights[z * map_w + MIN(map_w - 1, x + 1)];
+			const float hd = heights[MAX(0, z - 1) * map_w + x];
+			const float hu = heights[MIN(map_h - 1, z + 1) * map_w + x];
+			normals.push_back(Vector3((hl - hr) * inv, 1.0f, (hd - hu) * inv).normalized());
+			Color c(0, 0, 0);
+			for (int l = 0; l < MAX_LAYERS; l++) {
+				const float w = _layer_weight_local(l, x * vertex_spacing, z * vertex_spacing);
+				if (w > 0.0f) {
+					c += layer_mean[l] * w;
+				}
+			}
+			c.a = 1.0f;
+			colors.push_back(c);
+		}
+	}
+	PackedInt32Array indices;
+	auto hole = [&](int p_i, int p_j) { return !holes.is_empty() && holes[zs[p_j] * map_w + xs[p_i]] != 0; };
+	for (int j = 0; j + 1 < nz; j++) {
+		for (int i = 0; i + 1 < nx; i++) {
+			const int a = j * nx + i;
+			const int b = a + 1;
+			const int c = a + nx;
+			const int d = c + 1;
+			// The mesh's diagonal (b to c); a triangle with a hole's vertex left out.
+			if (!(hole(i, j) || hole(i + 1, j) || hole(i, j + 1))) {
+				indices.push_back(a);
+				indices.push_back(b);
+				indices.push_back(c);
+			}
+			if (!(hole(i + 1, j) || hole(i + 1, j + 1) || hole(i, j + 1))) {
+				indices.push_back(b);
+				indices.push_back(d);
+				indices.push_back(c);
+			}
+		}
+	}
+	arrays.resize(Mesh::ARRAY_MAX);
+	arrays[Mesh::ARRAY_VERTEX] = verts;
+	arrays[Mesh::ARRAY_NORMAL] = normals;
+	arrays[Mesh::ARRAY_COLOR] = colors;
+	arrays[Mesh::ARRAY_INDEX] = indices;
+	return arrays;
+}
+
 void FellowTerrain3D::prepare_data() {
 	if (data_dirty && !is_inside_tree()) {
 		_rebuild_data();
@@ -3552,6 +3632,7 @@ void FellowTerrain3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_region_group", "group"), &FellowTerrain3D::set_region_group);
 	ClassDB::bind_method(D_METHOD("get_region_group"), &FellowTerrain3D::get_region_group);
 	ClassDB::bind_method(D_METHOD("get_region_neighbors"), &FellowTerrain3D::get_region_neighbors);
+	ClassDB::bind_method(D_METHOD("make_proxy_arrays", "quads"), &FellowTerrain3D::make_proxy_arrays);
 	ClassDB::bind_method(D_METHOD("split_into_regions", "region_quads", "directory", "streamer"), &FellowTerrain3D::split_into_regions, DEFVAL(Variant()));
 	ClassDB::bind_method(D_METHOD("set_foliage", "foliage"), &FellowTerrain3D::set_foliage);
 	ClassDB::bind_method(D_METHOD("get_foliage"), &FellowTerrain3D::get_foliage);

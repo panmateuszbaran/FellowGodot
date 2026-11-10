@@ -1,6 +1,6 @@
 # FellowEngine — milestone 65 report (terrain regions streamed with the world's cells)
 
-Status: **FINAL** for the cloud's part (2026-11-10): checked on lavapipe; the RTX's flight with its next job. Branch
+Status: **FINAL** (2026-11-10): checked on lavapipe; the RTX's flight in section 3a (job f372). Branch
 `fellow/geometry`. Decision record: `docs/decisions/0173-terrain-regions.md`.
 
 ## 0. Result
@@ -65,6 +65,13 @@ The pictures differ from the whole's in two places, neither a seam: far silhouet
 detail is its own size, 256 m; the whole's goes to 4 km) and the splat maps' blend edges (each region's texture
 coordinates computed from its own size: rounding at the height blend's sharp threshold).
 
+## 3a. On the RTX (job f372, 1920 × 1080, the release template from `56490d7`)
+
+The same 4 km map in 256 regions: the shared edges within 7.6 µm, also after the brushes; the sky through the ground
+in 0-202 of 2,073,600 pixels (far silhouettes); terrain textures 213.4 → 17.6 MB at most (21 regions), all textures
+315.6 → 122.2 MB. **The flight** (11,474 frames): frames 0.69 ms at the median, 1.91 ms at the 99th percentile, the
+longest 4.19 ms, none over 100 ms; 96 regions entered, each in 1.07 ms of the main thread on average, 2.67 ms at most.
+
 ## 4. Limits
 
 * Beyond the streamer's distance there is no terrain: the far ground needs milestone 66's proxies for unloaded cells.
@@ -72,7 +79,6 @@ coordinates computed from its own size: rounding at the height blend's sharp thr
   distance.
 * The collision shapes are still made on the main thread when a region enters (part of its 2.4 ms).
 * Regions must be axis-aligned, of one spacing and size (`split_into_regions()` makes them so).
-* Measured on lavapipe.
 
 ## 5. Next
 

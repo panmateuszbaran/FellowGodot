@@ -9,6 +9,22 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 66 — proxies for unloaded cells, streamed meshes (2026-11-10)
+
+- `FellowWorldStreamer3D.bake_proxies(directory, options)` (decision 0174): each cell's meshes, MultiMesh instances (up
+  to 256 a node) and terrain regions (`FellowTerrain3D.make_proxy_arrays()`) merged, simplified to 5 % with
+  meshoptimizer and coloured per vertex by their materials' mean albedo, saved and added as the cell's `FellowProxy` —
+  shown while the cell is unloaded, hidden in the editor while the cell's scene is shown. Lavapipe, 12 × 12 cells of
+  64 m streamed to 160 m: 7.8 % of the picture off the whole world's (the horizon empty) → 2.0 %, for 2 MB of meshes
+  and 63 k triangles; 1.7 M triangles baked into 58 k in 4.7 s.
+- Streamed meshes: with the bake's `stream_meshes`, a cell's meshes of 2000+ triangles become stand-ins (15 % of their
+  triangles, their materials kept) in its scene, their full meshes saved apart and loaded on the ResourceLoader's
+  threads within the streamer's `mesh_distance` (`max_mesh_loads` at once), freed beyond it. A flight across the world:
+  mesh memory 42.2 → 24.6 MB on average, 51.4 → 28.2 MB at most.
+- Project > Tools > Bake Streaming Proxies; the editor check bakes the split level's proxies and a game shows them.
+- Milestones 64-65 measured on the RTX (job f372): a terrain region enters in 1.07 ms of the main thread (2.67 at most),
+  a flight across a 4 km map at 1.91 ms a frame at the 99th percentile.
+
 ## Milestone 65 — terrain regions streamed with the world's cells (2026-11-10)
 
 - `FellowTerrain3D.region_group` (decision 0173): terrains of one group are tiles of one height field, joined without a
@@ -20,7 +36,9 @@ Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.m
   `FellowWorldStreamer3D.split_into_cells()`'s option `split_terrains` (the editor's Split into Streaming Cells). A 4 km
   map at 1 m keeps 17.6 MB of terrain textures around the camera instead of 213 MB.
 - A streaming cell's terrains build their data (heights, mips, normals, splat maps, textures) on the worker thread that
-  instances the cell: a region enters the world in 2.4 ms of the main thread (6.2 at most) instead of 46-60.
+  instances the cell: a region enters the world in 2.4 ms of the main thread (6.2 at most) instead of 46-60. On the
+  RTX (job f372): 1.07 ms on average, 2.67 at most; a flight across the 4 km map at 1.91 ms a frame at the 99th
+  percentile.
 
 ## Milestone 64 — the terrain's holes, foliage fading out, tree impostors in files (2026-11-10)
 
@@ -36,7 +54,8 @@ Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.m
 - Tree impostors baked into files: `FellowTerrainFoliage.impostor` and `impostor_distance` — the meshes to the distance,
   the impostors from it, per instance on the GPU, the shadows per directional cascade;
   `FellowTerrain3D.bake_foliage_impostors()` (and the toolbar's Bake Impostors) renders decision 0122's octahedral
-  impostors and saves them as `.res` with lossless atlases. Lavapipe: 323 trees to 400 m, 78.9 → 49.2 ms a frame.
+  impostors and saves them as `.res` with lossless atlases. Lavapipe: 323 trees to 400 m, 78.9 → 49.2 ms a frame (the
+  RTX: 0.60 → 0.57 ms of GPU time, little to save with 323 trees).
 - The regression suite's `terrain_holes` scene; `bench/terrain_holes_check.gd`.
 
 ## Milestone 63 — recorded pipelines, the burning material baked (2026-11-10)

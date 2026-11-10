@@ -30,6 +30,7 @@
 
 #include "fellow_world_streamer_3d.h"
 
+#include "fellow_cell_proxies.h"
 #include "fellow_terrain_3d.h"
 
 #include "core/config/engine.h"
@@ -41,9 +42,11 @@
 #include "core/os/os.h"
 #include "core/templates/sort_array.h"
 #include "scene/3d/camera_3d.h"
+#include "scene/3d/mesh_instance_3d.h"
 #include "scene/3d/visual_instance_3d.h"
 #include "scene/main/scene_tree.h"
 #include "scene/main/viewport.h"
+#include "servers/rendering/rendering_server.h"
 
 static float _point_aabb_distance(const Vector3 &p_point, const AABB &p_box) {
 	const Vector3 c = p_box.get_center();
@@ -85,6 +88,10 @@ void FellowStreamingCell3D::set_scene_path(const String &p_path) {
 	}
 }
 
+// Milestone 66 (decision 0174): a cell's baked proxy, and a stand-in's full mesh's path.
+static const char *FELLOW_CELL_PROXY_META = "_fellow_cell_proxy";
+static const char *FELLOW_FULL_MESH_META = "_fellow_full_mesh";
+
 void FellowStreamingCell3D::_update_editor_preview() {
 #ifdef TOOLS_ENABLED
 	if (!Engine::get_singleton()->is_editor_hint() || !is_inside_tree()) {
@@ -103,6 +110,7 @@ void FellowStreamingCell3D::_update_editor_preview() {
 	}
 	const String shown = editor_preview ? String(editor_preview->get_meta(SNAME("_fellow_preview_path"), String())) : String();
 	if (show && editor_preview && shown == scene_path) {
+		_editor_hide_proxies();
 		return;
 	}
 	if (editor_preview) {
@@ -111,6 +119,7 @@ void FellowStreamingCell3D::_update_editor_preview() {
 		editor_preview = nullptr;
 	}
 	if (!show) {
+		_editor_hide_proxies();
 		return;
 	}
 	Ref<PackedScene> scene = ResourceLoader::load(scene_path, "PackedScene");
@@ -126,6 +135,19 @@ void FellowStreamingCell3D::_update_editor_preview() {
 	// cell.
 	add_child(n, false, INTERNAL_MODE_BACK);
 	editor_preview = n;
+	_editor_hide_proxies();
+#endif
+}
+
+void FellowStreamingCell3D::_editor_hide_proxies() {
+#ifdef TOOLS_ENABLED
+	// The preview in place of the proxies: their instances hidden, their saved visibility untouched.
+	for (int i = 0; i < get_child_count(); i++) {
+		GeometryInstance3D *g = Object::cast_to<GeometryInstance3D>(get_child(i));
+		if (g && g->has_meta(FELLOW_CELL_PROXY_META) && g->get_instance().is_valid()) {
+			RS::get_singleton()->instance_set_visible(g->get_instance(), !editor_preview && g->is_visible_in_tree());
+		}
+	}
 #endif
 }
 
@@ -291,6 +313,7 @@ void FellowWorldStreamer3D::_activate(FellowStreamingCell3D *p_cell, Node *p_con
 	p_cell->add_child(p_content);
 	p_cell->_set_proxy_visible(false);
 	p_cell->state = FellowStreamingCell3D::STATE_LOADED;
+	_register_meshes(p_cell, p_content);
 	const uint64_t t1 = OS::get_singleton()->get_ticks_usec();
 	activation_usec += t1 - t0;
 	activation_usec_max = MAX(activation_usec_max, t1 - t0);
@@ -303,6 +326,7 @@ void FellowWorldStreamer3D::_activate(FellowStreamingCell3D *p_cell, Node *p_con
 
 void FellowWorldStreamer3D::_release(FellowStreamingCell3D *p_cell) {
 	const uint64_t t0 = OS::get_singleton()->get_ticks_usec();
+	_unregister_meshes(p_cell);
 	Node *c = p_cell->content;
 	p_cell->content = nullptr;
 	if (c) {
@@ -355,6 +379,7 @@ void FellowWorldStreamer3D::_update() {
 	// 2. Distances.
 	LocalVector<Vector3> points;
 	_gather_points(points);
+	_update_meshes(points);
 	for (FellowStreamingCell3D *cell : cells) {
 		float d = 1e30f;
 		const AABB box = cell->get_global_bounds();
@@ -481,6 +506,255 @@ void FellowWorldStreamer3D::_update() {
 	update_usec += OS::get_singleton()->get_ticks_usec() - t0;
 }
 
+// ---------------------------------------------------------------------------------------------------------------------
+// Streamed meshes and cell proxies (decision 0174)
+
+void FellowWorldStreamer3D::_register_meshes(FellowStreamingCell3D *p_cell, Node *p_content) {
+	LocalVector<Node *> stack;
+	stack.push_back(p_content);
+	while (!stack.is_empty()) {
+		Node *n = stack[stack.size() - 1];
+		stack.resize(stack.size() - 1);
+		if (MeshInstance3D *mi = Object::cast_to<MeshInstance3D>(n)) {
+			if (mi->has_meta(FELLOW_FULL_MESH_META)) {
+				StreamedMesh m;
+				m.node = mi->get_instance_id();
+				m.cell = p_cell;
+				m.path = mi->get_meta(FELLOW_FULL_MESH_META);
+				m.stand_in = mi->get_mesh();
+				streamed_meshes.push_back(m);
+			}
+		}
+		for (int i = 0; i < n->get_child_count(); i++) {
+			stack.push_back(n->get_child(i));
+		}
+	}
+}
+
+void FellowWorldStreamer3D::_unregister_meshes(FellowStreamingCell3D *p_cell) {
+	for (uint32_t i = 0; i < streamed_meshes.size();) {
+		if (streamed_meshes[i].cell == p_cell) {
+			streamed_meshes.remove_at_unordered(i); // a load still pending is collected (and dropped) when it ends
+		} else {
+			i++;
+		}
+	}
+}
+
+void FellowWorldStreamer3D::_update_meshes(const LocalVector<Vector3> &p_points) {
+	// Loads that ended: their meshes onto the stand-ins still waiting for them.
+	LocalVector<String> done;
+	for (const String &path : mesh_pending) {
+		if (ResourceLoader::load_threaded_get_status(path) != ResourceLoader::THREAD_LOAD_IN_PROGRESS) {
+			done.push_back(path);
+		}
+	}
+	for (const String &path : done) {
+		mesh_pending.erase(path);
+		const Ref<Mesh> mesh = ResourceLoader::load_threaded_get(path);
+		for (StreamedMesh &m : streamed_meshes) {
+			if (m.state != MESH_LOADING || m.path != path) {
+				continue;
+			}
+			MeshInstance3D *mi = ObjectDB::get_instance<MeshInstance3D>(m.node);
+			if (mesh.is_null() || !mi) {
+				m.state = MESH_FAILED;
+				continue;
+			}
+			const uint64_t t0 = OS::get_singleton()->get_ticks_usec();
+			mi->set_mesh(mesh);
+			const uint64_t dt = OS::get_singleton()->get_ticks_usec() - t0;
+			mesh_swap_usec += dt;
+			mesh_swap_usec_max = MAX(mesh_swap_usec_max, dt);
+			m.full = mesh;
+			m.state = MESH_FULL;
+			mesh_loads++;
+		}
+	}
+	// Near: loaded (a few at a time); far: the stand-in again, the full mesh dropped.
+	for (StreamedMesh &m : streamed_meshes) {
+		MeshInstance3D *mi = ObjectDB::get_instance<MeshInstance3D>(m.node);
+		if (!mi || !mi->is_inside_tree() || m.state == MESH_FAILED) {
+			continue;
+		}
+		float d = 0.0f;
+		if (mesh_distance > 0.0) {
+			d = 1e30f;
+			const AABB box = mi->get_global_transform().xform(mi->get_aabb());
+			for (const Vector3 &p : p_points) {
+				d = MIN(d, _point_aabb_distance(p, box));
+			}
+		}
+		if (m.state == MESH_STAND_IN && (mesh_distance <= 0.0 || d <= mesh_distance)) {
+			if (mesh_pending.has(m.path)) {
+				m.state = MESH_LOADING;
+			} else if (int(mesh_pending.size()) < max_mesh_loads && ResourceLoader::load_threaded_request(m.path, "Mesh") == OK) {
+				mesh_pending.insert(m.path);
+				m.state = MESH_LOADING;
+			}
+		} else if (m.state == MESH_FULL && mesh_distance > 0.0 && d > mesh_distance + unload_margin) {
+			const uint64_t t0 = OS::get_singleton()->get_ticks_usec();
+			mi->set_mesh(m.stand_in);
+			m.full.unref();
+			const uint64_t dt = OS::get_singleton()->get_ticks_usec() - t0;
+			mesh_swap_usec += dt;
+			mesh_swap_usec_max = MAX(mesh_swap_usec_max, dt);
+			m.state = MESH_STAND_IN;
+			mesh_releases++;
+		}
+	}
+}
+
+Dictionary FellowWorldStreamer3D::bake_proxies(const String &p_directory, const Dictionary &p_options) {
+	Dictionary info;
+	const float ratio = p_options.get("ratio", 0.05f);
+	const int terrain_quads = p_options.get("terrain_quads", 32);
+	const bool stream_meshes = p_options.get("stream_meshes", false);
+	const float mesh_ratio = p_options.get("mesh_ratio", 0.15f);
+	const int mesh_min_triangles = p_options.get("mesh_min_triangles", 2000);
+	const real_t proxy_distance = p_options.get("proxy_distance", 0.0);
+	const bool proxy_shadows = p_options.get("proxy_shadows", false);
+	Node *owner = Object::cast_to<Node>(p_options.get("owner", Variant()).get_validated_object());
+	if (!owner) {
+		owner = get_owner();
+	}
+	const Error dir_err = DirAccess::make_dir_recursive_absolute(stream_meshes ? p_directory.path_join("meshes") : p_directory);
+	ERR_FAIL_COND_V_MSG(dir_err != OK && dir_err != ERR_ALREADY_EXISTS, info, vformat("Cannot create the directory \"%s\".", p_directory));
+	// One material for every proxy, saved beside them.
+	Ref<StandardMaterial3D> material = FellowCellProxies::proxy_material()->duplicate();
+	ResourceSaver::save(material, p_directory.path_join("fellow_proxy_material.tres"), ResourceSaver::FLAG_CHANGE_PATH);
+	int proxies = 0;
+	int source_triangles = 0;
+	int proxy_triangles = 0;
+	int streamed = 0;
+	int stream_before = 0;
+	int stream_after = 0;
+	const uint64_t t0 = OS::get_singleton()->get_ticks_usec();
+	// The cells below this streamer (in the editor they are not registered with it).
+	LocalVector<FellowStreamingCell3D *> targets;
+	LocalVector<Node *> walk;
+	walk.push_back(this);
+	while (!walk.is_empty()) {
+		Node *n = walk[walk.size() - 1];
+		walk.resize(walk.size() - 1);
+		for (int i = 0; i < n->get_child_count(); i++) {
+			Node *c = n->get_child(i);
+			FellowStreamingCell3D *cell = Object::cast_to<FellowStreamingCell3D>(c);
+			if (cell) {
+				if (cell->_find_streamer() == this) {
+					targets.push_back(cell);
+				}
+			} else if (!Object::cast_to<FellowWorldStreamer3D>(c)) {
+				walk.push_back(c);
+			}
+		}
+	}
+	for (FellowStreamingCell3D *cell : targets) {
+		if (cell->scene_path.is_empty()) {
+			continue;
+		}
+		const Ref<PackedScene> ps = ResourceLoader::load(cell->scene_path, "PackedScene");
+		Node *content = ps.is_valid() ? ps->instantiate() : nullptr;
+		if (!content) {
+			ERR_PRINT(vformat("FellowWorldStreamer3D: could not load '%s' to bake its proxy.", cell->scene_path));
+			continue;
+		}
+		// The proxy, in place of an earlier one.
+		for (int i = cell->get_child_count() - 1; i >= 0; i--) {
+			Node *c = cell->get_child(i);
+			if (c != cell->content && c->has_meta(FELLOW_CELL_PROXY_META)) {
+				cell->remove_child(c);
+				memdelete(c);
+			}
+		}
+		Dictionary pi;
+		Ref<ArrayMesh> proxy = FellowCellProxies::bake_proxy(content, ratio, terrain_quads, pi);
+		source_triangles += int(pi.get("source_triangles", 0));
+		if (proxy.is_valid()) {
+			proxy->surface_set_material(0, material);
+			const String path = p_directory.path_join(String(cell->get_name()) + "_proxy.res");
+			if (ResourceSaver::save(proxy, path, ResourceSaver::FLAG_CHANGE_PATH | ResourceSaver::FLAG_COMPRESS) == OK) {
+				MeshInstance3D *mi = memnew(MeshInstance3D);
+				mi->set_name("FellowProxy");
+				mi->set_meta(FELLOW_CELL_PROXY_META, true);
+				mi->set_mesh(proxy);
+				mi->set_cast_shadows_setting(proxy_shadows ? GeometryInstance3D::SHADOW_CASTING_SETTING_ON : GeometryInstance3D::SHADOW_CASTING_SETTING_OFF);
+				if (proxy_distance > 0.0) {
+					mi->set_visibility_range_end(proxy_distance);
+				}
+				cell->add_child(mi);
+				mi->set_visible(cell->state != FellowStreamingCell3D::STATE_LOADED);
+				if (owner) {
+					mi->set_owner(owner);
+				}
+				cell->_editor_hide_proxies();
+				proxies++;
+				proxy_triangles += int(pi.get("proxy_triangles", 0));
+			}
+		}
+		// The large meshes' stand-ins, their full meshes apart.
+		if (stream_meshes) {
+			bool changed = false;
+			int index = 0;
+			LocalVector<Node *> stack;
+			stack.push_back(content);
+			while (!stack.is_empty()) {
+				Node *n = stack[stack.size() - 1];
+				stack.resize(stack.size() - 1);
+				for (int i = 0; i < n->get_child_count(); i++) {
+					stack.push_back(n->get_child(i));
+				}
+				MeshInstance3D *mi = Object::cast_to<MeshInstance3D>(n);
+				if (!mi || mi->get_mesh().is_null() || mi->get_skin().is_valid() || mi->has_meta(FELLOW_FULL_MESH_META)) {
+					continue;
+				}
+				const Ref<Mesh> mesh = mi->get_mesh();
+				const int tris = FellowCellProxies::mesh_triangles(mesh);
+				if (tris < mesh_min_triangles) {
+					continue;
+				}
+				const Ref<ArrayMesh> stand_in = FellowCellProxies::simplified_mesh(mesh, mesh_ratio);
+				if (stand_in.is_null()) {
+					continue;
+				}
+				String full_path = mesh->get_path();
+				if (full_path.is_empty() || full_path.contains("::")) {
+					// Built into the cell's scene: saved on its own (a copy: the cached scene keeps its own).
+					const Ref<Mesh> copy = mesh->duplicate();
+					full_path = p_directory.path_join("meshes").path_join(vformat("%s_%d.res", String(cell->get_name()), index++));
+					if (ResourceSaver::save(copy, full_path, ResourceSaver::FLAG_COMPRESS) != OK) {
+						continue;
+					}
+				}
+				mi->set_mesh(stand_in);
+				mi->set_meta(FELLOW_FULL_MESH_META, full_path);
+				changed = true;
+				streamed++;
+				stream_before += tris;
+				stream_after += FellowCellProxies::mesh_triangles(stand_in);
+			}
+			if (changed) {
+				Ref<PackedScene> scene;
+				scene.instantiate();
+				const String path = p_directory.path_join(String(cell->get_name()) + ".scn");
+				if (scene->pack(content) == OK && ResourceSaver::save(scene, path) == OK) {
+					cell->set_scene_path(path);
+				}
+			}
+		}
+		memdelete(content);
+	}
+	info["cells"] = int(targets.size());
+	info["proxies"] = proxies;
+	info["source_triangles"] = source_triangles;
+	info["proxy_triangles"] = proxy_triangles;
+	info["streamed_meshes"] = streamed;
+	info["streamed_triangles"] = stream_before;
+	info["stand_in_triangles"] = stream_after;
+	info["bake_ms"] = (OS::get_singleton()->get_ticks_usec() - t0) / 1000.0;
+	return info;
+}
+
 void FellowWorldStreamer3D::_cancel_all() {
 	for (Instancing *inst : instancing) {
 		WorkerThreadPool::get_singleton()->wait_for_task_completion(inst->task);
@@ -595,6 +869,16 @@ Dictionary FellowWorldStreamer3D::get_stats() const {
 	d["update_usec"] = update_usec;
 	d["frames"] = frames;
 	d["settled"] = is_settled();
+	int full = 0;
+	for (const StreamedMesh &m : streamed_meshes) {
+		full += m.state == MESH_FULL ? 1 : 0;
+	}
+	d["streamed_meshes"] = int(streamed_meshes.size());
+	d["streamed_meshes_full"] = full;
+	d["mesh_loads"] = mesh_loads;
+	d["mesh_releases"] = mesh_releases;
+	d["mesh_swap_usec"] = mesh_swap_usec;
+	d["mesh_swap_usec_max"] = mesh_swap_usec_max;
 	return d;
 }
 
@@ -702,6 +986,11 @@ void FellowWorldStreamer3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("clear_prefetch"), &FellowWorldStreamer3D::clear_prefetch);
 	ClassDB::bind_method(D_METHOD("is_settled"), &FellowWorldStreamer3D::is_settled);
 	ClassDB::bind_method(D_METHOD("load_now"), &FellowWorldStreamer3D::load_now);
+	ClassDB::bind_method(D_METHOD("set_mesh_distance", "distance"), &FellowWorldStreamer3D::set_mesh_distance);
+	ClassDB::bind_method(D_METHOD("get_mesh_distance"), &FellowWorldStreamer3D::get_mesh_distance);
+	ClassDB::bind_method(D_METHOD("set_max_mesh_loads", "count"), &FellowWorldStreamer3D::set_max_mesh_loads);
+	ClassDB::bind_method(D_METHOD("get_max_mesh_loads"), &FellowWorldStreamer3D::get_max_mesh_loads);
+	ClassDB::bind_method(D_METHOD("bake_proxies", "directory", "options"), &FellowWorldStreamer3D::bake_proxies, DEFVAL(Dictionary()));
 	ClassDB::bind_method(D_METHOD("get_stats"), &FellowWorldStreamer3D::get_stats);
 	ClassDB::bind_method(D_METHOD("split_into_cells", "root", "cell_size", "directory", "options"), &FellowWorldStreamer3D::split_into_cells, DEFVAL(Dictionary()));
 
@@ -712,11 +1001,13 @@ void FellowWorldStreamer3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::ARRAY, "targets", PROPERTY_HINT_ARRAY_TYPE, "NodePath"), "set_targets", "get_targets");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "load_distance", PROPERTY_HINT_RANGE, "0,10000,0.1,or_greater,suffix:m"), "set_load_distance", "get_load_distance");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "unload_margin", PROPERTY_HINT_RANGE, "0,1000,0.1,or_greater,suffix:m"), "set_unload_margin", "get_unload_margin");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "mesh_distance", PROPERTY_HINT_RANGE, "0,10000,0.1,or_greater,suffix:m"), "set_mesh_distance", "get_mesh_distance");
 	ADD_GROUP("Budget", "");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "max_loading", PROPERTY_HINT_RANGE, "1,64,1"), "set_max_loading", "get_max_loading");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "max_activations_per_frame", PROPERTY_HINT_RANGE, "1,1024,1"), "set_max_activations_per_frame", "get_max_activations_per_frame");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "max_releases_per_frame", PROPERTY_HINT_RANGE, "1,1024,1"), "set_max_releases_per_frame", "get_max_releases_per_frame");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "threaded_instancing"), "set_threaded_instancing", "is_threaded_instancing");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "max_mesh_loads", PROPERTY_HINT_RANGE, "1,64,1"), "set_max_mesh_loads", "get_max_mesh_loads");
 	ADD_GROUP("", "");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "editor_preview"), "set_editor_preview", "is_editor_preview");
 }

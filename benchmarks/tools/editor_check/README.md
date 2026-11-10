@@ -16,6 +16,8 @@ copies `project/` to `<out>/project`, opens it in the editor, and lets its plugi
 * `split.tscn`: Project > Tools > Split into Streaming Cells run through its menu item and dialog on 40 boxes; the
   cells, their scenes, their owner, what is left in the level; the cells' content shown in the editor; the saved
   level (no box in it);
+* milestone 66: Project > Tools > Bake Streaming Proxies on the cells the split made: a proxy for each, owned by the
+  level and saved with it (`stream_back.gd` then checks them shown while their cells are unloaded, hidden once loaded);
 * the Performance monitors;
 * milestone 58: the terrain's brush on `idle/FellowTerrain3D.tscn` — its toolbar shown with the terrain selected, a
   Raise stroke dragged with the mouse, paint strokes (the first making the splat map), each undone and redone (the

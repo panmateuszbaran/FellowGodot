@@ -71,6 +71,10 @@ and border normals), its data built on the worker thread that instanced it — 4
 run: 48 of them waiting to create a texture), and 487 ms for the whole map's. Lavapipe's frames: 74 ms at the median,
 166 ms at the 99th percentile, the longest 317 ms (the flight's 33rd frame, as the first regions came in).
 
+**On the RTX** (job f372, 1920 × 1080, the release template): the same edges (≤ 7.6 µm) and memory (17.6 MB of terrain
+textures at most, all textures 315.6 → 122.2 MB); the flight's frames 0.69 ms at the median, 1.91 ms at the 99th
+percentile, the longest 4.19 ms; a region's entry 1.07 ms of the main thread on average, 2.67 ms at most.
+
 ## Decision
 
 Keep: an open world's terrain loads with its cells, its memory that of the regions around the camera, with no seam.

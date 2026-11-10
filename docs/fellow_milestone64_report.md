@@ -1,6 +1,6 @@
 # FellowEngine — milestone 64 report (the terrain's holes, foliage fading out, tree impostors in files)
 
-Status: **FINAL** for the cloud's part (2026-11-10): checked on lavapipe; the RTX's numbers with its next soak. Branch
+Status: **FINAL** (2026-11-10): checked on lavapipe; the RTX's holes and impostors in section 3a (job f372). Branch
 `fellow/geometry`. Decision record: `docs/decisions/0172-terrain-holes-foliage-fades-impostors.md`.
 
 ## 0. Result
@@ -69,6 +69,16 @@ the hole falls through (−33.8 m after 3 s), one beside it rests 0.50 m over th
 shadows, 214 → 191 ms with the sun's; the far trees through a 15° lens differ from the meshes by 0.0031 a channel on
 average. The bake: 8 × 8 views of 128 px, 13.6 s (a view a frame), a 553 KB file.
 
+## 3a. On the RTX (job f372, 1920 × 1080, the release template from `56490d7`)
+
+* **Holes**: the same — the ball over the hole at −33.8 m after 3 s, the one beside it at rest 0.51 m over the
+  ground; the sky through all of the hole's disc, no red pixel elsewhere.
+* **Impostors** (323 trees to 400 m): the GPU's frame 0.60 → 0.57 ms without shadows, 0.78 → 0.75 ms with the sun's
+  (the CPU's 0.07-0.15 ms either way); the far trees 0.0032 a channel from the meshes. 323 trees are little work for
+  this GPU: the impostors pay off with many more (lavapipe's −38 % is the work saved).
+* **Fading out**: not measured — the check counted the grass in rows of a 360-row picture, at 1080 rows the sky (the
+  check now scales its rows to the picture; for the next job).
+
 ## 4. Limits
 
 * The shadow passes draw a cell's meshes in the near cascades whatever their distance (the range and its fade are the
@@ -76,7 +86,7 @@ average. The bake: 8 × 8 views of 128 px, 13.6 s (a view a frame), a 553 KB fil
   little in the shadows. The range in the shadow passes would make the cached cascades depend on the camera.
 * The impostors' hand-over is a switch at the distance (no cross-fade: the instances carry no alpha).
 * A hole's edge follows the triangles (1 m steps at 1 m spacing).
-* Measured on lavapipe; the RTX's frame times with impostors are for its next run.
+* The RTX's measure of the fade is for its next job.
 
 ## 5. Next
 

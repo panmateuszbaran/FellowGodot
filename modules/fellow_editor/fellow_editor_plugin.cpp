@@ -50,6 +50,7 @@
 #include "scene/3d/node_3d.h"
 #include "scene/gui/box_container.h"
 #include "scene/gui/button.h"
+#include "scene/gui/check_box.h"
 #include "scene/gui/dialogs.h"
 #include "scene/gui/label.h"
 #include "scene/gui/line_edit.h"
@@ -628,6 +629,42 @@ void FellowEditorPlugin::_split_confirmed() {
 	EditorNode::get_singleton()->show_accept(vformat(TTR("%d streaming cells made; their scenes are in %s."), cells.size(), split_directory->get_text()), TTR("OK"));
 }
 
+// Milestone 66 (decision 0174): proxies baked for the selected streamer's cells, the large meshes streamed optionally.
+void FellowEditorPlugin::_proxies_menu() {
+	Node *streamer = nullptr;
+	for (Node *n : EditorInterface::get_singleton()->get_selection()->get_top_selected_node_list()) {
+		if (n->is_class("FellowWorldStreamer3D")) {
+			streamer = n;
+			break;
+		}
+	}
+	if (!streamer) {
+		EditorNode::get_singleton()->show_warning(TTR("Select a FellowWorldStreamer3D: a proxy is baked for each of its cells."));
+		return;
+	}
+	proxies_streamer = streamer->get_instance_id();
+	Node *scene = EditorInterface::get_singleton()->get_edited_scene_root();
+	const String base = scene && !scene->get_scene_file_path().is_empty() ? scene->get_scene_file_path().get_basename() : String("res://level");
+	proxies_directory->set_text(base + "_proxies");
+	proxies_dialog->popup_centered(Size2(460, 0) * EDSCALE);
+}
+
+void FellowEditorPlugin::_proxies_confirmed() {
+	Node *streamer = ObjectDB::get_instance<Node>(proxies_streamer);
+	ERR_FAIL_NULL(streamer);
+	Dictionary options;
+	options["owner"] = EditorInterface::get_singleton()->get_edited_scene_root();
+	options["stream_meshes"] = proxies_stream_meshes->is_pressed();
+	const Dictionary info = streamer->call("bake_proxies", proxies_directory->get_text(), options);
+	EditorFileSystem::get_singleton()->scan_changes();
+	EditorInterface::get_singleton()->mark_scene_as_unsaved();
+	String text = vformat(TTR("%d proxies baked (%d triangles for %d); they are in %s."), int(info.get("proxies", 0)), int(info.get("proxy_triangles", 0)), int(info.get("source_triangles", 0)), proxies_directory->get_text());
+	if (proxies_stream_meshes->is_pressed()) {
+		text += "\n" + vformat(TTR("%d meshes streamed: %d triangles while far (%d near)."), int(info.get("streamed_meshes", 0)), int(info.get("stand_in_triangles", 0)), int(info.get("streamed_triangles", 0)));
+	}
+	EditorNode::get_singleton()->show_accept(text, TTR("OK"));
+}
+
 // FellowEngine's nodes animate in the editor (milestone 52), or stand still: the toolbar's toggle and the editor setting
 // keep each other in step.
 static const char *FELLOW_ANIMATE_SETTING = "editors/3d/fellow/animate_nodes";
@@ -785,11 +822,13 @@ void FellowEditorPlugin::_add_preset(int p_preset) {
 void FellowEditorPlugin::_notification(int p_what) {
 	if (p_what == NOTIFICATION_ENTER_TREE) {
 		add_tool_menu_item(TTR("Split into Streaming Cells (FellowEngine)..."), callable_mp(this, &FellowEditorPlugin::_split_menu));
+		add_tool_menu_item(TTR("Bake Streaming Proxies (FellowEngine)..."), callable_mp(this, &FellowEditorPlugin::_proxies_menu));
 		add_control_to_container(CONTAINER_SPATIAL_EDITOR_MENU, add_menu);
 		add_control_to_container(CONTAINER_SPATIAL_EDITOR_MENU, animate_button);
 		EditorSettings::get_singleton()->connect("settings_changed", callable_mp(this, &FellowEditorPlugin::_editor_settings_changed));
 	} else if (p_what == NOTIFICATION_EXIT_TREE) {
 		remove_tool_menu_item(TTR("Split into Streaming Cells (FellowEngine)..."));
+		remove_tool_menu_item(TTR("Bake Streaming Proxies (FellowEngine)..."));
 		remove_control_from_container(CONTAINER_SPATIAL_EDITOR_MENU, animate_button);
 		remove_control_from_container(CONTAINER_SPATIAL_EDITOR_MENU, add_menu);
 		EditorSettings::get_singleton()->disconnect("settings_changed", callable_mp(this, &FellowEditorPlugin::_editor_settings_changed));
@@ -829,6 +868,24 @@ FellowEditorPlugin::FellowEditorPlugin() {
 	vb->add_margin_child(TTR("Directory for the cells' scenes:"), split_directory);
 	split_dialog->connect(SceneStringName(confirmed), callable_mp(this, &FellowEditorPlugin::_split_confirmed));
 	EditorNode::get_singleton()->get_gui_base()->add_child(split_dialog);
+
+	proxies_dialog = memnew(ConfirmationDialog);
+	proxies_dialog->set_title(TTR("Bake Streaming Proxies"));
+	VBoxContainer *pvb = memnew(VBoxContainer);
+	proxies_dialog->add_child(pvb);
+	Label *pinfo = memnew(Label);
+	pinfo->set_autowrap_mode(TextServer::AUTOWRAP_WORD_SMART);
+	pinfo->set_custom_minimum_size(Size2(420, 0) * EDSCALE);
+	pinfo->set_text(TTR("Each cell of the selected streamer gets a proxy: its content merged and simplified into one mesh with vertex colours, drawn while the cell is not loaded. Bake again after changing the cells."));
+	pvb->add_child(pinfo);
+	proxies_stream_meshes = memnew(CheckBox);
+	proxies_stream_meshes->set_text(TTR("Stream large meshes (simplified stand-ins in the cells' scenes, the full meshes loaded near)"));
+	proxies_stream_meshes->set_autowrap_mode(TextServer::AUTOWRAP_WORD_SMART);
+	pvb->add_child(proxies_stream_meshes);
+	proxies_directory = memnew(LineEdit);
+	pvb->add_margin_child(TTR("Directory for the proxies:"), proxies_directory);
+	proxies_dialog->connect(SceneStringName(confirmed), callable_mp(this, &FellowEditorPlugin::_proxies_confirmed));
+	EditorNode::get_singleton()->get_gui_base()->add_child(proxies_dialog);
 
 	EDITOR_DEF(FELLOW_ANIMATE_SETTING, true);
 	Fellow::set_editor_animate(EDITOR_GET(FELLOW_ANIMATE_SETTING));

@@ -96,6 +96,12 @@ rasterizing, a relative measure of the work):
 | the far trees through a 15° lens | — | mean difference 0.0031 a channel from the meshes |
 | bake (8 × 8 views of 128 px) | | 13.6 s on lavapipe (a view a frame), a 553 KB file |
 
+**On the RTX** (job f372, 1920 × 1080, the release template): the holes the same (the ball through at −33.8 m, the
+sky through all of the disc, no crack); 323 trees with impostors from 50 m: the GPU's frame 0.60 → 0.57 ms without
+shadows, 0.78 → 0.75 ms with the sun's — little for this GPU to save with 323 trees; the far trees 0.0032 a channel
+from the meshes. The fade's measure counted rows of a 360-row picture (at 1080 rows, the sky): fixed in the check, for
+the next job.
+
 ## Decision
 
 Keep. Holes cost nothing where there are none (no second material; the patches over holes only pay the discard),
