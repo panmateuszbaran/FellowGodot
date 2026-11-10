@@ -224,6 +224,7 @@ private:
 	void _rt_destroy();
 	void _rt_update(PackedByteArray p_push, bool p_enabled, bool p_ripples, PackedByteArray p_state, PackedByteArray p_tracks);
 	void _rt_tracks(RendererRD::FellowWeather::State &r_state, const PackedByteArray &p_tracks);
+	bool _rt_create_tracks_pipeline(); // milestone 68: at setup, not at the first footprint
 	void _rt_free_tracks();
 	bool _tracks_active() const;
 	void _rt_disable();

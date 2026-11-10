@@ -36,6 +36,7 @@
 #include "core/object/worker_thread_pool.h"
 #include "core/os/os.h"
 #include "core/string/string_builder.h"
+#include "core/templates/pair.h"
 #include "core/version.h"
 #include "servers/rendering/fellow_parallel.h"
 #include "servers/rendering/fellow_settings.h"
@@ -254,6 +255,7 @@ RID ShaderRD::version_create(bool p_embedded) {
 
 	version.mutex = memnew(Mutex);
 	RID rid = version_owner.make_rid(version);
+	version_owner.get_or_null(rid)->fellow_rid = rid;
 	{
 		MutexLock lock(versions_mutex);
 		version_mutexes.insert(rid, version.mutex);
@@ -648,14 +650,18 @@ void ShaderRD::_fellow_create_cached_variant(void *p_data, uint32_t p_index) {
 	data->created[p_index] = RD::get_singleton()->shader_create_from_bytecode_with_samplers(data->version->variant_data[variant_id], data->placeholders[variant_id], data->shader->immutable_samplers);
 }
 
-void ShaderRD::_fellow_create_lazy(Version *p_version, int p_variant) {
-	// Called by version_get_shader() with the version's mutex held.
+void ShaderRD::_fellow_create_lazy(Version *p_version, int p_variant, bool p_background) {
+	// Called by version_get_shader() (or the background filling) with the version's mutex held.
 	p_version->fellow_lazy[p_variant] = 0;
 	p_version->fellow_lazy_count--;
-	Fellow::stats().cost_shader_lazy_creates.increment();
+	if (p_background) {
+		Fellow::stats().cost_shader_background_creates.increment();
+	} else {
+		Fellow::stats().cost_shader_lazy_creates.increment();
+	}
 	// FELLOW_LOG_COMPILES=1 (milestone 68): which variant was made when first used (a hitch's cause in a soak).
 	static const bool fellow_log = OS::get_singleton()->has_environment("FELLOW_LOG_COMPILES");
-	if (fellow_log) {
+	if (fellow_log && !p_background) {
 		print_line(vformat("[fellow] lazy shader variant: %s, variant %d, frame %d", name, p_variant, int64_t(Engine::get_singleton()->get_frames_drawn())));
 	}
 	// A placeholder (the variant's RID while its group was disabled) is filled and keeps its RID.
@@ -664,7 +670,121 @@ void ShaderRD::_fellow_create_lazy(Version *p_version, int p_variant) {
 	p_version->variants.write[p_variant] = shader;
 }
 
+// FellowEngine (milestone 68, decision 0176): the lazy variants filled in the background, one task at a time.
+static Mutex fellow_fill_mutex;
+static LocalVector<Pair<ShaderRD *, RID>> fellow_fill_queue;
+static bool fellow_fill_running = false;
+static bool fellow_fill_stop = false;
+static ShaderRD *fellow_fill_current = nullptr;
+static WorkerThreadPool::TaskID fellow_fill_task_id = WorkerThreadPool::INVALID_TASK_ID;
+
+void ShaderRD::_fellow_fill_enqueue(Version *p_version) {
+	if (!Fellow::frame_lazy_shader_variants_fill() || p_version->fellow_rid.is_null() || p_version->fellow_lazy_count == 0) {
+		return;
+	}
+	MutexLock lock(fellow_fill_mutex);
+	if (fellow_fill_stop) {
+		return;
+	}
+	fellow_fill_queue.push_back(Pair<ShaderRD *, RID>(this, p_version->fellow_rid));
+	if (!fellow_fill_running) {
+		fellow_fill_running = true;
+		if (fellow_fill_task_id != WorkerThreadPool::INVALID_TASK_ID) {
+			// The previous task has left its loop (it cleared fellow_fill_running under this lock): only its return is left.
+			WorkerThreadPool::get_singleton()->wait_for_task_completion(fellow_fill_task_id);
+		}
+		fellow_fill_task_id = WorkerThreadPool::get_singleton()->add_native_task(&ShaderRD::_fellow_fill_task, nullptr, false, "FellowEngine shader variants");
+	}
+}
+
+// One lazy variant of the version created; true if it has more (or was busy: later).
+bool ShaderRD::_fellow_fill_version(RID p_version) {
+	Mutex *m = nullptr;
+	{
+		MutexLock lock(versions_mutex);
+		Mutex **mp = version_mutexes.getptr(p_version);
+		if (mp == nullptr) {
+			return false; // freed
+		}
+		m = *mp;
+		// Never waits for a version in use (its user may wait for something this thread holds): later.
+		if (!m->try_lock()) {
+			return true;
+		}
+	}
+	// Locked, it cannot be freed (version_free() locks it first).
+	Version *version = version_owner.get_or_null(p_version);
+	bool more = false;
+	if (version != nullptr && version->valid && !version->dirty && version->fellow_lazy_count > 0) {
+		for (uint32_t v = 0; v < version->fellow_lazy.size(); v++) {
+			if (version->fellow_lazy[v]) {
+				_fellow_create_lazy(version, int(v), true);
+				break;
+			}
+		}
+		more = version->fellow_lazy_count > 0;
+	}
+	m->unlock();
+	return more;
+}
+
+void ShaderRD::_fellow_fill_task(void *p_userdata) {
+	while (true) {
+		ShaderRD *shader = nullptr;
+		RID rid;
+		{
+			MutexLock lock(fellow_fill_mutex);
+			if (fellow_fill_stop || fellow_fill_queue.is_empty()) {
+				fellow_fill_running = false;
+				return;
+			}
+			shader = fellow_fill_queue[0].first;
+			rid = fellow_fill_queue[0].second;
+			fellow_fill_queue.remove_at(0);
+			fellow_fill_current = shader;
+		}
+		const bool more = shader->_fellow_fill_version(rid);
+		{
+			MutexLock lock(fellow_fill_mutex);
+			fellow_fill_current = nullptr;
+			if (more && !fellow_fill_stop) {
+				fellow_fill_queue.push_back(Pair<ShaderRD *, RID>(shader, rid)); // the others' turn first
+			}
+		}
+	}
+}
+
+void ShaderRD::_fellow_fill_forget(ShaderRD *p_shader) {
+	fellow_fill_mutex.lock();
+	for (uint32_t i = 0; i < fellow_fill_queue.size();) {
+		if (fellow_fill_queue[i].first == p_shader) {
+			fellow_fill_queue.remove_at(i);
+		} else {
+			i++;
+		}
+	}
+	while (fellow_fill_current == p_shader) {
+		fellow_fill_mutex.unlock();
+		OS::get_singleton()->delay_usec(100);
+		fellow_fill_mutex.lock();
+	}
+	fellow_fill_mutex.unlock();
+}
+
 void ShaderRD::fellow_finalize() {
+	{
+		WorkerThreadPool::TaskID task = WorkerThreadPool::INVALID_TASK_ID;
+		{
+			MutexLock lock(fellow_fill_mutex);
+			fellow_fill_stop = true;
+			fellow_fill_queue.clear();
+			task = fellow_fill_task_id;
+			fellow_fill_task_id = WorkerThreadPool::INVALID_TASK_ID;
+		}
+		if (task != WorkerThreadPool::INVALID_TASK_ID) {
+			WorkerThreadPool::get_singleton()->wait_for_task_completion(task);
+		}
+	}
 	MutexLock lock(fellow_cache_create_mutex);
 	if (fellow_cache_create_parallel != nullptr) {
 		memdelete(fellow_cache_create_parallel); // waits for its helpers
@@ -740,6 +860,7 @@ bool ShaderRD::_load_from_cache(Version *p_version, int p_group) {
 		}
 		p_version->valid = true;
 		Fellow::stats().cost_shader_cache_loads.increment();
+		_fellow_fill_enqueue(p_version); // milestone 68: made in the background before they are asked for
 		return true;
 	}
 
@@ -1443,6 +1564,7 @@ bool ShaderRD::shader_cache_save_compressed_zstd = true;
 bool ShaderRD::shader_cache_save_debug = true;
 
 ShaderRD::~ShaderRD() {
+	_fellow_fill_forget(this);
 	LocalVector<RID> remaining = version_owner.get_owned_list();
 	if (remaining.size()) {
 		ERR_PRINT(itos(remaining.size()) + " shaders of type " + name + " were never freed");

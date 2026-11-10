@@ -1071,6 +1071,10 @@ inline bool frame_parallel_shader_create() {
 inline bool frame_lazy_shader_variants() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/frame/lazy_shader_variants");
 }
+// Decision 0176: the variants left lazy by a cache load made in the background on a worker thread.
+inline bool frame_lazy_shader_variants_fill() {
+	return frame_lazy_shader_variants() && GLOBAL_GET_CACHED(bool, "rendering/fellow/frame/lazy_shader_variants_fill");
+}
 
 // Parallel replay: large draw lists (192+ draws) are replayed into secondary command buffers by worker threads at the
 // end of the frame (render graph), each segment starting with the state the instructions before it set; the render
@@ -1373,6 +1377,7 @@ struct Stats {
 	SafeNumeric<uint64_t> cost_shader_variants;
 	SafeNumeric<uint64_t> cost_shader_cache_loads; // shader version groups read from the shader cache
 	SafeNumeric<uint64_t> cost_shader_lazy_creates; // of their variants, created when first asked for (decision 0061)
+	SafeNumeric<uint64_t> cost_shader_background_creates; // lazy variants made in the background before asked for (decision 0176)
 	SafeNumeric<uint64_t> cost_shader_create_usec;
 	SafeNumeric<uint64_t> cost_shader_creates;
 	// Pipelines created on the render thread (it waits for them) and on other threads, and the render thread's waits for

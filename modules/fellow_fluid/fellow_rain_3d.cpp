@@ -767,6 +767,9 @@ void FellowRain3D::_rt_create() {
 			return;
 		}
 	}
+	// The snow tracks' kernel and pipeline made now too (milestone 68): made at the first footprint in the snow, the
+	// kernel was compiled from GLSL in play (77 ms in Frontier Lab's soak with the kernel cache cold).
+	_rt_create_tracks_pipeline();
 	if (shader_ripples.is_null()) {
 		shader_ripples = rd->shader_create_from_spirv(shader_file->get_spirv_stages("ripples"), "FellowRain ripples");
 		shader_tail = rd->shader_create_from_spirv(shader_file->get_spirv_stages("tail"), "FellowRain mip tail");
@@ -887,6 +890,31 @@ void FellowRain3D::_rt_update(PackedByteArray p_push, bool p_enabled, bool p_rip
 	w->set_state(st);
 }
 
+bool FellowRain3D::_rt_create_tracks_pipeline() {
+	if (tracks_shader.is_valid()) {
+		return true;
+	}
+	if (tracks_shader_file.is_null()) {
+		tracks_shader_file = FellowSharedShaders::file(fellow_snow_tracks_shader_glsl, "fellow_snow_tracks"); // milestone 53
+	}
+	if (tracks_shader_file.is_null()) {
+		return false;
+	}
+	tracks_shader = rd->shader_create_from_spirv(tracks_shader_file->get_spirv_stages(), "FellowRain snow tracks");
+	if (tracks_shader.is_null()) {
+		return false;
+	}
+	tracks_pipeline = rd->compute_pipeline_create(tracks_shader);
+	RD::SamplerState ss;
+	ss.mag_filter = RD::SAMPLER_FILTER_NEAREST;
+	ss.min_filter = RD::SAMPLER_FILTER_NEAREST;
+	ss.repeat_u = RD::SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE;
+	ss.repeat_v = RD::SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE;
+	tracks_sampler = rd->sampler_create(ss);
+	tracks_stamps = rd->storage_buffer_create(MAX_TRACK_STAMPS * sizeof(TrackStamp));
+	return true;
+}
+
 void FellowRain3D::_rt_tracks(RendererRD::FellowWeather::State &r_state, const PackedByteArray &p_tracks) {
 	TracksPush tp;
 	memcpy(&tp, p_tracks.ptr(), sizeof(tp));
@@ -894,23 +922,8 @@ void FellowRain3D::_rt_tracks(RendererRD::FellowWeather::State &r_state, const P
 	if (p_tracks.size() != int64_t(sizeof(TracksPush) + n * sizeof(TrackStamp))) {
 		return;
 	}
-	if (tracks_shader.is_null()) {
-		tracks_shader_file = FellowSharedShaders::file(fellow_snow_tracks_shader_glsl, "fellow_snow_tracks"); // milestone 53
-		if (tracks_shader_file.is_null()) {
-			return;
-		}
-		tracks_shader = rd->shader_create_from_spirv(tracks_shader_file->get_spirv_stages(), "FellowRain snow tracks");
-		if (tracks_shader.is_null()) {
-			return;
-		}
-		tracks_pipeline = rd->compute_pipeline_create(tracks_shader);
-		RD::SamplerState ss;
-		ss.mag_filter = RD::SAMPLER_FILTER_NEAREST;
-		ss.min_filter = RD::SAMPLER_FILTER_NEAREST;
-		ss.repeat_u = RD::SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE;
-		ss.repeat_v = RD::SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE;
-		tracks_sampler = rd->sampler_create(ss);
-		tracks_stamps = rd->storage_buffer_create(MAX_TRACK_STAMPS * sizeof(TrackStamp));
+	if (!_rt_create_tracks_pipeline()) {
+		return;
 	}
 	if (tracks_tex.is_null() || tracks_size != tp.size) {
 		_rt_free_tracks();

@@ -92,6 +92,7 @@ private:
 		// FellowEngine (decision 0061): variants read from the shader cache whose shader is created when first asked for.
 		LocalVector<uint8_t> fellow_lazy;
 		uint32_t fellow_lazy_count = 0;
+		RID fellow_rid; // its own RID (milestone 68: the background filling of its lazy variants)
 
 		bool valid;
 		bool dirty;
@@ -135,7 +136,13 @@ private:
 		RID *created = nullptr; // one per variant id in variant_ids
 	};
 	static void _fellow_create_cached_variant(void *p_data, uint32_t p_index);
-	void _fellow_create_lazy(Version *p_version, int p_variant);
+	void _fellow_create_lazy(Version *p_version, int p_variant, bool p_background = false);
+	// FellowEngine (milestone 68, decision 0176): the variants a cache load left lazy, created one by one on a worker
+	// thread after it, so that a variant's first use (a material that appears when it rains) finds it made.
+	void _fellow_fill_enqueue(Version *p_version);
+	bool _fellow_fill_version(RID p_version);
+	static void _fellow_fill_task(void *p_userdata);
+	static void _fellow_fill_forget(ShaderRD *p_shader);
 
 	void _initialize_version(Version *p_version);
 	void _clear_version(Version *p_version);

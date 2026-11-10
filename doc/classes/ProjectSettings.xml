@@ -3223,6 +3223,9 @@
 		<member name="rendering/fellow/frame/lazy_shader_variants" type="bool" setter="" getter="" default="true">
 			Shader variants created only when first asked for: scenes load faster. Decision 0061.
 		</member>
+		<member name="rendering/fellow/frame/lazy_shader_variants_fill" type="bool" setter="" getter="" default="true">
+			The variants left for later by frame/lazy_shader_variants made one by one on a worker thread after the load, so that a material appearing in play (rain's, the rainbow's) does not make its variant on the render thread. Decision 0176.
+		</member>
 		<member name="rendering/fellow/frame/movie_wait_pipelines" type="bool" setter="" getter="" default="true">
 			While Movie Maker mode writes a video, a 3D draw waits for its pipeline instead of drawing with the ubershader: the same recording every run. Decision 0072.
 		</member>

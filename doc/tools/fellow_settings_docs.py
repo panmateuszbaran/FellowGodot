@@ -236,6 +236,7 @@ D = {
     "frame/present_thread": "Presentation on a thread of its own. Decision 0017.",
     "frame/parallel_shader_create": "Shaders read from the shader cache created in parallel: scenes load faster. Decision 0061.",
     "frame/lazy_shader_variants": "Shader variants created only when first asked for: scenes load faster. Decision 0061.",
+    "frame/lazy_shader_variants_fill": "The variants left for later by frame/lazy_shader_variants made one by one on a worker thread after the load, so that a material appearing in play (rain's, the rainbow's) does not make its variant on the render thread. Decision 0176.",
     "frame/submit_thread": "Command buffer submission on a thread of its own. Decision 0017.",
     "frame/parallel_replay": "The frame's draw lists replayed into secondary command buffers by worker threads (CPU-bound frames). Decision 0017.",
     "frame/replay_max_segments": "The most segments a draw list is replayed in.",
