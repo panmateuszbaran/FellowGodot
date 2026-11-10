@@ -830,7 +830,9 @@ void FellowTerrain3D::_update_material() {
 	for (int i = 0; i < MAX_LAYERS; i++) {
 		Ref<FellowTerrainLayer> l = i < layers.size() ? Ref<FellowTerrainLayer>(layers[i]) : Ref<FellowTerrainLayer>();
 		if (l.is_valid()) {
-			colors.write[i] = l->get_albedo_color();
+			// The colour is sRGB (as a material's albedo); the shader multiplies linear texels by it (milestone 67: it was
+			// passed as it is, so that layers drew brighter than their colour).
+			colors.write[i] = l->get_albedo_color().srgb_to_linear();
 			params.write[i] = Vector4(1.0f / l->get_texture_size(), l->get_roughness(), l->get_normal_strength(), l->is_triplanar() ? 1.0f : 0.0f);
 			flags.write[i] = Vector4(l->get_albedo_texture().is_valid() ? 1.0f : 0.0f, l->get_normal_texture().is_valid() ? 1.0f : 0.0f, l->is_height_in_albedo_alpha() ? 1.0f : 0.0f, 0.0f);
 			_set_material_parameter(vformat("albedo_%d", i), l->get_albedo_texture());
@@ -3242,7 +3244,7 @@ Array FellowTerrain3D::make_proxy_arrays(int p_quads) {
 	Color layer_mean[MAX_LAYERS];
 	for (int i = 0; i < MAX_LAYERS; i++) {
 		Ref<FellowTerrainLayer> l = i < layers.size() ? Ref<FellowTerrainLayer>(layers[i]) : Ref<FellowTerrainLayer>();
-		layer_mean[i] = l.is_valid() ? l->get_albedo_color() * FellowCellProxies::texture_average(l->get_albedo_texture()) : Color(1, 1, 1);
+		layer_mean[i] = l.is_valid() ? l->get_albedo_color().srgb_to_linear() * FellowCellProxies::texture_average(l->get_albedo_texture()) : Color(1, 1, 1);
 	}
 	PackedVector3Array verts;
 	PackedVector3Array normals;
@@ -3360,8 +3362,10 @@ int FellowTerrain3D::bake_foliage_impostors(const String &p_directory, int p_fra
 void FellowTerrain3D::_foliage_impostor_baked(const Ref<ArrayMesh> &p_quad, int p_kind, const String &p_path) {
 	impostor_bakes_pending = MAX(0, impostor_bakes_pending - 1);
 	if (p_quad.is_valid()) {
-		const Error err = ResourceSaver::save(p_quad, p_path, ResourceSaver::FLAG_CHANGE_PATH);
+		const Error err = ResourceSaver::save(p_quad, p_path);
 		if (err == OK) {
+			// The foliage refers to the file when the scene is saved, not to a copy (FLAG_CHANGE_PATH keeps no path).
+			p_quad->set_path(p_path, true);
 			impostor_bake_paths.push_back(p_path);
 			if (p_kind < foliage.size()) {
 				Ref<FellowTerrainFoliage> f = foliage[p_kind];

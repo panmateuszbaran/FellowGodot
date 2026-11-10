@@ -767,7 +767,8 @@ Node3D *FellowEditorPlugin::make_preset(int p_preset, const Node *p_root) {
 			Ref<Image> heights = Image::create_empty(257, 257, false, Image::FORMAT_RF);
 			heights->fill(Color(0, 0, 0));
 			Array layers;
-			const Color colors[2] = { Color(0.3, 0.42, 0.2), Color(0.45, 0.43, 0.4) };
+			// sRGB colours, as a material's (milestone 67: the shader now takes them so; these draw as before).
+			const Color colors[2] = { Color(0.3, 0.42, 0.2).linear_to_srgb(), Color(0.45, 0.43, 0.4).linear_to_srgb() };
 			for (int i = 0; i < 2; i++) {
 				Ref<Resource> layer = Object::cast_to<Resource>(ClassDB::instantiate("FellowTerrainLayer"));
 				ERR_FAIL_COND_V(layer.is_null(), nullptr);

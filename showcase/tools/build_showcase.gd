@@ -218,7 +218,8 @@ func _build_terrain() -> Node3D:
 	var layers := []
 	for c in colours:
 		var l = ClassDB.instantiate("FellowTerrainLayer")
-		l.set("albedo_color", c)
+		# A layer's colour is sRGB, as a material's (milestone 67; these were chosen as the multipliers the shader used).
+		l.set("albedo_color", c.linear_to_srgb())
 		l.set("roughness", 0.92)
 		layers.append(l)
 	layers[1].set("triplanar", true)

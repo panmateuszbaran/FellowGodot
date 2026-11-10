@@ -622,7 +622,10 @@ Dictionary FellowWorldStreamer3D::bake_proxies(const String &p_directory, const 
 	ERR_FAIL_COND_V_MSG(dir_err != OK && dir_err != ERR_ALREADY_EXISTS, info, vformat("Cannot create the directory \"%s\".", p_directory));
 	// One material for every proxy, saved beside them.
 	Ref<StandardMaterial3D> material = FellowCellProxies::proxy_material()->duplicate();
-	ResourceSaver::save(material, p_directory.path_join("fellow_proxy_material.tres"), ResourceSaver::FLAG_CHANGE_PATH);
+	const String material_path = p_directory.path_join("fellow_proxy_material.tres");
+	if (ResourceSaver::save(material, material_path) == OK) {
+		material->set_path(material_path, true); // the proxies refer to the file (FLAG_CHANGE_PATH keeps no path)
+	}
 	int proxies = 0;
 	int source_triangles = 0;
 	int proxy_triangles = 0;
@@ -673,7 +676,8 @@ Dictionary FellowWorldStreamer3D::bake_proxies(const String &p_directory, const 
 		if (proxy.is_valid()) {
 			proxy->surface_set_material(0, material);
 			const String path = p_directory.path_join(String(cell->get_name()) + "_proxy.res");
-			if (ResourceSaver::save(proxy, path, ResourceSaver::FLAG_CHANGE_PATH | ResourceSaver::FLAG_COMPRESS) == OK) {
+			if (ResourceSaver::save(proxy, path, ResourceSaver::FLAG_COMPRESS) == OK) {
+				proxy->set_path(path, true); // the scene saved with the proxy refers to the file, not a copy
 				MeshInstance3D *mi = memnew(MeshInstance3D);
 				mi->set_name("FellowProxy");
 				mi->set_meta(FELLOW_CELL_PROXY_META, true);

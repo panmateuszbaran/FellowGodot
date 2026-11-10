@@ -13,6 +13,7 @@ a Python runner (`benchmarks/run_benchmarks.py`) and offline analysis tools (`be
 | `bistro_interior` | Bistro interior (FBX) | 1.0 M triangles, 2062 surfaces, shadowed omni lights, glass, dense props |
 | `fluid` | **Fluid Lab** (FellowEngine only) | GPU shallow-water simulation 256² / 512² / 1024², surface reconstruction, water rendering |
 | `slice` | **Slice Lab** (FellowEngine only, built in code) | a 1 km valley with every system at once: a town of 711 buildings under HLOD, street lights, a campfire with a burning log, a crowd, a lake, 9 000 trees and grass in the wind, turning weather, a day and night; the soak's scene (decision 0156) |
+| `frontier` | **Frontier Lab** (FellowEngine only, generated once into `external/frontier_<size>/`) | an open world at AAA scale: 4 km of terrain at 1 m in 256 streamed regions with forests and meadows, 1 024 streamed cells of towns, villages and the wild (windows of a modular kit, street lights, props, rocks), proxies for what is not loaded, Slice Lab's systems in the first town; `--frontier_size=1024` for a small one (milestone 67) |
 
 Every scene defines fixed cameras (`*_cam_NN`), a deterministic flythrough and short temporal sequences.
 Sponza's fixed cameras are the six artist cameras shipped in Intel's glTF (`PhysCamera001-006`); Bistro's

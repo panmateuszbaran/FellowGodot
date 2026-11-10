@@ -42,7 +42,7 @@ func _ready() -> void:
 	var layers := []
 	for c in [Color(0.3, 0.45, 0.2), Color(0.5, 0.48, 0.45), Color(0.75, 0.68, 0.5), Color(0.92, 0.94, 0.97)]:
 		var l = ClassDB.instantiate("FellowTerrainLayer")
-		l.albedo_color = c
+		l.albedo_color = c.linear_to_srgb() # sRGB, as a material's (milestone 67; the same multipliers as before)
 		l.roughness = 0.85
 		layers.append(l)
 	layers[0].albedo_texture = _checker(Color(0.85, 0.9, 0.8), Color(0.6, 0.7, 0.55))

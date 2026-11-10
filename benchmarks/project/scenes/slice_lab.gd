@@ -604,11 +604,16 @@ func _build_weather() -> void:
 	weather.call("set_weather", maxi(w, 0), 0.0)
 
 
-func _build_fire() -> void:
-	# A campfire in the square: a gas volume with a kindling emitter (Burn Lab's), a log burning on it.
+## The town square's centre (the campfire's place; Frontier Lab's is its first town's).
+func _square() -> Vector3:
 	var nx := int(TOWN_HALF.x * 2.0 / BLOCK)
 	var nz := int(TOWN_HALF.y * 2.0 / BLOCK)
-	var sq := Vector3(TOWN.x - TOWN_HALF.x + (nx / 2 + 0.5) * BLOCK, 0.0, TOWN.z - TOWN_HALF.y + (nz / 2 + 0.5) * BLOCK)
+	return Vector3(TOWN.x - TOWN_HALF.x + (nx / 2 + 0.5) * BLOCK, 0.0, TOWN.z - TOWN_HALF.y + (nz / 2 + 0.5) * BLOCK)
+
+
+func _build_fire() -> void:
+	# A campfire in the square: a gas volume with a kindling emitter (Burn Lab's), a log burning on it.
+	var sq := _square()
 	fire = ClassDB.instantiate("FellowGasVolume3D")
 	fire.name = "Campfire"
 	fire.set("size", Vector3(3.2, 4.0, 3.2))
@@ -651,9 +656,7 @@ func _build_fire() -> void:
 
 func _build_crowd() -> void:
 	# Crowd Lab's characters, in the square: its builders, under a node of its script.
-	var nx := int(TOWN_HALF.x * 2.0 / BLOCK)
-	var nz := int(TOWN_HALF.y * 2.0 / BLOCK)
-	var sq := Vector3(TOWN.x - TOWN_HALF.x + (nx / 2 + 0.5) * BLOCK, 0.0, TOWN.z - TOWN_HALF.y + (nz / 2 + 0.5) * BLOCK)
+	var sq := _square()
 	crowd = load("res://scenes/crowd_lab.gd").new()
 	crowd.name = "Crowd"
 	crowd.position = sq + Vector3(0, 0, 6.0) # beside the fire

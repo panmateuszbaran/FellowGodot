@@ -44,13 +44,15 @@
 namespace FellowCellProxies {
 
 static Mutex average_mutex;
-static HashMap<ObjectID, Color> average_cache;
+static HashMap<String, Color> average_cache;
 
 Color texture_average(const Ref<Texture2D> &p_texture) {
 	if (p_texture.is_null()) {
 		return Color(1, 1, 1);
 	}
-	const ObjectID key = p_texture->get_instance_id();
+	// Keyed by the texture's file when it has one: a bake loads the cells one by one, their textures again each time
+	// (the texture's data read back from the GPU is most of the cost).
+	const String key = p_texture->get_path().is_empty() ? "#" + itos(uint64_t(p_texture->get_instance_id())) : p_texture->get_path();
 	{
 		MutexLock lock(average_mutex);
 		if (const Color *c = average_cache.getptr(key)) {

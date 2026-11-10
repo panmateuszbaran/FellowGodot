@@ -84,6 +84,7 @@ const SCENES := {
 	"streaming": "res://scenes/streaming_lab.gd",
 	"world": "res://scenes/world_lab.gd",
 	"slice": "res://scenes/slice_lab.gd",
+	"frontier": "res://scenes/frontier_lab.gd",
 }
 const DT := 1.0 / 60.0
 
@@ -433,15 +434,19 @@ func _texture_streaming_info() -> Dictionary:
 ## frames pass sooner). Nothing without one.
 func _wait_world_streaming() -> void:
 	var st = scene.get("streamer") if "streamer" in scene else null
-	if st == null or not st.has_method("is_settled"):
+	# A scene with several streamers (Frontier Lab's cells and terrain regions, milestone 67) lists them in `streamers`.
+	var all: Array = scene.get("streamers") if "streamers" in scene else ([st] if st != null else [])
+	all = all.filter(func(s) -> bool: return s != null and s.has_method("is_settled"))
+	if all.is_empty():
 		return
+	st = all[0]
 	var limit := int(args.get("streaming_wait", "1200"))
 	var limit_usec := int(float(args.get("streaming_wait_s", "20")) * 1e6)
 	var t0 := Time.get_ticks_usec()
 	var waited := 0
 	# At most --streaming_wait frames, or --streaming_wait_s seconds where those frames pass sooner (a GPU at
 	# 1000 fps runs 1200 frames in a second, before the loads from disk land).
-	while (waited < limit or Time.get_ticks_usec() - t0 < limit_usec) and not st.is_settled():
+	while (waited < limit or Time.get_ticks_usec() - t0 < limit_usec) and not all.all(func(s) -> bool: return s.is_settled()):
 		await get_tree().process_frame
 		waited += 1
 	result["world_streaming_wait_frames"] = int(result.get("world_streaming_wait_frames", 0)) + waited
