@@ -41,6 +41,7 @@
 #include "scene/resources/mesh.h"
 
 class Camera3D;
+class FellowImpostorBaker;
 
 // One material of a FellowTerrain3D: its textures and how they tile (docs/decisions/0158-terrain.md).
 class FellowTerrainLayer : public Resource {
@@ -98,6 +99,9 @@ class FellowTerrainFoliage : public Resource {
 	float sink = 0.0f; // metres below the ground (at scale 1)
 	bool cast_shadows = true;
 	int seed = 0;
+	float fade_distance = 0.0f; // metres before the range's end over which the instances shrink out (decision 0172)
+	Ref<Mesh> impostor; // a baked impostor (FellowTerrain3D.bake_foliage_impostors()), drawn from impostor_distance on
+	float impostor_distance = 0.0f;
 
 protected:
 	static void _bind_methods();
@@ -138,6 +142,12 @@ public:
 	bool is_casting_shadows() const { return cast_shadows; }
 	void set_seed(int p_seed);
 	int get_seed() const { return seed; }
+	void set_fade_distance(float p_metres);
+	float get_fade_distance() const { return fade_distance; }
+	void set_impostor(const Ref<Mesh> &p_mesh);
+	Ref<Mesh> get_impostor() const { return impostor; }
+	void set_impostor_distance(float p_metres);
+	float get_impostor_distance() const { return impostor_distance; }
 };
 
 // FellowEngine terrain (docs/decisions/0158-terrain.md): a height field drawn with continuous distance-dependent levels
@@ -173,6 +183,7 @@ private:
 	Ref<Image> heightmap;
 	Ref<Image> splat_map;
 	Ref<Image> splat_map_2;
+	Ref<Image> hole_map; // decision 0172: a texel above half is a hole at that vertex (the triangles touching it)
 	TypedArray<FellowTerrainLayer> layers;
 	float vertex_spacing = 1.0f;
 	int patch_size = 16; // quads along a patch's side
@@ -197,6 +208,11 @@ private:
 	LocalVector<LocalVector<Vector2>> minmax; // per block level k (blocks of patch_size << k texels): (min, max)
 	LocalVector<Vector2i> minmax_size;
 	int top_level = 0;
+	// Holes (decision 0172): per vertex (empty without a hole map), and per block level as minmax: 1 where a block's
+	// triangles touch a hole (its patches are drawn with the material that discards them).
+	LocalVector<uint8_t> holes;
+	LocalVector<LocalVector<uint8_t>> hole_blocks;
+	int hole_count = 0;
 	float ranges[MAX_LEVELS] = {};
 
 	// Rendering.
@@ -214,6 +230,10 @@ private:
 	Ref<ImageTexture> splat_texture_2;
 	Ref<ArrayMesh> patch_mesh;
 	Ref<ShaderMaterial> material;
+	Ref<ShaderMaterial> hole_material; // the same with holes discarded, for the patches over them
+	Ref<Image> hole_image;
+	Ref<ImageTexture> hole_texture;
+	Rect2i edit_holes; // the hole map's texels edited since the frame's start
 	bool data_dirty = true;
 	bool material_dirty = true;
 
@@ -229,6 +249,11 @@ private:
 		RID multimesh[2];
 		RID instance[2];
 		int capacity[2] = { 0, 0 };
+		// The patches over holes, drawn with hole_material (made with the hole map).
+		RID hole_multimesh[2];
+		RID hole_instance[2];
+		int hole_capacity[2] = { 0, 0 };
+		int hole_patches[2] = { 0, 0 };
 		int shown = -1;
 		int pending = -1;
 		uint64_t pending_frame = 0;
@@ -265,6 +290,9 @@ private:
 		float sink = 0.0f;
 		bool shadows = true;
 		uint32_t seed = 0;
+		float fade = 0.0f;
+		RID impostor; // the impostor's quad mesh (its range from impostor_distance)
+		float impostor_distance = 0.0f;
 	};
 	LocalVector<FoliageKind> foliage_kinds;
 	struct FoliageCell {
@@ -278,6 +306,8 @@ private:
 		uint64_t seen = 0;
 		RID multimesh;
 		RID instance;
+		RID impostor_multimesh;
+		RID impostor_instance;
 		// What its task reads, copied for it on the main thread when it starts (decision 0160): the terrain's edits and
 		// rebuilds never race it, and nothing waits for it.
 		FoliageKind k;
@@ -285,7 +315,7 @@ private:
 		int map_h = 0;
 		float spacing = 1.0f;
 		Rect2i heights_rect; // in the heightmap's texels
-		LocalVector<float> heights;
+		LocalVector<float> heights; // NaN at holes
 		Vector2i splat_size[2];
 		Rect2i splat_rect[2]; // in the splat maps' texels
 		LocalVector<uint8_t> splat[2];
@@ -302,6 +332,13 @@ private:
 	bool foliage_dirty = true;
 	uint64_t foliage_frame = 0;
 	int foliage_instances = 0;
+	int foliage_impostor_instances = 0;
+
+	// Baking the foliage's impostors (decision 0172): one kind after another, saved as resources.
+	FellowImpostorBaker *impostor_baker = nullptr;
+	int impostor_bakes_pending = 0;
+	PackedStringArray impostor_bake_paths;
+	void _foliage_impostor_baked(const Ref<ArrayMesh> &p_quad, int p_kind, const String &p_path);
 
 	void _foliage_changed();
 	void _update_foliage_kinds();
@@ -326,6 +363,17 @@ private:
 
 	void _rebuild_data();
 	void _build_splat(int p_map);
+	void _build_holes();
+	void _build_hole_blocks();
+	void _update_hole_blocks(const Rect2i &p_rect);
+	void _update_holes_region(const Rect2i &p_rect);
+	bool _make_hole_map_editable();
+	void _holes_changed(const Rect2i &p_rect, bool p_rebuilt);
+	bool _patch_has_holes(const Patch &p_patch) const;
+	void _create_hole_instances();
+	void _free_hole_instances();
+	bool _is_hole_triangle(float p_fx, float p_fz) const;
+	void _set_material_parameter(const StringName &p_name, const Variant &p_value);
 	void _update_heights_region(const Rect2i &p_rect);
 	void _update_splat_region(int p_map, const Rect2i &p_rect);
 	void _drop_foliage_in(const Rect2 &p_local);
@@ -340,6 +388,7 @@ private:
 	void _build_mesh();
 	void _update_material();
 	void _update_collision();
+	Dictionary _collision_region_data(int p_x0, int p_z0, int p_w, int p_d) const;
 	void _free_collision();
 	void _create_instances();
 	void _free_instances();
@@ -366,6 +415,8 @@ public:
 	Ref<Image> get_splat_map() const { return splat_map; }
 	void set_splat_map_2(const Ref<Image> &p_image);
 	Ref<Image> get_splat_map_2() const { return splat_map_2; }
+	void set_hole_map(const Ref<Image> &p_image);
+	Ref<Image> get_hole_map() const { return hole_map; }
 	void set_layers(const TypedArray<FellowTerrainLayer> &p_layers);
 	TypedArray<FellowTerrainLayer> get_layers() const { return layers; }
 	void set_vertex_spacing(float p_spacing);
@@ -404,6 +455,11 @@ public:
 	void paint(const Vector3 &p_global, float p_radius, int p_layer, float p_strength);
 	void blit_heightmap_region(const Ref<Image> &p_region, const Vector2i &p_position);
 	void blit_splat_region(int p_map, const Ref<Image> &p_region, const Vector2i &p_position);
+	void paint_holes(const Vector3 &p_global, float p_radius, bool p_hole);
+	void blit_hole_region(const Ref<Image> &p_region, const Vector2i &p_position);
+	bool is_hole(const Vector3 &p_global) const;
+	int bake_foliage_impostors(const String &p_directory, int p_frames = 8, int p_resolution = 128);
+	bool is_baking_impostors() const { return impostor_bakes_pending > 0; }
 	float get_height(const Vector3 &p_global) const;
 	Vector3 get_normal(const Vector3 &p_global) const;
 	PackedFloat32Array get_layer_weights(const Vector3 &p_global) const;

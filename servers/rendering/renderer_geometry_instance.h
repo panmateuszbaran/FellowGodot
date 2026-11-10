@@ -82,6 +82,7 @@ public:
 	// distances (each instance's own; 0: no bound), culled one by one on the GPU; p_vertices_bounded: its material's
 	// vertices stay in the mesh's box. No-op elsewhere.
 	virtual void set_fellow_instance_range(float p_begin, float p_end, bool p_vertices_bounded) {}
+	virtual void set_fellow_instance_range_fade(float p_fade) {}
 	// An HLOD proxy (decision 0122): a MultiMesh's instances transform normals as nodes do. No-op elsewhere.
 	virtual void set_fellow_hlod_proxy(bool p_proxy) {}
 };
@@ -107,6 +108,7 @@ public:
 	float fellow_extra_margin = 0.0; // the node's extra cull margin, in its own space (decision 0036)
 	float fellow_instance_range_begin = 0.0; // decision 0122: MultiMesh instances drawn by the camera from this distance
 	float fellow_instance_range_end = 0.0; // and up to this one (0: no bound)
+	float fellow_instance_range_fade = 0.0; // decision 0172: over this distance before the end, the instances shrink to nothing
 	bool fellow_vertices_bounded = false; // the material's vertices stay in the mesh's box
 	bool fellow_hlod_proxy = false; // an HLOD proxy: per-instance normals as nodes
 	float sorting_offset = 0.0;
@@ -169,6 +171,7 @@ public:
 	virtual void set_cast_double_sided_shadows(bool p_enable) override;
 	virtual void set_fellow_extra_margin(float p_margin) override;
 	virtual void set_fellow_instance_range(float p_begin, float p_end, bool p_vertices_bounded) override;
+	virtual void set_fellow_instance_range_fade(float p_fade) override;
 	virtual void set_fellow_hlod_proxy(bool p_proxy) override;
 
 	virtual void reset_motion_vectors() override;

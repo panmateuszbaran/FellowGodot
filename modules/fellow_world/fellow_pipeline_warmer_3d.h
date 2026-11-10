@@ -79,6 +79,7 @@ class FellowPipelineWarmer3D : public Node3D {
 	struct ShelfItem {
 		ObjectID source;
 		int foliage = -1;
+		bool impostor = false; // the foliage kind's impostor (decision 0172)
 		bool multimesh = false;
 		int format = 1; // MultiMesh::TRANSFORM_3D
 		bool colors = false;

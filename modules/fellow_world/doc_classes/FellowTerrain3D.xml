@@ -8,6 +8,7 @@
 		It is drawn with continuous distance-dependent levels of detail (CDLOD): a quadtree of square patches of [member patch_size] × [member patch_size] quads, each level's cells twice the size of the finer one's, chosen around the camera every frame it moves. Before a coarser level takes over, a patch's vertices morph onto the coarser grid, and its heights are read from a coarser mipmap of the heightmap as they do, so neighbouring levels meet without cracks and change without popping. All patches are instances of one [MultiMesh] (one draw per pass); FellowEngine's MultiMesh culling ([member ProjectSettings.rendering/fellow/geometry/multimesh_culling]) culls them one by one in the camera's and the shadows' passes. When the selection changes, the new patches are written into a second, hidden MultiMesh and shown three drawn frames later, so the motion vectors (TAA, FSR) of the ground are always those of a static surface.
 		Up to 9 [member layers] are blended: layer 0 is the base, [member splat_map]'s red, green, blue and alpha channels the weights of layers 1 to 4 and [member splat_map_2]'s those of layers 5 to 8 (the base takes what they leave). With [member height_blend], a layer with a height in its albedo's alpha shows through where it is higher. FellowEngine's weather (wetness, puddles, snow cover, [FellowRain3D]) applies to the terrain as to any material.
 		With [member collision_enabled], the terrain is a static physics body of height map shapes, one per region of [member collision_region_size] cells, the same triangles as its finest level of detail. [method get_height], [method get_normal] and [method get_layer_weights] answer from the CPU's copy of the data.
+		[member hole_map] cuts holes (a cave's mouth, a tunnel's portal): a triangle touching a marked vertex is neither drawn nor collides, and no foliage grows on it. The patches over holes are drawn with a second material that discards those triangles; the rest of the terrain keeps the material without a discard. [method paint_holes] cuts and fills them with a brush.
 		[method sculpt] and [method paint] change the heights and the layers' weights around a point and update only that region (the editor's toolbar for a selected terrain sculpts and paints with them, with undo). After changing the [member heightmap] image's pixels in place yourself, call [method update_heightmap]. A large heightmap is best saved as its own resource ([code].res[/code]) rather than inside the scene.
 		In the editor, the levels of detail follow the 3D editor's camera.
 	</description>
@@ -29,6 +30,23 @@
 			<param index="2" name="position" type="Vector2i" />
 			<description>
 				Writes [param region] (weights, converted to [constant Image.FORMAT_RGBA8]) into [member splat_map] ([param map] 0) or [member splat_map_2] ([param map] 1) with its first texel at [param position], and updates only what it covers: as [method paint] does. The splat map must already be an RGBA8 image without mipmaps (as [method paint] leaves it).
+			</description>
+		</method>
+		<method name="bake_foliage_impostors">
+			<return type="int" />
+			<param index="0" name="directory" type="String" />
+			<param index="1" name="frames" type="int" default="8" />
+			<param index="2" name="resolution" type="int" default="128" />
+			<description>
+				Bakes the impostor of every [member foliage] kind with a mesh and a [member FellowTerrainFoliage.impostor_distance]: its mesh rendered from [param frames] × [param frames] directions over the sphere (octahedral views of [param resolution] pixels, the albedo with coverage and the normal), one view a frame in this terrain's world, saved in [param directory] as [code]&lt;terrain&gt;_foliage_&lt;index&gt;_&lt;mesh&gt;_impostor.res[/code] (a quad mesh with its material and its atlases, lossless), and set as the kind's [member FellowTerrainFoliage.impostor]. Returns the number of kinds queued; [signal foliage_impostors_baked] is emitted when they are all saved. The terrain must be in the tree, with the Forward+ or Mobile renderer (the editor's Bake Impostors button for a selected terrain saves them next to the scene, in [code]impostors/[/code], with undo).
+			</description>
+		</method>
+		<method name="blit_hole_region">
+			<return type="void" />
+			<param index="0" name="region" type="Image" />
+			<param index="1" name="position" type="Vector2i" />
+			<description>
+				Writes [param region] (converted to [constant Image.FORMAT_L8]: above half a hole) into [member hole_map] with its first texel at [param position], and updates only what it covers: as [method paint_holes] does. Used by the editor's undo.
 			</description>
 		</method>
 		<method name="get_aabb" qualifiers="const">
@@ -70,6 +88,19 @@
 				The current selection and data: [code]patches[/code], [code]triangles[/code], [code]patches_per_level[/code], [code]levels[/code], [code skip-lint]lod_distance[/code] (the finest level's range in metres), [code]selections[/code] and [code]swaps[/code] (the selections computed and the MultiMesh switches since the start), [code]last_select_usec[/code], [code]collision_shapes[/code], [code]edit_flush_usec[/code] (the last update of the textures and collision shapes after edits, at a frame's end), [code]map_size[/code], [code]process_usec_mean[/code], [code]process_usec_max[/code] and [code]process_usec_last[/code] (the main thread's time in the terrain's frames: its levels of detail and foliage), [code]foliage_cells[/code] and [code]foliage_instances[/code] (the foliage's cells made and the instances drawn in them).
 			</description>
 		</method>
+		<method name="is_baking_impostors" qualifiers="const">
+			<return type="bool" />
+			<description>
+				Whether [method bake_foliage_impostors] is still baking.
+			</description>
+		</method>
+		<method name="is_hole" qualifiers="const">
+			<return type="bool" />
+			<param index="0" name="global_position" type="Vector3" />
+			<description>
+				Whether the terrain has a hole under [param global_position] (in a triangle that touches a vertex of [member hole_map]). [method get_height] returns NaN there.
+			</description>
+		</method>
 		<method name="heightmap_from_image" qualifiers="static">
 			<return type="Image" />
 			<param index="0" name="image" type="Image" />
@@ -87,6 +118,15 @@
 			<param index="3" name="strength" type="float" />
 			<description>
 				Paints [param layer] (0-8) into the splat maps around [param global_position], [param radius] metres around it, with a smooth falloff: every layer's weight moves towards 0 and [param layer]'s towards 1 by [param strength] (0..1) at the centre, so that the weights still add up to 1. When there is no [member splat_map] yet, one is made (RGBA8, the heightmap's size); [member splat_map_2] is made when a layer above 4 is painted. A splat map in another format, or with mipmaps, is converted to RGBA8 without them first. Only the splat maps' texels within the brush are updated: their textures, the CPU's copy the queries and the foliage read, and the foliage cells over them (scattered again).
+			</description>
+		</method>
+		<method name="paint_holes">
+			<return type="void" />
+			<param index="0" name="global_position" type="Vector3" />
+			<param index="1" name="radius" type="float" />
+			<param index="2" name="hole" type="bool" />
+			<description>
+				Marks ([param hole] [code]true[/code]) or clears the vertices within [param radius] metres of [param global_position] in [member hole_map] (made, L8 at the heightmap's size, when there is none). The triangles touching a marked vertex are no longer drawn, collide no more (their heights are NaN in the collision shapes: Godot's 3D physics, Jolt, has no collision in such a triangle) and lose their foliage. Only the region is updated: the hole texture, the patches over holes, the foliage cells and the collision shapes over it.
 			</description>
 		</method>
 		<method name="sculpt">
@@ -136,6 +176,9 @@
 		<member name="height_blend" type="float" setter="set_height_blend" getter="get_height_blend" default="0.3">
 			How much the layers' heights (their albedo's alpha, with [member FellowTerrainLayer.height_in_albedo_alpha]) decide where they show: 0 blends by the weights alone; higher values give sharper transitions where the higher layer wins.
 		</member>
+		<member name="hole_map" type="Image" setter="set_hole_map" getter="get_hole_map">
+			Holes in the terrain (decision 0172): an image of the heightmap's size (another size is stretched over it, nearest texel), a texel above half a hole at that vertex. A triangle touching a hole's vertex is not drawn (the patches over holes use a second material that discards it), does not collide and has no foliage; [method get_height] returns NaN over it and [method is_hole] [code]true[/code]. Without a hole map (the default) the terrain draws as before, with its material only.
+		</member>
 		<member name="heightmap" type="Image" setter="set_heightmap" getter="get_heightmap">
 			The heights in metres, one texel per vertex ([constant Image.FORMAT_RF]; another format is converted as [method heightmap_from_image] does with 0..1 metres). At least 2 × 2 texels.
 		</member>
@@ -167,6 +210,14 @@
 			The distance between two vertices (two heightmap texels) in metres.
 		</member>
 	</members>
+	<signals>
+		<signal name="foliage_impostors_baked">
+			<param index="0" name="paths" type="PackedStringArray" />
+			<description>
+				Emitted when [method bake_foliage_impostors] has saved every impostor it queued, with their files.
+			</description>
+		</signal>
+	</signals>
 	<constants>
 		<constant name="SCULPT_RAISE" value="0" enum="SculptMode">
 			Raises the ground by the strength in metres at the brush's centre.

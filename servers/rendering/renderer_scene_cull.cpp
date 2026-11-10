@@ -739,6 +739,7 @@ void RendererSceneCull::instance_set_base(RID p_instance, RID p_base) {
 				geom->geometry_instance->set_lod_bias(instance->lod_bias);
 				geom->geometry_instance->set_fellow_extra_margin(instance->extra_margin);
 				geom->geometry_instance->set_fellow_instance_range(instance->fellow_range_begin, instance->fellow_range_end, instance->fellow_vertices_bounded);
+				geom->geometry_instance->set_fellow_instance_range_fade(instance->fellow_range_fade);
 				geom->geometry_instance->set_fellow_hlod_proxy(instance->fellow_hlod_role == RenderingServer::FELLOW_HLOD_PROXY);
 				geom->geometry_instance->set_transparency(instance->transparency);
 				geom->geometry_instance->set_use_baked_light(instance->baked_light);
@@ -1337,6 +1338,18 @@ void RendererSceneCull::fellow_instance_set_instance_range(RID p_instance, float
 		InstanceGeometryData *geom = static_cast<InstanceGeometryData *>(instance->base_data);
 		if (geom->geometry_instance) {
 			geom->geometry_instance->set_fellow_instance_range(instance->fellow_range_begin, instance->fellow_range_end, p_vertices_bounded);
+		}
+	}
+}
+
+void RendererSceneCull::fellow_instance_set_instance_range_fade(RID p_instance, float p_fade) {
+	Instance *instance = instance_owner.get_or_null(p_instance);
+	ERR_FAIL_NULL(instance);
+	instance->fellow_range_fade = MAX(0.0f, p_fade);
+	if (((1 << instance->base_type) & RSE::INSTANCE_GEOMETRY_MASK) && instance->base_data) {
+		InstanceGeometryData *geom = static_cast<InstanceGeometryData *>(instance->base_data);
+		if (geom->geometry_instance) {
+			geom->geometry_instance->set_fellow_instance_range_fade(instance->fellow_range_fade);
 		}
 	}
 }

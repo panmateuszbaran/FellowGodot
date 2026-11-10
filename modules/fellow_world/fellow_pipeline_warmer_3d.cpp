@@ -205,6 +205,10 @@ void FellowPipelineWarmer3D::_build_shelf(Node *p_root) {
 					it.shadows = kind->is_casting_shadows() ? GeometryInstance3D::SHADOW_CASTING_SETTING_ON : GeometryInstance3D::SHADOW_CASTING_SETTING_OFF;
 					it.layers = t->get_render_layer_mask();
 					add(it);
+					if (kind->get_impostor().is_valid() && kind->get_impostor_distance() > 0.0f) {
+						it.impostor = true; // its far instances' quads (decision 0172)
+						add(it);
+					}
 				}
 			}
 		}
@@ -241,11 +245,11 @@ bool FellowPipelineWarmer3D::_item_state(const ShelfItem &p_item, Ref<Mesh> &r_m
 			return false;
 		}
 		Ref<FellowTerrainFoliage> kind = f[p_item.foliage];
-		if (kind.is_null() || kind->get_mesh().is_null()) {
+		if (kind.is_null()) {
 			return false;
 		}
-		r_mesh = kind->get_mesh();
-		return true;
+		r_mesh = p_item.impostor ? kind->get_impostor() : kind->get_mesh();
+		return r_mesh.is_valid();
 	}
 	GeometryInstance3D *gi = Object::cast_to<GeometryInstance3D>(o);
 	if (gi == nullptr || !gi->is_inside_tree()) {

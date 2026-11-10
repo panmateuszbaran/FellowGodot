@@ -40,6 +40,7 @@
 #include "scene/resources/environment.h"
 #include "scene/resources/image_texture.h"
 #include "scene/resources/material.h"
+#include "scene/resources/portable_compressed_texture.h"
 #include "scene/resources/shader.h"
 #include "servers/rendering/rendering_server.h"
 
@@ -169,7 +170,7 @@ void fragment() {
 )";
 }
 
-void FellowImpostorBaker::queue_bake(const Ref<Mesh> &p_mesh, const Ref<Material> &p_material_override, int p_frames, int p_resolution, const Callable &p_done) {
+void FellowImpostorBaker::queue_bake(const Ref<Mesh> &p_mesh, const Ref<Material> &p_material_override, int p_frames, int p_resolution, const Callable &p_done, bool p_portable) {
 	ERR_FAIL_COND(p_mesh.is_null());
 	Job j;
 	j.mesh = p_mesh;
@@ -177,6 +178,7 @@ void FellowImpostorBaker::queue_bake(const Ref<Mesh> &p_mesh, const Ref<Material
 	j.frames = CLAMP(p_frames, 2, 32);
 	j.resolution = CLAMP(p_resolution, 16, 1024);
 	j.done = p_done;
+	j.portable = p_portable;
 	queue.push_back(j);
 	if (!running && is_inside_tree()) {
 		_start_next();
@@ -401,8 +403,23 @@ void FellowImpostorBaker::_finish() {
 	Ref<ShaderMaterial> mat;
 	mat.instantiate();
 	mat->set_shader(shader);
-	mat->set_shader_parameter("albedo_atlas", ImageTexture::create_from_image(atlas_albedo));
-	mat->set_shader_parameter("normal_atlas", ImageTexture::create_from_image(atlas_normal));
+	if (j.portable) {
+		// To be saved (decision 0172): the atlases with their mips, lossless (WebP) in the resource.
+		// (The compressed data kept to be saved; a game loading the file decodes it and keeps none.)
+		Ref<PortableCompressedTexture2D> albedo;
+		albedo.instantiate();
+		albedo->set_keep_compressed_buffer(true);
+		albedo->create_from_image(atlas_albedo, PortableCompressedTexture2D::COMPRESSION_MODE_LOSSLESS);
+		Ref<PortableCompressedTexture2D> normal;
+		normal.instantiate();
+		normal->set_keep_compressed_buffer(true);
+		normal->create_from_image(atlas_normal, PortableCompressedTexture2D::COMPRESSION_MODE_LOSSLESS);
+		mat->set_shader_parameter("albedo_atlas", albedo);
+		mat->set_shader_parameter("normal_atlas", normal);
+	} else {
+		mat->set_shader_parameter("albedo_atlas", ImageTexture::create_from_image(atlas_albedo));
+		mat->set_shader_parameter("normal_atlas", ImageTexture::create_from_image(atlas_normal));
+	}
 	mat->set_shader_parameter("frames", (float)j.frames);
 	mat->set_shader_parameter("center", center);
 	mat->set_shader_parameter("radius", (float)radius);

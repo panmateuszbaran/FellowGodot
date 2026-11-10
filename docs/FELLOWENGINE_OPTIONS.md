@@ -544,6 +544,22 @@ again; the result is the terrain a rebuild from the edited images makes, texel f
 and paints with the mouse, one undoable action a stroke. Bench `bench/terrain_edit_check.gd`; the editor check's
 terrain brush.
 
+Milestone 64 (decision 0172). **Holes**: `hole_map` (an `Image` of the heightmap's size, a texel above half a hole at
+that vertex; none by default): a triangle touching a hole's vertex is not drawn (the patches over holes are drawn with
+a second material that discards it, the rest of the terrain keeps the material without a discard), has NaN heights in
+the collision shapes (no collision with Jolt, Godot's 3D physics) and no foliage; `get_height()` returns NaN there,
+`is_hole()` true. `paint_holes(global_position, radius, hole)` cuts or fills with a brush and updates only the region,
+`blit_hole_region()` writes a rectangle back; the editor's toolbar has a Holes tool (Shift fills). **Foliage fading
+out**: `FellowTerrainFoliage.fade_distance` (metres, 0: they stop at the range, as before): over its last metres before
+`range` the instances shrink to nothing, scaled one by one by FellowEngine's MultiMesh culling on the GPU (the renderer's
+`fellow_instance_set_instance_range_fade()`). **Impostors baked into files**: `FellowTerrainFoliage.impostor` (a
+`Mesh`) and `impostor_distance` (0: none): the meshes up to the distance, the impostors from it to the range, each
+instance on the GPU, the shadows per directional cascade as an HLOD's; needs `geometry/multimesh_culling`.
+`FellowTerrain3D.bake_foliage_impostors(directory, frames, resolution)` renders each kind with a distance from
+`frames` × `frames` directions (octahedral, decision 0122's baker), saves it as `.res` (the quad mesh, its material,
+its atlases lossless) and sets it; signal `foliage_impostors_baked`. In the editor: the terrain toolbar's Bake
+Impostors button (next to the scene, `impostors/`, undoable). Bench `bench/terrain_holes_check.gd`.
+
 `FellowGasVolume3D` no longer reads the data of concave, height map and custom shapes in its box (not its obstacles),
 and the directional shadow cache ignores changes of instances that cast no shadows (both exact).
 

@@ -30,7 +30,11 @@
 
 #include "fellow_terrain_3d.h"
 
+#include "fellow_impostor_baker.h"
+
 #include "core/config/engine.h"
+#include "core/io/dir_access.h"
+#include "core/io/resource_saver.h"
 #include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
 #include "core/object/worker_thread_pool.h"
@@ -147,6 +151,9 @@ FOLIAGE_SETTER(set_align_to_normal, float, align_to_normal, CLAMP(p_value, 0.0f,
 FOLIAGE_SETTER(set_sink, float, sink, p_value)
 FOLIAGE_SETTER(set_cast_shadows, bool, cast_shadows, p_value)
 FOLIAGE_SETTER(set_seed, int, seed, p_value)
+FOLIAGE_SETTER(set_fade_distance, float, fade_distance, MAX(0.0f, p_value))
+FOLIAGE_SETTER(set_impostor, const Ref<Mesh> &, impostor, p_value)
+FOLIAGE_SETTER(set_impostor_distance, float, impostor_distance, MAX(0.0f, p_value))
 
 #undef FOLIAGE_SETTER
 
@@ -185,6 +192,12 @@ void FellowTerrainFoliage::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("is_casting_shadows"), &FellowTerrainFoliage::is_casting_shadows);
 	ClassDB::bind_method(D_METHOD("set_seed", "seed"), &FellowTerrainFoliage::set_seed);
 	ClassDB::bind_method(D_METHOD("get_seed"), &FellowTerrainFoliage::get_seed);
+	ClassDB::bind_method(D_METHOD("set_fade_distance", "metres"), &FellowTerrainFoliage::set_fade_distance);
+	ClassDB::bind_method(D_METHOD("get_fade_distance"), &FellowTerrainFoliage::get_fade_distance);
+	ClassDB::bind_method(D_METHOD("set_impostor", "mesh"), &FellowTerrainFoliage::set_impostor);
+	ClassDB::bind_method(D_METHOD("get_impostor"), &FellowTerrainFoliage::get_impostor);
+	ClassDB::bind_method(D_METHOD("set_impostor_distance", "metres"), &FellowTerrainFoliage::set_impostor_distance);
+	ClassDB::bind_method(D_METHOD("get_impostor_distance"), &FellowTerrainFoliage::get_impostor_distance);
 
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "mesh", PROPERTY_HINT_RESOURCE_TYPE, "Mesh"), "set_mesh", "get_mesh");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "layer", PROPERTY_HINT_RANGE, "0,8,1"), "set_layer", "get_layer");
@@ -203,6 +216,10 @@ void FellowTerrainFoliage::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "sink", PROPERTY_HINT_RANGE, "-10,10,0.001,or_greater,or_less,suffix:m"), "set_sink", "get_sink");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "cast_shadows"), "set_cast_shadows", "is_casting_shadows");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "seed"), "set_seed", "get_seed");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "fade_distance", PROPERTY_HINT_RANGE, "0,500,0.1,or_greater,suffix:m"), "set_fade_distance", "get_fade_distance");
+	ADD_GROUP("Impostor", "impostor");
+	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "impostor", PROPERTY_HINT_RESOURCE_TYPE, "Mesh"), "set_impostor", "get_impostor");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "impostor_distance", PROPERTY_HINT_RANGE, "0,2000,0.1,or_greater,suffix:m"), "set_impostor_distance", "get_impostor_distance");
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -212,7 +229,7 @@ void FellowTerrainFoliage::_bind_methods() {
 // distances from `lod_camera` (CDLOD), and reads the height at the level plus the morph (a coarser mip as it morphs: the
 // distant ground smoothed like its grid, and the same height on both sides of a level's edge).
 
-static String _terrain_shader_code() {
+static String _terrain_shader_code(bool p_holes = false) {
 	String code = R"(shader_type spatial;
 render_mode cull_back;
 
@@ -233,6 +250,10 @@ uniform vec4 layer_params[9];
 uniform vec4 layer_flags[9];
 instance uniform vec3 lod_camera;
 )";
+	if (p_holes) {
+		// Decision 0172: a texel above half is a hole at that vertex.
+		code += "uniform sampler2D holemap : filter_nearest, repeat_disable;\n";
+	}
 	for (int i = 0; i < FellowTerrain3D::MAX_LAYERS; i++) {
 		code += vformat("uniform sampler2D albedo_%d : source_color, hint_default_white, filter_linear_mipmap_anisotropic, repeat_enable;\n", i);
 		code += vformat("uniform sampler2D normal_%d : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;\n", i);
@@ -348,7 +369,26 @@ void layer_#(vec3 pl, vec3 dpdx, vec3 dpdy, vec3 nw, vec3 blend, out vec4 r_albe
 	}
 	code += R"(
 void fragment() {
-	vec2 uv = map_uv(v_local.xz);
+)";
+	if (p_holes) {
+		// The triangle under the fragment (the mesh's: the diagonal from (x + 1, z) to (x, z + 1), as the collision's) is
+		// not drawn when one of its vertices is a hole.
+		code += R"(	{
+		vec2 g = v_local.xz / spacing;
+		vec2 c = floor(g);
+		vec2 f = g - c;
+		ivec2 i = ivec2(c);
+		ivec2 hi = ivec2(map_texels) - 1;
+		float hb = texelFetch(holemap, clamp(i + ivec2(1, 0), ivec2(0), hi), 0).r;
+		float hc = texelFetch(holemap, clamp(i + ivec2(0, 1), ivec2(0), hi), 0).r;
+		float ho = texelFetch(holemap, clamp(f.x + f.y <= 1.0 ? i : i + ivec2(1, 1), ivec2(0), hi), 0).r;
+		if (max(ho, max(hb, hc)) > 0.5) {
+			discard;
+		}
+	}
+)";
+	}
+	code += R"(	vec2 uv = map_uv(v_local.xz);
 	vec2 n2 = texture(normalmap, uv).rg * 2.0 - 1.0;
 	vec3 nw = normalize(vec3(n2.x, sqrt(max(0.0, 1.0 - dot(n2, n2))), n2.y));
 	vec4 s0 = texture(splat_0, uv);
@@ -675,12 +715,21 @@ void FellowTerrain3D::_rebuild_data() {
 	for (int i = 0; i < 2; i++) {
 		_build_splat(i);
 	}
+	_build_holes();
 	_build_mesh();
 	if (set.instance[0].is_valid()) {
 		// The instances' MultiMeshes onto the new mesh (the old one is freed with its last reference).
 		RenderingServer *rs = RenderingServer::get_singleton();
 		for (int i = 0; i < 2; i++) {
 			rs->multimesh_set_mesh(set.multimesh[i], patch_mesh->get_rid());
+			if (set.hole_multimesh[i].is_valid()) {
+				rs->multimesh_set_mesh(set.hole_multimesh[i], patch_mesh->get_rid());
+			}
+		}
+		if (holes.is_empty()) {
+			_free_hole_instances();
+		} else {
+			_create_hole_instances();
 		}
 	}
 	material_dirty = true;
@@ -700,16 +749,23 @@ void FellowTerrain3D::_update_material() {
 			patch_mesh->surface_set_material(0, material);
 		}
 	}
-	material->set_shader_parameter("heightmap", height_texture);
-	material->set_shader_parameter("normalmap", normal_texture);
-	material->set_shader_parameter("splat_0", splat_texture);
-	material->set_shader_parameter("splat_1", splat_texture_2);
-	material->set_shader_parameter("map_texels", Vector2(MAX(1, map_w), MAX(1, map_h)));
-	material->set_shader_parameter("map_extent", Vector2(MAX(0, map_w - 1), MAX(0, map_h - 1)) * vertex_spacing);
-	material->set_shader_parameter("spacing", vertex_spacing);
-	material->set_shader_parameter("height_blend", height_blend);
-	material->set_shader_parameter("macro_variation", macro_variation);
-	material->set_shader_parameter("debug_view", int(debug_view));
+	if (!holes.is_empty() && hole_material.is_null()) {
+		hole_material.instantiate();
+		hole_material->set_shader(FellowSharedShaders::shader(_terrain_shader_code(true)));
+	}
+	if (hole_material.is_valid()) {
+		hole_material->set_shader_parameter("holemap", hole_texture);
+	}
+	_set_material_parameter("heightmap", height_texture);
+	_set_material_parameter("normalmap", normal_texture);
+	_set_material_parameter("splat_0", splat_texture);
+	_set_material_parameter("splat_1", splat_texture_2);
+	_set_material_parameter("map_texels", Vector2(MAX(1, map_w), MAX(1, map_h)));
+	_set_material_parameter("map_extent", Vector2(MAX(0, map_w - 1), MAX(0, map_h - 1)) * vertex_spacing);
+	_set_material_parameter("spacing", vertex_spacing);
+	_set_material_parameter("height_blend", height_blend);
+	_set_material_parameter("macro_variation", macro_variation);
+	_set_material_parameter("debug_view", int(debug_view));
 
 	// The levels' ranges (CDLOD): a level's vertices morph onto the next coarser grid from morph_ratio of the way
 	// between the finer level's range and its own to its own range, where the coarser level takes over.
@@ -725,7 +781,7 @@ void FellowTerrain3D::_update_material() {
 		const bool morphs = l < top_level;
 		morph.write[l] = Vector4(start, morphs ? 1.0f / MAX(end - start, 1e-3f) : 0.0f, 0, 0);
 	}
-	material->set_shader_parameter("morph", morph);
+	_set_material_parameter("morph", morph);
 
 	PackedColorArray colors;
 	PackedVector4Array params;
@@ -739,20 +795,29 @@ void FellowTerrain3D::_update_material() {
 			colors.write[i] = l->get_albedo_color();
 			params.write[i] = Vector4(1.0f / l->get_texture_size(), l->get_roughness(), l->get_normal_strength(), l->is_triplanar() ? 1.0f : 0.0f);
 			flags.write[i] = Vector4(l->get_albedo_texture().is_valid() ? 1.0f : 0.0f, l->get_normal_texture().is_valid() ? 1.0f : 0.0f, l->is_height_in_albedo_alpha() ? 1.0f : 0.0f, 0.0f);
-			material->set_shader_parameter(vformat("albedo_%d", i), l->get_albedo_texture());
-			material->set_shader_parameter(vformat("normal_%d", i), l->get_normal_texture());
+			_set_material_parameter(vformat("albedo_%d", i), l->get_albedo_texture());
+			_set_material_parameter(vformat("normal_%d", i), l->get_normal_texture());
 		} else {
 			colors.write[i] = Color(1, 1, 1);
 			params.write[i] = Vector4(0.25f, 0.9f, 1.0f, 0.0f);
 			flags.write[i] = Vector4();
-			material->set_shader_parameter(vformat("albedo_%d", i), Variant());
-			material->set_shader_parameter(vformat("normal_%d", i), Variant());
+			_set_material_parameter(vformat("albedo_%d", i), Variant());
+			_set_material_parameter(vformat("normal_%d", i), Variant());
 		}
 	}
-	material->set_shader_parameter("layer_color", colors);
-	material->set_shader_parameter("layer_params", params);
-	material->set_shader_parameter("layer_flags", flags);
+	_set_material_parameter("layer_color", colors);
+	_set_material_parameter("layer_params", params);
+	_set_material_parameter("layer_flags", flags);
 	_update_transforms();
+}
+
+void FellowTerrain3D::_set_material_parameter(const StringName &p_name, const Variant &p_value) {
+	if (material.is_valid()) {
+		material->set_shader_parameter(p_name, p_value);
+	}
+	if (hole_material.is_valid()) {
+		hole_material->set_shader_parameter(p_name, p_value);
+	}
 }
 
 void FellowTerrain3D::_layer_changed() {
@@ -786,11 +851,68 @@ void FellowTerrain3D::_create_instances() {
 	set.shown = -1;
 	set.pending = -1;
 	set.selection_valid = false;
+	if (!holes.is_empty()) {
+		_create_hole_instances();
+	}
 	_update_instance_settings();
 	_update_transforms();
 }
 
+// The patches over holes (decision 0172): a second pair of MultiMeshes drawn with the material that discards the
+// holes' triangles, so that the rest of the terrain keeps the material without a discard (its early depth test).
+void FellowTerrain3D::_create_hole_instances() {
+	if (set.hole_instance[0].is_valid() || set.instance[0].is_null() || !is_inside_tree()) {
+		return;
+	}
+	if (hole_material.is_null()) {
+		hole_material.instantiate();
+		hole_material->set_shader(FellowSharedShaders::shader(_terrain_shader_code(true)));
+	}
+	material_dirty = true; // the hole material's parameters with the next frame
+	RenderingServer *rs = RenderingServer::get_singleton();
+	const RID scenario = get_world_3d()->get_scenario();
+	for (int i = 0; i < 2; i++) {
+		set.hole_multimesh[i] = rs->multimesh_create();
+		rs->multimesh_set_mesh(set.hole_multimesh[i], patch_mesh.is_valid() ? patch_mesh->get_rid() : RID());
+		set.hole_capacity[i] = 0;
+		set.hole_patches[i] = 0;
+		set.hole_instance[i] = rs->instance_create2(set.hole_multimesh[i], scenario);
+		rs->instance_attach_object_instance_id(set.hole_instance[i], get_instance_id());
+		rs->instance_set_visible(set.hole_instance[i], false);
+		rs->fellow_instance_set_instance_range(set.hole_instance[i], 0.0f, 0.0f, true);
+		rs->instance_geometry_set_material_override(set.hole_instance[i], hole_material->get_rid());
+	}
+	// The shown patches written again, split.
+	if (set.shown >= 0) {
+		set.patches[set.shown].clear();
+	}
+	set.selection_valid = false;
+	_update_instance_settings();
+	_update_transforms();
+}
+
+void FellowTerrain3D::_free_hole_instances() {
+	RenderingServer *rs = RenderingServer::get_singleton();
+	for (int i = 0; i < 2; i++) {
+		if (set.hole_instance[i].is_valid()) {
+			rs->free_rid(set.hole_instance[i]);
+			set.hole_instance[i] = RID();
+		}
+		if (set.hole_multimesh[i].is_valid()) {
+			rs->free_rid(set.hole_multimesh[i]);
+			set.hole_multimesh[i] = RID();
+		}
+		set.hole_capacity[i] = 0;
+		set.hole_patches[i] = 0;
+	}
+	if (set.shown >= 0) {
+		set.patches[set.shown].clear(); // written again, whole
+	}
+	set.selection_valid = false;
+}
+
 void FellowTerrain3D::_free_instances() {
+	_free_hole_instances();
 	RenderingServer *rs = RenderingServer::get_singleton();
 	for (int i = 0; i < 2; i++) {
 		if (set.instance[i].is_valid()) {
@@ -818,11 +940,18 @@ void FellowTerrain3D::_update_instance_settings() {
 		rs->instance_geometry_set_cast_shadows_setting(set.instance[i], cast_shadows ? RSE::SHADOW_CASTING_SETTING_ON : RSE::SHADOW_CASTING_SETTING_OFF);
 		rs->instance_set_layer_mask(set.instance[i], render_layer_mask);
 		rs->instance_set_visible(set.instance[i], i == set.shown && is_visible_in_tree());
+		if (set.hole_instance[i].is_valid()) {
+			rs->instance_geometry_set_cast_shadows_setting(set.hole_instance[i], cast_shadows ? RSE::SHADOW_CASTING_SETTING_ON : RSE::SHADOW_CASTING_SETTING_OFF);
+			rs->instance_set_layer_mask(set.hole_instance[i], render_layer_mask);
+			rs->instance_set_visible(set.hole_instance[i], i == set.shown && is_visible_in_tree());
+		}
 	}
 	for (KeyValue<uint64_t, FoliageCell *> &kv : foliage_cells) {
-		if (kv.value->instance.is_valid()) {
-			rs->instance_set_layer_mask(kv.value->instance, render_layer_mask);
-			rs->instance_set_visible(kv.value->instance, is_visible_in_tree());
+		for (const RID &inst : { kv.value->instance, kv.value->impostor_instance }) {
+			if (inst.is_valid()) {
+				rs->instance_set_layer_mask(inst, render_layer_mask);
+				rs->instance_set_visible(inst, is_visible_in_tree());
+			}
 		}
 	}
 }
@@ -837,17 +966,20 @@ void FellowTerrain3D::_update_transforms() {
 		if (set.instance[i].is_valid()) {
 			rs->instance_set_transform(set.instance[i], xf);
 		}
+		if (set.hole_instance[i].is_valid()) {
+			rs->instance_set_transform(set.hole_instance[i], xf);
+		}
 	}
 	set.selection_valid = false;
-	if (material.is_valid()) {
-		material->set_shader_parameter("terrain_basis", xf.basis.orthonormalized());
-	}
+	_set_material_parameter("terrain_basis", xf.basis.orthonormalized());
 	if (body.is_valid()) {
 		PhysicsServer3D::get_singleton()->body_set_state(body, PhysicsServer3D::BODY_STATE_TRANSFORM, xf);
 	}
 	for (KeyValue<uint64_t, FoliageCell *> &kv : foliage_cells) {
-		if (kv.value->instance.is_valid()) {
-			rs->instance_set_transform(kv.value->instance, xf);
+		for (const RID &inst : { kv.value->instance, kv.value->impostor_instance }) {
+			if (inst.is_valid()) {
+				rs->instance_set_transform(inst, xf);
+			}
 		}
 	}
 }
@@ -940,46 +1072,67 @@ void FellowTerrain3D::_select(const Vector3 &p_camera, LocalVector<Patch> &r_out
 
 void FellowTerrain3D::_write_patches(int p_which, const LocalVector<Patch> &p_patches, const Vector3 &p_camera) {
 	RenderingServer *rs = RenderingServer::get_singleton();
-	const int n = p_patches.size();
-	if (n > set.capacity[p_which]) {
-		set.capacity[p_which] = MAX(256, int(Math::next_power_of_2(uint32_t(n))));
-		rs->multimesh_allocate_data(set.multimesh[p_which], set.capacity[p_which], RSE::MULTIMESH_TRANSFORM_3D, false, true);
+	// With holes (decision 0172) the patches over them go to the second MultiMesh; without, everything as before.
+	const bool split = set.hole_multimesh[p_which].is_valid();
+	LocalVector<Patch> plain;
+	LocalVector<Patch> holed;
+	if (split) {
+		for (const Patch &pt : p_patches) {
+			if (_patch_has_holes(pt)) {
+				holed.push_back(pt);
+			} else {
+				plain.push_back(pt);
+			}
+		}
 	}
-	const int cap = set.capacity[p_which];
-	Vector<float> data;
-	data.resize(cap * 16);
-	float *w = data.ptrw();
-	for (int i = 0; i < n; i++) {
-		const Patch &pt = p_patches[i];
-		const float cell = vertex_spacing * float(1 << pt.level);
-		const float qsize = cell * float(patch_size);
-		const float x0 = pt.x * qsize;
-		const float z0 = pt.z * qsize;
-		float *d = w + i * 16;
-		// The transform's rows (basis row, origin): x and z scaled by the cell, y unscaled.
-		d[0] = cell;
-		d[1] = 0.0f;
-		d[2] = 0.0f;
-		d[3] = x0;
-		d[4] = 0.0f;
-		d[5] = 1.0f;
-		d[6] = 0.0f;
-		d[7] = 0.0f;
-		d[8] = 0.0f;
-		d[9] = 0.0f;
-		d[10] = cell;
-		d[11] = z0;
-		d[12] = x0;
-		d[13] = z0;
-		d[14] = float(pt.level);
-		d[15] = 0.0f;
-	}
-	for (int i = n * 16; i < cap * 16; i++) {
-		w[i] = 0.0f;
-	}
-	rs->multimesh_set_buffer(set.multimesh[p_which], data);
-	rs->multimesh_set_visible_instances(set.multimesh[p_which], n);
+	auto write = [&](RID p_multimesh, int &r_capacity, const LocalVector<Patch> &p_list, bool p_allocate_empty) {
+		const int n = p_list.size();
+		if (n > r_capacity || (p_allocate_empty && r_capacity == 0)) {
+			r_capacity = MAX(256, int(Math::next_power_of_2(uint32_t(n))));
+			rs->multimesh_allocate_data(p_multimesh, r_capacity, RSE::MULTIMESH_TRANSFORM_3D, false, true);
+		}
+		const int cap = r_capacity;
+		Vector<float> data;
+		data.resize(cap * 16);
+		float *w = data.ptrw();
+		for (int i = 0; i < n; i++) {
+			const Patch &pt = p_list[i];
+			const float cell = vertex_spacing * float(1 << pt.level);
+			const float qsize = cell * float(patch_size);
+			const float x0 = pt.x * qsize;
+			const float z0 = pt.z * qsize;
+			float *d = w + i * 16;
+			// The transform's rows (basis row, origin): x and z scaled by the cell, y unscaled.
+			d[0] = cell;
+			d[1] = 0.0f;
+			d[2] = 0.0f;
+			d[3] = x0;
+			d[4] = 0.0f;
+			d[5] = 1.0f;
+			d[6] = 0.0f;
+			d[7] = 0.0f;
+			d[8] = 0.0f;
+			d[9] = 0.0f;
+			d[10] = cell;
+			d[11] = z0;
+			d[12] = x0;
+			d[13] = z0;
+			d[14] = float(pt.level);
+			d[15] = 0.0f;
+		}
+		for (int i = n * 16; i < cap * 16; i++) {
+			w[i] = 0.0f;
+		}
+		rs->multimesh_set_buffer(p_multimesh, data);
+		rs->multimesh_set_visible_instances(p_multimesh, n);
+	};
+	write(set.multimesh[p_which], set.capacity[p_which], split ? plain : p_patches, false);
 	rs->instance_geometry_set_shader_parameter(set.instance[p_which], "lod_camera", p_camera);
+	if (split) {
+		write(set.hole_multimesh[p_which], set.hole_capacity[p_which], holed, true);
+		rs->instance_geometry_set_shader_parameter(set.hole_instance[p_which], "lod_camera", p_camera);
+		set.hole_patches[p_which] = holed.size();
+	}
 	set.patches[p_which] = p_patches;
 }
 
@@ -999,8 +1152,14 @@ void FellowTerrain3D::_process_lod() {
 		// may be drawn at all: shown at once.
 		if (frame >= set.pending_frame + 3 || set.shown < 0 || rs->get_rendering_device() == nullptr) {
 			rs->instance_set_visible(set.instance[set.pending], is_visible_in_tree());
+			if (set.hole_instance[set.pending].is_valid()) {
+				rs->instance_set_visible(set.hole_instance[set.pending], is_visible_in_tree());
+			}
 			if (set.shown >= 0) {
 				rs->instance_set_visible(set.instance[set.shown], false);
+				if (set.hole_instance[set.shown].is_valid()) {
+					rs->instance_set_visible(set.hole_instance[set.shown], false);
+				}
 			}
 			set.shown = set.pending;
 			set.pending = -1;
@@ -1032,6 +1191,9 @@ void FellowTerrain3D::_process_lod() {
 		if (same) {
 			// The same patches: only the morph's camera moves (the same in both of a frame's vertex passes).
 			rs->instance_geometry_set_shader_parameter(set.instance[set.shown], "lod_camera", c);
+			if (set.hole_instance[set.shown].is_valid()) {
+				rs->instance_geometry_set_shader_parameter(set.hole_instance[set.shown], "lod_camera", c);
+			}
 			return;
 		}
 	}
@@ -1048,6 +1210,40 @@ void FellowTerrain3D::_process_lod() {
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Collision
+
+// A collision region's height map shape data: the heights, NaN at holes (decision 0172: Jolt, Godot's 3D physics, has
+// no collision in a triangle with a NaN vertex).
+Dictionary FellowTerrain3D::_collision_region_data(int p_x0, int p_z0, int p_w, int p_d) const {
+	PackedFloat32Array h;
+	h.resize(p_w * p_d);
+	float *hw = h.ptrw();
+	float lo = 1e30f;
+	float hi = -1e30f;
+	const bool with_holes = hole_count > 0 && !holes.is_empty();
+	for (int z = 0; z < p_d; z++) {
+		for (int x = 0; x < p_w; x++) {
+			const int i = (p_z0 + z) * map_w + p_x0 + x;
+			if (with_holes && holes[i]) {
+				hw[z * p_w + x] = Math::NaN;
+				continue;
+			}
+			const float v = heights[i];
+			hw[z * p_w + x] = v;
+			lo = MIN(lo, v);
+			hi = MAX(hi, v);
+		}
+	}
+	if (lo > hi) {
+		lo = hi = 0.0f; // the whole region a hole
+	}
+	Dictionary data;
+	data["width"] = p_w;
+	data["depth"] = p_d;
+	data["heights"] = h;
+	data["min_height"] = lo;
+	data["max_height"] = hi;
+	return data;
+}
 
 void FellowTerrain3D::_free_collision() {
 	PhysicsServer3D *ps = PhysicsServer3D::get_singleton();
@@ -1081,27 +1277,8 @@ void FellowTerrain3D::_update_collision() {
 		for (int x0 = 0; x0 < map_w - 1; x0 += r) {
 			const int w = MIN(r, map_w - 1 - x0) + 1;
 			const int d = MIN(r, map_h - 1 - z0) + 1;
-			PackedFloat32Array h;
-			h.resize(w * d);
-			float *hw = h.ptrw();
-			float lo = 1e30f;
-			float hi = -1e30f;
-			for (int z = 0; z < d; z++) {
-				for (int x = 0; x < w; x++) {
-					const float v = heights[(z0 + z) * map_w + x0 + x];
-					hw[z * w + x] = v;
-					lo = MIN(lo, v);
-					hi = MAX(hi, v);
-				}
-			}
-			Dictionary data;
-			data["width"] = w;
-			data["depth"] = d;
-			data["heights"] = h;
-			data["min_height"] = lo;
-			data["max_height"] = hi;
 			RID shape = ps->heightmap_shape_create();
-			ps->shape_set_data(shape, data);
+			ps->shape_set_data(shape, _collision_region_data(x0, z0, w, d));
 			Transform3D xf;
 			xf.basis.scale(Vector3(vertex_spacing, 1.0f, vertex_spacing));
 			xf.origin = Vector3((x0 + (w - 1) * 0.5f) * vertex_spacing, 0.0f, (z0 + (d - 1) * 0.5f) * vertex_spacing);
@@ -1255,6 +1432,18 @@ void FellowTerrain3D::_copy_foliage_data(FoliageCell *p_cell) const {
 		for (int z = 0; z < r.size.y; z++) {
 			memcpy(c.heights.ptr() + z * r.size.x, heights.ptr() + (r.position.y + z) * map_w + r.position.x, sizeof(float) * r.size.x);
 		}
+		if (hole_count > 0 && !holes.is_empty()) {
+			// Decision 0172: a hole's vertex NaN, so that nothing is placed on a triangle touching it.
+			for (int z = 0; z < r.size.y; z++) {
+				const uint8_t *hr = holes.ptr() + (r.position.y + z) * map_w + r.position.x;
+				float *row = c.heights.ptr() + z * r.size.x;
+				for (int x = 0; x < r.size.x; x++) {
+					if (hr[x]) {
+						row[x] = Math::NaN;
+					}
+				}
+			}
+		}
 	}
 	for (int m = 0; m < 2; m++) {
 		c.splat_size[m] = splat_cpu_size[m];
@@ -1314,6 +1503,9 @@ void FellowTerrain3D::_generate_foliage_cell(void *p_cell) {
 			const float hr = _cell_height(*cell, MIN(ex, x + e), z);
 			const float hd = _cell_height(*cell, x, MAX(0.0f, z - e));
 			const float hu = _cell_height(*cell, x, MIN(ez, z + e));
+			if (Math::is_nan(y) || Math::is_nan(hl) || Math::is_nan(hr) || Math::is_nan(hd) || Math::is_nan(hu)) {
+				continue; // in a hole, or at its edge (decision 0172)
+			}
 			const Vector3 n = Vector3((hl - hr) / (2.0f * e), 1.0f, (hd - hu) / (2.0f * e)).normalized();
 			if (n.y > k.cos_slope_min + 1e-6f || n.y < k.cos_slope_max - 1e-6f || y < k.height_min || y > k.height_max) {
 				continue;
@@ -1375,12 +1567,24 @@ void FellowTerrain3D::_update_foliage_kinds() {
 			k.sink = f->get_sink();
 			k.shadows = f->is_casting_shadows();
 			k.seed = uint32_t(f->get_seed()) * 2654435761u + uint32_t(i) * 40503u + 17u;
+			k.fade = MIN(f->get_fade_distance(), k.range);
+			// The impostor (decision 0172) takes over from impostor_distance, per instance on the GPU: only with
+			// MultiMesh culling, which draws the instances within their ranges.
+			if (f->get_impostor().is_valid() && f->get_impostor_distance() > 0.0f && f->get_impostor_distance() < k.range && Fellow::multimesh_culling()) {
+				k.impostor = f->get_impostor()->get_rid();
+				k.impostor_distance = f->get_impostor_distance();
+			}
 			if (is_inside_tree()) {
 				RenderingServer *rs = RenderingServer::get_singleton();
-				const RID warm = rs->instance_create2(k.mesh, get_world_3d()->get_scenario());
-				rs->instance_geometry_set_cast_shadows_setting(warm, k.shadows ? RSE::SHADOW_CASTING_SETTING_ON : RSE::SHADOW_CASTING_SETTING_OFF);
-				rs->instance_set_visible(warm, false);
-				foliage_warm.push_back(warm);
+				for (const RID &m : { k.mesh, k.impostor }) {
+					if (m.is_null()) {
+						continue;
+					}
+					const RID warm = rs->instance_create2(m, get_world_3d()->get_scenario());
+					rs->instance_geometry_set_cast_shadows_setting(warm, k.shadows ? RSE::SHADOW_CASTING_SETTING_ON : RSE::SHADOW_CASTING_SETTING_OFF);
+					rs->instance_set_visible(warm, false);
+					foliage_warm.push_back(warm);
+				}
 			}
 		} else {
 			k.density = 0.0f; // no mesh: nothing to scatter
@@ -1401,6 +1605,13 @@ void FellowTerrain3D::_free_foliage_cell(FoliageCell *p_cell) {
 	}
 	if (p_cell->multimesh.is_valid()) {
 		rs->free_rid(p_cell->multimesh);
+	}
+	if (p_cell->impostor_instance.is_valid()) {
+		rs->free_rid(p_cell->impostor_instance);
+		foliage_impostor_instances -= p_cell->count;
+	}
+	if (p_cell->impostor_multimesh.is_valid()) {
+		rs->free_rid(p_cell->impostor_multimesh);
 	}
 	memdelete(p_cell);
 }
@@ -1429,6 +1640,7 @@ void FellowTerrain3D::_clear_foliage(bool p_wait) {
 	}
 	foliage_warm.clear();
 	foliage_instances = 0;
+	foliage_impostor_instances = 0;
 }
 
 void FellowTerrain3D::_make_foliage_cell_visible(FoliageCell *p_cell) {
@@ -1443,6 +1655,14 @@ void FellowTerrain3D::_make_foliage_cell_visible(FoliageCell *p_cell) {
 	rs->multimesh_set_mesh(p_cell->multimesh, k.mesh);
 	rs->multimesh_allocate_data(p_cell->multimesh, p_cell->count, RSE::MULTIMESH_TRANSFORM_3D, false, false);
 	rs->multimesh_set_buffer(p_cell->multimesh, p_cell->buffer);
+	const bool impostor = k.impostor.is_valid();
+	if (impostor) {
+		// The impostors' MultiMesh: the same instances, the impostor's quad (decision 0172).
+		p_cell->impostor_multimesh = rs->multimesh_create();
+		rs->multimesh_set_mesh(p_cell->impostor_multimesh, k.impostor);
+		rs->multimesh_allocate_data(p_cell->impostor_multimesh, p_cell->count, RSE::MULTIMESH_TRANSFORM_3D, false, false);
+		rs->multimesh_set_buffer(p_cell->impostor_multimesh, p_cell->buffer);
+	}
 	p_cell->buffer.clear();
 	p_cell->instance = rs->instance_create2(p_cell->multimesh, get_world_3d()->get_scenario());
 	rs->instance_set_transform(p_cell->instance, get_global_transform());
@@ -1450,8 +1670,30 @@ void FellowTerrain3D::_make_foliage_cell_visible(FoliageCell *p_cell) {
 	rs->instance_geometry_set_cast_shadows_setting(p_cell->instance, k.shadows ? RSE::SHADOW_CASTING_SETTING_ON : RSE::SHADOW_CASTING_SETTING_OFF);
 	rs->instance_set_layer_mask(p_cell->instance, render_layer_mask);
 	rs->instance_set_visible(p_cell->instance, is_visible_in_tree());
-	// Each instance drawn by the camera up to the kind's range (culled one by one on the GPU, decision 0122's range).
-	rs->fellow_instance_set_instance_range(p_cell->instance, 0.0f, k.range, false);
+	// Each instance drawn by the camera up to the kind's range (culled one by one on the GPU, decision 0122's range),
+	// shrinking out over its last fade_distance metres (decision 0172) — or up to the impostors, which draw from there.
+	rs->fellow_instance_set_instance_range(p_cell->instance, 0.0f, impostor ? k.impostor_distance : k.range, false);
+	if (k.fade > 0.0f && !impostor) {
+		rs->fellow_instance_set_instance_range_fade(p_cell->instance, k.fade);
+	}
+	if (impostor) {
+		p_cell->impostor_instance = rs->instance_create2(p_cell->impostor_multimesh, get_world_3d()->get_scenario());
+		rs->instance_set_transform(p_cell->impostor_instance, get_global_transform());
+		rs->instance_attach_object_instance_id(p_cell->impostor_instance, get_instance_id());
+		rs->instance_geometry_set_cast_shadows_setting(p_cell->impostor_instance, k.shadows ? RSE::SHADOW_CASTING_SETTING_ON : RSE::SHADOW_CASTING_SETTING_OFF);
+		rs->instance_set_layer_mask(p_cell->impostor_instance, render_layer_mask);
+		rs->instance_set_visible(p_cell->impostor_instance, is_visible_in_tree());
+		// The billboard's vertices stay in its box (the impostor's sphere).
+		rs->fellow_instance_set_instance_range(p_cell->impostor_instance, k.impostor_distance, k.range, true);
+		if (k.fade > 0.0f) {
+			rs->fellow_instance_set_instance_range_fade(p_cell->impostor_instance, k.fade);
+		}
+		// Their shadows per cascade, as an HLOD's: the meshes in the cascades starting before the distance, the
+		// impostors in those beyond it.
+		rs->fellow_instance_set_hlod(p_cell->instance, RenderingServer::FELLOW_HLOD_MEMBER, k.impostor_distance, 0.0f);
+		rs->fellow_instance_set_hlod(p_cell->impostor_instance, RenderingServer::FELLOW_HLOD_PROXY, k.impostor_distance, 0.0f);
+		foliage_impostor_instances += p_cell->count;
+	}
 	foliage_instances += p_cell->count;
 	Fellow::request_redraw();
 }
@@ -1794,6 +2036,13 @@ void FellowTerrain3D::_flush_edits() {
 	const uint64_t t0 = OS::get_singleton()->get_ticks_usec();
 	const Rect2i r = edit_heights;
 	edit_heights = Rect2i();
+	// Holes (decision 0172): their texture, and the collision over them (NaN heights).
+	const Rect2i hr = edit_holes;
+	edit_holes = Rect2i();
+	if (hr.size.x > 0 && hole_image.is_valid() && hole_texture.is_valid()) {
+		_upload_texture(hole_texture, hole_image, hr);
+	}
+	const Rect2i cr = hr.size.x > 0 ? (r.size.x > 0 ? r.merge(hr) : hr) : r;
 	for (int i = 0; i < 2; i++) {
 		if (edit_splat[i] && splat_image[i].is_valid()) {
 			_upload_texture(i == 0 ? splat_texture : splat_texture_2, splat_image[i], edit_splat_rect[i]);
@@ -1802,14 +2051,14 @@ void FellowTerrain3D::_flush_edits() {
 		edit_splat_rect[i] = Rect2i();
 	}
 	Fellow::request_redraw();
-	if (r.size.x <= 0 || map_w < 2) {
+	if (cr.size.x <= 0 || map_w < 2) {
 		edit_flush_usec = OS::get_singleton()->get_ticks_usec() - t0;
 		return;
 	}
-	if (height_image.is_valid() && height_texture.is_valid()) {
+	if (r.size.x > 0 && height_image.is_valid() && height_texture.is_valid()) {
 		_upload_texture(height_texture, height_image, r);
 	}
-	if (normal_image.is_valid() && normal_texture.is_valid()) {
+	if (r.size.x > 0 && normal_image.is_valid() && normal_texture.is_valid()) {
 		// The normals of the region's edge texels changed too (central differences).
 		_upload_texture(normal_texture, normal_image, r.grow(1));
 	}
@@ -1822,31 +2071,12 @@ void FellowTerrain3D::_flush_edits() {
 			for (int x0 = 0; x0 < map_w - 1; x0 += rs) {
 				const int w = MIN(rs, map_w - 1 - x0) + 1;
 				const int d = MIN(rs, map_h - 1 - z0) + 1;
-				if (!Rect2i(x0, z0, w, d).intersects(r)) {
+				if (!Rect2i(x0, z0, w, d).intersects(cr)) {
 					continue;
 				}
-				PackedFloat32Array h;
-				h.resize(w * d);
-				float *hp = h.ptrw();
-				float lo = 1e30f;
-				float hi = -1e30f;
-				for (int z = 0; z < d; z++) {
-					for (int x = 0; x < w; x++) {
-						const float v = heights[(z0 + z) * map_w + x0 + x];
-						hp[z * w + x] = v;
-						lo = MIN(lo, v);
-						hi = MAX(hi, v);
-					}
-				}
-				Dictionary data;
-				data["width"] = w;
-				data["depth"] = d;
-				data["heights"] = h;
-				data["min_height"] = lo;
-				data["max_height"] = hi;
 				const int index = (z0 / rs) * nx + x0 / rs;
 				if (index < int(shapes.size())) {
-					ps->shape_set_data(shapes[index], data);
+					ps->shape_set_data(shapes[index], _collision_region_data(x0, z0, w, d));
 				}
 			}
 		}
@@ -2096,6 +2326,274 @@ void FellowTerrain3D::blit_splat_region(int p_map, const Ref<Image> &p_region, c
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
+// Holes (decision 0172): a hole map marks vertices; a triangle with a marked vertex is neither drawn (the patches over
+// holes draw with a material that discards it) nor collides (its heights NaN), and nothing is scattered on it.
+
+void FellowTerrain3D::_build_holes() {
+	holes.clear();
+	hole_count = 0;
+	hole_image.unref();
+	hole_texture.unref();
+	if (hole_map.is_valid() && !hole_map->is_empty() && map_w >= 2 && map_h >= 2) {
+		Ref<Image> c = hole_map;
+		if (c->get_format() != Image::FORMAT_L8 || c->has_mipmaps() || c->get_size() != Vector2i(map_w, map_h)) {
+			c = hole_map->duplicate();
+			if (c->is_compressed()) {
+				c->decompress();
+			}
+			c->clear_mipmaps();
+			c->convert(Image::FORMAT_L8);
+			if (c->get_size() != Vector2i(map_w, map_h)) {
+				c->resize(map_w, map_h, Image::INTERPOLATE_NEAREST);
+			}
+		}
+		holes.resize(map_w * map_h);
+		Vector<uint8_t> data;
+		data.resize(map_w * map_h);
+		uint8_t *dw = data.ptrw();
+		const uint8_t *src = c->ptr();
+		for (int i = 0; i < map_w * map_h; i++) {
+			holes[i] = src[i] > 127 ? 1 : 0;
+			dw[i] = holes[i] ? 255 : 0;
+			hole_count += holes[i];
+		}
+		hole_image = Image::create_from_data(map_w, map_h, false, Image::FORMAT_R8, data);
+		hole_texture = ImageTexture::create_from_image(hole_image);
+	}
+	_build_hole_blocks();
+}
+
+void FellowTerrain3D::_build_hole_blocks() {
+	hole_blocks.clear();
+	if (holes.is_empty() || minmax_size.is_empty()) {
+		return;
+	}
+	hole_blocks.resize(minmax_size.size());
+	for (uint32_t k = 0; k < minmax_size.size(); k++) {
+		hole_blocks[k].resize(minmax_size[k].x * minmax_size[k].y);
+		memset(hole_blocks[k].ptr(), 0, hole_blocks[k].size());
+	}
+	_update_hole_blocks(Rect2i(0, 0, map_w, map_h));
+}
+
+void FellowTerrain3D::_update_hole_blocks(const Rect2i &p_rect) {
+	if (hole_blocks.is_empty() || holes.is_empty()) {
+		return;
+	}
+	// Level 0: the blocks whose vertices (their edges' too: their triangles touch them) are in the region.
+	const Rect2i r = p_rect.intersection(Rect2i(0, 0, map_w, map_h));
+	if (r.size.x <= 0 || r.size.y <= 0) {
+		return;
+	}
+	const int p = patch_size;
+	const Vector2i s0 = minmax_size[0];
+	Vector2i b0(MAX(0, (r.position.x - 1) / p), MAX(0, (r.position.y - 1) / p));
+	Vector2i b1(MIN(s0.x - 1, (r.position.x + r.size.x) / p), MIN(s0.y - 1, (r.position.y + r.size.y) / p));
+	for (int bz = b0.y; bz <= b1.y; bz++) {
+		for (int bx = b0.x; bx <= b1.x; bx++) {
+			uint8_t any = 0;
+			const int x1 = MIN(map_w - 1, (bx + 1) * p);
+			const int z1 = MIN(map_h - 1, (bz + 1) * p);
+			for (int z = bz * p; z <= z1 && !any; z++) {
+				const uint8_t *row = holes.ptr() + z * map_w;
+				for (int x = bx * p; x <= x1; x++) {
+					if (row[x]) {
+						any = 1;
+						break;
+					}
+				}
+			}
+			hole_blocks[0][bz * s0.x + bx] = any;
+		}
+	}
+	for (uint32_t k = 1; k < hole_blocks.size(); k++) {
+		b0 = Vector2i(b0.x / 2, b0.y / 2);
+		b1 = Vector2i(b1.x / 2, b1.y / 2);
+		const Vector2i ps = minmax_size[k - 1];
+		const Vector2i s = minmax_size[k];
+		for (int z = b0.y; z <= MIN(b1.y, s.y - 1); z++) {
+			for (int x = b0.x; x <= MIN(b1.x, s.x - 1); x++) {
+				uint8_t any = 0;
+				for (int d = 0; d < 4; d++) {
+					const int sx = x * 2 + (d & 1);
+					const int sz = z * 2 + (d >> 1);
+					if (sx < ps.x && sz < ps.y) {
+						any |= hole_blocks[k - 1][sz * ps.x + sx];
+					}
+				}
+				hole_blocks[k][z * s.x + x] = any;
+			}
+		}
+	}
+}
+
+bool FellowTerrain3D::_patch_has_holes(const Patch &p_patch) const {
+	if (hole_count <= 0) {
+		return false;
+	}
+	// A patch of level L is a block of level L (patch_size << L texels); beyond the blocks known, drawn with holes.
+	if (p_patch.level < 0 || p_patch.level >= int(hole_blocks.size())) {
+		return true;
+	}
+	const Vector2i s = minmax_size[p_patch.level];
+	if (p_patch.x < 0 || p_patch.z < 0 || p_patch.x >= s.x || p_patch.z >= s.y) {
+		return true;
+	}
+	return hole_blocks[p_patch.level][p_patch.z * s.x + p_patch.x] != 0;
+}
+
+bool FellowTerrain3D::_is_hole_triangle(float p_fx, float p_fz) const {
+	if (hole_count <= 0 || holes.is_empty()) {
+		return false;
+	}
+	const int x = CLAMP(int(p_fx), 0, map_w - 2);
+	const int z = CLAMP(int(p_fz), 0, map_h - 2);
+	const uint8_t *h = holes.ptr();
+	// The two triangles of a cell share the diagonal from (x + 1, z) to (x, z + 1).
+	if (h[z * map_w + x + 1] || h[(z + 1) * map_w + x]) {
+		return true;
+	}
+	return (p_fx - x) + (p_fz - z) <= 1.0f ? h[z * map_w + x] != 0 : h[(z + 1) * map_w + x + 1] != 0;
+}
+
+bool FellowTerrain3D::_make_hole_map_editable() {
+	// An L8 image at the heights' size, without mipmaps (made, or converted): true when it was replaced.
+	if (hole_map.is_null() || hole_map->is_empty()) {
+		hole_map = Image::create_empty(map_w, map_h, false, Image::FORMAT_L8);
+		hole_map->fill(Color(0, 0, 0));
+		return true;
+	}
+	if (hole_map->get_format() != Image::FORMAT_L8 || hole_map->has_mipmaps() || hole_map->get_size() != Vector2i(map_w, map_h)) {
+		Ref<Image> c = hole_map->duplicate();
+		if (c->is_compressed()) {
+			c->decompress();
+		}
+		c->clear_mipmaps();
+		c->convert(Image::FORMAT_L8);
+		if (c->get_size() != Vector2i(map_w, map_h)) {
+			c->resize(map_w, map_h, Image::INTERPOLATE_NEAREST);
+		}
+		hole_map = c;
+		return true;
+	}
+	return false;
+}
+
+void FellowTerrain3D::_update_holes_region(const Rect2i &p_rect) {
+	const Rect2i r = p_rect.intersection(Rect2i(0, 0, map_w, map_h));
+	if (r.size.x <= 0 || r.size.y <= 0 || hole_map.is_null() || holes.is_empty() || hole_image.is_null()) {
+		return;
+	}
+	const uint8_t *src = hole_map->ptr();
+	uint8_t *img = hole_image->ptrw();
+	for (int z = r.position.y; z < r.position.y + r.size.y; z++) {
+		for (int x = r.position.x; x < r.position.x + r.size.x; x++) {
+			const int i = z * map_w + x;
+			const uint8_t v = src[i] > 127 ? 1 : 0;
+			hole_count += int(v) - int(holes[i]);
+			holes[i] = v;
+			img[i] = v ? 255 : 0;
+		}
+	}
+	_update_hole_blocks(r);
+	edit_holes = edit_holes.size.x > 0 ? edit_holes.merge(r) : r;
+	_holes_changed(r, false);
+}
+
+void FellowTerrain3D::_holes_changed(const Rect2i &p_rect, bool p_rebuilt) {
+	if (p_rebuilt && is_inside_tree()) {
+		// The first hole map (or one converted): its texture, material and the patches' MultiMeshes made.
+		_create_hole_instances();
+		material_dirty = true;
+		edit_holes = Rect2i(); // the texture is new
+	}
+	// The triangles around the region's vertices: their foliage scattered again, their collision made again.
+	const Rect2i g = p_rect.grow(1).intersection(Rect2i(0, 0, map_w, map_h));
+	_drop_foliage_in(Rect2(Vector2(g.position) * vertex_spacing, Vector2(g.size) * vertex_spacing));
+	edit_heights = edit_heights.size.x > 0 ? edit_heights.merge(g) : g;
+	if (set.shown >= 0) {
+		set.patches[set.shown].clear(); // split again
+	}
+	set.selection_valid = false;
+	_queue_edit_flush();
+}
+
+void FellowTerrain3D::paint_holes(const Vector3 &p_global, float p_radius, bool p_hole) {
+	_ensure_data();
+	if (map_w < 2) {
+		return;
+	}
+	const bool rebuilt = _make_hole_map_editable();
+	Vector2 c;
+	float rr = 0.0f;
+	const Rect2i r = _brush_texels(p_global, p_radius, c, rr);
+	if (r.size.x <= 0 || r.size.y <= 0) {
+		if (rebuilt) {
+			_build_holes();
+			_holes_changed(Rect2i(), true);
+		}
+		return;
+	}
+	uint8_t *w = hole_map->ptrw();
+	const uint8_t v = p_hole ? 255 : 0;
+	for (int z = r.position.y; z < r.position.y + r.size.y; z++) {
+		for (int x = r.position.x; x < r.position.x + r.size.x; x++) {
+			if (Vector2(x, z).distance_to(c) <= rr) {
+				w[z * map_w + x] = v;
+			}
+		}
+	}
+	if (rebuilt || holes.is_empty()) {
+		_build_holes();
+		_holes_changed(r, true);
+	} else {
+		_update_holes_region(r);
+	}
+}
+
+void FellowTerrain3D::blit_hole_region(const Ref<Image> &p_region, const Vector2i &p_position) {
+	ERR_FAIL_COND(p_region.is_null() || p_region->is_empty());
+	_ensure_data();
+	ERR_FAIL_COND_MSG(map_w < 2, "The terrain has no heightmap for holes.");
+	const bool rebuilt = _make_hole_map_editable();
+	Ref<Image> src = p_region;
+	if (src->get_format() != Image::FORMAT_L8 || src->has_mipmaps()) {
+		src = p_region->duplicate();
+		if (src->is_compressed()) {
+			src->decompress();
+		}
+		src->clear_mipmaps();
+		src->convert(Image::FORMAT_L8);
+	}
+	const Rect2i r = Rect2i(p_position, src->get_size()).intersection(Rect2i(0, 0, map_w, map_h));
+	if (r.size.x > 0 && r.size.y > 0) {
+		const uint8_t *sp = src->ptr();
+		uint8_t *dp = hole_map->ptrw();
+		for (int z = r.position.y; z < r.position.y + r.size.y; z++) {
+			memcpy(dp + z * map_w + r.position.x, sp + (z - p_position.y) * src->get_width() + (r.position.x - p_position.x), r.size.x);
+		}
+	}
+	if (rebuilt || holes.is_empty()) {
+		_build_holes();
+		_holes_changed(r, true);
+	} else {
+		_update_holes_region(r);
+	}
+}
+
+bool FellowTerrain3D::is_hole(const Vector3 &p_global) const {
+	_ensure_data();
+	const Transform3D xf = is_inside_tree() ? get_global_transform() : get_transform();
+	const Vector3 l = xf.affine_inverse().xform(p_global);
+	const float fx = l.x / vertex_spacing;
+	const float fz = l.z / vertex_spacing;
+	if (map_w < 2 || fx < 0.0f || fz < 0.0f || fx > float(map_w - 1) || fz > float(map_h - 1)) {
+		return false;
+	}
+	return _is_hole_triangle(fx, fz);
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
 // Queries
 
 float FellowTerrain3D::_height_local(float p_x, float p_z) const {
@@ -2103,6 +2601,9 @@ float FellowTerrain3D::_height_local(float p_x, float p_z) const {
 	const float fz = p_z / vertex_spacing;
 	if (map_w < 2 || fx < 0.0f || fz < 0.0f || fx > float(map_w - 1) || fz > float(map_h - 1)) {
 		return Math::NaN;
+	}
+	if (hole_count > 0 && _is_hole_triangle(fx, fz)) {
+		return Math::NaN; // decision 0172: no ground in a hole
 	}
 	const int x = MIN(int(fx), map_w - 2);
 	const int z = MIN(int(fz), map_h - 2);
@@ -2209,6 +2710,9 @@ Dictionary FellowTerrain3D::get_stats() const {
 	d["edit_flush_usec"] = int64_t(edit_flush_usec);
 	d["foliage_cells"] = int(foliage_cells.size());
 	d["foliage_instances"] = foliage_instances;
+	d["foliage_impostor_instances"] = foliage_impostor_instances;
+	d["hole_vertices"] = hole_count;
+	d["hole_patches"] = set.shown >= 0 ? set.hole_patches[set.shown] : 0;
 	d["map_size"] = Vector2i(map_w, map_h);
 	PackedInt32Array per_level;
 	per_level.resize(top_level + 1);
@@ -2231,6 +2735,71 @@ void FellowTerrain3D::update_heightmap() {
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
+// Foliage impostors baked into resources (decision 0172): each kind with an impostor distance rendered from N x N
+// directions (FellowImpostorBaker, in this terrain's world, one view a frame), saved as a quad mesh with its material
+// and atlases (lossless) under p_directory, and set as the kind's impostor.
+
+int FellowTerrain3D::bake_foliage_impostors(const String &p_directory, int p_frames, int p_resolution) {
+	ERR_FAIL_COND_V_MSG(!is_inside_tree(), 0, "The terrain must be in the scene tree to bake its foliage's impostors (they are rendered in viewports).");
+	ERR_FAIL_COND_V_MSG(impostor_bakes_pending > 0, 0, "The foliage's impostors are being baked already.");
+	ERR_FAIL_COND_V_MSG(RenderingServer::get_singleton()->get_rendering_device() == nullptr, 0, "Baking impostors needs the Forward+ or Mobile renderer.");
+	ERR_FAIL_COND_V(p_directory.is_empty(), 0);
+	{
+		Ref<DirAccess> da = DirAccess::create_for_path(p_directory);
+		if (da.is_valid() && !da->dir_exists(p_directory)) {
+			da->make_dir_recursive(p_directory);
+		}
+	}
+	if (!impostor_baker) {
+		impostor_baker = memnew(FellowImpostorBaker);
+		impostor_baker->set_name("ImpostorBaker");
+		add_child(impostor_baker, false, INTERNAL_MODE_BACK);
+	}
+	impostor_bake_paths.clear();
+	int queued = 0;
+	for (int i = 0; i < foliage.size(); i++) {
+		Ref<FellowTerrainFoliage> f = foliage[i];
+		if (f.is_null() || f->get_mesh().is_null() || f->get_impostor_distance() <= 0.0f) {
+			continue;
+		}
+		String base = f->get_mesh()->get_path().get_file().get_basename();
+		if (base.contains("::") || base.is_empty()) {
+			base = f->get_mesh()->get_name();
+		}
+		const String name = vformat("%s_foliage_%d%s_impostor.res", String(get_name()).validate_filename(), i, base.is_empty() ? String() : "_" + base.validate_filename());
+		queued++;
+		impostor_bakes_pending++;
+		impostor_baker->queue_bake(f->get_mesh(), Ref<Material>(), p_frames, p_resolution, callable_mp(this, &FellowTerrain3D::_foliage_impostor_baked).bind(i, p_directory.path_join(name)), true);
+	}
+	if (queued == 0) {
+		WARN_PRINT("FellowTerrain3D: no foliage kind has a mesh and an impostor distance; nothing to bake.");
+	}
+	return queued;
+}
+
+void FellowTerrain3D::_foliage_impostor_baked(const Ref<ArrayMesh> &p_quad, int p_kind, const String &p_path) {
+	impostor_bakes_pending = MAX(0, impostor_bakes_pending - 1);
+	if (p_quad.is_valid()) {
+		const Error err = ResourceSaver::save(p_quad, p_path, ResourceSaver::FLAG_CHANGE_PATH);
+		if (err == OK) {
+			impostor_bake_paths.push_back(p_path);
+			if (p_kind < foliage.size()) {
+				Ref<FellowTerrainFoliage> f = foliage[p_kind];
+				if (f.is_valid()) {
+					f->set_impostor(p_quad);
+				}
+			}
+		} else {
+			ERR_PRINT(vformat("FellowTerrain3D: could not save the impostor \"%s\" (error %d).", p_path, int(err)));
+		}
+	}
+	if (impostor_bakes_pending == 0) {
+		emit_signal(SNAME("foliage_impostors_baked"), impostor_bake_paths);
+		update_configuration_warnings();
+	}
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
 // Properties
 
 void FellowTerrain3D::set_heightmap(const Ref<Image> &p_image) {
@@ -2247,6 +2816,12 @@ void FellowTerrain3D::set_splat_map(const Ref<Image> &p_image) {
 void FellowTerrain3D::set_splat_map_2(const Ref<Image> &p_image) {
 	splat_map_2 = p_image;
 	update_heightmap();
+}
+
+void FellowTerrain3D::set_hole_map(const Ref<Image> &p_image) {
+	hole_map = p_image;
+	update_heightmap();
+	update_configuration_warnings();
 }
 
 void FellowTerrain3D::set_layers(const TypedArray<FellowTerrainLayer> &p_layers) {
@@ -2298,23 +2873,17 @@ void FellowTerrain3D::set_morph_ratio(float p_ratio) {
 
 void FellowTerrain3D::set_height_blend(float p_blend) {
 	height_blend = MAX(0.0f, p_blend);
-	if (material.is_valid()) {
-		material->set_shader_parameter("height_blend", height_blend);
-	}
+	_set_material_parameter("height_blend", height_blend);
 }
 
 void FellowTerrain3D::set_macro_variation(float p_variation) {
 	macro_variation = CLAMP(p_variation, 0.0f, 1.0f);
-	if (material.is_valid()) {
-		material->set_shader_parameter("macro_variation", macro_variation);
-	}
+	_set_material_parameter("macro_variation", macro_variation);
 }
 
 void FellowTerrain3D::set_debug_view(DebugView p_view) {
 	debug_view = p_view;
-	if (material.is_valid()) {
-		material->set_shader_parameter("debug_view", int(debug_view));
-	}
+	_set_material_parameter("debug_view", int(debug_view));
 }
 
 void FellowTerrain3D::set_cast_shadows(bool p_enable) {
@@ -2365,6 +2934,22 @@ PackedStringArray FellowTerrain3D::get_configuration_warnings() const {
 	if (layers.size() > MAX_LAYERS) {
 		warnings.push_back(vformat(RTR("Only the first %d layers are used."), MAX_LAYERS));
 	}
+	if (hole_map.is_valid() && !hole_map->is_empty() && heightmap.is_valid() && !heightmap->is_empty() && hole_map->get_size() != heightmap->get_size()) {
+		warnings.push_back(RTR("The hole map is not the heightmap's size: it is stretched over it (nearest texel)."));
+	}
+	for (int i = 0; i < foliage.size(); i++) {
+		Ref<FellowTerrainFoliage> f = foliage[i];
+		if (f.is_null() || f->get_impostor_distance() <= 0.0f) {
+			continue;
+		}
+		if (f->get_impostor().is_null()) {
+			warnings.push_back(vformat(RTR("Foliage kind %d has an impostor distance but no impostor: bake them (the terrain's Bake Impostors button, or bake_foliage_impostors()). Until then its meshes are drawn up to its range."), i));
+		} else if (f->get_impostor_distance() >= f->get_range()) {
+			warnings.push_back(vformat(RTR("Foliage kind %d's impostor distance is beyond its range: the impostor is never drawn."), i));
+		} else if (!Fellow::multimesh_culling()) {
+			warnings.push_back(vformat(RTR("Foliage kind %d's impostor needs rendering/fellow/geometry/multimesh_culling (the instances' ranges are drawn on the GPU); without it the meshes are drawn up to the range."), i));
+		}
+	}
 	return warnings;
 }
 
@@ -2413,6 +2998,7 @@ void FellowTerrain3D::_notification(int p_what) {
 
 void FellowTerrain3D::fellow_bake_shader_codes(Vector<String> &r_codes) {
 	r_codes.push_back(_terrain_shader_code());
+	r_codes.push_back(_terrain_shader_code(true)); // the patches over holes (decision 0172)
 }
 
 void FellowTerrain3D::_bind_methods() {
@@ -2422,6 +3008,8 @@ void FellowTerrain3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_splat_map"), &FellowTerrain3D::get_splat_map);
 	ClassDB::bind_method(D_METHOD("set_splat_map_2", "image"), &FellowTerrain3D::set_splat_map_2);
 	ClassDB::bind_method(D_METHOD("get_splat_map_2"), &FellowTerrain3D::get_splat_map_2);
+	ClassDB::bind_method(D_METHOD("set_hole_map", "image"), &FellowTerrain3D::set_hole_map);
+	ClassDB::bind_method(D_METHOD("get_hole_map"), &FellowTerrain3D::get_hole_map);
 	ClassDB::bind_method(D_METHOD("set_layers", "layers"), &FellowTerrain3D::set_layers);
 	ClassDB::bind_method(D_METHOD("get_layers"), &FellowTerrain3D::get_layers);
 	ClassDB::bind_method(D_METHOD("set_vertex_spacing", "metres"), &FellowTerrain3D::set_vertex_spacing);
@@ -2461,6 +3049,11 @@ void FellowTerrain3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("paint", "global_position", "radius", "layer", "strength"), &FellowTerrain3D::paint);
 	ClassDB::bind_method(D_METHOD("blit_heightmap_region", "region", "position"), &FellowTerrain3D::blit_heightmap_region);
 	ClassDB::bind_method(D_METHOD("blit_splat_region", "map", "region", "position"), &FellowTerrain3D::blit_splat_region);
+	ClassDB::bind_method(D_METHOD("paint_holes", "global_position", "radius", "hole"), &FellowTerrain3D::paint_holes);
+	ClassDB::bind_method(D_METHOD("blit_hole_region", "region", "position"), &FellowTerrain3D::blit_hole_region);
+	ClassDB::bind_method(D_METHOD("is_hole", "global_position"), &FellowTerrain3D::is_hole);
+	ClassDB::bind_method(D_METHOD("bake_foliage_impostors", "directory", "frames", "resolution"), &FellowTerrain3D::bake_foliage_impostors, DEFVAL(8), DEFVAL(128));
+	ClassDB::bind_method(D_METHOD("is_baking_impostors"), &FellowTerrain3D::is_baking_impostors);
 	ClassDB::bind_method(D_METHOD("get_height", "global_position"), &FellowTerrain3D::get_height);
 	ClassDB::bind_method(D_METHOD("get_normal", "global_position"), &FellowTerrain3D::get_normal);
 	ClassDB::bind_method(D_METHOD("get_layer_weights", "global_position"), &FellowTerrain3D::get_layer_weights);
@@ -2474,6 +3067,7 @@ void FellowTerrain3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "vertex_spacing", PROPERTY_HINT_RANGE, "0.01,16,0.01,or_greater,suffix:m"), "set_vertex_spacing", "get_vertex_spacing");
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "splat_map", PROPERTY_HINT_RESOURCE_TYPE, "Image"), "set_splat_map", "get_splat_map");
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "splat_map_2", PROPERTY_HINT_RESOURCE_TYPE, "Image"), "set_splat_map_2", "get_splat_map_2");
+	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "hole_map", PROPERTY_HINT_RESOURCE_TYPE, "Image"), "set_hole_map", "get_hole_map");
 	ADD_PROPERTY(PropertyInfo(Variant::ARRAY, "layers", PROPERTY_HINT_ARRAY_TYPE, MAKE_RESOURCE_TYPE_HINT("FellowTerrainLayer")), "set_layers", "get_layers");
 	ADD_GROUP("Material", "");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "height_blend", PROPERTY_HINT_RANGE, "0,2,0.01"), "set_height_blend", "get_height_blend");
@@ -2494,6 +3088,8 @@ void FellowTerrain3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "collision_layer", PROPERTY_HINT_LAYERS_3D_PHYSICS), "set_collision_layer", "get_collision_layer");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "collision_mask", PROPERTY_HINT_LAYERS_3D_PHYSICS), "set_collision_mask", "get_collision_mask");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "collision_region_size", PROPERTY_HINT_RANGE, "16,4096,1,suffix:cells"), "set_collision_region_size", "get_collision_region_size");
+
+	ADD_SIGNAL(MethodInfo("foliage_impostors_baked", PropertyInfo(Variant::PACKED_STRING_ARRAY, "paths")));
 
 	BIND_ENUM_CONSTANT(SCULPT_RAISE);
 	BIND_ENUM_CONSTANT(SCULPT_LOWER);

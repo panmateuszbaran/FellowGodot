@@ -21,11 +21,20 @@
 		<member name="density" type="float" setter="set_density" getter="get_density" default="1.0">
 			Instances per square metre where the layer's weight is 1 (and the slope and height allow).
 		</member>
+		<member name="fade_distance" type="float" setter="set_fade_distance" getter="get_fade_distance" default="0.0">
+			Over the last [member fade_distance] metres before [member range], the instances shrink about their origin to nothing instead of disappearing at the range (decision 0172; FellowEngine's MultiMesh culling scales each instance by its distance on the GPU, the meshes and materials unchanged). 0: they stop at the range, as before. With an [member impostor], its instances fade.
+		</member>
 		<member name="height_max" type="float" setter="set_height_max" getter="get_height_max" default="100000.0">
 			The highest ground (the terrain's local height) the kind grows on.
 		</member>
 		<member name="height_min" type="float" setter="set_height_min" getter="get_height_min" default="-100000.0">
 			The lowest ground (the terrain's local height) the kind grows on.
+		</member>
+		<member name="impostor" type="Mesh" setter="set_impostor" getter="get_impostor">
+			A baked impostor of [member mesh] ([method FellowTerrain3D.bake_foliage_impostors]: a camera-facing quad blending the nearest of the mesh's views over the sphere), drawn instead of the mesh from [member impostor_distance] to [member range] (decision 0172): the instances' meshes up to the distance, their impostors from it, each instance on the GPU; in the shadows the meshes in the directional cascades starting before the distance, the impostors in the others. Needs FellowEngine's MultiMesh culling ([member ProjectSettings.rendering/fellow/geometry/multimesh_culling]); without it the meshes are drawn up to the range.
+		</member>
+		<member name="impostor_distance" type="float" setter="set_impostor_distance" getter="get_impostor_distance" default="0.0">
+			The distance from which [member impostor] is drawn instead of [member mesh] (0: never). [method FellowTerrain3D.bake_foliage_impostors] bakes the kinds with a distance.
 		</member>
 		<member name="layer" type="int" setter="set_layer" getter="get_layer" default="0">
 			The terrain layer (0 to 8) whose weight gives the kind's density.

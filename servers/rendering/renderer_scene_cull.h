@@ -437,6 +437,7 @@ public:
 		float fellow_range_begin = 0.0f; // a MultiMesh: the camera's per-instance range (fellow_instance_set_instance_range)
 		float fellow_range_end = 0.0f;
 		bool fellow_vertices_bounded = false;
+		float fellow_range_fade = 0.0f; // fellow_instance_set_instance_range_fade (decision 0172)
 
 		Vector<RID> materials;
 
@@ -1141,6 +1142,7 @@ public:
 	uint32_t fellow_stream_instance_index = 0;
 	virtual void fellow_texture_streaming_update(); // no `override`: the class has none (clang's -Winconsistent-missing-override)
 	virtual void fellow_instance_set_instance_range(RID p_instance, float p_begin, float p_end, bool p_vertices_bounded);
+	virtual void fellow_instance_set_instance_range_fade(RID p_instance, float p_fade);
 
 	bool _update_instance_visibility_depth(Instance *p_instance);
 	void _update_instance_visibility_dependencies(Instance *p_instance) const;

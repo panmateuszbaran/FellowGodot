@@ -774,6 +774,8 @@ public:
 	// p_vertices_bounded: its material moves vertices but never out of the mesh's box (an impostor's billboard), so it
 	// can be culled. Not bound.
 	virtual void fellow_instance_set_instance_range(RID p_instance, float p_begin, float p_end, bool p_vertices_bounded) {}
+	// Decision 0172: a MultiMesh's instances shrink to nothing over this distance before its range's end (0: they stop).
+	virtual void fellow_instance_set_instance_range_fade(RID p_instance, float p_fade) {}
 
 	// Don't use these in a game!
 	virtual Vector<ObjectID> instances_cull_aabb(const AABB &p_aabb, RID p_scenario = RID()) const = 0;

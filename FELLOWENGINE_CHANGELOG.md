@@ -9,6 +9,23 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 64 — the terrain's holes, foliage fading out, tree impostors in files (2026-11-10)
+
+- Holes in `FellowTerrain3D` (decision 0172): `hole_map` (an image of the heightmap's size, a texel above half marks a
+  vertex). A triangle touching a marked vertex is not drawn — the patches over holes are drawn with a second material
+  that discards it, the rest of the terrain keeps its material and early depth test — does not collide (NaN heights in
+  the height map shapes; Godot Physics and Jolt) and has no foliage; `get_height()` is NaN there, `is_hole()`.
+  `paint_holes()` and `blit_hole_region()` update only their region; the editor's terrain toolbar has a Holes tool
+  (Shift fills, undo). Lavapipe: a ball over a hole falls through, one beside it rests; no crack.
+- `FellowTerrainFoliage.fade_distance`: plants shrink into the ground over their range's last metres instead of popping
+  out — each instance scaled by the GPU's MultiMesh culling (`fellow_instance_set_instance_range_fade()`), meshes and
+  materials unchanged. 0 (the default): as before.
+- Tree impostors baked into files: `FellowTerrainFoliage.impostor` and `impostor_distance` — the meshes to the distance,
+  the impostors from it, per instance on the GPU, the shadows per directional cascade;
+  `FellowTerrain3D.bake_foliage_impostors()` (and the toolbar's Bake Impostors) renders decision 0122's octahedral
+  impostors and saves them as `.res` with lossless atlases. Lavapipe: 323 trees to 400 m, 78.9 → 49.2 ms a frame.
+- The regression suite's `terrain_holes` scene; `bench/terrain_holes_check.gd`.
+
 ## Milestone 63 — recorded pipelines, the burning material baked (2026-11-10)
 
 - Recorded pipelines (decision 0171, `rendering/fellow/pipelines/record`, `replay`, `path`): a run with `record` on

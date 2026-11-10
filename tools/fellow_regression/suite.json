@@ -24,6 +24,7 @@
     "geometry",
     "instances",
     "terrain",
+    "terrain_holes",
     "crowd"
    ]
   },

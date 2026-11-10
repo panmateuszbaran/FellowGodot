@@ -35,6 +35,7 @@
 #include "editor/editor_node.h"
 #include "editor/editor_string_names.h"
 #include "editor/editor_undo_redo_manager.h"
+#include "editor/file_system/editor_file_system.h"
 #include "editor/gui/editor_spin_slider.h"
 #include "editor/scene/3d/node_3d_editor_plugin.h"
 #include "editor/themes/editor_scale.h"
@@ -51,15 +52,28 @@ static constexpr int SCULPT_LOWER = 1;
 static constexpr int SCULPT_SMOOTH = 2;
 static constexpr int SCULPT_FLATTEN = 3;
 
-static const char *_tool_names[FellowTerrainEditorPlugin::TOOL_MAX] = { "Raise", "Lower", "Smooth", "Flatten", "Paint" };
+static const char *_tool_names[FellowTerrainEditorPlugin::TOOL_MAX] = { "Raise", "Lower", "Smooth", "Flatten", "Paint", "Holes" };
 static const char *_tool_tips[FellowTerrainEditorPlugin::TOOL_MAX] = {
 	"Raise the ground (Shift: lower).",
 	"Lower the ground (Shift: raise).",
 	"Smooth the ground.",
 	"Flatten the ground to the height where the stroke starts.",
 	"Paint the selected layer.",
+	"Cut holes in the ground: not drawn, no collision, no foliage (Shift: fill them).",
 };
-static const char *_tool_icons[FellowTerrainEditorPlugin::TOOL_MAX] = { "ArrowUp", "ArrowDown", "Blend", "MoveDown", "Paint" };
+static const char *_tool_icons[FellowTerrainEditorPlugin::TOOL_MAX] = { "ArrowUp", "ArrowDown", "Blend", "MoveDown", "Paint", "Close" };
+static const char *_image_props[4] = { "heightmap", "splat_map", "splat_map_2", "hole_map" };
+
+// The images a tool changes: the heightmap (sculpting), the splat maps (painting) or the hole map.
+static bool _tool_uses_image(int p_tool, int p_image) {
+	if (p_tool == FellowTerrainEditorPlugin::TOOL_PAINT) {
+		return p_image == 1 || p_image == 2;
+	}
+	if (p_tool == FellowTerrainEditorPlugin::TOOL_HOLE) {
+		return p_image == 3;
+	}
+	return p_image == 0;
+}
 
 Node3D *FellowTerrainEditorPlugin::_terrain() const {
 	Node3D *t = ObjectDB::get_instance<Node3D>(terrain_id);
@@ -135,6 +149,8 @@ Color FellowTerrainEditorPlugin::_brush_color() const {
 			return Color(1.0, 0.9, 0.3);
 		case TOOL_PAINT:
 			return Color(1.0, 0.4, 1.0);
+		case TOOL_HOLE:
+			return Color(1.0, 0.25, 0.25);
 	}
 	return Color(1, 1, 1);
 }
@@ -162,6 +178,9 @@ void FellowTerrainEditorPlugin::_dab(const Vector3 &p_position) {
 		case TOOL_PAINT:
 			t->call("paint", p_position, radius, layer_option->get_selected_id(), strength * 0.5f);
 			break;
+		case TOOL_HOLE:
+			t->call("paint_holes", p_position, radius, !stroke_inverted);
+			break;
 		default:
 			return;
 	}
@@ -183,11 +202,10 @@ void FellowTerrainEditorPlugin::_begin_stroke(const Vector3 &p_position, bool p_
 	stroking = true;
 	stroke_inverted = p_inverted;
 	touched = Rect2i();
-	static const char *props[3] = { "heightmap", "splat_map", "splat_map_2" };
-	for (int i = 0; i < 3; i++) {
+	for (int i = 0; i < 4; i++) {
 		// Only the images this tool changes.
-		const bool used = tool == TOOL_PAINT ? i > 0 : i == 0;
-		Ref<Image> img = t->get(props[i]);
+		const bool used = _tool_uses_image(tool, i);
+		Ref<Image> img = t->get(_image_props[i]);
 		before[i] = used && img.is_valid() ? Ref<Image>(img->duplicate()) : Ref<Image>();
 		// The object itself, to tell an image the terrain replaced (made editable, or made) from one it changed.
 		before_object[i] = img;
@@ -204,36 +222,34 @@ void FellowTerrainEditorPlugin::_end_stroke() {
 	stroking = false;
 	Node3D *t = _terrain();
 	if (!t || touched.size.x <= 0) {
-		for (int i = 0; i < 3; i++) {
+		for (int i = 0; i < 4; i++) {
 			before[i].unref();
 			before_object[i].unref();
 		}
 		return;
 	}
-	static const char *props[3] = { "heightmap", "splat_map", "splat_map_2" };
 	EditorUndoRedoManager *ur = get_undo_redo();
-	ur->create_action(tool == TOOL_PAINT ? TTR("Paint Terrain") : TTR("Sculpt Terrain"), UndoRedo::MERGE_DISABLE, t);
+	ur->create_action(tool == TOOL_PAINT ? TTR("Paint Terrain") : (tool == TOOL_HOLE ? TTR("Cut Terrain Holes") : TTR("Sculpt Terrain")), UndoRedo::MERGE_DISABLE, t);
 	Ref<Image> hm = t->get("heightmap");
 	const Vector2i map = hm.is_valid() ? hm->get_size() : Vector2i(1, 1);
-	for (int i = 0; i < 3; i++) {
-		const bool used = tool == TOOL_PAINT ? i > 0 : i == 0;
-		if (!used) {
+	for (int i = 0; i < 4; i++) {
+		if (!_tool_uses_image(tool, i)) {
 			continue;
 		}
 		Ref<Image> was = before_object[i];
-		Ref<Image> now = t->get(props[i]);
+		Ref<Image> now = t->get(_image_props[i]);
 		if (now.is_null()) {
 			continue;
 		}
 		if (was != now) {
 			// The terrain replaced the image (its first edit): the property, both ways (a rebuild).
-			ur->add_do_property(t, props[i], now);
-			ur->add_undo_property(t, props[i], was);
+			ur->add_do_property(t, _image_props[i], now);
+			ur->add_undo_property(t, _image_props[i], was);
 			continue;
 		}
 		// The rectangle in this image's texels (a splat map is stretched over the terrain), both ways.
 		Rect2i r = touched;
-		if (i > 0) {
+		if (i == 1 || i == 2) {
 			const Vector2 s = Vector2(now->get_size()) / Vector2(MAX(1, map.x), MAX(1, map.y));
 			const Point2i a(int(Math::floor(touched.position.x * s.x)) - 2, int(Math::floor(touched.position.y * s.y)) - 2);
 			const Point2i b(int(Math::ceil((touched.position.x + touched.size.x) * s.x)) + 2, int(Math::ceil((touched.position.y + touched.size.y) * s.y)) + 2);
@@ -248,6 +264,9 @@ void FellowTerrainEditorPlugin::_end_stroke() {
 		if (i == 0) {
 			ur->add_do_method(t, "blit_heightmap_region", after_region, r.position);
 			ur->add_undo_method(t, "blit_heightmap_region", before_region, r.position);
+		} else if (i == 3) {
+			ur->add_do_method(t, "blit_hole_region", after_region, r.position);
+			ur->add_undo_method(t, "blit_hole_region", before_region, r.position);
 		} else {
 			ur->add_do_method(t, "blit_splat_region", i - 1, after_region, r.position);
 			ur->add_undo_method(t, "blit_splat_region", i - 1, before_region, r.position);
@@ -257,10 +276,68 @@ void FellowTerrainEditorPlugin::_end_stroke() {
 #endif
 	}
 	ur->commit_action(false); // done already
-	for (int i = 0; i < 3; i++) {
+	for (int i = 0; i < 4; i++) {
 		before[i].unref();
 		before_object[i].unref();
 	}
+}
+
+// Decision 0172: the selected terrain's foliage impostors baked into resources next to the scene (impostors/), each
+// kind's impostor set in one undoable action once they are all saved.
+void FellowTerrainEditorPlugin::_bake_impostors() {
+	Node3D *t = _terrain();
+	if (!t || bool(t->call("is_baking_impostors"))) {
+		return;
+	}
+	String dir = "res://";
+	Node *root = EditorNode::get_singleton()->get_edited_scene();
+	if (root && !root->get_scene_file_path().is_empty()) {
+		dir = root->get_scene_file_path().get_base_dir();
+	}
+	dir = dir.path_join("impostors");
+	bake_before.clear();
+	const Array kinds = t->get("foliage");
+	for (int i = 0; i < kinds.size(); i++) {
+		Ref<Resource> k = kinds[i];
+		bake_before.push_back(k.is_valid() ? Variant(k->get("impostor")) : Variant());
+	}
+	bake_terrain = t->get_instance_id();
+	const Callable done = callable_mp(this, &FellowTerrainEditorPlugin::_impostors_baked);
+	if (!t->is_connected("foliage_impostors_baked", done)) {
+		t->connect("foliage_impostors_baked", done, CONNECT_ONE_SHOT);
+	}
+	const int queued = t->call("bake_foliage_impostors", dir);
+	if (queued <= 0) {
+		t->disconnect("foliage_impostors_baked", done);
+		EditorNode::get_singleton()->show_warning(TTR("No foliage kind of this terrain has a mesh and an impostor distance: nothing to bake."));
+		return;
+	}
+	bake_button->set_disabled(true);
+	bake_button->set_text(vformat(TTR("Baking %d..."), queued));
+}
+
+void FellowTerrainEditorPlugin::_impostors_baked(const PackedStringArray &p_paths) {
+	bake_button->set_disabled(false);
+	bake_button->set_text(TTR("Bake Impostors"));
+	Node3D *t = ObjectDB::get_instance<Node3D>(bake_terrain);
+	if (!t) {
+		return;
+	}
+	EditorUndoRedoManager *ur = get_undo_redo();
+	ur->create_action(TTR("Bake Foliage Impostors"), UndoRedo::MERGE_DISABLE, t);
+	const Array kinds = t->get("foliage");
+	for (int i = 0; i < kinds.size() && i < bake_before.size(); i++) {
+		Ref<Resource> k = kinds[i];
+		if (k.is_null() || k->get("impostor") == bake_before[i]) {
+			continue;
+		}
+		ur->add_do_method(k.ptr(), "set_impostor", k->get("impostor"));
+		ur->add_undo_method(k.ptr(), "set_impostor", bake_before[i]);
+	}
+	ur->commit_action(false); // set already
+	bake_before.clear();
+	EditorFileSystem::get_singleton()->scan_changes();
+	print_line(vformat("FellowTerrain3D: %d impostors baked: %s", p_paths.size(), String(", ").join(p_paths)));
 }
 
 void FellowTerrainEditorPlugin::stroke(const PackedVector3Array &p_points, bool p_inverted) {
@@ -508,6 +585,13 @@ FellowTerrainEditorPlugin::FellowTerrainEditorPlugin() {
 	strength_slider->set_custom_minimum_size(Size2(110, 0) * EDSCALE);
 	strength_slider->set_tooltip_text(TTR("How much a dab changes the ground: raising and lowering, a tenth of the brush's radius at its centre at full strength; smoothing, flattening and painting, half of the way at full strength."));
 	toolbar->add_child(strength_slider);
+	bake_button = memnew(Button);
+	bake_button->set_name("BakeImpostors");
+	bake_button->set_theme_type_variation(SceneStringName(FlatButton));
+	bake_button->set_text(TTR("Bake Impostors"));
+	bake_button->set_tooltip_text(TTR("Render the impostors of the foliage kinds with an impostor distance and save them next to the scene (impostors/): from that distance on, their instances are drawn as impostors."));
+	bake_button->connect(SceneStringName(pressed), callable_mp(this, &FellowTerrainEditorPlugin::_bake_impostors));
+	toolbar->add_child(bake_button);
 	_update_layers();
 }
 

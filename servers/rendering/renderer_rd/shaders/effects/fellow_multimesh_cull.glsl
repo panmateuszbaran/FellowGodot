@@ -56,7 +56,7 @@ struct Job {
 	vec4 lod_edges[2]; // edge length of levels 1..7
 	vec4 contribution; // the pass's view direction as a plane (depth z = dot(xyz, p) + w)
 	vec4 instance_range; // HLOD proxy (decision 0122): xyz the camera's position, w the squared distance drawn from
-	vec4 contribution_mode; // x: 0 the small instances culled, 1 thinned (decision 0121)
+	vec4 contribution_mode; // x: 0 the small instances culled, 1 thinned (decision 0121); y: the range's end^2; z: its fade (0172)
 };
 
 layout(set = 0, binding = 0, std430) buffer restrict readonly Jobs {
@@ -153,6 +153,16 @@ void instance_box(Job job, vec4 r0, vec4 r1, vec4 r2, out vec3 center, out vec3 
 	half_extents = abs(wb[0]) * job.aabb_half.x + abs(wb[1]) * job.aabb_half.y + abs(wb[2]) * job.aabb_half.z + (abs(nb[0]) + abs(nb[1]) + abs(nb[2])) * job.aabb_center.w;
 }
 
+// The range's fade (decision 0172): over the last contribution_mode.z metres before the range's end the instance shrinks
+// about its origin to nothing (by its box's center's distance, as the range itself); 1 elsewhere.
+float range_fade_scale(Job job, vec3 center) {
+	if (!(job.contribution_mode.z > 0.0 && job.contribution_mode.y > 0.0)) {
+		return 1.0;
+	}
+	const float d = distance(center, job.instance_range.xyz);
+	return clamp((sqrt(job.contribution_mode.y) - d) / job.contribution_mode.z, 0.0, 1.0);
+}
+
 // Contribution culling (decision 0121): 1 for an instance drawn as it is, 0 for one left out, above 1 for a thinned
 // survivor's growth.
 float contribution_scale(Job job, vec3 center, vec3 half_extents, uint instance) {
@@ -239,6 +249,13 @@ void main() {
 			}
 		}
 		if (visible) {
+			// Shrinking out at the range's end (decision 0172): gone below a hundredth of its size.
+			grow *= range_fade_scale(job, center);
+			if (grow < 0.01) {
+				visible = false;
+			}
+		}
+		if (visible) {
 			uint bucket = 0;
 			if (job.lod_count > 0) {
 				// Stock's rule for a node: the distance from the camera to the box, the largest scale of the transform.
@@ -257,7 +274,7 @@ void main() {
 			}
 			atomicAdd(s_counts[bucket], 1);
 			const uint shift = (lid & 3) * 8;
-			// Bit 0x80: a thinned survivor, grown in the compaction (which computes its growth again).
+			// Bit 0x80: a thinned survivor or a fading instance, scaled in the compaction (which computes its scale again).
 			const uint code = bucket | (grow != 1.0 ? 0x80u : 0u);
 			atomicAnd(s_bytes[lid >> 2], ~(0xFFu << shift) | (code << shift));
 		}
@@ -365,13 +382,14 @@ void main() {
 		const uint position = block_data.data[b * BLOCK_UINTS + 24 + bucket] + rank;
 		const uint src = (job.pool_offset + (blk.y + lid) * job.stride) / 4;
 		const uint dst = ((job.out_offset + position) * job.stride) / 4;
-		// A thinned survivor (decision 0121) is grown about its origin: the basis (xyz of the three rows) scaled.
+		// A thinned survivor (decision 0121) is grown about its origin, a fading one (0172) shrunk: the basis (xyz of the
+		// three rows) scaled.
 		float grow = 1.0;
 		if ((code & 0x80u) != 0u) {
 			vec3 center, half_extents;
 			mat3 wb;
 			instance_box(job, pool.data[src + 0], pool.data[src + 1], pool.data[src + 2], center, half_extents, wb);
-			grow = contribution_scale(job, center, half_extents, blk.y + lid);
+			grow = contribution_scale(job, center, half_extents, blk.y + lid) * range_fade_scale(job, center);
 		}
 		for (uint k = 0; k < job.stride / 4; k++) {
 			const vec4 v = pool.data[src + k];

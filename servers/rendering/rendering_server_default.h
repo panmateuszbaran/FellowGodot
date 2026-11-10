@@ -963,6 +963,7 @@ public:
 	FUNC2(instance_set_ignore_culling, RID, bool)
 	FUNC4(fellow_instance_set_hlod, RID, int, float, float) // decision 0122
 	FUNC4(fellow_instance_set_instance_range, RID, float, float, bool) // decision 0122
+	FUNC2(fellow_instance_set_instance_range_fade, RID, float) // decision 0172
 
 	// don't use these in a game!
 	FUNC2RC(Vector<ObjectID>, instances_cull_aabb, const AABB &, RID)

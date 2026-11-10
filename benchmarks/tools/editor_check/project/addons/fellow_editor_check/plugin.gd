@@ -714,6 +714,40 @@ func _check_terrain_brush() -> void:
 	await _frames(2)
 	if map.get_data() != splat_after:
 		_fail("terrain brush: redoing the second paint stroke made other weights")
+
+	# 4. Milestone 64 (decision 0172): holes, cut with the Holes tool (the first stroke makes the hole map: the property
+	# both ways), then a second hole elsewhere (a rectangle both ways), filled again with Shift.
+	plugin.set_tool(5)
+	(toolbar.get_node("Size") as Range).value = 6.0
+	var hline := PackedVector3Array([Vector3(-12, 0, 0), Vector3(-11, 0, 0), Vector3(-10, 0, 0)])
+	plugin.stroke(hline)
+	results["holes"] = {"cut": terrain.is_hole(Vector3(-11, 0, 0)), "made_map": terrain.hole_map != null,
+			"height_nan": is_nan(terrain.get_height(Vector3(-11, 0, 0)))}
+	if not terrain.is_hole(Vector3(-11, 0, 0)) or terrain.hole_map == null:
+		_fail("terrain brush: the Holes stroke cut no hole: %s" % results["holes"])
+	history.undo()
+	await _frames(2)
+	results["holes"]["undone"] = terrain.is_hole(Vector3(-11, 0, 0))
+	if terrain.hole_map != null or terrain.is_hole(Vector3(-11, 0, 0)):
+		_fail("terrain brush: undoing the first Holes stroke left a hole map")
+	history.redo()
+	await _frames(2)
+	if not terrain.is_hole(Vector3(-11, 0, 0)):
+		_fail("terrain brush: redoing the first Holes stroke cut no hole")
+	var holes_map: Image = terrain.hole_map
+	var holes_before: PackedByteArray = holes_map.get_data()
+	plugin.stroke(PackedVector3Array([Vector3(12, 0, 4), Vector3(12, 0, 5)]))
+	var second: bool = terrain.is_hole(Vector3(12, 0, 4.5))
+	plugin.stroke(PackedVector3Array([Vector3(12, 0, 4), Vector3(12, 0, 5)]), true) # Shift: filled again
+	results["holes"]["second"] = second
+	results["holes"]["filled"] = not terrain.is_hole(Vector3(12, 0, 4.5))
+	history.undo()
+	await _frames(2)
+	results["holes"]["fill_undone"] = terrain.is_hole(Vector3(12, 0, 4.5))
+	history.undo()
+	await _frames(2)
+	if not second or terrain.is_hole(Vector3(12, 0, 4.5)) or terrain.hole_map != holes_map or holes_map.get_data() != holes_before:
+		_fail("terrain brush: the second hole, its filling and their undo: %s" % results["holes"])
 	plugin.set_tool(-1)
 	results["tool_after"] = plugin.get_tool()
 	out["terrain_brush"] = results

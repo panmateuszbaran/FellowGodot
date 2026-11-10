@@ -43,7 +43,8 @@ class World3D;
 // FellowEngine impostors (docs/decisions/0122-hlod.md): a mesh rendered from N x N directions over the sphere
 // (octahedral mapping) into two atlases — albedo with coverage (the viewport's unshaded debug draw) and the normal (its
 // normal buffer, turned from each view's space into the mesh's) — and drawn as a camera-facing quad that blends the
-// four nearest views. Baked at run time, one view per frame (internal; used by FellowHLOD3D).
+// four nearest views. Baked at run time, one view per frame (internal; used by FellowHLOD3D, and by FellowTerrain3D to
+// bake its foliage's impostors into resources, decision 0172).
 class FellowImpostorBaker : public Node {
 	GDCLASS(FellowImpostorBaker, Node);
 
@@ -60,6 +61,7 @@ private:
 		int frames = 8;
 		int resolution = 128;
 		Callable done; // done(ArrayMesh quad with the impostor material, or null)
+		bool portable = false; // the atlases as PortableCompressedTexture2D (lossless), for saving
 	};
 	List<Job> queue;
 	bool running = false;
@@ -92,7 +94,7 @@ public:
 	static void frame_basis(const Vector3 &p_dir, Vector3 &r_right, Vector3 &r_up);
 	static String shader_code();
 
-	void queue_bake(const Ref<Mesh> &p_mesh, const Ref<Material> &p_material_override, int p_frames, int p_resolution, const Callable &p_done);
+	void queue_bake(const Ref<Mesh> &p_mesh, const Ref<Material> &p_material_override, int p_frames, int p_resolution, const Callable &p_done, bool p_portable = false);
 	bool is_busy() const { return running || !queue.is_empty(); }
 
 	~FellowImpostorBaker();

@@ -2435,6 +2435,8 @@ void RenderForwardClustered::_fellow_multimesh_cull_collect(uint32_t p_set, Rend
 						j.instance_range[2] = p_lod.camera.z;
 						j.instance_range[3] = inst->fellow_instance_range_begin * inst->fellow_instance_range_begin;
 						j.contribution_mode[1] = inst->fellow_instance_range_end * inst->fellow_instance_range_end;
+						// Decision 0172: the instances shrink to nothing over the last metres before the end.
+						j.contribution_mode[2] = inst->fellow_instance_range_end > 0.0f ? MIN(inst->fellow_instance_range_fade, inst->fellow_instance_range_end) : 0.0f;
 						set.required = true;
 					}
 					if (p_contribution.active()) {

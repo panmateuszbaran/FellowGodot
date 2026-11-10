@@ -40,7 +40,8 @@ class Node3D;
 class OptionButton;
 
 // Milestone 58 (decision 0160): sculpting and painting a selected FellowTerrain3D in the 3D view. A toolbar in the 3D
-// editor's menu (raise, lower, smooth, flatten, paint; the layer, the brush's size and strength), the brush drawn on
+// editor's menu (raise, lower, smooth, flatten, paint, holes (milestone 64); the layer, the brush's size and strength;
+// Bake Impostors for the foliage, milestone 64), the brush drawn on
 // the ground under the mouse, dabs along a stroke through FellowTerrain3D.sculpt() and paint(), and one undoable action
 // a stroke: the touched rectangle of each image before and after it, written back with blit_heightmap_region() and
 // blit_splat_region(). Through the terrain's bound methods, so the plugin needs none of fellow_world's headers.
@@ -55,6 +56,7 @@ public:
 		TOOL_SMOOTH,
 		TOOL_FLATTEN,
 		TOOL_PAINT,
+		TOOL_HOLE, // decision 0172
 		TOOL_MAX,
 	};
 
@@ -78,8 +80,15 @@ private:
 	bool stroke_inverted = false;
 	Vector3 last_dab;
 	float flatten_height = 0.0f;
-	Ref<Image> before[3]; // heightmap, splat_map, splat_map_2: copies
-	Ref<Image> before_object[3]; // the images themselves
+	Ref<Image> before[4]; // heightmap, splat_map, splat_map_2, hole_map: copies
+	Ref<Image> before_object[4]; // the images themselves
+
+	// Baking the foliage's impostors (decision 0172): the kinds' impostors before, for the undo.
+	Button *bake_button = nullptr;
+	Array bake_before;
+	ObjectID bake_terrain;
+	void _bake_impostors();
+	void _impostors_baked(const PackedStringArray &p_paths);
 	Rect2i touched;
 
 	Node3D *_terrain() const;

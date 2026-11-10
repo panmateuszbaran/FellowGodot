@@ -100,6 +100,10 @@ void RenderGeometryInstanceBase::set_fellow_instance_range(float p_begin, float 
 	fellow_vertices_bounded = p_vertices_bounded;
 }
 
+void RenderGeometryInstanceBase::set_fellow_instance_range_fade(float p_fade) {
+	fellow_instance_range_fade = MAX(0.0f, p_fade);
+}
+
 void RenderGeometryInstanceBase::set_fellow_hlod_proxy(bool p_proxy) {
 	fellow_hlod_proxy = p_proxy;
 }
