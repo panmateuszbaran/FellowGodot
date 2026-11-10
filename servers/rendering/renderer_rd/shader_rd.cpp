@@ -33,6 +33,7 @@
 #include "core/config/engine.h"
 #include "core/io/dir_access.h"
 #include "core/io/file_access.h"
+#include "core/object/callable_mp.h"
 #include "core/object/worker_thread_pool.h"
 #include "core/os/os.h"
 #include "core/string/string_builder.h"
@@ -40,6 +41,7 @@
 #include "core/version.h"
 #include "servers/rendering/fellow_parallel.h"
 #include "servers/rendering/fellow_settings.h"
+#include "servers/rendering/rendering_server.h"
 #include "servers/rendering/shader_include_db.h"
 
 #define ENABLE_SHADER_CACHE 1
@@ -697,7 +699,10 @@ void ShaderRD::_fellow_fill_enqueue(Version *p_version) {
 	}
 }
 
-// One lazy variant of the version created; true if it has more (or was busy: later).
+// One lazy variant of the version created; true if it has more (or was busy: later). The shader is created without the
+// version's mutex held: the render thread takes it whenever it asks for one of the version's shaders, and would wait as
+// long as the creation takes (milestone 68: frames of 17-40 ms after a load). A variant asked for meanwhile is made by
+// the asking thread, as without the filling, and the copy made here freed.
 bool ShaderRD::_fellow_fill_version(RID p_version) {
 	Mutex *m = nullptr;
 	{
@@ -715,17 +720,77 @@ bool ShaderRD::_fellow_fill_version(RID p_version) {
 	// Locked, it cannot be freed (version_free() locks it first).
 	Version *version = version_owner.get_or_null(p_version);
 	bool more = false;
+	int variant = -1;
+	Vector<uint8_t> bytes;
 	if (version != nullptr && version->valid && !version->dirty && version->fellow_lazy_count > 0) {
 		for (uint32_t v = 0; v < version->fellow_lazy.size(); v++) {
-			if (version->fellow_lazy[v]) {
-				_fellow_create_lazy(version, int(v), true);
-				break;
+			if (version->fellow_lazy[v] != 1) {
+				continue;
 			}
+			if (version->variants[v].is_valid()) {
+				// A placeholder (its group enabled after the version was made) keeps its RID: filled here.
+				_fellow_create_lazy(version, int(v), true);
+			} else {
+				version->fellow_lazy[v] = 2;
+				variant = int(v);
+				bytes = version->variant_data[v]; // shared, not copied: kept alive if the version drops it
+			}
+			break;
 		}
 		more = version->fellow_lazy_count > 0;
 	}
 	m->unlock();
+	if (variant < 0) {
+		return more;
+	}
+
+	RID shader = RD::get_singleton()->shader_create_from_bytecode_with_samplers(bytes, RID(), immutable_samplers);
+
+	// The version again; freed meanwhile, or busy for a moment (try_lock(): never blocking on it while versions_mutex is
+	// held).
+	while (true) {
+		{
+			MutexLock lock(versions_mutex);
+			Mutex **mp = version_mutexes.getptr(p_version);
+			if (mp == nullptr) {
+				m = nullptr;
+				break;
+			}
+			m = *mp;
+			if (m->try_lock()) {
+				break;
+			}
+		}
+		OS::get_singleton()->delay_usec(50);
+	}
+	bool used = false;
+	more = false;
+	if (m != nullptr) {
+		version = version_owner.get_or_null(p_version);
+		// Still this claim (not made by an asking thread, not cleared by new code for the version).
+		if (version != nullptr && uint32_t(variant) < version->fellow_lazy.size() && version->fellow_lazy[variant] == 2) {
+			if (shader.is_valid()) {
+				version->fellow_lazy[variant] = 0;
+				version->fellow_lazy_count--;
+				version->variants.write[variant] = shader;
+				used = true;
+				Fellow::stats().cost_shader_background_creates.increment();
+			} else {
+				version->fellow_lazy[variant] = 1; // left to the first use, which reports the failure
+			}
+		}
+		more = version != nullptr && version->fellow_lazy_count > 0;
+		m->unlock();
+	}
+	if (!used && shader.is_valid()) {
+		// RenderingDevice frees on the render thread only.
+		RenderingServer::get_singleton()->call_on_render_thread(callable_mp_static(&ShaderRD::_fellow_free_shader).bind(shader));
+	}
 	return more;
+}
+
+void ShaderRD::_fellow_free_shader(RID p_shader) {
+	RD::get_singleton()->free_rid(p_shader);
 }
 
 void ShaderRD::_fellow_fill_task(void *p_userdata) {

@@ -89,7 +89,8 @@ private:
 
 		Vector<Vector<uint8_t>> variant_data;
 		Vector<RID> variants;
-		// FellowEngine (decision 0061): variants read from the shader cache whose shader is created when first asked for.
+		// FellowEngine (decision 0061): variants read from the shader cache whose shader is created when first asked for
+		// (1; 2: being created by the background filling, milestone 68 — asked for meanwhile, made by the asking thread).
 		LocalVector<uint8_t> fellow_lazy;
 		uint32_t fellow_lazy_count = 0;
 		RID fellow_rid; // its own RID (milestone 68: the background filling of its lazy variants)
@@ -142,6 +143,7 @@ private:
 	void _fellow_fill_enqueue(Version *p_version);
 	bool _fellow_fill_version(RID p_version);
 	static void _fellow_fill_task(void *p_userdata);
+	static void _fellow_free_shader(RID p_shader);
 	static void _fellow_fill_forget(ShaderRD *p_shader);
 
 	void _initialize_version(Version *p_version);
