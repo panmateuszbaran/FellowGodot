@@ -93,6 +93,8 @@ private:
 	Space space = SPACE_LOCAL;
 	// Simulation.
 	bool simulation_enabled = true;
+	float sleep_distance = 0.0f; // milestone 68: no steps while the camera is farther from the box (0: never)
+	bool sleeping = false;
 	int substeps = 1;
 	float time_scale = 1.0f;
 	int prewarm_steps = 0;
@@ -174,6 +176,7 @@ private:
 
 	void _update_grid();
 	Transform3D _grid_to_world() const;
+	bool _beyond_sleep_distance() const;
 	Basis _world_to_grid_axes() const; // world vectors (m/s) to the grid's axes (local units)
 	Vector3 _snapped_origin() const;
 	void _configure();
@@ -210,6 +213,9 @@ public:
 
 	void set_simulation_enabled(bool p_enable) { simulation_enabled = p_enable; }
 	bool is_simulation_enabled() const { return simulation_enabled; }
+	void set_sleep_distance(float p_distance) { sleep_distance = MAX(p_distance, 0.0f); }
+	float get_sleep_distance() const { return sleep_distance; }
+	bool is_sleeping() const { return sleeping; }
 	void set_substeps(int p_substeps) { substeps = CLAMP(p_substeps, 1, 8); }
 	int get_substeps() const { return substeps; }
 	void set_time_scale(float p_scale) { time_scale = MAX(p_scale, 0.0f); }

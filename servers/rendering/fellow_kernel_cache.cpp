@@ -36,6 +36,8 @@
 #include "core/io/file_access.h"
 #include "core/io/resource_loader.h"
 #include "core/io/resource_saver.h"
+#include "core/os/os.h"
+#include "core/os/thread.h"
 #include "servers/rendering/fellow_settings.h"
 
 Ref<RDShaderFile> FellowKernelCache::parse(const String &p_glsl, const String &p_defines, const String &p_name) {
@@ -58,6 +60,11 @@ Ref<RDShaderFile> FellowKernelCache::parse(const String &p_glsl, const String &p
 	{
 		Fellow::CostScope cost(Fellow::stats().cost_glsl_compile_usec, Fellow::stats().cost_glsl_compiles);
 		err = f->parse_versions_from_text(p_glsl, p_defines);
+	}
+	// FELLOW_LOG_COMPILES=1 (milestone 68): which kernel was compiled from GLSL, and when.
+	static const bool fellow_log = OS::get_singleton()->has_environment("FELLOW_LOG_COMPILES");
+	if (fellow_log) {
+		print_line(vformat("[fellow] kernel compiled from GLSL: %s, frame %d%s", p_name, int64_t(Engine::get_singleton()->get_frames_drawn()), Thread::is_main_thread() ? " (main thread)" : ""));
 	}
 	if (err != OK) {
 		f->print_errors(p_name);

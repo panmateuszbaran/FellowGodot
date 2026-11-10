@@ -19,7 +19,7 @@ extends "res://scenes/slice_lab.gd"
 ## --frontier_far=<m> (the camera's far plane, 4000); Slice Lab's --slice_weather, --slice_daytime, --slice_day,
 ## --slice_crowd, --slice_without=water,weather,fire,crowd.
 
-const F_VERSION := 5
+const F_VERSION := 6
 const F_CELL := 128.0
 const F_REGION := 256
 const F_TEX_DIR := "res://external/streaming"
@@ -43,6 +43,7 @@ var gen_info := {}
 var _mats: Array = []
 var _shared := {}
 var _tris := {}
+var _soak_prev := {}
 
 
 func build(p_args: Dictionary) -> void:
@@ -537,33 +538,33 @@ func _make_shared() -> void:
 	post.height = 5.0
 	post.radial_segments = 8
 	post.material = dark
-	_shared["post"] = _save_shared(post, "post.res")
+	_shared["post"] = _save_shared(_baked(post), "post.res")
 	var barrel := CylinderMesh.new()
 	barrel.top_radius = 0.3
 	barrel.bottom_radius = 0.3
 	barrel.height = 0.9
 	barrel.radial_segments = 14
 	barrel.material = wood
-	_shared["barrel"] = _save_shared(barrel, "barrel.res")
+	_shared["barrel"] = _save_shared(_baked(barrel), "barrel.res")
 	var bench := BoxMesh.new()
 	bench.size = Vector3(1.8, 0.45, 0.5)
 	bench.material = wood
-	_shared["bench"] = _save_shared(bench, "bench.res")
+	_shared["bench"] = _save_shared(_baked(bench), "bench.res")
 	var crate := BoxMesh.new()
 	crate.size = Vector3(1, 1, 1)
 	crate.material = wood
-	_shared["crate"] = _save_shared(crate, "crate.res")
+	_shared["crate"] = _save_shared(_baked(crate), "crate.res")
 	var fence := BoxMesh.new()
 	fence.size = Vector3(0.12, 1.2, 0.12)
 	fence.material = wood
-	_shared["fence"] = _save_shared(fence, "fence.res")
+	_shared["fence"] = _save_shared(_baked(fence), "fence.res")
 	var log_m := CylinderMesh.new()
 	log_m.top_radius = 0.22
 	log_m.bottom_radius = 0.25
 	log_m.height = 4.0
 	log_m.radial_segments = 12
 	log_m.material = wood
-	_shared["log"] = _save_shared(log_m, "log.res")
+	_shared["log"] = _save_shared(_baked(log_m), "log.res")
 	_shared["rock"] = _save_shared(_rock_mesh(stone), "rock.res")
 
 
@@ -582,6 +583,15 @@ func _detail_texture() -> Texture2D:
 	img = Image.create_from_data(512, 512, false, Image.FORMAT_RGB8, data)
 	img.generate_mipmaps()
 	return ImageTexture.create_from_image(img)
+
+
+## A primitive mesh as an ArrayMesh (as a game's assets are): a PrimitiveMesh shared by cells loading on several threads
+## builds itself lazily, and a material set meanwhile meets a mesh without its surface yet (an error, milestone 67).
+func _baked(m: PrimitiveMesh) -> ArrayMesh:
+	var am := ArrayMesh.new()
+	am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, m.get_mesh_arrays())
+	am.surface_set_material(0, m.material)
+	return am
 
 
 ## A rock: a sphere of 32 x 16 segments (about 1 000 triangles) pushed in and out by noise.
@@ -872,6 +882,13 @@ func _square() -> Vector3:
 	return Vector3(s.x, height(s.x, s.y), s.y)
 
 
+## The slice's campfire, asleep while the camera is farther than --frontier_fire_sleep (250 m; 0: never) — its gas
+## simulation was the largest pass of the frame wherever the camera was (milestone 67).
+func _build_fire() -> void:
+	super()
+	fire.set("sleep_distance", float(args.get("frontier_fire_sleep", "250")))
+
+
 func _build_water() -> void:
 	var water: Node3D = ClassDB.instantiate("FellowWater3D")
 	water.name = "Lake"
@@ -955,3 +972,20 @@ func sample_extra() -> Dictionary:
 		"region_loads": gs.get("loads", 0), "meshes_full": cs.get("streamed_meshes_full", 0), "mesh_loads": cs.get("mesh_loads", 0),
 		"cell_activation_usec_max": cs.get("activation_usec_max", 0), "region_activation_usec_max": gs.get("activation_usec_max", 0),
 		"lights": get_tree().get_nodes_in_group("frontier_lights").size()}
+
+
+## The soak (main.gd, after each frame): what the streamers did in it — a hitch's record carries it.
+func soak_after_frame() -> Dictionary:
+	var st := {}
+	var cs: Dictionary = cell_streamer.get_stats()
+	var gs: Dictionary = ground_streamer.get_stats()
+	var now := {"cell_activation_usec": cs.get("activation_usec", 0), "region_activation_usec": gs.get("activation_usec", 0),
+		"cell_release_usec": cs.get("release_usec", 0), "region_release_usec": gs.get("release_usec", 0),
+		"cell_loads": cs.get("loads", 0), "region_loads": gs.get("loads", 0), "mesh_swap_usec": cs.get("mesh_swap_usec", 0),
+		"streamer_update_usec": int(cs.get("update_usec", 0)) + int(gs.get("update_usec", 0))}
+	for k in now:
+		st[k] = int(now[k]) - int(_soak_prev.get(k, now[k]))
+	_soak_prev = now
+	if fire:
+		st["fire_sleeping"] = fire.call("is_sleeping")
+	return st

@@ -838,6 +838,7 @@ func _run_soak() -> void:
 	var vrid := vp.get_viewport_rid()
 	RenderingServer.viewport_set_measure_render_time(vrid, true)
 	var has_schedule: bool = scene.has_method("soak_update")
+	var has_after_frame: bool = scene.has_method("soak_after_frame")
 	var rows := []
 	var hitches := []
 	var all_ms := PackedFloat32Array()
@@ -872,6 +873,9 @@ func _run_soak() -> void:
 		scene.set_time(t)
 		scene.apply_path_sample(scene.flythrough.sample(fposmod(t, dur)))
 		await get_tree().process_frame
+		# What the scene did in that frame (milestone 68: Frontier Lab's streamers), kept with a hitch.
+		if has_after_frame:
+			state.merge(scene.soak_after_frame(), true)
 		var now := Time.get_ticks_usec()
 		var ft := (now - last) / 1000.0
 		last = now

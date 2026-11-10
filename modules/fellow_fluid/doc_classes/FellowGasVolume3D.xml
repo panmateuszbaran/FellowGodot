@@ -65,6 +65,12 @@
 				[code]true[/code] when the data of [method request_debug_data] has arrived.
 			</description>
 		</method>
+		<method name="is_sleeping" qualifiers="const">
+			<return type="bool" />
+			<description>
+				[code]true[/code] while the camera is farther than [member sleep_distance] from the box: the gas is not stepped.
+			</description>
+		</method>
 		<method name="request_debug_data">
 			<return type="void" />
 			<param index="0" name="what" type="int" />
@@ -184,6 +190,9 @@
 		</member>
 		<member name="smoke_color" type="Color" setter="set_smoke_color" getter="get_smoke_color" default="Color(0.75, 0.75, 0.75, 1)">
 			The smoke's scattering colour.
+		</member>
+		<member name="sleep_distance" type="float" setter="set_sleep_distance" getter="get_sleep_distance" default="0.0">
+			While the viewport's camera is farther than this from the box, the gas is not stepped: it keeps its state (still drawn, frozen) and goes on when the camera comes back; the [FellowBurnable3D]s burning in it wait with it. 0: never asleep. A volume far from where the player is costs nothing on the GPU (Frontier Lab's campfire was the largest pass of the frame from kilometres away, decision 0176).
 		</member>
 		<member name="smoke_density" type="float" setter="set_smoke_density" getter="get_smoke_density" default="4.0">
 			The smoke's extinction per metre at a smoke density of 1.

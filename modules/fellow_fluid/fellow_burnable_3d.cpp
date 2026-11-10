@@ -1836,6 +1836,10 @@ void FellowBurnable3D::_queue_step() {
 	if (!target || !target->is_inside_tree()) {
 		return;
 	}
+	// Its gas volume asleep (milestone 68: the camera beyond its sleep_distance): the burning waits with it.
+	if (const FellowGasVolume3D *asleep = _find_gas_volume(); asleep && asleep->is_sleeping()) {
+		return;
+	}
 	FellowGas::BurnStepParams sp;
 	const double tick = get_physics_process_delta_time();
 	sp.dt = float(tick * burn_speed);

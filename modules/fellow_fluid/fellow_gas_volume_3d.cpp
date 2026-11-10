@@ -39,6 +39,7 @@
 #include "core/config/engine.h"
 #include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
+#include "scene/3d/camera_3d.h"
 #include "scene/main/viewport.h"
 #include "scene/resources/3d/world_3d.h"
 #include "servers/physics_3d/physics_server_3d.h"
@@ -76,6 +77,31 @@ Transform3D FellowGasVolume3D::_grid_to_world() const {
 	}
 	const Transform3D local(Basis::from_scale(Vector3(grid_dx, grid_dx, grid_dx)), Vector3(-grid_res.x * grid_dx * 0.5f, 0.0f, -grid_res.z * grid_dx * 0.5f));
 	return (is_inside_tree() ? get_global_transform() : get_transform()) * local;
+}
+
+// Milestone 68 (decision 0176): the camera farther than sleep_distance from the box (its nearest point).
+bool FellowGasVolume3D::_beyond_sleep_distance() const {
+	if (sleep_distance <= 0.0f || !configured || !is_inside_tree()) {
+		return false;
+	}
+	const Viewport *vp = get_viewport();
+	const Camera3D *cam = vp ? vp->get_camera_3d() : nullptr;
+	if (!cam) {
+		return false;
+	}
+	const Transform3D g2w = _grid_to_world();
+	AABB box;
+	for (int c = 0; c < 8; c++) {
+		const Vector3 w = g2w.xform(Vector3((c & 1) ? grid_res.x : 0, (c & 2) ? grid_res.y : 0, (c & 4) ? grid_res.z : 0));
+		if (c == 0) {
+			box = AABB(w, Vector3());
+		} else {
+			box.expand_to(w);
+		}
+	}
+	const Vector3 p = cam->get_global_position();
+	const Vector3 nearest = p.clamp(box.position, box.position + box.size);
+	return p.distance_squared_to(nearest) > sleep_distance * sleep_distance;
 }
 
 Basis FellowGasVolume3D::_world_to_grid_axes() const {
@@ -763,6 +789,12 @@ void FellowGasVolume3D::_notification(int p_what) {
 			if (fellow_editor_still()) {
 				return;
 			}
+			// Asleep beyond sleep_distance (milestone 68): its state kept, no steps (Frontier Lab's campfire was the
+			// largest pass of a frame with the camera kilometres away); its burning objects wait with it.
+			sleeping = _beyond_sleep_distance();
+			if (sleeping) {
+				return;
+			}
 			for (int i = 0; i < substeps; i++) {
 				_queue_step(i == substeps - 1 && fire_light);
 			}
@@ -802,6 +834,9 @@ void FellowGasVolume3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_space"), &FellowGasVolume3D::get_space);
 	ClassDB::bind_method(D_METHOD("set_simulation_enabled", "enable"), &FellowGasVolume3D::set_simulation_enabled);
 	ClassDB::bind_method(D_METHOD("is_simulation_enabled"), &FellowGasVolume3D::is_simulation_enabled);
+	ClassDB::bind_method(D_METHOD("set_sleep_distance", "distance"), &FellowGasVolume3D::set_sleep_distance);
+	ClassDB::bind_method(D_METHOD("get_sleep_distance"), &FellowGasVolume3D::get_sleep_distance);
+	ClassDB::bind_method(D_METHOD("is_sleeping"), &FellowGasVolume3D::is_sleeping);
 	ClassDB::bind_method(D_METHOD("set_substeps", "substeps"), &FellowGasVolume3D::set_substeps);
 	ClassDB::bind_method(D_METHOD("get_substeps"), &FellowGasVolume3D::get_substeps);
 	ClassDB::bind_method(D_METHOD("set_time_scale", "scale"), &FellowGasVolume3D::set_time_scale);
@@ -916,6 +951,7 @@ void FellowGasVolume3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "space", PROPERTY_HINT_ENUM, "Local,World"), "set_space", "get_space");
 	ADD_GROUP("Simulation", "");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "simulation_enabled"), "set_simulation_enabled", "is_simulation_enabled");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "sleep_distance", PROPERTY_HINT_RANGE, "0,2000,1,or_greater,suffix:m"), "set_sleep_distance", "get_sleep_distance");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "substeps", PROPERTY_HINT_RANGE, "1,8,1"), "set_substeps", "get_substeps");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "time_scale", PROPERTY_HINT_RANGE, "0,4,0.01"), "set_time_scale", "get_time_scale");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "prewarm_steps", PROPERTY_HINT_RANGE, "0,10000,1"), "set_prewarm_steps", "get_prewarm_steps");

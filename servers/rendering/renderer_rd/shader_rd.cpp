@@ -653,6 +653,11 @@ void ShaderRD::_fellow_create_lazy(Version *p_version, int p_variant) {
 	p_version->fellow_lazy[p_variant] = 0;
 	p_version->fellow_lazy_count--;
 	Fellow::stats().cost_shader_lazy_creates.increment();
+	// FELLOW_LOG_COMPILES=1 (milestone 68): which variant was made when first used (a hitch's cause in a soak).
+	static const bool fellow_log = OS::get_singleton()->has_environment("FELLOW_LOG_COMPILES");
+	if (fellow_log) {
+		print_line(vformat("[fellow] lazy shader variant: %s, variant %d, frame %d", name, p_variant, int64_t(Engine::get_singleton()->get_frames_drawn())));
+	}
 	// A placeholder (the variant's RID while its group was disabled) is filled and keeps its RID.
 	RID shader = RD::get_singleton()->shader_create_from_bytecode_with_samplers(p_version->variant_data[p_variant], p_version->variants[p_variant], immutable_samplers);
 	ERR_FAIL_COND_MSG(shader.is_null(), vformat("Failed to create variant %d of shader %s from the shader cache.", p_variant, name));
