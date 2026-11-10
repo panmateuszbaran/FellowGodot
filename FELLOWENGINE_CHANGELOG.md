@@ -9,6 +9,23 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 67 — Frontier Lab: an open world at AAA scale on the RTX (2026-11-10)
+
+- Frontier Lab (`--scene=frontier`, decision 0175): a 4 km world generated once into `external/frontier_<size>/` —
+  terrain at 1 m in 256 streamed regions with forests (impostors) and meadows, 1 024 streamed cells of towns
+  (buildings, 145 142 windows of a modular kit as instances, 2 123 street lights, props), villages and the wild (17 354
+  rocks), proxies for what is not loaded, the slice's fire, crowd, lake and weather in the first town. About 64 M
+  triangles and 13 000 nodes; generated in 81 s on the laptop (291 MB).
+- On the RTX: its 154 s flight at 198 fps at 1080p (GPU 3.70 ms), 162 at 1440p, 186 at 1440p with FSR 3.1 at 67 %, 94
+  with the 3D frame at 3840 × 2160; 761-1 354 MB of video memory. Twenty minutes of play: 248 fps, p99 6.3 ms, 0.4
+  frames over 15 ms a minute, nothing growing.
+- Fixed: `FellowTerrainLayer.albedo_color` is sRGB in the shader and the proxies, as documented (layers drew brighter
+  than their colour; the editor's preset, the showcase and the regression scene keep their look); baked proxies, their
+  material and foliage impostors are referenced by their files in saved scenes (they were copied in: a level file
+  5.7 MB → 32 KB); a bake's texture averages keyed by file (a region's bake 2.3 s → 14 ms on lavapipe).
+- Found for milestone 68: the gas simulation's 0.93 ms of GPU at any distance, shaders and a kernel made in play, main
+  thread and GPU spikes.
+
 ## Milestone 66 — proxies for unloaded cells, streamed meshes (2026-11-10)
 
 - `FellowWorldStreamer3D.bake_proxies(directory, options)` (decision 0174): each cell's meshes, MultiMesh instances (up
