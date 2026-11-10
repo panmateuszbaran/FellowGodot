@@ -182,7 +182,7 @@ class FellowWorldStreamer3D : public Node3D {
 
 	static void _instance_task(void *p_data);
 	void _update();
-	void _flush_worker_commands();
+	void _flush_worker_commands(bool p_loaded = false);
 	void _gather_points(LocalVector<Vector3> &r_points) const;
 	void _activate(FellowStreamingCell3D *p_cell, Node *p_content);
 	void _release(FellowStreamingCell3D *p_cell);

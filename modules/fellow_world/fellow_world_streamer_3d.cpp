@@ -347,12 +347,13 @@ void FellowWorldStreamer3D::_release(FellowStreamingCell3D *p_cell) {
 	}
 }
 
-// Milestone 68 (decision 0176): content instanced on a worker thread queued its RenderingServer objects' creation (a
-// MultiMesh's, a mesh's); with the RenderingServer on this thread, the queue is run before the content enters the tree,
-// else its instances are given objects not created yet ("Attempting to use an uninitialized RID" in Frontier Lab).
-void FellowWorldStreamer3D::_flush_worker_commands() {
+// Milestone 68 (decision 0176): content instanced on a worker thread, and resources loaded on the ResourceLoader's threads
+// (p_loaded), queued their RenderingServer objects' creation (a MultiMesh's, a mesh's); with the RenderingServer on this
+// thread, the queue is run before the content enters the tree or is freed, else their objects are used or freed before
+// they exist ("Attempting to use an uninitialized RID" in Frontier Lab).
+void FellowWorldStreamer3D::_flush_worker_commands(bool p_loaded) {
 	RenderingServer *rs = RenderingServer::get_singleton();
-	if (threaded_instancing && rs->is_on_render_thread()) {
+	if ((p_loaded || threaded_instancing) && rs->is_on_render_thread()) {
 		rs->sync();
 	}
 }
@@ -375,6 +376,7 @@ void FellowWorldStreamer3D::_update() {
 			cell->state = FellowStreamingCell3D::STATE_READY;
 		} else {
 			if (inst->result) {
+				_flush_worker_commands(); // its objects' creation first, then their freeing (decision 0176)
 				memdelete(inst->result);
 			} else if (cell) {
 				failures++;
@@ -423,6 +425,9 @@ void FellowWorldStreamer3D::_update() {
 		}
 		Ref<PackedScene> scene;
 		if (st == ResourceLoader::THREAD_LOAD_LOADED) {
+			// Its resources (meshes, MultiMeshes) were made on the loading threads, their RenderingServer objects' creation
+			// queued: run before they are used or, the camera gone, freed (decision 0176).
+			_flush_worker_commands(true);
 			scene = ResourceLoader::load_threaded_get(cell->scene_path);
 		}
 		if (scene.is_null()) {
@@ -473,6 +478,7 @@ void FellowWorldStreamer3D::_update() {
 				if (beyond(cell)) {
 					Node *c = cell->content;
 					cell->content = nullptr;
+					_flush_worker_commands(); // its objects' creation first, then their freeing (decision 0176)
 					memdelete(c); // never entered the tree
 					cell->state = FellowStreamingCell3D::STATE_UNLOADED;
 				} else {
@@ -779,6 +785,7 @@ void FellowWorldStreamer3D::_cancel_all() {
 	for (Instancing *inst : instancing) {
 		WorkerThreadPool::get_singleton()->wait_for_task_completion(inst->task);
 		if (inst->result) {
+			_flush_worker_commands(); // its objects' creation first, then their freeing (decision 0176)
 			memdelete(inst->result);
 		}
 		memdelete(inst);
@@ -842,6 +849,7 @@ int FellowWorldStreamer3D::load_now() {
 		Ref<PackedScene> scene;
 		if (cell->state == FellowStreamingCell3D::STATE_LOADING) {
 			scene = ResourceLoader::load_threaded_get(cell->scene_path);
+			_flush_worker_commands(true); // its resources' objects, made on the loading threads (decision 0176)
 		} else if (cell->state == FellowStreamingCell3D::STATE_READY && cell->content) {
 			_flush_worker_commands();
 			Node *c = cell->content;
