@@ -9,6 +9,25 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 70 — terrain virtual texturing (2026-11-11)
+
+- `FellowTerrain3D.virtual_texture` (off; decision 0178): the terrain's material baked once into pages of a virtual
+  texture — 128 × 128 texels, `virtual_texture_texels_per_meter` (64) at the finest mip — by a compute kernel with the
+  layers' own arithmetic, into an atlas every terrain shares (`rendering/fellow/terrain/virtual_texture_atlas_size`,
+  4080: 900 slots), found through a page table per terrain; the coarsest mip is the terrain's overview, with its own
+  mips, read far away and until a page is baked. The pages a camera wants are chosen on the CPU each frame and the
+  missing ones baked within `rendering/fellow/terrain/virtual_texture_pages_per_frame` (16), coarsest and nearest
+  first; the least recently wanted give their slots up, and a nearly full atlas makes every terrain's pages coarser.
+  Edits and layer changes bake the pages over them again; regions have their own pages; `debug_view` Virtual Texture.
+  Lavapipe (no GPU run yet): five views of a 513 m terrain within 41.0-43.6 dB of the layers' pictures, a frame in
+  software 19-36 % shorter (the fragments' work: a proxy, not a GPU's time); a flight of 301 frames with one frame
+  missing pages.
+- Fixed: the terrain layers' colours were converted from sRGB twice since milestone 67 (a `Color` in a `vec4` uniform
+  is converted by the renderer): layers drew darker than their colour. They reach the shader as vectors now; the
+  regression scene, the editor's terrain preset and the showcase's builder have their colours back as before
+  milestone 67 (the same look), Slice Lab and Frontier Lab draw their linear colours as written (brighter than in
+  milestones 67-69, as their proxies).
+
 ## Milestone 69 — the rare frames attributed, an hour of play (2026-11-11)
 
 - Counted per frame (decision 0177): the RenderingServer's queue where it runs (`rs_queue_flush_usec`), the main

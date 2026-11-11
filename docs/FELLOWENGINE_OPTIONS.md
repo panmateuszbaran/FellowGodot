@@ -582,6 +582,23 @@ multiple of `patch_size` quads, padded with holes past the map), each a `FellowS
 streamer's `split_into_cells()` does it for terrains with the option `split_terrains` (the editor's Split into
 Streaming Cells). A region's data is built on the streaming worker thread. Bench `bench/terrain_regions_check.gd`.
 
+Milestone 70 (decision 0178), **virtual texture**: `virtual_texture` (off) draws the terrain's material from pages
+baked once into a virtual texture instead of blending its layers in every fragment. Pages of 128 × 128 texels,
+`virtual_texture_texels_per_meter` (64) at the finest mip and each mip's texels twice as wide, are baked by a compute
+kernel with the layers' own arithmetic (the textures prefiltered by each texel's footprint) into the slots of an atlas
+every terrain shares — `rendering/fellow/terrain/virtual_texture_atlas_size` (4080 texels: 30 × 30 slots of 136 with
+their borders; two RGBA8 textures, 127 MiB) — and found through the terrain's page table; the coarsest mip is the
+terrain's overview (128 × 128 with its own mips, 175 KB), read far away and wherever no page is baked yet. The pages a
+camera wants (by its distance to them; outside the frustum coarser) are chosen on the CPU each frame and the missing
+ones baked within `rendering/fellow/terrain/virtual_texture_pages_per_frame` (16) for every terrain, coarsest and nearest
+first, the least recently wanted giving their slots up; with more than 90 % of the slots wanted, every terrain's pages
+get coarser (up to four mips) until under 60 %. `virtual_texture_lod_bias` (0; positive: coarser pages). Sculpting,
+painting, blits and changes to the layers bake the pages over them again. `debug_view` Virtual Texture colours the mip
+drawn; `get_virtual_texture_stats()`. Regions have their own pages in the shared atlas. Needs the RenderingDevice
+(Forward+, Mobile; Compatibility draws the layers, with a configuration warning). The layers' colours reach the shader
+converted from sRGB once (milestones 67-69 converted them twice: darker than their colour). Bench
+`bench/terrain_vt_check.gd`; the regression scene `terrain_vt`.
+
 `FellowGasVolume3D` no longer reads the data of concave, height map and custom shapes in its box (not its obstacles),
 and the directional shadow cache ignores changes of instances that cast no shadows (both exact).
 
