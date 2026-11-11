@@ -9,6 +9,19 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 69 — the rare frames attributed, an hour of play (2026-11-11)
+
+- Counted per frame (decision 0177): the RenderingServer's queue where it runs (`rs_queue_flush_usec`), the main
+  loop's sync, the draw by phase (`draw_*_usec`), the RenderingDevice's pending frees and uploads, mesh surfaces and
+  MultiMesh buffers; `FellowWorldStreamer3D.get_stats()`: its update by step. An hour of Frontier Lab with them: of
+  fourteen frames over 15 ms, eight were terrain regions entering.
+- Terrain regions enter cheaply: a region's neighbours found once per border refresh (not once per border texel), and
+  a neighbour refreshes only the border facing it — an entry on the RTX p50 2.6 → 0.78 ms, p99 4.4 → 1.5 ms; the
+  flight at 1080p p99 6.5 → 5.3 ms, 1 % low 135 → 175 fps. An hour of play: 254 fps, p99.9 10.2 → 6.5 ms, frames
+  over 15 ms 0.24 → 0.15 a minute, none from a region (the rest the GPU, its driver, or a lost scheduling quantum).
+- Fixed: terrain regions instanced on pool threads waited there for their normals' group task (a hang with every pool
+  thread waiting); the rows are built inline on pool threads.
+
 ## Milestone 68 — what Frontier Lab found (2026-11-10)
 
 - `FellowGasVolume3D.sleep_distance` (decision 0176, 0: never): beyond it from the camera a gas volume takes no steps —
