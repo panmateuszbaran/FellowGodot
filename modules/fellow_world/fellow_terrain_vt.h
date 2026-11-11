@@ -63,7 +63,7 @@ public:
 	static constexpr int MAX_MIPS = 16;
 	static constexpr int HEIGHT_MIP = 3; // the coarsest mip whose pages keep their height range (finer ones use it)
 	static constexpr int OVERVIEW_MIPS = 8; // the overview's levels: PAGE texels down to 1
-	static constexpr int REVISIT_FRAMES = 4; // the quadtree at least every this many frames (staggered by terrain)
+	static constexpr int REVISIT_FRAMES = 4; // the quadtree at least every this many frames near the camera (staggered by terrain)
 
 	struct View {
 		Vector3 camera; // terrain-local

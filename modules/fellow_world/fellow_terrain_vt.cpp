@@ -851,7 +851,9 @@ bool FellowTerrainVT::_start(bool p_may_keep, const Vector3 &p_camera, float p_l
 		budget_left--;
 	}
 	const float bias = p_lod_bias + pressure_bias;
-	if (p_may_keep && visited && last_missing == 0 && stale.is_empty() && bias == visit_bias && (frame + id) % REVISIT_FRAMES != 0 &&
+	// Every REVISIT_FRAMES frames near the camera, half as often past 256 m from it, a quarter as often past 1 km.
+	const uint64_t period = REVISIT_FRAMES * (visit_near > 1024.0f ? 4 : (visit_near > 256.0f ? 2 : 1));
+	if (p_may_keep && visited && last_missing == 0 && stale.is_empty() && bias == visit_bias && (frame + id) % period != 0 &&
 			p_camera.distance_to(visit_camera) < MAX(1.0f, 0.03f * visit_near)) {
 		for (int s : wanted_slots) {
 			slots[s].used = frame;
@@ -987,6 +989,13 @@ void FellowTerrainVT::invalidate_all() {
 
 void FellowTerrainVT::upload_page_table() {
 	if (table_texture.is_null()) {
+		return;
+	}
+	bool any = false;
+	for (int m = 0; m < mips && !any; m++) {
+		any = table_dirty[m].has_area();
+	}
+	if (!any) {
 		return;
 	}
 	RenderingServer *rs = RenderingServer::get_singleton();
