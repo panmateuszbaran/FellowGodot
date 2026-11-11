@@ -9,6 +9,20 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 71 — the terrain's virtual texture on the RTX (2026-11-11)
+
+- Measured in Frontier Lab on the RTX 5070 Ti Laptop GPU (decision 0179, jobs f386-f389): with every terrain region
+  drawn from its pages the GPU's frame is 5-10 % shorter at the still cameras (1080p) and 5 % in the 4K flight (92 →
+  98 fps, 1 % low 62 → 67); the bakes cost the GPU 0.015 ms a frame. Where the frame is the CPU's (1080p, 230 fps) the
+  pages first cost more than they saved (the flight's frames over 7 ms 2-10 → 45-75); now about even.
+- The bakes reuse each terrain's uniform sets, overview views and a buffer updated in place (the render thread's time
+  18 → 3.6 µs a page); a terrain keeps its page choice while its view barely changes, far ones revisit less often (the
+  main thread's choice 0.32 → 0.14 ms a frame in the fast flight, 0.27 → 0.08 ms in play); regions enter with their
+  pages set up, without a second material update.
+- `rendering/fellow/terrain/virtual_texture_all`: every terrain drawn from its pages. Frontier Lab: `--frontier_vt=1`.
+  Counters `terrain_vt_update_usec`, `terrain_vt_setup_usec`; GPU timestamps around the bakes;
+  `get_virtual_texture_stats()` gains `updates`, `visits`, and the atlas's count is `atlas_wanted`.
+
 ## Milestone 70 — terrain virtual texturing (2026-11-11)
 
 - `FellowTerrain3D.virtual_texture` (off; decision 0178): the terrain's material baked once into pages of a virtual

@@ -599,6 +599,15 @@ drawn; `get_virtual_texture_stats()`. Regions have their own pages in the shared
 converted from sRGB once (milestones 67-69 converted them twice: darker than their colour). Bench
 `bench/terrain_vt_check.gd`; the regression scene `terrain_vt`.
 
+Milestone 71 (decision 0179): `rendering/fellow/terrain/virtual_texture_all` (off) draws every `FellowTerrain3D` from
+its pages as if its `virtual_texture` were on (to compare a project with and without; read as a terrain enters the
+tree). Measured on the RTX in Frontier Lab: the GPU's frame 5-10 % shorter at the still cameras (1080p) and 5 % in the
+flight at 4K; where the frame is the CPU's, no change (the page choice 0.08-0.14 ms a frame of the main thread for 66
+regions). A terrain keeps its page choice while its view barely changes (the choice again every 4 frames near the
+camera, 8 past 256 m, 16 past 1 km, or when it moved, pages are missing or stale). `get_virtual_texture_stats()`:
+`updates`, `visits`, `atlas_wanted`. Counters: `terrain_vt_update_usec`, `terrain_vt_setup_usec`. Frontier Lab:
+`--frontier_vt=1`.
+
 `FellowGasVolume3D` no longer reads the data of concave, height map and custom shapes in its box (not its obstacles),
 and the directional shadow cache ignores changes of instances that cast no shadows (both exact).
 
