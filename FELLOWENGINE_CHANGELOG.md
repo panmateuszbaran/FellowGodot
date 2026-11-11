@@ -9,6 +9,22 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 73 — cloth (2026-11-12)
+
+- `FellowCloth3D` (decision 0181): flags, banners, curtains, awnings and capes — a generated rectangle or a source
+  mesh, pinned by an edge, corners or vertex colours — simulated on the CPU by position-based dynamics in fixed
+  substeps (480 Hz, two stretch passes, bending, tethers to the pins), blown by the active `FellowWind3D` (drag along
+  each triangle's normal, lift across it, turbulence), kept out of spheres, capsules, boxes, cylinders, planes and
+  height maps (`colliders` followed as they move, the physics world's bodies under the cloth), with friction. Every
+  cloth of a frame on the worker threads at once; drawn with motion vectors (a blend shape gives each instance vertex
+  buffers swapped every frame). `lod_distance` (half the substeps), `simulation_distance` (carried, not simulated),
+  `apply_impulse()`, `set_particle_pinned()`, the monitor "FellowEngine/Cloth time"; the FellowEngine menu's "Add
+  Flag" and "Add Curtain".
+- Checked on ten lanes (`bench/cloth_check.gd`: a curtain hangs 2.40 m below its rail, sheets rest on a sphere, a box
+  and a height map with nothing inside them, a cape stays out of the capsule it is pinned on), a regression scene, the
+  editor. On the laptop a 400-particle flag costs 0.4 ms of a thread; 64 flags in the wind 1.4-1.6 ms of the frame,
+  256 5.6-6.0 ms (`--many=N`).
+
 ## Milestone 72 — mantling and vaulting (2026-11-11)
 
 - `FellowTraversal3D` (decision 0180): a character's body finds ledges in its way with the physics server's queries —

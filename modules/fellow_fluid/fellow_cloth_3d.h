@@ -132,6 +132,8 @@ private:
 		uint32_t a;
 		uint32_t b;
 		float rest;
+		float fa = 0.0f; // each end's share of the correction: its inverse mass over the pair's (set with the pins)
+		float fb = 0.0f;
 	};
 	struct Tether {
 		uint32_t p;

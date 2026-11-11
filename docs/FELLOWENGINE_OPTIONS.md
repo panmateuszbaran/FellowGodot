@@ -459,6 +459,25 @@ swapped; pairs by name or `mirror_pairs`) and `tags` (a clip's name to its tags,
 options, the matcher's `tags_required` and `tags_excluded`. Decision 0157; `bench/ground_check.gd`,
 `bench/matching_tags_check.gd`, Matching Lab's `--matching_mirror=1`.
 
+## Cloth (milestone 73)
+
+Module `fellow_fluid`; nothing changes without the node (decision 0181). `FellowCloth3D` (a `GeometryInstance3D`): a
+rectangle (`size` 2 × 1.2 m from the node's origin along +X and down, `resolution` 24 cells along its longer side) or a
+`source_mesh`'s first surface, pinned by `pin_mode` (top edge, left edge, top corners, corners, or vertex colours: red
+0.5 or more), simulated on the CPU by position-based dynamics: `mass` (0.25 kg/m²), `stretch_stiffness` (1),
+`bend_stiffness` (0.2), `damping` (0.05 a second), `tether_slack` (1.08; 0: no tethers), `gravity_scale`,
+`substep_rate` (480 Hz), `iterations` (2 stretch passes a substep), `max_substeps` (12 a frame). The air: the active
+`FellowWind3D`'s wind at the cloth times `wind_scale`, plus `wind`, `drag` (1), `lift` (0.3), `turbulence` (0.3).
+Collisions: `thickness` (2 cm), `friction` (0.3), `colliders` (`CollisionShape3D`s or `CollisionObject3D`s, followed as
+they move), `collide_with_world` (on: the physics world's bodies under the cloth on `collision_mask`; spheres, capsules,
+boxes, cylinders, planes, height maps). `lod_distance` (25 m: half the substeps past it), `simulation_distance` (100 m:
+carried, not simulated, past it), `simulating`, `material` (a two-sided default). `reset()`, `apply_impulse()`,
+`get_particle_count()`, `get_particle_position()`, `set_particle_pinned()`, `is_particle_pinned()`, `get_stats()`,
+`get_global_stats()`/`reset_global_stats()`; the monitor "FellowEngine/Cloth time". Every cloth of a frame on the worker
+threads at once; drawn with motion vectors (one blend shape: per-instance vertex buffers swapped each frame). The
+FellowEngine menu's "Add Flag" and "Add Curtain". Bench `bench/cloth_check.gd` (`--many=N`); the regression scene
+`cloth`.
+
 ## Traversal: mantling and vaulting (milestone 72)
 
 Module `fellow_animation`; nothing changes without the nodes (decision 0180). `FellowTraversal3D`, a child of the

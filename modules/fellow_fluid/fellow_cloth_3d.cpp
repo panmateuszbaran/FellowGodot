@@ -483,16 +483,16 @@ void FellowCloth3D::_build() {
 
 // The constraints between two pinned particles do nothing: left out of the solver's lists (again when a pin changes).
 void FellowCloth3D::_filter_constraints() {
-	stretch.clear();
-	bend.clear();
-	for (const Edge &e : stretch_all) {
-		if (w[e.a] > 0.0f || w[e.b] > 0.0f) {
-			stretch.push_back(e);
-		}
-	}
-	for (const Edge &e : bend_all) {
-		if (w[e.a] > 0.0f || w[e.b] > 0.0f) {
-			bend.push_back(e);
+	for (int k = 0; k < 2; k++) {
+		LocalVector<Edge> &out = k == 0 ? stretch : bend;
+		out.clear();
+		for (Edge e : (k == 0 ? stretch_all : bend_all)) {
+			const float ws = w[e.a] + w[e.b];
+			if (ws > 0.0f) {
+				e.fa = w[e.a] / ws;
+				e.fb = w[e.b] / ws;
+				out.push_back(e);
+			}
 		}
 	}
 }
@@ -861,24 +861,17 @@ void FellowCloth3D::_substep(float p_h, const Transform3D &p_pin_xf) {
 	}
 	// Constraints: Gauss-Seidel, `iterations` passes over the stretch edges (alternating their order: a pass's bias
 	// towards its first edges evens out), one over the bending pairs; small substeps converge.
-	auto solve = [X, W](const Edge *p_edges, int p_count, float p_k, bool p_reverse) {
+	auto solve = [X](const Edge *p_edges, int p_count, float p_k, bool p_reverse) {
 		for (int k = 0; k < p_count; k++) {
 			const Edge &e = p_edges[p_reverse ? p_count - 1 - k : k];
-			const float wa = W[e.a];
-			const float wb = W[e.b];
-			const float ws = wa + wb;
-			if (ws <= 0.0f) {
-				continue;
-			}
 			const Vector3 d = X[e.a] - X[e.b];
 			const float l2 = d.length_squared();
 			if (l2 < 1e-18f) {
 				continue;
 			}
-			const float l = Math::sqrt(l2);
-			const Vector3 corr = d * (p_k * (l - e.rest) / (l * ws));
-			X[e.a] -= corr * wa;
-			X[e.b] += corr * wb;
+			const Vector3 corr = d * (p_k * (1.0f - e.rest / Math::sqrt(l2)));
+			X[e.a] -= corr * e.fa;
+			X[e.b] += corr * e.fb;
 		}
 	};
 	for (int it = 0; it < iterations; it++) {
