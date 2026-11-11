@@ -298,6 +298,8 @@ static void _vt_rt_flush() {
 	if (batches.is_empty() || !rd || vt_rs.albedo.is_null() || !_vt_rt_ensure_kernel(rd)) {
 		return;
 	}
+	// The bakes' GPU time in a timestamp capture (FellowBench --profile=1): the interval to the closing "<" marker.
+	rd->capture_timestamp("FellowTerrain VT bake");
 	for (const BakeBatch &b : batches) {
 		const FellowTerrainVT::BakeParams &p = b.params;
 		const uint64_t t0 = OS::get_singleton()->get_ticks_usec();
@@ -349,6 +351,7 @@ static void _vt_rt_flush() {
 		Fellow::stats().terrain_vt_dispatch_usec.add(OS::get_singleton()->get_ticks_usec() - t0);
 		Fellow::stats().terrain_vt_pages_baked.add(b.jobs.size());
 	}
+	rd->capture_timestamp("<FellowTerrain VT bake");
 }
 
 void FellowTerrainVT::bake(const LocalVector<Job> &p_jobs, const BakeParams &p_params) {

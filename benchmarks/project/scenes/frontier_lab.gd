@@ -16,8 +16,9 @@ extends "res://scenes/slice_lab.gd"
 ## hundred MB; needs Streaming Lab's textures (benchmarks/scripts/make_streaming_textures.py). Options:
 ## --frontier_cells=<m> (the cells' load distance, 450), --frontier_meshes=<m> (the buildings' full meshes, 160),
 ## --frontier_regions=<m> (the terrain regions' load distance, 1000), --frontier_trees=<m> (the trees' range, 1000),
-## --frontier_far=<m> (the camera's far plane, 4000); Slice Lab's --slice_weather, --slice_daytime, --slice_day,
-## --slice_crowd, --slice_without=water,weather,fire,crowd.
+## --frontier_far=<m> (the camera's far plane, 4000), --frontier_vt=1 (the terrain regions drawn from their virtual
+## textures, milestone 71; --frontier_vt_texels=<n>, 64; the atlas's size and budget through --fellow=terrain/...);
+## Slice Lab's --slice_weather, --slice_daytime, --slice_day, --slice_crowd, --slice_without=water,weather,fire,crowd.
 
 const F_VERSION := 6
 const F_CELL := 128.0
@@ -44,6 +45,9 @@ var _mats: Array = []
 var _shared := {}
 var _tris := {}
 var _soak_prev := {}
+var vt_on := false # --frontier_vt=1
+var _vt_probe: Node = null # a terrain region whose stats give the shared atlas's
+var _vt_prev := {}
 
 
 func build(p_args: Dictionary) -> void:
@@ -100,6 +104,9 @@ func build(p_args: Dictionary) -> void:
 	ground_streamer.unload_margin = 100.0
 	ground_streamer.max_loading = 2
 	streamers = [cell_streamer, ground_streamer]
+	vt_on = str(args.get("frontier_vt", "0")) == "1"
+	if vt_on:
+		(Engine.get_main_loop() as SceneTree).node_added.connect(_vt_node_added)
 	add_child(level)
 	var place_ms := (Time.get_ticks_usec() - t1) / 1000.0
 	_build_lights()
@@ -964,14 +971,46 @@ func set_time(t: float) -> void:
 		crowd.set_time(t)
 
 
-## Per frame (perf mode): the streamers' cells and meshes.
+## --frontier_vt=1: every terrain region drawn from its virtual texture as it enters the tree.
+func _vt_node_added(n: Node) -> void:
+	if n.is_class("FellowTerrain3D"):
+		n.set("virtual_texture_texels_per_meter", float(args.get("frontier_vt_texels", "64")))
+		n.set("virtual_texture", true)
+		n.add_to_group("frontier_vt")
+
+
+## The shared atlas this frame (its counters as per-frame differences): the pages wanted, baked, evicted, missing.
+func _vt_sample() -> Dictionary:
+	if not vt_on:
+		return {}
+	if not is_instance_valid(_vt_probe) or not _vt_probe.is_inside_tree():
+		_vt_probe = null
+		for n in get_tree().get_nodes_in_group("frontier_vt"):
+			if is_instance_valid(n) and n.is_inside_tree():
+				_vt_probe = n
+				break
+	if _vt_probe == null:
+		return {}
+	var d: Dictionary = _vt_probe.call("get_virtual_texture_stats")
+	var now := {"baked": int(d.get("baked", 0)), "evicted": int(d.get("evicted", 0)), "missing": int(d.get("wanted_missing", 0))}
+	var out := {"vt_wanted": int(d.get("wanted", 0)), "vt_slots_used": int(d.get("slots", 0)) - int(d.get("free_slots", 0)),
+		"vt_pressure_bias": float(d.get("pressure_bias", 0.0))}
+	for k in now:
+		out["vt_" + k] = now[k] - int(_vt_prev.get(k, now[k]))
+	_vt_prev = now
+	return out
+
+
+## Per frame (perf mode): the streamers' cells and meshes; with --frontier_vt=1 the virtual textures' atlas.
 func sample_extra() -> Dictionary:
 	var cs: Dictionary = cell_streamer.get_stats()
 	var gs: Dictionary = ground_streamer.get_stats()
-	return {"cells_loaded": cs.get("loaded", 0), "regions_loaded": gs.get("loaded", 0), "cell_loads": cs.get("loads", 0),
+	var out := {"cells_loaded": cs.get("loaded", 0), "regions_loaded": gs.get("loaded", 0), "cell_loads": cs.get("loads", 0),
 		"region_loads": gs.get("loads", 0), "meshes_full": cs.get("streamed_meshes_full", 0), "mesh_loads": cs.get("mesh_loads", 0),
 		"cell_activation_usec_max": cs.get("activation_usec_max", 0), "region_activation_usec_max": gs.get("activation_usec_max", 0),
 		"lights": get_tree().get_nodes_in_group("frontier_lights").size()}
+	out.merge(_vt_sample())
+	return out
 
 
 ## The soak (main.gd, after each frame): what the streamers did in it — a hitch's record carries it.
@@ -992,4 +1031,5 @@ func soak_after_frame() -> Dictionary:
 	_soak_prev = now
 	if fire:
 		st["fire_sleeping"] = fire.call("is_sleeping")
+	st.merge(_vt_sample())
 	return st
