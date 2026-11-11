@@ -2247,7 +2247,7 @@ float FellowTerrain3D::_region_height(int p_x, int p_z, const RegionNeighbors &p
 	return heights[cz * map_w + cx];
 }
 
-void FellowTerrain3D::_refresh_border_normals() {
+void FellowTerrain3D::_refresh_border_normals(int p_dx, int p_dz) {
 	if (map_w < 2 || normal_image.is_null() || heights.is_empty()) {
 		return;
 	}
@@ -2265,15 +2265,32 @@ void FellowTerrain3D::_refresh_border_normals() {
 		nw[(p_z * map_w + p_x) * 2 + 0] = uint8_t(CLAMP(Math::round((n.x * 0.5f + 0.5f) * 255.0f), 0.0f, 255.0f));
 		nw[(p_z * map_w + p_x) * 2 + 1] = uint8_t(CLAMP(Math::round((n.z * 0.5f + 0.5f) * 255.0f), 0.0f, 255.0f));
 	};
-	for (int x = 0; x < map_w; x++) {
-		normal_at(x, 0);
-		normal_at(x, map_h - 1);
+	// A border texel's normal reads its four direct neighbours' heights: a neighbour across an edge changes that edge
+	// only (milestone 69: the eight neighbours of a region entering refreshed all their borders, uploads included).
+	if (p_dx != 0 && p_dz != 0) {
+		return; // a diagonal neighbour: no normal reads its heights
 	}
-	for (int z = 1; z < map_h - 1; z++) {
-		normal_at(0, z);
-		normal_at(map_w - 1, z);
+	const bool all = p_dx == 0 && p_dz == 0;
+	LocalVector<Rect2i> strips;
+	if (all || p_dz < 0) {
+		strips.push_back(Rect2i(0, 0, map_w, 1));
 	}
-	const Rect2i strips[4] = { Rect2i(0, 0, map_w, 1), Rect2i(0, map_h - 1, map_w, 1), Rect2i(0, 0, 1, map_h), Rect2i(map_w - 1, 0, 1, map_h) };
+	if (all || p_dz > 0) {
+		strips.push_back(Rect2i(0, map_h - 1, map_w, 1));
+	}
+	if (all || p_dx < 0) {
+		strips.push_back(Rect2i(0, 0, 1, map_h));
+	}
+	if (all || p_dx > 0) {
+		strips.push_back(Rect2i(map_w - 1, 0, 1, map_h));
+	}
+	for (const Rect2i &s : strips) {
+		for (int z = s.position.y; z < s.position.y + s.size.y; z++) {
+			for (int x = s.position.x; x < s.position.x + s.size.x; x++) {
+				normal_at(x, z);
+			}
+		}
+	}
 	for (const Rect2i &s : strips) {
 		_terrain_mips_region<uint8_t, 2>(normal_image, s);
 		if (normal_texture.is_valid()) {
@@ -2295,8 +2312,11 @@ void FellowTerrain3D::_region_register() {
 	_region_neighbors_changed();
 	for (int dz = -1; dz <= 1; dz++) {
 		for (int dx = -1; dx <= 1; dx++) {
-			if (FellowTerrain3D *n = (dx || dz) ? _region_neighbor(dx, dz) : nullptr) {
-				n->_region_neighbors_changed();
+			if ((dx == 0) == (dz == 0)) {
+				continue; // itself, or a diagonal neighbour (no normal of its reads this region's heights)
+			}
+			if (FellowTerrain3D *n = _region_neighbor(dx, dz)) {
+				n->_region_neighbors_changed(-dx, -dz); // its border facing this region
 			}
 		}
 	}
@@ -2307,10 +2327,15 @@ void FellowTerrain3D::_region_unregister() {
 		return;
 	}
 	LocalVector<FellowTerrain3D *> neighbors;
+	LocalVector<Vector2i> sides;
 	for (int dz = -1; dz <= 1; dz++) {
 		for (int dx = -1; dx <= 1; dx++) {
-			if (FellowTerrain3D *n = (dx || dz) ? _region_neighbor(dx, dz) : nullptr) {
+			if ((dx == 0) == (dz == 0)) {
+				continue; // itself, or a diagonal neighbour (no normal of its reads this region's heights)
+			}
+			if (FellowTerrain3D *n = _region_neighbor(dx, dz)) {
 				neighbors.push_back(n);
+				sides.push_back(Vector2i(-dx, -dz));
 			}
 		}
 	}
@@ -2322,14 +2347,14 @@ void FellowTerrain3D::_region_unregister() {
 		}
 	}
 	region_registered = false;
-	for (FellowTerrain3D *n : neighbors) {
-		n->_region_neighbors_changed(); // their edges from their own heights again
+	for (uint32_t i = 0; i < neighbors.size(); i++) {
+		neighbors[i]->_region_neighbors_changed(sides[i].x, sides[i].y); // their edge from their own heights again
 	}
 }
 
-void FellowTerrain3D::_region_neighbors_changed() {
+void FellowTerrain3D::_region_neighbors_changed(int p_dx, int p_dz) {
 	if (!data_dirty) {
-		_refresh_border_normals();
+		_refresh_border_normals(p_dx, p_dz);
 	}
 }
 

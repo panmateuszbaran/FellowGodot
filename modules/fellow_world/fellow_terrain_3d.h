@@ -216,8 +216,8 @@ private:
 	float _region_height(int p_x, int p_z, const RegionNeighbors &p_nb) const; // a texel of this map or, beyond its edges, of a neighbour's
 	void _region_register();
 	void _region_unregister();
-	void _region_neighbors_changed();
-	void _refresh_border_normals();
+	void _region_neighbors_changed(int p_dx = 0, int p_dz = 0);
+	void _refresh_border_normals(int p_dx = 0, int p_dz = 0); // all four borders, or the one facing (p_dx, p_dz)
 	template <typename F>
 	void _region_each_touched(const Vector3 &p_global, float p_radius, F p_edit);
 	void _sync_region_edges(const Vector3 &p_global, float p_radius);
