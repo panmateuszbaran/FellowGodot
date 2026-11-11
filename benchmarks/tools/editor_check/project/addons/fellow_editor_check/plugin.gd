@@ -11,10 +11,10 @@ const ICON_CLASSES := ["FellowBurnable3D", "FellowGasEmitter3D", "FellowGasVolum
 	"FellowRain3D", "FellowShallowWater3D", "FellowSnowTracker3D", "FellowWater3D", "FellowWeather3D", "FellowWind3D",
 	"FellowHLOD3D", "FellowImpostorBaker", "FellowStreamingCell3D", "FellowWorldStreamer3D", "FellowMotionCharacter3D",
 	"FellowMotionDatabase", "FellowMotionMatcher3D", "FellowTerrain3D", "FellowTerrainLayer", "FellowTerrainFoliage",
-	"FellowPipelineWarmer3D"]
+	"FellowPipelineWarmer3D", "FellowTraversal3D", "FellowTraversalPose3D"]
 const MONITORS := ["FellowEngine/Texture streaming resident", "FellowEngine/Texture streaming wanted",
 	"FellowEngine/Texture streaming pending", "FellowEngine/World cells loaded", "FellowEngine/World cells loading",
-	"FellowEngine/Motion matching time", "FellowEngine/Motion matching updates"]
+	"FellowEngine/Motion matching time", "FellowEngine/Motion matching updates", "FellowEngine/Traversal time"]
 const SPLIT_MENU := "Split into Streaming Cells (FellowEngine)..."
 const PROXIES_MENU := "Bake Streaming Proxies (FellowEngine)..."
 

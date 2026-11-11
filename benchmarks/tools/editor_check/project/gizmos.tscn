@@ -42,3 +42,10 @@ cloud_height = 1.0
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1.5)
 radius = 0.2
 length = 0.8
+
+[node name="Traversal" type="FellowTraversal3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.5, 0, 1.5)
+max_height = 1.0
+low_max_height = 0.8
+min_height = 0.3
+reach_distance = 0.5

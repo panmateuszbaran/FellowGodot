@@ -1,0 +1,248 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="FellowTraversal3D" inherits="Node3D" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+	<brief_description>
+		FellowEngine: mantling and vaulting for a character's body — a ledge found with physics queries, the body moved onto it (or over a thin obstacle) along a path that keeps its capsule clear.
+	</brief_description>
+	<description>
+		A child of a [CharacterBody3D] (or of any [CollisionObject3D], see [member body_path]). Every physics frame, while the body moves at [member auto_min_speed] or more (or the controller gives [method set_intent]), it looks for a ledge in the way: a wall within [member reach_distance] of the body's capsule (read from its first [CollisionShape3D]; a capsule, cylinder, box or sphere), facing the way the body goes within [member max_wall_angle]; a top no steeper than [member max_ledge_slope] between [member min_height] and [member max_height] over the body's feet; room for the capsule on the top, straight up in front of the wall and over the edge. A thin obstacle (its far side within [member vault_max_depth], a landing beyond it) is vaulted when there is no room on it, or when the body runs at [member vault_min_speed] or more. A ceiling over the body lowers the heights searched; a ledge the body could walk under (a beam over head height) is left to [method try_mantle].
+		The mantle moves the body itself, each physics frame, along a path from the ledge's geometry: up in front of the wall until the capsule is over the top, then onto it (a vault goes over and down beyond it), turned to face the wall when [member align_to_wall] is on; a [CharacterBody3D]'s velocity follows the motion, and is [member exit_speed] into the ledge at the end. A collider that moves (an [AnimatableBody3D] platform) carries the ledge with it. The body's own controller should not move it while [method is_active] is [code]true[/code] (the traversal sets the body's transform after the body's own physics processing, as its child).
+		The pose: a [FellowTraversalPose3D] on the character's [Skeleton3D] reaches the hands for the edge, puts the feet on the wall's face and onto the top and tips the torso towards the wall over whatever animation plays; or plays the clip set for the kind ([member low_clip], [member high_clip], [member vault_clip]) across the mantle, its root's motion ([member clip_root_bone]) warped onto the ledge as the body's path. The signals tell an [AnimationTree] when to switch. See [code]docs/decisions/0180-traversal-mantling.md[/code].
+		[codeblocks]
+		[gdscript]
+		# A controller: the input as the intent, nothing while the traversal moves the body.
+		func _physics_process(delta):
+		    if $FellowTraversal3D.is_active():
+		        return
+		    var wish = Vector3(input.x, 0, input.y) * speed
+		    $FellowTraversal3D.set_intent(wish)
+		    velocity.x = wish.x
+		    velocity.z = wish.z
+		    move_and_slide()
+		[/gdscript]
+		[csharp]
+		// A controller: the input as the intent, nothing while the traversal moves the body.
+		public override void _PhysicsProcess(double delta)
+		{
+		    var traversal = GetNode&lt;FellowTraversal3D&gt;("FellowTraversal3D");
+		    if (traversal.IsActive())
+		    {
+		        return;
+		    }
+		    var wish = new Vector3(input.X, 0, input.Y) * Speed;
+		    traversal.SetIntent(wish);
+		    Velocity = new Vector3(wish.X, Velocity.Y, wish.Z);
+		    MoveAndSlide();
+		}
+		[/csharp]
+		[/codeblocks]
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="cancel">
+			<return type="void" />
+			<description>
+				Ends the mantle in progress where the body is (its velocity zero); [signal mantle_cancelled] is emitted.
+			</description>
+		</method>
+		<method name="find_ledge">
+			<return type="Dictionary" />
+			<param index="0" name="direction" type="Vector3" default="Vector3(0, 0, 0)" />
+			<description>
+				Looks for a ledge in [param direction] (by default the intent, else the body's velocity, else its -Z) without starting anything. The result: [code]kind[/code] (a [enum Kind]), [code]reason[/code] (why it is [constant KIND_BLOCKED], [constant KIND_TOO_HIGH] or [constant KIND_NONE]), [code]edge[/code] (the top's edge on the wall's face), [code]inward[/code] (horizontal, into the wall), [code]top_normal[/code], [code]height[/code] (the top over the feet), [code]target[/code] (where the feet go: on the top, or the vault's landing), [code]depth[/code] (a vaulted obstacle's), [code]open_below[/code] (the body could walk on under it) and [code]collider[/code].
+			</description>
+		</method>
+		<method name="get_action" qualifiers="const">
+			<return type="int" enum="FellowTraversal3D.Kind" />
+			<description>
+				The mantle in progress ([constant KIND_LOW], [constant KIND_HIGH] or [constant KIND_VAULT]), or [constant KIND_NONE].
+			</description>
+		</method>
+		<method name="get_global_stats" qualifiers="static">
+			<return type="Dictionary" />
+			<description>
+				Every traversal's work since the last [method reset_global_stats]: [code]checks[/code] and [code]check_usec[/code] (the ledges looked for), [code]steps[/code] and [code]step_usec[/code] (the physics frames of mantles moving bodies), [code]mantles_low[/code], [code]mantles_high[/code], [code]vaults[/code], [code]poses[/code] and [code]pose_usec[/code] (the [FellowTraversalPose3D]s' poses). The debugger's Monitors tab shows their time a frame as "FellowEngine/Traversal time".
+			</description>
+		</method>
+		<method name="get_intent" qualifiers="const">
+			<return type="Vector3" />
+			<description>
+				The direction set by [method set_intent].
+			</description>
+		</method>
+		<method name="get_last_check" qualifiers="const">
+			<return type="Dictionary" />
+			<description>
+				The last check's result (automatic, [method find_ledge] or [method try_mantle]), as [method find_ledge] returns it.
+			</description>
+		</method>
+		<method name="get_pose_targets" qualifiers="const">
+			<return type="Dictionary" />
+			<description>
+				What the body's pose follows this physics frame (global space), for a pose of one's own: [code]active[/code], [code]kind[/code], [code]progress[/code], [code]inward[/code], [code]hand_left[/code], [code]hand_right[/code], [code]hand_weights[/code] (a [Vector2]: left, right), [code]foot_left[/code], [code]foot_right[/code], [code]foot_weights[/code], [code]foot_follow[/code] (how far each foot's target moves down with the hips), [code]lean[/code] (radians, towards the wall), [code]hips_drop[/code] (meters the hips may hang below the capsule's place), [code]clip[/code] and [code]clip_time[/code].
+			</description>
+		</method>
+		<method name="get_progress" qualifiers="const">
+			<return type="float" />
+			<description>
+				The mantle's progress, 0 to 1 (0 when none is in progress).
+			</description>
+		</method>
+		<method name="is_active" qualifiers="const">
+			<return type="bool" />
+			<description>
+				[code]true[/code] while a mantle moves the body.
+			</description>
+		</method>
+		<method name="reset_global_stats" qualifiers="static">
+			<return type="void" />
+			<description>
+				Sets the counters of [method get_global_stats] to zero.
+			</description>
+		</method>
+		<method name="set_intent">
+			<return type="void" />
+			<param index="0" name="direction" type="Vector3" />
+			<description>
+				The way the player wants to go (the input, in global space), set by the controller every physics frame: the automatic mantle checks that way, and a body pressed against a wall (its velocity into it lost to the slide) still mantles. A zero vector: the body's velocity is used.
+			</description>
+		</method>
+		<method name="try_mantle">
+			<return type="bool" />
+			<param index="0" name="direction" type="Vector3" default="Vector3(0, 0, 0)" />
+			<description>
+				Checks for a ledge as [method find_ledge] does and starts the mantle or vault it allows (also one the body could walk under); [code]false[/code] when there is none, a mantle is in progress, the traversal is disabled, or the body is in the air without [member grab_in_air]. For a mantle on a button with [member auto_mantle] off.
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="align_to_wall" type="bool" setter="set_align_to_wall" getter="is_align_to_wall" default="true">
+			The body turns to face the wall (its -Z into it) over the first 30 % of the mantle.
+		</member>
+		<member name="auto_mantle" type="bool" setter="set_auto_mantle" getter="is_auto_mantle" default="true">
+			Checks every physics frame while the body moves (or has an intent) and starts what it finds. Off: only [method try_mantle] starts one.
+		</member>
+		<member name="auto_min_speed" type="float" setter="set_auto_min_speed" getter="get_auto_min_speed" default="0.5">
+			The horizontal speed under which the automatic check does not run (without an intent).
+		</member>
+		<member name="body_path" type="NodePath" setter="set_body_path" getter="get_body_path" default="NodePath(&quot;&quot;)">
+			The body moved; by default the parent.
+		</member>
+		<member name="check_interval" type="int" setter="set_check_interval" getter="get_check_interval" default="2">
+			The physics frames from one automatic check to the next while nothing was in reach (staggered between traversals); with a wall in reach, every frame.
+		</member>
+		<member name="clip_root_bone" type="StringName" setter="set_clip_root_bone" getter="get_clip_root_bone" default="&amp;&quot;&quot;">
+			The bone whose position track in the clips is the root's motion: sampled, its rise scaled to the ledge's height and its advance to the distance onto the top (or the landing), it becomes the body's path (kept out of the wall until the root has risen); [FellowTraversalPose3D] takes the displacement out of the bone's pose. Empty: the procedural path, the clip only posing the body.
+		</member>
+		<member name="collision_mask" type="int" setter="set_collision_mask" getter="get_collision_mask" default="1">
+			The physics layers the queries see (walls, tops, the room for the capsule).
+		</member>
+		<member name="debug_draw" type="bool" setter="set_debug_draw" getter="is_debug_draw" default="false">
+			Draws the last ledge found (its edge and where the capsule goes; green when it can be climbed, red when not) and the mantle's path.
+		</member>
+		<member name="enabled" type="bool" setter="set_enabled" getter="is_enabled" default="true">
+			Off: no check, no mantle (one in progress is cancelled).
+		</member>
+		<member name="exit_speed" type="float" setter="set_exit_speed" getter="get_exit_speed" default="1.5">
+			A [CharacterBody3D]'s speed into the ledge when a mantle ends (a vault keeps its entry speed if that is higher).
+		</member>
+		<member name="grab_in_air" type="bool" setter="set_grab_in_air" getter="is_grab_in_air" default="true">
+			In the air (not on the floor, not rising faster than 1 m/s), ledges are grabbed up to 0.5 m higher than [member max_height] over the feet (hanging, the feet are lower). Vaults are not started in the air.
+		</member>
+		<member name="high_clip" type="Animation" setter="set_high_clip" getter="get_high_clip">
+			The clip played for a [constant KIND_HIGH] mantle (its length is the mantle's).
+		</member>
+		<member name="high_duration" type="float" setter="set_high_duration" getter="get_high_duration" default="1.1">
+			A procedural [constant KIND_HIGH] mantle's time for a 1.8 m ledge (scaled with the square root of the height, 0.85 to 1.15 times).
+		</member>
+		<member name="low_clip" type="Animation" setter="set_low_clip" getter="get_low_clip">
+			The clip played for a [constant KIND_LOW] mantle (its length is the mantle's).
+		</member>
+		<member name="low_duration" type="float" setter="set_low_duration" getter="get_low_duration" default="0.6">
+			A procedural [constant KIND_LOW] mantle's time for a 1 m ledge (scaled with the square root of the height, 0.85 to 1.2 times).
+		</member>
+		<member name="low_max_height" type="float" setter="set_low_max_height" getter="get_low_max_height" default="1.3">
+			Tops up to this height over the feet are [constant KIND_LOW] mantles, higher ones [constant KIND_HIGH].
+		</member>
+		<member name="max_height" type="float" setter="set_max_height" getter="get_max_height" default="2.3">
+			The highest top climbed from the ground ([member grab_in_air] adds 0.5 m in the air).
+		</member>
+		<member name="max_ledge_slope" type="float" setter="set_max_ledge_slope" getter="get_max_ledge_slope" default="40.0">
+			A steeper top is [constant KIND_BLOCKED] ([code]"slope"[/code]).
+		</member>
+		<member name="max_wall_angle" type="float" setter="set_max_wall_angle" getter="get_max_wall_angle" default="45.0">
+			The largest angle between the way the body goes and into the wall; a wall turned farther is passed by.
+		</member>
+		<member name="min_height" type="float" setter="set_min_height" getter="get_min_height" default="0.5">
+			Lower obstacles are the character's own to step over or jump.
+		</member>
+		<member name="reach_distance" type="float" setter="set_reach_distance" getter="get_reach_distance" default="0.6">
+			How far beyond the capsule a wall is looked for.
+		</member>
+		<member name="vault" type="bool" setter="set_vault" getter="is_vault" default="true">
+			Vaults over thin obstacles.
+		</member>
+		<member name="vault_clip" type="Animation" setter="set_vault_clip" getter="get_vault_clip">
+			The clip played for a [constant KIND_VAULT] (its length is the vault's).
+		</member>
+		<member name="vault_duration" type="float" setter="set_vault_duration" getter="get_vault_duration" default="0.6">
+			A procedural vault's time.
+		</member>
+		<member name="vault_max_depth" type="float" setter="set_vault_max_depth" getter="get_vault_max_depth" default="0.6">
+			An obstacle whose far side drops within this depth (at least 0.25 m below its top) can be vaulted.
+		</member>
+		<member name="vault_max_height" type="float" setter="set_vault_max_height" getter="get_vault_max_height" default="1.3">
+			The highest obstacle vaulted.
+		</member>
+		<member name="vault_min_speed" type="float" setter="set_vault_min_speed" getter="get_vault_min_speed" default="2.5">
+			At this speed or more a thin obstacle with room on it is vaulted rather than mantled.
+		</member>
+	</members>
+	<signals>
+		<signal name="mantle_cancelled">
+			<param index="0" name="kind" type="int" />
+			<description>
+				A mantle of [param kind] (a [enum Kind]) ended before its end: [method cancel], [member enabled] turned off, the traversal left the tree.
+			</description>
+		</signal>
+		<signal name="mantle_finished">
+			<param index="0" name="kind" type="int" />
+			<description>
+				A mantle of [param kind] (a [enum Kind]) ended with the body on the top or the landing.
+			</description>
+		</signal>
+		<signal name="mantle_started">
+			<param index="0" name="kind" type="int" />
+			<param index="1" name="ledge" type="Dictionary" />
+			<description>
+				A mantle of [param kind] (a [enum Kind]) began; [param ledge] is the check's result, as [method find_ledge] returns it.
+			</description>
+		</signal>
+	</signals>
+	<constants>
+		<constant name="KIND_NONE" value="0" enum="Kind">
+			Nothing to climb in reach (or no wall facing the way the body goes).
+		</constant>
+		<constant name="KIND_STEP" value="1" enum="Kind">
+			A top lower than [member min_height].
+		</constant>
+		<constant name="KIND_LOW" value="2" enum="Kind">
+			A mantle onto a top up to [member low_max_height].
+		</constant>
+		<constant name="KIND_HIGH" value="3" enum="Kind">
+			A mantle onto a top up to [member max_height] (pulled up from a hang).
+		</constant>
+		<constant name="KIND_VAULT" value="4" enum="Kind">
+			Over a thin obstacle up to [member vault_max_height].
+		</constant>
+		<constant name="KIND_TOO_HIGH" value="5" enum="Kind">
+			A wall with no top below [member max_height] (or the ceiling over the body).
+		</constant>
+		<constant name="KIND_BLOCKED" value="6" enum="Kind">
+			A top, but no room for the capsule on it, above the body or over the edge, or a top too steep (the reason says which).
+		</constant>
+		<constant name="KIND_MAX" value="7" enum="Kind">
+			The number of kinds.
+		</constant>
+	</constants>
+</class>

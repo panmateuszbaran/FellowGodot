@@ -9,10 +9,10 @@ python run_editor_check.py --godot <editor binary> --out <new directory> [--head
 copies `project/` to `<out>/project`, opens it in the editor, and lets its plugin
 (`project/addons/fellow_editor_check/plugin.gd`) check, once the first import is done:
 
-* the icons of the 17 FellowEngine classes in the editor's theme;
+* the icons of the 23 FellowEngine classes in the editor's theme;
 * `walk.bvh` imported by the `fellow.bvh` importer as an `Animation` (its tracks, the hips' first position, its length);
-* `gizmos.tscn`: one FellowEngine gizmo on each of eight nodes, and a picture of the 3D view (`gizmos.png`, not with
-  `--headless`);
+* `gizmos.tscn`: one FellowEngine gizmo on each of nine nodes (milestone 72: a `FellowTraversal3D`'s heights), and a
+  picture of the 3D view (`gizmos.png`, not with `--headless`);
 * `split.tscn`: Project > Tools > Split into Streaming Cells run through its menu item and dialog on 40 boxes; the
   cells, their scenes, their owner, what is left in the level; the cells' content shown in the editor; the saved
   level (no box in it);

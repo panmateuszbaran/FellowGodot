@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="FellowTraversalPose3D" inherits="SkeletonModifier3D" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+	<brief_description>
+		FellowEngine: a character's pose while its [FellowTraversal3D] mantles or vaults — procedural (two-bone IK for the hands and feet, the hips lowered, the torso leaned) or the clip set for the kind.
+	</brief_description>
+	<description>
+		A modifier of the character's [Skeleton3D] (after the animation's: an [AnimationTree] or [AnimationPlayer] plays under it). It finds its [FellowTraversal3D] among the children of the skeleton's ancestors (or at [member traversal_path]) and, while a mantle moves the body, poses the bones over whatever the animation plays: the torso tipped towards the wall (the spine and chest), the hips lowered as far as the traversal allows until the shoulders are within the arms' reach of the edge (hanging, pushing up), the hands on the edge (two-bone IK, the elbows out and down), the feet against the wall's face and stepping onto the top, or tucked over a vault (two-bone IK, the knees towards the wall, the feet keeping their turn in the world). When the traversal has a clip for the kind, the clip is played across the mantle instead, its root bone's motion since the clip's start taken out. Blended in and out over [member blend_time].
+		The bones are found by their names in common rigs: Godot's humanoid profile ([code]Hips[/code], [code]Spine[/code], [code]Chest[/code], [code]LeftUpperArm[/code], [code]LeftLowerArm[/code], [code]LeftHand[/code], [code]LeftUpperLeg[/code], [code]LeftLowerLeg[/code], [code]LeftFoot[/code] and the right side's), Mixamo's ([code]mixamorig:LeftArm[/code], [code]LeftForeArm[/code], [code]LeftUpLeg[/code], [code]LeftLeg[/code]…), Unreal's mannequin ([code]pelvis[/code], [code]spine_01[/code], [code]upperarm_l[/code], [code]lowerarm_l[/code], [code]hand_l[/code], [code]thigh_l[/code], [code]calf_l[/code], [code]foot_l[/code]…) and Blender's ([code]upper_arm.L[/code], [code]forearm.L[/code], [code]thigh.L[/code], [code]shin.L[/code]…); [member bone_names] names others. See [code]docs/decisions/0180-traversal-mantling.md[/code].
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="get_hips_drop" qualifiers="const">
+			<return type="float" />
+			<description>
+				How far the last pose lowered the hips, in meters.
+			</description>
+		</method>
+		<method name="get_role_bone">
+			<return type="int" />
+			<param index="0" name="role" type="int" enum="FellowTraversalPose3D.Role" />
+			<description>
+				The skeleton's bone found for [param role], or -1.
+			</description>
+		</method>
+		<method name="get_weight" qualifiers="const">
+			<return type="float" />
+			<description>
+				The blend of the traversal's pose over the animation's, 0 to 1.
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="blend_time" type="float" setter="set_blend_time" getter="get_blend_time" default="0.15">
+			The seconds the pose takes to blend in when a mantle starts and out when it ends (a clip's last pose is held while it fades).
+		</member>
+		<member name="bone_names" type="Dictionary" setter="set_bone_names" getter="get_bone_names" default="{}">
+			Bones named for roles, over the names found by themselves: a role's name ([code]"hips"[/code], [code]"spine"[/code], [code]"chest"[/code], [code]"left_upper_arm"[/code], [code]"left_lower_arm"[/code], [code]"left_hand"[/code], [code]"right_upper_arm"[/code], …, [code]"left_upper_leg"[/code], [code]"left_lower_leg"[/code], [code]"left_foot"[/code], [code]"right_upper_leg"[/code], …) to the bone's name.
+		</member>
+		<member name="foot_ik" type="bool" setter="set_foot_ik" getter="is_foot_ik" default="true">
+			The feet placed on the wall's face and the top.
+		</member>
+		<member name="hand_ik" type="bool" setter="set_hand_ik" getter="is_hand_ik" default="true">
+			The hands placed on the edge (and the hips lowered for them to reach it).
+		</member>
+		<member name="lean" type="bool" setter="set_lean" getter="is_lean" default="true">
+			The torso tipped towards the wall.
+		</member>
+		<member name="traversal_path" type="NodePath" setter="set_traversal_path" getter="get_traversal_path" default="NodePath(&quot;&quot;)">
+			The [FellowTraversal3D] followed; by default the first found among the children of the skeleton's ancestors.
+		</member>
+	</members>
+	<constants>
+		<constant name="ROLE_HIPS" value="0" enum="Role">
+			The hips (lowered while hanging).
+		</constant>
+		<constant name="ROLE_SPINE" value="1" enum="Role">
+			The lower spine (half the lean).
+		</constant>
+		<constant name="ROLE_CHEST" value="2" enum="Role">
+			The chest (half the lean).
+		</constant>
+		<constant name="ROLE_LEFT_UPPER_ARM" value="3" enum="Role">
+			The left upper arm.
+		</constant>
+		<constant name="ROLE_LEFT_LOWER_ARM" value="4" enum="Role">
+			The left forearm.
+		</constant>
+		<constant name="ROLE_LEFT_HAND" value="5" enum="Role">
+			The left hand (its origin, the wrist, is placed).
+		</constant>
+		<constant name="ROLE_RIGHT_UPPER_ARM" value="6" enum="Role">
+			The right upper arm.
+		</constant>
+		<constant name="ROLE_RIGHT_LOWER_ARM" value="7" enum="Role">
+			The right forearm.
+		</constant>
+		<constant name="ROLE_RIGHT_HAND" value="8" enum="Role">
+			The right hand.
+		</constant>
+		<constant name="ROLE_LEFT_UPPER_LEG" value="9" enum="Role">
+			The left thigh.
+		</constant>
+		<constant name="ROLE_LEFT_LOWER_LEG" value="10" enum="Role">
+			The left shin.
+		</constant>
+		<constant name="ROLE_LEFT_FOOT" value="11" enum="Role">
+			The left foot (its origin, the ankle, is placed).
+		</constant>
+		<constant name="ROLE_RIGHT_UPPER_LEG" value="12" enum="Role">
+			The right thigh.
+		</constant>
+		<constant name="ROLE_RIGHT_LOWER_LEG" value="13" enum="Role">
+			The right shin.
+		</constant>
+		<constant name="ROLE_RIGHT_FOOT" value="14" enum="Role">
+			The right foot.
+		</constant>
+		<constant name="ROLE_MAX" value="15" enum="Role">
+			The number of roles.
+		</constant>
+	</constants>
+</class>

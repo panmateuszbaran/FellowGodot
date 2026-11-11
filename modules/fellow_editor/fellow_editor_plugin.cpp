@@ -48,6 +48,8 @@
 #include "editor/themes/editor_scale.h"
 #include "scene/3d/mesh_instance_3d.h"
 #include "scene/3d/node_3d.h"
+#include "scene/3d/physics/character_body_3d.h"
+#include "scene/3d/physics/collision_shape_3d.h"
 #include "scene/gui/box_container.h"
 #include "scene/gui/button.h"
 #include "scene/gui/check_box.h"
@@ -56,6 +58,7 @@
 #include "scene/gui/line_edit.h"
 #include "scene/gui/menu_button.h"
 #include "scene/gui/spin_box.h"
+#include "scene/resources/3d/capsule_shape_3d.h"
 #include "scene/resources/3d/primitive_meshes.h"
 #include "scene/resources/animation.h"
 #include "scene/scene_string_names.h"
@@ -77,6 +80,7 @@ static const char *FELLOW_GIZMO_CLASSES[] = {
 	"FellowHLOD3D",
 	"FellowBurnable3D",
 	"FellowMotionCharacter3D",
+	"FellowTraversal3D",
 };
 
 // The properties each class's lines are drawn from.
@@ -97,8 +101,34 @@ static Vector<StringName> _fellow_gizmo_properties(const StringName &p_class) {
 		return { SNAME("distance_range"), SNAME("cloud_height") };
 	} else if (p_class == SNAME("FellowSnowTracker3D")) {
 		return { SNAME("radius"), SNAME("length") };
+	} else if (p_class == SNAME("FellowTraversal3D")) {
+		return { SNAME("min_height"), SNAME("low_max_height"), SNAME("max_height"), SNAME("reach_distance") };
 	}
 	return {};
+}
+
+// Milestone 72: a FellowTraversal3D's body's feet and radius, in the traversal's space (its first collision shape's
+// bounds; without one, a capsule 0.35 m wide standing on the traversal's origin).
+static Vector3 _fellow_traversal_feet(const Node3D *p_node, real_t *r_radius) {
+	*r_radius = 0.35;
+	const Node3D *body = Object::cast_to<Node3D>(p_node->get_parent());
+	if (!body) {
+		return Vector3();
+	}
+	for (int i = 0; i < body->get_child_count(); i++) {
+		const CollisionShape3D *cs = Object::cast_to<CollisionShape3D>(body->get_child(i));
+		if (!cs || cs->is_disabled() || cs->get_shape().is_null()) {
+			continue;
+		}
+		const Ref<ArrayMesh> mesh = cs->get_shape()->get_debug_mesh();
+		if (mesh.is_null()) {
+			continue;
+		}
+		const AABB box = cs->get_transform().xform(mesh->get_aabb());
+		*r_radius = MAX(box.size.x, box.size.z) * 0.5;
+		return p_node->get_transform().affine_inverse().xform(Vector3(box.get_center().x, box.position.y, box.get_center().z));
+	}
+	return Vector3();
 }
 
 static StringName _fellow_gizmo_class(const Node3D *p_node) {
@@ -198,6 +228,19 @@ Vector<Vector3> FellowGizmoPlugin::lines_for(const StringName &p_class, const Di
 		_circle_lines(Vector3(), range.y, 96, lines);
 		lines.push_back(Vector3(range.x, 0, 0));
 		lines.push_back(Vector3(range.x, h, 0));
+	} else if (p_class == SNAME("FellowTraversal3D")) {
+		// The heights a ledge may have, within reach in front of the body (-Z), and the low mantles' highest top.
+		const Vector3 feet = p_properties.get("_feet", Vector3());
+		const real_t r = p_properties.get("_radius", 0.35);
+		const real_t lo = p_properties.get("min_height", 0.5);
+		const real_t mid = p_properties.get("low_max_height", 1.3);
+		const real_t hi = p_properties.get("max_height", 2.3);
+		const real_t reach = p_properties.get("reach_distance", 0.6);
+		_box_lines(AABB(feet + Vector3(-r, lo, -r - reach), Vector3(r * 2.0, MAX(hi - lo, 0.01), reach)), lines);
+		lines.push_back(feet + Vector3(-r, mid, -r - reach));
+		lines.push_back(feet + Vector3(r, mid, -r - reach));
+		lines.push_back(feet + Vector3(-r, mid, -r));
+		lines.push_back(feet + Vector3(r, mid, -r));
 	} else if (p_class == SNAME("FellowSnowTracker3D")) {
 		// A capsule along the node's -Z, centred: the track it presses into the snow.
 		const real_t r = p_properties.get("radius", 0.1);
@@ -246,6 +289,11 @@ void FellowGizmoPlugin::redraw(EditorNode3DGizmo *p_gizmo) {
 	Dictionary props;
 	for (const StringName &p : _fellow_gizmo_properties(cls)) {
 		props[p] = node->get(p);
+	}
+	if (cls == SNAME("FellowTraversal3D")) {
+		real_t radius;
+		props["_feet"] = _fellow_traversal_feet(node, &radius);
+		props["_radius"] = radius;
 	}
 	const Vector<Vector3> lines = lines_for(cls, props);
 	if (!lines.is_empty()) {
@@ -781,6 +829,23 @@ Node3D *FellowEditorPlugin::make_preset(int p_preset, const Node *p_root) {
 		case PRESET_PIPELINE_WARMUP: {
 			top = Object::cast_to<Node3D>(_fellow_make("FellowPipelineWarmer3D", "PipelineWarmup", nullptr, Dictionary()));
 		} break;
+		case PRESET_MANTLING_CHARACTER: {
+			// Milestone 72: a character's body (a capsule standing on its origin) that mantles and vaults; its
+			// controller, its model and a FellowTraversalPose3D on the model's skeleton are the project's.
+			CharacterBody3D *body = memnew(CharacterBody3D);
+			body->set_name("Character");
+			CollisionShape3D *shape = memnew(CollisionShape3D);
+			shape->set_name("CollisionShape3D");
+			Ref<CapsuleShape3D> capsule;
+			capsule.instantiate();
+			capsule->set_radius(0.35);
+			capsule->set_height(1.8);
+			shape->set_shape(capsule);
+			shape->set_position(Vector3(0, 0.9, 0));
+			body->add_child(shape);
+			top = body;
+			_fellow_make("FellowTraversal3D", "FellowTraversal3D", top);
+		} break;
 		default:
 			break;
 	}
@@ -917,6 +982,8 @@ FellowEditorPlugin::FellowEditorPlugin() {
 	popup->add_separator();
 	popup->add_item(TTR("Add Terrain (256 x 256 m, to sculpt)"), PRESET_TERRAIN);
 	popup->add_item(TTR("Add Pipeline Warm-up (compiles while loading)"), PRESET_PIPELINE_WARMUP);
+	popup->add_separator();
+	popup->add_item(TTR("Add Mantling Character (body, capsule, traversal)"), PRESET_MANTLING_CHARACTER);
 	popup->connect(SceneStringName(id_pressed), callable_mp(this, &FellowEditorPlugin::_add_preset));
 }
 
