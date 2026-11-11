@@ -63,6 +63,7 @@ public:
 	static constexpr int MAX_MIPS = 16;
 	static constexpr int HEIGHT_MIP = 3; // the coarsest mip whose pages keep their height range (finer ones use it)
 	static constexpr int OVERVIEW_MIPS = 8; // the overview's levels: PAGE texels down to 1
+	static constexpr int REVISIT_FRAMES = 4; // the quadtree at least every this many frames (staggered by terrain)
 
 	struct View {
 		Vector3 camera; // terrain-local
@@ -136,6 +137,17 @@ private:
 	uint64_t overview_baked = 0;
 	int last_wanted = 0;
 	int last_missing = 0;
+	// Milestone 71: the last visit's choice kept while the view barely changes (the quadtree every few frames, or when the
+	// camera has moved, pages are missing or stale, the bias changed); its slots kept recent meanwhile.
+	bool visited = false;
+	Vector3 visit_camera;
+	float visit_bias = 0.0f;
+	float visit_near = 0.0f; // the camera's distance to the map's box at the visit
+	LocalVector<int> wanted_slots;
+	uint64_t start_frame = UINT64_MAX;
+	uint64_t visits = 0;
+	uint64_t updates = 0;
+	bool _start(bool p_may_keep, const Vector3 &p_camera, float p_lod_bias);
 	uint64_t baked = 0;
 
 	static uint64_t _key(int p_mip, int p_x, int p_z) { return (uint64_t(p_mip) << 48) | (uint64_t(uint32_t(p_z)) << 24) | uint64_t(uint32_t(p_x)); }
@@ -164,6 +176,9 @@ public:
 	// ranges there (the whole map with an empty rectangle).
 	void update_heights(const float *p_heights, int p_w, int p_h, float p_spacing, const Rect2i &p_texels = Rect2i());
 
+	// A frame, first: true when the last frame's choice of pages still holds for a camera there (terrain-local), kept
+	// (milestone 71); then update() is not needed this frame.
+	bool keep(const Vector3 &p_camera, float p_lod_bias);
 	// A frame: the pages p_view wants, and the missing or stale ones to bake now (within the budget every terrain
 	// shares). Their slots are this terrain's from now on and the page table says so (upload_page_table()).
 	void update(const View &p_view, float p_lod_bias, LocalVector<Job> &r_jobs);
@@ -184,6 +199,8 @@ public:
 	int get_wanted_count() const { return last_wanted; }
 	int get_missing_count() const { return last_missing; }
 	uint64_t get_baked_count() const { return baked; }
+	uint64_t get_visit_count() const { return visits; }
+	uint64_t get_update_count() const { return updates; }
 
 	// What a terrain's pages are baked from: its RenderingServer textures and its layers (FellowTerrain3D's shader
 	// parameters, the same arithmetic).

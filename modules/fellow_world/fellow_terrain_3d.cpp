@@ -3862,27 +3862,44 @@ void FellowTerrain3D::_process_vt(Camera3D *p_camera) {
 	if (material_dirty) {
 		_update_material();
 	}
+	// The camera's frustum and a pixel's angle, once a frame for every terrain (milestone 71).
+	static uint64_t cam_frame = UINT64_MAX;
+	static ObjectID cam_id;
+	static Vector<Plane> cam_planes;
+	static Vector3 cam_position;
+	static float cam_pixel_angle = 0.001f;
+	const uint64_t now = Engine::get_singleton()->get_process_frames();
+	if (cam_frame != now || cam_id != p_camera->get_instance_id()) {
+		cam_frame = now;
+		cam_id = p_camera->get_instance_id();
+		cam_planes = p_camera->get_frustum();
+		cam_position = p_camera->get_global_position();
+		// A pixel's angle in the 3D frame (its resolution with the viewport's 3D scaling).
+		Viewport *vp = p_camera->get_viewport();
+		Vector2 size = vp ? vp->get_visible_rect().size : Vector2(1920, 1080);
+		if (vp) {
+			size *= vp->get_scaling_3d_scale();
+		}
+		if (p_camera->get_projection() == Camera3D::PROJECTION_PERSPECTIVE) {
+			const bool keep_width = p_camera->get_keep_aspect_mode() == Camera3D::KEEP_WIDTH;
+			cam_pixel_angle = 2.0f * Math::tan(Math::deg_to_rad(p_camera->get_fov()) * 0.5f) / MAX(1.0f, keep_width ? size.x : size.y);
+		} else {
+			// Orthogonal: a pixel's width everywhere, as an angle seen from 1 m (the distances measured from the camera's
+			// plane would be another model; a terrain is rarely seen so).
+			cam_pixel_angle = p_camera->get_size() / MAX(1.0f, size.y);
+		}
+	}
 	FellowTerrainVT::View view;
 	const Transform3D inv = get_global_transform().affine_inverse();
-	view.camera = inv.xform(p_camera->get_global_position());
-	for (const Plane &p : p_camera->get_frustum()) {
-		view.frustum.push_back(inv.xform(p));
+	view.camera = inv.xform(cam_position);
+	vt_jobs.clear();
+	if (!vt->keep(view.camera, virtual_texture_lod_bias)) {
+		for (const Plane &p : cam_planes) {
+			view.frustum.push_back(inv.xform(p));
+		}
+		view.pixel_angle = cam_pixel_angle;
+		vt->update(view, virtual_texture_lod_bias, vt_jobs);
 	}
-	// A pixel's angle in the 3D frame (its resolution with the viewport's 3D scaling).
-	Viewport *vp = p_camera->get_viewport();
-	Vector2 size = vp ? vp->get_visible_rect().size : Vector2(1920, 1080);
-	if (vp) {
-		size *= vp->get_scaling_3d_scale();
-	}
-	if (p_camera->get_projection() == Camera3D::PROJECTION_PERSPECTIVE) {
-		const bool keep_width = p_camera->get_keep_aspect_mode() == Camera3D::KEEP_WIDTH;
-		view.pixel_angle = 2.0f * Math::tan(Math::deg_to_rad(p_camera->get_fov()) * 0.5f) / MAX(1.0f, keep_width ? size.x : size.y);
-	} else {
-		// Orthogonal: a pixel's width everywhere, as an angle seen from 1 m (the distances measured from the camera's
-		// plane would be another model; a terrain is rarely seen so).
-		view.pixel_angle = p_camera->get_size() / MAX(1.0f, size.y);
-	}
-	vt->update(view, virtual_texture_lod_bias, vt_jobs);
 	if (!vt_jobs.is_empty() || vt->is_overview_due()) {
 		FellowTerrainVT::BakeParams params;
 		_vt_bake_params(params);
@@ -3904,6 +3921,8 @@ Dictionary FellowTerrain3D::get_virtual_texture_stats() const {
 		d["missing"] = vt->get_missing_count();
 		d["baked_total"] = int64_t(vt->get_baked_count());
 		d["overview_baked"] = int64_t(vt->get_overview_baked_count());
+		d["updates"] = int64_t(vt->get_update_count());
+		d["visits"] = int64_t(vt->get_visit_count()); // the updates that chose the pages again
 	}
 	return d;
 }

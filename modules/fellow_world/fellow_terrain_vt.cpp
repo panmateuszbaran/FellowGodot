@@ -657,6 +657,8 @@ void FellowTerrainVT::configure(const Vector2 &p_extent, float p_texels_per_metr
 	}
 	resident.clear();
 	stale.clear();
+	visited = false;
+	wanted_slots.clear();
 	table.clear();
 	table_image.unref();
 	table_texture.unref();
@@ -832,21 +834,52 @@ void FellowTerrainVT::_visit(const View &p_view, float p_bias, int p_mip, int p_
 	}
 }
 
-void FellowTerrainVT::update(const View &p_view, float p_lod_bias, LocalVector<Job> &r_jobs) {
-	r_jobs.clear();
-	if (!is_configured() || slots.is_empty()) {
-		return;
-	}
+// A frame's start for this terrain (once a frame): the overview made due if stale; with p_may_keep, true when the last
+// visit's choice is kept (milestone 71: nothing missing or stale, the same bias, the camera within 1 m, or 3 % of its
+// distance to the map, of where it was, and not this terrain's frame of the REVISIT_FRAMES), its slots then kept recent.
+bool FellowTerrainVT::_start(bool p_may_keep, const Vector3 &p_camera, float p_lod_bias) {
 	_begin_frame();
+	if (start_frame == frame) {
+		return false;
+	}
+	start_frame = frame;
+	updates++;
 	// The overview first: what every fragment falls back on.
 	if (overview_stale && budget_left > 0) {
 		overview_stale = false;
 		overview_due = true;
 		budget_left--;
 	}
+	const float bias = p_lod_bias + pressure_bias;
+	if (p_may_keep && visited && last_missing == 0 && stale.is_empty() && bias == visit_bias && (frame + id) % REVISIT_FRAMES != 0 &&
+			p_camera.distance_to(visit_camera) < MAX(1.0f, 0.03f * visit_near)) {
+		for (int s : wanted_slots) {
+			slots[s].used = frame;
+		}
+		wanted_this_frame += last_wanted;
+		return true;
+	}
+	return false;
+}
+
+bool FellowTerrainVT::keep(const Vector3 &p_camera, float p_lod_bias) {
+	if (!is_configured() || slots.is_empty()) {
+		return true;
+	}
+	return _start(true, p_camera, p_lod_bias);
+}
+
+void FellowTerrainVT::update(const View &p_view, float p_lod_bias, LocalVector<Job> &r_jobs) {
+	r_jobs.clear();
+	if (!is_configured() || slots.is_empty()) {
+		return;
+	}
+	_start(false, p_view.camera, p_lod_bias); // (nothing if keep() started this frame)
+	const float bias = p_lod_bias + pressure_bias;
+	visits++;
 	wanted.clear();
 	missing.clear();
-	_visit(p_view, p_lod_bias + pressure_bias, mips - 1, 0, 0);
+	_visit(p_view, bias, mips - 1, 0, 0);
 	wanted_this_frame += wanted.size();
 	last_wanted = wanted.size();
 	missing.sort();
@@ -883,12 +916,26 @@ void FellowTerrainVT::update(const View &p_view, float p_lod_bias, LocalVector<J
 	stat_baked += done;
 	last_missing = int(missing.size()) - done;
 	stat_wanted_missing += last_missing;
+	// The slots this choice keeps recent until the next visit.
+	wanted_slots.clear();
+	for (const uint64_t k : wanted) {
+		if (const int *rs = resident.getptr(k)) {
+			wanted_slots.push_back(*rs);
+		}
+	}
+	visited = true;
+	visit_camera = p_view.camera;
+	visit_bias = bias;
+	const Vector3 c = p_view.camera;
+	const Vector3 d(MAX(MAX(-c.x, c.x - extent.x), 0.0f), MAX(MAX(height_all.x - c.y, c.y - height_all.y), 0.0f), MAX(MAX(-c.z, c.z - extent.y), 0.0f));
+	visit_near = d.length();
 }
 
 void FellowTerrainVT::_evict(uint64_t p_key) {
 	if (!resident.erase(p_key)) {
 		return;
 	}
+	visited = false; // the pages chosen again next frame (this one may still be wanted)
 	stale.erase(p_key);
 	_set_entry_tree(_key_mip(p_key), _key_x(p_key), _key_z(p_key));
 }
