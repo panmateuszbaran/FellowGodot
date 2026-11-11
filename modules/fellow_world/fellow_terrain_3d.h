@@ -206,7 +206,14 @@ private:
 	bool region_registered = false;
 	bool region_forwarding = false;
 	FellowTerrain3D *_region_neighbor(int p_dx, int p_dz) const;
-	float _region_height(int p_x, int p_z) const; // a texel of this map or, beyond its edges, of a neighbour's
+	// The eight neighbours and the transforms from this map's space into theirs, found once (each lookup walks the
+	// group's regions: done for every texel of the borders it cost milliseconds per region entering a large world).
+	struct RegionNeighbors {
+		const FellowTerrain3D *n[3][3] = {};
+		Transform3D to[3][3];
+	};
+	void _region_neighbors(RegionNeighbors &r_nb) const;
+	float _region_height(int p_x, int p_z, const RegionNeighbors &p_nb) const; // a texel of this map or, beyond its edges, of a neighbour's
 	void _region_register();
 	void _region_unregister();
 	void _region_neighbors_changed();

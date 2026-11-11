@@ -2213,7 +2213,20 @@ Vector2 FellowTerrain3D::_region_global_xz(int p_x, int p_z) const {
 	return Vector2(g.x, g.z);
 }
 
-float FellowTerrain3D::_region_height(int p_x, int p_z) const {
+void FellowTerrain3D::_region_neighbors(RegionNeighbors &r_nb) const {
+	const Transform3D xf = get_global_transform();
+	for (int dz = -1; dz <= 1; dz++) {
+		for (int dx = -1; dx <= 1; dx++) {
+			const FellowTerrain3D *n = (dx || dz) ? _region_neighbor(dx, dz) : nullptr;
+			r_nb.n[dz + 1][dx + 1] = n;
+			if (n) {
+				r_nb.to[dz + 1][dx + 1] = n->get_global_transform().affine_inverse() * xf;
+			}
+		}
+	}
+}
+
+float FellowTerrain3D::_region_height(int p_x, int p_z, const RegionNeighbors &p_nb) const {
 	const int cx = CLAMP(p_x, 0, map_w - 1);
 	const int cz = CLAMP(p_z, 0, map_h - 1);
 	if (cx == p_x && cz == p_z) {
@@ -2221,10 +2234,10 @@ float FellowTerrain3D::_region_height(int p_x, int p_z) const {
 	}
 	const int dx = p_x < 0 ? -1 : (p_x > map_w - 1 ? 1 : 0);
 	const int dz = p_z < 0 ? -1 : (p_z > map_h - 1 ? 1 : 0);
-	const FellowTerrain3D *n = _region_neighbor(dx, dz);
+	const FellowTerrain3D *n = p_nb.n[dz + 1][dx + 1];
 	if (n) {
 		// The texel in the neighbour's map (its first texel is our last along a shared edge).
-		const Vector3 l = n->get_global_transform().affine_inverse().xform(get_global_transform().xform(Vector3(p_x * vertex_spacing, 0.0f, p_z * vertex_spacing)));
+		const Vector3 l = p_nb.to[dz + 1][dx + 1].xform(Vector3(p_x * vertex_spacing, 0.0f, p_z * vertex_spacing));
 		const int nx = int(Math::round(l.x / n->vertex_spacing));
 		const int nz = int(Math::round(l.z / n->vertex_spacing));
 		if (nx >= 0 && nz >= 0 && nx < n->map_w && nz < n->map_h && !n->heights.is_empty()) {
@@ -2240,11 +2253,13 @@ void FellowTerrain3D::_refresh_border_normals() {
 	}
 	uint8_t *nw = normal_image->ptrw();
 	const float inv = 1.0f / (2.0f * vertex_spacing);
+	RegionNeighbors nb;
+	_region_neighbors(nb);
 	auto normal_at = [&](int p_x, int p_z) {
-		const float hl = _region_height(p_x - 1, p_z);
-		const float hr = _region_height(p_x + 1, p_z);
-		const float hd = _region_height(p_x, p_z - 1);
-		const float hu = _region_height(p_x, p_z + 1);
+		const float hl = _region_height(p_x - 1, p_z, nb);
+		const float hr = _region_height(p_x + 1, p_z, nb);
+		const float hd = _region_height(p_x, p_z - 1, nb);
+		const float hu = _region_height(p_x, p_z + 1, nb);
 		Vector3 n((hl - hr) * inv, 1.0f, (hd - hu) * inv);
 		n.normalize();
 		nw[(p_z * map_w + p_x) * 2 + 0] = uint8_t(CLAMP(Math::round((n.x * 0.5f + 0.5f) * 255.0f), 0.0f, 255.0f));
