@@ -27,7 +27,8 @@
     "terrain_holes",
     "terrain_vt",
     "crowd",
-    "traversal"
+    "traversal",
+    "cloth"
    ]
   },
   "stock": {

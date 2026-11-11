@@ -846,6 +846,26 @@ Node3D *FellowEditorPlugin::make_preset(int p_preset, const Node *p_root) {
 			top = body;
 			_fellow_make("FellowTraversal3D", "FellowTraversal3D", top);
 		} break;
+		case PRESET_FLAG: {
+			// Milestone 73: a flag of cloth on a 4 m pole, its edge along the pole, blown by the scene's wind.
+			top = memnew(Node3D);
+			top->set_name("Flag");
+			MeshInstance3D *pole = memnew(MeshInstance3D);
+			pole->set_name("Pole");
+			Ref<CylinderMesh> cyl;
+			cyl.instantiate();
+			cyl->set_top_radius(0.035);
+			cyl->set_bottom_radius(0.035);
+			cyl->set_height(4.0);
+			pole->set_mesh(cyl);
+			pole->set_position(Vector3(0, 2.0, 0));
+			top->add_child(pole);
+			_fellow_make("FellowCloth3D", "Cloth", top, Dictionary{ { "position", Vector3(0.04, 3.9, 0) }, { "size", Vector2(1.8, 1.1) }, { "pin_mode", 2 } });
+		} break;
+		case PRESET_CURTAIN: {
+			// Milestone 73: a curtain of cloth hanging from its top edge.
+			top = Object::cast_to<Node3D>(_fellow_make("FellowCloth3D", "Curtain", nullptr, Dictionary{ { "size", Vector2(2.0, 2.4) }, { "pin_mode", 1 }, { "wind_scale", 0.2 } }));
+		} break;
 		default:
 			break;
 	}
@@ -984,6 +1004,9 @@ FellowEditorPlugin::FellowEditorPlugin() {
 	popup->add_item(TTR("Add Pipeline Warm-up (compiles while loading)"), PRESET_PIPELINE_WARMUP);
 	popup->add_separator();
 	popup->add_item(TTR("Add Mantling Character (body, capsule, traversal)"), PRESET_MANTLING_CHARACTER);
+	popup->add_separator();
+	popup->add_item(TTR("Add Flag (cloth on a pole)"), PRESET_FLAG);
+	popup->add_item(TTR("Add Curtain (cloth)"), PRESET_CURTAIN);
 	popup->connect(SceneStringName(id_pressed), callable_mp(this, &FellowEditorPlugin::_add_preset));
 }
 

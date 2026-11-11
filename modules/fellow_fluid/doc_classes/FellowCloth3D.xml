@@ -1,0 +1,180 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="FellowCloth3D" inherits="GeometryInstance3D" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+	<brief_description>
+		FellowEngine: cloth — flags, banners, curtains, awnings, capes — simulated on the CPU in small substeps, blown by the scene's wind, colliding with shapes and the physics world, drawn with motion vectors.
+	</brief_description>
+	<description>
+		A rectangle of cloth ([member size], [member resolution]), or a [member source_mesh]'s first surface, simulated by position-based dynamics: its vertices welded by position are the particles, each edge a stretch constraint, the two vertices across each pair of triangles a bending constraint, each free particle tethered to its nearest pinned one (no farther along the cloth than at rest times [member tether_slack]). [member pin_mode] says which particles follow the node rather than the simulation: an edge, corners, or the source mesh's vertices whose colour's red is 0.5 or more. The simulation runs in world space, in fixed substeps ([member substep_rate]; [member iterations] passes over the stretch constraints each); pinned particles follow the node between the frames' transforms, the rest swing with inertia.
+		The air: the active [FellowWind3D]'s velocity where the cloth is (with its gusts) times [member wind_scale], plus [member wind], with [member turbulence], pushes each triangle along its normal ([member drag]) and across it ([member lift]) in proportion to the air's speed against the triangle's — a flag streams and flaps. Collisions: the particles, [member thickness] from their surface, are kept out of spheres, capsules, boxes, cylinders, planes and height maps — the shapes in [member colliders] (a [CollisionShape3D] or every shape of a [CollisionObject3D], followed as they move: a character's body), and with [member collide_with_world] the physics world's bodies under the cloth on [member collision_mask] (convex and concave shapes are not collided with), with [member friction].
+		Every cloth of a frame is simulated at once on the [WorkerThreadPool] after the game's processing ([member Node.process_priority] 100), and drawn as a mesh with one blend shape: its vertices are written each frame through the instance's own buffers, swapped every frame, so that its motion vectors (TAA, FSR) follow the cloth. Past [member lod_distance] from the camera a cloth takes half the substeps; past [member simulation_distance] it is carried with the node without simulating. In the editor it simulates while the 3D editor's Animate toggle is on. See [code]docs/decisions/0181-cloth.md[/code].
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="apply_impulse">
+			<return type="void" />
+			<param index="0" name="position" type="Vector3" />
+			<param index="1" name="impulse" type="Vector3" />
+			<param index="2" name="radius" type="float" />
+			<description>
+				Adds [param impulse] (N·s, global) to the free particles within [param radius] of [param position], more near it: a shot through a flag, a character brushing past.
+			</description>
+		</method>
+		<method name="get_global_stats" qualifiers="static">
+			<return type="Dictionary" />
+			<description>
+				Every cloth's work since [method reset_global_stats]: [code]frames[/code], [code]simulations[/code], [code]substeps[/code], [code]particles[/code] (simulated, summed over frames), [code]simulate_usec[/code] (the worker threads' time, summed), [code]frame_usec[/code] (the main thread's: preparing, waiting, uploading; the debugger's "FellowEngine/Cloth time"), [code]skipped[/code] (frames of cloths past [member simulation_distance]).
+			</description>
+		</method>
+		<method name="get_particle_count" qualifiers="const">
+			<return type="int" />
+			<description>
+				The particles: the cloth's vertices welded by position.
+			</description>
+		</method>
+		<method name="get_particle_position" qualifiers="const">
+			<return type="Vector3" />
+			<param index="0" name="index" type="int" />
+			<description>
+				A particle's position (global).
+			</description>
+		</method>
+		<method name="get_stats" qualifiers="const">
+			<return type="Dictionary" />
+			<description>
+				This cloth's [code]particles[/code], [code]triangles[/code], [code]stretch_constraints[/code], [code]bend_constraints[/code], [code]tethers[/code], the last frame's [code]substeps[/code], [code skip-lint]colliders[/code], [code]simulate_usec[/code], [code skip-lint]wind[/code], and whether it was past [member lod_distance] ([code]lod[/code]) or [member simulation_distance] ([code]far[/code]).
+			</description>
+		</method>
+		<method name="is_particle_pinned" qualifiers="const">
+			<return type="bool" />
+			<param index="0" name="index" type="int" />
+			<description>
+				Whether the particle follows the node.
+			</description>
+		</method>
+		<method name="reset">
+			<return type="void" />
+			<description>
+				The cloth at rest where the node is now (it also resets itself when the node moves more than 5 m in a frame).
+			</description>
+		</method>
+		<method name="reset_global_stats" qualifiers="static">
+			<return type="void" />
+			<description>
+				Sets the counters of [method get_global_stats] to zero.
+			</description>
+		</method>
+		<method name="set_particle_pinned">
+			<return type="void" />
+			<param index="0" name="index" type="int" />
+			<param index="1" name="pinned" type="bool" />
+			<description>
+				Pins a particle where it is now (it follows the node from there), or lets it go (a rope cut, a curtain torn from its rail).
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="bend_stiffness" type="float" setter="set_bend_stiffness" getter="get_bend_stiffness" default="0.2">
+			How much the cloth resists folding, 0 to 1 (a substep's share of the bending constraints' error corrected).
+		</member>
+		<member name="collide_with_world" type="bool" setter="set_collide_with_world" getter="is_collide_with_world" default="true">
+			Collides with the physics world's bodies overlapping the cloth (one query a frame, the shapes' types listed in the description).
+		</member>
+		<member name="colliders" type="NodePath[]" setter="set_colliders" getter="get_colliders" default="[]">
+			Shapes collided with: [CollisionShape3D]s, or [CollisionObject3D]s (all their shapes); a character's body, a pole.
+		</member>
+		<member name="collision_mask" type="int" setter="set_collision_mask" getter="get_collision_mask" default="1">
+			The physics layers [member collide_with_world] sees.
+		</member>
+		<member name="damping" type="float" setter="set_damping" getter="get_damping" default="0.05">
+			The particles' velocity lost a second, as a fraction.
+		</member>
+		<member name="drag" type="float" setter="set_drag" getter="get_drag" default="1.0">
+			The air's push along each triangle's normal (a drag coefficient).
+		</member>
+		<member name="friction" type="float" setter="set_friction" getter="get_friction" default="0.3">
+			How much a particle touching a collider is held back along its surface, 0 to 1.
+		</member>
+		<member name="gravity_scale" type="float" setter="set_gravity_scale" getter="get_gravity_scale" default="1.0">
+			The project's gravity, scaled.
+		</member>
+		<member name="iterations" type="int" setter="set_iterations" getter="get_iterations" default="2">
+			Passes over the stretch constraints a substep (more: less stretch, more time).
+		</member>
+		<member name="lift" type="float" setter="set_lift" getter="get_lift" default="0.3">
+			The air's push across each triangle, as it meets it at an angle (what makes a flag flap).
+		</member>
+		<member name="lod_distance" type="float" setter="set_lod_distance" getter="get_lod_distance" default="25.0">
+			Past this distance from the camera the cloth takes half the substeps (0: always all).
+		</member>
+		<member name="mass" type="float" setter="set_mass" getter="get_mass" default="0.25">
+			The fabric's mass per square meter (a flag 0.1-0.3, canvas 0.3-0.6).
+		</member>
+		<member name="material" type="Material" setter="set_material" getter="get_material">
+			The cloth's material; without one, a two-sided light grey one.
+		</member>
+		<member name="max_substeps" type="int" setter="set_max_substeps" getter="get_max_substeps" default="12">
+			The most substeps a frame: a slower frame simulates less than its time rather than ever more work.
+		</member>
+		<member name="pin_mode" type="int" setter="set_pin_mode" getter="get_pin_mode" enum="FellowCloth3D.PinMode" default="1">
+			The particles that follow the node.
+		</member>
+		<member name="process_priority" type="int" setter="set_process_priority" getter="get_process_priority" overrides="Node" default="100" />
+		<member name="resolution" type="int" setter="set_resolution" getter="get_resolution" default="24">
+			The generated rectangle's cells along its longer side.
+		</member>
+		<member name="simulating" type="bool" setter="set_simulating" getter="is_simulating" default="true">
+			Off: the cloth stays as it is.
+		</member>
+		<member name="simulation_distance" type="float" setter="set_simulation_distance" getter="get_simulation_distance" default="100.0">
+			Past this distance from the camera the cloth is carried with the node without simulating (0: always simulated).
+		</member>
+		<member name="size" type="Vector2" setter="set_size" getter="get_size" default="Vector2(2, 1.2)">
+			The generated rectangle (without a [member source_mesh]): from the node's origin, [code]x[/code] meters along +X and [code]y[/code] meters down, facing +Z.
+		</member>
+		<member name="source_mesh" type="Mesh" setter="set_source_mesh" getter="get_source_mesh">
+			A mesh to simulate instead of the rectangle: its first surface's triangles (vertices at the same position are one particle).
+		</member>
+		<member name="stretch_stiffness" type="float" setter="set_stretch_stiffness" getter="get_stretch_stiffness" default="1.0">
+			How much the cloth resists stretching, 0 to 1 (1: as little as the substeps allow).
+		</member>
+		<member name="substep_rate" type="int" setter="set_substep_rate" getter="get_substep_rate" default="480">
+			Substeps a second (480: 8 a frame at 60 fps).
+		</member>
+		<member name="tether_slack" type="float" setter="set_tether_slack" getter="get_tether_slack" default="1.08">
+			How much farther than at rest (along the cloth) a particle may be from its nearest pin, as a factor (0: no tethers).
+		</member>
+		<member name="thickness" type="float" setter="set_thickness" getter="get_thickness" default="0.02">
+			The particles' distance from a collider's surface.
+		</member>
+		<member name="turbulence" type="float" setter="set_turbulence" getter="get_turbulence" default="0.3">
+			Variation of the wind over the cloth and time, as a fraction of its speed.
+		</member>
+		<member name="wind" type="Vector3" setter="set_wind" getter="get_wind" default="Vector3(0, 0, 0)">
+			Wind added to the [FellowWind3D]'s (global, m/s).
+		</member>
+		<member name="wind_scale" type="float" setter="set_wind_scale" getter="get_wind_scale" default="1.0">
+			The [FellowWind3D]'s wind, scaled.
+		</member>
+	</members>
+	<constants>
+		<constant name="PIN_NONE" value="0" enum="PinMode">
+			Nothing pinned: the cloth falls (a sheet onto furniture).
+		</constant>
+		<constant name="PIN_TOP_EDGE" value="1" enum="PinMode">
+			The particles of the highest edge (local +Y): a curtain, a banner.
+		</constant>
+		<constant name="PIN_LEFT_EDGE" value="2" enum="PinMode">
+			The particles of the left edge (local −X): a flag on a pole.
+		</constant>
+		<constant name="PIN_TOP_CORNERS" value="3" enum="PinMode">
+			The two top corners (local XY): a sheet hung by its corners, a cape.
+		</constant>
+		<constant name="PIN_CORNERS" value="4" enum="PinMode">
+			The four corners (local XY): an awning, a tent's fly.
+		</constant>
+		<constant name="PIN_VERTEX_COLOR" value="5" enum="PinMode">
+			The source mesh's vertices whose colour's red is 0.5 or more.
+		</constant>
+	</constants>
+</class>
