@@ -459,6 +459,32 @@ swapped; pairs by name or `mirror_pairs`) and `tags` (a clip's name to its tags,
 options, the matcher's `tags_required` and `tags_excluded`. Decision 0157; `bench/ground_check.gd`,
 `bench/matching_tags_check.gd`, Matching Lab's `--matching_mirror=1`.
 
+## Traversal: mantling and vaulting (milestone 72)
+
+Module `fellow_animation`; nothing changes without the nodes (decision 0180). `FellowTraversal3D`, a child of the
+character's body (`body_path`: by default the parent; its capsule from its first `CollisionShape3D`): each physics frame
+while the body moves (`auto_mantle` on, `auto_min_speed` 0.5 m/s, or the controller's `set_intent()`) it looks for a
+ledge in the way with the physics server's queries — a wall within `reach_distance` (0.6 m) turned no more than
+`max_wall_angle` (45°), a top no steeper than `max_ledge_slope` (40°) between `min_height` (0.5 m) and `max_height`
+(2.3 m; `grab_in_air` on: 0.5 m more in the air), room for the capsule on it, above the body and over the edge — and
+moves the body onto it: `KIND_LOW` up to `low_max_height` (1.3 m, `low_duration` 0.6 s for 1 m), `KIND_HIGH` above
+(`high_duration` 1.1 s for 1.8 m), or over a thin obstacle (`vault` on, `vault_max_height` 1.3 m, `vault_max_depth`
+0.6 m; with no room on it or at `vault_min_speed` 2.5 m/s, `vault_duration` 0.6 s); `align_to_wall` (on),
+`exit_speed` (1.5 m/s), `collision_mask`, `check_interval` (2: while nothing is in reach, a check every second
+physics frame, staggered), `enabled`, `debug_draw`. `find_ledge()`, `try_mantle()`, `cancel()`,
+`is_active()`, `get_action()`, `get_progress()`, `get_last_check()`, `get_pose_targets()`; signals `mantle_started`,
+`mantle_finished`, `mantle_cancelled`; `get_global_stats()` / `reset_global_stats()` (checks, mantles, poses, their
+time) and the monitor "FellowEngine/Traversal time". Clips: `low_clip`, `high_clip`, `vault_clip` (the mantle in the
+clip's time), `clip_root_bone` (the clip's root motion warped onto the ledge as the body's path).
+
+`FellowTraversalPose3D`, a modifier of the character's `Skeleton3D`: while a mantle runs, the torso leaned towards the
+wall (`lean`), the hips lowered for the hands to reach the edge, the hands on it (`hand_ik`) and the feet on the wall's
+face and the top (`foot_ik`) by two-bone IK over the animation; or the traversal's clip played. `traversal_path`
+(found among the children of the skeleton's ancestors), `blend_time` (0.15 s), `bone_names` (roles to bones, over the
+names found: Godot's humanoid profile, Mixamo, Unreal's mannequin, Blender's); `get_role_bone()`, `get_hips_drop()`,
+`get_weight()`. The FellowEngine menu's "Add Mantling Character" (a body, its capsule, a traversal). Bench
+`bench/traversal_check.gd` (the course; `--crowd=N`); the regression scene `traversal`.
+
 ## Simulated GPUs (milestone 49)
 
 The environment's `FELLOW_VULKAN_PROFILE=<name>` (read once by the Vulkan driver; a diagnostic, nothing changes

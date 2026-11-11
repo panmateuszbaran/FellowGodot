@@ -9,6 +9,24 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 72 — mantling and vaulting (2026-11-11)
+
+- `FellowTraversal3D` (decision 0180): a character's body finds ledges in its way with the physics server's queries —
+  a wall in reach facing the way it goes, a top within `min_height`-`max_height` (0.5-2.3 m; 0.5 m more in the air),
+  room for its capsule on the top, above the body and over the edge — and climbs them: a low mantle (to 1.3 m), a high
+  one pulled up from a hang, or a vault over a thin obstacle. The body moves along a path built from that room (the
+  capsule never enters the world); moving platforms carry the ledge; ledges are grabbed in the air; a ceiling bounds the
+  search and a beam the body could walk under is left to `try_mantle()`. Clips per kind (`low_clip`, `high_clip`,
+  `vault_clip`) set the mantle's time and, with `clip_root_bone`, their root motion warped onto the ledge is the path.
+  `find_ledge()`, `set_intent()`, `get_pose_targets()`, signals for an `AnimationTree`, `get_global_stats()` and the
+  monitor "FellowEngine/Traversal time", `check_interval`, `debug_draw`.
+- `FellowTraversalPose3D`: the pose over the character's animation — the torso leaned in, the hips lowered until the
+  arms reach the edge, the hands and feet placed by two-bone IK (bones found by name in Godot's humanoid, Mixamo,
+  Unreal and Blender rigs) — or the traversal's clip played with its root's motion out.
+- Checked on nineteen obstacles with GodotPhysics3D and Jolt (`bench/traversal_check.gd`), a regression scene, the
+  editor (a gizmo, icons, "Add Mantling Character"). On the laptop: 200 characters mantling and vaulting all the way
+  cost 0.32 ms of the CPU a frame with Jolt, 0.49 ms with GodotPhysics3D (`--crowd=N`).
+
 ## Milestone 71 — the terrain's virtual texture on the RTX (2026-11-11)
 
 - Measured in Frontier Lab on the RTX 5070 Ti Laptop GPU (decision 0179, jobs f386-f389): with every terrain region
