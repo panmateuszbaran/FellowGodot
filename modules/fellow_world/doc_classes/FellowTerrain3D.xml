@@ -95,6 +95,12 @@
 				The current selection and data: [code]patches[/code], [code]triangles[/code], [code]patches_per_level[/code], [code]levels[/code], [code skip-lint]lod_distance[/code] (the finest level's range in metres), [code]selections[/code] and [code]swaps[/code] (the selections computed and the MultiMesh switches since the start), [code]last_select_usec[/code], [code]collision_shapes[/code], [code]edit_flush_usec[/code] (the last update of the textures and collision shapes after edits, at a frame's end), [code]map_size[/code], [code]process_usec_mean[/code], [code]process_usec_max[/code] and [code]process_usec_last[/code] (the main thread's time in the terrain's frames: its levels of detail and foliage), [code]foliage_cells[/code] and [code]foliage_instances[/code] (the foliage's cells made and the instances drawn in them).
 			</description>
 		</method>
+		<method name="get_virtual_texture_stats" qualifiers="const">
+			<return type="Dictionary" />
+			<description>
+				The virtual texture's state (decision 0178): [code]active[/code], [code]texels_per_meter[/code] (as used: lowered when the map would need more than 16 mips), [code]mips[/code], [code]pages0[/code] (the pages along x and z at the finest mip), [code]resident[/code] (this terrain's pages in the atlas), [code]wanted[/code] and [code]missing[/code] (the last frame's pages wanted and still to bake), [code]baked_total[/code], [code]overview_baked[/code] (the times its overview, the coarsest mip with its own mips, was baked); and the atlas every terrain shares: [code]slots[/code], [code]free_slots[/code], [code]atlas_texels[/code], [code]terrains[/code], [code]wanted[/code] (every terrain's pages wanted in the last frame), [code]pressure_bias[/code] (added to every terrain's [member virtual_texture_lod_bias] while the atlas is nearly full), [code]baked[/code], [code]evicted[/code], [code]wanted_missing[/code].
+			</description>
+		</method>
 		<method name="is_baking_impostors" qualifiers="const">
 			<return type="bool" />
 			<description>
@@ -106,6 +112,12 @@
 			<param index="0" name="global_position" type="Vector3" />
 			<description>
 				Whether the terrain has a hole under [param global_position] (in a triangle that touches a vertex of [member hole_map]). [method get_height] returns NaN there.
+			</description>
+		</method>
+		<method name="is_virtual_texture_active" qualifiers="const">
+			<return type="bool" />
+			<description>
+				Whether the terrain draws from its virtual texture: [member virtual_texture] on, the terrain in the tree with its data, and a rendering device (the Forward+ and Mobile renderers).
 			</description>
 		</method>
 		<method name="heightmap_from_image" qualifiers="static">
@@ -235,6 +247,15 @@
 		<member name="vertex_spacing" type="float" setter="set_vertex_spacing" getter="get_vertex_spacing" default="1.0">
 			The distance between two vertices (two heightmap texels) in metres.
 		</member>
+		<member name="virtual_texture" type="bool" setter="set_virtual_texture" getter="is_virtual_texture" default="false">
+			Draws the terrain's material from a virtual texture (decision 0178): its layers, splat maps, normals and macro variation baked into pages of 128 × 128 texels ([member virtual_texture_texels_per_meter] at the finest mip, each mip coarser by two) in an atlas shared by every terrain ([member ProjectSettings.rendering/fellow/terrain/virtual_texture_atlas_size]), and a fragment reading one or two pages through the terrain's page table instead of blending up to 9 layers from up to three projections. The pages a view wants are chosen each frame from the camera's distance (finer in the frustum) and the missing ones baked on the GPU, the coarsest and nearest first, within [member ProjectSettings.rendering/fellow/terrain/virtual_texture_pages_per_frame]; meanwhile a page's nearest baked ancestor is drawn. Edits, layer changes and a region's new neighbours bake the pages over them again. The texture is mapped from above: on steep slopes it is stretched along the slope (a triplanar layer keeps its look, its detail coarser). Needs a rendering device (the Forward+ and Mobile renderers); without one the layers are drawn as before.
+		</member>
+		<member name="virtual_texture_lod_bias" type="float" setter="set_virtual_texture_lod_bias" getter="get_virtual_texture_lod_bias" default="0.0">
+			Added to the mip the view wants and to the mip a fragment reads: positive values draw coarser pages (fewer pages, a softer ground), negative ones finer pages.
+		</member>
+		<member name="virtual_texture_texels_per_meter" type="float" setter="set_virtual_texture_texels_per_meter" getter="get_virtual_texture_texels_per_meter" default="64.0">
+			The virtual texture's texels per metre at its finest mip (64: 1.6 cm, a page 2 m wide). Lowered for a map that would need more than 16 mips.
+		</member>
 	</members>
 	<signals>
 		<signal name="foliage_impostors_baked">
@@ -262,6 +283,9 @@
 		</constant>
 		<constant name="DEBUG_VIEW_LEVELS" value="1" enum="DebugView">
 			The ground coloured by its level of detail (red the finest, then yellow, green, blue, purple, grey), blended towards the next colour as it morphs to the next level.
+		</constant>
+		<constant name="DEBUG_VIEW_VIRTUAL_TEXTURE" value="2" enum="DebugView">
+			With [member virtual_texture], the pages drawn, coloured by their mip (red the finest, then yellow, green, blue, purple, grey, again from red), their edges darker; grey where no page is baked yet.
 		</constant>
 	</constants>
 </class>

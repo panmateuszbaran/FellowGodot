@@ -424,6 +424,10 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/streaming/texture_info_details", false);
 	// FellowTerrain3D's edits upload the texels they changed (and the mips over them) instead of whole textures.
 	GLOBAL_DEF("rendering/fellow/streaming/terrain_region_uploads", true);
+	// FellowTerrain3D's virtual texture (milestone 70): the atlas every terrain's pages share (texels along a side: two
+	// RGBA8 textures), and the pages baked a frame across the terrains.
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/terrain/virtual_texture_atlas_size", PROPERTY_HINT_RANGE, "544,16320,136,suffix:texels"), 4080);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/terrain/virtual_texture_pages_per_frame", PROPERTY_HINT_RANGE, "1,1024,1"), 16);
 }
 
 // Hot workers' gate (render thread only): exponential averages of the fence wait and the frame interval; the gate
@@ -624,6 +628,8 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["cost_mesh_surfaces"] = s.cost_mesh_surfaces.get();
 	d["cost_multimesh_buffer_usec"] = s.cost_multimesh_buffer_usec.get();
 	d["cost_multimesh_buffers"] = s.cost_multimesh_buffers.get();
+	d["terrain_vt_pages_baked"] = s.terrain_vt_pages_baked.get();
+	d["terrain_vt_dispatch_usec"] = s.terrain_vt_dispatch_usec.get();
 	d["geometry_cluster_triangles_drawn"] = s.geometry_cluster_triangles_drawn.get();
 	d["geometry_cluster_triangles_culled"] = s.geometry_cluster_triangles_culled.get();
 	d["geometry_cluster_lod_coarser_ranges"] = s.geometry_cluster_lod_coarser_ranges.get();

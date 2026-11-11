@@ -30,6 +30,8 @@
 
 #pragma once
 
+#include "fellow_terrain_vt.h"
+
 #include "core/io/image.h"
 #include "core/io/resource.h"
 #include "core/object/worker_thread_pool.h"
@@ -177,6 +179,7 @@ public:
 	enum DebugView {
 		DEBUG_VIEW_OFF,
 		DEBUG_VIEW_LEVELS, // the ground coloured by its level of detail, blended as it morphs to the next
+		DEBUG_VIEW_VIRTUAL_TEXTURE, // milestone 70: the virtual texture's pages drawn, coloured by mip
 	};
 
 private:
@@ -377,6 +380,21 @@ private:
 	static float _cell_weight(const FoliageCell &p_cell, int p_layer, float p_x, float p_z);
 	float _layer_weight_local(int p_layer, float p_x, float p_z) const;
 
+	// The virtual texture (milestone 70, decision 0178): the material baked into pages and drawn from them.
+	bool virtual_texture = false;
+	float virtual_texture_texels_per_meter = 64.0f;
+	float virtual_texture_lod_bias = 0.0f;
+	FellowTerrainVT *vt = nullptr;
+	LocalVector<FellowTerrainVT::Job> vt_jobs;
+	Vector2 vt_world_offset;
+	bool _vt_active() const { return vt != nullptr && vt->is_configured(); }
+	void _vt_setup();
+	void _vt_free();
+	void _process_vt(Camera3D *p_camera);
+	void _vt_invalidate_texels(const Rect2i &p_texels, const Vector2i &p_map_size);
+	void _vt_bake_params(FellowTerrainVT::BakeParams &r_params) const;
+	void _layer_arrays(PackedColorArray &r_colors, PackedVector4Array &r_params, PackedVector4Array &r_flags) const;
+
 	// Statistics.
 	uint64_t selections = 0;
 	uint64_t swaps = 0;
@@ -459,6 +477,14 @@ public:
 	float get_macro_variation() const { return macro_variation; }
 	void set_debug_view(DebugView p_view);
 	DebugView get_debug_view() const { return debug_view; }
+	void set_virtual_texture(bool p_enable);
+	bool is_virtual_texture() const { return virtual_texture; }
+	void set_virtual_texture_texels_per_meter(float p_texels);
+	float get_virtual_texture_texels_per_meter() const { return virtual_texture_texels_per_meter; }
+	void set_virtual_texture_lod_bias(float p_bias);
+	float get_virtual_texture_lod_bias() const { return virtual_texture_lod_bias; }
+	bool is_virtual_texture_active() const { return _vt_active(); }
+	Dictionary get_virtual_texture_stats() const;
 	void set_cast_shadows(bool p_enable);
 	bool is_casting_shadows() const { return cast_shadows; }
 	void set_render_layer_mask(uint32_t p_mask);

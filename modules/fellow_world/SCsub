@@ -5,5 +5,7 @@ Import("env")
 Import("env_modules")
 
 env_fellow_world = env_modules.Clone()
+env_fellow_world.GLSL_HEADER("fellow_terrain_vt.glsl")
+env_fellow_world.Depends(Glob("*.glsl.gen.h"), ["#glsl_builders.py"])
 
 env_fellow_world.add_source_files(env.modules_sources, "*.cpp")

@@ -231,7 +231,7 @@ void FellowTerrainFoliage::_bind_methods() {
 // distances from `lod_camera` (CDLOD), and reads the height at the level plus the morph (a coarser mip as it morphs: the
 // distant ground smoothed like its grid, and the same height on both sides of a level's edge).
 
-static String _terrain_shader_code(bool p_holes = false) {
+static String _terrain_shader_code(bool p_holes = false, bool p_vt = false) {
 	String code = R"(shader_type spatial;
 render_mode cull_back;
 
@@ -258,9 +258,22 @@ instance uniform vec3 lod_camera;
 		// Decision 0172: a texel above half is a hole at that vertex.
 		code += "uniform sampler2D holemap : filter_nearest, repeat_disable;\n";
 	}
-	for (int i = 0; i < FellowTerrain3D::MAX_LAYERS; i++) {
-		code += vformat("uniform sampler2D albedo_%d : source_color, hint_default_white, filter_linear_mipmap_anisotropic, repeat_enable;\n", i);
-		code += vformat("uniform sampler2D normal_%d : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;\n", i);
+	if (p_vt) {
+		// Milestone 70 (decision 0178): the material from its virtual texture's pages (FellowTerrainVT): the page table
+		// (a level per mip: the slot of the page or of its nearest baked ancestor), the atlas, without mips (a page's
+		// border holds the bilinear and up to 4:1 anisotropic taps), and the overview (the coarsest mip, with its mips).
+		code += R"(uniform sampler2D vt_table : filter_nearest, repeat_disable;
+uniform sampler2D vt_albedo : filter_linear_mipmap_anisotropic, repeat_disable;
+uniform sampler2D vt_normal : filter_linear_mipmap_anisotropic, repeat_disable;
+uniform sampler2D vt_overview_albedo : filter_linear_mipmap_anisotropic, repeat_disable;
+uniform sampler2D vt_overview_normal : filter_linear_mipmap_anisotropic, repeat_disable;
+uniform vec4 vt_params; // texels per metre, the table's mips, 1 / the atlas's texels, the lod bias
+)";
+	} else {
+		for (int i = 0; i < FellowTerrain3D::MAX_LAYERS; i++) {
+			code += vformat("uniform sampler2D albedo_%d : source_color, hint_default_white, filter_linear_mipmap_anisotropic, repeat_enable;\n", i);
+			code += vformat("uniform sampler2D normal_%d : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;\n", i);
+		}
 	}
 	code += R"(
 varying vec3 v_local;
@@ -316,10 +329,50 @@ vec2 unpack_normal(vec4 t, float strength) {
 	return (t.xy * 2.0 - 1.0) * strength;
 }
 )";
+	if (p_vt) {
+		code += R"(
+// The overview (the coarsest mip, one page over the whole map, with its own mips): read with the fragment's gradients
+// (in the mip-0 texels), the hardware choosing its level.
+void vt_overview(vec2 gx, vec2 gy, out vec4 r_albedo, out vec4 r_normal) {
+	float s = 1.0 / (128.0 * exp2(vt_params.y - 1.0));
+	vec2 uv = v_local.xz * vt_params.x * s;
+	r_albedo = textureGrad(vt_overview_albedo, uv, gx * s, gy * s);
+	r_normal = textureGrad(vt_overview_normal, uv, gx * s, gy * s);
+}
+
+// A mip's page under the fragment: the table's entry (the page's slot, or its nearest baked ancestor's), the atlas
+// read with the fragment's gradients at the mip drawn; the overview where no page over it is baked. Returns the mip
+// drawn.
+float vt_page(float level, vec2 gx, vec2 gy, out vec4 r_albedo, out vec4 r_normal) {
+	int lv = int(level);
+	vec2 vp = v_local.xz * (vt_params.x / 128.0);
+	ivec2 size = textureSize(vt_table, lv);
+	ivec2 pg = clamp(ivec2(floor(vp * exp2(-level))), ivec2(0), size - 1);
+	vec4 e = floor(texelFetch(vt_table, pg, lv) * 255.0 + 0.5);
+	if (e.a < 128.0) {
+		vt_overview(gx, gy, r_albedo, r_normal);
+		return vt_params.y - 1.0;
+	}
+	float scale = exp2(-e.b);
+	vec2 pp = vp * scale;
+	vec2 at = e.rg * 136.0 + 4.0 + (pp - floor(pp)) * 128.0;
+	vec2 auv = at * vt_params.z;
+	// The footprint in the mip's texels, kept within the page's border (up to 6 texels long; longer only where the quad
+	// straddles a silhouette, whose taps would reach the next slot).
+	vec2 ga = gx * scale;
+	vec2 gb = gy * scale;
+	ga *= min(1.0, 6.0 / max(length(ga), 1e-8)) * vt_params.z;
+	gb *= min(1.0, 6.0 / max(length(gb), 1e-8)) * vt_params.z;
+	r_albedo = textureGrad(vt_albedo, auv, ga, gb);
+	r_normal = textureGrad(vt_normal, auv, ga, gb);
+	return e.b;
+}
+)";
+	}
 	// A layer: its albedo (alpha: its height, or 0.5) and its normal in terrain space, from the top (x, -z) or three
 	// projections (UDN blend), with explicit gradients (sampled inside branches). A texture the layer has not got is not
 	// read (layer_flags: albedo, normal, height in the albedo's alpha), nor a projection that weighs under 1 %.
-	for (int i = 0; i < FellowTerrain3D::MAX_LAYERS; i++) {
+	for (int i = 0; i < (p_vt ? 0 : FellowTerrain3D::MAX_LAYERS); i++) {
 		String f = R"(
 void layer_#(vec3 pl, vec3 dpdx, vec3 dpdy, vec3 nw, vec3 blend, out vec4 r_albedo, out vec3 r_normal) {
 	float s = layer_params[#].x;
@@ -396,6 +449,61 @@ void fragment() {
 		}
 	}
 )";
+	}
+	if (p_vt) {
+		code += R"(	// The mip whose texels a fragment covers (up to 4:1 along its longer axis: anisotropic taps within the page), and
+	// the next coarser one blended in; at the coarsest mip and beyond, the overview alone.
+	vec3 dpdx = dFdx(v_local);
+	vec3 dpdy = dFdy(v_local);
+	vec2 gx = dpdx.xz * vt_params.x;
+	vec2 gy = dpdy.xz * vt_params.x;
+	float lx = length(gx);
+	float ly = length(gy);
+	float lod = max(log2(max(max(max(lx, ly) * 0.25, min(lx, ly)), 1e-8)) + vt_params.w, 0.0);
+	float top = vt_params.y - 1.0;
+	vec4 a0;
+	vec4 n0;
+	float m0 = top;
+	if (lod >= top) {
+		vt_overview(gx, gy, a0, n0);
+	} else {
+		float l0 = floor(lod);
+		float tl = lod - l0;
+		m0 = vt_page(l0, gx, gy, a0, n0);
+		if (tl > 0.02) {
+			vec4 a1;
+			vec4 n1;
+			if (l0 + 1.0 >= top) {
+				vt_overview(gx, gy, a1, n1);
+			} else {
+				vt_page(l0 + 1.0, gx, gy, a1, n1);
+			}
+			a0 = mix(a0, a1, tl);
+			n0 = mix(n0, n1, tl);
+		}
+	}
+	vec3 albedo = mix(a0.rgb / 12.92, pow((a0.rgb + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), a0.rgb));
+	float rough = a0.a;
+	vec2 nxz = n0.xy * 2.0 - 1.0;
+	vec3 n = vec3(nxz.x, sqrt(max(0.0, 1.0 - dot(nxz, nxz))), nxz.y);
+	vec3 nf = normalize(terrain_basis * n);
+	if (debug_view == 1) {
+		vec3 pal[6] = vec3[](vec3(0.9, 0.2, 0.2), vec3(0.95, 0.75, 0.2), vec3(0.3, 0.8, 0.3), vec3(0.2, 0.6, 0.95), vec3(0.6, 0.35, 0.9), vec3(0.85, 0.85, 0.85));
+		int l = int(floor(v_lod));
+		albedo = mix(pal[l % 6], pal[(l + 1) % 6], fract(v_lod));
+	} else if (debug_view == 2) {
+		// The page drawn: its mip as a colour (the overview's the coarsest), its edges darker.
+		vec3 pal[6] = vec3[](vec3(0.9, 0.2, 0.2), vec3(0.95, 0.75, 0.2), vec3(0.3, 0.8, 0.3), vec3(0.2, 0.6, 0.95), vec3(0.6, 0.35, 0.9), vec3(0.85, 0.85, 0.85));
+		vec2 pp = v_local.xz * (vt_params.x / 128.0) * exp2(-m0);
+		vec2 e = abs(pp - floor(pp + 0.5));
+		albedo = pal[int(m0) % 6] * (min(e.x, e.y) < 0.02 ? 0.4 : 1.0);
+	}
+	ALBEDO = albedo;
+	ROUGHNESS = rough;
+	NORMAL = normalize((VIEW_MATRIX * vec4(nf, 0.0)).xyz);
+}
+)";
+		return code;
 	}
 	code += R"(	vec2 uv = map_uv(v_local.xz);
 	vec2 n2 = texture(normalmap, uv).rg * 2.0 - 1.0;
@@ -777,21 +885,44 @@ void FellowTerrain3D::_rebuild_data() {
 			Object::cast_to<FellowTerrain3D>(n)->_refresh_border_normals();
 		}
 	}
+	if (is_inside_tree()) {
+		_vt_setup(); // new maps: the pages again (not on a worker thread preparing a region: on entering)
+	}
 	update_configuration_warnings();
 }
 
 void FellowTerrain3D::_update_material() {
 	material_dirty = false;
+	const bool vt_on = _vt_active();
 	if (material.is_null()) {
 		material.instantiate();
-		material->set_shader(FellowSharedShaders::shader(_terrain_shader_code()));
 		if (patch_mesh.is_valid()) {
 			patch_mesh->surface_set_material(0, material);
 		}
 	}
+	const Ref<Shader> shader = FellowSharedShaders::shader(_terrain_shader_code(false, vt_on));
+	if (material->get_shader() != shader) {
+		material->set_shader(shader);
+	}
 	if (!holes.is_empty() && hole_material.is_null()) {
 		hole_material.instantiate();
-		hole_material->set_shader(FellowSharedShaders::shader(_terrain_shader_code(true)));
+	}
+	if (hole_material.is_valid()) {
+		const Ref<Shader> hole_shader = FellowSharedShaders::shader(_terrain_shader_code(true, vt_on));
+		if (hole_material->get_shader() != hole_shader) {
+			hole_material->set_shader(hole_shader);
+		}
+	}
+	if (vt_on) {
+		// Milestone 70: the page table and the shared atlas.
+		Vector4 vp = vt->get_shader_params();
+		vp.w = virtual_texture_lod_bias;
+		_set_material_parameter("vt_table", vt->get_page_table());
+		_set_material_parameter("vt_albedo", FellowTerrainVT::get_atlas_albedo());
+		_set_material_parameter("vt_normal", FellowTerrainVT::get_atlas_normal());
+		_set_material_parameter("vt_overview_albedo", vt->get_overview_albedo());
+		_set_material_parameter("vt_overview_normal", vt->get_overview_normal());
+		_set_material_parameter("vt_params", vp);
 	}
 	if (hole_material.is_valid()) {
 		hole_material->set_shader_parameter("holemap", hole_texture);
@@ -827,31 +958,44 @@ void FellowTerrain3D::_update_material() {
 	PackedColorArray colors;
 	PackedVector4Array params;
 	PackedVector4Array flags;
-	colors.resize(MAX_LAYERS);
-	params.resize(MAX_LAYERS);
-	flags.resize(MAX_LAYERS);
+	_layer_arrays(colors, params, flags);
 	for (int i = 0; i < MAX_LAYERS; i++) {
 		Ref<FellowTerrainLayer> l = i < layers.size() ? Ref<FellowTerrainLayer>(layers[i]) : Ref<FellowTerrainLayer>();
-		if (l.is_valid()) {
-			// The colour is sRGB (as a material's albedo); the shader multiplies linear texels by it (milestone 67: it was
-			// passed as it is, so that layers drew brighter than their colour).
-			colors.write[i] = l->get_albedo_color().srgb_to_linear();
-			params.write[i] = Vector4(1.0f / l->get_texture_size(), l->get_roughness(), l->get_normal_strength(), l->is_triplanar() ? 1.0f : 0.0f);
-			flags.write[i] = Vector4(l->get_albedo_texture().is_valid() ? 1.0f : 0.0f, l->get_normal_texture().is_valid() ? 1.0f : 0.0f, l->is_height_in_albedo_alpha() ? 1.0f : 0.0f, 0.0f);
-			_set_material_parameter(vformat("albedo_%d", i), l->get_albedo_texture());
-			_set_material_parameter(vformat("normal_%d", i), l->get_normal_texture());
-		} else {
-			colors.write[i] = Color(1, 1, 1);
-			params.write[i] = Vector4(0.25f, 0.9f, 1.0f, 0.0f);
-			flags.write[i] = Vector4();
-			_set_material_parameter(vformat("albedo_%d", i), Variant());
-			_set_material_parameter(vformat("normal_%d", i), Variant());
-		}
+		_set_material_parameter(vformat("albedo_%d", i), l.is_valid() && !vt_on ? Variant(l->get_albedo_texture()) : Variant());
+		_set_material_parameter(vformat("normal_%d", i), l.is_valid() && !vt_on ? Variant(l->get_normal_texture()) : Variant());
 	}
-	_set_material_parameter("layer_color", colors);
+	// The linear colours as vectors: a Color reaching a vec4 uniform (or an array of them) is taken as sRGB and converted
+	// by the renderer (Forward+, Mobile), so these linear Colors were converted twice (milestones 67-69: layers drew
+	// darker than their colour; found by milestone 70's pages, baked from the same values without that conversion).
+	PackedVector4Array color_vectors;
+	color_vectors.resize(colors.size());
+	for (int i = 0; i < colors.size(); i++) {
+		const Color &c = colors[i];
+		color_vectors.write[i] = Vector4(c.r, c.g, c.b, c.a);
+	}
+	_set_material_parameter("layer_color", color_vectors);
 	_set_material_parameter("layer_params", params);
 	_set_material_parameter("layer_flags", flags);
 	_update_transforms();
+}
+
+void FellowTerrain3D::_layer_arrays(PackedColorArray &r_colors, PackedVector4Array &r_params, PackedVector4Array &r_flags) const {
+	r_colors.resize(MAX_LAYERS);
+	r_params.resize(MAX_LAYERS);
+	r_flags.resize(MAX_LAYERS);
+	for (int i = 0; i < MAX_LAYERS; i++) {
+		Ref<FellowTerrainLayer> l = i < layers.size() ? Ref<FellowTerrainLayer>(layers[i]) : Ref<FellowTerrainLayer>();
+		if (l.is_valid()) {
+			// The colour is sRGB (as a material's albedo); the shader and the pages multiply linear texels by it linear.
+			r_colors.write[i] = l->get_albedo_color().srgb_to_linear();
+			r_params.write[i] = Vector4(1.0f / l->get_texture_size(), l->get_roughness(), l->get_normal_strength(), l->is_triplanar() ? 1.0f : 0.0f);
+			r_flags.write[i] = Vector4(l->get_albedo_texture().is_valid() ? 1.0f : 0.0f, l->get_normal_texture().is_valid() ? 1.0f : 0.0f, l->is_height_in_albedo_alpha() ? 1.0f : 0.0f, 0.0f);
+		} else {
+			r_colors.write[i] = Color(1, 1, 1);
+			r_params.write[i] = Vector4(0.25f, 0.9f, 1.0f, 0.0f);
+			r_flags.write[i] = Vector4();
+		}
+	}
 }
 
 void FellowTerrain3D::_set_material_parameter(const StringName &p_name, const Variant &p_value) {
@@ -865,6 +1009,9 @@ void FellowTerrain3D::_set_material_parameter(const StringName &p_name, const Va
 
 void FellowTerrain3D::_layer_changed() {
 	material_dirty = true;
+	if (vt) {
+		vt->invalidate_all(); // milestone 70: every page again
+	}
 	if (is_inside_tree()) {
 		_update_material();
 	}
@@ -1015,7 +1162,12 @@ void FellowTerrain3D::_update_transforms() {
 	}
 	set.selection_valid = false;
 	_set_material_parameter("terrain_basis", xf.basis.orthonormalized());
-	_set_material_parameter("world_offset", region_group.is_empty() ? Vector2() : Vector2(xf.origin.x, xf.origin.z));
+	const Vector2 offset = region_group.is_empty() ? Vector2() : Vector2(xf.origin.x, xf.origin.z);
+	_set_material_parameter("world_offset", offset);
+	if (vt && offset != vt_world_offset) {
+		vt_world_offset = offset;
+		vt->invalidate_all(); // the layers' textures and the macro variation follow the group's space
+	}
 	if (body.is_valid()) {
 		PhysicsServer3D::get_singleton()->body_set_state(body, PhysicsServer3D::BODY_STATE_TRANSFORM, xf);
 	}
@@ -2103,6 +2255,7 @@ void FellowTerrain3D::_flush_edits() {
 	for (int i = 0; i < 2; i++) {
 		if (edit_splat[i] && splat_image[i].is_valid()) {
 			_upload_texture(i == 0 ? splat_texture : splat_texture_2, splat_image[i], edit_splat_rect[i]);
+			_vt_invalidate_texels(edit_splat_rect[i], splat_cpu_size[i]); // milestone 70: its pages baked again
 		}
 		edit_splat[i] = false;
 		edit_splat_rect[i] = Rect2i();
@@ -2118,6 +2271,10 @@ void FellowTerrain3D::_flush_edits() {
 	if (r.size.x > 0 && normal_image.is_valid() && normal_texture.is_valid()) {
 		// The normals of the region's edge texels changed too (central differences).
 		_upload_texture(normal_texture, normal_image, r.grow(1));
+	}
+	if (r.size.x > 0 && vt) {
+		vt->update_heights(heights.ptr(), map_w, map_h, vertex_spacing, r);
+		_vt_invalidate_texels(r.grow(1), Vector2i(map_w, map_h));
 	}
 	// The collision shapes over the region.
 	if (body.is_valid() && !shapes.is_empty()) {
@@ -2292,6 +2449,7 @@ void FellowTerrain3D::_refresh_border_normals(int p_dx, int p_dz) {
 		}
 	}
 	for (const Rect2i &s : strips) {
+		_vt_invalidate_texels(s.grow(1), Vector2i(map_w, map_h)); // milestone 70
 		_terrain_mips_region<uint8_t, 2>(normal_image, s);
 		if (normal_texture.is_valid()) {
 			_upload_texture(normal_texture, normal_image, s);
@@ -3254,6 +3412,8 @@ Dictionary FellowTerrain3D::get_stats() const {
 	d["hole_vertices"] = hole_count;
 	d["hole_patches"] = set.shown >= 0 ? set.hole_patches[set.shown] : 0;
 	d["map_size"] = Vector2i(map_w, map_h);
+	d["virtual_texture_pages"] = vt ? vt->get_resident_count() : 0; // milestone 70
+	d["virtual_texture_missing"] = vt ? vt->get_missing_count() : 0;
 	PackedInt32Array per_level;
 	per_level.resize(top_level + 1);
 	per_level.fill(0);
@@ -3501,11 +3661,17 @@ void FellowTerrain3D::set_morph_ratio(float p_ratio) {
 void FellowTerrain3D::set_height_blend(float p_blend) {
 	height_blend = MAX(0.0f, p_blend);
 	_set_material_parameter("height_blend", height_blend);
+	if (vt) {
+		vt->invalidate_all();
+	}
 }
 
 void FellowTerrain3D::set_macro_variation(float p_variation) {
 	macro_variation = CLAMP(p_variation, 0.0f, 1.0f);
 	_set_material_parameter("macro_variation", macro_variation);
+	if (vt) {
+		vt->invalidate_all();
+	}
 }
 
 void FellowTerrain3D::set_debug_view(DebugView p_view) {
@@ -3561,6 +3727,9 @@ PackedStringArray FellowTerrain3D::get_configuration_warnings() const {
 	if (layers.size() > MAX_LAYERS) {
 		warnings.push_back(vformat(RTR("Only the first %d layers are used."), MAX_LAYERS));
 	}
+	if (virtual_texture && RenderingServer::get_singleton()->get_rendering_device() == nullptr) {
+		warnings.push_back(RTR("The virtual texture needs a rendering device (the Forward+ or Mobile renderer): the layers are drawn as without it."));
+	}
 	if (hole_map.is_valid() && !hole_map->is_empty() && heightmap.is_valid() && !heightmap->is_empty() && hole_map->get_size() != heightmap->get_size()) {
 		warnings.push_back(RTR("The hole map is not the heightmap's size: it is stretched over it (nearest texel)."));
 	}
@@ -3580,6 +3749,155 @@ PackedStringArray FellowTerrain3D::get_configuration_warnings() const {
 	return warnings;
 }
 
+// ---------------------------------------------------------------------------------------------------------------------
+// The virtual texture (milestone 70, decision 0178): FellowTerrainVT chooses the pages a view wants and bakes the missing
+// ones from the terrain's maps and layers; the shader reads them through the page table.
+
+void FellowTerrain3D::set_virtual_texture(bool p_enable) {
+	virtual_texture = p_enable;
+	_vt_setup();
+	update_configuration_warnings();
+}
+
+void FellowTerrain3D::set_virtual_texture_texels_per_meter(float p_texels) {
+	virtual_texture_texels_per_meter = CLAMP(p_texels, 1.0f, 512.0f);
+	if (vt) {
+		_vt_setup(); // a new page geometry
+	}
+}
+
+void FellowTerrain3D::set_virtual_texture_lod_bias(float p_bias) {
+	virtual_texture_lod_bias = CLAMP(p_bias, -2.0f, 4.0f);
+	if (vt) {
+		Vector4 vp = vt->get_shader_params();
+		vp.w = virtual_texture_lod_bias;
+		_set_material_parameter("vt_params", vp);
+	}
+}
+
+void FellowTerrain3D::_vt_setup() {
+	const bool want = virtual_texture && is_inside_tree() && map_w >= 2 && map_h >= 2 && !data_dirty &&
+			RenderingServer::get_singleton()->get_rendering_device() != nullptr;
+	if (!want) {
+		_vt_free();
+		return;
+	}
+	if (!vt) {
+		vt = memnew(FellowTerrainVT);
+	}
+	vt->configure(Vector2(map_w - 1, map_h - 1) * vertex_spacing, virtual_texture_texels_per_meter);
+	if (!vt->is_configured()) {
+		_vt_free();
+		return;
+	}
+	vt->update_heights(heights.ptr(), map_w, map_h, vertex_spacing);
+	const Transform3D xf = get_global_transform();
+	vt_world_offset = region_group.is_empty() ? Vector2() : Vector2(xf.origin.x, xf.origin.z);
+	material_dirty = true;
+	_update_material();
+}
+
+void FellowTerrain3D::_vt_free() {
+	if (!vt) {
+		return;
+	}
+	memdelete(vt);
+	vt = nullptr;
+	vt_jobs.clear();
+	material_dirty = true;
+	if (is_inside_tree() && material.is_valid()) {
+		_update_material();
+	}
+}
+
+void FellowTerrain3D::_vt_invalidate_texels(const Rect2i &p_texels, const Vector2i &p_map_size) {
+	if (!vt || p_map_size.x < 1 || p_map_size.y < 1 || !p_texels.has_area()) {
+		return;
+	}
+	// A map's texel (the heights', or a splat map's of another size) over the terrain: the shader's map_uv() scaled.
+	const Vector2 metres_per_texel = Vector2(map_w, map_h) * vertex_spacing / Vector2(p_map_size);
+	const Vector2 from = Vector2(p_texels.position) * metres_per_texel - Vector2(0.5f, 0.5f) * vertex_spacing;
+	vt->invalidate(Rect2(from, Vector2(p_texels.size) * metres_per_texel).grow(MAX(metres_per_texel.x, metres_per_texel.y)));
+}
+
+void FellowTerrain3D::_vt_bake_params(FellowTerrainVT::BakeParams &r_params) const {
+	r_params.heightmap = height_texture.is_valid() ? height_texture->get_rid() : RID();
+	r_params.normalmap = normal_texture.is_valid() ? normal_texture->get_rid() : RID();
+	r_params.splat[0] = splat_texture.is_valid() ? splat_texture->get_rid() : RID();
+	r_params.splat[1] = splat_texture_2.is_valid() ? splat_texture_2->get_rid() : RID();
+	PackedColorArray colors;
+	PackedVector4Array params;
+	PackedVector4Array flags;
+	_layer_arrays(colors, params, flags);
+	for (int i = 0; i < MAX_LAYERS && i < FellowTerrainVT::LAYERS; i++) {
+		Ref<FellowTerrainLayer> l = i < layers.size() ? Ref<FellowTerrainLayer>(layers[i]) : Ref<FellowTerrainLayer>();
+		r_params.albedo[i] = l.is_valid() && l->get_albedo_texture().is_valid() ? l->get_albedo_texture()->get_rid() : RID();
+		r_params.normal[i] = l.is_valid() && l->get_normal_texture().is_valid() ? l->get_normal_texture()->get_rid() : RID();
+		const Color &c = colors[i];
+		r_params.layer_color[i] = Vector4(c.r, c.g, c.b, c.a);
+		r_params.layer_params[i] = params[i];
+		r_params.layer_flags[i] = flags[i];
+	}
+	r_params.map_texels = Vector2(MAX(1, map_w), MAX(1, map_h));
+	r_params.world_offset = vt_world_offset;
+	r_params.spacing = vertex_spacing;
+	r_params.texels_per_metre = vt->get_texels_per_metre();
+	r_params.height_blend = height_blend;
+	r_params.macro_variation = macro_variation;
+}
+
+void FellowTerrain3D::_process_vt(Camera3D *p_camera) {
+	if (!p_camera || !_vt_active()) {
+		return;
+	}
+	if (material_dirty) {
+		_update_material();
+	}
+	FellowTerrainVT::View view;
+	const Transform3D inv = get_global_transform().affine_inverse();
+	view.camera = inv.xform(p_camera->get_global_position());
+	for (const Plane &p : p_camera->get_frustum()) {
+		view.frustum.push_back(inv.xform(p));
+	}
+	// A pixel's angle in the 3D frame (its resolution with the viewport's 3D scaling).
+	Viewport *vp = p_camera->get_viewport();
+	Vector2 size = vp ? vp->get_visible_rect().size : Vector2(1920, 1080);
+	if (vp) {
+		size *= vp->get_scaling_3d_scale();
+	}
+	if (p_camera->get_projection() == Camera3D::PROJECTION_PERSPECTIVE) {
+		const bool keep_width = p_camera->get_keep_aspect_mode() == Camera3D::KEEP_WIDTH;
+		view.pixel_angle = 2.0f * Math::tan(Math::deg_to_rad(p_camera->get_fov()) * 0.5f) / MAX(1.0f, keep_width ? size.x : size.y);
+	} else {
+		// Orthogonal: a pixel's width everywhere, as an angle seen from 1 m (the distances measured from the camera's
+		// plane would be another model; a terrain is rarely seen so).
+		view.pixel_angle = p_camera->get_size() / MAX(1.0f, size.y);
+	}
+	vt->update(view, virtual_texture_lod_bias, vt_jobs);
+	if (!vt_jobs.is_empty() || vt->is_overview_due()) {
+		FellowTerrainVT::BakeParams params;
+		_vt_bake_params(params);
+		vt->bake(vt_jobs, params);
+	}
+	vt->upload_page_table();
+}
+
+Dictionary FellowTerrain3D::get_virtual_texture_stats() const {
+	Dictionary d = FellowTerrainVT::get_cache_stats();
+	d["active"] = _vt_active();
+	if (vt) {
+		d["texels_per_meter"] = vt->get_texels_per_metre();
+		d["mips"] = vt->get_mip_count();
+		d["pages0"] = vt->get_pages0();
+		d["resident"] = vt->get_resident_count();
+		d["wanted"] = vt->get_wanted_count();
+		d["missing"] = vt->get_missing_count();
+		d["baked_total"] = int64_t(vt->get_baked_count());
+		d["overview_baked"] = int64_t(vt->get_overview_baked_count());
+	}
+	return d;
+}
+
 void FellowTerrain3D::_notification(int p_what) {
 	switch (p_what) {
 		case NOTIFICATION_ENTER_WORLD: {
@@ -3589,6 +3907,7 @@ void FellowTerrain3D::_notification(int p_what) {
 			} else {
 				_update_collision();
 			}
+			_vt_setup(); // milestone 70
 			const uint64_t t1 = OS::get_singleton()->get_ticks_usec();
 			_update_material();
 			_create_instances();
@@ -3603,6 +3922,7 @@ void FellowTerrain3D::_notification(int p_what) {
 		} break;
 		case NOTIFICATION_EXIT_WORLD: {
 			_region_unregister();
+			_vt_free(); // its slots back to the shared atlas
 			set_process_internal(false);
 			_clear_foliage(true);
 			foliage_dirty = true;
@@ -3618,6 +3938,9 @@ void FellowTerrain3D::_notification(int p_what) {
 		case NOTIFICATION_INTERNAL_PROCESS: {
 			const uint64_t t0 = OS::get_singleton()->get_ticks_usec();
 			_process_lod();
+			if (_vt_active()) {
+				_process_vt(_find_camera());
+			}
 			if (!foliage.is_empty() || !foliage_cells.is_empty()) {
 				Camera3D *cam = _find_camera();
 				if (cam && map_w >= 2) {
@@ -3636,6 +3959,8 @@ void FellowTerrain3D::_notification(int p_what) {
 void FellowTerrain3D::fellow_bake_shader_codes(Vector<String> &r_codes) {
 	r_codes.push_back(_terrain_shader_code());
 	r_codes.push_back(_terrain_shader_code(true)); // the patches over holes (decision 0172)
+	r_codes.push_back(_terrain_shader_code(false, true)); // from a virtual texture (decision 0178)
+	r_codes.push_back(_terrain_shader_code(true, true));
 }
 
 void FellowTerrain3D::_bind_methods() {
@@ -3661,6 +3986,14 @@ void FellowTerrain3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_height_blend"), &FellowTerrain3D::get_height_blend);
 	ClassDB::bind_method(D_METHOD("set_macro_variation", "variation"), &FellowTerrain3D::set_macro_variation);
 	ClassDB::bind_method(D_METHOD("get_macro_variation"), &FellowTerrain3D::get_macro_variation);
+	ClassDB::bind_method(D_METHOD("set_virtual_texture", "enable"), &FellowTerrain3D::set_virtual_texture);
+	ClassDB::bind_method(D_METHOD("is_virtual_texture"), &FellowTerrain3D::is_virtual_texture);
+	ClassDB::bind_method(D_METHOD("set_virtual_texture_texels_per_meter", "texels"), &FellowTerrain3D::set_virtual_texture_texels_per_meter);
+	ClassDB::bind_method(D_METHOD("get_virtual_texture_texels_per_meter"), &FellowTerrain3D::get_virtual_texture_texels_per_meter);
+	ClassDB::bind_method(D_METHOD("set_virtual_texture_lod_bias", "bias"), &FellowTerrain3D::set_virtual_texture_lod_bias);
+	ClassDB::bind_method(D_METHOD("get_virtual_texture_lod_bias"), &FellowTerrain3D::get_virtual_texture_lod_bias);
+	ClassDB::bind_method(D_METHOD("is_virtual_texture_active"), &FellowTerrain3D::is_virtual_texture_active);
+	ClassDB::bind_method(D_METHOD("get_virtual_texture_stats"), &FellowTerrain3D::get_virtual_texture_stats);
 	ClassDB::bind_method(D_METHOD("set_debug_view", "view"), &FellowTerrain3D::set_debug_view);
 	ClassDB::bind_method(D_METHOD("get_debug_view"), &FellowTerrain3D::get_debug_view);
 	ClassDB::bind_method(D_METHOD("set_cast_shadows", "enable"), &FellowTerrain3D::set_cast_shadows);
@@ -3715,6 +4048,10 @@ void FellowTerrain3D::_bind_methods() {
 	ADD_GROUP("Material", "");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "height_blend", PROPERTY_HINT_RANGE, "0,2,0.01"), "set_height_blend", "get_height_blend");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "macro_variation", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_macro_variation", "get_macro_variation");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "virtual_texture"), "set_virtual_texture", "is_virtual_texture");
+	ADD_GROUP("Virtual Texture", "virtual_texture_");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "virtual_texture_texels_per_meter", PROPERTY_HINT_RANGE, "1,512,1,exp"), "set_virtual_texture_texels_per_meter", "get_virtual_texture_texels_per_meter");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "virtual_texture_lod_bias", PROPERTY_HINT_RANGE, "-2,4,0.05"), "set_virtual_texture_lod_bias", "get_virtual_texture_lod_bias");
 	ADD_GROUP("Foliage", "foliage");
 	ADD_PROPERTY(PropertyInfo(Variant::ARRAY, "foliage", PROPERTY_HINT_ARRAY_TYPE, MAKE_RESOURCE_TYPE_HINT("FellowTerrainFoliage")), "set_foliage", "get_foliage");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "foliage_cells_per_frame", PROPERTY_HINT_RANGE, "1,256,1"), "set_foliage_cells_per_frame", "get_foliage_cells_per_frame");
@@ -3725,7 +4062,7 @@ void FellowTerrain3D::_bind_methods() {
 	ADD_GROUP("Rendering", "");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "cast_shadows"), "set_cast_shadows", "is_casting_shadows");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "render_layer_mask", PROPERTY_HINT_LAYERS_3D_RENDER), "set_render_layer_mask", "get_render_layer_mask");
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "debug_view", PROPERTY_HINT_ENUM, "Off,Levels of Detail"), "set_debug_view", "get_debug_view");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "debug_view", PROPERTY_HINT_ENUM, "Off,Levels of Detail,Virtual Texture"), "set_debug_view", "get_debug_view");
 	ADD_GROUP("Collision", "collision_");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "collision_enabled"), "set_collision_enabled", "is_collision_enabled");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "collision_layer", PROPERTY_HINT_LAYERS_3D_PHYSICS), "set_collision_layer", "get_collision_layer");
@@ -3740,6 +4077,7 @@ void FellowTerrain3D::_bind_methods() {
 	BIND_ENUM_CONSTANT(SCULPT_FLATTEN);
 	BIND_ENUM_CONSTANT(DEBUG_VIEW_OFF);
 	BIND_ENUM_CONSTANT(DEBUG_VIEW_LEVELS);
+	BIND_ENUM_CONSTANT(DEBUG_VIEW_VIRTUAL_TEXTURE);
 }
 
 FellowTerrain3D::FellowTerrain3D() {
@@ -3748,6 +4086,7 @@ FellowTerrain3D::FellowTerrain3D() {
 
 FellowTerrain3D::~FellowTerrain3D() {
 	_region_unregister(); // (left the world before: a safeguard)
+	_vt_free();
 	_clear_foliage(true);
 	_free_instances();
 	_free_collision();
