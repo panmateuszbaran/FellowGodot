@@ -325,6 +325,7 @@ D = {
     "streaming/terrain_region_uploads": "FellowTerrain3D's sculpting, painting and blits upload to the GPU only the texels they changed and the mips over them (the heights, the normals, the splat maps), not the whole textures: the same textures. Read once. Decision 0168.",
     "terrain/virtual_texture_atlas_size": "Texels along a side of the atlas every [FellowTerrain3D] with [member FellowTerrain3D.virtual_texture] keeps its baked pages in (two RGBA8 textures: 4080 holds 900 pages of 136 x 136 texels in 127 MiB). Made with the first such terrain, freed with the last; read then. Decision 0178.",
     "terrain/virtual_texture_pages_per_frame": "Pages of the terrains' virtual textures baked in a frame at most (the coarsest and nearest first): the pages a view lacks meanwhile are drawn from a coarser page. Decision 0178.",
+    "terrain/virtual_texture_all": "Every FellowTerrain3D drawn from a virtual texture as if its [member FellowTerrain3D.virtual_texture] were on (to compare a project with and without them; read as a terrain enters the tree). Decision 0179.",
     # ---------------------------------------------------------------- diagnostics (debug/*)
     "debug/raytracing_decode_positions": "Diagnostics: compressed vertex positions decoded for the acceleration structures even where the device builds from them.",
     "debug/raytracing_gi_dump_every": "Diagnostics: the DDGI probes written to [code]user://fellow_ddgi_dump.bin[/code] every n updates (stalls the GPU; 0: never).",

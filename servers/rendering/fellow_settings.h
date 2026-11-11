@@ -1411,6 +1411,8 @@ struct Stats {
 	SafeNumeric<uint64_t> cost_multimesh_buffers;
 	SafeNumeric<uint64_t> terrain_vt_pages_baked; // FellowTerrain3D's virtual texture (milestone 70): pages dispatched
 	SafeNumeric<uint64_t> terrain_vt_dispatch_usec; // the render thread's time recording them
+	SafeNumeric<uint64_t> terrain_vt_update_usec; // the main thread's time choosing the pages and updating the tables (milestone 71)
+	SafeNumeric<uint64_t> terrain_vt_setup_usec; // the main thread's time setting a terrain's virtual texture up (entering, new maps)
 	// Milestone 61: FellowEngine nodes' compute kernels compiled from GLSL (glslang) and read from their SPIR-V cache.
 	SafeNumeric<uint64_t> cost_glsl_compile_usec;
 	SafeNumeric<uint64_t> cost_glsl_compiles;

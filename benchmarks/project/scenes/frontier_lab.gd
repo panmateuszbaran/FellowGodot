@@ -17,7 +17,8 @@ extends "res://scenes/slice_lab.gd"
 ## --frontier_cells=<m> (the cells' load distance, 450), --frontier_meshes=<m> (the buildings' full meshes, 160),
 ## --frontier_regions=<m> (the terrain regions' load distance, 1000), --frontier_trees=<m> (the trees' range, 1000),
 ## --frontier_far=<m> (the camera's far plane, 4000), --frontier_vt=1 (the terrain regions drawn from their virtual
-## textures, milestone 71; --frontier_vt_texels=<n>, 64; the atlas's size and budget through --fellow=terrain/...);
+## textures, rendering/fellow/terrain/virtual_texture_all, milestone 71; --frontier_vt_texels=<n>, 64, set as each region
+## enters; the atlas's size and budget through --fellow=terrain/...);
 ## Slice Lab's --slice_weather, --slice_daytime, --slice_day, --slice_crowd, --slice_without=water,weather,fire,crowd.
 
 const F_VERSION := 6
@@ -106,6 +107,8 @@ func build(p_args: Dictionary) -> void:
 	streamers = [cell_streamer, ground_streamer]
 	vt_on = str(args.get("frontier_vt", "0")) == "1"
 	if vt_on:
+		# Every terrain as if its virtual_texture were on, from its first frame (as a region saved with it would be).
+		ProjectSettings.set_setting("rendering/fellow/terrain/virtual_texture_all", true)
 		(Engine.get_main_loop() as SceneTree).node_added.connect(_vt_node_added)
 	add_child(level)
 	var place_ms := (Time.get_ticks_usec() - t1) / 1000.0
@@ -971,11 +974,13 @@ func set_time(t: float) -> void:
 		crowd.set_time(t)
 
 
-## --frontier_vt=1: every terrain region drawn from its virtual texture as it enters the tree.
+## --frontier_vt=1: the terrain regions entering the tree, for the atlas's stats (and another texel density: their
+## pages set up again).
 func _vt_node_added(n: Node) -> void:
 	if n.is_class("FellowTerrain3D"):
-		n.set("virtual_texture_texels_per_meter", float(args.get("frontier_vt_texels", "64")))
-		n.set("virtual_texture", true)
+		var texels := float(args.get("frontier_vt_texels", "64"))
+		if not is_equal_approx(texels, float(n.get("virtual_texture_texels_per_meter"))):
+			n.set("virtual_texture_texels_per_meter", texels)
 		n.add_to_group("frontier_vt")
 
 
@@ -993,7 +998,7 @@ func _vt_sample() -> Dictionary:
 		return {}
 	var d: Dictionary = _vt_probe.call("get_virtual_texture_stats")
 	var now := {"baked": int(d.get("baked", 0)), "evicted": int(d.get("evicted", 0)), "missing": int(d.get("wanted_missing", 0))}
-	var out := {"vt_wanted": int(d.get("wanted", 0)), "vt_slots_used": int(d.get("slots", 0)) - int(d.get("free_slots", 0)),
+	var out := {"vt_wanted": int(d.get("atlas_wanted", 0)), "vt_slots_used": int(d.get("slots", 0)) - int(d.get("free_slots", 0)),
 		"vt_pressure_bias": float(d.get("pressure_bias", 0.0))}
 	for k in now:
 		out["vt_" + k] = now[k] - int(_vt_prev.get(k, now[k]))

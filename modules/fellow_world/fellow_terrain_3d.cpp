@@ -3727,7 +3727,7 @@ PackedStringArray FellowTerrain3D::get_configuration_warnings() const {
 	if (layers.size() > MAX_LAYERS) {
 		warnings.push_back(vformat(RTR("Only the first %d layers are used."), MAX_LAYERS));
 	}
-	if (virtual_texture && RenderingServer::get_singleton()->get_rendering_device() == nullptr) {
+	if (_vt_wanted() && RenderingServer::get_singleton()->get_rendering_device() == nullptr) {
 		warnings.push_back(RTR("The virtual texture needs a rendering device (the Forward+ or Mobile renderer): the layers are drawn as without it."));
 	}
 	if (hole_map.is_valid() && !hole_map->is_empty() && heightmap.is_valid() && !heightmap->is_empty() && hole_map->get_size() != heightmap->get_size()) {
@@ -3775,13 +3775,18 @@ void FellowTerrain3D::set_virtual_texture_lod_bias(float p_bias) {
 	}
 }
 
-void FellowTerrain3D::_vt_setup() {
-	const bool want = virtual_texture && is_inside_tree() && map_w >= 2 && map_h >= 2 && !data_dirty &&
+bool FellowTerrain3D::_vt_wanted() const {
+	return virtual_texture || bool(GLOBAL_GET_CACHED(bool, "rendering/fellow/terrain/virtual_texture_all"));
+}
+
+void FellowTerrain3D::_vt_setup(bool p_update_material) {
+	const bool want = _vt_wanted() && is_inside_tree() && map_w >= 2 && map_h >= 2 && !data_dirty &&
 			RenderingServer::get_singleton()->get_rendering_device() != nullptr;
 	if (!want) {
 		_vt_free();
 		return;
 	}
+	const uint64_t t0 = OS::get_singleton()->get_ticks_usec();
 	if (!vt) {
 		vt = memnew(FellowTerrainVT);
 	}
@@ -3794,7 +3799,10 @@ void FellowTerrain3D::_vt_setup() {
 	const Transform3D xf = get_global_transform();
 	vt_world_offset = region_group.is_empty() ? Vector2() : Vector2(xf.origin.x, xf.origin.z);
 	material_dirty = true;
-	_update_material();
+	if (p_update_material) {
+		_update_material();
+	}
+	Fellow::stats().terrain_vt_setup_usec.add(OS::get_singleton()->get_ticks_usec() - t0);
 }
 
 void FellowTerrain3D::_vt_free() {
@@ -3850,6 +3858,7 @@ void FellowTerrain3D::_process_vt(Camera3D *p_camera) {
 	if (!p_camera || !_vt_active()) {
 		return;
 	}
+	const uint64_t t0 = OS::get_singleton()->get_ticks_usec();
 	if (material_dirty) {
 		_update_material();
 	}
@@ -3880,6 +3889,7 @@ void FellowTerrain3D::_process_vt(Camera3D *p_camera) {
 		vt->bake(vt_jobs, params);
 	}
 	vt->upload_page_table();
+	Fellow::stats().terrain_vt_update_usec.add(OS::get_singleton()->get_ticks_usec() - t0);
 }
 
 Dictionary FellowTerrain3D::get_virtual_texture_stats() const {
@@ -3907,7 +3917,7 @@ void FellowTerrain3D::_notification(int p_what) {
 			} else {
 				_update_collision();
 			}
-			_vt_setup(); // milestone 70
+			_vt_setup(false); // milestone 70 (the material updated next)
 			const uint64_t t1 = OS::get_singleton()->get_ticks_usec();
 			_update_material();
 			_create_instances();

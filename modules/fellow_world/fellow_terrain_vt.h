@@ -105,6 +105,7 @@ private:
 	static int _take_slot(FellowTerrainVT *p_for);
 
 	// This terrain's virtual texture.
+	uint64_t id = 0; // the render thread's kernel inputs for it
 	Vector2 extent; // metres
 	float texels_per_metre = 32.0f;
 	int mips = 0;

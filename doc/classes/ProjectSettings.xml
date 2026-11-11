@@ -3886,6 +3886,9 @@
 		<member name="rendering/fellow/streaming/textures" type="bool" setter="" getter="" default="false">
 			Texture streaming: a VRAM-compressed texture with mipmaps loads only its small mips, the rest as the cameras need them, on worker threads. Off: textures load whole, as stock. Read at start-up. Decision 0146.
 		</member>
+		<member name="rendering/fellow/terrain/virtual_texture_all" type="bool" setter="" getter="" default="false">
+			Every FellowTerrain3D drawn from a virtual texture as if its [member FellowTerrain3D.virtual_texture] were on (to compare a project with and without them; read as a terrain enters the tree). Decision 0179.
+		</member>
 		<member name="rendering/fellow/terrain/virtual_texture_atlas_size" type="int" setter="" getter="" default="4080">
 			Texels along a side of the atlas every [FellowTerrain3D] with [member FellowTerrain3D.virtual_texture] keeps its baked pages in (two RGBA8 textures: 4080 holds 900 pages of 136 x 136 texels in 127 MiB). Made with the first such terrain, freed with the last; read then. Decision 0178.
 		</member>

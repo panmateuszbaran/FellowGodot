@@ -388,7 +388,9 @@ private:
 	LocalVector<FellowTerrainVT::Job> vt_jobs;
 	Vector2 vt_world_offset;
 	bool _vt_active() const { return vt != nullptr && vt->is_configured(); }
-	void _vt_setup();
+	// virtual_texture, or every terrain's (rendering/fellow/terrain/virtual_texture_all, milestone 71).
+	bool _vt_wanted() const;
+	void _vt_setup(bool p_update_material = true);
 	void _vt_free();
 	void _process_vt(Camera3D *p_camera);
 	void _vt_invalidate_texels(const Rect2i &p_texels, const Vector2i &p_map_size);

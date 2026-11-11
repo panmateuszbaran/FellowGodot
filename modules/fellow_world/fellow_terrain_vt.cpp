@@ -67,6 +67,7 @@ uint64_t FellowTerrainVT::stat_wanted_missing = 0;
 namespace {
 
 struct BakeBatch {
+	uint64_t terrain = 0; // its FellowTerrainVT's id: the render thread's sets and buffer for it
 	LocalVector<FellowTerrainVT::Job> jobs;
 	FellowTerrainVT::BakeParams params;
 	// The overview's levels too (its coarsest page's mip; -1: not this time).
@@ -87,9 +88,25 @@ struct RenderState {
 	bool failed = false;
 };
 
+// A terrain's kernel inputs on the render thread (milestone 71: made once, not per bake): the uniform sets writing the
+// atlas and each overview level, the views of those levels, the buffer of its layers and jobs; made again when an
+// input texture changes or a set is no longer valid (a resource it named was freed).
+struct TerrainRT {
+	static constexpr int INPUTS = 4 + 2 * FellowTerrainVT::LAYERS;
+	RID inputs[INPUTS]; // the RenderingDevice textures the sets were made with
+	RID overview[2]; // the overview's textures the views were made of
+	RID views[2][FellowTerrainVT::OVERVIEW_MIPS];
+	RID buffer;
+	int buffer_jobs = 0; // its capacity
+	RID set_atlas;
+	RID set_levels[FellowTerrainVT::OVERVIEW_MIPS];
+};
+
 Mutex vt_mutex;
 LocalVector<BakeBatch> vt_batches; // under vt_mutex
 RenderState vt_rs; // render thread only
+HashMap<uint64_t, TerrainRT> vt_terrains; // render thread only
+uint64_t vt_next_id = 1; // main thread
 
 struct BakePush {
 	float map_texels[2];
@@ -178,6 +195,48 @@ static void _vt_rt_free_overview(Ref<Texture2DRD> p_albedo, Ref<Texture2DRD> p_n
 	}
 }
 
+static void _vt_rt_free_sets(RD *p_rd, TerrainRT &r_t) {
+	for (RID *r : { &r_t.set_atlas }) {
+		if (r->is_valid() && p_rd->uniform_set_is_valid(*r)) {
+			p_rd->free_rid(*r);
+		}
+		*r = RID();
+	}
+	for (RID &r : r_t.set_levels) {
+		if (r.is_valid() && p_rd->uniform_set_is_valid(r)) {
+			p_rd->free_rid(r);
+		}
+		r = RID();
+	}
+}
+
+static void _vt_rt_free_terrain(RD *p_rd, TerrainRT &r_t) {
+	_vt_rt_free_sets(p_rd, r_t);
+	for (int a = 0; a < 2; a++) {
+		for (RID &v : r_t.views[a]) {
+			if (v.is_valid() && p_rd->texture_is_valid(v)) {
+				p_rd->free_rid(v);
+			}
+			v = RID();
+		}
+		r_t.overview[a] = RID();
+	}
+	if (r_t.buffer.is_valid()) {
+		p_rd->free_rid(r_t.buffer);
+		r_t.buffer = RID();
+	}
+	r_t.buffer_jobs = 0;
+}
+
+static void _vt_rt_forget(uint64_t p_terrain) {
+	RD *rd = RenderingServer::get_singleton()->get_rendering_device();
+	TerrainRT *t = vt_terrains.getptr(p_terrain);
+	if (rd && t) {
+		_vt_rt_free_terrain(rd, *t);
+	}
+	vt_terrains.erase(p_terrain);
+}
+
 static void _vt_rt_free_atlas() {
 	RD *rd = RenderingServer::get_singleton()->get_rendering_device();
 	if (!rd) {
@@ -185,6 +244,10 @@ static void _vt_rt_free_atlas() {
 	}
 	MutexLock lock(vt_mutex);
 	vt_batches.clear();
+	for (KeyValue<uint64_t, TerrainRT> &E : vt_terrains) {
+		_vt_rt_free_terrain(rd, E.value);
+	}
+	vt_terrains.clear();
 	for (RID *r : { &vt_rs.albedo, &vt_rs.normal, &vt_rs.map_sampler, &vt_rs.layer_sampler, &vt_rs.white, &vt_rs.flat_normal }) {
 		if (r->is_valid()) {
 			rd->free_rid(*r);
@@ -238,18 +301,17 @@ static RID _vt_rt_texture(RID p_rs_texture, bool p_srgb, RID p_fallback) {
 	return t.is_valid() ? t : p_fallback;
 }
 
-// One dispatch: the kernel writing p_albedo / p_normal (the atlas, or an overview level's views).
-static void _vt_rt_dispatch(RD *p_rd, const FellowTerrainVT::BakeParams &p_params, RID p_buffer, RID p_albedo, RID p_normal, int p_job_base, int p_jobs, int p_out_size) {
+// The uniform set writing p_albedo / p_normal (the atlas, or an overview level's views) from a terrain's inputs.
+static RID _vt_rt_make_set(RD *p_rd, const TerrainRT &p_t, RID p_albedo, RID p_normal) {
 	const int L = FellowTerrainVT::LAYERS;
 	Vector<RD::Uniform> u;
 	u.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 0, p_albedo));
 	u.push_back(RD::Uniform(RD::UNIFORM_TYPE_IMAGE, 1, p_normal));
 	u.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER, 2, vt_rs.map_sampler));
 	u.push_back(RD::Uniform(RD::UNIFORM_TYPE_SAMPLER, 3, vt_rs.layer_sampler));
-	u.push_back(RD::Uniform(RD::UNIFORM_TYPE_TEXTURE, 4, _vt_rt_texture(p_params.heightmap, false, vt_rs.white)));
-	u.push_back(RD::Uniform(RD::UNIFORM_TYPE_TEXTURE, 5, _vt_rt_texture(p_params.normalmap, false, vt_rs.flat_normal)));
-	u.push_back(RD::Uniform(RD::UNIFORM_TYPE_TEXTURE, 6, _vt_rt_texture(p_params.splat[0], false, vt_rs.white)));
-	u.push_back(RD::Uniform(RD::UNIFORM_TYPE_TEXTURE, 7, _vt_rt_texture(p_params.splat[1], false, vt_rs.white)));
+	for (int i = 0; i < 4; i++) {
+		u.push_back(RD::Uniform(RD::UNIFORM_TYPE_TEXTURE, 4 + i, p_t.inputs[i]));
+	}
 	RD::Uniform ua;
 	ua.uniform_type = RD::UNIFORM_TYPE_TEXTURE;
 	ua.binding = 8;
@@ -257,14 +319,92 @@ static void _vt_rt_dispatch(RD *p_rd, const FellowTerrainVT::BakeParams &p_param
 	un.uniform_type = RD::UNIFORM_TYPE_TEXTURE;
 	un.binding = 9;
 	for (int i = 0; i < L; i++) {
-		ua.append_id(_vt_rt_texture(p_params.albedo[i], true, vt_rs.white));
-		un.append_id(_vt_rt_texture(p_params.normal[i], false, vt_rs.flat_normal));
+		ua.append_id(p_t.inputs[4 + i]);
+		un.append_id(p_t.inputs[4 + L + i]);
 	}
 	u.push_back(ua);
 	u.push_back(un);
-	u.push_back(RD::Uniform(RD::UNIFORM_TYPE_STORAGE_BUFFER, 10, p_buffer));
-	const RID set = p_rd->uniform_set_create(u, vt_rs.shader, 0);
+	u.push_back(RD::Uniform(RD::UNIFORM_TYPE_STORAGE_BUFFER, 10, p_t.buffer));
+	return p_rd->uniform_set_create(u, vt_rs.shader, 0);
+}
 
+// A batch's terrain ready to dispatch: its inputs current, its buffer large enough (holding this batch's data), its
+// sets made; false if something could not be made.
+static bool _vt_rt_prepare(RD *p_rd, const BakeBatch &p_b, RID p_ov_albedo, RID p_ov_normal, const Vector<uint8_t> &p_data, int p_jobs) {
+	const FellowTerrainVT::BakeParams &p = p_b.params;
+	const int L = FellowTerrainVT::LAYERS;
+	TerrainRT &t = vt_terrains[p_b.terrain];
+	RID inputs[TerrainRT::INPUTS];
+	inputs[0] = _vt_rt_texture(p.heightmap, false, vt_rs.white);
+	inputs[1] = _vt_rt_texture(p.normalmap, false, vt_rs.flat_normal);
+	inputs[2] = _vt_rt_texture(p.splat[0], false, vt_rs.white);
+	inputs[3] = _vt_rt_texture(p.splat[1], false, vt_rs.white);
+	for (int i = 0; i < L; i++) {
+		inputs[4 + i] = _vt_rt_texture(p.albedo[i], true, vt_rs.white);
+		inputs[4 + L + i] = _vt_rt_texture(p.normal[i], false, vt_rs.flat_normal);
+	}
+	bool remake = false;
+	for (int i = 0; i < TerrainRT::INPUTS; i++) {
+		if (inputs[i] != t.inputs[i]) {
+			t.inputs[i] = inputs[i];
+			remake = true;
+		}
+	}
+	// The buffer: the layers' parameters and up to this many jobs (the budget's and the overview's, grown if needed).
+	const int needed = p_jobs;
+	if (t.buffer.is_null() || t.buffer_jobs < needed) {
+		if (t.buffer.is_valid()) {
+			p_rd->free_rid(t.buffer);
+		}
+		t.buffer_jobs = MAX(needed, 3 * L + 64 + FellowTerrainVT::OVERVIEW_MIPS);
+		Vector<uint8_t> init = p_data;
+		init.resize(t.buffer_jobs * 16);
+		t.buffer = p_rd->storage_buffer_create(t.buffer_jobs * 16, init);
+		remake = true;
+	} else {
+		p_rd->buffer_update(t.buffer, 0, p_data.size(), p_data.ptr());
+	}
+	if (t.buffer.is_null()) {
+		return false;
+	}
+	// The overview's level views (its textures are made once per terrain).
+	if (p_ov_albedo.is_valid() && (t.overview[0] != p_ov_albedo || t.overview[1] != p_ov_normal)) {
+		for (int a = 0; a < 2; a++) {
+			for (RID &v : t.views[a]) {
+				if (v.is_valid() && p_rd->texture_is_valid(v)) {
+					p_rd->free_rid(v);
+				}
+				v = RID();
+			}
+		}
+		t.overview[0] = p_ov_albedo;
+		t.overview[1] = p_ov_normal;
+		for (int k = 0; k < FellowTerrainVT::OVERVIEW_MIPS; k++) {
+			t.views[0][k] = p_rd->texture_create_shared_from_slice(RD::TextureView(), p_ov_albedo, 0, k, 1, RD::TEXTURE_SLICE_2D);
+			t.views[1][k] = p_rd->texture_create_shared_from_slice(RD::TextureView(), p_ov_normal, 0, k, 1, RD::TEXTURE_SLICE_2D);
+		}
+		remake = true;
+	}
+	if (!remake && t.set_atlas.is_valid() && !p_rd->uniform_set_is_valid(t.set_atlas)) {
+		remake = true;
+	}
+	if (remake) {
+		_vt_rt_free_sets(p_rd, t);
+	}
+	if (t.set_atlas.is_null()) {
+		t.set_atlas = _vt_rt_make_set(p_rd, t, vt_rs.albedo, vt_rs.normal);
+	}
+	if (p_ov_albedo.is_valid()) {
+		for (int k = 0; k < FellowTerrainVT::OVERVIEW_MIPS; k++) {
+			if (t.set_levels[k].is_null() && t.views[0][k].is_valid() && t.views[1][k].is_valid()) {
+				t.set_levels[k] = _vt_rt_make_set(p_rd, t, t.views[0][k], t.views[1][k]);
+			}
+		}
+	}
+	return t.set_atlas.is_valid();
+}
+
+static void _vt_rt_dispatch(RD *p_rd, const FellowTerrainVT::BakeParams &p_params, RID p_set, int p_job_base, int p_jobs, int p_out_size) {
 	BakePush push = {};
 	push.map_texels[0] = p_params.map_texels.x;
 	push.map_texels[1] = p_params.map_texels.y;
@@ -276,15 +416,13 @@ static void _vt_rt_dispatch(RD *p_rd, const FellowTerrainVT::BakeParams &p_param
 	push.macro_variation = p_params.macro_variation;
 	push.job_base = p_job_base;
 	push.out_size = p_out_size;
-
 	RD::ComputeListID cl = p_rd->compute_list_begin();
 	p_rd->compute_list_bind_compute_pipeline(cl, vt_rs.pipeline);
-	p_rd->compute_list_bind_uniform_set(cl, set, 0);
+	p_rd->compute_list_bind_uniform_set(cl, p_set, 0);
 	p_rd->compute_list_set_push_constant(cl, &push, sizeof(push));
 	const uint32_t groups = ((p_out_size > 0 ? p_out_size : FellowTerrainVT::PADDED) + 7) / 8;
 	p_rd->compute_list_dispatch(cl, groups, groups, p_jobs);
 	p_rd->compute_list_end();
-	p_rd->free_rid(set);
 }
 
 static void _vt_rt_flush() {
@@ -304,10 +442,10 @@ static void _vt_rt_flush() {
 		const FellowTerrainVT::BakeParams &p = b.params;
 		const uint64_t t0 = OS::get_singleton()->get_ticks_usec();
 		// The overview's textures (made on this thread before the first batch that names them).
-		const RID ov_albedo = b.overview_mip >= 0 && b.overview_albedo.is_valid() ? b.overview_albedo->get_texture_rd_rid() : RID();
-		const RID ov_normal = b.overview_mip >= 0 && b.overview_normal.is_valid() ? b.overview_normal->get_texture_rd_rid() : RID();
-		const bool overview = ov_albedo.is_valid() && ov_normal.is_valid() && rd->texture_is_valid(ov_albedo) && rd->texture_is_valid(ov_normal);
-		const int levels = overview ? FellowTerrainVT::OVERVIEW_MIPS : 0;
+		const RID ov_albedo = b.overview_albedo.is_valid() ? b.overview_albedo->get_texture_rd_rid() : RID();
+		const RID ov_normal = b.overview_normal.is_valid() ? b.overview_normal->get_texture_rd_rid() : RID();
+		const bool have_overview = ov_albedo.is_valid() && ov_normal.is_valid() && rd->texture_is_valid(ov_albedo) && rd->texture_is_valid(ov_normal);
+		const int levels = have_overview && b.overview_mip >= 0 ? FellowTerrainVT::OVERVIEW_MIPS : 0;
 		// The layers' parameters, then the jobs (the pages', then a job per overview level).
 		const int L = FellowTerrainVT::LAYERS;
 		Vector<uint8_t> data;
@@ -329,25 +467,17 @@ static void _vt_rt_flush() {
 			const FellowTerrainVT::Job j = { 0, 0, b.overview_mip + k, 0 };
 			memcpy(data.ptrw() + (3 * L + b.jobs.size() + k) * 16, &j, 16);
 		}
-		const RID buffer = rd->storage_buffer_create(data.size(), data);
-		if (!b.jobs.is_empty()) {
-			_vt_rt_dispatch(rd, p, buffer, vt_rs.albedo, vt_rs.normal, 0, b.jobs.size(), 0);
-		}
-		for (int k = 0; k < levels; k++) {
-			// A level's views (the kernel writes one level).
-			const RID va = rd->texture_create_shared_from_slice(RD::TextureView(), ov_albedo, 0, k, 1, RD::TEXTURE_SLICE_2D);
-			const RID vn = rd->texture_create_shared_from_slice(RD::TextureView(), ov_normal, 0, k, 1, RD::TEXTURE_SLICE_2D);
-			if (va.is_valid() && vn.is_valid()) {
-				_vt_rt_dispatch(rd, p, buffer, va, vn, b.jobs.size() + k, 1, FellowTerrainVT::PAGE >> k);
+		if (_vt_rt_prepare(rd, b, have_overview ? ov_albedo : RID(), have_overview ? ov_normal : RID(), data, 3 * L + b.jobs.size() + levels)) {
+			const TerrainRT &t = vt_terrains[b.terrain];
+			if (!b.jobs.is_empty()) {
+				_vt_rt_dispatch(rd, p, t.set_atlas, 0, b.jobs.size(), 0);
 			}
-			if (va.is_valid()) {
-				rd->free_rid(va);
-			}
-			if (vn.is_valid()) {
-				rd->free_rid(vn);
+			for (int k = 0; k < levels; k++) {
+				if (t.set_levels[k].is_valid()) {
+					_vt_rt_dispatch(rd, p, t.set_levels[k], b.jobs.size() + k, 1, FellowTerrainVT::PAGE >> k);
+				}
 			}
 		}
-		rd->free_rid(buffer);
 		Fellow::stats().terrain_vt_dispatch_usec.add(OS::get_singleton()->get_ticks_usec() - t0);
 		Fellow::stats().terrain_vt_pages_baked.add(b.jobs.size());
 	}
@@ -361,11 +491,12 @@ void FellowTerrainVT::bake(const LocalVector<Job> &p_jobs, const BakeParams &p_p
 	{
 		MutexLock lock(vt_mutex);
 		BakeBatch b;
+		b.terrain = id;
 		b.jobs = p_jobs;
 		b.params = p_params;
+		b.overview_albedo = overview_albedo;
+		b.overview_normal = overview_normal;
 		if (overview_due) {
-			b.overview_albedo = overview_albedo;
-			b.overview_normal = overview_normal;
 			b.overview_mip = mips - 1;
 			overview_due = false;
 			overview_baked++;
@@ -483,7 +614,7 @@ Dictionary FellowTerrainVT::get_cache_stats() {
 	d["free_slots"] = int(free_slots.size());
 	d["atlas_texels"] = atlas_texels;
 	d["terrains"] = users;
-	d["wanted"] = wanted_last_frame;
+	d["atlas_wanted"] = wanted_last_frame; // not "wanted": a terrain's own count (FellowTerrain3D) has that key
 	d["pressure_bias"] = pressure_bias;
 	d["baked"] = int64_t(stat_baked);
 	d["evicted"] = int64_t(stat_evicted);
@@ -495,15 +626,21 @@ Dictionary FellowTerrainVT::get_cache_stats() {
 // A terrain's virtual texture.
 
 FellowTerrainVT::FellowTerrainVT() {
+	id = vt_next_id++;
 	add_user();
 }
 
 FellowTerrainVT::~FellowTerrainVT() {
 	configure(Vector2(), texels_per_metre);
+	const bool rd = RenderingServer::get_singleton() && RenderingServer::get_singleton()->get_rendering_device();
+	if (rd) {
+		// Its sets, views and buffer first (they name the overview's textures).
+		RenderingServer::get_singleton()->call_on_render_thread(callable_mp_static(&_vt_rt_forget).bind(id));
+	}
 	if (overview_albedo.is_valid()) {
 		overview_albedo->set_texture_rd_rid(RID());
 		overview_normal->set_texture_rd_rid(RID());
-		if (RenderingServer::get_singleton() && RenderingServer::get_singleton()->get_rendering_device()) {
+		if (rd) {
 			RenderingServer::get_singleton()->call_on_render_thread(callable_mp_static(&_vt_rt_free_overview).bind(overview_albedo, overview_normal));
 		}
 	}
