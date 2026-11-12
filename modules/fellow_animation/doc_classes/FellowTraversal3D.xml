@@ -8,6 +8,7 @@
 		The mantle moves the body itself, each physics frame, along a path from the ledge's geometry: up in front of the wall until the capsule is over the top, then onto it (a vault goes over and down beyond it), turned to face the wall when [member align_to_wall] is on; a [CharacterBody3D]'s velocity follows the motion, and is [member exit_speed] into the ledge at the end. A collider that moves (an [AnimatableBody3D] platform) carries the ledge with it. The body's own controller should not move it while [method is_active] is [code]true[/code] (the traversal sets the body's transform after the body's own physics processing, as its child).
 		The pose: a [FellowTraversalPose3D] on the character's [Skeleton3D] reaches the hands for the edge, puts the feet on the wall's face and onto the top and tips the torso towards the wall over whatever animation plays; or plays the clip set for the kind ([member low_clip], [member high_clip], [member vault_clip]) across the mantle, its root's motion ([member clip_root_bone]) warped onto the ledge as the body's path. The signals tell an [AnimationTree] when to switch. See [code]docs/decisions/0180-traversal-mantling.md[/code].
 		Hanging (milestone 75): in the air, a ledge the body cannot climb (no room on its top: a wall rising behind it, an overhang) whose edge is about [member hang_reach] over its feet is caught and hung from ([member hang]; with [member hang_first], every ledge it could climb too, or [method try_hang]): the body hangs below the edge facing the wall, moves along it as the intent goes left or right ([member shimmy_speed]), following it as it turns and steps and stopping where it ends, at a gap or at something in the way; it climbs when pushed at the wall again, up, or [method climb_up] (a mantle from the hang), and lets go when pulled away, down, or [method release]. Ladders: a [FellowLadder3D] the body goes towards ([member ladders]) is climbed at [member ladder_speed] (the intent up or towards it: up; [method set_climb_input]), stepped off at its foot, and at its top mantled off onto what is there. The pose puts the hands on the edge or the rungs and the feet on the wall or the rungs.
+		Corners and jumps (milestone 81): hanging, the body goes round the corner where a ledge ends ([member wrap_corners]) and jumps to the next ledge along or up ([method hang_jump]); see [code]docs/decisions/0189-ledge-corners-and-jumps.md[/code].
 		[codeblocks]
 		[gdscript]
 		# A controller: the input as the intent, nothing while the traversal moves the body.
@@ -107,6 +108,12 @@
 				The mantle's progress, 0 to 1 (0 when none is in progress).
 			</description>
 		</method>
+		<method name="hang_jump">
+			<return type="void" />
+			<description>
+				Hanging, jumps to another ledge the way [method set_intent]'s wish goes, at the next physics frame: along the edge past its end (left or right; the first edge within [member hang_jump_distance] at about the same height, hung from 0.3 m into it) or up (within [member hang_jump_height], both hands on it), with room for the body there and half way. Nothing happens when there is none. The body flies there along a curve (0.5 s along, 0.45 s up), its hands letting go and catching the new edge; [signal hang_transferred] is emitted when it hangs again.
+			</description>
+		</method>
 		<method name="is_active" qualifiers="const">
 			<return type="bool" />
 			<description>
@@ -123,6 +130,12 @@
 			<return type="bool" />
 			<description>
 				Whether the body is on a ladder.
+			</description>
+		</method>
+		<method name="is_transferring" qualifiers="const">
+			<return type="bool" />
+			<description>
+				Whether the hanging body is on its way to another ledge: round a corner ([member wrap_corners]) or in a jump ([method hang_jump]).
 			</description>
 		</method>
 		<method name="release">
@@ -212,6 +225,12 @@
 		<member name="hang_first" type="bool" setter="set_hang_first" getter="is_hang_first" default="false">
 			In the air, hangs from ledges it could climb too, and climbs only when asked (pushing at the wall, up, or [method climb_up]).
 		</member>
+		<member name="hang_jump_distance" type="float" setter="set_hang_jump_distance" getter="get_hang_jump_distance" default="1.6">
+			Hanging, how far along the edge past its end [method hang_jump] looks for the next ledge, in metres.
+		</member>
+		<member name="hang_jump_height" type="float" setter="set_hang_jump_height" getter="get_hang_jump_height" default="1.3">
+			Hanging, how far over the edge [method hang_jump] looks for a ledge to jump up to, in metres.
+		</member>
 		<member name="hang_reach" type="float" setter="set_hang_reach" getter="get_hang_reach" default="2.05">
 			Hanging, the hands' height over the feet (the body hangs this far below the edge, its capsule [member reach_distance]-free of the top).
 		</member>
@@ -275,6 +294,9 @@
 		<member name="vault_min_speed" type="float" setter="set_vault_min_speed" getter="get_vault_min_speed" default="2.5">
 			At this speed or more a thin obstacle with room on it is vaulted rather than mantled.
 		</member>
+		<member name="wrap_corners" type="bool" setter="set_wrap_corners" getter="is_wrap_corners" default="true">
+			Hanging, goes round corners where the ledge ends while the intent goes on along it (milestone 81): an outside corner (the wall turning away: onto its side, the body swinging wide of the corner in 0.7 s) or an inside one (a wall meeting the ledge: onto its face in 0.5 s), when the new edge is at the same height, both hands fit on it and the body has room there. Afterwards the intent held as it was goes on along the new edge (a stick held left stays "left" round the corner) until it changes. Off: the body stops where the ledge ends.
+		</member>
 	</members>
 	<signals>
 		<signal name="hang_finished">
@@ -287,6 +309,13 @@
 			<param index="0" name="ledge" type="Dictionary" />
 			<description>
 				Emitted when the body starts hanging from a ledge ([param ledge]: as [method find_ledge]'s).
+			</description>
+		</signal>
+		<signal name="hang_transferred">
+			<param index="0" name="ledge" type="Dictionary" />
+			<param index="1" name="how" type="int" />
+			<description>
+				Emitted when the hanging body has reached another ledge, round a corner or by a jump ([param ledge]: as [method find_ledge]'s; [param how]: a [enum Transfer] value).
 			</description>
 		</signal>
 		<signal name="ladder_finished">
@@ -348,6 +377,18 @@
 		</constant>
 		<constant name="KIND_LADDER" value="8" enum="Kind">
 			On a [FellowLadder3D] (milestone 75).
+		</constant>
+		<constant name="TRANSFER_OUTER_CORNER" value="0" enum="Transfer">
+			Round an outside corner: the wall turning away.
+		</constant>
+		<constant name="TRANSFER_INNER_CORNER" value="1" enum="Transfer">
+			Round an inside corner: onto a wall meeting the ledge.
+		</constant>
+		<constant name="TRANSFER_JUMP_ALONG" value="2" enum="Transfer">
+			A jump along the edge, across a gap to the next ledge.
+		</constant>
+		<constant name="TRANSFER_JUMP_UP" value="3" enum="Transfer">
+			A jump up to a ledge over the edge.
 		</constant>
 		<constant name="KIND_MAX" value="9" enum="Kind">
 			The number of kinds.

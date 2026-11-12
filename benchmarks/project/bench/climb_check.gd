@@ -14,6 +14,8 @@ extends SceneTree
 ## started and finished, where the body ended, how far it moved along the ledge, the frames its capsule overlapped the
 ## world, the hands' and feet's distance to their targets. One JSON line: CLIMB_CHECK {...}; exit code 1 when a lane
 ## did otherwise than expected.
+## Milestone 81 (decision 0189): round a block's outside corner, round an inside corner onto a wall meeting the ledge,
+## a jump across a gap to the next ledge, a jump up to a beam over the ledge.
 
 const KIND_NAMES := ["none", "step", "low", "high", "vault", "too_high", "blocked", "hang", "ladder"]
 const RUN_SECONDS := 9.0
@@ -268,6 +270,8 @@ func _lane(name: String, start: Vector3, program: Array) -> Dictionary:
 		lane.events.append(["hang_started", snappedf((ledge["edge"] as Vector3).y, 0.1), snappedf(frame / 60.0, 0.01)]))
 	t.hang_finished.connect(func(climbed: bool) -> void:
 		lane.events.append(["hang_finished", climbed, snappedf(frame / 60.0, 0.01)]))
+	t.hang_transferred.connect(func(_ledge: Dictionary, how: int) -> void:
+		lane.events.append(["hang_transferred", ["outer", "inner", "along", "up"][how], snappedf(frame / 60.0, 0.01)]))
 	t.ladder_started.connect(func(_ladder: Node3D) -> void:
 		lane.events.append(["ladder_started", snappedf(frame / 60.0, 0.01)]))
 	t.ladder_finished.connect(func(at_top: bool) -> void:
@@ -345,6 +349,43 @@ func _build() -> void:
 	_lane("hang_gap", Vector3(x + 0.75, 0, 0), [[0.0, {"intent": walk, "speed": 2.0}], [0.55, {"jump": 5.2}], [1.4, {"intent": Vector3()}],
 			[2.0, {"intent": Vector3(-1, 0, 0)}], [6.0, {"intent": Vector3()}]])
 
+	# Milestone 81 (decision 0189): round corners and across to other ledges.
+	# 7. A free block 2.8 m high (2 m wide, 1.6 m deep), hang_first: it hangs, goes left to the end and round the corner
+	# onto the block's side (the wish held left goes on along it), then stops.
+	x = 54.0
+	_box(Vector3(x, 1.4, -2.8), Vector3(2.0, 2.8, 1.6))
+	var l7 := _lane("hang_corner_out", Vector3(x, 0, 0), [[0.0, {"intent": walk, "speed": 2.0}], [0.55, {"jump": 5.2}], [1.4, {"intent": Vector3()}],
+			[2.0, {"intent": Vector3(-1, 0, 0)}], [4.2, {"intent": Vector3()}]])
+	(l7.traversal as FellowTraversal3D).hang_first = true
+
+	# 8. A wall 2.5 m high with another meeting it from the front on its left (0.6 m thick, 2 m out), hang_first: it
+	# hangs, goes left until the other wall is in the way and round the inside corner onto it, then out along it.
+	x = 63.0
+	_box(Vector3(x, 1.25, -2.2), Vector3(3.0, 2.5, 0.4))
+	_box(Vector3(x - 1.0, 1.25, -1.0), Vector3(0.6, 2.5, 2.0))
+	var l8 := _lane("hang_corner_in", Vector3(x, 0, 0), [[0.0, {"intent": walk, "speed": 2.0}], [0.55, {"jump": 5.2}], [1.4, {"intent": Vector3()}],
+			[2.0, {"intent": Vector3(-1, 0, 0)}], [3.8, {"intent": Vector3()}]])
+	(l8.traversal as FellowTraversal3D).hang_first = true
+
+	# 9. Two 2.5 m ledges (1.5 m long, 0.4 m deep) 0.8 m apart: it hangs from the right one, goes left to the gap, jumps
+	# across (hang_jump with the wish left) and goes on to the left one's end.
+	x = 72.0
+	_box(Vector3(x + 0.25, 1.25, -2.2), Vector3(1.5, 2.5, 0.4))
+	_box(Vector3(x - 2.05, 1.25, -2.2), Vector3(1.5, 2.5, 0.4))
+	var l9 := _lane("hang_jump_gap", Vector3(x, 0, 0), [[0.0, {"intent": walk, "speed": 2.0}], [0.55, {"jump": 5.2}], [1.4, {"intent": Vector3()}],
+			[2.0, {"intent": Vector3(-1, 0, 0)}], [3.2, {"call": "hang_jump"}], [6.5, {"intent": Vector3()}]])
+	(l9.traversal as FellowTraversal3D).hang_first = true
+
+	# 10. A 2.5 m ledge (5 m long) with a beam over its left half (its top at 3.6 m, 0.6 m of air between): it hangs from
+	# the ledge right of the beam, goes left under it and jumps up to it (hang_jump with the wish up).
+	x = 81.0
+	_box(Vector3(x, 1.25, -2.2), Vector3(5.0, 2.5, 0.4))
+	_box(Vector3(x - 1.25, 3.35, -2.2), Vector3(2.5, 0.5, 0.4))
+	var l10 := _lane("hang_jump_up", Vector3(x + 1.2, 0, 0), [[0.0, {"intent": walk, "speed": 2.0}], [0.55, {"jump": 5.2}], [1.4, {"intent": Vector3()}],
+			[2.0, {"intent": Vector3(-1, 0, 0)}], [4.0, {"intent": Vector3()}], [4.4, {"intent": Vector3(0, 1, 0), "call": "hang_jump"}],
+			[4.5, {"intent": Vector3()}]])
+	(l10.traversal as FellowTraversal3D).hang_first = true
+
 	var cam := Camera3D.new()
 	root3d.add_child(cam)
 	cam.look_at_from_position(Vector3(22, 9, 16), Vector3(22, 1.5, -2))
@@ -376,6 +417,14 @@ func _make_viewports() -> void:
 				cam.look_at_from_position(Vector3(x + 5.0, 3.0, 2.5), Vector3(x, 2.0, -2.0))
 			"hang_round":
 				cam.look_at_from_position(Vector3(x + 1.0, 3.0, 4.0), Vector3(x - 0.8, 1.6, -2.4))
+			"hang_corner_out":
+				cam.look_at_from_position(Vector3(x - 4.5, 2.6, 2.0), Vector3(x - 0.8, 1.5, -2.4))
+			"hang_corner_in":
+				cam.look_at_from_position(Vector3(x + 2.0, 2.6, 2.8), Vector3(x - 0.6, 1.5, -1.6))
+			"hang_jump_gap":
+				cam.look_at_from_position(Vector3(x - 0.8, 2.6, 4.0), Vector3(x - 1.0, 1.6, -1.8))
+			"hang_jump_up":
+				cam.look_at_from_position(Vector3(x + 2.5, 2.8, 3.2), Vector3(x - 0.4, 2.2, -1.8))
 			_:
 				cam.look_at_from_position(Vector3(x + 2.5, 2.4, 3.2), Vector3(x - 0.4, 1.6, -1.8))
 		if grid:
@@ -526,6 +575,22 @@ func _finish() -> void:
 				var past_end: float = feet.x - (lane.x - 0.75)
 				e["from_gap"] = snappedf(past_end, 0.01)
 				ok = ok and names.has("hang_started:2.5") and past_end > 0.1 and past_end < 0.6 and moved > 0.2
+			"hang_corner_out":
+				# Round the outside corner (the block's left side at x - 1): turned a quarter, hanging from the side, behind
+				# the front face; one transfer.
+				e["from_side"] = snappedf(feet.x - (lane.x - 1.0), 0.01)
+				ok = ok and names.has("hang_started:2.8") and names.count("hang_transferred:outer") == 1 and absf(turned - 90.0) < 5.0 and absf(feet.x - (lane.x - 1.0) + 0.43) < 0.05 and feet.z < -2.2 and feet.z > -3.5 and not names.has("hang_finished:false")
+			"hang_corner_in":
+				# Round the inside corner onto the other wall (its face at x - 0.7): turned a quarter, hanging from it, out along
+				# it.
+				e["from_side"] = snappedf(feet.x - (lane.x - 0.7), 0.01)
+				ok = ok and names.has("hang_started:2.5") and names.count("hang_transferred:inner") == 1 and absf(turned - 90.0) < 5.0 and absf(feet.x - (lane.x - 0.7) - 0.43) < 0.05 and feet.z > -1.4 and not names.has("hang_finished:false")
+			"hang_jump_gap":
+				# Across the gap (the left ledge from x - 1.3 to x - 2.8) and on to its end.
+				ok = ok and names.has("hang_started:2.5") and names.count("hang_transferred:along") == 1 and feet.x - lane.x < -2.3 and feet.x - lane.x > -2.8 and absf(feet.y - (2.5 - 2.05)) < 0.05 and not names.has("hang_finished:false")
+			"hang_jump_up":
+				# Up to the beam: hanging from 3.6 m.
+				ok = ok and names.has("hang_started:2.5") and names.count("hang_transferred:up") == 1 and absf(feet.y - (3.6 - 2.05)) < 0.05 and not names.has("hang_finished:false")
 		e["ok"] = ok
 		if not ok:
 			failures.append(lane.name)

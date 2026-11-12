@@ -88,3 +88,8 @@ mantle), so they add no other way of moving the body; ladders are markers, not g
   them (turns up to 50° a step are followed, so round walls are).
 * **Jumping from a hang to another ledge**, wall climbing on free surfaces, ladders found from geometry without a
   marker, clips for hanging and ladders (the pose is procedural; the mantle from them can play its clip).
+
+## Later
+
+Milestone 81 (decision 0189): the body goes round outside and inside corners and jumps from the hang to other ledges
+(along across a gap, up); this record's six lanes are unchanged.

@@ -587,6 +587,15 @@ its foot at the node, climbed from +Z): `height` (3 m), `width` (0.5 m), `rung_s
 (0.25 m), `exit_at_top` (on), `enabled`. The FellowEngine menu's "Add Ladder". Bench `bench/climb_check.gd`; the
 regression scene `climb`.
 
+Corners and jumps (milestone 81, decision 0189), on `FellowTraversal3D`: `wrap_corners` (on: hanging, where the ledge
+ends while the intent goes on along it, round an outside corner onto the wall's side or an inside one onto a wall
+meeting it — the new edge at the same height, both hands on it, room for the body; the intent held as it was goes on
+along the new edge), `hang_jump_distance` (1.6 m: how far past the edge's end `hang_jump()` looks along it),
+`hang_jump_height` (1.3 m: how far over the edge it looks up). `hang_jump()` (to the next ledge the way the intent
+goes, along or up; nothing when none), `is_transferring()`; signal `hang_transferred(ledge, how)`; `TRANSFER_*`
+constants; the global stat `transfers`. Bench `bench/climb_check.gd` (ten lanes); the regression scene
+`ledge_corners`.
+
 ## Simulated GPUs (milestone 49)
 
 The environment's `FELLOW_VULKAN_PROFILE=<name>` (read once by the Vulkan driver; a diagnostic, nothing changes

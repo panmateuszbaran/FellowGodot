@@ -61,6 +61,14 @@ public:
 		KIND_MAX,
 	};
 
+	// Milestone 81: how a hanging body went to another ledge.
+	enum Transfer {
+		TRANSFER_OUTER_CORNER, // round a corner where the wall turns away
+		TRANSFER_INNER_CORNER, // onto the wall that meets it
+		TRANSFER_JUMP_ALONG, // across a gap along the edge
+		TRANSFER_JUMP_UP, // up to a ledge above
+	};
+
 	// A check's result (global space).
 	struct Ledge {
 		Kind kind = KIND_NONE;
@@ -103,6 +111,7 @@ public:
 		SafeNumeric<uint64_t> step_usec;
 		SafeNumeric<uint64_t> mantles[3]; // low, high, vault
 		SafeNumeric<uint64_t> hangs; // milestone 75
+		SafeNumeric<uint64_t> transfers; // milestone 81: corners wrapped, jumps between ledges
 		SafeNumeric<uint64_t> ladders;
 		SafeNumeric<uint64_t> poses;
 		SafeNumeric<uint64_t> pose_usec;
@@ -140,6 +149,10 @@ private:
 	bool hang_first = false;
 	float hang_reach = 2.05f; // the hands over the feet, hanging
 	float shimmy_speed = 1.0f;
+	// Milestone 81 (decision 0189): round corners and across to other ledges.
+	bool wrap_corners = true;
+	float hang_jump_distance = 1.6f; // m along the edge past its end
+	float hang_jump_height = 1.3f; // m up
 	bool ladders = true;
 	float ladder_speed = 1.2f;
 	float ladder_reach = 0.6f;
@@ -179,6 +192,22 @@ private:
 	bool climb_requested = false;
 	bool release_requested = false;
 	bool push_armed = false; // hanging: the push at the wall let go of since it caught the ledge (a new push climbs)
+	bool jump_requested = false;
+	// A transfer from one ledge to another (round a corner, a jump): the feet along a curve, the facing turning.
+	struct TransferState {
+		bool active = false;
+		int how = 0;
+		double t = 0.0;
+		double duration = 0.5;
+		Vector3 from_feet, control, to_feet;
+		Vector3 from_inward;
+		Vector3 from_hands[2];
+		Ledge to;
+	} transfer;
+	// After a corner the wish held as it was goes on along the new edge (the stick held left stays "left").
+	bool remap = false;
+	Vector3 remap_from, remap_to;
+	double corner_wait = 0.0; // after a corner looked for in vain, the next look (s)
 	float climb_input = 0.0f; // the controller's up (1) or down (-1) on a ladder; 0: from the intent
 	ObjectID ladder_id;
 	float ladder_h = 0.0f; // the feet's height along the ladder from its foot
@@ -211,6 +240,11 @@ private:
 	bool _start_hang(const Ledge &p_ledge);
 	void _step_hang(double p_delta);
 	void _end_hang(bool p_climbed);
+	float _edge_end(float p_sign) const;
+	bool _find_corner(float p_sign, Ledge &r_ledge, Vector3 &r_control, int &r_how) const;
+	bool _find_jump(const Vector3 &p_wish, Ledge &r_ledge, Vector3 &r_control, int &r_how) const;
+	void _start_transfer(const Ledge &p_to, const Vector3 &p_control, int p_how, double p_duration);
+	void _step_transfer(double p_delta);
 	FellowLadder3D *_find_ladder(const Vector3 &p_feet, const Vector3 &p_direction, bool p_in_air, float &r_h, bool &r_from_top) const;
 	bool _start_ladder(FellowLadder3D *p_ladder, float p_h, bool p_from_top);
 	void _step_ladder(double p_delta);
@@ -241,6 +275,8 @@ public:
 	Vector3 get_intent() const { return intent; }
 	// Milestone 75.
 	bool try_hang(const Vector3 &p_direction = Vector3());
+	void hang_jump() { jump_requested = true; }
+	bool is_transferring() const { return active && action == KIND_HANG && transfer.active; }
 	bool try_ladder();
 	void climb_up() { climb_requested = true; }
 	void release() { release_requested = true; }
@@ -312,6 +348,12 @@ public:
 	float get_hang_reach() const { return hang_reach; }
 	void set_shimmy_speed(float p_speed) { shimmy_speed = MAX(0.0f, p_speed); }
 	float get_shimmy_speed() const { return shimmy_speed; }
+	void set_wrap_corners(bool p_enabled) { wrap_corners = p_enabled; }
+	bool is_wrap_corners() const { return wrap_corners; }
+	void set_hang_jump_distance(float p_distance) { hang_jump_distance = MAX(0.0f, p_distance); }
+	float get_hang_jump_distance() const { return hang_jump_distance; }
+	void set_hang_jump_height(float p_height) { hang_jump_height = MAX(0.0f, p_height); }
+	float get_hang_jump_height() const { return hang_jump_height; }
 	void set_ladders(bool p_enabled) { ladders = p_enabled; }
 	bool is_ladders() const { return ladders; }
 	void set_ladder_speed(float p_speed) { ladder_speed = MAX(0.0f, p_speed); }
@@ -324,3 +366,4 @@ public:
 };
 
 VARIANT_ENUM_CAST(FellowTraversal3D::Kind);
+VARIANT_ENUM_CAST(FellowTraversal3D::Transfer);

@@ -9,6 +9,16 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 81 — round corners and across gaps (2026-11-12)
+
+- `FellowTraversal3D` (decision 0189): a hanging body goes round the corner where its ledge ends (`wrap_corners`, on)
+  — an outside corner onto the wall's side, swinging wide of it, or an inside one onto a wall meeting the ledge — when
+  both hands fit on the new edge and the body has room; the wish held round the corner goes on along the new edge.
+  `hang_jump()`: across a gap to the next ledge along the edge (`hang_jump_distance` 1.6 m) or up to a ledge over it
+  (`hang_jump_height` 1.3 m), the hands letting go and catching the new edge. `is_transferring()`, the signal
+  `hang_transferred`. Four lanes on both physics engines (round a block, round an inside corner, across a gap, up to a
+  beam), decision 0183's six unchanged; a regression scene (`ledge_corners`).
+
 ## Milestone 80 — destruction that holds (2026-11-12)
 
 - `FellowDestructible3D.structural` (decision 0188), with `break_radius` and `anchor_height`: a static object stands in
