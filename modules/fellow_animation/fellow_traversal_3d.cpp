@@ -905,8 +905,8 @@ bool FellowTraversal3D::_find_corner(float p_sign, Ledge &r_ledge, Vector3 &r_co
 }
 
 // A ledge to jump to from the hang, the way the controller wishes: along the edge past its end (the first edge within
-// hang_jump_distance, at about the same height, hung from 0.3 m into it) or up (within hang_jump_height, both hands on
-// it); room for the body there and half way.
+// hang_jump_distance, at about the same height, hung from 0.3 m into it), up (within hang_jump_height, both hands on
+// it) or (milestone 86) down (within hang_jump_depth, both hands on it); room for the body there and on the way.
 bool FellowTraversal3D::_find_jump(const Vector3 &p_wish, Ledge &r_ledge, Vector3 &r_control, int &r_how) const {
 	CollisionObject3D *body = _get_body();
 	if (!body) {
@@ -942,6 +942,25 @@ bool FellowTraversal3D::_find_jump(const Vector3 &p_wish, Ledge &r_ledge, Vector
 				return true;
 			}
 			break;
+		}
+	} else if (p_wish.y < -0.5f) {
+		// Milestone 86: down to a ledge below (let go of this one, caught there).
+		for (float h = 0.6f; h <= hang_jump_depth; h += 0.1f) {
+			if (!_probe_edge(ledge.edge - UP * h, ledge.inward, 0.0f, l) || l.edge.y > ledge.edge.y - 0.4f) {
+				continue;
+			}
+			if (!_probe_edge(l.edge, l.inward, 0.24f, hold) || !_probe_edge(l.edge, l.inward, -0.24f, hold)) {
+				continue;
+			}
+			// Out to the lower ledge's face (and 0.15 m more) first, then down: clear of a ledge that stands out.
+			const Vector3 to_feet = _hang_feet_at(l.edge, l.inward);
+			const Vector3 control = Vector3(to_feet.x, from_feet.y, to_feet.z) - ledge.inward * 0.15f;
+			if (room(to_feet) && room(control) && room(from_feet * 0.25f + control * 0.5f + to_feet * 0.25f)) {
+				r_ledge = l;
+				r_control = control;
+				r_how = TRANSFER_JUMP_DOWN;
+				return true;
+			}
 		}
 	} else if (up > 0.5f) {
 		for (float h = 0.6f; h <= hang_jump_height; h += 0.1f) {
@@ -1074,7 +1093,7 @@ void FellowTraversal3D::_start_transfer(const Ledge &p_to, const Vector3 &p_cont
 	transfer.from_inward = ledge.inward;
 	transfer.from_hands[0] = hints.hand[0];
 	transfer.from_hands[1] = hints.hand[1];
-	if (p_how == TRANSFER_JUMP_ALONG || p_how == TRANSFER_JUMP_UP) {
+	if (p_how == TRANSFER_JUMP_ALONG || p_how == TRANSFER_JUMP_UP || p_how == TRANSFER_JUMP_DOWN) {
 		shimmy_velocity = 0.0f;
 	}
 	global_stats.transfers.increment();
@@ -1104,7 +1123,7 @@ void FellowTraversal3D::_step_transfer(double p_delta) {
 	hang_feet = feet;
 	const Vector3 left = UP.cross(inward).normalized();
 	const Vector3 to_left = UP.cross(transfer.to.inward).normalized();
-	const bool jump = transfer.how == TRANSFER_JUMP_ALONG || transfer.how == TRANSFER_JUMP_UP;
+	const bool jump = transfer.how == TRANSFER_JUMP_ALONG || transfer.how == TRANSFER_JUMP_UP || transfer.how == TRANSFER_JUMP_DOWN;
 	hints.active = true;
 	hints.kind = KIND_HANG;
 	hints.inward = inward;
@@ -1217,7 +1236,7 @@ void FellowTraversal3D::_step_hang(double p_delta) {
 		Vector3 control;
 		int how = 0;
 		if (hold_time > 0.25 && _find_jump(wish, to, control, how)) {
-			_start_transfer(to, control, how, how == TRANSFER_JUMP_UP ? 0.45 : 0.5);
+			_start_transfer(to, control, how, how == TRANSFER_JUMP_UP ? 0.45 : (how == TRANSFER_JUMP_DOWN ? 0.4 : 0.5));
 			_step_transfer(p_delta);
 			return;
 		}
@@ -1900,6 +1919,8 @@ void FellowTraversal3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_hang_jump_distance"), &FellowTraversal3D::get_hang_jump_distance);
 	ClassDB::bind_method(D_METHOD("set_hang_jump_height", "height"), &FellowTraversal3D::set_hang_jump_height);
 	ClassDB::bind_method(D_METHOD("get_hang_jump_height"), &FellowTraversal3D::get_hang_jump_height);
+	ClassDB::bind_method(D_METHOD("set_hang_jump_depth", "depth"), &FellowTraversal3D::set_hang_jump_depth);
+	ClassDB::bind_method(D_METHOD("get_hang_jump_depth"), &FellowTraversal3D::get_hang_jump_depth);
 	ClassDB::bind_method(D_METHOD("set_drop_to_hang", "enabled"), &FellowTraversal3D::set_drop_to_hang);
 	ClassDB::bind_method(D_METHOD("is_drop_to_hang"), &FellowTraversal3D::is_drop_to_hang);
 	ClassDB::bind_method(D_METHOD("set_drop_max_speed", "speed"), &FellowTraversal3D::set_drop_max_speed);
@@ -1953,6 +1974,7 @@ void FellowTraversal3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "wrap_corners"), "set_wrap_corners", "is_wrap_corners");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "hang_jump_distance", PROPERTY_HINT_RANGE, "0,5,0.01,suffix:m"), "set_hang_jump_distance", "get_hang_jump_distance");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "hang_jump_height", PROPERTY_HINT_RANGE, "0,4,0.01,suffix:m"), "set_hang_jump_height", "get_hang_jump_height");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "hang_jump_depth", PROPERTY_HINT_RANGE, "0,6,0.01,suffix:m"), "set_hang_jump_depth", "get_hang_jump_depth");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "drop_to_hang"), "set_drop_to_hang", "is_drop_to_hang");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "drop_max_speed", PROPERTY_HINT_RANGE, "0,10,0.01,suffix:m/s"), "set_drop_max_speed", "get_drop_max_speed");
 	ADD_GROUP("Ladders", "");
@@ -1967,7 +1989,7 @@ void FellowTraversal3D::_bind_methods() {
 	ADD_SIGNAL(MethodInfo("mantle_cancelled", PropertyInfo(Variant::INT, "kind")));
 	ADD_SIGNAL(MethodInfo("hang_started", PropertyInfo(Variant::DICTIONARY, "ledge")));
 	ADD_SIGNAL(MethodInfo("hang_finished", PropertyInfo(Variant::BOOL, "climbed")));
-	ADD_SIGNAL(MethodInfo("hang_transferred", PropertyInfo(Variant::DICTIONARY, "ledge"), PropertyInfo(Variant::INT, "how", PROPERTY_HINT_ENUM, "Outer Corner,Inner Corner,Jump Along,Jump Up,Drop")));
+	ADD_SIGNAL(MethodInfo("hang_transferred", PropertyInfo(Variant::DICTIONARY, "ledge"), PropertyInfo(Variant::INT, "how", PROPERTY_HINT_ENUM, "Outer Corner,Inner Corner,Jump Along,Jump Up,Drop,Jump Down")));
 	ADD_SIGNAL(MethodInfo("ladder_started", PropertyInfo(Variant::OBJECT, "ladder", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_DEFAULT, "FellowLadder3D")));
 	ADD_SIGNAL(MethodInfo("ladder_finished", PropertyInfo(Variant::BOOL, "at_top")));
 
@@ -1985,5 +2007,6 @@ void FellowTraversal3D::_bind_methods() {
 	BIND_ENUM_CONSTANT(TRANSFER_JUMP_ALONG);
 	BIND_ENUM_CONSTANT(TRANSFER_JUMP_UP);
 	BIND_ENUM_CONSTANT(TRANSFER_DROP);
+	BIND_ENUM_CONSTANT(TRANSFER_JUMP_DOWN);
 	BIND_ENUM_CONSTANT(KIND_MAX);
 }

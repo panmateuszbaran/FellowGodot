@@ -9,6 +9,13 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 86 — down to a ledge below (2026-11-12)
+
+- `FellowTraversal3D.hang_jump()` with the wish down (decision 0194): a ledge within `hang_jump_depth` (2.6 m) under
+  the edge — both hands on it, room for the body — is dropped to and caught, the body going out to its face first (a
+  ledge standing out of the wall passed); none found, the wish down lets go as before. One lane on both physics
+  engines, the earlier twelve unchanged.
+
 ## Milestone 85 — virtual voices (2026-11-12)
 
 - `FellowSoundEvent.virtual_voice` and `steal_oldest` (decision 0193): a sound with no voice for it, giving its voice

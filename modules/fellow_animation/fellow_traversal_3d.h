@@ -68,6 +68,7 @@ public:
 		TRANSFER_JUMP_ALONG, // across a gap along the edge
 		TRANSFER_JUMP_UP, // up to a ledge above
 		TRANSFER_DROP, // milestone 84: from the floor over its edge into a hang
+		TRANSFER_JUMP_DOWN, // milestone 86: down to a ledge below
 	};
 
 	// A check's result (global space).
@@ -154,6 +155,7 @@ private:
 	bool wrap_corners = true;
 	float hang_jump_distance = 1.6f; // m along the edge past its end
 	float hang_jump_height = 1.3f; // m up
+	float hang_jump_depth = 2.6f; // m down (milestone 86)
 	// Milestone 84 (decision 0192): walking over an edge, hanging from it.
 	bool drop_to_hang = false;
 	float drop_max_speed = 2.0f; // m/s: faster, the body goes over
@@ -362,6 +364,8 @@ public:
 	float get_hang_jump_distance() const { return hang_jump_distance; }
 	void set_hang_jump_height(float p_height) { hang_jump_height = MAX(0.0f, p_height); }
 	float get_hang_jump_height() const { return hang_jump_height; }
+	void set_hang_jump_depth(float p_depth) { hang_jump_depth = MAX(0.0f, p_depth); }
+	float get_hang_jump_depth() const { return hang_jump_depth; }
 	void set_drop_to_hang(bool p_enabled) { drop_to_hang = p_enabled; }
 	bool is_drop_to_hang() const { return drop_to_hang; }
 	void set_drop_max_speed(float p_speed) { drop_max_speed = MAX(0.0f, p_speed); }

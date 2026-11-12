@@ -615,7 +615,9 @@ goes, along or up; nothing when none), `is_transferring()`; signal `hang_transfe
 constants; the global stat `transfers`. Bench `bench/climb_check.gd` (ten lanes); the regression scene
 `ledge_corners`. Over an edge into a hang (milestone 84, decision 0192): `drop_to_hang` (off: on, walking over the
 edge of the floor — a `CharacterBody3D` on the floor, the intent towards it — hangs from it), `drop_max_speed` (2 m/s:
-faster, it goes over); `try_drop(direction)`; `TRANSFER_DROP`. Bench `bench/climb_check.gd` (twelve lanes).
+faster, it goes over); `try_drop(direction)`; `TRANSFER_DROP`. Bench `bench/climb_check.gd` (twelve lanes). Down
+to a ledge below (milestone 86, decision 0194): `hang_jump()` with the wish down, `hang_jump_depth` (2.6 m);
+`TRANSFER_JUMP_DOWN`.
 
 Faces (milestone 83, decision 0191): `FellowFaceAnimator` (a `Node`; nothing changes without it): `mesh_path` (the
 face's `MeshInstance3D`), `voice_path` (an `AudioStreamPlayer`, 2D or 3D), `voice_stream` and `voice_time` (−1: with a

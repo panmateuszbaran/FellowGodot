@@ -111,7 +111,7 @@
 		<method name="hang_jump">
 			<return type="void" />
 			<description>
-				Hanging, jumps to another ledge the way [method set_intent]'s wish goes, at the next physics frame: along the edge past its end (left or right; the first edge within [member hang_jump_distance] at about the same height, hung from 0.3 m into it) or up (within [member hang_jump_height], both hands on it), with room for the body there and half way. Nothing happens when there is none. The body flies there along a curve (0.5 s along, 0.45 s up), its hands letting go and catching the new edge; [signal hang_transferred] is emitted when it hangs again.
+				Hanging, jumps to another ledge the way [method set_intent]'s wish goes, at the next physics frame: along the edge past its end (left or right; the first edge within [member hang_jump_distance] at about the same height, hung from 0.3 m into it), up (within [member hang_jump_height], both hands on it) or down (milestone 86: within [member hang_jump_depth], both hands on it; the body going out to the lower ledge's face first), with room for the body there and on the way. Nothing happens when there is none (a wish down then lets go). The body flies there along a curve (0.5 s along, 0.45 s up, 0.4 s down), its hands letting go and catching the new edge; [signal hang_transferred] is emitted when it hangs again.
 			</description>
 		</method>
 		<method name="is_active" qualifiers="const">
@@ -237,6 +237,9 @@
 		</member>
 		<member name="hang_first" type="bool" setter="set_hang_first" getter="is_hang_first" default="false">
 			In the air, hangs from ledges it could climb too, and climbs only when asked (pushing at the wall, up, or [method climb_up]).
+		</member>
+		<member name="hang_jump_depth" type="float" setter="set_hang_jump_depth" getter="get_hang_jump_depth" default="2.6">
+			Hanging, how far under the edge [method hang_jump] looks for a ledge to drop to when the wish goes down, in metres (milestone 86).
 		</member>
 		<member name="hang_jump_distance" type="float" setter="set_hang_jump_distance" getter="get_hang_jump_distance" default="1.6">
 			Hanging, how far along the edge past its end [method hang_jump] looks for the next ledge, in metres.
@@ -405,6 +408,9 @@
 		</constant>
 		<constant name="TRANSFER_DROP" value="4" enum="Transfer">
 			From the floor over its edge into a hang from it ([method try_drop], [member drop_to_hang]).
+		</constant>
+		<constant name="TRANSFER_JUMP_DOWN" value="5" enum="Transfer">
+			A drop to a ledge below, caught there ([method hang_jump] with the wish down).
 		</constant>
 		<constant name="KIND_MAX" value="9" enum="Kind">
 			The number of kinds.
