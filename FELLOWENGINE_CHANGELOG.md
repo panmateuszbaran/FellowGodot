@@ -9,6 +9,18 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 97 — crash reports (2026-11-13)
+
+- `FellowCrashReporter` and `debug/fellow/crash_reports/*` (decision 0205, a new module `fellow_diagnostics`): a crash
+  — in a release template too, where Godot's own handler is compiled out — writes a JSON report (the reason, the
+  faulting thread's frames as module and offset, the last lines of the log, the game's breadcrumbs and values, the
+  machine, GPU and scene, GDScript's backtrace) before the process ends, written without the heap; a minidump beside it
+  on Windows; the next run finds it pending. `tools/fellow_crash/`: the check (six kinds of crash and a late one, on
+  the editor build and the release template), a symbolizer. Off by default.
+- `FellowAudioDirector`: a virtual voice's tests in the order of their cost (decision 0204's follow-up): 4 400 virtual
+  voices 204-224 → 57-73 µs a frame.
+- Milestones 77-96 on the laptop (job f396): every check passed on the RTX with both physics engines.
+
 ## Milestone 96 — voice limits by bus (2026-11-12)
 
 - `FellowAudioDirector.bus_voice_limits` (decision 0204): a bus's own budget of voices, handled as the director's

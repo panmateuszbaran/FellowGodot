@@ -18,7 +18,10 @@ przynajmniej do 8 rano" (the GPU allowed). Branch `fellow/geometry`. Decision re
 
 ## 2. Verification
 
-Decision 0204's table. The laptop: not run (not linked to the session).
+Decision 0204's table. The laptop (job f396, milestone 97): the lane as on the cloud; but 4 447 virtual voices cost 152
+µs a frame (62 at milestone 85): each virtual voice looked its bus up in the limits and counted its voices every frame.
+Fixed in milestone 97 — the director's free voice and the reach tested first, the bus only for a voice that could be
+resumed: 204-224 → 57-73 µs on the cloud, the lanes unchanged.
 
 ## 3. Measurements
 

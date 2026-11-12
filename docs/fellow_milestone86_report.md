@@ -20,7 +20,8 @@ przynajmniej do 8 rano" (the GPU allowed). Branch `fellow/geometry`. Decision re
 
 ## 2. Verification
 
-Decision 0194's table; the laptop: not run (not linked to the session).
+Decision 0194's table; the laptop (job f396, milestone 97): as expected with both engines, exactly the cloud's results;
+filmed on the RTX.
 
 ## 3. Measurements
 

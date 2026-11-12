@@ -20,7 +20,8 @@ camera wider).
 
 ## 2. Verification
 
-Decision 0196's table; the laptop: not run (not linked to the session).
+Decision 0196's table; the laptop (job f396, milestone 97): as expected with both engines, exactly the cloud's results;
+filmed on the RTX (the dust over the loose strip, the ruts).
 
 ## 3. Measurements
 

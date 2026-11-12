@@ -29,7 +29,10 @@ przynajmniej do 8 rano" (the GPU allowed). Branch `fellow/geometry`. Decision re
   (decision 0187's tables); decision 0185's vehicle lanes and regression scene unchanged.
 * The sound under Movie Maker; its spectrogram looked at (harmonics through the gears, the shifts, the squeal).
 * Lavapipe: the marks and smoke filmed. The editor check passes.
-* The laptop: not run (not linked to the session).
+* The laptop (job f396, milestone 97): the lanes as expected with both engines, exactly the cloud's; under Movie Maker
+  the engine's tone at its firing frequency (30.0 Hz at idle, 99.9 Hz at 3 000 rpm) and the squeal in a slide (15 % of
+  the sound); 32 cars sliding in circles 0.025 ms of effects a frame (the sound's synthesis 0.004 ms); filmed on the RTX
+  (`vehicle_fx_strip.png`).
 
 ## 3. Measurements
 

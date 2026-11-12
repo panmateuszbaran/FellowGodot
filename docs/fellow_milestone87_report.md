@@ -18,7 +18,8 @@ przynajmniej do 8 rano" (the GPU allowed). Branch `fellow/geometry`. Decision re
 
 ## 2. Verification
 
-Decision 0195's table; the laptop: not run (not linked to the session).
+Decision 0195's table; the laptop (job f396, milestone 97): under Movie Maker as on the cloud (4 kHz −36.6 dB under the
+low-pass, 300 Hz −2.7 dB).
 
 ## 3. Measurements
 

@@ -26,7 +26,8 @@ przynajmniej do 8 rano" (the GPU allowed). Branch `fellow/geometry`. Decision re
 * Lavapipe: the lanes filmed; the regression scenes `structure`, `destruction` and `vehicle` exact, the release
   template's the same.
 * The editor check passes (one start crashed before opening the project; the rerun passed).
-* The laptop: not run (not linked to the session).
+* The laptop (job f396, milestone 97): the lanes as expected with both engines, exactly the cloud's; filmed on the RTX
+  (`structure_strip.png`).
 
 ## 3. Measurements
 

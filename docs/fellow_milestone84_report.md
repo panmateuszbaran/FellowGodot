@@ -25,7 +25,8 @@ przynajmniej do 8 rano" (the GPU allowed). Branch `fellow/geometry`. Decision re
 * Decision 0192's table, editor build and release template, both physics engines.
 * Lavapipe: the lanes filmed; the regression subset (`climb`, `ledge_corners`, `traversal`, `face`) exact against the
   goldens and the release template.
-* The laptop: not run (not linked to the session).
+* The laptop (job f396, milestone 97): the climbing lanes as expected with both engines, exactly the cloud's results;
+  filmed on the RTX.
 
 ## 3. Measurements
 

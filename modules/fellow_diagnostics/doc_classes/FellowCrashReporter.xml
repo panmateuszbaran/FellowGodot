@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="FellowCrashReporter" inherits="Object" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+	<brief_description>
+		FellowEngine: crash reports from shipped games — what crashed, where, and what the game was doing.
+	</brief_description>
+	<description>
+		A singleton. With [member ProjectSettings.debug/fellow/crash_reports/enabled] (and not in the editor), a crash — a fatal signal on Linux and macOS (SIGSEGV, SIGBUS, SIGILL, SIGFPE, SIGABRT, SIGTRAP), an unhandled exception, [code]abort()[/code] or a pure virtual call on Windows — writes a JSON report into [member ProjectSettings.debug/fellow/crash_reports/directory] before the process ends, in release templates too (where Godot's own crash handler is compiled out); on Windows a minidump ([code].dmp[/code]) beside it, for Visual Studio or WinDbg with the build's PDB. Godot's own handler (debug builds) and any handler installed before still run afterwards.
+		A report holds the reason (the signal or exception, the faulting address), the faulting thread's frames (each a module and an offset in it, symbolized afterwards with the build's symbols: [code]tools/fellow_crash/symbolize.py[/code]), the time, the frame and the scene, the process's memory, the machine (operating system, CPU, memory, GPU and its driver, the renderer), the project's name and version, the last lines of the log ([member ProjectSettings.debug/fellow/crash_reports/log_lines]), the breadcrumbs and values the game set, and GDScript's backtrace of the crashing thread (in a release build only with [member ProjectSettings.debug/settings/gdscript/always_track_call_stacks]). The fatal path writes from what it keeps in fixed buffers, without allocating; what needs the heap (the scripts' backtraces) is added last.
+		The next run finds the report: [method get_pending_report] returns the newest report of an earlier run not yet acknowledged; the game can show it, send it where it collects them (an [HTTPRequest] with the player's consent), and [method acknowledge_reports]. The newest [member ProjectSettings.debug/fellow/crash_reports/max_reports] are kept.
+		[codeblock]
+		func _ready():
+		    var report = FellowCrashReporter.get_pending_report()
+		    if not report.is_empty():
+		        print("The last run crashed: ", report.reason, " in ", report.scene)
+		        FellowCrashReporter.acknowledge_reports()
+		    FellowCrashReporter.set_custom_value("level", "harbour")
+
+		func _on_checkpoint(name):
+		    FellowCrashReporter.add_breadcrumb("checkpoint " + name, "game")
+		[/codeblock]
+		Reports may hold what the log printed and what the game set: tell players what is sent and ask first.
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="acknowledge_reports">
+			<return type="void" />
+			<description>
+				Marks the reports written so far as seen: [method get_pending_report] returns none until another run writes one.
+			</description>
+		</method>
+		<method name="add_breadcrumb">
+			<return type="void" />
+			<param index="0" name="message" type="String" />
+			<param index="1" name="category" type="String" default="&quot;&quot;" />
+			<description>
+				Notes what the game is doing (a level loaded, a menu opened, a save written); the last 64 go into the report with the milliseconds since the start. Cheap (a copy into a ring); text over 200 bytes is cut. The reporter adds its own: the engine's start and each change of the current scene.
+			</description>
+		</method>
+		<method name="debug_crash">
+			<return type="void" />
+			<param index="0" name="kind" type="String" />
+			<description>
+				Crashes the process on purpose, to test the reports and what collects them: [code]"segfault"[/code] (a null pointer written), [code]"abort"[/code], [code]"trap"[/code] (Godot's [code]CRASH_NOW[/code]), [code]"stack_overflow"[/code], [code]"thread"[/code] (a null pointer written on another thread), [code]"divide"[/code] (an integer divided by zero; no fault on ARM).
+			</description>
+		</method>
+		<method name="get_custom_values" qualifiers="const">
+			<return type="Dictionary" />
+			<description>
+				The values set with [method set_custom_value], as text.
+			</description>
+		</method>
+		<method name="get_pending_report" qualifiers="const">
+			<return type="Dictionary" />
+			<description>
+				The newest report an earlier run wrote and [method acknowledge_reports] has not marked, as [method read_report] returns it; empty when there is none (or the reports are off).
+			</description>
+		</method>
+		<method name="get_report_directory" qualifiers="const">
+			<return type="String" />
+			<description>
+				Where the reports are written (an absolute path ending with a separator); empty when they are off.
+			</description>
+		</method>
+		<method name="get_reports" qualifiers="const">
+			<return type="PackedStringArray" />
+			<description>
+				The reports in the directory (crashes, and those [method write_report] wrote), newest first: their absolute paths.
+			</description>
+		</method>
+		<method name="get_stats" qualifiers="const">
+			<return type="Dictionary" />
+			<description>
+				Diagnostics: [code]enabled[/code], [code]installed[/code] (the handlers), [code]log_capacity[/code], [code]log_lines_seen[/code], [code]log_lines_kept[/code], [code]breadcrumbs[/code], [code]reports_written[/code], [code]setup_usec[/code] (the reporter's start-up), [code]frame[/code], [code]scene[/code] and [code]context[/code] (the machine, as a report has it).
+			</description>
+		</method>
+		<method name="is_enabled" qualifiers="const">
+			<return type="bool" />
+			<description>
+				Whether reports are written in this process: [member ProjectSettings.debug/fellow/crash_reports/enabled] and FellowEngine on, and not the editor.
+			</description>
+		</method>
+		<method name="read_report" qualifiers="static">
+			<return type="Dictionary" />
+			<param index="0" name="path" type="String" />
+			<description>
+				A report's JSON as a [Dictionary], with [code skip-lint]path[/code] added (and [code]minidump_path[/code] when its minidump is beside it). Its keys: [code]kind[/code] ([code]"crash"[/code] or [code]"report"[/code]), [code]reason[/code], [code]signal[/code] and [code]code[/code] or the exception's [code]code[/code], [code]fault_address[/code], [code]access[/code], [code]time_utc[/code], [code]uptime_ms[/code], [code]frame[/code], [code]thread[/code], [code]scene[/code], [code]memory[/code], [code]context[/code], [code]frames[/code], [code]breadcrumbs[/code], [code]custom[/code], [code]log[/code], [code]script_backtraces[/code], [code]minidump[/code].
+			</description>
+		</method>
+		<method name="remove_custom_value">
+			<return type="void" />
+			<param index="0" name="key" type="String" />
+			<description>
+				Takes a value set with [method set_custom_value] out of the reports.
+			</description>
+		</method>
+		<method name="set_custom_value">
+			<return type="void" />
+			<param index="0" name="key" type="String" />
+			<param index="1" name="value" type="Variant" />
+			<description>
+				A value the reports carry (the level, the player's position, the build's branch), as text: up to 32 keys of up to 46 bytes, values cut at 206 bytes. Setting a key again replaces its value.
+			</description>
+		</method>
+		<method name="write_report">
+			<return type="String" />
+			<param index="0" name="reason" type="String" />
+			<description>
+				Writes a report now without crashing ([code]kind[/code] [code]"report"[/code]: a state the game should not be in, a failed save), with the calling thread's frames and its script's backtrace; returns its path (empty when the reports are off). Not pending for this run.
+			</description>
+		</method>
+	</methods>
+</class>

@@ -1,7 +1,7 @@
 # FellowEngine options
 
-All FellowEngine behaviour sits under **Project Settings → Rendering → Fellow** (`rendering/fellow/*`). There are two
-kinds of options:
+All FellowEngine behaviour sits under **Project Settings → Rendering → Fellow** (`rendering/fellow/*`; crash reports,
+milestone 97, under **Debug → Fellow**, `debug/fellow/*`). There are two kinds of options:
 
 * **Exact** options do not change a single pixel compared with Godot 4.7.2 (verified on lavapipe bit for bit and on
   RTX at the run-to-run floor). They are on by default when they were measured faster, and autotune
@@ -646,6 +646,24 @@ Gaze (milestone 89, decision 0197): `gaze` (on), `look_target_path` (empty: ahea
 space), `gaze_range_horizontal` (30°), `gaze_range_vertical` (25°), `gaze_time` (0.04 s), `saccades` (on),
 `saccade_amplitude` (1.5°); `get_gaze_angles()`; the channels `look_out_left` … `look_down_right` on ARKit's
 `eyeLook*` shapes. Vergence (milestone 94, decision 0202): `eye_spacing` (0 m: the eyes parallel); `get_vergence()`.
+
+## Crash reports (milestone 97)
+
+Decision 0205. `debug/fellow/crash_reports/enabled` (off; read at start-up; not in the editor, and off with
+`rendering/fellow/enabled` off): a crash writes a JSON report — in a release template too — into
+`debug/fellow/crash_reports/directory` (`user://crash_reports`): the reason (signal or exception, code, faulting
+address), the time, uptime, frame, thread and scene, the memory, the machine (engine and commit, build, OS, CPU, RAM,
+GPU and driver, renderer, project and version), the faulting thread's frames (module and offset), the breadcrumbs, the
+custom values, the last `debug/fellow/crash_reports/log_lines` (200) lines of the log and GDScript's backtrace (in a
+release build with `debug/settings/gdscript/always_track_call_stacks`); on Windows a minidump beside it
+(`debug/fellow/crash_reports/minidumps`, on). The newest `debug/fellow/crash_reports/max_reports` (10) are kept.
+Godot's own handler and any earlier one still run afterwards; the process ends as it would have.
+`FellowCrashReporter` (a singleton): `add_breadcrumb(message, category)`, `set_custom_value(key, value)`,
+`remove_custom_value()`, `get_custom_values()`, `write_report(reason)` (a report without crashing),
+`get_pending_report()` (an earlier run's newest unacknowledged report), `acknowledge_reports()`, `get_reports()`,
+`read_report(path)`, `is_enabled()`, `get_report_directory()`, `get_stats()`, `debug_crash(kind)` (`segfault`,
+`abort`, `trap`, `stack_overflow`, `thread`, `divide`). `tools/fellow_crash/symbolize.py` prints a report with its
+frames symbolized (the build's symbols); `tools/fellow_crash/crash_check.py` checks a build.
 
 ## Simulated GPUs (milestone 49)
 

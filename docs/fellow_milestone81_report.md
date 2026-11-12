@@ -32,7 +32,8 @@ przynajmniej do 8 rano" (the GPU allowed). Branch `fellow/geometry`. Decision re
 * Lavapipe: the lanes filmed; the regression suite (every scene, the release template against the editor build) exact
   with the new golden `ledge_corners`.
 * The editor check passes.
-* The laptop: not run (not linked to the session).
+* The laptop (job f396, milestone 97): the climbing lanes (fifteen after milestone 95) as expected with both engines,
+  exactly the cloud's results; filmed on the RTX (`climb_strip.png`).
 
 ## 3. Measurements
 

@@ -1,0 +1,1553 @@
+/**************************************************************************/
+/*  register_types.h                                                      */
+/**************************************************************************/
+/*                         This file is part of:                          */
+/*                             GODOT ENGINE                               */
+/*                        https://godotengine.org                         */
+/**************************************************************************/
+/* Copyright (c) 2014-present Godot Engine contributors (see AUTHORS.md). */
+/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                  */
+/*                                                                        */
+/* Permission is hereby granted, free of charge, to any person obtaining  */
+/* a copy of this software and associated documentation files (the        */
+/* "Software"), to deal in the Software without restriction, including    */
+/* without limitation the rights to use, copy, modify, merge, publish,    */
+/* distribute, sublicense, and/or sell copies of the Software, and to     */
+/* permit persons to whom the Software is furnished to do so, subject to  */
+/* the following conditions:                                              */
+/*                                                                        */
+/* The above copyright notice and this permission notice shall be         */
+/* included in all copies or substantial portions of the Software.        */
+/*                                                                        */
+/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,        */
+/* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF     */
+/* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. */
+/* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY   */
+/* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,   */
+/* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE      */
+/* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
+/**************************************************************************/
+
+// The fatal paths below run in a signal handler or an unhandled-exception filter: the report's core is written with
+// the state kept here in fixed buffers (no allocation, no lock, plain file writes), the frames described by the
+// loader (dladdr, GetModuleHandleEx); what needs the heap (the scripts' backtraces) is appended afterwards, so a
+// heap too broken for it still leaves a complete report.
+#if defined(__linux__) && !defined(_GNU_SOURCE)
+#define _GNU_SOURCE // REG_RIP in <ucontext.h>
+#endif
+
+#include "fellow_crash_reporter.h"
+
+#include "core/config/engine.h"
+#include "core/config/project_settings.h"
+#include "core/io/dir_access.h"
+#include "core/io/file_access.h"
+#include "core/io/json.h"
+#include "core/io/logger.h"
+#include "core/object/script_backtrace.h"
+#include "core/object/script_language.h"
+#include "core/os/memory.h"
+#include "core/os/os.h"
+#include "core/os/spin_lock.h"
+#include "core/os/thread.h"
+#include "core/version.h"
+#include "scene/main/node.h"
+#include "scene/main/scene_tree.h"
+#include "servers/display/display_server.h"
+#include "servers/rendering/rendering_server.h"
+
+#include <atomic>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <ctime>
+
+#if (defined(__linux__) && defined(__GLIBC__)) || defined(__APPLE__)
+#define FELLOW_CRASH_POSIX 1
+#include <dlfcn.h>
+#include <execinfo.h>
+#include <fcntl.h>
+#include <signal.h>
+#include <sys/types.h>
+#include <unistd.h>
+#if defined(__APPLE__)
+#include <sys/ucontext.h>
+#else
+#include <ucontext.h>
+#endif
+#elif defined(WINDOWS_ENABLED)
+#define FELLOW_CRASH_WINDOWS 1
+#include <windows.h>
+// After windows.h.
+#include <dbghelp.h>
+#include <signal.h>
+#else
+#include <unistd.h>
+#endif
+
+#if !defined(FELLOW_CRASH_WINDOWS)
+#include <fcntl.h>
+#include <unistd.h>
+#endif
+
+FellowCrashReporter *FellowCrashReporter::singleton = nullptr;
+
+namespace {
+
+constexpr int LOG_LINE = 320;
+constexpr int LOG_MAX = 1024;
+constexpr int CRUMB_MAX = 64;
+constexpr int CRUMB_TEXT = 200;
+constexpr int CUSTOM_MAX = 32;
+constexpr int CUSTOM_KEY = 48;
+constexpr int CUSTOM_VALUE = 208;
+constexpr int CONTEXT_MAX = 8192;
+constexpr int PATH_BYTES = 1024;
+constexpr int FRAMES_MAX = 96;
+
+struct Crumb {
+	uint64_t msec;
+	char category[24];
+	char text[CRUMB_TEXT];
+};
+
+struct Custom {
+	char key[CUSTOM_KEY];
+	char value[CUSTOM_VALUE];
+};
+
+// Everything a fatal handler reads. In static storage: it outlives the reporter, the loggers and the servers, so a
+// crash during the engine's shutdown is still reported.
+struct State {
+	std::atomic<bool> installed{ false };
+	std::atomic<bool> scripts_ok{ false }; // the script server lives: its backtraces can be captured
+	char dir[PATH_BYTES] = {}; // UTF-8, ending with a separator
+	std::atomic<int> context_index{ 0 };
+	char context[2][CONTEXT_MAX] = {};
+	char scene[512] = {};
+	std::atomic<uint64_t> frame{ 0 };
+	std::atomic<uint64_t> video_bytes{ 0 };
+	uint64_t start_msec = 0;
+	uint64_t page_size = 4096;
+	std::atomic<uint32_t> log_capacity{ 0 };
+	std::atomic<uint32_t> log_head{ 0 };
+	char log[LOG_MAX][LOG_LINE] = {};
+	std::atomic<uint32_t> crumb_head{ 0 };
+	Crumb crumbs[CRUMB_MAX] = {};
+	SpinLock custom_lock;
+	Custom custom[CUSTOM_MAX] = {};
+	std::atomic<int> reporting{ 0 }; // 0 none, 1 a fatal report being written, 2 written
+	std::atomic<uint64_t> reporting_thread{ 0 };
+	std::atomic<uint32_t> sequence{ 0 };
+	std::atomic<uint32_t> reports_written{ 0 };
+	char last_report[PATH_BYTES] = {}; // the fatal report's path, for what is appended to it
+	bool minidumps = true;
+	bool idle_added = false;
+	bool logger_added = false;
+	bool context_has_gpu = false;
+	ObjectID last_scene;
+};
+
+State g;
+
+uint64_t _now_msec() {
+#ifdef FELLOW_CRASH_WINDOWS
+	return GetTickCount64();
+#else
+	struct timespec ts;
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	return uint64_t(ts.tv_sec) * 1000 + uint64_t(ts.tv_nsec) / 1000000;
+#endif
+}
+
+struct UtcTime {
+	int year, month, day, hour, minute, second;
+};
+
+UtcTime _utc_now() {
+	UtcTime t;
+#ifdef FELLOW_CRASH_WINDOWS
+	SYSTEMTIME st;
+	GetSystemTime(&st);
+	t = { st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond };
+#else
+	const time_t now = time(nullptr);
+	struct tm tm;
+	gmtime_r(&now, &tm);
+	t = { tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec };
+#endif
+	return t;
+}
+
+uint64_t _process_id() {
+#ifdef FELLOW_CRASH_WINDOWS
+	return GetCurrentProcessId();
+#else
+	return uint64_t(getpid());
+#endif
+}
+
+// Copies at most p_len bytes of p_src into p_dst (p_cap bytes, the last one never written: always terminated):
+// without terminal escape sequences or a trailing newline, cut at a UTF-8 character's boundary.
+void _copy_text(char *p_dst, size_t p_cap, const char *p_src, size_t p_len) {
+	size_t o = 0;
+	for (size_t i = 0; i < p_len && p_src[i]; i++) {
+		const unsigned char c = (unsigned char)p_src[i];
+		if (c == 0x1b) { // ESC [ parameters final-byte
+			i++;
+			if (i < p_len && p_src[i] == '[') {
+				i++;
+				while (i < p_len && p_src[i] && !(p_src[i] >= 0x40 && p_src[i] <= 0x7e)) {
+					i++;
+				}
+			}
+			continue;
+		}
+		if (o + 2 >= p_cap) {
+			break;
+		}
+		p_dst[o++] = char(c);
+	}
+	if (o > 0 && ((unsigned char)p_dst[o - 1] & 0x80)) {
+		size_t k = o;
+		while (k > 0 && ((unsigned char)p_dst[k - 1] & 0xc0) == 0x80) {
+			k--;
+		}
+		if (k > 0) {
+			const unsigned char lead = (unsigned char)p_dst[k - 1];
+			const size_t need = lead >= 0xf0 ? 4 : (lead >= 0xe0 ? 3 : (lead >= 0xc0 ? 2 : 1));
+			if (o - (k - 1) < need) {
+				o = k - 1;
+			}
+		}
+	}
+	while (o > 0 && (p_dst[o - 1] == '\n' || p_dst[o - 1] == '\r')) {
+		o--;
+	}
+	p_dst[o] = 0;
+}
+
+void _copy_string(char *p_dst, size_t p_cap, const String &p_text) {
+	const CharString cs = p_text.utf8();
+	_copy_text(p_dst, p_cap, cs.get_data(), size_t(cs.length()));
+}
+
+size_t _bounded_length(const char *p_text, size_t p_cap) {
+	size_t n = 0;
+	while (n < p_cap && p_text[n]) {
+		n++;
+	}
+	return n;
+}
+
+// A file written without the heap: a buffer on the stack, the system's own calls.
+struct ReportFile {
+#ifdef FELLOW_CRASH_WINDOWS
+	HANDLE h = INVALID_HANDLE_VALUE;
+#else
+	int fd = -1;
+#endif
+	char buf[4096];
+	size_t n = 0;
+	uint64_t total = 0;
+
+	bool open(const char *p_path, bool p_existing) {
+#ifdef FELLOW_CRASH_WINDOWS
+		wchar_t w[PATH_BYTES];
+		if (!MultiByteToWideChar(CP_UTF8, 0, p_path, -1, w, PATH_BYTES)) {
+			return false;
+		}
+		h = CreateFileW(w, GENERIC_WRITE, FILE_SHARE_READ, nullptr, p_existing ? OPEN_EXISTING : CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+		return h != INVALID_HANDLE_VALUE;
+#else
+		fd = ::open(p_path, p_existing ? O_WRONLY : (O_WRONLY | O_CREAT | O_TRUNC), 0644);
+		return fd >= 0;
+#endif
+	}
+	void flush() {
+		size_t done = 0;
+		while (done < n) {
+#ifdef FELLOW_CRASH_WINDOWS
+			DWORD w = 0;
+			if (!WriteFile(h, buf + done, DWORD(n - done), &w, nullptr) || w == 0) {
+				break;
+			}
+#else
+			const ssize_t w = ::write(fd, buf + done, n - done);
+			if (w <= 0) {
+				break;
+			}
+#endif
+			done += size_t(w);
+		}
+		total += done;
+		n = 0;
+	}
+	// Moves back over the last p_bytes bytes written (the closing "}\n"), to write more fields before them.
+	void back(int p_bytes) {
+		flush();
+#ifdef FELLOW_CRASH_WINDOWS
+		LARGE_INTEGER d;
+		d.QuadPart = -p_bytes;
+		SetFilePointerEx(h, d, nullptr, FILE_END);
+#else
+		lseek(fd, -p_bytes, SEEK_END);
+#endif
+	}
+	void close() {
+		flush();
+#ifdef FELLOW_CRASH_WINDOWS
+		if (h != INVALID_HANDLE_VALUE) {
+			CloseHandle(h);
+			h = INVALID_HANDLE_VALUE;
+		}
+#else
+		if (fd >= 0) {
+			::close(fd);
+			fd = -1;
+		}
+#endif
+	}
+	void raw(const char *p_s, size_t p_len) {
+		while (p_len) {
+			const size_t k = MIN(p_len, sizeof(buf) - n);
+			memcpy(buf + n, p_s, k);
+			n += k;
+			p_s += k;
+			p_len -= k;
+			if (n == sizeof(buf)) {
+				flush();
+			}
+		}
+	}
+	void str(const char *p_s) { raw(p_s, strlen(p_s)); }
+	void ch(char p_c) { raw(&p_c, 1); }
+	void json(const char *p_s, size_t p_max = size_t(-1)) {
+		static const char *nibbles = "0123456789abcdef";
+		ch('"');
+		for (size_t i = 0; i < p_max && p_s && p_s[i]; i++) {
+			const unsigned char c = (unsigned char)p_s[i];
+			if (c == '"' || c == '\\') {
+				ch('\\');
+				ch(char(c));
+			} else if (c == '\n') {
+				str("\\n");
+			} else if (c == '\t') {
+				str("\\t");
+			} else if (c < 0x20 || c == 0x7f) {
+				char e[6] = { '\\', 'u', '0', '0', nibbles[c >> 4], nibbles[c & 15] };
+				raw(e, 6);
+			} else {
+				ch(char(c));
+			}
+		}
+		ch('"');
+	}
+	void u64(uint64_t p_v) {
+		char d[24];
+		int k = 0;
+		do {
+			d[k++] = char('0' + p_v % 10);
+			p_v /= 10;
+		} while (p_v);
+		while (k) {
+			ch(d[--k]);
+		}
+	}
+	void i64(int64_t p_v) {
+		if (p_v < 0) {
+			ch('-');
+			u64(uint64_t(-(p_v + 1)) + 1);
+		} else {
+			u64(uint64_t(p_v));
+		}
+	}
+	void hex(uint64_t p_v) {
+		static const char *digits = "0123456789abcdef";
+		char d[20];
+		int k = 0;
+		do {
+			d[k++] = digits[p_v & 15];
+			p_v >>= 4;
+		} while (p_v);
+		str("\"0x");
+		while (k) {
+			ch(d[--k]);
+		}
+		ch('"');
+	}
+	void two(int p_v) {
+		ch(char('0' + (p_v / 10) % 10));
+		ch(char('0' + p_v % 10));
+	}
+};
+
+// A frame: its module and the offset in it (what a symbol file is searched with), and the loader's symbol if it
+// exports one.
+struct FrameInfo {
+	char module[160];
+	uint64_t base;
+	char symbol[160];
+	uint64_t symbol_address;
+};
+
+void _describe_frame(void *p_address, FrameInfo &r_info) {
+	r_info.module[0] = 0;
+	r_info.symbol[0] = 0;
+	r_info.base = 0;
+	r_info.symbol_address = 0;
+#if defined(FELLOW_CRASH_POSIX)
+	Dl_info info;
+	if (dladdr(p_address, &info)) {
+		if (info.dli_fname) {
+			const char *name = info.dli_fname;
+			for (const char *s = info.dli_fname; *s; s++) {
+				if (*s == '/') {
+					name = s + 1;
+				}
+			}
+			_copy_text(r_info.module, sizeof(r_info.module), name, strlen(name));
+		}
+		r_info.base = uint64_t(info.dli_fbase);
+		if (info.dli_sname) {
+			_copy_text(r_info.symbol, sizeof(r_info.symbol), info.dli_sname, strlen(info.dli_sname));
+			r_info.symbol_address = uint64_t(info.dli_saddr);
+		}
+	}
+#elif defined(FELLOW_CRASH_WINDOWS)
+	HMODULE module = nullptr;
+	if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCWSTR)p_address, &module) && module) {
+		r_info.base = uint64_t(module);
+		wchar_t w[PATH_BYTES];
+		const DWORD len = GetModuleFileNameW(module, w, PATH_BYTES);
+		if (len > 0 && len < PATH_BYTES) {
+			const wchar_t *name = w;
+			for (const wchar_t *s = w; *s; s++) {
+				if (*s == L'\\' || *s == L'/') {
+					name = s + 1;
+				}
+			}
+			char utf8[PATH_BYTES];
+			const int k = WideCharToMultiByte(CP_UTF8, 0, name, -1, utf8, PATH_BYTES, nullptr, nullptr);
+			if (k > 0) {
+				_copy_text(r_info.module, sizeof(r_info.module), utf8, size_t(k));
+			}
+		}
+	}
+#else
+	(void)p_address;
+#endif
+}
+
+struct ReportInfo {
+	const char *kind = "crash";
+	const char *reason = "";
+	int64_t signal = -1;
+	int64_t code = 0;
+	bool has_code = false;
+	bool code_hex = false;
+	uint64_t fault_address = 0;
+	bool has_fault_address = false;
+	const char *access = nullptr;
+	void *const *frames = nullptr;
+	int frame_count = 0;
+	bool main_thread = false;
+	uint64_t thread_id = 0;
+	const char *minidump = nullptr; // a file name in the report directory
+};
+
+uint64_t _resident_bytes() {
+#if defined(__linux__)
+	const int fd = ::open("/proc/self/statm", O_RDONLY);
+	if (fd < 0) {
+		return 0;
+	}
+	char b[128];
+	const ssize_t n = ::read(fd, b, sizeof(b) - 1);
+	::close(fd);
+	if (n <= 0) {
+		return 0;
+	}
+	b[n] = 0;
+	// "size resident shared ...", in pages.
+	const char *s = b;
+	while (*s && *s != ' ') {
+		s++;
+	}
+	uint64_t pages = 0;
+	while (*s == ' ') {
+		s++;
+	}
+	while (*s >= '0' && *s <= '9') {
+		pages = pages * 10 + uint64_t(*s - '0');
+		s++;
+	}
+	return pages * g.page_size;
+#elif defined(FELLOW_CRASH_WINDOWS)
+	typedef BOOL(WINAPI * GetMemoryInfo)(HANDLE, void *, DWORD);
+	static GetMemoryInfo fn = nullptr;
+	if (!fn) {
+		HMODULE k32 = GetModuleHandleW(L"kernel32.dll");
+		fn = k32 ? (GetMemoryInfo)(void *)GetProcAddress(k32, "K32GetProcessMemoryInfo") : nullptr;
+	}
+	struct {
+		DWORD cb;
+		DWORD PageFaultCount;
+		SIZE_T PeakWorkingSetSize, WorkingSetSize, QuotaPeakPagedPoolUsage, QuotaPagedPoolUsage, QuotaPeakNonPagedPoolUsage, QuotaNonPagedPoolUsage, PagefileUsage, PeakPagefileUsage;
+	} pmc = {};
+	pmc.cb = sizeof(pmc);
+	if (fn && fn(GetCurrentProcess(), &pmc, sizeof(pmc))) {
+		return uint64_t(pmc.WorkingSetSize);
+	}
+	return 0;
+#else
+	return 0;
+#endif
+}
+
+// The report's name: <kind>_<UTC date>_<UTC time>_<process>_<sequence>.json (the names sort by time).
+void _report_name(const char *p_kind, const char *p_extension, uint32_t p_sequence, char *r_name, size_t p_cap) {
+	const UtcTime t = _utc_now();
+	snprintf(r_name, p_cap, "%s_%04d%02d%02d_%02d%02d%02d_%llu_%u.%s", p_kind, t.year, t.month, t.day, t.hour, t.minute, t.second, (unsigned long long)_process_id(), p_sequence, p_extension);
+}
+
+// p_dir + p_name into r_path (p_cap bytes), cut if too long.
+void _join_path(char *r_path, size_t p_cap, const char *p_dir, const char *p_name) {
+	size_t o = 0;
+	for (const char *s = p_dir; *s && o + 1 < p_cap; s++) {
+		r_path[o++] = *s;
+	}
+	for (const char *s = p_name; *s && o + 1 < p_cap; s++) {
+		r_path[o++] = *s;
+	}
+	r_path[o] = 0;
+}
+
+// The report's core: everything but what needs the heap. Leaves the file open (ending with "}\n") for more fields.
+bool _write_core(const ReportInfo &p, const char *p_path, ReportFile &f) {
+	if (!f.open(p_path, false)) {
+		return false;
+	}
+	f.str("{\"fellow_crash_report\":1,\"kind\":");
+	f.json(p.kind);
+	f.str(",\"reason\":");
+	f.json(p.reason);
+	if (p.signal >= 0) {
+		f.str(",\"signal\":");
+		f.i64(p.signal);
+	}
+	if (p.has_code) {
+		f.str(",\"code\":");
+		if (p.code_hex) {
+			f.hex(uint64_t(uint32_t(p.code)));
+		} else {
+			f.i64(p.code);
+		}
+	}
+	if (p.has_fault_address) {
+		f.str(",\"fault_address\":");
+		f.hex(p.fault_address);
+	}
+	if (p.access) {
+		f.str(",\"access\":");
+		f.json(p.access);
+	}
+	const UtcTime t = _utc_now();
+	f.str(",\"time_utc\":\"");
+	f.u64(uint64_t(t.year));
+	f.ch('-');
+	f.two(t.month);
+	f.ch('-');
+	f.two(t.day);
+	f.ch('T');
+	f.two(t.hour);
+	f.ch(':');
+	f.two(t.minute);
+	f.ch(':');
+	f.two(t.second);
+	f.str("Z\",\"uptime_ms\":");
+	f.u64(_now_msec() - g.start_msec);
+	f.str(",\"frame\":");
+	f.u64(g.frame.load(std::memory_order_relaxed));
+	f.str(",\"thread\":{\"main\":");
+	f.str(p.main_thread ? "true" : "false");
+	f.str(",\"id\":");
+	f.u64(p.thread_id);
+	f.str("},\"scene\":");
+	f.json(g.scene, sizeof(g.scene));
+	f.str(",\"memory\":{\"resident_mb\":");
+	f.u64(_resident_bytes() >> 20);
+	f.str(",\"engine_static_mb\":");
+	f.u64(Memory::get_mem_usage() >> 20);
+	f.str(",\"video_mb\":");
+	f.u64(g.video_bytes.load(std::memory_order_relaxed) >> 20);
+	f.str("},\"context\":");
+	const char *context = g.context[g.context_index.load(std::memory_order_acquire) & 1];
+	const size_t context_len = _bounded_length(context, CONTEXT_MAX);
+	if (context_len) {
+		f.raw(context, context_len);
+	} else {
+		f.str("{}");
+	}
+	f.str(",\"frames\":[");
+	for (int i = 0; i < p.frame_count; i++) {
+		FrameInfo info;
+		_describe_frame(p.frames[i], info);
+		f.str(i ? ",{\"address\":" : "{\"address\":");
+		f.hex(uint64_t(p.frames[i]));
+		f.str(",\"module\":");
+		f.json(info.module, sizeof(info.module));
+		f.str(",\"offset\":");
+		f.hex(uint64_t(p.frames[i]) - info.base);
+		if (info.symbol[0]) {
+			f.str(",\"symbol\":");
+			f.json(info.symbol, sizeof(info.symbol));
+			f.str(",\"symbol_offset\":");
+			f.hex(uint64_t(p.frames[i]) - info.symbol_address);
+		}
+		f.ch('}');
+	}
+	f.str("],\"breadcrumbs\":[");
+	{
+		const uint32_t head = g.crumb_head.load(std::memory_order_acquire);
+		const uint32_t count = MIN(head, uint32_t(CRUMB_MAX));
+		for (uint32_t i = head - count; i != head; i++) {
+			const Crumb &c = g.crumbs[i % CRUMB_MAX];
+			f.str(i != head - count ? ",{\"ms\":" : "{\"ms\":");
+			f.u64(c.msec);
+			f.str(",\"category\":");
+			f.json(c.category, sizeof(c.category));
+			f.str(",\"text\":");
+			f.json(c.text, sizeof(c.text));
+			f.ch('}');
+		}
+	}
+	f.str("],\"custom\":{");
+	{
+		bool first = true;
+		for (int i = 0; i < CUSTOM_MAX; i++) {
+			const Custom &c = g.custom[i];
+			if (!c.key[0]) {
+				continue;
+			}
+			if (!first) {
+				f.ch(',');
+			}
+			first = false;
+			f.json(c.key, sizeof(c.key));
+			f.ch(':');
+			f.json(c.value, sizeof(c.value));
+		}
+	}
+	f.str("},\"log\":[");
+	{
+		const uint32_t cap = g.log_capacity.load(std::memory_order_relaxed);
+		const uint32_t head = g.log_head.load(std::memory_order_acquire);
+		const uint32_t count = cap ? MIN(head, cap) : 0;
+		for (uint32_t i = head - count; i != head; i++) {
+			if (i != head - count) {
+				f.ch(',');
+			}
+			f.json(g.log[i % cap], LOG_LINE);
+		}
+	}
+	f.ch(']');
+	if (p.minidump) {
+		f.str(",\"minidump\":");
+		f.json(p.minidump);
+	}
+	f.str("}\n");
+	f.flush();
+	return true;
+}
+
+// More fields before the closing brace: p_fields is ",\"name\":value...".
+void _append(ReportFile &f, const char *p_fields, size_t p_len) {
+	f.back(2);
+	f.raw(p_fields, p_len);
+	f.str("}\n");
+	f.flush();
+}
+
+// The scripts' backtraces (GDScript's call stack of this thread; in a release build only with
+// debug/settings/gdscript/always_track_call_stacks): needs the heap, so written last.
+void _append_script_backtraces(ReportFile &f) {
+	if (!g.scripts_ok.load()) {
+		return;
+	}
+	Array texts;
+	for (const Ref<ScriptBacktrace> &bt : ScriptServer::capture_script_backtraces(false)) {
+		if (bt.is_valid() && !bt->is_empty()) {
+			texts.push_back(bt->format());
+		}
+	}
+	if (texts.is_empty()) {
+		return;
+	}
+	const CharString cs = (",\"script_backtraces\":" + JSON::stringify(texts, "", false)).utf8();
+	_append(f, cs.get_data(), size_t(cs.length()));
+}
+
+// The logger: every line the engine prints, the last log_lines kept in a ring.
+class FellowCrashLogger : public Logger {
+public:
+	virtual void logv(const char *p_format, va_list p_list, bool p_err) override {
+		const uint32_t cap = g.log_capacity.load(std::memory_order_relaxed);
+		if (cap == 0) {
+			return;
+		}
+		char tmp[LOG_LINE * 2];
+		const int n = vsnprintf(tmp, sizeof(tmp), p_format, p_list);
+		if (n <= 0) {
+			return;
+		}
+		const char *s = tmp;
+		const char *end = tmp + MIN(size_t(n), sizeof(tmp) - 1);
+		while (s < end) {
+			const char *nl = (const char *)memchr(s, '\n', size_t(end - s));
+			const size_t len = nl ? size_t(nl - s) : size_t(end - s);
+			if (len > 0) {
+				const uint32_t slot = g.log_head.fetch_add(1, std::memory_order_acq_rel) % cap;
+				_copy_text(g.log[slot], LOG_LINE, s, len);
+			}
+			s += len + 1;
+		}
+	}
+};
+
+void _add_crumb(const String &p_category, const String &p_text) {
+	const uint32_t i = g.crumb_head.fetch_add(1, std::memory_order_acq_rel);
+	Crumb &c = g.crumbs[i % CRUMB_MAX];
+	c.msec = _now_msec() - g.start_msec;
+	_copy_string(c.category, sizeof(c.category), p_category);
+	_copy_string(c.text, sizeof(c.text), p_text);
+}
+
+// The machine, the build, the project: JSON written once (again when the GPU is known), read by the handlers.
+void _build_context() {
+	Dictionary d;
+	OS *os = OS::get_singleton();
+	d["engine"] = GODOT_VERSION_FULL_NAME;
+	d["commit"] = GODOT_VERSION_HASH;
+#if defined(TOOLS_ENABLED)
+	d["build"] = "editor";
+#elif defined(DEBUG_ENABLED)
+	d["build"] = "debug";
+#else
+	d["build"] = "release";
+#endif
+	d["os"] = os->get_name();
+	d["os_version"] = os->get_version();
+	d["distribution"] = os->get_distribution_name();
+	d["cpu"] = os->get_processor_name();
+	d["cpu_count"] = os->get_processor_count();
+	const Dictionary mem = os->get_memory_info();
+	d["ram_mb"] = int64_t(mem.get("physical", -1)) > 0 ? int64_t(mem["physical"]) >> 20 : -1;
+	d["locale"] = os->get_locale();
+	d["pid"] = os->get_process_id();
+	d["executable"] = os->get_executable_path().get_file();
+	d["project"] = GLOBAL_GET("application/config/name");
+	d["project_version"] = GLOBAL_GET("application/config/version");
+	d["physics_3d"] = GLOBAL_GET("physics/3d/physics_engine");
+	d["rendering_driver"] = os->get_current_rendering_driver_name();
+	d["rendering_method"] = os->get_current_rendering_method();
+	if (DisplayServer::get_singleton()) {
+		d["display"] = DisplayServer::get_singleton()->get_name();
+	}
+	if (RenderingServer *rs = RenderingServer::get_singleton()) {
+		d["gpu"] = rs->get_video_adapter_name();
+		d["gpu_vendor"] = rs->get_video_adapter_vendor();
+		d["gpu_api"] = rs->get_video_adapter_api_version();
+		const Vector<String> driver = os->get_video_adapter_driver_info();
+		d["gpu_driver"] = String(" ").join(driver);
+		g.context_has_gpu = !String(d["gpu"]).is_empty() || DisplayServer::get_singleton() == nullptr || DisplayServer::get_singleton()->get_name() == "headless";
+	}
+	const UtcTime t = _utc_now();
+	d["session_start_utc"] = vformat("%04d-%02d-%02dT%02d:%02d:%02dZ", t.year, t.month, t.day, t.hour, t.minute, t.second);
+	const CharString cs = JSON::stringify(d, "", true).utf8();
+	const int next = (g.context_index.load() + 1) & 1;
+	const size_t len = MIN(size_t(cs.length()), size_t(CONTEXT_MAX - 1));
+	memcpy(g.context[next], cs.get_data(), len);
+	g.context[next][len] = 0;
+	g.context_index.store(next, std::memory_order_release);
+}
+
+// Once a frame (the scene tree's idle callbacks): the frame, the scene, the GPU's memory now and then.
+void _idle() {
+	if (!g.installed.load(std::memory_order_relaxed)) {
+		return;
+	}
+	const uint64_t frame = Engine::get_singleton()->get_process_frames();
+	g.frame.store(frame, std::memory_order_relaxed);
+	if (!g.context_has_gpu && frame > 1) {
+		_build_context();
+		g.context_has_gpu = true; // once, whatever it found
+	}
+	SceneTree *st = SceneTree::get_singleton();
+	Node *scene = st ? st->get_current_scene() : nullptr;
+	const ObjectID id = scene ? scene->get_instance_id() : ObjectID();
+	if (id != g.last_scene) {
+		g.last_scene = id;
+		String path;
+		if (scene) {
+			path = scene->get_scene_file_path();
+			if (path.is_empty()) {
+				path = String(scene->get_name());
+			}
+		}
+		_copy_string(g.scene, sizeof(g.scene), path);
+		_add_crumb("scene", path.is_empty() ? String("(none)") : path);
+	}
+	if (frame % 60 == 0 || frame == 2) {
+		if (RenderingServer *rs = RenderingServer::get_singleton()) {
+			g.video_bytes.store(rs->get_rendering_info(RSE::RENDERING_INFO_VIDEO_MEM_USED), std::memory_order_relaxed);
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------------------------- the fatal paths
+
+#if defined(FELLOW_CRASH_POSIX)
+
+const int FATAL_SIGNALS[] = { SIGSEGV, SIGBUS, SIGILL, SIGFPE, SIGABRT, SIGTRAP };
+constexpr int FATAL_COUNT = sizeof(FATAL_SIGNALS) / sizeof(FATAL_SIGNALS[0]);
+struct sigaction g_previous[FATAL_COUNT];
+alignas(16) char g_alt_stack[256 * 1024];
+
+const char *_signal_name(int p_sig) {
+	switch (p_sig) {
+		case SIGSEGV:
+			return "SIGSEGV";
+		case SIGBUS:
+			return "SIGBUS";
+		case SIGILL:
+			return "SIGILL";
+		case SIGFPE:
+			return "SIGFPE";
+		case SIGABRT:
+			return "SIGABRT";
+		case SIGTRAP:
+			return "SIGTRAP";
+	}
+	return "signal";
+}
+
+uint64_t _pc_from(void *p_context) {
+	if (!p_context) {
+		return 0;
+	}
+#if defined(__linux__)
+	const ucontext_t *uc = (const ucontext_t *)p_context;
+#if defined(__x86_64__) && defined(REG_RIP)
+	return uint64_t(uc->uc_mcontext.gregs[REG_RIP]);
+#elif defined(__i386__) && defined(REG_EIP)
+	return uint64_t(uint32_t(uc->uc_mcontext.gregs[REG_EIP]));
+#elif defined(__aarch64__)
+	return uint64_t(uc->uc_mcontext.pc);
+#else
+	return 0;
+#endif
+#elif defined(__APPLE__) && defined(__x86_64__)
+	const ucontext_t *uc = (const ucontext_t *)p_context;
+	return uint64_t(uc->uc_mcontext->__ss.__rip);
+#else
+	return 0;
+#endif
+}
+
+void _posix_chain(int p_sig, siginfo_t *p_info, void *p_context) {
+	int index = 0;
+	while (index < FATAL_COUNT && FATAL_SIGNALS[index] != p_sig) {
+		index++;
+	}
+	if (index < FATAL_COUNT) {
+		const struct sigaction &old = g_previous[index];
+		if ((old.sa_flags & SA_SIGINFO) && old.sa_sigaction) {
+			old.sa_sigaction(p_sig, p_info, p_context); // Godot's own handler (debug builds) prints and aborts
+		} else if (old.sa_handler != SIG_DFL && old.sa_handler != SIG_IGN && old.sa_handler != nullptr) {
+			old.sa_handler(p_sig);
+		}
+	}
+	// The default action: a fault happens again when the handler returns; a signal sent by kill() or raise() is sent
+	// again (blocked until the handler returns).
+	struct sigaction dfl;
+	memset(&dfl, 0, sizeof(dfl));
+	dfl.sa_handler = SIG_DFL;
+	sigemptyset(&dfl.sa_mask);
+	sigaction(p_sig, &dfl, nullptr);
+	if (!p_info || p_info->si_code <= 0) {
+		raise(p_sig);
+	}
+}
+
+void _posix_handler(int p_sig, siginfo_t *p_info, void *p_context) {
+	int expected = 0;
+	if (g.reporting.compare_exchange_strong(expected, 1)) {
+		g.reporting_thread.store(Thread::get_caller_id());
+		void *frames[FRAMES_MAX];
+		int count = backtrace(frames, FRAMES_MAX);
+		// From the faulting instruction on (before it: this handler and the kernel's trampoline).
+		const uint64_t pc = _pc_from(p_context);
+		int first = 0;
+		for (int i = 0; i < count; i++) {
+			if (uint64_t(frames[i]) == pc) {
+				first = i;
+				break;
+			}
+		}
+		ReportInfo ri;
+		ri.kind = "crash";
+		ri.reason = _signal_name(p_sig);
+		ri.signal = p_sig;
+		if (p_info) {
+			ri.code = p_info->si_code;
+			ri.has_code = true;
+			if (p_sig == SIGSEGV || p_sig == SIGBUS || p_sig == SIGILL || p_sig == SIGFPE) {
+				ri.fault_address = uint64_t(p_info->si_addr);
+				ri.has_fault_address = true;
+			}
+		}
+		ri.frames = frames + first;
+		ri.frame_count = count - first;
+		ri.main_thread = Thread::is_main_thread();
+		ri.thread_id = uint64_t(Thread::get_caller_id());
+		char name[160];
+		_report_name("crash", "json", g.sequence.fetch_add(1), name, sizeof(name));
+		_join_path(g.last_report, sizeof(g.last_report), g.dir, name);
+		ReportFile f;
+		if (_write_core(ri, g.last_report, f)) {
+			g.reports_written.fetch_add(1);
+			// A stack overflow leaves too little for the scripts' backtraces even on the alternate stack.
+			_append_script_backtraces(f);
+			f.close();
+		}
+		g.reporting.store(2);
+	} else if (expected == 1 && g.reporting_thread.load() != Thread::get_caller_id()) {
+		// Another thread is writing its report: let it finish before this one ends the process.
+		for (int i = 0; i < 500 && g.reporting.load() == 1; i++) {
+			usleep(10000);
+		}
+	}
+	_posix_chain(p_sig, p_info, p_context);
+}
+
+void _install_handlers() {
+	g.page_size = uint64_t(sysconf(_SC_PAGESIZE));
+	void *warm[2];
+	backtrace(warm, 2); // loads the unwinder now, not in the handler
+	stack_t ss;
+	memset(&ss, 0, sizeof(ss));
+	ss.ss_sp = g_alt_stack;
+	ss.ss_size = sizeof(g_alt_stack);
+	ss.ss_flags = 0;
+	sigaltstack(&ss, nullptr); // the main thread's stack overflowing still runs the handler
+	for (int i = 0; i < FATAL_COUNT; i++) {
+		struct sigaction sa;
+		memset(&sa, 0, sizeof(sa));
+		sa.sa_sigaction = _posix_handler;
+		sigemptyset(&sa.sa_mask);
+		sa.sa_flags = SA_SIGINFO | SA_ONSTACK;
+		sigaction(FATAL_SIGNALS[i], &sa, &g_previous[i]);
+	}
+}
+
+void _capture_current(void **r_frames, int &r_count) {
+	r_count = backtrace(r_frames, FRAMES_MAX);
+}
+
+#elif defined(FELLOW_CRASH_WINDOWS)
+
+typedef BOOL(WINAPI *MiniDumpWriteDumpFn)(HANDLE, DWORD, HANDLE, MINIDUMP_TYPE, PMINIDUMP_EXCEPTION_INFORMATION, PMINIDUMP_USER_STREAM_INFORMATION, PMINIDUMP_CALLBACK_INFORMATION);
+MiniDumpWriteDumpFn g_minidump = nullptr;
+LPTOP_LEVEL_EXCEPTION_FILTER g_previous_filter = nullptr;
+void(__cdecl *g_previous_abort)(int) = nullptr;
+
+// What the filter hands the thread that writes the report.
+struct WindowsCrash {
+	EXCEPTION_POINTERS *pointers = nullptr;
+	DWORD thread = 0;
+	bool main_thread = false;
+	uint64_t thread_id = 0;
+	const char *reason = "";
+	void *frames[FRAMES_MAX];
+	int frame_count = 0;
+};
+WindowsCrash g_crash;
+
+const char *_exception_name(DWORD p_code) {
+	switch (p_code) {
+		case EXCEPTION_ACCESS_VIOLATION:
+			return "EXCEPTION_ACCESS_VIOLATION";
+		case EXCEPTION_STACK_OVERFLOW:
+			return "EXCEPTION_STACK_OVERFLOW";
+		case EXCEPTION_ILLEGAL_INSTRUCTION:
+			return "EXCEPTION_ILLEGAL_INSTRUCTION";
+		case EXCEPTION_PRIV_INSTRUCTION:
+			return "EXCEPTION_PRIV_INSTRUCTION";
+		case EXCEPTION_INT_DIVIDE_BY_ZERO:
+			return "EXCEPTION_INT_DIVIDE_BY_ZERO";
+		case EXCEPTION_INT_OVERFLOW:
+			return "EXCEPTION_INT_OVERFLOW";
+		case EXCEPTION_BREAKPOINT:
+			return "EXCEPTION_BREAKPOINT";
+		case EXCEPTION_IN_PAGE_ERROR:
+			return "EXCEPTION_IN_PAGE_ERROR";
+		case EXCEPTION_ARRAY_BOUNDS_EXCEEDED:
+			return "EXCEPTION_ARRAY_BOUNDS_EXCEEDED";
+		case EXCEPTION_DATATYPE_MISALIGNMENT:
+			return "EXCEPTION_DATATYPE_MISALIGNMENT";
+		case EXCEPTION_FLT_DIVIDE_BY_ZERO:
+			return "EXCEPTION_FLT_DIVIDE_BY_ZERO";
+		case EXCEPTION_FLT_INVALID_OPERATION:
+			return "EXCEPTION_FLT_INVALID_OPERATION";
+		case 0xC0000374:
+			return "STATUS_HEAP_CORRUPTION";
+		case 0xE06D7363:
+			return "C++ exception";
+	}
+	return "exception";
+}
+
+bool _readable(const void *p_address, size_t p_bytes) {
+	MEMORY_BASIC_INFORMATION mbi;
+	if (!VirtualQuery(p_address, &mbi, sizeof(mbi)) || mbi.State != MEM_COMMIT) {
+		return false;
+	}
+	if (mbi.Protect & (PAGE_NOACCESS | PAGE_GUARD)) {
+		return false;
+	}
+	return uintptr_t(p_address) + p_bytes <= uintptr_t(mbi.BaseAddress) + mbi.RegionSize;
+}
+
+// The faulting thread's frames from its context, unwound by the modules' unwind tables (no symbols needed).
+int _unwind(const CONTEXT *p_context, void **r_frames, int p_max) {
+#if defined(_M_X64) || defined(__x86_64__)
+	CONTEXT c = *p_context;
+	int n = 0;
+	while (n < p_max && c.Rip) {
+		r_frames[n++] = (void *)c.Rip;
+		if (!_readable((void *)c.Rsp, 512)) {
+			break;
+		}
+		DWORD64 image_base = 0;
+		PRUNTIME_FUNCTION fn = RtlLookupFunctionEntry(c.Rip, &image_base, nullptr);
+		if (!fn) {
+			c.Rip = *(DWORD64 *)c.Rsp; // a leaf function: the return address on top of the stack
+			c.Rsp += 8;
+		} else {
+			PVOID handler_data = nullptr;
+			DWORD64 establisher = 0;
+			RtlVirtualUnwind(UNW_FLAG_NHANDLER, image_base, c.Rip, fn, &c, &handler_data, &establisher, nullptr);
+		}
+	}
+	return n;
+#else
+	(void)p_context;
+	(void)r_frames;
+	(void)p_max;
+	return 0;
+#endif
+}
+
+DWORD WINAPI _windows_report_thread(LPVOID) {
+	ReportInfo ri;
+	ri.kind = "crash";
+	ri.main_thread = g_crash.main_thread;
+	ri.thread_id = g_crash.thread_id;
+	ri.reason = g_crash.reason;
+	if (g_crash.pointers && g_crash.pointers->ExceptionRecord) {
+		const EXCEPTION_RECORD *er = g_crash.pointers->ExceptionRecord;
+		ri.reason = _exception_name(er->ExceptionCode);
+		ri.code = int64_t(er->ExceptionCode);
+		ri.has_code = true;
+		ri.code_hex = true;
+		ri.fault_address = uint64_t(er->ExceptionAddress);
+		ri.has_fault_address = true;
+		if (er->ExceptionCode == EXCEPTION_ACCESS_VIOLATION && er->NumberParameters >= 2) {
+			ri.access = er->ExceptionInformation[0] == 0 ? "read" : (er->ExceptionInformation[0] == 8 ? "execute" : "write");
+			ri.fault_address = uint64_t(er->ExceptionInformation[1]);
+		}
+		if (g_crash.pointers->ContextRecord) {
+			g_crash.frame_count = _unwind(g_crash.pointers->ContextRecord, g_crash.frames, FRAMES_MAX);
+		}
+	}
+	ri.frames = g_crash.frames;
+	ri.frame_count = g_crash.frame_count;
+	char name[160];
+	const uint32_t sequence = g.sequence.fetch_add(1);
+	_report_name("crash", "json", sequence, name, sizeof(name));
+	char dump_name[160];
+	_report_name("crash", "dmp", sequence, dump_name, sizeof(dump_name));
+	const bool dump = g.minidumps && g_minidump;
+	ri.minidump = dump ? dump_name : nullptr;
+	_join_path(g.last_report, sizeof(g.last_report), g.dir, name);
+	ReportFile f;
+	if (!_write_core(ri, g.last_report, f)) {
+		return 0;
+	}
+	g.reports_written.fetch_add(1);
+	if (dump) {
+		char dump_path[PATH_BYTES];
+		_join_path(dump_path, sizeof(dump_path), g.dir, dump_name);
+		wchar_t w[PATH_BYTES];
+		if (MultiByteToWideChar(CP_UTF8, 0, dump_path, -1, w, PATH_BYTES)) {
+			HANDLE h = CreateFileW(w, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+			if (h != INVALID_HANDLE_VALUE) {
+				MINIDUMP_EXCEPTION_INFORMATION mei;
+				mei.ThreadId = g_crash.thread;
+				mei.ExceptionPointers = g_crash.pointers;
+				mei.ClientPointers = FALSE;
+				const MINIDUMP_TYPE type = MINIDUMP_TYPE(MiniDumpWithThreadInfo | MiniDumpWithUnloadedModules | MiniDumpWithIndirectlyReferencedMemory);
+				const BOOL ok = g_minidump(GetCurrentProcess(), GetCurrentProcessId(), h, type, g_crash.pointers ? &mei : nullptr, nullptr, nullptr);
+				LARGE_INTEGER size;
+				size.QuadPart = 0;
+				GetFileSizeEx(h, &size);
+				CloseHandle(h);
+				char fields[96];
+				const int k = snprintf(fields, sizeof(fields), ",\"minidump_bytes\":%lld", ok ? (long long)size.QuadPart : -1LL);
+				_append(f, fields, size_t(k));
+			}
+		}
+	}
+	f.close();
+	return 0;
+}
+
+// Runs the report's writing on a thread of its own (a stack overflow leaves the faulting thread no stack; a
+// minidump is best written from another thread) and waits for it.
+void _windows_report(EXCEPTION_POINTERS *p_pointers, const char *p_reason) {
+	g_crash.pointers = p_pointers;
+	g_crash.thread = GetCurrentThreadId();
+	g_crash.main_thread = Thread::is_main_thread();
+	g_crash.thread_id = uint64_t(Thread::get_caller_id());
+	g_crash.reason = p_reason;
+	if (!p_pointers) {
+		// abort(), a pure virtual call: this thread's own frames (no exception context).
+		g_crash.frame_count = int(RtlCaptureStackBackTrace(0, FRAMES_MAX, g_crash.frames, nullptr));
+	}
+	HANDLE t = CreateThread(nullptr, 512 * 1024, _windows_report_thread, nullptr, 0, nullptr);
+	if (t) {
+		WaitForSingleObject(t, 60000);
+		CloseHandle(t);
+	}
+	const bool overflow = p_pointers && p_pointers->ExceptionRecord && p_pointers->ExceptionRecord->ExceptionCode == EXCEPTION_STACK_OVERFLOW;
+	if (!overflow) {
+		ReportFile f;
+		if (f.open(g.last_report, true)) {
+			_append_script_backtraces(f);
+			f.close();
+		}
+	}
+}
+
+bool _claim() {
+	int expected = 0;
+	if (g.reporting.compare_exchange_strong(expected, 1)) {
+		g.reporting_thread.store(Thread::get_caller_id());
+		return true;
+	}
+	if (expected == 1 && g.reporting_thread.load() != Thread::get_caller_id()) {
+		for (int i = 0; i < 500 && g.reporting.load() == 1; i++) {
+			Sleep(10);
+		}
+	}
+	return false;
+}
+
+LONG WINAPI _windows_filter(EXCEPTION_POINTERS *p_pointers) {
+	if (_claim()) {
+		_windows_report(p_pointers, "exception");
+		g.reporting.store(2);
+	}
+	return g_previous_filter ? g_previous_filter(p_pointers) : EXCEPTION_CONTINUE_SEARCH;
+}
+
+void __cdecl _windows_abort(int p_sig) {
+	if (_claim()) {
+		_windows_report(nullptr, "SIGABRT");
+		g.reporting.store(2);
+	}
+	if (g_previous_abort && g_previous_abort != SIG_DFL && g_previous_abort != SIG_IGN) {
+		g_previous_abort(p_sig);
+	}
+}
+
+void __cdecl _windows_purecall() {
+	if (_claim()) {
+		_windows_report(nullptr, "pure virtual call");
+		g.reporting.store(2);
+	}
+	abort();
+}
+
+void _install_handlers() {
+	if (g.minidumps) {
+		// Loaded now: loading a library in the filter could wait on the loader's lock the crash holds.
+		HMODULE dbghelp = LoadLibraryW(L"dbghelp.dll");
+		g_minidump = dbghelp ? (MiniDumpWriteDumpFn)(void *)GetProcAddress(dbghelp, "MiniDumpWriteDump") : nullptr;
+	}
+	_resident_bytes(); // resolves its function now
+	g_previous_filter = SetUnhandledExceptionFilter(_windows_filter);
+	g_previous_abort = signal(SIGABRT, _windows_abort);
+	_set_purecall_handler(_windows_purecall);
+}
+
+void _capture_current(void **r_frames, int &r_count) {
+	r_count = int(RtlCaptureStackBackTrace(0, FRAMES_MAX, r_frames, nullptr));
+}
+
+#else
+
+void _install_handlers() {}
+
+void _capture_current(void **r_frames, int &r_count) {
+	(void)r_frames;
+	r_count = 0;
+}
+
+#endif
+
+// What debug_crash() runs.
+volatile int g_never = 0;
+
+int _overflow(int p_depth) {
+	volatile char buf[2048];
+	buf[p_depth & 2047] = char(p_depth);
+	if (g_never) {
+		return 0;
+	}
+	return _overflow(p_depth + 1) + buf[(p_depth * 7) & 2047];
+}
+
+void _segfault_on_thread(void *) {
+	volatile int *volatile p = nullptr; // both volatile: GCC drops a plain store through a null pointer
+	*p = 7;
+}
+
+BinaryMutex g_write_mutex;
+
+struct SpinGuard {
+	const SpinLock &l;
+	explicit SpinGuard(const SpinLock &p_lock) :
+			l(p_lock) { l.lock(); }
+	~SpinGuard() { l.unlock(); }
+};
+
+// The report key a name sorts by: what follows the kind ("20261113_001502_1234_0").
+String _report_key(const String &p_file) {
+	const int under = p_file.find_char('_');
+	return under >= 0 ? p_file.substr(under + 1).get_basename() : p_file;
+}
+
+int _key_sequence(const String &p_key) {
+	return p_key.get_slicec('_', 3).to_int();
+}
+
+// Newest first: by time, then by process and sequence.
+struct ReportOrder {
+	bool operator()(const String &a, const String &b) const {
+		const String ka = _report_key(a.get_file());
+		const String kb = _report_key(b.get_file());
+		const String ta = ka.get_slicec('_', 0) + ka.get_slicec('_', 1);
+		const String tb = kb.get_slicec('_', 0) + kb.get_slicec('_', 1);
+		if (ta != tb) {
+			return ta > tb;
+		}
+		if (ka.get_slicec('_', 2) != kb.get_slicec('_', 2)) {
+			return ka.get_slicec('_', 2).to_int() > kb.get_slicec('_', 2).to_int();
+		}
+		return _key_sequence(ka) > _key_sequence(kb);
+	}
+};
+
+} // namespace
+
+// ------------------------------------------------------------------------------------------------ the reporter
+
+void FellowCrashReporter::create() {
+	if (!singleton) {
+		memnew(FellowCrashReporter);
+	}
+}
+
+void FellowCrashReporter::destroy() {
+	if (singleton) {
+		memdelete(singleton);
+	}
+}
+
+FellowCrashReporter::FellowCrashReporter() {
+	singleton = this;
+	const bool setting = GLOBAL_DEF(PropertyInfo(Variant::BOOL, "debug/fellow/crash_reports/enabled"), false);
+	const String dir = GLOBAL_DEF(PropertyInfo(Variant::STRING, "debug/fellow/crash_reports/directory"), "user://crash_reports");
+	const int log_lines = GLOBAL_DEF(PropertyInfo(Variant::INT, "debug/fellow/crash_reports/log_lines", PROPERTY_HINT_RANGE, "0,1024,1"), 200);
+	max_reports = GLOBAL_DEF(PropertyInfo(Variant::INT, "debug/fellow/crash_reports/max_reports", PROPERTY_HINT_RANGE, "1,100,1"), 10);
+	g.minidumps = GLOBAL_DEF(PropertyInfo(Variant::BOOL, "debug/fellow/crash_reports/minidumps"), true);
+	ProjectSettings *ps = ProjectSettings::get_singleton();
+	const bool fellow = !ps->has_setting("rendering/fellow/enabled") || bool(ps->get_setting("rendering/fellow/enabled"));
+	enabled = setting && fellow && !Engine::get_singleton()->is_editor_hint();
+	if (!enabled) {
+		return;
+	}
+	const uint64_t t0 = OS::get_singleton()->get_ticks_usec();
+	directory = ProjectSettings::get_singleton()->globalize_path(dir);
+	if (!directory.ends_with("/")) {
+		directory += "/";
+	}
+	DirAccess::make_dir_recursive_absolute(directory);
+	if (g.installed.load()) {
+		return; // a second reporter in the same process (not expected): the first one's handlers stay
+	}
+	g.start_msec = _now_msec();
+	const CharString dir_utf8 = directory.utf8();
+	if (dir_utf8.length() >= PATH_BYTES - 128) {
+		ERR_PRINT("FellowCrashReporter: the report directory's path is too long: " + directory);
+		enabled = false;
+		return;
+	}
+	memcpy(g.dir, dir_utf8.get_data(), size_t(dir_utf8.length()) + 1);
+	g.log_capacity.store(uint32_t(CLAMP(log_lines, 0, LOG_MAX)));
+	if (!g.logger_added) {
+		OS::get_singleton()->add_logger(memnew(FellowCrashLogger)); // owned by the OS from here
+		g.logger_added = true;
+	}
+	_build_context();
+	_install_handlers();
+	if (!g.idle_added) {
+		SceneTree::add_idle_callback(&_idle);
+		g.idle_added = true;
+	}
+	g.scripts_ok.store(true);
+	g.installed.store(true);
+	_add_crumb("engine", "started");
+	_prune_reports();
+	setup_usec = OS::get_singleton()->get_ticks_usec() - t0;
+}
+
+FellowCrashReporter::~FellowCrashReporter() {
+	// The handlers stay (a crash while the engine shuts down is reported too), without the scripts' backtraces.
+	g.scripts_ok.store(false);
+	if (singleton == this) {
+		singleton = nullptr;
+	}
+}
+
+void FellowCrashReporter::_prune_reports() {
+	PackedStringArray reports = get_reports();
+	for (int i = max_reports; i < reports.size(); i++) {
+		DirAccess::remove_absolute(reports[i]);
+		const String dump = reports[i].get_basename() + ".dmp";
+		if (FileAccess::exists(dump)) {
+			DirAccess::remove_absolute(dump);
+		}
+	}
+}
+
+void FellowCrashReporter::add_breadcrumb(const String &p_message, const String &p_category) {
+	if (!enabled) {
+		return;
+	}
+	_add_crumb(p_category, p_message);
+}
+
+void FellowCrashReporter::set_custom_value(const String &p_key, const Variant &p_value) {
+	if (!enabled) {
+		return;
+	}
+	ERR_FAIL_COND_MSG(p_key.is_empty(), "A custom value needs a key.");
+	const CharString key = p_key.utf8();
+	ERR_FAIL_COND_MSG(key.length() >= CUSTOM_KEY - 1, vformat("The key \"%s\" is longer than %d bytes.", p_key, CUSTOM_KEY - 2));
+	char value[CUSTOM_VALUE];
+	_copy_string(value, sizeof(value), String(p_value));
+	SpinGuard lock(g.custom_lock);
+	int slot = -1;
+	for (int i = 0; i < CUSTOM_MAX; i++) {
+		if (strcmp(g.custom[i].key, key.get_data()) == 0) {
+			slot = i;
+			break;
+		}
+		if (slot < 0 && !g.custom[i].key[0]) {
+			slot = i;
+		}
+	}
+	ERR_FAIL_COND_MSG(slot < 0, vformat("No room for another custom value (%d at most).", CUSTOM_MAX));
+	memcpy(g.custom[slot].value, value, sizeof(value));
+	if (strcmp(g.custom[slot].key, key.get_data()) != 0) {
+		memset(g.custom[slot].key, 0, CUSTOM_KEY);
+		memcpy(g.custom[slot].key, key.get_data(), size_t(key.length()));
+	}
+}
+
+void FellowCrashReporter::remove_custom_value(const String &p_key) {
+	const CharString key = p_key.utf8();
+	SpinGuard lock(g.custom_lock);
+	for (int i = 0; i < CUSTOM_MAX; i++) {
+		if (g.custom[i].key[0] && strcmp(g.custom[i].key, key.get_data()) == 0) {
+			g.custom[i].key[0] = 0;
+		}
+	}
+}
+
+Dictionary FellowCrashReporter::get_custom_values() const {
+	Dictionary d;
+	SpinGuard lock(g.custom_lock);
+	for (int i = 0; i < CUSTOM_MAX; i++) {
+		if (g.custom[i].key[0]) {
+			d[String::utf8(g.custom[i].key)] = String::utf8(g.custom[i].value);
+		}
+	}
+	return d;
+}
+
+String FellowCrashReporter::write_report(const String &p_reason) {
+	if (!enabled) {
+		return String();
+	}
+	MutexLock lock(g_write_mutex);
+	void *frames[FRAMES_MAX];
+	int count = 0;
+	_capture_current(frames, count);
+	const CharString reason = p_reason.utf8();
+	ReportInfo ri;
+	ri.kind = "report";
+	ri.reason = reason.get_data();
+	ri.frames = frames;
+	ri.frame_count = count;
+	ri.main_thread = Thread::is_main_thread();
+	ri.thread_id = uint64_t(Thread::get_caller_id());
+	char name[160];
+	_report_name("report", "json", g.sequence.fetch_add(1), name, sizeof(name));
+	char path[PATH_BYTES];
+	_join_path(path, sizeof(path), g.dir, name);
+	_add_crumb("report", p_reason);
+	ReportFile f;
+	ERR_FAIL_COND_V_MSG(!_write_core(ri, path, f), String(), vformat("Could not write the report \"%s\".", String::utf8(path)));
+	_append_script_backtraces(f);
+	f.close();
+	g.reports_written.fetch_add(1);
+	const String written_path = String::utf8(path);
+	written.push_back(written_path.get_file());
+	return written_path;
+}
+
+PackedStringArray FellowCrashReporter::get_reports() const {
+	PackedStringArray out;
+	if (directory.is_empty()) {
+		return out;
+	}
+	Vector<String> files;
+	for (const String &file : DirAccess::get_files_at(directory)) {
+		if (file.get_extension() == "json" && (file.begins_with("crash_") || file.begins_with("report_") || file.begins_with("hang_"))) {
+			files.push_back(directory + file);
+		}
+	}
+	files.sort_custom<ReportOrder>();
+	for (const String &f : files) {
+		out.push_back(f);
+	}
+	return out;
+}
+
+Dictionary FellowCrashReporter::read_report(const String &p_path) {
+	const String text = FileAccess::get_file_as_string(p_path);
+	ERR_FAIL_COND_V_MSG(text.is_empty(), Dictionary(), vformat("Could not read the report \"%s\".", p_path));
+	const Variant parsed = JSON::parse_string(text);
+	ERR_FAIL_COND_V_MSG(parsed.get_type() != Variant::DICTIONARY, Dictionary(), vformat("The report \"%s\" is not a JSON object.", p_path));
+	Dictionary d = parsed;
+	d["path"] = p_path;
+	const String dump = p_path.get_basename() + ".dmp";
+	if (d.has("minidump") && FileAccess::exists(dump)) {
+		d["minidump_path"] = dump;
+	}
+	return d;
+}
+
+Dictionary FellowCrashReporter::get_pending_report() const {
+	if (!enabled) {
+		return Dictionary();
+	}
+	const String acknowledged = FileAccess::get_file_as_string(directory + "acknowledged.txt").strip_edges();
+	for (const String &path : get_reports()) {
+		const String file = path.get_file();
+		if (written.has(file)) {
+			continue; // this session's own
+		}
+		if (!acknowledged.is_empty() && !ReportOrder()(file, acknowledged)) {
+			return Dictionary(); // the newest earlier report is acknowledged
+		}
+		return read_report(path);
+	}
+	return Dictionary();
+}
+
+void FellowCrashReporter::acknowledge_reports() {
+	if (!enabled) {
+		return;
+	}
+	const PackedStringArray reports = get_reports();
+	if (reports.is_empty()) {
+		return;
+	}
+	Ref<FileAccess> f = FileAccess::open(directory + "acknowledged.txt", FileAccess::WRITE);
+	ERR_FAIL_COND(f.is_null());
+	f->store_line(reports[0].get_file());
+}
+
+void FellowCrashReporter::debug_crash(const String &p_kind) {
+	print_line(vformat("FellowCrashReporter: crashing on purpose (%s).", p_kind));
+	if (p_kind == "segfault") {
+		volatile int *volatile p = nullptr; // both volatile: GCC drops a plain store through a null pointer
+		*p = 42;
+	} else if (p_kind == "abort") {
+		abort();
+	} else if (p_kind == "trap") {
+		CRASH_NOW_MSG("FellowCrashReporter.debug_crash(\"trap\")");
+	} else if (p_kind == "stack_overflow") {
+		_overflow(0);
+	} else if (p_kind == "thread") {
+		Thread t;
+		t.start(&_segfault_on_thread, nullptr);
+		t.wait_to_finish();
+	} else if (p_kind == "divide") {
+		volatile int a = 1;
+		volatile int b = 0;
+		volatile int c = a / b;
+		(void)c;
+	} else {
+		ERR_FAIL_MSG(vformat("Unknown crash kind \"%s\" (segfault, abort, trap, stack_overflow, thread, divide).", p_kind));
+	}
+}
+
+Dictionary FellowCrashReporter::get_stats() const {
+	Dictionary d;
+	d["enabled"] = enabled;
+	d["installed"] = g.installed.load();
+	const uint32_t cap = g.log_capacity.load();
+	const uint32_t head = g.log_head.load();
+	d["log_capacity"] = cap;
+	d["log_lines_seen"] = head;
+	d["log_lines_kept"] = cap ? MIN(head, cap) : 0;
+	d["breadcrumbs"] = MIN(g.crumb_head.load(), uint32_t(CRUMB_MAX));
+	d["reports_written"] = g.reports_written.load();
+	d["setup_usec"] = setup_usec;
+	d["frame"] = g.frame.load();
+	d["scene"] = String::utf8(g.scene);
+	d["context"] = JSON::parse_string(String::utf8(g.context[g.context_index.load() & 1]));
+	return d;
+}
+
+void FellowCrashReporter::_bind_methods() {
+	ClassDB::bind_method(D_METHOD("is_enabled"), &FellowCrashReporter::is_enabled);
+	ClassDB::bind_method(D_METHOD("get_report_directory"), &FellowCrashReporter::get_report_directory);
+	ClassDB::bind_method(D_METHOD("add_breadcrumb", "message", "category"), &FellowCrashReporter::add_breadcrumb, DEFVAL(String()));
+	ClassDB::bind_method(D_METHOD("set_custom_value", "key", "value"), &FellowCrashReporter::set_custom_value);
+	ClassDB::bind_method(D_METHOD("remove_custom_value", "key"), &FellowCrashReporter::remove_custom_value);
+	ClassDB::bind_method(D_METHOD("get_custom_values"), &FellowCrashReporter::get_custom_values);
+	ClassDB::bind_method(D_METHOD("write_report", "reason"), &FellowCrashReporter::write_report);
+	ClassDB::bind_method(D_METHOD("get_reports"), &FellowCrashReporter::get_reports);
+	ClassDB::bind_method(D_METHOD("get_pending_report"), &FellowCrashReporter::get_pending_report);
+	ClassDB::bind_method(D_METHOD("acknowledge_reports"), &FellowCrashReporter::acknowledge_reports);
+	ClassDB::bind_static_method("FellowCrashReporter", D_METHOD("read_report", "path"), &FellowCrashReporter::read_report);
+	ClassDB::bind_method(D_METHOD("debug_crash", "kind"), &FellowCrashReporter::debug_crash);
+	ClassDB::bind_method(D_METHOD("get_stats"), &FellowCrashReporter::get_stats);
+}

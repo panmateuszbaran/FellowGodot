@@ -35,3 +35,11 @@ Keep: a mix's buses keep their voices.
 ## Rejected / not done
 
 * **Limits by group of events** (all footsteps together across buses): by bus only.
+
+## Follow-up (milestone 97)
+
+On the laptop (job f396) 4 447 virtual voices cost 152 µs a frame, 62 at decision 0193: each virtual voice looked its
+bus up in `bus_voice_limits` (a `Dictionary` keyed by a `Variant`) every frame, and counted the bus's voices when it
+had a limit, before the cheap tests. Now the director's free voice and the reach are tested first and the bus only for
+a voice that could be resumed: 204-224 → 57-73 µs a frame on the cloud (release template), the fourteen lanes
+unchanged.

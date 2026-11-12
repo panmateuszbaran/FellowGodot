@@ -19,8 +19,8 @@ przynajmniej do 8 rano" (the GPU allowed). Branch `fellow/geometry`. Decision re
 
 Decision 0199's table; the editor check passes on this build (34 icons). The full regression suite (35 scenes, the
 release template against the editor build, FellowEngine off against on) ran exact on milestone 90's build, just before
-this change, which touches only the acoustics node (in no regression scene). The laptop: not run (not linked to the
-session).
+this change, which touches only the acoustics node (in no regression scene). The laptop (job f396, milestone 97): as
+expected with both engines, exactly the cloud's results.
 
 ## 3. Measurements
 

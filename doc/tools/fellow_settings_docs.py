@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""FellowEngine's project settings' descriptions (milestone 52): the tooltips of Project Settings > Rendering > Fellow.
+"""FellowEngine's project settings' descriptions (milestone 52): the tooltips of Project Settings > Rendering > Fellow
+(and, milestone 97, Debug > Fellow).
 
-Writes a <member> for every rendering/fellow/* setting into doc/classes/ProjectSettings.xml, in its place among the
-members, from the descriptions below; the types and defaults from an engine's --doctool output:
+Writes a <member> for every rendering/fellow/* and debug/fellow/* setting into doc/classes/ProjectSettings.xml, in its
+place among the members, from the descriptions below; the types and defaults from an engine's --doctool output:
 
     godot --headless --doctool /tmp/docs        # any empty directory
     python doc/tools/fellow_settings_docs.py /tmp/docs/doc/classes/ProjectSettings.xml
@@ -347,31 +348,46 @@ D = {
     "debug/occlusion_cull_approx": "Diagnostics: occlusion culling's per-surface visibility read back.",
 }
 
+# Milestone 97 (decision 0205): debug/fellow/*.
+DEBUG = {
+    "crash_reports/enabled": "Crash reports: a fatal signal or unhandled exception (release templates included) writes a JSON report — the reason, the faulting thread's frames, the last lines of the log, the game's breadcrumbs and values, the machine and GPU, the scene — into [member debug/fellow/crash_reports/directory] before the process ends (on Windows a minidump beside it); the next run finds it ([method FellowCrashReporter.get_pending_report]). Not in the editor. " + STARTUP + " Decision 0205.",
+    "crash_reports/directory": "Where the reports are written ([code]user://[/code] or an absolute path). " + STARTUP,
+    "crash_reports/log_lines": "The last lines of the log a report keeps (0: none). " + STARTUP,
+    "crash_reports/max_reports": "The newest reports kept: older ones (and their minidumps) are deleted at start-up.",
+    "crash_reports/minidumps": "Windows: a minidump beside each crash's report (the threads' stacks and the memory they point to: a few MB), for Visual Studio or WinDbg with the build's PDB. " + STARTUP,
+}
+
+PREFIXES = {"rendering/fellow/": D, "debug/fellow/": DEBUG}
+
 
 def main() -> int:
     if len(sys.argv) != 2:
         print(__doc__)
         return 2
     generated = open(sys.argv[1], encoding="utf-8").read()
-    heads = re.findall(r'\t\t<member name="rendering/fellow/([^"]+)"[^>]*>', generated)
-    tags = {name: tag for tag, name in re.findall(r'(\t\t<member name="rendering/fellow/([^"]+)"[^>]*>)', generated)}
-    missing = [h for h in heads if h not in D]
-    unknown = [k for k in D if k not in tags]
-    if missing or unknown:
-        print("no description:", missing, "\nnot a setting:", unknown)
-        return 1
-    block = ""
-    for name in sorted(tags):
-        block += tags[name] + "\n\t\t\t" + D[name] + "\n\t\t</member>\n"
     path = "doc/classes/ProjectSettings.xml"
     text = open(path, encoding="utf-8").read()
-    # Out with the ones written before, in with the new, before the first member that sorts after them.
-    text = re.sub(r'\t\t<member name="rendering/fellow/[^"]+"[^>]*>\n.*?\n\t\t</member>\n', "", text, flags=re.S)
-    members = [(m.start(), m.group(1)) for m in re.finditer(r'\t\t<member name="([^"]+)"', text)]
-    at = next(pos for pos, name in members if name > "rendering/fellow/")
-    text = text[:at] + block + text[at:]
+    described = 0
+    for prefix, descriptions in PREFIXES.items():
+        p = re.escape(prefix)
+        heads = re.findall(r'\t\t<member name="' + p + r'([^"]+)"[^>]*>', generated)
+        tags = {name: tag for tag, name in re.findall(r'(\t\t<member name="' + p + r'([^"]+)"[^>]*>)', generated)}
+        missing = [h for h in heads if h not in descriptions]
+        unknown = [k for k in descriptions if k not in tags]
+        if missing or unknown:
+            print(prefix, "no description:", missing, "\nnot a setting:", unknown)
+            return 1
+        block = ""
+        for name in sorted(tags):
+            block += tags[name] + "\n\t\t\t" + descriptions[name] + "\n\t\t</member>\n"
+        # Out with the ones written before, in with the new, before the first member that sorts after them.
+        text = re.sub(r'\t\t<member name="' + p + r'[^"]+"[^>]*>\n.*?\n\t\t</member>\n', "", text, flags=re.S)
+        members = [(m.start(), m.group(1)) for m in re.finditer(r'\t\t<member name="([^"]+)"', text)]
+        at = next(pos for pos, name in members if name > prefix)
+        text = text[:at] + block + text[at:]
+        described += len(tags)
     open(path, "w", encoding="utf-8", newline="\n").write(text)
-    print(f"{len(tags)} settings described")
+    print(f"{described} settings described")
     return 0
 
 

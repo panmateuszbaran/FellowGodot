@@ -20,7 +20,8 @@ przynajmniej do 8 rano" (the GPU allowed). Branch `fellow/geometry`. Decision re
 ## 2. Verification
 
 Decision 0200's table. The editor check and the full regression suite ran on the builds of milestones 91 and 90 (this
-change touches only the acoustics node, in no regression scene). The laptop: not run (not linked to the session).
+change touches only the acoustics node, in no regression scene). The laptop (job f396, milestone 97): as expected with
+both engines, exactly the cloud's results (under Movie Maker the curtain's highs 3 % of the sound, glass's 22 %).
 
 ## 3. Measurements
 

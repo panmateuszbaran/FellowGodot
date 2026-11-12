@@ -524,6 +524,21 @@
 		<member name="debug/canvas_items/debug_redraw_time" type="float" setter="" getter="" default="1.0">
 			If canvas item redraw debugging is active, this will be the time the flash will last each time they redraw.
 		</member>
+		<member name="debug/fellow/crash_reports/directory" type="String" setter="" getter="" default="&quot;user://crash_reports&quot;">
+			Where the reports are written ([code]user://[/code] or an absolute path). Read at start-up.
+		</member>
+		<member name="debug/fellow/crash_reports/enabled" type="bool" setter="" getter="" default="false">
+			Crash reports: a fatal signal or unhandled exception (release templates included) writes a JSON report — the reason, the faulting thread's frames, the last lines of the log, the game's breadcrumbs and values, the machine and GPU, the scene — into [member debug/fellow/crash_reports/directory] before the process ends (on Windows a minidump beside it); the next run finds it ([method FellowCrashReporter.get_pending_report]). Not in the editor. Read at start-up. Decision 0205.
+		</member>
+		<member name="debug/fellow/crash_reports/log_lines" type="int" setter="" getter="" default="200">
+			The last lines of the log a report keeps (0: none). Read at start-up.
+		</member>
+		<member name="debug/fellow/crash_reports/max_reports" type="int" setter="" getter="" default="10">
+			The newest reports kept: older ones (and their minidumps) are deleted at start-up.
+		</member>
+		<member name="debug/fellow/crash_reports/minidumps" type="bool" setter="" getter="" default="true">
+			Windows: a minidump beside each crash's report (the threads' stacks and the memory they point to: a few MB), for Visual Studio or WinDbg with the build's PDB. Read at start-up.
+		</member>
 		<member name="debug/file_logging/enable_file_logging" type="bool" setter="" getter="" default="false">
 			If [code]true[/code], logs all output and error messages to files. See also [member debug/file_logging/log_path], [member debug/file_logging/max_log_files], and [member application/run/flush_stdout_on_print].
 		</member>

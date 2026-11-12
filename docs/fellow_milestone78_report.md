@@ -30,7 +30,9 @@ przynajmniej do 8 rano" (the GPU allowed). Branch `fellow/geometry`. Decision re
   (decision 0186's tables).
 * The mix under Movie Maker (lavapipe): the node's effect on the stock mixer measured, stock's where it should be.
 * The editor check: the icon, the monitor, "Add Acoustics" without a warning and undone.
-* The laptop: not run (not linked to the session).
+* The laptop (job f396, milestone 97): the lanes as expected with both engines, exactly the cloud's results; 256 sources
+  0.21-0.23 ms a frame, 1 024 0.46-0.54 ms (Jolt-GodotPhysics3D; 512 rays a frame); under Movie Maker the mix measured
+  as on the cloud (behind a wall −40.1 dB against stock's −12.8 dB, its highs 2 % of the sound against 62 %).
 
 ## 3. Measurements
 

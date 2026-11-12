@@ -27,7 +27,8 @@ przynajmniej do 8 rano" (the GPU allowed). Branch `fellow/geometry`. Decision re
 * Lavapipe: the faces filmed; the regression scenes `face`, `climb` and `traversal` exact, the release template's the
   same.
 * The editor check passes (34 icons).
-* The laptop: not run (not linked to the session).
+* The laptop (job f396, milestone 97): the lanes as expected, exactly the cloud's results; under Movie Maker the mouth
+  following the voice (/a/, /i/, /u/ at 0.997 of their shapes); 100 faces 0.028 ms a frame.
 
 ## 3. Measurements
 

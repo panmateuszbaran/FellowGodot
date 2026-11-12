@@ -29,7 +29,8 @@ przynajmniej do 8 rano" (the GPU allowed). Branch `fellow/geometry`. Decision re
 * The editor check passes (33 icons).
 * Decision 0186's acoustics and 0187's vehicle sounds are untouched (the director plays through stock players, which
   the acoustics node hears like any other).
-* The laptop: not run (not linked to the session).
+* The laptop (job f396, milestone 97): the lanes (fourteen after milestone 96) under Movie Maker as on the cloud, lane
+  for lane (the duck −12.00 dB); 64 voices 7.3 µs a frame, a request 0.19 µs.
 
 ## 3. Measurements
 

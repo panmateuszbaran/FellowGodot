@@ -1,6 +1,6 @@
 # FellowEngine — milestone 77 report (vehicles)
 
-Status: **IN PROGRESS** (2026-11-12): the owner said "kontynuuj usprawnienia do poziomu AAA naszego silnika, pracuj
+Status: **FINAL** (2026-11-12; the laptop's results 2026-11-13, job f396): the owner said "kontynuuj usprawnienia do poziomu AAA naszego silnika, pracuj
 przynajmniej do 8 rano" (the GPU allowed). Branch `fellow/geometry`. Decision record:
 `docs/decisions/0185-vehicles.md`.
 
@@ -33,7 +33,11 @@ Also in this milestone: milestone 76's laptop results (job f395; decisions 0184 
 * Lavapipe: the lanes filmed; the regression scene `vehicle` exact on a second run and from the release template; the
   whole suite (32 scenes) with the release template.
 * The editor check: the icons, the wheel's gizmo, "Add Car" without a warning and undone.
-* The laptop (job f396): not run — the laptop was not linked when the milestone was finished.
+* The laptop (job f396, milestone 97; a release template of 9a49b088a1, MSVC, the RTX 5070 Ti Laptop): the fifteen lanes
+  as expected with both engines, the same as the cloud's within floats' rounding (the acceleration lane's top speed
+  205.521 against 205.523 km/h); 64 cars 0.52 ms of vehicles a frame with GodotPhysics3D and Jolt (the frame 0.86 and
+  0.76 ms), 256 cars 1.94 and 2.09 ms (2.77 and 2.78 ms; the 99th percentile 4.4 and 5.1 ms), 7.6-8.2 µs a car's step,
+  all upright; the lanes filmed on the RTX (`vehicle_strip.png`).
 
 ## 3. Measurements
 

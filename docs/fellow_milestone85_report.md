@@ -23,7 +23,9 @@ przynajmniej do 8 rano" (the GPU allowed). Branch `fellow/geometry`. Decision re
 
 * Decision 0193's table under Movie Maker, the editor build and the release template the same; decision 0190's eight
   lanes unchanged.
-* The laptop: not run (not linked to the session).
+* The laptop (job f396, milestone 97): the four lanes under Movie Maker as on the cloud; 4 447 virtual voices 152 µs a
+  frame — milestone 96's bus limits had made each virtual voice count its bus's voices every frame (the cloud 204-224
+  µs); fixed in milestone 97 (57-73 µs on the cloud).
 
 ## 3. Measurements
 
