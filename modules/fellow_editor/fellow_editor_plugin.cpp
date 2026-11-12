@@ -50,6 +50,7 @@
 #include "scene/3d/node_3d.h"
 #include "scene/3d/physics/character_body_3d.h"
 #include "scene/3d/physics/collision_shape_3d.h"
+#include "scene/3d/physics/rigid_body_3d.h"
 #include "scene/gui/box_container.h"
 #include "scene/gui/button.h"
 #include "scene/gui/check_box.h"
@@ -58,6 +59,7 @@
 #include "scene/gui/line_edit.h"
 #include "scene/gui/menu_button.h"
 #include "scene/gui/spin_box.h"
+#include "scene/resources/3d/box_shape_3d.h"
 #include "scene/resources/3d/capsule_shape_3d.h"
 #include "scene/resources/3d/primitive_meshes.h"
 #include "scene/resources/animation.h"
@@ -866,6 +868,38 @@ Node3D *FellowEditorPlugin::make_preset(int p_preset, const Node *p_root) {
 			// Milestone 73: a curtain of cloth hanging from its top edge.
 			top = Object::cast_to<Node3D>(_fellow_make("FellowCloth3D", "Curtain", nullptr, Dictionary{ { "size", Vector2(2.0, 2.4) }, { "pin_mode", 1 }, { "wind_scale", 0.2 } }));
 		} break;
+		case PRESET_DESTRUCTIBLE_CRATE: {
+			// Milestone 74: a 1 m wooden crate (a 40 kg rigid body) that breaks into twelve pieces when struck hard or
+			// dropped from about 0.7 m, its cut faces in a lighter wood.
+			RigidBody3D *body = memnew(RigidBody3D);
+			body->set_name("Crate");
+			body->set_mass(40.0);
+			Ref<StandardMaterial3D> wood;
+			wood.instantiate();
+			wood->set_albedo(Color(0.55, 0.38, 0.22));
+			wood->set_roughness(0.85);
+			Ref<StandardMaterial3D> inside;
+			inside.instantiate();
+			inside->set_albedo(Color(0.82, 0.68, 0.46));
+			inside->set_roughness(0.9);
+			MeshInstance3D *mesh = memnew(MeshInstance3D);
+			mesh->set_name("Mesh");
+			Ref<BoxMesh> box;
+			box.instantiate();
+			box->set_material(wood);
+			mesh->set_mesh(box);
+			mesh->set_position(Vector3(0, 0.5, 0));
+			body->add_child(mesh);
+			CollisionShape3D *shape = memnew(CollisionShape3D);
+			shape->set_name("CollisionShape3D");
+			Ref<BoxShape3D> box_shape;
+			box_shape.instantiate();
+			shape->set_shape(box_shape);
+			shape->set_position(Vector3(0, 0.5, 0));
+			body->add_child(shape);
+			top = body;
+			_fellow_make("FellowDestructible3D", "FellowDestructible3D", top, Dictionary{ { "interior_material", inside }, { "break_impulse", 150.0 } });
+		} break;
 		default:
 			break;
 	}
@@ -1007,6 +1041,8 @@ FellowEditorPlugin::FellowEditorPlugin() {
 	popup->add_separator();
 	popup->add_item(TTR("Add Flag (cloth on a pole)"), PRESET_FLAG);
 	popup->add_item(TTR("Add Curtain (cloth)"), PRESET_CURTAIN);
+	popup->add_separator();
+	popup->add_item(TTR("Add Destructible Crate (breaks when hit)"), PRESET_DESTRUCTIBLE_CRATE);
 	popup->connect(SceneStringName(id_pressed), callable_mp(this, &FellowEditorPlugin::_add_preset));
 }
 

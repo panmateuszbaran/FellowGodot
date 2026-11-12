@@ -153,6 +153,7 @@ public:
 		PRESET_MANTLING_CHARACTER, // milestone 72: a body that mantles and vaults
 		PRESET_FLAG, // milestone 73: cloth on a pole
 		PRESET_CURTAIN, // milestone 73: cloth hanging from its top edge
+		PRESET_DESTRUCTIBLE_CRATE, // milestone 74: a crate that breaks when it is hit or dropped
 	};
 	// The setup's nodes, not in the tree yet (nullptr for an unknown preset); p_root is the edited scene, where it looks
 	// for what the setup can share (the rain, wind and lightning: one of each works at a time).

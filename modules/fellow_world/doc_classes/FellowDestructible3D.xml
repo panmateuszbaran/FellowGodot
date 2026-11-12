@@ -1,0 +1,162 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="FellowDestructible3D" inherits="Node3D" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+	<brief_description>
+		FellowEngine: an object that breaks — a crate, a pillar, a wall, a pane of glass — into rigid pieces along a Voronoi diagram, when hit hard enough, damaged to nothing, or told to.
+	</brief_description>
+	<description>
+		A child of a body (a [StaticBody3D], [RigidBody3D] or [AnimatableBody3D]) whose [MeshInstance3D] it breaks: the body's own (its first [MeshInstance3D] child), or [member mesh_path]'s. When it breaks, the mesh is cut along the cells of a Voronoi diagram — [member piece_count] sites inside the solid, a share of them ([member impact_focus]) gathered around the point of impact, so the pieces are smaller there; a thin object (a pane, a plank) is cut across, never split in layers — on a worker thread, and each piece becomes a [RigidBody3D] with the mesh's materials on its outer faces, [member interior_material] on its cut faces (planar UVs, [member interior_uv_scale]), a mass from its volume and [member density], and a convex collision shape (a piece far from convex, a part of a wall bent round a window's corner, gets the hulls of its parts). The pieces start with the body's velocity, thrown out from the impact at up to [member burst_speed], and with the share of the impulse given to [method break_apart]; the body is freed ([member free_after_break]).
+		What breaks it: [method break_apart]; [method damage] taking [member health] to zero; and with [member break_on_impact], a blow of [member break_impulse] N·s or more — for a [RigidBody3D] its change of velocity in a step (less gravity's) times its mass (a crate dropped, hit by a car; not one resting under a load), for a static body a rigid body striking it (its momentum towards it). The cut faces are the source's own cross-sections, holes and all, so the pieces are closed and their volumes add up to the source's; the source should be a closed mesh (an open one breaks into open pieces).
+		A fracture on a worker thread appears a few frames after the blow (a 12-piece crate takes about 2 ms, a 4 000-triangle sphere in 32 pieces about 40 ms). With [member prefracture] the pattern is computed when the node is ready instead (on the main thread), and shared by every destructible of the same mesh, [member seed] and [member piece_count]: the break spawns its pieces at once. A frame spawns at most [method get_max_pieces_per_frame] pieces (a break over the budget waits for the next frame, intact). The pieces are debris: asleep past [member debris_lifetime] (or twice that old) they shrink away and are freed, and past [method get_max_debris] pieces in the game the oldest go first. See [code]docs/decisions/0182-destruction.md[/code].
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="break_apart">
+			<return type="void" />
+			<param index="0" name="position" type="Vector3" default="Vector3(0, 0, 0)" />
+			<param index="1" name="impulse" type="Vector3" default="Vector3(0, 0, 0)" />
+			<description>
+				Breaks the object now (or, without [member prefracture], as soon as its fracture is computed on a worker thread): its pieces gathered around [param position] (global; the mesh's centre if zero) and pushed by [param impulse] (N·s, shared by the pieces near the position). Does nothing once broken.
+			</description>
+		</method>
+		<method name="clear_cache" qualifiers="static">
+			<return type="void" />
+			<description>
+				Forgets the shared prefractured patterns (each is kept while a destructible uses it).
+			</description>
+		</method>
+		<method name="damage">
+			<return type="void" />
+			<param index="0" name="amount" type="float" />
+			<param index="1" name="position" type="Vector3" default="Vector3(0, 0, 0)" />
+			<param index="2" name="impulse" type="Vector3" default="Vector3(0, 0, 0)" />
+			<description>
+				Takes [param amount] from the health ([signal damaged]); at zero or less, breaks at [param position] with [param impulse] (see [method break_apart]).
+			</description>
+		</method>
+		<method name="get_current_health" qualifiers="const">
+			<return type="float" />
+			<description>
+				The health left ([member health] at first).
+			</description>
+		</method>
+		<method name="get_debris_count" qualifiers="static">
+			<return type="int" />
+			<description>
+				The pieces of every destructible still in the game.
+			</description>
+		</method>
+		<method name="get_global_stats" qualifiers="static">
+			<return type="Dictionary" />
+			<description>
+				Every destructible's work since [method reset_global_stats]: [code]breaks[/code], [code]fractures[/code] (computed; a shared pattern counts once), [code]fracture_usec[/code] (worker threads, or the main thread when prefractured), [code]build_usec[/code] (the pieces' meshes and shapes, main thread), [code]spawn_usec[/code] (their nodes, main thread), [code]pieces[/code], [code]faded[/code] (debris shrunk away), [code]debris[/code] (now).
+			</description>
+		</method>
+		<method name="get_max_debris" qualifiers="static">
+			<return type="int" />
+			<description>
+				The pieces the game keeps (256 by default): past it the oldest shrink away.
+			</description>
+		</method>
+		<method name="get_max_pieces_per_frame" qualifiers="static">
+			<return type="int" />
+			<description>
+				The pieces a frame may spawn (128 by default; 0: no limit): a break over the budget waits for the next frame. The first break of a frame always spawns.
+			</description>
+		</method>
+		<method name="get_stats" qualifiers="const">
+			<return type="Dictionary" />
+			<description>
+				This destructible's state: [code skip-lint]broken[/code], [code]pieces[/code], [code]fracture_usec[/code], [code]spawn_usec[/code], [code skip-lint]health[/code], [code]last_impact[/code] (N·s, the last blow it felt), [code]prefractured[/code].
+			</description>
+		</method>
+		<method name="is_broken" qualifiers="const">
+			<return type="bool" />
+			<description>
+				Whether it has broken (or is breaking: its fracture being computed).
+			</description>
+		</method>
+		<method name="reset_global_stats" qualifiers="static">
+			<return type="void" />
+			<description>
+				Sets the counters of [method get_global_stats] to zero.
+			</description>
+		</method>
+		<method name="set_max_debris" qualifiers="static">
+			<return type="void" />
+			<param index="0" name="count" type="int" />
+			<description>
+				Sets [method get_max_debris] for the whole game.
+			</description>
+		</method>
+		<method name="set_max_pieces_per_frame" qualifiers="static">
+			<return type="void" />
+			<param index="0" name="count" type="int" />
+			<description>
+				Sets [method get_max_pieces_per_frame] for the whole game.
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="body_path" type="NodePath" setter="set_body_path" getter="get_body_path" default="NodePath(&quot;&quot;)">
+			The body to remove when it breaks (its collision layers and mask go to the pieces). Empty: the parent, if a [CollisionObject3D], else the grandparent.
+		</member>
+		<member name="break_impulse" type="float" setter="set_break_impulse" getter="get_break_impulse" default="40.0">
+			The blow, in N·s, that breaks it with [member break_on_impact] (a 1 kg stone at 40 m/s; a 40 kg crate falling 1 m gives about 180).
+		</member>
+		<member name="break_on_impact" type="bool" setter="set_break_on_impact" getter="is_break_on_impact" default="true">
+			Breaks when a blow of [member break_impulse] or more strikes the body (a [RigidBody3D]'s contacts are monitored for it).
+		</member>
+		<member name="burst_speed" type="float" setter="set_burst_speed" getter="get_burst_speed" default="1.5">
+			The speed, in m/s, at which the pieces nearest the impact are thrown out from it (less farther away).
+		</member>
+		<member name="debris_lifetime" type="float" setter="set_debris_lifetime" getter="get_debris_lifetime" default="10.0">
+			Seconds a piece lives once asleep (twice this at most): then it shrinks away. 0: until the debris budget ([method get_max_debris]) takes it.
+		</member>
+		<member name="density" type="float" setter="set_density" getter="get_density" default="600.0">
+			The pieces' density, in kg/m³ (wood 600, stone 2 500, glass 2 500): each piece's mass is its volume times this.
+		</member>
+		<member name="free_after_break" type="bool" setter="set_free_after_break" getter="is_free_after_break" default="true">
+			Frees the body (and this node) once the pieces are spawned; off, the mesh is hidden and the body's shapes disabled.
+		</member>
+		<member name="health" type="float" setter="set_health" getter="get_health" default="100.0">
+			What [method damage] takes away; at zero it breaks.
+		</member>
+		<member name="impact_focus" type="float" setter="set_impact_focus" getter="get_impact_focus" default="0.5">
+			The share of the pieces gathered around the point of impact, 0 to 1 (more: smaller pieces there, larger ones farther).
+		</member>
+		<member name="interior_material" type="Material" setter="set_interior_material" getter="get_interior_material">
+			The cut faces' material (the mesh's first surface's when empty).
+		</member>
+		<member name="interior_uv_scale" type="float" setter="set_interior_uv_scale" getter="get_interior_uv_scale" default="1.0">
+			The cut faces' UVs: their position in the cut's plane, in metres, times this.
+		</member>
+		<member name="mesh_path" type="NodePath" setter="set_mesh_path" getter="get_mesh_path" default="NodePath(&quot;&quot;)">
+			The [MeshInstance3D] to break. Empty: the parent, if one, else the parent's first [MeshInstance3D] child.
+		</member>
+		<member name="piece_count" type="int" setter="set_piece_count" getter="get_piece_count" default="12">
+			The pieces (the Voronoi diagram's sites; a cell that misses a concave mesh gives none, and one that holds parts that do not touch gives each).
+		</member>
+		<member name="prefracture" type="bool" setter="set_prefracture" getter="is_prefracture" default="false">
+			Computes the pattern when the node is ready (on the main thread), shared by every destructible of the same mesh, [member seed] and [member piece_count]: the pieces spawn at once when it breaks, not gathered around the impact.
+		</member>
+		<member name="seed" type="int" setter="set_seed" getter="get_seed" default="0">
+			The pattern's random seed.
+		</member>
+	</members>
+	<signals>
+		<signal name="broken">
+			<param index="0" name="pieces" type="Array" />
+			<description>
+				Emitted when the pieces are spawned: [param pieces], their [RigidBody3D]s (each with a [MeshInstance3D] and [CollisionShape3D]s).
+			</description>
+		</signal>
+		<signal name="damaged">
+			<param index="0" name="amount" type="float" />
+			<param index="1" name="health" type="float" />
+			<description>
+				Emitted by [method damage]: the [param amount] taken and the [param health] left.
+			</description>
+		</signal>
+	</signals>
+</class>

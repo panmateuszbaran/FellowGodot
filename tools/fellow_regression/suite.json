@@ -28,7 +28,8 @@
     "terrain_vt",
     "crowd",
     "traversal",
-    "cloth"
+    "cloth",
+    "destruction"
    ]
   },
   "stock": {

@@ -9,6 +9,24 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 74 — destruction (2026-11-12)
+
+- `FellowDestructible3D` (decision 0182): a child of a body (static, rigid or animatable) that breaks its mesh into
+  rigid pieces — on `break_apart()`, when `damage()` takes `health` to zero, or on a blow of `break_impulse` N·s (a
+  rigid body's change of velocity in a step less gravity's, times its mass; a rigid body striking a static one). The
+  fracture runs on a worker thread: `piece_count` Voronoi sites inside the solid (`impact_focus` of them around the
+  blow; a thin object cut across), each cell's share of the surface clipped out and its faces capped with the mesh's
+  own cross-sections (holes and all), so every piece is closed and the volumes add up to the source's. Pieces: the
+  mesh's materials outside, `interior_material` on the cuts (planar UVs), mass from volume and `density`, convex hulls
+  (a piece far from convex: its parts'), the body's velocity plus a burst and the blow's impulse. `prefracture`
+  (computed at ready, shared by the same mesh, seed and count: breaks at once); budgets of pieces spawned a frame (128)
+  and of debris kept (256, the oldest shrinking away; `debris_lifetime`); the monitor "FellowEngine/Debris pieces"; the
+  FellowEngine menu's "Add Destructible Crate".
+- Checked on thirteen lanes with GodotPhysics3D and Jolt (`bench/destruction_check.gd`): a crate, a pillar knocked
+  apart by a 20 kg ball (and one a 2 kg ball leaves standing), a crate shattering when dropped (and a 600 kg one under
+  a 900 kg one that stays), a pane of glass, a wall with a window, a ring, a 4 000-triangle sphere in 32 pieces — every
+  piece closed, the volumes exact; a regression scene; the editor.
+
 ## Milestone 73 — cloth (2026-11-12)
 
 - `FellowCloth3D` (decision 0181): flags, banners, curtains, awnings and capes — a generated rectangle or a source

@@ -459,6 +459,22 @@ swapped; pairs by name or `mirror_pairs`) and `tags` (a clip's name to its tags,
 options, the matcher's `tags_required` and `tags_excluded`. Decision 0157; `bench/ground_check.gd`,
 `bench/matching_tags_check.gd`, Matching Lab's `--matching_mirror=1`.
 
+## Destruction (milestone 74)
+
+Module `fellow_world`; nothing changes without the node (decision 0182). `FellowDestructible3D` (a `Node3D`), a child of
+the body to break (`body_path`: by default the parent if a `CollisionObject3D`; its layers and mask go to the pieces),
+breaking its `MeshInstance3D` (`mesh_path`: by default the parent's first one). Fracture: `piece_count` (12),
+`seed` (0), `impact_focus` (0.5: the share of the sites around the blow), `interior_material` (the mesh's first surface's
+when empty), `interior_uv_scale` (1: UVs in metres), `prefracture` (off: computed on a worker when it breaks; on:
+computed at ready on the main thread and shared by the same mesh, seed and count). Breaking: `health` (100,
+`damage()`), `break_on_impact` (on), `break_impulse` (40 N·s), `free_after_break` (on). Pieces: `density` (600 kg/m³),
+`burst_speed` (1.5 m/s), `debris_lifetime` (10 s asleep; 0: until the budget). For the whole game:
+`set_max_pieces_per_frame()` (128; 0: no limit), `set_max_debris()` (256), `get_debris_count()`, `clear_cache()`,
+`get_global_stats()`/`reset_global_stats()`; the monitor "FellowEngine/Debris pieces". `break_apart()`, `damage()`,
+`is_broken()`, `get_current_health()`, `get_stats()`; signals `broken(pieces)`, `damaged(amount, health)`. The
+FellowEngine menu's "Add Destructible Crate". Bench `bench/destruction_check.gd` (`--many=N`, `--prefracture=1`); the
+regression scene `destruction`.
+
 ## Cloth (milestone 73)
 
 Module `fellow_fluid`; nothing changes without the node (decision 0181). `FellowCloth3D` (a `GeometryInstance3D`): a

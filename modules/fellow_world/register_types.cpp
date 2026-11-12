@@ -30,6 +30,7 @@
 
 #include "register_types.h"
 
+#include "fellow_destructible_3d.h"
 #include "fellow_hlod_3d.h"
 #include "fellow_pipeline_warmer_3d.h"
 #include "fellow_terrain_3d.h"
@@ -49,6 +50,7 @@ static const char *FELLOW_WORLD_MONITORS[] = {
 	"FellowEngine/Texture streaming pending",
 	"FellowEngine/World cells loaded",
 	"FellowEngine/World cells loading",
+	"FellowEngine/Debris pieces", // milestone 74
 };
 
 static Variant _fellow_world_monitor(int p_which) {
@@ -61,6 +63,9 @@ static Variant _fellow_world_monitor(int p_which) {
 		static const char *keys[3] = { "resident_bytes", "wanted_bytes", "pending" };
 		return d.get(keys[p_which], 0);
 	}
+	if (p_which == 5) {
+		return FellowDestructible3D::get_debris_count();
+	}
 	int cells, loaded, loading;
 	FellowWorldStreamer3D::get_totals(cells, loaded, loading);
 	return p_which == 3 ? loaded : loading;
@@ -68,6 +73,8 @@ static Variant _fellow_world_monitor(int p_which) {
 
 void initialize_fellow_world_module(ModuleInitializationLevel p_level) {
 	if (p_level == MODULE_INITIALIZATION_LEVEL_SCENE) {
+		GDREGISTER_CLASS(FellowDestructible3D); // milestone 74
+		GDREGISTER_INTERNAL_CLASS(FellowFractureResult);
 		GDREGISTER_CLASS(FellowHLOD3D);
 		GDREGISTER_CLASS(FellowPipelineWarmer3D);
 		GDREGISTER_CLASS(FellowStreamingCell3D);
@@ -79,8 +86,8 @@ void initialize_fellow_world_module(ModuleInitializationLevel p_level) {
 
 		Performance *performance = Performance::get_singleton();
 		if (performance) {
-			static const Performance::MonitorType types[5] = { Performance::MONITOR_TYPE_MEMORY, Performance::MONITOR_TYPE_MEMORY, Performance::MONITOR_TYPE_QUANTITY, Performance::MONITOR_TYPE_QUANTITY, Performance::MONITOR_TYPE_QUANTITY };
-			for (int i = 0; i < 5; i++) {
+			static const Performance::MonitorType types[6] = { Performance::MONITOR_TYPE_MEMORY, Performance::MONITOR_TYPE_MEMORY, Performance::MONITOR_TYPE_QUANTITY, Performance::MONITOR_TYPE_QUANTITY, Performance::MONITOR_TYPE_QUANTITY, Performance::MONITOR_TYPE_QUANTITY };
+			for (int i = 0; i < 6; i++) {
 				if (!performance->has_custom_monitor(FELLOW_WORLD_MONITORS[i])) {
 					performance->add_custom_monitor(FELLOW_WORLD_MONITORS[i], callable_mp_static(&_fellow_world_monitor).bind(i), Vector<Variant>(), types[i]);
 				}
@@ -91,6 +98,7 @@ void initialize_fellow_world_module(ModuleInitializationLevel p_level) {
 
 void uninitialize_fellow_world_module(ModuleInitializationLevel p_level) {
 	if (p_level == MODULE_INITIALIZATION_LEVEL_SCENE) {
+		FellowDestructible3D::clear_cache(); // the shared pieces' meshes and shapes, before the servers go
 		Performance *performance = Performance::get_singleton();
 		if (performance) {
 			for (const char *id : FELLOW_WORLD_MONITORS) {
