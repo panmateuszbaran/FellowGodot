@@ -459,6 +459,20 @@ swapped; pairs by name or `mirror_pairs`) and `tags` (a clip's name to its tags,
 options, the matcher's `tags_required` and `tags_excluded`. Decision 0157; `bench/ground_check.gd`,
 `bench/matching_tags_check.gd`, Matching Lab's `--matching_mirror=1`.
 
+## Sound through the scene's geometry (milestone 78)
+
+Module `fellow_world`; nothing changes without the node (decision 0186). `FellowAcoustics3D` (a `Node3D`; where it is
+does not matter; one works at a time, the last to enter the tree) acts on every `AudioStreamPlayer3D` in the tree but
+those in the group `fellow_no_acoustics`. `enabled`, `listener_path` (empty: the viewport's `AudioListener3D` or
+camera), `collision_mask` (1). Occlusion: `occlusion_rays` (5), `source_radius` (0.5 m), `occluded_volume_db` (−12),
+`occluded_shelf_db` (−18), `occluded_cutoff_hz` (1 000), `max_distance` (80 m), `max_rays_per_frame` (512),
+`response_time` (0.12 s). Reverb: `reverb` (on), `reverb_bus` ("FellowReverb": made when missing, sending to Master),
+`reverb_rays` (32), `reverb_interval` (0.25 s), `reverb_max_distance` (40 m), `absorption` (0.3), `reverb_level` (0.5),
+`reverb_response` (0.5 s). `get_occlusion(player)`, `get_room()`, `get_stats()`, `get_global_stats()`/
+`reset_global_stats()`; the monitor "FellowEngine/Acoustics time"; the FellowEngine menu's "Add Acoustics". The hook
+`AudioStreamPlayer3D::fellow_set_acoustics()` (C++). Bench `bench/acoustics_check.gd` (`--listen=1` under Movie Maker,
+`--many=N`).
+
 ## Vehicles (milestone 77)
 
 Module `fellow_world`; nothing changes without the nodes (decision 0185). `FellowVehicle3D` (a `RigidBody3D`, 1 400 kg,

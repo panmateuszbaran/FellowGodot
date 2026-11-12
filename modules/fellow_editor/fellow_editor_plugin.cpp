@@ -1008,6 +1008,10 @@ Node3D *FellowEditorPlugin::make_preset(int p_preset, const Node *p_root) {
 				wheel->add_child(mi);
 			}
 		} break;
+		case PRESET_ACOUSTICS: {
+			// Milestone 78: the scene's 3D sounds heard through its geometry (occlusion, the listener's room's reverb).
+			top = Object::cast_to<Node3D>(_fellow_make("FellowAcoustics3D", "Acoustics", nullptr));
+		} break;
 		case PRESET_LADDER: {
 			// Milestone 75: a 3 m ladder (rails and rungs), climbed from its +Z side by a FellowTraversal3D.
 			Node *made = _fellow_make("FellowLadder3D", "Ladder", nullptr, Dictionary{ { "height", 3.0 } });
@@ -1188,6 +1192,8 @@ FellowEditorPlugin::FellowEditorPlugin() {
 	popup->add_item(TTR("Add Destructible Crate (breaks when hit)"), PRESET_DESTRUCTIBLE_CRATE);
 	popup->add_item(TTR("Add Ladder (3 m, climbable)"), PRESET_LADDER);
 	popup->add_item(TTR("Add Car (driven by its throttle, brake and steering)"), PRESET_CAR);
+	popup->add_separator();
+	popup->add_item(TTR("Add Acoustics (sound occluded by walls, rooms' reverb)"), PRESET_ACOUSTICS);
 	popup->connect(SceneStringName(id_pressed), callable_mp(this, &FellowEditorPlugin::_add_preset));
 }
 

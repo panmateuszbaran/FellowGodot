@@ -20,6 +20,7 @@ def get_doc_classes():
         "FellowTerrainLayer",
         "FellowVehicle3D",
         "FellowWheel3D",
+        "FellowAcoustics3D",
         "FellowWorldStreamer3D",
     ]
 

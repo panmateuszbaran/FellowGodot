@@ -128,6 +128,23 @@ private:
 	/// This hash map is stored as member for efficiency reasons.
 	HashMap<StringName, Vector<AudioFrame>> bus_volumes;
 
+public:
+	// FellowEngine (decision 0186): what FellowAcoustics3D sets for this player: the direct sound's gain and high shelf
+	// (its gain, and its cutoff: 0 Hz keeps the player's), and a send of it to a bus (the listener's room's reverb).
+	// The defaults leave the player stock's.
+	struct FellowAcoustics {
+		float gain = 1.0f;
+		float shelf = 1.0f;
+		float cutoff_hz = 0.0f;
+		StringName send_bus;
+		float send = 0.0f;
+	};
+	void fellow_set_acoustics(const FellowAcoustics &p_acoustics) { fellow_acoustics = p_acoustics; }
+	const FellowAcoustics &fellow_get_acoustics() const { return fellow_acoustics; }
+
+private:
+	FellowAcoustics fellow_acoustics;
+
 protected:
 	void _validate_property(PropertyInfo &p_property) const;
 	void _notification(int p_what);

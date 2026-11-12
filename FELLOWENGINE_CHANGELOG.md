@@ -9,6 +9,16 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 78 — sound through the scene's geometry (2026-11-12)
+
+- `FellowAcoustics3D` (decision 0186): every `AudioStreamPlayer3D` heard through the physics world — rays from the
+  listener to each playing source and to points round it give the share of its paths blocked (walls, past an edge,
+  not the bodies it is in), which lowers its direct sound and cuts its highs (eased); rays round the listener measure
+  its room (enclosure, the walls' distance, the nearest) for a reverb (Sabine's decay, the nearest wall's predelay) on
+  a bus it makes, every source sent to it. Through a small hook in `AudioStreamPlayer3D` (its defaults stock's). Eight
+  lanes on both physics engines and the mix itself measured (a wall −27 dB on noise and its highs cut; a room's
+  reverb tail); 256 sources 0.18-0.25 ms a frame; the monitor "FellowEngine/Acoustics time", "Add Acoustics".
+
 ## Milestone 77 — vehicles (2026-11-12)
 
 - `FellowVehicle3D` and `FellowWheel3D` (decision 0185): cars and trucks on GodotPhysics3D and Jolt — a ray per wheel,

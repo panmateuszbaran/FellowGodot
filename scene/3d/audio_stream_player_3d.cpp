@@ -473,8 +473,10 @@ Vector<AudioFrame> AudioStreamPlayer3D::_update_panning() {
 		if (max_distance > 0) {
 			multiplier *= MAX(0, 1.0 - (dist / max_distance));
 		}
+		const float multiplier_direct = multiplier; // FellowEngine (decision 0186): before the occlusion's gain
+		multiplier *= fellow_acoustics.gain;
 
-		float db_att = (1.0 - MIN(1.0, multiplier)) * attenuation_filter_db;
+		float db_att = (1.0 - MIN(1.0, multiplier_direct)) * attenuation_filter_db;
 
 		if (emission_angle_enabled) {
 			Vector3 listenertopos = global_pos - listener_node->get_global_transform().origin;
@@ -550,8 +552,11 @@ Vector<AudioFrame> AudioStreamPlayer3D::_update_panning() {
 		actual_pitch_scale = pitch_scale_sum / pitch_scale_weight;
 	}
 
+	// FellowEngine (decision 0186): the occlusion's shelf on top of the distance's.
+	const float shelf_gain = linear_attenuation * fellow_acoustics.shelf;
+	const float shelf_cutoff = fellow_acoustics.cutoff_hz > 0.0f ? fellow_acoustics.cutoff_hz : attenuation_filter_cutoff_hz;
 	for (Ref<AudioStreamPlayback> &playback : internal->stream_playbacks) {
-		AudioServer::get_singleton()->set_playback_highshelf_params(playback, linear_attenuation, attenuation_filter_cutoff_hz);
+		AudioServer::get_singleton()->set_playback_highshelf_params(playback, shelf_gain, shelf_cutoff);
 	}
 
 	bus_volumes.clear();
@@ -571,6 +576,14 @@ Vector<AudioFrame> AudioStreamPlayer3D::_update_panning() {
 #endif // PHYSICS_3D_DISABLED
 		{
 			bus_volumes[internal->bus] = output_volume_vector;
+		}
+		// FellowEngine (decision 0186): a send to the listener's room's reverb.
+		if (fellow_acoustics.send > 0.0f && fellow_acoustics.send_bus != StringName() && !bus_volumes.has(fellow_acoustics.send_bus)) {
+			Vector<AudioFrame> send = output_volume_vector;
+			for (AudioFrame &frame : send) {
+				frame *= fellow_acoustics.send;
+			}
+			bus_volumes[fellow_acoustics.send_bus] = send;
 		}
 	}
 
