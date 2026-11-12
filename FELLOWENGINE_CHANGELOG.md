@@ -9,6 +9,17 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 77 — vehicles (2026-11-12)
+
+- `FellowVehicle3D` and `FellowWheel3D` (decision 0185): cars and trucks on GodotPhysics3D and Jolt — a ray per wheel,
+  springs, dampers, anti-roll bars and bump stops; tyres with a combined-slip curve times the ground's friction; the
+  wheels' spin solved implicitly (stable at walking pace); a hold at a standstill (slopes, turntables, moving
+  platforms) and moving or rigid ground; an engine with its torque curve, limiter, braking and inertia; an automatic
+  gearbox (earlier shifts at part throttle, kickdown, reverse from the brake), open or locked differentials, traction
+  control, anti-lock brakes, eased steering, drag and downforce. Fifteen lanes (0-100 km/h 6.3 s, 100-0 in 40 m,
+  0.96 g, a jump, a turntable, a slab pushed back, slopes, ice, coasting), many cars (64 in 0.65-0.80 ms a frame), a
+  regression scene (`vehicle`); the FellowEngine menu's "Add Car", the wheel's gizmo.
+
 ## Milestone 76 — cloth on bones (2026-11-12)
 
 - `FellowCloth3D` (decision 0184): `skeleton_path` and `pin_bones` — the pinned particles follow a skeleton's bones

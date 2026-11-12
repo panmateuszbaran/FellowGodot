@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="FellowWheel3D" inherits="Node3D" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+	<brief_description>
+		A wheel of a FellowVehicle3D: its suspension, its tyre, and what it does (FellowEngine).
+	</brief_description>
+	<description>
+		A wheel of its parent [FellowVehicle3D]: the node marks the wheel's centre with its suspension fully extended (its mount is [member suspension_length] above, along the node's Y); its X is the axle and the car's forward is [code]-Z[/code]. While the game runs the vehicle moves the node down its suspension, steers it and turns it by its spin: give it the wheel's meshes as children. The editor draws the wheel and its suspension's travel.
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="get_compression" qualifiers="const">
+			<return type="float" />
+			<description>
+				Returns how far the suspension is pushed in (metres).
+			</description>
+		</method>
+		<method name="get_contact_point" qualifiers="const">
+			<return type="Vector3" />
+			<description>
+				Returns the tyre's contact with the ground (global), when [method is_in_contact].
+			</description>
+		</method>
+		<method name="get_ground" qualifiers="const">
+			<return type="Node3D" />
+			<description>
+				Returns the node the wheel stands on, or [code]null[/code].
+			</description>
+		</method>
+		<method name="get_load" qualifiers="const">
+			<return type="float" />
+			<description>
+				Returns the suspension's force on the ground (N).
+			</description>
+		</method>
+		<method name="get_rpm" qualifiers="const">
+			<return type="float" />
+			<description>
+				Returns the wheel's revolutions per minute.
+			</description>
+		</method>
+		<method name="get_slip_angle" qualifiers="const">
+			<return type="float" />
+			<description>
+				Returns the angle between where the wheel points and where its contact moves (radians).
+			</description>
+		</method>
+		<method name="get_slip_ratio" qualifiers="const">
+			<return type="float" />
+			<description>
+				Returns how much faster the wheel turns than the ground passes under it, over the speed (negative braking).
+			</description>
+		</method>
+		<method name="is_in_contact" qualifiers="const">
+			<return type="bool" />
+			<description>
+				Returns [code]true[/code] if the wheel touches the ground.
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="braked" type="bool" setter="set_braked" getter="is_braked" default="true">
+			If [code]true[/code], the brakes act on this wheel.
+		</member>
+		<member name="damping_compression" type="float" setter="set_damping_compression" getter="get_damping_compression" default="3000.0">
+			The damper's force per metre a second of the suspension's compression (N·s/m).
+		</member>
+		<member name="damping_rebound" type="float" setter="set_damping_rebound" getter="get_damping_rebound" default="4000.0">
+			The damper's force per metre a second of the suspension's extension (N·s/m).
+		</member>
+		<member name="driven" type="bool" setter="set_driven" getter="is_driven" default="false">
+			If [code]true[/code], the engine drives this wheel.
+		</member>
+		<member name="grip" type="float" setter="set_grip" getter="get_grip" default="1.0">
+			The tyre's peak friction coefficient, times the ground's friction (its physics material's).
+		</member>
+		<member name="handbrake" type="bool" setter="set_handbrake" getter="is_handbrake" default="false">
+			If [code]true[/code], the handbrake acts on this wheel.
+		</member>
+		<member name="inertia" type="float" setter="set_inertia" getter="get_inertia" default="1.2">
+			The wheel's moment of inertia about its axle (kg·m²).
+		</member>
+		<member name="radius" type="float" setter="set_radius" getter="get_radius" default="0.34">
+			The wheel's radius (metres).
+		</member>
+		<member name="rolling_resistance" type="float" setter="set_rolling_resistance" getter="get_rolling_resistance" default="0.012">
+			The tyre's rolling resistance: the share of its load that holds the wheel back as it rolls (a torque of this times the load times the [member radius]; it holds a stopped wheel on a gentle slope).
+		</member>
+		<member name="spring_rate" type="float" setter="set_spring_rate" getter="get_spring_rate" default="40000.0">
+			The suspension's spring: its force per metre of compression (N/m).
+		</member>
+		<member name="steering" type="bool" setter="set_steering" getter="is_steering" default="false">
+			If [code]true[/code], the steering turns this wheel.
+		</member>
+		<member name="suspension_length" type="float" setter="set_suspension_length" getter="get_suspension_length" default="0.3">
+			The suspension's travel (metres): from the mount to the wheel's centre fully extended.
+		</member>
+	</members>
+</class>

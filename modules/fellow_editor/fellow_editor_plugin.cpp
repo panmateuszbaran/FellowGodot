@@ -84,6 +84,7 @@ static const char *FELLOW_GIZMO_CLASSES[] = {
 	"FellowMotionCharacter3D",
 	"FellowTraversal3D",
 	"FellowLadder3D",
+	"FellowWheel3D",
 };
 
 // The properties each class's lines are drawn from.
@@ -108,6 +109,8 @@ static Vector<StringName> _fellow_gizmo_properties(const StringName &p_class) {
 		return { SNAME("min_height"), SNAME("low_max_height"), SNAME("max_height"), SNAME("reach_distance") };
 	} else if (p_class == SNAME("FellowLadder3D")) {
 		return { SNAME("height"), SNAME("width"), SNAME("rung_spacing"), SNAME("rung_offset") };
+	} else if (p_class == SNAME("FellowWheel3D")) {
+		return { SNAME("radius"), SNAME("suspension_length") };
 	}
 	return {};
 }
@@ -266,6 +269,23 @@ Vector<Vector3> FellowGizmoPlugin::lines_for(const StringName &p_class, const Di
 		lines.push_back(Vector3(0.08, h * 0.5, 0.3));
 		lines.push_back(Vector3(0, h * 0.5, 0.4));
 		lines.push_back(Vector3(-0.08, h * 0.5, 0.3));
+	} else if (p_class == SNAME("FellowWheel3D")) {
+		// Milestone 77: the wheel (a circle across its X, a spoke to see it turn) where the node is, with its
+		// suspension fully extended, and the suspension's travel up to its mount.
+		const real_t r = p_properties.get("radius", 0.34);
+		const real_t travel = p_properties.get("suspension_length", 0.3);
+		for (int i = 0; i < 24; i++) {
+			const real_t a0 = Math::TAU * i / 24;
+			const real_t a1 = Math::TAU * (i + 1) / 24;
+			lines.push_back(Vector3(0, Math::sin(a0), Math::cos(a0)) * r);
+			lines.push_back(Vector3(0, Math::sin(a1), Math::cos(a1)) * r);
+		}
+		lines.push_back(Vector3(0, 0, 0));
+		lines.push_back(Vector3(0, 0, -r));
+		lines.push_back(Vector3(0, 0, 0));
+		lines.push_back(Vector3(0, travel, 0));
+		lines.push_back(Vector3(-0.06, travel, 0));
+		lines.push_back(Vector3(0.06, travel, 0));
 	} else if (p_class == SNAME("FellowSnowTracker3D")) {
 		// A capsule along the node's -Z, centred: the track it presses into the snow.
 		const real_t r = p_properties.get("radius", 0.1);
@@ -923,6 +943,71 @@ Node3D *FellowEditorPlugin::make_preset(int p_preset, const Node *p_root) {
 			top = body;
 			_fellow_make("FellowDestructible3D", "FellowDestructible3D", top, Dictionary{ { "interior_material", inside }, { "break_impulse", 150.0 } });
 		} break;
+		case PRESET_CAR: {
+			// Milestone 77: a 1 400 kg rear-driven car (FellowVehicle3D's defaults: 400 N·m, six gears, the assists
+			// on), a box for its body, its four wheels 0.34 m on 0.3 m of suspension; it faces -Z. A controller sets
+			// its throttle, brake, steering and handbrake.
+			Node *made = _fellow_make("FellowVehicle3D", "Car", nullptr, Dictionary{ { "center_of_mass_mode", 1 }, { "center_of_mass", Vector3(0, 0.45, 0.1) } });
+			top = Object::cast_to<Node3D>(made);
+			if (!top) {
+				break;
+			}
+			Ref<StandardMaterial3D> paint;
+			paint.instantiate();
+			paint->set_albedo(Color(0.75, 0.18, 0.14));
+			paint->set_roughness(0.4);
+			paint->set_metallic(0.3);
+			Ref<StandardMaterial3D> rubber;
+			rubber.instantiate();
+			rubber->set_albedo(Color(0.08, 0.08, 0.08));
+			rubber->set_roughness(0.9);
+			CollisionShape3D *shape = memnew(CollisionShape3D);
+			shape->set_name("CollisionShape3D");
+			Ref<BoxShape3D> box_shape;
+			box_shape.instantiate();
+			box_shape->set_size(Vector3(1.8, 0.55, 4.2));
+			shape->set_shape(box_shape);
+			shape->set_position(Vector3(0, 0.62, 0));
+			top->add_child(shape);
+			MeshInstance3D *body_mesh = memnew(MeshInstance3D);
+			body_mesh->set_name("Body");
+			Ref<BoxMesh> body_box;
+			body_box.instantiate();
+			body_box->set_size(Vector3(1.8, 0.55, 4.2));
+			body_box->set_material(paint);
+			body_mesh->set_mesh(body_box);
+			body_mesh->set_position(Vector3(0, 0.62, 0));
+			top->add_child(body_mesh);
+			MeshInstance3D *cabin = memnew(MeshInstance3D);
+			cabin->set_name("Cabin");
+			Ref<BoxMesh> cabin_box;
+			cabin_box.instantiate();
+			cabin_box->set_size(Vector3(1.5, 0.45, 2.0));
+			cabin_box->set_material(paint);
+			cabin->set_mesh(cabin_box);
+			cabin->set_position(Vector3(0, 1.12, 0.2));
+			top->add_child(cabin);
+			Ref<CylinderMesh> tyre;
+			tyre.instantiate();
+			tyre->set_top_radius(0.34);
+			tyre->set_bottom_radius(0.34);
+			tyre->set_height(0.24);
+			tyre->set_material(rubber);
+			const char *names[4] = { "FrontLeft", "FrontRight", "RearLeft", "RearRight" };
+			for (int i = 0; i < 4; i++) {
+				const bool front = i < 2;
+				const real_t x = (i % 2 == 0) ? -0.82 : 0.82;
+				Node *wheel = _fellow_make("FellowWheel3D", names[i], top, Dictionary{ { "position", Vector3(x, 0.34, front ? -1.35 : 1.35) }, { "steering", front }, { "driven", !front }, { "handbrake", !front } });
+				if (!wheel) {
+					continue;
+				}
+				MeshInstance3D *mi = memnew(MeshInstance3D);
+				mi->set_name("Tyre");
+				mi->set_mesh(tyre);
+				mi->set_rotation_degrees(Vector3(0, 0, 90));
+				wheel->add_child(mi);
+			}
+		} break;
 		case PRESET_LADDER: {
 			// Milestone 75: a 3 m ladder (rails and rungs), climbed from its +Z side by a FellowTraversal3D.
 			Node *made = _fellow_make("FellowLadder3D", "Ladder", nullptr, Dictionary{ { "height", 3.0 } });
@@ -1102,6 +1187,7 @@ FellowEditorPlugin::FellowEditorPlugin() {
 	popup->add_separator();
 	popup->add_item(TTR("Add Destructible Crate (breaks when hit)"), PRESET_DESTRUCTIBLE_CRATE);
 	popup->add_item(TTR("Add Ladder (3 m, climbable)"), PRESET_LADDER);
+	popup->add_item(TTR("Add Car (driven by its throttle, brake and steering)"), PRESET_CAR);
 	popup->connect(SceneStringName(id_pressed), callable_mp(this, &FellowEditorPlugin::_add_preset));
 }
 

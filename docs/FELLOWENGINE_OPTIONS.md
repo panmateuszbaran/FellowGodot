@@ -459,6 +459,30 @@ swapped; pairs by name or `mirror_pairs`) and `tags` (a clip's name to its tags,
 options, the matcher's `tags_required` and `tags_excluded`. Decision 0157; `bench/ground_check.gd`,
 `bench/matching_tags_check.gd`, Matching Lab's `--matching_mirror=1`.
 
+## Vehicles (milestone 77)
+
+Module `fellow_world`; nothing changes without the nodes (decision 0185). `FellowVehicle3D` (a `RigidBody3D`, 1 400 kg,
+its linear and angular damping replaced by 0: the node's own air) and its `FellowWheel3D` children (each marking a
+wheel's centre with the suspension fully extended; it moves along the suspension, steers and rolls). Input: `throttle`,
+`brake` (0-1), `steering` (-1 to 1; positive steers left, as `VehicleBody3D`'s), `handbrake`. Engine: `max_torque` (400 N·m), `idle_rpm` (900),
+`peak_rpm` (4 500), `max_rpm` (7 000, the limiter), `torque_curve` (a `Curve` over rpm / `max_rpm`; empty: a built-in
+one), `engine_braking` (70 N·m at `max_rpm` with the throttle closed), `engine_inertia` (0.25 kg·m²). Drivetrain:
+`gear_ratios` (3.6, 2.2, 1.5, 1.15, 0.92, 0.76), `reverse_ratio` (3.4), `max_reverse_speed` (8 m/s), `final_drive`
+(3.7), `drivetrain_efficiency` (0.9), `automatic` (on: up at `shift_up_rpm` 6 300 of the road speed at full throttle,
+earlier with less, down under `shift_down_rpm` 2 600, kickdown with the throttle floored, `shift_time` 0.25 s without
+drive; reverse after 0.5 s stopped with the brake held and the handbrake off, the brake then driving it backwards), `differential` (open: the torque shared equally; locked: an
+axle's driven wheels turn together), `traction_control` (on). Brakes and steering: `brake_torque` (2 500 N·m a wheel),
+`handbrake_torque` (3 500), `anti_lock_brakes` (on), `max_steer` (35°), `steer_at_speed` (0.35 of it at 100 km/h),
+`steer_speed` (4 rad/s). Body: `anti_roll` (8 000 N/m an axle), `drag_area` (0.7 m²), `downforce_area` (0.3 m²),
+`substeps` (4). `FellowWheel3D`: `radius` (0.34 m), `suspension_length` (0.3 m), `spring_rate` (40 000 N/m),
+`damping_compression` (3 000 N·s/m), `damping_rebound` (4 000), `grip` (1: the tyre's peak friction, times the ground's
+physics material's friction), `rolling_resistance` (0.012 of the load), `inertia` (1.2 kg·m²), `steering`, `driven`, `braked` (on), `handbrake`;
+`is_in_contact()`, `get_compression()`, `get_load()`, `get_rpm()`, `get_slip_ratio()`, `get_slip_angle()`,
+`get_contact_point()`, `get_ground()`. The vehicle's `get_speed()`, `get_speed_kmh()`, `get_engine_rpm()`, `get_gear()`,
+`set_gear()` (manual), `get_stats()`, `get_global_stats()`/`reset_global_stats()`; signal `gear_changed(gear)`. The
+FellowEngine menu's "Add Car"; the wheel's gizmo (its circle and its suspension's travel). Bench `bench/vehicle_check.gd`
+(`--many=N`, `--pictures=1`); the regression scene `vehicle`.
+
 ## Destruction (milestone 74)
 
 Module `fellow_world`; nothing changes without the node (decision 0182). `FellowDestructible3D` (a `Node3D`), a child of

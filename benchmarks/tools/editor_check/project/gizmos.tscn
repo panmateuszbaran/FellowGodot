@@ -53,3 +53,6 @@ reach_distance = 0.5
 [node name="Ladder" type="FellowLadder3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.5, 0, 1.5)
 height = 2.0
+
+[node name="Wheel" type="FellowWheel3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.7, 0.34, 0.8)

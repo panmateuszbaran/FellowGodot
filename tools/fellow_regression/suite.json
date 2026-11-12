@@ -31,7 +31,8 @@
     "cloth",
     "destruction",
     "climb",
-    "cape"
+    "cape",
+    "vehicle"
    ]
   },
   "stock": {

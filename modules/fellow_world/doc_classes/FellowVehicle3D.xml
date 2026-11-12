@@ -1,0 +1,181 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="FellowVehicle3D" inherits="RigidBody3D" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+	<brief_description>
+		A car or truck driven on its FellowWheel3D children: suspension, tyres, an engine, a gearbox and assists (FellowEngine).
+	</brief_description>
+	<description>
+		A [RigidBody3D] driven on its [FellowWheel3D] children (three or more), after each physics step: a ray down each wheel's suspension finds the ground; over [member substeps] the suspension's spring, damper, anti-roll bar and bump stop push the body up, and each tyre pulls it with a force from its slips along and across the wheel (a magic-formula curve, times the tyre's [member FellowWheel3D.grip], the ground's friction and the wheel's load). The wheels' spin is integrated implicitly against the tyres' pull; at a standstill a tyre holds where it stands (on a slope, on a moving platform) up to its grip. The ground's velocity is taken out of the slips (moving platforms, turntables, conveyors) and a rigid ground is pushed back.
+		The engine's torque follows a curve over its revolutions (taken from the driven wheels), with a limiter at [member max_rpm], engine braking and its inertia through the gears; the automatic gearbox shifts on the road speed, takes reverse after the car has stood half a second with the brake held (the brake then drives it backwards) and returns to first with the throttle. The differential is open or locked; traction control and anti-lock brakes keep the wheels' slip near the tyre's peak. Set [member throttle], [member brake], [member steering] and [member handbrake] from a controller.
+		The body's linear and angular damping are replaced by none (the node's own drag stands for the air). Works with GodotPhysics3D and Jolt. See decision 0185 in FellowEngine's [code]docs/decisions[/code].
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="get_engine_rpm" qualifiers="const">
+			<return type="float" />
+			<description>
+				Returns the engine's revolutions per minute (at least [member idle_rpm]).
+			</description>
+		</method>
+		<method name="get_gear" qualifiers="const">
+			<return type="int" />
+			<description>
+				Returns the gear: [code]-1[/code] reverse, [code]0[/code] neutral, [code]1[/code] and up the forward gears.
+			</description>
+		</method>
+		<method name="get_global_stats" qualifiers="static">
+			<return type="Dictionary" />
+			<description>
+				Returns the statistics of every vehicle since the start or [method reset_global_stats]: [code]steps[/code] (vehicles' physics steps) and [code]step_usec[/code] (their time on the CPU, in microseconds).
+			</description>
+		</method>
+		<method name="get_speed" qualifiers="const">
+			<return type="float" />
+			<description>
+				Returns the speed along the body's forward axis ([code]-Z[/code]), in metres per second (negative when going backwards).
+			</description>
+		</method>
+		<method name="get_speed_kmh" qualifiers="const">
+			<return type="float" />
+			<description>
+				Returns [method get_speed] in kilometres per hour.
+			</description>
+		</method>
+		<method name="get_stats" qualifiers="const">
+			<return type="Dictionary" />
+			<description>
+				Returns this vehicle's state: [code]speed_kmh[/code], [code]rpm[/code], [code]gear[/code], [code]steer_deg[/code], [code]step_usec[/code] (its last step's time) and [code]wheels[/code], an array with each wheel's [code]name[/code], [code]contact[/code], [code]compression[/code], [code]load[/code] (N), [code]rpm[/code], [code]slip_ratio[/code], [code]slip_angle_deg[/code], [code]force[/code] (the tyre's, global), [code]holding[/code] (held where it stands), [code]bottomed[/code] (on the bump stop) and [code]surface_friction[/code].
+			</description>
+		</method>
+		<method name="reset_global_stats" qualifiers="static">
+			<return type="void" />
+			<description>
+				Resets [method get_global_stats].
+			</description>
+		</method>
+		<method name="set_gear">
+			<return type="void" />
+			<param index="0" name="gear" type="int" />
+			<description>
+				Sets the gear ([code]-1[/code] reverse to the number of [member gear_ratios]); with [member automatic] on the gearbox may change it again.
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="angular_damp_mode" type="int" setter="set_angular_damp_mode" getter="get_angular_damp_mode" overrides="RigidBody3D" enum="RigidBody3D.DampMode" default="1" />
+		<member name="anti_lock_brakes" type="bool" setter="set_anti_lock_brakes" getter="has_anti_lock_brakes" default="true">
+			If [code]true[/code], a braked wheel is kept from locking: its brake is eased when the wheel turns more than 15% slower than the ground passes under it (not while the handbrake holds it).
+		</member>
+		<member name="anti_roll" type="float" setter="set_anti_roll" getter="get_anti_roll" default="8000.0">
+			The anti-roll bars' stiffness: the force pushing an axle's two wheels' suspensions towards the same compression, per metre of difference (N/m).
+		</member>
+		<member name="automatic" type="bool" setter="set_automatic" getter="is_automatic" default="true">
+			If [code]true[/code], the gearbox shifts by itself, from the road speed: up past [member shift_up_rpm] at full throttle (earlier with less: from 1.5 times [member shift_down_rpm] with none, never so early that the next gear would be under the shift down), down under [member shift_down_rpm], down at once with the throttle floored when the lower gear has room (kickdown), at least 1.5 s in a gear; into reverse after the car has stood still 0.5 s with the brake held, no throttle and the handbrake off (the brake then drives it backwards), back to first with the throttle.
+		</member>
+		<member name="brake" type="float" setter="set_brake" getter="get_brake" default="0.0">
+			The brake pedal, from [code]0[/code] to [code]1[/code] (with [member automatic], it drives the car backwards once it is in reverse).
+		</member>
+		<member name="brake_torque" type="float" setter="set_brake_torque" getter="get_brake_torque" default="2500.0">
+			The brakes' torque on each braked wheel at a full [member brake] (N·m).
+		</member>
+		<member name="differential" type="int" setter="set_differential" getter="get_differential" enum="FellowVehicle3D.Differential" default="0">
+			How the driven wheels share the engine's torque.
+		</member>
+		<member name="downforce_area" type="float" setter="set_downforce_area" getter="get_downforce_area" default="0.3">
+			The body's lift coefficient times its area (m²): a downward force growing with the square of the speed.
+		</member>
+		<member name="drag_area" type="float" setter="set_drag_area" getter="get_drag_area" default="0.7">
+			The body's drag coefficient times its frontal area (m²): the air's drag against the velocity, growing with its square.
+		</member>
+		<member name="drivetrain_efficiency" type="float" setter="set_drivetrain_efficiency" getter="get_drivetrain_efficiency" default="0.9">
+			The share of the engine's torque that reaches the wheels.
+		</member>
+		<member name="engine_braking" type="float" setter="set_engine_braking" getter="get_engine_braking" default="70.0">
+			The engine's friction against its turning at [member max_rpm] with the throttle closed (N·m, proportional to its revolutions): the car slows when the throttle lifts.
+		</member>
+		<member name="engine_inertia" type="float" setter="set_engine_inertia" getter="get_engine_inertia" default="0.25">
+			The engine's, flywheel's and clutch's moment of inertia (kg·m²), felt at the driven wheels through the gears (times the ratio squared).
+		</member>
+		<member name="final_drive" type="float" setter="set_final_drive" getter="get_final_drive" default="3.7">
+			The final drive's ratio, after the gearbox's.
+		</member>
+		<member name="gear_ratios" type="PackedFloat32Array" setter="set_gear_ratios" getter="get_gear_ratios" default="PackedFloat32Array(3.6, 2.2, 1.5, 1.15, 0.92, 0.76)">
+			The forward gears' ratios, first to last.
+		</member>
+		<member name="handbrake" type="bool" setter="set_handbrake" getter="is_handbrake" default="false">
+			If [code]true[/code], the handbrake holds the wheels with [member FellowWheel3D.handbrake] on.
+		</member>
+		<member name="handbrake_torque" type="float" setter="set_handbrake_torque" getter="get_handbrake_torque" default="3500.0">
+			The handbrake's torque on each wheel it holds (N·m).
+		</member>
+		<member name="idle_rpm" type="float" setter="set_idle_rpm" getter="get_idle_rpm" default="900.0">
+			The engine's idle revolutions: the lowest it turns at (a slipping clutch below).
+		</member>
+		<member name="linear_damp_mode" type="int" setter="set_linear_damp_mode" getter="get_linear_damp_mode" overrides="RigidBody3D" enum="RigidBody3D.DampMode" default="1" />
+		<member name="mass" type="float" setter="set_mass" getter="get_mass" overrides="RigidBody3D" default="1400.0" />
+		<member name="max_reverse_speed" type="float" setter="set_max_reverse_speed" getter="get_max_reverse_speed" default="8.0">
+			The speed the car goes backwards at most (m/s): the engine's torque is faded out towards it.
+		</member>
+		<member name="max_rpm" type="float" setter="set_max_rpm" getter="get_max_rpm" default="7000.0">
+			The engine's highest revolutions: no torque past them (the limiter).
+		</member>
+		<member name="max_steer" type="float" setter="set_max_steer" getter="get_max_steer" default="35.0">
+			The steered wheels' largest angle (degrees) at a full [member steering], at a standstill.
+		</member>
+		<member name="max_torque" type="float" setter="set_max_torque" getter="get_max_torque" default="400.0">
+			The engine's largest torque (N·m), at [member peak_rpm] with the built-in curve.
+		</member>
+		<member name="peak_rpm" type="float" setter="set_peak_rpm" getter="get_peak_rpm" default="4500.0">
+			The revolutions of the built-in torque curve's peak.
+		</member>
+		<member name="reverse_ratio" type="float" setter="set_reverse_ratio" getter="get_reverse_ratio" default="3.4">
+			The reverse gear's ratio.
+		</member>
+		<member name="shift_down_rpm" type="float" setter="set_shift_down_rpm" getter="get_shift_down_rpm" default="2600.0">
+			With [member automatic]: the revolutions (of the road speed in the gear) under which it shifts down.
+		</member>
+		<member name="shift_time" type="float" setter="set_shift_time" getter="get_shift_time" default="0.25">
+			Seconds a shift takes, without drive.
+		</member>
+		<member name="shift_up_rpm" type="float" setter="set_shift_up_rpm" getter="get_shift_up_rpm" default="6300.0">
+			With [member automatic]: the revolutions (of the road speed in the gear) past which it shifts up at full throttle (earlier with less).
+		</member>
+		<member name="steer_at_speed" type="float" setter="set_steer_at_speed" getter="get_steer_at_speed" default="0.35">
+			The share of [member max_steer] left at 100 km/h (less steering at speed, linearly from a standstill).
+		</member>
+		<member name="steer_speed" type="float" setter="set_steer_speed" getter="get_steer_speed" default="4.0">
+			How fast the steered wheels turn towards the asked angle (radians a second).
+		</member>
+		<member name="steering" type="float" setter="set_steering" getter="get_steering" default="0.0">
+			The steering, from [code]-1[/code] to [code]1[/code]; positive steers left (as [VehicleBody3D]'s).
+		</member>
+		<member name="substeps" type="int" setter="set_substeps" getter="get_substeps" default="4">
+			The substeps of each physics step in which the suspension, the tyres and the wheels' spin are worked out.
+		</member>
+		<member name="throttle" type="float" setter="set_throttle" getter="get_throttle" default="0.0">
+			The throttle, from [code]0[/code] to [code]1[/code].
+		</member>
+		<member name="torque_curve" type="Curve" setter="set_torque_curve" getter="get_torque_curve">
+			The engine's torque over its revolutions divided by [member max_rpm], as a share of [member max_torque]; empty: a built-in curve (55% at idle rising to all of it at [member peak_rpm], 80% at [member max_rpm]).
+		</member>
+		<member name="traction_control" type="bool" setter="set_traction_control" getter="has_traction_control" default="true">
+			If [code]true[/code], a driven wheel is kept from spinning: the drive is cut (and the wheel braked) when it turns more than 15% faster than the ground passes under it.
+		</member>
+	</members>
+	<signals>
+		<signal name="gear_changed">
+			<param index="0" name="gear" type="int" />
+			<description>
+				Emitted when the automatic gearbox shifts up or down.
+			</description>
+		</signal>
+	</signals>
+	<constants>
+		<constant name="DIFFERENTIAL_OPEN" value="0" enum="Differential">
+			The driven wheels get the same torque and turn freely of each other.
+		</constant>
+		<constant name="DIFFERENTIAL_LOCKED" value="1" enum="Differential">
+			Each axle's driven wheels turn together.
+		</constant>
+	</constants>
+</class>
