@@ -70,6 +70,29 @@ script functions deep after breadcrumbs, two custom values, a printed marker and
   for the call alone with the reporter off); the reporter's start-up 1.8-2.1 ms (the machine's description, the
   directory).
 
+## Checks on Windows (the laptop, job f397: a release template, MSVC)
+
+`crash_check.py` with a release template of 65dbf7997c on the laptop (Windows 11, MSVC):
+
+| crash | the report | the minidump |
+|---|---|---|
+| a null pointer written | EXCEPTION_ACCESS_VIOLATION at 0x0 (write), 19 frames, the script's backtrace | 451 KB: 35 threads, 44 modules, the exception's code 0xc0000005 on the faulting thread |
+| `abort()` | SIGABRT, 23 frames | 428 KB (no exception: the threads as they were) |
+| a trap (`CRASH_NOW`) | EXCEPTION_BREAKPOINT, 19 frames | 451 KB, 0x80000003 |
+| a null pointer on a worker thread | EXCEPTION_ACCESS_VIOLATION, 6 frames, not the main thread | 438 KB, 36 threads |
+| an integer divided by zero | EXCEPTION_INT_DIVIDE_BY_ZERO, 19 frames | 453 KB, 0xc0000094 |
+| a null pointer 30 frames into a game, windowed | frame 29, scene "Harbour", the GPU (NVIDIA GeForce RTX 5070 Ti Laptop GPU) | 702 KB: 63 threads, 107 modules |
+| a stack overflow (main thread) | **none**: the process ended with an access violation | — |
+
+Every report found pending by the next run and none after acknowledging it; the reports off: none written; a report
+the game writes: as on Linux. The frames are module and offset (a release template has no PDB): the minidump, opened
+with the build's PDB, is where Windows' frames are read.
+
+The stack overflow: the filter ran on the overflowed thread with what Windows leaves it (a page or two), and its own
+frame (a 4 KiB file buffer for the scripts' backtraces) overflowed again. Fixed: the main thread's stack guarantee
+raised to 64 KiB (`SetThreadStackGuarantee`), the filter's frame kept small (the scripts' part in a function of its
+own). Job f398 checks it.
+
 ## Decision
 
 Keep: a shipped game's crash leaves a report it can find and send, with a minidump on Windows.
@@ -82,6 +105,6 @@ Keep: a shipped game's crash leaves a report it can find and send, with a minidu
 * **Sending the reports**: the game's (an `HTTPRequest` with the player's consent); no server here.
 * **Symbol upload and server-side symbolization**: the frames are module and offset; symbolize.py with the same
   commit's symbols.
-* **Worker threads' stack overflows on Linux**: no alternate stack on threads the reporter did not create (the process
-  ends as before, without a report).
-* **Hangs** (the main thread stuck): next.
+* **Worker threads' stack overflows**: no alternate stack (Linux) or stack guarantee (Windows) on threads the reporter
+  did not create (the process ends as before, without a report).
+* **Hangs** (the main thread stuck): decision 0206.

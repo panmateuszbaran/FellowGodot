@@ -354,6 +354,7 @@ DEBUG = {
     "crash_reports/directory": "Where the reports are written ([code]user://[/code] or an absolute path). " + STARTUP,
     "crash_reports/log_lines": "The last lines of the log a report keeps (0: none). " + STARTUP,
     "crash_reports/max_reports": "The newest reports kept: older ones (and their minidumps) are deleted at start-up.",
+    "crash_reports/hang_seconds": "Hang reports (milestone 98): a watchdog writes a report when the main thread has made no progress for this long — its frames (on Linux and macOS its GDScript frames too; on Windows a minidump) — without stopping the game, and adds how long the stall lasted when it goes on. Not with a debugger attached. 0: off. " + STARTUP + " Decision 0206.",
     "crash_reports/minidumps": "Windows: a minidump beside each crash's report (the threads' stacks and the memory they point to: a few MB), for Visual Studio or WinDbg with the build's PDB. " + STARTUP,
 }
 

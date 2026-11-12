@@ -664,6 +664,10 @@ Godot's own handler and any earlier one still run afterwards; the process ends a
 `read_report(path)`, `is_enabled()`, `get_report_directory()`, `get_stats()`, `debug_crash(kind)` (`segfault`,
 `abort`, `trap`, `stack_overflow`, `thread`, `divide`). `tools/fellow_crash/symbolize.py` prints a report with its
 frames symbolized (the build's symbols); `tools/fellow_crash/crash_check.py` checks a build.
+Hang reports (milestone 98, decision 0206): `debug/fellow/crash_reports/hang_seconds` (10 s; 0 off; read at start-up):
+a watchdog writes `hang_*.json` when the main thread has made no progress that long — `stalled_ms`, the main thread's
+frames, on Linux and macOS its `script_frames`, on Windows a minidump — and appends `recovered_after_ms` when it goes
+on; not with a debugger attached or while the machine sleeps.
 
 ## Simulated GPUs (milestone 49)
 

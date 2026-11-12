@@ -9,6 +9,15 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 98 — hang reports (2026-11-13)
+
+- `debug/fellow/crash_reports/hang_seconds` (decision 0206, 10 s with the crash reports on): a watchdog writes a
+  `hang_*.json` report when the main thread makes no progress — its frames (on Linux and macOS its GDScript frames,
+  taken by the main thread in a signal; on Windows from its suspended context, and a minidump) — without stopping the
+  game, and how long the stall lasted when it goes on. Not with a debugger attached or while the machine sleeps.
+- Milestone 97 on Windows (job f397): every crash's report and minidump as expected but a stack overflow's; fixed (a
+  64 KiB stack guarantee for the filter, its frame kept small).
+
 ## Milestone 97 — crash reports (2026-11-13)
 
 - `FellowCrashReporter` and `debug/fellow/crash_reports/*` (decision 0205, a new module `fellow_diagnostics`): a crash

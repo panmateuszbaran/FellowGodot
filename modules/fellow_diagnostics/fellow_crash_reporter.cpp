@@ -40,6 +40,7 @@
 
 #include "core/config/engine.h"
 #include "core/config/project_settings.h"
+#include "core/debugger/engine_debugger.h"
 #include "core/io/dir_access.h"
 #include "core/io/file_access.h"
 #include "core/io/json.h"
@@ -67,6 +68,7 @@
 #include <dlfcn.h>
 #include <execinfo.h>
 #include <fcntl.h>
+#include <pthread.h>
 #include <signal.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -454,6 +456,16 @@ struct ReportInfo {
 	bool main_thread = false;
 	uint64_t thread_id = 0;
 	const char *minidump = nullptr; // a file name in the report directory
+	const struct ScriptFrame *script_frames = nullptr; // milestone 98: a hang's script frames, taken without the heap
+	int script_frame_count = 0;
+	uint64_t stalled_ms = 0; // milestone 98: how long the main thread had made no progress
+};
+
+// Milestone 98 (decision 0206): a script's frame copied without the heap (in a signal handler on the main thread).
+struct ScriptFrame {
+	char function[96];
+	char source[192];
+	int line;
 };
 
 uint64_t _resident_bytes() {
@@ -573,7 +585,12 @@ bool _write_core(const ReportInfo &p, const char *p_path, ReportFile &f) {
 	f.str(p.main_thread ? "true" : "false");
 	f.str(",\"id\":");
 	f.u64(p.thread_id);
-	f.str("},\"scene\":");
+	f.ch('}');
+	if (p.stalled_ms) {
+		f.str(",\"stalled_ms\":");
+		f.u64(p.stalled_ms);
+	}
+	f.str(",\"scene\":");
 	f.json(g.scene, sizeof(g.scene));
 	f.str(",\"memory\":{\"resident_mb\":");
 	f.u64(_resident_bytes() >> 20);
@@ -607,7 +624,22 @@ bool _write_core(const ReportInfo &p, const char *p_path, ReportFile &f) {
 		}
 		f.ch('}');
 	}
-	f.str("],\"breadcrumbs\":[");
+	f.ch(']');
+	if (p.script_frame_count > 0) {
+		f.str(",\"script_frames\":[");
+		for (int i = 0; i < p.script_frame_count; i++) {
+			const ScriptFrame &sf = p.script_frames[i];
+			f.str(i ? ",{\"function\":" : "{\"function\":");
+			f.json(sf.function, sizeof(sf.function));
+			f.str(",\"source\":");
+			f.json(sf.source, sizeof(sf.source));
+			f.str(",\"line\":");
+			f.i64(sf.line);
+			f.ch('}');
+		}
+		f.ch(']');
+	}
+	f.str(",\"breadcrumbs\":[");
 	{
 		const uint32_t head = g.crumb_head.load(std::memory_order_acquire);
 		const uint32_t count = MIN(head, uint32_t(CRUMB_MAX));
@@ -805,6 +837,64 @@ void _idle() {
 	}
 }
 
+// UTF-32 into UTF-8 without the heap (cut at a character).
+void _copy_utf32(char *p_dst, size_t p_cap, const char32_t *p_src) {
+	size_t o = 0;
+	for (const char32_t *s = p_src; s && *s; s++) {
+		const uint32_t c = uint32_t(*s);
+		char b[4];
+		size_t n;
+		if (c < 0x80) {
+			b[0] = char(c);
+			n = 1;
+		} else if (c < 0x800) {
+			b[0] = char(0xc0 | (c >> 6));
+			b[1] = char(0x80 | (c & 0x3f));
+			n = 2;
+		} else if (c < 0x10000) {
+			b[0] = char(0xe0 | (c >> 12));
+			b[1] = char(0x80 | ((c >> 6) & 0x3f));
+			b[2] = char(0x80 | (c & 0x3f));
+			n = 3;
+		} else {
+			b[0] = char(0xf0 | (c >> 18));
+			b[1] = char(0x80 | ((c >> 12) & 0x3f));
+			b[2] = char(0x80 | ((c >> 6) & 0x3f));
+			b[3] = char(0x80 | (c & 0x3f));
+			n = 4;
+		}
+		if (o + n + 1 >= p_cap) {
+			break;
+		}
+		memcpy(p_dst + o, b, n);
+		o += n;
+	}
+	p_dst[o] = 0;
+}
+
+// Milestone 98: GDScript, found at start-up (ScriptServer's lookup takes a lock).
+ScriptLanguage *g_gdscript = nullptr;
+
+// The calling thread's GDScript frames (GDScript keeps them in release builds only with
+// debug/settings/gdscript/always_track_call_stacks): the strings are referenced, not copied on the heap.
+int _capture_script_frames(ScriptFrame *r_frames, int p_max) {
+	ScriptLanguage *sl = g_gdscript;
+	if (!sl || !g.scripts_ok.load()) {
+		return 0;
+	}
+	const int count = sl->debug_get_stack_level_count();
+	int k = 0;
+	for (int i = 0; i < count && k < p_max; i++) {
+		const String function = sl->debug_get_stack_level_function(i);
+		const String source = sl->debug_get_stack_level_source(i);
+		ScriptFrame &f = r_frames[k++];
+		_copy_utf32(f.function, sizeof(f.function), function.ptr());
+		_copy_utf32(f.source, sizeof(f.source), source.ptr());
+		f.line = sl->debug_get_stack_level_line(i);
+	}
+	return k;
+}
+
 // ---------------------------------------------------------------------------------------------- the fatal paths
 
 #if defined(FELLOW_CRASH_POSIX)
@@ -955,6 +1045,120 @@ void _capture_current(void **r_frames, int &r_count) {
 	r_count = backtrace(r_frames, FRAMES_MAX);
 }
 
+// Milestone 98: the stalled main thread's frames, taken by the main thread itself in a signal the watchdog sends it
+// (as a sampling profiler's): its C++ frames and its script's, into static buffers.
+struct HangCapture {
+	std::atomic<int> state{ 0 }; // 1 asked, 2 taken
+	void *frames[FRAMES_MAX];
+	int count = 0;
+	int first = 0;
+	ScriptFrame script[24];
+	int script_count = 0;
+};
+HangCapture g_hang;
+int g_hang_signal = 0;
+pthread_t g_main_pthread;
+
+void _hang_handler(int, siginfo_t *, void *p_context) {
+	if (!Thread::is_main_thread() || g_hang.state.load(std::memory_order_acquire) != 1) {
+		return;
+	}
+	g_hang.count = backtrace(g_hang.frames, FRAMES_MAX);
+	const uint64_t pc = _pc_from(p_context);
+	g_hang.first = 0;
+	for (int i = 0; i < g_hang.count; i++) {
+		if (uint64_t(g_hang.frames[i]) == pc) {
+			g_hang.first = i;
+			break;
+		}
+	}
+	g_hang.script_count = _capture_script_frames(g_hang.script, 24);
+	g_hang.state.store(2, std::memory_order_release);
+}
+
+// A real-time signal nothing else handles (glibc's and .NET's are below SIGRTMIN + 4); SIGUSR2 where there are none.
+void _install_hang_signal() {
+	g_main_pthread = pthread_self();
+#if defined(SIGRTMIN)
+	const int first = SIGRTMIN + 4;
+	const int last = SIGRTMAX - 1;
+#else
+	const int first = SIGUSR2;
+	const int last = SIGUSR2;
+#endif
+	for (int sig = first; sig <= last; sig++) {
+		struct sigaction old;
+		memset(&old, 0, sizeof(old));
+		sigaction(sig, nullptr, &old);
+		if ((old.sa_flags & SA_SIGINFO) || old.sa_handler != SIG_DFL) {
+			continue;
+		}
+		struct sigaction sa;
+		memset(&sa, 0, sizeof(sa));
+		sa.sa_sigaction = _hang_handler;
+		sigemptyset(&sa.sa_mask);
+		sa.sa_flags = SA_SIGINFO | SA_RESTART; // a system call the signal interrupts goes on
+		if (sigaction(sig, &sa, nullptr) == 0) {
+			g_hang_signal = sig;
+		}
+		return;
+	}
+}
+
+int _hang_capture(void **&r_frames, ScriptFrame *&r_script, int &r_script_count) {
+	r_script_count = 0;
+	if (!g_hang_signal) {
+		return 0;
+	}
+	g_hang.state.store(1, std::memory_order_release);
+	if (pthread_kill(g_main_pthread, g_hang_signal) != 0) {
+		g_hang.state.store(0);
+		return 0;
+	}
+	for (int i = 0; i < 500 && g_hang.state.load(std::memory_order_acquire) != 2; i++) {
+		usleep(1000);
+	}
+	if (g_hang.state.load(std::memory_order_acquire) != 2) {
+		g_hang.state.store(0); // not taken in half a second (a thread blocked in the kernel): the report without them
+		return 0;
+	}
+	r_frames = g_hang.frames + g_hang.first;
+	r_script = g_hang.script;
+	r_script_count = g_hang.script_count;
+	return g_hang.count - g_hang.first;
+}
+
+void _hang_release() {
+	g_hang.state.store(0, std::memory_order_release);
+}
+
+bool _debugger_attached() {
+#if defined(__linux__)
+	const int fd = ::open("/proc/self/status", O_RDONLY);
+	if (fd < 0) {
+		return false;
+	}
+	char b[2048];
+	const ssize_t n = ::read(fd, b, sizeof(b) - 1);
+	::close(fd);
+	if (n <= 0) {
+		return false;
+	}
+	b[n] = 0;
+	const char *t = strstr(b, "TracerPid:");
+	if (!t) {
+		return false;
+	}
+	t += 10;
+	while (*t == ' ' || *t == '\t') {
+		t++;
+	}
+	return *t >= '1' && *t <= '9';
+#else
+	return false;
+#endif
+}
+
 #elif defined(FELLOW_CRASH_WINDOWS)
 
 typedef BOOL(WINAPI *MiniDumpWriteDumpFn)(HANDLE, DWORD, HANDLE, MINIDUMP_TYPE, PMINIDUMP_EXCEPTION_INFORMATION, PMINIDUMP_USER_STREAM_INFORMATION, PMINIDUMP_CALLBACK_INFORMATION);
@@ -1049,6 +1253,33 @@ int _unwind(const CONTEXT *p_context, void **r_frames, int p_max) {
 #endif
 }
 
+// A minidump of the process (with p_pointers, the exception's thread and context) beside the report, its size appended.
+void _append_minidump(ReportFile &f, const char *p_name, EXCEPTION_POINTERS *p_pointers, DWORD p_thread) {
+	char dump_path[PATH_BYTES];
+	_join_path(dump_path, sizeof(dump_path), g.dir, p_name);
+	wchar_t w[PATH_BYTES];
+	if (!MultiByteToWideChar(CP_UTF8, 0, dump_path, -1, w, PATH_BYTES)) {
+		return;
+	}
+	HANDLE h = CreateFileW(w, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+	if (h == INVALID_HANDLE_VALUE) {
+		return;
+	}
+	MINIDUMP_EXCEPTION_INFORMATION mei;
+	mei.ThreadId = p_thread;
+	mei.ExceptionPointers = p_pointers;
+	mei.ClientPointers = FALSE;
+	const MINIDUMP_TYPE type = MINIDUMP_TYPE(MiniDumpWithThreadInfo | MiniDumpWithUnloadedModules | MiniDumpWithIndirectlyReferencedMemory);
+	const BOOL ok = g_minidump(GetCurrentProcess(), GetCurrentProcessId(), h, type, p_pointers ? &mei : nullptr, nullptr, nullptr);
+	LARGE_INTEGER size;
+	size.QuadPart = 0;
+	GetFileSizeEx(h, &size);
+	CloseHandle(h);
+	char fields[96];
+	const int k = snprintf(fields, sizeof(fields), ",\"minidump_bytes\":%lld", ok ? (long long)size.QuadPart : -1LL);
+	_append(f, fields, size_t(k));
+}
+
 DWORD WINAPI _windows_report_thread(LPVOID) {
 	ReportInfo ri;
 	ri.kind = "crash";
@@ -1087,27 +1318,7 @@ DWORD WINAPI _windows_report_thread(LPVOID) {
 	}
 	g.reports_written.fetch_add(1);
 	if (dump) {
-		char dump_path[PATH_BYTES];
-		_join_path(dump_path, sizeof(dump_path), g.dir, dump_name);
-		wchar_t w[PATH_BYTES];
-		if (MultiByteToWideChar(CP_UTF8, 0, dump_path, -1, w, PATH_BYTES)) {
-			HANDLE h = CreateFileW(w, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-			if (h != INVALID_HANDLE_VALUE) {
-				MINIDUMP_EXCEPTION_INFORMATION mei;
-				mei.ThreadId = g_crash.thread;
-				mei.ExceptionPointers = g_crash.pointers;
-				mei.ClientPointers = FALSE;
-				const MINIDUMP_TYPE type = MINIDUMP_TYPE(MiniDumpWithThreadInfo | MiniDumpWithUnloadedModules | MiniDumpWithIndirectlyReferencedMemory);
-				const BOOL ok = g_minidump(GetCurrentProcess(), GetCurrentProcessId(), h, type, g_crash.pointers ? &mei : nullptr, nullptr, nullptr);
-				LARGE_INTEGER size;
-				size.QuadPart = 0;
-				GetFileSizeEx(h, &size);
-				CloseHandle(h);
-				char fields[96];
-				const int k = snprintf(fields, sizeof(fields), ",\"minidump_bytes\":%lld", ok ? (long long)size.QuadPart : -1LL);
-				_append(f, fields, size_t(k));
-			}
-		}
+		_append_minidump(f, dump_name, g_crash.pointers, g_crash.thread);
 	}
 	f.close();
 	return 0;
@@ -1115,6 +1326,16 @@ DWORD WINAPI _windows_report_thread(LPVOID) {
 
 // Runs the report's writing on a thread of its own (a stack overflow leaves the faulting thread no stack; a
 // minidump is best written from another thread) and waits for it.
+// Apart from _windows_report(), whose frame must stay small: after a stack overflow the faulting thread has only the
+// stack the guarantee below leaves it.
+_NO_INLINE_ void _windows_append_scripts() {
+	ReportFile f;
+	if (f.open(g.last_report, true)) {
+		_append_script_backtraces(f);
+		f.close();
+	}
+}
+
 void _windows_report(EXCEPTION_POINTERS *p_pointers, const char *p_reason) {
 	g_crash.pointers = p_pointers;
 	g_crash.thread = GetCurrentThreadId();
@@ -1132,11 +1353,7 @@ void _windows_report(EXCEPTION_POINTERS *p_pointers, const char *p_reason) {
 	}
 	const bool overflow = p_pointers && p_pointers->ExceptionRecord && p_pointers->ExceptionRecord->ExceptionCode == EXCEPTION_STACK_OVERFLOW;
 	if (!overflow) {
-		ReportFile f;
-		if (f.open(g.last_report, true)) {
-			_append_script_backtraces(f);
-			f.close();
-		}
+		_windows_append_scripts();
 	}
 }
 
@@ -1187,6 +1404,10 @@ void _install_handlers() {
 		g_minidump = dbghelp ? (MiniDumpWriteDumpFn)(void *)GetProcAddress(dbghelp, "MiniDumpWriteDump") : nullptr;
 	}
 	_resident_bytes(); // resolves its function now
+	// The main thread's stack overflowing leaves the filter 64 KiB (by default a page or two: not enough to start the
+	// thread that writes the report).
+	ULONG guarantee = 64 * 1024;
+	SetThreadStackGuarantee(&guarantee);
 	g_previous_filter = SetUnhandledExceptionFilter(_windows_filter);
 	g_previous_abort = signal(SIGABRT, _windows_abort);
 	_set_purecall_handler(_windows_purecall);
@@ -1194,6 +1415,39 @@ void _install_handlers() {
 
 void _capture_current(void **r_frames, int &r_count) {
 	r_count = int(RtlCaptureStackBackTrace(0, FRAMES_MAX, r_frames, nullptr));
+}
+
+// Milestone 98: the stalled main thread's frames, from its context while it is suspended for a moment (no script
+// frames: GDScript's stack is the thread's own; the minidump has every thread's).
+HANDLE g_main_thread = nullptr;
+void *g_hang_frames[FRAMES_MAX];
+
+void _install_hang_signal() {
+	g_main_thread = OpenThread(THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT | THREAD_QUERY_INFORMATION, FALSE, GetCurrentThreadId());
+}
+
+int _hang_capture(void **&r_frames, ScriptFrame *&r_script, int &r_script_count) {
+	r_script = nullptr;
+	r_script_count = 0;
+	if (!g_main_thread || SuspendThread(g_main_thread) == DWORD(-1)) {
+		return 0;
+	}
+	CONTEXT ctx;
+	memset(&ctx, 0, sizeof(ctx));
+	ctx.ContextFlags = CONTEXT_FULL;
+	int n = 0;
+	if (GetThreadContext(g_main_thread, &ctx)) {
+		n = _unwind(&ctx, g_hang_frames, FRAMES_MAX); // no heap, no lock the main thread could hold
+	}
+	ResumeThread(g_main_thread);
+	r_frames = g_hang_frames;
+	return n;
+}
+
+void _hang_release() {}
+
+bool _debugger_attached() {
+	return IsDebuggerPresent();
 }
 
 #else
@@ -1205,7 +1459,134 @@ void _capture_current(void **r_frames, int &r_count) {
 	r_count = 0;
 }
 
+void _install_hang_signal() {}
+
+int _hang_capture(void **&r_frames, ScriptFrame *&r_script, int &r_script_count) {
+	r_frames = nullptr;
+	r_script = nullptr;
+	r_script_count = 0;
+	return 0;
+}
+
+void _hang_release() {}
+
+bool _debugger_attached() {
+	return false;
+}
+
 #endif
+
+// ------------------------------------------------------------------------------- milestone 98: the watchdog
+
+std::atomic<bool> g_watch_quit{ false };
+Thread *g_watch_thread = nullptr;
+uint64_t g_hang_ms = 0;
+uint64_t g_main_id = 0;
+std::atomic<uint32_t> g_hangs{ 0 };
+
+// A clock that stops while the machine sleeps (a laptop's lid closed is no hang).
+uint64_t _awake_msec() {
+#if defined(FELLOW_CRASH_WINDOWS)
+	ULONGLONG t = 0;
+	QueryUnbiasedInterruptTime(&t);
+	return uint64_t(t / 10000);
+#elif defined(__APPLE__)
+	struct timespec ts;
+	clock_gettime(CLOCK_UPTIME_RAW, &ts);
+	return uint64_t(ts.tv_sec) * 1000 + uint64_t(ts.tv_nsec) / 1000000;
+#else
+	return _now_msec(); // CLOCK_MONOTONIC stops while Linux is suspended
+#endif
+}
+
+// The stalled main thread's report: written from the watchdog's thread without the heap (the main thread may hold its
+// lock), its frames taken from the main thread.
+void _report_hang(uint64_t p_stalled_ms, char *r_path, size_t p_cap) {
+	void **frames = nullptr;
+	ScriptFrame *script = nullptr;
+	int script_count = 0;
+	const int count = _hang_capture(frames, script, script_count);
+	ReportInfo ri;
+	ri.kind = "hang";
+	ri.reason = "the main thread made no progress";
+	ri.frames = frames;
+	ri.frame_count = count;
+	ri.main_thread = true;
+	ri.thread_id = g_main_id;
+	ri.script_frames = script;
+	ri.script_frame_count = script_count;
+	ri.stalled_ms = p_stalled_ms;
+	const uint32_t sequence = g.sequence.fetch_add(1);
+	char name[160];
+	_report_name("hang", "json", sequence, name, sizeof(name));
+#if defined(FELLOW_CRASH_WINDOWS)
+	char dump_name[160];
+	_report_name("hang", "dmp", sequence, dump_name, sizeof(dump_name));
+	const bool dump = g.minidumps && g_minidump;
+	ri.minidump = dump ? dump_name : nullptr;
+#endif
+	_join_path(r_path, p_cap, g.dir, name);
+	ReportFile f;
+	if (_write_core(ri, r_path, f)) {
+		g.reports_written.fetch_add(1);
+#if defined(FELLOW_CRASH_WINDOWS)
+		if (dump) {
+			_append_minidump(f, dump_name, nullptr, GetThreadId(g_main_thread));
+		}
+#endif
+		f.close();
+	} else {
+		r_path[0] = 0;
+	}
+	_hang_release();
+	g_hangs.fetch_add(1);
+}
+
+void _watchdog(void *) {
+	uint64_t last_frame = g.frame.load(std::memory_order_relaxed);
+	uint64_t last_progress = _awake_msec();
+	uint64_t last_tick = last_progress;
+	bool stalled = false;
+	char hang_path[PATH_BYTES] = {};
+	while (!g_watch_quit.load(std::memory_order_acquire)) {
+		OS::get_singleton()->delay_usec(100000);
+		const uint64_t now = _awake_msec();
+		if (now - last_tick > 3000) {
+			last_progress = now; // this thread was not run for seconds: the process was stopped, not the main thread
+		}
+		last_tick = now;
+		const uint64_t frame = g.frame.load(std::memory_order_relaxed);
+		if (frame != last_frame) {
+			if (stalled) {
+				// It recovered: how long the stall lasted, in the report and as a breadcrumb.
+				const uint64_t stall = now - last_progress;
+				if (hang_path[0]) {
+					ReportFile f;
+					if (f.open(hang_path, true)) {
+						char fields[64];
+						const int k = snprintf(fields, sizeof(fields), ",\"recovered_after_ms\":%llu", (unsigned long long)stall);
+						_append(f, fields, size_t(k));
+						f.close();
+					}
+				}
+				_add_crumb("hang", vformat("the main thread stalled for %.1f s", double(stall) / 1000.0));
+				stalled = false;
+			}
+			last_frame = frame;
+			last_progress = now;
+			continue;
+		}
+		if (stalled || frame == 0 || now - last_progress < g_hang_ms || g.reporting.load() != 0) {
+			continue;
+		}
+		if (EngineDebugger::is_active() || _debugger_attached()) {
+			last_progress = now; // stopped at a breakpoint
+			continue;
+		}
+		stalled = true;
+		_report_hang(now - last_progress, hang_path, sizeof(hang_path));
+	}
+}
 
 // What debug_crash() runs.
 volatile int g_never = 0;
@@ -1283,6 +1664,7 @@ FellowCrashReporter::FellowCrashReporter() {
 	const int log_lines = GLOBAL_DEF(PropertyInfo(Variant::INT, "debug/fellow/crash_reports/log_lines", PROPERTY_HINT_RANGE, "0,1024,1"), 200);
 	max_reports = GLOBAL_DEF(PropertyInfo(Variant::INT, "debug/fellow/crash_reports/max_reports", PROPERTY_HINT_RANGE, "1,100,1"), 10);
 	g.minidumps = GLOBAL_DEF(PropertyInfo(Variant::BOOL, "debug/fellow/crash_reports/minidumps"), true);
+	const double hang_seconds = GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "debug/fellow/crash_reports/hang_seconds", PROPERTY_HINT_RANGE, "0,120,0.5,suffix:s"), 10.0);
 	ProjectSettings *ps = ProjectSettings::get_singleton();
 	const bool fellow = !ps->has_setting("rendering/fellow/enabled") || bool(ps->get_setting("rendering/fellow/enabled"));
 	enabled = setting && fellow && !Engine::get_singleton()->is_editor_hint();
@@ -1321,10 +1703,31 @@ FellowCrashReporter::FellowCrashReporter() {
 	g.installed.store(true);
 	_add_crumb("engine", "started");
 	_prune_reports();
+	// Milestone 98: the watchdog, for the main thread making no progress.
+	for (int i = 0; i < ScriptServer::get_language_count(); i++) {
+		ScriptLanguage *sl = ScriptServer::get_language(i);
+		if (sl && sl->get_name() == "GDScript") {
+			g_gdscript = sl;
+		}
+	}
+	if (hang_seconds > 0.0) {
+		g_hang_ms = uint64_t(hang_seconds * 1000.0);
+		g_main_id = uint64_t(Thread::get_caller_id());
+		_install_hang_signal();
+		g_watch_quit.store(false);
+		g_watch_thread = memnew(Thread);
+		g_watch_thread->start(&_watchdog, nullptr);
+	}
 	setup_usec = OS::get_singleton()->get_ticks_usec() - t0;
 }
 
 FellowCrashReporter::~FellowCrashReporter() {
+	if (g_watch_thread) {
+		g_watch_quit.store(true);
+		g_watch_thread->wait_to_finish();
+		memdelete(g_watch_thread);
+		g_watch_thread = nullptr;
+	}
 	// The handlers stay (a crash while the engine shuts down is reported too), without the scripts' backtraces.
 	g.scripts_ok.store(false);
 	if (singleton == this) {
@@ -1530,6 +1933,12 @@ Dictionary FellowCrashReporter::get_stats() const {
 	d["breadcrumbs"] = MIN(g.crumb_head.load(), uint32_t(CRUMB_MAX));
 	d["reports_written"] = g.reports_written.load();
 	d["setup_usec"] = setup_usec;
+	d["watchdog"] = g_watch_thread != nullptr;
+	d["hang_ms"] = g_hang_ms;
+	d["hangs"] = g_hangs.load();
+#if defined(FELLOW_CRASH_POSIX)
+	d["hang_signal"] = g_hang_signal;
+#endif
 	d["frame"] = g.frame.load();
 	d["scene"] = String::utf8(g.scene);
 	d["context"] = JSON::parse_string(String::utf8(g.context[g.context_index.load() & 1]));

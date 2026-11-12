@@ -9,7 +9,9 @@ and runs tools/fellow_crash/crash_check.gd in it: for each kind of crash (a null
 stack overflow, a null pointer on a worker thread, an integer divided by zero) a process that crashes on purpose two
 script functions deep, and one 30 frames into a game with a scene current — its report is read (the reason, the frames, the breadcrumbs and values the game set, the
 marker it printed, the script's backtrace, the machine) and the next run finds it pending, then acknowledged; a
-report written by the game; the reports off (none written); the cost of printing with the reporter on and off. One
+report written by the game; the reports off (none written); the cost of printing with the reporter on and off;
+milestone 98: the main thread stalled for 3.5 s and going on, and frozen in a script's loop (killed), each a hang
+report. One
 JSON line: CRASH_CHECK {...} (also <dir>/crash_check.json); exit code 1 when something was otherwise than expected.
 """
 
@@ -64,7 +66,7 @@ def read_minidump(path):
     return out
 
 
-def write_project(path, reports, enabled=True, log_lines=50):
+def write_project(path, reports, enabled=True, log_lines=50, hang_seconds=None):
     os.makedirs(path, exist_ok=True)
     shutil.copy(os.path.join(HERE, "crash_check.gd"), os.path.join(path, "crash_check.gd"))
     with open(os.path.join(path, "project.godot"), "w", newline="\n") as f:
@@ -74,6 +76,7 @@ def write_project(path, reports, enabled=True, log_lines=50):
             f"fellow/crash_reports/directory=\"{reports.replace(os.sep, '/')}\"\n"
             f"fellow/crash_reports/log_lines={log_lines}\n"
             "settings/gdscript/always_track_call_stacks=true\n"
+            + (f"fellow/crash_reports/hang_seconds={hang_seconds}\n" if hang_seconds is not None else "")
         )
 
 
@@ -204,6 +207,44 @@ def main():
         if not p.get("found") or os.path.basename(p.get("path", "")) != os.path.basename(found[0]) or p.get("after_acknowledge"):
             failures.append(f"{kind}: pending {p}")
         result["kinds"][kind] = r
+
+    # Milestone 98: hangs. The main thread stalled 3.5 s (the watchdog at 2 s), then going on: one report, its stall
+    # and recovery, the main thread's frames (and on Linux its script's: the watchdog asks the main thread for them).
+    hang_project = os.path.join(out_dir, "project_hang")
+    write_project(hang_project, reports, hang_seconds=2.0)
+    hangs = {}
+    for mode, extra, timeout in (("hang", ["--stall_ms=3500"], 120), ("freeze", [], 9)):
+        for f in glob.glob(os.path.join(reports, "*")):
+            os.remove(f)
+        rc, out, secs = run(godot, hang_project, mode, extra, timeout=timeout)
+        found = sorted(glob.glob(os.path.join(reports, "hang_*.json")))
+        h = {"rc": rc, "seconds": round(secs, 2), "reports": len(found)}
+        if len(found) == 1:
+            rep = json.load(open(found[0], encoding="utf-8", errors="replace"))
+            shutil.copy(found[0], os.path.join(out_dir, f"{mode}_report.json"))
+            h.update({k: rep.get(k) for k in ("kind", "stalled_ms", "recovered_after_ms", "frame", "scene")})
+            h["frames"] = len(rep.get("frames", []))
+            h["script_frames"] = [f"{f['function']}:{f['line']}" for f in rep.get("script_frames", [])]
+            h["thread_main"] = rep.get("thread", {}).get("main")
+            h["minidump_bytes"] = rep.get("minidump_bytes")
+            if rep.get("minidump"):
+                h["minidump_streams"] = read_minidump(os.path.join(reports, rep["minidump"]))
+            if mode == "hang":
+                h["went_on"] = "CRASH_CHECK_AFTER_STALL" in out
+                ok = rc == 0 and h["went_on"] and 2000 <= (h["stalled_ms"] or 0) < 3500 and 3000 <= (h["recovered_after_ms"] or 0) <= 5000
+            else:
+                ok = rc == "timeout" and "recovered_after_ms" not in rep and (h["stalled_ms"] or 0) >= 2000
+            ok = ok and h["kind"] == "hang" and h["frames"] >= 3 and h["thread_main"] is True
+            want = ["_stall_two", "_stall_one"] if mode == "hang" else ["_spin_two", "_spin_one"]
+            if not WINDOWS:
+                ok = ok and [f.split(":")[0] for f in h["script_frames"][:2]] == want
+            if not ok:
+                failures.append(f"{mode}: {h}")
+        else:
+            failures.append(f"{mode}: rc {rc}, {len(found)} hang reports")
+            open(os.path.join(out_dir, f"{mode}_output.txt"), "w", encoding="utf-8").write(out)
+        hangs[mode] = h
+    result["hangs"] = hangs
 
     # A report written by the game.
     rc, out, _ = run(godot, project, "report")

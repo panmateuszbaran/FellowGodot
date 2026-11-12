@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""FellowEngine milestone 97 (decision 0205): a crash report made readable.
+"""FellowEngine milestone 97 (decision 0205): a crash report made readable (and milestone 98's hang reports).
 
     python tools/fellow_crash/symbolize.py <report.json> [--binary <the build's executable with symbols>]... [--json]
 
@@ -90,6 +90,9 @@ def main():
     c = report.get("context", {})
     print(f"{report.get('kind')}: {report.get('reason')}" + (f" at {report['fault_address']}" if "fault_address" in report else "") + (f" ({report['access']})" if "access" in report else ""))
     print(f"  {report.get('time_utc')}, {report.get('uptime_ms', 0) / 1000:.1f} s after start, frame {report.get('frame')}, scene {report.get('scene') or '-'}")
+    if report.get("kind") == "hang":
+        rec = report.get("recovered_after_ms")
+        print(f"  the main thread stalled {report.get('stalled_ms', 0) / 1000:.1f} s when reported; " + (f"it went on after {rec / 1000:.1f} s" if rec is not None else "it never went on (the process was ended)"))
     t = report.get("thread", {})
     print(f"  thread {t.get('id')} ({'main' if t.get('main') else 'not the main thread'})")
     print(f"  {c.get('engine')} {c.get('commit', '')[:10]} ({c.get('build')}), {c.get('project')} {c.get('project_version')}")
@@ -104,6 +107,10 @@ def main():
         where = f.get("function") or f.get("symbol") or "?"
         loc = f" {f['location']}" if f.get("location") and not f["location"].startswith("??") else ""
         print(f"  [{i}] {f.get('module')}+{f.get('offset')} {where}{loc}")
+    if report.get("script_frames"):
+        print("script frames:")
+        for i, f in enumerate(report["script_frames"]):
+            print(f"  [{i}] {f['function']} ({f['source']}:{f['line']})")
     for bt in report.get("script_backtraces", []):
         print(bt.rstrip())
     if report.get("breadcrumbs"):

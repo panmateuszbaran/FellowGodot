@@ -1,7 +1,7 @@
 # FellowEngine — milestone 97 report (crash reports)
 
-Status: **IN PROGRESS** (2026-11-13): the owner said "ok kontynuuj" (the GPU free again after a Windows update). Branch
-`fellow/geometry`. Decision record: `docs/decisions/0205-crash-reports.md`.
+Status: **FINAL** (2026-11-13; Windows' stack overflow checked in job f398, milestone 98): the owner said "ok
+kontynuuj" (the GPU free again after a Windows update). Branch `fellow/geometry`. Decision record: `docs/decisions/0205-crash-reports.md`.
 
 ## 0. Result
 
@@ -28,7 +28,12 @@ Status: **IN PROGRESS** (2026-11-13): the owner said "ok kontynuuj" (the GPU fre
 * Decision 0205's table: every report as expected on both Linux builds.
 * The editor check: passes (34 icons; the only error ALSA's).
 * The audio director's fourteen lanes under Movie Maker after the fix: the same as the laptop's before it.
-* The laptop (job f397, Windows): in progress.
+* The laptop (job f397, Windows, a release template): every crash's report and minidump as expected (decision 0205's
+  second table: the exception, its address and access, the frames, the script's backtrace; minidumps of 428-702 KB
+  holding the exception on the faulting thread), the windowed one with the RTX in its context — but a stack overflow
+  wrote nothing: the filter's own frame overflowed what Windows leaves the thread. Fixed (a 64 KiB stack guarantee, a
+  small frame); job f398 checks it with milestone 98.
+* The audio director's fix on the laptop: 4 447 virtual voices 46-48 µs a frame (152 before), 64 voices 7.4 µs.
 
 ## 3. Measurements
 
@@ -45,4 +50,4 @@ frame and a few millimetres). The reports of milestones 77-96 have their numbers
 
 ## 5. Next
 
-Hang reports (a watchdog: the main thread stuck for seconds, its stack taken without stopping the game).
+Hang reports (milestone 98).

@@ -6,6 +6,7 @@
 	<description>
 		A singleton. With [member ProjectSettings.debug/fellow/crash_reports/enabled] (and not in the editor), a crash — a fatal signal on Linux and macOS (SIGSEGV, SIGBUS, SIGILL, SIGFPE, SIGABRT, SIGTRAP), an unhandled exception, [code]abort()[/code] or a pure virtual call on Windows — writes a JSON report into [member ProjectSettings.debug/fellow/crash_reports/directory] before the process ends, in release templates too (where Godot's own crash handler is compiled out); on Windows a minidump ([code].dmp[/code]) beside it, for Visual Studio or WinDbg with the build's PDB. Godot's own handler (debug builds) and any handler installed before still run afterwards.
 		A report holds the reason (the signal or exception, the faulting address), the faulting thread's frames (each a module and an offset in it, symbolized afterwards with the build's symbols: [code]tools/fellow_crash/symbolize.py[/code]), the time, the frame and the scene, the process's memory, the machine (operating system, CPU, memory, GPU and its driver, the renderer), the project's name and version, the last lines of the log ([member ProjectSettings.debug/fellow/crash_reports/log_lines]), the breadcrumbs and values the game set, and GDScript's backtrace of the crashing thread (in a release build only with [member ProjectSettings.debug/settings/gdscript/always_track_call_stacks]). The fatal path writes from what it keeps in fixed buffers, without allocating; what needs the heap (the scripts' backtraces) is added last.
+		Hangs (milestone 98): with [member ProjectSettings.debug/fellow/crash_reports/hang_seconds], a watchdog thread notices the main thread making no progress (no frame) for that long and writes a [code]hang_*.json[/code] report without stopping the game — the main thread's frames (on Linux and macOS taken by the main thread itself in a signal, with its GDScript frames; on Windows from its context while it is suspended for a moment, and a minidump of every thread beside it), and when it goes on, how long the stall lasted ([code]recovered_after_ms[/code]; a report without it is a freeze the player ended). Not while a debugger is attached or the game runs from the editor with its debugger, nor while the machine sleeps.
 		The next run finds the report: [method get_pending_report] returns the newest report of an earlier run not yet acknowledged; the game can show it, send it where it collects them (an [HTTPRequest] with the player's consent), and [method acknowledge_reports]. The newest [member ProjectSettings.debug/fellow/crash_reports/max_reports] are kept.
 		[codeblock]
 		func _ready():
@@ -65,13 +66,13 @@
 		<method name="get_reports" qualifiers="const">
 			<return type="PackedStringArray" />
 			<description>
-				The reports in the directory (crashes, and those [method write_report] wrote), newest first: their absolute paths.
+				The reports in the directory (crashes, hangs, and those [method write_report] wrote), newest first: their absolute paths.
 			</description>
 		</method>
 		<method name="get_stats" qualifiers="const">
 			<return type="Dictionary" />
 			<description>
-				Diagnostics: [code]enabled[/code], [code]installed[/code] (the handlers), [code]log_capacity[/code], [code]log_lines_seen[/code], [code]log_lines_kept[/code], [code]breadcrumbs[/code], [code]reports_written[/code], [code]setup_usec[/code] (the reporter's start-up), [code]frame[/code], [code]scene[/code] and [code]context[/code] (the machine, as a report has it).
+				Diagnostics: [code]enabled[/code], [code]installed[/code] (the handlers), [code]log_capacity[/code], [code]log_lines_seen[/code], [code]log_lines_kept[/code], [code]breadcrumbs[/code], [code]reports_written[/code], [code]setup_usec[/code] (the reporter's start-up), [code]watchdog[/code], [code]hang_ms[/code], [code]hangs[/code], [code]hang_signal[/code] (Linux, macOS), [code]frame[/code], [code]scene[/code] and [code]context[/code] (the machine, as a report has it).
 			</description>
 		</method>
 		<method name="is_enabled" qualifiers="const">
@@ -84,7 +85,7 @@
 			<return type="Dictionary" />
 			<param index="0" name="path" type="String" />
 			<description>
-				A report's JSON as a [Dictionary], with [code skip-lint]path[/code] added (and [code]minidump_path[/code] when its minidump is beside it). Its keys: [code]kind[/code] ([code]"crash"[/code] or [code]"report"[/code]), [code]reason[/code], [code]signal[/code] and [code]code[/code] or the exception's [code]code[/code], [code]fault_address[/code], [code]access[/code], [code]time_utc[/code], [code]uptime_ms[/code], [code]frame[/code], [code]thread[/code], [code]scene[/code], [code]memory[/code], [code]context[/code], [code]frames[/code], [code]breadcrumbs[/code], [code]custom[/code], [code]log[/code], [code]script_backtraces[/code], [code]minidump[/code].
+				A report's JSON as a [Dictionary], with [code skip-lint]path[/code] added (and [code]minidump_path[/code] when its minidump is beside it). Its keys: [code]kind[/code] ([code]"crash"[/code], [code]"hang"[/code] or [code]"report"[/code]), [code]reason[/code], [code]signal[/code] and [code]code[/code] or the exception's [code]code[/code], [code]fault_address[/code], [code]access[/code], [code]time_utc[/code], [code]uptime_ms[/code], [code]frame[/code], [code]thread[/code], [code]scene[/code], [code]memory[/code], [code]context[/code], [code]frames[/code], [code]breadcrumbs[/code], [code]custom[/code], [code]log[/code], [code]script_backtraces[/code], [code]minidump[/code]; a hang's [code]stalled_ms[/code], [code]recovered_after_ms[/code] and [code]script_frames[/code].
 			</description>
 		</method>
 		<method name="remove_custom_value">

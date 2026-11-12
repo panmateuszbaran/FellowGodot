@@ -530,6 +530,9 @@
 		<member name="debug/fellow/crash_reports/enabled" type="bool" setter="" getter="" default="false">
 			Crash reports: a fatal signal or unhandled exception (release templates included) writes a JSON report — the reason, the faulting thread's frames, the last lines of the log, the game's breadcrumbs and values, the machine and GPU, the scene — into [member debug/fellow/crash_reports/directory] before the process ends (on Windows a minidump beside it); the next run finds it ([method FellowCrashReporter.get_pending_report]). Not in the editor. Read at start-up. Decision 0205.
 		</member>
+		<member name="debug/fellow/crash_reports/hang_seconds" type="float" setter="" getter="" default="10.0">
+			Hang reports (milestone 98): a watchdog writes a report when the main thread has made no progress for this long — its frames (on Linux and macOS its GDScript frames too; on Windows a minidump) — without stopping the game, and adds how long the stall lasted when it goes on. Not with a debugger attached. 0: off. Read at start-up. Decision 0206.
+		</member>
 		<member name="debug/fellow/crash_reports/log_lines" type="int" setter="" getter="" default="200">
 			The last lines of the log a report keeps (0: none). Read at start-up.
 		</member>

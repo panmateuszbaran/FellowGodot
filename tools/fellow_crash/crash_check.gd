@@ -3,11 +3,13 @@
 ##
 ##   godot --headless --path <project> -s res://crash_check.gd -- --mode=crash --kind=segfault|abort|trap|stack_overflow|thread|divide
 ##       [--delay=<frames>]
-##   godot --headless --path <project> -s res://crash_check.gd -- --mode=report|pending|cost
+##   godot --headless --path <project> -s res://crash_check.gd -- --mode=report|pending|cost|hang|freeze [--stall_ms=N]
 ##
 ## crash: breadcrumbs, custom values and a marker printed, then a crash on purpose two script functions deep (the
 ## report should hold all of them and the script's backtrace; --delay: a scene made current and frames gone by first). report: a report written by the game. pending: the
-## earlier run's report found, then acknowledged. cost: what printing, breadcrumbs and values cost. One JSON line:
+## earlier run's report found, then acknowledged. cost: what printing, breadcrumbs and values cost. hang (milestone
+## 98): the main thread stalled for --stall_ms two script functions deep, then going on; freeze: in a loop that never
+## ends (the checker kills it). One JSON line:
 ## CRASH_CHECK_<MODE> {...}.
 extends SceneTree
 
@@ -37,6 +39,20 @@ func _initialize() -> void:
 				for i in delay:
 					await process_frame
 			_level_one(args.get("kind", "segfault"))
+		"hang", "freeze":
+			# Milestone 98: the main thread stalled two script functions deep — for --stall_ms and then going on, or
+			# (freeze) in a loop that never ends.
+			r.add_breadcrumb("before the stall", "game")
+			for i in 20:
+				await process_frame
+			if mode == "hang":
+				_stall_one(int(args.get("stall_ms", "3500")))
+				for i in 10:
+					await process_frame
+				print("CRASH_CHECK_AFTER_STALL")
+				_out("HANG", r.get_stats())
+			else:
+				_spin_one()
 		"report":
 			r.add_breadcrumb("before the report", "game")
 			r.set_custom_value("checkpoint", 7)
@@ -100,6 +116,24 @@ func _level_two(kind: String) -> void:
 	FellowCrashReporter.add_breadcrumb("level two", "game")
 	print("CRASH_CHECK_ARMED " + kind)
 	FellowCrashReporter.debug_crash(kind)
+
+
+func _stall_one(ms: int) -> void:
+	_stall_two(ms)
+
+
+func _stall_two(ms: int) -> void:
+	OS.delay_msec(ms)
+
+
+func _spin_one() -> void:
+	_spin_two()
+
+
+func _spin_two() -> void:
+	var n := 0
+	while true:
+		n += 1
 
 
 func _out(mode: String, d: Dictionary) -> void:
