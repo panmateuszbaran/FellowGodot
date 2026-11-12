@@ -963,6 +963,104 @@ bool FellowTraversal3D::_find_jump(const Vector3 &p_wish, Ledge &r_ledge, Vector
 	return false;
 }
 
+// Milestone 84 (decision 0192): the edge of the floor the body walks over (p_direction, flat): no floor a step ahead
+// within drop_min (1 m) below, the floor's side found looking back from there; hung from facing back into it, both
+// hands on it, room for the body hanging and just over the edge outside it (r_mid: where it goes before it goes down).
+bool FellowTraversal3D::_find_drop(const Vector3 &p_direction, Ledge &r_ledge, Vector3 &r_mid) const {
+	CollisionObject3D *body = _get_body();
+	if (!body || body->get_world_3d().is_null()) {
+		return false;
+	}
+	const Vector3 dir = flat(p_direction);
+	if (dir.length() < 1e-3f) {
+		return false;
+	}
+	const Vector3 d = dir.normalized();
+	PhysicsDirectSpaceState3D *space = body->get_world_3d()->get_direct_space_state();
+	HashSet<RID> exclude;
+	exclude.insert(body->get_rid());
+	const Vector3 feet = _feet_of(body->get_global_transform());
+	const Vector3 ahead = feet + d * (radius + 0.2f);
+	PhysicsDirectSpaceState3D::RayParameters dq;
+	dq.from = ahead + UP * 0.3f;
+	dq.to = ahead - UP * 1.0f;
+	dq.exclude = exclude;
+	dq.collision_mask = collision_mask;
+	PhysicsDirectSpaceState3D::RayResult dr;
+	if (space->intersect_ray(dq, dr)) {
+		return false; // the floor goes on (or steps down less than a metre)
+	}
+	PhysicsDirectSpaceState3D::RayParameters bq;
+	bq.from = ahead - UP * 0.12f;
+	bq.to = bq.from - d * (radius + 0.45f);
+	bq.exclude = exclude;
+	bq.collision_mask = collision_mask;
+	PhysicsDirectSpaceState3D::RayResult br;
+	if (!space->intersect_ray(bq, br) || flat(br.normal).length() < 0.6f || flat(br.normal).normalized().dot(d) < 0.8f) {
+		return false;
+	}
+	Ledge l;
+	if (!_probe_edge(Vector3(br.position.x, feet.y, br.position.z), -d, 0.0f, l) || Math::abs(l.edge.y - feet.y) > 0.15f) {
+		return false;
+	}
+	Ledge hand;
+	if (!_probe_edge(l.edge, l.inward, 0.24f, hand) || !_probe_edge(l.edge, l.inward, -0.24f, hand)) {
+		return false;
+	}
+	const Vector3 mid = Vector3(l.edge.x, feet.y + 0.02f, l.edge.z) - l.inward * (radius + 0.1f);
+	if (!_capsule_free(_hang_feet_at(l.edge, l.inward) + UP * 0.02f, radius * 0.95f, height - 0.04f, exclude) || !_capsule_free(mid + UP * 0.02f, radius * 0.95f, height - 0.04f, exclude)) {
+		return false;
+	}
+	r_ledge = l;
+	r_mid = mid;
+	return true;
+}
+
+// Into the hang over the edge: out over it, then down, turning to face the wall; the hands reaching for the edge.
+bool FellowTraversal3D::_start_drop(const Ledge &p_ledge, const Vector3 &p_mid) {
+	CollisionObject3D *body = _get_body();
+	if (!body) {
+		return false;
+	}
+	const Vector3 feet = _feet_of(body->get_global_transform());
+	const Vector3 facing = -body->get_global_transform().basis.get_column(2);
+	const Vector3 wish = flat(intent);
+	if (!_start_hang(p_ledge, false)) {
+		return false;
+	}
+	_start_transfer(ledge, p_mid, TRANSFER_DROP, drop_duration);
+	transfer.from_feet = feet;
+	transfer.from_inward = flat(facing).length() > 1e-3f ? flat(facing).normalized() : -ledge.inward;
+	const Vector3 left = UP.cross(ledge.inward).normalized();
+	transfer.from_hands[0] = ledge.edge + left * 0.24f + ledge.inward * 0.06f + UP * 0.02f;
+	transfer.from_hands[1] = ledge.edge - left * 0.24f + ledge.inward * 0.06f + UP * 0.02f;
+	// The wish that walked it over the edge points away from the wall: held as it was, it does nothing (it would let
+	// go); changed, it is the world's again.
+	remap = wish.length() > 0.3f;
+	remap_from = remap ? wish.normalized() : Vector3();
+	remap_to = Vector3();
+	_step_transfer(0.0);
+	return true;
+}
+
+bool FellowTraversal3D::try_drop(const Vector3 &p_direction) {
+	CollisionObject3D *body = _get_body();
+	if (!body || active || !hang) {
+		return false;
+	}
+	_read_body_shape(body);
+	Vector3 d = flat(p_direction);
+	if (d.length() < 1e-3f) {
+		d = flat(intent);
+	}
+	if (d.length() < 1e-3f) {
+		d = flat(-body->get_global_transform().basis.get_column(2));
+	}
+	Ledge l;
+	Vector3 mid;
+	return _find_drop(d, l, mid) && _start_drop(l, mid);
+}
+
 void FellowTraversal3D::_start_transfer(const Ledge &p_to, const Vector3 &p_control, int p_how, double p_duration) {
 	transfer.active = true;
 	transfer.how = p_how;
@@ -993,7 +1091,11 @@ void FellowTraversal3D::_step_transfer(double p_delta) {
 	transfer.t += p_delta / transfer.duration;
 	const float u = float(MIN(transfer.t, 1.0));
 	const float w = smooth(u);
-	const Vector3 feet = transfer.from_feet * ((1.0f - w) * (1.0f - w)) + transfer.control * (2.0f * (1.0f - w) * w) + transfer.to_feet * (w * w);
+	Vector3 feet = transfer.from_feet * ((1.0f - w) * (1.0f - w)) + transfer.control * (2.0f * (1.0f - w) * w) + transfer.to_feet * (w * w);
+	if (transfer.how == TRANSFER_DROP) {
+		// Out over the edge (the first 40 %), then straight down.
+		feet = u < 0.4f ? transfer.from_feet.lerp(transfer.control, smooth(u / 0.4f)) : transfer.control.lerp(transfer.to_feet, smooth((u - 0.4f) / 0.6f));
+	}
 	const Vector3 a = flat(transfer.from_inward).normalized();
 	const Vector3 b = flat(transfer.to.inward).normalized();
 	const float angle = Math::atan2(a.cross(b).dot(UP), a.dot(b));
@@ -1011,13 +1113,13 @@ void FellowTraversal3D::_step_transfer(double p_delta) {
 		transfer.to.edge + to_left * 0.24f + transfer.to.inward * 0.06f + UP * 0.02f,
 		transfer.to.edge - to_left * 0.24f + transfer.to.inward * 0.06f + UP * 0.02f,
 	};
-	const float hold = jump ? 1.0f - 0.85f * Math::sin(u * float(Math::PI)) : 1.0f;
+	const float hold = jump ? 1.0f - 0.85f * Math::sin(u * float(Math::PI)) : (transfer.how == TRANSFER_DROP ? smooth(MIN(1.0f, u * 2.0f)) : 1.0f);
 	const Vector3 face = feet + inward * (radius + 0.02f) + UP * 0.35f;
 	for (int h = 0; h < 2; h++) {
 		hints.hand[h] = transfer.from_hands[h].lerp(to_hands[h], w);
 		hints.hand_weight[h] = hold;
 		hints.foot[h] = face + left * (h == 0 ? 0.14f : -0.14f);
-		hints.foot_weight[h] = jump ? 0.3f : 0.8f;
+		hints.foot_weight[h] = jump ? 0.3f : (transfer.how == TRANSFER_DROP ? 0.8f * smooth(MAX(0.0f, u - 0.4f) / 0.6f) : 0.8f);
 		hints.foot_follow[h] = 1.0f;
 	}
 	hints.progress = 0.0f;
@@ -1037,7 +1139,7 @@ void FellowTraversal3D::_step_transfer(double p_delta) {
 	}
 }
 
-bool FellowTraversal3D::_start_hang(const Ledge &p_ledge) {
+bool FellowTraversal3D::_start_hang(const Ledge &p_ledge, bool p_step) {
 	CollisionObject3D *body = _get_body();
 	if (!body || !hang || p_ledge.inward == Vector3()) {
 		return false;
@@ -1071,7 +1173,9 @@ bool FellowTraversal3D::_start_hang(const Ledge &p_ledge) {
 	active = true;
 	global_stats.hangs.increment();
 	emit_signal(SNAME("hang_started"), _ledge_dict(ledge));
-	_step_hang(0.0); // the pose's targets from this frame
+	if (p_step) {
+		_step_hang(0.0); // the pose's targets from this frame
+	}
 	return true;
 }
 
@@ -1584,6 +1688,18 @@ void FellowTraversal3D::_notification(int p_what) {
 						}
 					}
 				}
+				if (!active && enabled && hang && drop_to_hang && cooldown <= 0.0) {
+					// Milestone 84: walking slowly over an edge, hanging from it.
+					const CharacterBody3D *cb = Object::cast_to<CharacterBody3D>(body);
+					if (cb && cb->is_on_floor() && flat(intent).length() > 0.5f && flat(v).length() <= drop_max_speed) {
+						_read_body_shape(body);
+						Ledge l;
+						Vector3 mid;
+						if (_find_drop(intent, l, mid)) {
+							_start_drop(l, mid);
+						}
+					}
+				}
 				if (!active && enabled && auto_mantle && cooldown <= 0.0) {
 					const CharacterBody3D *cb = Object::cast_to<CharacterBody3D>(body);
 					const bool air = cb && !cb->is_on_floor();
@@ -1784,6 +1900,11 @@ void FellowTraversal3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_hang_jump_distance"), &FellowTraversal3D::get_hang_jump_distance);
 	ClassDB::bind_method(D_METHOD("set_hang_jump_height", "height"), &FellowTraversal3D::set_hang_jump_height);
 	ClassDB::bind_method(D_METHOD("get_hang_jump_height"), &FellowTraversal3D::get_hang_jump_height);
+	ClassDB::bind_method(D_METHOD("set_drop_to_hang", "enabled"), &FellowTraversal3D::set_drop_to_hang);
+	ClassDB::bind_method(D_METHOD("is_drop_to_hang"), &FellowTraversal3D::is_drop_to_hang);
+	ClassDB::bind_method(D_METHOD("set_drop_max_speed", "speed"), &FellowTraversal3D::set_drop_max_speed);
+	ClassDB::bind_method(D_METHOD("get_drop_max_speed"), &FellowTraversal3D::get_drop_max_speed);
+	ClassDB::bind_method(D_METHOD("try_drop", "direction"), &FellowTraversal3D::try_drop, DEFVAL(Vector3()));
 	ClassDB::bind_method(D_METHOD("hang_jump"), &FellowTraversal3D::hang_jump);
 	ClassDB::bind_method(D_METHOD("is_transferring"), &FellowTraversal3D::is_transferring);
 	ClassDB::bind_method(D_METHOD("set_ladders", "enabled"), &FellowTraversal3D::set_ladders);
@@ -1832,6 +1953,8 @@ void FellowTraversal3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "wrap_corners"), "set_wrap_corners", "is_wrap_corners");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "hang_jump_distance", PROPERTY_HINT_RANGE, "0,5,0.01,suffix:m"), "set_hang_jump_distance", "get_hang_jump_distance");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "hang_jump_height", PROPERTY_HINT_RANGE, "0,4,0.01,suffix:m"), "set_hang_jump_height", "get_hang_jump_height");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "drop_to_hang"), "set_drop_to_hang", "is_drop_to_hang");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "drop_max_speed", PROPERTY_HINT_RANGE, "0,10,0.01,suffix:m/s"), "set_drop_max_speed", "get_drop_max_speed");
 	ADD_GROUP("Ladders", "");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "ladders"), "set_ladders", "is_ladders");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "ladder_speed", PROPERTY_HINT_RANGE, "0,5,0.01,suffix:m/s"), "set_ladder_speed", "get_ladder_speed");
@@ -1844,7 +1967,7 @@ void FellowTraversal3D::_bind_methods() {
 	ADD_SIGNAL(MethodInfo("mantle_cancelled", PropertyInfo(Variant::INT, "kind")));
 	ADD_SIGNAL(MethodInfo("hang_started", PropertyInfo(Variant::DICTIONARY, "ledge")));
 	ADD_SIGNAL(MethodInfo("hang_finished", PropertyInfo(Variant::BOOL, "climbed")));
-	ADD_SIGNAL(MethodInfo("hang_transferred", PropertyInfo(Variant::DICTIONARY, "ledge"), PropertyInfo(Variant::INT, "how", PROPERTY_HINT_ENUM, "Outer Corner,Inner Corner,Jump Along,Jump Up")));
+	ADD_SIGNAL(MethodInfo("hang_transferred", PropertyInfo(Variant::DICTIONARY, "ledge"), PropertyInfo(Variant::INT, "how", PROPERTY_HINT_ENUM, "Outer Corner,Inner Corner,Jump Along,Jump Up,Drop")));
 	ADD_SIGNAL(MethodInfo("ladder_started", PropertyInfo(Variant::OBJECT, "ladder", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_DEFAULT, "FellowLadder3D")));
 	ADD_SIGNAL(MethodInfo("ladder_finished", PropertyInfo(Variant::BOOL, "at_top")));
 
@@ -1861,5 +1984,6 @@ void FellowTraversal3D::_bind_methods() {
 	BIND_ENUM_CONSTANT(TRANSFER_INNER_CORNER);
 	BIND_ENUM_CONSTANT(TRANSFER_JUMP_ALONG);
 	BIND_ENUM_CONSTANT(TRANSFER_JUMP_UP);
+	BIND_ENUM_CONSTANT(TRANSFER_DROP);
 	BIND_ENUM_CONSTANT(KIND_MAX);
 }

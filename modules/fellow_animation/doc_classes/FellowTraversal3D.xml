@@ -8,7 +8,7 @@
 		The mantle moves the body itself, each physics frame, along a path from the ledge's geometry: up in front of the wall until the capsule is over the top, then onto it (a vault goes over and down beyond it), turned to face the wall when [member align_to_wall] is on; a [CharacterBody3D]'s velocity follows the motion, and is [member exit_speed] into the ledge at the end. A collider that moves (an [AnimatableBody3D] platform) carries the ledge with it. The body's own controller should not move it while [method is_active] is [code]true[/code] (the traversal sets the body's transform after the body's own physics processing, as its child).
 		The pose: a [FellowTraversalPose3D] on the character's [Skeleton3D] reaches the hands for the edge, puts the feet on the wall's face and onto the top and tips the torso towards the wall over whatever animation plays; or plays the clip set for the kind ([member low_clip], [member high_clip], [member vault_clip]) across the mantle, its root's motion ([member clip_root_bone]) warped onto the ledge as the body's path. The signals tell an [AnimationTree] when to switch. See [code]docs/decisions/0180-traversal-mantling.md[/code].
 		Hanging (milestone 75): in the air, a ledge the body cannot climb (no room on its top: a wall rising behind it, an overhang) whose edge is about [member hang_reach] over its feet is caught and hung from ([member hang]; with [member hang_first], every ledge it could climb too, or [method try_hang]): the body hangs below the edge facing the wall, moves along it as the intent goes left or right ([member shimmy_speed]), following it as it turns and steps and stopping where it ends, at a gap or at something in the way; it climbs when pushed at the wall again, up, or [method climb_up] (a mantle from the hang), and lets go when pulled away, down, or [method release]. Ladders: a [FellowLadder3D] the body goes towards ([member ladders]) is climbed at [member ladder_speed] (the intent up or towards it: up; [method set_climb_input]), stepped off at its foot, and at its top mantled off onto what is there. The pose puts the hands on the edge or the rungs and the feet on the wall or the rungs.
-		Corners and jumps (milestone 81): hanging, the body goes round the corner where a ledge ends ([member wrap_corners]) and jumps to the next ledge along or up ([method hang_jump]); see [code]docs/decisions/0189-ledge-corners-and-jumps.md[/code].
+		Corners and jumps (milestone 81): hanging, the body goes round the corner where a ledge ends ([member wrap_corners]) and jumps to the next ledge along or up ([method hang_jump]); see [code]docs/decisions/0189-ledge-corners-and-jumps.md[/code]. Over an edge into a hang (milestone 84): [method try_drop], [member drop_to_hang]; see [code]docs/decisions/0192-drop-to-hang.md[/code].
 		[codeblocks]
 		[gdscript]
 		# A controller: the input as the intent, nothing while the traversal moves the body.
@@ -164,6 +164,13 @@
 				The way the player wants to go (the input, in global space), set by the controller every physics frame: the automatic mantle checks that way, and a body pressed against a wall (its velocity into it lost to the slide) still mantles. A zero vector: the body's velocity is used.
 			</description>
 		</method>
+		<method name="try_drop">
+			<return type="bool" />
+			<param index="0" name="direction" type="Vector3" default="Vector3(0, 0, 0)" />
+			<description>
+				Hangs from the edge of the floor the body stands on in [param direction] (the intent's, or the way the body faces, when zero) — its "drop" button: when the floor ends within a step ahead, both hands fit on its edge and the body has room hanging below it. The body goes out over the edge and down in 0.8 s, turning to face the wall ([constant TRANSFER_DROP]); [signal hang_started] is emitted at once, [signal hang_transferred] when it hangs. Returns whether it drops.
+			</description>
+		</method>
 		<method name="try_hang">
 			<return type="bool" />
 			<param index="0" name="direction" type="Vector3" default="Vector3(0, 0, 0)" />
@@ -209,6 +216,12 @@
 		</member>
 		<member name="debug_draw" type="bool" setter="set_debug_draw" getter="is_debug_draw" default="false">
 			Draws the last ledge found (its edge and where the capsule goes; green when it can be climbed, red when not) and the mantle's path.
+		</member>
+		<member name="drop_max_speed" type="float" setter="set_drop_max_speed" getter="get_drop_max_speed" default="2.0">
+			With [member drop_to_hang], the fastest the body may walk over an edge and hang from it, in m/s; faster, it goes over (and falls).
+		</member>
+		<member name="drop_to_hang" type="bool" setter="set_drop_to_hang" getter="is_drop_to_hang" default="false">
+			Walking over the edge of the floor (the intent towards it, a [CharacterBody3D] on the floor, no faster than [member drop_max_speed]; the floor ending within a step ahead, more than a metre down), the body hangs from the edge instead, as [method try_drop] (milestone 84). The intent that walked it over the edge points away from the wall: held as it was it does nothing (it would let go); changed, it moves the body as when hanging.
 		</member>
 		<member name="enabled" type="bool" setter="set_enabled" getter="is_enabled" default="true">
 			Off: no check, no mantle (one in progress is cancelled).
@@ -389,6 +402,9 @@
 		</constant>
 		<constant name="TRANSFER_JUMP_UP" value="3" enum="Transfer">
 			A jump up to a ledge over the edge.
+		</constant>
+		<constant name="TRANSFER_DROP" value="4" enum="Transfer">
+			From the floor over its edge into a hang from it ([method try_drop], [member drop_to_hang]).
 		</constant>
 		<constant name="KIND_MAX" value="9" enum="Kind">
 			The number of kinds.

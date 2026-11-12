@@ -67,6 +67,7 @@ public:
 		TRANSFER_INNER_CORNER, // onto the wall that meets it
 		TRANSFER_JUMP_ALONG, // across a gap along the edge
 		TRANSFER_JUMP_UP, // up to a ledge above
+		TRANSFER_DROP, // milestone 84: from the floor over its edge into a hang
 	};
 
 	// A check's result (global space).
@@ -153,6 +154,10 @@ private:
 	bool wrap_corners = true;
 	float hang_jump_distance = 1.6f; // m along the edge past its end
 	float hang_jump_height = 1.3f; // m up
+	// Milestone 84 (decision 0192): walking over an edge, hanging from it.
+	bool drop_to_hang = false;
+	float drop_max_speed = 2.0f; // m/s: faster, the body goes over
+	double drop_duration = 0.8;
 	bool ladders = true;
 	float ladder_speed = 1.2f;
 	float ladder_reach = 0.6f;
@@ -237,12 +242,14 @@ private:
 	void _draw_debug();
 	Vector3 _hang_feet_at(const Vector3 &p_edge, const Vector3 &p_inward) const;
 	bool _probe_edge(const Vector3 &p_edge, const Vector3 &p_inward, float p_along, Ledge &r_ledge) const;
-	bool _start_hang(const Ledge &p_ledge);
+	bool _start_hang(const Ledge &p_ledge, bool p_step = true);
 	void _step_hang(double p_delta);
 	void _end_hang(bool p_climbed);
 	float _edge_end(float p_sign) const;
 	bool _find_corner(float p_sign, Ledge &r_ledge, Vector3 &r_control, int &r_how) const;
 	bool _find_jump(const Vector3 &p_wish, Ledge &r_ledge, Vector3 &r_control, int &r_how) const;
+	bool _find_drop(const Vector3 &p_direction, Ledge &r_ledge, Vector3 &r_mid) const;
+	bool _start_drop(const Ledge &p_ledge, const Vector3 &p_mid);
 	void _start_transfer(const Ledge &p_to, const Vector3 &p_control, int p_how, double p_duration);
 	void _step_transfer(double p_delta);
 	FellowLadder3D *_find_ladder(const Vector3 &p_feet, const Vector3 &p_direction, bool p_in_air, float &r_h, bool &r_from_top) const;
@@ -275,6 +282,7 @@ public:
 	Vector3 get_intent() const { return intent; }
 	// Milestone 75.
 	bool try_hang(const Vector3 &p_direction = Vector3());
+	bool try_drop(const Vector3 &p_direction = Vector3());
 	void hang_jump() { jump_requested = true; }
 	bool is_transferring() const { return active && action == KIND_HANG && transfer.active; }
 	bool try_ladder();
@@ -354,6 +362,10 @@ public:
 	float get_hang_jump_distance() const { return hang_jump_distance; }
 	void set_hang_jump_height(float p_height) { hang_jump_height = MAX(0.0f, p_height); }
 	float get_hang_jump_height() const { return hang_jump_height; }
+	void set_drop_to_hang(bool p_enabled) { drop_to_hang = p_enabled; }
+	bool is_drop_to_hang() const { return drop_to_hang; }
+	void set_drop_max_speed(float p_speed) { drop_max_speed = MAX(0.0f, p_speed); }
+	float get_drop_max_speed() const { return drop_max_speed; }
 	void set_ladders(bool p_enabled) { ladders = p_enabled; }
 	bool is_ladders() const { return ladders; }
 	void set_ladder_speed(float p_speed) { ladder_speed = MAX(0.0f, p_speed); }

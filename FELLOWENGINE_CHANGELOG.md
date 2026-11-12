@@ -9,6 +9,13 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 84 — over an edge into a hang (2026-11-12)
+
+- `FellowTraversal3D` (decision 0192): `try_drop()` and `drop_to_hang` (off by default) — walking slowly over the edge
+  of the floor, the body goes out over it and down into a hang from it, facing back (both hands on the edge, room
+  below); the wish that walked it there does nothing until it changes. Two lanes on both physics engines (into the
+  hang, along it and down; running over without one), the earlier ten unchanged.
+
 ## Milestone 83 — faces that speak and blink (2026-11-12)
 
 - `FellowFaceAnimator` (decision 0191): the mouth's blend shapes (ARKit's names by default) from the voice a player
