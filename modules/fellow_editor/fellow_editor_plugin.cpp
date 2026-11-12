@@ -51,6 +51,7 @@
 #include "scene/3d/physics/character_body_3d.h"
 #include "scene/3d/physics/collision_shape_3d.h"
 #include "scene/3d/physics/rigid_body_3d.h"
+#include "scene/3d/physics/static_body_3d.h"
 #include "scene/gui/box_container.h"
 #include "scene/gui/button.h"
 #include "scene/gui/check_box.h"
@@ -1014,6 +1015,39 @@ Node3D *FellowEditorPlugin::make_preset(int p_preset, const Node *p_root) {
 			// Milestone 78: the scene's 3D sounds heard through its geometry (occlusion, the listener's room's reverb).
 			top = Object::cast_to<Node3D>(_fellow_make("FellowAcoustics3D", "Acoustics", nullptr));
 		} break;
+		case PRESET_DESTRUCTIBLE_WALL: {
+			// Milestone 80: a 4 x 3 m brick-coloured wall, 0.25 m thick (a static body), prefractured in 40 pieces:
+			// broken where it is struck (0.6 m round the blow), what loses its support falling.
+			StaticBody3D *body = memnew(StaticBody3D);
+			body->set_name("Wall");
+			Ref<StandardMaterial3D> brick;
+			brick.instantiate();
+			brick->set_albedo(Color(0.62, 0.38, 0.3));
+			brick->set_roughness(0.9);
+			Ref<StandardMaterial3D> inside;
+			inside.instantiate();
+			inside->set_albedo(Color(0.72, 0.68, 0.62));
+			inside->set_roughness(0.95);
+			MeshInstance3D *mesh = memnew(MeshInstance3D);
+			mesh->set_name("Mesh");
+			Ref<BoxMesh> box;
+			box.instantiate();
+			box->set_size(Vector3(4.0, 3.0, 0.25));
+			box->set_material(brick);
+			mesh->set_mesh(box);
+			mesh->set_position(Vector3(0, 1.5, 0));
+			body->add_child(mesh);
+			CollisionShape3D *shape = memnew(CollisionShape3D);
+			shape->set_name("CollisionShape3D");
+			Ref<BoxShape3D> box_shape;
+			box_shape.instantiate();
+			box_shape->set_size(Vector3(4.0, 3.0, 0.25));
+			shape->set_shape(box_shape);
+			shape->set_position(Vector3(0, 1.5, 0));
+			body->add_child(shape);
+			top = body;
+			_fellow_make("FellowDestructible3D", "FellowDestructible3D", top, Dictionary{ { "interior_material", inside }, { "piece_count", 40 }, { "prefracture", true }, { "structural", true }, { "density", 1800.0 }, { "break_impulse", 300.0 } });
+		} break;
 		case PRESET_LADDER: {
 			// Milestone 75: a 3 m ladder (rails and rungs), climbed from its +Z side by a FellowTraversal3D.
 			Node *made = _fellow_make("FellowLadder3D", "Ladder", nullptr, Dictionary{ { "height", 3.0 } });
@@ -1193,6 +1227,7 @@ FellowEditorPlugin::FellowEditorPlugin() {
 	popup->add_separator();
 	popup->add_item(TTR("Add Destructible Crate (breaks when hit)"), PRESET_DESTRUCTIBLE_CRATE);
 	popup->add_item(TTR("Add Ladder (3 m, climbable)"), PRESET_LADDER);
+	popup->add_item(TTR("Add Destructible Wall (breaks where hit, stands while supported)"), PRESET_DESTRUCTIBLE_WALL);
 	popup->add_item(TTR("Add Car (driven by its throttle, brake and steering)"), PRESET_CAR);
 	popup->add_separator();
 	popup->add_item(TTR("Add Acoustics (sound occluded by walls, rooms' reverb)"), PRESET_ACOUSTICS);

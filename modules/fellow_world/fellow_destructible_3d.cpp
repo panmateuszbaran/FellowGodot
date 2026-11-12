@@ -60,6 +60,81 @@ void FellowFractureResult::prepare() {
 	if (prepared) {
 		return;
 	}
+	// Milestone 80: which pieces touch — the points of their surfaces that coincide (within a thousandth of the
+	// whole's size), three or more a pair (a shared face's corners; the cut points are computed alike for both cells).
+	{
+		AABB all;
+		for (uint32_t k = 0; k < pieces.size(); k++) {
+			all = k == 0 ? pieces[k].aabb : all.merge(pieces[k].aabb);
+		}
+		const float tol = MAX(1e-5f, all.get_longest_axis_size() * 1e-3f);
+		const float cell = tol * 2.0f;
+		struct Entry {
+			int piece;
+			Vector3 p;
+		};
+		HashMap<Vector3i, LocalVector<Entry>> grid;
+		auto key = [&](const Vector3 &p) {
+			return Vector3i(int(Math::floor(p.x / cell)), int(Math::floor(p.y / cell)), int(Math::floor(p.z / cell)));
+		};
+		LocalVector<LocalVector<Vector3>> points;
+		points.resize(pieces.size());
+		for (uint32_t k = 0; k < pieces.size(); k++) {
+			HashSet<Vector3i> seen;
+			for (const FellowFracture::Triangle &t : pieces[k].tris) {
+				for (int m = 0; m < 3; m++) {
+					const Vector3 &p = t.v[m].p;
+					const Vector3i fine(int(Math::floor(p.x / tol)), int(Math::floor(p.y / tol)), int(Math::floor(p.z / tol)));
+					if (seen.has(fine)) {
+						continue;
+					}
+					seen.insert(fine);
+					points[k].push_back(p);
+					grid[key(p)].push_back(Entry{ int(k), p });
+				}
+			}
+		}
+		const uint32_t n = pieces.size();
+		LocalVector<int> shared;
+		shared.resize(n * n);
+		memset(shared.ptr(), 0, sizeof(int) * n * n);
+		LocalVector<int> touched;
+		touched.resize(n);
+		for (uint32_t a = 0; a < n; a++) {
+			for (const Vector3 &p : points[a]) {
+				for (uint32_t b = 0; b < n; b++) {
+					touched[b] = 0;
+				}
+				const Vector3i c = key(p);
+				for (int dx = -1; dx <= 1; dx++) {
+					for (int dy = -1; dy <= 1; dy++) {
+						for (int dz = -1; dz <= 1; dz++) {
+							const LocalVector<Entry> *e = grid.getptr(c + Vector3i(dx, dy, dz));
+							if (!e) {
+								continue;
+							}
+							for (const Entry &q : *e) {
+								if (q.piece != int(a) && !touched[q.piece] && q.p.distance_squared_to(p) <= tol * tol) {
+									touched[q.piece] = 1;
+									shared[a * n + q.piece]++;
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+		adjacency.resize(n);
+		for (uint32_t a = 0; a < n; a++) {
+			Vector<int> list;
+			for (uint32_t b = 0; b < n; b++) {
+				if (b != a && MIN(shared[a * n + b], shared[b * n + a]) >= 3) {
+					list.push_back(int(b));
+				}
+			}
+			adjacency.write[a] = list;
+		}
+	}
 	surface_arrays.resize(pieces.size());
 	mesh_surfaces.resize(pieces.size());
 	for (uint32_t k = 0; k < pieces.size(); k++) {
@@ -205,6 +280,10 @@ void FellowDestructible3D::break_apart(const Vector3 &p_position, const Vector3 
 		return;
 	}
 	const Vector3 position = p_position == Vector3() ? mi->get_global_transform().xform(mi->get_aabb().get_center()) : p_position;
+	if (structure_built) {
+		_strike(position, p_impulse); // standing in pieces already: these break off
+		return;
+	}
 	if (prefractured.is_valid() && prefractured->built) {
 		pending = true;
 		pending_position = position;
@@ -266,6 +345,15 @@ void FellowDestructible3D::_spawn(const Ref<FellowFractureResult> &p_result, con
 	const uint64_t t0 = OS::get_singleton()->get_ticks_usec();
 	MeshInstance3D *src = _get_mesh();
 	CollisionObject3D *body = _get_body();
+	if (structural && body && src && p_result.is_valid() && !Object::cast_to<RigidBody3D>(body)) {
+		// Milestone 80: the object stands in its pieces; the blow breaks those near it off.
+		_build_structure(p_result);
+		pending = false;
+		_strike(p_position, p_impulse);
+		last_spawn_usec = OS::get_singleton()->get_ticks_usec() - t0;
+		global_stats.spawn_usec.add(last_spawn_usec);
+		return;
+	}
 	Node *parent = body ? body->get_parent() : (src ? src->get_parent() : nullptr);
 	if (!src || !parent || p_result.is_null()) {
 		pending = false;
@@ -377,6 +465,318 @@ void FellowDestructible3D::_spawn(const Ref<FellowFractureResult> &p_result, con
 	}
 }
 
+// Milestone 80 (decision 0188): the object standing in its pieces — each piece's mesh and convex shapes children of
+// the object's own body where they were in it, the object's mesh hidden and its shapes off. A piece stands on the
+// ground when it reaches within anchor_height of the object's lowest point.
+void FellowDestructible3D::_build_structure(const Ref<FellowFractureResult> &p_result) {
+	MeshInstance3D *src = _get_mesh();
+	CollisionObject3D *body = _get_body();
+	if (!src || !body || p_result.is_null() || !p_result->built) {
+		return;
+	}
+	struct_result = p_result;
+	struct_mxf = src->get_global_transform();
+	const Transform3D to_body = body->get_global_transform().affine_inverse();
+	const Vector3 scale = struct_mxf.basis.get_scale();
+	const Basis rot = struct_mxf.basis.orthonormalized();
+	Vector<Ref<Material>> materials;
+	for (int s = 0; s < p_result->source_surfaces; s++) {
+		materials.push_back(src->get_active_material(s));
+	}
+	const Ref<Material> interior = interior_material.is_valid() ? interior_material : (materials.is_empty() ? Ref<Material>() : materials[0]);
+	for (int i = 0; i < body->get_child_count(); i++) {
+		if (CollisionShape3D *cs = Object::cast_to<CollisionShape3D>(body->get_child(i))) {
+			cs->set_disabled(true);
+		}
+	}
+	src->set_visible(false);
+	const uint32_t n = p_result->pieces.size();
+	struct_pieces.clear();
+	struct_pieces.resize(n);
+	float lowest = 1e30f;
+	LocalVector<float> bottoms;
+	bottoms.resize(n);
+	for (uint32_t k = 0; k < n; k++) {
+		const AABB box = struct_mxf.xform(p_result->pieces[k].aabb);
+		bottoms[k] = box.position.y;
+		lowest = MIN(lowest, bottoms[k]);
+	}
+	for (uint32_t k = 0; k < n; k++) {
+		const FellowFracture::Piece &piece = p_result->pieces[k];
+		const Transform3D at = to_body * Transform3D(rot * Basis::from_scale(scale), struct_mxf.xform(piece.centroid));
+		StructPiece &sp = struct_pieces[k];
+		MeshInstance3D *mi = memnew(MeshInstance3D);
+		mi->set_name(vformat("%sPiece%d", src->get_name(), int(k)));
+		mi->set_mesh(p_result->meshes[k]);
+		mi->set_cast_shadows_setting(src->get_cast_shadows_setting());
+		const Vector<int> &surfaces = p_result->mesh_surfaces[k];
+		for (int i = 0; i < surfaces.size(); i++) {
+			const Ref<Material> m = surfaces[i] < materials.size() ? materials[surfaces[i]] : interior;
+			if (m.is_valid()) {
+				mi->set_surface_override_material(i, m);
+			}
+		}
+		mi->set_transform(at);
+		body->add_child(mi);
+		sp.mesh = mi;
+		for (const Ref<ConvexPolygonShape3D> &shape : p_result->shapes[k]) {
+			CollisionShape3D *cs = memnew(CollisionShape3D);
+			cs->set_shape(shape);
+			cs->set_transform(at);
+			body->add_child(cs);
+			sp.shapes.push_back(cs);
+		}
+		sp.alive = true;
+		sp.anchored = bottoms[k] <= lowest + anchor_height;
+	}
+	structure_built = true;
+}
+
+// The structure as it stands: each piece's centre and bounds (global), whether it stands and on the ground, the pieces
+// it touches.
+Array FellowDestructible3D::get_structure() const {
+	Array out;
+	if (!structure_built || struct_result.is_null()) {
+		return out;
+	}
+	for (uint32_t k = 0; k < struct_pieces.size(); k++) {
+		Dictionary d;
+		d["centre"] = struct_mxf.xform(struct_result->pieces[k].centroid);
+		d["aabb"] = struct_mxf.xform(struct_result->pieces[k].aabb);
+		d["standing"] = struct_pieces[k].alive;
+		d["anchored"] = struct_pieces[k].anchored;
+		PackedInt32Array touching;
+		if (k < uint32_t(struct_result->adjacency.size())) {
+			for (int j : struct_result->adjacency[k]) {
+				touching.push_back(j);
+			}
+		}
+		d["touching"] = touching;
+		out.push_back(d);
+	}
+	return out;
+}
+
+int FellowDestructible3D::get_standing_pieces() const {
+	int n = 0;
+	for (const StructPiece &sp : struct_pieces) {
+		n += sp.alive ? 1 : 0;
+	}
+	return n;
+}
+
+// Pieces of the broken object as one rigid body (a piece knocked off, or a chunk that lost its support), where they
+// were, their meshes and shapes about its centre of mass.
+RigidBody3D *FellowDestructible3D::_make_body(const LocalVector<int> &p_pieces, const Transform3D &p_mxf) {
+	MeshInstance3D *src = _get_mesh();
+	CollisionObject3D *body = _get_body();
+	Node *parent = body ? body->get_parent() : nullptr;
+	if (!src || !parent || struct_result.is_null()) {
+		return nullptr;
+	}
+	const Vector3 scale = p_mxf.basis.get_scale();
+	const Basis rot = p_mxf.basis.orthonormalized();
+	const float scale3 = Math::abs(scale.x * scale.y * scale.z);
+	Vector<Ref<Material>> materials;
+	for (int s = 0; s < struct_result->source_surfaces; s++) {
+		materials.push_back(src->get_active_material(s));
+	}
+	const Ref<Material> interior = interior_material.is_valid() ? interior_material : (materials.is_empty() ? Ref<Material>() : materials[0]);
+	float mass = 0.0f;
+	Vector3 centre;
+	for (int k : p_pieces) {
+		const float m = MAX(0.02f, struct_result->pieces[k].volume * scale3 * density);
+		mass += m;
+		centre += p_mxf.xform(struct_result->pieces[k].centroid) * m;
+	}
+	centre /= MAX(mass, 1e-6f);
+	RigidBody3D *rb = memnew(RigidBody3D);
+	rb->set_name(vformat("%s%s%d", src->get_name(), p_pieces.size() > 1 ? "Chunk" : "Piece", p_pieces[0]));
+	rb->set_mass(mass);
+	rb->set_collision_layer(body->get_collision_layer());
+	rb->set_collision_mask(body->get_collision_mask());
+	const Basis inv = rot.inverse();
+	for (int k : p_pieces) {
+		const FellowFracture::Piece &piece = struct_result->pieces[k];
+		const Transform3D local(Basis::from_scale(scale), inv.xform(p_mxf.xform(piece.centroid) - centre));
+		MeshInstance3D *mi = memnew(MeshInstance3D);
+		mi->set_mesh(struct_result->meshes[k]);
+		mi->set_cast_shadows_setting(src->get_cast_shadows_setting());
+		const Vector<int> &surfaces = struct_result->mesh_surfaces[k];
+		for (int i = 0; i < surfaces.size(); i++) {
+			const Ref<Material> m = surfaces[i] < materials.size() ? materials[surfaces[i]] : interior;
+			if (m.is_valid()) {
+				mi->set_surface_override_material(i, m);
+			}
+		}
+		mi->set_transform(local);
+		rb->add_child(mi);
+		for (const Ref<ConvexPolygonShape3D> &shape : struct_result->shapes[k]) {
+			CollisionShape3D *cs = memnew(CollisionShape3D);
+			cs->set_shape(shape);
+			cs->set_transform(local);
+			rb->add_child(cs);
+		}
+	}
+	const Node3D *parent_3d = Object::cast_to<Node3D>(parent);
+	const Transform3D to_parent = parent_3d ? parent_3d->get_global_transform().affine_inverse() : Transform3D();
+	rb->set_transform(to_parent * Transform3D(rot, centre));
+	parent->add_child(rb);
+	own_bodies.insert(rb->get_rid());
+	// Its faces lie on the standing pieces' (the cells share them): touching all round, it would be held there by
+	// friction. It passes through them while it leaves.
+	rb->add_collision_exception_with(body);
+	Exception e;
+	e.body = rb->get_instance_id();
+	e.until = debris_clock + (p_pieces.size() > 1 ? 0.15 : 0.3);
+	exceptions.push_back(e);
+	return rb;
+}
+
+void FellowDestructible3D::_expire_exceptions() {
+	CollisionObject3D *body = _get_body();
+	for (uint32_t i = 0; i < exceptions.size();) {
+		if (debris_clock >= exceptions[i].until) {
+			RigidBody3D *rb = ObjectDB::get_instance<RigidBody3D>(exceptions[i].body);
+			if (rb && body) {
+				rb->remove_collision_exception_with(body);
+			}
+			exceptions.remove_at_unordered(i);
+		} else {
+			i++;
+		}
+	}
+}
+
+// A blow on the standing object: the pieces within break_radius of it (at least the nearest) break off, thrown by it;
+// then what no longer reaches the ground through the pieces that touch falls, each part that hangs together as one
+// body.
+void FellowDestructible3D::_strike(const Vector3 &p_position, const Vector3 &p_impulse) {
+	if (!structure_built || struct_result.is_null()) {
+		return;
+	}
+	const uint32_t n = struct_pieces.size();
+	const Vector3 scale = struct_mxf.basis.get_scale();
+	const float scale3 = Math::abs(scale.x * scale.y * scale.z);
+	LocalVector<int> hit;
+	int nearest = -1;
+	float best = 1e30f;
+	for (uint32_t k = 0; k < n; k++) {
+		if (!struct_pieces[k].alive) {
+			continue;
+		}
+		const float d = struct_mxf.xform(struct_result->pieces[k].centroid).distance_to(p_position);
+		if (d < break_radius) {
+			hit.push_back(int(k));
+		}
+		if (d < best) {
+			best = d;
+			nearest = int(k);
+		}
+	}
+	if (hit.is_empty() && nearest >= 0) {
+		hit.push_back(nearest);
+	}
+	if (hit.is_empty()) {
+		return;
+	}
+	auto remove_piece = [&](int k) {
+		StructPiece &sp = struct_pieces[k];
+		sp.alive = false;
+		if (sp.mesh) {
+			sp.mesh->queue_free();
+			sp.mesh = nullptr;
+		}
+		for (CollisionShape3D *cs : sp.shapes) {
+			cs->set_disabled(true); // at once: the rest of this step's queries must not meet it
+			cs->queue_free();
+		}
+		sp.shapes.clear();
+	};
+	Array spawned;
+	float hit_mass = 0.0f;
+	for (int k : hit) {
+		hit_mass += MAX(0.02f, struct_result->pieces[k].volume * scale3 * density);
+	}
+	for (int k : hit) {
+		remove_piece(k);
+		LocalVector<int> one;
+		one.push_back(k);
+		RigidBody3D *rb = _make_body(one, struct_mxf);
+		if (!rb) {
+			continue;
+		}
+		const Vector3 centre = struct_mxf.xform(struct_result->pieces[k].centroid);
+		Vector3 out = centre - p_position;
+		const float dist = out.length();
+		out = dist > 1e-4f ? out / dist : Vector3(0, 1, 0);
+		rb->set_linear_velocity(out * burst_speed + p_impulse / MAX(hit_mass, 1e-3f));
+		_add_debris(rb, debris_lifetime);
+		spawned.push_back(rb);
+	}
+	// Support: from the pieces on the ground through the pieces that touch.
+	LocalVector<uint8_t> reached;
+	reached.resize(n);
+	LocalVector<int> queue;
+	for (uint32_t k = 0; k < n; k++) {
+		reached[k] = struct_pieces[k].alive && struct_pieces[k].anchored ? 1 : 0;
+		if (reached[k]) {
+			queue.push_back(int(k));
+		}
+	}
+	for (uint32_t q = 0; q < queue.size(); q++) {
+		for (int j : struct_result->adjacency[queue[q]]) {
+			if (struct_pieces[j].alive && !reached[j]) {
+				reached[j] = 1;
+				queue.push_back(j);
+			}
+		}
+	}
+	int fallen = 0;
+	int chunks = 0;
+	for (uint32_t k = 0; k < n; k++) {
+		if (!struct_pieces[k].alive || reached[k]) {
+			continue;
+		}
+		// An unsupported part: the pieces that touch it, together.
+		LocalVector<int> part;
+		part.push_back(int(k));
+		reached[k] = 1;
+		for (uint32_t q = 0; q < part.size(); q++) {
+			for (int j : struct_result->adjacency[part[q]]) {
+				if (struct_pieces[j].alive && !reached[j]) {
+					reached[j] = 1;
+					part.push_back(j);
+				}
+			}
+		}
+		for (int j : part) {
+			remove_piece(j);
+		}
+		RigidBody3D *rb = _make_body(part, struct_mxf);
+		if (rb) {
+			_add_debris(rb, debris_lifetime);
+			spawned.push_back(rb);
+		}
+		fallen += int(part.size());
+		chunks++;
+	}
+	last_broken = int(hit.size());
+	last_fallen = fallen;
+	last_chunks = chunks;
+	last_pieces = int(hit.size()) + fallen;
+	global_stats.breaks.increment();
+	global_stats.pieces.add(uint64_t(last_pieces));
+	emit_signal(SNAME("broken"), spawned);
+	if (get_standing_pieces() == 0) {
+		broken = true;
+		CollisionObject3D *body = _get_body();
+		if (body && free_after_break) {
+			body->queue_free();
+		}
+	}
+}
+
 void FellowDestructible3D::_check_impacts() {
 	if (broken || pending || !break_on_impact || break_impulse <= 0.0f) {
 		return;
@@ -438,8 +838,11 @@ void FellowDestructible3D::_check_impacts() {
 		PhysicsDirectSpaceState3D::ShapeResult res[8];
 		const int n = space->intersect_shape(sp, res, 8);
 		for (int i = 0; i < n; i++) {
-			if (!Object::cast_to<RigidBody3D>(ObjectDB::get_instance(res[i].collider_id))) {
+			if (!Object::cast_to<RigidBody3D>(ObjectDB::get_instance(res[i].collider_id)) || own_bodies.has(res[i].rid)) {
 				continue;
+			}
+			if (structure_built && res[i].collider_id == last_striker && debris_clock - last_strike_time < 0.25) {
+				continue; // the body that just struck: going on through the gap it made
 			}
 			PhysicsDirectBodyState3D *st = ps->body_get_direct_state(res[i].rid);
 			if (!st || st->get_inverse_mass() <= 0.0f) {
@@ -453,8 +856,11 @@ void FellowDestructible3D::_check_impacts() {
 				last_impact = MAX(last_impact, momentum);
 			}
 			if (momentum >= break_impulse && (towards || momentum >= 2.0f * break_impulse)) {
-				// No impulse given to the pieces: the body striking goes on into them.
-				break_apart(at, Vector3());
+				// No impulse given to the pieces when it all breaks: the body striking goes on into them. Standing in
+				// pieces, those it knocks out take its momentum (they would rest wedged in the hole).
+				last_striker = res[i].collider_id;
+				last_strike_time = debris_clock;
+				break_apart(at, structural ? v / st->get_inverse_mass() : Vector3());
 				return;
 			}
 		}
@@ -590,6 +996,9 @@ void FellowDestructible3D::_notification(int p_what) {
 			}
 		} break;
 		case NOTIFICATION_INTERNAL_PHYSICS_PROCESS: {
+			if (!exceptions.is_empty()) {
+				_expire_exceptions();
+			}
 			_check_impacts();
 		} break;
 		case NOTIFICATION_INTERNAL_PROCESS: {
@@ -631,6 +1040,11 @@ Dictionary FellowDestructible3D::get_stats() const {
 	d["health"] = current_health;
 	d["last_impact"] = last_impact;
 	d["prefractured"] = prefractured.is_valid();
+	d["structural"] = structure_built;
+	d["standing"] = get_standing_pieces();
+	d["last_broken"] = last_broken;
+	d["last_fallen"] = last_fallen;
+	d["last_chunks"] = last_chunks;
 	return d;
 }
 
@@ -728,6 +1142,14 @@ void FellowDestructible3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_debris_lifetime"), &FellowDestructible3D::get_debris_lifetime);
 	ClassDB::bind_method(D_METHOD("set_prefracture", "enabled"), &FellowDestructible3D::set_prefracture);
 	ClassDB::bind_method(D_METHOD("is_prefracture"), &FellowDestructible3D::is_prefracture);
+	ClassDB::bind_method(D_METHOD("set_structural", "enabled"), &FellowDestructible3D::set_structural);
+	ClassDB::bind_method(D_METHOD("is_structural"), &FellowDestructible3D::is_structural);
+	ClassDB::bind_method(D_METHOD("set_break_radius", "radius"), &FellowDestructible3D::set_break_radius);
+	ClassDB::bind_method(D_METHOD("get_break_radius"), &FellowDestructible3D::get_break_radius);
+	ClassDB::bind_method(D_METHOD("set_anchor_height", "height"), &FellowDestructible3D::set_anchor_height);
+	ClassDB::bind_method(D_METHOD("get_anchor_height"), &FellowDestructible3D::get_anchor_height);
+	ClassDB::bind_method(D_METHOD("get_standing_pieces"), &FellowDestructible3D::get_standing_pieces);
+	ClassDB::bind_method(D_METHOD("get_structure"), &FellowDestructible3D::get_structure);
 	ClassDB::bind_method(D_METHOD("set_free_after_break", "enabled"), &FellowDestructible3D::set_free_after_break);
 	ClassDB::bind_method(D_METHOD("is_free_after_break"), &FellowDestructible3D::is_free_after_break);
 
@@ -745,6 +1167,10 @@ void FellowDestructible3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "break_on_impact"), "set_break_on_impact", "is_break_on_impact");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "break_impulse", PROPERTY_HINT_RANGE, "0,1000,0.1,or_greater,suffix:N·s"), "set_break_impulse", "get_break_impulse");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "free_after_break"), "set_free_after_break", "is_free_after_break");
+	ADD_GROUP("Structure", "");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "structural"), "set_structural", "is_structural");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "break_radius", PROPERTY_HINT_RANGE, "0,10,0.01,or_greater,suffix:m"), "set_break_radius", "get_break_radius");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "anchor_height", PROPERTY_HINT_RANGE, "0,5,0.01,or_greater,suffix:m"), "set_anchor_height", "get_anchor_height");
 	ADD_GROUP("Pieces", "");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "density", PROPERTY_HINT_RANGE, "1,10000,1,or_greater,suffix:kg/m³"), "set_density", "get_density");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "burst_speed", PROPERTY_HINT_RANGE, "0,20,0.01,or_greater,suffix:m/s"), "set_burst_speed", "get_burst_speed");

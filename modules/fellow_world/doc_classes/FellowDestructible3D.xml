@@ -64,10 +64,22 @@
 				The pieces a frame may spawn (128 by default; 0: no limit): a break over the budget waits for the next frame. The first break of a frame always spawns.
 			</description>
 		</method>
+		<method name="get_standing_pieces" qualifiers="const">
+			<return type="int" />
+			<description>
+				Returns how many pieces of the object stand, in the [member structural] mode (0 before its first break).
+			</description>
+		</method>
 		<method name="get_stats" qualifiers="const">
 			<return type="Dictionary" />
 			<description>
 				This destructible's state: [code skip-lint]broken[/code], [code]pieces[/code], [code]fracture_usec[/code], [code]spawn_usec[/code], [code skip-lint]health[/code], [code]last_impact[/code] (N·s, the last blow it felt), [code]prefractured[/code].
+			</description>
+		</method>
+		<method name="get_structure" qualifiers="const">
+			<return type="Array" />
+			<description>
+				Returns the object standing in its pieces, in the [member structural] mode: for each piece a dictionary with its [code]centre[/code] and [code]aabb[/code] (global), [code]standing[/code], [code]anchored[/code] (on the ground) and [code]touching[/code] (the indices of the pieces it touches). Empty before its first break.
 			</description>
 		</method>
 		<method name="is_broken" qualifiers="const">
@@ -98,6 +110,9 @@
 		</method>
 	</methods>
 	<members>
+		<member name="anchor_height" type="float" setter="set_anchor_height" getter="get_anchor_height" default="0.1">
+			In the [member structural] mode: a piece that reaches this near the object's lowest point stands on the ground (metres).
+		</member>
 		<member name="body_path" type="NodePath" setter="set_body_path" getter="get_body_path" default="NodePath(&quot;&quot;)">
 			The body to remove when it breaks (its collision layers and mask go to the pieces). Empty: the parent, if a [CollisionObject3D], else the grandparent.
 		</member>
@@ -106,6 +121,9 @@
 		</member>
 		<member name="break_on_impact" type="bool" setter="set_break_on_impact" getter="is_break_on_impact" default="true">
 			Breaks when a blow of [member break_impulse] or more strikes the body (a [RigidBody3D]'s contacts are monitored for it).
+		</member>
+		<member name="break_radius" type="float" setter="set_break_radius" getter="get_break_radius" default="0.6">
+			In the [member structural] mode: the pieces whose centres are this near a blow break off (at least the nearest one), metres.
 		</member>
 		<member name="burst_speed" type="float" setter="set_burst_speed" getter="get_burst_speed" default="1.5">
 			The speed, in m/s, at which the pieces nearest the impact are thrown out from it (less farther away).
@@ -142,6 +160,9 @@
 		</member>
 		<member name="seed" type="int" setter="set_seed" getter="get_seed" default="0">
 			The pattern's random seed.
+		</member>
+		<member name="structural" type="bool" setter="set_structural" getter="is_structural" default="false">
+			If [code]true[/code], a static object breaks where it is struck: at its first break it stands in its pieces (their meshes and shapes in its body), each blow knocks out the pieces within [member break_radius] of it (thrown out by it, a striking body's momentum among them), and each part that no longer reaches the ground through the pieces that touch falls as one rigid body. The bodies it made do not strike it. A rigid object breaks whole as without it. See decision 0188.
 		</member>
 	</members>
 	<signals>

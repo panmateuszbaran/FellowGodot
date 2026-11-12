@@ -522,7 +522,9 @@ computed at ready on the main thread and shared by the same mesh, seed and count
 `set_max_pieces_per_frame()` (128; 0: no limit), `set_max_debris()` (256), `get_debris_count()`, `clear_cache()`,
 `get_global_stats()`/`reset_global_stats()`; the monitor "FellowEngine/Debris pieces". `break_apart()`, `damage()`,
 `is_broken()`, `get_current_health()`, `get_stats()`; signals `broken(pieces)`, `damaged(amount, health)`. The
-FellowEngine menu's "Add Destructible Crate". Bench `bench/destruction_check.gd` (`--many=N`, `--prefracture=1`); the
+FellowEngine menu's "Add Destructible Crate". Milestone 80 (decision 0188): `structural` (off; a static object stands
+in its pieces, broken where struck), `break_radius` (0.6 m), `anchor_height` (0.1 m); `get_standing_pieces()`,
+`get_structure()`; "Add Destructible Wall"; bench `bench/structure_check.gd`, the regression scene `structure`. Bench `bench/destruction_check.gd` (`--many=N`, `--prefracture=1`); the
 regression scene `destruction`.
 
 ## Cloth (milestone 73)

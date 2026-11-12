@@ -33,6 +33,7 @@
 #include "fellow_fracture.h"
 
 #include "core/object/worker_thread_pool.h"
+#include "core/templates/hash_set.h"
 #include "core/templates/safe_refcount.h"
 #include "scene/3d/node_3d.h"
 #include "scene/resources/3d/convex_polygon_shape_3d.h"
@@ -44,6 +45,10 @@ class MeshInstance3D;
 
 // A fracture's pieces, ready to spawn: their meshes and collision shapes, shared by every destructible broken with the
 // same pattern (the same mesh, seed and count, prefractured).
+class CollisionShape3D;
+class MeshInstance3D;
+class RigidBody3D;
+
 class FellowFractureResult : public RefCounted {
 	GDCLASS(FellowFractureResult, RefCounted);
 
@@ -56,6 +61,9 @@ public:
 	int source_surfaces = 0;
 	bool prepared = false;
 	bool built = false;
+	// Milestone 80 (decision 0188): the pieces that touch (share three or more of their surface's points: a cell's
+	// face), found when prepared.
+	Vector<Vector<int>> adjacency;
 
 	void prepare(); // the surfaces' arrays (any thread)
 	void build(); // the meshes and shapes (main thread)
@@ -115,6 +123,33 @@ private:
 	float debris_lifetime = 10.0f; // s (0: forever)
 	bool prefracture = false;
 	bool free_after_break = true;
+	// Milestone 80 (decision 0188): a static object broken where it is struck; the rest stands while it is supported.
+	bool structural = false;
+	float break_radius = 0.6f; // m: the pieces within it of a blow break off
+	float anchor_height = 0.1f; // m: the pieces reaching this near the object's lowest point stand on the ground
+
+	struct StructPiece {
+		MeshInstance3D *mesh = nullptr;
+		LocalVector<CollisionShape3D *> shapes;
+		bool alive = false;
+		bool anchored = false;
+	};
+	LocalVector<StructPiece> struct_pieces;
+	Ref<FellowFractureResult> struct_result;
+	bool structure_built = false;
+	Transform3D struct_mxf; // the mesh's global transform when the structure was made
+	HashSet<RID> own_bodies; // the pieces and chunks it made: they do not strike it
+	int last_broken = 0;
+	int last_fallen = 0;
+	int last_chunks = 0;
+	struct Exception {
+		ObjectID body; // a piece or chunk let through the standing object's shapes until (the debris clock)
+		double until = 0.0;
+	};
+	LocalVector<Exception> exceptions;
+	void _expire_exceptions();
+	ObjectID last_striker; // the body that struck last, and when (the debris clock): it strikes again only later
+	double last_strike_time = -1.0;
 
 	bool broken = false;
 	bool pending = false;
@@ -145,6 +180,9 @@ private:
 	bool _prepare_source();
 	void _fracture_task(int p_unused);
 	void _spawn(const Ref<FellowFractureResult> &p_result, const Vector3 &p_position, const Vector3 &p_impulse);
+	void _build_structure(const Ref<FellowFractureResult> &p_result);
+	void _strike(const Vector3 &p_position, const Vector3 &p_impulse);
+	RigidBody3D *_make_body(const LocalVector<int> &p_pieces, const Transform3D &p_mxf);
 	void _check_impacts();
 	static bool _spawn_allowed(int p_pieces);
 	String _cache_key() const;
@@ -203,6 +241,14 @@ public:
 	bool is_prefracture() const { return prefracture; }
 	void set_free_after_break(bool p_enabled) { free_after_break = p_enabled; }
 	bool is_free_after_break() const { return free_after_break; }
+	void set_structural(bool p_enabled) { structural = p_enabled; }
+	bool is_structural() const { return structural; }
+	void set_break_radius(float p_radius) { break_radius = MAX(0.0f, p_radius); }
+	float get_break_radius() const { return break_radius; }
+	void set_anchor_height(float p_height) { anchor_height = MAX(0.0f, p_height); }
+	float get_anchor_height() const { return anchor_height; }
+	int get_standing_pieces() const;
+	Array get_structure() const;
 
 	FellowDestructible3D();
 	~FellowDestructible3D();

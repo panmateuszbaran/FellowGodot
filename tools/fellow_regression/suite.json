@@ -32,7 +32,8 @@
     "destruction",
     "climb",
     "cape",
-    "vehicle"
+    "vehicle",
+    "structure"
    ]
   },
   "stock": {

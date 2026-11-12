@@ -9,6 +9,16 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 80 — destruction that holds (2026-11-12)
+
+- `FellowDestructible3D.structural` (decision 0188), with `break_radius` and `anchor_height`: a static object stands in
+  its pieces after its first break; each blow knocks out the pieces near it (thrown out, passing through their
+  neighbours while they leave), and each part that no longer reaches the ground through the pieces that touch (found
+  from their shared surface points when the fracture is prepared) falls as one rigid body; its own debris does not
+  strike it. `get_standing_pieces()`, `get_structure()`. Four lanes on both physics engines (a hole punched in a wall,
+  a pillar falling whole, a wall cut across, the whole break unchanged), a regression scene (`structure`), "Add
+  Destructible Wall".
+
 ## Milestone 79 — vehicles' marks, smoke and sounds (2026-11-12)
 
 - `FellowVehicleEffects3D` (decision 0187), a child of a `FellowVehicle3D`: skid marks where a tyre slides past its
