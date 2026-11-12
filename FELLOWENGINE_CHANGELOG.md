@@ -9,6 +9,12 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 96 — voice limits by bus (2026-11-12)
+
+- `FellowAudioDirector.bus_voice_limits` (decision 0204): a bus's own budget of voices, handled as the director's
+  before it (the bus's least important, quietest giving way, or the new sound virtual or refused). One lane under
+  Movie Maker, the earlier thirteen unchanged.
+
 ## Milestone 95 — a jump back to the wall behind (2026-11-12)
 
 - `FellowTraversal3D.hang_jump()` with the wish away from the wall (decision 0203): a ledge on the wall behind is

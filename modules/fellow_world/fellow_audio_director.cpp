@@ -377,12 +377,29 @@ int FellowAudioDirector::_play(const Ref<FellowSoundEvent> &p_event, const Vecto
 	const float vr = p_event->get_volume_random_db();
 	nv.volume_db = p_event->get_volume_db() + (vr > 0.0f ? rng.random(-vr, vr) : 0.0f);
 	nv.audibility = _audibility(nv, listener);
-	// The budget: a voice given up by the least important, quietest one if the new one matters more.
-	if (!start_virtual && _active_voices() >= max_voices) {
+	// The budgets — the bus's (milestone 96: bus_voice_limits) and then the director's: when full, a voice given up by
+	// the least important, quietest one there if the new one matters more; else the new one virtual or refused.
+	for (int pass = 0; pass < 2 && !start_virtual; pass++) {
+		const StringName bus = p_event->get_bus();
+		int limit = max_voices;
+		int used = _active_voices();
+		if (pass == 0) {
+			limit = bus_voice_limits.has(bus) ? int(bus_voice_limits[bus]) : 0;
+			if (limit <= 0) {
+				continue;
+			}
+			used = 0;
+			for (const Voice &v : voices) {
+				used += (!v.fading && !v.is_virtual && v.event->get_bus() == bus) ? 1 : 0;
+			}
+		}
+		if (used < limit) {
+			continue;
+		}
 		int victim = -1;
 		for (uint32_t i = 0; i < voices.size(); i++) {
 			const Voice &v = voices[i];
-			if (v.fading || v.is_virtual) {
+			if (v.fading || v.is_virtual || (pass == 0 && v.event->get_bus() != bus)) {
 				continue;
 			}
 			if (victim < 0) {
@@ -623,7 +640,16 @@ void FellowAudioDirector::_update(double p_delta) {
 				_release(uint32_t(i));
 				continue;
 			}
-			if (active_count < max_voices && _in_reach(v, listener, 1.0f)) {
+			int bus_free = 1;
+			const StringName vbus = v.event->get_bus();
+			if (bus_voice_limits.has(vbus) && int(bus_voice_limits[vbus]) > 0) {
+				int used = 0;
+				for (const Voice &o : voices) {
+					used += (!o.fading && !o.is_virtual && o.event->get_bus() == vbus) ? 1 : 0;
+				}
+				bus_free = used < int(bus_voice_limits[vbus]) ? 1 : 0;
+			}
+			if (active_count < max_voices && bus_free && _in_reach(v, listener, 1.0f)) {
 				v.audibility = _audibility(v, listener);
 				_realize(v, at);
 				stats.realized++;
@@ -864,6 +890,8 @@ void FellowAudioDirector::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_steal_fade"), &FellowAudioDirector::get_steal_fade);
 	ClassDB::bind_method(D_METHOD("set_snapshots", "snapshots"), &FellowAudioDirector::set_snapshots);
 	ClassDB::bind_method(D_METHOD("get_snapshots"), &FellowAudioDirector::get_snapshots);
+	ClassDB::bind_method(D_METHOD("set_bus_voice_limits", "limits"), &FellowAudioDirector::set_bus_voice_limits);
+	ClassDB::bind_method(D_METHOD("get_bus_voice_limits"), &FellowAudioDirector::get_bus_voice_limits);
 	ClassDB::bind_method(D_METHOD("set_seed", "seed"), &FellowAudioDirector::set_seed);
 	ClassDB::bind_method(D_METHOD("get_seed"), &FellowAudioDirector::get_seed);
 	ClassDB::bind_method(D_METHOD("set_listener_path", "path"), &FellowAudioDirector::set_listener_path);
@@ -888,6 +916,7 @@ void FellowAudioDirector::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "max_voices", PROPERTY_HINT_RANGE, "1,256,1,or_greater"), "set_max_voices", "get_max_voices");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "steal_voices"), "set_steal_voices", "is_steal_voices");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "steal_fade", PROPERTY_HINT_RANGE, "0,1,0.001,suffix:s"), "set_steal_fade", "get_steal_fade");
+	ADD_PROPERTY(PropertyInfo(Variant::DICTIONARY, "bus_voice_limits", PROPERTY_HINT_DICTIONARY_TYPE, "StringName;int"), "set_bus_voice_limits", "get_bus_voice_limits");
 	ADD_PROPERTY(PropertyInfo(Variant::ARRAY, "snapshots", PROPERTY_HINT_ARRAY_TYPE, MAKE_RESOURCE_TYPE_HINT("FellowMixSnapshot")), "set_snapshots", "get_snapshots");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "seed"), "set_seed", "get_seed");
 	ADD_PROPERTY(PropertyInfo(Variant::NODE_PATH, "listener_path", PROPERTY_HINT_NODE_PATH_VALID_TYPES, "Node3D"), "set_listener_path", "get_listener_path");

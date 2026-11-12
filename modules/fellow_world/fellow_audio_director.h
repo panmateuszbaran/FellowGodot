@@ -198,6 +198,7 @@ class FellowAudioDirector : public Node {
 	int max_voices = 32;
 	bool steal_voices = true;
 	float steal_fade = 0.03f;
+	Dictionary bus_voice_limits; // milestone 96: StringName -> voices on that bus at most
 	TypedArray<FellowMixSnapshot> snapshots;
 	int64_t seed = 0;
 	NodePath listener_path;
@@ -242,6 +243,8 @@ public:
 	void set_steal_voices(bool p_enabled) { steal_voices = p_enabled; }
 	bool is_steal_voices() const { return steal_voices; }
 	void set_steal_fade(float p_seconds) { steal_fade = MAX(0.0f, p_seconds); }
+	void set_bus_voice_limits(const Dictionary &p_limits) { bus_voice_limits = p_limits; }
+	Dictionary get_bus_voice_limits() const { return bus_voice_limits; }
 	float get_steal_fade() const { return steal_fade; }
 	void set_snapshots(const TypedArray<FellowMixSnapshot> &p_snapshots);
 	TypedArray<FellowMixSnapshot> get_snapshots() const { return snapshots; }

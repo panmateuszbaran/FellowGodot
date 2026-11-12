@@ -123,6 +123,9 @@
 		</method>
 	</methods>
 	<members>
+		<member name="bus_voice_limits" type="Dictionary" setter="set_bus_voice_limits" getter="get_bus_voice_limits" default="{}">
+			Voices a bus may play at once (milestone 96): a bus's name and a count. A new sound on a bus at its limit takes the voice of the bus's least important, quietest one when it matters more, or goes virtual or is refused — before [member max_voices] is looked at; a virtual voice is resumed only when its bus has room.
+		</member>
 		<member name="listener_path" type="NodePath" setter="set_listener_path" getter="get_listener_path" default="NodePath(&quot;&quot;)">
 			The node whose place is the listener's for the distances and levels; empty: the viewport's [AudioListener3D] or camera.
 		</member>

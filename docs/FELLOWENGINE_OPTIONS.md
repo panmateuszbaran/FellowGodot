@@ -514,6 +514,8 @@ voice for it, giving its voice up or out of reach goes on unheard and is resumed
 `virtualized`, `realized` (`--many=1 --virtual=1`). Milestone 87 (decision 0195), on `FellowMixSnapshot`:
 `bus_lowpass` (bus → cutoff Hz; the director's own low-pass at the end of the bus, faded in octaves with the
 snapshot's weight, off when no snapshot filters the bus).
+Milestone 96 (decision 0204), on `FellowAudioDirector`: `bus_voice_limits` (bus → voices at most on it; a sound over
+it takes the voice of the bus's least important, quietest, or goes virtual or is refused).
 
 ## Vehicles (milestone 77)
 

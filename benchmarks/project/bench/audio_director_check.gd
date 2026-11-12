@@ -18,7 +18,8 @@ extends SceneTree
 ## voice following a moving node and going on where it was when the node is freed. Milestone 85 (decision 0193):
 ## a virtual voice (a loop losing its voice to more important ones, resumed where it would be), a loop coming within
 ## its reach and leaving it, a one-shot ending unheard, the oldest instance giving way. Milestone 87 (decision 0195):
-## a snapshot's low-pass on a bus (a 4 kHz tone and a 300 Hz one measured before, under and after it). One JSON line:
+## a snapshot's low-pass on a bus (a 4 kHz tone and a 300 Hz one measured before, under and after it). Milestone 96
+## (decision 0204): a bus's voice limit. One JSON line:
 ## AUDIO_DIRECTOR_CHECK {...}; exit code 1 when a lane did otherwise than expected. --many=1: 64 voices, 50 requests a
 ## frame at random places, the director's time (--virtual=1: the events' sounds kept as virtual voices). One JSON
 ## line: AUDIO_DIRECTOR_MANY {...}.
@@ -242,6 +243,12 @@ func _build() -> void:
 	var em := _event([_two_tones(300.0, 4000.0, 1.0)], "Muffle")
 	em.volume_db = -6.0
 	lanes["lowpass"] = {"d": _director("Lowpass"), "snapshot": muffle, "event": em, "effects": {}}
+	# Milestone 96 (decision 0204): at most 2 voices on the bus "Sfx" (8 in all): three loops at 10, 12 and 14 m (the
+	# third refused), then one at 5 m (it takes the 12 m one's voice).
+	var bl := _director("BusLimit", 8)
+	bl.bus_voice_limits = {&"Sfx": 2}
+	var eb := _event([_tone(1700, 1.0, true)], "Sfx", true)
+	lanes["bus_limit"] = {"d": bl, "event": eb, "ids": {}}
 	physics_frame.connect(_on_frame)
 
 
@@ -402,7 +409,23 @@ func _on_frame() -> void:
 	if frame == 40:
 		lold["playing"] = lold.ids.map(func(i): return lold.d.is_playing(i))
 		lold["stats"] = lold.d.get_stats()
-	# 7 ends (the music stopped) before 13 starts.
+	# 14.
+	var lbl: Dictionary = lanes.bus_limit
+	if frame == 10:
+		for dz in [10.0, 12.0, 14.0]:
+			lbl.ids[str(dz)] = lbl.d.play(lbl.event, Vector3(0, 0, -dz))
+		lbl["after_three"] = lbl.d.get_voice_count()
+	if frame == 20:
+		lbl.ids["5.0"] = lbl.d.play(lbl.event, Vector3(0, 0, -5.0))
+	if frame == 30:
+		var playing := []
+		for k in lbl.ids:
+			if lbl.ids[k] != 0 and lbl.d.is_playing(lbl.ids[k]):
+				playing.append(k)
+		playing.sort()
+		lbl["playing"] = playing
+		lbl["stats"] = lbl.d.get_stats()
+		# 7 ends (the music stopped) before 13 starts.
 	if frame == 390:
 		lanes.duck.d.stop_all()
 	# 13. The loop from 7 s, the snapshot pushed at 8 s, popped at 9.5 s.
@@ -533,6 +556,10 @@ func _finish() -> void:
 	out["lowpass"] = {"tone_300_db": lows.map(func(v): return snappedf(v, 0.01)), "tone_4000_db": highs.map(func(v): return snappedf(v, 0.01)),
 		"cut_4000_db": snappedf(highs[1] - highs[0], 0.01), "cut_300_db": snappedf(lows[1] - lows[0], 0.01), "effects": lp.effects,
 		"ok": highs[1] - highs[0] < -30.0 and absf(lows[1] - lows[0]) < 4.0 and absf(highs[2] - highs[0]) < 0.1 and absf(lows[2] - lows[0]) < 0.1 and lp.effects.before == 0 and lp.effects.under == 1 and lp.effects.under_enabled and absf(lp.effects.cutoff - 500.0) < 1.0 and not lp.effects.after_enabled}
+	# 14.
+	var lbl: Dictionary = lanes.bus_limit
+	out["bus_limit"] = {"after_three": lbl.after_three, "refused_14": lbl.ids["14.0"] == 0, "playing": lbl.playing, "stolen": lbl.stats.stolen, "rejected": lbl.stats.rejected_voices,
+		"ok": lbl.after_three == 2 and lbl.ids["14.0"] == 0 and lbl.playing == ["10.0", "5.0"] and lbl.stats.stolen == 1 and lbl.stats.rejected_voices == 1}
 	var usec := 0
 	var frames := 0
 	for n in lanes:
