@@ -41,6 +41,29 @@ EXPECTED = {
 }
 
 
+def read_minidump(path):
+    """A minidump's header and the streams a debugger starts from: the exception (its code and thread), the threads,
+    the modules."""
+    import struct
+
+    data = open(path, "rb").read()
+    if data[:4] != b"MDMP":
+        return {"valid": False}
+    count, rva = struct.unpack_from("<II", data, 8)
+    out = {"valid": True, "streams": count}
+    for i in range(count):
+        kind, size, at = struct.unpack_from("<III", data, rva + 12 * i)
+        if kind == 6:  # ExceptionStream: ThreadId, alignment, MINIDUMP_EXCEPTION (code first)
+            thread, _, code = struct.unpack_from("<III", data, at)
+            out["exception_thread"] = thread
+            out["exception_code"] = "0x%08x" % code
+        elif kind == 3:  # ThreadListStream
+            out["threads"] = struct.unpack_from("<I", data, at)[0]
+        elif kind == 4:  # ModuleListStream
+            out["modules"] = struct.unpack_from("<I", data, at)[0]
+    return out
+
+
 def write_project(path, reports, enabled=True, log_lines=50):
     os.makedirs(path, exist_ok=True)
     shutil.copy(os.path.join(HERE, "crash_check.gd"), os.path.join(path, "crash_check.gd"))
@@ -138,9 +161,13 @@ def main():
         if rep.get("minidump"):
             dump = os.path.join(reports, rep["minidump"])
             r["minidump_bytes"] = os.path.getsize(dump) if os.path.exists(dump) else 0
-            r["minidump_header"] = open(dump, "rb").read(4).decode("latin-1") if os.path.exists(dump) else ""
-            if r["minidump_header"] != "MDMP":
-                failures.append(f"{kind}: no minidump")
+            md = read_minidump(dump) if os.path.exists(dump) else {"valid": False}
+            r["minidump_streams"] = md
+            if not md["valid"] or md.get("threads", 0) < 2 or md.get("modules", 0) < 5:
+                failures.append(f"{kind}: minidump {md}")
+            # A crash's dump holds its exception, the report's code (abort() and pure virtual calls have none).
+            if "code" in rep and md.get("exception_code") != rep["code"]:
+                failures.append(f"{kind}: the minidump's exception {md.get('exception_code')}, the report's {rep['code']}")
         if a.symbols:
             sym = rep.get("frames", [])
             for b in a.symbols.split(","):
