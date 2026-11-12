@@ -103,6 +103,7 @@ private:
 	bool gaze = true;
 	NodePath look_target_path;
 	Vector3 eye_center; // in the face mesh's space
+	float eye_spacing = 0.0f; // m between the eyes (milestone 94: they converge on a near target); 0: parallel
 	float gaze_range_horizontal = 30.0f; // degrees: the eyes fully out or in
 	float gaze_range_vertical = 25.0f;
 	float gaze_time = 0.04f; // s: the eyes' easing (a saccade is fast)
@@ -119,6 +120,7 @@ private:
 	RandomPCG saccade_rng; // its own: the blinks' intervals the same with or without saccades
 	Vector2 saccade; // degrees (yaw, pitch)
 	Vector2 gaze_now; // degrees, eased
+	float vergence_now = 0.0f; // degrees each eye turns in, eased
 	double blink_t = -1.0; // s into a blink, < 0: none
 	double clock = 0.0;
 	ObjectID mesh_id;
@@ -196,6 +198,9 @@ public:
 	void set_saccade_amplitude(float p_degrees) { saccade_amplitude = CLAMP(p_degrees, 0.0f, 20.0f); }
 	float get_saccade_amplitude() const { return saccade_amplitude; }
 	Vector2 get_gaze_angles() const { return gaze_now; }
+	void set_eye_spacing(float p_spacing) { eye_spacing = MAX(0.0f, p_spacing); }
+	float get_eye_spacing() const { return eye_spacing; }
+	float get_vergence() const { return vergence_now; }
 
 	void blink();
 	float get_channel(Channel p_channel) const;

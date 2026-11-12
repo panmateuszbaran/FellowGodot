@@ -376,6 +376,19 @@ func _on_frame() -> void:
 			gaze_face.saccades = true
 		if frame > 330 and frame <= 930:  # back from the last target first
 			gaze_trace.append(gaze_face.get_gaze_angles())
+		# Milestone 94: the eyes converging on a near target (0.6 m ahead of them), parallel on a far one (10 m).
+		if frame == 960:
+			gaze_face.saccades = false
+			gaze_face.eye_spacing = 0.34
+			gaze_face.look_target_path = gaze_face.get_path_to(gaze_target)
+			gaze_target.position = Vector3(4, 0.12, 0.45 + 0.6)
+		if frame == 1020:
+			var c := gaze_face.get_channels()
+			gaze_reads["near"] = {"in_left": snappedf(c.look_in_left, 0.001), "in_right": snappedf(c.look_in_right, 0.001), "out_left": snappedf(c.look_out_left, 0.001), "vergence": snappedf(gaze_face.get_vergence(), 0.01)}
+			gaze_target.position = Vector3(4, 0.12, 0.45 + 10.0)
+		if frame == 1080:
+			var c := gaze_face.get_channels()
+			gaze_reads["far"] = {"in_left": snappedf(c.look_in_left, 0.001), "in_right": snappedf(c.look_in_right, 0.001), "vergence": snappedf(gaze_face.get_vergence(), 0.01)}
 		# The blinks over a minute (the frame's lid, closed past 0.9).
 		var lid := blink_face.get_channel(FellowFaceAnimator.CHANNEL_BLINK_LEFT)
 		if lid > 0.9 and not blink_closed:
@@ -446,6 +459,8 @@ func _finish() -> void:
 		gok = gok and gr.up.look_up_left > 0.99 and gr.up.look_up_right > 0.99 and gr.up.look_down_left == 0.0
 		gok = gok and gr.right_down.look_in_left > 0.3 and gr.right_down.look_out_right > 0.3 and gr.right_down.look_down_left > 0.3 and gr.right_down.look_out_left == 0.0
 		gok = gok and jumps >= 4 and jumps <= 30 and widest <= 1.51
+		# Converging: both eyes in by atan(0.17 / 0.6) = 15.8 degrees (0.53 of the range); far: under 1 degree.
+		gok = gok and absf(gr.near.in_left - 0.527) < 0.01 and absf(gr.near.in_right - 0.527) < 0.01 and gr.near.out_left == 0.0 and gr.far.in_left < 0.04 and gr.far.in_right < 0.04
 		out["gaze"] = {"reads": gr, "saccades_in_10_s": jumps, "saccade_widest_deg": snappedf(widest, 0.01), "ok": gok}
 		out["blinks"] = {"count": blink_log.size(), "gap_min": gmin, "gap_max": gmax,
 			"ok": blink_log.size() >= 10 and blink_log.size() <= 25 and gmin >= 2.0 and gmax <= 6.3}

@@ -372,6 +372,7 @@ void FellowFaceAnimator::_update(double p_delta) {
 	// Milestone 89: the gaze — towards the target (its direction in the face mesh's space from eye_center, the face
 	// looking along +Z, its left +X), within the eyes' range, plus small saccades at random intervals; eased.
 	Vector2 goal;
+	float vergence = 0.0f;
 	if (gaze) {
 		const Node3D *target = look_target_path.is_empty() ? nullptr : Object::cast_to<Node3D>(get_node_or_null(look_target_path));
 		const MeshInstance3D *face = mesh_path.is_empty() ? nullptr : Object::cast_to<MeshInstance3D>(get_node_or_null(mesh_path));
@@ -381,6 +382,10 @@ void FellowFaceAnimator::_update(double p_delta) {
 			if (d.length() > 1e-4f) {
 				goal.x = Math::rad_to_deg(Math::atan2(d.x, d.z));
 				goal.y = Math::rad_to_deg(Math::atan2(d.y, Vector2(d.x, d.z).length()));
+				// Milestone 94 (decision 0202): each eye turned in by half the angle the target subtends between them.
+				if (eye_spacing > 0.0f) {
+					vergence = Math::rad_to_deg(Math::atan2(eye_spacing * 0.5f, d.length()));
+				}
 			}
 		}
 		if (saccades && saccade_amplitude > 0.0f) {
@@ -395,12 +400,16 @@ void FellowFaceAnimator::_update(double p_delta) {
 	}
 	const float gk = gaze_time > 0.0f ? 1.0f - Math::exp(-float(p_delta) / gaze_time) : 1.0f;
 	gaze_now += (goal - gaze_now) * gk;
-	const float yaw = gaze_now.x / gaze_range_horizontal; // + the character's left
+	vergence_now += (vergence - vergence_now) * gk;
+	// Each eye's yaw (+ the character's left): the left eye turned in (to its right) by the vergence, the right eye in
+	// (to its left).
+	const float yaw_left = CLAMP(gaze_now.x - vergence_now, -gaze_range_horizontal, gaze_range_horizontal) / gaze_range_horizontal;
+	const float yaw_right = CLAMP(gaze_now.x + vergence_now, -gaze_range_horizontal, gaze_range_horizontal) / gaze_range_horizontal;
 	const float pitch = gaze_now.y / gaze_range_vertical;
-	channels[CHANNEL_LOOK_OUT_LEFT] = MAX(0.0f, yaw);
-	channels[CHANNEL_LOOK_IN_RIGHT] = MAX(0.0f, yaw);
-	channels[CHANNEL_LOOK_IN_LEFT] = MAX(0.0f, -yaw);
-	channels[CHANNEL_LOOK_OUT_RIGHT] = MAX(0.0f, -yaw);
+	channels[CHANNEL_LOOK_OUT_LEFT] = MAX(0.0f, yaw_left);
+	channels[CHANNEL_LOOK_IN_RIGHT] = MAX(0.0f, yaw_right);
+	channels[CHANNEL_LOOK_IN_LEFT] = MAX(0.0f, -yaw_left);
+	channels[CHANNEL_LOOK_OUT_RIGHT] = MAX(0.0f, -yaw_right);
 	channels[CHANNEL_LOOK_UP_LEFT] = channels[CHANNEL_LOOK_UP_RIGHT] = MAX(0.0f, pitch);
 	channels[CHANNEL_LOOK_DOWN_LEFT] = channels[CHANNEL_LOOK_DOWN_RIGHT] = MAX(0.0f, -pitch);
 	// The face: each blend shape the sum of its channels' (at most 1), written when it changed.
@@ -607,6 +616,9 @@ void FellowFaceAnimator::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_saccade_amplitude", "degrees"), &FellowFaceAnimator::set_saccade_amplitude);
 	ClassDB::bind_method(D_METHOD("get_saccade_amplitude"), &FellowFaceAnimator::get_saccade_amplitude);
 	ClassDB::bind_method(D_METHOD("get_gaze_angles"), &FellowFaceAnimator::get_gaze_angles);
+	ClassDB::bind_method(D_METHOD("set_eye_spacing", "spacing"), &FellowFaceAnimator::set_eye_spacing);
+	ClassDB::bind_method(D_METHOD("get_eye_spacing"), &FellowFaceAnimator::get_eye_spacing);
+	ClassDB::bind_method(D_METHOD("get_vergence"), &FellowFaceAnimator::get_vergence);
 	ClassDB::bind_method(D_METHOD("blink"), &FellowFaceAnimator::blink);
 	ClassDB::bind_method(D_METHOD("get_channel", "channel"), &FellowFaceAnimator::get_channel);
 	ClassDB::bind_method(D_METHOD("get_channels"), &FellowFaceAnimator::get_channels);
@@ -639,6 +651,7 @@ void FellowFaceAnimator::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "gaze"), "set_gaze", "is_gaze");
 	ADD_PROPERTY(PropertyInfo(Variant::NODE_PATH, "look_target_path", PROPERTY_HINT_NODE_PATH_VALID_TYPES, "Node3D"), "set_look_target_path", "get_look_target_path");
 	ADD_PROPERTY(PropertyInfo(Variant::VECTOR3, "eye_center", PROPERTY_HINT_NONE, "suffix:m"), "set_eye_center", "get_eye_center");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "eye_spacing", PROPERTY_HINT_RANGE, "0,0.5,0.001,suffix:m"), "set_eye_spacing", "get_eye_spacing");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "gaze_range_horizontal", PROPERTY_HINT_RANGE, "1,89,0.1,degrees"), "set_gaze_range_horizontal", "get_gaze_range_horizontal");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "gaze_range_vertical", PROPERTY_HINT_RANGE, "1,89,0.1,degrees"), "set_gaze_range_vertical", "get_gaze_range_vertical");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "gaze_time", PROPERTY_HINT_RANGE, "0,1,0.001,suffix:s"), "set_gaze_time", "get_gaze_time");

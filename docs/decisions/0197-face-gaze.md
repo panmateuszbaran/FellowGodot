@@ -48,3 +48,7 @@ Keep: eyes that look at a target and never quite stand still, from the same node
 
 * **Head and neck turning** towards the target beyond the eyes' range (a skeleton's bones), **vergence** (the eyes
   converging on a near target) and **eye bones**: blend shapes only, both eyes the same angles.
+
+## Later
+
+Milestone 94 (decision 0202): vergence (`eye_spacing`, 0 by default); this record's reads are unchanged.

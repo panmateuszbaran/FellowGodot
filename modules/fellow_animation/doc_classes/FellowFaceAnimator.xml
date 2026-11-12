@@ -52,6 +52,12 @@
 				This face's [code]frames[/code] and [code]usec[/code] (its process steps).
 			</description>
 		</method>
+		<method name="get_vergence" qualifiers="const">
+			<return type="float" />
+			<description>
+				How far each eye turns in now, in degrees ([member eye_spacing]; eased).
+			</description>
+		</method>
 		<method name="reset_global_stats" qualifiers="static">
 			<return type="void" />
 			<description>
@@ -91,6 +97,9 @@
 		</member>
 		<member name="eye_center" type="Vector3" setter="set_eye_center" getter="get_eye_center" default="Vector3(0, 0, 0)">
 			The point between the eyes, in the face mesh's space, the gaze's directions are measured from.
+		</member>
+		<member name="eye_spacing" type="float" setter="set_eye_spacing" getter="get_eye_spacing" default="0.0">
+			The distance between the eyes, in metres (milestone 94): each eye turns in by half the angle the target subtends between them, so the eyes converge on a near target (0.6 m away with 0.064 m: 3° each). 0: the eyes parallel.
 		</member>
 		<member name="gaze" type="bool" setter="set_gaze" getter="is_gaze" default="true">
 			The eyes look at [member look_target_path] (within [member gaze_range_horizontal] and [member gaze_range_vertical]), with [member saccades], through the eyeLook channels (milestone 89).

@@ -9,6 +9,11 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 94 — eyes that converge (2026-11-12)
+
+- `FellowFaceAnimator.eye_spacing` (decision 0202): each eye turns in by half the angle a target subtends between
+  them — the eyes converge on a near target (0.6 m: 15.8° each with the test face's 0.34 m). 0 by default (parallel).
+
 ## Milestone 93 — diagonal jumps (2026-11-12)
 
 - `FellowTraversal3D.hang_jump()` with the wish along and up or down (decision 0201): the nearest edge past this one's

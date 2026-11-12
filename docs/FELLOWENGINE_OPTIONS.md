@@ -642,7 +642,7 @@ constants. Bench `bench/face_check.gd` (`--listen=1` under Movie Maker, `--many=
 Gaze (milestone 89, decision 0197): `gaze` (on), `look_target_path` (empty: ahead), `eye_center` (in the face mesh's
 space), `gaze_range_horizontal` (30°), `gaze_range_vertical` (25°), `gaze_time` (0.04 s), `saccades` (on),
 `saccade_amplitude` (1.5°); `get_gaze_angles()`; the channels `look_out_left` … `look_down_right` on ARKit's
-`eyeLook*` shapes.
+`eyeLook*` shapes. Vergence (milestone 94, decision 0202): `eye_spacing` (0 m: the eyes parallel); `get_vergence()`.
 
 ## Simulated GPUs (milestone 49)
 
