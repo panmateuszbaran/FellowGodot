@@ -15,9 +15,12 @@ extends SceneTree
 ## loud one of the first kind (the quietest of its kind gives its voice); a snapshot pushed and popped (the bus's level
 ## faded to -20 dB and back to where it was); a duck — a snapshot active while a line plays on the bus "Dialogue",
 ## the music's tone measured on the master bus before, during and after it (Goertzel's power at its frequency); a
-## voice following a moving node and going on where it was when the node is freed. One JSON line:
+## voice following a moving node and going on where it was when the node is freed. Milestone 85 (decision 0193):
+## a virtual voice (a loop losing its voice to more important ones, resumed where it would be), a loop coming within
+## its reach and leaving it, a one-shot ending unheard, the oldest instance giving way. One JSON line:
 ## AUDIO_DIRECTOR_CHECK {...}; exit code 1 when a lane did otherwise than expected. --many=1: 64 voices, 50 requests a
-## frame at random places, the director's time. One JSON line: AUDIO_DIRECTOR_MANY {...}.
+## frame at random places, the director's time (--virtual=1: the events' sounds kept as virtual voices). One JSON
+## line: AUDIO_DIRECTOR_MANY {...}.
 
 const RATE := 44100
 
@@ -34,6 +37,7 @@ var done := false
 var many := false
 var many_seconds := 5.0
 var mover: Node3D
+var mover2: Node3D
 
 
 func _arg(name: String, default: String) -> String:
@@ -180,6 +184,36 @@ func _build() -> void:
 	mover.position = Vector3(-5, 0, -10)
 	var ef := _event([_tone(1100, 0.5, true)], "Sfx", true)
 	lanes["follow"] = {"d": _director("Follow"), "event": ef, "max_error": 0.0}
+	# Milestone 85 (decision 0193): virtual voices and the oldest instance giving way.
+	# 9. Two voices: a quiet loop (virtual_voice) loses its voice to two important ones, goes on unheard, and is resumed
+	# where it would be when they stop.
+	var va := _event([_tone(1200, 1.0, true)], "Sfx", true)
+	va.virtual_voice = true
+	va.priority = 64
+	var vb := _event([_tone(1300, 1.0, true)], "Sfx", true)
+	vb.priority = 200
+	lanes["virtual"] = {"d": _director("Virtual", 2), "a": va, "b": vb}
+	# 10. A loop that carries 30 m (virtual_voice), on a node coming from 50 m to 10 m, then taken 60 m away.
+	mover2 = Node3D.new()
+	root3d.add_child(mover2)
+	mover2.position = Vector3(3, 0, -50)
+	var vc := _event([_tone(1400, 1.0, true)], "Sfx", true)
+	vc.virtual_voice = true
+	vc.max_distance = 30.0
+	lanes["reach"] = {"d": _director("Reach"), "event": vc}
+	# 11. A 0.5 s sound started 40 m away (it carries 20 m, virtual_voice): it ends unheard.
+	var vd := _event([_tone(1500, 0.5)], "Sfx", true)
+	vd.virtual_voice = true
+	vd.max_distance = 20.0
+	var lo := _director("Oneshot")
+	lanes["oneshot"] = {"d": lo, "event": vd, "finished": []}
+	lo.voice_finished.connect(func(voice: int, stolen: bool) -> void:
+		lanes.oneshot.finished.append([voice, stolen, frame]))
+	# 12. At most 2 instances, the oldest giving way (steal_oldest): played three times.
+	var ve := _event([_tone(1600, 1.0)], "Sfx")
+	ve.max_instances = 2
+	ve.steal_oldest = true
+	lanes["oldest"] = {"d": _director("Oldest"), "event": ve, "ids": []}
 	physics_frame.connect(_on_frame)
 
 
@@ -291,6 +325,55 @@ func _on_frame() -> void:
 		var p3: AudioStreamPlayer3D = lf.d.get_voice_player(lf.id)
 		lf["after_free"] = p3.global_position.distance_to(lf.freed_at) if p3 else -1.0
 		lf["still_playing"] = lf.d.is_playing(lf.id)
+	# 9.
+	var lvv: Dictionary = lanes.virtual
+	if frame == 10:
+		lvv["a_id"] = lvv.d.play(lvv.a, Vector3(0, 0, -10))
+	if frame == 40:
+		lvv["b_ids"] = [lvv.d.play(lvv.b, Vector3(0, 0, -5)), lvv.d.play(lvv.b, Vector3(1, 0, -5))]
+	if frame == 60:
+		lvv["virtual_60"] = lvv.d.is_virtual(lvv.a_id)
+		lvv["playing_60"] = lvv.d.is_playing(lvv.a_id)
+		lvv["voices_60"] = lvv.d.get_voice_count()
+	if frame == 100:
+		lvv.d.stop_event(lvv.b)
+	if frame == 103:
+		var p3: AudioStreamPlayer3D = lvv.d.get_voice_player(lvv.a_id)
+		lvv["virtual_103"] = lvv.d.is_virtual(lvv.a_id)
+		# Where it would be: started at frame 10's step, a 1 s loop.
+		lvv["position_103"] = p3.get_playback_position() if p3 else -1.0
+		lvv["expected_103"] = fmod((103 - 10) / 60.0, 1.0)
+		lvv["stats"] = lvv.d.get_stats()
+	# 10.
+	var lr: Dictionary = lanes.reach
+	if frame == 10:
+		lr["id"] = lr.d.play_on(lr.event, mover2)
+	if frame > 10 and frame <= 250:
+		mover2.position.z = minf(-10.0, mover2.position.z + 10.0 / 60.0)
+	if frame in [30, 120, 160, 250, 270]:
+		lr[str(frame)] = lr.d.is_virtual(lr.id)
+	if frame == 260:
+		mover2.position.z = -60.0
+	if frame == 270:
+		lr["stats"] = lr.d.get_stats()
+		lr["playing"] = lr.d.is_playing(lr.id)
+	# 11.
+	var lo: Dictionary = lanes.oneshot
+	if frame == 10:
+		lo["id"] = lo.d.play(lo.event, Vector3(0, 0, -40))
+	if frame == 20:
+		lo["virtual_20"] = lo.d.is_virtual(lo.id)
+		lo["playing_20"] = lo.d.is_playing(lo.id)
+	if frame == 50:
+		lo["playing_50"] = lo.d.is_playing(lo.id)
+		lo["stats"] = lo.d.get_stats()
+	# 12.
+	var lold: Dictionary = lanes.oldest
+	if frame in [10, 20, 30]:
+		lold.ids.append(lold.d.play(lold.event))
+	if frame == 40:
+		lold["playing"] = lold.ids.map(func(i): return lold.d.is_playing(i))
+		lold["stats"] = lold.d.get_stats()
 	if frame >= 400:
 		done = true
 		_finish()
@@ -375,6 +458,27 @@ func _finish() -> void:
 	var lf: Dictionary = lanes.follow
 	out["follow"] = {"max_error_m": snappedf(lf.max_error, 0.0001), "after_free_m": snappedf(lf.after_free, 0.0001), "still_playing": lf.still_playing,
 		"ok": lf.max_error < 1e-4 and lf.after_free >= 0.0 and lf.after_free < 1e-4 and lf.still_playing}
+	# 9.
+	var lvv: Dictionary = lanes.virtual
+	var st9: Dictionary = lvv.stats
+	out["virtual"] = {"virtual_60": lvv.virtual_60, "playing_60": lvv.playing_60, "voices_60": lvv.voices_60, "virtual_103": lvv.virtual_103,
+		"position_103": snappedf(lvv.position_103, 0.001), "expected_103": snappedf(lvv.expected_103, 0.001), "virtualized": st9.virtualized, "realized": st9.realized,
+		"ok": lvv.virtual_60 and lvv.playing_60 and lvv.voices_60 == 2 and not lvv.virtual_103 and absf(lvv.position_103 - lvv.expected_103) < 0.04 and st9.virtualized == 1 and st9.realized == 1}
+	# 10.
+	var lr: Dictionary = lanes.reach
+	var st10: Dictionary = lr.stats
+	out["reach"] = {"virtual_at": {"46.8 m": lr["30"], "31.8 m": lr["120"], "25.2 m": lr["160"], "10.4 m": lr["250"], "60.1 m": lr["270"]},
+		"playing": lr.playing, "culled": st10.culled, "virtualized": st10.virtualized, "realized": st10.realized,
+		"ok": lr["30"] and not lr["160"] and not lr["250"] and lr["270"] and lr.playing and st10.culled == 0 and st10.virtualized == 2 and st10.realized == 1}
+	# 11.
+	var lo: Dictionary = lanes.oneshot
+	var st11: Dictionary = lo.stats
+	out["oneshot"] = {"virtual_20": lo.virtual_20, "playing_20": lo.playing_20, "playing_50": lo.playing_50, "finished": lo.finished, "realized": st11.realized,
+		"ok": lo.virtual_20 and lo.playing_20 and not lo.playing_50 and lo.finished.size() == 1 and not lo.finished[0][1] and st11.realized == 0}
+	# 12.
+	var lold: Dictionary = lanes.oldest
+	out["oldest"] = {"playing": lold.playing, "stolen": lold.stats.stolen, "rejected": lold.stats.rejected_instances,
+		"ok": lold.playing == [false, true, true] and lold.stats.stolen == 1 and lold.stats.rejected_instances == 0}
 	var usec := 0
 	var frames := 0
 	for n in lanes:
@@ -429,6 +533,7 @@ func _build_many() -> void:
 		e.max_distance = 80.0
 		e.volume_random_db = 2.0
 		e.pitch_random_semitones = 1.0
+		e.virtual_voice = _arg("virtual", "0") == "1"  # --virtual=1: the sounds kept as virtual voices
 		many_events.append(e)
 	physics_frame.connect(_on_many_frame)
 

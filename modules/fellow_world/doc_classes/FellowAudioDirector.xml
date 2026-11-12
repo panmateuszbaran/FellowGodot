@@ -4,7 +4,7 @@
 		FellowEngine: plays [FellowSoundEvent]s within a budget of voices — variations, instance limits, cooldowns, distance, priorities and audibility — and fades the mix between [FellowMixSnapshot]s.
 	</brief_description>
 	<description>
-		Add one to the scene and play sounds through it: [method play] at a place, [method play_on] following a node. It plays each in a player of a pool it keeps as its own children (reused, made as needed), with the event's variation, level and pitch; it does not play an event over its instance limit, within its cooldown or beyond its distance from the listener (the [AudioListener3D] or the camera, or [member listener_path]). [member max_voices] play at once: a new sound when they are all taken takes the voice of the least important, quietest one (its event's priority, then its level at the listener now), which fades out in [member steal_fade], when the new one is more important or louder; otherwise it is not played. Mix snapshots ([FellowMixSnapshot]) change the buses' levels: pushed and popped by the game, or active while a voice plays on their trigger bus. Its work is done in the process step; [method get_stats] counts it. See [code]docs/decisions/0190-audio-director.md[/code].
+		Add one to the scene and play sounds through it: [method play] at a place, [method play_on] following a node. It plays each in a player of a pool it keeps as its own children (reused, made as needed), with the event's variation, level and pitch; it does not play an event over its instance limit, within its cooldown or beyond its distance from the listener (the [AudioListener3D] or the camera, or [member listener_path]). [member max_voices] play at once: a new sound when they are all taken takes the voice of the least important, quietest one (its event's priority, then its level at the listener now), which fades out in [member steal_fade], when the new one is more important or louder; otherwise it is not played. Mix snapshots ([FellowMixSnapshot]) change the buses' levels: pushed and popped by the game, or active while a voice plays on their trigger bus. Its work is done in the process step; [method get_stats] counts it. Events with [member FellowSoundEvent.virtual_voice] that find no voice, lose theirs or go out of reach go on unheard as virtual voices — their time running, nothing mixed — and are resumed where they would be when within reach and a voice is free (milestone 85). See [code]docs/decisions/0190-audio-director.md[/code] and [code]docs/decisions/0193-virtual-voices.md[/code].
 	</description>
 	<tutorials>
 	</tutorials>
@@ -26,7 +26,7 @@
 		<method name="get_stats" qualifiers="const">
 			<return type="Dictionary" />
 			<description>
-				Counts since the last [method reset_stats]: [code]voices[/code], [code]fading[/code], [code]peak[/code], [code]started[/code], [code]stolen[/code] (voices given up), [code]rejected_voices[/code], [code]rejected_instances[/code], [code]rejected_cooldown[/code], [code]culled[/code] (beyond their distance), [code]finished[/code], [code]players[/code] (in the pool), [code]frames[/code], [code]usec[/code] (its process steps), [code]play_usec[/code] (its plays).
+				Counts since the last [method reset_stats]: [code]voices[/code], [code]virtual[/code] (now), [code]fading[/code], [code]virtualized[/code] and [code]realized[/code] (voices gone virtual and resumed), [code]peak[/code], [code]started[/code], [code]stolen[/code] (voices given up), [code]rejected_voices[/code], [code]rejected_instances[/code], [code]rejected_cooldown[/code], [code]culled[/code] (beyond their distance), [code]finished[/code], [code]players[/code] (in the pool), [code]frames[/code], [code]usec[/code] (its process steps), [code]play_usec[/code] (its plays).
 			</description>
 		</method>
 		<method name="get_voice_count" qualifiers="const">
@@ -45,14 +45,21 @@
 		<method name="get_voices" qualifiers="const">
 			<return type="Array" />
 			<description>
-				The voices, each a dictionary: [code]id[/code], [code]event[/code], [code]priority[/code], [code]audibility_db[/code] (its level at the listener), [code]volume_db[/code], [code]bus[/code], [code]position[/code], [code]fading[/code].
+				The voices, each a dictionary: [code]id[/code], [code]event[/code], [code]priority[/code], [code]audibility_db[/code] (its level at the listener), [code]volume_db[/code], [code]bus[/code], [code]position[/code], [code]fading[/code], [code]virtual[/code].
 			</description>
 		</method>
 		<method name="is_playing" qualifiers="const">
 			<return type="bool" />
 			<param index="0" name="voice" type="int" />
 			<description>
-				Whether the voice [param voice] plays (not ended, stopped or fading out).
+				Whether the voice [param voice] plays (not ended, stopped or fading out; a virtual voice plays, unheard).
+			</description>
+		</method>
+		<method name="is_virtual" qualifiers="const">
+			<return type="bool" />
+			<param index="0" name="voice" type="int" />
+			<description>
+				Whether the voice [param voice] goes on unheard as a virtual voice (its event's [member FellowSoundEvent.virtual_voice]: no voice for it, or out of its reach); it is resumed where it would be.
 			</description>
 		</method>
 		<method name="play">

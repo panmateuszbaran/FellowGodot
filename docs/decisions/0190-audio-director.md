@@ -77,3 +77,8 @@ resources, without middleware.
   low-pass on a bus under a pause menu): the snapshot changes levels only.
 * **A ducked level that follows the speech's loudness** (a compressor's side chain): stock's `AudioEffectCompressor`
   has one; the duck here follows whether a line plays.
+
+## Later
+
+Milestone 85 (decision 0193): virtual voices and the oldest instance giving way, both off by default; this record's
+eight lanes are unchanged.

@@ -48,11 +48,17 @@
 		<member name="spatial" type="bool" setter="set_spatial" getter="is_spatial" default="true">
 			Played at a place in the world ([AudioStreamPlayer3D]); off: everywhere at once ([AudioStreamPlayer]).
 		</member>
+		<member name="steal_oldest" type="bool" setter="set_steal_oldest" getter="is_steal_oldest" default="false">
+			Over [member max_instances], the oldest of its voices gives way (faded out in [member FellowAudioDirector.steal_fade]) instead of the new one being refused: footsteps, impacts.
+		</member>
 		<member name="streams" type="AudioStream[]" setter="set_streams" getter="get_streams" default="[]">
 			The variations: one is played each time.
 		</member>
 		<member name="unit_size" type="float" setter="set_unit_size" getter="get_unit_size" default="10.0">
 			As [member AudioStreamPlayer3D.unit_size]: the distance at which the attenuation starts.
+		</member>
+		<member name="virtual_voice" type="bool" setter="set_virtual_voice" getter="is_virtual_voice" default="false">
+			Kept as a virtual voice instead of being refused when there is no voice for it, given up when another takes its voice, or not started beyond [member max_distance] (and when it is carried out of reach while it plays): its time runs on, nothing is mixed, and it is resumed where it would be (a loop wrapped; a one-shot that ended is let go) when within reach and a voice is free. For loops — engines, machinery, ambiences (milestone 85).
 		</member>
 		<member name="volume_db" type="float" setter="set_volume_db" getter="get_volume_db" default="0.0">
 			Its level, in dB.

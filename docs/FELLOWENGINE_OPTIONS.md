@@ -499,7 +499,10 @@ played), `stop(voice, fade)`, `stop_event()`, `stop_all()`, `is_playing()`, `get
 `get_snapshot_weight()`, `get_stats()`/`reset_stats()`; signal `voice_finished(voice, stolen)`. `FellowMixSnapshot` (a
 resource): `bus_volumes` (bus → dB added), `fade_in` (0.3 s), `fade_out` (0.5 s), `trigger_bus` (empty: pushed and
 popped; set: active while a voice of the director plays on it). Bench `bench/audio_director_check.gd` (under Movie
-Maker; `--many=1`).
+Maker; `--many=1`). Milestone 85 (decision 0193), on `FellowSoundEvent`: `virtual_voice` (off: on, a sound with no
+voice for it, giving its voice up or out of reach goes on unheard and is resumed where it would be), `steal_oldest`
+(off: on, over `max_instances` the oldest gives way); on the director `is_virtual()`, the stats `virtual`,
+`virtualized`, `realized` (`--many=1 --virtual=1`).
 
 ## Vehicles (milestone 77)
 

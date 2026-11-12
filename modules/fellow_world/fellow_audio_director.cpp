@@ -38,6 +38,7 @@
 #include "scene/3d/camera_3d.h"
 #include "scene/audio/audio_stream_player.h"
 #include "scene/main/viewport.h"
+#include "scene/resources/audio_stream_wav.h"
 #include "servers/audio/audio_server.h"
 #include "servers/audio/audio_stream.h"
 
@@ -94,6 +95,10 @@ void FellowSoundEvent::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_max_distance"), &FellowSoundEvent::get_max_distance);
 	ClassDB::bind_method(D_METHOD("set_attenuation_model", "model"), &FellowSoundEvent::set_attenuation_model);
 	ClassDB::bind_method(D_METHOD("get_attenuation_model"), &FellowSoundEvent::get_attenuation_model);
+	ClassDB::bind_method(D_METHOD("set_virtual_voice", "enabled"), &FellowSoundEvent::set_virtual_voice);
+	ClassDB::bind_method(D_METHOD("is_virtual_voice"), &FellowSoundEvent::is_virtual_voice);
+	ClassDB::bind_method(D_METHOD("set_steal_oldest", "enabled"), &FellowSoundEvent::set_steal_oldest);
+	ClassDB::bind_method(D_METHOD("is_steal_oldest"), &FellowSoundEvent::is_steal_oldest);
 	ClassDB::bind_method(D_METHOD("get_audibility_db", "distance"), &FellowSoundEvent::get_audibility_db);
 
 	ADD_PROPERTY(PropertyInfo(Variant::ARRAY, "streams", PROPERTY_HINT_ARRAY_TYPE, MAKE_RESOURCE_TYPE_HINT("AudioStream")), "set_streams", "get_streams");
@@ -110,6 +115,8 @@ void FellowSoundEvent::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "unit_size", PROPERTY_HINT_RANGE, "0.1,100,0.01,or_greater"), "set_unit_size", "get_unit_size");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "max_distance", PROPERTY_HINT_RANGE, "0,4096,0.01,or_greater,suffix:m"), "set_max_distance", "get_max_distance");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "attenuation_model", PROPERTY_HINT_ENUM, "Inverse,Inverse Square,Logarithmic,Disabled"), "set_attenuation_model", "get_attenuation_model");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "virtual_voice"), "set_virtual_voice", "is_virtual_voice");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "steal_oldest"), "set_steal_oldest", "is_steal_oldest");
 
 	BIND_ENUM_CONSTANT(SELECTION_RANDOM_NO_REPEAT);
 	BIND_ENUM_CONSTANT(SELECTION_RANDOM);
@@ -161,11 +168,7 @@ float FellowAudioDirector::_audibility(const Voice &p_voice, const Vector3 &p_li
 }
 
 int FellowAudioDirector::_active_voices() const {
-	int n = 0;
-	for (const Voice &v : voices) {
-		n += v.fading ? 0 : 1;
-	}
-	return n;
+	return active_count;
 }
 
 Node *FellowAudioDirector::_take_player(bool p_spatial) {
@@ -187,6 +190,9 @@ Node *FellowAudioDirector::_take_player(bool p_spatial) {
 
 void FellowAudioDirector::_release(uint32_t p_index) {
 	Voice &v = voices[p_index];
+	if (!v.fading && !v.is_virtual) {
+		active_count--;
+	}
 	const int id = v.id;
 	const bool stolen = v.stolen;
 	if (v.player) {
@@ -200,6 +206,29 @@ void FellowAudioDirector::_release(uint32_t p_index) {
 	}
 	voices.remove_at_unordered(p_index);
 	emit_signal(SNAME("voice_finished"), id, stolen);
+}
+
+// A voice that loses its player (given up, or out of reach) goes on as a virtual voice.
+void FellowAudioDirector::_release_player_to_virtual(uint32_t p_index) {
+	Voice &v = voices[p_index];
+	if (!v.fading && !v.is_virtual) {
+		active_count--;
+	}
+	if (v.player) {
+		if (AudioStreamPlayer3D *p3 = Object::cast_to<AudioStreamPlayer3D>(v.player)) {
+			p3->stop();
+			free_players_3d.push_back(v.player);
+		} else if (AudioStreamPlayer *p2 = Object::cast_to<AudioStreamPlayer>(v.player)) {
+			p2->stop();
+			free_players.push_back(v.player);
+		}
+	}
+	v.player = nullptr;
+	v.is_virtual = true;
+	v.fading = false;
+	v.to_virtual = false;
+	v.stolen = false;
+	stats.virtualized++;
 }
 
 FellowAudioDirector::SnapshotState *FellowAudioDirector::_snapshot_state(const Ref<FellowMixSnapshot> &p_snapshot, bool p_create) {
@@ -233,6 +262,58 @@ void FellowAudioDirector::set_seed(int64_t p_seed) {
 	rng.seed(uint64_t(seed));
 }
 
+// Where a voice that went virtual would be now (s into its stream; a loop wraps); r_ended when a one-shot is over.
+float FellowAudioDirector::_virtual_position(const Voice &p_voice, bool &r_ended) const {
+	r_ended = false;
+	const float elapsed = float(clock - p_voice.started) * p_voice.pitch;
+	const float length = p_voice.stream.is_valid() ? float(p_voice.stream->get_length()) : 0.0f;
+	if (length <= 0.0f) {
+		return elapsed;
+	}
+	if (const AudioStreamWAV *wav = Object::cast_to<AudioStreamWAV>(p_voice.stream.ptr())) {
+		if (wav->get_loop_mode() != AudioStreamWAV::LOOP_DISABLED) {
+			const float rate = float(MAX(1, wav->get_mix_rate()));
+			const float end = wav->get_loop_end() > 0 ? float(wav->get_loop_end()) / rate : length;
+			const float begin = float(wav->get_loop_begin()) / rate;
+			return elapsed < end ? elapsed : begin + Math::fmod(elapsed - end, MAX(end - begin, 1e-3f));
+		}
+	} else if (p_voice.stream->has_loop()) {
+		return Math::fmod(elapsed, length);
+	}
+	r_ended = elapsed >= length;
+	return elapsed;
+}
+
+bool FellowAudioDirector::_in_reach(const Voice &p_voice, const Vector3 &p_listener, float p_margin) const {
+	const float reach = p_voice.event->get_max_distance();
+	return !p_voice.spatial || reach <= 0.0f || p_voice.position.distance_to(p_listener) <= reach * p_margin;
+}
+
+// A voice given a player (at its start, or resumed from virtual at p_from seconds into its stream).
+void FellowAudioDirector::_realize(Voice &p_voice, float p_from) {
+	const Ref<FellowSoundEvent> &e = p_voice.event;
+	p_voice.player = _take_player(p_voice.spatial);
+	p_voice.is_virtual = false;
+	active_count++;
+	if (AudioStreamPlayer3D *p3 = Object::cast_to<AudioStreamPlayer3D>(p_voice.player)) {
+		p3->set_stream(p_voice.stream);
+		p3->set_volume_db(p_voice.volume_db);
+		p3->set_pitch_scale(p_voice.pitch);
+		p3->set_bus(e->get_bus());
+		p3->set_unit_size(e->get_unit_size());
+		p3->set_max_distance(e->get_max_distance());
+		p3->set_attenuation_model(AudioStreamPlayer3D::AttenuationModel(e->get_attenuation_model()));
+		p3->set_global_position(p_voice.position);
+		p3->play(p_from);
+	} else if (AudioStreamPlayer *p2 = Object::cast_to<AudioStreamPlayer>(p_voice.player)) {
+		p2->set_stream(p_voice.stream);
+		p2->set_volume_db(p_voice.volume_db);
+		p2->set_pitch_scale(p_voice.pitch);
+		p2->set_bus(e->get_bus());
+		p2->play(p_from);
+	}
+}
+
 int FellowAudioDirector::_play(const Ref<FellowSoundEvent> &p_event, const Vector3 &p_position, Node3D *p_follow) {
 	ERR_FAIL_COND_V_MSG(p_event.is_null(), 0, "FellowAudioDirector: no event to play.");
 	ERR_FAIL_COND_V_MSG(!is_inside_tree(), 0, "FellowAudioDirector: not in the scene tree.");
@@ -244,14 +325,36 @@ int FellowAudioDirector::_play(const Ref<FellowSoundEvent> &p_event, const Vecto
 		stats.play_usec += OS::get_singleton()->get_ticks_usec() - t0;
 		return p_id;
 	};
-	// Its cooldown and its instances.
+	const bool virtual_ok = p_event->is_virtual_voice();
+	// Its cooldown and its instances (over them: refused, or with steal_oldest the oldest gives way).
 	if (p_event->get_cooldown() > 0.0f && clock - state.last_start < double(p_event->get_cooldown()) - 1e-6) {
 		stats.rejected_cooldown++;
 		return done(0);
 	}
 	if (p_event->get_max_instances() > 0 && get_event_voice_count(p_event) >= p_event->get_max_instances()) {
-		stats.rejected_instances++;
-		return done(0);
+		if (!p_event->is_steal_oldest()) {
+			stats.rejected_instances++;
+			return done(0);
+		}
+		int oldest = -1;
+		for (uint32_t i = 0; i < voices.size(); i++) {
+			if (!voices[i].fading && voices[i].event == p_event && (oldest < 0 || voices[i].order < voices[oldest].order)) {
+				oldest = int(i);
+			}
+		}
+		if (oldest >= 0) {
+			Voice &o = voices[oldest];
+			o.stolen = true;
+			stats.stolen++;
+			if (o.is_virtual || steal_fade <= 0.0f) {
+				_release(uint32_t(oldest));
+			} else {
+				active_count--;
+				o.fading = true;
+				o.fade_time = steal_fade;
+				o.fade_left = steal_fade;
+			}
+		}
 	}
 	Voice nv;
 	nv.event = p_event;
@@ -259,19 +362,23 @@ int FellowAudioDirector::_play(const Ref<FellowSoundEvent> &p_event, const Vecto
 	nv.position = p_follow ? p_follow->get_global_position() : p_position;
 	nv.follow = p_follow ? p_follow->get_instance_id() : ObjectID();
 	const Vector3 listener = _listener_position();
-	if (nv.spatial && p_event->get_max_distance() > 0.0f && nv.position.distance_to(listener) > p_event->get_max_distance()) {
-		stats.culled++;
-		return done(0);
+	bool start_virtual = false;
+	if (!_in_reach(nv, listener, 1.0f)) {
+		if (!virtual_ok) {
+			stats.culled++;
+			return done(0);
+		}
+		start_virtual = true; // out of reach: it goes on unheard until it comes within it
 	}
 	const float vr = p_event->get_volume_random_db();
 	nv.volume_db = p_event->get_volume_db() + (vr > 0.0f ? rng.random(-vr, vr) : 0.0f);
 	nv.audibility = _audibility(nv, listener);
 	// The budget: a voice given up by the least important, quietest one if the new one matters more.
-	if (_active_voices() >= max_voices) {
+	if (!start_virtual && _active_voices() >= max_voices) {
 		int victim = -1;
 		for (uint32_t i = 0; i < voices.size(); i++) {
 			const Voice &v = voices[i];
-			if (v.fading) {
+			if (v.fading || v.is_virtual) {
 				continue;
 			}
 			if (victim < 0) {
@@ -285,25 +392,34 @@ int FellowAudioDirector::_play(const Ref<FellowSoundEvent> &p_event, const Vecto
 				victim = int(i);
 			}
 		}
-		if (!steal_voices || victim < 0) {
-			stats.rejected_voices++;
-			return done(0);
+		bool take = steal_voices && victim >= 0;
+		if (take) {
+			const Voice &w = voices[victim];
+			const int np = p_event->get_priority();
+			const int wp = w.event->get_priority();
+			take = !(wp > np || (wp == np && w.audibility >= nv.audibility));
 		}
-		Voice &w = voices[victim];
-		const int np = p_event->get_priority();
-		const int wp = w.event->get_priority();
-		if (wp > np || (wp == np && w.audibility >= nv.audibility)) {
-			stats.rejected_voices++;
-			return done(0);
-		}
-		w.stolen = true;
-		stats.stolen++;
-		if (steal_fade > 0.0f) {
-			w.fading = true;
-			w.fade_time = steal_fade;
-			w.fade_left = steal_fade;
+		if (!take) {
+			if (!virtual_ok) {
+				stats.rejected_voices++;
+				return done(0);
+			}
+			start_virtual = true; // no voice for it now: unheard until one frees
 		} else {
-			_release(uint32_t(victim));
+			Voice &w = voices[victim];
+			w.stolen = true;
+			stats.stolen++;
+			w.to_virtual = w.event->is_virtual_voice();
+			if (steal_fade > 0.0f) {
+				active_count--;
+				w.fading = true;
+				w.fade_time = steal_fade;
+				w.fade_left = steal_fade;
+			} else if (w.to_virtual) {
+				_release_player_to_virtual(uint32_t(victim));
+			} else {
+				_release(uint32_t(victim));
+			}
 		}
 	}
 	// The variation.
@@ -326,33 +442,22 @@ int FellowAudioDirector::_play(const Ref<FellowSoundEvent> &p_event, const Vecto
 			state.next_index = (index + 1) % n;
 		} break;
 	}
-	Ref<AudioStream> stream = streams[index];
-	ERR_FAIL_COND_V_MSG(stream.is_null(), done(0), "FellowAudioDirector: an empty stream in the event.");
+	nv.stream = streams[index];
+	ERR_FAIL_COND_V_MSG(nv.stream.is_null(), done(0), "FellowAudioDirector: an empty stream in the event.");
 	const float pr = p_event->get_pitch_random_semitones();
-	const float pitch = p_event->get_pitch_scale() * (pr > 0.0f ? Math::pow(2.0f, rng.random(-pr, pr) / 12.0f) : 1.0f);
-	nv.player = _take_player(nv.spatial);
-	if (AudioStreamPlayer3D *p3 = Object::cast_to<AudioStreamPlayer3D>(nv.player)) {
-		p3->set_stream(stream);
-		p3->set_volume_db(nv.volume_db);
-		p3->set_pitch_scale(pitch);
-		p3->set_bus(p_event->get_bus());
-		p3->set_unit_size(p_event->get_unit_size());
-		p3->set_max_distance(p_event->get_max_distance());
-		p3->set_attenuation_model(AudioStreamPlayer3D::AttenuationModel(p_event->get_attenuation_model()));
-		p3->set_global_position(nv.position);
-		p3->play();
-	} else if (AudioStreamPlayer *p2 = Object::cast_to<AudioStreamPlayer>(nv.player)) {
-		p2->set_stream(stream);
-		p2->set_volume_db(nv.volume_db);
-		p2->set_pitch_scale(pitch);
-		p2->set_bus(p_event->get_bus());
-		p2->play();
-	}
+	nv.pitch = p_event->get_pitch_scale() * (pr > 0.0f ? Math::pow(2.0f, rng.random(-pr, pr) / 12.0f) : 1.0f);
+	nv.started = clock;
 	nv.id = next_id++;
 	if (next_id <= 0) {
 		next_id = 1;
 	}
 	nv.order = next_order++;
+	if (start_virtual) {
+		nv.is_virtual = true;
+		stats.virtualized++;
+	} else {
+		_realize(nv, 0.0f);
+	}
 	voices.push_back(nv);
 	state.last_start = clock;
 	state.last_index = index;
@@ -375,9 +480,11 @@ void FellowAudioDirector::stop(int p_voice, float p_fade) {
 		if (voices[i].id != p_voice) {
 			continue;
 		}
-		if (p_fade > 0.0f) {
+		if (p_fade > 0.0f && !voices[i].is_virtual) {
 			Voice &v = voices[i];
+			v.to_virtual = false;
 			if (!v.fading) {
+				active_count--;
 				v.fading = true;
 				v.fade_time = p_fade;
 				v.fade_left = p_fade;
@@ -420,6 +527,15 @@ bool FellowAudioDirector::is_playing(int p_voice) const {
 	return false;
 }
 
+bool FellowAudioDirector::is_virtual(int p_voice) const {
+	for (const Voice &v : voices) {
+		if (v.id == p_voice) {
+			return v.is_virtual;
+		}
+	}
+	return false;
+}
+
 int FellowAudioDirector::get_event_voice_count(const Ref<FellowSoundEvent> &p_event) const {
 	int n = 0;
 	for (const Voice &v : voices) {
@@ -449,6 +565,7 @@ Array FellowAudioDirector::get_voices() const {
 		d["bus"] = v.event->get_bus();
 		d["position"] = v.position;
 		d["fading"] = v.fading;
+		d["virtual"] = v.is_virtual;
 		a.push_back(d);
 	}
 	return a;
@@ -478,7 +595,8 @@ void FellowAudioDirector::_update(double p_delta) {
 	const uint64_t t0 = OS::get_singleton()->get_ticks_usec();
 	clock += p_delta;
 	const Vector3 listener = _listener_position();
-	// The voices: where they are, how loud the listener hears them, which have ended or faded out.
+	// The voices: where they are, how loud the listener hears them, which have ended or faded out; the virtual ones
+	// going on in time, resumed where they would be when within reach and a voice is free.
 	for (int i = int(voices.size()) - 1; i >= 0; i--) {
 		Voice &v = voices[i];
 		AudioStreamPlayer3D *p3 = Object::cast_to<AudioStreamPlayer3D>(v.player);
@@ -493,10 +611,29 @@ void FellowAudioDirector::_update(double p_delta) {
 				v.follow = ObjectID(); // gone: the sound goes on where it was
 			}
 		}
+		if (v.is_virtual) {
+			bool ended = false;
+			const float at = _virtual_position(v, ended);
+			if (ended) {
+				stats.finished++;
+				_release(uint32_t(i));
+				continue;
+			}
+			if (active_count < max_voices && _in_reach(v, listener, 1.0f)) {
+				v.audibility = _audibility(v, listener);
+				_realize(v, at);
+				stats.realized++;
+			}
+			continue;
+		}
 		if (v.fading) {
 			v.fade_left -= float(p_delta);
 			if (v.fade_left <= 0.0f) {
-				_release(uint32_t(i));
+				if (v.to_virtual) {
+					_release_player_to_virtual(uint32_t(i));
+				} else {
+					_release(uint32_t(i));
+				}
 				continue;
 			}
 			const float db = v.volume_db + Math::linear_to_db(MAX(v.fade_left / v.fade_time, 1e-4f));
@@ -514,6 +651,9 @@ void FellowAudioDirector::_update(double p_delta) {
 			continue;
 		}
 		v.audibility = _audibility(v, listener);
+		if (v.event->is_virtual_voice() && !_in_reach(v, listener, 1.05f)) {
+			_release_player_to_virtual(uint32_t(i)); // out of reach (inaudible there): unheard until it comes back
+		}
 	}
 	// The snapshots: in while pushed or while a voice plays on their trigger bus.
 	HashMap<StringName, float> offsets;
@@ -523,7 +663,7 @@ void FellowAudioDirector::_update(double p_delta) {
 		const StringName trigger = s.snapshot->get_trigger_bus();
 		if (!active && trigger != StringName()) {
 			for (const Voice &v : voices) {
-				if (!v.fading && v.event->get_bus() == trigger) {
+				if (!v.fading && !v.is_virtual && v.event->get_bus() == trigger) {
 					active = true;
 					break;
 				}
@@ -611,8 +751,15 @@ void FellowAudioDirector::_notification(int p_what) {
 
 Dictionary FellowAudioDirector::get_stats() const {
 	Dictionary d;
+	int virtual_count = 0;
+	for (const Voice &v : voices) {
+		virtual_count += v.is_virtual ? 1 : 0;
+	}
 	d["voices"] = _active_voices();
-	d["fading"] = int(voices.size()) - _active_voices();
+	d["virtual"] = virtual_count;
+	d["fading"] = int(voices.size()) - _active_voices() - virtual_count;
+	d["virtualized"] = int64_t(stats.virtualized);
+	d["realized"] = int64_t(stats.realized);
 	d["peak"] = int64_t(stats.peak);
 	d["started"] = int64_t(stats.started);
 	d["stolen"] = int64_t(stats.stolen);
@@ -665,6 +812,7 @@ void FellowAudioDirector::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("stop_event", "event", "fade"), &FellowAudioDirector::stop_event, DEFVAL(0.0f));
 	ClassDB::bind_method(D_METHOD("stop_all", "fade"), &FellowAudioDirector::stop_all, DEFVAL(0.0f));
 	ClassDB::bind_method(D_METHOD("is_playing", "voice"), &FellowAudioDirector::is_playing);
+	ClassDB::bind_method(D_METHOD("is_virtual", "voice"), &FellowAudioDirector::is_virtual);
 	ClassDB::bind_method(D_METHOD("get_voice_count"), &FellowAudioDirector::get_voice_count);
 	ClassDB::bind_method(D_METHOD("get_event_voice_count", "event"), &FellowAudioDirector::get_event_voice_count);
 	ClassDB::bind_method(D_METHOD("get_voice_player", "voice"), &FellowAudioDirector::get_voice_player);

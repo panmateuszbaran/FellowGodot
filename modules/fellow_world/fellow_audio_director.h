@@ -68,6 +68,8 @@ private:
 	float unit_size = 10.0f;
 	float max_distance = 0.0f; // m: farther, not played (0: no limit)
 	int attenuation_model = 0; // AudioStreamPlayer3D::AttenuationModel
+	bool virtual_voice = false; // milestone 85: kept and resumed when out of voices or of reach
+	bool steal_oldest = false; // milestone 85: over max_instances, the oldest gives way
 
 protected:
 	static void _bind_methods();
@@ -101,6 +103,10 @@ public:
 	float get_max_distance() const { return max_distance; }
 	void set_attenuation_model(int p_model) { attenuation_model = CLAMP(p_model, 0, 3); }
 	int get_attenuation_model() const { return attenuation_model; }
+	void set_virtual_voice(bool p_enabled) { virtual_voice = p_enabled; }
+	bool is_virtual_voice() const { return virtual_voice; }
+	void set_steal_oldest(bool p_enabled) { steal_oldest = p_enabled; }
+	bool is_steal_oldest() const { return steal_oldest; }
 
 	// The level a listener p_distance away hears it at (dB, before the variation): its volume and the attenuation.
 	float get_audibility_db(float p_distance) const;
@@ -153,6 +159,12 @@ class FellowAudioDirector : public Node {
 		float fade_time = 0.0f;
 		float fade_left = 0.0f;
 		bool stolen = false;
+		// Milestone 85: a virtual voice (no player: out of voices or of reach) goes on in time and is resumed there.
+		bool is_virtual = false;
+		bool to_virtual = false; // fading out into a virtual voice
+		double started = 0.0; // the director's clock at its start
+		float pitch = 1.0f;
+		Ref<AudioStream> stream;
 	};
 	struct EventState {
 		double last_start = -1e9;
@@ -172,6 +184,8 @@ class FellowAudioDirector : public Node {
 		uint64_t rejected_cooldown = 0;
 		uint64_t culled = 0;
 		uint64_t finished = 0;
+		uint64_t virtualized = 0;
+		uint64_t realized = 0;
 		uint64_t peak = 0;
 		uint64_t frames = 0;
 		uint64_t usec = 0;
@@ -194,6 +208,7 @@ class FellowAudioDirector : public Node {
 	RandomPCG rng;
 	double clock = 0.0;
 	int next_id = 1;
+	int active_count = 0; // voices with a player, not fading out
 	uint64_t next_order = 0;
 	Stats stats;
 
@@ -203,10 +218,14 @@ class FellowAudioDirector : public Node {
 	int _active_voices() const;
 	Node *_take_player(bool p_spatial);
 	void _release(uint32_t p_index);
+	void _release_player_to_virtual(uint32_t p_index);
 	SnapshotState *_snapshot_state(const Ref<FellowMixSnapshot> &p_snapshot, bool p_create);
 	void _update(double p_delta);
 	void _restore_buses();
 	int _play(const Ref<FellowSoundEvent> &p_event, const Vector3 &p_position, Node3D *p_follow);
+	void _realize(Voice &p_voice, float p_from);
+	float _virtual_position(const Voice &p_voice, bool &r_ended) const;
+	bool _in_reach(const Voice &p_voice, const Vector3 &p_listener, float p_margin) const;
 
 protected:
 	void _notification(int p_what);
@@ -232,6 +251,7 @@ public:
 	void stop_event(const Ref<FellowSoundEvent> &p_event, float p_fade = 0.0f);
 	void stop_all(float p_fade = 0.0f);
 	bool is_playing(int p_voice) const;
+	bool is_virtual(int p_voice) const;
 	int get_voice_count() const { return _active_voices(); }
 	int get_event_voice_count(const Ref<FellowSoundEvent> &p_event) const;
 	Node *get_voice_player(int p_voice) const;

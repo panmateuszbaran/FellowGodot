@@ -9,6 +9,14 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 85 — virtual voices (2026-11-12)
+
+- `FellowSoundEvent.virtual_voice` and `steal_oldest` (decision 0193): a sound with no voice for it, giving its voice
+  up or out of its reach goes on unheard as a virtual voice and is resumed where it would be when within reach and a
+  voice is free (a one-shot that ends meanwhile is let go); an event's oldest instance can give way to a new one. The
+  director keeps its count of voices as they change (4 400 virtual voices 62 µs a frame). Four lanes under Movie
+  Maker, decision 0190's eight unchanged.
+
 ## Milestone 84 — over an edge into a hang (2026-11-12)
 
 - `FellowTraversal3D` (decision 0192): `try_drop()` and `drop_to_hang` (off by default) — walking slowly over the edge
