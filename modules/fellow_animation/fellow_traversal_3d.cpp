@@ -923,7 +923,38 @@ bool FellowTraversal3D::_find_jump(const Vector3 &p_wish, Ledge &r_ledge, Vector
 	};
 	Ledge l;
 	Ledge hold;
-	if (Math::abs(along) > 0.5f) {
+	if (Math::abs(along) > 0.35f && Math::abs(p_wish.y) > 0.35f) {
+		// Milestone 93 (decision 0201): along and up or down at once — the nearest edge past this one's end (within
+		// hang_jump_distance), higher or lower by 0.4 m to hang_jump_height or hang_jump_depth, hung from 0.3 m into it.
+		const float s = SIGN(along);
+		const float v = SIGN(p_wish.y);
+		const float reach = v > 0.0f ? hang_jump_height : hang_jump_depth;
+		const float a0 = _edge_end(s) + 0.3f;
+		for (float a = a0; a <= a0 + hang_jump_distance; a += 0.1f) {
+			for (float h = 0.4f; h <= reach; h += 0.1f) {
+				if (!_probe_edge(ledge.edge + UP * (v * h), ledge.inward, s * a, hold)) {
+					continue;
+				}
+				const float dy = hold.edge.y - ledge.edge.y;
+				if (dy * v < 0.4f) {
+					continue;
+				}
+				const Vector3 level = ledge.edge + UP * dy;
+				if (!_probe_edge(level, ledge.inward, s * (a + 0.3f), l) || !_probe_edge(level, ledge.inward, s * (a + 0.55f), hold) || Math::abs(l.edge.y - ledge.edge.y - dy) > 0.3f) {
+					break;
+				}
+				const Vector3 to_feet = _hang_feet_at(l.edge, l.inward);
+				const Vector3 control = (from_feet + to_feet) * 0.5f + UP * 0.35f;
+				if (room(to_feet) && room(control - UP * 0.05f)) {
+					r_ledge = l;
+					r_control = control;
+					r_how = TRANSFER_JUMP_DIAGONAL;
+					return true;
+				}
+				break;
+			}
+		}
+	} else if (Math::abs(along) > 0.5f) {
 		const float s = SIGN(along);
 		// The first edge found past the gap; hung from 0.3 m into it (the near hand 6 cm in).
 		const float a0 = _edge_end(s) + 0.3f;
@@ -1093,7 +1124,7 @@ void FellowTraversal3D::_start_transfer(const Ledge &p_to, const Vector3 &p_cont
 	transfer.from_inward = ledge.inward;
 	transfer.from_hands[0] = hints.hand[0];
 	transfer.from_hands[1] = hints.hand[1];
-	if (p_how == TRANSFER_JUMP_ALONG || p_how == TRANSFER_JUMP_UP || p_how == TRANSFER_JUMP_DOWN) {
+	if (p_how == TRANSFER_JUMP_ALONG || p_how == TRANSFER_JUMP_UP || p_how == TRANSFER_JUMP_DOWN || p_how == TRANSFER_JUMP_DIAGONAL) {
 		shimmy_velocity = 0.0f;
 	}
 	global_stats.transfers.increment();
@@ -1123,7 +1154,7 @@ void FellowTraversal3D::_step_transfer(double p_delta) {
 	hang_feet = feet;
 	const Vector3 left = UP.cross(inward).normalized();
 	const Vector3 to_left = UP.cross(transfer.to.inward).normalized();
-	const bool jump = transfer.how == TRANSFER_JUMP_ALONG || transfer.how == TRANSFER_JUMP_UP || transfer.how == TRANSFER_JUMP_DOWN;
+	const bool jump = transfer.how == TRANSFER_JUMP_ALONG || transfer.how == TRANSFER_JUMP_UP || transfer.how == TRANSFER_JUMP_DOWN || transfer.how == TRANSFER_JUMP_DIAGONAL;
 	hints.active = true;
 	hints.kind = KIND_HANG;
 	hints.inward = inward;
@@ -1236,7 +1267,7 @@ void FellowTraversal3D::_step_hang(double p_delta) {
 		Vector3 control;
 		int how = 0;
 		if (hold_time > 0.25 && _find_jump(wish, to, control, how)) {
-			_start_transfer(to, control, how, how == TRANSFER_JUMP_UP ? 0.45 : (how == TRANSFER_JUMP_DOWN ? 0.4 : 0.5));
+			_start_transfer(to, control, how, how == TRANSFER_JUMP_UP ? 0.45 : (how == TRANSFER_JUMP_DOWN ? 0.4 : (how == TRANSFER_JUMP_DIAGONAL ? 0.55 : 0.5)));
 			_step_transfer(p_delta);
 			return;
 		}
@@ -1989,7 +2020,7 @@ void FellowTraversal3D::_bind_methods() {
 	ADD_SIGNAL(MethodInfo("mantle_cancelled", PropertyInfo(Variant::INT, "kind")));
 	ADD_SIGNAL(MethodInfo("hang_started", PropertyInfo(Variant::DICTIONARY, "ledge")));
 	ADD_SIGNAL(MethodInfo("hang_finished", PropertyInfo(Variant::BOOL, "climbed")));
-	ADD_SIGNAL(MethodInfo("hang_transferred", PropertyInfo(Variant::DICTIONARY, "ledge"), PropertyInfo(Variant::INT, "how", PROPERTY_HINT_ENUM, "Outer Corner,Inner Corner,Jump Along,Jump Up,Drop,Jump Down")));
+	ADD_SIGNAL(MethodInfo("hang_transferred", PropertyInfo(Variant::DICTIONARY, "ledge"), PropertyInfo(Variant::INT, "how", PROPERTY_HINT_ENUM, "Outer Corner,Inner Corner,Jump Along,Jump Up,Drop,Jump Down,Jump Diagonal")));
 	ADD_SIGNAL(MethodInfo("ladder_started", PropertyInfo(Variant::OBJECT, "ladder", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_DEFAULT, "FellowLadder3D")));
 	ADD_SIGNAL(MethodInfo("ladder_finished", PropertyInfo(Variant::BOOL, "at_top")));
 
@@ -2008,5 +2039,6 @@ void FellowTraversal3D::_bind_methods() {
 	BIND_ENUM_CONSTANT(TRANSFER_JUMP_UP);
 	BIND_ENUM_CONSTANT(TRANSFER_DROP);
 	BIND_ENUM_CONSTANT(TRANSFER_JUMP_DOWN);
+	BIND_ENUM_CONSTANT(TRANSFER_JUMP_DIAGONAL);
 	BIND_ENUM_CONSTANT(KIND_MAX);
 }

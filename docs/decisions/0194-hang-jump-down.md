@@ -38,3 +38,7 @@ Keep: with decisions 0189 and 0192 a climber goes along, round, across, up and d
 ## Rejected / not done
 
 * **Diagonal jumps** (along and down at once) and **jumps to ledges on other walls** (across a corner).
+
+## Later
+
+Milestone 93 (decision 0201): diagonal jumps; this record's lane is unchanged.

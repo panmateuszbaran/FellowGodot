@@ -69,6 +69,7 @@ public:
 		TRANSFER_JUMP_UP, // up to a ledge above
 		TRANSFER_DROP, // milestone 84: from the floor over its edge into a hang
 		TRANSFER_JUMP_DOWN, // milestone 86: down to a ledge below
+		TRANSFER_JUMP_DIAGONAL, // milestone 93: along and up or down at once
 	};
 
 	// A check's result (global space).

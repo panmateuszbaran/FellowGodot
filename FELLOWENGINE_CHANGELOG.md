@@ -9,6 +9,12 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 93 — diagonal jumps (2026-11-12)
+
+- `FellowTraversal3D.hang_jump()` with the wish along and up or down (decision 0201): the nearest edge past this one's
+  end at another height is jumped to and caught (`TRANSFER_JUMP_DIAGONAL`). One lane on both physics engines (across
+  a gap and up), the earlier thirteen unchanged.
+
 ## Milestone 92 — the highs blocked apart (2026-11-12)
 
 - `FellowAcoustics3D` (decision 0200): a collider's `fellow_occlusion_highs` blocks a path's highs (the shelf and the

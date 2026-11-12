@@ -111,7 +111,7 @@
 		<method name="hang_jump">
 			<return type="void" />
 			<description>
-				Hanging, jumps to another ledge the way [method set_intent]'s wish goes, at the next physics frame: along the edge past its end (left or right; the first edge within [member hang_jump_distance] at about the same height, hung from 0.3 m into it), up (within [member hang_jump_height], both hands on it) or down (milestone 86: within [member hang_jump_depth], both hands on it; the body going out to the lower ledge's face first), with room for the body there and on the way. Nothing happens when there is none (a wish down then lets go). The body flies there along a curve (0.5 s along, 0.45 s up, 0.4 s down), its hands letting go and catching the new edge; [signal hang_transferred] is emitted when it hangs again.
+				Hanging, jumps to another ledge the way [method set_intent]'s wish goes, at the next physics frame: along the edge past its end (left or right; the first edge within [member hang_jump_distance] at about the same height, hung from 0.3 m into it), up (within [member hang_jump_height], both hands on it) or down (milestone 86: within [member hang_jump_depth], both hands on it; the body going out to the lower ledge's face first), or diagonally (milestone 93: the wish both along and up or down, each over 0.35: the nearest edge past this one's end within [member hang_jump_distance], 0.4 m higher or lower at least, within [member hang_jump_height] or [member hang_jump_depth]), with room for the body there and on the way. Nothing happens when there is none (a wish down then lets go). The body flies there along a curve (0.5 s along, 0.45 s up, 0.4 s down, 0.55 s diagonally), its hands letting go and catching the new edge; [signal hang_transferred] is emitted when it hangs again.
 			</description>
 		</method>
 		<method name="is_active" qualifiers="const">
@@ -411,6 +411,9 @@
 		</constant>
 		<constant name="TRANSFER_JUMP_DOWN" value="5" enum="Transfer">
 			A drop to a ledge below, caught there ([method hang_jump] with the wish down).
+		</constant>
+		<constant name="TRANSFER_JUMP_DIAGONAL" value="6" enum="Transfer">
+			A jump along the edge and up or down at once, to a ledge past a gap at another height ([method hang_jump] with the wish both along and up or down).
 		</constant>
 		<constant name="KIND_MAX" value="9" enum="Kind">
 			The number of kinds.
