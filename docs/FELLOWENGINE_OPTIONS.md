@@ -502,7 +502,9 @@ popped; set: active while a voice of the director plays on it). Bench `bench/aud
 Maker; `--many=1`). Milestone 85 (decision 0193), on `FellowSoundEvent`: `virtual_voice` (off: on, a sound with no
 voice for it, giving its voice up or out of reach goes on unheard and is resumed where it would be), `steal_oldest`
 (off: on, over `max_instances` the oldest gives way); on the director `is_virtual()`, the stats `virtual`,
-`virtualized`, `realized` (`--many=1 --virtual=1`).
+`virtualized`, `realized` (`--many=1 --virtual=1`). Milestone 87 (decision 0195), on `FellowMixSnapshot`:
+`bus_lowpass` (bus → cutoff Hz; the director's own low-pass at the end of the bus, faded in octaves with the
+snapshot's weight, off when no snapshot filters the bus).
 
 ## Vehicles (milestone 77)
 

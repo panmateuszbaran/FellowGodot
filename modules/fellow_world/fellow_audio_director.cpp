@@ -41,6 +41,7 @@
 #include "scene/resources/audio_stream_wav.h"
 #include "servers/audio/audio_server.h"
 #include "servers/audio/audio_stream.h"
+#include "servers/audio/effects/audio_effect_filter.h"
 
 // --- FellowSoundEvent --------------------------------------------------------------------------------------------
 
@@ -128,6 +129,8 @@ void FellowSoundEvent::_bind_methods() {
 void FellowMixSnapshot::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_bus_volumes", "volumes"), &FellowMixSnapshot::set_bus_volumes);
 	ClassDB::bind_method(D_METHOD("get_bus_volumes"), &FellowMixSnapshot::get_bus_volumes);
+	ClassDB::bind_method(D_METHOD("set_bus_lowpass", "cutoffs"), &FellowMixSnapshot::set_bus_lowpass);
+	ClassDB::bind_method(D_METHOD("get_bus_lowpass"), &FellowMixSnapshot::get_bus_lowpass);
 	ClassDB::bind_method(D_METHOD("set_fade_in", "seconds"), &FellowMixSnapshot::set_fade_in);
 	ClassDB::bind_method(D_METHOD("get_fade_in"), &FellowMixSnapshot::get_fade_in);
 	ClassDB::bind_method(D_METHOD("set_fade_out", "seconds"), &FellowMixSnapshot::set_fade_out);
@@ -136,6 +139,7 @@ void FellowMixSnapshot::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_trigger_bus"), &FellowMixSnapshot::get_trigger_bus);
 
 	ADD_PROPERTY(PropertyInfo(Variant::DICTIONARY, "bus_volumes", PROPERTY_HINT_DICTIONARY_TYPE, "StringName;float"), "set_bus_volumes", "get_bus_volumes");
+	ADD_PROPERTY(PropertyInfo(Variant::DICTIONARY, "bus_lowpass", PROPERTY_HINT_DICTIONARY_TYPE, "StringName;float"), "set_bus_lowpass", "get_bus_lowpass");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "fade_in", PROPERTY_HINT_RANGE, "0,10,0.01,suffix:s"), "set_fade_in", "get_fade_in");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "fade_out", PROPERTY_HINT_RANGE, "0,10,0.01,suffix:s"), "set_fade_out", "get_fade_out");
 	ADD_PROPERTY(PropertyInfo(Variant::STRING_NAME, "trigger_bus"), "set_trigger_bus", "get_trigger_bus");
@@ -657,6 +661,7 @@ void FellowAudioDirector::_update(double p_delta) {
 	}
 	// The snapshots: in while pushed or while a voice plays on their trigger bus.
 	HashMap<StringName, float> offsets;
+	HashMap<StringName, float> cutoffs;
 	for (int i = int(snapshot_states.size()) - 1; i >= 0; i--) {
 		SnapshotState &s = snapshot_states[i];
 		bool active = s.pushed;
@@ -677,6 +682,15 @@ void FellowAudioDirector::_update(double p_delta) {
 			continue;
 		}
 		if (s.weight > 0.0f) {
+			// Milestone 87: a low-pass on a bus, its cutoff from 20.5 kHz to the snapshot's along its weight (in
+			// octaves); the lowest of the snapshots' wins.
+			const Dictionary lp = s.snapshot->get_bus_lowpass();
+			for (const KeyValue<Variant, Variant> &kv : lp) {
+				const StringName bus = kv.key;
+				const float target = CLAMP(float(kv.value), 10.0f, 20500.0f);
+				const float cut = Math::exp(Math::lerp(Math::log(20500.0f), Math::log(target), s.weight));
+				cutoffs[bus] = cutoffs.has(bus) ? MIN(cutoffs[bus], cut) : cut;
+			}
 			const Dictionary bv = s.snapshot->get_bus_volumes();
 			for (const KeyValue<Variant, Variant> &kv : bv) {
 				const StringName bus = kv.key;
@@ -709,8 +723,47 @@ void FellowAudioDirector::_update(double p_delta) {
 		}
 		as->set_bus_volume_db(idx, bus_base[kv.key] + kv.value);
 	}
+	// The low-passes: one the director owns at the end of each bus a snapshot filters, off (the bus as it was) when
+	// none does.
+	for (const KeyValue<StringName, Ref<AudioEffect>> &kv : bus_filters) {
+		if (!cutoffs.has(kv.key)) {
+			const int idx = as->get_bus_index(kv.key);
+			const int e = idx >= 0 ? _filter_index(idx, kv.value) : -1;
+			if (e >= 0 && as->is_bus_effect_enabled(idx, e)) {
+				as->set_bus_effect_enabled(idx, e, false);
+			}
+		}
+	}
+	for (const KeyValue<StringName, float> &kv : cutoffs) {
+		const int idx = as->get_bus_index(kv.key);
+		if (idx < 0) {
+			continue;
+		}
+		if (!bus_filters.has(kv.key)) {
+			Ref<AudioEffectLowPassFilter> f;
+			f.instantiate();
+			as->add_bus_effect(idx, f);
+			bus_filters[kv.key] = f;
+		}
+		Ref<AudioEffectLowPassFilter> f = bus_filters[kv.key];
+		f->set_cutoff(kv.value);
+		const int e = _filter_index(idx, f);
+		if (e >= 0 && !as->is_bus_effect_enabled(idx, e)) {
+			as->set_bus_effect_enabled(idx, e, true);
+		}
+	}
 	stats.frames++;
 	stats.usec += OS::get_singleton()->get_ticks_usec() - t0;
+}
+
+int FellowAudioDirector::_filter_index(int p_bus, const Ref<AudioEffect> &p_effect) const {
+	AudioServer *as = AudioServer::get_singleton();
+	for (int e = 0; e < as->get_bus_effect_count(p_bus); e++) {
+		if (as->get_bus_effect(p_bus, e) == p_effect) {
+			return e;
+		}
+	}
+	return -1;
 }
 
 void FellowAudioDirector::_restore_buses() {
@@ -718,6 +771,14 @@ void FellowAudioDirector::_restore_buses() {
 	if (!as) {
 		return;
 	}
+	for (const KeyValue<StringName, Ref<AudioEffect>> &kv : bus_filters) {
+		const int idx = as->get_bus_index(kv.key);
+		const int e = idx >= 0 ? _filter_index(idx, kv.value) : -1;
+		if (e >= 0) {
+			as->remove_bus_effect(idx, e);
+		}
+	}
+	bus_filters.clear();
 	for (const KeyValue<StringName, float> &kv : bus_base) {
 		const int idx = as->get_bus_index(kv.key);
 		if (idx >= 0) {
@@ -783,7 +844,8 @@ PackedStringArray FellowAudioDirector::get_configuration_warnings() const {
 		if (s.is_null() || !as) {
 			continue;
 		}
-		const Dictionary bv = s->get_bus_volumes();
+		Dictionary bv = s->get_bus_volumes().duplicate();
+		bv.merge(s->get_bus_lowpass());
 		for (const KeyValue<Variant, Variant> &kv : bv) {
 			if (as->get_bus_index(kv.key) < 0) {
 				warnings.push_back(vformat(RTR("A snapshot changes the bus \"%s\", which is not in the audio bus layout."), String(kv.key)));

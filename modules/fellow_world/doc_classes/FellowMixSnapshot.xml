@@ -4,11 +4,14 @@
 		FellowEngine: a state of the mix — the buses' levels it changes, how fast it comes in and goes out.
 	</brief_description>
 	<description>
-		Pushed and popped on a [FellowAudioDirector] ([method FellowAudioDirector.push_snapshot]), or in its [member FellowAudioDirector.snapshots] with a [member trigger_bus]: active while one of the director's voices plays on that bus (a duck: the music lowered while someone speaks). While active its weight rises to 1 over [member fade_in], afterwards falls to 0 over [member fade_out]; each bus in [member bus_volumes] is set to its level before the snapshots plus the active snapshots' changes times their weights, and given back its level when none changes it.
+		Pushed and popped on a [FellowAudioDirector] ([method FellowAudioDirector.push_snapshot]), or in its [member FellowAudioDirector.snapshots] with a [member trigger_bus]: active while one of the director's voices plays on that bus (a duck: the music lowered while someone speaks). While active its weight rises to 1 over [member fade_in], afterwards falls to 0 over [member fade_out]; each bus in [member bus_volumes] is set to its level before the snapshots plus the active snapshots' changes times their weights, and given back its level when none changes it; each bus in [member bus_lowpass] filtered.
 	</description>
 	<tutorials>
 	</tutorials>
 	<members>
+		<member name="bus_lowpass" type="Dictionary" setter="set_bus_lowpass" getter="get_bus_lowpass" default="{}">
+			Low-passes (milestone 87): a bus's name and a cutoff in Hz. The director puts an [AudioEffectLowPassFilter] of its own at the end of the bus while a snapshot filters it, its cutoff moved from 20.5 kHz to the snapshot's along the snapshot's weight (evenly in octaves; the lowest of the active snapshots' wins), and turns it off when none does (the bus then as without it); it takes it away when it leaves the tree. A pause menu's muffled game, a character under water.
+		</member>
 		<member name="bus_volumes" type="Dictionary" setter="set_bus_volumes" getter="get_bus_volumes" default="{}">
 			The changes: a bus's name and the dB added to its level.
 		</member>

@@ -119,6 +119,7 @@ class FellowMixSnapshot : public Resource {
 	GDCLASS(FellowMixSnapshot, Resource);
 
 	Dictionary bus_volumes; // StringName -> dB added
+	Dictionary bus_lowpass; // StringName -> Hz (milestone 87)
 	float fade_in = 0.3f;
 	float fade_out = 0.5f;
 	StringName trigger_bus;
@@ -129,6 +130,8 @@ protected:
 public:
 	void set_bus_volumes(const Dictionary &p_volumes) { bus_volumes = p_volumes; }
 	Dictionary get_bus_volumes() const { return bus_volumes; }
+	void set_bus_lowpass(const Dictionary &p_cutoffs) { bus_lowpass = p_cutoffs; }
+	Dictionary get_bus_lowpass() const { return bus_lowpass; }
 	void set_fade_in(float p_seconds) { fade_in = MAX(0.0f, p_seconds); }
 	float get_fade_in() const { return fade_in; }
 	void set_fade_out(float p_seconds) { fade_out = MAX(0.0f, p_seconds); }
@@ -205,6 +208,7 @@ class FellowAudioDirector : public Node {
 	HashMap<ObjectID, EventState> event_states;
 	LocalVector<SnapshotState> snapshot_states;
 	HashMap<StringName, float> bus_base; // the buses' levels before the snapshots
+	HashMap<StringName, Ref<AudioEffect>> bus_filters; // milestone 87: the low-passes it put on buses
 	RandomPCG rng;
 	double clock = 0.0;
 	int next_id = 1;
@@ -222,6 +226,7 @@ class FellowAudioDirector : public Node {
 	SnapshotState *_snapshot_state(const Ref<FellowMixSnapshot> &p_snapshot, bool p_create);
 	void _update(double p_delta);
 	void _restore_buses();
+	int _filter_index(int p_bus, const Ref<AudioEffect> &p_effect) const;
 	int _play(const Ref<FellowSoundEvent> &p_event, const Vector3 &p_position, Node3D *p_follow);
 	void _realize(Voice &p_voice, float p_from);
 	float _virtual_position(const Voice &p_voice, bool &r_ended) const;

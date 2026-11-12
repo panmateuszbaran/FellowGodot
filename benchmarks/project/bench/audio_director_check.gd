@@ -17,7 +17,8 @@ extends SceneTree
 ## the music's tone measured on the master bus before, during and after it (Goertzel's power at its frequency); a
 ## voice following a moving node and going on where it was when the node is freed. Milestone 85 (decision 0193):
 ## a virtual voice (a loop losing its voice to more important ones, resumed where it would be), a loop coming within
-## its reach and leaving it, a one-shot ending unheard, the oldest instance giving way. One JSON line:
+## its reach and leaving it, a one-shot ending unheard, the oldest instance giving way. Milestone 87 (decision 0195):
+## a snapshot's low-pass on a bus (a 4 kHz tone and a 300 Hz one measured before, under and after it). One JSON line:
 ## AUDIO_DIRECTOR_CHECK {...}; exit code 1 when a lane did otherwise than expected. --many=1: 64 voices, 50 requests a
 ## frame at random places, the director's time (--virtual=1: the events' sounds kept as virtual voices). One JSON
 ## line: AUDIO_DIRECTOR_MANY {...}.
@@ -77,6 +78,23 @@ func _tone(p_freq: float, p_seconds: float, p_loop := false) -> AudioStreamWAV:
 		w.loop_mode = AudioStreamWAV.LOOP_FORWARD
 		w.loop_begin = 0
 		w.loop_end = n
+	return w
+
+
+# Two sines (p_a and p_b Hz, a quarter of full scale each), looped.
+func _two_tones(p_a: float, p_b: float, p_seconds: float) -> AudioStreamWAV:
+	var n := int(p_seconds * RATE)
+	var data := PackedByteArray()
+	data.resize(n * 2)
+	for i in n:
+		var v := (sin(TAU * p_a * i / RATE) + sin(TAU * p_b * i / RATE)) * 0.25
+		data.encode_s16(i * 2, int(clampf(v, -1.0, 1.0) * 32767.0))
+	var w := AudioStreamWAV.new()
+	w.format = AudioStreamWAV.FORMAT_16_BITS
+	w.mix_rate = RATE
+	w.data = data
+	w.loop_mode = AudioStreamWAV.LOOP_FORWARD
+	w.loop_end = n
 	return w
 
 
@@ -214,6 +232,16 @@ func _build() -> void:
 	ve.max_instances = 2
 	ve.steal_oldest = true
 	lanes["oldest"] = {"d": _director("Oldest"), "event": ve, "ids": []}
+	# Milestone 87 (decision 0195): a snapshot's low-pass. A loop of 300 Hz and 4 kHz on the bus "Muffle"; a snapshot
+	# filtering it at 500 Hz (in 0.2 s, out in 0.2 s), pushed and popped; the master bus measured at both tones.
+	_add_bus("Muffle")
+	var muffle := FellowMixSnapshot.new()
+	muffle.bus_lowpass = {&"Muffle": 500.0}
+	muffle.fade_in = 0.2
+	muffle.fade_out = 0.2
+	var em := _event([_two_tones(300.0, 4000.0, 1.0)], "Muffle")
+	em.volume_db = -6.0
+	lanes["lowpass"] = {"d": _director("Lowpass"), "snapshot": muffle, "event": em, "effects": {}}
 	physics_frame.connect(_on_frame)
 
 
@@ -374,7 +402,26 @@ func _on_frame() -> void:
 	if frame == 40:
 		lold["playing"] = lold.ids.map(func(i): return lold.d.is_playing(i))
 		lold["stats"] = lold.d.get_stats()
-	if frame >= 400:
+	# 7 ends (the music stopped) before 13 starts.
+	if frame == 390:
+		lanes.duck.d.stop_all()
+	# 13. The loop from 7 s, the snapshot pushed at 8 s, popped at 9.5 s.
+	var lp: Dictionary = lanes.lowpass
+	var muffle_bus := AudioServer.get_bus_index("Muffle")
+	if frame == 420:
+		lp["id"] = lp.d.play(lp.event)
+	if frame == 480:
+		lp.effects["before"] = AudioServer.get_bus_effect_count(muffle_bus)
+		lp.d.push_snapshot(lp.snapshot)
+	if frame == 530:
+		lp.effects["under"] = AudioServer.get_bus_effect_count(muffle_bus)
+		lp.effects["under_enabled"] = AudioServer.is_bus_effect_enabled(muffle_bus, 0) if AudioServer.get_bus_effect_count(muffle_bus) > 0 else false
+		lp.effects["cutoff"] = (AudioServer.get_bus_effect(muffle_bus, 0) as AudioEffectLowPassFilter).cutoff_hz if AudioServer.get_bus_effect_count(muffle_bus) > 0 else 0.0
+	if frame == 570:
+		lp.d.pop_snapshot(lp.snapshot)
+	if frame == 620:
+		lp.effects["after_enabled"] = AudioServer.is_bus_effect_enabled(muffle_bus, 0) if AudioServer.get_bus_effect_count(muffle_bus) > 0 else false
+	if frame >= 660:
 		done = true
 		_finish()
 
@@ -479,6 +526,13 @@ func _finish() -> void:
 	var lold: Dictionary = lanes.oldest
 	out["oldest"] = {"playing": lold.playing, "stolen": lold.stats.stolen, "rejected": lold.stats.rejected_instances,
 		"ok": lold.playing == [false, true, true] and lold.stats.stolen == 1 and lold.stats.rejected_instances == 0}
+	# 13. The tones before the snapshot (7.5-8 s), under it (8.5-9.4 s) and after it (9.9-10.4 s).
+	var lp: Dictionary = lanes.lowpass
+	var lows := [_tone_db(300.0, 7.5 - base, 8.0 - base), _tone_db(300.0, 8.5 - base, 9.4 - base), _tone_db(300.0, 9.9 - base, 10.4 - base)]
+	var highs := [_tone_db(4000.0, 7.5 - base, 8.0 - base), _tone_db(4000.0, 8.5 - base, 9.4 - base), _tone_db(4000.0, 9.9 - base, 10.4 - base)]
+	out["lowpass"] = {"tone_300_db": lows.map(func(v): return snappedf(v, 0.01)), "tone_4000_db": highs.map(func(v): return snappedf(v, 0.01)),
+		"cut_4000_db": snappedf(highs[1] - highs[0], 0.01), "cut_300_db": snappedf(lows[1] - lows[0], 0.01), "effects": lp.effects,
+		"ok": highs[1] - highs[0] < -30.0 and absf(lows[1] - lows[0]) < 4.0 and absf(highs[2] - highs[0]) < 0.1 and absf(lows[2] - lows[0]) < 0.1 and lp.effects.before == 0 and lp.effects.under == 1 and lp.effects.under_enabled and absf(lp.effects.cutoff - 500.0) < 1.0 and not lp.effects.after_enabled}
 	var usec := 0
 	var frames := 0
 	for n in lanes:

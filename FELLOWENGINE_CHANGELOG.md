@@ -9,6 +9,12 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 87 — low-passes in mix snapshots (2026-11-12)
+
+- `FellowMixSnapshot.bus_lowpass` (decision 0195): a snapshot muffles buses — the director's own low-pass at the end
+  of each, its cutoff faded from 20.5 kHz in octaves with the snapshot's weight, turned off when no snapshot filters
+  the bus. Measured on the master bus under Movie Maker (a 4 kHz tone −36.6 dB under a 500 Hz cutoff and back).
+
 ## Milestone 86 — down to a ledge below (2026-11-12)
 
 - `FellowTraversal3D.hang_jump()` with the wish down (decision 0194): a ledge within `hang_jump_depth` (2.6 m) under
