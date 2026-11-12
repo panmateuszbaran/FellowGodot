@@ -1230,7 +1230,7 @@ int _unwind(const CONTEXT *p_context, void **r_frames, int p_max) {
 	int n = 0;
 	while (n < p_max && c.Rip) {
 		r_frames[n++] = (void *)c.Rip;
-		if (!_readable((void *)c.Rsp, 512)) {
+		if (!_readable((void *)c.Rsp, 8)) { // (a new thread's stack ends a few hundred bytes above it: no more)
 			break;
 		}
 		DWORD64 image_base = 0;
