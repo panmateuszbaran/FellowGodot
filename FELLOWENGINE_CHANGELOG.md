@@ -9,6 +9,12 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 92 — the highs blocked apart (2026-11-12)
+
+- `FellowAcoustics3D` (decision 0200): a collider's `fellow_occlusion_highs` blocks a path's highs (the shelf and the
+  cutoff) apart from its level — a curtain dulls a sound without silencing it. A curtain lane on both physics engines
+  and in the mix; the earlier lanes unchanged.
+
 ## Milestone 91 — occlusion through several things (2026-11-12)
 
 - `FellowAcoustics3D` (decision 0199): a path through glass goes on to what lies behind it — up to three colliders

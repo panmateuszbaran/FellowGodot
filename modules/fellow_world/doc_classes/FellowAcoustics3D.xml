@@ -4,7 +4,7 @@
 		The scene's 3D sounds heard through its geometry: occluded by walls, with the reverb of the listener's room (FellowEngine).
 	</brief_description>
 	<description>
-		Every [AudioStreamPlayer3D] in the tree (but those in the group [code]fellow_no_acoustics[/code]) is heard through what lies between it and the listener (the viewport's [AudioListener3D] or camera, or [member listener_path]). Each physics frame, rays from the listener to playing sources within [member max_distance] — to the source and to points [member source_radius] around it across the line, so that a path past an edge counts — give the share of its paths blocked by the physics world ([member collision_mask]); the bodies the listener and the source are in do not block them. A collider with the metadata [code]fellow_occlusion[/code] (a float, 0 to 1) blocks a path that much (glass 0.3, a curtain 0.15; without it, 1: milestone 90). That share lowers the direct sound (up to [member occluded_volume_db]) and cuts its highs (a high shelf of up to [member occluded_shelf_db] above a cutoff moving down to [member occluded_cutoff_hz]), eased over [member response_time]. [member max_rays_per_frame] bounds the rays: with many sources each is tested in turn.
+		Every [AudioStreamPlayer3D] in the tree (but those in the group [code]fellow_no_acoustics[/code]) is heard through what lies between it and the listener (the viewport's [AudioListener3D] or camera, or [member listener_path]). Each physics frame, rays from the listener to playing sources within [member max_distance] — to the source and to points [member source_radius] around it across the line, so that a path past an edge counts — give the share of its paths blocked by the physics world ([member collision_mask]); the bodies the listener and the source are in do not block them. A collider with the metadata [code]fellow_occlusion[/code] (a float, 0 to 1) blocks a path that much (glass 0.3; without it, 1: milestone 90); up to three colliders on a path add up (milestone 91); [code]fellow_occlusion_highs[/code] blocks its highs apart from its level (a curtain: 0.1 and 0.8; milestone 92). That share lowers the direct sound (up to [member occluded_volume_db]) and cuts its highs (a high shelf of up to [member occluded_shelf_db] above a cutoff moving down to [member occluded_cutoff_hz]), eased over [member response_time]. [member max_rays_per_frame] bounds the rays: with many sources each is tested in turn.
 		With [member reverb] on, rays from the listener in every direction ([member reverb_rays], every [member reverb_interval]) measure its room: how much of what is above and around it is closed (the enclosure), how far the walls are. A reverb on the bus [member reverb_bus] (made, sending to Master, if there is none; an [AudioEffectReverb] added to it if it has none) takes its decay from the room's size and [member absorption] (Sabine's formula), its predelay from the nearest wall; every source is sent to it, more in a closed room ([member reverb_level] at full enclosure) and less cut by occlusion than its direct sound. What the node made it removes when it leaves the tree.
 		The sounds' gains, shelves and sends are set through a hook in [AudioStreamPlayer3D] (its own properties are left as they are); without the node, or with it disabled, the players are stock's. One works at a time: the last to enter the tree. Works with GodotPhysics3D and Jolt. See decision 0186 in FellowEngine's [code]docs/decisions[/code].
 	</description>
@@ -22,6 +22,13 @@
 			<param index="0" name="player" type="Node" />
 			<description>
 				Returns the share of [param player]'s paths to the listener that are blocked, eased ([code]0[/code] open to [code]1[/code] blocked); [code]0[/code] for a player the node does not track.
+			</description>
+		</method>
+		<method name="get_occlusion_highs" qualifiers="const">
+			<return type="float" />
+			<param index="0" name="player" type="Node" />
+			<description>
+				The share of [param player]'s paths blocked for its highs (the shelf and the cutoff), 0 to 1, eased: as [method get_occlusion] unless the colliders on them have [code]fellow_occlusion_highs[/code] (milestone 92).
 			</description>
 		</method>
 		<method name="get_room" qualifiers="const">

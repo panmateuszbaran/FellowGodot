@@ -38,3 +38,7 @@ Keep: what lies on a path adds up.
 ## Rejected / not done
 
 * **More than three colliders on a path**, and walls of one body counted apart.
+
+## Later
+
+Milestone 92 (decision 0200): the highs blocked apart from the level; this record's lanes are unchanged.

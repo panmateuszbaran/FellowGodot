@@ -211,6 +211,8 @@ void FellowAcoustics3D::_reset_sources() {
 		}
 		kv.value.occlusion = 0.0f;
 		kv.value.target = 0.0f;
+		kv.value.occlusion_highs = 0.0f;
+		kv.value.target_highs = 0.0f;
 		kv.value.tested = false;
 	}
 }
@@ -333,6 +335,7 @@ void FellowAcoustics3D::_step(float p_delta) {
 		Vector3 u = dir.cross(Math::abs(dir.y) < 0.9f ? Vector3(0, 1, 0) : Vector3(1, 0, 0)).normalized();
 		Vector3 v = dir.cross(u).normalized();
 		float blocked = 0.0f;
+		float blocked_highs = 0.0f;
 		for (int i = 0; i < occlusion_rays; i++) {
 			Vector3 to = pos;
 			if (i > 0) {
@@ -346,7 +349,8 @@ void FellowAcoustics3D::_step(float p_delta) {
 			path_exclude = exclude;
 			Vector3 from = at;
 			float path_block = 0.0f;
-			for (int wall = 0; wall < 3 && path_block < 1.0f; wall++) {
+			float path_highs = 0.0f;
+			for (int wall = 0; wall < 3 && (path_block < 1.0f || path_highs < 1.0f); wall++) {
 				PhysicsDirectSpaceState3D::RayParameters rq;
 				rq.from = from;
 				rq.to = to;
@@ -360,21 +364,31 @@ void FellowAcoustics3D::_step(float p_delta) {
 				if (rr.collider && rr.collider->has_meta(SNAME("fellow_occlusion"))) {
 					b = CLAMP(float(rr.collider->get_meta(SNAME("fellow_occlusion"))), 0.0f, 1.0f);
 				}
+				// Milestone 92 (decision 0200): the highs blocked by "fellow_occlusion_highs" when it has one (a
+				// curtain lets the level through and stops the highs), else as much as the level.
+				float h = b;
+				if (rr.collider && rr.collider->has_meta(SNAME("fellow_occlusion_highs"))) {
+					h = CLAMP(float(rr.collider->get_meta(SNAME("fellow_occlusion_highs"))), 0.0f, 1.0f);
+				}
 				path_block += b;
+				path_highs += h;
 				path_exclude.insert(rr.rid);
 				from = rr.position;
-				if (b < 1.0f) {
+				if (b < 1.0f || h < 1.0f) {
 					last_rays++; // a ray more to look past it
 				}
 			}
 			blocked += MIN(path_block, 1.0f);
+			blocked_highs += MIN(path_highs, 1.0f);
 		}
 		budget -= occlusion_rays;
 		last_rays += occlusion_rays;
 		last_tests++;
 		s->target = blocked / float(occlusion_rays);
+		s->target_highs = blocked_highs / float(occlusion_rays);
 		if (!s->tested) {
 			s->occlusion = s->target;
+			s->occlusion_highs = s->target_highs;
 			s->tested = true;
 		}
 	}
@@ -389,14 +403,16 @@ void FellowAcoustics3D::_step(float p_delta) {
 		}
 		if (!s.audible) {
 			s.target = 0.0f;
+			s.target_highs = 0.0f;
 		}
 		s.occlusion += (s.target - s.occlusion) * k;
+		s.occlusion_highs += (s.target_highs - s.occlusion_highs) * k;
 		AudioStreamPlayer3D::FellowAcoustics a;
-		if (s.occlusion > 1e-4f) {
+		if (s.occlusion > 1e-4f || s.occlusion_highs > 1e-4f) {
 			a.gain = Math::db_to_linear(s.occlusion * occluded_volume_db);
-			a.shelf = Math::db_to_linear(s.occlusion * occluded_shelf_db);
+			a.shelf = Math::db_to_linear(s.occlusion_highs * occluded_shelf_db);
 			const float own = player->get_attenuation_filter_cutoff_hz();
-			a.cutoff_hz = Math::exp(Math::lerp(Math::log(MAX(own, 20.0f)), Math::log(MIN(occluded_cutoff_hz, own)), s.occlusion));
+			a.cutoff_hz = Math::exp(Math::lerp(Math::log(MAX(own, 20.0f)), Math::log(MIN(occluded_cutoff_hz, own)), s.occlusion_highs));
 		}
 		if (send > 0.0f) {
 			// The reverb hears the source through the room more than through the wall: the send is cut by half the
@@ -465,6 +481,12 @@ float FellowAcoustics3D::get_occlusion(Node *p_player) const {
 	ERR_FAIL_NULL_V(p_player, 0.0f);
 	const Source *s = sources.getptr(p_player->get_instance_id());
 	return s ? s->occlusion : 0.0f;
+}
+
+float FellowAcoustics3D::get_occlusion_highs(Node *p_player) const {
+	ERR_FAIL_NULL_V(p_player, 0.0f);
+	const Source *s = sources.getptr(p_player->get_instance_id());
+	return s ? s->occlusion_highs : 0.0f;
 }
 
 Dictionary FellowAcoustics3D::get_room() const {
@@ -558,6 +580,7 @@ void FellowAcoustics3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_reverb_response", "time"), &FellowAcoustics3D::set_reverb_response);
 	ClassDB::bind_method(D_METHOD("get_reverb_response"), &FellowAcoustics3D::get_reverb_response);
 	ClassDB::bind_method(D_METHOD("get_occlusion", "player"), &FellowAcoustics3D::get_occlusion);
+	ClassDB::bind_method(D_METHOD("get_occlusion_highs", "player"), &FellowAcoustics3D::get_occlusion_highs);
 	ClassDB::bind_method(D_METHOD("get_room"), &FellowAcoustics3D::get_room);
 	ClassDB::bind_method(D_METHOD("get_stats"), &FellowAcoustics3D::get_stats);
 	ClassDB::bind_static_method("FellowAcoustics3D", D_METHOD("get_global_stats"), &FellowAcoustics3D::get_global_stats);

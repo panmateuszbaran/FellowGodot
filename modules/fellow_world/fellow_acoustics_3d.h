@@ -54,6 +54,8 @@ class FellowAcoustics3D : public Node3D {
 		ObjectID id;
 		float occlusion = 0.0f; // smoothed, 0 open to 1 blocked
 		float target = 0.0f;
+		float occlusion_highs = 0.0f; // milestone 92: the highs' (the shelf and the cutoff), by the materials'
+		float target_highs = 0.0f;
 		float distance = 0.0f;
 		bool audible = false;
 		bool tested = false;
@@ -166,6 +168,7 @@ public:
 	float get_reverb_response() const { return reverb_response; }
 
 	float get_occlusion(Node *p_player) const;
+	float get_occlusion_highs(Node *p_player) const;
 	Dictionary get_room() const;
 	Dictionary get_stats() const;
 	static Dictionary get_global_stats();

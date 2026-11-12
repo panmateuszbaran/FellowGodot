@@ -146,6 +146,14 @@ func _build() -> void:
 	pane9.set_meta(&"fellow_occlusion", 0.3)
 	_box(dir20 * 10.5 + Vector3(0, 2, 0), Vector3(3, 4, 0.3), null).rotation_degrees = Vector3(0, -20, 0)
 	_source("glass_wall", dir20 * 12.0 + Vector3(0, 1.7, 0))
+	# Milestone 92 (decision 0200): 15 degrees south of east, 12 m away, behind a curtain at 9 m that lets the level
+	# through and stops the highs (fellow_occlusion 0.1, fellow_occlusion_highs 0.8).
+	var dir105 := Vector3(sin(deg_to_rad(105.0)), 0, -cos(deg_to_rad(105.0)))
+	var curtain := _box(dir105 * 9.0 + Vector3(0, 2, 0), Vector3(3, 4, 0.1), null)
+	curtain.rotation_degrees = Vector3(0, -105, 0)
+	curtain.set_meta(&"fellow_occlusion", 0.1)
+	curtain.set_meta(&"fellow_occlusion_highs", 0.8)
+	_source("curtain", dir105 * 12.0 + Vector3(0, 1.7, 0))
 	# A source going round the listener at 7 m (0.5 rad/s), behind a wall 3 m long across its path at 4 m for part of
 	# the circle.
 	_box(Vector3(2.83, 2, 2.83), Vector3(0.3, 4, 3), null).rotation_degrees = Vector3(0, -45, 0)
@@ -179,7 +187,7 @@ func _setup_listen() -> void:
 	capture.buffer_length = 2.0
 	AudioServer.add_bus_effect(0, capture)
 	capture_idx = AudioServer.get_bus_effect_count(0) - 1
-	for n in ["open", "wall", "edge", "car", "glass"]:
+	for n in ["open", "wall", "edge", "car", "glass", "curtain"]:
 		listen_plan.append({"source": n, "fellow": true})
 		listen_plan.append({"source": n, "fellow": false})
 	# A source in the closed room with the listener: the reverb's send (with the node) and its tail after it stops.
@@ -275,9 +283,10 @@ func _on_frame() -> void:
 	# The listener: among the sources for the moving one's lap (13 s), then in the open, in the closed room and under
 	# the roof (3 s each).
 	if frame == 90:
-		for n in ["open", "wall", "edge", "car", "glass", "glass2", "glass_wall"]:
+		for n in ["open", "wall", "edge", "car", "glass", "glass2", "glass_wall", "curtain"]:
 			var p: AudioStreamPlayer3D = sources[n]
 			_measure(n, "occlusion", snappedf(acoustics.get_occlusion(p), 0.001))
+			_measure(n, "occlusion_highs", snappedf(acoustics.get_occlusion_highs(p), 0.001))
 			_measure(n, "gain_db", snappedf(acoustics.get_occlusion(p) * acoustics.occluded_volume_db, 0.01))
 		_measure("stats", "stats", acoustics.get_stats())
 	if frame == 780:
@@ -360,6 +369,9 @@ func _finish() -> void:
 		# Milestone 90: through the glass, less than through the wall (its 0.3: -3.6 dB and the shelf -5.4 dB).
 		var gl: Dictionary = data["listen_glass"]
 		expect.call("listen_glass", gl.fellow_db < gl.stock_db - 3.0 and gl.fellow_db > gl.stock_db - 9.0 and gl.fellow_high_share > w.fellow_high_share)
+		# Milestone 92: through the curtain, the highs cut more than through the glass, the level less.
+		var cu: Dictionary = data["listen_curtain"]
+		expect.call("listen_curtain", cu.fellow_high_share < gl.fellow_high_share * 0.6 and cu.fellow_db < cu.stock_db - 2.0)
 		var e: Dictionary = data["listen_edge"]
 		expect.call("listen_edge", e.fellow_db < e.stock_db - 1.0 and e.fellow_db > w.fellow_db - 0.5 + (w.stock_db - e.stock_db))
 	else:
@@ -370,6 +382,7 @@ func _finish() -> void:
 		expect.call("glass", absf(data.glass.occlusion - 0.3) < 0.01)
 		expect.call("glass2", absf(data.glass2.occlusion - 0.6) < 0.01)
 		expect.call("glass_wall", data.glass_wall.occlusion > 0.99)
+		expect.call("curtain", absf(data.curtain.occlusion - 0.1) < 0.01 and absf(data.curtain.occlusion_highs - 0.8) < 0.01 and absf(data.glass.occlusion_highs - 0.3) < 0.01 and data.wall.occlusion_highs > 0.99)
 		expect.call("moving", data.moving.max_occlusion > 0.9 and data.moving.max_step_db < 2.0)
 		var ro: Dictionary = data.room_open.room
 		var rc: Dictionary = data.room_closed.room

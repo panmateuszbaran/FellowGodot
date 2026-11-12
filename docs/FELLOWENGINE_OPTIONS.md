@@ -491,7 +491,8 @@ camera), `collision_mask` (1). Occlusion: `occlusion_rays` (5), `source_radius` 
 `AudioStreamPlayer3D::fellow_set_acoustics()` (C++). Bench `bench/acoustics_check.gd` (`--listen=1` under Movie Maker,
 `--many=N`). Milestone 90 (decision 0198): a collider's metadata `fellow_occlusion` (0 to 1; without it 1) is how much it
 blocks a path (glass 0.3, a curtain 0.15); milestone 91 (decision 0199): up to three colliders on a path add up (at
-most a full block).
+most a full block); milestone 92 (decision 0200): `fellow_occlusion_highs` (0 to 1; without it as `fellow_occlusion`)
+blocks the highs (the shelf and the cutoff) apart from the level; `get_occlusion_highs()`.
 
 ## Sound events, voices and mix snapshots (milestone 82)
 
