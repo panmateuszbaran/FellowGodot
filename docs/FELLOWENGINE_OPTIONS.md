@@ -489,7 +489,8 @@ camera), `collision_mask` (1). Occlusion: `occlusion_rays` (5), `source_radius` 
 `reverb_response` (0.5 s). `get_occlusion(player)`, `get_room()`, `get_stats()`, `get_global_stats()`/
 `reset_global_stats()`; the monitor "FellowEngine/Acoustics time"; the FellowEngine menu's "Add Acoustics". The hook
 `AudioStreamPlayer3D::fellow_set_acoustics()` (C++). Bench `bench/acoustics_check.gd` (`--listen=1` under Movie Maker,
-`--many=N`).
+`--many=N`). Milestone 90 (decision 0198): a collider's metadata `fellow_occlusion` (0 to 1; without it 1) is how much it
+blocks a path (glass 0.3, a curtain 0.15).
 
 ## Sound events, voices and mix snapshots (milestone 82)
 

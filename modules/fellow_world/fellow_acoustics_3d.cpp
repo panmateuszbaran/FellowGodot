@@ -332,7 +332,7 @@ void FellowAcoustics3D::_step(float p_delta) {
 		const Vector3 dir = s->distance > 1e-4f ? (pos - at) / s->distance : Vector3(0, 0, -1);
 		Vector3 u = dir.cross(Math::abs(dir.y) < 0.9f ? Vector3(0, 1, 0) : Vector3(1, 0, 0)).normalized();
 		Vector3 v = dir.cross(u).normalized();
-		int blocked = 0;
+		float blocked = 0.0f;
 		for (int i = 0; i < occlusion_rays; i++) {
 			Vector3 to = pos;
 			if (i > 0) {
@@ -345,12 +345,20 @@ void FellowAcoustics3D::_step(float p_delta) {
 			rq.exclude = exclude;
 			rq.collision_mask = collision_mask;
 			PhysicsDirectSpaceState3D::RayResult rr;
-			blocked += space->intersect_ray(rq, rr) ? 1 : 0;
+			if (space->intersect_ray(rq, rr)) {
+				// Milestone 90 (decision 0198): what blocks it, by its metadata "fellow_occlusion" (0 lets all through, 1
+				// blocks as a wall: glass 0.3, a curtain 0.15); without it, 1.
+				float b = 1.0f;
+				if (rr.collider && rr.collider->has_meta(SNAME("fellow_occlusion"))) {
+					b = CLAMP(float(rr.collider->get_meta(SNAME("fellow_occlusion"))), 0.0f, 1.0f);
+				}
+				blocked += b;
+			}
 		}
 		budget -= occlusion_rays;
 		last_rays += occlusion_rays;
 		last_tests++;
-		s->target = float(blocked) / float(occlusion_rays);
+		s->target = blocked / float(occlusion_rays);
 		if (!s->tested) {
 			s->occlusion = s->target;
 			s->tested = true;

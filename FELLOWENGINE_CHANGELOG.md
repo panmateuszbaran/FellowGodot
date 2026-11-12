@@ -9,6 +9,12 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 90 — occlusion by material (2026-11-12)
+
+- `FellowAcoustics3D` (decision 0198): a collider's metadata `fellow_occlusion` (0 to 1) is how much it blocks a path —
+  glass, curtains and thin walls muffle less than a wall. A glass lane on both physics engines and in the mix under
+  Movie Maker; decision 0186's lanes unchanged.
+
 ## Milestone 89 — eyes that look (2026-11-12)
 
 - `FellowFaceAnimator` (decision 0197): the eyes look at `look_target_path` through eight gaze channels on ARKit's

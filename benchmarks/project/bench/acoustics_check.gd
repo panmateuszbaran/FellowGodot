@@ -127,6 +127,12 @@ func _build() -> void:
 	car.add_child(cs)
 	root3d.add_child(car)
 	_source("car", Vector3(0, 1.2, 0.6), car)
+	# Milestone 90 (decision 0198): north-east, 12 m away, behind a pane of glass at 9 m (its metadata
+	# "fellow_occlusion" 0.3), beyond the moving source's circle.
+	var glass := _box(Vector3(6.36, 2, -6.36), Vector3(0.3, 4, 3), null)
+	glass.rotation_degrees = Vector3(0, 45, 0)
+	glass.set_meta(&"fellow_occlusion", 0.3)
+	_source("glass", Vector3(8.49, 1.7, -8.49))
 	# A source going round the listener at 7 m (0.5 rad/s), behind a wall 3 m long across its path at 4 m for part of
 	# the circle.
 	_box(Vector3(2.83, 2, 2.83), Vector3(0.3, 4, 3), null).rotation_degrees = Vector3(0, -45, 0)
@@ -160,7 +166,7 @@ func _setup_listen() -> void:
 	capture.buffer_length = 2.0
 	AudioServer.add_bus_effect(0, capture)
 	capture_idx = AudioServer.get_bus_effect_count(0) - 1
-	for n in ["open", "wall", "edge", "car"]:
+	for n in ["open", "wall", "edge", "car", "glass"]:
 		listen_plan.append({"source": n, "fellow": true})
 		listen_plan.append({"source": n, "fellow": false})
 	# A source in the closed room with the listener: the reverb's send (with the node) and its tail after it stops.
@@ -256,7 +262,7 @@ func _on_frame() -> void:
 	# The listener: among the sources for the moving one's lap (13 s), then in the open, in the closed room and under
 	# the roof (3 s each).
 	if frame == 90:
-		for n in ["open", "wall", "edge", "car"]:
+		for n in ["open", "wall", "edge", "car", "glass"]:
 			var p: AudioStreamPlayer3D = sources[n]
 			_measure(n, "occlusion", snappedf(acoustics.get_occlusion(p), 0.001))
 			_measure(n, "gain_db", snappedf(acoustics.get_occlusion(p) * acoustics.occluded_volume_db, 0.01))
@@ -338,6 +344,9 @@ func _finish() -> void:
 		# The reverb's tail (0.2-0.7 s after the source stops) within 40 dB of the direct sound with the node; nothing
 		# after the stock source stops.
 		expect.call("listen_inroom", r.fellow_tail_db > r.fellow_db - 40.0 and r.stock_tail_db < -100.0)
+		# Milestone 90: through the glass, less than through the wall (its 0.3: -3.6 dB and the shelf -5.4 dB).
+		var gl: Dictionary = data["listen_glass"]
+		expect.call("listen_glass", gl.fellow_db < gl.stock_db - 3.0 and gl.fellow_db > gl.stock_db - 9.0 and gl.fellow_high_share > w.fellow_high_share)
 		var e: Dictionary = data["listen_edge"]
 		expect.call("listen_edge", e.fellow_db < e.stock_db - 1.0 and e.fellow_db > w.fellow_db - 0.5 + (w.stock_db - e.stock_db))
 	else:
@@ -345,6 +354,7 @@ func _finish() -> void:
 		expect.call("wall", data.wall.occlusion > 0.99)
 		expect.call("edge", data.edge.occlusion > 0.1 and data.edge.occlusion < 0.9)
 		expect.call("car", data.car.occlusion < 0.01)
+		expect.call("glass", absf(data.glass.occlusion - 0.3) < 0.01)
 		expect.call("moving", data.moving.max_occlusion > 0.9 and data.moving.max_step_db < 2.0)
 		var ro: Dictionary = data.room_open.room
 		var rc: Dictionary = data.room_closed.room
