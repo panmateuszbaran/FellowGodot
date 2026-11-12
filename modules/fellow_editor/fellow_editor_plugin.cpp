@@ -945,8 +945,8 @@ Node3D *FellowEditorPlugin::make_preset(int p_preset, const Node *p_root) {
 		} break;
 		case PRESET_CAR: {
 			// Milestone 77: a 1 400 kg rear-driven car (FellowVehicle3D's defaults: 400 N·m, six gears, the assists
-			// on), a box for its body, its four wheels 0.34 m on 0.3 m of suspension; it faces -Z. A controller sets
-			// its throttle, brake, steering and handbrake.
+			// on), a box for its body, its four wheels 0.34 m on 0.3 m of suspension, its effects (milestone 79); it
+			// faces -Z. A controller sets its throttle, brake, steering and handbrake.
 			Node *made = _fellow_make("FellowVehicle3D", "Car", nullptr, Dictionary{ { "center_of_mass_mode", 1 }, { "center_of_mass", Vector3(0, 0.45, 0.1) } });
 			top = Object::cast_to<Node3D>(made);
 			if (!top) {
@@ -1007,6 +1007,8 @@ Node3D *FellowEditorPlugin::make_preset(int p_preset, const Node *p_root) {
 				mi->set_rotation_degrees(Vector3(0, 0, 90));
 				wheel->add_child(mi);
 			}
+			// Milestone 79: its skid marks, tyre smoke and sounds.
+			_fellow_make("FellowVehicleEffects3D", "Effects", top);
 		} break;
 		case PRESET_ACOUSTICS: {
 			// Milestone 78: the scene's 3D sounds heard through its geometry (occlusion, the listener's room's reverb).

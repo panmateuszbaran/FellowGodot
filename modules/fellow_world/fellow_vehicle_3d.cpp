@@ -205,6 +205,8 @@ void FellowWheel3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_rpm"), &FellowWheel3D::get_rpm);
 	ClassDB::bind_method(D_METHOD("get_slip_ratio"), &FellowWheel3D::get_slip_ratio);
 	ClassDB::bind_method(D_METHOD("get_slip_angle"), &FellowWheel3D::get_slip_angle);
+	ClassDB::bind_method(D_METHOD("get_slip_speed"), &FellowWheel3D::get_slip_speed);
+	ClassDB::bind_method(D_METHOD("get_contact_normal"), &FellowWheel3D::get_contact_normal);
 	ClassDB::bind_method(D_METHOD("get_contact_point"), &FellowWheel3D::get_contact_point);
 	ClassDB::bind_method(D_METHOD("get_ground"), &FellowWheel3D::get_ground);
 
@@ -544,6 +546,7 @@ void FellowVehicle3D::_body_state_changed(PhysicsDirectBodyState3D *p_state) {
 			if (!w->contact) {
 				w->load = 0.0f;
 				w->slip_ratio = 0.0f;
+				w->slip_speed = 0.0f;
 				w->slip_angle = 0.0f;
 				w->omega += drive / spin_inertia * h;
 				if (hold > 0.0f) {
@@ -648,6 +651,7 @@ void FellowVehicle3D::_body_state_changed(PhysicsDirectBodyState3D *p_state) {
 					fx = CLAMP(fx, -lim_x, lim_x);
 				}
 				w->slip_ratio = sx;
+				w->slip_speed = Math::sqrt((w->omega * w->radius - v_long) * (w->omega * w->radius - v_long) + v_lat * v_lat);
 				w->slip_angle = Math::atan2(v_lat, MAX(Math::abs(v_long), 0.1f));
 				const Vector3 force = fwd * fx + side * fy;
 				w->force += force / float(n);

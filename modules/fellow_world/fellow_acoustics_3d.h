@@ -81,7 +81,7 @@ class FellowAcoustics3D : public Node3D {
 	int max_rays_per_frame = 512;
 	float response_time = 0.12f;
 	bool reverb = true;
-	StringName reverb_bus = SNAME("FellowReverb");
+	StringName reverb_bus = StringName("FellowReverb");
 	int reverb_rays = 32;
 	float reverb_interval = 0.25f;
 	float reverb_max_distance = 40.0f;

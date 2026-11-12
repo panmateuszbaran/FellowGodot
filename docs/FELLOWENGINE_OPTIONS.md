@@ -459,6 +459,18 @@ swapped; pairs by name or `mirror_pairs`) and `tags` (a clip's name to its tags,
 options, the matcher's `tags_required` and `tags_excluded`. Decision 0157; `bench/ground_check.gd`,
 `bench/matching_tags_check.gd`, Matching Lab's `--matching_mirror=1`.
 
+## Vehicles' marks, smoke and sounds (milestone 79)
+
+Module `fellow_world`; nothing changes without the node (decision 0187). `FellowVehicleEffects3D` (a `Node3D`, a child
+of a `FellowVehicle3D`; the FellowEngine menu's "Add Car" includes one). A tyre slides past `slip_min` (1.5 m/s over
+the ground) and `slide_slip` (0.2 combined slip), fully at `slip_full` (6 m/s). Skid marks: `skid_marks` (on),
+`max_mark_segments` (512), `mark_width` (0.22 m), `mark_step` (0.3 m), `mark_opacity` (0.8); `clear_marks()`. Smoke:
+`smoke` (on), `smoke_amount` (40), `smoke_lifetime` (2.2 s), `smoke_color`. Sound: `sound` (on), `cylinders` (4),
+`engine_volume_db` (0), `tyre_volume_db` (−4), `road_volume_db` (−10), `engine_offset` (0, 0.6, −1.3 m),
+`sound_unit_size` (8), `sound_distance` (80 m); `get_audio_player()`. `get_stats()`, `get_global_stats()`/
+`reset_global_stats()`. `FellowWheel3D.get_slip_speed()`, `get_contact_normal()`. Bench `bench/vehicle_fx_check.gd`
+(`--listen=1` under Movie Maker, `--pictures=1`, `--many=N`).
+
 ## Sound through the scene's geometry (milestone 78)
 
 Module `fellow_world`; nothing changes without the node (decision 0186). `FellowAcoustics3D` (a `Node3D`; where it is

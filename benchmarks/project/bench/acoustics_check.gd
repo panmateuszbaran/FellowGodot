@@ -318,10 +318,11 @@ func _many_tick() -> void:
 		var f := FileAccess.open(out_dir.path_join("acoustics_many.json"), FileAccess.WRITE)
 		f.store_string(JSON.stringify(res, "  "))
 		f.close()
-		quit(0)
+		_quit_quietly()
 
 
 func _finish() -> void:
+	await _stop_sounds()
 	var failures := []
 	var expect := func(name: String, ok: bool) -> void:
 		_measure(name, "ok", ok)
@@ -360,3 +361,18 @@ func _finish() -> void:
 	f.store_string(JSON.stringify(result, "  "))
 	f.close()
 	quit(1 if not failures.is_empty() else 0)
+
+
+# The sounds stopped and their playbacks released by the mixer before quitting (a player still playing when the game
+# quits keeps its playback: stock's leak warning).
+func _stop_sounds() -> void:
+	for n in sources:
+		sources[n].stop()
+	for i in 6:
+		await process_frame
+		OS.delay_msec(20)
+
+
+func _quit_quietly() -> void:
+	await _stop_sounds()
+	quit(0)

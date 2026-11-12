@@ -15,6 +15,12 @@
 				Returns how far the suspension is pushed in (metres).
 			</description>
 		</method>
+		<method name="get_contact_normal" qualifiers="const">
+			<return type="Vector3" />
+			<description>
+				Returns the ground's normal at the tyre's contact (global), when [method is_in_contact].
+			</description>
+		</method>
 		<method name="get_contact_point" qualifiers="const">
 			<return type="Vector3" />
 			<description>
@@ -49,6 +55,12 @@
 			<return type="float" />
 			<description>
 				Returns how much faster the wheel turns than the ground passes under it, over the speed (negative braking).
+			</description>
+		</method>
+		<method name="get_slip_speed" qualifiers="const">
+			<return type="float" />
+			<description>
+				Returns how fast the tyre slides over the ground at its contact (m/s): its rolling speed's difference from the ground's along the wheel and the ground's speed across it.
 			</description>
 		</method>
 		<method name="is_in_contact" qualifiers="const">

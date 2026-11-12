@@ -9,6 +9,17 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 79 — vehicles' marks, smoke and sounds (2026-11-12)
+
+- `FellowVehicleEffects3D` (decision 0187), a child of a `FellowVehicle3D`: skid marks where a tyre slides past its
+  grip (a ribbon a wheel in one mesh in the world, each segment written into its buffers in place, the oldest reused),
+  tyre smoke (GPU particles at the sliding wheels), and its sound synthesised in a 3D player from its state — the
+  engine's firing frequency and harmonics with the revolutions and throttle, the tyres' squeal, the road's rumble —
+  silent beyond `sound_distance`. Five lanes on both physics engines (no marks cruising or with the anti-lock brakes;
+  marks and smoke in a handbrake turn, a burnout and with locked wheels), the sound measured under Movie Maker (the
+  tone at the firing frequency at idle and at 70 km/h, the squeal in a slide); "Add Car" includes it. The wheel's
+  `get_slip_speed()`, `get_contact_normal()`.
+
 ## Milestone 78 — sound through the scene's geometry (2026-11-12)
 
 - `FellowAcoustics3D` (decision 0186): every `AudioStreamPlayer3D` heard through the physics world — rays from the

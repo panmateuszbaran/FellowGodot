@@ -69,6 +69,7 @@ class FellowWheel3D : public Node3D {
 	float steer = 0.0f; // radians
 	float slip_ratio = 0.0f;
 	float slip_angle = 0.0f; // radians
+	float slip_speed = 0.0f; // m/s: how fast the tyre slides over the ground
 	Vector3 contact_point;
 	Vector3 contact_normal;
 	Vector3 force; // the tyre's last force (global)
@@ -117,6 +118,8 @@ public:
 	float get_rpm() const { return omega * 60.0f / Math::TAU; }
 	float get_slip_ratio() const { return slip_ratio; }
 	float get_slip_angle() const { return slip_angle; }
+	float get_slip_speed() const { return slip_speed; }
+	Vector3 get_contact_normal() const { return contact_normal; }
 	Vector3 get_contact_point() const { return contact_point; }
 	Node3D *get_ground() const;
 };

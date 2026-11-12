@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="FellowVehicleEffects3D" inherits="Node3D" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+	<brief_description>
+		A FellowVehicle3D's skid marks, tyre smoke and sounds: its engine, its tyres and the road (FellowEngine).
+	</brief_description>
+	<description>
+		A child of a [FellowVehicle3D]. While the game runs: where a tyre slides — faster than [member slip_min] over the ground and past its grip (its combined slip beyond [member slide_slip]: a tyre held at its peak by the traction control or the anti-lock brakes leaves nothing) — it lays a skid mark (a ribbon [member mark_width] wide, a segment every [member mark_step], darker as it slides harder up to [member slip_full]) in one mesh in the world, the oldest of [member max_mark_segments] segments reused; and it smokes (a GPU particle system at each wheel, [member smoke_amount] particles over [member smoke_lifetime], emitting as much as the tyre slides).
+		Its sound is synthesised as it drives, in an [AudioStreamPlayer3D] at [member engine_offset] (heard through [FellowAcoustics3D] like any other): the engine's firing frequency (its revolutions times [member cylinders] over two) and its harmonics, a burst of noise at each firing, brighter and louder with the throttle and the revolutions, the crankshaft's rumble below; the tyres' squeal (noise through a resonant band-pass from 800 to 1 500 Hz) as they slide; the road's rumble with the speed squared.
+		See decision 0187 in FellowEngine's [code]docs/decisions[/code].
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="clear_marks">
+			<return type="void" />
+			<description>
+				Removes the vehicle's skid marks.
+			</description>
+		</method>
+		<method name="get_audio_player" qualifiers="const">
+			<return type="AudioStreamPlayer3D" />
+			<description>
+				Returns the [AudioStreamPlayer3D] the vehicle's sound plays in (made when the node is ready; [code]null[/code] before).
+			</description>
+		</method>
+		<method name="get_global_stats" qualifiers="static">
+			<return type="Dictionary" />
+			<description>
+				Returns every vehicle's totals since the start or [method reset_global_stats]: [code]frames[/code], [code]usec[/code] (the marks and smoke on the CPU), [code]segments[/code] (marks laid), [code]synth_usec[/code] and [code]samples[/code] (the sound synthesised).
+			</description>
+		</method>
+		<method name="get_stats" qualifiers="const">
+			<return type="Dictionary" />
+			<description>
+				Returns this vehicle's [code]mark_segments[/code] (in its mesh), [code]segments_laid[/code], [code]mark_low[/code] and [code]mark_high[/code] (the laid marks' heights), [code]marks_aabb[/code], each wheel's sliding [code]intensity[/code] (0-1), the wheels [code]smoking[/code], the last frame's [code]usec[/code] and [code]synth_usec[/code], and the [code]sound_rpm[/code] the engine's sound is at.
+			</description>
+		</method>
+		<method name="reset_global_stats" qualifiers="static">
+			<return type="void" />
+			<description>
+				Resets [method get_global_stats].
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="cylinders" type="int" setter="set_cylinders" getter="get_cylinders" default="4">
+			The engine's cylinders: its firing frequency is the revolutions a second times half of them (a four-stroke engine).
+		</member>
+		<member name="engine_offset" type="Vector3" setter="set_engine_offset" getter="get_engine_offset" default="Vector3(0, 0.6, -1.3)">
+			Where the sound plays, in the vehicle's space.
+		</member>
+		<member name="engine_volume_db" type="float" setter="set_engine_volume_db" getter="get_engine_volume_db" default="0.0">
+			The engine's level.
+		</member>
+		<member name="mark_opacity" type="float" setter="set_mark_opacity" getter="get_mark_opacity" default="0.8">
+			The marks' opacity where a tyre slides hardest.
+		</member>
+		<member name="mark_step" type="float" setter="set_mark_step" getter="get_mark_step" default="0.3">
+			The length of a mark's segments (metres).
+		</member>
+		<member name="mark_width" type="float" setter="set_mark_width" getter="get_mark_width" default="0.22">
+			The marks' width (the tyres', metres).
+		</member>
+		<member name="max_mark_segments" type="int" setter="set_max_mark_segments" getter="get_max_mark_segments" default="512">
+			The segments of marks the vehicle keeps: the oldest are reused.
+		</member>
+		<member name="road_volume_db" type="float" setter="set_road_volume_db" getter="get_road_volume_db" default="-10.0">
+			The road's rumble's level.
+		</member>
+		<member name="skid_marks" type="bool" setter="set_skid_marks" getter="has_skid_marks" default="true">
+			If [code]true[/code], sliding tyres leave marks on the ground.
+		</member>
+		<member name="slide_slip" type="float" setter="set_slide_slip" getter="get_slide_slip" default="0.2">
+			The combined slip (the slip ratio and the slip angle's tangent together) past which a tyre slides: its marks, smoke and squeal grow from it to 0.2 more.
+		</member>
+		<member name="slip_full" type="float" setter="set_slip_full" getter="get_slip_full" default="6.0">
+			The tyre's speed over the ground (m/s) at which its marks, smoke and squeal are full.
+		</member>
+		<member name="slip_min" type="float" setter="set_slip_min" getter="get_slip_min" default="1.5">
+			The tyre's speed over the ground (m/s) under which it leaves no marks or smoke and does not squeal.
+		</member>
+		<member name="smoke" type="bool" setter="set_smoke" getter="has_smoke" default="true">
+			If [code]true[/code], sliding tyres smoke.
+		</member>
+		<member name="smoke_amount" type="int" setter="set_smoke_amount" getter="get_smoke_amount" default="40">
+			The particles of each wheel's smoke.
+		</member>
+		<member name="smoke_color" type="Color" setter="set_smoke_color" getter="get_smoke_color" default="Color(0.85, 0.85, 0.85, 0.5)">
+			The smoke's colour (its alpha the particles' when new; they fade out).
+		</member>
+		<member name="smoke_lifetime" type="float" setter="set_smoke_lifetime" getter="get_smoke_lifetime" default="2.2">
+			Seconds a particle of smoke lives.
+		</member>
+		<member name="sound" type="bool" setter="set_sound" getter="has_sound" default="true">
+			If [code]true[/code], the vehicle sounds (its engine, tyres and the road).
+		</member>
+		<member name="sound_distance" type="float" setter="set_sound_distance" getter="get_sound_distance" default="80.0">
+			Farther than this from the listener (the viewport's [AudioListener3D] or camera) the vehicle is silent: its player stopped, nothing synthesised.
+		</member>
+		<member name="sound_unit_size" type="float" setter="set_sound_unit_size" getter="get_sound_unit_size" default="8.0">
+			The sound's [member AudioStreamPlayer3D.unit_size].
+		</member>
+		<member name="tyre_volume_db" type="float" setter="set_tyre_volume_db" getter="get_tyre_volume_db" default="-4.0">
+			The tyres' squeal's level.
+		</member>
+	</members>
+</class>
