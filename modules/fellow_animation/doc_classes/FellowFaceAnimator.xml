@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="FellowFaceAnimator" inherits="Node" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+	<brief_description>
+		FellowEngine: a face that speaks and blinks — its mouth's blend shapes from the voice it plays (analysed as it plays, ahead of the sound), its eyes blinking at random.
+	</brief_description>
+	<description>
+		A child anywhere under the character: set [member mesh_path] to the face's [MeshInstance3D] (its mesh with blend shapes; ARKit's names by default, see [member blend_shapes]) and [member voice_path] to the player of its voice ([AudioStreamPlayer], [AudioStreamPlayer2D] or [AudioStreamPlayer3D]). While the player plays, the stream is analysed a little ahead of its position (its playback rendered offline once and shared by every face playing it: the level and five bands' energies every 10 ms) into the mouth's channels — [constant CHANNEL_JAW_OPEN] with an open vowel's high first formant, [constant CHANNEL_MOUTH_WIDE] with a front vowel's high second formant, [constant CHANNEL_MOUTH_ROUND] with a back vowel's low one, [constant CHANNEL_TEETH] with the hiss of s and f, [constant CHANNEL_MOUTH_CLOSED] as it falls silent — read [member anticipation] ahead of what is heard, eased ([member attack], [member release]) and set on the blend shapes. A timeline can drive it instead: [member voice_stream] read at [member voice_time] (an [AnimationPlayer]'s track setting it). The eyes blink between [member blink_interval_min] and [member blink_interval_max] seconds apart. Language-independent and without phonemes: a stylised mouth, not a speech recogniser's visemes. See [code]docs/decisions/0191-face-animation.md[/code].
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="blink">
+			<return type="void" />
+			<description>
+				Blinks now (unless a blink is under way).
+			</description>
+		</method>
+		<method name="clear_analysis_cache" qualifiers="static">
+			<return type="void" />
+			<description>
+				Forgets every voice's analysis (analysed again when played again). The cache keeps at most 256 voices.
+			</description>
+		</method>
+		<method name="get_channel" qualifiers="const">
+			<return type="float" />
+			<param index="0" name="channel" type="int" enum="FellowFaceAnimator.Channel" />
+			<description>
+				A channel's value now, 0 to 1 (as set on the blend shapes).
+			</description>
+		</method>
+		<method name="get_channels" qualifiers="const">
+			<return type="Dictionary" />
+			<description>
+				Every channel's value now, by name.
+			</description>
+		</method>
+		<method name="get_global_stats" qualifiers="static">
+			<return type="Dictionary" />
+			<description>
+				Every face's: [code]frames[/code], [code]usec[/code], [code]analyses[/code] (voices seen), [code]analysis_usec[/code], [code]analysed_seconds[/code], [code]cached_voices[/code].
+			</description>
+		</method>
+		<method name="get_stats" qualifiers="const">
+			<return type="Dictionary" />
+			<description>
+				This face's [code]frames[/code] and [code]usec[/code] (its process steps).
+			</description>
+		</method>
+		<method name="reset_global_stats" qualifiers="static">
+			<return type="void" />
+			<description>
+				Sets the counts of [method get_global_stats] to zero.
+			</description>
+		</method>
+		<method name="sample_voice" qualifiers="const">
+			<return type="Dictionary" />
+			<param index="0" name="stream" type="AudioStream" />
+			<param index="1" name="time" type="float" />
+			<description>
+				The mouth's channels the analysis gives at [param time] seconds into [param stream] (unsmoothed), with the level ([code]level_db[/code]) and the scores they came from ([code]open_score[/code], [code]wide_score[/code], [code]low_score[/code], [code]hiss_score[/code], in dB), [code]analysed_seconds[/code] and [code]analysis_usec[/code].
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="anticipation" type="float" setter="set_anticipation" getter="get_anticipation" default="0.04">
+			How far ahead of what is heard the mouth reads the voice, in seconds: a mouth moves before its sound.
+		</member>
+		<member name="attack" type="float" setter="set_attack" getter="get_attack" default="0.04">
+			The time constant of a channel rising, in seconds.
+		</member>
+		<member name="blend_shapes" type="Dictionary" setter="set_blend_shapes" getter="get_blend_shapes" default="{ &quot;blink_left&quot;: PackedStringArray(&quot;eyeBlinkLeft&quot;), &quot;blink_right&quot;: PackedStringArray(&quot;eyeBlinkRight&quot;), &quot;jaw_open&quot;: PackedStringArray(&quot;jawOpen&quot;), &quot;mouth_closed&quot;: PackedStringArray(), &quot;mouth_round&quot;: PackedStringArray(&quot;mouthPucker&quot;, &quot;mouthFunnel&quot;), &quot;mouth_wide&quot;: PackedStringArray(&quot;mouthStretchLeft&quot;, &quot;mouthStretchRight&quot;), &quot;teeth&quot;: PackedStringArray(&quot;mouthRollLower&quot;) }">
+			Which blend shapes each channel moves: a channel's name ([code]jaw_open[/code], [code]mouth_wide[/code], [code]mouth_round[/code], [code]mouth_closed[/code], [code]teeth[/code], [code]blink_left[/code], [code]blink_right[/code]) and a blend shape's name or a [PackedStringArray] of them. A blend shape moved by several channels gets their sum (at most 1). By default ARKit's: [code]jawOpen[/code]; [code]mouthStretchLeft[/code], [code]mouthStretchRight[/code]; [code]mouthPucker[/code], [code]mouthFunnel[/code]; none; [code]mouthRollLower[/code]; [code]eyeBlinkLeft[/code]; [code]eyeBlinkRight[/code].
+		</member>
+		<member name="blink_duration" type="float" setter="set_blink_duration" getter="get_blink_duration" default="0.18">
+			A blink's length, in seconds: closing in a third of it, closed a sixth, opening in half.
+		</member>
+		<member name="blink_interval_max" type="float" setter="set_blink_interval_max" getter="get_blink_interval_max" default="6.0">
+			The longest time between two blinks, in seconds.
+		</member>
+		<member name="blink_interval_min" type="float" setter="set_blink_interval_min" getter="get_blink_interval_min" default="2.0">
+			The shortest time between two blinks, in seconds.
+		</member>
+		<member name="blinks" type="bool" setter="set_blinks" getter="is_blinks" default="true">
+			The eyes blink at random intervals.
+		</member>
+		<member name="level_floor_db" type="float" setter="set_level_floor_db" getter="get_level_floor_db" default="-45.0">
+			The voice's level (a sine's peak dB for its mean square over 20 ms) at which the mouth starts to move.
+		</member>
+		<member name="level_full_db" type="float" setter="set_level_full_db" getter="get_level_full_db" default="-18.0">
+			The voice's level at which the mouth's channels reach their full value.
+		</member>
+		<member name="lip_sync" type="bool" setter="set_lip_sync" getter="is_lip_sync" default="true">
+			The mouth follows the voice.
+		</member>
+		<member name="max_analysis_seconds" type="float" setter="set_max_analysis_seconds" getter="get_max_analysis_seconds" default="60.0">
+			At most this much of a voice is analysed (a longer one is silent past it; a loop wraps when it was all analysed).
+		</member>
+		<member name="mesh_path" type="NodePath" setter="set_mesh_path" getter="get_mesh_path" default="NodePath(&quot;&quot;)">
+			The face's [MeshInstance3D]: its blend shapes are set each frame (only those that changed).
+		</member>
+		<member name="release" type="float" setter="set_release" getter="get_release" default="0.08">
+			The time constant of a channel falling, in seconds.
+		</member>
+		<member name="seed" type="int" setter="set_seed" getter="get_seed" default="0">
+			The seed of the blinks' intervals.
+		</member>
+		<member name="strength" type="float" setter="set_strength" getter="get_strength" default="1.0">
+			The mouth's channels times this (not [code]mouth_closed[/code]).
+		</member>
+		<member name="voice_path" type="NodePath" setter="set_voice_path" getter="get_voice_path" default="NodePath(&quot;&quot;)">
+			The player of the voice: [AudioStreamPlayer], [AudioStreamPlayer2D] or [AudioStreamPlayer3D]. Its stream is analysed as it plays, at its playback position (what is heard: the mix's position, the time since the mix and the output's latency; under Movie Maker the position).
+		</member>
+		<member name="voice_stream" type="AudioStream" setter="set_voice_stream" getter="get_voice_stream">
+			With [member voice_time] 0 or more: the voice read at that time instead of a player's (a timeline drives the face).
+		</member>
+		<member name="voice_time" type="float" setter="set_voice_time" getter="get_voice_time" default="-1.0">
+			Where in [member voice_stream] the mouth reads, in seconds (an animation track can set it); below 0: the player at [member voice_path] drives it.
+		</member>
+	</members>
+	<constants>
+		<constant name="CHANNEL_JAW_OPEN" value="0" enum="Channel">
+			The jaw open: with the voice's level, most for open vowels (a).
+		</constant>
+		<constant name="CHANNEL_MOUTH_WIDE" value="1" enum="Channel">
+			The mouth wide: front vowels (i, e).
+		</constant>
+		<constant name="CHANNEL_MOUTH_ROUND" value="2" enum="Channel">
+			The mouth round: back vowels (u, o).
+		</constant>
+		<constant name="CHANNEL_MOUTH_CLOSED" value="3" enum="Channel">
+			The lips closed: 1 in silence (not mapped by default).
+		</constant>
+		<constant name="CHANNEL_TEETH" value="4" enum="Channel">
+			The lower lip under the teeth: the hiss of s, f, sh.
+		</constant>
+		<constant name="CHANNEL_BLINK_LEFT" value="5" enum="Channel">
+			The left eye closed.
+		</constant>
+		<constant name="CHANNEL_BLINK_RIGHT" value="6" enum="Channel">
+			The right eye closed.
+		</constant>
+		<constant name="CHANNEL_MAX" value="7" enum="Channel">
+			The number of channels.
+		</constant>
+	</constants>
+</class>

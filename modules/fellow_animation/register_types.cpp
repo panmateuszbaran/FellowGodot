@@ -30,6 +30,7 @@
 
 #include "register_types.h"
 
+#include "fellow_face_animator.h"
 #include "fellow_ladder_3d.h"
 #include "fellow_motion_database.h"
 #include "fellow_motion_matcher_3d.h"
@@ -85,6 +86,7 @@ void initialize_fellow_animation_module(ModuleInitializationLevel p_level) {
 		GDREGISTER_CLASS(FellowLadder3D); // milestone 75
 		GDREGISTER_CLASS(FellowTraversal3D);
 		GDREGISTER_CLASS(FellowTraversalPose3D);
+		GDREGISTER_CLASS(FellowFaceAnimator); // milestone 83
 
 		Performance *performance = Performance::get_singleton();
 		if (performance) {

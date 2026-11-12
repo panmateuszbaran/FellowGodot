@@ -9,6 +9,14 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 83 — faces that speak and blink (2026-11-12)
+
+- `FellowFaceAnimator` (decision 0191): the mouth's blend shapes (ARKit's names by default) from the voice a player
+  plays — analysed as it plays (five bands every 10 ms, shared by every face playing it) into the jaw open, the mouth
+  wide, round or closed and the lower lip under the teeth, read 40 ms ahead of what is heard and eased — or from a
+  timeline (`voice_stream` at `voice_time`); blinks at random intervals. Synthesised vowels read as expected at two
+  pitches, the face following a played voice under Movie Maker, a regression scene (`face`); a face 0.24 µs a frame.
+
 ## Milestone 82 — sound events, voices and mix snapshots (2026-11-12)
 
 - `FellowAudioDirector`, `FellowSoundEvent`, `FellowMixSnapshot` (decision 0190): sounds played as events — a

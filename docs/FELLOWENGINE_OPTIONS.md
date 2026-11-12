@@ -612,6 +612,15 @@ goes, along or up; nothing when none), `is_transferring()`; signal `hang_transfe
 constants; the global stat `transfers`. Bench `bench/climb_check.gd` (ten lanes); the regression scene
 `ledge_corners`.
 
+Faces (milestone 83, decision 0191): `FellowFaceAnimator` (a `Node`; nothing changes without it): `mesh_path` (the
+face's `MeshInstance3D`), `voice_path` (an `AudioStreamPlayer`, 2D or 3D), `voice_stream` and `voice_time` (−1: with a
+time, the stream read there instead), `blend_shapes` (channel → blend shape names; ARKit's by default). Lip sync:
+`lip_sync` (on), `strength` (1), `anticipation` (0.04 s), `attack` (0.04 s), `release` (0.08 s), `level_floor_db`
+(−45), `level_full_db` (−18), `max_analysis_seconds` (60). Blinks: `blinks` (on), `blink_interval_min` (2 s),
+`blink_interval_max` (6 s), `blink_duration` (0.18 s); `seed`. `blink()`, `get_channel()`, `get_channels()`,
+`sample_voice()`, `get_stats()`, `get_global_stats()`/`reset_global_stats()`, `clear_analysis_cache()`; `CHANNEL_*`
+constants. Bench `bench/face_check.gd` (`--listen=1` under Movie Maker, `--many=N`); the regression scene `face`.
+
 ## Simulated GPUs (milestone 49)
 
 The environment's `FELLOW_VULKAN_PROFILE=<name>` (read once by the Vulkan driver; a diagnostic, nothing changes
