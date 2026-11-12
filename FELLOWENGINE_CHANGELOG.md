@@ -9,6 +9,12 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 89 — eyes that look (2026-11-12)
+
+- `FellowFaceAnimator` (decision 0197): the eyes look at `look_target_path` through eight gaze channels on ARKit's
+  `eyeLook*` shapes (clamped to their range, eased), with saccades at random intervals. A target in five directions
+  read as expected, decision 0191's lanes unchanged; the regression scene `face` re-blessed (pupils, a gaze).
+
 ## Milestone 88 — vehicles on loose ground, marks that fade (2026-11-12)
 
 - `FellowVehicleEffects3D` (decision 0196): on colliders in `loose_ground_group`, dust from the rolling wheels (more

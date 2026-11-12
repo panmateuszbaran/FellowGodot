@@ -40,6 +40,11 @@ var blink_face: FellowFaceAnimator
 var blink_log := []
 var blink_closed := false
 var faces := []
+var gaze_face: FellowFaceAnimator
+var gaze_mesh: MeshInstance3D
+var gaze_target: Node3D
+var gaze_reads := {}
+var gaze_trace := []
 
 
 func _arg(name: String, default: String) -> String:
@@ -146,10 +151,11 @@ func _segment_start(index: int) -> float:
 	return t
 
 
-# A test face: a head (a sphere), two eyes and a mouth (flat discs on its front), with ARKit's blend shapes for the
-# mouth and the eyes moving the discs' points.
+# A test face: a head (a sphere) and on its front a mouth, two eyes (white) with pupils (flat discs), with ARKit's blend
+# shapes for the mouth, the eyelids and the gaze moving the discs' points.
 func _face_mesh() -> ArrayMesh:
-	var shapes := ["jawOpen", "mouthStretchLeft", "mouthStretchRight", "mouthPucker", "mouthFunnel", "mouthRollLower", "eyeBlinkLeft", "eyeBlinkRight"]
+	var shapes := ["jawOpen", "mouthStretchLeft", "mouthStretchRight", "mouthPucker", "mouthFunnel", "mouthRollLower", "eyeBlinkLeft", "eyeBlinkRight",
+		"eyeLookOutLeft", "eyeLookInLeft", "eyeLookUpLeft", "eyeLookDownLeft", "eyeLookOutRight", "eyeLookInRight", "eyeLookUpRight", "eyeLookDownRight"]
 	var mesh := ArrayMesh.new()
 	mesh.blend_shape_mode = Mesh.BLEND_SHAPE_MODE_NORMALIZED
 	for s in shapes:
@@ -171,79 +177,108 @@ func _face_mesh() -> ArrayMesh:
 	var skin := StandardMaterial3D.new()
 	skin.albedo_color = Color(0.86, 0.7, 0.6)
 	mesh.surface_set_material(0, skin)
-	# The features: discs (a ring of 24 points round a centre) — the mouth at (0, -0.2), the eyes at (±0.17, 0.12).
-	var verts := PackedVector3Array()
-	var norms := PackedVector3Array()
-	var idx := PackedInt32Array()
-	var feature := PackedInt32Array()  # 0 mouth, 1 left eye (+x), 2 right eye
-	var centers := [Vector2(0, -0.2), Vector2(0.17, 0.12), Vector2(-0.17, 0.12)]
-	var radii := [Vector2(0.12, 0.018), Vector2(0.06, 0.04), Vector2(0.06, 0.04)]
-	for fi in 3:
-		var c: Vector2 = centers[fi]
-		var r: Vector2 = radii[fi]
-		var base := verts.size()
-		verts.append(Vector3(c.x, c.y, sqrt(0.25 - c.x * c.x - c.y * c.y) + 0.004))
-		norms.append(Vector3(0, 0, 1))
-		feature.append(fi)
-		for k in 24:
-			var ang := TAU * k / 24.0
-			var p := c + Vector2(cos(ang) * r.x, sin(ang) * r.y)
-			verts.append(Vector3(p.x, p.y, sqrt(maxf(0.0, 0.25 - p.x * p.x - p.y * p.y)) + 0.004))
+	# The features: discs (a ring of 24 points round a centre): 0 the mouth, 1 and 2 the eyes (the character's left at
+	# +x), 3 and 4 their pupils (a little in front).
+	var centers := [Vector2(0, -0.2), Vector2(0.17, 0.12), Vector2(-0.17, 0.12), Vector2(0.17, 0.12), Vector2(-0.17, 0.12)]
+	var radii := [Vector2(0.12, 0.018), Vector2(0.06, 0.04), Vector2(0.06, 0.04), Vector2(0.022, 0.022), Vector2(0.022, 0.022)]
+	var lift := [0.004, 0.004, 0.004, 0.02, 0.02]  # the pupils well in front: moved, they stay over the eye
+	var groups := [[1, 2, Color(0.95, 0.95, 0.92)], [0, 3, 4, Color(0.2, 0.06, 0.06)]]
+	for g in groups:
+		var ids: Array = g.slice(0, g.size() - 1)
+		var verts := PackedVector3Array()
+		var norms := PackedVector3Array()
+		var idx := PackedInt32Array()
+		var feature := PackedInt32Array()
+		for fi in ids:
+			var c: Vector2 = centers[fi]
+			var r: Vector2 = radii[fi]
+			var base := verts.size()
+			verts.append(Vector3(c.x, c.y, sqrt(0.25 - c.x * c.x - c.y * c.y) + lift[fi]))
 			norms.append(Vector3(0, 0, 1))
 			feature.append(fi)
-		for k in 24:
-			idx.append_array([base, base + 1 + (k + 1) % 24, base + 1 + k])
-	var arrays := []
-	arrays.resize(Mesh.ARRAY_MAX)
-	arrays[Mesh.ARRAY_VERTEX] = verts
-	arrays[Mesh.ARRAY_NORMAL] = norms
-	arrays[Mesh.ARRAY_INDEX] = idx
-	var feature_shapes := []
-	for s in shapes:
-		var v := verts.duplicate()
-		for i in v.size():
-			var fi: int = feature[i]
-			var c: Vector2 = centers[fi]
-			var d := Vector2(v[i].x, v[i].y) - c
-			var p := v[i]
-			match s:
-				"jawOpen":
-					if fi == 0 and d.y < 0.0:
-						p.y -= 0.14 * (-d.y / 0.018 + 0.5) / 1.5
-					elif fi == 0:
-						p.y += 0.02 * (d.y / 0.018)
-				"mouthStretchLeft":
-					if fi == 0 and d.x > 0.0:
-						p.x += 0.05 * d.x / 0.12
-				"mouthStretchRight":
-					if fi == 0 and d.x < 0.0:
-						p.x += 0.05 * d.x / 0.12
-				"mouthPucker":
-					if fi == 0:
-						p.x -= d.x * 0.5
-						p.z += 0.03
-				"mouthFunnel":
-					if fi == 0:
-						p.y += d.y * 2.5
-				"mouthRollLower":
-					if fi == 0 and d.y < 0.0:
-						p.y += 0.01
-				"eyeBlinkLeft":
-					if fi == 1:
-						p.y -= d.y * 0.92
-				"eyeBlinkRight":
-					if fi == 2:
-						p.y -= d.y * 0.92
-			v[i] = p
-		var a := []
-		a.resize(Mesh.ARRAY_MAX)
-		a[Mesh.ARRAY_VERTEX] = v
-		a[Mesh.ARRAY_NORMAL] = norms
-		feature_shapes.append(a)
-	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays, feature_shapes)
-	var dark := StandardMaterial3D.new()
-	dark.albedo_color = Color(0.25, 0.08, 0.08)
-	mesh.surface_set_material(1, dark)
+			for k in 24:
+				var ang := TAU * k / 24.0
+				var p := c + Vector2(cos(ang) * r.x, sin(ang) * r.y)
+				verts.append(Vector3(p.x, p.y, sqrt(maxf(0.0, 0.25 - p.x * p.x - p.y * p.y)) + lift[fi]))
+				norms.append(Vector3(0, 0, 1))
+				feature.append(fi)
+			for k in 24:
+				idx.append_array([base, base + 1 + (k + 1) % 24, base + 1 + k])
+		var arrays := []
+		arrays.resize(Mesh.ARRAY_MAX)
+		arrays[Mesh.ARRAY_VERTEX] = verts
+		arrays[Mesh.ARRAY_NORMAL] = norms
+		arrays[Mesh.ARRAY_INDEX] = idx
+		var feature_shapes := []
+		for s in shapes:
+			var v := verts.duplicate()
+			for i in v.size():
+				var fi: int = feature[i]
+				var c: Vector2 = centers[fi]
+				var d := Vector2(v[i].x, v[i].y) - c
+				var p := v[i]
+				match s:
+					"jawOpen":
+						if fi == 0 and d.y < 0.0:
+							p.y -= 0.14 * (-d.y / 0.018 + 0.5) / 1.5
+						elif fi == 0:
+							p.y += 0.02 * (d.y / 0.018)
+					"mouthStretchLeft":
+						if fi == 0 and d.x > 0.0:
+							p.x += 0.05 * d.x / 0.12
+					"mouthStretchRight":
+						if fi == 0 and d.x < 0.0:
+							p.x += 0.05 * d.x / 0.12
+					"mouthPucker":
+						if fi == 0:
+							p.x -= d.x * 0.5
+							p.z += 0.03
+					"mouthFunnel":
+						if fi == 0:
+							p.y += d.y * 2.5
+					"mouthRollLower":
+						if fi == 0 and d.y < 0.0:
+							p.y += 0.01
+					"eyeBlinkLeft":
+						if fi == 1 or fi == 3:
+							p.y -= (p.y - 0.12) * 0.92
+					"eyeBlinkRight":
+						if fi == 2 or fi == 4:
+							p.y -= (p.y - 0.12) * 0.92
+					"eyeLookOutLeft":
+						if fi == 3:
+							p.x += 0.03
+					"eyeLookInLeft":
+						if fi == 3:
+							p.x -= 0.03
+					"eyeLookUpLeft":
+						if fi == 3:
+							p.y += 0.016
+					"eyeLookDownLeft":
+						if fi == 3:
+							p.y -= 0.016
+					"eyeLookOutRight":
+						if fi == 4:
+							p.x -= 0.03
+					"eyeLookInRight":
+						if fi == 4:
+							p.x += 0.03
+					"eyeLookUpRight":
+						if fi == 4:
+							p.y += 0.016
+					"eyeLookDownRight":
+						if fi == 4:
+							p.y -= 0.016
+				v[i] = p
+			var a := []
+			a.resize(Mesh.ARRAY_MAX)
+			a[Mesh.ARRAY_VERTEX] = v
+			a[Mesh.ARRAY_NORMAL] = norms
+			feature_shapes.append(a)
+		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays, feature_shapes)
+		var m := StandardMaterial3D.new()
+		m.albedo_color = g[g.size() - 1]
+		mesh.surface_set_material(mesh.get_surface_count() - 1, m)
 	return mesh
 
 
@@ -284,6 +319,21 @@ func _build() -> void:
 	blink_face = FellowFaceAnimator.new()
 	blink_face.seed = 11
 	root3d.add_child(blink_face)
+	# Milestone 89: a face looking at a target (no saccades first), then with saccades and nothing to look at.
+	gaze_mesh = MeshInstance3D.new()
+	gaze_mesh.mesh = _face_mesh()
+	gaze_mesh.position = Vector3(4, 0, 0)
+	root3d.add_child(gaze_mesh)
+	gaze_target = Node3D.new()
+	root3d.add_child(gaze_target)
+	gaze_face = FellowFaceAnimator.new()
+	gaze_face.blinks = false
+	gaze_face.lip_sync = false
+	gaze_face.saccades = false
+	gaze_face.eye_center = Vector3(0, 0.12, 0.45)
+	root3d.add_child(gaze_face)
+	gaze_face.mesh_path = gaze_face.get_path_to(gaze_mesh)
+	gaze_face.look_target_path = gaze_face.get_path_to(gaze_target)
 	physics_frame.connect(_on_frame)
 
 
@@ -307,6 +357,25 @@ func _on_frame() -> void:
 			done = true
 			_finish()
 	else:
+		# The gaze: the target ahead, at the character's left, above, right and below (relative to the face at x 4); then
+		# saccades with nothing to look at.
+		var spots := {60: ["ahead", Vector3(4, 0.12, 2.5)], 120: ["left", Vector3(5.2, 0.12, 1.0)], 180: ["up", Vector3(4, 1.0, 2.0)], 240: ["right_down", Vector3(3.6, -0.3, 2.0)]}
+		if spots.has(frame):
+			gaze_target.position = spots[frame][1]
+		if frame - 50 in spots:
+			var name: String = spots[frame - 50][0]
+			var r := {}
+			for k in ["look_out_left", "look_in_left", "look_up_left", "look_down_left", "look_out_right", "look_in_right", "look_up_right", "look_down_right"]:
+				r[k] = snappedf(gaze_face.get_channels()[k], 0.001)
+			var shape := gaze_mesh.find_blend_shape_by_name("eyeLookOutLeft")
+			r["shape_out_left"] = snappedf(gaze_mesh.get_blend_shape_value(shape), 0.001)
+			r["angles"] = [snappedf(gaze_face.get_gaze_angles().x, 0.01), snappedf(gaze_face.get_gaze_angles().y, 0.01)]
+			gaze_reads[name] = r
+		if frame == 300:
+			gaze_face.look_target_path = NodePath()
+			gaze_face.saccades = true
+		if frame > 330 and frame <= 930:  # back from the last target first
+			gaze_trace.append(gaze_face.get_gaze_angles())
 		# The blinks over a minute (the frame's lid, closed past 0.9).
 		var lid := blink_face.get_channel(FellowFaceAnimator.CHANNEL_BLINK_LEFT)
 		if lid > 0.9 and not blink_closed:
@@ -365,6 +434,19 @@ func _finish() -> void:
 			gaps.append(snappedf(blink_log[k] - blink_log[k - 1], 0.01))
 		var gmin: float = gaps.min() if not gaps.is_empty() else 0.0
 		var gmax: float = gaps.max() if not gaps.is_empty() else 0.0
+		# The gaze.
+		var gr := gaze_reads
+		var jumps := 0
+		var widest := 0.0
+		for k in range(1, gaze_trace.size()):
+			jumps += 1 if (gaze_trace[k] - gaze_trace[k - 1]).length() > 0.3 and (gaze_trace[k - 1] - gaze_trace[maxi(0, k - 2)]).length() <= 0.3 else 0
+			widest = maxf(widest, maxf(absf(gaze_trace[k].x), absf(gaze_trace[k].y)))
+		var gok: bool = gr.ahead.look_out_left < 0.02 and gr.ahead.look_in_left < 0.02 and gr.ahead.look_up_left < 0.02 and gr.ahead.look_down_left < 0.02
+		gok = gok and gr.left.look_out_left > 0.99 and gr.left.look_in_right > 0.99 and gr.left.look_in_left == 0.0 and absf(gr.left.shape_out_left - gr.left.look_out_left) < 0.002
+		gok = gok and gr.up.look_up_left > 0.99 and gr.up.look_up_right > 0.99 and gr.up.look_down_left == 0.0
+		gok = gok and gr.right_down.look_in_left > 0.3 and gr.right_down.look_out_right > 0.3 and gr.right_down.look_down_left > 0.3 and gr.right_down.look_out_left == 0.0
+		gok = gok and jumps >= 4 and jumps <= 30 and widest <= 1.51
+		out["gaze"] = {"reads": gr, "saccades_in_10_s": jumps, "saccade_widest_deg": snappedf(widest, 0.01), "ok": gok}
 		out["blinks"] = {"count": blink_log.size(), "gap_min": gmin, "gap_max": gmax,
 			"ok": blink_log.size() >= 10 and blink_log.size() <= 25 and gmin >= 2.0 and gmax <= 6.3}
 	else:

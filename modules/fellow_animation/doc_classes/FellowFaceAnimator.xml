@@ -4,7 +4,7 @@
 		FellowEngine: a face that speaks and blinks — its mouth's blend shapes from the voice it plays (analysed as it plays, ahead of the sound), its eyes blinking at random.
 	</brief_description>
 	<description>
-		A child anywhere under the character: set [member mesh_path] to the face's [MeshInstance3D] (its mesh with blend shapes; ARKit's names by default, see [member blend_shapes]) and [member voice_path] to the player of its voice ([AudioStreamPlayer], [AudioStreamPlayer2D] or [AudioStreamPlayer3D]). While the player plays, the stream is analysed a little ahead of its position (its playback rendered offline once and shared by every face playing it: the level and five bands' energies every 10 ms) into the mouth's channels — [constant CHANNEL_JAW_OPEN] with an open vowel's high first formant, [constant CHANNEL_MOUTH_WIDE] with a front vowel's high second formant, [constant CHANNEL_MOUTH_ROUND] with a back vowel's low one, [constant CHANNEL_TEETH] with the hiss of s and f, [constant CHANNEL_MOUTH_CLOSED] as it falls silent — read [member anticipation] ahead of what is heard, eased ([member attack], [member release]) and set on the blend shapes. A timeline can drive it instead: [member voice_stream] read at [member voice_time] (an [AnimationPlayer]'s track setting it). The eyes blink between [member blink_interval_min] and [member blink_interval_max] seconds apart. Language-independent and without phonemes: a stylised mouth, not a speech recogniser's visemes. See [code]docs/decisions/0191-face-animation.md[/code].
+		A child anywhere under the character: set [member mesh_path] to the face's [MeshInstance3D] (its mesh with blend shapes; ARKit's names by default, see [member blend_shapes]) and [member voice_path] to the player of its voice ([AudioStreamPlayer], [AudioStreamPlayer2D] or [AudioStreamPlayer3D]). While the player plays, the stream is analysed a little ahead of its position (its playback rendered offline once and shared by every face playing it: the level and five bands' energies every 10 ms) into the mouth's channels — [constant CHANNEL_JAW_OPEN] with an open vowel's high first formant, [constant CHANNEL_MOUTH_WIDE] with a front vowel's high second formant, [constant CHANNEL_MOUTH_ROUND] with a back vowel's low one, [constant CHANNEL_TEETH] with the hiss of s and f, [constant CHANNEL_MOUTH_CLOSED] as it falls silent — read [member anticipation] ahead of what is heard, eased ([member attack], [member release]) and set on the blend shapes. A timeline can drive it instead: [member voice_stream] read at [member voice_time] (an [AnimationPlayer]'s track setting it). The eyes blink between [member blink_interval_min] and [member blink_interval_max] seconds apart, and look at [member look_target_path] with small saccades (milestone 89; ARKit's [code]eyeLook*[/code] shapes). Language-independent and without phonemes: a stylised mouth, not a speech recogniser's visemes. See [code]docs/decisions/0191-face-animation.md[/code].
 	</description>
 	<tutorials>
 	</tutorials>
@@ -32,6 +32,12 @@
 			<return type="Dictionary" />
 			<description>
 				Every channel's value now, by name.
+			</description>
+		</method>
+		<method name="get_gaze_angles" qualifiers="const">
+			<return type="Vector2" />
+			<description>
+				The gaze now, in degrees: x to the character's left, y up (eased; saccades in).
 			</description>
 		</method>
 		<method name="get_global_stats" qualifiers="static">
@@ -68,8 +74,8 @@
 		<member name="attack" type="float" setter="set_attack" getter="get_attack" default="0.04">
 			The time constant of a channel rising, in seconds.
 		</member>
-		<member name="blend_shapes" type="Dictionary" setter="set_blend_shapes" getter="get_blend_shapes" default="{ &quot;blink_left&quot;: PackedStringArray(&quot;eyeBlinkLeft&quot;), &quot;blink_right&quot;: PackedStringArray(&quot;eyeBlinkRight&quot;), &quot;jaw_open&quot;: PackedStringArray(&quot;jawOpen&quot;), &quot;mouth_closed&quot;: PackedStringArray(), &quot;mouth_round&quot;: PackedStringArray(&quot;mouthPucker&quot;, &quot;mouthFunnel&quot;), &quot;mouth_wide&quot;: PackedStringArray(&quot;mouthStretchLeft&quot;, &quot;mouthStretchRight&quot;), &quot;teeth&quot;: PackedStringArray(&quot;mouthRollLower&quot;) }">
-			Which blend shapes each channel moves: a channel's name ([code]jaw_open[/code], [code]mouth_wide[/code], [code]mouth_round[/code], [code]mouth_closed[/code], [code]teeth[/code], [code]blink_left[/code], [code]blink_right[/code]) and a blend shape's name or a [PackedStringArray] of them. A blend shape moved by several channels gets their sum (at most 1). By default ARKit's: [code]jawOpen[/code]; [code]mouthStretchLeft[/code], [code]mouthStretchRight[/code]; [code]mouthPucker[/code], [code]mouthFunnel[/code]; none; [code]mouthRollLower[/code]; [code]eyeBlinkLeft[/code]; [code]eyeBlinkRight[/code].
+		<member name="blend_shapes" type="Dictionary" setter="set_blend_shapes" getter="get_blend_shapes" default="{ &quot;blink_left&quot;: PackedStringArray(&quot;eyeBlinkLeft&quot;), &quot;blink_right&quot;: PackedStringArray(&quot;eyeBlinkRight&quot;), &quot;jaw_open&quot;: PackedStringArray(&quot;jawOpen&quot;), &quot;look_down_left&quot;: PackedStringArray(&quot;eyeLookDownLeft&quot;), &quot;look_down_right&quot;: PackedStringArray(&quot;eyeLookDownRight&quot;), &quot;look_in_left&quot;: PackedStringArray(&quot;eyeLookInLeft&quot;), &quot;look_in_right&quot;: PackedStringArray(&quot;eyeLookInRight&quot;), &quot;look_out_left&quot;: PackedStringArray(&quot;eyeLookOutLeft&quot;), &quot;look_out_right&quot;: PackedStringArray(&quot;eyeLookOutRight&quot;), &quot;look_up_left&quot;: PackedStringArray(&quot;eyeLookUpLeft&quot;), &quot;look_up_right&quot;: PackedStringArray(&quot;eyeLookUpRight&quot;), &quot;mouth_closed&quot;: PackedStringArray(), &quot;mouth_round&quot;: PackedStringArray(&quot;mouthPucker&quot;, &quot;mouthFunnel&quot;), &quot;mouth_wide&quot;: PackedStringArray(&quot;mouthStretchLeft&quot;, &quot;mouthStretchRight&quot;), &quot;teeth&quot;: PackedStringArray(&quot;mouthRollLower&quot;) }">
+			Which blend shapes each channel moves: a channel's name ([code]jaw_open[/code], [code]mouth_wide[/code], [code]mouth_round[/code], [code]mouth_closed[/code], [code]teeth[/code], [code]blink_left[/code], [code]blink_right[/code], [code]look_out_left[/code], [code]look_in_left[/code], [code]look_up_left[/code], [code]look_down_left[/code] and the same [code]_right[/code]) and a blend shape's name or a [PackedStringArray] of them. A blend shape moved by several channels gets their sum (at most 1). By default ARKit's: [code]jawOpen[/code]; [code]mouthStretchLeft[/code], [code]mouthStretchRight[/code]; [code]mouthPucker[/code], [code]mouthFunnel[/code]; none; [code]mouthRollLower[/code]; [code]eyeBlinkLeft[/code]; [code]eyeBlinkRight[/code]; [code]eyeLookOutLeft[/code], [code]eyeLookInLeft[/code], [code]eyeLookUpLeft[/code], [code]eyeLookDownLeft[/code] and the same [code]Right[/code].
 		</member>
 		<member name="blink_duration" type="float" setter="set_blink_duration" getter="get_blink_duration" default="0.18">
 			A blink's length, in seconds: closing in a third of it, closed a sixth, opening in half.
@@ -83,6 +89,21 @@
 		<member name="blinks" type="bool" setter="set_blinks" getter="is_blinks" default="true">
 			The eyes blink at random intervals.
 		</member>
+		<member name="eye_center" type="Vector3" setter="set_eye_center" getter="get_eye_center" default="Vector3(0, 0, 0)">
+			The point between the eyes, in the face mesh's space, the gaze's directions are measured from.
+		</member>
+		<member name="gaze" type="bool" setter="set_gaze" getter="is_gaze" default="true">
+			The eyes look at [member look_target_path] (within [member gaze_range_horizontal] and [member gaze_range_vertical]), with [member saccades], through the eyeLook channels (milestone 89).
+		</member>
+		<member name="gaze_range_horizontal" type="float" setter="set_gaze_range_horizontal" getter="get_gaze_range_horizontal" default="30.0">
+			The eyes' reach left and right, in degrees: at it the look_out and look_in channels are 1 (beyond: clamped).
+		</member>
+		<member name="gaze_range_vertical" type="float" setter="set_gaze_range_vertical" getter="get_gaze_range_vertical" default="25.0">
+			The eyes' reach up and down, in degrees.
+		</member>
+		<member name="gaze_time" type="float" setter="set_gaze_time" getter="get_gaze_time" default="0.04">
+			The time constant of the eyes' turn, in seconds (a saccade is fast).
+		</member>
 		<member name="level_floor_db" type="float" setter="set_level_floor_db" getter="get_level_floor_db" default="-45.0">
 			The voice's level (a sine's peak dB for its mean square over 20 ms) at which the mouth starts to move.
 		</member>
@@ -92,6 +113,9 @@
 		<member name="lip_sync" type="bool" setter="set_lip_sync" getter="is_lip_sync" default="true">
 			The mouth follows the voice.
 		</member>
+		<member name="look_target_path" type="NodePath" setter="set_look_target_path" getter="get_look_target_path" default="NodePath(&quot;&quot;)">
+			What the eyes look at ([Node3D]): its direction from [member eye_center] in the face mesh's space (the face looking along +Z, its left +X) gives the gaze's angles. Empty: ahead.
+		</member>
 		<member name="max_analysis_seconds" type="float" setter="set_max_analysis_seconds" getter="get_max_analysis_seconds" default="60.0">
 			At most this much of a voice is analysed (a longer one is silent past it; a loop wraps when it was all analysed).
 		</member>
@@ -100,6 +124,12 @@
 		</member>
 		<member name="release" type="float" setter="set_release" getter="get_release" default="0.08">
 			The time constant of a channel falling, in seconds.
+		</member>
+		<member name="saccade_amplitude" type="float" setter="set_saccade_amplitude" getter="get_saccade_amplitude" default="1.5">
+			The saccades' reach, in degrees (vertically 0.6 of it).
+		</member>
+		<member name="saccades" type="bool" setter="set_saccades" getter="is_saccades" default="true">
+			Small quick eye movements at random intervals (0.4-1.6 s) round where they look.
 		</member>
 		<member name="seed" type="int" setter="set_seed" getter="get_seed" default="0">
 			The seed of the blinks' intervals.
@@ -139,7 +169,31 @@
 		<constant name="CHANNEL_BLINK_RIGHT" value="6" enum="Channel">
 			The right eye closed.
 		</constant>
-		<constant name="CHANNEL_MAX" value="7" enum="Channel">
+		<constant name="CHANNEL_LOOK_OUT_LEFT" value="7" enum="Channel">
+			The left eye looking out (to the character's left).
+		</constant>
+		<constant name="CHANNEL_LOOK_IN_LEFT" value="8" enum="Channel">
+			The left eye looking in (to the character's right).
+		</constant>
+		<constant name="CHANNEL_LOOK_UP_LEFT" value="9" enum="Channel">
+			The left eye looking up.
+		</constant>
+		<constant name="CHANNEL_LOOK_DOWN_LEFT" value="10" enum="Channel">
+			The left eye looking down.
+		</constant>
+		<constant name="CHANNEL_LOOK_OUT_RIGHT" value="11" enum="Channel">
+			The right eye looking out (to the character's right).
+		</constant>
+		<constant name="CHANNEL_LOOK_IN_RIGHT" value="12" enum="Channel">
+			The right eye looking in (to the character's left).
+		</constant>
+		<constant name="CHANNEL_LOOK_UP_RIGHT" value="13" enum="Channel">
+			The right eye looking up.
+		</constant>
+		<constant name="CHANNEL_LOOK_DOWN_RIGHT" value="14" enum="Channel">
+			The right eye looking down.
+		</constant>
+		<constant name="CHANNEL_MAX" value="15" enum="Channel">
 			The number of channels.
 		</constant>
 	</constants>

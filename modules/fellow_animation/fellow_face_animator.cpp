@@ -36,6 +36,7 @@
 #include "scene/2d/audio_stream_player_2d.h"
 #include "scene/3d/audio_stream_player_3d.h"
 #include "scene/3d/mesh_instance_3d.h"
+#include "scene/3d/node_3d.h"
 #include "scene/audio/audio_stream_player.h"
 #include "servers/audio/audio_server.h"
 
@@ -79,7 +80,8 @@ float to_db(float p_energy) {
 } //namespace
 
 const char *FellowFaceAnimator::channel_name(int p_channel) {
-	static const char *names[CHANNEL_MAX] = { "jaw_open", "mouth_wide", "mouth_round", "mouth_closed", "teeth", "blink_left", "blink_right" };
+	static const char *names[CHANNEL_MAX] = { "jaw_open", "mouth_wide", "mouth_round", "mouth_closed", "teeth", "blink_left", "blink_right",
+		"look_out_left", "look_in_left", "look_up_left", "look_down_left", "look_out_right", "look_in_right", "look_up_right", "look_down_right" };
 	return (p_channel >= 0 && p_channel < CHANNEL_MAX) ? names[p_channel] : "";
 }
 
@@ -367,6 +369,40 @@ void FellowFaceAnimator::_update(double p_delta) {
 	}
 	channels[CHANNEL_BLINK_LEFT] = lid;
 	channels[CHANNEL_BLINK_RIGHT] = lid;
+	// Milestone 89: the gaze — towards the target (its direction in the face mesh's space from eye_center, the face
+	// looking along +Z, its left +X), within the eyes' range, plus small saccades at random intervals; eased.
+	Vector2 goal;
+	if (gaze) {
+		const Node3D *target = look_target_path.is_empty() ? nullptr : Object::cast_to<Node3D>(get_node_or_null(look_target_path));
+		const MeshInstance3D *face = mesh_path.is_empty() ? nullptr : Object::cast_to<MeshInstance3D>(get_node_or_null(mesh_path));
+		if (target && face) {
+			const Transform3D xf = face->get_global_transform();
+			const Vector3 d = xf.basis.inverse().xform(target->get_global_position() - xf.xform(eye_center));
+			if (d.length() > 1e-4f) {
+				goal.x = Math::rad_to_deg(Math::atan2(d.x, d.z));
+				goal.y = Math::rad_to_deg(Math::atan2(d.y, Vector2(d.x, d.z).length()));
+			}
+		}
+		if (saccades && saccade_amplitude > 0.0f) {
+			if (clock >= next_saccade) {
+				saccade = Vector2(saccade_rng.random(-saccade_amplitude, saccade_amplitude), saccade_rng.random(-saccade_amplitude, saccade_amplitude) * 0.6f);
+				next_saccade = clock + saccade_rng.random(MIN(saccade_interval_min, saccade_interval_max), MAX(saccade_interval_min, saccade_interval_max));
+			}
+			goal += saccade;
+		}
+		goal.x = CLAMP(goal.x, -gaze_range_horizontal, gaze_range_horizontal);
+		goal.y = CLAMP(goal.y, -gaze_range_vertical, gaze_range_vertical);
+	}
+	const float gk = gaze_time > 0.0f ? 1.0f - Math::exp(-float(p_delta) / gaze_time) : 1.0f;
+	gaze_now += (goal - gaze_now) * gk;
+	const float yaw = gaze_now.x / gaze_range_horizontal; // + the character's left
+	const float pitch = gaze_now.y / gaze_range_vertical;
+	channels[CHANNEL_LOOK_OUT_LEFT] = MAX(0.0f, yaw);
+	channels[CHANNEL_LOOK_IN_RIGHT] = MAX(0.0f, yaw);
+	channels[CHANNEL_LOOK_IN_LEFT] = MAX(0.0f, -yaw);
+	channels[CHANNEL_LOOK_OUT_RIGHT] = MAX(0.0f, -yaw);
+	channels[CHANNEL_LOOK_UP_LEFT] = channels[CHANNEL_LOOK_UP_RIGHT] = MAX(0.0f, pitch);
+	channels[CHANNEL_LOOK_DOWN_LEFT] = channels[CHANNEL_LOOK_DOWN_RIGHT] = MAX(0.0f, -pitch);
 	// The face: each blend shape the sum of its channels' (at most 1), written when it changed.
 	if (MeshInstance3D *mi = _mesh()) {
 		LocalVector<float> values;
@@ -462,7 +498,9 @@ void FellowFaceAnimator::set_blend_shapes(const Dictionary &p_shapes) {
 void FellowFaceAnimator::set_seed(int64_t p_seed) {
 	seed = p_seed;
 	rng.seed(uint64_t(seed));
+	saccade_rng.seed(uint64_t(seed) + 1);
 	next_blink = clock + _next_interval();
+	next_saccade = clock;
 }
 
 Dictionary FellowFaceAnimator::get_stats() const {
@@ -552,6 +590,23 @@ void FellowFaceAnimator::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_blink_duration"), &FellowFaceAnimator::get_blink_duration);
 	ClassDB::bind_method(D_METHOD("set_seed", "seed"), &FellowFaceAnimator::set_seed);
 	ClassDB::bind_method(D_METHOD("get_seed"), &FellowFaceAnimator::get_seed);
+	ClassDB::bind_method(D_METHOD("set_gaze", "enabled"), &FellowFaceAnimator::set_gaze);
+	ClassDB::bind_method(D_METHOD("is_gaze"), &FellowFaceAnimator::is_gaze);
+	ClassDB::bind_method(D_METHOD("set_look_target_path", "path"), &FellowFaceAnimator::set_look_target_path);
+	ClassDB::bind_method(D_METHOD("get_look_target_path"), &FellowFaceAnimator::get_look_target_path);
+	ClassDB::bind_method(D_METHOD("set_eye_center", "center"), &FellowFaceAnimator::set_eye_center);
+	ClassDB::bind_method(D_METHOD("get_eye_center"), &FellowFaceAnimator::get_eye_center);
+	ClassDB::bind_method(D_METHOD("set_gaze_range_horizontal", "degrees"), &FellowFaceAnimator::set_gaze_range_horizontal);
+	ClassDB::bind_method(D_METHOD("get_gaze_range_horizontal"), &FellowFaceAnimator::get_gaze_range_horizontal);
+	ClassDB::bind_method(D_METHOD("set_gaze_range_vertical", "degrees"), &FellowFaceAnimator::set_gaze_range_vertical);
+	ClassDB::bind_method(D_METHOD("get_gaze_range_vertical"), &FellowFaceAnimator::get_gaze_range_vertical);
+	ClassDB::bind_method(D_METHOD("set_gaze_time", "seconds"), &FellowFaceAnimator::set_gaze_time);
+	ClassDB::bind_method(D_METHOD("get_gaze_time"), &FellowFaceAnimator::get_gaze_time);
+	ClassDB::bind_method(D_METHOD("set_saccades", "enabled"), &FellowFaceAnimator::set_saccades);
+	ClassDB::bind_method(D_METHOD("is_saccades"), &FellowFaceAnimator::is_saccades);
+	ClassDB::bind_method(D_METHOD("set_saccade_amplitude", "degrees"), &FellowFaceAnimator::set_saccade_amplitude);
+	ClassDB::bind_method(D_METHOD("get_saccade_amplitude"), &FellowFaceAnimator::get_saccade_amplitude);
+	ClassDB::bind_method(D_METHOD("get_gaze_angles"), &FellowFaceAnimator::get_gaze_angles);
 	ClassDB::bind_method(D_METHOD("blink"), &FellowFaceAnimator::blink);
 	ClassDB::bind_method(D_METHOD("get_channel", "channel"), &FellowFaceAnimator::get_channel);
 	ClassDB::bind_method(D_METHOD("get_channels"), &FellowFaceAnimator::get_channels);
@@ -580,6 +635,15 @@ void FellowFaceAnimator::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "blink_interval_min", PROPERTY_HINT_RANGE, "0.1,30,0.01,suffix:s"), "set_blink_interval_min", "get_blink_interval_min");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "blink_interval_max", PROPERTY_HINT_RANGE, "0.1,30,0.01,suffix:s"), "set_blink_interval_max", "get_blink_interval_max");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "blink_duration", PROPERTY_HINT_RANGE, "0.05,1,0.001,suffix:s"), "set_blink_duration", "get_blink_duration");
+	ADD_GROUP("Gaze", "");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "gaze"), "set_gaze", "is_gaze");
+	ADD_PROPERTY(PropertyInfo(Variant::NODE_PATH, "look_target_path", PROPERTY_HINT_NODE_PATH_VALID_TYPES, "Node3D"), "set_look_target_path", "get_look_target_path");
+	ADD_PROPERTY(PropertyInfo(Variant::VECTOR3, "eye_center", PROPERTY_HINT_NONE, "suffix:m"), "set_eye_center", "get_eye_center");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "gaze_range_horizontal", PROPERTY_HINT_RANGE, "1,89,0.1,degrees"), "set_gaze_range_horizontal", "get_gaze_range_horizontal");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "gaze_range_vertical", PROPERTY_HINT_RANGE, "1,89,0.1,degrees"), "set_gaze_range_vertical", "get_gaze_range_vertical");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "gaze_time", PROPERTY_HINT_RANGE, "0,1,0.001,suffix:s"), "set_gaze_time", "get_gaze_time");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "saccades"), "set_saccades", "is_saccades");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "saccade_amplitude", PROPERTY_HINT_RANGE, "0,20,0.1,degrees"), "set_saccade_amplitude", "get_saccade_amplitude");
 	ADD_GROUP("", "");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "seed"), "set_seed", "get_seed");
 
@@ -590,6 +654,14 @@ void FellowFaceAnimator::_bind_methods() {
 	BIND_ENUM_CONSTANT(CHANNEL_TEETH);
 	BIND_ENUM_CONSTANT(CHANNEL_BLINK_LEFT);
 	BIND_ENUM_CONSTANT(CHANNEL_BLINK_RIGHT);
+	BIND_ENUM_CONSTANT(CHANNEL_LOOK_OUT_LEFT);
+	BIND_ENUM_CONSTANT(CHANNEL_LOOK_IN_LEFT);
+	BIND_ENUM_CONSTANT(CHANNEL_LOOK_UP_LEFT);
+	BIND_ENUM_CONSTANT(CHANNEL_LOOK_DOWN_LEFT);
+	BIND_ENUM_CONSTANT(CHANNEL_LOOK_OUT_RIGHT);
+	BIND_ENUM_CONSTANT(CHANNEL_LOOK_IN_RIGHT);
+	BIND_ENUM_CONSTANT(CHANNEL_LOOK_UP_RIGHT);
+	BIND_ENUM_CONSTANT(CHANNEL_LOOK_DOWN_RIGHT);
 	BIND_ENUM_CONSTANT(CHANNEL_MAX);
 }
 
@@ -602,6 +674,15 @@ FellowFaceAnimator::FellowFaceAnimator() {
 	blend_shapes["teeth"] = PackedStringArray({ "mouthRollLower" });
 	blend_shapes["blink_left"] = PackedStringArray({ "eyeBlinkLeft" });
 	blend_shapes["blink_right"] = PackedStringArray({ "eyeBlinkRight" });
+	blend_shapes["look_out_left"] = PackedStringArray({ "eyeLookOutLeft" });
+	blend_shapes["look_in_left"] = PackedStringArray({ "eyeLookInLeft" });
+	blend_shapes["look_up_left"] = PackedStringArray({ "eyeLookUpLeft" });
+	blend_shapes["look_down_left"] = PackedStringArray({ "eyeLookDownLeft" });
+	blend_shapes["look_out_right"] = PackedStringArray({ "eyeLookOutRight" });
+	blend_shapes["look_in_right"] = PackedStringArray({ "eyeLookInRight" });
+	blend_shapes["look_up_right"] = PackedStringArray({ "eyeLookUpRight" });
+	blend_shapes["look_down_right"] = PackedStringArray({ "eyeLookDownRight" });
 	rng.seed(0);
+	saccade_rng.seed(1);
 	next_blink = _next_interval();
 }

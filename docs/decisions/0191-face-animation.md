@@ -74,3 +74,8 @@ Keep: faces with ARKit-named blend shapes speak and blink with a node and the vo
   worker would have to be waited for when behind.
 * **Emotion, brows, gaze and head motion**, a jaw bone (a skeleton's): blend shapes only, the mouth and the eyes.
 * **Live microphone input**: a stream played by a player only.
+
+## Later
+
+Milestone 89 (decision 0197): the eyes' gaze and saccades; this record's lanes are unchanged; the regression scene
+`face` re-blessed (pupils, looking at a point).

@@ -56,6 +56,15 @@ public:
 		CHANNEL_TEETH,
 		CHANNEL_BLINK_LEFT,
 		CHANNEL_BLINK_RIGHT,
+		// Milestone 89: the gaze (each eye out, in, up, down; "left" the character's).
+		CHANNEL_LOOK_OUT_LEFT,
+		CHANNEL_LOOK_IN_LEFT,
+		CHANNEL_LOOK_UP_LEFT,
+		CHANNEL_LOOK_DOWN_LEFT,
+		CHANNEL_LOOK_OUT_RIGHT,
+		CHANNEL_LOOK_IN_RIGHT,
+		CHANNEL_LOOK_UP_RIGHT,
+		CHANNEL_LOOK_DOWN_RIGHT,
 		CHANNEL_MAX,
 	};
 	static constexpr int MOUTH_CHANNELS = 5;
@@ -90,11 +99,26 @@ private:
 	float blink_interval_min = 2.0f;
 	float blink_interval_max = 6.0f;
 	float blink_duration = 0.18f;
+	// Milestone 89 (decision 0197): the gaze.
+	bool gaze = true;
+	NodePath look_target_path;
+	Vector3 eye_center; // in the face mesh's space
+	float gaze_range_horizontal = 30.0f; // degrees: the eyes fully out or in
+	float gaze_range_vertical = 25.0f;
+	float gaze_time = 0.04f; // s: the eyes' easing (a saccade is fast)
+	bool saccades = true;
+	float saccade_amplitude = 1.5f; // degrees
+	float saccade_interval_min = 0.4f;
+	float saccade_interval_max = 1.6f;
 	int64_t seed = 0;
 
 	float channels[CHANNEL_MAX] = {};
 	RandomPCG rng;
 	double next_blink = 0.0;
+	double next_saccade = 0.0;
+	RandomPCG saccade_rng; // its own: the blinks' intervals the same with or without saccades
+	Vector2 saccade; // degrees (yaw, pitch)
+	Vector2 gaze_now; // degrees, eased
 	double blink_t = -1.0; // s into a blink, < 0: none
 	double clock = 0.0;
 	ObjectID mesh_id;
@@ -154,6 +178,24 @@ public:
 	float get_blink_duration() const { return blink_duration; }
 	void set_seed(int64_t p_seed);
 	int64_t get_seed() const { return seed; }
+
+	void set_gaze(bool p_enabled) { gaze = p_enabled; }
+	bool is_gaze() const { return gaze; }
+	void set_look_target_path(const NodePath &p_path) { look_target_path = p_path; }
+	NodePath get_look_target_path() const { return look_target_path; }
+	void set_eye_center(const Vector3 &p_center) { eye_center = p_center; }
+	Vector3 get_eye_center() const { return eye_center; }
+	void set_gaze_range_horizontal(float p_degrees) { gaze_range_horizontal = CLAMP(p_degrees, 1.0f, 89.0f); }
+	float get_gaze_range_horizontal() const { return gaze_range_horizontal; }
+	void set_gaze_range_vertical(float p_degrees) { gaze_range_vertical = CLAMP(p_degrees, 1.0f, 89.0f); }
+	float get_gaze_range_vertical() const { return gaze_range_vertical; }
+	void set_gaze_time(float p_seconds) { gaze_time = MAX(0.0f, p_seconds); }
+	float get_gaze_time() const { return gaze_time; }
+	void set_saccades(bool p_enabled) { saccades = p_enabled; }
+	bool is_saccades() const { return saccades; }
+	void set_saccade_amplitude(float p_degrees) { saccade_amplitude = CLAMP(p_degrees, 0.0f, 20.0f); }
+	float get_saccade_amplitude() const { return saccade_amplitude; }
+	Vector2 get_gaze_angles() const { return gaze_now; }
 
 	void blink();
 	float get_channel(Channel p_channel) const;

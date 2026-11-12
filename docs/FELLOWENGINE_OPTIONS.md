@@ -635,6 +635,10 @@ time, the stream read there instead), `blend_shapes` (channel → blend shape na
 `blink_interval_max` (6 s), `blink_duration` (0.18 s); `seed`. `blink()`, `get_channel()`, `get_channels()`,
 `sample_voice()`, `get_stats()`, `get_global_stats()`/`reset_global_stats()`, `clear_analysis_cache()`; `CHANNEL_*`
 constants. Bench `bench/face_check.gd` (`--listen=1` under Movie Maker, `--many=N`); the regression scene `face`.
+Gaze (milestone 89, decision 0197): `gaze` (on), `look_target_path` (empty: ahead), `eye_center` (in the face mesh's
+space), `gaze_range_horizontal` (30°), `gaze_range_vertical` (25°), `gaze_time` (0.04 s), `saccades` (on),
+`saccade_amplitude` (1.5°); `get_gaze_angles()`; the channels `look_out_left` … `look_down_right` on ARKit's
+`eyeLook*` shapes.
 
 ## Simulated GPUs (milestone 49)
 
