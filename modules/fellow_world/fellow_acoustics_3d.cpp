@@ -339,21 +339,35 @@ void FellowAcoustics3D::_step(float p_delta) {
 				const float a = float(Math::TAU) * float(i - 1) / float(occlusion_rays - 1);
 				to += (u * Math::cos(a) + v * Math::sin(a)) * source_radius;
 			}
-			PhysicsDirectSpaceState3D::RayParameters rq;
-			rq.from = at;
-			rq.to = to;
-			rq.exclude = exclude;
-			rq.collision_mask = collision_mask;
-			PhysicsDirectSpaceState3D::RayResult rr;
-			if (space->intersect_ray(rq, rr)) {
-				// Milestone 90 (decision 0198): what blocks it, by its metadata "fellow_occlusion" (0 lets all through, 1
-				// blocks as a wall: glass 0.3, a curtain 0.15); without it, 1.
+			// Milestone 91 (decision 0199): through what lies on the path, up to three colliders, each blocking it by its
+			// metadata "fellow_occlusion" (0 lets all through, 1 blocks as a wall; without it, 1), the shares added up
+			// to a full block (a plain wall ends the path at once).
+			HashSet<RID> path_exclude;
+			path_exclude = exclude;
+			Vector3 from = at;
+			float path_block = 0.0f;
+			for (int wall = 0; wall < 3 && path_block < 1.0f; wall++) {
+				PhysicsDirectSpaceState3D::RayParameters rq;
+				rq.from = from;
+				rq.to = to;
+				rq.exclude = path_exclude;
+				rq.collision_mask = collision_mask;
+				PhysicsDirectSpaceState3D::RayResult rr;
+				if (!space->intersect_ray(rq, rr)) {
+					break;
+				}
 				float b = 1.0f;
 				if (rr.collider && rr.collider->has_meta(SNAME("fellow_occlusion"))) {
 					b = CLAMP(float(rr.collider->get_meta(SNAME("fellow_occlusion"))), 0.0f, 1.0f);
 				}
-				blocked += b;
+				path_block += b;
+				path_exclude.insert(rr.rid);
+				from = rr.position;
+				if (b < 1.0f) {
+					last_rays++; // a ray more to look past it
+				}
 			}
+			blocked += MIN(path_block, 1.0f);
 		}
 		budget -= occlusion_rays;
 		last_rays += occlusion_rays;

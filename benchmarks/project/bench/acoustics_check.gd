@@ -133,6 +133,19 @@ func _build() -> void:
 	glass.rotation_degrees = Vector3(0, 45, 0)
 	glass.set_meta(&"fellow_occlusion", 0.3)
 	_source("glass", Vector3(8.49, 1.7, -8.49))
+	# Milestone 91 (decision 0199): south-west, 12 m away, behind two panes (at 8 and 10 m, 0.3 each); and 20 degrees
+	# west of south, behind a pane at 9 m and a wall at 10.5 m.
+	for d in [8.0, 10.0]:
+		var pane := _box(Vector3(-0.7071 * d, 2.0, 0.7071 * d), Vector3(3, 4, 0.3), null)
+		pane.rotation_degrees = Vector3(0, -45, 0)
+		pane.set_meta(&"fellow_occlusion", 0.3)
+	_source("glass2", Vector3(-8.49, 1.7, 8.49))
+	var dir20 := Vector3(-sin(deg_to_rad(20.0)), 0, cos(deg_to_rad(20.0)))
+	var pane9 := _box(dir20 * 9.0 + Vector3(0, 2, 0), Vector3(3, 4, 0.3), null)
+	pane9.rotation_degrees = Vector3(0, -20, 0)
+	pane9.set_meta(&"fellow_occlusion", 0.3)
+	_box(dir20 * 10.5 + Vector3(0, 2, 0), Vector3(3, 4, 0.3), null).rotation_degrees = Vector3(0, -20, 0)
+	_source("glass_wall", dir20 * 12.0 + Vector3(0, 1.7, 0))
 	# A source going round the listener at 7 m (0.5 rad/s), behind a wall 3 m long across its path at 4 m for part of
 	# the circle.
 	_box(Vector3(2.83, 2, 2.83), Vector3(0.3, 4, 3), null).rotation_degrees = Vector3(0, -45, 0)
@@ -262,7 +275,7 @@ func _on_frame() -> void:
 	# The listener: among the sources for the moving one's lap (13 s), then in the open, in the closed room and under
 	# the roof (3 s each).
 	if frame == 90:
-		for n in ["open", "wall", "edge", "car", "glass"]:
+		for n in ["open", "wall", "edge", "car", "glass", "glass2", "glass_wall"]:
 			var p: AudioStreamPlayer3D = sources[n]
 			_measure(n, "occlusion", snappedf(acoustics.get_occlusion(p), 0.001))
 			_measure(n, "gain_db", snappedf(acoustics.get_occlusion(p) * acoustics.occluded_volume_db, 0.01))
@@ -355,6 +368,8 @@ func _finish() -> void:
 		expect.call("edge", data.edge.occlusion > 0.1 and data.edge.occlusion < 0.9)
 		expect.call("car", data.car.occlusion < 0.01)
 		expect.call("glass", absf(data.glass.occlusion - 0.3) < 0.01)
+		expect.call("glass2", absf(data.glass2.occlusion - 0.6) < 0.01)
+		expect.call("glass_wall", data.glass_wall.occlusion > 0.99)
 		expect.call("moving", data.moving.max_occlusion > 0.9 and data.moving.max_step_db < 2.0)
 		var ro: Dictionary = data.room_open.room
 		var rc: Dictionary = data.room_closed.room

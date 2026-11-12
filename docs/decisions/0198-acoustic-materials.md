@@ -39,3 +39,7 @@ Keep: walls, glass and curtains muffle as much as they should, by a metadata on 
 * **Several walls on a path** (each one's share added): the first collider decides.
 * **Transmission by frequency** (glass passing lows, cutting highs more than a curtain): one share a material, the
   shelf following it.
+
+## Later
+
+Milestone 91 (decision 0199): up to three colliders on a path add up; this record's lanes are unchanged.

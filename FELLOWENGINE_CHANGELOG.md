@@ -9,6 +9,12 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 91 — occlusion through several things (2026-11-12)
+
+- `FellowAcoustics3D` (decision 0199): a path through glass goes on to what lies behind it — up to three colliders
+  add their `fellow_occlusion` (at most a full block); a plain wall ends the path at once as before. Two panes 0.6, a
+  pane and a wall 1.0, on both physics engines; the earlier lanes and the listened mix unchanged.
+
 ## Milestone 90 — occlusion by material (2026-11-12)
 
 - `FellowAcoustics3D` (decision 0198): a collider's metadata `fellow_occlusion` (0 to 1) is how much it blocks a path —
