@@ -39,9 +39,12 @@ skeleton in the physics frame, the cloth simulates in the frame's processing): 7
 with the same frame's pose, 0.02 mm. The other ten lanes as in decision 0181. The regression scene `cape` (the body
 walking an arc, its chest twisting, the cape on its chest): the same picture on every run.
 
-## Results on the laptop (job f395, release template)
+## Results on the laptop (job f395, release template at 251ebff)
 
-(to be filled)
+The eleven lanes with GodotPhysics3D and with Jolt, as on the cloud: the cape's pins 0.02 mm from their places in the
+chest's space, nothing into the capsules, the mean strain at the end 1.35 % (26 % at the twist's whip); the
+simulation a frame 0.25 ms (GodotPhysics3D) and 0.24 ms (Jolt) for its 221 particles, the flag's 400 0.31-0.34 ms.
+Filmed on the RTX: the cape following the chest as it twists, the flag, the tablecloth over its table.
 
 ## Decision
 

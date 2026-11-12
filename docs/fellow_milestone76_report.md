@@ -1,6 +1,6 @@
 # FellowEngine — milestone 76 report (cloth on bones)
 
-Status: **IN PROGRESS** (2026-11-12): the owner said "kontynuuj usprawnienia do poziomu AAA naszego silnika, pracuj
+Status: **FINAL** (2026-11-12): the owner said "kontynuuj usprawnienia do poziomu AAA naszego silnika, pracuj
 przynajmniej do 8 rano" (the GPU allowed). Branch `fellow/geometry`. Decision record:
 `docs/decisions/0184-cloth-on-bones.md`.
 
@@ -26,11 +26,14 @@ Also in this milestone (destruction, decision 0182): fractures are low-priority 
 
 * The cloth lanes on the editor build (cloud) with GodotPhysics3D and Jolt: all as expected (decision 0184).
 * Lavapipe: the lanes filmed; the regression scenes `cape` and `cloth` exact, the release template's the same.
-* The laptop (f395, release template): to be run.
+* The laptop (f395, release template): the cloth lanes with both engines as on the cloud (the pins 0.02 mm off their
+  bone), filmed on the RTX; the destruction's crates measured again with the low-priority fractures (decision 0182:
+  the frames while 256 crates break 8-15 ms, were 19-86 ms).
 
 ## 3. Measurements
 
-The cape (221 particles, 13 on the bone): 0.22 ms of a worker thread a frame on the cloud (editor build).
+The cape (221 particles, 13 on the bone): 0.22 ms of a worker thread a frame on the cloud (editor build); on the laptop
+0.25 ms with GodotPhysics3D, 0.24 ms with Jolt (release template).
 
 ## 4. Next
 

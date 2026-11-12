@@ -17,7 +17,7 @@ Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.m
   the cloth out of the body. Checked on a cape on a twisting chest of a circling body (the pins within 0.02 mm, nothing
   in the body), a regression scene (`cape`).
 - Destruction (decision 0182): fractures are low-priority tasks on the worker pool (high-priority ones delayed the
-  engine's own work: 19-86 ms frames while 64-256 crates broke on the laptop).
+  engine's own work: 19-86 ms frames while 64-256 crates broke on the laptop; 8-15 ms as low-priority ones, job f395).
 
 ## Milestone 75 — hanging and ladders (2026-11-12)
 

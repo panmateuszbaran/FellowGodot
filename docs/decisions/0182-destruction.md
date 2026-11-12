@@ -130,7 +130,9 @@ the frame it may spawn (the budget covers them too). Job f394 (8549eb5): 64 crat
 pool's 24 threads busy, the allocator shared), its build 0.12-0.67 ms and spawn 0.16-0.61 ms of the main thread. The
 frames while they broke reached 19-24 ms with Jolt and 25-86 ms with GodotPhysics3D — against 0.9-3.7 ms spawning the
 same pieces prefractured: the fractures were high-priority tasks, ahead of the engine's own work on the pool. They are
-low-priority tasks now (milestone 76); measured again in job f395.
+low-priority tasks now (milestone 76). Job f395 (251ebff), the same blows: 64 crates all broken 53-85 ms after the blow,
+256 in 208-310 ms; a crate's fracture 2.6-4.5 ms of a worker (was 9-13); the frames while they broke 8-14 ms with Jolt
+and 14-15 ms with GodotPhysics3D (were 19-24 and 25-86), 0.2-0.4 ms mean after with Jolt.
 
 ## Decision
 
