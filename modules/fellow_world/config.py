@@ -21,6 +21,9 @@ def get_doc_classes():
         "FellowVehicle3D",
         "FellowWheel3D",
         "FellowAcoustics3D",
+        "FellowAudioDirector",
+        "FellowMixSnapshot",
+        "FellowSoundEvent",
         "FellowVehicleEffects3D",
         "FellowWorldStreamer3D",
     ]

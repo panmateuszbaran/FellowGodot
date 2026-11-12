@@ -31,6 +31,7 @@
 #include "register_types.h"
 
 #include "fellow_acoustics_3d.h"
+#include "fellow_audio_director.h"
 #include "fellow_destructible_3d.h"
 #include "fellow_hlod_3d.h"
 #include "fellow_pipeline_warmer_3d.h"
@@ -104,6 +105,9 @@ void initialize_fellow_world_module(ModuleInitializationLevel p_level) {
 		GDREGISTER_CLASS(FellowWheel3D);
 		GDREGISTER_CLASS(FellowAcoustics3D); // milestone 78
 		GDREGISTER_CLASS(FellowVehicleEffects3D); // milestone 79
+		GDREGISTER_CLASS(FellowSoundEvent); // milestone 82
+		GDREGISTER_CLASS(FellowMixSnapshot);
+		GDREGISTER_CLASS(FellowAudioDirector);
 		FellowBakeShaders::register_provider(&FellowTerrain3D::fellow_bake_shader_codes); // milestone 61
 
 		Performance *performance = Performance::get_singleton();

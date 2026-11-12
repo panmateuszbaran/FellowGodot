@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="FellowMixSnapshot" inherits="Resource" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+	<brief_description>
+		FellowEngine: a state of the mix — the buses' levels it changes, how fast it comes in and goes out.
+	</brief_description>
+	<description>
+		Pushed and popped on a [FellowAudioDirector] ([method FellowAudioDirector.push_snapshot]), or in its [member FellowAudioDirector.snapshots] with a [member trigger_bus]: active while one of the director's voices plays on that bus (a duck: the music lowered while someone speaks). While active its weight rises to 1 over [member fade_in], afterwards falls to 0 over [member fade_out]; each bus in [member bus_volumes] is set to its level before the snapshots plus the active snapshots' changes times their weights, and given back its level when none changes it.
+	</description>
+	<tutorials>
+	</tutorials>
+	<members>
+		<member name="bus_volumes" type="Dictionary" setter="set_bus_volumes" getter="get_bus_volumes" default="{}">
+			The changes: a bus's name and the dB added to its level.
+		</member>
+		<member name="fade_in" type="float" setter="set_fade_in" getter="get_fade_in" default="0.3">
+			Seconds to come in fully (its weight 0 to 1, the change in dB following it).
+		</member>
+		<member name="fade_out" type="float" setter="set_fade_out" getter="get_fade_out" default="0.5">
+			Seconds to go out.
+		</member>
+		<member name="trigger_bus" type="StringName" setter="set_trigger_bus" getter="get_trigger_bus" default="&amp;&quot;&quot;">
+			When set (and the snapshot is in the director's [member FellowAudioDirector.snapshots]), the snapshot is active while a voice of the director plays on this bus.
+		</member>
+	</members>
+</class>

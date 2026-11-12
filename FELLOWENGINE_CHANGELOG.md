@@ -9,6 +9,16 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 82 — sound events, voices and mix snapshots (2026-11-12)
+
+- `FellowAudioDirector`, `FellowSoundEvent`, `FellowMixSnapshot` (decision 0190): sounds played as events — a
+  variation picked (at random without repeats, at random, in turn), the level and pitch varied, instance limits,
+  cooldowns, sounds beyond their distance not started — from a pool of players within a budget of voices, the least
+  important and quietest at the listener giving its voice to a more audible new one (faded out); voices that follow
+  nodes; mix snapshots fading buses' levels in and out, pushed by the game or while a voice plays on their trigger bus
+  (ducking). Eight lanes under Movie Maker (the duck measured on the master bus), the release template the same; 64
+  voices 12-16 µs a frame.
+
 ## Milestone 81 — round corners and across gaps (2026-11-12)
 
 - `FellowTraversal3D` (decision 0189): a hanging body goes round the corner where its ledge ends (`wrap_corners`, on)

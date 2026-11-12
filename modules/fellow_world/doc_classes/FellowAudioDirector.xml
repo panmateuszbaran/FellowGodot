@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="FellowAudioDirector" inherits="Node" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+	<brief_description>
+		FellowEngine: plays [FellowSoundEvent]s within a budget of voices — variations, instance limits, cooldowns, distance, priorities and audibility — and fades the mix between [FellowMixSnapshot]s.
+	</brief_description>
+	<description>
+		Add one to the scene and play sounds through it: [method play] at a place, [method play_on] following a node. It plays each in a player of a pool it keeps as its own children (reused, made as needed), with the event's variation, level and pitch; it does not play an event over its instance limit, within its cooldown or beyond its distance from the listener (the [AudioListener3D] or the camera, or [member listener_path]). [member max_voices] play at once: a new sound when they are all taken takes the voice of the least important, quietest one (its event's priority, then its level at the listener now), which fades out in [member steal_fade], when the new one is more important or louder; otherwise it is not played. Mix snapshots ([FellowMixSnapshot]) change the buses' levels: pushed and popped by the game, or active while a voice plays on their trigger bus. Its work is done in the process step; [method get_stats] counts it. See [code]docs/decisions/0190-audio-director.md[/code].
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="get_event_voice_count" qualifiers="const">
+			<return type="int" />
+			<param index="0" name="event" type="FellowSoundEvent" />
+			<description>
+				How many voices of [param event] play.
+			</description>
+		</method>
+		<method name="get_snapshot_weight" qualifiers="const">
+			<return type="float" />
+			<param index="0" name="snapshot" type="FellowMixSnapshot" />
+			<description>
+				How far [param snapshot] is in, 0 to 1.
+			</description>
+		</method>
+		<method name="get_stats" qualifiers="const">
+			<return type="Dictionary" />
+			<description>
+				Counts since the last [method reset_stats]: [code]voices[/code], [code]fading[/code], [code]peak[/code], [code]started[/code], [code]stolen[/code] (voices given up), [code]rejected_voices[/code], [code]rejected_instances[/code], [code]rejected_cooldown[/code], [code]culled[/code] (beyond their distance), [code]finished[/code], [code]players[/code] (in the pool), [code]frames[/code], [code]usec[/code] (its process steps), [code]play_usec[/code] (its plays).
+			</description>
+		</method>
+		<method name="get_voice_count" qualifiers="const">
+			<return type="int" />
+			<description>
+				How many voices play (those fading out not counted).
+			</description>
+		</method>
+		<method name="get_voice_player" qualifiers="const">
+			<return type="Node" />
+			<param index="0" name="voice" type="int" />
+			<description>
+				The player ([AudioStreamPlayer3D] or [AudioStreamPlayer]) of the voice [param voice], or [code]null[/code]. Owned by the director: read it, do not keep it.
+			</description>
+		</method>
+		<method name="get_voices" qualifiers="const">
+			<return type="Array" />
+			<description>
+				The voices, each a dictionary: [code]id[/code], [code]event[/code], [code]priority[/code], [code]audibility_db[/code] (its level at the listener), [code]volume_db[/code], [code]bus[/code], [code]position[/code], [code]fading[/code].
+			</description>
+		</method>
+		<method name="is_playing" qualifiers="const">
+			<return type="bool" />
+			<param index="0" name="voice" type="int" />
+			<description>
+				Whether the voice [param voice] plays (not ended, stopped or fading out).
+			</description>
+		</method>
+		<method name="play">
+			<return type="int" />
+			<param index="0" name="event" type="FellowSoundEvent" />
+			<param index="1" name="position" type="Vector3" default="Vector3(0, 0, 0)" />
+			<description>
+				Plays [param event] at [param position] (ignored for an event that is not spatial). Returns the voice's id, or 0 when it is not played (its instances, cooldown, distance, or no voice for it).
+			</description>
+		</method>
+		<method name="play_on">
+			<return type="int" />
+			<param index="0" name="event" type="FellowSoundEvent" />
+			<param index="1" name="node" type="Node3D" />
+			<description>
+				Plays [param event] following [param node] (its global position each frame; where it was when the node is freed). Returns the voice's id, or 0.
+			</description>
+		</method>
+		<method name="pop_snapshot">
+			<return type="void" />
+			<param index="0" name="snapshot" type="FellowMixSnapshot" />
+			<description>
+				Takes [param snapshot] out (over its [member FellowMixSnapshot.fade_out]).
+			</description>
+		</method>
+		<method name="push_snapshot">
+			<return type="void" />
+			<param index="0" name="snapshot" type="FellowMixSnapshot" />
+			<description>
+				Brings [param snapshot] in (over its [member FellowMixSnapshot.fade_in]) until it is popped.
+			</description>
+		</method>
+		<method name="reset_stats">
+			<return type="void" />
+			<description>
+				Sets the counts of [method get_stats] to zero.
+			</description>
+		</method>
+		<method name="stop">
+			<return type="void" />
+			<param index="0" name="voice" type="int" />
+			<param index="1" name="fade" type="float" default="0.0" />
+			<description>
+				Stops the voice [param voice], fading it out over [param fade] seconds (0: at once).
+			</description>
+		</method>
+		<method name="stop_all">
+			<return type="void" />
+			<param index="0" name="fade" type="float" default="0.0" />
+			<description>
+				Stops every voice, fading them out over [param fade] seconds.
+			</description>
+		</method>
+		<method name="stop_event">
+			<return type="void" />
+			<param index="0" name="event" type="FellowSoundEvent" />
+			<param index="1" name="fade" type="float" default="0.0" />
+			<description>
+				Stops every voice of [param event], fading them out over [param fade] seconds.
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="listener_path" type="NodePath" setter="set_listener_path" getter="get_listener_path" default="NodePath(&quot;&quot;)">
+			The node whose place is the listener's for the distances and levels; empty: the viewport's [AudioListener3D] or camera.
+		</member>
+		<member name="max_voices" type="int" setter="set_max_voices" getter="get_max_voices" default="32">
+			How many sounds play at once (voices fading out after giving theirs up not counted).
+		</member>
+		<member name="seed" type="int" setter="set_seed" getter="get_seed" default="0">
+			The seed of the variations' and levels' random numbers (the same seed, the same picks).
+		</member>
+		<member name="snapshots" type="FellowMixSnapshot[]" setter="set_snapshots" getter="get_snapshots" default="[]">
+			Snapshots known from the start: those with a [member FellowMixSnapshot.trigger_bus] come in while a voice plays on it; the others when pushed.
+		</member>
+		<member name="steal_fade" type="float" setter="set_steal_fade" getter="get_steal_fade" default="0.03">
+			How fast a voice given up fades out, in seconds (0: at once).
+		</member>
+		<member name="steal_voices" type="bool" setter="set_steal_voices" getter="is_steal_voices" default="true">
+			When the voices are all taken, a more important or louder sound takes the voice of the least important, quietest; off: the new one is not played.
+		</member>
+	</members>
+	<signals>
+		<signal name="voice_finished">
+			<param index="0" name="voice" type="int" />
+			<param index="1" name="stolen" type="bool" />
+			<description>
+				Emitted when the voice [param voice] has ended, been stopped or faded out; [param stolen]: it gave its voice to another sound.
+			</description>
+		</signal>
+	</signals>
+</class>

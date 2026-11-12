@@ -485,6 +485,22 @@ camera), `collision_mask` (1). Occlusion: `occlusion_rays` (5), `source_radius` 
 `AudioStreamPlayer3D::fellow_set_acoustics()` (C++). Bench `bench/acoustics_check.gd` (`--listen=1` under Movie Maker,
 `--many=N`).
 
+## Sound events, voices and mix snapshots (milestone 82)
+
+Module `fellow_world`; nothing changes without the node (decision 0190). `FellowSoundEvent` (a resource): `streams`,
+`selection` (`SELECTION_RANDOM_NO_REPEAT`, `SELECTION_RANDOM`, `SELECTION_SEQUENCE`), `volume_db` (0),
+`volume_random_db` (0: ± uniform), `pitch_scale` (1), `pitch_random_semitones` (0), `max_instances` (0: no limit),
+`cooldown` (0 s), `priority` (128, 0-255), `bus` ("Master"), `spatial` (on), `unit_size` (10), `max_distance` (0: no
+limit), `attenuation_model` (inverse distance); `get_audibility_db(distance)`. `FellowAudioDirector` (a `Node`):
+`max_voices` (32), `steal_voices` (on), `steal_fade` (0.03 s), `snapshots`, `seed` (0), `listener_path` (empty: the
+viewport's `AudioListener3D` or camera); `play(event, position)`, `play_on(event, node)` (a voice's id, 0 when not
+played), `stop(voice, fade)`, `stop_event()`, `stop_all()`, `is_playing()`, `get_voice_count()`,
+`get_event_voice_count()`, `get_voice_player()`, `get_voices()`, `push_snapshot()`, `pop_snapshot()`,
+`get_snapshot_weight()`, `get_stats()`/`reset_stats()`; signal `voice_finished(voice, stolen)`. `FellowMixSnapshot` (a
+resource): `bus_volumes` (bus → dB added), `fade_in` (0.3 s), `fade_out` (0.5 s), `trigger_bus` (empty: pushed and
+popped; set: active while a voice of the director plays on it). Bench `bench/audio_director_check.gd` (under Movie
+Maker; `--many=1`).
+
 ## Vehicles (milestone 77)
 
 Module `fellow_world`; nothing changes without the nodes (decision 0185). `FellowVehicle3D` (a `RigidBody3D`, 1 400 kg,
