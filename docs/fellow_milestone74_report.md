@@ -1,6 +1,6 @@
 # FellowEngine — milestone 74 report (destruction)
 
-Status: **IN PROGRESS** (2026-11-12): the owner said "kontynuuj usprawnienia do poziomu AAA naszego silnika, pracuj
+Status: **FINAL** (2026-11-12): the owner said "kontynuuj usprawnienia do poziomu AAA naszego silnika, pracuj
 przynajmniej do 8 rano" (the GPU allowed). Branch `fellow/geometry`. Decision record: `docs/decisions/0182-destruction.md`.
 
 ## 0. Result
@@ -33,7 +33,9 @@ przynajmniej do 8 rano" (the GPU allowed). Branch `fellow/geometry`. Decision re
 * Lavapipe: the lanes filmed; the regression scene `destruction` exact on a second run; the whole suite with the
   release template.
 * The editor check: the icon, "Add Destructible Crate" without a warning and undone, the monitor.
-* The laptop (f393, release template): to be run.
+* The laptop (f393, release template): the lanes with both engines as on the cloud; 64 and 256 crates broken at once
+  (prefractured), with both; the lanes filmed on the RTX (Jolt). The workers' run of the many crates ended before they
+  broke (headless frames are short): the bench now waits for them, measured again in job f394 (decision 0182).
 
 ## 3. Measurements (cloud, editor build)
 
@@ -46,6 +48,8 @@ przynajmniej do 8 rano" (the GPU allowed). Branch `fellow/geometry`. Decision re
 | a 4 000-triangle sphere, 32 pieces | 51 ms | 10 ms |
 
 64 crates at once: prefractured, 768 pieces spread over 7 frames by the budget; on the workers, 2.1 ms of fracture each.
+On the laptop (Jolt, prefractured): 64 crates in 7 frames of 0.9-3.7 ms, 256 in 26 frames of 2.1-3.9 ms; a crate's spawn
+0.11-0.22 ms; 256 pieces of debris then cost 0.34-0.63 ms a frame.
 
 ## 4. Next
 

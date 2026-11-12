@@ -1,12 +1,13 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <class name="FellowTraversal3D" inherits="Node3D" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
 	<brief_description>
-		FellowEngine: mantling and vaulting for a character's body — a ledge found with physics queries, the body moved onto it (or over a thin obstacle) along a path that keeps its capsule clear.
+		FellowEngine: mantling, vaulting, hanging from ledges and climbing ladders for a character's body — a ledge found with physics queries, the body moved onto it (or over a thin obstacle) along a path that keeps its capsule clear, or hung from it and moved along it.
 	</brief_description>
 	<description>
 		A child of a [CharacterBody3D] (or of any [CollisionObject3D], see [member body_path]). Every physics frame, while the body moves at [member auto_min_speed] or more (or the controller gives [method set_intent]), it looks for a ledge in the way: a wall within [member reach_distance] of the body's capsule (read from its first [CollisionShape3D]; a capsule, cylinder, box or sphere), facing the way the body goes within [member max_wall_angle]; a top no steeper than [member max_ledge_slope] between [member min_height] and [member max_height] over the body's feet; room for the capsule on the top, straight up in front of the wall and over the edge. A thin obstacle (its far side within [member vault_max_depth], a landing beyond it) is vaulted when there is no room on it, or when the body runs at [member vault_min_speed] or more. A ceiling over the body lowers the heights searched; a ledge the body could walk under (a beam over head height) is left to [method try_mantle].
 		The mantle moves the body itself, each physics frame, along a path from the ledge's geometry: up in front of the wall until the capsule is over the top, then onto it (a vault goes over and down beyond it), turned to face the wall when [member align_to_wall] is on; a [CharacterBody3D]'s velocity follows the motion, and is [member exit_speed] into the ledge at the end. A collider that moves (an [AnimatableBody3D] platform) carries the ledge with it. The body's own controller should not move it while [method is_active] is [code]true[/code] (the traversal sets the body's transform after the body's own physics processing, as its child).
 		The pose: a [FellowTraversalPose3D] on the character's [Skeleton3D] reaches the hands for the edge, puts the feet on the wall's face and onto the top and tips the torso towards the wall over whatever animation plays; or plays the clip set for the kind ([member low_clip], [member high_clip], [member vault_clip]) across the mantle, its root's motion ([member clip_root_bone]) warped onto the ledge as the body's path. The signals tell an [AnimationTree] when to switch. See [code]docs/decisions/0180-traversal-mantling.md[/code].
+		Hanging (milestone 75): in the air, a ledge the body cannot climb (no room on its top: a wall rising behind it, an overhang) whose edge is about [member hang_reach] over its feet is caught and hung from ([member hang]; with [member hang_first], every ledge it could climb too, or [method try_hang]): the body hangs below the edge facing the wall, moves along it as the intent goes left or right ([member shimmy_speed]), following it as it turns and steps and stopping where it ends, at a gap or at something in the way; it climbs when pushed at the wall again, up, or [method climb_up] (a mantle from the hang), and lets go when pulled away, down, or [method release]. Ladders: a [FellowLadder3D] the body goes towards ([member ladders]) is climbed at [member ladder_speed] (the intent up or towards it: up; [method set_climb_input]), stepped off at its foot, and at its top mantled off onto what is there. The pose puts the hands on the edge or the rungs and the feet on the wall or the rungs.
 		[codeblocks]
 		[gdscript]
 		# A controller: the input as the intent, nothing while the traversal moves the body.
@@ -45,6 +46,12 @@
 				Ends the mantle in progress where the body is (its velocity zero); [signal mantle_cancelled] is emitted.
 			</description>
 		</method>
+		<method name="climb_up">
+			<return type="void" />
+			<description>
+				Hanging: climbs onto the top now if there is room (the same as pushing at the wall).
+			</description>
+		</method>
 		<method name="find_ledge">
 			<return type="Dictionary" />
 			<param index="0" name="direction" type="Vector3" default="Vector3(0, 0, 0)" />
@@ -58,6 +65,12 @@
 				The mantle in progress ([constant KIND_LOW], [constant KIND_HIGH] or [constant KIND_VAULT]), or [constant KIND_NONE].
 			</description>
 		</method>
+		<method name="get_climb_input" qualifiers="const">
+			<return type="float" />
+			<description>
+				See [method set_climb_input].
+			</description>
+		</method>
 		<method name="get_global_stats" qualifiers="static">
 			<return type="Dictionary" />
 			<description>
@@ -68,6 +81,12 @@
 			<return type="Vector3" />
 			<description>
 				The direction set by [method set_intent].
+			</description>
+		</method>
+		<method name="get_ladder" qualifiers="const">
+			<return type="Node3D" />
+			<description>
+				The [FellowLadder3D] the body is on, or [code]null[/code].
 			</description>
 		</method>
 		<method name="get_last_check" qualifiers="const">
@@ -94,10 +113,35 @@
 				[code]true[/code] while a mantle moves the body.
 			</description>
 		</method>
+		<method name="is_hanging" qualifiers="const">
+			<return type="bool" />
+			<description>
+				Whether the body hangs from a ledge.
+			</description>
+		</method>
+		<method name="is_on_ladder" qualifiers="const">
+			<return type="bool" />
+			<description>
+				Whether the body is on a ladder.
+			</description>
+		</method>
+		<method name="release">
+			<return type="void" />
+			<description>
+				Hanging or on a ladder: lets go (the body falls, pushed a little away).
+			</description>
+		</method>
 		<method name="reset_global_stats" qualifiers="static">
 			<return type="void" />
 			<description>
 				Sets the counters of [method get_global_stats] to zero.
+			</description>
+		</method>
+		<method name="set_climb_input">
+			<return type="void" />
+			<param index="0" name="input" type="float" />
+			<description>
+				On a ladder: up (1) or down (-1), from the controller's own input; 0: from the intent ([method set_intent]: up, or towards the ladder, climbs).
 			</description>
 		</method>
 		<method name="set_intent">
@@ -105,6 +149,19 @@
 			<param index="0" name="direction" type="Vector3" />
 			<description>
 				The way the player wants to go (the input, in global space), set by the controller every physics frame: the automatic mantle checks that way, and a body pressed against a wall (its velocity into it lost to the slide) still mantles. A zero vector: the body's velocity is used.
+			</description>
+		</method>
+		<method name="try_hang">
+			<return type="bool" />
+			<param index="0" name="direction" type="Vector3" default="Vector3(0, 0, 0)" />
+			<description>
+				Hangs from the ledge in [param direction] (the intent's or the velocity's when zero) if one is in reach whose top it could climb or is blocked from climbing: a jump's grab done by the controller. Returns whether it hangs.
+			</description>
+		</method>
+		<method name="try_ladder">
+			<return type="bool" />
+			<description>
+				Takes a [FellowLadder3D] in reach (in front of it, the body going towards it; or at its top, going over it). Returns whether it did.
 			</description>
 		</method>
 		<method name="try_mantle">
@@ -149,11 +206,29 @@
 		<member name="grab_in_air" type="bool" setter="set_grab_in_air" getter="is_grab_in_air" default="true">
 			In the air (not on the floor, not rising faster than 1 m/s), ledges are grabbed up to 0.5 m higher than [member max_height] over the feet (hanging, the feet are lower). Vaults are not started in the air.
 		</member>
+		<member name="hang" type="bool" setter="set_hang" getter="is_hang" default="true">
+			In the air, hangs from a ledge it cannot climb (no room on its top: a ceiling, an overhang) when the edge is about [member hang_reach] over its feet; and with [member hang_first], from every ledge it could climb.
+		</member>
+		<member name="hang_first" type="bool" setter="set_hang_first" getter="is_hang_first" default="false">
+			In the air, hangs from ledges it could climb too, and climbs only when asked (pushing at the wall, up, or [method climb_up]).
+		</member>
+		<member name="hang_reach" type="float" setter="set_hang_reach" getter="get_hang_reach" default="2.05">
+			Hanging, the hands' height over the feet (the body hangs this far below the edge, its capsule [member reach_distance]-free of the top).
+		</member>
 		<member name="high_clip" type="Animation" setter="set_high_clip" getter="get_high_clip">
 			The clip played for a [constant KIND_HIGH] mantle (its length is the mantle's).
 		</member>
 		<member name="high_duration" type="float" setter="set_high_duration" getter="get_high_duration" default="1.1">
 			A procedural [constant KIND_HIGH] mantle's time for a 1.8 m ledge (scaled with the square root of the height, 0.85 to 1.15 times).
+		</member>
+		<member name="ladder_reach" type="float" setter="set_ladder_reach" getter="get_ladder_reach" default="0.6">
+			How far in front of a ladder (past the capsule's radius) the body takes it.
+		</member>
+		<member name="ladder_speed" type="float" setter="set_ladder_speed" getter="get_ladder_speed" default="1.2">
+			Climbing speed on ladders, in m/s, at full input.
+		</member>
+		<member name="ladders" type="bool" setter="set_ladders" getter="is_ladders" default="true">
+			Takes the [FellowLadder3D]s the body goes towards (see [FellowLadder3D]).
 		</member>
 		<member name="low_clip" type="Animation" setter="set_low_clip" getter="get_low_clip">
 			The clip played for a [constant KIND_LOW] mantle (its length is the mantle's).
@@ -179,6 +254,9 @@
 		<member name="reach_distance" type="float" setter="set_reach_distance" getter="get_reach_distance" default="0.6">
 			How far beyond the capsule a wall is looked for.
 		</member>
+		<member name="shimmy_speed" type="float" setter="set_shimmy_speed" getter="get_shimmy_speed" default="1.0">
+			Hanging, the speed along the ledge at full intent, in m/s: the body follows the edge as it turns (up to 50 degrees at a step) and steps (0.3 m), and stops where it ends, at a gap, or at something in the way.
+		</member>
 		<member name="vault" type="bool" setter="set_vault" getter="is_vault" default="true">
 			Vaults over thin obstacles.
 		</member>
@@ -199,6 +277,30 @@
 		</member>
 	</members>
 	<signals>
+		<signal name="hang_finished">
+			<param index="0" name="climbed" type="bool" />
+			<description>
+				Emitted when the body stops hanging: [param climbed] if it climbs onto the top (a mantle starts), else it let go.
+			</description>
+		</signal>
+		<signal name="hang_started">
+			<param index="0" name="ledge" type="Dictionary" />
+			<description>
+				Emitted when the body starts hanging from a ledge ([param ledge]: as [method find_ledge]'s).
+			</description>
+		</signal>
+		<signal name="ladder_finished">
+			<param index="0" name="at_top" type="bool" />
+			<description>
+				Emitted when the body leaves a ladder: [param at_top] if it climbs off at the top (a mantle starts), else at the foot or let go.
+			</description>
+		</signal>
+		<signal name="ladder_started">
+			<param index="0" name="ladder" type="FellowLadder3D" />
+			<description>
+				Emitted when the body takes a [param ladder].
+			</description>
+		</signal>
 		<signal name="mantle_cancelled">
 			<param index="0" name="kind" type="int" />
 			<description>
@@ -241,7 +343,13 @@
 		<constant name="KIND_BLOCKED" value="6" enum="Kind">
 			A top, but no room for the capsule on it, above the body or over the edge, or a top too steep (the reason says which).
 		</constant>
-		<constant name="KIND_MAX" value="7" enum="Kind">
+		<constant name="KIND_HANG" value="7" enum="Kind">
+			Hanging from a ledge (milestone 75).
+		</constant>
+		<constant name="KIND_LADDER" value="8" enum="Kind">
+			On a [FellowLadder3D] (milestone 75).
+		</constant>
+		<constant name="KIND_MAX" value="9" enum="Kind">
 			The number of kinds.
 		</constant>
 	</constants>

@@ -597,12 +597,15 @@ void FellowDestructible3D::_notification(int p_what) {
 				task = WorkerThreadPool::INVALID_TASK_ID;
 				global_stats.fractures.increment();
 				global_stats.fracture_usec.add(task_usec);
-				const uint64_t t0 = OS::get_singleton()->get_ticks_usec();
-				result->build();
-				global_stats.build_usec.add(OS::get_singleton()->get_ticks_usec() - t0);
 				spawn_result = result;
 			}
 			if (pending && spawn_result.is_valid() && _spawn_allowed(int(spawn_result->pieces.size()))) {
+				// Built when it may spawn: the meshes and shapes are the frame's budget's too.
+				if (!spawn_result->built) {
+					const uint64_t t0 = OS::get_singleton()->get_ticks_usec();
+					spawn_result->build();
+					global_stats.build_usec.add(OS::get_singleton()->get_ticks_usec() - t0);
+				}
 				_spawn(spawn_result, pending_position, pending_impulse);
 				spawn_result.unref();
 				set_process_internal(false);

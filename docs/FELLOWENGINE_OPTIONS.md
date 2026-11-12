@@ -520,6 +520,16 @@ names found: Godot's humanoid profile, Mixamo, Unreal's mannequin, Blender's); `
 `get_weight()`. The FellowEngine menu's "Add Mantling Character" (a body, its capsule, a traversal). Bench
 `bench/traversal_check.gd` (the course; `--crowd=N`); the regression scene `traversal`.
 
+Hanging and ladders (milestone 75, decision 0183), on `FellowTraversal3D`: `hang` (on: in the air, a ledge with no
+room on its top is hung from when its edge is within 0.8 m below to 0.4 m above `hang_reach` over the feet),
+`hang_first` (off: with it, ledges it could climb too), `hang_reach` (2.05 m), `shimmy_speed` (1 m/s); `ladders` (on),
+`ladder_speed` (1.2 m/s), `ladder_reach` (0.6 m past the capsule). `try_hang()`, `try_ladder()`, `climb_up()`,
+`release()`, `is_hanging()`, `is_on_ladder()`, `get_ladder()`, `set_climb_input()`; signals `hang_started`,
+`hang_finished`, `ladder_started`, `ladder_finished`; actions `KIND_HANG`, `KIND_LADDER`. `FellowLadder3D` (a marker:
+its foot at the node, climbed from +Z): `height` (3 m), `width` (0.5 m), `rung_spacing` (0.3 m), `rung_offset`
+(0.25 m), `exit_at_top` (on), `enabled`. The FellowEngine menu's "Add Ladder". Bench `bench/climb_check.gd`; the
+regression scene `climb`.
+
 ## Simulated GPUs (milestone 49)
 
 The environment's `FELLOW_VULKAN_PROFILE=<name>` (read once by the Vulkan driver; a diagnostic, nothing changes

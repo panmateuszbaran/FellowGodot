@@ -105,9 +105,27 @@ Lavapipe: the lanes filmed (the crate's corner, the pillar knocked apart by the 
 the pane's shards, the wall breaking round its window, the ring's pieces with their cut faces). The regression scene
 `destruction` (a crate, a pillar and a pane prefractured and broken as it starts): the same picture on every run.
 
-## Results on the laptop (job f393, release template)
+## Results on the laptop (job f393, release template at 0f02e28)
 
-(to be filled)
+The thirteen lanes with GodotPhysics3D and with Jolt: all as on the cloud (the same pieces, volumes exact, every piece
+closed; the deepest hull point 4.7 cm on GodotPhysics3D, a heavy shard of the sphere 7.1 cm on Jolt; the debris cut to
+40). The fractures on the 24 threads, five breaks in one frame (their times overlapping): the crate 3.0-3.1 ms, the pane
+8.0 ms, the wall 8-10 ms, the ring 51-74 ms, the sphere 55-71 ms; spawning a crate's 12 pieces 0.2-0.4 ms of the main
+thread, the sphere's 32 0.8 ms (GodotPhysics3D).
+
+Crates broken at once, prefractured (headless: the CPU's whole frame; Jolt twice):
+
+| | 64 crates (768 pieces) | 256 crates (3 072 pieces) |
+|---|---|---|
+| frames to break them all (128 pieces a frame) | 7 | 26 |
+| the frames meanwhile, Jolt | 0.9-3.7 ms | 2.1-3.9 ms |
+| the frames meanwhile, GodotPhysics3D | 2.6-7.3 ms | 3.3-7.6 ms |
+| a crate's spawn (main thread) | 0.11-0.22 ms | 0.11-0.17 ms |
+| the frames after, 256 pieces of debris (mean / largest), Jolt | 0.34 / 1.4-2.1 ms | 0.63 / 2.8-3.0 ms |
+
+Computed on the workers the headless frames were far shorter than the fractures, and the check ended (240 frames) before
+any crate had broken: the bench now waits until every crate has broken, and builds a piece's meshes and shapes only in
+the frame it may spawn (the budget covers them too); measured again in job f394.
 
 ## Decision
 

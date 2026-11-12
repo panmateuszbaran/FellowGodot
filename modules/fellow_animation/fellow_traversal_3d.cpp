@@ -30,6 +30,8 @@
 
 #include "fellow_traversal_3d.h"
 
+#include "fellow_ladder_3d.h"
+
 #include "core/config/engine.h"
 #include "core/object/class_db.h"
 #include "core/os/os.h"
@@ -95,11 +97,13 @@ Dictionary FellowTraversal3D::get_global_stats() {
 	d["vaults"] = int64_t(global_stats.mantles[2].get());
 	d["poses"] = int64_t(global_stats.poses.get());
 	d["pose_usec"] = int64_t(global_stats.pose_usec.get());
+	d["hangs"] = int64_t(global_stats.hangs.get());
+	d["ladders"] = int64_t(global_stats.ladders.get());
 	return d;
 }
 
 void FellowTraversal3D::reset_global_stats() {
-	for (SafeNumeric<uint64_t> *v : { &global_stats.checks, &global_stats.check_usec, &global_stats.steps, &global_stats.step_usec, &global_stats.mantles[0], &global_stats.mantles[1], &global_stats.mantles[2], &global_stats.poses, &global_stats.pose_usec }) {
+	for (SafeNumeric<uint64_t> *v : { &global_stats.checks, &global_stats.check_usec, &global_stats.steps, &global_stats.step_usec, &global_stats.mantles[0], &global_stats.mantles[1], &global_stats.mantles[2], &global_stats.poses, &global_stats.pose_usec, &global_stats.hangs, &global_stats.ladders }) {
 		v->set(0);
 	}
 }
@@ -669,6 +673,14 @@ void FellowTraversal3D::_step(double p_delta) {
 }
 
 void FellowTraversal3D::_step_body(double p_delta) {
+	if (action == KIND_HANG) {
+		_step_hang(p_delta);
+		return;
+	}
+	if (action == KIND_LADDER) {
+		_step_ladder(p_delta);
+		return;
+	}
 	CollisionObject3D *body = _get_body();
 	if (!body) {
 		_finish(true);
@@ -727,9 +739,426 @@ void FellowTraversal3D::_finish(bool p_cancelled) {
 }
 
 void FellowTraversal3D::cancel() {
-	if (active) {
+	if (!active) {
+		return;
+	}
+	if (action == KIND_HANG) {
+		_end_hang(false);
+	} else if (action == KIND_LADDER) {
+		_end_ladder(false, Vector3());
+	} else {
 		_finish(true);
 	}
+}
+
+// Milestone 75: the body placed (its feet, facing p_facing: horizontal), its velocity the move's.
+void FellowTraversal3D::_place(CollisionObject3D *p_body, const Vector3 &p_feet, const Vector3 &p_facing, double p_delta) {
+	const Transform3D current = p_body->get_global_transform();
+	const Vector3 scale = current.basis.get_scale();
+	Basis basis = current.basis;
+	const Vector3 f = flat(p_facing);
+	if (align_to_wall && f.length() > 1e-3f) {
+		const float w = smooth(float(hold_time / 0.25));
+		const Quaternion q = start_xf.basis.get_rotation_quaternion().slerp(Basis::looking_at(f.normalized(), UP).get_rotation_quaternion(), w);
+		basis = Basis(q).scaled_local(scale);
+	}
+	const Transform3D xf = _body_at(p_feet, basis);
+	const Vector3 previous = current.origin;
+	p_body->set_global_transform(xf);
+	if (CharacterBody3D *cb = Object::cast_to<CharacterBody3D>(p_body)) {
+		cb->set_velocity(p_delta > 0.0 ? (xf.origin - previous) / p_delta : Vector3());
+	}
+}
+
+// Hanging: the hands hang_reach over the feet at the edge, the capsule radius + 0.08 m off the wall's face.
+Vector3 FellowTraversal3D::_hang_feet_at(const Vector3 &p_edge, const Vector3 &p_inward) const {
+	return p_edge - p_inward * (radius + 0.08f) - UP * hang_reach;
+}
+
+// The ledge p_along metres along the edge (positive: the body's left, facing the wall): the wall's face just under the
+// top found there, the top over it. False where the ledge ends: a corner, a gap, a step of more than 0.3 m, a face
+// turned more than 50 degrees, a slope.
+bool FellowTraversal3D::_probe_edge(const Vector3 &p_edge, const Vector3 &p_inward, float p_along, Ledge &r_ledge) const {
+	CollisionObject3D *body = _get_body();
+	if (!body || body->get_world_3d().is_null()) {
+		return false;
+	}
+	PhysicsDirectSpaceState3D *space = body->get_world_3d()->get_direct_space_state();
+	HashSet<RID> exclude;
+	exclude.insert(body->get_rid());
+	const Vector3 left = UP.cross(p_inward).normalized();
+	const Vector3 p = p_edge + left * p_along;
+	PhysicsDirectSpaceState3D::RayParameters fq;
+	fq.from = p - p_inward * (radius + 0.3f) - UP * 0.08f;
+	fq.to = p + p_inward * 0.3f - UP * 0.08f;
+	fq.exclude = exclude;
+	fq.collision_mask = collision_mask;
+	PhysicsDirectSpaceState3D::RayResult fr;
+	if (!space->intersect_ray(fq, fr)) {
+		return false;
+	}
+	const Vector3 wn = flat(fr.normal);
+	if (wn.length() < 0.6f) {
+		return false;
+	}
+	const Vector3 inward = -wn.normalized();
+	if (inward.dot(p_inward) < Math::cos(Math::deg_to_rad(50.0f))) {
+		return false;
+	}
+	const Vector3 column = fr.position + inward * MAX(0.1f, radius * 0.3f);
+	PhysicsDirectSpaceState3D::RayParameters tq;
+	tq.from = Vector3(column.x, p_edge.y + 0.3f, column.z);
+	tq.to = Vector3(column.x, p_edge.y - 0.3f, column.z);
+	tq.exclude = exclude;
+	tq.collision_mask = collision_mask;
+	tq.hit_from_inside = true;
+	PhysicsDirectSpaceState3D::RayResult tr;
+	if (!space->intersect_ray(tq, tr) || tr.normal == Vector3() || tr.normal.y < Math::cos(Math::deg_to_rad(max_ledge_slope))) {
+		return false;
+	}
+	r_ledge = ledge;
+	r_ledge.kind = KIND_HANG;
+	r_ledge.edge = Vector3(fr.position.x, tr.position.y, fr.position.z);
+	r_ledge.inward = inward;
+	r_ledge.top_normal = tr.normal;
+	r_ledge.collider = tr.collider_id;
+	return true;
+}
+
+bool FellowTraversal3D::_start_hang(const Ledge &p_ledge) {
+	CollisionObject3D *body = _get_body();
+	if (!body || !hang || p_ledge.inward == Vector3()) {
+		return false;
+	}
+	const Vector3 feet = _hang_feet_at(p_ledge.edge, p_ledge.inward);
+	HashSet<RID> exclude;
+	exclude.insert(body->get_rid());
+	if (!_capsule_free(feet + UP * 0.02f, radius * 0.95f, height - 0.04f, exclude)) {
+		return false;
+	}
+	ledge = p_ledge;
+	ledge.kind = KIND_HANG;
+	action = KIND_HANG;
+	start_xf = body->get_global_transform();
+	start_feet = _feet_of(start_xf);
+	hang_feet = feet;
+	time = 0.0;
+	duration = 1.0;
+	hold_time = 0.0;
+	shimmy_phase = 0.0f;
+	shimmy_velocity = 0.0f;
+	climb_requested = false;
+	release_requested = false;
+	push_armed = false;
+	const Node3D *collider = ObjectDB::get_instance<Node3D>(ledge.collider);
+	collider_start = collider ? collider->get_global_transform() : Transform3D();
+	active = true;
+	global_stats.hangs.increment();
+	emit_signal(SNAME("hang_started"), _ledge_dict(ledge));
+	_step_hang(0.0); // the pose's targets from this frame
+	return true;
+}
+
+void FellowTraversal3D::_step_hang(double p_delta) {
+	CollisionObject3D *body = _get_body();
+	if (!body) {
+		_end_hang(false);
+		return;
+	}
+	hold_time += p_delta;
+	// A moving collider carries the ledge.
+	if (const Node3D *collider = ObjectDB::get_instance<Node3D>(ledge.collider)) {
+		const Transform3D now = collider->get_global_transform();
+		const Transform3D delta = now * collider_start.affine_inverse();
+		if (!delta.is_equal_approx(Transform3D())) {
+			ledge.edge = delta.xform(ledge.edge);
+			const Vector3 i = flat(delta.basis.xform(ledge.inward));
+			ledge.inward = i.length() > 1e-4f ? i.normalized() : ledge.inward;
+		}
+		collider_start = now;
+	}
+	const Vector3 left = UP.cross(ledge.inward).normalized();
+	// The controller's wish: along the edge (shimmy), into the wall or up (climb), away or down (let go).
+	const float along = intent.dot(left);
+	const float in = flat(intent).dot(ledge.inward);
+	if (release_requested || intent.y < -0.5f || in < -0.6f) {
+		_end_hang(false);
+		return;
+	}
+	if (in < 0.3f) {
+		push_armed = true; // the push that jumped at the wall let go of: the next one climbs
+	}
+	if (hold_time > 0.25 && (climb_requested || intent.y > 0.5f || (in > 0.6f && push_armed))) {
+		climb_requested = false;
+		// A mantle from here, if there is room on the top.
+		const Ledge l = _check(ledge.inward, true, 0.0f);
+		last_check = l;
+		if (l.kind == KIND_LOW || l.kind == KIND_HIGH) {
+			_end_hang(true);
+			_start(l, 0.0f);
+			return;
+		}
+	}
+	// Along the edge, following it as it turns and steps; stopping where it ends (looked for half the body's width
+	// ahead) or something is in the way.
+	const float wanted = CLAMP(along, -1.0f, 1.0f) * shimmy_speed;
+	shimmy_velocity = Math::move_toward(shimmy_velocity, wanted, float(p_delta) * 5.0f * MAX(shimmy_speed, 0.2f));
+	if (Math::abs(shimmy_velocity) > 1e-3f && hold_time > 0.2) {
+		const float step = shimmy_velocity * float(p_delta);
+		Ledge ahead;
+		Ledge next;
+		HashSet<RID> exclude;
+		exclude.insert(body->get_rid());
+		if (_probe_edge(ledge.edge, ledge.inward, step + SIGN(step) * radius * 0.6f, ahead) && _probe_edge(ledge.edge, ledge.inward, step, next) && _capsule_free(_hang_feet_at(next.edge, next.inward) + UP * 0.02f, radius * 0.95f, height - 0.04f, exclude)) {
+			shimmy_phase += Math::abs(step);
+			if (next.collider != ledge.collider) {
+				const Node3D *collider = ObjectDB::get_instance<Node3D>(next.collider);
+				collider_start = collider ? collider->get_global_transform() : Transform3D();
+			}
+			ledge = next;
+		} else {
+			shimmy_velocity = 0.0f;
+		}
+	}
+	hang_feet = _hang_feet_at(ledge.edge, ledge.inward);
+	const float w = smooth(float(hold_time / 0.2));
+	_place(body, start_feet.lerp(hang_feet, w), ledge.inward, p_delta);
+	// The pose: both hands on the edge, stepping along it as the body moves; the feet against the wall.
+	hints.active = true;
+	hints.kind = KIND_HANG;
+	hints.progress = 0.0f;
+	hints.inward = ledge.inward;
+	hints.left = left;
+	const float stride = 0.3f;
+	const float swing = Math::sin(shimmy_phase / stride * Math::PI);
+	const float sgn = shimmy_velocity >= 0.0f ? 1.0f : -1.0f;
+	hints.hand[0] = ledge.edge + left * (0.24f + 0.08f * swing * sgn) + ledge.inward * 0.06f + UP * 0.02f;
+	hints.hand[1] = ledge.edge - left * (0.24f - 0.08f * swing * sgn) + ledge.inward * 0.06f + UP * 0.02f;
+	hints.hand_weight[0] = hints.hand_weight[1] = w;
+	const Vector3 face = ledge.edge - ledge.inward * 0.06f;
+	for (int s = 0; s < 2; s++) {
+		hints.foot[s] = Vector3(face.x, hang_feet.y + 0.35f, face.z) + left * (s == 0 ? 0.14f : -0.14f);
+		hints.foot_weight[s] = 0.8f * w;
+		hints.foot_follow[s] = 1.0f;
+	}
+	hints.lean = 0.0f;
+	hints.hips_drop = 0.0f;
+	hints.clip.unref();
+}
+
+void FellowTraversal3D::_end_hang(bool p_climbed) {
+	active = false;
+	hints.active = false;
+	hints.hand_weight[0] = hints.hand_weight[1] = 0.0f;
+	hints.foot_weight[0] = hints.foot_weight[1] = 0.0f;
+	climb_requested = false;
+	release_requested = false;
+	cooldown = p_climbed ? 0.0 : 0.6; // let go: not caught by the same ledge at once
+	if (!p_climbed) {
+		if (CharacterBody3D *cb = Object::cast_to<CharacterBody3D>(_get_body())) {
+			cb->set_velocity(-ledge.inward * 0.6f);
+		}
+	}
+	emit_signal(SNAME("hang_finished"), p_climbed);
+}
+
+bool FellowTraversal3D::try_hang(const Vector3 &p_direction) {
+	if (active || !enabled || !hang) {
+		return false;
+	}
+	CollisionObject3D *body = _get_body();
+	Vector3 d = p_direction;
+	if (const CharacterBody3D *cb = Object::cast_to<CharacterBody3D>(body)) {
+		if (d == Vector3()) {
+			d = flat(intent).length() > 0.1f ? intent : cb->get_velocity();
+		}
+	}
+	last_check = _check(d, true, 0.0f);
+	if (last_check.inward == Vector3() || (last_check.kind != KIND_LOW && last_check.kind != KIND_HIGH && last_check.kind != KIND_BLOCKED)) {
+		return false;
+	}
+	return _start_hang(last_check);
+}
+
+// Milestone 75: ladders. One in reach: in front of it and going towards it (the feet along it), or on its top going
+// over it (onto it from the floor it leads to).
+FellowLadder3D *FellowTraversal3D::_find_ladder(const Vector3 &p_feet, const Vector3 &p_direction, bool p_in_air, float &r_h, bool &r_from_top) const {
+	const Vector3 d = flat(p_direction);
+	if (d.length() < 1e-3f) {
+		return nullptr;
+	}
+	const Vector3 dn = d.normalized();
+	for (FellowLadder3D *l : FellowLadder3D::get_all()) {
+		if (!l->is_enabled() || !l->is_inside_tree()) {
+			continue;
+		}
+		const Vector3 foot = l->get_foot();
+		const Vector3 out = flat(l->get_outward());
+		if (out.length() < 1e-3f) {
+			continue;
+		}
+		const Vector3 outn = out.normalized();
+		const float top = l->get_global_height();
+		const Vector3 rel = p_feet - foot;
+		const float h = rel.dot(l->get_up());
+		const float a = rel.dot(l->get_across());
+		const float o = rel.dot(outn);
+		if (Math::abs(a) > l->get_width() * 0.5f + 0.25f) {
+			continue;
+		}
+		if (o > 0.0f && o < radius + ladder_reach && h > -0.6f && h < top - 0.6f && dn.dot(-outn) > 0.7f) {
+			r_h = MAX(h, 0.0f);
+			r_from_top = false;
+			return l;
+		}
+		if (!p_in_air && o < 0.1f && o > -(radius + ladder_reach + 0.3f) && Math::abs(h - top) < 0.35f && dn.dot(outn) > 0.7f) {
+			r_h = MAX(0.0f, top - 1.2f);
+			r_from_top = true;
+			return l;
+		}
+	}
+	return nullptr;
+}
+
+bool FellowTraversal3D::_start_ladder(FellowLadder3D *p_ladder, float p_h, bool p_from_top) {
+	CollisionObject3D *body = _get_body();
+	if (!body || !p_ladder) {
+		return false;
+	}
+	_read_body_shape(body);
+	action = KIND_LADDER;
+	ladder_id = p_ladder->get_instance_id();
+	ladder_h = p_h;
+	ladder_from_top = p_from_top;
+	start_xf = body->get_global_transform();
+	start_feet = _feet_of(start_xf);
+	time = 0.0;
+	duration = 1.0;
+	hold_time = 0.0;
+	climb_requested = false;
+	release_requested = false;
+	active = true;
+	global_stats.ladders.increment();
+	emit_signal(SNAME("ladder_started"), p_ladder);
+	_step_ladder(0.0); // the pose's targets from this frame
+	return true;
+}
+
+void FellowTraversal3D::_step_ladder(double p_delta) {
+	CollisionObject3D *body = _get_body();
+	FellowLadder3D *l = ObjectDB::get_instance<FellowLadder3D>(ladder_id);
+	if (!body || !l || !l->is_inside_tree() || !l->is_enabled()) {
+		_end_ladder(false, Vector3());
+		return;
+	}
+	hold_time += p_delta;
+	const Vector3 foot = l->get_foot();
+	const Vector3 up = l->get_up();
+	const Vector3 out = flat(l->get_outward()).normalized();
+	const float top = l->get_global_height();
+	if (release_requested) {
+		_end_ladder(false, out * 1.5f);
+		return;
+	}
+	// Up or down: the controller's climb input, else its intent (up or towards the ladder: up).
+	float input = climb_input;
+	if (Math::abs(input) < 0.05f) {
+		input = Math::abs(intent.y) > 0.05f ? intent.y : flat(intent).dot(-out);
+	}
+	input = CLAMP(input, -1.0f, 1.0f);
+	if (hold_time > (ladder_from_top ? 0.6 : 0.25)) {
+		ladder_h += input * ladder_speed * float(p_delta);
+	}
+	const float highest = MAX(0.0f, top - 1.0f); // the hands at the top
+	if (ladder_h >= highest) {
+		ladder_h = highest;
+		// Going up at the top: off onto what is there (a mantle from the ladder).
+		if (input > 0.1f && l->is_exit_at_top() && hold_time > 0.25) {
+			const Ledge le = _check(-out, true, 0.0f);
+			last_check = le;
+			if (le.kind == KIND_LOW || le.kind == KIND_HIGH) {
+				_end_ladder(true, Vector3());
+				_start(le, 0.0f);
+				return;
+			}
+		}
+	}
+	if (ladder_h <= 0.0f && input < -0.1f && hold_time > 0.25) {
+		ladder_h = 0.0f;
+		_place(body, foot + out * (radius + 0.12f), -out, p_delta);
+		_end_ladder(false, Vector3());
+		return;
+	}
+	ladder_h = MAX(ladder_h, 0.0f);
+	const Vector3 target = foot + up * ladder_h + out * (radius + 0.12f);
+	float w = smooth(float(hold_time / 0.3));
+	Vector3 feet = start_feet.lerp(target, w);
+	if (ladder_from_top) {
+		// From the floor at its top: out over the edge first, at the floor's height, then down onto the ladder (the
+		// capsule clear of the edge).
+		const float u = float(CLAMP(hold_time / 0.6, 0.0, 1.0));
+		const Vector3 over = Vector3(target.x, start_feet.y + 0.02f, target.z);
+		feet = u < 0.5f ? start_feet.lerp(over, smooth(u / 0.5f)) : over.lerp(target, smooth((u - 0.5f) / 0.5f));
+		w = smooth(u / 0.5f);
+	}
+	_place(body, feet, -out, p_delta);
+	// The pose: the hands and feet on the rungs, a rung apart, changing over as it climbs.
+	const Vector3 left = UP.cross(-out).normalized();
+	const float spacing = MAX(l->get_rung_spacing() * l->get_global_transform().basis.get_column(1).length(), 0.05f);
+	const int phase = int(Math::floor(ladder_h / spacing));
+	hints.active = true;
+	hints.kind = KIND_LADDER;
+	hints.progress = top > 0.0f ? ladder_h / top : 0.0f;
+	hints.inward = -out;
+	hints.left = left;
+	for (int s = 0; s < 2; s++) {
+		const float lead = ((phase + s) % 2 == 0) ? spacing : 0.0f;
+		const float side = s == 0 ? 1.0f : -1.0f;
+		hints.hand[s] = foot + up * l->rung_near(ladder_h + 1.55f + lead) + left * (0.17f * side) + out * 0.04f;
+		hints.hand_weight[s] = w;
+		hints.foot[s] = foot + up * l->rung_near(ladder_h + 0.05f + lead) + left * (0.12f * side) + out * 0.1f;
+		hints.foot_weight[s] = w;
+		hints.foot_follow[s] = 0.0f;
+	}
+	hints.lean = 0.0f;
+	hints.hips_drop = 0.0f;
+	hints.clip.unref();
+}
+
+void FellowTraversal3D::_end_ladder(bool p_at_top, const Vector3 &p_velocity) {
+	active = false;
+	hints.active = false;
+	hints.hand_weight[0] = hints.hand_weight[1] = 0.0f;
+	hints.foot_weight[0] = hints.foot_weight[1] = 0.0f;
+	release_requested = false;
+	cooldown = p_at_top ? 0.0 : 0.5;
+	if (CharacterBody3D *cb = Object::cast_to<CharacterBody3D>(_get_body())) {
+		cb->set_velocity(p_velocity);
+	}
+	ladder_id = ObjectID();
+	emit_signal(SNAME("ladder_finished"), p_at_top);
+}
+
+bool FellowTraversal3D::try_ladder() {
+	if (active || !enabled) {
+		return false;
+	}
+	CollisionObject3D *body = _get_body();
+	if (!body) {
+		return false;
+	}
+	_read_body_shape(body);
+	const Transform3D bx = body->get_global_transform();
+	Vector3 d = flat(intent).length() > 0.1f ? intent : -bx.basis.get_column(2);
+	const CharacterBody3D *cb = Object::cast_to<CharacterBody3D>(body);
+	float h = 0.0f;
+	bool from_top = false;
+	FellowLadder3D *l = _find_ladder(_feet_of(bx), d, cb && !cb->is_on_floor(), h, from_top);
+	return l && _start_ladder(l, h, from_top);
+}
+
+Node3D *FellowTraversal3D::get_ladder() const {
+	return active && action == KIND_LADDER ? ObjectDB::get_instance<FellowLadder3D>(ladder_id) : nullptr;
 }
 
 Dictionary FellowTraversal3D::find_ledge(const Vector3 &p_direction) {
@@ -866,7 +1295,7 @@ void FellowTraversal3D::_notification(int p_what) {
 		} break;
 		case NOTIFICATION_EXIT_TREE: {
 			if (active) {
-				_finish(true);
+				cancel();
 			}
 			has_last_origin = false;
 		} break;
@@ -882,7 +1311,20 @@ void FellowTraversal3D::_notification(int p_what) {
 			} else {
 				cooldown -= dt;
 				const Vector3 v = _body_velocity(body, dt);
-				if (enabled && auto_mantle && cooldown <= 0.0) {
+				if (enabled && ladders && cooldown <= 0.0 && !FellowLadder3D::get_all().is_empty()) {
+					// Milestone 75: a ladder in reach, going towards it.
+					const CharacterBody3D *cb = Object::cast_to<CharacterBody3D>(body);
+					const Vector3 d = flat(intent).length() > 0.1f ? intent : v;
+					if (flat(d).length() > 0.1f) {
+						_read_body_shape(body);
+						float h = 0.0f;
+						bool from_top = false;
+						if (FellowLadder3D *l = _find_ladder(_feet_of(body->get_global_transform()), d, cb && !cb->is_on_floor(), h, from_top)) {
+							_start_ladder(l, h, from_top);
+						}
+					}
+				}
+				if (!active && enabled && auto_mantle && cooldown <= 0.0) {
 					const CharacterBody3D *cb = Object::cast_to<CharacterBody3D>(body);
 					const bool air = cb && !cb->is_on_floor();
 					const float speed = flat(v).length();
@@ -899,7 +1341,14 @@ void FellowTraversal3D::_notification(int p_what) {
 							if (last_check.kind == KIND_NONE) {
 								skip_checks = check_interval - 1;
 							}
-							if (!(air && last_check.kind == KIND_VAULT) && !(last_check.open_below && !air)) {
+							// Milestone 75: in the air, a ledge it cannot climb (no room on its top), or any with
+							// hang_first, is hung from when its edge is about the hands' reach above the feet.
+							const float over = last_check.edge.y - _feet_of(body->get_global_transform()).y;
+							const bool climbable = last_check.kind == KIND_LOW || last_check.kind == KIND_HIGH;
+							const bool hangable = air && hang && last_check.inward != Vector3() && over > hang_reach - 0.8f && over < hang_reach + 0.4f && ((last_check.kind == KIND_BLOCKED && last_check.reason != "no room above") || (hang_first && climbable));
+							if (hangable && _start_hang(last_check)) {
+								// hanging
+							} else if (!(air && last_check.kind == KIND_VAULT) && !(last_check.open_below && !air)) {
 								_start(last_check, speed);
 							}
 						}
@@ -1052,6 +1501,29 @@ void FellowTraversal3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_clip_root_bone"), &FellowTraversal3D::get_clip_root_bone);
 	ClassDB::bind_method(D_METHOD("set_debug_draw", "enabled"), &FellowTraversal3D::set_debug_draw);
 	ClassDB::bind_method(D_METHOD("is_debug_draw"), &FellowTraversal3D::is_debug_draw);
+	ClassDB::bind_method(D_METHOD("try_hang", "direction"), &FellowTraversal3D::try_hang, DEFVAL(Vector3()));
+	ClassDB::bind_method(D_METHOD("try_ladder"), &FellowTraversal3D::try_ladder);
+	ClassDB::bind_method(D_METHOD("climb_up"), &FellowTraversal3D::climb_up);
+	ClassDB::bind_method(D_METHOD("release"), &FellowTraversal3D::release);
+	ClassDB::bind_method(D_METHOD("is_hanging"), &FellowTraversal3D::is_hanging);
+	ClassDB::bind_method(D_METHOD("is_on_ladder"), &FellowTraversal3D::is_on_ladder);
+	ClassDB::bind_method(D_METHOD("get_ladder"), &FellowTraversal3D::get_ladder);
+	ClassDB::bind_method(D_METHOD("set_climb_input", "input"), &FellowTraversal3D::set_climb_input);
+	ClassDB::bind_method(D_METHOD("get_climb_input"), &FellowTraversal3D::get_climb_input);
+	ClassDB::bind_method(D_METHOD("set_hang", "enabled"), &FellowTraversal3D::set_hang);
+	ClassDB::bind_method(D_METHOD("is_hang"), &FellowTraversal3D::is_hang);
+	ClassDB::bind_method(D_METHOD("set_hang_first", "enabled"), &FellowTraversal3D::set_hang_first);
+	ClassDB::bind_method(D_METHOD("is_hang_first"), &FellowTraversal3D::is_hang_first);
+	ClassDB::bind_method(D_METHOD("set_hang_reach", "reach"), &FellowTraversal3D::set_hang_reach);
+	ClassDB::bind_method(D_METHOD("get_hang_reach"), &FellowTraversal3D::get_hang_reach);
+	ClassDB::bind_method(D_METHOD("set_shimmy_speed", "speed"), &FellowTraversal3D::set_shimmy_speed);
+	ClassDB::bind_method(D_METHOD("get_shimmy_speed"), &FellowTraversal3D::get_shimmy_speed);
+	ClassDB::bind_method(D_METHOD("set_ladders", "enabled"), &FellowTraversal3D::set_ladders);
+	ClassDB::bind_method(D_METHOD("is_ladders"), &FellowTraversal3D::is_ladders);
+	ClassDB::bind_method(D_METHOD("set_ladder_speed", "speed"), &FellowTraversal3D::set_ladder_speed);
+	ClassDB::bind_method(D_METHOD("get_ladder_speed"), &FellowTraversal3D::get_ladder_speed);
+	ClassDB::bind_method(D_METHOD("set_ladder_reach", "reach"), &FellowTraversal3D::set_ladder_reach);
+	ClassDB::bind_method(D_METHOD("get_ladder_reach"), &FellowTraversal3D::get_ladder_reach);
 
 	ADD_PROPERTY(PropertyInfo(Variant::NODE_PATH, "body_path", PROPERTY_HINT_NODE_PATH_VALID_TYPES, "CollisionObject3D"), "set_body_path", "get_body_path");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "enabled"), "set_enabled", "is_enabled");
@@ -1084,12 +1556,25 @@ void FellowTraversal3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "high_clip", PROPERTY_HINT_RESOURCE_TYPE, "Animation"), "set_high_clip", "get_high_clip");
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "vault_clip", PROPERTY_HINT_RESOURCE_TYPE, "Animation"), "set_vault_clip", "get_vault_clip");
 	ADD_PROPERTY(PropertyInfo(Variant::STRING_NAME, "clip_root_bone"), "set_clip_root_bone", "get_clip_root_bone");
+	ADD_GROUP("Hanging", "");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "hang"), "set_hang", "is_hang");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "hang_first"), "set_hang_first", "is_hang_first");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "hang_reach", PROPERTY_HINT_RANGE, "0.5,4,0.01,suffix:m"), "set_hang_reach", "get_hang_reach");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "shimmy_speed", PROPERTY_HINT_RANGE, "0,5,0.01,suffix:m/s"), "set_shimmy_speed", "get_shimmy_speed");
+	ADD_GROUP("Ladders", "");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "ladders"), "set_ladders", "is_ladders");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "ladder_speed", PROPERTY_HINT_RANGE, "0,5,0.01,suffix:m/s"), "set_ladder_speed", "get_ladder_speed");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "ladder_reach", PROPERTY_HINT_RANGE, "0.05,2,0.01,suffix:m"), "set_ladder_reach", "get_ladder_reach");
 	ADD_GROUP("", "");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "debug_draw"), "set_debug_draw", "is_debug_draw");
 
 	ADD_SIGNAL(MethodInfo("mantle_started", PropertyInfo(Variant::INT, "kind"), PropertyInfo(Variant::DICTIONARY, "ledge")));
 	ADD_SIGNAL(MethodInfo("mantle_finished", PropertyInfo(Variant::INT, "kind")));
 	ADD_SIGNAL(MethodInfo("mantle_cancelled", PropertyInfo(Variant::INT, "kind")));
+	ADD_SIGNAL(MethodInfo("hang_started", PropertyInfo(Variant::DICTIONARY, "ledge")));
+	ADD_SIGNAL(MethodInfo("hang_finished", PropertyInfo(Variant::BOOL, "climbed")));
+	ADD_SIGNAL(MethodInfo("ladder_started", PropertyInfo(Variant::OBJECT, "ladder", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_DEFAULT, "FellowLadder3D")));
+	ADD_SIGNAL(MethodInfo("ladder_finished", PropertyInfo(Variant::BOOL, "at_top")));
 
 	BIND_ENUM_CONSTANT(KIND_NONE);
 	BIND_ENUM_CONSTANT(KIND_STEP);
@@ -1098,5 +1583,7 @@ void FellowTraversal3D::_bind_methods() {
 	BIND_ENUM_CONSTANT(KIND_VAULT);
 	BIND_ENUM_CONSTANT(KIND_TOO_HIGH);
 	BIND_ENUM_CONSTANT(KIND_BLOCKED);
+	BIND_ENUM_CONSTANT(KIND_HANG);
+	BIND_ENUM_CONSTANT(KIND_LADDER);
 	BIND_ENUM_CONSTANT(KIND_MAX);
 }

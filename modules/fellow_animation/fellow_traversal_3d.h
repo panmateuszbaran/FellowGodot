@@ -35,6 +35,7 @@
 #include "scene/resources/animation.h"
 
 class CollisionObject3D;
+class FellowLadder3D;
 class ImmediateMesh;
 class MeshInstance3D;
 class StandardMaterial3D;
@@ -55,6 +56,8 @@ public:
 		KIND_VAULT, // over a thin obstacle up to vault_max_height
 		KIND_TOO_HIGH, // a wall without a top below max_height
 		KIND_BLOCKED, // a top, but no room on it or on the way (the reason says which)
+		KIND_HANG, // milestone 75: hanging from a ledge, moving along it
+		KIND_LADDER, // milestone 75: on a FellowLadder3D
 		KIND_MAX,
 	};
 
@@ -99,6 +102,8 @@ public:
 		SafeNumeric<uint64_t> steps;
 		SafeNumeric<uint64_t> step_usec;
 		SafeNumeric<uint64_t> mantles[3]; // low, high, vault
+		SafeNumeric<uint64_t> hangs; // milestone 75
+		SafeNumeric<uint64_t> ladders;
 		SafeNumeric<uint64_t> poses;
 		SafeNumeric<uint64_t> pose_usec;
 	};
@@ -130,6 +135,14 @@ private:
 	Ref<Animation> clips[3]; // low, high, vault
 	StringName clip_root_bone;
 	bool debug_draw = false;
+	// Milestone 75: hanging and ladders.
+	bool hang = true;
+	bool hang_first = false;
+	float hang_reach = 2.05f; // the hands over the feet, hanging
+	float shimmy_speed = 1.0f;
+	bool ladders = true;
+	float ladder_speed = 1.2f;
+	float ladder_reach = 0.6f;
 
 	// The body's capsule (body space), from its first CollisionShape3D child.
 	float radius = 0.35f;
@@ -159,6 +172,18 @@ private:
 	double clip_root_step = 1.0 / 60.0;
 	PoseHints hints;
 	Ledge last_check;
+	// Hanging (action KIND_HANG) and climbing a ladder (KIND_LADDER).
+	Vector3 hang_feet; // where the body hangs (global)
+	float shimmy_phase = 0.0f; // metres moved along the edge (the hands and feet step with it)
+	float shimmy_velocity = 0.0f;
+	bool climb_requested = false;
+	bool release_requested = false;
+	bool push_armed = false; // hanging: the push at the wall let go of since it caught the ledge (a new push climbs)
+	float climb_input = 0.0f; // the controller's up (1) or down (-1) on a ladder; 0: from the intent
+	ObjectID ladder_id;
+	float ladder_h = 0.0f; // the feet's height along the ladder from its foot
+	bool ladder_from_top = false; // taken from the floor at its top (over the edge, then down)
+	double hold_time = 0.0; // how long the body has hung or climbed (the blend in)
 
 	// The debug drawing (debug_draw).
 	MeshInstance3D *debug_instance = nullptr;
@@ -181,6 +206,16 @@ private:
 	Vector3 _path(double p_t, const Vector3 &p_edge, const Vector3 &p_inward, const Vector3 &p_target) const;
 	void _prepare_clip();
 	void _draw_debug();
+	Vector3 _hang_feet_at(const Vector3 &p_edge, const Vector3 &p_inward) const;
+	bool _probe_edge(const Vector3 &p_edge, const Vector3 &p_inward, float p_along, Ledge &r_ledge) const;
+	bool _start_hang(const Ledge &p_ledge);
+	void _step_hang(double p_delta);
+	void _end_hang(bool p_climbed);
+	FellowLadder3D *_find_ladder(const Vector3 &p_feet, const Vector3 &p_direction, bool p_in_air, float &r_h, bool &r_from_top) const;
+	bool _start_ladder(FellowLadder3D *p_ladder, float p_h, bool p_from_top);
+	void _step_ladder(double p_delta);
+	void _end_ladder(bool p_at_top, const Vector3 &p_velocity);
+	void _place(CollisionObject3D *p_body, const Vector3 &p_feet, const Vector3 &p_facing, double p_delta);
 	static Dictionary _ledge_dict(const Ledge &p_ledge);
 
 protected:
@@ -204,6 +239,16 @@ public:
 	static void reset_global_stats();
 	void set_intent(const Vector3 &p_direction) { intent = p_direction; }
 	Vector3 get_intent() const { return intent; }
+	// Milestone 75.
+	bool try_hang(const Vector3 &p_direction = Vector3());
+	bool try_ladder();
+	void climb_up() { climb_requested = true; }
+	void release() { release_requested = true; }
+	bool is_hanging() const { return active && action == KIND_HANG; }
+	bool is_on_ladder() const { return active && action == KIND_LADDER; }
+	Node3D *get_ladder() const;
+	void set_climb_input(float p_input) { climb_input = CLAMP(p_input, -1.0f, 1.0f); }
+	float get_climb_input() const { return climb_input; }
 
 	void set_body_path(const NodePath &p_path);
 	NodePath get_body_path() const { return body_path; }
@@ -259,6 +304,20 @@ public:
 	StringName get_clip_root_bone() const { return clip_root_bone; }
 	void set_debug_draw(bool p_enabled);
 	bool is_debug_draw() const { return debug_draw; }
+	void set_hang(bool p_enabled) { hang = p_enabled; }
+	bool is_hang() const { return hang; }
+	void set_hang_first(bool p_enabled) { hang_first = p_enabled; }
+	bool is_hang_first() const { return hang_first; }
+	void set_hang_reach(float p_reach) { hang_reach = CLAMP(p_reach, 0.5f, 4.0f); }
+	float get_hang_reach() const { return hang_reach; }
+	void set_shimmy_speed(float p_speed) { shimmy_speed = MAX(0.0f, p_speed); }
+	float get_shimmy_speed() const { return shimmy_speed; }
+	void set_ladders(bool p_enabled) { ladders = p_enabled; }
+	bool is_ladders() const { return ladders; }
+	void set_ladder_speed(float p_speed) { ladder_speed = MAX(0.0f, p_speed); }
+	float get_ladder_speed() const { return ladder_speed; }
+	void set_ladder_reach(float p_reach) { ladder_reach = MAX(0.05f, p_reach); }
+	float get_ladder_reach() const { return ladder_reach; }
 
 	FellowTraversal3D();
 	~FellowTraversal3D();

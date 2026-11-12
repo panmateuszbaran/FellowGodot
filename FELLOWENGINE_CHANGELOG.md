@@ -9,6 +9,25 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 75 — hanging and ladders (2026-11-12)
+
+- `FellowTraversal3D` (decision 0183): in the air, a ledge the body cannot climb (no room on its top) — or with
+  `hang_first` any it could — is hung from when its edge is about `hang_reach` (2.05 m) over the feet (`hang`,
+  `try_hang()`). Hanging, the body moves along the edge as the intent asks (`shimmy_speed`), the ledge found again a
+  step along: round walls are followed, its end, a gap or something in the way stops it; pushing at the wall again,
+  up or `climb_up()` climbs (a high mantle from the hang), pulling away, down or `release()` lets go. The pose: hands on
+  the edge stepping along it, feet on the wall.
+- `FellowLadder3D`: a ladder marker (`height`, `width`, `rung_spacing`, `rung_offset`, `exit_at_top`; the editor draws
+  its rails, rungs and climbing side). A traversal with `ladders` takes one the body walks at, or walks off its top
+  over it; climbs at `ladder_speed` as asked (`set_climb_input()`, or the intent), steps off at its foot, mantles off at
+  its top. The pose: hands and feet on the rungs. Signals `hang_started`, `hang_finished`, `ladder_started`,
+  `ladder_finished`; the FellowEngine menu's "Add Ladder".
+- Checked on six lanes with GodotPhysics3D and Jolt (`bench/climb_check.gd`: a hang moved to a ledge's end and let go,
+  a climb from a hang, a round tower's rim followed 120°, a gap stopped at, up and down a ladder; no frame of the capsule
+  in the world), milestone 72's course unchanged, a regression scene, the editor.
+- Destruction (decision 0182): a break's meshes and shapes are built within the frame's budget of pieces; the bench's
+  `--many=N` waits until every crate has broken.
+
 ## Milestone 74 — destruction (2026-11-12)
 
 - `FellowDestructible3D` (decision 0182): a child of a body (static, rigid or animatable) that breaks its mesh into

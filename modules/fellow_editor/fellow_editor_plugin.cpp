@@ -83,6 +83,7 @@ static const char *FELLOW_GIZMO_CLASSES[] = {
 	"FellowBurnable3D",
 	"FellowMotionCharacter3D",
 	"FellowTraversal3D",
+	"FellowLadder3D",
 };
 
 // The properties each class's lines are drawn from.
@@ -105,6 +106,8 @@ static Vector<StringName> _fellow_gizmo_properties(const StringName &p_class) {
 		return { SNAME("radius"), SNAME("length") };
 	} else if (p_class == SNAME("FellowTraversal3D")) {
 		return { SNAME("min_height"), SNAME("low_max_height"), SNAME("max_height"), SNAME("reach_distance") };
+	} else if (p_class == SNAME("FellowLadder3D")) {
+		return { SNAME("height"), SNAME("width"), SNAME("rung_spacing"), SNAME("rung_offset") };
 	}
 	return {};
 }
@@ -243,6 +246,26 @@ Vector<Vector3> FellowGizmoPlugin::lines_for(const StringName &p_class, const Di
 		lines.push_back(feet + Vector3(r, mid, -r - reach));
 		lines.push_back(feet + Vector3(-r, mid, -r));
 		lines.push_back(feet + Vector3(r, mid, -r));
+	} else if (p_class == SNAME("FellowLadder3D")) {
+		// Milestone 75: the ladder's rails and rungs, and an arrow out of the side it is climbed from (+Z).
+		const real_t h = p_properties.get("height", 3.0);
+		const real_t w = real_t(p_properties.get("width", 0.5)) * 0.5;
+		const real_t spacing = MAX(real_t(p_properties.get("rung_spacing", 0.3)), real_t(0.05));
+		const real_t offset = p_properties.get("rung_offset", 0.25);
+		lines.push_back(Vector3(-w, 0, 0));
+		lines.push_back(Vector3(-w, h, 0));
+		lines.push_back(Vector3(w, 0, 0));
+		lines.push_back(Vector3(w, h, 0));
+		for (real_t y = offset; y <= h + 1e-4; y += spacing) {
+			lines.push_back(Vector3(-w, y, 0));
+			lines.push_back(Vector3(w, y, 0));
+		}
+		lines.push_back(Vector3(0, h * 0.5, 0));
+		lines.push_back(Vector3(0, h * 0.5, 0.4));
+		lines.push_back(Vector3(0, h * 0.5, 0.4));
+		lines.push_back(Vector3(0.08, h * 0.5, 0.3));
+		lines.push_back(Vector3(0, h * 0.5, 0.4));
+		lines.push_back(Vector3(-0.08, h * 0.5, 0.3));
 	} else if (p_class == SNAME("FellowSnowTracker3D")) {
 		// A capsule along the node's -Z, centred: the track it presses into the snow.
 		const real_t r = p_properties.get("radius", 0.1);
@@ -900,6 +923,41 @@ Node3D *FellowEditorPlugin::make_preset(int p_preset, const Node *p_root) {
 			top = body;
 			_fellow_make("FellowDestructible3D", "FellowDestructible3D", top, Dictionary{ { "interior_material", inside }, { "break_impulse", 150.0 } });
 		} break;
+		case PRESET_LADDER: {
+			// Milestone 75: a 3 m ladder (rails and rungs), climbed from its +Z side by a FellowTraversal3D.
+			Node *made = _fellow_make("FellowLadder3D", "Ladder", nullptr, Dictionary{ { "height", 3.0 } });
+			top = Object::cast_to<Node3D>(made);
+			if (!top) {
+				break;
+			}
+			Ref<StandardMaterial3D> wood;
+			wood.instantiate();
+			wood->set_albedo(Color(0.5, 0.36, 0.22));
+			wood->set_roughness(0.85);
+			Ref<BoxMesh> rail;
+			rail.instantiate();
+			rail->set_size(Vector3(0.05, 3.0, 0.05));
+			rail->set_material(wood);
+			Ref<BoxMesh> rung;
+			rung.instantiate();
+			rung->set_size(Vector3(0.5, 0.035, 0.035));
+			rung->set_material(wood);
+			for (int i = 0; i < 2; i++) {
+				MeshInstance3D *mi = memnew(MeshInstance3D);
+				mi->set_name(i == 0 ? "RailLeft" : "RailRight");
+				mi->set_mesh(rail);
+				mi->set_position(Vector3(i == 0 ? -0.25 : 0.25, 1.5, 0));
+				top->add_child(mi);
+			}
+			int n = 0;
+			for (real_t y = 0.25; y <= 3.0 + 1e-4; y += 0.3) {
+				MeshInstance3D *mi = memnew(MeshInstance3D);
+				mi->set_name(vformat("Rung%d", n++));
+				mi->set_mesh(rung);
+				mi->set_position(Vector3(0, y, 0));
+				top->add_child(mi);
+			}
+		} break;
 		default:
 			break;
 	}
@@ -1043,6 +1101,7 @@ FellowEditorPlugin::FellowEditorPlugin() {
 	popup->add_item(TTR("Add Curtain (cloth)"), PRESET_CURTAIN);
 	popup->add_separator();
 	popup->add_item(TTR("Add Destructible Crate (breaks when hit)"), PRESET_DESTRUCTIBLE_CRATE);
+	popup->add_item(TTR("Add Ladder (3 m, climbable)"), PRESET_LADDER);
 	popup->connect(SceneStringName(id_pressed), callable_mp(this, &FellowEditorPlugin::_add_preset));
 }
 

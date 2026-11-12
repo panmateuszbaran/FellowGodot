@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="FellowLadder3D" inherits="Node3D" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+	<brief_description>
+		FellowEngine: a ladder a [FellowTraversal3D] climbs — a vertical strip with rungs, climbed from its +Z side.
+	</brief_description>
+	<description>
+		A marker for ladders: its foot at the node's origin, [member height] up its Y axis, [member width] along its X, climbed from its +Z side (the climber facing -Z). The rungs, every [member rung_spacing] from [member rung_offset] up, place the climber's hands and feet. It draws nothing: the ladder's mesh (and any collision) is the scene's; the editor draws its outline and an arrow out of the side it is climbed from.
+		A [FellowTraversal3D] with [member FellowTraversal3D.ladders] on takes it when the body goes towards it in front of it (its feet along it), or walks off the floor at its top over it (onto it backwards), or calls [method FellowTraversal3D.try_ladder]; it climbs at [member FellowTraversal3D.ladder_speed] as the controller asks ([method FellowTraversal3D.set_climb_input], or the intent: up or towards the ladder climbs), steps off at its foot, and at its top, with [member exit_at_top], mantles onto what is there. See [code]docs/decisions/0183-hanging-and-ladders.md[/code].
+	</description>
+	<tutorials>
+	</tutorials>
+	<members>
+		<member name="enabled" type="bool" setter="set_enabled" getter="is_enabled" default="true">
+			Whether traversals take it.
+		</member>
+		<member name="exit_at_top" type="bool" setter="set_exit_at_top" getter="is_exit_at_top" default="true">
+			At its top, climbing up, the climber mantles onto what is there (a platform, a roof); off, it stops with its hands at the top.
+		</member>
+		<member name="height" type="float" setter="set_height" getter="get_height" default="3.0">
+			Its length up its Y axis, in metres (scaled with the node).
+		</member>
+		<member name="rung_offset" type="float" setter="set_rung_offset" getter="get_rung_offset" default="0.25">
+			The first rung's height over the foot.
+		</member>
+		<member name="rung_spacing" type="float" setter="set_rung_spacing" getter="get_rung_spacing" default="0.3">
+			The rungs' spacing (the hands and feet go from rung to rung).
+		</member>
+		<member name="width" type="float" setter="set_width" getter="get_width" default="0.5">
+			Its width along its X axis (a climber farther across than half of it and 0.25 m is not on it).
+		</member>
+	</members>
+</class>

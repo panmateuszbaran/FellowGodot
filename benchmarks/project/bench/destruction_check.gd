@@ -38,6 +38,8 @@ var many_seconds := 4.0
 var many_frames: PackedFloat64Array = []
 var many_last := 0
 var many_broken_frame := -1
+var many_break_usec := 0
+var many_broken_ms := -1.0
 var many_nodes: Array = []
 var done := false
 var shots := {}
@@ -641,6 +643,7 @@ func _many_tick() -> void:
 	var now := Time.get_ticks_usec()
 	if frame == 60:
 		FellowDestructible3D.reset_global_stats()
+		many_break_usec = now
 		for d in many_nodes:
 			var dd: FellowDestructible3D = d
 			dd.break_apart(dd.get_parent().global_position + Vector3(0.4, 0.4, 0.4))
@@ -658,13 +661,19 @@ func _many_tick() -> void:
 				break
 		if all:
 			many_broken_frame = frame - 60
-	if frame >= 60 + int(many_seconds * 60.0):
+			many_broken_ms = float(now - many_break_usec) / 1000.0
+	# Until every crate has broken (a headless frame can be far shorter than the workers' fractures), then the
+	# seconds asked for with the debris; at most two minutes.
+	var waited := float(now - many_break_usec) / 1e6
+	if (many_broken_frame >= 0 and frame >= 60 + many_broken_frame + int(many_seconds * 60.0)) or waited > 120.0:
 		done = true
 		var st := FellowDestructible3D.get_global_stats()
 		var head := many_frames.slice(0, 10)
-		var tail := many_frames.slice(30)
+		var breaking := many_frames.slice(0, maxi(1, many_broken_frame + 1))
+		var tail := many_frames.slice(maxi(0, many_broken_frame) + 30)
 		var r := {"crates": many, "pieces_each": many_pieces, "prefracture": many_prefracture, "stats": st,
-			"setup_ms": result.get("setup_ms", 0.0), "frames_to_break_all": many_broken_frame,
+			"setup_ms": result.get("setup_ms", 0.0), "frames_to_break_all": many_broken_frame, "ms_to_break_all": snappedf(many_broken_ms, 0.01),
+			"frame_ms_max_breaking": snappedf(_max(breaking), 0.01),
 			"fracture_ms_each": snappedf(float(st.fracture_usec) / maxf(1.0, float(st.fractures)) / 1000.0, 0.001),
 			"build_ms_each": snappedf(float(st.build_usec) / maxf(1.0, float(st.fractures)) / 1000.0, 0.001),
 			"spawn_ms_each": snappedf(float(st.spawn_usec) / maxf(1.0, float(st.breaks)) / 1000.0, 0.001),
