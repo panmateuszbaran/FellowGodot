@@ -37,3 +37,7 @@ Keep: with decisions 0189, 0192 and 0194 a hanging climber goes to the next ledg
 
 * **Jumps to ledges on other walls** (round a corner in the air) and **wall jumps** (pushing off a wall to a ledge
   behind).
+
+## Later
+
+Milestone 95 (decision 0203): jumps back to the wall behind; this record's lane is unchanged.

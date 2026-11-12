@@ -629,7 +629,8 @@ edge of the floor — a `CharacterBody3D` on the floor, the intent towards it �
 faster, it goes over); `try_drop(direction)`; `TRANSFER_DROP`. Bench `bench/climb_check.gd` (twelve lanes). Down
 to a ledge below (milestone 86, decision 0194): `hang_jump()` with the wish down, `hang_jump_depth` (2.6 m);
 `TRANSFER_JUMP_DOWN`. Diagonally (milestone 93, decision 0201): `hang_jump()` with the wish along and up or down;
-`TRANSFER_JUMP_DIAGONAL`.
+`TRANSFER_JUMP_DIAGONAL`. Back to the wall behind (milestone 95, decision 0203): `hang_jump()` with the wish away from
+the wall; `TRANSFER_JUMP_BACK`.
 
 Faces (milestone 83, decision 0191): `FellowFaceAnimator` (a `Node`; nothing changes without it): `mesh_path` (the
 face's `MeshInstance3D`), `voice_path` (an `AudioStreamPlayer`, 2D or 3D), `voice_stream` and `voice_time` (−1: with a

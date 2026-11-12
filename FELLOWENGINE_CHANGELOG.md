@@ -9,6 +9,11 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 95 — a jump back to the wall behind (2026-11-12)
+
+- `FellowTraversal3D.hang_jump()` with the wish away from the wall (decision 0203): a ledge on the wall behind is
+  jumped to, turning round (`TRANSFER_JUMP_BACK`). One lane on both physics engines, the earlier fourteen unchanged.
+
 ## Milestone 94 — eyes that converge (2026-11-12)
 
 - `FellowFaceAnimator.eye_spacing` (decision 0202): each eye turns in by half the angle a target subtends between

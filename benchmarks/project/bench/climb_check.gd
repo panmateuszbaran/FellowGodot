@@ -18,6 +18,7 @@ extends SceneTree
 ## a jump across a gap to the next ledge, a jump up to a beam over the ledge. Milestone 84 (decision 0192): walking
 ## over a platform's edge into a hang from it (then along it and letting go), and running over it (no hang). Milestone 86
 ## (decision 0194): from a hang down to a ledge below. Milestone 93 (decision 0201): a diagonal jump, across a gap and up.
+## Milestone 95 (decision 0203): a jump back to the ledge on the wall behind.
 
 const KIND_NAMES := ["none", "step", "low", "high", "vault", "too_high", "blocked", "hang", "ladder"]
 const RUN_SECONDS := 9.0
@@ -273,7 +274,7 @@ func _lane(name: String, start: Vector3, program: Array) -> Dictionary:
 	t.hang_finished.connect(func(climbed: bool) -> void:
 		lane.events.append(["hang_finished", climbed, snappedf(frame / 60.0, 0.01)]))
 	t.hang_transferred.connect(func(_ledge: Dictionary, how: int) -> void:
-		lane.events.append(["hang_transferred", ["outer", "inner", "along", "up", "drop", "down", "diagonal"][how], snappedf(frame / 60.0, 0.01)]))
+		lane.events.append(["hang_transferred", ["outer", "inner", "along", "up", "drop", "down", "diagonal", "back"][how], snappedf(frame / 60.0, 0.01)]))
 	t.ladder_started.connect(func(_ladder: Node3D) -> void:
 		lane.events.append(["ladder_started", snappedf(frame / 60.0, 0.01)]))
 	t.ladder_finished.connect(func(at_top: bool) -> void:
@@ -420,6 +421,15 @@ func _build() -> void:
 	var l14 := _lane("hang_jump_diagonal", Vector3(x, 0, 0), [[0.0, {"intent": walk, "speed": 2.0}], [0.55, {"jump": 5.2}], [1.4, {"intent": Vector3()}],
 			[2.0, {"intent": Vector3(-1, 0, 0)}], [3.2, {"intent": Vector3(-0.7, 0.7, 0), "call": "hang_jump"}], [3.25, {"intent": Vector3()}]])
 	(l14.traversal as FellowTraversal3D).hang_first = true
+
+	# Milestone 95 (decision 0203): a jump back. Two 2.5 m ledges facing each other 2.4 m apart (1.5 m long, 0.4 m deep):
+	# hung from one, hang_jump with the wish away from it: caught on the other, turned round.
+	x = -15.0
+	_box(Vector3(x, 1.25, -2.2), Vector3(1.5, 2.5, 0.4))
+	_box(Vector3(x, 1.25, 0.6), Vector3(1.5, 2.5, 0.4))
+	var l15 := _lane("hang_jump_back", Vector3(x, 0, -0.6), [[0.0, {"intent": walk, "speed": 2.0}], [0.45, {"jump": 5.2}], [1.4, {"intent": Vector3()}],
+			[2.5, {"intent": Vector3(0, 0, 1), "call": "hang_jump"}], [2.55, {"intent": Vector3()}]])
+	(l15.traversal as FellowTraversal3D).hang_first = true
 
 	var cam := Camera3D.new()
 	root3d.add_child(cam)
@@ -639,6 +649,9 @@ func _finish() -> void:
 			"hang_jump_diagonal":
 				# Across the gap and up: hanging from the left ledge (3.4 m), 0.3 m into it.
 				ok = ok and names.has("hang_started:2.5") and names.count("hang_transferred:diagonal") == 1 and absf(feet.y - (3.4 - 2.05)) < 0.05 and feet.x - lane.x < -1.3 and feet.x - lane.x > -2.8 and not names.has("hang_finished:false")
+			"hang_jump_back":
+				# Round to the ledge behind (its face at z 0.4): hanging from it, 0.43 m off it, turned half round.
+				ok = ok and names.has("hang_started:2.5") and names.count("hang_transferred:back") == 1 and absf(feet.z - (0.4 - 0.43)) < 0.05 and absf(feet.y - 0.45) < 0.05 and turned > 170.0 and not names.has("hang_finished:false")
 			"drop_run":
 				# Too fast: over the edge and down, no hang.
 				ok = ok and not names.has("hang_started:3.5") and feet.y < 0.05 and feet.z > -2.0
