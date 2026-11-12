@@ -41,6 +41,7 @@ class AudioStreamPlayer3D;
 class FellowVehicle3D;
 class FellowWheel3D;
 class GPUParticles3D;
+class Gradient;
 class MeshInstance3D;
 class StandardMaterial3D;
 
@@ -58,6 +59,10 @@ class FellowVehicleEffects3D : public Node3D {
 		Vector3 left, right; // its last edge
 		float intensity = 0.0f;
 		GPUParticles3D *smoke = nullptr;
+		// Milestone 88: on loose ground.
+		bool loose = false;
+		float dust_intensity = 0.0f;
+		GPUParticles3D *dust_fx = nullptr;
 	};
 
 	struct GlobalStats {
@@ -89,6 +94,16 @@ class FellowVehicleEffects3D : public Node3D {
 	Vector3 engine_offset = Vector3(0, 0.6f, -1.3f);
 	float sound_unit_size = 8.0f;
 	float sound_distance = 80.0f; // m from the listener: farther, silent (nothing synthesised)
+	// Milestone 88 (decision 0196): loose ground and marks that fade.
+	StringName loose_ground_group = StringName("fellow_loose_ground");
+	bool dust = true;
+	int dust_amount = 48;
+	float dust_lifetime = 1.6f;
+	Color dust_color = Color(0.55f, 0.46f, 0.34f, 0.55f);
+	float dust_min_speed = 2.0f; // m/s over loose ground: dust from
+	float dust_full_speed = 15.0f;
+	float rut_opacity = 0.3f; // the tracks rolling tyres leave on loose ground
+	float mark_lifetime = 0.0f; // s (0: the marks stay until reused)
 
 	FellowVehicle3D *vehicle = nullptr;
 	LocalVector<WheelFx> wheels;
@@ -105,6 +120,14 @@ class FellowVehicleEffects3D : public Node3D {
 	AABB marks_aabb;
 	bool marks_aabb_valid = false;
 	uint64_t segments_laid = 0;
+	LocalVector<float> segment_birth; // the clock when each segment was laid
+	LocalVector<uint8_t> segment_alpha; // its opacity then
+	LocalVector<uint8_t> segment_shown; // its opacity now
+	double clock = 0.0;
+	double fade_timer = 0.0;
+	Ref<StandardMaterial3D> dust_material;
+	Ref<Gradient> dust_ramp;
+	Color dust_color_now;
 	float mark_low = 0.0f; // the laid segments' lowest and highest points (y)
 	float mark_high = 0.0f;
 
@@ -128,6 +151,7 @@ class FellowVehicleEffects3D : public Node3D {
 	void _setup();
 	void _teardown();
 	void _add_segment(const Vector3 &p_l0, const Vector3 &p_r0, const Vector3 &p_l1, const Vector3 &p_r1, float p_alpha);
+	void _fade_marks();
 	void _physics_step();
 	void _synthesise();
 
@@ -176,6 +200,25 @@ public:
 	float get_sound_distance() const { return sound_distance; }
 	void set_sound_unit_size(float p_size) { sound_unit_size = MAX(0.1f, p_size); }
 	float get_sound_unit_size() const { return sound_unit_size; }
+
+	void set_loose_ground_group(const StringName &p_group) { loose_ground_group = p_group; }
+	StringName get_loose_ground_group() const { return loose_ground_group; }
+	void set_dust(bool p_enabled) { dust = p_enabled; }
+	bool has_dust() const { return dust; }
+	void set_dust_amount(int p_amount) { dust_amount = MAX(1, p_amount); }
+	int get_dust_amount() const { return dust_amount; }
+	void set_dust_lifetime(float p_lifetime) { dust_lifetime = MAX(0.1f, p_lifetime); }
+	float get_dust_lifetime() const { return dust_lifetime; }
+	void set_dust_color(const Color &p_color) { dust_color = p_color; }
+	Color get_dust_color() const { return dust_color; }
+	void set_dust_min_speed(float p_speed) { dust_min_speed = MAX(0.0f, p_speed); }
+	float get_dust_min_speed() const { return dust_min_speed; }
+	void set_dust_full_speed(float p_speed) { dust_full_speed = MAX(0.01f, p_speed); }
+	float get_dust_full_speed() const { return dust_full_speed; }
+	void set_rut_opacity(float p_opacity) { rut_opacity = CLAMP(p_opacity, 0.0f, 1.0f); }
+	float get_rut_opacity() const { return rut_opacity; }
+	void set_mark_lifetime(float p_seconds) { mark_lifetime = MAX(0.0f, p_seconds); }
+	float get_mark_lifetime() const { return mark_lifetime; }
 
 	void clear_marks();
 	AudioStreamPlayer3D *get_audio_player() const { return audio; }

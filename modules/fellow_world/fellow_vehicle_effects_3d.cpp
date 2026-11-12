@@ -140,6 +140,14 @@ void FellowVehicleEffects3D::_setup() {
 			next_segment = 0;
 			used_segments = 0;
 			marks_aabb_valid = false;
+			segment_birth.resize(max_mark_segments);
+			segment_alpha.resize(max_mark_segments);
+			segment_shown.resize(max_mark_segments);
+			for (int q = 0; q < max_mark_segments; q++) {
+				segment_birth[q] = 0.0f;
+				segment_alpha[q] = 0;
+				segment_shown[q] = 0;
+			}
 		}
 	}
 
@@ -205,6 +213,67 @@ void FellowVehicleEffects3D::_setup() {
 		}
 	}
 
+	// Milestone 88: dust at each wheel on loose ground, thrown back and up and drifting, its colour the ground's.
+	if (dust) {
+		Ref<ParticleProcessMaterial> pm;
+		pm.instantiate();
+		pm->set_direction(Vector3(0, 1, 0));
+		pm->set_spread(60.0f);
+		pm->set_param_min(ParticleProcessMaterial::PARAM_INITIAL_LINEAR_VELOCITY, 0.6f);
+		pm->set_param_max(ParticleProcessMaterial::PARAM_INITIAL_LINEAR_VELOCITY, 2.0f);
+		pm->set_gravity(Vector3(0, -0.6f, 0));
+		pm->set_param_min(ParticleProcessMaterial::PARAM_DAMPING, 1.0f);
+		pm->set_param_max(ParticleProcessMaterial::PARAM_DAMPING, 2.0f);
+		pm->set_param_min(ParticleProcessMaterial::PARAM_SCALE, 0.6f);
+		pm->set_param_max(ParticleProcessMaterial::PARAM_SCALE, 1.0f);
+		pm->set_param_min(ParticleProcessMaterial::PARAM_ANGLE, -180.0f);
+		pm->set_param_max(ParticleProcessMaterial::PARAM_ANGLE, 180.0f);
+		Ref<Curve> grow;
+		grow.instantiate();
+		grow->set_max_value(4.0f);
+		grow->add_point(Vector2(0, 0.5f));
+		grow->add_point(Vector2(1, 2.6f));
+		Ref<CurveTexture> grow_tex;
+		grow_tex.instantiate();
+		grow_tex->set_curve(grow);
+		pm->set_param_texture(ParticleProcessMaterial::PARAM_SCALE, grow_tex);
+		dust_ramp.instantiate();
+		dust_color_now = dust_color;
+		dust_ramp->set_color(0, dust_color);
+		dust_ramp->set_color(1, Color(dust_color.r, dust_color.g, dust_color.b, 0.0f));
+		Ref<GradientTexture1D> ramp_tex;
+		ramp_tex.instantiate();
+		ramp_tex->set_gradient(dust_ramp);
+		pm->set_color_ramp(ramp_tex);
+		dust_material.instantiate();
+		dust_material->set_transparency(BaseMaterial3D::TRANSPARENCY_ALPHA);
+		dust_material->set_shading_mode(BaseMaterial3D::SHADING_MODE_UNSHADED);
+		dust_material->set_billboard_mode(BaseMaterial3D::BILLBOARD_PARTICLES);
+		dust_material->set_flag(BaseMaterial3D::FLAG_ALBEDO_FROM_VERTEX_COLOR, true);
+		dust_material->set_proximity_fade_enabled(true);
+		dust_material->set_proximity_fade_distance(0.5f);
+		dust_material->set_cull_mode(BaseMaterial3D::CULL_DISABLED);
+		Ref<QuadMesh> quad;
+		quad.instantiate();
+		quad->set_size(Vector2(0.7f, 0.7f));
+		quad->set_material(dust_material);
+		for (WheelFx &fx : wheels) {
+			GPUParticles3D *p = memnew(GPUParticles3D);
+			p->set_name("TyreDust");
+			p->set_amount(dust_amount);
+			p->set_lifetime(dust_lifetime);
+			p->set_process_material(pm);
+			p->set_draw_pass_mesh(0, quad);
+			p->set_use_local_coordinates(false);
+			p->set_emitting(false);
+			p->set_cast_shadows_setting(GeometryInstance3D::SHADOW_CASTING_SETTING_OFF);
+			p->set_visibility_aabb(AABB(Vector3(-20, -2, -20), Vector3(40, 10, 40)));
+			p->set_as_top_level(true);
+			add_child(p, false, INTERNAL_MODE_FRONT);
+			fx.dust_fx = p;
+		}
+	}
+
 	// The sound: a generator in a 3D player at the engine.
 	generator.instantiate();
 	sample_rate = AudioServer::get_singleton() ? AudioServer::get_singleton()->get_mix_rate() : 44100.0f;
@@ -233,8 +302,14 @@ void FellowVehicleEffects3D::_teardown() {
 			fx.smoke->queue_free();
 			fx.smoke = nullptr;
 		}
+		if (fx.dust_fx) {
+			fx.dust_fx->queue_free();
+			fx.dust_fx = nullptr;
+		}
 	}
 	wheels.clear();
+	dust_material.unref();
+	dust_ramp.unref();
 	if (marks) {
 		marks->queue_free();
 		marks = nullptr;
@@ -262,6 +337,46 @@ void FellowVehicleEffects3D::clear_marks() {
 	marks_mesh->surface_update_attribute_region(0, 0, ab);
 	next_segment = 0;
 	used_segments = 0;
+	for (uint32_t q = 0; q < segment_shown.size(); q++) {
+		segment_alpha[q] = 0;
+		segment_shown[q] = 0;
+	}
+}
+
+// Milestone 88: marks older than half their lifetime fade out by its end (the segments' colours written again in one
+// update, four times a second, when one changed).
+void FellowVehicleEffects3D::_fade_marks() {
+	if (marks_mesh.is_null() || mark_lifetime <= 0.0f || used_segments == 0) {
+		return;
+	}
+	const float half = mark_lifetime * 0.5f;
+	bool changed = false;
+	for (uint32_t q = 0; q < used_segments; q++) {
+		const float age = float(clock) - segment_birth[q];
+		const float k = age <= half ? 1.0f : CLAMP(1.0f - (age - half) / half, 0.0f, 1.0f);
+		const uint8_t a = uint8_t(float(segment_alpha[q]) * k);
+		if (a != segment_shown[q]) {
+			segment_shown[q] = a;
+			changed = true;
+		}
+	}
+	if (!changed) {
+		return;
+	}
+	const int nv = max_mark_segments * 4;
+	Vector<uint8_t> ab;
+	ab.resize(nv * attribute_stride);
+	memset(ab.ptrw(), 0, ab.size());
+	for (uint32_t q = 0; q < used_segments; q++) {
+		for (int i = 0; i < 4; i++) {
+			uint8_t *c = ab.ptrw() + (q * 4 + i) * attribute_stride + color_offset;
+			c[0] = 255;
+			c[1] = 255;
+			c[2] = 255;
+			c[3] = segment_shown[q];
+		}
+	}
+	marks_mesh->surface_update_attribute_region(0, 0, ab);
 }
 
 void FellowVehicleEffects3D::_add_segment(const Vector3 &p_l0, const Vector3 &p_r0, const Vector3 &p_l1, const Vector3 &p_r1, float p_alpha) {
@@ -288,6 +403,11 @@ void FellowVehicleEffects3D::_add_segment(const Vector3 &p_l0, const Vector3 &p_
 	}
 	marks_mesh->surface_update_vertex_region(0, base * vertex_stride, vb);
 	marks_mesh->surface_update_attribute_region(0, base * attribute_stride, ab);
+	if (next_segment < segment_birth.size()) {
+		segment_birth[next_segment] = float(clock);
+		segment_alpha[next_segment] = a;
+		segment_shown[next_segment] = a;
+	}
 	next_segment = (next_segment + 1) % uint32_t(max_mark_segments);
 	used_segments = MIN(used_segments + 1, uint32_t(max_mark_segments));
 	if (segments_laid == 0) {
@@ -314,6 +434,8 @@ void FellowVehicleEffects3D::_add_segment(const Vector3 &p_l0, const Vector3 &p_
 
 void FellowVehicleEffects3D::_physics_step() {
 	const uint64_t t0 = OS::get_singleton()->get_ticks_usec();
+	clock += get_physics_process_delta_time();
+	const float ground_speed = vehicle ? Vector3(vehicle->get_linear_velocity().x, 0.0f, vehicle->get_linear_velocity().z).length() : 0.0f;
 	for (WheelFx &fx : wheels) {
 		FellowWheel3D *w = ObjectDB::get_instance<FellowWheel3D>(fx.wheel);
 		if (!w) {
@@ -330,9 +452,28 @@ void FellowVehicleEffects3D::_physics_step() {
 			intensity = CLAMP((w->get_slip_speed() - slip_min) / MAX(slip_full - slip_min, 0.01f), 0.0f, 1.0f) * CLAMP((combined - slide_slip) / 0.2f, 0.0f, 1.0f);
 		}
 		fx.intensity = intensity;
+		// Milestone 88: loose ground (a collider in loose_ground_group; its metadata "fellow_dust_color" the dust's
+		// colour): dust as the tyre rolls (more with the speed, and with its sliding), ruts where it rolls.
+		fx.loose = false;
+		if (contact) {
+			if (const Node *g = Object::cast_to<Node>(ObjectDB::get_instance(w->get_ground_id()))) {
+				fx.loose = g->is_in_group(loose_ground_group);
+				if (fx.loose && g->has_meta(SNAME("fellow_dust_color")) && dust_ramp.is_valid()) {
+					const Color c = g->get_meta(SNAME("fellow_dust_color"));
+					if (c != dust_color_now) {
+						dust_color_now = c;
+						dust_ramp->set_color(0, c);
+						dust_ramp->set_color(1, Color(c.r, c.g, c.b, 0.0f));
+					}
+				}
+			}
+		}
+		fx.dust_intensity = fx.loose ? MAX(CLAMP((ground_speed - dust_min_speed) / MAX(dust_full_speed - dust_min_speed, 0.01f), 0.0f, 1.0f), intensity) : 0.0f;
+		const float rut = (fx.loose && ground_speed > 0.5f) ? rut_opacity : 0.0f;
+		const float mark_alpha = MAX(fx.intensity * mark_opacity, rut);
 		const Vector3 n = contact ? w->get_contact_normal() : Vector3(0, 1, 0);
 		const Vector3 at = contact ? w->get_contact_point() : w->get_global_position();
-		if (marks_mesh.is_valid() && skid_marks && fx.intensity > 0.0f) {
+		if (marks_mesh.is_valid() && skid_marks && mark_alpha > 0.0f) {
 			// Across the tyre on the ground (the wheel's axle, its X), a little above it.
 			Vector3 axle = w->get_global_transform().basis.get_column(0);
 			axle -= n * axle.dot(n);
@@ -345,7 +486,7 @@ void FellowVehicleEffects3D::_physics_step() {
 				fx.right = r;
 				fx.laying = true;
 			} else if (p.distance_to((fx.left + fx.right) * 0.5f) >= mark_step) {
-				_add_segment(fx.left, fx.right, l, r, fx.intensity * mark_opacity);
+				_add_segment(fx.left, fx.right, l, r, mark_alpha);
 				fx.left = l;
 				fx.right = r;
 			}
@@ -354,7 +495,7 @@ void FellowVehicleEffects3D::_physics_step() {
 		}
 		if (fx.smoke) {
 			fx.smoke->set_global_position(at + n * 0.1f);
-			const bool on = smoke && fx.intensity > 0.05f;
+			const bool on = smoke && fx.intensity > 0.05f && !fx.loose; // on loose ground it raises dust instead
 			if (on) {
 				fx.smoke->set_amount_ratio(fx.intensity);
 			}
@@ -362,6 +503,21 @@ void FellowVehicleEffects3D::_physics_step() {
 				fx.smoke->set_emitting(on);
 			}
 		}
+		if (fx.dust_fx) {
+			fx.dust_fx->set_global_position(at + n * 0.15f);
+			const bool on = dust && fx.dust_intensity > 0.02f;
+			if (on) {
+				fx.dust_fx->set_amount_ratio(fx.dust_intensity);
+			}
+			if (fx.dust_fx->is_emitting() != on) {
+				fx.dust_fx->set_emitting(on);
+			}
+		}
+	}
+	fade_timer += get_physics_process_delta_time();
+	if (fade_timer >= 0.25) {
+		fade_timer = 0.0;
+		_fade_marks();
 	}
 	last_usec = OS::get_singleton()->get_ticks_usec() - t0;
 	global_stats.frames++;
@@ -536,6 +692,19 @@ Dictionary FellowVehicleEffects3D::get_stats() const {
 	}
 	d["intensity"] = ws;
 	d["smoking"] = smoking;
+	int dusting = 0;
+	int loose = 0;
+	for (const WheelFx &fx : wheels) {
+		dusting += fx.dust_fx && fx.dust_fx->is_emitting() ? 1 : 0;
+		loose += fx.loose ? 1 : 0;
+	}
+	d["dusting"] = dusting;
+	d["on_loose_ground"] = loose;
+	int visible = 0;
+	for (uint32_t q = 0; q < used_segments && q < segment_shown.size(); q++) {
+		visible += segment_shown[q] > 0 ? 1 : 0;
+	}
+	d["visible_segments"] = visible;
 	d["usec"] = int64_t(last_usec);
 	d["synth_usec"] = int64_t(last_synth_usec);
 	d["sound_rpm"] = s_rpm;
@@ -605,6 +774,24 @@ void FellowVehicleEffects3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_sound_distance"), &FellowVehicleEffects3D::get_sound_distance);
 	ClassDB::bind_method(D_METHOD("set_sound_unit_size", "size"), &FellowVehicleEffects3D::set_sound_unit_size);
 	ClassDB::bind_method(D_METHOD("get_sound_unit_size"), &FellowVehicleEffects3D::get_sound_unit_size);
+	ClassDB::bind_method(D_METHOD("set_loose_ground_group", "group"), &FellowVehicleEffects3D::set_loose_ground_group);
+	ClassDB::bind_method(D_METHOD("get_loose_ground_group"), &FellowVehicleEffects3D::get_loose_ground_group);
+	ClassDB::bind_method(D_METHOD("set_dust", "enabled"), &FellowVehicleEffects3D::set_dust);
+	ClassDB::bind_method(D_METHOD("has_dust"), &FellowVehicleEffects3D::has_dust);
+	ClassDB::bind_method(D_METHOD("set_dust_amount", "amount"), &FellowVehicleEffects3D::set_dust_amount);
+	ClassDB::bind_method(D_METHOD("get_dust_amount"), &FellowVehicleEffects3D::get_dust_amount);
+	ClassDB::bind_method(D_METHOD("set_dust_lifetime", "lifetime"), &FellowVehicleEffects3D::set_dust_lifetime);
+	ClassDB::bind_method(D_METHOD("get_dust_lifetime"), &FellowVehicleEffects3D::get_dust_lifetime);
+	ClassDB::bind_method(D_METHOD("set_dust_color", "color"), &FellowVehicleEffects3D::set_dust_color);
+	ClassDB::bind_method(D_METHOD("get_dust_color"), &FellowVehicleEffects3D::get_dust_color);
+	ClassDB::bind_method(D_METHOD("set_dust_min_speed", "speed"), &FellowVehicleEffects3D::set_dust_min_speed);
+	ClassDB::bind_method(D_METHOD("get_dust_min_speed"), &FellowVehicleEffects3D::get_dust_min_speed);
+	ClassDB::bind_method(D_METHOD("set_dust_full_speed", "speed"), &FellowVehicleEffects3D::set_dust_full_speed);
+	ClassDB::bind_method(D_METHOD("get_dust_full_speed"), &FellowVehicleEffects3D::get_dust_full_speed);
+	ClassDB::bind_method(D_METHOD("set_rut_opacity", "opacity"), &FellowVehicleEffects3D::set_rut_opacity);
+	ClassDB::bind_method(D_METHOD("get_rut_opacity"), &FellowVehicleEffects3D::get_rut_opacity);
+	ClassDB::bind_method(D_METHOD("set_mark_lifetime", "seconds"), &FellowVehicleEffects3D::set_mark_lifetime);
+	ClassDB::bind_method(D_METHOD("get_mark_lifetime"), &FellowVehicleEffects3D::get_mark_lifetime);
 	ClassDB::bind_method(D_METHOD("clear_marks"), &FellowVehicleEffects3D::clear_marks);
 	ClassDB::bind_method(D_METHOD("get_audio_player"), &FellowVehicleEffects3D::get_audio_player);
 	ClassDB::bind_method(D_METHOD("get_stats"), &FellowVehicleEffects3D::get_stats);
@@ -620,11 +807,21 @@ void FellowVehicleEffects3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "slip_min", PROPERTY_HINT_RANGE, "0,10,0.01,suffix:m/s"), "set_slip_min", "get_slip_min");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "slip_full", PROPERTY_HINT_RANGE, "0.01,30,0.01,suffix:m/s"), "set_slip_full", "get_slip_full");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "slide_slip", PROPERTY_HINT_RANGE, "0,2,0.01"), "set_slide_slip", "get_slide_slip");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "mark_lifetime", PROPERTY_HINT_RANGE, "0,600,0.1,or_greater,suffix:s"), "set_mark_lifetime", "get_mark_lifetime");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rut_opacity", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_rut_opacity", "get_rut_opacity");
 	ADD_GROUP("Smoke", "");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "smoke"), "set_smoke", "has_smoke");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "smoke_amount", PROPERTY_HINT_RANGE, "1,512,1"), "set_smoke_amount", "get_smoke_amount");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "smoke_lifetime", PROPERTY_HINT_RANGE, "0.1,10,0.01,suffix:s"), "set_smoke_lifetime", "get_smoke_lifetime");
 	ADD_PROPERTY(PropertyInfo(Variant::COLOR, "smoke_color"), "set_smoke_color", "get_smoke_color");
+	ADD_GROUP("Dust", "");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "dust"), "set_dust", "has_dust");
+	ADD_PROPERTY(PropertyInfo(Variant::STRING_NAME, "loose_ground_group"), "set_loose_ground_group", "get_loose_ground_group");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "dust_amount", PROPERTY_HINT_RANGE, "1,512,1"), "set_dust_amount", "get_dust_amount");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "dust_lifetime", PROPERTY_HINT_RANGE, "0.1,10,0.01,suffix:s"), "set_dust_lifetime", "get_dust_lifetime");
+	ADD_PROPERTY(PropertyInfo(Variant::COLOR, "dust_color"), "set_dust_color", "get_dust_color");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "dust_min_speed", PROPERTY_HINT_RANGE, "0,30,0.01,suffix:m/s"), "set_dust_min_speed", "get_dust_min_speed");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "dust_full_speed", PROPERTY_HINT_RANGE, "0.01,60,0.01,suffix:m/s"), "set_dust_full_speed", "get_dust_full_speed");
 	ADD_GROUP("Sound", "");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "sound"), "set_sound", "has_sound");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "cylinders", PROPERTY_HINT_RANGE, "1,16,1"), "set_cylinders", "get_cylinders");

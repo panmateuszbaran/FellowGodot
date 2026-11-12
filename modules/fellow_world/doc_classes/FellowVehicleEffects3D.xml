@@ -32,7 +32,7 @@
 		<method name="get_stats" qualifiers="const">
 			<return type="Dictionary" />
 			<description>
-				Returns this vehicle's [code]mark_segments[/code] (in its mesh), [code]segments_laid[/code], [code]mark_low[/code] and [code]mark_high[/code] (the laid marks' heights), [code]marks_aabb[/code], each wheel's sliding [code]intensity[/code] (0-1), the wheels [code]smoking[/code], the last frame's [code]usec[/code] and [code]synth_usec[/code], and the [code]sound_rpm[/code] the engine's sound is at.
+				Returns this vehicle's [code]mark_segments[/code] (in its mesh), [code]segments_laid[/code], [code]mark_low[/code] and [code]mark_high[/code] (the laid marks' heights), [code]marks_aabb[/code], each wheel's sliding [code]intensity[/code] (0-1), the wheels [code]smoking[/code], [code]dusting[/code] and [code]on_loose_ground[/code], the [code]visible_segments[/code] (not faded out), the last frame's [code]usec[/code] and [code]synth_usec[/code], and the [code]sound_rpm[/code] the engine's sound is at.
 			</description>
 		</method>
 		<method name="reset_global_stats" qualifiers="static">
@@ -46,11 +46,35 @@
 		<member name="cylinders" type="int" setter="set_cylinders" getter="get_cylinders" default="4">
 			The engine's cylinders: its firing frequency is the revolutions a second times half of them (a four-stroke engine).
 		</member>
+		<member name="dust" type="bool" setter="set_dust" getter="has_dust" default="true">
+			Dust at each wheel rolling on loose ground (milestone 88): GPU particles thrown up and drifting, more with the speed (from [member dust_min_speed] to [member dust_full_speed]) and with the tyre's sliding; there the tyre's smoke is not made.
+		</member>
+		<member name="dust_amount" type="int" setter="set_dust_amount" getter="get_dust_amount" default="48">
+			The dust particles a wheel emits over [member dust_lifetime] at full intensity.
+		</member>
+		<member name="dust_color" type="Color" setter="set_dust_color" getter="get_dust_color" default="Color(0.55, 0.46, 0.34, 0.55)">
+			The dust's colour, unless the ground's collider has the metadata [code]fellow_dust_color[/code] (a [Color]): then that one (one colour for the vehicle's dust at a time).
+		</member>
+		<member name="dust_full_speed" type="float" setter="set_dust_full_speed" getter="get_dust_full_speed" default="15.0">
+			The speed over loose ground at which the dust is fullest, in m/s.
+		</member>
+		<member name="dust_lifetime" type="float" setter="set_dust_lifetime" getter="get_dust_lifetime" default="1.6">
+			A dust particle's lifetime, in seconds.
+		</member>
+		<member name="dust_min_speed" type="float" setter="set_dust_min_speed" getter="get_dust_min_speed" default="2.0">
+			The speed over loose ground from which a rolling tyre raises dust, in m/s.
+		</member>
 		<member name="engine_offset" type="Vector3" setter="set_engine_offset" getter="get_engine_offset" default="Vector3(0, 0.6, -1.3)">
 			Where the sound plays, in the vehicle's space.
 		</member>
 		<member name="engine_volume_db" type="float" setter="set_engine_volume_db" getter="get_engine_volume_db" default="0.0">
 			The engine's level.
+		</member>
+		<member name="loose_ground_group" type="StringName" setter="set_loose_ground_group" getter="get_loose_ground_group" default="&amp;&quot;fellow_loose_ground&quot;">
+			The group of the colliders that are loose ground (dirt, gravel, sand, snow): on them tyres raise dust and leave ruts as they roll.
+		</member>
+		<member name="mark_lifetime" type="float" setter="set_mark_lifetime" getter="get_mark_lifetime" default="0.0">
+			How long the marks last, in seconds: past half of it a segment fades out, gone at its end (its colour written again four times a second). 0: they stay until their segments are reused.
 		</member>
 		<member name="mark_opacity" type="float" setter="set_mark_opacity" getter="get_mark_opacity" default="0.8">
 			The marks' opacity where a tyre slides hardest.
@@ -66,6 +90,9 @@
 		</member>
 		<member name="road_volume_db" type="float" setter="set_road_volume_db" getter="get_road_volume_db" default="-10.0">
 			The road's rumble's level.
+		</member>
+		<member name="rut_opacity" type="float" setter="set_rut_opacity" getter="get_rut_opacity" default="0.3">
+			The opacity of the ruts a tyre leaves rolling on loose ground (sliding, the skid marks' opacity if more).
 		</member>
 		<member name="skid_marks" type="bool" setter="set_skid_marks" getter="has_skid_marks" default="true">
 			If [code]true[/code], sliding tyres leave marks on the ground.

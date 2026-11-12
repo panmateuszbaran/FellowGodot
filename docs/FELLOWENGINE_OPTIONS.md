@@ -471,6 +471,12 @@ the ground) and `slide_slip` (0.2 combined slip), fully at `slip_full` (6 m/s). 
 `reset_global_stats()`. `FellowWheel3D.get_slip_speed()`, `get_contact_normal()`. Bench `bench/vehicle_fx_check.gd`
 (`--listen=1` under Movie Maker, `--pictures=1`, `--many=N`).
 
+Loose ground and fading marks (milestone 88, decision 0196), on `FellowVehicleEffects3D`: `loose_ground_group`
+("fellow_loose_ground": colliders in it are loose ground; their metadata `fellow_dust_color` the dust's colour),
+`dust` (on), `dust_amount` (48), `dust_lifetime` (1.6 s), `dust_color`, `dust_min_speed` (2 m/s), `dust_full_speed`
+(15 m/s), `rut_opacity` (0.3); `mark_lifetime` (0 s: the marks stay); stats `dusting`, `on_loose_ground`,
+`visible_segments`.
+
 ## Sound through the scene's geometry (milestone 78)
 
 Module `fellow_world`; nothing changes without the node (decision 0186). `FellowAcoustics3D` (a `Node3D`; where it is

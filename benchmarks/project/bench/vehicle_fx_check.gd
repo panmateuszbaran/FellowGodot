@@ -11,7 +11,9 @@ extends SceneTree
 ##
 ## Lanes, each a car (as bench/vehicle_check.gd's) with a FellowVehicleEffects3D: cruising straight at 50 km/h (no
 ## marks, no smoke), a handbrake turn at 50 km/h, a burnout (the traction control off, full throttle from rest), a
-## stop from 80 km/h with the wheels locked (the anti-lock brakes off) and one with them (fewer marks). One JSON line:
+## stop from 80 km/h with the wheels locked (the anti-lock brakes off) and one with them (fewer marks); milestone 88
+## (decision 0196): cruising on a strip of loose ground (dust and ruts, no smoke), a handbrake turn whose marks fade
+## (mark_lifetime 3 s). One JSON line:
 ## VEHICLE_FX_CHECK {...}; exit code 1 when a lane did otherwise than expected. --listen=1: one car, the master bus
 ## captured — the engine's tone at its firing frequency at idle and at 70 km/h, the tyres' squeal in a slide. --many=N: N cars
 ## sliding in circles, the effects' time a frame. One JSON line: VEHICLE_FX_MANY {...}.
@@ -184,8 +186,17 @@ func _build() -> void:
 	locked.anti_lock_brakes = false
 	_lane("locked", locked)
 	_lane("abs", _car(Vector3(60, 0.1, 0), Color(0.6, 0.3, 0.7)))
+	# Milestone 88 (decision 0196): a strip of loose ground (in the group "fellow_loose_ground", its dust's colour in its
+	# metadata), a car cruising on it; and a handbrake turn whose marks fade (mark_lifetime 3 s).
+	var dirt := _box(Vector3(75, -0.49, -400), Vector3(10, 1, 2000), Color(0.5, 0.42, 0.3))
+	dirt.add_to_group(&"fellow_loose_ground")
+	dirt.set_meta(&"fellow_dust_color", Color(0.6, 0.5, 0.36, 0.6))
+	_lane("dirt", _car(Vector3(75, 0.11, 0), Color(0.85, 0.8, 0.3)))
+	var fading := _car(Vector3(90, 0.1, 0), Color(0.3, 0.75, 0.8))
+	_fx(fading).mark_lifetime = 3.0
+	_lane("fade", fading)
 	if pictures:
-		cam.look_at_from_position(Vector3(30, 26, 22), Vector3(30, 0, -50))
+		cam.look_at_from_position(Vector3(45, 30, 26), Vector3(45, 0, -50))
 	physics_frame.connect(_on_frame)
 
 
@@ -205,7 +216,11 @@ func _drive(lane: Dictionary, dt: float) -> void:
 	match lane.name:
 		"cruise":
 			_cruise(car, 50.0)
-		"handbrake":
+		"dirt":
+			_cruise(car, 50.0)
+			d["dust_frames"] = d.get("dust_frames", 0) + (1 if st.dusting > 0 else 0)
+			d["loose_wheels_max"] = maxi(d.get("loose_wheels_max", 0), st.on_loose_ground)
+		"handbrake", "fade":
 			if t < 6.0:
 				_cruise(car, 50.0)
 			else:
@@ -231,6 +246,8 @@ func _drive(lane: Dictionary, dt: float) -> void:
 				if car.get_speed_kmh() < 1.0:
 					lane.phase = 2
 					d["while_braking"] = st.segments_laid - d.before
+	d["visible_max"] = maxi(d.get("visible_max", 0), st.visible_segments)
+	d["visible"] = st.visible_segments
 	d["segments"] = st.segments_laid
 	d["mark_low"] = snappedf(st.mark_low, 0.001)
 	d["mark_high"] = snappedf(st.mark_high, 0.001)
@@ -379,6 +396,12 @@ func _finish() -> void:
 				ok = d.get("segments", 1) == 0 and d.get("max_smoking", 1) == 0
 			"handbrake":
 				ok = d.get("segments", 0) > 10 and d.get("smoking_frames", 0) > 30 and absf(d.get("mark_low", 1.0) - 0.02) < 0.03 and d.get("mark_high", 1.0) < 0.06
+			"dirt":
+				# Rolling on loose ground: dust and ruts, no smoke (nothing slides).
+				ok = d.get("segments", 0) > 10 and d.get("dust_frames", 0) > 60 and d.get("max_smoking", 1) == 0 and d.get("loose_wheels_max", 0) == 4
+			"fade":
+				# The marks there, then faded away (laid at 6-9 s, gone 3 s after).
+				ok = d.get("segments", 0) > 10 and d.get("visible_max", 0) > 10 and d.get("visible", 1) == 0
 			"burnout":
 				ok = d.get("segments", 0) > 5 and d.get("smoking_frames", 0) > 30
 			"locked":

@@ -121,6 +121,7 @@ public:
 	float get_slip_speed() const { return slip_speed; }
 	Vector3 get_contact_normal() const { return contact_normal; }
 	Vector3 get_contact_point() const { return contact_point; }
+	ObjectID get_ground_id() const { return ground; } // FellowEngine milestone 88: what the tyre stands on
 	Node3D *get_ground() const;
 };
 
