@@ -82,7 +82,7 @@ script functions deep after breadcrumbs, two custom values, a printed marker and
 | a null pointer on a worker thread | EXCEPTION_ACCESS_VIOLATION, 6 frames, not the main thread | 438 KB, 36 threads |
 | an integer divided by zero | EXCEPTION_INT_DIVIDE_BY_ZERO, 19 frames | 453 KB, 0xc0000094 |
 | a null pointer 30 frames into a game, windowed | frame 29, scene "Harbour", the GPU (NVIDIA GeForce RTX 5070 Ti Laptop GPU) | 702 KB: 63 threads, 107 modules |
-| a stack overflow (main thread) | **none**: the process ended with an access violation | — |
+| a stack overflow (main thread) | **none**: the process ended with an access violation (fixed below: EXCEPTION_STACK_OVERFLOW, 96 frames, jobs f398-f399) | (after the fix) 8.9 MB: the referenced memory of a deep stack |
 
 Every report found pending by the next run and none after acknowledging it; the reports off: none written; a report
 the game writes: as on Linux. The frames are module and offset (a release template has no PDB): the minidump, opened
@@ -91,7 +91,9 @@ with the build's PDB, is where Windows' frames are read.
 The stack overflow: the filter ran on the overflowed thread with what Windows leaves it (a page or two), and its own
 frame (a 4 KiB file buffer for the scripts' backtraces) overflowed again. Fixed: the main thread's stack guarantee
 raised to 64 KiB (`SetThreadStackGuarantee`), the filter's frame kept small (the scripts' part in a function of its
-own). Job f398 checks it.
+own). Jobs f398 and f399 (milestone 98): the stack overflow reported (96 frames, its minidump with the exception);
+f398 also found a worker thread's crash unwound to one frame (its unwinder asked for 512 readable bytes above the
+stack pointer, past the top of a young thread's stack: 8 now), six again in f399. Every lane passes on Windows.
 
 ## Decision
 

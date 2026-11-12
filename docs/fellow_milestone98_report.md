@@ -1,6 +1,6 @@
 # FellowEngine — milestone 98 report (hang reports)
 
-Status: **IN PROGRESS** (2026-11-13): the owner said "ok kontynuuj". Branch `fellow/geometry`. Decision record:
+Status: **FINAL** (2026-11-13): the owner said "ok kontynuuj". Branch `fellow/geometry`. Decision record:
 `docs/decisions/0206-hang-reports.md`.
 
 ## 0. Result
@@ -25,7 +25,9 @@ script frames).
 ## 2. Verification
 
 * Decision 0206's table.
-* The laptop (job f398, Windows): in progress.
+* The laptop (jobs f398-f399, Windows, a release template): the stall and the freeze reported as on Linux (25-28 C++
+  frames from the suspended main thread, a minidump beside each); milestone 97's stack overflow now reported (96
+  frames); a worker thread's crash unwound to one frame in f398 (fixed: six in f399). Every crash and hang lane passes.
 
 ## 3. Measurements
 
@@ -33,4 +35,4 @@ A thread waking ten times a second; nothing on the main thread beyond milestone 
 
 ## 4. Next
 
-Hang reports on Windows on the laptop; a per-thread view of where the CPU went in a stall (later).
+Sound through openings (portals), milestone 99.

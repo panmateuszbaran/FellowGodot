@@ -42,6 +42,13 @@ without it is a freeze the player ended) and adds a breadcrumb. One report a sta
 
 The crash lanes (decision 0205) unchanged with the watchdog running (its default, 10 s).
 
+## Checks on Windows (the laptop, jobs f398-f399: a release template, MSVC)
+
+The same two lanes: the stall reported at 2009-2010 ms and recovered at 3483-3484 ms (the game going on, exit 0), the
+loop reported at 2009-2010 ms and never recovered (killed); the main thread's 25-28 frames unwound from its suspended
+context; a minidump of 35 threads beside each (420-431 KB). No script frames (decision's design). The crash lanes
+pass with the watchdog running.
+
 ## Cost
 
 A thread waking ten times a second to read a counter; nothing on the main thread beyond decision 0205's idle
