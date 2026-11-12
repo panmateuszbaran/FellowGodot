@@ -9,6 +9,16 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 76 — cloth on bones (2026-11-12)
+
+- `FellowCloth3D` (decision 0184): `skeleton_path` and `pin_bones` — the pinned particles follow a skeleton's bones
+  (each bound to the nearest allowed bone when built or reset, kept in its space, interpolated over the substeps): a
+  cape on a character's chest turns and bends with it; capsules on the bones (`BoneAttachment3D`s) in `colliders` keep
+  the cloth out of the body. Checked on a cape on a twisting chest of a circling body (the pins within 0.02 mm, nothing
+  in the body), a regression scene (`cape`).
+- Destruction (decision 0182): fractures are low-priority tasks on the worker pool (high-priority ones delayed the
+  engine's own work: 19-86 ms frames while 64-256 crates broke on the laptop).
+
 ## Milestone 75 — hanging and ladders (2026-11-12)
 
 - `FellowTraversal3D` (decision 0183): in the air, a ledge the body cannot climb (no room on its top) — or with

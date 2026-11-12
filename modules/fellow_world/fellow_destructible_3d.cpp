@@ -231,7 +231,8 @@ void FellowDestructible3D::break_apart(const Vector3 &p_position, const Vector3 
 	pending = true;
 	pending_position = position;
 	pending_impulse = p_impulse;
-	task = WorkerThreadPool::get_singleton()->add_template_task(this, &FellowDestructible3D::_fracture_task, 0, true, "FellowDestructible3D");
+	// Low priority: the engine's own work on the pool (the physics step's jobs, streaming) goes first.
+	task = WorkerThreadPool::get_singleton()->add_template_task(this, &FellowDestructible3D::_fracture_task, 0, false, "FellowDestructible3D");
 	set_process_internal(true);
 }
 

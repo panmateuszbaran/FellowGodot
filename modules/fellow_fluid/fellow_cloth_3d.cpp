@@ -42,6 +42,7 @@
 #include "scene/3d/camera_3d.h"
 #include "scene/3d/physics/collision_object_3d.h"
 #include "scene/3d/physics/collision_shape_3d.h"
+#include "scene/3d/skeleton_3d.h"
 #include "scene/main/viewport.h"
 #include "scene/resources/3d/world_3d.h"
 #include "servers/physics_3d/physics_server_3d.h"
@@ -520,6 +521,104 @@ void FellowCloth3D::_init_particles() {
 	xf_cur = xf;
 	have_prev = true;
 	step_acc = 0.0;
+	_bind_bones();
+}
+
+// Milestone 76: the skeleton the pinned particles follow (skeleton_path), or none.
+Skeleton3D *FellowCloth3D::_get_skeleton() const {
+	if (skeleton_path.is_empty() || !is_inside_tree()) {
+		return nullptr;
+	}
+	return Object::cast_to<Skeleton3D>(get_node_or_null(skeleton_path));
+}
+
+// Each pinned particle bound to the nearest of the allowed bones (the segment from the bone to its first child, as the
+// skeleton is posed now), its place kept in that bone's space; without a skeleton they follow the node.
+void FellowCloth3D::_bind_bones() {
+	const uint32_t np = x.size();
+	pin_bone.resize(np);
+	pin_offset.resize(np);
+	pin_from.resize(np);
+	pin_to.resize(np);
+	bone_pins = 0;
+	bound_skeleton = ObjectID();
+	for (uint32_t i = 0; i < np; i++) {
+		pin_bone[i] = -1;
+	}
+	Skeleton3D *sk = _get_skeleton();
+	if (!sk || sk->get_bone_count() == 0) {
+		return;
+	}
+	bound_skeleton = sk->get_instance_id();
+	const Transform3D skx = sk->get_global_transform();
+	LocalVector<int> bones;
+	for (int b = 0; b < sk->get_bone_count(); b++) {
+		if (pin_bones.is_empty() || pin_bones.has(sk->get_bone_name(b))) {
+			bones.push_back(b);
+		}
+	}
+	if (bones.is_empty()) {
+		return;
+	}
+	LocalVector<Transform3D> bone_xf;
+	LocalVector<Vector3> seg_a;
+	LocalVector<Vector3> seg_b;
+	for (int b : bones) {
+		const Transform3D gx = skx * sk->get_bone_global_pose(b);
+		bone_xf.push_back(gx);
+		seg_a.push_back(gx.origin);
+		const Vector<int> children = sk->get_bone_children(b);
+		seg_b.push_back(children.is_empty() ? gx.origin : (skx * sk->get_bone_global_pose(children[0])).origin);
+	}
+	for (uint32_t i = 0; i < np; i++) {
+		if (w[i] > 0.0f) {
+			continue;
+		}
+		const Vector3 p = x[i];
+		float best = std::numeric_limits<float>::max();
+		uint32_t best_k = 0;
+		for (uint32_t k = 0; k < bones.size(); k++) {
+			const Vector3 ab = seg_b[k] - seg_a[k];
+			const float l2 = ab.length_squared();
+			const float t = l2 > 1e-12f ? CLAMP((p - seg_a[k]).dot(ab) / l2, 0.0f, 1.0f) : 0.0f;
+			const float d = p.distance_squared_to(seg_a[k] + ab * t);
+			if (d < best) {
+				best = d;
+				best_k = k;
+			}
+		}
+		pin_bone[i] = bones[best_k];
+		pin_offset[i] = bone_xf[best_k].affine_inverse().xform(p);
+		pin_from[i] = p;
+		pin_to[i] = p;
+		bone_pins++;
+	}
+}
+
+// The bone pins' places this frame (main thread): where they were, where their bones are now.
+void FellowCloth3D::_update_bone_pins() {
+	if (bone_pins == 0) {
+		return;
+	}
+	Skeleton3D *sk = ObjectDB::get_instance<Skeleton3D>(bound_skeleton);
+	if (!sk || !sk->is_inside_tree()) {
+		return;
+	}
+	const Transform3D skx = sk->get_global_transform();
+	HashMap<int, Transform3D> bone_xf;
+	const uint32_t np = x.size();
+	for (uint32_t i = 0; i < np; i++) {
+		const int b = pin_bone[i];
+		if (b < 0 || b >= sk->get_bone_count()) {
+			continue;
+		}
+		HashMap<int, Transform3D>::Iterator it = bone_xf.find(b);
+		if (!it) {
+			it = bone_xf.insert(b, skx * sk->get_bone_global_pose(b));
+		}
+		pin_from[i] = pin_to[i];
+		pin_to[i] = it->value.xform(pin_offset[i]);
+	}
 }
 
 void FellowCloth3D::reset() {
@@ -664,6 +763,10 @@ bool FellowCloth3D::_prepare(double p_delta) {
 	if (xf_cur.origin.distance_to(xf_prev.origin) > 5.0f) {
 		_init_particles(); // a teleport
 	}
+	if ((bone_pins > 0) != (_get_skeleton() != nullptr) || (bone_pins > 0 && ObjectDB::get_instance(bound_skeleton) != _get_skeleton())) {
+		_bind_bones(); // the skeleton set, changed or gone
+	}
+	_update_bone_pins();
 	// Level of detail by the camera's distance: past lod_distance half the substeps, past simulation_distance none
 	// (the cloth carried with the node).
 	carry_only = false;
@@ -812,7 +915,7 @@ void FellowCloth3D::_collide(uint32_t p_i) {
 	x[p_i] = p;
 }
 
-void FellowCloth3D::_substep(float p_h, const Transform3D &p_pin_xf) {
+void FellowCloth3D::_substep(float p_h, const Transform3D &p_pin_xf, float p_f) {
 	// Raw pointers in the loops: the vectors' checked indexing costs a branch each access.
 	const uint32_t np = x.size();
 	Vector3 *__restrict X = x.ptr();
@@ -847,14 +950,17 @@ void FellowCloth3D::_substep(float p_h, const Transform3D &p_pin_xf) {
 			A[c] += f * W[c];
 		}
 	}
-	// Integrate (pinned particles follow the node).
+	// Integrate (pinned particles follow the node, or their bones).
 	const float keep = MAX(0.0f, 1.0f - damping * p_h);
 	const Vector3 *R = rest_local.ptr();
+	const int *PB = bone_pins > 0 ? pin_bone.ptr() : nullptr;
 	for (uint32_t i = 0; i < np; i++) {
 		P[i] = X[i];
 		if (W[i] > 0.0f) {
 			V[i] = (V[i] + A[i] * p_h) * keep;
 			X[i] += V[i] * p_h;
+		} else if (PB && PB[i] >= 0) {
+			X[i] = pin_from[i].lerp(pin_to[i], p_f);
 		} else {
 			X[i] = p_pin_xf.xform(R[i]);
 		}
@@ -921,7 +1027,7 @@ void FellowCloth3D::_simulate() {
 		// Far from the camera: the cloth keeps its shape, carried with the node.
 		const Transform3D d = xf_cur * xf_prev.affine_inverse();
 		for (uint32_t i = 0; i < np; i++) {
-			x[i] = d.xform(x[i]);
+			x[i] = bone_pins > 0 && pin_bone[i] >= 0 ? pin_to[i] : d.xform(x[i]);
 			prev[i] = x[i];
 			vel[i] = Vector3();
 		}
@@ -944,7 +1050,7 @@ void FellowCloth3D::_simulate() {
 		}
 		for (int s = 0; s < steps_now; s++) {
 			const real_t f = real_t(s + 1) / real_t(steps_now);
-			_substep(h, xf_prev.interpolate_with(xf_cur, f));
+			_substep(h, xf_prev.interpolate_with(xf_cur, f), float(f));
 		}
 		global_stats.substeps.add(steps_now);
 		global_stats.particles.add(np);
@@ -1097,6 +1203,21 @@ Vector3 FellowCloth3D::get_particle_position(int p_index) const {
 	return x[p_index];
 }
 
+void FellowCloth3D::set_skeleton_path(const NodePath &p_path) {
+	skeleton_path = p_path;
+	if (built && is_inside_tree()) {
+		_bind_bones();
+	}
+	update_configuration_warnings();
+}
+
+void FellowCloth3D::set_pin_bones(const PackedStringArray &p_bones) {
+	pin_bones = p_bones;
+	if (built && is_inside_tree()) {
+		_bind_bones();
+	}
+}
+
 void FellowCloth3D::set_particle_pinned(int p_index, bool p_pinned) {
 	ERR_FAIL_INDEX(p_index, int(x.size()));
 	if (p_pinned) {
@@ -1107,6 +1228,9 @@ void FellowCloth3D::set_particle_pinned(int p_index, bool p_pinned) {
 		w[p_index] = 1.0f / particle_mass[p_index];
 	}
 	_filter_constraints();
+	if (_get_skeleton()) {
+		_bind_bones(); // the pins on the bones again, this one with them or not
+	}
 }
 
 bool FellowCloth3D::is_particle_pinned(int p_index) const {
@@ -1127,6 +1251,7 @@ Dictionary FellowCloth3D::get_stats() const {
 	d["far"] = carry_only;
 	d["lod"] = lod_now;
 	d["wind"] = wind_now;
+	d["bone_pins"] = bone_pins;
 	return d;
 }
 
@@ -1157,6 +1282,18 @@ PackedStringArray FellowCloth3D::get_configuration_warnings() const {
 		const Node *n = is_inside_tree() ? get_node_or_null(colliders[i]) : nullptr;
 		if (is_inside_tree() && !Object::cast_to<CollisionShape3D>(n) && !Object::cast_to<CollisionObject3D>(n)) {
 			warnings.push_back(vformat(RTR("Colliders[%d] (%s) leads to no CollisionShape3D or CollisionObject3D."), i, String(colliders[i])));
+		}
+	}
+	if (is_inside_tree() && !skeleton_path.is_empty()) {
+		const Skeleton3D *sk = Object::cast_to<Skeleton3D>(get_node_or_null(skeleton_path));
+		if (!sk) {
+			warnings.push_back(vformat(RTR("Skeleton Path (%s) leads to no Skeleton3D: the pinned particles follow the node."), String(skeleton_path)));
+		} else {
+			for (const String &b : pin_bones) {
+				if (sk->find_bone(b) < 0) {
+					warnings.push_back(vformat(RTR("Pin Bones: the skeleton has no bone \"%s\"."), b));
+				}
+			}
 		}
 	}
 	return warnings;
@@ -1233,6 +1370,10 @@ void FellowCloth3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_size"), &FellowCloth3D::get_size);
 	ClassDB::bind_method(D_METHOD("set_resolution", "resolution"), &FellowCloth3D::set_resolution);
 	ClassDB::bind_method(D_METHOD("get_resolution"), &FellowCloth3D::get_resolution);
+	ClassDB::bind_method(D_METHOD("set_skeleton_path", "path"), &FellowCloth3D::set_skeleton_path);
+	ClassDB::bind_method(D_METHOD("get_skeleton_path"), &FellowCloth3D::get_skeleton_path);
+	ClassDB::bind_method(D_METHOD("set_pin_bones", "bones"), &FellowCloth3D::set_pin_bones);
+	ClassDB::bind_method(D_METHOD("get_pin_bones"), &FellowCloth3D::get_pin_bones);
 	ClassDB::bind_method(D_METHOD("set_pin_mode", "mode"), &FellowCloth3D::set_pin_mode);
 	ClassDB::bind_method(D_METHOD("get_pin_mode"), &FellowCloth3D::get_pin_mode);
 	ClassDB::bind_method(D_METHOD("set_material", "material"), &FellowCloth3D::set_material);
@@ -1287,6 +1428,8 @@ void FellowCloth3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::VECTOR2, "size", PROPERTY_HINT_NONE, "suffix:m"), "set_size", "get_size");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "resolution", PROPERTY_HINT_RANGE, "1,128,1,or_greater"), "set_resolution", "get_resolution");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "pin_mode", PROPERTY_HINT_ENUM, "None,Top Edge,Left Edge,Top Corners,Corners,Vertex Color"), "set_pin_mode", "get_pin_mode");
+	ADD_PROPERTY(PropertyInfo(Variant::NODE_PATH, "skeleton_path", PROPERTY_HINT_NODE_PATH_VALID_TYPES, "Skeleton3D"), "set_skeleton_path", "get_skeleton_path");
+	ADD_PROPERTY(PropertyInfo(Variant::PACKED_STRING_ARRAY, "pin_bones"), "set_pin_bones", "get_pin_bones");
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "material", PROPERTY_HINT_RESOURCE_TYPE, "BaseMaterial3D,ShaderMaterial"), "set_material", "get_material");
 	ADD_GROUP("Fabric", "");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "simulating"), "set_simulating", "is_simulating");

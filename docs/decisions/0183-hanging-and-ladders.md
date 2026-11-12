@@ -70,9 +70,12 @@ Lavapipe: the lanes filmed (the hang and the move along the ledge, the climb fro
 the ladders). The regression scene `climb` (a body hanging and moving along a ledge, one on a ladder, held at a frame):
 the same picture on every run.
 
-## Results on the laptop (job f394, release template)
+## Results on the laptop (job f394, release template at 8549eb5)
 
-(to be filled)
+The six lanes with GodotPhysics3D and with Jolt: the same events, the same ends and distances as on the cloud (1.35 m
+along the ledge, 0.21 m before the gap, 120.5° round the tower, 2.03 m from its axis), no frame of the capsule in the
+world. A traversal's step while hanging or climbing: 1.9 µs with Jolt, 2.4 µs with GodotPhysics3D on average (its probes
+are the physics server's rays and shape queries). The lanes filmed on the RTX (Jolt).
 
 ## Decision
 

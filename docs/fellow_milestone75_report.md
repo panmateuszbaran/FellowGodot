@@ -1,6 +1,6 @@
 # FellowEngine — milestone 75 report (hanging and ladders)
 
-Status: **IN PROGRESS** (2026-11-12): the owner said "kontynuuj usprawnienia do poziomu AAA naszego silnika, pracuj
+Status: **FINAL** (2026-11-12): the owner said "kontynuuj usprawnienia do poziomu AAA naszego silnika, pracuj
 przynajmniej do 8 rano" (the GPU allowed). Branch `fellow/geometry`. Decision record:
 `docs/decisions/0183-hanging-and-ladders.md`.
 
@@ -37,11 +37,12 @@ broken.
 * Lavapipe: the lanes filmed; the regression scene `climb` exact on a second run; the whole suite with the release
   template.
 * The editor check: the ladder's icon and gizmo, "Add Ladder" without a warning and undone.
-* The laptop (f394, release template): to be run.
+* The laptop (f394, release template): the six lanes with both engines as on the cloud; filmed on the RTX (Jolt).
 
 ## 3. Measurements
 
-A traversal's step while hanging or on a ladder (its probes along the edge included): 1.6-1.8 µs on average on the cloud.
+A traversal's step while hanging or on a ladder (its probes along the edge included): 1.6-1.8 µs on average on the cloud;
+on the laptop 1.9 µs with Jolt, 2.4 µs with GodotPhysics3D.
 
 ## 4. Next
 

@@ -494,6 +494,11 @@ threads at once; drawn with motion vectors (one blend shape: per-instance vertex
 FellowEngine menu's "Add Flag" and "Add Curtain". Bench `bench/cloth_check.gd` (`--many=N`); the regression scene
 `cloth`.
 
+Milestone 76 (decision 0184): `skeleton_path` (a `Skeleton3D`: the pinned particles follow its bones, each bound to
+the nearest of `pin_bones` — empty: any — when the cloth is built or reset, interpolated over the substeps); capsules
+on the bones (`BoneAttachment3D`s with `CollisionShape3D`s) in `colliders` for the body. `get_stats()` counts
+`bone_pins`.
+
 ## Traversal: mantling and vaulting (milestone 72)
 
 Module `fellow_animation`; nothing changes without the nodes (decision 0180). `FellowTraversal3D`, a child of the

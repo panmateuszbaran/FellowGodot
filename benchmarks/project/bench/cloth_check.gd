@@ -1,5 +1,5 @@
 extends SceneTree
-## FellowEngine milestone 73 check (decision 0181): FellowCloth3D.
+## FellowEngine milestone 73 check (decision 0181): FellowCloth3D; milestone 76 (decision 0184): pinned to bones.
 ##
 ##   godot --path benchmarks/project --headless --fixed-fps 60 -s res://bench/cloth_check.gd -- --out=<dir>
 ##   godot --path benchmarks/project --fixed-fps 60 --resolution 1280x720 -s res://bench/cloth_check.gd
@@ -9,7 +9,9 @@ extends SceneTree
 ## Lanes, each a cloth in a situation: a flag on a pole in the wind (FellowWind3D, gusts), a curtain hanging still, a
 ## sheet dropped on a sphere and a box (the physics world's), a sheet dropped on a height map, a cape pinned at two
 ## corners on a node circling a capsule it collides with, an awning pinned at its corners, a banner from a source mesh
-## (a PlaneMesh), a flag hit by an impulse, a flag beyond the simulation distance. For each after the run: the largest
+## (a PlaneMesh), a flag hit by an impulse, a flag beyond the simulation distance, a cape pinned to a skeleton's chest
+## bone (twisting) on a body circling, colliding with capsules on its bones (the pins' drift in the bone's space
+## measured). For each after the run: the largest
 ## strain of the grid's edges (stretched over rest), positions finite, the deepest a particle went into a collider,
 ## where the cloth went (a flag downwind, a curtain hanging, a sheet resting on what it fell on). The cost: the
 ## simulation's time a frame (--many=N flags in the wind). With --pictures=1 the lanes filmed (cloth_strip.png),
@@ -36,10 +38,13 @@ var many_last := 0
 var wind: FellowWind3D
 var mover: Node3D
 var mover_capsule: CollisionShape3D
+var walker: Node3D # milestone 76: the cape on a skeleton's chest
+var walker_skeleton: Skeleton3D
+var walker_capsules: Array = []
 var done := false
 var shots := {}
 var viewports := {}
-var strip_lanes := ["flag", "curtain", "sheet_on_shapes", "cape", "awning", "banner_mesh"]
+var strip_lanes := ["flag", "curtain", "sheet_on_shapes", "cape", "awning", "banner_mesh", "cape_bones"]
 var strip_times := [0.5, 1.0, 2.0, 3.9]
 
 
@@ -281,6 +286,55 @@ func _build() -> void:
 	far.simulation_distance = 1.0
 	_lane("far", far, x)
 
+	# Milestone 76: a cape on a skeleton — its top edge pinned to the Chest bone (the chest twisting 35 degrees each way
+	# twice a second), the body circling at 1.6 m/s, colliding with capsules on the hips and the chest (BoneAttachment3Ds).
+	x += 8.0
+	walker = Node3D.new()
+	walker.position = Vector3(x, 0, 0)
+	root3d.add_child(walker)
+	walker_skeleton = Skeleton3D.new()
+	walker.add_child(walker_skeleton)
+	for b in [["Hips", "", Vector3(0, 0.95, 0)], ["Spine", "Hips", Vector3(0, 0.15, 0)], ["Chest", "Spine", Vector3(0, 0.25, 0)], ["Neck", "Chest", Vector3(0, 0.25, 0)]]:
+		var bi := walker_skeleton.add_bone(b[0])
+		if b[1] != "":
+			walker_skeleton.set_bone_parent(bi, walker_skeleton.find_bone(b[1]))
+		walker_skeleton.set_bone_rest(bi, Transform3D(Basis(), b[2]))
+		walker_skeleton.set_bone_pose_position(bi, b[2])
+	var wmat := _material(Color(0.6, 0.6, 0.62))
+	for b in [["Hips", 0.2, 0.55, Vector3(0, 0.05, 0)], ["Chest", 0.21, 0.6, Vector3(0, 0.05, 0)]]:
+		var wat := BoneAttachment3D.new()
+		wat.bone_name = b[0]
+		walker_skeleton.add_child(wat)
+		var wcs := CollisionShape3D.new()
+		var bcap := CapsuleShape3D.new()
+		bcap.radius = b[1]
+		bcap.height = b[2]
+		wcs.shape = bcap
+		wcs.position = b[3]
+		wat.add_child(wcs)
+		var wmi := MeshInstance3D.new()
+		var wcm := CapsuleMesh.new()
+		wcm.radius = b[1]
+		wcm.height = b[2]
+		wmi.mesh = wcm
+		wmi.material_override = wmat
+		wmi.position = b[3]
+		wat.add_child(wmi)
+		walker_capsules.append(wcs)
+	var bcape := _cloth("BoneCape", Transform3D(Basis(), Vector3(-0.4, 1.55, 0.24)), Vector2(0.8, 1.1), 16, FellowCloth3D.PIN_TOP_EDGE, Color(0.15, 0.3, 0.6))
+	bcape.get_parent().remove_child(bcape)
+	walker.add_child(bcape)
+	bcape.collide_with_world = false
+	bcape.wind_scale = 0.25 # the scene's wind is the flags' gale: the cape swings with the body more than it streams
+	bcape.skeleton_path = bcape.get_path_to(walker_skeleton)
+	bcape.pin_bones = PackedStringArray(["Chest"])
+	var wpaths := []
+	for wc in walker_capsules:
+		wpaths.append(bcape.get_path_to(wc))
+	bcape.colliders = wpaths
+	l = _lane("cape_bones", bcape, x)
+	l["bone_capsules"] = walker_capsules
+
 	var cam := Camera3D.new()
 	root3d.add_child(cam)
 	cam.look_at_from_position(Vector3(40, 9, 22), Vector3(40, 1.5, 0))
@@ -336,6 +390,8 @@ func _make_viewports() -> void:
 				cam.look_at_from_position(Vector3(x + 2.5, 1.2, 3.5), Vector3(x, 2.2, 0))
 			"banner_mesh":
 				cam.look_at_from_position(Vector3(x + 2.0, 2.2, 3.5), Vector3(x, 2.0, 0))
+			"cape_bones":
+				cam.look_at_from_position(Vector3(x + 4.0, 2.4, 5.0), Vector3(x, 1.0, 0))
 		if grid:
 			var cell := Control.new()
 			cell.custom_minimum_size = Vector2(shot_size)
@@ -363,7 +419,7 @@ func _find(name: String) -> Dictionary:
 	return {}
 
 
-func _measure(lane: Dictionary) -> void:
+func _measure(lane: Dictionary, pins := false) -> void:
 	var c: FellowCloth3D = lane.cloth
 	var n := c.get_particle_count()
 	for i in n:
@@ -406,6 +462,28 @@ func _measure(lane: Dictionary) -> void:
 				if q.x < h.x and q.y < h.y and q.z < h.z:
 					depth = minf(minf(h.x - q.x, h.y - q.y), h.z - q.z)
 			lane.deepest = maxf(lane.deepest, depth)
+	if lane.has("bone_capsules") and pins:
+		var chest_xf := walker_skeleton.global_transform * walker_skeleton.get_bone_global_pose(walker_skeleton.find_bone("Chest"))
+		var inv := chest_xf.affine_inverse()
+		if not lane.has("pin_local"):
+			var pl := {}
+			for i in n:
+				if c.is_particle_pinned(i):
+					pl[i] = inv * c.get_particle_position(i)
+			lane["pin_local"] = pl
+			lane["pin_drift"] = 0.0
+		for i in lane.pin_local:
+			lane.pin_drift = maxf(lane.pin_drift, (inv * c.get_particle_position(i)).distance_to(lane.pin_local[i]))
+		for cs in lane.bone_capsules:
+			var capsule: CapsuleShape3D = (cs as CollisionShape3D).shape
+			var gx: Transform3D = (cs as CollisionShape3D).global_transform
+			var half := capsule.height * 0.5 - capsule.radius
+			var a := gx * Vector3(0, half, 0)
+			var b := gx * Vector3(0, -half, 0)
+			for i in n:
+				var p := c.get_particle_position(i)
+				var tt := clampf((p - b).dot(a - b) / maxf((a - b).length_squared(), 1e-9), 0.0, 1.0)
+				lane.deepest = maxf(lane.deepest, capsule.radius - p.distance_to(b.lerp(a, tt)))
 	if lane.has("capsule"):
 		var cs: CollisionShape3D = lane.capsule
 		var a := cs.global_position + Vector3(0, 0.55, 0)
@@ -451,7 +529,16 @@ func _on_frame() -> void:
 		hit.apply_impulse(hit.global_position + Vector3(1.2, -0.5, 0), Vector3(0, 0, 0.4), 0.6)
 	if frame > 30 and frame % 10 == 0:
 		for lane in lanes:
-			_measure(lane)
+			_measure(lane, true)
+	# The walker moved after the measurement: its cloth was simulated (in the frame's processing) with the pose it had.
+	if walker:
+		var tw := frame / 60.0
+		var aw := tw * 1.6 / 2.5
+		var wx: float = _find("cape_bones").x
+		walker.position = Vector3(wx + cos(aw) * 2.5, 0, sin(aw) * 2.5)
+		walker.look_at(walker.position + Vector3(-sin(aw), 0, cos(aw)), Vector3.UP)
+		var chest := walker_skeleton.find_bone("Chest")
+		walker_skeleton.set_bone_pose_rotation(chest, Quaternion(Vector3.UP, deg_to_rad(35.0) * sin(tw * TAU * 2.0)))
 	if pictures:
 		_shoot()
 	if frame >= int(RUN_SECONDS * 60.0):
@@ -522,6 +609,11 @@ func _finish() -> void:
 				ok = ok and st.lod and tip2.x - lane.x > 1.2 and lane.strain_mean_now < 0.03 and lane.strain_now < 0.3
 			"far":
 				ok = ok and st.far
+			"cape_bones":
+				# The pins on the chest (they twist with it, within a millimetre), nothing inside the body.
+				e["pin_drift_mm"] = snappedf(lane.get("pin_drift", 1.0) * 1000.0, 0.01)
+				e["bone_pins"] = st.get("bone_pins", 0)
+				ok = ok and st.get("bone_pins", 0) > 0 and st.get("bone_pins", 0) == lane.get("pin_local", {}).size() and lane.get("pin_drift", 1.0) < 0.001 and lane.deepest < 0.03 and lane.strain_mean_now < 0.03
 		e["ok"] = ok
 		if not ok:
 			failures.append(lane.name)

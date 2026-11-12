@@ -42,6 +42,8 @@
 // spheres, capsules, boxes, cylinders, planes and height maps (shapes it is given, and the physics world's under it),
 // every cloth of a frame on the worker threads at once. Drawn as a mesh whose vertices are updated each frame through a
 // blend shape's per-instance buffers, so that its motion vectors (TAA, FSR) follow the cloth.
+class Skeleton3D;
+
 class FellowCloth3D : public GeometryInstance3D {
 	GDCLASS(FellowCloth3D, GeometryInstance3D);
 
@@ -123,6 +125,9 @@ private:
 	TypedArray<NodePath> colliders;
 	bool collide_with_world = true;
 	uint32_t collision_mask = 1;
+	// Milestone 76: the pinned particles on a skeleton's bones (a cape on the shoulders, a skirt on the hips).
+	NodePath skeleton_path;
+	PackedStringArray pin_bones; // the bones they may follow (empty: any)
 	// Level of detail.
 	float simulation_distance = 100.0f;
 	float lod_distance = 25.0f;
@@ -159,6 +164,14 @@ private:
 	LocalVector<Vector3> render_rest_normal; // node space
 	LocalVector<Vector4> render_rest_tangent;
 	LocalVector<Vector3> particle_rest_normal; // node space, from the triangles
+	// Bone pins (milestone 76): each pinned particle's bone (-1: the node) and its place in the bone's space; where it
+	// was at the last frame and is at this one (global, main thread), interpolated over the substeps.
+	LocalVector<int> pin_bone;
+	LocalVector<Vector3> pin_offset;
+	LocalVector<Vector3> pin_from;
+	LocalVector<Vector3> pin_to;
+	int bone_pins = 0;
+	ObjectID bound_skeleton;
 	float normal_sign = 1.0f;
 	bool has_tangents = false;
 	bool built = false;
@@ -200,7 +213,10 @@ private:
 	void _gather_colliders();
 	void _add_collider(RID p_shape, const Transform3D &p_xf);
 	void _simulate();
-	void _substep(float p_h, const Transform3D &p_pin_xf);
+	void _substep(float p_h, const Transform3D &p_pin_xf, float p_f);
+	Skeleton3D *_get_skeleton() const;
+	void _bind_bones();
+	void _update_bone_pins();
 	void _collide(uint32_t p_i);
 	void _write_vertices();
 	void _finish();
@@ -232,6 +248,10 @@ public:
 	Vector2 get_size() const { return size; }
 	void set_resolution(int p_resolution);
 	int get_resolution() const { return resolution; }
+	void set_skeleton_path(const NodePath &p_path);
+	NodePath get_skeleton_path() const { return skeleton_path; }
+	void set_pin_bones(const PackedStringArray &p_bones);
+	PackedStringArray get_pin_bones() const { return pin_bones; }
 	void set_pin_mode(PinMode p_mode);
 	PinMode get_pin_mode() const { return pin_mode; }
 	void set_material(const Ref<Material> &p_material);

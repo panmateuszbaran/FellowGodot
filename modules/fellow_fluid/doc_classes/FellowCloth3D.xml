@@ -42,7 +42,7 @@
 		<method name="get_stats" qualifiers="const">
 			<return type="Dictionary" />
 			<description>
-				This cloth's [code]particles[/code], [code]triangles[/code], [code]stretch_constraints[/code], [code]bend_constraints[/code], [code]tethers[/code], the last frame's [code]substeps[/code], [code skip-lint]colliders[/code], [code]simulate_usec[/code], [code skip-lint]wind[/code], and whether it was past [member lod_distance] ([code]lod[/code]) or [member simulation_distance] ([code]far[/code]).
+				This cloth's [code]particles[/code], [code]triangles[/code], [code]stretch_constraints[/code], [code]bend_constraints[/code], [code]tethers[/code], the last frame's [code]substeps[/code], [code skip-lint]colliders[/code], [code]simulate_usec[/code], [code skip-lint]wind[/code], whether it was past [member lod_distance] ([code]lod[/code]) or [member simulation_distance] ([code]far[/code]), and the pinned particles on bones ([code]bone_pins[/code], [member skeleton_path]).
 			</description>
 		</method>
 		<method name="is_particle_pinned" qualifiers="const">
@@ -116,6 +116,9 @@
 		<member name="max_substeps" type="int" setter="set_max_substeps" getter="get_max_substeps" default="12">
 			The most substeps a frame: a slower frame simulates less than its time rather than ever more work.
 		</member>
+		<member name="pin_bones" type="PackedStringArray" setter="set_pin_bones" getter="get_pin_bones" default="PackedStringArray()">
+			The bones the pinned particles may follow ([member skeleton_path]): each is bound to the nearest of them (empty: any bone).
+		</member>
 		<member name="pin_mode" type="int" setter="set_pin_mode" getter="get_pin_mode" enum="FellowCloth3D.PinMode" default="1">
 			The particles that follow the node.
 		</member>
@@ -131,6 +134,9 @@
 		</member>
 		<member name="size" type="Vector2" setter="set_size" getter="get_size" default="Vector2(2, 1.2)">
 			The generated rectangle (without a [member source_mesh]): from the node's origin, [code]x[/code] meters along +X and [code]y[/code] meters down, facing +Z.
+		</member>
+		<member name="skeleton_path" type="NodePath" setter="set_skeleton_path" getter="get_skeleton_path" default="NodePath(&quot;&quot;)">
+			A [Skeleton3D] the pinned particles follow instead of the node (milestone 76): when the cloth is built or reset, each pinned particle is bound to the nearest of [member pin_bones] (the segment from the bone to its first child, as the skeleton is posed then) and keeps its place in that bone's space, interpolated between the frames' poses over the substeps — a cape on the shoulders turns with the chest, a skirt on the hips with them. Put capsules on the bones ([BoneAttachment3D]s with [CollisionShape3D]s) in [member colliders] for the body.
 		</member>
 		<member name="source_mesh" type="Mesh" setter="set_source_mesh" getter="get_source_mesh">
 			A mesh to simulate instead of the rectangle: its first surface's triangles (vertices at the same position are one particle).

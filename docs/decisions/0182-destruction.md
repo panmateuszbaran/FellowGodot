@@ -125,7 +125,12 @@ Crates broken at once, prefractured (headless: the CPU's whole frame; Jolt twice
 
 Computed on the workers the headless frames were far shorter than the fractures, and the check ended (240 frames) before
 any crate had broken: the bench now waits until every crate has broken, and builds a piece's meshes and shapes only in
-the frame it may spawn (the budget covers them too); measured again in job f394.
+the frame it may spawn (the budget covers them too). Job f394 (8549eb5): 64 crates all broken 72-96 ms after the blow,
+256 in 262-374 ms (Jolt / GodotPhysics3D); each crate's fracture 9-13 ms of a worker with all of them at once (the
+pool's 24 threads busy, the allocator shared), its build 0.12-0.67 ms and spawn 0.16-0.61 ms of the main thread. The
+frames while they broke reached 19-24 ms with Jolt and 25-86 ms with GodotPhysics3D — against 0.9-3.7 ms spawning the
+same pieces prefractured: the fractures were high-priority tasks, ahead of the engine's own work on the pool. They are
+low-priority tasks now (milestone 76); measured again in job f395.
 
 ## Decision
 
