@@ -1,6 +1,6 @@
 # FellowEngine — milestone 105 report (vehicles dented where they hit)
 
-Status: **IN PROGRESS** (2026-11-13): the owner said "ok kontynuuj". Branch `fellow/geometry`. Decision record:
+Status: **FINAL** (2026-11-13): the owner said "ok kontynuuj"; the laptop's jobs f409-f410 done. Branch `fellow/geometry`. Decision record:
 `docs/decisions/0213-vehicle-damage.md`.
 
 ## 0. Result
@@ -21,7 +21,8 @@ crash in the picture strip); the editor check's icon list.
 * Decision 0213's table (GodotPhysics3D, the editor build).
 * The editor check: 37 icons, no warning.
 * The laptop (job f409): GodotPhysics3D value for value; Jolt the front 9.6 cm (three impacts), nothing at 5 km/h or
-  over the bumps. The picture strip's crash camera moved in front of the car (it showed its side): next job.
+  over the bumps. The picture strip's crash camera moved in front of the car (it showed its side; job f410): the front
+  face bowed in.
 
 ## 3. Measurements
 

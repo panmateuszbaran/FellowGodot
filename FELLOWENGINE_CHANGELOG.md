@@ -9,6 +9,13 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 106 — Windows: a refused connection seen at once (2026-11-13)
+
+- A stock bug fixed in `drivers/windows/net_socket_winsock.cpp` (decision 0214): Godot polled a connection in progress
+  by calling `connect()` again, which starts another attempt after a refusal, so a refused TCP connection was reported
+  only at the 30 s timeout; the socket's error is now checked first. `StreamPeerTCP` to a closed port: 30 s → 2.05 s;
+  crash reports to a collector that is down, or to `localhost` whose IPv6 address refuses: 30 s → 2.05-2.08 s.
+
 ## Milestone 105 — vehicles dented where they hit (2026-11-13)
 
 - `FellowVehicleDamage3D` (decision 0213): a child of a `FellowVehicle3D` reading its body's contacts; an impact past
