@@ -9,6 +9,13 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 110 — rigid bodies by the thousand (a measurement, 2026-11-13)
+
+- Physics Lab's pile at 2 000, 5 000 and 10 000 bodies on the laptop, stock against FellowEngine (the same results):
+  GodotPhysics3D 26.5 → 12.2, 106.8 → 40.0, 395 → 144 ms a tick (× 2.2-2.75); Jolt the same as stock (3.1, 10.3-10.5,
+  24.3-24.4 ms). At Godot's default Jolt limits 10 000 bodies in contact overflow its buffers (contacts ignored, the
+  runs no longer repeatable, in stock too): `physics/jolt_physics_3d/limits/*` raised, they repeat.
+
 ## Milestone 109 — parts that hang before they come off (2026-11-13)
 
 - `FellowVehicleDamage3D.hang_depth` (decision 0217): a part dented that deep hangs from the vehicle on a `PinJoint3D` at
