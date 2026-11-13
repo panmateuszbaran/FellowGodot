@@ -42,7 +42,8 @@ The earlier lanes (the analysis, the level, the blinks, the gaze, expressions, t
 
 ## Cost
 
-100 heads: 0.38 µs a head a frame (0.04 ms a frame, the release template on the cloud), the modifier's own time.
+100 heads: 0.38 µs a head a frame (0.04 ms a frame, the release template on the cloud), the modifier's own time; the
+laptop (job f408) 0.21-0.26 µs. The laptop's lanes: the same results, value for value.
 
 ## Decision
 

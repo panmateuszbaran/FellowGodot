@@ -1,6 +1,6 @@
 # FellowEngine — milestone 104 report (the head moving with what the face says)
 
-Status: **IN PROGRESS** (2026-11-13): the owner said "ok kontynuuj". Branch `fellow/geometry`. Decision record:
+Status: **FINAL** (2026-11-13): the owner said "ok kontynuuj"; the laptop's job f408 done. Branch `fellow/geometry`. Decision record:
 `docs/decisions/0212-head-motion.md`.
 
 ## 0. Result
@@ -21,11 +21,13 @@ reference; `benchmarks/project/bench/face_check.gd` (the lanes, `--heads=1`); th
 
 * Decision 0212's table: the editor build and the release template the same; the earlier lanes the same.
 * The editor check: 36 icons, no warning; the regression scenes `face` and `cape` exact.
-* The laptop: next job.
+* The laptop (job f408, a release template, MSVC): every lane the same, value for value (six nods 6.00/6.25°, 7.0
+  frames after their syllables; the sway 0.499° and 2.06°; the still head exact).
 
 ## 3. Measurements
 
-100 heads: 0.38 µs a head a frame (0.04 ms a frame; the cloud, the release template).
+100 heads: 0.38 µs a head a frame (0.04 ms a frame; the cloud, the release template); the laptop 0.21-0.26 µs (three
+runs; the faces 0.33-0.49 µs).
 
 ## 4. Next
 
