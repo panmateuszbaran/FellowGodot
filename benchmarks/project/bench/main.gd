@@ -11,6 +11,7 @@ extends Node
 ##   --preset=<name>          graphics preset (bench/presets.gd), default "high"
 ##   --set=<k=v,...>          explicit preset overrides (exported to results)
 ##   --fellow=<k=v,...>       FellowEngine toggles under rendering/fellow/* (no-op on stock)
+##   --render_size=<WxH>      render at that size whatever the window's (stretched into it): 4K on a smaller screen
 ##   --cameras=<a,b>          restrict capture/reference to these fixed cameras
 ##   --seqs=<a,b>             restrict temporal sequences
 ##   --settle=<frames>        frames rendered before a still capture (default 96, fills TAA history)
@@ -131,6 +132,15 @@ func _ready() -> void:
 	# --fixed-fps advances game time by 1/60 s per frame regardless of real time.
 	watchdog_s = float(args.get("watchdog", "1800"))
 	vp = get_viewport()
+	# --render_size=WxH (milestone 111): render the frame at that size whatever the window's (the root viewport's content
+	# scale in viewport mode, shown stretched into the window): output sizes larger than the screen, such as 3840 x 2160
+	# on a 2560 x 1600 laptop. The viewport then reports that size, which the run's --res must match.
+	var render_size := _parse_res(args.get("render_size", ""))
+	if render_size != Vector2i.ZERO:
+		var win := vp as Window
+		win.content_scale_mode = Window.CONTENT_SCALE_MODE_VIEWPORT
+		win.content_scale_aspect = Window.CONTENT_SCALE_ASPECT_IGNORE
+		win.content_scale_size = render_size
 	# Benchmark rules: no vsync, no FPS cap (both are also set in project.godot / CLI).
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
 	# --max_fps=N: a frame rate cap for diagnostics only (presentation at a given rate); never in a measurement. The
