@@ -1,6 +1,6 @@
 # FellowEngine — milestone 99 report (sound through openings)
 
-Status: **IN PROGRESS** (2026-11-13): the owner said "ok kontynuuj". Branch `fellow/geometry`. Decision record:
+Status: **FINAL** (2026-11-13): the owner said "ok kontynuuj". Branch `fellow/geometry`. Decision record:
 `docs/decisions/0207-acoustic-portals.md`.
 
 ## 0. Result
@@ -27,12 +27,14 @@ Status: **IN PROGRESS** (2026-11-13): the owner said "ok kontynuuj". Branch `fel
 * Decision 0207's tables: the editor build and the release template, GodotPhysics3D and Jolt; the earlier lanes the
   same.
 * The editor check: passes (35 icons; the only error ALSA's).
-* The laptop: next job.
+* The laptop (job f400, a release template, MSVC): the six lanes with GodotPhysics3D and Jolt and the listening as on
+  the cloud, value for value (the doorway −25.8 dB against −40.0 through the wall, +2.86 dB to the right).
 
 ## 3. Measurements
 
-Two rays an opening tried, from the node's ray budget; with 61 openings and 256-1 024 sources the node's time within
-the spread of the cloud's runs (0.33-0.71 ms), 68-70 sources tested a frame instead of 102.
+Two rays an opening tried, from the node's ray budget. On the laptop with 61 openings: 256 sources 0.22 → 0.30 ms a
+frame, 1 024 0.52 → 0.60 ms (the openings' planes tested for every blocked source, their rays longer), 12 sources
+heard through one a frame, 68-70 tested a frame instead of 102 (the budget shared).
 
 ## 4. Next
 

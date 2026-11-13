@@ -60,12 +60,15 @@ behind the open doorway:
 The editor check: the portal's icon (35 icons), gizmo (the opening, a line through it), its width dragged with the
 mouse and undone, "Add Acoustic Portal" without a warning and undone.
 
+The laptop (job f400, a release template, MSVC): the six lanes with both engines and the listening the same, value for
+value.
+
 ## Cost
 
-`--many` (the release template, the cloud's two cores, 512 rays a frame): with an opening beside each of the 61 walls,
-12 sources heard through one a frame; the node's time 0.33-0.43 ms for 256 sources (0.33 without portals) and
-0.63-0.71 ms for 1 024 (0.60-0.63), within the run-to-run spread on these cores. The rays the openings take come from
-the budget: 68-70 sources tested a frame instead of 102.
+`--many` (512 rays a frame), with an opening beside each of the 61 walls: 12 sources heard through one a frame. The
+laptop: 256 sources 0.22 → 0.30 ms a frame, 1 024 0.52 → 0.60 ms (+0.08 ms: every blocked source's openings' planes
+tested, two longer rays an opening tried); the cloud's two cores within their run-to-run spread (0.33-0.43 ms,
+0.63-0.71 ms). The rays the openings take come from the budget: 68-70 sources tested a frame instead of 102.
 
 ## Decision
 
