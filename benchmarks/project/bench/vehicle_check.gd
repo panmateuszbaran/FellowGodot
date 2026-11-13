@@ -26,7 +26,7 @@ extends SceneTree
 ## suspension_damage (that corner lower, the others about where they were; back after repair()). One JSON line:
 ## VEHICLE_CHECK {...}; exit
 ## code 1 when a lane did otherwise than expected. --many=N: N cars driving circles, the vehicles' step a frame and the
-## frame's (headless). One JSON line: VEHICLE_MANY {...}.
+## frame's (headless; --damage=1: each with a FellowVehicleDamage3D, every feature on). One JSON line: VEHICLE_MANY {...}.
 
 const RUN_SECONDS := 26.0
 
@@ -255,6 +255,12 @@ func _build() -> void:
 			c.substeps = int(_arg("substeps", "4"))
 			if _arg("contact", "0") != "0":
 				_contact(c, int(_arg("contact", "0")))  # milestone 101: the tyres' shapes swept (1 a sphere, 2 a cylinder)
+			if _arg("damage", "0") == "1":
+				# Milestone 110: every damage feature on (the cost of a car that can be damaged, driving without a hit).
+				var cd: FellowVehicleDamage3D = _damage_car(c).get_node("Damage")
+				cd.wheel_bend = 4.0
+				cd.engine_power_loss = 0.4
+				cd.suspension_damage = 0.05
 			many_cars.append(c)
 		var cam := Camera3D.new()
 		root3d.add_child(cam)
