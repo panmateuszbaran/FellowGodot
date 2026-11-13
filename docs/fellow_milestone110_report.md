@@ -1,6 +1,6 @@
 # FellowEngine — milestone 110 report (rigid bodies by the thousand: a measurement)
 
-Status: **FINAL** (2026-11-13): the owner said "ok kontynuuj"; the laptop's jobs f416-f425 done. Branch
+Status: **FINAL** (2026-11-13): the owner said "ok kontynuuj"; the laptop's jobs f416-f426 done. Branch
 `fellow/geometry`. A measurement (the readiness assessment listed "thousands of bodies not measured"), and four
 additions to the vehicles' damage: a regression scene, the editor's car preset, engine smoke, suspension damage,
 hinged parts.
@@ -86,7 +86,7 @@ outwards with (0, 70); the first try, (−70, 0), kept the door shut). `vehicle_
 door (0.06 × 0.6 × 1.0 m, the axis vertical) hit at its rear end at rest hangs from its front edge; the car then turns
 right at 25 km/h and the door swings open — without a limit 94.8° at 4 s (GodotPhysics3D; Jolt 94.6°, the laptop's job
 f425 the same), its front edge 4.7 cm from where it was (the joint's give); with (0, 70) 74.1° (the limit's give), the
-edge 3.9 cm off, its rear end level. The other lanes as before; the editor build and the release template the same.
+edge 3.9 cm off, its rear end level (the laptop's job f426: GodotPhysics3D 74.1°, Jolt 70.1°, 3.7 cm). The other lanes as before; the editor build and the release template the same.
 
 ## 7. Next
 
