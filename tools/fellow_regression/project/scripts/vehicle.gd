@@ -109,4 +109,4 @@ func _ready() -> void:
 	var b := _car(Transform3D(Basis.from_euler(Vector3(0, 0, deg_to_rad(8.0))), Vector3(5.0, 0.6, -5.5)), Color(0.2, 0.4, 0.75))
 	b.handbrake = true
 	b.brake = 1.0
-	($Camera as Camera3D).look_at_from_position(Vector3(-0.5, 3.0, 4.0), Vector3(3.6, 0.6, -3.2))
+	($Camera as Camera3D).look_at_from_position(to_global(Vector3(-0.5, 3.0, 4.0)), to_global(Vector3(3.6, 0.6, -3.2)))

@@ -153,7 +153,7 @@ func _ready() -> void:
 	# front of the ladder 1 m up it.
 	_hanger = _body(Vector3(-1.1, 0.45, -1.57), Color(0.25, 0.45, 0.8))
 	_climber = _body(Vector3(1.8, 1.0, -1.4), Color(0.8, 0.45, 0.25))
-	($Camera as Camera3D).look_at_from_position(Vector3(4.6, 2.8, 3.6), Vector3(0.0, 1.6, -1.8))
+	($Camera as Camera3D).look_at_from_position(to_global(Vector3(4.6, 2.8, 3.6)), to_global(Vector3(0.0, 1.6, -1.8)))
 
 
 func _physics_process(_delta: float) -> void:

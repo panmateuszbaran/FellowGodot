@@ -566,7 +566,7 @@ void FellowFaceAnimator::_update(double p_delta) {
 				goal.y = Math::rad_to_deg(Math::atan2(d.y, Vector2(d.x, d.z).length()));
 				// Milestone 94 (decision 0202): each eye turned in by half the angle the target subtends between them.
 				if (eye_spacing > 0.0f) {
-					vergence = Math::rad_to_deg(Math::atan2(eye_spacing * 0.5f, d.length()));
+					vergence = Math::rad_to_deg(Math::atan2(eye_spacing * 0.5f, float(d.length())));
 				}
 			}
 		}

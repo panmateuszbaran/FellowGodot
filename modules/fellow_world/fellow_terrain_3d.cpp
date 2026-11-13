@@ -1725,7 +1725,7 @@ void FellowTerrain3D::_generate_foliage_cell(void *p_cell) {
 			}
 			b = b * Basis::from_scale(Vector3(sc, sc, sc));
 			const Vector3 o(x, y - k.sink * sc, z);
-			const float row[12] = { b.rows[0].x, b.rows[0].y, b.rows[0].z, o.x, b.rows[1].x, b.rows[1].y, b.rows[1].z, o.y, b.rows[2].x, b.rows[2].y, b.rows[2].z, o.z };
+			const float row[12] = { float(b.rows[0].x), float(b.rows[0].y), float(b.rows[0].z), float(o.x), float(b.rows[1].x), float(b.rows[1].y), float(b.rows[1].z), float(o.y), float(b.rows[2].x), float(b.rows[2].y), float(b.rows[2].z), float(o.z) };
 			for (int r = 0; r < 12; r++) {
 				out.push_back(row[r]);
 			}

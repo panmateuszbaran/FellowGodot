@@ -1581,7 +1581,7 @@ void FellowBurnable3D::_build_display(MeshInstance3D *p_target) {
 					pcu.push_back(cu.z);
 					pcu.push_back(cu.w);
 					if (bm_cached) {
-						const float rec[12] = { b.pos[v].x, b.pos[v].y, b.pos[v].z, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, cu.x, cu.y, cu.z, cu.w };
+						const float rec[12] = { float(b.pos[v].x), float(b.pos[v].y), float(b.pos[v].z), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, cu.x, cu.y, cu.z, cu.w };
 						for (float x : rec) {
 							marched.push_back(x);
 						}
@@ -1642,7 +1642,7 @@ void FellowBurnable3D::_build_display(MeshInstance3D *p_target) {
 		memcpy(vertices.ptrw(), marched.ptr(), vertices.size());
 		// FellowGas's VertexParams (std140): the march's parameters, as the materials' (_make_burn_material).
 		const Vector3 extent = Vector3(res) * voxel;
-		const float pf[8] = { origin.x, origin.y, origin.z, voxel, 1.0f / extent.x, 1.0f / extent.y, 1.0f / extent.z, voxel * 0.5f };
+		const float pf[8] = { float(origin.x), float(origin.y), float(origin.z), voxel, float(1.0f / extent.x), float(1.0f / extent.y), float(1.0f / extent.z), voxel * 0.5f };
 		const int32_t pi[4] = { int32_t(Math::ceil(extent.length() / (voxel * 0.5f))), int32_t(count), BURN_VERTEX_ROW, 0 };
 		const float pl[4] = { BURN_LOOSE_ASH * ash_volume, 0.0f, 0.0f, 0.0f };
 		PackedByteArray params;

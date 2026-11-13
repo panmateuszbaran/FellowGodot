@@ -133,7 +133,7 @@ func _ready() -> void:
 	# The bodies where hanging puts them (the hands 2.05 m over the feet at the edge, 0.43 m off the face).
 	_rounder = _body(Vector3(-2.6, 0.75, -1.57), Color(0.25, 0.45, 0.8))
 	_jumper = _body(Vector3(1.95, 0.45, -1.57), Color(0.8, 0.45, 0.25))
-	($Camera as Camera3D).look_at_from_position(Vector3(-1.2, 3.0, 4.8), Vector3(-0.4, 1.7, -2.0))
+	($Camera as Camera3D).look_at_from_position(to_global(Vector3(-1.2, 3.0, 4.8)), to_global(Vector3(-0.4, 1.7, -2.0)))
 
 
 func _physics_process(_delta: float) -> void:

@@ -71,7 +71,7 @@ func _ready() -> void:
 	for cs in shapes:
 		paths.append(cape.get_path_to(cs))
 	cape.colliders = paths
-	($Camera as Camera3D).look_at_from_position(Vector3(1.4, 1.9, 1.2), Vector3(-0.3, 1.1, -1.2))
+	($Camera as Camera3D).look_at_from_position(to_global(Vector3(1.4, 1.9, 1.2)), to_global(Vector3(-0.3, 1.1, -1.2)))
 
 
 func _physics_process(_delta: float) -> void:
@@ -80,5 +80,5 @@ func _physics_process(_delta: float) -> void:
 	# An arc of 3 m radius at 1.8 m/s, facing the way it goes; the chest twisting 30 degrees each way.
 	var a := t * 1.8 / 3.0
 	_walker.position = Vector3(cos(a) * 3.0 - 3.0, 0, -sin(a) * 3.0)
-	_walker.look_at(_walker.position + Vector3(-sin(a), 0, -cos(a)), Vector3.UP)
+	_walker.look_at(_walker.global_position + Vector3(-sin(a), 0, -cos(a)), Vector3.UP)
 	_skeleton.set_bone_pose_rotation(_skeleton.find_bone("Chest"), Quaternion(Vector3.UP, deg_to_rad(30.0) * sin(t * TAU * 1.5)))

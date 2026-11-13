@@ -274,7 +274,7 @@ void FellowCloth3D::_build() {
 		adjacency[a].push_back(Pair<uint32_t, float>(b, rest));
 		adjacency[b].push_back(Pair<uint32_t, float>(a, rest));
 		if (kv.value.size() == 2 && kv.value[0] != kv.value[1]) {
-			bend.push_back({ kv.value[0], kv.value[1], rest_local[kv.value[0]].distance_to(rest_local[kv.value[1]]) });
+			bend.push_back({ kv.value[0], kv.value[1], float(rest_local[kv.value[0]].distance_to(rest_local[kv.value[1]])) });
 		}
 	}
 	// A stable order (the hash map's is not): the solver is Gauss-Seidel.

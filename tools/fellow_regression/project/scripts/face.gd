@@ -235,7 +235,7 @@ func _ready() -> void:
 		fa.mesh_path = fa.get_path_to(mi)
 		fa.look_target_path = fa.get_path_to(_target)
 		_faces.append(fa)
-	($Camera as Camera3D).look_at_from_position(Vector3(0, 0.1, 3.4), Vector3(0, 0, 0))
+	($Camera as Camera3D).look_at_from_position(to_global(Vector3(0, 0.1, 3.4)), to_global(Vector3(0, 0, 0)))
 
 
 func _physics_process(_delta: float) -> void:

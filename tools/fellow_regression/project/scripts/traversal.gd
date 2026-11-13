@@ -124,7 +124,7 @@ func _ready() -> void:
 		sk.add_child(FellowTraversalPose3D.new())
 		add_child(body)
 		_bodies.append(body)
-	($Camera as Camera3D).look_at_from_position(Vector3(5.2, 2.6, 2.4), Vector3(0.2, 1.1, -0.9))
+	($Camera as Camera3D).look_at_from_position(to_global(Vector3(5.2, 2.6, 2.4)), to_global(Vector3(0.2, 1.1, -0.9)))
 
 
 func _physics_process(_delta: float) -> void:
