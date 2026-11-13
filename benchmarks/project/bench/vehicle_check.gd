@@ -16,7 +16,10 @@ extends SceneTree
 ## coasting from 80 km/h (the engine's braking); milestone 101 (decision 0209): a 12 cm curb and a 25 cm trench, each
 ## by a car on rays and one whose tyres are cylinders; milestone 105 (decision 0213): cars whose bodies dent
 ## (FellowVehicleDamage3D) driven into a wall at 30 km/h (the front dented, the rear not) and at 5 km/h (nothing), the
-## bumps lane's car undented. One JSON line:
+## bumps lane's car undented; milestone 107 (decision 0215): the dents reaching the running gear — a car hit by the
+## left ahead of its front-left wheel (the wheel's toe bent in: it pulls to the right), the same hit with wheel_bend 0
+## and an unhit car (both straight), a car hit at the engine (slower to 100 km/h), a car hit and repaired (straight,
+## its torque back). One JSON line:
 ## VEHICLE_CHECK {...}; exit
 ## code 1 when a lane did otherwise than expected. --many=N: N cars driving circles, the vehicles' step a frame and the
 ## frame's (headless). One JSON line: VEHICLE_MANY {...}.
@@ -34,7 +37,7 @@ var save_frames := false
 var grid := false
 var shot_size := Vector2i(480, 320)
 var strip_times := [2.0, 6.0, 10.0, 14.0, 18.0, 22.0]
-var strip_lanes := ["accel", "brake", "skidpad", "lane_change", "bumps", "jump", "crash"]
+var strip_lanes := ["accel", "brake", "skidpad", "lane_change", "bumps", "jump", "crash", "bent"]
 var shots := {}
 var viewports := {}
 var cameras := {}
@@ -364,6 +367,16 @@ func _build() -> void:
 		_box(Vector3(x, 1.0, -30.0), Vector3(6.0, 2.0, 1.0), Color(0.62, 0.6, 0.58))
 		_lane("crash" if k == 0 else "tap", _damage_car(_car(Vector3(x, 0.1, 0), Color(0.85, 0.25, 0.2) if k == 0 else Color(0.25, 0.5, 0.85))))
 	_damage_car(_find("bumps").car)
+	# Milestone 107 (decision 0215): the running gear (wheel_bend 5 degrees but on bent_off, engine_power_loss 0.5).
+	var gear_lanes := ["straight", "bent", "bent_off", "engine", "repaired"]
+	for i in 16:
+		_box(Vector3(460, 0.005, 5.0 - i * 10.0), Vector3(160, 0.01, 0.3), Color(0.8, 0.8, 0.75)).get_child(0).disabled = true
+	for k in gear_lanes.size():
+		var gc := _damage_car(_car(Vector3(400.0 + k * 30.0, 0.1, 0), Color.from_hsv(0.08 + k * 0.17, 0.6, 0.85)))
+		var gd: FellowVehicleDamage3D = gc.get_node("Damage")
+		gd.wheel_bend = 0.0 if gear_lanes[k] == "bent_off" else 5.0
+		gd.engine_power_loss = 0.5
+		_lane(gear_lanes[k], gc)
 
 	var cam := Camera3D.new()
 	root3d.add_child(cam)
@@ -422,6 +435,21 @@ func _cruise(car: FellowVehicle3D, kmh: float) -> void:
 	var err := kmh - car.get_speed_kmh()
 	car.throttle = clampf(err * 0.15, 0.0, 1.0)
 	car.brake = clampf(-err * 0.1, 0.0, 1.0)
+
+
+# Milestone 107: a scripted hit (an explosion's, a scene's) at a point of the car's space, pushing along a direction of
+# it, as hard as a dent of twice max_depth would take (max_depth deep).
+func _hit(car: FellowVehicle3D, local_point: Vector3, local_dir: Vector3) -> void:
+	var dmg: FellowVehicleDamage3D = car.get_node("Damage")
+	dmg.apply_impact(car.global_transform * local_point, car.global_basis * local_dir, dmg.impulse_threshold + 2.0 * dmg.max_depth / dmg.softness)
+
+
+func _toes(car: FellowVehicle3D) -> Dictionary:
+	var t := {}
+	for w in car.get_children():
+		if w is FellowWheel3D:
+			t[String(w.name)] = snappedf((w as FellowWheel3D).toe, 0.001)
+	return t
 
 
 func _heading(car: FellowVehicle3D) -> float:
@@ -585,6 +613,54 @@ func _drive(lane: Dictionary, dt: float) -> void:
 				d["rolled_m"] = snappedf(car.global_position.distance_to(d.p0), 0.01)
 			if t > 7.0:
 				car.handbrake = true
+		"straight", "bent", "bent_off", "engine", "repaired":
+			# Milestone 107: at rest, hit at 0.5 s — by the left ahead of the front-left wheel (bent, bent_off, repaired),
+			# at the front's middle (engine, repaired) — repaired at 0.6 s; from 1 s at 40 km/h with the steering at 0 for
+			# 6 s (the engine lane at full throttle to 100 km/h).
+			var dmg: FellowVehicleDamage3D = car.get_node("Damage")
+			if lane.phase == 0:
+				if t >= 0.5:
+					var fl: Vector3 = _front_left(car).position
+					if lane.name in ["bent", "bent_off", "repaired"]:
+						_hit(car, Vector3(fl.x - 0.2, fl.y + 0.1, fl.z - 0.35), Vector3(1, 0, 0))
+					if lane.name in ["engine", "repaired"]:
+						_hit(car, Vector3(0, 0.62, -2.1), Vector3(0, 0, 1))
+					d["toe_after_hit"] = _toes(car)
+					d["engine_power"] = snappedf(dmg.get_engine_power(), 0.0001)
+					d["max_torque"] = snappedf(car.max_torque, 0.01)
+					lane.phase = 1
+			elif lane.phase == 1:
+				if t >= 0.6:
+					if lane.name == "repaired":
+						dmg.repair()
+						d["toe_repaired"] = _toes(car)
+						d["max_torque_repaired"] = snappedf(car.max_torque, 0.01)
+					if t >= 1.0:
+						d["gear_h0"] = _heading(car)
+						d["x0"] = car.global_position.x
+						lane.phase = 2
+			elif lane.phase == 2:
+				if lane.name == "engine":
+					car.throttle = 1.0
+					if kmh >= 100.0:
+						d["t100"] = snappedf(t - 1.0, 0.01)
+						lane.phase = 3
+					if t > 21.0:
+						lane.phase = 3
+				else:
+					_cruise(car, 40.0)
+					if t >= 7.0:
+						d["heading_change"] = snappedf(_heading(car) - d.gear_h0, 0.01)
+						d["drift_x"] = snappedf(car.global_position.x - d.x0, 0.01)
+						d["kmh_end"] = snappedf(kmh, 0.1)
+						lane.phase = 3
+				if lane.name == "engine":
+					d["heading_change"] = snappedf(_heading(car) - d.gear_h0, 0.01)
+			else:
+				# Stopped and held (the brake alone at a standstill would engage reverse).
+				car.throttle = 0.0
+				car.brake = 1.0
+				car.handbrake = true
 		"crash", "tap":
 			# Up to speed, held until the wall stops the car; a second held; backed off 3 m (the brake held at a standstill
 			# engages reverse) to show its front; held there.
@@ -659,6 +735,11 @@ func _on_frame() -> void:
 		if name == "crash":
 			# Milestone 105: the front, where the wall dents it (from ahead and above, once the car has backed off the wall).
 			cam.look_at_from_position(car.global_position - back * 4.6 + Vector3(0.9, 1.9, 0), car.global_position - back * 2.0 + Vector3(0, 0.55, 0))
+		elif name == "bent":
+			# Milestone 107: from 30 m above, with the unhit car 30 m to its left (the lanes' markings every 10 m): its
+			# path pulled to the right.
+			var mid: Vector3 = (car.global_position + _find("straight").car.global_position) * 0.5
+			cam.look_at_from_position(mid + Vector3(0, 30, 0), mid, Vector3(0, 0, -1))
 		else:
 			cam.look_at_from_position(car.global_position + back * 9.0 + Vector3(4, 4, 0), car.global_position + Vector3(0, 0.8, 0))
 	if pictures:
@@ -688,7 +769,7 @@ func _finish() -> void:
 		var car: FellowVehicle3D = lane.car
 		var d: Dictionary = lane.data
 		var e := d.duplicate()
-		for k in ["v_prev", "a_smooth", "local0", "p0", "coast_t0", "comp_prev", "vy_prev", "t_stop"]:
+		for k in ["v_prev", "a_smooth", "local0", "p0", "coast_t0", "comp_prev", "vy_prev", "t_stop", "gear_h0", "x0"]:
 			e.erase(k)
 		e["gears"] = lane.gears
 		e["end"] = [snappedf(car.global_position.x - lane.start.x, 0.1), snappedf(car.global_position.y, 0.01), snappedf(car.global_position.z, 0.1)]
@@ -747,10 +828,38 @@ func _finish() -> void:
 				var dn := _dents(car)
 				e["dents"] = dn
 				ok = ok and dn.deepest_m == 0.0 and dn.impacts.is_empty() and dn.dented_meshes == 0
+			"straight":
+				# Milestone 107: unhit, straight within half a degree.
+				ok = ok and absf(d.get("heading_change", 99.0)) < 0.5 and d.toe_after_hit.FrontLeft == 0.0 and d.engine_power == 1.0
+			"bent":
+				# The front-left wheel's toe bent in by 1-5 degrees (the others unbent), the car turned right by more than
+				# 3 degrees in 6 s with the steering at 0; the engine all but untouched.
+				var toe: Dictionary = d.get("toe_after_hit", {})
+				ok = ok and toe.get("FrontLeft", 0.0) > 1.0 and toe.get("FrontLeft", 0.0) <= 5.0 and toe.get("FrontRight", 1.0) == 0.0 and toe.get("RearLeft", 1.0) == 0.0
+				ok = ok and d.get("heading_change", 0.0) < -3.0 and d.get("engine_power", 0.0) > 0.9
 		e["ok"] = ok
 		if not ok:
 			failures.append(lane.name)
 		out[lane.name] = e
+	# Milestone 107: the lanes against each other — the same hit with wheel_bend 0 and the repaired car as straight as
+	# the unhit one (within 0.2 degrees), their wheels and engines as they were; the engine lane's power and torque lost,
+	# slower to 100 km/h than the accel lane's car (more than 10 %), straight.
+	if out.has("straight"):
+		var st: Dictionary = out.straight
+		var bo: Dictionary = out.bent_off
+		var en: Dictionary = out.engine
+		var rp: Dictionary = out.repaired
+		var acc: Dictionary = out.accel
+		var g := {"bent_off_vs_straight_deg": snappedf(bo.get("heading_change", 99.0) - st.get("heading_change", 0.0), 0.01),
+			"repaired_vs_straight_deg": snappedf(rp.get("heading_change", 99.0) - st.get("heading_change", 0.0), 0.01),
+			"engine_t100": en.get("t100", 99.0), "accel_t100": acc.get("t100", 0.0)}
+		g["ok_bent_off"] = absf(g.bent_off_vs_straight_deg) < 0.2 and bo.toe_after_hit.FrontLeft == 0.0
+		g["ok_repaired"] = absf(g.repaired_vs_straight_deg) < 0.2 and rp.toe_after_hit.FrontLeft != 0.0 and rp.toe_repaired.values().all(func(v): return v == 0.0) and rp.max_torque < 400.0 and rp.max_torque_repaired == 400.0
+		g["ok_engine"] = en.engine_power < 0.85 and absf(en.max_torque - 400.0 * en.engine_power) < 0.5 and en.toe_after_hit.FrontLeft == 0.0 and g.engine_t100 > g.accel_t100 * 1.1 and absf(en.get("heading_change", 99.0)) < 1.0
+		g["ok"] = g.ok_bent_off and g.ok_repaired and g.ok_engine
+		out["running_gear"] = g
+		if not g.ok:
+			failures.append("running_gear")
 	# Milestone 101: the cylinders meet the curb over several steps (the rays all at once, in one step), and bridge the
 	# trench (the rays drop into it).
 	if out.has("curb_cylinder"):

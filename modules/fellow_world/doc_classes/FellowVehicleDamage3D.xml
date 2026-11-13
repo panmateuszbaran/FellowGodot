@@ -6,6 +6,7 @@
 	<description>
 		A child of a [FellowVehicle3D]. It turns the vehicle's contact reporting on ([member RigidBody3D.contact_monitor], at least 8 [member RigidBody3D.max_contacts_reported]) and reads the body's contacts every physics step: when their impulses together exceed [member impulse_threshold], each contact pushes the vertices of the vehicle's meshes within [member radius] of it into the body (along its normal, towards the body's centre of mass), [member softness] metres for each N·s beyond the threshold, falling off smoothly to the radius's edge; no vertex moves more than [member max_depth] from where it was. The dented meshes are copies made at the first impact (the originals are kept: [method repair]); their normals are recomputed from the dented triangles.
 		The meshes are those of [member mesh_paths], or without them every [MeshInstance3D] of the vehicle but those of its wheels. A mesh with blend shapes is left as it is. The collision shapes are not changed. See [code]docs/decisions/0213-vehicle-damage.md[/code].
+		The dents can also reach the running gear (both off by default): a wheel near a dent is bent out of line ([member wheel_bend]: the vehicle pulls to one side) and an engine the dent reaches loses power ([member engine_power_loss]). An impact reaches into the body twice as far as it spreads over it: [member radius] across the push, twice that along it. See [code]docs/decisions/0215-running-gear-damage.md[/code].
 		[codeblock]
 		var damage = FellowVehicleDamage3D.new()
 		car.add_child(damage)
@@ -36,6 +37,12 @@
 				The largest distance any vertex has moved, in metres.
 			</description>
 		</method>
+		<method name="get_engine_power" qualifiers="const">
+			<return type="float" />
+			<description>
+				The share of the engine's torque left (1 undamaged): see [member engine_power_loss].
+			</description>
+		</method>
 		<method name="get_stats" qualifiers="const">
 			<return type="Dictionary" />
 			<description>
@@ -51,6 +58,13 @@
 				How far a vertex of a mesh (its path from this node) has been dented, in the mesh's space.
 			</description>
 		</method>
+		<method name="get_wheel_toe_change" qualifiers="const">
+			<return type="float" />
+			<param index="0" name="wheel" type="NodePath" />
+			<description>
+				How far the dents have bent a wheel's [member FellowWheel3D.toe] (its path from this node), in degrees (+ in).
+			</description>
+		</method>
 		<method name="repair">
 			<return type="void" />
 			<description>
@@ -59,6 +73,12 @@
 		</method>
 	</methods>
 	<members>
+		<member name="engine_position" type="Vector3" setter="set_engine_position" getter="get_engine_position" default="Vector3(0, 0.5, -1.4)">
+			Where the engine is, in the vehicle's space (the default: a front-engined car about 4 m long, its origin in the middle, its front towards -Z).
+		</member>
+		<member name="engine_power_loss" type="float" setter="set_engine_power_loss" getter="get_engine_power_loss" default="0.0">
+			The share of the engine's torque ([member FellowVehicle3D.max_torque]) lost when a dent of [member max_depth] reaches [member engine_position] (less for a shallower dent or one farther off). 0: the engine is never hurt. [method repair] gives it back (unless the game has changed [member FellowVehicle3D.max_torque] since).
+		</member>
 		<member name="impulse_threshold" type="float" setter="set_impulse_threshold" getter="get_impulse_threshold" default="2500.0">
 			The impulse (N·s) the body's contacts must exceed in one physics step before it dents: below it bumps, kerbs, pushes and a 1 400 kg car meeting a wall at 5 km/h (about 1 700 N·s a step) leave it as it is; at 30 km/h the wall takes about 6 600 N·s in its first step.
 		</member>
@@ -73,6 +93,9 @@
 		</member>
 		<member name="softness" type="float" setter="set_softness" getter="get_softness" default="2e-05">
 			Metres of dent for each N·s of impulse beyond [member impulse_threshold] (2e-5: about 10 cm at 30 km/h for a 1 400 kg car).
+		</member>
+		<member name="wheel_bend" type="float" setter="set_wheel_bend" getter="get_wheel_bend" default="0.0">
+			The most a dent can bend a wheel's [member FellowWheel3D.toe], in degrees. A dent reaching a wheel turns it about its upright the way the push would: a push from the side ahead of the wheel's centre turns its front in, one from the front outside the centre turns it out, as far as the dent is deep (up to this at [member max_depth] and close to the wheel). A wheel out of line makes the vehicle pull to one side with the steering straight. 0: the wheels are never bent. [method repair] puts them back.
 		</member>
 	</members>
 	<signals>

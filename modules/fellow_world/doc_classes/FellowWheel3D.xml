@@ -110,6 +110,9 @@
 		<member name="suspension_length" type="float" setter="set_suspension_length" getter="get_suspension_length" default="0.3">
 			The suspension's travel (metres): from the mount to the wheel's centre fully extended.
 		</member>
+		<member name="toe" type="float" setter="set_toe" getter="get_toe" default="0.0">
+			The wheel's toe (its alignment), in degrees: + its front turned towards the vehicle's centre line (toe-in), - away from it (toe-out), whether it steers or not. Toe-in on both wheels of an axle steadies the vehicle; a front wheel's toe alone makes it pull to that wheel's side (toe-out) or the other (toe-in). [FellowVehicleDamage3D] bends it ([member FellowVehicleDamage3D.wheel_bend]).
+		</member>
 		<member name="width" type="float" setter="set_width" getter="get_width" default="0.22">
 			The tyre's width, in metres (a [constant CONTACT_CYLINDER] contact's cylinder).
 		</member>

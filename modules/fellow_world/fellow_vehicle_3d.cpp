@@ -231,6 +231,8 @@ void FellowWheel3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("is_braked"), &FellowWheel3D::is_braked);
 	ClassDB::bind_method(D_METHOD("set_handbrake", "enabled"), &FellowWheel3D::set_handbrake);
 	ClassDB::bind_method(D_METHOD("is_handbrake"), &FellowWheel3D::is_handbrake);
+	ClassDB::bind_method(D_METHOD("set_toe", "degrees"), &FellowWheel3D::set_toe);
+	ClassDB::bind_method(D_METHOD("get_toe"), &FellowWheel3D::get_toe);
 	ClassDB::bind_method(D_METHOD("is_in_contact"), &FellowWheel3D::is_in_contact);
 	ClassDB::bind_method(D_METHOD("get_compression"), &FellowWheel3D::get_compression);
 	ClassDB::bind_method(D_METHOD("get_load"), &FellowWheel3D::get_load);
@@ -259,6 +261,8 @@ void FellowWheel3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "driven"), "set_driven", "is_driven");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "braked"), "set_braked", "is_braked");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "handbrake"), "set_handbrake", "is_handbrake");
+	ADD_GROUP("Alignment", "");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "toe", PROPERTY_HINT_RANGE, "-10,10,0.01,or_less,or_greater,suffix:°"), "set_toe", "get_toe");
 
 	BIND_ENUM_CONSTANT(CONTACT_RAY);
 	BIND_ENUM_CONSTANT(CONTACT_SPHERE);
@@ -556,6 +560,11 @@ void FellowVehicle3D::_body_state_changed(PhysicsDirectBodyState3D *p_state) {
 	for (FellowWheel3D *w : wheels) {
 		driven += w->driven ? 1 : 0;
 		w->steer = w->steering ? steer_now : 0.0f;
+		// Milestone 107 (decision 0215): the wheel's toe, its front towards the centre line (-Z ahead: a left wheel's
+		// towards +X, a turn to the right).
+		if (w->toe != 0.0f) {
+			w->steer += Math::deg_to_rad(w->toe) * SIGN(w->mount.origin.x);
+		}
 	}
 
 	// Anti-roll: the wheels paired by axle (the same distance along the body, opposite sides).

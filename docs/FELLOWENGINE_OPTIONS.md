@@ -482,7 +482,11 @@ vehicle's contact reporting on): `impulse_threshold` (2 500 N·s in a physics st
 beyond it), `max_depth` (0.3 m), `radius` (0.7 m), `mesh_paths` (empty: every mesh of the vehicle but its wheels');
 `apply_impact(position, direction, impulse)`, `repair()`, `get_damage()` (0-1), `get_deepest_dent()`,
 `get_vertex_offset()`, `get_stats()`; the signal `impacted(position, impulse, depth)`. Bench `bench/vehicle_check.gd`
-(the lanes `crash`, `tap`).
+(the lanes `crash`, `tap`). The running gear (milestone 107, decision 0215; both 0 by default): `wheel_bend` (degrees:
+the most a dent bends a wheel's toe, the way the push turns it), `engine_power_loss` (the share of `max_torque` a dent
+of `max_depth` at `engine_position`, 0, 0.5, −1.4 m, takes); an impact reaches `radius` across its push, twice that
+along it; `get_engine_power()`, `get_wheel_toe_change()`; `repair()` puts them back. `FellowWheel3D.toe` (degrees, +
+in). Bench `bench/vehicle_check.gd` (the lanes `straight`, `bent`, `bent_off`, `engine`, `repaired`).
 
 ## Sound through the scene's geometry (milestone 78)
 

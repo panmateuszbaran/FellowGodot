@@ -225,6 +225,96 @@ void FellowVehicleDamage3D::_impact(const Vector3 &p_position, const Vector3 &p_
 	deform_usec += OS::get_singleton()->get_ticks_usec() - t0;
 }
 
+// Milestone 107 (decision 0215): how much of a dent at p_position, pushed along p_direction, reaches a part at p_part
+// (global): the vertices' falloff over radius, the distance along the push counted half (an impact reaches into the
+// body twice as far as it spreads over it).
+float FellowVehicleDamage3D::_reach(const Vector3 &p_part, const Vector3 &p_position, const Vector3 &p_direction) const {
+	const Vector3 v = p_part - p_position;
+	const float along = v.dot(p_direction);
+	const Vector3 across = v - p_direction * along;
+	const float dist = Math::sqrt(across.length_squared() + 0.25f * along * along);
+	if (dist >= radius) {
+		return 0.0f;
+	}
+	const float q = 1.0f - (dist / radius) * (dist / radius);
+	return q * q;
+}
+
+// Milestone 107: a dent reaching a wheel bends its toe — the way the push turns it about its upright (an impact
+// ahead of the wheel's centre and outside it turns its front out, inside it in), up to wheel_bend in all; one reaching
+// the engine takes engine_power_loss of its torque at max_depth.
+void FellowVehicleDamage3D::_running_gear(const Vector3 &p_position, const Vector3 &p_direction, float p_depth) {
+	if (!vehicle || max_depth <= 0.0f) {
+		return;
+	}
+	if (wheel_bend > 0.0f) {
+		const Basis to_vehicle = vehicle->get_global_basis().inverse();
+		for (FellowWheel3D *w : vehicle->get_wheels()) {
+			if (!w->is_inside_tree()) {
+				continue;
+			}
+			const Vector3 c = w->get_global_position();
+			const float reach = _reach(c, p_position, p_direction);
+			if (reach <= 0.0f) {
+				continue;
+			}
+			// The push's turning about the wheel's upright (the vehicle's +Y): + turns its front (-Z) towards -X.
+			const Vector3 arm = to_vehicle.xform(p_position - c);
+			const Vector3 push = to_vehicle.xform(p_direction);
+			const float turn = CLAMP(arm.cross(push).y / MAX(w->get_radius(), 0.05f), -1.0f, 1.0f);
+			if (Math::abs(turn) < 1e-4f) {
+				continue;
+			}
+			Bent *b = nullptr;
+			for (Bent &e : bent) {
+				if (e.wheel == w->get_instance_id()) {
+					b = &e;
+				}
+			}
+			if (!b) {
+				Bent e;
+				e.wheel = w->get_instance_id();
+				e.toe_base = w->get_toe();
+				e.toe_set = e.toe_base;
+				bent.push_back(e);
+				b = &bent[bent.size() - 1];
+			} else if (w->get_toe() != b->toe_set) {
+				b->toe_base = w->get_toe(); // the game set it since
+			}
+			// A turn of the front towards -X is toe-out on a left wheel (x < 0), toe-in on a right one.
+			const float side = w->get_position().x < 0.0f ? -1.0f : 1.0f;
+			b->bend = CLAMP(b->bend + side * turn * wheel_bend * reach * p_depth / max_depth, -wheel_bend, wheel_bend);
+			b->toe_set = b->toe_base + b->bend;
+			w->set_toe(b->toe_set);
+		}
+	}
+	if (engine_power_loss > 0.0f) {
+		const float reach = _reach(vehicle->get_global_transform().xform(engine_position), p_position, p_direction);
+		if (reach > 0.0f) {
+			engine_dent = MIN(engine_dent + p_depth * reach, max_depth);
+			if (torque_base < 0.0f || vehicle->get_max_torque() != torque_set) {
+				torque_base = vehicle->get_max_torque(); // the first dent, or the game set it since
+			}
+			torque_set = torque_base * (1.0f - engine_power_loss * engine_dent / max_depth);
+			vehicle->set_max_torque(torque_set);
+		}
+	}
+}
+
+float FellowVehicleDamage3D::get_engine_power() const {
+	return max_depth > 0.0f ? 1.0f - engine_power_loss * engine_dent / max_depth : 1.0f;
+}
+
+float FellowVehicleDamage3D::get_wheel_toe_change(const NodePath &p_wheel) const {
+	const Node *n = get_node_or_null(p_wheel);
+	for (const Bent &b : bent) {
+		if (n && b.wheel == n->get_instance_id()) {
+			return b.bend;
+		}
+	}
+	return 0.0f;
+}
+
 void FellowVehicleDamage3D::apply_impact(const Vector3 &p_position, const Vector3 &p_direction, float p_impulse) {
 	const float excess = p_impulse - impulse_threshold;
 	if (excess <= 0.0f || p_direction.is_zero_approx()) {
@@ -233,6 +323,7 @@ void FellowVehicleDamage3D::apply_impact(const Vector3 &p_position, const Vector
 	const float depth = MIN(softness * excess, max_depth);
 	impacts++;
 	_impact(p_position, p_direction.normalized(), depth);
+	_running_gear(p_position, p_direction.normalized(), depth);
 	emit_signal(SNAME("impacted"), p_position, p_impulse, depth);
 }
 
@@ -247,6 +338,20 @@ void FellowVehicleDamage3D::repair() {
 		t.offsets.clear();
 	}
 	deepest = 0.0f;
+	// Milestone 107: the wheels' toe and the engine's torque back (unless the game has set them since).
+	for (const Bent &b : bent) {
+		FellowWheel3D *w = ObjectDB::get_instance<FellowWheel3D>(b.wheel);
+		if (w && w->get_toe() == b.toe_set) {
+			w->set_toe(b.toe_base);
+		}
+	}
+	bent.clear();
+	if (vehicle && torque_base >= 0.0f && vehicle->get_max_torque() == torque_set) {
+		vehicle->set_max_torque(torque_base);
+	}
+	torque_base = -1.0f;
+	torque_set = -1.0f;
+	engine_dent = 0.0f;
 }
 
 Vector3 FellowVehicleDamage3D::get_vertex_offset(const NodePath &p_mesh, int p_surface, int p_vertex) const {
@@ -272,6 +377,14 @@ Dictionary FellowVehicleDamage3D::get_stats() const {
 	}
 	d["dented_meshes"] = dented;
 	d["vertices"] = vertices;
+	d["engine_power"] = get_engine_power();
+	Dictionary toe;
+	for (const Bent &b : bent) {
+		if (const Node *w = ObjectDB::get_instance<Node>(b.wheel)) {
+			toe[w->get_name()] = b.bend;
+		}
+	}
+	d["wheel_toe_change"] = toe;
 	return d;
 }
 
@@ -352,6 +465,14 @@ void FellowVehicleDamage3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("repair"), &FellowVehicleDamage3D::repair);
 	ClassDB::bind_method(D_METHOD("get_damage"), &FellowVehicleDamage3D::get_damage);
 	ClassDB::bind_method(D_METHOD("get_deepest_dent"), &FellowVehicleDamage3D::get_deepest_dent);
+	ClassDB::bind_method(D_METHOD("set_wheel_bend", "degrees"), &FellowVehicleDamage3D::set_wheel_bend);
+	ClassDB::bind_method(D_METHOD("get_wheel_bend"), &FellowVehicleDamage3D::get_wheel_bend);
+	ClassDB::bind_method(D_METHOD("set_engine_power_loss", "share"), &FellowVehicleDamage3D::set_engine_power_loss);
+	ClassDB::bind_method(D_METHOD("get_engine_power_loss"), &FellowVehicleDamage3D::get_engine_power_loss);
+	ClassDB::bind_method(D_METHOD("set_engine_position", "position"), &FellowVehicleDamage3D::set_engine_position);
+	ClassDB::bind_method(D_METHOD("get_engine_position"), &FellowVehicleDamage3D::get_engine_position);
+	ClassDB::bind_method(D_METHOD("get_engine_power"), &FellowVehicleDamage3D::get_engine_power);
+	ClassDB::bind_method(D_METHOD("get_wheel_toe_change", "wheel"), &FellowVehicleDamage3D::get_wheel_toe_change);
 	ClassDB::bind_method(D_METHOD("get_vertex_offset", "mesh", "surface", "vertex"), &FellowVehicleDamage3D::get_vertex_offset);
 	ClassDB::bind_method(D_METHOD("get_stats"), &FellowVehicleDamage3D::get_stats);
 
@@ -360,6 +481,11 @@ void FellowVehicleDamage3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "max_depth", PROPERTY_HINT_RANGE, "0,2,0.01,or_greater,suffix:m"), "set_max_depth", "get_max_depth");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "radius", PROPERTY_HINT_RANGE, "0.01,5,0.01,or_greater,suffix:m"), "set_radius", "get_radius");
 	ADD_PROPERTY(PropertyInfo(Variant::ARRAY, "mesh_paths", PROPERTY_HINT_ARRAY_TYPE, vformat("%s/%s:%s", Variant::NODE_PATH, PROPERTY_HINT_NODE_PATH_VALID_TYPES, "MeshInstance3D")), "set_mesh_paths", "get_mesh_paths");
+
+	ADD_GROUP("Running Gear", "");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "wheel_bend", PROPERTY_HINT_RANGE, "0,15,0.1,or_greater,suffix:°"), "set_wheel_bend", "get_wheel_bend");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "engine_power_loss", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_engine_power_loss", "get_engine_power_loss");
+	ADD_PROPERTY(PropertyInfo(Variant::VECTOR3, "engine_position", PROPERTY_HINT_NONE, "suffix:m"), "set_engine_position", "get_engine_position");
 
 	ADD_SIGNAL(MethodInfo("impacted", PropertyInfo(Variant::VECTOR3, "position"), PropertyInfo(Variant::FLOAT, "impulse"), PropertyInfo(Variant::FLOAT, "depth")));
 }

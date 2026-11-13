@@ -9,6 +9,14 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 107 — dents that reach the running gear (2026-11-13)
+
+- `FellowVehicleDamage3D` (decision 0215): `wheel_bend` — a dent reaching a wheel bends its toe the way the push turns
+  it (a side hit ahead of the front-left wheel: +2.5°, the car pulls 24.5° right in 6 s at 40 km/h); `engine_power_loss`
+  at `engine_position` — a front-end hit takes the engine's torque (74 % left: 0-100 km/h 6.27 → 7.63 s); both 0 by
+  default, `repair()` puts them back; `get_engine_power()`, `get_wheel_toe_change()`.
+- `FellowWheel3D.toe`: the wheel's alignment (degrees, + in).
+
 ## Milestone 106 — Windows: a refused connection seen at once (2026-11-13)
 
 - A stock bug fixed in `drivers/windows/net_socket_winsock.cpp` (decision 0214): Godot polled a connection in progress

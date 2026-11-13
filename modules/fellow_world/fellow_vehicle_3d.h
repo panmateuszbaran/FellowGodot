@@ -70,6 +70,7 @@ private:
 	bool driven = false;
 	bool braked = true;
 	bool handbrake = false;
+	float toe = 0.0f; // milestone 107 (decision 0215): degrees, + the wheel's front turned towards the centre line
 
 	// State (the vehicle's step).
 	Transform3D mount; // in the vehicle's space, at entering the tree
@@ -140,6 +141,8 @@ public:
 	bool is_braked() const { return braked; }
 	void set_handbrake(bool p_enabled) { handbrake = p_enabled; }
 	bool is_handbrake() const { return handbrake; }
+	void set_toe(float p_degrees) { toe = CLAMP(p_degrees, -45.0f, 45.0f); }
+	float get_toe() const { return toe; }
 
 	bool is_in_contact() const { return contact; }
 	float get_compression() const { return compression; }
@@ -260,6 +263,7 @@ public:
 	void set_gear(int p_gear);
 	Dictionary get_stats() const;
 	static Dictionary get_global_stats();
+	const LocalVector<FellowWheel3D *> &get_wheels() const { return wheels; } // milestone 107: FellowVehicleDamage3D's
 	static void reset_global_stats();
 
 	void set_max_torque(float p_torque) { max_torque = MAX(0.0f, p_torque); }
