@@ -1,7 +1,8 @@
 # FellowEngine — milestone 110 report (rigid bodies by the thousand: a measurement)
 
-Status: **FINAL** (2026-11-13): the owner said "ok kontynuuj"; the laptop's jobs f416-f420 done. Branch
-`fellow/geometry`. No code changed: the readiness assessment listed "thousands of bodies not measured".
+Status: **FINAL** (2026-11-13): the owner said "ok kontynuuj"; the laptop's jobs f416-f422 done. Branch
+`fellow/geometry`. A measurement (the readiness assessment listed "thousands of bodies not measured"), and three
+additions to the vehicles' damage: a regression scene, the editor's car preset, engine smoke.
 
 ## 0. Result
 
@@ -53,7 +54,9 @@ by the scene, undone; 37 icons.
 made when the node enters the tree (its materials' shaders shared by key), dark smoke rising from above
 `engine_position`, its amount the dent's share of `max_depth` there, from a tenth of it. `vehicle_check.gd`: the
 engine lane's car smokes, the unhit, the side-hit (the engine 4 % weaker: under a tenth) and the repaired ones do not;
-the other values as before; the editor build and the release template the same.
+the other values as before; the editor build and the release template the same. The laptop (jobs f421-f422): the
+same with GodotPhysics3D and Jolt; the picture strip's new row showed the puffs as grey squares where the smoke trailed
+past the camera (a quad without a texture) — now soft round puffs (a radial gradient).
 
 ## 4. Next
 
