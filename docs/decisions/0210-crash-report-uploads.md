@@ -27,7 +27,7 @@ diagnostics row listed "reports kept on the machine; sending them the game's".
 * **Accepted** (a 2xx response): the report and its minidump move into the directory's `sent/` folder (the newest
   `max_reports` kept there too), so the next run neither finds them pending nor sends them again. **Refused or not
   answered**: they stay for the next try. The signal `report_uploaded(path, ok, response_code)` for each — the HTTP
-  code, or a negative one when there was none (the URL, the host not found, no connection within 10 s, the TLS
+  code, or a negative one when there was none (the URL, the host not found, no connection within 30 s, the TLS
   handshake failed, no response within 30 s and a second for each 100 KB) — and `uploads_finished(sent, failed)` at
   the end; `is_uploading()`. A collector not reached (its host, the connection, the handshake) is not tried again for
   the reports after it in that call: they fail with the same code at once.
@@ -69,8 +69,10 @@ report, off, the cost): the same results.
 
 The laptop (job f403, Windows, a release template, MSVC): the crash's request 443 013 bytes, its 438 019-byte minidump
 in `upload_file_minidump` byte for byte; refused, accepted, TLS trusted and not, on their own: as on the cloud. The
-unreachable lane found Windows reporting a refused connection only at the TCP connection's own timeout (30 s): the
-connection now waits 10 s, and a collector not reached is not tried again for the rest of the reports.
+unreachable lane found Windows reporting a refused connection only at the TCP connection's own timeout (30 s a
+report): a collector not reached is now not tried again for the rest of the reports (30 s for the call, not 30 s a
+report). A connection limit of 10 s was tried and rejected: `localhost` on Windows tries its IPv6 address first and
+reached the collector's IPv4 one only after 10 s (job f404: the TLS lanes failed with −3).
 
 ## Cost
 

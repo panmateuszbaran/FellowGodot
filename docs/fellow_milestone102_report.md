@@ -29,8 +29,8 @@ settings, the signals), `doc_classes/FellowCrashReporter.xml`, `doc/classes/Proj
   the same as the editor build.
 * The laptop (job f403, Windows): the minidump (438 019 bytes) sent with its report, TLS, refused, accepted, on their
   own as on the cloud; the unreachable lane waited 30 s a report (Windows reports a refused connection at the TCP
-  timeout) — the connection now waits 10 s and a collector not reached is not tried again for the rest; the laptop
-  again: next job.
+  timeout) — a collector not reached is now not tried again for the rest (a 10 s connection limit tried in job f404
+  and rejected: `localhost`'s IPv6 address tried first took longer); the laptop again: next job.
 
 ## 3. Measurements
 

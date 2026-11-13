@@ -1973,10 +1973,10 @@ int _post(const String &p_url, const String &p_content_type, const PackedByteArr
 	if (client.is_null() || client->connect_to_host(host, port, tls ? TLSOptions::client() : Ref<TLSOptions>()) != OK) {
 		return UPLOAD_CANT_CONNECT;
 	}
-	// The connection within 10 s (Windows reports a refused one only at its own timeout); the request within 30 s and a
-	// second more for each 100 KB sent.
-	const uint64_t start = OS::get_singleton()->get_ticks_msec();
-	uint64_t deadline = start + 10000;
+	// The connection (with TLS, its handshake) within 30 s — on Windows a refused one is reported only at the TCP
+	// connection's own timeout, and a host's addresses are tried in turn — then the request within 30 s and a second
+	// more for each 100 KB sent.
+	uint64_t deadline = OS::get_singleton()->get_ticks_msec() + 30000;
 	auto wait_while = [&](HTTPClient::Status p_a, HTTPClient::Status p_b) {
 		while ((client->get_status() == p_a || client->get_status() == p_b) && OS::get_singleton()->get_ticks_msec() < deadline && !p_cancel.load()) {
 			client->poll();
