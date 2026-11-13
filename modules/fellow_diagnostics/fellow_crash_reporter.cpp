@@ -40,11 +40,14 @@
 
 #include "core/config/engine.h"
 #include "core/config/project_settings.h"
+#include "core/crypto/crypto.h"
 #include "core/debugger/engine_debugger.h"
 #include "core/io/dir_access.h"
 #include "core/io/file_access.h"
+#include "core/io/http_client.h"
 #include "core/io/json.h"
 #include "core/io/logger.h"
+#include "core/object/callable_mp.h"
 #include "core/object/script_backtrace.h"
 #include "core/object/script_language.h"
 #include "core/os/memory.h"
@@ -814,6 +817,9 @@ void _idle() {
 	if (!g.context_has_gpu && frame > 1) {
 		_build_context();
 		g.context_has_gpu = true; // once, whatever it found
+	}
+	if (frame == 2 && FellowCrashReporter::get_singleton()) {
+		FellowCrashReporter::get_singleton()->auto_upload(); // milestone 102
 	}
 	SceneTree *st = SceneTree::get_singleton();
 	Node *scene = st ? st->get_current_scene() : nullptr;
@@ -1665,6 +1671,9 @@ FellowCrashReporter::FellowCrashReporter() {
 	max_reports = GLOBAL_DEF(PropertyInfo(Variant::INT, "debug/fellow/crash_reports/max_reports", PROPERTY_HINT_RANGE, "1,100,1"), 10);
 	g.minidumps = GLOBAL_DEF(PropertyInfo(Variant::BOOL, "debug/fellow/crash_reports/minidumps"), true);
 	const double hang_seconds = GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "debug/fellow/crash_reports/hang_seconds", PROPERTY_HINT_RANGE, "0,120,0.5,suffix:s"), 10.0);
+	GLOBAL_DEF(PropertyInfo(Variant::STRING, "debug/fellow/crash_reports/upload_url"), "");
+	upload_minidumps = GLOBAL_DEF(PropertyInfo(Variant::BOOL, "debug/fellow/crash_reports/upload_minidumps"), true);
+	upload_automatically = GLOBAL_DEF(PropertyInfo(Variant::BOOL, "debug/fellow/crash_reports/upload_automatically"), false);
 	ProjectSettings *ps = ProjectSettings::get_singleton();
 	const bool fellow = !ps->has_setting("rendering/fellow/enabled") || bool(ps->get_setting("rendering/fellow/enabled"));
 	enabled = setting && fellow && !Engine::get_singleton()->is_editor_hint();
@@ -1702,7 +1711,8 @@ FellowCrashReporter::FellowCrashReporter() {
 	g.scripts_ok.store(true);
 	g.installed.store(true);
 	_add_crumb("engine", "started");
-	_prune_reports();
+	_prune_reports(directory);
+	_prune_reports(directory + "sent/");
 	// Milestone 98: the watchdog, for the main thread making no progress.
 	for (int i = 0; i < ScriptServer::get_language_count(); i++) {
 		ScriptLanguage *sl = ScriptServer::get_language(i);
@@ -1722,6 +1732,12 @@ FellowCrashReporter::FellowCrashReporter() {
 }
 
 FellowCrashReporter::~FellowCrashReporter() {
+	if (upload_thread) {
+		upload_cancel.store(true);
+		upload_thread->wait_to_finish();
+		memdelete(upload_thread);
+		upload_thread = nullptr;
+	}
 	if (g_watch_thread) {
 		g_watch_quit.store(true);
 		g_watch_thread->wait_to_finish();
@@ -1735,8 +1751,27 @@ FellowCrashReporter::~FellowCrashReporter() {
 	}
 }
 
-void FellowCrashReporter::_prune_reports() {
-	PackedStringArray reports = get_reports();
+// A directory's reports, newest first.
+static PackedStringArray _list_reports(const String &p_dir) {
+	PackedStringArray out;
+	if (p_dir.is_empty() || !DirAccess::dir_exists_absolute(p_dir)) {
+		return out;
+	}
+	Vector<String> files;
+	for (const String &file : DirAccess::get_files_at(p_dir)) {
+		if (file.get_extension() == "json" && (file.begins_with("crash_") || file.begins_with("report_") || file.begins_with("hang_"))) {
+			files.push_back(p_dir + file);
+		}
+	}
+	files.sort_custom<ReportOrder>();
+	for (const String &f : files) {
+		out.push_back(f);
+	}
+	return out;
+}
+
+void FellowCrashReporter::_prune_reports(const String &p_dir) {
+	PackedStringArray reports = _list_reports(p_dir);
 	for (int i = max_reports; i < reports.size(); i++) {
 		DirAccess::remove_absolute(reports[i]);
 		const String dump = reports[i].get_basename() + ".dmp";
@@ -1834,21 +1869,7 @@ String FellowCrashReporter::write_report(const String &p_reason) {
 }
 
 PackedStringArray FellowCrashReporter::get_reports() const {
-	PackedStringArray out;
-	if (directory.is_empty()) {
-		return out;
-	}
-	Vector<String> files;
-	for (const String &file : DirAccess::get_files_at(directory)) {
-		if (file.get_extension() == "json" && (file.begins_with("crash_") || file.begins_with("report_") || file.begins_with("hang_"))) {
-			files.push_back(directory + file);
-		}
-	}
-	files.sort_custom<ReportOrder>();
-	for (const String &f : files) {
-		out.push_back(f);
-	}
-	return out;
+	return _list_reports(directory);
 }
 
 Dictionary FellowCrashReporter::read_report(const String &p_path) {
@@ -1894,6 +1915,201 @@ void FellowCrashReporter::acknowledge_reports() {
 	Ref<FileAccess> f = FileAccess::open(directory + "acknowledged.txt", FileAccess::WRITE);
 	ERR_FAIL_COND(f.is_null());
 	f->store_line(reports[0].get_file());
+}
+
+// ------------------------------------------------------------------------- milestone 102: the reports uploaded
+
+namespace {
+
+void _append_bytes(PackedByteArray &r_body, const uint8_t *p_data, int p_size) {
+	if (p_size > 0) {
+		const int at = r_body.size();
+		r_body.resize(at + p_size);
+		memcpy(r_body.ptrw() + at, p_data, p_size);
+	}
+}
+
+// One part of a multipart/form-data body.
+void _part(PackedByteArray &r_body, const String &p_boundary, const String &p_name, const String &p_filename, const String &p_type, const uint8_t *p_data, int p_size) {
+	String head = "--" + p_boundary + "\r\nContent-Disposition: form-data; name=\"" + p_name + "\"";
+	if (!p_filename.is_empty()) {
+		head += "; filename=\"" + p_filename + "\"";
+	}
+	head += "\r\n";
+	if (!p_type.is_empty()) {
+		head += "Content-Type: " + p_type + "\r\n";
+	}
+	head += "\r\n";
+	const CharString h = head.utf8();
+	_append_bytes(r_body, (const uint8_t *)h.get_data(), h.length());
+	_append_bytes(r_body, p_data, p_size);
+	r_body.append('\r');
+	r_body.append('\n');
+}
+
+// A POST of p_body to p_url: the response's code, or a negative number when the request got none (UploadError).
+enum UploadError {
+	UPLOAD_BAD_URL = -1,
+	UPLOAD_CANT_RESOLVE = -2,
+	UPLOAD_CANT_CONNECT = -3,
+	UPLOAD_TLS_HANDSHAKE = -4,
+	UPLOAD_NO_RESPONSE = -5,
+};
+
+int _post(const String &p_url, const String &p_content_type, const PackedByteArray &p_body, const std::atomic<bool> &p_cancel) {
+	String scheme, host, path, fragment;
+	int port = -1;
+	if (p_url.parse_url(scheme, host, port, path, fragment) != OK || host.is_empty() || (scheme != "http://" && scheme != "https://")) {
+		return UPLOAD_BAD_URL;
+	}
+	const bool tls = scheme == "https://";
+	if (port < 0) {
+		port = tls ? 443 : 80;
+	}
+	if (path.is_empty()) {
+		path = "/";
+	}
+	Ref<HTTPClient> client = Ref<HTTPClient>(HTTPClient::create());
+	if (client.is_null() || client->connect_to_host(host, port, tls ? TLSOptions::client() : Ref<TLSOptions>()) != OK) {
+		return UPLOAD_CANT_CONNECT;
+	}
+	// 30 s, and a second more for each 100 KB sent.
+	const uint64_t deadline = OS::get_singleton()->get_ticks_msec() + 30000 + uint64_t(p_body.size()) / 100;
+	auto wait_while = [&](HTTPClient::Status p_a, HTTPClient::Status p_b) {
+		while ((client->get_status() == p_a || client->get_status() == p_b) && OS::get_singleton()->get_ticks_msec() < deadline && !p_cancel.load()) {
+			client->poll();
+			OS::get_singleton()->delay_usec(1000);
+		}
+	};
+	wait_while(HTTPClient::STATUS_CONNECTING, HTTPClient::STATUS_RESOLVING);
+	switch (client->get_status()) {
+		case HTTPClient::STATUS_CONNECTED:
+			break;
+		case HTTPClient::STATUS_CANT_RESOLVE:
+			return UPLOAD_CANT_RESOLVE;
+		case HTTPClient::STATUS_TLS_HANDSHAKE_ERROR:
+			return UPLOAD_TLS_HANDSHAKE;
+		default:
+			return UPLOAD_CANT_CONNECT;
+	}
+	Vector<String> headers;
+	headers.push_back("Content-Type: " + p_content_type);
+	headers.push_back("User-Agent: FellowEngine-CrashReporter/1");
+	if (client->request(HTTPClient::METHOD_POST, path, headers, p_body.ptr(), p_body.size()) != OK) {
+		return UPLOAD_NO_RESPONSE;
+	}
+	wait_while(HTTPClient::STATUS_REQUESTING, HTTPClient::STATUS_REQUESTING);
+	if (!client->has_response()) {
+		return UPLOAD_NO_RESPONSE;
+	}
+	const int code = client->get_response_code();
+	while (client->get_status() == HTTPClient::STATUS_BODY && OS::get_singleton()->get_ticks_msec() < deadline && !p_cancel.load()) {
+		client->poll();
+		client->read_response_body_chunk();
+		OS::get_singleton()->delay_usec(500);
+	}
+	client->close();
+	return code;
+}
+
+} // namespace
+
+Error FellowCrashReporter::upload_reports(const String &p_url) {
+	ERR_FAIL_COND_V_MSG(!enabled, ERR_UNCONFIGURED, "The crash reports are off (debug/fellow/crash_reports/enabled).");
+	const String url = p_url.is_empty() ? String(GLOBAL_GET("debug/fellow/crash_reports/upload_url")) : p_url;
+	ERR_FAIL_COND_V_MSG(url.is_empty(), ERR_INVALID_PARAMETER, "No URL to upload the reports to (debug/fellow/crash_reports/upload_url).");
+	ERR_FAIL_COND_V_MSG(!url.begins_with("http://") && !url.begins_with("https://"), ERR_INVALID_PARAMETER, vformat("The reports are uploaded over HTTP or HTTPS, not to \"%s\".", url));
+	ERR_FAIL_COND_V_MSG(uploading.load(), ERR_BUSY, "The reports are being uploaded already.");
+	if (upload_thread) {
+		upload_thread->wait_to_finish();
+		memdelete(upload_thread);
+		upload_thread = nullptr;
+	}
+	// Oldest first.
+	upload_queue.clear();
+	const PackedStringArray reports = get_reports();
+	for (int i = reports.size() - 1; i >= 0; i--) {
+		upload_queue.push_back(reports[i]);
+	}
+	upload_target = url;
+	upload_cancel.store(false);
+	uploading.store(true);
+	upload_thread = memnew(Thread);
+	upload_thread->start(&FellowCrashReporter::_upload_thread, this);
+	return OK;
+}
+
+void FellowCrashReporter::auto_upload() {
+	if (auto_upload_done || !enabled || !upload_automatically) {
+		return;
+	}
+	auto_upload_done = true;
+	if (!String(GLOBAL_GET("debug/fellow/crash_reports/upload_url")).is_empty() && !get_reports().is_empty()) {
+		upload_reports();
+	}
+}
+
+// Each report a POST of multipart/form-data — "report" (its JSON), "upload_file_minidump" (its minidump, the field
+// Sentry's, BugSplat's and Backtrace's minidump endpoints read) and its kind, reason, project, version and commit as
+// fields — moved into sent/ once the collector answers 2xx.
+void FellowCrashReporter::_upload_thread(void *p_self) {
+	FellowCrashReporter *self = static_cast<FellowCrashReporter *>(p_self);
+	int sent = 0;
+	int failed = 0;
+	const String sent_dir = self->directory + "sent/";
+	for (const String &path : self->upload_queue) {
+		if (self->upload_cancel.load()) {
+			break;
+		}
+		const PackedByteArray json = FileAccess::get_file_as_bytes(path);
+		if (json.is_empty()) {
+			failed++;
+			continue;
+		}
+		const Variant parsed = JSON::parse_string(String::utf8((const char *)json.ptr(), json.size()));
+		const Dictionary report = parsed.get_type() == Variant::DICTIONARY ? Dictionary(parsed) : Dictionary();
+		const Dictionary context = report.get("context", Dictionary());
+		const String boundary = "FellowCrashReport" + String::num_uint64(OS::get_singleton()->get_ticks_usec(), 16);
+		PackedByteArray body;
+		const String fields[5][2] = { { "kind", report.get("kind", "") }, { "reason", report.get("reason", "") }, { "project", context.get("project", "") }, { "version", context.get("project_version", "") }, { "commit", context.get("commit", "") } };
+		for (const auto &f : fields) {
+			const CharString v = f[1].utf8();
+			_part(body, boundary, f[0], String(), String(), (const uint8_t *)v.get_data(), v.length());
+		}
+		_part(body, boundary, "report", path.get_file(), "application/json", json.ptr(), json.size());
+		const String dump = path.get_basename() + ".dmp";
+		const bool has_dump = FileAccess::exists(dump);
+		if (has_dump && self->upload_minidumps) {
+			const PackedByteArray dmp = FileAccess::get_file_as_bytes(dump);
+			_part(body, boundary, "upload_file_minidump", dump.get_file(), "application/octet-stream", dmp.ptr(), dmp.size());
+		}
+		const CharString tail = ("--" + boundary + "--\r\n").utf8();
+		_append_bytes(body, (const uint8_t *)tail.get_data(), tail.length());
+		const int code = _post(self->upload_target, "multipart/form-data; boundary=" + boundary, body, self->upload_cancel);
+		const bool ok = code >= 200 && code < 300;
+		if (ok) {
+			DirAccess::make_dir_recursive_absolute(sent_dir);
+			DirAccess::rename_absolute(path, sent_dir + path.get_file());
+			if (has_dump) {
+				DirAccess::rename_absolute(dump, sent_dir + dump.get_file());
+			}
+			sent++;
+		} else {
+			failed++;
+		}
+		callable_mp(self, &FellowCrashReporter::_emit_uploaded).call_deferred(path, ok, code);
+	}
+	callable_mp(self, &FellowCrashReporter::_upload_done).call_deferred(sent, failed);
+	self->uploading.store(false);
+}
+
+void FellowCrashReporter::_emit_uploaded(const String &p_path, bool p_ok, int p_code) {
+	emit_signal(SNAME("report_uploaded"), p_path, p_ok, p_code);
+}
+
+void FellowCrashReporter::_upload_done(int p_sent, int p_failed) {
+	_prune_reports(directory + "sent/");
+	emit_signal(SNAME("uploads_finished"), p_sent, p_failed);
 }
 
 void FellowCrashReporter::debug_crash(const String &p_kind) {
@@ -1957,6 +2173,10 @@ void FellowCrashReporter::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_pending_report"), &FellowCrashReporter::get_pending_report);
 	ClassDB::bind_method(D_METHOD("acknowledge_reports"), &FellowCrashReporter::acknowledge_reports);
 	ClassDB::bind_static_method("FellowCrashReporter", D_METHOD("read_report", "path"), &FellowCrashReporter::read_report);
+	ClassDB::bind_method(D_METHOD("upload_reports", "url"), &FellowCrashReporter::upload_reports, DEFVAL(String()));
+	ClassDB::bind_method(D_METHOD("is_uploading"), &FellowCrashReporter::is_uploading);
 	ClassDB::bind_method(D_METHOD("debug_crash", "kind"), &FellowCrashReporter::debug_crash);
+	ADD_SIGNAL(MethodInfo("report_uploaded", PropertyInfo(Variant::STRING, "path"), PropertyInfo(Variant::BOOL, "ok"), PropertyInfo(Variant::INT, "response_code")));
+	ADD_SIGNAL(MethodInfo("uploads_finished", PropertyInfo(Variant::INT, "sent"), PropertyInfo(Variant::INT, "failed")));
 	ClassDB::bind_method(D_METHOD("get_stats"), &FellowCrashReporter::get_stats);
 }

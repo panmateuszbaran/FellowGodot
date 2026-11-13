@@ -356,6 +356,9 @@ DEBUG = {
     "crash_reports/max_reports": "The newest reports kept: older ones (and their minidumps) are deleted at start-up.",
     "crash_reports/hang_seconds": "Hang reports (milestone 98): a watchdog writes a report when the main thread has made no progress for this long — its frames (on Linux and macOS its GDScript frames too; on Windows a minidump) — without stopping the game, and adds how long the stall lasted when it goes on. Not with a debugger attached. 0: off. " + STARTUP + " Decision 0206.",
     "crash_reports/minidumps": "Windows: a minidump beside each crash's report (the threads' stacks and the memory they point to: a few MB), for Visual Studio or WinDbg with the build's PDB. " + STARTUP,
+    "crash_reports/upload_url": "Where [method FellowCrashReporter.upload_reports] sends the reports (milestone 102): an [code]http://[/code] or [code]https://[/code] URL taking a POST of [code]multipart/form-data[/code] — the report in [code]report[/code], its minidump in [code]upload_file_minidump[/code] (what Sentry's, BugSplat's and Backtrace's minidump endpoints read), its kind, reason, project, version and commit as fields. Empty: no uploads. Decision 0210.",
+    "crash_reports/upload_minidumps": "Windows: a report's minidump sent with it (a few MB each). " + STARTUP,
+    "crash_reports/upload_automatically": "The reports waiting in [member debug/fellow/crash_reports/directory] sent to [member debug/fellow/crash_reports/upload_url] on their own, on a thread, two frames after the game starts. Off: the game calls [method FellowCrashReporter.upload_reports] (after asking the player, where its privacy policy wants that). " + STARTUP,
 }
 
 PREFIXES = {"rendering/fellow/": D, "debug/fellow/": DEBUG}

@@ -32,7 +32,10 @@
 
 #include "core/object/class_db.h"
 #include "core/object/object.h"
+#include "core/os/thread.h"
 #include "core/variant/dictionary.h"
+
+#include <atomic>
 
 // Milestone 97 (decision 0205): crash reports for shipped games. With debug/fellow/crash_reports/enabled, a fatal
 // signal or exception (a release template included, where Godot's own handler is compiled out) writes a JSON report
@@ -50,7 +53,20 @@ class FellowCrashReporter : public Object {
 	uint64_t setup_usec = 0;
 	PackedStringArray written; // this session's reports (not pending)
 
-	void _prune_reports();
+	// Milestone 102 (decision 0210): the reports sent to a collector, on a thread of their own.
+	Thread *upload_thread = nullptr;
+	std::atomic<bool> uploading{ false };
+	std::atomic<bool> upload_cancel{ false };
+	PackedStringArray upload_queue;
+	String upload_target;
+	bool upload_minidumps = true;
+	bool upload_automatically = false;
+	bool auto_upload_done = false;
+	static void _upload_thread(void *p_self);
+	void _upload_done(int p_sent, int p_failed);
+	void _emit_uploaded(const String &p_path, bool p_ok, int p_code);
+
+	void _prune_reports(const String &p_dir);
 
 protected:
 	static void _bind_methods();
@@ -73,6 +89,10 @@ public:
 	Dictionary get_pending_report() const;
 	void acknowledge_reports();
 	static Dictionary read_report(const String &p_path);
+
+	Error upload_reports(const String &p_url = String());
+	bool is_uploading() const { return uploading.load(); }
+	void auto_upload(); // the first frame's, with upload_automatically
 
 	void debug_crash(const String &p_kind);
 

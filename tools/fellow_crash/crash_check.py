@@ -11,7 +11,9 @@ script functions deep, and one 30 frames into a game with a scene current — it
 marker it printed, the script's backtrace, the machine) and the next run finds it pending, then acknowledged; a
 report written by the game; the reports off (none written); the cost of printing with the reporter on and off;
 milestone 98: the main thread stalled for 3.5 s and going on, and frozen in a script's loop (killed), each a hang
-report. One
+report; milestone 102: the reports uploaded to a collector on this machine (multipart/form-data, as Sentry's,
+BugSplat's and Backtrace's minidump endpoints take them) — refused (500), unreachable, accepted, over TLS (a
+self-signed certificate for localhost), and on their own at the start without minidumps. One
 JSON line: CRASH_CHECK {...} (also <dir>/crash_check.json); exit code 1 when something was otherwise than expected.
 """
 
@@ -22,9 +24,15 @@ import os
 import platform
 import re
 import shutil
+import socket
+import ssl
 import subprocess
 import sys
+import threading
 import time
+from email.parser import BytesParser
+from email.policy import default as email_default
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -66,7 +74,64 @@ def read_minidump(path):
     return out
 
 
-def write_project(path, reports, enabled=True, log_lines=50, hang_seconds=None):
+class Collector:
+    """A crash report collector on this machine: answers POST /ok with 200 and /fail with 500, and keeps each
+    request's multipart parts (name, file name, content type, bytes)."""
+
+    def __init__(self, cert=None, key=None):
+        received = self.received = []
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_POST(self):
+                body = self.rfile.read(int(self.headers.get("Content-Length", 0)))
+                ctype = self.headers.get("Content-Type", "")
+                msg = BytesParser(policy=email_default).parsebytes(b"Content-Type: " + ctype.encode() + b"\r\nMIME-Version: 1.0\r\n\r\n" + body)
+                parts = []
+                if msg.is_multipart():
+                    for part in msg.iter_parts():
+                        parts.append(
+                            {
+                                "name": part.get_param("name", header="content-disposition"),
+                                "filename": part.get_filename(),
+                                "type": part.get_content_type() if part.get("Content-Type") else None,
+                                "data": part.get_payload(decode=True) or b"",
+                            }
+                        )
+                received.append({"path": self.path, "content_type": ctype.split(";")[0], "bytes": len(body), "user_agent": self.headers.get("User-Agent"), "parts": parts})
+                code = 200 if self.path.startswith("/ok") else 500
+                reply = json.dumps({"id": "%032x" % len(received)} if code == 200 else {"error": "refused on purpose"}).encode()
+                self.send_response(code)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(reply)))
+                self.end_headers()
+                self.wfile.write(reply)
+
+            def log_message(self, *args):
+                pass
+
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        if cert:
+            ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            ctx.load_cert_chain(cert, key)
+            self.server.socket = ctx.wrap_socket(self.server.socket, server_side=True)
+        self.port = self.server.server_address[1]
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+
+    def close(self):
+        self.server.shutdown()
+        self.server.server_close()
+
+
+def free_port():
+    s = socket.socket()
+    s.bind(("127.0.0.1", 0))
+    port = s.getsockname()[1]
+    s.close()
+    return port
+
+
+def write_project(path, reports, enabled=True, log_lines=50, hang_seconds=None, extra=""):
     os.makedirs(path, exist_ok=True)
     shutil.copy(os.path.join(HERE, "crash_check.gd"), os.path.join(path, "crash_check.gd"))
     with open(os.path.join(path, "project.godot"), "w", newline="\n") as f:
@@ -77,6 +142,7 @@ def write_project(path, reports, enabled=True, log_lines=50, hang_seconds=None):
             f"fellow/crash_reports/log_lines={log_lines}\n"
             "settings/gdscript/always_track_call_stacks=true\n"
             + (f"fellow/crash_reports/hang_seconds={hang_seconds}\n" if hang_seconds is not None else "")
+            + extra
         )
 
 
@@ -97,6 +163,146 @@ def line(out, tag):
     return json.loads(m.group(1)) if m else None
 
 
+def _json_files(d):
+    return sorted(os.path.basename(f) for f in glob.glob(os.path.join(d, "*.json")))
+
+
+def _upload(godot, project, url=None):
+    rc, out, secs = run(godot, project, "upload", ["--url=" + url] if url else [], timeout=120)
+    u = line(out, "CRASH_CHECK_UPLOAD") or {}
+    u["rc"] = rc
+    if not u.get("finished") or rc != 0:
+        u["output"] = out[-2000:]
+    return u
+
+
+def _parts_summary(req):
+    out = {}
+    for p in req["parts"]:
+        out[p["name"]] = {"filename": p["filename"], "type": p["type"], "bytes": len(p["data"])}
+        if p["filename"] is None:
+            out[p["name"]]["value"] = p["data"].decode(errors="replace")
+    return out
+
+
+def upload_lanes(godot, out_dir, failures):
+    """Milestone 102: two reports (a crash, with its minidump on Windows, and the game's) refused, unreachable, then
+    accepted; one over TLS (and refused where the certificate is not trusted); one on its own at the start."""
+    res = {}
+    project = os.path.join(out_dir, "project_upload")
+    reports = os.path.join(out_dir, "reports_upload")
+    os.makedirs(reports)
+    write_project(project, reports)
+    run(godot, project, "crash", ["--kind=abort"])
+    time.sleep(1.2)  # the next report a second later: oldest first is the crash
+    run(godot, project, "report")
+    files = _json_files(reports)
+    dumps = sorted(os.path.basename(f) for f in glob.glob(os.path.join(reports, "*.dmp")))
+    res["reports"] = files
+    res["minidumps"] = dumps
+    crash = [f for f in files if f.startswith("crash_")]
+    game = [f for f in files if f.startswith("report_")]
+    if len(crash) != 1 or len(game) != 1 or (WINDOWS and len(dumps) != 1):
+        failures.append(f"upload: the reports to send {files} {dumps}")
+        return res
+    originals = {f: open(os.path.join(reports, f), "rb").read() for f in files + dumps}
+    order = [crash[0], game[0]]
+    col = Collector()
+    try:
+        # Refused: both tried, oldest first, both kept.
+        u = _upload(godot, project, f"http://127.0.0.1:{col.port}/fail")
+        res["refused"] = u
+        if u.get("rc") != 0 or [x["file"] for x in u.get("uploaded", [])] != order or any(x["ok"] or x["code"] != 500 for x in u.get("uploaded", [])) or u.get("finished") != [[0, 2]] or u.get("reports_after") is None or sorted(u["reports_after"]) != files or len(col.received) != 2:
+            failures.append(f"upload refused: {u}")
+        # Unreachable: no response, both kept.
+        u = _upload(godot, project, f"http://127.0.0.1:{free_port()}/ok")
+        res["unreachable"] = {k: u.get(k) for k in ("uploaded", "finished", "reports_after", "msec", "rc")}
+        # -3: no connection (UPLOAD_CANT_CONNECT).
+        if u.get("rc") != 0 or u.get("finished") != [[0, 2]] or any(x["ok"] or x["code"] != -3 for x in u.get("uploaded", [])) or sorted(u.get("reports_after", [])) != files:
+            failures.append(f"upload unreachable: {u}")
+        # Accepted: both sent, oldest first, moved to sent/ unchanged; the fields, the report, the minidump.
+        col.received.clear()
+        u = _upload(godot, project, f"http://127.0.0.1:{col.port}/ok")
+        sent_dir = os.path.join(reports, "sent")
+        res["accepted"] = {k: u.get(k) for k in ("uploaded", "finished", "reports_after", "msec", "rc")}
+        res["accepted"]["sent_dir"] = sorted(os.listdir(sent_dir)) if os.path.isdir(sent_dir) else []
+        res["accepted"]["requests"] = [{"path": r["path"], "content_type": r["content_type"], "bytes": r["bytes"], "user_agent": r["user_agent"], "parts": _parts_summary(r)} for r in col.received]
+        ok = u.get("rc") == 0 and [x["file"] for x in u.get("uploaded", [])] == order and all(x["ok"] and x["code"] == 200 for x in u.get("uploaded", []))
+        ok = ok and u.get("finished") == [[2, 0]] and u.get("reports_after") == [] and sorted(res["accepted"]["sent_dir"]) == sorted(files + dumps)
+        ok = ok and all(open(os.path.join(sent_dir, f), "rb").read() == originals[f] for f in files + dumps if os.path.exists(os.path.join(sent_dir, f)))
+        ok = ok and len(col.received) == 2
+        if ok:
+            for req, name in zip(col.received, order):
+                parts = {p["name"]: p for p in req["parts"]}
+                kind = "crash" if name.startswith("crash_") else "report"
+                ok = ok and req["content_type"] == "multipart/form-data" and parts.get("report", {}).get("data") == originals[name] and parts["report"]["filename"] == name
+                ok = ok and parts.get("kind", {}).get("data") == kind.encode() and parts.get("project", {}).get("data") == b"Crash Check" and parts.get("version", {}).get("data") == b"1.2.3"
+                ok = ok and len(parts.get("commit", {}).get("data", b"")) >= 7 and parts.get("reason", {}).get("data")
+                dump = name[:-5] + ".dmp"
+                if dump in originals:
+                    ok = ok and parts.get("upload_file_minidump", {}).get("data") == originals[dump] and parts["upload_file_minidump"]["filename"] == dump
+                else:
+                    ok = ok and "upload_file_minidump" not in parts
+        if not ok:
+            failures.append(f"upload accepted: {res['accepted']}")
+    finally:
+        col.close()
+
+    # TLS: a certificate for localhost the project trusts (network/tls/certificate_bundle_override), and the same
+    # server refused by a project that does not trust it.
+    cert = os.path.join(out_dir, "collector.crt")
+    key = os.path.join(out_dir, "collector.key")
+    rc, out, _ = run(godot, project, "makecert", ["--cert=" + cert.replace(os.sep, "/"), "--key=" + key.replace(os.sep, "/")])
+    tls = {}
+    if not (line(out, "CRASH_CHECK_MAKECERT") or {}).get("ok"):
+        failures.append("upload tls: no certificate made")
+    else:
+        col = Collector(cert=cert, key=key)
+        try:
+            for name, trusted in (("untrusted", False), ("trusted", True)):
+                proj = os.path.join(out_dir, "project_tls_" + name)
+                reps = os.path.join(out_dir, "reports_tls_" + name)
+                os.makedirs(reps)
+                write_project(proj, reps, extra=f"\n[network]\n\ntls/certificate_bundle_override=\"{cert.replace(os.sep, '/')}\"\n" if trusted else "")
+                run(godot, proj, "report")
+                before = len(col.received)
+                u = _upload(godot, proj, f"https://localhost:{col.port}/ok")
+                tls[name] = {k: u.get(k) for k in ("uploaded", "finished", "reports_after", "msec", "rc")}
+                tls[name]["received"] = len(col.received) - before
+                if trusted:
+                    good = u.get("finished") == [[1, 0]] and tls[name]["received"] == 1 and u.get("reports_after") == []
+                else:
+                    # -4: the handshake refused (UPLOAD_TLS_HANDSHAKE): the collector's certificate not trusted.
+                    good = u.get("finished") == [[0, 1]] and tls[name]["received"] == 0 and len(u.get("reports_after", [])) == 1 and u["uploaded"][0]["code"] == -4
+                good = good and u.get("rc") == 0
+                if not good:
+                    failures.append(f"upload tls {name}: {tls[name]} {u.get('output', '')[-600:]}")
+        finally:
+            col.close()
+    res["tls"] = tls
+
+    # On their own: upload_automatically, minidumps not sent (upload_minidumps off).
+    col = Collector()
+    try:
+        proj = os.path.join(out_dir, "project_auto")
+        reps = os.path.join(out_dir, "reports_auto")
+        os.makedirs(reps)
+        write_project(proj, reps)
+        run(godot, proj, "crash", ["--kind=abort"])
+        with open(os.path.join(proj, "project.godot"), "a", newline="\n") as f:
+            f.write(f"fellow/crash_reports/upload_url=\"http://127.0.0.1:{col.port}/ok\"\nfellow/crash_reports/upload_automatically=true\nfellow/crash_reports/upload_minidumps=false\n")
+        u = _upload(godot, proj)
+        auto = {k: u.get(k) for k in ("before", "uploaded", "finished", "reports_after", "msec", "rc")}
+        auto["parts"] = [sorted(p["name"] for p in r["parts"]) for r in col.received]
+        auto["sent_dir"] = sorted(os.listdir(os.path.join(reps, "sent"))) if os.path.isdir(os.path.join(reps, "sent")) else []
+        if u.get("rc") != 0 or u.get("before") != 1 or u.get("finished") != [[1, 0]] or len(col.received) != 1 or "upload_file_minidump" in auto["parts"][0] or "report" not in auto["parts"][0]:
+            failures.append(f"upload auto: {auto} {u.get('output', '')[-600:]}")
+        res["auto"] = auto
+    finally:
+        col.close()
+    return res
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--godot", required=True)
@@ -105,7 +311,9 @@ def main():
     ap.add_argument("--symbols", help="the same build with symbols (or a library, e.g. libc), to symbolize the frames; comma-separated")
     ap.add_argument("--cost-lines", type=int, default=20000)
     ap.add_argument("--windowed", action="store_true", help="the late crash in a window (the GPU in its report)")
+    ap.add_argument("--lanes", default="crashes,hangs,report,upload,off,cost", help="which parts to run, comma-separated")
     a = ap.parse_args()
+    lanes = a.lanes.split(",")
     if WINDOWS:
         import ctypes
 
@@ -121,7 +329,7 @@ def main():
     failures = []
     result = {"platform": sys.platform, "machine": platform.machine(), "godot": os.path.basename(godot), "kinds": {}}
 
-    for kind in a.kinds.split(",") + ["later"]:
+    for kind in (a.kinds.split(",") + ["later"]) if "crashes" in lanes else []:
         for f in glob.glob(os.path.join(reports, "*")):
             os.remove(f)
         if kind == "later":
@@ -213,7 +421,7 @@ def main():
     hang_project = os.path.join(out_dir, "project_hang")
     write_project(hang_project, reports, hang_seconds=2.0)
     hangs = {}
-    for mode, extra, timeout in (("hang", ["--stall_ms=3500"], 120), ("freeze", [], 9)):
+    for mode, extra, timeout in (("hang", ["--stall_ms=3500"], 120), ("freeze", [], 9)) if "hangs" in lanes else ():
         for f in glob.glob(os.path.join(reports, "*")):
             os.remove(f)
         rc, out, secs = run(godot, hang_project, mode, extra, timeout=timeout)
@@ -247,34 +455,41 @@ def main():
     result["hangs"] = hangs
 
     # A report written by the game.
-    rc, out, _ = run(godot, project, "report")
-    rep = line(out, "CRASH_CHECK_REPORT") or {}
-    result["report"] = {k: rep.get(k) for k in ("kind", "reason", "frames", "breadcrumbs", "custom", "script_backtraces")}
-    if rc != 0 or rep.get("kind") != "report" or rep.get("reason") != "a soft failure" or "before the report" not in rep.get("breadcrumbs", []) or rep.get("custom", {}).get("checkpoint") != "7" or not rep.get("script_backtraces") or "_write" not in rep["script_backtraces"][0]:
-        failures.append(f"report: {rep}")
-    result["report"]["stats"] = rep.get("stats")
+    if "report" in lanes:
+        rc, out, _ = run(godot, project, "report")
+        rep = line(out, "CRASH_CHECK_REPORT") or {}
+        result["report"] = {k: rep.get(k) for k in ("kind", "reason", "frames", "breadcrumbs", "custom", "script_backtraces")}
+        if rc != 0 or rep.get("kind") != "report" or rep.get("reason") != "a soft failure" or "before the report" not in rep.get("breadcrumbs", []) or rep.get("custom", {}).get("checkpoint") != "7" or not rep.get("script_backtraces") or "_write" not in rep["script_backtraces"][0]:
+            failures.append(f"report: {rep}")
+        result["report"]["stats"] = rep.get("stats")
+
+    # Milestone 102: the reports uploaded.
+    if "upload" in lanes:
+        result["upload"] = upload_lanes(godot, out_dir, failures)
 
     # Off: nothing written, the process still crashes.
     off_project = os.path.join(out_dir, "project_off")
     off_reports = os.path.join(out_dir, "reports_off")
     os.makedirs(off_reports)
     write_project(off_project, off_reports, enabled=False)
-    rc, out, _ = run(godot, off_project, "crash", ["--kind=segfault"])
-    result["off"] = {"rc": rc, "reports": len(os.listdir(off_reports))}
-    if rc == 0 or result["off"]["reports"] != 0:
-        failures.append(f"off: {result['off']}")
+    if "off" in lanes:
+        rc, out, _ = run(godot, off_project, "crash", ["--kind=segfault"])
+        result["off"] = {"rc": rc, "reports": len(os.listdir(off_reports))}
+        if rc == 0 or result["off"]["reports"] != 0:
+            failures.append(f"off: {result['off']}")
 
     # The cost: printing with the reporter on and off (the output thrown away), breadcrumbs and values.
-    cost = {}
-    for name, proj in (("on", project), ("off", off_project)):
-        best = None
-        for _ in range(3):
-            rc, out, _ = run(godot, proj, "cost", ["--lines=%d" % a.cost_lines])
-            c = line(out, "CRASH_CHECK_COST")
-            if c and (best is None or c["print_ns"] < best["print_ns"]):
-                best = c
-        cost[name] = {k: round(v, 1) for k, v in (best or {}).items() if isinstance(v, float)}
-    result["cost"] = cost
+    if "cost" in lanes:
+        cost = {}
+        for name, proj in (("on", project), ("off", off_project)):
+            best = None
+            for _ in range(3):
+                rc, out, _ = run(godot, proj, "cost", ["--lines=%d" % a.cost_lines])
+                c = line(out, "CRASH_CHECK_COST")
+                if c and (best is None or c["print_ns"] < best["print_ns"]):
+                    best = c
+            cost[name] = {k: round(v, 1) for k, v in (best or {}).items() if isinstance(v, float)}
+        result["cost"] = cost
 
     result["failures"] = failures
     with open(os.path.join(out_dir, "crash_check.json"), "w") as f:

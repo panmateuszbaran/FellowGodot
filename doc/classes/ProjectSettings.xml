@@ -542,6 +542,15 @@
 		<member name="debug/fellow/crash_reports/minidumps" type="bool" setter="" getter="" default="true">
 			Windows: a minidump beside each crash's report (the threads' stacks and the memory they point to: a few MB), for Visual Studio or WinDbg with the build's PDB. Read at start-up.
 		</member>
+		<member name="debug/fellow/crash_reports/upload_automatically" type="bool" setter="" getter="" default="false">
+			The reports waiting in [member debug/fellow/crash_reports/directory] sent to [member debug/fellow/crash_reports/upload_url] on their own, on a thread, two frames after the game starts. Off: the game calls [method FellowCrashReporter.upload_reports] (after asking the player, where its privacy policy wants that). Read at start-up.
+		</member>
+		<member name="debug/fellow/crash_reports/upload_minidumps" type="bool" setter="" getter="" default="true">
+			Windows: a report's minidump sent with it (a few MB each). Read at start-up.
+		</member>
+		<member name="debug/fellow/crash_reports/upload_url" type="String" setter="" getter="" default="&quot;&quot;">
+			Where [method FellowCrashReporter.upload_reports] sends the reports (milestone 102): an [code]http://[/code] or [code]https://[/code] URL taking a POST of [code]multipart/form-data[/code] — the report in [code]report[/code], its minidump in [code]upload_file_minidump[/code] (what Sentry's, BugSplat's and Backtrace's minidump endpoints read), its kind, reason, project, version and commit as fields. Empty: no uploads. Decision 0210.
+		</member>
 		<member name="debug/file_logging/enable_file_logging" type="bool" setter="" getter="" default="false">
 			If [code]true[/code], logs all output and error messages to files. See also [member debug/file_logging/log_path], [member debug/file_logging/max_log_files], and [member application/run/flush_stdout_on_print].
 		</member>

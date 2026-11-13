@@ -1520,6 +1520,16 @@ GDScript::~GDScript() {
 
 	clear();
 
+	// FellowEngine (decision 0210): the lambdas that outlive the script (a lambda connected to a singleton's signal
+	// holding the last reference, at exit) let go of its list here, so their destruction does not lock its freed mutex.
+	{
+		MutexLock lock(func_ptrs_to_update_mutex);
+		for (UpdatableFuncPtr *updatable : func_ptrs_to_update) {
+			updatable->list_element = nullptr;
+		}
+		func_ptrs_to_update.clear();
+	}
+
 	cancel_pending_functions(false);
 
 	{

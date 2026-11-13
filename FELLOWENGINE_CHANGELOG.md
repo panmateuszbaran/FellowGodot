@@ -9,6 +9,18 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 102 — crash reports sent to a collector (2026-11-13)
+
+- `FellowCrashReporter.upload_reports()`, `debug/fellow/crash_reports/upload_url`, `upload_automatically`,
+  `upload_minidumps` (decision 0210): the reports waiting on the machine sent on a thread, oldest first, as
+  `multipart/form-data` with the minidump in `upload_file_minidump` (Sentry's, BugSplat's and Backtrace's form) and
+  the kind, reason, project, version and commit as fields; accepted ones moved into `sent/`, refused or unanswered ones
+  kept; `report_uploaded`, `uploads_finished`; HTTPS with the certificate checked. Six lanes against a collector on the
+  machine (refused, unreachable, accepted, TLS trusted and not, on their own).
+- A stock GDScript bug fixed (marked in `modules/gdscript/gdscript.cpp`): a lambda connected to a module singleton's
+  signal (`NavigationServer3D`'s too) corrupted the heap at exit; `GDScript::~GDScript` now lets go of the lambdas
+  that outlive it.
+
 ## Milestone 101 — wheels that meet the ground with their shape (2026-11-13)
 
 - `FellowWheel3D.contact_shape` and `width` (decision 0209): a wheel's ground found by sweeping a sphere or a cylinder

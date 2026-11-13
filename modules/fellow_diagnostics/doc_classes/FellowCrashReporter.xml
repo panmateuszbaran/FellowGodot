@@ -7,7 +7,8 @@
 		A singleton. With [member ProjectSettings.debug/fellow/crash_reports/enabled] (and not in the editor), a crash — a fatal signal on Linux and macOS (SIGSEGV, SIGBUS, SIGILL, SIGFPE, SIGABRT, SIGTRAP), an unhandled exception, [code]abort()[/code] or a pure virtual call on Windows — writes a JSON report into [member ProjectSettings.debug/fellow/crash_reports/directory] before the process ends, in release templates too (where Godot's own crash handler is compiled out); on Windows a minidump ([code].dmp[/code]) beside it, for Visual Studio or WinDbg with the build's PDB. Godot's own handler (debug builds) and any handler installed before still run afterwards.
 		A report holds the reason (the signal or exception, the faulting address), the faulting thread's frames (each a module and an offset in it, symbolized afterwards with the build's symbols: [code]tools/fellow_crash/symbolize.py[/code]), the time, the frame and the scene, the process's memory, the machine (operating system, CPU, memory, GPU and its driver, the renderer), the project's name and version, the last lines of the log ([member ProjectSettings.debug/fellow/crash_reports/log_lines]), the breadcrumbs and values the game set, and GDScript's backtrace of the crashing thread (in a release build only with [member ProjectSettings.debug/settings/gdscript/always_track_call_stacks]). The fatal path writes from what it keeps in fixed buffers, without allocating; what needs the heap (the scripts' backtraces) is added last.
 		Hangs (milestone 98): with [member ProjectSettings.debug/fellow/crash_reports/hang_seconds], a watchdog thread notices the main thread making no progress (no frame) for that long and writes a [code]hang_*.json[/code] report without stopping the game — the main thread's frames (on Linux and macOS taken by the main thread itself in a signal, with its GDScript frames; on Windows from its context while it is suspended for a moment, and a minidump of every thread beside it), and when it goes on, how long the stall lasted ([code]recovered_after_ms[/code]; a report without it is a freeze the player ended). Not while a debugger is attached or the game runs from the editor with its debugger, nor while the machine sleeps.
-		The next run finds the report: [method get_pending_report] returns the newest report of an earlier run not yet acknowledged; the game can show it, send it where it collects them (an [HTTPRequest] with the player's consent), and [method acknowledge_reports]. The newest [member ProjectSettings.debug/fellow/crash_reports/max_reports] are kept.
+		The next run finds the report: [method get_pending_report] returns the newest report of an earlier run not yet acknowledged; the game can show it and [method acknowledge_reports]. The newest [member ProjectSettings.debug/fellow/crash_reports/max_reports] are kept.
+		Uploads (milestone 102): [method upload_reports] sends the reports waiting in the directory to a collector — [member ProjectSettings.debug/fellow/crash_reports/upload_url], a POST of [code]multipart/form-data[/code] a report, the form Sentry's, BugSplat's and Backtrace's minidump endpoints take — on a thread of its own, oldest first; a report the collector accepts (a 2xx response) moves into the directory's [code]sent/[/code] folder (the newest [member ProjectSettings.debug/fellow/crash_reports/max_reports] kept there), one it refuses or does not answer stays for the next try. With [member ProjectSettings.debug/fellow/crash_reports/upload_automatically] they are sent two frames after the start, without the game asking.
 		[codeblock]
 		func _ready():
 		    var report = FellowCrashReporter.get_pending_report()
@@ -18,6 +19,10 @@
 
 		func _on_checkpoint(name):
 		    FellowCrashReporter.add_breadcrumb("checkpoint " + name, "game")
+
+		func _on_player_agreed_to_send():
+		    FellowCrashReporter.uploads_finished.connect(func(sent, failed): print(sent, " reports sent"), CONNECT_ONE_SHOT)
+		    FellowCrashReporter.upload_reports("https://collector.example.com/api/minidump")
 		[/codeblock]
 		Reports may hold what the log printed and what the game set: tell players what is sent and ask first.
 	</description>
@@ -81,6 +86,12 @@
 				Whether reports are written in this process: [member ProjectSettings.debug/fellow/crash_reports/enabled] and FellowEngine on, and not the editor.
 			</description>
 		</method>
+		<method name="is_uploading" qualifiers="const">
+			<return type="bool" />
+			<description>
+				Whether [method upload_reports] is sending reports now.
+			</description>
+		</method>
 		<method name="read_report" qualifiers="static">
 			<return type="Dictionary" />
 			<param index="0" name="path" type="String" />
@@ -103,6 +114,13 @@
 				A value the reports carry (the level, the player's position, the build's branch), as text: up to 32 keys of up to 46 bytes, values cut at 206 bytes. Setting a key again replaces its value.
 			</description>
 		</method>
+		<method name="upload_reports">
+			<return type="int" enum="Error" />
+			<param index="0" name="url" type="String" default="&quot;&quot;" />
+			<description>
+				Sends the reports waiting in the directory (those of [method get_reports], oldest first) to [param url] — empty: [member ProjectSettings.debug/fellow/crash_reports/upload_url] — on a thread of its own, and returns at once: [constant OK], or [constant ERR_UNCONFIGURED] (the reports off), [constant ERR_INVALID_PARAMETER] (no URL, or not [code]http://[/code] or [code]https://[/code]), [constant ERR_BUSY] (sending already). Each report is a POST of [code]multipart/form-data[/code]: [code]report[/code] (its JSON, as a file), [code]upload_file_minidump[/code] (its minidump, with [member ProjectSettings.debug/fellow/crash_reports/upload_minidumps]), and the fields [code]kind[/code], [code]reason[/code], [code]project[/code], [code]version[/code] and [code]commit[/code]. HTTPS checks the collector's certificate against Godot's certificates ([member ProjectSettings.network/tls/certificate_bundle_override] to use others). A report the collector accepts (2xx) is moved into the directory's [code]sent/[/code] folder; [signal report_uploaded] for each, [signal uploads_finished] at the end.
+			</description>
+		</method>
 		<method name="write_report">
 			<return type="String" />
 			<param index="0" name="reason" type="String" />
@@ -111,4 +129,21 @@
 			</description>
 		</method>
 	</methods>
+	<signals>
+		<signal name="report_uploaded">
+			<param index="0" name="path" type="String" />
+			<param index="1" name="ok" type="bool" />
+			<param index="2" name="response_code" type="int" />
+			<description>
+				A report [method upload_reports] tried to send: its path (where it was), whether the collector accepted it (moved into [code]sent/[/code]), and the collector's HTTP response code, or when there was none: [code]-1[/code] (the URL not understood), [code]-2[/code] (its host not found), [code]-3[/code] (no connection), [code]-4[/code] (the TLS handshake failed: the certificate not trusted), [code]-5[/code] (no response within 30 s and a second for each 100 KB).
+			</description>
+		</signal>
+		<signal name="uploads_finished">
+			<param index="0" name="sent" type="int" />
+			<param index="1" name="failed" type="int" />
+			<description>
+				[method upload_reports] is done: how many reports the collector accepted and how many it did not (they stay in the directory for the next try).
+			</description>
+		</signal>
+	</signals>
 </class>
