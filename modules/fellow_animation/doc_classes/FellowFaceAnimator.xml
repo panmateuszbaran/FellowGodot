@@ -5,6 +5,7 @@
 	</brief_description>
 	<description>
 		A child anywhere under the character: set [member mesh_path] to the face's [MeshInstance3D] (its mesh with blend shapes; ARKit's names by default, see [member blend_shapes]) and [member voice_path] to the player of its voice ([AudioStreamPlayer], [AudioStreamPlayer2D] or [AudioStreamPlayer3D]). While the player plays, the stream is analysed a little ahead of its position (its playback rendered offline once and shared by every face playing it: the level and five bands' energies every 10 ms) into the mouth's channels — [constant CHANNEL_JAW_OPEN] with an open vowel's high first formant, [constant CHANNEL_MOUTH_WIDE] with a front vowel's high second formant, [constant CHANNEL_MOUTH_ROUND] with a back vowel's low one, [constant CHANNEL_TEETH] with the hiss of s and f, [constant CHANNEL_MOUTH_CLOSED] as it falls silent — read [member anticipation] ahead of what is heard, eased ([member attack], [member release]) and set on the blend shapes. A timeline can drive it instead: [member voice_stream] read at [member voice_time] (an [AnimationPlayer]'s track setting it). The eyes blink between [member blink_interval_min] and [member blink_interval_max] seconds apart, and look at [member look_target_path] with small saccades (milestone 89; ARKit's [code]eyeLook*[/code] shapes). Language-independent and without phonemes: a stylised mouth, not a speech recogniser's visemes. See [code]docs/decisions/0191-face-animation.md[/code].
+		Expressions (milestone 100): [method set_expression] fades named sets of channels — the brows, the mouth's corners, the cheeks, the eyes' squint and widening, the nose — in and out on top of the rest (six built in after FACS, and [member expressions]); the voice's stressed syllables raise the brows ([member speech_brows]) and emit [signal emphasized].
 	</description>
 	<tutorials>
 	</tutorials>
@@ -21,6 +22,13 @@
 				Forgets every voice's analysis (analysed again when played again). The cache keeps at most 256 voices.
 			</description>
 		</method>
+		<method name="clear_expressions">
+			<return type="void" />
+			<param index="0" name="fade" type="float" default="0.3" />
+			<description>
+				Fades every expression out over [param fade] seconds (0: at once) (milestone 100).
+			</description>
+		</method>
 		<method name="get_channel" qualifiers="const">
 			<return type="float" />
 			<param index="0" name="channel" type="int" enum="FellowFaceAnimator.Channel" />
@@ -32,6 +40,25 @@
 			<return type="Dictionary" />
 			<description>
 				Every channel's value now, by name.
+			</description>
+		</method>
+		<method name="get_emphasis" qualifiers="const">
+			<return type="float" />
+			<description>
+				The brows' pulse from the voice's last stressed syllable: 1 at it, fading over 0.3 s (milestone 100).
+			</description>
+		</method>
+		<method name="get_expression_names" qualifiers="const">
+			<return type="PackedStringArray" />
+			<description>
+				The expressions [method set_expression] knows: the built-in ones ([code]happy[/code], [code]sad[/code], [code]angry[/code], [code]surprised[/code], [code]afraid[/code], [code]disgusted[/code]) and those in [member expressions].
+			</description>
+		</method>
+		<method name="get_expression_weight" qualifiers="const">
+			<return type="float" />
+			<param index="0" name="name" type="StringName" />
+			<description>
+				How much of an expression the face shows now (0 to 1, as it fades).
 			</description>
 		</method>
 		<method name="get_gaze_angles" qualifiers="const">
@@ -72,6 +99,15 @@
 				The mouth's channels the analysis gives at [param time] seconds into [param stream] (unsmoothed), with the level ([code]level_db[/code]) and the scores they came from ([code]open_score[/code], [code]wide_score[/code], [code]low_score[/code], [code]hiss_score[/code], in dB), [code]analysed_seconds[/code] and [code]analysis_usec[/code].
 			</description>
 		</method>
+		<method name="set_expression">
+			<return type="void" />
+			<param index="0" name="name" type="StringName" />
+			<param index="1" name="weight" type="float" default="1.0" />
+			<param index="2" name="fade" type="float" default="0.3" />
+			<description>
+				Fades an expression to [param weight] over [param fade] seconds (0: at once) (milestone 100). Expressions add up — each channel at most 1 — on top of the lip sync, the blinks and the gaze: [code]set_expression(&amp;"happy")[/code] smiles; [code]set_expression(&amp;"happy", 0.0, 0.5)[/code] with [code]set_expression(&amp;"sad", 1.0, 0.5)[/code] crossfades. The built-in ones follow the action units Ekman and Friesen give for the basic emotions (FACS): [code]happy[/code] (the cheeks raised, the corners pulled), [code]sad[/code] (the inner brows raised and drawn, the corners down), [code]angry[/code] (the brows down, the lids tightened, the lips pressed), [code]surprised[/code] (the brows up, the eyes wide, the jaw dropped), [code]afraid[/code], [code]disgusted[/code] (the nose wrinkled, the corners down); [member expressions] adds the game's own or changes these.
+			</description>
+		</method>
 	</methods>
 	<members>
 		<member name="anticipation" type="float" setter="set_anticipation" getter="get_anticipation" default="0.04">
@@ -80,7 +116,7 @@
 		<member name="attack" type="float" setter="set_attack" getter="get_attack" default="0.04">
 			The time constant of a channel rising, in seconds.
 		</member>
-		<member name="blend_shapes" type="Dictionary" setter="set_blend_shapes" getter="get_blend_shapes" default="{ &quot;blink_left&quot;: PackedStringArray(&quot;eyeBlinkLeft&quot;), &quot;blink_right&quot;: PackedStringArray(&quot;eyeBlinkRight&quot;), &quot;jaw_open&quot;: PackedStringArray(&quot;jawOpen&quot;), &quot;look_down_left&quot;: PackedStringArray(&quot;eyeLookDownLeft&quot;), &quot;look_down_right&quot;: PackedStringArray(&quot;eyeLookDownRight&quot;), &quot;look_in_left&quot;: PackedStringArray(&quot;eyeLookInLeft&quot;), &quot;look_in_right&quot;: PackedStringArray(&quot;eyeLookInRight&quot;), &quot;look_out_left&quot;: PackedStringArray(&quot;eyeLookOutLeft&quot;), &quot;look_out_right&quot;: PackedStringArray(&quot;eyeLookOutRight&quot;), &quot;look_up_left&quot;: PackedStringArray(&quot;eyeLookUpLeft&quot;), &quot;look_up_right&quot;: PackedStringArray(&quot;eyeLookUpRight&quot;), &quot;mouth_closed&quot;: PackedStringArray(), &quot;mouth_round&quot;: PackedStringArray(&quot;mouthPucker&quot;, &quot;mouthFunnel&quot;), &quot;mouth_wide&quot;: PackedStringArray(&quot;mouthStretchLeft&quot;, &quot;mouthStretchRight&quot;), &quot;teeth&quot;: PackedStringArray(&quot;mouthRollLower&quot;) }">
+		<member name="blend_shapes" type="Dictionary" setter="set_blend_shapes" getter="get_blend_shapes" default="{ &quot;blink_left&quot;: PackedStringArray(&quot;eyeBlinkLeft&quot;), &quot;blink_right&quot;: PackedStringArray(&quot;eyeBlinkRight&quot;), &quot;brow_down_left&quot;: PackedStringArray(&quot;browDownLeft&quot;), &quot;brow_down_right&quot;: PackedStringArray(&quot;browDownRight&quot;), &quot;brow_inner_up&quot;: PackedStringArray(&quot;browInnerUp&quot;), &quot;brow_outer_up_left&quot;: PackedStringArray(&quot;browOuterUpLeft&quot;), &quot;brow_outer_up_right&quot;: PackedStringArray(&quot;browOuterUpRight&quot;), &quot;cheek_squint_left&quot;: PackedStringArray(&quot;cheekSquintLeft&quot;), &quot;cheek_squint_right&quot;: PackedStringArray(&quot;cheekSquintRight&quot;), &quot;eye_squint_left&quot;: PackedStringArray(&quot;eyeSquintLeft&quot;), &quot;eye_squint_right&quot;: PackedStringArray(&quot;eyeSquintRight&quot;), &quot;eye_wide_left&quot;: PackedStringArray(&quot;eyeWideLeft&quot;), &quot;eye_wide_right&quot;: PackedStringArray(&quot;eyeWideRight&quot;), &quot;frown_left&quot;: PackedStringArray(&quot;mouthFrownLeft&quot;), &quot;frown_right&quot;: PackedStringArray(&quot;mouthFrownRight&quot;), &quot;jaw_open&quot;: PackedStringArray(&quot;jawOpen&quot;), &quot;look_down_left&quot;: PackedStringArray(&quot;eyeLookDownLeft&quot;), &quot;look_down_right&quot;: PackedStringArray(&quot;eyeLookDownRight&quot;), &quot;look_in_left&quot;: PackedStringArray(&quot;eyeLookInLeft&quot;), &quot;look_in_right&quot;: PackedStringArray(&quot;eyeLookInRight&quot;), &quot;look_out_left&quot;: PackedStringArray(&quot;eyeLookOutLeft&quot;), &quot;look_out_right&quot;: PackedStringArray(&quot;eyeLookOutRight&quot;), &quot;look_up_left&quot;: PackedStringArray(&quot;eyeLookUpLeft&quot;), &quot;look_up_right&quot;: PackedStringArray(&quot;eyeLookUpRight&quot;), &quot;mouth_closed&quot;: PackedStringArray(), &quot;mouth_round&quot;: PackedStringArray(&quot;mouthPucker&quot;, &quot;mouthFunnel&quot;), &quot;mouth_wide&quot;: PackedStringArray(&quot;mouthStretchLeft&quot;, &quot;mouthStretchRight&quot;), &quot;nose_sneer_left&quot;: PackedStringArray(&quot;noseSneerLeft&quot;), &quot;nose_sneer_right&quot;: PackedStringArray(&quot;noseSneerRight&quot;), &quot;smile_left&quot;: PackedStringArray(&quot;mouthSmileLeft&quot;), &quot;smile_right&quot;: PackedStringArray(&quot;mouthSmileRight&quot;), &quot;teeth&quot;: PackedStringArray(&quot;mouthRollLower&quot;) }">
 			Which blend shapes each channel moves: a channel's name ([code]jaw_open[/code], [code]mouth_wide[/code], [code]mouth_round[/code], [code]mouth_closed[/code], [code]teeth[/code], [code]blink_left[/code], [code]blink_right[/code], [code]look_out_left[/code], [code]look_in_left[/code], [code]look_up_left[/code], [code]look_down_left[/code] and the same [code]_right[/code]) and a blend shape's name or a [PackedStringArray] of them. A blend shape moved by several channels gets their sum (at most 1). By default ARKit's: [code]jawOpen[/code]; [code]mouthStretchLeft[/code], [code]mouthStretchRight[/code]; [code]mouthPucker[/code], [code]mouthFunnel[/code]; none; [code]mouthRollLower[/code]; [code]eyeBlinkLeft[/code]; [code]eyeBlinkRight[/code]; [code]eyeLookOutLeft[/code], [code]eyeLookInLeft[/code], [code]eyeLookUpLeft[/code], [code]eyeLookDownLeft[/code] and the same [code]Right[/code].
 		</member>
 		<member name="blink_duration" type="float" setter="set_blink_duration" getter="get_blink_duration" default="0.18">
@@ -94,6 +130,9 @@
 		</member>
 		<member name="blinks" type="bool" setter="set_blinks" getter="is_blinks" default="true">
 			The eyes blink at random intervals.
+		</member>
+		<member name="expressions" type="Dictionary" setter="set_expressions" getter="get_expressions" default="{}">
+			The game's own expressions (milestone 100): a name and a [Dictionary] of channels' names (as in [member blend_shapes]) and their weights (−1 to 1): [code]{"wink": {"blink_left": 1.0, "smile_left": 0.3}}[/code]. A built-in name here replaces the built-in expression.
 		</member>
 		<member name="eye_center" type="Vector3" setter="set_eye_center" getter="get_eye_center" default="Vector3(0, 0, 0)">
 			The point between the eyes, in the face mesh's space, the gaze's directions are measured from.
@@ -143,6 +182,12 @@
 		<member name="seed" type="int" setter="set_seed" getter="get_seed" default="0">
 			The seed of the blinks' intervals.
 		</member>
+		<member name="speech_brows" type="float" setter="set_speech_brows" getter="get_speech_brows" default="0.5">
+			How far the voice's stressed syllables raise the brows (milestone 100): where its level rises [member speech_emphasis_db] above its last half second's (a syllable after a pause, a stressed one), the inner brows rise by this much and the outer ones by 60 % of it, fading over 0.3 s; once a rise (a held vowel raises them once), at most every quarter second. 0: off. The signal [signal emphasized] marks each.
+		</member>
+		<member name="speech_emphasis_db" type="float" setter="set_speech_emphasis_db" getter="get_speech_emphasis_db" default="6.0">
+			How much the voice's level must rise above its last half second's for a stressed syllable.
+		</member>
 		<member name="strength" type="float" setter="set_strength" getter="get_strength" default="1.0">
 			The mouth's channels times this (not [code]mouth_closed[/code]).
 		</member>
@@ -156,6 +201,14 @@
 			Where in [member voice_stream] the mouth reads, in seconds (an animation track can set it); below 0: the player at [member voice_path] drives it.
 		</member>
 	</members>
+	<signals>
+		<signal name="emphasized">
+			<param index="0" name="strength" type="float" />
+			<description>
+				A stressed syllable of the voice where the mouth reads it (milestone 100): [param strength] 0.5 for a rise of [member speech_emphasis_db], 1 for twice that. A game can nod the head or gesture there.
+			</description>
+		</signal>
+	</signals>
 	<constants>
 		<constant name="CHANNEL_JAW_OPEN" value="0" enum="Channel">
 			The jaw open: with the voice's level, most for open vowels (a).
@@ -202,7 +255,58 @@
 		<constant name="CHANNEL_LOOK_DOWN_RIGHT" value="14" enum="Channel">
 			The right eye looking down.
 		</constant>
-		<constant name="CHANNEL_MAX" value="15" enum="Channel">
+		<constant name="CHANNEL_BROW_INNER_UP" value="15" enum="Channel">
+			The inner brows raised (milestone 100).
+		</constant>
+		<constant name="CHANNEL_BROW_DOWN_LEFT" value="16" enum="Channel">
+			The left brow lowered.
+		</constant>
+		<constant name="CHANNEL_BROW_DOWN_RIGHT" value="17" enum="Channel">
+			The right brow lowered.
+		</constant>
+		<constant name="CHANNEL_BROW_OUTER_UP_LEFT" value="18" enum="Channel">
+			The left brow's outer end raised.
+		</constant>
+		<constant name="CHANNEL_BROW_OUTER_UP_RIGHT" value="19" enum="Channel">
+			The right brow's outer end raised.
+		</constant>
+		<constant name="CHANNEL_SMILE_LEFT" value="20" enum="Channel">
+			The mouth's left corner pulled up.
+		</constant>
+		<constant name="CHANNEL_SMILE_RIGHT" value="21" enum="Channel">
+			The mouth's right corner pulled up.
+		</constant>
+		<constant name="CHANNEL_FROWN_LEFT" value="22" enum="Channel">
+			The mouth's left corner pulled down.
+		</constant>
+		<constant name="CHANNEL_FROWN_RIGHT" value="23" enum="Channel">
+			The mouth's right corner pulled down.
+		</constant>
+		<constant name="CHANNEL_CHEEK_SQUINT_LEFT" value="24" enum="Channel">
+			The left cheek raised.
+		</constant>
+		<constant name="CHANNEL_CHEEK_SQUINT_RIGHT" value="25" enum="Channel">
+			The right cheek raised.
+		</constant>
+		<constant name="CHANNEL_EYE_SQUINT_LEFT" value="26" enum="Channel">
+			The left eye's lids tightened.
+		</constant>
+		<constant name="CHANNEL_EYE_SQUINT_RIGHT" value="27" enum="Channel">
+			The right eye's lids tightened.
+		</constant>
+		<constant name="CHANNEL_EYE_WIDE_LEFT" value="28" enum="Channel">
+			The left eye widened.
+		</constant>
+		<constant name="CHANNEL_EYE_WIDE_RIGHT" value="29" enum="Channel">
+			The right eye widened.
+		</constant>
+		<constant name="CHANNEL_NOSE_SNEER_LEFT" value="30" enum="Channel">
+			The nose wrinkled on the left.
+		</constant>
+		<constant name="CHANNEL_NOSE_SNEER_RIGHT" value="31" enum="Channel">
+			The nose wrinkled on the right.
+		</constant>
+		<constant name="CHANNEL_MAX" value="32" enum="Channel">
 			The number of channels.
 		</constant>
 	</constants>

@@ -654,6 +654,13 @@ Gaze (milestone 89, decision 0197): `gaze` (on), `look_target_path` (empty: ahea
 space), `gaze_range_horizontal` (30°), `gaze_range_vertical` (25°), `gaze_time` (0.04 s), `saccades` (on),
 `saccade_amplitude` (1.5°); `get_gaze_angles()`; the channels `look_out_left` … `look_down_right` on ARKit's
 `eyeLook*` shapes. Vergence (milestone 94, decision 0202): `eye_spacing` (0 m: the eyes parallel); `get_vergence()`.
+Expressions (milestone 100, decision 0208): `set_expression(name, weight = 1, fade = 0.3)`, `clear_expressions(fade)`,
+`get_expression_weight()`, `get_expression_names()`; built in `happy`, `sad`, `angry`, `surprised`, `afraid`,
+`disgusted`; `expressions` (the game's own: name → {channel: weight}); the channels `brow_inner_up`,
+`brow_down_left/right`, `brow_outer_up_left/right`, `smile_left/right`, `frown_left/right`, `cheek_squint_left/right`,
+`eye_squint_left/right`, `eye_wide_left/right`, `nose_sneer_left/right` (ARKit's `browInnerUp` … `noseSneerRight`).
+`speech_brows` (0.5: the brows on the voice's stressed syllables), `speech_emphasis_db` (6 dB); `get_emphasis()`,
+the signal `emphasized(strength)`.
 
 ## Crash reports (milestone 97)
 

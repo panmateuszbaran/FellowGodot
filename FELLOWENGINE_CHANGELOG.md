@@ -9,6 +9,14 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 100 — faces with expressions (2026-11-13)
+
+- `FellowFaceAnimator.set_expression()`, `clear_expressions()`, `expressions`, `speech_brows` (decision 0208):
+  expressions faded in and out and layered — happy, sad, angry, surprised, afraid, disgusted built in after FACS's
+  action units, and the game's own — on seventeen new channels (the brows, the mouth's corners, the cheeks, the eyes'
+  squint and widening, the nose; ARKit's shapes by default); the brows raised on the voice's stressed syllables, the
+  signal `emphasized` for the game's nods and gestures. Two lanes; a face's frame 0.37-0.43 µs.
+
 ## Milestone 99 — sound through openings (2026-11-13)
 
 - `FellowAcousticPortal3D` and `FellowAcoustics3D.portals` (decision 0207): a source behind a wall is heard through

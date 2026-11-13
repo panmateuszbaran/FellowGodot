@@ -13,7 +13,9 @@ extends SceneTree
 ## the jaw most, /i/ widens the mouth, /u/ rounds it, the "s" puts the lower lip under the teeth, silence closes it),
 ## a higher voice (210 Hz), the level (the same /a/ at -6, -20, -35 and -50 dB), the blinks over a minute (their number and intervals). With
 ## --listen=1 the voice played by an AudioStreamPlayer under Movie Maker and the face's blend shapes followed: the mouth
-## leads the sound by the anticipation, its blend shapes are its channels. --many=N: N faces, the time a frame. One
+## leads the sound by the anticipation, its blend shapes are its channels. Milestone 100 (decision 0208): expressions
+## faded in, crossfaded, a custom one, cleared; the brows raised on each of the voice's sounds after a silence.
+## --many=N: N faces, the time a frame. One
 ## JSON line: FACE_CHECK {...} (or FACE_MANY {...}); exit code 1 when a lane did otherwise than expected.
 
 const RATE := 48000.0
@@ -45,6 +47,13 @@ var gaze_mesh: MeshInstance3D
 var gaze_target: Node3D
 var gaze_reads := {}
 var gaze_trace := []
+# Milestone 100: a face's expressions; a face's brows on the voice's stressed syllables.
+var expr_face: FellowFaceAnimator
+var expr_reads := {}
+var brow_face: FellowFaceAnimator
+var brow_peaks := []
+var brow_signals := []
+var brow_silent_max := 0.0
 
 
 func _arg(name: String, default: String) -> String:
@@ -334,6 +343,18 @@ func _build() -> void:
 	root3d.add_child(gaze_face)
 	gaze_face.mesh_path = gaze_face.get_path_to(gaze_mesh)
 	gaze_face.look_target_path = gaze_face.get_path_to(gaze_target)
+	# Milestone 100: a face for expressions (nothing else moving it), a face reading the voice from a timeline.
+	expr_face = FellowFaceAnimator.new()
+	expr_face.blinks = false
+	expr_face.lip_sync = false
+	expr_face.gaze = false
+	root3d.add_child(expr_face)
+	brow_face = FellowFaceAnimator.new()
+	brow_face.blinks = false
+	brow_face.gaze = false
+	brow_face.voice_stream = voice
+	root3d.add_child(brow_face)
+	brow_face.emphasized.connect(func(strength: float): brow_signals.append([snappedf(brow_face.voice_time, 0.001), snappedf(strength, 0.01)]))
 	physics_frame.connect(_on_frame)
 
 
@@ -389,6 +410,47 @@ func _on_frame() -> void:
 		if frame == 1080:
 			var c := gaze_face.get_channels()
 			gaze_reads["far"] = {"in_left": snappedf(c.look_in_left, 0.001), "in_right": snappedf(c.look_in_right, 0.001), "vergence": snappedf(gaze_face.get_vergence(), 0.01)}
+		# Milestone 100: expressions — happy faded in, crossfaded to sad, a custom one at once (a wink: the left lid and
+		# a little smile), all cleared.
+		var ch := func(n: String) -> float: return snappedf(expr_face.get_channels()[n], 0.001)
+		if frame == 60:
+			expr_face.set_expression(&"happy", 1.0, 0.3)
+		if frame == 100:
+			expr_reads["happy"] = {"smile_left": ch.call("smile_left"), "smile_right": ch.call("smile_right"), "cheek_squint_left": ch.call("cheek_squint_left"), "eye_squint_left": ch.call("eye_squint_left"), "brow_inner_up": ch.call("brow_inner_up"), "weight": snappedf(expr_face.get_expression_weight(&"happy"), 0.001)}
+			expr_face.set_expression(&"happy", 0.0, 0.5)
+			expr_face.set_expression(&"sad", 1.0, 0.5)
+		if frame == 115:
+			expr_reads["crossfade"] = {"happy": snappedf(expr_face.get_expression_weight(&"happy"), 0.001), "sad": snappedf(expr_face.get_expression_weight(&"sad"), 0.001), "smile_left": ch.call("smile_left"), "brow_inner_up": ch.call("brow_inner_up")}
+		if frame == 150:
+			expr_reads["sad"] = {"smile_left": ch.call("smile_left"), "brow_inner_up": ch.call("brow_inner_up"), "frown_left": ch.call("frown_left"), "brow_down_left": ch.call("brow_down_left"), "expressions": expr_face.get_stats().expressions}
+			expr_face.expressions = {"wink": {"blink_left": 1.0, "smile_left": 0.3}}
+			expr_face.set_expression(&"wink", 1.0, 0.0)
+		if frame == 152:
+			expr_reads["wink"] = {"blink_left": ch.call("blink_left"), "blink_right": ch.call("blink_right"), "smile_left": ch.call("smile_left"), "brow_inner_up": ch.call("brow_inner_up"), "names": expr_face.get_expression_names()}
+			expr_face.clear_expressions(0.2)
+		if frame == 180:
+			var c: Dictionary = expr_face.get_channels()
+			var most := 0.0
+			for k in c:
+				if k != "mouth_closed":  # closed: the lips without a voice
+					most = maxf(most, c[k])
+			expr_reads["cleared"] = {"largest_channel": snappedf(most, 0.001), "expressions": expr_face.get_stats().expressions}
+		# Milestone 100: the brows on the voice's stressed syllables, the voice read from a timeline (4 s, six sounds
+		# after silences).
+		if frame >= 400 and frame < 400 + 250:
+			brow_face.voice_time = (frame - 400) / 60.0
+			var b := brow_face.get_channel(FellowFaceAnimator.CHANNEL_BROW_INNER_UP)
+			var seg := 0
+			var t0 := 0.0
+			while seg < SEGMENTS.size() - 1 and t0 + SEGMENTS[seg][1] <= brow_face.voice_time + brow_face.anticipation:
+				t0 += SEGMENTS[seg][1]
+				seg += 1
+			if brow_peaks.size() <= seg:
+				brow_peaks.resize(seg + 1)
+				brow_peaks[seg] = 0.0
+			brow_peaks[seg] = maxf(brow_peaks[seg] if brow_peaks[seg] != null else 0.0, b)
+		if frame == 400 + 250:
+			brow_face.voice_time = -1.0
 		# The blinks over a minute (the frame's lid, closed past 0.9).
 		var lid := blink_face.get_channel(FellowFaceAnimator.CHANNEL_BLINK_LEFT)
 		if lid > 0.9 and not blink_closed:
@@ -462,6 +524,26 @@ func _finish() -> void:
 		# Converging: both eyes in by atan(0.17 / 0.6) = 15.8 degrees (0.53 of the range); far: under 1 degree.
 		gok = gok and absf(gr.near.in_left - 0.527) < 0.01 and absf(gr.near.in_right - 0.527) < 0.01 and gr.near.out_left == 0.0 and gr.far.in_left < 0.04 and gr.far.in_right < 0.04
 		out["gaze"] = {"reads": gr, "saccades_in_10_s": jumps, "saccade_widest_deg": snappedf(widest, 0.01), "ok": gok}
+		# Milestone 100: the expressions' channels (happy 0.8 smile, 0.5 cheeks, 0.25 squint; halfway through the
+		# crossfade half of each; sad 0.7 inner brows, 0.6 frown; the wink at once; nothing after the clear).
+		var er := expr_reads
+		var eok: bool = absf(er.happy.smile_left - 0.8) < 0.01 and absf(er.happy.smile_right - 0.8) < 0.01 and absf(er.happy.cheek_squint_left - 0.5) < 0.01 and absf(er.happy.eye_squint_left - 0.25) < 0.01 and er.happy.brow_inner_up == 0.0
+		eok = eok and absf(er.crossfade.happy - 0.5) < 0.02 and absf(er.crossfade.sad - 0.5) < 0.02 and absf(er.crossfade.smile_left - 0.4) < 0.02 and absf(er.crossfade.brow_inner_up - 0.35) < 0.02
+		eok = eok and er.sad.smile_left == 0.0 and absf(er.sad.brow_inner_up - 0.7) < 0.01 and absf(er.sad.frown_left - 0.6) < 0.01 and absf(er.sad.brow_down_left - 0.3) < 0.01 and er.sad.expressions == 1
+		eok = eok and er.wink.blink_left == 1.0 and er.wink.blink_right == 0.0 and absf(er.wink.smile_left - 0.3) < 0.01 and absf(er.wink.brow_inner_up - 0.7) < 0.01 and "wink" in er.wink.names and "disgusted" in er.wink.names
+		eok = eok and er.cleared.largest_channel < 0.001 and er.cleared.expressions == 0
+		out["expressions"] = {"reads": er, "ok": eok}
+		# The brows: raised at each of the six sounds' starts (to speech_brows, 0.5), not within them or in silence.
+		var peaks := {}
+		for i in brow_peaks.size():
+			if brow_peaks[i] != null:
+				peaks["%d %s" % [i, SEGMENTS[i][0]]] = snappedf(brow_peaks[i], 0.001)
+		var sounds_raised := 0
+		for i in brow_peaks.size():
+			if SEGMENTS[i][0] != "sil" and brow_peaks[i] != null and brow_peaks[i] > 0.4:
+				sounds_raised += 1
+		out["speech_brows"] = {"peaks": peaks, "emphases": brow_face.get_stats().emphases, "signals": brow_signals, "sounds_raised": sounds_raised,
+			"ok": brow_face.get_stats().emphases == 6 and brow_signals.size() == 6 and sounds_raised == 6 and brow_peaks[0] != null and brow_peaks[0] < 0.001}
 		out["blinks"] = {"count": blink_log.size(), "gap_min": gmin, "gap_max": gmax,
 			"ok": blink_log.size() >= 10 and blink_log.size() <= 25 and gmin >= 2.0 and gmax <= 6.3}
 	else:

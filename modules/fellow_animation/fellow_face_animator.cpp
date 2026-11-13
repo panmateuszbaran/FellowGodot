@@ -81,9 +81,45 @@ float to_db(float p_energy) {
 
 const char *FellowFaceAnimator::channel_name(int p_channel) {
 	static const char *names[CHANNEL_MAX] = { "jaw_open", "mouth_wide", "mouth_round", "mouth_closed", "teeth", "blink_left", "blink_right",
-		"look_out_left", "look_in_left", "look_up_left", "look_down_left", "look_out_right", "look_in_right", "look_up_right", "look_down_right" };
+		"look_out_left", "look_in_left", "look_up_left", "look_down_left", "look_out_right", "look_in_right", "look_up_right", "look_down_right",
+		"brow_inner_up", "brow_down_left", "brow_down_right", "brow_outer_up_left", "brow_outer_up_right", "smile_left", "smile_right",
+		"frown_left", "frown_right", "cheek_squint_left", "cheek_squint_right", "eye_squint_left", "eye_squint_right", "eye_wide_left",
+		"eye_wide_right", "nose_sneer_left", "nose_sneer_right" };
 	return (p_channel >= 0 && p_channel < CHANNEL_MAX) ? names[p_channel] : "";
 }
+
+// Milestone 100 (decision 0208): the built-in expressions, after the action units Ekman and Friesen give for the basic
+// emotions (FACS), on ARKit's shapes: happiness (6+12: the cheeks raised, the lips' corners pulled), sadness (1+4+15:
+// the inner brows raised and drawn, the corners down), anger (4+5+7+23: the brows down, the lids tightened, the lips
+// pressed), surprise (1+2+5+26: the brows up, the eyes wide, the jaw dropped), fear (1+2+4+5+20+26), disgust (9+15+16:
+// the nose wrinkled, the corners down).
+namespace {
+struct ExpressionPreset {
+	const char *name;
+	int count;
+	struct {
+		int channel;
+		float weight;
+	} values[10];
+};
+const ExpressionPreset EXPRESSION_PRESETS[] = {
+	{ "happy", 6, { { FellowFaceAnimator::CHANNEL_SMILE_LEFT, 0.8f }, { FellowFaceAnimator::CHANNEL_SMILE_RIGHT, 0.8f }, { FellowFaceAnimator::CHANNEL_CHEEK_SQUINT_LEFT, 0.5f }, { FellowFaceAnimator::CHANNEL_CHEEK_SQUINT_RIGHT, 0.5f }, { FellowFaceAnimator::CHANNEL_EYE_SQUINT_LEFT, 0.25f }, { FellowFaceAnimator::CHANNEL_EYE_SQUINT_RIGHT, 0.25f } } },
+	{ "sad", 5, { { FellowFaceAnimator::CHANNEL_BROW_INNER_UP, 0.7f }, { FellowFaceAnimator::CHANNEL_BROW_DOWN_LEFT, 0.3f }, { FellowFaceAnimator::CHANNEL_BROW_DOWN_RIGHT, 0.3f }, { FellowFaceAnimator::CHANNEL_FROWN_LEFT, 0.6f }, { FellowFaceAnimator::CHANNEL_FROWN_RIGHT, 0.6f } } },
+	{ "angry", 7, { { FellowFaceAnimator::CHANNEL_BROW_DOWN_LEFT, 0.9f }, { FellowFaceAnimator::CHANNEL_BROW_DOWN_RIGHT, 0.9f }, { FellowFaceAnimator::CHANNEL_EYE_SQUINT_LEFT, 0.4f }, { FellowFaceAnimator::CHANNEL_EYE_SQUINT_RIGHT, 0.4f }, { FellowFaceAnimator::CHANNEL_NOSE_SNEER_LEFT, 0.3f }, { FellowFaceAnimator::CHANNEL_NOSE_SNEER_RIGHT, 0.3f }, { FellowFaceAnimator::CHANNEL_MOUTH_CLOSED, 0.3f } } },
+	{ "surprised", 6, { { FellowFaceAnimator::CHANNEL_BROW_INNER_UP, 0.8f }, { FellowFaceAnimator::CHANNEL_BROW_OUTER_UP_LEFT, 0.8f }, { FellowFaceAnimator::CHANNEL_BROW_OUTER_UP_RIGHT, 0.8f }, { FellowFaceAnimator::CHANNEL_EYE_WIDE_LEFT, 0.7f }, { FellowFaceAnimator::CHANNEL_EYE_WIDE_RIGHT, 0.7f }, { FellowFaceAnimator::CHANNEL_JAW_OPEN, 0.25f } } },
+	{ "afraid", 8, { { FellowFaceAnimator::CHANNEL_BROW_INNER_UP, 0.9f }, { FellowFaceAnimator::CHANNEL_BROW_OUTER_UP_LEFT, 0.5f }, { FellowFaceAnimator::CHANNEL_BROW_OUTER_UP_RIGHT, 0.5f }, { FellowFaceAnimator::CHANNEL_BROW_DOWN_LEFT, 0.3f }, { FellowFaceAnimator::CHANNEL_BROW_DOWN_RIGHT, 0.3f }, { FellowFaceAnimator::CHANNEL_EYE_WIDE_LEFT, 0.8f }, { FellowFaceAnimator::CHANNEL_EYE_WIDE_RIGHT, 0.8f }, { FellowFaceAnimator::CHANNEL_JAW_OPEN, 0.15f } } },
+	{ "disgusted", 6, { { FellowFaceAnimator::CHANNEL_NOSE_SNEER_LEFT, 0.8f }, { FellowFaceAnimator::CHANNEL_NOSE_SNEER_RIGHT, 0.8f }, { FellowFaceAnimator::CHANNEL_FROWN_LEFT, 0.4f }, { FellowFaceAnimator::CHANNEL_FROWN_RIGHT, 0.4f }, { FellowFaceAnimator::CHANNEL_EYE_SQUINT_LEFT, 0.3f }, { FellowFaceAnimator::CHANNEL_EYE_SQUINT_RIGHT, 0.3f } } },
+};
+
+int channel_by_name(const String &p_name) {
+	for (int c = 0; c < FellowFaceAnimator::CHANNEL_MAX; c++) {
+		if (p_name == FellowFaceAnimator::channel_name_of(c)) {
+			return c;
+		}
+	}
+	return -1;
+}
+} // namespace
 
 struct FellowFaceAnimator::Track {
 	float hop = 0.01f;
@@ -255,6 +291,105 @@ void FellowFaceAnimator::_sample(const Track &p_track, float p_time, float r_val
 	}
 }
 
+// Milestone 100: the voice's level (dB) at p_time, as _sample() reads its channels.
+float FellowFaceAnimator::_sample_level(const Track &p_track, float p_time) {
+	const int hops = int(p_track.frames.size() / TRACK_STRIDE);
+	if (hops == 0 || p_time < 0.0f) {
+		return -100.0f;
+	}
+	float t = p_time;
+	if (p_track.stream_length > 0.0f && t >= p_track.stream_length && p_track.finished && p_track.length >= p_track.stream_length - 0.02f) {
+		t = Math::fmod(t, p_track.stream_length);
+	}
+	const float f = t / p_track.hop - 1.0f;
+	if (f >= float(hops - 1)) {
+		return -100.0f;
+	}
+	const int k0 = MAX(0, int(Math::floor(f)));
+	const int k1 = MIN(hops - 1, k0 + 1);
+	const float w = CLAMP(f - float(k0), 0.0f, 1.0f);
+	return Math::lerp(p_track.frames[k0 * TRACK_STRIDE + 5], p_track.frames[k1 * TRACK_STRIDE + 5], w);
+}
+
+bool FellowFaceAnimator::_resolve_expression(const StringName &p_name, LocalVector<Pair<int, float>> &r_values) const {
+	r_values.clear();
+	const Variant custom = expressions.get(p_name, Variant());
+	if (custom.get_type() == Variant::DICTIONARY) {
+		const Dictionary d = custom;
+		for (const KeyValue<Variant, Variant> &kv : d) {
+			const int c = channel_by_name(kv.key);
+			if (c >= 0) {
+				r_values.push_back(Pair<int, float>(c, CLAMP(float(kv.value), -1.0f, 1.0f)));
+			}
+		}
+		return true;
+	}
+	for (const ExpressionPreset &preset : EXPRESSION_PRESETS) {
+		if (p_name == StringName(preset.name)) {
+			for (int i = 0; i < preset.count; i++) {
+				r_values.push_back(Pair<int, float>(preset.values[i].channel, preset.values[i].weight));
+			}
+			return true;
+		}
+	}
+	return false;
+}
+
+void FellowFaceAnimator::set_expressions(const Dictionary &p_expressions) {
+	expressions = p_expressions;
+	for (ExpressionState &e : expression_states) {
+		_resolve_expression(e.name, e.values);
+	}
+}
+
+void FellowFaceAnimator::set_expression(const StringName &p_name, float p_weight, float p_fade) {
+	ExpressionState *state = nullptr;
+	for (ExpressionState &e : expression_states) {
+		if (e.name == p_name) {
+			state = &e;
+			break;
+		}
+	}
+	if (!state) {
+		ExpressionState e;
+		e.name = p_name;
+		ERR_FAIL_COND_MSG(!_resolve_expression(p_name, e.values), vformat("No expression \"%s\" (built in: happy, sad, angry, surprised, afraid, disgusted; or one in expressions).", p_name));
+		expression_states.push_back(e);
+		state = &expression_states[expression_states.size() - 1];
+	}
+	state->target = CLAMP(p_weight, 0.0f, 1.0f);
+	state->rate = p_fade > 0.0f ? Math::abs(state->target - state->weight) / p_fade : 0.0f;
+}
+
+void FellowFaceAnimator::clear_expressions(float p_fade) {
+	for (ExpressionState &e : expression_states) {
+		e.target = 0.0f;
+		e.rate = p_fade > 0.0f ? e.weight / p_fade : 0.0f;
+	}
+}
+
+float FellowFaceAnimator::get_expression_weight(const StringName &p_name) const {
+	for (const ExpressionState &e : expression_states) {
+		if (e.name == p_name) {
+			return e.weight;
+		}
+	}
+	return 0.0f;
+}
+
+PackedStringArray FellowFaceAnimator::get_expression_names() const {
+	PackedStringArray names;
+	for (const ExpressionPreset &preset : EXPRESSION_PRESETS) {
+		names.push_back(preset.name);
+	}
+	for (const KeyValue<Variant, Variant> &kv : expressions) {
+		if (!names.has(String(kv.key))) {
+			names.push_back(kv.key);
+		}
+	}
+	return names;
+}
+
 MeshInstance3D *FellowFaceAnimator::_mesh() {
 	MeshInstance3D *mi = mesh_path.is_empty() ? nullptr : Object::cast_to<MeshInstance3D>(get_node_or_null(mesh_path));
 	if (!mi) {
@@ -305,11 +440,15 @@ void FellowFaceAnimator::_update(double p_delta) {
 	clock += p_delta;
 	// The mouth: the voice's channels where its player is (a little ahead).
 	float target[MOUTH_CHANNELS] = { 0, 0, 0, 1, 0 };
+	float level_db = -100.0f; // milestone 100: the voice's level where the mouth reads it
+	bool voice_on = false;
 	if (lip_sync && voice_time >= 0.0f && voice_stream.is_valid()) {
 		// Driven by a timeline (an animation's track sets voice_time): the stream read there.
 		if (Track *track = _track_for(voice_stream, max_analysis_seconds, level_floor_db, level_full_db)) {
 			_extend(track, voice_time + anticipation + 0.25f);
 			_sample(*track, voice_time + anticipation, target);
+			level_db = _sample_level(*track, voice_time + anticipation);
+			voice_on = true;
 		}
 	} else if (lip_sync && !voice_path.is_empty()) {
 		Node *voice = get_node_or_null(voice_path);
@@ -337,6 +476,8 @@ void FellowFaceAnimator::_update(double p_delta) {
 			if (Track *track = _track_for(stream, max_analysis_seconds, level_floor_db, level_full_db)) {
 				_extend(track, position + anticipation + 0.25f);
 				_sample(*track, position + anticipation, target);
+				level_db = _sample_level(*track, position + anticipation);
+				voice_on = true;
 			}
 		}
 	}
@@ -345,6 +486,47 @@ void FellowFaceAnimator::_update(double p_delta) {
 		const float tau = goal > channels[c] ? attack : release;
 		const float k = tau > 0.0f ? 1.0f - Math::exp(-float(p_delta) / tau) : 1.0f;
 		channels[c] += (goal - channels[c]) * k;
+	}
+	// Milestone 100 (decision 0208): the brows on the voice's stressed syllables — its level rising speech_emphasis_db
+	// above its last half second's (an onset), at most every quarter second; the pulse fades in 0.3 s.
+	const float dt = float(p_delta);
+	const float rise = voice_on ? level_db - level_slow : -100.0f;
+	if (emphasis_armed && voice_on && level_db > level_floor_db + 6.0f && rise > speech_emphasis_db && (last_emphasis < 0.0 || clock - last_emphasis > 0.25)) {
+		emphasis = 1.0f;
+		last_emphasis = clock;
+		emphases++;
+		emphasis_armed = false; // once a rise: again after the level has come back near its average (a held vowel is one)
+		emit_signal(SNAME("emphasized"), CLAMP(rise / (2.0f * speech_emphasis_db), 0.0f, 1.0f));
+	} else if (rise < speech_emphasis_db * 0.5f) {
+		emphasis_armed = true;
+	}
+	level_slow += ((voice_on ? MAX(level_db, level_floor_db) : level_floor_db) - level_slow) * (1.0f - Math::exp(-dt / 0.5f));
+	emphasis *= Math::exp(-dt / 0.3f);
+	// The expressions, each faded towards its weight; their channels and the brows' pulse added up.
+	for (int i = int(expression_states.size()) - 1; i >= 0; i--) {
+		ExpressionState &e = expression_states[i];
+		if (e.rate <= 0.0f) {
+			e.weight = e.target;
+		} else {
+			const float step = e.rate * dt;
+			e.weight = e.weight < e.target ? MIN(e.target, e.weight + step) : MAX(e.target, e.weight - step);
+		}
+		if (e.weight <= 0.0f && e.target <= 0.0f) {
+			expression_states.remove_at(i);
+		}
+	}
+	for (float &v : extra) {
+		v = 0.0f;
+	}
+	for (const ExpressionState &e : expression_states) {
+		for (const Pair<int, float> &cv : e.values) {
+			extra[cv.first] += e.weight * cv.second;
+		}
+	}
+	if (speech_brows > 0.0f && emphasis > 1e-3f) {
+		extra[CHANNEL_BROW_INNER_UP] += speech_brows * emphasis;
+		extra[CHANNEL_BROW_OUTER_UP_LEFT] += speech_brows * 0.6f * emphasis;
+		extra[CHANNEL_BROW_OUTER_UP_RIGHT] += speech_brows * 0.6f * emphasis;
 	}
 	// The eyes: a blink at random intervals (closing in a third of it, held a sixth, opening in half).
 	if (blinks && blink_t < 0.0 && clock >= next_blink) {
@@ -420,9 +602,10 @@ void FellowFaceAnimator::_update(double p_delta) {
 			v = 0.0f;
 		}
 		for (int c = 0; c < CHANNEL_MAX; c++) {
+			const float cv = CLAMP(channels[c] + extra[c], 0.0f, 1.0f);
 			for (int idx : shape_index[c]) {
 				if (idx < int(values.size())) {
-					values[idx] += channels[c];
+					values[idx] += cv;
 				}
 			}
 		}
@@ -454,13 +637,13 @@ void FellowFaceAnimator::blink() {
 
 float FellowFaceAnimator::get_channel(Channel p_channel) const {
 	ERR_FAIL_INDEX_V(int(p_channel), int(CHANNEL_MAX), 0.0f);
-	return channels[p_channel];
+	return CLAMP(channels[p_channel] + extra[p_channel], 0.0f, 1.0f);
 }
 
 Dictionary FellowFaceAnimator::get_channels() const {
 	Dictionary d;
 	for (int c = 0; c < CHANNEL_MAX; c++) {
-		d[channel_name(c)] = channels[c];
+		d[channel_name(c)] = CLAMP(channels[c] + extra[c], 0.0f, 1.0f);
 	}
 	return d;
 }
@@ -516,6 +699,8 @@ Dictionary FellowFaceAnimator::get_stats() const {
 	Dictionary d;
 	d["frames"] = int64_t(frames);
 	d["usec"] = int64_t(usec);
+	d["emphases"] = int64_t(emphases); // milestone 100
+	d["expressions"] = int(expression_states.size());
 	return d;
 }
 
@@ -620,6 +805,17 @@ void FellowFaceAnimator::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_eye_spacing"), &FellowFaceAnimator::get_eye_spacing);
 	ClassDB::bind_method(D_METHOD("get_vergence"), &FellowFaceAnimator::get_vergence);
 	ClassDB::bind_method(D_METHOD("blink"), &FellowFaceAnimator::blink);
+	ClassDB::bind_method(D_METHOD("set_expressions", "expressions"), &FellowFaceAnimator::set_expressions);
+	ClassDB::bind_method(D_METHOD("get_expressions"), &FellowFaceAnimator::get_expressions);
+	ClassDB::bind_method(D_METHOD("set_speech_brows", "amount"), &FellowFaceAnimator::set_speech_brows);
+	ClassDB::bind_method(D_METHOD("get_speech_brows"), &FellowFaceAnimator::get_speech_brows);
+	ClassDB::bind_method(D_METHOD("set_speech_emphasis_db", "db"), &FellowFaceAnimator::set_speech_emphasis_db);
+	ClassDB::bind_method(D_METHOD("get_speech_emphasis_db"), &FellowFaceAnimator::get_speech_emphasis_db);
+	ClassDB::bind_method(D_METHOD("set_expression", "name", "weight", "fade"), &FellowFaceAnimator::set_expression, DEFVAL(1.0f), DEFVAL(0.3f));
+	ClassDB::bind_method(D_METHOD("clear_expressions", "fade"), &FellowFaceAnimator::clear_expressions, DEFVAL(0.3f));
+	ClassDB::bind_method(D_METHOD("get_expression_weight", "name"), &FellowFaceAnimator::get_expression_weight);
+	ClassDB::bind_method(D_METHOD("get_expression_names"), &FellowFaceAnimator::get_expression_names);
+	ClassDB::bind_method(D_METHOD("get_emphasis"), &FellowFaceAnimator::get_emphasis);
 	ClassDB::bind_method(D_METHOD("get_channel", "channel"), &FellowFaceAnimator::get_channel);
 	ClassDB::bind_method(D_METHOD("get_channels"), &FellowFaceAnimator::get_channels);
 	ClassDB::bind_method(D_METHOD("sample_voice", "stream", "time"), &FellowFaceAnimator::sample_voice);
@@ -657,7 +853,12 @@ void FellowFaceAnimator::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "gaze_time", PROPERTY_HINT_RANGE, "0,1,0.001,suffix:s"), "set_gaze_time", "get_gaze_time");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "saccades"), "set_saccades", "is_saccades");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "saccade_amplitude", PROPERTY_HINT_RANGE, "0,20,0.1,degrees"), "set_saccade_amplitude", "get_saccade_amplitude");
+	ADD_GROUP("Expressions", "");
+	ADD_PROPERTY(PropertyInfo(Variant::DICTIONARY, "expressions"), "set_expressions", "get_expressions");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "speech_brows", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_speech_brows", "get_speech_brows");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "speech_emphasis_db", PROPERTY_HINT_RANGE, "1,30,0.1,suffix:dB"), "set_speech_emphasis_db", "get_speech_emphasis_db");
 	ADD_GROUP("", "");
+	ADD_SIGNAL(MethodInfo("emphasized", PropertyInfo(Variant::FLOAT, "strength")));
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "seed"), "set_seed", "get_seed");
 
 	BIND_ENUM_CONSTANT(CHANNEL_JAW_OPEN);
@@ -675,6 +876,23 @@ void FellowFaceAnimator::_bind_methods() {
 	BIND_ENUM_CONSTANT(CHANNEL_LOOK_IN_RIGHT);
 	BIND_ENUM_CONSTANT(CHANNEL_LOOK_UP_RIGHT);
 	BIND_ENUM_CONSTANT(CHANNEL_LOOK_DOWN_RIGHT);
+	BIND_ENUM_CONSTANT(CHANNEL_BROW_INNER_UP);
+	BIND_ENUM_CONSTANT(CHANNEL_BROW_DOWN_LEFT);
+	BIND_ENUM_CONSTANT(CHANNEL_BROW_DOWN_RIGHT);
+	BIND_ENUM_CONSTANT(CHANNEL_BROW_OUTER_UP_LEFT);
+	BIND_ENUM_CONSTANT(CHANNEL_BROW_OUTER_UP_RIGHT);
+	BIND_ENUM_CONSTANT(CHANNEL_SMILE_LEFT);
+	BIND_ENUM_CONSTANT(CHANNEL_SMILE_RIGHT);
+	BIND_ENUM_CONSTANT(CHANNEL_FROWN_LEFT);
+	BIND_ENUM_CONSTANT(CHANNEL_FROWN_RIGHT);
+	BIND_ENUM_CONSTANT(CHANNEL_CHEEK_SQUINT_LEFT);
+	BIND_ENUM_CONSTANT(CHANNEL_CHEEK_SQUINT_RIGHT);
+	BIND_ENUM_CONSTANT(CHANNEL_EYE_SQUINT_LEFT);
+	BIND_ENUM_CONSTANT(CHANNEL_EYE_SQUINT_RIGHT);
+	BIND_ENUM_CONSTANT(CHANNEL_EYE_WIDE_LEFT);
+	BIND_ENUM_CONSTANT(CHANNEL_EYE_WIDE_RIGHT);
+	BIND_ENUM_CONSTANT(CHANNEL_NOSE_SNEER_LEFT);
+	BIND_ENUM_CONSTANT(CHANNEL_NOSE_SNEER_RIGHT);
 	BIND_ENUM_CONSTANT(CHANNEL_MAX);
 }
 
@@ -695,6 +913,23 @@ FellowFaceAnimator::FellowFaceAnimator() {
 	blend_shapes["look_in_right"] = PackedStringArray({ "eyeLookInRight" });
 	blend_shapes["look_up_right"] = PackedStringArray({ "eyeLookUpRight" });
 	blend_shapes["look_down_right"] = PackedStringArray({ "eyeLookDownRight" });
+	blend_shapes["brow_inner_up"] = PackedStringArray({ "browInnerUp" });
+	blend_shapes["brow_down_left"] = PackedStringArray({ "browDownLeft" });
+	blend_shapes["brow_down_right"] = PackedStringArray({ "browDownRight" });
+	blend_shapes["brow_outer_up_left"] = PackedStringArray({ "browOuterUpLeft" });
+	blend_shapes["brow_outer_up_right"] = PackedStringArray({ "browOuterUpRight" });
+	blend_shapes["smile_left"] = PackedStringArray({ "mouthSmileLeft" });
+	blend_shapes["smile_right"] = PackedStringArray({ "mouthSmileRight" });
+	blend_shapes["frown_left"] = PackedStringArray({ "mouthFrownLeft" });
+	blend_shapes["frown_right"] = PackedStringArray({ "mouthFrownRight" });
+	blend_shapes["cheek_squint_left"] = PackedStringArray({ "cheekSquintLeft" });
+	blend_shapes["cheek_squint_right"] = PackedStringArray({ "cheekSquintRight" });
+	blend_shapes["eye_squint_left"] = PackedStringArray({ "eyeSquintLeft" });
+	blend_shapes["eye_squint_right"] = PackedStringArray({ "eyeSquintRight" });
+	blend_shapes["eye_wide_left"] = PackedStringArray({ "eyeWideLeft" });
+	blend_shapes["eye_wide_right"] = PackedStringArray({ "eyeWideRight" });
+	blend_shapes["nose_sneer_left"] = PackedStringArray({ "noseSneerLeft" });
+	blend_shapes["nose_sneer_right"] = PackedStringArray({ "noseSneerRight" });
 	rng.seed(0);
 	saccade_rng.seed(1);
 	next_blink = _next_interval();

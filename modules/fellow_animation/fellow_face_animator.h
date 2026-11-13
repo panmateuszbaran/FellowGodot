@@ -33,6 +33,7 @@
 #include "core/math/random_pcg.h"
 #include "core/templates/hash_map.h"
 #include "core/templates/local_vector.h"
+#include "core/templates/pair.h"
 #include "scene/main/node.h"
 #include "scene/resources/mesh.h"
 #include "servers/audio/audio_stream.h"
@@ -65,6 +66,25 @@ public:
 		CHANNEL_LOOK_IN_RIGHT,
 		CHANNEL_LOOK_UP_RIGHT,
 		CHANNEL_LOOK_DOWN_RIGHT,
+		// Milestone 100: the brows, the mouth's corners, the cheeks, the eyes' squint and widening, the nose (the
+		// expressions', and the brows the voice's stressed syllables raise).
+		CHANNEL_BROW_INNER_UP,
+		CHANNEL_BROW_DOWN_LEFT,
+		CHANNEL_BROW_DOWN_RIGHT,
+		CHANNEL_BROW_OUTER_UP_LEFT,
+		CHANNEL_BROW_OUTER_UP_RIGHT,
+		CHANNEL_SMILE_LEFT,
+		CHANNEL_SMILE_RIGHT,
+		CHANNEL_FROWN_LEFT,
+		CHANNEL_FROWN_RIGHT,
+		CHANNEL_CHEEK_SQUINT_LEFT,
+		CHANNEL_CHEEK_SQUINT_RIGHT,
+		CHANNEL_EYE_SQUINT_LEFT,
+		CHANNEL_EYE_SQUINT_RIGHT,
+		CHANNEL_EYE_WIDE_LEFT,
+		CHANNEL_EYE_WIDE_RIGHT,
+		CHANNEL_NOSE_SNEER_LEFT,
+		CHANNEL_NOSE_SNEER_RIGHT,
 		CHANNEL_MAX,
 	};
 	static constexpr int MOUTH_CHANNELS = 5;
@@ -114,6 +134,25 @@ private:
 	int64_t seed = 0;
 
 	float channels[CHANNEL_MAX] = {};
+	// Milestone 100 (decision 0208): expressions — named sets of channels faded in and out, layered — and the brows
+	// raised on the voice's stressed syllables; added to the channels when the face is written.
+	struct ExpressionState {
+		StringName name;
+		float weight = 0.0f;
+		float target = 0.0f;
+		float rate = 0.0f; // weight a second (0: at once)
+		LocalVector<Pair<int, float>> values; // channel, weight
+	};
+	LocalVector<ExpressionState> expression_states;
+	Dictionary expressions; // name -> {channel name: weight}: the game's own, or the built-in ones changed
+	float speech_brows = 0.5f;
+	float speech_emphasis_db = 6.0f;
+	float extra[CHANNEL_MAX] = {};
+	float level_slow = -100.0f; // dB, the voice's level over the last half second
+	float emphasis = 0.0f; // the brows' pulse, 0-1
+	double last_emphasis = -1.0;
+	bool emphasis_armed = true;
+	uint64_t emphases = 0;
 	RandomPCG rng;
 	double next_blink = 0.0;
 	double next_saccade = 0.0;
@@ -131,9 +170,16 @@ private:
 	uint64_t usec = 0;
 
 	static const char *channel_name(int p_channel);
+
+public:
+	static const char *channel_name_of(int p_channel) { return channel_name(p_channel); }
+
+private:
 	static Track *_track_for(const Ref<AudioStream> &p_stream, float p_max_seconds, float p_floor_db, float p_full_db);
 	static void _extend(Track *p_track, float p_until);
 	static void _sample(const Track &p_track, float p_time, float r_values[MOUTH_CHANNELS]);
+	static float _sample_level(const Track &p_track, float p_time);
+	bool _resolve_expression(const StringName &p_name, LocalVector<Pair<int, float>> &r_values) const;
 	MeshInstance3D *_mesh();
 	void _resolve_shapes(MeshInstance3D *p_mesh);
 	void _update(double p_delta);
@@ -201,6 +247,18 @@ public:
 	void set_eye_spacing(float p_spacing) { eye_spacing = MAX(0.0f, p_spacing); }
 	float get_eye_spacing() const { return eye_spacing; }
 	float get_vergence() const { return vergence_now; }
+
+	void set_expressions(const Dictionary &p_expressions);
+	Dictionary get_expressions() const { return expressions; }
+	void set_speech_brows(float p_amount) { speech_brows = CLAMP(p_amount, 0.0f, 1.0f); }
+	float get_speech_brows() const { return speech_brows; }
+	void set_speech_emphasis_db(float p_db) { speech_emphasis_db = CLAMP(p_db, 1.0f, 30.0f); }
+	float get_speech_emphasis_db() const { return speech_emphasis_db; }
+	void set_expression(const StringName &p_name, float p_weight = 1.0f, float p_fade = 0.3f);
+	void clear_expressions(float p_fade = 0.3f);
+	float get_expression_weight(const StringName &p_name) const;
+	PackedStringArray get_expression_names() const;
+	float get_emphasis() const { return emphasis; }
 
 	void blink();
 	float get_channel(Channel p_channel) const;
