@@ -59,6 +59,13 @@
 				How far a vertex of a mesh (its path from this node) has been dented, in the mesh's space.
 			</description>
 		</method>
+		<method name="get_wheel_sag" qualifiers="const">
+			<return type="float" />
+			<param index="0" name="wheel" type="NodePath" />
+			<description>
+				How much of a wheel's suspension travel (its path from this node) the dents have taken, in metres (see [member suspension_damage]).
+			</description>
+		</method>
 		<method name="get_wheel_toe_change" qualifiers="const">
 			<return type="float" />
 			<param index="0" name="wheel" type="NodePath" />
@@ -129,6 +136,9 @@
 		</member>
 		<member name="softness" type="float" setter="set_softness" getter="get_softness" default="2e-05">
 			Metres of dent for each N·s of impulse beyond [member impulse_threshold] (2e-5: about 10 cm at 30 km/h for a 1 400 kg car).
+		</member>
+		<member name="suspension_damage" type="float" setter="set_suspension_damage" getter="get_suspension_damage" default="0.0">
+			The most a dent can shorten a wheel's [member FellowWheel3D.suspension_length], in metres (a bent strut: that corner of the body sits lower and the wheel has less travel): this much at a dent of [member max_depth] close to the wheel, less for a shallower or farther one, added up to it. 0: the suspension is never hurt. [method repair] gives the travel back (unless the game has changed it since).
 		</member>
 		<member name="wheel_bend" type="float" setter="set_wheel_bend" getter="get_wheel_bend" default="0.0">
 			The most a dent can bend a wheel's [member FellowWheel3D.toe], in degrees. A dent reaching a wheel turns it about its upright the way the push would: a push from the side ahead of the wheel's centre turns its front in, one from the front outside the centre turns it out, as far as the dent is deep (up to this at [member max_depth] and close to the wheel). A wheel out of line makes the vehicle pull to one side with the steering straight. 0: the wheels are never bent. [method repair] puts them back.

@@ -22,7 +22,8 @@ extends SceneTree
 ## its torque back); milestone 108 (decision 0216): a car with a bumper that can come off — kept after a light hit,
 ## off into a wall at 30 km/h (on the ground by the wall), back after repair(); milestone 109 (decision 0217): a car at
 ## rest whose bumper, hit at its right end, hangs from its left end, then comes off at a second hit; milestone 110: the
-## engine lane's car smoking (the strip's last row), the others not. One JSON line:
+## engine lane's car smoking (the strip's last row), the others not; a car at rest hit by its front-left wheel with
+## suspension_damage (that corner lower, the others about where they were; back after repair()). One JSON line:
 ## VEHICLE_CHECK {...}; exit
 ## code 1 when a lane did otherwise than expected. --many=N: N cars driving circles, the vehicles' step a frame and the
 ## frame's (headless). One JSON line: VEHICLE_MANY {...}.
@@ -408,6 +409,11 @@ func _build() -> void:
 		hc.set_meta("hanging", [String(part.name), body.get_class()]))
 	hd.part_detached.connect(func(part: Node3D, body: RigidBody3D) -> void: hc.set_meta("detached", [String(part.name), body.get_class(), body == hc.get_meta("detached_body")]))
 	_lane("hang", hc)
+	# Milestone 110: suspension damage (0.06 m) on a car at rest.
+	var sc := _damage_car(_car(Vector3(308.0, 0.1, 0), Color(0.6, 0.8, 0.45)))
+	var sd: FellowVehicleDamage3D = sc.get_node("Damage")
+	sd.suspension_damage = 0.06
+	_lane("sagged", sc)
 	# Milestone 107 (decision 0215): the running gear (wheel_bend 5 degrees but on bent_off, engine_power_loss 0.5).
 	var gear_lanes := ["straight", "bent", "bent_off", "engine", "repaired"]
 	for i in 16:
@@ -738,6 +744,34 @@ func _drive(lane: Dictionary, dt: float) -> void:
 			if t >= 6.5 and not d.has("after_repair"):
 				d["after_repair"] = {"on_car": hb.get_parent() == car, "offset": snappedf((hb.transform.origin - Vector3(0, 0.48, -2.05)).length(), 0.0001),
 					"bodies_left": is_instance_valid(car.get_meta("detached_body")), "pin_left": root3d.find_child("BumperPin", false, false) != null}
+		"sagged":
+			# Milestone 110: held at rest (settled by 1.5 s); hit by the left ahead of the front-left wheel at 1.6 s (as the
+			# bent lane's), repaired at 4 s; the body's height over each wheel before, after and after the repair.
+			car.handbrake = true
+			var sdm: FellowVehicleDamage3D = car.get_node("Damage")
+			var corners := func() -> Array:
+				var r := []
+				for p in [Vector3(-0.82, 0.62, -1.35), Vector3(0.82, 0.62, -1.35), Vector3(-0.82, 0.62, 1.35), Vector3(0.82, 0.62, 1.35)]:
+					r.append((car.global_transform * p).y)
+				return r
+			if t >= 1.5 and not d.has("h0"):
+				d["h0"] = corners.call()
+			if t >= 1.6 and not d.has("hit"):
+				var fl: Vector3 = _front_left(car).position
+				_hit(car, Vector3(fl.x - 0.2, fl.y + 0.1, fl.z - 0.35), Vector3(1, 0, 0))
+				d["hit"] = true
+				d["sag_fl"] = snappedf(sdm.get_wheel_sag(NodePath("../FrontLeft")), 0.0001)
+				d["sag_fr"] = snappedf(sdm.get_wheel_sag(NodePath("../FrontRight")), 0.0001)
+			if t >= 3.5 and not d.has("drop"):
+				var h1: Array = corners.call()
+				d["drop"] = [snappedf(d.h0[0] - h1[0], 0.0001), snappedf(d.h0[1] - h1[1], 0.0001), snappedf(d.h0[2] - h1[2], 0.0001), snappedf(d.h0[3] - h1[3], 0.0001)]
+			if t >= 4.0 and not d.has("repaired"):
+				sdm.repair()
+				d["repaired"] = true
+			if t >= 6.0 and not d.has("drop_repaired"):
+				var h2: Array = corners.call()
+				d["drop_repaired"] = [snappedf(d.h0[0] - h2[0], 0.0001), snappedf(d.h0[1] - h2[1], 0.0001), snappedf(d.h0[2] - h2[2], 0.0001), snappedf(d.h0[3] - h2[3], 0.0001)]
+				d["length_repaired"] = snappedf(_front_left(car).suspension_length, 0.0001)
 		"crash", "tap", "bumper":
 			# Up to speed, held until the wall stops the car; a second held; backed off 3 m (the brake held at a standstill
 			# engages reverse) to show its front; held there.
@@ -954,6 +988,15 @@ func _finish() -> void:
 				ok = ok and d.get("detached_at_5_5", false) and not d.get("hanging_at_5_5", true) and d.get("bumper_y_5_5", 9.0) < 0.35 and not d.get("pin_left", true)
 				ok = ok and ar.get("on_car", false) and ar.get("offset", 1.0) < 0.0001 and not ar.get("bodies_left", true) and not ar.get("pin_left", true)
 				ok = ok and e.hanging.size() == 2 and e.detached.size() == 3 and e.detached[2]  # the body it hung in fell
+			"sagged":
+				# Milestone 110: the front-left wheel's travel 2-6 cm shorter, the others' not; the front-left corner lower
+				# by more than 1 cm, lower than every other (the body leans onto it, the springs and the anti-roll bar
+				# sharing the load); after repair() every corner within 3 mm of where it was, the suspension 0.3 m again.
+				var dr: Array = d.get("drop", [0, 0, 0, 0])
+				var rr: Array = d.get("drop_repaired", [1, 1, 1, 1])
+				e.erase("h0")
+				ok = ok and d.get("sag_fl", 0.0) > 0.02 and d.get("sag_fl", 1.0) <= 0.06 and d.get("sag_fr", 1.0) == 0.0 and dr[0] > 0.01 and dr[0] > dr[1] and dr[0] > dr[2] and dr[0] > dr[3]
+				ok = ok and rr.all(func(v): return absf(v) < 0.003) and d.get("length_repaired", 0.0) == 0.3
 			"straight":
 				# Milestone 107: unhit, straight within half a degree.
 				ok = ok and absf(d.get("heading_change", 99.0)) < 0.5 and d.toe_after_hit.FrontLeft == 0.0 and d.engine_power == 1.0 and not d.get("engine_smoking", true)

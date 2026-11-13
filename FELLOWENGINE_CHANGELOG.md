@@ -18,6 +18,9 @@ Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.m
 - The regression suite's scene `vehicle_damage`: a car dented, a wheel bent, its bumper hanging, its mirror off.
 - `FellowVehicleDamage3D.engine_smoke` (on): with `engine_power_loss` set, a hurt engine smokes — dark smoke from
   above `engine_position`, as much as the dent there is deep (from a tenth of `max_depth`); `is_engine_smoking()`.
+- `FellowVehicleDamage3D.suspension_damage` (m, 0: off): a dent reaching a wheel shortens its suspension's travel (a
+  bent strut): 0.06 m at a side hit by the front-left wheel took 3.0 cm, that corner 2.3 cm lower, the diagonal one
+  0.8 cm higher; `get_wheel_sag()`; `repair()` gives it back.
 - The FellowEngine menu's "Add Car" makes a car that takes damage: its body subdivided for dents, a bumper, and a
   `FellowVehicleDamage3D` (`wheel_bend` 4°, `engine_power_loss` 0.4, the bumper hanging at 6 cm and off at 16 cm).
 

@@ -61,6 +61,7 @@ class FellowVehicleDamage3D : public Node3D {
 	float engine_power_loss = 0.0f; // the share of the engine's torque lost at a dent of max_depth at the engine
 	Vector3 engine_position = Vector3(0, 0.5, -1.4); // the vehicle's space
 	bool engine_smoke = true; // milestone 110: smoke from a hurt engine
+	float suspension_damage = 0.0f; // milestone 110: m of a wheel's suspension travel lost at a dent of max_depth
 	GPUParticles3D *smoke_fx = nullptr;
 	void _make_smoke();
 	void _update_smoke();
@@ -70,6 +71,9 @@ class FellowVehicleDamage3D : public Node3D {
 		float toe_base = 0.0f; // the wheel's own toe (the game's)
 		float toe_set = 0.0f; // the toe this node gave it
 		float bend = 0.0f; // degrees of toe added
+		float length_base = -1.0f; // milestone 110: the wheel's own suspension_length (-1: not sagged)
+		float length_set = 0.0f;
+		float sag = 0.0f; // m of travel lost
 	};
 	LocalVector<Bent> bent;
 	float engine_dent = 0.0f; // m
@@ -158,6 +162,9 @@ public:
 	void set_hang_depth(float p_depth) { hang_depth = MAX(0.0f, p_depth); }
 	float get_hang_depth() const { return hang_depth; }
 	bool is_part_hanging(const NodePath &p_part) const;
+	void set_suspension_damage(float p_metres) { suspension_damage = MAX(0.0f, p_metres); }
+	float get_suspension_damage() const { return suspension_damage; }
+	float get_wheel_sag(const NodePath &p_wheel) const;
 	void set_engine_smoke(bool p_enabled) { engine_smoke = p_enabled; }
 	bool has_engine_smoke() const { return engine_smoke; }
 	bool is_engine_smoking() const;

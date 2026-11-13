@@ -495,7 +495,8 @@ up), `detach_mass` (8 kg: the body it falls away in, not colliding with the vehi
 (milestone 110) includes a bumper and a `FellowVehicleDamage3D` (`wheel_bend` 4°, `engine_power_loss` 0.4, the bumper
 hanging at 6 cm and off at 16 cm) and subdivides the body for the dents; the regression scene `vehicle_damage`. Engine
 smoke (milestone 110): `engine_smoke` (on; with `engine_power_loss` set, smoke from above `engine_position` as deep as
-the dent there, from a tenth of `max_depth`), `is_engine_smoking()`.
+the dent there, from a tenth of `max_depth`), `is_engine_smoking()`. Suspension damage (milestone 110): `suspension_damage` (m,
+0: off; the most a dent shortens a wheel's `suspension_length`), `get_wheel_sag()` (the lane `sagged`).
 
 ## Sound through the scene's geometry (milestone 78)
 

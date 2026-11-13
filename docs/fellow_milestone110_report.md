@@ -1,8 +1,8 @@
 # FellowEngine — milestone 110 report (rigid bodies by the thousand: a measurement)
 
 Status: **FINAL** (2026-11-13): the owner said "ok kontynuuj"; the laptop's jobs f416-f422 done. Branch
-`fellow/geometry`. A measurement (the readiness assessment listed "thousands of bodies not measured"), and three
-additions to the vehicles' damage: a regression scene, the editor's car preset, engine smoke.
+`fellow/geometry`. A measurement (the readiness assessment listed "thousands of bodies not measured"), and four
+additions to the vehicles' damage: a regression scene, the editor's car preset, engine smoke, suspension damage.
 
 ## 0. Result
 
@@ -58,6 +58,16 @@ the other values as before; the editor build and the release template the same. 
 same with GodotPhysics3D and Jolt; the picture strip's new row showed the puffs as grey squares where the smoke trailed
 past the camera (a quad without a texture) — now soft round puffs (a radial gradient).
 
-## 4. Next
+## 4. Suspension damage
+
+`FellowVehicleDamage3D.suspension_damage` (m, 0: off): a dent reaching a wheel shortens its `suspension_length` (a
+bent strut) by `suspension_damage` × the dent's share of `max_depth` × its reach, added up to `suspension_damage`;
+`get_wheel_sag()`; `repair()` gives it back. `vehicle_check.gd`'s lane `sagged` (a car at rest, 0.06 m, decision
+0215's side hit by the front-left wheel): the wheel's travel 3.02 cm shorter, the others' not; that corner 2.3 cm
+lower, the front-right and rear-left 0.8 cm, the rear-right 0.8 cm higher (the body leaning onto it); after `repair()`
+every corner within 0.1 mm of where it was. The other lanes as before; the editor build and the release template the
+same.
+
+## 5. Next
 
 GodotPhysics3D's broadphase at 10 000 bodies (63 ms); the 8 ms of node updates at 10 000 bodies (both engines).

@@ -261,7 +261,7 @@ void FellowVehicleDamage3D::_running_gear(const Vector3 &p_position, const Vecto
 	if (!vehicle || max_depth <= 0.0f) {
 		return;
 	}
-	if (wheel_bend > 0.0f) {
+	if (wheel_bend > 0.0f || suspension_damage > 0.0f) {
 		const Basis to_vehicle = vehicle->get_global_basis().inverse();
 		for (FellowWheel3D *w : vehicle->get_wheels()) {
 			if (!w->is_inside_tree()) {
@@ -276,7 +276,8 @@ void FellowVehicleDamage3D::_running_gear(const Vector3 &p_position, const Vecto
 			const Vector3 arm = to_vehicle.xform(p_position - c);
 			const Vector3 push = to_vehicle.xform(p_direction);
 			const float turn = CLAMP(arm.cross(push).y / MAX(w->get_radius(), 0.05f), -1.0f, 1.0f);
-			if (Math::abs(turn) < 1e-4f) {
+			const bool bends = wheel_bend > 0.0f && Math::abs(turn) >= 1e-4f;
+			if (!bends && suspension_damage <= 0.0f) {
 				continue;
 			}
 			Bent *b = nullptr;
@@ -292,14 +293,27 @@ void FellowVehicleDamage3D::_running_gear(const Vector3 &p_position, const Vecto
 				e.toe_set = e.toe_base;
 				bent.push_back(e);
 				b = &bent[bent.size() - 1];
-			} else if (w->get_toe() != b->toe_set) {
-				b->toe_base = w->get_toe(); // the game set it since
 			}
-			// A turn of the front towards -X is toe-out on a left wheel (x < 0), toe-in on a right one.
-			const float side = w->get_position().x < 0.0f ? -1.0f : 1.0f;
-			b->bend = CLAMP(b->bend + side * turn * wheel_bend * reach * p_depth / max_depth, -wheel_bend, wheel_bend);
-			b->toe_set = b->toe_base + b->bend;
-			w->set_toe(b->toe_set);
+			if (bends) {
+				if (w->get_toe() != b->toe_set) {
+					b->toe_base = w->get_toe(); // the game set it since
+				}
+				// A turn of the front towards -X is toe-out on a left wheel (x < 0), toe-in on a right one.
+				const float side = w->get_position().x < 0.0f ? -1.0f : 1.0f;
+				b->bend = CLAMP(b->bend + side * turn * wheel_bend * reach * p_depth / max_depth, -wheel_bend, wheel_bend);
+				b->toe_set = b->toe_base + b->bend;
+				w->set_toe(b->toe_set);
+			}
+			// Milestone 110: the suspension's travel lost (a bent strut: that corner sits lower), up to
+			// suspension_damage.
+			if (suspension_damage > 0.0f) {
+				if (b->length_base < 0.0f || w->get_suspension_length() != b->length_set) {
+					b->length_base = w->get_suspension_length(); // the first sag, or the game set it since
+				}
+				b->sag = MIN(b->sag + suspension_damage * reach * p_depth / max_depth, suspension_damage);
+				b->length_set = MAX(b->length_base - b->sag, 0.0f);
+				w->set_suspension_length(b->length_set);
+			}
 		}
 	}
 	if (engine_power_loss > 0.0f) {
@@ -581,6 +595,16 @@ void FellowVehicleDamage3D::_update_smoke() {
 	}
 }
 
+float FellowVehicleDamage3D::get_wheel_sag(const NodePath &p_wheel) const {
+	const Node *n = get_node_or_null(p_wheel);
+	for (const Bent &b : bent) {
+		if (n && b.wheel == n->get_instance_id()) {
+			return b.sag;
+		}
+	}
+	return 0.0f;
+}
+
 bool FellowVehicleDamage3D::is_engine_smoking() const {
 	return smoke_fx && smoke_fx->is_emitting();
 }
@@ -628,6 +652,9 @@ void FellowVehicleDamage3D::repair() {
 		FellowWheel3D *w = ObjectDB::get_instance<FellowWheel3D>(b.wheel);
 		if (w && w->get_toe() == b.toe_set) {
 			w->set_toe(b.toe_base);
+		}
+		if (w && b.length_base >= 0.0f && w->get_suspension_length() == b.length_set) {
+			w->set_suspension_length(b.length_base); // milestone 110
 		}
 	}
 	bent.clear();
@@ -797,6 +824,9 @@ void FellowVehicleDamage3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_hang_depth", "depth"), &FellowVehicleDamage3D::set_hang_depth);
 	ClassDB::bind_method(D_METHOD("get_hang_depth"), &FellowVehicleDamage3D::get_hang_depth);
 	ClassDB::bind_method(D_METHOD("is_part_hanging", "part"), &FellowVehicleDamage3D::is_part_hanging);
+	ClassDB::bind_method(D_METHOD("set_suspension_damage", "metres"), &FellowVehicleDamage3D::set_suspension_damage);
+	ClassDB::bind_method(D_METHOD("get_suspension_damage"), &FellowVehicleDamage3D::get_suspension_damage);
+	ClassDB::bind_method(D_METHOD("get_wheel_sag", "wheel"), &FellowVehicleDamage3D::get_wheel_sag);
 	ClassDB::bind_method(D_METHOD("set_engine_smoke", "enabled"), &FellowVehicleDamage3D::set_engine_smoke);
 	ClassDB::bind_method(D_METHOD("has_engine_smoke"), &FellowVehicleDamage3D::has_engine_smoke);
 	ClassDB::bind_method(D_METHOD("is_engine_smoking"), &FellowVehicleDamage3D::is_engine_smoking);
@@ -811,6 +841,7 @@ void FellowVehicleDamage3D::_bind_methods() {
 
 	ADD_GROUP("Running Gear", "");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "wheel_bend", PROPERTY_HINT_RANGE, "0,15,0.1,or_greater,suffix:°"), "set_wheel_bend", "get_wheel_bend");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "suspension_damage", PROPERTY_HINT_RANGE, "0,0.3,0.001,or_greater,suffix:m"), "set_suspension_damage", "get_suspension_damage");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "engine_power_loss", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_engine_power_loss", "get_engine_power_loss");
 	ADD_PROPERTY(PropertyInfo(Variant::VECTOR3, "engine_position", PROPERTY_HINT_NONE, "suffix:m"), "set_engine_position", "get_engine_position");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "engine_smoke"), "set_engine_smoke", "has_engine_smoke");
