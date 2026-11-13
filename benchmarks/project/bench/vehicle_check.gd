@@ -23,7 +23,9 @@ extends SceneTree
 ## off into a wall at 30 km/h (on the ground by the wall), back after repair(); milestone 109 (decision 0217): a car at
 ## rest whose bumper, hit at its right end, hangs from its left end, then comes off at a second hit; milestone 110: the
 ## engine lane's car smoking (the strip's last row), the others not; a car at rest hit by its front-left wheel with
-## suspension_damage (that corner lower, the others about where they were; back after repair()). One JSON line:
+## suspension_damage (that corner lower, the others about where they were; back after repair()); a car whose left door,
+## hit at its rear end, hangs on a vertical hinge at its front edge and swings open as the car turns right. One JSON
+## line:
 ## VEHICLE_CHECK {...}; exit
 ## code 1 when a lane did otherwise than expected. --many=N: N cars driving circles, the vehicles' step a frame and the
 ## frame's (headless; --damage=1: each with a FellowVehicleDamage3D, every feature on). One JSON line: VEHICLE_MANY {...}.
@@ -420,6 +422,23 @@ func _build() -> void:
 	var sd: FellowVehicleDamage3D = sc.get_node("Damage")
 	sd.suspension_damage = 0.06
 	_lane("sagged", sc)
+	# Milestone 110: a door on a hinge (the metadata fellow_hinge_axis).
+	var dc := _damage_car(_car(Vector3(320.0, 0.1, 0), Color(0.75, 0.45, 0.75)))
+	var door := MeshInstance3D.new()
+	var dbm := BoxMesh.new()
+	dbm.size = Vector3(0.06, 0.6, 1.0)
+	door.mesh = dbm
+	door.name = "Door"
+	door.material_override = _material(Color(0.55, 0.3, 0.55))
+	door.position = Vector3(-0.93, 0.75, -0.2)
+	door.set_meta("fellow_hinge_axis", Vector3(0, 1, 0))
+	dc.add_child(door)
+	dc.set_meta("door", door)
+	var ddm: FellowVehicleDamage3D = dc.get_node("Damage")
+	ddm.detachable_paths = [NodePath("../Door")]
+	ddm.hang_depth = 0.05
+	ddm.detach_depth = 0.5
+	_lane("door", dc)
 	# Milestone 107 (decision 0215): the running gear (wheel_bend 5 degrees but on bent_off, engine_power_loss 0.5).
 	var gear_lanes := ["straight", "bent", "bent_off", "engine", "repaired"]
 	for i in 16:
@@ -750,6 +769,32 @@ func _drive(lane: Dictionary, dt: float) -> void:
 			if t >= 6.5 and not d.has("after_repair"):
 				d["after_repair"] = {"on_car": hb.get_parent() == car, "offset": snappedf((hb.transform.origin - Vector3(0, 0.48, -2.05)).length(), 0.0001),
 					"bodies_left": is_instance_valid(car.get_meta("detached_body")), "pin_left": root3d.find_child("BumperPin", false, false) != null}
+		"door":
+			# Milestone 110: at rest, the door hit at its rear end at 0.5 s (10 cm); from 1 s a right turn at 25 km/h; at 4 s
+			# where the door is in the car's space.
+			var dr: Node3D = car.get_meta("door")
+			var ddmg: FellowVehicleDamage3D = car.get_node("Damage")
+			if t < 1.0:
+				car.handbrake = true
+			if t >= 0.5 and not d.has("hit"):
+				ddmg.apply_impact(car.global_transform * Vector3(-0.96, 0.75, 0.25), car.global_basis * Vector3(1, 0, 0), ddmg.impulse_threshold + 0.1 / ddmg.softness)
+				d["hit"] = true
+			if t >= 0.9 and not d.has("hinged"):
+				d["hinged"] = ddmg.is_part_hanging(NodePath("../Door"))
+				d["hinge_node"] = root3d.find_child("DoorHinge", false, false) != null
+			if t >= 1.0:
+				car.handbrake = false
+				_cruise(car, 25.0)
+				car.steering = -0.6
+			if t >= 4.0 and not d.has("door_front"):
+				var inv := car.global_transform.affine_inverse()
+				var front: Vector3 = inv * (dr.global_transform * Vector3(0, 0, -0.5))
+				var rear: Vector3 = inv * (dr.global_transform * Vector3(0, 0, 0.5))
+				d["door_front"] = [snappedf(front.x, 0.001), snappedf(front.y, 0.001), snappedf(front.z, 0.001)]
+				d["door_rear"] = [snappedf(rear.x, 0.001), snappedf(rear.y, 0.001), snappedf(rear.z, 0.001)]
+				d["door_open_deg"] = snappedf(rad_to_deg(atan2(-(rear.x - front.x), rear.z - front.z)), 0.1)
+				d["front_moved_m"] = snappedf(front.distance_to(Vector3(-0.93, 0.75, -0.7)), 0.001)
+				d["heading_turned"] = snappedf(_heading(car), 0.1)
 		"sagged":
 			# Milestone 110: held at rest (settled by 1.5 s); hit by the left ahead of the front-left wheel at 1.6 s (as the
 			# bent lane's), repaired at 4 s; the body's height over each wheel before, after and after the repair.
@@ -994,6 +1039,12 @@ func _finish() -> void:
 				ok = ok and d.get("detached_at_5_5", false) and not d.get("hanging_at_5_5", true) and d.get("bumper_y_5_5", 9.0) < 0.35 and not d.get("pin_left", true)
 				ok = ok and ar.get("on_car", false) and ar.get("offset", 1.0) < 0.0001 and not ar.get("bodies_left", true) and not ar.get("pin_left", true)
 				ok = ok and e.hanging.size() == 2 and e.detached.size() == 3 and e.detached[2]  # the body it hung in fell
+			"door":
+				# Milestone 110: hanging on its hinge (a HingeJoint3D) after the hit; at 4 s, the car turned right, the
+				# door swung open by more than 15 degrees about its front edge, which stayed within 6 cm of where it was
+				# (the joint's give as the door swings hard: no limit), its rear end level (within 5 cm of its height).
+				var rr: Array = d.get("door_rear", [0, 0, 0])
+				ok = ok and d.get("hinged", false) and d.get("hinge_node", false) and d.get("door_open_deg", 0.0) > 15.0 and d.get("front_moved_m", 1.0) < 0.06 and absf(rr[1] - 0.75) < 0.05 and d.get("heading_turned", 0.0) < -20.0
 			"sagged":
 				# Milestone 110: the front-left wheel's travel 2-6 cm shorter, the others' not; the front-left corner lower
 				# by more than 1 cm, lower than every other (the body leans onto it, the springs and the anti-roll bar

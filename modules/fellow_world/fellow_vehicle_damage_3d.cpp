@@ -38,6 +38,7 @@
 #include "scene/3d/gpu_particles_3d.h"
 #include "scene/3d/mesh_instance_3d.h"
 #include "scene/3d/physics/collision_shape_3d.h"
+#include "scene/3d/physics/joints/hinge_joint_3d.h"
 #include "scene/3d/physics/joints/pin_joint_3d.h"
 #include "scene/3d/physics/rigid_body_3d.h"
 #include "scene/resources/3d/box_shape_3d.h"
@@ -458,16 +459,29 @@ void FellowVehicleDamage3D::_detach_pending() {
 			end_a[axis] = box.position[axis];
 			end_b[axis] = box.position[axis] + box.size[axis];
 			const Vector3 pin = n->get_global_transform().xform(part.last_hit.distance_squared_to(end_a) > part.last_hit.distance_squared_to(end_b) ? end_a : end_b);
-			PinJoint3D *joint = memnew(PinJoint3D);
-			joint->set_name(String(n->get_name()) + "Pin");
-			vehicle->get_parent()->add_child(joint);
-			joint->set_global_position(pin);
+			// Milestone 110: a part with the metadata fellow_hinge_axis (a direction in its space: a door's vertical,
+			// a bonnet's across) swings on a hinge along it through that point instead of every way about a pin.
+			const Variant hinge_axis = n->has_meta(SNAME("fellow_hinge_axis")) ? n->get_meta(SNAME("fellow_hinge_axis")) : Variant();
+			Joint3D *joint = nullptr;
+			if (hinge_axis.get_type() == Variant::VECTOR3 && !Vector3(hinge_axis).is_zero_approx()) {
+				const Vector3 axis = n->get_global_transform().basis.xform(Vector3(hinge_axis)).normalized();
+				const Vector3 up = Math::abs(axis.y) < 0.9f ? Vector3(0, 1, 0) : Vector3(1, 0, 0);
+				joint = memnew(HingeJoint3D); // it turns about its own Z
+				joint->set_name(String(n->get_name()) + "Hinge");
+				vehicle->get_parent()->add_child(joint);
+				joint->set_global_transform(Transform3D(Basis::looking_at(-axis, up), pin));
+			} else {
+				joint = memnew(PinJoint3D);
+				joint->set_name(String(n->get_name()) + "Pin");
+				vehicle->get_parent()->add_child(joint);
+				joint->set_global_position(pin);
+			}
 			joint->set_node_a(joint->get_path_to(vehicle));
 			joint->set_node_b(joint->get_path_to(body));
 			part.joint = joint->get_instance_id();
 			emit_signal(SNAME("part_hanging"), n, body);
 		} else {
-			if (PinJoint3D *joint = ObjectDB::get_instance<PinJoint3D>(part.joint)) {
+			if (Joint3D *joint = ObjectDB::get_instance<Joint3D>(part.joint)) {
 				joint->set_node_b(NodePath());
 				joint->queue_free();
 			}
@@ -674,7 +688,7 @@ void FellowVehicleDamage3D::repair() {
 			n->set_transform(part.local);
 			parent->move_child(n, MIN(part.index, parent->get_child_count() - 1));
 		}
-		if (PinJoint3D *joint = ObjectDB::get_instance<PinJoint3D>(part.joint)) {
+		if (Joint3D *joint = ObjectDB::get_instance<Joint3D>(part.joint)) {
 			joint->set_node_b(NodePath());
 			joint->queue_free();
 		}

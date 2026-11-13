@@ -1,8 +1,9 @@
 # FellowEngine — milestone 110 report (rigid bodies by the thousand: a measurement)
 
-Status: **FINAL** (2026-11-13): the owner said "ok kontynuuj"; the laptop's jobs f416-f424 done. Branch
+Status: **FINAL** (2026-11-13): the owner said "ok kontynuuj"; the laptop's jobs f416-f425 done. Branch
 `fellow/geometry`. A measurement (the readiness assessment listed "thousands of bodies not measured"), and four
-additions to the vehicles' damage: a regression scene, the editor's car preset, engine smoke, suspension damage.
+additions to the vehicles' damage: a regression scene, the editor's car preset, engine smoke, suspension damage,
+hinged parts.
 
 ## 0. Result
 
@@ -75,6 +76,15 @@ feature on (contact reporting, the steps' impulses read; no hit), against the sa
 three alternating runs each, the release template, ms a frame): GodotPhysics3D 0.825-0.847 → 0.851-0.869 (+0.025 ms,
 0.4 µs a car), Jolt 0.755-0.768 → 0.766-0.783 (+0.01 ms); the vehicles' own step the same within the spread.
 
-## 6. Next
+## 6. Hinged parts
 
-GodotPhysics3D's broadphase at 10 000 bodies (63 ms); the 8 ms of node updates at 10 000 bodies (both engines).
+Decision 0217's hanging parts swing every way about a pin; a part with the metadata `fellow_hinge_axis` (a direction in
+its space) hangs on a `HingeJoint3D` along it instead, through the same point (the end of its longest side farthest
+from its last hit). `vehicle_check.gd`'s lane `door`: a car's left door (0.06 × 0.6 × 1.0 m, the axis vertical) hit
+at its rear end at rest hangs from its front edge; the car then turns right at 25 km/h and the door swings open — at
+4 s 94.8° (GodotPhysics3D; Jolt 94.6°), its front edge 4.7 cm from where it was (the joint's give: no limit stops the
+door), its rear end level. The other lanes as before; the editor build and the release template the same.
+
+## 7. Next
+
+Hinge limits (a door opening 70° at most); GodotPhysics3D's broadphase at 10 000 bodies (63 ms); the 8 ms of node updates at 10 000 bodies (both engines).

@@ -496,7 +496,9 @@ up), `detach_mass` (8 kg: the body it falls away in, not colliding with the vehi
 hanging at 6 cm and off at 16 cm) and subdivides the body for the dents; the regression scene `vehicle_damage`. Engine
 smoke (milestone 110): `engine_smoke` (on; with `engine_power_loss` set, smoke from above `engine_position` as deep as
 the dent there, from a tenth of `max_depth`), `is_engine_smoking()`. Suspension damage (milestone 110): `suspension_damage` (m,
-0: off; the most a dent shortens a wheel's `suspension_length`), `get_wheel_sag()` (the lane `sagged`).
+0: off; the most a dent shortens a wheel's `suspension_length`), `get_wheel_sag()` (the lane `sagged`). Hinged parts
+(milestone 110): a part's metadata `fellow_hinge_axis` (a `Vector3` in its space) makes it hang on a `HingeJoint3D`
+along it instead of a pin (the lane `door`).
 
 ## Sound through the scene's geometry (milestone 78)
 
