@@ -32,9 +32,13 @@
 
 #include "fellow_vehicle_3d.h"
 
+#include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
 #include "core/os/os.h"
 #include "scene/3d/mesh_instance_3d.h"
+#include "scene/3d/physics/collision_shape_3d.h"
+#include "scene/3d/physics/rigid_body_3d.h"
+#include "scene/resources/3d/box_shape_3d.h"
 #include "servers/physics_3d/physics_server_3d.h"
 
 void FellowVehicleDamage3D::set_mesh_paths(const TypedArray<NodePath> &p_paths) {
@@ -182,6 +186,9 @@ void FellowVehicleDamage3D::_impact(const Vector3 &p_position, const Vector3 &p_
 		if (!mi || !mi->is_inside_tree()) {
 			continue;
 		}
+		if (vehicle && !vehicle->is_ancestor_of(mi)) {
+			continue; // milestone 108: a part that came off
+		}
 		const Transform3D xf = mi->get_global_transform();
 		const float scale = MAX(float(xf.basis.get_scale().length()) / float(Math::SQRT3), 1e-4f);
 		const Transform3D inv = xf.affine_inverse();
@@ -301,6 +308,116 @@ void FellowVehicleDamage3D::_running_gear(const Vector3 &p_position, const Vecto
 	}
 }
 
+// Milestone 108 (decision 0216): the parts that can come off, where they are now.
+void FellowVehicleDamage3D::set_detachable_paths(const TypedArray<NodePath> &p_paths) {
+	repair();
+	detachable_paths = p_paths;
+	parts.clear();
+	parts_ready = false;
+}
+
+void FellowVehicleDamage3D::_gather_parts() {
+	parts.clear();
+	parts_ready = true;
+	for (int i = 0; i < detachable_paths.size(); i++) {
+		Node3D *n = Object::cast_to<Node3D>(get_node_or_null(detachable_paths[i]));
+		if (!n || !n->get_parent()) {
+			continue;
+		}
+		Part part;
+		part.path = detachable_paths[i];
+		part.node = n->get_instance_id();
+		part.parent = n->get_parent()->get_instance_id();
+		part.local = n->get_transform();
+		part.index = n->get_index();
+		parts.push_back(part);
+	}
+}
+
+// The dent that reaches each part — at the point of its box nearest the impact (a bumper's end is reached by a hit at
+// its corner) — added up; at detach_depth it comes off (after the physics step: bodies are not added during it).
+void FellowVehicleDamage3D::_parts_hit(const Vector3 &p_position, const Vector3 &p_direction, float p_depth) {
+	if (detachable_paths.is_empty()) {
+		return;
+	}
+	if (!parts_ready) {
+		_gather_parts();
+	}
+	for (Part &part : parts) {
+		Node3D *n = ObjectDB::get_instance<Node3D>(part.node);
+		if (!n || part.body.is_valid() || part.pending || !n->is_inside_tree()) {
+			continue;
+		}
+		const VisualInstance3D *vi = Object::cast_to<VisualInstance3D>(n);
+		const AABB box = vi ? vi->get_aabb() : AABB(Vector3(-0.05, -0.05, -0.05), Vector3(0.1, 0.1, 0.1));
+		const Transform3D xf = n->get_global_transform();
+		const Vector3 local = xf.affine_inverse().xform(p_position);
+		const Vector3 nearest = xf.xform(local.clamp(box.position, box.position + box.size));
+		part.dent += p_depth * _reach(nearest, p_position, p_direction);
+		if (part.dent >= detach_depth) {
+			part.pending = true;
+			if (!detach_queued) {
+				detach_queued = true;
+				callable_mp(this, &FellowVehicleDamage3D::_detach_pending).call_deferred();
+			}
+		}
+	}
+}
+
+// A part coming off: a rigid body of detach_mass where it is (a box of its bounds, the vehicle's layers, not colliding
+// with the vehicle it came from), moving as the vehicle's body moved at that point; the part moved under it.
+void FellowVehicleDamage3D::_detach_pending() {
+	detach_queued = false;
+	if (!vehicle || !vehicle->get_parent()) {
+		return;
+	}
+	for (Part &part : parts) {
+		if (!part.pending) {
+			continue;
+		}
+		part.pending = false;
+		Node3D *n = ObjectDB::get_instance<Node3D>(part.node);
+		if (!n || !n->is_inside_tree() || part.body.is_valid()) {
+			continue;
+		}
+		const VisualInstance3D *vi = Object::cast_to<VisualInstance3D>(n);
+		const AABB box = vi ? vi->get_aabb() : AABB(Vector3(-0.05, -0.05, -0.05), Vector3(0.1, 0.1, 0.1));
+		const Transform3D xf = n->get_global_transform();
+		const Vector3 scale = xf.basis.get_scale().abs();
+		RigidBody3D *body = memnew(RigidBody3D);
+		body->set_name(String(n->get_name()) + "Detached");
+		body->set_mass(detach_mass);
+		body->set_collision_layer(vehicle->get_collision_layer());
+		body->set_collision_mask(vehicle->get_collision_mask());
+		CollisionShape3D *cs = memnew(CollisionShape3D);
+		Ref<BoxShape3D> shape;
+		shape.instantiate();
+		shape->set_size((box.size * scale).max(Vector3(0.02, 0.02, 0.02)));
+		cs->set_shape(shape);
+		cs->set_position(box.get_center() * scale);
+		body->add_child(cs);
+		vehicle->get_parent()->add_child(body);
+		body->set_global_transform(Transform3D(xf.basis.orthonormalized(), xf.origin));
+		body->add_collision_exception_with(vehicle);
+		const Vector3 at = xf.xform(box.get_center());
+		body->set_linear_velocity(vehicle->get_linear_velocity() + vehicle->get_angular_velocity().cross(at - vehicle->get_global_position()));
+		body->set_angular_velocity(vehicle->get_angular_velocity());
+		n->reparent(body, true);
+		part.body = body->get_instance_id();
+		detached++;
+		emit_signal(SNAME("part_detached"), n, body);
+	}
+}
+
+bool FellowVehicleDamage3D::is_part_detached(const NodePath &p_part) const {
+	for (const Part &part : parts) {
+		if (part.path == p_part) {
+			return part.body.is_valid();
+		}
+	}
+	return false;
+}
+
 float FellowVehicleDamage3D::get_engine_power() const {
 	return max_depth > 0.0f ? 1.0f - engine_power_loss * engine_dent / max_depth : 1.0f;
 }
@@ -324,6 +441,7 @@ void FellowVehicleDamage3D::apply_impact(const Vector3 &p_position, const Vector
 	impacts++;
 	_impact(p_position, p_direction.normalized(), depth);
 	_running_gear(p_position, p_direction.normalized(), depth);
+	_parts_hit(p_position, p_direction.normalized(), depth);
 	emit_signal(SNAME("impacted"), p_position, p_impulse, depth);
 }
 
@@ -352,6 +470,23 @@ void FellowVehicleDamage3D::repair() {
 	torque_base = -1.0f;
 	torque_set = -1.0f;
 	engine_dent = 0.0f;
+	// Milestone 108: the parts back where they were, their bodies freed.
+	for (Part &part : parts) {
+		Node3D *n = ObjectDB::get_instance<Node3D>(part.node);
+		RigidBody3D *body = ObjectDB::get_instance<RigidBody3D>(part.body);
+		Node *parent = ObjectDB::get_instance<Node>(part.parent);
+		if (n && body && parent && n->get_parent() == body) {
+			n->reparent(parent, false);
+			n->set_transform(part.local);
+			parent->move_child(n, MIN(part.index, parent->get_child_count() - 1));
+		}
+		if (body) {
+			body->queue_free();
+		}
+		part.body = ObjectID();
+		part.dent = 0.0f;
+		part.pending = false;
+	}
 }
 
 Vector3 FellowVehicleDamage3D::get_vertex_offset(const NodePath &p_mesh, int p_surface, int p_vertex) const {
@@ -385,6 +520,7 @@ Dictionary FellowVehicleDamage3D::get_stats() const {
 		}
 	}
 	d["wheel_toe_change"] = toe;
+	d["detached"] = detached;
 	return d;
 }
 
@@ -473,6 +609,13 @@ void FellowVehicleDamage3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_engine_position"), &FellowVehicleDamage3D::get_engine_position);
 	ClassDB::bind_method(D_METHOD("get_engine_power"), &FellowVehicleDamage3D::get_engine_power);
 	ClassDB::bind_method(D_METHOD("get_wheel_toe_change", "wheel"), &FellowVehicleDamage3D::get_wheel_toe_change);
+	ClassDB::bind_method(D_METHOD("set_detachable_paths", "paths"), &FellowVehicleDamage3D::set_detachable_paths);
+	ClassDB::bind_method(D_METHOD("get_detachable_paths"), &FellowVehicleDamage3D::get_detachable_paths);
+	ClassDB::bind_method(D_METHOD("set_detach_depth", "depth"), &FellowVehicleDamage3D::set_detach_depth);
+	ClassDB::bind_method(D_METHOD("get_detach_depth"), &FellowVehicleDamage3D::get_detach_depth);
+	ClassDB::bind_method(D_METHOD("set_detach_mass", "mass"), &FellowVehicleDamage3D::set_detach_mass);
+	ClassDB::bind_method(D_METHOD("get_detach_mass"), &FellowVehicleDamage3D::get_detach_mass);
+	ClassDB::bind_method(D_METHOD("is_part_detached", "part"), &FellowVehicleDamage3D::is_part_detached);
 	ClassDB::bind_method(D_METHOD("get_vertex_offset", "mesh", "surface", "vertex"), &FellowVehicleDamage3D::get_vertex_offset);
 	ClassDB::bind_method(D_METHOD("get_stats"), &FellowVehicleDamage3D::get_stats);
 
@@ -487,5 +630,11 @@ void FellowVehicleDamage3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "engine_power_loss", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_engine_power_loss", "get_engine_power_loss");
 	ADD_PROPERTY(PropertyInfo(Variant::VECTOR3, "engine_position", PROPERTY_HINT_NONE, "suffix:m"), "set_engine_position", "get_engine_position");
 
+	ADD_GROUP("Detachable Parts", "");
+	ADD_PROPERTY(PropertyInfo(Variant::ARRAY, "detachable_paths", PROPERTY_HINT_ARRAY_TYPE, vformat("%s/%s:%s", Variant::NODE_PATH, PROPERTY_HINT_NODE_PATH_VALID_TYPES, "Node3D")), "set_detachable_paths", "get_detachable_paths");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "detach_depth", PROPERTY_HINT_RANGE, "0,1,0.01,or_greater,suffix:m"), "set_detach_depth", "get_detach_depth");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "detach_mass", PROPERTY_HINT_RANGE, "0.1,200,0.1,or_greater,suffix:kg"), "set_detach_mass", "get_detach_mass");
+
+	ADD_SIGNAL(MethodInfo("part_detached", PropertyInfo(Variant::OBJECT, "part", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_DEFAULT, "Node3D"), PropertyInfo(Variant::OBJECT, "body", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_DEFAULT, "RigidBody3D")));
 	ADD_SIGNAL(MethodInfo("impacted", PropertyInfo(Variant::VECTOR3, "position"), PropertyInfo(Variant::FLOAT, "impulse"), PropertyInfo(Variant::FLOAT, "depth")));
 }

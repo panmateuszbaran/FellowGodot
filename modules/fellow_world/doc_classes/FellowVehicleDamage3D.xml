@@ -7,6 +7,7 @@
 		A child of a [FellowVehicle3D]. It turns the vehicle's contact reporting on ([member RigidBody3D.contact_monitor], at least 8 [member RigidBody3D.max_contacts_reported]) and reads the body's contacts every physics step: when their impulses together exceed [member impulse_threshold], each contact pushes the vertices of the vehicle's meshes within [member radius] of it into the body (along its normal, towards the body's centre of mass), [member softness] metres for each N·s beyond the threshold, falling off smoothly to the radius's edge; no vertex moves more than [member max_depth] from where it was. The dented meshes are copies made at the first impact (the originals are kept: [method repair]); their normals are recomputed from the dented triangles.
 		The meshes are those of [member mesh_paths], or without them every [MeshInstance3D] of the vehicle but those of its wheels. A mesh with blend shapes is left as it is. The collision shapes are not changed. See [code]docs/decisions/0213-vehicle-damage.md[/code].
 		The dents can also reach the running gear (both off by default): a wheel near a dent is bent out of line ([member wheel_bend]: the vehicle pulls to one side) and an engine the dent reaches loses power ([member engine_power_loss]). An impact reaches into the body twice as far as it spreads over it: [member radius] across the push, twice that along it. See [code]docs/decisions/0215-running-gear-damage.md[/code].
+		Parts can come off ([member detachable_paths]): dented deep enough, each falls away as a rigid body of its own. See [code]docs/decisions/0216-detachable-parts.md[/code].
 		[codeblock]
 		var damage = FellowVehicleDamage3D.new()
 		car.add_child(damage)
@@ -65,6 +66,13 @@
 				How far the dents have bent a wheel's [member FellowWheel3D.toe] (its path from this node), in degrees (+ in).
 			</description>
 		</method>
+		<method name="is_part_detached" qualifiers="const">
+			<return type="bool" />
+			<param index="0" name="part" type="NodePath" />
+			<description>
+				Whether the part of [member detachable_paths] at [param part] (its path as given there) has come off.
+			</description>
+		</method>
 		<method name="repair">
 			<return type="void" />
 			<description>
@@ -73,6 +81,15 @@
 		</method>
 	</methods>
 	<members>
+		<member name="detach_depth" type="float" setter="set_detach_depth" getter="get_detach_depth" default="0.12">
+			The dent (in metres, added up over impacts, at the part's point nearest each) at which a part of [member detachable_paths] comes off.
+		</member>
+		<member name="detach_mass" type="float" setter="set_detach_mass" getter="get_detach_mass" default="8.0">
+			The mass of the body a part falls away in, in kilograms (the vehicle's own is not changed).
+		</member>
+		<member name="detachable_paths" type="NodePath[]" setter="set_detachable_paths" getter="get_detachable_paths" default="[]">
+			The parts that can come off (paths from this node to [Node3D]s of the vehicle: a bumper, a door, a mirror). A part the dents reach [member detach_depth] deep falls away after the physics step: a [RigidBody3D] of [member detach_mass] is made where it is, beside the vehicle (its parent's child), a box of the part's bounds (a [VisualInstance3D]'s; 10 cm without), on the vehicle's collision layers but not colliding with the vehicle, moving as the vehicle's body moved there; the part becomes its child. [method repair] puts the parts back and frees their bodies. The vehicle's collision shapes are not changed.
+		</member>
 		<member name="engine_position" type="Vector3" setter="set_engine_position" getter="get_engine_position" default="Vector3(0, 0.5, -1.4)">
 			Where the engine is, in the vehicle's space (the default: a front-engined car about 4 m long, its origin in the middle, its front towards -Z).
 		</member>
@@ -105,6 +122,13 @@
 			<param index="2" name="depth" type="float" />
 			<description>
 				An impact dented the body: where (global), its impulse (N·s) and the dent's depth at its centre (m).
+			</description>
+		</signal>
+		<signal name="part_detached">
+			<param index="0" name="part" type="Node3D" />
+			<param index="1" name="body" type="RigidBody3D" />
+			<description>
+				A part of [member detachable_paths] came off: the part and the body it now hangs in (the game can give it a sound, let it fade, or free it).
 			</description>
 		</signal>
 	</signals>

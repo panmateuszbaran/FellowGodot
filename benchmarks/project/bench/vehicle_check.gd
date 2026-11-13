@@ -19,7 +19,8 @@ extends SceneTree
 ## bumps lane's car undented; milestone 107 (decision 0215): the dents reaching the running gear — a car hit by the
 ## left ahead of its front-left wheel (the wheel's toe bent in: it pulls to the right), the same hit with wheel_bend 0
 ## and an unhit car (both straight), a car hit at the engine (slower to 100 km/h), a car hit and repaired (straight,
-## its torque back). One JSON line:
+## its torque back); milestone 108 (decision 0216): a car with a bumper that can come off — kept after a light hit,
+## off into a wall at 30 km/h (on the ground by the wall), back after repair(). One JSON line:
 ## VEHICLE_CHECK {...}; exit
 ## code 1 when a lane did otherwise than expected. --many=N: N cars driving circles, the vehicles' step a frame and the
 ## frame's (headless). One JSON line: VEHICLE_MANY {...}.
@@ -37,7 +38,7 @@ var save_frames := false
 var grid := false
 var shot_size := Vector2i(480, 320)
 var strip_times := [2.0, 6.0, 10.0, 14.0, 18.0, 22.0]
-var strip_lanes := ["accel", "brake", "skidpad", "lane_change", "bumps", "jump", "crash", "bent"]
+var strip_lanes := ["accel", "brake", "skidpad", "lane_change", "bumps", "jump", "crash", "bent", "bumper"]
 var shots := {}
 var viewports := {}
 var cameras := {}
@@ -367,6 +368,25 @@ func _build() -> void:
 		_box(Vector3(x, 1.0, -30.0), Vector3(6.0, 2.0, 1.0), Color(0.62, 0.6, 0.58))
 		_lane("crash" if k == 0 else "tap", _damage_car(_car(Vector3(x, 0.1, 0), Color(0.85, 0.25, 0.2) if k == 0 else Color(0.25, 0.5, 0.85))))
 	_damage_car(_find("bumps").car)
+	# Milestone 108 (decision 0216): a bumper that can come off (detach_depth 0.1 m), the car into a wall 30 m ahead at
+	# 30 km/h.
+	_box(Vector3(284.0, 1.0, -30.0), Vector3(6.0, 2.0, 1.0), Color(0.62, 0.6, 0.58))
+	var bc := _damage_car(_car(Vector3(284.0, 0.1, 0), Color(0.9, 0.6, 0.2)))
+	var bumper := MeshInstance3D.new()
+	var bbm := BoxMesh.new()
+	bbm.size = Vector3(1.86, 0.22, 0.14)
+	bumper.mesh = bbm
+	bumper.name = "Bumper"
+	bumper.material_override = _material(Color(0.15, 0.15, 0.17))
+	bumper.position = Vector3(0, 0.48, -2.05)
+	bc.add_child(bumper)
+	bc.set_meta("bumper", bumper)
+	var bd: FellowVehicleDamage3D = bc.get_node("Damage")
+	bd.detachable_paths = [NodePath("../Bumper")]
+	bd.detach_depth = 0.1
+	bd.part_detached.connect(func(part: Node3D, body: RigidBody3D) -> void:
+		bc.set_meta("detached", [String(part.name), String(body.name), snappedf(bc.get_speed_kmh(), 0.1), snappedf(body.mass, 0.01)]))
+	_lane("bumper", bc)
 	# Milestone 107 (decision 0215): the running gear (wheel_bend 5 degrees but on bent_off, engine_power_loss 0.5).
 	var gear_lanes := ["straight", "bent", "bent_off", "engine", "repaired"]
 	for i in 16:
@@ -661,11 +681,11 @@ func _drive(lane: Dictionary, dt: float) -> void:
 				car.throttle = 0.0
 				car.brake = 1.0
 				car.handbrake = true
-		"crash", "tap":
+		"crash", "tap", "bumper":
 			# Up to speed, held until the wall stops the car; a second held; backed off 3 m (the brake held at a standstill
 			# engages reverse) to show its front; held there.
 			if lane.phase == 0:
-				_cruise(car, 30.0 if lane.name == "crash" else 5.0)
+				_cruise(car, 5.0 if lane.name == "tap" else 30.0)
 				d["kmh_impact"] = snappedf(maxf(d.get("kmh_impact", 0.0), kmh), 0.1)
 				if car.global_position.z < -26.0 and kmh < 1.0 and t > 2.0:
 					lane.phase = 1
@@ -684,6 +704,29 @@ func _drive(lane: Dictionary, dt: float) -> void:
 			else:
 				car.brake = 0.0
 				car.handbrake = true
+			if lane.name == "bumper":
+				# Milestone 108: a light hit at the bumper at 0.5 s (4 cm: kept); where it lies at 23.9 s; repaired at 24 s.
+				var bmp: Node3D = car.get_meta("bumper")
+				var bdmg: FellowVehicleDamage3D = car.get_node("Damage")
+				if t >= 0.5 and not d.has("light_detached"):
+					bdmg.apply_impact(car.global_transform * Vector3(0.5, 0.48, -2.12), car.global_basis * Vector3(0, 0, 1), bdmg.impulse_threshold + 0.04 / bdmg.softness)
+					d["light_detached"] = bdmg.is_part_detached(NodePath("../Bumper"))
+				if t >= 1.0 and not d.has("light_detached_later"):
+					d["light_detached_later"] = bdmg.is_part_detached(NodePath("../Bumper"))
+				if t >= 23.9 and not d.has("bumper_end"):
+					var bp := bmp.global_position
+					var holder := bmp.get_parent()
+					d["bumper_end"] = [snappedf(bp.x - lane.start.x, 0.01), snappedf(bp.y, 0.01), snappedf(bp.z, 0.01)]
+					d["bumper_holder"] = String(holder.name)
+					d["bumper_speed"] = snappedf((holder as RigidBody3D).linear_velocity.length(), 0.001) if holder is RigidBody3D else -1.0
+					d["car_front_z"] = snappedf((car.global_transform * Vector3(0, 0.48, -2.1)).z, 0.01)
+					d["detached_flag"] = bdmg.is_part_detached(NodePath("../Bumper"))
+				if t >= 24.0 and not d.has("repaired_at"):
+					bdmg.repair()
+					d["repaired_at"] = snappedf(t, 0.01)
+				if t >= 24.5 and not d.has("after_repair"):
+					d["after_repair"] = {"on_car": bmp.get_parent() == car, "offset": snappedf((bmp.transform.origin - Vector3(0, 0.48, -2.05)).length(), 0.0001),
+						"bodies_left": root3d.find_child("BumperDetached", false, false) != null, "detached_flag": bdmg.is_part_detached(NodePath("../Bumper"))}
 		"slab":
 			# On the slab: its momentum and the car's along Z sum to about none while the car speeds up on it.
 			if t > 1.0:
@@ -732,7 +775,7 @@ func _on_frame() -> void:
 		var back := car.global_basis.z
 		back.y = 0.0
 		back = back.normalized() if back.length() > 0.1 else Vector3(0, 0, 1)
-		if name == "crash":
+		if name == "crash" or name == "bumper":
 			# Milestone 105: the front, where the wall dents it (from ahead and above, once the car has backed off the wall).
 			cam.look_at_from_position(car.global_position - back * 4.6 + Vector3(0.9, 1.9, 0), car.global_position - back * 2.0 + Vector3(0, 0.55, 0))
 		elif name == "bent":
@@ -828,6 +871,15 @@ func _finish() -> void:
 				var dn := _dents(car)
 				e["dents"] = dn
 				ok = ok and dn.deepest_m == 0.0 and dn.impacts.is_empty() and dn.dented_meshes == 0
+			"bumper":
+				# Milestone 108: kept after the light hit; off in the crash (a body of 8 kg), lying on the ground between the
+				# wall (z -29.5) and the car backed off, still; on the car again after repair(), its body gone.
+				var be: Array = d.get("bumper_end", [0.0, 9.0, 0.0])
+				var ar: Dictionary = d.get("after_repair", {})
+				e["detached"] = car.get_meta("detached", [])
+				ok = ok and not d.get("light_detached", true) and not d.get("light_detached_later", true) and e.detached.size() == 4 and d.get("detached_flag", false)
+				ok = ok and be[1] < 0.35 and be[2] > -29.6 and be[2] < d.get("car_front_z", -99.0) - 0.3 and d.get("bumper_speed", 9.0) < 0.2 and d.get("bumper_holder", "") == "BumperDetached"
+				ok = ok and ar.get("on_car", false) and ar.get("offset", 1.0) < 0.0001 and not ar.get("bodies_left", true) and not ar.get("detached_flag", true)
 			"straight":
 				# Milestone 107: unhit, straight within half a degree.
 				ok = ok and absf(d.get("heading_change", 99.0)) < 0.5 and d.toe_after_hit.FrontLeft == 0.0 and d.engine_power == 1.0

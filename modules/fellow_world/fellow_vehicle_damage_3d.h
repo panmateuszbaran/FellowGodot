@@ -43,6 +43,8 @@ class MeshInstance3D;
 // impact, falling off over radius, each vertex at most max_depth from where it was. The dented meshes are copies made at
 // the first impact; repair() puts the originals back. Milestone 107 (decision 0215): the dents reach the running gear —
 // a wheel near one bent out of line (its toe: the car pulls), the engine's power lost when the dent reaches it.
+// Milestone 108 (decision 0216): parts that come off — a node of detachable_paths dented detach_depth deep falls away
+// as a rigid body of its own.
 class FellowVehicleDamage3D : public Node3D {
 	GDCLASS(FellowVehicleDamage3D, Node3D);
 
@@ -67,6 +69,25 @@ class FellowVehicleDamage3D : public Node3D {
 	float torque_base = -1.0f; // the engine's own max_torque (the game's), -1 before a dent reached it
 	float torque_set = -1.0f;
 
+	// Milestone 108: the parts that can come off.
+	TypedArray<NodePath> detachable_paths;
+	float detach_depth = 0.12f; // m of dent at the part
+	float detach_mass = 8.0f; // kg
+	struct Part {
+		NodePath path; // from this node, as given
+		ObjectID node;
+		ObjectID parent; // where it was
+		Transform3D local; // its transform there
+		int index = -1; // among the parent's children
+		float dent = 0.0f; // m
+		bool pending = false;
+		ObjectID body; // the body it fell away in
+	};
+	LocalVector<Part> parts;
+	bool parts_ready = false;
+	bool detach_queued = false;
+	uint64_t detached = 0;
+
 	struct Target {
 		ObjectID instance;
 		Ref<Mesh> original;
@@ -90,6 +111,9 @@ class FellowVehicleDamage3D : public Node3D {
 	void _rebuild(Target &r_target);
 	void _running_gear(const Vector3 &p_position, const Vector3 &p_direction, float p_depth);
 	float _reach(const Vector3 &p_part, const Vector3 &p_position, const Vector3 &p_direction) const;
+	void _gather_parts();
+	void _parts_hit(const Vector3 &p_position, const Vector3 &p_direction, float p_depth);
+	void _detach_pending();
 
 protected:
 	void _notification(int p_what);
@@ -112,6 +136,13 @@ public:
 	float get_engine_power_loss() const { return engine_power_loss; }
 	void set_engine_position(const Vector3 &p_position) { engine_position = p_position; }
 	Vector3 get_engine_position() const { return engine_position; }
+	void set_detachable_paths(const TypedArray<NodePath> &p_paths);
+	TypedArray<NodePath> get_detachable_paths() const { return detachable_paths; }
+	void set_detach_depth(float p_depth) { detach_depth = MAX(0.0f, p_depth); }
+	float get_detach_depth() const { return detach_depth; }
+	void set_detach_mass(float p_mass) { detach_mass = MAX(0.01f, p_mass); }
+	float get_detach_mass() const { return detach_mass; }
+	bool is_part_detached(const NodePath &p_part) const;
 
 	void apply_impact(const Vector3 &p_position, const Vector3 &p_direction, float p_impulse);
 	void repair();

@@ -486,7 +486,10 @@ beyond it), `max_depth` (0.3 m), `radius` (0.7 m), `mesh_paths` (empty: every me
 the most a dent bends a wheel's toe, the way the push turns it), `engine_power_loss` (the share of `max_torque` a dent
 of `max_depth` at `engine_position`, 0, 0.5, −1.4 m, takes); an impact reaches `radius` across its push, twice that
 along it; `get_engine_power()`, `get_wheel_toe_change()`; `repair()` puts them back. `FellowWheel3D.toe` (degrees, +
-in). Bench `bench/vehicle_check.gd` (the lanes `straight`, `bent`, `bent_off`, `engine`, `repaired`).
+in). Bench `bench/vehicle_check.gd` (the lanes `straight`, `bent`, `bent_off`, `engine`, `repaired`). Parts that come off
+(milestone 108, decision 0216): `detachable_paths` (empty: none), `detach_depth` (0.12 m of dent at the part, added
+up), `detach_mass` (8 kg: the body it falls away in, not colliding with the vehicle); `is_part_detached()`, the signal
+`part_detached(part, body)`; `repair()` puts them back. Bench `bench/vehicle_check.gd` (the lane `bumper`).
 
 ## Sound through the scene's geometry (milestone 78)
 

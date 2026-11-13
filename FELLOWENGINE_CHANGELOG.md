@@ -9,6 +9,13 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 108 — parts that come off (2026-11-13)
+
+- `FellowVehicleDamage3D.detachable_paths` (decision 0216): a part dented `detach_depth` deep (0.12 m, added up over
+  impacts at its point nearest each) falls away as a `RigidBody3D` of `detach_mass` (8 kg) that does not collide with
+  the vehicle; the signal `part_detached(part, body)`, `is_part_detached()`; `repair()` puts it back. A bumper kept
+  after a light hit, off in a 30 km/h crash, lying still by the wall.
+
 ## Milestone 107 — dents that reach the running gear (2026-11-13)
 
 - `FellowVehicleDamage3D` (decision 0215): `wheel_bend` — a dent reaching a wheel bends its toe the way the push turns
