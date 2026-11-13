@@ -549,6 +549,12 @@ physics material's friction), `rolling_resistance` (0.012 of the load), `inertia
 FellowEngine menu's "Add Car"; the wheel's gizmo (its circle and its suspension's travel). Bench `bench/vehicle_check.gd`
 (`--many=N`, `--pictures=1`); the regression scene `vehicle`.
 
+Contacts (milestone 101, decision 0209): on `FellowWheel3D`, `contact_shape` (`CONTACT_RAY`, the default;
+`CONTACT_SPHERE`; `CONTACT_CYLINDER` of `radius` and `width`, 0.22 m, along the steered axle): the tyre's shape swept down
+the suspension — curbs met by the tyre's front, gaps narrower than it bridged; two queries a wheel a step on an edge,
+one on flat ground (for the player's car; rays for traffic). Bench `bench/vehicle_check.gd` (`--contact=1|2` with
+`--many`).
+
 ## Destruction (milestone 74)
 
 Module `fellow_world`; nothing changes without the node (decision 0182). `FellowDestructible3D` (a `Node3D`), a child of

@@ -145,6 +145,34 @@ Node3D *FellowWheel3D::get_ground() const {
 	return ObjectDB::get_instance<Node3D>(ground);
 }
 
+// Milestone 101: the shape the vehicle sweeps down this wheel's suspension (none for a ray).
+void FellowWheel3D::_update_shape() {
+	PhysicsServer3D *ps = PhysicsServer3D::get_singleton();
+	if (!ps) {
+		return;
+	}
+	if (shape_rid.is_valid()) {
+		ps->free_rid(shape_rid);
+		shape_rid = RID();
+	}
+	if (contact_shape == CONTACT_SPHERE) {
+		shape_rid = ps->sphere_shape_create();
+		ps->shape_set_data(shape_rid, radius);
+	} else if (contact_shape == CONTACT_CYLINDER) {
+		shape_rid = ps->cylinder_shape_create();
+		Dictionary d;
+		d["radius"] = radius;
+		d["height"] = width;
+		ps->shape_set_data(shape_rid, d);
+	}
+}
+
+FellowWheel3D::~FellowWheel3D() {
+	if (shape_rid.is_valid() && PhysicsServer3D::get_singleton()) {
+		PhysicsServer3D::get_singleton()->free_rid(shape_rid);
+	}
+}
+
 void FellowWheel3D::_notification(int p_what) {
 	switch (p_what) {
 		case NOTIFICATION_ENTER_TREE: {
@@ -177,6 +205,10 @@ PackedStringArray FellowWheel3D::get_configuration_warnings() const {
 void FellowWheel3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_radius", "radius"), &FellowWheel3D::set_radius);
 	ClassDB::bind_method(D_METHOD("get_radius"), &FellowWheel3D::get_radius);
+	ClassDB::bind_method(D_METHOD("set_width", "width"), &FellowWheel3D::set_width);
+	ClassDB::bind_method(D_METHOD("get_width"), &FellowWheel3D::get_width);
+	ClassDB::bind_method(D_METHOD("set_contact_shape", "shape"), &FellowWheel3D::set_contact_shape);
+	ClassDB::bind_method(D_METHOD("get_contact_shape"), &FellowWheel3D::get_contact_shape);
 	ClassDB::bind_method(D_METHOD("set_suspension_length", "length"), &FellowWheel3D::set_suspension_length);
 	ClassDB::bind_method(D_METHOD("get_suspension_length"), &FellowWheel3D::get_suspension_length);
 	ClassDB::bind_method(D_METHOD("set_spring_rate", "rate"), &FellowWheel3D::set_spring_rate);
@@ -211,6 +243,8 @@ void FellowWheel3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_ground"), &FellowWheel3D::get_ground);
 
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "radius", PROPERTY_HINT_RANGE, "0.05,2,0.001,or_greater,suffix:m"), "set_radius", "get_radius");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "width", PROPERTY_HINT_RANGE, "0.02,1,0.001,or_greater,suffix:m"), "set_width", "get_width");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "contact_shape", PROPERTY_HINT_ENUM, "Ray,Sphere,Cylinder"), "set_contact_shape", "get_contact_shape");
 	ADD_GROUP("Suspension", "");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "suspension_length", PROPERTY_HINT_RANGE, "0,2,0.001,or_greater,suffix:m"), "set_suspension_length", "get_suspension_length");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "spring_rate", PROPERTY_HINT_RANGE, "0,500000,1,or_greater,suffix:N/m"), "set_spring_rate", "get_spring_rate");
@@ -225,6 +259,10 @@ void FellowWheel3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "driven"), "set_driven", "is_driven");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "braked"), "set_braked", "is_braked");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "handbrake"), "set_handbrake", "is_handbrake");
+
+	BIND_ENUM_CONSTANT(CONTACT_RAY);
+	BIND_ENUM_CONSTANT(CONTACT_SPHERE);
+	BIND_ENUM_CONSTANT(CONTACT_CYLINDER);
 }
 
 // -------------------------------------------------------------------------------------------------------------- vehicle
@@ -303,6 +341,87 @@ void FellowVehicle3D::_update_wheel_nodes() {
 	}
 }
 
+// Milestone 101 (decision 0209): the tyre's shape swept down the suspension from fully compressed (its centre at the
+// mount, the cylinder's axis along the steered axle): where it first touches is where the wheel stands; the contact's
+// point and normal from the shape at rest there (the normal leans where the tyre meets an edge).
+void FellowVehicle3D::_shape_contact(FellowWheel3D *w, const Transform3D &p_mount, const Vector3 &p_up, PhysicsDirectSpaceState3D *p_space, const HashSet<RID> &p_exclude) {
+	Basis b = Basis(p_up, w->steer) * p_mount.basis.orthonormalized();
+	if (w->contact_shape == FellowWheel3D::CONTACT_CYLINDER) {
+		b = b * Basis(Vector3(0, 0, 1), float(Math::PI * 0.5)); // the cylinder's Y along the axle (X)
+	}
+	PhysicsDirectSpaceState3D::ShapeParameters sp;
+	sp.shape_rid = w->shape_rid;
+	sp.transform = Transform3D(b, p_mount.origin);
+	sp.motion = -p_up * w->suspension_length;
+	sp.exclude = p_exclude;
+	sp.collision_mask = get_collision_mask();
+	real_t safe = 1.0;
+	real_t unsafe = 1.0;
+	const bool cast = w->suspension_length > 0.0f && p_space->cast_motion(sp, safe, unsafe);
+	// The ray under the centre as well (cheap): when the tyre stands where it does (on what is under its centre), its
+	// point and normal are the contact's; only on an edge or over a gap is the shape asked where it touches.
+	PhysicsDirectSpaceState3D::RayParameters ray;
+	ray.from = p_mount.origin;
+	ray.to = p_mount.origin - p_up * (w->suspension_length + w->radius);
+	ray.exclude = p_exclude;
+	ray.collision_mask = get_collision_mask();
+	PhysicsDirectSpaceState3D::RayResult under;
+	const bool ray_hit = p_space->intersect_ray(ray, under);
+	if (!cast || unsafe >= 1.0) {
+		w->contact = false;
+	} else {
+		PhysicsDirectSpaceState3D::ShapeRestInfo ri;
+		const float drop = float(unsafe) * w->suspension_length;
+		if (ray_hit && Math::abs((p_mount.origin.distance_to(under.position) - w->radius) - drop) < 0.002f) {
+			ri.point = under.position;
+			ri.normal = under.normal;
+			ri.collider_id = under.collider_id;
+			ri.rid = under.rid;
+			w->contact = true;
+		} else {
+			// At rest where it touches (two millimetres' margin to find the contact).
+			PhysicsDirectSpaceState3D::ShapeParameters rp = sp;
+			rp.transform.origin = sp.transform.origin + sp.motion * unsafe;
+			rp.motion = Vector3();
+			rp.margin = 0.002;
+			w->contact = p_space->rest_info(rp, &ri);
+		}
+		if (w->contact) {
+			w->compression = CLAMP(w->suspension_length - drop, 0.0f, w->suspension_length);
+			w->bottomed = 0.0f;
+			if (unsafe <= 0.0) {
+				// Touching already fully compressed: how far past by the ray (as milestone 77's).
+				PhysicsDirectSpaceState3D::RayParameters rq;
+				rq.from = p_mount.origin + p_up * w->radius;
+				rq.to = p_mount.origin - p_up * w->radius;
+				rq.exclude = p_exclude;
+				rq.collision_mask = get_collision_mask();
+				PhysicsDirectSpaceState3D::RayResult rr;
+				if (p_space->intersect_ray(rq, rr)) {
+					w->bottomed = MAX(0.0f, w->radius - (p_mount.origin - rr.position).dot(p_up));
+				}
+			}
+			w->contact_point = ri.point;
+			w->contact_normal = ri.normal.length_squared() > 1e-8f ? ri.normal.normalized() : p_up;
+			if (w->contact_normal.dot(p_up) < 0.0f) {
+				w->contact_normal = -w->contact_normal; // the ground's side
+			}
+			w->ground = ri.collider_id;
+			Object *collider = ObjectDB::get_instance(ri.collider_id);
+			w->ground_body = Object::cast_to<PhysicsBody3D>(collider) ? ri.rid : RID();
+			w->ground_friction = w->ground_body.is_valid() ? float(PhysicsServer3D::get_singleton()->body_get_param(w->ground_body, PhysicsServer3D::BODY_PARAM_FRICTION)) : 1.0f;
+		}
+	}
+	if (!w->contact) {
+		w->compression = 0.0f;
+		w->bottomed = 0.0f;
+		w->anchored = false;
+		w->load = 0.0f;
+		w->ground = ObjectID();
+		w->ground_body = RID();
+	}
+}
+
 void FellowVehicle3D::_body_state_changed(PhysicsDirectBodyState3D *p_state) {
 	RigidBody3D::_body_state_changed(p_state);
 	if (wheels.is_empty() || Engine::get_singleton()->is_editor_hint()) {
@@ -325,6 +444,10 @@ void FellowVehicle3D::_body_state_changed(PhysicsDirectBodyState3D *p_state) {
 	for (FellowWheel3D *w : wheels) {
 		const Transform3D mx = xf * w->mount;
 		const Vector3 up = mx.basis.get_column(1).normalized();
+		if (w->contact_shape != FellowWheel3D::CONTACT_RAY && w->shape_rid.is_valid() && space) {
+			_shape_contact(w, mx, up, space, exclude);
+			continue;
+		}
 		PhysicsDirectSpaceState3D::RayParameters rq;
 		rq.from = mx.origin;
 		rq.to = mx.origin - up * (w->suspension_length + w->radius);

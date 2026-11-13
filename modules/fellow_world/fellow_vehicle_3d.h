@@ -44,7 +44,21 @@ class FellowWheel3D : public Node3D {
 	GDCLASS(FellowWheel3D, Node3D);
 	friend class FellowVehicle3D;
 
+public:
+	// Milestone 101 (decision 0209): how the ground is found — a ray down the suspension (milestone 77's), or the tyre's
+	// shape (a sphere of its radius, a cylinder of its radius and width) swept down it: a curb is met by the tyre's
+	// front, a gap narrower than the tyre bridged.
+	enum ContactShape {
+		CONTACT_RAY,
+		CONTACT_SPHERE,
+		CONTACT_CYLINDER,
+	};
+
+private:
 	float radius = 0.34f;
+	float width = 0.22f; // milestone 101: the tyre's (a cylinder's contact)
+	ContactShape contact_shape = CONTACT_RAY;
+	RID shape_rid; // the swept shape (made on the main thread when the contact or the size changes)
 	float suspension_length = 0.3f; // from the mount to the wheel's centre, fully extended
 	float spring_rate = 40000.0f; // N/m
 	float damping_compression = 3000.0f; // N·s/m
@@ -80,6 +94,8 @@ class FellowWheel3D : public Node3D {
 	Vector3 anchor; // where, in the ground body's space (or the world's)
 	RID anchor_body;
 
+	void _update_shape();
+
 protected:
 	void _notification(int p_what);
 	static void _bind_methods();
@@ -87,8 +103,21 @@ protected:
 public:
 	PackedStringArray get_configuration_warnings() const override;
 
-	void set_radius(float p_radius) { radius = MAX(0.05f, p_radius); }
+	void set_radius(float p_radius) {
+		radius = MAX(0.05f, p_radius);
+		_update_shape();
+	}
 	float get_radius() const { return radius; }
+	void set_width(float p_width) {
+		width = MAX(0.02f, p_width);
+		_update_shape();
+	}
+	float get_width() const { return width; }
+	void set_contact_shape(ContactShape p_shape) {
+		contact_shape = p_shape;
+		_update_shape();
+	}
+	ContactShape get_contact_shape() const { return contact_shape; }
 	void set_suspension_length(float p_length) { suspension_length = MAX(0.0f, p_length); }
 	float get_suspension_length() const { return suspension_length; }
 	void set_spring_rate(float p_rate) { spring_rate = MAX(0.0f, p_rate); }
@@ -123,7 +152,11 @@ public:
 	Vector3 get_contact_point() const { return contact_point; }
 	ObjectID get_ground_id() const { return ground; } // FellowEngine milestone 88: what the tyre stands on
 	Node3D *get_ground() const;
+
+	~FellowWheel3D();
 };
+
+VARIANT_ENUM_CAST(FellowWheel3D::ContactShape);
 
 // FellowEngine (milestone 77, decision 0185): a car — a RigidBody3D on FellowWheel3D children: each wheel's suspension
 // a spring and damper from a ray down from its mount, its tyre's force from its slip (ratio and angle, combined, on a
@@ -198,6 +231,7 @@ private:
 	float _engine_torque(float p_rpm) const;
 	float _gear_ratio() const;
 	void _update_wheel_nodes();
+	void _shape_contact(FellowWheel3D *w, const Transform3D &p_mount, const Vector3 &p_up, PhysicsDirectSpaceState3D *p_space, const HashSet<RID> &p_exclude);
 
 protected:
 	void _notification(int p_what);

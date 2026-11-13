@@ -4,7 +4,7 @@ extends SceneTree
 ##   godot --path benchmarks/project --headless --fixed-fps 60 -s res://bench/vehicle_check.gd -- --out=<dir>
 ##   godot --path benchmarks/project --fixed-fps 60 --resolution 1280x720 -s res://bench/vehicle_check.gd
 ##       -- --out=<dir> --pictures=1 [--frames=1] [--grid=1 --shot=640x540]
-##   godot ... -s res://bench/vehicle_check.gd -- --out=<dir> --many=32 [--seconds=10] [--substeps=4]
+##   godot ... -s res://bench/vehicle_check.gd -- --out=<dir> --many=32 [--seconds=10] [--substeps=4] [--contact=0|1|2]
 ##
 ## Lanes, each a 1 400 kg rear-driven car (400 N·m, six gears, 0.34 m wheels on 0.3 m of suspension) driven by a
 ## program: full throttle from rest (the time to 100 km/h, the gears it went through), a stop from 100 km/h (the distance,
@@ -13,7 +13,8 @@ extends SceneTree
 ## with the brake held, a jump off a 1.5 m ramp at 60 km/h (upright after), a car parked on a turning turntable (kept
 ## where it carries it), a car driving off a slab on frictionless ground (the slab pushed back), a car parked on a
 ## 12-degree slope with the handbrake (held where it is) and one without a brake (rolling back), full throttle on ice (friction 0.25: a quarter of the speed),
-## coasting from 80 km/h (the engine's braking). One JSON line:
+## coasting from 80 km/h (the engine's braking); milestone 101 (decision 0209): a 12 cm curb and a 25 cm trench, each
+## by a car on rays and one whose tyres are cylinders. One JSON line:
 ## VEHICLE_CHECK {...}; exit
 ## code 1 when a lane did otherwise than expected. --many=N: N cars driving circles, the vehicles' step a frame and the
 ## frame's (headless). One JSON line: VEHICLE_MANY {...}.
@@ -150,6 +151,16 @@ func _car(pos: Vector3, color: Color) -> FellowVehicle3D:
 	return car
 
 
+func _contact(car: FellowVehicle3D, shape: int) -> void:
+	for w in car.get_children():
+		if w is FellowWheel3D:
+			(w as FellowWheel3D).contact_shape = shape
+
+
+func _front_left(car: FellowVehicle3D) -> FellowWheel3D:
+	return car.get_node("FrontLeft") as FellowWheel3D
+
+
 func _lane(name: String, car: FellowVehicle3D) -> Dictionary:
 	var lane := {"name": name, "car": car, "start": car.global_position, "t": 0.0, "phase": 0, "data": {}, "gears": []}
 	car.gear_changed.connect(func(g: int) -> void: lane.gears.append(g))
@@ -185,6 +196,8 @@ func _build() -> void:
 			c.throttle = 0.35
 			c.steering = 0.35
 			c.substeps = int(_arg("substeps", "4"))
+			if _arg("contact", "0") != "0":
+				_contact(c, int(_arg("contact", "0")))  # milestone 101: the tyres' shapes swept (1 a sphere, 2 a cylinder)
 			many_cars.append(c)
 		var cam := Camera3D.new()
 		root3d.add_child(cam)
@@ -277,6 +290,23 @@ func _build() -> void:
 	free.rotation_degrees = Vector3(12, 0, 0)
 	free.can_sleep = false
 	_lane("slope_free", free)
+	# Milestone 101 (decision 0209): on raised roads (slabs 0.3 m high: GodotPhysics3D's shape casts are unreliable
+	# against the 2 km ground box), a curb 12 cm high 20 m ahead, driven onto at 15 km/h, and a trench 25 cm wide and
+	# 30 cm deep, crossed at 10 km/h — each by a car on rays and one whose tyres are cylinders.
+	for k in 2:
+		var x := 200.0 + k * 12.0
+		_box(Vector3(x, 0.15, -5.0), Vector3(4.0, 0.3, 30.0), Color(0.55, 0.52, 0.48))
+		_box(Vector3(x, 0.21, -70.0), Vector3(4.0, 0.42, 100.0), Color(0.6, 0.57, 0.52))
+		var c := _car(Vector3(x, 0.4, 0), Color(0.75, 0.35, 0.3) if k == 0 else Color(0.3, 0.75, 0.4))
+		_contact(c, FellowWheel3D.CONTACT_RAY if k == 0 else FellowWheel3D.CONTACT_CYLINDER)
+		_lane("curb_ray" if k == 0 else "curb_cylinder", c)
+	for k in 2:
+		var x := 224.0 + k * 12.0
+		_box(Vector3(x, 0.15, -10.0), Vector3(4.0, 0.3, 40.0), Color(0.55, 0.52, 0.48))
+		_box(Vector3(x, 0.15, -130.25), Vector3(4.0, 0.3, 200.0), Color(0.55, 0.52, 0.48))
+		var c := _car(Vector3(x, 0.4, 0), Color(0.75, 0.35, 0.3) if k == 0 else Color(0.3, 0.75, 0.4))
+		_contact(c, FellowWheel3D.CONTACT_RAY if k == 0 else FellowWheel3D.CONTACT_CYLINDER)
+		_lane("gap_ray" if k == 0 else "gap_cylinder", c)
 
 	var cam := Camera3D.new()
 	root3d.add_child(cam)
@@ -418,6 +448,28 @@ func _drive(lane: Dictionary, dt: float) -> void:
 					d["comp_max"] = snappedf(maxf(d.get("comp_max", 0.0), (w as FellowWheel3D).get_compression()), 0.001)
 			if car.global_position.z < -45.0 and car.global_position.z > -75.0:
 				d["pitch_max_deg"] = snappedf(maxf(d.get("pitch_max_deg", 0.0), absf(rad_to_deg(asin(clampf(-car.global_basis.z.dot(Vector3.UP), -1.0, 1.0))))), 0.1)
+		"curb_ray", "curb_cylinder", "gap_ray", "gap_cylinder":
+			# Milestone 101: the front left suspension's largest change in a step and the body's vertical acceleration
+			# while the front axle meets the curb (or the trench), the suspension's least compression over the trench.
+			var curb: bool = lane.name.begins_with("curb")
+			_cruise(car, 15.0 if curb else 10.0)
+			var w := _front_left(car)
+			var axle_z: float = car.global_position.z - 1.35
+			var comp := w.get_compression()
+			var vy := car.linear_velocity.y
+			if d.has("comp_prev"):
+				var near: bool = (axle_z < -17.0 and axle_z > -23.0) if curb else (axle_z < -28.5 and axle_z > -32.0)
+				if near:
+					d["comp_step_max"] = snappedf(maxf(d.get("comp_step_max", 0.0), absf(comp - d.comp_prev)), 0.0001)
+					d["a_y_max_g"] = snappedf(maxf(d.get("a_y_max_g", 0.0), absf(vy - d.vy_prev) / dt / 9.81), 0.001)
+					d["comp_min_near"] = snappedf(minf(d.get("comp_min_near", 1.0), comp), 0.0001)
+				elif axle_z > (-15.0 if curb else -26.0) and axle_z < (-10.0 if curb else -24.0):
+					d["comp_before"] = snappedf(comp, 0.0001)
+			d["comp_prev"] = comp
+			d["vy_prev"] = vy
+			if t > 18.0 and not d.has("end_y"):
+				d["end_y"] = snappedf(car.global_position.y, 0.001)
+				d["end_z"] = snappedf(car.global_position.z, 0.1)
 		"handbrake":
 			if t < 8.0:
 				_cruise(car, 50.0)
@@ -552,7 +604,7 @@ func _finish() -> void:
 		var car: FellowVehicle3D = lane.car
 		var d: Dictionary = lane.data
 		var e := d.duplicate()
-		for k in ["v_prev", "a_smooth", "local0", "p0", "coast_t0"]:
+		for k in ["v_prev", "a_smooth", "local0", "p0", "coast_t0", "comp_prev", "vy_prev"]:
 			e.erase(k)
 		e["gears"] = lane.gears
 		e["end"] = [snappedf(car.global_position.x - lane.start.x, 0.1), snappedf(car.global_position.y, 0.01), snappedf(car.global_position.z, 0.1)]
@@ -593,10 +645,30 @@ func _finish() -> void:
 				ok = ok and d.get("turned_deg", 0.0) != 0.0 and d.get("drift_max", 99.0) < 0.2
 			"slab":
 				ok = ok and absf(d.get("p_car", 0.0)) > 2000.0 and absf(d.get("p_car", 0.0) + d.get("p_slab", 0.0)) < 0.15 * absf(d.get("p_car", 0.0))
+			"curb_ray", "curb_cylinder", "gap_ray", "gap_cylinder":
+				# Both onto the curb and over the trench (driven on past them).
+				var curb: bool = lane.name.begins_with("curb")
+				ok = ok and d.get("end_z", 0.0) < -40.0 and d.get("end_y", -1.0) > (0.25 if curb else 0.15)
 		e["ok"] = ok
 		if not ok:
 			failures.append(lane.name)
 		out[lane.name] = e
+	# Milestone 101: the cylinders meet the curb over several steps (the rays all at once, in one step), and bridge the
+	# trench (the rays drop into it).
+	if out.has("curb_cylinder"):
+		var cr: Dictionary = out.curb_ray
+		var cc: Dictionary = out.curb_cylinder
+		var gr: Dictionary = out.gap_ray
+		var gc: Dictionary = out.gap_cylinder
+		var gr_drop: float = gr.get("comp_before", 0.0) - gr.get("comp_min_near", 0.0)
+		var gc_drop: float = gc.get("comp_before", 0.0) - gc.get("comp_min_near", 0.0)
+		var cmp := {"curb_step_ray": cr.get("comp_step_max", 0.0), "curb_step_cylinder": cc.get("comp_step_max", 0.0),
+			"curb_a_ray_g": cr.get("a_y_max_g", 0.0), "curb_a_cylinder_g": cc.get("a_y_max_g", 0.0),
+			"gap_drop_ray": snappedf(gr_drop, 0.0001), "gap_drop_cylinder": snappedf(gc_drop, 0.0001)}
+		cmp["ok"] = cmp.curb_step_cylinder < cmp.curb_step_ray * 0.5 and cmp.curb_a_cylinder_g < cmp.curb_a_ray_g and cmp.gap_drop_ray > 0.05 and cmp.gap_drop_cylinder < 0.03
+		out["contact_shapes"] = cmp
+		if not cmp.ok:
+			failures.append("contact_shapes")
 	result["lanes"] = out
 	result["failures"] = failures
 	result["global"] = FellowVehicle3D.get_global_stats()

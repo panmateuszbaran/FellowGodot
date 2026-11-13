@@ -9,6 +9,13 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 101 — wheels that meet the ground with their shape (2026-11-13)
+
+- `FellowWheel3D.contact_shape` and `width` (decision 0209): a wheel's ground found by sweeping a sphere or a cylinder
+  of the tyre down its suspension instead of a ray — a curb met by the tyre's front and climbed over several steps
+  (0.12 → 0.05 m a step, the body's jolt 0.70 → 0.47-0.53 g), a trench narrower than the tyre bridged (0.085 →
+  0.015-0.021 m). Rays by default; a car's step 9 → 32 µs (GodotPhysics3D), 11.5 → 87 µs (Jolt) with cylinders.
+
 ## Milestone 100 — faces with expressions (2026-11-13)
 
 - `FellowFaceAnimator.set_expression()`, `clear_expressions()`, `expressions`, `speech_brows` (decision 0208):

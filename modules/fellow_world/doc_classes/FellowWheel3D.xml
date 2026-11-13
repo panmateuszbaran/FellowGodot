@@ -74,6 +74,9 @@
 		<member name="braked" type="bool" setter="set_braked" getter="is_braked" default="true">
 			If [code]true[/code], the brakes act on this wheel.
 		</member>
+		<member name="contact_shape" type="int" setter="set_contact_shape" getter="get_contact_shape" enum="FellowWheel3D.ContactShape" default="0">
+			How the ground under the wheel is found (milestone 101): [constant CONTACT_RAY] a ray down the suspension from the mount (the wheel stands on what is under its centre: cheap, for traffic); [constant CONTACT_SPHERE] or [constant CONTACT_CYLINDER] the tyre's shape swept down the suspension from fully compressed — the tyre meets a curb with its front and rises onto it over several steps, and bridges a gap narrower than itself; the contact's normal leans where it meets an edge. A swept shape costs more (two queries a wheel a step on an edge, one on flat ground, as against a ray): for the player's vehicle and those near it. With GodotPhysics3D, sweep against ground of a sensible size: its shape casts against a box kilometres across are erratic.
+		</member>
 		<member name="damping_compression" type="float" setter="set_damping_compression" getter="get_damping_compression" default="3000.0">
 			The damper's force per metre a second of the suspension's compression (N·s/m).
 		</member>
@@ -107,5 +110,19 @@
 		<member name="suspension_length" type="float" setter="set_suspension_length" getter="get_suspension_length" default="0.3">
 			The suspension's travel (metres): from the mount to the wheel's centre fully extended.
 		</member>
+		<member name="width" type="float" setter="set_width" getter="get_width" default="0.22">
+			The tyre's width, in metres (a [constant CONTACT_CYLINDER] contact's cylinder).
+		</member>
 	</members>
+	<constants>
+		<constant name="CONTACT_RAY" value="0" enum="ContactShape">
+			A ray down the suspension from the mount (milestone 77's contact).
+		</constant>
+		<constant name="CONTACT_SPHERE" value="1" enum="ContactShape">
+			A sphere of [member radius] swept down the suspension.
+		</constant>
+		<constant name="CONTACT_CYLINDER" value="2" enum="ContactShape">
+			A cylinder of [member radius] and [member width] along the (steered) axle swept down the suspension.
+		</constant>
+	</constants>
 </class>
