@@ -59,7 +59,7 @@ own) and a collector on the machine (Python's HTTP server, answering 200 or 500,
 | unreachable (a closed port) | both kept, no response | codes −3, −3; `(0, 2)`; both still there |
 | accepted (200) | both sent, oldest first, moved to `sent/` | codes 200, 200; `(2, 0)`; none left, both in `sent/` byte for byte |
 | what the collector received | the five fields, the report as a file | `kind` crash / report, `reason` SIGABRT / a soft failure, `project` Crash Check, `version` 1.2.3, `commit` the build's; `report` the file, `application/json`, its name, byte for byte |
-| TLS, the certificate trusted (a self-signed one for `localhost` the project bundles) | sent | 200, `(1, 0)` |
+| TLS, the certificate trusted (a self-signed one for `127.0.0.1` the project bundles) | sent | 200, `(1, 0)` |
 | TLS, the same collector, the certificate not trusted | refused at the handshake, nothing received | −4, `(0, 1)`, kept; the collector received nothing |
 | on their own (`upload_automatically`, `upload_minidumps` off) | the waiting report sent at the start, without its minidump | `(1, 0)`; fields and `report` only |
 
@@ -69,10 +69,11 @@ report, off, the cost): the same results.
 
 The laptop (job f403, Windows, a release template, MSVC): the crash's request 443 013 bytes, its 438 019-byte minidump
 in `upload_file_minidump` byte for byte; refused, accepted, TLS trusted and not, on their own: as on the cloud. The
-unreachable lane found Windows reporting a refused connection only at the TCP connection's own timeout (30 s a
-report): a collector not reached is now not tried again for the rest of the reports (30 s for the call, not 30 s a
-report). A connection limit of 10 s was tried and rejected: `localhost` on Windows tries its IPv6 address first and
-reached the collector's IPv4 one only after 10 s (job f404: the TLS lanes failed with −3).
+unreachable lane found Godot's Windows sockets reporting a refused connection only at the connection's timeout
+(`network/limits/tcp/connect_timeout_seconds`, 30 s a report): a collector not reached is now not tried again for the
+rest of the reports (30 s for the call). The same delay met the TLS lanes, whose collector was `localhost`: Windows
+tries its IPv6 address first, refused, and the IPv4 one only 30 s later (jobs f404 and f405: a 10 s connection limit,
+then exactly 30 s, cut them off; f403 had passed by 30 ms). The lanes now use `127.0.0.1` (the certificate's name).
 
 ## Cost
 

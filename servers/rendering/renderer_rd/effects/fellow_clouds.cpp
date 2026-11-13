@@ -28,13 +28,12 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-
 #include "fellow_clouds.h"
 
+#include "fellow_camera_relative.h"
 #include "fellow_weather.h"
 
 #include "core/object/callable_mp.h"
-
 #include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
 #include "servers/rendering/renderer_rd/uniform_set_cache_rd.h"
 
@@ -147,8 +146,10 @@ void FellowClouds::process(const Params &p_params) {
 
 	UBO u;
 	memset(&u, 0, sizeof(UBO));
-	_fellow_clouds_store_matrix(p_params.view_projection.inverse(), u.inv_view_projection);
-	_fellow_clouds_store_matrix(p_params.prev_view_projection, u.prev_view_projection);
+	// Milestone 103 (decision 0212): the view's directions relative to the camera, the reprojection and the flash
+	// taken there on the CPU (the field's position stays the camera's, in km).
+	_fellow_clouds_store_matrix(fellow_inverse_view_projection_relative(p_params.view_projection, p_params.camera_position), u.inv_view_projection);
+	_fellow_clouds_store_matrix(fellow_view_projection_relative(p_params.prev_view_projection, p_params.camera_position), u.prev_view_projection);
 	u.camera_position[0] = p_params.camera_position.x;
 	u.camera_position[1] = p_params.camera_position.y;
 	u.camera_position[2] = p_params.camera_position.z;
@@ -188,9 +189,9 @@ void FellowClouds::process(const Params &p_params) {
 	u.flags[1] = interleaved ? 1 : 0;
 	u.flags[2] = int32_t(p_params.frame & 3);
 	if (p_params.flash) {
-		u.flash[0] = p_params.flash_position.x;
-		u.flash[1] = p_params.flash_position.y;
-		u.flash[2] = p_params.flash_position.z;
+		u.flash[0] = p_params.flash_position.x - p_params.camera_position.x;
+		u.flash[1] = p_params.flash_position.y - p_params.camera_position.y;
+		u.flash[2] = p_params.flash_position.z - p_params.camera_position.z;
 		u.flash[3] = MAX(p_params.flash_radius, 1.0f);
 		u.flash_color[0] = p_params.flash_color.r;
 		u.flash_color[1] = p_params.flash_color.g;

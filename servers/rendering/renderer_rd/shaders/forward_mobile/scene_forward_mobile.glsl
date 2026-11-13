@@ -464,7 +464,7 @@ void vertex_shader(in vec3 vertex,
 
 	// Overwrite the translation part of modelview with improved precision.
 	vec3 temp_precision; // Will be ignored.
-	modelview[3].xyz = double_add_vec3(model_origin, model_precision, inv_view_matrix[3].xyz, view_precision, temp_precision);
+	modelview[3].xyz = double_add_vec3(model_origin, model_precision, -inv_view_matrix[3].xyz, -view_precision, temp_precision); // FellowEngine (decision 0211): the camera's position stored as it is
 	modelview[3].xyz = mat3(read_view_matrix) * modelview[3].xyz;
 #else
 	mat4 modelview = read_view_matrix * model_matrix;

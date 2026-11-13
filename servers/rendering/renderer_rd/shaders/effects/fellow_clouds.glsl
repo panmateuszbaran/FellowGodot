@@ -26,8 +26,8 @@ layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 #endif
 
 layout(set = 0, binding = 0, std140) uniform Params {
-	mat4 inv_view_projection; // NDC (x, y, depth * 2 - 1) to world
-	mat4 prev_view_projection; // world to the previous frame's clip (the reprojection of the clouds' far points)
+	mat4 inv_view_projection; // NDC (x, y, depth * 2 - 1) to the position relative to the camera (decision 0212)
+	mat4 prev_view_projection; // relative to the camera, to the previous frame's clip (the reprojection of the clouds' far points)
 	vec4 camera_position; // world, metres; w: the ground's height
 	vec4 sun_direction; // world, towards the sun; w: the time (s)
 	vec4 sun_color; // the sun's illuminance (colour * energy)
@@ -38,7 +38,7 @@ layout(set = 0, binding = 0, std140) uniform Params {
 	ivec4 sizes; // trace w, h; screen w, h
 	ivec4 flags; // x: 1 the atmosphere's tables are bound (the sun through the atmosphere, the sky's light); y: 1 interleaved
 	// (each frame one pixel of every 2 x 2 block traced, decision 0115); z: this frame's pixel in the block (0-3)
-	vec4 flash; // a lightning flash (decision 0131): its position (world, m), the radius it lights (m)
+	vec4 flash; // a lightning flash (decision 0131): its position relative to the camera (m), the radius it lights (m)
 	vec4 flash_color; // its light (colour * energy); w: 1 when there is one
 	vec4 shadow; // the clouds' shadow map (decision 0133): its centre x, z (m), its side (m), the ground's height (m)
 	vec4 precip; // rain shafts (decision 0135): the rain's rate (0..1), 1 when it snows
@@ -326,7 +326,7 @@ void main() {
 	}
 	vec2 uv = (vec2(pos) + 0.5) / vec2(params.sizes.xy);
 	vec4 wp = params.inv_view_projection * vec4(uv * 2.0 - 1.0, 0.5, 1.0);
-	vec3 d = normalize(wp.xyz / wp.w - params.camera_position.xyz);
+	vec3 d = normalize(wp.xyz / wp.w);
 	float cam_h = max(params.camera_position.y - params.camera_position.w, 0.0) * 0.001;
 	vec3 o = vec3(0.0, PLANET_RADIUS + cam_h, 0.0) + vec3(params.camera_position.x, 0.0, params.camera_position.z) * 0.001;
 	float r_bottom = PLANET_RADIUS + params.layer.x;
@@ -538,8 +538,8 @@ void main() {
 	}
 	// The clouds' far point reprojected: rotation and slow translation (the clouds are kilometres away).
 	vec4 wp = params.inv_view_projection * vec4(uv * 2.0 - 1.0, 0.5, 1.0);
-	vec3 dir = normalize(wp.xyz / wp.w - params.camera_position.xyz);
-	vec4 prev_clip = params.prev_view_projection * vec4(params.camera_position.xyz + dir * 5000.0, 1.0);
+	vec3 dir = normalize(wp.xyz / wp.w);
+	vec4 prev_clip = params.prev_view_projection * vec4(dir * 5000.0, 1.0);
 	vec2 prev_uv = (prev_clip.xy / prev_clip.w) * 0.5 + 0.5;
 	if (params.misc.z > 0.0 && prev_clip.w > 0.0 && all(greaterThanEqual(prev_uv, vec2(0.0))) && all(lessThanEqual(prev_uv, vec2(1.0)))) {
 		// Clamped to this frame's neighbourhood (moving clouds, uncovered sky).
@@ -574,8 +574,8 @@ void main() {
 		// as much as they are opaque. Here, at full resolution, every frame: the traces' accumulation over frames would
 		// smear a flash of a few frames.
 		vec4 wp = params.inv_view_projection * vec4(uv * 2.0 - 1.0, 0.5, 1.0);
-		vec3 dir = normalize(wp.xyz / wp.w - params.camera_position.xyz);
-		vec3 to_flash = params.flash.xyz - params.camera_position.xyz;
+		vec3 dir = normalize(wp.xyz / wp.w);
+		vec3 to_flash = params.flash.xyz;
 		float t = dot(to_flash, dir);
 		if (t > 0.0) {
 			float miss = length(to_flash - dir * t) / params.flash.w;

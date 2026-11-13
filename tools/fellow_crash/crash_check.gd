@@ -106,10 +106,11 @@ func _initialize() -> void:
 				"msec": Time.get_ticks_msec() - t0,
 			})
 		"makecert":
-			# A self-signed certificate for localhost, for the TLS upload's server.
+			# A self-signed certificate for 127.0.0.1, for the TLS upload's server (not localhost: Windows tries its IPv6
+			# address first, and Godot sees a refused connection there only at the connection's timeout).
 			var crypto := Crypto.new()
 			var key := crypto.generate_rsa(2048)
-			var cert := crypto.generate_self_signed_certificate(key, "CN=localhost,O=FellowEngine,C=PL", "20250101000000", "20350101000000")
+			var cert := crypto.generate_self_signed_certificate(key, "CN=127.0.0.1,O=FellowEngine,C=PL", "20250101000000", "20350101000000")
 			key.save(args["key"])
 			cert.save(args["cert"])
 			_out("MAKECERT", {"ok": FileAccess.file_exists(args["key"]) and FileAccess.file_exists(args["cert"])})

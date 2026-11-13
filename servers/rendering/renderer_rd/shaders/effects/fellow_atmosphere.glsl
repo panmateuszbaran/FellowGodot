@@ -23,7 +23,7 @@ layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 #endif
 
 layout(set = 0, binding = 0, std140) uniform Params {
-	mat4 inv_view_projection; // NDC (x, y, 1) to world direction (uses only the direction)
+	mat4 inv_view_projection; // NDC (x, y, depth) to the position relative to the camera (decision 0212)
 	vec4 sun_direction; // world, towards the sun; w: the sun's disk angular radius
 	vec4 camera_position; // world (metres); w: the ground's height (metres)
 	vec4 rayleigh_scattering; // per km; w: scale height (km)
@@ -328,7 +328,7 @@ void main() {
 	}
 	vec2 uv = (vec2(pos.xy) + 0.5) / vec2(size.xy);
 	vec4 p = params.inv_view_projection * vec4(uv * 2.0 - 1.0, 0.5, 1.0);
-	vec3 d = normalize(p.xyz / p.w - params.camera_position.xyz);
+	vec3 d = normalize(p.xyz / p.w);
 	float r = clamp(bottom_radius() + max(params.camera_position.y - params.camera_position.w, 0.0) * 0.001, bottom_radius() + 0.0005, top_radius() - 0.0005);
 	vec3 o = vec3(0.0, r, 0.0);
 	float s = (float(pos.z) + 1.0) / float(size.z);
@@ -358,7 +358,7 @@ void main() {
 	}
 	vec2 uv = (vec2(pos) + 0.5) / vec2(params.screen.xy);
 	vec4 wp = params.inv_view_projection * vec4(uv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
-	float dist_km = length(wp.xyz / wp.w - params.camera_position.xyz) * 0.001 * params.sun_illuminance.w;
+	float dist_km = length(wp.xyz / wp.w) * 0.001 * params.sun_illuminance.w;
 	float slices = float(params.sizes.w);
 	float z = sqrt(max(dist_km, 0.0) / params.radii.z) * slices - 1.0;
 	float w = clamp(z + 1.0, 0.0, 1.0); // before the first slice's distance: faded in from nothing

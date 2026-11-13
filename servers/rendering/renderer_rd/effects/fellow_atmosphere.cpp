@@ -28,8 +28,9 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-
 #include "fellow_atmosphere.h"
+
+#include "fellow_camera_relative.h"
 
 #include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
 #include "servers/rendering/renderer_rd/uniform_set_cache_rd.h"
@@ -95,7 +96,9 @@ static void _fellow_atmo_store_matrix(const Projection &p_m, float *r_dst) {
 void FellowAtmosphere::_fill_ubo(const Params &p_params, const Size2i &p_screen) {
 	const Settings &s = p_params.settings;
 	UBO &u = ubo_data;
-	_fellow_atmo_store_matrix(p_params.view_projection.inverse(), u.inv_view_projection);
+	// Milestone 103 (decision 0212): NDC to the position relative to the camera (the view's directions, a surface's
+	// distance).
+	_fellow_atmo_store_matrix(fellow_inverse_view_projection_relative(p_params.view_projection, p_params.camera_position), u.inv_view_projection);
 	const Vector3 sun = p_params.sun_direction.normalized();
 	u.sun_direction[0] = sun.x;
 	u.sun_direction[1] = sun.y;

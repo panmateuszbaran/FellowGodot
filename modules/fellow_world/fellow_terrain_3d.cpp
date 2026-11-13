@@ -1410,9 +1410,9 @@ void FellowTerrain3D::_process_lod() {
 // A collision region's height map shape data: the heights, NaN at holes (decision 0172: Jolt, Godot's 3D physics, has
 // no collision in a triangle with a NaN vertex).
 Dictionary FellowTerrain3D::_collision_region_data(int p_x0, int p_z0, int p_w, int p_d) const {
-	PackedFloat32Array h;
+	Vector<real_t> h; // the physics servers' heights are real_t (PackedFloat64Array with precision=double)
 	h.resize(p_w * p_d);
-	float *hw = h.ptrw();
+	real_t *hw = h.ptrw();
 	float lo = 1e30f;
 	float hi = -1e30f;
 	const bool with_holes = hole_count > 0 && !holes.is_empty();

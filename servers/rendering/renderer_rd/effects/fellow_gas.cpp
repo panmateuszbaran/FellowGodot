@@ -30,6 +30,8 @@
 
 #include "fellow_gas.h"
 
+#include "fellow_camera_relative.h"
+
 #include "core/config/project_settings.h"
 #include "core/object/callable_mp.h"
 #include "servers/rendering/fellow_settings.h"
@@ -923,10 +925,13 @@ bool FellowGas::begin_frame(const FrameParams &p_frame) {
 
 	RenderUBO u;
 	memset(&u, 0, sizeof(RenderUBO));
-	_fellow_gas_store_matrix(p_frame.view_projection.inverse(), u.inv_view_projection);
-	u.camera_position[0] = p_frame.camera_position.x;
-	u.camera_position[1] = p_frame.camera_position.y;
-	u.camera_position[2] = p_frame.camera_position.z;
+	// Milestone 103 (decision 0212): the trace relative to the camera — the inverse view projection, the grids, the fire
+	// lights and the view taken there on the CPU; the camera at the origin.
+	const Vector3 cam = p_frame.camera_position;
+	_fellow_gas_store_matrix(fellow_inverse_view_projection_relative(p_frame.view_projection, cam), u.inv_view_projection);
+	u.camera_position[0] = 0.0f;
+	u.camera_position[1] = 0.0f;
+	u.camera_position[2] = 0.0f;
 	u.camera_position[3] = p_frame.exposure;
 	const Vector3 sun = p_frame.sun_direction.normalized();
 	u.sun_direction[0] = sun.x;
@@ -952,7 +957,7 @@ bool FellowGas::begin_frame(const FrameParams &p_frame) {
 		}
 	}
 	u.sky_xform[15] = 1.0f;
-	_fellow_gas_store_matrix(Projection(p_frame.view), u.view);
+	_fellow_gas_store_matrix(Projection(fellow_transform_relative(p_frame.view, cam)), u.view);
 	trace_size = Size2i((p_frame.size.x + 1) / 2, (p_frame.size.y + 1) / 2);
 	u.sizes[0] = trace_size.x;
 	u.sizes[1] = trace_size.y;
@@ -969,7 +974,7 @@ bool FellowGas::begin_frame(const FrameParams &p_frame) {
 	for (uint32_t i = 0; i < candidates.size(); i++) {
 		const Volume &v = volumes[candidates[i].id];
 		const RenderParams &r = v.render;
-		const Transform3D w2g = r.grid_to_world.affine_inverse();
+		const Transform3D w2g = fellow_transform_relative(r.grid_to_world.affine_inverse(), cam);
 		for (int j = 0; j < 3; j++) {
 			float *row = j == 0 ? u.volumes[i].w2g0 : (j == 1 ? u.volumes[i].w2g1 : u.volumes[i].w2g2);
 			row[0] = w2g.basis.rows[j][0];
@@ -995,9 +1000,9 @@ bool FellowGas::begin_frame(const FrameParams &p_frame) {
 		u.volumes[i].emission[1] = r.ambient_temperature;
 		u.volumes[i].emission[2] = MAX(r.step_cells, 0.25f) * mpc;
 		u.volumes[i].emission[3] = CLAMP(r.anisotropy, -0.95f, 0.95f);
-		u.volumes[i].fire_light_position[0] = r.fire_light_position[0];
-		u.volumes[i].fire_light_position[1] = r.fire_light_position[1];
-		u.volumes[i].fire_light_position[2] = r.fire_light_position[2];
+		u.volumes[i].fire_light_position[0] = r.fire_light_position[0] - cam.x;
+		u.volumes[i].fire_light_position[1] = r.fire_light_position[1] - cam.y;
+		u.volumes[i].fire_light_position[2] = r.fire_light_position[2] - cam.z;
 		u.volumes[i].fire_light_position[3] = r.fire_light ? 1.0f : 0.0f;
 		u.volumes[i].fire_light_intensity[0] = r.fire_light_intensity[0] * p_frame.exposure;
 		u.volumes[i].fire_light_intensity[1] = r.fire_light_intensity[1] * p_frame.exposure;

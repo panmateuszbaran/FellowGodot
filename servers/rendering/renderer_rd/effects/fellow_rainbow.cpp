@@ -30,6 +30,8 @@
 
 #include "fellow_rainbow.h"
 
+#include "fellow_camera_relative.h"
+
 #include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
 #include "servers/rendering/renderer_rd/uniform_set_cache_rd.h"
 
@@ -161,7 +163,8 @@ void FellowRainbow::process(const Params &p_params) {
 
 	UBO u;
 	memset(&u, 0, sizeof(UBO));
-	const Projection inv = p_params.view_projection.inverse();
+	// Milestone 103 (decision 0212): NDC to the position relative to the camera (the bow's direction and distance).
+	const Projection inv = fellow_inverse_view_projection_relative(p_params.view_projection, p_params.camera_position);
 	for (int i = 0; i < 4; i++) {
 		for (int j = 0; j < 4; j++) {
 			u.inv_view_projection[i * 4 + j] = inv.columns[i][j];

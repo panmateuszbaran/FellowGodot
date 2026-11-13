@@ -13,7 +13,7 @@ report written by the game; the reports off (none written); the cost of printing
 milestone 98: the main thread stalled for 3.5 s and going on, and frozen in a script's loop (killed), each a hang
 report; milestone 102: the reports uploaded to a collector on this machine (multipart/form-data, as Sentry's,
 BugSplat's and Backtrace's minidump endpoints take them) — refused (500), unreachable, accepted, over TLS (a
-self-signed certificate for localhost), and on their own at the start without minidumps. One
+self-signed certificate for 127.0.0.1), and on their own at the start without minidumps. One
 JSON line: CRASH_CHECK {...} (also <dir>/crash_check.json); exit code 1 when something was otherwise than expected.
 """
 
@@ -248,7 +248,7 @@ def upload_lanes(godot, out_dir, failures):
     finally:
         col.close()
 
-    # TLS: a certificate for localhost the project trusts (network/tls/certificate_bundle_override), and the same
+    # TLS: a certificate for 127.0.0.1 the project trusts (network/tls/certificate_bundle_override), and the same
     # server refused by a project that does not trust it.
     cert = os.path.join(out_dir, "collector.crt")
     key = os.path.join(out_dir, "collector.key")
@@ -266,7 +266,7 @@ def upload_lanes(godot, out_dir, failures):
                 write_project(proj, reps, extra=f"\n[network]\n\ntls/certificate_bundle_override=\"{cert.replace(os.sep, '/')}\"\n" if trusted else "")
                 run(godot, proj, "report")
                 before = len(col.received)
-                u = _upload(godot, proj, f"https://localhost:{col.port}/ok")
+                u = _upload(godot, proj, f"https://127.0.0.1:{col.port}/ok")
                 tls[name] = {k: u.get(k) for k in ("uploaded", "finished", "reports_after", "msec", "rc")}
                 tls[name]["received"] = len(col.received) - before
                 if trusted:

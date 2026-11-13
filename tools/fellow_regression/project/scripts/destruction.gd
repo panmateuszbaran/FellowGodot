@@ -68,6 +68,6 @@ func _ready() -> void:
 	var glass := _destructible(gl, gls, Vector3(2.8, 1.3, 0.2), glass_mat, glass_mat, 24, 9)
 	glass.density = 2500.0
 	crate.burst_speed = 3.0
-	crate.break_apart(Vector3(-2.1, 0.95, 0.4), Vector3(0, 0, -900))
-	pillar.break_apart(Vector3(0.2, 2.0, -0.75), Vector3(0, 0, -400))
-	glass.break_apart(Vector3(2.8, 1.3, 0.21), Vector3(0, 0, -15))
+	crate.break_apart(to_global(Vector3(-2.1, 0.95, 0.4)), Vector3(0, 0, -900))
+	pillar.break_apart(to_global(Vector3(0.2, 2.0, -0.75)), Vector3(0, 0, -400))
+	glass.break_apart(to_global(Vector3(2.8, 1.3, 0.21)), Vector3(0, 0, -15))

@@ -11,7 +11,7 @@
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 
 layout(set = 0, binding = 0, std140) uniform Params {
-	mat4 inv_view_projection; // NDC (x, y, depth) to world
+	mat4 inv_view_projection; // NDC (x, y, depth) to the position relative to the camera (decision 0212)
 	vec4 camera_position; // world (m); w: ln 2 / the distance at which half the bow shows (1/m)
 	vec4 anti_sun; // the point opposite the sun (unit)
 	vec4 light; // the bow's brightness (rgb)
@@ -41,13 +41,13 @@ void main() {
 	float rain = 1.0;
 	if (depth > 0.0) {
 		vec4 wp = params.inv_view_projection * vec4(ndc, depth, 1.0);
-		vec3 v = wp.xyz / wp.w - cam;
+		vec3 v = wp.xyz / wp.w;
 		float dist = length(v);
 		d = v / max(dist, 1e-4);
 		rain = 1.0 - exp(-dist * params.camera_position.w);
 	} else {
 		vec4 wp = params.inv_view_projection * vec4(ndc, 0.5, 1.0);
-		d = normalize(wp.xyz / wp.w - cam);
+		d = normalize(wp.xyz / wp.w);
 	}
 	float theta = degrees(acos(clamp(dot(d, params.anti_sun.xyz), -1.0, 1.0)));
 	if (theta <= TABLE_MIN || theta >= TABLE_MAX) {
