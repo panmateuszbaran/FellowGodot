@@ -1,6 +1,6 @@
 # FellowEngine — milestone 100 report (faces with expressions)
 
-Status: **IN PROGRESS** (2026-11-13): the owner said "ok kontynuuj". Branch `fellow/geometry`. Decision record:
+Status: **FINAL** (2026-11-13): the owner said "ok kontynuuj". Branch `fellow/geometry`. Decision record:
 `docs/decisions/0208-face-expressions.md`.
 
 ## 0. Result
@@ -24,11 +24,13 @@ Status: **IN PROGRESS** (2026-11-13): the owner said "ok kontynuuj". Branch `fel
 * Decision 0208's table: the editor build and the release template the same; under Movie Maker the mouth as before.
 * The regression scene `face`: exact against its golden, the release template against the editor.
 * The full regression suite (35 scenes) exact on milestone 99's build (this one touches only the face node).
-* The laptop: next job.
+* The laptop (job f401, a release template, MSVC): both lanes as on the cloud (the six raises at the same times);
+  under Movie Maker the mouth as before.
 
 ## 3. Measurements
 
-A face's frame 0.37-0.43 µs (0.37-0.39 before).
+A face's frame 0.37-0.43 µs on the cloud (0.37-0.39 before); on the laptop 0.41-0.44 µs (0.28 at milestone 96: the
+seventeen channels more written, the level read for the brows) — 100 faces 0.04 ms a frame.
 
 ## 4. Next
 

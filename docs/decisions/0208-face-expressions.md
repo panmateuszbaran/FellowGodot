@@ -47,7 +47,8 @@ half the threshold of its average.
 ## Cost
 
 A face's frame 0.37-0.43 µs with the new channels and the level read for the brows (0.37-0.39 before; 100 faces
-0.04 ms a frame, the release template on the cloud).
+0.04 ms a frame, the release template on the cloud); on the laptop (job f401) 0.41-0.44 µs, 0.28 at milestone 96. The
+laptop's lanes and listening: the same results.
 
 ## Decision
 
