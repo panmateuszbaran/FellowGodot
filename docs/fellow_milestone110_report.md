@@ -83,7 +83,8 @@ its space) hangs on a `HingeJoint3D` along it instead, through the same point (t
 from its last hit). `vehicle_check.gd`'s lane `door`: a car's left door (0.06 × 0.6 × 1.0 m, the axis vertical) hit
 at its rear end at rest hangs from its front edge; the car then turns right at 25 km/h and the door swings open — at
 4 s 94.8° (GodotPhysics3D; Jolt 94.6°), its front edge 4.7 cm from where it was (the joint's give: no limit stops the
-door), its rear end level. The other lanes as before; the editor build and the release template the same.
+door), its rear end level. The other lanes as before; the editor build and the release template the same; the laptop
+(job f425) the same values with both engines.
 
 ## 7. Next
 
