@@ -477,6 +477,13 @@ Loose ground and fading marks (milestone 88, decision 0196), on `FellowVehicleEf
 (15 m/s), `rut_opacity` (0.3); `mark_lifetime` (0 s: the marks stay); stats `dusting`, `on_loose_ground`,
 `visible_segments`.
 
+Dents (milestone 105, decision 0213): `FellowVehicleDamage3D` (a `Node3D`, a child of a `FellowVehicle3D`; it turns the
+vehicle's contact reporting on): `impulse_threshold` (2 500 N·s in a physics step), `softness` (2·10⁻⁵ m per N·s
+beyond it), `max_depth` (0.3 m), `radius` (0.7 m), `mesh_paths` (empty: every mesh of the vehicle but its wheels');
+`apply_impact(position, direction, impulse)`, `repair()`, `get_damage()` (0-1), `get_deepest_dent()`,
+`get_vertex_offset()`, `get_stats()`; the signal `impacted(position, impulse, depth)`. Bench `bench/vehicle_check.gd`
+(the lanes `crash`, `tap`).
+
 ## Sound through the scene's geometry (milestone 78)
 
 Module `fellow_world`; nothing changes without the node (decision 0186). `FellowAcoustics3D` (a `Node3D`; where it is

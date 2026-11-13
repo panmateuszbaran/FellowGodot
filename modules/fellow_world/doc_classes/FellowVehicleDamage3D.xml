@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="FellowVehicleDamage3D" inherits="Node3D" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+	<brief_description>
+		FellowEngine: a vehicle's body dented where it hits.
+	</brief_description>
+	<description>
+		A child of a [FellowVehicle3D]. It turns the vehicle's contact reporting on ([member RigidBody3D.contact_monitor], at least 8 [member RigidBody3D.max_contacts_reported]) and reads the body's contacts every physics step: when their impulses together exceed [member impulse_threshold], each contact pushes the vertices of the vehicle's meshes within [member radius] of it into the body (along its normal, towards the body's centre of mass), [member softness] metres for each N·s beyond the threshold, falling off smoothly to the radius's edge; no vertex moves more than [member max_depth] from where it was. The dented meshes are copies made at the first impact (the originals are kept: [method repair]); their normals are recomputed from the dented triangles.
+		The meshes are those of [member mesh_paths], or without them every [MeshInstance3D] of the vehicle but those of its wheels. A mesh with blend shapes is left as it is. The collision shapes are not changed. See [code]docs/decisions/0213-vehicle-damage.md[/code].
+		[codeblock]
+		var damage = FellowVehicleDamage3D.new()
+		car.add_child(damage)
+		damage.impacted.connect(func(position, impulse, depth): print("dented ", depth, " m"))
+		[/codeblock]
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="apply_impact">
+			<return type="void" />
+			<param index="0" name="position" type="Vector3" />
+			<param index="1" name="direction" type="Vector3" />
+			<param index="2" name="impulse" type="float" />
+			<description>
+				Dents the body as an impact would (an explosion's blast, a scripted crash): at [param position] (global), pushed along [param direction] (into the body), as deep as an impulse of [param impulse] N·s makes it. Below [member impulse_threshold] nothing happens.
+			</description>
+		</method>
+		<method name="get_damage" qualifiers="const">
+			<return type="float" />
+			<description>
+				The deepest dent as a share of [member max_depth] (0-1): for the game's damage model (the engine's power, the steering's pull, a smoking bonnet).
+			</description>
+		</method>
+		<method name="get_deepest_dent" qualifiers="const">
+			<return type="float" />
+			<description>
+				The largest distance any vertex has moved, in metres.
+			</description>
+		</method>
+		<method name="get_stats" qualifiers="const">
+			<return type="Dictionary" />
+			<description>
+				Diagnostics: [code]impacts[/code], [code]deepest[/code], [code]damage[/code], [code]deform_usec[/code] (the time spent denting), [code]meshes[/code], [code]dented_meshes[/code], [code]vertices[/code] (of the meshes copied).
+			</description>
+		</method>
+		<method name="get_vertex_offset" qualifiers="const">
+			<return type="Vector3" />
+			<param index="0" name="mesh" type="NodePath" />
+			<param index="1" name="surface" type="int" />
+			<param index="2" name="vertex" type="int" />
+			<description>
+				How far a vertex of a mesh (its path from this node) has been dented, in the mesh's space.
+			</description>
+		</method>
+		<method name="repair">
+			<return type="void" />
+			<description>
+				Puts the original meshes back and forgets the dents.
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="impulse_threshold" type="float" setter="set_impulse_threshold" getter="get_impulse_threshold" default="2500.0">
+			The impulse (N·s) the body's contacts must exceed in one physics step before it dents: below it bumps, kerbs, pushes and a 1 400 kg car meeting a wall at 5 km/h (about 1 700 N·s a step) leave it as it is; at 30 km/h the wall takes about 6 600 N·s in its first step.
+		</member>
+		<member name="max_depth" type="float" setter="set_max_depth" getter="get_max_depth" default="0.3">
+			The farthest a vertex is moved from where it was, in metres, however many impacts.
+		</member>
+		<member name="mesh_paths" type="NodePath[]" setter="set_mesh_paths" getter="get_mesh_paths" default="[]">
+			The meshes to dent (paths from this node). Empty: every [MeshInstance3D] of the vehicle but its wheels'.
+		</member>
+		<member name="radius" type="float" setter="set_radius" getter="get_radius" default="0.7">
+			How far from a contact the body is dented, in metres.
+		</member>
+		<member name="softness" type="float" setter="set_softness" getter="get_softness" default="2e-05">
+			Metres of dent for each N·s of impulse beyond [member impulse_threshold] (2e-5: about 10 cm at 30 km/h for a 1 400 kg car).
+		</member>
+	</members>
+	<signals>
+		<signal name="impacted">
+			<param index="0" name="position" type="Vector3" />
+			<param index="1" name="impulse" type="float" />
+			<param index="2" name="depth" type="float" />
+			<description>
+				An impact dented the body: where (global), its impulse (N·s) and the dent's depth at its centre (m).
+			</description>
+		</signal>
+	</signals>
+</class>

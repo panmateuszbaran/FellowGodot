@@ -14,7 +14,9 @@ extends SceneTree
 ## where it carries it), a car driving off a slab on frictionless ground (the slab pushed back), a car parked on a
 ## 12-degree slope with the handbrake (held where it is) and one without a brake (rolling back), full throttle on ice (friction 0.25: a quarter of the speed),
 ## coasting from 80 km/h (the engine's braking); milestone 101 (decision 0209): a 12 cm curb and a 25 cm trench, each
-## by a car on rays and one whose tyres are cylinders. One JSON line:
+## by a car on rays and one whose tyres are cylinders; milestone 105 (decision 0213): cars whose bodies dent
+## (FellowVehicleDamage3D) driven into a wall at 30 km/h (the front dented, the rear not) and at 5 km/h (nothing), the
+## bumps lane's car undented. One JSON line:
 ## VEHICLE_CHECK {...}; exit
 ## code 1 when a lane did otherwise than expected. --many=N: N cars driving circles, the vehicles' step a frame and the
 ## frame's (headless). One JSON line: VEHICLE_MANY {...}.
@@ -32,7 +34,7 @@ var save_frames := false
 var grid := false
 var shot_size := Vector2i(480, 320)
 var strip_times := [2.0, 6.0, 10.0, 14.0, 18.0, 22.0]
-var strip_lanes := ["accel", "brake", "skidpad", "lane_change", "bumps", "jump"]
+var strip_lanes := ["accel", "brake", "skidpad", "lane_change", "bumps", "jump", "crash"]
 var shots := {}
 var viewports := {}
 var cameras := {}
@@ -149,6 +151,54 @@ func _car(pos: Vector3, color: Color) -> FellowVehicle3D:
 			car.add_child(w)
 	root3d.add_child(car)
 	return car
+
+
+# Milestone 105: the car's body a subdivided box (its vertices to dent), a FellowVehicleDamage3D under it.
+func _damage_car(car: FellowVehicle3D) -> FellowVehicle3D:
+	for c in car.get_children():
+		if c is MeshInstance3D and (c as MeshInstance3D).mesh is BoxMesh and ((c as MeshInstance3D).mesh as BoxMesh).size.z > 4.0:
+			var bm: BoxMesh = ((c as MeshInstance3D).mesh as BoxMesh).duplicate()
+			bm.subdivide_width = 8
+			bm.subdivide_height = 4
+			bm.subdivide_depth = 20
+			(c as MeshInstance3D).mesh = bm
+			c.name = "Body"
+			car.set_meta("body_mesh", bm)  # the dents replace the instance's mesh with a copy
+	var dmg := FellowVehicleDamage3D.new()
+	dmg.name = "Damage"
+	car.add_child(dmg)
+	dmg.impacted.connect(func(p: Vector3, j: float, depth: float) -> void:
+		if not car.has_meta("impacts"):
+			car.set_meta("impacts", [])
+		car.get_meta("impacts").append([snappedf(j, 1.0), snappedf(depth, 0.0001), snappedf(car.get_speed_kmh(), 0.1)]))
+	return car
+
+
+# The body's dents by region (its original vertices' z: the front -2.1 m, the rear +2.1 m): the largest in each, and its
+# direction's share along +Z (into the body, for the front).
+func _dents(car: FellowVehicle3D) -> Dictionary:
+	var dmg: FellowVehicleDamage3D = car.get_node("Damage")
+	var arrays: Array = (car.get_meta("body_mesh") as BoxMesh).get_mesh_arrays()
+	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var front := 0.0
+	var rear := 0.0
+	var middle := 0.0
+	var along := 0.0
+	for i in verts.size():
+		var o := dmg.get_vertex_offset(NodePath("../Body"), 0, i)
+		var l := o.length()
+		if verts[i].z < -1.6:
+			if l > front:
+				front = l
+				along = o.z / maxf(l, 1e-9)
+		elif verts[i].z > 1.6:
+			rear = maxf(rear, l)
+		else:
+			middle = maxf(middle, l)
+	var st := dmg.get_stats()
+	return {"front_m": snappedf(front, 0.0001), "rear_m": snappedf(rear, 0.0001), "middle_m": snappedf(middle, 0.0001), "front_along_z": snappedf(along, 0.001),
+		"deepest_m": snappedf(dmg.get_deepest_dent(), 0.0001), "damage": snappedf(dmg.get_damage(), 0.001), "impacts": car.get_meta("impacts", []),
+		"dented_meshes": st.dented_meshes, "deform_usec": st.deform_usec, "vertices": st.vertices}
 
 
 func _contact(car: FellowVehicle3D, shape: int) -> void:
@@ -307,6 +357,13 @@ func _build() -> void:
 		var c := _car(Vector3(x, 0.4, 0), Color(0.75, 0.35, 0.3) if k == 0 else Color(0.3, 0.75, 0.4))
 		_contact(c, FellowWheel3D.CONTACT_RAY if k == 0 else FellowWheel3D.CONTACT_CYLINDER)
 		_lane("gap_ray" if k == 0 else "gap_cylinder", c)
+	# Milestone 105 (decision 0213): cars whose bodies dent (a body of 8 x 4 x 20 quads, FellowVehicleDamage3D) driven
+	# into a wall 30 m ahead at 30 km/h and at 5 km/h; the bumps lane's car dents nothing.
+	for k in 2:
+		var x := 260.0 + k * 12.0
+		_box(Vector3(x, 1.0, -30.0), Vector3(6.0, 2.0, 1.0), Color(0.62, 0.6, 0.58))
+		_lane("crash" if k == 0 else "tap", _damage_car(_car(Vector3(x, 0.1, 0), Color(0.85, 0.25, 0.2) if k == 0 else Color(0.25, 0.5, 0.85))))
+	_damage_car(_find("bumps").car)
 
 	var cam := Camera3D.new()
 	root3d.add_child(cam)
@@ -528,6 +585,29 @@ func _drive(lane: Dictionary, dt: float) -> void:
 				d["rolled_m"] = snappedf(car.global_position.distance_to(d.p0), 0.01)
 			if t > 7.0:
 				car.handbrake = true
+		"crash", "tap":
+			# Up to speed, held until the wall stops the car; a second held; backed off 3 m (the brake held at a standstill
+			# engages reverse) to show its front; held there.
+			if lane.phase == 0:
+				_cruise(car, 30.0 if lane.name == "crash" else 5.0)
+				d["kmh_impact"] = snappedf(maxf(d.get("kmh_impact", 0.0), kmh), 0.1)
+				if car.global_position.z < -26.0 and kmh < 1.0 and t > 2.0:
+					lane.phase = 1
+					d["stopped_z"] = snappedf(car.global_position.z, 0.01)
+					d["t_stop"] = t
+			elif lane.phase == 1:
+				car.throttle = 0.0
+				car.handbrake = true
+				if t > d.t_stop + 1.0:
+					lane.phase = 2
+			elif lane.phase == 2:
+				car.handbrake = false
+				car.brake = 0.5
+				if car.global_position.z > d.stopped_z + 3.0:
+					lane.phase = 3
+			else:
+				car.brake = 0.0
+				car.handbrake = true
 		"slab":
 			# On the slab: its momentum and the car's along Z sum to about none while the car speeds up on it.
 			if t > 1.0:
@@ -576,7 +656,11 @@ func _on_frame() -> void:
 		var back := car.global_basis.z
 		back.y = 0.0
 		back = back.normalized() if back.length() > 0.1 else Vector3(0, 0, 1)
-		cam.look_at_from_position(car.global_position + back * 9.0 + Vector3(4, 4, 0), car.global_position + Vector3(0, 0.8, 0))
+		if name == "crash":
+			# Milestone 105: the front, where the wall dents it (from ahead and to the left, the wall out of the way).
+			cam.look_at_from_position(car.global_position - back * 3.6 + Vector3(-2.2, 1.3, 0), car.global_position - back * 2.1 + Vector3(0, 0.55, 0))
+		else:
+			cam.look_at_from_position(car.global_position + back * 9.0 + Vector3(4, 4, 0), car.global_position + Vector3(0, 0.8, 0))
 	if pictures:
 		_shoot()
 	if frame >= int(RUN_SECONDS * 60.0):
@@ -604,7 +688,7 @@ func _finish() -> void:
 		var car: FellowVehicle3D = lane.car
 		var d: Dictionary = lane.data
 		var e := d.duplicate()
-		for k in ["v_prev", "a_smooth", "local0", "p0", "coast_t0", "comp_prev", "vy_prev"]:
+		for k in ["v_prev", "a_smooth", "local0", "p0", "coast_t0", "comp_prev", "vy_prev", "t_stop"]:
 			e.erase(k)
 		e["gears"] = lane.gears
 		e["end"] = [snappedf(car.global_position.x - lane.start.x, 0.1), snappedf(car.global_position.y, 0.01), snappedf(car.global_position.z, 0.1)]
@@ -624,6 +708,10 @@ func _finish() -> void:
 				ok = ok and d.get("roll_max_deg", 99.0) < 10.0 and absf(d.get("heading_after", 99.0)) < 15.0 and d.get("kmh_after", 0.0) > 50.0
 			"bumps":
 				ok = ok and d.get("comp_max", 1.0) <= 0.3 and d.get("pitch_max_deg", 99.0) < 8.0
+				# Milestone 105: its body undented over ten bumps.
+				var dn := _dents(car)
+				e["dents"] = {"deepest_m": dn.deepest_m, "impacts": dn.impacts}
+				ok = ok and dn.deepest_m == 0.0
 			"handbrake":
 				ok = ok and d.get("rear_slip_max_deg", 0.0) > 8.0
 			"reverse":
@@ -649,6 +737,16 @@ func _finish() -> void:
 				# Both onto the curb and over the trench (driven on past them).
 				var curb: bool = lane.name.begins_with("curb")
 				ok = ok and d.get("end_z", 0.0) < -40.0 and d.get("end_y", -1.0) > (0.25 if curb else 0.15)
+			"crash":
+				# Milestone 105: the front dented 5-30 cm into the body, the rear and the middle not; the car stopped by the wall.
+				var dn := _dents(car)
+				e["dents"] = dn
+				ok = ok and dn.front_m > 0.05 and dn.front_m <= 0.3 and dn.rear_m == 0.0 and dn.front_along_z > 0.9 and dn.impacts.size() >= 1 and d.get("stopped_z", -99.0) > -30.0
+			"tap":
+				# At 5 km/h: under the threshold, nothing dented.
+				var dn := _dents(car)
+				e["dents"] = dn
+				ok = ok and dn.deepest_m == 0.0 and dn.impacts.is_empty() and dn.dented_meshes == 0
 		e["ok"] = ok
 		if not ok:
 			failures.append(lane.name)

@@ -9,6 +9,14 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 105 — vehicles dented where they hit (2026-11-13)
+
+- `FellowVehicleDamage3D` (decision 0213): a child of a `FellowVehicle3D` reading its body's contacts; an impact past
+  `impulse_threshold` (2 500 N·s in a step) pushes the vertices of the vehicle's meshes (not the wheels') near it into
+  the body, `softness` deep for the excess, falling off over `radius` (0.7 m), at most `max_depth` (0.3 m); the meshes
+  copied at the first impact, their normals recomputed; `repair()`, `apply_impact()`, `get_damage()`, `impacted`. A wall
+  at 30 km/h: the front 9.3 cm, the rear untouched; at 5 km/h and over ten bumps nothing.
+
 ## Milestone 104 — the head moving with what the face says (2026-11-13)
 
 - `FellowHeadMotion3D` (decision 0212): a skeleton modifier following a `FellowFaceAnimator` — a nod at each of the

@@ -38,6 +38,7 @@
 #include "fellow_pipeline_warmer_3d.h"
 #include "fellow_terrain_3d.h"
 #include "fellow_vehicle_3d.h"
+#include "fellow_vehicle_damage_3d.h"
 #include "fellow_vehicle_effects_3d.h"
 #include "fellow_world_streamer_3d.h"
 
@@ -107,6 +108,7 @@ void initialize_fellow_world_module(ModuleInitializationLevel p_level) {
 		GDREGISTER_CLASS(FellowAcoustics3D); // milestone 78
 		GDREGISTER_CLASS(FellowAcousticPortal3D); // milestone 99
 		GDREGISTER_CLASS(FellowVehicleEffects3D); // milestone 79
+		GDREGISTER_CLASS(FellowVehicleDamage3D); // milestone 105
 		GDREGISTER_CLASS(FellowSoundEvent); // milestone 82
 		GDREGISTER_CLASS(FellowMixSnapshot);
 		GDREGISTER_CLASS(FellowAudioDirector);
