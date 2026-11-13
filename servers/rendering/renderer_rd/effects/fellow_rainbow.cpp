@@ -163,7 +163,7 @@ void FellowRainbow::process(const Params &p_params) {
 
 	UBO u;
 	memset(&u, 0, sizeof(UBO));
-	// Milestone 103 (decision 0212): NDC to the position relative to the camera (the bow's direction and distance).
+	// Milestone 103 (decision 0211): NDC to the position relative to the camera (the bow's direction and distance).
 	const Projection inv = fellow_inverse_view_projection_relative(p_params.view_projection, p_params.camera_position);
 	for (int i = 0; i < 4; i++) {
 		for (int j = 0; j < 4; j++) {

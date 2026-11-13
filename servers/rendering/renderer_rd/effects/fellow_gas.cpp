@@ -925,7 +925,7 @@ bool FellowGas::begin_frame(const FrameParams &p_frame) {
 
 	RenderUBO u;
 	memset(&u, 0, sizeof(RenderUBO));
-	// Milestone 103 (decision 0212): the trace relative to the camera — the inverse view projection, the grids, the fire
+	// Milestone 103 (decision 0211): the trace relative to the camera — the inverse view projection, the grids, the fire
 	// lights and the view taken there on the CPU; the camera at the origin.
 	const Vector3 cam = p_frame.camera_position;
 	_fellow_gas_store_matrix(fellow_inverse_view_projection_relative(p_frame.view_projection, cam), u.inv_view_projection);

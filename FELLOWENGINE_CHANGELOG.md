@@ -9,6 +9,17 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 103 — far from the origin: double precision (2026-11-13)
+
+- FellowEngine builds and runs with `precision=double` (decision 0211): GCC and MSVC; 103.68 km out the terrain and
+  lights identical to the near picture, the fire within one level, characters and cars within 0.1-0.2 % of the pixels
+  (single precision: 6.6-7.2 %). Fixed: the camera's position kept negated for shaders in double builds (stock: the
+  water vanished, the snow and the rain's wetness wrong even near the origin); the terrain's collision heights in
+  double builds; the gas volumes, clouds, atmosphere and rainbow traced relative to the camera (single precision too);
+  the clouds' camera kept on top of the planet (it rose 1.7 km at 100 km). `regression.py far` checks it. Cost: Frontier
+  Lab +0.8 %, City Lab +3.8 %, Crowd Lab +13 % (the CPU). Six regression goldens within 1-4 levels or changed by the
+  cape scene's script.
+
 ## Milestone 102 — crash reports sent to a collector (2026-11-13)
 
 - `FellowCrashReporter.upload_reports()`, `debug/fellow/crash_reports/upload_url`, `upload_automatically`,

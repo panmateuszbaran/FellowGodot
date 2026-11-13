@@ -57,6 +57,11 @@ Outputs land in `bin\` (`godot.windows.template_release.x86_64.exe`, `godot.wind
 * `.tools\bin\stock\`  built from the untouched `4.7.2-stable` tag (branch `fellow/baseline`)
 * `.tools\bin\fellow\` built from the FellowEngine branch under test
 
+**Large worlds** (milestone 103, decision 0211): add `precision=double` for a world beyond about 10 km
+(`godot.windows.template_release.double.x86_64.exe`, objects of its own). FellowEngine is checked in it 103.68 km
+from the origin (`tools/fellow_regression/regression.py far`); it costs 1-4 % of the frame in the open-world and city
+labs and 13 % in a crowd of 256 characters (the CPU), and its first start compiles its own shaders.
+
 ### Building FellowEngine next to the stock build (git worktree)
 
 The benchmark project (with the imported Sponza/Bistro assets and the `.godot` import cache) lives in the main

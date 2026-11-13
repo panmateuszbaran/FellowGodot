@@ -96,7 +96,7 @@ static void _fellow_atmo_store_matrix(const Projection &p_m, float *r_dst) {
 void FellowAtmosphere::_fill_ubo(const Params &p_params, const Size2i &p_screen) {
 	const Settings &s = p_params.settings;
 	UBO &u = ubo_data;
-	// Milestone 103 (decision 0212): NDC to the position relative to the camera (the view's directions, a surface's
+	// Milestone 103 (decision 0211): NDC to the position relative to the camera (the view's directions, a surface's
 	// distance).
 	_fellow_atmo_store_matrix(fellow_inverse_view_projection_relative(p_params.view_projection, p_params.camera_position), u.inv_view_projection);
 	const Vector3 sun = p_params.sun_direction.normalized();

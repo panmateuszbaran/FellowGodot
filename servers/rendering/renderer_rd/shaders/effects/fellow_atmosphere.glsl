@@ -23,7 +23,7 @@ layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 #endif
 
 layout(set = 0, binding = 0, std140) uniform Params {
-	mat4 inv_view_projection; // NDC (x, y, depth) to the position relative to the camera (decision 0212)
+	mat4 inv_view_projection; // NDC (x, y, depth) to the position relative to the camera (decision 0211)
 	vec4 sun_direction; // world, towards the sun; w: the sun's disk angular radius
 	vec4 camera_position; // world (metres); w: the ground's height (metres)
 	vec4 rayleigh_scattering; // per km; w: scale height (km)

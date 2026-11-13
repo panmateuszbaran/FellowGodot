@@ -33,7 +33,7 @@
 #include "core/math/projection.h"
 #include "core/math/transform_3d.h"
 
-// Milestone 103 (decision 0212): FellowEngine's screen effects work relative to the camera. A position far from the
+// Milestone 103 (decision 0211): FellowEngine's screen effects work relative to the camera. A position far from the
 // origin (100 km: a float's step is 8 mm there) reconstructed from depth in world space and then the camera's
 // position subtracted from it lost most of its digits on the GPU — the fire's volume in blocks, the clouds and the
 // rainbow in steps. The matrices below are made on the CPU (real_t: double with precision=double), so the GPU only

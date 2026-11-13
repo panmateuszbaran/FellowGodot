@@ -124,7 +124,8 @@ private:
 		float flash_color[4]; // colour * energy, on
 		float shadow[4]; // the shadow map's centre x, z (m), side (m), the ground's height (m)
 		float precip[4]; // rain shafts: the rain's rate, 1 when it snows
-	}; // 304 bytes
+		float field[4]; // decision 0211: the world's x, z (km) at the planet-centred frame's top
+	}; // 320 bytes
 
 	FellowCloudsShaderRD shader;
 	RID shader_version;

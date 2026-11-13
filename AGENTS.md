@@ -47,6 +47,11 @@ Other platforms build in containers: `benchmarks/tools/platforms/platforms.sh bu
   `xvfb-run -a` on Linux; `--template` with a release template too): FellowEngine's features rendered on lavapipe
   against their goldens, the release template against the editor build, FellowEngine off against on. Every picture is
   exact; a difference you meant gets new goldens (`bless`, look at them, commit them with the reason).
+* **Far from the origin** (milestone 103): `tools/fellow_regression/regression.py far --godot <build> [--offset ...]`
+  renders each scene near the origin and far out with one build and compares them; a double-precision build
+  (`scons ... precision=double`) should keep them within a fraction of a per cent. A node or effect that computes world
+  positions on the GPU works relative to the camera (`fellow_camera_relative.h`); world positions passed to physics
+  servers are `real_t`.
 * **Performance**: `benchmarks/run_benchmarks.py` (A/B with alternating order, heat soak, statistics); timings only
   mean something on a real GPU, not on lavapipe.
 * **Long play** (a node that runs for minutes: its errors, hitches, memory): Slice Lab's soak,

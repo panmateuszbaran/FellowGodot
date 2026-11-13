@@ -26,7 +26,7 @@ layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 #endif
 
 layout(set = 0, binding = 0, std140) uniform Params {
-	mat4 inv_view_projection; // NDC (x, y, depth * 2 - 1) to the position relative to the camera (decision 0212)
+	mat4 inv_view_projection; // NDC (x, y, depth * 2 - 1) to the position relative to the camera (decision 0211)
 	mat4 prev_view_projection; // relative to the camera, to the previous frame's clip (the reprojection of the clouds' far points)
 	vec4 camera_position; // world, metres; w: the ground's height
 	vec4 sun_direction; // world, towards the sun; w: the time (s)
@@ -42,8 +42,16 @@ layout(set = 0, binding = 0, std140) uniform Params {
 	vec4 flash_color; // its light (colour * energy); w: 1 when there is one
 	vec4 shadow; // the clouds' shadow map (decision 0133): its centre x, z (m), its side (m), the ground's height (m)
 	vec4 precip; // rain shafts (decision 0135): the rain's rate (0..1), 1 when it snows
+	vec4 field; // xy: the world's x, z (km) at the planet-centred frame's top, (0, PLANET_RADIUS, 0) (decision 0211)
 }
 params;
+
+// The noise's world position (km) at a planet-centred one: the frame is centred on the camera (the trace, the probe) or
+// on the shadow map (decision 0211: the camera stayed on top of the planet however far it went; before, 100 km out
+// it stood 1.7 km above the ground, in or over the clouds).
+vec3 field_position(vec3 p) {
+	return p + vec3(params.field.x, 0.0, params.field.y);
+}
 
 #define PLANET_RADIUS 6360.0
 #define EXTINCTION 40.0 // per km at density 1 (clouds' extinction coefficient, about 0.04 per metre)
@@ -193,7 +201,7 @@ float ray_sphere_near(vec3 o, vec3 d, float r) {
 
 // The clouds' local coverage over p's ground point (the weather field; 0 in the clear, 1 in a cloud's middle).
 float cloud_cover_at(vec3 p) {
-	vec3 q = p + vec3(params.shape.z, 0.0, params.shape.w) * params.sun_direction.w;
+	vec3 q = field_position(p) + vec3(params.shape.z, 0.0, params.shape.w) * params.sun_direction.w;
 	float w = textureLod(shape_noise, vec3(q.x, 0.0, q.z) * params.shape.x * WEATHER_SCALE, 0.0).r;
 	float wn = clamp((w - 0.70) * (1.0 / (0.14 * 3.46)) + 0.5, 0.0, 1.0);
 	return clamp((wn - (1.0 - params.layer.z)) * 2.0, 0.0, 1.0);
@@ -207,7 +215,7 @@ float cloud_density(vec3 p, bool p_detail) {
 		return 0.0;
 	}
 	vec3 wind = vec3(params.shape.z, 0.0, params.shape.w) * params.sun_direction.w;
-	vec3 q = p + wind;
+	vec3 q = field_position(p) + wind;
 	// The weather: where the clouds stand, a 2D field (the shape noise's Perlin-Worley, about 16 km across its period)
 	// spread to about [0, 1] (its mean 0.70 and deviation 0.14); the clouds cover where it exceeds 1 - coverage, the
 	// more the further (local coverage, from 0 at their rims to 1 in their middles).
@@ -252,8 +260,8 @@ void main() {
 		imageStore(shadow_dest, pos, vec4(1.0));
 		return;
 	}
-	vec2 xz = params.shadow.xy + ((vec2(pos) + 0.5) / vec2(params.sizes.xy) - 0.5) * params.shadow.z;
-	// Planet-centred km, as the trace places the camera (its height above the ground: here 0).
+	vec2 xz = ((vec2(pos) + 0.5) / vec2(params.sizes.xy) - 0.5) * params.shadow.z; // from the map's centre (m)
+	// Planet-centred km around the map's centre (params.field: its x, z), on the ground.
 	vec3 o = vec3(xz.x * 0.001, PLANET_RADIUS, xz.y * 0.001);
 	float r_bottom = PLANET_RADIUS + params.layer.x;
 	float t0 = max(ray_sphere_far(o, sun, r_bottom), 0.0);
@@ -278,7 +286,7 @@ void main() {
 	if (gl_LocalInvocationIndex != 0) {
 		return;
 	}
-	float c = cloud_cover_at(vec3(params.shadow.x * 0.001, PLANET_RADIUS, params.shadow.y * 0.001));
+	float c = cloud_cover_at(vec3(0.0, PLANET_RADIUS, 0.0)); // the camera's ground point (params.field)
 	probe.value = vec4(smoothstep(0.7, 0.95, c), c, 0.0, 0.0);
 }
 #endif
@@ -328,7 +336,7 @@ void main() {
 	vec4 wp = params.inv_view_projection * vec4(uv * 2.0 - 1.0, 0.5, 1.0);
 	vec3 d = normalize(wp.xyz / wp.w);
 	float cam_h = max(params.camera_position.y - params.camera_position.w, 0.0) * 0.001;
-	vec3 o = vec3(0.0, PLANET_RADIUS + cam_h, 0.0) + vec3(params.camera_position.x, 0.0, params.camera_position.z) * 0.001;
+	vec3 o = vec3(0.0, PLANET_RADIUS + cam_h, 0.0); // the camera on top (params.field: its x, z)
 	float r_bottom = PLANET_RADIUS + params.layer.x;
 	float r_top = r_bottom + params.layer.y;
 	float t0, t1;
@@ -384,7 +392,7 @@ void main() {
 			if (dens <= 0.0) {
 				continue;
 			}
-			vec3 q = p + fall;
+			vec3 q = field_position(p) + fall;
 			float streak = textureLod(shape_noise, vec3(q.x * 0.8, q.y * 0.08, q.z * 0.8) * (params.shape.x * 3.0), 0.0).g;
 			float sigma = dens * params.precip.x * (0.25 + 0.75 * streak) * 0.6; // per km at the heaviest rain
 			vec3 S = shaft_light * sigma;

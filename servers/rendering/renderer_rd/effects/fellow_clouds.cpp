@@ -146,14 +146,16 @@ void FellowClouds::process(const Params &p_params) {
 
 	UBO u;
 	memset(&u, 0, sizeof(UBO));
-	// Milestone 103 (decision 0212): the view's directions relative to the camera, the reprojection and the flash
-	// taken there on the CPU (the field's position stays the camera's, in km).
+	// Milestone 103 (decision 0211): the view's directions relative to the camera, the reprojection and the flash
+	// taken there on the CPU; the camera on top of the planet, its x and z the clouds' field position (km).
 	_fellow_clouds_store_matrix(fellow_inverse_view_projection_relative(p_params.view_projection, p_params.camera_position), u.inv_view_projection);
 	_fellow_clouds_store_matrix(fellow_view_projection_relative(p_params.prev_view_projection, p_params.camera_position), u.prev_view_projection);
 	u.camera_position[0] = p_params.camera_position.x;
 	u.camera_position[1] = p_params.camera_position.y;
 	u.camera_position[2] = p_params.camera_position.z;
 	u.camera_position[3] = p_params.ground_height;
+	u.field[0] = p_params.camera_position.x * 0.001;
+	u.field[1] = p_params.camera_position.z * 0.001;
 	const Vector3 sun = p_params.sun_direction.normalized();
 	u.sun_direction[0] = sun.x;
 	u.sun_direction[1] = sun.y;
@@ -298,6 +300,8 @@ RID FellowClouds::process_shadow(const ShadowParams &p_params) {
 	u.shadow[1] = shadow_origin.y;
 	u.shadow[2] = SHADOW_EXTENT;
 	u.shadow[3] = p_params.ground_height;
+	u.field[0] = shadow_origin.x * 0.001;
+	u.field[1] = shadow_origin.y * 0.001;
 	RD::get_singleton()->buffer_update(shadow_ubo, 0, sizeof(UBO), &u);
 
 	RD::get_singleton()->draw_command_begin_label("FellowEngine Cloud Shadows");
@@ -345,6 +349,8 @@ void FellowClouds::process_probe(const ShadowParams &p_params) {
 	u.shape[3] = p_params.wind.y;
 	u.shadow[0] = p_params.camera_position.x;
 	u.shadow[1] = p_params.camera_position.z;
+	u.field[0] = p_params.camera_position.x * 0.001;
+	u.field[1] = p_params.camera_position.z * 0.001;
 	RD::get_singleton()->buffer_update(probe_ubo, 0, sizeof(UBO), &u);
 
 	RD::get_singleton()->draw_command_begin_label("FellowEngine Showers Probe");
