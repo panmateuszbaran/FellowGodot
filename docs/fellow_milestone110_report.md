@@ -37,8 +37,8 @@ into a 20 × 20 m bin, piling up and settling; `--physics_scale` 1, 2.5 and 5; n
 
 A scene for milestones 105-109: `vehicle_damage` (group `base`) — a parked car hit four times as it starts
 (`apply_impact()`): its front dented, its front-left wheel's toe bent, its bumper hanging from its left end, its right
-mirror off and falling. Exact on lavapipe run to run, the release template the same as the editor build; the whole
-suite (36 scenes) exact after milestones 107-109.
+mirror off and falling. Exact on lavapipe run to run, the release template the same as the editor build; the other 35
+scenes of the suite exact after milestones 107-109.
 
 ## 2. Next
 
