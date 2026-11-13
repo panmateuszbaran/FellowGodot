@@ -528,9 +528,23 @@ void FellowVehicleDamage3D::_make_smoke() {
 	dm->set_billboard_mode(BaseMaterial3D::BILLBOARD_PARTICLES);
 	dm->set_flag(BaseMaterial3D::FLAG_ALBEDO_FROM_VERTEX_COLOR, true);
 	dm->set_cull_mode(BaseMaterial3D::CULL_DISABLED);
+	// A soft round puff (a quad's square edges show where the smoke trails past the camera).
+	Ref<Gradient> puff;
+	puff.instantiate();
+	puff->set_color(0, Color(1, 1, 1, 1));
+	puff->set_color(1, Color(1, 1, 1, 0));
+	Ref<GradientTexture2D> puff_tex;
+	puff_tex.instantiate();
+	puff_tex->set_gradient(puff);
+	puff_tex->set_width(64);
+	puff_tex->set_height(64);
+	puff_tex->set_fill(GradientTexture2D::FILL_RADIAL);
+	puff_tex->set_fill_from(Vector2(0.5f, 0.5f));
+	puff_tex->set_fill_to(Vector2(0.5f, 0.0f));
+	dm->set_texture(BaseMaterial3D::TEXTURE_ALBEDO, puff_tex);
 	Ref<QuadMesh> quad;
 	quad.instantiate();
-	quad->set_size(Vector2(0.7f, 0.7f));
+	quad->set_size(Vector2(0.9f, 0.9f));
 	quad->set_material(dm);
 	smoke_fx = memnew(GPUParticles3D);
 	smoke_fx->set_name("EngineSmoke");
