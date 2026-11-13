@@ -18,6 +18,12 @@ Another Mesa or LLVM version renders slightly differently: compare with --tolera
         [--template bin/godot.linuxbsd.template_release.x86_64] [--only group/scene,...] [--out DIR]
     python tools/fellow_regression/regression.py bless --godot bin/godot.linuxbsd.editor.x86_64 [--only ...]
     python tools/fellow_regression/regression.py bless|run --godot ... --goldens DIR     # another GPU: its own goldens
+    python tools/fellow_regression/regression.py far --godot <build> [--offset 100000,0,100000] [--only ...]
+        [--importer <an editor build, when --godot is a release template>]
+
+far (milestone 103): each scene rendered where it is and again moved far from the origin (the scene instanced under a
+node at --offset, its camera with it), the two pictures compared — what single precision loses far out, and what a
+double-precision build (precision=double) keeps. No goldens; with --tolerance a far picture outside it fails.
 
 Prints one JSON report (also report.json in --out) and exits 0 (every check passed), 1 (a check failed) or 2 (it
 could not run). On Linux without a display, run it under xvfb-run.
@@ -177,9 +183,82 @@ def project_copy(group, settings, root, editor=None):
     return dst
 
 
+FAR_SCENE = """[gd_scene load_steps=2 format=3]
+
+[ext_resource type="PackedScene" path="res://scenes/{scene}.tscn" id="1"]
+
+[node name="Far" type="Node3D"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, {x}, {y}, {z})
+
+[node name="{root}" parent="." instance=ExtResource("1")]
+"""
+
+
+def far(args) -> int:
+    """Each scene where it is and moved to --offset, by one build; the far picture against the near one."""
+    with open(os.path.join(HERE, "suite.json"), encoding="utf-8") as f:
+        suite = json.load(f)
+    x, y, z = (float(v) for v in args.offset.split(","))
+    out = os.path.abspath(args.out) if args.out else tempfile.mkdtemp(prefix="fellow_far_")
+    os.makedirs(out, exist_ok=True)
+    only = [o for o in args.only.split(",") if o]
+    godot = os.path.abspath(args.godot)
+    tol = None
+    if args.tolerance:
+        a, b = args.tolerance.split(",")
+        tol = {"max_diff": int(a), "share_over": float(b)}
+    results, failures = [], []
+    t0 = time.time()
+    done = set()
+    for group, spec in suite["groups"].items():
+        if spec.get("same_as"):
+            continue  # the same scenes as another group
+        scenes = [s for s in spec["scenes"] if not only or group in only or f"{group}/{s}" in only]
+        if not scenes:
+            continue
+        project = project_copy(group, spec.get("settings", {}), out, os.path.abspath(args.importer) if args.importer else None)
+        for scene in scenes:
+            if scene in done and group == "base":
+                continue
+            src = os.path.join(project, "scenes", f"{scene}.tscn")
+            root = "Root"
+            with open(src, encoding="utf-8") as f:
+                for line in f:
+                    if line.startswith("[node name="):
+                        root = line.split('"')[1]
+                        break
+            with open(os.path.join(project, "scenes", f"{scene}__far.tscn"), "w", encoding="utf-8") as f:
+                f.write(FAR_SCENE.format(scene=scene, root=root, x=repr(x), y=repr(y), z=repr(z)))
+            r = {"group": group, "scene": scene}
+            pngs = {}
+            for where, path in (("near", f"res://scenes/{scene}.tscn"), ("far", f"res://scenes/{scene}__far.tscn")):
+                d = os.path.join(out, group, scene, where)
+                os.makedirs(d, exist_ok=True)
+                t = time.time()
+                png, report = capture(godot, project, path, suite, d, args.timeout)
+                r[where] = {"seconds": round(time.time() - t, 1), "picture": png, "errors": errors_of(report)}
+                if png is None:
+                    failures.append(f"{group}/{scene} ({where}): no picture ({report.get('error', 'see ' + d)})")
+                elif r[where]["errors"]:
+                    failures.append(f"{group}/{scene} ({where}): {len(r[where]['errors'])} errors, the first: {r[where]['errors'][0]}")
+                pngs[where] = png
+            if pngs.get("near") and pngs.get("far"):
+                r["far_vs_near"] = compare(pngs["far"], pngs["near"])
+                if tol and not within(r["far_vs_near"], tol):
+                    failures.append(f"{group}/{scene}: far from the near picture (max {r['far_vs_near']['max_diff']}, {r['far_vs_near']['share_over'] * 100:.3f} % of pixels over 8 levels)")
+            results.append(r)
+            done.add(scene)
+    summary = {"ok": not failures, "command": "far", "offset": [x, y, z], "out": out, "seconds": round(time.time() - t0, 1),
+               "scenes": len(results), "failures": failures, "results": results, "tolerance": tol}
+    with open(os.path.join(out, "report.json"), "w", encoding="utf-8") as f:
+        json.dump(summary, f, indent=1)
+    print(json.dumps(summary, indent=1))
+    return 0 if not failures else 1
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("command", choices=["run", "bless"])
+    ap.add_argument("command", choices=["run", "bless", "far"])
     ap.add_argument("--godot", required=True, help="an editor build (debug checks on): the goldens' build")
     ap.add_argument("--template", default="", help="a release template (disable_path_overrides=no) to check against the editor build")
     ap.add_argument("--only", default="", help="group/scene or group entries, comma-separated")
@@ -187,7 +266,11 @@ def main() -> int:
     ap.add_argument("--timeout", type=float, default=240.0, help="seconds per capture")
     ap.add_argument("--tolerance", default="", help="max_diff,share_over: a picture passes within either (default: suite.json's)")
     ap.add_argument("--goldens", default="", help="a directory of goldens instead of the repository's (another GPU or driver: bless into it, then run against it)")
+    ap.add_argument("--offset", default="100000,0,100000", help="far: where the scenes are moved (metres)")
+    ap.add_argument("--importer", default="", help="far: an editor build to import the project with first (when --godot is a release template)")
     args = ap.parse_args()
+    if args.command == "far":
+        return far(args)
 
     with open(os.path.join(HERE, "suite.json"), encoding="utf-8") as f:
         suite = json.load(f)

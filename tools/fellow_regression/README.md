@@ -21,6 +21,17 @@ python tools/fellow_regression/regression.py bless --godot ... --goldens DIR    
 python tools/fellow_regression/regression.py run --godot ... --goldens DIR              #   goldens of its own, then runs against them
 ```
 
+`far` (milestone 103) renders each scene where it is and again moved far from the origin — instanced under a node at
+`--offset` (100 km by default), its camera with it — and compares the two pictures of one build: what single
+precision loses far out, and what a double-precision build (`precision=double`) keeps. No goldens; `--tolerance`
+makes a far picture outside it fail; `--importer <editor build>` imports the project first when `--godot` is a release
+template.
+
+```
+python tools/fellow_regression/regression.py far --godot bin/godot.linuxbsd.template_release.double.x86_64 \
+    --importer bin/godot.linuxbsd.editor.x86_64 --offset 100000,0,100000 [--only base/water]
+```
+
 It prints a JSON report (and writes `report.json` with the pictures in `--out`) and exits 0, 1 (a check failed) or 2
 (it could not run). With `--template` each group's copy of the project is imported by the editor build first, as a
 game's project is before it runs on a template. On the cloud's two CPUs a run takes about 4 minutes, 9 with
