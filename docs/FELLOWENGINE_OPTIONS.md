@@ -493,7 +493,9 @@ up), `detach_mass` (8 kg: the body it falls away in, not colliding with the vehi
 (milestone 109, decision 0217): `hang_depth` (0: never; a part hangs on a pin at its end farthest from the hit until
 `detach_depth`), `is_part_hanging()`, the signal `part_hanging(part, body)` (the lane `hang`). The FellowEngine menu's "Add Car"
 (milestone 110) includes a bumper and a `FellowVehicleDamage3D` (`wheel_bend` 4°, `engine_power_loss` 0.4, the bumper
-hanging at 6 cm and off at 16 cm) and subdivides the body for the dents; the regression scene `vehicle_damage`.
+hanging at 6 cm and off at 16 cm) and subdivides the body for the dents; the regression scene `vehicle_damage`. Engine
+smoke (milestone 110): `engine_smoke` (on; with `engine_power_loss` set, smoke from above `engine_position` as deep as
+the dent there, from a tenth of `max_depth`), `is_engine_smoking()`.
 
 ## Sound through the scene's geometry (milestone 78)
 

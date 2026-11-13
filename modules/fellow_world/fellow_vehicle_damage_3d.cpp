@@ -35,11 +35,17 @@
 #include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
 #include "core/os/os.h"
+#include "scene/3d/gpu_particles_3d.h"
 #include "scene/3d/mesh_instance_3d.h"
 #include "scene/3d/physics/collision_shape_3d.h"
 #include "scene/3d/physics/joints/pin_joint_3d.h"
 #include "scene/3d/physics/rigid_body_3d.h"
 #include "scene/resources/3d/box_shape_3d.h"
+#include "scene/resources/3d/primitive_meshes.h"
+#include "scene/resources/curve_texture.h"
+#include "scene/resources/gradient_texture.h"
+#include "scene/resources/material.h"
+#include "scene/resources/particle_process_material.h"
 #include "servers/physics_3d/physics_server_3d.h"
 
 void FellowVehicleDamage3D::set_mesh_paths(const TypedArray<NodePath> &p_paths) {
@@ -476,6 +482,95 @@ bool FellowVehicleDamage3D::is_part_hanging(const NodePath &p_part) const {
 	return false;
 }
 
+// Milestone 110: a hurt engine smokes — dark smoke rising from engine_position, as much as the dent there is deep (of
+// max_depth; from a tenth of it: a glancing hit's edge does not). Made when the node enters the tree with engine_power_loss set (its materials' shaders are shared by key,
+// none compiled for each car), not drawn until it smokes.
+void FellowVehicleDamage3D::_make_smoke() {
+	if (smoke_fx || !engine_smoke || Engine::get_singleton()->is_editor_hint()) {
+		return;
+	}
+	Ref<ParticleProcessMaterial> pm;
+	pm.instantiate();
+	pm->set_direction(Vector3(0, 1, 0));
+	pm->set_spread(25.0f);
+	pm->set_param_min(ParticleProcessMaterial::PARAM_INITIAL_LINEAR_VELOCITY, 0.6f);
+	pm->set_param_max(ParticleProcessMaterial::PARAM_INITIAL_LINEAR_VELOCITY, 1.2f);
+	pm->set_gravity(Vector3(0, 0.4f, 0));
+	pm->set_param_min(ParticleProcessMaterial::PARAM_DAMPING, 0.5f);
+	pm->set_param_max(ParticleProcessMaterial::PARAM_DAMPING, 1.0f);
+	pm->set_param_min(ParticleProcessMaterial::PARAM_SCALE, 0.4f);
+	pm->set_param_max(ParticleProcessMaterial::PARAM_SCALE, 0.7f);
+	pm->set_param_min(ParticleProcessMaterial::PARAM_ANGLE, -180.0f);
+	pm->set_param_max(ParticleProcessMaterial::PARAM_ANGLE, 180.0f);
+	pm->set_emission_shape(ParticleProcessMaterial::EMISSION_SHAPE_BOX);
+	pm->set_emission_box_extents(Vector3(0.4f, 0.05f, 0.3f));
+	Ref<Curve> grow;
+	grow.instantiate();
+	grow->set_max_value(4.0f);
+	grow->add_point(Vector2(0, 0.5f));
+	grow->add_point(Vector2(1, 3.0f));
+	Ref<CurveTexture> grow_tex;
+	grow_tex.instantiate();
+	grow_tex->set_curve(grow);
+	pm->set_param_texture(ParticleProcessMaterial::PARAM_SCALE, grow_tex);
+	Ref<Gradient> fade;
+	fade.instantiate();
+	fade->set_color(0, Color(0.22f, 0.22f, 0.23f, 0.7f));
+	fade->set_color(1, Color(0.45f, 0.45f, 0.46f, 0.0f));
+	Ref<GradientTexture1D> fade_tex;
+	fade_tex.instantiate();
+	fade_tex->set_gradient(fade);
+	pm->set_color_ramp(fade_tex);
+	Ref<StandardMaterial3D> dm;
+	dm.instantiate();
+	dm->set_transparency(BaseMaterial3D::TRANSPARENCY_ALPHA);
+	dm->set_shading_mode(BaseMaterial3D::SHADING_MODE_UNSHADED);
+	dm->set_billboard_mode(BaseMaterial3D::BILLBOARD_PARTICLES);
+	dm->set_flag(BaseMaterial3D::FLAG_ALBEDO_FROM_VERTEX_COLOR, true);
+	dm->set_cull_mode(BaseMaterial3D::CULL_DISABLED);
+	Ref<QuadMesh> quad;
+	quad.instantiate();
+	quad->set_size(Vector2(0.7f, 0.7f));
+	quad->set_material(dm);
+	smoke_fx = memnew(GPUParticles3D);
+	smoke_fx->set_name("EngineSmoke");
+	smoke_fx->set_amount(48);
+	smoke_fx->set_lifetime(2.5f);
+	smoke_fx->set_process_material(pm);
+	smoke_fx->set_draw_pass_mesh(0, quad);
+	smoke_fx->set_use_local_coordinates(false);
+	smoke_fx->set_emitting(false);
+	smoke_fx->set_cast_shadows_setting(GeometryInstance3D::SHADOW_CASTING_SETTING_OFF);
+	smoke_fx->set_visibility_aabb(AABB(Vector3(-8, -2, -8), Vector3(16, 12, 16)));
+	smoke_fx->set_as_top_level(true);
+	add_child(smoke_fx, false, INTERNAL_MODE_FRONT);
+}
+
+void FellowVehicleDamage3D::_update_smoke() {
+	if (!vehicle || max_depth <= 0.0f) {
+		return;
+	}
+	const float share = engine_power_loss > 0.0f ? engine_dent / max_depth : 0.0f;
+	const bool on = engine_smoke && share > 0.1f;
+	if (on && !smoke_fx) {
+		_make_smoke(); // engine_power_loss set after the node entered the tree
+	}
+	if (!smoke_fx) {
+		return;
+	}
+	if (on) {
+		smoke_fx->set_global_position(vehicle->get_global_transform().xform(engine_position + Vector3(0, 0.35f, 0)));
+		smoke_fx->set_amount_ratio(MIN(share, 1.0f));
+	}
+	if (smoke_fx->is_emitting() != on) {
+		smoke_fx->set_emitting(on);
+	}
+}
+
+bool FellowVehicleDamage3D::is_engine_smoking() const {
+	return smoke_fx && smoke_fx->is_emitting();
+}
+
 float FellowVehicleDamage3D::get_engine_power() const {
 	return max_depth > 0.0f ? 1.0f - engine_power_loss * engine_dent / max_depth : 1.0f;
 }
@@ -585,6 +680,7 @@ Dictionary FellowVehicleDamage3D::get_stats() const {
 	}
 	d["wheel_toe_change"] = toe;
 	d["detached"] = detached;
+	d["engine_smoking"] = is_engine_smoking();
 	return d;
 }
 
@@ -606,6 +702,9 @@ void FellowVehicleDamage3D::_notification(int p_what) {
 				vehicle->set_contact_monitor(true);
 				vehicle->set_max_contacts_reported(MAX(vehicle->get_max_contacts_reported(), 8));
 				set_physics_process_internal(true);
+				if (engine_power_loss > 0.0f) {
+					_make_smoke(); // milestone 110
+				}
 			}
 		} break;
 		case NOTIFICATION_EXIT_TREE: {
@@ -616,6 +715,7 @@ void FellowVehicleDamage3D::_notification(int p_what) {
 			if (!vehicle) {
 				break;
 			}
+			_update_smoke(); // milestone 110
 			PhysicsDirectBodyState3D *state = PhysicsServer3D::get_singleton()->body_get_direct_state(vehicle->get_rid());
 			if (!state) {
 				break;
@@ -683,6 +783,9 @@ void FellowVehicleDamage3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_hang_depth", "depth"), &FellowVehicleDamage3D::set_hang_depth);
 	ClassDB::bind_method(D_METHOD("get_hang_depth"), &FellowVehicleDamage3D::get_hang_depth);
 	ClassDB::bind_method(D_METHOD("is_part_hanging", "part"), &FellowVehicleDamage3D::is_part_hanging);
+	ClassDB::bind_method(D_METHOD("set_engine_smoke", "enabled"), &FellowVehicleDamage3D::set_engine_smoke);
+	ClassDB::bind_method(D_METHOD("has_engine_smoke"), &FellowVehicleDamage3D::has_engine_smoke);
+	ClassDB::bind_method(D_METHOD("is_engine_smoking"), &FellowVehicleDamage3D::is_engine_smoking);
 	ClassDB::bind_method(D_METHOD("get_vertex_offset", "mesh", "surface", "vertex"), &FellowVehicleDamage3D::get_vertex_offset);
 	ClassDB::bind_method(D_METHOD("get_stats"), &FellowVehicleDamage3D::get_stats);
 
@@ -696,6 +799,7 @@ void FellowVehicleDamage3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "wheel_bend", PROPERTY_HINT_RANGE, "0,15,0.1,or_greater,suffix:°"), "set_wheel_bend", "get_wheel_bend");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "engine_power_loss", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_engine_power_loss", "get_engine_power_loss");
 	ADD_PROPERTY(PropertyInfo(Variant::VECTOR3, "engine_position", PROPERTY_HINT_NONE, "suffix:m"), "set_engine_position", "get_engine_position");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "engine_smoke"), "set_engine_smoke", "has_engine_smoke");
 
 	ADD_GROUP("Detachable Parts", "");
 	ADD_PROPERTY(PropertyInfo(Variant::ARRAY, "detachable_paths", PROPERTY_HINT_ARRAY_TYPE, vformat("%s/%s:%s", Variant::NODE_PATH, PROPERTY_HINT_NODE_PATH_VALID_TYPES, "Node3D")), "set_detachable_paths", "get_detachable_paths");

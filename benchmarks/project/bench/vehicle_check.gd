@@ -21,7 +21,8 @@ extends SceneTree
 ## and an unhit car (both straight), a car hit at the engine (slower to 100 km/h), a car hit and repaired (straight,
 ## its torque back); milestone 108 (decision 0216): a car with a bumper that can come off — kept after a light hit,
 ## off into a wall at 30 km/h (on the ground by the wall), back after repair(); milestone 109 (decision 0217): a car at
-## rest whose bumper, hit at its right end, hangs from its left end, then comes off at a second hit. One JSON line:
+## rest whose bumper, hit at its right end, hangs from its left end, then comes off at a second hit; milestone 110: the
+## engine lane's car smoking (the strip's last row), the others not. One JSON line:
 ## VEHICLE_CHECK {...}; exit
 ## code 1 when a lane did otherwise than expected. --many=N: N cars driving circles, the vehicles' step a frame and the
 ## frame's (headless). One JSON line: VEHICLE_MANY {...}.
@@ -39,7 +40,7 @@ var save_frames := false
 var grid := false
 var shot_size := Vector2i(480, 320)
 var strip_times := [2.0, 6.0, 10.0, 14.0, 18.0, 22.0]
-var strip_lanes := ["accel", "brake", "skidpad", "lane_change", "bumps", "jump", "crash", "bent", "bumper", "hang"]
+var strip_lanes := ["accel", "brake", "skidpad", "lane_change", "bumps", "jump", "crash", "bent", "bumper", "hang", "engine"]
 var shots := {}
 var viewports := {}
 var cameras := {}
@@ -676,6 +677,7 @@ func _drive(lane: Dictionary, dt: float) -> void:
 						d["toe_repaired"] = _toes(car)
 						d["max_torque_repaired"] = snappedf(car.max_torque, 0.01)
 					if t >= 1.0:
+						d["engine_smoking"] = dmg.is_engine_smoking()  # milestone 110
 						d["gear_h0"] = _heading(car)
 						d["x0"] = car.global_position.x
 						lane.phase = 2
@@ -954,7 +956,7 @@ func _finish() -> void:
 				ok = ok and e.hanging.size() == 2 and e.detached.size() == 3 and e.detached[2]  # the body it hung in fell
 			"straight":
 				# Milestone 107: unhit, straight within half a degree.
-				ok = ok and absf(d.get("heading_change", 99.0)) < 0.5 and d.toe_after_hit.FrontLeft == 0.0 and d.engine_power == 1.0
+				ok = ok and absf(d.get("heading_change", 99.0)) < 0.5 and d.toe_after_hit.FrontLeft == 0.0 and d.engine_power == 1.0 and not d.get("engine_smoking", true)
 			"bent":
 				# The front-left wheel's toe bent in by 1-5 degrees (the others unbent), the car turned right by more than
 				# 3 degrees in 6 s with the steering at 0; the engine all but untouched.
@@ -979,8 +981,10 @@ func _finish() -> void:
 			"engine_t100": en.get("t100", 99.0), "accel_t100": acc.get("t100", 0.0)}
 		g["ok_bent_off"] = absf(g.bent_off_vs_straight_deg) < 0.2 and bo.toe_after_hit.FrontLeft == 0.0
 		g["ok_repaired"] = absf(g.repaired_vs_straight_deg) < 0.2 and rp.toe_after_hit.FrontLeft != 0.0 and rp.toe_repaired.values().all(func(v): return v == 0.0) and rp.max_torque < 400.0 and rp.max_torque_repaired == 400.0
+		# Milestone 110: the engine hit smokes, the repaired one does not.
+		g["ok_smoke"] = en.get("engine_smoking", false) and not rp.get("engine_smoking", true)
 		g["ok_engine"] = en.engine_power < 0.85 and absf(en.max_torque - 400.0 * en.engine_power) < 0.5 and en.toe_after_hit.FrontLeft == 0.0 and g.engine_t100 > g.accel_t100 * 1.1 and absf(en.get("heading_change", 99.0)) < 1.0
-		g["ok"] = g.ok_bent_off and g.ok_repaired and g.ok_engine
+		g["ok"] = g.ok_bent_off and g.ok_repaired and g.ok_engine and g.ok_smoke
 		out["running_gear"] = g
 		if not g.ok:
 			failures.append("running_gear")

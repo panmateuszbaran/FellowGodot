@@ -47,6 +47,14 @@ quads (vertices to dent), a bumper, a `FellowVehicleDamage3D` (`wheel_bend` 4°,
 hanging at 6 cm and off at 16 cm). The editor check: the preset's 15 nodes added without a configuration warning, owned
 by the scene, undone; 37 icons.
 
-## 3. Next
+## 3. Engine smoke
+
+`FellowVehicleDamage3D.engine_smoke` (on): with `engine_power_loss` set, a hurt engine smokes — a `GPUParticles3D`
+made when the node enters the tree (its materials' shaders shared by key), dark smoke rising from above
+`engine_position`, its amount the dent's share of `max_depth` there, from a tenth of it. `vehicle_check.gd`: the
+engine lane's car smokes, the unhit, the side-hit (the engine 4 % weaker: under a tenth) and the repaired ones do not;
+the other values as before; the editor build and the release template the same.
+
+## 4. Next
 
 GodotPhysics3D's broadphase at 10 000 bodies (63 ms); the 8 ms of node updates at 10 000 bodies (both engines).

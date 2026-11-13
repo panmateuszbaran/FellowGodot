@@ -37,6 +37,7 @@
 class FellowVehicle3D;
 class MeshInstance3D;
 class RigidBody3D;
+class GPUParticles3D;
 
 // FellowEngine (milestone 105, decision 0213): a vehicle's body dented where it hits. A child of a FellowVehicle3D; it
 // reads the body's contacts each physics step, and an impact whose impulse exceeds impulse_threshold pushes the
@@ -59,6 +60,10 @@ class FellowVehicleDamage3D : public Node3D {
 	float wheel_bend = 0.0f; // degrees: the most a wheel's toe is bent
 	float engine_power_loss = 0.0f; // the share of the engine's torque lost at a dent of max_depth at the engine
 	Vector3 engine_position = Vector3(0, 0.5, -1.4); // the vehicle's space
+	bool engine_smoke = true; // milestone 110: smoke from a hurt engine
+	GPUParticles3D *smoke_fx = nullptr;
+	void _make_smoke();
+	void _update_smoke();
 
 	struct Bent {
 		ObjectID wheel;
@@ -153,6 +158,9 @@ public:
 	void set_hang_depth(float p_depth) { hang_depth = MAX(0.0f, p_depth); }
 	float get_hang_depth() const { return hang_depth; }
 	bool is_part_hanging(const NodePath &p_part) const;
+	void set_engine_smoke(bool p_enabled) { engine_smoke = p_enabled; }
+	bool has_engine_smoke() const { return engine_smoke; }
+	bool is_engine_smoking() const;
 
 	void apply_impact(const Vector3 &p_position, const Vector3 &p_direction, float p_impulse);
 	void repair();
