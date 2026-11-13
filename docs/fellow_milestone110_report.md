@@ -40,6 +40,13 @@ A scene for milestones 105-109: `vehicle_damage` (group `base`) — a parked car
 mirror off and falling. Exact on lavapipe run to run, the release template the same as the editor build; the other 35
 scenes of the suite exact after milestones 107-109.
 
-## 2. Next
+## 2. The editor
+
+The FellowEngine menu's "Add Car" makes a car that takes damage (milestones 105-109): its body a box of 8 × 4 × 20
+quads (vertices to dent), a bumper, a `FellowVehicleDamage3D` (`wheel_bend` 4°, `engine_power_loss` 0.4, the bumper
+hanging at 6 cm and off at 16 cm). The editor check: the preset's 15 nodes added without a configuration warning, owned
+by the scene, undone; 37 icons.
+
+## 3. Next
 
 GodotPhysics3D's broadphase at 10 000 bodies (63 ms); the 8 ms of node updates at 10 000 bodies (both engines).

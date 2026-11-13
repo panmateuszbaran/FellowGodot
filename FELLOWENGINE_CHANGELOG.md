@@ -16,6 +16,8 @@ Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.m
   24.3-24.4 ms). At Godot's default Jolt limits 10 000 bodies in contact overflow its buffers (contacts ignored, the
   runs no longer repeatable, in stock too): `physics/jolt_physics_3d/limits/*` raised, they repeat.
 - The regression suite's scene `vehicle_damage`: a car dented, a wheel bent, its bumper hanging, its mirror off.
+- The FellowEngine menu's "Add Car" makes a car that takes damage: its body subdivided for dents, a bumper, and a
+  `FellowVehicleDamage3D` (`wheel_bend` 4°, `engine_power_loss` 0.4, the bumper hanging at 6 cm and off at 16 cm).
 
 ## Milestone 109 — parts that hang before they come off (2026-11-13)
 

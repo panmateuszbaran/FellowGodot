@@ -966,8 +966,8 @@ Node3D *FellowEditorPlugin::make_preset(int p_preset, const Node *p_root) {
 		} break;
 		case PRESET_CAR: {
 			// Milestone 77: a 1 400 kg rear-driven car (FellowVehicle3D's defaults: 400 N·m, six gears, the assists
-			// on), a box for its body, its four wheels 0.34 m on 0.3 m of suspension, its effects (milestone 79); it
-			// faces -Z. A controller sets its throttle, brake, steering and handbrake.
+			// on), a box for its body, its four wheels 0.34 m on 0.3 m of suspension, its effects (milestone 79), its
+			// damage (milestone 110); it faces -Z. A controller sets its throttle, brake, steering and handbrake.
 			Node *made = _fellow_make("FellowVehicle3D", "Car", nullptr, Dictionary{ { "center_of_mass_mode", 1 }, { "center_of_mass", Vector3(0, 0.45, 0.1) } });
 			top = Object::cast_to<Node3D>(made);
 			if (!top) {
@@ -996,6 +996,10 @@ Node3D *FellowEditorPlugin::make_preset(int p_preset, const Node *p_root) {
 			body_box.instantiate();
 			body_box->set_size(Vector3(1.8, 0.55, 4.2));
 			body_box->set_material(paint);
+			// Milestone 110: vertices for the damage's dents (8 x 4 x 20 quads).
+			body_box->set_subdivide_width(8);
+			body_box->set_subdivide_height(4);
+			body_box->set_subdivide_depth(20);
 			body_mesh->set_mesh(body_box);
 			body_mesh->set_position(Vector3(0, 0.62, 0));
 			top->add_child(body_mesh);
@@ -1030,6 +1034,20 @@ Node3D *FellowEditorPlugin::make_preset(int p_preset, const Node *p_root) {
 			}
 			// Milestone 79: its skid marks, tyre smoke and sounds.
 			_fellow_make("FellowVehicleEffects3D", "Effects", top);
+			// Milestone 110: a bumper, and damage (milestones 105-109): the body dented where it hits, a wheel near a
+			// dent bent out of line, the engine's power lost, the bumper hanging and then off.
+			MeshInstance3D *bumper = memnew(MeshInstance3D);
+			bumper->set_name("Bumper");
+			Ref<BoxMesh> bumper_box;
+			bumper_box.instantiate();
+			bumper_box->set_size(Vector3(1.86, 0.22, 0.14));
+			bumper_box->set_material(rubber);
+			bumper->set_mesh(bumper_box);
+			bumper->set_position(Vector3(0, 0.48, -2.05));
+			top->add_child(bumper);
+			TypedArray<NodePath> detachable;
+			detachable.push_back(NodePath("../Bumper"));
+			_fellow_make("FellowVehicleDamage3D", "Damage", top, Dictionary{ { "wheel_bend", 4.0 }, { "engine_power_loss", 0.4 }, { "detachable_paths", detachable }, { "hang_depth", 0.06 }, { "detach_depth", 0.16 } });
 		} break;
 		case PRESET_ACOUSTICS: {
 			// Milestone 78: the scene's 3D sounds heard through its geometry (occlusion, the listener's room's reverb).

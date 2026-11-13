@@ -491,7 +491,9 @@ in). Bench `bench/vehicle_check.gd` (the lanes `straight`, `bent`, `bent_off`, `
 up), `detach_mass` (8 kg: the body it falls away in, not colliding with the vehicle); `is_part_detached()`, the signal
 `part_detached(part, body)`; `repair()` puts them back. Bench `bench/vehicle_check.gd` (the lane `bumper`). Hanging
 (milestone 109, decision 0217): `hang_depth` (0: never; a part hangs on a pin at its end farthest from the hit until
-`detach_depth`), `is_part_hanging()`, the signal `part_hanging(part, body)` (the lane `hang`).
+`detach_depth`), `is_part_hanging()`, the signal `part_hanging(part, body)` (the lane `hang`). The FellowEngine menu's "Add Car"
+(milestone 110) includes a bumper and a `FellowVehicleDamage3D` (`wheel_bend` 4°, `engine_power_loss` 0.4, the bumper
+hanging at 6 cm and off at 16 cm) and subdivides the body for the dents; the regression scene `vehicle_damage`.
 
 ## Sound through the scene's geometry (milestone 78)
 
