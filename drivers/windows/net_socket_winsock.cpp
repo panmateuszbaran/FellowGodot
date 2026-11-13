@@ -312,6 +312,24 @@ Error NetSocketWinSock::connect_to_host(Address p_addr) {
 	ERR_FAIL_COND_V(!is_open(), ERR_UNCONFIGURED);
 	ERR_FAIL_COND_V(!_can_use_ip(p_addr.ip(), false), ERR_INVALID_PARAMETER);
 
+	// FellowEngine (decision 0214): an attempt that failed since the last call (refused: a reset) shows as the socket's
+	// error (select()'s exceptfds); calling connect() again would start another attempt, so a refused connection was
+	// seen only at network/limits/tcp/connect_timeout_seconds (30 s). Checked first.
+	{
+		fd_set ex;
+		FD_ZERO(&ex);
+		FD_SET(_sock, &ex);
+		struct timeval now = { 0, 0 };
+		if (select(1, nullptr, nullptr, &ex, &now) > 0 && FD_ISSET(_sock, &ex)) {
+			int so_error = 0;
+			int so_len = sizeof(so_error);
+			getsockopt(_sock, SOL_SOCKET, SO_ERROR, (char *)&so_error, &so_len);
+			print_verbose("Connection to remote host failed: " + itos(so_error) + ".");
+			close();
+			return FAILED;
+		}
+	}
+
 	struct sockaddr_storage addr;
 	size_t addr_size = _set_addr_storage(&addr, p_addr.ip(), p_addr.port(), _ip_type);
 
@@ -324,24 +342,8 @@ Error NetSocketWinSock::connect_to_host(Address p_addr) {
 				return OK;
 			// Still waiting to connect, try again in a while.
 			case ERR_NET_WOULD_BLOCK:
-			case ERR_NET_IN_PROGRESS: {
-				// FellowEngine (decision 0214): a refused or failed attempt shows as the socket's error (select()'s
-				// exceptfds), while connect() keeps answering "in progress": without this check it was seen only at
-				// network/limits/tcp/connect_timeout_seconds (30 s).
-				fd_set ex;
-				FD_ZERO(&ex);
-				FD_SET(_sock, &ex);
-				struct timeval now = { 0, 0 };
-				if (select(1, nullptr, nullptr, &ex, &now) > 0 && FD_ISSET(_sock, &ex)) {
-					int so_error = 0;
-					int so_len = sizeof(so_error);
-					getsockopt(_sock, SOL_SOCKET, SO_ERROR, (char *)&so_error, &so_len);
-					print_verbose("Connection to remote host failed: " + itos(so_error) + ".");
-					close();
-					return FAILED;
-				}
+			case ERR_NET_IN_PROGRESS:
 				return ERR_BUSY;
-			}
 			default:
 				print_verbose("Connection to remote host failed.");
 				close();
