@@ -37,7 +37,10 @@ off 3 m, repaired at 24 s:
 | at 23.9 s on the ground between the wall's face (z −29.5) and the car backed off, still | y 0.11 (half its height), z −29.46, the car's front at −24.97; 0.000 m/s |
 | after `repair()` on the car where it was, its body freed | on the car, 0 m off, no body left |
 
-The other 26 lanes the same values as before.
+The other 26 lanes the same values as before. The laptop (job f413: Windows, a release template): the lane passes with
+GodotPhysics3D (the same values) and with Jolt (the bumper at z −29.46, the car's front at −25.05, still); the picture
+strip's camera for the lane (decision 0213's, at the car's front) did not show the bumper lying by the wall: milestone
+109 moved it ahead and to the right of the car.
 
 ## Cost
 

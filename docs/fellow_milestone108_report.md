@@ -1,6 +1,6 @@
 # FellowEngine — milestone 108 report (parts that come off)
 
-Status: **IN PROGRESS** (2026-11-13): the owner said "ok kontynuuj". Branch `fellow/geometry`. Decision record:
+Status: **FINAL** (2026-11-13): the owner said "ok kontynuuj"; the laptop's job f413 done. Branch `fellow/geometry`. Decision record:
 `docs/decisions/0216-detachable-parts.md`.
 
 ## 0. Result
@@ -21,7 +21,8 @@ Decision 0216's table: the editor build and the release template the same; the o
 
 ## 3. Measurements
 
-The laptop (Windows, GodotPhysics3D and Jolt): next.
+The laptop (job f413): the lane passes with GodotPhysics3D and Jolt (decision 0216). Nothing to time: a body made when
+a part comes off.
 
 ## 4. Next
 

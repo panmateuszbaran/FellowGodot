@@ -21,7 +21,7 @@ car read as damaged while it still drives.
 ## Checks (cloud: the CPU; the editor build and the release template the same)
 
 The lane `hang`: decision 0216's bumper on a car held at rest, `hang_depth` 0.05 m and `detach_depth` 0.15 m, hit at
-its right end 8 cm deep at 0.5 s and again at 3 s, repaired at 6 s:
+its right end 8 cm deep at 0.5 s and again at 3 s (where that end hangs then), repaired at 6 s:
 
 | expected | result |
 |---|---|
@@ -31,6 +31,10 @@ its right end 8 cm deep at 0.5 s and again at 3 s, repaired at 6 s:
 
 The other 27 lanes the same values as before (decision 0216's lane: the part's body's name no longer compared — two
 lanes' bodies share one parent).
+
+The laptop's first run (job f414) hit the second time where the bumper had been before it hung: with GodotPhysics3D
+the hanging bumper was still close enough to reach 0.15 m, with Jolt (it hung 9 mm lower) not — a hanging part is
+dented only where it is. The lane now hits it where it hangs (both engines on the cloud: off at the second hit).
 
 ## Decision
 

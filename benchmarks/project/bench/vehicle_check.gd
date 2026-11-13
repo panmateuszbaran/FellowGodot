@@ -702,7 +702,8 @@ func _drive(lane: Dictionary, dt: float) -> void:
 				car.brake = 1.0
 				car.handbrake = true
 		"hang":
-			# Milestone 109: held at rest; hit at the bumper's right end at 0.5 s and 3 s (8 cm each), repaired at 6 s.
+			# Milestone 109: held at rest; hit at the bumper's right end at 0.5 s and (where it hangs) at 3 s, 8 cm each;
+			# repaired at 6 s.
 			car.handbrake = true
 			var hb: Node3D = car.get_meta("bumper")
 			var hdm: FellowVehicleDamage3D = car.get_node("Damage")
@@ -721,7 +722,8 @@ func _drive(lane: Dictionary, dt: float) -> void:
 				d["right_drop_m"] = snappedf(d.ends0[1].y - right.y, 0.001)
 				d["pin_present"] = root3d.find_child("BumperPin", false, false) != null
 			if t >= 3.0 and not d.has("hit2"):
-				hdm.apply_impact(car.global_transform * Vector3(0.85, 0.48, -2.12), car.global_basis * Vector3(0, 0, 1), hdm.impulse_threshold + 0.08 / hdm.softness)
+				# At the bumper's right end where it hangs now (a hit where it was would miss it).
+				hdm.apply_impact(hb.global_transform * Vector3(0.85, 0, -0.07), car.global_basis * Vector3(0, 0, 1), hdm.impulse_threshold + 0.08 / hdm.softness)
 				d["hit2"] = true
 			if t >= 5.5 and not d.has("detached_at_5_5"):
 				d["detached_at_5_5"] = hdm.is_part_detached(bp)
