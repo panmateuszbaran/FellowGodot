@@ -135,7 +135,7 @@
 			<param index="1" name="ok" type="bool" />
 			<param index="2" name="response_code" type="int" />
 			<description>
-				A report [method upload_reports] tried to send: its path (where it was), whether the collector accepted it (moved into [code]sent/[/code]), and the collector's HTTP response code, or when there was none: [code]-1[/code] (the URL not understood), [code]-2[/code] (its host not found), [code]-3[/code] (no connection), [code]-4[/code] (the TLS handshake failed: the certificate not trusted), [code]-5[/code] (no response within 30 s and a second for each 100 KB).
+				A report [method upload_reports] tried to send: its path (where it was), whether the collector accepted it (moved into [code]sent/[/code]), and the collector's HTTP response code, or when there was none: [code]-1[/code] (the URL not understood), [code]-2[/code] (its host not found), [code]-3[/code] (no connection within 10 s), [code]-4[/code] (the TLS handshake failed: the certificate not trusted), [code]-5[/code] (no response within 30 s and a second for each 100 KB). When the collector is not reached ([code]-2[/code] to [code]-4[/code]) the reports after it are not tried: they get the same code.
 			</description>
 		</signal>
 		<signal name="uploads_finished">

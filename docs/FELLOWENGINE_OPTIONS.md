@@ -694,7 +694,8 @@ Uploads (milestone 102, decision 0210): `upload_reports(url = "")` sends the wai
 `report` (the JSON), `upload_file_minidump` (its minidump, with `debug/fellow/crash_reports/upload_minidumps`, on),
 `kind`, `reason`, `project`, `version`, `commit`; accepted (2xx) ones moved into `sent/`, the rest kept;
 `report_uploaded(path, ok, response_code)` (negative: −1 the URL, −2 the host not found, −3 no connection, −4 the TLS
-handshake, −5 no response), `uploads_finished(sent, failed)`, `is_uploading()`.
+handshake, −5 no response; a collector not reached is not tried again for the rest), `uploads_finished(sent, failed)`,
+`is_uploading()`.
 `debug/fellow/crash_reports/upload_automatically` (off; read at start-up): sent on their own two frames after the start.
 
 ## Simulated GPUs (milestone 49)

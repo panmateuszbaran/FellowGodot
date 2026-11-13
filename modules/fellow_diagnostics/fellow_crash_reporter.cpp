@@ -1973,8 +1973,10 @@ int _post(const String &p_url, const String &p_content_type, const PackedByteArr
 	if (client.is_null() || client->connect_to_host(host, port, tls ? TLSOptions::client() : Ref<TLSOptions>()) != OK) {
 		return UPLOAD_CANT_CONNECT;
 	}
-	// 30 s, and a second more for each 100 KB sent.
-	const uint64_t deadline = OS::get_singleton()->get_ticks_msec() + 30000 + uint64_t(p_body.size()) / 100;
+	// The connection within 10 s (Windows reports a refused one only at its own timeout); the request within 30 s and a
+	// second more for each 100 KB sent.
+	const uint64_t start = OS::get_singleton()->get_ticks_msec();
+	uint64_t deadline = start + 10000;
 	auto wait_while = [&](HTTPClient::Status p_a, HTTPClient::Status p_b) {
 		while ((client->get_status() == p_a || client->get_status() == p_b) && OS::get_singleton()->get_ticks_msec() < deadline && !p_cancel.load()) {
 			client->poll();
@@ -1982,6 +1984,7 @@ int _post(const String &p_url, const String &p_content_type, const PackedByteArr
 		}
 	};
 	wait_while(HTTPClient::STATUS_CONNECTING, HTTPClient::STATUS_RESOLVING);
+	deadline = OS::get_singleton()->get_ticks_msec() + 30000 + uint64_t(p_body.size()) / 100;
 	switch (client->get_status()) {
 		case HTTPClient::STATUS_CONNECTED:
 			break;
@@ -2057,7 +2060,13 @@ void FellowCrashReporter::_upload_thread(void *p_self) {
 	int sent = 0;
 	int failed = 0;
 	const String sent_dir = self->directory + "sent/";
+	int unreachable = 0; // the collector not reached (its host, no connection, the TLS handshake): the rest not tried
 	for (const String &path : self->upload_queue) {
+		if (unreachable != 0) {
+			failed++;
+			callable_mp(self, &FellowCrashReporter::_emit_uploaded).call_deferred(path, false, unreachable);
+			continue;
+		}
 		if (self->upload_cancel.load()) {
 			break;
 		}
@@ -2096,6 +2105,9 @@ void FellowCrashReporter::_upload_thread(void *p_self) {
 			sent++;
 		} else {
 			failed++;
+			if (code == UPLOAD_CANT_RESOLVE || code == UPLOAD_CANT_CONNECT || code == UPLOAD_TLS_HANDSHAKE) {
+				unreachable = code;
+			}
 		}
 		callable_mp(self, &FellowCrashReporter::_emit_uploaded).call_deferred(path, ok, code);
 	}

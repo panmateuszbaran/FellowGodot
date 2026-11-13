@@ -296,7 +296,7 @@ void FellowLightning3D::_begin(uint64_t p_seed, float p_distance, float p_azimut
 	if (d < 0.0f) {
 		// Uniform over the ring's area.
 		float u = rng.randf();
-		d = Math::sqrt(Math::lerp(distance_range.x * distance_range.x, distance_range.y * distance_range.y, u));
+		d = Math::sqrt(Math::lerp(distance_range.x * distance_range.x, distance_range.y * distance_range.y, real_t(u)));
 	}
 	float az = p_azimuth > -360.0f ? Math::deg_to_rad(p_azimuth) : rng.randf() * Math::TAU;
 	float ground = get_global_position().y;

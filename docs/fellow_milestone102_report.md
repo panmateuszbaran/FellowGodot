@@ -27,7 +27,10 @@ settings, the signals), `doc_classes/FellowCrashReporter.xml`, `doc/classes/Proj
 * The lambdas' fix: the two singletons' runs with a lambda connected end cleanly; Valgrind without errors.
 * The image regression suite (the GDScript change in every scene's scripts): 35 scenes exact, the release template
   the same as the editor build.
-* The laptop (Windows, the minidump sent with its report): next job.
+* The laptop (job f403, Windows): the minidump (438 019 bytes) sent with its report, TLS, refused, accepted, on their
+  own as on the cloud; the unreachable lane waited 30 s a report (Windows reports a refused connection at the TCP
+  timeout) — the connection now waits 10 s and a collector not reached is not tried again for the rest; the laptop
+  again: next job.
 
 ## 3. Measurements
 

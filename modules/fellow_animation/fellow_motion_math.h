@@ -58,7 +58,7 @@ inline Vector3 quat_to_scaled_angle_axis(const Quaternion &p_q) {
 	if (length < 1e-8f) {
 		return v * 2.0f;
 	}
-	const float half_angle = Math::atan2(length, q.w);
+	const float half_angle = Math::atan2(length, float(q.w)); // float(): unambiguous with precision=double
 	return v * (2.0f * half_angle / length);
 }
 

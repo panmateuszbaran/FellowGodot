@@ -352,7 +352,7 @@ bool FellowBurnable3D::_ground_distance(MeshInstance3D *p_target, const AABB &p_
 	for (int c = 0; c < 8; c++) {
 		low = MIN(low, m.xform(p_box.get_endpoint(c)).y);
 	}
-	const float scale = Math::pow(Math::abs(m.basis.determinant()), 1.0f / 3.0f);
+	const float scale = Math::pow(Math::abs(m.basis.determinant()), real_t(1.0) / real_t(3.0));
 	const float h = voxel * scale;
 	PhysicsDirectSpaceState3D::RayParameters params;
 	params.from = Vector3(centre.x, low + 0.25f * h, centre.z);
@@ -1847,7 +1847,7 @@ void FellowBurnable3D::_queue_step() {
 		return;
 	}
 	const Transform3D m = target->get_global_transform();
-	const float scale = Math::pow(Math::abs(m.basis.determinant()), 1.0f / 3.0f);
+	const float scale = Math::pow(Math::abs(m.basis.determinant()), real_t(1.0) / real_t(3.0));
 	const float h = voxel * scale; // metres
 	sp.voxel_size = h;
 	sp.settle = 1.0f - Math::exp(-BURN_SETTLE_RATE * sp.dt);
