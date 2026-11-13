@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="FellowHeadMotion3D" inherits="SkeletonModifier3D" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+	<brief_description>
+		FellowEngine: the head moving with what the face says — a nod on each stressed syllable, a sway that grows while it speaks.
+	</brief_description>
+	<description>
+		A modifier of the character's [Skeleton3D] (after the animation's: an [AnimationTree] or [AnimationPlayer] plays under it). It follows a [FellowFaceAnimator] ([member face_animator_path]) and turns the head and neck bones over whatever the animation plays:
+		- a [b]nod[/b] at each of the voice's stressed syllables (each [signal FellowFaceAnimator.emphasized]): the head tipped down by [member nod_degrees] times the syllable's strength, its lowest point [member nod_time] after it, back in about half a second (a critically damped pulse); [method nod] adds one from the game;
+		- a [b]sway[/b]: a slow turn about the three axes (two sines each at frequencies that never repeat together, about [member sway_frequency]), [member idle_sway_degrees] at rest and up to [member speech_sway_degrees] more while the face speaks ([method FellowFaceAnimator.get_speech_activity]).
+		The rotation is in the skeleton's space — the face looks along [member forward], up is +Y — and shared between the neck ([member neck_share]) and the head. With every amount 0 the bones are left as the animation posed them. See [code]docs/decisions/0212-head-motion.md[/code].
+		[codeblock]
+		# Under the character's Skeleton3D, its face's FellowFaceAnimator elsewhere in the character:
+		var head = FellowHeadMotion3D.new()
+		skeleton.add_child(head)
+		head.face_animator_path = head.get_path_to(face_animator)
+		[/codeblock]
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="get_head_angles" qualifiers="const">
+			<return type="Vector3" />
+			<description>
+				The rotation applied last, in degrees: x the pitch (down), y the yaw (towards the character's left), z the roll.
+			</description>
+		</method>
+		<method name="get_stats" qualifiers="const">
+			<return type="Dictionary" />
+			<description>
+				Diagnostics: [code]frames[/code], [code]usec[/code] (the modifier's own time), [code]nods[/code] (since it was made), [code]nods_active[/code], [code skip-lint]head_bone[/code] and [code skip-lint]neck_bone[/code] (their indices, -1 when not found).
+			</description>
+		</method>
+		<method name="nod">
+			<return type="void" />
+			<param index="0" name="strength" type="float" default="1.0" />
+			<description>
+				Nods once now: [member nod_degrees] times [param strength] (0-2), added to the nods under way.
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="face_animator_path" type="NodePath" setter="set_face_animator_path" getter="get_face_animator_path" default="NodePath(&quot;&quot;)">
+			The [FellowFaceAnimator] whose stressed syllables the head nods at and whose speech makes it sway more. Without one the head sways at rest (and nods when [method nod] is called).
+		</member>
+		<member name="forward" type="Vector3" setter="set_forward" getter="get_forward" default="Vector3(0, 0, 1)">
+			The direction the face looks in the skeleton's space (Godot's humanoid profile: +Z): a nod tips it down.
+		</member>
+		<member name="head_bone" type="StringName" setter="set_head_bone" getter="get_head_bone" default="&amp;&quot;Head&quot;">
+			The head's bone. Without it in the skeleton nothing is turned (a configuration warning says so).
+		</member>
+		<member name="idle_sway_degrees" type="float" setter="set_idle_sway_degrees" getter="get_idle_sway_degrees" default="0.5">
+			The sway's amplitude at rest, in degrees.
+		</member>
+		<member name="neck_bone" type="StringName" setter="set_neck_bone" getter="get_neck_bone" default="&amp;&quot;Neck&quot;">
+			The neck's bone, sharing the rotation with the head (empty or not found: the head turns alone).
+		</member>
+		<member name="neck_share" type="float" setter="set_neck_share" getter="get_neck_share" default="0.4">
+			The share of the rotation the neck takes; the head takes the rest.
+		</member>
+		<member name="nod_degrees" type="float" setter="set_nod_degrees" getter="get_nod_degrees" default="6.0">
+			How far a nod at a full-strength syllable tips the head down, in degrees.
+		</member>
+		<member name="nod_time" type="float" setter="set_nod_time" getter="get_nod_time" default="0.12">
+			Seconds from a stressed syllable to the nod's lowest point; the head is back in about four times this.
+		</member>
+		<member name="seed" type="int" setter="set_seed" getter="get_seed" default="0">
+			The sway's phases (heads with different seeds sway differently).
+		</member>
+		<member name="speech_sway_degrees" type="float" setter="set_speech_sway_degrees" getter="get_speech_sway_degrees" default="2.0">
+			The sway's amplitude added while the face speaks at full level, in degrees.
+		</member>
+		<member name="sway_frequency" type="float" setter="set_sway_frequency" getter="get_sway_frequency" default="0.3">
+			The sway's base frequency, in hertz.
+		</member>
+	</members>
+</class>

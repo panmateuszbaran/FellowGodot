@@ -14,7 +14,7 @@ const ICON_CLASSES := ["FellowBurnable3D", "FellowGasEmitter3D", "FellowGasVolum
 	"FellowPipelineWarmer3D", "FellowTraversal3D", "FellowTraversalPose3D", "FellowCloth3D",
 	"FellowDestructible3D", "FellowLadder3D", "FellowVehicle3D", "FellowWheel3D", "FellowAcoustics3D",
 	"FellowVehicleEffects3D", "FellowAudioDirector", "FellowSoundEvent", "FellowMixSnapshot", "FellowFaceAnimator",
-	"FellowAcousticPortal3D"]
+	"FellowAcousticPortal3D", "FellowHeadMotion3D"]
 const MONITORS := ["FellowEngine/Texture streaming resident", "FellowEngine/Texture streaming wanted",
 	"FellowEngine/Texture streaming pending", "FellowEngine/World cells loaded", "FellowEngine/World cells loading",
 	"FellowEngine/Motion matching time", "FellowEngine/Motion matching updates", "FellowEngine/Traversal time", "FellowEngine/Cloth time",

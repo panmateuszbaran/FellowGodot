@@ -153,6 +153,8 @@ private:
 	double last_emphasis = -1.0;
 	bool emphasis_armed = true;
 	uint64_t emphases = 0;
+	float last_emphasis_strength = 0.0f;
+	float speech_activity = 0.0f; // milestone 104: 0-1, eased
 	RandomPCG rng;
 	double next_blink = 0.0;
 	double next_saccade = 0.0;
@@ -259,6 +261,10 @@ public:
 	float get_expression_weight(const StringName &p_name) const;
 	PackedStringArray get_expression_names() const;
 	float get_emphasis() const { return emphasis; }
+	// Milestone 104 (decision 0212): for FellowHeadMotion3D and the game.
+	int64_t get_emphasis_count() const { return int64_t(emphases); }
+	float get_last_emphasis_strength() const { return last_emphasis_strength; }
+	float get_speech_activity() const { return speech_activity; }
 
 	void blink();
 	float get_channel(Channel p_channel) const;

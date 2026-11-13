@@ -48,6 +48,12 @@
 				The brows' pulse from the voice's last stressed syllable: 1 at it, fading over 0.3 s (milestone 100).
 			</description>
 		</method>
+		<method name="get_emphasis_count" qualifiers="const">
+			<return type="int" />
+			<description>
+				How many stressed syllables the face has met ([signal emphasized] emitted), since it was made (milestone 104: [FellowHeadMotion3D] nods at each new one).
+			</description>
+		</method>
 		<method name="get_expression_names" qualifiers="const">
 			<return type="PackedStringArray" />
 			<description>
@@ -71,6 +77,18 @@
 			<return type="Dictionary" />
 			<description>
 				Every face's: [code]frames[/code], [code]usec[/code], [code]analyses[/code] (voices seen), [code]analysis_usec[/code], [code]analysed_seconds[/code], [code]cached_voices[/code].
+			</description>
+		</method>
+		<method name="get_last_emphasis_strength" qualifiers="const">
+			<return type="float" />
+			<description>
+				The last stressed syllable's strength, as [signal emphasized] gave it (0-1).
+			</description>
+		</method>
+		<method name="get_speech_activity" qualifiers="const">
+			<return type="float" />
+			<description>
+				How much the face is speaking: the voice's level between [member level_floor_db] (0) and [member level_full_db] (1), eased over a quarter second; 0 without a voice (milestone 104: [FellowHeadMotion3D]'s sway grows with it).
 			</description>
 		</method>
 		<method name="get_stats" qualifiers="const">

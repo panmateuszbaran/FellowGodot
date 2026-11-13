@@ -9,6 +9,15 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 104 — the head moving with what the face says (2026-11-13)
+
+- `FellowHeadMotion3D` (decision 0212): a skeleton modifier following a `FellowFaceAnimator` — a nod at each of the
+  voice's stressed syllables (6°, its lowest point 0.12 s after it, a critically damped pulse), a sway of the three
+  axes (0.5° at rest, up to 2° more while the face speaks), shared between the neck and the head, over whatever the
+  animation plays. `FellowFaceAnimator.get_emphasis_count()`, `get_last_emphasis_strength()`, `get_speech_activity()`.
+  Three lanes (six nods at six sounds, the bones as the angles say; the sway at rest and speaking; untouched at 0); a
+  head 0.38 µs a frame.
+
 ## Milestone 103 — far from the origin: double precision (2026-11-13)
 
 - FellowEngine builds and runs with `precision=double` (decision 0211): GCC and MSVC; 103.68 km out the terrain and

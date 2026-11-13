@@ -15,7 +15,9 @@ extends SceneTree
 ## --listen=1 the voice played by an AudioStreamPlayer under Movie Maker and the face's blend shapes followed: the mouth
 ## leads the sound by the anticipation, its blend shapes are its channels. Milestone 100 (decision 0208): expressions
 ## faded in, crossfaded, a custom one, cleared; the brows raised on each of the voice's sounds after a silence.
-## --many=N: N faces, the time a frame. One
+## Milestone 104 (decision 0212): FellowHeadMotion3D — a head nodding at each of those sounds, a head swaying (more
+## while the voice speaks), a head with every amount 0 (its bones untouched).
+## --many=N: N faces, the time a frame (--heads=1: each with its head moving). One
 ## JSON line: FACE_CHECK {...} (or FACE_MANY {...}); exit code 1 when a lane did otherwise than expected.
 
 const RATE := 48000.0
@@ -54,6 +56,16 @@ var brow_face: FellowFaceAnimator
 var brow_peaks := []
 var brow_signals := []
 var brow_silent_max := 0.0
+# Milestone 104: heads (a neck and a head bone) moving with the voice: nods only; the sway; nothing (exact).
+var heads := []
+var head_usec0 := 0
+var head_frames0 := 0
+var nod_motion: FellowHeadMotion3D
+var nod_trace := []  # [frame, pitch from get_head_angles, pitch measured on the bones]
+var sway_motion: FellowHeadMotion3D
+var sway_trace := []  # [frame, pitch, yaw, roll]
+var still_motion: FellowHeadMotion3D
+var still_poses := []
 
 
 func _arg(name: String, default: String) -> String:
@@ -355,7 +367,47 @@ func _build() -> void:
 	brow_face.voice_stream = voice
 	root3d.add_child(brow_face)
 	brow_face.emphasized.connect(func(strength: float): brow_signals.append([snappedf(brow_face.voice_time, 0.001), snappedf(strength, 0.01)]))
+	# Milestone 104: three heads following brow_face — nodding only (no sway), swaying (rest and speech), still (every
+	# amount 0: the bones untouched).
+	nod_motion = _head(Vector3(-4, 0, 0))
+	nod_motion.idle_sway_degrees = 0.0
+	nod_motion.speech_sway_degrees = 0.0
+	nod_motion.modification_processed.connect(func() -> void:
+		var sk: Skeleton3D = nod_motion.get_skeleton()
+		var q := sk.get_bone_pose_rotation(0) * sk.get_bone_pose_rotation(1)
+		var f := q * Vector3(0, 0, 1)
+		nod_trace.append([frame, nod_motion.get_head_angles().x, rad_to_deg(asin(clampf(-f.y, -1.0, 1.0)))]))
+	sway_motion = _head(Vector3(-6, 0, 0))
+	sway_motion.nod_degrees = 0.0
+	sway_motion.modification_processed.connect(func() -> void:
+		var a := sway_motion.get_head_angles()
+		sway_trace.append([frame, a.x, a.y, a.z]))
+	still_motion = _head(Vector3(-8, 0, 0))
+	still_motion.nod_degrees = 0.0
+	still_motion.idle_sway_degrees = 0.0
+	still_motion.speech_sway_degrees = 0.0
+	still_motion.modification_processed.connect(func() -> void:
+		var sk: Skeleton3D = still_motion.get_skeleton()
+		if frame % 50 == 0:
+			still_poses.append([sk.get_bone_pose_rotation(0), sk.get_bone_pose_rotation(1)]))
 	physics_frame.connect(_on_frame)
+
+
+# A skeleton of a neck and a head (the head 0.12 m above the neck, at 1.5 m), its FellowHeadMotion3D following brow_face.
+func _head(at: Vector3) -> FellowHeadMotion3D:
+	var sk := Skeleton3D.new()
+	sk.position = at
+	sk.add_bone("Neck")
+	sk.set_bone_rest(0, Transform3D(Basis(), Vector3(0, 1.5, 0)))
+	sk.add_bone("Head")
+	sk.set_bone_parent(1, 0)
+	sk.set_bone_rest(1, Transform3D(Basis(), Vector3(0, 0.12, 0)))
+	sk.reset_bone_poses()
+	root3d.add_child(sk)
+	var m := FellowHeadMotion3D.new()
+	sk.add_child(m)
+	m.face_animator_path = m.get_path_to(brow_face)
+	return m
 
 
 func _on_frame() -> void:
@@ -461,6 +513,52 @@ func _on_frame() -> void:
 			_finish()
 
 
+# Milestone 104 (decision 0212): the heads.
+func _head_lanes(out: Dictionary) -> void:
+	# Nods: one at each of brow_face's emphases (frames 400 + 60 x its voice time), its lowest point nod_time (0.12 s:
+	# 7.2 frames) later, as deep as nod_degrees x the strength; the bones turned as get_head_angles() says; back to rest
+	# after the voice.
+	var peaks := []
+	for i in range(1, nod_trace.size() - 1):
+		var p: float = nod_trace[i][1]
+		if p > 1.0 and p >= nod_trace[i - 1][1] and p > nod_trace[i + 1][1]:
+			peaks.append([nod_trace[i][0], snappedf(p, 0.01)])
+	var delays := []
+	for k in mini(peaks.size(), brow_signals.size()):
+		delays.append(peaks[k][0] - (400 + brow_signals[k][0] * 60.0))
+	var bone_error := 0.0
+	var before := 0.0
+	var after := 0.0
+	for r in nod_trace:
+		bone_error = maxf(bone_error, absf(r[1] - r[2]))
+		if r[0] < 400:
+			before = maxf(before, absf(r[1]))
+		if r[0] > 400 + 250 + 60:
+			after = maxf(after, absf(r[1]))
+	var nok := peaks.size() == 6 and bone_error < 0.01 and before == 0.0 and after < 0.05
+	for k in peaks.size():
+		nok = nok and peaks[k][1] > 5.5 and peaks[k][1] < 7.0
+	for d in delays:
+		nok = nok and d >= 6.0 and d <= 9.5
+	out["head_nods"] = {"peaks": peaks, "delays_frames": delays, "bone_vs_angles_deg": snappedf(bone_error, 0.0001),
+		"before_deg": before, "after_deg": snappedf(after, 0.001), "nods": nod_motion.get_stats().nods, "ok": nok}
+	# The sway: at rest (frames 100-390) within idle_sway_degrees (0.5), while the face speaks (420-640) larger.
+	var rest := 0.0
+	var speaking := 0.0
+	for r in sway_trace:
+		var m := maxf(absf(r[1]), absf(r[2]))
+		if r[0] >= 100 and r[0] < 390:
+			rest = maxf(rest, m)
+		elif r[0] >= 420 and r[0] < 640:
+			speaking = maxf(speaking, m)
+	out["head_sway"] = {"rest_deg": snappedf(rest, 0.001), "speaking_deg": snappedf(speaking, 0.001), "ok": rest > 0.2 and rest <= 0.5 and speaking > rest * 2.0 and speaking <= 2.5}
+	# Every amount 0: the bones exactly the animation's (here the rest).
+	var exact := not still_poses.is_empty()
+	for pr in still_poses:
+		exact = exact and pr[0] == Quaternion() and pr[1] == Quaternion()
+	out["head_still"] = {"samples": still_poses.size(), "ok": exact}
+
+
 func _dominant(d: Dictionary) -> String:
 	var best := ""
 	var v := -1.0
@@ -544,6 +642,7 @@ func _finish() -> void:
 				sounds_raised += 1
 		out["speech_brows"] = {"peaks": peaks, "emphases": brow_face.get_stats().emphases, "signals": brow_signals, "sounds_raised": sounds_raised,
 			"ok": brow_face.get_stats().emphases == 6 and brow_signals.size() == 6 and sounds_raised == 6 and brow_peaks[0] != null and brow_peaks[0] < 0.001}
+		_head_lanes(out)
 		out["blinks"] = {"count": blink_log.size(), "gap_min": gmin, "gap_max": gmax,
 			"ok": blink_log.size() >= 10 and blink_log.size() <= 25 and gmin >= 2.0 and gmax <= 6.3}
 	else:
@@ -622,6 +721,21 @@ func _build_many() -> void:
 		root3d.add_child(fa)
 		fa.mesh_path = fa.get_path_to(mi)
 		faces.append(fa)
+		if _arg("heads", "0") == "1":
+			# Milestone 104: each face's head moving with it (a neck and a head bone).
+			var sk := Skeleton3D.new()
+			sk.add_bone("Neck")
+			sk.set_bone_rest(0, Transform3D(Basis(), Vector3(0, 1.5, 0)))
+			sk.add_bone("Head")
+			sk.set_bone_parent(1, 0)
+			sk.set_bone_rest(1, Transform3D(Basis(), Vector3(0, 0.12, 0)))
+			sk.reset_bone_poses()
+			root3d.add_child(sk)
+			var hm := FellowHeadMotion3D.new()
+			hm.seed = k
+			sk.add_child(hm)
+			hm.face_animator_path = hm.get_path_to(fa)
+			heads.append(hm)
 	physics_frame.connect(_on_many_frame)
 
 
@@ -633,11 +747,21 @@ func _on_many_frame() -> void:
 		faces[k].voice_time = fmod(frame / 60.0 + k * 0.037, 4.0)
 	if frame == 60:
 		FellowFaceAnimator.reset_global_stats()
+		for h in heads:
+			head_usec0 += h.get_stats().usec
+			head_frames0 += h.get_stats().frames
 	if frame >= 360:
 		done = true
 		var st := FellowFaceAnimator.get_global_stats()
 		var r := {"faces": many, "stats": st, "us_per_face_frame": snappedf(float(st.usec) / maxf(1, st.frames), 0.001),
 			"ms_per_frame": snappedf(float(st.usec) / 300.0 / 1000.0, 0.0001)}
+		if not heads.is_empty():
+			var hu := -head_usec0
+			var hf := -head_frames0
+			for h in heads:
+				hu += h.get_stats().usec
+				hf += h.get_stats().frames
+			r["heads"] = {"us_per_head_frame": snappedf(float(hu) / maxf(1, hf), 0.001), "ms_per_frame": snappedf(float(hu) / 300.0 / 1000.0, 0.0001), "head_frames": hf}
 		print("FACE_MANY " + JSON.stringify(r))
 		var f := FileAccess.open(out_dir.path_join("face_many.json"), FileAccess.WRITE)
 		f.store_string(JSON.stringify(r, "  "))

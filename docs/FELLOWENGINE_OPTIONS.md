@@ -666,7 +666,13 @@ Expressions (milestone 100, decision 0208): `set_expression(name, weight = 1, fa
 `brow_down_left/right`, `brow_outer_up_left/right`, `smile_left/right`, `frown_left/right`, `cheek_squint_left/right`,
 `eye_squint_left/right`, `eye_wide_left/right`, `nose_sneer_left/right` (ARKit's `browInnerUp` … `noseSneerRight`).
 `speech_brows` (0.5: the brows on the voice's stressed syllables), `speech_emphasis_db` (6 dB); `get_emphasis()`,
-the signal `emphasized(strength)`.
+the signal `emphasized(strength)`; milestone 104: `get_emphasis_count()`, `get_last_emphasis_strength()`,
+`get_speech_activity()` (0-1).
+The head (milestone 104, decision 0212): `FellowHeadMotion3D` (a `SkeletonModifier3D` under the character's skeleton):
+`face_animator_path`, `head_bone` (`Head`), `neck_bone` (`Neck`), `neck_share` (0.4), `forward` (+Z, the skeleton's
+space); nods `nod_degrees` (6°) at each stressed syllable, `nod_time` (0.12 s); sway `idle_sway_degrees` (0.5°),
+`speech_sway_degrees` (2°, × the speech activity), `sway_frequency` (0.3 Hz), `seed`; `nod(strength)`,
+`get_head_angles()`, `get_stats()`. Bench `bench/face_check.gd` (`--heads=1` with `--many`).
 
 ## Crash reports (milestone 97)
 

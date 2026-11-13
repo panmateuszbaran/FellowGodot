@@ -496,11 +496,16 @@ void FellowFaceAnimator::_update(double p_delta) {
 		last_emphasis = clock;
 		emphases++;
 		emphasis_armed = false; // once a rise: again after the level has come back near its average (a held vowel is one)
-		emit_signal(SNAME("emphasized"), CLAMP(rise / (2.0f * speech_emphasis_db), 0.0f, 1.0f));
+		last_emphasis_strength = CLAMP(rise / (2.0f * speech_emphasis_db), 0.0f, 1.0f);
+		emit_signal(SNAME("emphasized"), last_emphasis_strength);
 	} else if (rise < speech_emphasis_db * 0.5f) {
 		emphasis_armed = true;
 	}
 	level_slow += ((voice_on ? MAX(level_db, level_floor_db) : level_floor_db) - level_slow) * (1.0f - Math::exp(-dt / 0.5f));
+	// Milestone 104 (decision 0212): how much the face is speaking (the voice's level between the floor and full, eased
+	// over a quarter second), for the head's motion.
+	const float activity = voice_on ? CLAMP((level_db - level_floor_db) / MAX(level_full_db - level_floor_db, 1.0f), 0.0f, 1.0f) : 0.0f;
+	speech_activity += (activity - speech_activity) * (1.0f - Math::exp(-dt / 0.25f));
 	emphasis *= Math::exp(-dt / 0.3f);
 	// The expressions, each faded towards its weight; their channels and the brows' pulse added up.
 	for (int i = int(expression_states.size()) - 1; i >= 0; i--) {
@@ -816,6 +821,9 @@ void FellowFaceAnimator::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_expression_weight", "name"), &FellowFaceAnimator::get_expression_weight);
 	ClassDB::bind_method(D_METHOD("get_expression_names"), &FellowFaceAnimator::get_expression_names);
 	ClassDB::bind_method(D_METHOD("get_emphasis"), &FellowFaceAnimator::get_emphasis);
+	ClassDB::bind_method(D_METHOD("get_emphasis_count"), &FellowFaceAnimator::get_emphasis_count);
+	ClassDB::bind_method(D_METHOD("get_last_emphasis_strength"), &FellowFaceAnimator::get_last_emphasis_strength);
+	ClassDB::bind_method(D_METHOD("get_speech_activity"), &FellowFaceAnimator::get_speech_activity);
 	ClassDB::bind_method(D_METHOD("get_channel", "channel"), &FellowFaceAnimator::get_channel);
 	ClassDB::bind_method(D_METHOD("get_channels"), &FellowFaceAnimator::get_channels);
 	ClassDB::bind_method(D_METHOD("sample_voice", "stream", "time"), &FellowFaceAnimator::sample_voice);
