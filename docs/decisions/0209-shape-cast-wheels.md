@@ -36,7 +36,8 @@ tyres are cylinders:
 | the suspension's drop over the trench | 0.085 m (to full extension) | 0.015-0.018 m | 0.020-0.021 m |
 | onto the curb, over the trench, on | yes | yes | yes |
 
-The fifteen earlier lanes: the same results (GodotPhysics3D and Jolt).
+The fifteen earlier lanes: the same results (GodotPhysics3D and Jolt). The laptop (job f402, a release template,
+MSVC): the nineteen lanes on both engines the same, value for value.
 
 GodotPhysics3D's shape casts against the bench's ground — a box 2 km across — gave erratic contacts (the suspension
 flickering between 0 and 0.2 m on flat ground, with or without FellowEngine's collision changes); on slabs of 4-100 m
@@ -47,7 +48,8 @@ of a sensible size with GodotPhysics3D.
 
 `--many=64 --contact=2` on the 2 km ground, the release template on the cloud's two cores: a car's step 9 → 32 µs with
 GodotPhysics3D, 11.5 → 87 µs with Jolt (its shape cast a bisection of about ten collision tests; four wheels, two
-queries on an edge). For the player's car and those near it, rays for traffic.
+queries on an edge); the laptop 8.1 → 34.5 µs and 7.9 → 59.4 µs (64 cars 0.52 → 2.21 ms and 0.51 → 3.80 ms a frame).
+For the player's car and those near it, rays for traffic.
 
 ## Decision
 
