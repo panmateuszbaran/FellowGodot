@@ -432,6 +432,7 @@ func _build() -> void:
 	door.material_override = _material(Color(0.55, 0.3, 0.55))
 	door.position = Vector3(-0.93, 0.75, -0.2)
 	door.set_meta("fellow_hinge_axis", Vector3(0, 1, 0))
+	door.set_meta("fellow_hinge_limits", Vector2(0, 70))  # outward, up to 70 degrees (a left door, its axis up)
 	dc.add_child(door)
 	dc.set_meta("door", door)
 	var ddm: FellowVehicleDamage3D = dc.get_node("Damage")
@@ -1041,10 +1042,10 @@ func _finish() -> void:
 				ok = ok and e.hanging.size() == 2 and e.detached.size() == 3 and e.detached[2]  # the body it hung in fell
 			"door":
 				# Milestone 110: hanging on its hinge (a HingeJoint3D) after the hit; at 4 s, the car turned right, the
-				# door swung open by more than 15 degrees about its front edge, which stayed within 6 cm of where it was
-				# (the joint's give as the door swings hard: no limit), its rear end level (within 5 cm of its height).
+				# door swung open about its front edge as far as its limit allows (70 degrees: 60-80 with the joint's
+				# give), the edge within 6 cm of where it was, its rear end level (within 5 cm of its height).
 				var rr: Array = d.get("door_rear", [0, 0, 0])
-				ok = ok and d.get("hinged", false) and d.get("hinge_node", false) and d.get("door_open_deg", 0.0) > 15.0 and d.get("front_moved_m", 1.0) < 0.06 and absf(rr[1] - 0.75) < 0.05 and d.get("heading_turned", 0.0) < -20.0
+				ok = ok and d.get("hinged", false) and d.get("hinge_node", false) and d.get("door_open_deg", 0.0) > 60.0 and d.get("door_open_deg", 99.0) < 80.0 and d.get("front_moved_m", 1.0) < 0.06 and absf(rr[1] - 0.75) < 0.05 and d.get("heading_turned", 0.0) < -20.0
 			"sagged":
 				# Milestone 110: the front-left wheel's travel 2-6 cm shorter, the others' not; the front-left corner lower
 				# by more than 1 cm, lower than every other (the body leans onto it, the springs and the anti-roll bar

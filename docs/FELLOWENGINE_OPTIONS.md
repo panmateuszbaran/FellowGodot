@@ -498,7 +498,8 @@ smoke (milestone 110): `engine_smoke` (on; with `engine_power_loss` set, smoke f
 the dent there, from a tenth of `max_depth`), `is_engine_smoking()`. Suspension damage (milestone 110): `suspension_damage` (m,
 0: off; the most a dent shortens a wheel's `suspension_length`), `get_wheel_sag()` (the lane `sagged`). Hinged parts
 (milestone 110): a part's metadata `fellow_hinge_axis` (a `Vector3` in its space) makes it hang on a `HingeJoint3D`
-along it instead of a pin (the lane `door`).
+along it instead of a pin, `fellow_hinge_limits` (a `Vector2` of degrees; a left door with its axis up opens outwards with
+(0, 70)) (the lane `door`).
 
 ## Sound through the scene's geometry (milestone 78)
 

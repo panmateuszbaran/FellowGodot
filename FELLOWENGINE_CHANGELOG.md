@@ -21,8 +21,9 @@ Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.m
 - `FellowVehicleDamage3D.suspension_damage` (m, 0: off): a dent reaching a wheel shortens its suspension's travel (a
   bent strut): 0.06 m at a side hit by the front-left wheel took 3.0 cm, that corner 2.3 cm lower, the diagonal one
   0.8 cm higher; `get_wheel_sag()`; `repair()` gives it back.
-- Hinged parts: a detachable part with the metadata `fellow_hinge_axis` hangs on a `HingeJoint3D` along it (a door hit
-  at its rear end hangs from its front edge and swings 95° open in a right turn at 25 km/h).
+- Hinged parts: a detachable part with the metadata `fellow_hinge_axis` hangs on a `HingeJoint3D` along it, limited by
+  `fellow_hinge_limits` (a door hit at its rear end hangs from its front edge and swings open in a right turn at
+  25 km/h: 95° without a limit, 74° with (0, 70)).
 - The FellowEngine menu's "Add Car" makes a car that takes damage: its body subdivided for dents, a bumper, and a
   `FellowVehicleDamage3D` (`wheel_bend` 4°, `engine_power_loss` 0.4, the bumper hanging at 6 cm and off at 16 cm).
 

@@ -80,12 +80,14 @@ three alternating runs each, the release template, ms a frame): GodotPhysics3D 0
 
 Decision 0217's hanging parts swing every way about a pin; a part with the metadata `fellow_hinge_axis` (a direction in
 its space) hangs on a `HingeJoint3D` along it instead, through the same point (the end of its longest side farthest
-from its last hit). `vehicle_check.gd`'s lane `door`: a car's left door (0.06 × 0.6 × 1.0 m, the axis vertical) hit
-at its rear end at rest hangs from its front edge; the car then turns right at 25 km/h and the door swings open — at
-4 s 94.8° (GodotPhysics3D; Jolt 94.6°), its front edge 4.7 cm from where it was (the joint's give: no limit stops the
-door), its rear end level. The other lanes as before; the editor build and the release template the same; the laptop
-(job f425) the same values with both engines.
+from its last hit). The metadata `fellow_hinge_limits` (a `Vector2` of degrees) limits the turn (the
+joint's angle: positive turns the part by the left-hand rule about the axis — a left door with its axis up opens
+outwards with (0, 70); the first try, (−70, 0), kept the door shut). `vehicle_check.gd`'s lane `door`: a car's left
+door (0.06 × 0.6 × 1.0 m, the axis vertical) hit at its rear end at rest hangs from its front edge; the car then turns
+right at 25 km/h and the door swings open — without a limit 94.8° at 4 s (GodotPhysics3D; Jolt 94.6°, the laptop's job
+f425 the same), its front edge 4.7 cm from where it was (the joint's give); with (0, 70) 74.1° (the limit's give), the
+edge 3.9 cm off, its rear end level. The other lanes as before; the editor build and the release template the same.
 
 ## 7. Next
 
-Hinge limits (a door opening 70° at most); GodotPhysics3D's broadphase at 10 000 bodies (63 ms); the 8 ms of node updates at 10 000 bodies (both engines).
+GodotPhysics3D's broadphase at 10 000 bodies (63 ms); the 8 ms of node updates at 10 000 bodies (both engines).

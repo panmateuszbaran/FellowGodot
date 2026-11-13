@@ -466,7 +466,17 @@ void FellowVehicleDamage3D::_detach_pending() {
 			if (hinge_axis.get_type() == Variant::VECTOR3 && !Vector3(hinge_axis).is_zero_approx()) {
 				const Vector3 axis = n->get_global_transform().basis.xform(Vector3(hinge_axis)).normalized();
 				const Vector3 up = Math::abs(axis.y) < 0.9f ? Vector3(0, 1, 0) : Vector3(1, 0, 0);
-				joint = memnew(HingeJoint3D); // it turns about its own Z
+				HingeJoint3D *hinge = memnew(HingeJoint3D); // it turns about its own Z
+				// The metadata fellow_hinge_limits (a Vector2, degrees): how far it can turn each way from where it hung
+				// (the joint's angle: positive turns the part about the axis by the left-hand rule — a left door with
+				// its axis up opens outwards between 0 and 70).
+				if (n->has_meta(SNAME("fellow_hinge_limits"))) {
+					const Vector2 limits = n->get_meta(SNAME("fellow_hinge_limits"));
+					hinge->set_flag(HingeJoint3D::FLAG_USE_LIMIT, true);
+					hinge->set_param(HingeJoint3D::PARAM_LIMIT_LOWER, Math::deg_to_rad(MIN(limits.x, limits.y)));
+					hinge->set_param(HingeJoint3D::PARAM_LIMIT_UPPER, Math::deg_to_rad(MAX(limits.x, limits.y)));
+				}
+				joint = hinge;
 				joint->set_name(String(n->get_name()) + "Hinge");
 				vehicle->get_parent()->add_child(joint);
 				joint->set_global_transform(Transform3D(Basis::looking_at(-axis, up), pin));
