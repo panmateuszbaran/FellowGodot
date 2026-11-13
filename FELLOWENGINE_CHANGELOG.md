@@ -9,6 +9,12 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 109 — parts that hang before they come off (2026-11-13)
+
+- `FellowVehicleDamage3D.hang_depth` (decision 0217): a part dented that deep hangs from the vehicle on a `PinJoint3D` at
+  its end farthest from the hit (a bumper hit at its right end swings down from its left end), then comes off at
+  `detach_depth`; `part_hanging(part, body)`, `is_part_hanging()`; 0 by default.
+
 ## Milestone 108 — parts that come off (2026-11-13)
 
 - `FellowVehicleDamage3D.detachable_paths` (decision 0216): a part dented `detach_depth` deep (0.12 m, added up over

@@ -37,6 +37,7 @@
 #include "core/os/os.h"
 #include "scene/3d/mesh_instance_3d.h"
 #include "scene/3d/physics/collision_shape_3d.h"
+#include "scene/3d/physics/joints/pin_joint_3d.h"
 #include "scene/3d/physics/rigid_body_3d.h"
 #include "scene/resources/3d/box_shape_3d.h"
 #include "servers/physics_3d/physics_server_3d.h"
@@ -345,7 +346,8 @@ void FellowVehicleDamage3D::_parts_hit(const Vector3 &p_position, const Vector3 
 	}
 	for (Part &part : parts) {
 		Node3D *n = ObjectDB::get_instance<Node3D>(part.node);
-		if (!n || part.body.is_valid() || part.pending || !n->is_inside_tree()) {
+		const bool off = part.body.is_valid() && !part.joint.is_valid();
+		if (!n || off || part.pending || !n->is_inside_tree()) {
 			continue;
 		}
 		const VisualInstance3D *vi = Object::cast_to<VisualInstance3D>(n);
@@ -353,66 +355,122 @@ void FellowVehicleDamage3D::_parts_hit(const Vector3 &p_position, const Vector3 
 		const Transform3D xf = n->get_global_transform();
 		const Vector3 local = xf.affine_inverse().xform(p_position);
 		const Vector3 nearest = xf.xform(local.clamp(box.position, box.position + box.size));
-		part.dent += p_depth * _reach(nearest, p_position, p_direction);
+		const float reach = _reach(nearest, p_position, p_direction);
+		if (reach <= 0.0f) {
+			continue;
+		}
+		part.dent += p_depth * reach;
+		part.last_hit = local;
+		bool queue = false;
 		if (part.dent >= detach_depth) {
 			part.pending = true;
-			if (!detach_queued) {
-				detach_queued = true;
-				callable_mp(this, &FellowVehicleDamage3D::_detach_pending).call_deferred();
-			}
+			queue = true;
+		} else if (hang_depth > 0.0f && part.dent >= hang_depth && !part.body.is_valid() && !part.hang_pending) {
+			part.hang_pending = true; // milestone 109
+			queue = true;
+		}
+		if (queue && !detach_queued) {
+			detach_queued = true;
+			callable_mp(this, &FellowVehicleDamage3D::_detach_pending).call_deferred();
 		}
 	}
 }
 
-// A part coming off: a rigid body of detach_mass where it is (a box of its bounds, the vehicle's layers, not colliding
+// A part falling away: a rigid body of detach_mass where it is (a box of its bounds, the vehicle's layers, not colliding
 // with the vehicle it came from), moving as the vehicle's body moved at that point; the part moved under it.
+RigidBody3D *FellowVehicleDamage3D::_make_body(Part &r_part) {
+	Node3D *n = ObjectDB::get_instance<Node3D>(r_part.node);
+	const VisualInstance3D *vi = Object::cast_to<VisualInstance3D>(n);
+	const AABB box = vi ? vi->get_aabb() : AABB(Vector3(-0.05, -0.05, -0.05), Vector3(0.1, 0.1, 0.1));
+	const Transform3D xf = n->get_global_transform();
+	const Vector3 scale = xf.basis.get_scale().abs();
+	RigidBody3D *body = memnew(RigidBody3D);
+	body->set_name(String(n->get_name()) + "Detached");
+	body->set_mass(detach_mass);
+	body->set_collision_layer(vehicle->get_collision_layer());
+	body->set_collision_mask(vehicle->get_collision_mask());
+	CollisionShape3D *cs = memnew(CollisionShape3D);
+	Ref<BoxShape3D> shape;
+	shape.instantiate();
+	shape->set_size((box.size * scale).max(Vector3(0.02, 0.02, 0.02)));
+	cs->set_shape(shape);
+	cs->set_position(box.get_center() * scale);
+	body->add_child(cs);
+	vehicle->get_parent()->add_child(body);
+	body->set_global_transform(Transform3D(xf.basis.orthonormalized(), xf.origin));
+	body->add_collision_exception_with(vehicle);
+	const Vector3 at = xf.xform(box.get_center());
+	body->set_linear_velocity(vehicle->get_linear_velocity() + vehicle->get_angular_velocity().cross(at - vehicle->get_global_position()));
+	body->set_angular_velocity(vehicle->get_angular_velocity());
+	n->reparent(body, true);
+	r_part.body = body->get_instance_id();
+	return body;
+}
+
+// The parts' changes after the physics step: hanging (milestone 109: its body pinned to the vehicle at the end of its
+// longest side farthest from its last hit) or off (the pin, if it hung, let go).
 void FellowVehicleDamage3D::_detach_pending() {
 	detach_queued = false;
 	if (!vehicle || !vehicle->get_parent()) {
 		return;
 	}
 	for (Part &part : parts) {
-		if (!part.pending) {
+		if (!part.pending && !part.hang_pending) {
 			continue;
 		}
+		const bool hang = part.hang_pending && !part.pending;
 		part.pending = false;
+		part.hang_pending = false;
 		Node3D *n = ObjectDB::get_instance<Node3D>(part.node);
-		if (!n || !n->is_inside_tree() || part.body.is_valid()) {
+		if (!n || !n->is_inside_tree()) {
 			continue;
 		}
-		const VisualInstance3D *vi = Object::cast_to<VisualInstance3D>(n);
-		const AABB box = vi ? vi->get_aabb() : AABB(Vector3(-0.05, -0.05, -0.05), Vector3(0.1, 0.1, 0.1));
-		const Transform3D xf = n->get_global_transform();
-		const Vector3 scale = xf.basis.get_scale().abs();
-		RigidBody3D *body = memnew(RigidBody3D);
-		body->set_name(String(n->get_name()) + "Detached");
-		body->set_mass(detach_mass);
-		body->set_collision_layer(vehicle->get_collision_layer());
-		body->set_collision_mask(vehicle->get_collision_mask());
-		CollisionShape3D *cs = memnew(CollisionShape3D);
-		Ref<BoxShape3D> shape;
-		shape.instantiate();
-		shape->set_size((box.size * scale).max(Vector3(0.02, 0.02, 0.02)));
-		cs->set_shape(shape);
-		cs->set_position(box.get_center() * scale);
-		body->add_child(cs);
-		vehicle->get_parent()->add_child(body);
-		body->set_global_transform(Transform3D(xf.basis.orthonormalized(), xf.origin));
-		body->add_collision_exception_with(vehicle);
-		const Vector3 at = xf.xform(box.get_center());
-		body->set_linear_velocity(vehicle->get_linear_velocity() + vehicle->get_angular_velocity().cross(at - vehicle->get_global_position()));
-		body->set_angular_velocity(vehicle->get_angular_velocity());
-		n->reparent(body, true);
-		part.body = body->get_instance_id();
-		detached++;
-		emit_signal(SNAME("part_detached"), n, body);
+		RigidBody3D *body = ObjectDB::get_instance<RigidBody3D>(part.body);
+		if (!body) {
+			body = _make_body(part);
+		}
+		if (hang) {
+			const VisualInstance3D *vi = Object::cast_to<VisualInstance3D>(n);
+			const AABB box = vi ? vi->get_aabb() : AABB(Vector3(-0.05, -0.05, -0.05), Vector3(0.1, 0.1, 0.1));
+			const int axis = box.get_longest_axis_index();
+			Vector3 end_a = box.get_center();
+			Vector3 end_b = end_a;
+			end_a[axis] = box.position[axis];
+			end_b[axis] = box.position[axis] + box.size[axis];
+			const Vector3 pin = n->get_global_transform().xform(part.last_hit.distance_squared_to(end_a) > part.last_hit.distance_squared_to(end_b) ? end_a : end_b);
+			PinJoint3D *joint = memnew(PinJoint3D);
+			joint->set_name(String(n->get_name()) + "Pin");
+			vehicle->get_parent()->add_child(joint);
+			joint->set_global_position(pin);
+			joint->set_node_a(joint->get_path_to(vehicle));
+			joint->set_node_b(joint->get_path_to(body));
+			part.joint = joint->get_instance_id();
+			emit_signal(SNAME("part_hanging"), n, body);
+		} else {
+			if (PinJoint3D *joint = ObjectDB::get_instance<PinJoint3D>(part.joint)) {
+				joint->set_node_b(NodePath());
+				joint->queue_free();
+			}
+			part.joint = ObjectID();
+			detached++;
+			emit_signal(SNAME("part_detached"), n, body);
+		}
 	}
 }
 
 bool FellowVehicleDamage3D::is_part_detached(const NodePath &p_part) const {
 	for (const Part &part : parts) {
 		if (part.path == p_part) {
-			return part.body.is_valid();
+			return part.body.is_valid() && !part.joint.is_valid();
+		}
+	}
+	return false;
+}
+
+bool FellowVehicleDamage3D::is_part_hanging(const NodePath &p_part) const {
+	for (const Part &part : parts) {
+		if (part.path == p_part) {
+			return part.joint.is_valid();
 		}
 	}
 	return false;
@@ -480,6 +538,12 @@ void FellowVehicleDamage3D::repair() {
 			n->set_transform(part.local);
 			parent->move_child(n, MIN(part.index, parent->get_child_count() - 1));
 		}
+		if (PinJoint3D *joint = ObjectDB::get_instance<PinJoint3D>(part.joint)) {
+			joint->set_node_b(NodePath());
+			joint->queue_free();
+		}
+		part.joint = ObjectID();
+		part.hang_pending = false;
 		if (body) {
 			body->queue_free();
 		}
@@ -616,6 +680,9 @@ void FellowVehicleDamage3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_detach_mass", "mass"), &FellowVehicleDamage3D::set_detach_mass);
 	ClassDB::bind_method(D_METHOD("get_detach_mass"), &FellowVehicleDamage3D::get_detach_mass);
 	ClassDB::bind_method(D_METHOD("is_part_detached", "part"), &FellowVehicleDamage3D::is_part_detached);
+	ClassDB::bind_method(D_METHOD("set_hang_depth", "depth"), &FellowVehicleDamage3D::set_hang_depth);
+	ClassDB::bind_method(D_METHOD("get_hang_depth"), &FellowVehicleDamage3D::get_hang_depth);
+	ClassDB::bind_method(D_METHOD("is_part_hanging", "part"), &FellowVehicleDamage3D::is_part_hanging);
 	ClassDB::bind_method(D_METHOD("get_vertex_offset", "mesh", "surface", "vertex"), &FellowVehicleDamage3D::get_vertex_offset);
 	ClassDB::bind_method(D_METHOD("get_stats"), &FellowVehicleDamage3D::get_stats);
 
@@ -634,7 +701,9 @@ void FellowVehicleDamage3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::ARRAY, "detachable_paths", PROPERTY_HINT_ARRAY_TYPE, vformat("%s/%s:%s", Variant::NODE_PATH, PROPERTY_HINT_NODE_PATH_VALID_TYPES, "Node3D")), "set_detachable_paths", "get_detachable_paths");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "detach_depth", PROPERTY_HINT_RANGE, "0,1,0.01,or_greater,suffix:m"), "set_detach_depth", "get_detach_depth");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "detach_mass", PROPERTY_HINT_RANGE, "0.1,200,0.1,or_greater,suffix:kg"), "set_detach_mass", "get_detach_mass");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "hang_depth", PROPERTY_HINT_RANGE, "0,1,0.01,or_greater,suffix:m"), "set_hang_depth", "get_hang_depth");
 
+	ADD_SIGNAL(MethodInfo("part_hanging", PropertyInfo(Variant::OBJECT, "part", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_DEFAULT, "Node3D"), PropertyInfo(Variant::OBJECT, "body", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_DEFAULT, "RigidBody3D")));
 	ADD_SIGNAL(MethodInfo("part_detached", PropertyInfo(Variant::OBJECT, "part", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_DEFAULT, "Node3D"), PropertyInfo(Variant::OBJECT, "body", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_DEFAULT, "RigidBody3D")));
 	ADD_SIGNAL(MethodInfo("impacted", PropertyInfo(Variant::VECTOR3, "position"), PropertyInfo(Variant::FLOAT, "impulse"), PropertyInfo(Variant::FLOAT, "depth")));
 }

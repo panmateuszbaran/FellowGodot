@@ -36,6 +36,7 @@
 
 class FellowVehicle3D;
 class MeshInstance3D;
+class RigidBody3D;
 
 // FellowEngine (milestone 105, decision 0213): a vehicle's body dented where it hits. A child of a FellowVehicle3D; it
 // reads the body's contacts each physics step, and an impact whose impulse exceeds impulse_threshold pushes the
@@ -44,7 +45,8 @@ class MeshInstance3D;
 // the first impact; repair() puts the originals back. Milestone 107 (decision 0215): the dents reach the running gear —
 // a wheel near one bent out of line (its toe: the car pulls), the engine's power lost when the dent reaches it.
 // Milestone 108 (decision 0216): parts that come off — a node of detachable_paths dented detach_depth deep falls away
-// as a rigid body of its own.
+// as a rigid body of its own. Milestone 109 (decision 0217): before that, at hang_depth, it hangs from its end farthest
+// from the hits on a pin to the vehicle.
 class FellowVehicleDamage3D : public Node3D {
 	GDCLASS(FellowVehicleDamage3D, Node3D);
 
@@ -73,6 +75,7 @@ class FellowVehicleDamage3D : public Node3D {
 	TypedArray<NodePath> detachable_paths;
 	float detach_depth = 0.12f; // m of dent at the part
 	float detach_mass = 8.0f; // kg
+	float hang_depth = 0.0f; // milestone 109: m of dent at which a part hangs (0: never)
 	struct Part {
 		NodePath path; // from this node, as given
 		ObjectID node;
@@ -82,6 +85,9 @@ class FellowVehicleDamage3D : public Node3D {
 		float dent = 0.0f; // m
 		bool pending = false;
 		ObjectID body; // the body it fell away in
+		bool hang_pending = false; // milestone 109
+		ObjectID joint; // the pin it hangs from
+		Vector3 last_hit; // the last impact, in the part's space
 	};
 	LocalVector<Part> parts;
 	bool parts_ready = false;
@@ -114,6 +120,7 @@ class FellowVehicleDamage3D : public Node3D {
 	void _gather_parts();
 	void _parts_hit(const Vector3 &p_position, const Vector3 &p_direction, float p_depth);
 	void _detach_pending();
+	RigidBody3D *_make_body(Part &r_part);
 
 protected:
 	void _notification(int p_what);
@@ -143,6 +150,9 @@ public:
 	void set_detach_mass(float p_mass) { detach_mass = MAX(0.01f, p_mass); }
 	float get_detach_mass() const { return detach_mass; }
 	bool is_part_detached(const NodePath &p_part) const;
+	void set_hang_depth(float p_depth) { hang_depth = MAX(0.0f, p_depth); }
+	float get_hang_depth() const { return hang_depth; }
+	bool is_part_hanging(const NodePath &p_part) const;
 
 	void apply_impact(const Vector3 &p_position, const Vector3 &p_direction, float p_impulse);
 	void repair();

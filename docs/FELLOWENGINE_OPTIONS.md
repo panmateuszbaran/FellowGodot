@@ -489,7 +489,9 @@ along it; `get_engine_power()`, `get_wheel_toe_change()`; `repair()` puts them b
 in). Bench `bench/vehicle_check.gd` (the lanes `straight`, `bent`, `bent_off`, `engine`, `repaired`). Parts that come off
 (milestone 108, decision 0216): `detachable_paths` (empty: none), `detach_depth` (0.12 m of dent at the part, added
 up), `detach_mass` (8 kg: the body it falls away in, not colliding with the vehicle); `is_part_detached()`, the signal
-`part_detached(part, body)`; `repair()` puts them back. Bench `bench/vehicle_check.gd` (the lane `bumper`).
+`part_detached(part, body)`; `repair()` puts them back. Bench `bench/vehicle_check.gd` (the lane `bumper`). Hanging
+(milestone 109, decision 0217): `hang_depth` (0: never; a part hangs on a pin at its end farthest from the hit until
+`detach_depth`), `is_part_hanging()`, the signal `part_hanging(part, body)` (the lane `hang`).
 
 ## Sound through the scene's geometry (milestone 78)
 
