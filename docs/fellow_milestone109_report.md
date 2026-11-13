@@ -1,6 +1,6 @@
 # FellowEngine — milestone 109 report (parts that hang before they come off)
 
-Status: **IN PROGRESS** (2026-11-13): the owner said "ok kontynuuj". Branch `fellow/geometry`. Decision record:
+Status: **FINAL** (2026-11-13): the owner said "ok kontynuuj"; the laptop's jobs f414-f415 done. Branch `fellow/geometry`. Decision record:
 `docs/decisions/0217-hanging-parts.md`.
 
 ## 0. Result
@@ -20,7 +20,8 @@ Decision 0217's table: the editor build and the release template the same; the o
 
 ## 3. Measurements
 
-The laptop (Windows, GodotPhysics3D and Jolt, the pictures on the RTX): next.
+The laptop (jobs f414-f415): the lane passes with GodotPhysics3D and Jolt after the second hit was moved to where the
+bumper hangs (decision 0217). Nothing to time: a body and a pin made when a part comes loose.
 
 ## 4. Next
 

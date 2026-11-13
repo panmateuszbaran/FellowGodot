@@ -34,7 +34,8 @@ lanes' bodies share one parent).
 
 The laptop's first run (job f414) hit the second time where the bumper had been before it hung: with GodotPhysics3D
 the hanging bumper was still close enough to reach 0.15 m, with Jolt (it hung 9 mm lower) not — a hanging part is
-dented only where it is. The lane now hits it where it hangs (both engines on the cloud: off at the second hit).
+dented only where it is. The lane now hits it where it hangs: job f415 — every lane passes with GodotPhysics3D (the left end 2.5 cm from where it
+was, the right end 27.3 cm down, off at the second hit, y 0.10 m) and with Jolt (2.6 cm, 28.2 cm, y 0.09 m).
 
 ## Decision
 
