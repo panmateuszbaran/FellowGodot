@@ -1,6 +1,6 @@
 # FellowEngine — milestone 107 report (dents that reach the running gear)
 
-Status: **IN PROGRESS** (2026-11-13): the owner said "ok kontynuuj". Branch `fellow/geometry`. Decision record:
+Status: **FINAL** (2026-11-13): the owner said "ok kontynuuj"; the laptop's job f412 done. Branch `fellow/geometry`. Decision record:
 `docs/decisions/0215-running-gear-damage.md`.
 
 ## 0. Result
@@ -20,11 +20,13 @@ Status: **IN PROGRESS** (2026-11-13): the owner said "ok kontynuuj". Branch `fel
 ## 2. Verification
 
 Decision 0215's table: the editor build and the release template the same, value for value; the other lanes as
-before.
+before; the regression scene `vehicle` exact. The laptop (job f412): every lane with GodotPhysics3D and Jolt, the same
+values; the picture strip's row of the bent car beside the unhit one.
 
 ## 3. Measurements
 
-The laptop (Windows, GodotPhysics3D and Jolt): next.
+Nothing to time apart from decision 0213's dents (a loop over the wheels at an impact; one comparison a wheel in the
+vehicle's step).
 
 ## 4. Next
 

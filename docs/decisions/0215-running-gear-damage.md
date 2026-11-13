@@ -43,8 +43,11 @@ front's middle), then 6 s at 40 km/h with the steering at 0 (the engine lane at 
 | engine (the front's middle) | power < 0.85, `max_torque` 400 × it, slower to 100 km/h than the accel lane's car by more than 10 %, straight | power 0.740, 296.1 N·m; 7.63 s against 6.27 s (+22 %); 0.00° |
 | repaired (both hits, `repair()` 0.1 s later) | as straight within 0.2°, toes 0, 400 N·m | 0.00°, toes 0 (+2.52 before), 400 N·m (280.1 before) |
 
-The other 21 lanes the same values as before (their cars' amounts 0, their toes 0); the picture strip's new row
-(`bent`, from 30 m above with the unhit car beside it) shows its path pulled to the right.
+The other 21 lanes the same values as before (their cars' amounts 0, their toes 0); the regression scene `vehicle`
+exact. The laptop (job f412: Windows, a release template, MSVC): every lane passes with GodotPhysics3D and with Jolt,
+the values the cloud's (the bent car 24.53° with both engines, 11.50 and 11.49 m sideways; the engine lane 7.63 s);
+the picture strip's new row (`bent`, from 30 m above with the unhit car beside it, the lanes' markings every 10 m)
+shows it turned to the right from 2 s on and held there after it stops.
 
 ## Cost
 
