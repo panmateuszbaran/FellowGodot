@@ -80,5 +80,7 @@ func _physics_process(_delta: float) -> void:
 	# An arc of 3 m radius at 1.8 m/s, facing the way it goes; the chest twisting 30 degrees each way.
 	var a := t * 1.8 / 3.0
 	_walker.position = Vector3(cos(a) * 3.0 - 3.0, 0, -sin(a) * 3.0)
-	_walker.look_at(_walker.global_position + Vector3(-sin(a), 0, -cos(a)), Vector3.UP)
+	# The basis from the direction itself: look_at() compares the target with the position relative to their size and
+	# fails far from the origin (milestone 103).
+	_walker.basis = Basis.looking_at(Vector3(-sin(a), 0, -cos(a)), Vector3.UP)
 	_skeleton.set_bone_pose_rotation(_skeleton.find_bone("Chest"), Quaternion(Vector3.UP, deg_to_rad(30.0) * sin(t * TAU * 1.5)))

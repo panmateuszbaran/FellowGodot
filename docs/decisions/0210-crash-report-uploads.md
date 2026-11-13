@@ -73,7 +73,8 @@ unreachable lane found Godot's Windows sockets reporting a refused connection on
 (`network/limits/tcp/connect_timeout_seconds`, 30 s a report): a collector not reached is now not tried again for the
 rest of the reports (30 s for the call). The same delay met the TLS lanes, whose collector was `localhost`: Windows
 tries its IPv6 address first, refused, and the IPv4 one only 30 s later (jobs f404 and f405: a 10 s connection limit,
-then exactly 30 s, cut them off; f403 had passed by 30 ms). The lanes now use `127.0.0.1` (the certificate's name).
+then exactly 30 s, cut them off; f403 had passed by 30 ms). The lanes now use `127.0.0.1` (the certificate's name):
+job f406, every upload lane as on the cloud (TLS 29-35 ms; the unreachable collector 30 s for the call).
 
 ## Cost
 
