@@ -396,6 +396,11 @@ Vector<AudioFrame> AudioStreamPlayer3D::_update_panning() {
 	}
 
 	Vector3 global_pos = get_global_transform().origin;
+	// FellowEngine (decision 0207): heard from where FellowAcoustics3D's path through an opening reaches the listener
+	// (its direction, at its length), by the weight it has.
+	if (fellow_acoustics.position_weight > 0.0f) {
+		global_pos = global_pos.lerp(fellow_acoustics.position, fellow_acoustics.position_weight);
+	}
 
 	Ref<World3D> world_3d = get_world_3d();
 	ERR_FAIL_COND_V(world_3d.is_null(), output_volume_vector);

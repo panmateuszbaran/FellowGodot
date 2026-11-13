@@ -30,6 +30,8 @@
 
 #include "fellow_acoustics_3d.h"
 
+#include "fellow_acoustic_portal_3d.h"
+
 #include "core/config/engine.h"
 #include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
@@ -213,6 +215,8 @@ void FellowAcoustics3D::_reset_sources() {
 		kv.value.target = 0.0f;
 		kv.value.occlusion_highs = 0.0f;
 		kv.value.target_highs = 0.0f;
+		kv.value.portal_target = 0.0f;
+		kv.value.portal_weight = 0.0f;
 		kv.value.tested = false;
 	}
 }
@@ -276,10 +280,104 @@ void FellowAcoustics3D::_measure_room(const Vector3 &p_at, PhysicsDirectSpaceSta
 	}
 }
 
+// Milestone 99 (decision 0207): the path through an opening, for a source the rays found blocked. The open portals the
+// line crosses (the listener and the source on its two sides), nearest path first: the line's crossing of the opening's
+// plane brought 10 cm inside its edges, both legs tested clear. The first clear one is heard when it is louder than
+// through the wall (the path's extra length, the bend through it at portal_diffraction_db a quarter turn, its
+// transmission; the highs: the wall's shelf against the bend's): the source then heard from its direction at its
+// length (the player's own distance attenuation), its occlusion the bend's and the transmission's.
+void FellowAcoustics3D::_portal_path(Source &r_source, const Vector3 &p_at, const Vector3 &p_pos, float p_range, const HashSet<RID> &p_exclude, PhysicsDirectSpaceState3D *p_space, const World3D *p_world, int &r_budget) {
+	struct Candidate {
+		float length = 0.0f;
+		Vector3 point;
+		float transmission = 1.0f;
+	};
+	LocalVector<Candidate> candidates;
+	for (const FellowAcousticPortal3D *portal : FellowAcousticPortal3D::get_portals()) {
+		if (portal->get_transmission() <= 0.0f || portal->get_world_3d().ptr() != p_world) {
+			continue;
+		}
+		const Transform3D xf = portal->get_global_transform();
+		Vector3 ux = xf.basis.get_column(0);
+		Vector3 uy = xf.basis.get_column(1);
+		Vector3 n = xf.basis.get_column(2);
+		const float sx = ux.length();
+		const float sy = uy.length();
+		const float sn = n.length();
+		if (sx < 1e-6f || sy < 1e-6f || sn < 1e-6f) {
+			continue;
+		}
+		ux /= sx;
+		uy /= sy;
+		n /= sn;
+		const float dl = (p_at - xf.origin).dot(n);
+		const float ds = (p_pos - xf.origin).dot(n);
+		if (dl * ds >= 0.0f) {
+			continue; // both on one side: the opening is not between them
+		}
+		const Vector3 crossing = p_at + (p_pos - p_at) * (dl / (dl - ds));
+		const Vector2 half = portal->get_size() * 0.5f * Vector2(sx, sy);
+		const float mx = MAX(0.0f, half.x - 0.1f);
+		const float my = MAX(0.0f, half.y - 0.1f);
+		const Vector3 local = crossing - xf.origin;
+		Candidate c;
+		c.point = xf.origin + ux * CLAMP(local.dot(ux), -mx, mx) + uy * CLAMP(local.dot(uy), -my, my);
+		c.length = p_at.distance_to(c.point) + c.point.distance_to(p_pos);
+		c.transmission = portal->get_transmission();
+		if (c.length <= p_range) {
+			candidates.push_back(c);
+		}
+	}
+	for (uint32_t i = 1; i < candidates.size(); i++) {
+		for (uint32_t j = i; j > 0 && candidates[j].length < candidates[j - 1].length; j--) {
+			SWAP(candidates[j], candidates[j - 1]);
+		}
+	}
+	const float direct = MAX(p_at.distance_to(p_pos), 0.01f);
+	int tried = 0;
+	for (const Candidate &c : candidates) {
+		if (tried >= max_portals || r_budget < 2) {
+			break;
+		}
+		tried++;
+		r_budget -= 2;
+		last_rays += 2;
+		bool clear = true;
+		for (int leg = 0; leg < 2 && clear; leg++) {
+			PhysicsDirectSpaceState3D::RayParameters rq;
+			rq.from = leg == 0 ? p_at : c.point;
+			rq.to = leg == 0 ? c.point : p_pos;
+			rq.exclude = p_exclude;
+			rq.collision_mask = collision_mask;
+			PhysicsDirectSpaceState3D::RayResult rr;
+			clear = !p_space->intersect_ray(rq, rr);
+		}
+		if (!clear) {
+			continue;
+		}
+		const Vector3 in = (c.point - p_at).normalized();
+		const Vector3 out = (p_pos - c.point).normalized();
+		const float bend = in.angle_to(out); // 0: straight through
+		const float level_db = portal_diffraction_db * bend / float(Math::PI * 0.5) + Math::linear_to_db(MAX(c.transmission, 1e-4f));
+		const float bend_highs = CLAMP(bend / float(Math::PI), 0.0f, 1.0f);
+		const float path_db = Math::linear_to_db(direct / c.length) + level_db + 0.5f * bend_highs * occluded_shelf_db;
+		const float wall_db = r_source.target * occluded_volume_db + 0.5f * r_source.target_highs * occluded_shelf_db;
+		if (path_db > wall_db) {
+			r_source.target = occluded_volume_db < -0.01f ? CLAMP(level_db / occluded_volume_db, 0.0f, 1.0f) : 0.0f;
+			r_source.target_highs = bend_highs;
+			r_source.portal_point = p_at + in * c.length;
+			r_source.portal_target = 1.0f;
+			last_portal_paths++;
+		}
+		return; // the nearest clear opening decides
+	}
+}
+
 void FellowAcoustics3D::_step(float p_delta) {
 	const uint64_t t0 = OS::get_singleton()->get_ticks_usec();
 	last_rays = 0;
 	last_tests = 0;
+	last_portal_paths = 0;
 	Node3D *listener = _listener();
 	Ref<World3D> world = listener ? listener->get_world_3d() : Ref<World3D>();
 	PhysicsDirectSpaceState3D *space = world.is_valid() ? PhysicsServer3D::get_singleton()->space_get_direct_state(world->get_space()) : nullptr;
@@ -386,9 +484,15 @@ void FellowAcoustics3D::_step(float p_delta) {
 		last_tests++;
 		s->target = blocked / float(occlusion_rays);
 		s->target_highs = blocked_highs / float(occlusion_rays);
+		s->portal_target = 0.0f;
+		if (portals && s->target > 0.01f) {
+			_portal_path(*s, at, pos, range, exclude, space, world.ptr(), budget);
+		}
 		if (!s->tested) {
 			s->occlusion = s->target;
 			s->occlusion_highs = s->target_highs;
+			s->portal_weight = s->portal_target;
+			s->apparent = s->portal_point;
 			s->tested = true;
 		}
 	}
@@ -404,10 +508,20 @@ void FellowAcoustics3D::_step(float p_delta) {
 		if (!s.audible) {
 			s.target = 0.0f;
 			s.target_highs = 0.0f;
+			s.portal_target = 0.0f;
 		}
 		s.occlusion += (s.target - s.occlusion) * k;
 		s.occlusion_highs += (s.target_highs - s.occlusion_highs) * k;
+		// Milestone 99: where it is heard from moves to the opening's path and back with the same response.
+		if (s.portal_target > 0.0f) {
+			s.apparent = s.portal_weight < 0.02f ? s.portal_point : s.apparent.lerp(s.portal_point, k);
+		}
+		s.portal_weight += (s.portal_target - s.portal_weight) * k;
 		AudioStreamPlayer3D::FellowAcoustics a;
+		if (s.portal_weight > 1e-3f) {
+			a.position = s.apparent;
+			a.position_weight = MIN(s.portal_weight, 1.0f);
+		}
 		if (s.occlusion > 1e-4f || s.occlusion_highs > 1e-4f) {
 			a.gain = Math::db_to_linear(s.occlusion * occluded_volume_db);
 			a.shelf = Math::db_to_linear(s.occlusion_highs * occluded_shelf_db);
@@ -477,6 +591,20 @@ void FellowAcoustics3D::_notification(int p_what) {
 	}
 }
 
+float FellowAcoustics3D::get_portal_weight(Node *p_player) const {
+	ERR_FAIL_NULL_V(p_player, 0.0f);
+	const Source *s = sources.getptr(p_player->get_instance_id());
+	return s ? s->portal_weight : 0.0f;
+}
+
+Vector3 FellowAcoustics3D::get_heard_position(Node *p_player) const {
+	const Node3D *n = Object::cast_to<Node3D>(p_player);
+	ERR_FAIL_NULL_V(n, Vector3());
+	const Source *s = sources.getptr(p_player->get_instance_id());
+	const Vector3 own = n->is_inside_tree() ? n->get_global_position() : Vector3();
+	return s && s->portal_weight > 1e-3f ? own.lerp(s->apparent, MIN(s->portal_weight, 1.0f)) : own;
+}
+
 float FellowAcoustics3D::get_occlusion(Node *p_player) const {
 	ERR_FAIL_NULL_V(p_player, 0.0f);
 	const Source *s = sources.getptr(p_player->get_instance_id());
@@ -516,6 +644,8 @@ Dictionary FellowAcoustics3D::get_stats() const {
 	d["tests"] = last_tests;
 	d["usec"] = int64_t(last_usec);
 	d["active"] = current == this;
+	d["portal_paths"] = last_portal_paths; // milestone 99: sources heard through an opening, tested this frame
+	d["portals"] = int(FellowAcousticPortal3D::get_portals().size());
 	return d;
 }
 
@@ -579,6 +709,14 @@ void FellowAcoustics3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_reverb_level"), &FellowAcoustics3D::get_reverb_level);
 	ClassDB::bind_method(D_METHOD("set_reverb_response", "time"), &FellowAcoustics3D::set_reverb_response);
 	ClassDB::bind_method(D_METHOD("get_reverb_response"), &FellowAcoustics3D::get_reverb_response);
+	ClassDB::bind_method(D_METHOD("set_portals", "enabled"), &FellowAcoustics3D::set_portals);
+	ClassDB::bind_method(D_METHOD("has_portals"), &FellowAcoustics3D::has_portals);
+	ClassDB::bind_method(D_METHOD("set_portal_diffraction_db", "db"), &FellowAcoustics3D::set_portal_diffraction_db);
+	ClassDB::bind_method(D_METHOD("get_portal_diffraction_db"), &FellowAcoustics3D::get_portal_diffraction_db);
+	ClassDB::bind_method(D_METHOD("set_max_portals", "count"), &FellowAcoustics3D::set_max_portals);
+	ClassDB::bind_method(D_METHOD("get_max_portals"), &FellowAcoustics3D::get_max_portals);
+	ClassDB::bind_method(D_METHOD("get_portal_weight", "player"), &FellowAcoustics3D::get_portal_weight);
+	ClassDB::bind_method(D_METHOD("get_heard_position", "player"), &FellowAcoustics3D::get_heard_position);
 	ClassDB::bind_method(D_METHOD("get_occlusion", "player"), &FellowAcoustics3D::get_occlusion);
 	ClassDB::bind_method(D_METHOD("get_occlusion_highs", "player"), &FellowAcoustics3D::get_occlusion_highs);
 	ClassDB::bind_method(D_METHOD("get_room"), &FellowAcoustics3D::get_room);
@@ -598,6 +736,10 @@ void FellowAcoustics3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "max_distance", PROPERTY_HINT_RANGE, "0,1000,0.1,or_greater,suffix:m"), "set_max_distance", "get_max_distance");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "max_rays_per_frame", PROPERTY_HINT_RANGE, "1,4096,1,or_greater"), "set_max_rays_per_frame", "get_max_rays_per_frame");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "response_time", PROPERTY_HINT_RANGE, "0,2,0.01,suffix:s"), "set_response_time", "get_response_time");
+	ADD_GROUP("Portals", "");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "portals"), "set_portals", "has_portals");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "portal_diffraction_db", PROPERTY_HINT_RANGE, "-40,0,0.1,suffix:dB"), "set_portal_diffraction_db", "get_portal_diffraction_db");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "max_portals", PROPERTY_HINT_RANGE, "1,16,1"), "set_max_portals", "get_max_portals");
 	ADD_GROUP("Reverb", "");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "reverb"), "set_reverb", "has_reverb");
 	ADD_PROPERTY(PropertyInfo(Variant::STRING_NAME, "reverb_bus"), "set_reverb_bus", "get_reverb_bus");

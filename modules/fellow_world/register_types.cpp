@@ -30,6 +30,7 @@
 
 #include "register_types.h"
 
+#include "fellow_acoustic_portal_3d.h"
 #include "fellow_acoustics_3d.h"
 #include "fellow_audio_director.h"
 #include "fellow_destructible_3d.h"
@@ -104,6 +105,7 @@ void initialize_fellow_world_module(ModuleInitializationLevel p_level) {
 		GDREGISTER_CLASS(FellowVehicle3D); // milestone 77
 		GDREGISTER_CLASS(FellowWheel3D);
 		GDREGISTER_CLASS(FellowAcoustics3D); // milestone 78
+		GDREGISTER_CLASS(FellowAcousticPortal3D); // milestone 99
 		GDREGISTER_CLASS(FellowVehicleEffects3D); // milestone 79
 		GDREGISTER_CLASS(FellowSoundEvent); // milestone 82
 		GDREGISTER_CLASS(FellowMixSnapshot);

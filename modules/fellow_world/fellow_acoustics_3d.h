@@ -59,6 +59,11 @@ class FellowAcoustics3D : public Node3D {
 		float distance = 0.0f;
 		bool audible = false;
 		bool tested = false;
+		// Milestone 99 (decision 0207): a path through an opening, heard from its direction at its length.
+		float portal_target = 0.0f; // 1 while the path through a portal is the one heard
+		float portal_weight = 0.0f; // smoothed
+		Vector3 portal_point; // the apparent position (from the listener towards the opening, at the path's length)
+		Vector3 apparent;
 	};
 
 	struct GlobalStats {
@@ -90,6 +95,9 @@ class FellowAcoustics3D : public Node3D {
 	float absorption = 0.3f;
 	float reverb_level = 0.5f;
 	float reverb_response = 0.5f;
+	bool portals = true;
+	float portal_diffraction_db = -6.0f;
+	int max_portals = 2;
 
 	HashMap<ObjectID, Source> sources;
 	LocalVector<ObjectID> order;
@@ -110,6 +118,7 @@ class FellowAcoustics3D : public Node3D {
 
 	int last_rays = 0;
 	int last_tests = 0;
+	int last_portal_paths = 0;
 	uint64_t last_usec = 0;
 
 	void _node_added(Node *p_node);
@@ -122,6 +131,7 @@ class FellowAcoustics3D : public Node3D {
 	void _step(float p_delta);
 	void _measure_room(const Vector3 &p_at, PhysicsDirectSpaceState3D *p_space, const HashSet<RID> &p_exclude);
 	float _rt60() const;
+	void _portal_path(Source &r_source, const Vector3 &p_at, const Vector3 &p_pos, float p_range, const HashSet<RID> &p_exclude, PhysicsDirectSpaceState3D *p_space, const World3D *p_world, int &r_budget);
 
 protected:
 	void _notification(int p_what);
@@ -166,6 +176,16 @@ public:
 	float get_reverb_level() const { return reverb_level; }
 	void set_reverb_response(float p_time) { reverb_response = MAX(0.0f, p_time); }
 	float get_reverb_response() const { return reverb_response; }
+
+	void set_portals(bool p_enabled) { portals = p_enabled; }
+	bool has_portals() const { return portals; }
+	void set_portal_diffraction_db(float p_db) { portal_diffraction_db = CLAMP(p_db, -40.0f, 0.0f); }
+	float get_portal_diffraction_db() const { return portal_diffraction_db; }
+	void set_max_portals(int p_count) { max_portals = CLAMP(p_count, 1, 16); }
+	int get_max_portals() const { return max_portals; }
+	float get_portal_weight(Node *p_player) const;
+	Vector3 get_heard_position(Node *p_player) const;
+	static FellowAcoustics3D *get_current() { return current; }
 
 	float get_occlusion(Node *p_player) const;
 	float get_occlusion_highs(Node *p_player) const;

@@ -138,6 +138,8 @@ public:
 		float cutoff_hz = 0.0f;
 		StringName send_bus;
 		float send = 0.0f;
+		Vector3 position; // decision 0207: where the sound is heard from (a path through an opening), by its weight
+		float position_weight = 0.0f;
 	};
 	void fellow_set_acoustics(const FellowAcoustics &p_acoustics) { fellow_acoustics = p_acoustics; }
 	const FellowAcoustics &fellow_get_acoustics() const { return fellow_acoustics; }

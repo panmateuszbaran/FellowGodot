@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="FellowAcousticPortal3D" inherits="Node3D" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+	<brief_description>
+		FellowEngine: an opening sound passes through — a doorway, a window, a hatch.
+	</brief_description>
+	<description>
+		A rectangle of [member size] in the node's XY plane, centred on it (sound crosses it along the node's Z). With a [FellowAcoustics3D] in the scene, a source blocked from the listener is heard through the nearest open portal between them whose path is clear (the line from the listener crossing the opening's plane, brought 10 cm inside its edges, and from there to the source): from the opening's direction at the path's length, quieter and duller the more the path bends through it. A door in the doorway (a collider) blocks the path as long as it is there; [member transmission] closes or half-opens it without one. Without a [FellowAcoustics3D] it does nothing. See decision 0207 in [code]docs/decisions/[/code].
+	</description>
+	<tutorials>
+	</tutorials>
+	<members>
+		<member name="size" type="Vector2" setter="set_size" getter="get_size" default="Vector2(1, 2.1)">
+			The opening's width (X) and height (Y), in metres (scaled with the node).
+		</member>
+		<member name="transmission" type="float" setter="set_transmission" getter="get_transmission" default="1.0">
+			How much passes: 1 open, 0 closed (the portal is not used), between a door ajar or a curtained opening (its decibels added to the path's).
+		</member>
+	</members>
+</class>

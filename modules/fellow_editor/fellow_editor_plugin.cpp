@@ -86,6 +86,7 @@ static const char *FELLOW_GIZMO_CLASSES[] = {
 	"FellowTraversal3D",
 	"FellowLadder3D",
 	"FellowWheel3D",
+	"FellowAcousticPortal3D",
 };
 
 // The properties each class's lines are drawn from.
@@ -112,6 +113,8 @@ static Vector<StringName> _fellow_gizmo_properties(const StringName &p_class) {
 		return { SNAME("height"), SNAME("width"), SNAME("rung_spacing"), SNAME("rung_offset") };
 	} else if (p_class == SNAME("FellowWheel3D")) {
 		return { SNAME("radius"), SNAME("suspension_length") };
+	} else if (p_class == SNAME("FellowAcousticPortal3D")) {
+		return { SNAME("size") };
 	}
 	return {};
 }
@@ -270,6 +273,20 @@ Vector<Vector3> FellowGizmoPlugin::lines_for(const StringName &p_class, const Di
 		lines.push_back(Vector3(0.08, h * 0.5, 0.3));
 		lines.push_back(Vector3(0, h * 0.5, 0.4));
 		lines.push_back(Vector3(-0.08, h * 0.5, 0.3));
+	} else if (p_class == SNAME("FellowAcousticPortal3D")) {
+		// Milestone 99: the opening (its XY plane, centred) and a short line through it each way: sound passes across.
+		const Vector2 size = p_properties.get("size", Vector2(1.0, 2.1));
+		const real_t w = size.x * 0.5;
+		const real_t h = size.y * 0.5;
+		const Vector3 c[4] = { Vector3(-w, -h, 0), Vector3(w, -h, 0), Vector3(w, h, 0), Vector3(-w, h, 0) };
+		for (int i = 0; i < 4; i++) {
+			lines.push_back(c[i]);
+			lines.push_back(c[(i + 1) % 4]);
+		}
+		lines.push_back(Vector3(0, 0, -0.3));
+		lines.push_back(Vector3(0, 0, 0.3));
+		lines.push_back(Vector3(-0.1, 0, 0));
+		lines.push_back(Vector3(0.1, 0, 0));
 	} else if (p_class == SNAME("FellowWheel3D")) {
 		// Milestone 77: the wheel (a circle across its X, a spoke to see it turn) where the node is, with its
 		// suspension fully extended, and the suspension's travel up to its mount.
@@ -374,7 +391,7 @@ FellowGizmoPlugin::HandleKind FellowGizmoPlugin::_handle_kind(const Node3D *p_no
 	if (p_class == SNAME("FellowStreamingCell3D")) {
 		return HANDLES_BOUNDS;
 	}
-	if (p_class == SNAME("FellowWater3D") || p_class == SNAME("FellowShallowWater3D") || p_class == SNAME("FellowSnowTracker3D") || p_class == SNAME("FellowLightning3D")) {
+	if (p_class == SNAME("FellowWater3D") || p_class == SNAME("FellowShallowWater3D") || p_class == SNAME("FellowSnowTracker3D") || p_class == SNAME("FellowLightning3D") || p_class == SNAME("FellowAcousticPortal3D")) {
 		return HANDLES_AXES;
 	}
 	return HANDLES_NONE;
@@ -423,6 +440,9 @@ Vector<FellowGizmoPlugin::AxisHandle> FellowGizmoPlugin::axis_handles_for(const 
 		const real_t r = p_properties.get("radius", 0.1);
 		add(SNAME("radius"), -1, 0, 1, 1, 0, Vector3(), TTR("Radius"));
 		add(SNAME("length"), -1, 2, -1, 2, r, Vector3(), TTR("Length")); // at the capsule's front tip
+	} else if (p_class == SNAME("FellowAcousticPortal3D")) {
+		add(SNAME("size"), 0, 0, 1, 2, 0, Vector3(), TTR("Width (X)"));
+		add(SNAME("size"), 1, 1, 1, 2, 0, Vector3(), TTR("Height (Y)"));
 	} else if (p_class == SNAME("FellowLightning3D")) {
 		const Vector2 range = p_properties.get("distance_range", Vector2(400, 3000));
 		add(SNAME("distance_range"), 0, 0, 1, 1, 0, Vector3(), TTR("Nearest Strike"));
@@ -1015,6 +1035,10 @@ Node3D *FellowEditorPlugin::make_preset(int p_preset, const Node *p_root) {
 			// Milestone 78: the scene's 3D sounds heard through its geometry (occlusion, the listener's room's reverb).
 			top = Object::cast_to<Node3D>(_fellow_make("FellowAcoustics3D", "Acoustics", nullptr));
 		} break;
+		case PRESET_ACOUSTIC_PORTAL: {
+			// Milestone 99: a doorway 1 x 2.1 m (its centre 1.05 m up, facing along Z): set it in a wall's opening.
+			top = Object::cast_to<Node3D>(_fellow_make("FellowAcousticPortal3D", "Doorway", nullptr, Dictionary{ { "position", Vector3(0, 1.05, 0) } }));
+		} break;
 		case PRESET_DESTRUCTIBLE_WALL: {
 			// Milestone 80: a 4 x 3 m brick-coloured wall, 0.25 m thick (a static body), prefractured in 40 pieces:
 			// broken where it is struck (0.6 m round the blow), what loses its support falling.
@@ -1231,6 +1255,7 @@ FellowEditorPlugin::FellowEditorPlugin() {
 	popup->add_item(TTR("Add Car (driven by its throttle, brake and steering)"), PRESET_CAR);
 	popup->add_separator();
 	popup->add_item(TTR("Add Acoustics (sound occluded by walls, rooms' reverb)"), PRESET_ACOUSTICS);
+	popup->add_item(TTR("Add Acoustic Portal (a doorway sound passes through)"), PRESET_ACOUSTIC_PORTAL);
 	popup->connect(SceneStringName(id_pressed), callable_mp(this, &FellowEditorPlugin::_add_preset));
 }
 

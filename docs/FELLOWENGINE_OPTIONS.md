@@ -494,6 +494,14 @@ blocks a path (glass 0.3, a curtain 0.15); milestone 91 (decision 0199): up to t
 most a full block); milestone 92 (decision 0200): `fellow_occlusion_highs` (0 to 1; without it as `fellow_occlusion`)
 blocks the highs (the shelf and the cutoff) apart from the level; `get_occlusion_highs()`.
 
+Openings (milestone 99, decision 0207): `FellowAcousticPortal3D` (a `Node3D`: `size` 1 × 2.1 m in its XY plane,
+`transmission` 1; a gizmo with width and height handles; FellowEngine menu → Add Acoustic Portal). On
+`FellowAcoustics3D`: `portals` (on), `portal_diffraction_db` (−6 dB a quarter turn), `max_portals` (2 tried a blocked
+source, two rays each); `get_portal_weight(player)`, `get_heard_position(player)`; `get_stats()` adds `portal_paths`
+and `portals`. A blocked source is heard through the nearest open portal between it and the listener when both legs
+are clear and that way is louder: from the opening's direction at the path's length, its occlusion the bend's and the
+transmission's. Bench `bench/acoustics_check.gd` (`--portals=1` with `--many`).
+
 ## Sound events, voices and mix snapshots (milestone 82)
 
 Module `fellow_world`; nothing changes without the node (decision 0190). `FellowSoundEvent` (a resource): `streams`,

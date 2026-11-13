@@ -13,7 +13,8 @@ const ICON_CLASSES := ["FellowBurnable3D", "FellowGasEmitter3D", "FellowGasVolum
 	"FellowMotionDatabase", "FellowMotionMatcher3D", "FellowTerrain3D", "FellowTerrainLayer", "FellowTerrainFoliage",
 	"FellowPipelineWarmer3D", "FellowTraversal3D", "FellowTraversalPose3D", "FellowCloth3D",
 	"FellowDestructible3D", "FellowLadder3D", "FellowVehicle3D", "FellowWheel3D", "FellowAcoustics3D",
-	"FellowVehicleEffects3D", "FellowAudioDirector", "FellowSoundEvent", "FellowMixSnapshot", "FellowFaceAnimator"]
+	"FellowVehicleEffects3D", "FellowAudioDirector", "FellowSoundEvent", "FellowMixSnapshot", "FellowFaceAnimator",
+	"FellowAcousticPortal3D"]
 const MONITORS := ["FellowEngine/Texture streaming resident", "FellowEngine/Texture streaming wanted",
 	"FellowEngine/Texture streaming pending", "FellowEngine/World cells loaded", "FellowEngine/World cells loading",
 	"FellowEngine/Motion matching time", "FellowEngine/Motion matching updates", "FellowEngine/Traversal time", "FellowEngine/Cloth time",
@@ -471,6 +472,8 @@ func _check_handles() -> void:
 		["SnowTracker", Vector3(0.2, 0, 0), Vector3(0.5, 0, 0), "radius", 0.5],
 		# milestone 54: the gas volume's box has its floor on the node; the height's handle on its top
 		["GasVolume", Vector3(0, 1, 0), Vector3(0, 1.5, 0), "size", Vector3(1, 1.5, 1)],
+		# milestone 99: an opening's width, centred on the node
+		["Portal", Vector3(0.5, 0, 0), Vector3(0.75, 0, 0), "size", Vector2(1.5, 1.0)],
 	]
 	for c in cases:
 		var node: Node3D = root.get_node(c[0])

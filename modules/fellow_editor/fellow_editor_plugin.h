@@ -158,6 +158,7 @@ public:
 		PRESET_CAR, // milestone 77: a car (FellowVehicle3D and its wheels)
 		PRESET_ACOUSTICS, // milestone 78: sound through the scene's geometry
 		PRESET_DESTRUCTIBLE_WALL, // milestone 80: a wall broken where it is struck, standing while supported
+		PRESET_ACOUSTIC_PORTAL, // milestone 99: a doorway sound passes through
 	};
 	// The setup's nodes, not in the tree yet (nullptr for an unknown preset); p_root is the edited scene, where it looks
 	// for what the setup can share (the rain, wind and lightning: one of each works at a time).

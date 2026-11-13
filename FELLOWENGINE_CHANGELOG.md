@@ -9,6 +9,15 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 99 — sound through openings (2026-11-13)
+
+- `FellowAcousticPortal3D` and `FellowAcoustics3D.portals` (decision 0207): a source behind a wall is heard through
+  the nearest open doorway or window between it and the listener when that path is clear and louder — from the
+  opening's direction at the path's length (`AudioStreamPlayer3D`'s hook takes a position), its level and highs
+  lowered by the bend there (`portal_diffraction_db`) and the portal's `transmission`; a door in the doorway closes it.
+  Six lanes on both physics engines, under Movie Maker 14 dB louder and brighter than through the wall and from the
+  doorway's side; the gizmo, handles and a ready-made doorway in the editor.
+
 ## Milestone 98 — hang reports (2026-11-13)
 
 - `debug/fellow/crash_reports/hang_seconds` (decision 0206, 10 s with the crash reports on): a watchdog writes a
