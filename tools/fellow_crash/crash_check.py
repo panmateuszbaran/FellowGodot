@@ -217,8 +217,9 @@ def upload_lanes(godot, out_dir, failures):
         # Unreachable: no response, both kept.
         u = _upload(godot, project, f"http://127.0.0.1:{free_port()}/ok")
         res["unreachable"] = {k: u.get(k) for k in ("uploaded", "finished", "reports_after", "msec", "rc")}
-        # -3: no connection (UPLOAD_CANT_CONNECT).
-        if u.get("rc") != 0 or u.get("finished") != [[0, 2]] or any(x["ok"] or x["code"] != -3 for x in u.get("uploaded", [])) or sorted(u.get("reports_after", [])) != files:
+        # -3: no connection (UPLOAD_CANT_CONNECT); refused at once (decision 0214: on Windows not at the 30 s timeout), the
+        # second report not tried.
+        if u.get("rc") != 0 or u.get("finished") != [[0, 2]] or any(x["ok"] or x["code"] != -3 for x in u.get("uploaded", [])) or sorted(u.get("reports_after", [])) != files or u.get("msec", 99999) > 10000:
             failures.append(f"upload unreachable: {u}")
         # Accepted: both sent, oldest first, moved to sent/ unchanged; the fields, the report, the minidump.
         col.received.clear()
@@ -280,6 +281,24 @@ def upload_lanes(godot, out_dir, failures):
         finally:
             col.close()
     res["tls"] = tls
+
+    # Milestone 106 (decision 0214): to "localhost" — its IPv6 address first (the collector listens on IPv4 only: refused),
+    # then its IPv4 one: sent, without waiting for a timeout.
+    col = Collector()
+    try:
+        proj = os.path.join(out_dir, "project_localhost")
+        reps = os.path.join(out_dir, "reports_localhost")
+        os.makedirs(reps)
+        write_project(proj, reps)
+        run(godot, proj, "report")
+        u = _upload(godot, proj, f"http://localhost:{col.port}/ok")
+        lh = {k: u.get(k) for k in ("uploaded", "finished", "msec", "rc")}
+        lh["received"] = len(col.received)
+        if u.get("rc") != 0 or u.get("finished") != [[1, 0]] or len(col.received) != 1 or u.get("msec", 99999) > 10000:
+            failures.append(f"upload localhost: {lh} {u.get('output', '')[-600:]}")
+        res["localhost"] = lh
+    finally:
+        col.close()
 
     # On their own: upload_automatically, minidumps not sent (upload_minidumps off).
     col = Collector()

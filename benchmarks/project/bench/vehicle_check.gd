@@ -657,8 +657,8 @@ func _on_frame() -> void:
 		back.y = 0.0
 		back = back.normalized() if back.length() > 0.1 else Vector3(0, 0, 1)
 		if name == "crash":
-			# Milestone 105: the front, where the wall dents it (from ahead and to the left, the wall out of the way).
-			cam.look_at_from_position(car.global_position - back * 3.6 + Vector3(-2.2, 1.3, 0), car.global_position - back * 2.1 + Vector3(0, 0.55, 0))
+			# Milestone 105: the front, where the wall dents it (from ahead and above, once the car has backed off the wall).
+			cam.look_at_from_position(car.global_position - back * 4.6 + Vector3(0.9, 1.9, 0), car.global_position - back * 2.0 + Vector3(0, 0.55, 0))
 		else:
 			cam.look_at_from_position(car.global_position + back * 9.0 + Vector3(4, 4, 0), car.global_position + Vector3(0, 0.8, 0))
 	if pictures:

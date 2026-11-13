@@ -36,7 +36,9 @@ driven into a wall 30 m ahead:
 | at 5 km/h | nothing dented | 4.9 km/h, no impact over the threshold (the steps' impulses up to about 1 700 N·s) |
 | the bumps lane's car (ten 10 cm bumps at 40 km/h) | nothing dented | nothing; its suspension and pitch as before |
 
-The other lanes the same; the editor check (37 icons).
+The other lanes the same; the editor check (37 icons). The laptop (job f409, a release template, MSVC): GodotPhysics3D
+the same, value for value; Jolt: three impacts (7 357, 6 118, 3 044 N·s), the front 9.6 cm, the middle 1.4 mm, the
+rear 0; at 5 km/h and over the bumps nothing.
 
 ## Cost
 

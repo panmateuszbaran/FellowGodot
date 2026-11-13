@@ -20,7 +20,8 @@ crash in the picture strip); the editor check's icon list.
 
 * Decision 0213's table (GodotPhysics3D, the editor build).
 * The editor check: 37 icons, no warning.
-* The laptop (both physics engines, the release template, the pictures): next job.
+* The laptop (job f409): GodotPhysics3D value for value; Jolt the front 9.6 cm (three impacts), nothing at 5 km/h or
+  over the bumps. The picture strip's crash camera moved in front of the car (it showed its side): next job.
 
 ## 3. Measurements
 
