@@ -15,6 +15,7 @@ Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.m
   GodotPhysics3D 26.5 → 12.2, 106.8 → 40.0, 395 → 144 ms a tick (× 2.2-2.75); Jolt the same as stock (3.1, 10.3-10.5,
   24.3-24.4 ms). At Godot's default Jolt limits 10 000 bodies in contact overflow its buffers (contacts ignored, the
   runs no longer repeatable, in stock too): `physics/jolt_physics_3d/limits/*` raised, they repeat.
+- The regression suite's scene `vehicle_damage`: a car dented, a wheel bent, its bumper hanging, its mirror off.
 
 ## Milestone 109 — parts that hang before they come off (2026-11-13)
 

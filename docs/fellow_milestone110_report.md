@@ -33,6 +33,13 @@ into a 20 × 20 m bin, piling up and settling; `--physics_scale` 1, 2.5 and 5; n
   runs (job f417) put it within the laptop's spread (stock 20.5-22.3 ms, FellowEngine 21.8-22.8 ms at 10 000 with the
   default limits), and neither Jolt's job count at the worker count nor decision 0088's sensor contacts changed it.
 
-## 1. Next
+## 1. The regression suite
+
+A scene for milestones 105-109: `vehicle_damage` (group `base`) — a parked car hit four times as it starts
+(`apply_impact()`): its front dented, its front-left wheel's toe bent, its bumper hanging from its left end, its right
+mirror off and falling. Exact on lavapipe run to run, the release template the same as the editor build; the whole
+suite (36 scenes) exact after milestones 107-109.
+
+## 2. Next
 
 GodotPhysics3D's broadphase at 10 000 bodies (63 ms); the 8 ms of node updates at 10 000 bodies (both engines).

@@ -35,6 +35,7 @@
     "face",
     "cape",
     "vehicle",
+    "vehicle_damage",
     "structure"
    ]
   },
