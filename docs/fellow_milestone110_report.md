@@ -1,6 +1,6 @@
 # FellowEngine — milestone 110 report (rigid bodies by the thousand: a measurement)
 
-Status: **FINAL** (2026-11-13): the owner said "ok kontynuuj"; the laptop's jobs f416-f423 done. Branch
+Status: **FINAL** (2026-11-13): the owner said "ok kontynuuj"; the laptop's jobs f416-f424 done. Branch
 `fellow/geometry`. A measurement (the readiness assessment listed "thousands of bodies not measured"), and four
 additions to the vehicles' damage: a regression scene, the editor's car preset, engine smoke, suspension damage.
 
@@ -68,6 +68,13 @@ lower, the front-right and rear-left 0.8 cm, the rear-right 0.8 cm higher (the b
 every corner within 0.1 mm of where it was. The other lanes as before; the editor build and the release template the
 same; the laptop (job f423) the same values with GodotPhysics3D and Jolt.
 
-## 5. Next
+## 5. What a car that can be damaged costs
+
+`vehicle_check.gd --many=64 --damage=1`: 64 cars driving circles, each with a `FellowVehicleDamage3D` with every
+feature on (contact reporting, the steps' impulses read; no hit), against the same without it; the laptop (job f424,
+three alternating runs each, the release template, ms a frame): GodotPhysics3D 0.825-0.847 → 0.851-0.869 (+0.025 ms,
+0.4 µs a car), Jolt 0.755-0.768 → 0.766-0.783 (+0.01 ms); the vehicles' own step the same within the spread.
+
+## 6. Next
 
 GodotPhysics3D's broadphase at 10 000 bodies (63 ms); the 8 ms of node updates at 10 000 bodies (both engines).
