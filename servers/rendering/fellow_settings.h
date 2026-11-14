@@ -1391,6 +1391,12 @@ struct Stats {
 	SafeNumeric<uint64_t> transfer_submit_wait_usec;
 	SafeNumeric<uint64_t> transfer_submit_skips; // ... and the wait ended because the frame's uploads were done (0227)
 	SafeNumeric<uint64_t> transfer_own_submits; // large uploads submitted on their own thread (decision 0227)
+	// Milestone 116: the render thread's own uploads taking a transfer worker: how many, their time, those over 1 ms.
+	SafeNumeric<uint64_t> transfer_render_acquires;
+	SafeNumeric<uint64_t> transfer_render_acquire_usec;
+	SafeNumeric<uint64_t> transfer_render_acquire_slow;
+	SafeNumeric<uint64_t> transfer_frame_large_submits; // a frame's end submitting more than 4 MiB of copies it waits for
+	SafeNumeric<uint64_t> transfer_frame_large_bytes;
 	SafeNumeric<uint64_t> physics_jolt_usec[3];
 	SafeNumeric<uint64_t> physics_motion_cache_calls; // body_test_motion() calls inside move_and_slide() (decision 0093)
 	SafeNumeric<uint64_t> physics_motion_cache_hits; // of those, answered from the kept results

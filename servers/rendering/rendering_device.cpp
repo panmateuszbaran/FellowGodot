@@ -7569,6 +7569,8 @@ RenderingDevice::TransferWorker *RenderingDevice::_acquire_transfer_worker(uint3
 	uint32_t available_list_index = 0;
 	bool transfer_worker_busy = true;
 	bool transfer_worker_full = true;
+	// FellowEngine (milestone 116): the render thread's time in here counted (a worker waited for, a staging buffer made).
+	const uint64_t fellow_acquire_t0 = render_thread_id == Thread::get_caller_id() ? OS::get_singleton()->get_ticks_usec() : 0;
 	{
 		MutexLock pool_lock(transfer_worker_pool_mutex);
 
@@ -7711,6 +7713,14 @@ RenderingDevice::TransferWorker *RenderingDevice::_acquire_transfer_worker(uint3
 		transfer_worker->recording = true;
 	}
 
+	if (fellow_acquire_t0 != 0) {
+		const uint64_t us = OS::get_singleton()->get_ticks_usec() - fellow_acquire_t0;
+		Fellow::stats().transfer_render_acquires.increment();
+		Fellow::stats().transfer_render_acquire_usec.add(us);
+		if (us > 1000) {
+			Fellow::stats().transfer_render_acquire_slow.increment();
+		}
+	}
 	return transfer_worker;
 }
 
@@ -7923,6 +7933,11 @@ void RenderingDevice::_submit_transfer_workers(RDD::CommandBufferID p_draw_comma
 			}
 			if (worker->recording) {
 				VectorView<RDD::SemaphoreID> semaphores = p_draw_command_buffer ? frames[frame].transfer_worker_semaphores[i] : VectorView<RDD::SemaphoreID>();
+				if (p_draw_command_buffer && worker->staging_buffer_size_in_use > 4 * 1024 * 1024) {
+					// FellowEngine (milestone 116): copies of more than 4 MiB the frame waits for (its semaphores).
+					Fellow::stats().transfer_frame_large_submits.increment();
+					Fellow::stats().transfer_frame_large_bytes.add(worker->staging_buffer_size_in_use);
+				}
 				_end_transfer_worker(worker);
 				_submit_transfer_worker(worker, semaphores);
 			}

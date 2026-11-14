@@ -617,6 +617,11 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["transfer_submit_wait_usec"] = s.transfer_submit_wait_usec.get();
 	d["transfer_submit_skips"] = s.transfer_submit_skips.get();
 	d["transfer_own_submits"] = s.transfer_own_submits.get();
+	d["transfer_render_acquires"] = s.transfer_render_acquires.get();
+	d["transfer_render_acquire_usec"] = s.transfer_render_acquire_usec.get();
+	d["transfer_render_acquire_slow"] = s.transfer_render_acquire_slow.get();
+	d["transfer_frame_large_submits"] = s.transfer_frame_large_submits.get();
+	d["transfer_frame_large_bytes"] = s.transfer_frame_large_bytes.get();
 	d["physics_godot_pairs_made"] = s.physics_godot_pairs_made.get();
 	d["physics_godot_pairs_freed"] = s.physics_godot_pairs_freed.get();
 	d["physics_motion_cache_calls"] = s.physics_motion_cache_calls.get();

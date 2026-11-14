@@ -42,4 +42,19 @@ The four views captured without TAA the same either way (0 pixels). The wait lef
 
 ## Results
 
-PENDING: the RTX (Sponza streamed, p99.9 and the longest frames; decision 0225's idle times again).
+The RTX (job f442, the release template at 76ca4d3440; Sponza streamed at 1920 × 1080, five alternating runs each; the
+frame's longest and its p99.9, ms; the frame's end's counted waits for held workers in all the runs):
+
+| | longest frame, each run | p99.9 | waits counted | GPU frame (median) | staging at the end |
+|---|---|---:|---:|---:|---:|
+| the defaults (decision 0225: 5 s) | 23.9, 25.1, 13.1, 28.0, 27.3 | 11.0-13.7 | 4, 0.2 ms | 6.27 ms | 128-290 MiB |
+| large uploads on their own thread | 26.1, 13.5, 14.2, 13.7, 33.5 | 11.1-11.7 | 6, 0 ms | 6.25 ms | 130-258 MiB |
+| the staging trimmed after 0.5 s | 26.4, 30.7, 28.3, 27.6, 29.8 | 13.5-20.7 | 12, 23.8 ms | 6.27 ms | 131-132 MiB |
+| both | **13.6, 13.3, 13.4, 13.0, 13.9** | **11.0-11.2** | 6, 0 ms | 6.24 ms | 132-134 MiB |
+
+The longest frames left with both are the flythrough's shadow cascades rebuilt (1 236-1 342 draws, the GPU's 12-13 ms:
+in every variant); the others' long frames are the CPU's (the GPU's 5-9 ms in 25-34 ms frames). The frame's end's
+counted waits are few on the RTX (its copies are quick): where the CPU's stalls wait is not pinned down — not at the
+frame's end's taking of a worker, as counted — but they are gone when the large uploads submit on their own thread and
+the staging is trimmed soon (with 16-17 buffers made again in a flythrough), and not with either alone. PENDING: job f443 confirming it (and a
+256 MiB budget, and Bistro).
