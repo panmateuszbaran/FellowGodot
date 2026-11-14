@@ -1,8 +1,9 @@
 # FellowEngine — milestone 111 report (FSR 3.1 at 1440p and 4K; each source's own room; the broadphase's pairs)
 
-Status: **IN PROGRESS** (2026-11-14). Branch `fellow/geometry`. A measurement the readiness assessment listed as
-missing (FSR 3.1 at 1440p and 4K output), the acoustics' second room model (decision 0218), GodotPhysics3D's broadphase
-at thousands of bodies (decision 0219), and the editor's car with doors.
+Status: **FINAL** (2026-11-14): the owner said "kontynuuj"; the laptop's jobs f427-f431 done. Branch
+`fellow/geometry`. A measurement the readiness assessment listed as missing (FSR 3.1 at 1440p and 4K output), the
+acoustics' second room model (decision 0218), GodotPhysics3D's broadphase at thousands of bodies (decision 0219), and
+the editor's car with doors.
 
 ## 0. Result
 
@@ -13,7 +14,10 @@ at thousands of bodies (decision 0219), and the editor's car with doors.
 * **Each source's own room** (decision 0218): `FellowAcoustics3D.source_rooms` sends a source in another room than the
   listener's to a reverb of its own room's (section 2).
 * **The broadphase's existing pairs** (decision 0219): GodotPhysics3D's broadphase drops on the worker threads the
-  culls' hits that are pairs already; exact (section 3).
+  culls' hits that are pairs already: the pile −9.6 % at 2 000 bodies, −13.3 % at 5 000, −14.0 % at 10 000 (its
+  broadphase 2.2 × faster at 2 000 and 5 000), the same hashes as stock's (section 3).
+* **Thirty minutes of the slice** with the milestone's build on the RTX: nothing growing, no hitch from compiling
+  (section 5).
 * **Add Car's doors** (section 4).
 
 ## 1. FSR 3.1 at 1440p and 4K
@@ -79,15 +83,44 @@ measured a frame (32 rays).
 
 ## 3. The broadphase's existing pairs (decision 0219)
 
-See decision 0219. LAPTOP RESULTS (job f431) PENDING.
+Decision 0087 runs the broadphase's culls on the worker threads; the loop after them looked up every hit in the moved
+object's pair list, and in a pile almost every hit is a pair that exists. Now each worker drops the hits whose pair
+exists and will still exist when the loop reaches the object (only an earlier moved partner's leavers can remove it,
+and they keep it when that partner's expanded box still meets this object's — tested on the worker on the same boxes),
+so the loop looks up only the hits that may be new pairs; the pairs are made and freed in stock's order.
+
+The laptop (job f431, 24 threads, 600 ticks, two alternating runs; ms a tick):
+
+| bodies | stock (the frame) | without | with the prefilter | | the broadphase |
+|---:|---:|---:|---:|---:|---|
+| 2 000 | 28.1 | 14.27 | 12.90 | −9.6 % | 2.73 → 1.25 ms |
+| 5 000 | 121.0 | 41.38 | 35.88 | −13.3 % | 8.30 → 3.78 ms |
+| 10 000 | 421.5 | 149.64 | 128.70 | −14.0 % | 69.5 → 50.2 ms |
+
+Every hash equal to stock's (the pile at the three sizes, and the five cases: `pile` 12.25 → 10.18 ms, `areas` 2.43 →
+2.23 ms, `stack` 1.08 → 1.06 ms, `chars` and `rays` the same). FellowEngine's GodotPhysics3D is now 3.3 × stock's at 5 000
+and 10 000 bodies (milestone 110: × 2.7). What is left of the broadphase at 10 000 bodies is the pairs made and freed
+as the tall pile falls through itself (about 8 000 of each a tick in its first four seconds on the cloud).
 
 ## 4. Add Car's doors
 
 The FellowEngine menu's "Add Car" (milestone 110) gives the car two doors hinged at their front edges
 (`fellow_hinge_axis` up on the left, down on the right, `fellow_hinge_limits` (0, 70): both open outwards) and lists
 them among the detachable parts with the bumper. `vehicle_check.gd`'s door lane runs for a right door too
-(`door_right`: hit at its rear end, the car turning left): 73.6° at 4 s (the left door 73.3°).
+(`door_right`: hit at its rear end, the car turning left): 73.6° at 4 s (the left door 73.3°). The editor check: the
+preset's 17 nodes added without a configuration warning, owned by the scene, undone.
 
-## 5. Next
+## 5. Thirty minutes of the slice
 
-PENDING.
+Slice Lab's soak (milestone 55's vertical slice: every system in one valley, the weather cycling) for 30 minutes at
+1080p on the RTX with the milestone's release template (job f430): 239 fps (4.18 ms; p99 6.85 ms, p99.9 7.71 ms, the
+largest frame 19.8 ms); 6 hitches (frames longer than twice the median and than the median and 10 ms: 0.21 a
+minute), none of them compiling a pipeline; objects, nodes and resources the same from start to end (2 789, 1 184, 8);
+video memory 404.6 MiB at the start, 405.8 at the end (a peak of 464). The pipelines compiled after the warm-up: 86
+specializations.
+
+## 6. Next
+
+GodotPhysics3D's pairs made and freed at 10 000 bodies (an allocation and two hash-map insertions each); Jolt's 8 ms
+of node updates at 10 000 bodies (memory-bound: about 15 cache lines a body across 7 objects — the cloud showed
+prefetching ahead gains 15 % at best); FSR 3.1's pass at 4K (2.3 ms at 50 %).

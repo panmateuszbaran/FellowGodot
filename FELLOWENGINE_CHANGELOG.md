@@ -9,6 +9,32 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 112 — cloth that tears and keeps off itself (2026-11-14)
+
+- `FellowCloth3D.tear(position, radius)` and `tear_strain` (decision 0220, 0: off): edges break — cut, or stretched past
+  that fraction of their length; their triangles go (a hole), the tethers are found again (a part cut from its pins
+  falls); the signal `torn`, `reset()` makes it whole. A ball through a sheet held at its corners tears it open; a flag
+  cut off its pole falls to the ground.
+- `FellowCloth3D.self_collision` (decision 0221, off): no two particles closer than `self_collision_distance` (0: three
+  quarters of the mean edge) but neighbours at rest — a sheet falling in a heap lies in folds (the nearest two 8.5 cm
+  apart, against 0.65 cm without); +22 % of the cloth's worker time for flags in the wind.
+- FellowEngine's stats split GodotPhysics3D's broadphase update (the tree's optimisation, the culls, the pairs' loop) and
+  count the pairs made and freed.
+
+## Milestone 111 — FSR 3.1 at 1440p and 4K; each source's own room; the broadphase's pairs (2026-11-14)
+
+- FSR 3.1 measured at 2560 × 1440 and 3840 × 2160 on the RTX (FellowBench's new `--render_size=WxH`): at 50 % the
+  frame 44-48 % shorter than TAA's at native resolution (Bistro 4K 13.50 → 7.24 ms, Sponza 18.43 → 9.57 ms), at 33 %
+  55-61 %; the pass 0.92-0.98 ms at 1440p and 2.31-2.36 ms at 4K at 50 %; half precision gains nothing on NVIDIA.
+- `FellowAcoustics3D.source_rooms` (decision 0218, 0 by default; "Add Acoustics" sets 2): a source in another room
+  than the listener's is sent to a reverb of its own room's (a hall heard from the open keeps its 1.35 s decay, a
+  closet its 0.29 s); +15 µs a frame for 64 sources on the laptop.
+- GodotPhysics3D's broadphase drops on the worker threads the culls' hits that are pairs already (decision 0219,
+  `rendering/fellow/physics/pair_prefilter`, on): the pile −9.6 % at 2 000 bodies, −13.3 % at 5 000, −14.0 % at 10 000,
+  the same hashes as stock's; FellowEngine's GodotPhysics3D 3.3 × stock's at 5 000 and 10 000 bodies.
+- "Add Car" gives the car two doors on hinges (opening outwards, 70° at most), detachable with the bumper.
+- Thirty minutes of the slice on the RTX: 239 fps, 0.21 hitches a minute, none compiling, nothing growing.
+
 ## Milestone 110 — rigid bodies by the thousand (a measurement, 2026-11-13)
 
 - Physics Lab's pile at 2 000, 5 000 and 10 000 bodies on the laptop, stock against FellowEngine (the same results):

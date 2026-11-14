@@ -577,11 +577,17 @@ Dictionary Fellow::get_stats_dictionary() {
 		for (int i = 0; i < 6; i++) {
 			d[String("physics_godot_") + godot_phases[i] + "_usec"] = s.physics_godot_usec[i].get();
 		}
+		static const char *bp_phases[3] = { "bp_optimize", "bp_cull", "bp_pairs" };
+		for (int i = 0; i < 3; i++) {
+			d[String("physics_godot_") + bp_phases[i] + "_usec"] = s.physics_godot_bp_usec[i].get();
+		}
 		static const char *jolt_phases[3] = { "pre_step", "update", "post_step" };
 		for (int i = 0; i < 3; i++) {
 			d[String("physics_jolt_") + jolt_phases[i] + "_usec"] = s.physics_jolt_usec[i].get();
 		}
 	}
+	d["physics_godot_pairs_made"] = s.physics_godot_pairs_made.get();
+	d["physics_godot_pairs_freed"] = s.physics_godot_pairs_freed.get();
 	d["physics_motion_cache_calls"] = s.physics_motion_cache_calls.get();
 	d["physics_motion_cache_hits"] = s.physics_motion_cache_hits.get();
 	d["physics_verify_faces"] = s.physics_verify_faces.get();

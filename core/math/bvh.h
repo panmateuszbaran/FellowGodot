@@ -54,6 +54,7 @@
 #include "core/math/geometry_3d.h"
 #include "core/object/worker_thread_pool.h"
 #include "core/os/mutex.h"
+#include "core/os/os.h" // FellowEngine: the update's phases timed
 
 #include <climits> // INT_MAX
 
@@ -302,7 +303,9 @@ public:
 	// call e.g. once per frame (this does a trickle optimize)
 	void update() {
 		BVH_LOCKED_FUNCTION
+		const uint64_t fellow_t0 = OS::get_singleton()->get_ticks_usec(); // FellowEngine (milestone 112)
 		tree.update();
+		fellow_usec[0] += OS::get_singleton()->get_ticks_usec() - fellow_t0;
 		_check_for_collisions();
 #ifdef BVH_INTEGRITY_CHECKS
 		tree._integrity_check_all();
@@ -464,11 +467,14 @@ private:
 				fellow_changed_index[changed_items[i].id()] = i;
 			}
 		}
+		const uint64_t fellow_t0 = OS::get_singleton()->get_ticks_usec();
 		if (fellow_parallel) {
 			fellow_hits.resize(changed_items.size());
 			WorkerThreadPool::GroupID group = WorkerThreadPool::get_singleton()->add_template_group_task(this, &BVH_Manager::_fellow_cull_changed_item, nullptr, changed_items.size(), -1, true, String("BVHPairCulls"));
 			WorkerThreadPool::get_singleton()->wait_for_group_task_completion(group);
 		}
+		const uint64_t fellow_t1 = OS::get_singleton()->get_ticks_usec();
+		fellow_usec[1] += fellow_t1 - fellow_t0;
 
 		for (uint32_t item_index = 0; item_index < changed_items.size(); item_index++) {
 			const BVHHandle &h = changed_items[item_index];
@@ -511,6 +517,7 @@ private:
 				fellow_changed_index[changed_items[i].id()] = UINT32_MAX;
 			}
 		}
+		fellow_usec[2] += OS::get_singleton()->get_ticks_usec() - fellow_t1;
 		_reset();
 	}
 
@@ -570,6 +577,9 @@ public:
 	bool fellow_parallel_culls = false;
 	// FellowEngine (milestone 111, decision 0219): with the parallel culls, existing pairs dropped from their hits.
 	bool fellow_pair_prefilter = false;
+	// FellowEngine (milestone 112): update()'s time (µs, summed until the owner takes it): the tree's incremental
+	// optimisation, the changed items' culls (on the worker threads, or none), the loop over them (leavers, new pairs).
+	uint64_t fellow_usec[3] = {};
 
 	void item_get_AABB(BVHHandle p_handle, BOUNDS &r_aabb) {
 		DEV_ASSERT(!p_handle.is_invalid());

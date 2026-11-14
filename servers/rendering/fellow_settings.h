@@ -1346,6 +1346,11 @@ struct Stats {
 	// setup (worker threads), pre-solve and solve, integrate velocities and sleep); Jolt's (pre-step, PhysicsSystem::Update,
 	// post-step).
 	SafeNumeric<uint64_t> physics_godot_usec[6];
+	// Milestone 112: GodotPhysics3D's broadphase update split: the BVH's incremental optimisation, the changed objects'
+	// culls (worker threads), the loop over them (leavers, new pairs).
+	SafeNumeric<uint64_t> physics_godot_bp_usec[3];
+	SafeNumeric<uint64_t> physics_godot_pairs_made; // the broadphase's pairs made and freed (bodies, areas)
+	SafeNumeric<uint64_t> physics_godot_pairs_freed;
 	SafeNumeric<uint64_t> physics_jolt_usec[3];
 	SafeNumeric<uint64_t> physics_motion_cache_calls; // body_test_motion() calls inside move_and_slide() (decision 0093)
 	SafeNumeric<uint64_t> physics_motion_cache_hits; // of those, answered from the kept results

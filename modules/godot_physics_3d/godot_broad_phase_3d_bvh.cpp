@@ -120,6 +120,10 @@ void GodotBroadPhase3DBVH::update() {
 	bvh.fellow_parallel_culls = Fellow::physics_parallel_pair_culls(); // FellowEngine (decision 0087)
 	bvh.fellow_pair_prefilter = Fellow::physics_pair_prefilter(); // FellowEngine (decision 0219)
 	bvh.update();
+	for (int i = 0; i < 3; i++) {
+		Fellow::stats().physics_godot_bp_usec[i].add(bvh.fellow_usec[i]); // FellowEngine (milestone 112)
+		bvh.fellow_usec[i] = 0;
+	}
 }
 
 GodotBroadPhase3D *GodotBroadPhase3DBVH::_create() {

@@ -1,6 +1,6 @@
 # FellowEngine — milestone 112 report (cloth that tears and keeps off itself)
 
-Status: **IN PROGRESS** (2026-11-14). Branch `fellow/geometry`. The readiness assessment's physics row listed "cloth
+Status: **FINAL** (2026-11-14): the owner said "kontynuuj"; the laptop's job f432 done. Branch `fellow/geometry`. The readiness assessment's physics row listed "cloth
 without self-collision or tearing": this milestone does both (decisions 0220 and 0221).
 
 ## 0. Result
@@ -36,19 +36,35 @@ the same):
 | `tear_strain_off`: the same, 0 | nothing torn: the ball through between the particles, as before |
 | `tear_off`: a flag in a breeze cut beside its pole (16 calls) | a clean cut (30 triangles); the cut part on the ground 2.8 s later, the strip on the pole hanging |
 
-The cost: nothing without tears; `tear_strain` one pass over the edges a frame (64 flags in the wind: the same worker
-time within the noise on the cloud). LAPTOP RESULTS (job f432) PENDING.
+The laptop (job f432, the release template at 9ae3ede529): every lane passes with GodotPhysics3D and Jolt (the same
+values with both); the lanes out of the wind the same values as the cloud's, those in the wind (the flags, the capes,
+`tear_off`) a few per cent apart, as the gusts' and the turbulence's sines differ between MSVC and GCC. Its picture
+strip: the hole, the star-shaped tear, the cut part downwind on the ground, the heaps.
+
+The cost: nothing without tears; `tear_strain` one pass over the edges a frame — 64 flags in the wind on the laptop
+(three alternating runs each, 20 s): the worker threads 25.3-26.5 ms a frame (summed over 24 threads) without, 25.6-27.4
+with 0.5; the main thread 1.36-1.54 ms against 1.48-1.55.
 
 ## 3. Self-collision
 
 Decision 0221: each frame the pairs of particles that may meet — within twice `self_collision_distance` now (0: three
-quarters of the mean edge), not within it at rest (neighbours, which the cloth's constraints keep) — found by a spatial
+quarters of the mean edge), not within twice it at rest (neighbours, which the cloth's constraints keep) — found by a spatial
 hash (a particle's own cell and half of the 26 around it); in each substep a pair closer than the distance is pushed
 apart along its line by the particles' inverse masses. `cloth_check.gd`'s `self_heap` / `self_heap_off`: a sheet let go
 of its rail, falling in a heap — at 4 s the nearest two particles not neighbours at rest 8.47 cm apart (none within half
-the distance) against 0.65 cm (56 particles) without. The cost: 64 flags in the wind +22 % of the worker threads' time
-(0.09 ms a flag on the cloud), nothing when off.
+the distance) against 0.65 cm (56 particles) without. The cost: nothing when off; 64 flags in the wind with it, on the
+laptop (three alternating runs each): the worker threads 25.9-29.3 → 31.7-37.4 ms a frame (+22 %, about 0.1 ms a flag
+of 400 particles), the main thread (waiting for them) 1.47-1.56 → 1.69-1.94 ms.
 
-## 4. Next
+## 4. The broadphase's update in the stats
+
+For milestone 111's next step, FellowEngine's stats split GodotPhysics3D's broadphase update
+(`physics_godot_bp_optimize_usec`, `_bp_cull_usec`, `_bp_pairs_usec`) and count the pairs made and freed
+(`physics_godot_pairs_made`, `_freed`); Physics Lab reports them with the step's phases. The cloud's pile in its first
+four seconds: at 5 000 bodies the culls 10.2 ms and the loop 3.4 ms a tick (1 300 pairs made a tick); at 10 000 the
+culls 22.1 ms and the loop 20.2 ms (8 000 made and 7 200 freed a tick, as the taller pile falls through itself) — the
+loop's time is the pairs'. The same hashes.
+
+## 5. Next
 
 Particles against triangles (thinner layers), friction between layers.

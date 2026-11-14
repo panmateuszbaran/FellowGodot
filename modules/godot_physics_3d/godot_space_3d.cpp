@@ -1096,6 +1096,7 @@ void *GodotSpace3D::_broadphase_pair(GodotCollisionObject3D *A, int p_subindex_A
 	GodotSpace3D *self = static_cast<GodotSpace3D *>(p_self);
 
 	self->collision_pairs++;
+	Fellow::stats().physics_godot_pairs_made.increment(); // FellowEngine (milestone 112)
 
 	if (type_A == GodotCollisionObject3D::TYPE_AREA) {
 		GodotArea3D *area = static_cast<GodotArea3D *>(A);
@@ -1134,6 +1135,7 @@ void GodotSpace3D::_broadphase_unpair(GodotCollisionObject3D *A, int p_subindex_
 
 	GodotSpace3D *self = static_cast<GodotSpace3D *>(p_self);
 	self->collision_pairs--;
+	Fellow::stats().physics_godot_pairs_freed.increment(); // FellowEngine (milestone 112)
 	GodotConstraint3D *c = static_cast<GodotConstraint3D *>(p_data);
 	memdelete(c);
 }
