@@ -9,6 +9,19 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 115 — the frame's waits on uploads; cloth layers thin and with friction (2026-11-14)
+
+- The frame's end counts the transfer workers it found held by another thread's upload and its time waiting
+  (`transfer_submit_waits`, `transfer_submit_wait_usec`). `rendering/fellow/frame/transfer_large_own_submit` (decision
+  0227, off until measured on the RTX): uploads above 4 MiB off the render thread submit their worker's earlier work and
+  their own copy themselves; lavapipe's Streaming Lab: 73 → 17 ms of waits in a flythrough, the same pictures.
+- `FellowCloth3D.self_collision_triangles` (decision 0228): particles kept off the other layers' triangles too, layers a
+  quarter of an edge apart without passing through each other (a heap's particles through a layer 71 → 0 at 2.8 cm).
+- `FellowCloth3D.self_collision_friction` (decision 0229): friction between a cloth's layers (a heap on a 25° slope held
+  by its own layers).
+- The regression suite's captures with Godot's separate render thread read the frame drawn last (`render_thread/rain`
+  differed under load: a frame early or late).
+
 ## Milestone 114 — the upload workers' staging; FSR 3.1's accumulation stays in full precision (2026-11-14)
 
 - Video memory as the driver counts it (every heap) split in FellowEngine's statistics and the debugger's Monitors tab:
