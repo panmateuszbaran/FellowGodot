@@ -34,6 +34,7 @@
 #include "core/os/os.h"
 #include "core/profiling/profiling.h"
 #include "servers/display/display_server.h"
+#include "servers/rendering/fellow_hitch_sampler.h"
 #include "servers/rendering/fellow_settings.h"
 #include "servers/rendering/fellow_texture_streaming.h"
 #include "servers/rendering/renderer_canvas_cull.h"
@@ -79,6 +80,11 @@ void RenderingServerDefault::request_frame_drawn_callback(const Callable &p_call
 }
 
 void RenderingServerDefault::_draw(bool p_swap_buffers, double frame_step) {
+	// FellowEngine hitch sampler (decision 0231): the draw, when a thread of its own runs it.
+	FellowHitchSampler::step_begin(FellowHitchSampler::SLOT_DRAW);
+	struct FellowStepEnd {
+		~FellowStepEnd() { FellowHitchSampler::step_end(FellowHitchSampler::SLOT_DRAW); }
+	} fellow_step_end;
 	// FellowEngine (milestone 69): the draw's phases timed (Fellow::stats().draw_*_usec).
 	uint64_t fellow_phase = OS::get_singleton()->get_ticks_usec();
 	auto fellow_lap = [&fellow_phase](SafeNumeric<uint64_t> &r_usec) {
@@ -331,6 +337,7 @@ void RenderingServerDefault::init() {
 }
 
 void RenderingServerDefault::finish() {
+	FellowHitchSampler::finish(); // FellowEngine (decision 0231): the watchdog stopped, its report printed
 	if (create_thread) {
 		command_queue.push(this, &RenderingServerDefault::_finish);
 		command_queue.push(this, &RenderingServerDefault::_thread_exit);

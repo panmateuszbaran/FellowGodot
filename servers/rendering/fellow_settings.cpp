@@ -33,6 +33,7 @@
 #include "core/config/engine.h"
 #include "core/os/os.h"
 #include "core/variant/dictionary.h"
+#include "servers/rendering/fellow_hitch_sampler.h"
 #include "servers/rendering/fellow_parallel.h"
 #include "servers/rendering/renderer_compositor.h"
 #include "servers/rendering/rendering_device.h"
@@ -307,6 +308,8 @@ void Fellow::register_settings() {
 	// MultiMesh instances below the threshold: culled, or thinned (a share kept and grown so their coverage stays).
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/geometry/contribution_cull_instances", PROPERTY_HINT_ENUM, "Cull,Thin"), 1);
 	GLOBAL_DEF("rendering/fellow/debug/occlusion_stats", false);
+	GLOBAL_DEF("rendering/fellow/debug/hitch_sampler", false); // decision 0231: frame steps over the threshold sampled and reported at exit
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/debug/hitch_sampler_ms", PROPERTY_HINT_RANGE, "1,1000,0.1,suffix:ms"), 33.3);
 	GLOBAL_DEF("rendering/fellow/debug/multimesh_stats", false);
 	// Diagnostics: experiments on the compiled scene shaders (e.g. their register counts with FELLOW_PIPELINE_STATS), bits
 	// read at start-up: 1 FELLOW_EXP_DONT_UNROLL (loops bounded by specialization constants not unrolled), 2
@@ -622,6 +625,8 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["transfer_render_acquire_slow"] = s.transfer_render_acquire_slow.get();
 	d["transfer_frame_large_submits"] = s.transfer_frame_large_submits.get();
 	d["transfer_frame_large_bytes"] = s.transfer_frame_large_bytes.get();
+	d["hitches"] = FellowHitchSampler::get_hitch_count(); // decision 0231
+	d["hitch_samples"] = FellowHitchSampler::get_sample_count();
 	d["physics_godot_pairs_made"] = s.physics_godot_pairs_made.get();
 	d["physics_godot_pairs_freed"] = s.physics_godot_pairs_freed.get();
 	d["physics_motion_cache_calls"] = s.physics_motion_cache_calls.get();

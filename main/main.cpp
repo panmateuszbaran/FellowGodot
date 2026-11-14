@@ -77,6 +77,7 @@
 #include "servers/display/display_server.h"
 #include "servers/movie_writer/movie_writer.h"
 #include "servers/register_server_types.h"
+#include "servers/rendering/fellow_hitch_sampler.h"
 #include "servers/rendering/fellow_parallel.h"
 #include "servers/rendering/fellow_settings.h"
 #include "servers/rendering/rendering_device.h"
@@ -4924,6 +4925,11 @@ bool Main::iteration() {
 	GodotProfileZone("Main::iteration");
 	GodotProfileZoneGroupedFirst(_profile_zone, "prepare");
 	iterating++;
+	// FellowEngine hitch sampler (decision 0231): the frame step, up to the frame delay.
+	FellowHitchSampler::step_begin(FellowHitchSampler::SLOT_MAIN);
+	struct FellowStepEnd {
+		~FellowStepEnd() { FellowHitchSampler::step_end(FellowHitchSampler::SLOT_MAIN); }
+	} fellow_step_end;
 
 	const uint64_t ticks = OS::get_singleton()->get_ticks_usec();
 	Engine::get_singleton()->_frame_ticks = ticks;
@@ -5198,6 +5204,7 @@ bool Main::iteration() {
 	SceneTree *scene_tree = SceneTree::get_singleton();
 	bool wake_for_events = scene_tree && scene_tree->is_accessibility_enabled();
 
+	FellowHitchSampler::step_end(FellowHitchSampler::SLOT_MAIN); // FellowEngine: the frame delay is not the step's
 	GodotProfileZoneGrouped(_profile_zone, "OS::add_frame_delay");
 	OS::get_singleton()->add_frame_delay(DisplayServer::get_singleton()->window_can_draw(), wake_for_events);
 
