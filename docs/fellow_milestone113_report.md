@@ -67,4 +67,7 @@ The FSR 3.1 port now writes a profiler timestamp before each dispatch, named by 
 
 ## 5. Next
 
-PENDING.
+The transfer workers' staging buffers (the likely cause of streaming's higher video memory peak: kept at the largest
+upload's power of two, for good); the swaps' churn along a flythrough under a budget (hundreds of loads and downgrades a
+run: a hysteresis on the budget's targets); a per-texture shadow dependency (an alpha-tested material is invalidated on
+any of its textures' swaps); FSR 3.1's heaviest pass (section 4).
