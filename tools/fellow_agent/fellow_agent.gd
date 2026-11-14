@@ -150,6 +150,19 @@ func _frames(n: int) -> void:
 		await process_frame
 
 
+# Waits for the frame to capture: the one drawn last. With Godot's separate render thread (thread model 2)
+# frame_post_draw reaches the main thread deferred, before or after the next frame is queued depending on how far the
+# render thread lags, so the picture read then was one frame or the next (the regression suite's render_thread/rain
+# under load, milestone 115). At the next process frame the frame queued last is the one drawn last (reading the
+# texture syncs the render thread) and the next one is not queued yet: the same frame as frame_post_draw's without the
+# thread.
+func _drawn_frame() -> void:
+	if int(ProjectSettings.get_setting("rendering/driver/threads/thread_model", 1)) == 2:
+		await process_frame
+	else:
+		await RenderingServer.frame_post_draw
+
+
 func _walk(node: Node, out: Array) -> void:
 	out.append(node)
 	for c in node.get_children():
@@ -439,7 +452,7 @@ func _capture() -> void:
 			scene_cam.make_current()
 			vr["camera"] = {"path": str(root.get_path_to(scene_cam)), "position": var_to_str(scene_cam.global_position)}
 		await _frames(settle)
-		await RenderingServer.frame_post_draw
+		await _drawn_frame()
 		var img := get_root().get_texture().get_image()
 		vr["image"] = _save(img, "view_%s.png" % v)
 		vr["stats"] = _image_stats(img)
@@ -449,7 +462,7 @@ func _capture() -> void:
 			# it — too far, behind it, or nothing drawn).
 			_set_scene_visible(root, false)
 			await _frames(3)
-			await RenderingServer.frame_post_draw
+			await _drawn_frame()
 			var empty := get_root().get_texture().get_image()
 			_set_scene_visible(root, true)
 			vr["scene_coverage"] = _coverage(img, empty)
@@ -729,7 +742,7 @@ func _run() -> void:
 	result["render"] = _render_stats()
 	result["summary"] = _scene_summary(root)
 	if args.get("picture", "true") == "true":
-		await RenderingServer.frame_post_draw
+		await _drawn_frame()
 		var img := get_root().get_texture().get_image()
 		result["image"] = _save(img, "run_end.png")
 		result["image_stats"] = _image_stats(img)
