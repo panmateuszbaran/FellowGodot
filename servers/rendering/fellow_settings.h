@@ -291,6 +291,22 @@ inline bool physics_parallel_pair_culls() {
 // physics/pair_prefilter (decision 0219): with the parallel culls, each moved object's hits whose pair already exists
 // and will still exist when the serial loop reaches it are dropped on the worker threads, so the loop looks up only
 // the pairs that may be new. The same pairs in the same order. Read per step.
+// streaming/texture_swaps_keep_shadows (milestone 113, decision 0222): a streamed texture's swap (another range of its
+// mips) does not invalidate the directional shadow caches through the materials whose shadows cannot depend on their
+// textures (no alpha, discard or vertex code). The same shadows. Read per swap.
+inline bool texture_swaps_keep_shadows() {
+	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/streaming/texture_swaps_keep_shadows");
+}
+// streaming/texture_budget_from_used_level (milestone 113, decision 0223): over texture_budget_mb, the bias coarsens the
+// level each texture would use (its first at the finest) rather than its estimate (below 0 when magnified). Without a
+// budget the same levels. Read per cycle.
+inline bool texture_budget_from_used_level() {
+	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/streaming/texture_budget_from_used_level");
+}
+// Set on the render thread while a streamed texture's old data is freed (its materials' uniform sets erased), and while
+// such a material notifies its users: RendererSceneCull then updates the instances without a shadow cache event.
+bool &texture_stream_swap_active();
+bool &material_change_is_texture_swap();
 inline bool physics_pair_prefilter() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/physics/pair_prefilter");
 }

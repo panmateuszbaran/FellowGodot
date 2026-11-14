@@ -30,6 +30,8 @@
 
 #include "fellow_texture_streaming.h"
 
+#include "servers/rendering/fellow_settings.h"
+
 #include "core/config/project_settings.h"
 #include "core/io/file_access.h"
 #include "core/os/os.h"
@@ -414,7 +416,11 @@ int FellowTextureStreaming::_target_at(const Texture *p_tex, float p_bias) {
 	if (p_tex->lod >= 1e29f) {
 		return p_tex->tail_mip;
 	}
-	const float l = std::floor(p_tex->lod + p_bias);
+	// FellowEngine (milestone 113, decision 0223): the budget's bias coarsens the level the texture would use, never
+	// finer than its first (a magnified texture's estimate is below 0: biased from there, it kept its full chain until
+	// the bias passed that, and the others paid for it). Without a bias the same levels as before.
+	const float used = Fellow::texture_budget_from_used_level() ? MAX(p_tex->lod, 0.0f) : p_tex->lod;
+	const float l = std::floor(used + p_bias);
 	if (l <= 0.0f) {
 		return 0;
 	}

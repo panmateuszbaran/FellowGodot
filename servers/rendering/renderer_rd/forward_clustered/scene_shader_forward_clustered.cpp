@@ -319,6 +319,12 @@ bool SceneShaderForwardClustered::ShaderData::fellow_shadow_cacheable() const {
 	return true;
 }
 
+bool SceneShaderForwardClustered::ShaderData::fellow_shadow_texture_independent() const {
+	// Decision 0222: no alpha, discard or depth from the fragment, no vertex code (a texture could move the vertices):
+	// the depth this material casts is its mesh's, whatever its textures hold.
+	return !(uses_alpha || uses_alpha_clip || uses_alpha_antialiasing || uses_depth_prepass_alpha || uses_discard || uses_vertex || uses_position || writes_modelview_or_projection || uses_particle_trails || uses_z_clip_scale);
+}
+
 bool SceneShaderForwardClustered::ShaderData::fellow_shadow_cacheable_far() const {
 	// As fellow_shadow_cacheable(), the wind's motion aside (decision 0125): it moves vertices, but in a far cascade the
 	// pose of the cache's build stands for it.

@@ -36,6 +36,7 @@
 #include "servers/rendering/renderer_rd/renderer_scene_render_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
 #include "servers/rendering/renderer_rd/uniform_set_cache_rd.h"
+#include "servers/rendering/fellow_settings.h"
 #include "servers/rendering/fellow_texture_streaming.h"
 #include "servers/rendering/rendering_server_globals.h"
 
@@ -2119,12 +2120,15 @@ void TextureStorage::texture_2d_fellow_stream_swap(RID p_texture, RID p_by_textu
 		texture_free(p_by_texture);
 		return;
 	}
+	// FellowEngine (decision 0222): the uniform sets erased with the old data tell their materials it is a swap.
+	Fellow::texture_stream_swap_active() = Fellow::texture_swaps_keep_shadows();
 	if (tex->rd_texture_srgb.is_valid()) {
 		RD::get_singleton()->free_rid(tex->rd_texture_srgb);
 	}
 	if (tex->rd_texture.is_valid()) {
 		RD::get_singleton()->free_rid(tex->rd_texture);
 	}
+	Fellow::texture_stream_swap_active() = false;
 	if (tex->canvas_texture) {
 		memdelete(tex->canvas_texture);
 		tex->canvas_texture = nullptr;

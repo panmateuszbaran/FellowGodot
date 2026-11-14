@@ -30,6 +30,7 @@
 
 #include "material_storage.h"
 
+#include "servers/rendering/fellow_settings.h"
 #include "servers/rendering/fellow_texture_streaming.h"
 
 #include "core/config/engine.h"
@@ -2415,19 +2416,29 @@ void MaterialStorage::_material_uniform_set_erased(void *p_material) {
 	RID rid = *(RID *)p_material;
 	Material *material = MaterialStorage::get_singleton()->get_material(rid);
 	if (material) {
+		// FellowEngine (decision 0222): a streamed texture's swap, in a material whose shadows cannot depend on it.
+		const bool swap = Fellow::texture_stream_swap_active() && material->shader && material->shader->data && material->shader->data->fellow_shadow_texture_independent();
 		if (material->data) {
 			// Uniform set may be gone because a dependency was erased. This happens
 			// if a texture is deleted, so re-create it.
-			MaterialStorage::get_singleton()->_material_queue_update(material, false, true);
+			MaterialStorage::get_singleton()->_material_queue_update(material, false, true, swap);
 		}
+		Fellow::material_change_is_texture_swap() = swap;
 		material->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_MATERIAL);
+		Fellow::material_change_is_texture_swap() = false;
 	}
 }
 
-void MaterialStorage::_material_queue_update(Material *material, bool p_uniform, bool p_texture) {
+void MaterialStorage::_material_queue_update(Material *material, bool p_uniform, bool p_texture, bool p_fellow_swap) {
 	MutexLock lock(material_update_list_mutex);
 	material->uniform_dirty = material->uniform_dirty || p_uniform;
 	material->texture_dirty = material->texture_dirty || p_texture;
+	// FellowEngine (decision 0222): the update stays a swap's only while nothing else queued it.
+	if (!p_fellow_swap) {
+		material->fellow_swap_only = false;
+	} else if (!material->update_element.in_list()) {
+		material->fellow_swap_only = true;
+	}
 
 	if (material->update_element.in_list()) {
 		return;
@@ -2460,8 +2471,11 @@ void MaterialStorage::_update_queued_materials() {
 
 		if (uniforms_changed) {
 			//some implementations such as 3D renderer cache the material uniform set, so update is required
+			Fellow::material_change_is_texture_swap() = material->fellow_swap_only; // FellowEngine (decision 0222)
 			material->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_MATERIAL);
+			Fellow::material_change_is_texture_swap() = false;
 		}
+		material->fellow_swap_only = false;
 	}
 }
 

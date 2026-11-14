@@ -388,7 +388,10 @@ image with its full mip chain (how Godot imports 3D textures) loads only its mip
 releases them when they no longer do. The level each texture needs comes from the instances that use it (their box's
 nearest view depth, their smallest scale, their surfaces' texel density, BaseMaterial3D's `uv1_scale`) and the
 samplers' bias; `texture_lod_bias` (-1) is the margin, `texture_budget_mb` (0: none) caps the streamed textures'
-memory (every texture coarsened by the same bias over it). `texture_instances_per_frame` (2048) instances are
+memory (every texture coarsened by the same bias over it; milestone 113, decision 0223: `texture_budget_from_used_level`
+(on) biases the level each texture would use, never finer than its first, not its estimate under magnification).
+Milestone 113 (decision 0222): `texture_swaps_keep_shadows` (on, exact): a swap does not invalidate the directional
+shadow caches through materials whose shadows cannot read their textures. `texture_instances_per_frame` (2048) instances are
 evaluated a frame; `texture_max_jobs` (4), `texture_upload_mb_per_frame` (64), `texture_release_hold_s` (2),
 `texture_unreferenced_hold_s` (5); `texture_info_details` lists every texture in
 `RenderingServer.fellow_get_texture_streaming_info()`, which reports the streamer's state (resident, target, wanted and

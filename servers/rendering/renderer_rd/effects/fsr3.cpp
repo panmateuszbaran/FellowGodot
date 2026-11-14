@@ -44,6 +44,7 @@
 #include "servers/rendering/renderer_rd/shaders/effects/fsr3/fsr3_shading_change_pyramid_pass.glsl.gen.h"
 #include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
 #include "servers/rendering/renderer_rd/uniform_set_cache_rd.h"
+#include "servers/rendering/rendering_server_globals.h"
 
 #include <cwchar>
 #include <initializer_list>
@@ -711,6 +712,16 @@ static FfxErrorCode execute_compute_job_rd(FSR3Context::Scratch &p_scratch, FSR3
 
 	RID uniform_set = uniform_set_cache->get_cache_vec(shader, 0, uniforms);
 	ERR_FAIL_COND_V(uniform_set.is_null(), FFX_ERROR_BACKEND_API_ERROR);
+
+	// FellowEngine (milestone 113): each pass timed on its own in the profiler (FellowBench's --profile).
+	static const char *pass_names[FFX_FSR3UPSCALER_PASS_COUNT] = { "FSR 3.1: prepare inputs", "FSR 3.1: luma pyramid",
+		"FSR 3.1: shading change pyramid", "FSR 3.1: shading change", "FSR 3.1: prepare reactivity", "FSR 3.1: luma instability",
+		"FSR 3.1: accumulate", "FSR 3.1: accumulate and sharpen", "FSR 3.1: RCAS", "FSR 3.1: debug view", "FSR 3.1: reactive mask",
+		"FSR 3.1: TCR" };
+	const intptr_t pass_index = p_job.pipeline->pass - device.passes;
+	if (pass_index >= 0 && pass_index < FFX_FSR3UPSCALER_PASS_COUNT) {
+		RENDER_TIMESTAMP(pass_names[pass_index]);
+	}
 
 	RD::ComputeListID compute_list = rd->compute_list_begin();
 	rd->compute_list_bind_compute_pipeline(compute_list, pipeline);

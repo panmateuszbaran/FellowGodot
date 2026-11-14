@@ -357,6 +357,7 @@ public:
 		virtual bool is_animated() const;
 		virtual bool fellow_shadow_cacheable() const;
 		virtual bool fellow_shadow_cacheable_far() const;
+		virtual bool fellow_shadow_texture_independent() const;
 		virtual bool casts_shadows() const;
 		virtual RenderingServerTypes::ShaderNativeSourceCode get_native_source_code() const;
 		virtual Pair<ShaderRD *, RID> get_native_shader_and_version() const;

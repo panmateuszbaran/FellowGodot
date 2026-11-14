@@ -528,7 +528,10 @@ void RendererSceneCull::scenario_add_viewport_visibility_mask(RID p_scenario, RI
 
 /* INSTANCING API */
 
-void RendererSceneCull::_instance_queue_update(Instance *p_instance, bool p_update_aabb, bool p_update_dependencies) const {
+void RendererSceneCull::_instance_queue_update(Instance *p_instance, bool p_update_aabb, bool p_update_dependencies, bool p_shadow_relevant) const {
+	if (p_shadow_relevant) {
+		p_instance->fellow_shadow_relevant_update = true; // FellowEngine (decision 0222)
+	}
 	if (p_update_aabb) {
 		p_instance->update_aabb = true;
 	}
@@ -1810,7 +1813,10 @@ void RendererSceneCull::instance_geometry_get_shader_parameter_list(RID p_instan
 
 void RendererSceneCull::_update_instance(Instance *p_instance) const {
 	p_instance->version++;
-	_fellow_shadow_instance_changed(p_instance); // before the transformed AABB changes: log the cached position
+	if (p_instance->fellow_shadow_relevant_update) {
+		_fellow_shadow_instance_changed(p_instance); // before the transformed AABB changes: log the cached position
+	}
+	p_instance->fellow_shadow_relevant_update = false;
 
 	// When not using interpolation the transform is used straight.
 	const Transform3D *instance_xform = &p_instance->transform;

@@ -84,6 +84,8 @@ public:
 		// FellowEngine directional shadow cache (see RendererMaterialStorage::material_fellow_shadow_cacheable).
 		virtual bool fellow_shadow_cacheable() const { return !is_animated(); }
 		virtual bool fellow_shadow_cacheable_far() const { return fellow_shadow_cacheable(); }
+		// FellowEngine (decision 0222): the material's shadow (depth) cannot depend on its textures' data.
+		virtual bool fellow_shadow_texture_independent() const { return false; }
 		virtual RenderingServerTypes::ShaderNativeSourceCode get_native_source_code() const = 0;
 		virtual Pair<ShaderRD *, RID> get_native_shader_and_version() const = 0;
 
@@ -300,6 +302,7 @@ private:
 		uint32_t shader_id = 0;
 		bool uniform_dirty = false;
 		bool texture_dirty = false;
+		bool fellow_swap_only = false; // FellowEngine (decision 0222): queued only by streamed textures' swaps
 		HashMap<StringName, Variant> params;
 		int32_t priority = 0;
 		RID next_pass;
@@ -489,7 +492,7 @@ public:
 
 	bool owns_material(RID p_rid) { return material_owner.owns(p_rid); }
 
-	void _material_queue_update(Material *material, bool p_uniform, bool p_texture);
+	void _material_queue_update(Material *material, bool p_uniform, bool p_texture, bool p_fellow_swap = false);
 	void _update_queued_materials();
 
 	virtual RID material_allocate() override;

@@ -144,6 +144,8 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/physics/convex_vertex_cache", true); // decision 0086 (exact)
 	GLOBAL_DEF("rendering/fellow/physics/parallel_pair_culls", true); // decision 0087 (exact)
 	GLOBAL_DEF("rendering/fellow/physics/pair_prefilter", true); // decision 0219 (exact)
+	GLOBAL_DEF("rendering/fellow/streaming/texture_swaps_keep_shadows", true); // decision 0222 (exact)
+	GLOBAL_DEF("rendering/fellow/streaming/texture_budget_from_used_level", true); // decision 0223 (no change without a budget)
 	GLOBAL_DEF("rendering/fellow/physics/jolt_deferred_sensor_contacts", true); // decision 0088
 	GLOBAL_DEF("rendering/fellow/physics/parallel_island_solve", true); // decision 0089 (exact)
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/physics/parallel_island_solve_grab", PROPERTY_HINT_RANGE, "1,1024,1"), 16);
@@ -440,6 +442,17 @@ void Fellow::register_settings() {
 static double fellow_gate_wait_avg = 0.0;
 static double fellow_gate_frame_avg = 0.0;
 static std::atomic<bool> fellow_gate_open{ true };
+
+// Milestone 113 (decision 0222): the streamed texture swap's flags (render thread).
+bool &Fellow::texture_stream_swap_active() {
+	static thread_local bool active = false;
+	return active;
+}
+
+bool &Fellow::material_change_is_texture_swap() {
+	static thread_local bool swap = false;
+	return swap;
+}
 
 bool Fellow::raytracing_active() {
 	// Decided once: the mesh buffers created from then on carry the acceleration structure input usage or not.

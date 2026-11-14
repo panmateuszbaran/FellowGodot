@@ -44,6 +44,7 @@
 #include "servers/rendering/renderer_scene_occlusion_cull.h"
 #include "servers/rendering/renderer_scene_render.h"
 #include "servers/rendering/rendering_method.h"
+#include "servers/rendering/fellow_settings.h"
 #include "servers/rendering/rendering_server_globals.h"
 #include "servers/rendering/rendering_server_types.h"
 #include "servers/rendering/storage/utilities.h"
@@ -505,6 +506,9 @@ public:
 
 		// FellowEngine directional shadow cache: frame of the last change that can affect this instance's shadow.
 		uint64_t fellow_change_frame = 0;
+		// FellowEngine (decision 0222): the pending update has a cause that can change the instance's shadow (all but
+		// a streamed texture's swap in a material whose shadows do not read it).
+		bool fellow_shadow_relevant_update = false;
 
 		InstanceBaseData *base_data = nullptr;
 
@@ -524,7 +528,7 @@ public:
 				} break;
 				case Dependency::DEPENDENCY_CHANGED_MULTIMESH_VISIBLE_INSTANCES:
 				case Dependency::DEPENDENCY_CHANGED_MATERIAL: {
-					singleton->_instance_queue_update(instance, false, true);
+					singleton->_instance_queue_update(instance, false, true, !(p_notification == Dependency::DEPENDENCY_CHANGED_MATERIAL && Fellow::material_change_is_texture_swap()));
 				} break;
 				case Dependency::DEPENDENCY_CHANGED_MESH:
 				case Dependency::DEPENDENCY_CHANGED_PARTICLES:
@@ -642,7 +646,7 @@ public:
 	};
 
 	mutable SelfList<Instance>::List _instance_update_list;
-	void _instance_queue_update(Instance *p_instance, bool p_update_aabb, bool p_update_dependencies = false) const;
+	void _instance_queue_update(Instance *p_instance, bool p_update_aabb, bool p_update_dependencies = false, bool p_shadow_relevant = true) const;
 
 	struct InstanceGeometryData : public InstanceBaseData {
 		RenderGeometryInstance *geometry_instance = nullptr;
