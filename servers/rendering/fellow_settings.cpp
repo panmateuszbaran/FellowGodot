@@ -34,6 +34,7 @@
 #include "core/os/os.h"
 #include "core/variant/dictionary.h"
 #include "servers/rendering/fellow_hitch_sampler.h"
+#include "servers/rendering/fellow_memory_counters.h"
 #include "servers/rendering/fellow_parallel.h"
 #include "servers/rendering/renderer_compositor.h"
 #include "servers/rendering/rendering_device.h"
@@ -627,6 +628,14 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["transfer_frame_large_bytes"] = s.transfer_frame_large_bytes.get();
 	d["hitches"] = FellowHitchSampler::get_hitch_count(); // decision 0231
 	d["hitch_samples"] = FellowHitchSampler::get_sample_count();
+	// Milestone 117: the driver's device memory allocations and frees (Vulkan's vkAllocateMemory(), vkFreeMemory()).
+	d["memory_allocations"] = FellowMemoryCounters::allocations.get();
+	d["memory_allocation_bytes"] = FellowMemoryCounters::allocation_bytes.get();
+	d["memory_allocation_usec"] = FellowMemoryCounters::allocation_usec.get();
+	d["memory_allocation_max_usec"] = FellowMemoryCounters::allocation_max_usec.get();
+	d["memory_frees"] = FellowMemoryCounters::frees.get();
+	d["memory_free_bytes"] = FellowMemoryCounters::free_bytes.get();
+	d["memory_free_usec"] = FellowMemoryCounters::free_usec.get();
 	d["physics_godot_pairs_made"] = s.physics_godot_pairs_made.get();
 	d["physics_godot_pairs_freed"] = s.physics_godot_pairs_freed.get();
 	d["physics_motion_cache_calls"] = s.physics_motion_cache_calls.get();

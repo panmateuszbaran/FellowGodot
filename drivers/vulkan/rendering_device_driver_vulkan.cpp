@@ -36,6 +36,7 @@
 #include "core/os/os.h"
 #include "core/templates/fixed_vector.h"
 #include "drivers/vulkan/vulkan_hooks.h"
+#include "servers/rendering/fellow_memory_counters.h"
 #include "servers/rendering/fellow_settings.h"
 
 #include <thirdparty/misc/smolv.h>
@@ -1715,8 +1716,39 @@ Error RenderingDeviceDriverVulkan::_initialize_device(const LocalVector<VkDevice
 	return OK;
 }
 
+// FellowEngine (milestone 117): the memory allocator's device memory allocations and frees timed and counted
+// (FellowMemoryCounters, FellowEngine's statistics): on Windows a new allocation can hold up the next submission.
+static VKAPI_ATTR VkResult VKAPI_CALL fellow_vk_allocate_memory(VkDevice p_device, const VkMemoryAllocateInfo *p_info, const VkAllocationCallbacks *p_callbacks, VkDeviceMemory *r_memory) {
+	const uint64_t from = OS::get_singleton()->get_ticks_usec();
+	const VkResult result = vkAllocateMemory(p_device, p_info, p_callbacks, r_memory);
+	const uint64_t usec = OS::get_singleton()->get_ticks_usec() - from;
+	FellowMemoryCounters::allocations.increment();
+	FellowMemoryCounters::allocation_bytes.add(p_info->allocationSize);
+	FellowMemoryCounters::allocation_usec.add(usec);
+	FellowMemoryCounters::allocation_max_usec.exchange_if_greater(usec);
+	return result;
+}
+
+static VKAPI_ATTR void VKAPI_CALL fellow_vk_free_memory(VkDevice p_device, VkDeviceMemory p_memory, const VkAllocationCallbacks *p_callbacks) {
+	const uint64_t from = OS::get_singleton()->get_ticks_usec();
+	vkFreeMemory(p_device, p_memory, p_callbacks);
+	FellowMemoryCounters::frees.increment();
+	FellowMemoryCounters::free_usec.add(OS::get_singleton()->get_ticks_usec() - from);
+}
+
+static void VKAPI_CALL fellow_vma_free_callback(VmaAllocator, uint32_t, VkDeviceMemory, VkDeviceSize p_size, void *) {
+	FellowMemoryCounters::free_bytes.add(p_size);
+}
+
 Error RenderingDeviceDriverVulkan::_initialize_allocator() {
 	VmaAllocatorCreateInfo allocator_info = {};
+	static VmaVulkanFunctions fellow_functions = {};
+	fellow_functions.vkAllocateMemory = fellow_vk_allocate_memory;
+	fellow_functions.vkFreeMemory = fellow_vk_free_memory;
+	allocator_info.pVulkanFunctions = &fellow_functions;
+	static VmaDeviceMemoryCallbacks fellow_memory_callbacks = {};
+	fellow_memory_callbacks.pfnFree = fellow_vma_free_callback;
+	allocator_info.pDeviceMemoryCallbacks = &fellow_memory_callbacks;
 	allocator_info.physicalDevice = physical_device;
 	allocator_info.device = vk_device;
 	allocator_info.instance = context_driver->instance_get();
