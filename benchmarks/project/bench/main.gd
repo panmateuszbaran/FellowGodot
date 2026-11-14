@@ -547,6 +547,10 @@ func _run_perf() -> void:
 	var last_ts_frame := -1
 	var m0 := Time.get_ticks_usec()
 	var mem_peak := _mem()
+	# FellowEngine's split of video memory (the device's heaps, the transfer workers' staging: milestone 114), sampled
+	# every 30 frames (the stats dictionary is not free).
+	var fellow_mem_peak := {}
+	var fellow_mem_keys := ["memory_device_local_bytes", "memory_total_bytes", "transfer_staging_bytes", "transfer_workers"]
 	var has_extra: bool = scene.has_method("sample_extra")
 	var extra := {}
 	var fellow_frames := {}
@@ -630,6 +634,11 @@ func _run_perf() -> void:
 		var mm := _mem()
 		for k in mm.keys():
 			mem_peak[k] = max(mem_peak[k], mm[k])
+		if passes % 30 == 0 and not fs0.is_empty():
+			var fsm := _fellow_stats()
+			for k in fellow_mem_keys:
+				if fsm.has(k):
+					fellow_mem_peak[k] = max(int(fellow_mem_peak.get(k, 0)), int(fsm[k]))
 		if ab.is_empty() and (Time.get_ticks_usec() - m0) / 1e6 >= measure_s:
 			break
 		if not ab.is_empty() and passes >= ab_passes:
@@ -676,7 +685,14 @@ func _run_perf() -> void:
 	result["frames"] = m.to_json_arrays()
 	result["frames"]["path_frame"] = pass_frames
 	if not fs0.is_empty():
-		result["fellow_stats"] = _dict_sub(_fellow_stats(), fs0)
+		var fs_end := _fellow_stats()
+		result["fellow_stats"] = _dict_sub(fs_end, fs0)
+		if fs_end.has("transfer_staging_bytes"):
+			var fme := {}
+			for k in fellow_mem_keys:
+				fme[k] = fs_end.get(k, 0)
+			result["fellow_memory_end"] = fme
+			result["fellow_memory_peak"] = fellow_mem_peak
 		result["frames"]["fellow"] = {}
 		for k in fellow_frames.keys():
 			result["frames"]["fellow"][k] = Array(fellow_frames[k])
