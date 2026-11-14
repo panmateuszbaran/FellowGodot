@@ -1045,8 +1045,27 @@ Node3D *FellowEditorPlugin::make_preset(int p_preset, const Node *p_root) {
 			bumper->set_mesh(bumper_box);
 			bumper->set_position(Vector3(0, 0.48, -2.05));
 			top->add_child(bumper);
+			// Milestone 111: two doors on hinges at their front edges (fellow_hinge_axis: up on the left, down on the
+			// right, so that both open outwards between 0 and 70 degrees): hit, they swing open, then come off.
+			Ref<StandardMaterial3D> door_paint = paint->duplicate();
+			door_paint->set_albedo(Color(0.68, 0.16, 0.12));
+			for (int side = 0; side < 2; side++) {
+				MeshInstance3D *door = memnew(MeshInstance3D);
+				door->set_name(side == 0 ? "DoorLeft" : "DoorRight");
+				Ref<BoxMesh> door_box;
+				door_box.instantiate();
+				door_box->set_size(Vector3(0.05, 0.45, 1.1));
+				door_box->set_material(door_paint);
+				door->set_mesh(door_box);
+				door->set_position(Vector3(side == 0 ? -0.925 : 0.925, 0.62, -0.25));
+				door->set_meta(SNAME("fellow_hinge_axis"), Vector3(0, side == 0 ? 1 : -1, 0));
+				door->set_meta(SNAME("fellow_hinge_limits"), Vector2(0, 70));
+				top->add_child(door);
+			}
 			TypedArray<NodePath> detachable;
 			detachable.push_back(NodePath("../Bumper"));
+			detachable.push_back(NodePath("../DoorLeft"));
+			detachable.push_back(NodePath("../DoorRight"));
 			_fellow_make("FellowVehicleDamage3D", "Damage", top, Dictionary{ { "wheel_bend", 4.0 }, { "engine_power_loss", 0.4 }, { "detachable_paths", detachable }, { "hang_depth", 0.06 }, { "detach_depth", 0.16 } });
 		} break;
 		case PRESET_ACOUSTICS: {
