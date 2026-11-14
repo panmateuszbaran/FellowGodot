@@ -1,6 +1,6 @@
 # 0225 — The transfer workers' staging buffers trimmed
 
-Status: **KEEP**, on by default (5 s, the largest kept; the same frames; host memory) · Branch `fellow/geometry` · Setting `rendering/fellow/frame/transfer_staging_trim` · Code:
+Status: **KEEP**, off by default since decision 0233 (on from milestone 114 to 116: 5 s, the largest kept; host memory; a freed block of the memory allocator holds a frame up ~30 ms) · Branch `fellow/geometry` · Setting `rendering/fellow/frame/transfer_staging_trim` · Code:
 `servers/rendering/rendering_device.{h,cpp}` (`_fellow_trim_transfer_workers()`, `fellow_transfer_staging_bytes()`,
 `fellow_device_local_memory_used()`), `drivers/vulkan/rendering_device_driver_vulkan.cpp`, `fellow_settings.*` ·
 Checks: lavapipe's Streaming Lab, the laptop's Sponza and Bistro (jobs f436, f437).

@@ -7,12 +7,12 @@ scenes `cloth` and `cape`.
 
 ## Problem
 
-Decision 0230 keeps a skinned garment's free particles within `skin_max_distance` of their skinned places — one
-distance for the whole garment. A skirt's hem should swing a hand's width from the legs while the cloth just under its
-waistband stays on the hips: with one distance, the hem's freedom is the waist's too (a skirt flaring out under the
-waistband in a gale), or the waist's tightness is the hem's (a skirt that cannot swing). Middleware paints the distance
-a vertex (NvCloth's motion constraints' radii, Chaos Cloth's max distance mask); the readiness assessment's next step
-for garments was "a garment's painted distance".
+Decision 0230 keeps a skinned garment's free particles within `skin_max_distance` of their skinned places — one distance
+for the whole garment. A skirt's hem should swing a hand's width from the legs while the cloth just under its waistband
+stays on the hips: with one distance, the hem's freedom is the waist's too (a skirt flaring out under the waistband in a
+gale), or the waist's tightness is the hem's (a skirt that cannot swing). Middleware paints the distance a vertex
+(NvCloth's motion constraints' radii, Chaos Cloth's max distance mask); the readiness assessment's next step for
+garments was "a garment's painted distance".
 
 ## Change
 

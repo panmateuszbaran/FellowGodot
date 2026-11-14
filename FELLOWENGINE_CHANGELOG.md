@@ -9,6 +9,21 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 117 — a hitch sampler, and the rare long frames it found; a garment's distance shaped (2026-11-14)
+
+- `rendering/fellow/debug/hitch_sampler`, `hitch_sampler_ms` (decision 0231): a watchdog thread samples the stack of a
+  frame step that runs past half the threshold (about every millisecond, with the thread's CPU time, the other threads
+  in turn) and reports the steps over it, named, when the engine exits — in a release template too (Windows x86-64:
+  names from a PDB or a linker map, `linkflags=/MAP`; Linux: the executable's symbol table, `FELLOW_KEEP_SYMBOLS=1`).
+- Sponza streamed's rare 25-46 ms frames found: the render thread in `vkQueueSubmit()` waiting for a lock the NVIDIA
+  driver held while a worker freed a 256 MiB block of the memory allocator (30-34 ms), after decision 0225's staging
+  trim had emptied it. `rendering/fellow/frame/transfer_staging_trim` is now off by default (decision 0233): no such
+  frame in eight flythroughs (three of 32-36 ms in eight with it on); it keeps up to 512 MiB of host memory.
+- FellowEngine's statistics count the driver's device memory allocations and frees with their time (`memory_*`).
+- `FellowCloth3D.skin_distance_mode` (decision 0232): a garment's distance from the skin a share a particle, growing
+  along the cloth from its pins (a skirt's waist on the hips, its hem free) or painted in the vertex colours' green.
+- FellowBench `--vsync=mailbox` (diagnostics); the present thread named in thread lists.
+
 ## Milestone 116 — cloth following the skin; no frame waits for a large copy (2026-11-14)
 
 - `FellowCloth3D.follow_skin`, `skin_max_distance`, `skin` (decision 0230): a source mesh with bone weights skins each

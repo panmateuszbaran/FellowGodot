@@ -1200,7 +1200,7 @@ void report() {
 			const HitchOther &other = hitch.others[shown[i].index];
 			const String cpu_text = other.cpu_share >= 0.0 ? vformat("on a CPU %d %% of the time", int(Math::round(100.0 * MIN(1.0, other.cpu_share)))) : String("its CPU time unknown");
 			print_line(vformat("  thread \"%s\" (id %d): %s, %d samples", other.name, (int64_t)other.os_id, cpu_text, other.stacks.size()));
-			print_profile(shown[i].stacks, table, "    ", 12, 3);
+			print_profile(shown[i].stacks, table, "    ", 30, 3);
 		}
 		// The waiting ones, a line each: where their last sample waited (the innermost frames, the outermost last).
 		String waiting_lines;
