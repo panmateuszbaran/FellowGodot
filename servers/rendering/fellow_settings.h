@@ -304,10 +304,14 @@ inline bool texture_budget_from_used_level() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/streaming/texture_budget_from_used_level");
 }
 // frame/transfer_staging_trim (milestone 114, decision 0225): RenderingDevice's transfer workers release a staging
-// buffer above 4 MiB after 60 frames unused (stock keeps each at its largest upload's power of two for good; streamed
-// loads on worker threads make one worker a thread). Host memory the driver counts as video memory. Read per frame.
+// buffer above 4 MiB after transfer_staging_trim_idle_s unused (stock keeps each at its largest upload's power of two
+// for good; streamed loads on worker threads make one worker a thread). Host memory the driver counts as video memory.
+// Read per frame.
 inline bool transfer_staging_trim() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/frame/transfer_staging_trim");
+}
+inline uint64_t transfer_staging_trim_idle_usec() {
+	return uint64_t(MAX(0.0, double(GLOBAL_GET_CACHED(float, "rendering/fellow/frame/transfer_staging_trim_idle_s"))) * 1000000.0);
 }
 // Set on the render thread while a streamed texture's old data is freed (its materials' uniform sets erased), and while
 // such a material notifies its users: RendererSceneCull then updates the instances without a shadow cache event.
@@ -1373,6 +1377,8 @@ struct Stats {
 	SafeNumeric<uint64_t> physics_godot_bp_usec[3];
 	SafeNumeric<uint64_t> physics_godot_pairs_made; // the broadphase's pairs made and freed (bodies, areas)
 	SafeNumeric<uint64_t> physics_godot_pairs_freed;
+	SafeNumeric<uint64_t> transfer_staging_grows; // milestone 114: staging buffers made larger (a fresh allocation)
+	SafeNumeric<uint64_t> transfer_staging_trims; // ... and released by frame/transfer_staging_trim (decision 0225)
 	SafeNumeric<uint64_t> physics_jolt_usec[3];
 	SafeNumeric<uint64_t> physics_motion_cache_calls; // body_test_motion() calls inside move_and_slide() (decision 0093)
 	SafeNumeric<uint64_t> physics_motion_cache_hits; // of those, answered from the kept results

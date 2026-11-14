@@ -147,6 +147,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/streaming/texture_swaps_keep_shadows", true); // decision 0222 (exact)
 	GLOBAL_DEF("rendering/fellow/streaming/texture_budget_from_used_level", true); // decision 0223 (no change without a budget)
 	GLOBAL_DEF("rendering/fellow/frame/transfer_staging_trim", true); // decision 0225 (host memory; the same frames)
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/frame/transfer_staging_trim_idle_s", PROPERTY_HINT_RANGE, "0,60,0.1"), 5.0);
 	GLOBAL_DEF("rendering/fellow/physics/jolt_deferred_sensor_contacts", true); // decision 0088
 	GLOBAL_DEF("rendering/fellow/physics/parallel_island_solve", true); // decision 0089 (exact)
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/physics/parallel_island_solve_grab", PROPERTY_HINT_RANGE, "1,1024,1"), 16);
@@ -609,6 +610,8 @@ Dictionary Fellow::get_stats_dictionary() {
 		d["transfer_staging_bytes"] = rd->fellow_transfer_staging_bytes(&workers);
 		d["transfer_workers"] = workers;
 	}
+	d["transfer_staging_grows"] = s.transfer_staging_grows.get();
+	d["transfer_staging_trims"] = s.transfer_staging_trims.get();
 	d["physics_godot_pairs_made"] = s.physics_godot_pairs_made.get();
 	d["physics_godot_pairs_freed"] = s.physics_godot_pairs_freed.get();
 	d["physics_motion_cache_calls"] = s.physics_motion_cache_calls.get();

@@ -7654,7 +7654,7 @@ RenderingDevice::TransferWorker *RenderingDevice::_acquire_transfer_worker(uint3
 		// Wait for the worker if the command buffer was submitted but it hasn't finished processing yet.
 		_wait_for_transfer_worker(transfer_worker);
 	}
-	transfer_worker->fellow_last_used_frame = frames_drawn;
+	transfer_worker->fellow_last_used_usec = OS::get_singleton()->get_ticks_usec();
 
 	uint32_t alignment_offset = _get_alignment_offset(transfer_worker->staging_buffer_size_in_use, p_required_align);
 	transfer_worker->max_transfer_size = MAX(transfer_worker->max_transfer_size, p_transfer_size);
@@ -7682,6 +7682,7 @@ RenderingDevice::TransferWorker *RenderingDevice::_acquire_transfer_worker(uint3
 			}
 
 			uint32_t new_staging_buffer_size = Math::next_power_of_2(expected_buffer_size);
+			Fellow::stats().transfer_staging_grows.increment(); // FellowEngine (decision 0225)
 			transfer_worker->staging_buffer_size_allocated = new_staging_buffer_size;
 			transfer_worker->staging_buffer = driver->buffer_create(new_staging_buffer_size, RDD::BUFFER_USAGE_TRANSFER_FROM_BIT, RDD::MEMORY_ALLOCATION_TYPE_CPU, frames_drawn);
 		}
@@ -7722,7 +7723,8 @@ void RenderingDevice::_fellow_free_staging_task(void *p_userdata) {
 
 void RenderingDevice::_fellow_trim_transfer_workers() {
 	// FellowEngine (decision 0225): a staging buffer grows to the next power of two of the largest upload its worker made
-	// and stock keeps it; a worker unused for 60 frames releases one above 4 MiB (the next large upload makes it again).
+	// and stock keeps it; a worker unused for transfer_staging_trim_idle_s releases one above 4 MiB (the next large upload
+	// makes it again: a fresh allocation, its pages first touched while the worker copies into it).
 	// Render thread, at the start of a frame; only workers nobody holds and with nothing recorded. The buffers are freed
 	// on a worker thread: freeing a large host allocation on the render thread stalled frames by 10-20 ms (job f437).
 	if (fellow_staging_free_task != WorkerThreadPool::INVALID_TASK_ID) {
@@ -7733,11 +7735,12 @@ void RenderingDevice::_fellow_trim_transfer_workers() {
 		fellow_staging_free_task = WorkerThreadPool::INVALID_TASK_ID;
 	}
 	const uint32_t keep_bytes = 4 * 1024 * 1024;
-	const uint64_t idle_frames = 60;
+	const uint64_t idle_usec = Fellow::transfer_staging_trim_idle_usec();
+	const uint64_t now = OS::get_singleton()->get_ticks_usec();
 	MutexLock pool_lock(transfer_worker_pool_mutex);
 	for (uint32_t index : transfer_worker_pool_available_list) {
 		TransferWorker *worker = transfer_worker_pool[index];
-		if (worker->staging_buffer_size_allocated <= keep_bytes || frames_drawn - worker->fellow_last_used_frame < idle_frames) {
+		if (worker->staging_buffer_size_allocated <= keep_bytes || worker->fellow_last_used_usec + idle_usec > now) {
 			continue;
 		}
 		if (!worker->thread_mutex.try_lock()) {
@@ -7748,6 +7751,7 @@ void RenderingDevice::_fellow_trim_transfer_workers() {
 				_wait_for_transfer_worker(worker); // long finished: 60 frames ago
 			}
 			fellow_staging_to_free.push_back(worker->staging_buffer);
+			Fellow::stats().transfer_staging_trims.increment();
 			worker->staging_buffer = RDD::BufferID();
 			worker->staging_buffer_size_allocated = 0;
 			worker->staging_buffer_size_in_use = 0;
