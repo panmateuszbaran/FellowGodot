@@ -94,7 +94,8 @@ constexpr uint32_t MAX_DEPTH = 64;
 constexpr uint32_t MAX_SAMPLES = 256; // the stepping thread's, a hitch (about a quarter of a second)
 constexpr uint32_t MAX_THREADS = 128; // other threads followed during a hitch
 constexpr uint32_t MAX_OTHER_STACKS = 2048; // their samples, a hitch
-constexpr uint32_t OTHERS_EVERY = 4; // the other threads sampled every fourth sample of the stepping thread
+constexpr uint64_t OTHERS_BUDGET_USEC = 400; // the other threads sampled in turn after each sample of the stepping thread, for this long
+constexpr uint64_t RELIST_USEC = 2000000; // the process's threads listed again between hitches
 constexpr uint32_t MAX_HITCHES = 64;
 constexpr uint32_t DURATION_RING = 16;
 constexpr uint32_t NAME_SIZE = 64;
@@ -155,9 +156,9 @@ struct Capture {
 	uint32_t samples = 0;
 	uint32_t ticks = 0;
 	Stack *stacks = nullptr; // MAX_SAMPLES
-	bool threads_listed = false;
 	uint32_t thread_count = 0;
-	OtherThread *threads = nullptr; // MAX_THREADS
+	uint32_t next_other = 0;
+	OtherThread *threads = nullptr; // MAX_THREADS: the known threads' copies (their handles the list's) with this hitch's CPU times
 	uint32_t other_count = 0;
 	OtherSample *others = nullptr; // MAX_OTHER_STACKS
 };
@@ -194,6 +195,10 @@ uint64_t sampler_start_usec = 0;
 LocalVector<Hitch> hitches; // the watchdog's until it has stopped
 uint32_t hitches_dropped = 0;
 uint64_t steps_sampled = 0; // captures started (steps past half the threshold)
+uint64_t longest_gap_usec = 0; // the longest wait between two samples of a stepping thread
+OtherThread *known_threads = nullptr; // MAX_THREADS: the process's other threads, listed by the watchdog between hitches
+uint32_t known_count = 0;
+uint64_t known_listed_usec = 0;
 double cpu_units_per_usec = 1.0;
 
 const char *slot_name(uint32_t p_slot) {
@@ -369,8 +374,8 @@ void thread_name(HANDLE p_handle, char *r_name) {
 	}
 }
 
-void list_threads(Capture &r_capture, const uint64_t *p_skip, uint32_t p_skip_count) {
-	r_capture.thread_count = 0;
+void list_threads(OtherThread *r_threads, uint32_t &r_count, const uint64_t *p_skip, uint32_t p_skip_count) {
+	r_count = 0;
 	HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
 	if (snapshot == INVALID_HANDLE_VALUE) {
 		return;
@@ -380,7 +385,7 @@ void list_threads(Capture &r_capture, const uint64_t *p_skip, uint32_t p_skip_co
 	entry.dwSize = sizeof(entry);
 	if (Thread32First(snapshot, &entry)) {
 		do {
-			if (entry.th32OwnerProcessID != pid || r_capture.thread_count >= MAX_THREADS) {
+			if (entry.th32OwnerProcessID != pid || r_count >= MAX_THREADS) {
 				continue;
 			}
 			bool skip = false;
@@ -394,7 +399,7 @@ void list_threads(Capture &r_capture, const uint64_t *p_skip, uint32_t p_skip_co
 			if (!handle) {
 				continue;
 			}
-			OtherThread &other = r_capture.threads[r_capture.thread_count++];
+			OtherThread &other = r_threads[r_count++];
 			other = OtherThread();
 			other.thread.handle = handle;
 			other.thread.os_id = entry.th32ThreadID;
@@ -666,14 +671,14 @@ bool sample_thread(const NativeThread &p_thread, Stack &r_stack) {
 	return r_stack.depth > 0;
 }
 
-void list_threads(Capture &r_capture, const uint64_t *p_skip, uint32_t p_skip_count) {
-	r_capture.thread_count = 0;
+void list_threads(OtherThread *r_threads, uint32_t &r_count, const uint64_t *p_skip, uint32_t p_skip_count) {
+	r_count = 0;
 	DIR *dir = opendir("/proc/self/task");
 	if (!dir) {
 		return;
 	}
 	while (struct dirent *entry = readdir(dir)) {
-		if (entry->d_name[0] < '0' || entry->d_name[0] > '9' || r_capture.thread_count >= MAX_THREADS) {
+		if (entry->d_name[0] < '0' || entry->d_name[0] > '9' || r_count >= MAX_THREADS) {
 			continue;
 		}
 		const uint64_t tid = strtoull(entry->d_name, nullptr, 10);
@@ -684,7 +689,7 @@ void list_threads(Capture &r_capture, const uint64_t *p_skip, uint32_t p_skip_co
 		if (skip) {
 			continue;
 		}
-		OtherThread &other = r_capture.threads[r_capture.thread_count++];
+		OtherThread &other = r_threads[r_count++];
 		other = OtherThread();
 		other.thread.os_id = tid;
 		other.name[0] = 0;
@@ -770,16 +775,30 @@ void symbolize(const LocalVector<uint64_t> &p_addresses, HashMap<uint64_t, Strin
 #endif
 
 void capture_reset(Capture &r_capture) {
-	for (uint32_t i = 0; i < r_capture.thread_count; i++) {
-		close_thread(r_capture.threads[i].thread);
-	}
 	r_capture.active = false;
 	r_capture.samples = 0;
 	r_capture.ticks = 0;
 	r_capture.cpu_reads = 0;
-	r_capture.threads_listed = false;
 	r_capture.thread_count = 0;
+	r_capture.next_other = 0;
 	r_capture.other_count = 0;
+}
+
+// The process's other threads listed again (between hitches: listing them takes milliseconds on Windows).
+void relist_known() {
+	for (uint32_t i = 0; i < known_count; i++) {
+		close_thread(known_threads[i].thread);
+	}
+	uint64_t skip[FellowHitchSampler::SLOT_MAX + 1];
+	uint32_t skip_count = 0;
+	skip[skip_count++] = watchdog_os_id;
+	for (uint32_t s = 0; s < FellowHitchSampler::SLOT_MAX; s++) {
+		if (slots[s].mode.load(std::memory_order_acquire) == SLOT_REGISTERED) {
+			skip[skip_count++] = slots[s].thread.os_id;
+		}
+	}
+	list_threads(known_threads, known_count, skip, skip_count);
+	known_listed_usec = OS::get_singleton()->get_ticks_usec();
 }
 
 void capture_finish(uint32_t p_slot, Capture &r_capture) {
@@ -833,20 +852,15 @@ void capture_finish(uint32_t p_slot, Capture &r_capture) {
 	capture_reset(r_capture);
 }
 
-void sample_others(uint32_t p_slot, Capture &r_capture) {
-	if (!r_capture.threads_listed) {
-		r_capture.threads_listed = true;
-		uint64_t skip[FellowHitchSampler::SLOT_MAX + 1];
-		uint32_t skip_count = 0;
-		skip[skip_count++] = watchdog_os_id;
-		for (uint32_t s = 0; s < FellowHitchSampler::SLOT_MAX; s++) {
-			if (slots[s].mode.load(std::memory_order_acquire) == SLOT_REGISTERED) {
-				skip[skip_count++] = slots[s].thread.os_id;
-			}
-		}
-		list_threads(r_capture, skip, skip_count);
+// The other threads in turn, for up to OTHERS_BUDGET_USEC (one at least): the stepping thread is sampled again soon.
+void sample_others(Capture &r_capture) {
+	if (r_capture.thread_count == 0) {
+		return;
 	}
-	for (uint32_t t = 0; t < r_capture.thread_count; t++) {
+	const uint64_t from = OS::get_singleton()->get_ticks_usec();
+	for (uint32_t visited = 0; visited < r_capture.thread_count; visited++) {
+		const uint32_t t = r_capture.next_other;
+		r_capture.next_other = (r_capture.next_other + 1) % r_capture.thread_count;
 		OtherThread &other = r_capture.threads[t];
 		uint64_t cpu = 0;
 		if (thread_cpu(other.thread, cpu)) {
@@ -866,14 +880,29 @@ void sample_others(uint32_t p_slot, Capture &r_capture) {
 				r_capture.other_count++;
 			}
 		}
+		if (OS::get_singleton()->get_ticks_usec() - from >= OTHERS_BUDGET_USEC) {
+			break;
+		}
 	}
 }
 
 void watchdog(void *) {
 	Thread::set_name("FellowEngine hitch sampler");
 	watchdog_os_id = current_os_id();
+	// The main thread registers its slot right after starting this thread: it is not one of the others.
+	while (slots[FellowHitchSampler::SLOT_MAIN].mode.load(std::memory_order_acquire) == SLOT_UNREGISTERED && !exit_requested.load(std::memory_order_acquire)) {
+		OS::get_singleton()->delay_usec(1000);
+	}
+	relist_known();
 	while (!exit_requested.load(std::memory_order_acquire)) {
 		OS::get_singleton()->delay_usec(1000);
+		bool capturing = false;
+		for (uint32_t s = 0; s < FellowHitchSampler::SLOT_MAX; s++) {
+			capturing = capturing || captures[s].active;
+		}
+		if (!capturing && OS::get_singleton()->get_ticks_usec() - known_listed_usec >= RELIST_USEC) {
+			relist_known();
+		}
 		for (uint32_t s = 0; s < FellowHitchSampler::SLOT_MAX; s++) {
 			SlotState &slot = slots[s];
 			if (slot.mode.load(std::memory_order_acquire) != SLOT_REGISTERED) {
@@ -895,6 +924,12 @@ void watchdog(void *) {
 				capture.seq = seq;
 				capture.step_begin = begin;
 				capture.frame = slot.frame.load(std::memory_order_relaxed);
+				capture.thread_count = known_count;
+				capture.next_other = 0;
+				for (uint32_t t = 0; t < known_count; t++) {
+					capture.threads[t] = known_threads[t];
+					capture.threads[t].cpu_reads = 0;
+				}
 				steps_sampled++;
 			}
 			uint64_t cpu = 0;
@@ -903,6 +938,8 @@ void watchdog(void *) {
 			if (capture.samples < MAX_SAMPLES && sample_thread(slot.thread, capture.stacks[capture.samples])) {
 				if (capture.samples == 0) {
 					capture.first_usec = t;
+				} else {
+					longest_gap_usec = MAX(longest_gap_usec, t - capture.last_usec);
 				}
 				capture.samples++;
 				sample_count.fetch_add(1, std::memory_order_relaxed);
@@ -918,9 +955,7 @@ void watchdog(void *) {
 					capture.cpu_reads++;
 				}
 			}
-			if (capture.ticks % OTHERS_EVERY == 0) {
-				sample_others(s, capture);
-			}
+			sample_others(capture);
 			capture.ticks++;
 		}
 	}
@@ -1120,8 +1155,8 @@ void report() {
 		ids.insert(kv.key, table.intern(kv.value));
 	}
 
-	print_line(vformat("FellowEngine hitch sampler: %d hitches over %.1f ms%s (%d steps sampled past %.1f ms).", hitches.size(), report_threshold_usec / 1000.0,
-			hitches_dropped > 0 ? vformat(", %d more not kept", hitches_dropped) : String(), (int64_t)steps_sampled, start_threshold_usec / 1000.0));
+	print_line(vformat("FellowEngine hitch sampler: %d hitches over %.1f ms%s (%d steps sampled past %.1f ms; the longest gap between two samples of a stepping thread %.1f ms).", hitches.size(), report_threshold_usec / 1000.0,
+			hitches_dropped > 0 ? vformat(", %d more not kept", hitches_dropped) : String(), (int64_t)steps_sampled, start_threshold_usec / 1000.0, longest_gap_usec / 1000.0));
 	for (uint32_t h = 0; h < hitches.size(); h++) {
 		const Hitch &hitch = hitches[h];
 		String cpu = hitch.cpu_share >= 0.0 ? vformat("; the thread on a CPU %d %% of that time", int(Math::round(100.0 * MIN(1.0, hitch.cpu_share)))) : String();
@@ -1167,6 +1202,30 @@ void report() {
 			print_line(vformat("  thread \"%s\" (id %d): %s, %d samples", other.name, (int64_t)other.os_id, cpu_text, other.stacks.size()));
 			print_profile(shown[i].stacks, table, "    ", 12, 3);
 		}
+		// The waiting ones, a line each: where their last sample waited (the innermost frames, the outermost last).
+		String waiting_lines;
+		int waiting_count = 0;
+		for (uint32_t i = 0; i < hitch.others.size(); i++) {
+			bool listed = false;
+			for (const OtherInfo &info : shown) {
+				listed = listed || info.index == i;
+			}
+			if (listed || hitch.others[i].stacks.is_empty()) {
+				continue;
+			}
+			const HitchOther &other = hitch.others[i];
+			const LocalVector<int> frames = named_stack(other.stacks[other.stacks.size() - 1], ids);
+			String where;
+			for (int k = int(frames.size()) - 1, n = 0; k >= 0 && n < 7; k--, n++) {
+				where += (n > 0 ? " < " : "") + frame_name(table, frames[k]);
+			}
+			waiting_lines += vformat("\n    \"%s\" (id %d, %s): %s", other.name, (int64_t)other.os_id,
+					other.cpu_share >= 0.0 ? vformat("CPU %d %%", int(Math::round(100.0 * MIN(1.0, other.cpu_share)))) : String("CPU ?"), where);
+			waiting_count++;
+		}
+		if (waiting_count > 0) {
+			print_line(vformat("  waiting threads (innermost frames first):%s", waiting_lines));
+		}
 	}
 }
 
@@ -1189,6 +1248,10 @@ void start() {
 	for (uint32_t s = 0; s < FellowHitchSampler::SLOT_MAX; s++) {
 		captures[s].stacks = (Stack *)memalloc(sizeof(Stack) * MAX_SAMPLES);
 		captures[s].threads = (OtherThread *)memalloc(sizeof(OtherThread) * MAX_THREADS);
+	}
+	known_threads = (OtherThread *)memalloc(sizeof(OtherThread) * MAX_THREADS);
+	known_count = 0;
+	for (uint32_t s = 0; s < FellowHitchSampler::SLOT_MAX; s++) {
 		captures[s].others = (OtherSample *)memalloc(sizeof(OtherSample) * MAX_OTHER_STACKS);
 	}
 	sampler_start_usec = OS::get_singleton()->get_ticks_usec();
@@ -1291,6 +1354,12 @@ void FellowHitchSampler::finish() {
 			close_thread(slots[s].thread);
 		}
 	}
+	for (uint32_t i = 0; i < known_count; i++) {
+		close_thread(known_threads[i].thread);
+	}
+	memfree(known_threads);
+	known_threads = nullptr;
+	known_count = 0;
 	platform_finish();
 #endif
 }

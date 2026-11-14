@@ -8871,6 +8871,7 @@ struct RenderingDevice::FellowPresentThread {
 
 	static void _run(void *p_self) {
 		FellowPresentThread *self = static_cast<FellowPresentThread *>(p_self);
+		Thread::set_name("FellowEngine present thread"); // milestone 117: named in the hitch sampler's reports
 		self->driver->fellow_set_submit_thread();
 		while (true) {
 			Job *job = nullptr;
