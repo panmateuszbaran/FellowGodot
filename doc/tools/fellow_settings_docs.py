@@ -309,6 +309,7 @@ D = {
     # ---------------------------------------------------------------- upscaling
     "upscaling/fsr3": "A viewport in Godot's FSR 2 scaling mode runs AMD's FidelityFX Super Resolution 3.1 upscaler instead of FSR 2.2: less error and flicker in motion. Decision 0148.",
     "upscaling/fsr3_half_precision": "Half precision in FSR 3.1's passes that have it, where the GPU supports it. " + STARTUP,
+    "upscaling/fsr3_accumulate_half_precision_nvidia": "FSR 3.1's accumulation in half precision on NVIDIA GPUs too (with [code]fsr3_half_precision[/code]); AMD's backends keep it in full precision there. Decision 0224. " + STARTUP,
     "upscaling/fsr3_velocity_factor": "FSR 3.1's velocity factor: 0 steadies bright pixels.",
     "upscaling/fsr3_reactiveness_scale": "FSR 3.1's reactiveness scale: larger reacts faster.",
     "upscaling/fsr3_shading_change_scale": "FSR 3.1's shading change scale: larger reacts faster to lighting changes.",

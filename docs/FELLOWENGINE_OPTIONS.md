@@ -435,7 +435,8 @@ Proxies**. Bench `bench/world_proxies_check.gd`.
 (`scaling_3d_mode` FSR 2, any `scaling_3d_scale`, 1.0 for native AA) runs AMD's FidelityFX Super Resolution 3.1
 upscaler instead of FSR 2.2, with the same inputs, jitter, sharpness (`fsr_sharpness`) and output; switching makes a
 new context (a new history). `fsr3_half_precision` (on; read at start-up): half precision in the passes that have it,
-where the GPU supports it (not SPD's pyramids, not the accumulation on NVIDIA). The SDK's tunables:
+where the GPU supports it (not SPD's pyramids, not the accumulation on NVIDIA unless
+`fsr3_accumulate_half_precision_nvidia`, off, read at start-up: decision 0224). The SDK's tunables:
 `fsr3_velocity_factor` (1; 0 steadies bright pixels), `fsr3_reactiveness_scale` (1), `fsr3_shading_change_scale` (1),
 `fsr3_accumulation_added_per_frame` (0.333; less ghosts less where the history is rejected),
 `fsr3_min_disocclusion_accumulation` (−0.333). `fsr3_debug_view` draws the SDK's debug view over the output. In motion

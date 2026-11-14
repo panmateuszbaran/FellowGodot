@@ -394,6 +394,9 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/upscaling/fsr3", true);
 	// Half precision in the passes that have it (where the GPU supports it; not in the accumulation on NVIDIA).
 	GLOBAL_DEF_RST("rendering/fellow/upscaling/fsr3_half_precision", true);
+	// The accumulation in half precision on NVIDIA GPUs too (decision 0224; AMD's backends and Godot's FSR 2.2 keep it in
+	// full precision there).
+	GLOBAL_DEF_RST("rendering/fellow/upscaling/fsr3_accumulate_half_precision_nvidia", false);
 	// The SDK's tunables (ffxFsr3UpscalerSetConstant): 0 velocity factor steadies bright pixels; a larger reactiveness or
 	// shading change scale reacts faster; less accumulation added a frame ghosts less where the history is rejected;
 	// the accumulation a disoccluded pixel starts from.
