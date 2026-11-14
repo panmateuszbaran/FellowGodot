@@ -648,7 +648,11 @@ from every pin falls free); a part fallen 100 m below the cloth is dropped. The 
 whole again. Self-collision (decision 0221): `self_collision` (off) keeps every two particles at least
 `self_collision_distance` apart (0: three quarters of the mean edge), but for those as close at rest; the pairs found
 once a frame by a spatial hash, pushed apart in each substep. `get_stats()`' `self_pairs`, `self_contacts`,
-`self_distance`.
+`self_distance`. Milestone 115: `self_collision_triangles` (off; decision 0228) keeps each particle at the distance from
+the other layers' triangles too, on the side it was found on (the distance then defaults to a quarter of the mean edge:
+layers that close without a particle slipping between another layer's); `self_collision_friction` (0-1, 0; decision
+0229) takes the layers' sliding along each other away where they touch (a heap on a slope held by its own layers).
+`get_stats()`' `self_tri_pairs`, `self_tri_contacts`.
 
 ## Traversal: mantling and vaulting (milestone 72)
 

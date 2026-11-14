@@ -6,6 +6,7 @@ extends SceneTree
 ##   godot --path benchmarks/project --fixed-fps 60 --resolution 1280x720 -s res://bench/cloth_check.gd
 ##       -- --out=<dir> --pictures=1 [--frames=1] [--grid=1 --shot=640x360] [--motion=1]
 ##   godot ... -s res://bench/cloth_check.gd -- --out=<dir> --many=64 [--seconds=20] [--tear_strain=0.5] [--self=1]
+##       [--self_tri=1] [--self_friction=1]
 ##
 ## Lanes, each a cloth in a situation: a flag on a pole in the wind (FellowWind3D, gusts), a curtain hanging still, a
 ## sheet dropped on a sphere and a box (the physics world's), a sheet dropped on a height map, a cape pinned at two
@@ -15,7 +16,10 @@ extends SceneTree
 ## measured); milestone 112 (decision 0220): a curtain with a hole cut in it (tear()), one cut and made whole again
 ## (reset()), a sheet held at its corners a ball goes through (tear_strain 0.5, and 0), a flag cut off its pole (its
 ## cut part on the ground); decision 0221: a sheet let go of its rail falling in a heap, with self-collision (no two
-## particles closer than half its distance, but for neighbours at rest) and without. For each after the run: the largest
+## particles closer than half its distance, but for neighbours at rest) and without; milestone 115 (decisions 0228,
+## 0229): the heap in still air with the layers a quarter of an edge apart, by particles only and against the triangles
+## too (no particle within half the distance of another layer's triangle), and the sheet heaped on a 25-degree slope
+## without and with friction between its layers (held on it). For each after the run: the largest
 ## strain of the grid's edges (stretched over rest), positions finite, the deepest a particle went into a collider,
 ## where the cloth went (a flag downwind, a curtain hanging, a sheet resting on what it fell on). The cost: the
 ## simulation's time a frame (--many=N flags in the wind). With --pictures=1 the lanes filmed (cloth_strip.png),
@@ -48,7 +52,7 @@ var walker_capsules: Array = []
 var done := false
 var shots := {}
 var viewports := {}
-var strip_lanes := ["flag", "curtain", "sheet_on_shapes", "cape", "awning", "banner_mesh", "cape_bones", "tear_cut", "tear_strain", "tear_off", "self_heap", "self_heap_off"]
+var strip_lanes := ["flag", "curtain", "sheet_on_shapes", "cape", "awning", "banner_mesh", "cape_bones", "tear_cut", "tear_strain", "tear_off", "self_heap", "self_heap_off", "self_heap_thin", "self_heap_tri", "self_slope", "self_slope_friction"]
 var strip_times := [0.5, 1.0, 2.0, 3.9]
 
 
@@ -383,13 +387,37 @@ func _build() -> void:
 	_watch_tears(_lane("tear_off", toff, x))
 	# Milestone 112 (decision 0221): self-collision. A sheet hung by its top edge, turned to the breeze, let go at 0.5 s:
 	# it falls in a heap; and the same without self-collision.
-	for lane_name in ["self_heap", "self_heap_off"]:
+	# Milestone 115: the same heap, in still air, with the layers as close as a quarter of an edge — particles only (they
+	# slip between each other's), and kept off the triangles too (decision 0228).
+	for lane_name in ["self_heap", "self_heap_off", "self_heap_thin", "self_heap_tri"]:
 		x += 8.0
 		var sc := _cloth("Self_" + lane_name, Transform3D(Basis(Vector3.UP, deg_to_rad(30.0)), Vector3(x - 0.9, 2.6, 0)), Vector2(1.8, 2.4), 24, FellowCloth3D.PIN_TOP_EDGE, Color(0.55, 0.75, 0.5))
 		sc.wind_scale = 0.3
 		sc.simulation_distance = 1000.0 # far from the course's camera
 		sc.self_collision = not lane_name.ends_with("_off")
+		if lane_name in ["self_heap_thin", "self_heap_tri"]:
+			sc.wind_scale = 0.0 # still air
+			sc.self_collision_distance = 0.028 # a quarter of the mean edge (0.113 m)
+			sc.self_collision_triangles = lane_name == "self_heap_tri"
 		_lane(lane_name, sc, x)
+	# Decision 0229: the sheet let go over a 25-degree slope (its friction with colliders 1): it falls in a heap on it,
+	# whose upper layers slide down over the lower ones — and pull them along — without friction between the layers.
+	for lane_name in ["self_slope", "self_slope_friction"]:
+		x += 10.0
+		var slope := BoxShape3D.new()
+		slope.size = Vector3(6.0, 0.2, 3.0)
+		var slope_mesh := BoxMesh.new()
+		slope_mesh.size = slope.size
+		_static(slope, Transform3D(Basis(Vector3(0, 0, 1), deg_to_rad(-25.0)), Vector3(x, 1.0, 0)), slope_mesh)
+		var ss := _cloth("Self_" + lane_name, Transform3D(Basis(Vector3.UP, deg_to_rad(90.0)), Vector3(x, 4.2, 0.9)), Vector2(1.8, 2.4), 24, FellowCloth3D.PIN_TOP_EDGE, Color(0.55, 0.75, 0.5))
+		ss.wind_scale = 0.0
+		ss.friction = 1.0
+		ss.simulation_distance = 1000.0
+		ss.self_collision = true
+		ss.self_collision_distance = 0.028
+		ss.self_collision_triangles = true
+		ss.self_collision_friction = 1.0 if lane_name == "self_slope_friction" else 0.0
+		_lane(lane_name, ss, x)
 
 	var cam := Camera3D.new()
 	root3d.add_child(cam)
@@ -410,6 +438,8 @@ func _build_many() -> void:
 		f.lod_distance = float(_arg("lod", "1000"))
 		f.tear_strain = float(_arg("tear_strain", "0")) # milestone 112: the check's cost (a flag in the wind does not tear)
 		f.self_collision = _arg("self", "0") == "1" # milestone 112: self-collision's cost
+		f.self_collision_triangles = _arg("self_tri", "0") == "1" # milestone 115: against the triangles too
+		f.self_collision_friction = float(_arg("self_friction", "0"))
 	var cam := Camera3D.new()
 	root3d.add_child(cam)
 	cam.look_at_from_position(Vector3(-6, 8, -6), Vector3(cols * 2.0, 2, cols * 2.0))
@@ -454,8 +484,10 @@ func _make_viewports() -> void:
 				cam.look_at_from_position(Vector3(x + 3.0, 2.4, 3.5), Vector3(x, 2.0, 0))
 			"tear_off":
 				cam.look_at_from_position(Vector3(x + 1.0, 2.2, 4.8), Vector3(x + 1.0, 1.9, 0))
-			"self_heap", "self_heap_off":
+			"self_heap", "self_heap_off", "self_heap_thin", "self_heap_tri":
 				cam.look_at_from_position(Vector3(x + 2.0, 1.9, 3.4), Vector3(x + 0.7, 0.15, 0.4))
+			"self_slope", "self_slope_friction":
+				cam.look_at_from_position(Vector3(x + 1.0, 3.0, 5.0), Vector3(x + 0.5, 1.2, 0.0))
 			"cape_bones":
 				cam.look_at_from_position(Vector3(x + 4.0, 2.4, 5.0), Vector3(x, 1.0, 0))
 		if grid:
@@ -614,11 +646,19 @@ func _on_frame() -> void:
 	if frame == 150:
 		(_find("tear_reset").cloth as FellowCloth3D).reset()
 	if frame == 30:
-		for nm in ["self_heap", "self_heap_off"]:
+		for nm in ["self_heap", "self_heap_off", "self_heap_thin", "self_heap_tri", "self_slope", "self_slope_friction"]:
 			var hc: FellowCloth3D = _find(nm).cloth
 			for i in hc.get_particle_count():
 				if hc.is_particle_pinned(i):
 					hc.set_particle_pinned(i, false)
+	if frame == 210:
+		# Milestone 115: the heaps' particles half a second before the end (how much they still move).
+		for nm in ["self_heap", "self_heap_off", "self_heap_thin", "self_heap_tri", "self_slope", "self_slope_friction"]:
+			var hc2: FellowCloth3D = _find(nm).cloth
+			var at := []
+			for i in hc2.get_particle_count():
+				at.append(hc2.get_particle_position(i))
+			_find(nm)["pos_210"] = at
 	for lane in lanes:
 		if lane.has("ball"):
 			# Thrown along -Z at 8 m/s from 0.8 s: through the curtain's middle at about 1.18 s.
@@ -708,7 +748,7 @@ func _finish() -> void:
 				ok = ok and st.far
 			"tear_cut", "tear_reset", "tear_strain", "tear_strain_off", "tear_off":
 				ok = ok and _check_tear(lane, c, st, box, e)
-			"self_heap", "self_heap_off":
+			"self_heap", "self_heap_off", "self_heap_thin", "self_heap_tri", "self_slope", "self_slope_friction":
 				ok = ok and _check_self(lane, c, st, box, e)
 			"cape_bones":
 				# The pins on the chest (they twist with it, within a millimetre), nothing inside the body.
@@ -808,8 +848,79 @@ func _check_self(lane: Dictionary, c: FellowCloth3D, st: Dictionary, box: AABB, 
 	e["close_particles"] = close.size()
 	e["self_pairs"] = st.get("self_pairs", 0)
 	e["height"] = snappedf(box.end.y, 0.01)
+	e["footprint_m2"] = snappedf(box.size.x * box.size.z, 0.01)
+	if lane.has("pos_210"):
+		# The mean speed over the last half second (frames 210-240): a heap still sliding, or settled.
+		var moved := 0.0
+		var drift := Vector3()
+		for i in n:
+			moved += (pos[i] as Vector3).distance_to(lane.pos_210[i])
+			drift += (pos[i] as Vector3) - (lane.pos_210[i] as Vector3)
+		drift /= n
+		var inner := 0.0
+		for i in n:
+			inner += ((pos[i] as Vector3) - (lane.pos_210[i] as Vector3) - drift).length()
+		var secs := (frame - 210) / 60.0
+		e["speed_last_cm_s"] = snappedf(moved / n / secs * 100.0, 0.01)
+		e["drift_last_cm_s"] = snappedf(drift.length() / secs * 100.0, 0.01) # the heap as a whole
+		e["inner_last_cm_s"] = snappedf(inner / n / secs * 100.0, 0.01) # its parts against each other
+		if lane.name.begins_with("self_slope"):
+			var downhill := Vector3(cos(deg_to_rad(25.0)), -sin(deg_to_rad(25.0)), 0.0)
+			e["downhill_last_cm_s"] = snappedf(drift.dot(downhill) / secs * 100.0, 0.01)
+	# Milestone 115: how close particles come to the other layers' triangles (those not within 1.5 cells at rest of any
+	# of the triangle's corners): the nearest, and the particles within half the distance of one (through a layer, or
+	# about to be). The grid's quads split as the cloth builds them (the diagonals alternating).
+	var tri_near := 1e9
+	var tri_close := {}
+	for cy in dims.y - 1:
+		for cx in dims.x - 1:
+			var i00 := cy * dims.x + cx
+			var i11 := i00 + dims.x + 1
+			var quad := [[i00, i00 + 1, i00 + dims.x], [i00 + 1, i11, i00 + dims.x]]
+			if (cx + cy) & 1:
+				quad = [[i00, i00 + 1, i11], [i00, i11, i00 + dims.x]]
+			for tri in quad:
+				var a: Vector3 = pos[tri[0]]
+				var b: Vector3 = pos[tri[1]]
+				var cc: Vector3 = pos[tri[2]]
+				var lo := a.min(b).min(cc) - Vector3.ONE * d
+				var hi := a.max(b).max(cc) + Vector3.ONE * d
+				var nrm := (b - a).cross(cc - a)
+				if nrm.length_squared() < 1e-12:
+					continue
+				nrm = nrm.normalized()
+				for i in n:
+					var p: Vector3 = pos[i]
+					if p.x < lo.x or p.y < lo.y or p.z < lo.z or p.x > hi.x or p.y > hi.y or p.z > hi.z:
+						continue
+					var ri := Vector2(i % dims.x, i / dims.x)
+					var far := true
+					for k in tri:
+						if ri.distance_to(Vector2(k % dims.x, k / dims.x)) < 1.5:
+							far = false
+							break
+					if not far:
+						continue
+					var dist := absf((p - a).dot(nrm))
+					var q := p - nrm * (p - a).dot(nrm)
+					# Inside the triangle (the same side of each edge as the normal).
+					if (b - a).cross(q - a).dot(nrm) < 0.0 or (cc - b).cross(q - b).dot(nrm) < 0.0 or (a - cc).cross(q - cc).dot(nrm) < 0.0:
+						continue
+					tri_near = minf(tri_near, dist)
+					if dist < 0.5 * d:
+						tri_close[i] = true
+	e["nearest_triangle_cm"] = snappedf(tri_near * 100.0, 0.01)
+	e["close_to_triangles"] = tri_close.size()
+	e["self_tri_pairs"] = st.get("self_tri_pairs", 0)
 	if lane.name.ends_with("_off"):
 		return st.get("self_pairs", 0) == 0
+	if lane.name == "self_heap_thin":
+		return st.get("self_pairs", 0) > 0 and st.get("self_tri_pairs", 0) == 0
+	if lane.name == "self_heap_tri" or lane.name == "self_slope":
+		return nearest > 0.5 * d and close.is_empty() and tri_close.is_empty() and st.get("self_tri_pairs", 0) > 0
+	if lane.name == "self_slope_friction":
+		# Held on the slope by its own layers.
+		return nearest > 0.5 * d and close.is_empty() and tri_close.is_empty() and st.get("self_tri_pairs", 0) > 0 and absf(float(e.get("downhill_last_cm_s", 99.0))) < 5.0
 	return nearest > 0.5 * d and close.is_empty() and st.get("self_pairs", 0) > 0
 
 
@@ -847,7 +958,7 @@ func _many_tick() -> void:
 		var n := float(frame - 60)
 		var fr := many_frames.duplicate()
 		fr.sort()
-		var r := {"flags": many, "frames": int(n), "stats": st, "tear_strain": float(_arg("tear_strain", "0")), "self_collision": _arg("self", "0") == "1",
+		var r := {"flags": many, "frames": int(n), "stats": st, "tear_strain": float(_arg("tear_strain", "0")), "self_collision": _arg("self", "0") == "1", "self_tri": _arg("self_tri", "0") == "1", "self_friction": float(_arg("self_friction", "0")),
 			"cloth_main_ms_per_frame": snappedf(float(st.frame_usec) / n / 1000.0, 0.001),
 			"cloth_worker_ms_per_frame": snappedf(float(st.simulate_usec) / n / 1000.0, 0.001),
 			"particles_per_frame": snappedf(float(st.particles) / n, 0.1),

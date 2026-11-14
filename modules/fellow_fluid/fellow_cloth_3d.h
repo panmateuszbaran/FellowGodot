@@ -124,7 +124,9 @@ private:
 	float friction = 0.3f;
 	// Milestone 112 (decision 0221): the cloth kept off itself.
 	bool self_collision = false;
-	float self_collision_distance = 0.0f; // 0: three quarters of the mean edge
+	float self_collision_distance = 0.0f; // 0: three quarters of the mean edge (a quarter with self_collision_triangles)
+	bool self_collision_triangles = false; // decision 0228: the particles kept off the other layers' triangles too
+	float self_collision_friction = 0.0f; // decision 0229: the layers' sliding on each other taken away, 0-1
 	TypedArray<NodePath> colliders;
 	bool collide_with_world = true;
 	uint32_t collision_mask = 1;
@@ -204,6 +206,23 @@ private:
 	float self_distance_now = 0.0f;
 	float mean_edge = 0.0f;
 	int self_contacts = 0; // pairs pushed apart in the last frame's last substep
+	// Decision 0228: the frame's particles near a triangle of another layer (not near it at rest), and the side of it
+	// they were on; the triangles hashed into the cells their bounds (and the frame's reach) cover.
+	struct SelfTriPair {
+		uint32_t p;
+		uint32_t t; // the triangle's first index in tris
+		float side; // +1 or -1: the side of the triangle's normal the particle was on when found
+	};
+	struct SelfTriEntry {
+		Vector3i cell;
+		uint32_t tri;
+		uint32_t next;
+	};
+	LocalVector<SelfTriPair> self_tri_pairs;
+	LocalVector<uint32_t> self_tri_head;
+	LocalVector<SelfTriEntry> self_tri_entries;
+	LocalVector<Vector3> self_tri_bounds; // two a triangle: its bounds grown by the reach
+	int self_tri_contacts = 0;
 	// Bone pins (milestone 76): each pinned particle's bone (-1: the node) and its place in the bone's space; where it
 	// was at the last frame and is at this one (global, main thread), interpolated over the substeps.
 	LocalVector<int> pin_bone;
@@ -264,6 +283,7 @@ private:
 	static void _group_process(double p_delta);
 	void _set_build_dirty();
 	void _find_self_pairs();
+	void _find_self_tri_pairs(float p_d);
 	int _tear(const LocalVector<uint32_t> &p_edges, Vector3 *r_sum);
 	void _after_tear();
 	void _compute_tethers();
@@ -342,6 +362,10 @@ public:
 	bool is_self_collision() const { return self_collision; }
 	void set_self_collision_distance(float p_distance) { self_collision_distance = MAX(0.0f, p_distance); }
 	float get_self_collision_distance() const { return self_collision_distance; }
+	void set_self_collision_triangles(bool p_enabled) { self_collision_triangles = p_enabled; }
+	bool is_self_collision_triangles() const { return self_collision_triangles; }
+	void set_self_collision_friction(float p_friction) { self_collision_friction = CLAMP(p_friction, 0.0f, 1.0f); }
+	float get_self_collision_friction() const { return self_collision_friction; }
 	float get_friction() const { return friction; }
 	void set_colliders(const TypedArray<NodePath> &p_colliders);
 	TypedArray<NodePath> get_colliders() const { return colliders; }

@@ -1103,9 +1103,10 @@ void FellowCloth3D::_substep(float p_h, const Transform3D &p_pin_xf, float p_f) 
 	if (bend_stiffness > 0.0f) {
 		solve(bend.ptr(), int(bend.size()), bend_stiffness, false);
 	}
+	const float mu = self_collision_friction;
 	if (!self_pairs.is_empty()) {
 		// Decision 0221: the pairs of the frame closer than the distance pushed apart along their line, by their
-		// inverse masses.
+		// inverse masses. Decision 0229: and their sliding along each other in the substep taken away by the friction.
 		const float d = self_distance_now;
 		const float d2 = d * d;
 		const Vector3 *NO = normal.ptr();
@@ -1124,9 +1125,84 @@ void FellowCloth3D::_substep(float p_h, const Transform3D &p_pin_xf, float p_f) 
 			const Vector3 corr = dv * ((d - l) / l);
 			X[sp.a] += corr * sp.fa;
 			X[sp.b] -= corr * sp.fb;
+			if (mu > 0.0f) {
+				const Vector3 nn = dv / l;
+				const Vector3 rel = (X[sp.a] - P[sp.a]) - (X[sp.b] - P[sp.b]);
+				const Vector3 tang = (rel - nn * rel.dot(nn)) * mu;
+				X[sp.a] -= tang * sp.fa;
+				X[sp.b] += tang * sp.fb;
+			}
 			contacts++;
 		}
 		self_contacts = contacts;
+	}
+	if (!self_tri_pairs.is_empty()) {
+		// Decision 0228: a particle closer to another layer's triangle than the distance, on the side it was found on,
+		// pushed out to the distance along the triangle's normal — the particle and the triangle's corners by their
+		// inverse masses and the corners' weights at the nearest point (a point-triangle constraint); not where the
+		// point is beyond the triangle's edges (the neighbouring triangle's, or a particle pair's). Decision 0229: with
+		// the friction, their sliding along each other.
+		const float d = self_distance_now;
+		const uint32_t *T = tris.ptr();
+		int contacts = 0;
+		for (const SelfTriPair &tp : self_tri_pairs) {
+			const uint32_t ia = T[tp.t];
+			const uint32_t ib = T[tp.t + 1];
+			const uint32_t ic = T[tp.t + 2];
+			const Vector3 a = X[ia];
+			const Vector3 e1 = X[ib] - a;
+			const Vector3 e2 = X[ic] - a;
+			Vector3 n = e1.cross(e2);
+			const float nl = n.length();
+			if (nl < 1e-12f) {
+				continue;
+			}
+			n *= tp.side / nl; // towards the particle's side
+			const Vector3 ap = X[tp.p] - a;
+			const float s = ap.dot(n);
+			if (s >= d) {
+				continue;
+			}
+			// The projection's barycentric weights (inside the triangle only).
+			const float d00 = e1.dot(e1);
+			const float d01 = e1.dot(e2);
+			const float d11 = e2.dot(e2);
+			const float d20 = ap.dot(e1);
+			const float d21 = ap.dot(e2);
+			const float den = d00 * d11 - d01 * d01;
+			if (den < 1e-24f) {
+				continue;
+			}
+			const float bv = (d11 * d20 - d01 * d21) / den;
+			const float bw = (d00 * d21 - d01 * d20) / den;
+			const float bu = 1.0f - bv - bw;
+			if (bu < 0.0f || bv < 0.0f || bw < 0.0f) {
+				continue;
+			}
+			const float wp = W[tp.p];
+			const float wa = W[ia] * bu;
+			const float wb = W[ib] * bv;
+			const float wc = W[ic] * bw;
+			const float wsum = wp + wa * bu + wb * bv + wc * bw;
+			if (wsum <= 0.0f) {
+				continue;
+			}
+			const Vector3 dl = n * ((d - s) / wsum);
+			X[tp.p] += dl * wp;
+			X[ia] -= dl * wa;
+			X[ib] -= dl * wb;
+			X[ic] -= dl * wc;
+			if (mu > 0.0f) {
+				const Vector3 rel = (X[tp.p] - P[tp.p]) - ((X[ia] - P[ia]) * bu + (X[ib] - P[ib]) * bv + (X[ic] - P[ic]) * bw);
+				const Vector3 tang = (rel - n * rel.dot(n)) * (mu / wsum);
+				X[tp.p] -= tang * wp;
+				X[ia] += tang * wa;
+				X[ib] += tang * wb;
+				X[ic] += tang * wc;
+			}
+			contacts++;
+		}
+		self_tri_contacts = contacts;
 	}
 	if (tether_slack > 0.0f) {
 		const Tether *TT = tethers.ptr();
@@ -1194,7 +1270,9 @@ void FellowCloth3D::_simulate() {
 			_find_self_pairs();
 		} else {
 			self_pairs.clear();
+			self_tri_pairs.clear();
 			self_contacts = 0;
+			self_tri_contacts = 0;
 		}
 		for (int s = 0; s < steps_now; s++) {
 			const real_t f = real_t(s + 1) / real_t(steps_now);
@@ -1325,9 +1403,11 @@ void FellowCloth3D::_finish() {
 // twice the distance across (a pair in the same or a neighbouring cell).
 void FellowCloth3D::_find_self_pairs() {
 	self_pairs.clear();
+	self_tri_pairs.clear();
 	self_contacts = 0;
+	self_tri_contacts = 0;
 	const uint32_t np = x.size();
-	const float d = self_collision_distance > 0.0f ? self_collision_distance : 0.75f * mean_edge;
+	const float d = self_collision_distance > 0.0f ? self_collision_distance : (self_collision_triangles ? 0.25f : 0.75f) * mean_edge;
 	self_distance_now = d;
 	if (d <= 0.0f || np < 2) {
 		return;
@@ -1380,6 +1460,164 @@ void FellowCloth3D::_find_self_pairs() {
 					self_pairs.push_back({ i, j, w[i] / ws, w[j] / ws });
 				}
 			}
+		}
+	}
+	if (self_collision_triangles) {
+		_find_self_tri_pairs(d);
+	}
+}
+
+// Decision 0228: the closest point of a triangle to a point (Ericson's regions), its barycentric weights in r_bary.
+static Vector3 _cloth_closest_on_triangle(const Vector3 &p_p, const Vector3 &p_a, const Vector3 &p_b, const Vector3 &p_c, Vector3 &r_bary) {
+	const Vector3 ab = p_b - p_a;
+	const Vector3 ac = p_c - p_a;
+	const Vector3 ap = p_p - p_a;
+	const float d1 = ab.dot(ap);
+	const float d2 = ac.dot(ap);
+	if (d1 <= 0.0f && d2 <= 0.0f) {
+		r_bary = Vector3(1, 0, 0);
+		return p_a;
+	}
+	const Vector3 bp = p_p - p_b;
+	const float d3 = ab.dot(bp);
+	const float d4 = ac.dot(bp);
+	if (d3 >= 0.0f && d4 <= d3) {
+		r_bary = Vector3(0, 1, 0);
+		return p_b;
+	}
+	const float vc = d1 * d4 - d3 * d2;
+	if (vc <= 0.0f && d1 >= 0.0f && d3 <= 0.0f) {
+		const float v = d1 / (d1 - d3);
+		r_bary = Vector3(1.0f - v, v, 0);
+		return p_a + ab * v;
+	}
+	const Vector3 cp = p_p - p_c;
+	const float d5 = ab.dot(cp);
+	const float d6 = ac.dot(cp);
+	if (d6 >= 0.0f && d5 <= d6) {
+		r_bary = Vector3(0, 0, 1);
+		return p_c;
+	}
+	const float vb = d5 * d2 - d1 * d6;
+	if (vb <= 0.0f && d2 >= 0.0f && d6 <= 0.0f) {
+		const float w2 = d2 / (d2 - d6);
+		r_bary = Vector3(1.0f - w2, 0, w2);
+		return p_a + ac * w2;
+	}
+	const float va = d3 * d6 - d5 * d4;
+	if (va <= 0.0f && (d4 - d3) >= 0.0f && (d5 - d6) >= 0.0f) {
+		const float w2 = (d4 - d3) / ((d4 - d3) + (d5 - d6));
+		r_bary = Vector3(0, 1.0f - w2, w2);
+		return p_b + (p_c - p_b) * w2;
+	}
+	const float den = va + vb + vc;
+	if (Math::abs(den) < 1e-30f) {
+		r_bary = Vector3(1, 0, 0);
+		return p_a;
+	}
+	const float v = vb / den;
+	const float w2 = vc / den;
+	r_bary = Vector3(1.0f - v - w2, v, w2);
+	return p_a + ab * v + ac * w2;
+}
+
+// Decision 0228: the particles within the frame's reach (twice the distance) of a live triangle that is not theirs
+// and was not within that reach of them at rest (the fabric's own neighbours), with the side of it they are on. The
+// triangles are hashed into every cell their bounds, grown by the reach, cover; a particle looks in its own cell only.
+void FellowCloth3D::_find_self_tri_pairs(float p_d) {
+	const uint32_t np = x.size();
+	const uint32_t nt = tris.size() / 3;
+	if (nt == 0 || np < 4) {
+		return;
+	}
+	const float reach = 2.0f * p_d;
+	const float reach2 = reach * reach;
+	const float cell = 2.0f * MAX(reach, mean_edge); // twice: fewer cells a triangle, the bounds test the extra candidates
+	const float inv = 1.0f / cell;
+	const uint32_t *T = tris.ptr();
+	const Vector3 *X = x.ptr();
+	const Vector3 *R = rest_local.ptr();
+	self_tri_entries.clear();
+	self_tri_bounds.resize(nt * 2);
+	Vector3 *TB = self_tri_bounds.ptr();
+	auto floor_i = [](float p_v) { return int(Math::floor(p_v)); };
+	for (uint32_t t = 0; t < nt; t++) {
+		const Vector3 &a = X[T[t * 3]];
+		const Vector3 &b = X[T[t * 3 + 1]];
+		const Vector3 &c = X[T[t * 3 + 2]];
+		const Vector3 lo = a.min(b).min(c) - Vector3(reach, reach, reach);
+		const Vector3 hi = a.max(b).max(c) + Vector3(reach, reach, reach);
+		TB[t * 2] = lo;
+		TB[t * 2 + 1] = hi;
+		const Vector3i c0(floor_i(lo.x * inv), floor_i(lo.y * inv), floor_i(lo.z * inv));
+		const Vector3i c1(floor_i(hi.x * inv), floor_i(hi.y * inv), floor_i(hi.z * inv));
+		if ((c1.x - c0.x + 1) * (c1.y - c0.y + 1) * (c1.z - c0.z + 1) > 64) {
+			continue; // a triangle stretched across the scene (a broken simulation): left out
+		}
+		for (int cz = c0.z; cz <= c1.z; cz++) {
+			for (int cy = c0.y; cy <= c1.y; cy++) {
+				for (int cx = c0.x; cx <= c1.x; cx++) {
+					self_tri_entries.push_back({ Vector3i(cx, cy, cz), t, UINT32_MAX });
+				}
+			}
+		}
+	}
+	uint32_t table = 64;
+	while (table < self_tri_entries.size() * 2) {
+		table <<= 1;
+	}
+	self_tri_head.resize(table);
+	for (uint32_t &h : self_tri_head) {
+		h = UINT32_MAX;
+	}
+	auto bucket = [table](const Vector3i &p_c) {
+		return (uint32_t(p_c.x) * 73856093u ^ uint32_t(p_c.y) * 19349663u ^ uint32_t(p_c.z) * 83492791u) & (table - 1);
+	};
+	SelfTriEntry *E = self_tri_entries.ptr();
+	for (uint32_t k = 0; k < self_tri_entries.size(); k++) {
+		const uint32_t b = bucket(E[k].cell);
+		E[k].next = self_tri_head[b];
+		self_tri_head[b] = k;
+	}
+	const uint8_t *LO = any_loose ? loose.ptr() : nullptr;
+	const float *Wt = w.ptr();
+	for (uint32_t i = 0; i < np; i++) {
+		if (LO && LO[i]) {
+			continue;
+		}
+		const Vector3 &p = X[i];
+		const Vector3i cc(floor_i(p.x * inv), floor_i(p.y * inv), floor_i(p.z * inv));
+		for (uint32_t k = self_tri_head[bucket(cc)]; k != UINT32_MAX; k = E[k].next) {
+			if (E[k].cell != cc) {
+				continue;
+			}
+			const uint32_t t = E[k].tri;
+			const uint32_t ia = T[t * 3];
+			const uint32_t ib = T[t * 3 + 1];
+			const uint32_t ic = T[t * 3 + 2];
+			if (ia == i || ib == i || ic == i) {
+				continue;
+			}
+			const Vector3 &lo = TB[t * 2];
+			const Vector3 &hi = TB[t * 2 + 1];
+			if (p.x < lo.x || p.y < lo.y || p.z < lo.z || p.x > hi.x || p.y > hi.y || p.z > hi.z) {
+				continue; // outside the triangle's bounds grown by the reach
+			}
+			if (Wt[i] <= 0.0f && Wt[ia] <= 0.0f && Wt[ib] <= 0.0f && Wt[ic] <= 0.0f) {
+				continue; // all pinned
+			}
+			Vector3 bary;
+			const Vector3 q = _cloth_closest_on_triangle(p, X[ia], X[ib], X[ic], bary);
+			if (p.distance_squared_to(q) >= reach2) {
+				continue;
+			}
+			const Vector3 qr = _cloth_closest_on_triangle(R[i], R[ia], R[ib], R[ic], bary);
+			if (R[i].distance_squared_to(qr) < reach2) {
+				continue; // the fabric's own neighbourhood
+			}
+			const Vector3 n = (X[ib] - X[ia]).cross(X[ic] - X[ia]);
+			const float side = (p - q).dot(n);
+			self_tri_pairs.push_back({ i, t * 3, side >= 0.0f ? 1.0f : -1.0f });
 		}
 	}
 }
@@ -1703,6 +1941,8 @@ Dictionary FellowCloth3D::get_stats() const {
 	}
 	d["loose_particles"] = nl;
 	d["self_pairs"] = int(self_pairs.size());
+	d["self_tri_pairs"] = int(self_tri_pairs.size());
+	d["self_tri_contacts"] = self_tri_contacts;
 	d["self_contacts"] = self_contacts;
 	d["self_distance"] = self_distance_now;
 	return d;
@@ -1881,6 +2121,10 @@ void FellowCloth3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("is_self_collision"), &FellowCloth3D::is_self_collision);
 	ClassDB::bind_method(D_METHOD("set_self_collision_distance", "distance"), &FellowCloth3D::set_self_collision_distance);
 	ClassDB::bind_method(D_METHOD("get_self_collision_distance"), &FellowCloth3D::get_self_collision_distance);
+	ClassDB::bind_method(D_METHOD("set_self_collision_triangles", "enabled"), &FellowCloth3D::set_self_collision_triangles);
+	ClassDB::bind_method(D_METHOD("is_self_collision_triangles"), &FellowCloth3D::is_self_collision_triangles);
+	ClassDB::bind_method(D_METHOD("set_self_collision_friction", "friction"), &FellowCloth3D::set_self_collision_friction);
+	ClassDB::bind_method(D_METHOD("get_self_collision_friction"), &FellowCloth3D::get_self_collision_friction);
 	ClassDB::bind_method(D_METHOD("set_tear_strain", "strain"), &FellowCloth3D::set_tear_strain);
 	ClassDB::bind_method(D_METHOD("get_tear_strain"), &FellowCloth3D::get_tear_strain);
 
@@ -1918,6 +2162,8 @@ void FellowCloth3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "collision_mask", PROPERTY_HINT_LAYERS_3D_PHYSICS), "set_collision_mask", "get_collision_mask");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "self_collision"), "set_self_collision", "is_self_collision");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "self_collision_distance", PROPERTY_HINT_RANGE, "0,0.5,0.001,or_greater,suffix:m"), "set_self_collision_distance", "get_self_collision_distance");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "self_collision_triangles"), "set_self_collision_triangles", "is_self_collision_triangles");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "self_collision_friction", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_self_collision_friction", "get_self_collision_friction");
 	ADD_GROUP("", "");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "lod_distance", PROPERTY_HINT_RANGE, "0,500,0.1,or_greater,suffix:m"), "set_lod_distance", "get_lod_distance");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "simulation_distance", PROPERTY_HINT_RANGE, "0,500,0.1,or_greater,suffix:m"), "set_simulation_distance", "get_simulation_distance");
