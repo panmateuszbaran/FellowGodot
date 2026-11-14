@@ -940,8 +940,9 @@ FSR3Effect::FSR3Effect() {
 			{ { 9, L"cbFSR3Upscaler" } });
 
 	// Accumulation with and without sharpening share the bindings; FSR 2.2's port leaves the accumulation in full
-	// precision on NVIDIA (occupancy), and so does this one unless the setting says otherwise (decision 0224).
-	const bool accumulate_fp16 = rd->get_device_vendor_name() != "NVIDIA" || bool(GLOBAL_GET("rendering/fellow/upscaling/fsr3_accumulate_half_precision_nvidia"));
+	// precision on NVIDIA (occupancy), and so does this one: on the RTX half precision was no faster there and changed the
+	// picture (decision 0224).
+	const bool accumulate_fp16 = rd->get_device_vendor_name() != "NVIDIA";
 	setup(FFX_FSR3UPSCALER_PASS_ACCUMULATE, &device->shaders.accumulate, accumulate_fp16, true,
 			{ { 0, L"r_input_exposure" }, { 1, L"r_dilated_reactive_masks" }, { 2, L"r_dilated_motion_vectors" }, { 3, L"r_internal_upscaled_color" }, { 4, L"r_lanczos_lut" }, { 5, L"r_farthest_depth_mip1" }, { 6, L"r_current_luma" }, { 7, L"r_luma_instability" }, { 8, L"r_input_color_jittered" } },
 			{ { 9, L"rw_internal_upscaled_color" }, { 10, L"rw_upscaled_output" }, { 11, L"rw_new_locks" } },

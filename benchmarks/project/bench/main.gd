@@ -548,8 +548,9 @@ func _run_perf() -> void:
 	var m0 := Time.get_ticks_usec()
 	var mem_peak := _mem()
 	# FellowEngine's split of video memory (the device's heaps, the transfer workers' staging: milestone 114), sampled
-	# every 30 frames (the stats dictionary is not free).
+	# every 30 frames along the path (the stats dictionary is not free), with the memory statistics.
 	var fellow_mem_peak := {}
+	var mem_peak_sampled := {}
 	var fellow_mem_keys := ["memory_device_local_bytes", "memory_total_bytes", "transfer_staging_bytes", "transfer_workers"]
 	var has_extra: bool = scene.has_method("sample_extra")
 	var extra := {}
@@ -613,6 +614,16 @@ func _run_perf() -> void:
 						fellow_frames[k] = PackedInt32Array()
 					fellow_frames[k].append(int(fs.get(k, 0)) - int(fs_prev.get(k, 0)))
 				fs_prev = fs
+			if f % 30 == 0:
+				# Memory every 30 frames along the path (memory_peak above is sampled at the passes' ends only).
+				var ms := _mem()
+				for k in ms.keys():
+					mem_peak_sampled[k] = max(int(mem_peak_sampled.get(k, 0)), int(ms[k]))
+				if not fs0.is_empty():
+					var fsm := _fellow_stats()
+					for k in fellow_mem_keys:
+						if fsm.has(k):
+							fellow_mem_peak[k] = max(int(fellow_mem_peak.get(k, 0)), int(fsm[k]))
 			if has_extra:
 				var ex: Dictionary = scene.sample_extra()
 				for k in ex.keys():
@@ -634,11 +645,6 @@ func _run_perf() -> void:
 		var mm := _mem()
 		for k in mm.keys():
 			mem_peak[k] = max(mem_peak[k], mm[k])
-		if passes % 30 == 0 and not fs0.is_empty():
-			var fsm := _fellow_stats()
-			for k in fellow_mem_keys:
-				if fsm.has(k):
-					fellow_mem_peak[k] = max(int(fellow_mem_peak.get(k, 0)), int(fsm[k]))
 		if ab.is_empty() and (Time.get_ticks_usec() - m0) / 1e6 >= measure_s:
 			break
 		if not ab.is_empty() and passes >= ab_passes:
@@ -697,6 +703,7 @@ func _run_perf() -> void:
 		for k in fellow_frames.keys():
 			result["frames"]["fellow"][k] = Array(fellow_frames[k])
 	result["memory_peak"] = mem_peak
+	result["memory_peak_sampled"] = mem_peak_sampled
 	if has_extra:
 		var es := {}
 		for k in extra.keys():

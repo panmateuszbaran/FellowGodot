@@ -392,8 +392,9 @@ memory (every texture coarsened by the same bias over it; milestone 113, decisio
 (on) biases the level each texture would use, never finer than its first, not its estimate under magnification).
 Milestone 113 (decision 0222): `texture_swaps_keep_shadows` (on, exact): a swap does not invalidate the directional
 shadow caches through materials whose shadows cannot read their textures. Milestone 114 (decision 0225):
-`transfer_staging_trim` (off): RenderingDevice's transfer workers release a staging buffer above 4 MiB after 60 frames
-unused (host memory, counted in the driver's video memory). `texture_instances_per_frame` (2048) instances are
+`rendering/fellow/frame/transfer_staging_trim` (off): RenderingDevice's transfer workers release a staging buffer above
+4 MiB after 60 frames unused (host memory, counted in the driver's video memory: the streamer's loads made it grow).
+`texture_instances_per_frame` (2048) instances are
 evaluated a frame; `texture_max_jobs` (4), `texture_upload_mb_per_frame` (64), `texture_release_hold_s` (2),
 `texture_unreferenced_hold_s` (5); `texture_info_details` lists every texture in
 `RenderingServer.fellow_get_texture_streaming_info()`, which reports the streamer's state (resident, target, wanted and
@@ -437,8 +438,8 @@ Proxies**. Bench `bench/world_proxies_check.gd`.
 (`scaling_3d_mode` FSR 2, any `scaling_3d_scale`, 1.0 for native AA) runs AMD's FidelityFX Super Resolution 3.1
 upscaler instead of FSR 2.2, with the same inputs, jitter, sharpness (`fsr_sharpness`) and output; switching makes a
 new context (a new history). `fsr3_half_precision` (on; read at start-up): half precision in the passes that have it,
-where the GPU supports it (not SPD's pyramids, not the accumulation on NVIDIA unless
-`fsr3_accumulate_half_precision_nvidia`, off, read at start-up: decision 0224). The SDK's tunables:
+where the GPU supports it (not SPD's pyramids, not the accumulation on NVIDIA: no faster there in half precision,
+decision 0224). The SDK's tunables:
 `fsr3_velocity_factor` (1; 0 steadies bright pixels), `fsr3_reactiveness_scale` (1), `fsr3_shading_change_scale` (1),
 `fsr3_accumulation_added_per_frame` (0.333; less ghosts less where the history is rejected),
 `fsr3_min_disocclusion_accumulation` (−0.333). `fsr3_debug_view` draws the SDK's debug view over the output. In motion

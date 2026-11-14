@@ -146,7 +146,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/physics/pair_prefilter", true); // decision 0219 (exact)
 	GLOBAL_DEF("rendering/fellow/streaming/texture_swaps_keep_shadows", true); // decision 0222 (exact)
 	GLOBAL_DEF("rendering/fellow/streaming/texture_budget_from_used_level", true); // decision 0223 (no change without a budget)
-	GLOBAL_DEF("rendering/fellow/streaming/transfer_staging_trim", false); // decision 0225 (host memory)
+	GLOBAL_DEF("rendering/fellow/frame/transfer_staging_trim", false); // decision 0225 (host memory)
 	GLOBAL_DEF("rendering/fellow/physics/jolt_deferred_sensor_contacts", true); // decision 0088
 	GLOBAL_DEF("rendering/fellow/physics/parallel_island_solve", true); // decision 0089 (exact)
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/physics/parallel_island_solve_grab", PROPERTY_HINT_RANGE, "1,1024,1"), 16);
@@ -395,9 +395,6 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/upscaling/fsr3", true);
 	// Half precision in the passes that have it (where the GPU supports it; not in the accumulation on NVIDIA).
 	GLOBAL_DEF_RST("rendering/fellow/upscaling/fsr3_half_precision", true);
-	// The accumulation in half precision on NVIDIA GPUs too (decision 0224; AMD's backends and Godot's FSR 2.2 keep it in
-	// full precision there).
-	GLOBAL_DEF_RST("rendering/fellow/upscaling/fsr3_accumulate_half_precision_nvidia", false);
 	// The SDK's tunables (ffxFsr3UpscalerSetConstant): 0 velocity factor steadies bright pixels; a larger reactiveness or
 	// shading change scale reacts faster; less accumulation added a frame ghosts less where the history is rejected;
 	// the accumulation a disoccluded pixel starts from.

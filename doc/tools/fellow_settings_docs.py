@@ -121,7 +121,7 @@ D = {
     "physics/convex_vertex_cache": "GodotPhysics3D's separating-axis tests transform a convex shape's vertices once per test instead of once per axis. " + EXACT + " Decision 0086.",
     "physics/parallel_pair_culls": "GodotPhysics3D's broadphase culls run on worker threads; the pairs are then made in stock's order. " + EXACT + " Decision 0087.",
     "streaming/texture_swaps_keep_shadows": "A streamed texture's swap (another range of its mips) does not invalidate the directional shadow caches through materials whose shadows cannot depend on their textures (no alpha, discard or vertex code): their casters' shadows are the same. " + EXACT + " Decision 0222.",
-    "streaming/transfer_staging_trim": "RenderingDevice's transfer workers release a staging buffer above 4 MiB after 60 frames unused; stock keeps each at the next power of two of the largest upload its worker made, for good (a streamed 4K texture's chain: 32 MiB a worker). Host memory, which the driver's count of video memory includes. Decision 0225.",
+    "frame/transfer_staging_trim": "RenderingDevice's transfer workers release a staging buffer above 4 MiB after 60 frames unused; stock keeps each at the next power of two of the largest upload its worker made, for good (a streamed 4K texture's chain: 32 MiB a worker). Host memory, which the driver's count of video memory includes. Decision 0225.",
     "streaming/texture_budget_from_used_level": "Over Texture Budget Mb, the bias coarsens the level each texture would use (its first at the finest) rather than its estimate, which is below 0 for a magnified texture: a budget no longer drops every other texture to its tail before those. No change without a budget. Decision 0223.",
     "physics/pair_prefilter": "With the parallel culls, the hits whose pair already exists (and stays until the loop reaches the object) are dropped on the worker threads: the serial loop looks up only pairs that may be new. " + EXACT + " Decision 0219.",
     "physics/jolt_deferred_sensor_contacts": "Jolt: Area3D contacts recorded per thread during the step and evaluated after it, instead of under one lock. Decision 0088.",
@@ -310,7 +310,6 @@ D = {
     # ---------------------------------------------------------------- upscaling
     "upscaling/fsr3": "A viewport in Godot's FSR 2 scaling mode runs AMD's FidelityFX Super Resolution 3.1 upscaler instead of FSR 2.2: less error and flicker in motion. Decision 0148.",
     "upscaling/fsr3_half_precision": "Half precision in FSR 3.1's passes that have it, where the GPU supports it. " + STARTUP,
-    "upscaling/fsr3_accumulate_half_precision_nvidia": "FSR 3.1's accumulation in half precision on NVIDIA GPUs too (with [code]fsr3_half_precision[/code]); AMD's backends keep it in full precision there. Decision 0224. " + STARTUP,
     "upscaling/fsr3_velocity_factor": "FSR 3.1's velocity factor: 0 steadies bright pixels.",
     "upscaling/fsr3_reactiveness_scale": "FSR 3.1's reactiveness scale: larger reacts faster.",
     "upscaling/fsr3_shading_change_scale": "FSR 3.1's shading change scale: larger reacts faster to lighting changes.",
