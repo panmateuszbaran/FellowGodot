@@ -42,7 +42,7 @@
 		<method name="get_stats" qualifiers="const">
 			<return type="Dictionary" />
 			<description>
-				This cloth's [code]particles[/code], [code]triangles[/code], [code]stretch_constraints[/code], [code]bend_constraints[/code], [code]tethers[/code], the last frame's [code]substeps[/code], [code skip-lint]colliders[/code], [code]simulate_usec[/code], [code skip-lint]wind[/code], whether it was past [member lod_distance] ([code]lod[/code]) or [member simulation_distance] ([code]far[/code]), the pinned particles on bones ([code]bone_pins[/code], [member skeleton_path]), and its tears: [code]torn_edges[/code], [code]triangles_all[/code] (as built; [code]triangles[/code] are those left), [code]loose_particles[/code] (of no triangle left).
+				This cloth's [code]particles[/code], [code]triangles[/code], [code]stretch_constraints[/code], [code]bend_constraints[/code], [code]tethers[/code], the last frame's [code]substeps[/code], [code skip-lint]colliders[/code], [code]simulate_usec[/code], [code skip-lint]wind[/code], whether it was past [member lod_distance] ([code]lod[/code]) or [member simulation_distance] ([code]far[/code]), the pinned particles on bones ([code]bone_pins[/code], [member skeleton_path]), its tears: [code]torn_edges[/code], [code]triangles_all[/code] (as built; [code]triangles[/code] are those left), [code]loose_particles[/code] (of no triangle left), and its self-collision: [code]self_pairs[/code] (the last frame's pairs of particles near each other), [code]self_contacts[/code] (those pushed apart in its last substep), [code]self_distance[/code].
 			</description>
 		</method>
 		<method name="get_torn_edge_count" qualifiers="const">
@@ -139,6 +139,12 @@
 		<member name="process_priority" type="int" setter="set_process_priority" getter="get_process_priority" overrides="Node" default="100" />
 		<member name="resolution" type="int" setter="set_resolution" getter="get_resolution" default="24">
 			The generated rectangle's cells along its longer side.
+		</member>
+		<member name="self_collision" type="bool" setter="set_self_collision" getter="is_self_collision" default="false">
+			Keeps the cloth off itself: no two particles closer than [member self_collision_distance], but for those that are as close at rest (neighbours, which the cloth's own constraints keep). Each frame the pairs that may meet are found by a spatial hash (within twice the distance), then pushed apart in each substep. A sheet falling in a heap lies in layers instead of through itself; a cape folding over a moving body does not pass through its own folds. Costs about as much again as the simulation for a cloth lying in folds. See [code]docs/decisions/0221-cloth-self-collision.md[/code].
+		</member>
+		<member name="self_collision_distance" type="float" setter="set_self_collision_distance" getter="get_self_collision_distance" default="0.0">
+			The particles' distance from each other with [member self_collision] (m; 0: three quarters of the cloth's mean edge). Below about 0.7 of the cells' size, a particle can slip between two of another layer's.
 		</member>
 		<member name="simulating" type="bool" setter="set_simulating" getter="is_simulating" default="true">
 			Off: the cloth stays as it is.

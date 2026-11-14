@@ -634,7 +634,10 @@ again as long; checked once a frame). A broken edge's triangles go (a hole, not 
 left without a triangle and the bending pairs across one; the tethers are found again along what is left (a part cut
 from every pin falls free); a part fallen 100 m below the cloth is dropped. The signal `torn(position, edges)`,
 `get_torn_edge_count()`, `get_stats()`' `torn_edges`, `triangles_all`, `loose_particles`; `reset()` makes the cloth
-whole again.
+whole again. Self-collision (decision 0221): `self_collision` (off) keeps every two particles at least
+`self_collision_distance` apart (0: three quarters of the mean edge), but for those as close at rest; the pairs found
+once a frame by a spatial hash, pushed apart in each substep. `get_stats()`' `self_pairs`, `self_contacts`,
+`self_distance`.
 
 ## Traversal: mantling and vaulting (milestone 72)
 

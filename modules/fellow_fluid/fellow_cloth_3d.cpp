@@ -401,6 +401,11 @@ void FellowCloth3D::_build() {
 	stretch_all = stretch;
 	bend_all = bend;
 	tris_all = tris;
+	mean_edge = 0.0f;
+	for (const Edge &e : stretch_all) {
+		mean_edge += e.rest;
+	}
+	mean_edge = stretch_all.is_empty() ? 0.0f : mean_edge / float(stretch_all.size());
 	tri_alive.resize(tris.size() / 3);
 	for (uint8_t &a : tri_alive) {
 		a = 1;
@@ -1098,6 +1103,31 @@ void FellowCloth3D::_substep(float p_h, const Transform3D &p_pin_xf, float p_f) 
 	if (bend_stiffness > 0.0f) {
 		solve(bend.ptr(), int(bend.size()), bend_stiffness, false);
 	}
+	if (!self_pairs.is_empty()) {
+		// Decision 0221: the pairs of the frame closer than the distance pushed apart along their line, by their
+		// inverse masses.
+		const float d = self_distance_now;
+		const float d2 = d * d;
+		const Vector3 *NO = normal.ptr();
+		int contacts = 0;
+		for (const SelfPair &sp : self_pairs) {
+			Vector3 dv = X[sp.a] - X[sp.b];
+			float l2 = dv.length_squared();
+			if (l2 >= d2) {
+				continue;
+			}
+			if (l2 < 1e-18f) {
+				dv = NO[sp.a] * 1e-6f; // on top of each other: apart along the cloth's normal
+				l2 = 1e-12f;
+			}
+			const float l = Math::sqrt(l2);
+			const Vector3 corr = dv * ((d - l) / l);
+			X[sp.a] += corr * sp.fa;
+			X[sp.b] -= corr * sp.fb;
+			contacts++;
+		}
+		self_contacts = contacts;
+	}
 	if (tether_slack > 0.0f) {
 		const Tether *TT = tethers.ptr();
 		const uint32_t ntt = tethers.size();
@@ -1159,6 +1189,12 @@ void FellowCloth3D::_simulate() {
 				a += noise * (turbulence * wind_speed * 0.5f);
 			}
 			air[t] = a;
+		}
+		if (self_collision) {
+			_find_self_pairs();
+		} else {
+			self_pairs.clear();
+			self_contacts = 0;
 		}
 		for (int s = 0; s < steps_now; s++) {
 			const real_t f = real_t(s + 1) / real_t(steps_now);
@@ -1281,6 +1317,70 @@ void FellowCloth3D::_finish() {
 		torn_pending = 0;
 		torn_pending_sum = Vector3();
 		emit_signal(SNAME("torn"), at, n);
+	}
+}
+
+// Decision 0221: the pairs of particles that may meet in this frame — within twice the self-collision distance now,
+// not within it of each other at rest (neighbours, whose own constraints keep them) — from a spatial hash of cells
+// twice the distance across (a pair in the same or a neighbouring cell).
+void FellowCloth3D::_find_self_pairs() {
+	self_pairs.clear();
+	self_contacts = 0;
+	const uint32_t np = x.size();
+	const float d = self_collision_distance > 0.0f ? self_collision_distance : 0.75f * mean_edge;
+	self_distance_now = d;
+	if (d <= 0.0f || np < 2) {
+		return;
+	}
+	const float cell = 2.0f * d;
+	const float inv = 1.0f / cell;
+	uint32_t table = 64;
+	while (table < np * 2) {
+		table <<= 1;
+	}
+	self_head.resize(table);
+	for (uint32_t &h : self_head) {
+		h = UINT32_MAX;
+	}
+	self_next.resize(np);
+	const uint8_t *LO = any_loose ? loose.ptr() : nullptr;
+	auto cell_of = [inv](const Vector3 &p_p) {
+		return Vector3i(int(Math::floor(p_p.x * inv)), int(Math::floor(p_p.y * inv)), int(Math::floor(p_p.z * inv)));
+	};
+	auto bucket = [table](const Vector3i &p_c) {
+		return (uint32_t(p_c.x) * 73856093u ^ uint32_t(p_c.y) * 19349663u ^ uint32_t(p_c.z) * 83492791u) & (table - 1);
+	};
+	self_cell.resize(np);
+	for (uint32_t i = 0; i < np; i++) {
+		if (LO && LO[i]) {
+			continue;
+		}
+		self_cell[i] = cell_of(x[i]);
+		const uint32_t b = bucket(self_cell[i]);
+		self_next[i] = self_head[b];
+		self_head[b] = i;
+	}
+	const float reach2 = cell * cell;
+	const Vector3i *CE = self_cell.ptr();
+	for (uint32_t i = 0; i < np; i++) {
+		if (LO && LO[i]) {
+			continue;
+		}
+		// The particle's own cell (the later particles in it) and half of the 26 around it (each pair of cells once).
+		const Vector3i c = CE[i];
+		for (int k = 13; k < 27; k++) {
+			const Vector3i cc = c + Vector3i(k % 3 - 1, (k / 3) % 3 - 1, k / 9 - 1);
+			for (uint32_t j = self_head[bucket(cc)]; j != UINT32_MAX; j = self_next[j]) {
+				// Only the particles of that cell (a bucket may hold others' too).
+				if ((k == 13 && j <= i) || CE[j] != cc || x[i].distance_squared_to(x[j]) >= reach2 || rest_local[i].distance_squared_to(rest_local[j]) < reach2) {
+					continue;
+				}
+				const float ws = w[i] + w[j];
+				if (ws > 0.0f) {
+					self_pairs.push_back({ i, j, w[i] / ws, w[j] / ws });
+				}
+			}
+		}
 	}
 }
 
@@ -1602,6 +1702,9 @@ Dictionary FellowCloth3D::get_stats() const {
 		nl += l;
 	}
 	d["loose_particles"] = nl;
+	d["self_pairs"] = int(self_pairs.size());
+	d["self_contacts"] = self_contacts;
+	d["self_distance"] = self_distance_now;
 	return d;
 }
 
@@ -1774,6 +1877,10 @@ void FellowCloth3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_lod_distance"), &FellowCloth3D::get_lod_distance);
 	ClassDB::bind_method(D_METHOD("set_simulation_distance", "distance"), &FellowCloth3D::set_simulation_distance);
 	ClassDB::bind_method(D_METHOD("get_simulation_distance"), &FellowCloth3D::get_simulation_distance);
+	ClassDB::bind_method(D_METHOD("set_self_collision", "enabled"), &FellowCloth3D::set_self_collision);
+	ClassDB::bind_method(D_METHOD("is_self_collision"), &FellowCloth3D::is_self_collision);
+	ClassDB::bind_method(D_METHOD("set_self_collision_distance", "distance"), &FellowCloth3D::set_self_collision_distance);
+	ClassDB::bind_method(D_METHOD("get_self_collision_distance"), &FellowCloth3D::get_self_collision_distance);
 	ClassDB::bind_method(D_METHOD("set_tear_strain", "strain"), &FellowCloth3D::set_tear_strain);
 	ClassDB::bind_method(D_METHOD("get_tear_strain"), &FellowCloth3D::get_tear_strain);
 
@@ -1809,6 +1916,8 @@ void FellowCloth3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::ARRAY, "colliders", PROPERTY_HINT_TYPE_STRING, String::num_int64(Variant::NODE_PATH) + "/" + itos(PROPERTY_HINT_NODE_PATH_VALID_TYPES) + ":CollisionShape3D,CollisionObject3D"), "set_colliders", "get_colliders");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "collide_with_world"), "set_collide_with_world", "is_collide_with_world");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "collision_mask", PROPERTY_HINT_LAYERS_3D_PHYSICS), "set_collision_mask", "get_collision_mask");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "self_collision"), "set_self_collision", "is_self_collision");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "self_collision_distance", PROPERTY_HINT_RANGE, "0,0.5,0.001,or_greater,suffix:m"), "set_self_collision_distance", "get_self_collision_distance");
 	ADD_GROUP("", "");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "lod_distance", PROPERTY_HINT_RANGE, "0,500,0.1,or_greater,suffix:m"), "set_lod_distance", "get_lod_distance");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "simulation_distance", PROPERTY_HINT_RANGE, "0,500,0.1,or_greater,suffix:m"), "set_simulation_distance", "get_simulation_distance");

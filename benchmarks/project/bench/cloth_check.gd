@@ -1,11 +1,11 @@
 extends SceneTree
 ## FellowEngine milestone 73 check (decision 0181): FellowCloth3D; milestone 76 (decision 0184): pinned to bones;
-## milestone 112 (decision 0220): tearing.
+## milestone 112 (decisions 0220, 0221): tearing, self-collision.
 ##
 ##   godot --path benchmarks/project --headless --fixed-fps 60 -s res://bench/cloth_check.gd -- --out=<dir>
 ##   godot --path benchmarks/project --fixed-fps 60 --resolution 1280x720 -s res://bench/cloth_check.gd
 ##       -- --out=<dir> --pictures=1 [--frames=1] [--grid=1 --shot=640x360] [--motion=1]
-##   godot ... -s res://bench/cloth_check.gd -- --out=<dir> --many=64 [--seconds=20] [--tear_strain=0.5]
+##   godot ... -s res://bench/cloth_check.gd -- --out=<dir> --many=64 [--seconds=20] [--tear_strain=0.5] [--self=1]
 ##
 ## Lanes, each a cloth in a situation: a flag on a pole in the wind (FellowWind3D, gusts), a curtain hanging still, a
 ## sheet dropped on a sphere and a box (the physics world's), a sheet dropped on a height map, a cape pinned at two
@@ -14,7 +14,8 @@ extends SceneTree
 ## bone (twisting) on a body circling, colliding with capsules on its bones (the pins' drift in the bone's space
 ## measured); milestone 112 (decision 0220): a curtain with a hole cut in it (tear()), one cut and made whole again
 ## (reset()), a sheet held at its corners a ball goes through (tear_strain 0.5, and 0), a flag cut off its pole (its
-## cut part on the ground). For each after the run: the largest
+## cut part on the ground); decision 0221: a sheet let go of its rail falling in a heap, with self-collision (no two
+## particles closer than half its distance, but for neighbours at rest) and without. For each after the run: the largest
 ## strain of the grid's edges (stretched over rest), positions finite, the deepest a particle went into a collider,
 ## where the cloth went (a flag downwind, a curtain hanging, a sheet resting on what it fell on). The cost: the
 ## simulation's time a frame (--many=N flags in the wind). With --pictures=1 the lanes filmed (cloth_strip.png),
@@ -47,7 +48,7 @@ var walker_capsules: Array = []
 var done := false
 var shots := {}
 var viewports := {}
-var strip_lanes := ["flag", "curtain", "sheet_on_shapes", "cape", "awning", "banner_mesh", "cape_bones", "tear_cut", "tear_strain", "tear_off"]
+var strip_lanes := ["flag", "curtain", "sheet_on_shapes", "cape", "awning", "banner_mesh", "cape_bones", "tear_cut", "tear_strain", "tear_off", "self_heap", "self_heap_off"]
 var strip_times := [0.5, 1.0, 2.0, 3.9]
 
 
@@ -380,6 +381,15 @@ func _build() -> void:
 	var toff := _cloth("TearOff", Transform3D(Basis(), Vector3(x + 0.04, 3.9, 0)), Vector2(1.8, 1.1), 24, FellowCloth3D.PIN_LEFT_EDGE, Color(0.9, 0.8, 0.3))
 	toff.wind_scale = 0.3 # a breeze: the cut part does not land flat on its edge and stand
 	_watch_tears(_lane("tear_off", toff, x))
+	# Milestone 112 (decision 0221): self-collision. A sheet hung by its top edge, turned to the breeze, let go at 0.5 s:
+	# it falls in a heap; and the same without self-collision.
+	for lane_name in ["self_heap", "self_heap_off"]:
+		x += 8.0
+		var sc := _cloth("Self_" + lane_name, Transform3D(Basis(Vector3.UP, deg_to_rad(30.0)), Vector3(x - 0.9, 2.6, 0)), Vector2(1.8, 2.4), 24, FellowCloth3D.PIN_TOP_EDGE, Color(0.55, 0.75, 0.5))
+		sc.wind_scale = 0.3
+		sc.simulation_distance = 1000.0 # far from the course's camera
+		sc.self_collision = not lane_name.ends_with("_off")
+		_lane(lane_name, sc, x)
 
 	var cam := Camera3D.new()
 	root3d.add_child(cam)
@@ -399,6 +409,7 @@ func _build_many() -> void:
 		f.simulation_distance = 1000.0
 		f.lod_distance = float(_arg("lod", "1000"))
 		f.tear_strain = float(_arg("tear_strain", "0")) # milestone 112: the check's cost (a flag in the wind does not tear)
+		f.self_collision = _arg("self", "0") == "1" # milestone 112: self-collision's cost
 	var cam := Camera3D.new()
 	root3d.add_child(cam)
 	cam.look_at_from_position(Vector3(-6, 8, -6), Vector3(cols * 2.0, 2, cols * 2.0))
@@ -443,6 +454,8 @@ func _make_viewports() -> void:
 				cam.look_at_from_position(Vector3(x + 3.0, 2.4, 3.5), Vector3(x, 2.0, 0))
 			"tear_off":
 				cam.look_at_from_position(Vector3(x + 1.0, 2.2, 4.8), Vector3(x + 1.0, 1.9, 0))
+			"self_heap", "self_heap_off":
+				cam.look_at_from_position(Vector3(x + 2.0, 1.9, 3.4), Vector3(x + 0.7, 0.15, 0.4))
 			"cape_bones":
 				cam.look_at_from_position(Vector3(x + 4.0, 2.4, 5.0), Vector3(x, 1.0, 0))
 		if grid:
@@ -600,6 +613,12 @@ func _on_frame() -> void:
 		tof["torn_by_call"] = cut
 	if frame == 150:
 		(_find("tear_reset").cloth as FellowCloth3D).reset()
+	if frame == 30:
+		for nm in ["self_heap", "self_heap_off"]:
+			var hc: FellowCloth3D = _find(nm).cloth
+			for i in hc.get_particle_count():
+				if hc.is_particle_pinned(i):
+					hc.set_particle_pinned(i, false)
 	for lane in lanes:
 		if lane.has("ball"):
 			# Thrown along -Z at 8 m/s from 0.8 s: through the curtain's middle at about 1.18 s.
@@ -689,6 +708,8 @@ func _finish() -> void:
 				ok = ok and st.far
 			"tear_cut", "tear_reset", "tear_strain", "tear_strain_off", "tear_off":
 				ok = ok and _check_tear(lane, c, st, box, e)
+			"self_heap", "self_heap_off":
+				ok = ok and _check_self(lane, c, st, box, e)
 			"cape_bones":
 				# The pins on the chest (they twist with it, within a millimetre), nothing inside the body.
 				e["pin_drift_mm"] = snappedf(lane.get("pin_drift", 1.0) * 1000.0, 0.01)
@@ -755,6 +776,43 @@ func _check_tear(lane: Dictionary, c: FellowCloth3D, st: Dictionary, box: AABB, 
 	return false
 
 
+# Milestone 112: how close the cloth comes to itself — the nearest two particles that are not near each other at rest
+# (more than 1.5 cells apart), and how many particles have such a one within half the self-collision distance.
+func _check_self(lane: Dictionary, c: FellowCloth3D, st: Dictionary, box: AABB, e: Dictionary) -> bool:
+	var dims := _grid_dims(c)
+	var dx := c.size.x / (dims.x - 1)
+	var dy := c.size.y / (dims.y - 1)
+	var cellsz := maxf(dx, dy)
+	var d: float = st.get("self_distance", 0.0)
+	if d <= 0.0:
+		d = 0.75 * (dx + dy) * 0.5 # what the cloth would use
+	var n := c.get_particle_count()
+	var pos := []
+	for i in n:
+		pos.append(c.get_particle_position(i))
+	var nearest := 1e9
+	var close := {}
+	for i in n:
+		var ri := Vector2(i % dims.x * dx, i / dims.x * dy)
+		for j in range(i + 1, n):
+			var rj := Vector2(j % dims.x * dx, j / dims.x * dy)
+			if ri.distance_to(rj) < 1.5 * cellsz:
+				continue
+			var dd: float = (pos[i] as Vector3).distance_to(pos[j])
+			nearest = minf(nearest, dd)
+			if dd < 0.5 * d:
+				close[i] = true
+				close[j] = true
+	e["self_distance_cm"] = snappedf(d * 100.0, 0.01)
+	e["nearest_cm"] = snappedf(nearest * 100.0, 0.01)
+	e["close_particles"] = close.size()
+	e["self_pairs"] = st.get("self_pairs", 0)
+	e["height"] = snappedf(box.end.y, 0.01)
+	if lane.name.ends_with("_off"):
+		return st.get("self_pairs", 0) == 0
+	return nearest > 0.5 * d and close.is_empty() and st.get("self_pairs", 0) > 0
+
+
 func _save_strip() -> void:
 	var w := shot_size.x
 	var h := shot_size.y
@@ -789,7 +847,7 @@ func _many_tick() -> void:
 		var n := float(frame - 60)
 		var fr := many_frames.duplicate()
 		fr.sort()
-		var r := {"flags": many, "frames": int(n), "stats": st, "tear_strain": float(_arg("tear_strain", "0")),
+		var r := {"flags": many, "frames": int(n), "stats": st, "tear_strain": float(_arg("tear_strain", "0")), "self_collision": _arg("self", "0") == "1",
 			"cloth_main_ms_per_frame": snappedf(float(st.frame_usec) / n / 1000.0, 0.001),
 			"cloth_worker_ms_per_frame": snappedf(float(st.simulate_usec) / n / 1000.0, 0.001),
 			"particles_per_frame": snappedf(float(st.particles) / n, 0.1),

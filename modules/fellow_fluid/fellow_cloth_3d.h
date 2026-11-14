@@ -122,6 +122,9 @@ private:
 	// Collisions.
 	float thickness = 0.02f;
 	float friction = 0.3f;
+	// Milestone 112 (decision 0221): the cloth kept off itself.
+	bool self_collision = false;
+	float self_collision_distance = 0.0f; // 0: three quarters of the mean edge
 	TypedArray<NodePath> colliders;
 	bool collide_with_world = true;
 	uint32_t collision_mask = 1;
@@ -186,6 +189,21 @@ private:
 	int torn_edges = 0; // edges gone since the build or reset()
 	int torn_pending = 0; // broken on the worker this frame: the signal on the main thread
 	Vector3 torn_pending_sum;
+	// Self-collision (decision 0221): the frame's pairs of particles near each other (not neighbours at rest), kept
+	// apart in each substep; a spatial hash of the particles' cells.
+	struct SelfPair {
+		uint32_t a;
+		uint32_t b;
+		float fa;
+		float fb;
+	};
+	LocalVector<SelfPair> self_pairs;
+	LocalVector<uint32_t> self_head;
+	LocalVector<uint32_t> self_next;
+	LocalVector<Vector3i> self_cell;
+	float self_distance_now = 0.0f;
+	float mean_edge = 0.0f;
+	int self_contacts = 0; // pairs pushed apart in the last frame's last substep
 	// Bone pins (milestone 76): each pinned particle's bone (-1: the node) and its place in the bone's space; where it
 	// was at the last frame and is at this one (global, main thread), interpolated over the substeps.
 	LocalVector<int> pin_bone;
@@ -245,6 +263,7 @@ private:
 	void _group_task(uint32_t p_index, const LocalVector<FellowCloth3D *> *p_list);
 	static void _group_process(double p_delta);
 	void _set_build_dirty();
+	void _find_self_pairs();
 	int _tear(const LocalVector<uint32_t> &p_edges, Vector3 *r_sum);
 	void _after_tear();
 	void _compute_tethers();
@@ -319,6 +338,10 @@ public:
 	void set_thickness(float p_thickness) { thickness = MAX(0.0f, p_thickness); }
 	float get_thickness() const { return thickness; }
 	void set_friction(float p_friction) { friction = CLAMP(p_friction, 0.0f, 1.0f); }
+	void set_self_collision(bool p_enabled) { self_collision = p_enabled; }
+	bool is_self_collision() const { return self_collision; }
+	void set_self_collision_distance(float p_distance) { self_collision_distance = MAX(0.0f, p_distance); }
+	float get_self_collision_distance() const { return self_collision_distance; }
 	float get_friction() const { return friction; }
 	void set_colliders(const TypedArray<NodePath> &p_colliders);
 	TypedArray<NodePath> get_colliders() const { return colliders; }
