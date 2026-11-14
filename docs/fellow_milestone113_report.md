@@ -44,7 +44,11 @@ For a material whose shadow pass cannot read its textures (the Forward+ scene sh
 prepass alpha or vertex code), the swap's two notifications now carry a mark, and the instances' updates they cause log
 no shadow event; any other cause in the same frame does. On lavapipe, Streaming Lab without TAA: the same pictures (0
 pixels), the invalidations 17 → 0 a run, the cascades built 49 → 33 times; the regression suite's thirteen scenes with
-shadows the same as their goldens. LAPTOP RESULTS (job f434) PENDING.
+shadows the same as their goldens. On the RTX (job f434, Sponza's flythrough at 1920 × 1080, streaming on without a
+budget, three alternating runs each): the invalidations 71 → 32 a run (those left are the alpha-tested plants' and
+curtains', whose shadows do read their textures), the cascades built 262 → 214 times (174 without streaming), the
+objects drawn a frame 293 → 280 (276); the GPU's frame 6.37 → 6.30 ms (6.25 without streaming), within the runs'
+spread.
 
 ## 3. The budget (decision 0223)
 
@@ -63,7 +67,27 @@ Milestone 111 measured FSR 3.1's pass at 2.3 ms at 4K and 50 % (one timestamp ar
 The FSR 3.1 port now writes a profiler timestamp before each dispatch, named by its pass (`FSR 3.1: prepare inputs`,
 `luma pyramid`, `shading change pyramid`, `shading change`, `prepare reactivity`, `luma instability`, `accumulate` or
 `accumulate and sharpen`, `RCAS`), so FellowBench's `--profile` (and Godot's visual profiler) splits it. On the RTX
-(job f434; 3840 × 2160 rendered at that size, 50 %, two runs, the GPU's ms): PENDING.
+(job f434; 3840 × 2160 at 50 %, 1920 × 1080 rendered, two runs each; the GPU's ms, each pass's interval to the next
+timestamp):
+
+| pass | Bistro exterior | Sponza |
+|---|---:|---:|
+| prepare inputs | 0.16 | 0.16 |
+| luma pyramid | 0.04 | 0.04 |
+| shading change pyramid | 0.18 | 0.15 |
+| shading change | 0.03 | 0.01 |
+| prepare reactivity | 0.18 | 0.18 |
+| luma instability | 0.11 | 0.09 |
+| accumulate and sharpen | **1.45** | **1.40** |
+| RCAS | 0.21 | 0.26 |
+| FSR 3.1 in all (its setup's 0.01 included) | 2.38 | 2.31 |
+| the frame | 7.14 | 9.48 |
+
+The accumulation — the pass at the output's resolution that reconstructs the frame (the jittered input's Lanczos
+samples, the history reprojected, the locks) — is 61 % of the upscaler, as much as Bistro's opaque pass; RCAS, the other
+pass at 4K, 0.2-0.26 ms; the six passes at the input's resolution 0.6 ms together. The accumulation runs in full
+precision on NVIDIA GPUs, as Godot's FSR 2.2 port does (AMD's reason: occupancy and memory traffic); whether half
+precision is faster on this GPU is the next measurement (section 5).
 
 ## 5. Next
 
