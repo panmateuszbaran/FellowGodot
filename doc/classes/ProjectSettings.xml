@@ -3886,6 +3886,9 @@
 		<member name="rendering/fellow/streaming/terrain_region_uploads" type="bool" setter="" getter="" default="true">
 			FellowTerrain3D's sculpting, painting and blits upload to the GPU only the texels they changed and the mips over them (the heights, the normals, the splat maps), not the whole textures: the same textures. Read once. Decision 0168.
 		</member>
+		<member name="rendering/fellow/streaming/texture_budget_from_used_level" type="bool" setter="" getter="" default="true">
+			Over Texture Budget Mb, the bias coarsens the level each texture would use (its first at the finest) rather than its estimate, which is below 0 for a magnified texture: a budget no longer drops every other texture to its tail before those. No change without a budget. Decision 0223.
+		</member>
 		<member name="rendering/fellow/streaming/texture_budget_mb" type="int" setter="" getter="" default="0">
 			The streamed textures' memory (0: no limit); over it every streamed texture is coarsened by the same bias.
 		</member>
@@ -3906,6 +3909,9 @@
 		</member>
 		<member name="rendering/fellow/streaming/texture_resident_size" type="int" setter="" getter="" default="128">
 			Mips at or below this size (the larger side) are always resident; smaller textures are not streamed.
+		</member>
+		<member name="rendering/fellow/streaming/texture_swaps_keep_shadows" type="bool" setter="" getter="" default="true">
+			A streamed texture's swap (another range of its mips) does not invalidate the directional shadow caches through materials whose shadows cannot depend on their textures (no alpha, discard or vertex code): their casters' shadows are the same. Exact: the same image or results as stock Godot. Decision 0222.
 		</member>
 		<member name="rendering/fellow/streaming/texture_unreferenced_hold_s" type="float" setter="" getter="" default="5.0">
 			A streamed texture no instance uses keeps its mips this long, then falls back to its resident mips.
