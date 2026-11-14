@@ -9,6 +9,21 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 113 — Sponza streamed on the RTX; FSR 3.1's passes (2026-11-14)
+
+- Texture streaming measured in Sponza on the RTX (milestone 45 measured Streaming Lab only): with a 256 MiB budget video
+  memory's peak 1 626 MiB against 2 597 without streaming, the GPU's frame the same (6.17 against 6.16 ms), the first
+  frame 20-25 % sooner, the cameras' captures 36-47 dB from streaming off.
+- A streamed texture's swap no longer invalidates the directional shadow caches through materials whose shadows cannot
+  read their textures (decision 0222, `rendering/fellow/streaming/texture_swaps_keep_shadows`, on, exact): Sponza's
+  invalidations 71 → 32 a run (the alpha-tested materials' left), the cascades built 262 → 214 times.
+- The streaming budget's bias coarsens the level each texture would use, not its estimate under magnification, and the
+  budget is then filled, levels first to the textures furthest from what the cameras need (decision 0223,
+  `rendering/fellow/streaming/texture_budget_from_used_level`, on; no change without a budget): Sponza's 256 MiB budget
+  held 255 MiB instead of 129, half the swaps, camera 03 43.2 → 46.8 dB.
+- FSR 3.1's passes timed one by one in the profiler (`FSR 3.1: accumulate and sharpen`, …): at 4K (50 %) the
+  accumulation is 1.40-1.45 ms of the upscaler's 2.31-2.38 on the RTX.
+
 ## Milestone 112 — cloth that tears and keeps off itself (2026-11-14)
 
 - `FellowCloth3D.tear(position, radius)` and `tear_strain` (decision 0220, 0: off): edges break — cut, or stretched past

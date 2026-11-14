@@ -1,12 +1,21 @@
 # FellowEngine — milestone 113 report (Sponza streamed on the RTX; FSR 3.1's passes)
 
-Status: **IN PROGRESS** (2026-11-14). Branch `fellow/geometry`. The readiness assessment's streaming row listed "Sponza
+Status: **FINAL** (2026-11-14). Branch `fellow/geometry`. The readiness assessment's streaming row listed "Sponza
 not yet streamed on the RTX" (milestone 45 measured Streaming Lab only); streaming it found two costs, both fixed
 (decisions 0222 and 0223). And FSR 3.1's pass timed pass by pass at 4K.
 
 ## 0. Result
 
-PENDING.
+* **Sponza streamed on the RTX** (the readiness assessment's open item): with a 256 MiB budget, video memory's peak
+  1 626 MiB against 2 597 without streaming (−37 %), the GPU's frame the same (6.17 against 6.16 ms in one job), the
+  first frame 20-25 % sooner, the cameras' captures 36-47 dB from streaming off (47.7-48.6 dB with 512 MiB).
+* **Two costs found and fixed**: a texture's swap invalidated the directional shadow caches through every material
+  using it (decision 0222: 71 → 32 invalidations a run, only the alpha-tested materials' left; the same shadows), and
+  the budget's bias dropped nearly every texture to its tail, holding half the budget (decision 0223: the bias from the
+  level used, then the budget filled: 255 MiB held of 256 instead of 129, half the swaps, camera 03 43.2 → 46.8 dB).
+* **FSR 3.1 timed pass by pass**: at 4K (50 %) the accumulation is 1.40-1.45 ms of the upscaler's 2.31-2.38.
+* Video memory beyond the textures and buffers follows streaming's swaps (131 MiB without streaming, up to 515 with
+  them): the transfer workers' staging buffers, the likely cause, are milestone 114's.
 
 ## 1. Sponza with texture streaming (job f433)
 
@@ -33,7 +42,9 @@ textures, 1 320 MiB of them at full resolution). FellowBench's perf mode on Spon
   worker threads, and RenderingDevice's transfer workers (one per thread in use, up to the CPU's thread count) each
   keep a staging buffer the next power of two of the largest upload they made — 16 or 32 MiB for a 2K or 4K BC mip
   chain — for good; that memory is the host's, but the driver's allocator counts it. Milestone 45 saw the same in
-  Streaming Lab's flythrough.
+  Streaming Lab's flythrough. Video memory beyond the textures' and the buffers' (834 MiB in Sponza) follows the swaps:
+  131 MiB without streaming, 451-515 MiB with the budget before section 3 (408 loads and 331 downgrades a run), 163 MiB
+  after (213 and 99).
 
 ## 2. The swaps and the shadow caches (decision 0222)
 
@@ -58,8 +69,25 @@ passed that, while the rest were coarsened by the whole bias — in Sponza 7.5 l
 half the budget unused. The bias now coarsens the level the texture would use, `floor(max(estimate, 0) + bias)`; without
 a budget nothing changes. On lavapipe, Streaming Lab with 16 MiB: the views wanting 35.7 and 42.9 MiB now held at one
 level coarser (bias 1, 9.8 and 11.5 MiB) instead of six and seven (5.4 and 7.4 MiB); against no budget 402 pixels
-changed by 1 instead of 50 345 by up to 66 in one, 6 074 by up to 4 instead of 12 595 by up to 8 in the other. LAPTOP
-RESULTS (job f434) PENDING.
+changed by 1 instead of 50 345 by up to 66 in one, 6 074 by up to 4 instead of 12 595 by up to 8 in the other.
+
+The first bias that fits can leave up to three quarters of the budget unused (a level is a quarter of a chain's bytes):
+on the RTX (job f434) the bias fell from 7.5 to 2, but the streamed textures held 71 MiB of the 256. **The budget is now
+filled**: the textures come a level finer, in rounds, while the next level fits — those furthest from what the cameras
+need first (target − estimate: a magnified texture before one at its natural level), never finer than wanted. On the
+RTX (jobs f434 and f435, Sponza's flythrough at 1920 × 1080, a 256 MiB budget, three runs each):
+
+| | bias | streamed textures held | loads, downgrades a run | video memory (peak) | GPU frame |
+|---|---:|---:|---:|---:|---:|
+| streaming off | — | — | — | 2 597 MiB | 6.16-6.25 ms |
+| before | 7.5 | 129 MiB | 408, 331 | 1 755-1 851 MiB | 6.06-6.12 ms |
+| the bias from the level used | 2.0 | 71 MiB | | 1 441-1 473 MiB | 6.16 ms |
+| and the budget filled | 2.0 | 255 MiB | 213, 99 | 1 626 MiB | 6.17 ms |
+
+Sponza's cameras 01, 03 and 04 captured with the budget, against streaming off: 30.7 / 43.2 / 38.0 dB before, 36.1 /
+46.8 / 46.7 dB filled (47.7 / 48.6 / 47.9 with 512 MiB). The swaps halved; video memory beyond the textures' and the
+buffers' peaked at 163 MiB filled against 451-515 MiB before (131 without streaming) — the swaps' uploads (section 1's
+staging buffers, measured in milestone 114).
 
 ## 4. FSR 3.1's passes at 4K
 

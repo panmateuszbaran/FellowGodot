@@ -2,8 +2,8 @@
 
 Status: **KEEP**, on by default (no change without a budget) · Branch `fellow/geometry` · Setting
 `rendering/fellow/streaming/texture_budget_from_used_level` · Code: `servers/rendering/fellow_texture_streaming.cpp`
-(`_target_at()`) · Checks: `benchmarks/tools/lavapipe/streaming_check.sh` (its budget pass), the laptop's Sponza (job
-f434).
+(`_target_at()`) · Checks: `benchmarks/tools/lavapipe/streaming_check.sh` (its budget pass), the laptop's Sponza (jobs
+f434, f435).
 
 ## Problem
 
@@ -46,13 +46,39 @@ detail; by the distance from what the cameras need, to the magnified facade's.
 The RTX, Sponza's flythrough at 1920 × 1080 with a 256 MiB budget (three alternating runs each; job f434: the bias
 alone, before the budget was filled; job f435: filled):
 
-| | bias | streamed textures held | video memory (peak) | GPU frame (median) |
-|---|---:|---:|---:|---:|
-| streaming off | — | — | 2 597 MiB | 6.25 ms |
-| before (f434) | 7.5 | 129 MiB | 1 755-1 851 MiB | 6.12 ms |
-| the bias from the level used (f434) | 2.0 | 71 MiB | 1 441-1 473 MiB | 6.16 ms |
-| and the budget filled (f435) | PENDING | | | |
+| | bias | streamed textures held | loads, downgrades a run | video memory (peak) | GPU frame (median) |
+|---|---:|---:|---:|---:|---:|
+| streaming off (f434; f435) | — | — | — | 2 597 MiB | 6.25; 6.16 ms |
+| before (f434; f435) | 7.5 | 129 MiB | 408, 331 | 1 755-1 851 MiB | 6.12; 6.06 ms |
+| the bias from the level used (f434) | 2.0 | 71 MiB | | 1 441-1 473 MiB | 6.16 ms |
+| and the budget filled (f435) | 2.0 | 255 MiB | 213, 99 | 1 626 MiB | 6.17 ms |
 
-Sponza's cameras captured with the 256 MiB budget, against streaming off (PSNR): the bias alone 36.0 / 38.9 / 42.0 dB
-(cameras 01, 03, 04) against 30.7 / 43.2 / 38.0 before — camera 03 (a narrow view of the carved columns, its
-textures magnified) had kept them whole before, at the others' expense. PENDING: filled.
+The frame within the runs' spread throughout. Filled, the streamed textures hold the budget, and swap half as often as
+before (the bias no longer sweeping them all between their tails and their chains). Video memory beyond the textures'
+and the buffers' (the transfer workers' staging buffers, the likely part: milestone 113's report, section 1) peaked at
+163 MiB filled, 451-515 MiB before, 131 MiB without streaming.
+
+Sponza's cameras captured with the 256 MiB budget, against streaming off (PSNR, cameras 01, 03 and 04):
+
+| | camera 01 | camera 03 | camera 04 |
+|---|---:|---:|---:|
+| before (f434) | 30.7 dB | 43.2 dB | 38.0 dB |
+| the bias from the level used (f434) | 36.0 dB | 38.9 dB | 42.0 dB |
+| and the budget filled (f435) | 36.1 dB | 46.8 dB | 46.7 dB |
+| filled, a 512 MiB budget (f435) | 47.7 dB | 48.6 dB | 47.9 dB |
+
+Camera 03 (a narrow view of the carved columns, its textures magnified) had kept them whole before, at the others'
+expense; the bias alone coarsened them with the rest; filled, the levels go back to them first. Camera 01 (the whole
+atrium) wants more than 256 MiB.
+
+## Decision
+
+Keep, on by default: a budget coarsens every texture from the level it would use and is then filled, levels going
+first to the textures furthest from what the cameras need. Without a budget nothing changes.
+
+## Rejected / not done
+
+* **Filling by the cheapest texture first**: it filled the budget too, but with levels of textures out of the view's
+  detail (lavapipe's facade_close: 6 048 pixels changed against 3 374).
+* **A hysteresis on the targets** (a texture kept at its level until the budget moves it by more than one): the swaps
+  halved with the fill alone; left for the churn's own measurement.
