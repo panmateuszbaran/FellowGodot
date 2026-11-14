@@ -392,7 +392,7 @@ memory (every texture coarsened by the same bias over it; milestone 113, decisio
 (on) biases the level each texture would use, never finer than its first, not its estimate under magnification).
 Milestone 113 (decision 0222): `texture_swaps_keep_shadows` (on, exact): a swap does not invalidate the directional
 shadow caches through materials whose shadows cannot read their textures. Milestone 114 (decision 0225):
-`rendering/fellow/frame/transfer_staging_trim` (off): RenderingDevice's transfer workers release a staging buffer above
+`rendering/fellow/frame/transfer_staging_trim` (on): RenderingDevice's transfer workers release a staging buffer above
 4 MiB after 60 frames unused (host memory, counted in the driver's video memory: the streamer's loads made it grow).
 `texture_instances_per_frame` (2048) instances are
 evaluated a frame; `texture_max_jobs` (4), `texture_upload_mb_per_frame` (64), `texture_release_hold_s` (2),

@@ -7712,10 +7712,26 @@ void RenderingDevice::_release_transfer_worker(TransferWorker *p_transfer_worker
 	transfer_worker_pool_condition.notify_one();
 }
 
+void RenderingDevice::_fellow_free_staging_task(void *p_userdata) {
+	RenderingDevice *rd = static_cast<RenderingDevice *>(p_userdata);
+	for (RDD::BufferID buffer : rd->fellow_staging_to_free) {
+		rd->driver->buffer_free(buffer);
+	}
+	rd->fellow_staging_to_free.clear();
+}
+
 void RenderingDevice::_fellow_trim_transfer_workers() {
 	// FellowEngine (decision 0225): a staging buffer grows to the next power of two of the largest upload its worker made
 	// and stock keeps it; a worker unused for 60 frames releases one above 4 MiB (the next large upload makes it again).
-	// Render thread, at the start of a frame; only workers nobody holds and with nothing recorded.
+	// Render thread, at the start of a frame; only workers nobody holds and with nothing recorded. The buffers are freed
+	// on a worker thread: freeing a large host allocation on the render thread stalled frames by 10-20 ms (job f437).
+	if (fellow_staging_free_task != WorkerThreadPool::INVALID_TASK_ID) {
+		if (!WorkerThreadPool::get_singleton()->is_task_completed(fellow_staging_free_task)) {
+			return; // the last ones are still being freed
+		}
+		WorkerThreadPool::get_singleton()->wait_for_task_completion(fellow_staging_free_task);
+		fellow_staging_free_task = WorkerThreadPool::INVALID_TASK_ID;
+	}
 	const uint32_t keep_bytes = 4 * 1024 * 1024;
 	const uint64_t idle_frames = 60;
 	MutexLock pool_lock(transfer_worker_pool_mutex);
@@ -7731,13 +7747,16 @@ void RenderingDevice::_fellow_trim_transfer_workers() {
 			if (worker->submitted) {
 				_wait_for_transfer_worker(worker); // long finished: 60 frames ago
 			}
-			driver->buffer_free(worker->staging_buffer);
+			fellow_staging_to_free.push_back(worker->staging_buffer);
 			worker->staging_buffer = RDD::BufferID();
 			worker->staging_buffer_size_allocated = 0;
 			worker->staging_buffer_size_in_use = 0;
 			worker->max_transfer_size = 0;
 		}
 		worker->thread_mutex.unlock();
+	}
+	if (!fellow_staging_to_free.is_empty()) {
+		fellow_staging_free_task = WorkerThreadPool::get_singleton()->add_native_task(&RenderingDevice::_fellow_free_staging_task, this, false, "FellowEngine staging free");
 	}
 }
 
@@ -7874,6 +7893,10 @@ void RenderingDevice::_wait_for_transfer_workers() {
 }
 
 void RenderingDevice::_free_transfer_workers() {
+	if (fellow_staging_free_task != WorkerThreadPool::INVALID_TASK_ID) { // FellowEngine (decision 0225)
+		WorkerThreadPool::get_singleton()->wait_for_task_completion(fellow_staging_free_task);
+		fellow_staging_free_task = WorkerThreadPool::INVALID_TASK_ID;
+	}
 	MutexLock transfer_worker_lock(transfer_worker_pool_mutex);
 	for (uint32_t i = 0; i < transfer_worker_pool_size; i++) {
 		TransferWorker *worker = transfer_worker_pool[i];

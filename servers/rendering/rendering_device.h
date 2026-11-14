@@ -1760,6 +1760,11 @@ private:
 
 	TransferWorker *_acquire_transfer_worker(uint32_t p_transfer_size, uint32_t p_required_align, uint32_t &r_staging_offset);
 	void _fellow_trim_transfer_workers();
+	// FellowEngine (decision 0225): the released staging buffers are freed on a worker thread (freeing large host
+	// allocations can take milliseconds); the render thread only touches the list when the task has completed.
+	LocalVector<RDD::BufferID> fellow_staging_to_free;
+	WorkerThreadPool::TaskID fellow_staging_free_task = WorkerThreadPool::INVALID_TASK_ID;
+	static void _fellow_free_staging_task(void *p_userdata);
 	void _release_transfer_worker(TransferWorker *p_transfer_worker);
 	void _end_transfer_worker(TransferWorker *p_transfer_worker);
 	void _submit_transfer_worker(TransferWorker *p_transfer_worker, VectorView<RDD::SemaphoreID> p_signal_semaphores = VectorView<RDD::SemaphoreID>());
