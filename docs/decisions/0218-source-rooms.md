@@ -46,10 +46,14 @@ closed closet 4 × 4 × 3 m 25 m away, a source in each and one in the open; `so
 The earlier lanes (occlusion, materials, portals, the listener's rooms; with `--listen=1` the mix) the same values as
 decision 0186-0207's. The editor check: "Add Acoustics" with `source_rooms` 2, no warning.
 
+The laptop (job f429, the release template at 4bce0248e2): every lane the same values with GodotPhysics3D and Jolt;
+`--listen=1` the same (the tail 15.2 dB under the direct sound, 10.5 dB weaker without source rooms).
+
 ## Cost
 
-The rays of one room a frame (32), and a pass over the sources: 64 sources among walls (`--many=64`, cloud, 2 cores)
-150-174 µs a frame without, 166-300 µs with two room reverbs (noisy), the rays 322 → 354.
+The rays of one room a frame (32), and a pass over the sources: 64 sources among walls (`--many=64`), on the cloud
+(2 cores) 150-174 µs a frame without, 166-300 µs with two room reverbs (noisy); on the laptop (job f429, three
+alternating runs each) 116-133 µs without, 135-137 µs with (+15 µs); the rays 322 → 354.
 
 ## Decision
 

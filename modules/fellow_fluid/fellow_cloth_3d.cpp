@@ -180,6 +180,24 @@ void FellowCloth3D::_build() {
 	render_particle.clear();
 	render_rest_normal.clear();
 	render_rest_tangent.clear();
+	tris_all.clear();
+	tri_edges.clear();
+	edge_tri_start.clear();
+	edge_tri_list.clear();
+	bend_tris.clear();
+	tri_index.clear();
+	tri_alive.clear();
+	edge_alive.clear();
+	loose.clear();
+	stretch_source.clear();
+	tethers_rest.clear();
+	index_bytes.clear();
+	index_bytes_rest.clear();
+	index_dirty = false;
+	any_loose = false;
+	torn_edges = 0;
+	torn_pending = 0;
+	torn_pending_sum = Vector3();
 
 	PackedVector3Array vertices;
 	PackedVector3Array normals;
@@ -241,6 +259,7 @@ void FellowCloth3D::_build() {
 	}
 	// Triangles, edges, the bending pairs (the vertices opposite an edge two triangles share).
 	HashMap<uint64_t, LocalVector<uint32_t>> edge_opposite;
+	HashMap<uint64_t, LocalVector<uint32_t>> edge_tri; // the triangles on each edge (tearing)
 	for (int t = 0; t + 2 < indices.size(); t += 3) {
 		const uint32_t a = render_particle[indices[t]];
 		const uint32_t b = render_particle[indices[t + 1]];
@@ -248,6 +267,8 @@ void FellowCloth3D::_build() {
 		if (a == b || b == c || a == c) {
 			continue;
 		}
+		const uint32_t tri_id = tris.size() / 3;
+		tri_index.push_back(uint32_t(t));
 		tris.push_back(a);
 		tris.push_back(b);
 		tris.push_back(c);
@@ -258,6 +279,7 @@ void FellowCloth3D::_build() {
 		const uint32_t e[3][3] = { { a, b, c }, { b, c, a }, { c, a, b } };
 		for (int k = 0; k < 3; k++) {
 			edge_opposite[edge_key(e[k][0], e[k][1])].push_back(e[k][2]);
+			edge_tri[edge_key(e[k][0], e[k][1])].push_back(tri_id);
 		}
 	}
 	if (tris.is_empty()) {
@@ -266,6 +288,12 @@ void FellowCloth3D::_build() {
 	}
 	LocalVector<LocalVector<Pair<uint32_t, float>>> adjacency;
 	adjacency.resize(np);
+	// The bending pairs with the edge they bend across (its two triangles: tearing), sorted with it.
+	struct BendKeyed {
+		Edge e;
+		uint64_t key;
+	};
+	LocalVector<BendKeyed> bend_keyed;
 	for (const KeyValue<uint64_t, LocalVector<uint32_t>> &kv : edge_opposite) {
 		const uint32_t a = uint32_t(kv.key >> 32);
 		const uint32_t b = uint32_t(kv.key & 0xffffffffu);
@@ -274,15 +302,44 @@ void FellowCloth3D::_build() {
 		adjacency[a].push_back(Pair<uint32_t, float>(b, rest));
 		adjacency[b].push_back(Pair<uint32_t, float>(a, rest));
 		if (kv.value.size() == 2 && kv.value[0] != kv.value[1]) {
-			bend.push_back({ kv.value[0], kv.value[1], float(rest_local[kv.value[0]].distance_to(rest_local[kv.value[1]])) });
+			bend_keyed.push_back({ { kv.value[0], kv.value[1], float(rest_local[kv.value[0]].distance_to(rest_local[kv.value[1]])) }, kv.key });
 		}
 	}
 	// A stable order (the hash map's is not): the solver is Gauss-Seidel.
 	struct EdgeSort {
 		bool operator()(const Edge &p_a, const Edge &p_b) const { return p_a.a != p_b.a ? p_a.a < p_b.a : p_a.b < p_b.b; }
 	};
+	struct BendKeyedSort {
+		bool operator()(const BendKeyed &p_a, const BendKeyed &p_b) const { return p_a.e.a != p_b.e.a ? p_a.e.a < p_b.e.a : p_a.e.b < p_b.e.b; }
+	};
 	stretch.sort_custom<EdgeSort>();
-	bend.sort_custom<EdgeSort>();
+	bend_keyed.sort_custom<BendKeyedSort>(); // the same comparisons as the pairs' alone: the same order
+	for (const BendKeyed &bk : bend_keyed) {
+		bend.push_back(bk.e);
+		const LocalVector<uint32_t> &bt = edge_tri[bk.key];
+		bend_tris.push_back(bt[0]);
+		bend_tris.push_back(bt[1]);
+	}
+	// Each edge's triangles and each triangle's edges.
+	{
+		HashMap<uint64_t, uint32_t> edge_index;
+		edge_tri_start.resize(stretch.size() + 1);
+		for (uint32_t i = 0; i < stretch.size(); i++) {
+			const uint64_t key = edge_key(stretch[i].a, stretch[i].b);
+			edge_index.insert(key, i);
+			edge_tri_start[i] = edge_tri_list.size();
+			for (uint32_t t : edge_tri[key]) {
+				edge_tri_list.push_back(t);
+			}
+		}
+		edge_tri_start[stretch.size()] = edge_tri_list.size();
+		tri_edges.resize(tris.size());
+		for (uint32_t t = 0; t < tris.size(); t += 3) {
+			for (uint32_t k = 0; k < 3; k++) {
+				tri_edges[t + k] = edge_index[edge_key(tris[t + k], tris[t + (k + 1) % 3])];
+			}
+		}
+	}
 
 	// Pins.
 	LocalVector<uint8_t> pinned;
@@ -343,6 +400,19 @@ void FellowCloth3D::_build() {
 
 	stretch_all = stretch;
 	bend_all = bend;
+	tris_all = tris;
+	tri_alive.resize(tris.size() / 3);
+	for (uint8_t &a : tri_alive) {
+		a = 1;
+	}
+	edge_alive.resize(stretch_all.size());
+	for (uint8_t &a : edge_alive) {
+		a = 1;
+	}
+	loose.resize(np);
+	for (uint8_t &l : loose) {
+		l = 0;
+	}
 	_filter_constraints();
 
 	// Tethers: each free particle no farther from its nearest pin (along the cloth) than the path at rest, with slack.
@@ -379,6 +449,7 @@ void FellowCloth3D::_build() {
 			}
 		}
 	}
+	tethers_rest = tethers;
 
 	// Normals at rest (node space) and which way the triangles' winding faces against the mesh's normals.
 	particle_rest_normal.resize(np);
@@ -475,6 +546,9 @@ void FellowCloth3D::_build() {
 		_clear();
 		return;
 	}
+	index_bytes_rest = sd.index_data;
+	index_bytes = sd.index_data;
+	index_size = sd.index_count > 0 ? uint32_t(sd.index_data.size()) / sd.index_count : 2;
 	local_bounds = sd.aabb;
 	set_base(mesh);
 	built = true;
@@ -484,15 +558,27 @@ void FellowCloth3D::_build() {
 
 // The constraints between two pinned particles do nothing: left out of the solver's lists (again when a pin changes).
 void FellowCloth3D::_filter_constraints() {
+	// Torn edges, and the bending pairs across a torn triangle, are left out too (decision 0220).
+	const bool edges_known = edge_alive.size() == stretch_all.size();
+	const bool bends_known = bend_tris.size() == bend_all.size() * 2 && !tri_alive.is_empty();
+	stretch_source.clear();
 	for (int k = 0; k < 2; k++) {
 		LocalVector<Edge> &out = k == 0 ? stretch : bend;
+		const LocalVector<Edge> &in = k == 0 ? stretch_all : bend_all;
 		out.clear();
-		for (Edge e : (k == 0 ? stretch_all : bend_all)) {
+		for (uint32_t i = 0; i < in.size(); i++) {
+			if (k == 0 ? (edges_known && !edge_alive[i]) : (bends_known && (!tri_alive[bend_tris[i * 2]] || !tri_alive[bend_tris[i * 2 + 1]]))) {
+				continue;
+			}
+			Edge e = in[i];
 			const float ws = w[e.a] + w[e.b];
 			if (ws > 0.0f) {
 				e.fa = w[e.a] / ws;
 				e.fb = w[e.b] / ws;
 				out.push_back(e);
+				if (k == 0) {
+					stretch_source.push_back(i);
+				}
 			}
 		}
 	}
@@ -624,6 +710,28 @@ void FellowCloth3D::_update_bone_pins() {
 void FellowCloth3D::reset() {
 	if (!built) {
 		return;
+	}
+	if (torn_edges > 0 || any_loose) {
+		// Whole again (decision 0220).
+		for (uint8_t &a : tri_alive) {
+			a = 1;
+		}
+		for (uint8_t &a : edge_alive) {
+			a = 1;
+		}
+		for (uint8_t &l : loose) {
+			l = 0;
+		}
+		any_loose = false;
+		torn_edges = 0;
+		torn_pending = 0;
+		torn_pending_sum = Vector3();
+		tris = tris_all;
+		tethers = tethers_rest;
+		_filter_constraints();
+		index_bytes = index_bytes_rest;
+		index_dirty = true;
+		_upload_indices();
 	}
 	_init_particles();
 	if (is_inside_tree()) {
@@ -954,8 +1062,12 @@ void FellowCloth3D::_substep(float p_h, const Transform3D &p_pin_xf, float p_f) 
 	const float keep = MAX(0.0f, 1.0f - damping * p_h);
 	const Vector3 *R = rest_local.ptr();
 	const int *PB = bone_pins > 0 ? pin_bone.ptr() : nullptr;
+	const uint8_t *LO = any_loose ? loose.ptr() : nullptr; // torn free of every triangle: left where it is
 	for (uint32_t i = 0; i < np; i++) {
 		P[i] = X[i];
+		if (LO && LO[i]) {
+			continue;
+		}
 		if (W[i] > 0.0f) {
 			V[i] = (V[i] + A[i] * p_h) * keep;
 			X[i] += V[i] * p_h;
@@ -1054,6 +1166,42 @@ void FellowCloth3D::_simulate() {
 		}
 		global_stats.substeps.add(steps_now);
 		global_stats.particles.add(np);
+		// Decision 0220: the edges stretched past tear_strain break; a piece fallen 100 m below the cloth is gone.
+		if (tear_strain > 0.0f || any_loose) {
+			LocalVector<uint32_t> broken;
+			if (tear_strain > 0.0f) {
+				const float lim = 1.0f + tear_strain;
+				for (uint32_t k = 0; k < stretch.size(); k++) {
+					const Edge &e = stretch[k];
+					if (x[e.a].distance_squared_to(x[e.b]) > lim * lim * e.rest * e.rest) {
+						broken.push_back(stretch_source[k]);
+					}
+				}
+			}
+			if (any_loose) {
+				const real_t floor_y = xf_cur.origin.y - 100.0;
+				for (uint32_t t = 0; t < tris.size(); t += 3) {
+					if (x[tris[t]].y < floor_y || x[tris[t + 1]].y < floor_y || x[tris[t + 2]].y < floor_y) {
+						for (int k = 0; k < 3; k++) {
+							const uint32_t a = tris[t + k];
+							const uint32_t b = tris[t + (k + 1) % 3];
+							for (uint32_t e = 0; e < stretch_all.size(); e++) {
+								if ((stretch_all[e].a == a && stretch_all[e].b == b) || (stretch_all[e].a == b && stretch_all[e].b == a)) {
+									broken.push_back(e);
+									break;
+								}
+							}
+						}
+					}
+				}
+			}
+			if (!broken.is_empty()) {
+				Vector3 sum;
+				const int n = _tear(broken, &sum);
+				torn_pending += n;
+				torn_pending_sum += sum;
+			}
+		}
 	}
 	// Normals and bounds.
 	for (uint32_t i = 0; i < np; i++) {
@@ -1065,11 +1213,20 @@ void FellowCloth3D::_simulate() {
 		normal[tris[t + 1]] += n;
 		normal[tris[t + 2]] += n;
 	}
+	bool first = true;
 	bounds = AABB(np ? x[0] : Vector3(), Vector3());
 	for (uint32_t i = 0; i < np; i++) {
 		const float l = normal[i].length();
 		normal[i] = l > 1e-12f ? normal[i] * (normal_sign / l) : Vector3(0, 1, 0);
-		bounds.expand_to(x[i]);
+		if (any_loose && loose[i]) {
+			continue; // not drawn, not reaching anything
+		}
+		if (first) {
+			bounds = AABB(x[i], Vector3());
+			first = false;
+		} else {
+			bounds.expand_to(x[i]);
+		}
 	}
 	_write_vertices();
 	last_usec = OS::get_singleton()->get_ticks_usec() - t0;
@@ -1113,10 +1270,196 @@ void FellowCloth3D::_write_vertices() {
 
 void FellowCloth3D::_finish() {
 	RenderingServer *rs = RenderingServer::get_singleton();
+	_upload_indices();
 	rs->mesh_surface_update_vertex_region(mesh, 0, 0, vertex_bytes);
 	rs->mesh_set_custom_aabb(mesh, local_bounds);
 	rs->instance_set_blend_shape_weight(get_instance(), 0, 0.0f); // the instance's vertices made again (the buffers swap)
 	xf_prev = xf_cur;
+	if (torn_pending > 0) {
+		const int n = torn_pending;
+		const Vector3 at = torn_pending_sum / float(n);
+		torn_pending = 0;
+		torn_pending_sum = Vector3();
+		emit_signal(SNAME("torn"), at, n);
+	}
+}
+
+// Decision 0220: tearing. The edges given break; their triangles go (not drawn, no wind), and with them every edge
+// left without a triangle and every bending pair across one; a particle of no live triangle is left where it is. The
+// tethers are found again along what is left (a piece cut from its pins falls free). Returns the edges broken (not
+// counting those that went with their triangles); r_sum the sum of their midpoints.
+int FellowCloth3D::_tear(const LocalVector<uint32_t> &p_edges, Vector3 *r_sum) {
+	int broken = 0;
+	Vector3 sum;
+	LocalVector<uint32_t> dead_tris;
+	for (uint32_t e : p_edges) {
+		if (e >= edge_alive.size() || !edge_alive[e]) {
+			continue;
+		}
+		edge_alive[e] = 0;
+		broken++;
+		sum += (x[stretch_all[e].a] + x[stretch_all[e].b]) * 0.5f;
+		for (uint32_t k = edge_tri_start[e]; k < edge_tri_start[e + 1]; k++) {
+			const uint32_t t = edge_tri_list[k];
+			if (tri_alive[t]) {
+				tri_alive[t] = 0;
+				dead_tris.push_back(t);
+			}
+		}
+	}
+	if (broken == 0) {
+		return 0;
+	}
+	for (uint32_t t : dead_tris) {
+		for (int k = 0; k < 3; k++) {
+			const uint32_t e = tri_edges[t * 3 + k];
+			if (!edge_alive[e]) {
+				continue;
+			}
+			bool held = false;
+			for (uint32_t j = edge_tri_start[e]; j < edge_tri_start[e + 1]; j++) {
+				held = held || tri_alive[edge_tri_list[j]];
+			}
+			if (!held) {
+				edge_alive[e] = 0;
+			}
+		}
+	}
+	_after_tear();
+	if (r_sum) {
+		*r_sum = sum;
+	}
+	return broken;
+}
+
+void FellowCloth3D::_after_tear() {
+	const uint32_t np = x.size();
+	tris.clear();
+	for (uint8_t &l : loose) {
+		l = 1;
+	}
+	for (uint32_t t = 0; t < tri_alive.size(); t++) {
+		if (tri_alive[t]) {
+			for (int k = 0; k < 3; k++) {
+				tris.push_back(tris_all[t * 3 + k]);
+				loose[tris_all[t * 3 + k]] = 0;
+			}
+		}
+	}
+	any_loose = false;
+	for (uint32_t i = 0; i < np; i++) {
+		if (loose[i]) {
+			any_loose = true;
+			vel[i] = Vector3();
+		}
+	}
+	torn_edges = 0;
+	for (uint8_t a : edge_alive) {
+		torn_edges += a ? 0 : 1;
+	}
+	_filter_constraints();
+	_compute_tethers();
+	// The torn triangles made degenerate in the surface's indices (uploaded on the main thread).
+	uint8_t *ib = index_bytes.ptrw();
+	const uint8_t *rb = index_bytes_rest.ptr();
+	for (uint32_t t = 0; t < tri_alive.size(); t++) {
+		const uint32_t o = tri_index[t] * index_size;
+		if (o + index_size * 3 > uint32_t(index_bytes.size())) {
+			continue;
+		}
+		if (tri_alive[t]) {
+			memcpy(ib + o, rb + o, index_size * 3);
+		} else {
+			memcpy(ib + o + index_size, rb + o, index_size);
+			memcpy(ib + o + index_size * 2, rb + o, index_size);
+		}
+	}
+	index_dirty = true;
+}
+
+// The tethers along the edges left: each free particle to its nearest pin (as _build() finds them).
+void FellowCloth3D::_compute_tethers() {
+	tethers.clear();
+	if (tether_slack <= 0.0f) {
+		return;
+	}
+	const uint32_t np = x.size();
+	LocalVector<LocalVector<Pair<uint32_t, float>>> adjacency;
+	adjacency.resize(np);
+	for (uint32_t e = 0; e < stretch_all.size(); e++) {
+		if (edge_alive[e]) {
+			const Edge &ed = stretch_all[e];
+			adjacency[ed.a].push_back(Pair<uint32_t, float>(ed.b, ed.rest));
+			adjacency[ed.b].push_back(Pair<uint32_t, float>(ed.a, ed.rest));
+		}
+	}
+	LocalVector<float> dist;
+	LocalVector<uint32_t> source;
+	dist.resize(np);
+	source.resize(np);
+	LocalVector<HeapItem> heap;
+	for (uint32_t i = 0; i < np; i++) {
+		const bool pinned = w[i] == 0.0f && !loose[i];
+		dist[i] = pinned ? 0.0f : std::numeric_limits<float>::max();
+		source[i] = i;
+		if (pinned) {
+			heap_push(heap, { 0.0f, i });
+		}
+	}
+	while (!heap.is_empty()) {
+		const HeapItem it = heap_pop(heap);
+		if (it.d > dist[it.i]) {
+			continue;
+		}
+		for (const Pair<uint32_t, float> &nb : adjacency[it.i]) {
+			const float d = it.d + nb.second;
+			if (d < dist[nb.first]) {
+				dist[nb.first] = d;
+				source[nb.first] = source[it.i];
+				heap_push(heap, { d, nb.first });
+			}
+		}
+	}
+	for (uint32_t i = 0; i < np; i++) {
+		if (w[i] > 0.0f && !loose[i] && dist[i] < std::numeric_limits<float>::max()) {
+			tethers.push_back({ i, source[i], dist[i] });
+		}
+	}
+}
+
+void FellowCloth3D::_upload_indices() {
+	if (index_dirty && mesh.is_valid() && !index_bytes.is_empty()) {
+		RenderingServer::get_singleton()->mesh_surface_update_index_region(mesh, 0, 0, index_bytes);
+	}
+	index_dirty = false;
+}
+
+int FellowCloth3D::tear(const Vector3 &p_position, float p_radius) {
+	if (!built) {
+		return 0;
+	}
+	// Every edge passing within the radius (a cut, a shot through the cloth).
+	const float r2 = p_radius * p_radius;
+	LocalVector<uint32_t> edges;
+	for (uint32_t e = 0; e < stretch_all.size(); e++) {
+		if (!edge_alive[e]) {
+			continue;
+		}
+		const Vector3 a = x[stretch_all[e].a];
+		const Vector3 ab = x[stretch_all[e].b] - a;
+		const float l2 = ab.length_squared();
+		const float t = l2 > 1e-12f ? CLAMP((p_position - a).dot(ab) / l2, 0.0f, 1.0f) : 0.0f;
+		if ((a + ab * t).distance_squared_to(p_position) <= r2) {
+			edges.push_back(e);
+		}
+	}
+	Vector3 sum;
+	const int n = _tear(edges, &sum);
+	if (n > 0) {
+		_upload_indices();
+		emit_signal(SNAME("torn"), sum / float(n), n);
+	}
+	return n;
 }
 
 void FellowCloth3D::_group_task(uint32_t p_index, const LocalVector<FellowCloth3D *> *p_list) {
@@ -1252,6 +1595,13 @@ Dictionary FellowCloth3D::get_stats() const {
 	d["lod"] = lod_now;
 	d["wind"] = wind_now;
 	d["bone_pins"] = bone_pins;
+	d["torn_edges"] = torn_edges;
+	d["triangles_all"] = int(tris_all.size() / 3);
+	int nl = 0;
+	for (uint8_t l : loose) {
+		nl += l;
+	}
+	d["loose_particles"] = nl;
 	return d;
 }
 
@@ -1356,6 +1706,8 @@ void FellowCloth3D::set_colliders(const TypedArray<NodePath> &p_colliders) {
 void FellowCloth3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("reset"), &FellowCloth3D::reset);
 	ClassDB::bind_method(D_METHOD("apply_impulse", "position", "impulse", "radius"), &FellowCloth3D::apply_impulse);
+	ClassDB::bind_method(D_METHOD("tear", "position", "radius"), &FellowCloth3D::tear);
+	ClassDB::bind_method(D_METHOD("get_torn_edge_count"), &FellowCloth3D::get_torn_edge_count);
 	ClassDB::bind_method(D_METHOD("get_particle_count"), &FellowCloth3D::get_particle_count);
 	ClassDB::bind_method(D_METHOD("get_particle_position", "index"), &FellowCloth3D::get_particle_position);
 	ClassDB::bind_method(D_METHOD("set_particle_pinned", "index", "pinned"), &FellowCloth3D::set_particle_pinned);
@@ -1422,6 +1774,8 @@ void FellowCloth3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_lod_distance"), &FellowCloth3D::get_lod_distance);
 	ClassDB::bind_method(D_METHOD("set_simulation_distance", "distance"), &FellowCloth3D::set_simulation_distance);
 	ClassDB::bind_method(D_METHOD("get_simulation_distance"), &FellowCloth3D::get_simulation_distance);
+	ClassDB::bind_method(D_METHOD("set_tear_strain", "strain"), &FellowCloth3D::set_tear_strain);
+	ClassDB::bind_method(D_METHOD("get_tear_strain"), &FellowCloth3D::get_tear_strain);
 
 	ADD_GROUP("Shape", "");
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "source_mesh", PROPERTY_HINT_RESOURCE_TYPE, "Mesh"), "set_source_mesh", "get_source_mesh");
@@ -1442,6 +1796,7 @@ void FellowCloth3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "substep_rate", PROPERTY_HINT_RANGE, "60,2000,1,or_greater,suffix:Hz"), "set_substep_rate", "get_substep_rate");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "iterations", PROPERTY_HINT_RANGE, "1,8,1"), "set_iterations", "get_iterations");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "max_substeps", PROPERTY_HINT_RANGE, "1,64,1"), "set_max_substeps", "get_max_substeps");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "tear_strain", PROPERTY_HINT_RANGE, "0,4,0.01,or_greater"), "set_tear_strain", "get_tear_strain");
 	ADD_GROUP("Air", "");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "wind_scale", PROPERTY_HINT_RANGE, "0,4,0.01,or_greater"), "set_wind_scale", "get_wind_scale");
 	ADD_PROPERTY(PropertyInfo(Variant::VECTOR3, "wind", PROPERTY_HINT_NONE, "suffix:m/s"), "set_wind", "get_wind");
@@ -1457,6 +1812,8 @@ void FellowCloth3D::_bind_methods() {
 	ADD_GROUP("", "");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "lod_distance", PROPERTY_HINT_RANGE, "0,500,0.1,or_greater,suffix:m"), "set_lod_distance", "get_lod_distance");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "simulation_distance", PROPERTY_HINT_RANGE, "0,500,0.1,or_greater,suffix:m"), "set_simulation_distance", "get_simulation_distance");
+
+	ADD_SIGNAL(MethodInfo("torn", PropertyInfo(Variant::VECTOR3, "position"), PropertyInfo(Variant::INT, "edges")));
 
 	BIND_ENUM_CONSTANT(PIN_NONE);
 	BIND_ENUM_CONSTANT(PIN_TOP_EDGE);

@@ -628,6 +628,14 @@ the nearest of `pin_bones` — empty: any — when the cloth is built or reset, 
 on the bones (`BoneAttachment3D`s with `CollisionShape3D`s) in `colliders` for the body. `get_stats()` counts
 `bone_pins`.
 
+Milestone 112 (decision 0220): tearing. `tear(position, radius)` breaks every edge passing within the radius (a shot, a
+cut: a line of calls); `tear_strain` (0: off) breaks an edge stretched past that fraction of its length (0.5: half
+again as long; checked once a frame). A broken edge's triangles go (a hole, not drawn, no wind on them), with the edges
+left without a triangle and the bending pairs across one; the tethers are found again along what is left (a part cut
+from every pin falls free); a part fallen 100 m below the cloth is dropped. The signal `torn(position, edges)`,
+`get_torn_edge_count()`, `get_stats()`' `torn_edges`, `triangles_all`, `loose_particles`; `reset()` makes the cloth
+whole again.
+
 ## Traversal: mantling and vaulting (milestone 72)
 
 Module `fellow_animation`; nothing changes without the nodes (decision 0180). `FellowTraversal3D`, a child of the

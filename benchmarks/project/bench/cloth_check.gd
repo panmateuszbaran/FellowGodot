@@ -1,17 +1,20 @@
 extends SceneTree
-## FellowEngine milestone 73 check (decision 0181): FellowCloth3D; milestone 76 (decision 0184): pinned to bones.
+## FellowEngine milestone 73 check (decision 0181): FellowCloth3D; milestone 76 (decision 0184): pinned to bones;
+## milestone 112 (decision 0220): tearing.
 ##
 ##   godot --path benchmarks/project --headless --fixed-fps 60 -s res://bench/cloth_check.gd -- --out=<dir>
 ##   godot --path benchmarks/project --fixed-fps 60 --resolution 1280x720 -s res://bench/cloth_check.gd
 ##       -- --out=<dir> --pictures=1 [--frames=1] [--grid=1 --shot=640x360] [--motion=1]
-##   godot ... -s res://bench/cloth_check.gd -- --out=<dir> --many=64 [--seconds=20]
+##   godot ... -s res://bench/cloth_check.gd -- --out=<dir> --many=64 [--seconds=20] [--tear_strain=0.5]
 ##
 ## Lanes, each a cloth in a situation: a flag on a pole in the wind (FellowWind3D, gusts), a curtain hanging still, a
 ## sheet dropped on a sphere and a box (the physics world's), a sheet dropped on a height map, a cape pinned at two
 ## corners on a node circling a capsule it collides with, an awning pinned at its corners, a banner from a source mesh
 ## (a PlaneMesh), a flag hit by an impulse, a flag beyond the simulation distance, a cape pinned to a skeleton's chest
 ## bone (twisting) on a body circling, colliding with capsules on its bones (the pins' drift in the bone's space
-## measured). For each after the run: the largest
+## measured); milestone 112 (decision 0220): a curtain with a hole cut in it (tear()), one cut and made whole again
+## (reset()), a sheet held at its corners a ball goes through (tear_strain 0.5, and 0), a flag cut off its pole (its
+## cut part on the ground). For each after the run: the largest
 ## strain of the grid's edges (stretched over rest), positions finite, the deepest a particle went into a collider,
 ## where the cloth went (a flag downwind, a curtain hanging, a sheet resting on what it fell on). The cost: the
 ## simulation's time a frame (--many=N flags in the wind). With --pictures=1 the lanes filmed (cloth_strip.png),
@@ -44,7 +47,7 @@ var walker_capsules: Array = []
 var done := false
 var shots := {}
 var viewports := {}
-var strip_lanes := ["flag", "curtain", "sheet_on_shapes", "cape", "awning", "banner_mesh", "cape_bones"]
+var strip_lanes := ["flag", "curtain", "sheet_on_shapes", "cape", "awning", "banner_mesh", "cape_bones", "tear_cut", "tear_strain", "tear_off"]
 var strip_times := [0.5, 1.0, 2.0, 3.9]
 
 
@@ -335,6 +338,49 @@ func _build() -> void:
 	l = _lane("cape_bones", bcape, x)
 	l["bone_capsules"] = walker_capsules
 
+	# Milestone 112 (decision 0220): tearing. A curtain cut at its middle at 1.1 s (tear(): a hole), one cut and made
+	# whole again (reset()), a sheet held at its four corners a ball goes through at 8 m/s, tearing at half again an
+	# edge's length (and one that does not tear), a flag in a breeze cut off its pole (the cut part falls to the ground).
+	x += 8.0
+	var tc := _cloth("TearCut", Transform3D(Basis(), Vector3(x - 1.0, 3.0, 0)), Vector2(2.0, 2.4), 24, FellowCloth3D.PIN_TOP_EDGE, Color(0.7, 0.25, 0.2))
+	tc.wind_scale = 0.0
+	tc.turbulence = 0.0
+	_watch_tears(_lane("tear_cut", tc, x))
+	x += 8.0
+	var trs := _cloth("TearReset", Transform3D(Basis(), Vector3(x - 1.0, 3.0, 0)), Vector2(2.0, 2.4), 24, FellowCloth3D.PIN_TOP_EDGE, Color(0.6, 0.3, 0.25))
+	trs.wind_scale = 0.0
+	trs.turbulence = 0.0
+	_watch_tears(_lane("tear_reset", trs, x))
+	for lane_name in ["tear_strain", "tear_strain_off"]:
+		x += 8.0
+		var ts := _cloth("Tear_" + lane_name, Transform3D(Basis(), Vector3(x - 1.0, 3.0, 0)), Vector2(2.0, 2.0), 24, FellowCloth3D.PIN_CORNERS, Color(0.85, 0.6, 0.3))
+		ts.wind_scale = 0.0
+		ts.turbulence = 0.0
+		ts.tear_strain = 0.5 if lane_name == "tear_strain" else 0.0
+		var ball := StaticBody3D.new() # moved by the script: the cloth finds it in the physics world
+		var bcs := CollisionShape3D.new()
+		var bsp := SphereShape3D.new()
+		bsp.radius = 0.3
+		bcs.shape = bsp
+		ball.add_child(bcs)
+		var bmi := MeshInstance3D.new()
+		var bsm := SphereMesh.new()
+		bsm.radius = 0.3
+		bsm.height = 0.6
+		bmi.mesh = bsm
+		bmi.material_override = _material(Color(0.25, 0.25, 0.28))
+		ball.add_child(bmi)
+		ball.position = Vector3(x, 2.0, 3.0)
+		root3d.add_child(ball)
+		l = _lane(lane_name, ts, x)
+		l["ball"] = ball
+		_watch_tears(l)
+	x += 8.0
+	_pole(Vector3(x, 0, 0), 4.0)
+	var toff := _cloth("TearOff", Transform3D(Basis(), Vector3(x + 0.04, 3.9, 0)), Vector2(1.8, 1.1), 24, FellowCloth3D.PIN_LEFT_EDGE, Color(0.9, 0.8, 0.3))
+	toff.wind_scale = 0.3 # a breeze: the cut part does not land flat on its edge and stand
+	_watch_tears(_lane("tear_off", toff, x))
+
 	var cam := Camera3D.new()
 	root3d.add_child(cam)
 	cam.look_at_from_position(Vector3(40, 9, 22), Vector3(40, 1.5, 0))
@@ -352,6 +398,7 @@ func _build_many() -> void:
 		var f := _cloth("Flag%d" % i, Transform3D(Basis(), p + Vector3(0.04, 3.9, 0)), Vector2(1.8, 1.1), 24, FellowCloth3D.PIN_LEFT_EDGE, Color.from_hsv(float(i) / many, 0.6, 0.8))
 		f.simulation_distance = 1000.0
 		f.lod_distance = float(_arg("lod", "1000"))
+		f.tear_strain = float(_arg("tear_strain", "0")) # milestone 112: the check's cost (a flag in the wind does not tear)
 	var cam := Camera3D.new()
 	root3d.add_child(cam)
 	cam.look_at_from_position(Vector3(-6, 8, -6), Vector3(cols * 2.0, 2, cols * 2.0))
@@ -390,6 +437,12 @@ func _make_viewports() -> void:
 				cam.look_at_from_position(Vector3(x + 2.5, 1.2, 3.5), Vector3(x, 2.2, 0))
 			"banner_mesh":
 				cam.look_at_from_position(Vector3(x + 2.0, 2.2, 3.5), Vector3(x, 2.0, 0))
+			"tear_cut":
+				cam.look_at_from_position(Vector3(x + 1.5, 2.2, 4.5), Vector3(x, 1.8, 0))
+			"tear_strain":
+				cam.look_at_from_position(Vector3(x + 3.0, 2.4, 3.5), Vector3(x, 2.0, 0))
+			"tear_off":
+				cam.look_at_from_position(Vector3(x + 1.0, 2.2, 4.8), Vector3(x + 1.0, 1.9, 0))
 			"cape_bones":
 				cam.look_at_from_position(Vector3(x + 4.0, 2.4, 5.0), Vector3(x, 1.0, 0))
 		if grid:
@@ -410,6 +463,11 @@ func _make_viewports() -> void:
 		else:
 			get_root().add_child(vp)
 		viewports[name] = vp
+
+
+func _watch_tears(lane: Dictionary) -> void:
+	lane["tears"] = []
+	(lane.cloth as FellowCloth3D).torn.connect(func(pos: Vector3, edges: int) -> void: lane.tears.append([pos, edges, frame]))
 
 
 func _find(name: String) -> Dictionary:
@@ -527,6 +585,25 @@ func _on_frame() -> void:
 	if frame == 120:
 		var hit: FellowCloth3D = _find("impulse").cloth
 		hit.apply_impulse(hit.global_position + Vector3(1.2, -0.5, 0), Vector3(0, 0, 0.4), 0.6)
+	# Milestone 112: the tears.
+	if frame == 66:
+		for nm in ["tear_cut", "tear_reset"]:
+			var tcl: FellowCloth3D = _find(nm).cloth
+			_find(nm)["torn_by_call"] = tcl.tear(tcl.global_position + Vector3(1.0, -1.2, 0.0), 0.25)
+		# The flag cut between its 4th and 5th columns: each row's edge across the gap at its middle (the cells there go).
+		var tof: Dictionary = _find("tear_off")
+		var fc: FellowCloth3D = tof.cloth
+		var fd := _grid_dims(fc)
+		var cut := 0
+		for j in fd.y:
+			cut += fc.tear((fc.get_particle_position(j * fd.x + 3) + fc.get_particle_position(j * fd.x + 4)) * 0.5, 0.02)
+		tof["torn_by_call"] = cut
+	if frame == 150:
+		(_find("tear_reset").cloth as FellowCloth3D).reset()
+	for lane in lanes:
+		if lane.has("ball"):
+			# Thrown along -Z at 8 m/s from 0.8 s: through the curtain's middle at about 1.18 s.
+			(lane.ball as Node3D).position = Vector3(lane.x, 2.0, 3.0 - 8.0 * maxf(0.0, frame / 60.0 - 0.8))
 	if frame > 30 and frame % 10 == 0:
 		for lane in lanes:
 			_measure(lane, true)
@@ -567,6 +644,7 @@ func _finish() -> void:
 		var c: FellowCloth3D = lane.cloth
 		var st := c.get_stats()
 		var e := {"particles": st.particles, "triangles": st.triangles, "max_strain": snappedf(lane.max_strain, 0.0001),
+			"torn_edges": st.get("torn_edges", 0), "loose_particles": st.get("loose_particles", 0),
 			"strain_end": snappedf(lane.strain_now, 0.0001), "strain_mean_end": snappedf(lane.strain_mean_now, 0.00001), "finite": lane.finite,
 			"deepest_cm": snappedf(lane.deepest * 100.0, 0.01), "simulate_usec": st.simulate_usec}
 		var ok: bool = lane.finite
@@ -609,6 +687,8 @@ func _finish() -> void:
 				ok = ok and st.lod and tip2.x - lane.x > 1.2 and lane.strain_mean_now < 0.03 and lane.strain_now < 0.3
 			"far":
 				ok = ok and st.far
+			"tear_cut", "tear_reset", "tear_strain", "tear_strain_off", "tear_off":
+				ok = ok and _check_tear(lane, c, st, box, e)
 			"cape_bones":
 				# The pins on the chest (they twist with it, within a millimetre), nothing inside the body.
 				e["pin_drift_mm"] = snappedf(lane.get("pin_drift", 1.0) * 1000.0, 0.01)
@@ -629,6 +709,50 @@ func _finish() -> void:
 	f.store_string(JSON.stringify(result, "  "))
 	f.close()
 	quit(1 if not failures.is_empty() else 0)
+
+
+func _check_tear(lane: Dictionary, c: FellowCloth3D, st: Dictionary, box: AABB, e: Dictionary) -> bool:
+	var tears: Array = lane.get("tears", [])
+	e["tear_signals"] = tears.size()
+	e["torn_by_call"] = lane.get("torn_by_call", 0)
+	e["triangles_all"] = st.get("triangles_all", 0)
+	if not tears.is_empty():
+		var first: Vector3 = tears[0][0]
+		e["first_tear"] = [snappedf(first.x - lane.x, 0.01), snappedf(first.y, 0.01), snappedf(first.z, 0.01), tears[0][2]]
+	e["top"] = snappedf(box.end.y, 0.01)
+	e["bottom"] = snappedf(box.position.y, 0.01)
+	match lane.name:
+		"tear_cut":
+			# A hole at the middle (a fifth of a metre and more across): edges and triangles gone, its inside loose; the
+			# curtain still hanging whole around it (its bottom where the curtain's is).
+			var at: Vector3 = tears[0][0] if not tears.is_empty() else Vector3(1e9, 0, 0)
+			return tears.size() == 1 and int(lane.get("torn_by_call", 0)) > 20 and st.torn_edges >= int(lane.torn_by_call) and st.triangles < st.triangles_all \
+					and st.loose_particles > 0 and at.distance_to(Vector3(lane.x, 1.8, 0)) < 0.1 and box.end.y > 2.99 and box.position.y < 0.7 and box.position.y > 0.5
+		"tear_reset":
+			return tears.size() == 1 and int(lane.get("torn_by_call", 0)) > 20 and st.torn_edges == 0 and st.triangles == st.triangles_all and st.loose_particles == 0 \
+					and box.end.y > 2.99 and box.position.y < 0.7 and box.position.y > 0.5 and absf(box.position.z) < 0.15 and lane.strain_now < 0.05
+		"tear_strain":
+			# Torn where the ball went through (about 2 m up, at the middle); the sheet still on its corners.
+			var at2: Vector3 = tears[0][0] if not tears.is_empty() else Vector3(1e9, 0, 0)
+			return not tears.is_empty() and st.torn_edges > 10 and Vector2(at2.x - lane.x, at2.y - 2.0).length() < 0.5 and box.end.y > 2.99
+		"tear_strain_off":
+			return tears.is_empty() and st.torn_edges == 0 and st.triangles == st.triangles_all and box.end.y > 2.99
+		"tear_off":
+			# The cut part on the ground, the strip by the pole still hanging from it.
+			var d := _grid_dims(c)
+			var piece_top := -1e9
+			var strip_bottom := 1e9
+			for j in d.y:
+				for i in d.x:
+					var p := c.get_particle_position(j * d.x + i)
+					if i >= 4:
+						piece_top = maxf(piece_top, p.y)
+					else:
+						strip_bottom = minf(strip_bottom, p.y)
+			e["piece_top"] = snappedf(piece_top, 0.01)
+			e["strip_bottom"] = snappedf(strip_bottom, 0.01)
+			return tears.size() == d.y and int(lane.get("torn_by_call", 0)) == d.y and piece_top < 0.5 and strip_bottom > 2.6
+	return false
 
 
 func _save_strip() -> void:
@@ -665,7 +789,7 @@ func _many_tick() -> void:
 		var n := float(frame - 60)
 		var fr := many_frames.duplicate()
 		fr.sort()
-		var r := {"flags": many, "frames": int(n), "stats": st,
+		var r := {"flags": many, "frames": int(n), "stats": st, "tear_strain": float(_arg("tear_strain", "0")),
 			"cloth_main_ms_per_frame": snappedf(float(st.frame_usec) / n / 1000.0, 0.001),
 			"cloth_worker_ms_per_frame": snappedf(float(st.simulate_usec) / n / 1000.0, 0.001),
 			"particles_per_frame": snappedf(float(st.particles) / n, 0.1),

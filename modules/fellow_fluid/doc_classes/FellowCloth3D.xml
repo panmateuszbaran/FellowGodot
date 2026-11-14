@@ -42,7 +42,13 @@
 		<method name="get_stats" qualifiers="const">
 			<return type="Dictionary" />
 			<description>
-				This cloth's [code]particles[/code], [code]triangles[/code], [code]stretch_constraints[/code], [code]bend_constraints[/code], [code]tethers[/code], the last frame's [code]substeps[/code], [code skip-lint]colliders[/code], [code]simulate_usec[/code], [code skip-lint]wind[/code], whether it was past [member lod_distance] ([code]lod[/code]) or [member simulation_distance] ([code]far[/code]), and the pinned particles on bones ([code]bone_pins[/code], [member skeleton_path]).
+				This cloth's [code]particles[/code], [code]triangles[/code], [code]stretch_constraints[/code], [code]bend_constraints[/code], [code]tethers[/code], the last frame's [code]substeps[/code], [code skip-lint]colliders[/code], [code]simulate_usec[/code], [code skip-lint]wind[/code], whether it was past [member lod_distance] ([code]lod[/code]) or [member simulation_distance] ([code]far[/code]), the pinned particles on bones ([code]bone_pins[/code], [member skeleton_path]), and its tears: [code]torn_edges[/code], [code]triangles_all[/code] (as built; [code]triangles[/code] are those left), [code]loose_particles[/code] (of no triangle left).
+			</description>
+		</method>
+		<method name="get_torn_edge_count" qualifiers="const">
+			<return type="int" />
+			<description>
+				The edges gone since the cloth was built or [method reset]: broken by [method tear] or [member tear_strain], or left without a triangle.
 			</description>
 		</method>
 		<method name="is_particle_pinned" qualifiers="const">
@@ -55,7 +61,7 @@
 		<method name="reset">
 			<return type="void" />
 			<description>
-				The cloth at rest where the node is now (it also resets itself when the node moves more than 5 m in a frame).
+				The cloth at rest where the node is now (it also resets itself when the node moves more than 5 m in a frame), whole again if it was torn.
 			</description>
 		</method>
 		<method name="reset_global_stats" qualifiers="static">
@@ -70,6 +76,14 @@
 			<param index="1" name="pinned" type="bool" />
 			<description>
 				Pins a particle where it is now (it follows the node from there), or lets it go (a rope cut, a curtain torn from its rail).
+			</description>
+		</method>
+		<method name="tear">
+			<return type="int" />
+			<param index="0" name="position" type="Vector3" />
+			<param index="1" name="radius" type="float" />
+			<description>
+				Breaks every edge of the cloth passing within [param radius] of [param position] (global): a shot through a flag, a blade's cut (a line of calls along it). The triangles on a broken edge go (a hole: not drawn, no wind on them), with every edge left without a triangle and every bending constraint across one; a particle of no triangle left stays where it is. The tethers are found again along what is left: a part cut from every pin falls free. Emits [signal torn] and returns the edges broken. [method reset] makes the cloth whole again.
 			</description>
 		</method>
 	</methods>
@@ -147,6 +161,9 @@
 		<member name="substep_rate" type="int" setter="set_substep_rate" getter="get_substep_rate" default="480">
 			Substeps a second (480: 8 a frame at 60 fps).
 		</member>
+		<member name="tear_strain" type="float" setter="set_tear_strain" getter="get_tear_strain" default="0.0">
+			An edge stretched by more than this fraction of its length at rest breaks (0.5: half again as long), as [method tear] breaks it — a sheet held at its corners that something goes through tears there, and the tear runs on while it is pulled. Checked once a frame after the substeps; 0: never. See [code]docs/decisions/0220-cloth-tearing.md[/code].
+		</member>
 		<member name="tether_slack" type="float" setter="set_tether_slack" getter="get_tether_slack" default="1.08">
 			How much farther than at rest (along the cloth) a particle may be from its nearest pin, as a factor (0: no tethers).
 		</member>
@@ -163,6 +180,15 @@
 			The [FellowWind3D]'s wind, scaled.
 		</member>
 	</members>
+	<signals>
+		<signal name="torn">
+			<param index="0" name="position" type="Vector3" />
+			<param index="1" name="edges" type="int" />
+			<description>
+				Edges broke: by [method tear] (at once), or stretched past [member tear_strain] (after the frame's simulation). [param position] is the broken edges' mean middle (global), [param edges] how many broke.
+			</description>
+		</signal>
+	</signals>
 	<constants>
 		<constant name="PIN_NONE" value="0" enum="PinMode">
 			Nothing pinned: the cloth falls (a sheet onto furniture).

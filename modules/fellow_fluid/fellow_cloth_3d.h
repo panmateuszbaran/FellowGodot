@@ -164,6 +164,28 @@ private:
 	LocalVector<Vector3> render_rest_normal; // node space
 	LocalVector<Vector4> render_rest_tangent;
 	LocalVector<Vector3> particle_rest_normal; // node space, from the triangles
+	// Milestone 112 (decision 0220): tearing. The cloth's topology as built — every triangle (`tris` holds the live
+	// ones), its three edges, each edge's triangles, each bending pair's two — and what is left of it.
+	float tear_strain = 0.0f; // 0: off
+	LocalVector<uint32_t> tris_all;
+	LocalVector<uint32_t> tri_edges; // three a triangle: indices into stretch_all
+	LocalVector<uint32_t> edge_tri_start; // an edge's triangles: edge_tri_list[edge_tri_start[e] .. edge_tri_start[e + 1]]
+	LocalVector<uint32_t> edge_tri_list;
+	LocalVector<uint32_t> bend_tris; // two a bending pair
+	LocalVector<uint32_t> tri_index; // a triangle's first index in the surface's index array
+	LocalVector<uint8_t> tri_alive;
+	LocalVector<uint8_t> edge_alive;
+	LocalVector<uint8_t> loose; // particles of no live triangle: left where they are, not drawn
+	LocalVector<uint32_t> stretch_source; // the solver's stretch edges' places in stretch_all
+	LocalVector<Tether> tethers_rest; // as built (reset())
+	Vector<uint8_t> index_bytes; // the surface's indices, a torn triangle's made degenerate
+	Vector<uint8_t> index_bytes_rest;
+	uint32_t index_size = 2;
+	bool index_dirty = false;
+	bool any_loose = false;
+	int torn_edges = 0; // edges gone since the build or reset()
+	int torn_pending = 0; // broken on the worker this frame: the signal on the main thread
+	Vector3 torn_pending_sum;
 	// Bone pins (milestone 76): each pinned particle's bone (-1: the node) and its place in the bone's space; where it
 	// was at the last frame and is at this one (global, main thread), interpolated over the substeps.
 	LocalVector<int> pin_bone;
@@ -223,6 +245,10 @@ private:
 	void _group_task(uint32_t p_index, const LocalVector<FellowCloth3D *> *p_list);
 	static void _group_process(double p_delta);
 	void _set_build_dirty();
+	int _tear(const LocalVector<uint32_t> &p_edges, Vector3 *r_sum);
+	void _after_tear();
+	void _compute_tethers();
+	void _upload_indices();
 
 protected:
 	void _notification(int p_what);
@@ -234,6 +260,10 @@ public:
 
 	void reset();
 	void apply_impulse(const Vector3 &p_position, const Vector3 &p_impulse, float p_radius);
+	int tear(const Vector3 &p_position, float p_radius);
+	int get_torn_edge_count() const { return torn_edges; }
+	void set_tear_strain(float p_strain) { tear_strain = MAX(0.0f, p_strain); }
+	float get_tear_strain() const { return tear_strain; }
 	int get_particle_count() const { return int(x.size()); }
 	Vector3 get_particle_position(int p_index) const;
 	void set_particle_pinned(int p_index, bool p_pinned);
