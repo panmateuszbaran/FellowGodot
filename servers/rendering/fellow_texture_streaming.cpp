@@ -451,11 +451,62 @@ void FellowTextureStreaming::_compute_targets() {
 		bias = MIN(bias, 16.0f);
 	}
 	budget_bias = bias;
-	target_bytes = total;
 	computed_budget = budget;
 	for (KeyValue<RID, Texture *> &E : textures) {
 		E.value->target_mip = target_at(E.value, bias);
 	}
+	// FellowEngine (decision 0223): the budget the bias left filled — the textures furthest from the level the cameras
+	// need (a magnified one's estimate is below 0) a level finer first, in rounds, while the next level fits (a level is
+	// a quarter of the bytes: the bias's steps leave up to three quarters of the budget unused).
+	if (budget > 0 && bias > 0.0f && Fellow::texture_budget_from_used_level()) {
+		struct Candidate {
+			Texture *tex;
+			int want;
+		};
+		LocalVector<Candidate> candidates;
+		for (KeyValue<RID, Texture *> &E : textures) {
+			const int want = target_at(E.value, 0.0f);
+			if (E.value->target_mip > want) {
+				candidates.push_back({ E.value, want });
+			}
+		}
+		struct CandidateSort {
+			bool operator()(const Candidate &p_a, const Candidate &p_b) const {
+				// How much coarser than the cameras need it is: a magnified texture (an estimate below 0) the most.
+				const float da = float(p_a.tex->target_mip) - p_a.tex->lod;
+				const float db = float(p_b.tex->target_mip) - p_b.tex->lod;
+				if (da != db) {
+					return da > db;
+				}
+				const int64_t ca = p_a.tex->chain_size(p_a.tex->target_mip - 1);
+				const int64_t cb = p_b.tex->chain_size(p_b.tex->target_mip - 1);
+				if (ca != cb) {
+					return ca < cb;
+				}
+				return p_a.tex->rid.get_id() < p_b.tex->rid.get_id();
+			}
+		};
+		int64_t left = budget - total;
+		bool refined = true;
+		while (refined && left > 0) {
+			refined = false;
+			candidates.sort_custom<CandidateSort>();
+			for (const Candidate &c : candidates) {
+				Texture *t = c.tex;
+				if (t->target_mip <= c.want) {
+					continue;
+				}
+				const int64_t extra = t->chain_size(t->target_mip - 1) - t->chain_size(t->target_mip);
+				if (extra <= left) {
+					t->target_mip--;
+					left -= extra;
+					total += extra;
+					refined = true;
+				}
+			}
+		}
+	}
+	target_bytes = total;
 	targets_valid = true;
 }
 

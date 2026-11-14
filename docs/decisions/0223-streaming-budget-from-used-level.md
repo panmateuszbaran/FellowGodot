@@ -17,9 +17,13 @@ every texture by one or two levels from the level it uses would have fitted.
 
 ## Change
 
-The bias coarsens the level the texture would use: `floor(max(estimate, 0) + bias)` (its first level is the finest it
-can have). Without a budget (bias 0) every target is the same as before. The steps, the order and the rest of the
-budget are unchanged.
+* The bias coarsens the level the texture would use: `floor(max(estimate, 0) + bias)` (its first level is the finest
+  it can have). Without a budget (bias 0) every target is the same as before.
+* **The budget filled**: a level is a quarter of a chain's bytes, so the first bias that fits can leave up to three
+  quarters of the budget unused (Sponza: 71 MiB held of 256 at bias 2). The textures then come a level finer, in
+  rounds, while the next level fits: those furthest from what the cameras need first (target − estimate: a magnified
+  texture, its estimate below 0, before one at its natural level), the cheaper first among equals, never finer than
+  wanted.
 
 ## Verification
 

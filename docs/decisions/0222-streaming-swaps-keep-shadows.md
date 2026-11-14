@@ -47,4 +47,26 @@ camera visited first, 48 frames each), the setting on against off:
 
 ## Results
 
-PENDING.
+The RTX (job f434, the release template at 6c5ee4cf91, Sponza's flythrough at 1920 × 1080, streaming on without a budget,
+three alternating runs each, the median GPU frame):
+
+| | shadow cache invalidations a run | cascades built | objects drawn a frame (shadow passes included) | GPU frame |
+|---|---:|---:|---:|---:|
+| streaming off | 0 | 174 | 276.4 | 6.25 ms |
+| on, without the decision | 71 | 262 | 292.4-294.4 | 6.37 ms |
+| on, with it | 32 | 214 | 280.1-280.3 | 6.30 ms |
+
+The invalidations left are the swaps of Sponza's alpha-tested materials (the plants, the curtains' edges: their shadows
+do read their textures). The GPU's frame moved within the runs' spread (job f433 put streaming at +0.32 ms over off,
+this job at +0.12 ms without the decision); the shadow passes' extra casters are what the decision removes.
+
+## Decision
+
+Keep, on by default: a swap's shadow cache invalidations only where a shadow can change.
+
+## Rejected / not done
+
+* **Skipping the instances' update altogether** on a swap: the renderer's surface caches hold the material's uniform
+  set and must be rebuilt; GI's voxelisations may read the textures.
+* **Per-texture knowledge** (which of a material's textures its shadow pass reads): an alpha-tested material is
+  invalidated on any of its textures' swaps.

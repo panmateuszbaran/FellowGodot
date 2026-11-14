@@ -25,24 +25,45 @@ textures, 1 320 MiB of them at full resolution). FellowBench's perf mode on Spon
 * **The frame** 5.6 % longer at 1080p (0.7 % at 4K): the flythrough keeps the streamer swapping (187 loads and 38
   downgrades a run), and each swap made its materials' instances update — logging an event for decision 0004's
   directional shadow cache: 72 invalidations a run against none, the cascades built 260 times against 174, and more
-  shadow casters drawn (the frame's objects 293 against 276). Section 2.
+  shadow casters drawn (the objects drawn a frame, shadow passes included, 293 against 276). Section 2.
 * **The budget** coarsened every texture by 7.5 levels (8.5 at 4K): the streamed textures held 129 MiB of the 256 —
   nearly all at their 128-pixel tails — and kept swapping (332 downgrades). Section 3.
 * **Video memory's peak** with streaming and no budget is higher than without it (+193 to +257 MiB at 1080p), though
-  the textures' peak is lower: the swaps' new textures beside the old ones until they are freed, and the uploads'
-  staging (milestone 45 saw the same in Streaming Lab's flythrough).
+  the textures' peak is lower. The likely cause (not measured apart): the streamer's loads create their textures on
+  worker threads, and RenderingDevice's transfer workers (one per thread in use, up to the CPU's thread count) each
+  keep a staging buffer the next power of two of the largest upload they made — 16 or 32 MiB for a 2K or 4K BC mip
+  chain — for good; that memory is the host's, but the driver's allocator counts it. Milestone 45 saw the same in
+  Streaming Lab's flythrough.
 
 ## 2. The swaps and the shadow caches (decision 0222)
 
-PENDING.
+A swap erases the old data's uniform sets; each material using them rebuilds its set and tells its instances "the
+material changed", twice (at the erasure, and when the set is made again). RendererSceneCull updated those instances as
+for any change, and an update logs an event that invalidates every directional shadow cascade holding the instance.
+For a material whose shadow pass cannot read its textures (the Forward+ scene shader without alpha, discard, depth
+prepass alpha or vertex code), the swap's two notifications now carry a mark, and the instances' updates they cause log
+no shadow event; any other cause in the same frame does. On lavapipe, Streaming Lab without TAA: the same pictures (0
+pixels), the invalidations 17 → 0 a run, the cascades built 49 → 33 times; the regression suite's thirteen scenes with
+shadows the same as their goldens. LAPTOP RESULTS (job f434) PENDING.
 
 ## 3. The budget (decision 0223)
 
-PENDING.
+Over `texture_budget_mb` every streamed texture is coarsened by one bias: its target was `floor(estimate + bias)`, and a
+magnified texture's estimate is below 0 (as many levels as it is magnified), so it kept its full chain until the bias
+passed that, while the rest were coarsened by the whole bias — in Sponza 7.5 levels, the textures at their tails with
+half the budget unused. The bias now coarsens the level the texture would use, `floor(max(estimate, 0) + bias)`; without
+a budget nothing changes. On lavapipe, Streaming Lab with 16 MiB: the views wanting 35.7 and 42.9 MiB now held at one
+level coarser (bias 1, 9.8 and 11.5 MiB) instead of six and seven (5.4 and 7.4 MiB); against no budget 402 pixels
+changed by 1 instead of 50 345 by up to 66 in one, 6 074 by up to 4 instead of 12 595 by up to 8 in the other. LAPTOP
+RESULTS (job f434) PENDING.
 
 ## 4. FSR 3.1's passes at 4K
 
-PENDING.
+Milestone 111 measured FSR 3.1's pass at 2.3 ms at 4K and 50 % (one timestamp around the upscaler's eight dispatches).
+The FSR 3.1 port now writes a profiler timestamp before each dispatch, named by its pass (`FSR 3.1: prepare inputs`,
+`luma pyramid`, `shading change pyramid`, `shading change`, `prepare reactivity`, `luma instability`, `accumulate` or
+`accumulate and sharpen`, `RCAS`), so FellowBench's `--profile` (and Godot's visual profiler) splits it. On the RTX
+(job f434; 3840 × 2160 rendered at that size, 50 %, two runs, the GPU's ms): PENDING.
 
 ## 5. Next
 
