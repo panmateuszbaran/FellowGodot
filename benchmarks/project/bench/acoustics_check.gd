@@ -4,7 +4,7 @@ extends SceneTree
 ##   godot --path benchmarks/project --headless --fixed-fps 60 -s res://bench/acoustics_check.gd -- --out=<dir>
 ##   godot --path benchmarks/project --fixed-fps 60 --resolution 64x64 --write-movie <dir>/m.png
 ##       -s res://bench/acoustics_check.gd -- --out=<dir> --listen=1          (the mix measured, Movie Maker's audio)
-##   godot ... -s res://bench/acoustics_check.gd -- --out=<dir> --many=256 [--seconds=6] [--portals=1]
+##   godot ... -s res://bench/acoustics_check.gd -- --out=<dir> --many=256 [--seconds=6] [--portals=1] [--rooms=2]
 ##
 ## A listener (the camera) at the origin, noise sources 8 m away: one in the open, one behind a wall, one past a
 ## wall's edge, one inside a car's body (its own body does not block it), one moving from the open to behind a wall
@@ -15,7 +15,10 @@ extends SceneTree
 ## sources among walls, the node's time and rays a frame. One JSON line: ACOUSTICS_MANY {...}.
 ## Milestone 99 (decision 0207): three walls with doorways round the listener, a FellowAcousticPortal3D in each — one
 ## open (the source behind it heard through it, from its side), one closed (transmission 0), one shut by a door; then
-## the door taken away and the closed one opened half. With --listen=1 the open one heard with and without portals and
+## the door taken away and the closed one opened half. Milestone 111 (decision 0218): source_rooms 2 — the listener in
+## the open, a source in a hall seen through its doorway and one in a closed closet (each sent to its own room's
+## reverb), one in the open (the listener's); then the listener in the hall (its source the listener's, the closet's
+## and the open one's their own); then source_rooms 0 (every source the listener's again, the buses gone). With --listen=1 the open one heard with and without portals and
 ## stock (its level, highs and stereo balance). --portals=1 with --many: an opening beside each wall.
 
 var args := {}
@@ -36,6 +39,7 @@ var capture_idx := -1
 var listen_plan := []
 var done := false
 const PORTALS_AT := Vector3(0, 0, -300)
+const ROOMS_AT := Vector3(600, 0, 0)
 var south_portal: FellowAcousticPortal3D
 var door: StaticBody3D
 
@@ -215,6 +219,26 @@ func _build() -> void:
 	door = _box(Vector3(3, 1.1, 0), Vector3(1.2, 2.2, 0.1), west)
 	_portal(pa + Vector3(-4, 1.1, -3), 90.0, 1.0)
 	_source("portal_door", pa + Vector3(-8, 1.7, 0))
+	# Milestone 111: far to the east, a hall 20 x 20 x 8 m 10 m from the listener with a doorway 2 x 3 m facing it, a
+	# closet 4 x 4 x 3 m 25 m to the south (closed), a source in each and one in the open 6 m west.
+	var ra := ROOMS_AT
+	var hall := ra + Vector3(20, 0, 0)
+	_box(hall + Vector3(-10, 5.5, 0), Vector3(0.3, 5, 20))
+	_box(hall + Vector3(-10, 1.5, -5.5), Vector3(0.3, 3, 9))
+	_box(hall + Vector3(-10, 1.5, 5.5), Vector3(0.3, 3, 9))
+	_box(hall + Vector3(10, 4, 0), Vector3(0.3, 8, 20))
+	_box(hall + Vector3(0, 4, -10), Vector3(20.3, 8, 0.3))
+	_box(hall + Vector3(0, 4, 10), Vector3(20.3, 8, 0.3))
+	_box(hall + Vector3(0, 8.15, 0), Vector3(20.3, 0.3, 20.3))
+	_source("hall", hall + Vector3(0, 1.7, 0))
+	var closet := ra + Vector3(0, 0, 25)
+	_box(closet + Vector3(0, 1.5, -2), Vector3(4.3, 3, 0.3))
+	_box(closet + Vector3(0, 1.5, 2), Vector3(4.3, 3, 0.3))
+	_box(closet + Vector3(-2, 1.5, 0), Vector3(0.3, 3, 4))
+	_box(closet + Vector3(2, 1.5, 0), Vector3(0.3, 3, 4))
+	_box(closet + Vector3(0, 3.15, 0), Vector3(4.3, 0.3, 4.3))
+	_source("closet", closet + Vector3(0, 1.5, 0))
+	_source("open3", ra + Vector3(-6, 1.7, 0))
 	acoustics = FellowAcoustics3D.new()
 	root3d.add_child(acoustics)
 	if listen:
@@ -244,6 +268,10 @@ func _setup_listen() -> void:
 	# A source in the closed room with the listener: the reverb's send (with the node) and its tail after it stops.
 	listen_plan.append({"source": "inroom", "fellow": true, "room": true})
 	listen_plan.append({"source": "inroom", "fellow": false, "room": true})
+	# Milestone 111: the source in the hall heard from the open by its doorway, with source_rooms 2 (the hall's reverb)
+	# and 0 (the listener's: the open's, nothing).
+	listen_plan.append({"source": "hall", "fellow": true, "room": true, "at": ROOMS_AT, "rooms": 2})
+	listen_plan.append({"source": "hall", "fellow": true, "room": true, "at": ROOMS_AT, "rooms": 0, "no_rooms": true})
 
 
 func _measure(name: String, key: String, value) -> void:
@@ -285,7 +313,7 @@ func _listen_tick(dt: float) -> void:
 	if listen_step < 0 or listen_t >= length:
 		if listen_step >= 0:
 			var rms := sqrt(listen_acc.sum / maxf(1.0, listen_acc.n))
-			var tag := ("no_portals" if step.get("no_portals", false) else "fellow") if step.fellow else "stock"
+			var tag := ("no_portals" if step.get("no_portals", false) else ("no_rooms" if step.get("no_rooms", false) else "fellow")) if step.fellow else "stock"
 			_measure("listen_" + step.source, tag + "_db", snappedf(linear_to_db(maxf(rms, 1e-9)), 0.01))
 			if step.has("at"):
 				# Milestone 99: the right channel over the left (dB).
@@ -305,6 +333,7 @@ func _listen_tick(dt: float) -> void:
 		acoustics.enabled = next.fellow
 		acoustics.reverb = next.get("room", false) and next.fellow
 		acoustics.portals = not next.get("no_portals", false)
+		acoustics.source_rooms = next.get("rooms", 0)
 		cam.position = Vector3(300, 1.7, 0) if next.get("room", false) else Vector3(0, 1.7, 0)
 		if next.has("at"):
 			cam.position = next.at + Vector3(0, 1.7, 0)
@@ -375,8 +404,25 @@ func _on_frame() -> void:
 			door.queue_free()
 			south_portal.transmission = 0.5
 	if frame == 1680:
-		done = true
-		_finish.call_deferred()
+		# Milestone 111: the sources' rooms, the listener in the open by the hall.
+		acoustics.source_rooms = 2
+		cam.position = ROOMS_AT + Vector3(0, 1.7, 0)
+	if frame == 1800 or frame == 1920 or frame == 2010:
+		var tag: String = {1800: "_open", 1920: "_hall", 2010: "_off"}[frame]
+		for n in ["hall", "closet", "open3"]:
+			var sr: Dictionary = acoustics.get_source_room(sources[n])
+			for k in ["bus", "enclosure", "mean_distance", "rt60", "bus_rt60", "bus_room_size", "send"]:
+				var v = sr.get(k)
+				_measure("rooms_" + n + tag, k, snappedf(v, 0.001) if v is float else String(v))
+		_measure("rooms_stats" + tag, "stats", acoustics.get_stats())
+		_measure("rooms_stats" + tag, "room_bus_present", AudioServer.get_bus_index(&"FellowReverbRoom1") >= 0)
+		if frame == 1800:
+			cam.position = ROOMS_AT + Vector3(16, 1.7, 3)  # in the hall
+		elif frame == 1920:
+			acoustics.source_rooms = 0
+		else:
+			done = true
+			_finish.call_deferred()
 
 
 func _build_many() -> void:
@@ -394,6 +440,7 @@ func _build_many() -> void:
 		var p := _source("s%d" % k, Vector3(rng.randf_range(-30, 30), 1.0, rng.randf_range(-30, 30)))
 		p.play()
 	acoustics = FellowAcoustics3D.new()
+	acoustics.source_rooms = int(_arg("rooms", "0"))  # milestone 111: --rooms=N
 	root3d.add_child(acoustics)
 	physics_frame.connect(_on_frame)
 
@@ -423,6 +470,7 @@ func _many_tick() -> void:
 		var res := {"sources": many, "frames": many_usec.size(), "usec_mean": snappedf(float(s) / many_usec.size(), 0.1),
 			"usec_max": mx, "rays_mean": snappedf(float(r) / many_rays.size(), 0.1), "stats": st,
 			"portal_paths_per_frame": snappedf(float(many_portal_paths) / many_usec.size(), 0.01),
+			"source_rooms": acoustics.source_rooms,
 			"physics_engine": ProjectSettings.get_setting("physics/3d/physics_engine")}
 		print("ACOUSTICS_MANY " + JSON.stringify(res))
 		var f := FileAccess.open(out_dir.path_join("acoustics_many.json"), FileAccess.WRITE)
@@ -458,6 +506,10 @@ func _finish() -> void:
 		# stock centred.
 		var lp: Dictionary = data["listen_portal_open"]
 		expect.call("listen_portal_open", lp.fellow_db > lp.no_portals_db + 4.0 and lp.fellow_high_share > lp.no_portals_high_share * 2.0 and lp.fellow_balance_db > 2.0 and absf(lp.stock_balance_db) < 1.0 and absf(lp.no_portals_balance_db) < 1.0)
+		# Milestone 111: the hall heard from the open — its reverb's tail with source_rooms (within 40 dB of the direct
+		# sound), more than 6 dB weaker without (only the listener's reverb: the open by a building, a little closed).
+		var lh: Dictionary = data["listen_hall"]
+		expect.call("listen_hall", lh.fellow_tail_db > lh.fellow_db - 40.0 and lh.no_rooms_tail_db < lh.fellow_tail_db - 6.0)
 		var e: Dictionary = data["listen_edge"]
 		expect.call("listen_edge", e.fellow_db < e.stock_db - 1.0 and e.fellow_db > w.fellow_db - 0.5 + (w.stock_db - e.stock_db))
 	else:
@@ -488,6 +540,23 @@ func _finish() -> void:
 		var ph: Dictionary = data.portal_closed_after
 		expect.call("portal_closed_after", ph.portal_weight > 0.95 and absf(ph.occlusion - 0.857) < 0.03)
 		expect.call("portal_open_after", absf(data.portal_open_after.occlusion - po.occlusion) < 0.005)
+		# Milestone 111: the listener in the open — the hall's source sent to a room reverb (a closed room's decay, RT60
+		# 0.8-2.5 s, sent more than 0.3), the closet's to another (a short decay: under 0.6 s, a smaller room size), the
+		# open one's to the listener's; the listener in the hall — the hall's source the listener's, the closet's still
+		# its own, the open one's the listener's (in the open a source has no room of its own); source_rooms 0 —
+		# every source the listener's, the room buses removed.
+		var ho: Dictionary = data.rooms_hall_open
+		var co: Dictionary = data.rooms_closet_open
+		var oo: Dictionary = data.rooms_open3_open
+		expect.call("rooms_open", ho.bus.begins_with("FellowReverbRoom") and co.bus.begins_with("FellowReverbRoom") and ho.bus != co.bus and oo.bus == "FellowReverb" and ho.bus_rt60 > 0.8 and ho.bus_rt60 < 2.5 and ho.send > 0.3 and co.bus_rt60 < 0.6 and co.bus_room_size < ho.bus_room_size and ho.enclosure > 0.8 and co.enclosure > 0.95)
+		var hh: Dictionary = data.rooms_hall_hall
+		var ch: Dictionary = data.rooms_closet_hall
+		var oh: Dictionary = data.rooms_open3_hall
+		expect.call("rooms_hall", hh.bus == "FellowReverb" and ch.bus.begins_with("FellowReverbRoom") and ch.bus_rt60 < 0.6 and oh.bus == "FellowReverb")
+		var off_ok: bool = not data.rooms_stats_off.room_bus_present and data.rooms_stats_open.room_bus_present
+		for n in ["hall", "closet", "open3"]:
+			off_ok = off_ok and data["rooms_" + n + "_off"].bus == "FellowReverb"
+		expect.call("rooms_off", off_ok)
 	result["lanes"] = data
 	result["failures"] = failures
 	result["global"] = FellowAcoustics3D.get_global_stats()

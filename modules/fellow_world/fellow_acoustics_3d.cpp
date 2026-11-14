@@ -173,6 +173,7 @@ void FellowAcoustics3D::_setup_reverb() {
 	}
 	room_measured = false;
 	reverb_timer = 0.0f;
+	_setup_room_buses(); // milestone 111
 }
 
 void FellowAcoustics3D::_release_reverb() {
@@ -185,7 +186,9 @@ void FellowAcoustics3D::_release_reverb() {
 			a.send_bus = StringName();
 			p->fellow_set_acoustics(a);
 		}
+		kv.value.room_bus = -1;
 	}
+	_release_room_buses(); // milestone 111
 	if (as && effect.is_valid()) {
 		const int idx = as->get_bus_index(reverb_bus);
 		if (idx >= 0) {
@@ -238,10 +241,36 @@ Node3D *FellowAcoustics3D::_listener() const {
 // The reverb's decay from the room (Sabine's formula with the mean free path, 4 V / S, taken as the mean distance to
 // the walls the rays found): RT60 = 0.161 V / (S a) = 0.04 l / a.
 float FellowAcoustics3D::_rt60() const {
-	return CLAMP(0.04f * room_distance / absorption, 0.1f, 10.0f);
+	return _rt60_for(room_distance);
+}
+
+float FellowAcoustics3D::_rt60_for(float p_distance) const {
+	return CLAMP(0.04f * p_distance / absorption, 0.1f, 10.0f);
+}
+
+// Godot's reverb (Freeverb's combs) driven by a room: the feedback that decays in its RT60, from 0.7 (room size 0) to
+// 0.98 (1); the predelay from the nearest wall; the damping from the absorption.
+void FellowAcoustics3D::_drive_reverb(const Ref<AudioEffectReverb> &p_effect, const Room &p_room) const {
+	const float g = Math::pow(10.0f, -3.0f * COMB_DELAY / _rt60_for(p_room.distance));
+	p_effect->set_room_size(CLAMP((g - 0.7f) / 0.28f, 0.0f, 1.0f));
+	p_effect->set_predelay_msec(CLAMP(2.0f * p_room.nearest / SPEED_OF_SOUND * 1000.0f, 1.0f, 150.0f));
+	p_effect->set_damping(CLAMP(0.2f + absorption, 0.0f, 1.0f));
 }
 
 void FellowAcoustics3D::_measure_room(const Vector3 &p_at, PhysicsDirectSpaceState3D *p_space, const HashSet<RID> &p_exclude) {
+	const Room r = _room_at(p_at, p_space, p_exclude);
+	target_enclosure = r.enclosure;
+	target_distance = r.distance;
+	target_nearest = r.nearest;
+	if (!room_measured) {
+		room_enclosure = target_enclosure;
+		room_distance = target_distance;
+		room_nearest = target_nearest;
+		room_measured = true;
+	}
+}
+
+FellowAcoustics3D::Room FellowAcoustics3D::_room_at(const Vector3 &p_at, PhysicsDirectSpaceState3D *p_space, const HashSet<RID> &p_exclude) {
 	int around = 0;
 	int closed = 0;
 	int hits = 0;
@@ -269,14 +298,199 @@ void FellowAcoustics3D::_measure_room(const Vector3 &p_at, PhysicsDirectSpaceSta
 			}
 		}
 	}
-	target_enclosure = around > 0 ? float(closed) / float(around) : 0.0f;
-	target_distance = hits > 0 ? sum / float(hits) : reverb_max_distance;
-	target_nearest = nearest;
-	if (!room_measured) {
-		room_enclosure = target_enclosure;
-		room_distance = target_distance;
-		room_nearest = target_nearest;
-		room_measured = true;
+	Room r;
+	r.enclosure = around > 0 ? float(closed) / float(around) : 0.0f;
+	r.distance = hits > 0 ? sum / float(hits) : reverb_max_distance;
+	r.nearest = nearest;
+	return r;
+}
+
+// Milestone 111 (decision 0218): two points are in one room when the rays found it alike from both — as closed
+// (within 0.2) and as large (mean distances within a factor of 1.5).
+bool FellowAcoustics3D::_same_room(const Room &p_a, const Room &p_b) {
+	const float lo = MAX(MIN(p_a.distance, p_b.distance), 0.01f);
+	return Math::abs(p_a.enclosure - p_b.enclosure) <= 0.2f && MAX(p_a.distance, p_b.distance) / lo <= 1.5f;
+}
+
+// The reverbs for other rooms: buses named reverb_bus + "Room1", "Room2"... (made, sending to Master, when there are
+// none), each with its first AudioEffectReverb (added, wet only, when it has none).
+void FellowAcoustics3D::_setup_room_buses() {
+	AudioServer *as = AudioServer::get_singleton();
+	if (!as || source_rooms <= 0 || reverb_bus == StringName() || !room_buses.is_empty()) {
+		return;
+	}
+	for (int i = 0; i < source_rooms; i++) {
+		RoomBus rb;
+		rb.bus = StringName(String(reverb_bus) + "Room" + itos(i + 1));
+		int idx = as->get_bus_index(rb.bus);
+		if (idx < 0) {
+			as->add_bus();
+			idx = as->get_bus_count() - 1;
+			as->set_bus_name(idx, rb.bus);
+			as->set_bus_send(idx, SNAME("Master"));
+			rb.created_bus = true;
+		}
+		for (int e = 0; e < as->get_bus_effect_count(idx); e++) {
+			Ref<AudioEffectReverb> r = as->get_bus_effect(idx, e);
+			if (r.is_valid()) {
+				rb.effect = r;
+				break;
+			}
+		}
+		if (rb.effect.is_null()) {
+			rb.effect.instantiate();
+			rb.effect->set_dry(0.0f);
+			rb.effect->set_wet(1.0f);
+			as->add_bus_effect(idx, rb.effect);
+			rb.added_effect = true;
+		}
+		room_buses.push_back(rb);
+	}
+	room_cursor = 0;
+}
+
+void FellowAcoustics3D::_release_room_buses() {
+	AudioServer *as = AudioServer::get_singleton();
+	for (KeyValue<ObjectID, Source> &kv : sources) {
+		if (kv.value.room_bus >= 0) {
+			if (AudioStreamPlayer3D *p = ObjectDB::get_instance<AudioStreamPlayer3D>(kv.key)) {
+				AudioStreamPlayer3D::FellowAcoustics a = p->fellow_get_acoustics();
+				a.send = 0.0f;
+				a.send_bus = StringName();
+				p->fellow_set_acoustics(a);
+			}
+			kv.value.room_bus = -1;
+		}
+		kv.value.room_measured = false;
+	}
+	// From the last: removing a bus moves the ones after it.
+	for (int i = int(room_buses.size()) - 1; i >= 0; i--) {
+		const RoomBus &rb = room_buses[i];
+		const int idx = as ? as->get_bus_index(rb.bus) : -1;
+		if (idx < 0) {
+			continue;
+		}
+		if (rb.created_bus) {
+			as->remove_bus(idx);
+		} else if (rb.added_effect) {
+			for (int e = 0; e < as->get_bus_effect_count(idx); e++) {
+				if (as->get_bus_effect(idx, e) == rb.effect) {
+					as->remove_bus_effect(idx, e);
+					break;
+				}
+			}
+		}
+	}
+	room_buses.clear();
+}
+
+void FellowAcoustics3D::set_source_rooms(int p_count) {
+	p_count = CLAMP(p_count, 0, 8);
+	if (source_rooms == p_count) {
+		return;
+	}
+	const bool live = is_inside_tree() && !Engine::get_singleton()->is_editor_hint() && current == this && reverb && effect.is_valid();
+	if (live) {
+		_release_room_buses();
+	}
+	source_rooms = p_count;
+	if (live) {
+		_setup_room_buses();
+	}
+}
+
+// Milestone 111: one audible source's room measured a frame (in turn, within the rays left), then every source given a
+// reverb — the listener's when its room is alike or it has none (enclosed under half), else the room bus already
+// holding an alike room, a free one, or the nearest — and each room bus driven by the mean of its sources' rooms.
+void FellowAcoustics3D::_source_rooms(float p_delta, const Room &p_listener, PhysicsDirectSpaceState3D *p_space, const HashSet<RID> &p_listener_exclude, int &r_budget) {
+	last_room_measures = 0;
+	const uint32_t count = order.size();
+	for (uint32_t visited = 0; visited < count && r_budget >= reverb_rays; visited++) {
+		room_cursor = room_cursor % count;
+		const ObjectID id = order[room_cursor++];
+		Source *s = sources.getptr(id);
+		AudioStreamPlayer3D *player = ObjectDB::get_instance<AudioStreamPlayer3D>(id);
+		if (!s || !player || !s->audible || !player->is_inside_tree()) {
+			continue;
+		}
+		HashSet<RID> exclude;
+		exclude = p_listener_exclude;
+		exclude_bodies(player, exclude);
+		s->room = _room_at(player->get_global_position(), p_space, exclude);
+		s->room_measured = true;
+		r_budget -= reverb_rays;
+		last_room_measures++;
+		break;
+	}
+	for (RoomBus &rb : room_buses) {
+		rb.sources = 0;
+	}
+	LocalVector<Room> sums;
+	sums.resize(room_buses.size());
+	for (KeyValue<ObjectID, Source> &kv : sources) {
+		Source &s = kv.value;
+		// In the open or under little cover (an enclosure under 0.5) a source has no room of its own: the listener's
+		// reverb, as without source_rooms.
+		if (!s.audible || !s.room_measured || s.room.enclosure < 0.5f || _same_room(s.room, p_listener)) {
+			s.room_bus = -1;
+			continue;
+		}
+		int pick = -1;
+		// Its bus of the last frame while it still holds an alike room, else one that does, else a free one, else the
+		// one whose room is nearest.
+		if (s.room_bus >= 0 && s.room_bus < int(room_buses.size()) && (room_buses[s.room_bus].sources == 0 || _same_room(room_buses[s.room_bus].target, s.room))) {
+			pick = s.room_bus;
+		}
+		for (uint32_t i = 0; pick < 0 && i < room_buses.size(); i++) {
+			if (room_buses[i].sources > 0 && _same_room(room_buses[i].target, s.room)) {
+				pick = int(i);
+			}
+		}
+		for (uint32_t i = 0; pick < 0 && i < room_buses.size(); i++) {
+			if (room_buses[i].sources == 0) {
+				pick = int(i);
+			}
+		}
+		float best = 1e30f;
+		for (uint32_t i = 0; pick < 0 && i < room_buses.size(); i++) {
+			const float d = Math::abs(room_buses[i].target.enclosure - s.room.enclosure) + Math::abs(Math::log(MAX(room_buses[i].target.distance, 0.01f) / MAX(s.room.distance, 0.01f)));
+			if (d < best) {
+				best = d;
+				pick = int(i);
+			}
+		}
+		s.room_bus = pick;
+		if (pick < 0) {
+			continue;
+		}
+		RoomBus &rb = room_buses[pick];
+		if (rb.sources == 0) {
+			rb.target = s.room; // the first source sets the room the next ones are compared with
+			sums[pick] = Room();
+		}
+		rb.sources++;
+		sums[pick].enclosure += s.room.enclosure;
+		sums[pick].distance += s.room.distance;
+		sums[pick].nearest += s.room.nearest;
+	}
+	const float k = reverb_response > 0.0f ? 1.0f - Math::exp(-p_delta / reverb_response) : 1.0f;
+	for (uint32_t i = 0; i < room_buses.size(); i++) {
+		RoomBus &rb = room_buses[i];
+		if (rb.sources == 0) {
+			continue;
+		}
+		const float n = float(rb.sources);
+		rb.target.enclosure = sums[i].enclosure / n;
+		rb.target.distance = sums[i].distance / n;
+		rb.target.nearest = sums[i].nearest / n;
+		if (!rb.measured) {
+			rb.room = rb.target;
+			rb.measured = true;
+		}
+		rb.room.enclosure += (rb.target.enclosure - rb.room.enclosure) * k;
+		rb.room.distance += (rb.target.distance - rb.room.distance) * k;
+		rb.room.nearest += (rb.target.nearest - rb.room.nearest) * k;
+		_drive_reverb(rb.effect, rb.room);
 	}
 }
 
@@ -399,11 +613,11 @@ void FellowAcoustics3D::_step(float p_delta) {
 		room_enclosure += (target_enclosure - room_enclosure) * k;
 		room_distance += (target_distance - room_distance) * k;
 		room_nearest += (target_nearest - room_nearest) * k;
-		// Godot's reverb (Freeverb's combs): the feedback that decays in RT60, from 0.7 (room size 0) to 0.98 (1).
-		const float g = Math::pow(10.0f, -3.0f * COMB_DELAY / _rt60());
-		effect->set_room_size(CLAMP((g - 0.7f) / 0.28f, 0.0f, 1.0f));
-		effect->set_predelay_msec(CLAMP(2.0f * room_nearest / SPEED_OF_SOUND * 1000.0f, 1.0f, 150.0f));
-		effect->set_damping(CLAMP(0.2f + absorption, 0.0f, 1.0f));
+		Room heard;
+		heard.enclosure = room_enclosure;
+		heard.distance = room_distance;
+		heard.nearest = room_nearest;
+		_drive_reverb(effect, heard);
 	}
 	const float send = reverb && effect.is_valid() ? reverb_level * room_enclosure : 0.0f;
 
@@ -497,6 +711,16 @@ void FellowAcoustics3D::_step(float p_delta) {
 		}
 	}
 
+	// Milestone 111: the sources' own rooms.
+	last_room_measures = 0;
+	if (reverb && effect.is_valid() && !room_buses.is_empty()) {
+		Room listener_room;
+		listener_room.enclosure = target_enclosure;
+		listener_room.distance = target_distance;
+		listener_room.nearest = target_nearest;
+		_source_rooms(p_delta, listener_room, space, listener_exclude, budget);
+	}
+
 	// Every source's sound, its occlusion eased towards what the rays found.
 	const float k = response_time > 0.0f ? 1.0f - Math::exp(-p_delta / response_time) : 1.0f;
 	for (KeyValue<ObjectID, Source> &kv : sources) {
@@ -528,12 +752,18 @@ void FellowAcoustics3D::_step(float p_delta) {
 			const float own = player->get_attenuation_filter_cutoff_hz();
 			a.cutoff_hz = Math::exp(Math::lerp(Math::log(MAX(own, 20.0f)), Math::log(MIN(occluded_cutoff_hz, own)), s.occlusion_highs));
 		}
-		if (send > 0.0f) {
+		if (s.room_bus >= 0 && s.room_bus < int(room_buses.size())) {
+			// Milestone 111: a source in another room, sent to that room's reverb by how closed its room is (cut by
+			// half the occlusion's decibels as below).
+			a.send_bus = room_buses[s.room_bus].bus;
+			a.send = MIN(1.0f, reverb_level * s.room.enclosure / Math::sqrt(MAX(a.gain, 1e-4f)));
+		} else if (send > 0.0f) {
 			// The reverb hears the source through the room more than through the wall: the send is cut by half the
 			// occlusion's decibels.
 			a.send_bus = reverb_bus;
 			a.send = MIN(1.0f, send / Math::sqrt(MAX(a.gain, 1e-4f)));
 		}
+		s.send = a.send;
 		player->fellow_set_acoustics(a);
 	}
 
@@ -646,6 +876,33 @@ Dictionary FellowAcoustics3D::get_stats() const {
 	d["active"] = current == this;
 	d["portal_paths"] = last_portal_paths; // milestone 99: sources heard through an opening, tested this frame
 	d["portals"] = int(FellowAcousticPortal3D::get_portals().size());
+	int rooms_used = 0;
+	for (const RoomBus &rb : room_buses) {
+		rooms_used += rb.sources > 0 ? 1 : 0;
+	}
+	d["room_buses"] = int(room_buses.size()); // milestone 111
+	d["room_buses_used"] = rooms_used;
+	d["room_measures"] = last_room_measures;
+	return d;
+}
+
+Dictionary FellowAcoustics3D::get_source_room(Node *p_player) const {
+	Dictionary d;
+	ERR_FAIL_NULL_V(p_player, d);
+	const Source *s = sources.getptr(p_player->get_instance_id());
+	if (!s) {
+		return d;
+	}
+	d["measured"] = s->room_measured;
+	d["send"] = s->send;
+	d["enclosure"] = s->room.enclosure;
+	d["mean_distance"] = s->room.distance;
+	d["nearest"] = s->room.nearest;
+	d["rt60"] = _rt60_for(s->room.distance);
+	const bool own = s->room_bus >= 0 && s->room_bus < int(room_buses.size());
+	d["bus"] = own ? room_buses[s->room_bus].bus : (reverb && effect.is_valid() ? reverb_bus : StringName());
+	d["bus_rt60"] = own ? _rt60_for(room_buses[s->room_bus].room.distance) : _rt60();
+	d["bus_room_size"] = own ? room_buses[s->room_bus].effect->get_room_size() : (effect.is_valid() ? effect->get_room_size() : 0.0f);
 	return d;
 }
 
@@ -715,6 +972,9 @@ void FellowAcoustics3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_portal_diffraction_db"), &FellowAcoustics3D::get_portal_diffraction_db);
 	ClassDB::bind_method(D_METHOD("set_max_portals", "count"), &FellowAcoustics3D::set_max_portals);
 	ClassDB::bind_method(D_METHOD("get_max_portals"), &FellowAcoustics3D::get_max_portals);
+	ClassDB::bind_method(D_METHOD("set_source_rooms", "count"), &FellowAcoustics3D::set_source_rooms);
+	ClassDB::bind_method(D_METHOD("get_source_rooms"), &FellowAcoustics3D::get_source_rooms);
+	ClassDB::bind_method(D_METHOD("get_source_room", "player"), &FellowAcoustics3D::get_source_room);
 	ClassDB::bind_method(D_METHOD("get_portal_weight", "player"), &FellowAcoustics3D::get_portal_weight);
 	ClassDB::bind_method(D_METHOD("get_heard_position", "player"), &FellowAcoustics3D::get_heard_position);
 	ClassDB::bind_method(D_METHOD("get_occlusion", "player"), &FellowAcoustics3D::get_occlusion);
@@ -749,6 +1009,7 @@ void FellowAcoustics3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "absorption", PROPERTY_HINT_RANGE, "0.01,1,0.01"), "set_absorption", "get_absorption");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "reverb_level", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_reverb_level", "get_reverb_level");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "reverb_response", PROPERTY_HINT_RANGE, "0,5,0.01,suffix:s"), "set_reverb_response", "get_reverb_response");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "source_rooms", PROPERTY_HINT_RANGE, "0,8,1"), "set_source_rooms", "get_source_rooms");
 }
 
 FellowAcoustics3D::FellowAcoustics3D() {

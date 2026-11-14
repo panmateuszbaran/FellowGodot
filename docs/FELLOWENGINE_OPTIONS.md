@@ -526,6 +526,13 @@ and `portals`. A blocked source is heard through the nearest open portal between
 are clear and that way is louder: from the opening's direction at the path's length, its occlusion the bend's and the
 transmission's. Bench `bench/acoustics_check.gd` (`--portals=1` with `--many`).
 
+Each source's own room (milestone 111, decision 0218): `FellowAcoustics3D.source_rooms` (0: every source sent to the
+listener's reverb; "Add Acoustics" sets 2) — that many reverbs more, on buses named `reverb_bus` + "Room1"...; one
+audible source's room measured a frame by rays from it; a source in a room of its own (enclosed by at least half) unlike
+the listener's (enclosure more than 0.2 apart or mean distance more than × 1.5) is sent to a room reverb (shared by
+alike rooms, driven by their mean) by its own room's enclosure. `get_source_room(player)`; `get_stats()` adds
+`room_buses`, `room_buses_used`, `room_measures`. Bench `bench/acoustics_check.gd` (`--rooms=N` with `--many`).
+
 ## Sound events, voices and mix snapshots (milestone 82)
 
 Module `fellow_world`; nothing changes without the node (decision 0190). `FellowSoundEvent` (a resource): `streams`,

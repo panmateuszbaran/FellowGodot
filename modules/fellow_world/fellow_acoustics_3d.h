@@ -46,9 +46,18 @@ class PhysicsDirectSpaceState3D;
 // AudioStreamPlayer3D); rays from the listener in every direction measure the room it is in (how closed, how large),
 // which sets a reverb (its decay from the room's size and absorption, its predelay from the nearest walls) that every
 // source is sent to, more in a closed room. One works at a time (the last to enter the tree); where it is does not
-// matter.
+// matter. Milestone 111 (decision 0218): with source_rooms, a source in another room than the listener's (measured the
+// same way from it) is sent to a reverb of its own room's (a few more buses, shared by sources in alike rooms).
 class FellowAcoustics3D : public Node3D {
 	GDCLASS(FellowAcoustics3D, Node3D);
+
+	// A room as rays measure it: how closed over and round the point (0-1), the mean distance to what they met, the
+	// nearest wall.
+	struct Room {
+		float enclosure = 0.0f;
+		float distance = 0.0f;
+		float nearest = 0.0f;
+	};
 
 	struct Source {
 		ObjectID id;
@@ -64,6 +73,23 @@ class FellowAcoustics3D : public Node3D {
 		float portal_weight = 0.0f; // smoothed
 		Vector3 portal_point; // the apparent position (from the listener towards the opening, at the path's length)
 		Vector3 apparent;
+		// Milestone 111 (decision 0218): the source's own room, and the reverb it is sent to (-1: the listener's).
+		Room room;
+		bool room_measured = false;
+		int room_bus = -1;
+		float send = 0.0f; // the send given last
+	};
+
+	// Milestone 111: a reverb for sources in rooms other than the listener's.
+	struct RoomBus {
+		StringName bus;
+		Ref<AudioEffectReverb> effect;
+		bool created_bus = false;
+		bool added_effect = false;
+		Room target; // the mean of its sources' rooms
+		Room room; // smoothed
+		bool measured = false;
+		int sources = 0; // this frame
 	};
 
 	struct GlobalStats {
@@ -98,6 +124,10 @@ class FellowAcoustics3D : public Node3D {
 	bool portals = true;
 	float portal_diffraction_db = -6.0f;
 	int max_portals = 2;
+	int source_rooms = 0; // milestone 111: the reverbs for other rooms (0: every source sent to the listener's)
+	LocalVector<RoomBus> room_buses;
+	uint32_t room_cursor = 0;
+	int last_room_measures = 0;
 
 	HashMap<ObjectID, Source> sources;
 	LocalVector<ObjectID> order;
@@ -130,7 +160,14 @@ class FellowAcoustics3D : public Node3D {
 	Node3D *_listener() const;
 	void _step(float p_delta);
 	void _measure_room(const Vector3 &p_at, PhysicsDirectSpaceState3D *p_space, const HashSet<RID> &p_exclude);
+	Room _room_at(const Vector3 &p_at, PhysicsDirectSpaceState3D *p_space, const HashSet<RID> &p_exclude);
 	float _rt60() const;
+	float _rt60_for(float p_distance) const;
+	void _drive_reverb(const Ref<AudioEffectReverb> &p_effect, const Room &p_room) const;
+	static bool _same_room(const Room &p_a, const Room &p_b);
+	void _setup_room_buses();
+	void _release_room_buses();
+	void _source_rooms(float p_delta, const Room &p_listener, PhysicsDirectSpaceState3D *p_space, const HashSet<RID> &p_listener_exclude, int &r_budget);
 	void _portal_path(Source &r_source, const Vector3 &p_at, const Vector3 &p_pos, float p_range, const HashSet<RID> &p_exclude, PhysicsDirectSpaceState3D *p_space, const World3D *p_world, int &r_budget);
 
 protected:
@@ -183,6 +220,9 @@ public:
 	float get_portal_diffraction_db() const { return portal_diffraction_db; }
 	void set_max_portals(int p_count) { max_portals = CLAMP(p_count, 1, 16); }
 	int get_max_portals() const { return max_portals; }
+	void set_source_rooms(int p_count);
+	int get_source_rooms() const { return source_rooms; }
+	Dictionary get_source_room(Node *p_player) const;
 	float get_portal_weight(Node *p_player) const;
 	Vector3 get_heard_position(Node *p_player) const;
 	static FellowAcoustics3D *get_current() { return current; }

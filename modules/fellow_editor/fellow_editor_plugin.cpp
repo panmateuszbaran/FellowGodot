@@ -1050,8 +1050,9 @@ Node3D *FellowEditorPlugin::make_preset(int p_preset, const Node *p_root) {
 			_fellow_make("FellowVehicleDamage3D", "Damage", top, Dictionary{ { "wheel_bend", 4.0 }, { "engine_power_loss", 0.4 }, { "detachable_paths", detachable }, { "hang_depth", 0.06 }, { "detach_depth", 0.16 } });
 		} break;
 		case PRESET_ACOUSTICS: {
-			// Milestone 78: the scene's 3D sounds heard through its geometry (occlusion, the listener's room's reverb).
-			top = Object::cast_to<Node3D>(_fellow_make("FellowAcoustics3D", "Acoustics", nullptr));
+			// Milestone 78: the scene's 3D sounds heard through its geometry (occlusion, the listener's room's reverb);
+			// milestone 111: two reverbs more for the rooms the sources are in.
+			top = Object::cast_to<Node3D>(_fellow_make("FellowAcoustics3D", "Acoustics", nullptr, Dictionary{ { "source_rooms", 2 } }));
 		} break;
 		case PRESET_ACOUSTIC_PORTAL: {
 			// Milestone 99: a doorway 1 x 2.1 m (its centre 1.05 m up, facing along Z): set it in a wall's opening.

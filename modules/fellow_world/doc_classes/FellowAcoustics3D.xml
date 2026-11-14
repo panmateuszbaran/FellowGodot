@@ -5,7 +5,7 @@
 	</brief_description>
 	<description>
 		Every [AudioStreamPlayer3D] in the tree (but those in the group [code]fellow_no_acoustics[/code]) is heard through what lies between it and the listener (the viewport's [AudioListener3D] or camera, or [member listener_path]). Each physics frame, rays from the listener to playing sources within [member max_distance] — to the source and to points [member source_radius] around it across the line, so that a path past an edge counts — give the share of its paths blocked by the physics world ([member collision_mask]); the bodies the listener and the source are in do not block them. A collider with the metadata [code]fellow_occlusion[/code] (a float, 0 to 1) blocks a path that much (glass 0.3; without it, 1: milestone 90); up to three colliders on a path add up (milestone 91); [code]fellow_occlusion_highs[/code] blocks its highs apart from its level (a curtain: 0.1 and 0.8; milestone 92). That share lowers the direct sound (up to [member occluded_volume_db]) and cuts its highs (a high shelf of up to [member occluded_shelf_db] above a cutoff moving down to [member occluded_cutoff_hz]), eased over [member response_time]. [member max_rays_per_frame] bounds the rays: with many sources each is tested in turn.
-		With [member reverb] on, rays from the listener in every direction ([member reverb_rays], every [member reverb_interval]) measure its room: how much of what is above and around it is closed (the enclosure), how far the walls are. A reverb on the bus [member reverb_bus] (made, sending to Master, if there is none; an [AudioEffectReverb] added to it if it has none) takes its decay from the room's size and [member absorption] (Sabine's formula), its predelay from the nearest wall; every source is sent to it, more in a closed room ([member reverb_level] at full enclosure) and less cut by occlusion than its direct sound. What the node made it removes when it leaves the tree.
+		With [member reverb] on, rays from the listener in every direction ([member reverb_rays], every [member reverb_interval]) measure its room: how much of what is above and around it is closed (the enclosure), how far the walls are. A reverb on the bus [member reverb_bus] (made, sending to Master, if there is none; an [AudioEffectReverb] added to it if it has none) takes its decay from the room's size and [member absorption] (Sabine's formula), its predelay from the nearest wall; every source is sent to it, more in a closed room ([member reverb_level] at full enclosure) and less cut by occlusion than its direct sound. What the node made it removes when it leaves the tree. With [member source_rooms] a source in another room is sent to a reverb of its own room's instead (decision 0218).
 		Openings (milestone 99): a source the rays find blocked is heard through the nearest open [FellowAcousticPortal3D] between it and the listener when both legs of the path through it are clear and it is louder that way — from the opening's direction at the path's length (the player's own distance attenuation), its level lowered by the bend through the opening ([member portal_diffraction_db] a quarter turn) and the portal's [member FellowAcousticPortal3D.transmission], its highs by the bend (a full turn: as through a wall). Where it is heard from moves there and back with [member response_time].
 		The sounds' gains, shelves and sends are set through a hook in [AudioStreamPlayer3D] (its own properties are left as they are); without the node, or with it disabled, the players are stock's. One works at a time: the last to enter the tree. Works with GodotPhysics3D and Jolt. See decision 0186 in FellowEngine's [code]docs/decisions[/code].
 	</description>
@@ -50,6 +50,13 @@
 			<return type="Dictionary" />
 			<description>
 				Returns the listener's room as measured: [code]enclosure[/code] (0 open to 1 closed), [code]mean_distance[/code] and [code]nearest[/code] (metres to the walls found), [code]rt60[/code] (the decay, seconds), the reverb's [code]room_size[/code] and [code]predelay_msec[/code], and the [code]send[/code] of the sources to it.
+			</description>
+		</method>
+		<method name="get_source_room" qualifiers="const">
+			<return type="Dictionary" />
+			<param index="0" name="player" type="Node" />
+			<description>
+				The room [param player]'s source is in, as rays from it measure it ([member source_rooms]): [code]measured[/code], [code]enclosure[/code], [code]mean_distance[/code], [code]nearest[/code], [code]rt60[/code] (its decay), and the reverb it is sent to — [code]bus[/code], [code]bus_rt60[/code], [code]bus_room_size[/code] — and [code]send[/code] (the share of it sent).
 			</description>
 		</method>
 		<method name="get_stats" qualifiers="const">
@@ -131,6 +138,9 @@
 		</member>
 		<member name="source_radius" type="float" setter="set_source_radius" getter="get_source_radius" default="0.5">
 			How far around a source its other rays aim (metres): a path past an edge within it counts.
+		</member>
+		<member name="source_rooms" type="int" setter="set_source_rooms" getter="get_source_rooms" default="0">
+			How many reverbs there are for rooms other than the listener's (buses named [member reverb_bus] + "Room1", "Room2"..., made like [member reverb_bus]'s and removed with it). With them each audible source's own room is measured in turn (one a frame, [member reverb_rays] rays from it, within [member max_rays_per_frame]): a source in a room of its own — closed over by at least half, and unlike the listener's (more than 0.2 apart in enclosure or its mean distance more than 1.5 times the other) — is sent to a room reverb instead of the listener's: the one already holding an alike room, else a free one, else the one whose room is nearest. Each is driven by the mean of its sources' rooms as the listener's reverb is by the listener's (decay, predelay, damping; eased over [member reverb_response]), and a source is sent to it by how closed its own room is, cut by half its occlusion's decibels. A hall heard from the street through its doors keeps its echo; a closet next door sounds small. 0: every source sent to the listener's reverb (as before milestone 111).
 		</member>
 	</members>
 </class>
