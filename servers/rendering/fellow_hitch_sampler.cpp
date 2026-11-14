@@ -57,6 +57,7 @@
 #include <tlhelp32.h>
 #ifdef _MSC_VER
 #include <intrin.h>
+#pragma comment(lib, "dbghelp.lib") // the platform links it only for its crash handler's builds
 #else
 #include <x86intrin.h>
 #endif
