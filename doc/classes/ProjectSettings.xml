@@ -3289,6 +3289,9 @@
 		<member name="rendering/fellow/frame/submit_thread" type="bool" setter="" getter="" default="true">
 			Command buffer submission on a thread of its own. Decision 0017.
 		</member>
+		<member name="rendering/fellow/frame/transfer_staging_trim" type="bool" setter="" getter="" default="false">
+			RenderingDevice's transfer workers release a staging buffer above 4 MiB after 60 frames unused; stock keeps each at the next power of two of the largest upload its worker made, for good (a streamed 4K texture's chain: 32 MiB a worker). Host memory, which the driver's count of video memory includes. Decision 0225.
+		</member>
 		<member name="rendering/fellow/geometry/cluster_blended_surfaces" type="bool" setter="" getter="" default="true">
 			Transparent surfaces clustered too, their draw order kept.
 		</member>

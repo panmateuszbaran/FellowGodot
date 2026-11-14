@@ -46,6 +46,7 @@
 #include "core/object/class_db.h"
 #include "main/performance.h"
 #include "servers/rendering/fellow_bake_shaders.h"
+#include "servers/rendering/fellow_settings.h"
 #include "servers/rendering/rendering_server.h"
 
 // Milestone 50 (tools): the streaming systems in the debugger's Monitors tab, under "FellowEngine" (and to
@@ -58,6 +59,8 @@ static const char *FELLOW_WORLD_MONITORS[] = {
 	"FellowEngine/World cells loading",
 	"FellowEngine/Debris pieces", // milestone 74
 	"FellowEngine/Acoustics time", // milestone 78: seconds a frame, averaged since the last sample
+	"FellowEngine/Video memory (device)", // milestone 114: the device's own heaps (the driver's total counts the host's too)
+	"FellowEngine/Upload staging", // milestone 114: RenderingDevice's transfer workers' staging buffers (host memory)
 };
 
 static Variant _fellow_world_monitor(int p_which) {
@@ -72,6 +75,10 @@ static Variant _fellow_world_monitor(int p_which) {
 	}
 	if (p_which == 5) {
 		return FellowDestructible3D::get_debris_count();
+	}
+	if (p_which == 7 || p_which == 8) {
+		const Dictionary st = Fellow::get_stats_dictionary();
+		return st.get(p_which == 7 ? "memory_device_local_bytes" : "transfer_staging_bytes", 0);
 	}
 	if (p_which == 6) {
 		static uint64_t last_frames = 0;
@@ -116,8 +123,8 @@ void initialize_fellow_world_module(ModuleInitializationLevel p_level) {
 
 		Performance *performance = Performance::get_singleton();
 		if (performance) {
-			static const Performance::MonitorType types[7] = { Performance::MONITOR_TYPE_MEMORY, Performance::MONITOR_TYPE_MEMORY, Performance::MONITOR_TYPE_QUANTITY, Performance::MONITOR_TYPE_QUANTITY, Performance::MONITOR_TYPE_QUANTITY, Performance::MONITOR_TYPE_QUANTITY, Performance::MONITOR_TYPE_TIME };
-			for (int i = 0; i < 7; i++) {
+			static const Performance::MonitorType types[9] = { Performance::MONITOR_TYPE_MEMORY, Performance::MONITOR_TYPE_MEMORY, Performance::MONITOR_TYPE_QUANTITY, Performance::MONITOR_TYPE_QUANTITY, Performance::MONITOR_TYPE_QUANTITY, Performance::MONITOR_TYPE_QUANTITY, Performance::MONITOR_TYPE_TIME, Performance::MONITOR_TYPE_MEMORY, Performance::MONITOR_TYPE_MEMORY };
+			for (int i = 0; i < 9; i++) {
 				if (!performance->has_custom_monitor(FELLOW_WORLD_MONITORS[i])) {
 					performance->add_custom_monitor(FELLOW_WORLD_MONITORS[i], callable_mp_static(&_fellow_world_monitor).bind(i), Vector<Variant>(), types[i]);
 				}

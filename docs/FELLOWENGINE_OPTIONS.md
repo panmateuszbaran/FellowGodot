@@ -775,7 +775,9 @@ resources (import options `scale`, `skip_first_frame`; presets for centimetres a
 Tools > **Split into Streaming Cells** for the selected `FellowWorldStreamer3D`. Performance monitors (the debugger's
 Monitors tab, *FellowEngine*; in every build): `Texture streaming resident` / `wanted` (bytes), `pending`; `World
 cells loaded` / `loading`; `Motion matching time` (CPU seconds a frame, summed over the threads) / `updates` (a
-frame). Decision 0151; check `benchmarks/tools/editor_check/run_editor_check.py`.
+frame); milestone 114: `Video memory (device)` (bytes in the GPU's own heaps; Godot's video memory monitor counts the
+host memory the driver allocates too) and `Upload staging` (RenderingDevice's transfer workers' staging buffers, host
+memory: decision 0225). Decision 0151; check `benchmarks/tools/editor_check/run_editor_check.py`.
 
 ## The editor: animate or still, warnings, handles (milestone 52)
 
