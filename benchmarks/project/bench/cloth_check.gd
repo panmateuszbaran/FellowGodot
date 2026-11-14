@@ -49,10 +49,11 @@ var mover_capsule: CollisionShape3D
 var walker: Node3D # milestone 76: the cape on a skeleton's chest
 var walker_skeleton: Skeleton3D
 var walker_capsules: Array = []
+var garment_walkers: Array = [] # milestone 116: [walker, skeleton] a skirt on its hips each
 var done := false
 var shots := {}
 var viewports := {}
-var strip_lanes := ["flag", "curtain", "sheet_on_shapes", "cape", "awning", "banner_mesh", "cape_bones", "tear_cut", "tear_strain", "tear_off", "self_heap", "self_heap_off", "self_heap_thin", "self_heap_tri", "self_slope", "self_slope_friction"]
+var strip_lanes := ["flag", "curtain", "sheet_on_shapes", "cape", "awning", "banner_mesh", "cape_bones", "tear_cut", "tear_strain", "tear_off", "self_heap", "self_heap_off", "self_heap_thin", "self_heap_tri", "self_slope", "self_slope_friction", "garment_skin", "garment_bones"]
 var strip_times := [0.5, 1.0, 2.0, 3.9]
 
 
@@ -125,6 +126,54 @@ func _cloth(name: String, xf: Transform3D, size: Vector2, res: int, pin: int, co
 	c.lod_distance = 0.0 # the lanes at full quality (the course's camera is far); the "lod" lane has its own
 	root3d.add_child(c)
 	return c
+
+
+# Milestone 116: an open cylinder around the hips (radius 0.26 m, from 1.05 m down to 0.5 m; 20 around, 10 rings) with
+# bone weights (bone indices: Hips 0, Spine 1): the waistband half and half and pinned (vertex colour red), the rest
+# to the hips. Returns the mesh and, per vertex (a particle each: no seams), its rest place, [hips, spine] weights, pin.
+func _skirt_mesh() -> Dictionary:
+	var seg := 20
+	var rings := 10
+	var verts := PackedVector3Array()
+	var normals := PackedVector3Array()
+	var colors := PackedColorArray()
+	var bones := PackedInt32Array()
+	var weights := PackedFloat32Array()
+	var idx := PackedInt32Array()
+	var rest := []
+	var ws := []
+	var pinned := []
+	for r in rings:
+		var y := 1.05 - 0.55 * float(r) / float(rings - 1)
+		for s in seg:
+			var a := TAU * float(s) / float(seg)
+			verts.append(Vector3(sin(a) * 0.26, y, cos(a) * 0.26))
+			normals.append(Vector3(sin(a), 0, cos(a)))
+			colors.append(Color(1, 0, 0) if r == 0 else Color(0, 0, 0))
+			var wh := 0.5 if r == 0 else 1.0
+			bones.append_array([0, 1, 0, 0])
+			weights.append_array([wh, 1.0 - wh, 0.0, 0.0])
+			rest.append(verts[verts.size() - 1])
+			ws.append([wh, 1.0 - wh])
+			pinned.append(r == 0)
+	for r in rings - 1:
+		for s in seg:
+			var a := r * seg + s
+			var b := r * seg + (s + 1) % seg
+			var c := a + seg
+			var d := b + seg
+			idx.append_array([a, b, c, b, d, c])
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = verts
+	arrays[Mesh.ARRAY_NORMAL] = normals
+	arrays[Mesh.ARRAY_COLOR] = colors
+	arrays[Mesh.ARRAY_BONES] = bones
+	arrays[Mesh.ARRAY_WEIGHTS] = weights
+	arrays[Mesh.ARRAY_INDEX] = idx
+	var am := ArrayMesh.new()
+	am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	return {"mesh": am, "rest": rest, "weights": ws, "pinned": pinned}
 
 
 func _lane(name: String, cloth: FellowCloth3D, x: float) -> Dictionary:
@@ -418,6 +467,76 @@ func _build() -> void:
 		ss.self_collision_triangles = true
 		ss.self_collision_friction = 1.0 if lane_name == "self_slope_friction" else 0.0
 		_lane(lane_name, ss, x)
+	# Milestone 116 (decision 0230): a skirt, a skinned mesh's surface (its waistband weighted half to the hips, half to
+	# the spine; the rest to the hips), on a skeleton whose hips sway and whose spine twists against them, the body
+	# circling, in the flags' gale: following the skin (the waistband pinned to its skinned place, the rest within 12 cm of
+	# its own), and pinned to the nearest bones as decision 0184 does.
+	for lane_name in ["garment_skin", "garment_bones"]:
+		x += 8.0
+		var gw := Node3D.new()
+		gw.position = Vector3(x + 2.5, 0, 0) # where the circle starts, facing along it (no jump at the first frame)
+		root3d.add_child(gw)
+		gw.look_at(gw.position + Vector3(0, 0, 1), Vector3.UP)
+		var gsk := Skeleton3D.new()
+		gw.add_child(gsk)
+		for b in [["Hips", "", Vector3(0, 0.95, 0)], ["Spine", "Hips", Vector3(0, 0.15, 0)], ["Chest", "Spine", Vector3(0, 0.25, 0)], ["Neck", "Chest", Vector3(0, 0.25, 0)]]:
+			var bi := gsk.add_bone(b[0])
+			if b[1] != "":
+				gsk.set_bone_parent(bi, gsk.find_bone(b[1]))
+			gsk.set_bone_rest(bi, Transform3D(Basis(), b[2]))
+			gsk.set_bone_pose_position(bi, b[2])
+		var hat := BoneAttachment3D.new()
+		hat.bone_name = "Hips"
+		gsk.add_child(hat)
+		var hcs := CollisionShape3D.new()
+		var hcap := CapsuleShape3D.new()
+		hcap.radius = 0.2
+		hcap.height = 0.7
+		hcs.shape = hcap
+		hcs.position = Vector3(0, -0.15, 0)
+		hat.add_child(hcs)
+		var hmi := MeshInstance3D.new()
+		var hcm := CapsuleMesh.new()
+		hcm.radius = 0.2
+		hcm.height = 0.7
+		hmi.mesh = hcm
+		hmi.material_override = _material(Color(0.6, 0.6, 0.62))
+		hmi.position = hcs.position
+		hat.add_child(hmi)
+		var skirt := _skirt_mesh()
+		# The same mesh skinned by Godot (a MeshInstance3D on the skeleton, hidden): the waistband compared with its
+		# vertices as Godot's skinning places them (baked on the CPU).
+		var gskin := MeshInstance3D.new()
+		gskin.mesh = skirt.mesh
+		gskin.visible = false
+		gsk.add_child(gskin)
+		gskin.skeleton = gskin.get_path_to(gsk)
+		var gc := FellowCloth3D.new()
+		gc.name = "Skirt_" + lane_name
+		gc.source_mesh = skirt.mesh
+		gc.pin_mode = FellowCloth3D.PIN_VERTEX_COLOR
+		gc.material = _material(Color(0.7, 0.35, 0.4), true)
+		gc.lod_distance = 0.0
+		gc.simulation_distance = 1000.0
+		gc.collide_with_world = false
+		gc.wind_scale = 1.0 # the flags' gale: a skirt blown off the body without the skin's distance
+		gw.add_child(gc)
+		gc.skeleton_path = gc.get_path_to(gsk)
+		gc.colliders = [gc.get_path_to(hcs)]
+		if lane_name == "garment_skin":
+			gc.follow_skin = true
+			gc.skin_max_distance = 0.12
+		var gl := _lane(lane_name, gc, x)
+		gl["skin_rest"] = skirt.rest
+		gl["skin_weights"] = skirt.weights
+		gl["skin_pinned"] = skirt.pinned
+		gl["skeleton"] = gsk
+		gl["walker"] = gw
+		gl["skin_err"] = 0.0
+		gl["skin_far"] = 0.0
+		gl["godot_skin"] = gskin
+		gl["godot_skin_err"] = 0.0
+		garment_walkers.append(gl)
 
 	var cam := Camera3D.new()
 	root3d.add_child(cam)
@@ -490,6 +609,8 @@ func _make_viewports() -> void:
 				cam.look_at_from_position(Vector3(x + 1.0, 3.0, 5.0), Vector3(x + 0.5, 1.2, 0.0))
 			"cape_bones":
 				cam.look_at_from_position(Vector3(x + 4.0, 2.4, 5.0), Vector3(x, 1.0, 0))
+			"garment_skin", "garment_bones":
+				cam.look_at_from_position(Vector3(x + 0.5, 2.6, 5.0), Vector3(x + 0.3, 0.7, 0.8))
 		if grid:
 			var cell := Control.new()
 			cell.custom_minimum_size = Vector2(shot_size)
@@ -565,6 +686,38 @@ func _measure(lane: Dictionary, pins := false) -> void:
 				if q.x < h.x and q.y < h.y and q.z < h.z:
 					depth = minf(minf(h.x - q.x, h.y - q.y), h.z - q.z)
 			lane.deepest = maxf(lane.deepest, depth)
+	if lane.has("skin_rest") and pins:
+		# Milestone 116: each particle against its skinned place (linear blend skinning in GDScript, the bones' poses now):
+		# the pinned ones' error, the free ones' distance.
+		var gsk: Skeleton3D = lane.skeleton
+		var mats := []
+		for b in 2:
+			mats.append(gsk.global_transform * gsk.get_bone_global_pose(b) * gsk.get_bone_global_rest(b).affine_inverse())
+		for i in n:
+			var v: Vector3 = lane.skin_rest[i]
+			var wv: Array = lane.skin_weights[i]
+			var target: Vector3 = (mats[0] as Transform3D) * v * float(wv[0]) + (mats[1] as Transform3D) * v * float(wv[1])
+			var cp := c.get_particle_position(i)
+			var dd := cp.distance_to(target)
+			if lane.skin_pinned[i]:
+				lane.skin_err = maxf(lane.skin_err, dd)
+			else:
+				lane.skin_far = maxf(lane.skin_far, dd)
+			# Into the hips' capsule (radius 0.2 m, its cylinder 0.95 - 0.15 +- 0.15 m high, upright).
+			var hc: Vector3 = (mats[0] as Transform3D).origin # the hips' place now (its rest at the origin of skeleton space)
+			hc = gsk.global_transform * gsk.get_bone_global_pose(0) * Vector3(0, -0.15, 0)
+			if absf(cp.y - hc.y) < 0.15:
+				lane.deepest = maxf(lane.deepest, 0.2 - Vector2(cp.x - hc.x, cp.z - hc.z).length())
+		# Godot's own skinning of the mesh (the waistband's vertices: a particle each); the renderer's skeleton, so not
+		# headless.
+		var gsm: MeshInstance3D = lane.godot_skin
+		var baked: ArrayMesh = null if DisplayServer.get_name() == "headless" else gsm.bake_mesh_from_current_skeleton_pose()
+		if baked:
+			lane["godot_skin_checked"] = true
+			var bv: PackedVector3Array = baked.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+			for i in mini(n, bv.size()):
+				if lane.skin_pinned[i]:
+					lane.godot_skin_err = maxf(lane.godot_skin_err, c.get_particle_position(i).distance_to(gsm.global_transform * bv[i]))
 	if lane.has("bone_capsules") and pins:
 		var chest_xf := walker_skeleton.global_transform * walker_skeleton.get_bone_global_pose(walker_skeleton.find_bone("Chest"))
 		var inv := chest_xf.affine_inverse()
@@ -667,6 +820,17 @@ func _on_frame() -> void:
 		for lane in lanes:
 			_measure(lane, true)
 	# The walker moved after the measurement: its cloth was simulated (in the frame's processing) with the pose it had.
+	for gl in garment_walkers:
+		# Milestone 116: the garment's body circling 2.5 m at 1.2 m/s, its hips swaying 20 degrees and its spine
+		# twisting 25 degrees against them, once a second.
+		var gt := frame / 60.0
+		var ga := gt * 1.2 / 2.5
+		var gw: Node3D = gl.walker
+		var gsk: Skeleton3D = gl.skeleton
+		gw.position = Vector3(gl.x + cos(ga) * 2.5, 0, sin(ga) * 2.5)
+		gw.look_at(gw.position + Vector3(-sin(ga), 0, cos(ga)), Vector3.UP)
+		gsk.set_bone_pose_rotation(gsk.find_bone("Hips"), Quaternion(Vector3.UP, deg_to_rad(20.0) * sin(gt * TAU)))
+		gsk.set_bone_pose_rotation(gsk.find_bone("Spine"), Quaternion(Vector3.UP, deg_to_rad(-25.0) * sin(gt * TAU)))
 	if walker:
 		var tw := frame / 60.0
 		var aw := tw * 1.6 / 2.5
@@ -750,6 +914,22 @@ func _finish() -> void:
 				ok = ok and _check_tear(lane, c, st, box, e)
 			"self_heap", "self_heap_off", "self_heap_thin", "self_heap_tri", "self_slope", "self_slope_friction":
 				ok = ok and _check_self(lane, c, st, box, e)
+			"garment_skin", "garment_bones":
+				# Milestone 116 (decision 0230): the waistband on its skinned place (within a millimetre, following the
+				# skin; decision 0184's nearest bones as they are), the rest within the distance (and its colliders' push),
+				# nothing into the hips.
+				e["waistband_from_skin_mm"] = snappedf(float(lane.skin_err) * 1000.0, 0.01)
+				if lane.get("godot_skin_checked", false):
+					e["waistband_from_godot_skin_mm"] = snappedf(float(lane.godot_skin_err) * 1000.0, 0.01)
+				e["farthest_from_skin_cm"] = snappedf(float(lane.skin_far) * 100.0, 0.01)
+				e["deepest_into_hips_cm"] = snappedf(lane.deepest * 100.0, 0.01)
+				e["skin_particles"] = st.get("skin_particles", 0)
+				e["skin_limited"] = st.get("skin_limited", 0)
+				e["bone_pins"] = st.get("bone_pins", 0)
+				if lane.name == "garment_skin":
+					ok = ok and st.get("skin_particles", 0) == c.get_particle_count() and float(lane.skin_err) < 0.001 and float(lane.godot_skin_err) < 0.001 and float(lane.skin_far) < 0.12 + 0.01 and lane.deepest < 0.03
+				else:
+					ok = ok and st.get("skin_particles", 0) == 0 and st.get("bone_pins", 0) == 20
 			"cape_bones":
 				# The pins on the chest (they twist with it, within a millimetre), nothing inside the body.
 				e["pin_drift_mm"] = snappedf(lane.get("pin_drift", 1.0) * 1000.0, 0.01)

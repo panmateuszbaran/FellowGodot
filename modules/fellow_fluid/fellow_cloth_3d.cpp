@@ -205,6 +205,8 @@ void FellowCloth3D::_build() {
 	PackedVector2Array uvs;
 	PackedColorArray colors;
 	PackedInt32Array indices;
+	PackedInt32Array mesh_bones; // decision 0230
+	PackedFloat32Array mesh_weights;
 	if (source_mesh.is_valid()) {
 		if (source_mesh->get_surface_count() == 0 || source_mesh->surface_get_primitive_type(0) != Mesh::PRIMITIVE_TRIANGLES) {
 			build_problem = RTR("The source mesh has no surface of triangles.");
@@ -217,6 +219,10 @@ void FellowCloth3D::_build() {
 		uvs = arrays[Mesh::ARRAY_TEX_UV];
 		colors = arrays[Mesh::ARRAY_COLOR];
 		indices = arrays[Mesh::ARRAY_INDEX];
+		if (arrays[Mesh::ARRAY_BONES].get_type() == Variant::PACKED_INT32_ARRAY && arrays[Mesh::ARRAY_WEIGHTS].get_type() == Variant::PACKED_FLOAT32_ARRAY) {
+			mesh_bones = arrays[Mesh::ARRAY_BONES];
+			mesh_weights = arrays[Mesh::ARRAY_WEIGHTS];
+		}
 		if (indices.is_empty()) {
 			indices.resize(vertices.size());
 			for (int i = 0; i < vertices.size(); i++) {
@@ -250,6 +256,53 @@ void FellowCloth3D::_build() {
 			weld.insert(key, id);
 			rest_local.push_back(p);
 			render_particle[i] = id;
+		}
+	}
+	// Decision 0230: the source mesh's skin per particle — its first vertex's binds and weights (a seam's vertices share
+	// them), the heaviest four of eight, normalized.
+	skin_binds.clear();
+	skin_weights.clear();
+	skin_data = false;
+	{
+		const int per = mesh_bones.size() == nv * 8 && mesh_weights.size() == nv * 8 ? 8 : (mesh_bones.size() == nv * 4 && mesh_weights.size() == nv * 4 ? 4 : 0);
+		if (per > 0) {
+			const uint32_t npart = rest_local.size();
+			skin_binds.resize(npart * 4);
+			skin_weights.resize(npart * 4);
+			LocalVector<uint8_t> set;
+			set.resize(npart);
+			for (uint32_t i = 0; i < npart; i++) {
+				set[i] = 0;
+			}
+			for (int v = 0; v < nv; v++) {
+				const uint32_t pi = render_particle[v];
+				if (set[pi]) {
+					continue;
+				}
+				set[pi] = 1;
+				int32_t b[8];
+				float wt[8];
+				for (int k = 0; k < per; k++) {
+					b[k] = mesh_bones[v * per + k];
+					wt[k] = mesh_weights[v * per + k];
+				}
+				// The heaviest four first (a few elements: insertion sort).
+				for (int k = 1; k < per; k++) {
+					for (int m = k; m > 0 && wt[m] > wt[m - 1]; m--) {
+						SWAP(wt[m], wt[m - 1]);
+						SWAP(b[m], b[m - 1]);
+					}
+				}
+				float sum = 0.0f;
+				for (int k = 0; k < 4; k++) {
+					sum += MAX(0.0f, wt[k]);
+				}
+				for (int k = 0; k < 4; k++) {
+					skin_binds[pi * 4 + k] = b[k];
+					skin_weights[pi * 4 + k] = sum > 0.0f ? MAX(0.0f, wt[k]) / sum : (k == 0 ? 1.0f : 0.0f);
+				}
+			}
+			skin_data = true;
 		}
 	}
 	const uint32_t np = rest_local.size();
@@ -633,6 +686,7 @@ void FellowCloth3D::_bind_bones() {
 	pin_to.resize(np);
 	bone_pins = 0;
 	bound_skeleton = ObjectID();
+	skin_active = false;
 	for (uint32_t i = 0; i < np; i++) {
 		pin_bone[i] = -1;
 	}
@@ -641,6 +695,23 @@ void FellowCloth3D::_bind_bones() {
 		return;
 	}
 	bound_skeleton = sk->get_instance_id();
+	if (follow_skin && skin_data && _bind_skin(sk)) {
+		// Decision 0230: every particle starts at its skinned place; the pinned ones follow it (pin_bone 0: on the pins'
+		// interpolation, their places given by the skin).
+		for (uint32_t i = 0; i < np; i++) {
+			x[i] = skin_to[i];
+			prev[i] = skin_to[i];
+			vel[i] = Vector3();
+			if (w[i] > 0.0f) {
+				continue;
+			}
+			pin_bone[i] = 0;
+			pin_from[i] = skin_to[i];
+			pin_to[i] = skin_to[i];
+			bone_pins++;
+		}
+		return;
+	}
 	const Transform3D skx = sk->get_global_transform();
 	LocalVector<int> bones;
 	for (int b = 0; b < sk->get_bone_count(); b++) {
@@ -686,13 +757,98 @@ void FellowCloth3D::_bind_bones() {
 	}
 }
 
+// Decision 0230: the skin's binds mapped to the skeleton's bones (by the Skin's bones or names, or bone i with the
+// inverse of its global rest without a Skin), and each particle's skinned place now. False when a bind's bone is not
+// there.
+bool FellowCloth3D::_bind_skin(Skeleton3D *p_skeleton) {
+	skin_bind_bone.clear();
+	skin_bind_pose.clear();
+	int binds = 0;
+	for (int32_t b : skin_binds) {
+		binds = MAX(binds, b + 1);
+	}
+	if (skin.is_valid()) {
+		if (skin->get_bind_count() < binds) {
+			return false;
+		}
+		for (int j = 0; j < skin->get_bind_count(); j++) {
+			int bone = skin->get_bind_bone(j);
+			if (skin->get_bind_name(j) != StringName()) {
+				bone = p_skeleton->find_bone(skin->get_bind_name(j));
+			}
+			if (bone < 0 || bone >= p_skeleton->get_bone_count()) {
+				if (j < binds) {
+					return false;
+				}
+				bone = 0;
+			}
+			skin_bind_bone.push_back(bone);
+			skin_bind_pose.push_back(skin->get_bind_pose(j));
+		}
+	} else {
+		if (p_skeleton->get_bone_count() < binds) {
+			return false;
+		}
+		for (int j = 0; j < p_skeleton->get_bone_count(); j++) {
+			skin_bind_bone.push_back(j);
+			skin_bind_pose.push_back(p_skeleton->get_bone_global_rest(j).affine_inverse());
+		}
+	}
+	const uint32_t np = rest_local.size();
+	skin_from.resize(np);
+	skin_to.resize(np);
+	skin_active = true;
+	_skin_places(p_skeleton);
+	for (uint32_t i = 0; i < np; i++) {
+		skin_from[i] = skin_to[i];
+	}
+	return true;
+}
+
+// Decision 0230: each particle's skinned place this frame (main thread; linear blend skinning of its rest place, the
+// source mesh being in the skeleton's space): the last one kept as where it was.
+void FellowCloth3D::_skin_places(Skeleton3D *p_skeleton) {
+	const Transform3D skx = p_skeleton->get_global_transform();
+	const uint32_t nb = skin_bind_bone.size();
+	skin_matrix.resize(nb);
+	for (uint32_t j = 0; j < nb; j++) {
+		skin_matrix[j] = skx * p_skeleton->get_bone_global_pose(skin_bind_bone[j]) * skin_bind_pose[j];
+	}
+	const uint32_t np = rest_local.size();
+	const Transform3D *M = skin_matrix.ptr();
+	for (uint32_t i = 0; i < np; i++) {
+		skin_from[i] = skin_to[i];
+		Vector3 p;
+		for (int k = 0; k < 4; k++) {
+			const float wt = skin_weights[i * 4 + k];
+			const int32_t b = skin_binds[i * 4 + k];
+			if (wt > 0.0f && b >= 0 && uint32_t(b) < nb) {
+				p += M[b].xform(rest_local[i]) * wt;
+			}
+		}
+		skin_to[i] = p;
+	}
+}
+
 // The bone pins' places this frame (main thread): where they were, where their bones are now.
 void FellowCloth3D::_update_bone_pins() {
-	if (bone_pins == 0) {
+	if (bone_pins == 0 && !skin_active) {
 		return;
 	}
 	Skeleton3D *sk = ObjectDB::get_instance<Skeleton3D>(bound_skeleton);
 	if (!sk || !sk->is_inside_tree()) {
+		return;
+	}
+	if (skin_active) {
+		// Decision 0230: the skin gives every particle's place; the pins follow theirs.
+		_skin_places(sk);
+		const uint32_t np = x.size();
+		for (uint32_t i = 0; i < np; i++) {
+			if (pin_bone[i] >= 0) {
+				pin_from[i] = pin_to[i];
+				pin_to[i] = skin_to[i];
+			}
+		}
 		return;
 	}
 	const Transform3D skx = sk->get_global_transform();
@@ -876,8 +1032,12 @@ bool FellowCloth3D::_prepare(double p_delta) {
 	if (xf_cur.origin.distance_to(xf_prev.origin) > 5.0f) {
 		_init_particles(); // a teleport
 	}
-	if ((bone_pins > 0) != (_get_skeleton() != nullptr) || (bone_pins > 0 && ObjectDB::get_instance(bound_skeleton) != _get_skeleton())) {
-		_bind_bones(); // the skeleton set, changed or gone
+	{
+		Skeleton3D *sk_now = _get_skeleton();
+		const bool bound = bone_pins > 0 || skin_active;
+		if (bound != (sk_now != nullptr) || (bound && ObjectDB::get_instance(bound_skeleton) != sk_now) || (follow_skin && skin_data && sk_now && !skin_active)) {
+			_bind_bones(); // the skeleton set, changed or gone; the skin to follow
+		}
 	}
 	_update_bone_pins();
 	// Level of detail by the camera's distance: past lod_distance half the substeps, past simulation_distance none
@@ -1220,6 +1380,27 @@ void FellowCloth3D::_substep(float p_h, const Transform3D &p_pin_xf, float p_f) 
 			}
 		}
 	}
+	if (skin_active && skin_max_distance > 0.0f) {
+		// Decision 0230: a free particle kept within the distance of its skinned place (interpolated over the substeps).
+		const Vector3 *SF = skin_from.ptr();
+		const Vector3 *ST = skin_to.ptr();
+		const float lim = skin_max_distance;
+		const float lim2 = lim * lim;
+		int limited = 0;
+		for (uint32_t i = 0; i < np; i++) {
+			if (W[i] <= 0.0f) {
+				continue;
+			}
+			const Vector3 t = SF[i].lerp(ST[i], p_f);
+			const Vector3 d = X[i] - t;
+			const float l2 = d.length_squared();
+			if (l2 > lim2) {
+				X[i] = t + d * (lim / Math::sqrt(l2));
+				limited++;
+			}
+		}
+		skin_limited = limited;
+	}
 	if (!colliders_now.is_empty()) {
 		for (uint32_t i = 0; i < np; i++) {
 			if (W[i] > 0.0f) {
@@ -1245,7 +1426,7 @@ void FellowCloth3D::_simulate() {
 		// Far from the camera: the cloth keeps its shape, carried with the node.
 		const Transform3D d = xf_cur * xf_prev.affine_inverse();
 		for (uint32_t i = 0; i < np; i++) {
-			x[i] = bone_pins > 0 && pin_bone[i] >= 0 ? pin_to[i] : d.xform(x[i]);
+			x[i] = skin_active ? skin_to[i] : (bone_pins > 0 && pin_bone[i] >= 0 ? pin_to[i] : d.xform(x[i])); // decision 0230: skinned
 			prev[i] = x[i];
 			vel[i] = Vector3();
 		}
@@ -1899,6 +2080,22 @@ void FellowCloth3D::set_pin_bones(const PackedStringArray &p_bones) {
 	}
 }
 
+void FellowCloth3D::set_follow_skin(bool p_enabled) {
+	follow_skin = p_enabled;
+	if (built && is_inside_tree()) {
+		_bind_bones();
+	}
+	update_configuration_warnings();
+}
+
+void FellowCloth3D::set_skin(const Ref<Skin> &p_skin) {
+	skin = p_skin;
+	if (built && is_inside_tree()) {
+		_bind_bones();
+	}
+	update_configuration_warnings();
+}
+
 void FellowCloth3D::set_particle_pinned(int p_index, bool p_pinned) {
 	ERR_FAIL_INDEX(p_index, int(x.size()));
 	if (p_pinned) {
@@ -1933,6 +2130,8 @@ Dictionary FellowCloth3D::get_stats() const {
 	d["lod"] = lod_now;
 	d["wind"] = wind_now;
 	d["bone_pins"] = bone_pins;
+	d["skin_particles"] = skin_active ? int(rest_local.size()) : 0;
+	d["skin_limited"] = skin_active ? skin_limited : 0;
 	d["torn_edges"] = torn_edges;
 	d["triangles_all"] = int(tris_all.size() / 3);
 	int nl = 0;
@@ -1987,6 +2186,16 @@ PackedStringArray FellowCloth3D::get_configuration_warnings() const {
 					warnings.push_back(vformat(RTR("Pin Bones: the skeleton has no bone \"%s\"."), b));
 				}
 			}
+		}
+	}
+	if (follow_skin) {
+		// Decision 0230.
+		if (skeleton_path.is_empty()) {
+			warnings.push_back(RTR("Follow Skin needs a Skeleton Path: the cloth hangs from its node."));
+		} else if (built && !skin_data) {
+			warnings.push_back(RTR("Follow Skin: the source mesh has no bone weights (a skinned mesh's surface): the pins follow their nearest bones."));
+		} else if (built && is_inside_tree() && Object::cast_to<Skeleton3D>(get_node_or_null(skeleton_path)) && !skin_active) {
+			warnings.push_back(RTR("Follow Skin: a bone of the skin is not in the skeleton (or the Skin has too few binds): the pins follow their nearest bones."));
 		}
 	}
 	return warnings;
@@ -2069,6 +2278,12 @@ void FellowCloth3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_skeleton_path"), &FellowCloth3D::get_skeleton_path);
 	ClassDB::bind_method(D_METHOD("set_pin_bones", "bones"), &FellowCloth3D::set_pin_bones);
 	ClassDB::bind_method(D_METHOD("get_pin_bones"), &FellowCloth3D::get_pin_bones);
+	ClassDB::bind_method(D_METHOD("set_follow_skin", "enabled"), &FellowCloth3D::set_follow_skin);
+	ClassDB::bind_method(D_METHOD("is_following_skin"), &FellowCloth3D::is_following_skin);
+	ClassDB::bind_method(D_METHOD("set_skin_max_distance", "distance"), &FellowCloth3D::set_skin_max_distance);
+	ClassDB::bind_method(D_METHOD("get_skin_max_distance"), &FellowCloth3D::get_skin_max_distance);
+	ClassDB::bind_method(D_METHOD("set_skin", "skin"), &FellowCloth3D::set_skin);
+	ClassDB::bind_method(D_METHOD("get_skin"), &FellowCloth3D::get_skin);
 	ClassDB::bind_method(D_METHOD("set_pin_mode", "mode"), &FellowCloth3D::set_pin_mode);
 	ClassDB::bind_method(D_METHOD("get_pin_mode"), &FellowCloth3D::get_pin_mode);
 	ClassDB::bind_method(D_METHOD("set_material", "material"), &FellowCloth3D::set_material);
@@ -2135,6 +2350,9 @@ void FellowCloth3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "pin_mode", PROPERTY_HINT_ENUM, "None,Top Edge,Left Edge,Top Corners,Corners,Vertex Color"), "set_pin_mode", "get_pin_mode");
 	ADD_PROPERTY(PropertyInfo(Variant::NODE_PATH, "skeleton_path", PROPERTY_HINT_NODE_PATH_VALID_TYPES, "Skeleton3D"), "set_skeleton_path", "get_skeleton_path");
 	ADD_PROPERTY(PropertyInfo(Variant::PACKED_STRING_ARRAY, "pin_bones"), "set_pin_bones", "get_pin_bones");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "follow_skin"), "set_follow_skin", "is_following_skin");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "skin_max_distance", PROPERTY_HINT_RANGE, "0,1,0.001,or_greater,suffix:m"), "set_skin_max_distance", "get_skin_max_distance");
+	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "skin", PROPERTY_HINT_RESOURCE_TYPE, "Skin"), "set_skin", "get_skin");
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "material", PROPERTY_HINT_RESOURCE_TYPE, "BaseMaterial3D,ShaderMaterial"), "set_material", "get_material");
 	ADD_GROUP("Fabric", "");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "simulating"), "set_simulating", "is_simulating");

@@ -637,7 +637,11 @@ FellowEngine menu's "Add Flag" and "Add Curtain". Bench `bench/cloth_check.gd` (
 Milestone 76 (decision 0184): `skeleton_path` (a `Skeleton3D`: the pinned particles follow its bones, each bound to
 the nearest of `pin_bones` — empty: any — when the cloth is built or reset, interpolated over the substeps); capsules
 on the bones (`BoneAttachment3D`s with `CollisionShape3D`s) in `colliders` for the body. `get_stats()` counts
-`bone_pins`.
+`bone_pins`. Milestone 116 (decision 0230): `follow_skin` (off) with a `source_mesh` that has bone weights (a skinned
+mesh's surface, in the skeleton's space): every particle skinned with the skeleton as Godot skins the mesh (`skin`: the
+binds; none: the skeleton's rest); the pinned ones follow their skinned places (blended between bones), the free ones
+are kept within `skin_max_distance` (m; 0: anywhere) of theirs; past `simulation_distance` the cloth is skinned.
+`get_stats()`' `skin_particles`, `skin_limited`.
 
 Milestone 112 (decision 0220): tearing. `tear(position, radius)` breaks every edge passing within the radius (a shot, a
 cut: a line of calls); `tear_strain` (0: off) breaks an edge stretched past that fraction of its length (0.5: half

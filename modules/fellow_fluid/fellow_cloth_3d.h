@@ -35,6 +35,7 @@
 #include "scene/3d/visual_instance_3d.h"
 #include "scene/resources/material.h"
 #include "scene/resources/mesh.h"
+#include "scene/resources/3d/skin.h"
 
 // FellowEngine (milestone 73, decision 0181): cloth — flags, banners, curtains, awnings, sails, capes — simulated on
 // the CPU by position-based dynamics in small fixed substeps (stretch and bending constraints, long-range tethers to
@@ -133,6 +134,12 @@ private:
 	// Milestone 76: the pinned particles on a skeleton's bones (a cape on the shoulders, a skirt on the hips).
 	NodePath skeleton_path;
 	PackedStringArray pin_bones; // the bones they may follow (empty: any)
+	// Milestone 116 (decision 0230): a skinned garment's simulated part — the source mesh's bone weights skin each
+	// particle with the skeleton; the pinned ones follow their skinned places, the free ones are kept within
+	// skin_max_distance of theirs (0: anywhere).
+	bool follow_skin = false;
+	float skin_max_distance = 0.0f;
+	Ref<Skin> skin; // the binds' bones and poses (none: bone i, the inverse of its global rest)
 	// Level of detail.
 	float simulation_distance = 100.0f;
 	float lod_distance = 25.0f;
@@ -231,6 +238,18 @@ private:
 	LocalVector<Vector3> pin_to;
 	int bone_pins = 0;
 	ObjectID bound_skeleton;
+	// Skinning (decision 0230): each particle's four binds and weights (its first vertex's; the heaviest four of eight),
+	// the binds' bones and poses, and each particle's skinned place at the last frame and this one (global).
+	LocalVector<int32_t> skin_binds;
+	LocalVector<float> skin_weights;
+	bool skin_data = false; // the source mesh has bone weights
+	bool skin_active = false; // follow_skin with the data and a skeleton bound
+	LocalVector<int> skin_bind_bone;
+	LocalVector<Transform3D> skin_bind_pose;
+	LocalVector<Transform3D> skin_matrix; // a bind's matrix this frame (global)
+	LocalVector<Vector3> skin_from;
+	LocalVector<Vector3> skin_to;
+	int skin_limited = 0; // free particles held at the distance in the last frame's last substep
 	float normal_sign = 1.0f;
 	bool has_tangents = false;
 	bool built = false;
@@ -276,6 +295,8 @@ private:
 	Skeleton3D *_get_skeleton() const;
 	void _bind_bones();
 	void _update_bone_pins();
+	bool _bind_skin(Skeleton3D *p_skeleton);
+	void _skin_places(Skeleton3D *p_skeleton);
 	void _collide(uint32_t p_i);
 	void _write_vertices();
 	void _finish();
@@ -365,6 +386,12 @@ public:
 	void set_self_collision_triangles(bool p_enabled) { self_collision_triangles = p_enabled; }
 	bool is_self_collision_triangles() const { return self_collision_triangles; }
 	void set_self_collision_friction(float p_friction) { self_collision_friction = CLAMP(p_friction, 0.0f, 1.0f); }
+	void set_follow_skin(bool p_enabled);
+	bool is_following_skin() const { return follow_skin; }
+	void set_skin_max_distance(float p_distance) { skin_max_distance = MAX(0.0f, p_distance); }
+	float get_skin_max_distance() const { return skin_max_distance; }
+	void set_skin(const Ref<Skin> &p_skin);
+	Ref<Skin> get_skin() const { return skin; }
 	float get_self_collision_friction() const { return self_collision_friction; }
 	float get_friction() const { return friction; }
 	void set_colliders(const TypedArray<NodePath> &p_colliders);

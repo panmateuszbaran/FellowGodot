@@ -42,7 +42,7 @@
 		<method name="get_stats" qualifiers="const">
 			<return type="Dictionary" />
 			<description>
-				This cloth's [code]particles[/code], [code]triangles[/code], [code]stretch_constraints[/code], [code]bend_constraints[/code], [code]tethers[/code], the last frame's [code]substeps[/code], [code skip-lint]colliders[/code], [code]simulate_usec[/code], [code skip-lint]wind[/code], whether it was past [member lod_distance] ([code]lod[/code]) or [member simulation_distance] ([code]far[/code]), the pinned particles on bones ([code]bone_pins[/code], [member skeleton_path]), its tears: [code]torn_edges[/code], [code]triangles_all[/code] (as built; [code]triangles[/code] are those left), [code]loose_particles[/code] (of no triangle left), and its self-collision: [code]self_pairs[/code] (the last frame's pairs of particles near each other), [code]self_contacts[/code] (those pushed apart in its last substep), [code]self_distance[/code], and with [member self_collision_triangles] [code]self_tri_pairs[/code] (the last frame's particles near another layer's triangle) and [code]self_tri_contacts[/code] (those pushed out in its last substep).
+				This cloth's [code]particles[/code], [code]triangles[/code], [code]stretch_constraints[/code], [code]bend_constraints[/code], [code]tethers[/code], the last frame's [code]substeps[/code], [code skip-lint]colliders[/code], [code]simulate_usec[/code], [code skip-lint]wind[/code], whether it was past [member lod_distance] ([code]lod[/code]) or [member simulation_distance] ([code]far[/code]), the pinned particles on bones ([code]bone_pins[/code], [member skeleton_path]), the particles following the skin ([code]skin_particles[/code], [member follow_skin]) and those held at [member skin_max_distance] in the last substep ([code]skin_limited[/code]), its tears: [code]torn_edges[/code], [code]triangles_all[/code] (as built; [code]triangles[/code] are those left), [code]loose_particles[/code] (of no triangle left), and its self-collision: [code]self_pairs[/code] (the last frame's pairs of particles near each other), [code]self_contacts[/code] (those pushed apart in its last substep), [code]self_distance[/code], and with [member self_collision_triangles] [code]self_tri_pairs[/code] (the last frame's particles near another layer's triangle) and [code]self_tri_contacts[/code] (those pushed out in its last substep).
 			</description>
 		</method>
 		<method name="get_torn_edge_count" qualifiers="const">
@@ -106,6 +106,9 @@
 		<member name="drag" type="float" setter="set_drag" getter="get_drag" default="1.0">
 			The air's push along each triangle's normal (a drag coefficient).
 		</member>
+		<member name="follow_skin" type="bool" setter="set_follow_skin" getter="is_following_skin" default="false">
+			With a [member source_mesh] that has bone weights (a skinned mesh's surface, in the skeleton's space) and a [member skeleton_path]: each particle is skinned with the skeleton as Godot skins the mesh (linear blend skinning by its first vertex's four heaviest weights; the binds from [member skin], or the skeleton's rest without one). The pinned particles follow their skinned places — a garment's waistband or collar moves with the body's skin, blended between bones, instead of with its nearest bone — the free ones are kept within [member skin_max_distance] of theirs, and the cloth starts on the body. Past [member simulation_distance] the whole cloth is skinned. See [code]docs/decisions/0230-cloth-following-skin.md[/code].
+		</member>
 		<member name="friction" type="float" setter="set_friction" getter="get_friction" default="0.3">
 			How much a particle touching a collider is held back along its surface, 0 to 1.
 		</member>
@@ -163,6 +166,12 @@
 		</member>
 		<member name="skeleton_path" type="NodePath" setter="set_skeleton_path" getter="get_skeleton_path" default="NodePath(&quot;&quot;)">
 			A [Skeleton3D] the pinned particles follow instead of the node (milestone 76): when the cloth is built or reset, each pinned particle is bound to the nearest of [member pin_bones] (the segment from the bone to its first child, as the skeleton is posed then) and keeps its place in that bone's space, interpolated between the frames' poses over the substeps — a cape on the shoulders turns with the chest, a skirt on the hips with them. Put capsules on the bones ([BoneAttachment3D]s with [CollisionShape3D]s) in [member colliders] for the body.
+		</member>
+		<member name="skin" type="Skin" setter="set_skin" getter="get_skin">
+			With [member follow_skin], the binds of the source mesh's bone indices: their bones (by name or index) and bind poses, as a [MeshInstance3D]'s [member MeshInstance3D.skin]. Without one, bind [i]i[/i] is bone [i]i[/i] with the inverse of its global rest (as Godot skins a mesh without a skin).
+		</member>
+		<member name="skin_max_distance" type="float" setter="set_skin_max_distance" getter="get_skin_max_distance" default="0.0">
+			With [member follow_skin], how far a free particle may go from its skinned place (m; 0: anywhere): a skirt or a coat kept about the body however the wind or a fast turn throws it.
 		</member>
 		<member name="source_mesh" type="Mesh" setter="set_source_mesh" getter="get_source_mesh">
 			A mesh to simulate instead of the rectangle: its first surface's triangles (vertices at the same position are one particle).
