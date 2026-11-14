@@ -303,6 +303,12 @@ inline bool texture_swaps_keep_shadows() {
 inline bool texture_budget_from_used_level() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/streaming/texture_budget_from_used_level");
 }
+// streaming/transfer_staging_trim (milestone 114, decision 0225): RenderingDevice's transfer workers release a staging
+// buffer above 4 MiB after 60 frames unused (stock keeps each at its largest upload's power of two for good; streamed
+// loads on worker threads make one worker a thread). Host memory the driver counts as video memory. Read per frame.
+inline bool transfer_staging_trim() {
+	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/streaming/transfer_staging_trim");
+}
 // Set on the render thread while a streamed texture's old data is freed (its materials' uniform sets erased), and while
 // such a material notifies its users: RendererSceneCull then updates the instances without a shadow cache event.
 bool &texture_stream_swap_active();

@@ -7654,6 +7654,7 @@ RenderingDevice::TransferWorker *RenderingDevice::_acquire_transfer_worker(uint3
 		// Wait for the worker if the command buffer was submitted but it hasn't finished processing yet.
 		_wait_for_transfer_worker(transfer_worker);
 	}
+	transfer_worker->fellow_last_used_frame = frames_drawn;
 
 	uint32_t alignment_offset = _get_alignment_offset(transfer_worker->staging_buffer_size_in_use, p_required_align);
 	transfer_worker->max_transfer_size = MAX(transfer_worker->max_transfer_size, p_transfer_size);
@@ -7709,6 +7710,35 @@ void RenderingDevice::_release_transfer_worker(TransferWorker *p_transfer_worker
 	transfer_worker_pool_available_list.push_back(p_transfer_worker->index);
 	transfer_worker_pool_mutex.unlock();
 	transfer_worker_pool_condition.notify_one();
+}
+
+void RenderingDevice::_fellow_trim_transfer_workers() {
+	// FellowEngine (decision 0225): a staging buffer grows to the next power of two of the largest upload its worker made
+	// and stock keeps it; a worker unused for 60 frames releases one above 4 MiB (the next large upload makes it again).
+	// Render thread, at the start of a frame; only workers nobody holds and with nothing recorded.
+	const uint32_t keep_bytes = 4 * 1024 * 1024;
+	const uint64_t idle_frames = 60;
+	MutexLock pool_lock(transfer_worker_pool_mutex);
+	for (uint32_t index : transfer_worker_pool_available_list) {
+		TransferWorker *worker = transfer_worker_pool[index];
+		if (worker->staging_buffer_size_allocated <= keep_bytes || frames_drawn - worker->fellow_last_used_frame < idle_frames) {
+			continue;
+		}
+		if (!worker->thread_mutex.try_lock()) {
+			continue;
+		}
+		if (!worker->recording) {
+			if (worker->submitted) {
+				_wait_for_transfer_worker(worker); // long finished: 60 frames ago
+			}
+			driver->buffer_free(worker->staging_buffer);
+			worker->staging_buffer = RDD::BufferID();
+			worker->staging_buffer_size_allocated = 0;
+			worker->staging_buffer_size_in_use = 0;
+			worker->max_transfer_size = 0;
+		}
+		worker->thread_mutex.unlock();
+	}
 }
 
 void RenderingDevice::_end_transfer_worker(TransferWorker *p_transfer_worker) {
@@ -7848,7 +7878,9 @@ void RenderingDevice::_free_transfer_workers() {
 	for (uint32_t i = 0; i < transfer_worker_pool_size; i++) {
 		TransferWorker *worker = transfer_worker_pool[i];
 		driver->fence_free(worker->command_fence);
-		driver->buffer_free(worker->staging_buffer);
+		if (worker->staging_buffer.id != 0) { // FellowEngine: released by _fellow_trim_transfer_workers()
+			driver->buffer_free(worker->staging_buffer);
+		}
 		driver->command_pool_free(worker->command_pool);
 		memdelete(worker);
 	}
@@ -8494,6 +8526,22 @@ uint64_t RenderingDevice::get_memory_usage(MemoryType p_type) const {
 	}
 }
 
+uint64_t RenderingDevice::fellow_device_local_memory_used() const {
+	return driver->fellow_device_local_memory_used();
+}
+
+uint64_t RenderingDevice::fellow_transfer_staging_bytes(uint32_t *r_workers) {
+	MutexLock pool_lock(transfer_worker_pool_mutex);
+	uint64_t bytes = 0;
+	for (uint32_t i = 0; i < transfer_worker_pool_size; i++) {
+		bytes += transfer_worker_pool[i]->staging_buffer_size_allocated;
+	}
+	if (r_workers) {
+		*r_workers = transfer_worker_pool_size;
+	}
+	return bytes;
+}
+
 void RenderingDevice::_begin_frame(bool p_presented) {
 	GodotProfileZoneGroupedFirst(_profile_zone, "_stall_for_frame");
 	// Before writing to this frame, wait for it to be finished.
@@ -8505,6 +8553,10 @@ void RenderingDevice::_begin_frame(bool p_presented) {
 		const uint64_t now = OS::get_singleton()->get_ticks_usec();
 		Fellow::frame_gpu_wait_report(fellow_stall_wait_usec, fellow_last_stall_usec ? now - fellow_last_stall_usec : 0);
 		fellow_last_stall_usec = now;
+	}
+
+	if (Fellow::transfer_staging_trim()) {
+		_fellow_trim_transfer_workers();
 	}
 
 	// FellowEngine async compute: every segment of the frame has finished (the frame's last submission waited on the

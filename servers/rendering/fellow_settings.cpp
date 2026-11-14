@@ -146,6 +146,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/physics/pair_prefilter", true); // decision 0219 (exact)
 	GLOBAL_DEF("rendering/fellow/streaming/texture_swaps_keep_shadows", true); // decision 0222 (exact)
 	GLOBAL_DEF("rendering/fellow/streaming/texture_budget_from_used_level", true); // decision 0223 (no change without a budget)
+	GLOBAL_DEF("rendering/fellow/streaming/transfer_staging_trim", false); // decision 0225 (host memory)
 	GLOBAL_DEF("rendering/fellow/physics/jolt_deferred_sensor_contacts", true); // decision 0088
 	GLOBAL_DEF("rendering/fellow/physics/parallel_island_solve", true); // decision 0089 (exact)
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/physics/parallel_island_solve_grab", PROPERTY_HINT_RANGE, "1,1024,1"), 16);
@@ -601,6 +602,15 @@ Dictionary Fellow::get_stats_dictionary() {
 		for (int i = 0; i < 3; i++) {
 			d[String("physics_jolt_") + jolt_phases[i] + "_usec"] = s.physics_jolt_usec[i].get();
 		}
+	}
+	if (RenderingDevice *rd = RenderingDevice::get_singleton()) {
+		// Video memory as the driver counts it (every heap) split: the device's own heaps, and of the host's the transfer
+		// workers' staging buffers (kept at the largest upload's power of two, milestone 113).
+		uint32_t workers = 0;
+		d["memory_device_local_bytes"] = rd->fellow_device_local_memory_used();
+		d["memory_total_bytes"] = rd->get_memory_usage(RenderingDevice::MEMORY_TOTAL);
+		d["transfer_staging_bytes"] = rd->fellow_transfer_staging_bytes(&workers);
+		d["transfer_workers"] = workers;
 	}
 	d["physics_godot_pairs_made"] = s.physics_godot_pairs_made.get();
 	d["physics_godot_pairs_freed"] = s.physics_godot_pairs_freed.get();

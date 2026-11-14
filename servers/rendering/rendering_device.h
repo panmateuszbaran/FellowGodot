@@ -1745,6 +1745,7 @@ private:
 		uint64_t operations_submitted = 0;
 		uint64_t operations_counter = 0;
 		BinaryMutex operations_mutex;
+		uint64_t fellow_last_used_frame = 0; // FellowEngine: frames_drawn when last acquired (decision 0225)
 	};
 
 	TightLocalVector<TransferWorker *> transfer_worker_pool;
@@ -1758,6 +1759,7 @@ private:
 	ConditionVariable transfer_worker_pool_condition;
 
 	TransferWorker *_acquire_transfer_worker(uint32_t p_transfer_size, uint32_t p_required_align, uint32_t &r_staging_offset);
+	void _fellow_trim_transfer_workers();
 	void _release_transfer_worker(TransferWorker *p_transfer_worker);
 	void _end_transfer_worker(TransferWorker *p_transfer_worker);
 	void _submit_transfer_worker(TransferWorker *p_transfer_worker, VectorView<RDD::SemaphoreID> p_signal_semaphores = VectorView<RDD::SemaphoreID>());
@@ -2032,6 +2034,9 @@ public:
 	};
 
 	uint64_t get_memory_usage(MemoryType p_type) const;
+	// FellowEngine: the bytes in the device's own heaps, and the transfer workers' staging buffers (the host's) and count.
+	uint64_t fellow_device_local_memory_used() const;
+	uint64_t fellow_transfer_staging_bytes(uint32_t *r_workers = nullptr);
 
 	RenderingDevice *create_local_device();
 
