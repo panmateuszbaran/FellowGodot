@@ -3415,6 +3415,9 @@
 		<member name="rendering/fellow/physics/motion_query_cache" type="bool" setter="" getter="" default="true">
 			A motion test repeated within one [code]move_and_slide()[/code] is answered from the first. Exact: the same image or results as stock Godot. Decision 0093.
 		</member>
+		<member name="rendering/fellow/physics/pair_prefilter" type="bool" setter="" getter="" default="true">
+			With the parallel culls, the hits whose pair already exists (and stays until the loop reaches the object) are dropped on the worker threads: the serial loop looks up only pairs that may be new. Exact: the same image or results as stock Godot. Decision 0219.
+		</member>
 		<member name="rendering/fellow/physics/parallel_island_solve" type="bool" setter="" getter="" default="true">
 			GodotPhysics3D: a large island solved on every thread, each body updated in stock's order. Exact: the same image or results as stock Godot. Decision 0089.
 		</member>

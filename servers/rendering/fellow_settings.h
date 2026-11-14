@@ -288,6 +288,12 @@ inline bool physics_convex_vertex_cache() {
 inline bool physics_parallel_pair_culls() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/physics/parallel_pair_culls");
 }
+// physics/pair_prefilter (decision 0219): with the parallel culls, each moved object's hits whose pair already exists
+// and will still exist when the serial loop reaches it are dropped on the worker threads, so the loop looks up only
+// the pairs that may be new. The same pairs in the same order. Read per step.
+inline bool physics_pair_prefilter() {
+	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/physics/pair_prefilter");
+}
 // physics/jolt_deferred_sensor_contacts (decision 0088): Jolt's contact listener records the sensor (Area3D) contacts per
 // worker thread during the step and evaluates them after it (stock: each under one mutex as it is reported, from every
 // worker thread). The same overlaps. Read per step.

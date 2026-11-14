@@ -448,6 +448,22 @@ private:
 		// FellowEngine (milestone 17): every changed item's cull computed first, on worker threads (they only read the tree:
 		// the loop below changes pairs, never the tree), then used in the same order.
 		const bool fellow_parallel = fellow_parallel_culls && changed_items.size() >= 64;
+		// FellowEngine (milestone 111, decision 0219): the culls also drop the hits whose pair exists and will still exist
+		// when the loop reaches the item (only an earlier changed partner's leavers could remove it: kept when that
+		// partner's expanded box still meets this item's), so the loop calls _collide() only for pairs that may be new.
+		fellow_prefilter_now = fellow_parallel && fellow_pair_prefilter && !p_full_check;
+		if (fellow_prefilter_now) {
+			if (fellow_changed_index.size() < tree._refs.reserved_size()) {
+				const uint32_t old = fellow_changed_index.size();
+				fellow_changed_index.resize(tree._refs.reserved_size());
+				for (uint32_t i = old; i < fellow_changed_index.size(); i++) {
+					fellow_changed_index[i] = UINT32_MAX;
+				}
+			}
+			for (uint32_t i = 0; i < changed_items.size(); i++) {
+				fellow_changed_index[changed_items[i].id()] = i;
+			}
+		}
 		if (fellow_parallel) {
 			fellow_hits.resize(changed_items.size());
 			WorkerThreadPool::GroupID group = WorkerThreadPool::get_singleton()->add_template_group_task(this, &BVH_Manager::_fellow_cull_changed_item, nullptr, changed_items.size(), -1, true, String("BVHPairCulls"));
@@ -490,6 +506,11 @@ private:
 				_collide(h, h_collidee);
 			}
 		}
+		if (fellow_prefilter_now) {
+			for (uint32_t i = 0; i < changed_items.size(); i++) {
+				fellow_changed_index[changed_items[i].id()] = UINT32_MAX;
+			}
+		}
 		_reset();
 	}
 
@@ -505,11 +526,50 @@ private:
 		tree.item_fill_cullparams(h, params);
 		params.abb = abb;
 		tree.cull_aabb_into(params, fellow_hits[p_index]);
+		if (!fellow_prefilter_now) {
+			return;
+		}
+		// Milestone 111 (decision 0219): the hits whose pair stays until this item's turn dropped (_collide() would return
+		// for them without doing anything). This item's own leavers keep every hit (the cull's test is theirs).
+		const uint32_t self = h.id();
+		const typename BVHTREE_CLASS::ItemPairs &pairs = tree._pairs[self];
+		if (pairs.num_pairs == 0) {
+			return;
+		}
+		BVHABB_CLASS self_leaf;
+		tree.item_get_ABB(h, self_leaf);
+		LocalVector<uint32_t> &hits = fellow_hits[p_index];
+		uint32_t kept = 0;
+		for (uint32_t r = 0; r < hits.size(); r++) {
+			const uint32_t ref_id = hits[r];
+			bool drop = false;
+			if (ref_id != self) {
+				BVHHandle hb;
+				hb.set_id(ref_id);
+				if (pairs.contains_pair_to(hb)) {
+					const uint32_t ci = fellow_changed_index[ref_id];
+					if (ci == UINT32_MAX || ci > p_index) {
+						drop = true; // its leavers come after this item's turn, or never
+					} else {
+						// Its leavers came first: they keep the pair when its expanded box still meets this item's.
+						BVHABB_CLASS partner;
+						partner.from(tree._pairs[ref_id].expanded_aabb);
+						drop = partner.intersects(self_leaf);
+					}
+				}
+			}
+			if (!drop) {
+				hits[kept++] = ref_id;
+			}
+		}
+		hits.resize(kept);
 	}
 
 public:
 	// FellowEngine (milestone 17): set by the owner before update() (the 3D physics broadphase).
 	bool fellow_parallel_culls = false;
+	// FellowEngine (milestone 111, decision 0219): with the parallel culls, existing pairs dropped from their hits.
+	bool fellow_pair_prefilter = false;
 
 	void item_get_AABB(BVHHandle p_handle, BOUNDS &r_aabb) {
 		DEV_ASSERT(!p_handle.is_invalid());
@@ -802,6 +862,8 @@ private:
 	// maintain a list of all items moved etc on each frame / tick
 	LocalVector<BVHHandle> changed_items;
 	LocalVector<LocalVector<uint32_t>> fellow_hits; // FellowEngine: each changed item's cull (fellow_parallel_culls)
+	LocalVector<uint32_t> fellow_changed_index; // FellowEngine (decision 0219): a ref's place in changed_items, or UINT32_MAX
+	bool fellow_prefilter_now = false;
 	uint32_t _tick = 1; // Start from 1 so items with 0 indicate never updated.
 
 	class BVHLockedFunction {

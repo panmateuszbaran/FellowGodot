@@ -120,6 +120,7 @@ D = {
     "physics/distance_face_batch": "Faces tested together by [member rendering/fellow/physics/distance_face_cull].",
     "physics/convex_vertex_cache": "GodotPhysics3D's separating-axis tests transform a convex shape's vertices once per test instead of once per axis. " + EXACT + " Decision 0086.",
     "physics/parallel_pair_culls": "GodotPhysics3D's broadphase culls run on worker threads; the pairs are then made in stock's order. " + EXACT + " Decision 0087.",
+    "physics/pair_prefilter": "With the parallel culls, the hits whose pair already exists (and stays until the loop reaches the object) are dropped on the worker threads: the serial loop looks up only pairs that may be new. " + EXACT + " Decision 0219.",
     "physics/jolt_deferred_sensor_contacts": "Jolt: Area3D contacts recorded per thread during the step and evaluated after it, instead of under one lock. Decision 0088.",
     "physics/parallel_island_solve": "GodotPhysics3D: a large island solved on every thread, each body updated in stock's order. " + EXACT + " Decision 0089.",
     "physics/parallel_island_solve_grab": "Constraints a thread takes at a time in [member rendering/fellow/physics/parallel_island_solve].",

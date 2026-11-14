@@ -118,6 +118,7 @@ void GodotBroadPhase3DBVH::set_unpair_callback(UnpairCallback p_unpair_callback,
 
 void GodotBroadPhase3DBVH::update() {
 	bvh.fellow_parallel_culls = Fellow::physics_parallel_pair_culls(); // FellowEngine (decision 0087)
+	bvh.fellow_pair_prefilter = Fellow::physics_pair_prefilter(); // FellowEngine (decision 0219)
 	bvh.update();
 }
 
