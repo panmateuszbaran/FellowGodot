@@ -7578,10 +7578,6 @@ RenderingDevice::TransferWorker *RenderingDevice::_acquire_transfer_worker(uint3
 			transfer_worker_pool_condition.wait(pool_lock);
 		}
 
-		// FellowEngine (decision 0226): a large upload prefers a worker whose staging fits, even one whose last submission
-		// is still to be waited for, to a free worker that would have to grow: the large buffers stay with few workers.
-		const bool fellow_large = p_transfer_size > 4 * 1024 * 1024 && Fellow::transfer_large_reuse();
-
 		// Look at all available workers first.
 		for (uint32_t i = 0; i < transfer_worker_pool_available_list.size(); i++) {
 			uint32_t worker_index = transfer_worker_pool_available_list[i];
@@ -7600,11 +7596,11 @@ RenderingDevice::TransferWorker *RenderingDevice::_acquire_transfer_worker(uint3
 			} else if (!candidate_worker_busy) {
 				// The worker can't fit the transfer but it's not currently doing anything.
 				// We pick it as a possible candidate if the current one is busy.
-				pick_candidate = transfer_worker_busy && !(fellow_large && transfer_worker != nullptr && !transfer_worker_full);
+				pick_candidate = transfer_worker_busy;
 			} else if (!candidate_worker_full) {
 				// The worker can fit the transfer but it's currently executing previous work.
 				// We pick it as a possible candidate if the current one is both busy and full.
-				pick_candidate = (transfer_worker_busy && transfer_worker_full) || (fellow_large && transfer_worker_full);
+				pick_candidate = transfer_worker_busy && transfer_worker_full;
 			} else if (transfer_worker == nullptr) {
 				// The worker can't fit the transfer and it's currently executing work, so it's the worst candidate.
 				// We only pick if no candidate has been picked yet.
@@ -7742,8 +7738,8 @@ void RenderingDevice::_fellow_trim_transfer_workers() {
 	const uint64_t idle_usec = Fellow::transfer_staging_trim_idle_usec();
 	const uint64_t now = OS::get_singleton()->get_ticks_usec();
 	MutexLock pool_lock(transfer_worker_pool_mutex);
-	// The largest buffer of all is kept (the most recently used among equals): the next large upload after a pause finds
-	// it (with frame/transfer_large_reuse) instead of filling fresh memory while the frame may wait for it (job f440).
+	// The largest buffer of all is kept (the most recently used among equals): the next large upload after a pause can
+	// find it instead of filling fresh memory while the frame may wait for it (job f440).
 	uint32_t keep_index = UINT32_MAX;
 	for (uint32_t i = 0; i < transfer_worker_pool_size; i++) {
 		const TransferWorker *w = transfer_worker_pool[i];

@@ -304,16 +304,11 @@ inline bool texture_budget_from_used_level() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/streaming/texture_budget_from_used_level");
 }
 // frame/transfer_staging_trim (milestone 114, decision 0225): RenderingDevice's transfer workers release a staging
-// buffer above 4 MiB after transfer_staging_trim_idle_s unused (stock keeps each at its largest upload's power of two
-// for good; streamed loads on worker threads make one worker a thread). Host memory the driver counts as video memory.
-// Read per frame.
+// buffer above 4 MiB after transfer_staging_trim_idle_s unused, all but the largest (stock keeps each at its largest
+// upload's power of two for good; streamed loads on worker threads make one worker a thread). Host memory the driver
+// counts as video memory. Read per frame.
 inline bool transfer_staging_trim() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/frame/transfer_staging_trim");
-}
-// frame/transfer_large_reuse (milestone 114, decision 0226): an upload above 4 MiB takes a transfer worker whose staging
-// buffer fits (waiting for its last submission) rather than growing a free one. Read per upload.
-inline bool transfer_large_reuse() {
-	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/frame/transfer_large_reuse");
 }
 inline uint64_t transfer_staging_trim_idle_usec() {
 	return uint64_t(MAX(0.0, double(GLOBAL_GET_CACHED(float, "rendering/fellow/frame/transfer_staging_trim_idle_s"))) * 1000000.0);

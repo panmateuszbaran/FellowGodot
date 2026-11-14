@@ -9,6 +9,18 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 114 — the upload workers' staging; FSR 3.1's accumulation stays in full precision (2026-11-14)
+
+- Video memory as the driver counts it (every heap) split in FellowEngine's statistics and the debugger's Monitors tab:
+  `FellowEngine/Video memory (device)` (the GPU's own heaps) and `Upload staging` (RenderingDevice's transfer workers'
+  staging buffers, host memory); FellowBench samples them every 30 frames along a run. Sponza streamed ended with four
+  workers of 128 MiB each — 512 MiB of the 2 854 MiB reported — the device's heaps 127 MiB lower than without streaming.
+- The workers' staging released when uploads pause (decision 0225, `rendering/fellow/frame/transfer_staging_trim`, on;
+  `transfer_staging_trim_idle_s`, 5 s; the largest buffer kept, the frees on a worker thread): the same frames, their
+  times within the runs' spread. Shorter idle times made frames wait for fresh buffers (p99.9 +3-8 ms): rejected.
+- Rejected after measurement: FSR 3.1's accumulation in half precision on NVIDIA GPUs (decision 0224: no faster on the
+  RTX at 4K, its pictures 42-50 dB from full precision's); large uploads reusing a big worker (decision 0226).
+
 ## Milestone 113 — Sponza streamed on the RTX; FSR 3.1's passes (2026-11-14)
 
 - Texture streaming measured in Sponza on the RTX (milestone 45 measured Streaming Lab only): with a 256 MiB budget video
