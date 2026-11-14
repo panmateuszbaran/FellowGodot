@@ -7742,9 +7742,19 @@ void RenderingDevice::_fellow_trim_transfer_workers() {
 	const uint64_t idle_usec = Fellow::transfer_staging_trim_idle_usec();
 	const uint64_t now = OS::get_singleton()->get_ticks_usec();
 	MutexLock pool_lock(transfer_worker_pool_mutex);
+	// The largest buffer of all is kept (the most recently used among equals): the next large upload after a pause finds
+	// it (with frame/transfer_large_reuse) instead of filling fresh memory while the frame may wait for it (job f440).
+	uint32_t keep_index = UINT32_MAX;
+	for (uint32_t i = 0; i < transfer_worker_pool_size; i++) {
+		const TransferWorker *w = transfer_worker_pool[i];
+		if (keep_index == UINT32_MAX || w->staging_buffer_size_allocated > transfer_worker_pool[keep_index]->staging_buffer_size_allocated ||
+				(w->staging_buffer_size_allocated == transfer_worker_pool[keep_index]->staging_buffer_size_allocated && w->fellow_last_used_usec > transfer_worker_pool[keep_index]->fellow_last_used_usec)) {
+			keep_index = i;
+		}
+	}
 	for (uint32_t index : transfer_worker_pool_available_list) {
 		TransferWorker *worker = transfer_worker_pool[index];
-		if (worker->staging_buffer_size_allocated <= keep_bytes || worker->fellow_last_used_usec + idle_usec > now) {
+		if (index == keep_index || worker->staging_buffer_size_allocated <= keep_bytes || worker->fellow_last_used_usec + idle_usec > now) {
 			continue;
 		}
 		if (!worker->thread_mutex.try_lock()) {
@@ -7752,7 +7762,7 @@ void RenderingDevice::_fellow_trim_transfer_workers() {
 		}
 		if (!worker->recording) {
 			if (worker->submitted) {
-				_wait_for_transfer_worker(worker); // long finished: 60 frames ago
+				_wait_for_transfer_worker(worker); // long finished: unused for the idle time
 			}
 			fellow_staging_to_free.push_back(worker->staging_buffer);
 			Fellow::stats().transfer_staging_trims.increment();
