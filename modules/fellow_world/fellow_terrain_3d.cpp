@@ -689,11 +689,11 @@ void _normals_row(void *p_job, uint32_t p_z) {
 
 void FellowTerrain3D::_build_normals(Ref<Image> &r_normals) const {
 	// RG8: the normal's x and z (y is the rest of the unit length), from central differences of the heights.
-	Vector<uint8_t> data;
-	data.resize(map_w * map_h * 2);
+	Vector<uint8_t> normal_bytes;
+	normal_bytes.resize(map_w * map_h * 2);
 	NormalsJob job;
 	job.h = heights.ptr();
-	job.out = data.ptrw();
+	job.out = normal_bytes.ptrw();
 	job.w = map_w;
 	job.d = map_h;
 	job.inv = 1.0f / (2.0f * vertex_spacing);
@@ -708,7 +708,7 @@ void FellowTerrain3D::_build_normals(Ref<Image> &r_normals) const {
 			_normals_row(&job, z);
 		}
 	}
-	r_normals = Image::create_from_data(map_w, map_h, false, Image::FORMAT_RG8, data);
+	r_normals = Image::create_from_data(map_w, map_h, false, Image::FORMAT_RG8, normal_bytes);
 	r_normals->generate_mipmaps();
 }
 
@@ -810,8 +810,8 @@ void FellowTerrain3D::_rebuild_data() {
 		map_w = img->get_width();
 		map_h = img->get_height();
 		heights.resize(map_w * map_h);
-		const Vector<uint8_t> data = img->get_data();
-		memcpy(heights.ptr(), data.ptr(), sizeof(float) * map_w * map_h);
+		const Vector<uint8_t> bytes = img->get_data();
+		memcpy(heights.ptr(), bytes.ptr(), sizeof(float) * map_w * map_h);
 	}
 	height_min = 0.0f;
 	height_max = 0.0f;
@@ -1288,9 +1288,9 @@ void FellowTerrain3D::_write_patches(int p_which, const LocalVector<Patch> &p_pa
 			rs->multimesh_allocate_data(p_multimesh, r_capacity, RSE::MULTIMESH_TRANSFORM_3D, false, true);
 		}
 		const int cap = r_capacity;
-		Vector<float> data;
-		data.resize(cap * 16);
-		float *w = data.ptrw();
+		Vector<float> values;
+		values.resize(cap * 16);
+		float *w = values.ptrw();
 		for (int i = 0; i < n; i++) {
 			const Patch &pt = p_list[i];
 			const float cell = vertex_spacing * float(1 << pt.level);
@@ -1319,7 +1319,7 @@ void FellowTerrain3D::_write_patches(int p_which, const LocalVector<Patch> &p_pa
 		for (int i = n * 16; i < cap * 16; i++) {
 			w[i] = 0.0f;
 		}
-		rs->multimesh_set_buffer(p_multimesh, data);
+		rs->multimesh_set_buffer(p_multimesh, values);
 		rs->multimesh_set_visible_instances(p_multimesh, n);
 	};
 	write(set.multimesh[p_which], set.capacity[p_which], split ? plain : p_patches, false);
@@ -1432,13 +1432,13 @@ Dictionary FellowTerrain3D::_collision_region_data(int p_x0, int p_z0, int p_w, 
 	if (lo > hi) {
 		lo = hi = 0.0f; // the whole region a hole
 	}
-	Dictionary data;
-	data["width"] = p_w;
-	data["depth"] = p_d;
-	data["heights"] = h;
-	data["min_height"] = lo;
-	data["max_height"] = hi;
-	return data;
+	Dictionary info;
+	info["width"] = p_w;
+	info["depth"] = p_d;
+	info["heights"] = h;
+	info["min_height"] = lo;
+	info["max_height"] = hi;
+	return info;
 }
 
 void FellowTerrain3D::_free_collision() {
@@ -2960,10 +2960,10 @@ void FellowTerrain3D::_paint_local(const Vector3 &p_global, float p_radius, int 
 void FellowTerrain3D::_make_heightmap_editable() {
 	if (heightmap.is_valid() && (heightmap->get_format() != Image::FORMAT_RF || heightmap->has_mipmaps())) {
 		// In metres from now on: the heights as drawn.
-		Vector<uint8_t> data;
-		data.resize(sizeof(float) * heights.size());
-		memcpy(data.ptrw(), heights.ptr(), data.size());
-		heightmap = Image::create_from_data(map_w, map_h, false, Image::FORMAT_RF, data);
+		Vector<uint8_t> bytes;
+		bytes.resize(sizeof(float) * heights.size());
+		memcpy(bytes.ptrw(), heights.ptr(), bytes.size());
+		heightmap = Image::create_from_data(map_w, map_h, false, Image::FORMAT_RF, bytes);
 	}
 }
 
@@ -3038,16 +3038,16 @@ void FellowTerrain3D::_build_holes() {
 			}
 		}
 		holes.resize(map_w * map_h);
-		Vector<uint8_t> data;
-		data.resize(map_w * map_h);
-		uint8_t *dw = data.ptrw();
+		Vector<uint8_t> bytes;
+		bytes.resize(map_w * map_h);
+		uint8_t *dw = bytes.ptrw();
 		const uint8_t *src = c->ptr();
 		for (int i = 0; i < map_w * map_h; i++) {
 			holes[i] = src[i] > 127 ? 1 : 0;
 			dw[i] = holes[i] ? 255 : 0;
 			hole_count += holes[i];
 		}
-		hole_image = Image::create_from_data(map_w, map_h, false, Image::FORMAT_R8, data);
+		hole_image = Image::create_from_data(map_w, map_h, false, Image::FORMAT_R8, bytes);
 		hole_texture = ImageTexture::create_from_image(hole_image);
 	}
 	_build_hole_blocks();
