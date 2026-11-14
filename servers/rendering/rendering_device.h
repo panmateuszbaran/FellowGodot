@@ -1746,6 +1746,7 @@ private:
 		uint64_t operations_counter = 0;
 		BinaryMutex operations_mutex;
 		uint64_t fellow_last_used_usec = 0; // FellowEngine: when last acquired (decision 0225)
+		bool fellow_own_submit = false; // FellowEngine: submitted and waited for at release (decision 0227)
 	};
 
 	TightLocalVector<TransferWorker *> transfer_worker_pool;

@@ -7656,6 +7656,16 @@ RenderingDevice::TransferWorker *RenderingDevice::_acquire_transfer_worker(uint3
 	}
 	transfer_worker->fellow_last_used_usec = OS::get_singleton()->get_ticks_usec();
 
+	// FellowEngine (decision 0227): a large upload off the render thread first submits what the worker had recorded and
+	// waits for it, then submits and waits for its own copy before the worker is released (_release_transfer_worker()):
+	// while it copies into the staging buffer, nothing the frame may draw with is left unsubmitted in this worker.
+	transfer_worker->fellow_own_submit = p_transfer_size > 4 * 1024 * 1024 && Fellow::transfer_large_own_submit() && Thread::get_caller_id() != render_thread_id;
+	if (transfer_worker->fellow_own_submit && transfer_worker->recording) {
+		_end_transfer_worker(transfer_worker);
+		_submit_transfer_worker(transfer_worker);
+		_wait_for_transfer_worker(transfer_worker);
+	}
+
 	uint32_t alignment_offset = _get_alignment_offset(transfer_worker->staging_buffer_size_in_use, p_required_align);
 	transfer_worker->max_transfer_size = MAX(transfer_worker->max_transfer_size, p_transfer_size);
 
@@ -7705,6 +7715,15 @@ RenderingDevice::TransferWorker *RenderingDevice::_acquire_transfer_worker(uint3
 }
 
 void RenderingDevice::_release_transfer_worker(TransferWorker *p_transfer_worker) {
+	if (p_transfer_worker->fellow_own_submit) { // FellowEngine (decision 0227)
+		p_transfer_worker->fellow_own_submit = false;
+		if (p_transfer_worker->recording) {
+			_end_transfer_worker(p_transfer_worker);
+			_submit_transfer_worker(p_transfer_worker);
+			_wait_for_transfer_worker(p_transfer_worker);
+			Fellow::stats().transfer_own_submits.increment();
+		}
+	}
 	p_transfer_worker->thread_mutex.unlock();
 
 	transfer_worker_pool_mutex.lock();
@@ -7801,12 +7820,14 @@ void RenderingDevice::_wait_for_transfer_worker(TransferWorker *p_transfer_worke
 	p_transfer_worker->staging_buffer_size_in_use = 0;
 	p_transfer_worker->submitted = false;
 
+	// FellowEngine (decision 0227): the barriers are handed over before the operations are marked processed, so that
+	// the frame's end, seeing them processed without taking the worker, records them.
+	_flush_barriers_for_transfer_worker(p_transfer_worker);
+
 	{
 		MutexLock lock(p_transfer_worker->operations_mutex);
 		p_transfer_worker->operations_processed = p_transfer_worker->operations_submitted;
 	}
-
-	_flush_barriers_for_transfer_worker(p_transfer_worker);
 }
 
 void RenderingDevice::_flush_barriers_for_transfer_worker(TransferWorker *p_transfer_worker) {
@@ -7873,7 +7894,33 @@ void RenderingDevice::_submit_transfer_workers(RDD::CommandBufferID p_draw_comma
 		}
 
 		{
-			MutexLock lock(worker->thread_mutex);
+			// FellowEngine (milestone 115): a worker held by a thread copying into it is waited for and counted; with
+			// decision 0227 the wait ends as soon as the operations the frame draws with are processed (a large upload
+			// submits and waits for the worker's earlier work before its copy).
+			if (!worker->thread_mutex.try_lock()) {
+				const uint64_t wait_t0 = OS::get_singleton()->get_ticks_usec();
+				bool skip = false;
+				if (p_draw_command_buffer && Fellow::transfer_large_own_submit()) {
+					while (!worker->thread_mutex.try_lock()) {
+						{
+							MutexLock lock(worker->operations_mutex);
+							if (worker->operations_processed >= transfer_worker_operation_used_by_draw[worker->index]) {
+								skip = true;
+								break;
+							}
+						}
+						Thread::yield();
+					}
+				} else {
+					worker->thread_mutex.lock();
+				}
+				Fellow::stats().transfer_submit_waits.increment();
+				Fellow::stats().transfer_submit_wait_usec.add(OS::get_singleton()->get_ticks_usec() - wait_t0);
+				if (skip) {
+					Fellow::stats().transfer_submit_skips.increment();
+					continue;
+				}
+			}
 			if (worker->recording) {
 				VectorView<RDD::SemaphoreID> semaphores = p_draw_command_buffer ? frames[frame].transfer_worker_semaphores[i] : VectorView<RDD::SemaphoreID>();
 				_end_transfer_worker(worker);
@@ -7883,6 +7930,7 @@ void RenderingDevice::_submit_transfer_workers(RDD::CommandBufferID p_draw_comma
 			if (p_draw_command_buffer) {
 				_flush_barriers_for_transfer_worker(worker);
 			}
+			worker->thread_mutex.unlock();
 		}
 	}
 }

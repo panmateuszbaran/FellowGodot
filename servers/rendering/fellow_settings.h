@@ -310,6 +310,13 @@ inline bool texture_budget_from_used_level() {
 inline bool transfer_staging_trim() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/frame/transfer_staging_trim");
 }
+// frame/transfer_large_own_submit (milestone 115, decision 0227): an upload above 4 MiB made off the render thread
+// submits what its transfer worker had recorded and waits for it before copying, and submits and waits for its own copy
+// before releasing the worker; the frame's end, finding a worker held, waits only while the uploads it draws with are
+// not done. Read per upload.
+inline bool transfer_large_own_submit() {
+	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/frame/transfer_large_own_submit");
+}
 inline uint64_t transfer_staging_trim_idle_usec() {
 	return uint64_t(MAX(0.0, double(GLOBAL_GET_CACHED(float, "rendering/fellow/frame/transfer_staging_trim_idle_s"))) * 1000000.0);
 }
@@ -1379,6 +1386,11 @@ struct Stats {
 	SafeNumeric<uint64_t> physics_godot_pairs_freed;
 	SafeNumeric<uint64_t> transfer_staging_grows; // milestone 114: staging buffers made larger (a fresh allocation)
 	SafeNumeric<uint64_t> transfer_staging_trims; // ... and released by frame/transfer_staging_trim (decision 0225)
+	// Milestone 115: the frame's end finding a transfer worker it must submit held by a thread copying into it.
+	SafeNumeric<uint64_t> transfer_submit_waits;
+	SafeNumeric<uint64_t> transfer_submit_wait_usec;
+	SafeNumeric<uint64_t> transfer_submit_skips; // ... and the wait ended because the frame's uploads were done (0227)
+	SafeNumeric<uint64_t> transfer_own_submits; // large uploads submitted on their own thread (decision 0227)
 	SafeNumeric<uint64_t> physics_jolt_usec[3];
 	SafeNumeric<uint64_t> physics_motion_cache_calls; // body_test_motion() calls inside move_and_slide() (decision 0093)
 	SafeNumeric<uint64_t> physics_motion_cache_hits; // of those, answered from the kept results

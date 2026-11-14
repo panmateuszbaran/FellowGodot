@@ -394,7 +394,10 @@ Milestone 113 (decision 0222): `texture_swaps_keep_shadows` (on, exact): a swap 
 shadow caches through materials whose shadows cannot read their textures. Milestone 114 (decision 0225):
 `rendering/fellow/frame/transfer_staging_trim` (on): RenderingDevice's transfer workers release a staging buffer above
 4 MiB after `transfer_staging_trim_idle_s` (5) unused, all but the largest (host memory, counted in the driver's video
-memory: the streamer's loads made the workers multiply, each keeping its largest upload's).
+memory: the streamer's loads made the workers multiply, each keeping its largest upload's). Milestone 115 (decision
+0227, pending the RTX): `rendering/fellow/frame/transfer_large_own_submit` (off): an upload above 4 MiB made off the
+render thread submits and waits for its worker's earlier work and its own copy itself, so that the frame's end does not
+wait while it copies (FellowEngine's statistics count those waits: `transfer_submit_waits`, `transfer_submit_wait_usec`).
 `texture_instances_per_frame` (2048) instances are
 evaluated a frame; `texture_max_jobs` (4), `texture_upload_mb_per_frame` (64), `texture_release_hold_s` (2),
 `texture_unreferenced_hold_s` (5); `texture_info_details` lists every texture in
