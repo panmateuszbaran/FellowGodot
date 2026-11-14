@@ -1248,12 +1248,10 @@ void start() {
 	for (uint32_t s = 0; s < FellowHitchSampler::SLOT_MAX; s++) {
 		captures[s].stacks = (Stack *)memalloc(sizeof(Stack) * MAX_SAMPLES);
 		captures[s].threads = (OtherThread *)memalloc(sizeof(OtherThread) * MAX_THREADS);
+		captures[s].others = (OtherSample *)memalloc(sizeof(OtherSample) * MAX_OTHER_STACKS);
 	}
 	known_threads = (OtherThread *)memalloc(sizeof(OtherThread) * MAX_THREADS);
 	known_count = 0;
-	for (uint32_t s = 0; s < FellowHitchSampler::SLOT_MAX; s++) {
-		captures[s].others = (OtherSample *)memalloc(sizeof(OtherSample) * MAX_OTHER_STACKS);
-	}
 	sampler_start_usec = OS::get_singleton()->get_ticks_usec();
 	exit_requested.store(false, std::memory_order_release);
 	Thread::Settings thread_settings;

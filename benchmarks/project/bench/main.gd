@@ -141,8 +141,9 @@ func _ready() -> void:
 		win.content_scale_mode = Window.CONTENT_SCALE_MODE_VIEWPORT
 		win.content_scale_aspect = Window.CONTENT_SCALE_ASPECT_IGNORE
 		win.content_scale_size = render_size
-	# Benchmark rules: no vsync, no FPS cap (both are also set in project.godot / CLI).
-	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
+	# Benchmark rules: no vsync, no FPS cap (both are also set in project.godot / CLI). --vsync=mailbox (milestone 117,
+	# diagnostics): the mailbox presentation mode instead (no wait for the display either, the newest frame shown).
+	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_MAILBOX if args.get("vsync", "") == "mailbox" else DisplayServer.VSYNC_DISABLED)
 	# --max_fps=N: a frame rate cap for diagnostics only (presentation at a given rate); never in a measurement. The
 	# runner passes --fixed-fps, with which the engine's own cap does nothing: the main thread waits in _process().
 	Engine.max_fps = 0

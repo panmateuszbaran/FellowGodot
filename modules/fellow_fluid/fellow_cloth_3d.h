@@ -58,6 +58,13 @@ public:
 		PIN_VERTEX_COLOR, // the source mesh's vertices whose colour's red is 0.5 or more
 	};
 
+	// Decision 0232: how far a free particle may go from its skinned place, as a share of skin_max_distance.
+	enum SkinDistanceMode {
+		SKIN_DISTANCE_UNIFORM, // all of it everywhere
+		SKIN_DISTANCE_FROM_PINS, // growing along the cloth from the pinned particles (0 at a pin, all of it at the farthest)
+		SKIN_DISTANCE_VERTEX_COLOR, // painted: the source mesh's vertex colour's green (0: on the skin, 1: all of it)
+	};
+
 	// A collision shape in world space, for the solver.
 	struct Collider {
 		enum Type {
@@ -139,6 +146,7 @@ private:
 	// skin_max_distance of theirs (0: anywhere).
 	bool follow_skin = false;
 	float skin_max_distance = 0.0f;
+	SkinDistanceMode skin_distance_mode = SKIN_DISTANCE_UNIFORM;
 	Ref<Skin> skin; // the binds' bones and poses (none: bone i, the inverse of its global rest)
 	// Level of detail.
 	float simulation_distance = 100.0f;
@@ -250,6 +258,7 @@ private:
 	LocalVector<Vector3> skin_from;
 	LocalVector<Vector3> skin_to;
 	int skin_limited = 0; // free particles held at the distance in the last frame's last substep
+	LocalVector<float> skin_distance_scale; // decision 0232: each particle's share of skin_max_distance (empty: all of it)
 	float normal_sign = 1.0f;
 	bool has_tangents = false;
 	bool built = false;
@@ -390,6 +399,8 @@ public:
 	bool is_following_skin() const { return follow_skin; }
 	void set_skin_max_distance(float p_distance) { skin_max_distance = MAX(0.0f, p_distance); }
 	float get_skin_max_distance() const { return skin_max_distance; }
+	void set_skin_distance_mode(SkinDistanceMode p_mode);
+	SkinDistanceMode get_skin_distance_mode() const { return skin_distance_mode; }
 	void set_skin(const Ref<Skin> &p_skin);
 	Ref<Skin> get_skin() const { return skin; }
 	float get_self_collision_friction() const { return self_collision_friction; }
@@ -410,3 +421,4 @@ public:
 };
 
 VARIANT_ENUM_CAST(FellowCloth3D::PinMode);
+VARIANT_ENUM_CAST(FellowCloth3D::SkinDistanceMode);

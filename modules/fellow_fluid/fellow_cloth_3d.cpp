@@ -231,6 +231,8 @@ void FellowCloth3D::_build() {
 		}
 		if (pin_mode == PIN_VERTEX_COLOR && colors.size() != vertices.size()) {
 			build_problem = RTR("Pin Mode is Vertex Color, but the source mesh has no vertex colors: nothing is pinned.");
+		} else if (follow_skin && skin_distance_mode == SKIN_DISTANCE_VERTEX_COLOR && colors.size() != vertices.size()) {
+			build_problem = RTR("Skin Distance Mode is Vertex Color, but the source mesh has no vertex colors: the whole of Skin Max Distance applies everywhere.");
 		}
 	} else {
 		_make_grid(vertices, normals, uvs, indices, colors);
@@ -473,41 +475,79 @@ void FellowCloth3D::_build() {
 	}
 	_filter_constraints();
 
-	// Tethers: each free particle no farther from its nearest pin (along the cloth) than the path at rest, with slack.
-	if (tether_slack > 0.0f) {
-		LocalVector<float> dist;
-		LocalVector<uint32_t> source;
-		dist.resize(np);
-		source.resize(np);
+	// Each particle's distance along the cloth from its nearest pin at rest, and that pin (for the tethers and decision
+	// 0232's distance from the skin growing from the pins).
+	LocalVector<float> pin_path;
+	LocalVector<uint32_t> pin_source;
+	if (tether_slack > 0.0f || skin_distance_mode == SKIN_DISTANCE_FROM_PINS) {
+		pin_path.resize(np);
+		pin_source.resize(np);
 		LocalVector<HeapItem> heap;
 		for (uint32_t i = 0; i < np; i++) {
-			dist[i] = pinned[i] ? 0.0f : std::numeric_limits<float>::max();
-			source[i] = i;
+			pin_path[i] = pinned[i] ? 0.0f : std::numeric_limits<float>::max();
+			pin_source[i] = i;
 			if (pinned[i]) {
 				heap_push(heap, { 0.0f, i });
 			}
 		}
 		while (!heap.is_empty()) {
 			const HeapItem it = heap_pop(heap);
-			if (it.d > dist[it.i]) {
+			if (it.d > pin_path[it.i]) {
 				continue;
 			}
 			for (const Pair<uint32_t, float> &nb : adjacency[it.i]) {
 				const float d = it.d + nb.second;
-				if (d < dist[nb.first]) {
-					dist[nb.first] = d;
-					source[nb.first] = source[it.i];
+				if (d < pin_path[nb.first]) {
+					pin_path[nb.first] = d;
+					pin_source[nb.first] = pin_source[it.i];
 					heap_push(heap, { d, nb.first });
 				}
 			}
 		}
+	}
+
+	// Tethers: each free particle no farther from its nearest pin (along the cloth) than the path at rest, with slack.
+	if (tether_slack > 0.0f) {
 		for (uint32_t i = 0; i < np; i++) {
-			if (!pinned[i] && dist[i] < std::numeric_limits<float>::max()) {
-				tethers.push_back({ i, source[i], dist[i] });
+			if (!pinned[i] && pin_path[i] < std::numeric_limits<float>::max()) {
+				tethers.push_back({ i, pin_source[i], pin_path[i] });
 			}
 		}
 	}
 	tethers_rest = tethers;
+
+	// Decision 0232: each particle's share of skin_max_distance.
+	skin_distance_scale.clear();
+	if (skin_distance_mode == SKIN_DISTANCE_FROM_PINS) {
+		float farthest = 0.0f;
+		for (uint32_t i = 0; i < np; i++) {
+			if (pin_path[i] < std::numeric_limits<float>::max()) {
+				farthest = MAX(farthest, pin_path[i]);
+			}
+		}
+		skin_distance_scale.resize(np);
+		for (uint32_t i = 0; i < np; i++) {
+			// A part no pin reaches (or a cloth without pins) may go all of the distance.
+			skin_distance_scale[i] = (farthest > 0.0f && pin_path[i] < std::numeric_limits<float>::max()) ? pin_path[i] / farthest : 1.0f;
+		}
+	} else if (skin_distance_mode == SKIN_DISTANCE_VERTEX_COLOR && colors.size() == nv) {
+		skin_distance_scale.resize(np);
+		for (uint32_t i = 0; i < np; i++) {
+			skin_distance_scale[i] = 1.0f;
+		}
+		LocalVector<uint8_t> painted;
+		painted.resize(np);
+		for (uint32_t i = 0; i < np; i++) {
+			painted[i] = 0;
+		}
+		for (int i = 0; i < nv; i++) {
+			// Vertices welded into one particle: the smallest of their shares.
+			const uint32_t p = render_particle[i];
+			const float g = CLAMP(colors[i].g, 0.0f, 1.0f);
+			skin_distance_scale[p] = painted[p] ? MIN(skin_distance_scale[p], g) : g;
+			painted[p] = 1;
+		}
+	}
 
 	// Normals at rest (node space) and which way the triangles' winding faces against the mesh's normals.
 	particle_rest_normal.resize(np);
@@ -1384,18 +1424,19 @@ void FellowCloth3D::_substep(float p_h, const Transform3D &p_pin_xf, float p_f) 
 		// Decision 0230: a free particle kept within the distance of its skinned place (interpolated over the substeps).
 		const Vector3 *SF = skin_from.ptr();
 		const Vector3 *ST = skin_to.ptr();
-		const float lim = skin_max_distance;
-		const float lim2 = lim * lim;
+		// Decision 0232: a particle's own share of the distance (0: on its skinned place).
+		const float *scale = skin_distance_scale.size() == np ? skin_distance_scale.ptr() : nullptr;
 		int limited = 0;
 		for (uint32_t i = 0; i < np; i++) {
 			if (W[i] <= 0.0f) {
 				continue;
 			}
+			const float lim = scale ? skin_max_distance * scale[i] : skin_max_distance;
 			const Vector3 t = SF[i].lerp(ST[i], p_f);
 			const Vector3 d = X[i] - t;
 			const float l2 = d.length_squared();
-			if (l2 > lim2) {
-				X[i] = t + d * (lim / Math::sqrt(l2));
+			if (l2 > lim * lim) {
+				X[i] = l2 > 0.0f ? t + d * (lim / Math::sqrt(l2)) : t;
 				limited++;
 			}
 		}
@@ -2229,6 +2270,11 @@ void FellowCloth3D::set_pin_mode(PinMode p_mode) {
 	_set_build_dirty();
 }
 
+void FellowCloth3D::set_skin_distance_mode(SkinDistanceMode p_mode) {
+	skin_distance_mode = p_mode;
+	_set_build_dirty();
+}
+
 void FellowCloth3D::set_material(const Ref<Material> &p_material) {
 	material = p_material;
 	if (mesh.is_valid()) {
@@ -2282,6 +2328,8 @@ void FellowCloth3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("is_following_skin"), &FellowCloth3D::is_following_skin);
 	ClassDB::bind_method(D_METHOD("set_skin_max_distance", "distance"), &FellowCloth3D::set_skin_max_distance);
 	ClassDB::bind_method(D_METHOD("get_skin_max_distance"), &FellowCloth3D::get_skin_max_distance);
+	ClassDB::bind_method(D_METHOD("set_skin_distance_mode", "mode"), &FellowCloth3D::set_skin_distance_mode);
+	ClassDB::bind_method(D_METHOD("get_skin_distance_mode"), &FellowCloth3D::get_skin_distance_mode);
 	ClassDB::bind_method(D_METHOD("set_skin", "skin"), &FellowCloth3D::set_skin);
 	ClassDB::bind_method(D_METHOD("get_skin"), &FellowCloth3D::get_skin);
 	ClassDB::bind_method(D_METHOD("set_pin_mode", "mode"), &FellowCloth3D::set_pin_mode);
@@ -2352,6 +2400,7 @@ void FellowCloth3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::PACKED_STRING_ARRAY, "pin_bones"), "set_pin_bones", "get_pin_bones");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "follow_skin"), "set_follow_skin", "is_following_skin");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "skin_max_distance", PROPERTY_HINT_RANGE, "0,1,0.001,or_greater,suffix:m"), "set_skin_max_distance", "get_skin_max_distance");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "skin_distance_mode", PROPERTY_HINT_ENUM, "Uniform,From Pins,Vertex Color"), "set_skin_distance_mode", "get_skin_distance_mode");
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "skin", PROPERTY_HINT_RESOURCE_TYPE, "Skin"), "set_skin", "get_skin");
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "material", PROPERTY_HINT_RESOURCE_TYPE, "BaseMaterial3D,ShaderMaterial"), "set_material", "get_material");
 	ADD_GROUP("Fabric", "");
@@ -2394,4 +2443,8 @@ void FellowCloth3D::_bind_methods() {
 	BIND_ENUM_CONSTANT(PIN_TOP_CORNERS);
 	BIND_ENUM_CONSTANT(PIN_CORNERS);
 	BIND_ENUM_CONSTANT(PIN_VERTEX_COLOR);
+
+	BIND_ENUM_CONSTANT(SKIN_DISTANCE_UNIFORM);
+	BIND_ENUM_CONSTANT(SKIN_DISTANCE_FROM_PINS);
+	BIND_ENUM_CONSTANT(SKIN_DISTANCE_VERTEX_COLOR);
 }

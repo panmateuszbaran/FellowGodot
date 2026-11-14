@@ -170,8 +170,11 @@
 		<member name="skin" type="Skin" setter="set_skin" getter="get_skin">
 			With [member follow_skin], the binds of the source mesh's bone indices: their bones (by name or index) and bind poses, as a [MeshInstance3D]'s [member MeshInstance3D.skin]. Without one, bind [i]i[/i] is bone [i]i[/i] with the inverse of its global rest (as Godot skins a mesh without a skin).
 		</member>
+		<member name="skin_distance_mode" type="int" setter="set_skin_distance_mode" getter="get_skin_distance_mode" enum="FellowCloth3D.SkinDistanceMode" default="0">
+			With [member follow_skin] and a [member skin_max_distance], how much of the distance each free particle may go from its skinned place: all of it everywhere, a share growing along the cloth from the pinned particles (a skirt close to the hips at its waistband, free at its hem), or a share painted in the [member source_mesh]'s vertex colours' green (0: on the skin). See [code]docs/decisions/0232-cloth-skin-distance.md[/code].
+		</member>
 		<member name="skin_max_distance" type="float" setter="set_skin_max_distance" getter="get_skin_max_distance" default="0.0">
-			With [member follow_skin], how far a free particle may go from its skinned place (m; 0: anywhere): a skirt or a coat kept about the body however the wind or a fast turn throws it.
+			With [member follow_skin], how far a free particle may go from its skinned place (m; 0: anywhere): a skirt or a coat kept about the body however the wind or a fast turn throws it. [member skin_distance_mode] gives each particle its share of it.
 		</member>
 		<member name="source_mesh" type="Mesh" setter="set_source_mesh" getter="get_source_mesh">
 			A mesh to simulate instead of the rectangle: its first surface's triangles (vertices at the same position are one particle).
@@ -228,6 +231,15 @@
 		</constant>
 		<constant name="PIN_VERTEX_COLOR" value="5" enum="PinMode">
 			The source mesh's vertices whose colour's red is 0.5 or more.
+		</constant>
+		<constant name="SKIN_DISTANCE_UNIFORM" value="0" enum="SkinDistanceMode">
+			Every free particle may go all of [member skin_max_distance] from its skinned place.
+		</constant>
+		<constant name="SKIN_DISTANCE_FROM_PINS" value="1" enum="SkinDistanceMode">
+			A free particle's share of [member skin_max_distance] grows with its distance along the cloth from the nearest pinned particle (at rest): none at a pin, all of it at the farthest particle.
+		</constant>
+		<constant name="SKIN_DISTANCE_VERTEX_COLOR" value="2" enum="SkinDistanceMode">
+			A free particle's share of [member skin_max_distance] is painted in the [member source_mesh]'s vertex colours' green (0 to 1; vertices welded into one particle: the smallest).
 		</constant>
 	</constants>
 </class>

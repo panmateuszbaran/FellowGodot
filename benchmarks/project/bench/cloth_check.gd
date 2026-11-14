@@ -53,7 +53,7 @@ var garment_walkers: Array = [] # milestone 116: [walker, skeleton] a skirt on i
 var done := false
 var shots := {}
 var viewports := {}
-var strip_lanes := ["flag", "curtain", "sheet_on_shapes", "cape", "awning", "banner_mesh", "cape_bones", "tear_cut", "tear_strain", "tear_off", "self_heap", "self_heap_off", "self_heap_thin", "self_heap_tri", "self_slope", "self_slope_friction", "garment_skin", "garment_bones"]
+var strip_lanes := ["flag", "curtain", "sheet_on_shapes", "cape", "awning", "banner_mesh", "cape_bones", "tear_cut", "tear_strain", "tear_off", "self_heap", "self_heap_off", "self_heap_thin", "self_heap_tri", "self_slope", "self_slope_friction", "garment_skin", "garment_bones", "garment_from_pins", "garment_painted"]
 var strip_times := [0.5, 1.0, 2.0, 3.9]
 
 
@@ -149,7 +149,10 @@ func _skirt_mesh() -> Dictionary:
 			var a := TAU * float(s) / float(seg)
 			verts.append(Vector3(sin(a) * 0.26, y, cos(a) * 0.26))
 			normals.append(Vector3(sin(a), 0, cos(a)))
-			colors.append(Color(1, 0, 0) if r == 0 else Color(0, 0, 0))
+			# Red: pinned (the waistband); green: the share of the skin's distance painted (decision 0232: the square of
+			# the ring's place down the skirt).
+			var g := pow(float(r) / float(rings - 1), 2.0)
+			colors.append(Color(1, g, 0) if r == 0 else Color(0, g, 0))
 			var wh := 0.5 if r == 0 else 1.0
 			bones.append_array([0, 1, 0, 0])
 			weights.append_array([wh, 1.0 - wh, 0.0, 0.0])
@@ -471,7 +474,9 @@ func _build() -> void:
 	# the spine; the rest to the hips), on a skeleton whose hips sway and whose spine twists against them, the body
 	# circling, in the flags' gale: following the skin (the waistband pinned to its skinned place, the rest within 12 cm of
 	# its own), and pinned to the nearest bones as decision 0184 does.
-	for lane_name in ["garment_skin", "garment_bones"]:
+	# Milestone 117 (decision 0232): the skin's distance a share of it each, growing from the waistband along the skirt,
+	# and painted.
+	for lane_name in ["garment_skin", "garment_bones", "garment_from_pins", "garment_painted"]:
 		x += 8.0
 		var gw := Node3D.new()
 		gw.position = Vector3(x + 2.5, 0, 0) # where the circle starts, facing along it (no jump at the first frame)
@@ -523,9 +528,13 @@ func _build() -> void:
 		gw.add_child(gc)
 		gc.skeleton_path = gc.get_path_to(gsk)
 		gc.colliders = [gc.get_path_to(hcs)]
-		if lane_name == "garment_skin":
+		if lane_name != "garment_bones":
 			gc.follow_skin = true
 			gc.skin_max_distance = 0.12
+		if lane_name == "garment_from_pins":
+			gc.skin_distance_mode = FellowCloth3D.SKIN_DISTANCE_FROM_PINS
+		elif lane_name == "garment_painted":
+			gc.skin_distance_mode = FellowCloth3D.SKIN_DISTANCE_VERTEX_COLOR
 		var gl := _lane(lane_name, gc, x)
 		gl["skin_rest"] = skirt.rest
 		gl["skin_weights"] = skirt.weights
@@ -534,6 +543,9 @@ func _build() -> void:
 		gl["walker"] = gw
 		gl["skin_err"] = 0.0
 		gl["skin_far"] = 0.0
+		gl["ring_far"] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] # the farthest from its skinned place, a ring
+		gl["ring_sum"] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+		gl["ring_count"] = 0
 		gl["godot_skin"] = gskin
 		gl["godot_skin_err"] = 0.0
 		garment_walkers.append(gl)
@@ -609,7 +621,7 @@ func _make_viewports() -> void:
 				cam.look_at_from_position(Vector3(x + 1.0, 3.0, 5.0), Vector3(x + 0.5, 1.2, 0.0))
 			"cape_bones":
 				cam.look_at_from_position(Vector3(x + 4.0, 2.4, 5.0), Vector3(x, 1.0, 0))
-			"garment_skin", "garment_bones":
+			"garment_skin", "garment_bones", "garment_from_pins", "garment_painted":
 				cam.look_at_from_position(Vector3(x + 0.5, 2.6, 5.0), Vector3(x + 0.3, 0.7, 0.8))
 		if grid:
 			var cell := Control.new()
@@ -703,11 +715,17 @@ func _measure(lane: Dictionary, pins := false) -> void:
 				lane.skin_err = maxf(lane.skin_err, dd)
 			else:
 				lane.skin_far = maxf(lane.skin_far, dd)
+			var ring := i / 20
+			lane.ring_far[ring] = maxf(lane.ring_far[ring], dd)
+			if frame >= 120: # after the first two seconds: the mean distance a ring keeps while the body circles
+				lane.ring_sum[ring] += dd / 20.0
 			# Into the hips' capsule (radius 0.2 m, its cylinder 0.95 - 0.15 +- 0.15 m high, upright).
 			var hc: Vector3 = (mats[0] as Transform3D).origin # the hips' place now (its rest at the origin of skeleton space)
 			hc = gsk.global_transform * gsk.get_bone_global_pose(0) * Vector3(0, -0.15, 0)
 			if absf(cp.y - hc.y) < 0.15:
 				lane.deepest = maxf(lane.deepest, 0.2 - Vector2(cp.x - hc.x, cp.z - hc.z).length())
+		if frame >= 120:
+			lane.ring_count += 1
 		# Godot's own skinning of the mesh (the waistband's vertices: a particle each); the renderer's skeleton, so not
 		# headless.
 		var gsm: MeshInstance3D = lane.godot_skin
@@ -914,7 +932,7 @@ func _finish() -> void:
 				ok = ok and _check_tear(lane, c, st, box, e)
 			"self_heap", "self_heap_off", "self_heap_thin", "self_heap_tri", "self_slope", "self_slope_friction":
 				ok = ok and _check_self(lane, c, st, box, e)
-			"garment_skin", "garment_bones":
+			"garment_skin", "garment_bones", "garment_from_pins", "garment_painted":
 				# Milestone 116 (decision 0230): the waistband on its skinned place (within a millimetre, following the
 				# skin; decision 0184's nearest bones as they are), the rest within the distance (and its colliders' push),
 				# nothing into the hips.
@@ -926,8 +944,25 @@ func _finish() -> void:
 				e["skin_particles"] = st.get("skin_particles", 0)
 				e["skin_limited"] = st.get("skin_limited", 0)
 				e["bone_pins"] = st.get("bone_pins", 0)
-				if lane.name == "garment_skin":
-					ok = ok and st.get("skin_particles", 0) == c.get_particle_count() and float(lane.skin_err) < 0.001 and float(lane.godot_skin_err) < 0.001 and float(lane.skin_far) < 0.12 + 0.01 and lane.deepest < 0.03
+				# Milestone 117 (decision 0232): each ring's farthest and mean distance from its skinned place (cm).
+				var rf := []
+				var rm := []
+				for r in 10:
+					rf.append(snappedf(float(lane.ring_far[r]) * 100.0, 0.1))
+					rm.append(snappedf(float(lane.ring_sum[r]) / maxf(1.0, float(lane.ring_count)) * 100.0, 0.1))
+				e["ring_farthest_cm"] = rf
+				e["ring_mean_cm"] = rm
+				if lane.name != "garment_bones":
+					var rings_ok := true
+					for r in 10:
+						var share := 1.0
+						if lane.name == "garment_from_pins":
+							share = float(r) / 9.0
+						elif lane.name == "garment_painted":
+							share = pow(float(r) / 9.0, 2.0)
+						rings_ok = rings_ok and float(lane.ring_far[r]) <= 0.12 * share + 0.01
+					e["rings_within_their_distance"] = rings_ok
+					ok = ok and rings_ok and st.get("skin_particles", 0) == c.get_particle_count() and float(lane.skin_err) < 0.001 and float(lane.godot_skin_err) < 0.001 and float(lane.skin_far) < 0.12 + 0.01 and lane.deepest < 0.03
 				else:
 					ok = ok and st.get("skin_particles", 0) == 0 and st.get("bone_pins", 0) == 20
 			"cape_bones":
