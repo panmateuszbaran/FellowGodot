@@ -1,6 +1,6 @@
 # FellowEngine — milestone 115 report (the frame's waits on uploads; cloth layers thin and with friction)
 
-Status: **FINAL** (2026-11-14; the cloud only — the RTX's measurement of decision 0227 is to come). Branch
+Status: **FINAL** (2026-11-14; the cloud only — decision 0227 measured on the RTX in milestone 116: kept, on by default). Branch
 `fellow/geometry`. Milestone 114 traced texture streaming's long frames to the render thread waiting, at the frame's end,
 for a transfer worker another thread was copying a texture into; milestone 112 left cloth self-collision by particles
 only (thick layers) and without friction between its layers. And the regression suite's one intermittent difference

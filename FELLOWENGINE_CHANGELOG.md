@@ -9,6 +9,17 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 116 — cloth following the skin; no frame waits for a large copy (2026-11-14)
+
+- `FellowCloth3D.follow_skin`, `skin_max_distance`, `skin` (decision 0230): a source mesh with bone weights skins each
+  particle with the skeleton as Godot skins the mesh; the pinned particles follow their skinned places (a skirt's
+  waistband 51.5 mm → 0 from the body's skin), the free ones within a distance of theirs; past the simulation distance
+  the cloth is skinned.
+- `rendering/fellow/frame/transfer_large_own_submit` (decision 0227) measured on the RTX and on by default: Sponza
+  streamed no longer makes the frame wait for copies over 4 MiB (22-24 a flythrough, 54-60 with a 256 MiB budget, then
+  0-1); the GPU's frame the same. New statistics: `transfer_frame_large_submits`, the render thread's worker acquisitions.
+- The build without a warning (`FellowTerrain3D`'s locals no longer shadow `Node::data`).
+
 ## Milestone 115 — the frame's waits on uploads; cloth layers thin and with friction (2026-11-14)
 
 - The frame's end counts the transfer workers it found held by another thread's upload and its time waiting

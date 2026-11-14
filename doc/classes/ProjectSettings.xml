@@ -3289,8 +3289,8 @@
 		<member name="rendering/fellow/frame/submit_thread" type="bool" setter="" getter="" default="true">
 			Command buffer submission on a thread of its own. Decision 0017.
 		</member>
-		<member name="rendering/fellow/frame/transfer_large_own_submit" type="bool" setter="" getter="" default="false">
-			An upload above 4 MiB made off the render thread (a streamed texture, a resource loaded in the background) submits what its transfer worker had recorded and waits for it before copying, then submits and waits for its own copy before releasing the worker; the frame's end, finding a worker held by such a copy, waits only while the uploads it draws with are not done. Decision 0227.
+		<member name="rendering/fellow/frame/transfer_large_own_submit" type="bool" setter="" getter="" default="true">
+			An upload above 4 MiB made off the render thread (a streamed texture, a resource loaded in the background) submits what its transfer worker had recorded and waits for it before copying, then submits and waits for its own copy before releasing the worker; the frame's end, finding a worker held by such a copy, waits only while the uploads it draws with are not done. No frame then waits for a large copy (Sponza streamed: 22-24 a flythrough, 55-60 with a 256 MiB budget; then 0-1). Decision 0227.
 		</member>
 		<member name="rendering/fellow/frame/transfer_staging_trim" type="bool" setter="" getter="" default="true">
 			RenderingDevice's transfer workers release a staging buffer above 4 MiB after [member rendering/fellow/frame/transfer_staging_trim_idle_s] unused, all but the largest (freed on a worker thread); stock keeps each at the next power of two of the largest upload its worker made, for good (a streamed 4K texture's chain: 32 MiB a worker). Host memory, which the driver's count of video memory includes. Decision 0225.

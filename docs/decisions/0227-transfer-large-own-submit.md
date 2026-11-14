@@ -1,9 +1,10 @@
 # 0227 — Large uploads submitted on their own thread
 
-Status: **PENDING** (off; lavapipe measured, the RTX not yet) · Branch `fellow/geometry` · Setting
+Status: **KEEP**, on by default (the same frames; the frame no longer waits for large copies) · Branch `fellow/geometry` · Setting
 `rendering/fellow/frame/transfer_large_own_submit` · Code: `servers/rendering/rendering_device.{h,cpp}`
 (`_acquire_transfer_worker()`, `_release_transfer_worker()`, `_wait_for_transfer_worker()`,
-`_submit_transfer_workers()`), `fellow_settings.*` · Checks: lavapipe's Streaming Lab.
+`_submit_transfer_workers()`), `fellow_settings.*` · Checks: lavapipe's Streaming Lab, the laptop's Sponza (jobs
+f442-f444).
 
 ## Problem
 
@@ -20,7 +21,7 @@ RTX in Sponza (9-11 without streaming) and traced decision 0225's longer frames 
 
 * **Measured**: the frame's end counts the workers it found held (`transfer_submit_waits`) and how long it waited
   (`transfer_submit_wait_usec`) in FellowEngine's statistics.
-* `transfer_large_own_submit` (off): an upload above 4 MiB made off the render thread first submits what its worker had
+* `transfer_large_own_submit` (on): an upload above 4 MiB made off the render thread first submits what its worker had
   recorded and waits for it, copies, then submits and waits for its own copy before releasing the worker (its texture
   barriers handed to the frame, as an immediate upload's). While it copies, nothing the frame draws with is left
   unsubmitted in that worker; the frame's end, finding a worker held, waits only while the uploads it draws with are not
@@ -37,24 +38,38 @@ lavapipe, Streaming Lab's flythrough (480 × 270, streaming on, 1 738-1 806 load
 | off | 68 times | 73.0 ms | — | — |
 | on | 47 times | 17.4 ms | 34 | 358 |
 
-The four views captured without TAA the same either way (0 pixels). The wait left is small uploads batched as before
+The four views captured without TAA the same either way (0 pixels); the regression suite (36 scenes) with it off and
+with it on (milestone 116) the same as its goldens. The wait left is small uploads batched as before
 (below 4 MiB they stay batched: a submission and a wait for each would slow a level's load of many small resources).
 
 ## Results
 
-The RTX (job f442, the release template at 76ca4d3440; Sponza streamed at 1920 × 1080, five alternating runs each; the
-frame's longest and its p99.9, ms; the frame's end's counted waits for held workers in all the runs):
+lavapipe (counted, milestone 116): without the option 238 of a flythrough's frame-end submissions carried more than
+4 MiB of copies the frame waits for (4.1 GB in all); with it, 1 (4 MB).
 
-| | longest frame, each run | p99.9 | waits counted | GPU frame (median) | staging at the end |
-|---|---|---:|---:|---:|---:|
-| the defaults (decision 0225: 5 s) | 23.9, 25.1, 13.1, 28.0, 27.3 | 11.0-13.7 | 4, 0.2 ms | 6.27 ms | 128-290 MiB |
-| large uploads on their own thread | 26.1, 13.5, 14.2, 13.7, 33.5 | 11.1-11.7 | 6, 0 ms | 6.25 ms | 130-258 MiB |
-| the staging trimmed after 0.5 s | 26.4, 30.7, 28.3, 27.6, 29.8 | 13.5-20.7 | 12, 23.8 ms | 6.27 ms | 131-132 MiB |
-| both | **13.6, 13.3, 13.4, 13.0, 13.9** | **11.0-11.2** | 6, 0 ms | 6.24 ms | 132-134 MiB |
+The RTX, Sponza streamed at 1920 × 1080. Job f442 (five alternating runs each) suggested more than it held: with the
+staging trimmed after 0.5 s (decision 0225) the CPU stalled in every run (3-7 frames over 16.7 ms whose GPU work was
+under 60 %: 22 in five runs), with the option too in none of five, and the defaults in four of five. Job f444 (the
+release template at 0c711198e5, eight alternating runs each, without and with a 256 MiB budget; stalls: frames over
+16.7 ms whose GPU work is under 60 % of them):
 
-The longest frames left with both are the flythrough's shadow cascades rebuilt (1 236-1 342 draws, the GPU's 12-13 ms:
-in every variant); the others' long frames are the CPU's (the GPU's 5-9 ms in 25-34 ms frames). The frame's end's
-counted waits are few on the RTX (its copies are quick): where the CPU's stalls wait is not pinned down — not at the
-frame's end's taking of a worker, as counted — but they are gone when the large uploads submit on their own thread and
-the staging is trimmed soon (with 16-17 buffers made again in a flythrough), and not with either alone. PENDING: job f443 confirming it (and a
-256 MiB budget, and Bistro).
+| | the frame's own copies over 4 MiB, a flythrough | stalls in 8 runs | longest frame | p99.9 | GPU frame (mean of runs) | staging trims' buffers made again |
+|---|---:|---:|---:|---:|---:|---:|
+| the defaults (decision 0225: 5 s) | 22-24 | 2 | 13.3-27.3 ms | 10.8-12.2 ms | 6.24 ms | 0-4 |
+| large uploads on their own thread | 0 | 3 | 13.1-28.1 ms | 10.8-12.4 ms | 6.24 ms | 0-2 |
+| and the staging trimmed after 0.5 s | 0 | 2 | 13.2-23.0 ms | 10.9-11.5 ms | 6.27 ms | 16-18 |
+| 256 MiB budget: the defaults | 54-60 | 3 | 13.1-22.8 ms | 11.0-12.4 ms | 6.25 ms | 0-2 |
+| budget, large uploads on their own thread | 0-1 | 1 | 13.3-22.0 ms | 11.1-12.8 ms | 6.24 ms | 0-1 |
+| budget, and the trim after 0.5 s | 0 | 2 | 13.2-24.6 ms | 11.0-12.8 ms | 6.25 ms | 41-55 |
+
+So the frame no longer waits for a large copy — 22-24 such waits a flythrough without a budget, 54-60 with one, then
+none — the GPU's frame the same; the CPU's rarer stalls (one in four runs, here) stay in every variant: their cause is
+elsewhere (job f445 records FellowEngine's counters frame by frame). Bistro exterior (no streaming, job f443): the same
+frames (its uploads at its load). What the option does change: decision 0225's short idle times no longer stall
+(0.5 s: 22 stalls in five runs without the option, 2 in eight with it), so a game short of memory can trim the staging
+soon (Sponza: 132 MiB of staging at the end against 257).
+
+## Decision
+
+Keep, on by default: no frame waits for a large copy, at no cost; decision 0225's idle time stays 5 s (0.5 s is safe
+with this on, a choice for a game short of memory).
