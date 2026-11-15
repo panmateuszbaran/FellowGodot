@@ -845,7 +845,9 @@ Monitors tab, *FellowEngine*; in every build): `Texture streaming resident` / `w
 cells loaded` / `loading`; `Motion matching time` (CPU seconds a frame, summed over the threads) / `updates` (a
 frame); milestone 114: `Video memory (device)` (bytes in the GPU's own heaps; Godot's video memory monitor counts the
 host memory the driver allocates too) and `Upload staging` (RenderingDevice's transfer workers' staging buffers, host
-memory: decision 0225). Decision 0151; check `benchmarks/tools/editor_check/run_editor_check.py`.
+memory: decision 0225); milestone 120: `Video memory budget` and `Video memory used (driver)` (the operating system's
+budget for the device's own heaps and the process's usage of them, decision 0240) and `Texture streaming budget` (the
+budget in force). Decision 0151; check `benchmarks/tools/editor_check/run_editor_check.py`.
 
 ## The editor: animate or still, warnings, handles (milestone 52)
 

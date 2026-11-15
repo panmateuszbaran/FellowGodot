@@ -18,7 +18,8 @@ const ICON_CLASSES := ["FellowBurnable3D", "FellowGasEmitter3D", "FellowGasVolum
 const MONITORS := ["FellowEngine/Texture streaming resident", "FellowEngine/Texture streaming wanted",
 	"FellowEngine/Texture streaming pending", "FellowEngine/World cells loaded", "FellowEngine/World cells loading",
 	"FellowEngine/Motion matching time", "FellowEngine/Motion matching updates", "FellowEngine/Traversal time", "FellowEngine/Cloth time",
-	"FellowEngine/Debris pieces", "FellowEngine/Acoustics time"]
+	"FellowEngine/Debris pieces", "FellowEngine/Acoustics time", "FellowEngine/Video memory (device)", "FellowEngine/Upload staging",
+	"FellowEngine/Video memory budget", "FellowEngine/Video memory used (driver)", "FellowEngine/Texture streaming budget"]
 const SPLIT_MENU := "Split into Streaming Cells (FellowEngine)..."
 const PROXIES_MENU := "Bake Streaming Proxies (FellowEngine)..."
 

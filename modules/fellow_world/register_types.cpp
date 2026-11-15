@@ -61,17 +61,24 @@ static const char *FELLOW_WORLD_MONITORS[] = {
 	"FellowEngine/Acoustics time", // milestone 78: seconds a frame, averaged since the last sample
 	"FellowEngine/Video memory (device)", // milestone 114: the device's own heaps (the driver's total counts the host's too)
 	"FellowEngine/Upload staging", // milestone 114: RenderingDevice's transfer workers' staging buffers (host memory)
+	"FellowEngine/Video memory budget", // milestone 120 (decision 0240): the operating system's, for the device's heaps
+	"FellowEngine/Video memory used (driver)", // the process's usage of them as the operating system counts it
+	"FellowEngine/Texture streaming budget", // the budget in force (texture_budget_mb, texture_budget_auto)
 };
 
 static Variant _fellow_world_monitor(int p_which) {
-	if (p_which <= 2) {
+	if (p_which <= 2 || p_which == 11) {
 		RenderingServer *rs = RenderingServer::get_singleton();
 		if (!rs) {
 			return 0;
 		}
 		const Dictionary d = rs->fellow_get_texture_streaming_info();
 		static const char *keys[3] = { "resident_bytes", "wanted_bytes", "pending" };
-		return d.get(keys[p_which], 0);
+		return d.get(p_which == 11 ? "budget_bytes" : keys[p_which], 0);
+	}
+	if (p_which == 9 || p_which == 10) {
+		const Dictionary st = Fellow::get_stats_dictionary();
+		return st.get(p_which == 9 ? "memory_budget_bytes" : "memory_budget_usage_bytes", 0);
 	}
 	if (p_which == 5) {
 		return FellowDestructible3D::get_debris_count();
@@ -123,8 +130,8 @@ void initialize_fellow_world_module(ModuleInitializationLevel p_level) {
 
 		Performance *performance = Performance::get_singleton();
 		if (performance) {
-			static const Performance::MonitorType types[9] = { Performance::MONITOR_TYPE_MEMORY, Performance::MONITOR_TYPE_MEMORY, Performance::MONITOR_TYPE_QUANTITY, Performance::MONITOR_TYPE_QUANTITY, Performance::MONITOR_TYPE_QUANTITY, Performance::MONITOR_TYPE_QUANTITY, Performance::MONITOR_TYPE_TIME, Performance::MONITOR_TYPE_MEMORY, Performance::MONITOR_TYPE_MEMORY };
-			for (int i = 0; i < 9; i++) {
+			static const Performance::MonitorType types[12] = { Performance::MONITOR_TYPE_MEMORY, Performance::MONITOR_TYPE_MEMORY, Performance::MONITOR_TYPE_QUANTITY, Performance::MONITOR_TYPE_QUANTITY, Performance::MONITOR_TYPE_QUANTITY, Performance::MONITOR_TYPE_QUANTITY, Performance::MONITOR_TYPE_TIME, Performance::MONITOR_TYPE_MEMORY, Performance::MONITOR_TYPE_MEMORY, Performance::MONITOR_TYPE_MEMORY, Performance::MONITOR_TYPE_MEMORY, Performance::MONITOR_TYPE_MEMORY };
+			for (int i = 0; i < 12; i++) {
 				if (!performance->has_custom_monitor(FELLOW_WORLD_MONITORS[i])) {
 					performance->add_custom_monitor(FELLOW_WORLD_MONITORS[i], callable_mp_static(&_fellow_world_monitor).bind(i), Vector<Variant>(), types[i]);
 				}
