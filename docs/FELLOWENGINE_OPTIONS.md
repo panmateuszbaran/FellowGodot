@@ -663,7 +663,11 @@ once a frame by a spatial hash, pushed apart in each substep. `get_stats()`' `se
 the other layers' triangles too, on the side it was found on (the distance then defaults to a quarter of the mean edge:
 layers that close without a particle slipping between another layer's); `self_collision_friction` (0-1, 0; decision
 0229) takes the layers' sliding along each other away where they touch (a heap on a slope held by its own layers).
-`get_stats()`' `self_tri_pairs`, `self_tri_contacts`.
+`get_stats()`' `self_tri_pairs`, `self_tri_contacts`. Milestone 118: `self_collision_edges` (off; decision 0235) keeps the
+edges at the distance from the other layers' edges too (two edges crossing between particles: a towel across a bar of the
+same cloth); the pairs come from the particles nearer each other than the reach and the longest edge and not near along
+the cloth at rest, so a cloth that does not come near itself costs next to nothing. `get_stats()`' `self_edge_pairs`,
+`self_edge_contacts`.
 
 ## Traversal: mantling and vaulting (milestone 72)
 

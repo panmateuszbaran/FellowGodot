@@ -169,6 +169,7 @@ void FellowCloth3D::_make_grid(PackedVector3Array &r_vertices, PackedVector3Arra
 }
 
 void FellowCloth3D::_build() {
+	self_edge_rest_reach = -1.0f; // decision 0235: the edges' neighbours at rest found again
 	_clear();
 	build_dirty = false;
 	build_problem = String();
@@ -1404,6 +1405,46 @@ void FellowCloth3D::_substep(float p_h, const Transform3D &p_pin_xf, float p_f) 
 		}
 		self_tri_contacts = contacts;
 	}
+	if (!self_edge_pairs.is_empty()) {
+		// Decision 0235: two edges nearer each other than the distance, along the direction found between them, pushed
+		// apart to it — the four particles by their inverse masses and their places along the edges (an edge-edge
+		// constraint at the frame's nearest points); with the friction, their sliding along each other.
+		const float d = self_distance_now;
+		int contacts = 0;
+		for (const SelfEdgePair &ep : self_edge_pairs) {
+			const float s = ep.s;
+			const float t = ep.t;
+			const Vector3 p1 = X[ep.a] * (1.0f - s) + X[ep.b] * s;
+			const Vector3 p2 = X[ep.c] * (1.0f - t) + X[ep.d] * t;
+			const float sep = (p1 - p2).dot(ep.n);
+			if (sep >= d) {
+				continue;
+			}
+			const float wa = W[ep.a] * (1.0f - s);
+			const float wb = W[ep.b] * s;
+			const float wc = W[ep.c] * (1.0f - t);
+			const float wd = W[ep.d] * t;
+			const float wsum = wa * (1.0f - s) + wb * s + wc * (1.0f - t) + wd * t;
+			if (wsum <= 0.0f) {
+				continue;
+			}
+			const Vector3 dl = ep.n * ((d - sep) / wsum);
+			X[ep.a] += dl * wa;
+			X[ep.b] += dl * wb;
+			X[ep.c] -= dl * wc;
+			X[ep.d] -= dl * wd;
+			if (mu > 0.0f) {
+				const Vector3 rel = ((X[ep.a] - P[ep.a]) * (1.0f - s) + (X[ep.b] - P[ep.b]) * s) - ((X[ep.c] - P[ep.c]) * (1.0f - t) + (X[ep.d] - P[ep.d]) * t);
+				const Vector3 tang = (rel - ep.n * rel.dot(ep.n)) * (mu / wsum);
+				X[ep.a] -= tang * wa;
+				X[ep.b] -= tang * wb;
+				X[ep.c] += tang * wc;
+				X[ep.d] += tang * wd;
+			}
+			contacts++;
+		}
+		self_edge_contacts = contacts;
+	}
 	if (tether_slack > 0.0f) {
 		const Tether *TT = tethers.ptr();
 		const uint32_t ntt = tethers.size();
@@ -1493,8 +1534,10 @@ void FellowCloth3D::_simulate() {
 		} else {
 			self_pairs.clear();
 			self_tri_pairs.clear();
+			self_edge_pairs.clear();
 			self_contacts = 0;
 			self_tri_contacts = 0;
+			self_edge_contacts = 0;
 		}
 		for (int s = 0; s < steps_now; s++) {
 			const real_t f = real_t(s + 1) / real_t(steps_now);
@@ -1626,10 +1669,12 @@ void FellowCloth3D::_finish() {
 void FellowCloth3D::_find_self_pairs() {
 	self_pairs.clear();
 	self_tri_pairs.clear();
+	self_edge_pairs.clear();
 	self_contacts = 0;
 	self_tri_contacts = 0;
+	self_edge_contacts = 0;
 	const uint32_t np = x.size();
-	const float d = self_collision_distance > 0.0f ? self_collision_distance : (self_collision_triangles ? 0.25f : 0.75f) * mean_edge;
+	const float d = self_collision_distance > 0.0f ? self_collision_distance : ((self_collision_triangles || self_collision_edges) ? 0.25f : 0.75f) * mean_edge;
 	self_distance_now = d;
 	if (d <= 0.0f || np < 2) {
 		return;
@@ -1686,6 +1731,270 @@ void FellowCloth3D::_find_self_pairs() {
 	}
 	if (self_collision_triangles) {
 		_find_self_tri_pairs(d);
+	}
+	if (self_collision_edges) {
+		_find_self_edge_pairs(d);
+	}
+}
+
+// Decision 0235: the nearest points of two segments (Ericson's), their places along them in r_s and r_t; returns the
+// squared distance between them.
+static float _cloth_segments_closest(const Vector3 &p_p1, const Vector3 &p_q1, const Vector3 &p_p2, const Vector3 &p_q2, float &r_s, float &r_t) {
+	const Vector3 d1 = p_q1 - p_p1;
+	const Vector3 d2 = p_q2 - p_p2;
+	const Vector3 r = p_p1 - p_p2;
+	const float a = d1.dot(d1);
+	const float e = d2.dot(d2);
+	const float f = d2.dot(r);
+	const float eps = 1e-12f;
+	if (a <= eps && e <= eps) {
+		r_s = 0.0f;
+		r_t = 0.0f;
+	} else if (a <= eps) {
+		r_s = 0.0f;
+		r_t = CLAMP(f / e, 0.0f, 1.0f);
+	} else {
+		const float c = d1.dot(r);
+		if (e <= eps) {
+			r_t = 0.0f;
+			r_s = CLAMP(-c / a, 0.0f, 1.0f);
+		} else {
+			const float b = d1.dot(d2);
+			const float den = a * e - b * b;
+			r_s = den > eps ? CLAMP((b * f - c * e) / den, 0.0f, 1.0f) : 0.0f;
+			r_t = (b * r_s + f) / e;
+			if (r_t < 0.0f) {
+				r_t = 0.0f;
+				r_s = CLAMP(-c / a, 0.0f, 1.0f);
+			} else if (r_t > 1.0f) {
+				r_t = 1.0f;
+				r_s = CLAMP((b - c) / a, 0.0f, 1.0f);
+			}
+		}
+	}
+	return (p_p1 + d1 * r_s).distance_squared_to(p_p2 + d2 * r_t);
+}
+
+// Decision 0235: the pairs of the cloth's edges, of no common particle, nearer each other now than twice the distance
+// and not at rest, with the direction between their nearest points when found. Two such edges have particles within the
+// reach and the longest edge of each other: the particles nearer than that now and not at rest are found in a grid of
+// cells that size, and their edges' pairs tested — nothing to test where the cloth does not come near itself.
+void FellowCloth3D::_find_self_edge_pairs(float p_d) {
+	const uint32_t ne = stretch_all.size();
+	const uint32_t np = x.size();
+	if (ne < 2 || np < 4) {
+		return;
+	}
+	const Edge *ED = stretch_all.ptr();
+	const uint8_t *ALIVE = edge_alive.size() == ne ? edge_alive.ptr() : nullptr;
+	const Vector3 *X = x.ptr();
+	const Vector3 *R = rest_local.ptr();
+	const float *Wt = w.ptr();
+	const float reach = 2.0f * p_d;
+	const float reach2 = reach * reach;
+	if (self_edge_rest_reach != reach) {
+		// Once (and when the reach changes): each particle's edges, and the pairs of edges within the reach at rest — the
+		// fabric's own neighbourhood, which its stretch and bending keep — from a grid of the edges' rest midpoints.
+		self_edge_rest_reach = reach;
+		particle_edge_start.resize(np + 1);
+		for (uint32_t &v : particle_edge_start) {
+			v = 0;
+		}
+		for (uint32_t e = 0; e < ne; e++) {
+			particle_edge_start[ED[e].a + 1]++;
+			particle_edge_start[ED[e].b + 1]++;
+		}
+		for (uint32_t i = 0; i < np; i++) {
+			particle_edge_start[i + 1] += particle_edge_start[i];
+		}
+		particle_edge_list.resize(ne * 2);
+		LocalVector<uint32_t> fill;
+		fill.resize(np);
+		for (uint32_t i = 0; i < np; i++) {
+			fill[i] = particle_edge_start[i];
+		}
+		for (uint32_t e = 0; e < ne; e++) {
+			particle_edge_list[fill[ED[e].a]++] = e;
+			particle_edge_list[fill[ED[e].b]++] = e;
+		}
+		self_edge_rest_near.clear();
+		float rest_longest = 0.0f;
+		for (uint32_t e = 0; e < ne; e++) {
+			rest_longest = MAX(rest_longest, R[ED[e].a].distance_to(R[ED[e].b]));
+		}
+		// Each particle's neighbours along the cloth (its edges' rest lengths) within half again the reach and the longest
+		// edge: its own fabric, whose particles come that near without the cloth coming near itself. Measured along the
+		// cloth, not across: two layers built close together, or two pieces of one mesh, are not neighbours.
+		self_particle_rest_near.clear();
+		{
+			const float rg = 1.5f * (reach + rest_longest);
+			LocalVector<float> dist;
+			dist.resize(np);
+			for (float &v : dist) {
+				v = std::numeric_limits<float>::max();
+			}
+			LocalVector<uint32_t> touched;
+			LocalVector<HeapItem> heap;
+			for (uint32_t src = 0; src < np; src++) {
+				dist[src] = 0.0f;
+				touched.push_back(src);
+				heap_push(heap, { 0.0f, src });
+				while (!heap.is_empty()) {
+					const HeapItem it = heap_pop(heap);
+					if (it.d > dist[it.i]) {
+						continue;
+					}
+					if (it.i > src) {
+						self_particle_rest_near.insert((uint64_t(src) << 32) | it.i);
+					}
+					for (uint32_t k = particle_edge_start[it.i]; k < particle_edge_start[it.i + 1]; k++) {
+						const Edge &ee = ED[particle_edge_list[k]];
+						const uint32_t other = ee.a == it.i ? ee.b : ee.a;
+						const float nd = it.d + ee.rest;
+						if (nd <= rg && nd < dist[other]) {
+							if (dist[other] == std::numeric_limits<float>::max()) {
+								touched.push_back(other);
+							}
+							dist[other] = nd;
+							heap_push(heap, { nd, other });
+						}
+					}
+				}
+				for (uint32_t t : touched) {
+					dist[t] = std::numeric_limits<float>::max();
+				}
+				touched.clear();
+			}
+		}
+		const float rcell = MAX(reach + rest_longest, 1e-4f);
+		const float rinv = 1.0f / rcell;
+		HashMap<Vector3i, LocalVector<uint32_t>> grid;
+		for (uint32_t e = 0; e < ne; e++) {
+			const Vector3 m = (R[ED[e].a] + R[ED[e].b]) * 0.5f;
+			grid[Vector3i(int(Math::floor(m.x * rinv)), int(Math::floor(m.y * rinv)), int(Math::floor(m.z * rinv)))].push_back(e);
+		}
+		for (uint32_t e1 = 0; e1 < ne; e1++) {
+			const Vector3 m = (R[ED[e1].a] + R[ED[e1].b]) * 0.5f;
+			const Vector3i c(int(Math::floor(m.x * rinv)), int(Math::floor(m.y * rinv)), int(Math::floor(m.z * rinv)));
+			for (int k = 0; k < 27; k++) {
+				const LocalVector<uint32_t> *cell_edges = grid.getptr(c + Vector3i(k % 3 - 1, (k / 3) % 3 - 1, k / 9 - 1));
+				if (!cell_edges) {
+					continue;
+				}
+				for (uint32_t e2 : *cell_edges) {
+					if (e2 <= e1) {
+						continue;
+					}
+					float rs = 0.0f;
+					float rt = 0.0f;
+					if (_cloth_segments_closest(R[ED[e1].a], R[ED[e1].b], R[ED[e2].a], R[ED[e2].b], rs, rt) < reach2) {
+						self_edge_rest_near.insert((uint64_t(e1) << 32) | e2);
+					}
+				}
+			}
+		}
+	}
+	// The particles within the reach and the longest edge now, not at rest (a grid of cells that size).
+	float longest = 0.0f;
+	for (uint32_t e = 0; e < ne; e++) {
+		if (!ALIVE || ALIVE[e]) {
+			longest = MAX(longest, X[ED[e].a].distance_squared_to(X[ED[e].b]));
+		}
+	}
+	const float near_d = reach + Math::sqrt(longest);
+	const float near2 = near_d * near_d;
+	const float inv = 1.0f / near_d;
+	uint32_t table = 64;
+	while (table < np * 2) {
+		table <<= 1;
+	}
+	self_edge_head.resize(table);
+	for (uint32_t &h : self_edge_head) {
+		h = UINT32_MAX;
+	}
+	self_edge_next.resize(np);
+	const uint8_t *LO = any_loose ? loose.ptr() : nullptr;
+	auto cell_of = [inv](const Vector3 &p_p) {
+		return Vector3i(int(Math::floor(p_p.x * inv)), int(Math::floor(p_p.y * inv)), int(Math::floor(p_p.z * inv)));
+	};
+	auto bucket = [table](const Vector3i &p_c) {
+		return (uint32_t(p_c.x) * 73856093u ^ uint32_t(p_c.y) * 19349663u ^ uint32_t(p_c.z) * 83492791u) & (table - 1);
+	};
+	// The particle grid's cells reuse self_cell (decision 0221's array, the same size).
+	self_cell.resize(np);
+	Vector3i *CE = self_cell.ptr();
+	for (uint32_t i = 0; i < np; i++) {
+		if (LO && LO[i]) {
+			continue;
+		}
+		CE[i] = cell_of(X[i]);
+		const uint32_t b = bucket(CE[i]);
+		self_edge_next[i] = self_edge_head[b];
+		self_edge_head[b] = i;
+	}
+	self_edge_tested.clear();
+	const uint32_t *PS = particle_edge_start.ptr();
+	const uint32_t *PL = particle_edge_list.ptr();
+	for (uint32_t i = 0; i < np; i++) {
+		if (LO && LO[i]) {
+			continue;
+		}
+		const Vector3i c = CE[i];
+		for (int k = 13; k < 27; k++) {
+			const Vector3i cc = c + Vector3i(k % 3 - 1, (k / 3) % 3 - 1, k / 9 - 1);
+			for (uint32_t j = self_edge_head[bucket(cc)]; j != UINT32_MAX; j = self_edge_next[j]) {
+				if ((k == 13 && j <= i) || CE[j] != cc || X[i].distance_squared_to(X[j]) >= near2) {
+					continue;
+				}
+				if (self_particle_rest_near.has(i < j ? ((uint64_t(i) << 32) | j) : ((uint64_t(j) << 32) | i))) {
+					continue; // the fabric's own neighbourhood
+				}
+				// The two particles' edges, pair by pair.
+				for (uint32_t ki = PS[i]; ki < PS[i + 1]; ki++) {
+					for (uint32_t kj = PS[j]; kj < PS[j + 1]; kj++) {
+						uint32_t e1 = PL[ki];
+						uint32_t e2 = PL[kj];
+						if (e1 == e2 || (ALIVE && (!ALIVE[e1] || !ALIVE[e2]))) {
+							continue;
+						}
+						if (e1 > e2) {
+							SWAP(e1, e2);
+						}
+						const uint64_t key = (uint64_t(e1) << 32) | e2;
+						if (self_edge_rest_near.has(key) || self_edge_tested.has(key)) {
+							continue;
+						}
+						self_edge_tested.insert(key);
+						const uint32_t a = ED[e1].a;
+						const uint32_t b = ED[e1].b;
+						const uint32_t cp = ED[e2].a;
+						const uint32_t dp = ED[e2].b;
+						if (cp == a || cp == b || dp == a || dp == b) {
+							continue; // of one triangle, or neighbours
+						}
+						if (Wt[a] <= 0.0f && Wt[b] <= 0.0f && Wt[cp] <= 0.0f && Wt[dp] <= 0.0f) {
+							continue; // all pinned
+						}
+						float s = 0.0f;
+						float t = 0.0f;
+						if (_cloth_segments_closest(X[a], X[b], X[cp], X[dp], s, t) >= reach2) {
+							continue;
+						}
+						Vector3 n = X[a].lerp(X[b], s) - X[cp].lerp(X[dp], t);
+						float nl = n.length();
+						if (nl < 1e-7f) {
+							// Touching: the edges' common normal, either way.
+							n = (X[b] - X[a]).cross(X[dp] - X[cp]);
+							nl = n.length();
+							if (nl < 1e-12f) {
+								continue;
+							}
+						}
+						self_edge_pairs.push_back({ a, b, cp, dp, s, t, n / nl });
+					}
+				}
+			}
+		}
 	}
 }
 
@@ -2183,6 +2492,8 @@ Dictionary FellowCloth3D::get_stats() const {
 	d["self_pairs"] = int(self_pairs.size());
 	d["self_tri_pairs"] = int(self_tri_pairs.size());
 	d["self_tri_contacts"] = self_tri_contacts;
+	d["self_edge_pairs"] = int(self_edge_pairs.size());
+	d["self_edge_contacts"] = self_edge_contacts;
 	d["self_contacts"] = self_contacts;
 	d["self_distance"] = self_distance_now;
 	return d;
@@ -2386,6 +2697,8 @@ void FellowCloth3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_self_collision_distance"), &FellowCloth3D::get_self_collision_distance);
 	ClassDB::bind_method(D_METHOD("set_self_collision_triangles", "enabled"), &FellowCloth3D::set_self_collision_triangles);
 	ClassDB::bind_method(D_METHOD("is_self_collision_triangles"), &FellowCloth3D::is_self_collision_triangles);
+	ClassDB::bind_method(D_METHOD("set_self_collision_edges", "enabled"), &FellowCloth3D::set_self_collision_edges);
+	ClassDB::bind_method(D_METHOD("is_self_collision_edges"), &FellowCloth3D::is_self_collision_edges);
 	ClassDB::bind_method(D_METHOD("set_self_collision_friction", "friction"), &FellowCloth3D::set_self_collision_friction);
 	ClassDB::bind_method(D_METHOD("get_self_collision_friction"), &FellowCloth3D::get_self_collision_friction);
 	ClassDB::bind_method(D_METHOD("set_tear_strain", "strain"), &FellowCloth3D::set_tear_strain);
@@ -2430,6 +2743,7 @@ void FellowCloth3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "self_collision"), "set_self_collision", "is_self_collision");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "self_collision_distance", PROPERTY_HINT_RANGE, "0,0.5,0.001,or_greater,suffix:m"), "set_self_collision_distance", "get_self_collision_distance");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "self_collision_triangles"), "set_self_collision_triangles", "is_self_collision_triangles");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "self_collision_edges"), "set_self_collision_edges", "is_self_collision_edges");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "self_collision_friction", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_self_collision_friction", "get_self_collision_friction");
 	ADD_GROUP("", "");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "lod_distance", PROPERTY_HINT_RANGE, "0,500,0.1,or_greater,suffix:m"), "set_lod_distance", "get_lod_distance");

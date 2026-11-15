@@ -38,6 +38,13 @@ during which the GPU was busier with something else (7.2-10.9 ms in both variant
 With the trim off and decision 0231's sampler on (job f452, six runs), no frame stalled on the CPU; its steps over 16.7
 ms were frames waiting for the GPU (on an idle GPU p99.9 10.8-11.8 ms, the longest frame 13.5-14.0 ms).
 
+Job f454 (milestone 118, the GPU idle before and after it, every run's GPU frame 6.0-6.6 ms; eight alternating runs
+each, the default now off): the trim off, no frame over 29 ms (the longest 12.9-20.0 ms, the 20 ms one waiting for the
+GPU); the trim on, a 25.0 ms frame with a 23.3 ms free and a 45.4 ms frame (nothing counted in it), and one run's
+process hung at exit (killed after 15 minutes; its free task waited for at exit — now gone, the trim frees on the render
+thread). A 256 MiB streaming budget's evictions freed no block during play (staging 136-160 MiB at the end). The GPU's
+frame 5.96-6.60 ms in all three.
+
 ## Decision
 
 The trim off by default: no freed block holds a frame up. It keeps up to 512 MiB of host memory the driver counts as

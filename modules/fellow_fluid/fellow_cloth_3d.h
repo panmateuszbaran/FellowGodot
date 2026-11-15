@@ -30,6 +30,7 @@
 
 #pragma once
 
+#include "core/templates/hash_set.h"
 #include "core/templates/local_vector.h"
 #include "core/templates/safe_refcount.h"
 #include "scene/3d/visual_instance_3d.h"
@@ -134,6 +135,7 @@ private:
 	bool self_collision = false;
 	float self_collision_distance = 0.0f; // 0: three quarters of the mean edge (a quarter with self_collision_triangles)
 	bool self_collision_triangles = false; // decision 0228: the particles kept off the other layers' triangles too
+	bool self_collision_edges = false; // decision 0235: and the edges off the other layers' edges
 	float self_collision_friction = 0.0f; // decision 0229: the layers' sliding on each other taken away, 0-1
 	TypedArray<NodePath> colliders;
 	bool collide_with_world = true;
@@ -238,6 +240,27 @@ private:
 	LocalVector<SelfTriEntry> self_tri_entries;
 	LocalVector<Vector3> self_tri_bounds; // two a triangle: its bounds grown by the reach
 	int self_tri_contacts = 0;
+	// Decision 0235: the frame's pairs of edges of other layers near each other (not near at rest), their nearest points'
+	// places along them and the direction from the second to the first when found; the edges hashed by their bounds.
+	struct SelfEdgePair {
+		uint32_t a;
+		uint32_t b;
+		uint32_t c;
+		uint32_t d;
+		float s;
+		float t;
+		Vector3 n;
+	};
+	LocalVector<SelfEdgePair> self_edge_pairs;
+	LocalVector<uint32_t> self_edge_head; // the particles' grid: a bucket's first particle
+	LocalVector<uint32_t> self_edge_next; // and each particle's next
+	LocalVector<uint32_t> particle_edge_start; // a particle's edges: particle_edge_list[start[p] .. start[p + 1]]
+	LocalVector<uint32_t> particle_edge_list;
+	HashSet<uint64_t> self_edge_rest_near; // pairs of edges within the reach of each other at rest (first << 32 | second)
+	HashSet<uint64_t> self_edge_tested; // the frame's pairs of edges already tested
+	HashSet<uint64_t> self_particle_rest_near; // pairs of particles near each other along the cloth at rest (its own fabric)
+	float self_edge_rest_reach = -1.0f; // the reach that set was found for (-1: none; the cloth built again resets it)
+	int self_edge_contacts = 0;
 	// Bone pins (milestone 76): each pinned particle's bone (-1: the node) and its place in the bone's space; where it
 	// was at the last frame and is at this one (global, main thread), interpolated over the substeps.
 	LocalVector<int> pin_bone;
@@ -314,6 +337,7 @@ private:
 	void _set_build_dirty();
 	void _find_self_pairs();
 	void _find_self_tri_pairs(float p_d);
+	void _find_self_edge_pairs(float p_d);
 	int _tear(const LocalVector<uint32_t> &p_edges, Vector3 *r_sum);
 	void _after_tear();
 	void _compute_tethers();
@@ -394,6 +418,8 @@ public:
 	float get_self_collision_distance() const { return self_collision_distance; }
 	void set_self_collision_triangles(bool p_enabled) { self_collision_triangles = p_enabled; }
 	bool is_self_collision_triangles() const { return self_collision_triangles; }
+	void set_self_collision_edges(bool p_enabled) { self_collision_edges = p_enabled; }
+	bool is_self_collision_edges() const { return self_collision_edges; }
 	void set_self_collision_friction(float p_friction) { self_collision_friction = CLAMP(p_friction, 0.0f, 1.0f); }
 	void set_follow_skin(bool p_enabled);
 	bool is_following_skin() const { return follow_skin; }

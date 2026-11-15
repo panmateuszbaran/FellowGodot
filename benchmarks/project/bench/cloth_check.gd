@@ -6,7 +6,7 @@ extends SceneTree
 ##   godot --path benchmarks/project --fixed-fps 60 --resolution 1280x720 -s res://bench/cloth_check.gd
 ##       -- --out=<dir> --pictures=1 [--frames=1] [--grid=1 --shot=640x360] [--motion=1]
 ##   godot ... -s res://bench/cloth_check.gd -- --out=<dir> --many=64 [--seconds=20] [--tear_strain=0.5] [--self=1]
-##       [--self_tri=1] [--self_friction=1]
+##       [--self_tri=1] [--self_friction=1] [--self_edges=1]
 ##
 ## Lanes, each a cloth in a situation: a flag on a pole in the wind (FellowWind3D, gusts), a curtain hanging still, a
 ## sheet dropped on a sphere and a box (the physics world's), a sheet dropped on a height map, a cape pinned at two
@@ -53,7 +53,7 @@ var garment_walkers: Array = [] # milestone 116: [walker, skeleton] a skirt on i
 var done := false
 var shots := {}
 var viewports := {}
-var strip_lanes := ["flag", "curtain", "sheet_on_shapes", "cape", "awning", "banner_mesh", "cape_bones", "tear_cut", "tear_strain", "tear_off", "self_heap", "self_heap_off", "self_heap_thin", "self_heap_tri", "self_slope", "self_slope_friction", "garment_skin", "garment_bones", "garment_from_pins", "garment_painted"]
+var strip_lanes := ["flag", "curtain", "sheet_on_shapes", "cape", "awning", "banner_mesh", "cape_bones", "tear_cut", "tear_strain", "tear_off", "self_heap", "self_heap_off", "self_heap_thin", "self_heap_tri", "self_heap_edges", "self_slope", "self_slope_friction", "garment_skin", "garment_bones", "garment_from_pins", "garment_painted"]
 var strip_times := [0.5, 1.0, 2.0, 3.9]
 
 
@@ -177,6 +177,53 @@ func _skirt_mesh() -> Dictionary:
 	var am := ArrayMesh.new()
 	am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	return {"mesh": am, "rest": rest, "weights": ws, "pinned": pinned}
+
+
+# Milestone 118 (decision 0235): two ribbons in one mesh, crossing. A bar along X (two rows, z = +-0.06, its columns at
+# x = +-0.075, +-0.225, ... +-0.525, the end columns pinned: vertex colour red) at y = 1.0, and a towel along Z above it
+# (two columns, x = +-0.06, its rows at z = +-0.15, +-0.45, +-0.75) at y = 1.25: neither has a particle over the other's
+# triangles where they cross, only edges across edges. Returns the mesh and the towel's and the bar's crossing particles.
+func _cross_mesh() -> Dictionary:
+	var verts := PackedVector3Array()
+	var normals := PackedVector3Array()
+	var colors := PackedColorArray()
+	var idx := PackedInt32Array()
+	var bar_x := [-0.525, -0.375, -0.225, -0.075, 0.075, 0.225, 0.375, 0.525]
+	for zi in 2:
+		for xi in bar_x.size():
+			verts.append(Vector3(bar_x[xi], 1.0, -0.06 + 0.12 * zi))
+			normals.append(Vector3.UP)
+			colors.append(Color(1, 0, 0) if xi == 0 or xi == bar_x.size() - 1 else Color(0, 0, 0))
+	var nb := bar_x.size()
+	for xi in nb - 1:
+		var a := xi
+		var b := xi + 1
+		var c := a + nb
+		var d := b + nb
+		idx.append_array([a, c, b, b, c, d])
+	var towel_z := [-0.75, -0.45, -0.15, 0.15, 0.45, 0.75]
+	var base := verts.size()
+	for zi in towel_z.size():
+		for xi in 2:
+			verts.append(Vector3(-0.06 + 0.12 * xi, 1.25, towel_z[zi]))
+			normals.append(Vector3.UP)
+			colors.append(Color(0, 0, 0))
+	for zi in towel_z.size() - 1:
+		var a := base + zi * 2
+		var b := a + 1
+		var c := a + 2
+		var d := a + 3
+		idx.append_array([a, c, b, b, c, d])
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = verts
+	arrays[Mesh.ARRAY_NORMAL] = normals
+	arrays[Mesh.ARRAY_COLOR] = colors
+	arrays[Mesh.ARRAY_INDEX] = idx
+	var am := ArrayMesh.new()
+	am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	# The towel's four particles around the crossing (rows z = +-0.15) and the bar's (columns x = +-0.075).
+	return {"mesh": am, "towel": [base + 4, base + 5, base + 6, base + 7], "bar": [3, 4, nb + 3, nb + 4]}
 
 
 func _lane(name: String, cloth: FellowCloth3D, x: float) -> Dictionary:
@@ -441,16 +488,17 @@ func _build() -> void:
 	# it falls in a heap; and the same without self-collision.
 	# Milestone 115: the same heap, in still air, with the layers as close as a quarter of an edge — particles only (they
 	# slip between each other's), and kept off the triangles too (decision 0228).
-	for lane_name in ["self_heap", "self_heap_off", "self_heap_thin", "self_heap_tri"]:
+	for lane_name in ["self_heap", "self_heap_off", "self_heap_thin", "self_heap_tri", "self_heap_edges"]:
 		x += 8.0
 		var sc := _cloth("Self_" + lane_name, Transform3D(Basis(Vector3.UP, deg_to_rad(30.0)), Vector3(x - 0.9, 2.6, 0)), Vector2(1.8, 2.4), 24, FellowCloth3D.PIN_TOP_EDGE, Color(0.55, 0.75, 0.5))
 		sc.wind_scale = 0.3
 		sc.simulation_distance = 1000.0 # far from the course's camera
 		sc.self_collision = not lane_name.ends_with("_off")
-		if lane_name in ["self_heap_thin", "self_heap_tri"]:
+		if lane_name in ["self_heap_thin", "self_heap_tri", "self_heap_edges"]:
 			sc.wind_scale = 0.0 # still air
 			sc.self_collision_distance = 0.028 # a quarter of the mean edge (0.113 m)
-			sc.self_collision_triangles = lane_name == "self_heap_tri"
+			sc.self_collision_triangles = lane_name != "self_heap_thin"
+			sc.self_collision_edges = lane_name == "self_heap_edges" # milestone 118: the edges too (decision 0235)
 		_lane(lane_name, sc, x)
 	# Decision 0229: the sheet let go over a 25-degree slope (its friction with colliders 1): it falls in a heap on it,
 	# whose upper layers slide down over the lower ones — and pull them along — without friction between the layers.
@@ -470,6 +518,31 @@ func _build() -> void:
 		ss.self_collision_triangles = true
 		ss.self_collision_friction = 1.0 if lane_name == "self_slope_friction" else 0.0
 		_lane(lane_name, ss, x)
+	# Milestone 118 (decision 0235): a towel dropped across a bar of the same cloth where they cross by their edges only:
+	# kept off each other's triangles (decision 0228), and their edges off each other's too; friction between them 1.
+	for lane_name in ["self_cross_tri", "self_cross_edges"]:
+		x += 6.0
+		var cross := _cross_mesh()
+		var xc := FellowCloth3D.new()
+		xc.name = "Cross_" + lane_name
+		xc.source_mesh = cross.mesh
+		xc.pin_mode = FellowCloth3D.PIN_VERTEX_COLOR
+		xc.material = _material(Color(0.5, 0.6, 0.8), true)
+		xc.position = Vector3(x, 0, 0)
+		xc.lod_distance = 0.0
+		xc.simulation_distance = 1000.0
+		xc.collide_with_world = false
+		xc.wind_scale = 0.0
+		xc.self_collision = true
+		xc.self_collision_distance = 0.03
+		xc.self_collision_triangles = true
+		xc.self_collision_edges = lane_name == "self_cross_edges"
+		xc.self_collision_friction = 1.0 # a towel laid across a bar slides off it without (an equilibrium unstable)
+		root3d.add_child(xc)
+		var xl := _lane(lane_name, xc, x)
+		xl["towel"] = cross.towel
+		xl["bar"] = cross.bar
+		xl["cross_min"] = 1e9 # the towel's crossing above the bar's, the lowest over the run
 	# Milestone 116 (decision 0230): a skirt, a skinned mesh's surface (its waistband weighted half to the hips, half to
 	# the spine; the rest to the hips), on a skeleton whose hips sway and whose spine twists against them, the body
 	# circling, in the flags' gale: following the skin (the waistband pinned to its skinned place, the rest within 12 cm of
@@ -571,6 +644,7 @@ func _build_many() -> void:
 		f.self_collision = _arg("self", "0") == "1" # milestone 112: self-collision's cost
 		f.self_collision_triangles = _arg("self_tri", "0") == "1" # milestone 115: against the triangles too
 		f.self_collision_friction = float(_arg("self_friction", "0"))
+		f.self_collision_edges = _arg("self_edges", "0") == "1" # milestone 118: the edges off each other's too
 	var cam := Camera3D.new()
 	root3d.add_child(cam)
 	cam.look_at_from_position(Vector3(-6, 8, -6), Vector3(cols * 2.0, 2, cols * 2.0))
@@ -615,7 +689,7 @@ func _make_viewports() -> void:
 				cam.look_at_from_position(Vector3(x + 3.0, 2.4, 3.5), Vector3(x, 2.0, 0))
 			"tear_off":
 				cam.look_at_from_position(Vector3(x + 1.0, 2.2, 4.8), Vector3(x + 1.0, 1.9, 0))
-			"self_heap", "self_heap_off", "self_heap_thin", "self_heap_tri":
+			"self_heap", "self_heap_off", "self_heap_thin", "self_heap_tri", "self_heap_edges":
 				cam.look_at_from_position(Vector3(x + 2.0, 1.9, 3.4), Vector3(x + 0.7, 0.15, 0.4))
 			"self_slope", "self_slope_friction":
 				cam.look_at_from_position(Vector3(x + 1.0, 3.0, 5.0), Vector3(x + 0.5, 1.2, 0.0))
@@ -663,6 +737,18 @@ func _measure(lane: Dictionary, pins := false) -> void:
 		if not (is_finite(p.x) and is_finite(p.y) and is_finite(p.z)):
 			lane.finite = false
 			return
+	if lane.has("towel"):
+		# Milestone 118: the towel's crossing (the mean of its four particles around it: their segments' middle) above the
+		# bar's (its four), from the towel's first second on (it lands at about 0.25 s).
+		var ty := 0.0
+		var by := 0.0
+		for i in lane.towel:
+			ty += c.get_particle_position(i).y / 4.0
+		for i in lane.bar:
+			by += c.get_particle_position(i).y / 4.0
+		lane["cross_now"] = ty - by
+		if frame >= 60:
+			lane.cross_min = minf(lane.cross_min, ty - by)
 	if c.source_mesh == null:
 		var d := _grid_dims(c)
 		var dx := c.size.x / (d.x - 1)
@@ -817,14 +903,14 @@ func _on_frame() -> void:
 	if frame == 150:
 		(_find("tear_reset").cloth as FellowCloth3D).reset()
 	if frame == 30:
-		for nm in ["self_heap", "self_heap_off", "self_heap_thin", "self_heap_tri", "self_slope", "self_slope_friction"]:
+		for nm in ["self_heap", "self_heap_off", "self_heap_thin", "self_heap_tri", "self_heap_edges", "self_slope", "self_slope_friction"]:
 			var hc: FellowCloth3D = _find(nm).cloth
 			for i in hc.get_particle_count():
 				if hc.is_particle_pinned(i):
 					hc.set_particle_pinned(i, false)
 	if frame == 210:
 		# Milestone 115: the heaps' particles half a second before the end (how much they still move).
-		for nm in ["self_heap", "self_heap_off", "self_heap_thin", "self_heap_tri", "self_slope", "self_slope_friction"]:
+		for nm in ["self_heap", "self_heap_off", "self_heap_thin", "self_heap_tri", "self_heap_edges", "self_slope", "self_slope_friction"]:
 			var hc2: FellowCloth3D = _find(nm).cloth
 			var at := []
 			for i in hc2.get_particle_count():
@@ -930,8 +1016,20 @@ func _finish() -> void:
 				ok = ok and st.far
 			"tear_cut", "tear_reset", "tear_strain", "tear_strain_off", "tear_off":
 				ok = ok and _check_tear(lane, c, st, box, e)
-			"self_heap", "self_heap_off", "self_heap_thin", "self_heap_tri", "self_slope", "self_slope_friction":
+			"self_heap", "self_heap_off", "self_heap_thin", "self_heap_tri", "self_heap_edges", "self_slope", "self_slope_friction":
 				ok = ok and _check_self(lane, c, st, box, e)
+			"self_cross_tri", "self_cross_edges":
+				# Milestone 118 (decision 0235): the towel's crossing above the bar at the end and at its lowest (cm); with
+				# the edges kept apart it hangs over the bar, with particles and triangles only it passes through.
+				e["crossing_above_cm"] = snappedf(float(lane.get("cross_now", 0.0)) * 100.0, 0.01)
+				e["crossing_lowest_cm"] = snappedf(float(lane.cross_min) * 100.0, 0.01)
+				e["self_edge_pairs"] = st.get("self_edge_pairs", 0)
+				e["self_edge_contacts"] = st.get("self_edge_contacts", 0)
+				e["self_tri_pairs"] = st.get("self_tri_pairs", 0)
+				if lane.name == "self_cross_edges":
+					ok = ok and float(lane.get("cross_now", 0.0)) > 0.0 and float(lane.cross_min) > 0.0 and st.get("self_edge_pairs", 0) > 0
+				else:
+					ok = ok and st.get("self_edge_pairs", 0) == 0
 			"garment_skin", "garment_bones", "garment_from_pins", "garment_painted":
 				# Milestone 116 (decision 0230): the waistband on its skinned place (within a millimetre, following the
 				# skin; decision 0184's nearest bones as they are), the rest within the distance (and its colliders' push),
@@ -1131,8 +1229,11 @@ func _check_self(lane: Dictionary, c: FellowCloth3D, st: Dictionary, box: AABB, 
 		return st.get("self_pairs", 0) == 0
 	if lane.name == "self_heap_thin":
 		return st.get("self_pairs", 0) > 0 and st.get("self_tri_pairs", 0) == 0
+	e["self_edge_pairs"] = st.get("self_edge_pairs", 0)
 	if lane.name == "self_heap_tri" or lane.name == "self_slope":
-		return nearest > 0.5 * d and close.is_empty() and tri_close.is_empty() and st.get("self_tri_pairs", 0) > 0
+		return nearest > 0.5 * d and close.is_empty() and tri_close.is_empty() and st.get("self_tri_pairs", 0) > 0 and st.get("self_edge_pairs", 0) == 0
+	if lane.name == "self_heap_edges":
+		return nearest > 0.5 * d and close.is_empty() and tri_close.is_empty() and st.get("self_tri_pairs", 0) > 0 and st.get("self_edge_pairs", 0) > 0
 	if lane.name == "self_slope_friction":
 		# Held on the slope by its own layers.
 		return nearest > 0.5 * d and close.is_empty() and tri_close.is_empty() and st.get("self_tri_pairs", 0) > 0 and absf(float(e.get("downhill_last_cm_s", 99.0))) < 5.0
@@ -1173,7 +1274,7 @@ func _many_tick() -> void:
 		var n := float(frame - 60)
 		var fr := many_frames.duplicate()
 		fr.sort()
-		var r := {"flags": many, "frames": int(n), "stats": st, "tear_strain": float(_arg("tear_strain", "0")), "self_collision": _arg("self", "0") == "1", "self_tri": _arg("self_tri", "0") == "1", "self_friction": float(_arg("self_friction", "0")),
+		var r := {"flags": many, "frames": int(n), "stats": st, "tear_strain": float(_arg("tear_strain", "0")), "self_collision": _arg("self", "0") == "1", "self_tri": _arg("self_tri", "0") == "1", "self_friction": float(_arg("self_friction", "0")), "self_edges": _arg("self_edges", "0") == "1",
 			"cloth_main_ms_per_frame": snappedf(float(st.frame_usec) / n / 1000.0, 0.001),
 			"cloth_worker_ms_per_frame": snappedf(float(st.simulate_usec) / n / 1000.0, 0.001),
 			"particles_per_frame": snappedf(float(st.particles) / n, 0.1),
