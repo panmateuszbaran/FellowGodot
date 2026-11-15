@@ -2134,6 +2134,20 @@ static _ALWAYS_INLINE_ void _copy_region(uint8_t const *__restrict p_src, uint8_
 	}
 }
 
+// FellowEngine (milestone 118, decision 0234): a block-compressed upload's staging space is its rows of blocks (stock
+// reserves its rows of pixels: 4 times the data with 4x4 blocks, 2 times with BC1 or ASTC 8x8), so that a transfer
+// worker's staging and the frame's staging ring hold what is copied. Read once when the device is created
+// (rendering/fellow/frame/transfer_tight_staging).
+static bool fellow_tight_staging = false;
+
+static _ALWAYS_INLINE_ uint32_t _fellow_staging_rows(uint32_t p_height, uint32_t p_block_h, uint32_t p_pixel_rshift, uint32_t p_pitch, bool p_stock_rshift) {
+	if (fellow_tight_staging) {
+		return p_pitch * (p_height / p_block_h);
+	}
+	// Stock's: the rows of pixels (shifted again by the format's right shift where stock did).
+	return p_stock_rshift ? (p_pitch * p_height) >> p_pixel_rshift : p_pitch * p_height;
+}
+
 static _ALWAYS_INLINE_ void _copy_region_block_or_regular(const uint8_t *p_read_ptr, uint8_t *p_write_ptr, uint32_t p_x, uint32_t p_y, uint32_t p_width, uint32_t p_region_w, uint32_t p_region_h, uint32_t p_block_w, uint32_t p_block_h, uint32_t p_dst_pitch, uint32_t p_pixel_size, uint32_t p_block_size) {
 	if (p_block_w != 1 || p_block_h != 1) {
 		// Block format.
@@ -2274,8 +2288,7 @@ Error RenderingDevice::_texture_initialize(RID p_texture, uint32_t p_layer, cons
 				uint32_t pitch = (width * pixel_size * block_w) >> pixel_rshift;
 				uint32_t pitch_step = driver->api_trait_get(RDD::API_TRAIT_TEXTURE_DATA_ROW_PITCH_STEP);
 				pitch = STEPIFY(pitch, pitch_step);
-				uint32_t to_allocate = pitch * height;
-				to_allocate >>= pixel_rshift;
+				uint32_t to_allocate = _fellow_staging_rows(height, block_h, pixel_rshift, pitch, true);
 
 				if (copy_pass) {
 					const uint8_t *read_ptr_mipmap_layer = read_ptr_mipmap + (tight_mip_size / depth) * z;
@@ -2411,7 +2424,7 @@ Error RenderingDevice::texture_update(RID p_texture, uint32_t p_layer, const Vec
 					uint32_t region_pitch = (region_w * pixel_size * block_w) >> pixel_rshift;
 					uint32_t pitch_step = driver->api_trait_get(RDD::API_TRAIT_TEXTURE_DATA_ROW_PITCH_STEP);
 					region_pitch = STEPIFY(region_pitch, pitch_step);
-					uint32_t to_allocate = region_pitch * region_h;
+					uint32_t to_allocate = _fellow_staging_rows(region_h, block_h, pixel_rshift, region_pitch, false);
 					uint32_t alloc_offset = 0, alloc_size = 0;
 					StagingRequiredAction required_action;
 					Error err = _staging_buffer_allocate(upload_staging_buffers, to_allocate, required_align, alloc_offset, alloc_size, required_action, false);
@@ -9585,6 +9598,7 @@ Error RenderingDevice::initialize(RenderingContextDriver *p_context, DisplayServ
 
 	// Use the processor count as the max amount of transfer workers that can be created.
 	transfer_worker_pool_max_size = OS::get_singleton()->get_processor_count();
+	fellow_tight_staging = Fellow::enabled() && bool(GLOBAL_GET("rendering/fellow/frame/transfer_tight_staging")); // decision 0234
 
 	// Pre-allocate to avoid locking a mutex when indexing into them.
 	transfer_worker_pool.resize(transfer_worker_pool_max_size);
