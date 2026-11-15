@@ -35,7 +35,8 @@ assessment's physics row: "no stress, loads or sagging".
 | balcony, 3 MPa, + 4 t at its edge | holds itself (0.23); with the load 10 cracked, 19 fall |
 | wall 8 × 4 m, 128 pieces, 20 kPa, a hole | 96 cracked, 103 fallen over 22 frames, 18 standing |
 
-A solve of 24-36 pieces: 64-125 iterations, 0.1-0.8 ms. Found on the way: an L with a 0.5 m column topples whole (its
+A solve of 24-36 pieces: 64-125 iterations, 0.1-0.8 ms (the laptop's CPU, the release template, job f463: 0.07-0.36
+ms; the 128-piece collapse at most 3.9-4.6 ms of solving a frame; every lane's outcome the same as on Linux). Found on the way: an L with a 0.5 m column topples whole (its
 foot's moment is greater than the arm's root's — right); one crack a solve made a big collapse 355 ms; cracking with
 the worst all bonds within 75 % of it, then spreading the rest over frames by work, not time.
 

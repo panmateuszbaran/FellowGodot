@@ -70,7 +70,9 @@ and Jolt alike (the same cracks and falls; the solve does not depend on the phys
 | a wall 8 × 4 × 0.3 m, 128 pieces, 20 kPa, a hole in its foot | the collapse spread over frames | 7 out; 96 bonds cracked and 103 pieces fallen over 22 frames, 18 standing; a frame's work at most 109 691 (one round alone past the budget), its solves 2.5-9 ms on the cloud's CPU |
 
 The solves: 24-36 pieces 64-125 iterations, 0.1-0.8 ms on the cloud's CPU; a settling that cracks the 40-piece wall
-1.9-3.8 ms. Decision 0188's `structure_check.gd` (strength 0): its four lanes as before on both engines (38, 11 and 0
+1.9-3.8 ms. **The laptop's CPU** (job f463, the Windows release template, three runs): every lane's cracks and falls the
+same as on Linux; a 24-36-piece solve 0.07-0.36 ms; the weak L's settling 1.3-1.7 ms, the weak wall's 2.0-2.1 ms; the
+128-piece wall's collapse at most 3.9-4.6 ms of solving a frame over its 22 frames. Decision 0188's lanes as before. Decision 0188's `structure_check.gd` (strength 0): its four lanes as before on both engines (38, 11 and 0
 standing; the pillar's upper part at 0.24 m on GodotPhysics3D, 0.26 m on Jolt). Lavapipe: the lanes filmed (the weak
 L's arm on the ground, the strong wall spanning its hole, the weak and the loaded balconies fallen), the same results
 as without a picture; the regression scene `stress` (a weak L — its 0.5 m column toppling — and a weak wall with a
