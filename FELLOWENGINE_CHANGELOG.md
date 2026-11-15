@@ -9,6 +9,12 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 123 — the parts that fall break where they land (2026-11-15)
+
+- `FellowDestructible3D.landing_break_speed` (decision 0247; 0 by default): a part a structural object drops breaks
+  where it lands hard enough — the pieces near the contact each a body, the rest split along the bonds that hold (a
+  toppled pillar in pieces where it struck, a balcony fallen 3 m broken at its edge). `bench/landing_check.gd`.
+
 ## Milestone 122 — destruction under load: bonds that carry the weight, and crack (2026-11-15)
 
 - `FellowDestructible3D.strength` (decision 0246; 0 by default): a structural object's touching faces are elastic

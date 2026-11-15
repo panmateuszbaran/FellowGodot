@@ -93,7 +93,7 @@
 		<method name="get_stats" qualifiers="const">
 			<return type="Dictionary" />
 			<description>
-				This destructible's state: [code skip-lint]broken[/code], [code]pieces[/code], [code]fracture_usec[/code], [code]spawn_usec[/code], [code skip-lint]health[/code], [code]last_impact[/code] (N·s, the last blow it felt), [code]prefractured[/code]; in the [member structural] mode [code skip-lint]structural[/code] (standing in its pieces), [code]standing[/code], [code]last_broken[/code], [code]last_fallen[/code] and [code]last_chunks[/code] (the last blow's pieces knocked out, pieces fallen and the bodies they fell as), and with a [member strength] [code]last_cracked[/code] (the bonds the last blow or [method update_structure] cracked), [code]stress_usec[/code] and [code]stress_iterations[/code] (its solves' time and iterations) and [code]bonds[/code] (those holding).
+				This destructible's state: [code skip-lint]broken[/code], [code]pieces[/code], [code]fracture_usec[/code], [code]spawn_usec[/code], [code skip-lint]health[/code], [code]last_impact[/code] (N·s, the last blow it felt), [code]prefractured[/code]; in the [member structural] mode [code skip-lint]structural[/code] (standing in its pieces), [code]standing[/code], [code]last_broken[/code], [code]last_fallen[/code] and [code]last_chunks[/code] (the last blow's pieces knocked out, pieces fallen and the bodies they fell as), and with a [member strength] [code]last_cracked[/code] (the bonds the last blow or [method update_structure] cracked), [code]stress_usec[/code] and [code]stress_iterations[/code] (its solves' time and iterations), [code]stress_work[/code], [code]bonds[/code] (those holding), [code]settling[/code] (a collapse going on over the next frames), [code]cracked_total[/code] and [code]fallen_total[/code]; with a [member landing_break_speed] [code]falling_parts[/code] (the parts watched), [code]last_landing_breaks[/code] and [code]landing_breaks_total[/code].
 			</description>
 		</method>
 		<method name="get_structure" qualifiers="const">
@@ -177,6 +177,9 @@
 		</member>
 		<member name="interior_uv_scale" type="float" setter="set_interior_uv_scale" getter="get_interior_uv_scale" default="1.0">
 			The cut faces' UVs: their position in the cut's plane, in metres, times this.
+		</member>
+		<member name="landing_break_speed" type="float" setter="set_landing_break_speed" getter="get_landing_break_speed" default="0.0">
+			In the [member structural] mode: the parts of several pieces that fall from the standing structure break where they land when their speed changes in a step by more than this (m/s, less what gravity accounts for; a fall of 1 m strikes at 4.4 m/s, of 3 m at 7.7 m/s) — the pieces within [member break_radius] of their hardest contact each a body, the rest split along the bonds that hold, each group a body watched in turn ([signal broken]). 0: they land whole. A part is watched until it comes to rest; the object's body, empty once nothing stands, is freed after its parts have landed. See decision 0247.
 		</member>
 		<member name="mesh_path" type="NodePath" setter="set_mesh_path" getter="get_mesh_path" default="NodePath(&quot;&quot;)">
 			The [MeshInstance3D] to break. Empty: the parent, if one, else the parent's first [MeshInstance3D] child.

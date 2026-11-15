@@ -637,7 +637,11 @@ compression, cracks, the worst first; what no longer reaches the ground falls), 
 within `anchor_height` of the object's lowest point; Static Bodies: the pieces touching another static body — a
 balcony on a wall); `update_structure()` (a prefractured structural object stood in its pieces and settled without a
 blow), `add_load()`/`clear_loads()` (what rests on it), `get_bonds()` (each bond's face, force, moment, stresses and ratio); `get_stats()` adds `last_cracked`,
-`stress_usec`, `stress_iterations`, `bonds`. Bench `bench/stress_check.gd`, the regression scene `stress`.
+`stress_usec`, `stress_iterations`, `bonds`. Bench `bench/stress_check.gd`, the regression scene `stress`. Milestone 123
+(decision 0247): `landing_break_speed` (0 m/s: the parts land whole; a part of several pieces the structure drops
+breaks where it lands when its speed changes by more than this in a step — the pieces near the contact each a body,
+the rest split along the bonds that hold); `get_stats()` adds `falling_parts`, `last_landing_breaks`,
+`landing_breaks_total`. Bench `bench/landing_check.gd`.
 
 ## Cloth (milestone 73)
 

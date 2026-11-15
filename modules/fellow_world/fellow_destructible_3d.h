@@ -177,6 +177,23 @@ private:
 		Vector3 force; // N
 	};
 	LocalVector<Load> loads; // what rests on the structure: on the standing piece nearest each
+	// Milestone 123 (decision 0247): the parts that fell, breaking where they land — a part (more than one piece)
+	// whose speed changes in a step by more than landing_break_speed (less gravity's) loses the pieces within
+	// break_radius of its hardest contact, and what is left splits along the bonds that hold.
+	float landing_break_speed = 0.0f; // m/s (0: the parts stay whole)
+	struct Chunk {
+		ObjectID body;
+		LocalVector<int> pieces;
+		Transform3D made; // the body's global transform when it was made
+		Vector3 last_velocity;
+		bool has_last = false;
+	};
+	LocalVector<Chunk> chunks;
+	int last_landing_breaks = 0;
+	int landing_breaks_total = 0;
+	void _track_chunk(RigidBody3D *p_body, const LocalVector<int> &p_pieces);
+	void _check_chunks();
+	void _break_chunk(const Chunk &p_chunk, RigidBody3D *p_body, const Vector3 &p_at, Array &r_spawned);
 	int last_cracked = 0;
 	int cracked_total = 0;
 	int fallen_total = 0;
@@ -317,6 +334,8 @@ public:
 	Array get_structure() const;
 	void set_strength(float p_kpa) { strength = MAX(0.0f, p_kpa); }
 	void set_anchor_mode(AnchorMode p_mode) { anchor_mode = p_mode; }
+	void set_landing_break_speed(float p_speed) { landing_break_speed = MAX(0.0f, p_speed); }
+	float get_landing_break_speed() const { return landing_break_speed; }
 	AnchorMode get_anchor_mode() const { return anchor_mode; }
 	float get_strength() const { return strength; }
 	void update_structure();

@@ -1207,7 +1207,7 @@ void FellowDestructible3D::_settle(Array &r_spawned) {
 	cracked_total += cracked;
 	last_stress_usec = strength > 0.0f ? OS::get_singleton()->get_ticks_usec() - t0 : 0;
 	int fallen = 0;
-	int chunks = 0;
+	int chunk_count = 0;
 	for (uint32_t k = 0; k < n; k++) {
 		if (!struct_pieces[k].alive || reached[k]) {
 			continue;
@@ -1243,12 +1243,13 @@ void FellowDestructible3D::_settle(Array &r_spawned) {
 		if (rb) {
 			_add_debris(rb, debris_lifetime);
 			r_spawned.push_back(rb);
+			_track_chunk(rb, part); // milestone 123
 		}
 		fallen += int(part.size());
-		chunks++;
+		chunk_count++;
 	}
 	last_fallen = fallen;
-	last_chunks = chunks;
+	last_chunks = chunk_count;
 	fallen_total += fallen;
 }
 
@@ -1278,6 +1279,153 @@ void FellowDestructible3D::update_structure() {
 		emit_signal(SNAME("broken"), spawned);
 	}
 	_finish_if_empty();
+}
+
+// Milestone 123 (decision 0247): a part that fell, watched until it lands (or is gone).
+void FellowDestructible3D::_track_chunk(RigidBody3D *p_body, const LocalVector<int> &p_pieces) {
+	if (landing_break_speed <= 0.0f || !p_body || p_pieces.size() < 2) {
+		return;
+	}
+	p_body->set_contact_monitor(true); // its contacts, where it lands
+	p_body->set_max_contacts_reported(MAX(p_body->get_max_contacts_reported(), 4));
+	Chunk chunk;
+	chunk.body = p_body->get_instance_id();
+	chunk.pieces = p_pieces;
+	chunk.made = p_body->get_global_transform();
+	chunks.push_back(chunk);
+}
+
+// Each part's change of velocity in the last step, less what gravity accounts for (as a rigid destructible's blow,
+// decision 0182, but in m/s: a heavy part should not break on a light landing that a light one survives — the speed it
+// stops from is what breaks it).
+void FellowDestructible3D::_check_chunks() {
+	PhysicsServer3D *ps = PhysicsServer3D::get_singleton();
+	Array spawned;
+	int breaks = 0;
+	for (uint32_t i = 0; i < chunks.size();) {
+		Chunk &chunk = chunks[i];
+		RigidBody3D *rb = ObjectDB::get_instance<RigidBody3D>(chunk.body);
+		if (!rb || !rb->is_inside_tree() || rb->is_freeze_enabled() || rb->is_sleeping() || landing_break_speed <= 0.0f) {
+			chunks.remove_at_unordered(i); // gone, fading away, at rest, or the option turned off
+			continue;
+		}
+		PhysicsDirectBodyState3D *st = ps->body_get_direct_state(rb->get_rid());
+		if (!st) {
+			i++;
+			continue;
+		}
+		const Vector3 v = st->get_linear_velocity();
+		const Vector3 dv = v - chunk.last_velocity;
+		const bool had = chunk.has_last;
+		chunk.last_velocity = v;
+		chunk.has_last = true;
+		if (!had || st->get_contact_count() == 0) {
+			i++;
+			continue;
+		}
+		const float change = dv.length() - st->get_total_gravity().length() * st->get_step();
+		if (change < landing_break_speed) {
+			i++;
+			continue;
+		}
+		// Where: the contact that pushed hardest along the change.
+		int best = 0;
+		float best_dot = -1e30f;
+		for (int c = 0; c < st->get_contact_count(); c++) {
+			const float d = st->get_contact_impulse(c).dot(dv);
+			if (d > best_dot) {
+				best_dot = d;
+				best = c;
+			}
+		}
+		const Vector3 at = st->get_contact_local_position(best); // global (Godot 4)
+		const Chunk broken_chunk = chunk;
+		chunks.remove_at_unordered(i);
+		_break_chunk(broken_chunk, rb, at, spawned);
+		breaks++;
+	}
+	if (breaks > 0) {
+		last_landing_breaks = breaks;
+		landing_breaks_total += breaks;
+		global_stats.breaks.add(uint64_t(breaks));
+		global_stats.pieces.add(uint64_t(spawned.size()));
+		emit_signal(SNAME("broken"), spawned);
+	}
+}
+
+// A part broken where it landed: the pieces within break_radius of the contact (at least the nearest) each a body, the
+// rest split along the bonds between its pieces that hold, each group a body (a group of several watched in turn);
+// every new body where its pieces are and moving as they did.
+void FellowDestructible3D::_break_chunk(const Chunk &p_chunk, RigidBody3D *p_body, const Vector3 &p_at, Array &r_spawned) {
+	const Transform3D now = p_body->get_global_transform();
+	const Transform3D mxf = now * p_chunk.made.affine_inverse() * struct_mxf; // the pieces' mesh transform now
+	const Vector3 v = p_body->get_linear_velocity();
+	const Vector3 w = p_body->get_angular_velocity();
+	const Vector3 com = now.origin;
+	HashSet<int> in_chunk;
+	for (int k : p_chunk.pieces) {
+		in_chunk.insert(k);
+	}
+	HashSet<int> hit;
+	int nearest = -1;
+	float best = 1e30f;
+	for (int k : p_chunk.pieces) {
+		const float d = mxf.xform(struct_result->pieces[k].centroid).distance_to(p_at);
+		if (d < break_radius) {
+			hit.insert(k);
+		}
+		if (d < best) {
+			best = d;
+			nearest = k;
+		}
+	}
+	if (hit.is_empty() && nearest >= 0) {
+		hit.insert(nearest);
+	}
+	auto launch = [&](RigidBody3D *p_new) {
+		const Vector3 r = p_new->get_global_transform().origin - com;
+		p_new->set_linear_velocity(v + w.cross(r));
+		p_new->set_angular_velocity(w);
+		_add_debris(p_new, debris_lifetime);
+		r_spawned.push_back(p_new);
+	};
+	for (int k : hit) {
+		LocalVector<int> one;
+		one.push_back(k);
+		if (RigidBody3D *rb = _make_body(one, mxf)) {
+			launch(rb);
+		}
+	}
+	// The rest: groups along the bonds that hold.
+	HashSet<int> done;
+	for (int start : p_chunk.pieces) {
+		if (hit.has(start) || done.has(start)) {
+			continue;
+		}
+		LocalVector<int> group;
+		group.push_back(start);
+		done.insert(start);
+		for (uint32_t q = 0; q < group.size(); q++) {
+			const int piece = group[q];
+			if (uint32_t(piece) >= piece_bonds.size()) {
+				continue;
+			}
+			for (int bi : piece_bonds[piece]) {
+				const Bond &bond = bonds[bi];
+				const int j = bond.a == piece ? bond.b : bond.a;
+				if (!bond.broken && in_chunk.has(j) && !hit.has(j) && !done.has(j)) {
+					done.insert(j);
+					group.push_back(j);
+				}
+			}
+		}
+		if (RigidBody3D *rb = _make_body(group, mxf)) {
+			launch(rb);
+			_track_chunk(rb, group);
+		}
+	}
+	own_bodies.erase(p_body->get_rid());
+	p_body->queue_free();
 }
 
 // Milestone 122: a load resting on the structure (a body's weight on a floor, a balcony): global position and force
@@ -1481,12 +1629,12 @@ void FellowDestructible3D::_remove_struct_piece(int p_index) {
 	sp.shapes.clear();
 }
 
-// Nothing stands: the object is done.
+// Nothing stands: the object is done (milestone 123: its body, empty, freed once the parts it dropped have landed).
 void FellowDestructible3D::_finish_if_empty() {
 	if (structure_built && get_standing_pieces() == 0) {
 		broken = true;
 		CollisionObject3D *body = _get_body();
-		if (body && free_after_break) {
+		if (body && free_after_break && chunks.is_empty()) {
 			body->queue_free();
 		}
 	}
@@ -1714,6 +1862,12 @@ void FellowDestructible3D::_notification(int p_what) {
 			if (!exceptions.is_empty()) {
 				_expire_exceptions();
 			}
+			if (!chunks.is_empty()) {
+				_check_chunks(); // milestone 123: the parts that fell, landing
+				if (chunks.is_empty() && broken && structure_built) {
+					_finish_if_empty(); // the last of them landed: the empty body goes
+				}
+			}
 			if (settle_pending && structure_built && !broken) {
 				// Milestone 122: a collapse going on (the last frame's settling ran out of its budget).
 				Array spawned;
@@ -1785,6 +1939,9 @@ Dictionary FellowDestructible3D::get_stats() const {
 	d["settling"] = settle_pending; // a collapse going on over the next frames
 	d["cracked_total"] = cracked_total;
 	d["fallen_total"] = fallen_total;
+	d["last_landing_breaks"] = last_landing_breaks; // milestone 123
+	d["landing_breaks_total"] = landing_breaks_total;
+	d["falling_parts"] = int(chunks.size());
 	return d;
 }
 
@@ -1894,6 +2051,8 @@ void FellowDestructible3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_strength"), &FellowDestructible3D::get_strength);
 	ClassDB::bind_method(D_METHOD("update_structure"), &FellowDestructible3D::update_structure);
 	ClassDB::bind_method(D_METHOD("set_anchor_mode", "mode"), &FellowDestructible3D::set_anchor_mode);
+	ClassDB::bind_method(D_METHOD("set_landing_break_speed", "speed"), &FellowDestructible3D::set_landing_break_speed);
+	ClassDB::bind_method(D_METHOD("get_landing_break_speed"), &FellowDestructible3D::get_landing_break_speed);
 	ClassDB::bind_method(D_METHOD("get_anchor_mode"), &FellowDestructible3D::get_anchor_mode);
 	ClassDB::bind_method(D_METHOD("get_bonds"), &FellowDestructible3D::get_bonds);
 	ClassDB::bind_method(D_METHOD("add_load", "position", "force"), &FellowDestructible3D::add_load);
@@ -1921,6 +2080,7 @@ void FellowDestructible3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "anchor_mode", PROPERTY_HINT_ENUM, "Lowest Point,Static Bodies"), "set_anchor_mode", "get_anchor_mode");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "anchor_height", PROPERTY_HINT_RANGE, "0,5,0.01,or_greater,suffix:m"), "set_anchor_height", "get_anchor_height");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "strength", PROPERTY_HINT_RANGE, "0,100000,0.1,or_greater,suffix:kPa"), "set_strength", "get_strength");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "landing_break_speed", PROPERTY_HINT_RANGE, "0,50,0.1,or_greater,suffix:m/s"), "set_landing_break_speed", "get_landing_break_speed");
 	ADD_GROUP("Pieces", "");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "density", PROPERTY_HINT_RANGE, "1,10000,1,or_greater,suffix:kg/m³"), "set_density", "get_density");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "burst_speed", PROPERTY_HINT_RANGE, "0,20,0.01,or_greater,suffix:m/s"), "set_burst_speed", "get_burst_speed");
