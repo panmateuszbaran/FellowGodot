@@ -41,6 +41,26 @@ class TextEdit;
 class Tree;
 class VBoxContainer;
 
+// Milestone 120 (docs/decisions/0242-gpu-timeline.md): a long GPU frame's passes drawn on a time line, a row per queue,
+// each pass coloured by how far past its average it ran.
+class FellowGpuTimeline : public Control {
+	GDCLASS(FellowGpuTimeline, Control);
+
+	Array passes; // [name, queue, start µs, length µs, average µs or -1]
+	double span_usec = 0.0;
+	double gap_usec = -1.0;
+	int _pass_at(const Point2 &p_pos) const;
+	Rect2 _pass_rect(int p_index) const;
+
+protected:
+	void _notification(int p_what);
+
+public:
+	void set_frame(const Array &p_passes, double p_gap_usec);
+	virtual String get_tooltip(const Point2 &p_pos) const override;
+	virtual Size2 get_minimum_size() const override;
+};
+
 // FellowEngine milestone 119 (docs/decisions/0238-hitches-in-the-debugger.md): the debugger's "FellowEngine Hitches" tab.
 // A game run from the editor with rendering/fellow/debug/hitch_sampler on (or started from the tab) sends each hitch as
 // it happens: the main thread's or the draw's long frame steps, named (FellowHitchSampler), and the GPU's long frames
@@ -56,6 +76,7 @@ class FellowHitchDebuggerPlugin : public EditorDebuggerPlugin {
 		Label *summary = nullptr;
 		Tree *list = nullptr;
 		TextEdit *details = nullptr;
+		FellowGpuTimeline *timeline = nullptr; // milestone 120
 		int cpu = 0;
 		int gpu = 0;
 	};

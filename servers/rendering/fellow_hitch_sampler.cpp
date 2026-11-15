@@ -1980,6 +1980,31 @@ void FellowHitchSampler::gpu_frame(uint64_t p_frame, uint32_t p_count, const Str
 		message.push_back(MAX(record.passes_usec, record.gap_usec) / 1000.0);
 		message.push_back(record.passes.is_empty() ? String() : record.passes[0].name);
 		message.push_back(gpu_hitch_text(gpu_hitches.size(), record));
+		// Milestone 120 (decision 0242): the frame's passes for the editor's timeline — [name, queue (0 main, 1 async),
+		// start and length in microseconds from the frame's earliest timestamp, the pass's average (-1: none)], and the
+		// gap before the frame (-1: unknown).
+		Array timeline;
+		for (uint32_t i = 0; i + 1 < p_count; i++) {
+			const uint8_t queue = p_async ? p_async[i] : 0;
+			uint32_t next = i + 1;
+			while (p_async && next < p_count && p_async[next] != queue) {
+				next++;
+			}
+			if (next >= p_count || p_gpu_nsec[next] < p_gpu_nsec[i]) {
+				continue;
+			}
+			const String name = queue ? p_names[i] + " (async queue)" : p_names[i];
+			const double *average = gpu_pass_average.getptr(name);
+			Array pass;
+			pass.push_back(p_names[i]);
+			pass.push_back(int(queue));
+			pass.push_back(double(p_gpu_nsec[i] - first_nsec) / 1000.0);
+			pass.push_back(double(p_gpu_nsec[next] - p_gpu_nsec[i]) / 1000.0);
+			pass.push_back(average ? *average : -1.0);
+			timeline.push_back(pass);
+		}
+		message.push_back(timeline);
+		message.push_back(gap_usec);
 		live_post("fellow_hitch:gpu", message);
 	}
 }

@@ -37,7 +37,8 @@ The editor check reads the three monitors (lavapipe: budget 8 024 MiB, used 3 16
 
 The RTX (job f461, Sponza streamed with `texture_budget_auto` 0.9): the driver's figures read every frame; the
 streamed textures' budget 8 192 MiB in force, their resident bytes 1.13 GiB (wanted 1.07): no texture coarsened; the
-frame 6.12 ms as in the lane without it (6.05-6.25).
+frame 6.12 ms as in the lane without it (6.05-6.25). Job f462 recorded the figures at the end of each run: the budget
+11 176 MiB (of the GPU's 12 GiB), the process's usage 2 963 MiB, the allocator's own device memory 2 341 MiB.
 
 ## Decision
 

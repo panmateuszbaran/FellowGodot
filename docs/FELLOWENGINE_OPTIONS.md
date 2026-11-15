@@ -814,7 +814,9 @@ FellowEngine's statistics count `gpu_hitches`.
 In the editor (milestone 119, decision 0238): the debugger's **FellowEngine Hitches** tab lists a game's hitches as they
 happen (when, CPU or GPU, how long, where) with the exit report's text for the one selected; **Record** starts the
 sampler in the running game (and in the next one) at the tab's threshold, without the project setting. In the game, a
-CPU hitch is named on a low-priority thread of its own; the messages are sent by the main thread.
+CPU hitch is named on a low-priority thread of its own; the messages are sent by the main thread. Milestone 120
+(decision 0242): a GPU hitch selected draws its frame's passes on a time line, a row per queue, each reddening as it runs
+past its average (tooltips give the length, start and average).
 
 Script frames (milestone 119, decision 0239; GDScript's debug builds: the editor, games run from it, debug templates):
 each sample of a stepping thread also reads its GDScript call levels, and a hitch's report adds the script call path

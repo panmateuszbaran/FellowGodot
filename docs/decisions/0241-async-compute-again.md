@@ -3,7 +3,7 @@
 Status: **CHANGE**: `rendering/fellow/frame/async_compute` off by default (it was on for NVIDIA GPUs) · Branch
 `fellow/geometry` · Code: `servers/rendering/fellow_settings.cpp`, `servers/rendering/rendering_device.cpp`,
 `drivers/vulkan/rendering_device_driver_vulkan.cpp` (the default when the project does not set it) · Checks: jobs f460,
-f461 (the RTX 5070 Ti Laptop, Windows, NVIDIA's driver; autotune off, the hitch sampler on at 16.7 ms).
+f461, f462 (the RTX 5070 Ti Laptop, Windows, NVIDIA's driver; autotune off, the hitch sampler on at 16.7 ms).
 
 ## Problem
 
@@ -30,6 +30,14 @@ process waiting on the frame's fence — the main queue waiting for the asynchro
 time: it ran late, or its signal came late; not the CPU, nor the work of either queue. Both lanes also had, a few times
 each, a frame step of 17-19 ms whose GPU frame was 6.8 ms (a fence late without FellowEngine's work: the operating
 system's or another program's).
+
+Job f462 (the release template at b54dea6beb, whose GPU hitches say when the asynchronous part began and how long it
+took; Sponza streamed, two alternating runs of 300 s each): with it on, 4 such frames in 10 minutes — three whose
+asynchronous part began 12.9-17.7 ms into the frame (1.3-1.9 on average) and took its usual 0.5 ms, one whose part began
+on time (1.4 ms) and finished in 1.3 ms while the main queue still waited 15.7 ms after the fog: late to start, or its
+finish signalled late to the main queue — the driver's and the operating system's scheduling of two queues, not
+FellowEngine's work. Off (the new default): none. Sponza's frame either way within the runs' spread across the three
+jobs (on 6.09-6.28 ms, off 6.11-6.37 ms).
 
 ## Decision
 

@@ -18,7 +18,8 @@ Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.m
 - The operating system's video memory budget and the process's usage read from the driver every frame
   (`VK_EXT_memory_budget`, decision 0240): FellowEngine's statistics, Performance monitors; `streaming/texture_budget_auto`
   (off) makes the streamed textures' budget follow it.
-- The hitch sampler's GPU hitches say when the asynchronous part began into the frame and how long it took.
+- The hitch sampler's GPU hitches say when the asynchronous part began into the frame and how long it took; in the
+  debugger's FellowEngine Hitches tab a GPU hitch's passes are drawn on a time line, a row per queue (decision 0242).
 
 ## Milestone 119 — downloads returned whole; the GPU's hitches, scripts' frames and hitches in the editor's debugger (2026-11-15)
 
