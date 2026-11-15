@@ -64,6 +64,14 @@ public:
 	// Milestone 80 (decision 0188): the pieces that touch (share three or more of their surface's points: a cell's
 	// face), found when prepared.
 	Vector<Vector<int>> adjacency;
+	// Milestone 122 (decision 0246): each touching pair's shared points (mesh space; a < b), the face the stress
+	// solver's bond is made of.
+	struct Contact {
+		int a = 0;
+		int b = 0;
+		Vector<Vector3> points;
+	};
+	Vector<Contact> contacts;
 
 	void prepare(); // the surfaces' arrays (any thread)
 	void build(); // the meshes and shapes (main thread)
@@ -79,6 +87,12 @@ class FellowDestructible3D : public Node3D {
 	GDCLASS(FellowDestructible3D, Node3D);
 
 public:
+	// Milestone 122 (decision 0246): which pieces stand on something.
+	enum AnchorMode {
+		ANCHOR_LOWEST_POINT, // those reaching within anchor_height of the object's lowest point (decision 0188)
+		ANCHOR_STATIC_BODIES, // those touching another static body (the ground, a building's wall or frame)
+	};
+
 	struct GlobalStats {
 		SafeNumeric<uint64_t> breaks;
 		SafeNumeric<uint64_t> fractures; // computed (a shared pattern counts once)
@@ -127,6 +141,58 @@ private:
 	bool structural = false;
 	float break_radius = 0.6f; // m: the pieces within it of a blow break off
 	float anchor_height = 0.1f; // m: the pieces reaching this near the object's lowest point stand on the ground
+	// Milestone 122 (decision 0246): the material's strength (kPa; 0: support is connectivity alone). The faces where
+	// pieces touch are bonds, elastic in tension, compression, shear, bending and torsion; under the pieces' weight a bond
+	// whose tension or shear passes the strength (compression ten times it) cracks, the worst first, and what no longer
+	// reaches the ground falls.
+	float strength = 0.0f;
+	AnchorMode anchor_mode = ANCHOR_LOWEST_POINT;
+	struct Bond {
+		int a = 0;
+		int b = 0;
+		Vector3 centre; // global, at the structure's making
+		Vector3 normal; // from a to b
+		Vector3 axis1, axis2; // the face's principal axes
+		double area = 0.0;
+		double inertia1 = 0.0; // ∫ s2² dA: bending about axis1
+		double inertia2 = 0.0; // ∫ s1² dA: bending about axis2
+		double length = 1.0; // the springs' length (a's centre to b's along the normal)
+		LocalVector<Vector2> outline; // the face's corners (s1, s2) from the centre
+		bool broken = false;
+		// The last solve's: the force and moment on b (at the centre), the stresses (Pa) and their ratio to the limits.
+		Vector3 force;
+		Vector3 moment;
+		double tension = 0.0;
+		double compression = 0.0;
+		double shear = 0.0;
+		double ratio = 0.0;
+	};
+	LocalVector<Bond> bonds;
+	LocalVector<LocalVector<int>> piece_bonds;
+	LocalVector<Vector3> piece_centre; // global
+	LocalVector<double> piece_mass;
+	LocalVector<double> stress_x; // the last solve's displacements (6 a piece), the next one's start
+	struct Load {
+		Vector3 position; // global
+		Vector3 force; // N
+	};
+	LocalVector<Load> loads; // what rests on the structure: on the standing piece nearest each
+	int last_cracked = 0;
+	int cracked_total = 0;
+	int fallen_total = 0;
+	bool settle_pending = false;
+	// A settling's stress solves a frame, as work (conjugate-gradient iterations × the bonds they run over: the same
+	// collapse on every machine): about 5 ms on the cloud's CPU, less on a desktop's; the rest the next frame.
+	static constexpr uint64_t STRESS_FRAME_WORK = 100000;
+	uint64_t stress_work = 0;
+	uint64_t last_stress_usec = 0;
+	int last_stress_iterations = 0;
+	void _build_bonds();
+	void _supported(LocalVector<uint8_t> &r_reached) const;
+	int _solve_stress(const LocalVector<uint8_t> &p_supported);
+	void _settle(Array &r_spawned);
+	void _remove_struct_piece(int p_index);
+	void _finish_if_empty();
 
 	struct StructPiece {
 		MeshInstance3D *mesh = nullptr;
@@ -249,7 +315,17 @@ public:
 	float get_anchor_height() const { return anchor_height; }
 	int get_standing_pieces() const;
 	Array get_structure() const;
+	void set_strength(float p_kpa) { strength = MAX(0.0f, p_kpa); }
+	void set_anchor_mode(AnchorMode p_mode) { anchor_mode = p_mode; }
+	AnchorMode get_anchor_mode() const { return anchor_mode; }
+	float get_strength() const { return strength; }
+	void update_structure();
+	Array get_bonds() const;
+	void add_load(const Vector3 &p_position, const Vector3 &p_force);
+	void clear_loads() { loads.clear(); }
 
 	FellowDestructible3D();
 	~FellowDestructible3D();
 };
+
+VARIANT_ENUM_CAST(FellowDestructible3D::AnchorMode);

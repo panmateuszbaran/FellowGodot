@@ -31,6 +31,7 @@
 #include "fellow_destructible_3d.h"
 
 #include "core/config/engine.h"
+#include "core/config/project_settings.h"
 #include "core/math/random_pcg.h"
 #include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
@@ -100,6 +101,7 @@ void FellowFractureResult::prepare() {
 		memset(shared.ptr(), 0, sizeof(int) * n * n);
 		LocalVector<int> touched;
 		touched.resize(n);
+		HashMap<uint64_t, Vector<Vector3>> shared_points; // milestone 122: a's points touching b (a < b)
 		for (uint32_t a = 0; a < n; a++) {
 			for (const Vector3 &p : points[a]) {
 				for (uint32_t b = 0; b < n; b++) {
@@ -117,6 +119,9 @@ void FellowFractureResult::prepare() {
 								if (q.piece != int(a) && !touched[q.piece] && q.p.distance_squared_to(p) <= tol * tol) {
 									touched[q.piece] = 1;
 									shared[a * n + q.piece]++;
+									if (uint32_t(q.piece) > a) {
+										shared_points[uint64_t(a) * n + q.piece].push_back(p);
+									}
 								}
 							}
 						}
@@ -133,6 +138,22 @@ void FellowFractureResult::prepare() {
 				}
 			}
 			adjacency.write[a] = list;
+		}
+		contacts.clear();
+		for (uint32_t a = 0; a < n; a++) {
+			for (int b : adjacency[a]) {
+				if (uint32_t(b) <= a) {
+					continue;
+				}
+				Contact contact;
+				contact.a = int(a);
+				contact.b = b;
+				const Vector<Vector3> *face = shared_points.getptr(uint64_t(a) * n + b);
+				if (face) {
+					contact.points = *face;
+				}
+				contacts.push_back(contact);
+			}
 		}
 	}
 	surface_arrays.resize(pieces.size());
@@ -527,9 +548,39 @@ void FellowDestructible3D::_build_structure(const Ref<FellowFractureResult> &p_r
 			sp.shapes.push_back(cs);
 		}
 		sp.alive = true;
-		sp.anchored = bottoms[k] <= lowest + anchor_height;
+		sp.anchored = anchor_mode == ANCHOR_LOWEST_POINT && bottoms[k] <= lowest + anchor_height;
+	}
+	if (anchor_mode == ANCHOR_STATIC_BODIES && body->is_inside_tree()) {
+		// Milestone 122: a piece touching another static body (within 2 cm) stands on it.
+		PhysicsDirectSpaceState3D *space = body->get_world_3d().is_valid() ? body->get_world_3d()->get_direct_space_state() : nullptr;
+		for (uint32_t k = 0; space && k < n; k++) {
+			StructPiece &sp = struct_pieces[k];
+			for (CollisionShape3D *cs : sp.shapes) {
+				if (sp.anchored || cs->get_shape().is_null()) {
+					break;
+				}
+				PhysicsDirectSpaceState3D::ShapeParameters query;
+				query.shape_rid = cs->get_shape()->get_rid();
+				query.transform = body->get_global_transform() * cs->get_transform();
+				query.margin = 0.02f;
+				query.collision_mask = body->get_collision_mask();
+				query.collide_with_bodies = true;
+				query.collide_with_areas = false;
+				query.exclude.insert(body->get_rid());
+				PhysicsDirectSpaceState3D::ShapeResult results[8];
+				const int count = space->intersect_shape(query, results, 8);
+				for (int i = 0; i < count; i++) {
+					const PhysicsServer3D::BodyMode mode = PhysicsServer3D::get_singleton()->body_get_mode(results[i].rid);
+					if (!own_bodies.has(results[i].rid) && (mode == PhysicsServer3D::BODY_MODE_STATIC || mode == PhysicsServer3D::BODY_MODE_KINEMATIC)) {
+						sp.anchored = true;
+						break;
+					}
+				}
+			}
+		}
 	}
 	structure_built = true;
+	_build_bonds(); // milestone 122
 }
 
 // The structure as it stands: each piece's centre and bounds (global), whether it stands and on the ground, the pieces
@@ -545,13 +596,718 @@ Array FellowDestructible3D::get_structure() const {
 		d["aabb"] = struct_mxf.xform(struct_result->pieces[k].aabb);
 		d["standing"] = struct_pieces[k].alive;
 		d["anchored"] = struct_pieces[k].anchored;
+		d["mass"] = k < piece_mass.size() ? piece_mass[k] : 0.0; // milestone 122
 		PackedInt32Array touching;
-		if (k < uint32_t(struct_result->adjacency.size())) {
+		if (k < piece_bonds.size()) {
+			for (int bi : piece_bonds[k]) { // milestone 122: the bonds that hold
+				if (!bonds[bi].broken) {
+					touching.push_back(bonds[bi].a == int(k) ? bonds[bi].b : bonds[bi].a);
+				}
+			}
+		} else if (k < uint32_t(struct_result->adjacency.size())) {
 			for (int j : struct_result->adjacency[k]) {
 				touching.push_back(j);
 			}
 		}
 		d["touching"] = touching;
+		out.push_back(d);
+	}
+	return out;
+}
+
+// Milestone 122 (decision 0246): the bonds — each touching pair's shared face (its points' convex outline in their
+// plane), its area, centre and second moments about its principal axes, in global space as the structure was made.
+void FellowDestructible3D::_build_bonds() {
+	bonds.clear();
+	piece_bonds.clear();
+	piece_centre.clear();
+	piece_mass.clear();
+	stress_x.clear();
+	if (struct_result.is_null()) {
+		return;
+	}
+	const uint32_t n = struct_result->pieces.size();
+	const Vector3 scale = struct_mxf.basis.get_scale();
+	const double scale3 = Math::abs(double(scale.x) * scale.y * scale.z);
+	piece_bonds.resize(n);
+	piece_centre.resize(n);
+	piece_mass.resize(n);
+	stress_x.resize(n * 6);
+	for (uint32_t k = 0; k < n; k++) {
+		piece_centre[k] = struct_mxf.xform(struct_result->pieces[k].centroid);
+		piece_mass[k] = MAX(0.02, double(struct_result->pieces[k].volume) * scale3 * density);
+	}
+	for (double &x : stress_x) {
+		x = 0.0;
+	}
+	for (const FellowFractureResult::Contact &contact : struct_result->contacts) {
+		Bond bond;
+		bond.a = contact.a;
+		bond.b = contact.b;
+		const Vector3 ab = piece_centre[contact.b] - piece_centre[contact.a];
+		LocalVector<Vector3> points;
+		for (const Vector3 &p : contact.points) {
+			points.push_back(struct_mxf.xform(p));
+		}
+		// The face's plane: its two farthest points and the point farthest from their line.
+		Vector3 normal;
+		Vector3 e1;
+		Vector3 origin = points.is_empty() ? (piece_centre[contact.a] + piece_centre[contact.b]) * 0.5f : points[0];
+		if (points.size() >= 3) {
+			uint32_t i0 = 0, i1 = 1;
+			float far = -1.0f;
+			for (uint32_t i = 0; i < points.size(); i++) {
+				for (uint32_t j = i + 1; j < points.size(); j++) {
+					const float d = points[i].distance_squared_to(points[j]);
+					if (d > far) {
+						far = d;
+						i0 = i;
+						i1 = j;
+					}
+				}
+			}
+			const Vector3 line = (points[i1] - points[i0]).normalized();
+			float off = -1.0f;
+			uint32_t i2 = 0;
+			for (uint32_t i = 0; i < points.size(); i++) {
+				const Vector3 v = points[i] - points[i0];
+				const float d = (v - line * v.dot(line)).length_squared();
+				if (d > off) {
+					off = d;
+					i2 = i;
+				}
+			}
+			normal = line.cross(points[i2] - points[i0]);
+			origin = points[i0];
+			e1 = line;
+		}
+		if (normal.length_squared() < 1e-12f) {
+			normal = ab; // a degenerate face: across the centres
+			e1 = normal.cross(Math::abs(normal.y) < 0.9f ? Vector3(0, 1, 0) : Vector3(1, 0, 0));
+		}
+		normal.normalize();
+		if (normal.dot(ab) < 0.0f) {
+			normal = -normal;
+		}
+		e1 = (e1 - normal * e1.dot(normal)).normalized();
+		const Vector3 e2 = normal.cross(e1);
+		// The outline: the points' convex hull in the plane (Andrew's monotone chain), counter-clockwise.
+		LocalVector<Vector2> flat;
+		for (const Vector3 &p : points) {
+			flat.push_back(Vector2((p - origin).dot(e1), (p - origin).dot(e2)));
+		}
+		flat.sort(); // by x, then y
+		LocalVector<Vector2> hull;
+		if (flat.size() >= 3) {
+			hull.resize(flat.size() * 2);
+			int h = 0;
+			for (uint32_t i = 0; i < flat.size(); i++) {
+				while (h >= 2 && (hull[h - 1] - hull[h - 2]).cross(flat[i] - hull[h - 2]) <= 0.0f) {
+					h--;
+				}
+				hull[h++] = flat[i];
+			}
+			for (int i = int(flat.size()) - 2, lower = h + 1; i >= 0; i--) {
+				while (h >= lower && (hull[h - 1] - hull[h - 2]).cross(flat[i] - hull[h - 2]) <= 0.0f) {
+					h--;
+				}
+				hull[h++] = flat[i];
+			}
+			hull.resize(MAX(0, h - 1));
+		}
+		// Area, centre and second moments of the outline (about the plane's origin, then its centre).
+		double area = 0.0, cx = 0.0, cy = 0.0, sxx = 0.0, syy = 0.0, sxy = 0.0;
+		for (uint32_t i = 0; i < hull.size(); i++) {
+			const Vector2 p = hull[i];
+			const Vector2 q = hull[(i + 1) % hull.size()];
+			const double cross = double(p.x) * q.y - double(q.x) * p.y;
+			area += cross;
+			cx += (p.x + q.x) * cross;
+			cy += (p.y + q.y) * cross;
+			sxx += cross * (double(p.x) * p.x + double(p.x) * q.x + double(q.x) * q.x);
+			syy += cross * (double(p.y) * p.y + double(p.y) * q.y + double(q.y) * q.y);
+			sxy += cross * (double(p.x) * q.y + 2.0 * p.x * p.y + 2.0 * q.x * q.y + double(q.x) * p.y);
+		}
+		area *= 0.5;
+		const double min_area = MAX(1e-8, 1e-6 * ab.length_squared());
+		if (area > min_area) {
+			cx /= 6.0 * area;
+			cy /= 6.0 * area;
+			sxx = sxx / 12.0 - area * cx * cx;
+			syy = syy / 12.0 - area * cy * cy;
+			sxy = sxy / 24.0 - area * cx * cy;
+		} else {
+			// A face of a point or a line: a small square bond across the centres.
+			area = min_area;
+			cx = cy = 0.0;
+			sxx = syy = area * area / 12.0;
+			sxy = 0.0;
+			hull.clear();
+			const float half = float(Math::sqrt(area) * 0.5);
+			hull.push_back(Vector2(-half, -half));
+			hull.push_back(Vector2(half, -half));
+			hull.push_back(Vector2(half, half));
+			hull.push_back(Vector2(-half, half));
+			origin = (piece_centre[contact.a] + piece_centre[contact.b]) * 0.5f;
+		}
+		// The principal axes: the eigenvectors of [[sxx, sxy], [sxy, syy]].
+		const double angle = 0.5 * Math::atan2(2.0 * sxy, sxx - syy);
+		const double ca = Math::cos(angle), sa = Math::sin(angle);
+		const double l1 = sxx * ca * ca + 2.0 * sxy * ca * sa + syy * sa * sa; // ∫ s1² along the first axis
+		const double l2 = sxx * sa * sa - 2.0 * sxy * ca * sa + syy * ca * ca; // ∫ s2²
+		bond.centre = origin + e1 * float(cx) + e2 * float(cy);
+		bond.normal = normal;
+		bond.axis1 = (e1 * float(ca) + e2 * float(sa)).normalized();
+		bond.axis2 = normal.cross(bond.axis1);
+		bond.area = area;
+		bond.inertia1 = MAX(l2, area * area * 1e-4); // about axis1: the s2 coordinate's
+		bond.inertia2 = MAX(l1, area * area * 1e-4);
+		bond.length = MAX(double(Math::abs(ab.dot(normal))), 0.25 * Math::sqrt(area));
+		for (const Vector2 &p : hull) {
+			const Vector3 v = origin + e1 * p.x + e2 * p.y - bond.centre;
+			bond.outline.push_back(Vector2(v.dot(bond.axis1), v.dot(bond.axis2)));
+		}
+		piece_bonds[contact.a].push_back(int(bonds.size()));
+		piece_bonds[contact.b].push_back(int(bonds.size()));
+		bonds.push_back(bond);
+	}
+}
+
+// What stands: from the pieces on the ground through the bonds that hold.
+void FellowDestructible3D::_supported(LocalVector<uint8_t> &r_reached) const {
+	const uint32_t n = struct_pieces.size();
+	r_reached.resize(n);
+	LocalVector<int> queue;
+	for (uint32_t k = 0; k < n; k++) {
+		r_reached[k] = struct_pieces[k].alive && struct_pieces[k].anchored ? 1 : 0;
+		if (r_reached[k]) {
+			queue.push_back(int(k));
+		}
+	}
+	for (uint32_t q = 0; q < queue.size(); q++) {
+		const int k = queue[q];
+		if (uint32_t(k) < piece_bonds.size()) {
+			for (int bi : piece_bonds[k]) {
+				const Bond &bond = bonds[bi];
+				const int j = bond.a == k ? bond.b : bond.a;
+				if (!bond.broken && struct_pieces[j].alive && !r_reached[j]) {
+					r_reached[j] = 1;
+					queue.push_back(j);
+				}
+			}
+		} else {
+			for (int j : struct_result->adjacency[k]) {
+				if (struct_pieces[j].alive && !r_reached[j]) {
+					r_reached[j] = 1;
+					queue.push_back(j);
+				}
+			}
+		}
+	}
+}
+
+namespace {
+
+constexpr double STRESS_E = 1.0e9; // Pa: the bonds' stiffness (their forces under the weight do not depend on it where
+// the structure is determinate; where it is not, only the ratios between bonds matter)
+constexpr double STRESS_G = 0.4e9;
+constexpr double STRESS_COMPRESSION = 10.0; // the compressive strength, in multiples of the tensile
+
+// Double-precision vectors for the solve (stiffnesses span orders of magnitude).
+struct Vector3d {
+	double x = 0.0, y = 0.0, z = 0.0;
+	Vector3d() {}
+	Vector3d(double p_x, double p_y, double p_z) :
+			x(p_x), y(p_y), z(p_z) {}
+	double &operator[](int p_i) { return p_i == 0 ? x : (p_i == 1 ? y : z); }
+	Vector3d operator+(const Vector3d &p_o) const { return Vector3d(x + p_o.x, y + p_o.y, z + p_o.z); }
+	Vector3d operator-(const Vector3d &p_o) const { return Vector3d(x - p_o.x, y - p_o.y, z - p_o.z); }
+	Vector3d operator*(double p_s) const { return Vector3d(x * p_s, y * p_s, z * p_s); }
+	double dot(const Vector3d &p_o) const { return x * p_o.x + y * p_o.y + z * p_o.z; }
+	Vector3d cross(const Vector3d &p_o) const { return Vector3d(y * p_o.z - z * p_o.y, z * p_o.x - x * p_o.z, x * p_o.y - y * p_o.x); }
+	double length_squared() const { return dot(*this); }
+	double length() const { return Math::sqrt(length_squared()); }
+};
+
+inline Vector3d to_d(const Vector3 &p_v) {
+	return Vector3d(p_v.x, p_v.y, p_v.z);
+}
+
+// A bond's springs in the global frame: K_lin = (E A/L) n nᵀ + (G A/L)(I - n nᵀ); K_rot = (G J/L) n nᵀ +
+// (E I1/L) a1 a1ᵀ + (E I2/L) a2 a2ᵀ.
+struct BondK {
+	double kn, ks, kt, kb1, kb2;
+	Vector3d n, a1, a2, c;
+	Vector3d lin(const Vector3d &p_d) const {
+		const double dn = p_d.dot(n);
+		return n * (kn * dn) + (p_d - n * dn) * ks;
+	}
+	Vector3d rot(const Vector3d &p_p) const {
+		return n * (kt * p_p.dot(n)) + a1 * (kb1 * p_p.dot(a1)) + a2 * (kb2 * p_p.dot(a2));
+	}
+};
+
+// 6x6 symmetric positive definite blocks: the block Jacobi preconditioner (Cholesky).
+struct Block6 {
+	double m[6][6] = {};
+	bool factor() {
+		for (int j = 0; j < 6; j++) {
+			double d = m[j][j];
+			for (int k = 0; k < j; k++) {
+				d -= m[j][k] * m[j][k];
+			}
+			if (d <= 1e-30) {
+				return false;
+			}
+			m[j][j] = Math::sqrt(d);
+			for (int i = j + 1; i < 6; i++) {
+				double v = m[i][j];
+				for (int k = 0; k < j; k++) {
+					v -= m[i][k] * m[j][k];
+				}
+				m[i][j] = v / m[j][j];
+			}
+		}
+		return true;
+	}
+	void solve(const double *p_b, double *r_x) const {
+		double y[6];
+		for (int i = 0; i < 6; i++) {
+			double v = p_b[i];
+			for (int k = 0; k < i; k++) {
+				v -= m[i][k] * y[k];
+			}
+			y[i] = v / m[i][i];
+		}
+		for (int i = 5; i >= 0; i--) {
+			double v = y[i];
+			for (int k = i + 1; k < 6; k++) {
+				v -= m[k][i] * r_x[k];
+			}
+			r_x[i] = v / m[i][i];
+		}
+	}
+};
+
+} // namespace
+
+// The structure's small displacements under the pieces' weight, the pieces on the ground fixed: K x = f, solved by
+// conjugate gradients with a block Jacobi preconditioner, started from the last solve's. Then each bond's force, moment
+// and stresses at its outline's corners (normal: (E/L)(δ·n + (φ × s)·n), tension positive; shear: (G/L)|slip|), and
+// its ratio to the limits. Returns the bond most past its limits, or -1.
+int FellowDestructible3D::_solve_stress(const LocalVector<uint8_t> &p_supported) {
+	const uint32_t n = struct_pieces.size();
+	if (bonds.is_empty() || piece_bonds.size() != n) {
+		return -1;
+	}
+	// The unknowns: the standing pieces not on the ground.
+	LocalVector<int> index;
+	index.resize(n);
+	int m = 0;
+	for (uint32_t k = 0; k < n; k++) {
+		const bool free = p_supported[k] && struct_pieces[k].alive && !struct_pieces[k].anchored;
+		index[k] = free ? m++ : -1;
+	}
+	if (m == 0) {
+		return -1;
+	}
+	// The bonds that carry: holding, between standing pieces, at least one of them free.
+	LocalVector<int> active;
+	LocalVector<BondK> ks;
+	for (uint32_t bi = 0; bi < bonds.size(); bi++) {
+		Bond &bond = bonds[bi];
+		bond.force = Vector3();
+		bond.moment = Vector3();
+		bond.tension = bond.compression = bond.shear = bond.ratio = 0.0;
+		if (bond.broken || !p_supported[bond.a] || !p_supported[bond.b] || !struct_pieces[bond.a].alive || !struct_pieces[bond.b].alive || (index[bond.a] < 0 && index[bond.b] < 0)) {
+			continue;
+		}
+		BondK k;
+		k.kn = STRESS_E * bond.area / bond.length;
+		k.ks = STRESS_G * bond.area / bond.length;
+		k.kt = STRESS_G * (bond.inertia1 + bond.inertia2) / bond.length;
+		k.kb1 = STRESS_E * bond.inertia1 / bond.length;
+		k.kb2 = STRESS_E * bond.inertia2 / bond.length;
+		k.n = to_d(bond.normal);
+		k.a1 = to_d(bond.axis1);
+		k.a2 = to_d(bond.axis2);
+		k.c = to_d(bond.centre);
+		active.push_back(int(bi));
+		ks.push_back(k);
+	}
+	if (active.is_empty()) {
+		return -1;
+	}
+	ProjectSettings *settings = ProjectSettings::get_singleton();
+	const Vector3 g_dir = settings ? Vector3(GLOBAL_GET("physics/3d/default_gravity_vector")) : Vector3(0, -1, 0);
+	const double g_len = settings ? double(GLOBAL_GET("physics/3d/default_gravity")) : 9.8;
+	const Vector3d g = to_d(g_dir.normalized()) * g_len;
+
+	// A x for x of 6 m: each bond's relative motion at its centre, its springs' forces back on its pieces.
+	auto relative = [&](const BondK &k, const Bond &bond, const double *x, Vector3d &r_d, Vector3d &r_p) {
+		Vector3d ua, wa, ub, wb;
+		if (index[bond.a] >= 0) {
+			const double *v = x + 6 * index[bond.a];
+			ua = Vector3d(v[0], v[1], v[2]);
+			wa = Vector3d(v[3], v[4], v[5]);
+		}
+		if (index[bond.b] >= 0) {
+			const double *v = x + 6 * index[bond.b];
+			ub = Vector3d(v[0], v[1], v[2]);
+			wb = Vector3d(v[3], v[4], v[5]);
+		}
+		const Vector3d ra = k.c - to_d(piece_centre[bond.a]);
+		const Vector3d rb = k.c - to_d(piece_centre[bond.b]);
+		r_d = (ub + wb.cross(rb)) - (ua + wa.cross(ra));
+		r_p = wb - wa;
+	};
+	auto apply = [&](const double *x, double *r_out) {
+		memset(r_out, 0, sizeof(double) * 6 * m);
+		for (uint32_t i = 0; i < active.size(); i++) {
+			const Bond &bond = bonds[active[i]];
+			const BondK &k = ks[i];
+			Vector3d d, p;
+			relative(k, bond, x, d, p);
+			const Vector3d f = k.lin(d);
+			const Vector3d t = k.rot(p);
+			if (index[bond.b] >= 0) {
+				double *o = r_out + 6 * index[bond.b];
+				const Vector3d tq = (k.c - to_d(piece_centre[bond.b])).cross(f) + t;
+				o[0] += f.x, o[1] += f.y, o[2] += f.z, o[3] += tq.x, o[4] += tq.y, o[5] += tq.z;
+			}
+			if (index[bond.a] >= 0) {
+				double *o = r_out + 6 * index[bond.a];
+				const Vector3d tq = (k.c - to_d(piece_centre[bond.a])).cross(f) + t;
+				o[0] -= f.x, o[1] -= f.y, o[2] -= f.z, o[3] -= tq.x, o[4] -= tq.y, o[5] -= tq.z;
+			}
+		}
+	};
+	// The preconditioner: each free piece's own 6 x 6 block, [[K, -K [r]x], [[r]x K, -[r]x K [r]x + R]] over its bonds.
+	LocalVector<Block6> blocks;
+	blocks.resize(m);
+	for (uint32_t i = 0; i < active.size(); i++) {
+		const Bond &bond = bonds[active[i]];
+		const BondK &k = ks[i];
+		for (int end = 0; end < 2; end++) {
+			const int piece = end ? bond.b : bond.a;
+			if (index[piece] < 0) {
+				continue;
+			}
+			Block6 &bl = blocks[index[piece]];
+			const Vector3d r = k.c - to_d(piece_centre[piece]);
+			// Columns: the response to a unit displacement or rotation of the piece alone.
+			for (int c = 0; c < 6; c++) {
+				Vector3d du, dw;
+				if (c < 3) {
+					du[c] = 1.0;
+				} else {
+					dw[c - 3] = 1.0;
+				}
+				const Vector3d d = du + dw.cross(r);
+				const Vector3d f = k.lin(d);
+				const Vector3d t = r.cross(f) + k.rot(dw);
+				bl.m[0][c] += f.x;
+				bl.m[1][c] += f.y;
+				bl.m[2][c] += f.z;
+				bl.m[3][c] += t.x;
+				bl.m[4][c] += t.y;
+				bl.m[5][c] += t.z;
+			}
+		}
+	}
+	LocalVector<uint8_t> factored;
+	factored.resize(m);
+	for (int i = 0; i < m; i++) {
+		factored[i] = blocks[i].factor() ? 1 : 0;
+	}
+	auto precondition = [&](const double *r, double *z) {
+		for (int i = 0; i < m; i++) {
+			if (factored[i]) {
+				blocks[i].solve(r + 6 * i, z + 6 * i);
+			} else {
+				for (int c = 0; c < 6; c++) {
+					z[6 * i + c] = r[6 * i + c];
+				}
+			}
+		}
+	};
+	const int dim = 6 * m;
+	LocalVector<double> x, b, r, z, p, ap;
+	x.resize(dim);
+	b.resize(dim);
+	r.resize(dim);
+	z.resize(dim);
+	p.resize(dim);
+	ap.resize(dim);
+	double b_norm = 0.0;
+	for (uint32_t k = 0; k < n; k++) {
+		if (index[k] < 0) {
+			continue;
+		}
+		const Vector3d f = g * piece_mass[k];
+		double *bk = b.ptr() + 6 * index[k];
+		bk[0] = f.x, bk[1] = f.y, bk[2] = f.z, bk[3] = bk[4] = bk[5] = 0.0;
+		b_norm += f.length_squared();
+		for (int c = 0; c < 6; c++) {
+			x[6 * index[k] + c] = stress_x[6 * k + c];
+		}
+	}
+	// Loads resting on it: on the standing piece nearest each (none if that piece is on the ground).
+	for (const Load &load : loads) {
+		int nearest = -1;
+		float best = 1e30f;
+		for (uint32_t k = 0; k < n; k++) {
+			if (!p_supported[k] || !struct_pieces[k].alive) {
+				continue;
+			}
+			const float d = piece_centre[k].distance_squared_to(load.position);
+			if (d < best) {
+				best = d;
+				nearest = int(k);
+			}
+		}
+		if (nearest < 0 || index[nearest] < 0) {
+			continue;
+		}
+		const Vector3d f = to_d(load.force);
+		const Vector3d t = (to_d(load.position) - to_d(piece_centre[nearest])).cross(f);
+		double *bk = b.ptr() + 6 * index[nearest];
+		b_norm -= Vector3d(bk[0], bk[1], bk[2]).length_squared();
+		bk[0] += f.x, bk[1] += f.y, bk[2] += f.z, bk[3] += t.x, bk[4] += t.y, bk[5] += t.z;
+		b_norm += Vector3d(bk[0], bk[1], bk[2]).length_squared();
+	}
+	b_norm = Math::sqrt(MAX(0.0, b_norm));
+	apply(x.ptr(), ap.ptr());
+	for (int i = 0; i < dim; i++) {
+		r[i] = b[i] - ap[i];
+	}
+	precondition(r.ptr(), z.ptr());
+	double rz = 0.0;
+	for (int i = 0; i < dim; i++) {
+		p[i] = z[i];
+		rz += r[i] * z[i];
+	}
+	const int max_iterations = MIN(4000, MAX(100, 2 * dim));
+	int it = 0;
+	for (; it < max_iterations; it++) {
+		double rr = 0.0;
+		for (int i = 0; i < dim; i++) {
+			rr += r[i] * r[i];
+		}
+		if (Math::sqrt(rr) <= 1e-6 * MAX(b_norm, 1e-12)) { // the forces balanced to a millionth of the weight
+			break;
+		}
+		apply(p.ptr(), ap.ptr());
+		double pap = 0.0;
+		for (int i = 0; i < dim; i++) {
+			pap += p[i] * ap[i];
+		}
+		if (pap <= 0.0) {
+			break;
+		}
+		const double alpha = rz / pap;
+		for (int i = 0; i < dim; i++) {
+			x[i] += alpha * p[i];
+			r[i] -= alpha * ap[i];
+		}
+		precondition(r.ptr(), z.ptr());
+		double rz_new = 0.0;
+		for (int i = 0; i < dim; i++) {
+			rz_new += r[i] * z[i];
+		}
+		const double beta = rz_new / MAX(rz, 1e-300);
+		rz = rz_new;
+		for (int i = 0; i < dim; i++) {
+			p[i] = z[i] + beta * p[i];
+		}
+	}
+	last_stress_iterations += it;
+	stress_work += uint64_t(it + 2) * active.size();
+	for (uint32_t k = 0; k < n; k++) {
+		for (int c = 0; c < 6; c++) {
+			stress_x[6 * k + c] = index[k] >= 0 ? x[6 * index[k] + c] : 0.0;
+		}
+	}
+	// The bonds' forces and stresses.
+	const double limit = MAX(1e-3, double(strength) * 1000.0);
+	int worst = -1;
+	double worst_ratio = 1.0;
+	for (uint32_t i = 0; i < active.size(); i++) {
+		Bond &bond = bonds[active[i]];
+		const BondK &k = ks[i];
+		Vector3d d, ph;
+		relative(k, bond, x.ptr(), d, ph);
+		const Vector3d f = k.lin(d);
+		const Vector3d t = k.rot(ph);
+		bond.force = Vector3(-f.x, -f.y, -f.z); // on b: the springs pull it back
+		bond.moment = Vector3(-t.x, -t.y, -t.z);
+		const double dn = d.dot(k.n);
+		const Vector3d dt = d - k.n * dn;
+		double tension = 0.0, compression = 0.0, shear = 0.0;
+		for (const Vector2 &corner : bond.outline) {
+			const Vector3d s = k.a1 * corner.x + k.a2 * corner.y;
+			const Vector3d slip = ph.cross(s);
+			const double opening = dn + slip.dot(k.n);
+			const double sigma = STRESS_E / bond.length * opening;
+			tension = MAX(tension, sigma);
+			compression = MAX(compression, -sigma);
+			shear = MAX(shear, STRESS_G / bond.length * (dt + slip - k.n * slip.dot(k.n)).length());
+		}
+		bond.tension = tension;
+		bond.compression = compression;
+		bond.shear = shear;
+		bond.ratio = MAX(MAX(tension, shear) / limit, compression / (STRESS_COMPRESSION * limit));
+		if (bond.ratio > worst_ratio) {
+			worst_ratio = bond.ratio;
+			worst = int(active[i]);
+		}
+	}
+	return worst;
+}
+
+// After a blow (or update_structure()): the bonds the weight overloads crack, the worst first, the stresses solved
+// again after each; then each part that no longer reaches the ground becomes one rigid body and falls.
+void FellowDestructible3D::_settle(Array &r_spawned) {
+	const uint32_t n = struct_pieces.size();
+	LocalVector<uint8_t> reached;
+	const uint64_t t0 = OS::get_singleton()->get_ticks_usec();
+	int cracked = 0;
+	last_stress_iterations = 0;
+	settle_pending = false;
+	stress_work = 0;
+	uint64_t round_work = 0; // the last round's: the next one's likely cost
+	for (int round = 0;; round++) {
+		_supported(reached);
+		if (strength <= 0.0f || bonds.is_empty()) {
+			break;
+		}
+		// A collapse spread over frames: past the frame's budget (or 64 rounds) the rest is settled at the next physics
+		// frame, from what stands then (the parts that lost their support falling now).
+		if (round >= 64 || (round > 0 && stress_work + round_work > STRESS_FRAME_WORK)) {
+			settle_pending = true;
+			break;
+		}
+		const uint64_t work_before = stress_work;
+		const int worst = _solve_stress(reached);
+		round_work = stress_work - work_before;
+		if (worst < 0) {
+			break;
+		}
+		// The worst cracks, and with it those nearly as far past their limits (a crack runs along a line of bonds): fewer
+		// solves for a collapse.
+		const double worst_ratio = bonds[worst].ratio;
+		for (Bond &bond : bonds) {
+			if (!bond.broken && bond.ratio > 1.0 && bond.ratio >= 0.75 * worst_ratio) {
+				bond.broken = true;
+				cracked++;
+			}
+		}
+	}
+	last_cracked = cracked;
+	cracked_total += cracked;
+	last_stress_usec = strength > 0.0f ? OS::get_singleton()->get_ticks_usec() - t0 : 0;
+	int fallen = 0;
+	int chunks = 0;
+	for (uint32_t k = 0; k < n; k++) {
+		if (!struct_pieces[k].alive || reached[k]) {
+			continue;
+		}
+		// An unsupported part: the pieces it still holds, together.
+		LocalVector<int> part;
+		part.push_back(int(k));
+		reached[k] = 1;
+		for (uint32_t q = 0; q < part.size(); q++) {
+			const int piece = part[q];
+			if (uint32_t(piece) < piece_bonds.size()) {
+				for (int bi : piece_bonds[piece]) {
+					const Bond &bond = bonds[bi];
+					const int j = bond.a == piece ? bond.b : bond.a;
+					if (!bond.broken && struct_pieces[j].alive && !reached[j]) {
+						reached[j] = 1;
+						part.push_back(j);
+					}
+				}
+			} else {
+				for (int j : struct_result->adjacency[piece]) {
+					if (struct_pieces[j].alive && !reached[j]) {
+						reached[j] = 1;
+						part.push_back(j);
+					}
+				}
+			}
+		}
+		for (int j : part) {
+			_remove_struct_piece(j);
+		}
+		RigidBody3D *rb = _make_body(part, struct_mxf);
+		if (rb) {
+			_add_debris(rb, debris_lifetime);
+			r_spawned.push_back(rb);
+		}
+		fallen += int(part.size());
+		chunks++;
+	}
+	last_fallen = fallen;
+	last_chunks = chunks;
+	fallen_total += fallen;
+}
+
+// Milestone 122 (decision 0246): a prefractured structural object stood in its pieces and settled without a blow —
+// what its weight breaks breaks, what loses its support falls (after its strength or its pieces changed, or to see at
+// once whether it holds).
+void FellowDestructible3D::update_structure() {
+	if (!structural || broken || pending || !is_inside_tree()) {
+		return;
+	}
+	if (!structure_built) {
+		if (prefractured.is_null() || !prefractured->built || Object::cast_to<RigidBody3D>(_get_body())) {
+			return;
+		}
+		_build_structure(prefractured);
+	}
+	for (Bond &bond : bonds) {
+		bond.ratio = 0.0;
+	}
+	Array spawned;
+	last_broken = 0;
+	_settle(spawned);
+	last_pieces = last_fallen;
+	if (!spawned.is_empty()) {
+		global_stats.breaks.increment();
+		global_stats.pieces.add(uint64_t(last_pieces));
+		emit_signal(SNAME("broken"), spawned);
+	}
+	_finish_if_empty();
+}
+
+// Milestone 122: a load resting on the structure (a body's weight on a floor, a balcony): global position and force
+// (N), kept until clear_loads(); it counts at the next blow or update_structure().
+void FellowDestructible3D::add_load(const Vector3 &p_position, const Vector3 &p_force) {
+	Load load;
+	load.position = p_position;
+	load.force = p_force;
+	loads.push_back(load);
+}
+
+// The bonds and their last solve: each one's pieces, face (centre, normal, area), whether it holds, the force and
+// moment on its second piece (newtons, newton-metres) and its greatest tension, compression and shear (kPa), and its
+// ratio to the limits.
+Array FellowDestructible3D::get_bonds() const {
+	Array out;
+	for (const Bond &bond : bonds) {
+		Dictionary d;
+		d["a"] = bond.a;
+		d["b"] = bond.b;
+		d["centre"] = bond.centre;
+		d["normal"] = bond.normal;
+		d["area"] = bond.area;
+		d["broken"] = bond.broken;
+		d["force"] = bond.force;
+		d["moment"] = bond.moment;
+		d["tension"] = bond.tension / 1000.0;
+		d["compression"] = bond.compression / 1000.0;
+		d["shear"] = bond.shear / 1000.0;
+		d["ratio"] = bond.ratio;
 		out.push_back(d);
 	}
 	return out;
@@ -680,26 +1436,13 @@ void FellowDestructible3D::_strike(const Vector3 &p_position, const Vector3 &p_i
 	if (hit.is_empty()) {
 		return;
 	}
-	auto remove_piece = [&](int k) {
-		StructPiece &sp = struct_pieces[k];
-		sp.alive = false;
-		if (sp.mesh) {
-			sp.mesh->queue_free();
-			sp.mesh = nullptr;
-		}
-		for (CollisionShape3D *cs : sp.shapes) {
-			cs->set_disabled(true); // at once: the rest of this step's queries must not meet it
-			cs->queue_free();
-		}
-		sp.shapes.clear();
-	};
 	Array spawned;
 	float hit_mass = 0.0f;
 	for (int k : hit) {
 		hit_mass += MAX(0.02f, struct_result->pieces[k].volume * scale3 * density);
 	}
 	for (int k : hit) {
-		remove_piece(k);
+		_remove_struct_piece(k);
 		LocalVector<int> one;
 		one.push_back(k);
 		RigidBody3D *rb = _make_body(one, struct_mxf);
@@ -714,61 +1457,33 @@ void FellowDestructible3D::_strike(const Vector3 &p_position, const Vector3 &p_i
 		_add_debris(rb, debris_lifetime);
 		spawned.push_back(rb);
 	}
-	// Support: from the pieces on the ground through the pieces that touch.
-	LocalVector<uint8_t> reached;
-	reached.resize(n);
-	LocalVector<int> queue;
-	for (uint32_t k = 0; k < n; k++) {
-		reached[k] = struct_pieces[k].alive && struct_pieces[k].anchored ? 1 : 0;
-		if (reached[k]) {
-			queue.push_back(int(k));
-		}
-	}
-	for (uint32_t q = 0; q < queue.size(); q++) {
-		for (int j : struct_result->adjacency[queue[q]]) {
-			if (struct_pieces[j].alive && !reached[j]) {
-				reached[j] = 1;
-				queue.push_back(j);
-			}
-		}
-	}
-	int fallen = 0;
-	int chunks = 0;
-	for (uint32_t k = 0; k < n; k++) {
-		if (!struct_pieces[k].alive || reached[k]) {
-			continue;
-		}
-		// An unsupported part: the pieces that touch it, together.
-		LocalVector<int> part;
-		part.push_back(int(k));
-		reached[k] = 1;
-		for (uint32_t q = 0; q < part.size(); q++) {
-			for (int j : struct_result->adjacency[part[q]]) {
-				if (struct_pieces[j].alive && !reached[j]) {
-					reached[j] = 1;
-					part.push_back(j);
-				}
-			}
-		}
-		for (int j : part) {
-			remove_piece(j);
-		}
-		RigidBody3D *rb = _make_body(part, struct_mxf);
-		if (rb) {
-			_add_debris(rb, debris_lifetime);
-			spawned.push_back(rb);
-		}
-		fallen += int(part.size());
-		chunks++;
-	}
+	// Support (milestone 122: and stress), and the parts that lost it falling.
+	_settle(spawned);
 	last_broken = int(hit.size());
-	last_fallen = fallen;
-	last_chunks = chunks;
-	last_pieces = int(hit.size()) + fallen;
+	last_pieces = int(hit.size()) + last_fallen;
 	global_stats.breaks.increment();
 	global_stats.pieces.add(uint64_t(last_pieces));
 	emit_signal(SNAME("broken"), spawned);
-	if (get_standing_pieces() == 0) {
+	_finish_if_empty();
+}
+
+void FellowDestructible3D::_remove_struct_piece(int p_index) {
+	StructPiece &sp = struct_pieces[p_index];
+	sp.alive = false;
+	if (sp.mesh) {
+		sp.mesh->queue_free();
+		sp.mesh = nullptr;
+	}
+	for (CollisionShape3D *cs : sp.shapes) {
+		cs->set_disabled(true); // at once: the rest of this step's queries must not meet it
+		cs->queue_free();
+	}
+	sp.shapes.clear();
+}
+
+// Nothing stands: the object is done.
+void FellowDestructible3D::_finish_if_empty() {
+	if (structure_built && get_standing_pieces() == 0) {
 		broken = true;
 		CollisionObject3D *body = _get_body();
 		if (body && free_after_break) {
@@ -999,6 +1714,19 @@ void FellowDestructible3D::_notification(int p_what) {
 			if (!exceptions.is_empty()) {
 				_expire_exceptions();
 			}
+			if (settle_pending && structure_built && !broken) {
+				// Milestone 122: a collapse going on (the last frame's settling ran out of its budget).
+				Array spawned;
+				last_broken = 0;
+				_settle(spawned);
+				last_pieces = last_fallen;
+				if (!spawned.is_empty()) {
+					global_stats.breaks.increment();
+					global_stats.pieces.add(uint64_t(last_pieces));
+					emit_signal(SNAME("broken"), spawned);
+				}
+				_finish_if_empty();
+			}
 			_check_impacts();
 		} break;
 		case NOTIFICATION_INTERNAL_PROCESS: {
@@ -1045,6 +1773,18 @@ Dictionary FellowDestructible3D::get_stats() const {
 	d["last_broken"] = last_broken;
 	d["last_fallen"] = last_fallen;
 	d["last_chunks"] = last_chunks;
+	d["last_cracked"] = last_cracked; // milestone 122
+	d["stress_usec"] = int64_t(last_stress_usec);
+	d["stress_iterations"] = last_stress_iterations;
+	d["stress_work"] = int64_t(stress_work); // iterations × bonds, the last settling's (a frame's at most about 100 000)
+	int holding = 0;
+	for (const Bond &bond : bonds) {
+		holding += bond.broken ? 0 : 1;
+	}
+	d["bonds"] = holding;
+	d["settling"] = settle_pending; // a collapse going on over the next frames
+	d["cracked_total"] = cracked_total;
+	d["fallen_total"] = fallen_total;
 	return d;
 }
 
@@ -1150,6 +1890,14 @@ void FellowDestructible3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_anchor_height"), &FellowDestructible3D::get_anchor_height);
 	ClassDB::bind_method(D_METHOD("get_standing_pieces"), &FellowDestructible3D::get_standing_pieces);
 	ClassDB::bind_method(D_METHOD("get_structure"), &FellowDestructible3D::get_structure);
+	ClassDB::bind_method(D_METHOD("set_strength", "kpa"), &FellowDestructible3D::set_strength);
+	ClassDB::bind_method(D_METHOD("get_strength"), &FellowDestructible3D::get_strength);
+	ClassDB::bind_method(D_METHOD("update_structure"), &FellowDestructible3D::update_structure);
+	ClassDB::bind_method(D_METHOD("set_anchor_mode", "mode"), &FellowDestructible3D::set_anchor_mode);
+	ClassDB::bind_method(D_METHOD("get_anchor_mode"), &FellowDestructible3D::get_anchor_mode);
+	ClassDB::bind_method(D_METHOD("get_bonds"), &FellowDestructible3D::get_bonds);
+	ClassDB::bind_method(D_METHOD("add_load", "position", "force"), &FellowDestructible3D::add_load);
+	ClassDB::bind_method(D_METHOD("clear_loads"), &FellowDestructible3D::clear_loads);
 	ClassDB::bind_method(D_METHOD("set_free_after_break", "enabled"), &FellowDestructible3D::set_free_after_break);
 	ClassDB::bind_method(D_METHOD("is_free_after_break"), &FellowDestructible3D::is_free_after_break);
 
@@ -1170,12 +1918,17 @@ void FellowDestructible3D::_bind_methods() {
 	ADD_GROUP("Structure", "");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "structural"), "set_structural", "is_structural");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "break_radius", PROPERTY_HINT_RANGE, "0,10,0.01,or_greater,suffix:m"), "set_break_radius", "get_break_radius");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "anchor_mode", PROPERTY_HINT_ENUM, "Lowest Point,Static Bodies"), "set_anchor_mode", "get_anchor_mode");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "anchor_height", PROPERTY_HINT_RANGE, "0,5,0.01,or_greater,suffix:m"), "set_anchor_height", "get_anchor_height");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "strength", PROPERTY_HINT_RANGE, "0,100000,0.1,or_greater,suffix:kPa"), "set_strength", "get_strength");
 	ADD_GROUP("Pieces", "");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "density", PROPERTY_HINT_RANGE, "1,10000,1,or_greater,suffix:kg/m³"), "set_density", "get_density");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "burst_speed", PROPERTY_HINT_RANGE, "0,20,0.01,or_greater,suffix:m/s"), "set_burst_speed", "get_burst_speed");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "debris_lifetime", PROPERTY_HINT_RANGE, "0,600,0.1,or_greater,suffix:s"), "set_debris_lifetime", "get_debris_lifetime");
 
 	ADD_SIGNAL(MethodInfo("broken", PropertyInfo(Variant::ARRAY, "pieces")));
+
+	BIND_ENUM_CONSTANT(ANCHOR_LOWEST_POINT);
+	BIND_ENUM_CONSTANT(ANCHOR_STATIC_BODIES);
 	ADD_SIGNAL(MethodInfo("damaged", PropertyInfo(Variant::FLOAT, "amount"), PropertyInfo(Variant::FLOAT, "health")));
 }

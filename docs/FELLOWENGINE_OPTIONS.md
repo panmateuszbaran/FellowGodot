@@ -630,7 +630,14 @@ computed at ready on the main thread and shared by the same mesh, seed and count
 FellowEngine menu's "Add Destructible Crate". Milestone 80 (decision 0188): `structural` (off; a static object stands
 in its pieces, broken where struck), `break_radius` (0.6 m), `anchor_height` (0.1 m); `get_standing_pieces()`,
 `get_structure()`; "Add Destructible Wall"; bench `bench/structure_check.gd`, the regression scene `structure`. Bench `bench/destruction_check.gd` (`--many=N`, `--prefracture=1`); the
-regression scene `destruction`.
+regression scene `destruction`. Milestone 122 (decision 0246): `strength` (0 kPa: support by connectivity alone; with
+a strength, the faces where pieces touch are elastic bonds carrying the structure's weight — at each blow and
+`update_structure()` the stresses are solved and a bond past the strength in tension or shear, or ten times it in
+compression, cracks, the worst first; what no longer reaches the ground falls), `anchor_mode` (Lowest Point: the pieces
+within `anchor_height` of the object's lowest point; Static Bodies: the pieces touching another static body — a
+balcony on a wall); `update_structure()` (a prefractured structural object stood in its pieces and settled without a
+blow), `add_load()`/`clear_loads()` (what rests on it), `get_bonds()` (each bond's face, force, moment, stresses and ratio); `get_stats()` adds `last_cracked`,
+`stress_usec`, `stress_iterations`, `bonds`. Bench `bench/stress_check.gd`, the regression scene `stress`.
 
 ## Cloth (milestone 73)
 

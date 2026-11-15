@@ -36,7 +36,8 @@
     "cape",
     "vehicle",
     "vehicle_damage",
-    "structure"
+    "structure",
+    "stress"
    ]
   },
   "stock": {

@@ -11,12 +11,26 @@
 	<tutorials>
 	</tutorials>
 	<methods>
+		<method name="add_load">
+			<return type="void" />
+			<param index="0" name="position" type="Vector3" />
+			<param index="1" name="force" type="Vector3" />
+			<description>
+				In the [member structural] mode with a [member strength]: a load resting on the structure — [param force] (N; a 2 t crate's weight is [code]Vector3(0, -19600, 0)[/code]) at [param position] (global), on the standing piece nearest it — counted with the pieces' weight at the next blow or [method update_structure], until [method clear_loads]. A load on a piece on the ground goes into the ground. See decision 0246.
+			</description>
+		</method>
 		<method name="break_apart">
 			<return type="void" />
 			<param index="0" name="position" type="Vector3" default="Vector3(0, 0, 0)" />
 			<param index="1" name="impulse" type="Vector3" default="Vector3(0, 0, 0)" />
 			<description>
 				Breaks the object now (or, without [member prefracture], as soon as its fracture is computed on a worker thread): its pieces gathered around [param position] (global; the mesh's centre if zero) and pushed by [param impulse] (N·s, shared by the pieces near the position). Does nothing once broken.
+			</description>
+		</method>
+		<method name="clear_loads">
+			<return type="void" />
+			<description>
+				Removes the loads of [method add_load].
 			</description>
 		</method>
 		<method name="clear_cache" qualifiers="static">
@@ -32,6 +46,12 @@
 			<param index="2" name="impulse" type="Vector3" default="Vector3(0, 0, 0)" />
 			<description>
 				Takes [param amount] from the health ([signal damaged]); at zero or less, breaks at [param position] with [param impulse] (see [method break_apart]).
+			</description>
+		</method>
+		<method name="get_bonds" qualifiers="const">
+			<return type="Array" />
+			<description>
+				Returns the bonds between the pieces, in the [member structural] mode with a [member strength] (empty before the object stands in its pieces): for each a dictionary with its pieces [code]a[/code] and [code]b[/code] (indices of [method get_structure]), its face's [code]centre[/code] and [code]normal[/code] (global; from a to b) and [code]area[/code] (m²), [code skip-lint]broken[/code], and from the last stress solve the [code]force[/code] (N) and [code]moment[/code] (N·m, about the centre) the bond puts on [code]b[/code] (on [code]a[/code] the opposite), its greatest [code]tension[/code], [code]compression[/code] and [code]shear[/code] (kPa) and [code]ratio[/code] (the greatest of tension and shear over [member strength], and compression over ten times it: past 1 it cracks). See decision 0246.
 			</description>
 		</method>
 		<method name="get_current_health" qualifiers="const">
@@ -73,13 +93,13 @@
 		<method name="get_stats" qualifiers="const">
 			<return type="Dictionary" />
 			<description>
-				This destructible's state: [code skip-lint]broken[/code], [code]pieces[/code], [code]fracture_usec[/code], [code]spawn_usec[/code], [code skip-lint]health[/code], [code]last_impact[/code] (N·s, the last blow it felt), [code]prefractured[/code].
+				This destructible's state: [code skip-lint]broken[/code], [code]pieces[/code], [code]fracture_usec[/code], [code]spawn_usec[/code], [code skip-lint]health[/code], [code]last_impact[/code] (N·s, the last blow it felt), [code]prefractured[/code]; in the [member structural] mode [code skip-lint]structural[/code] (standing in its pieces), [code]standing[/code], [code]last_broken[/code], [code]last_fallen[/code] and [code]last_chunks[/code] (the last blow's pieces knocked out, pieces fallen and the bodies they fell as), and with a [member strength] [code]last_cracked[/code] (the bonds the last blow or [method update_structure] cracked), [code]stress_usec[/code] and [code]stress_iterations[/code] (its solves' time and iterations) and [code]bonds[/code] (those holding).
 			</description>
 		</method>
 		<method name="get_structure" qualifiers="const">
 			<return type="Array" />
 			<description>
-				Returns the object standing in its pieces, in the [member structural] mode: for each piece a dictionary with its [code]centre[/code] and [code]aabb[/code] (global), [code]standing[/code], [code]anchored[/code] (on the ground) and [code]touching[/code] (the indices of the pieces it touches). Empty before its first break.
+				Returns the object standing in its pieces, in the [member structural] mode: for each piece a dictionary with its [code]centre[/code] and [code]aabb[/code] (global), [code]standing[/code], [code]anchored[/code] (on the ground), [code]mass[/code] (kg) and [code]touching[/code] (the indices of the pieces it touches; with a [member strength], through a bond that holds). Empty before its first break.
 			</description>
 		</method>
 		<method name="is_broken" qualifiers="const">
@@ -108,10 +128,19 @@
 				Sets [method get_max_pieces_per_frame] for the whole game.
 			</description>
 		</method>
+		<method name="update_structure">
+			<return type="void" />
+			<description>
+				In the [member structural] mode, for a static object with [member prefracture]: stands it in its pieces if it does not yet, and settles it without a blow — with a [member strength], the bonds its weight overloads crack (the worst first, the stresses solved again after each) — and each part that no longer reaches the ground falls as one rigid body ([signal broken] if any did). Call it after changing [member strength], or to see at once whether a structure holds (a long overhang, a span over a hole); a blow settles the object the same way. See decision 0246.
+			</description>
+		</method>
 	</methods>
 	<members>
 		<member name="anchor_height" type="float" setter="set_anchor_height" getter="get_anchor_height" default="0.1">
-			In the [member structural] mode: a piece that reaches this near the object's lowest point stands on the ground (metres).
+			In the [member structural] mode with [member anchor_mode] [constant ANCHOR_LOWEST_POINT]: a piece that reaches this near the object's lowest point stands on the ground (metres).
+		</member>
+		<member name="anchor_mode" type="int" setter="set_anchor_mode" getter="get_anchor_mode" enum="FellowDestructible3D.AnchorMode" default="0">
+			In the [member structural] mode: which pieces stand on something when the object stands in its pieces — those near its lowest point ([constant ANCHOR_LOWEST_POINT], an object on the ground), or those touching another static body ([constant ANCHOR_STATIC_BODIES]: the ground, a building's wall or frame — a balcony held out from a wall, a wall panel between pillars). See decision 0246.
 		</member>
 		<member name="body_path" type="NodePath" setter="set_body_path" getter="get_body_path" default="NodePath(&quot;&quot;)">
 			The body to remove when it breaks (its collision layers and mask go to the pieces). Empty: the parent, if a [CollisionObject3D], else the grandparent.
@@ -161,6 +190,9 @@
 		<member name="seed" type="int" setter="set_seed" getter="get_seed" default="0">
 			The pattern's random seed.
 		</member>
+		<member name="strength" type="float" setter="set_strength" getter="get_strength" default="0.0">
+			In the [member structural] mode: the material's strength in tension and shear (kPa; its compressive strength ten times it); 0, support is the pieces reaching the ground through those they touch, whatever they carry. With a strength, each face where two pieces touch is an elastic bond (its area and second moments: in tension, compression, shear, bending and torsion); at each blow (and [method update_structure]) the structure's displacements under the pieces' weight are solved, the pieces on the ground fixed, and a bond whose stress at a corner of its face passes the limits cracks, the worst first, the stresses solved again after each — a long overhang breaks off at its root, a span over a hole falls. The pieces' weight and the loads of [method add_load] (not the blow's force). A masonry wall of 2200 kg/m³ 3 m tall carries about 65 kPa at its foot in compression; real concrete's tensile strength is 2-5 MPa, so a game's walls that should give way under their own weight once holed want tens to hundreds of kPa. See decision 0246.
+		</member>
 		<member name="structural" type="bool" setter="set_structural" getter="is_structural" default="false">
 			If [code]true[/code], a static object breaks where it is struck: at its first break it stands in its pieces (their meshes and shapes in its body), each blow knocks out the pieces within [member break_radius] of it (thrown out by it, a striking body's momentum among them), and each part that no longer reaches the ground through the pieces that touch falls as one rigid body. The bodies it made do not strike it. A rigid object breaks whole as without it. See decision 0188.
 		</member>
@@ -180,4 +212,12 @@
 			</description>
 		</signal>
 	</signals>
+	<constants>
+		<constant name="ANCHOR_LOWEST_POINT" value="0" enum="AnchorMode">
+			The pieces reaching within [member anchor_height] of the object's lowest point stand on the ground (decision 0188).
+		</constant>
+		<constant name="ANCHOR_STATIC_BODIES" value="1" enum="AnchorMode">
+			The pieces touching another static body (within 2 cm when the object stands in its pieces) stand on it.
+		</constant>
+	</constants>
 </class>

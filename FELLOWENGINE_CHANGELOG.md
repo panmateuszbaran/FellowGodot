@@ -9,6 +9,16 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 122 — destruction under load: bonds that carry the weight, and crack (2026-11-15)
+
+- `FellowDestructible3D.strength` (decision 0246; 0 by default): a structural object's touching faces are elastic
+  bonds; at each blow and `update_structure()` the structure's stresses under its weight (and `add_load()`'s loads) are
+  solved and the bonds past the strength crack, the worst first — an overhang breaks off at its root, a span over a hole
+  falls, a balcony gives way at the wall; the forces balance to 10⁻⁷ of the weight, the root stress of a cantilever
+  near a beam's. A collapse goes on over frames within a deterministic work budget (a 128-piece wall: 22 frames).
+- `anchor_mode` Static Bodies: the pieces touching another static body stand on it (a balcony on a building's wall).
+- `bench/stress_check.gd` (ten lanes, both physics engines), the regression scene `stress`.
+
 ## Milestone 121 — any frame's GPU passes in the editor; a span of frames as a graph (2026-11-15)
 
 - The debugger's FellowEngine Hitches tab's **Capture GPU Frame** (decision 0243): the running game's next frame's GPU
