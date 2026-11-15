@@ -132,6 +132,11 @@ def main():
     r = report(d)
     expect("run: frames measured, a last frame", rc == 0 and r.get("frames", 0) > 10 and r.get("frame_ms", {}).get("p50", 0) > 0 and os.path.exists(r.get("image", "")),
            f"{r.get('frames')} frames, {r.get('frame_ms')}")
+    rc, d = tool("run", "--project", project, "--scene", "res://scenes/spinning.tscn", "--seconds", "2", "--size", a.size, "--passes", "--no-picture", "--out", os.path.join(out, "run_passes"))
+    r = report(d)
+    rows = r.get("gpu_passes", [])
+    expect("run --passes: the GPU's passes, longest first", rc == 0 and len(rows) > 3 and r.get("gpu_passes_frames", 0) > 10
+           and all(rows[i]["ms"] >= rows[i + 1]["ms"] for i in range(len(rows) - 1)), json.dumps(rows[:4]))
 
     # api and init
     p = subprocess.run([sys.executable, TOOL, "api", "FellowWater3D"], stdout=subprocess.PIPE)

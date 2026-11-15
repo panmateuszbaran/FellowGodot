@@ -154,7 +154,9 @@ def finish(report, out_dir, a):
     report_path = os.path.join(out_dir, "report.json")
     errors = [e for e in report.get("errors", []) if e.get("type") != "warning"]
     if a.quiet:
-        brief = {k: report[k] for k in ("command", "ok", "scene", "summary", "error") if k in report}
+        brief = {k: report[k] for k in ("command", "ok", "scene", "summary", "error", "frame_ms", "gpu_ms_mean") if k in report}
+        if report.get("gpu_passes"):
+            brief["gpu_passes"] = report["gpu_passes"][:8]
         brief["errors"] = len(errors)
         brief["report"] = report_path
         if "views" in report:
@@ -474,6 +476,7 @@ def main():
     p.add_argument("--warmup", type=int, default=30, help="frames before measuring")
     p.add_argument("--vsync", action="store_true", help="keep V-Sync (off by default: the frame times are the engine's)")
     p.add_argument("--no-picture", action="store_true")
+    p.add_argument("--passes", action="store_true", help="the GPU's time by render pass (FellowEngine's pass timestamps; they order the GPU's work, so the frame times are a little longer)")
 
     p = sub.add_parser("compare", help="compare two PNGs")
     p.add_argument("a")
@@ -511,7 +514,7 @@ def main():
         return engine_command(a, extra, a.render)
     if a.command == "run":
         extra = ["--cmd=run", f"--scene={a.scene}", f"--seconds={a.seconds}", f"--warmup={a.warmup}",
-                 f"--picture={'false' if a.no_picture else 'true'}"]
+                 f"--picture={'false' if a.no_picture else 'true'}", f"--passes={'true' if a.passes else 'false'}"]
         a.fps = 0
         return engine_command(a, extra, True)
     if a.command == "compare":

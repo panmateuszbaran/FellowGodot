@@ -157,6 +157,18 @@ struct GpuHitch {
 };
 
 std::atomic<int> gpu_state{ 0 }; // 0 not read yet, 1 on, -1 off
+// Milestone 121 (decision 0243): the editor asked for a frame's passes (the time it asked, 0: none pending); the
+// timestamps are captured until one recorded after it is read back.
+std::atomic<uint64_t> capture_requested_usec{ 0 };
+// Decision 0244: the editor asked for every frame recorded between these times (until 0: none); the frames are sent in
+// batches as their timestamps are read back, the last batch marked, and the request cleared then.
+std::atomic<uint64_t> record_from_usec{ 0 };
+std::atomic<uint64_t> record_until_usec{ 0 };
+Array record_batch; // the render thread's alone
+uint64_t record_last_cpu_usec = 0;
+uint32_t record_sent = 0;
+constexpr uint32_t RECORD_BATCH = 30;
+constexpr uint32_t RECORD_MAX_FRAMES = 3000;
 std::atomic<uint64_t> gpu_hitch_count{ 0 };
 Mutex gpu_mutex;
 double gpu_threshold_usec = 33300.0;
@@ -192,6 +204,33 @@ String gpu_hitch_text(uint32_t p_number, const GpuHitch &hitch) {
 	const String async = hitch.async_start_usec >= 0.0 ? vformat(" The asynchronous compute queue's part began %.1f ms into the frame (average %.2f) and took %.1f ms (average %.2f).", hitch.async_start_usec / 1000.0, hitch.async_start_average_usec / 1000.0, hitch.async_span_usec / 1000.0, hitch.async_span_average_usec / 1000.0) : String();
 	return vformat("FellowEngine GPU hitch %d: recorded %.2f s in (read back at drawn frame %d): its passes %.1f ms (average %.2f), %d timestamps; it %s.%s The passes longest past their averages:%s",
 			p_number, hitch.at_sec, (int64_t)hitch.frame, hitch.passes_usec / 1000.0, hitch.passes_average_usec / 1000.0, hitch.markers, gap, async, passes);
+}
+
+// Decisions 0242, 0243: a frame's passes for the editor's time line — [name, queue (0 main, 1 async), start and length in
+// microseconds from the frame's earliest timestamp, the pass's average (-1: none; -2: the sampler off, no averages)].
+// gpu_mutex need not be held: the averages are read without it (the render thread alone writes them).
+Array gpu_timeline(uint32_t p_count, const String *p_names, const uint64_t *p_gpu_nsec, const uint8_t *p_async, uint64_t p_first_nsec, bool p_averages) {
+	Array timeline;
+	for (uint32_t i = 0; i + 1 < p_count; i++) {
+		const uint8_t queue = p_async ? p_async[i] : 0;
+		uint32_t next = i + 1;
+		while (p_async && next < p_count && p_async[next] != queue) {
+			next++;
+		}
+		if (next >= p_count || p_gpu_nsec[next] < p_gpu_nsec[i]) {
+			continue;
+		}
+		const String name = queue ? p_names[i] + " (async queue)" : p_names[i];
+		const double *average = p_averages ? gpu_pass_average.getptr(name) : nullptr;
+		Array pass;
+		pass.push_back(p_names[i]);
+		pass.push_back(int(queue));
+		pass.push_back(double(p_gpu_nsec[i] - p_first_nsec) / 1000.0);
+		pass.push_back(double(p_gpu_nsec[next] - p_gpu_nsec[i]) / 1000.0);
+		pass.push_back(average ? *average : (p_averages ? -1.0 : -2.0));
+		timeline.push_back(pass);
+	}
+	return timeline;
 }
 
 void gpu_report() {
@@ -1780,6 +1819,9 @@ uint64_t FellowHitchSampler::get_sample_count() {
 }
 
 bool FellowHitchSampler::gpu_wanted() {
+	if (capture_requested_usec.load(std::memory_order_acquire) != 0 || record_until_usec.load(std::memory_order_acquire) != 0) {
+		return true; // decisions 0243, 0244: a frame, or the frames of a span, asked for by the editor
+	}
 	const int state = gpu_state.load(std::memory_order_acquire);
 	if (state != 0) {
 		return state > 0;
@@ -1803,6 +1845,24 @@ bool FellowHitchSampler::gpu_wanted() {
 // The editor's "start" message (decision 0238): the sampler turned on, or its threshold changed, while the game runs.
 static Error fellow_hitch_debugger_capture(void *p_user, const String &p_msg, const Array &p_args, bool &r_captured) {
 	r_captured = false;
+	if (p_msg == "capture") { // decision 0243: the next frame's passes, for the editor's time line
+		r_captured = true;
+		live_on.store(true, std::memory_order_release);
+		capture_requested_usec.store(MAX<uint64_t>(1, OS::get_singleton()->get_ticks_usec()), std::memory_order_release);
+		return OK;
+	}
+	if (p_msg == "record") { // decision 0244: every frame of the next seconds
+		r_captured = true;
+		if (record_until_usec.load(std::memory_order_acquire) != 0) {
+			return OK; // one recording at a time
+		}
+		const double seconds = CLAMP(p_args.size() > 0 ? double(p_args[0]) : 2.0, 0.1, 30.0);
+		const uint64_t now = MAX<uint64_t>(1, OS::get_singleton()->get_ticks_usec());
+		live_on.store(true, std::memory_order_release);
+		record_from_usec.store(now, std::memory_order_release);
+		record_until_usec.store(now + uint64_t(seconds * 1000000.0), std::memory_order_release);
+		return OK;
+	}
 	if (p_msg != "start") {
 		return OK;
 	}
@@ -1837,11 +1897,30 @@ void FellowHitchSampler::register_debugger() {
 }
 
 void FellowHitchSampler::gpu_frame(uint64_t p_frame, uint32_t p_count, const String *p_names, const uint64_t *p_gpu_nsec, uint64_t p_cpu_usec, uint64_t p_cpu_last_usec, uint64_t p_cpu_wait_usec, const uint8_t *p_async) {
-	if (gpu_state.load(std::memory_order_acquire) != 1 || p_count < 2 || p_gpu_nsec[p_count - 1] < p_gpu_nsec[0]) {
+	const uint64_t capture_from = capture_requested_usec.load(std::memory_order_acquire);
+	const bool capture = capture_from != 0 && p_cpu_usec >= capture_from;
+	const uint64_t record_until = record_until_usec.load(std::memory_order_acquire);
+	const bool recording = record_until != 0 && p_cpu_usec >= record_from_usec.load(std::memory_order_acquire);
+	if (recording && p_cpu_usec > record_until) {
+		// Decision 0244: the first frame recorded after the span — the rest sent, the request cleared.
+		Array message;
+		message.push_back(record_batch);
+		message.push_back(true);
+		live_post("fellow_hitch:frames", message);
+		record_batch = Array();
+		record_last_cpu_usec = 0;
+		record_sent = 0;
+		record_until_usec.store(0, std::memory_order_release);
+		record_from_usec.store(0, std::memory_order_release);
+	}
+	const bool record_frame = recording && p_cpu_usec <= record_until && record_sent < RECORD_MAX_FRAMES;
+	if ((gpu_state.load(std::memory_order_acquire) != 1 && !capture && !record_frame) || p_count < 2 || p_gpu_nsec[p_count - 1] < p_gpu_nsec[0]) {
 		return;
 	}
-	uint64_t expected = 0;
-	base_usec.compare_exchange_strong(expected, p_cpu_usec);
+	if (gpu_state.load(std::memory_order_acquire) == 1) {
+		uint64_t expected = 0;
+		base_usec.compare_exchange_strong(expected, p_cpu_usec);
+	}
 	// A pass's time: from its timestamp to the next one written on the same queue (the asynchronous compute queue's
 	// overlap the main queue's: their names marked); a name timed twice in a frame summed.
 	HashMap<String, double> passes;
@@ -1884,6 +1963,70 @@ void FellowHitchSampler::gpu_frame(uint64_t p_frame, uint32_t p_count, const Str
 		if (async_first != UINT64_MAX) {
 			async_start_usec = double(async_first - first_nsec) / 1000.0;
 			async_span_usec = double(async_last - async_first) / 1000.0;
+		}
+	}
+
+	if (capture) {
+		// Decision 0243: the frame the editor asked for, its passes longest first and on a time line.
+		capture_requested_usec.store(0, std::memory_order_release);
+		Array timeline = gpu_timeline(p_count, p_names, p_gpu_nsec, p_async, first_nsec, gpu_state.load(std::memory_order_acquire) == 1);
+		LocalVector<Pair<double, String>> longest;
+		for (const KeyValue<String, double> &kv : passes) {
+			longest.push_back(Pair<double, String>(kv.value, kv.key));
+		}
+		for (uint32_t i = 0; i < longest.size(); i++) {
+			for (uint32_t j = i + 1; j < longest.size(); j++) {
+				if (longest[j].first > longest[i].first) {
+					SWAP(longest[i], longest[j]);
+				}
+			}
+		}
+		// From the sampler's start like the hitches when it runs, else from the game's.
+		const double at_sec = double(p_cpu_usec - MIN(p_cpu_usec, base_usec.load(std::memory_order_acquire))) / 1000000.0;
+		String text = vformat("FellowEngine GPU frame captured %.2f s in (read back at drawn frame %d): its passes %.2f ms, %d timestamps%s. The longest passes:",
+				at_sec, (int64_t)p_frame, passes_usec / 1000.0, p_count,
+				async_start_usec >= 0.0 ? vformat("; the asynchronous compute queue's part began %.2f ms into it and took %.2f ms", async_start_usec / 1000.0, async_span_usec / 1000.0) : String());
+		for (uint32_t i = 0; i < longest.size() && i < 16; i++) {
+			text += vformat("\n    \"%s\" %.3f ms", longest[i].second, longest[i].first / 1000.0);
+		}
+		Array message;
+		message.push_back(0);
+		message.push_back(at_sec);
+		message.push_back(passes_usec / 1000.0);
+		message.push_back(longest.is_empty() ? String() : longest[0].second);
+		message.push_back(text);
+		message.push_back(timeline);
+		message.push_back(-1.0);
+		live_post("fellow_hitch:frame", message);
+		if (gpu_state.load(std::memory_order_acquire) != 1 && !record_frame) {
+			return; // the sampler off: the capture only
+		}
+	}
+
+	if (record_frame) {
+		// Decision 0244: [frame, seconds in, the interval since the previous frame's first timestamp was recorded (-1:
+		// unknown), the CPU's recording of its passes, its wait for the GPU before it, its passes' time — milliseconds —
+		// the time line].
+		Array frame;
+		frame.push_back(int64_t(p_frame));
+		frame.push_back(double(p_cpu_usec - MIN(p_cpu_usec, base_usec.load(std::memory_order_acquire))) / 1000000.0);
+		frame.push_back(record_last_cpu_usec != 0 && p_cpu_usec > record_last_cpu_usec ? double(p_cpu_usec - record_last_cpu_usec) / 1000.0 : -1.0);
+		frame.push_back(p_cpu_last_usec > p_cpu_usec ? double(p_cpu_last_usec - p_cpu_usec) / 1000.0 : 0.0);
+		frame.push_back(double(p_cpu_wait_usec) / 1000.0);
+		frame.push_back(passes_usec / 1000.0);
+		frame.push_back(gpu_timeline(p_count, p_names, p_gpu_nsec, p_async, first_nsec, gpu_state.load(std::memory_order_acquire) == 1));
+		record_batch.push_back(frame);
+		record_last_cpu_usec = p_cpu_usec;
+		record_sent++;
+		if (record_batch.size() >= int(RECORD_BATCH)) {
+			Array message;
+			message.push_back(record_batch);
+			message.push_back(false);
+			live_post("fellow_hitch:frames", message);
+			record_batch = Array();
+		}
+		if (gpu_state.load(std::memory_order_acquire) != 1) {
+			return; // the sampler off: the recording only
 		}
 	}
 
@@ -1983,27 +2126,7 @@ void FellowHitchSampler::gpu_frame(uint64_t p_frame, uint32_t p_count, const Str
 		// Milestone 120 (decision 0242): the frame's passes for the editor's timeline — [name, queue (0 main, 1 async),
 		// start and length in microseconds from the frame's earliest timestamp, the pass's average (-1: none)], and the
 		// gap before the frame (-1: unknown).
-		Array timeline;
-		for (uint32_t i = 0; i + 1 < p_count; i++) {
-			const uint8_t queue = p_async ? p_async[i] : 0;
-			uint32_t next = i + 1;
-			while (p_async && next < p_count && p_async[next] != queue) {
-				next++;
-			}
-			if (next >= p_count || p_gpu_nsec[next] < p_gpu_nsec[i]) {
-				continue;
-			}
-			const String name = queue ? p_names[i] + " (async queue)" : p_names[i];
-			const double *average = gpu_pass_average.getptr(name);
-			Array pass;
-			pass.push_back(p_names[i]);
-			pass.push_back(int(queue));
-			pass.push_back(double(p_gpu_nsec[i] - first_nsec) / 1000.0);
-			pass.push_back(double(p_gpu_nsec[next] - p_gpu_nsec[i]) / 1000.0);
-			pass.push_back(average ? *average : -1.0);
-			timeline.push_back(pass);
-		}
-		message.push_back(timeline);
+		message.push_back(gpu_timeline(p_count, p_names, p_gpu_nsec, p_async, first_nsec, true));
 		message.push_back(gap_usec);
 		live_post("fellow_hitch:gpu", message);
 	}

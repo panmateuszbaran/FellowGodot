@@ -715,7 +715,17 @@ func _run() -> void:
 		_place_camera(cam, _visual_bounds(root), "iso")
 		cam.make_current()
 		result["camera"] = {"view": "iso", "position": var_to_str(cam.global_position)}
+	# The GPU's time by pass (milestone 121, decision 0245): FellowEngine's pass timestamps, read as each frame's come
+	# back; markers that open and close a group ("> ", "< ") left out.
+	var passes: bool = args.get("passes", "false") == "true"
+	var rd := RenderingServer.get_rendering_device()
+	if passes:
+		ProjectSettings.set_setting("rendering/fellow/profiling/pass_timestamps", true)
 	await _frames(warmup)
+	var pass_ms := {}
+	var pass_frames := 0
+	var pass_total := 0.0
+	var last_ts_frame := -1
 	var frame_ms := []
 	var gpu_ms := []
 	var t_end := Time.get_ticks_usec() + int(seconds * 1e6)
@@ -726,6 +736,17 @@ func _run() -> void:
 		frame_ms.append((now - last) / 1000.0)
 		last = now
 		gpu_ms.append(RenderingServer.viewport_get_measured_render_time_gpu(get_root().get_viewport_rid()))
+		if passes and rd and rd.get_captured_timestamps_frame() != last_ts_frame:
+			last_ts_frame = rd.get_captured_timestamps_frame()
+			var n := rd.get_captured_timestamps_count()
+			if n >= 2:
+				for i in range(n - 1):
+					var nm := rd.get_captured_timestamp_name(i)
+					if nm.begins_with("<") or nm.begins_with(">"):
+						continue
+					pass_ms[nm] = pass_ms.get(nm, 0.0) + (rd.get_captured_timestamp_gpu_time(i + 1) - rd.get_captured_timestamp_gpu_time(i)) / 1e6
+				pass_total += (rd.get_captured_timestamp_gpu_time(n - 1) - rd.get_captured_timestamp_gpu_time(0)) / 1e6
+				pass_frames += 1
 	var sorted := frame_ms.duplicate()
 	sorted.sort()
 	var total := 0.0
@@ -739,6 +760,19 @@ func _run() -> void:
 		"p95": snappedf(_percentile(sorted, 0.95), 0.001), "p99": snappedf(_percentile(sorted, 0.99), 0.001),
 		"max": snappedf(sorted[-1] if not sorted.is_empty() else 0.0, 0.001)}
 	result["gpu_ms_mean"] = snappedf(gsum / maxi(gpu_ms.size(), 1), 0.001)
+	if passes:
+		ProjectSettings.set_setting("rendering/fellow/profiling/pass_timestamps", false)
+		if pass_frames == 0:
+			result["gpu_passes_note"] = "no pass timestamps came back (stock Godot, FellowEngine off, or a renderer without them)"
+		else:
+			var rows := []
+			for nm in pass_ms.keys():
+				var ms: float = pass_ms[nm] / pass_frames
+				rows.append({"pass": nm, "ms": snappedf(ms, 0.001), "share": snappedf(ms / maxf(pass_total / pass_frames, 0.000001), 0.001)})
+			rows.sort_custom(func(x, y): return x["ms"] > y["ms"])
+			result["gpu_passes"] = rows
+			result["gpu_passes_frames"] = pass_frames
+			result["gpu_passes_total_ms"] = snappedf(pass_total / pass_frames, 0.001)
 	result["render"] = _render_stats()
 	result["summary"] = _scene_summary(root)
 	if args.get("picture", "true") == "true":

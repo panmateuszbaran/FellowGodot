@@ -46,6 +46,7 @@ void initialize_fellow_editor_module(ModuleInitializationLevel p_level) {
 		GDREGISTER_INTERNAL_CLASS(FellowTerrainEditorPlugin);
 		GDREGISTER_INTERNAL_CLASS(FellowHitchDebuggerPlugin); // milestone 119, decision 0238
 		GDREGISTER_INTERNAL_CLASS(FellowGpuTimeline); // milestone 120, decision 0242
+		GDREGISTER_INTERNAL_CLASS(FellowFrameGraph); // milestone 121, decision 0244
 		GDREGISTER_ABSTRACT_CLASS(FellowEditorTools);
 		EditorPlugins::add_by_type<FellowEditorPlugin>();
 		EditorPlugins::add_by_type<FellowTerrainEditorPlugin>();

@@ -816,7 +816,15 @@ happen (when, CPU or GPU, how long, where) with the exit report's text for the o
 sampler in the running game (and in the next one) at the tab's threshold, without the project setting. In the game, a
 CPU hitch is named on a low-priority thread of its own; the messages are sent by the main thread. Milestone 120
 (decision 0242): a GPU hitch selected draws its frame's passes on a time line, a row per queue, each reddening as it runs
-past its average (tooltips give the length, start and average).
+past its average (tooltips give the length, start and average). Milestone 121 (decision 0243): **Capture GPU Frame**
+asks the running game for its next frame's passes, with the sampler on or off: the game captures the renderer's pass
+timestamps until a frame recorded after the request is read back, and the tab lists it as a `Frame` row, selected, its
+passes longest first and on the time line. Nothing is captured when the button is not pressed. Decision 0244:
+**Record GPU Frames** records every frame of the next seconds (the spin box beside it; up to 30 s, 3 000 frames),
+sent in batches of 30 as they are read back: a `Frames` row whose graph draws a bar a frame — the time since the frame
+before (grey) behind the GPU's passes (blue), lines at 16.7 and 33.3 ms — its slowest frame selected; clicking or
+dragging over the graph shows a frame's passes on the time line and in the text (the CPU's recording of them and its
+wait for the GPU before it too).
 
 Script frames (milestone 119, decision 0239; GDScript's debug builds: the editor, games run from it, debug templates):
 each sample of a stepping thread also reads its GDScript call levels, and a hitch's report adds the script call path

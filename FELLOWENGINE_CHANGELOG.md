@@ -9,6 +9,15 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 121 — any frame's GPU passes in the editor; a span of frames as a graph (2026-11-15)
+
+- The debugger's FellowEngine Hitches tab's **Capture GPU Frame** (decision 0243): the running game's next frame's GPU
+  passes, longest first and on the time line, a row per queue, with the hitch sampler on or off; the game captures its
+  pass timestamps only until that frame is read back.
+- **Record GPU Frames** (decision 0244): every frame of the next seconds as a graph (the time since the frame before,
+  the GPU's passes), any frame's passes on the time line.
+- The agent toolkit's `run --passes` (decision 0245): the GPU's time by render pass, longest first, in `report.json`.
+
 ## Milestone 120 — asynchronous compute off by default; the driver's video memory budget (2026-11-15)
 
 - `rendering/fellow/frame/async_compute` off by default (decision 0241; it was on for NVIDIA GPUs): measured again on

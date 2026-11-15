@@ -39,6 +39,7 @@ class Label;
 class SpinBox;
 class TextEdit;
 class Tree;
+class TreeItem;
 class VBoxContainer;
 
 // Milestone 120 (docs/decisions/0242-gpu-timeline.md): a long GPU frame's passes drawn on a time line, a row per queue,
@@ -61,6 +62,30 @@ public:
 	virtual Size2 get_minimum_size() const override;
 };
 
+// Milestone 121 (docs/decisions/0244-frame-recording.md): a recording's frames as bars — the interval since the previous
+// frame behind, the GPU's passes in front — one selected by clicking or dragging over them.
+class FellowFrameGraph : public Control {
+	GDCLASS(FellowFrameGraph, Control);
+
+	Array frames; // [frame, seconds in, interval ms or -1, CPU recording ms, CPU wait ms, GPU passes ms, time line]
+	int selected = -1;
+	double scale_ms = 16.7;
+	int _frame_at(float p_x) const;
+	void _select(int p_index);
+
+protected:
+	void _notification(int p_what);
+	static void _bind_methods();
+
+public:
+	void set_frames(const Array &p_frames);
+	void select_frame(int p_index);
+	int get_selected() const { return selected; }
+	virtual void gui_input(const Ref<InputEvent> &p_event) override;
+	virtual String get_tooltip(const Point2 &p_pos) const override;
+	virtual Size2 get_minimum_size() const override;
+};
+
 // FellowEngine milestone 119 (docs/decisions/0238-hitches-in-the-debugger.md): the debugger's "FellowEngine Hitches" tab.
 // A game run from the editor with rendering/fellow/debug/hitch_sampler on (or started from the tab) sends each hitch as
 // it happens: the main thread's or the draw's long frame steps, named (FellowHitchSampler), and the GPU's long frames
@@ -77,6 +102,9 @@ class FellowHitchDebuggerPlugin : public EditorDebuggerPlugin {
 		Tree *list = nullptr;
 		TextEdit *details = nullptr;
 		FellowGpuTimeline *timeline = nullptr; // milestone 120
+		FellowFrameGraph *graph = nullptr; // milestone 121: a recording's frames
+		SpinBox *record_seconds = nullptr;
+		TreeItem *recording = nullptr; // the recording whose frames are arriving
 		int cpu = 0;
 		int gpu = 0;
 	};
@@ -87,6 +115,10 @@ class FellowHitchDebuggerPlugin : public EditorDebuggerPlugin {
 	void _clear(int p_session);
 	void _selected(int p_session);
 	void _send_start(int p_session);
+	void _capture_frame(int p_session); // decision 0243
+	void _record_frames(int p_session); // decision 0244
+	void _graph_frame_selected(int p_index, int p_session);
+	static String _frame_text(const Array &p_frame);
 	void _update_summary(SessionTab &r_tab);
 
 public:

@@ -13,6 +13,7 @@ python $T capture  --project . --scene res://main.tscn --out /tmp/shot          
 python $T capture  --project . --scene res://level.tscn --views iso,top,front --out /tmp/views   # + sheet.png
 python $T describe --project . --scene res://level.tscn           # the node tree as data
 python $T run      --project . --scene res://main.tscn --seconds 10              # frame times, errors, the last frame
+python $T run      --project . --scene res://main.tscn --passes      # + the GPU's time by render pass
 python $T compare  before.png after.png --out diff.png            # did a change alter the picture?
 python $T api FellowWater3D                                       # a class's reference (members, methods, signals)
 python $T api --search wetness                                    # find classes and members by name
@@ -30,7 +31,8 @@ The engine binary comes from `--godot` or `$FELLOW_GODOT`; use an **editor build
    light of its own (a game would show it dark).
 3. For a visual change that should not alter other scenes, `capture` before and after and `compare` (captures run at a
    fixed frame rate and are the same every run on the same machine and build).
-4. For performance, `run` and read `frame_ms` (p50, p95, p99) and `gpu_ms_mean`.
+4. For performance, `run` and read `frame_ms` (p50, p95, p99) and `gpu_ms_mean`; when the GPU is the limit, `run
+   --passes` lists its render passes longest first (`gpu_passes`: milliseconds a frame, share of the frame).
 
 ## Conventions
 
