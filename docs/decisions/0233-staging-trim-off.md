@@ -35,6 +35,9 @@ stalls (20-22 ms) were frames waiting for the GPU. The GPU's frame the same eith
 during which the GPU was busier with something else (7.2-10.9 ms in both variants; between jobs `nvidia-smi` found it
 26-29 % busy with no FellowEngine running, then 7 %).
 
+With the trim off and decision 0231's sampler on (job f452, six runs), no frame stalled on the CPU; its steps over 16.7
+ms were frames waiting for the GPU (on an idle GPU p99.9 10.8-11.8 ms, the longest frame 13.5-14.0 ms).
+
 ## Decision
 
 The trim off by default: no freed block holds a frame up. It keeps up to 512 MiB of host memory the driver counts as

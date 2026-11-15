@@ -1,6 +1,6 @@
 # FellowEngine — milestone 117 report (a hitch sampler and what it found; a garment's distance shaped)
 
-Status: **DRAFT** (2026-11-14; job f452 — what long frames remain with the trim off — the final regression run and the settings' class reference still to do). Branch `fellow/geometry`. Milestones 114-116 left Sponza streamed with a rare long CPU
+Status: **FINAL** (2026-11-15). Branch `fellow/geometry`. Milestones 114-116 left Sponza streamed with a rare long CPU
 frame (25-34 ms, about one 20-second flythrough in four, the GPU's 5-9 ms) that no counter of FellowEngine explained, and
 milestone 116 a garment's distance from the skin one number for the whole garment.
 
@@ -55,6 +55,10 @@ a game short of memory can turn it on, at that cost. Milestone 114 had measured 
 ms against 13.5-21.1 without it and called it the runs' spread; milestone 116's stalls "in every variant" were in
 variants that all trimmed.
 
+With the trim off and the sampler on (job f452, six runs) no frame stalled on the CPU: the steps over 16.7 ms waited
+for a frame's fence (the GPU's frames, in runs while the GPU was busy with another load; the two runs on an idle GPU:
+p99.9 10.8-11.8 ms, the longest frame 13.5-14.0 ms), and the sampler's last one was FellowBench writing its results.
+
 During jobs f447-f450 the laptop's GPU was also busy with something else part of the time (Sponza's GPU passes 1.5 times
 longer at higher clocks; `nvidia-smi` found it 26-29 % busy with no FellowEngine running, later 7 %): those runs are
 not compared with earlier jobs' times; the finding rests on the frames' own counters.
@@ -78,10 +82,9 @@ lanes the same.
 
 ## 4. Checks
 
-The regression suite (36 scenes, the release template against the editor build, lavapipe): the same as its goldens with
-the cloth's and the sampler's changes (one scene, `rt/raytracing`, rerun alone after the editor build was replaced
-during the run: the same). Still to do: the suite on the final build (the trim's default changes no picture), and
-`ProjectSettings.xml` regenerated with the new settings' descriptions.
+The regression suite (36 scenes, the release template against the editor build, lavapipe), on the final build: the same
+as its goldens, no failure. The class reference (`ProjectSettings.xml` with the sampler's settings and the trim's new
+default) regenerated; `make_rst.py` without errors or warnings.
 
 ## 5. Next
 
