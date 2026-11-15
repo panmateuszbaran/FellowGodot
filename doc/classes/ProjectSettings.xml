@@ -3904,6 +3904,9 @@
 		<member name="rendering/fellow/streaming/terrain_region_uploads" type="bool" setter="" getter="" default="true">
 			FellowTerrain3D's sculpting, painting and blits upload to the GPU only the texels they changed and the mips over them (the heights, the normals, the splat maps), not the whole textures: the same textures. Read once. Decision 0168.
 		</member>
+		<member name="rendering/fellow/streaming/texture_budget_auto" type="float" setter="" getter="" default="0.0">
+			With a share above 0, the streamed textures' budget follows the operating system's budget for the process's video memory (VK_EXT_memory_budget, read every frame): that share of it less what the process uses besides the streamed textures (at least 64 MiB, in steps of 32 MiB; [member rendering/fellow/streaming/texture_budget_mb] still caps it). Another program taking video memory, or the game's own render targets growing, leaves the textures less; nothing is done without the driver's figures. [method RenderingServer.fellow_get_texture_streaming_info] reports [code]budget_bytes[/code] and [code]auto_budget_bytes[/code]; FellowEngine's statistics [code]memory_budget_bytes[/code] and [code]memory_budget_usage_bytes[/code]. Decision 0240.
+		</member>
 		<member name="rendering/fellow/streaming/texture_budget_from_used_level" type="bool" setter="" getter="" default="true">
 			Over Texture Budget Mb, the bias coarsens the level each texture would use (its first at the finest) rather than its estimate, which is below 0 for a magnified texture: a budget no longer drops every other texture to its tail before those. No change without a budget. Decision 0223.
 		</member>

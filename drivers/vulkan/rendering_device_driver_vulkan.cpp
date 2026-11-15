@@ -610,6 +610,11 @@ Error RenderingDeviceDriverVulkan::_initialize_device_extensions() {
 	}
 #endif
 	_register_requested_device_extension(VK_EXT_DEVICE_FAULT_EXTENSION_NAME, false);
+	// FellowEngine (milestone 120, decision 0240): the operating system's budget for the process's video memory and its
+	// usage (VK_EXT_memory_budget, read through the memory allocator).
+	if (bool(ProjectSettings::get_singleton()->get_setting("rendering/fellow/enabled", true))) {
+		_register_requested_device_extension(VK_EXT_MEMORY_BUDGET_EXTENSION_NAME, false);
+	}
 
 	{
 		// Debug marker extensions.
@@ -1758,6 +1763,11 @@ Error RenderingDeviceDriverVulkan::_initialize_allocator() {
 	}
 	if (buffer_device_address_support) {
 		allocator_info.flags |= VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
+	}
+	// FellowEngine (decision 0240): the allocator reads the budget from the driver (it needs the memory properties 2 query).
+	fellow_memory_budget_ext = enabled_device_extension_names.has(VK_EXT_MEMORY_BUDGET_EXTENSION_NAME) && context_driver->fellow_has_physical_device_properties_2();
+	if (fellow_memory_budget_ext) {
+		allocator_info.flags |= VMA_ALLOCATOR_CREATE_EXT_MEMORY_BUDGET_BIT;
 	}
 	VkResult err = vmaCreateAllocator(&allocator_info, &allocator);
 	ERR_FAIL_COND_V_MSG(err, ERR_CANT_CREATE, vformat("Couldn't create Vulkan memory allocator (VkResult error %d).", err));
@@ -7687,6 +7697,9 @@ inline String RenderingDeviceDriverVulkan::get_vulkan_result(VkResult err) {
 
 void RenderingDeviceDriverVulkan::begin_segment(uint32_t p_frame_index, uint32_t p_frames_drawn) {
 	// Per-frame segments are not required in Vulkan.
+	if (fellow_memory_budget_ext) {
+		vmaSetCurrentFrameIndex(allocator, p_frames_drawn); // FellowEngine (decision 0240): the budget read again a frame
+	}
 }
 
 void RenderingDeviceDriverVulkan::end_segment() {
@@ -7815,6 +7828,22 @@ uint64_t RenderingDeviceDriverVulkan::fellow_device_local_memory_used() {
 		}
 	}
 	return used;
+}
+
+bool RenderingDeviceDriverVulkan::fellow_memory_budget(uint64_t &r_budget, uint64_t &r_usage) {
+	const VkPhysicalDeviceMemoryProperties *memory_properties = nullptr;
+	vmaGetMemoryProperties(allocator, &memory_properties);
+	VmaBudget *budgets = ALLOCA_ARRAY(VmaBudget, memory_properties->memoryHeapCount);
+	vmaGetHeapBudgets(allocator, budgets);
+	r_budget = 0;
+	r_usage = 0;
+	for (uint32_t i = 0; i < memory_properties->memoryHeapCount; i++) {
+		if (memory_properties->memoryHeaps[i].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) {
+			r_budget += budgets[i].budget;
+			r_usage += budgets[i].usage;
+		}
+	}
+	return fellow_memory_budget_ext; // otherwise the allocator's estimate: 80 % of the heaps, its own blocks
 }
 
 uint64_t RenderingDeviceDriverVulkan::get_lazily_memory_used() {

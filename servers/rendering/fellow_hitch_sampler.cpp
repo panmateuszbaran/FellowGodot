@@ -1827,37 +1827,53 @@ void FellowHitchSampler::register_debugger() {
 	}
 }
 
-void FellowHitchSampler::gpu_frame(uint64_t p_frame, uint32_t p_count, const String *p_names, const uint64_t *p_gpu_nsec, uint64_t p_cpu_usec, uint64_t p_cpu_last_usec, uint64_t p_cpu_wait_usec) {
+void FellowHitchSampler::gpu_frame(uint64_t p_frame, uint32_t p_count, const String *p_names, const uint64_t *p_gpu_nsec, uint64_t p_cpu_usec, uint64_t p_cpu_last_usec, uint64_t p_cpu_wait_usec, const uint8_t *p_async) {
 	if (gpu_state.load(std::memory_order_acquire) != 1 || p_count < 2 || p_gpu_nsec[p_count - 1] < p_gpu_nsec[0]) {
 		return;
 	}
 	uint64_t expected = 0;
 	base_usec.compare_exchange_strong(expected, p_cpu_usec);
-	// A pass's time: from its timestamp to the next (a name timed twice in a frame summed).
+	// A pass's time: from its timestamp to the next one written on the same queue (the asynchronous compute queue's
+	// overlap the main queue's: their names marked); a name timed twice in a frame summed.
 	HashMap<String, double> passes;
 	for (uint32_t i = 0; i + 1 < p_count; i++) {
-		const double usec = p_gpu_nsec[i + 1] >= p_gpu_nsec[i] ? double(p_gpu_nsec[i + 1] - p_gpu_nsec[i]) / 1000.0 : 0.0;
-		double *found = passes.getptr(p_names[i]);
+		const uint8_t queue = p_async ? p_async[i] : 0;
+		uint32_t next = i + 1;
+		while (p_async && next < p_count && p_async[next] != queue) {
+			next++;
+		}
+		if (next >= p_count) {
+			continue; // the queue's last timestamp
+		}
+		const double usec = p_gpu_nsec[next] >= p_gpu_nsec[i] ? double(p_gpu_nsec[next] - p_gpu_nsec[i]) / 1000.0 : 0.0;
+		const String name = queue ? p_names[i] + " (async queue)" : p_names[i];
+		double *found = passes.getptr(name);
 		if (found) {
 			*found += usec;
 		} else {
-			passes.insert(p_names[i], usec);
+			passes.insert(name, usec);
 		}
 	}
-	const double passes_usec = double(p_gpu_nsec[p_count - 1] - p_gpu_nsec[0]) / 1000.0;
+	uint64_t first_nsec = p_gpu_nsec[0];
+	uint64_t last_nsec = p_gpu_nsec[p_count - 1];
+	for (uint32_t i = 0; i < p_count; i++) {
+		first_nsec = MIN(first_nsec, p_gpu_nsec[i]);
+		last_nsec = MAX(last_nsec, p_gpu_nsec[i]);
+	}
+	const double passes_usec = double(last_nsec - first_nsec) / 1000.0;
 
 	MutexLock lock(gpu_mutex);
 	gpu_frames++;
 	double gap_usec = -1.0;
 	double cpu_gap_usec = 0.0;
-	if (gpu_prev_valid && p_frame == gpu_prev_frame + 1 && p_gpu_nsec[0] >= gpu_prev_end_nsec) {
-		gap_usec = double(p_gpu_nsec[0] - gpu_prev_end_nsec) / 1000.0;
+	if (gpu_prev_valid && p_frame == gpu_prev_frame + 1 && first_nsec >= gpu_prev_end_nsec) {
+		gap_usec = double(first_nsec - gpu_prev_end_nsec) / 1000.0;
 		// The CPU's own time between recording the two frames: less its wait for the GPU (a fence) when this one began.
 		cpu_gap_usec = p_cpu_usec > gpu_prev_cpu_last_usec ? MAX(0.0, double(p_cpu_usec - gpu_prev_cpu_last_usec) - double(p_cpu_wait_usec)) : 0.0;
 	}
 	gpu_prev_valid = true;
 	gpu_prev_frame = p_frame;
-	gpu_prev_end_nsec = p_gpu_nsec[p_count - 1];
+	gpu_prev_end_nsec = last_nsec;
 	gpu_prev_cpu_last_usec = p_cpu_last_usec;
 	gpu_longest_passes = MAX(gpu_longest_passes, passes_usec);
 	gpu_longest_gap = MAX(gpu_longest_gap, gap_usec);

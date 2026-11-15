@@ -212,14 +212,18 @@ void RenderingServerDefault::_draw(bool p_swap_buffers, double frame_step) {
 			const uint32_t count = RSG::utilities->get_captured_timestamps_count();
 			LocalVector<String> fellow_names;
 			LocalVector<uint64_t> fellow_gpu;
+			LocalVector<uint8_t> fellow_async;
 			fellow_names.resize(count);
 			fellow_gpu.resize(count);
+			fellow_async.resize(count);
+			RenderingDevice *fellow_rd = RenderingDevice::get_singleton();
 			for (uint32_t i = 0; i < count; i++) {
 				fellow_names[i] = RSG::utilities->get_captured_timestamp_name(i);
 				fellow_gpu[i] = RSG::utilities->get_captured_timestamp_gpu_time(i);
+				fellow_async[i] = fellow_rd && fellow_rd->fellow_get_captured_timestamp_async(i) ? 1 : 0;
 			}
 			FellowHitchSampler::gpu_frame(RSG::utilities->get_captured_timestamps_frame(), count, fellow_names.ptr(), fellow_gpu.ptr(), RSG::utilities->get_captured_timestamp_cpu_time(0), RSG::utilities->get_captured_timestamp_cpu_time(count - 1),
-					RenderingDevice::get_singleton() ? RenderingDevice::get_singleton()->fellow_get_captured_begin_wait_usec() : 0);
+					fellow_rd ? fellow_rd->fellow_get_captured_begin_wait_usec() : 0, fellow_async.ptr());
 		}
 	}
 

@@ -37,6 +37,7 @@
 #include "core/os/os.h"
 #include "core/templates/sort_array.h"
 #include "servers/rendering/rendering_server.h"
+#include "servers/rendering/rendering_device.h"
 #include "servers/rendering/rendering_server_globals.h"
 #include "servers/rendering/storage/material_storage.h"
 #include "servers/rendering/storage/texture_storage.h"
@@ -427,8 +428,38 @@ int FellowTextureStreaming::_target_at(const Texture *p_tex, float p_bias) {
 	return MIN(int(l), p_tex->tail_mip);
 }
 
+// FellowEngine (milestone 120, decision 0240): texture_budget_mb (0: none), and with texture_budget_auto the room the
+// driver's budget for the process's video memory leaves the streamed textures: that share of it less what the process
+// uses besides them (at least 64 MiB, in steps of 32 MiB, raised only by 64 MiB or more so that the targets are not
+// recomputed for every few megabytes). Only with the driver's own figures (VK_EXT_memory_budget).
+int64_t FellowTextureStreaming::_budget_bytes() {
+	int64_t budget = int64_t(MAX(0, GLOBAL_GET_CACHED(int, "rendering/fellow/streaming/texture_budget_mb"))) * 1024 * 1024;
+	const float share = GLOBAL_GET_CACHED(float, "rendering/fellow/streaming/texture_budget_auto");
+	if (share <= 0.0f) {
+		auto_budget = 0;
+		return budget;
+	}
+	RenderingDevice *rd = RenderingDevice::get_singleton();
+	uint64_t driver_budget = 0;
+	uint64_t usage = 0;
+	if (!rd || !rd->fellow_memory_budget(driver_budget, usage) || driver_budget == 0) {
+		auto_budget = 0;
+		return budget;
+	}
+	constexpr int64_t MIB = 1024 * 1024;
+	const int64_t others = MAX<int64_t>(0, int64_t(usage) - resident_bytes);
+	int64_t room = int64_t(double(driver_budget) * double(MIN(share, 1.0f))) - others;
+	room = MAX(room, 64 * MIB);
+	room -= room % (32 * MIB);
+	if (auto_budget > 0 && room > auto_budget && room - auto_budget < 64 * MIB) {
+		room = auto_budget;
+	}
+	auto_budget = room;
+	return budget > 0 ? MIN(budget, room) : room;
+}
+
 void FellowTextureStreaming::_compute_targets() {
-	const int64_t budget = int64_t(MAX(0, GLOBAL_GET_CACHED(int, "rendering/fellow/streaming/texture_budget_mb"))) * 1024 * 1024;
+	const int64_t budget = current_budget;
 	// Pass 1: the targets without the budget's bias.
 	auto target_at = [](const Texture *p_tex, float p_bias) -> int { return _target_at(p_tex, p_bias); };
 	int64_t wanted = 0;
@@ -586,7 +617,7 @@ void FellowTextureStreaming::_schedule() {
 	const uint64_t now = OS::get_singleton()->get_ticks_usec();
 	const int max_jobs = CLAMP(GLOBAL_GET_CACHED(int, "rendering/fellow/streaming/texture_max_jobs"), 1, 64);
 	const int64_t upload_limit = int64_t(MAX(1, GLOBAL_GET_CACHED(int, "rendering/fellow/streaming/texture_upload_mb_per_frame"))) * 1024 * 1024;
-	const int64_t budget = int64_t(MAX(0, GLOBAL_GET_CACHED(int, "rendering/fellow/streaming/texture_budget_mb"))) * 1024 * 1024;
+	const int64_t budget = current_budget;
 	const uint64_t hold = uint64_t(MAX(0.0f, GLOBAL_GET_CACHED(float, "rendering/fellow/streaming/texture_release_hold_s")) * 1000000.0f);
 
 	struct Candidate {
@@ -701,7 +732,8 @@ void FellowTextureStreaming::update() {
 		schedule_dirty = true;
 	}
 	if (!textures.is_empty()) {
-		if (computed_budget != int64_t(MAX(0, GLOBAL_GET_CACHED(int, "rendering/fellow/streaming/texture_budget_mb"))) * 1024 * 1024) {
+		current_budget = _budget_bytes();
+		if (computed_budget != current_budget) {
 			targets_valid = false; // the budget changed
 		}
 		if (!targets_valid) {
@@ -751,6 +783,8 @@ void FellowTextureStreaming::_update_snapshot() {
 	c.wanted_bytes = wanted_bytes;
 	c.full_bytes = full_bytes;
 	c.budget_bias = budget_bias;
+	c.budget_bytes = current_budget;
+	c.auto_budget_bytes = auto_budget;
 	c.cycles = cycles;
 	c.loads = loads;
 	c.downgrades = downgrades;
@@ -809,6 +843,8 @@ Dictionary FellowTextureStreaming::get_info() const {
 	d["wanted_bytes"] = c.wanted_bytes;
 	d["full_bytes"] = c.full_bytes;
 	d["budget_bias"] = c.budget_bias;
+	d["budget_bytes"] = c.budget_bytes; // decision 0240: the budget in force (0: none)
+	d["auto_budget_bytes"] = c.auto_budget_bytes; // texture_budget_auto's part (0: off or no driver figures)
 	d["pending"] = c.pending;
 	d["max_pending"] = c.max_pending;
 	d["jobs"] = c.jobs;

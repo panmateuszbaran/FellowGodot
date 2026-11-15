@@ -8671,6 +8671,10 @@ uint64_t RenderingDevice::fellow_device_local_memory_used() const {
 	return driver->fellow_device_local_memory_used();
 }
 
+bool RenderingDevice::fellow_memory_budget(uint64_t &r_budget, uint64_t &r_usage) const {
+	return driver->fellow_memory_budget(r_budget, r_usage);
+}
+
 uint64_t RenderingDevice::fellow_transfer_staging_bytes(uint32_t *r_workers) {
 	MutexLock pool_lock(transfer_worker_pool_mutex);
 	uint64_t bytes = 0;
@@ -8769,6 +8773,7 @@ void RenderingDevice::_begin_frame(bool p_presented) {
 		driver->command_timestamp_query_pool_reset(frames[frame].command_buffer, frames[frame].timestamp_pool, frames[frame].timestamp_count);
 		SWAP(frames[frame].timestamp_names, frames[frame].timestamp_result_names);
 		SWAP(frames[frame].timestamp_cpu_values, frames[frame].timestamp_cpu_result_values);
+		SWAP(frames[frame].fellow_timestamp_async, frames[frame].fellow_timestamp_result_async);
 	}
 
 	frames[frame].timestamp_result_count = frames[frame].timestamp_count;
@@ -9701,6 +9706,8 @@ Error RenderingDevice::initialize(RenderingContextDriver *p_context, DisplayServ
 		frames[i].timestamp_cpu_result_values.resize(max_timestamp_query_elements);
 		frames[i].timestamp_result_values.resize(max_timestamp_query_elements);
 		frames[i].timestamp_result_count = 0;
+		frames[i].fellow_timestamp_async.resize(max_timestamp_query_elements);
+		frames[i].fellow_timestamp_result_async.resize(max_timestamp_query_elements);
 
 		// Assign the main queue family and command pool to the command buffer pool.
 		frames[i].command_buffer_pool.pool = frames[i].command_pool;
@@ -10015,6 +10022,7 @@ void RenderingDevice::capture_timestamp(const String &p_name) {
 
 	frames[frame].timestamp_names[frames[frame].timestamp_count] = p_name;
 	frames[frame].timestamp_cpu_values[frames[frame].timestamp_count] = OS::get_singleton()->get_ticks_usec();
+	frames[frame].fellow_timestamp_async[frames[frame].timestamp_count] = fellow_async_recording ? 1 : 0; // decision 0237
 	frames[frame].timestamp_count++;
 }
 
@@ -10146,6 +10154,11 @@ uint64_t RenderingDevice::get_captured_timestamps_frame() const {
 
 uint64_t RenderingDevice::fellow_get_captured_begin_wait_usec() const {
 	return frames[frame].fellow_result_begin_wait_usec;
+}
+
+bool RenderingDevice::fellow_get_captured_timestamp_async(uint32_t p_index) const {
+	ERR_FAIL_UNSIGNED_INDEX_V(p_index, frames[frame].timestamp_result_count, false);
+	return frames[frame].fellow_timestamp_result_async[p_index] != 0;
 }
 
 uint64_t RenderingDevice::get_captured_timestamp_gpu_time(uint32_t p_index) const {

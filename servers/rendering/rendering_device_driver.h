@@ -965,6 +965,13 @@ public:
 	virtual uint64_t get_lazily_memory_used() = 0;
 	// FellowEngine: the bytes allocated in the heaps local to the device (the rest of get_total_memory_used() is the host's).
 	virtual uint64_t fellow_device_local_memory_used() { return get_total_memory_used(); }
+	// FellowEngine (decision 0240): the device's own heaps' budget from the operating system and the process's usage of
+	// them; false when the driver gives none (the values then an estimate, or 0).
+	virtual bool fellow_memory_budget(uint64_t &r_budget, uint64_t &r_usage) {
+		r_budget = 0;
+		r_usage = 0;
+		return false;
+	}
 	virtual uint64_t limit_get(Limit p_limit) = 0;
 	virtual uint64_t api_trait_get(ApiTrait p_trait);
 	virtual bool has_feature(Features p_feature) = 0;

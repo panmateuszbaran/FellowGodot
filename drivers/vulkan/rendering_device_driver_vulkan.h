@@ -840,6 +840,8 @@ public:
 	virtual uint64_t get_total_memory_used() override final;
 	virtual uint64_t get_lazily_memory_used() override final;
 	virtual uint64_t fellow_device_local_memory_used() override final;
+	virtual bool fellow_memory_budget(uint64_t &r_budget, uint64_t &r_usage) override final;
+	bool fellow_memory_budget_ext = false; // FellowEngine (decision 0240): VK_EXT_memory_budget in use
 	virtual uint64_t limit_get(Limit p_limit) override final;
 	virtual uint64_t api_trait_get(ApiTrait p_trait) override final;
 	virtual bool has_feature(Features p_feature) override final;

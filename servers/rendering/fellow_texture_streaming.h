@@ -153,10 +153,16 @@ private:
 	uint64_t eval_references = 0;
 	bool targets_valid = false;
 	int64_t computed_budget = -1; // the budget the targets were computed for
+	// FellowEngine (milestone 120, decision 0240): this update's budget (texture_budget_mb, and with texture_budget_auto
+	// the room the driver's video memory budget leaves the streamed textures), and the automatic part's last value.
+	int64_t current_budget = 0;
+	int64_t auto_budget = 0;
+	int64_t _budget_bytes();
 
 	struct Stats {
 		int textures = 0, streamed = 0, full = 0, fresh = 0, at_full = 0, at_tail = 0, pending = 0, jobs = 0, materials = 0;
 		int64_t resident_bytes = 0, peak_resident_bytes = 0, target_bytes = 0, wanted_bytes = 0, full_bytes = 0;
+		int64_t budget_bytes = 0, auto_budget_bytes = 0; // decision 0240
 		int max_pending = 0;
 		float budget_bias = 0.0f;
 		uint64_t cycles = 0, loads = 0, downgrades = 0, failures = 0, bytes_read = 0, eval_usec = 0, eval_references = 0, update_usec = 0, frames = 0;

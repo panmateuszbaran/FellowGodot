@@ -1923,6 +1923,9 @@ private:
 		// frame whose timestamps were last read back from it.
 		uint64_t fellow_begin_wait_usec = 0;
 		uint64_t fellow_result_begin_wait_usec = 0;
+		// FellowEngine (decision 0237): which timestamps were written on the asynchronous compute queue.
+		TightLocalVector<uint8_t> fellow_timestamp_async;
+		TightLocalVector<uint8_t> fellow_timestamp_result_async;
 	};
 
 	uint32_t max_timestamp_query_elements = 0;
@@ -2029,6 +2032,7 @@ public:
 	uint32_t get_captured_timestamps_count() const;
 	uint64_t get_captured_timestamps_frame() const;
 	uint64_t fellow_get_captured_begin_wait_usec() const; // FellowEngine: the read-back frame's fence wait at its start
+	bool fellow_get_captured_timestamp_async(uint32_t p_index) const; // FellowEngine: written on the async compute queue
 	uint64_t get_captured_timestamp_gpu_time(uint32_t p_index) const;
 	uint64_t get_captured_timestamp_cpu_time(uint32_t p_index) const;
 	String get_captured_timestamp_name(uint32_t p_index) const;
@@ -2055,6 +2059,7 @@ public:
 	uint64_t get_memory_usage(MemoryType p_type) const;
 	// FellowEngine: the bytes in the device's own heaps, and the transfer workers' staging buffers (the host's) and count.
 	uint64_t fellow_device_local_memory_used() const;
+	bool fellow_memory_budget(uint64_t &r_budget, uint64_t &r_usage) const; // FellowEngine (decision 0240)
 	uint64_t fellow_transfer_staging_bytes(uint32_t *r_workers = nullptr);
 
 	RenderingDevice *create_local_device();

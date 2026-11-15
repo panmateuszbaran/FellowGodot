@@ -409,6 +409,12 @@ the parts copied before the ring's wait (stock dropped them). Milestone 115 (dec
 the render thread submits and waits for its worker's earlier work and its own copy itself, so that no frame waits for
 a large copy (FellowEngine's statistics: `transfer_frame_large_submits`, the frame's own copies over 4 MiB;
 `transfer_submit_waits`, `transfer_submit_wait_usec`, the frame's end waiting for a held worker).
+Milestone 120 (decision 0240): with FellowEngine on, the device is created with `VK_EXT_memory_budget` where the
+driver has it and the memory allocator reads the operating system's budget for the process's video memory every frame
+(FellowEngine's statistics: `memory_budget_bytes`, `memory_budget_usage_bytes`, `memory_budget_from_driver`);
+`texture_budget_auto` (0, off; a share): the streamed textures' budget is that share of the driver's budget less what the
+process uses besides them (at least 64 MiB, in 32 MiB steps, capped by `texture_budget_mb`), reported as
+`budget_bytes` and `auto_budget_bytes` by `RenderingServer.fellow_get_texture_streaming_info()`.
 `texture_instances_per_frame` (2048) instances are
 evaluated a frame; `texture_max_jobs` (4), `texture_upload_mb_per_frame` (64), `texture_release_hold_s` (2),
 `texture_unreferenced_hold_s` (5); `texture_info_details` lists every texture in

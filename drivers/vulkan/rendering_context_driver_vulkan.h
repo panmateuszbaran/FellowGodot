@@ -130,6 +130,8 @@ protected:
 
 public:
 	virtual Error initialize() override;
+	// FellowEngine (decision 0240): the memory allocator's budget query needs vkGetPhysicalDeviceMemoryProperties2KHR.
+	bool fellow_has_physical_device_properties_2() const { return enabled_instance_extension_names.has(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME); }
 	virtual const Device &device_get(uint32_t p_device_index) const override;
 	virtual uint32_t device_get_count() const override;
 	virtual bool device_supports_present(uint32_t p_device_index, SurfaceID p_surface) const override;

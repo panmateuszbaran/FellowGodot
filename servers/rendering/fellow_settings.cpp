@@ -420,6 +420,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF_RST(PropertyInfo(Variant::INT, "rendering/fellow/streaming/texture_resident_size", PROPERTY_HINT_RANGE, "16,4096,1,suffix:px"), 128);
 	// The streamed textures' memory (0: no limit); over it every streamed texture is coarsened by the same bias.
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/streaming/texture_budget_mb", PROPERTY_HINT_RANGE, "0,65536,1,suffix:MiB"), 0);
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/streaming/texture_budget_auto", PROPERTY_HINT_RANGE, "0,1,0.01"), 0.0); // decision 0240
 	// Added to the estimated level (negative: finer, a margin; positive: coarser). -1: the estimate is the finest level
 	// along the UV mapping's largest stretch; a GPU's level, the larger of the screen axes' derivatives, can be half a
 	// level finer when that stretch is diagonal on screen, and half a level more where the derivatives' lengths are
@@ -616,6 +617,12 @@ Dictionary Fellow::get_stats_dictionary() {
 		d["memory_total_bytes"] = rd->get_memory_usage(RenderingDevice::MEMORY_TOTAL);
 		d["transfer_staging_bytes"] = rd->fellow_transfer_staging_bytes(&workers);
 		d["transfer_workers"] = workers;
+		// Decision 0240: the operating system's budget for the device's own heaps and the process's usage of them.
+		uint64_t budget = 0;
+		uint64_t usage = 0;
+		d["memory_budget_from_driver"] = rd->fellow_memory_budget(budget, usage);
+		d["memory_budget_bytes"] = budget;
+		d["memory_budget_usage_bytes"] = usage;
 	}
 	d["transfer_staging_grows"] = s.transfer_staging_grows.get();
 	d["transfer_staging_trims"] = s.transfer_staging_trims.get();

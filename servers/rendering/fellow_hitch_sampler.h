@@ -75,7 +75,9 @@ bool gpu_wanted(); // the sampler is on: capture the timestamps
 // microseconds) when the first and the last were recorded, the render thread's wait for the GPU when the frame began;
 // p_frame the frame number RenderingDevice gave them. A gap the CPU explains (its own time between recording the two
 // frames: the GPU waited for the frame) is not the GPU's hitch.
-void gpu_frame(uint64_t p_frame, uint32_t p_count, const String *p_names, const uint64_t *p_gpu_nsec, uint64_t p_cpu_usec, uint64_t p_cpu_last_usec, uint64_t p_cpu_wait_usec);
+// p_async (may be null): which timestamps were written on the asynchronous compute queue (a pass's time is to the next
+// timestamp of its own queue).
+void gpu_frame(uint64_t p_frame, uint32_t p_count, const String *p_names, const uint64_t *p_gpu_nsec, uint64_t p_cpu_usec, uint64_t p_cpu_last_usec, uint64_t p_cpu_wait_usec, const uint8_t *p_async);
 uint64_t get_gpu_hitch_count();
 
 // The editor's debugger (milestone 119, docs/decisions/0238-hitches-in-the-debugger.md): when the game runs from the

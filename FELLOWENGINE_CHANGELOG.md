@@ -9,7 +9,7 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
-## Milestone 119 — downloads returned whole; the GPU's hitches, and hitches in the editor's debugger (2026-11-15)
+## Milestone 119 — downloads returned whole; the GPU's hitches, scripts' frames and hitches in the editor's debugger (2026-11-15)
 
 - `RenderingDevice.buffer_get_data_async()` and `texture_get_data_async()` return every byte with FellowEngine on
   (decision 0236): stock left a texture that is not square without its last mips, and dropped the parts of a download
@@ -22,6 +22,8 @@ Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.m
 - Script frames (decision 0239): in GDScript's debug builds a hitch names the script functions and lines it ran.
 - Frontier Lab (the 4 km open world streamed at 45 m/s) on the RTX with the sampler: no frame step and one GPU frame
   over 16.7 ms in three 90-second flights (3.9 ms frames, p99.9 6.0 ms).
+- The GPU's rare 21-23 ms frames placed (job f460): about one in five minutes of Sponza streamed, all with asynchronous
+  compute on (the GPU stalled about 15 ms where its part runs); none in 15 minutes with it off.
 
 ## Milestone 118 — compressed uploads staged as they are copied; cloth edges kept apart (2026-11-15)
 
