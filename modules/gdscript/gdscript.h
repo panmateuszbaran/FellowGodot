@@ -570,6 +570,11 @@ public:
 	} strings;
 
 	_FORCE_INLINE_ bool should_track_call_stack() const { return track_call_stack; }
+
+	// FellowEngine (milestone 119, decision 0239): the hitch sampler reads the call levels of the thread it samples.
+	static void **fellow_call_stack_slot() { return (void **)&_call_stack; }
+	static bool fellow_describe_function(void *p_function, String &r_name);
+	void fellow_register_hitch_hooks(bool p_register);
 	_FORCE_INLINE_ bool should_track_locals() const { return track_locals; }
 	_FORCE_INLINE_ int get_global_array_size() const { return global_array.size(); }
 	_FORCE_INLINE_ Variant *get_global_array() { return _global_array; }

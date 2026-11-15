@@ -8687,7 +8687,10 @@ void RenderingDevice::_begin_frame(bool p_presented) {
 	GodotProfileZoneGroupedFirst(_profile_zone, "_stall_for_frame");
 	// Before writing to this frame, wait for it to be finished.
 	fellow_stall_wait_usec = 0;
+	const uint64_t fellow_result_wait = frames[frame].fellow_begin_wait_usec; // the frame read back below began with it
 	_stall_for_frame(frame);
+	frames[frame].fellow_result_begin_wait_usec = fellow_result_wait;
+	frames[frame].fellow_begin_wait_usec = fellow_stall_wait_usec;
 	draw_graph.fellow_frame_begin(frame); // its secondary command buffers are free again
 	if (is_main_instance && p_presented) {
 		// FellowEngine: how long the render thread waited for the GPU this frame (gate of the hot workers).
@@ -10139,6 +10142,10 @@ uint32_t RenderingDevice::get_captured_timestamps_count() const {
 uint64_t RenderingDevice::get_captured_timestamps_frame() const {
 	ERR_RENDER_THREAD_GUARD_V(0);
 	return frames[frame].index;
+}
+
+uint64_t RenderingDevice::fellow_get_captured_begin_wait_usec() const {
+	return frames[frame].fellow_result_begin_wait_usec;
 }
 
 uint64_t RenderingDevice::get_captured_timestamp_gpu_time(uint32_t p_index) const {

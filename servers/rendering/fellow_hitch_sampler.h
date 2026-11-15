@@ -67,17 +67,34 @@ uint64_t get_sample_count();
 // The GPU's side (milestone 119, docs/decisions/0237-gpu-hitches.md), on every platform: with the sampler on, the
 // renderer's pass timestamps are captured every frame (as with rendering/fellow/profiling/pass_timestamps). A frame
 // whose passes took the GPU longer than the threshold from the first timestamp to the last, or whose first timestamp came
-// that long after the previous frame's last, is a GPU hitch: kept (up to 64) with the passes longest past their average
+// that long after the previous frame's last (beyond what the CPU's own time explains), is a GPU hitch: kept (up to 64)
+// with the passes longest past their average
 // and reported with the CPU's hitches.
 bool gpu_wanted(); // the sampler is on: capture the timestamps
-// A frame's timestamps as RenderingServer reads them back: names, GPU times in nanoseconds, the CPU's time (ticks in
-// microseconds) when the first was recorded; p_frame the frame number RenderingDevice gave them.
-void gpu_frame(uint64_t p_frame, uint32_t p_count, const String *p_names, const uint64_t *p_gpu_nsec, uint64_t p_cpu_usec);
+// A frame's timestamps as RenderingServer reads them back: names, GPU times in nanoseconds, the CPU's times (ticks in
+// microseconds) when the first and the last were recorded, the render thread's wait for the GPU when the frame began;
+// p_frame the frame number RenderingDevice gave them. A gap the CPU explains (its own time between recording the two
+// frames: the GPU waited for the frame) is not the GPU's hitch.
+void gpu_frame(uint64_t p_frame, uint32_t p_count, const String *p_names, const uint64_t *p_gpu_nsec, uint64_t p_cpu_usec, uint64_t p_cpu_last_usec, uint64_t p_cpu_wait_usec);
 uint64_t get_gpu_hitch_count();
 
 // The editor's debugger (milestone 119, docs/decisions/0238-hitches-in-the-debugger.md): when the game runs from the
 // editor, each hitch is named on a thread of its own as it happens and sent to the debugger's FellowEngine Hitches tab
 // ("fellow_hitch:cpu", "fellow_hitch:gpu"); the tab can start the sampler in a running game ("fellow_hitch:start").
 void register_debugger(); // with the debugger active, the "fellow_hitch" message capture (FellowEngine's settings)
+
+// A script language's call stack, sampled with the native one (milestone 119, docs/decisions/0239-script-frames.md):
+// GDScript's debug builds keep a linked list of call levels on the stack of the thread that runs them.
+struct ScriptStackHooks {
+	void **(*current_head_slot)() = nullptr; // the calling thread's innermost call level pointer's address
+	uint32_t level_size = 0; // a call level's size, and in it the offsets of
+	uint32_t prev_offset = 0; // the next call level out
+	uint32_t function_offset = 0; // the function (opaque)
+	uint32_t line_offset = 0; // a pointer to its current line (an int)
+	// The function's script and name, if it still exists (on any thread; a language lock taken). Not called after the
+	// language has cleared the hooks.
+	bool (*describe)(void *p_function, String &r_name) = nullptr;
+};
+void set_script_stack_hooks(const ScriptStackHooks &p_hooks); // cleared with ScriptStackHooks() before the language goes
 
 } // namespace FellowHitchSampler

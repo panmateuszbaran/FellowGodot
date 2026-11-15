@@ -91,6 +91,11 @@ std::atomic<uint64_t> hitch_count{ 0 };
 std::atomic<uint64_t> sample_count{ 0 };
 std::atomic<uint64_t> base_usec{ 0 }; // the reports' "s in": the sampler's start (the CPU's, else the first GPU frame's)
 
+// Decision 0239: the script language's call stack (set once by GDScript; describe() used under script_hooks_mutex, which
+// clearing the hooks takes too).
+FellowHitchSampler::ScriptStackHooks script_hooks;
+Mutex script_hooks_mutex;
+
 // The editor's debugger (milestone 119, decision 0238): hitches sent as they happen, by the main thread at its next frame
 // step (it alone runs while the debugger exists: none is sent after the main loop).
 std::atomic<bool> live_on{ false }; // a debugger was attached when the sampler started
@@ -141,6 +146,7 @@ struct GpuHitch {
 	double passes_average_usec = 0.0;
 	double gap_usec = -1.0; // after the previous frame's last timestamp (-1: that frame had none)
 	double gap_average_usec = 0.0;
+	double cpu_gap_usec = 0.0; // the CPU's time from recording the previous frame's last timestamp to this one's first
 	uint32_t markers = 0;
 	LocalVector<GpuPass> passes; // the longest past their average
 };
@@ -157,6 +163,7 @@ uint64_t gpu_ordinary_frames = 0;
 uint64_t gpu_gap_frames = 0;
 uint64_t gpu_prev_frame = 0;
 uint64_t gpu_prev_end_nsec = 0;
+uint64_t gpu_prev_cpu_last_usec = 0;
 bool gpu_prev_valid = false;
 double gpu_longest_passes = 0.0;
 double gpu_longest_gap = 0.0;
@@ -168,7 +175,7 @@ double gpu_follow(double p_average, double p_value, uint64_t p_count) {
 }
 
 String gpu_hitch_text(uint32_t p_number, const GpuHitch &hitch) {
-	const String gap = hitch.gap_usec >= 0.0 ? vformat("began %.1f ms after the previous frame's last timestamp (average %.2f)", hitch.gap_usec / 1000.0, hitch.gap_average_usec / 1000.0) : String("followed a frame that was not timed");
+	const String gap = hitch.gap_usec >= 0.0 ? vformat("began %.1f ms after the previous frame's last timestamp (average %.2f; the CPU's own time between recording the two, less its waits for the GPU, %.1f ms)", hitch.gap_usec / 1000.0, hitch.gap_average_usec / 1000.0, hitch.cpu_gap_usec / 1000.0) : String("followed a frame that was not timed");
 	String passes;
 	for (uint32_t i = 0; i < hitch.passes.size(); i++) {
 		const GpuPass &pass = hitch.passes[i];
@@ -211,10 +218,39 @@ constexpr uint32_t MAX_HITCHES = 64;
 constexpr uint32_t DURATION_RING = 16;
 constexpr uint32_t NAME_SIZE = 64;
 
+constexpr uint32_t MAX_SCRIPT_DEPTH = 16;
+
 struct Stack {
 	uint32_t depth = 0;
 	uint64_t pc[MAX_DEPTH]; // [0] where the thread was, then return addresses outwards
+	uint32_t script_depth = 0; // decision 0239: the script call levels, innermost first
+	void *script_function[MAX_SCRIPT_DEPTH];
+	int32_t script_line[MAX_SCRIPT_DEPTH];
 };
+
+// Decision 0239: the script call levels from p_head outwards, while they lie within [p_lo, p_hi) (Windows: the stack's
+// copy, its pointers moved to it) or anywhere (p_hi 0: Linux, in the signal handler, on the thread itself). Reads only.
+void walk_script(const uint8_t *p_head, uint64_t p_lo, uint64_t p_hi, Stack &r_stack) {
+	const FellowHitchSampler::ScriptStackHooks &hooks = script_hooks;
+	uint32_t count = 0;
+	const uint8_t *level = p_head;
+	while (level && count < MAX_SCRIPT_DEPTH && hooks.level_size > 0) {
+		if (p_hi != 0 && (uint64_t(level) < p_lo || uint64_t(level) + hooks.level_size > p_hi)) {
+			break;
+		}
+		void *function = *(void *const *)(level + hooks.function_offset);
+		const int *line = *(const int *const *)(level + hooks.line_offset);
+		int value = 0;
+		if (line && (p_hi == 0 || (uint64_t(line) >= p_lo && uint64_t(line) + sizeof(int) <= p_hi))) {
+			value = *line;
+		}
+		r_stack.script_function[count] = function;
+		r_stack.script_line[count] = value;
+		count++;
+		level = *(const uint8_t *const *)(level + hooks.prev_offset);
+	}
+	r_stack.script_depth = count;
+}
 
 struct NativeThread {
 	uint64_t os_id = 0;
@@ -237,6 +273,7 @@ struct SlotState {
 	std::atomic<uint64_t> ring_seq[DURATION_RING];
 	std::atomic<uint64_t> ring_usec[DURATION_RING];
 	NativeThread thread;
+	void **script_head = nullptr; // decision 0239: the thread's innermost script call level pointer
 };
 
 struct OtherThread {
@@ -292,6 +329,7 @@ struct Hitch {
 	double cpu_share = -1.0; // of the time between the first and the last sample
 	LocalVector<Stack> stacks;
 	LocalVector<HitchOther> others;
+	HashMap<void *, String> script_names; // decision 0239: the sampled script functions, named when the step ended
 };
 
 std::atomic<int> sampler_state{ 0 }; // 0 not started, 1 running, -1 off
@@ -433,14 +471,29 @@ uint32_t unwind_copy(CONTEXT *p_context, uint64_t p_lo, uint64_t p_hi, uint64_t 
 	return depth;
 }
 
-bool sample_thread(const NativeThread &p_thread, Stack &r_stack) {
+// Decision 0239: the script call levels in the stack's copy, under the structured exception guard (plain data only).
+void walk_script_copy(const uint8_t *p_head, uint64_t p_lo, uint64_t p_hi, Stack &r_stack) {
+#ifdef _MSC_VER
+	__try {
+#endif
+		walk_script(p_head, p_lo, p_hi, r_stack);
+#ifdef _MSC_VER
+	} __except (EXCEPTION_EXECUTE_HANDLER) {
+		r_stack.script_depth = 0;
+	}
+#endif
+}
+
+bool sample_thread(const NativeThread &p_thread, Stack &r_stack, void **p_script_head) {
 	r_stack.depth = 0;
+	r_stack.script_depth = 0;
 	if (!p_thread.handle || !stack_copy) {
 		return false;
 	}
 	if (SuspendThread(p_thread.handle) == (DWORD)-1) {
 		return false;
 	}
+	uint64_t script_head = 0;
 	// While the thread is suspended: its registers and a copy of its stack, nothing that could take a lock it holds.
 	CONTEXT context;
 	memset(&context, 0, sizeof(context));
@@ -455,6 +508,9 @@ bool sample_thread(const NativeThread &p_thread, Stack &r_stack) {
 			const uint64_t top = uint64_t(info.BaseAddress) + uint64_t(info.RegionSize);
 			size = MIN(top - lo, STACK_COPY_SIZE) & ~uint64_t(7);
 			memcpy(stack_copy, (const void *)lo, size);
+			if (p_script_head) {
+				script_head = (uint64_t)*p_script_head; // the thread's own variable, read while it is suspended
+			}
 		} else {
 			ok = false;
 		}
@@ -483,6 +539,9 @@ bool sample_thread(const NativeThread &p_thread, Stack &r_stack) {
 		}
 	}
 	r_stack.depth = unwind_copy(&context, copy_lo, copy_lo + size, r_stack.pc, MAX_DEPTH);
+	if (script_head >= lo && script_head < hi) {
+		walk_script_copy((const uint8_t *)(script_head + delta), copy_lo, copy_lo + size, r_stack);
+	}
 	return r_stack.depth > 0;
 }
 
@@ -726,11 +785,18 @@ std::atomic<int> signal_done{ 0 };
 void *signal_frames[MAX_DEPTH + 8];
 std::atomic<int> signal_count{ 0 };
 
+void **signal_script_head = nullptr; // decision 0239: the target's innermost script call level pointer
+Stack signal_script; // its script call levels (only the script fields)
+
 void signal_handler(int, siginfo_t *, void *) {
 	const int saved_errno = errno;
 	if ((int64_t)syscall(SYS_gettid) == signal_target.load(std::memory_order_acquire)) {
 		const int count = backtrace(signal_frames, MAX_DEPTH + 8);
 		signal_count.store(count, std::memory_order_relaxed);
+		signal_script.script_depth = 0;
+		if (signal_script_head) {
+			walk_script((const uint8_t *)*signal_script_head, 0, 0, signal_script); // the thread's own call levels
+		}
 		signal_done.store(1, std::memory_order_release);
 	}
 	errno = saved_errno;
@@ -779,9 +845,11 @@ bool thread_cpu(const NativeThread &p_thread, uint64_t &r_units) {
 	return true;
 }
 
-bool sample_thread(const NativeThread &p_thread, Stack &r_stack) {
+bool sample_thread(const NativeThread &p_thread, Stack &r_stack, void **p_script_head) {
 	r_stack.depth = 0;
+	r_stack.script_depth = 0;
 	signal_done.store(0, std::memory_order_relaxed);
+	signal_script_head = p_script_head;
 	signal_target.store((int64_t)p_thread.os_id, std::memory_order_release);
 	if (syscall(SYS_tgkill, getpid(), (pid_t)p_thread.os_id, hitch_signal) != 0) {
 		signal_target.store(0, std::memory_order_release);
@@ -798,6 +866,11 @@ bool sample_thread(const NativeThread &p_thread, Stack &r_stack) {
 	const int count = signal_count.load(std::memory_order_relaxed);
 	for (int i = 2; i < count && r_stack.depth < MAX_DEPTH; i++) {
 		r_stack.pc[r_stack.depth++] = (uint64_t)signal_frames[i];
+	}
+	r_stack.script_depth = signal_script.script_depth;
+	for (uint32_t i = 0; i < signal_script.script_depth; i++) {
+		r_stack.script_function[i] = signal_script.script_function[i];
+		r_stack.script_line[i] = signal_script.script_line[i];
 	}
 	return r_stack.depth > 0;
 }
@@ -961,6 +1034,22 @@ void capture_finish(uint32_t p_slot, Capture &r_capture) {
 			for (uint32_t i = 0; i < r_capture.samples; i++) {
 				hitch.stacks.push_back(r_capture.stacks[i]);
 			}
+			{
+				// Decision 0239: the script functions named now, while they exist (the language's lock taken).
+				MutexLock lock(script_hooks_mutex);
+				for (const Stack &stack : hitch.stacks) {
+					for (uint32_t k = 0; k < stack.script_depth; k++) {
+						void *function = stack.script_function[k];
+						if (function && !hitch.script_names.has(function)) {
+							String name;
+							if (!script_hooks.describe || !script_hooks.describe(function, name)) {
+								name = "?";
+							}
+							hitch.script_names.insert(function, name);
+						}
+					}
+				}
+			}
 			for (uint32_t t = 0; t < r_capture.thread_count; t++) {
 				const OtherThread &other = r_capture.threads[t];
 				HitchOther h;
@@ -1013,7 +1102,7 @@ void sample_others(Capture &r_capture) {
 		}
 		if (r_capture.other_count < MAX_OTHER_STACKS) {
 			OtherSample &sample = r_capture.others[r_capture.other_count];
-			if (sample_thread(other.thread, sample.stack)) {
+			if (sample_thread(other.thread, sample.stack, nullptr)) {
 				sample.thread = t;
 				r_capture.other_count++;
 			}
@@ -1073,7 +1162,7 @@ void watchdog(void *) {
 			uint64_t cpu = 0;
 			const bool cpu_ok = thread_cpu(slot.thread, cpu);
 			const uint64_t t = OS::get_singleton()->get_ticks_usec();
-			if (capture.samples < MAX_SAMPLES && sample_thread(slot.thread, capture.stacks[capture.samples])) {
+			if (capture.samples < MAX_SAMPLES && sample_thread(slot.thread, capture.stacks[capture.samples], slot.script_head)) {
 				if (capture.samples == 0) {
 					capture.first_usec = t;
 				} else {
@@ -1216,7 +1305,7 @@ void emit_line(String *r_out, const String &p_line) {
 	}
 }
 
-void print_profile(const LocalVector<LocalVector<int>> &p_stacks, const NameTable &p_names, const String &p_indent, int p_path_lines, int p_leaves, String *r_out = nullptr) {
+void print_profile(const LocalVector<LocalVector<int>> &p_stacks, const NameTable &p_names, const String &p_indent, int p_path_lines, int p_leaves, String *r_out = nullptr, const String &p_path_title = "hottest call path", const String &p_leaves_title = "innermost") {
 	const uint32_t total = p_stacks.size();
 	if (total == 0) {
 		return;
@@ -1234,13 +1323,13 @@ void print_profile(const LocalVector<LocalVector<int>> &p_stacks, const NameTabl
 		if (path.size() - from > uint32_t(p_path_lines)) {
 			from = path.size() - p_path_lines;
 		}
-		emit_line(r_out, p_indent + "hottest call path (share of the samples)" + (from > 0 ? vformat(", from depth %d:", from) : String(":")));
+		emit_line(r_out, p_indent + p_path_title + " (share of the samples)" + (from > 0 ? vformat(", from depth %d:", from) : String(":")));
 		for (uint32_t i = from; i < path.size(); i++) {
 			emit_line(r_out, p_indent + "  " + share(path[i].count, total) + "  " + frame_name(p_names, path[i].id));
 		}
 	}
 	const LocalVector<Count> leaves = innermost(p_stacks);
-	String line = p_indent + "innermost:";
+	String line = p_indent + p_leaves_title + ":";
 	for (uint32_t i = 0; i < leaves.size() && int(i) < p_leaves; i++) {
 		line += (i > 0 ? "; " : " ") + share(leaves[i].count, total).strip_edges() + " " + frame_name(p_names, leaves[i].id);
 	}
@@ -1267,6 +1356,44 @@ bool waits_mostly(const LocalVector<LocalVector<int>> &p_stacks, const NameTable
 	return waiting * 2 >= p_stacks.size();
 }
 
+// Decision 0239: the stepping thread's script call levels, as a call path and innermost functions of their own; a script
+// function is "name (script:line)". r_where: the hottest path's innermost.
+void script_profile(const Hitch &p_hitch, const String &p_indent, bool p_emit, String *r_out, String *r_where) {
+	NameTable names;
+	LocalVector<LocalVector<int>> stacks;
+	for (const Stack &stack : p_hitch.stacks) {
+		if (stack.script_depth == 0) {
+			continue;
+		}
+		LocalVector<int> frames;
+		for (int k = int(stack.script_depth) - 1; k >= 0; k--) {
+			const String *name = p_hitch.script_names.getptr(stack.script_function[k]);
+			String function = name ? *name : String("?");
+			String script;
+			const int colon = function.rfind("::");
+			if (colon >= 0) {
+				script = function.substr(0, colon);
+				function = function.substr(colon + 2);
+			}
+			frames.push_back(names.intern(vformat("%s (%s:%d)", function, script, stack.script_line[k])));
+		}
+		stacks.push_back(std::move(frames));
+	}
+	if (stacks.is_empty()) {
+		return;
+	}
+	if (p_emit) {
+		emit_line(r_out, vformat("%sscript call levels in %d of %d samples:", p_indent, stacks.size(), p_hitch.stacks.size()));
+		print_profile(stacks, names, p_indent, 16, 4, r_out, "script call path", "script innermost");
+	}
+	if (r_where) {
+		const LocalVector<PathStep> path = hottest_path(stacks);
+		if (!path.is_empty()) {
+			*r_where = frame_name(names, path[path.size() - 1].id);
+		}
+	}
+}
+
 // One hitch's part of the report (printed at exit, or sent to the editor's debugger as it happens: decision 0238).
 void hitch_text(uint32_t p_number, const Hitch &hitch, const NameTable &table, const HashMap<uint64_t, int> &ids, String *r_out) {
 	String cpu = hitch.cpu_share >= 0.0 ? vformat("; the thread on a CPU %d %% of that time", int(Math::round(100.0 * MIN(1.0, hitch.cpu_share)))) : String();
@@ -1276,6 +1403,7 @@ void hitch_text(uint32_t p_number, const Hitch &hitch, const NameTable &table, c
 		stacks.push_back(named_stack(stack, ids));
 	}
 	print_profile(stacks, table, "  ", 40, 6, r_out);
+	script_profile(hitch, "  ", true, r_out, nullptr);
 
 	// The other threads: those on a CPU a fifth of the time or more, and those not waiting (a thread that holds what
 	// the stepping thread waits for may not be running either), the busiest first.
@@ -1416,6 +1544,11 @@ void live_namer(void *) {
 				if (where.is_empty() && !path.is_empty()) {
 					where = frame_name(table, path[path.size() - 1].id);
 				}
+				String script_where;
+				script_profile(item.hitch, String(), false, nullptr, &script_where);
+				if (!script_where.is_empty()) {
+					where = script_where; // decision 0239: the script's function says more than the interpreter's
+				}
 			}
 			Array message;
 			message.push_back(int64_t(item.number));
@@ -1546,6 +1679,10 @@ void FellowHitchSampler::step_begin(Slot p_slot) {
 		if (!register_current(slot.thread)) {
 			slot.mode.store(SLOT_IGNORED, std::memory_order_release);
 			return;
+		}
+		{
+			MutexLock lock(script_hooks_mutex);
+			slot.script_head = script_hooks.current_head_slot ? script_hooks.current_head_slot() : nullptr; // decision 0239
 		}
 		mode = SLOT_REGISTERED;
 		slot.mode.store(SLOT_REGISTERED, std::memory_order_release);
@@ -1690,7 +1827,7 @@ void FellowHitchSampler::register_debugger() {
 	}
 }
 
-void FellowHitchSampler::gpu_frame(uint64_t p_frame, uint32_t p_count, const String *p_names, const uint64_t *p_gpu_nsec, uint64_t p_cpu_usec) {
+void FellowHitchSampler::gpu_frame(uint64_t p_frame, uint32_t p_count, const String *p_names, const uint64_t *p_gpu_nsec, uint64_t p_cpu_usec, uint64_t p_cpu_last_usec, uint64_t p_cpu_wait_usec) {
 	if (gpu_state.load(std::memory_order_acquire) != 1 || p_count < 2 || p_gpu_nsec[p_count - 1] < p_gpu_nsec[0]) {
 		return;
 	}
@@ -1712,16 +1849,23 @@ void FellowHitchSampler::gpu_frame(uint64_t p_frame, uint32_t p_count, const Str
 	MutexLock lock(gpu_mutex);
 	gpu_frames++;
 	double gap_usec = -1.0;
+	double cpu_gap_usec = 0.0;
 	if (gpu_prev_valid && p_frame == gpu_prev_frame + 1 && p_gpu_nsec[0] >= gpu_prev_end_nsec) {
 		gap_usec = double(p_gpu_nsec[0] - gpu_prev_end_nsec) / 1000.0;
+		// The CPU's own time between recording the two frames: less its wait for the GPU (a fence) when this one began.
+		cpu_gap_usec = p_cpu_usec > gpu_prev_cpu_last_usec ? MAX(0.0, double(p_cpu_usec - gpu_prev_cpu_last_usec) - double(p_cpu_wait_usec)) : 0.0;
 	}
 	gpu_prev_valid = true;
 	gpu_prev_frame = p_frame;
 	gpu_prev_end_nsec = p_gpu_nsec[p_count - 1];
+	gpu_prev_cpu_last_usec = p_cpu_last_usec;
 	gpu_longest_passes = MAX(gpu_longest_passes, passes_usec);
 	gpu_longest_gap = MAX(gpu_longest_gap, gap_usec);
 
-	const bool hitch = passes_usec > gpu_threshold_usec || gap_usec > gpu_threshold_usec;
+	// A gap the CPU explains (it recorded the frame that much later: the GPU had nothing to do) is the CPU's hitch, not
+	// the GPU's; what is left of it is time the GPU spent on something else first.
+	const double unexplained_gap_usec = gap_usec - cpu_gap_usec;
+	const bool hitch = passes_usec > gpu_threshold_usec || unexplained_gap_usec > gpu_threshold_usec;
 	if (!hitch) {
 		gpu_ordinary_frames++;
 		gpu_passes_average = gpu_follow(gpu_passes_average, passes_usec, gpu_ordinary_frames);
@@ -1751,6 +1895,7 @@ void FellowHitchSampler::gpu_frame(uint64_t p_frame, uint32_t p_count, const Str
 	record.passes_average_usec = gpu_passes_average;
 	record.gap_usec = gap_usec;
 	record.gap_average_usec = gpu_gap_average;
+	record.cpu_gap_usec = cpu_gap_usec;
 	record.markers = p_count;
 	// The passes longest past their average (a pass not seen in an ordinary frame counts whole).
 	LocalVector<GpuPass> all;
@@ -1791,4 +1936,9 @@ void FellowHitchSampler::gpu_frame(uint64_t p_frame, uint32_t p_count, const Str
 
 uint64_t FellowHitchSampler::get_gpu_hitch_count() {
 	return gpu_hitch_count.load(std::memory_order_relaxed);
+}
+
+void FellowHitchSampler::set_script_stack_hooks(const ScriptStackHooks &p_hooks) {
+	MutexLock lock(script_hooks_mutex);
+	script_hooks = p_hooks;
 }

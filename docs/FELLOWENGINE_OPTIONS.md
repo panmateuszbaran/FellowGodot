@@ -800,8 +800,8 @@ statistics count `hitches` and `hitch_samples`. Changes no frame; elsewhere it d
 The GPU's side (milestone 119, decision 0237; every platform): with the sampler on, the renderer's pass timestamps are
 captured every frame (as with `profiling/pass_timestamps`). A frame whose passes took the GPU longer than the threshold
 (its first timestamp to its last), or whose first timestamp came that long after the previous frame's last (work the
-GPU did outside the frame's passes — a transfer worker's copies, another program — or, with V-Sync, the wait for the
-display), is a GPU hitch: up to 64 are reported after the CPU's, each with when it was recorded, its passes' time and
+GPU did outside the frame's passes — a transfer worker's copies, another program — beyond the CPU's own time between
+recording the two frames, which leaves the GPU idle: the CPU's hitch, not the GPU's), is a GPU hitch: up to 64 are reported after the CPU's, each with when it was recorded, its passes' time and
 their average over ordinary frames, the gap before it and its average, and the six passes longest past their averages.
 FellowEngine's statistics count `gpu_hitches`.
 
@@ -809,6 +809,11 @@ In the editor (milestone 119, decision 0238): the debugger's **FellowEngine Hitc
 happen (when, CPU or GPU, how long, where) with the exit report's text for the one selected; **Record** starts the
 sampler in the running game (and in the next one) at the tab's threshold, without the project setting. In the game, a
 CPU hitch is named on a low-priority thread of its own; the messages are sent by the main thread.
+
+Script frames (milestone 119, decision 0239; GDScript's debug builds: the editor, games run from it, debug templates):
+each sample of a stepping thread also reads its GDScript call levels, and a hitch's report adds the script call path
+and innermost script functions with their lines (`_sleepy_function (res://main.gd:25)`); the editor's list shows the
+innermost one of the hottest path.
 
 ## Simulated GPUs (milestone 49)
 

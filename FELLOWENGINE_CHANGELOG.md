@@ -19,6 +19,9 @@ Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.m
   passes, or the gap before them, exceed the threshold is reported with the passes longest past their averages.
 - The debugger's FellowEngine Hitches tab (decision 0238): a game run from the editor lists its hitches as they happen,
   named, with the exit report's text; Record starts the sampler in a running game.
+- Script frames (decision 0239): in GDScript's debug builds a hitch names the script functions and lines it ran.
+- Frontier Lab (the 4 km open world streamed at 45 m/s) on the RTX with the sampler: no frame step and one GPU frame
+  over 16.7 ms in three 90-second flights (3.9 ms frames, p99.9 6.0 ms).
 
 ## Milestone 118 — compressed uploads staged as they are copied; cloth edges kept apart (2026-11-15)
 

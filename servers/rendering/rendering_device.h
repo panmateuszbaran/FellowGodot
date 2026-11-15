@@ -1919,6 +1919,10 @@ private:
 		TightLocalVector<uint64_t> timestamp_result_values;
 		uint32_t timestamp_result_count = 0;
 		uint64_t index = 0;
+		// FellowEngine (decision 0237): the render thread's fence wait when this slot's frame began, and that of the
+		// frame whose timestamps were last read back from it.
+		uint64_t fellow_begin_wait_usec = 0;
+		uint64_t fellow_result_begin_wait_usec = 0;
 	};
 
 	uint32_t max_timestamp_query_elements = 0;
@@ -2024,6 +2028,7 @@ public:
 	void capture_timestamp(const String &p_name);
 	uint32_t get_captured_timestamps_count() const;
 	uint64_t get_captured_timestamps_frame() const;
+	uint64_t fellow_get_captured_begin_wait_usec() const; // FellowEngine: the read-back frame's fence wait at its start
 	uint64_t get_captured_timestamp_gpu_time(uint32_t p_index) const;
 	uint64_t get_captured_timestamp_cpu_time(uint32_t p_index) const;
 	String get_captured_timestamp_name(uint32_t p_index) const;

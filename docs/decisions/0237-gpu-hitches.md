@@ -2,7 +2,8 @@
 
 Status: **KEEP** (with `rendering/fellow/debug/hitch_sampler`, off by default: a diagnostic) · Branch `fellow/geometry` ·
 Code: `servers/rendering/fellow_hitch_sampler.{h,cpp}` (`gpu_wanted()`, `gpu_frame()`, `gpu_report()`),
-`servers/rendering/rendering_server_default.cpp` (`_draw()`) · Checks: a lavapipe scene with a long GPU frame every 40
+`servers/rendering/rendering_server_default.cpp` (`_draw()`), `servers/rendering/rendering_device.{h,cpp}`
+(`fellow_get_captured_begin_wait_usec()`) · Checks: a lavapipe scene with a long GPU frame every 40
 frames; the laptop's Sponza streamed (job f457).
 
 ## Problem
@@ -19,7 +20,10 @@ With the sampler on, the renderer's pass timestamps (`RENDER_TIMESTAMP`, as `pro
 are captured every frame and handed to the sampler as they are read back. A pass's time is from its timestamp to the
 next (summed when a name recurs in a frame); a frame's, from its first timestamp to its last; and the gap, from the
 previous frame's last timestamp to its first. Ordinary frames keep running averages (about the last 32) of each. A
-frame whose passes or gap exceed the threshold is a GPU hitch: up to 64 are reported at exit after the CPU's, with when
+gap is the GPU's only beyond what the CPU explains: the CPU's own time between recording the previous frame's last
+timestamp and this one's first, less the render thread's wait for the GPU's fence when this frame began (RenderingDevice
+keeps it with the frame's timestamps) — a frame the CPU recorded late leaves the GPU idle, which is the CPU's hitch. A
+frame whose passes, or the unexplained part of its gap, exceed the threshold is a GPU hitch: up to 64 are reported at exit after the CPU's, with when
 the frame was recorded (on the CPU sampler's clock), its passes' time and gap against their averages, and the six passes
 longest past their averages. FellowEngine's statistics count `gpu_hitches`. On every platform; with V-Sync the gap
 includes the wait for the display.
@@ -31,10 +35,25 @@ every 40th frame: 4 GPU hitches, each "Render Opaque Pass" 188-259 ms against it
 1-4 ms (the release template; the editor build alike, plus the first frame's 1 s of pipelines). A box lit by the sun, with a
 compute dispatch of 20 000 iterations an invocation recorded on the render thread before every 40th frame's draw (outside
 its passes): 4 GPU hitches whose passes took 4.4-9.7 ms (their average 4.9-5.5) and which began 2.6-2.8 s after the previous frame's last
-timestamp. The CPU's report alongside: the main thread's steps of the same frames waiting for the GPU.
+timestamp, against 0.7-11 ms of the CPU's own time. A 250 ms sleep in a script every 60 frames: its frames' 247 ms gaps
+explained by the CPU (259 ms), no GPU hitch (before the CPU's share was taken off, each was one).
 
-The RTX, job f458 (Sponza streamed, the sampler on at 16.7 ms against the defaults): below.
+The RTX, job f458 (the release template at 5ea9de57e3, before the CPU's share of a gap was taken off; Sponza streamed at
+1920 × 1080, eight alternating runs each, 7 683 frames timed a run):
+
+| | frame (run means) | GPU frame | p99 (pooled) | longest frame measured |
+|---|---:|---:|---:|---:|
+| the defaults | 5.97-6.57 ms | 5.90-6.49 ms | 8.72 ms | 14.5 ms |
+| the sampler on (CPU and GPU) | 5.99-6.72 ms | 5.92-6.64 ms | 8.82 ms | 14.0 ms |
+
+The sampler's GPU hitches, 2-6 a run, all but one in the run's first 3.3 s (the level loading, the camera's first
+moves): frames whose shadow pass took 4.4-9.0 ms against 0.5-2.5, and gaps of 17-52 ms while the streamer's first loads
+and pipelines were being made (some of them the CPU's: this template did not yet take its share off). The one later (run 7, 15.4 s in, as the measurement began): passes of 19.1 ms
+against 6.7, the main thread waiting 21.4 ms for its fence meanwhile, the time between "Prepare Depth for SSAO/SSIL"
+(13.7 ms) and the volumetric fog — where the asynchronous compute queue's work overlaps the main queue's, so that a
+pass's time there is the queues' together. No frame over 14.5 ms in the measured flythroughs of either lane.
 
 ## Decision
 
-Keep, with the sampler: a long GPU frame's passes, or the work before them, named.
+Keep, with the sampler: a long GPU frame's passes, or the work before them, named, at no measurable cost (the runs
+overlap). With asynchronous compute on, a pass next to the asynchronous queue's work can take the other queue's time.

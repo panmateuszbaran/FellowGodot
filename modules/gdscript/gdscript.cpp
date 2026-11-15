@@ -56,6 +56,7 @@
 #include "core/io/file_access.h"
 #include "scene/resources/packed_scene.h"
 #include "scene/scene_string_names.h"
+#include "servers/rendering/fellow_hitch_sampler.h"
 
 #ifdef TOOLS_ENABLED
 #include "core/extension/gdextension_manager.h"
@@ -2154,7 +2155,42 @@ void GDScriptLanguage::remove_named_global_constant(const StringName &p_name) {
 	named_globals.erase(p_name);
 }
 
+// FellowEngine (milestone 119, decision 0239): the hitch sampler's view of the call levels. Debug builds only: they keep
+// the call stack and the list of functions that tells a live function from a freed one.
+bool GDScriptLanguage::fellow_describe_function(void *p_function, String &r_name) {
+#ifdef DEBUG_ENABLED
+	GDScriptLanguage *language = get_singleton();
+	if (!language) {
+		return false;
+	}
+	MutexLock lock(language->mutex);
+	for (SelfList<GDScriptFunction> *e = language->function_list.first(); e; e = e->next()) {
+		if ((void *)e->self() == p_function) {
+			r_name = String(e->self()->source) + "::" + String(e->self()->name);
+			return true;
+		}
+	}
+#endif
+	return false;
+}
+
+void GDScriptLanguage::fellow_register_hitch_hooks(bool p_register) {
+#ifdef DEBUG_ENABLED
+	FellowHitchSampler::ScriptStackHooks hooks;
+	if (p_register) {
+		hooks.current_head_slot = &GDScriptLanguage::fellow_call_stack_slot;
+		hooks.level_size = sizeof(CallLevel);
+		hooks.prev_offset = offsetof(CallLevel, prev);
+		hooks.function_offset = offsetof(CallLevel, function);
+		hooks.line_offset = offsetof(CallLevel, line);
+		hooks.describe = &GDScriptLanguage::fellow_describe_function;
+	}
+	FellowHitchSampler::set_script_stack_hooks(hooks);
+#endif
+}
+
 void GDScriptLanguage::init() {
+	fellow_register_hitch_hooks(true); // FellowEngine, decision 0239
 	//populate global constants
 	int gcc = CoreConstants::get_global_constant_count();
 	for (int i = 0; i < gcc; i++) {
@@ -2240,6 +2276,7 @@ void GDScriptLanguage::finish() {
 		return;
 	}
 	finishing = true;
+	fellow_register_hitch_hooks(false); // FellowEngine: before any lock is taken (the sampler may be naming a function)
 
 	// Clear the cache before parsing the script_list
 	GDScriptCache::clear();
