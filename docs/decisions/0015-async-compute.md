@@ -1,6 +1,6 @@
 # 0015 — Async compute: screen-space effects on a second queue
 
-Status: **KEEP**, on by default on NVIDIA GPUs from `fellow71` (`fellow38`-`fellow40`; an option, off, until milestone 5) · Branch `fellow/geometry` · Setting `rendering/fellow/frame/async_compute`
+Status: **KEEP** as an option, **off by default since milestone 120** (decision 0241: rare 13-18 ms stalls at the join on NVIDIA's Windows driver); on by default on NVIDIA GPUs from `fellow71` to milestone 119 (`fellow38`-`fellow40`; an option, off, until milestone 5) · Branch `fellow/geometry` · Setting `rendering/fellow/frame/async_compute`
 (start-up only: 0 off, 1 on, 2 NVIDIA GPUs, the default) · Code: `rendering_device.{h,cpp}` (`fellow_async_compute_begin/end/join`),
 `rendering_device_graph.{h,cpp}` (conflict tracking), `drivers/vulkan/rendering_device_driver_vulkan.cpp` (second
 queue of the family), `forward_clustered/render_forward_clustered.{h,cpp}` (`_pre_opaque_render`), `fellow_settings.*`.

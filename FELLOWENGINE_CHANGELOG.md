@@ -9,6 +9,17 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 120 — asynchronous compute off by default; the driver's video memory budget (2026-11-15)
+
+- `rendering/fellow/frame/async_compute` off by default (decision 0241; it was on for NVIDIA GPUs): measured again on
+  four scenes with the passes timed by queue — 1.5-3.7 % of the GPU's time in Bistro and Frontier Lab, none in Sponza,
+  and about once in two to five minutes the main queue waiting 13-18 ms at its join (a missed frame at 60 Hz; Sponza 8
+  in 30 minutes on, none in 15 off).
+- The operating system's video memory budget and the process's usage read from the driver every frame
+  (`VK_EXT_memory_budget`, decision 0240): FellowEngine's statistics, Performance monitors; `streaming/texture_budget_auto`
+  (off) makes the streamed textures' budget follow it.
+- The hitch sampler's GPU hitches say when the asynchronous part began into the frame and how long it took.
+
 ## Milestone 119 — downloads returned whole; the GPU's hitches, scripts' frames and hitches in the editor's debugger (2026-11-15)
 
 - `RenderingDevice.buffer_get_data_async()` and `texture_get_data_async()` return every byte with FellowEngine on

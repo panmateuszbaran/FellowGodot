@@ -552,7 +552,7 @@ func _run_perf() -> void:
 	# every 30 frames along the path (the stats dictionary is not free), with the memory statistics.
 	var fellow_mem_peak := {}
 	var mem_peak_sampled := {}
-	var fellow_mem_keys := ["memory_device_local_bytes", "memory_total_bytes", "transfer_staging_bytes", "transfer_workers"]
+	var fellow_mem_keys := ["memory_device_local_bytes", "memory_total_bytes", "transfer_staging_bytes", "transfer_workers", "memory_budget_bytes", "memory_budget_usage_bytes"]
 	var has_extra: bool = scene.has_method("sample_extra")
 	var extra := {}
 	var fellow_frames := {}

@@ -147,6 +147,11 @@ struct GpuHitch {
 	double gap_usec = -1.0; // after the previous frame's last timestamp (-1: that frame had none)
 	double gap_average_usec = 0.0;
 	double cpu_gap_usec = 0.0; // the CPU's time from recording the previous frame's last timestamp to this one's first
+	// The asynchronous compute queue's part (-1: none): its first timestamp from the frame's earliest, and its span.
+	double async_start_usec = -1.0;
+	double async_span_usec = 0.0;
+	double async_start_average_usec = 0.0;
+	double async_span_average_usec = 0.0;
 	uint32_t markers = 0;
 	LocalVector<GpuPass> passes; // the longest past their average
 };
@@ -157,6 +162,9 @@ Mutex gpu_mutex;
 double gpu_threshold_usec = 33300.0;
 HashMap<String, double> gpu_pass_average; // a pass's time in the ordinary frames (summed within a frame)
 double gpu_passes_average = 0.0;
+double gpu_async_start_average = 0.0; // the asynchronous part's start into the frame, and its span (ordinary frames)
+double gpu_async_span_average = 0.0;
+uint64_t gpu_async_frames = 0;
 double gpu_gap_average = 0.0;
 uint64_t gpu_frames = 0;
 uint64_t gpu_ordinary_frames = 0;
@@ -181,8 +189,9 @@ String gpu_hitch_text(uint32_t p_number, const GpuHitch &hitch) {
 		const GpuPass &pass = hitch.passes[i];
 		passes += vformat("\n    \"%s\" %.2f ms (%s)", pass.name, pass.usec / 1000.0, pass.average_usec >= 0.0 ? vformat("average %.2f", pass.average_usec / 1000.0) : String("not in an ordinary frame"));
 	}
-	return vformat("FellowEngine GPU hitch %d: recorded %.2f s in (read back at drawn frame %d): its passes %.1f ms (average %.2f), %d timestamps; it %s. The passes longest past their averages:%s",
-			p_number, hitch.at_sec, (int64_t)hitch.frame, hitch.passes_usec / 1000.0, hitch.passes_average_usec / 1000.0, hitch.markers, gap, passes);
+	const String async = hitch.async_start_usec >= 0.0 ? vformat(" The asynchronous compute queue's part began %.1f ms into the frame (average %.2f) and took %.1f ms (average %.2f).", hitch.async_start_usec / 1000.0, hitch.async_start_average_usec / 1000.0, hitch.async_span_usec / 1000.0, hitch.async_span_average_usec / 1000.0) : String();
+	return vformat("FellowEngine GPU hitch %d: recorded %.2f s in (read back at drawn frame %d): its passes %.1f ms (average %.2f), %d timestamps; it %s.%s The passes longest past their averages:%s",
+			p_number, hitch.at_sec, (int64_t)hitch.frame, hitch.passes_usec / 1000.0, hitch.passes_average_usec / 1000.0, hitch.markers, gap, async, passes);
 }
 
 void gpu_report() {
@@ -1861,6 +1870,22 @@ void FellowHitchSampler::gpu_frame(uint64_t p_frame, uint32_t p_count, const Str
 		last_nsec = MAX(last_nsec, p_gpu_nsec[i]);
 	}
 	const double passes_usec = double(last_nsec - first_nsec) / 1000.0;
+	double async_start_usec = -1.0;
+	double async_span_usec = 0.0;
+	if (p_async) {
+		uint64_t async_first = UINT64_MAX;
+		uint64_t async_last = 0;
+		for (uint32_t i = 0; i < p_count; i++) {
+			if (p_async[i]) {
+				async_first = MIN(async_first, p_gpu_nsec[i]);
+				async_last = MAX(async_last, p_gpu_nsec[i]);
+			}
+		}
+		if (async_first != UINT64_MAX) {
+			async_start_usec = double(async_first - first_nsec) / 1000.0;
+			async_span_usec = double(async_last - async_first) / 1000.0;
+		}
+	}
 
 	MutexLock lock(gpu_mutex);
 	gpu_frames++;
@@ -1885,6 +1910,11 @@ void FellowHitchSampler::gpu_frame(uint64_t p_frame, uint32_t p_count, const Str
 	if (!hitch) {
 		gpu_ordinary_frames++;
 		gpu_passes_average = gpu_follow(gpu_passes_average, passes_usec, gpu_ordinary_frames);
+		if (async_start_usec >= 0.0) {
+			gpu_async_frames++;
+			gpu_async_start_average = gpu_follow(gpu_async_start_average, async_start_usec, gpu_async_frames);
+			gpu_async_span_average = gpu_follow(gpu_async_span_average, async_span_usec, gpu_async_frames);
+		}
 		if (gap_usec >= 0.0) {
 			gpu_gap_frames++;
 			gpu_gap_average = gpu_follow(gpu_gap_average, gap_usec, gpu_gap_frames);
@@ -1912,6 +1942,10 @@ void FellowHitchSampler::gpu_frame(uint64_t p_frame, uint32_t p_count, const Str
 	record.gap_usec = gap_usec;
 	record.gap_average_usec = gpu_gap_average;
 	record.cpu_gap_usec = cpu_gap_usec;
+	record.async_start_usec = async_start_usec;
+	record.async_span_usec = async_span_usec;
+	record.async_start_average_usec = gpu_async_start_average;
+	record.async_span_average_usec = gpu_async_span_average;
 	record.markers = p_count;
 	// The passes longest past their average (a pass not seen in an ordinary frame counts whole).
 	LocalVector<GpuPass> all;

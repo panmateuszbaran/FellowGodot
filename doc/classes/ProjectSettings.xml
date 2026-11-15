@@ -3232,8 +3232,8 @@
 		<member name="rendering/fellow/fluid/gas_sparse_margin" type="int" setter="" getter="" default="0">
 			For measurements: the sparse simulation's margin in bricks (0: each node's own).
 		</member>
-		<member name="rendering/fellow/frame/async_compute" type="int" setter="" getter="" default="2">
-			Async compute (SSAO, SSIL, SSR on a second queue beside shadows, clusters and fog): 0 off, 1 on, 2 on NVIDIA GPUs. Read when the device is created (project.godot or override.cfg only). Decision 0015.
+		<member name="rendering/fellow/frame/async_compute" type="int" setter="" getter="" default="0">
+			Async compute (SSAO, SSIL, SSR on a second queue beside shadows, clusters and fog): 0 off (the default since milestone 120), 1 on, 2 on NVIDIA GPUs. On an RTX under Windows it saves 1-4 % of the GPU's time in Bistro and Frontier Lab, none in Sponza, and the main queue waits 13-18 ms where it joins the asynchronous part about once in two to five minutes (a missed frame at 60 Hz): for throughput where frame pacing matters less, with autotune deciding per scene. Read when the device is created (project.godot or override.cfg only). Decisions 0015, 0241.
 		</member>
 		<member name="rendering/fellow/frame/async_compute_family" type="int" setter="" getter="" default="0">
 			Diagnostics: 0 a dedicated compute queue family, 1 a second queue of the main family, 2 the main queue itself (the same submissions, nothing concurrent).

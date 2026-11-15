@@ -75,6 +75,9 @@ where decision 0015's asynchronous part runs beside the main queue. Both lanes h
 frame was 6.8 ms (a fence late without the GPU's passes: the operating system's or another program's work), and every
 loop of the flight a 13 ms GPU frame where the camera's path jumps back to its start.
 
+Milestone 120: a GPU hitch also says when the asynchronous compute queue's part began into the frame and how long it
+took, against their averages (decision 0241's question: late or long).
+
 ## Decision
 
 Keep, with the sampler: a long GPU frame's passes, or the work before them, named, at no measurable cost (the runs

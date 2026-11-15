@@ -392,7 +392,9 @@ void Fellow::register_settings() {
 	GLOBAL_DEF_RST("rendering/fellow/frame/separate_present_queue", false);
 	// 0 off, 1 on, 2 on NVIDIA GPUs (decision 0015; read when the device is created, so only a value set in project.godot or
 	// override.cfg counts, and 2 when there is none).
-	GLOBAL_DEF_RST(PropertyInfo(Variant::INT, "rendering/fellow/frame/async_compute", PROPERTY_HINT_ENUM, "Off,On,NVIDIA GPUs"), 2);
+	// Off by default since milestone 120 (decision 0241): on NVIDIA's Windows driver the main queue waits 13-18 ms at the
+	// join about once in two to five minutes, for 1-4 % of GPU time in three of four scenes.
+	GLOBAL_DEF_RST(PropertyInfo(Variant::INT, "rendering/fellow/frame/async_compute", PROPERTY_HINT_ENUM, "Off,On,NVIDIA GPUs"), 0);
 	// The pipeline cache file is ignored at start-up (and replaced by the next save) when larger than this: stock lets
 	// it grow without bound, and at 2 GiB its checksum's length overflows and the save crashes (decision 0050).
 	GLOBAL_DEF_RST(PropertyInfo(Variant::INT, "rendering/fellow/frame/pipeline_cache_max_mb", PROPERTY_HINT_RANGE, "64,2000,1,suffix:MiB"), 1024);
