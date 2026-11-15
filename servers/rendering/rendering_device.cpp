@@ -1350,6 +1350,14 @@ Vector<uint8_t> RenderingDevice::buffer_get_data(RID p_buffer, uint32_t p_offset
 	return buffer_data;
 }
 
+// FellowEngine (milestone 119, decision 0236): asynchronous downloads returned whole. texture_get_data_async() copies a
+// mip of a texture that is not square whose height (or width) halves to zero as one row (column) of blocks; stock's copy
+// back from the staging took that mip as zero rows and left its bytes as they were. And a download (of a texture or a
+// buffer) that fills the download staging ring stalls for every frame and reuses the ring: stock dropped the parts copied
+// before the stall (their bytes left as they were, a buffer's later parts written from its start); they are kept as a
+// part request read back by that stall. Read once when the device is created (rendering/fellow/enabled).
+static bool fellow_download_fixes = false;
+
 Error RenderingDevice::buffer_get_data_async(RID p_buffer, const Callable &p_callback, uint32_t p_offset, uint32_t p_size) {
 	ERR_RENDER_THREAD_GUARD_V(ERR_UNAVAILABLE);
 
@@ -1394,6 +1402,13 @@ Error RenderingDevice::buffer_get_data_async(RID p_buffer, const Callable &p_cal
 			for (uint32_t i = 0; i < get_data_request.frame_local_count; i++) {
 				uint32_t local_index = get_data_request.frame_local_index + i;
 				draw_graph.add_buffer_get_data(buffer->driver_id, buffer->draw_tracker, frames[frame].download_buffer_staging_buffers[local_index], frames[frame].download_buffer_copy_regions[local_index]);
+			}
+			if (fellow_download_fixes) { // FellowEngine (decision 0236): the parts so far read back by the stall.
+				BufferGetDataRequest part = get_data_request;
+				part.fellow_more = true;
+				frames[frame].download_buffer_get_data_requests.push_back(part);
+				get_data_request.fellow_continued = true;
+				get_data_request.fellow_offset = submit_from;
 			}
 		}
 
@@ -3050,6 +3065,12 @@ Error RenderingDevice::texture_get_data_async(RID p_texture, uint32_t p_layer, c
 						for (uint32_t j = 0; j < get_data_request.frame_local_count; j++) {
 							uint32_t local_index = get_data_request.frame_local_index + j;
 							draw_graph.add_texture_get_data(tex->driver_id, tex->draw_tracker, frames[frame].download_texture_staging_buffers[local_index], frames[frame].download_buffer_texture_copy_regions[local_index]);
+						}
+						if (fellow_download_fixes) { // FellowEngine (decision 0236): the parts so far read back by the stall.
+							TextureGetDataRequest part = get_data_request;
+							part.fellow_more = true;
+							frames[frame].download_texture_get_data_requests.push_back(part);
+							get_data_request.fellow_continued = true;
 						}
 					}
 
@@ -9337,19 +9358,30 @@ void RenderingDevice::_stall_for_frame(uint32_t p_frame) {
 			GodotProfileZoneGrouped(_profile_zone, "flush asynchronous buffer downloads");
 			for (uint32_t i = 0; i < frames[p_frame].download_buffer_get_data_requests.size(); i++) {
 				const BufferGetDataRequest &request = frames[p_frame].download_buffer_get_data_requests[i];
-				packed_byte_array.resize(request.size);
+				// FellowEngine (decision 0236): a split download's parts gathered in fellow_download_parts.
+				const bool fellow_parts = request.fellow_more || request.fellow_continued;
+				PackedByteArray &result = fellow_parts ? fellow_download_parts : packed_byte_array;
+				if (!request.fellow_continued) {
+					result.resize(request.size);
+				}
 
-				uint32_t array_offset = 0;
+				uint32_t array_offset = request.fellow_offset;
+				uint8_t *result_ptr = result.ptrw();
 				for (uint32_t j = 0; j < request.frame_local_count; j++) {
 					uint32_t local_index = request.frame_local_index + j;
 					const RDD::BufferCopyRegion &region = frames[p_frame].download_buffer_copy_regions[local_index];
 					uint8_t *buffer_data = driver->buffer_map(frames[p_frame].download_buffer_staging_buffers[local_index]);
-					memcpy(&packed_byte_array.write[array_offset], &buffer_data[region.dst_offset], region.size);
+					memcpy(&result_ptr[array_offset], &buffer_data[region.dst_offset], region.size);
 					driver->buffer_unmap(frames[p_frame].download_buffer_staging_buffers[local_index]);
 					array_offset += region.size;
 				}
 
-				request.callback.call(packed_byte_array);
+				if (!request.fellow_more) {
+					request.callback.call(result);
+					if (fellow_parts) {
+						fellow_download_parts = PackedByteArray();
+					}
+				}
 			}
 
 			frames[p_frame].download_buffer_staging_buffers.clear();
@@ -9363,7 +9395,12 @@ void RenderingDevice::_stall_for_frame(uint32_t p_frame) {
 			for (uint32_t i = 0; i < frames[p_frame].download_texture_get_data_requests.size(); i++) {
 				const TextureGetDataRequest &request = frames[p_frame].download_texture_get_data_requests[i];
 				uint32_t texture_size = get_image_format_required_size(request.format, request.width, request.height, request.depth, request.mipmaps);
-				packed_byte_array.resize(texture_size);
+				// FellowEngine (decision 0236): a split download's parts gathered in fellow_download_parts.
+				const bool fellow_parts = request.fellow_more || request.fellow_continued;
+				PackedByteArray &result = fellow_parts ? fellow_download_parts : packed_byte_array;
+				if (!request.fellow_continued) {
+					result.resize(texture_size);
+				}
 
 				// Find the block size of the texture's format.
 				uint32_t block_w = 0;
@@ -9379,12 +9416,16 @@ void RenderingDevice::_stall_for_frame(uint32_t p_frame) {
 					const RDD::BufferTextureCopyRegion &region = frames[p_frame].download_buffer_texture_copy_regions[local_index];
 					uint32_t w = STEPIFY(request.width >> region.texture_subresource.mipmap, block_w);
 					uint32_t h = STEPIFY(request.height >> region.texture_subresource.mipmap, block_h);
+					if (fellow_download_fixes) { // FellowEngine: a mip's side is at least a pixel, as in texture_get_data_async().
+						w = STEPIFY(MAX(1u, request.width >> region.texture_subresource.mipmap), block_w);
+						h = STEPIFY(MAX(1u, request.height >> region.texture_subresource.mipmap), block_h);
+					}
 					uint32_t region_w = MIN(region_size, w - region.texture_offset.x);
 					uint32_t region_h = MIN(region_size, h - region.texture_offset.y);
 
 					uint8_t *buffer_data = driver->buffer_map(frames[p_frame].download_texture_staging_buffers[local_index]);
 					const uint8_t *read_ptr = buffer_data + region.buffer_offset;
-					uint8_t *write_ptr = packed_byte_array.ptrw() + frames[p_frame].download_texture_mipmap_offsets[local_index];
+					uint8_t *write_ptr = result.ptrw() + frames[p_frame].download_texture_mipmap_offsets[local_index];
 					uint32_t unit_size = pixel_size;
 					if (block_w != 1 || block_h != 1) {
 						unit_size = block_size;
@@ -9400,7 +9441,12 @@ void RenderingDevice::_stall_for_frame(uint32_t p_frame) {
 					driver->buffer_unmap(frames[p_frame].download_texture_staging_buffers[local_index]);
 				}
 
-				request.callback.call(packed_byte_array);
+				if (!request.fellow_more) {
+					request.callback.call(result);
+					if (fellow_parts) {
+						fellow_download_parts = PackedByteArray();
+					}
+				}
 			}
 
 			GodotProfileZoneGrouped(_profile_zone, "clear buffers");
@@ -9607,6 +9653,7 @@ Error RenderingDevice::initialize(RenderingContextDriver *p_context, DisplayServ
 	transfer_worker_pool_max_size = OS::get_singleton()->get_processor_count();
 	// Decision 0234. Read with defaults: the device is made before the RenderingServer registers FellowEngine's settings.
 	fellow_tight_staging = bool(ProjectSettings::get_singleton()->get_setting("rendering/fellow/enabled", true)) && bool(ProjectSettings::get_singleton()->get_setting("rendering/fellow/frame/transfer_tight_staging", true));
+	fellow_download_fixes = bool(ProjectSettings::get_singleton()->get_setting("rendering/fellow/enabled", true)); // decision 0236
 
 	// Pre-allocate to avoid locking a mutex when indexing into them.
 	transfer_worker_pool.resize(transfer_worker_pool_max_size);

@@ -30,6 +30,8 @@
 
 #include "fellow_editor_plugin.h"
 
+#include "fellow_hitch_debugger.h"
+
 #include "core/io/image.h"
 #include "core/io/resource_importer.h"
 #include "core/io/resource_saver.h"
@@ -1190,12 +1192,25 @@ void FellowEditorPlugin::_notification(int p_what) {
 		add_control_to_container(CONTAINER_SPATIAL_EDITOR_MENU, add_menu);
 		add_control_to_container(CONTAINER_SPATIAL_EDITOR_MENU, animate_button);
 		EditorSettings::get_singleton()->connect("settings_changed", callable_mp(this, &FellowEditorPlugin::_editor_settings_changed));
+		// The debugger's sessions are its tab container's tabs once it is in the tree: added after this frame.
+		callable_mp(this, &FellowEditorPlugin::_add_hitch_debugger).call_deferred();
 	} else if (p_what == NOTIFICATION_EXIT_TREE) {
+		if (hitch_debugger.is_valid()) {
+			remove_debugger_plugin(hitch_debugger);
+			hitch_debugger.unref();
+		}
 		remove_tool_menu_item(TTR("Split into Streaming Cells (FellowEngine)..."));
 		remove_tool_menu_item(TTR("Bake Streaming Proxies (FellowEngine)..."));
 		remove_control_from_container(CONTAINER_SPATIAL_EDITOR_MENU, animate_button);
 		remove_control_from_container(CONTAINER_SPATIAL_EDITOR_MENU, add_menu);
 		EditorSettings::get_singleton()->disconnect("settings_changed", callable_mp(this, &FellowEditorPlugin::_editor_settings_changed));
+	}
+}
+
+void FellowEditorPlugin::_add_hitch_debugger() {
+	if (hitch_debugger.is_null() && is_inside_tree()) {
+		hitch_debugger = Ref<EditorDebuggerPlugin>(memnew(FellowHitchDebuggerPlugin));
+		add_debugger_plugin(hitch_debugger);
 	}
 }
 

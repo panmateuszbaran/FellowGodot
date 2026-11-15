@@ -32,6 +32,8 @@
 
 #include "core/typedefs.h"
 
+class String;
+
 // FellowEngine hitch sampler (milestone 117, docs/decisions/0231-hitch-sampler.md).
 //
 // With rendering/fellow/debug/hitch_sampler on, a watchdog thread follows the main thread's frame steps
@@ -61,5 +63,21 @@ void finish();
 // FellowEngine's statistics: the steps reported as hitches, and the stepping threads' stacks sampled.
 uint64_t get_hitch_count();
 uint64_t get_sample_count();
+
+// The GPU's side (milestone 119, docs/decisions/0237-gpu-hitches.md), on every platform: with the sampler on, the
+// renderer's pass timestamps are captured every frame (as with rendering/fellow/profiling/pass_timestamps). A frame
+// whose passes took the GPU longer than the threshold from the first timestamp to the last, or whose first timestamp came
+// that long after the previous frame's last, is a GPU hitch: kept (up to 64) with the passes longest past their average
+// and reported with the CPU's hitches.
+bool gpu_wanted(); // the sampler is on: capture the timestamps
+// A frame's timestamps as RenderingServer reads them back: names, GPU times in nanoseconds, the CPU's time (ticks in
+// microseconds) when the first was recorded; p_frame the frame number RenderingDevice gave them.
+void gpu_frame(uint64_t p_frame, uint32_t p_count, const String *p_names, const uint64_t *p_gpu_nsec, uint64_t p_cpu_usec);
+uint64_t get_gpu_hitch_count();
+
+// The editor's debugger (milestone 119, docs/decisions/0238-hitches-in-the-debugger.md): when the game runs from the
+// editor, each hitch is named on a thread of its own as it happens and sent to the debugger's FellowEngine Hitches tab
+// ("fellow_hitch:cpu", "fellow_hitch:gpu"); the tab can start the sampler in a running game ("fellow_hitch:start").
+void register_debugger(); // with the debugger active, the "fellow_hitch" message capture (FellowEngine's settings)
 
 } // namespace FellowHitchSampler

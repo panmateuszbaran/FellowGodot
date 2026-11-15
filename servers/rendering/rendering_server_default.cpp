@@ -96,8 +96,9 @@ void RenderingServerDefault::_draw(bool p_swap_buffers, double frame_step) {
 	RSG::rasterizer->begin_frame(frame_step);
 	fellow_lap(Fellow::stats().draw_begin_frame_usec);
 
-	if (Fellow::pass_timestamps()) {
-		// FellowEngine: keep per-pass RENDER_TIMESTAMP markers enabled (only ever forces them on).
+	if (Fellow::pass_timestamps() || FellowHitchSampler::gpu_wanted()) {
+		// FellowEngine: keep per-pass RENDER_TIMESTAMP markers enabled (only ever forces them on); the hitch sampler's GPU
+		// side reads them (decision 0237).
 		RSG::utilities->capturing_timestamps = true;
 	}
 
@@ -206,6 +207,19 @@ void RenderingServerDefault::_draw(bool p_swap_buffers, double frame_step) {
 		}
 
 		frame_profile = new_profile;
+
+		if (FellowHitchSampler::gpu_wanted()) { // FellowEngine: the hitch sampler's GPU side (decision 0237).
+			const uint32_t count = RSG::utilities->get_captured_timestamps_count();
+			LocalVector<String> fellow_names;
+			LocalVector<uint64_t> fellow_gpu;
+			fellow_names.resize(count);
+			fellow_gpu.resize(count);
+			for (uint32_t i = 0; i < count; i++) {
+				fellow_names[i] = RSG::utilities->get_captured_timestamp_name(i);
+				fellow_gpu[i] = RSG::utilities->get_captured_timestamp_gpu_time(i);
+			}
+			FellowHitchSampler::gpu_frame(RSG::utilities->get_captured_timestamps_frame(), count, fellow_names.ptr(), fellow_gpu.ptr(), RSG::utilities->get_captured_timestamp_cpu_time(0));
+		}
 	}
 
 	frame_profile_frame = RSG::utilities->get_captured_timestamps_frame();

@@ -312,6 +312,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/debug/occlusion_stats", false);
 	GLOBAL_DEF("rendering/fellow/debug/hitch_sampler", false); // decision 0231: frame steps over the threshold sampled and reported at exit
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/debug/hitch_sampler_ms", PROPERTY_HINT_RANGE, "1,1000,0.1,suffix:ms"), 33.3);
+	FellowHitchSampler::register_debugger(); // decision 0238: the editor's debugger can start it
 	GLOBAL_DEF("rendering/fellow/debug/multimesh_stats", false);
 	// Diagnostics: experiments on the compiled scene shaders (e.g. their register counts with FELLOW_PIPELINE_STATS), bits
 	// read at start-up: 1 FELLOW_EXP_DONT_UNROLL (loops bounded by specialization constants not unrolled), 2
@@ -629,6 +630,7 @@ Dictionary Fellow::get_stats_dictionary() {
 	d["transfer_frame_large_bytes"] = s.transfer_frame_large_bytes.get();
 	d["hitches"] = FellowHitchSampler::get_hitch_count(); // decision 0231
 	d["hitch_samples"] = FellowHitchSampler::get_sample_count();
+	d["gpu_hitches"] = FellowHitchSampler::get_gpu_hitch_count(); // decision 0237
 	// Milestone 117: the driver's device memory allocations and frees (Vulkan's vkAllocateMemory(), vkFreeMemory()).
 	d["memory_allocations"] = FellowMemoryCounters::allocations.get();
 	d["memory_allocation_bytes"] = FellowMemoryCounters::allocation_bytes.get();

@@ -32,6 +32,7 @@
 
 #include "fellow_editor_plugin.h"
 #include "fellow_editor_tools.h"
+#include "fellow_hitch_debugger.h"
 #include "fellow_terrain_editor.h"
 
 #include "core/object/class_db.h"
@@ -43,6 +44,7 @@ void initialize_fellow_editor_module(ModuleInitializationLevel p_level) {
 		GDREGISTER_INTERNAL_CLASS(FellowBVHImporter);
 		GDREGISTER_INTERNAL_CLASS(FellowEditorPlugin);
 		GDREGISTER_INTERNAL_CLASS(FellowTerrainEditorPlugin);
+		GDREGISTER_INTERNAL_CLASS(FellowHitchDebuggerPlugin); // milestone 119, decision 0238
 		GDREGISTER_ABSTRACT_CLASS(FellowEditorTools);
 		EditorPlugins::add_by_type<FellowEditorPlugin>();
 		EditorPlugins::add_by_type<FellowTerrainEditorPlugin>();

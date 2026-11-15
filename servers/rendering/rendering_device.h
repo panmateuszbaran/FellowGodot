@@ -217,6 +217,10 @@ private:
 		uint32_t frame_local_count = 0;
 		Callable callback;
 		uint32_t size = 0;
+		// FellowEngine (milestone 119): a part of a download split by a stall of the staging ring.
+		uint32_t fellow_offset = 0; // where this part's bytes start in the result
+		bool fellow_more = false; // parts follow: the bytes kept in fellow_download_parts, no callback yet
+		bool fellow_continued = false; // parts preceded: fellow_download_parts holds them
 	};
 
 	Error _buffer_update(Buffer *p_buffer, RID p_buffer_id, uint32_t p_offset, uint32_t p_size, const void *p_data);
@@ -435,7 +439,11 @@ public:
 		uint32_t depth = 0;
 		uint32_t mipmaps = 0;
 		RDD::DataFormat format = RDD::DATA_FORMAT_MAX;
+		// FellowEngine (milestone 119): see BufferGetDataRequest.
+		bool fellow_more = false;
+		bool fellow_continued = false;
 	};
+	PackedByteArray fellow_download_parts; // FellowEngine: a split download's bytes so far (render thread)
 
 public:
 	struct TextureView {

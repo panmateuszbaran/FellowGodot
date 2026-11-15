@@ -127,6 +127,7 @@ class FellowEditorPlugin : public EditorPlugin {
 
 	Ref<FellowGizmoPlugin> gizmo_plugin;
 	Ref<FellowBVHImporter> bvh_importer;
+	Ref<EditorDebuggerPlugin> hitch_debugger; // milestone 119: the debugger's FellowEngine Hitches tab
 	ConfirmationDialog *split_dialog = nullptr;
 	SpinBox *split_cell_size = nullptr;
 	LineEdit *split_directory = nullptr;
@@ -174,6 +175,7 @@ private:
 	void _animate_toggled(bool p_animate);
 	void _editor_settings_changed();
 	void _update_animate_icon();
+	void _add_hitch_debugger(); // milestone 119, decision 0238
 
 protected:
 	void _notification(int p_what);

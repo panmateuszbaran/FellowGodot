@@ -9,6 +9,17 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 119 — downloads returned whole; the GPU's hitches, and hitches in the editor's debugger (2026-11-15)
+
+- `RenderingDevice.buffer_get_data_async()` and `texture_get_data_async()` return every byte with FellowEngine on
+  (decision 0236): stock left a texture that is not square without its last mips, and dropped the parts of a download
+  copied before the download staging ring's wait (a 144 MiB buffer came back 89 % wrong). `bench/readback_check.gd`
+  checks uploads and downloads byte for byte.
+- The hitch sampler's GPU side (decision 0237): the renderer's pass timestamps captured every frame; a GPU frame whose
+  passes, or the gap before them, exceed the threshold is reported with the passes longest past their averages.
+- The debugger's FellowEngine Hitches tab (decision 0238): a game run from the editor lists its hitches as they happen,
+  named, with the exit report's text; Record starts the sampler in a running game.
+
 ## Milestone 118 — compressed uploads staged as they are copied; cloth edges kept apart (2026-11-15)
 
 - `rendering/fellow/frame/transfer_tight_staging` (decision 0234, on): a block-compressed texture's upload reserves

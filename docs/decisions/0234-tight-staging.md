@@ -2,7 +2,8 @@
 
 Status: **KEEP**, on by default (the same copies and pictures; host memory) · Branch `fellow/geometry` · Setting
 `rendering/fellow/frame/transfer_tight_staging` (read when the device is created) · Code:
-`servers/rendering/rendering_device.cpp` (`_fellow_staging_rows()`, `_texture_initialize()`, `texture_update()`) ·
+`servers/rendering/rendering_device.cpp` (`_fellow_staging_rows()`, `_texture_initialize()`, `texture_update()`,
+`texture_get_data_async()`) ·
 Checks: lavapipe's Streaming Lab, the regression suite, the laptop's Sponza streamed.
 
 ## Problem
@@ -51,5 +52,6 @@ the GPU's frame 4.01-4.04 against 4.05-4.09 ms, the load 2.9-3.1 s either way.
 
 Keep, on by default: Sponza's streamed flythrough ends with 320-352 MiB less host memory held by the transfer workers
 (512 → 160-192 MiB), the frames and pictures the same — what decision 0225's trim was for, without freeing anything
-while it plays (decision 0233). Not changed: the download path (`texture_get_data_async()`), which reserves the same
-way.
+while it plays (decision 0233). The download path (`texture_get_data_async()`) reserves its staging the same way (milestone
+118's last commit); checking it found two faults of stock's in what the asynchronous downloads return, fixed by decision
+0236.

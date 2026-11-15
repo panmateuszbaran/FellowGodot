@@ -32,16 +32,21 @@
 
 #include "core/config/engine.h"
 #include "core/config/project_settings.h"
+#include "core/debugger/engine_debugger.h"
 #include "core/io/file_access.h"
 #include "core/math/math_funcs.h"
 #include "core/os/memory.h"
+#include "core/os/mutex.h"
+#include "core/os/semaphore.h"
 #include "core/os/os.h"
 #include "core/os/thread.h"
 #include "core/string/print_string.h"
+#include "core/string/ustring.h"
 #include "core/templates/hash_map.h"
 #include "core/templates/list.h"
 #include "core/templates/local_vector.h"
 #include "core/templates/sort_array.h"
+#include "core/variant/array.h"
 
 #include <atomic>
 #include <cstring>
@@ -84,6 +89,112 @@
 namespace {
 std::atomic<uint64_t> hitch_count{ 0 };
 std::atomic<uint64_t> sample_count{ 0 };
+std::atomic<uint64_t> base_usec{ 0 }; // the reports' "s in": the sampler's start (the CPU's, else the first GPU frame's)
+
+// The editor's debugger (milestone 119, decision 0238): hitches sent as they happen, by the main thread at its next frame
+// step (it alone runs while the debugger exists: none is sent after the main loop).
+std::atomic<bool> live_on{ false }; // a debugger was attached when the sampler started
+Mutex live_outbox_mutex;
+LocalVector<Pair<String, Array>> live_outbox;
+std::atomic<uint32_t> live_outbox_count{ 0 };
+
+void live_post(const String &p_message, const Array &p_data) {
+	MutexLock lock(live_outbox_mutex);
+	if (live_outbox.size() >= 64) {
+		return; // nobody reading: the exit report has them
+	}
+	live_outbox.push_back(Pair<String, Array>(p_message, p_data));
+	live_outbox_count.store(live_outbox.size(), std::memory_order_release);
+}
+
+void live_flush() {
+	LocalVector<Pair<String, Array>> outbox;
+	{
+		MutexLock lock(live_outbox_mutex);
+		outbox = live_outbox;
+		live_outbox.clear();
+		live_outbox_count.store(0, std::memory_order_release);
+	}
+	if (!EngineDebugger::is_active()) {
+		return;
+	}
+	for (const Pair<String, Array> &message : outbox) {
+		EngineDebugger::get_singleton()->send_message(message.first, message.second);
+	}
+}
+
+// The GPU's side (milestone 119, decision 0237).
+constexpr uint32_t GPU_MAX_HITCHES = 64;
+constexpr uint32_t GPU_SHOWN_PASSES = 6;
+constexpr double GPU_AVERAGE_FRAMES = 32.0; // the averages follow about this many ordinary frames
+
+struct GpuPass {
+	String name;
+	double usec = 0.0;
+	double average_usec = -1.0; // -1: not seen in an ordinary frame
+};
+
+struct GpuHitch {
+	uint64_t frame = 0;
+	double at_sec = 0.0; // when its first timestamp was recorded, from base_usec
+	double passes_usec = 0.0; // first timestamp to last
+	double passes_average_usec = 0.0;
+	double gap_usec = -1.0; // after the previous frame's last timestamp (-1: that frame had none)
+	double gap_average_usec = 0.0;
+	uint32_t markers = 0;
+	LocalVector<GpuPass> passes; // the longest past their average
+};
+
+std::atomic<int> gpu_state{ 0 }; // 0 not read yet, 1 on, -1 off
+std::atomic<uint64_t> gpu_hitch_count{ 0 };
+Mutex gpu_mutex;
+double gpu_threshold_usec = 33300.0;
+HashMap<String, double> gpu_pass_average; // a pass's time in the ordinary frames (summed within a frame)
+double gpu_passes_average = 0.0;
+double gpu_gap_average = 0.0;
+uint64_t gpu_frames = 0;
+uint64_t gpu_ordinary_frames = 0;
+uint64_t gpu_gap_frames = 0;
+uint64_t gpu_prev_frame = 0;
+uint64_t gpu_prev_end_nsec = 0;
+bool gpu_prev_valid = false;
+double gpu_longest_passes = 0.0;
+double gpu_longest_gap = 0.0;
+LocalVector<GpuHitch> gpu_hitches;
+uint64_t gpu_hitches_dropped = 0;
+
+double gpu_follow(double p_average, double p_value, uint64_t p_count) {
+	return p_average + (p_value - p_average) / MIN(double(p_count), GPU_AVERAGE_FRAMES);
+}
+
+String gpu_hitch_text(uint32_t p_number, const GpuHitch &hitch) {
+	const String gap = hitch.gap_usec >= 0.0 ? vformat("began %.1f ms after the previous frame's last timestamp (average %.2f)", hitch.gap_usec / 1000.0, hitch.gap_average_usec / 1000.0) : String("followed a frame that was not timed");
+	String passes;
+	for (uint32_t i = 0; i < hitch.passes.size(); i++) {
+		const GpuPass &pass = hitch.passes[i];
+		passes += vformat("\n    \"%s\" %.2f ms (%s)", pass.name, pass.usec / 1000.0, pass.average_usec >= 0.0 ? vformat("average %.2f", pass.average_usec / 1000.0) : String("not in an ordinary frame"));
+	}
+	return vformat("FellowEngine GPU hitch %d: recorded %.2f s in (read back at drawn frame %d): its passes %.1f ms (average %.2f), %d timestamps; it %s. The passes longest past their averages:%s",
+			p_number, hitch.at_sec, (int64_t)hitch.frame, hitch.passes_usec / 1000.0, hitch.passes_average_usec / 1000.0, hitch.markers, gap, passes);
+}
+
+void gpu_report() {
+	MutexLock lock(gpu_mutex);
+	if (gpu_state.load(std::memory_order_acquire) != 1 || gpu_frames == 0) {
+		return;
+	}
+	const String head = vformat("%d frames timed on the GPU; their passes %.2f ms on average (the longest %.1f ms), %.2f ms from one frame's last timestamp to the next one's first (the longest %.1f ms)",
+			(int64_t)gpu_frames, gpu_passes_average / 1000.0, gpu_longest_passes / 1000.0, gpu_gap_average / 1000.0, gpu_longest_gap / 1000.0);
+	if (gpu_hitches.is_empty()) {
+		print_line(vformat("FellowEngine GPU hitches: none over %.1f ms (%s).", gpu_threshold_usec / 1000.0, head));
+		return;
+	}
+	print_line(vformat("FellowEngine GPU hitches: %d over %.1f ms%s (%s).", (int64_t)gpu_hitch_count.load(), gpu_threshold_usec / 1000.0,
+			gpu_hitches_dropped > 0 ? vformat(", %d not kept", (int64_t)gpu_hitches_dropped) : String(), head));
+	for (uint32_t h = 0; h < gpu_hitches.size(); h++) {
+		print_line(gpu_hitch_text(h + 1, gpu_hitches[h]));
+	}
+}
 } // namespace
 
 #ifdef FELLOW_HITCH_SUPPORTED
@@ -195,6 +306,20 @@ uint64_t sampler_start_usec = 0;
 LocalVector<Hitch> hitches; // the watchdog's until it has stopped
 uint32_t hitches_dropped = 0;
 uint64_t steps_sampled = 0; // captures started (steps past half the threshold)
+
+// The editor's debugger (decision 0238): a hitch handed to a thread of its own, which names it (symbolize() is slow:
+// a process or a linker map) and posts it.
+struct LiveHitch {
+	uint32_t number = 0;
+	Hitch hitch;
+};
+Thread live_thread;
+Semaphore live_semaphore;
+Mutex live_mutex;
+LocalVector<LiveHitch> live_pending;
+std::atomic<bool> live_exit{ false };
+bool ever_started = false; // the watchdog ran (the sampler can be started from the editor only before that)
+void live_queue(uint32_t p_number, const Hitch &p_hitch);
 uint64_t longest_gap_usec = 0; // the longest wait between two samples of a stepping thread
 OtherThread *known_threads = nullptr; // MAX_THREADS: the process's other threads, listed by the watchdog between hitches
 uint32_t known_count = 0;
@@ -538,12 +663,18 @@ void symbolize(const LocalVector<uint64_t> &p_addresses, HashMap<uint64_t, Strin
 			exe_pdb = info.SymType == SymPdb;
 		}
 	}
-	MapSymbols map;
-	bool map_loaded = false;
-	if (!exe_pdb) {
-		map_loaded = map.load(exe_path.get_basename() + ".map");
+	// The map parsed once: the editor's debugger has each hitch named as it happens (decision 0238).
+	static MapSymbols map;
+	static int map_state = 0; // 0 not read, 1 read, -1 none
+	if (!exe_pdb && map_state == 0) {
+		map_state = map.load(exe_path.get_basename() + ".map") ? 1 : -1;
 	}
-	print_line(vformat("FellowEngine hitch sampler: names from %s.", exe_pdb ? "the executable's PDB" : (map_loaded ? "the executable's linker map" : "exports only (no PDB or .map next to the executable)")));
+	const bool map_loaded = !exe_pdb && map_state > 0;
+	static bool told = false;
+	if (!told) {
+		told = true;
+		print_line(vformat("FellowEngine hitch sampler: names from %s.", exe_pdb ? "the executable's PDB" : (map_loaded ? "the executable's linker map" : "exports only (no PDB or .map next to the executable)")));
+	}
 
 	alignas(8) uint8_t symbol_buffer[sizeof(SYMBOL_INFO) + 1024];
 	for (uint64_t address : p_addresses) {
@@ -759,7 +890,11 @@ void symbolize(const LocalVector<uint64_t> &p_addresses, HashMap<uint64_t, Strin
 	if (OS::get_singleton()->execute("addr2line", exec_args, &output, &exit_code) == OK && exit_code == 0) {
 		lines = output.split("\n");
 	}
-	print_line(vformat("FellowEngine hitch sampler: names from %s.", lines.size() >= int(exe_addresses.size() * 2) ? "addr2line (the executable's symbol table: FELLOW_KEEP_SYMBOLS=1 at link)" : "nothing (addr2line failed)"));
+	static bool told = false;
+	if (!told && !exe_addresses.is_empty()) {
+		told = true;
+		print_line(vformat("FellowEngine hitch sampler: names from %s.", lines.size() >= int(exe_addresses.size() * 2) ? "addr2line (the executable's symbol table: FELLOW_KEEP_SYMBOLS=1 at link)" : "nothing (addr2line failed)"));
+	}
 	for (uint32_t i = 0; i < exe_addresses.size(); i++) {
 		String name;
 		if (int(i * 2) < lines.size()) {
@@ -845,6 +980,9 @@ void capture_finish(uint32_t p_slot, Capture &r_capture) {
 			}
 			hitches.push_back(hitch);
 			hitch_count.fetch_add(1, std::memory_order_relaxed);
+			if (live_on.load(std::memory_order_acquire)) {
+				live_queue(hitches.size(), hitches[hitches.size() - 1]);
+			}
 		} else {
 			hitches_dropped++;
 		}
@@ -1069,7 +1207,16 @@ LocalVector<Count> innermost(const LocalVector<LocalVector<int>> &p_stacks) {
 	return sorted;
 }
 
-void print_profile(const LocalVector<LocalVector<int>> &p_stacks, const NameTable &p_names, const String &p_indent, int p_path_lines, int p_leaves) {
+// A report line printed, or added to r_out (the editor's debugger, decision 0238).
+void emit_line(String *r_out, const String &p_line) {
+	if (r_out) {
+		*r_out += p_line + "\n";
+	} else {
+		print_line(p_line);
+	}
+}
+
+void print_profile(const LocalVector<LocalVector<int>> &p_stacks, const NameTable &p_names, const String &p_indent, int p_path_lines, int p_leaves, String *r_out = nullptr) {
 	const uint32_t total = p_stacks.size();
 	if (total == 0) {
 		return;
@@ -1087,9 +1234,9 @@ void print_profile(const LocalVector<LocalVector<int>> &p_stacks, const NameTabl
 		if (path.size() - from > uint32_t(p_path_lines)) {
 			from = path.size() - p_path_lines;
 		}
-		print_line(p_indent + "hottest call path (share of the samples)" + (from > 0 ? vformat(", from depth %d:", from) : String(":")));
+		emit_line(r_out, p_indent + "hottest call path (share of the samples)" + (from > 0 ? vformat(", from depth %d:", from) : String(":")));
 		for (uint32_t i = from; i < path.size(); i++) {
-			print_line(p_indent + "  " + share(path[i].count, total) + "  " + frame_name(p_names, path[i].id));
+			emit_line(r_out, p_indent + "  " + share(path[i].count, total) + "  " + frame_name(p_names, path[i].id));
 		}
 	}
 	const LocalVector<Count> leaves = innermost(p_stacks);
@@ -1097,7 +1244,7 @@ void print_profile(const LocalVector<LocalVector<int>> &p_stacks, const NameTabl
 	for (uint32_t i = 0; i < leaves.size() && int(i) < p_leaves; i++) {
 		line += (i > 0 ? "; " : " ") + share(leaves[i].count, total).strip_edges() + " " + frame_name(p_names, leaves[i].id);
 	}
-	print_line(line);
+	emit_line(r_out, line);
 }
 
 // A thread whose innermost frames are mostly a wait (a kernel wait, a futex, a sleep) is idle.
@@ -1118,6 +1265,167 @@ bool waits_mostly(const LocalVector<LocalVector<int>> &p_stacks, const NameTable
 		waiting += found ? 1 : 0;
 	}
 	return waiting * 2 >= p_stacks.size();
+}
+
+// One hitch's part of the report (printed at exit, or sent to the editor's debugger as it happens: decision 0238).
+void hitch_text(uint32_t p_number, const Hitch &hitch, const NameTable &table, const HashMap<uint64_t, int> &ids, String *r_out) {
+	String cpu = hitch.cpu_share >= 0.0 ? vformat("; the thread on a CPU %d %% of that time", int(Math::round(100.0 * MIN(1.0, hitch.cpu_share)))) : String();
+	emit_line(r_out, vformat("FellowEngine hitch %d: %s (process frame %d, %.2f s in) took %s%.1f ms; %d samples from %.1f to %.1f ms of it%s.", p_number, slot_name(hitch.slot), (int64_t)hitch.frame, hitch.at_usec / 1000000.0, hitch.step_known ? "" : "at least ", hitch.step_usec / 1000.0, hitch.stacks.size(), hitch.first_offset_usec / 1000.0, hitch.last_offset_usec / 1000.0, cpu));
+	LocalVector<LocalVector<int>> stacks;
+	for (const Stack &stack : hitch.stacks) {
+		stacks.push_back(named_stack(stack, ids));
+	}
+	print_profile(stacks, table, "  ", 40, 6, r_out);
+
+	// The other threads: those on a CPU a fifth of the time or more, and those not waiting (a thread that holds what
+	// the stepping thread waits for may not be running either), the busiest first.
+	struct OtherInfo {
+		uint32_t index = 0;
+		double cpu = 0.0;
+		LocalVector<LocalVector<int>> stacks;
+	};
+	LocalVector<OtherInfo> shown;
+	for (uint32_t i = 0; i < hitch.others.size(); i++) {
+		OtherInfo info;
+		info.index = i;
+		info.cpu = hitch.others[i].cpu_share;
+		for (const Stack &stack : hitch.others[i].stacks) {
+			info.stacks.push_back(named_stack(stack, ids));
+		}
+		if (info.cpu >= 0.2 || !waits_mostly(info.stacks, table)) {
+			shown.push_back(info);
+		}
+	}
+	for (uint32_t i = 0; i < shown.size(); i++) {
+		for (uint32_t j = i + 1; j < shown.size(); j++) {
+			if (shown[j].cpu > shown[i].cpu) {
+				SWAP(shown[i], shown[j]);
+			}
+		}
+	}
+	emit_line(r_out, vformat("  other threads: %d sampled, %d busy or not waiting%s", hitch.others.size(), shown.size(), shown.is_empty() ? "." : ":"));
+	for (uint32_t i = 0; i < shown.size() && i < 10; i++) {
+		const HitchOther &other = hitch.others[shown[i].index];
+		const String cpu_text = other.cpu_share >= 0.0 ? vformat("on a CPU %d %% of the time", int(Math::round(100.0 * MIN(1.0, other.cpu_share)))) : String("its CPU time unknown");
+		emit_line(r_out, vformat("  thread \"%s\" (id %d): %s, %d samples", other.name, (int64_t)other.os_id, cpu_text, other.stacks.size()));
+		print_profile(shown[i].stacks, table, "    ", 30, 3, r_out);
+	}
+	// The waiting ones, a line each: where their last sample waited (the innermost frames, the outermost last).
+	String waiting_lines;
+	int waiting_count = 0;
+	for (uint32_t i = 0; i < hitch.others.size(); i++) {
+		bool listed = false;
+		for (const OtherInfo &info : shown) {
+			listed = listed || info.index == i;
+		}
+		if (listed || hitch.others[i].stacks.is_empty()) {
+			continue;
+		}
+		const HitchOther &other = hitch.others[i];
+		const LocalVector<int> frames = named_stack(other.stacks[other.stacks.size() - 1], ids);
+		String where;
+		for (int k = int(frames.size()) - 1, n = 0; k >= 0 && n < 7; k--, n++) {
+			where += (n > 0 ? " < " : "") + frame_name(table, frames[k]);
+		}
+		waiting_lines += vformat("\n    \"%s\" (id %d, %s): %s", other.name, (int64_t)other.os_id,
+				other.cpu_share >= 0.0 ? vformat("CPU %d %%", int(Math::round(100.0 * MIN(1.0, other.cpu_share)))) : String("CPU ?"), where);
+		waiting_count++;
+	}
+	if (waiting_count > 0) {
+		emit_line(r_out, vformat("  waiting threads (innermost frames first):%s", waiting_lines));
+	}
+}
+
+void live_queue(uint32_t p_number, const Hitch &p_hitch) {
+	{
+		MutexLock lock(live_mutex);
+		if (live_pending.size() >= 8) {
+			return; // the namer behind: the exit report has it
+		}
+		LiveHitch item;
+		item.number = p_number;
+		item.hitch = p_hitch;
+		live_pending.push_back(item);
+	}
+	live_semaphore.post();
+}
+
+void live_namer(void *) {
+	Thread::set_name("FellowEngine hitch namer");
+	HashMap<uint64_t, String> names; // every address named so far
+	while (true) {
+		live_semaphore.wait();
+		if (live_exit.load(std::memory_order_acquire)) {
+			break;
+		}
+		LocalVector<LiveHitch> batch;
+		{
+			MutexLock lock(live_mutex);
+			batch = live_pending;
+			live_pending.clear();
+		}
+		for (const LiveHitch &item : batch) {
+			LocalVector<uint64_t> addresses;
+			HashMap<uint64_t, int> wanted;
+			auto add_stack = [&](const Stack &p_stack) {
+				for (uint32_t i = 0; i < p_stack.depth; i++) {
+					const uint64_t address = i == 0 ? p_stack.pc[0] : p_stack.pc[i] - 1;
+					if (!names.has(address) && !wanted.has(address)) {
+						wanted.insert(address, 0);
+						addresses.push_back(address);
+					}
+				}
+			};
+			for (const Stack &stack : item.hitch.stacks) {
+				add_stack(stack);
+			}
+			for (const HitchOther &other : item.hitch.others) {
+				for (const Stack &stack : other.stacks) {
+					add_stack(stack);
+				}
+			}
+			if (!addresses.is_empty()) {
+				HashMap<uint64_t, String> found;
+				symbolize(addresses, found);
+				for (const KeyValue<uint64_t, String> &kv : found) {
+					names.insert(kv.key, kv.value);
+				}
+			}
+			NameTable table;
+			HashMap<uint64_t, int> ids;
+			for (const KeyValue<uint64_t, String> &kv : names) {
+				ids.insert(kv.key, table.intern(kv.value));
+			}
+			String text;
+			hitch_text(item.number, item.hitch, table, ids, &text);
+			// For the editor's list: the innermost of the hottest path's functions that is the executable's (a system
+			// library's wait or sleep says less than its caller).
+			String where;
+			{
+				LocalVector<LocalVector<int>> stacks;
+				for (const Stack &stack : item.hitch.stacks) {
+					stacks.push_back(named_stack(stack, ids));
+				}
+				const LocalVector<PathStep> path = hottest_path(stacks);
+				for (int i = int(path.size()) - 1; i >= 0 && where.is_empty(); i--) {
+					const String name = frame_name(table, path[i].id);
+					if (!name.contains("!") && !name.contains("+0x") && !name.begins_with("0x") && name != "?") {
+						where = name.get_slice("(", 0); // without its parameters
+					}
+				}
+				if (where.is_empty() && !path.is_empty()) {
+					where = frame_name(table, path[path.size() - 1].id);
+				}
+			}
+			Array message;
+			message.push_back(int64_t(item.number));
+			message.push_back(item.hitch.at_usec / 1000000.0);
+			message.push_back(item.hitch.step_usec / 1000.0);
+			message.push_back(String(slot_name(item.hitch.slot)) + (where.is_empty() ? String() : ": " + where));
+			message.push_back(text);
+			live_post("fellow_hitch:cpu", message);
+		}
+	}
 }
 
 void report() {
@@ -1158,74 +1466,7 @@ void report() {
 	print_line(vformat("FellowEngine hitch sampler: %d hitches over %.1f ms%s (%d steps sampled past %.1f ms; the longest gap between two samples of a stepping thread %.1f ms).", hitches.size(), report_threshold_usec / 1000.0,
 			hitches_dropped > 0 ? vformat(", %d more not kept", hitches_dropped) : String(), (int64_t)steps_sampled, start_threshold_usec / 1000.0, longest_gap_usec / 1000.0));
 	for (uint32_t h = 0; h < hitches.size(); h++) {
-		const Hitch &hitch = hitches[h];
-		String cpu = hitch.cpu_share >= 0.0 ? vformat("; the thread on a CPU %d %% of that time", int(Math::round(100.0 * MIN(1.0, hitch.cpu_share)))) : String();
-		print_line(vformat("FellowEngine hitch %d: %s (process frame %d, %.2f s in) took %s%.1f ms; %d samples from %.1f to %.1f ms of it%s.",
-				h + 1, slot_name(hitch.slot), (int64_t)hitch.frame, hitch.at_usec / 1000000.0, hitch.step_known ? "" : "at least ", hitch.step_usec / 1000.0,
-				hitch.stacks.size(), hitch.first_offset_usec / 1000.0, hitch.last_offset_usec / 1000.0, cpu));
-		LocalVector<LocalVector<int>> stacks;
-		for (const Stack &stack : hitch.stacks) {
-			stacks.push_back(named_stack(stack, ids));
-		}
-		print_profile(stacks, table, "  ", 40, 6);
-
-		// The other threads: those on a CPU a fifth of the time or more, and those not waiting (a thread that holds what
-		// the stepping thread waits for may not be running either), the busiest first.
-		struct OtherInfo {
-			uint32_t index = 0;
-			double cpu = 0.0;
-			LocalVector<LocalVector<int>> stacks;
-		};
-		LocalVector<OtherInfo> shown;
-		for (uint32_t i = 0; i < hitch.others.size(); i++) {
-			OtherInfo info;
-			info.index = i;
-			info.cpu = hitch.others[i].cpu_share;
-			for (const Stack &stack : hitch.others[i].stacks) {
-				info.stacks.push_back(named_stack(stack, ids));
-			}
-			if (info.cpu >= 0.2 || !waits_mostly(info.stacks, table)) {
-				shown.push_back(info);
-			}
-		}
-		for (uint32_t i = 0; i < shown.size(); i++) {
-			for (uint32_t j = i + 1; j < shown.size(); j++) {
-				if (shown[j].cpu > shown[i].cpu) {
-					SWAP(shown[i], shown[j]);
-				}
-			}
-		}
-		print_line(vformat("  other threads: %d sampled, %d busy or not waiting%s", hitch.others.size(), shown.size(), shown.is_empty() ? "." : ":"));
-		for (uint32_t i = 0; i < shown.size() && i < 10; i++) {
-			const HitchOther &other = hitch.others[shown[i].index];
-			const String cpu_text = other.cpu_share >= 0.0 ? vformat("on a CPU %d %% of the time", int(Math::round(100.0 * MIN(1.0, other.cpu_share)))) : String("its CPU time unknown");
-			print_line(vformat("  thread \"%s\" (id %d): %s, %d samples", other.name, (int64_t)other.os_id, cpu_text, other.stacks.size()));
-			print_profile(shown[i].stacks, table, "    ", 30, 3);
-		}
-		// The waiting ones, a line each: where their last sample waited (the innermost frames, the outermost last).
-		String waiting_lines;
-		int waiting_count = 0;
-		for (uint32_t i = 0; i < hitch.others.size(); i++) {
-			bool listed = false;
-			for (const OtherInfo &info : shown) {
-				listed = listed || info.index == i;
-			}
-			if (listed || hitch.others[i].stacks.is_empty()) {
-				continue;
-			}
-			const HitchOther &other = hitch.others[i];
-			const LocalVector<int> frames = named_stack(other.stacks[other.stacks.size() - 1], ids);
-			String where;
-			for (int k = int(frames.size()) - 1, n = 0; k >= 0 && n < 7; k--, n++) {
-				where += (n > 0 ? " < " : "") + frame_name(table, frames[k]);
-			}
-			waiting_lines += vformat("\n    \"%s\" (id %d, %s): %s", other.name, (int64_t)other.os_id,
-					other.cpu_share >= 0.0 ? vformat("CPU %d %%", int(Math::round(100.0 * MIN(1.0, other.cpu_share)))) : String("CPU ?"), where);
-			waiting_count++;
-		}
-		if (waiting_count > 0) {
-			print_line(vformat("  waiting threads (innermost frames first):%s", waiting_lines));
-		}
+		hitch_text(h + 1, hitches[h], table, ids, nullptr);
 	}
 }
 
@@ -1253,10 +1494,21 @@ void start() {
 	known_threads = (OtherThread *)memalloc(sizeof(OtherThread) * MAX_THREADS);
 	known_count = 0;
 	sampler_start_usec = OS::get_singleton()->get_ticks_usec();
+	base_usec.store(sampler_start_usec, std::memory_order_release);
 	exit_requested.store(false, std::memory_order_release);
 	Thread::Settings thread_settings;
 	thread_settings.priority = Thread::PRIORITY_HIGH;
 	watchdog_thread.start(watchdog, nullptr, thread_settings);
+	ever_started = true;
+	if (EngineDebugger::is_active()) { // decision 0238: hitches named and sent to the editor as they happen
+		live_on.store(true, std::memory_order_release);
+	}
+	if (live_on.load(std::memory_order_acquire)) {
+		live_exit.store(false, std::memory_order_release);
+		Thread::Settings namer_settings;
+		namer_settings.priority = Thread::PRIORITY_LOW;
+		live_thread.start(live_namer, nullptr, namer_settings);
+	}
 	print_line(vformat("FellowEngine hitch sampler: on (steps over %.1f ms reported when the engine exits).", threshold_ms));
 	sampler_state.store(1, std::memory_order_release);
 }
@@ -1266,6 +1518,9 @@ void start() {
 #endif // FELLOW_HITCH_SUPPORTED
 
 void FellowHitchSampler::step_begin(Slot p_slot) {
+	if (p_slot == SLOT_MAIN && live_outbox_count.load(std::memory_order_acquire) > 0) {
+		live_flush(); // decision 0238: the hitches named since the last frame step, to the editor
+	}
 #ifdef FELLOW_HITCH_SUPPORTED
 	int state = sampler_state.load(std::memory_order_acquire);
 	if (state < 0) {
@@ -1333,10 +1588,17 @@ void FellowHitchSampler::finish() {
 #ifdef FELLOW_HITCH_SUPPORTED
 	if (sampler_state.load(std::memory_order_acquire) != 1) {
 		sampler_state.store(-1, std::memory_order_release);
+		gpu_report();
 		return;
 	}
 	exit_requested.store(true, std::memory_order_release);
 	watchdog_thread.wait_to_finish();
+	if (live_thread.is_started()) {
+		live_exit.store(true, std::memory_order_release);
+		live_semaphore.post();
+		live_thread.wait_to_finish();
+	}
+	live_on.store(false, std::memory_order_release);
 	sampler_state.store(-1, std::memory_order_release);
 	report();
 	hitches.clear();
@@ -1360,6 +1622,7 @@ void FellowHitchSampler::finish() {
 	known_count = 0;
 	platform_finish();
 #endif
+	gpu_report();
 }
 
 uint64_t FellowHitchSampler::get_hitch_count() {
@@ -1368,4 +1631,164 @@ uint64_t FellowHitchSampler::get_hitch_count() {
 
 uint64_t FellowHitchSampler::get_sample_count() {
 	return sample_count.load(std::memory_order_relaxed);
+}
+
+bool FellowHitchSampler::gpu_wanted() {
+	const int state = gpu_state.load(std::memory_order_acquire);
+	if (state != 0) {
+		return state > 0;
+	}
+	ProjectSettings *settings = ProjectSettings::get_singleton();
+	if (!settings || !settings->has_setting("rendering/fellow/debug/hitch_sampler")) {
+		return false; // FellowEngine's settings not registered yet: asked again next frame
+	}
+	const bool on = bool(settings->get_setting("rendering/fellow/debug/hitch_sampler"));
+	{
+		MutexLock lock(gpu_mutex);
+		gpu_threshold_usec = 1000.0 * MAX(1.0, double(settings->get_setting("rendering/fellow/debug/hitch_sampler_ms", 33.3)));
+	}
+	if (on && EngineDebugger::is_active()) {
+		live_on.store(true, std::memory_order_release);
+	}
+	gpu_state.store(on ? 1 : -1, std::memory_order_release);
+	return on;
+}
+
+// The editor's "start" message (decision 0238): the sampler turned on, or its threshold changed, while the game runs.
+static Error fellow_hitch_debugger_capture(void *p_user, const String &p_msg, const Array &p_args, bool &r_captured) {
+	r_captured = false;
+	if (p_msg != "start") {
+		return OK;
+	}
+	r_captured = true;
+	const double threshold_ms = MAX(1.0, p_args.size() > 0 ? double(p_args[0]) : 33.3);
+	ProjectSettings *settings = ProjectSettings::get_singleton();
+	settings->set_setting("rendering/fellow/debug/hitch_sampler", true);
+	settings->set_setting("rendering/fellow/debug/hitch_sampler_ms", threshold_ms);
+	live_on.store(true, std::memory_order_release);
+	{
+		MutexLock lock(gpu_mutex);
+		gpu_threshold_usec = 1000.0 * threshold_ms;
+	}
+	gpu_state.store(0, std::memory_order_release); // read again at the next frame
+#ifdef FELLOW_HITCH_SUPPORTED
+	const int state = sampler_state.load(std::memory_order_acquire);
+	if (state < 0 && !ever_started) {
+		sampler_state.store(0, std::memory_order_release); // started at the main thread's next frame step
+	} else if (state == 1) {
+		report_threshold_usec = uint64_t(threshold_ms * 1000.0);
+		start_threshold_usec = report_threshold_usec / 2;
+	}
+#endif
+	print_line(vformat("FellowEngine hitch sampler: started from the editor (steps over %.1f ms).", threshold_ms));
+	return OK;
+}
+
+void FellowHitchSampler::register_debugger() {
+	if (EngineDebugger::is_active() && !EngineDebugger::has_capture("fellow_hitch")) {
+		EngineDebugger::register_message_capture("fellow_hitch", EngineDebugger::Capture(nullptr, &fellow_hitch_debugger_capture));
+	}
+}
+
+void FellowHitchSampler::gpu_frame(uint64_t p_frame, uint32_t p_count, const String *p_names, const uint64_t *p_gpu_nsec, uint64_t p_cpu_usec) {
+	if (gpu_state.load(std::memory_order_acquire) != 1 || p_count < 2 || p_gpu_nsec[p_count - 1] < p_gpu_nsec[0]) {
+		return;
+	}
+	uint64_t expected = 0;
+	base_usec.compare_exchange_strong(expected, p_cpu_usec);
+	// A pass's time: from its timestamp to the next (a name timed twice in a frame summed).
+	HashMap<String, double> passes;
+	for (uint32_t i = 0; i + 1 < p_count; i++) {
+		const double usec = p_gpu_nsec[i + 1] >= p_gpu_nsec[i] ? double(p_gpu_nsec[i + 1] - p_gpu_nsec[i]) / 1000.0 : 0.0;
+		double *found = passes.getptr(p_names[i]);
+		if (found) {
+			*found += usec;
+		} else {
+			passes.insert(p_names[i], usec);
+		}
+	}
+	const double passes_usec = double(p_gpu_nsec[p_count - 1] - p_gpu_nsec[0]) / 1000.0;
+
+	MutexLock lock(gpu_mutex);
+	gpu_frames++;
+	double gap_usec = -1.0;
+	if (gpu_prev_valid && p_frame == gpu_prev_frame + 1 && p_gpu_nsec[0] >= gpu_prev_end_nsec) {
+		gap_usec = double(p_gpu_nsec[0] - gpu_prev_end_nsec) / 1000.0;
+	}
+	gpu_prev_valid = true;
+	gpu_prev_frame = p_frame;
+	gpu_prev_end_nsec = p_gpu_nsec[p_count - 1];
+	gpu_longest_passes = MAX(gpu_longest_passes, passes_usec);
+	gpu_longest_gap = MAX(gpu_longest_gap, gap_usec);
+
+	const bool hitch = passes_usec > gpu_threshold_usec || gap_usec > gpu_threshold_usec;
+	if (!hitch) {
+		gpu_ordinary_frames++;
+		gpu_passes_average = gpu_follow(gpu_passes_average, passes_usec, gpu_ordinary_frames);
+		if (gap_usec >= 0.0) {
+			gpu_gap_frames++;
+			gpu_gap_average = gpu_follow(gpu_gap_average, gap_usec, gpu_gap_frames);
+		}
+		for (const KeyValue<String, double> &kv : passes) {
+			double *average = gpu_pass_average.getptr(kv.key);
+			if (average) {
+				*average = gpu_follow(*average, kv.value, MIN(gpu_ordinary_frames, uint64_t(GPU_AVERAGE_FRAMES)));
+			} else {
+				gpu_pass_average.insert(kv.key, kv.value);
+			}
+		}
+		return;
+	}
+	gpu_hitch_count.fetch_add(1, std::memory_order_relaxed);
+	if (gpu_hitches.size() >= GPU_MAX_HITCHES) {
+		gpu_hitches_dropped++;
+		return;
+	}
+	GpuHitch record;
+	record.frame = p_frame;
+	record.at_sec = double(p_cpu_usec - MIN(p_cpu_usec, base_usec.load(std::memory_order_acquire))) / 1000000.0;
+	record.passes_usec = passes_usec;
+	record.passes_average_usec = gpu_passes_average;
+	record.gap_usec = gap_usec;
+	record.gap_average_usec = gpu_gap_average;
+	record.markers = p_count;
+	// The passes longest past their average (a pass not seen in an ordinary frame counts whole).
+	LocalVector<GpuPass> all;
+	for (const KeyValue<String, double> &kv : passes) {
+		GpuPass pass;
+		pass.name = kv.key;
+		pass.usec = kv.value;
+		const double *average = gpu_pass_average.getptr(kv.key);
+		pass.average_usec = average ? *average : -1.0;
+		all.push_back(pass);
+	}
+	for (uint32_t i = 0; i < all.size() && i < GPU_SHOWN_PASSES; i++) {
+		uint32_t best = i;
+		for (uint32_t j = i + 1; j < all.size(); j++) {
+			const double excess_j = all[j].usec - MAX(0.0, all[j].average_usec);
+			const double excess_best = all[best].usec - MAX(0.0, all[best].average_usec);
+			if (excess_j > excess_best) {
+				best = j;
+			}
+		}
+		SWAP(all[i], all[best]);
+		if (i > 0 && all[i].usec - MAX(0.0, all[i].average_usec) < 100.0) {
+			break; // the rest within 0.1 ms of their averages
+		}
+		record.passes.push_back(all[i]);
+	}
+	gpu_hitches.push_back(record);
+	if (live_on.load(std::memory_order_acquire)) {
+		Array message;
+		message.push_back(int64_t(gpu_hitches.size()));
+		message.push_back(record.at_sec);
+		message.push_back(MAX(record.passes_usec, record.gap_usec) / 1000.0);
+		message.push_back(record.passes.is_empty() ? String() : record.passes[0].name);
+		message.push_back(gpu_hitch_text(gpu_hitches.size(), record));
+		live_post("fellow_hitch:gpu", message);
+	}
+}
+
+uint64_t FellowHitchSampler::get_gpu_hitch_count() {
+	return gpu_hitch_count.load(std::memory_order_relaxed);
 }
