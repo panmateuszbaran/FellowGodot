@@ -9,6 +9,16 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 118 — compressed uploads staged as they are copied; cloth edges kept apart (2026-11-15)
+
+- `rendering/fellow/frame/transfer_tight_staging` (decision 0234, on): a block-compressed texture's upload reserves
+  staging for its rows of blocks — stock reserved its rows of pixels, 4 times the data with 4x4 blocks. Sponza streamed's
+  transfer workers end with 160-192 MiB of staging instead of 512; the same copies, pictures and frames.
+- Decision 0233 confirmed on an idle GPU; the optional staging trim now frees on the render thread (a run with it on had
+  hung at exit waiting for its free task).
+- `FellowCloth3D.self_collision_edges` (decision 0235): the cloth's edges kept off its other layers' edges — a towel
+  dropped across a bar of the same cloth between their particles held 3 cm above it instead of passing through.
+
 ## Milestone 117 — a hitch sampler, and the rare long frames it found; a garment's distance shaped (2026-11-14)
 
 - `rendering/fellow/debug/hitch_sampler`, `hitch_sampler_ms` (decision 0231): a watchdog thread samples the stack of a

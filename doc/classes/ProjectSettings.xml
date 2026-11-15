@@ -3304,6 +3304,9 @@
 		<member name="rendering/fellow/frame/transfer_staging_trim_idle_s" type="float" setter="" getter="" default="5.0">
 			How long a transfer worker goes unused before [member rendering/fellow/frame/transfer_staging_trim] releases its staging buffer: shorter frees memory sooner, but a buffer made again is fresh memory, slower to fill while the render thread may wait for it. Decision 0225.
 		</member>
+		<member name="rendering/fellow/frame/transfer_tight_staging" type="bool" setter="" getter="" default="true">
+			A block-compressed texture's upload reserves staging for its rows of blocks — what is copied — where stock reserves its rows of pixels: 4 times the data with 4x4 blocks (BC2-BC7, ETC2 RGBA, ASTC 4x4), 2 times with BC1, BC4 or ASTC 8x8. A texture created with data (a streamed texture's mips) grows its transfer worker's staging buffer by that much less; [method RenderingDevice.texture_update] fills the frame's staging ring by that much less. The same copies and pictures; Sponza streamed's transfer workers end with 160-192 MiB of staging instead of 512. Read when the device is created. Decision 0234.
+		</member>
 		<member name="rendering/fellow/geometry/cluster_blended_surfaces" type="bool" setter="" getter="" default="true">
 			Transparent surfaces clustered too, their draw order kept.
 		</member>

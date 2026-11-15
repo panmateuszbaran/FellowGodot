@@ -2134,9 +2134,9 @@ static _ALWAYS_INLINE_ void _copy_region(uint8_t const *__restrict p_src, uint8_
 	}
 }
 
-// FellowEngine (milestone 118, decision 0234): a block-compressed upload's staging space is its rows of blocks (stock
-// reserves its rows of pixels: 4 times the data with 4x4 blocks, 2 times with BC1 or ASTC 8x8), so that a transfer
-// worker's staging and the frame's staging ring hold what is copied. Read once when the device is created
+// FellowEngine (milestone 118, decision 0234): a block-compressed upload's (and download's) staging space is its rows of
+// blocks (stock reserves its rows of pixels: 4 times the data with 4x4 blocks, 2 times with BC1 or ASTC 8x8), so that a
+// transfer worker's staging and the frame's staging rings hold what is copied. Read once when the device is created
 // (rendering/fellow/frame/transfer_tight_staging).
 static bool fellow_tight_staging = false;
 
@@ -3041,7 +3041,7 @@ Error RenderingDevice::texture_get_data_async(RID p_texture, uint32_t p_layer, c
 					uint32_t region_pitch = (region_w * pixel_size * block_w) >> pixel_rshift;
 					region_pitch = STEPIFY(region_pitch, pitch_step);
 
-					uint32_t to_allocate = region_pitch * region_h;
+					uint32_t to_allocate = _fellow_staging_rows(region_h, block_h, pixel_rshift, region_pitch, false); // decision 0234
 					Error err = _staging_buffer_allocate(download_staging_buffers, to_allocate, required_align, block_write_offset, block_write_amount, required_action, false);
 					ERR_FAIL_COND_V(err, ERR_CANT_CREATE);
 
@@ -9606,7 +9606,7 @@ Error RenderingDevice::initialize(RenderingContextDriver *p_context, DisplayServ
 	// Use the processor count as the max amount of transfer workers that can be created.
 	transfer_worker_pool_max_size = OS::get_singleton()->get_processor_count();
 	// Decision 0234. Read with defaults: the device is made before the RenderingServer registers FellowEngine's settings.
-	fellow_tight_staging = bool(ProjectSettings::get_singleton()->get_setting("rendering/fellow/enabled", true)) && bool(ProjectSettings::get_singleton()->get_setting("rendering/fellow/frame/transfer_tight_staging", false));
+	fellow_tight_staging = bool(ProjectSettings::get_singleton()->get_setting("rendering/fellow/enabled", true)) && bool(ProjectSettings::get_singleton()->get_setting("rendering/fellow/frame/transfer_tight_staging", true));
 
 	// Pre-allocate to avoid locking a mutex when indexing into them.
 	transfer_worker_pool.resize(transfer_worker_pool_max_size);
