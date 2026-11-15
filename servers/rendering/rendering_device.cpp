@@ -7767,8 +7767,11 @@ void RenderingDevice::_fellow_trim_transfer_workers() {
 	// FellowEngine (decision 0225): a staging buffer grows to the next power of two of the largest upload its worker made
 	// and stock keeps it; a worker unused for transfer_staging_trim_idle_s releases one above 4 MiB (the next large upload
 	// makes it again: a fresh allocation, its pages first touched while the worker copies into it).
-	// Render thread, at the start of a frame; only workers nobody holds and with nothing recorded. The buffers are freed
-	// on a worker thread: freeing a large host allocation on the render thread stalled frames by 10-20 ms (job f437).
+	// Render thread, at the start of a frame; only workers nobody holds and with nothing recorded. Off by default since
+	// decision 0233: a release that empties a block of the memory allocator frees it, holding the driver's lock about
+	// 30 ms on any thread. The buffers are freed here, on the render thread (milestone 118): a worker thread's task, as
+	// milestone 114 had it, saved no frame — the frame's submission waited for its lock — and was waited for at exit,
+	// where the process once hung (job f454).
 	if (fellow_staging_free_task != WorkerThreadPool::INVALID_TASK_ID) {
 		if (!WorkerThreadPool::get_singleton()->is_task_completed(fellow_staging_free_task)) {
 			return; // the last ones are still being freed
@@ -7779,41 +7782,45 @@ void RenderingDevice::_fellow_trim_transfer_workers() {
 	const uint32_t keep_bytes = 4 * 1024 * 1024;
 	const uint64_t idle_usec = Fellow::transfer_staging_trim_idle_usec();
 	const uint64_t now = OS::get_singleton()->get_ticks_usec();
-	MutexLock pool_lock(transfer_worker_pool_mutex);
-	// The largest buffer of all is kept (the most recently used among equals): the next large upload after a pause can
-	// find it instead of filling fresh memory while the frame may wait for it (job f440).
-	uint32_t keep_index = UINT32_MAX;
-	for (uint32_t i = 0; i < transfer_worker_pool_size; i++) {
-		const TransferWorker *w = transfer_worker_pool[i];
-		if (keep_index == UINT32_MAX || w->staging_buffer_size_allocated > transfer_worker_pool[keep_index]->staging_buffer_size_allocated ||
-				(w->staging_buffer_size_allocated == transfer_worker_pool[keep_index]->staging_buffer_size_allocated && w->fellow_last_used_usec > transfer_worker_pool[keep_index]->fellow_last_used_usec)) {
-			keep_index = i;
-		}
-	}
-	for (uint32_t index : transfer_worker_pool_available_list) {
-		TransferWorker *worker = transfer_worker_pool[index];
-		if (index == keep_index || worker->staging_buffer_size_allocated <= keep_bytes || worker->fellow_last_used_usec + idle_usec > now) {
-			continue;
-		}
-		if (!worker->thread_mutex.try_lock()) {
-			continue;
-		}
-		if (!worker->recording) {
-			if (worker->submitted) {
-				_wait_for_transfer_worker(worker); // long finished: unused for the idle time
+	{
+		MutexLock pool_lock(transfer_worker_pool_mutex);
+		// The largest buffer of all is kept (the most recently used among equals): the next large upload after a pause can
+		// find it instead of filling fresh memory while the frame may wait for it (job f440).
+		uint32_t keep_index = UINT32_MAX;
+		for (uint32_t i = 0; i < transfer_worker_pool_size; i++) {
+			const TransferWorker *w = transfer_worker_pool[i];
+			if (keep_index == UINT32_MAX || w->staging_buffer_size_allocated > transfer_worker_pool[keep_index]->staging_buffer_size_allocated ||
+					(w->staging_buffer_size_allocated == transfer_worker_pool[keep_index]->staging_buffer_size_allocated && w->fellow_last_used_usec > transfer_worker_pool[keep_index]->fellow_last_used_usec)) {
+				keep_index = i;
 			}
-			fellow_staging_to_free.push_back(worker->staging_buffer);
-			Fellow::stats().transfer_staging_trims.increment();
-			worker->staging_buffer = RDD::BufferID();
-			worker->staging_buffer_size_allocated = 0;
-			worker->staging_buffer_size_in_use = 0;
-			worker->max_transfer_size = 0;
 		}
-		worker->thread_mutex.unlock();
+		for (uint32_t index : transfer_worker_pool_available_list) {
+			TransferWorker *worker = transfer_worker_pool[index];
+			if (index == keep_index || worker->staging_buffer_size_allocated <= keep_bytes || worker->fellow_last_used_usec + idle_usec > now) {
+				continue;
+			}
+			if (!worker->thread_mutex.try_lock()) {
+				continue;
+			}
+			if (!worker->recording) {
+				if (worker->submitted) {
+					_wait_for_transfer_worker(worker); // long finished: unused for the idle time
+				}
+				fellow_staging_to_free.push_back(worker->staging_buffer);
+				Fellow::stats().transfer_staging_trims.increment();
+				worker->staging_buffer = RDD::BufferID();
+				worker->staging_buffer_size_allocated = 0;
+				worker->staging_buffer_size_in_use = 0;
+				worker->max_transfer_size = 0;
+			}
+			worker->thread_mutex.unlock();
+		}
 	}
-	if (!fellow_staging_to_free.is_empty()) {
-		fellow_staging_free_task = WorkerThreadPool::get_singleton()->add_native_task(&RenderingDevice::_fellow_free_staging_task, this, false, "FellowEngine staging free");
+	// Freed with the pool unlocked: another thread taking a worker meanwhile does not wait for the driver.
+	for (RDD::BufferID buffer : fellow_staging_to_free) {
+		driver->buffer_free(buffer);
 	}
+	fellow_staging_to_free.clear();
 }
 
 void RenderingDevice::_end_transfer_worker(TransferWorker *p_transfer_worker) {
@@ -9598,7 +9605,8 @@ Error RenderingDevice::initialize(RenderingContextDriver *p_context, DisplayServ
 
 	// Use the processor count as the max amount of transfer workers that can be created.
 	transfer_worker_pool_max_size = OS::get_singleton()->get_processor_count();
-	fellow_tight_staging = Fellow::enabled() && bool(GLOBAL_GET("rendering/fellow/frame/transfer_tight_staging")); // decision 0234
+	// Decision 0234. Read with defaults: the device is made before the RenderingServer registers FellowEngine's settings.
+	fellow_tight_staging = bool(ProjectSettings::get_singleton()->get_setting("rendering/fellow/enabled", true)) && bool(ProjectSettings::get_singleton()->get_setting("rendering/fellow/frame/transfer_tight_staging", false));
 
 	// Pre-allocate to avoid locking a mutex when indexing into them.
 	transfer_worker_pool.resize(transfer_worker_pool_max_size);
