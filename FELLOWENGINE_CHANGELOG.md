@@ -9,6 +9,13 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 130 — HLOD merged proxies baked into files (2026-11-16)
+
+- `FellowHLOD3D.bake_merged_proxies()` (decision 0254): the merged proxies and their detail levels baked into files
+  under a signature of each cell's members; `build()` takes a cell's mesh when its members are as baked, else merges
+  it (a stale bake can only miss). A town of 1 600 houses builds in 9 ms instead of 2.5 s. Project > Tools > Bake HLOD
+  (was Bake HLOD Impostors) bakes the merged proxies and the impostors. `bench/hlod_merged_files_check.gd`.
+
 ## Milestone 129 — HLOD impostors baked into files (2026-11-16)
 
 - `FellowHLOD3D.bake_impostors()` and Project > Tools > Bake HLOD Impostors (decision 0253): the impostors baked ahead

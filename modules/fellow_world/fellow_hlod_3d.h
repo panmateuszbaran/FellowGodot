@@ -94,6 +94,11 @@ private:
 	int impostors_pending = 0;
 	int impostors_saved = 0;
 	String _impostor_key(const Ref<Mesh> &p_mesh, const Ref<Material> &p_override) const;
+	// Decision 0254: merged proxies baked into files (bake_merged_proxies()), by a signature of their cell's members;
+	// a build takes them instead of merging.
+	Dictionary baked_merged;
+	String merged_bake_directory; // while bake_merged_proxies() builds
+	int merged_saved = 0;
 	void _impostor_saved(const Ref<ArrayMesh> &p_quad, const String &p_key, const String &p_path);
 	Dictionary build_info;
 	bool built = false;
@@ -142,6 +147,9 @@ public:
 	void set_impostors(const Dictionary &p_impostors);
 	Dictionary get_impostors() const;
 	int bake_impostors(const String &p_directory);
+	void set_merged_proxies(const Dictionary &p_merged);
+	Dictionary get_merged_proxies() const;
+	int bake_merged_proxies(const String &p_directory);
 	bool is_built() const { return built; }
 	Dictionary get_build_info() const { return build_info; }
 

@@ -22,7 +22,7 @@ const MONITORS := ["FellowEngine/Texture streaming resident", "FellowEngine/Text
 	"FellowEngine/Video memory budget", "FellowEngine/Video memory used (driver)", "FellowEngine/Texture streaming budget"]
 const SPLIT_MENU := "Split into Streaming Cells (FellowEngine)..."
 const PROXIES_MENU := "Bake Streaming Proxies (FellowEngine)..."
-const HLOD_MENU := "Bake HLOD Impostors (FellowEngine)"
+const HLOD_MENU := "Bake HLOD (FellowEngine)"
 
 var out := {}
 var failures := []
@@ -681,8 +681,9 @@ func _check_proxies() -> void:
 	out["proxies"] = result
 
 
-# Milestone 129: Project > Tools > Bake HLOD Impostors on a FellowHLOD3D over a MultiMesh of a mesh saved in a file:
-# the impostor baked into a file beside the scene, kept in the node's impostors (undoable) and saved with the scene.
+# Milestones 129-130: Project > Tools > Bake HLOD on a FellowHLOD3D over a MultiMesh of a mesh saved in a file and six
+# MeshInstance3D nodes of it in one cell: the impostor and the merged proxy baked into files beside the scene, kept in
+# the node's impostors and merged_proxies (undoable) and saved with the scene.
 func _check_hlod_impostors() -> void:
 	var sphere := SphereMesh.new()
 	sphere.radial_segments = 64
@@ -708,6 +709,14 @@ func _check_hlod_impostors() -> void:
 	mmi.multimesh = mm
 	hlod.add_child(mmi)
 	mmi.owner = level
+	# Milestone 130: six balls in one cell, merged.
+	for i in 6:
+		var mi := MeshInstance3D.new()
+		mi.name = "Ball%d" % i
+		mi.mesh = load("res://hlod_ball.res")
+		mi.position = Vector3(i * 3.0, 0, 20.0)
+		hlod.add_child(mi)
+		mi.owner = level
 	var ps := PackedScene.new()
 	ps.pack(level)
 	ResourceSaver.save(ps, "res://hlod.tscn")
@@ -738,19 +747,22 @@ func _check_hlod_impostors() -> void:
 		frames += 1
 		# (The report pops up over whichever window is in front: looked for in all of them.)
 		for d in get_tree().root.find_children("*", "AcceptDialog", true, false):
-			if d.visible and d.dialog_text.contains("impostors baked"):
+			if d.visible and d.dialog_text.contains("impostors baked into"):
 				report = d.dialog_text
 				d.hide()
 		if report != "":
 			break
 
 	var impostors: Dictionary = node.get("impostors")
+	var merged: Dictionary = node.get("merged_proxies")
 	EditorInterface.save_scene()
 	await _frames(3)
 	var saved := FileAccess.get_file_as_string("res://hlod.tscn")
-	var files := DirAccess.get_files_at("res://hlod_impostors")
-	var result := {"report": report, "frames": frames, "impostors": impostors.size(), "files": files.size(), "saved_with_scene": saved.contains("impostors = {")}
-	if report == "" or impostors.size() != 1 or files.size() != 1 or not result["saved_with_scene"]:
+	var files := DirAccess.get_files_at("res://hlod_hlod/impostors")
+	var merged_files := DirAccess.get_files_at("res://hlod_hlod/merged")
+	var result := {"report": report, "frames": frames, "impostors": impostors.size(), "files": files.size(), "merged": merged.size(), "merged_files": merged_files.size(),
+		"saved_with_scene": saved.contains("impostors = {") and saved.contains("merged_proxies = {")}
+	if report == "" or impostors.size() != 1 or files.size() != 1 or merged.size() != 1 or merged_files.size() != 1 or not result["saved_with_scene"]:
 		_fail("hlod impostors: %s" % [result])
 	out["hlod_impostors"] = result
 

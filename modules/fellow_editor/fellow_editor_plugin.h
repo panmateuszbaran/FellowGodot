@@ -175,9 +175,12 @@ private:
 	void _split_confirmed();
 	void _proxies_menu();
 	void _proxies_confirmed();
-	// Milestone 129 (decision 0253): the selected FellowHLOD3D's impostors baked into files.
+	// Milestones 129-130 (decisions 0253, 0254): the selected FellowHLOD3D's impostors and merged proxies baked into
+	// files.
 	ObjectID hlod_bake_node;
 	Dictionary hlod_bake_before;
+	Dictionary hlod_merged_before; // milestone 130 (decision 0254): the merged proxies too
+	int hlod_merged_saved = 0;
 	String hlod_bake_directory;
 	void _hlod_impostors_menu();
 	void _hlod_impostors_baked(int p_count);

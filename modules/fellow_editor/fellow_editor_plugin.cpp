@@ -798,25 +798,32 @@ void FellowEditorPlugin::_hlod_impostors_menu() {
 		}
 	}
 	if (!hlod) {
-		EditorNode::get_singleton()->show_warning(TTR("Select a FellowHLOD3D: its impostors are baked into files beside the scene."));
+		EditorNode::get_singleton()->show_warning(TTR("Select a FellowHLOD3D: its merged proxies and impostors are baked into files beside the scene."));
 		return;
 	}
 	Node *scene = EditorInterface::get_singleton()->get_edited_scene_root();
 	if (!scene || scene->get_scene_file_path().is_empty()) {
-		EditorNode::get_singleton()->show_warning(TTR("Save the scene first: the impostors are found by their meshes' files and saved beside the scene."));
+		EditorNode::get_singleton()->show_warning(TTR("Save the scene first: the baked meshes are found by their meshes' files and saved beside the scene."));
 		return;
 	}
 	hlod_bake_node = hlod->get_instance_id();
 	hlod_bake_before = Dictionary(hlod->get("impostors")).duplicate();
-	hlod_bake_directory = scene->get_scene_file_path().get_basename() + "_impostors";
+	hlod_merged_before = Dictionary(hlod->get("merged_proxies")).duplicate();
+	hlod_bake_directory = scene->get_scene_file_path().get_basename() + "_hlod";
+	// The merged proxies first (at once), then the impostors (a view a frame).
+	hlod_merged_saved = hlod->call("bake_merged_proxies", hlod_bake_directory.path_join("merged"));
 	const Callable done = callable_mp(this, &FellowEditorPlugin::_hlod_impostors_baked);
 	if (!hlod->is_connected("impostors_baked", done)) {
 		hlod->connect("impostors_baked", done, CONNECT_ONE_SHOT);
 	}
-	const int queued = hlod->call("bake_impostors", hlod_bake_directory);
+	const int queued = float(hlod->get("impostor_distance")) > 0.0f ? int(hlod->call("bake_impostors", hlod_bake_directory.path_join("impostors"))) : 0;
 	if (queued <= 0) {
 		hlod->disconnect("impostors_baked", done);
-		EditorNode::get_singleton()->show_warning(TTR("Nothing to bake: no repeated mesh or MultiMesh below the node with an impostor distance, enough triangles and a mesh saved in a file."));
+		if (hlod_merged_saved <= 0) {
+			EditorNode::get_singleton()->show_warning(TTR("Nothing to bake: no cell of meshes to merge and no impostor, or their meshes and materials are not saved in files."));
+			return;
+		}
+		_hlod_impostors_baked(0);
 	}
 }
 
@@ -826,12 +833,14 @@ void FellowEditorPlugin::_hlod_impostors_baked(int p_count) {
 		return;
 	}
 	EditorUndoRedoManager *ur = EditorUndoRedoManager::get_singleton();
-	ur->create_action(TTR("Bake HLOD Impostors"));
+	ur->create_action(TTR("Bake HLOD"));
+	ur->add_do_property(hlod, "merged_proxies", hlod->get("merged_proxies"));
+	ur->add_undo_property(hlod, "merged_proxies", hlod_merged_before);
 	ur->add_do_property(hlod, "impostors", hlod->get("impostors"));
 	ur->add_undo_property(hlod, "impostors", hlod_bake_before);
 	ur->commit_action();
 	EditorFileSystem::get_singleton()->scan_changes();
-	EditorNode::get_singleton()->show_accept(vformat(TTR("%d impostors baked into %s."), p_count, hlod_bake_directory), TTR("OK"));
+	EditorNode::get_singleton()->show_accept(vformat(TTR("%d merged proxies and %d impostors baked into %s."), hlod_merged_saved, p_count, hlod_bake_directory), TTR("OK"));
 }
 
 // FellowEngine's nodes animate in the editor (milestone 52), or stand still: the toolbar's toggle and the editor setting
@@ -1246,7 +1255,7 @@ void FellowEditorPlugin::_notification(int p_what) {
 	if (p_what == NOTIFICATION_ENTER_TREE) {
 		add_tool_menu_item(TTR("Split into Streaming Cells (FellowEngine)..."), callable_mp(this, &FellowEditorPlugin::_split_menu));
 		add_tool_menu_item(TTR("Bake Streaming Proxies (FellowEngine)..."), callable_mp(this, &FellowEditorPlugin::_proxies_menu));
-		add_tool_menu_item(TTR("Bake HLOD Impostors (FellowEngine)"), callable_mp(this, &FellowEditorPlugin::_hlod_impostors_menu));
+		add_tool_menu_item(TTR("Bake HLOD (FellowEngine)"), callable_mp(this, &FellowEditorPlugin::_hlod_impostors_menu));
 		add_control_to_container(CONTAINER_SPATIAL_EDITOR_MENU, add_menu);
 		add_control_to_container(CONTAINER_SPATIAL_EDITOR_MENU, animate_button);
 		EditorSettings::get_singleton()->connect("settings_changed", callable_mp(this, &FellowEditorPlugin::_editor_settings_changed));
@@ -1259,7 +1268,7 @@ void FellowEditorPlugin::_notification(int p_what) {
 		}
 		remove_tool_menu_item(TTR("Split into Streaming Cells (FellowEngine)..."));
 		remove_tool_menu_item(TTR("Bake Streaming Proxies (FellowEngine)..."));
-		remove_tool_menu_item(TTR("Bake HLOD Impostors (FellowEngine)"));
+		remove_tool_menu_item(TTR("Bake HLOD (FellowEngine)"));
 		remove_control_from_container(CONTAINER_SPATIAL_EDITOR_MENU, animate_button);
 		remove_control_from_container(CONTAINER_SPATIAL_EDITOR_MENU, add_menu);
 		EditorSettings::get_singleton()->disconnect("settings_changed", callable_mp(this, &FellowEditorPlugin::_editor_settings_changed));

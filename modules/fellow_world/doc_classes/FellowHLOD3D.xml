@@ -18,7 +18,14 @@
 			<return type="int" />
 			<param index="0" name="directory" type="String" />
 			<description>
-				Bakes the impostors this node would bake at run time — for its repeated meshes and its [MultiMeshInstance3D] nodes, as [method build] finds them — into files in [param directory] ([code]impostor_&lt;n&gt;.res[/code]: the quad, its material and its atlases, lossless), one view a frame, without building, and keeps them in [member impostors]; [signal impostors_baked] when the last is saved. A mesh (or material override) not saved in a file has no key and is skipped. Returns the bakes queued. The editor's [b]Project &gt; Tools &gt; Bake HLOD Impostors[/b] calls it on the selected node (undoable). See [code]docs/decisions/0253-hlod-impostor-files.md[/code].
+				Bakes the impostors this node would bake at run time — for its repeated meshes and its [MultiMeshInstance3D] nodes, as [method build] finds them — into files in [param directory] ([code]impostor_&lt;n&gt;.res[/code]: the quad, its material and its atlases, lossless), one view a frame, without building, and keeps them in [member impostors]; [signal impostors_baked] when the last is saved. A mesh (or material override) not saved in a file has no key and is skipped. Returns the bakes queued. The editor's [b]Project &gt; Tools &gt; Bake HLOD[/b] calls it on the selected node (undoable). See [code]docs/decisions/0253-hlod-impostor-files.md[/code].
+			</description>
+		</method>
+		<method name="bake_merged_proxies">
+			<return type="int" />
+			<param index="0" name="directory" type="String" />
+			<description>
+				Builds as [method build] does, saves each merged proxy's mesh (with its detail levels) into [param directory] ([code]merged_&lt;cell&gt;_&lt;n&gt;.res[/code]) under a signature of its cell's members — their meshes' and materials' files and their transforms — keeps them in [member merged_proxies], and undoes the build (built again if it was). Cells whose members' meshes or materials are not files are left to run time. Returns the meshes saved. The editor's [b]Project &gt; Tools &gt; Bake HLOD[/b] calls it with [method bake_impostors] (undoable). See [code]docs/decisions/0254-hlod-merged-files.md[/code].
 			</description>
 		</method>
 		<method name="build">
@@ -36,7 +43,7 @@
 		<method name="get_build_info" qualifiers="const">
 			<return type="Dictionary" />
 			<description>
-				Statistics of the last build: [code]impostor_bakes[/code], [code]impostor_multimeshes[/code], [code]candidates[/code], [code]instanced_members[/code], [code]instanced_proxies[/code], [code]merged_members[/code], [code]merged_proxies[/code], [code]merged_surfaces[/code], [code]cells_skipped[/code], [code]merged_triangles[/code], [code]lod_triangles[/code] (summed over the generated levels) and [code]build_msec[/code].
+				Statistics of the last build: [code]impostor_bakes[/code], [code]impostors_loaded[/code] (taken from [member impostors]), [code]impostor_multimeshes[/code], [code]candidates[/code], [code]instanced_members[/code], [code]instanced_proxies[/code], [code]merged_members[/code], [code skip-lint]merged_proxies[/code], [code]merged_loaded[/code] (taken from [member merged_proxies]), [code]merged_surfaces[/code], [code]cells_skipped[/code], [code]merged_triangles[/code], [code]lod_triangles[/code] (summed over the generated levels) and [code]build_msec[/code].
 			</description>
 		</method>
 		<method name="is_baking" qualifiers="const">
@@ -88,6 +95,9 @@
 		</member>
 		<member name="margin" type="float" setter="set_margin" getter="get_margin" default="5.0">
 			Hysteresis around [member distance], so a camera moving around it does not switch every frame.
+		</member>
+		<member name="merged_proxies" type="Dictionary" setter="set_merged_proxies" getter="get_merged_proxies" default="{}">
+			Merged proxies baked into files by [method bake_merged_proxies], by their cells' signatures: [method build] takes a cell's mesh instead of merging it and generating its detail levels when its members are as they were baked (the same meshes and materials, transforms within a tenth of a millimetre); others are merged at run time. Saved with the scene.
 		</member>
 		<member name="min_meshes" type="int" setter="set_min_meshes" getter="get_min_meshes" default="4">
 			Cells with fewer mergeable meshes keep them as they are.

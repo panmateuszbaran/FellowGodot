@@ -413,7 +413,7 @@ void FellowHLOD3D::build() {
 	generation++;
 	const uint64_t t0 = OS::get_singleton()->get_ticks_usec();
 	// Impostors (decision 0122): baked one view per frame by an internal baker; applied when done.
-	const bool impostors = impostor_distance > 0.0 && Fellow::multimesh_culling();
+	const bool impostors = impostor_distance > 0.0 && Fellow::multimesh_culling() && merged_bake_directory.is_empty();
 	int impostor_bakes = 0;
 	int impostors_loaded = 0;
 	LocalVector<Pair<Ref<ArrayMesh>, uint32_t>> ready;
@@ -539,15 +539,62 @@ void FellowHLOD3D::build() {
 
 	// Meshes shared by many nodes are read once.
 	HashMap<uint64_t, SourceSurface> source_cache; // mesh id * 64 + surface
-	int merged_members = 0, merged_count = 0, surface_count = 0, skipped_cells = 0;
+	int merged_members = 0, merged_count = 0, surface_count = 0, skipped_cells = 0, merged_loaded = 0;
+	Dictionary merged_baked_now; // (bake_merged_proxies(): this build's cells)
 	int64_t triangles = 0, lod_triangles = 0;
 	for (Proxy &px : cells) {
 		if ((int)px.members.size() < MAX(1, min_meshes)) {
 			skipped_cells++;
 			continue;
 		}
+		// Decision 0254: the cell's signature — its members' meshes, materials and transforms (to a tenth of a
+		// millimetre), by their files — and its merged mesh baked into a file for it, if there is one.
+		String signature;
+		{
+			String desc = vformat("%d|%f|", lods ? 1 : 0, cell);
+			for (MeshInstance3D *mi : px.members) {
+				const Ref<Mesh> mesh = mi->get_mesh();
+				if (mesh->get_path().is_empty()) {
+					desc = String();
+					break;
+				}
+				desc += mesh->get_path() + "|";
+				for (int s = -1; s < mesh->get_surface_count(); s++) {
+					const Ref<Material> m = s < 0 ? mi->get_material_override() : mi->get_surface_override_material(s);
+					if (m.is_valid() && m->get_path().is_empty()) {
+						desc = String();
+						break;
+					}
+					desc += (m.is_valid() ? m->get_path() : String()) + ",";
+				}
+				if (desc.is_empty()) {
+					break;
+				}
+				const Transform3D x = to_local * mi->get_global_transform();
+				for (int r = 0; r < 3; r++) {
+					for (int c = 0; c < 3; c++) {
+						desc += itos(int64_t(Math::round(x.basis[r][c] * 100000.0))) + ",";
+					}
+					desc += itos(int64_t(Math::round(x.origin[r] * 10000.0))) + ";";
+				}
+			}
+			signature = desc.is_empty() ? String() : desc.sha256_text();
+		}
+		const Dictionary baked_cell = (merged_bake_directory.is_empty() && !signature.is_empty()) ? Dictionary(baked_merged.get(signature, Dictionary())) : Dictionary();
+		const Ref<ArrayMesh> baked_mesh = baked_cell.get("mesh", Variant());
 		LocalVector<MeshInstance3D *> merged;
+		if (baked_mesh.is_valid()) {
+			const PackedInt32Array which = baked_cell.get("members", PackedInt32Array());
+			for (int i = 0; i < which.size(); i++) {
+				if (which[i] >= 0 && which[i] < (int)px.members.size()) {
+					merged.push_back(px.members[which[i]]);
+				}
+			}
+		}
 		for (MeshInstance3D *mi : px.members) {
+			if (baked_mesh.is_valid()) {
+				break;
+			}
 			const Ref<Mesh> mesh = mi->get_mesh();
 			const Transform3D xf = to_local * mi->get_global_transform();
 			const Ref<Material> override = mi->get_material_override();
@@ -593,13 +640,16 @@ void FellowHLOD3D::build() {
 			}
 			merged.push_back(mi);
 		}
-		if ((int)merged.size() < MAX(1, min_meshes) || px.surfaces.is_empty()) {
+		if ((int)merged.size() < MAX(1, min_meshes) || (px.surfaces.is_empty() && baked_mesh.is_null())) {
 			skipped_cells++;
 			continue;
 		}
 
 		Ref<ArrayMesh> mesh;
-		if (lods) {
+		if (baked_mesh.is_valid()) {
+			mesh = baked_mesh;
+			merged_loaded++;
+		} else if (lods) {
 			Ref<ImporterMesh> im;
 			im.instantiate();
 			for (const Accum &a : px.surfaces) {
@@ -622,7 +672,23 @@ void FellowHLOD3D::build() {
 		for (const Accum &a : px.surfaces) {
 			triangles += a.indices.size() / 3;
 		}
-		surface_count += px.surfaces.size();
+		surface_count += baked_mesh.is_valid() ? mesh->get_surface_count() : (int)px.surfaces.size();
+		// Baking (bake_merged_proxies()): the mesh into a file, under its cell's signature, with its members.
+		if (!merged_bake_directory.is_empty() && !signature.is_empty()) {
+			const String path = merged_bake_directory.path_join(vformat("merged_%d_%d_%d_%d.res", px.key.cell.x, px.key.cell.y, px.key.cell.z, merged_count));
+			if (ResourceSaver::save(mesh, path, ResourceSaver::FLAG_COMPRESS) == OK) {
+				mesh->set_path(path, true);
+				PackedInt32Array which;
+				for (MeshInstance3D *mi : merged) {
+					which.push_back(px.members.find(mi));
+				}
+				Dictionary entry;
+				entry["mesh"] = mesh;
+				entry["members"] = which;
+				merged_baked_now[signature] = entry;
+				merged_saved++;
+			}
+		}
 
 		MeshInstance3D *proxy = memnew(MeshInstance3D);
 		proxy->set_name(vformat("HLOD_%d_%d_%d", px.key.cell.x, px.key.cell.y, px.key.cell.z));
@@ -665,6 +731,9 @@ void FellowHLOD3D::build() {
 			impostor_multimeshes++;
 		}
 	}
+	if (!merged_bake_directory.is_empty()) {
+		baked_merged = merged_baked_now;
+	}
 	built = true;
 	_apply_roles();
 	for (const Pair<Ref<ArrayMesh>, uint32_t> &r : ready) {
@@ -683,6 +752,7 @@ void FellowHLOD3D::build() {
 	build_info["lod_triangles"] = lod_triangles;
 	build_info["impostor_bakes"] = impostor_bakes;
 	build_info["impostors_loaded"] = impostors_loaded;
+	build_info["merged_loaded"] = merged_loaded;
 	build_info["impostor_multimeshes"] = impostor_multimeshes;
 	build_info["build_msec"] = double(OS::get_singleton()->get_ticks_usec() - t0) / 1000.0;
 }
@@ -806,6 +876,34 @@ void FellowHLOD3D::_impostor_saved(const Ref<ArrayMesh> &p_quad, const String &p
 		notify_property_list_changed();
 		emit_signal(SNAME("impostors_baked"), impostors_saved);
 	}
+}
+
+void FellowHLOD3D::set_merged_proxies(const Dictionary &p_merged) {
+	baked_merged = p_merged;
+}
+
+Dictionary FellowHLOD3D::get_merged_proxies() const {
+	return baked_merged;
+}
+
+// The merged proxies built as build() builds them and saved into p_directory (merged_<cell>_<n>.res) under their cells'
+// signatures, then the build undone (the members as they were): a build takes them instead of merging. Members whose
+// meshes or materials are not files keep their cell merged at run time. Returns the meshes saved.
+int FellowHLOD3D::bake_merged_proxies(const String &p_directory) {
+	ERR_FAIL_COND_V_MSG(!is_inside_tree(), 0, "FellowHLOD3D: bake_merged_proxies() needs the node in the scene tree.");
+	const Error dir_err = DirAccess::make_dir_recursive_absolute(p_directory);
+	ERR_FAIL_COND_V_MSG(dir_err != OK && dir_err != ERR_ALREADY_EXISTS, 0, vformat("Cannot create the directory \"%s\".", p_directory));
+	const bool was_built = built;
+	merged_bake_directory = p_directory;
+	merged_saved = 0;
+	build();
+	merged_bake_directory = String();
+	clear();
+	if (was_built) {
+		build();
+	}
+	notify_property_list_changed();
+	return merged_saved;
 }
 
 bool FellowHLOD3D::is_baking() const {
@@ -1085,6 +1183,9 @@ void FellowHLOD3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_impostors", "impostors"), &FellowHLOD3D::set_impostors);
 	ClassDB::bind_method(D_METHOD("get_impostors"), &FellowHLOD3D::get_impostors);
 	ClassDB::bind_method(D_METHOD("bake_impostors", "directory"), &FellowHLOD3D::bake_impostors);
+	ClassDB::bind_method(D_METHOD("set_merged_proxies", "merged_proxies"), &FellowHLOD3D::set_merged_proxies);
+	ClassDB::bind_method(D_METHOD("get_merged_proxies"), &FellowHLOD3D::get_merged_proxies);
+	ClassDB::bind_method(D_METHOD("bake_merged_proxies", "directory"), &FellowHLOD3D::bake_merged_proxies);
 	ClassDB::bind_method(D_METHOD("clear"), &FellowHLOD3D::clear);
 	ClassDB::bind_method(D_METHOD("is_built"), &FellowHLOD3D::is_built);
 	ClassDB::bind_method(D_METHOD("get_build_info"), &FellowHLOD3D::get_build_info);
@@ -1099,6 +1200,7 @@ void FellowHLOD3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "impostor_resolution", PROPERTY_HINT_RANGE, "16,1024,1,suffix:px"), "set_impostor_resolution", "get_impostor_resolution");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "impostor_min_triangles", PROPERTY_HINT_RANGE, "0,100000,1,or_greater"), "set_impostor_min_triangles", "get_impostor_min_triangles");
 	ADD_PROPERTY(PropertyInfo(Variant::DICTIONARY, "impostors"), "set_impostors", "get_impostors");
+	ADD_PROPERTY(PropertyInfo(Variant::DICTIONARY, "merged_proxies"), "set_merged_proxies", "get_merged_proxies");
 	ADD_SIGNAL(MethodInfo("impostors_baked", PropertyInfo(Variant::INT, "count")));
 	ADD_GROUP("", "");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "cell_size", PROPERTY_HINT_RANGE, "1,1000,0.1,or_greater,suffix:m"), "set_cell_size", "get_cell_size");

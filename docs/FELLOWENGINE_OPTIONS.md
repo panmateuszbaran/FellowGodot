@@ -174,6 +174,9 @@ when the node is ready (or by `build()`):
   (decision 0253): `bake_impostors(directory)` bakes them into files ahead (Project > Tools > Bake HLOD Impostors in
   the editor), kept in the node's `impostors` (by the mesh's and material override's files, `impostor_frames` and
   `impostor_resolution`) and taken by `build()` at once: no frames of baking at start. Signal `impostors_baked`.
+  Milestone 130 (decision 0254): `bake_merged_proxies(directory)` bakes the merged proxies too (`merged_proxies`, by a
+  signature of each cell's members: their meshes' and materials' files and transforms); `build()` takes a cell's mesh
+  when its members are as baked (a town of 1 600 houses: 2.5 s → 9 ms). Project > Tools > Bake HLOD bakes both.
 
 Directional cascades starting beyond `distance` draw the proxies, the nearer ones the meshes, independently of the
 camera's position (`shadow_mode`), so the directional shadow cache keeps both. Meshes with skins, blend shapes,

@@ -24,7 +24,7 @@ at run time". The terrain's foliage already bakes its impostors into files (deci
   `impostor_frames` and `impostor_resolution`. A mesh made at run time has no file and no key (baked at run time as
   before); other views or another resolution do not use a bake made for different ones. `build()` looks each impostor
   up first and, once built, hands its instances over at once; the build's info gains `impostors_loaded`.
-* **The editor**: Project > Tools > Bake HLOD Impostors bakes the selected node's impostors beside the scene
+* **The editor**: Project > Tools > Bake HLOD Impostors (Bake HLOD since decision 0254) bakes the selected node's impostors beside the scene
   (`<scene>_impostors/`, the scene saved first: the keys are files), the property set in one undoable action, and
   reports the count. The baker now asks for the next frame while it runs (`Fellow::request_redraw()`): in the editor
   frames are drawn only on a change, and a bake waited for one between its views. The property is replaced, not
@@ -67,7 +67,8 @@ Keep: a scene's far trees are impostors from its first frame, with no bake at ru
 
 * **Baking the whole HLOD build into the scene** (the merged proxies and their detail levels as files, decision 0122's
   1 s for City Lab at load): the members' visibility parents would be saved into the level, and a change to a member
-  would need a bake again; this milestone bakes the part that costs frames.
+  would need a bake again; this milestone bakes the part that costs frames. (The merged proxies: decision 0254, as a
+  cache keyed by the members.)
 * **VRAM-compressed atlases**: as decision 0172 — lossless keeps the impostors as the run-time bake draws them.
 * **Not yet**: impostors of meshes without files (made by a script) are baked at run time; the files are not shared
   between nodes baking the same mesh.
