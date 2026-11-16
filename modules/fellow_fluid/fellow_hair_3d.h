@@ -30,6 +30,7 @@
 
 #pragma once
 
+#include "core/math/random_pcg.h"
 #include "core/templates/local_vector.h"
 #include "scene/3d/visual_instance_3d.h"
 #include "scene/resources/image_texture.h"
@@ -68,6 +69,19 @@ private:
 	Vector3 scalp_center;
 	float coverage = 105.0f; // degrees from the top
 	float forehead_angle = 55.0f; // degrees about the face's direction (-Z) left bare
+	// Milestone 125 (decision 0249): the scalp from a mesh in the node's space (the head's, or one made for it): the
+	// roots on its faces whose three vertices' colour's red is 0.5 or more (all its faces without colours). The sphere stays
+	// the head's collider and the styled shape's.
+	Ref<Mesh> scalp_mesh;
+	struct ScalpTri {
+		Vector3 a, b, c;
+		Vector3 na, nb, nc;
+		float area = 0.0f;
+	};
+	LocalVector<ScalpTri> scalp_tris;
+	LocalVector<float> scalp_cdf;
+	bool _scalp_mesh_triangles();
+	void _scalp_mesh_sample(RandomPCG &p_rng, Vector3 &r_position, Vector3 &r_normal) const;
 	// The strands.
 	int guide_count = 160;
 	int strand_count = 10000;
@@ -88,6 +102,15 @@ private:
 	float collision_margin = 0.01f; // m beyond the scalp's sphere
 	TypedArray<NodePath> colliders;
 	int substeps = 4;
+	// Milestone 125: level of detail — beyond lod_distance fewer strands, wider in proportion (the same coverage), at
+	// least min_strand_share of them; beyond simulation_distance the styled shape follows the head.
+	float lod_distance = 4.0f; // m (0: all strands at any distance)
+	float min_strand_share = 0.05f;
+	float simulation_distance = 40.0f; // m (0: everywhere)
+	int visible_strands = -1;
+	bool simulated = false;
+	float width_scale = 1.0f;
+	void _update_lod();
 	// The look.
 	float root_width = 0.4f; // mm (a drawn strand stands for a few real ones)
 	float tip_width = 0.12f; // mm
@@ -191,6 +214,14 @@ public:
 	void set_colliders(const TypedArray<NodePath> &p_colliders) { colliders = p_colliders; }
 	TypedArray<NodePath> get_colliders() const { return colliders; }
 	void set_substeps(int p_substeps) { substeps = CLAMP(p_substeps, 1, 16); }
+	void set_scalp_mesh(const Ref<Mesh> &p_mesh);
+	Ref<Mesh> get_scalp_mesh() const { return scalp_mesh; }
+	void set_lod_distance(float p_distance) { lod_distance = MAX(0.0f, p_distance); }
+	float get_lod_distance() const { return lod_distance; }
+	void set_min_strand_share(float p_share) { min_strand_share = CLAMP(p_share, 0.001f, 1.0f); }
+	float get_min_strand_share() const { return min_strand_share; }
+	void set_simulation_distance(float p_distance) { simulation_distance = MAX(0.0f, p_distance); }
+	float get_simulation_distance() const { return simulation_distance; }
 	int get_substeps() const { return substeps; }
 	void set_root_width(float p_mm);
 	float get_root_width() const { return root_width; }

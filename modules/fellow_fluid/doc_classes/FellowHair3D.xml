@@ -4,11 +4,11 @@
 		Hair of strands: guide strands simulated on the CPU, many more drawn between them on the GPU with a hair shading model.
 	</brief_description>
 	<description>
-		Hair for a character's head (FellowEngine milestone 124, decision 0248). Put it under a [BoneAttachment3D] on the head bone: its scalp is the cap of a sphere ([member scalp_radius] about [member scalp_center], in the node's space) from its top down to [member coverage], the face's side (-Z) left bare by [member forehead_angle].
+		Hair for a character's head (FellowEngine milestone 124, decision 0248). Put it under a [BoneAttachment3D] on the head bone: its scalp is the cap of a sphere ([member scalp_radius] about [member scalp_center], in the node's space) from its top down to [member coverage], the face's side (-Z) left bare by [member forehead_angle] — or the painted faces of [member scalp_mesh].
 		[member guide_count] guide strands grow from the scalp, combed along it (down and back) and falling, in [member segments] segments of [member length]. They are simulated on the CPU each frame in [member substeps] substeps: their roots on the scalp as the node moves, the segments' lengths kept exactly, a pull back to the styled shape strongest at the root ([member stiffness]), gravity, [member damping], the scene's [FellowWind3D] with [member drag], and out of the scalp's sphere and the [member colliders] (spheres and capsules: shoulders, a collar).
 		[member strand_count] strands are drawn, each between the three guides nearest its root (how far between them: [member spread]), along a Catmull-Rom curve through their points, as ribbons facing the camera at least a pixel wide (a thinner strand's coverage goes to its alpha, dithered: use TAA or FSR for smooth hair), [member root_width] thinning to [member tip_width]. The hair model: Kajiya-Kay's diffuse, a specular lobe in the light's colour and a broader one in the hair's ([member specular_shift], [member specular_strength], [member specular_sharpness]), light through it from behind ([member transmission]); darker at the roots ([member root_occlusion]) and on the strands under others; the light's shadows fall on it and from it.
 		Motion vectors follow the strands (the guides' positions go to the GPU in a texture of this frame's and the last frame's halves, each strand's instance data naming this frame's), so TAA and FSR see the hair's own motion.
-		In the editor the styled shape is shown, not simulated.
+		Far away fewer, wider strands are drawn ([member lod_distance]) and the hair is not simulated ([member simulation_distance]). In the editor the styled shape is shown, not simulated.
 	</description>
 	<tutorials>
 	</tutorials>
@@ -36,7 +36,7 @@
 		<method name="get_stats" qualifiers="const">
 			<return type="Dictionary" />
 			<description>
-				Returns [code]guides[/code], [code]points[/code] (a guide's), [code]strands[/code], and the last frame's [code]simulate_usec[/code] and [code]upload_usec[/code] (the guides' texture and the strands' instance data sent to the GPU).
+				Returns [code]guides[/code], [code]points[/code] (a guide's), [code]strands[/code], and the last frame's [code]simulate_usec[/code] and [code]upload_usec[/code] (the guides' texture and the strands' instance data sent to the GPU), [code]simulated[/code] (whether it was simulated: not beyond [member simulation_distance]), [code]visible_strands[/code] and [code]width_scale[/code] (the level of detail's).
 			</description>
 		</method>
 		<method name="reset">
@@ -86,6 +86,12 @@
 		<member name="length_variation" type="float" setter="set_length_variation" getter="get_length_variation" default="0.25">
 			How much shorter than its guides a strand may be (a share of their length).
 		</member>
+		<member name="lod_distance" type="float" setter="set_lod_distance" getter="get_lod_distance" default="4.0">
+			The distance within which every strand is drawn (metres, as through Godot's default 75-degree view: a narrower view counts as nearer). Beyond it a share of them falling with the square of the distance (the hair's size on the screen), at least [member min_strand_share], each drawn wider in proportion so that the hair covers as much (decision 0249). 0: every strand at any distance.
+		</member>
+		<member name="min_strand_share" type="float" setter="set_min_strand_share" getter="get_min_strand_share" default="0.05">
+			The least share of the strands drawn however far the hair is (see [member lod_distance]).
+		</member>
 		<member name="root_color" type="Color" setter="set_root_color" getter="get_root_color" default="Color(0.07, 0.045, 0.03, 1)">
 			The hair's colour at the roots.
 		</member>
@@ -98,6 +104,9 @@
 		<member name="scalp_center" type="Vector3" setter="set_scalp_center" getter="get_scalp_center" default="Vector3(0, 0, 0)">
 			The scalp's sphere's centre in the node's space (metres).
 		</member>
+		<member name="scalp_mesh" type="Mesh" setter="set_scalp_mesh" getter="get_scalp_mesh">
+			A mesh in the node's space the roots grow on instead of the sphere's cap (the head's mesh, or a scalp made for it): on its faces whose three vertices' colour's red is 0.5 or more (all its faces if it has no colours), by area, the guides spread evenly over them, the strands at random; the mesh's normals give the comb its start (decision 0249). The sphere ([member scalp_radius], [member scalp_center]) stays the head's collider and the styled shape's: fit it inside the head.
+		</member>
 		<member name="scalp_radius" type="float" setter="set_scalp_radius" getter="get_scalp_radius" default="0.1">
 			The scalp's sphere's radius (metres): the head's.
 		</member>
@@ -109,6 +118,9 @@
 		</member>
 		<member name="simulating" type="bool" setter="set_simulating" getter="is_simulating" default="true">
 			If [code]false[/code], the hair keeps its styled shape, following the node.
+		</member>
+		<member name="simulation_distance" type="float" setter="set_simulation_distance" getter="get_simulation_distance" default="40.0">
+			Beyond this distance from the camera the hair is not simulated: its styled shape follows the head (metres; 0: simulated at any distance).
 		</member>
 		<member name="specular_sharpness" type="float" setter="set_specular_sharpness" getter="get_specular_sharpness" default="120.0">
 			How narrow the hair's highlights are.

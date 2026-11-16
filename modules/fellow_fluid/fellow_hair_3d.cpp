@@ -39,7 +39,9 @@
 #include "core/math/random_pcg.h"
 #include "core/object/class_db.h"
 #include "core/os/os.h"
+#include "scene/3d/camera_3d.h"
 #include "scene/3d/physics/collision_shape_3d.h"
+#include "scene/main/viewport.h"
 #include "scene/resources/3d/capsule_shape_3d.h"
 #include "scene/resources/3d/sphere_shape_3d.h"
 #include "servers/rendering/rendering_server.h"
@@ -76,6 +78,7 @@ uniform float specular_sharpness = 120.0;
 uniform float transmission = 0.35;
 uniform float root_occlusion = 0.6;
 uniform float layer_occlusion = 0.45;
+uniform float width_scale = 1.0;
 
 varying vec3 hair_tangent;
 varying float hair_t;
@@ -130,7 +133,7 @@ void vertex() {
 	float sl = length(side);
 	side = sl > 1e-5 ? side / sl : vec3(1.0, 0.0, 0.0);
 	// At least a pixel wide: a thinner strand's coverage goes to its alpha, dithered (TAA resolves it).
-	float width = mix(root_width, tip_width, t);
+	float width = mix(root_width, tip_width, t) * width_scale;
 	float pixel = (ortho ? 2.0 : 2.0 * max(-pv.z, 1e-4)) / (PROJECTION_MATRIX[1][1] * VIEWPORT_SIZE.y);
 	float drawn = max(width, pixel);
 	hair_coverage = width / drawn;
@@ -229,10 +232,46 @@ void FellowHair3D::_build() {
 	auto on_scalp = [&](const Vector3 &p_dir) {
 		return p_dir.y >= cap && !(forehead_angle > 0.0f && p_dir.dot(Vector3(0, 0, -1)) > face);
 	};
-	// The guides' roots.
+	const bool mesh_scalp = _scalp_mesh_triangles();
+	// The guides' roots: on the mesh's painted faces, spread by farthest-point sampling over random points on them
+	// (milestone 125); or on a Fibonacci spiral over the sphere's cap.
+	if (mesh_scalp) {
+		LocalVector<Vector3> cand_p;
+		LocalVector<Vector3> cand_n;
+		const int candidates = MAX(64, guide_count * 16);
+		for (int i = 0; i < candidates; i++) {
+			Vector3 p, n;
+			_scalp_mesh_sample(rng, p, n);
+			cand_p.push_back(p);
+			cand_n.push_back(n);
+		}
+		LocalVector<float> nearest;
+		nearest.resize(cand_p.size());
+		for (float &f : nearest) {
+			f = 1e30f;
+		}
+		uint32_t pick = 0;
+		for (int i = 0; i < guide_count; i++) {
+			guide_root.push_back(cand_p[pick]);
+			guide_normal.push_back(cand_n[pick]);
+			uint32_t next = 0;
+			float far = -1.0f;
+			for (uint32_t c = 0; c < cand_p.size(); c++) {
+				nearest[c] = MIN(nearest[c], cand_p[c].distance_squared_to(cand_p[pick]));
+				if (nearest[c] > far) {
+					far = nearest[c];
+					next = c;
+				}
+			}
+			if (far <= 0.0f) {
+				break; // fewer distinct points than guides
+			}
+			pick = next;
+		}
+	}
 	LocalVector<Vector3> dirs;
 	const int tries = MAX(16, guide_count * 8);
-	for (int i = 0; i < tries && int(dirs.size()) < guide_count * 4; i++) {
+	for (int i = 0; !mesh_scalp && i < tries && int(dirs.size()) < guide_count * 4; i++) {
 		const float y = 1.0f - 2.0f * (float(i) + 0.5f) / float(tries);
 		const float r = Math::sqrt(MAX(0.0f, 1.0f - y * y));
 		const float phi = float(i) * 2.39996323f;
@@ -241,15 +280,21 @@ void FellowHair3D::_build() {
 			dirs.push_back(d);
 		}
 	}
-	if (dirs.is_empty()) {
-		return;
+	if (!mesh_scalp) {
+		if (dirs.is_empty()) {
+			return;
+		}
+		// Thin the spiral's points evenly down to guide_count.
+		const int count = MIN(guide_count, int(dirs.size()));
+		for (int i = 0; i < count; i++) {
+			const Vector3 d = dirs[uint32_t(int64_t(i) * dirs.size() / count)];
+			guide_root.push_back(scalp_center + d * scalp_radius);
+			guide_normal.push_back(d);
+		}
 	}
-	// Thin the spiral's points evenly down to guide_count.
-	const int g = MIN(guide_count, int(dirs.size()));
-	for (int i = 0; i < g; i++) {
-		const Vector3 d = dirs[uint32_t(int64_t(i) * dirs.size() / g)];
-		guide_root.push_back(scalp_center + d * scalp_radius);
-		guide_normal.push_back(d);
+	const int g = int(guide_root.size());
+	if (g == 0) {
+		return;
 	}
 	points = segments + 1;
 	const float seg = length / float(segments);
@@ -308,14 +353,20 @@ void FellowHair3D::_build() {
 	float *w = instance_data.ptrw();
 	int made = 0;
 	for (int attempt = 0; made < s_count && attempt < s_count * 20; attempt++) {
-		const float y = rng.randf() * 2.0f - 1.0f;
-		const float phi = rng.randf() * Math::TAU;
-		const float r = Math::sqrt(MAX(0.0f, 1.0f - y * y));
-		const Vector3 d(r * Math::cos(phi), y, r * Math::sin(phi));
-		if (!on_scalp(d)) {
-			continue;
+		Vector3 root;
+		if (mesh_scalp) {
+			Vector3 n;
+			_scalp_mesh_sample(rng, root, n);
+		} else {
+			const float y = rng.randf() * 2.0f - 1.0f;
+			const float phi = rng.randf() * Math::TAU;
+			const float r = Math::sqrt(MAX(0.0f, 1.0f - y * y));
+			const Vector3 d(r * Math::cos(phi), y, r * Math::sin(phi));
+			if (!on_scalp(d)) {
+				continue;
+			}
+			root = scalp_center + d * scalp_radius;
 		}
-		const Vector3 root = scalp_center + d * scalp_radius;
 		int best[3] = { 0, 0, 0 };
 		float best_d[3] = { 1e30f, 1e30f, 1e30f };
 		for (int i = 0; i < g; i++) {
@@ -401,6 +452,8 @@ void FellowHair3D::_build() {
 	strip->surface_set_material(0, material);
 	multimesh->set_mesh(strip);
 	multimesh->set_instance_count(made);
+	visible_strands = -1; // the level of detail set again
+	width_scale = 1.0f;
 	// The guides' texture: two halves of the guides' points.
 	guide_image = Image::create_empty(points, g * 2, false, Image::FORMAT_RGBAF);
 	guide_texture = ImageTexture::create_from_image(guide_image);
@@ -431,6 +484,7 @@ void FellowHair3D::_update_material() {
 	material->set_shader_parameter("specular_sharpness", specular_sharpness);
 	material->set_shader_parameter("transmission", transmission);
 	material->set_shader_parameter("root_occlusion", root_occlusion);
+	material->set_shader_parameter("width_scale", width_scale);
 }
 
 Vector3 FellowHair3D::_rest_global(int p_guide, int p_point, const Transform3D &p_xform) const {
@@ -632,10 +686,17 @@ void FellowHair3D::_notification(int p_what) {
 			if (!built) {
 				break;
 			}
-			if (simulating) {
+			_update_lod();
+			bool near = true;
+			if (simulation_distance > 0.0f) {
+				const Camera3D *camera = get_viewport() ? get_viewport()->get_camera_3d() : nullptr;
+				near = !camera || camera->get_global_position().distance_to(get_global_position()) <= simulation_distance;
+			}
+			simulated = simulating && near;
+			if (simulated) {
 				_simulate(get_process_delta_time());
 			} else {
-				_reset_positions();
+				_reset_positions(); // the styled shape, following the head
 			}
 			_upload();
 			global_stats.frames++;
@@ -669,6 +730,9 @@ Dictionary FellowHair3D::get_stats() const {
 	d["strands"] = int(instance_data.size() / FLOATS_PER_STRAND);
 	d["simulate_usec"] = int64_t(last_simulate_usec);
 	d["upload_usec"] = int64_t(last_upload_usec);
+	d["visible_strands"] = visible_strands < 0 ? int(instance_data.size() / FLOATS_PER_STRAND) : visible_strands; // milestone 125
+	d["width_scale"] = width_scale;
+	d["simulated"] = simulated; // the last frame (not beyond simulation_distance, simulating on)
 	return d;
 }
 
@@ -682,6 +746,113 @@ PackedVector3Array FellowHair3D::get_guide_points(int p_guide) const {
 		out.push_back(positions_valid && x.size() == rest.size() ? x[p_guide * points + k] : xf.xform(rest[p_guide * points + k]));
 	}
 	return out;
+}
+
+// Milestone 125: the scalp mesh's faces the roots go on (its painted ones), with their areas' running sum.
+bool FellowHair3D::_scalp_mesh_triangles() {
+	scalp_tris.clear();
+	scalp_cdf.clear();
+	if (scalp_mesh.is_null()) {
+		return false;
+	}
+	float total = 0.0f;
+	for (int s = 0; s < scalp_mesh->get_surface_count(); s++) {
+		if (scalp_mesh->surface_get_primitive_type(s) != Mesh::PRIMITIVE_TRIANGLES) {
+			continue;
+		}
+		const Array arrays = scalp_mesh->surface_get_arrays(s);
+		const PackedVector3Array verts = arrays[Mesh::ARRAY_VERTEX];
+		const PackedVector3Array normals = arrays[Mesh::ARRAY_NORMAL];
+		const PackedColorArray colors = arrays[Mesh::ARRAY_COLOR];
+		const PackedInt32Array indices = arrays[Mesh::ARRAY_INDEX];
+		const int count = indices.is_empty() ? verts.size() : indices.size();
+		for (int i = 0; i + 2 < count; i += 3) {
+			const int ia = indices.is_empty() ? i : indices[i];
+			const int ib = indices.is_empty() ? i + 1 : indices[i + 1];
+			const int ic = indices.is_empty() ? i + 2 : indices[i + 2];
+			if (ia >= verts.size() || ib >= verts.size() || ic >= verts.size()) {
+				continue;
+			}
+			if (colors.size() == verts.size() && (colors[ia].r < 0.5f || colors[ib].r < 0.5f || colors[ic].r < 0.5f)) {
+				continue; // not painted (all three of its vertices)
+			}
+			ScalpTri tri;
+			tri.a = verts[ia];
+			tri.b = verts[ib];
+			tri.c = verts[ic];
+			// Godot's front faces are clockwise: the outward normal is (c - a) × (b - a).
+			const Vector3 face = (tri.c - tri.a).cross(tri.b - tri.a);
+			tri.area = face.length() * 0.5f;
+			if (tri.area <= 1e-12f) {
+				continue;
+			}
+			const Vector3 fn = face.normalized();
+			const bool has_normals = normals.size() == verts.size();
+			tri.na = has_normals ? normals[ia] : fn;
+			tri.nb = has_normals ? normals[ib] : fn;
+			tri.nc = has_normals ? normals[ic] : fn;
+			total += tri.area;
+			scalp_tris.push_back(tri);
+			scalp_cdf.push_back(total);
+		}
+	}
+	return !scalp_tris.is_empty();
+}
+
+// A random point on the painted faces (by area), and the mesh's normal there.
+void FellowHair3D::_scalp_mesh_sample(RandomPCG &p_rng, Vector3 &r_position, Vector3 &r_normal) const {
+	const float u = p_rng.randf() * scalp_cdf[scalp_cdf.size() - 1];
+	uint32_t lo = 0;
+	uint32_t hi = scalp_cdf.size() - 1;
+	while (lo < hi) {
+		const uint32_t mid = (lo + hi) / 2;
+		if (scalp_cdf[mid] < u) {
+			lo = mid + 1;
+		} else {
+			hi = mid;
+		}
+	}
+	const ScalpTri &tri = scalp_tris[lo];
+	const float r1 = Math::sqrt(p_rng.randf());
+	const float r2 = p_rng.randf();
+	const float wa = 1.0f - r1;
+	const float wb = r1 * (1.0f - r2);
+	const float wc = r1 * r2;
+	r_position = tri.a * wa + tri.b * wb + tri.c * wc;
+	r_normal = (tri.na * wa + tri.nb * wb + tri.nc * wc).normalized();
+}
+
+// Milestone 125: the strands drawn by the camera's distance — all within lod_distance, then a share falling with the
+// square of the distance (the strands' screen size), at least min_strand_share; the drawn ones wider in proportion so
+// that the hair's coverage stays (the roots are in random order: any first share covers the scalp).
+void FellowHair3D::_update_lod() {
+	const int total = int(instance_data.size() / FLOATS_PER_STRAND);
+	int visible = total;
+	if (lod_distance > 0.0f && total > 0) {
+		const Camera3D *camera = get_viewport() ? get_viewport()->get_camera_3d() : nullptr;
+		if (camera && camera->get_projection() == Camera3D::PROJECTION_PERSPECTIVE) {
+			// The distance at which the hair would look this size through Godot's default 75-degree view: a zoomed
+			// camera's far hair keeps its strands.
+			const float zoom = Math::tan(Math::deg_to_rad(camera->get_fov()) * 0.5f) / Math::tan(Math::deg_to_rad(75.0f) * 0.5f);
+			const float d = camera->get_global_position().distance_to(get_global_position()) * zoom;
+			const float share = d > lod_distance ? MAX(min_strand_share, (lod_distance * lod_distance) / (d * d)) : 1.0f;
+			visible = CLAMP(int(Math::round(float(total) * share)), 1, total);
+		}
+	}
+	if (visible == visible_strands) {
+		return;
+	}
+	visible_strands = visible;
+	width_scale = total > 0 ? float(total) / float(visible) : 1.0f;
+	multimesh->set_visible_instance_count(visible == total ? -1 : visible);
+	if (material.is_valid()) {
+		material->set_shader_parameter("width_scale", width_scale);
+	}
+}
+
+void FellowHair3D::set_scalp_mesh(const Ref<Mesh> &p_mesh) {
+	scalp_mesh = p_mesh;
+	_rebuild();
 }
 
 // A guide's styled shape where the node is now (global): the simulated points' targets.
@@ -745,6 +916,14 @@ void FellowHair3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_guide_points", "guide"), &FellowHair3D::get_guide_points);
 	ClassDB::bind_method(D_METHOD("get_guide_rest_points", "guide"), &FellowHair3D::get_guide_rest_points);
 	ClassDB::bind_method(D_METHOD("get_point_count"), &FellowHair3D::get_point_count);
+	ClassDB::bind_method(D_METHOD("set_scalp_mesh", "mesh"), &FellowHair3D::set_scalp_mesh);
+	ClassDB::bind_method(D_METHOD("get_scalp_mesh"), &FellowHair3D::get_scalp_mesh);
+	ClassDB::bind_method(D_METHOD("set_lod_distance", "distance"), &FellowHair3D::set_lod_distance);
+	ClassDB::bind_method(D_METHOD("get_lod_distance"), &FellowHair3D::get_lod_distance);
+	ClassDB::bind_method(D_METHOD("set_min_strand_share", "share"), &FellowHair3D::set_min_strand_share);
+	ClassDB::bind_method(D_METHOD("get_min_strand_share"), &FellowHair3D::get_min_strand_share);
+	ClassDB::bind_method(D_METHOD("set_simulation_distance", "distance"), &FellowHair3D::set_simulation_distance);
+	ClassDB::bind_method(D_METHOD("get_simulation_distance"), &FellowHair3D::get_simulation_distance);
 
 #define FELLOW_HAIR_BIND(m_name, m_getter) \
 	ClassDB::bind_method(D_METHOD("set_" #m_name, "value"), &FellowHair3D::set_##m_name); \
@@ -788,6 +967,7 @@ void FellowHair3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::VECTOR3, "scalp_center", PROPERTY_HINT_NONE, "suffix:m"), "set_scalp_center", "get_scalp_center");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "coverage", PROPERTY_HINT_RANGE, "1,180,0.1,degrees"), "set_coverage", "get_coverage");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "forehead_angle", PROPERTY_HINT_RANGE, "0,180,0.1,degrees"), "set_forehead_angle", "get_forehead_angle");
+	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "scalp_mesh", PROPERTY_HINT_RESOURCE_TYPE, "Mesh"), "set_scalp_mesh", "get_scalp_mesh");
 	ADD_GROUP("Strands", "");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "guide_count", PROPERTY_HINT_RANGE, "3,1024,1,or_greater"), "set_guide_count", "get_guide_count");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "strand_count", PROPERTY_HINT_RANGE, "0,50000,1,or_greater"), "set_strand_count", "get_strand_count");
@@ -808,6 +988,10 @@ void FellowHair3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "collision_margin", PROPERTY_HINT_RANGE, "0,0.1,0.001,or_greater,suffix:m"), "set_collision_margin", "get_collision_margin");
 	ADD_PROPERTY(PropertyInfo(Variant::ARRAY, "colliders", PROPERTY_HINT_ARRAY_TYPE, MAKE_RESOURCE_TYPE_HINT("NodePath")), "set_colliders", "get_colliders");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "substeps", PROPERTY_HINT_RANGE, "1,16,1"), "set_substeps", "get_substeps");
+	ADD_GROUP("Level of Detail", "");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "lod_distance", PROPERTY_HINT_RANGE, "0,50,0.1,or_greater,suffix:m"), "set_lod_distance", "get_lod_distance");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "min_strand_share", PROPERTY_HINT_RANGE, "0.001,1,0.001"), "set_min_strand_share", "get_min_strand_share");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "simulation_distance", PROPERTY_HINT_RANGE, "0,500,0.1,or_greater,suffix:m"), "set_simulation_distance", "get_simulation_distance");
 	ADD_GROUP("Look", "");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "root_width", PROPERTY_HINT_RANGE, "0.001,5,0.001,or_greater,suffix:mm"), "set_root_width", "get_root_width");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "tip_width", PROPERTY_HINT_RANGE, "0.001,5,0.001,or_greater,suffix:mm"), "set_tip_width", "get_tip_width");

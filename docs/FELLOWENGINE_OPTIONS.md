@@ -707,6 +707,10 @@ wide (`root_width` 0.4 mm, `tip_width` 0.12 mm; the coverage of thinner ones dit
 (`root_color`, `tip_color`, `color_variation`, `specular_shift`, `specular_strength`, `specular_sharpness`,
 `transmission`, `root_occlusion`); motion vectors follow the strands. `reset()`, `get_stats()`, `get_guide_points()`,
 `get_guide_rest_points()`. "Add Hair" in the FellowEngine menu. Bench `bench/hair_check.gd`, the regression scene `hair`.
+Milestone 125 (decision 0249): `scalp_mesh` (roots on the faces whose three vertices' red is 0.5 or more; the sphere
+stays the collider), `lod_distance` (4 m: beyond it a share of the strands by the square of the distance through a
+75-degree view, at least `min_strand_share`, wider in proportion), `simulation_distance` (40 m); `get_stats()` adds
+`simulated`, `visible_strands`, `width_scale`. Bench `bench/hair_lod_check.gd`.
 
 ## Traversal: mantling and vaulting (milestone 72)
 

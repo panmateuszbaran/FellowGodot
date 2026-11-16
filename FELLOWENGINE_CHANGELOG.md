@@ -9,6 +9,13 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 125 — hair on a head's mesh; fewer, wider strands far away (2026-11-16)
+
+- `FellowHair3D.scalp_mesh` (decision 0249): roots on a head mesh's painted faces (an egg-shaped head: within 0.4 % of
+  its surface, none on the face). `lod_distance`: beyond it a share of the strands by the square of the distance, each
+  wider in proportion (at 8 m 2 398 strands, lavapipe's frame 773 → 259 ms, the hair looking the same);
+  `simulation_distance`. `bench/hair_lod_check.gd`.
+
 ## Milestone 124 — hair of strands (2026-11-16)
 
 - `FellowHair3D` (decision 0248): guide strands on a head's scalp simulated on the CPU (lengths exact, a pull to the
