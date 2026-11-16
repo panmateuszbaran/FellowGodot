@@ -3,7 +3,7 @@ extends SceneTree
 ## meshes (stand-ins far, the full meshes near).
 ##
 ##   godot --path benchmarks/project --fixed-fps 60 --resolution 640x360 -s res://bench/world_proxies_check.gd
-##       -- --out=<dir> [--cells=12] [--load_distance=160] [--mesh_distance=70] [--frames=20] [--texel=0.5] [--ratio=0.05] [--groups=4] [--flights=1]
+##       -- --out=<dir> [--cells=12] [--load_distance=160] [--mesh_distance=70] [--frames=20] [--texel=0.5] [--ratio=0.05] [--groups=4] [--flights=1] [--timing=120]
 ##
 ## A world of --cells x --cells cells of 64 m (World Lab's: ten buildings as one mesh of 1.5 m quads, 40 crates;
 ## Streaming Lab's textures) on a terrain split into regions of the same size, both under streamers. From a corner,
@@ -13,6 +13,7 @@ extends SceneTree
 ## the full meshes whenever loaded and then by --mesh_distance: the buffer memory, frame times, the meshes' swaps.
 ## The cells' proxies are textured with texels of --texel metres (milestone 127, decision 0251; 0: vertex colours);
 ## cells and regions in groups of --groups x --groups with a proxy each for afar (milestone 128, decision 0252; 0: none).
+## Each lane A-D also times its view (--timing frames: the frame, the renderer's CPU and GPU times).
 ## One JSON line: WORLD_PROXIES_CHECK {...}.
 
 const CELL := 64.0
@@ -183,6 +184,29 @@ func _stats() -> Dictionary:
 	}
 
 
+# The view's cost over --timing frames (default 120): the frame's wall time, and the renderer's CPU and GPU times
+# (meaningful on a GPU, relative on lavapipe), medians.
+func _timing() -> Dictionary:
+	var vp := root.get_viewport_rid()
+	RenderingServer.viewport_set_measure_render_time(vp, true)
+	var n := int(_arg("timing", "120"))
+	var wall := []
+	var cpu := []
+	var gpu := []
+	var t_prev := Time.get_ticks_usec()
+	for i in n:
+		await process_frame
+		var t := Time.get_ticks_usec()
+		wall.append((t - t_prev) / 1000.0)
+		t_prev = t
+		cpu.append(RenderingServer.viewport_get_measured_render_time_cpu(vp) + RenderingServer.get_frame_setup_time_cpu())
+		gpu.append(RenderingServer.viewport_get_measured_render_time_gpu(vp))
+	for a in [wall, cpu, gpu]:
+		a.sort()
+	return {"frames": n, "frame_ms": snappedf(wall[n / 2], 0.01), "render_cpu_ms": snappedf(cpu[n / 2], 0.01), "render_gpu_ms": snappedf(gpu[n / 2], 0.01),
+		"frame_ms_p95": snappedf(wall[int(n * 0.95)], 0.01), "render_gpu_ms_p95": snappedf(gpu[int(n * 0.95)], 0.01)}
+
+
 # Milestone 128: the groups' proxies shown, and those shown with a cell of theirs loaded (none should be).
 func _groups() -> Dictionary:
 	var shown := 0
@@ -303,6 +327,7 @@ func _run() -> void:
 	await _wait_settled()
 	var a := await _shot("a_all_loaded")
 	result["a_all_loaded"] = _stats()
+	result["a_all_loaded"]["timing"] = await _timing()
 
 	# B. Streamed, nothing beyond the distance (the cells loaded from afar: none kept by the unload margin).
 	var view := cam.transform
@@ -314,6 +339,7 @@ func _run() -> void:
 	await _wait_settled()
 	result["b_streamed"] = _stats()
 	result["b_streamed"]["vs_a"] = _diff(a, await _shot("b_streamed"))
+	result["b_streamed"]["timing"] = await _timing()
 
 	# C. Proxies baked for the cells and the regions.
 	t0 = Time.get_ticks_msec()
@@ -323,6 +349,7 @@ func _run() -> void:
 	await _wait_settled()
 	result["c_proxies"] = _stats()
 	result["c_proxies"]["vs_a"] = _diff(a, await _shot("c_proxies"))
+	result["c_proxies"]["timing"] = await _timing()
 
 	# D. The large meshes streamed too: the cells' scenes again with stand-ins, the full meshes near. (The cells
 	# unloaded first: the camera away from the world.)
@@ -335,6 +362,7 @@ func _run() -> void:
 	result["d_streamed_meshes"] = _stats()
 	result["d_streamed_meshes"]["vs_a"] = _diff(a, await _shot("d_streamed_meshes"))
 	result["d_streamed_meshes"]["streamer"] = streamer.get_stats()
+	result["d_streamed_meshes"]["timing"] = await _timing()
 
 	# E. A flight across the world at 30 m/s, low, with the full meshes whenever their cells are loaded and then with
 	# them near only: the meshes' swaps on the way, the memory, the frames.
