@@ -2,6 +2,7 @@ extends SceneTree
 ## FellowEngine milestone 125 check (decision 0249): FellowHair3D's scalp from a mesh and its level of detail.
 ##
 ##   godot --path benchmarks/project --fixed-fps 60 --resolution 960x540 -s res://bench/hair_lod_check.gd -- --out=<dir>
+##       [--settle=5] [--frames=5]
 ##
 ## * The scalp from a mesh: an egg-shaped head (an ellipsoid of 0.085 x 0.11 x 0.1 m) whose vertices are painted red
 ##   above the ears and off the face; the roots must lie on its surface (the ellipsoid's equation within the mesh's
@@ -151,12 +152,13 @@ func _on_frame() -> void:
 		step = 0
 		step_frame = frame
 		_apply_step()
-	if step >= 0 and frame > step_frame + 10:
-		# 10 frames at a distance; the last 5 frames' GPU time.
-		pass
-	if step >= 0 and frame >= step_frame + 5 and frame < step_frame + 10:
+	# At each distance --settle frames (5), then the GPU's time over --frames frames (5; the median): on a GPU, more
+	# of both (its clocks settle).
+	var settle := int(_arg("settle", "5"))
+	var measure := int(_arg("frames", "5"))
+	if step >= 0 and frame >= step_frame + settle and frame < step_frame + settle + measure:
 		gpu_ms.append(RenderingServer.viewport_get_measured_render_time_gpu(get_root().get_viewport_rid()))
-	if step >= 0 and frame == step_frame + 10:
+	if step >= 0 and frame == step_frame + settle + measure:
 		var st := hair.get_stats()
 		var s: Dictionary = steps[step]
 		gpu_ms.sort()
