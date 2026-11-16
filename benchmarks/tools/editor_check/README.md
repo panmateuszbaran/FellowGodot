@@ -18,6 +18,7 @@ copies `project/` to `<out>/project`, opens it in the editor, and lets its plugi
   level (no box in it);
 * milestone 66: Project > Tools > Bake Streaming Proxies on the cells the split made: a proxy for each, owned by the
   level and saved with it (`stream_back.gd` then checks them shown while their cells are unloaded, hidden once loaded);
+  milestone 127: the boxes' material has a texture, and each proxy's file has its baked texture;
 * the Performance monitors;
 * milestone 58: the terrain's brush on `idle/FellowTerrain3D.tscn` — its toolbar shown with the terrain selected, a
   Raise stroke dragged with the mouse, paint strokes (the first making the splat map), each undone and redone (the

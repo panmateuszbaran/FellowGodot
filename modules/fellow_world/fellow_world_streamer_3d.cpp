@@ -632,13 +632,15 @@ Dictionary FellowWorldStreamer3D::bake_proxies(const String &p_directory, const 
 	const int mesh_min_triangles = p_options.get("mesh_min_triangles", 2000);
 	const real_t proxy_distance = p_options.get("proxy_distance", 0.0);
 	const bool proxy_shadows = p_options.get("proxy_shadows", false);
+	const float texel_size = p_options.get("texel_size", 0.5f);
+	const int max_texture_size = p_options.get("max_texture_size", 512);
 	Node *owner = Object::cast_to<Node>(p_options.get("owner", Variant()).get_validated_object());
 	if (!owner) {
 		owner = get_owner();
 	}
 	const Error dir_err = DirAccess::make_dir_recursive_absolute(stream_meshes ? p_directory.path_join("meshes") : p_directory);
 	ERR_FAIL_COND_V_MSG(dir_err != OK && dir_err != ERR_ALREADY_EXISTS, info, vformat("Cannot create the directory \"%s\".", p_directory));
-	// One material for every proxy, saved beside them.
+	// One material for the vertex-coloured proxies, saved beside them (a textured proxy has its own, in its file).
 	Ref<StandardMaterial3D> material = FellowCellProxies::proxy_material()->duplicate();
 	const String material_path = p_directory.path_join("fellow_proxy_material.tres");
 	if (ResourceSaver::save(material, material_path) == OK) {
@@ -647,6 +649,11 @@ Dictionary FellowWorldStreamer3D::bake_proxies(const String &p_directory, const 
 	int proxies = 0;
 	int source_triangles = 0;
 	int proxy_triangles = 0;
+	int textured = 0;
+	int64_t texture_bytes = 0;
+	int64_t texture_usec = 0;
+	int64_t texture_texels = 0;
+	int64_t texture_hits = 0;
 	int streamed = 0;
 	int stream_before = 0;
 	int stream_after = 0;
@@ -689,10 +696,18 @@ Dictionary FellowWorldStreamer3D::bake_proxies(const String &p_directory, const 
 			}
 		}
 		Dictionary pi;
-		Ref<ArrayMesh> proxy = FellowCellProxies::bake_proxy(content, ratio, terrain_quads, pi);
+		Ref<ArrayMesh> proxy = FellowCellProxies::bake_proxy(content, ratio, terrain_quads, texel_size, max_texture_size, pi);
 		source_triangles += int(pi.get("source_triangles", 0));
 		if (proxy.is_valid()) {
-			proxy->surface_set_material(0, material);
+			if (pi.has("texture_width")) {
+				textured++;
+				texture_bytes += int64_t(pi.get("texture_bytes", 0));
+				texture_usec += int64_t(pi.get("texture_usec", 0));
+				texture_texels += int64_t(pi.get("texture_texels", 0));
+				texture_hits += int64_t(pi.get("texture_hits", 0));
+			} else {
+				proxy->surface_set_material(0, material);
+			}
 			const String path = p_directory.path_join(String(cell->get_name()) + "_proxy.res");
 			if (ResourceSaver::save(proxy, path, ResourceSaver::FLAG_COMPRESS) == OK) {
 				proxy->set_path(path, true); // the scene saved with the proxy refers to the file, not a copy
@@ -766,10 +781,15 @@ Dictionary FellowWorldStreamer3D::bake_proxies(const String &p_directory, const 
 		}
 		memdelete(content);
 	}
+	FellowCellProxies::clear_bake_cache();
 	info["cells"] = int(targets.size());
 	info["proxies"] = proxies;
 	info["source_triangles"] = source_triangles;
 	info["proxy_triangles"] = proxy_triangles;
+	info["textured"] = textured;
+	info["texture_bytes"] = texture_bytes;
+	info["texture_ms"] = texture_usec / 1000.0;
+	info["texture_hit_share"] = texture_texels > 0 ? double(texture_hits) / double(texture_texels) : 0.0; // texels coloured by a surface found under them
 	info["streamed_meshes"] = streamed;
 	info["streamed_triangles"] = stream_before;
 	info["stand_in_triangles"] = stream_after;

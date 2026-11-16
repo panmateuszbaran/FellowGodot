@@ -136,6 +136,7 @@ class FellowEditorPlugin : public EditorPlugin {
 	ConfirmationDialog *proxies_dialog = nullptr;
 	LineEdit *proxies_directory = nullptr;
 	CheckBox *proxies_stream_meshes = nullptr;
+	SpinBox *proxies_texel = nullptr;
 	ObjectID proxies_streamer;
 	Button *animate_button = nullptr; // milestone 52: the 3D editor's toolbar toggle
 	MenuButton *add_menu = nullptr; // milestone 53: ready-made, wired-up setups

@@ -9,6 +9,16 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 127 — textured streaming proxies (2026-11-16)
+
+- `bake_proxies()` bakes a texture for a cell's proxy where its materials have textures (decision 0251): the proxy
+  unwrapped (xatlas), each texel the colour the cell's surface under it draws (material colour, vertex colours, the
+  albedo texture at the level of the texel's size), BC1 with mipmaps in the proxy's file; `texel_size` 0.5 m,
+  `max_texture_size` 512. A village of atlas-textured houses from 300 m: 50 → 11 % of the picture more than 16 levels
+  off, about 30 KB a cell. Proxies are now simplified by meshoptimizer without locked borders or pruning (Godot's LODs
+  had deleted nearly all of the village's 144 houses), vertex-coloured ones coloured per corner. The editor's dialog
+  has the texel; `bench/proxy_texture_check.gd`.
+
 ## Milestone 126 — hair on the worker threads (2026-11-16)
 
 - Every `FellowHair3D` of a frame stepped on the worker threads at once (decision 0250): 24 heads' 5.8 ms of steps in

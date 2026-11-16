@@ -105,7 +105,8 @@ one call, and a loaded cell's large meshes stay simplified until the camera come
 * **Proxies at run time** (made as cells unload): the same merging and simplification on the main thread at the
   worst moment, and nothing to show for a cell never loaded.
 * **Textured proxies** (an atlas baked per cell, as HLOD's impostors): a texture per cell to stream again; from beyond
-  the streamer's distance a vertex colour per a few metres is what the pixels show.
+  the streamer's distance a vertex colour per a few metres is what the pixels show. (Done in decision 0251: atlas- and
+  trim-sheet-textured buildings need it.)
 * **One proxy per group of cells** (a quadtree of proxies, as HLOD's cascades): fewer draws far away, but each cell's
   proxy is its own unit that loads and unloads with it; the proxies here cost 270 draws in view.
 * **Streaming a mesh's levels of detail one by one** (Nanite-like pages): two states — the stand-in and the full mesh

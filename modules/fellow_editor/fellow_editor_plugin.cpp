@@ -771,10 +771,14 @@ void FellowEditorPlugin::_proxies_confirmed() {
 	Dictionary options;
 	options["owner"] = EditorInterface::get_singleton()->get_edited_scene_root();
 	options["stream_meshes"] = proxies_stream_meshes->is_pressed();
+	options["texel_size"] = proxies_texel->get_value();
 	const Dictionary info = streamer->call("bake_proxies", proxies_directory->get_text(), options);
 	EditorFileSystem::get_singleton()->scan_changes();
 	EditorInterface::get_singleton()->mark_scene_as_unsaved();
 	String text = vformat(TTR("%d proxies baked (%d triangles for %d); they are in %s."), int(info.get("proxies", 0)), int(info.get("proxy_triangles", 0)), int(info.get("source_triangles", 0)), proxies_directory->get_text());
+	if (int(info.get("textured", 0)) > 0) {
+		text += "\n" + vformat(TTR("%d with a texture (%s in all)."), int(info.get("textured", 0)), String::humanize_size(int64_t(info.get("texture_bytes", 0))));
+	}
 	if (proxies_stream_meshes->is_pressed()) {
 		text += "\n" + vformat(TTR("%d meshes streamed: %d triangles while far (%d near)."), int(info.get("streamed_meshes", 0)), int(info.get("stand_in_triangles", 0)), int(info.get("streamed_triangles", 0)));
 	}
@@ -1259,8 +1263,15 @@ FellowEditorPlugin::FellowEditorPlugin() {
 	Label *pinfo = memnew(Label);
 	pinfo->set_autowrap_mode(TextServer::AUTOWRAP_WORD_SMART);
 	pinfo->set_custom_minimum_size(Size2(420, 0) * EDSCALE);
-	pinfo->set_text(TTR("Each cell of the selected streamer gets a proxy: its content merged and simplified into one mesh with vertex colours, drawn while the cell is not loaded. Bake again after changing the cells."));
+	pinfo->set_text(TTR("Each cell of the selected streamer gets a proxy: its content merged and simplified into one mesh, drawn while the cell is not loaded. Where its materials have textures the proxy gets a texture of what they draw (else, or with a texel size of 0, its materials' mean colours per vertex). Bake again after changing the cells."));
 	pvb->add_child(pinfo);
+	proxies_texel = memnew(SpinBox);
+	proxies_texel->set_min(0.0);
+	proxies_texel->set_max(8.0);
+	proxies_texel->set_step(0.05);
+	proxies_texel->set_value(0.5);
+	proxies_texel->set_suffix("m");
+	pvb->add_margin_child(TTR("Proxy texture's texel (0: vertex colours):"), proxies_texel);
 	proxies_stream_meshes = memnew(CheckBox);
 	proxies_stream_meshes->set_text(TTR("Stream large meshes (simplified stand-ins in the cells' scenes, the full meshes loaded near)"));
 	proxies_stream_meshes->set_autowrap_mode(TextServer::AUTOWRAP_WORD_SMART);

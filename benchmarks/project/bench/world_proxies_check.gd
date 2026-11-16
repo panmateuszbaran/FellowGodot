@@ -3,7 +3,7 @@ extends SceneTree
 ## meshes (stand-ins far, the full meshes near).
 ##
 ##   godot --path benchmarks/project --fixed-fps 60 --resolution 640x360 -s res://bench/world_proxies_check.gd
-##       -- --out=<dir> [--cells=12] [--load_distance=160] [--mesh_distance=70] [--frames=20]
+##       -- --out=<dir> [--cells=12] [--load_distance=160] [--mesh_distance=70] [--frames=20] [--texel=0.5] [--ratio=0.05] [--flights=1]
 ##
 ## A world of --cells x --cells cells of 64 m (World Lab's: ten buildings as one mesh of 1.5 m quads, 40 crates;
 ## Streaming Lab's textures) on a terrain split into regions of the same size, both under streamers. From a corner,
@@ -11,6 +11,7 @@ extends SceneTree
 ## cells and the regions; (D) C with the buildings streamed by --mesh_distance. Each: the picture, its difference from
 ## A, the video, texture and buffer memory, the triangles drawn. (E) Flights across the world at 30 m/s with D's cells,
 ## the full meshes whenever loaded and then by --mesh_distance: the buffer memory, frame times, the meshes' swaps.
+## The cells' proxies are textured with texels of --texel metres (milestone 127, decision 0251; 0: vertex colours).
 ## One JSON line: WORLD_PROXIES_CHECK {...}.
 
 const CELL := 64.0
@@ -294,7 +295,7 @@ func _run() -> void:
 	# C. Proxies baked for the cells and the regions.
 	t0 = Time.get_ticks_msec()
 	result["bake_regions"] = ground_streamer.bake_proxies(out_dir.path_join("proxies_ground"), {"terrain_quads": 16})
-	result["bake_cells"] = streamer.bake_proxies(out_dir.path_join("proxies"), {})
+	result["bake_cells"] = streamer.bake_proxies(out_dir.path_join("proxies"), {"texel_size": float(_arg("texel", "0.5")), "ratio": float(_arg("ratio", "0.05"))})
 	result["bake_ms"] = Time.get_ticks_msec() - t0
 	await _wait_settled()
 	result["c_proxies"] = _stats()
@@ -304,7 +305,7 @@ func _run() -> void:
 	# unloaded first: the camera away from the world.)
 	cam.position = Vector3(-100000, 0, -100000)
 	await _settle(90)
-	result["bake_stream"] = streamer.bake_proxies(out_dir.path_join("proxies_stream"), {"stream_meshes": true})
+	result["bake_stream"] = streamer.bake_proxies(out_dir.path_join("proxies_stream"), {"stream_meshes": true, "texel_size": float(_arg("texel", "0.5")), "ratio": float(_arg("ratio", "0.05"))})
 	streamer.mesh_distance = float(_arg("mesh_distance", "70"))
 	cam.transform = view
 	await _wait_settled()
@@ -314,10 +315,11 @@ func _run() -> void:
 
 	# E. A flight across the world at 30 m/s, low, with the full meshes whenever their cells are loaded and then with
 	# them near only: the meshes' swaps on the way, the memory, the frames.
-	streamer.mesh_distance = 0.0
-	result["e_flight_full"] = await _flight(w)
-	streamer.mesh_distance = float(_arg("mesh_distance", "70"))
-	result["e_flight_streamed"] = await _flight(w)
+	if _arg("flights", "1") != "0":
+		streamer.mesh_distance = 0.0
+		result["e_flight_full"] = await _flight(w)
+		streamer.mesh_distance = float(_arg("mesh_distance", "70"))
+		result["e_flight_streamed"] = await _flight(w)
 	print("WORLD_PROXIES_CHECK " + JSON.stringify(result))
 	quit()
 

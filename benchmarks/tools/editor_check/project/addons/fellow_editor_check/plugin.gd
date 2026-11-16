@@ -660,9 +660,16 @@ func _check_proxies() -> void:
 	EditorInterface.save_scene()
 	await _frames(3)
 	var saved := FileAccess.get_file_as_string("res://split.tscn")
+	# Milestone 127: the boxes' material has a texture, so the proxies are textured (their textures in their files).
+	var textured := 0
+	for f in files:
+		if f.ends_with("_proxy.res"):
+			var proxy = ResourceLoader.load("res://split_proxies".path_join(f), "", ResourceLoader.CACHE_MODE_IGNORE)
+			if proxy is ArrayMesh and proxy.surface_get_material(0) is StandardMaterial3D and proxy.surface_get_material(0).albedo_texture != null:
+				textured += 1
 	var result := {"cells": cells, "proxies": proxies, "owned": owned, "files": files.size(), "report": report,
-		"bake_ms": bake_ms, "saved_meshes": saved.count("type=\"MeshInstance3D\"")}
-	if cells == 0 or proxies != cells or owned != cells or files.size() != cells + 1 or report == "" or result["saved_meshes"] != cells:
+		"bake_ms": bake_ms, "saved_meshes": saved.count("type=\"MeshInstance3D\""), "textured": textured}
+	if cells == 0 or proxies != cells or owned != cells or files.size() != cells + 1 or report == "" or result["saved_meshes"] != cells or textured != cells:
 		_fail("proxies: %s" % [result])
 	out["proxies"] = result
 

@@ -41,10 +41,17 @@ class Node;
 namespace FellowCellProxies {
 
 // One mesh standing in for a cell's content: its visible meshes, MultiMeshes (up to a few hundred instances) and
-// terrains merged in the content root's space, simplified to about p_ratio of their triangles, and coloured by their
-// materials' average albedo (linear vertex colours, for proxy_material()). Null when there is nothing to draw. r_info:
-// the source and proxy triangles.
-Ref<ArrayMesh> bake_proxy(Node *p_content, float p_ratio, int p_terrain_quads, Dictionary &r_info);
+// terrains merged in the content root's space, welded and simplified to about p_ratio of their triangles (a terrain
+// region's edges kept), each corner coloured by its materials' average albedo under it (linear vertex colours, for
+// proxy_material()). With p_texel_size (metres) over 0 and a material with a texture among them (and an editor build:
+// the UV unwrapper), the proxy is unwrapped instead and drawn with a texture of what the content draws under it,
+// texels of about p_texel_size (coarser to keep within p_max_texture_size), with a material of its own
+// (docs/decisions/0251-textured-proxies.md). Null when there is nothing to draw. r_info: the source and proxy
+// triangles, the simplifier's error, the texture's size, bytes, texels found and time.
+Ref<ArrayMesh> bake_proxy(Node *p_content, float p_ratio, int p_terrain_quads, float p_texel_size, int p_max_texture_size, Dictionary &r_info);
+
+// Frees the textures' levels read by textured bakes (kept from one cell to the next).
+void clear_bake_cache();
 
 // A mesh's stand-in with vertices of its own: each triangle surface simplified to about p_ratio of its triangles
 // (materials and attributes kept). Null when it would not be at most half the triangles.

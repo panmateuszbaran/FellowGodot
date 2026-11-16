@@ -453,6 +453,15 @@ ResourceLoader's threads within the streamer's `mesh_distance` (0: whenever the 
 plus `unload_margin`), `max_mesh_loads` 2 at once. The editor runs it from Project > Tools > **Bake Streaming
 Proxies**. Bench `bench/world_proxies_check.gd`.
 
+Milestone 127 (decision 0251), **textured proxies**: a proxy's shape is the cell welded by position and simplified by
+meshoptimizer directly (no border locked, nothing pruned: small buildings kept), its normals rebuilt with a 60° split.
+Where a cell's materials have albedo textures, in editor builds, `bake_proxies` unwraps the proxy (xatlas) and bakes a
+texture of what the cell draws under each texel — material colour × vertex colours × albedo texture at the level of the
+texel's size, past alpha-tested holes — BC1 with mipmaps in the proxy's file, a material per proxy. Options
+`texel_size` 0.5 m (0: vertex colours), `max_texture_size` 512 (coarser texels beyond). Otherwise (and for terrain
+regions) vertex colours, each corner from the surface under it. The result has `textured`, `texture_bytes`,
+`texture_ms`, `texture_hit_share`. The editor's dialog has the texel. Bench `bench/proxy_texture_check.gd`.
+
 ## FSR 3.1 upscaler (milestone 47)
 
 `rendering/fellow/upscaling/fsr3` (on from milestone 49; read every frame): a viewport in Godot's FSR 2 scaling mode
