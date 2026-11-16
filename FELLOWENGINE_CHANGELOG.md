@@ -9,6 +9,11 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 126 — hair on the worker threads (2026-11-16)
+
+- Every `FellowHair3D` of a frame stepped on the worker threads at once (decision 0250): 24 heads' 5.8 ms of steps in
+  3.5 ms of the main thread on two cores (1.9×); `get_global_stats()`. `bench/hair_crowd_check.gd`.
+
 ## Milestone 125 — hair on a head's mesh; fewer, wider strands far away (2026-11-16)
 
 - `FellowHair3D.scalp_mesh` (decision 0249): roots on a head mesh's painted faces (an egg-shaped head: within 0.4 % of

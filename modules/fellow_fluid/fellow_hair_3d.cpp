@@ -38,6 +38,7 @@
 #include "core/config/project_settings.h"
 #include "core/math/random_pcg.h"
 #include "core/object/class_db.h"
+#include "core/object/worker_thread_pool.h"
 #include "core/os/os.h"
 #include "scene/3d/camera_3d.h"
 #include "scene/3d/physics/collision_shape_3d.h"
@@ -47,6 +48,8 @@
 #include "servers/rendering/rendering_server.h"
 
 FellowHair3D::GlobalStats FellowHair3D::global_stats;
+LocalVector<FellowHair3D *> FellowHair3D::registry;
+uint64_t FellowHair3D::group_frame = UINT64_MAX;
 
 namespace {
 
@@ -539,32 +542,65 @@ void FellowHair3D::_gather_colliders(LocalVector<Vector4> &r_spheres, LocalVecto
 // Position-based dynamics in substeps: Verlet with damping, gravity and the air's drag; the roots on the scalp; the
 // segments' lengths (from the root out, the root's side immovable); the pull to the styled shape in the head's space,
 // strongest at the root; out of the spheres and capsules.
-void FellowHair3D::_simulate(double p_delta) {
-	const uint64_t t0 = OS::get_singleton()->get_ticks_usec();
-	const Transform3D xf = get_global_transform();
+// Milestone 126 (decision 0250): what the simulation needs from the scene, read on the main thread — the node's
+// transform, gravity, the wind at each guide's middle, the colliders — so that the step itself can run on a worker.
+// Returns whether it will run.
+bool FellowHair3D::_prepare(double p_delta) {
+	prep_run = false;
+	if (!built) {
+		return false;
+	}
+	_update_lod();
+	bool near = true;
+	if (simulation_distance > 0.0f) {
+		const Camera3D *camera = get_viewport() ? get_viewport()->get_camera_3d() : nullptr;
+		near = !camera || camera->get_global_position().distance_to(get_global_position()) <= simulation_distance;
+	}
+	simulated = simulating && near;
+	if (!simulated) {
+		_reset_positions(); // the styled shape, following the head
+		return false;
+	}
+	prep_xf = get_global_transform();
 	const int g = int(guide_root.size());
-	if (!positions_valid || x.size() != rest.size() || xf.origin.distance_to(last_xform.origin) > 1.0f) {
+	if (!positions_valid || x.size() != rest.size() || prep_xf.origin.distance_to(last_xform.origin) > 1.0f) {
 		_reset_positions(); // the first frame, or a teleport
 	}
-	const float dt_frame = float(MIN(p_delta, 1.0 / 20.0));
-	if (dt_frame <= 0.0f) {
-		return;
+	prep_dt = float(MIN(p_delta, 1.0 / 20.0));
+	if (prep_dt <= 0.0f) {
+		return false;
 	}
-	const int n_sub = MAX(1, substeps);
-	const float dt = dt_frame / float(n_sub);
 	ProjectSettings *settings = ProjectSettings::get_singleton();
-	const Vector3 gravity = Vector3(settings->get_setting("physics/3d/default_gravity_vector", Vector3(0, -1, 0))) * float(settings->get_setting("physics/3d/default_gravity", 9.8)) * gravity_scale;
-	// The wind at each guide's middle, once a frame.
-	LocalVector<Vector3> wind;
-	wind.resize(g);
+	prep_gravity = Vector3(settings->get_setting("physics/3d/default_gravity_vector", Vector3(0, -1, 0))) * float(settings->get_setting("physics/3d/default_gravity", 9.8)) * gravity_scale;
+	prep_wind.resize(g);
 	FellowWind3D *fw = FellowWind3D::get_active();
 	for (int i = 0; i < g; i++) {
-		wind[i] = (fw && wind_scale != 0.0f) ? fw->get_velocity_at(x[i * points + points / 2]) * wind_scale : Vector3();
+		prep_wind[i] = (fw && wind_scale != 0.0f) ? fw->get_velocity_at(x[i * points + points / 2]) * wind_scale : Vector3();
 	}
-	LocalVector<Vector4> spheres;
-	LocalVector<Vector3> cap_a, cap_b;
-	LocalVector<float> cap_r;
-	_gather_colliders(spheres, cap_a, cap_b, cap_r);
+	prep_spheres.clear();
+	prep_cap_a.clear();
+	prep_cap_b.clear();
+	prep_cap_r.clear();
+	_gather_colliders(prep_spheres, prep_cap_a, prep_cap_b, prep_cap_r);
+	prep_run = true;
+	return true;
+}
+
+void FellowHair3D::_simulate() {
+	if (!prep_run) {
+		return;
+	}
+	const uint64_t t0 = OS::get_singleton()->get_ticks_usec();
+	const Transform3D xf = prep_xf;
+	const int g = int(guide_root.size());
+	const int n_sub = MAX(1, substeps);
+	const float dt = prep_dt / float(n_sub);
+	const Vector3 gravity = prep_gravity;
+	const LocalVector<Vector3> &wind = prep_wind;
+	const LocalVector<Vector4> &spheres = prep_spheres;
+	const LocalVector<Vector3> &cap_a = prep_cap_a;
+	const LocalVector<Vector3> &cap_b = prep_cap_b;
+	const LocalVector<float> &cap_r = prep_cap_r;
 	const float decay = Math::exp(-damping * dt);
 	for (int sub = 0; sub < n_sub; sub++) {
 		// The head's transform within the frame (the roots move smoothly from the last frame's to this one's).
@@ -630,8 +666,42 @@ void FellowHair3D::_simulate(double p_delta) {
 		}
 	}
 	last_xform = xf;
-	last_simulate_usec = OS::get_singleton()->get_ticks_usec() - t0;
-	global_stats.simulate_usec += last_simulate_usec;
+	last_simulate_usec = OS::get_singleton()->get_ticks_usec() - t0; // (global_stats summed on the main thread)
+}
+
+// Milestone 126: every hair node of the frame — prepared on the main thread, stepped on the worker threads at once,
+// sent to the GPU on the main thread — by the first of them processed in the frame.
+void FellowHair3D::_group_task(uint32_t p_index, FellowHair3D *const *p_list) {
+	p_list[p_index]->_simulate();
+}
+
+void FellowHair3D::_group_process(double p_delta) {
+	const uint64_t t0 = OS::get_singleton()->get_ticks_usec();
+	LocalVector<FellowHair3D *> all;
+	LocalVector<FellowHair3D *> run;
+	for (FellowHair3D *h : registry) {
+		if (h->is_inside_tree() && h->built) {
+			all.push_back(h);
+			if (h->_prepare(p_delta)) {
+				run.push_back(h);
+			}
+		}
+	}
+	if (run.size() == 1) {
+		run[0]->_simulate();
+	} else if (run.size() > 1) {
+		WorkerThreadPool::GroupID group = WorkerThreadPool::get_singleton()->add_template_group_task(this, &FellowHair3D::_group_task, (FellowHair3D *const *)run.ptr(), run.size(), -1, true, SNAME("FellowHair3D"));
+		WorkerThreadPool::get_singleton()->wait_for_group_task_completion(group);
+	}
+	for (FellowHair3D *h : all) {
+		if (h->prep_run) {
+			global_stats.simulate_usec += h->last_simulate_usec;
+		}
+		h->_upload();
+	}
+	global_stats.frames++;
+	global_stats.group_usec += OS::get_singleton()->get_ticks_usec() - t0;
+	global_stats.simulated += run.size();
 }
 
 // This frame's points into its half of the guides' texture (the other half keeps the last frame's), and the strands'
@@ -675,31 +745,21 @@ void FellowHair3D::_upload() {
 void FellowHair3D::_notification(int p_what) {
 	switch (p_what) {
 		case NOTIFICATION_ENTER_TREE: {
+			registry.push_back(this);
 			_rebuild();
 			set_process_internal(!Engine::get_singleton()->is_editor_hint());
 			set_notify_transform(Engine::get_singleton()->is_editor_hint());
 		} break;
 		case NOTIFICATION_EXIT_TREE: {
+			registry.erase(this);
 			set_process_internal(false);
 		} break;
 		case NOTIFICATION_INTERNAL_PROCESS: {
-			if (!built) {
-				break;
+			const uint64_t frame = Engine::get_singleton()->get_process_frames();
+			if (frame != group_frame) {
+				group_frame = frame;
+				_group_process(get_process_delta_time());
 			}
-			_update_lod();
-			bool near = true;
-			if (simulation_distance > 0.0f) {
-				const Camera3D *camera = get_viewport() ? get_viewport()->get_camera_3d() : nullptr;
-				near = !camera || camera->get_global_position().distance_to(get_global_position()) <= simulation_distance;
-			}
-			simulated = simulating && near;
-			if (simulated) {
-				_simulate(get_process_delta_time());
-			} else {
-				_reset_positions(); // the styled shape, following the head
-			}
-			_upload();
-			global_stats.frames++;
 		} break;
 		case NOTIFICATION_TRANSFORM_CHANGED: {
 			if (Engine::get_singleton()->is_editor_hint() && built) {
@@ -734,6 +794,21 @@ Dictionary FellowHair3D::get_stats() const {
 	d["width_scale"] = width_scale;
 	d["simulated"] = simulated; // the last frame (not beyond simulation_distance, simulating on)
 	return d;
+}
+
+// Every hair node's work since the last reset (milestone 126).
+Dictionary FellowHair3D::get_global_stats() {
+	Dictionary d;
+	d["frames"] = int64_t(global_stats.frames);
+	d["group_usec"] = int64_t(global_stats.group_usec);
+	d["simulate_usec"] = int64_t(global_stats.simulate_usec);
+	d["upload_usec"] = int64_t(global_stats.upload_usec);
+	d["simulated"] = int64_t(global_stats.simulated);
+	return d;
+}
+
+void FellowHair3D::reset_global_stats() {
+	global_stats = GlobalStats();
 }
 
 PackedVector3Array FellowHair3D::get_guide_points(int p_guide) const {
@@ -916,6 +991,8 @@ void FellowHair3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_guide_points", "guide"), &FellowHair3D::get_guide_points);
 	ClassDB::bind_method(D_METHOD("get_guide_rest_points", "guide"), &FellowHair3D::get_guide_rest_points);
 	ClassDB::bind_method(D_METHOD("get_point_count"), &FellowHair3D::get_point_count);
+	ClassDB::bind_static_method("FellowHair3D", D_METHOD("get_global_stats"), &FellowHair3D::get_global_stats);
+	ClassDB::bind_static_method("FellowHair3D", D_METHOD("reset_global_stats"), &FellowHair3D::reset_global_stats);
 	ClassDB::bind_method(D_METHOD("set_scalp_mesh", "mesh"), &FellowHair3D::set_scalp_mesh);
 	ClassDB::bind_method(D_METHOD("get_scalp_mesh"), &FellowHair3D::get_scalp_mesh);
 	ClassDB::bind_method(D_METHOD("set_lod_distance", "distance"), &FellowHair3D::set_lod_distance);

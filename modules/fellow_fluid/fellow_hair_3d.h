@@ -54,16 +54,34 @@ class FellowHair3D : public GeometryInstance3D {
 	GDCLASS(FellowHair3D, GeometryInstance3D);
 
 public:
+	// Every hair node's work (main thread: written by the group's owner only).
 	struct GlobalStats {
 		uint64_t frames = 0;
-		uint64_t simulate_usec = 0;
+		uint64_t group_usec = 0; // the main thread's whole group a frame: preparing, the workers' steps, uploading
+		uint64_t simulate_usec = 0; // the steps' time, summed over the nodes (on the workers)
 		uint64_t upload_usec = 0;
+		uint64_t simulated = 0; // node-frames stepped
 		uint64_t guides = 0;
 		uint64_t strands = 0;
 	};
 	static GlobalStats global_stats;
 
 private:
+	static LocalVector<FellowHair3D *> registry;
+	static uint64_t group_frame;
+	// Milestone 126: what the step needs, read on the main thread.
+	bool prep_run = false;
+	Transform3D prep_xf;
+	float prep_dt = 0.0f;
+	Vector3 prep_gravity;
+	LocalVector<Vector3> prep_wind;
+	LocalVector<Vector4> prep_spheres;
+	LocalVector<Vector3> prep_cap_a;
+	LocalVector<Vector3> prep_cap_b;
+	LocalVector<float> prep_cap_r;
+	bool _prepare(double p_delta);
+	void _group_task(uint32_t p_index, FellowHair3D *const *p_list);
+	void _group_process(double p_delta);
 	// The scalp.
 	float scalp_radius = 0.1f;
 	Vector3 scalp_center;
@@ -150,7 +168,7 @@ private:
 	void _clear();
 	void _rebuild();
 	void _reset_positions();
-	void _simulate(double p_delta);
+	void _simulate();
 	void _upload();
 	void _update_material();
 	void _gather_colliders(LocalVector<Vector4> &r_spheres, LocalVector<Vector3> &r_capsule_a, LocalVector<Vector3> &r_capsule_b, LocalVector<float> &r_capsule_r) const;
@@ -167,6 +185,8 @@ public:
 
 	void reset();
 	Dictionary get_stats() const;
+	static Dictionary get_global_stats();
+	static void reset_global_stats();
 	PackedVector3Array get_guide_points(int p_guide) const;
 	PackedVector3Array get_guide_rest_points(int p_guide) const;
 	int get_point_count() const { return points; }

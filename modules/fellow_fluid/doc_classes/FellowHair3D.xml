@@ -8,11 +8,17 @@
 		[member guide_count] guide strands grow from the scalp, combed along it (down and back) and falling, in [member segments] segments of [member length]. They are simulated on the CPU each frame in [member substeps] substeps: their roots on the scalp as the node moves, the segments' lengths kept exactly, a pull back to the styled shape strongest at the root ([member stiffness]), gravity, [member damping], the scene's [FellowWind3D] with [member drag], and out of the scalp's sphere and the [member colliders] (spheres and capsules: shoulders, a collar).
 		[member strand_count] strands are drawn, each between the three guides nearest its root (how far between them: [member spread]), along a Catmull-Rom curve through their points, as ribbons facing the camera at least a pixel wide (a thinner strand's coverage goes to its alpha, dithered: use TAA or FSR for smooth hair), [member root_width] thinning to [member tip_width]. The hair model: Kajiya-Kay's diffuse, a specular lobe in the light's colour and a broader one in the hair's ([member specular_shift], [member specular_strength], [member specular_sharpness]), light through it from behind ([member transmission]); darker at the roots ([member root_occlusion]) and on the strands under others; the light's shadows fall on it and from it.
 		Motion vectors follow the strands (the guides' positions go to the GPU in a texture of this frame's and the last frame's halves, each strand's instance data naming this frame's), so TAA and FSR see the hair's own motion.
-		Far away fewer, wider strands are drawn ([member lod_distance]) and the hair is not simulated ([member simulation_distance]). In the editor the styled shape is shown, not simulated.
+		Far away fewer, wider strands are drawn ([member lod_distance]) and the hair is not simulated ([member simulation_distance]). Every hair node of a frame is stepped on the worker threads at once (what the step reads from the scene — the node's transform, the wind, the colliders — gathered on the main thread first). In the editor the styled shape is shown, not simulated.
 	</description>
 	<tutorials>
 	</tutorials>
 	<methods>
+		<method name="get_global_stats" qualifiers="static">
+			<return type="Dictionary" />
+			<description>
+				Returns every hair node's work since [method reset_global_stats]: [code]frames[/code], [code]group_usec[/code] (the main thread's time for all of them: preparing on the main thread, their steps on the worker threads at once, sending them to the GPU), [code]simulate_usec[/code] (the steps' time summed over the nodes: what one thread would spend), [code]upload_usec[/code], [code]simulated[/code] (the node-frames stepped). See decision 0250.
+			</description>
+		</method>
 		<method name="get_guide_points" qualifiers="const">
 			<return type="PackedVector3Array" />
 			<param index="0" name="guide" type="int" />
@@ -43,6 +49,12 @@
 			<return type="void" />
 			<description>
 				Puts the guides back in their styled shape where the node is now, at rest (after a teleport; a move of more than 1 m in a frame does it by itself).
+			</description>
+		</method>
+		<method name="reset_global_stats" qualifiers="static">
+			<return type="void" />
+			<description>
+				Sets [method get_global_stats]' counts to zero.
 			</description>
 		</method>
 	</methods>

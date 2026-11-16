@@ -710,7 +710,9 @@ wide (`root_width` 0.4 mm, `tip_width` 0.12 mm; the coverage of thinner ones dit
 Milestone 125 (decision 0249): `scalp_mesh` (roots on the faces whose three vertices' red is 0.5 or more; the sphere
 stays the collider), `lod_distance` (4 m: beyond it a share of the strands by the square of the distance through a
 75-degree view, at least `min_strand_share`, wider in proportion), `simulation_distance` (40 m); `get_stats()` adds
-`simulated`, `visible_strands`, `width_scale`. Bench `bench/hair_lod_check.gd`.
+`simulated`, `visible_strands`, `width_scale`. Bench `bench/hair_lod_check.gd`. Milestone 126 (decision 0250): every
+hair node of a frame stepped on the worker threads at once; `FellowHair3D.get_global_stats()` (`group_usec`,
+`simulate_usec`, ...), `reset_global_stats()`. Bench `bench/hair_crowd_check.gd`.
 
 ## Traversal: mantling and vaulting (milestone 72)
 
