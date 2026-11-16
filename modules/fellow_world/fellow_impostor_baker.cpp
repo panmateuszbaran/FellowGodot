@@ -42,6 +42,7 @@
 #include "scene/resources/material.h"
 #include "scene/resources/portable_compressed_texture.h"
 #include "scene/resources/shader.h"
+#include "servers/rendering/fellow_settings.h"
 #include "servers/rendering/rendering_server.h"
 
 // The octahedral mapping (y up) and each view's camera basis; the impostor shader uses the same.
@@ -263,6 +264,7 @@ void FellowImpostorBaker::_start_next() {
 		RenderingServer::get_singleton()->connect(SNAME("frame_post_draw"), callable_mp(this, &FellowImpostorBaker::_on_frame_post_draw));
 		connected = true;
 	}
+	Fellow::request_redraw();
 }
 
 void FellowImpostorBaker::_place_cameras(int p_frame) {
@@ -279,6 +281,9 @@ void FellowImpostorBaker::_on_frame_post_draw() {
 	if (!running || queue.is_empty()) {
 		return;
 	}
+	// The next frame asked for (milestone 129): in the editor frames are drawn only on a change, and a bake would wait
+	// for one between its views.
+	Fellow::request_redraw();
 	const Job &j = queue.front()->get();
 	if (frame < 0) {
 		// Let the viewports render a few frames first (render buffers allocated, pipelines compiled).

@@ -88,6 +88,13 @@ private:
 	LocalVector<Instanced> instanced;
 	FellowImpostorBaker *baker = nullptr;
 	uint32_t generation = 0; // builds: a bake finishing after a later build or clear is dropped
+	// Decision 0253: impostors baked into files (bake_impostors()), by their mesh's and material's files and the
+	// impostors' frames and resolution; a build takes them instead of baking.
+	Dictionary baked_impostors;
+	int impostors_pending = 0;
+	int impostors_saved = 0;
+	String _impostor_key(const Ref<Mesh> &p_mesh, const Ref<Material> &p_override) const;
+	void _impostor_saved(const Ref<ArrayMesh> &p_quad, const String &p_key, const String &p_path);
 	Dictionary build_info;
 	bool built = false;
 	bool build_queued = false;
@@ -132,6 +139,9 @@ public:
 
 	void build();
 	void clear();
+	void set_impostors(const Dictionary &p_impostors);
+	Dictionary get_impostors() const;
+	int bake_impostors(const String &p_directory);
 	bool is_built() const { return built; }
 	Dictionary get_build_info() const { return build_info; }
 

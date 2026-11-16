@@ -9,6 +9,14 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 129 — HLOD impostors baked into files (2026-11-16)
+
+- `FellowHLOD3D.bake_impostors()` and Project > Tools > Bake HLOD Impostors (decision 0253): the impostors baked ahead
+  into files beside the scene, kept in the node's `impostors` (by their meshes' files) and taken by `build()` at once —
+  a forest's impostors from the first frame instead of after 68 frames of baking; the picture as the run-time bake's
+  (within lavapipe's frame-to-frame floor). The impostor baker asks for frames while it runs (in the editor it waited
+  for a redraw between views). `bench/hlod_impostor_files_check.gd`; the editor check's HLOD step.
+
 ## Milestone 128 — one proxy for a group of far cells (2026-11-16)
 
 - `bake_proxies()` groups the cells 4 × 4 (`group_cells`) and bakes one proxy of each group's content, drawn beyond the

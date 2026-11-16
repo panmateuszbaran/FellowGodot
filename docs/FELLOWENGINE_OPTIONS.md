@@ -170,7 +170,10 @@ when the node is ready (or by `build()`):
   aerial 27.4 dB, mean colour within 1.4 levels) and pay for **heavy meshes only**: an impostor is an alpha-tested
   quad over the bounding sphere, so it trades vertices for fragments. Foliage Lab's 420-triangle trees beyond 60 m:
   flythrough −2.8 % on the RTX, but the aerial view +5 % and the forest +6 % (lavapipe forest +85 %); baking 8 x 8
-  views of a mesh takes about 70 frames at start. Measure with your own meshes before using them.
+  views of a mesh takes about 70 frames at start. Measure with your own meshes before using them. Milestone 129
+  (decision 0253): `bake_impostors(directory)` bakes them into files ahead (Project > Tools > Bake HLOD Impostors in
+  the editor), kept in the node's `impostors` (by the mesh's and material override's files, `impostor_frames` and
+  `impostor_resolution`) and taken by `build()` at once: no frames of baking at start. Signal `impostors_baked`.
 
 Directional cascades starting beyond `distance` draw the proxies, the nearer ones the meshes, independently of the
 camera's position (`shadow_mode`), so the directional shadow cache keeps both. Meshes with skins, blend shapes,

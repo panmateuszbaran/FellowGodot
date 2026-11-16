@@ -14,6 +14,13 @@
 	<tutorials>
 	</tutorials>
 	<methods>
+		<method name="bake_impostors">
+			<return type="int" />
+			<param index="0" name="directory" type="String" />
+			<description>
+				Bakes the impostors this node would bake at run time — for its repeated meshes and its [MultiMeshInstance3D] nodes, as [method build] finds them — into files in [param directory] ([code]impostor_&lt;n&gt;.res[/code]: the quad, its material and its atlases, lossless), one view a frame, without building, and keeps them in [member impostors]; [signal impostors_baked] when the last is saved. A mesh (or material override) not saved in a file has no key and is skipped. Returns the bakes queued. The editor's [b]Project &gt; Tools &gt; Bake HLOD Impostors[/b] calls it on the selected node (undoable). See [code]docs/decisions/0253-hlod-impostor-files.md[/code].
+			</description>
+		</method>
 		<method name="build">
 			<return type="void" />
 			<description>
@@ -70,6 +77,9 @@
 		<member name="impostor_resolution" type="int" setter="set_impostor_resolution" getter="get_impostor_resolution" default="128">
 			Pixels per side of each view.
 		</member>
+		<member name="impostors" type="Dictionary" setter="set_impostors" getter="get_impostors" default="{}">
+			Impostors baked into files by [method bake_impostors], by their mesh's and material override's files and the impostors' [member impostor_frames] and [member impostor_resolution]: [method build] takes them instead of baking (no frames of baking, no impostor missing meanwhile). Saved with the scene; a bake for other views or another resolution (or a changed mesh file) is not used.
+		</member>
 		<member name="instance_threshold" type="int" setter="set_instance_threshold" getter="get_instance_threshold" default="32">
 			A mesh repeated at least this many times (same mesh, material override and instance settings) gets an instanced proxy; fewer: merged.
 		</member>
@@ -86,6 +96,14 @@
 			How directional shadow cascades choose between the proxies and the meshes.
 		</member>
 	</members>
+	<signals>
+		<signal name="impostors_baked">
+			<param index="0" name="count" type="int" />
+			<description>
+				Emitted when the impostors queued by [method bake_impostors] are all baked; [param count] were saved.
+			</description>
+		</signal>
+	</signals>
 	<constants>
 		<constant name="SHADOW_MODE_FOLLOW_CAMERA" value="0" enum="ShadowMode">
 			As stock Godot's visibility dependencies: every shadow pass draws what the camera's distance selects.

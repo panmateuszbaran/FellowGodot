@@ -22,6 +22,7 @@ const MONITORS := ["FellowEngine/Texture streaming resident", "FellowEngine/Text
 	"FellowEngine/Video memory budget", "FellowEngine/Video memory used (driver)", "FellowEngine/Texture streaming budget"]
 const SPLIT_MENU := "Split into Streaming Cells (FellowEngine)..."
 const PROXIES_MENU := "Bake Streaming Proxies (FellowEngine)..."
+const HLOD_MENU := "Bake HLOD Impostors (FellowEngine)"
 
 var out := {}
 var failures := []
@@ -72,6 +73,7 @@ func _run() -> void:
 	await _check_handles()
 	await _check_split()
 	await _check_proxies()
+	await _check_hlod_impostors()
 	_check_monitors()
 	_check_animate_toggle()
 	await _check_warnings()
@@ -677,6 +679,80 @@ func _check_proxies() -> void:
 	if cells == 0 or proxies != cells or owned != cells or groups == 0 or files.size() != cells + groups + 1 or report == "" or result["saved_meshes"] != cells + groups or textured != cells:
 		_fail("proxies: %s" % [result])
 	out["proxies"] = result
+
+
+# Milestone 129: Project > Tools > Bake HLOD Impostors on a FellowHLOD3D over a MultiMesh of a mesh saved in a file:
+# the impostor baked into a file beside the scene, kept in the node's impostors (undoable) and saved with the scene.
+func _check_hlod_impostors() -> void:
+	var sphere := SphereMesh.new()
+	sphere.radial_segments = 64
+	sphere.rings = 32
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, sphere.get_mesh_arrays())
+	ResourceSaver.save(mesh, "res://hlod_ball.res")
+	var level := Node3D.new()
+	level.name = "HlodLevel"
+	var hlod = ClassDB.instantiate("FellowHLOD3D")
+	hlod.name = "HLOD"
+	hlod.set("impostor_distance", 50.0)
+	level.add_child(hlod)
+	hlod.owner = level
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.mesh = load("res://hlod_ball.res")
+	mm.instance_count = 20
+	for i in 20:
+		mm.set_instance_transform(i, Transform3D(Basis(), Vector3(i * 3.0, 0, 0)))
+	var mmi := MultiMeshInstance3D.new()
+	mmi.name = "Balls"
+	mmi.multimesh = mm
+	hlod.add_child(mmi)
+	mmi.owner = level
+	var ps := PackedScene.new()
+	ps.pack(level)
+	ResourceSaver.save(ps, "res://hlod.tscn")
+	level.free()
+	EditorInterface.open_scene_from_path("res://hlod.tscn")
+	await _frames(10)
+	var root := EditorInterface.get_edited_scene_root()
+	if root == null or root.name != "HlodLevel":
+		_fail("hlod.tscn did not open")
+		return
+	var node := root.get_node("HLOD")
+	var selection := EditorInterface.get_selection()
+	selection.clear()
+	selection.add_node(node)
+	await _frames(2)
+	var base := EditorInterface.get_base_control()
+	var menu := _find_menu(base, HLOD_MENU)
+	if menu == null:
+		_fail("no \"%s\" menu item" % HLOD_MENU)
+		return
+	for i in menu.item_count:
+		if menu.get_item_text(i) == HLOD_MENU:
+			menu.index_pressed.emit(i)
+	var report := ""
+	var frames := 0
+	for f in 3000:
+		await _frames(1)
+		frames += 1
+		# (The report pops up over whichever window is in front: looked for in all of them.)
+		for d in get_tree().root.find_children("*", "AcceptDialog", true, false):
+			if d.visible and d.dialog_text.contains("impostors baked"):
+				report = d.dialog_text
+				d.hide()
+		if report != "":
+			break
+
+	var impostors: Dictionary = node.get("impostors")
+	EditorInterface.save_scene()
+	await _frames(3)
+	var saved := FileAccess.get_file_as_string("res://hlod.tscn")
+	var files := DirAccess.get_files_at("res://hlod_impostors")
+	var result := {"report": report, "frames": frames, "impostors": impostors.size(), "files": files.size(), "saved_with_scene": saved.contains("impostors = {")}
+	if report == "" or impostors.size() != 1 or files.size() != 1 or not result["saved_with_scene"]:
+		_fail("hlod impostors: %s" % [result])
+	out["hlod_impostors"] = result
 
 
 func _check_monitors() -> void:

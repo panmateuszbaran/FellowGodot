@@ -175,6 +175,12 @@ private:
 	void _split_confirmed();
 	void _proxies_menu();
 	void _proxies_confirmed();
+	// Milestone 129 (decision 0253): the selected FellowHLOD3D's impostors baked into files.
+	ObjectID hlod_bake_node;
+	Dictionary hlod_bake_before;
+	String hlod_bake_directory;
+	void _hlod_impostors_menu();
+	void _hlod_impostors_baked(int p_count);
 	void _animate_toggled(bool p_animate);
 	void _editor_settings_changed();
 	void _update_animate_icon();

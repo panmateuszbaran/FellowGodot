@@ -19,6 +19,8 @@ copies `project/` to `<out>/project`, opens it in the editor, and lets its plugi
 * milestone 66: Project > Tools > Bake Streaming Proxies on the cells the split made: a proxy for each, owned by the
   level and saved with it (`stream_back.gd` then checks them shown while their cells are unloaded, hidden once loaded);
   milestone 127: the boxes' material has a texture, and each proxy's file has its baked texture;
+* milestone 129: Project > Tools > Bake HLOD Impostors on a FellowHLOD3D over a MultiMesh of a mesh in a file: the
+  impostor baked into a file beside the scene, in the node's `impostors` and saved with the scene;
 * the Performance monitors;
 * milestone 58: the terrain's brush on `idle/FellowTerrain3D.tscn` — its toolbar shown with the terrain selected, a
   Raise stroke dragged with the mouse, paint strokes (the first making the splat map), each undone and redone (the

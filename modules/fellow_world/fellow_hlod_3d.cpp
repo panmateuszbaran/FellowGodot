@@ -32,6 +32,8 @@
 
 #include "fellow_impostor_baker.h"
 
+#include "core/io/dir_access.h"
+#include "core/io/resource_saver.h"
 #include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
 #include "core/os/os.h"
@@ -413,7 +415,17 @@ void FellowHLOD3D::build() {
 	// Impostors (decision 0122): baked one view per frame by an internal baker; applied when done.
 	const bool impostors = impostor_distance > 0.0 && Fellow::multimesh_culling();
 	int impostor_bakes = 0;
+	int impostors_loaded = 0;
+	LocalVector<Pair<Ref<ArrayMesh>, uint32_t>> ready;
 	auto queue_impostor = [&](const Ref<Mesh> &p_mesh, const Ref<Material> &p_override, uint32_t p_index) {
+		// Baked into a file already (decision 0253): taken once the build is done.
+		const String key = _impostor_key(p_mesh, p_override);
+		const Ref<ArrayMesh> baked = key.is_empty() ? Ref<ArrayMesh>() : Ref<ArrayMesh>(baked_impostors.get(key, Variant()));
+		if (baked.is_valid()) {
+			ready.push_back(Pair<Ref<ArrayMesh>, uint32_t>(baked, p_index));
+			impostors_loaded++;
+			return;
+		}
 		if (!baker) {
 			baker = memnew(FellowImpostorBaker);
 			baker->set_name("ImpostorBaker");
@@ -655,6 +667,9 @@ void FellowHLOD3D::build() {
 	}
 	built = true;
 	_apply_roles();
+	for (const Pair<Ref<ArrayMesh>, uint32_t> &r : ready) {
+		_impostor_baked(r.first, generation, r.second);
+	}
 
 	build_info.clear();
 	build_info["candidates"] = (int)candidates.size();
@@ -667,6 +682,7 @@ void FellowHLOD3D::build() {
 	build_info["merged_triangles"] = triangles;
 	build_info["lod_triangles"] = lod_triangles;
 	build_info["impostor_bakes"] = impostor_bakes;
+	build_info["impostors_loaded"] = impostors_loaded;
 	build_info["impostor_multimeshes"] = impostor_multimeshes;
 	build_info["build_msec"] = double(OS::get_singleton()->get_ticks_usec() - t0) / 1000.0;
 }
@@ -699,6 +715,97 @@ void FellowHLOD3D::_impostor_baked(const Ref<ArrayMesh> &p_quad, uint32_t p_gene
 	source->add_child(imp, false, INTERNAL_MODE_BACK);
 	in.impostor = imp;
 	_apply_roles();
+}
+
+// Decision 0253: an impostor's key — its mesh's and material's files (a mesh made at run time has none: no key) and the
+// impostors' views and resolution.
+String FellowHLOD3D::_impostor_key(const Ref<Mesh> &p_mesh, const Ref<Material> &p_override) const {
+	if (p_mesh.is_null() || p_mesh->get_path().is_empty() || (p_override.is_valid() && p_override->get_path().is_empty())) {
+		return String();
+	}
+	return vformat("%s|%s|%d|%d", p_mesh->get_path(), p_override.is_valid() ? p_override->get_path() : String(), impostor_frames, impostor_resolution);
+}
+
+void FellowHLOD3D::set_impostors(const Dictionary &p_impostors) {
+	baked_impostors = p_impostors;
+}
+
+Dictionary FellowHLOD3D::get_impostors() const {
+	return baked_impostors;
+}
+
+// Every mesh this node would give impostors (its repeated meshes, its MultiMeshes) baked into p_directory, one view a
+// frame, without building: the meshes' and materials' files make the keys (meshes made at run time are skipped). Each
+// impostor is saved as it finishes; impostors_baked(count) when the last has. Returns the bakes queued.
+int FellowHLOD3D::bake_impostors(const String &p_directory) {
+	ERR_FAIL_COND_V_MSG(!is_inside_tree(), 0, "FellowHLOD3D: bake_impostors() needs the node in the scene tree.");
+	ERR_FAIL_COND_V_MSG(impostors_pending > 0, 0, "FellowHLOD3D: impostors are being baked already.");
+	const Error dir_err = DirAccess::make_dir_recursive_absolute(p_directory);
+	ERR_FAIL_COND_V_MSG(dir_err != OK && dir_err != ERR_ALREADY_EXISTS, 0, vformat("Cannot create the directory \"%s\".", p_directory));
+	// The sources as build() finds them: repeated meshes (the same mesh, override and settings, instance_threshold
+	// times), and MultiMeshInstance3D nodes below the node.
+	HashMap<String, Pair<Ref<Mesh>, Ref<Material>>> sources;
+	LocalVector<String> order;
+	auto add = [&](const Ref<Mesh> &p_mesh, const Ref<Material> &p_override) {
+		const String key = _impostor_key(p_mesh, p_override);
+		if (!key.is_empty() && !sources.has(key) && mesh_triangles(p_mesh) >= impostor_min_triangles) {
+			sources.insert(key, Pair<Ref<Mesh>, Ref<Material>>(p_mesh, p_override));
+			order.push_back(key);
+		}
+	};
+	LocalVector<MeshInstance3D *> candidates;
+	collect(this, this, candidates);
+	HashMap<String, int> counts;
+	for (MeshInstance3D *mi : candidates) {
+		if (!mesh_instance_instancing_safe(mi)) {
+			continue;
+		}
+		const Ref<Material> mo = mi->get_material_override();
+		const String group = vformat("%d/%d/%d/%d/%d", (int64_t)(uint64_t)mi->get_mesh()->get_instance_id(), mo.is_valid() ? (int64_t)(uint64_t)mo->get_instance_id() : (int64_t)0, (int)mi->get_cast_shadows_setting(), (int64_t)mi->get_layer_mask(), (int)mi->get_gi_mode());
+		const int n = counts.has(group) ? counts[group] + 1 : 1;
+		counts[group] = n;
+		if (n == MAX(1, instance_threshold)) {
+			add(mi->get_mesh(), mo);
+		}
+	}
+	LocalVector<MultiMeshInstance3D *> mmis;
+	collect_multimeshes(this, mmis);
+	for (MultiMeshInstance3D *mmi : mmis) {
+		if (multimesh_instance_impostor_safe(mmi, impostor_min_triangles)) {
+			add(mmi->get_multimesh()->get_mesh(), mmi->get_material_override());
+		}
+	}
+	if (order.is_empty()) {
+		return 0;
+	}
+	if (!baker) {
+		baker = memnew(FellowImpostorBaker);
+		baker->set_name("ImpostorBaker");
+		add_child(baker, false, INTERNAL_MODE_BACK);
+	}
+	impostors_saved = 0;
+	for (uint32_t i = 0; i < order.size(); i++) {
+		const Pair<Ref<Mesh>, Ref<Material>> &src = sources[order[i]];
+		const String path = p_directory.path_join(vformat("impostor_%d.res", (int)i));
+		baker->queue_bake(src.first, src.second, impostor_frames, impostor_resolution, callable_mp(this, &FellowHLOD3D::_impostor_saved).bind(order[i], path), true);
+		impostors_pending++;
+	}
+	return order.size();
+}
+
+void FellowHLOD3D::_impostor_saved(const Ref<ArrayMesh> &p_quad, const String &p_key, const String &p_path) {
+	impostors_pending = MAX(0, impostors_pending - 1);
+	if (p_quad.is_valid() && ResourceSaver::save(p_quad, p_path, ResourceSaver::FLAG_COMPRESS) == OK) {
+		p_quad->set_path(p_path, true); // the scene refers to the file, not a copy
+		Dictionary updated = baked_impostors.duplicate(); // (not the one the caller or an undo step holds)
+		updated[p_key] = p_quad;
+		baked_impostors = updated;
+		impostors_saved++;
+	}
+	if (impostors_pending == 0) {
+		notify_property_list_changed();
+		emit_signal(SNAME("impostors_baked"), impostors_saved);
+	}
 }
 
 bool FellowHLOD3D::is_baking() const {
@@ -975,6 +1082,9 @@ void FellowHLOD3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_shadow_mode", "mode"), &FellowHLOD3D::set_shadow_mode);
 	ClassDB::bind_method(D_METHOD("get_shadow_mode"), &FellowHLOD3D::get_shadow_mode);
 	ClassDB::bind_method(D_METHOD("build"), &FellowHLOD3D::build);
+	ClassDB::bind_method(D_METHOD("set_impostors", "impostors"), &FellowHLOD3D::set_impostors);
+	ClassDB::bind_method(D_METHOD("get_impostors"), &FellowHLOD3D::get_impostors);
+	ClassDB::bind_method(D_METHOD("bake_impostors", "directory"), &FellowHLOD3D::bake_impostors);
 	ClassDB::bind_method(D_METHOD("clear"), &FellowHLOD3D::clear);
 	ClassDB::bind_method(D_METHOD("is_built"), &FellowHLOD3D::is_built);
 	ClassDB::bind_method(D_METHOD("get_build_info"), &FellowHLOD3D::get_build_info);
@@ -988,6 +1098,8 @@ void FellowHLOD3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "impostor_frames", PROPERTY_HINT_RANGE, "2,32,1"), "set_impostor_frames", "get_impostor_frames");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "impostor_resolution", PROPERTY_HINT_RANGE, "16,1024,1,suffix:px"), "set_impostor_resolution", "get_impostor_resolution");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "impostor_min_triangles", PROPERTY_HINT_RANGE, "0,100000,1,or_greater"), "set_impostor_min_triangles", "get_impostor_min_triangles");
+	ADD_PROPERTY(PropertyInfo(Variant::DICTIONARY, "impostors"), "set_impostors", "get_impostors");
+	ADD_SIGNAL(MethodInfo("impostors_baked", PropertyInfo(Variant::INT, "count")));
 	ADD_GROUP("", "");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "cell_size", PROPERTY_HINT_RANGE, "1,1000,0.1,or_greater,suffix:m"), "set_cell_size", "get_cell_size");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "min_meshes", PROPERTY_HINT_RANGE, "1,1000,1,or_greater"), "set_min_meshes", "get_min_meshes");
