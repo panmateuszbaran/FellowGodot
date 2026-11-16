@@ -7,7 +7,7 @@ extends SceneTree
 ## A village of --cells x --cells cells of 64 m: houses of 1 m quads whose walls, gables and roofs take their parts of
 ## one atlas texture (white plaster with dark windows, plain plaster, red roof tiles: a trim sheet, the common way of
 ## texturing modular buildings), on ground with a tiled texture, under a streamer. Seen from 300 m and from 600 m (the
-## sun without shadows: the proxies' colours alone): (A) every cell loaded; (B) every cell a proxy coloured per vertex
+## sun without shadows: the proxies' colours alone; the cells' own proxies, not grouped): (A) every cell loaded; (B) every cell a proxy coloured per vertex
 ## (each material's mean colour: the atlas's mean on walls and roofs alike); (C, D, E) proxies with textures of texels
 ## of 0.25, 0.5 and 1 m. Each: the picture, its difference from A (the share of pixels more than 16 levels off and
 ## the mean difference, over the pixels where A draws the village), the textures' bytes and the bake's time.
@@ -333,7 +333,7 @@ func _run() -> void:
 	var lanes := [["b_vertex_colours", 0.0], ["c_texel_0_25", 0.25], ["d_texel_0_5", 0.5], ["e_texel_1", 1.0]]
 	for lane in lanes:
 		var name: String = lane[0]
-		var info: Dictionary = streamer.bake_proxies(out_dir.path_join("proxies_" + name), {"texel_size": lane[1]})
+		var info: Dictionary = streamer.bake_proxies(out_dir.path_join("proxies_" + name), {"texel_size": lane[1], "group_cells": 0})
 		var row := {
 			"texel_size": lane[1],
 			"proxies": info.get("proxies", 0),

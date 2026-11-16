@@ -192,6 +192,8 @@ class FellowWorldStreamer3D : public Node3D {
 	void _activate(FellowStreamingCell3D *p_cell, Node *p_content);
 	void _release(FellowStreamingCell3D *p_cell);
 	void _cancel_all();
+	void _update_group(FellowStreamingCell3D *p_cell); // decision 0252
+	void _editor_hide_groups();
 
 protected:
 	void _notification(int p_what);

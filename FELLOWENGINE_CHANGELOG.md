@@ -9,6 +9,13 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 128 — one proxy for a group of far cells (2026-11-16)
+
+- `bake_proxies()` groups the cells 4 × 4 (`group_cells`) and bakes one proxy of each group's content, drawn beyond the
+  distance at which none of its cells can be loaded as its cells' proxies' visibility parent and hidden while one of
+  them is loaded (decision 0252): World Lab's view 347 → 107 draws, 0.43 → 0.65 % of the picture off. A terrain's
+  outer edges stay locked across a group. The editor's dialog has the group size; `stream_back.gd` checks the groups.
+
 ## Milestone 127 — textured streaming proxies (2026-11-16)
 
 - `bake_proxies()` bakes a texture for a cell's proxy where its materials have textures (decision 0251): the proxy

@@ -656,6 +656,11 @@ func _check_proxies() -> void:
 			if n is MeshInstance3D and n.has_meta("_fellow_cell_proxy"):
 				proxies += 1
 				owned += 1 if n.owner == root else 0
+	# Milestone 128: the cells in groups, each group with a proxy of its own under the streamer, owned by the level.
+	var groups := 0
+	for g in streamer.get_children():
+		if g is MeshInstance3D and g.has_meta("_fellow_group_proxy") and g.owner == root:
+			groups += 1
 	var files := DirAccess.get_files_at("res://split_proxies")
 	EditorInterface.save_scene()
 	await _frames(3)
@@ -663,13 +668,13 @@ func _check_proxies() -> void:
 	# Milestone 127: the boxes' material has a texture, so the proxies are textured (their textures in their files).
 	var textured := 0
 	for f in files:
-		if f.ends_with("_proxy.res"):
+		if not f.begins_with("group_") and f.ends_with("_proxy.res"):
 			var proxy = ResourceLoader.load("res://split_proxies".path_join(f), "", ResourceLoader.CACHE_MODE_IGNORE)
 			if proxy is ArrayMesh and proxy.surface_get_material(0) is StandardMaterial3D and proxy.surface_get_material(0).albedo_texture != null:
 				textured += 1
 	var result := {"cells": cells, "proxies": proxies, "owned": owned, "files": files.size(), "report": report,
-		"bake_ms": bake_ms, "saved_meshes": saved.count("type=\"MeshInstance3D\""), "textured": textured}
-	if cells == 0 or proxies != cells or owned != cells or files.size() != cells + 1 or report == "" or result["saved_meshes"] != cells or textured != cells:
+		"bake_ms": bake_ms, "saved_meshes": saved.count("type=\"MeshInstance3D\""), "textured": textured, "groups": groups}
+	if cells == 0 or proxies != cells or owned != cells or groups == 0 or files.size() != cells + groups + 1 or report == "" or result["saved_meshes"] != cells + groups or textured != cells:
 		_fail("proxies: %s" % [result])
 	out["proxies"] = result
 

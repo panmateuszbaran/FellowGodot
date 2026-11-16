@@ -3,7 +3,7 @@ extends SceneTree
 ## meshes (stand-ins far, the full meshes near).
 ##
 ##   godot --path benchmarks/project --fixed-fps 60 --resolution 640x360 -s res://bench/world_proxies_check.gd
-##       -- --out=<dir> [--cells=12] [--load_distance=160] [--mesh_distance=70] [--frames=20] [--texel=0.5] [--ratio=0.05] [--flights=1]
+##       -- --out=<dir> [--cells=12] [--load_distance=160] [--mesh_distance=70] [--frames=20] [--texel=0.5] [--ratio=0.05] [--groups=4] [--flights=1]
 ##
 ## A world of --cells x --cells cells of 64 m (World Lab's: ten buildings as one mesh of 1.5 m quads, 40 crates;
 ## Streaming Lab's textures) on a terrain split into regions of the same size, both under streamers. From a corner,
@@ -11,7 +11,8 @@ extends SceneTree
 ## cells and the regions; (D) C with the buildings streamed by --mesh_distance. Each: the picture, its difference from
 ## A, the video, texture and buffer memory, the triangles drawn. (E) Flights across the world at 30 m/s with D's cells,
 ## the full meshes whenever loaded and then by --mesh_distance: the buffer memory, frame times, the meshes' swaps.
-## The cells' proxies are textured with texels of --texel metres (milestone 127, decision 0251; 0: vertex colours).
+## The cells' proxies are textured with texels of --texel metres (milestone 127, decision 0251; 0: vertex colours);
+## cells and regions in groups of --groups x --groups with a proxy each for afar (milestone 128, decision 0252; 0: none).
 ## One JSON line: WORLD_PROXIES_CHECK {...}.
 
 const CELL := 64.0
@@ -178,7 +179,29 @@ func _stats() -> Dictionary:
 		"draw_calls": Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME),
 		"cells_loaded": streamer.get_stats().get("loaded", 0),
 		"regions_loaded": ground_streamer.get_stats().get("loaded", 0),
+		"groups": _groups(),
 	}
+
+
+# Milestone 128: the groups' proxies shown, and those shown with a cell of theirs loaded (none should be).
+func _groups() -> Dictionary:
+	var shown := 0
+	var wrong := 0
+	var total := 0
+	for s in [streamer, ground_streamer]:
+		for g in s.get_children():
+			if not g.has_meta("_fellow_group_proxy"):
+				continue
+			total += 1
+			if not g.visible:
+				continue
+			shown += 1
+			for p in g.get_meta("_fellow_group_proxy"):
+				var c = g.get_node_or_null(p)
+				if c and c.is_loaded():
+					wrong += 1
+					break
+	return {"total": total, "shown": shown, "shown_with_a_cell_loaded": wrong}
 
 
 func _wait_settled() -> void:
@@ -294,8 +317,8 @@ func _run() -> void:
 
 	# C. Proxies baked for the cells and the regions.
 	t0 = Time.get_ticks_msec()
-	result["bake_regions"] = ground_streamer.bake_proxies(out_dir.path_join("proxies_ground"), {"terrain_quads": 16})
-	result["bake_cells"] = streamer.bake_proxies(out_dir.path_join("proxies"), {"texel_size": float(_arg("texel", "0.5")), "ratio": float(_arg("ratio", "0.05"))})
+	result["bake_regions"] = ground_streamer.bake_proxies(out_dir.path_join("proxies_ground"), {"terrain_quads": 16, "group_cells": int(_arg("groups", "4"))})
+	result["bake_cells"] = streamer.bake_proxies(out_dir.path_join("proxies"), {"texel_size": float(_arg("texel", "0.5")), "ratio": float(_arg("ratio", "0.05")), "group_cells": int(_arg("groups", "4"))})
 	result["bake_ms"] = Time.get_ticks_msec() - t0
 	await _wait_settled()
 	result["c_proxies"] = _stats()
@@ -305,7 +328,7 @@ func _run() -> void:
 	# unloaded first: the camera away from the world.)
 	cam.position = Vector3(-100000, 0, -100000)
 	await _settle(90)
-	result["bake_stream"] = streamer.bake_proxies(out_dir.path_join("proxies_stream"), {"stream_meshes": true, "texel_size": float(_arg("texel", "0.5")), "ratio": float(_arg("ratio", "0.05"))})
+	result["bake_stream"] = streamer.bake_proxies(out_dir.path_join("proxies_stream"), {"stream_meshes": true, "texel_size": float(_arg("texel", "0.5")), "ratio": float(_arg("ratio", "0.05")), "group_cells": int(_arg("groups", "4"))})
 	streamer.mesh_distance = float(_arg("mesh_distance", "70"))
 	cam.transform = view
 	await _wait_settled()

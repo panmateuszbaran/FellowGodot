@@ -1,7 +1,7 @@
 extends SceneTree
 ## FellowEngine's editor check (milestone 50), after the editor split split.tscn into cells and saved it: the level
 ## loaded as a game would, its cells streamed in, every box back where split.tscn had it; the proxies baked for them
-## (milestone 66) shown before, hidden after. Prints STREAM_BACK {json}.
+## (milestone 66) shown before, hidden after, and so their groups' proxies (milestone 128). Prints STREAM_BACK {json}.
 ##   godot --headless --path <copy> -s res://stream_back.gd
 
 
@@ -14,6 +14,7 @@ func _run() -> void:
 	get_root().add_child(level)
 	var streamer = level.get_node("Streamer")
 	var proxies_shown_before := _proxies_shown(streamer)
+	var groups_shown_before := _groups_shown(streamer)
 	streamer.prefetch(Vector3.ZERO, 1000.0)
 	var loaded: int = streamer.load_now()
 	await process_frame
@@ -37,9 +38,10 @@ func _run() -> void:
 	# Milestone 66: the proxies the editor baked, shown while their cells were unloaded, hidden once loaded.
 	var r := {"cells_loaded": loaded, "boxes_back": positions.size(), "missing": missing, "worst_offset": worst,
 		"monitor_cells_loaded": Performance.get_custom_monitor("FellowEngine/World cells loaded"),
-		"proxies_shown_before": proxies_shown_before, "proxies_shown_after": _proxies_shown(streamer)}
+		"proxies_shown_before": proxies_shown_before, "proxies_shown_after": _proxies_shown(streamer),
+		"groups_shown_before": groups_shown_before, "groups_shown_after": _groups_shown(streamer)}
 	print("STREAM_BACK ", JSON.stringify(r))
-	quit(0 if missing == 0 and positions.size() == 40 and worst < 0.001 and proxies_shown_before == loaded and r["proxies_shown_after"] == 0 else 1)
+	quit(0 if missing == 0 and positions.size() == 40 and worst < 0.001 and proxies_shown_before == loaded and r["proxies_shown_after"] == 0 and groups_shown_before > 0 and r["groups_shown_after"] == 0 else 1)
 
 
 func _proxies_shown(streamer: Node) -> int:
@@ -48,4 +50,12 @@ func _proxies_shown(streamer: Node) -> int:
 		for n in cell.get_children():
 			if n is MeshInstance3D and n.has_meta("_fellow_cell_proxy") and n.is_visible_in_tree():
 				shown += 1
+	return shown
+
+
+func _groups_shown(streamer: Node) -> int:
+	var shown := 0
+	for g in streamer.get_children():
+		if g is MeshInstance3D and g.has_meta("_fellow_group_proxy") and g.is_visible_in_tree():
+			shown += 1
 	return shown

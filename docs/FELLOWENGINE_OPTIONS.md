@@ -462,6 +462,13 @@ texel's size, past alpha-tested holes — BC1 with mipmaps in the proxy's file, 
 regions) vertex colours, each corner from the surface under it. The result has `textured`, `texture_bytes`,
 `texture_ms`, `texture_hit_share`. The editor's dialog has the texel. Bench `bench/proxy_texture_check.gd`.
 
+Milestone 128 (decision 0252), **grouped proxies**: `bake_proxies` option `group_cells` 4 (0: none) groups the cells
+4 × 4 on a grid of their boxes' centres; each group gets one proxy of its cells' content together (its cells' proxies'
+triangles over the square of how much farther it is seen, coarser texels), a `FellowGroupProxy_<x>_<z>` child of the
+streamer drawn beyond `group_distance` (0: where none of its cells can be loaded) as its cells' proxies' visibility
+parent, and hidden while any of its cells is loaded. The result has `groups`, `group_triangles`,
+`group_texture_bytes`; the editor's dialog has the group size. World Lab: 347 → 107 draws.
+
 ## FSR 3.1 upscaler (milestone 47)
 
 `rendering/fellow/upscaling/fsr3` (on from milestone 49; read every frame): a viewport in Godot's FSR 2 scaling mode

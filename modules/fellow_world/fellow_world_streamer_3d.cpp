@@ -91,6 +91,21 @@ void FellowStreamingCell3D::set_scene_path(const String &p_path) {
 // Milestone 66 (decision 0174): a cell's baked proxy, and a stand-in's full mesh's path.
 static const char *FELLOW_CELL_PROXY_META = "_fellow_cell_proxy";
 static const char *FELLOW_FULL_MESH_META = "_fellow_full_mesh";
+// Decision 0252: on a group's proxy, its cells (paths from it); on a cell, its group's proxy (a path from the cell).
+static const char *FELLOW_GROUP_PROXY_META = "_fellow_group_proxy";
+static const char *FELLOW_CELL_GROUP_META = "_fellow_group";
+
+// A node's transform in an ancestor's space (in the tree or not).
+static Transform3D _fellow_relative_xform(const Node *p_ancestor, const Node *p_node) {
+	Transform3D x;
+	for (const Node *n = p_node; n && n != p_ancestor; n = n->get_parent()) {
+		const Node3D *n3 = Object::cast_to<Node3D>(n);
+		if (n3) {
+			x = n3->get_transform() * x;
+		}
+	}
+	return x;
+}
 
 void FellowStreamingCell3D::_update_editor_preview() {
 #ifdef TOOLS_ENABLED
@@ -313,6 +328,7 @@ void FellowWorldStreamer3D::_activate(FellowStreamingCell3D *p_cell, Node *p_con
 	p_cell->add_child(p_content);
 	p_cell->_set_proxy_visible(false);
 	p_cell->state = FellowStreamingCell3D::STATE_LOADED;
+	_update_group(p_cell);
 	_register_meshes(p_cell, p_content);
 	const uint64_t t1 = OS::get_singleton()->get_ticks_usec();
 	activation_usec += t1 - t0;
@@ -338,6 +354,7 @@ void FellowWorldStreamer3D::_release(FellowStreamingCell3D *p_cell) {
 	p_cell->_set_proxy_visible(true);
 	const bool was_loaded = p_cell->state == FellowStreamingCell3D::STATE_LOADED;
 	p_cell->state = FellowStreamingCell3D::STATE_UNLOADED;
+	_update_group(p_cell);
 	const uint64_t dt = OS::get_singleton()->get_ticks_usec() - t0;
 	release_usec += dt;
 	release_usec_max = MAX(release_usec_max, dt);
@@ -345,6 +362,40 @@ void FellowWorldStreamer3D::_release(FellowStreamingCell3D *p_cell) {
 		releases++;
 		p_cell->emit_signal(SNAME("unloaded"));
 	}
+}
+
+// Decision 0252: a group's proxy is drawn (beyond its distance) while none of its cells is loaded; hidden, it leaves
+// its cells' own proxies to the visibility ranges (a hidden visibility parent does not hide its dependants).
+void FellowWorldStreamer3D::_update_group(FellowStreamingCell3D *p_cell) {
+	if (!p_cell->has_meta(FELLOW_CELL_GROUP_META)) {
+		return;
+	}
+	GeometryInstance3D *group = Object::cast_to<GeometryInstance3D>(p_cell->get_node_or_null(NodePath(p_cell->get_meta(FELLOW_CELL_GROUP_META))));
+	if (!group) {
+		return;
+	}
+	const Array paths = group->get_meta(FELLOW_GROUP_PROXY_META, Array());
+	bool loaded = false;
+	for (int i = 0; i < paths.size() && !loaded; i++) {
+		const FellowStreamingCell3D *c = Object::cast_to<FellowStreamingCell3D>(group->get_node_or_null(NodePath(paths[i])));
+		loaded = c && c->state == FellowStreamingCell3D::STATE_LOADED;
+	}
+	group->set_visible(!loaded);
+}
+
+void FellowWorldStreamer3D::_editor_hide_groups() {
+#ifdef TOOLS_ENABLED
+	// As the cells' proxies under the editor's preview: the instances hidden, the saved visibility untouched.
+	if (!Engine::get_singleton()->is_editor_hint()) {
+		return;
+	}
+	for (int i = 0; i < get_child_count(); i++) {
+		GeometryInstance3D *g = Object::cast_to<GeometryInstance3D>(get_child(i));
+		if (g && g->has_meta(FELLOW_GROUP_PROXY_META) && g->get_instance().is_valid()) {
+			RS::get_singleton()->instance_set_visible(g->get_instance(), !editor_preview && g->is_visible_in_tree());
+		}
+	}
+#endif
 }
 
 void FellowWorldStreamer3D::_update() {
@@ -634,6 +685,8 @@ Dictionary FellowWorldStreamer3D::bake_proxies(const String &p_directory, const 
 	const bool proxy_shadows = p_options.get("proxy_shadows", false);
 	const float texel_size = p_options.get("texel_size", 0.5f);
 	const int max_texture_size = p_options.get("max_texture_size", 512);
+	const int group_cells = p_options.get("group_cells", 4);
+	const real_t group_distance = p_options.get("group_distance", 0.0);
 	Node *owner = Object::cast_to<Node>(p_options.get("owner", Variant()).get_validated_object());
 	if (!owner) {
 		owner = get_owner();
@@ -654,6 +707,9 @@ Dictionary FellowWorldStreamer3D::bake_proxies(const String &p_directory, const 
 	int64_t texture_usec = 0;
 	int64_t texture_texels = 0;
 	int64_t texture_hits = 0;
+	int groups_baked = 0;
+	int group_triangles = 0;
+	int64_t group_texture_bytes = 0;
 	int streamed = 0;
 	int stream_before = 0;
 	int stream_after = 0;
@@ -677,110 +733,247 @@ Dictionary FellowWorldStreamer3D::bake_proxies(const String &p_directory, const 
 			}
 		}
 	}
+	// Decision 0252: the cells in groups of group_cells x group_cells, on a grid of their boxes' centres in the
+	// streamer's space (the pitch: group_cells times the cells' median size), each group with one proxy for afar.
 	for (FellowStreamingCell3D *cell : targets) {
-		if (cell->scene_path.is_empty()) {
-			continue;
-		}
-		const Ref<PackedScene> ps = ResourceLoader::load(cell->scene_path, "PackedScene");
-		Node *content = ps.is_valid() ? ps->instantiate() : nullptr;
-		if (!content) {
-			ERR_PRINT(vformat("FellowWorldStreamer3D: could not load '%s' to bake its proxy.", cell->scene_path));
-			continue;
-		}
-		// The proxy, in place of an earlier one.
-		for (int i = cell->get_child_count() - 1; i >= 0; i--) {
-			Node *c = cell->get_child(i);
-			if (c != cell->content && c->has_meta(FELLOW_CELL_PROXY_META)) {
-				cell->remove_child(c);
-				memdelete(c);
+		for (int i = 0; i < cell->get_child_count(); i++) {
+			Node3D *proxy = Object::cast_to<Node3D>(cell->get_child(i));
+			if (proxy && proxy->has_meta(FELLOW_CELL_PROXY_META)) {
+				proxy->set_visibility_parent(NodePath()); // (before its group's proxy goes)
 			}
 		}
-		Dictionary pi;
-		Ref<ArrayMesh> proxy = FellowCellProxies::bake_proxy(content, ratio, terrain_quads, texel_size, max_texture_size, pi);
-		source_triangles += int(pi.get("source_triangles", 0));
-		if (proxy.is_valid()) {
-			if (pi.has("texture_width")) {
-				textured++;
-				texture_bytes += int64_t(pi.get("texture_bytes", 0));
-				texture_usec += int64_t(pi.get("texture_usec", 0));
-				texture_texels += int64_t(pi.get("texture_texels", 0));
-				texture_hits += int64_t(pi.get("texture_hits", 0));
-			} else {
-				proxy->surface_set_material(0, material);
-			}
-			const String path = p_directory.path_join(String(cell->get_name()) + "_proxy.res");
-			if (ResourceSaver::save(proxy, path, ResourceSaver::FLAG_COMPRESS) == OK) {
-				proxy->set_path(path, true); // the scene saved with the proxy refers to the file, not a copy
-				MeshInstance3D *mi = memnew(MeshInstance3D);
-				mi->set_name("FellowProxy");
-				mi->set_meta(FELLOW_CELL_PROXY_META, true);
-				mi->set_mesh(proxy);
-				mi->set_cast_shadows_setting(proxy_shadows ? GeometryInstance3D::SHADOW_CASTING_SETTING_ON : GeometryInstance3D::SHADOW_CASTING_SETTING_OFF);
-				if (proxy_distance > 0.0) {
-					mi->set_visibility_range_end(proxy_distance);
-				}
-				cell->add_child(mi);
-				mi->set_visible(cell->state != FellowStreamingCell3D::STATE_LOADED);
-				if (owner) {
-					mi->set_owner(owner);
-				}
-				cell->_editor_hide_proxies();
-				proxies++;
-				proxy_triangles += int(pi.get("proxy_triangles", 0));
-			}
+	}
+	for (int i = get_child_count() - 1; i >= 0; i--) {
+		Node *c = get_child(i);
+		if (c->has_meta(FELLOW_GROUP_PROXY_META)) {
+			remove_child(c);
+			memdelete(c);
 		}
-		// The large meshes' stand-ins, their full meshes apart.
-		if (stream_meshes) {
-			bool changed = false;
-			int index = 0;
-			LocalVector<Node *> stack;
-			stack.push_back(content);
-			while (!stack.is_empty()) {
-				Node *n = stack[stack.size() - 1];
-				stack.resize(stack.size() - 1);
-				for (int i = 0; i < n->get_child_count(); i++) {
-					stack.push_back(n->get_child(i));
+	}
+	LocalVector<LocalVector<FellowStreamingCell3D *>> groups;
+	LocalVector<Vector2i> group_keys;
+	if (group_cells > 1 && targets.size() > 1) {
+		LocalVector<real_t> sizes;
+		real_t min_x = 1e30;
+		real_t min_z = 1e30;
+		for (FellowStreamingCell3D *cell : targets) {
+			const AABB b = _fellow_relative_xform(this, cell).xform(cell->bounds);
+			sizes.push_back(MAX(b.size.x, b.size.z));
+			min_x = MIN(min_x, b.position.x);
+			min_z = MIN(min_z, b.position.z);
+		}
+		sizes.sort();
+		const real_t pitch = MAX(real_t(1.0), sizes[sizes.size() / 2] * group_cells);
+		HashMap<Vector2i, int> index;
+		for (FellowStreamingCell3D *cell : targets) {
+			const Vector3 c = _fellow_relative_xform(this, cell).xform(cell->bounds).get_center();
+			const Vector2i key(int(Math::floor((c.x - min_x) / pitch)), int(Math::floor((c.z - min_z) / pitch)));
+			if (!index.has(key)) {
+				index.insert(key, groups.size());
+				groups.push_back(LocalVector<FellowStreamingCell3D *>());
+				group_keys.push_back(key);
+			}
+			groups[index[key]].push_back(cell);
+		}
+	} else {
+		for (FellowStreamingCell3D *cell : targets) {
+			groups.push_back(LocalVector<FellowStreamingCell3D *>());
+			groups[groups.size() - 1].push_back(cell);
+			group_keys.push_back(Vector2i());
+		}
+	}
+	for (FellowStreamingCell3D *cell : targets) {
+		cell->remove_meta(FELLOW_CELL_GROUP_META);
+	}
+	for (uint32_t gi = 0; gi < groups.size(); gi++) {
+		LocalVector<Node *> contents;
+		LocalVector<FellowStreamingCell3D *> baked;
+		int baked_triangles = 0; // the group's cells' proxies
+		for (FellowStreamingCell3D *cell : groups[gi]) {
+			if (cell->scene_path.is_empty()) {
+				continue;
+			}
+			const Ref<PackedScene> ps = ResourceLoader::load(cell->scene_path, "PackedScene");
+			Node *content = ps.is_valid() ? ps->instantiate() : nullptr;
+			if (!content) {
+				ERR_PRINT(vformat("FellowWorldStreamer3D: could not load '%s' to bake its proxy.", cell->scene_path));
+				continue;
+			}
+			// The proxy, in place of an earlier one.
+			for (int i = cell->get_child_count() - 1; i >= 0; i--) {
+				Node *c = cell->get_child(i);
+				if (c != cell->content && c->has_meta(FELLOW_CELL_PROXY_META)) {
+					cell->remove_child(c);
+					memdelete(c);
 				}
-				MeshInstance3D *mi = Object::cast_to<MeshInstance3D>(n);
-				if (!mi || mi->get_mesh().is_null() || mi->get_skin().is_valid() || mi->has_meta(FELLOW_FULL_MESH_META)) {
-					continue;
+			}
+			Dictionary pi;
+			Ref<ArrayMesh> proxy = FellowCellProxies::bake_proxy(content, ratio, terrain_quads, texel_size, max_texture_size, pi);
+			source_triangles += int(pi.get("source_triangles", 0));
+			if (proxy.is_valid()) {
+				if (pi.has("texture_width")) {
+					textured++;
+					texture_bytes += int64_t(pi.get("texture_bytes", 0));
+					texture_usec += int64_t(pi.get("texture_usec", 0));
+					texture_texels += int64_t(pi.get("texture_texels", 0));
+					texture_hits += int64_t(pi.get("texture_hits", 0));
+				} else {
+					proxy->surface_set_material(0, material);
 				}
-				const Ref<Mesh> mesh = mi->get_mesh();
-				const int tris = FellowCellProxies::mesh_triangles(mesh);
-				if (tris < mesh_min_triangles) {
-					continue;
+				const String path = p_directory.path_join(String(cell->get_name()) + "_proxy.res");
+				if (ResourceSaver::save(proxy, path, ResourceSaver::FLAG_COMPRESS) == OK) {
+					proxy->set_path(path, true); // the scene saved with the proxy refers to the file, not a copy
+					MeshInstance3D *mi = memnew(MeshInstance3D);
+					mi->set_name("FellowProxy");
+					mi->set_meta(FELLOW_CELL_PROXY_META, true);
+					mi->set_mesh(proxy);
+					mi->set_cast_shadows_setting(proxy_shadows ? GeometryInstance3D::SHADOW_CASTING_SETTING_ON : GeometryInstance3D::SHADOW_CASTING_SETTING_OFF);
+					if (proxy_distance > 0.0) {
+						mi->set_visibility_range_end(proxy_distance);
+					}
+					cell->add_child(mi);
+					mi->set_visible(cell->state != FellowStreamingCell3D::STATE_LOADED);
+					if (owner) {
+						mi->set_owner(owner);
+					}
+					cell->_editor_hide_proxies();
+					proxies++;
+					proxy_triangles += int(pi.get("proxy_triangles", 0));
+					baked_triangles += int(pi.get("proxy_triangles", 0));
 				}
-				const Ref<ArrayMesh> stand_in = FellowCellProxies::simplified_mesh(mesh, mesh_ratio);
-				if (stand_in.is_null()) {
-					continue;
-				}
-				String full_path = mesh->get_path();
-				if (full_path.is_empty() || full_path.contains("::")) {
-					// Built into the cell's scene: saved on its own (a copy: the cached scene keeps its own).
-					const Ref<Mesh> copy = mesh->duplicate();
-					full_path = p_directory.path_join("meshes").path_join(vformat("%s_%d.res", String(cell->get_name()), index++));
-					if (ResourceSaver::save(copy, full_path, ResourceSaver::FLAG_COMPRESS) != OK) {
+			}
+			// The large meshes' stand-ins, their full meshes apart.
+			if (stream_meshes) {
+				bool changed = false;
+				int index = 0;
+				LocalVector<Node *> stack;
+				stack.push_back(content);
+				while (!stack.is_empty()) {
+					Node *n = stack[stack.size() - 1];
+					stack.resize(stack.size() - 1);
+					for (int i = 0; i < n->get_child_count(); i++) {
+						stack.push_back(n->get_child(i));
+					}
+					MeshInstance3D *mi = Object::cast_to<MeshInstance3D>(n);
+					if (!mi || mi->get_mesh().is_null() || mi->get_skin().is_valid() || mi->has_meta(FELLOW_FULL_MESH_META)) {
 						continue;
 					}
+					const Ref<Mesh> mesh = mi->get_mesh();
+					const int tris = FellowCellProxies::mesh_triangles(mesh);
+					if (tris < mesh_min_triangles) {
+						continue;
+					}
+					const Ref<ArrayMesh> stand_in = FellowCellProxies::simplified_mesh(mesh, mesh_ratio);
+					if (stand_in.is_null()) {
+						continue;
+					}
+					String full_path = mesh->get_path();
+					if (full_path.is_empty() || full_path.contains("::")) {
+						// Built into the cell's scene: saved on its own (a copy: the cached scene keeps its own).
+						const Ref<Mesh> copy = mesh->duplicate();
+						full_path = p_directory.path_join("meshes").path_join(vformat("%s_%d.res", String(cell->get_name()), index++));
+						if (ResourceSaver::save(copy, full_path, ResourceSaver::FLAG_COMPRESS) != OK) {
+							continue;
+						}
+					}
+					mi->set_mesh(stand_in);
+					mi->set_meta(FELLOW_FULL_MESH_META, full_path);
+					changed = true;
+					streamed++;
+					stream_before += tris;
+					stream_after += FellowCellProxies::mesh_triangles(stand_in);
 				}
-				mi->set_mesh(stand_in);
-				mi->set_meta(FELLOW_FULL_MESH_META, full_path);
-				changed = true;
-				streamed++;
-				stream_before += tris;
-				stream_after += FellowCellProxies::mesh_triangles(stand_in);
+				if (changed) {
+					Ref<PackedScene> scene;
+					scene.instantiate();
+					const String path = p_directory.path_join(String(cell->get_name()) + ".scn");
+					if (scene->pack(content) == OK && ResourceSaver::save(scene, path) == OK) {
+						cell->set_scene_path(path);
+					}
+				}
 			}
-			if (changed) {
-				Ref<PackedScene> scene;
-				scene.instantiate();
-				const String path = p_directory.path_join(String(cell->get_name()) + ".scn");
-				if (scene->pack(content) == OK && ResourceSaver::save(scene, path) == OK) {
-					cell->set_scene_path(path);
+			contents.push_back(content);
+			baked.push_back(cell);
+		}
+		// The group's proxy: its cells' content together, simplified and textured for its distance (its cells'
+		// proxies' triangles over the square of how much farther, their texel times it; a terrain's quads as its
+		// cells', so that the edges it keeps meet its neighbours'), drawn beyond the distance at which none of its
+		// cells can be loaded (the streamer's distance, its margin, and the farthest point of the cells' boxes from
+		// the proxy's centre: visibility ranges measure to it); the cells' proxies hidden there (it is their
+		// visibility parent).
+		if (group_cells > 1 && baked.size() >= 2) {
+			AABB bounds;
+			real_t load = load_distance;
+			Node3D *root = memnew(Node3D);
+			for (uint32_t i = 0; i < baked.size(); i++) {
+				const Transform3D x = _fellow_relative_xform(this, baked[i]);
+				bounds = i == 0 ? x.xform(baked[i]->bounds) : bounds.merge(x.xform(baked[i]->bounds));
+				load = MAX(load, baked[i]->load_distance);
+			}
+			const Vector3 origin = bounds.get_center();
+			for (uint32_t i = 0; i < baked.size(); i++) {
+				Node3D *wrap = memnew(Node3D);
+				wrap->set_transform(Transform3D(Basis(), -origin) * _fellow_relative_xform(this, baked[i]));
+				root->add_child(wrap);
+				wrap->add_child(contents[i]);
+			}
+			contents.clear(); // (freed with the root)
+			// (How much farther than its cells' proxies it is seen: at most as much as it is larger.)
+			const float scale = CLAMP(float((load + unload_margin + bounds.size.length() * 0.5) / MAX(load, real_t(1.0))), 1.0f, float(group_cells));
+			Dictionary gpi;
+			Ref<ArrayMesh> group = FellowCellProxies::bake_proxy(root, ratio, terrain_quads, texel_size > 0.0f ? texel_size * scale : 0.0f, max_texture_size, gpi, MAX(1, int(baked_triangles / (scale * scale))));
+			memdelete(root);
+			if (group.is_valid()) {
+				if (gpi.has("texture_width")) {
+					group_texture_bytes += int64_t(gpi.get("texture_bytes", 0));
+				} else {
+					group->surface_set_material(0, material);
+				}
+				const Vector2i key = group_keys[gi];
+				const String path = p_directory.path_join(vformat("group_%d_%d_proxy.res", key.x, key.y));
+				if (ResourceSaver::save(group, path, ResourceSaver::FLAG_COMPRESS) == OK) {
+					group->set_path(path, true);
+					const Vector3 center = group->get_aabb().get_center();
+					real_t reach = 0.0;
+					for (int k = 0; k < 8; k++) {
+						reach = MAX(reach, (bounds.get_endpoint(k) - origin).distance_to(center));
+					}
+					MeshInstance3D *gmi = memnew(MeshInstance3D);
+					gmi->set_name(vformat("FellowGroupProxy_%d_%d", key.x, key.y));
+					gmi->set_mesh(group);
+					gmi->set_position(origin);
+					gmi->set_cast_shadows_setting(proxy_shadows ? GeometryInstance3D::SHADOW_CASTING_SETTING_ON : GeometryInstance3D::SHADOW_CASTING_SETTING_OFF);
+					gmi->set_visibility_range_begin(group_distance > 0.0 ? group_distance : load + unload_margin + reach);
+					if (proxy_distance > 0.0) {
+						gmi->set_visibility_range_end(proxy_distance);
+					}
+					add_child(gmi);
+					if (owner) {
+						gmi->set_owner(owner);
+					}
+					Array paths;
+					for (FellowStreamingCell3D *cell : baked) {
+						paths.push_back(gmi->get_path_to(cell));
+						cell->set_meta(FELLOW_CELL_GROUP_META, cell->get_path_to(gmi));
+						for (int i = 0; i < cell->get_child_count(); i++) {
+							Node3D *proxy = Object::cast_to<Node3D>(cell->get_child(i));
+							if (proxy && proxy->has_meta(FELLOW_CELL_PROXY_META)) {
+								proxy->set_visibility_parent(proxy->get_path_to(gmi));
+							}
+						}
+					}
+					gmi->set_meta(FELLOW_GROUP_PROXY_META, paths);
+					_update_group(baked[0]);
+					groups_baked++;
+					group_triangles += int(gpi.get("proxy_triangles", 0));
 				}
 			}
 		}
-		memdelete(content);
+		for (Node *content : contents) {
+			memdelete(content);
+		}
 	}
+	_editor_hide_groups();
 	FellowCellProxies::clear_bake_cache();
 	info["cells"] = int(targets.size());
 	info["proxies"] = proxies;
@@ -789,6 +982,9 @@ Dictionary FellowWorldStreamer3D::bake_proxies(const String &p_directory, const 
 	info["textured"] = textured;
 	info["texture_bytes"] = texture_bytes;
 	info["texture_ms"] = texture_usec / 1000.0;
+	info["groups"] = groups_baked;
+	info["group_triangles"] = group_triangles;
+	info["group_texture_bytes"] = group_texture_bytes;
 	info["texture_hit_share"] = texture_texels > 0 ? double(texture_hits) / double(texture_texels) : 0.0; // texels coloured by a surface found under them
 	info["streamed_meshes"] = streamed;
 	info["streamed_triangles"] = stream_before;
@@ -946,6 +1142,7 @@ void FellowWorldStreamer3D::set_editor_preview(bool p_enable) {
 	editor_preview = p_enable;
 	if (is_inside_tree()) {
 		_fellow_update_previews(this);
+		_editor_hide_groups();
 	}
 }
 
@@ -996,6 +1193,8 @@ void FellowWorldStreamer3D::_notification(int p_what) {
 		case NOTIFICATION_READY: {
 			if (!Engine::get_singleton()->is_editor_hint()) {
 				set_process_internal(true);
+			} else {
+				_editor_hide_groups();
 			}
 		} break;
 		case NOTIFICATION_INTERNAL_PROCESS: {

@@ -270,7 +270,6 @@ struct Merged {
 	LocalVector<Vector2> uvs;
 	LocalVector<Color> tints;
 	LocalVector<int> triangle_sampler;
-	LocalVector<uint8_t> locked; // vertices the simplifier keeps (a terrain region's edge, which its neighbours share)
 	LocalVector<Sampler> samplers;
 	HashMap<ObjectID, int> material_sampler;
 	int terrain_sampler = -1;
@@ -349,7 +348,6 @@ void _append(Merged &r_merged, const Array &p_arrays, const Transform3D &p_xform
 		r_merged.tints.push_back(tint);
 		r_merged.colors.push_back(Color(tint.r * s.texture_mean.r, tint.g * s.texture_mean.g, tint.b * s.texture_mean.b, 1.0f));
 		r_merged.uvs.push_back(uvs.size() == verts.size() ? uvs[i] : Vector2());
-		r_merged.locked.push_back(0);
 	}
 	const int n = indices.is_empty() ? verts.size() : indices.size();
 	for (int i = 0; i + 2 < n; i += 3) {
@@ -435,7 +433,7 @@ T _gather(const T &p_src, const LocalVector<int> &p_used, int p_per_vertex = 1) 
 // buildings), the normals rebuilt from the faces, split where they meet at more than 60 degrees; r_error the
 // simplifier's estimate of how far it moved the surface (metres). False when the simplifier is missing or nothing is
 // left.
-bool _simplify_welded(const Merged &p_merged, float p_ratio, PackedVector3Array &r_vertices, PackedVector3Array &r_normals, PackedColorArray &r_colors, PackedInt32Array &r_indices, float &r_error) {
+bool _simplify_welded(const Merged &p_merged, float p_ratio, int p_triangles, PackedVector3Array &r_vertices, PackedVector3Array &r_normals, PackedColorArray &r_colors, PackedInt32Array &r_indices, float &r_error) {
 	if (!SurfaceTool::simplify_with_attrib_func || !SurfaceTool::generate_remap_func || !SurfaceTool::remap_index_func || !SurfaceTool::simplify_scale_func) {
 		return false;
 	}
@@ -456,17 +454,9 @@ bool _simplify_welded(const Merged &p_merged, float p_ratio, PackedVector3Array 
 	welded.resize(unique * 3);
 	LocalVector<int> representative; // an original vertex of each welded one (its colour)
 	representative.resize(unique);
-	LocalVector<uint8_t> lock;
-	lock.resize(unique);
-	memset(lock.ptr(), 0, unique);
-	bool any_locked = false;
 	for (int i = 0; i < vertex_count; i++) {
 		if (remap[i] != ~0u) {
 			representative[remap[i]] = i;
-			if (p_merged.locked[i]) {
-				lock[remap[i]] = 1; // (meshopt_SimplifyVertex_Lock)
-				any_locked = true;
-			}
 			for (int k = 0; k < 3; k++) {
 				welded[remap[i] * 3 + k] = positions[i * 3 + k];
 			}
@@ -475,9 +465,41 @@ bool _simplify_welded(const Merged &p_merged, float p_ratio, PackedVector3Array 
 	LocalVector<unsigned int> indices;
 	indices.resize(index_count);
 	SurfaceTool::remap_index_func(indices.ptr(), (const unsigned int *)p_merged.indices.ptr(), index_count, remap.ptr());
+	// The terrain's outer edges kept where they are (the welded terrain's edges of one triangle): the neighbouring
+	// regions' proxies, and a group's neighbours, meet them.
+	LocalVector<uint8_t> lock;
+	bool any_locked = false;
+	if (p_merged.terrain_sampler >= 0) {
+		lock.resize(unique);
+		memset(lock.ptr(), 0, unique);
+		HashMap<uint64_t, int> edges;
+		for (int t = 0; t < index_count / 3; t++) {
+			if (p_merged.triangle_sampler[t] != p_merged.terrain_sampler) {
+				continue;
+			}
+			for (int k = 0; k < 3; k++) {
+				const uint32_t a = indices[t * 3 + k];
+				const uint32_t b = indices[t * 3 + (k + 1) % 3];
+				const uint64_t key = (uint64_t(MIN(a, b)) << 32) | uint64_t(MAX(a, b));
+				int *n = edges.getptr(key);
+				if (n) {
+					(*n)++;
+				} else {
+					edges.insert(key, 1);
+				}
+			}
+		}
+		for (const KeyValue<uint64_t, int> &E : edges) {
+			if (E.value == 1) {
+				lock[uint32_t(E.key >> 32)] = 1; // (meshopt_SimplifyVertex_Lock)
+				lock[uint32_t(E.key & 0xffffffff)] = 1;
+				any_locked = true;
+			}
+		}
+	}
 	LocalVector<unsigned int> simplified;
 	simplified.resize(index_count);
-	const size_t target = MAX(size_t(index_count * p_ratio) / 3 * 3, size_t(36));
+	const size_t target = MAX(p_triangles > 0 ? size_t(p_triangles) * 3 : size_t(index_count * p_ratio) / 3 * 3, size_t(36));
 	float error = 0.0f;
 	const size_t count = SurfaceTool::simplify_with_attrib_func(simplified.ptr(), indices.ptr(), index_count, welded.ptr(), unique, sizeof(float) * 3, nullptr, 0, nullptr, 0, any_locked ? lock.ptr() : nullptr, target, 1.0f, 0, &error);
 	if (count == 0) {
@@ -1039,7 +1061,7 @@ Ref<StandardMaterial3D> proxy_material() {
 	return material;
 }
 
-Ref<ArrayMesh> bake_proxy(Node *p_content, float p_ratio, int p_terrain_quads, float p_texel_size, int p_max_texture_size, Dictionary &r_info) {
+Ref<ArrayMesh> bake_proxy(Node *p_content, float p_ratio, int p_terrain_quads, float p_texel_size, int p_max_texture_size, Dictionary &r_info, int p_triangles) {
 	Merged merged;
 	merged.want_textures = p_texel_size > 0.0f;
 	int source_triangles = 0;
@@ -1073,22 +1095,6 @@ Ref<ArrayMesh> bake_proxy(Node *p_content, float p_ratio, int p_terrain_quads, f
 				const int before = merged.indices.size();
 				_append(merged, arrays, it.xform, merged.terrain_sampler);
 				source_triangles += (merged.indices.size() - before) / 3;
-				// Its edges kept where they are: the neighbouring regions' proxies meet them.
-				HashMap<uint64_t, int> edges;
-				for (int i = before; i < merged.indices.size(); i += 3) {
-					for (int k = 0; k < 3; k++) {
-						const uint32_t a = merged.indices[i + k];
-						const uint32_t b = merged.indices[i + (k + 1) % 3];
-						const uint64_t key = (uint64_t(MIN(a, b)) << 32) | uint64_t(MAX(a, b));
-						edges[key] = edges.has(key) ? edges[key] + 1 : 1;
-					}
-				}
-				for (const KeyValue<uint64_t, int> &E : edges) {
-					if (E.value == 1) {
-						merged.locked[uint32_t(E.key >> 32)] = 1;
-						merged.locked[uint32_t(E.key & 0xffffffff)] = 1;
-					}
-				}
 			}
 		} else if (MeshInstance3D *mi = Object::cast_to<MeshInstance3D>(it.node)) {
 			const Ref<Mesh> mesh = mi->get_mesh();
@@ -1127,7 +1133,7 @@ Ref<ArrayMesh> bake_proxy(Node *p_content, float p_ratio, int p_terrain_quads, f
 	PackedColorArray colors;
 	PackedInt32Array indices;
 	float error = 0.0f;
-	if (!_simplify_welded(merged, p_ratio, vertices, normals, colors, indices, error)) {
+	if (!_simplify_welded(merged, p_ratio, p_triangles, vertices, normals, colors, indices, error)) {
 		r_info["proxy_triangles"] = 0;
 		return Ref<ArrayMesh>();
 	}
