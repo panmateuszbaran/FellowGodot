@@ -32,7 +32,7 @@ func _initialize() -> void:
 	# Autotune's evaluations (frame times: lavapipe's frames of seconds while a bake runs) switch rendering options of
 	# their own between the pictures: off, so that they compare the impostors alone.
 	ProjectSettings.set_setting("rendering/fellow/autotune/enabled", false)
-	out_dir = _arg("out", "user://hlod_impostor_files_check")
+	out_dir = _arg("out", "user://hlod_impostor_files_check").replace("\\", "/") # (a Windows path's backslashes: written into a .tres's paths, they break it)
 	DirAccess.make_dir_recursive_absolute(out_dir)
 	_run.call_deferred()
 

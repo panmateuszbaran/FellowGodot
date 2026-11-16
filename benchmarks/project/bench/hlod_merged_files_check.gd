@@ -28,7 +28,7 @@ func _initialize() -> void:
 			var kv: PackedStringArray = a.substr(2).split("=", true, 1)
 			args[kv[0]] = kv[1]
 	ProjectSettings.set_setting("rendering/fellow/autotune/enabled", false)
-	out_dir = _arg("out", "user://hlod_merged_files_check")
+	out_dir = _arg("out", "user://hlod_merged_files_check").replace("\\", "/") # (a Windows path's backslashes: written into a .tres's paths, they break it)
 	DirAccess.make_dir_recursive_absolute(out_dir)
 	_run.call_deferred()
 

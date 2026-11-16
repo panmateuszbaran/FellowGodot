@@ -37,7 +37,7 @@ func _initialize() -> void:
 		if a.begins_with("--") and a.contains("="):
 			var kv: PackedStringArray = a.substr(2).split("=", true, 1)
 			args[kv[0]] = kv[1]
-	out_dir = _arg("out", "user://proxy_texture_check")
+	out_dir = _arg("out", "user://proxy_texture_check").replace("\\", "/") # (a Windows path's backslashes: written into a .tres's paths, they break it)
 	DirAccess.make_dir_recursive_absolute(out_dir)
 	n_cells = int(_arg("cells", "4"))
 	_run.call_deferred()
