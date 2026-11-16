@@ -34,6 +34,7 @@
 #include "fellow_cloth_3d.h"
 #include "fellow_gas_emitter_3d.h"
 #include "fellow_gas_volume_3d.h"
+#include "fellow_hair_3d.h"
 #include "fellow_lightning_3d.h"
 #include "fellow_rain_3d.h"
 #include "fellow_shallow_water_3d.h"
@@ -80,6 +81,7 @@ void initialize_fellow_fluid_module(ModuleInitializationLevel p_level) {
 		GDREGISTER_CLASS(FellowGasEmitter3D);
 		GDREGISTER_CLASS(FellowBurnable3D);
 		GDREGISTER_CLASS(FellowCloth3D);
+		GDREGISTER_CLASS(FellowHair3D); // milestone 124
 		GDREGISTER_INTERNAL_CLASS(FellowGasReadback);
 		// Milestone 61: the nodes' code shaders for Godot's shader baker.
 		FellowBakeShaders::register_provider(&FellowWater3D::fellow_bake_shader_codes);

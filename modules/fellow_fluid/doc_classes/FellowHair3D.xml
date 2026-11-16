@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="FellowHair3D" inherits="GeometryInstance3D" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../../doc/class.xsd">
+	<brief_description>
+		Hair of strands: guide strands simulated on the CPU, many more drawn between them on the GPU with a hair shading model.
+	</brief_description>
+	<description>
+		Hair for a character's head (FellowEngine milestone 124, decision 0248). Put it under a [BoneAttachment3D] on the head bone: its scalp is the cap of a sphere ([member scalp_radius] about [member scalp_center], in the node's space) from its top down to [member coverage], the face's side (-Z) left bare by [member forehead_angle].
+		[member guide_count] guide strands grow from the scalp, combed along it (down and back) and falling, in [member segments] segments of [member length]. They are simulated on the CPU each frame in [member substeps] substeps: their roots on the scalp as the node moves, the segments' lengths kept exactly, a pull back to the styled shape strongest at the root ([member stiffness]), gravity, [member damping], the scene's [FellowWind3D] with [member drag], and out of the scalp's sphere and the [member colliders] (spheres and capsules: shoulders, a collar).
+		[member strand_count] strands are drawn, each between the three guides nearest its root (how far between them: [member spread]), along a Catmull-Rom curve through their points, as ribbons facing the camera at least a pixel wide (a thinner strand's coverage goes to its alpha, dithered: use TAA or FSR for smooth hair), [member root_width] thinning to [member tip_width]. The hair model: Kajiya-Kay's diffuse, a specular lobe in the light's colour and a broader one in the hair's ([member specular_shift], [member specular_strength], [member specular_sharpness]), light through it from behind ([member transmission]); darker at the roots ([member root_occlusion]) and on the strands under others; the light's shadows fall on it and from it.
+		Motion vectors follow the strands (the guides' positions go to the GPU in a texture of this frame's and the last frame's halves, each strand's instance data naming this frame's), so TAA and FSR see the hair's own motion.
+		In the editor the styled shape is shown, not simulated.
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="get_guide_points" qualifiers="const">
+			<return type="PackedVector3Array" />
+			<param index="0" name="guide" type="int" />
+			<description>
+				Returns a guide's points, global, from the root to the tip ([method get_point_count] of them): the simulated ones in a running game, the styled shape in the editor.
+			</description>
+		</method>
+		<method name="get_guide_rest_points" qualifiers="const">
+			<return type="PackedVector3Array" />
+			<param index="0" name="guide" type="int" />
+			<description>
+				Returns a guide's styled shape where the node is now, global: the points its simulated ones are pulled towards.
+			</description>
+		</method>
+		<method name="get_point_count" qualifiers="const">
+			<return type="int" />
+			<description>
+				Returns a guide's point count: [member segments] + 1.
+			</description>
+		</method>
+		<method name="get_stats" qualifiers="const">
+			<return type="Dictionary" />
+			<description>
+				Returns [code]guides[/code], [code]points[/code] (a guide's), [code]strands[/code], and the last frame's [code]simulate_usec[/code] and [code]upload_usec[/code] (the guides' texture and the strands' instance data sent to the GPU).
+			</description>
+		</method>
+		<method name="reset">
+			<return type="void" />
+			<description>
+				Puts the guides back in their styled shape where the node is now, at rest (after a teleport; a move of more than 1 m in a frame does it by itself).
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="colliders" type="NodePath[]" setter="set_colliders" getter="get_colliders" default="[]">
+			[CollisionShape3D] nodes with a [SphereShape3D] or [CapsuleShape3D] the strands are kept out of (shoulders, a collar), besides the scalp's sphere.
+		</member>
+		<member name="collision_margin" type="float" setter="set_collision_margin" getter="get_collision_margin" default="0.01">
+			How far the strands stay from the scalp's sphere and the colliders (metres).
+		</member>
+		<member name="color_variation" type="float" setter="set_color_variation" getter="get_color_variation" default="0.2">
+			How much each strand's colour differs from the others (a share of its brightness).
+		</member>
+		<member name="coverage" type="float" setter="set_coverage" getter="get_coverage" default="105.0">
+			How far down the scalp's sphere the hair grows, as an angle from its top (degrees).
+		</member>
+		<member name="curl" type="float" setter="set_curl" getter="get_curl" default="0.0">
+			The radius of the strands' curls (metres; 0: straight).
+		</member>
+		<member name="curl_frequency" type="float" setter="set_curl_frequency" getter="get_curl_frequency" default="18.0">
+			The curls' turns a metre.
+		</member>
+		<member name="damping" type="float" setter="set_damping" getter="get_damping" default="1.5">
+			How quickly the strands' motion dies away (per second).
+		</member>
+		<member name="drag" type="float" setter="set_drag" getter="get_drag" default="1.0">
+			How strongly the air (the [FellowWind3D]) pulls the strands to its own speed.
+		</member>
+		<member name="forehead_angle" type="float" setter="set_forehead_angle" getter="get_forehead_angle" default="55.0">
+			The angle about the face's direction (the node's -Z) left bare: the hairline (degrees; 0: none).
+		</member>
+		<member name="gravity_scale" type="float" setter="set_gravity_scale" getter="get_gravity_scale" default="1.0">
+			Gravity on the strands, in multiples of the project's.
+		</member>
+		<member name="guide_count" type="int" setter="set_guide_count" getter="get_guide_count" default="160">
+			The guide strands simulated (more: the hair's motion in finer detail; each costs the CPU).
+		</member>
+		<member name="length" type="float" setter="set_length" getter="get_length" default="0.32">
+			A guide's length (metres).
+		</member>
+		<member name="length_variation" type="float" setter="set_length_variation" getter="get_length_variation" default="0.25">
+			How much shorter than its guides a strand may be (a share of their length).
+		</member>
+		<member name="root_color" type="Color" setter="set_root_color" getter="get_root_color" default="Color(0.07, 0.045, 0.03, 1)">
+			The hair's colour at the roots.
+		</member>
+		<member name="root_occlusion" type="float" setter="set_root_occlusion" getter="get_root_occlusion" default="0.6">
+			How much darker the hair is at its roots (the light the hair above keeps from it).
+		</member>
+		<member name="root_width" type="float" setter="set_root_width" getter="get_root_width" default="0.4">
+			A drawn strand's width at its root (millimetres; a drawn strand stands for a few real ones).
+		</member>
+		<member name="scalp_center" type="Vector3" setter="set_scalp_center" getter="get_scalp_center" default="Vector3(0, 0, 0)">
+			The scalp's sphere's centre in the node's space (metres).
+		</member>
+		<member name="scalp_radius" type="float" setter="set_scalp_radius" getter="get_scalp_radius" default="0.1">
+			The scalp's sphere's radius (metres): the head's.
+		</member>
+		<member name="seed" type="int" setter="set_seed" getter="get_seed" default="0">
+			The seed of the strands' random roots and variations.
+		</member>
+		<member name="segments" type="int" setter="set_segments" getter="get_segments" default="12">
+			A guide's segments: its simulated points less one.
+		</member>
+		<member name="simulating" type="bool" setter="set_simulating" getter="is_simulating" default="true">
+			If [code]false[/code], the hair keeps its styled shape, following the node.
+		</member>
+		<member name="specular_sharpness" type="float" setter="set_specular_sharpness" getter="get_specular_sharpness" default="120.0">
+			How narrow the hair's highlights are.
+		</member>
+		<member name="specular_shift" type="float" setter="set_specular_shift" getter="get_specular_shift" default="0.08">
+			How far the highlights are shifted along the strand (the cuticle's tilt): the light's-colour highlight one way, the hair's-colour one twice as far the other.
+		</member>
+		<member name="specular_strength" type="float" setter="set_specular_strength" getter="get_specular_strength" default="0.5">
+			The highlights' strength.
+		</member>
+		<member name="spread" type="float" setter="set_spread" getter="get_spread" default="0.6">
+			How far between its three nearest guides a strand's root may lie (0: on its nearest guide, in clumps; 1: anywhere between them).
+		</member>
+		<member name="stiffness" type="float" setter="set_stiffness" getter="get_stiffness" default="0.35">
+			How strongly the strands keep their styled shape at the root (0-1); the pull fades to nothing at the tip.
+		</member>
+		<member name="strand_count" type="int" setter="set_strand_count" getter="get_strand_count" default="10000">
+			The strands drawn.
+		</member>
+		<member name="substeps" type="int" setter="set_substeps" getter="get_substeps" default="4">
+			The simulation's substeps a frame.
+		</member>
+		<member name="tip_color" type="Color" setter="set_tip_color" getter="get_tip_color" default="Color(0.22, 0.14, 0.08, 1)">
+			The hair's colour at the tips.
+		</member>
+		<member name="tip_width" type="float" setter="set_tip_width" getter="get_tip_width" default="0.12">
+			A drawn strand's width at its tip (millimetres).
+		</member>
+		<member name="transmission" type="float" setter="set_transmission" getter="get_transmission" default="0.35">
+			Light through the hair from behind it.
+		</member>
+		<member name="wind_scale" type="float" setter="set_wind_scale" getter="get_wind_scale" default="1.0">
+			The scene's [FellowWind3D] on the strands, in multiples of its speed.
+		</member>
+	</members>
+</class>

@@ -930,6 +930,10 @@ Node3D *FellowEditorPlugin::make_preset(int p_preset, const Node *p_root) {
 			top->add_child(pole);
 			_fellow_make("FellowCloth3D", "Cloth", top, Dictionary{ { "position", Vector3(0.04, 3.9, 0) }, { "size", Vector2(1.8, 1.1) }, { "pin_mode", 2 } });
 		} break;
+		case PRESET_HAIR: {
+			// Milestone 124: hair of strands on a 0.1 m scalp (a head's size), to move under the head's BoneAttachment3D.
+			top = Object::cast_to<Node3D>(_fellow_make("FellowHair3D", "Hair", nullptr, Dictionary{ { "scalp_radius", 0.1 } }));
+		} break;
 		case PRESET_CURTAIN: {
 			// Milestone 73: a curtain of cloth hanging from its top edge.
 			top = Object::cast_to<Node3D>(_fellow_make("FellowCloth3D", "Curtain", nullptr, Dictionary{ { "size", Vector2(2.0, 2.4) }, { "pin_mode", 1 }, { "wind_scale", 0.2 } }));
@@ -1301,6 +1305,7 @@ FellowEditorPlugin::FellowEditorPlugin() {
 	popup->add_separator();
 	popup->add_item(TTR("Add Flag (cloth on a pole)"), PRESET_FLAG);
 	popup->add_item(TTR("Add Curtain (cloth)"), PRESET_CURTAIN);
+	popup->add_item(TTR("Add Hair (strands; put it under the head's BoneAttachment3D)"), PRESET_HAIR);
 	popup->add_separator();
 	popup->add_item(TTR("Add Destructible Crate (breaks when hit)"), PRESET_DESTRUCTIBLE_CRATE);
 	popup->add_item(TTR("Add Ladder (3 m, climbable)"), PRESET_LADDER);

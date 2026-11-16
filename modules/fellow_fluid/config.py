@@ -20,6 +20,7 @@ def get_doc_classes():
         "FellowSnowTracker3D",
         "FellowWeather3D",
         "FellowCloth3D",
+        "FellowHair3D",
     ]
 
 

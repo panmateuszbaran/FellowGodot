@@ -693,6 +693,21 @@ same cloth); the pairs come from the particles nearer each other than the reach 
 the cloth at rest, so a cloth that does not come near itself costs next to nothing. `get_stats()`' `self_edge_pairs`,
 `self_edge_contacts`.
 
+## Hair (milestone 124)
+
+Module `fellow_fluid`; nothing changes without the node (decision 0248). `FellowHair3D` (a `GeometryInstance3D`), under
+a `BoneAttachment3D` on the head bone: the scalp is a sphere's cap (`scalp_radius`, `scalp_center`, `coverage` from its
+top, `forehead_angle` about the face's -Z left bare). `guide_count` guides (160) of `segments` (12) and `length`
+(0.32 m) combed along the scalp and falling, simulated on the CPU each frame (`substeps` 4: roots on the scalp, lengths
+exact, `stiffness` back to the styled shape fading to the tip, `damping`, `gravity_scale`, the scene's `FellowWind3D`
+by `wind_scale` and `drag`, out of the scalp's sphere by `collision_margin` and out of `colliders` — sphere and capsule
+`CollisionShape3D`s); `simulating` off keeps the styled shape. `strand_count` strands (10 000) drawn between their three
+nearest guides (`spread`; `length_variation`, `curl`, `curl_frequency`, `seed`) as camera-facing ribbons at least a pixel
+wide (`root_width` 0.4 mm, `tip_width` 0.12 mm; the coverage of thinner ones dithered: TAA or FSR), lit by a hair model
+(`root_color`, `tip_color`, `color_variation`, `specular_shift`, `specular_strength`, `specular_sharpness`,
+`transmission`, `root_occlusion`); motion vectors follow the strands. `reset()`, `get_stats()`, `get_guide_points()`,
+`get_guide_rest_points()`. "Add Hair" in the FellowEngine menu. Bench `bench/hair_check.gd`, the regression scene `hair`.
+
 ## Traversal: mantling and vaulting (milestone 72)
 
 Module `fellow_animation`; nothing changes without the nodes (decision 0180). `FellowTraversal3D`, a child of the

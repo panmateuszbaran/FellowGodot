@@ -9,6 +9,14 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 124 — hair of strands (2026-11-16)
+
+- `FellowHair3D` (decision 0248): guide strands on a head's scalp simulated on the CPU (lengths exact, a pull to the
+  styled shape, gravity, damping, the scene's wind, the scalp's sphere and sphere or capsule colliders), and many more
+  strands drawn between them on the GPU as camera-facing ribbons at least a pixel wide with a hair shading model
+  (Kajiya-Kay, shifted highlights, light from behind); motion vectors follow the strands. "Add Hair" in the
+  FellowEngine menu; `bench/hair_check.gd`, the regression scene `hair`.
+
 ## Milestone 123 — the parts that fall break where they land (2026-11-15)
 
 - `FellowDestructible3D.landing_break_speed` (decision 0247; 0 by default): a part a structural object drops breaks
