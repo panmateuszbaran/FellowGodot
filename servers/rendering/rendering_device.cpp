@@ -2338,6 +2338,7 @@ Error RenderingDevice::_texture_initialize(RID p_texture, uint32_t p_layer, cons
 				RDD::TextureBarrier tb;
 				tb.texture = texture->driver_id;
 				tb.src_access = RDD::BARRIER_ACCESS_COPY_WRITE_BIT;
+				tb.dst_access = RDD::BARRIER_ACCESS_SHADER_READ_BIT; // FellowEngine (milestone 142): the upload visible to the shaders that sample it (none before: SYNC-HAZARD-READ-AFTER-WRITE)
 				tb.prev_layout = p_dst_layout;
 				tb.next_layout = RDD::TEXTURE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 				tb.subresources.aspect = texture->barrier_aspect_flags;

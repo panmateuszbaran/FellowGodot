@@ -128,6 +128,10 @@ RID vt_texture(RD *p_rd, int p_size, const char *p_name, int p_mips = 1) {
 	tf.mipmaps = p_mips;
 	tf.format = RD::DATA_FORMAT_R8G8B8A8_UNORM;
 	tf.usage_bits = RD::TEXTURE_USAGE_STORAGE_BIT | RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_CAN_COPY_FROM_BIT | RD::TEXTURE_USAGE_CAN_COPY_TO_BIT;
+	// (Milestone 142: a Texture2DRD makes an sRGB view of an RGBA8 texture; the image must allow it —
+	// VUID-VkImageViewCreateInfo-image-01762 otherwise.)
+	tf.shareable_formats.push_back(RD::DATA_FORMAT_R8G8B8A8_UNORM);
+	tf.shareable_formats.push_back(RD::DATA_FORMAT_R8G8B8A8_SRGB);
 	const RID t = p_rd->texture_create(tf, RD::TextureView());
 	if (t.is_valid()) {
 		p_rd->set_resource_name(t, p_name);
