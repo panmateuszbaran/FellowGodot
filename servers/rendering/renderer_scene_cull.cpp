@@ -744,6 +744,7 @@ void RendererSceneCull::instance_set_base(RID p_instance, RID p_base) {
 				geom->geometry_instance->set_fellow_instance_range(instance->fellow_range_begin, instance->fellow_range_end, instance->fellow_vertices_bounded);
 				geom->geometry_instance->set_fellow_instance_range_fade(instance->fellow_range_fade);
 				geom->geometry_instance->set_fellow_instance_range_margins(instance->fellow_range_begin_margin, instance->fellow_range_end_margin);
+				geom->geometry_instance->set_fellow_dither_alpha(instance->fellow_dither_alpha, instance->fellow_dither_other);
 				geom->geometry_instance->set_fellow_hlod_proxy(instance->fellow_hlod_role == RenderingServer::FELLOW_HLOD_PROXY);
 				geom->geometry_instance->set_transparency(instance->transparency);
 				geom->geometry_instance->set_use_baked_light(instance->baked_light);
@@ -1367,6 +1368,19 @@ void RendererSceneCull::fellow_instance_set_instance_range_margins(RID p_instanc
 		InstanceGeometryData *geom = static_cast<InstanceGeometryData *>(instance->base_data);
 		if (geom->geometry_instance) {
 			geom->geometry_instance->set_fellow_instance_range_margins(instance->fellow_range_begin_margin, instance->fellow_range_end_margin);
+		}
+	}
+}
+
+void RendererSceneCull::fellow_instance_set_dither_alpha(RID p_instance, float p_alpha, bool p_other_share) {
+	Instance *instance = instance_owner.get_or_null(p_instance);
+	ERR_FAIL_NULL(instance);
+	instance->fellow_dither_alpha = CLAMP(p_alpha, 0.0f, 1.0f);
+	instance->fellow_dither_other = p_other_share;
+	if (((1 << instance->base_type) & RSE::INSTANCE_GEOMETRY_MASK) && instance->base_data) {
+		InstanceGeometryData *geom = static_cast<InstanceGeometryData *>(instance->base_data);
+		if (geom->geometry_instance) {
+			geom->geometry_instance->set_fellow_dither_alpha(instance->fellow_dither_alpha, instance->fellow_dither_other);
 		}
 	}
 }

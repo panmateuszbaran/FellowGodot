@@ -441,6 +441,8 @@ public:
 		float fellow_range_fade = 0.0f; // fellow_instance_set_instance_range_fade (decision 0172)
 		float fellow_range_begin_margin = 0.0f; // fellow_instance_set_instance_range_margins (decision 0257)
 		float fellow_range_end_margin = 0.0f;
+		float fellow_dither_alpha = 1.0f; // fellow_instance_set_dither_alpha (decision 0258)
+		bool fellow_dither_other = false;
 
 		Vector<RID> materials;
 
@@ -1150,6 +1152,7 @@ public:
 	virtual void fellow_instance_set_instance_range(RID p_instance, float p_begin, float p_end, bool p_vertices_bounded);
 	virtual void fellow_instance_set_instance_range_fade(RID p_instance, float p_fade);
 	virtual void fellow_instance_set_instance_range_margins(RID p_instance, float p_begin_margin, float p_end_margin);
+	virtual void fellow_instance_set_dither_alpha(RID p_instance, float p_alpha, bool p_other_share);
 
 	bool _update_instance_visibility_depth(Instance *p_instance);
 	void _update_instance_visibility_dependencies(Instance *p_instance) const;

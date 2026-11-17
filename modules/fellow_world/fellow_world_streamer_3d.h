@@ -136,6 +136,21 @@ class FellowWorldStreamer3D : public Node3D {
 	};
 	LocalVector<Instancing *> instancing;
 
+	// Decision 0258: a cell's content and its proxy crossing over (dithered) for crossfade seconds when it loads, and when
+	// it unloads (the content kept meanwhile as a ghost, freed after).
+	real_t crossfade = 0.0;
+	struct CellFade {
+		ObjectID cell;
+		ObjectID ghost; // the content of a cell that unloaded, fading out
+		float t = 0.0f;
+		bool in = true;
+	};
+	LocalVector<CellFade> cell_fades;
+	void _dither_tree(Node *p_root, float p_alpha, bool p_other_share);
+	void _dither_proxies(FellowStreamingCell3D *p_cell, float p_alpha, bool p_other_share);
+	void _update_fades(double p_delta);
+	void _clear_fades();
+
 	// Statistics.
 	uint64_t loads = 0;
 	uint64_t releases = 0;
@@ -240,6 +255,8 @@ public:
 	// Loads and activates synchronously every cell in range now (a loading screen); returns how many entered.
 	int load_now();
 
+	void set_crossfade(real_t p_seconds) { crossfade = MAX(p_seconds, real_t(0.0)); }
+	real_t get_crossfade() const { return crossfade; }
 	void set_mesh_distance(real_t p_distance) { mesh_distance = MAX(p_distance, real_t(0.0)); }
 	real_t get_mesh_distance() const { return mesh_distance; }
 	void set_max_mesh_loads(int p_count) { max_mesh_loads = CLAMP(p_count, 1, 64); }

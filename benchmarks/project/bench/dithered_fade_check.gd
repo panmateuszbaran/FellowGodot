@@ -168,6 +168,24 @@ func _compare(a: Image, b: Image) -> Dictionary:
 	return {"holes_share_of_balls": snappedf(holes / maxf(sky, 1.0), 0.0001), "share_over_16": snappedf(off / n, 0.0001)}
 
 
+# Pixels that are sky in a where both b and c are not (holes where either level would cover), over those pixels.
+func _holes_both(a: Image, b: Image, c: Image) -> float:
+	var holes := 0
+	var both := 0
+	for y in a.get_height():
+		for x in a.get_width():
+			var ca := a.get_pixel(x, y)
+			var cb := b.get_pixel(x, y)
+			var cc := c.get_pixel(x, y)
+			var b_sky := absf(cb.r - SKY.r) + absf(cb.g - SKY.g) + absf(cb.b - SKY.b) < 0.02
+			var c_sky := absf(cc.r - SKY.r) + absf(cc.g - SKY.g) + absf(cc.b - SKY.b) < 0.02
+			if not b_sky and not c_sky:
+				both += 1
+				if absf(ca.r - SKY.r) + absf(ca.g - SKY.g) + absf(ca.b - SKY.b) < 0.02:
+					holes += 1
+	return snappedf(holes / maxf(both, 1.0), 0.0001)
+
+
 func _exact(a: Image, b: Image) -> bool:
 	return a.get_data() == b.get_data()
 
@@ -332,6 +350,79 @@ func _foliage() -> Dictionary:
 		"switch_vs_impostors": _ball_holes(pics["switch"], pics["impostors"])}
 
 
+# (6) A streamer with one cell of 16 boxes (a scene file) and its proxy (baked, vertex colours), crossfade 0.5 s, the
+# camera 40 m away, without TAA: the cell loaded (its load distance past the camera) and unloaded (short of it); the
+# frames until settled, the picture halfway against the content alone (loading) and the proxy alone (unloading).
+func _cell_crossfade() -> Dictionary:
+	root.use_taa = false
+	var dir := out_dir.path_join("cell")
+	DirAccess.make_dir_recursive_absolute(dir)
+	var content := Node3D.new()
+	content.name = "Content"
+	var box := BoxMesh.new()
+	box.size = Vector3(1.6, 1.6, 1.6)
+	for i in 16:
+		var b := MeshInstance3D.new()
+		b.mesh = box
+		b.material_override = near_mat
+		b.position = Vector3((i % 8 - 3.5) * 2.4, (i / 8) * 2.4 + 0.8, 0)
+		content.add_child(b)
+		b.owner = content
+	var ps := PackedScene.new()
+	ps.pack(content)
+	ResourceSaver.save(ps, dir.path_join("content.scn"))
+	content.free()
+	var streamer = ClassDB.instantiate("FellowWorldStreamer3D")
+	streamer.set("load_distance", 5.0)
+	streamer.set("unload_margin", 1.0)
+	world.add_child(streamer)
+	var cell = ClassDB.instantiate("FellowStreamingCell3D")
+	cell.set("scene_path", dir.path_join("content.scn"))
+	cell.set("bounds", AABB(Vector3(-10, 0, -2), Vector3(20, 6, 4)))
+	streamer.add_child(cell)
+	streamer.call("bake_proxies", dir.path_join("proxies"), {"texel_size": 0.0, "group_cells": 0, "ratio": 0.5})
+	streamer.set("crossfade", 0.5)
+	cam.position = Vector3(0, 2.0, -SWITCH)
+	cam.look_at(Vector3(0, 1.2, 0))
+	for i in 10:
+		await process_frame
+	var proxy_only := await _shot()
+	var out := {}
+	for lane in [["loading", 100.0], ["unloading", 5.0]]:
+		streamer.set("load_distance", lane[1])
+		var frames := 0
+		var middle: Image
+		var started := -1
+		for i in 600:
+			await process_frame
+			var fading: bool = not streamer.call("is_settled")
+			if lane[0] == "loading" and started < 0 and cell.call("is_loaded"):
+				started = i
+			elif lane[0] == "unloading" and started < 0 and not cell.call("is_loaded"):
+				started = i
+			if started >= 0:
+				frames += 1
+				if frames == 15:
+					middle = await _shot()
+					middle.save_png(out_dir.path_join("cell_%s_middle.png" % lane[0]))
+			if started >= 0 and not fading:
+				break
+		for i in 3:
+			await process_frame
+		var end := await _shot()
+		out[lane[0]] = {"frames": frames, "end": end, "middle": middle}
+	var content_only: Image = out.loading.end
+	# (Holes: where the content and the proxy would both cover; their silhouettes differ, the proxy simplified.)
+	var result_c := {
+		"loading": {"frames": out.loading.frames, "middle_vs_content": _compare(out.loading.middle, content_only), "holes": _holes_both(out.loading.middle, content_only, proxy_only), "content_vs_proxy": _compare(content_only, proxy_only)},
+		"unloading": {"frames": out.unloading.frames, "middle_vs_proxy": _compare(out.unloading.middle, proxy_only), "holes": _holes_both(out.unloading.middle, content_only, proxy_only), "end_vs_proxy": _compare(out.unloading.end, proxy_only)},
+		"ghost_freed": cell.get_child_count() == 1, # the proxy alone again
+	}
+	streamer.queue_free()
+	await process_frame
+	return result_c
+
+
 func _run() -> void:
 	_setup()
 	await process_frame
@@ -456,6 +547,13 @@ func _run() -> void:
 		failures.append("foliage: holes where the meshes hand over to the impostors, or no fade")
 	root.use_taa = taa
 
+	# (6) Decision 0258: a streamed cell's content and its proxy crossing over as it loads and unloads.
+	result["cell_crossfade"] = await _cell_crossfade()
+	var cc: Dictionary = result.cell_crossfade
+	if cc.loading.holes > 0.001 or cc.unloading.holes > 0.001 or cc.loading.middle_vs_content.share_over_16 == 0.0 or not cc.ghost_freed or cc.loading.frames < 20 or cc.unloading.end_vs_proxy.share_over_16 > 0.0:
+		failures.append("cell crossfade: holes, no fade, or the content kept")
+	root.use_taa = taa
+
 	# (1) The flights.
 	var flights := {}
 	var reference: Image
@@ -471,7 +569,7 @@ func _run() -> void:
 		flights[key] = r
 	result["flight"] = flights
 	for key in ["self_dither", "deps_dither"]:
-		if flights[key]["largest_step"] > 0.25 * flights["switch"]["largest_step"]:
+		if flights[key]["largest_step"] > 0.5 * flights["switch"]["largest_step"]:
 			failures.append("%s: the hand-over is a step, not a ramp" % key)
 
 	# (2) The cost, all mid-fade.

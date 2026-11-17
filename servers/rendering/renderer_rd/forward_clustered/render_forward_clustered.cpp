@@ -3623,6 +3623,12 @@ void RenderForwardClustered::_fill_render_list_range(const FellowFillParams &p_p
 		} else {
 			fellow_dither = 0;
 		}
+		// Decision 0258: an instance asked to keep only a share of its pixels (a streamed cell's content and its proxy
+		// crossing over), dithered whatever the setting; its shadows whole.
+		if (p_pass_mode == PASS_MODE_COLOR && inst->fellow_dither_alpha < FADE_ALPHA_PASS_THRESHOLD && inst->force_alpha >= FADE_ALPHA_PASS_THRESHOLD) {
+			fade_alpha *= inst->fellow_dither_alpha;
+			fellow_dither = inst->fellow_dither_other ? 2 : (fellow_dither ? fellow_dither : 1);
+		}
 		if constexpr (!t_records) {
 			if (p_pass_mode == PASS_MODE_COLOR) {
 				inst->fellow_dither = fellow_dither;

@@ -84,6 +84,7 @@ public:
 	virtual void set_fellow_instance_range(float p_begin, float p_end, bool p_vertices_bounded) {}
 	virtual void set_fellow_instance_range_fade(float p_fade) {}
 	virtual void set_fellow_instance_range_margins(float p_begin_margin, float p_end_margin) {} // decision 0257
+	virtual void set_fellow_dither_alpha(float p_alpha, bool p_other_share) {} // decision 0258
 	// An HLOD proxy (decision 0122): a MultiMesh's instances transform normals as nodes do. No-op elsewhere.
 	virtual void set_fellow_hlod_proxy(bool p_proxy) {}
 };
@@ -112,6 +113,8 @@ public:
 	float fellow_instance_range_fade = 0.0; // decision 0172: over this distance before the end, the instances shrink to nothing
 	float fellow_instance_range_begin_margin = 0.0; // decision 0257: the instances fade, dithered, over these on each side
 	float fellow_instance_range_end_margin = 0.0; // of the range's start and end
+	float fellow_dither_alpha = 1.0; // decision 0258: the share of its pixels drawn (dithered)
+	bool fellow_dither_other = false; // and which share
 	bool fellow_vertices_bounded = false; // the material's vertices stay in the mesh's box
 	bool fellow_hlod_proxy = false; // an HLOD proxy: per-instance normals as nodes
 	uint8_t fellow_dither = 0; // decision 0256: this frame's colour passes dither its fade (1; 2: fading out towards the near end)
@@ -177,6 +180,7 @@ public:
 	virtual void set_fellow_instance_range(float p_begin, float p_end, bool p_vertices_bounded) override;
 	virtual void set_fellow_instance_range_fade(float p_fade) override;
 	virtual void set_fellow_instance_range_margins(float p_begin_margin, float p_end_margin) override;
+	virtual void set_fellow_dither_alpha(float p_alpha, bool p_other_share) override;
 	virtual void set_fellow_hlod_proxy(bool p_proxy) override;
 
 	virtual void reset_motion_vectors() override;

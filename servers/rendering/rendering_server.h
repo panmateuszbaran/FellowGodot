@@ -780,6 +780,10 @@ public:
 	// end (each instance by its own distance; a fade at the start keeps the other pixels than one at the end, so a
 	// MultiMesh ending where another starts with the same margin hands over without a hole). 0: a switch.
 	virtual void fellow_instance_set_instance_range_margins(RID p_instance, float p_begin_margin, float p_end_margin) {}
+	// Decision 0258: the instance drawn with only this share of its pixels (dithered, as decision 0256's fades; 1: all);
+	// p_other_share: the other pixels than an instance at the same share without it keeps (two instances at shares that
+	// add to one, one with it, cover each pixel once). Not bound.
+	virtual void fellow_instance_set_dither_alpha(RID p_instance, float p_alpha, bool p_other_share) {}
 
 	// Don't use these in a game!
 	virtual Vector<ObjectID> instances_cull_aabb(const AABB &p_aabb, RID p_scenario = RID()) const = 0;

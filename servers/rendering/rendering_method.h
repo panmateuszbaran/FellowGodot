@@ -107,6 +107,7 @@ public:
 	virtual void fellow_instance_set_instance_range(RID p_instance, float p_begin, float p_end, bool p_vertices_bounded) {} // decision 0122
 	virtual void fellow_instance_set_instance_range_fade(RID p_instance, float p_fade) {} // decision 0172
 	virtual void fellow_instance_set_instance_range_margins(RID p_instance, float p_begin_margin, float p_end_margin) {} // decision 0257
+	virtual void fellow_instance_set_dither_alpha(RID p_instance, float p_alpha, bool p_other_share) {} // decision 0258
 
 	// don't use these in a game!
 	virtual Vector<ObjectID> instances_cull_aabb(const AABB &p_aabb, RID p_scenario = RID()) const = 0;

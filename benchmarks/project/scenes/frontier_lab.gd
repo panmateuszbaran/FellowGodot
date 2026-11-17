@@ -110,6 +110,11 @@ func build(p_args: Dictionary) -> void:
 	ground_streamer.load_distance = float(args.get("frontier_regions", "1000"))
 	ground_streamer.unload_margin = 100.0
 	ground_streamer.max_loading = 2
+	# Milestone 134 (decision 0258): --frontier_crossfade=<s> — the cells and the regions crossing over with their
+	# proxies as they load and unload.
+	var crossfade := float(args.get("frontier_crossfade", "0"))
+	cell_streamer.set("crossfade", crossfade)
+	ground_streamer.set("crossfade", crossfade)
 	streamers = [cell_streamer, ground_streamer]
 	vt_on = str(args.get("frontier_vt", "0")) == "1"
 	if vt_on:

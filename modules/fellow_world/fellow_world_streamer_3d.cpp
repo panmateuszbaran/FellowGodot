@@ -326,7 +326,32 @@ void FellowWorldStreamer3D::_activate(FellowStreamingCell3D *p_cell, Node *p_con
 	const uint64_t t0 = OS::get_singleton()->get_ticks_usec();
 	p_cell->content = p_content;
 	p_cell->add_child(p_content);
-	p_cell->_set_proxy_visible(false);
+	// Decision 0258: the content fading in over the proxy, which stays until it is whole (a ghost of this cell's earlier
+	// content still fading out is dropped: the new content takes the share it had, the proxy keeps its own).
+	float fade_from = -1.0f;
+	if (crossfade > 0.0 && !Engine::get_singleton()->is_editor_hint() && is_inside_tree()) {
+		fade_from = 0.0f;
+		for (uint32_t i = 0; i < cell_fades.size(); i++) {
+			if (cell_fades[i].cell == p_cell->get_instance_id()) {
+				Node *ghost = ObjectDB::get_instance<Node>(cell_fades[i].ghost);
+				if (ghost) {
+					ghost->queue_free();
+				}
+				fade_from = cell_fades[i].in ? cell_fades[i].t : 1.0f - cell_fades[i].t;
+				cell_fades.remove_at_unordered(i);
+				break;
+			}
+		}
+		CellFade f;
+		f.cell = p_cell->get_instance_id();
+		f.t = fade_from;
+		f.in = true;
+		cell_fades.push_back(f);
+		_dither_tree(p_content, fade_from, false);
+		_dither_proxies(p_cell, 1.0f - fade_from, true);
+	} else {
+		p_cell->_set_proxy_visible(false);
+	}
 	p_cell->state = FellowStreamingCell3D::STATE_LOADED;
 	_update_group(p_cell);
 	_register_meshes(p_cell, p_content);
@@ -345,13 +370,35 @@ void FellowWorldStreamer3D::_release(FellowStreamingCell3D *p_cell) {
 	_unregister_meshes(p_cell);
 	Node *c = p_cell->content;
 	p_cell->content = nullptr;
-	if (c) {
-		if (c->get_parent() == p_cell) {
-			p_cell->remove_child(c);
+	if (c && crossfade > 0.0 && !Engine::get_singleton()->is_editor_hint() && is_inside_tree() && c->get_parent() == p_cell) {
+		// Decision 0258: the content kept as a ghost fading out while the proxy fades in (freed when done); a cell still
+		// fading in turns back from where it is.
+		float t = 0.0f;
+		for (uint32_t i = 0; i < cell_fades.size(); i++) {
+			if (cell_fades[i].cell == p_cell->get_instance_id()) {
+				t = cell_fades[i].in ? 1.0f - cell_fades[i].t : cell_fades[i].t;
+				cell_fades.remove_at_unordered(i);
+				break;
+			}
 		}
-		c->queue_free();
+		CellFade f;
+		f.cell = p_cell->get_instance_id();
+		f.ghost = c->get_instance_id();
+		f.t = t;
+		f.in = false;
+		cell_fades.push_back(f);
+		p_cell->_set_proxy_visible(true);
+		_dither_proxies(p_cell, t, false);
+		_dither_tree(c, 1.0f - t, true);
+	} else {
+		if (c) {
+			if (c->get_parent() == p_cell) {
+				p_cell->remove_child(c);
+			}
+			c->queue_free();
+		}
+		p_cell->_set_proxy_visible(true);
 	}
-	p_cell->_set_proxy_visible(true);
 	const bool was_loaded = p_cell->state == FellowStreamingCell3D::STATE_LOADED;
 	p_cell->state = FellowStreamingCell3D::STATE_UNLOADED;
 	_update_group(p_cell);
@@ -362,6 +409,90 @@ void FellowWorldStreamer3D::_release(FellowStreamingCell3D *p_cell) {
 		releases++;
 		p_cell->emit_signal(SNAME("unloaded"));
 	}
+}
+
+// Decision 0258: every geometry instance below p_root keeps p_alpha of its pixels (the other share with p_other_share).
+void FellowWorldStreamer3D::_dither_tree(Node *p_root, float p_alpha, bool p_other_share) {
+	RenderingServer *rs = RenderingServer::get_singleton();
+	LocalVector<Node *> stack;
+	stack.push_back(p_root);
+	while (!stack.is_empty()) {
+		Node *n = stack[stack.size() - 1];
+		stack.resize(stack.size() - 1);
+		GeometryInstance3D *gi = Object::cast_to<GeometryInstance3D>(n);
+		if (gi && gi->get_instance().is_valid()) {
+			rs->fellow_instance_set_dither_alpha(gi->get_instance(), p_alpha, p_other_share);
+		}
+		for (int i = 0; i < n->get_child_count(); i++) {
+			stack.push_back(n->get_child(i));
+		}
+	}
+}
+
+void FellowWorldStreamer3D::_dither_proxies(FellowStreamingCell3D *p_cell, float p_alpha, bool p_other_share) {
+	for (int i = 0; i < p_cell->get_child_count(); i++) {
+		Node *n = p_cell->get_child(i);
+		if (n != p_cell->content && n->has_meta(FELLOW_CELL_PROXY_META)) {
+			_dither_tree(n, p_alpha, p_other_share);
+		}
+	}
+}
+
+void FellowWorldStreamer3D::_update_fades(double p_delta) {
+	for (uint32_t i = 0; i < cell_fades.size();) {
+		CellFade &f = cell_fades[i];
+		FellowStreamingCell3D *cell = ObjectDB::get_instance<FellowStreamingCell3D>(f.cell);
+		Node *ghost = ObjectDB::get_instance<Node>(f.ghost);
+		f.t = MIN(1.0f, f.t + float(p_delta / crossfade));
+		const bool done = f.t >= 1.0f || !cell || (!f.in && !ghost) || (f.in && !cell->content);
+		if (f.in) {
+			if (cell && cell->content) {
+				_dither_tree(cell->content, done ? 1.0f : f.t, false);
+			}
+			if (cell) {
+				if (done) {
+					_dither_proxies(cell, 1.0f, false);
+					cell->_set_proxy_visible(cell->state != FellowStreamingCell3D::STATE_LOADED);
+				} else {
+					_dither_proxies(cell, 1.0f - f.t, true);
+				}
+			}
+		} else {
+			if (cell) {
+				_dither_proxies(cell, done ? 1.0f : f.t, false);
+			}
+			if (ghost) {
+				if (done) {
+					ghost->queue_free();
+				} else {
+					_dither_tree(ghost, 1.0f - f.t, true);
+				}
+			}
+		}
+		if (done) {
+			cell_fades.remove_at_unordered(i);
+		} else {
+			i++;
+		}
+	}
+}
+
+void FellowWorldStreamer3D::_clear_fades() {
+	for (const CellFade &f : cell_fades) {
+		Node *ghost = ObjectDB::get_instance<Node>(f.ghost);
+		if (ghost) {
+			ghost->queue_free();
+		}
+		FellowStreamingCell3D *cell = ObjectDB::get_instance<FellowStreamingCell3D>(f.cell);
+		if (cell) {
+			_dither_proxies(cell, 1.0f, false);
+			if (cell->content) {
+				_dither_tree(cell->content, 1.0f, false);
+			}
+			cell->_set_proxy_visible(cell->state != FellowStreamingCell3D::STATE_LOADED);
+		}
+	}
+	cell_fades.clear();
 }
 
 // Decision 0252: a group's proxy is drawn (beyond its distance) while none of its cells is loaded; hidden, it leaves
@@ -1037,7 +1168,7 @@ void FellowWorldStreamer3D::clear_prefetch() {
 }
 
 bool FellowWorldStreamer3D::is_settled() const {
-	if (!instancing.is_empty()) {
+	if (!instancing.is_empty() || !cell_fades.is_empty()) {
 		return false;
 	}
 	for (const FellowStreamingCell3D *cell : cells) {
@@ -1217,10 +1348,14 @@ void FellowWorldStreamer3D::_notification(int p_what) {
 		} break;
 		case NOTIFICATION_INTERNAL_PROCESS: {
 			_update();
+			if (!cell_fades.is_empty()) {
+				_update_fades(get_process_delta_time());
+			}
 		} break;
 		case NOTIFICATION_EXIT_TREE: {
 			in_tree.erase(this);
 			_cancel_all();
+			_clear_fades();
 		} break;
 	}
 }
@@ -1234,6 +1369,8 @@ void FellowWorldStreamer3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_max_loading"), &FellowWorldStreamer3D::get_max_loading);
 	ClassDB::bind_method(D_METHOD("set_max_activations_per_frame", "count"), &FellowWorldStreamer3D::set_max_activations_per_frame);
 	ClassDB::bind_method(D_METHOD("get_max_activations_per_frame"), &FellowWorldStreamer3D::get_max_activations_per_frame);
+	ClassDB::bind_method(D_METHOD("set_crossfade", "seconds"), &FellowWorldStreamer3D::set_crossfade);
+	ClassDB::bind_method(D_METHOD("get_crossfade"), &FellowWorldStreamer3D::get_crossfade);
 	ClassDB::bind_method(D_METHOD("set_max_releases_per_frame", "count"), &FellowWorldStreamer3D::set_max_releases_per_frame);
 	ClassDB::bind_method(D_METHOD("get_max_releases_per_frame"), &FellowWorldStreamer3D::get_max_releases_per_frame);
 	ClassDB::bind_method(D_METHOD("set_threaded_instancing", "enable"), &FellowWorldStreamer3D::set_threaded_instancing);
@@ -1270,6 +1407,7 @@ void FellowWorldStreamer3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "max_loading", PROPERTY_HINT_RANGE, "1,64,1"), "set_max_loading", "get_max_loading");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "max_activations_per_frame", PROPERTY_HINT_RANGE, "1,1024,1"), "set_max_activations_per_frame", "get_max_activations_per_frame");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "max_releases_per_frame", PROPERTY_HINT_RANGE, "1,1024,1"), "set_max_releases_per_frame", "get_max_releases_per_frame");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "crossfade", PROPERTY_HINT_RANGE, "0,5,0.01,or_greater,suffix:s"), "set_crossfade", "get_crossfade");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "threaded_instancing"), "set_threaded_instancing", "is_threaded_instancing");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "max_mesh_loads", PROPERTY_HINT_RANGE, "1,64,1"), "set_max_mesh_loads", "get_max_mesh_loads");
 	ADD_GROUP("", "");
