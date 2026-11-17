@@ -436,6 +436,77 @@ func _cell_crossfade() -> Dictionary:
 	return result_c
 
 
+# (7) A cell whose content is one large ball (a sphere of 128 x 64 faces, streamed: its stand-in 15 % of it), loaded,
+# the camera 40 m away, crossfade 0.5 s, without TAA: mesh_distance moved past the camera (the full mesh loads and
+# crosses over) and back (the stand-in crosses over); halfway, no hole where both would cover.
+func _mesh_swap() -> Dictionary:
+	root.use_taa = false
+	var dir := out_dir.path_join("swap")
+	DirAccess.make_dir_recursive_absolute(dir)
+	var content := Node3D.new()
+	content.name = "Content"
+	var ball := SphereMesh.new()
+	ball.radius = 4.0
+	ball.height = 8.0
+	ball.radial_segments = 128
+	ball.rings = 64
+	var mi := MeshInstance3D.new()
+	mi.name = "Ball"
+	mi.mesh = _ball_mesh(ball, near_mat)
+	mi.position = Vector3(0, 4, 0)
+	content.add_child(mi)
+	mi.owner = content
+	var ps := PackedScene.new()
+	ps.pack(content)
+	ResourceSaver.save(ps, dir.path_join("content.scn"))
+	content.free()
+	var streamer = ClassDB.instantiate("FellowWorldStreamer3D")
+	streamer.set("load_distance", 100.0)
+	world.add_child(streamer)
+	var cell = ClassDB.instantiate("FellowStreamingCell3D")
+	cell.set("scene_path", dir.path_join("content.scn"))
+	cell.set("bounds", AABB(Vector3(-5, 0, -5), Vector3(10, 9, 10)))
+	streamer.add_child(cell)
+	streamer.call("bake_proxies", dir.path_join("proxies"), {"texel_size": 0.0, "group_cells": 0, "stream_meshes": true, "mesh_min_triangles": 1000})
+	streamer.set("mesh_distance", 10.0)
+	streamer.set("crossfade", 0.5)
+	cam.position = Vector3(0, 4.0, -SWITCH)
+	cam.look_at(Vector3(0, 4.0, 0))
+	for i in 600:
+		await process_frame
+		if streamer.call("is_settled") and cell.call("is_loaded") and i > 10:
+			break
+	var stand_in_only := await _shot()
+	var out := {}
+	for lane in [["to_full", 100.0], ["to_stand_in", 10.0]]:
+		streamer.set("mesh_distance", lane[1])
+		var frames := 0
+		var middle: Image
+		var started := false
+		for i in 600:
+			await process_frame
+			var settled: bool = streamer.call("is_settled")
+			if not settled:
+				started = true
+			if started:
+				frames += 1
+				if frames == 15:
+					middle = await _shot()
+					middle.save_png(out_dir.path_join("swap_%s_middle.png" % lane[0]))
+				if settled:
+					break
+		for i in 3:
+			await process_frame
+		out[lane[0]] = {"frames": frames, "middle": middle, "end": await _shot()}
+	var full_only: Image = out.to_full.end
+	var r := {"stand_in_vs_full": _compare(stand_in_only, full_only), "stats": streamer.call("get_stats"),
+		"to_full": {"frames": out.to_full.frames, "holes": _holes_both(out.to_full.middle, stand_in_only, full_only), "middle_vs_full": _compare(out.to_full.middle, full_only)},
+		"to_stand_in": {"frames": out.to_stand_in.frames, "holes": _holes_both(out.to_stand_in.middle, stand_in_only, full_only), "end_vs_stand_in": _compare(out.to_stand_in.end, stand_in_only)}}
+	streamer.queue_free()
+	await process_frame
+	return r
+
+
 func _run() -> void:
 	_setup()
 	await process_frame
@@ -565,6 +636,13 @@ func _run() -> void:
 	var cc: Dictionary = result.cell_crossfade
 	if cc.loading.holes > 0.001 or cc.unloading.holes > 0.001 or cc.loading.middle_vs_content.share_over_16 == 0.0 or not cc.ghost_freed or cc.loading.frames < 20 or cc.unloading.end_vs_proxy.share_over_16 > 0.0:
 		failures.append("cell crossfade: holes, no fade, or the content kept")
+	root.use_taa = taa
+
+	# (7) Decision 0259: a streamed mesh's swap between its stand-in and its full mesh crossing over.
+	result["mesh_swap"] = await _mesh_swap()
+	var ms: Dictionary = result.mesh_swap
+	if ms.to_full.holes > 0.001 or ms.to_stand_in.holes > 0.001 or ms.to_full.frames < 20 or ms.to_full.middle_vs_full.share_over_16 == 0.0 or ms.stand_in_vs_full.share_over_16 == 0.0:
+		failures.append("mesh swap crossfade: holes, or no fade")
 	root.use_taa = taa
 
 	# (1) The flights.

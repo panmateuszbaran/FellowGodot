@@ -39,6 +39,7 @@
 #include <atomic>
 
 class FellowWorldStreamer3D;
+class MeshInstance3D;
 
 // FellowEngine world streaming (milestone 46): a cell of a level, its content a PackedScene loaded when a camera (or a
 // target of its FellowWorldStreamer3D) comes within its load distance and freed when it goes beyond it plus the
@@ -146,6 +147,16 @@ class FellowWorldStreamer3D : public Node3D {
 		bool in = true;
 	};
 	LocalVector<CellFade> cell_fades;
+	// Decision 0259: a streamed mesh's swap (stand-in and full mesh) crossing over the same way, the outgoing mesh drawn
+	// meanwhile by an instance of its own.
+	struct MeshFade {
+		ObjectID node;
+		RID outgoing; // a RenderingServer instance of the mesh being replaced
+		Ref<Mesh> mesh; // kept until then (the full mesh's last reference when it is dropped)
+		float t = 0.0f;
+	};
+	LocalVector<MeshFade> mesh_fades;
+	void _mesh_crossfade(MeshInstance3D *p_mi, const Ref<Mesh> &p_outgoing);
 	void _dither_tree(Node *p_root, float p_alpha, bool p_other_share);
 	void _dither_proxies(FellowStreamingCell3D *p_cell, float p_alpha, bool p_other_share);
 	void _update_fades(double p_delta);

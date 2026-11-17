@@ -440,7 +440,66 @@ void FellowWorldStreamer3D::_dither_proxies(FellowStreamingCell3D *p_cell, float
 	}
 }
 
+// Decision 0259: the outgoing mesh drawn by an instance of its own (the node's transform, materials, layers; no shadow:
+// the node casts its new mesh's) keeping the other share while the node's new mesh's grows.
+void FellowWorldStreamer3D::_mesh_crossfade(MeshInstance3D *p_mi, const Ref<Mesh> &p_outgoing) {
+	if (crossfade <= 0.0 || Engine::get_singleton()->is_editor_hint() || p_outgoing.is_null() || !p_mi->is_inside_tree() || !p_mi->is_visible_in_tree()) {
+		return;
+	}
+	for (const CellFade &cf : cell_fades) {
+		const FellowStreamingCell3D *cell = ObjectDB::get_instance<FellowStreamingCell3D>(cf.cell);
+		if (cell && cell->is_ancestor_of(p_mi)) {
+			return; // its cell crossing over already (the content's share is the cell's)
+		}
+	}
+	RenderingServer *rs = RenderingServer::get_singleton();
+	for (uint32_t i = 0; i < mesh_fades.size(); i++) {
+		if (mesh_fades[i].node == p_mi->get_instance_id()) {
+			// Swapped back while crossing: the earlier outgoing instance dropped.
+			rs->free_rid(mesh_fades[i].outgoing);
+			mesh_fades.remove_at_unordered(i);
+			break;
+		}
+	}
+	MeshFade f;
+	f.node = p_mi->get_instance_id();
+	f.mesh = p_outgoing;
+	f.outgoing = rs->instance_create2(p_outgoing->get_rid(), p_mi->get_world_3d()->get_scenario());
+	rs->instance_set_transform(f.outgoing, p_mi->get_global_transform());
+	rs->instance_set_layer_mask(f.outgoing, p_mi->get_layer_mask());
+	rs->instance_geometry_set_cast_shadows_setting(f.outgoing, RSE::SHADOW_CASTING_SETTING_OFF);
+	if (p_mi->get_material_override().is_valid()) {
+		rs->instance_geometry_set_material_override(f.outgoing, p_mi->get_material_override()->get_rid());
+	}
+	for (int s = 0; s < p_mi->get_surface_override_material_count() && s < p_outgoing->get_surface_count(); s++) {
+		const Ref<Material> m = p_mi->get_surface_override_material(s);
+		if (m.is_valid()) {
+			rs->instance_set_surface_override_material(f.outgoing, s, m->get_rid());
+		}
+	}
+	rs->fellow_instance_set_dither_alpha(f.outgoing, 1.0f, true);
+	rs->fellow_instance_set_dither_alpha(p_mi->get_instance(), 0.0f, false);
+	mesh_fades.push_back(f);
+}
+
 void FellowWorldStreamer3D::_update_fades(double p_delta) {
+	RenderingServer *rs = RenderingServer::get_singleton();
+	for (uint32_t i = 0; i < mesh_fades.size();) {
+		MeshFade &f = mesh_fades[i];
+		MeshInstance3D *mi = ObjectDB::get_instance<MeshInstance3D>(f.node);
+		f.t = MIN(1.0f, f.t + float(p_delta / crossfade));
+		const bool done = f.t >= 1.0f || !mi || !mi->is_inside_tree();
+		if (mi) {
+			rs->fellow_instance_set_dither_alpha(mi->get_instance(), done ? 1.0f : f.t, false);
+		}
+		if (done) {
+			rs->free_rid(f.outgoing);
+			mesh_fades.remove_at_unordered(i);
+		} else {
+			rs->fellow_instance_set_dither_alpha(f.outgoing, 1.0f - f.t, true);
+			i++;
+		}
+	}
 	for (uint32_t i = 0; i < cell_fades.size();) {
 		CellFade &f = cell_fades[i];
 		FellowStreamingCell3D *cell = ObjectDB::get_instance<FellowStreamingCell3D>(f.cell);
@@ -480,6 +539,14 @@ void FellowWorldStreamer3D::_update_fades(double p_delta) {
 }
 
 void FellowWorldStreamer3D::_clear_fades() {
+	for (const MeshFade &f : mesh_fades) {
+		RenderingServer::get_singleton()->free_rid(f.outgoing);
+		MeshInstance3D *mi = ObjectDB::get_instance<MeshInstance3D>(f.node);
+		if (mi) {
+			RenderingServer::get_singleton()->fellow_instance_set_dither_alpha(mi->get_instance(), 1.0f, false);
+		}
+	}
+	mesh_fades.clear();
 	for (const CellFade &f : cell_fades) {
 		Node *ghost = ObjectDB::get_instance<Node>(f.ghost);
 		if (ghost) {
@@ -764,7 +831,9 @@ void FellowWorldStreamer3D::_update_meshes(const LocalVector<Vector3> &p_points)
 				continue;
 			}
 			const uint64_t t0 = OS::get_singleton()->get_ticks_usec();
+			const Ref<Mesh> outgoing = mi->get_mesh();
 			mi->set_mesh(mesh);
+			_mesh_crossfade(mi, outgoing); // decision 0259
 			const uint64_t dt = OS::get_singleton()->get_ticks_usec() - t0;
 			mesh_swap_usec += dt;
 			mesh_swap_usec_max = MAX(mesh_swap_usec_max, dt);
@@ -796,7 +865,9 @@ void FellowWorldStreamer3D::_update_meshes(const LocalVector<Vector3> &p_points)
 			}
 		} else if (m.state == MESH_FULL && mesh_distance > 0.0 && d > mesh_distance + unload_margin) {
 			const uint64_t t0 = OS::get_singleton()->get_ticks_usec();
+			const Ref<Mesh> outgoing = mi->get_mesh();
 			mi->set_mesh(m.stand_in);
+			_mesh_crossfade(mi, outgoing); // decision 0259
 			m.full.unref();
 			const uint64_t dt = OS::get_singleton()->get_ticks_usec() - t0;
 			mesh_swap_usec += dt;
@@ -1170,7 +1241,7 @@ void FellowWorldStreamer3D::clear_prefetch() {
 }
 
 bool FellowWorldStreamer3D::is_settled() const {
-	if (!instancing.is_empty() || !cell_fades.is_empty()) {
+	if (!instancing.is_empty() || !cell_fades.is_empty() || !mesh_fades.is_empty()) {
 		return false;
 	}
 	for (const FellowStreamingCell3D *cell : cells) {
@@ -1350,7 +1421,7 @@ void FellowWorldStreamer3D::_notification(int p_what) {
 		} break;
 		case NOTIFICATION_INTERNAL_PROCESS: {
 			_update();
-			if (!cell_fades.is_empty()) {
+			if (!cell_fades.is_empty() || !mesh_fades.is_empty()) {
 				_update_fades(get_process_delta_time());
 			}
 		} break;
