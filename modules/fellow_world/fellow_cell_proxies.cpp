@@ -163,6 +163,14 @@ const TextureLevels *_texture_levels(const Ref<Texture2D> &p_texture) {
 	}
 	TextureLevels *tl = memnew(TextureLevels);
 	Ref<Image> img = p_texture->get_image();
+	if (img.is_valid() && img->get_width() < p_texture->get_width() && p_texture->get_path().get_extension().to_lower() == "dds") {
+		// Decision 0264: a streamed DDS texture holds its resident levels; its file has them all.
+		Ref<Image> whole;
+		whole.instantiate();
+		if (whole->load_dds_from_buffer(FileAccess::get_file_as_bytes(p_texture->get_path())) == OK && !whole->is_empty()) {
+			img = whole;
+		}
+	}
 	if (img.is_valid() && !img->is_empty()) {
 		if (!img->has_mipmaps()) {
 			img = img->duplicate();

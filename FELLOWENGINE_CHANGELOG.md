@@ -9,6 +9,14 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 139 — DDS textures streamed (2026-11-17)
+
+- Decision 0264: with `streaming/textures`, a 2D `.dds` file of a compressed format with its full mip chain (loaded by
+  Godot itself, as Bistro's) reads only its tail and registers its chain with the RenderingServer, streamed like an
+  imported texture. Streaming Lab as DDS: the same residency as its `.ctex` files at every camera (13.5-42.9 MiB of 384
+  MiB at street level), loaded in 11 ms instead of 1 077 ms. Streaming Lab `--streaming_dds=1`,
+  `world_proxies_check.gd --dds=1`.
+
 ## Milestone 138 — proxies' textures streamed (2026-11-17)
 
 - Decision 0263: `bake_proxies()`'s `texture_files` (on) writes each textured proxy's, group's and level's texture

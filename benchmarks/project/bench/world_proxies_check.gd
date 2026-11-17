@@ -28,6 +28,8 @@ extends SceneTree
 ## proxies' files); with rendering/fellow/streaming/textures on (override.cfg), each lane's proxy_textures: those files
 ## as texture streaming holds them (resident and whole bytes, how many at their tails). --taa=0: no lane with TAA
 ## (its jitter's phase depends on how many frames the streaming took: pictures the same from run to run without it).
+## Milestone 139: --dds=1, the cells' textures as DDS files (res://external/streaming_dds/: Streaming Lab's
+## --streaming_dds=1 writes them).
 ## One JSON line: WORLD_PROXIES_CHECK {...}.
 
 const CELL := 64.0
@@ -79,9 +81,12 @@ func _settle(n: int) -> void:
 
 
 func _materials() -> bool:
+	# (Milestone 139: --dds=1, the same textures as DDS files, Streaming Lab's --streaming_dds=1 writes them.)
+	var ext := ".dds" if _arg("dds", "0") == "1" else ".ctex"
+	var dir := "res://external/streaming_dds" if ext == ".dds" else "res://external/streaming"
 	for i in 48:
-		var a = load("res://external/streaming/m%02d_albedo.ctex" % i)
-		var nm = load("res://external/streaming/m%02d_normal.ctex" % i)
+		var a = load(dir.path_join("m%02d_albedo" % i + ext))
+		var nm = load(dir.path_join("m%02d_normal" % i + ext))
 		if a == null or nm == null:
 			return false
 		var m := StandardMaterial3D.new()

@@ -396,7 +396,8 @@ results either way.
 `rendering/fellow/streaming/textures` (off; read at start-up): a `CompressedTexture2D` holding a VRAM-compressed
 image with its full mip chain (how Godot imports 3D textures) loads only its mips at or below
 `texture_resident_size` (128 px); the RenderingServer loads the rest on worker threads as the cameras need them and
-releases them when they no longer do. The level each texture needs comes from the instances that use it (their box's
+releases them when they no longer do; from milestone 139 (decision 0264) a 2D DDS file of a compressed format with its
+full mip chain loaded directly (as Bistro's) too. The level each texture needs comes from the instances that use it (their box's
 nearest view depth, their smallest scale, their surfaces' texel density, BaseMaterial3D's `uv1_scale`) and the
 samplers' bias; `texture_lod_bias` (-1) is the margin, `texture_budget_mb` (0: none) caps the streamed textures'
 memory (every texture coarsened by the same bias over it; milestone 113, decision 0223: `texture_budget_from_used_level`
