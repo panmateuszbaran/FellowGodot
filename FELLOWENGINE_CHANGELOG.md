@@ -9,6 +9,17 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 132 — dithered fades (2026-11-17)
+
+- `rendering/fellow/geometry/dithered_fade` (off; decision 0256): an opaque instance fading at its visibility range
+  (its own fade or its visibility parent's) is drawn in the depth pre-pass and the opaque passes with a share of its
+  pixels kept by a dither moving with TAA's frames, instead of blended in the transparent pass — solid instead of
+  see-through, instanced, lit as opaque; the level coming in keeps the other share, so two levels crossing over cover
+  every pixel once. Two specialization bits, set only on fading instances' draws (the regression suite exact).
+  `FellowHLOD3D.fade` and `bake_proxies()`'s `group_fade` fade their hand-overs instead of popping. On the RTX: 4 000
+  balls all mid-fade +0.9-1.7 ms of GPU against blending, −0.7 ms of the renderer's CPU; City Lab's HLOD fading the
+  same GPU time either way. `bench/dithered_fade_check.gd`; City Lab `--city_hlod_fade`, `--city_hlod_margin`.
+
 ## Milestone 131 — milestones 124-130 on the RTX; terrain proxies by error (2026-11-17)
 
 - `bake_proxies()`'s `terrain_error` (decision 0255): a terrain's streaming proxies are simplified apart from the rest

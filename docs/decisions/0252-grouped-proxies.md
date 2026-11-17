@@ -91,6 +91,7 @@ a per cent more of the picture off at the switch's distance.
 * **Merging the cells' proxies' meshes** instead of baking from content: their textures would need an atlas of
   atlases, and the group's simplification would start from a simplified mesh.
 * **A fade** between a group and its cells' proxies (`visibility_range_begin_margin` with a dither): the switch pops,
-  as cell proxies already do; the same distance is beyond the shadows' and most fog's.
+  as cell proxies already do; the same distance is beyond the shadows' and most fog's. (Milestone 132, decision 0256:
+  `group_fade`, dithered with `geometry/dithered_fade`.)
 * **Not yet**: a group's proxy is resident with the level like the cells' proxies; groups do not follow cells moved
   after the bake.

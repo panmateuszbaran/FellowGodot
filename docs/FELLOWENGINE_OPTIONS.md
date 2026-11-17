@@ -177,6 +177,10 @@ when the node is ready (or by `build()`):
   Milestone 130 (decision 0254): `bake_merged_proxies(directory)` bakes the merged proxies too (`merged_proxies`, by a
   signature of each cell's members: their meshes' and materials' files and transforms); `build()` takes a cell's mesh
   when its members are as baked (a town of 1 600 houses: 2.5 s → 9 ms). Project > Tools > Bake HLOD bakes both.
+  Milestone 132 (decision 0256): `fade` (off): the merged proxies' members fade over `margin` on each side of
+  `distance` while their proxy shows behind them (`VISIBILITY_RANGE_FADE_DEPENDENCIES`), instead of switching — with
+  `geometry/dithered_fade` and TAA or FSR, dithered and solid; the instanced proxies still switch. City Lab
+  `--city_hlod_fade=1 --city_hlod_margin=<m>`.
 
 Directional cascades starting beyond `distance` draw the proxies, the nearer ones the meshes, independently of the
 camera's position (`shadow_mode`), so the directional shadow cache keeps both. Meshes with skins, blend shapes,
@@ -473,7 +477,8 @@ Milestone 128 (decision 0252), **grouped proxies**: `bake_proxies` option `group
 triangles over the square of how much farther it is seen, coarser texels), a `FellowGroupProxy_<x>_<z>` child of the
 streamer drawn beyond `group_distance` (0: where none of its cells can be loaded) as its cells' proxies' visibility
 parent, and hidden while any of its cells is loaded. The result has `groups`, `group_triangles`,
-`group_texture_bytes`; the editor's dialog has the group size. World Lab: 347 → 107 draws.
+`group_texture_bytes`; the editor's dialog has the group size. World Lab: 347 → 107 draws. Milestone 132 (decision
+0256): option `group_fade` (0 m): the cells' proxies fade over that distance on each side of their group's switch.
 
 Milestone 131 (decision 0255), **terrain proxies by error**: `bake_proxies` option `terrain_error` 2 (pixels; 0: the
 terrain simplified with the rest, to `ratio`, as before): a cell's terrain is simplified apart from its other content,
@@ -1105,6 +1110,7 @@ a burnable's burning materials).
 | `geometry/contribution_cull_pixels` (0 = off) | contribution culling: the camera does not draw a mesh or MultiMesh node whose bounding sphere would cover fewer than this many pixels of the viewport's width (as `mesh_lod_threshold`), nor, with `geometry/multimesh_culling`, such a MultiMesh instance; nodes with `ignore_occlusion_culling` are always drawn | tiny far objects disappear: City Lab at 2 px of 960 (about 4 px at 1080p) 62.9-78.4 dB, 292 pixels over three captures; 5-14 % of the city's nodes not drawn, 10-13 % fewer primitives | 0121 |
 | `geometry/contribution_cull_instances` (Thin) | MultiMesh instances below the threshold: thinned (a share kept and grown to the threshold's size, so a far meadow keeps its coverage) or culled | Foliage Lab aerial at 2 px of 960: thinned 41.1 dB with the meadow's mean colour unchanged; culled 36.8 dB, the meadow 3.7 levels lighter | 0121 |
 | `shadows/contribution_cull_texels` (0 = off) | a caster whose box's diagonal spans fewer than this many texels of a directional cascade is not drawn into it (per node; per instance for culled MultiMeshes) | the shadows of tiny far casters disappear: City Lab at 2 texels 0 differing pixels (its smallest casters span 6 texels of the far cascade) | 0121 |
+| `geometry/dithered_fade` | an opaque instance fading at its visibility range (its own fade, or its visibility parent's) is drawn in the depth pre-pass and the opaque passes with a share of its pixels kept by a dither moving with TAA's frames, instead of blended in the transparent pass; one fading at its range's start keeps the other share (two levels crossing over cover every pixel once); shadows as without; Forward+ | fading objects stay solid instead of see-through, with TAA or FSR a blend over a few frames, without them a screen-door pattern; 4 000 balls all mid-fade on the RTX: GPU +0.9-1.7 ms against blending, the renderer's CPU −0.7 ms (instanced); City Lab's HLOD fading: the same GPU time as blended | 0256 |
 | `geometry/cluster_lod` (with `geometry/mesh_clusters`) | each cluster of a large static surface is drawn at the mesh LOD stock would give it as an instance of its own (the main camera's distance to the cluster), with its neighbours' finer levels where they meet (no cracks) | the image as LOD changes it: Sponza 63.6 dB on a moving sequence, stills 52.9-56.8 dB at distant silhouettes; Sponza GPU −3.1 %, render thread +0.21 ms | 0063 |
 
 ## Exact options (on by default unless noted)
