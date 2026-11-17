@@ -29,7 +29,9 @@ extends SceneTree
 ## as texture streaming holds them (resident and whole bytes, how many at their tails). --taa=0: no lane with TAA
 ## (its jitter's phase depends on how many frames the streaming took: pictures the same from run to run without it).
 ## Milestone 141 (decision 0266): --mesh_middle_ratio=<r> bakes a middle level of each streamed mesh, shown within
-## --mesh_middle_distance=<m> (D and the streamed flight).
+## --mesh_middle_distance=<m> (D and the streamed flight); --rocks=<n> curved props a cell (streamed meshes whose
+## simplification shows); --ground=1 a view over the roofs across the world, all loaded (a_ground) and streamed
+## (d_ground).
 ## Milestone 139: --dds=1, the cells' textures as DDS files (res://external/streaming_dds/: Streaming Lab's
 ## --streaming_dds=1 writes them).
 ## One JSON line: WORLD_PROXIES_CHECK {...}.
@@ -136,6 +138,36 @@ func _box_quads(verts: PackedVector3Array, normals: PackedVector3Array, uvs: Pac
 
 
 # A World Lab cell, on the ground's heights (the buildings and crates stand on the terrain under them).
+var _rocks := {}
+
+
+# A bumpy sphere (noise along its radius), 64 x 32 segments: one of four shapes.
+func _rock(i: int) -> ArrayMesh:
+	if _rocks.has(i):
+		return _rocks[i]
+	var sm := SphereMesh.new()
+	sm.radius = 1.0
+	sm.height = 2.0
+	sm.radial_segments = 64
+	sm.rings = 32
+	var arr := sm.get_mesh_arrays()
+	var noise := FastNoiseLite.new()
+	noise.seed = 7 + i
+	noise.frequency = 1.1
+	var v: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+	for k in v.size():
+		v[k] = v[k] * (1.0 + 0.35 * noise.get_noise_3dv(v[k] * 1.7))
+	arr[Mesh.ARRAY_VERTEX] = v
+	arr[Mesh.ARRAY_NORMAL] = null
+	arr[Mesh.ARRAY_TANGENT] = null
+	var st := SurfaceTool.new()
+	st.create_from_arrays(arr)
+	st.generate_normals()
+	var m := st.commit()
+	_rocks[i] = m
+	return m
+
+
 func _make_cell(x: int, z: int, terrain) -> Node3D:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 46000 + x * 131 + z
@@ -182,6 +214,20 @@ func _make_cell(x: int, z: int, terrain) -> Node3D:
 	crates.material_override = mats[(x + z * 13 + 2) % mats.size()]
 	root.add_child(crates)
 	crates.owner = root
+	# Milestone 141: --rocks=<n> curved props a cell (bumpy spheres of 4 096 triangles, 2-4 m): meshes whose
+	# simplification shows, unlike the buildings' flat walls.
+	for r in int(_arg("rocks", "0")):
+		var rock := MeshInstance3D.new()
+		rock.name = "rock_%d" % r
+		rock.mesh = _rock(r % 4)
+		var rp := Vector3(rng.randf_range(-28, 28), 0, rng.randf_range(-28, 28))
+		rp.y = terrain.get_height(origin + rp)
+		rock.position = rp
+		rock.rotation.y = rng.randf() * TAU
+		rock.scale = Vector3.ONE * rng.randf_range(2.0, 4.0)
+		rock.material_override = mats[(x * 7 + z * 3 + r) % mats.size()]
+		root.add_child(rock)
+		rock.owner = root
 	return root
 
 
@@ -495,6 +541,15 @@ func _run() -> void:
 	var a := await _shot("a_all_loaded")
 	result["a_all_loaded"] = _stats()
 	result["a_all_loaded"]["timing"] = await _timing()
+	# Milestone 141: --ground=1, a view from the ground across the world (the streamed meshes' levels by distance).
+	var a_ground: Image = null
+	if _arg("ground", "0") != "0":
+		var back := cam.transform
+		cam.transform = _ground_view(w)
+		await _settle(frames)
+		a_ground = await _shot("a_ground")
+		cam.transform = back
+		await _settle(2)
 	var a_far: Image = null
 	var taa := root.use_taa
 	var a_far_white: Image = null
@@ -576,6 +631,13 @@ func _run() -> void:
 	result["d_streamed_meshes"]["vs_a"] = _diff(a, await _shot("d_streamed_meshes"))
 	result["d_streamed_meshes"]["streamer"] = streamer.get_stats()
 	result["d_streamed_meshes"]["timing"] = await _timing()
+	if a_ground:
+		cam.transform = _ground_view(w)
+		await _wait_settled()
+		result["d_ground"] = _stats()
+		result["d_ground"]["vs_a"] = _diff(a_ground, await _shot("d_ground"))
+		result["d_ground"]["streamer"] = streamer.get_stats()
+		cam.transform = view
 
 	# E. A flight across the world at 30 m/s, low, with the full meshes whenever their cells are loaded and then with
 	# them near only: the meshes' swaps on the way, the memory, the frames.
@@ -588,6 +650,15 @@ func _run() -> void:
 	print("WORLD_PROXIES_CHECK " + JSON.stringify(result))
 	terrain_ref.free()
 	quit()
+
+
+# Milestone 141: over the roofs (30 m up) a quarter of the way in, looking down across the world.
+func _ground_view(w: float) -> Transform3D:
+	var p := Vector3(w * 0.3, 0.0, w * 0.3)
+	p.y = terrain_ref.get_height(p) + 30.0
+	var t := Vector3(w * 0.3 + 60.0, 0.0, w * 0.3 + 70.0)
+	t.y = terrain_ref.get_height(t)
+	return Transform3D(Basis(), p).looking_at(t)
 
 
 # Milestone 137: from outside the world's corner, high, looking at its centre (far enough for the coarser levels).
