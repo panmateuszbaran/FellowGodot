@@ -3157,6 +3157,9 @@
 		<member name="rendering/fellow/debug/batched_taps_kinds" type="int" setter="" getter="" default="3">
 			Diagnostics: the lights [member rendering/fellow/shadows/batched_taps] applies to (bits: directional, positional).
 		</member>
+		<member name="rendering/fellow/debug/cloud_shadow_same_frame" type="bool" setter="" getter="" default="false">
+			Diagnostics: the colour passes read the clouds' shadow map written in the same frame (decision 0133 reads the previous frame's: the map written and read in one frame had lost the device with ray-traced GI on an NVIDIA GPU). Milestone 142.
+		</member>
 		<member name="rendering/fellow/debug/cluster_keep_depth_words" type="bool" setter="" getter="" default="false">
 			Diagnostics: the light clusters keep their first version's depth words.
 		</member>

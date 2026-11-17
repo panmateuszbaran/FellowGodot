@@ -317,6 +317,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/geometry/contribution_cull_instances", PROPERTY_HINT_ENUM, "Cull,Thin"), 1);
 	GLOBAL_DEF("rendering/fellow/debug/occlusion_stats", false);
 	GLOBAL_DEF("rendering/fellow/debug/wait_pipelines", false); // milestone 136
+	GLOBAL_DEF("rendering/fellow/debug/cloud_shadow_same_frame", false); // milestone 142: decision 0133's single map (diagnostics)
 	GLOBAL_DEF("rendering/fellow/debug/hitch_sampler", false); // decision 0231: frame steps over the threshold sampled and reported at exit
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/debug/hitch_sampler_ms", PROPERTY_HINT_RANGE, "1,1000,0.1,suffix:ms"), 33.3);
 	FellowHitchSampler::register_debugger(); // decision 0238: the editor's debugger can start it

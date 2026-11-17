@@ -33,6 +33,7 @@
 #include "fellow_camera_relative.h"
 #include "fellow_weather.h"
 
+#include "core/config/project_settings.h"
 #include "core/object/callable_mp.h"
 #include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
 #include "servers/rendering/renderer_rd/uniform_set_cache_rd.h"
@@ -317,6 +318,12 @@ RID FellowClouds::process_shadow(const ShadowParams &p_params) {
 	RD::get_singleton()->compute_list_dispatch_threads(list, SHADOW_SIZE, SHADOW_SIZE, 1);
 	RD::get_singleton()->compute_list_end();
 	RD::get_singleton()->draw_command_end_label();
+	// (rendering/fellow/debug/cloud_shadow_same_frame: the map just written, as before decision 0133's double buffer —
+	// diagnostics of the device lost with DDGI.)
+	if (GLOBAL_GET_CACHED(bool, "rendering/fellow/debug/cloud_shadow_same_frame")) {
+		shadow_read_origin = shadow_origins[write];
+		return shadow_maps[write];
+	}
 	return shadow_maps[write ^ 1];
 }
 
