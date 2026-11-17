@@ -3199,6 +3199,9 @@
 		<member name="rendering/fellow/debug/visibility_barriers" type="bool" setter="" getter="" default="true">
 			The render graph's barriers for a read from a stage the last write was not made visible to (a correctness fix). Decision 0062.
 		</member>
+		<member name="rendering/fellow/debug/wait_pipelines" type="bool" setter="" getter="" default="false">
+			Testing: every 3D draw whose specialized pipeline is not compiled yet waits for it instead of drawing with the ubershader (as Movie Maker mode with [code]frame/movie_wait_pipelines[/code]), also with FellowEngine off: pictures that do not depend on how fast the GPU compiles. The image regression suite's [code]--wait-pipelines[/code] (another GPU than lavapipe). Read every frame. Milestone 136.
+		</member>
 		<member name="rendering/fellow/enabled" type="bool" setter="" getter="" default="true">
 			FellowEngine's master switch: off, every FellowEngine setting below is off and the engine behaves as stock Godot 4.7.2 (the nodes FellowEngine adds do nothing where they need its renderer).
 		</member>

@@ -18,6 +18,7 @@ Another Mesa or LLVM version renders slightly differently: compare with --tolera
         [--template bin/godot.linuxbsd.template_release.x86_64] [--only group/scene,...] [--out DIR]
     python tools/fellow_regression/regression.py bless --godot bin/godot.linuxbsd.editor.x86_64 [--only ...]
     python tools/fellow_regression/regression.py bless|run --godot ... --goldens DIR     # another GPU: its own goldens
+        [--wait-pipelines]   # draws wait for their pipelines: pictures independent of how fast the GPU compiles
     python tools/fellow_regression/regression.py far --godot <build> [--offset 100000,0,100000] [--only ...]
         [--importer <an editor build, when --godot is a release template>]
 
@@ -163,6 +164,13 @@ def errors_of(report):
     return [e for e in errs if "ERR_CANT_OPEN" not in e and "ALSA" not in e]
 
 
+def group_settings(spec, args):
+    settings = dict(spec.get("settings", {}))
+    if getattr(args, "wait_pipelines", False):
+        settings["rendering/fellow/debug/wait_pipelines"] = True
+    return settings
+
+
 def project_copy(group, settings, root, editor=None):
     dst = os.path.join(root, "project_" + group)
     if not os.path.exists(dst):
@@ -216,7 +224,7 @@ def far(args) -> int:
         scenes = [s for s in spec["scenes"] if not only or group in only or f"{group}/{s}" in only]
         if not scenes:
             continue
-        project = project_copy(group, spec.get("settings", {}), out, os.path.abspath(args.importer) if args.importer else None)
+        project = project_copy(group, group_settings(spec, args), out, os.path.abspath(args.importer) if args.importer else None)
         for scene in scenes:
             if scene in done and group == "base":
                 continue
@@ -268,6 +276,7 @@ def main() -> int:
     ap.add_argument("--goldens", default="", help="a directory of goldens instead of the repository's (another GPU or driver: bless into it, then run against it)")
     ap.add_argument("--offset", default="100000,0,100000", help="far: where the scenes are moved (metres)")
     ap.add_argument("--importer", default="", help="far: an editor build to import the project with first (when --godot is a release template)")
+    ap.add_argument("--wait-pipelines", action="store_true", help="every group with rendering/fellow/debug/wait_pipelines: draws wait for their pipelines instead of the ubershader (milestone 136: on a GPU that compiles slowly the pictures otherwise depend on the compile threads' timing)")
     args = ap.parse_args()
     if args.command == "far":
         return far(args)
@@ -304,7 +313,7 @@ def main() -> int:
         scenes = [s for s in spec["scenes"] if wanted(group, s)]
         if not scenes:
             continue
-        project = project_copy(group, spec.get("settings", {}), out, builds[0][1] if len(builds) > 1 else None)
+        project = project_copy(group, group_settings(spec, args), out, builds[0][1] if len(builds) > 1 else None)
         for scene in scenes:
             r = {"group": group, "scene": scene}
             for build, binary in builds:

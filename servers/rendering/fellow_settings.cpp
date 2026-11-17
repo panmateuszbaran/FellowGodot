@@ -311,6 +311,7 @@ void Fellow::register_settings() {
 	// MultiMesh instances below the threshold: culled, or thinned (a share kept and grown so their coverage stays).
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/geometry/contribution_cull_instances", PROPERTY_HINT_ENUM, "Cull,Thin"), 1);
 	GLOBAL_DEF("rendering/fellow/debug/occlusion_stats", false);
+	GLOBAL_DEF("rendering/fellow/debug/wait_pipelines", false); // milestone 136
 	GLOBAL_DEF("rendering/fellow/debug/hitch_sampler", false); // decision 0231: frame steps over the threshold sampled and reported at exit
 	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/debug/hitch_sampler_ms", PROPERTY_HINT_RANGE, "1,1000,0.1,suffix:ms"), 33.3);
 	FellowHitchSampler::register_debugger(); // decision 0238: the editor's debugger can start it
@@ -536,7 +537,8 @@ uint64_t Fellow::shadow_atlas_tick_msec() {
 
 bool Fellow::frame_movie_wait_pipelines() {
 	static const bool writing_movie = !Engine::get_singleton()->get_write_movie_path().is_empty();
-	return writing_movie && enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/frame/movie_wait_pipelines");
+	// (Milestone 136: debug/wait_pipelines, with FellowEngine off too — a test's pictures, not the game's frame.)
+	return (writing_movie && enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/frame/movie_wait_pipelines")) || GLOBAL_GET_CACHED(bool, "rendering/fellow/debug/wait_pipelines");
 }
 
 bool Fellow::frame_stable_scene_bits() {

@@ -658,6 +658,8 @@ uint64_t shadow_atlas_tick_msec();
 // frame/movie_wait_pipelines (decision 0072): while Movie Maker mode writes a video (--write-movie), a 3D draw whose
 // specialized pipeline is not compiled yet waits for it instead of drawing with the ubershader, as the 2D renderer
 // always does. The recorded frames are drawn by the same pipelines on every run. Read every frame.
+// debug/wait_pipelines (milestone 136): the same always, also with FellowEngine off — pictures that do not depend on
+// how fast a GPU compiles (the image regression suite on Intel's GPU).
 bool frame_movie_wait_pipelines();
 // frame/stable_scene_bits (decision 0161): the colour passes' specialization bits that follow what a frame holds —
 // decision 0057's absent features, the positional lights' loop variants (0045-0047) and tile culling (0049), the
