@@ -481,6 +481,15 @@ parent, and hidden while any of its cells is loaded. The result has `groups`, `g
 `group_texture_bytes`; the editor's dialog has the group size. World Lab: 347 → 107 draws. Milestone 132 (decision
 0256): option `group_fade` (0 m): the cells' proxies fade over that distance on each side of their group's switch.
 
+Milestone 134 (decision 0258), **cells crossing over**: `FellowWorldStreamer3D.crossfade` (seconds, 0: a switch): a
+cell's content enters keeping none of its pixels and its proxy stays; over the time the content's share grows and the
+proxy keeps the others (dithered, as decision 0256's fades: TAA or FSR resolve it), then the proxy hides. Unloading,
+the content stays as a ghost fading out while the proxy fades in, then is freed. `is_settled()` waits for the fades.
+Shadows switch; terrain regions take part (`FellowTerrain3D.fellow_set_dither_alpha()`). A streamed mesh's swap
+between its stand-in and its full mesh (`mesh_distance`) crosses over the same way, the outgoing mesh drawn by an
+instance of its own meanwhile (decision 0259). The renderer's `fellow_instance_set_dither_alpha()`. Frontier Lab
+`--frontier_crossfade=<s>`.
+
 Milestone 131 (decision 0255), **terrain proxies by error**: `bake_proxies` option `terrain_error` 2 (pixels; 0: the
 terrain simplified with the rest, to `ratio`, as before): a cell's terrain is simplified apart from its other content,
 its region's edges kept, as far as an error of that many pixels allows in a view of 1 080 lines with a 75° field of

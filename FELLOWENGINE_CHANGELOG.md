@@ -9,6 +9,14 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 134 — streamed cells and meshes cross over (2026-11-17)
+
+- `FellowWorldStreamer3D.crossfade` (decisions 0258, 0259): a streamed cell's content and its proxy cross over when it
+  loads and unloads (the content kept as a ghost fading out, then freed), terrain regions included, and its streamed
+  meshes' swaps between stand-in and full mesh too — dithered (`fellow_instance_set_dither_alpha()`), no hole halfway.
+  Frontier Lab crossing over in 0.5 s: the same frame time as switching. `bench/dithered_fade_check.gd` sections 6-7;
+  Frontier Lab `--frontier_crossfade`.
+
 ## Milestone 133 — hand-overs per instance dithered (2026-11-17)
 
 - `FellowTerrainFoliage.impostor_fade` and `FellowHLOD3D.fade` for the instanced proxies (decision 0257): the hand-overs
