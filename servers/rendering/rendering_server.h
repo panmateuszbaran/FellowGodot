@@ -776,6 +776,10 @@ public:
 	virtual void fellow_instance_set_instance_range(RID p_instance, float p_begin, float p_end, bool p_vertices_bounded) {}
 	// Decision 0172: a MultiMesh's instances shrink to nothing over this distance before its range's end (0: they stop).
 	virtual void fellow_instance_set_instance_range_fade(RID p_instance, float p_fade) {}
+	// Decision 0257: a MultiMesh's instances fade, dithered, over these distances on each side of its range's start and
+	// end (each instance by its own distance; a fade at the start keeps the other pixels than one at the end, so a
+	// MultiMesh ending where another starts with the same margin hands over without a hole). 0: a switch.
+	virtual void fellow_instance_set_instance_range_margins(RID p_instance, float p_begin_margin, float p_end_margin) {}
 
 	// Don't use these in a game!
 	virtual Vector<ObjectID> instances_cull_aabb(const AABB &p_aabb, RID p_scenario = RID()) const = 0;

@@ -116,6 +116,14 @@ func build(p_args: Dictionary) -> void:
 		# Every terrain as if its virtual_texture were on, from its first frame (as a region saved with it would be).
 		ProjectSettings.set_setting("rendering/fellow/terrain/virtual_texture_all", true)
 		(Engine.get_main_loop() as SceneTree).node_added.connect(_vt_node_added)
+	# Milestone 133 (decision 0257): --frontier_impostor_fade=<m> — the trees handed over to their impostors dithered over
+	# that on each side of 140 m (the kinds are shared by every region: set once, before the regions stream in).
+	var impostor_fade := float(args.get("frontier_impostor_fade", "0"))
+	if impostor_fade > 0.0:
+		for i in 2:
+			var kind = ResourceLoader.load(fdir.path_join("shared").path_join("foliage_%d.tres" % i))
+			if kind and kind.get("impostor") != null:
+				kind.set("impostor_fade", impostor_fade)
 	add_child(level)
 	var place_ms := (Time.get_ticks_usec() - t1) / 1000.0
 	_build_lights()

@@ -256,6 +256,82 @@ func _cost(lane: String, dither: bool) -> Dictionary:
 	return {"gpu_ms": snappedf(gpu[frames / 2], 0.01), "render_cpu_ms": snappedf(cpu[frames / 2], 0.01), "draws": draws, "img": img}
 
 
+# Pixels that are a ball's (more red than blue) in b and not in a, over b's ball pixels; pixels that differ at all.
+func _ball_holes(a: Image, b: Image) -> Dictionary:
+	var holes := 0
+	var balls := 0
+	var differing := 0
+	for y in a.get_height():
+		for x in a.get_width():
+			var ca := a.get_pixel(x, y)
+			var cb := b.get_pixel(x, y)
+			if cb.r > cb.b + 0.05:
+				balls += 1
+				if not (ca.r > ca.b + 0.05):
+					holes += 1
+			if ca != cb:
+				differing += 1
+	return {"holes": snappedf(holes / maxf(balls, 1.0), 0.0001), "share_differing": snappedf(differing / float(a.get_width() * a.get_height()), 0.0001)}
+
+
+func _ball_mesh(sphere: SphereMesh, mat: Material) -> ArrayMesh:
+	var m := ArrayMesh.new()
+	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, sphere.get_mesh_arrays())
+	m.surface_set_material(0, mat)
+	return m
+
+
+# (5) A flat terrain (blue) with balls as foliage, their "impostor" the far ball (a mesh: any mesh can stand in), from
+# 40 m with a band of 6 m on each side, without TAA: against the impostors alone (their silhouettes inside the
+# meshes'), no pixel of a ball lost; against the switch, a fade.
+func _foliage() -> Dictionary:
+	root.use_taa = false
+	var size := 257
+	var heights := PackedFloat32Array()
+	heights.resize(size * size)
+	var t = ClassDB.instantiate("FellowTerrain3D")
+	var layer = ClassDB.instantiate("FellowTerrainLayer")
+	layer.albedo_color = Color(0.1, 0.12, 0.8)
+	t.layers = [layer]
+	t.heightmap = Image.create_from_data(size, size, false, Image.FORMAT_RF, heights.to_byte_array())
+	var f = ClassDB.instantiate("FellowTerrainFoliage")
+	f.mesh = _ball_mesh(near_mesh, near_mat)
+	f.impostor = _ball_mesh(far_mesh, far_mat)
+	f.density = 0.03
+	f.range = 150.0
+	f.cast_shadows = false
+	f.sink = -0.5
+	f.scale_min = 1.0
+	f.scale_max = 1.0
+	t.foliage = [f]
+	world.add_child(t)
+	cam.position = Vector3(128, 1.6, 40)
+	cam.rotation_degrees = Vector3(-2, 180, 0)
+	var pics := {}
+	var counts := {}
+	for lane in [["impostors", 1.0, 0.0], ["fade", SWITCH, MARGIN], ["switch", SWITCH, 0.0], ["meshes", 1000.0, 0.0]]:
+		f.impostor_distance = lane[1]
+		f.impostor_fade = lane[2]
+		var last := -1
+		var same := 0
+		for i in 900:
+			await process_frame
+			var n: int = t.get_stats().get("foliage_instances", 0)
+			same = same + 1 if n == last and n > 0 else 0
+			last = n
+			if same >= 10:
+				break
+		for i in 5:
+			await process_frame
+		pics[lane[0]] = await _shot()
+		pics[lane[0]].save_png(out_dir.path_join("foliage_%s.png" % lane[0]))
+		counts[lane[0]] = {"instances": t.get_stats().get("foliage_instances", 0), "impostor_instances": t.get_stats().get("foliage_impostor_instances", 0)}
+	t.queue_free()
+	await process_frame
+	return {"counts": counts, "fade_vs_impostors": _ball_holes(pics["fade"], pics["impostors"]), "fade_vs_switch": _ball_holes(pics["fade"], pics["switch"]),
+		"switch_vs_impostors": _ball_holes(pics["switch"], pics["impostors"])}
+
+
 func _run() -> void:
 	_setup()
 	await process_frame
@@ -319,51 +395,66 @@ func _run() -> void:
 	if cross["dither"]["holes_share_of_balls"] > 0.001:
 		failures.append("holes where the two levels cross over, dithered")
 
-	# (4) FellowHLOD3D with fade: 16 boxes merged into one proxy, the camera still 40 m away, the node's distance set
-	# past the camera (the boxes), at it (the middle of the fade) and short of it (the proxy alone). Dithered, the
-	# middle has the boxes' pixels and the proxy's under them: no hole against the proxy alone.
+	# (4) FellowHLOD3D with fade: 16 boxes merged into one proxy (or, decision 0257, instanced: a MultiMesh of them whose
+	# instances fade in on the GPU while the boxes, nodes, fade out), the camera still 40 m away, the node's distance
+	# set past the camera (the boxes), at it (the middle of the fade) and short of it (the proxy alone). Dithered, the
+	# middle has the boxes' pixels and the proxy's in the others: the same picture (the proxy is the same surface), both
+	# drawn, no hole.
 	root.use_taa = false
 	ProjectSettings.set_setting("rendering/fellow/geometry/dithered_fade", true)
-	var hlod = ClassDB.instantiate("FellowHLOD3D")
-	hlod.set("build_on_ready", false)
-	hlod.set("instancing", false)
-	hlod.set("cell_size", 100.0)
-	hlod.set("margin", MARGIN)
-	hlod.set("fade", true)
-	world.add_child(hlod)
 	var box := BoxMesh.new()
 	box.size = Vector3(1.6, 1.6, 1.6)
 	box.subdivide_width = 8
 	box.subdivide_height = 8
 	box.subdivide_depth = 8
-	for i in 16:
-		var b := MeshInstance3D.new()
-		b.mesh = box
-		b.material_override = near_mat
-		b.position = Vector3((i % 8 - 3.5) * 2.4, (i / 8) * 2.4, 0)
-		hlod.add_child(b)
-	hlod.call("build")
-	cam.position = Vector3(0, 2.0, -SWITCH)
-	cam.look_at(Vector3(0, 1.2, 0))
-	var hlod_pics := {}
-	var hlod_tris := {}
-	for lane in [["members", 100.0], ["middle", SWITCH], ["proxy", 10.0]]:
-		hlod.set("distance", lane[1])
-		for i in 5:
-			await process_frame
-		hlod_pics[lane[0]] = await _shot()
-		hlod_tris[lane[0]] = Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME)
-		hlod_pics[lane[0]].save_png(out_dir.path_join("hlod_%s.png" % lane[0]))
-	# (The proxy is the boxes merged, the same surface: the middle's picture is the boxes', the members' dithered
-	# pixels filled by the proxy's; both drawn.)
-	result["hlod_fade"] = {"merged_proxies": hlod.call("get_build_info").get("merged_proxies", 0), "triangles": hlod_tris,
-		"middle_vs_members": _compare(hlod_pics["middle"], hlod_pics["members"])}
-	if hlod_tris["middle"] < hlod_tris["members"] + hlod_tris["proxy"] or result.hlod_fade.middle_vs_members.holes_share_of_balls > 0.001:
-		failures.append("HLOD fade: not both drawn in the middle, or holes")
-	hlod.queue_free()
+	result["hlod_fade"] = {}
+	for instancing in [false, true]:
+		var hlod = ClassDB.instantiate("FellowHLOD3D")
+		hlod.set("build_on_ready", false)
+		hlod.set("instancing", instancing)
+		hlod.set("instance_threshold", 4)
+		hlod.set("cell_size", 100.0)
+		hlod.set("margin", MARGIN)
+		hlod.set("fade", true)
+		world.add_child(hlod)
+		for i in 16:
+			var b := MeshInstance3D.new()
+			b.mesh = box
+			b.material_override = near_mat
+			b.position = Vector3((i % 8 - 3.5) * 2.4, (i / 8) * 2.4, 0)
+			hlod.add_child(b)
+		hlod.call("build")
+		cam.position = Vector3(0, 2.0, -SWITCH)
+		cam.look_at(Vector3(0, 1.2, 0))
+		var hlod_pics := {}
+		var hlod_tris := {}
+		var kind := "instanced" if instancing else "merged"
+		for lane in [["members", 100.0], ["middle", SWITCH], ["proxy", 10.0]]:
+			hlod.set("distance", lane[1])
+			for i in 5:
+				await process_frame
+			hlod_pics[lane[0]] = await _shot()
+			hlod_tris[lane[0]] = Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME)
+			hlod_pics[lane[0]].save_png(out_dir.path_join("hlod_%s_%s.png" % [kind, lane[0]]))
+		var info: Dictionary = hlod.call("get_build_info")
+		result.hlod_fade[kind] = {"merged_proxies": info.get("merged_proxies", 0), "instanced_proxies": info.get("instanced_proxies", 0), "triangles": hlod_tris,
+			"middle_vs_members": _compare(hlod_pics["middle"], hlod_pics["members"])}
+		# (A MultiMesh's draws are not counted in the frame's primitives when culled on the GPU: the middle then at least
+		# the members'.)
+		var both: bool = hlod_tris["middle"] >= hlod_tris["members"] + (0 if instancing else hlod_tris["proxy"])
+		if not both or result.hlod_fade[kind].middle_vs_members.holes_share_of_balls > 0.001 or result.hlod_fade[kind].middle_vs_members.share_over_16 > 0.001:
+			failures.append("HLOD fade (%s): not both drawn in the middle, or holes" % kind)
+		hlod.queue_free()
+		await process_frame
 	ProjectSettings.set_setting("rendering/fellow/geometry/dithered_fade", false)
 	root.use_taa = taa
 	await process_frame
+
+	# (5) Decision 0257: a terrain's foliage handing over to its impostor per instance on the GPU.
+	result["foliage"] = await _foliage()
+	if result.foliage.fade_vs_impostors.holes > 0.001 or result.foliage.fade_vs_switch.share_differing == 0.0:
+		failures.append("foliage: holes where the meshes hand over to the impostors, or no fade")
+	root.use_taa = taa
 
 	# (1) The flights.
 	var flights := {}

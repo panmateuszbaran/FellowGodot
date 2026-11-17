@@ -57,6 +57,11 @@ struct Job {
 	vec4 contribution; // the pass's view direction as a plane (depth z = dot(xyz, p) + w)
 	vec4 instance_range; // HLOD proxy (decision 0122): xyz the camera's position, w the squared distance drawn from
 	vec4 contribution_mode; // x: 0 the small instances culled, 1 thinned (decision 0121); y: the range's end^2; z: its fade (0172)
+	vec4 fade; // decision 0257: x the range's start, y its margin, z its end, w its margin (the dithered fades' bands)
+	uint out_stride; // floats per compacted instance: the stride, or 4 more for the instance's fade (decision 0257)
+	uint pad0;
+	uint pad1;
+	uint pad2;
 };
 
 layout(set = 0, binding = 0, std430) buffer restrict readonly Jobs {
@@ -161,6 +166,22 @@ float range_fade_scale(Job job, vec3 center) {
 	}
 	const float d = distance(center, job.instance_range.xyz);
 	return clamp((sqrt(job.contribution_mode.y) - d) / job.contribution_mode.z, 0.0, 1.0);
+}
+
+// The dithered fade (decision 0257) of an instance by its box's center's distance: from 0 to 1 over the band of the
+// range's start, from 1 to 0 over its end's (smoothstep, as Godot's fades by visibility range); r_near 2 in the start's
+// band (the scene shader keeps the other pixels there), else 1.
+float instance_fade(Job job, vec3 center, out float r_near) {
+	r_near = 1.0;
+	const float d = distance(center, job.instance_range.xyz);
+	if (job.fade.w > 0.0 && job.fade.z > 0.0 && d > job.fade.z - job.fade.w) {
+		return smoothstep(0.0, 1.0, 1.0 - (d - (job.fade.z - job.fade.w)) / (2.0 * job.fade.w));
+	}
+	if (job.fade.y > 0.0 && job.fade.x > 0.0 && d < job.fade.x + job.fade.y) {
+		r_near = 2.0;
+		return smoothstep(0.0, 1.0, (d - (job.fade.x - job.fade.y)) / (2.0 * job.fade.y));
+	}
+	return 1.0;
 }
 
 // Contribution culling (decision 0121): 1 for an instance drawn as it is, 0 for one left out, above 1 for a thinned
@@ -381,28 +402,43 @@ void main() {
 		const Job job = jobs.data[blk.x];
 		const uint position = block_data.data[b * BLOCK_UINTS + 24 + bucket] + rank;
 		const uint src = (job.pool_offset + (blk.y + lid) * job.stride) / 4;
-		const uint dst = ((job.out_offset + position) * job.stride) / 4;
+		const uint dst = ((job.out_offset + position) * job.out_stride) / 4;
 		// A thinned survivor (decision 0121) is grown about its origin, a fading one (0172) shrunk: the basis (xyz of the
 		// three rows) scaled.
 		float grow = 1.0;
-		if ((code & 0x80u) != 0u) {
+		const bool with_fade = job.out_stride > job.stride; // decision 0257: the instance's dithered fade after its data
+		vec4 fade = vec4(1.0, 1.0, 0.0, 0.0);
+		if ((code & 0x80u) != 0u || with_fade) {
 			vec3 center, half_extents;
 			mat3 wb;
 			instance_box(job, pool.data[src + 0], pool.data[src + 1], pool.data[src + 2], center, half_extents, wb);
-			grow = contribution_scale(job, center, half_extents, blk.y + lid) * range_fade_scale(job, center);
+			if ((code & 0x80u) != 0u) {
+				grow = contribution_scale(job, center, half_extents, blk.y + lid) * range_fade_scale(job, center);
+			}
+			if (with_fade) {
+				float near;
+				fade.x = instance_fade(job, center, near);
+				fade.y = near;
+			}
 		}
 		for (uint k = 0; k < job.stride / 4; k++) {
 			const vec4 v = pool.data[src + k];
 			compacted.data[dst + k] = (k < 3 && grow != 1.0) ? vec4(v.xyz * grow, v.w) : v;
 		}
+		if (with_fade) {
+			compacted.data[dst + job.stride / 4] = fade;
+		}
 		if (job.has_previous != 0) {
 			// The same instance's previous-frame data at the same position of the previous region (the vertex shader
 			// reads it for motion vectors at the same instance index).
 			const uint psrc = (job.prev_pool_offset + (blk.y + lid) * job.stride) / 4;
-			const uint pdst = ((job.out_prev_offset + position) * job.stride) / 4;
+			const uint pdst = ((job.out_prev_offset + position) * job.out_stride) / 4;
 			for (uint k = 0; k < job.stride / 4; k++) {
 				const vec4 v = pool.data[psrc + k];
 				compacted.data[pdst + k] = (k < 3 && grow != 1.0) ? vec4(v.xyz * grow, v.w) : v;
+			}
+			if (with_fade) {
+				compacted.data[pdst + job.stride / 4] = fade;
 			}
 		}
 	} else {

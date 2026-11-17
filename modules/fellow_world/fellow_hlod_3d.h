@@ -76,6 +76,7 @@ private:
 		NodePath old_parent;
 		float old_range_end = 0.0f;
 		float old_range_end_margin = 0.0f;
+		int old_fade_mode = 0; // decision 0257: an instanced proxy's member fading by itself with fade
 	};
 	LocalVector<Member> members;
 	LocalVector<GeometryInstance3D *> merged_proxies;
@@ -108,6 +109,7 @@ private:
 	void _queue_build();
 	void _deferred_build();
 	void _apply_roles();
+	void _apply_member_fades(); // decision 0257
 	void _impostor_baked(const Ref<ArrayMesh> &p_quad, uint32_t p_generation, uint32_t p_index);
 
 protected:

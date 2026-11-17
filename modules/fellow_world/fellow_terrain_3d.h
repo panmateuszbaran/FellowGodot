@@ -104,6 +104,7 @@ class FellowTerrainFoliage : public Resource {
 	float fade_distance = 0.0f; // metres before the range's end over which the instances shrink out (decision 0172)
 	Ref<Mesh> impostor; // a baked impostor (FellowTerrain3D.bake_foliage_impostors()), drawn from impostor_distance on
 	float impostor_distance = 0.0f;
+	float impostor_fade = 0.0f; // decision 0257: metres on each side of impostor_distance over which the two are dithered
 
 protected:
 	static void _bind_methods();
@@ -150,6 +151,8 @@ public:
 	Ref<Mesh> get_impostor() const { return impostor; }
 	void set_impostor_distance(float p_metres);
 	float get_impostor_distance() const { return impostor_distance; }
+	void set_impostor_fade(float p_metres);
+	float get_impostor_fade() const { return impostor_fade; }
 };
 
 // FellowEngine terrain (docs/decisions/0158-terrain.md): a height field drawn with continuous distance-dependent levels
@@ -320,6 +323,7 @@ private:
 		float fade = 0.0f;
 		RID impostor; // the impostor's quad mesh (its range from impostor_distance)
 		float impostor_distance = 0.0f;
+		float impostor_fade = 0.0f; // decision 0257
 	};
 	LocalVector<FoliageKind> foliage_kinds;
 	struct FoliageCell {

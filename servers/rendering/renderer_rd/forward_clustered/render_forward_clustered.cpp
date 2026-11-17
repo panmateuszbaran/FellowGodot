@@ -554,6 +554,8 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 		pipeline_specialization.multimesh_format_2d = bool(surf->owner->base_flags & INSTANCE_DATA_FLAG_MULTIMESH_FORMAT_2D);
 		pipeline_specialization.multimesh_has_color = bool(surf->owner->base_flags & INSTANCE_DATA_FLAG_MULTIMESH_HAS_COLOR);
 		pipeline_specialization.multimesh_has_custom_data = bool(surf->owner->base_flags & INSTANCE_DATA_FLAG_MULTIMESH_HAS_CUSTOM_DATA);
+		// FellowEngine (decision 0257): a culled MultiMesh whose compacted instances carry their dithered fade.
+		pipeline_specialization.fellow_mm_instance_fade = fellow_mm_slot != UINT32_MAX && p_params->fellow_mm_fades != nullptr && p_params->fellow_mm_fades[fellow_mm_slot] != 0;
 		// FellowEngine dithered fades (decision 0256): the opaque passes of an instance whose fade is dithered (not the
 		// shadows', which it casts whole as stock's fading instances do, nor the transparent pass's, which blends).
 		if constexpr (p_pass_mode != PASS_MODE_SHADOW && p_pass_mode != PASS_MODE_SHADOW_DP && p_pass_mode != PASS_MODE_DEPTH_MATERIAL && p_pass_mode != PASS_MODE_SDF && (p_color_pass_flags & COLOR_PASS_FLAG_TRANSPARENT) == 0) {
@@ -2249,6 +2251,7 @@ void RenderForwardClustered::_fellow_multimesh_cull_begin(uint32_t p_set) {
 	set.draw_offsets.clear();
 	set.draw_prev_offsets.clear();
 	set.draw_levels.clear();
+	set.draw_fades.clear();
 	set.compacted_floats = 0;
 	set.potential_indices = 0;
 	set.active = false;
@@ -2413,13 +2416,17 @@ void RenderForwardClustered::_fellow_multimesh_cull_collect(uint32_t p_set, Rend
 					j.count = inst->instance_count;
 					j.planes_offset = proxy_planes ? proxy_planes_offset : planes_offset;
 					j.plane_count = proxy_planes ? uint32_t(p_plane_count + p_proxy_plane_count) : uint32_t(MIN(p_plane_count, 8));
-					j.out_offset = uint32_t((set.compacted_floats + stride - 1) / stride);
-					set.compacted_floats = (uint64_t(j.out_offset) + j.count) * stride;
+					// Decision 0257: instances fading, dithered, at the range's ends carry their fade (a vec4 after their data).
+					const bool fades = range_proxy && (inst->fellow_instance_range_begin_margin > 0.0f || inst->fellow_instance_range_end_margin > 0.0f);
+					const uint32_t out_stride = fades ? stride + 4 : stride;
+					j.out_stride = out_stride;
+					j.out_offset = uint32_t((set.compacted_floats + out_stride - 1) / out_stride);
+					set.compacted_floats = (uint64_t(j.out_offset) + j.count) * out_stride;
 					if (with_previous) {
 						j.has_previous = 1;
 						j.prev_pool_offset = uint32_t(prev_pool_offset);
 						j.out_prev_offset = j.out_offset + j.count;
-						set.compacted_floats = (uint64_t(j.out_prev_offset) + j.count) * stride;
+						set.compacted_floats = (uint64_t(j.out_prev_offset) + j.count) * out_stride;
 					}
 					j.first_block = set.blocks.size() / 2;
 					j.block_count = (j.count + 63) / 64;
@@ -2439,8 +2446,17 @@ void RenderForwardClustered::_fellow_multimesh_cull_collect(uint32_t p_set, Rend
 						j.instance_range[0] = p_lod.camera.x;
 						j.instance_range[1] = p_lod.camera.y;
 						j.instance_range[2] = p_lod.camera.z;
-						j.instance_range[3] = inst->fellow_instance_range_begin * inst->fellow_instance_range_begin;
-						j.contribution_mode[1] = inst->fellow_instance_range_end * inst->fellow_instance_range_end;
+						// (With dithered fades, decision 0257: drawn from the start's band and up to the end's.)
+						const float begin = inst->fellow_instance_range_begin > 0.0f ? MAX(inst->fellow_instance_range_begin - inst->fellow_instance_range_begin_margin, 0.0f) : 0.0f;
+						const float end = inst->fellow_instance_range_end > 0.0f ? inst->fellow_instance_range_end + inst->fellow_instance_range_end_margin : 0.0f;
+						j.instance_range[3] = begin * begin;
+						j.contribution_mode[1] = end * end;
+						if (fades) {
+							j.fade[0] = inst->fellow_instance_range_begin;
+							j.fade[1] = inst->fellow_instance_range_begin > 0.0f ? inst->fellow_instance_range_begin_margin : 0.0f;
+							j.fade[2] = inst->fellow_instance_range_end;
+							j.fade[3] = inst->fellow_instance_range_end > 0.0f ? inst->fellow_instance_range_end_margin : 0.0f;
+						}
 						// Decision 0172: the instances shrink to nothing over the last metres before the end.
 						j.contribution_mode[2] = inst->fellow_instance_range_end > 0.0f ? MIN(inst->fellow_instance_range_fade, inst->fellow_instance_range_end) : 0.0f;
 						set.required = true;
@@ -2480,6 +2496,7 @@ void RenderForwardClustered::_fellow_multimesh_cull_collect(uint32_t p_set, Rend
 		set.draw_offsets.push_back(set.jobs[job].out_offset);
 		set.draw_prev_offsets.push_back(set.jobs[job].has_previous ? set.jobs[job].out_prev_offset : set.jobs[job].out_offset);
 		set.draw_levels.push_back(levels);
+		set.draw_fades.push_back(set.jobs[job].out_stride > set.jobs[job].stride ? 1 : 0);
 		set.potential_indices += uint64_t(set.jobs[job].count) * draw_count;
 	}
 }
@@ -2657,6 +2674,7 @@ void RenderForwardClustered::_fellow_multimesh_cull_params(uint32_t p_set, Rende
 	r_params.fellow_mm_offsets = set.draw_offsets.ptr();
 	r_params.fellow_mm_prev_offsets = set.draw_prev_offsets.ptr();
 	r_params.fellow_mm_levels = set.draw_levels.ptr();
+	r_params.fellow_mm_fades = set.draw_fades.ptr();
 	r_params.fellow_mm_args = set.args;
 	r_params.fellow_mm_xforms = set.xforms_uniform_set;
 }

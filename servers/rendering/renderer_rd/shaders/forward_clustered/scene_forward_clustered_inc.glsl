@@ -307,6 +307,13 @@ bool sc_fellow_dither_fade_near() {
 	return ((sc_packed_2() >> 9) & 1U) != 0;
 }
 
+// FellowEngine (decision 0257): a culled MultiMesh's compacted instances carry a vec4 after their data — x its dithered
+// fade, y 2 in its range's start's band (the other share of the pixels), else 1 — passed to the fragments in the high
+// bits of the instance index.
+bool sc_fellow_mm_instance_fade() {
+	return ((sc_packed_2() >> 10) & 1U) != 0;
+}
+
 // FellowEngine DDGI (decision 0083): the colour passes take the ambient light from the probe volume.
 bool sc_fellow_ddgi() {
 	return ((sc_packed_2() >> 2) & 1U) != 0;

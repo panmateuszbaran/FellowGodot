@@ -36,6 +36,9 @@
 		<member name="impostor_distance" type="float" setter="set_impostor_distance" getter="get_impostor_distance" default="0.0">
 			The distance from which [member impostor] is drawn instead of [member mesh] (0: never). [method FellowTerrain3D.bake_foliage_impostors] bakes the kinds with a distance.
 		</member>
+		<member name="impostor_fade" type="float" setter="set_impostor_fade" getter="get_impostor_fade" default="0.0">
+			Metres on each side of [member impostor_distance] over which an instance's mesh and its impostor are dithered into each other instead of switching (each instance by its own distance, on the GPU; the impostor keeping the pixels the mesh leaves, so no hole). The dither moves with TAA's frames and is resolved by TAA or FSR; without them it stands still. 0: a switch. Shadows switch per cascade as before. See [code]docs/decisions/0257-instance-fades.md[/code].
+		</member>
 		<member name="layer" type="int" setter="set_layer" getter="get_layer" default="0">
 			The terrain layer (0 to 8) whose weight gives the kind's density.
 		</member>

@@ -501,6 +501,7 @@ void FellowHLOD3D::build() {
 				m.instanced = true;
 				m.old_range_end = mi->get_visibility_range_end();
 				m.old_range_end_margin = mi->get_visibility_range_end_margin();
+				m.old_fade_mode = mi->get_visibility_range_fade_mode();
 				members.push_back(m);
 				mi->set_visibility_range_end(distance);
 				mi->set_visibility_range_end_margin(0.0);
@@ -921,6 +922,7 @@ void FellowHLOD3D::clear() {
 		if (m.instanced) {
 			mi->set_visibility_range_end(m.old_range_end);
 			mi->set_visibility_range_end_margin(m.old_range_end_margin);
+			mi->set_visibility_range_fade_mode((GeometryInstance3D::VisibilityRangeFadeMode)m.old_fade_mode);
 		} else {
 			mi->set_visibility_parent(m.old_parent);
 		}
@@ -983,22 +985,29 @@ void FellowHLOD3D::_apply_roles() {
 	// draws its instances up to it, the impostors from it, per instance on the GPU and per cascade in the shadows.
 	RenderingServer *rs = RenderingServer::get_singleton();
 	const bool per_cascade = shadow_mode == SHADOW_MODE_PER_CASCADE;
+	// Decision 0257: with fade, the instanced hand-overs dithered over the margin on each side (each instance by its own
+	// distance on the GPU; the members, nodes, by their own fade).
+	const float m = fade ? (float)margin : 0.0f;
 	for (const Instanced &in : instanced) {
 		const float hand_over = in.impostor ? (float)impostor_distance : 0.0f;
 		if (in.proxy) {
 			rs->fellow_instance_set_hlod(in.proxy->get_instance(), RenderingServer::FELLOW_HLOD_PROXY, distance, hand_over);
 			rs->fellow_instance_set_instance_range(in.proxy->get_instance(), distance, hand_over, false);
+			rs->fellow_instance_set_instance_range_margins(in.proxy->get_instance(), m, hand_over > 0.0f ? m : 0.0f);
 		}
 		MultiMeshInstance3D *original = ObjectDB::get_instance<MultiMeshInstance3D>(in.original);
 		if (original) {
 			rs->fellow_instance_set_hlod(original->get_instance(), in.impostor ? RenderingServer::FELLOW_HLOD_MEMBER : RenderingServer::FELLOW_HLOD_NONE, hand_over, 0.0f);
 			rs->fellow_instance_set_instance_range(original->get_instance(), 0.0f, hand_over, false);
+			rs->fellow_instance_set_instance_range_margins(original->get_instance(), 0.0f, hand_over > 0.0f ? m : 0.0f);
 		}
 		if (in.impostor) {
 			rs->fellow_instance_set_hlod(in.impostor->get_instance(), RenderingServer::FELLOW_HLOD_PROXY, impostor_distance, 0.0f);
 			rs->fellow_instance_set_instance_range(in.impostor->get_instance(), impostor_distance, 0.0f, true);
+			rs->fellow_instance_set_instance_range_margins(in.impostor->get_instance(), m, 0.0f);
 		}
 	}
+	_apply_member_fades();
 	for (GeometryInstance3D *p : merged_proxies) {
 		rs->fellow_instance_set_hlod(p->get_instance(), per_cascade ? RenderingServer::FELLOW_HLOD_PROXY : RenderingServer::FELLOW_HLOD_NONE, distance, 0.0f);
 	}
@@ -1045,6 +1054,9 @@ void FellowHLOD3D::set_margin(real_t p_margin) {
 	for (GeometryInstance3D *p : merged_proxies) {
 		p->set_visibility_range_begin_margin(margin);
 	}
+	if (built && fade) {
+		_apply_roles();
+	}
 }
 
 real_t FellowHLOD3D::get_margin() const {
@@ -1055,6 +1067,21 @@ void FellowHLOD3D::set_fade(bool p_fade) {
 	fade = p_fade;
 	for (GeometryInstance3D *p : merged_proxies) {
 		p->set_visibility_range_fade_mode(fade ? GeometryInstance3D::VISIBILITY_RANGE_FADE_DEPENDENCIES : GeometryInstance3D::VISIBILITY_RANGE_FADE_DISABLED);
+	}
+	if (built) {
+		_apply_roles();
+	}
+}
+
+void FellowHLOD3D::_apply_member_fades() {
+	// An instanced proxy's members (nodes, up to the distance) fade out by themselves over the margin where the proxy's
+	// instances fade in (decision 0257), or switch (as before).
+	for (const Member &mb : members) {
+		MeshInstance3D *mi = mb.instanced ? ObjectDB::get_instance<MeshInstance3D>(mb.id) : nullptr;
+		if (mi) {
+			mi->set_visibility_range_end_margin(fade ? margin : 0.0);
+			mi->set_visibility_range_fade_mode(fade ? GeometryInstance3D::VISIBILITY_RANGE_FADE_SELF : (GeometryInstance3D::VisibilityRangeFadeMode)mb.old_fade_mode);
+		}
 	}
 }
 

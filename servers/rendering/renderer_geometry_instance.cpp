@@ -104,6 +104,11 @@ void RenderGeometryInstanceBase::set_fellow_instance_range_fade(float p_fade) {
 	fellow_instance_range_fade = MAX(0.0f, p_fade);
 }
 
+void RenderGeometryInstanceBase::set_fellow_instance_range_margins(float p_begin_margin, float p_end_margin) {
+	fellow_instance_range_begin_margin = MAX(0.0f, p_begin_margin);
+	fellow_instance_range_end_margin = MAX(0.0f, p_end_margin);
+}
+
 void RenderGeometryInstanceBase::set_fellow_hlod_proxy(bool p_proxy) {
 	fellow_hlod_proxy = p_proxy;
 }

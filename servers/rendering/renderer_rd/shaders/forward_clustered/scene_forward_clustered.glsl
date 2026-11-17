@@ -222,6 +222,7 @@ uint multimesh_stride() {
 	uint stride = sc_multimesh_format_2d() ? 2 : 3;
 	stride += sc_multimesh_has_color() ? 1 : 0;
 	stride += sc_multimesh_has_custom_data() ? 1 : 0;
+	stride += sc_fellow_mm_instance_fade() ? 1 : 0; // decision 0257: the instance's fade
 	return stride;
 }
 
@@ -901,6 +902,13 @@ void main() {
 	}
 
 	instance_index_interp = instance_index;
+	if (sc_multimesh() && sc_fellow_mm_instance_fade()) {
+		// Decision 0257: the instance's dithered fade (8 bits) and side (1 bit) above the instance index (23 bits).
+		const uint fellow_stride = multimesh_stride();
+		const vec4 fellow_fade = transforms.data[fellow_stride * (INSTANCE_INDEX + draw_call.multimesh_motion_vectors_current_offset) + fellow_stride - 1];
+		const uint fellow_q = uint(clamp(fellow_fade.x, 0.0, 1.0) * 255.0 + 0.5);
+		instance_index_interp = (instance_index & 0x7FFFFFu) | (fellow_q << 23) | (fellow_fade.y > 1.5 ? (1u << 31) : 0u);
+	}
 	fellow_element_init(instance_index);
 
 #ifdef MOTION_VECTORS
@@ -1830,6 +1838,13 @@ void fellow_wetness_apply(in SceneData p_scene, inout vec3 r_albedo, inout float
 
 void fragment_shader(in SceneData scene_data) {
 	uint instance_index = instance_index_interp;
+	float fellow_mm_fade = 1.0; // decision 0257: a culled MultiMesh instance's dithered fade
+	bool fellow_mm_fade_near = false;
+	if (sc_fellow_mm_instance_fade()) {
+		fellow_mm_fade = float((instance_index >> 23) & 0xFFu) / 255.0;
+		fellow_mm_fade_near = (instance_index >> 31) != 0u;
+		instance_index &= 0x7FFFFFu;
+	}
 	fellow_element_init(instance_index);
 
 #ifdef PREMUL_ALPHA_USED
@@ -2067,11 +2082,12 @@ void fragment_shader(in SceneData scene_data) {
 	// frames, is below the fade; an instance fading at its range's start keeps the others, so that it and the one
 	// handing over to it at the same distance (their fades add to one) cover each pixel once. The same pixels in the
 	// depth pre-pass and the colour passes.
-	if (sc_fellow_dither_fade()) {
-		const float fellow_fade = float(fellow_flags >> INSTANCE_FLAGS_FADE_SHIFT) / float(255.0);
+	// (Decision 0257: a culled MultiMesh's instances each by its own fade, the same way.)
+	if (sc_fellow_dither_fade() || sc_fellow_mm_instance_fade()) {
+		const float fellow_fade = sc_fellow_mm_instance_fade() ? fellow_mm_fade : float(fellow_flags >> INSTANCE_FLAGS_FADE_SHIFT) / float(255.0);
 		const vec2 fellow_p = gl_FragCoord.xy + 5.588238 * scene_data.taa_frame_count;
 		float fellow_n = fract(52.9829189 * fract(dot(fellow_p, vec2(0.06711056, 0.00583715))));
-		if (sc_fellow_dither_fade_near()) {
+		if (sc_fellow_mm_instance_fade() ? fellow_mm_fade_near : sc_fellow_dither_fade_near()) {
 			fellow_n = 1.0 - fellow_n;
 		}
 		if (fellow_n >= fellow_fade) {

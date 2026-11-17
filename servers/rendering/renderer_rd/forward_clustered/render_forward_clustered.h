@@ -329,6 +329,7 @@ private:
 		const uint32_t *fellow_mm_offsets = nullptr;
 		const uint32_t *fellow_mm_prev_offsets = nullptr;
 		const uint32_t *fellow_mm_levels = nullptr; // per slot: levels drawn (per-instance LOD: one draw per level)
+		const uint8_t *fellow_mm_fades = nullptr; // per slot: its instances carry their dithered fade (decision 0257)
 		RID fellow_mm_args;
 		RID fellow_mm_xforms;
 
@@ -986,8 +987,11 @@ private:
 			float contribution[4]; // contribution culling (decision 0121): the pass's view direction as a plane
 			float instance_range[4]; // HLOD proxies (decision 0122): camera position, squared distance drawn from (0: none)
 			float contribution_mode[4]; // x: 0 small instances culled, 1 thinned (decision 0121); y: instance range end^2 (0122); z: its fade (0172)
+			float fade[4]; // decision 0257: the range's start, its margin, its end, its margin (the dithered fades' bands)
+			uint32_t out_stride; // floats per compacted instance: stride, or 4 more for the instance's fade (decision 0257)
+			uint32_t fade_pad[3];
 		};
-		static_assert(sizeof(Job) == 240);
+		static_assert(sizeof(Job) == 272);
 		static constexpr uint32_t BUCKETS = 8;
 		static constexpr uint32_t BLOCK_UINTS = 32;
 		static constexpr uint32_t DRAW_INFO_UINTS = 10;
@@ -1000,6 +1004,7 @@ private:
 			LocalVector<uint32_t> draw_offsets; // per draw: its job's region (instances)
 			LocalVector<uint32_t> draw_prev_offsets; // per draw: the region of its previous-frame data (= draw_offsets without)
 			LocalVector<uint32_t> draw_levels; // per draw: 1, or the levels of a per-instance LOD job
+			LocalVector<uint8_t> draw_fades; // per draw: its instances carry their dithered fade (decision 0257)
 			uint64_t compacted_floats = 0;
 			uint64_t potential_indices = 0; // per draw: instances x indices (or vertices), summed (what culling could save)
 			RID jobs_buffer, blocks_buffer, planes_buffer, block_data, job_visible, compacted, draw_info_buffer, args, counters;

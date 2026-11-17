@@ -156,6 +156,7 @@ FOLIAGE_SETTER(set_seed, int, seed, p_value)
 FOLIAGE_SETTER(set_fade_distance, float, fade_distance, MAX(0.0f, p_value))
 FOLIAGE_SETTER(set_impostor, const Ref<Mesh> &, impostor, p_value)
 FOLIAGE_SETTER(set_impostor_distance, float, impostor_distance, MAX(0.0f, p_value))
+FOLIAGE_SETTER(set_impostor_fade, float, impostor_fade, MAX(0.0f, p_value))
 
 #undef FOLIAGE_SETTER
 
@@ -200,6 +201,8 @@ void FellowTerrainFoliage::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_impostor"), &FellowTerrainFoliage::get_impostor);
 	ClassDB::bind_method(D_METHOD("set_impostor_distance", "metres"), &FellowTerrainFoliage::set_impostor_distance);
 	ClassDB::bind_method(D_METHOD("get_impostor_distance"), &FellowTerrainFoliage::get_impostor_distance);
+	ClassDB::bind_method(D_METHOD("set_impostor_fade", "metres"), &FellowTerrainFoliage::set_impostor_fade);
+	ClassDB::bind_method(D_METHOD("get_impostor_fade"), &FellowTerrainFoliage::get_impostor_fade);
 
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "mesh", PROPERTY_HINT_RESOURCE_TYPE, "Mesh"), "set_mesh", "get_mesh");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "layer", PROPERTY_HINT_RANGE, "0,8,1"), "set_layer", "get_layer");
@@ -222,6 +225,7 @@ void FellowTerrainFoliage::_bind_methods() {
 	ADD_GROUP("Impostor", "impostor");
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "impostor", PROPERTY_HINT_RESOURCE_TYPE, "Mesh"), "set_impostor", "get_impostor");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "impostor_distance", PROPERTY_HINT_RANGE, "0,2000,0.1,or_greater,suffix:m"), "set_impostor_distance", "get_impostor_distance");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "impostor_fade", PROPERTY_HINT_RANGE, "0,200,0.1,or_greater,suffix:m"), "set_impostor_fade", "get_impostor_fade");
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -1775,6 +1779,8 @@ void FellowTerrain3D::_update_foliage_kinds() {
 			if (f->get_impostor().is_valid() && f->get_impostor_distance() > 0.0f && f->get_impostor_distance() < k.range && Fellow::multimesh_culling()) {
 				k.impostor = f->get_impostor()->get_rid();
 				k.impostor_distance = f->get_impostor_distance();
+				// (Decision 0257: the band neither reaching the ground nor the range's end.)
+				k.impostor_fade = MIN(f->get_impostor_fade(), MIN(k.impostor_distance, k.range - k.impostor_distance) * 0.5f);
 			}
 			if (is_inside_tree()) {
 				RenderingServer *rs = RenderingServer::get_singleton();
@@ -1889,6 +1895,12 @@ void FellowTerrain3D::_make_foliage_cell_visible(FoliageCell *p_cell) {
 		rs->fellow_instance_set_instance_range(p_cell->impostor_instance, k.impostor_distance, k.range, true);
 		if (k.fade > 0.0f) {
 			rs->fellow_instance_set_instance_range_fade(p_cell->impostor_instance, k.fade);
+		}
+		if (k.impostor_fade > 0.0f) {
+			// Decision 0257: the meshes and the impostors dithered over the band about the distance, each instance by its
+			// own distance, the impostors keeping the pixels the meshes leave.
+			rs->fellow_instance_set_instance_range_margins(p_cell->instance, 0.0f, k.impostor_fade);
+			rs->fellow_instance_set_instance_range_margins(p_cell->impostor_instance, k.impostor_fade, 0.0f);
 		}
 		// Their shadows per cascade, as an HLOD's: the meshes in the cascades starting before the distance, the
 		// impostors in those beyond it.
