@@ -15,6 +15,7 @@ errors) or 2 (it could not run).
 
 The engine binary: --godot, or $FELLOW_GODOT, or the newest bin/godot.* of this repository (an editor build is needed
 for `import`; the others run with an export template too). On Linux without a display, capture and run use xvfb-run.
+More engine arguments: $FELLOW_GODOT_ARGS (e.g. "--gpu-index 1", another GPU of the machine).
 
   python tools/fellow_agent/fellow_agent.py capture --project my_game --scene res://levels/forest.tscn --out /tmp/shot
 """
@@ -114,6 +115,10 @@ def engine_command(a, script_args, rendering):
         engine_args += ["--rendering-method", a.renderer]
     if getattr(a, "driver", None):
         engine_args += ["--rendering-driver", a.driver]
+    # Milestone 136: more engine arguments from the environment (FELLOW_GODOT_ARGS, e.g. "--gpu-index 1": another GPU of
+    # the machine), also for the tools that run the agent (the image regression suite).
+    if os.environ.get("FELLOW_GODOT_ARGS"):
+        engine_args += os.environ["FELLOW_GODOT_ARGS"].split()
     engine_args += ["-s", GD_SCRIPT, "--", f"--out={out_dir}", f"--seed={getattr(a, 'seed', 1)}"] + script_args
     info, err, out = run_engine(godot, engine_args, a.timeout, rendering, getattr(a, "size", "1280x720"))
     if err:
