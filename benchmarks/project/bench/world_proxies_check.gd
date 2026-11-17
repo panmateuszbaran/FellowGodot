@@ -18,6 +18,10 @@ extends SceneTree
 ## Milestone 131 (decision 0255): the terrain's heights reach +-(--relief) metres; its regions' proxies and their groups'
 ## are simplified as far as --terrain_error pixels allow (0: to the ratio, as before), and C reports how far their
 ## surfaces are from the terrain's (sampled every 2 m under each proxy).
+## Milestone 137 (decision 0262): --group_levels=<n> (1) bakes n levels of groups; with --far=1, (F) the world from
+## outside it (C's proxies, every cell unloaded): the coarser levels' proxies shown and hidden (the groups' alone), each
+## against the world all loaded from there (A's), the triangles and draws; and the buildings alone in one white material
+## (the shapes' shading alone), each against A's: *_white, compared on the world's pixels (not the sky's).
 ## One JSON line: WORLD_PROXIES_CHECK {...}.
 
 const CELL := 64.0
@@ -32,6 +36,7 @@ var mats: Array[StandardMaterial3D] = []
 var streamer: Node3D
 var ground_streamer: Node3D
 var terrain_ref # the whole terrain, kept (out of the tree) for its heights
+var white := StandardMaterial3D.new() # milestone 137: the buildings' shading alone
 
 
 func _arg(name: String, default: String) -> String:
@@ -325,6 +330,45 @@ func _diff(a: Image, b: Image) -> Dictionary:
 	return {"share_over_16": snappedf(big / n, 0.0001), "mean": snappedf(total / n, 0.00001)}
 
 
+# Milestone 137: the share of the world's pixels (those of either picture not the sky's colour) more than 16 levels off.
+func _diff_world(a: Image, b: Image) -> Dictionary:
+	var sky := a.get_pixel(0, 0)
+	var big := 0
+	var total := 0.0
+	var n := 0
+	for y in a.get_height():
+		for x in a.get_width():
+			var ca := a.get_pixel(x, y)
+			var cb := b.get_pixel(x, y)
+			var da := maxf(absf(ca.r - sky.r), maxf(absf(ca.g - sky.g), absf(ca.b - sky.b)))
+			var db := maxf(absf(cb.r - sky.r), maxf(absf(cb.g - sky.g), absf(cb.b - sky.b)))
+			if da <= 8.0 / 255.0 and db <= 8.0 / 255.0:
+				continue
+			n += 1
+			var d := maxf(absf(ca.r - cb.r), maxf(absf(ca.g - cb.g), absf(ca.b - cb.b)))
+			total += d
+			if d > 16.0 / 255.0:
+				big += 1
+	return {"world_pixels": n, "share_over_16": snappedf(big / maxf(n, 1.0), 0.0001), "mean": snappedf(total / maxf(n, 1.0), 0.00001)}
+
+
+# Milestone 137: the buildings alone (the ground hidden) in one white material, shot; then as they were.
+func _white_shot(name: String) -> Image:
+	ground_streamer.visible = false
+	var nodes := streamer.find_children("*", "GeometryInstance3D", true, false)
+	var before := []
+	for g in nodes:
+		before.append(g.material_override)
+		g.material_override = white
+	await _settle(4)
+	var img := await _shot(name)
+	for i in nodes.size():
+		nodes[i].material_override = before[i]
+	ground_streamer.visible = true
+	await _settle(2)
+	return img
+
+
 func _run() -> void:
 	if not _materials():
 		print("WORLD_PROXIES_CHECK " + JSON.stringify({"error": "Streaming Lab's textures missing (benchmarks/scripts/make_streaming_textures.py)"}))
@@ -394,6 +438,16 @@ func _run() -> void:
 	var a := await _shot("a_all_loaded")
 	result["a_all_loaded"] = _stats()
 	result["a_all_loaded"]["timing"] = await _timing()
+	var a_far: Image = null
+	var a_far_white: Image = null
+	if _arg("far", "0") != "0":
+		_far_view(w)
+		await _settle(frames)
+		a_far = await _shot("a_far")
+		result["a_far"] = _stats()
+		a_far_white = await _white_shot("a_far_white")
+		cam.transform = Transform3D(Basis(), Vector3(20, 45, 20)).looking_at(Vector3(w * 0.75, 0, w * 0.75))
+		await _settle(2)
 
 	# B. Streamed, nothing beyond the distance (the cells loaded from afar: none kept by the unload margin).
 	var view := cam.transform
@@ -409,8 +463,8 @@ func _run() -> void:
 
 	# C. Proxies baked for the cells and the regions.
 	t0 = Time.get_ticks_msec()
-	result["bake_regions"] = ground_streamer.bake_proxies(out_dir.path_join("proxies_ground"), {"terrain_quads": 16, "group_cells": int(_arg("groups", "4")), "terrain_error": float(_arg("terrain_error", "2"))})
-	result["bake_cells"] = streamer.bake_proxies(out_dir.path_join("proxies"), {"texel_size": float(_arg("texel", "0.5")), "ratio": float(_arg("ratio", "0.05")), "group_cells": int(_arg("groups", "4"))})
+	result["bake_regions"] = ground_streamer.bake_proxies(out_dir.path_join("proxies_ground"), {"terrain_quads": 16, "group_cells": int(_arg("groups", "4")), "group_levels": int(_arg("group_levels", "1")), "terrain_error": float(_arg("terrain_error", "2"))})
+	result["bake_cells"] = streamer.bake_proxies(out_dir.path_join("proxies"), {"texel_size": float(_arg("texel", "0.5")), "ratio": float(_arg("ratio", "0.05")), "group_cells": int(_arg("groups", "4")), "group_levels": int(_arg("group_levels", "1"))})
 	result["bake_ms"] = Time.get_ticks_msec() - t0
 	await _wait_settled()
 	result["c_proxies"] = _stats()
@@ -418,11 +472,40 @@ func _run() -> void:
 	result["c_proxies"]["timing"] = await _timing()
 	result["c_proxies"]["terrain_proxies_error"] = _terrain_errors()
 
+	# F. The world from outside it: the coarser levels' proxies, and the groups' alone (those hidden).
+	if a_far:
+		var back := cam.transform
+		_far_view(w)
+		await _wait_settled()
+		result["f_far_levels"] = _stats()
+		var shot_levels := await _shot("f_far_levels")
+		result["f_far_levels"]["vs_a"] = _diff(a_far, shot_levels)
+		result["f_far_levels"]["vs_a_world"] = _diff_world(a_far, shot_levels)
+		result["f_far_levels"]["white_vs_a"] = _diff_world(a_far_white, await _white_shot("f_far_levels_white"))
+		var hidden := []
+		for st in [streamer, ground_streamer]:
+			for g in st.get_children():
+				if g.name.begins_with("FellowGroupProxy_L") and g.visible:
+					g.visible = false
+					hidden.append(g)
+		await _settle(frames)
+		result["f_far_groups_only"] = _stats()
+		var shot_groups_only := await _shot("f_far_groups_only")
+		result["f_far_groups_only"]["vs_a"] = _diff(a_far, shot_groups_only)
+		result["f_far_groups_only"]["vs_a_world"] = _diff_world(a_far, shot_groups_only)
+		result["f_far_groups_only"]["white_vs_a"] = _diff_world(a_far_white, await _white_shot("f_far_groups_only_white"))
+		result["f_far_groups_only"]["levels_hidden"] = hidden.size()
+		for g in hidden:
+			g.visible = true
+		cam.transform = back
+		cam.far = 1500.0
+		await _wait_settled()
+
 	# D. The large meshes streamed too: the cells' scenes again with stand-ins, the full meshes near. (The cells
 	# unloaded first: the camera away from the world.)
 	cam.position = Vector3(-100000, 0, -100000)
 	await _settle(90)
-	result["bake_stream"] = streamer.bake_proxies(out_dir.path_join("proxies_stream"), {"stream_meshes": true, "texel_size": float(_arg("texel", "0.5")), "ratio": float(_arg("ratio", "0.05")), "group_cells": int(_arg("groups", "4"))})
+	result["bake_stream"] = streamer.bake_proxies(out_dir.path_join("proxies_stream"), {"stream_meshes": true, "texel_size": float(_arg("texel", "0.5")), "ratio": float(_arg("ratio", "0.05")), "group_cells": int(_arg("groups", "4")), "group_levels": int(_arg("group_levels", "1"))})
 	streamer.mesh_distance = float(_arg("mesh_distance", "70"))
 	cam.transform = view
 	await _wait_settled()
@@ -441,6 +524,12 @@ func _run() -> void:
 	print("WORLD_PROXIES_CHECK " + JSON.stringify(result))
 	terrain_ref.free()
 	quit()
+
+
+# Milestone 137: from outside the world's corner, high, looking at its centre (far enough for the coarser levels).
+func _far_view(w: float) -> void:
+	cam.far = maxf(1500.0, w * 3.0)
+	cam.transform = Transform3D(Basis(), Vector3(-0.6 * w, 0.2 * w, -0.6 * w)).looking_at(Vector3(w * 0.5, 0, w * 0.5))
 
 
 func _flight(w: float) -> Dictionary:

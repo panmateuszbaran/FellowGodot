@@ -480,6 +480,13 @@ streamer drawn beyond `group_distance` (0: where none of its cells can be loaded
 parent, and hidden while any of its cells is loaded. The result has `groups`, `group_triangles`,
 `group_texture_bytes`; the editor's dialog has the group size. World Lab: 347 → 107 draws. Milestone 132 (decision
 0256): option `group_fade` (0 m): the cells' proxies fade over that distance on each side of their group's switch.
+Milestone 137 (decision 0262), **levels of groups**: option `group_levels` 1 (at most 4): above 1, the groups' proxies
+are grouped `group_cells` × `group_cells` again, level by level, each set of two or more with one coarser proxy baked
+from the proxies below it (`FellowGroupProxy_L<n>_<x>_<z>`, `group_l<n>_<x>_<z>_proxy.res`), drawn from where all of
+them would be drawn, their visibility parent (`group_fade` fading them into it), hidden while any of them is; its
+objects simplified to `terrain_error` pixels there at least (2 when that is 0), its texture up to twice as wide a level
+(at most 4 096). The result's `group_levels` lists each level's `groups`, `triangles`, `texture_bytes`; the editor's
+dialog has the levels. Frontier Lab `--frontier_group_levels=<n>`.
 
 Milestone 134 (decision 0258), **cells crossing over**: `FellowWorldStreamer3D.crossfade` (seconds, 0: a switch): a
 cell's content enters keeping none of its pixels and its proxy stays; over the time the content's share grows and the

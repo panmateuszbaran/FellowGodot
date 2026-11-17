@@ -773,6 +773,7 @@ void FellowEditorPlugin::_proxies_confirmed() {
 	options["stream_meshes"] = proxies_stream_meshes->is_pressed();
 	options["texel_size"] = proxies_texel->get_value();
 	options["group_cells"] = int(proxies_group->get_value());
+	options["group_levels"] = int(proxies_group_levels->get_value());
 	options["terrain_error"] = proxies_terrain_error->get_value();
 	const Dictionary info = streamer->call("bake_proxies", proxies_directory->get_text(), options);
 	EditorFileSystem::get_singleton()->scan_changes();
@@ -780,6 +781,11 @@ void FellowEditorPlugin::_proxies_confirmed() {
 	String text = vformat(TTR("%d proxies baked (%d triangles for %d); they are in %s."), int(info.get("proxies", 0)), int(info.get("proxy_triangles", 0)), int(info.get("source_triangles", 0)), proxies_directory->get_text());
 	if (int(info.get("groups", 0)) > 0) {
 		text += "\n" + vformat(TTR("%d groups of cells with a proxy of their own for afar (%d triangles)."), int(info.get("groups", 0)), int(info.get("group_triangles", 0)));
+	}
+	const Array levels = info.get("group_levels", Array());
+	for (int i = 0; i < levels.size(); i++) {
+		const Dictionary level = levels[i];
+		text += "\n" + vformat(TTR("Level %d: %d groups of the groups below, with a proxy for farther away (%d triangles)."), int(level.get("level", 0)), int(level.get("groups", 0)), int(level.get("triangles", 0)));
 	}
 	if (int(info.get("terrain_triangles", 0)) > 0) {
 		text += "\n" + vformat(TTR("Terrain: %d triangles in the cells' proxies, %d in the groups'."), int(info.get("terrain_triangles", 0)), int(info.get("group_terrain_triangles", 0)));
@@ -1341,6 +1347,11 @@ FellowEditorPlugin::FellowEditorPlugin() {
 	proxies_group->set_max(16);
 	proxies_group->set_value(4);
 	pvb->add_margin_child(TTR("Cells a side in a group with one proxy for afar (0: none):"), proxies_group);
+	proxies_group_levels = memnew(SpinBox);
+	proxies_group_levels->set_min(1);
+	proxies_group_levels->set_max(4);
+	proxies_group_levels->set_value(1);
+	pvb->add_margin_child(TTR("Levels of groups (each grouping the one below again):"), proxies_group_levels);
 	proxies_terrain_error = memnew(SpinBox);
 	proxies_terrain_error->set_min(0.0);
 	proxies_terrain_error->set_max(16.0);

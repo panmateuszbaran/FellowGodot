@@ -1,7 +1,8 @@
 extends SceneTree
 ## FellowEngine's editor check (milestone 50), after the editor split split.tscn into cells and saved it: the level
 ## loaded as a game would, its cells streamed in, every box back where split.tscn had it; the proxies baked for them
-## (milestone 66) shown before, hidden after, and so their groups' proxies (milestone 128). Prints STREAM_BACK {json}.
+## (milestone 66) shown before, hidden after, and so their groups' proxies (milestone 128) and the coarser level's over
+## them (milestone 137). Prints STREAM_BACK {json}.
 ##   godot --headless --path <copy> -s res://stream_back.gd
 
 

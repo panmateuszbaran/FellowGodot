@@ -18,7 +18,8 @@ copies `project/` to `<out>/project`, opens it in the editor, and lets its plugi
   level (no box in it);
 * milestone 66: Project > Tools > Bake Streaming Proxies on the cells the split made: a proxy for each, owned by the
   level and saved with it (`stream_back.gd` then checks them shown while their cells are unloaded, hidden once loaded);
-  milestone 127: the boxes' material has a texture, and each proxy's file has its baked texture;
+  milestone 127: the boxes' material has a texture, and each proxy's file has its baked texture; milestone 137: two
+  levels of groups (the dialog's levels), the coarser one the groups' proxies' visibility parent, reported;
 * milestones 129-130: Project > Tools > Bake HLOD on a FellowHLOD3D over a MultiMesh of a mesh in a file and six
   meshes of it in one cell: the impostor and the merged proxy baked into files beside the scene, in the node's
   `impostors` and `merged_proxies` and saved with the scene;

@@ -637,6 +637,10 @@ func _check_proxies() -> void:
 	for e in dialog.find_children("*", "LineEdit", true, false):
 		if e.text.begins_with("res://"):
 			e.text = "res://split_proxies"
+	# Milestone 137: two levels of groups (the field's range 1-4).
+	for b in dialog.find_children("*", "SpinBox", true, false):
+		if b.min_value == 1 and b.max_value == 4:
+			b.value = 2
 	var t0 := Time.get_ticks_usec()
 	dialog.confirmed.emit()
 	dialog.hide()
@@ -660,9 +664,16 @@ func _check_proxies() -> void:
 				owned += 1 if n.owner == root else 0
 	# Milestone 128: the cells in groups, each group with a proxy of its own under the streamer, owned by the level.
 	var groups := 0
+	var levels := 0 # milestone 137: a coarser level's proxy over the groups', their visibility parent
 	for g in streamer.get_children():
 		if g is MeshInstance3D and g.has_meta("_fellow_group_proxy") and g.owner == root:
 			groups += 1
+			if g.has_meta("_fellow_group_children"):
+				var under := 0
+				for path in g.get_meta("_fellow_group_children"):
+					var child := g.get_node_or_null(path) as GeometryInstance3D
+					under += 1 if child != null and child.get_node_or_null(child.visibility_parent) == g else 0
+				levels += 1 if under >= 2 else 0
 	var files := DirAccess.get_files_at("res://split_proxies")
 	EditorInterface.save_scene()
 	await _frames(3)
@@ -675,8 +686,9 @@ func _check_proxies() -> void:
 			if proxy is ArrayMesh and proxy.surface_get_material(0) is StandardMaterial3D and proxy.surface_get_material(0).albedo_texture != null:
 				textured += 1
 	var result := {"cells": cells, "proxies": proxies, "owned": owned, "files": files.size(), "report": report,
-		"bake_ms": bake_ms, "saved_meshes": saved.count("type=\"MeshInstance3D\""), "textured": textured, "groups": groups}
-	if cells == 0 or proxies != cells or owned != cells or groups == 0 or files.size() != cells + groups + 1 or report == "" or result["saved_meshes"] != cells + groups or textured != cells:
+		"bake_ms": bake_ms, "saved_meshes": saved.count("type=\"MeshInstance3D\""), "textured": textured, "groups": groups,
+		"levels": levels}
+	if cells == 0 or proxies != cells or owned != cells or groups == 0 or levels == 0 or not report.contains("Level 2") or files.size() != cells + groups + 1 or report == "" or result["saved_meshes"] != cells + groups or textured != cells:
 		_fail("proxies: %s" % [result])
 	out["proxies"] = result
 

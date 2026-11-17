@@ -138,6 +138,7 @@ class FellowEditorPlugin : public EditorPlugin {
 	CheckBox *proxies_stream_meshes = nullptr;
 	SpinBox *proxies_texel = nullptr;
 	SpinBox *proxies_group = nullptr;
+	SpinBox *proxies_group_levels = nullptr; // decision 0262
 	SpinBox *proxies_terrain_error = nullptr;
 	ObjectID proxies_streamer;
 	Button *animate_button = nullptr; // milestone 52: the 3D editor's toolbar toggle

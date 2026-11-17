@@ -259,6 +259,7 @@ struct Sampler {
 	bool vertex_tint = false; // the albedo times the mesh's vertex colours
 	bool srgb_vertex = false;
 	bool own_colors = false; // the arrays' colours as they are (a terrain's proxy arrays)
+	bool atlas = false; // a proxy's baked texture: its finest level only (its charts' texels mix in the coarser ones)
 };
 
 struct Merged {
@@ -270,9 +271,12 @@ struct Merged {
 	LocalVector<Vector2> uvs;
 	LocalVector<Color> tints;
 	LocalVector<int> triangle_sampler;
+	LocalVector<uint8_t> triangle_terrain; // a terrain's triangle (its outer edges locked, simplified by its error)
 	LocalVector<Sampler> samplers;
 	HashMap<ObjectID, int> material_sampler;
 	int terrain_sampler = -1;
+	bool any_terrain = false;
+	bool prefer_facing = false; // decision 0262: a texel takes the first surface facing its own way along its normal
 	bool want_textures = false; // read the textures' levels
 	bool textured = false; // a sampler has a texture
 };
@@ -309,6 +313,7 @@ int _sampler(Merged &r_merged, const Ref<Material> &p_material) {
 			s.alpha_cut = 0.5f;
 		}
 		s.vertex_tint = bm->get_flag(BaseMaterial3D::FLAG_ALBEDO_FROM_VERTEX_COLOR);
+		s.atlas = bm->has_meta(ATLAS_META); // (decision 0262)
 		s.srgb_vertex = bm->get_flag(BaseMaterial3D::FLAG_SRGB_VERTEX_COLOR);
 	}
 	const int index = r_merged.samplers.size();
@@ -317,8 +322,8 @@ int _sampler(Merged &r_merged, const Ref<Material> &p_material) {
 	return index;
 }
 
-// A surface's triangles into p_merged, under p_xform, drawn by a sampler.
-void _append(Merged &r_merged, const Array &p_arrays, const Transform3D &p_xform, int p_sampler) {
+// A surface's triangles into p_merged, under p_xform, drawn by a sampler (p_terrain: a terrain's).
+void _append(Merged &r_merged, const Array &p_arrays, const Transform3D &p_xform, int p_sampler, bool p_terrain = false) {
 	if (p_arrays.size() != Mesh::ARRAY_MAX || p_arrays[Mesh::ARRAY_BONES].get_type() != Variant::NIL) {
 		return;
 	}
@@ -358,10 +363,12 @@ void _append(Merged &r_merged, const Array &p_arrays, const Transform3D &p_xform
 		r_merged.indices.push_back(base + (mirrored ? c : b));
 		r_merged.indices.push_back(base + (mirrored ? b : c));
 		r_merged.triangle_sampler.push_back(p_sampler);
+		r_merged.triangle_terrain.push_back(p_terrain ? 1 : 0);
+		r_merged.any_terrain = r_merged.any_terrain || p_terrain;
 	}
 }
 
-void _append_mesh(Merged &r_merged, const Ref<Mesh> &p_mesh, const Transform3D &p_xform, const Ref<Material> &p_override, const MeshInstance3D *p_mi) {
+void _append_mesh(Merged &r_merged, const Ref<Mesh> &p_mesh, const Transform3D &p_xform, const Ref<Material> &p_override, const MeshInstance3D *p_mi, bool p_terrain = false) {
 	for (int s = 0; s < p_mesh->get_surface_count(); s++) {
 		if (p_mesh->surface_get_primitive_type(s) != Mesh::PRIMITIVE_TRIANGLES) {
 			continue;
@@ -373,7 +380,7 @@ void _append_mesh(Merged &r_merged, const Ref<Mesh> &p_mesh, const Transform3D &
 		if (m.is_null()) {
 			m = p_mesh->surface_get_material(s);
 		}
-		_append(r_merged, p_mesh->surface_get_arrays(s), p_xform, _sampler(r_merged, m));
+		_append(r_merged, p_mesh->surface_get_arrays(s), p_xform, _sampler(r_merged, m), p_terrain);
 	}
 }
 
@@ -435,7 +442,7 @@ T _gather(const T &p_src, const LocalVector<int> &p_used, int p_per_vertex = 1) 
 // triangles are simplified apart, as far as that error allows (its outer edges locked, a count target would leave a
 // fan of thin triangles from them over a valley: decision 0255), the rest to p_ratio or p_triangles;
 // r_terrain_triangles the terrain's. False when the simplifier is missing or nothing is left.
-bool _simplify_welded(const Merged &p_merged, float p_ratio, int p_triangles, float p_terrain_error, PackedVector3Array &r_vertices, PackedVector3Array &r_normals, PackedColorArray &r_colors, PackedInt32Array &r_indices, float &r_error, int &r_terrain_triangles) {
+bool _simplify_welded(const Merged &p_merged, float p_ratio, int p_triangles, float p_terrain_error, float p_object_error, PackedVector3Array &r_vertices, PackedVector3Array &r_normals, PackedColorArray &r_colors, PackedInt32Array &r_indices, float &r_error, int &r_terrain_triangles) {
 	if (!SurfaceTool::simplify_with_attrib_func || !SurfaceTool::generate_remap_func || !SurfaceTool::remap_index_func || !SurfaceTool::simplify_scale_func) {
 		return false;
 	}
@@ -471,12 +478,12 @@ bool _simplify_welded(const Merged &p_merged, float p_ratio, int p_triangles, fl
 	// regions' proxies, and a group's neighbours, meet them.
 	LocalVector<uint8_t> lock;
 	bool any_locked = false;
-	if (p_merged.terrain_sampler >= 0) {
+	if (p_merged.any_terrain) {
 		lock.resize(unique);
 		memset(lock.ptr(), 0, unique);
 		HashMap<uint64_t, int> edges;
 		for (int t = 0; t < index_count / 3; t++) {
-			if (p_merged.triangle_sampler[t] != p_merged.terrain_sampler) {
+			if (!p_merged.triangle_terrain[t]) {
 				continue;
 			}
 			for (int k = 0; k < 3; k++) {
@@ -502,6 +509,9 @@ bool _simplify_welded(const Merged &p_merged, float p_ratio, int p_triangles, fl
 	LocalVector<unsigned int> simplified;
 	simplified.resize(index_count);
 	const float extent = SurfaceTool::simplify_scale_func(welded.ptr(), unique, sizeof(float) * 3); // (errors are relative to it)
+	// Decision 0262: with p_object_error (metres), the objects' simplification also stops where it would move their
+	// surfaces farther (their count a floor's: no fewer triangles than that error needs).
+	const float object_error = p_object_error > 0.0f && extent > 0.0f ? p_object_error / extent : 1.0f;
 	size_t count = 0;
 	r_terrain_triangles = 0;
 	if (any_locked && p_terrain_error > 0.0f) {
@@ -509,7 +519,7 @@ bool _simplify_welded(const Merged &p_merged, float p_ratio, int p_triangles, fl
 		LocalVector<unsigned int> terrain;
 		LocalVector<unsigned int> rest;
 		for (int t = 0; t < index_count / 3; t++) {
-			LocalVector<unsigned int> &to = p_merged.triangle_sampler[t] == p_merged.terrain_sampler ? terrain : rest;
+			LocalVector<unsigned int> &to = p_merged.triangle_terrain[t] ? terrain : rest;
 			for (int k = 0; k < 3; k++) {
 				to.push_back(indices[t * 3 + k]);
 			}
@@ -521,18 +531,34 @@ bool _simplify_welded(const Merged &p_merged, float p_ratio, int p_triangles, fl
 		if (!rest.is_empty()) {
 			const size_t target = MAX(p_triangles > 0 ? size_t(p_triangles) * 3 : size_t(rest.size() * p_ratio) / 3 * 3, size_t(36));
 			float rest_error = 0.0f;
-			count += SurfaceTool::simplify_with_attrib_func(simplified.ptr() + count, rest.ptr(), rest.size(), welded.ptr(), unique, sizeof(float) * 3, nullptr, 0, nullptr, 0, nullptr, MIN(target, size_t(rest.size())), 1.0f, 0, &rest_error);
+			count += SurfaceTool::simplify_with_attrib_func(simplified.ptr() + count, rest.ptr(), rest.size(), welded.ptr(), unique, sizeof(float) * 3, nullptr, 0, nullptr, 0, nullptr, MIN(target, size_t(rest.size())), object_error, 0, &rest_error);
 			r_error = MAX(r_error, rest_error * extent);
 		}
 	} else {
 		const size_t target = MAX(p_triangles > 0 ? size_t(p_triangles) * 3 : size_t(index_count * p_ratio) / 3 * 3, size_t(36));
 		float error = 0.0f;
-		count = SurfaceTool::simplify_with_attrib_func(simplified.ptr(), indices.ptr(), index_count, welded.ptr(), unique, sizeof(float) * 3, nullptr, 0, nullptr, 0, any_locked ? lock.ptr() : nullptr, MIN(target, size_t(index_count)), 1.0f, 0, &error);
+		count = SurfaceTool::simplify_with_attrib_func(simplified.ptr(), indices.ptr(), index_count, welded.ptr(), unique, sizeof(float) * 3, nullptr, 0, nullptr, 0, any_locked ? lock.ptr() : nullptr, MIN(target, size_t(index_count)), object_error, 0, &error);
 		r_error = error * extent;
 	}
 	if (count == 0) {
 		return false;
 	}
+	// Which way the source's triangles wind against their own corners' normals (Godot's front faces wind clockwise,
+	// mirrored transforms are undone by _append()): the simplifier keeps each triangle's winding, so its face takes
+	// the source's majority (decision 0262: the welded vertices' normals below are one of their faces' — at a box's
+	// corner a wall's triangle may find the roof's or the other wall's, and took either side).
+	int64_t wound_along = 0;
+	int64_t wound_against = 0;
+	for (int t = 0; t < index_count / 3; t++) {
+		const int ia = p_merged.indices[t * 3];
+		const int ib = p_merged.indices[t * 3 + 1];
+		const int ic = p_merged.indices[t * 3 + 2];
+		const Vector3 f = (p_merged.vertices[ib] - p_merged.vertices[ia]).cross(p_merged.vertices[ic] - p_merged.vertices[ia]);
+		const float d = f.dot(p_merged.normals[ia] + p_merged.normals[ib] + p_merged.normals[ic]);
+		wound_along += d > 0.0f ? 1 : 0;
+		wound_against += d < 0.0f ? 1 : 0;
+	}
+	const float winding = wound_against > wound_along ? -1.0f : 1.0f;
 	// The faces' normals (area-weighted), and the faces at each vertex.
 	const int tris = int(count / 3);
 	LocalVector<Vector3> face;
@@ -546,10 +572,11 @@ bool _simplify_welded(const Merged &p_merged, float p_ratio, int p_triangles, fl
 		const Vector3 a(welded[simplified[t * 3] * 3], welded[simplified[t * 3] * 3 + 1], welded[simplified[t * 3] * 3 + 2]);
 		const Vector3 b(welded[simplified[t * 3 + 1] * 3], welded[simplified[t * 3 + 1] * 3 + 1], welded[simplified[t * 3 + 1] * 3 + 2]);
 		const Vector3 c(welded[simplified[t * 3 + 2] * 3], welded[simplified[t * 3 + 2] * 3 + 1], welded[simplified[t * 3 + 2] * 3 + 2]);
-		// Facing as the source's normals at its corners (whichever way its triangles wind).
-		face[t] = (b - a).cross(c - a);
+		// Facing as the source's triangles wind; turned only where its corners' normals clearly face the other way (a
+		// source winding against the rest).
+		face[t] = (b - a).cross(c - a) * winding;
 		const Vector3 source_normal = p_merged.normals[representative[simplified[t * 3]]] + p_merged.normals[representative[simplified[t * 3 + 1]]] + p_merged.normals[representative[simplified[t * 3 + 2]]];
-		if (face[t].dot(source_normal) < 0.0f) {
+		if (face[t].dot(source_normal) < -0.5f * face[t].length() * source_normal.length()) {
 			face[t] = -face[t];
 		}
 		for (int k = 0; k < 3; k++) {
@@ -641,6 +668,7 @@ struct ShadeContext {
 	const int32_t *indices = nullptr;
 	const BakeTexel *texels = nullptr;
 	Color *out = nullptr;
+	uint8_t *missed = nullptr; // decision 0262: a texel no surface was found for (filled from its neighbours instead)
 	int width = 0;
 	float texel_size = 0.0f;
 	float reach = 0.0f;
@@ -681,13 +709,23 @@ bool _source_color(const Merged &p_merged, int p_face, const Vector3 &p_point, f
 	const Vector2 ua = p_merged.uvs[ia] * s.uv_scale;
 	const Vector2 ub = p_merged.uvs[ib] * s.uv_scale;
 	const Vector2 uc = p_merged.uvs[ic] * s.uv_scale;
-	const Vector2 uv = ua * ba + ub * bb + uc * bc + s.uv_offset;
+	Vector2 uv = ua * ba + ub * bb + uc * bc + s.uv_offset;
 	// The level whose texels are the proxy's texel: the texture's texels per metre on this triangle.
 	const float uv_area = Math::abs((ub - ua).cross(uc - ua));
 	const float area = e0.cross(e1).length();
 	const TextureLevels::Level &finest = s.texture->levels[0];
+	if (s.atlas) {
+		// Decision 0262: a baked proxy's texture read a texel and a half inside its triangle (its charts' edges are
+		// the compressed blocks shared with the padding around them).
+		const Vector2 centre = (ua + ub + uc) / 3.0f + s.uv_offset;
+		const float inset = 1.5f / float(MAX(finest.width, finest.height));
+		const float dist = uv.distance_to(centre);
+		if (dist > 0.0f) {
+			uv += (centre - uv) * MIN(1.0f, inset / dist);
+		}
+	}
 	const float footprint = area > 0.0f ? p_texel_size * Math::sqrt(uv_area / area * finest.width * finest.height) : 1.0f;
-	const Color t = _sample(*s.texture, uv, Math::log2(MAX(footprint, 1.0f)));
+	const Color t = _sample(*s.texture, uv, s.atlas ? 0.0f : Math::log2(MAX(footprint, 1.0f)));
 	if (s.alpha_cut >= 0.0f && t.a * tint.a < s.alpha_cut) {
 		return false;
 	}
@@ -716,12 +754,27 @@ Ref<TriangleMesh> _source_mesh(const Merged &p_merged) {
 bool _surface_color(const Merged &p_merged, const TriangleMesh &p_source, const Vector3 &p_point, const Vector3 &p_normal, float p_reach, float p_texel_size, Color &r_color) {
 	Vector3 from = p_point + p_normal * p_reach;
 	const Vector3 to = p_point - p_normal * p_reach;
+	// Decision 0262 (a coarser level's bake, its reach long): past surfaces turned away from the texel's (a roof, the
+	// next building's wall, a crate in front of it, within the reach of a wall's edge), back to the first if none faces it.
+	int32_t first_face = -1;
+	Vector3 first_hit;
 	for (int step = 0; step < 4; step++) {
 		Vector3 hit;
 		Vector3 hit_normal;
 		int32_t face = -1;
 		if (!p_source.intersect_segment(from, to, hit, hit_normal, nullptr, &face) || face < 0) {
+			if (first_face >= 0) {
+				return _source_color(p_merged, first_face, first_hit, p_texel_size, r_color);
+			}
 			return false;
+		}
+		if (p_merged.prefer_facing && p_texel_size > 0.0f && hit_normal.dot(p_normal) < 0.5f) {
+			if (first_face < 0) {
+				first_face = face;
+				first_hit = hit;
+			}
+			from = hit - p_normal * 0.001f;
+			continue;
 		}
 		if (p_texel_size <= 0.0f) {
 			const int32_t *idx = p_merged.indices.ptr();
@@ -741,6 +794,9 @@ bool _surface_color(const Merged &p_merged, const TriangleMesh &p_source, const 
 			return true;
 		}
 		from = hit - p_normal * 0.001f;
+	}
+	if (first_face >= 0) {
+		return _source_color(p_merged, first_face, first_hit, p_texel_size, r_color);
 	}
 	return false;
 }
@@ -806,6 +862,15 @@ void _shade_row(void *p_userdata, uint32_t p_row) {
 		Color c = ctx.colors[i0] * b0 + ctx.colors[i1] * t.b1 + ctx.colors[i2] * t.b2;
 		if (_surface_color(*ctx.merged, *ctx.source, p, n, ctx.reach, ctx.texel_size, c)) {
 			hits++;
+		} else if (ctx.merged->prefer_facing) {
+			// Decision 0262 (a coarser level's bake): again a quarter of the way to the triangle's centre (an edge's
+			// texel, its ray along the source's edge), else left to its neighbours (not the sources' mean colour).
+			const Vector3 centre = (ctx.positions[i0] + ctx.positions[i1] + ctx.positions[i2]) / 3.0f;
+			if (_surface_color(*ctx.merged, *ctx.source, p.lerp(centre, 0.25f), n, ctx.reach, ctx.texel_size, c)) {
+				hits++;
+			} else {
+				ctx.missed[k] = 1;
+			}
 		}
 		ctx.out[k] = c;
 	}
@@ -973,6 +1038,10 @@ Ref<StandardMaterial3D> _bake_texture(const Merged &p_merged, const TriangleMesh
 	ctx.indices = out_indices.ptr();
 	ctx.texels = texels.ptr();
 	ctx.out = colors.ptr();
+	LocalVector<uint8_t> missed;
+	missed.resize(width * height);
+	memset(missed.ptr(), 0, width * height);
+	ctx.missed = missed.ptr();
 	ctx.width = width;
 	ctx.texel_size = texel;
 	ctx.reach = MAX(p_reach, 2.0f * texel);
@@ -986,7 +1055,7 @@ Ref<StandardMaterial3D> _bake_texture(const Merged &p_merged, const TriangleMesh
 	Color sum(0, 0, 0, 0);
 	int covered = 0;
 	for (int k = 0; k < width * height; k++) {
-		filled[k] = texels[k].priority > 0 ? 1 : 0;
+		filled[k] = texels[k].priority > 0 && !missed[k] ? 1 : 0;
 		if (filled[k]) {
 			sum += colors[k];
 			covered++;
@@ -1047,6 +1116,7 @@ Ref<StandardMaterial3D> _bake_texture(const Merged &p_merged, const TriangleMesh
 	material->set_texture(BaseMaterial3D::TEXTURE_ALBEDO, ImageTexture::create_from_image(img));
 	material->set_texture_filter(BaseMaterial3D::TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC);
 	material->set_roughness(0.9f);
+	material->set_meta(ATLAS_META, true); // (decision 0262: sampled at its finest level by a coarser level's bake)
 	material->set_name("FellowCellProxyTextured");
 
 	r_arrays.resize(Mesh::ARRAY_MAX);
@@ -1088,9 +1158,10 @@ Ref<StandardMaterial3D> proxy_material() {
 	return material;
 }
 
-Ref<ArrayMesh> bake_proxy(Node *p_content, float p_ratio, int p_terrain_quads, float p_texel_size, int p_max_texture_size, Dictionary &r_info, int p_triangles, float p_terrain_error) {
+Ref<ArrayMesh> bake_proxy(Node *p_content, float p_ratio, int p_terrain_quads, float p_texel_size, int p_max_texture_size, Dictionary &r_info, int p_triangles, float p_terrain_error, float p_object_error) {
 	Merged merged;
 	merged.want_textures = p_texel_size > 0.0f;
+	merged.prefer_facing = p_object_error > 0.0f; // (a coarser level's bake: decision 0262)
 	int source_triangles = 0;
 	int skipped_instances = 0;
 	struct Item {
@@ -1120,13 +1191,13 @@ Ref<ArrayMesh> bake_proxy(Node *p_content, float p_ratio, int p_terrain_quads, f
 					merged.samplers.push_back(ts);
 				}
 				const int before = merged.indices.size();
-				_append(merged, arrays, it.xform, merged.terrain_sampler);
+				_append(merged, arrays, it.xform, merged.terrain_sampler, true);
 				source_triangles += (merged.indices.size() - before) / 3;
 			}
 		} else if (MeshInstance3D *mi = Object::cast_to<MeshInstance3D>(it.node)) {
 			const Ref<Mesh> mesh = mi->get_mesh();
 			if (mesh.is_valid() && mi->get_skin().is_null()) {
-				_append_mesh(merged, mesh, it.xform, mi->get_material_override(), mi);
+				_append_mesh(merged, mesh, it.xform, mi->get_material_override(), mi, mi->has_meta(TERRAIN_META));
 				source_triangles += mesh_triangles(mesh);
 			}
 		} else if (MultiMeshInstance3D *mmi = Object::cast_to<MultiMeshInstance3D>(it.node)) {
@@ -1161,7 +1232,7 @@ Ref<ArrayMesh> bake_proxy(Node *p_content, float p_ratio, int p_terrain_quads, f
 	PackedInt32Array indices;
 	float error = 0.0f;
 	int terrain_triangles = 0;
-	if (!_simplify_welded(merged, p_ratio, p_triangles, p_terrain_error, vertices, normals, colors, indices, error, terrain_triangles)) {
+	if (!_simplify_welded(merged, p_ratio, p_triangles, p_terrain_error, p_object_error, vertices, normals, colors, indices, error, terrain_triangles)) {
 		r_info["proxy_triangles"] = 0;
 		return Ref<ArrayMesh>();
 	}

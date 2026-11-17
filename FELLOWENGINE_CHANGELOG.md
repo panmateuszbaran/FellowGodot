@@ -9,6 +9,16 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 137 — levels of proxy groups (2026-11-17)
+
+- Decision 0262: `bake_proxies()`'s `group_levels` (1: as before; at most 4) groups the groups' proxies again, level by
+  level, each set with one coarser proxy baked from the proxies below it (their meshes and textures; a terrain's edges
+  kept), drawn from where all of them would be, their visibility parent, hidden while any of them is. Its objects keep
+  at least what an error of `terrain_error` pixels needs there, its texels take the surfaces facing them. World Lab's 16 × 16
+  cells seen from outside with three levels: 8 draws instead of 128. Every proxy's faces now face the right way (a
+  simplified triangle's normal had taken its side from one of its welded corners' faces). The editor's dialog has the levels; `world_proxies_check.gd --group_levels --far=1`, Frontier Lab
+  `--frontier_group_levels`.
+
 ## Milestone 136 — a second GPU: the laptop's Intel GPU (2026-11-17)
 
 - FellowEngine's first runs on another vendor's GPU and driver (the Core Ultra 9 275HX's Intel GPU, `--gpu-index 1`).

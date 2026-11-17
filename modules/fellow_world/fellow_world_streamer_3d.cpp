@@ -94,6 +94,10 @@ static const char *FELLOW_FULL_MESH_META = "_fellow_full_mesh";
 // Decision 0252: on a group's proxy, its cells (paths from it); on a cell, its group's proxy (a path from the cell).
 static const char *FELLOW_GROUP_PROXY_META = "_fellow_group_proxy";
 static const char *FELLOW_CELL_GROUP_META = "_fellow_group";
+// Decision 0262: on a group's proxy, the coarser level's proxy over it (a path from it); on that one, the groups'
+// proxies below it (paths from it).
+static const char *FELLOW_GROUP_PARENT_META = "_fellow_group_parent";
+static const char *FELLOW_GROUP_CHILDREN_META = "_fellow_group_children";
 
 // A node's transform in an ancestor's space (in the tree or not).
 static Transform3D _fellow_relative_xform(const Node *p_ancestor, const Node *p_node) {
@@ -582,6 +586,23 @@ void FellowWorldStreamer3D::_update_group(FellowStreamingCell3D *p_cell) {
 		loaded = c && c->state == FellowStreamingCell3D::STATE_LOADED;
 	}
 	group->set_visible(!loaded);
+	// Decision 0262: a coarser level's proxy drawn while all the groups' proxies below it are (none of its cells
+	// loaded); hidden, it leaves them to their visibility ranges.
+	GeometryInstance3D *g = group;
+	while (g->has_meta(FELLOW_GROUP_PARENT_META)) {
+		GeometryInstance3D *parent = Object::cast_to<GeometryInstance3D>(g->get_node_or_null(NodePath(g->get_meta(FELLOW_GROUP_PARENT_META))));
+		if (!parent) {
+			break;
+		}
+		const Array children = parent->get_meta(FELLOW_GROUP_CHILDREN_META, Array());
+		bool all = true;
+		for (int i = 0; i < children.size() && all; i++) {
+			const Node3D *child = Object::cast_to<Node3D>(parent->get_node_or_null(NodePath(children[i])));
+			all = !child || child->is_visible();
+		}
+		parent->set_visible(all);
+		g = parent;
+	}
 }
 
 void FellowWorldStreamer3D::_editor_hide_groups() {
@@ -894,6 +915,9 @@ Dictionary FellowWorldStreamer3D::bake_proxies(const String &p_directory, const 
 	const real_t group_distance = p_options.get("group_distance", 0.0);
 	// Decision 0256: the cells' proxies fade out over this distance on each side of their group's switch (0: a switch).
 	const real_t group_fade = p_options.get("group_fade", 0.0);
+	// Decision 0262: levels of groups — the groups' proxies in groups of group_cells x group_cells again, each with a
+	// coarser proxy for farther away (1: the groups alone).
+	const int group_levels = CLAMP(int(p_options.get("group_levels", 1)), 1, 4);
 	// A terrain's proxies as far as an error of terrain_error pixels allows where they are first drawn, in a view of
 	// 1 080 lines with Godot's default field of view (75 degrees): metres per metre of distance (decision 0255).
 	const float terrain_error = p_options.get("terrain_error", 2.0f);
@@ -920,6 +944,19 @@ Dictionary FellowWorldStreamer3D::bake_proxies(const String &p_directory, const 
 	int64_t texture_hits = 0;
 	int groups_baked = 0;
 	int group_triangles = 0;
+	// Decision 0262: the groups' proxies baked, for the coarser levels.
+	struct GroupProxy {
+		MeshInstance3D *node = nullptr;
+		Vector2i key;
+		AABB bounds; // its cells' boxes, in the streamer's space
+		real_t begin = 0.0; // the distance it is drawn from (to its centre)
+		float texel = 0.0f;
+		int triangles = 0;
+		bool terrain = false; // mostly a terrain's
+		LocalVector<FellowStreamingCell3D *> cells;
+	};
+	LocalVector<GroupProxy> level_proxies;
+	Array level_info;
 	int terrain_triangles = 0; // the terrains' among the proxies' and the groups'
 	int group_terrain_triangles = 0;
 	int64_t group_texture_bytes = 0;
@@ -954,6 +991,12 @@ Dictionary FellowWorldStreamer3D::bake_proxies(const String &p_directory, const 
 			if (proxy && proxy->has_meta(FELLOW_CELL_PROXY_META)) {
 				proxy->set_visibility_parent(NodePath()); // (before its group's proxy goes)
 			}
+		}
+	}
+	for (int i = get_child_count() - 1; i >= 0; i--) {
+		Node3D *g = Object::cast_to<Node3D>(get_child(i));
+		if (g && g->has_meta(FELLOW_GROUP_PARENT_META)) {
+			g->set_visibility_parent(NodePath()); // (decision 0262: before the coarser level's proxy goes)
 		}
 	}
 	for (int i = get_child_count() - 1; i >= 0; i--) {
@@ -1187,12 +1230,173 @@ Dictionary FellowWorldStreamer3D::bake_proxies(const String &p_directory, const 
 					groups_baked++;
 					group_triangles += int(gpi.get("proxy_triangles", 0));
 					group_terrain_triangles += int(gpi.get("proxy_terrain_triangles", 0));
+					GroupProxy gp;
+					gp.node = gmi;
+					gp.key = key;
+					gp.bounds = bounds;
+					gp.begin = gmi->get_visibility_range_begin();
+					gp.texel = texel_size > 0.0f ? texel_size * scale : 0.0f;
+					gp.triangles = int(gpi.get("proxy_triangles", 0));
+					gp.terrain = int(gpi.get("proxy_terrain_triangles", 0)) * 2 >= gp.triangles;
+					for (FellowStreamingCell3D *cell : baked) {
+						gp.cells.push_back(cell);
+					}
+					level_proxies.push_back(gp);
 				}
 			}
 		}
 		for (Node *content : contents) {
 			memdelete(content);
 		}
+	}
+	// Decision 0262: the coarser levels, each from the level below's proxies (their meshes, textures and terrains:
+	// cheap to bake, and the terrain's outer edges where the finer level has them, so that neighbours meet). A level's
+	// proxy is drawn from where each of the proxies below it would be drawn (their distance plus how far their centre
+	// is from its), simplified and textured for how much farther that is; it is their visibility parent.
+	for (int level = 2; level <= group_levels && level_proxies.size() > 1 && group_cells > 1; level++) {
+		HashMap<Vector2i, int> index;
+		LocalVector<LocalVector<int>> sets;
+		LocalVector<Vector2i> keys;
+		for (uint32_t i = 0; i < level_proxies.size(); i++) {
+			const Vector2i k = level_proxies[i].key;
+			const Vector2i key(int(Math::floor(real_t(k.x) / group_cells)), int(Math::floor(real_t(k.y) / group_cells)));
+			if (!index.has(key)) {
+				index.insert(key, sets.size());
+				sets.push_back(LocalVector<int>());
+				keys.push_back(key);
+			}
+			sets[index[key]].push_back(i);
+		}
+		LocalVector<GroupProxy> next;
+		int baked_level = 0;
+		int level_triangles = 0;
+		int64_t level_texture_bytes = 0;
+		String texture_skipped;
+		for (uint32_t si = 0; si < sets.size(); si++) {
+			const LocalVector<int> &set = sets[si];
+			if (set.size() < 2) {
+				continue;
+			}
+			AABB bounds;
+			int triangles = 0;
+			int terrain_triangles_below = 0;
+			float texel = 0.0f;
+			for (uint32_t j = 0; j < set.size(); j++) {
+				const GroupProxy &gp = level_proxies[set[j]];
+				bounds = j == 0 ? gp.bounds : bounds.merge(gp.bounds);
+				triangles += gp.triangles;
+				terrain_triangles_below += gp.terrain ? gp.triangles : 0;
+				texel = MAX(texel, gp.texel);
+			}
+			const Vector3 origin = bounds.get_center();
+			real_t begin = 0.0;
+			real_t begin_below = 0.0;
+			for (const int j : set) {
+				const GroupProxy &gp = level_proxies[j];
+				const Vector3 c = gp.node->get_position() + gp.node->get_mesh()->get_aabb().get_center();
+				begin = MAX(begin, gp.begin + c.distance_to(origin));
+				begin_below += gp.begin / set.size();
+			}
+			if (proxy_distance > 0.0 && begin >= proxy_distance) {
+				continue; // (never drawn: past the distance no proxy is)
+			}
+			const float scale = CLAMP(float(begin / MAX(begin_below, real_t(1.0))), 1.0f, float(group_cells));
+			Node3D *root = memnew(Node3D);
+			for (const int j : set) {
+				const GroupProxy &gp = level_proxies[j];
+				MeshInstance3D *mi = memnew(MeshInstance3D);
+				mi->set_mesh(gp.node->get_mesh());
+				mi->set_position(gp.node->get_position() - origin);
+				if (gp.terrain) {
+					mi->set_meta(FellowCellProxies::TERRAIN_META, true);
+				}
+				root->add_child(mi);
+			}
+			Dictionary lpi;
+			const int objects = triangles - terrain_triangles_below;
+			// (Its texture up to twice as wide a level: it stands for many groups' textures, their charts together.)
+			const int level_texture_size = MIN(max_texture_size << (level - 1), 4096);
+			// (Its objects as far as their count or that error allows, whichever keeps more: a few triangles a building
+			// would leave none of its shape. The terrain's error, or 2 pixels with terrain_error 0.)
+			const float object_error_per_metre = error_per_metre > 0.0f ? error_per_metre : 4.0f * Math::tan(Math::deg_to_rad(37.5f)) / 1080.0f;
+			Ref<ArrayMesh> mesh = FellowCellProxies::bake_proxy(root, ratio, terrain_quads, texel > 0.0f ? texel * scale : 0.0f, level_texture_size, lpi, MAX(1, int(objects / (scale * scale))), float(begin) * error_per_metre, float(begin) * object_error_per_metre);
+			memdelete(root);
+			if (mesh.is_null()) {
+				continue;
+			}
+			if (lpi.has("texture_width")) {
+				level_texture_bytes += int64_t(lpi.get("texture_bytes", 0));
+			} else {
+				mesh->surface_set_material(0, material);
+				texture_skipped = lpi.get("texture_skipped", texture_skipped);
+			}
+			const String path = p_directory.path_join(vformat("group_l%d_%d_%d_proxy.res", level, keys[si].x, keys[si].y));
+			if (ResourceSaver::save(mesh, path, ResourceSaver::FLAG_COMPRESS) != OK) {
+				continue;
+			}
+			mesh->set_path(path, true);
+			MeshInstance3D *gmi = memnew(MeshInstance3D);
+			gmi->set_name(vformat("FellowGroupProxy_L%d_%d_%d", level, keys[si].x, keys[si].y));
+			gmi->set_mesh(mesh);
+			gmi->set_position(origin);
+			gmi->set_cast_shadows_setting(proxy_shadows ? GeometryInstance3D::SHADOW_CASTING_SETTING_ON : GeometryInstance3D::SHADOW_CASTING_SETTING_OFF);
+			// (Measured to its own centre, which may lie off the boxes' centre: the farthest finer proxy's distance to it.)
+			const Vector3 center = origin + mesh->get_aabb().get_center();
+			real_t from = 0.0;
+			for (const int j : set) {
+				const GroupProxy &gp = level_proxies[j];
+				const Vector3 c = gp.node->get_position() + gp.node->get_mesh()->get_aabb().get_center();
+				from = MAX(from, gp.begin + c.distance_to(center));
+			}
+			gmi->set_visibility_range_begin(from);
+			if (group_fade > 0.0) {
+				gmi->set_visibility_range_begin_margin(group_fade);
+				gmi->set_visibility_range_fade_mode(GeometryInstance3D::VISIBILITY_RANGE_FADE_DEPENDENCIES);
+			}
+			if (proxy_distance > 0.0) {
+				gmi->set_visibility_range_end(proxy_distance);
+			}
+			add_child(gmi);
+			if (owner) {
+				gmi->set_owner(owner);
+			}
+			Array cell_paths;
+			Array children;
+			GroupProxy up;
+			up.node = gmi;
+			up.key = keys[si];
+			up.bounds = bounds;
+			up.begin = from;
+			up.texel = texel > 0.0f ? texel * scale : 0.0f;
+			up.triangles = int(lpi.get("proxy_triangles", 0));
+			up.terrain = int(lpi.get("proxy_terrain_triangles", 0)) * 2 >= up.triangles;
+			for (const int j : set) {
+				GroupProxy &gp = level_proxies[j];
+				children.push_back(gmi->get_path_to(gp.node));
+				gp.node->set_meta(FELLOW_GROUP_PARENT_META, gp.node->get_path_to(gmi));
+				gp.node->set_visibility_parent(gp.node->get_path_to(gmi));
+				for (FellowStreamingCell3D *cell : gp.cells) {
+					cell_paths.push_back(gmi->get_path_to(cell));
+					up.cells.push_back(cell);
+				}
+			}
+			gmi->set_meta(FELLOW_GROUP_PROXY_META, cell_paths);
+			gmi->set_meta(FELLOW_GROUP_CHILDREN_META, children);
+			_update_group(up.cells[0]);
+			next.push_back(up);
+			baked_level++;
+			level_triangles += up.triangles;
+		}
+		Dictionary li;
+		li["level"] = level;
+		li["groups"] = baked_level;
+		li["triangles"] = level_triangles;
+		li["texture_bytes"] = level_texture_bytes;
+		if (!texture_skipped.is_empty()) {
+			li["texture_skipped"] = texture_skipped;
+		}
+		level_info.push_back(li);
+		level_proxies = next;
 	}
 	_editor_hide_groups();
 	FellowCellProxies::clear_bake_cache();
@@ -1208,6 +1412,7 @@ Dictionary FellowWorldStreamer3D::bake_proxies(const String &p_directory, const 
 	info["terrain_triangles"] = terrain_triangles;
 	info["group_terrain_triangles"] = group_terrain_triangles;
 	info["group_texture_bytes"] = group_texture_bytes;
+	info["group_levels"] = level_info; // decision 0262: the coarser levels' groups, triangles, texture bytes
 	info["texture_hit_share"] = texture_texels > 0 ? double(texture_hits) / double(texture_texels) : 0.0; // texels coloured by a surface found under them
 	info["streamed_meshes"] = streamed;
 	info["streamed_triangles"] = stream_before;
