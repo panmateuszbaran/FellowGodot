@@ -36,6 +36,21 @@
 #include "core/io/file_access_memory.h"
 #include "core/object/class_db.h"
 #include "scene/resources/image_texture.h"
+#include "servers/rendering/fellow_texture_streaming.h" // FellowEngine: DDS textures streamed (decision 0264)
+#include "servers/rendering/rendering_server.h"
+
+// FellowEngine (decision 0264): a 2D DDS texture of a compressed format with its full mip chain, loaded from a file
+// with texture streaming on, is read from its first level at or below the resident size; the rest stays in the file,
+// whose position of the chain is registered with the RenderingServer (as CompressedTexture2D does, decision 0146).
+struct FellowDDSStream {
+	bool streamed = false;
+	uint64_t data_offset = 0; // the file's position of mip 0
+	int width = 0;
+	int height = 0;
+	Image::Format format = Image::FORMAT_MAX;
+	int levels = 0;
+	int resident_mip = 0;
+};
 
 DDSFormat _dxgi_to_dds_format(uint32_t p_dxgi_format) {
 	switch (p_dxgi_format) {
@@ -488,7 +503,7 @@ static Ref<Resource> _dds_create_texture_from_images(const Vector<Ref<Image>> &p
 	return _dds_create_texture(p_images, p_dds_type, p_width, p_height, p_layer_count, p_mipmaps, r_error);
 }
 
-static Vector<Ref<Image>> _dds_load_images_from_buffer(Ref<FileAccess> p_f, DDSFormat &r_dds_format, uint32_t &r_width, uint32_t &r_height, uint32_t &r_mipmaps, uint32_t &r_pitch, uint32_t &r_flags, uint32_t &r_layer_count, uint32_t &r_dds_type, const String &p_path = "") {
+static Vector<Ref<Image>> _dds_load_images_from_buffer(Ref<FileAccess> p_f, DDSFormat &r_dds_format, uint32_t &r_width, uint32_t &r_height, uint32_t &r_mipmaps, uint32_t &r_pitch, uint32_t &r_flags, uint32_t &r_layer_count, uint32_t &r_dds_type, const String &p_path = "", FellowDDSStream *r_stream = nullptr) {
 	ERR_FAIL_COND_V_MSG(p_f.is_null(), Vector<Ref<Image>>(), vformat("Empty DDS texture file."));
 	ERR_FAIL_COND_V_MSG(!p_f->get_length(), Vector<Ref<Image>>(), vformat("Empty DDS texture file."));
 
@@ -700,6 +715,49 @@ static Vector<Ref<Image>> _dds_load_images_from_buffer(Ref<FileAccess> p_f, DDSF
 		r_mipmaps = 1;
 	}
 
+	// FellowEngine (decision 0264): the streamed tail of a 2D texture, compressed, its chain whole, its sides whole
+	// blocks (the file's levels then laid out as an Image's).
+	if (r_stream && !p_path.is_empty() && FellowTextureStreaming::enabled_at_startup() && RenderingServer::get_singleton() && RenderingServer::get_singleton()->get_rendering_device() != nullptr && (r_dds_type & DDST_TYPE_MASK) == DDST_2D && !(r_dds_type & DDST_ARRAY) && r_layer_count == 1) {
+		const DDSFormatInfo &info = dds_format_info[r_dds_format];
+		const Image::Format fmt = info.format;
+		const int iw = int(r_width);
+		const int ih = int(r_height);
+		const int mips = int(r_mipmaps) - 1;
+		const int rs = FellowTextureStreaming::resident_size();
+		if (info.compressed && Image::is_format_compressed(fmt) && iw % 4 == 0 && ih % 4 == 0 && MAX(iw, ih) > rs && mips > 0 && mips < 16 && mips == Image::get_image_required_mipmaps(iw, ih, fmt)) {
+			int tail = 0;
+			int tw = iw, th = ih;
+			while (tail < mips && MAX(tw, th) > rs) {
+				tail++;
+				Image::get_image_mipmap_offset_and_dimensions(iw, ih, fmt, tail, tw, th);
+			}
+			const uint64_t data_start = p_f->get_position();
+			const int64_t total = Image::get_image_mipmap_offset(iw, ih, fmt, mips + 1);
+			const int64_t ofs = Image::get_image_mipmap_offset_and_dimensions(iw, ih, fmt, tail, tw, th);
+			if (tail > 0 && data_start + uint64_t(total) <= p_f->get_length()) {
+				p_f->seek(data_start + uint64_t(ofs));
+				Vector<uint8_t> data;
+				data.resize(total - ofs);
+				if (p_f->get_buffer(data.ptrw(), data.size()) == uint64_t(data.size())) {
+					Ref<Image> image = Image::create_from_data(tw, th, tail < mips, fmt, data);
+					if (image.is_valid() && !image->is_empty()) {
+						r_stream->streamed = true;
+						r_stream->data_offset = data_start;
+						r_stream->width = iw;
+						r_stream->height = ih;
+						r_stream->format = fmt;
+						r_stream->levels = mips + 1;
+						r_stream->resident_mip = tail;
+						Vector<Ref<Image>> images;
+						images.push_back(image);
+						return images;
+					}
+				}
+			}
+			p_f->seek(data_start);
+		}
+	}
+
 	return _dds_load_images(p_f, r_dds_format, r_width, r_height, r_mipmaps, r_pitch, r_flags, r_layer_count);
 }
 
@@ -711,7 +769,19 @@ static Ref<Resource> _dds_load_from_buffer(Ref<FileAccess> p_f, Error *r_error, 
 	DDSFormat dds_format;
 	uint32_t width = 0, height = 0, mipmaps = 0, pitch = 0, flags = 0, layer_count = 0, dds_type = 0;
 
-	Vector<Ref<Image>> images = _dds_load_images_from_buffer(p_f, dds_format, width, height, mipmaps, pitch, flags, layer_count, dds_type, p_path);
+	FellowDDSStream stream;
+	Vector<Ref<Image>> images = _dds_load_images_from_buffer(p_f, dds_format, width, height, mipmaps, pitch, flags, layer_count, dds_type, p_path, &stream);
+	if (stream.streamed && images.size() == 1) {
+		// (Decision 0264: the tail as the texture, its full size kept; its finer levels read from the file as needed.)
+		Ref<ImageTexture> texture = ImageTexture::create_from_image(images[0]);
+		ERR_FAIL_COND_V(texture.is_null(), Ref<Resource>());
+		texture->set_size_override(Size2i(stream.width, stream.height));
+		RenderingServer::get_singleton()->texture_2d_fellow_set_stream_source(texture->get_rid(), p_path, stream.data_offset, stream.width, stream.height, stream.format, stream.levels, stream.resident_mip);
+		if (r_error) {
+			*r_error = OK;
+		}
+		return texture;
+	}
 	return _dds_create_texture_from_images(images, dds_format, width, height, mipmaps, pitch, flags, layer_count, dds_type, r_error);
 }
 

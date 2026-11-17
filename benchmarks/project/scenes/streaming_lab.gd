@@ -5,7 +5,9 @@ extends "res://bench/scene_base.gd"
 ## (rendering/fellow/streaming/textures) keeps only the mips the cameras can see; without it every level is resident.
 ##
 ## The textures are generated, never committed: benchmarks/scripts/make_streaming_textures.py writes them into
-## res://external/streaming/ (--streaming_dir=<res path> to use another folder).
+## res://external/streaming/ (--streaming_dir=<res path> to use another folder). Milestone 139: --streaming_dds=1 loads
+## the same textures as DDS files (written into <dir>_dds/ from them the first time: Godot loads a .dds itself, as
+## Bistro's, not through the importer).
 
 const BLOCKS := 32 # buildings per side
 const SPACING := 18.0 # metres between buildings along the street
@@ -57,8 +59,8 @@ func _setup_environment() -> void:
 func _load_textures() -> void:
 	var n := int(args.get("streaming_materials", "48"))
 	for i in n:
-		var a: Texture2D = load(_dir().path_join("m%02d_albedo.ctex" % i))
-		var nm: Texture2D = load(_dir().path_join("m%02d_normal.ctex" % i))
+		var a: Texture2D = _texture("m%02d_albedo" % i)
+		var nm: Texture2D = _texture("m%02d_normal" % i)
 		if a == null or nm == null:
 			_missing += 1
 			continue
@@ -72,6 +74,23 @@ func _load_textures() -> void:
 		# BoxMesh puts each face in a third of U and half of V; four repeats of the texture across a face.
 		m.uv1_scale = Vector3(4.0, 4.0, 1.0)
 		_mats.append(m)
+
+
+# The imported texture, or with --streaming_dds=1 the same levels in a DDS file (written from it if missing).
+func _texture(p_name: String) -> Texture2D:
+	var ctex := _dir().path_join(p_name + ".ctex")
+	if str(args.get("streaming_dds", "0")) != "1":
+		return load(ctex)
+	var dds := (_dir() + "_dds").path_join(p_name + ".dds")
+	if not FileAccess.file_exists(dds):
+		var src: Texture2D = load(ctex)
+		if src == null:
+			return null
+		DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(_dir() + "_dds"))
+		var img := src.get_image()
+		if img == null or img.save_dds(ProjectSettings.globalize_path(dds)) != OK:
+			return null
+	return load(dds)
 
 
 func _box(size: Vector3) -> BoxMesh:
