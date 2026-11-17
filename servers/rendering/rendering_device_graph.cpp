@@ -167,6 +167,22 @@ RDD::TextureLayout RenderingDeviceGraph::_usage_to_image_layout(ResourceUsage p_
 	}
 }
 
+// FellowEngine (milestone 142): the pipeline stages a barrier's transfer accesses are done in. A barrier's source stages
+// must include them (VUID-vkCmdPipelineBarrier-srcAccessMask-02815), or the transfer's writes are not ordered by it.
+static BitField<RDD::PipelineStageBits> _fellow_transfer_access_stages(BitField<RDD::BarrierAccessBits> p_access) {
+	BitField<RDD::PipelineStageBits> stages = {};
+	if (p_access & (RDD::BARRIER_ACCESS_COPY_READ_BIT | RDD::BARRIER_ACCESS_COPY_WRITE_BIT)) {
+		stages = stages | RDD::PIPELINE_STAGE_COPY_BIT;
+	}
+	if (p_access & (RDD::BARRIER_ACCESS_RESOLVE_READ_BIT | RDD::BARRIER_ACCESS_RESOLVE_WRITE_BIT)) {
+		stages = stages | RDD::PIPELINE_STAGE_RESOLVE_BIT;
+	}
+	if (p_access & RDD::BARRIER_ACCESS_STORAGE_CLEAR_BIT) {
+		stages = stages | RDD::PIPELINE_STAGE_CLEAR_STORAGE_BIT;
+	}
+	return stages;
+}
+
 RDD::BarrierAccessBits RenderingDeviceGraph::_usage_to_access_bits(ResourceUsage p_usage) {
 #if FORCE_FULL_ACCESS_BITS
 	return RDD::BarrierAccessBits(RDD::BARRIER_ACCESS_MEMORY_READ_BIT | RDD::BARRIER_ACCESS_MEMORY_WRITE_BIT);
@@ -678,6 +694,11 @@ void RenderingDeviceGraph::_add_command_to_graph(ResourceTracker **p_resource_tr
 				}
 
 				_add_texture_barrier_to_command(resource_tracker->texture_driver_id, resource_tracker->usage_access, new_usage_access, resource_tracker->usage, new_resource_usage, resource_tracker->texture_subresources, command_transition_barriers, r_command->transition_barrier_index, r_command->transition_barrier_count);
+				// FellowEngine (milestone 142): a slice takes its parent's access as its own; a parent last cleared or copied
+				// to (decision 0070's clear at first use, then used only through its slices: a bloom's mips) gives each
+				// frame's first transition of its slices a copy's access with only the stages of the commands that used
+				// them — invalid (VUID-vkCmdPipelineBarrier-srcAccessMask-02815). The copy's stage joins the source stages.
+				r_command->previous_stages = r_command->previous_stages | _fellow_transfer_access_stages(resource_tracker->usage_access);
 			} else if (resource_tracker->buffer_driver_id.id != 0) {
 #if USE_BUFFER_BARRIERS
 				_add_buffer_barrier_to_command(resource_tracker->buffer_driver_id, resource_tracker->usage_access, new_usage_access, r_command->buffer_barrier_index, r_command->buffer_barrier_count);
