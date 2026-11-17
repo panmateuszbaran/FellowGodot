@@ -1134,10 +1134,12 @@ void FellowTerrain3D::_update_instance_settings() {
 		rs->instance_geometry_set_cast_shadows_setting(set.instance[i], cast_shadows ? RSE::SHADOW_CASTING_SETTING_ON : RSE::SHADOW_CASTING_SETTING_OFF);
 		rs->instance_set_layer_mask(set.instance[i], render_layer_mask);
 		rs->instance_set_visible(set.instance[i], i == set.shown && is_visible_in_tree());
+		rs->fellow_instance_set_dither_alpha(set.instance[i], dither_alpha, dither_other);
 		if (set.hole_instance[i].is_valid()) {
 			rs->instance_geometry_set_cast_shadows_setting(set.hole_instance[i], cast_shadows ? RSE::SHADOW_CASTING_SETTING_ON : RSE::SHADOW_CASTING_SETTING_OFF);
 			rs->instance_set_layer_mask(set.hole_instance[i], render_layer_mask);
 			rs->instance_set_visible(set.hole_instance[i], i == set.shown && is_visible_in_tree());
+			rs->fellow_instance_set_dither_alpha(set.hole_instance[i], dither_alpha, dither_other);
 		}
 	}
 	for (KeyValue<uint64_t, FoliageCell *> &kv : foliage_cells) {
@@ -1145,6 +1147,31 @@ void FellowTerrain3D::_update_instance_settings() {
 			if (inst.is_valid()) {
 				rs->instance_set_layer_mask(inst, render_layer_mask);
 				rs->instance_set_visible(inst, is_visible_in_tree());
+				rs->fellow_instance_set_dither_alpha(inst, dither_alpha, dither_other);
+			}
+		}
+	}
+}
+
+void FellowTerrain3D::fellow_set_dither_alpha(float p_alpha, bool p_other_share) {
+	const float alpha = CLAMP(p_alpha, 0.0f, 1.0f);
+	if (alpha == dither_alpha && p_other_share == dither_other) {
+		return;
+	}
+	dither_alpha = alpha;
+	dither_other = p_other_share;
+	RenderingServer *rs = RenderingServer::get_singleton();
+	for (int i = 0; i < 2; i++) {
+		for (const RID &inst : { set.instance[i], set.hole_instance[i] }) {
+			if (inst.is_valid()) {
+				rs->fellow_instance_set_dither_alpha(inst, dither_alpha, dither_other);
+			}
+		}
+	}
+	for (KeyValue<uint64_t, FoliageCell *> &kv : foliage_cells) {
+		for (const RID &inst : { kv.value->instance, kv.value->impostor_instance }) {
+			if (inst.is_valid()) {
+				rs->fellow_instance_set_dither_alpha(inst, dither_alpha, dither_other);
 			}
 		}
 	}
@@ -1881,6 +1908,9 @@ void FellowTerrain3D::_make_foliage_cell_visible(FoliageCell *p_cell) {
 	// Each instance drawn by the camera up to the kind's range (culled one by one on the GPU, decision 0122's range),
 	// shrinking out over its last fade_distance metres (decision 0172) — or up to the impostors, which draw from there.
 	rs->fellow_instance_set_instance_range(p_cell->instance, 0.0f, impostor ? k.impostor_distance : k.range, false);
+	if (dither_alpha < 1.0f) {
+		rs->fellow_instance_set_dither_alpha(p_cell->instance, dither_alpha, dither_other); // decision 0258
+	}
 	if (k.fade > 0.0f && !impostor) {
 		rs->fellow_instance_set_instance_range_fade(p_cell->instance, k.fade);
 	}
@@ -1893,6 +1923,9 @@ void FellowTerrain3D::_make_foliage_cell_visible(FoliageCell *p_cell) {
 		rs->instance_set_visible(p_cell->impostor_instance, is_visible_in_tree());
 		// The billboard's vertices stay in its box (the impostor's sphere).
 		rs->fellow_instance_set_instance_range(p_cell->impostor_instance, k.impostor_distance, k.range, true);
+		if (dither_alpha < 1.0f) {
+			rs->fellow_instance_set_dither_alpha(p_cell->impostor_instance, dither_alpha, dither_other); // decision 0258
+		}
 		if (k.fade > 0.0f) {
 			rs->fellow_instance_set_instance_range_fade(p_cell->impostor_instance, k.fade);
 		}

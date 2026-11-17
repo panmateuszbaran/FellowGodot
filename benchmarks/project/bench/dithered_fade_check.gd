@@ -350,7 +350,7 @@ func _foliage() -> Dictionary:
 		"switch_vs_impostors": _ball_holes(pics["switch"], pics["impostors"])}
 
 
-# (6) A streamer with one cell of 16 boxes (a scene file) and its proxy (baked, vertex colours), crossfade 0.5 s, the
+# (6) A streamer with one cell of 16 boxes on a terrain (a scene file) and its proxy (baked, vertex colours), crossfade 0.5 s, the
 # camera 40 m away, without TAA: the cell loaded (its load distance past the camera) and unloaded (short of it); the
 # frames until settled, the picture halfway against the content alone (loading) and the proxy alone (unloading).
 func _cell_crossfade() -> Dictionary:
@@ -359,6 +359,19 @@ func _cell_crossfade() -> Dictionary:
 	DirAccess.make_dir_recursive_absolute(dir)
 	var content := Node3D.new()
 	content.name = "Content"
+	# A terrain under the boxes (it draws its patches itself: FellowTerrain3D.fellow_set_dither_alpha()).
+	var size := 33
+	var heights := PackedFloat32Array()
+	heights.resize(size * size)
+	var ground = ClassDB.instantiate("FellowTerrain3D")
+	ground.name = "Ground"
+	var layer = ClassDB.instantiate("FellowTerrainLayer")
+	layer.albedo_color = Color(0.25, 0.5, 0.2)
+	ground.layers = [layer]
+	ground.heightmap = Image.create_from_data(size, size, false, Image.FORMAT_RF, heights.to_byte_array())
+	ground.position = Vector3(-16, 0, -16)
+	content.add_child(ground)
+	ground.owner = content
 	var box := BoxMesh.new()
 	box.size = Vector3(1.6, 1.6, 1.6)
 	for i in 16:
@@ -378,7 +391,7 @@ func _cell_crossfade() -> Dictionary:
 	world.add_child(streamer)
 	var cell = ClassDB.instantiate("FellowStreamingCell3D")
 	cell.set("scene_path", dir.path_join("content.scn"))
-	cell.set("bounds", AABB(Vector3(-10, 0, -2), Vector3(20, 6, 4)))
+	cell.set("bounds", AABB(Vector3(-16, -1, -16), Vector3(32, 7, 32)))
 	streamer.add_child(cell)
 	streamer.call("bake_proxies", dir.path_join("proxies"), {"texel_size": 0.0, "group_cells": 0, "ratio": 0.5})
 	streamer.set("crossfade", 0.5)

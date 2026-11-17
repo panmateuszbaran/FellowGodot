@@ -302,6 +302,8 @@ private:
 	// Foliage (decision 0159): per kind, cells around the camera, each a MultiMesh made once on a worker thread.
 	TypedArray<FellowTerrainFoliage> foliage;
 	int foliage_cells_per_frame = 8;
+	float dither_alpha = 1.0f; // decision 0258: the share of its pixels the terrain keeps (a streamed region crossing over)
+	bool dither_other = false;
 	struct FoliageKind {
 		RID mesh;
 		int layer = 0;
@@ -509,6 +511,9 @@ public:
 	Array split_into_regions(int p_region_quads, const String &p_directory, Node *p_streamer = nullptr);
 	void set_foliage(const TypedArray<FellowTerrainFoliage> &p_foliage);
 	TypedArray<FellowTerrainFoliage> get_foliage() const { return foliage; }
+	// Decision 0258: the terrain (its patches and foliage) keeps this share of its pixels, dithered (the other share with
+	// p_other_share). A streamer crossing a region over with its proxy calls it.
+	void fellow_set_dither_alpha(float p_alpha, bool p_other_share);
 	void set_foliage_cells_per_frame(int p_cells);
 	int get_foliage_cells_per_frame() const { return foliage_cells_per_frame; }
 

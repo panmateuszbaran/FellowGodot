@@ -2084,10 +2084,17 @@ void fragment_shader(in SceneData scene_data) {
 	// depth pre-pass and the colour passes.
 	// (Decision 0257: a culled MultiMesh's instances each by its own fade, the same way.)
 	if (sc_fellow_dither_fade() || sc_fellow_mm_instance_fade()) {
-		const float fellow_fade = sc_fellow_mm_instance_fade() ? fellow_mm_fade : float(fellow_flags >> INSTANCE_FLAGS_FADE_SHIFT) / float(255.0);
+		// (Both: the node's share times the instance's, on the instance's side while it is fading — decision 0258's
+		// crossing of a region whose trees fade into their impostors.)
+		float fellow_fade = sc_fellow_dither_fade() ? float(fellow_flags >> INSTANCE_FLAGS_FADE_SHIFT) / float(255.0) : 1.0;
+		bool fellow_near = sc_fellow_dither_fade_near();
+		if (sc_fellow_mm_instance_fade() && fellow_mm_fade < 1.0) {
+			fellow_fade *= fellow_mm_fade;
+			fellow_near = fellow_mm_fade_near;
+		}
 		const vec2 fellow_p = gl_FragCoord.xy + 5.588238 * scene_data.taa_frame_count;
 		float fellow_n = fract(52.9829189 * fract(dot(fellow_p, vec2(0.06711056, 0.00583715))));
-		if (sc_fellow_mm_instance_fade() ? fellow_mm_fade_near : sc_fellow_dither_fade_near()) {
+		if (fellow_near) {
 			fellow_n = 1.0 - fellow_n;
 		}
 		if (fellow_n >= fellow_fade) {

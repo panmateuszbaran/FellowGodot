@@ -422,6 +422,8 @@ void FellowWorldStreamer3D::_dither_tree(Node *p_root, float p_alpha, bool p_oth
 		GeometryInstance3D *gi = Object::cast_to<GeometryInstance3D>(n);
 		if (gi && gi->get_instance().is_valid()) {
 			rs->fellow_instance_set_dither_alpha(gi->get_instance(), p_alpha, p_other_share);
+		} else if (FellowTerrain3D *t = Object::cast_to<FellowTerrain3D>(n)) {
+			t->fellow_set_dither_alpha(p_alpha, p_other_share); // its patches and foliage
 		}
 		for (int i = 0; i < n->get_child_count(); i++) {
 			stack.push_back(n->get_child(i));
