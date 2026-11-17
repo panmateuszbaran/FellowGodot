@@ -9,6 +9,14 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 138 — proxies' textures streamed (2026-11-17)
+
+- Decision 0263: `bake_proxies()`'s `texture_files` (on) writes each textured proxy's, group's and level's texture
+  beside it as `<proxy>_albedo.ctex`, a `CompressedTexture2D` its material reads — streamed with `streaming/textures`
+  like any imported texture. World Lab's 16 × 16 cells from outside: 6.9 MB of the proxies' 24.2 MB of textures
+  resident, the same picture; every lane bit for bit the same as with the textures whole (without TAA).
+  `world_proxies_check.gd --texture_files`, `--taa=0`, `proxy_textures` with streaming on.
+
 ## Milestone 137 — levels of proxy groups (2026-11-17)
 
 - Decision 0262: `bake_proxies()`'s `group_levels` (1: as before; at most 4) groups the groups' proxies again, level by
