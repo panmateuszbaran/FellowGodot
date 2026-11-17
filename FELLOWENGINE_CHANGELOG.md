@@ -9,6 +9,16 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 136 — a second GPU: the laptop's Intel GPU (2026-11-17)
+
+- FellowEngine's first runs on another vendor's GPU and driver (the Core Ultra 9 275HX's Intel GPU, `--gpu-index 1`).
+  A crash found and fixed (decision 0261): Intel's driver crashed reading the Vulkan pipeline cache for its periodic
+  save while other threads created pipelines — stock Godot 4.7.2 too; `frame/pipeline_cache_exclusive` (on for Intel
+  GPUs) reads it only while none is being created (`bench/pipeline_cache_stress.gd`: 10 of 10 runs crashed without, 0
+  of 10 with). The regression suite's 38 scenes on Intel within a level of lavapipe's on average; FellowEngine's
+  defaults faster than stock in 8 of 9 scenes at 720p (Sponza −49 %), City Lab 7 % slower. `debug/wait_pipelines` and
+  the suite's `--wait-pipelines`; `FELLOW_GODOT_ARGS` for the agent toolkit.
+
 ## Milestone 135 — fading instances' shadows fade (2026-11-17)
 
 - Decision 0260: the shadow passes dither the fades the view does — by distance with `geometry/dithered_fade`, and the

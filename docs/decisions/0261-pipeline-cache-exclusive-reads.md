@@ -1,10 +1,10 @@
 # 0261 — The pipeline cache read only while no pipeline is created (Intel's driver)
 
-Status: **KEEP** (a fix; `rendering/fellow/frame/pipeline_cache_exclusive`, 2: Intel GPUs) · Branch
+Status: **KEEP** (a fix of stock's crash on Intel GPUs; `rendering/fellow/frame/pipeline_cache_exclusive`, 2: Intel GPUs) · Branch
 `fellow/geometry` · Code: `drivers/vulkan/rendering_device_driver_vulkan.{h,cpp}` (a reader-writer lock around the
 pipeline cache), `servers/rendering/rendering_device.cpp` (`update_pipeline_cache()` with no size yet),
-`servers/rendering/fellow_settings.cpp` · Checks: `benchmarks/project/bench/dithered_fade_check.gd` on the laptop's
-Intel GPU (jobs f476-f478).
+`servers/rendering/fellow_settings.cpp` · Checks: `benchmarks/project/bench/pipeline_cache_stress.gd` (new),
+`benchmarks/project/bench/dithered_fade_check.gd` on the laptop's Intel GPU (jobs f476-f484).
 
 ## Problem
 
