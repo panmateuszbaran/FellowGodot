@@ -681,9 +681,12 @@ func _check_proxies() -> void:
 	# Milestone 127: the boxes' material has a texture, so the proxies are textured (their textures in their files).
 	var textured := 0
 	var texture_files := 0 # milestone 138: each proxy's texture in a file of its own beside it
+	var uid_files := 0 # (the editor gives each a .uid file)
 	for f in files:
 		if f.ends_with("_albedo.ctex"):
 			texture_files += 1
+		if f.ends_with("_albedo.ctex.uid"):
+			uid_files += 1
 		if not f.begins_with("group_") and f.ends_with("_proxy.res"):
 			var proxy = ResourceLoader.load("res://split_proxies".path_join(f), "", ResourceLoader.CACHE_MODE_IGNORE)
 			if proxy is ArrayMesh and proxy.surface_get_material(0) is StandardMaterial3D and proxy.surface_get_material(0).albedo_texture is CompressedTexture2D and proxy.surface_get_material(0).albedo_texture.resource_path == "res://split_proxies".path_join(f.get_basename() + "_albedo.ctex"):
@@ -691,7 +694,7 @@ func _check_proxies() -> void:
 	var result := {"cells": cells, "proxies": proxies, "owned": owned, "files": files.size(), "report": report,
 		"bake_ms": bake_ms, "saved_meshes": saved.count("type=\"MeshInstance3D\""), "textured": textured, "groups": groups,
 		"levels": levels, "texture_files": texture_files}
-	if cells == 0 or proxies != cells or owned != cells or groups == 0 or levels == 0 or not report.contains("Level 2") or files.size() != cells + groups + 1 + texture_files or texture_files < cells or report == "" or result["saved_meshes"] != cells + groups or textured != cells:
+	if cells == 0 or proxies != cells or owned != cells or groups == 0 or levels == 0 or not report.contains("Level 2") or files.size() != cells + groups + 1 + texture_files + uid_files or uid_files > texture_files or texture_files < cells or report == "" or result["saved_meshes"] != cells + groups or textured != cells:
 		_fail("proxies: %s" % [result])
 	out["proxies"] = result
 
