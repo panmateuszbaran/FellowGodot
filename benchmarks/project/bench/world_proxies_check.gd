@@ -21,7 +21,8 @@ extends SceneTree
 ## Milestone 137 (decision 0262): --group_levels=<n> (1) bakes n levels of groups; with --far=1, (F) the world from
 ## outside it (C's proxies, every cell unloaded): the coarser levels' proxies shown and hidden (the groups' alone), each
 ## against the world all loaded from there (A's), the triangles and draws; and the buildings alone in one white material
-## (the shapes' shading alone), each against A's: *_white, compared on the world's pixels (not the sky's).
+## (the shapes' shading alone), each against A's: *_white, compared on the world's pixels (not the sky's). Draws wait
+## for their pipelines (rendering/fellow/debug/wait_pipelines; --wait_pipelines=0: not).
 ## One JSON line: WORLD_PROXIES_CHECK {...}.
 
 const CELL := 64.0
@@ -52,6 +53,10 @@ func _initialize() -> void:
 	DirAccess.make_dir_recursive_absolute(out_dir)
 	n_cells = int(_arg("cells", "12"))
 	frames = int(_arg("frames", "20"))
+	# Milestone 137: the pictures independent of how fast the pipelines compile (the ubershader meanwhile: the same
+	# view shot twice differed; --wait_pipelines=0 as before).
+	if _arg("wait_pipelines", "1") != "0":
+		ProjectSettings.set_setting("rendering/fellow/debug/wait_pipelines", true)
 	_run.call_deferred()
 
 

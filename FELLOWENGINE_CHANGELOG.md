@@ -15,8 +15,9 @@ Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.m
   level, each set with one coarser proxy baked from the proxies below it (their meshes and textures; a terrain's edges
   kept), drawn from where all of them would be, their visibility parent, hidden while any of them is. Its objects keep
   at least what an error of `terrain_error` pixels needs there, its texels take the surfaces facing them. World Lab's 16 × 16
-  cells seen from outside with three levels: 8 draws instead of 128. Every proxy's faces now face the right way (a
-  simplified triangle's normal had taken its side from one of its welded corners' faces). The editor's dialog has the levels; `world_proxies_check.gd --group_levels --far=1`, Frontier Lab
+  cells seen from outside with three levels: 8 draws and 31 k triangles instead of 128 and 67 k. Every proxy's faces
+  now face the right way (a simplified triangle's normal had taken its side from one of its welded corners' faces:
+  walls lit from behind) — World Lab's streamed view 1.05 → 0.42 % of the picture off the world all loaded. The editor's dialog has the levels; `world_proxies_check.gd --group_levels --far=1`, Frontier Lab
   `--frontier_group_levels`.
 
 ## Milestone 136 — a second GPU: the laptop's Intel GPU (2026-11-17)

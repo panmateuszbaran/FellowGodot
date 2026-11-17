@@ -1,6 +1,6 @@
 # 0262 — Levels of proxy groups: a coarser proxy over the groups' for farther away
 
-Status: **IN PROGRESS** (KEEP expected) (`bake_proxies()`'s `group_levels`, 1 by default: the groups alone, as before) · Branch
+Status: **KEEP** (`bake_proxies()`'s `group_levels`, 1 by default: the groups alone, as before) · Branch
 `fellow/geometry` · Code: `modules/fellow_world/fellow_world_streamer_3d.cpp` (the levels' bake from the level below's
 proxies, their visibility parents, `_update_group()` up the levels), `modules/fellow_world/fellow_cell_proxies.{h,cpp}`
 (a proxy marked as a terrain's; an error floor for the objects' simplification; a coarser level's texels from the
@@ -87,11 +87,31 @@ textures 5.5 MB, 3.3 MB and 1.9 MB. None of the 168 proxies of groups and levels
 The fix of the faces' sides on the near view (C: every cell's proxy, its groups and levels; D: C with the buildings
 streamed): 1.05 → 0.42 % of the picture more than 16 levels off the world all loaded, D 0.99 → 0.42 %.
 
-FAR8_RESULTS
+**8 × 8 cells** (512 m), groups of 4 × 4 and two levels (4 groups, one proxy over them, for the cells and the regions),
+from outside the world 0.8 km from its centre — the share of the world's pixels more than 16 levels off A's, textured
+and with the buildings alone in white:
+
+| | draws | triangles | textured | white |
+|---|---:|---:|---:|---:|
+| the groups' proxies alone | 8 | 9 941 | 10.8 % | 8.5 % |
+| **the second level** | **2** | **7 737** | 14.6 % | 10.7 % |
+| the second level, the faces' sides as before | 2 | 7 737 | 23.9 % | — |
+
+The same cells' buildings alone at 1280 × 720 (a scratch script, the same view; their pixels more than 16 levels off):
+
+| | groups alone, white | second level, white | groups alone, textured | second level, textured |
+|---|---:|---:|---:|---:|
+| the faces' sides as before | 6.3 % | 23.6 % | 16.2 % | 23.4 % |
+| **now** | **4.7 %** | **4.7 %** | 14.0 % | **8.0 %** |
+
+The levels' bake costs little beside the cells' and groups': the 8 × 8 cells' bake took 13.2 s with the second level
+and 16.6 s without (two runs sharing the machine: within their spread); the 16 × 16 cells' 65 s with three levels.
 
 ## Decision
 
-Pending the measurements.
+Keep, opt-in per bake (`group_levels` 1 by default: a world of a few kilometres has few groups; a larger one asks for
+more levels): the far world a few draws, each proxy of the detail its distance needs, baked from what the groups
+already hold. The faces' sides fixed for every proxy.
 
 ## Rejected / not done
 
