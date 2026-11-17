@@ -4,6 +4,7 @@ extends SceneTree
 ##
 ##   godot --path benchmarks/project --fixed-fps 60 --resolution 640x360 -s res://bench/world_proxies_check.gd
 ##       -- --out=<dir> [--cells=12] [--load_distance=160] [--mesh_distance=70] [--frames=20] [--texel=0.5] [--ratio=0.05] [--groups=4] [--flights=1] [--timing=120]
+##       [--relief=12] [--terrain_error=2]
 ##
 ## A world of --cells x --cells cells of 64 m (World Lab's: ten buildings as one mesh of 1.5 m quads, 40 crates;
 ## Streaming Lab's textures) on a terrain split into regions of the same size, both under streamers. From a corner,
@@ -14,6 +15,9 @@ extends SceneTree
 ## The cells' proxies are textured with texels of --texel metres (milestone 127, decision 0251; 0: vertex colours);
 ## cells and regions in groups of --groups x --groups with a proxy each for afar (milestone 128, decision 0252; 0: none).
 ## Each lane A-D also times its view (--timing frames: the frame, the renderer's CPU and GPU times).
+## Milestone 131 (decision 0255): the terrain's heights reach +-(--relief) metres; its regions' proxies and their groups'
+## are simplified as far as --terrain_error pixels allow (0: to the ratio, as before), and C reports how far their
+## surfaces are from the terrain's (sampled every 2 m under each proxy).
 ## One JSON line: WORLD_PROXIES_CHECK {...}.
 
 const CELL := 64.0
@@ -27,6 +31,7 @@ var cam: Camera3D
 var mats: Array[StandardMaterial3D] = []
 var streamer: Node3D
 var ground_streamer: Node3D
+var terrain_ref # the whole terrain, kept (out of the tree) for its heights
 
 
 func _arg(name: String, default: String) -> String:
@@ -159,7 +164,7 @@ func _terrain():
 	data.resize(size * size)
 	for z in size:
 		for x in size:
-			data[z * size + x] = noise.get_noise_2d(x, z) * 12.0
+			data[z * size + x] = noise.get_noise_2d(x, z) * float(_arg("relief", "12"))
 	var t = ClassDB.instantiate("FellowTerrain3D")
 	t.name = "Ground"
 	var l0 = ClassDB.instantiate("FellowTerrainLayer")
@@ -226,6 +231,66 @@ func _groups() -> Dictionary:
 					wrong += 1
 					break
 	return {"total": total, "shown": shown, "shown_with_a_cell_loaded": wrong}
+
+
+# Milestone 131: how far the terrain's proxies (the regions' and their groups') are from the terrain, sampled every
+# 2 m under each: the largest and mean distance (metres, vertical), the share of samples more than 2 m off.
+func _terrain_errors() -> Dictionary:
+	var out := {}
+	var regions := []
+	var groups := []
+	for c in ground_streamer.get_children():
+		if c.has_meta("_fellow_group_proxy"):
+			groups.append(c)
+		else:
+			for p in c.get_children():
+				if p.has_meta("_fellow_cell_proxy"):
+					regions.append(p)
+	for lane in [["regions", regions], ["groups", groups]]:
+		var worst := 0.0
+		var total := 0.0
+		var over := 0
+		var samples := 0
+		var triangles := 0
+		for mi in lane[1]:
+			var mesh: Mesh = mi.mesh
+			if mesh == null:
+				continue
+			var xf: Transform3D = mi.global_transform
+			var a: Array = mesh.surface_get_arrays(0)
+			var v: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
+			var idx: PackedInt32Array = a[Mesh.ARRAY_INDEX]
+			triangles += idx.size() / 3
+			for t in idx.size() / 3:
+				var p0: Vector3 = xf * v[idx[t * 3]]
+				var p1: Vector3 = xf * v[idx[t * 3 + 1]]
+				var p2: Vector3 = xf * v[idx[t * 3 + 2]]
+				var den := (p1.z - p2.z) * (p0.x - p2.x) + (p2.x - p1.x) * (p0.z - p2.z)
+				if absf(den) < 1e-6:
+					continue
+				var x0 := ceilf(minf(p0.x, minf(p1.x, p2.x)) / 2.0) * 2.0 + 1.0
+				var z0 := ceilf(minf(p0.z, minf(p1.z, p2.z)) / 2.0) * 2.0 + 1.0
+				var x1 := maxf(p0.x, maxf(p1.x, p2.x))
+				var z1 := maxf(p0.z, maxf(p1.z, p2.z))
+				var x := x0
+				while x <= x1:
+					var z := z0
+					while z <= z1:
+						var b0 := ((p1.z - p2.z) * (x - p2.x) + (p2.x - p1.x) * (z - p2.z)) / den
+						var b1 := ((p2.z - p0.z) * (x - p2.x) + (p0.x - p2.x) * (z - p2.z)) / den
+						var b2 := 1.0 - b0 - b1
+						if b0 >= 0.0 and b1 >= 0.0 and b2 >= 0.0:
+							var d := absf(b0 * p0.y + b1 * p1.y + b2 * p2.y - terrain_ref.get_height(Vector3(x, 0, z)))
+							worst = maxf(worst, d)
+							total += d
+							samples += 1
+							if d > 2.0:
+								over += 1
+						z += 2.0
+					x += 2.0
+		out[lane[0]] = {"proxies": lane[1].size(), "triangles": triangles, "samples": samples, "max_m": snappedf(worst, 0.01),
+			"mean_m": snappedf(total / maxf(samples, 1), 0.001), "share_over_2m": snappedf(over / maxf(samples, 1.0), 0.0001)}
+	return out
 
 
 func _wait_settled() -> void:
@@ -314,7 +379,8 @@ func _run() -> void:
 			cell.set("scene_path", path)
 			cell.set("bounds", AABB(Vector3(-CELL * 0.5, -20.0, -CELL * 0.5), Vector3(CELL, 70.0, CELL)))
 			streamer.add_child(cell)
-	terrain.queue_free()
+	level.remove_child(terrain)
+	terrain_ref = terrain
 	result["build_ms"] = Time.get_ticks_msec() - t0
 	var w := n_cells * CELL
 	cam.position = Vector3(20, 45, 20)
@@ -343,13 +409,14 @@ func _run() -> void:
 
 	# C. Proxies baked for the cells and the regions.
 	t0 = Time.get_ticks_msec()
-	result["bake_regions"] = ground_streamer.bake_proxies(out_dir.path_join("proxies_ground"), {"terrain_quads": 16, "group_cells": int(_arg("groups", "4"))})
+	result["bake_regions"] = ground_streamer.bake_proxies(out_dir.path_join("proxies_ground"), {"terrain_quads": 16, "group_cells": int(_arg("groups", "4")), "terrain_error": float(_arg("terrain_error", "2"))})
 	result["bake_cells"] = streamer.bake_proxies(out_dir.path_join("proxies"), {"texel_size": float(_arg("texel", "0.5")), "ratio": float(_arg("ratio", "0.05")), "group_cells": int(_arg("groups", "4"))})
 	result["bake_ms"] = Time.get_ticks_msec() - t0
 	await _wait_settled()
 	result["c_proxies"] = _stats()
 	result["c_proxies"]["vs_a"] = _diff(a, await _shot("c_proxies"))
 	result["c_proxies"]["timing"] = await _timing()
+	result["c_proxies"]["terrain_proxies_error"] = _terrain_errors()
 
 	# D. The large meshes streamed too: the cells' scenes again with stand-ins, the full meshes near. (The cells
 	# unloaded first: the camera away from the world.)
@@ -372,6 +439,7 @@ func _run() -> void:
 		streamer.mesh_distance = float(_arg("mesh_distance", "70"))
 		result["e_flight_streamed"] = await _flight(w)
 	print("WORLD_PROXIES_CHECK " + JSON.stringify(result))
+	terrain_ref.free()
 	quit()
 
 

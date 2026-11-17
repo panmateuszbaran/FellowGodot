@@ -773,12 +773,16 @@ void FellowEditorPlugin::_proxies_confirmed() {
 	options["stream_meshes"] = proxies_stream_meshes->is_pressed();
 	options["texel_size"] = proxies_texel->get_value();
 	options["group_cells"] = int(proxies_group->get_value());
+	options["terrain_error"] = proxies_terrain_error->get_value();
 	const Dictionary info = streamer->call("bake_proxies", proxies_directory->get_text(), options);
 	EditorFileSystem::get_singleton()->scan_changes();
 	EditorInterface::get_singleton()->mark_scene_as_unsaved();
 	String text = vformat(TTR("%d proxies baked (%d triangles for %d); they are in %s."), int(info.get("proxies", 0)), int(info.get("proxy_triangles", 0)), int(info.get("source_triangles", 0)), proxies_directory->get_text());
 	if (int(info.get("groups", 0)) > 0) {
 		text += "\n" + vformat(TTR("%d groups of cells with a proxy of their own for afar (%d triangles)."), int(info.get("groups", 0)), int(info.get("group_triangles", 0)));
+	}
+	if (int(info.get("terrain_triangles", 0)) > 0) {
+		text += "\n" + vformat(TTR("Terrain: %d triangles in the cells' proxies, %d in the groups'."), int(info.get("terrain_triangles", 0)), int(info.get("group_terrain_triangles", 0)));
 	}
 	if (int(info.get("textured", 0)) > 0) {
 		text += "\n" + vformat(TTR("%d with a texture (%s in all)."), int(info.get("textured", 0)), String::humanize_size(int64_t(info.get("texture_bytes", 0))));
@@ -1337,6 +1341,13 @@ FellowEditorPlugin::FellowEditorPlugin() {
 	proxies_group->set_max(16);
 	proxies_group->set_value(4);
 	pvb->add_margin_child(TTR("Cells a side in a group with one proxy for afar (0: none):"), proxies_group);
+	proxies_terrain_error = memnew(SpinBox);
+	proxies_terrain_error->set_min(0.0);
+	proxies_terrain_error->set_max(16.0);
+	proxies_terrain_error->set_step(0.25);
+	proxies_terrain_error->set_value(2.0);
+	proxies_terrain_error->set_suffix("px");
+	pvb->add_margin_child(TTR("Terrain proxies' largest error where first drawn (0: to the ratio):"), proxies_terrain_error);
 	proxies_stream_meshes = memnew(CheckBox);
 	proxies_stream_meshes->set_text(TTR("Stream large meshes (simplified stand-ins in the cells' scenes, the full meshes loaded near)"));
 	proxies_stream_meshes->set_autowrap_mode(TextServer::AUTOWRAP_WORD_SMART);

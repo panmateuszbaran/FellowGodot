@@ -9,6 +9,17 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 131 — milestones 124-130 on the RTX; terrain proxies by error (2026-11-17)
+
+- `bake_proxies()`'s `terrain_error` (decision 0255): a terrain's streaming proxies are simplified apart from the rest
+  as far as 2 pixels of error allow where they are first drawn, not to `ratio` — 5 % of a region's triangles had left
+  a fan from its locked edges over the valleys, and Frontier Lab's far groups buried a town. World Lab with ±60 m
+  hills: the groups' ground 9.4 → 0.5 m off on average. The editor's dialog has the error; Frontier Lab bakes at the
+  distances it streams at (version 8).
+- The laptop's measurements of milestones 124-130 in their decisions (0248-0254): the hair's GPU cost and level of
+  detail, its crowd on 24 threads (10.4×), World Lab's groups (347 → 107 draws, a tenth of a millisecond), the textured
+  proxies' bakes, the HLOD bakes (the town's build 1.7 s → 7 ms, the forest's impostors at once).
+
 ## Milestone 130 — HLOD merged proxies baked into files (2026-11-16)
 
 - `FellowHLOD3D.bake_merged_proxies()` (decision 0254): the merged proxies and their detail levels baked into files

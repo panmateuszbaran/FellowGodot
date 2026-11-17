@@ -50,6 +50,10 @@ The bake: 3.3 s, 100 files, 15.5 MB (their detail levels with them). The picture
 merge, 12.2 % of the pixels differ; two run-time merges of the same scene differ as much (12.2 %), so that is lavapipe's
 floor here, not the meshes — a proxy's surfaces and detail levels compared equal, built either way.
 
+**On the laptop** (milestone 131, job f464: the release template on its CPU): the town's build 1 666-1 780 ms at run time,
+**7.4 ms** from the files; the bake 3.1 s. The pictures: the files' against a run-time merge 11.7 %, two run-time merges
+11.8 %.
+
 ## Decision
 
 Keep: a level's HLOD builds in milliseconds at load, from files baked once in the editor, and any change to a member

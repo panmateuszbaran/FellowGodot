@@ -46,7 +46,22 @@ strands cost the same at 1 m and at 50 m: on lavapipe the hair's frame at 8 and 
   At 8 m the hair with and without the level of detail looks the same (pictures).
 * `bench/hair_check.gd` as before (its camera within 4 m); the regression scene `hair` the same as its golden.
 
-Not measured: the RTX (no GPU for this milestone).
+**On the laptop** (milestone 131, job f466: RTX 5070 Ti Laptop, 1920 × 1080, the release template; each distance
+settled 60 frames, the median of 120; three runs): the frame's GPU time
+
+| camera | strands drawn | GPU, with | GPU, every strand |
+|---:|---:|---:|---:|
+| 1.0 m | 10 000 | 0.88-0.90 ms | |
+| 4.1 m | 9 592 | 0.75-0.80 ms | |
+| 8.2 m | 2 398 | 0.36-0.42 ms | 0.86-0.96 ms |
+| 16.3 m | 600 | 0.27-0.32 ms | 0.67-0.71 ms |
+| 32.7 m | 500 | 0.26-0.31 ms | |
+| 61.3 m | 500, not simulated | 0.29-0.34 ms | |
+
+The scene without the hair's strands is about 0.27 ms here (32 m), so the hair costs about 0.6 ms at 1 m and 4 m,
+0.1 ms at 8 m with its level of detail (0.6 ms without), and nothing measurable from 16 m (0.4 ms without). A first
+job (f464) measured five frames a distance, the GPU's clocks still changing: 0.9-2.4 ms at 1 m, the two runs apart by
+up to twice.
 
 ## Decision
 

@@ -59,6 +59,11 @@ Found on the way: in the editor the baker stalled between views until something 
 drawn there only on a change; the same baker serves the terrain's Bake Impostors, decision 0172). It now asks for the
 next frame.
 
+**On the laptop** (milestone 131, job f464: RTX 5070 Ti Laptop, 960 × 540, the release template, 2 500 trees): the
+run-time bake still takes 68 frames, 0.41-0.81 s there (its longest frame 132-460 ms); from the files the impostors are
+there at once (the build 0.8-2.9 ms). The pictures: the files' against the run-time bake's 8.3 % of the pixels (0.16
+levels on average), two loads of the files 11.0 % (0.23).
+
 ## Decision
 
 Keep: a scene's far trees are impostors from its first frame, with no bake at run time, for half a megabyte a mesh.

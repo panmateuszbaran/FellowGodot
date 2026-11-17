@@ -97,6 +97,12 @@ regions' proxies keep their edges (9 180 triangles; 3 550 without the lock, thei
 **The editor check**: its split level's boxes, now with a gradient texture, give 15 textured proxies (6.7 KiB in all),
 saved with the level and shown by a game while their cells are unloaded. The image regression suite: 38 scenes exact.
 
+**On the laptop** (milestone 131, job f464-f465: RTX 5070 Ti Laptop, 1080p; textured proxies need the editor build's
+UV unwrapper): the village's pictures as on lavapipe — vertex colours 46 % of the picture more than 16 levels off at
+300 m, 0.5 m texels 10.4 %, 0.25 m 13.0 %, 1 m 24.1 % — and its 16 cells baked in 0.51 s (0.32 s the textures). World
+Lab's 144 cells: 8.1 s, 4.2-4.3 s of it the textures. Frontier Lab's 4 km world (1 024 cells, 31.4 M triangles): 272
+of its 999 proxies textured (its towns'), 20 MB of textures, its cells' proxies baked in 140 s (29 s the textures).
+
 ## Decision
 
 Keep, textured by default: an unloaded cell's proxy now looks like the cell — its atlases' and trim sheets' parts in

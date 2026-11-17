@@ -23,7 +23,7 @@ extends "res://scenes/slice_lab.gd"
 ## cells' proxies are textured, milestone 127);
 ## Slice Lab's --slice_weather, --slice_daytime, --slice_day, --slice_crowd, --slice_without=water,weather,fire,crowd.
 
-const F_VERSION := 7 # 7: milestones 127-128's proxies (textured where baked by an editor build; groups of far cells)
+const F_VERSION := 8 # 7: milestones 127-128's proxies (textured where baked by an editor build; groups of far cells); 8: milestone 131's (the terrain's by its error, baked at the streaming distances)
 const F_CELL := 128.0
 const F_REGION := 256
 const F_TEX_DIR := "res://external/streaming"
@@ -311,6 +311,12 @@ func _generate() -> bool:
 	cell_streamer.name = "Cells"
 	cell_streamer.streaming = false
 	level.add_child(cell_streamer)
+	# (Milestone 131: the distances it streams at, so that the proxies are baked for them — the groups' switch, the
+	# terrain proxies' error.)
+	ground_streamer.load_distance = 1000.0
+	ground_streamer.unload_margin = 100.0
+	cell_streamer.load_distance = 450.0
+	cell_streamer.unload_margin = 50.0
 	# The terrain, its foliage's impostors baked, split into regions.
 	var t1 := Time.get_ticks_usec()
 	var terrain = _make_terrain()

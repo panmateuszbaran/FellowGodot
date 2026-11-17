@@ -23,8 +23,9 @@ one more from their content together (each cell's content placed as in the strea
   loaded: the load distance (the cells' own if larger), `unload_margin`, and the farthest point of the cells' boxes
   from the proxy's centre (visibility ranges measure to the instance's centre). By that factor `s` (at most
   `group_cells`): as many triangles as its cells' proxies over `s²`, texels `s` times theirs. A terrain keeps its
-  cells' quads, and only the group's outer edges are locked (the lock now found on the welded mesh: edges of one
-  terrain triangle), so it meets its neighbours' proxies without cracks.
+  cells' quads (simplified to an error on screen since decision 0255), and only the group's outer edges are locked
+  (the lock now found on the welded mesh: edges of one terrain triangle), so it meets its neighbours' proxies without
+  cracks.
 * **Its switch**: a `MeshInstance3D` under the streamer (`FellowGroupProxy_<x>_<z>`, its file
   `group_<x>_<z>_proxy.res`) whose `visibility_range_begin` is that distance (or `group_distance`), and the cells'
   proxies' `visibility_parent`: Godot's HLOD dependency hides them beyond it and shows it, with one test for the group.
@@ -60,6 +61,23 @@ shown — and none with a cell of theirs loaded. The groups add 15 858 triangles
 A first version took the groups' triangles as a share of their content's: after `stream_meshes` had put stand-ins in
 the content, that share of an already simplified mesh left a triangle or two a building — shards on the horizon (D: 4 %
 of the picture off). The groups now take their cells' proxies' triangles as the measure.
+
+**On the laptop** (milestone 131, job f464: RTX 5070 Ti Laptop, 1080p, the editor build; World Lab's corner view, the
+median of 120 frames, two runs each, interleaved):
+
+| C: the proxies | draws | GPU | the renderer's CPU | frame | pixels > 16 levels off A / mean |
+|---|---:|---:|---:|---:|---:|
+| each cell its proxy | 347 | 0.71 / 0.71 ms | 0.28 / 0.37 ms | 0.79 / 0.77 ms | 0.27 % / 0.0016 |
+| groups of 4 × 4 | 107 | 0.62 / 0.58 ms | 0.19 / 0.25 ms | 0.69 / 0.67 ms | 0.48 % / 0.0021 |
+
+A tenth of a millisecond of GPU and of the renderer's CPU in a view this light; the bake 8.1 → 15.4-16.0 s (the groups'
+own bakes merge 16 cells each on one thread). Frontier Lab's 4 km world: 64 groups of cells and 16 of regions, 140 k
+triangles and 5 MB of textures more; its cells' proxies baked in 209 s instead of 140 s. Streamed with the
+atmosphere (job f468, 3 runs of 90 s, interleaved): 455 draws instead of 755, 5.47 M triangles instead of 5.77 M, the
+GPU 3.74 ms instead of 3.96 ms, the renderer's CPU 0.97 ms instead of 1.08 ms, the frame 4.31 ms instead of 4.43 ms.
+Its far views showed what World Lab's gentle terrain had hidden: the regions' groups simplified to a fan from their
+locked edges, a town 2 km away under it — decision 0255 simplifies a terrain's proxies to an error instead, and
+measures Frontier Lab again.
 
 ## Decision
 

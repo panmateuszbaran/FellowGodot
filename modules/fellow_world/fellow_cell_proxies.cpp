@@ -431,9 +431,11 @@ T _gather(const T &p_src, const LocalVector<int> &p_used, int p_per_vertex = 1) 
 // (meshoptimizer, no border locked but a terrain region's and no part pruned: Godot's LOD generation locks open
 // borders — a wall's quads not joined to the next wall at a corner — and then reaches its targets by deleting whole
 // buildings), the normals rebuilt from the faces, split where they meet at more than 60 degrees; r_error the
-// simplifier's estimate of how far it moved the surface (metres). False when the simplifier is missing or nothing is
-// left.
-bool _simplify_welded(const Merged &p_merged, float p_ratio, int p_triangles, PackedVector3Array &r_vertices, PackedVector3Array &r_normals, PackedColorArray &r_colors, PackedInt32Array &r_indices, float &r_error) {
+// simplifier's estimate of how far it moved the surface (metres). With p_terrain_error over 0 (metres) the terrain's
+// triangles are simplified apart, as far as that error allows (its outer edges locked, a count target would leave a
+// fan of thin triangles from them over a valley: decision 0255), the rest to p_ratio or p_triangles;
+// r_terrain_triangles the terrain's. False when the simplifier is missing or nothing is left.
+bool _simplify_welded(const Merged &p_merged, float p_ratio, int p_triangles, float p_terrain_error, PackedVector3Array &r_vertices, PackedVector3Array &r_normals, PackedColorArray &r_colors, PackedInt32Array &r_indices, float &r_error, int &r_terrain_triangles) {
 	if (!SurfaceTool::simplify_with_attrib_func || !SurfaceTool::generate_remap_func || !SurfaceTool::remap_index_func || !SurfaceTool::simplify_scale_func) {
 		return false;
 	}
@@ -499,13 +501,38 @@ bool _simplify_welded(const Merged &p_merged, float p_ratio, int p_triangles, Pa
 	}
 	LocalVector<unsigned int> simplified;
 	simplified.resize(index_count);
-	const size_t target = MAX(p_triangles > 0 ? size_t(p_triangles) * 3 : size_t(index_count * p_ratio) / 3 * 3, size_t(36));
-	float error = 0.0f;
-	const size_t count = SurfaceTool::simplify_with_attrib_func(simplified.ptr(), indices.ptr(), index_count, welded.ptr(), unique, sizeof(float) * 3, nullptr, 0, nullptr, 0, any_locked ? lock.ptr() : nullptr, target, 1.0f, 0, &error);
+	const float extent = SurfaceTool::simplify_scale_func(welded.ptr(), unique, sizeof(float) * 3); // (errors are relative to it)
+	size_t count = 0;
+	r_terrain_triangles = 0;
+	if (any_locked && p_terrain_error > 0.0f) {
+		// The terrain as far as its error allows (no count: 0), the rest to its ratio or count.
+		LocalVector<unsigned int> terrain;
+		LocalVector<unsigned int> rest;
+		for (int t = 0; t < index_count / 3; t++) {
+			LocalVector<unsigned int> &to = p_merged.triangle_sampler[t] == p_merged.terrain_sampler ? terrain : rest;
+			for (int k = 0; k < 3; k++) {
+				to.push_back(indices[t * 3 + k]);
+			}
+		}
+		float terrain_error = 0.0f;
+		count = SurfaceTool::simplify_with_attrib_func(simplified.ptr(), terrain.ptr(), terrain.size(), welded.ptr(), unique, sizeof(float) * 3, nullptr, 0, nullptr, 0, lock.ptr(), 0, p_terrain_error, 1 << 2 /* meshopt_SimplifyErrorAbsolute */, &terrain_error);
+		r_terrain_triangles = int(count / 3);
+		r_error = terrain_error;
+		if (!rest.is_empty()) {
+			const size_t target = MAX(p_triangles > 0 ? size_t(p_triangles) * 3 : size_t(rest.size() * p_ratio) / 3 * 3, size_t(36));
+			float rest_error = 0.0f;
+			count += SurfaceTool::simplify_with_attrib_func(simplified.ptr() + count, rest.ptr(), rest.size(), welded.ptr(), unique, sizeof(float) * 3, nullptr, 0, nullptr, 0, nullptr, MIN(target, size_t(rest.size())), 1.0f, 0, &rest_error);
+			r_error = MAX(r_error, rest_error * extent);
+		}
+	} else {
+		const size_t target = MAX(p_triangles > 0 ? size_t(p_triangles) * 3 : size_t(index_count * p_ratio) / 3 * 3, size_t(36));
+		float error = 0.0f;
+		count = SurfaceTool::simplify_with_attrib_func(simplified.ptr(), indices.ptr(), index_count, welded.ptr(), unique, sizeof(float) * 3, nullptr, 0, nullptr, 0, any_locked ? lock.ptr() : nullptr, MIN(target, size_t(index_count)), 1.0f, 0, &error);
+		r_error = error * extent;
+	}
 	if (count == 0) {
 		return false;
 	}
-	r_error = error * SurfaceTool::simplify_scale_func(welded.ptr(), unique, sizeof(float) * 3); // (relative to the extents)
 	// The faces' normals (area-weighted), and the faces at each vertex.
 	const int tris = int(count / 3);
 	LocalVector<Vector3> face;
@@ -1061,7 +1088,7 @@ Ref<StandardMaterial3D> proxy_material() {
 	return material;
 }
 
-Ref<ArrayMesh> bake_proxy(Node *p_content, float p_ratio, int p_terrain_quads, float p_texel_size, int p_max_texture_size, Dictionary &r_info, int p_triangles) {
+Ref<ArrayMesh> bake_proxy(Node *p_content, float p_ratio, int p_terrain_quads, float p_texel_size, int p_max_texture_size, Dictionary &r_info, int p_triangles, float p_terrain_error) {
 	Merged merged;
 	merged.want_textures = p_texel_size > 0.0f;
 	int source_triangles = 0;
@@ -1133,10 +1160,12 @@ Ref<ArrayMesh> bake_proxy(Node *p_content, float p_ratio, int p_terrain_quads, f
 	PackedColorArray colors;
 	PackedInt32Array indices;
 	float error = 0.0f;
-	if (!_simplify_welded(merged, p_ratio, p_triangles, vertices, normals, colors, indices, error)) {
+	int terrain_triangles = 0;
+	if (!_simplify_welded(merged, p_ratio, p_triangles, p_terrain_error, vertices, normals, colors, indices, error, terrain_triangles)) {
 		r_info["proxy_triangles"] = 0;
 		return Ref<ArrayMesh>();
 	}
+	r_info["proxy_terrain_triangles"] = terrain_triangles;
 	// The source's surfaces are looked for within twice the simplifier's error (a centimetre at least) of the proxy's.
 	const Ref<TriangleMesh> source = _source_mesh(merged);
 	const float reach = MAX(2.0f * error, 0.01f);

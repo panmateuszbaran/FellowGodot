@@ -32,7 +32,11 @@ over the nodes (`simulate_usec`), the uploads, the node-frames stepped.
 
 `bench/hair_check.gd` and `bench/hair_lod_check.gd`: every figure as before (stretch 0, 0.110 m from the head's centre,
 the tips 0.231 m behind in the turn, 3.6 cm in the wind; the strands drawn at each distance); the regression scene
-`hair` the same as its golden from both builds. A desktop's 24 threads not measured (no laptop job this milestone).
+`hair` the same as its golden from both builds.
+
+**On the laptop** (milestone 131, job f464: the release template on its 24 threads, headless, twice): the group 0.89 /
+0.93 ms a frame on the main thread, the steps 5.20 / 5.36 ms summed, the uploads 0.40 ms — the steps 10.4 / 10.3 times
+faster than one after another (the uploads, on the main thread, now a little under half of what the main thread pays).
 
 ## Decision
 

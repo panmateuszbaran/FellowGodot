@@ -46,10 +46,12 @@ namespace FellowCellProxies {
 // proxy_material()). With p_texel_size (metres) over 0 and a material with a texture among them (and an editor build:
 // the UV unwrapper), the proxy is unwrapped instead and drawn with a texture of what the content draws under it,
 // texels of about p_texel_size (coarser to keep within p_max_texture_size), with a material of its own
-// (docs/decisions/0251-textured-proxies.md). p_triangles over 0: about that many triangles instead of p_ratio. Null
-// when there is nothing to draw. r_info: the source and proxy triangles, the simplifier's error, the texture's size,
-// bytes, texels found and time.
-Ref<ArrayMesh> bake_proxy(Node *p_content, float p_ratio, int p_terrain_quads, float p_texel_size, int p_max_texture_size, Dictionary &r_info, int p_triangles = 0);
+// (docs/decisions/0251-textured-proxies.md). p_triangles over 0: about that many triangles instead of p_ratio (the
+// terrains' apart when p_terrain_error is). p_terrain_error over 0 (metres): the terrains simplified apart, as far as
+// that error allows, whatever their count (docs/decisions/0255-terrain-proxy-error.md); else with the rest, to
+// p_ratio. Null when there is nothing to draw. r_info: the source and proxy triangles (the terrains' among them), the
+// simplifier's error, the texture's size, bytes, texels found and time.
+Ref<ArrayMesh> bake_proxy(Node *p_content, float p_ratio, int p_terrain_quads, float p_texel_size, int p_max_texture_size, Dictionary &r_info, int p_triangles = 0, float p_terrain_error = 0.0f);
 
 // Frees the textures' levels read by textured bakes (kept from one cell to the next).
 void clear_bake_cache();

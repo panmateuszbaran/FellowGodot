@@ -475,6 +475,14 @@ streamer drawn beyond `group_distance` (0: where none of its cells can be loaded
 parent, and hidden while any of its cells is loaded. The result has `groups`, `group_triangles`,
 `group_texture_bytes`; the editor's dialog has the group size. World Lab: 347 → 107 draws.
 
+Milestone 131 (decision 0255), **terrain proxies by error**: `bake_proxies` option `terrain_error` 2 (pixels; 0: the
+terrain simplified with the rest, to `ratio`, as before): a cell's terrain is simplified apart from its other content,
+its region's edges kept, as far as an error of that many pixels allows in a view of 1 080 lines with a 75° field of
+view at the distance at which the proxy is first drawn (its cell's load distance and `unload_margin`; a group's
+switch) — its count whatever that takes. A ratio's count left a region's proxy a fan from its locked edges across the
+valleys. The result has `terrain_triangles`, `group_terrain_triangles`; the editor's dialog has the error. Bake proxies
+with the load distances the streamer will use: the error and the groups' switch are computed from them.
+
 ## FSR 3.1 upscaler (milestone 47)
 
 `rendering/fellow/upscaling/fsr3` (on from milestone 49; read every frame): a viewport in Godot's FSR 2 scaling mode

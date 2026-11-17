@@ -69,7 +69,9 @@ reference; the editor check (the preset added without a warning).
 First versions: the guides started along the scalp's normal, so the crown's stood up; the highlights were near white
 (the narrow lobe at 0.4, the broad one 2.5 × the colour); without TAA the dithered coverage looked sparse and noisy.
 
-Not measured: the GPU's cost on the RTX (the GPU was not available for this milestone).
+On the laptop (milestone 131, job f466; RTX 5070 Ti Laptop, 1920 × 1080, the release template): 10 000 strands of a
+head 1 m from the camera cost about 0.6 ms of GPU time (decision 0249's check: the frame 0.88-0.90 ms, 0.27 ms
+without the strands near).
 
 ## Decision
 

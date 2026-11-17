@@ -687,6 +687,10 @@ Dictionary FellowWorldStreamer3D::bake_proxies(const String &p_directory, const 
 	const int max_texture_size = p_options.get("max_texture_size", 512);
 	const int group_cells = p_options.get("group_cells", 4);
 	const real_t group_distance = p_options.get("group_distance", 0.0);
+	// A terrain's proxies as far as an error of terrain_error pixels allows where they are first drawn, in a view of
+	// 1 080 lines with Godot's default field of view (75 degrees): metres per metre of distance (decision 0255).
+	const float terrain_error = p_options.get("terrain_error", 2.0f);
+	const float error_per_metre = terrain_error * 2.0f * Math::tan(Math::deg_to_rad(37.5f)) / 1080.0f;
 	Node *owner = Object::cast_to<Node>(p_options.get("owner", Variant()).get_validated_object());
 	if (!owner) {
 		owner = get_owner();
@@ -709,6 +713,8 @@ Dictionary FellowWorldStreamer3D::bake_proxies(const String &p_directory, const 
 	int64_t texture_hits = 0;
 	int groups_baked = 0;
 	int group_triangles = 0;
+	int terrain_triangles = 0; // the terrains' among the proxies' and the groups'
+	int group_terrain_triangles = 0;
 	int64_t group_texture_bytes = 0;
 	int streamed = 0;
 	int stream_before = 0;
@@ -808,7 +814,8 @@ Dictionary FellowWorldStreamer3D::bake_proxies(const String &p_directory, const 
 				}
 			}
 			Dictionary pi;
-			Ref<ArrayMesh> proxy = FellowCellProxies::bake_proxy(content, ratio, terrain_quads, texel_size, max_texture_size, pi);
+			const real_t first_drawn = (cell->load_distance > 0.0 ? cell->load_distance : load_distance) + unload_margin;
+			Ref<ArrayMesh> proxy = FellowCellProxies::bake_proxy(content, ratio, terrain_quads, texel_size, max_texture_size, pi, 0, float(first_drawn) * error_per_metre);
 			source_triangles += int(pi.get("source_triangles", 0));
 			if (proxy.is_valid()) {
 				if (pi.has("texture_width")) {
@@ -839,7 +846,8 @@ Dictionary FellowWorldStreamer3D::bake_proxies(const String &p_directory, const 
 					cell->_editor_hide_proxies();
 					proxies++;
 					proxy_triangles += int(pi.get("proxy_triangles", 0));
-					baked_triangles += int(pi.get("proxy_triangles", 0));
+					terrain_triangles += int(pi.get("proxy_terrain_triangles", 0));
+					baked_triangles += int(pi.get("proxy_triangles", 0)) - int(pi.get("proxy_terrain_triangles", 0)); // (a terrain's as its error allows)
 				}
 			}
 			// The large meshes' stand-ins, their full meshes apart.
@@ -921,7 +929,8 @@ Dictionary FellowWorldStreamer3D::bake_proxies(const String &p_directory, const 
 			// (How much farther than its cells' proxies it is seen: at most as much as it is larger.)
 			const float scale = CLAMP(float((load + unload_margin + bounds.size.length() * 0.5) / MAX(load, real_t(1.0))), 1.0f, float(group_cells));
 			Dictionary gpi;
-			Ref<ArrayMesh> group = FellowCellProxies::bake_proxy(root, ratio, terrain_quads, texel_size > 0.0f ? texel_size * scale : 0.0f, max_texture_size, gpi, MAX(1, int(baked_triangles / (scale * scale))));
+			const real_t group_drawn = group_distance > 0.0 ? group_distance : load + unload_margin + bounds.size.length() * 0.5;
+			Ref<ArrayMesh> group = FellowCellProxies::bake_proxy(root, ratio, terrain_quads, texel_size > 0.0f ? texel_size * scale : 0.0f, max_texture_size, gpi, MAX(1, int(baked_triangles / (scale * scale))), float(group_drawn) * error_per_metre);
 			memdelete(root);
 			if (group.is_valid()) {
 				if (gpi.has("texture_width")) {
@@ -966,6 +975,7 @@ Dictionary FellowWorldStreamer3D::bake_proxies(const String &p_directory, const 
 					_update_group(baked[0]);
 					groups_baked++;
 					group_triangles += int(gpi.get("proxy_triangles", 0));
+					group_terrain_triangles += int(gpi.get("proxy_terrain_triangles", 0));
 				}
 			}
 		}
@@ -984,6 +994,8 @@ Dictionary FellowWorldStreamer3D::bake_proxies(const String &p_directory, const 
 	info["texture_ms"] = texture_usec / 1000.0;
 	info["groups"] = groups_baked;
 	info["group_triangles"] = group_triangles;
+	info["terrain_triangles"] = terrain_triangles;
+	info["group_terrain_triangles"] = group_terrain_triangles;
 	info["group_texture_bytes"] = group_texture_bytes;
 	info["texture_hit_share"] = texture_texels > 0 ? double(texture_hits) / double(texture_texels) : 0.0; // texels coloured by a surface found under them
 	info["streamed_meshes"] = streamed;
