@@ -60,9 +60,34 @@ triangles and textures in memory at a detail no view needs past a few kilometres
 `world_proxies_check.gd` (lavapipe, 640 × 360; World Lab's cells of 64 m — ten buildings of 1.5 m quads, 40 crates,
 Streaming Lab's textures — on a terrain of regions of the same size) with `--far=1`: a view from outside the world's
 corner, high, looking at its centre (F), every cell unloaded and C's proxies baked: with the coarser levels and with them
-hidden (the groups' proxies alone), each against the world all loaded from there (A's).
+hidden (the groups' proxies alone), each against the world all loaded from there (A's); since the fix of the faces'
+sides also with the buildings alone in one white material (their shapes' shading, `*_white`), and compared on the
+world's pixels only (not the sky's: from out there the world is a small part of the picture). The editor check: two
+levels baked from the dialog over the split level's 15 cells (3 groups, one coarser proxy over them), owned by the level
+and saved with it; in a game shown while the cells are unloaded, hidden once they load. The image regression suite
+(exact: no scene of it bakes proxies).
 
-Measurements being finished.
+## Results
+
+**16 × 16 cells** (1 km a side; 256 cells and 256 terrain regions streamed to 160 m), groups of 2 × 2 and three
+levels — 64 groups, 16 of the second level and 4 of the third, for the cells and for the regions; from outside the
+world's corner (1.6 km from its centre):
+
+| | draws | triangles drawn | picture > 16 levels off A / mean | its world's pixels > 16 off |
+|---|---:|---:|---:|---:|
+| the groups' proxies alone (decision 0252) | 128 | 66 500 | 0.25 % / 0.0006 | 12.2 % |
+| **with the levels** (the third drawn) | **8** | **31 205** | 0.29 % / 0.0007 | 14.4 % |
+| with the levels, the faces' sides as before | 8 | 31 205 | 0.62 % / 0.0010 | 31.5 % |
+
+The cells' levels: 48 342 triangles in the 64 groups, 27 243 in the second level's 16 proxies, 25 719 in the third's 4
+(the error floor: about ten triangles a building, the houses kept as boxes); the regions' 18 158, 10 270 and 5 486. Their
+textures 5.5 MB, 3.3 MB and 1.9 MB. None of the 168 proxies of groups and levels was drawn with a cell of its loaded (C:
+156 shown, the 12 over the loaded cells near the camera hidden, up the levels).
+
+The fix of the faces' sides on the near view (C: every cell's proxy, its groups and levels; D: C with the buildings
+streamed): 1.05 → 0.42 % of the picture more than 16 levels off the world all loaded, D 0.99 → 0.42 %.
+
+FAR8_RESULTS
 
 ## Decision
 
