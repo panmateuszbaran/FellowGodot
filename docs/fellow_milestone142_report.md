@@ -18,16 +18,19 @@ Status: **FINAL** (2026-11-18). Branch `fellow/geometry`. Lavapipe in the cloud 
   SPIR-V).
 * The device loss of milestone 33 (ray-traced GI with the clouds' shadow map written and read in one frame): no hazard
   on the map on lavapipe with the new diagnostic `debug/cloud_shadow_same_frame`; the double buffer stays, and the RTX
-  can be asked again when its GPU is free.
+  is asked again in milestone 143.
 
 ## 1. Checks
 
-The image regression suite under validation (its README's command, new) and without (exact); FellowBench's labs under
-validation on lavapipe (Slice Lab with ray-traced GI and the sky's atmosphere and clouds, Rain, Water, Fire and Lights
-Lab), their pictures against the same captures before the last fix.
+The image regression suite under validation (its README's command, new): 48 of 48 pictures identical, nothing but the
+layer's own message. FellowBench's labs under validation on lavapipe (Slice Lab with ray-traced GI and the sky's
+atmosphere and clouds, Rain, Water, Fire and Lights Lab): nothing but the layer's own message, and their pictures the
+same bit for bit as the captures before the last fix — but Rain Lab's splashes, which differ as much between two runs
+of one build.
 
 ## 2. Next
 
-On the RTX when the laptop's GPU is free: PBR Lab with ray-traced GI and `debug/cloud_shadow_same_frame`; Frontier
-Lab's levels of groups, middle mesh levels, Bistro streamed, Crowd Lab with `update_lod`; City Lab on the Intel GPU
-(job f487, queued).
+Milestone 143, the laptop's GPUs free again: m142 built on the laptop, then on the RTX Bistro's DDS textures streamed,
+Crowd Lab with `update_lod`, Frontier Lab's levels of groups, and last milestone 33's device loss asked again
+(Bistro exterior with ray-traced GI, the clouds' shadows and `debug/cloud_shadow_same_frame`, as in milestone 33); City
+Lab on the Intel GPU (job f487) running.

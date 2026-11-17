@@ -50,13 +50,15 @@ validation layer (core and synchronization validation) and Godot's `--gpu-valida
 
 Each fixed, the sweep again: no validation message but the layer's own (`VUID-VkShaderModuleCreateInfo-pCode-08739`:
 this layer cannot parse ray-query SPIR-V, which lavapipe runs), and every picture of the suite and the labs the same
-bit for bit.
+bit for bit — but Rain Lab's, which differ from the captures before the last fix as two runs of one build differ
+(mean 0.006 levels, at most 7-11: its splashes are stock's GPU sub-emitter particles, emitted in an order that changes
+between runs).
 
 **The device loss of milestone 33**: with `debug/cloud_shadow_same_frame` (new, diagnostics: the colour passes read the
 map written in the same frame, as before decision 0133), PBR Lab with ray-traced GI and the clouds' shadows reports no
 hazard on the map; the cause on NVIDIA's driver remains unfound, and the double buffer stays. With the invalid barrier
-above fixed (the frame's bloom, there in milestone 33's captures too), the RTX can be asked again — PBR Lab with
-ray-traced GI, the clouds' shadows and `debug/cloud_shadow_same_frame` — when its GPU is free (not in this milestone).
+above fixed (the frame's bloom, there in milestone 33's captures too), the RTX is asked again in milestone 143 —
+Bistro exterior (milestone 33's scene) with ray-traced GI, the clouds' shadows and `debug/cloud_shadow_same_frame`.
 
 ## Decision
 
