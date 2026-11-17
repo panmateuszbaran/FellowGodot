@@ -5697,6 +5697,13 @@ bool RenderingDeviceDriverVulkan::pipeline_cache_create(const Vector<uint8_t> &p
 		}
 	}
 
+	// FellowEngine (decision 0261): 0 off, 1 on, 2 on Intel's GPUs (the default; also when not set).
+	{
+		const ProjectSettings *ps = ProjectSettings::get_singleton();
+		const int mode = ps && ps->has_setting("rendering/fellow/frame/pipeline_cache_exclusive") ? int(ps->get_setting("rendering/fellow/frame/pipeline_cache_exclusive")) : 2;
+		fellow_cache_exclusive = mode == 1 || (mode == 2 && physical_device_properties.vendorID == RenderingContextDriver::Vendor::VENDOR_INTEL);
+	}
+
 	// Create.
 	{
 		VkPipelineCacheCreateInfo cache_info = {};
@@ -5742,7 +5749,14 @@ size_t RenderingDeviceDriverVulkan::pipeline_cache_query_size() {
 	// FIXME:
 	// We're letting the cache grow unboundedly. We may want to set at limit and see if implementations use LRU or the like.
 	// If we do, we won't be able to assume any longer that the cache is dirty if, and only if, it has grown.
+	// FellowEngine (decision 0261): while another thread creates a pipeline, the size known (the next query sees it).
+	if (fellow_cache_exclusive && !fellow_cache_lock.write_try_lock()) {
+		return pipelines_cache.current_size;
+	}
 	VkResult err = vkGetPipelineCacheData(vk_device, pipelines_cache.vk_cache, &pipelines_cache.current_size, nullptr);
+	if (fellow_cache_exclusive) {
+		fellow_cache_lock.write_unlock();
+	}
 	ERR_FAIL_COND_V_MSG(err, 0, vformat("Couldn't get Vulkan pipeline cache data (VkResult error %d).", err));
 
 	return pipelines_cache.current_size;
@@ -5758,9 +5772,19 @@ Vector<uint8_t> RenderingDeviceDriverVulkan::pipeline_cache_serialize() {
 		return Vector<uint8_t>();
 	}
 
+	// FellowEngine (decision 0261): the copy waits (on the saving thread) for a moment no pipeline is being created; a
+	// creation never waits for it to start.
+	if (fellow_cache_exclusive) {
+		while (!fellow_cache_lock.write_try_lock()) {
+			OS::get_singleton()->delay_usec(500);
+		}
+	}
 	pipelines_cache.buffer.resize(pipelines_cache.current_size + sizeof(PipelineCacheHeader));
 
 	VkResult err = vkGetPipelineCacheData(vk_device, pipelines_cache.vk_cache, &pipelines_cache.current_size, pipelines_cache.buffer.ptrw() + sizeof(PipelineCacheHeader));
+	if (fellow_cache_exclusive) {
+		fellow_cache_lock.write_unlock();
+	}
 	// Incomplete is OK because the cache may have grown since the size was queried (unless when exiting).
 	ERR_FAIL_COND_V_MSG(err != VK_SUCCESS && err != VK_INCOMPLETE, Vector<uint8_t>(), vformat("Couldn't get Vulkan pipeline cache data (VkResult error %d).", err));
 
@@ -6653,7 +6677,11 @@ RDD::PipelineID RenderingDeviceDriverVulkan::render_pipeline_create(
 	}
 
 	VkPipeline vk_pipeline = VK_NULL_HANDLE;
-	VkResult err = vkCreateGraphicsPipelines(vk_device, fellow_pipeline_stats_support ? VK_NULL_HANDLE : pipelines_cache.vk_cache, 1, &pipeline_create_info, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_PIPELINE), &vk_pipeline);
+	VkResult err;
+	{
+		FellowCacheUse fellow_cache_use(this); // decision 0261
+		err = vkCreateGraphicsPipelines(vk_device, fellow_pipeline_stats_support ? VK_NULL_HANDLE : pipelines_cache.vk_cache, 1, &pipeline_create_info, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_PIPELINE), &vk_pipeline);
+	}
 	if (fellow_pipeline_stats_support && err == VK_SUCCESS) {
 		_fellow_dump_pipeline_stats(vk_pipeline, shader_info, p_specialization_constants, "render");
 	}
@@ -7076,7 +7104,11 @@ RDD::RaytracingPipelineID RenderingDeviceDriverVulkan::raytracing_pipeline_creat
 	pipeline_create_info.maxPipelineRayRecursionDepth = p_max_trace_recursion_depth;
 
 	VkPipeline vk_pipeline = VK_NULL_HANDLE;
-	VkResult err = device_functions.CreateRaytracingPipelinesKHR(vk_device, VK_NULL_HANDLE, pipelines_cache.vk_cache, 1, &pipeline_create_info, nullptr, &vk_pipeline);
+	VkResult err;
+	{
+		FellowCacheUse fellow_cache_use(this); // decision 0261
+		err = device_functions.CreateRaytracingPipelinesKHR(vk_device, VK_NULL_HANDLE, pipelines_cache.vk_cache, 1, &pipeline_create_info, nullptr, &vk_pipeline);
+	}
 	ERR_FAIL_COND_V_MSG(err, RaytracingPipelineID(), vformat("Couldn't create Vulkan raytracing pipelines (VkResult error %d).", err));
 
 	return RaytracingPipelineID(vk_pipeline);
@@ -7202,7 +7234,11 @@ RDD::PipelineID RenderingDeviceDriverVulkan::compute_pipeline_create(ShaderID p_
 	}
 
 	VkPipeline vk_pipeline = VK_NULL_HANDLE;
-	VkResult err = vkCreateComputePipelines(vk_device, fellow_pipeline_stats_support ? VK_NULL_HANDLE : pipelines_cache.vk_cache, 1, &pipeline_create_info, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_PIPELINE), &vk_pipeline);
+	VkResult err;
+	{
+		FellowCacheUse fellow_cache_use(this); // decision 0261
+		err = vkCreateComputePipelines(vk_device, fellow_pipeline_stats_support ? VK_NULL_HANDLE : pipelines_cache.vk_cache, 1, &pipeline_create_info, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_PIPELINE), &vk_pipeline);
+	}
 	ERR_FAIL_COND_V_MSG(err, PipelineID(), vformat("Couldn't create Vulkan compute pipelines (VkResult error %d).", err));
 	if (fellow_pipeline_stats_support) {
 		_fellow_dump_pipeline_stats(vk_pipeline, shader_info, p_specialization_constants, "compute");

@@ -9945,7 +9945,9 @@ void RenderingDevice::update_pipeline_cache(bool p_closing) {
 
 	{
 		size_t new_pipelines_cache_size = driver->pipeline_cache_query_size();
-		ERR_FAIL_COND(!new_pipelines_cache_size);
+		if (!new_pipelines_cache_size) {
+			return; // FellowEngine (decision 0261): not known yet (the driver says why when it failed)
+		}
 		Fellow::stats().pipeline_cache_bytes.set(new_pipelines_cache_size);
 		size_t difference = new_pipelines_cache_size - pipeline_cache_size;
 

@@ -399,6 +399,7 @@ void Fellow::register_settings() {
 	// The pipeline cache file is ignored at start-up (and replaced by the next save) when larger than this: stock lets
 	// it grow without bound, and at 2 GiB its checksum's length overflows and the save crashes (decision 0050).
 	GLOBAL_DEF_RST(PropertyInfo(Variant::INT, "rendering/fellow/frame/pipeline_cache_max_mb", PROPERTY_HINT_RANGE, "64,2000,1,suffix:MiB"), 1024);
+	GLOBAL_DEF_RST(PropertyInfo(Variant::INT, "rendering/fellow/frame/pipeline_cache_exclusive", PROPERTY_HINT_ENUM, "Off,On,Intel GPUs"), 2);
 	GLOBAL_DEF_RST(PropertyInfo(Variant::INT, "rendering/fellow/frame/async_compute_family", PROPERTY_HINT_ENUM, "Dedicated Compute Family,Main Family,Main Queue (Split Only)"), 0);
 	// FSR 3.1 upscaler (milestone 47, decision 0148, renderer_rd/effects/fsr3.h): a viewport in the FSR 2 scaling mode runs
 	// AMD's FidelityFX Super Resolution 3.1 upscaler instead of stock's 2.2. Read every frame (a new context, a new history).

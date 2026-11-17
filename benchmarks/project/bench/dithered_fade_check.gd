@@ -679,8 +679,10 @@ func _mesh_swap(shadow := false) -> Dictionary:
 		_sun().shadow_enabled = false
 		await process_frame
 		return rs
-	var r := {"stand_in_vs_full": _compare(stand_in_only, full_only), "stats": streamer.call("get_stats"),
-		"to_full": {"frames": out.to_full.frames, "holes": _holes_both(out.to_full.middle, stand_in_only, full_only), "middle_vs_full": _compare(out.to_full.middle, full_only)},
+	var r := {"stand_in_vs_full": _compare(stand_in_only, full_only), "stand_in_vs_full_differing": _ball_holes(stand_in_only, full_only).share_differing, "stats": streamer.call("get_stats"),
+		"to_full": {"frames": out.to_full.frames, "holes": _holes_both(out.to_full.middle, stand_in_only, full_only), "middle_vs_full": _compare(out.to_full.middle, full_only),
+			# (Pixels differing at all: halfway the picture is neither end's — the two meshes' shading differs by little.)
+			"middle_differing": [_ball_holes(out.to_full.middle, full_only).share_differing, _ball_holes(out.to_full.middle, stand_in_only).share_differing]},
 		"to_stand_in": {"frames": out.to_stand_in.frames, "holes": _holes_both(out.to_stand_in.middle, stand_in_only, full_only), "end_vs_stand_in": _compare(out.to_stand_in.end, stand_in_only)}}
 	streamer.queue_free()
 	await process_frame
@@ -847,7 +849,7 @@ func _run() -> void:
 	# (7) Decision 0259: a streamed mesh's swap between its stand-in and its full mesh crossing over.
 	result["mesh_swap"] = await _mesh_swap()
 	var ms: Dictionary = result.mesh_swap
-	if ms.to_full.holes > 0.001 or ms.to_stand_in.holes > 0.001 or ms.to_full.frames < 20 or ms.to_full.middle_vs_full.share_over_16 == 0.0 or ms.stand_in_vs_full.share_over_16 == 0.0:
+	if ms.to_full.holes > 0.001 or ms.to_stand_in.holes > 0.001 or ms.to_full.frames < 20 or ms.to_full.middle_differing.min() == 0.0 or ms.stand_in_vs_full_differing == 0.0:
 		failures.append("mesh swap crossfade: holes, or no fade")
 	root.use_taa = taa
 

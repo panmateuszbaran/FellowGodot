@@ -31,6 +31,7 @@
 #pragma once
 
 #include "core/os/mutex.h"
+#include "core/os/rw_lock.h"
 #include "core/templates/hash_map.h"
 #include "core/templates/hash_set.h"
 #include "core/templates/paged_allocator.h"
@@ -644,6 +645,26 @@ private:
 	static int caching_instance_count;
 	PipelineCache pipelines_cache;
 	String pipeline_cache_id;
+	// FellowEngine (rendering/fellow/frame/pipeline_cache_exclusive, decision 0261): the cache's data read out (its size,
+	// its copy for the file) only while no pipeline is being created with it — Intel's driver crashed reading it while
+	// other threads created pipelines. Pipelines are created under the read lock, the data read under the write lock,
+	// never waited for by a creation: taken only when free.
+	bool fellow_cache_exclusive = false;
+	RWLock fellow_cache_lock;
+	struct FellowCacheUse {
+		const RenderingDeviceDriverVulkan *driver;
+		FellowCacheUse(const RenderingDeviceDriverVulkan *p_driver) :
+				driver(p_driver) {
+			if (driver->fellow_cache_exclusive) {
+				driver->fellow_cache_lock.read_lock();
+			}
+		}
+		~FellowCacheUse() {
+			if (driver->fellow_cache_exclusive) {
+				driver->fellow_cache_lock.read_unlock();
+			}
+		}
+	};
 	HashMap<uint64_t, bool> has_comp_alpha;
 
 public:

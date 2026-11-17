@@ -3268,6 +3268,9 @@
 		<member name="rendering/fellow/frame/parallel_shader_create" type="bool" setter="" getter="" default="true">
 			Shaders read from the shader cache created in parallel: scenes load faster. Decision 0061.
 		</member>
+		<member name="rendering/fellow/frame/pipeline_cache_exclusive" type="int" setter="" getter="" default="2">
+			The Vulkan pipeline cache's data (its size, and its copy saved to the file) read only while no pipeline is being created with it: 0 off, 1 on, 2 on Intel GPUs (the default). Intel's Windows driver crashed reading the cache while other threads created pipelines (the periodic save on a worker thread, a game's first minutes on that GPU). Pipelines never wait for a save to start; a save waits on its worker thread for a moment no pipeline is being created. Read when the device is created (project.godot or override.cfg only). Decision 0261.
+		</member>
 		<member name="rendering/fellow/frame/pipeline_cache_max_mb" type="int" setter="" getter="" default="1024">
 			The pipeline cache file is ignored at start-up (and replaced by the next save) when larger than this: stock lets it grow, and at 2 GiB its checksum crashed. Decision 0050.
 		</member>
