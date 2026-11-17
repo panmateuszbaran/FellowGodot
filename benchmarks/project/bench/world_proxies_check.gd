@@ -214,7 +214,7 @@ func _make_cell(x: int, z: int, terrain) -> Node3D:
 	crates.material_override = mats[(x + z * 13 + 2) % mats.size()]
 	root.add_child(crates)
 	crates.owner = root
-	# Milestone 141: --rocks=<n> curved props a cell (bumpy spheres of 4 096 triangles, 2-4 m): meshes whose
+	# Milestone 141: --rocks=<n> curved props a cell (bumpy spheres of 4 096 triangles, 4-8 m across): meshes whose
 	# simplification shows, unlike the buildings' flat walls.
 	for r in int(_arg("rocks", "0")):
 		var rock := MeshInstance3D.new()

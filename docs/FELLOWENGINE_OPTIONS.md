@@ -462,8 +462,10 @@ shown). Options `ratio` 0.05, `terrain_quads` 32, `proxy_distance` 0 (always dra
 `stream_meshes` (off): the cells' meshes of at least `mesh_min_triangles` 2000 triangles replaced in their scenes by
 stand-ins of `mesh_ratio` 0.15 of their triangles, the full meshes saved apart (`meshes/`) and loaded on the
 ResourceLoader's threads within the streamer's `mesh_distance` (0: whenever the cell is loaded; released beyond it
-plus `unload_margin`), `max_mesh_loads` 2 at once. The editor runs it from Project > Tools > **Bake Streaming
-Proxies**. Bench `bench/world_proxies_check.gd`.
+plus `unload_margin`), `max_mesh_loads` 2 at once; milestone 141 (decision 0266): `mesh_middle_ratio` (0: none) saves
+a middle level of each (one per full mesh's file), shown between `mesh_distance` and the streamer's
+`mesh_middle_distance` (0: none). The editor runs it from Project > Tools > **Bake Streaming Proxies**. Bench
+`bench/world_proxies_check.gd`.
 
 Milestone 127 (decision 0251), **textured proxies**: a proxy's shape is the cell welded by position and simplified by
 meshoptimizer directly (no border locked, nothing pruned: small buildings kept), its normals rebuilt with a 60° split.

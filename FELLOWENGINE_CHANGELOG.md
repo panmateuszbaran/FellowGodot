@@ -9,6 +9,14 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 141 — streamed meshes in three levels (2026-11-17)
+
+- Decision 0266: `bake_proxies()`'s `mesh_middle_ratio` (0: none) saves a middle level of each streamed mesh;
+  `FellowWorldStreamer3D.mesh_middle_distance` shows it between `mesh_distance` and that distance, loaded and swapped
+  as the full mesh is. World Lab with curved props, seen over the roofs: the full meshes within 20 m and the middle
+  level within 70 m 25.1 MB of buffers instead of 33.3 MB (full within 70 m), 91 more of 518 400 pixels off the world
+  all loaded. `world_proxies_check.gd --mesh_middle_ratio --mesh_middle_distance --rocks --ground`.
+
 ## Milestone 140 — far characters animate less often (2026-11-17)
 
 - Decision 0265: `animation/update_lod` (opt-in) — an AnimationPlayer or AnimationTree in the idle or physics process
