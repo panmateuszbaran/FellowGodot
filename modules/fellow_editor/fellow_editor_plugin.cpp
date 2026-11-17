@@ -793,6 +793,10 @@ void FellowEditorPlugin::_proxies_confirmed() {
 	if (int(info.get("textured", 0)) > 0) {
 		text += "\n" + vformat(TTR("%d with a texture (%s in all)."), int(info.get("textured", 0)), String::humanize_size(int64_t(info.get("texture_bytes", 0))));
 	}
+	if (int(info.get("texture_files", 0)) > 0) {
+		// (Decision 0263.)
+		text += "\n" + vformat(TTR("%d textures in files of their own beside the proxies (streamed with texture streaming)."), int(info.get("texture_files", 0)));
+	}
 	if (proxies_stream_meshes->is_pressed()) {
 		text += "\n" + vformat(TTR("%d meshes streamed: %d triangles while far (%d near)."), int(info.get("streamed_meshes", 0)), int(info.get("stand_in_triangles", 0)), int(info.get("streamed_triangles", 0)));
 	}

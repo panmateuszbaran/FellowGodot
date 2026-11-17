@@ -915,6 +915,18 @@ Dictionary FellowWorldStreamer3D::bake_proxies(const String &p_directory, const 
 	const real_t group_distance = p_options.get("group_distance", 0.0);
 	// Decision 0256: the cells' proxies fade out over this distance on each side of their group's switch (0: a switch).
 	const real_t group_fade = p_options.get("group_fade", 0.0);
+	// Decision 0263: each textured proxy's texture in a file of its own beside it (<proxy>_albedo.ctex), streamed with
+	// rendering/fellow/streaming/textures (false: kept in the proxy's file, loaded whole).
+	const bool texture_files = p_options.get("texture_files", true);
+	int texture_files_written = 0;
+	int64_t texture_file_bytes = 0;
+	auto texture_file = [&](const Ref<ArrayMesh> &p_mesh, const String &p_path) {
+		int64_t bytes = 0;
+		if (texture_files && FellowCellProxies::move_texture_to_file(p_mesh, p_path.get_basename() + "_albedo.ctex", bytes)) {
+			texture_files_written++;
+			texture_file_bytes += bytes;
+		}
+	};
 	// Decision 0262: levels of groups — the groups' proxies in groups of group_cells x group_cells again, each with a
 	// coarser proxy for farther away (1: the groups alone).
 	const int group_levels = CLAMP(int(p_options.get("group_levels", 1)), 1, 4);
@@ -1078,6 +1090,7 @@ Dictionary FellowWorldStreamer3D::bake_proxies(const String &p_directory, const 
 					proxy->surface_set_material(0, material);
 				}
 				const String path = p_directory.path_join(String(cell->get_name()) + "_proxy.res");
+				texture_file(proxy, path);
 				if (ResourceSaver::save(proxy, path, ResourceSaver::FLAG_COMPRESS) == OK) {
 					proxy->set_path(path, true); // the scene saved with the proxy refers to the file, not a copy
 					MeshInstance3D *mi = memnew(MeshInstance3D);
@@ -1190,6 +1203,7 @@ Dictionary FellowWorldStreamer3D::bake_proxies(const String &p_directory, const 
 				}
 				const Vector2i key = group_keys[gi];
 				const String path = p_directory.path_join(vformat("group_%d_%d_proxy.res", key.x, key.y));
+				texture_file(group, path);
 				if (ResourceSaver::save(group, path, ResourceSaver::FLAG_COMPRESS) == OK) {
 					group->set_path(path, true);
 					const Vector3 center = group->get_aabb().get_center();
@@ -1331,6 +1345,7 @@ Dictionary FellowWorldStreamer3D::bake_proxies(const String &p_directory, const 
 				texture_skipped = lpi.get("texture_skipped", texture_skipped);
 			}
 			const String path = p_directory.path_join(vformat("group_l%d_%d_%d_proxy.res", level, keys[si].x, keys[si].y));
+			texture_file(mesh, path);
 			if (ResourceSaver::save(mesh, path, ResourceSaver::FLAG_COMPRESS) != OK) {
 				continue;
 			}
@@ -1412,6 +1427,8 @@ Dictionary FellowWorldStreamer3D::bake_proxies(const String &p_directory, const 
 	info["terrain_triangles"] = terrain_triangles;
 	info["group_terrain_triangles"] = group_terrain_triangles;
 	info["group_texture_bytes"] = group_texture_bytes;
+	info["texture_files"] = texture_files_written; // decision 0263: the textures in files of their own, and their bytes
+	info["texture_file_bytes"] = texture_file_bytes;
 	info["group_levels"] = level_info; // decision 0262: the coarser levels' groups, triangles, texture bytes
 	info["texture_hit_share"] = texture_texels > 0 ? double(texture_hits) / double(texture_texels) : 0.0; // texels coloured by a surface found under them
 	info["streamed_meshes"] = streamed;

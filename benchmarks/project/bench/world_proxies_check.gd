@@ -24,6 +24,9 @@ extends SceneTree
 ## (the shapes' shading alone), each against A's: *_white, compared on the world's pixels (not the sky's); the far views
 ## without TAA (its jitter alone moved 6 % of their world's pixels from one frame to the next). Draws wait
 ## for their pipelines (rendering/fellow/debug/wait_pipelines; --wait_pipelines=0: not).
+## Milestone 138 (decision 0263): the proxies' textures baked into files of their own (--texture_files=0: kept in the
+## proxies' files); with rendering/fellow/streaming/textures on (override.cfg), each lane's proxy_textures: those files
+## as texture streaming holds them (resident and whole bytes, how many at their tails).
 ## One JSON line: WORLD_PROXIES_CHECK {...}.
 
 const CELL := 64.0
@@ -39,6 +42,7 @@ var streamer: Node3D
 var ground_streamer: Node3D
 var terrain_ref # the whole terrain, kept (out of the tree) for its heights
 var white := StandardMaterial3D.new() # milestone 137: the buildings' shading alone
+var streaming := false # milestone 138: rendering/fellow/streaming/textures on (read at start-up: override.cfg)
 
 
 func _arg(name: String, default: String) -> String:
@@ -58,6 +62,10 @@ func _initialize() -> void:
 	# view shot twice differed; --wait_pipelines=0 as before).
 	if _arg("wait_pipelines", "1") != "0":
 		ProjectSettings.set_setting("rendering/fellow/debug/wait_pipelines", true)
+	streaming = bool(ProjectSettings.get_setting("rendering/fellow/streaming/textures", false))
+	if streaming:
+		ProjectSettings.set_setting("rendering/fellow/streaming/texture_info_details", true)
+	result["texture_streaming"] = streaming
 	_run.call_deferred()
 
 
@@ -188,7 +196,7 @@ func _terrain():
 
 
 func _stats() -> Dictionary:
-	return {
+	var d := {
 		"video_mb": snappedf(Performance.get_monitor(Performance.RENDER_VIDEO_MEM_USED) / 1048576.0, 0.1),
 		"texture_mb": snappedf(Performance.get_monitor(Performance.RENDER_TEXTURE_MEM_USED) / 1048576.0, 0.1),
 		"buffer_mb": snappedf(Performance.get_monitor(Performance.RENDER_BUFFER_MEM_USED) / 1048576.0, 0.1),
@@ -198,6 +206,30 @@ func _stats() -> Dictionary:
 		"regions_loaded": ground_streamer.get_stats().get("loaded", 0),
 		"groups": _groups(),
 	}
+	if streaming:
+		d["proxy_textures"] = _proxy_textures()
+	return d
+
+
+# Milestone 138 (decision 0263): with texture streaming on, the proxies' texture files (<proxy>_albedo.ctex under
+# --out) as the streamer holds them: how many, the bytes resident, the bytes of their whole chains, how many at their tails.
+func _proxy_textures() -> Dictionary:
+	var info: Dictionary = RenderingServer.fellow_get_texture_streaming_info()
+	var n := 0
+	var resident := 0
+	var full := 0
+	var at_tail := 0
+	for t in info.get("list", []):
+		var path: String = t.get("path", "")
+		if not path.ends_with("_albedo.ctex") or not path.begins_with(out_dir):
+			continue
+		n += 1
+		resident += int(t.get("bytes", 0))
+		var size: Vector2i = t.get("size", Vector2i.ZERO)
+		for level in int(t.get("levels", 1)):
+			full += maxi(1, ceili(maxi(1, size.x >> level) / 4.0)) * maxi(1, ceili(maxi(1, size.y >> level) / 4.0)) * 8 # (BC1)
+		at_tail += 1 if int(t.get("resident", 0)) == int(t.get("tail", 0)) else 0
+	return {"files": n, "resident_mb": snappedf(resident / 1048576.0, 0.01), "full_mb": snappedf(full / 1048576.0, 0.01), "at_tail": at_tail}
 
 
 # The view's cost over --timing frames (default 120): the frame's wall time, and the renderer's CPU and GPU times
@@ -310,6 +342,14 @@ func _wait_settled() -> void:
 		if streamer.is_settled() and ground_streamer.is_settled() and i > 30:
 			var s: Dictionary = streamer.get_stats()
 			if s.get("streamed_meshes", 0) == 0 or s.get("mesh_loads", 0) > 0 or float(_arg("mesh_distance", "70")) <= 0.0 or i > 300:
+				break
+	# Milestone 138: with texture streaming, its loads done too (two whole cycles of the view, nothing pending).
+	if streaming:
+		var cycles := int(RenderingServer.fellow_get_texture_streaming_info().get("cycles", 0))
+		for i in 1200:
+			await process_frame
+			var t: Dictionary = RenderingServer.fellow_get_texture_streaming_info()
+			if int(t.get("cycles", 0)) >= cycles + 2 and int(t.get("pending", 0)) == 0 and int(t.get("jobs", 0)) == 0:
 				break
 	await _settle(frames)
 
@@ -472,8 +512,8 @@ func _run() -> void:
 
 	# C. Proxies baked for the cells and the regions.
 	t0 = Time.get_ticks_msec()
-	result["bake_regions"] = ground_streamer.bake_proxies(out_dir.path_join("proxies_ground"), {"terrain_quads": 16, "group_cells": int(_arg("groups", "4")), "group_levels": int(_arg("group_levels", "1")), "terrain_error": float(_arg("terrain_error", "2"))})
-	result["bake_cells"] = streamer.bake_proxies(out_dir.path_join("proxies"), {"texel_size": float(_arg("texel", "0.5")), "ratio": float(_arg("ratio", "0.05")), "group_cells": int(_arg("groups", "4")), "group_levels": int(_arg("group_levels", "1"))})
+	result["bake_regions"] = ground_streamer.bake_proxies(out_dir.path_join("proxies_ground"), {"terrain_quads": 16, "group_cells": int(_arg("groups", "4")), "group_levels": int(_arg("group_levels", "1")), "texture_files": _arg("texture_files", "1") != "0", "terrain_error": float(_arg("terrain_error", "2"))})
+	result["bake_cells"] = streamer.bake_proxies(out_dir.path_join("proxies"), {"texel_size": float(_arg("texel", "0.5")), "ratio": float(_arg("ratio", "0.05")), "group_cells": int(_arg("groups", "4")), "group_levels": int(_arg("group_levels", "1")), "texture_files": _arg("texture_files", "1") != "0"})
 	result["bake_ms"] = Time.get_ticks_msec() - t0
 	await _wait_settled()
 	result["c_proxies"] = _stats()
@@ -516,7 +556,7 @@ func _run() -> void:
 	# unloaded first: the camera away from the world.)
 	cam.position = Vector3(-100000, 0, -100000)
 	await _settle(90)
-	result["bake_stream"] = streamer.bake_proxies(out_dir.path_join("proxies_stream"), {"stream_meshes": true, "texel_size": float(_arg("texel", "0.5")), "ratio": float(_arg("ratio", "0.05")), "group_cells": int(_arg("groups", "4")), "group_levels": int(_arg("group_levels", "1"))})
+	result["bake_stream"] = streamer.bake_proxies(out_dir.path_join("proxies_stream"), {"stream_meshes": true, "texel_size": float(_arg("texel", "0.5")), "ratio": float(_arg("ratio", "0.05")), "group_cells": int(_arg("groups", "4")), "group_levels": int(_arg("group_levels", "1")), "texture_files": _arg("texture_files", "1") != "0"})
 	streamer.mesh_distance = float(_arg("mesh_distance", "70"))
 	cam.transform = view
 	await _wait_settled()

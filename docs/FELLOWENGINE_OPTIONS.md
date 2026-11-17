@@ -472,6 +472,11 @@ texel's size, past alpha-tested holes — BC1 with mipmaps in the proxy's file, 
 `texel_size` 0.5 m (0: vertex colours), `max_texture_size` 512 (coarser texels beyond). Otherwise (and for terrain
 regions) vertex colours, each corner from the surface under it. The result has `textured`, `texture_bytes`,
 `texture_ms`, `texture_hit_share`. The editor's dialog has the texel. Bench `bench/proxy_texture_check.gd`.
+Milestone 138 (decision 0263), **proxies' textures in files of their own**: `bake_proxies` option `texture_files` true
+(false: inside the proxy's file, as before): each textured proxy's, group's and level's texture is saved beside it as
+`<proxy>_albedo.ctex`, a `CompressedTexture2D` the proxy's material refers to — with `streaming/textures` only the
+levels a camera needs are resident; without it the same texels load whole. The result has `texture_files`,
+`texture_file_bytes`.
 
 Milestone 128 (decision 0252), **grouped proxies**: `bake_proxies` option `group_cells` 4 (0: none) groups the cells
 4 × 4 on a grid of their boxes' centres; each group gets one proxy of its cells' content together (its cells' proxies'

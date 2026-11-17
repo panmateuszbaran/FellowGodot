@@ -32,6 +32,8 @@
 
 #include "fellow_terrain_3d.h"
 
+#include "core/io/file_access.h"
+#include "core/io/resource_loader.h"
 #include "core/math/geometry_2d.h"
 #include "core/math/triangle_mesh.h"
 #include "core/object/worker_thread_pool.h"
@@ -41,6 +43,7 @@
 #include "scene/3d/mesh_instance_3d.h"
 #include "scene/3d/multimesh_instance_3d.h"
 #include "scene/resources/3d/importer_mesh.h"
+#include "scene/resources/compressed_texture.h"
 #include "scene/resources/image_texture.h"
 #include "scene/resources/multimesh.h"
 #include "scene/resources/surface_tool.h"
@@ -1143,6 +1146,57 @@ void clear_bake_cache() {
 		memdelete(E.value);
 	}
 	levels_cache.clear();
+}
+
+bool move_texture_to_file(const Ref<ArrayMesh> &p_mesh, const String &p_path, int64_t &r_bytes) {
+	r_bytes = 0;
+	if (p_mesh.is_null() || p_mesh->get_surface_count() == 0) {
+		return false;
+	}
+	const Ref<StandardMaterial3D> material = p_mesh->surface_get_material(0);
+	if (material.is_null() || !material->has_meta(ATLAS_META)) {
+		return false;
+	}
+	const Ref<ImageTexture> texture = material->get_texture(BaseMaterial3D::TEXTURE_ALBEDO);
+	const Ref<Image> image = texture.is_valid() ? texture->get_image() : Ref<Image>();
+	if (image.is_null() || image->is_empty()) {
+		return false;
+	}
+	{
+		// As the texture importer writes a VRAM-compressed texture ("GST2"; the chain from mip 0 down, one image):
+		// what CompressedTexture2D loads, and texture streaming reads from its tail up.
+		Ref<FileAccess> f = FileAccess::open(p_path, FileAccess::WRITE);
+		ERR_FAIL_COND_V_MSG(f.is_null(), false, vformat("FellowCellProxies: could not write '%s'.", p_path));
+		f->store_8('G');
+		f->store_8('S');
+		f->store_8('T');
+		f->store_8('2');
+		f->store_32(CompressedTexture2D::FORMAT_VERSION);
+		f->store_32(image->get_width());
+		f->store_32(image->get_height());
+		f->store_32(image->has_mipmaps() ? uint32_t(CompressedTexture2D::FORMAT_BIT_HAS_MIPMAPS) : 0u);
+		f->store_32(0); // no mipmap limit
+		f->store_32(0);
+		f->store_32(0);
+		f->store_32(0);
+		f->store_32(CompressedTexture2D::DATA_FORMAT_IMAGE);
+		f->store_16(image->get_width());
+		f->store_16(image->get_height());
+		f->store_32(image->get_mipmap_count());
+		f->store_32(image->get_format());
+		const Vector<uint8_t> data = image->get_data();
+		f->store_buffer(data.ptr(), data.size());
+		r_bytes = int64_t(f->get_position());
+	}
+	// (Replacing a texture loaded from that path before: a rebake's; its mean colour too.)
+	{
+		MutexLock lock(average_mutex);
+		average_cache.erase(p_path);
+	}
+	const Ref<CompressedTexture2D> file = ResourceLoader::load(p_path, "CompressedTexture2D", ResourceFormatLoader::CACHE_MODE_REPLACE);
+	ERR_FAIL_COND_V_MSG(file.is_null(), false, vformat("FellowCellProxies: could not load '%s' back.", p_path));
+	material->set_texture(BaseMaterial3D::TEXTURE_ALBEDO, file);
+	return true;
 }
 
 Ref<StandardMaterial3D> proxy_material() {

@@ -60,6 +60,12 @@ Ref<ArrayMesh> bake_proxy(Node *p_content, float p_ratio, int p_terrain_quads, f
 // Frees the textures' levels read by textured bakes (kept from one cell to the next).
 void clear_bake_cache();
 
+// A textured proxy's texture moved into a file of its own (docs/decisions/0263-proxy-texture-files.md): its image
+// (BC1 and its mipmaps) saved at p_path as a CompressedTexture2D (.ctex), loaded back and set on its material in place
+// of the image texture — with rendering/fellow/streaming/textures, its finer levels read only while a camera needs
+// them. False (the mesh unchanged) for a proxy without a texture of its own.
+bool move_texture_to_file(const Ref<ArrayMesh> &p_mesh, const String &p_path, int64_t &r_bytes);
+
 // A mesh's stand-in with vertices of its own: each triangle surface simplified to about p_ratio of its triangles
 // (materials and attributes kept). Null when it would not be at most half the triangles.
 Ref<ArrayMesh> simplified_mesh(const Ref<Mesh> &p_mesh, float p_ratio);
