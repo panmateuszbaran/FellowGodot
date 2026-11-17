@@ -307,6 +307,9 @@ protected:
 	AHashMap<Animation::TrackCacheID, TrackCache *, HashHasher> track_cache;
 	AHashMap<Ref<Animation>, LocalVector<TrackCache *>> animation_track_num_to_track_cache;
 	AHashMap<Ref<Animation>, LocalVector<int>> fellow_key_hints; // FellowEngine (decision 0076): per track, the key found last.
+	// FellowEngine (decision 0265): the time of the frames skipped by animation/update_lod, added to the next evaluation.
+	double fellow_lod_skipped = 0.0;
+	bool _fellow_update_lod_skip(double &r_delta, uint64_t p_frame);
 	HashSet<TrackCache *> playing_caches;
 	Vector<Node *> playing_audio_stream_players;
 

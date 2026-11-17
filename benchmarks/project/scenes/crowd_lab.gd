@@ -18,6 +18,8 @@ extends "res://bench/scene_base.gd"
 ## --crowd_groups=N (milestone 60): the characters split into N process thread groups (Node.PROCESS_THREAD_GROUP_SUB_THREAD,
 ## crowd_group.gd), each seeking its characters in its own _process() on a worker thread; their skeletons update on the
 ## same thread (deferred thread-group notifications). The same poses as without groups.
+## --crowd_process=1 (milestone 140): the players play in the idle process from their phases, as a game's (set_time()
+## only walks them): what rendering/fellow/animation/update_lod (decision 0265) acts on.
 
 const CROWD := 256
 const SPACING := 2.4
@@ -39,6 +41,7 @@ var _start: PackedFloat32Array = PackedFloat32Array()
 var _dir: PackedFloat32Array = PackedFloat32Array()
 var _area := 60.0
 var groups := 0 # --crowd_groups=N: the characters processed in N sub-thread process groups
+var idle := false # --crowd_process=1 (milestone 140): the players play in the idle process, as a game's (not seeked)
 var _groups: Array[Node3D] = []
 var _t := 0.0
 
@@ -65,6 +68,7 @@ func build(p_args: Dictionary) -> void:
 	crowd = int(args.get("crowd", str(CROWD)))
 	blend = str(args.get("crowd_blend", "0")) == "1"
 	groups = int(args.get("crowd_groups", "0"))
+	idle = str(args.get("crowd_process", "0")) == "1"
 	_area = maxf(20.0, sqrt(float(crowd)) * SPACING * 1.6)
 	_setup_common()
 	_setup_environment()
@@ -326,9 +330,11 @@ func _build_crowd() -> void:
 			root.add_child(ap)
 			ap.root_node = NodePath("..")
 			ap.add_animation_library("", _library)
-			ap.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_MANUAL
+			ap.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_IDLE if idle else AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_MANUAL
 			parent.add_child(root)
 			ap.play(CLIPS[clip])
+			if idle:
+				ap.seek(phase, true)
 			_players.append(ap)
 		_chars.append(root)
 		_clip_of.append(clip)
@@ -396,6 +402,6 @@ func apply_time(p_from: int, p_to: int) -> void:
 			at.set("parameters/blend_position", 1.0 + sin(0.3 * t + _phase[i] * 2.0))
 			at.advance(t - _last_t[i])
 			_last_t[i] = t
-		else:
+		elif not idle:
 			var ap := _players[i]
 			ap.seek(fposmod(t + _phase[i], float(CLIP_LENGTH[clip])), true)

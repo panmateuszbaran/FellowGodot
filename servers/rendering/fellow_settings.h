@@ -258,6 +258,27 @@ inline bool animation_shared_no_override_pose() {
 inline bool animation_lazy_simulator_poses() {
 	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/animation/lazy_simulator_poses");
 }
+// animation/update_lod (decision 0265; off): an AnimationMixer processed every frame (idle or physics) whose root node is
+// a Node3D evaluates less often the farther it is from the viewport's camera: every frame within update_lod_distance
+// (metres, for a 75-degree field of view), every 2nd within twice it, every 4th within four times..., at most every
+// update_lod_max_interval-th frame, and every update_lod_offscreen_interval-th while its root is out of the camera's
+// frustum by more than update_lod_offscreen_margin metres; a skipped frame's time is added to its next evaluation (its
+// clips at the same times; its skeleton, skin and method tracks updated then). Not for a mixer with a root motion track.
+inline bool animation_update_lod() {
+	return enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/animation/update_lod");
+}
+inline float animation_update_lod_distance() {
+	return GLOBAL_GET_CACHED(float, "rendering/fellow/animation/update_lod_distance");
+}
+inline int animation_update_lod_max_interval() {
+	return GLOBAL_GET_CACHED(int, "rendering/fellow/animation/update_lod_max_interval");
+}
+inline int animation_update_lod_offscreen_interval() {
+	return GLOBAL_GET_CACHED(int, "rendering/fellow/animation/update_lod_offscreen_interval");
+}
+inline float animation_update_lod_offscreen_margin() {
+	return GLOBAL_GET_CACHED(float, "rendering/fellow/animation/update_lod_offscreen_margin");
+}
 // physics/* (milestone 17): GodotPhysics3D. physics/distance_face_cull (decision 0085): the motion queries' yes/no distance
 // tests against a concave shape (cast_motion(), test_body_motion(): only whether the shapes are apart is used) do not give
 // GJK the faces a conservative separating-axis test in double precision proves farther from the moving shape's swept box

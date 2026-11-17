@@ -38,6 +38,7 @@
 #include "core/string/string_name.h"
 #include "scene/2d/audio_stream_player_2d.h"
 #include "scene/animation/animation_player.h"
+#include "scene/main/viewport.h"
 #include "scene/audio/audio_stream_player.h"
 #include "scene/resources/animation.h"
 #include "servers/audio/audio_server.h"
@@ -46,6 +47,7 @@
 
 #ifndef _3D_DISABLED
 #include "scene/3d/audio_stream_player_3d.h"
+#include "scene/3d/camera_3d.h"
 #include "scene/3d/mesh_instance_3d.h"
 #include "scene/3d/node_3d.h"
 #include "scene/3d/skeleton_3d.h"
@@ -1014,6 +1016,60 @@ bool AnimationMixer::_update_caches() {
 /* -------------------------------------------- */
 /* -- Blending processor ---------------------- */
 /* -------------------------------------------- */
+
+// FellowEngine (decision 0265): animation/update_lod — true when this frame's evaluation is skipped (its time kept for
+// the next); r_delta grows by the time skipped before.
+bool AnimationMixer::_fellow_update_lod_skip(double &r_delta, uint64_t p_frame) {
+#ifndef _3D_DISABLED
+	if (Fellow::animation_update_lod() && root_motion_track.is_empty()
+#ifdef TOOLS_ENABLED
+			&& !Engine::get_singleton()->is_editor_hint()
+#endif
+	) {
+		const Node3D *root = Object::cast_to<Node3D>(get_node_or_null(root_node));
+		const Viewport *viewport = root ? root->get_viewport() : nullptr;
+		const Camera3D *camera = viewport ? viewport->get_camera_3d() : nullptr;
+		if (camera && root->is_inside_tree()) {
+			const Vector3 position = root->get_global_position();
+			int interval = 1;
+			const float margin = Fellow::animation_update_lod_offscreen_margin();
+			bool inside = true;
+			for (const Plane &plane : camera->get_frustum()) {
+				if (plane.distance_to(position) > margin) {
+					inside = false;
+					break;
+				}
+			}
+			if (!inside) {
+				interval = MAX(1, Fellow::animation_update_lod_offscreen_interval());
+			} else {
+				real_t distance = position.distance_to(camera->get_global_position());
+				if (camera->get_projection() == Camera3D::PROJECTION_PERSPECTIVE) {
+					// (Farther with a wider view, nearer zoomed in: the size on screen of a field of view of 75 degrees.)
+					distance *= Math::tan(Math::deg_to_rad(camera->get_fov() * 0.5)) / Math::tan(Math::deg_to_rad(real_t(37.5)));
+				}
+				const real_t base = MAX(real_t(0.01), real_t(Fellow::animation_update_lod_distance()));
+				const int max_interval = MAX(1, Fellow::animation_update_lod_max_interval());
+				while (interval < max_interval && distance > base * interval) {
+					interval *= 2;
+				}
+				interval = MIN(interval, max_interval);
+			}
+			if (interval > 1) {
+				// (Each mixer on its own frames of the interval: the crowd's evaluations spread over them.)
+				const uint64_t phase = (uint64_t(get_instance_id()) * 0x9E3779B97F4A7C15ull) >> 40;
+				if ((p_frame + phase) % uint64_t(interval) != 0) {
+					fellow_lod_skipped += r_delta;
+					return true;
+				}
+			}
+		}
+	}
+#endif
+	r_delta += fellow_lod_skipped;
+	fellow_lod_skipped = 0.0;
+	return false;
+}
 
 void AnimationMixer::_process_animation(double p_delta, bool p_update_only) {
 	_blend_init();
@@ -2452,13 +2508,19 @@ void AnimationMixer::_notification(int p_what) {
 
 		case NOTIFICATION_INTERNAL_PROCESS: {
 			if (active && callback_mode_process == ANIMATION_CALLBACK_MODE_PROCESS_IDLE) {
-				_process_animation(get_process_delta_time());
+				double delta = get_process_delta_time();
+				if (!_fellow_update_lod_skip(delta, Engine::get_singleton()->get_process_frames())) { // FellowEngine (decision 0265)
+					_process_animation(delta);
+				}
 			}
 		} break;
 
 		case NOTIFICATION_INTERNAL_PHYSICS_PROCESS: {
 			if (active && callback_mode_process == ANIMATION_CALLBACK_MODE_PROCESS_PHYSICS) {
-				_process_animation(get_physics_process_delta_time());
+				double delta = get_physics_process_delta_time();
+				if (!_fellow_update_lod_skip(delta, Engine::get_singleton()->get_physics_frames())) { // FellowEngine (decision 0265)
+					_process_animation(delta);
+				}
 			}
 		} break;
 

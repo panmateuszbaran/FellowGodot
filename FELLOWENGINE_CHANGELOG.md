@@ -9,6 +9,15 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 140 — far characters animate less often (2026-11-17)
+
+- Decision 0265: `animation/update_lod` (opt-in) — an AnimationPlayer or AnimationTree in the idle or physics process
+  evaluates every frame within `update_lod_distance` (20 m) of its camera, every 2nd, 4th, … frame farther (at most
+  every `update_lod_max_interval`-th, 8), every `update_lod_offscreen_interval`-th out of view, each on its own frames,
+  a skipped frame's time added to its next evaluation. Crowd Lab's 256 characters on a 120 m field: 50 evaluations a
+  frame instead of 256, the main thread's process step 3.4 → 1.2 ms; the near characters unchanged.
+  `bench/animation_lod_check.gd`, Crowd Lab `--crowd_process=1`.
+
 ## Milestone 139 — DDS textures streamed (2026-11-17)
 
 - Decision 0264: with `streaming/textures`, a 2D `.dds` file of a compressed format with its full mip chain (loaded by

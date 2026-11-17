@@ -3040,6 +3040,21 @@
 		<member name="rendering/fellow/animation/track_shortcuts" type="bool" setter="" getter="" default="true">
 			Animation tracks' lookups done once per track instead of per key. Exact: the same image or results as stock Godot. Decision 0076.
 		</member>
+		<member name="rendering/fellow/animation/update_lod" type="bool" setter="" getter="" default="false">
+			Off by default. An AnimationPlayer or AnimationTree processed every frame (idle or physics) whose root node is a Node3D evaluates less often the farther it is from the viewport's camera — every frame within update_lod_distance, every 2nd frame within twice it, every 4th within four times, up to update_lod_max_interval — and every update_lod_offscreen_interval-th frame while out of view; a skipped frame's time goes into its next evaluation, so clips stay on time while far characters' skeletons, skins and method tracks update less often. Mixers with a root motion track always update. Decision 0265.
+		</member>
+		<member name="rendering/fellow/animation/update_lod_distance" type="float" setter="" getter="" default="20.0">
+			With animation/update_lod: the distance from the camera (metres, for a 75° field of view: farther with a wider view) within which an animation updates every frame; each doubling of it halves the rate. Decision 0265.
+		</member>
+		<member name="rendering/fellow/animation/update_lod_max_interval" type="int" setter="" getter="" default="8">
+			With animation/update_lod: the most frames between two evaluations of an animation in view. Decision 0265.
+		</member>
+		<member name="rendering/fellow/animation/update_lod_offscreen_interval" type="int" setter="" getter="" default="8">
+			With animation/update_lod: the frames between two evaluations of an animation whose root node is out of the camera's view. Decision 0265.
+		</member>
+		<member name="rendering/fellow/animation/update_lod_offscreen_margin" type="float" setter="" getter="" default="2.0">
+			With animation/update_lod: how far (metres) a root node may be outside the camera's frustum and still count as in view (a character's body around its root). Decision 0265.
+		</member>
 		<member name="rendering/fellow/autotune/block_frames" type="int" setter="" getter="" default="16">
 			Frames in each block of an evaluation.
 		</member>

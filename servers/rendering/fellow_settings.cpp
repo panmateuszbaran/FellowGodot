@@ -140,6 +140,11 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/animation/batched_skin_transforms", true); // decision 0077 (exact; on from fellow170)
 	GLOBAL_DEF("rendering/fellow/animation/shared_no_override_pose", true); // decision 0163 (exact)
 	GLOBAL_DEF("rendering/fellow/animation/lazy_simulator_poses", true); // decision 0163
+	GLOBAL_DEF("rendering/fellow/animation/update_lod", false); // decision 0265 (opt-in: far characters animate less often)
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/animation/update_lod_distance", PROPERTY_HINT_RANGE, "1,1000,0.5,or_greater,suffix:m"), 20.0);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/animation/update_lod_max_interval", PROPERTY_HINT_RANGE, "1,64,1"), 8);
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/animation/update_lod_offscreen_interval", PROPERTY_HINT_RANGE, "1,64,1"), 8);
+	GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "rendering/fellow/animation/update_lod_offscreen_margin", PROPERTY_HINT_RANGE, "0,100,0.1,or_greater,suffix:m"), 2.0);
 	GLOBAL_DEF("rendering/fellow/physics/distance_face_cull", true); // decision 0085 (exact)
 	GLOBAL_DEF("rendering/fellow/physics/distance_face_order", true); // decision 0085 (exact)
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/fellow/physics/distance_face_batch", PROPERTY_HINT_RANGE, "1,32,1"), 8);
