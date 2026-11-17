@@ -9,6 +9,17 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 142 — the frame under Vulkan's validation (2026-11-18)
+
+- Decision 0267: the image regression suite, PBR Lab and five labs run under the Khronos validation layer's core and
+  synchronization validation on lavapipe; four invalid synchronizations fixed, the same pictures bit for bit — the
+  bloom's mips' first transition each frame without the stage of the clear that preceded it, the terrain virtual
+  texture's sRGB view of an atlas created without it, an upload's transition to the shaders' read layout with no
+  destination access (stock Godot's code: a read-after-write hazard), and a buffer's read-to-read barrier with a
+  shader's read as source access and a copy's stage (the graph's code is stock's: a MultiMesh copied into the culling's
+  pool). Afterwards nothing but the layer's own message. `debug/cloud_shadow_same_frame` (diagnostics) for milestone
+  33's device loss: no hazard on lavapipe, the double buffer stays. The suite's README: its run under validation.
+
 ## Milestone 141 — streamed meshes in three levels (2026-11-17)
 
 - Decision 0266: `bake_proxies()`'s `mesh_middle_ratio` (0: none) saves a middle level of each streamed mesh;

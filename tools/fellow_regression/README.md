@@ -69,7 +69,7 @@ run the suite with the Khronos validation layer's core and synchronization valid
 own callback (`--gpu-validation`), and look for them in each scene's `engine.log`:
 
 ```
-printf '%s\n' 'khronos_validation.validate_core = true' 'khronos_validation.validate_sync = true' \
+mkdir -p /tmp/syncval && printf '%s\n' 'khronos_validation.validate_core = true' 'khronos_validation.validate_sync = true' \
   'khronos_validation.enables = VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT' \
   'khronos_validation.report_flags = error,warn' 'khronos_validation.debug_action = VK_DBG_LAYER_ACTION_CALLBACK' \
   > /tmp/syncval/vk_layer_settings.txt
@@ -78,4 +78,6 @@ grep -rho "VUID-[A-Za-z0-9_-]*\|SYNC-HAZARD-[A-Z_-]*" <dir> --include=engine.log
 ```
 
 The pictures are the same as without it. Expected: nothing but `VUID-VkShaderModuleCreateInfo-pCode-08739` (the
-layer of Ubuntu 24.04 cannot parse the ray-traced scenes' ray-query SPIR-V).
+layer of Ubuntu 24.04 cannot parse the ray-traced scenes' ray-query SPIR-V). The bench's labs the same way: the same
+`VK_LAYER_SETTINGS_PATH` and `--gpu-validation` on a FellowBench run on lavapipe (`benchmarks/tools/lavapipe/`; the
+milestone swept Slice Lab with ray-traced GI and the sky's atmosphere and clouds, Rain, Water, Fire and Lights Lab).
