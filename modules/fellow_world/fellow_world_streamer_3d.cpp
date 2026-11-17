@@ -467,7 +467,8 @@ void FellowWorldStreamer3D::_mesh_crossfade(MeshInstance3D *p_mi, const Ref<Mesh
 	f.outgoing = rs->instance_create2(p_outgoing->get_rid(), p_mi->get_world_3d()->get_scenario());
 	rs->instance_set_transform(f.outgoing, p_mi->get_global_transform());
 	rs->instance_set_layer_mask(f.outgoing, p_mi->get_layer_mask());
-	rs->instance_geometry_set_cast_shadows_setting(f.outgoing, RSE::SHADOW_CASTING_SETTING_OFF);
+	// Its shadow as the node's: the two shadows dithered as the meshes are (decision 0260), they make one.
+	rs->instance_geometry_set_cast_shadows_setting(f.outgoing, RSE::ShadowCastingSetting(p_mi->get_cast_shadows_setting()));
 	if (p_mi->get_material_override().is_valid()) {
 		rs->instance_geometry_set_material_override(f.outgoing, p_mi->get_material_override()->get_rid());
 	}

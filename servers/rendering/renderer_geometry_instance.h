@@ -86,7 +86,7 @@ public:
 	virtual void set_fellow_instance_range_margins(float p_begin_margin, float p_end_margin) {} // decision 0257
 	virtual void set_fellow_dither_alpha(float p_alpha, bool p_other_share) {} // decision 0258
 	// An HLOD proxy (decision 0122): a MultiMesh's instances transform normals as nodes do. No-op elsewhere.
-	virtual void set_fellow_hlod_proxy(bool p_proxy) {}
+	virtual void set_fellow_hlod_proxy(bool p_proxy, bool p_member) {}
 };
 
 // Base implementation of RenderGeometryInstance shared by internal renderers.
@@ -117,7 +117,9 @@ public:
 	bool fellow_dither_other = false; // and which share
 	bool fellow_vertices_bounded = false; // the material's vertices stay in the mesh's box
 	bool fellow_hlod_proxy = false; // an HLOD proxy: per-instance normals as nodes
+	bool fellow_hlod_member = false; // decision 0260: an HLOD's proxy or member casts its shadows per cascade (never faded)
 	uint8_t fellow_dither = 0; // decision 0256: this frame's colour passes dither its fade (1; 2: fading out towards the near end)
+	uint8_t fellow_shadow_dither = 0; // decision 0260: the same for the last secondary-list pass filled stock's way (a shadow's)
 	float sorting_offset = 0.0;
 	bool use_aabb_center = true;
 
@@ -181,7 +183,7 @@ public:
 	virtual void set_fellow_instance_range_fade(float p_fade) override;
 	virtual void set_fellow_instance_range_margins(float p_begin_margin, float p_end_margin) override;
 	virtual void set_fellow_dither_alpha(float p_alpha, bool p_other_share) override;
-	virtual void set_fellow_hlod_proxy(bool p_proxy) override;
+	virtual void set_fellow_hlod_proxy(bool p_proxy, bool p_member) override;
 
 	virtual void reset_motion_vectors() override;
 

@@ -584,6 +584,7 @@ private:
 				uint32_t uses_projector : 1;
 				uint32_t uses_forward_gi : 1;
 				uint32_t uses_lightmap : 1;
+				uint32_t fellow_shadow_dither : 2; // decision 0260: a shadow pass's element dithers its fade (as fellow_dither)
 			};
 			uint32_t value;
 		};
@@ -641,6 +642,8 @@ private:
 		bool count_primitives = false;
 		RenderingServerTypes::RenderInfo *render_info = nullptr;
 		bool fellow_dithered_fade = false; // decision 0256
+		bool fellow_shadow_fades = false; // decision 0260: the shadow passes dither the fades of the main camera's view
+		bool fellow_shadow_dither = true; // (not a cube map's: its depths are filtered into the atlas)
 	};
 	// One element of a shadow pass filled in record mode: the sort keys and instance flags the pass gives it.
 	struct FellowShadowRecord {
@@ -648,6 +651,7 @@ private:
 		uint64_t key1;
 		GeometryInstanceSurfaceDataCache *surface;
 		uint32_t flags;
+		uint32_t dither; // decision 0260: the pass dithers the element's fade (as fellow_dither)
 	};
 	struct FellowShadowRecordByKey {
 		_FORCE_INLINE_ bool operator()(const FellowShadowRecord &A, const FellowShadowRecord &B) const {
@@ -792,6 +796,8 @@ private:
 	static_assert(offsetof(SceneState::InstanceData, lightmap_uv_scale) == FELLOW_SHADOW_INSTANCE_BYTES + sizeof(float) * 12 && sizeof(SceneState::InstanceData) == offsetof(SceneState::InstanceData, lightmap_uv_scale) + sizeof(float) * 4, "prev_transform and lightmap_uv_scale must be InstanceData's last fields");
 #endif
 	bool fellow_shadow_compact = false;
+	float fellow_shadow_taa_frame_count = 0.0f; // decision 0260: the main view's, for the shadow passes' dithered fades
+	bool fellow_shadow_cube = false; // decision 0260: an omni light's cube map is being filled (not dithered)
 	void _fellow_fill_instance_data_chunk(uint32_t p_chunk, void *p_unused);
 	void _fellow_sort_by_key(RenderListType p_render_list, uint32_t p_from, uint32_t p_size);
 	void _fellow_sort_by_key_impl(RenderListType p_render_list, uint32_t p_from, uint32_t p_size);

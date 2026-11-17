@@ -562,6 +562,12 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 			pipeline_specialization.fellow_dither_fade = surf->owner->fellow_dither != 0;
 			pipeline_specialization.fellow_dither_fade_near = surf->owner->fellow_dither == 2;
 		}
+		// Decision 0260: the shadow passes' elements dither the fades of the main camera's view (the pass's own value: a
+		// caster the camera does not see fades too).
+		if constexpr (p_pass_mode == PASS_MODE_SHADOW || p_pass_mode == PASS_MODE_SHADOW_DP) {
+			pipeline_specialization.fellow_dither_fade = element_info.fellow_shadow_dither != 0;
+			pipeline_specialization.fellow_dither_fade_near = element_info.fellow_shadow_dither == 2;
+		}
 
 		if constexpr (p_pass_mode == PASS_MODE_COLOR) {
 			pipeline_specialization.use_light_soft_shadows = element_info.uses_softshadow;
@@ -3097,11 +3103,12 @@ uint32_t RenderForwardClustered::_fellow_verify_instances(RenderListType p_rende
 		if (memcmp(&expected, &gpu[i], p_compact ? FELLOW_SHADOW_INSTANCE_BYTES : sizeof(SceneState::InstanceData)) != 0) {
 			mismatches++;
 		}
-		if (rl->element_info[i].value != uint32_t(surface->sort.sort_key1 & 0xFFF) && p_flags == nullptr) {
+		const bool secondary = p_render_list == RENDER_LIST_SECONDARY; // decision 0260: its elements' shadow dither
+		if (rl->element_info[i].value != (uint32_t(surface->sort.sort_key1 & 0xFFF) | (secondary ? uint32_t(inst->fellow_shadow_dither) << 12 : 0u)) && p_flags == nullptr) {
 			mismatches++;
 		}
 		const bool cant_repeat = flags & INSTANCE_DATA_FLAG_MULTIMESH || inst->mesh_instance.is_valid();
-		if (prev_surface != nullptr && !cant_repeat && prev_surface->sort.sort_key1 == surface->sort.sort_key1 && prev_surface->sort.sort_key2 == surface->sort.sort_key2 && inst->mirror == prev_surface->owner->mirror && (p_flags != nullptr || inst->fellow_dither == prev_surface->owner->fellow_dither) && repeats < RenderElementInfo::MAX_REPEATS) {
+		if (prev_surface != nullptr && !cant_repeat && prev_surface->sort.sort_key1 == surface->sort.sort_key1 && prev_surface->sort.sort_key2 == surface->sort.sort_key2 && inst->mirror == prev_surface->owner->mirror && (secondary ? inst->fellow_shadow_dither == prev_surface->owner->fellow_shadow_dither : (p_flags != nullptr || inst->fellow_dither == prev_surface->owner->fellow_dither)) && repeats < RenderElementInfo::MAX_REPEATS) {
 			repeats++;
 		} else {
 			for (uint32_t j = 1; j <= repeats; j++) {
@@ -3221,6 +3228,7 @@ void RenderForwardClustered::_fill_instance_data(RenderListType p_render_list, i
 
 	uint32_t repeats = 0;
 	GeometryInstanceSurfaceDataCache *prev_surface = nullptr;
+	const bool secondary = p_render_list == RENDER_LIST_SECONDARY; // decision 0260: its elements' shadow dither
 	for (uint32_t i = 0; i < element_total; i++) {
 		GeometryInstanceSurfaceDataCache *surface = rl->elements[i + p_offset];
 		GeometryInstanceForwardClustered *inst = surface->owner;
@@ -3242,7 +3250,7 @@ void RenderForwardClustered::_fill_instance_data(RenderListType p_render_list, i
 
 		const bool cant_repeat = element_flags & INSTANCE_DATA_FLAG_MULTIMESH || inst->mesh_instance.is_valid();
 
-		if (prev_surface != nullptr && !cant_repeat && prev_surface->sort.sort_key1 == surface->sort.sort_key1 && prev_surface->sort.sort_key2 == surface->sort.sort_key2 && inst->mirror == prev_surface->owner->mirror && inst->fellow_dither == prev_surface->owner->fellow_dither && repeats < RenderElementInfo::MAX_REPEATS) {
+		if (prev_surface != nullptr && !cant_repeat && prev_surface->sort.sort_key1 == surface->sort.sort_key1 && prev_surface->sort.sort_key2 == surface->sort.sort_key2 && inst->mirror == prev_surface->owner->mirror && (secondary ? inst->fellow_shadow_dither == prev_surface->owner->fellow_shadow_dither : inst->fellow_dither == prev_surface->owner->fellow_dither) && repeats < RenderElementInfo::MAX_REPEATS) {
 			//this element is the same as the previous one, count repeats to draw it using instancing
 			repeats++;
 		} else {
@@ -3259,7 +3267,7 @@ void RenderForwardClustered::_fill_instance_data(RenderListType p_render_list, i
 
 		RenderElementInfo &element_info = rl->element_info[p_offset + i];
 
-		element_info.value = uint32_t(surface->sort.sort_key1 & 0xFFF);
+		element_info.value = uint32_t(surface->sort.sort_key1 & 0xFFF) | (secondary ? uint32_t(inst->fellow_shadow_dither) << 12 : 0u);
 
 		if (cant_repeat) {
 			prev_surface = nullptr;
@@ -3369,6 +3377,7 @@ void RenderForwardClustered::_fellow_fill_instance_data_chunk(uint32_t p_chunk, 
 	const uint32_t from = job.offset + p_chunk * job.chunk_size;
 	const uint32_t to = MIN(from + job.chunk_size, job.offset + job.total);
 	const bool prefetch = Fellow::cpu_prefetch();
+	const bool secondary = job.render_list == RENDER_LIST_SECONDARY; // decision 0260: its elements' shadow dither
 	for (uint32_t i = from; i < to; i++) {
 		GeometryInstanceSurfaceDataCache *surface = rl->elements[i];
 		GeometryInstanceForwardClustered *inst = surface->owner;
@@ -3395,11 +3404,11 @@ void RenderForwardClustered::_fellow_fill_instance_data_chunk(uint32_t p_chunk, 
 			const GeometryInstanceSurfaceDataCache *prev_surface = rl->elements[i - 1];
 			const GeometryInstanceForwardClustered *prev_inst = prev_surface->owner;
 			const bool prev_cant_repeat = prev_inst->flags_cache & INSTANCE_DATA_FLAG_MULTIMESH || prev_inst->mesh_instance.is_valid();
-			join = !prev_cant_repeat && prev_surface->sort.sort_key1 == surface->sort.sort_key1 && prev_surface->sort.sort_key2 == surface->sort.sort_key2 && inst->mirror == prev_inst->mirror && inst->fellow_dither == prev_inst->fellow_dither; // (decision 0256: one draw, one dither)
+			join = !prev_cant_repeat && prev_surface->sort.sort_key1 == surface->sort.sort_key1 && prev_surface->sort.sort_key2 == surface->sort.sort_key2 && inst->mirror == prev_inst->mirror && (secondary ? inst->fellow_shadow_dither == prev_inst->fellow_shadow_dither : inst->fellow_dither == prev_inst->fellow_dither); // (decision 0256: one draw, one dither)
 		}
 		joinable[i - job.offset] = join;
 
-		rl->element_info[i].value = uint32_t(surface->sort.sort_key1 & 0xFFF);
+		rl->element_info[i].value = uint32_t(surface->sort.sort_key1 & 0xFFF) | (secondary ? uint32_t(inst->fellow_shadow_dither) << 12 : 0u);
 	}
 	_fellow_run_scan(p_chunk);
 }
@@ -3476,6 +3485,8 @@ RenderForwardClustered::FellowFillParams RenderForwardClustered::_fellow_fill_pa
 	params.count_primitives = p_render_data->render_info != nullptr;
 	params.render_info = p_render_data->render_info;
 	params.fellow_dithered_fade = Fellow::dithered_fade(); // decision 0256
+	params.fellow_shadow_fades = params.fellow_dithered_fade; // decision 0260
+	params.fellow_shadow_dither = !fellow_shadow_cube;
 	return params;
 }
 
@@ -3629,9 +3640,51 @@ void RenderForwardClustered::_fill_render_list_range(const FellowFillParams &p_p
 			fade_alpha *= inst->fellow_dither_alpha;
 			fellow_dither = inst->fellow_dither_other ? 2 : (fellow_dither ? fellow_dither : 1);
 		}
+		// Decision 0260: the shadow passes dither the same fades — by the main camera's distance (stock's shadow passes
+		// measure from the light) — so a caster's shadow fades with it, and two handing over cast one shadow; one with no
+		// pixel left is not drawn (a positional light's casters include those its range hides). Otherwise (and in an
+		// omni light's cube map, which is filtered: whole) the pass's values are stock's.
+		bool fellow_shadow_skip = false;
+		if ((p_pass_mode == PASS_MODE_SHADOW || p_pass_mode == PASS_MODE_SHADOW_DP) && inst->force_alpha >= FADE_ALPHA_PASS_THRESHOLD && (p_params.fellow_shadow_fades || inst->fellow_dither_alpha < FADE_ALPHA_PASS_THRESHOLD)) {
+			float shadow_fade = 1.0f;
+			uint8_t shadow_dither = 0;
+			if (p_params.fellow_shadow_fades && !inst->fellow_hlod_proxy && !inst->fellow_hlod_member) {
+				// (An HLOD's proxies and members cast their shadows per cascade, decision 0122: whole.)
+				bool near = false;
+				if (inst->fade_near || inst->fade_far) {
+					const float dist = inst->transformed_aabb.get_center().distance_to(p_params.main_cam_origin);
+					if (inst->fade_far && dist > inst->fade_far_begin) {
+						shadow_fade = Math::smoothstep(0.0f, 1.0f, 1.0f - (dist - inst->fade_far_begin) / (inst->fade_far_end - inst->fade_far_begin));
+					} else if (inst->fade_near && dist < inst->fade_near_end) {
+						shadow_fade = Math::smoothstep(0.0f, 1.0f, (dist - inst->fade_near_begin) / (inst->fade_near_end - inst->fade_near_begin));
+						near = true;
+					}
+				}
+				shadow_fade *= inst->parent_fade_alpha;
+				if (shadow_fade < FADE_ALPHA_PASS_THRESHOLD) {
+					shadow_dither = near ? 2 : 1;
+				} else {
+					shadow_fade = 1.0f;
+				}
+			}
+			if (inst->fellow_dither_alpha < FADE_ALPHA_PASS_THRESHOLD) {
+				shadow_fade *= inst->fellow_dither_alpha;
+				shadow_dither = inst->fellow_dither_other ? 2 : (shadow_dither ? shadow_dither : 1);
+			}
+			if (shadow_dither) {
+				if (uint32_t(shadow_fade * 255.0f + 0.5f) == 0) {
+					fellow_shadow_skip = true;
+				} else if (p_params.fellow_shadow_dither) {
+					fade_alpha = shadow_fade;
+					fellow_dither = shadow_dither;
+				}
+			}
+		}
 		if constexpr (!t_records) {
 			if (p_pass_mode == PASS_MODE_COLOR) {
 				inst->fellow_dither = fellow_dither;
+			} else if (p_render_list == RENDER_LIST_SECONDARY) {
+				inst->fellow_shadow_dither = fellow_dither; // decision 0260 (0 in the secondary list's other passes)
 			}
 		}
 
@@ -3851,7 +3904,7 @@ void RenderForwardClustered::_fill_render_list_range(const FellowFillParams &p_p
 					r_out.used_opaque_stencil = true;
 				}
 			} else if (p_pass_mode == PASS_MODE_SHADOW || p_pass_mode == PASS_MODE_SHADOW_DP) {
-				if (surf->flags & GeometryInstanceSurfaceDataCache::FLAG_PASS_SHADOW) {
+				if ((surf->flags & GeometryInstanceSurfaceDataCache::FLAG_PASS_SHADOW) && !fellow_shadow_skip) {
 					record_add = true;
 					if constexpr (!t_records) {
 						out_main.push_back(surf);
@@ -3876,13 +3929,13 @@ void RenderForwardClustered::_fill_render_list_range(const FellowFillParams &p_p
 			sort.depth_layer = depth_layer;
 			if constexpr (t_records) {
 				if (record_add) {
-					r_out.records->push_back({ sort.sort_key2, sort.sort_key1, surf, flags });
+					r_out.records->push_back({ sort.sort_key2, sort.sort_key1, surf, flags, fellow_dither });
 				}
 			} else {
 				if (record_add && sort_records) {
 					// The main list's sort keys, final for this frame, taken while the surface is in this thread's
 					// cache (the sort then needs no pass over the surfaces).
-					sort_records->push_back({ sort.sort_key2, sort.sort_key1, surf, 0 });
+					sort_records->push_back({ sort.sort_key2, sort.sort_key1, surf, 0, 0 });
 				}
 			}
 
@@ -5861,6 +5914,8 @@ void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, boo
 		// This will not be available when rendering reflection probes.
 		rb_data = rb->get_custom_data(RB_SCOPE_FORWARD_CLUSTERED);
 	}
+	// FellowEngine (decision 0260): the shadow passes' dithered fades move with the view's TAA frames, as its own.
+	fellow_shadow_taa_frame_count = p_render_data->scene_data->taa_frame_count;
 
 	// FellowEngine ray-traced ambient occlusion (decision 0081): on the main queue, before the screen-space effects, in
 	// place of SSAO (which the rest of this function then skips); the colour pass reads the same buffer.
@@ -7871,7 +7926,11 @@ void RenderForwardClustered::_render_shadow_pass(RID p_light, RID p_shadow_atlas
 
 	if (render_cubemap) {
 		//rendering to cubemap
+		// (FellowEngine, decision 0260: not dithered — the cube's depths are filtered into the atlas's paraboloids, which
+		// would average a dither's texels with what lies behind them: a fading caster's shadow stays whole here.)
+		fellow_shadow_cube = true;
 		_render_shadow_append(render_fb, p_instances, light_projection, light_transform, zfar, 0, 0, reverse_cull_face, false, false, use_pancake, p_lod_distance_multiplier, p_screen_mesh_lod_threshold, Rect2(), false, true, true, true, p_render_info, p_viewport_size, p_main_cam_transform);
+		fellow_shadow_cube = false;
 		if (finalize_cubemap) {
 			_render_shadow_process();
 			_render_shadow_end();
@@ -8101,7 +8160,7 @@ void RenderForwardClustered::_fellow_shadow_instance_chunk(uint32_t p_item, void
 				gpu[i] = instance_data;
 			}
 		}
-		rl->element_info[i].value = uint32_t(rec.key1 & 0xFFF);
+		rl->element_info[i].value = uint32_t(rec.key1 & 0xFFF) | (rec.dither << 12); // (decision 0260: its shadow dither)
 
 		// Stock's repeat test against the element before it (a pass's first element starts a run).
 		const bool cant_repeat = rec.flags & INSTANCE_DATA_FLAG_MULTIMESH || inst->mesh_instance.is_valid();
@@ -8110,7 +8169,7 @@ void RenderForwardClustered::_fellow_shadow_instance_chunk(uint32_t p_item, void
 			const FellowShadowRecord &prev = records[r - 1];
 			const GeometryInstanceForwardClustered *prev_inst = prev.surface->owner;
 			const bool prev_cant_repeat = prev.flags & INSTANCE_DATA_FLAG_MULTIMESH || prev_inst->mesh_instance.is_valid();
-			join = !prev_cant_repeat && prev.key1 == rec.key1 && prev.key2 == rec.key2 && inst->mirror == prev_inst->mirror;
+			join = !prev_cant_repeat && prev.key1 == rec.key1 && prev.key2 == rec.key2 && inst->mirror == prev_inst->mirror && prev.dither == rec.dither;
 		}
 		link[i] = join;
 	}
@@ -8444,6 +8503,7 @@ void RenderForwardClustered::_render_shadow_append(RID p_framebuffer, const Page
 	scene_data.time = time;
 	scene_data.time_step = time_step;
 	scene_data.main_cam_transform = p_main_cam_transform;
+	scene_data.taa_frame_count = fellow_shadow_taa_frame_count; // decision 0260 (read only by dithered fades)
 	scene_data.fellow_lod_distance_bias = p_fellow_lod_distance_bias;
 	scene_data.fellow_lod_ortho_extent = p_fellow_lod_ortho_extent;
 	scene_data.shadow_pass = true;

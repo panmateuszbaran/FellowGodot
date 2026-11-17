@@ -2,7 +2,7 @@ extends SceneTree
 ## FellowEngine milestone 132 check (decision 0256): dithered fades (rendering/fellow/geometry/dithered_fade).
 ##
 ##   godot --path benchmarks/project --fixed-fps 60 --resolution 960x540 -s res://bench/dithered_fade_check.gd
-##       -- --out=<dir> [--objects=4000] [--frames=60] [--taa=1]
+##       -- --out=<dir> [--objects=4000] [--frames=60] [--taa=1] [--only=shadows]
 ##
 ## Two levels of detail of a ball (a sphere of 64 x 32 faces near, of 10 x 5 far, the far one a little darker), handed
 ## over at 40 m with a margin of 6 m, each with its own fade (visibility_range_fade_mode SELF), or the far one the near
@@ -12,9 +12,11 @@ extends SceneTree
 ## 108, their inside) — a switch is one step, a fade a ramp — and, in the middle
 ## (the middle of the hand-over), the pixels where the sky shows through the balls (holes) against the switch's
 ## picture. (2) The cost: --objects balls on a shell 40 m around the camera, all mid-fade — the GPU's and the
-## renderer's times (medians of --frames), the draws, and the picture. (3) Nothing fading (the camera nearer than any
+## renderer's times (medians of --frames), the draws, and the picture (also with the sun's shadows: theirs dithered too). (3) Nothing fading (the camera nearer than any
 ## hand-over): the picture with the setting on is the picture with it off, exactly. (4) FellowHLOD3D's fade: its
-## merged boxes dithered over their proxy, no hole.
+## merged boxes dithered over their proxy, no hole. (5)-(7) decisions 0257-0259 (below). (8) Decision 0260: the
+## shadows of fading instances fade too (a sun's, cached, and an omni light's), two handing over cast one shadow, and a
+## streamed mesh's swap keeps its shadow whole.
 ## One JSON line: DITHERED_FADE_CHECK {...}; exit code 1 when a check fails.
 
 const SWITCH := 40.0
@@ -239,8 +241,9 @@ func _flight(lane: String, dither: bool) -> Dictionary:
 		"median_step": snappedf(sorted[sorted.size() / 2], 0.001), "frames_changing_over_0_1": changing, "mid": mid}
 
 
-func _cost(lane: String, dither: bool) -> Dictionary:
+func _cost(lane: String, dither: bool, shadows := false) -> Dictionary:
 	ProjectSettings.set_setting("rendering/fellow/geometry/dithered_fade", dither)
+	_sun().shadow_enabled = shadows # (decision 0260: the balls' shadows, dithered with them)
 	var shell := Node3D.new()
 	world.add_child(shell)
 	cam.position = Vector3.ZERO
@@ -267,7 +270,8 @@ func _cost(lane: String, dither: bool) -> Dictionary:
 	cpu.sort()
 	var draws := Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)
 	var img := await _shot()
-	img.save_png(out_dir.path_join("cost_%s_%s.png" % [lane, "dither" if dither else "blend"]))
+	img.save_png(out_dir.path_join("cost_%s_%s%s.png" % [lane, "dither" if dither else "blend", "_shadows" if shadows else ""]))
+	_sun().shadow_enabled = false
 	shell.queue_free()
 	await process_frame
 	await process_frame
@@ -436,12 +440,167 @@ func _cell_crossfade() -> Dictionary:
 	return result_c
 
 
+func _lum(c: Color) -> float:
+	return 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b
+
+
+func _boxy(c: Color) -> bool:
+	return c.r > c.b + 0.05
+
+
+# The depth of the shadow in l against empty (no caster) and whole (the caster whole): 1 the whole shadow, 0 none — over
+# the pixels the whole caster shadows (ground, not a caster's, in the three pictures).
+func _shadow_depth(l: Image, empty: Image, whole: Image) -> Dictionary:
+	var total := 0.0
+	var n := 0
+	for y in l.get_height():
+		for x in l.get_width():
+			var ce := empty.get_pixel(x, y)
+			var cw := whole.get_pixel(x, y)
+			var cl := l.get_pixel(x, y)
+			if _boxy(ce) or _boxy(cw) or _boxy(cl):
+				continue
+			var d := _lum(ce) - _lum(cw)
+			if d < 0.04:
+				continue
+			total += clampf((_lum(ce) - _lum(cl)) / d, -0.5, 1.5)
+			n += 1
+	return {"depth": snappedf(total / maxf(n, 1.0), 0.001), "pixels": n}
+
+
+func _sun() -> DirectionalLight3D:
+	for c in world.get_children():
+		if c is DirectionalLight3D:
+			return c
+	return null
+
+
+func _ground(parent: Node3D) -> MeshInstance3D:
+	var g := MeshInstance3D.new()
+	var pm := PlaneMesh.new()
+	pm.size = Vector2(200, 200)
+	g.mesh = pm
+	var m := StandardMaterial3D.new()
+	m.albedo_color = Color(0.6, 0.6, 0.62)
+	g.material_override = m
+	parent.add_child(g)
+	return g
+
+
+# (8) Decision 0260: a tall box on the ground fading out at 40 m (its own fade, 6 m on each side), lit by the sun (its
+# shadow cached, decision 0004) or by an omni light (dual paraboloid; a cube map's shadows stay whole), without TAA, the camera moved only: 20 m (the box whole), 40 m (half
+# faded), 60 m (gone), 40 m again, 20 m again — its shadow's depth against the box whole and absent at each distance.
+# Then a box of the same size handing over to it at 40 m: one shadow. The setting off: the shadow whole (as stock).
+func _shadows(kind: String) -> Dictionary:
+	root.use_taa = false
+	ProjectSettings.set_setting("rendering/fellow/geometry/dithered_fade", true)
+	var sun := _sun()
+	var holder := Node3D.new()
+	world.add_child(holder)
+	_ground(holder)
+	if kind == "sun":
+		sun.shadow_enabled = true
+		sun.directional_shadow_max_distance = 150.0
+	else:
+		sun.visible = false
+		var omni := OmniLight3D.new()
+		omni.position = Vector3(-3, 8, 4)
+		omni.omni_range = 40.0
+		omni.light_energy = 4.0
+		omni.shadow_enabled = true
+		# (A cube map's depths are filtered into the atlas: not dithered, its shadows whole — decision 0260.)
+		omni.omni_shadow_mode = OmniLight3D.SHADOW_CUBE if kind == "omni_cube" else OmniLight3D.SHADOW_DUAL_PARABOLOID
+		holder.add_child(omni)
+	var mesh_near := BoxMesh.new()
+	mesh_near.size = Vector3(2, 4, 2)
+	mesh_near.subdivide_width = 4
+	mesh_near.subdivide_height = 4
+	mesh_near.subdivide_depth = 4
+	var mesh_far := BoxMesh.new()
+	mesh_far.size = Vector3(2, 4, 2)
+	var near := MeshInstance3D.new()
+	near.mesh = mesh_near
+	near.material_override = near_mat
+	near.position = Vector3(0, 2, 0)
+	holder.add_child(near)
+	var far := MeshInstance3D.new()
+	far.mesh = mesh_far
+	far.material_override = far_mat
+	far.position = Vector3(0, 2, 0)
+	far.visible = false
+	holder.add_child(far)
+	var center := Vector3(0, 2, 0)
+	var view_dir := Vector3(0.0, 0.45, -1.0).normalized()
+	var refs := {}
+	for d in [20.0, SWITCH, 60.0]:
+		cam.position = center + view_dir * d
+		cam.look_at(center)
+		near.visible = false
+		for i in 6:
+			await process_frame
+		var empty := await _shot()
+		near.visible = true
+		for i in 6:
+			await process_frame
+		refs[d] = {"empty": empty, "whole": await _shot()}
+	var r := {}
+	# The setting off and on, nothing fading (the box whole at 20 m, its range set): the same picture.
+	near.visibility_range_end = SWITCH
+	near.visibility_range_end_margin = MARGIN
+	near.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
+	cam.position = center + view_dir * 20.0
+	cam.look_at(center)
+	var same := []
+	for dither in [false, true]:
+		ProjectSettings.set_setting("rendering/fellow/geometry/dithered_fade", dither)
+		for i in 8:
+			await process_frame
+		same.append(await _shot())
+	r["nothing_fading_same_picture"] = _exact(same[0], same[1])
+	# The flight (the camera moved only).
+	var seq := []
+	for d in [20.0, SWITCH, 60.0, SWITCH, 20.0]:
+		cam.position = center + view_dir * d
+		cam.look_at(center)
+		for i in 4:
+			await process_frame
+		var img := await _shot()
+		seq.append({"at": d, "shadow": _shadow_depth(img, refs[d].empty, refs[d].whole)})
+		if d == SWITCH and seq.size() == 2:
+			img.save_png(out_dir.path_join("shadow_%s_middle.png" % kind))
+	r["flight"] = seq
+	# Stock's look with the setting off: the box blended, its shadow whole.
+	ProjectSettings.set_setting("rendering/fellow/geometry/dithered_fade", false)
+	cam.position = center + view_dir * SWITCH
+	cam.look_at(center)
+	for i in 6:
+		await process_frame
+	r["setting_off_middle"] = _shadow_depth(await _shot(), refs[SWITCH].empty, refs[SWITCH].whole)
+	# The hand-over: the plain box from 40 m (with the same margin), the two half faded each at 40 m.
+	ProjectSettings.set_setting("rendering/fellow/geometry/dithered_fade", true)
+	far.visible = true
+	far.visibility_range_begin = SWITCH
+	far.visibility_range_begin_margin = MARGIN
+	far.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
+	for i in 6:
+		await process_frame
+	var hand := await _shot()
+	hand.save_png(out_dir.path_join("shadow_%s_handover.png" % kind))
+	r["handover_middle"] = _shadow_depth(hand, refs[SWITCH].empty, refs[SWITCH].whole)
+	ProjectSettings.set_setting("rendering/fellow/geometry/dithered_fade", false)
+	holder.queue_free()
+	sun.shadow_enabled = false
+	sun.visible = true
+	await process_frame
+	return r
+
+
 # (7) A cell whose content is one large ball (a sphere of 128 x 64 faces, streamed: its stand-in 15 % of it), loaded,
 # the camera 40 m away, crossfade 0.5 s, without TAA: mesh_distance moved past the camera (the full mesh loads and
 # crosses over) and back (the stand-in crosses over); halfway, no hole where both would cover.
-func _mesh_swap() -> Dictionary:
+func _mesh_swap(shadow := false) -> Dictionary:
 	root.use_taa = false
-	var dir := out_dir.path_join("swap")
+	var dir := out_dir.path_join("swap_shadow" if shadow else "swap")
 	DirAccess.make_dir_recursive_absolute(dir)
 	var content := Node3D.new()
 	content.name = "Content"
@@ -460,6 +619,18 @@ func _mesh_swap() -> Dictionary:
 	ps.pack(content)
 	ResourceSaver.save(ps, dir.path_join("content.scn"))
 	content.free()
+	# (Decision 0260: with a ground and the sun's shadow, the camera higher: the shadow's depth halfway.)
+	var ground: MeshInstance3D
+	var empty: Image
+	if shadow:
+		ground = _ground(world)
+		_sun().shadow_enabled = true
+		_sun().directional_shadow_max_distance = 100.0
+		cam.position = Vector3(0, 14.0, -SWITCH)
+		cam.look_at(Vector3(0, 3.0, 0))
+		for i in 6:
+			await process_frame
+		empty = await _shot()
 	var streamer = ClassDB.instantiate("FellowWorldStreamer3D")
 	streamer.set("load_distance", 100.0)
 	world.add_child(streamer)
@@ -470,8 +641,9 @@ func _mesh_swap() -> Dictionary:
 	streamer.call("bake_proxies", dir.path_join("proxies"), {"texel_size": 0.0, "group_cells": 0, "stream_meshes": true, "mesh_min_triangles": 1000})
 	streamer.set("mesh_distance", 10.0)
 	streamer.set("crossfade", 0.5)
-	cam.position = Vector3(0, 4.0, -SWITCH)
-	cam.look_at(Vector3(0, 4.0, 0))
+	if not shadow:
+		cam.position = Vector3(0, 4.0, -SWITCH)
+		cam.look_at(Vector3(0, 4.0, 0))
 	for i in 600:
 		await process_frame
 		if streamer.call("is_settled") and cell.call("is_loaded") and i > 10:
@@ -492,13 +664,21 @@ func _mesh_swap() -> Dictionary:
 				frames += 1
 				if frames == 15:
 					middle = await _shot()
-					middle.save_png(out_dir.path_join("swap_%s_middle.png" % lane[0]))
+					middle.save_png(out_dir.path_join("swap%s_%s_middle.png" % ["_shadow" if shadow else "", lane[0]]))
 				if settled:
 					break
 		for i in 3:
 			await process_frame
 		out[lane[0]] = {"frames": frames, "middle": middle, "end": await _shot()}
 	var full_only: Image = out.to_full.end
+	if shadow:
+		var rs := {"to_full_middle": _shadow_depth(out.to_full.middle, empty, full_only), "to_stand_in_middle": _shadow_depth(out.to_stand_in.middle, empty, stand_in_only),
+			"frames": [out.to_full.frames, out.to_stand_in.frames]}
+		streamer.queue_free()
+		ground.queue_free()
+		_sun().shadow_enabled = false
+		await process_frame
+		return rs
 	var r := {"stand_in_vs_full": _compare(stand_in_only, full_only), "stats": streamer.call("get_stats"),
 		"to_full": {"frames": out.to_full.frames, "holes": _holes_both(out.to_full.middle, stand_in_only, full_only), "middle_vs_full": _compare(out.to_full.middle, full_only)},
 		"to_stand_in": {"frames": out.to_stand_in.frames, "holes": _holes_both(out.to_stand_in.middle, stand_in_only, full_only), "end_vs_stand_in": _compare(out.to_stand_in.end, stand_in_only)}}
@@ -507,10 +687,36 @@ func _mesh_swap() -> Dictionary:
 	return r
 
 
+# (8) Decision 0260: the shadows fade with them.
+func _shadow_sections(failures: Array, taa: bool) -> void:
+	result["shadows"] = {}
+	for kind in ["sun", "omni", "omni_cube"]:
+		var sh: Dictionary = await _shadows(kind)
+		result.shadows[kind] = sh
+		var fl: Array = sh.flight
+		var ok: bool = sh.nothing_fading_same_picture and fl[0].shadow.depth >= 0.95 and fl[2].shadow.depth <= 0.05 and fl[4].shadow.depth >= 0.95
+		if kind == "omni_cube":
+			ok = ok and fl[1].shadow.depth >= 0.95 and fl[3].shadow.depth >= 0.95 # (whole while fading, gone when faded)
+		else:
+			ok = ok and fl[1].shadow.depth > 0.15 and fl[1].shadow.depth < 0.85 and absf(fl[3].shadow.depth - fl[1].shadow.depth) < 0.1
+		ok = ok and sh.handover_middle.depth >= 0.95 and sh.setting_off_middle.depth >= 0.95
+		if not ok:
+			failures.append("shadows (%s): not faded with the box, stale, or not one shadow handing over" % kind)
+	result.shadows["mesh_swap"] = await _mesh_swap(true)
+	var mss: Dictionary = result.shadows.mesh_swap
+	if mss.to_full_middle.depth < 0.95 or mss.to_stand_in_middle.depth < 0.95:
+		failures.append("mesh swap crossfade: its shadow not whole halfway")
+	root.use_taa = taa
+
+
 func _run() -> void:
 	_setup()
 	await process_frame
 	var failures := []
+	if _arg("only", "") == "shadows":
+		await _shadow_sections(failures, root.use_taa)
+		_finish(failures)
+		return
 
 	# (3) Nothing fading: the setting changes nothing.
 	var row := Node3D.new()
@@ -645,6 +851,8 @@ func _run() -> void:
 		failures.append("mesh swap crossfade: holes, or no fade")
 	root.use_taa = taa
 
+	await _shadow_sections(failures, taa)
+
 	# (1) The flights.
 	var flights := {}
 	var reference: Image
@@ -665,12 +873,16 @@ func _run() -> void:
 
 	# (2) The cost, all mid-fade.
 	var cost := {}
-	for lane in [["switch", false], ["self", false], ["self", true], ["deps", false], ["deps", true]]:
-		var key: String = lane[0] + ("_dither" if lane[1] else ("" if lane[0] == "switch" else "_blend"))
-		var r: Dictionary = await _cost(lane[0], lane[1])
+	for lane in [["switch", false], ["self", false], ["self", true], ["deps", false], ["deps", true], ["switch", false, true], ["self", false, true], ["self", true, true]]:
+		var key: String = lane[0] + ("_dither" if lane[1] else ("" if lane[0] == "switch" else "_blend")) + ("_shadows" if lane.size() > 2 else "")
+		var r: Dictionary = await _cost(lane[0], lane[1], lane.size() > 2)
 		r.erase("img")
 		cost[key] = r
 	result["cost"] = cost
+	_finish(failures)
+
+
+func _finish(failures: Array) -> void:
 	result["failures"] = failures
 	print("DITHERED_FADE_CHECK " + JSON.stringify(result))
 	var f := FileAccess.open(out_dir.path_join("dithered_fade_check.json"), FileAccess.WRITE)

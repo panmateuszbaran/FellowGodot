@@ -114,8 +114,9 @@ void RenderGeometryInstanceBase::set_fellow_dither_alpha(float p_alpha, bool p_o
 	fellow_dither_other = p_other_share;
 }
 
-void RenderGeometryInstanceBase::set_fellow_hlod_proxy(bool p_proxy) {
+void RenderGeometryInstanceBase::set_fellow_hlod_proxy(bool p_proxy, bool p_member) {
 	fellow_hlod_proxy = p_proxy;
+	fellow_hlod_member = p_member;
 }
 
 void RenderGeometryInstanceBase::set_layer_mask(uint32_t p_layer_mask) {

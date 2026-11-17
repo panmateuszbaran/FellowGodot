@@ -9,6 +9,15 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 135 — fading instances' shadows fade (2026-11-17)
+
+- Decision 0260: the shadow passes dither the fades the view does — by distance with `geometry/dithered_fade`, and the
+  shares of decision 0258's cross-overs — by the main camera, with the same noise and side: a fading caster's shadow
+  fades with it and two handing over cast one shadow (directional cascades, spot lights, omni lights' dual paraboloids;
+  an omni light's cube map whole while fading). Fading casters leave the directional caches meanwhile and redraw their
+  positional lights' shadows; a caster faded out entirely is not drawn. A streamed mesh's swap keeps one shadow. The
+  image regression suite exact. `bench/dithered_fade_check.gd` section 8 (`--only=shadows`).
+
 ## Milestone 134 — streamed cells and meshes cross over (2026-11-17)
 
 - `FellowWorldStreamer3D.crossfade` (decisions 0258, 0259): a streamed cell's content and its proxy cross over when it

@@ -745,7 +745,7 @@ void RendererSceneCull::instance_set_base(RID p_instance, RID p_base) {
 				geom->geometry_instance->set_fellow_instance_range_fade(instance->fellow_range_fade);
 				geom->geometry_instance->set_fellow_instance_range_margins(instance->fellow_range_begin_margin, instance->fellow_range_end_margin);
 				geom->geometry_instance->set_fellow_dither_alpha(instance->fellow_dither_alpha, instance->fellow_dither_other);
-				geom->geometry_instance->set_fellow_hlod_proxy(instance->fellow_hlod_role == RenderingServer::FELLOW_HLOD_PROXY);
+				geom->geometry_instance->set_fellow_hlod_proxy(instance->fellow_hlod_role == RenderingServer::FELLOW_HLOD_PROXY, instance->fellow_hlod_role == RenderingServer::FELLOW_HLOD_MEMBER);
 				geom->geometry_instance->set_transparency(instance->transparency);
 				geom->geometry_instance->set_use_baked_light(instance->baked_light);
 				geom->geometry_instance->set_use_dynamic_gi(instance->dynamic_gi);
@@ -1326,7 +1326,7 @@ void RendererSceneCull::fellow_instance_set_hlod(RID p_instance, int p_role, flo
 	if (((1 << instance->base_type) & RSE::INSTANCE_GEOMETRY_MASK) && instance->base_data) {
 		InstanceGeometryData *geom = static_cast<InstanceGeometryData *>(instance->base_data);
 		if (geom->geometry_instance) {
-			geom->geometry_instance->set_fellow_hlod_proxy(instance->fellow_hlod_role == RenderingServer::FELLOW_HLOD_PROXY);
+			geom->geometry_instance->set_fellow_hlod_proxy(instance->fellow_hlod_role == RenderingServer::FELLOW_HLOD_PROXY, instance->fellow_hlod_role == RenderingServer::FELLOW_HLOD_MEMBER);
 		}
 	}
 	// The directional shadow cache's view of the instance changed (decision 0004).
@@ -1375,8 +1375,12 @@ void RendererSceneCull::fellow_instance_set_instance_range_margins(RID p_instanc
 void RendererSceneCull::fellow_instance_set_dither_alpha(RID p_instance, float p_alpha, bool p_other_share) {
 	Instance *instance = instance_owner.get_or_null(p_instance);
 	ERR_FAIL_NULL(instance);
+	const bool was_dithered = instance->fellow_dither_alpha < 1.0f;
 	instance->fellow_dither_alpha = CLAMP(p_alpha, 0.0f, 1.0f);
 	instance->fellow_dither_other = p_other_share;
+	if (was_dithered || instance->fellow_dither_alpha < 1.0f) {
+		_fellow_shadow_fading(instance); // decision 0260: its shadow fades too
+	}
 	if (((1 << instance->base_type) & RSE::INSTANCE_GEOMETRY_MASK) && instance->base_data) {
 		InstanceGeometryData *geom = static_cast<InstanceGeometryData *>(instance->base_data);
 		if (geom->geometry_instance) {
@@ -2670,6 +2674,20 @@ void RendererSceneCull::_fellow_shadow_instance_changed(Instance *p_instance) co
 	ev.frame = frame;
 	ev.prev_change_frame = prev;
 	p_instance->scenario->fellow_shadow_invalidations.push_back(ev);
+}
+
+void RendererSceneCull::_fellow_shadow_fading(Instance *p_instance) const {
+	// Decision 0260: an instance whose shadow fades (dithered) changes the shadow maps it is in every frame: out of the
+	// directional caches, and its positional lights' shadows drawn again (as for a moving instance).
+	_fellow_shadow_instance_changed(p_instance);
+	if (((1 << p_instance->base_type) & RSE::INSTANCE_GEOMETRY_MASK) && p_instance->base_data && p_instance->cast_shadows != RSE::SHADOW_CASTING_SETTING_OFF) {
+		InstanceGeometryData *geom = static_cast<InstanceGeometryData *>(p_instance->base_data);
+		if (geom->can_cast_shadows) {
+			for (Instance *light_instance : geom->lights) {
+				static_cast<InstanceLightData *>(light_instance->base_data)->make_shadow_dirty();
+			}
+		}
+	}
 }
 
 bool RendererSceneCull::_fellow_shadow_cache_events_hit(const Scenario *p_scenario, const FellowDirShadowCache::Cascade &p_cascade, const Vector3 &p_x, const Vector3 &p_y, const Vector3 &p_z, uint64_t p_frame) const {
@@ -4212,6 +4230,41 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 				WorkerThreadPool::get_singleton()->wait_for_group_task_completion(group_task);
 			} else {
 				_visibility_cull(visibility_cull_data, visibility_cull_data.cull_offset, visibility_cull_data.cull_offset + visibility_cull_data.cull_count);
+			}
+		}
+		// FellowEngine (decision 0260): with dithered fades, the shadows of the instances fading for this camera fade too.
+		// Their shadow maps change every frame of the fade and once after it: the directional caches leave them out
+		// meanwhile (drawn with the cascades' dynamic casters), the positional lights' shadows are drawn again.
+		if (Fellow::dithered_fade()) {
+			const Vector3 cam_pos = visibility_cull_data.camera_position;
+			for (int bin = scenario->instance_visibility.get_bin_count() - 1; bin >= 0; bin--) {
+				const uint64_t from = scenario->instance_visibility.get_bin_start(bin);
+				const uint64_t to = from + scenario->instance_visibility.get_bin_size(bin);
+				for (uint64_t i = from; i < to; i++) {
+					const InstanceVisibilityData &vd = scenario->instance_visibility[i];
+					InstanceData &idata = scenario->instance_data[vd.array_index];
+					// Within a band of its own range (fading itself), or below a parent fading its children.
+					bool fading = false;
+					if (vd.fade_mode == RSE::VISIBILITY_RANGE_FADE_SELF) {
+						const float dist = cam_pos.distance_to(vd.position);
+						fading = (vd.range_end > 0.0f && dist > vd.range_end - vd.range_end_margin && dist <= vd.range_end + vd.range_end_margin) ||
+								(vd.range_begin > 0.0f && dist < vd.range_begin + vd.range_begin_margin && dist >= vd.range_begin - vd.range_begin_margin);
+					}
+					if (!fading && idata.parent_array_index >= 0) {
+						fading = scenario->instance_data[idata.parent_array_index].flags & InstanceData::FLAG_VISIBILITY_DEPENDENCY_FADE_CHILDREN;
+					}
+					if (idata.flags & (InstanceData::FLAG_FELLOW_HLOD_PROXY | InstanceData::FLAG_FELLOW_HLOD_MEMBER)) {
+						fading = false; // their shadows are per cascade, not faded (decision 0122)
+					}
+					if ((fading || (idata.flags & InstanceData::FLAG_FELLOW_SHADOW_FADED)) && idata.instance) {
+						_fellow_shadow_fading(idata.instance);
+					}
+					if (fading) {
+						idata.flags |= InstanceData::FLAG_FELLOW_SHADOW_FADED;
+					} else {
+						idata.flags &= ~InstanceData::FLAG_FELLOW_SHADOW_FADED;
+					}
+				}
 			}
 		}
 	}
