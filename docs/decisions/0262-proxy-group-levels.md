@@ -49,9 +49,9 @@ triangles and textures in memory at a detail no view needs past a few kilometres
   0252): a simplified triangle's normal took its side from its corners' source normals — on the welded mesh one of each
   corner's faces', at a box's corner the roof's or the other wall's for a wall's triangle (at right angles: either
   side). Proxies baked from content made of many quads have most corners inside a wall and were mostly right; a level
-  baked from proxies, all corners and edges, had many of its walls lit from behind (below). The simplifier keeps each triangle's winding: a face
-  now takes the source's winding (the side most of its triangles' own corners' normals give), its corners' normals
-  turning it only where they clearly face the other way (a source wound against the rest).
+  baked from proxies, all corners and edges, had many of its walls lit from behind (below). The simplifier keeps each
+  triangle's winding: a face now takes the source's winding (the side most of its triangles' own corners' normals
+  give), its corners' normals turning it only where they clearly face the other way (a source wound against the rest).
 * **Rebaking** removes every level (their dependants' parents cleared first). The editor's dialog has the levels and
   reports each one's groups and triangles; the result's `"group_levels"` lists them.
 
@@ -69,43 +69,45 @@ and saved with it; in a game shown while the cells are unloaded, hidden once the
 
 ## Results
 
+The far views are shot without TAA (its jitter alone moved 6 % of the far world's pixels from one frame to the next:
+the check's first numbers had it) and with every draw waiting for its pipeline.
+
 **16 × 16 cells** (1 km a side; 256 cells and 256 terrain regions streamed to 160 m), groups of 2 × 2 and three
 levels — 64 groups, 16 of the second level and 4 of the third, for the cells and for the regions; from outside the
 world's corner (1.6 km from its centre):
 
-| | draws | triangles drawn | picture > 16 levels off A / mean | its world's pixels > 16 off |
-|---|---:|---:|---:|---:|
-| the groups' proxies alone (decision 0252) | 128 | 66 500 | 0.25 % / 0.0006 | 12.2 % |
-| **with the levels** (the third drawn) | **8** | **31 205** | 0.29 % / 0.0007 | 14.4 % |
-| with the levels, the faces' sides as before | 8 | 31 205 | 0.62 % / 0.0010 | 31.5 % |
+| | draws | triangles drawn | picture > 16 levels off A / mean | world's pixels > 16 off | the buildings in white |
+|---|---:|---:|---:|---:|---:|
+| the groups' proxies alone (decision 0252) | 128 | 66 500 | 0.34 % / 0.0007 | 19.0 % | 0.33 % |
+| **with the levels** (the third drawn) | **8** | **31 205** | 0.36 % / 0.0008 | 20.0 % | 0.51 % |
 
-The cells' levels: 48 342 triangles in the 64 groups, 27 243 in the second level's 16 proxies, 25 719 in the third's 4
-(the error floor: about ten triangles a building, the houses kept as boxes); the regions' 18 158, 10 270 and 5 486. Their
-textures 5.5 MB, 3.3 MB and 1.9 MB. None of the 168 proxies of groups and levels was drawn with a cell of its loaded (C:
-156 shown, the 12 over the loaded cells near the camera hidden, up the levels).
-
-The fix of the faces' sides on the near view (C: every cell's proxy, its groups and levels; D: C with the buildings
-streamed): 1.05 → 0.42 % of the picture more than 16 levels off the world all loaded, D 0.99 → 0.42 %.
+(The world's pixels textured are mostly the terrain's: its regions' proxies are vertex-coloured against the terrain's
+layers; the buildings alone in white differ in a few pixels in 200 either way.) The cells' levels: 48 342 triangles in
+the 64 groups, 27 243 in the second level's 16 proxies, 25 719 in the third's 4 (the error floor: about ten triangles a
+building, the houses kept as boxes); the regions' 18 158, 10 270 and 5 486. Their textures 5.5 MB, 3.3 MB and 1.9 MB.
+None of the 168 proxies of groups and levels was drawn with a cell of its loaded (C: 156 shown, the 12 over the loaded
+cells near the camera hidden, up the levels).
 
 **8 × 8 cells** (512 m), groups of 4 × 4 and two levels (4 groups, one proxy over them, for the cells and the regions),
-from outside the world 0.8 km from its centre — the share of the world's pixels more than 16 levels off A's, textured
-and with the buildings alone in white:
+from outside the world 0.8 km from its centre:
 
-| | draws | triangles | textured | white |
+| | draws | triangles | world's pixels > 16 off | the buildings in white |
 |---|---:|---:|---:|---:|
-| the groups' proxies alone | 8 | 9 941 | 10.8 % | 8.5 % |
-| **the second level** | **2** | **7 737** | 14.6 % | 10.7 % |
-| the second level, the faces' sides as before | 2 | 7 737 | 23.9 % | — |
+| the groups' proxies alone | 8 | 9 941 | 9.9 % | 2.3 % |
+| **the second level** | **2** | **7 737** | 10.0 % | 2.3 % |
 
-The same cells' buildings alone at 1280 × 720 (a scratch script, the same view; their pixels more than 16 levels off):
+The same cells' buildings alone at 1280 × 720 (a scratch script, the same view, the ground left out; their pixels more
+than 16 levels off): the groups alone 8.6 % textured and 1.9 % white, the second level 8.4 % and 1.9 %. Before the fix
+of the faces' sides (the same views with TAA on, whose jitter alone moves about 6 % of these pixels): the second level
+23.4 % textured and 23.6 % white against the groups' 16.2 % and 6.3 % — many of its walls lit from behind; the 16 × 16
+cells' third level 31.5 % of the world's pixels against 12.2 %.
 
-| | groups alone, white | second level, white | groups alone, textured | second level, textured |
-|---|---:|---:|---:|---:|
-| the faces' sides as before | 6.3 % | 23.6 % | 16.2 % | 23.4 % |
-| **now** | **4.7 %** | **4.7 %** | 14.0 % | **8.0 %** |
+The fix of the faces' sides on the near view (16 × 16 cells, C: every cell's proxy, its groups and levels; D: C with
+the buildings streamed; TAA on, the pipelines not waited for, as in milestones 127-131): 1.05 → 0.42 % of the picture
+more than 16 levels off the world all loaded, D 0.99 → 0.42 %.
 
-The levels' bake costs little beside the cells' and groups': the 8 × 8 cells' bake took 13.2 s with the second level
-and 16.6 s without (two runs sharing the machine: within their spread); the 16 × 16 cells' 65 s with three levels.
+The levels' bake costs little beside the cells' and groups': the 8 × 8 cells' bake 9.5 s with one level, 10.0 s with
+two; the 16 × 16 cells' 44 s with three.
 
 ## Decision
 

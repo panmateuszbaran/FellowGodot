@@ -12,21 +12,23 @@ Status: **FINAL** (2026-11-17). Branch `fellow/geometry`. Lavapipe in the cloud 
   a house five triangles); its texels take the surfaces facing them, edge texels a second ray or their neighbours, and
   it reads the textures below it a texel and a half inside their charts.
 * World Lab's 16 × 16 cells and regions (1 km) seen from outside, with groups of 2 × 2 and three levels: **8 draws and
-  31 205 triangles instead of 128 and 66 500**, the picture 0.29 % off the world all loaded (0.25 % with the groups
-  alone). 8 × 8 cells with two levels: 2 draws instead of 8.
+  31 205 triangles instead of 128 and 66 500**, the picture 0.36 % off the world all loaded (0.34 % with the groups
+  alone; the buildings in white 0.51 % of the world's pixels against 0.33 %). 8 × 8 cells with two levels: 2 draws
+  instead of 8, as close to the world all loaded as the groups.
 * **A fix for every proxy**: a simplified triangle's normal took its side from its welded corners' source normals — at
   a box's corner one of its other faces', either side for a wall. Proxies baked from many-quad content were mostly
   right; a level baked from proxies had many walls lit from behind (the buildings in white from outside: 23.6 % of
-  their pixels off, 4.7 % now — as the groups'). The faces now take the source's winding. World Lab's streamed view
-  with its proxies: 1.05 → 0.42 % of the picture off the world all loaded.
+  their pixels off against the groups' 6.3 %, with TAA; now 1.9 %, as the groups', without it). The faces now take the
+  source's winding. World Lab's streamed view with its proxies: 1.05 → 0.42 % of the picture off the world all loaded.
 * The editor's dialog has the levels and reports them; Frontier Lab `--frontier_group_levels` for the RTX.
 
 ## 1. Checks
 
 `bench/world_proxies_check.gd` (`--group_levels`; `--far=1`: lane F, the world from outside it, the coarser levels shown
-and hidden against the world all loaded, and the buildings alone in white, compared on the world's pixels); the editor
-check (two levels baked from the dialog over the split level's cells, owned and saved with it; in a game shown while the
-cells are unloaded, hidden once they load); the image regression suite (exact).
+and hidden against the world all loaded, and the buildings alone in white, compared on the world's pixels; the far
+views without TAA, whose jitter alone moved 6 % of their pixels between frames, and every draw waiting for its
+pipeline); the editor check (two levels baked from the dialog over the split level's cells, owned and saved with it; in
+a game shown while the cells are unloaded, hidden once they load); the image regression suite (exact).
 
 ## 2. Next
 
