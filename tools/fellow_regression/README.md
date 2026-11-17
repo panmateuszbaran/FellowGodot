@@ -63,3 +63,19 @@ not is a regression. Goldens are lavapipe's (Mesa 25.2, LLVM 20): another Mesa r
 adds none), built the same every run (scripts seed their random numbers; particles with `use_fixed_seed`), its name
 in a group of `suite.json`; then `bless --only group/scene`, look at the picture, commit it. Keep it cheap: lavapipe
 draws a few million triangles a second.
+
+**Under Vulkan's validation** (milestone 142, decision 0267: after changes to passes, barriers or textures' formats):
+run the suite with the Khronos validation layer's core and synchronization validation, the messages through Godot's
+own callback (`--gpu-validation`), and look for them in each scene's `engine.log`:
+
+```
+printf '%s\n' 'khronos_validation.validate_core = true' 'khronos_validation.validate_sync = true' \
+  'khronos_validation.enables = VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT' \
+  'khronos_validation.report_flags = error,warn' 'khronos_validation.debug_action = VK_DBG_LAYER_ACTION_CALLBACK' \
+  > /tmp/syncval/vk_layer_settings.txt
+FELLOW_GODOT_ARGS=--gpu-validation VK_LAYER_SETTINGS_PATH=/tmp/syncval xvfb-run -a python3 tools/fellow_regression/regression.py run --godot <editor build> --out <dir>
+grep -rho "VUID-[A-Za-z0-9_-]*\|SYNC-HAZARD-[A-Z_-]*" <dir> --include=engine.log | sort | uniq -c
+```
+
+The pictures are the same as without it. Expected: nothing but `VUID-VkShaderModuleCreateInfo-pCode-08739` (the
+layer of Ubuntu 24.04 cannot parse the ray-traced scenes' ray-query SPIR-V).
