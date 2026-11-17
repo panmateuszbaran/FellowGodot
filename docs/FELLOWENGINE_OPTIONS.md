@@ -179,8 +179,9 @@ when the node is ready (or by `build()`):
   when its members are as baked (a town of 1 600 houses: 2.5 s → 9 ms). Project > Tools > Bake HLOD bakes both.
   Milestone 132 (decision 0256): `fade` (off): the merged proxies' members fade over `margin` on each side of
   `distance` while their proxy shows behind them (`VISIBILITY_RANGE_FADE_DEPENDENCIES`), instead of switching — with
-  `geometry/dithered_fade` and TAA or FSR, dithered and solid; the instanced proxies still switch. City Lab
-  `--city_hlod_fade=1 --city_hlod_margin=<m>`.
+  `geometry/dithered_fade` and TAA or FSR, dithered and solid. Milestone 133 (decision 0257): the instanced proxies
+  too — their members fade out by themselves, the proxy's instances fade in on the GPU, and hand over to their
+  impostors the same way. City Lab `--city_hlod_fade=1 --city_hlod_margin=<m>`.
 
 Directional cascades starting beyond `distance` draw the proxies, the nearer ones the meshes, independently of the
 camera's position (`shadow_mode`), so the directional shadow cache keeps both. Meshes with skins, blend shapes,
@@ -1014,7 +1015,10 @@ instance on the GPU, the shadows per directional cascade as an HLOD's; needs `ge
 `FellowTerrain3D.bake_foliage_impostors(directory, frames, resolution)` renders each kind with a distance from
 `frames` × `frames` directions (octahedral, decision 0122's baker), saves it as `.res` (the quad mesh, its material,
 its atlases lossless) and sets it; signal `foliage_impostors_baked`. In the editor: the terrain toolbar's Bake
-Impostors button (next to the scene, `impostors/`, undoable). Bench `bench/terrain_holes_check.gd`.
+Impostors button (next to the scene, `impostors/`, undoable). Bench `bench/terrain_holes_check.gd`. Milestone 133
+(decision 0257): `impostor_fade` (metres, 0: a switch): each instance's mesh and impostor dithered into each other over
+that on each side of `impostor_distance`, on the GPU (the renderer's `fellow_instance_set_instance_range_margins()`);
+resolved by TAA or FSR.
 
 Milestone 65 (decision 0173), **regions**: `region_group` (empty: a terrain on its own) makes terrains of one group,
 the same spacing, edge to edge, tiles of one height field — their border vertices drawn from the exact heights, their

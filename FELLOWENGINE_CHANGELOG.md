@@ -9,6 +9,15 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 133 — hand-overs per instance dithered (2026-11-17)
+
+- `FellowTerrainFoliage.impostor_fade` and `FellowHLOD3D.fade` for the instanced proxies (decision 0257): the hand-overs
+  made per instance on the GPU — a tree to its impostor, a repeated mesh to its HLOD proxy — dithered over a band
+  instead of switching. The MultiMesh culling writes each instance's fade after its data
+  (`fellow_instance_set_instance_range_margins()`), the scene shader dithers it as decision 0256's fades, the side
+  coming in keeping the other pixels: no hole (the check's foliage and HLOD). Frontier Lab's forests faded over 20 m:
+  4.21 ms against 4.25 ms switching.
+
 ## Milestone 132 — dithered fades (2026-11-17)
 
 - `rendering/fellow/geometry/dithered_fade` (off; decision 0256): an opaque instance fading at its visibility range
