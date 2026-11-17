@@ -46,6 +46,10 @@ func build(p_args: Dictionary) -> void:
 		hlod.set("shadow_mode", int(args.get("city_hlod_shadows", "1")))
 		hlod.set("generate_lods", str(args.get("city_hlod_lods", "1")) == "1")
 		hlod.set("instancing", str(args.get("city_hlod_instancing", "1")) == "1")
+		# Milestone 132 (decision 0256): --city_hlod_fade=1 (the merged proxies' members fade over the margin instead of
+		# switching; blended, or dithered with rendering/fellow/geometry/dithered_fade), --city_hlod_margin=<m> (5).
+		hlod.set("fade", str(args.get("city_hlod_fade", "0")) == "1")
+		hlod.set("margin", float(args.get("city_hlod_margin", "5")))
 		add_child(hlod)
 		_parent = hlod
 	_build_city()
