@@ -21,7 +21,8 @@ extends SceneTree
 ## Milestone 137 (decision 0262): --group_levels=<n> (1) bakes n levels of groups; with --far=1, (F) the world from
 ## outside it (C's proxies, every cell unloaded): the coarser levels' proxies shown and hidden (the groups' alone), each
 ## against the world all loaded from there (A's), the triangles and draws; and the buildings alone in one white material
-## (the shapes' shading alone), each against A's: *_white, compared on the world's pixels (not the sky's). Draws wait
+## (the shapes' shading alone), each against A's: *_white, compared on the world's pixels (not the sky's); the far views
+## without TAA (its jitter alone moved 6 % of their world's pixels from one frame to the next). Draws wait
 ## for their pipelines (rendering/fellow/debug/wait_pipelines; --wait_pipelines=0: not).
 ## One JSON line: WORLD_PROXIES_CHECK {...}.
 
@@ -444,13 +445,16 @@ func _run() -> void:
 	result["a_all_loaded"] = _stats()
 	result["a_all_loaded"]["timing"] = await _timing()
 	var a_far: Image = null
+	var taa := root.use_taa
 	var a_far_white: Image = null
 	if _arg("far", "0") != "0":
+		root.use_taa = false # (the far views without TAA: its jitter moves the far buildings' pixels from frame to frame)
 		_far_view(w)
 		await _settle(frames)
 		a_far = await _shot("a_far")
 		result["a_far"] = _stats()
 		a_far_white = await _white_shot("a_far_white")
+		root.use_taa = taa
 		cam.transform = Transform3D(Basis(), Vector3(20, 45, 20)).looking_at(Vector3(w * 0.75, 0, w * 0.75))
 		await _settle(2)
 
@@ -480,6 +484,7 @@ func _run() -> void:
 	# F. The world from outside it: the coarser levels' proxies, and the groups' alone (those hidden).
 	if a_far:
 		var back := cam.transform
+		root.use_taa = false
 		_far_view(w)
 		await _wait_settled()
 		result["f_far_levels"] = _stats()
@@ -502,6 +507,7 @@ func _run() -> void:
 		result["f_far_groups_only"]["levels_hidden"] = hidden.size()
 		for g in hidden:
 			g.visible = true
+		root.use_taa = taa
 		cam.transform = back
 		cam.far = 1500.0
 		await _wait_settled()
