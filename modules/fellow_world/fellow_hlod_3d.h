@@ -57,6 +57,7 @@ public:
 private:
 	real_t distance = 100.0;
 	real_t margin = 5.0;
+	bool fade = false; // decision 0256: the merged proxies' members fade over the margin instead of switching
 	real_t cell_size = 50.0;
 	int min_meshes = 4;
 	int instance_threshold = 32;
@@ -118,6 +119,8 @@ public:
 	real_t get_distance() const;
 	void set_margin(real_t p_margin);
 	real_t get_margin() const;
+	void set_fade(bool p_fade);
+	bool get_fade() const;
 	void set_cell_size(real_t p_size);
 	real_t get_cell_size() const;
 	void set_min_meshes(int p_count);

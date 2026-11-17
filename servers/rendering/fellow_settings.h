@@ -896,6 +896,13 @@ inline bool mesh_clusters() {
 inline bool mesh_clusters_blended() {
 	return GLOBAL_GET_CACHED(bool, "rendering/fellow/geometry/cluster_blended_surfaces");
 }
+// Dithered fades (docs/decisions/0256-dithered-fades.md): an opaque instance fading at its visibility range (its own
+// fade, or its visibility parent's) is drawn in the depth pre-pass and the opaque passes with a share of its pixels
+// kept by a screen-space dither (moving with TAA's frames), instead of blended in the transparent pass; one fading at
+// its range's start keeps the other share. Its shadows as stock's. Forward+ only. Read every frame.
+inline bool dithered_fade() {
+	return geometry_enabled() && GLOBAL_GET_CACHED(bool, "rendering/fellow/geometry/dithered_fade");
+}
 // Occlusion culling of the opaque pass (docs/decisions/0026-occlusion-culling.md): after the full depth pre-pass, the
 // elements whose surface's bounding box lies behind the depth buffer everywhere it covers are left out of the opaque
 // pass by the GPU (per run of instanced elements, the visible ones compacted in order and drawn indirectly). Exact: such

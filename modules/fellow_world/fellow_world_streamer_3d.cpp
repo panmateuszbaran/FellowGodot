@@ -687,6 +687,8 @@ Dictionary FellowWorldStreamer3D::bake_proxies(const String &p_directory, const 
 	const int max_texture_size = p_options.get("max_texture_size", 512);
 	const int group_cells = p_options.get("group_cells", 4);
 	const real_t group_distance = p_options.get("group_distance", 0.0);
+	// Decision 0256: the cells' proxies fade out over this distance on each side of their group's switch (0: a switch).
+	const real_t group_fade = p_options.get("group_fade", 0.0);
 	// A terrain's proxies as far as an error of terrain_error pixels allows where they are first drawn, in a view of
 	// 1 080 lines with Godot's default field of view (75 degrees): metres per metre of distance (decision 0255).
 	const float terrain_error = p_options.get("terrain_error", 2.0f);
@@ -953,6 +955,10 @@ Dictionary FellowWorldStreamer3D::bake_proxies(const String &p_directory, const 
 					gmi->set_position(origin);
 					gmi->set_cast_shadows_setting(proxy_shadows ? GeometryInstance3D::SHADOW_CASTING_SETTING_ON : GeometryInstance3D::SHADOW_CASTING_SETTING_OFF);
 					gmi->set_visibility_range_begin(group_distance > 0.0 ? group_distance : load + unload_margin + reach);
+					if (group_fade > 0.0) {
+						gmi->set_visibility_range_begin_margin(group_fade);
+						gmi->set_visibility_range_fade_mode(GeometryInstance3D::VISIBILITY_RANGE_FADE_DEPENDENCIES);
+					}
 					if (proxy_distance > 0.0) {
 						gmi->set_visibility_range_end(proxy_distance);
 					}

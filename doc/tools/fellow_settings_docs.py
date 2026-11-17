@@ -222,6 +222,7 @@ D = {
     "geometry/cluster_front_to_back": "Measured and rejected (no frame gain): large surfaces' clusters drawn front to back. Decision 0058.",
     "geometry/cluster_lod": "Changes the image, off: each cluster of a large surface drawn at the mesh LOD it would get as an instance of its own, without cracks. Decision 0063.",
     "geometry/occlusion_culling": "Measured and rejected (slower in most scenes): the opaque pass culled against a depth pyramid. Decision 0026.",
+    "geometry/dithered_fade": "Opaque instances fading at their visibility range (their own fade or their visibility parent's) are drawn in the depth pre-pass and the opaque passes with a share of their pixels kept by a screen-space dither that moves with TAA, instead of being blended in the transparent pass: instanced, depth-tested, lit as opaque, and two instances crossing over cover each pixel once. Shadows as without. Forward+ only. Decision 0256.",
     "geometry/multimesh_culling": "MultiMesh instances culled one by one on the GPU for each pass (camera, shadows) and drawn indirectly. " + EXACT + " Decision 0034.",
     "geometry/multimesh_instance_lod": "Changes the image, off: each culled MultiMesh instance gets its own mesh LOD level instead of its MultiMesh's. Decision 0035.",
     "geometry/multimesh_cull_vertex_motion": "Changes the image where a material moves vertices beyond its node's extra cull margin, off: MultiMeshes whose material moves vertices (wind) culled too, the margin taken as how far they move. Decision 0036.",

@@ -554,6 +554,12 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 		pipeline_specialization.multimesh_format_2d = bool(surf->owner->base_flags & INSTANCE_DATA_FLAG_MULTIMESH_FORMAT_2D);
 		pipeline_specialization.multimesh_has_color = bool(surf->owner->base_flags & INSTANCE_DATA_FLAG_MULTIMESH_HAS_COLOR);
 		pipeline_specialization.multimesh_has_custom_data = bool(surf->owner->base_flags & INSTANCE_DATA_FLAG_MULTIMESH_HAS_CUSTOM_DATA);
+		// FellowEngine dithered fades (decision 0256): the opaque passes of an instance whose fade is dithered (not the
+		// shadows', which it casts whole as stock's fading instances do, nor the transparent pass's, which blends).
+		if constexpr (p_pass_mode != PASS_MODE_SHADOW && p_pass_mode != PASS_MODE_SHADOW_DP && p_pass_mode != PASS_MODE_DEPTH_MATERIAL && p_pass_mode != PASS_MODE_SDF && (p_color_pass_flags & COLOR_PASS_FLAG_TRANSPARENT) == 0) {
+			pipeline_specialization.fellow_dither_fade = surf->owner->fellow_dither != 0;
+			pipeline_specialization.fellow_dither_fade_near = surf->owner->fellow_dither == 2;
+		}
 
 		if constexpr (p_pass_mode == PASS_MODE_COLOR) {
 			pipeline_specialization.use_light_soft_shadows = element_info.uses_softshadow;
@@ -3077,7 +3083,7 @@ uint32_t RenderForwardClustered::_fellow_verify_instances(RenderListType p_rende
 			mismatches++;
 		}
 		const bool cant_repeat = flags & INSTANCE_DATA_FLAG_MULTIMESH || inst->mesh_instance.is_valid();
-		if (prev_surface != nullptr && !cant_repeat && prev_surface->sort.sort_key1 == surface->sort.sort_key1 && prev_surface->sort.sort_key2 == surface->sort.sort_key2 && inst->mirror == prev_surface->owner->mirror && repeats < RenderElementInfo::MAX_REPEATS) {
+		if (prev_surface != nullptr && !cant_repeat && prev_surface->sort.sort_key1 == surface->sort.sort_key1 && prev_surface->sort.sort_key2 == surface->sort.sort_key2 && inst->mirror == prev_surface->owner->mirror && (p_flags != nullptr || inst->fellow_dither == prev_surface->owner->fellow_dither) && repeats < RenderElementInfo::MAX_REPEATS) {
 			repeats++;
 		} else {
 			for (uint32_t j = 1; j <= repeats; j++) {
@@ -3218,7 +3224,7 @@ void RenderForwardClustered::_fill_instance_data(RenderListType p_render_list, i
 
 		const bool cant_repeat = element_flags & INSTANCE_DATA_FLAG_MULTIMESH || inst->mesh_instance.is_valid();
 
-		if (prev_surface != nullptr && !cant_repeat && prev_surface->sort.sort_key1 == surface->sort.sort_key1 && prev_surface->sort.sort_key2 == surface->sort.sort_key2 && inst->mirror == prev_surface->owner->mirror && repeats < RenderElementInfo::MAX_REPEATS) {
+		if (prev_surface != nullptr && !cant_repeat && prev_surface->sort.sort_key1 == surface->sort.sort_key1 && prev_surface->sort.sort_key2 == surface->sort.sort_key2 && inst->mirror == prev_surface->owner->mirror && inst->fellow_dither == prev_surface->owner->fellow_dither && repeats < RenderElementInfo::MAX_REPEATS) {
 			//this element is the same as the previous one, count repeats to draw it using instancing
 			repeats++;
 		} else {
@@ -3371,7 +3377,7 @@ void RenderForwardClustered::_fellow_fill_instance_data_chunk(uint32_t p_chunk, 
 			const GeometryInstanceSurfaceDataCache *prev_surface = rl->elements[i - 1];
 			const GeometryInstanceForwardClustered *prev_inst = prev_surface->owner;
 			const bool prev_cant_repeat = prev_inst->flags_cache & INSTANCE_DATA_FLAG_MULTIMESH || prev_inst->mesh_instance.is_valid();
-			join = !prev_cant_repeat && prev_surface->sort.sort_key1 == surface->sort.sort_key1 && prev_surface->sort.sort_key2 == surface->sort.sort_key2 && inst->mirror == prev_inst->mirror;
+			join = !prev_cant_repeat && prev_surface->sort.sort_key1 == surface->sort.sort_key1 && prev_surface->sort.sort_key2 == surface->sort.sort_key2 && inst->mirror == prev_inst->mirror && inst->fellow_dither == prev_inst->fellow_dither; // (decision 0256: one draw, one dither)
 		}
 		joinable[i - job.offset] = join;
 
@@ -3451,6 +3457,7 @@ RenderForwardClustered::FellowFillParams RenderForwardClustered::_fellow_fill_pa
 	params.screen_mesh_lod_threshold = p_render_data->scene_data->screen_mesh_lod_threshold;
 	params.count_primitives = p_render_data->render_info != nullptr;
 	params.render_info = p_render_data->render_info;
+	params.fellow_dithered_fade = Fellow::dithered_fade(); // decision 0256
 	return params;
 }
 
@@ -3575,6 +3582,7 @@ void RenderForwardClustered::_fill_render_list_range(const FellowFillParams &p_p
 		bool uses_gi = false;
 		bool uses_motion = false;
 		float fade_alpha = 1.0;
+		uint8_t fellow_dither = 0; // decision 0256
 
 		if (inst->fade_near || inst->fade_far) {
 			float fade_dist = inst->transformed_aabb.get_center().distance_to(p_params.cam_origin);
@@ -3583,12 +3591,27 @@ void RenderForwardClustered::_fill_render_list_range(const FellowFillParams &p_p
 				fade_alpha = Math::smoothstep(0.0f, 1.0f, 1.0f - (fade_dist - inst->fade_far_begin) / (inst->fade_far_end - inst->fade_far_begin));
 			} else if (inst->fade_near && fade_dist < inst->fade_near_end) {
 				fade_alpha = Math::smoothstep(0.0f, 1.0f, (fade_dist - inst->fade_near_begin) / (inst->fade_near_end - inst->fade_near_begin));
+				fellow_dither = 2;
 			}
 		}
 
+		// FellowEngine dithered fades (rendering/fellow/geometry/dithered_fade, decision 0256): a fade by distance or by the
+		// visibility parent, of an instance not made transparent itself, is dithered in the opaque passes instead of
+		// blended in the transparent one (its fade rounded: two instances crossing over add to one).
+		const float fellow_range_fade = fade_alpha * inst->parent_fade_alpha;
 		fade_alpha *= inst->force_alpha * inst->parent_fade_alpha;
+		if (p_params.fellow_dithered_fade && p_pass_mode == PASS_MODE_COLOR && fellow_range_fade < FADE_ALPHA_PASS_THRESHOLD && inst->force_alpha >= FADE_ALPHA_PASS_THRESHOLD) {
+			fellow_dither = fellow_dither ? fellow_dither : 1;
+		} else {
+			fellow_dither = 0;
+		}
+		if constexpr (!t_records) {
+			if (p_pass_mode == PASS_MODE_COLOR) {
+				inst->fellow_dither = fellow_dither;
+			}
+		}
 
-		flags = (flags & ~INSTANCE_DATA_FLAGS_FADE_MASK) | (uint32_t(fade_alpha * 255.0) << INSTANCE_DATA_FLAGS_FADE_SHIFT);
+		flags = (flags & ~INSTANCE_DATA_FLAGS_FADE_MASK) | (uint32_t(fade_alpha * 255.0 + (fellow_dither ? 0.5 : 0.0)) << INSTANCE_DATA_FLAGS_FADE_SHIFT);
 
 		if (p_render_list == RENDER_LIST_OPAQUE) {
 			// Setup GI
@@ -3750,7 +3773,7 @@ void RenderForwardClustered::_fill_render_list_range(const FellowFillParams &p_p
 				bool force_alpha = false;
 #endif
 
-				if (fade_alpha < FADE_ALPHA_PASS_THRESHOLD) {
+				if (fade_alpha < FADE_ALPHA_PASS_THRESHOLD && !fellow_dither) {
 					force_alpha = true;
 				}
 

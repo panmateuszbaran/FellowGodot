@@ -639,6 +639,7 @@ private:
 		float screen_mesh_lod_threshold = 0.0;
 		bool count_primitives = false;
 		RenderingServerTypes::RenderInfo *render_info = nullptr;
+		bool fellow_dithered_fade = false; // decision 0256
 	};
 	// One element of a shadow pass filled in record mode: the sort keys and instance flags the pass gives it.
 	struct FellowShadowRecord {

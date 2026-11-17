@@ -298,6 +298,7 @@ void Fellow::register_settings() {
 	GLOBAL_DEF("rendering/fellow/postfx/fog_half_rate", false);
 	GLOBAL_DEF("rendering/fellow/postfx/verify_luminance_reduce", false);
 	GLOBAL_DEF("rendering/fellow/geometry/occlusion_culling", false);
+	GLOBAL_DEF("rendering/fellow/geometry/dithered_fade", false); // decision 0256 (changes fading instances' image; off until measured)
 	GLOBAL_DEF("rendering/fellow/geometry/multimesh_culling", true);
 	GLOBAL_DEF("rendering/fellow/geometry/multimesh_instance_lod", false);
 	GLOBAL_DEF("rendering/fellow/geometry/multimesh_cull_vertex_motion", false);

@@ -3328,6 +3328,9 @@
 		<member name="rendering/fellow/geometry/contribution_cull_pixels" type="float" setter="" getter="" default="0.0">
 			Changes the image, off: nodes and MultiMesh instances whose bounding sphere covers fewer than this many pixels of the viewport's width are not drawn (0: off). Decision 0121.
 		</member>
+		<member name="rendering/fellow/geometry/dithered_fade" type="bool" setter="" getter="" default="false">
+			Opaque instances fading at their visibility range (their own fade or their visibility parent's) are drawn in the depth pre-pass and the opaque passes with a share of their pixels kept by a screen-space dither that moves with TAA, instead of being blended in the transparent pass: instanced, depth-tested, lit as opaque, and two instances crossing over cover each pixel once. Shadows as without. Forward+ only. Decision 0256.
+		</member>
 		<member name="rendering/fellow/geometry/enabled" type="bool" setter="" getter="" default="true">
 			FellowEngine's geometry optimizations ([code]geometry/*[/code]: mesh clusters, MultiMesh culling, contribution culling); off: stock's.
 		</member>

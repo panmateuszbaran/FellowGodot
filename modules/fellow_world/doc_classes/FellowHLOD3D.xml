@@ -69,6 +69,9 @@
 		<member name="distance" type="float" setter="set_distance" getter="get_distance" default="100.0">
 			Beyond this distance from the camera to a cell's proxy (the center of its box), the proxy is drawn instead of the cell's meshes.
 		</member>
+		<member name="fade" type="bool" setter="set_fade" getter="get_fade" default="false">
+			If [code]true[/code], the meshes merged into a proxy fade out over [member margin] on each side of [member distance] while their proxy shows behind them (the proxy's [member GeometryInstance3D.visibility_range_fade_mode] is [constant GeometryInstance3D.VISIBILITY_RANGE_FADE_DEPENDENCIES]) instead of switching at once. Blended in the transparent pass, or with [code]rendering/fellow/geometry/dithered_fade[/code] dithered in the opaque passes. The instanced proxies (repeated meshes) still switch. See [code]docs/decisions/0256-dithered-fades.md[/code].
+		</member>
 		<member name="generate_lods" type="bool" setter="set_generate_lods" getter="get_generate_lods" default="true">
 			Generates detail levels for the proxies' surfaces (as the mesh importer does), applied by Godot's mesh LOD ([member Viewport.mesh_lod_threshold]).
 		</member>
@@ -94,7 +97,7 @@
 			Repeated meshes get instanced proxies (needs [code]rendering/fellow/geometry/multimesh_culling[/code]); off: every mesh is merged per cell.
 		</member>
 		<member name="margin" type="float" setter="set_margin" getter="get_margin" default="5.0">
-			Hysteresis around [member distance], so a camera moving around it does not switch every frame.
+			Hysteresis around [member distance], so a camera moving around it does not switch every frame; with [member fade], the distance over which the merged meshes fade on each side of it.
 		</member>
 		<member name="merged_proxies" type="Dictionary" setter="set_merged_proxies" getter="get_merged_proxies" default="{}">
 			Merged proxies baked into files by [method bake_merged_proxies], by their cells' signatures: [method build] takes a cell's mesh instead of merging it and generating its detail levels when its members are as they were baked (the same meshes and materials, transforms within a tenth of a millimetre); others are merged at run time. Saved with the scene.

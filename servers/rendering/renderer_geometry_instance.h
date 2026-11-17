@@ -111,6 +111,7 @@ public:
 	float fellow_instance_range_fade = 0.0; // decision 0172: over this distance before the end, the instances shrink to nothing
 	bool fellow_vertices_bounded = false; // the material's vertices stay in the mesh's box
 	bool fellow_hlod_proxy = false; // an HLOD proxy: per-instance normals as nodes
+	uint8_t fellow_dither = 0; // decision 0256: this frame's colour passes dither its fade (1; 2: fading out towards the near end)
 	float sorting_offset = 0.0;
 	bool use_aabb_center = true;
 

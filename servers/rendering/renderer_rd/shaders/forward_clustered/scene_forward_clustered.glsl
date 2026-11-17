@@ -1876,6 +1876,9 @@ void fragment_shader(in SceneData scene_data) {
 	float ao_light_affect = 0.0;
 
 	float alpha_highp = float(fellow_flags >> INSTANCE_FLAGS_FADE_SHIFT) / float(255.0);
+	if (sc_fellow_dither_fade()) {
+		alpha_highp = 1.0; // decision 0256: the fade is a dither below, the instance otherwise opaque
+	}
 
 #ifdef TANGENT_USED
 	vec3 binormal = binormal_interp;
@@ -2059,6 +2062,22 @@ void fragment_shader(in SceneData scene_data) {
 #endif // MODE_RENDER_DEPTH
 
 #endif // !USE_SHADOW_TO_OPACITY
+
+	// FellowEngine dithered fades (decision 0256): the pixels kept where interleaved gradient noise, moving with TAA's
+	// frames, is below the fade; an instance fading at its range's start keeps the others, so that it and the one
+	// handing over to it at the same distance (their fades add to one) cover each pixel once. The same pixels in the
+	// depth pre-pass and the colour passes.
+	if (sc_fellow_dither_fade()) {
+		const float fellow_fade = float(fellow_flags >> INSTANCE_FLAGS_FADE_SHIFT) / float(255.0);
+		const vec2 fellow_p = gl_FragCoord.xy + 5.588238 * scene_data.taa_frame_count;
+		float fellow_n = fract(52.9829189 * fract(dot(fellow_p, vec2(0.06711056, 0.00583715))));
+		if (sc_fellow_dither_fade_near()) {
+			fellow_n = 1.0 - fellow_n;
+		}
+		if (fellow_n >= fellow_fade) {
+			discard;
+		}
+	}
 
 #if defined(FELLOW_ALPHA_ZERO_SKIP_OK) && !defined(MODE_RENDER_DEPTH) && !defined(MODE_RENDER_MATERIAL) && !defined(MODE_SEPARATE_SPECULAR)
 	// FellowEngine: from here on alpha is only multiplied by finite factors or lowered with min(): a mix-blended

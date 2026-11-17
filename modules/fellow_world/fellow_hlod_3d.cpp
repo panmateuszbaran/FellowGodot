@@ -698,7 +698,7 @@ void FellowHLOD3D::build() {
 		proxy->set_gi_mode((GeometryInstance3D::GIMode)px.key.gi_mode);
 		proxy->set_visibility_range_begin(distance);
 		proxy->set_visibility_range_begin_margin(margin);
-		proxy->set_visibility_range_fade_mode(GeometryInstance3D::VISIBILITY_RANGE_FADE_DISABLED);
+		proxy->set_visibility_range_fade_mode(fade ? GeometryInstance3D::VISIBILITY_RANGE_FADE_DEPENDENCIES : GeometryInstance3D::VISIBILITY_RANGE_FADE_DISABLED);
 		add_child(proxy, false, INTERNAL_MODE_BACK);
 		merged_proxies.push_back(proxy);
 		merged_count++;
@@ -1051,6 +1051,17 @@ real_t FellowHLOD3D::get_margin() const {
 	return margin;
 }
 
+void FellowHLOD3D::set_fade(bool p_fade) {
+	fade = p_fade;
+	for (GeometryInstance3D *p : merged_proxies) {
+		p->set_visibility_range_fade_mode(fade ? GeometryInstance3D::VISIBILITY_RANGE_FADE_DEPENDENCIES : GeometryInstance3D::VISIBILITY_RANGE_FADE_DISABLED);
+	}
+}
+
+bool FellowHLOD3D::get_fade() const {
+	return fade;
+}
+
 void FellowHLOD3D::set_cell_size(real_t p_size) {
 	cell_size = MAX((real_t)0.01, p_size);
 }
@@ -1156,6 +1167,8 @@ void FellowHLOD3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_distance"), &FellowHLOD3D::get_distance);
 	ClassDB::bind_method(D_METHOD("set_margin", "margin"), &FellowHLOD3D::set_margin);
 	ClassDB::bind_method(D_METHOD("get_margin"), &FellowHLOD3D::get_margin);
+	ClassDB::bind_method(D_METHOD("set_fade", "fade"), &FellowHLOD3D::set_fade);
+	ClassDB::bind_method(D_METHOD("get_fade"), &FellowHLOD3D::get_fade);
 	ClassDB::bind_method(D_METHOD("set_cell_size", "size"), &FellowHLOD3D::set_cell_size);
 	ClassDB::bind_method(D_METHOD("get_cell_size"), &FellowHLOD3D::get_cell_size);
 	ClassDB::bind_method(D_METHOD("set_min_meshes", "count"), &FellowHLOD3D::set_min_meshes);
@@ -1192,6 +1205,7 @@ void FellowHLOD3D::_bind_methods() {
 
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "distance", PROPERTY_HINT_RANGE, "0,10000,0.1,or_greater,suffix:m"), "set_distance", "get_distance");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "margin", PROPERTY_HINT_RANGE, "0,100,0.1,or_greater,suffix:m"), "set_margin", "get_margin");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "fade"), "set_fade", "get_fade");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "instancing"), "set_instancing", "get_instancing");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "instance_threshold", PROPERTY_HINT_RANGE, "1,100000,1,or_greater"), "set_instance_threshold", "get_instance_threshold");
 	ADD_GROUP("Impostors", "impostor_");

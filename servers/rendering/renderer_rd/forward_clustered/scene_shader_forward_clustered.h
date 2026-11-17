@@ -172,6 +172,8 @@ public:
 				uint32_t fellow_contact_shadow : 1; // decision 0107: the first directional light's shadow times the contact mask
 				uint32_t fellow_wetness : 1; // decision 0124: materials wetted by the weather (FellowRain3D)
 				uint32_t fellow_cloud_shadow : 1; // decision 0133: the sun's shadow times the clouds' shadow map
+				uint32_t fellow_dither_fade : 1; // decision 0256: an opaque instance's fade dithered (depth and colour passes)
+				uint32_t fellow_dither_fade_near : 1; // decision 0256: the other share of the pixels (fading at its range's start)
 			};
 		};
 	};

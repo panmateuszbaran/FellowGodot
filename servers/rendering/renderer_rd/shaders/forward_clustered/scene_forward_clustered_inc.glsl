@@ -296,6 +296,17 @@ bool sc_fellow_cloud_shadow() {
 	return ((sc_packed_2() >> 7) & 1U) != 0;
 }
 
+// FellowEngine dithered fades (decision 0256): an opaque instance fading at its visibility range (or with its
+// visibility parent) keeps a share of its pixels in the opaque passes instead of being blended; _near: the other share
+// (an instance fading at its range's start, crossing over with one fading at its range's end).
+bool sc_fellow_dither_fade() {
+	return ((sc_packed_2() >> 8) & 1U) != 0;
+}
+
+bool sc_fellow_dither_fade_near() {
+	return ((sc_packed_2() >> 9) & 1U) != 0;
+}
+
 // FellowEngine DDGI (decision 0083): the colour passes take the ambient light from the probe volume.
 bool sc_fellow_ddgi() {
 	return ((sc_packed_2() >> 2) & 1U) != 0;
