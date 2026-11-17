@@ -26,7 +26,8 @@ extends SceneTree
 ## for their pipelines (rendering/fellow/debug/wait_pipelines; --wait_pipelines=0: not).
 ## Milestone 138 (decision 0263): the proxies' textures baked into files of their own (--texture_files=0: kept in the
 ## proxies' files); with rendering/fellow/streaming/textures on (override.cfg), each lane's proxy_textures: those files
-## as texture streaming holds them (resident and whole bytes, how many at their tails).
+## as texture streaming holds them (resident and whole bytes, how many at their tails). --taa=0: no lane with TAA
+## (its jitter's phase depends on how many frames the streaming took: pictures the same from run to run without it).
 ## One JSON line: WORLD_PROXIES_CHECK {...}.
 
 const CELL := 64.0
@@ -66,6 +67,9 @@ func _initialize() -> void:
 	if streaming:
 		ProjectSettings.set_setting("rendering/fellow/streaming/texture_info_details", true)
 	result["texture_streaming"] = streaming
+	# (--taa=0: every lane without TAA, its pictures the same from run to run.)
+	if _arg("taa", "1") == "0":
+		root.use_taa = false
 	_run.call_deferred()
 
 
