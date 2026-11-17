@@ -65,7 +65,19 @@ the groups' 6 368 (2 330); the ground under them 0.15 m and 0.27 m off on averag
 of the picture more than 16 levels off A (0.65 % in decision 0252), D 0.48 % (0.36 %); 107 draws, 455 k triangles
 (451 k). The editor check as before.
 
-Frontier Lab's 4 km world is generated again and measured on the laptop in job f469.
+Frontier Lab's 4 km world generated again (job f469, the editor build): the regions' proxies 50 164 triangles, the 16
+groups of regions 19 004; the town is back, the fans gone (and, without groups, the regions' flat facets: their
+proxies had been the same fans, 256 m across). The far views, pixels more than 16 levels off:
+
+| | far view | overlook |
+|---|---:|---:|
+| groups against none, before (job f468) | 3.37 % | 1.7 % |
+| **groups against none, now** | **0.28 %** | **0.40 %** |
+| no groups, now against before | 1.35 % | 1.13 % |
+
+Streamed with the atmosphere (1080p, 3 runs of 90 s, interleaved): with groups the frame 4.18 ms (4.31 before), the GPU
+3.74 ms (3.74), 5.55 M triangles (5.47 M); without groups 4.37 ms, 3.92 ms and 5.78 M (4.43 ms, 3.96 ms, 5.77 M). On the
+RTX World Lab with ±60 m hills drew its view in 0.63-0.65 ms of GPU either way (2 px against the ratio).
 
 ## Decision
 
