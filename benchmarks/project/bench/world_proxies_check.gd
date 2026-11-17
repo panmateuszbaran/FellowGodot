@@ -28,6 +28,8 @@ extends SceneTree
 ## proxies' files); with rendering/fellow/streaming/textures on (override.cfg), each lane's proxy_textures: those files
 ## as texture streaming holds them (resident and whole bytes, how many at their tails). --taa=0: no lane with TAA
 ## (its jitter's phase depends on how many frames the streaming took: pictures the same from run to run without it).
+## Milestone 141 (decision 0266): --mesh_middle_ratio=<r> bakes a middle level of each streamed mesh, shown within
+## --mesh_middle_distance=<m> (D and the streamed flight).
 ## Milestone 139: --dds=1, the cells' textures as DDS files (res://external/streaming_dds/: Streaming Lab's
 ## --streaming_dds=1 writes them).
 ## One JSON line: WORLD_PROXIES_CHECK {...}.
@@ -565,8 +567,9 @@ func _run() -> void:
 	# unloaded first: the camera away from the world.)
 	cam.position = Vector3(-100000, 0, -100000)
 	await _settle(90)
-	result["bake_stream"] = streamer.bake_proxies(out_dir.path_join("proxies_stream"), {"stream_meshes": true, "texel_size": float(_arg("texel", "0.5")), "ratio": float(_arg("ratio", "0.05")), "group_cells": int(_arg("groups", "4")), "group_levels": int(_arg("group_levels", "1")), "texture_files": _arg("texture_files", "1") != "0"})
+	result["bake_stream"] = streamer.bake_proxies(out_dir.path_join("proxies_stream"), {"stream_meshes": true, "mesh_middle_ratio": float(_arg("mesh_middle_ratio", "0")), "texel_size": float(_arg("texel", "0.5")), "ratio": float(_arg("ratio", "0.05")), "group_cells": int(_arg("groups", "4")), "group_levels": int(_arg("group_levels", "1")), "texture_files": _arg("texture_files", "1") != "0"})
 	streamer.mesh_distance = float(_arg("mesh_distance", "70"))
+	streamer.mesh_middle_distance = float(_arg("mesh_middle_distance", "0"))
 	cam.transform = view
 	await _wait_settled()
 	result["d_streamed_meshes"] = _stats()
@@ -580,6 +583,7 @@ func _run() -> void:
 		streamer.mesh_distance = 0.0
 		result["e_flight_full"] = await _flight(w)
 		streamer.mesh_distance = float(_arg("mesh_distance", "70"))
+		streamer.mesh_middle_distance = float(_arg("mesh_middle_distance", "0"))
 		result["e_flight_streamed"] = await _flight(w)
 	print("WORLD_PROXIES_CHECK " + JSON.stringify(result))
 	terrain_ref.free()

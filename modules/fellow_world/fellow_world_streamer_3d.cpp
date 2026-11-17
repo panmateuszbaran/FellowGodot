@@ -91,6 +91,7 @@ void FellowStreamingCell3D::set_scene_path(const String &p_path) {
 // Milestone 66 (decision 0174): a cell's baked proxy, and a stand-in's full mesh's path.
 static const char *FELLOW_CELL_PROXY_META = "_fellow_cell_proxy";
 static const char *FELLOW_FULL_MESH_META = "_fellow_full_mesh";
+static const char *FELLOW_MIDDLE_MESH_META = "_fellow_middle_mesh"; // decision 0266: the middle level's file
 // Decision 0252: on a group's proxy, its cells (paths from it); on a cell, its group's proxy (a path from the cell).
 static const char *FELLOW_GROUP_PROXY_META = "_fellow_group_proxy";
 static const char *FELLOW_CELL_GROUP_META = "_fellow_group";
@@ -812,6 +813,7 @@ void FellowWorldStreamer3D::_register_meshes(FellowStreamingCell3D *p_cell, Node
 				m.node = mi->get_instance_id();
 				m.cell = p_cell;
 				m.path = mi->get_meta(FELLOW_FULL_MESH_META);
+				m.middle_path = mi->get_meta(FELLOW_MIDDLE_MESH_META, String());
 				m.stand_in = mi->get_mesh();
 				streamed_meshes.push_back(m);
 			}
@@ -833,7 +835,7 @@ void FellowWorldStreamer3D::_unregister_meshes(FellowStreamingCell3D *p_cell) {
 }
 
 void FellowWorldStreamer3D::_update_meshes(const LocalVector<Vector3> &p_points) {
-	// Loads that ended: their meshes onto the stand-ins still waiting for them.
+	// Loads that ended: their meshes onto the instances still waiting for them.
 	LocalVector<String> done;
 	for (const String &path : mesh_pending) {
 		if (ResourceLoader::load_threaded_get_status(path) != ResourceLoader::THREAD_LOAD_IN_PROGRESS) {
@@ -844,12 +846,14 @@ void FellowWorldStreamer3D::_update_meshes(const LocalVector<Vector3> &p_points)
 		mesh_pending.erase(path);
 		const Ref<Mesh> mesh = ResourceLoader::load_threaded_get(path);
 		for (StreamedMesh &m : streamed_meshes) {
-			if (m.state != MESH_LOADING || m.path != path) {
+			if (m.loading < 0 || (m.loading == 2 ? m.path : m.middle_path) != path) {
 				continue;
 			}
 			MeshInstance3D *mi = ObjectDB::get_instance<MeshInstance3D>(m.node);
+			const int level = m.loading;
+			m.loading = -1;
 			if (mesh.is_null() || !mi) {
-				m.state = MESH_FAILED;
+				m.failed = true;
 				continue;
 			}
 			const uint64_t t0 = OS::get_singleton()->get_ticks_usec();
@@ -859,43 +863,61 @@ void FellowWorldStreamer3D::_update_meshes(const LocalVector<Vector3> &p_points)
 			const uint64_t dt = OS::get_singleton()->get_ticks_usec() - t0;
 			mesh_swap_usec += dt;
 			mesh_swap_usec_max = MAX(mesh_swap_usec_max, dt);
-			m.full = mesh;
-			m.state = MESH_FULL;
+			m.loaded = mesh; // (the level shown before dropped)
+			m.level = level;
 			mesh_loads++;
 		}
 	}
-	// Near: loaded (a few at a time); far: the stand-in again, the full mesh dropped.
+	// Each mesh's level by its distance: the full mesh within mesh_distance, the middle level within
+	// mesh_middle_distance (decision 0266), the stand-in beyond; a coarser level only past the distance and the unload
+	// margin. A finer level is loaded (a few at a time) and swapped in when it arrives; a coarser one as well, but the
+	// stand-in, in the cell's content, at once.
 	for (StreamedMesh &m : streamed_meshes) {
 		MeshInstance3D *mi = ObjectDB::get_instance<MeshInstance3D>(m.node);
-		if (!mi || !mi->is_inside_tree() || m.state == MESH_FAILED) {
+		if (!mi || !mi->is_inside_tree() || m.failed) {
 			continue;
 		}
-		float d = 0.0f;
+		int target = 2;
 		if (mesh_distance > 0.0) {
-			d = 1e30f;
+			float d = 1e30f;
 			const AABB box = mi->get_global_transform().xform(mi->get_aabb());
 			for (const Vector3 &p : p_points) {
 				d = MIN(d, _point_aabb_distance(p, box));
 			}
-		}
-		if (m.state == MESH_STAND_IN && (mesh_distance <= 0.0 || d <= mesh_distance)) {
-			if (mesh_pending.has(m.path)) {
-				m.state = MESH_LOADING;
-			} else if (int(mesh_pending.size()) < max_mesh_loads && ResourceLoader::load_threaded_request(m.path, "Mesh") == OK) {
-				mesh_pending.insert(m.path);
-				m.state = MESH_LOADING;
+			const bool middle = !m.middle_path.is_empty() && mesh_middle_distance > mesh_distance;
+			if (d <= mesh_distance + (m.level >= 2 ? unload_margin : 0.0)) {
+				target = 2;
+			} else if (middle && d <= mesh_middle_distance + (m.level >= 1 ? unload_margin : 0.0)) {
+				target = 1;
+			} else {
+				target = 0;
 			}
-		} else if (m.state == MESH_FULL && mesh_distance > 0.0 && d > mesh_distance + unload_margin) {
+		}
+		if (target == m.level || m.loading == target) {
+			continue;
+		}
+		if (target == 0) {
+			if (m.loading >= 0) {
+				continue; // (a load in flight: dropped when it lands on the wrong level, below)
+			}
 			const uint64_t t0 = OS::get_singleton()->get_ticks_usec();
 			const Ref<Mesh> outgoing = mi->get_mesh();
 			mi->set_mesh(m.stand_in);
 			_mesh_crossfade(mi, outgoing); // decision 0259
-			m.full.unref();
+			m.loaded.unref();
 			const uint64_t dt = OS::get_singleton()->get_ticks_usec() - t0;
 			mesh_swap_usec += dt;
 			mesh_swap_usec_max = MAX(mesh_swap_usec_max, dt);
-			m.state = MESH_STAND_IN;
+			m.level = 0;
 			mesh_releases++;
+		} else if (m.loading < 0) {
+			const String &path = target == 2 ? m.path : m.middle_path;
+			if (mesh_pending.has(path)) {
+				m.loading = target;
+			} else if (int(mesh_pending.size()) < max_mesh_loads && ResourceLoader::load_threaded_request(path, "Mesh") == OK) {
+				mesh_pending.insert(path);
+				m.loading = target;
+			}
 		}
 	}
 }
@@ -906,6 +928,12 @@ Dictionary FellowWorldStreamer3D::bake_proxies(const String &p_directory, const 
 	const int terrain_quads = p_options.get("terrain_quads", 32);
 	const bool stream_meshes = p_options.get("stream_meshes", false);
 	const float mesh_ratio = p_options.get("mesh_ratio", 0.15f);
+	// Decision 0266: a middle level of each streamed mesh, this share of its triangles (0: none), saved apart and loaded
+	// within mesh_middle_distance; one per full mesh's file.
+	const float mesh_middle_ratio = p_options.get("mesh_middle_ratio", 0.0f);
+	HashMap<String, String> middle_of;
+	int middle_meshes = 0;
+	int64_t middle_triangles = 0;
 	const int mesh_min_triangles = p_options.get("mesh_min_triangles", 2000);
 	const real_t proxy_distance = p_options.get("proxy_distance", 0.0);
 	const bool proxy_shadows = p_options.get("proxy_shadows", false);
@@ -1149,6 +1177,26 @@ Dictionary FellowWorldStreamer3D::bake_proxies(const String &p_directory, const 
 					}
 					mi->set_mesh(stand_in);
 					mi->set_meta(FELLOW_FULL_MESH_META, full_path);
+					if (mesh_middle_ratio > mesh_ratio && mesh_middle_ratio < 1.0f) {
+						String middle_path;
+						if (const String *found = middle_of.getptr(full_path)) {
+							middle_path = *found;
+						} else {
+							const Ref<ArrayMesh> middle = FellowCellProxies::simplified_mesh(mesh, mesh_middle_ratio);
+							if (middle.is_valid()) {
+								const String path = p_directory.path_join("meshes").path_join(vformat("%s_middle_%s.res", full_path.get_file().get_basename(), full_path.md5_text().substr(0, 8)));
+								if (ResourceSaver::save(middle, path, ResourceSaver::FLAG_COMPRESS) == OK) {
+									middle_path = path;
+									middle_meshes++;
+									middle_triangles += FellowCellProxies::mesh_triangles(middle);
+								}
+							}
+							middle_of.insert(full_path, middle_path);
+						}
+						if (!middle_path.is_empty()) {
+							mi->set_meta(FELLOW_MIDDLE_MESH_META, middle_path);
+						}
+					}
 					changed = true;
 					streamed++;
 					stream_before += tris;
@@ -1432,6 +1480,8 @@ Dictionary FellowWorldStreamer3D::bake_proxies(const String &p_directory, const 
 	info["group_levels"] = level_info; // decision 0262: the coarser levels' groups, triangles, texture bytes
 	info["texture_hit_share"] = texture_texels > 0 ? double(texture_hits) / double(texture_texels) : 0.0; // texels coloured by a surface found under them
 	info["streamed_meshes"] = streamed;
+	info["middle_meshes"] = middle_meshes; // decision 0266: the middle levels' files, their triangles
+	info["middle_triangles"] = middle_triangles;
 	info["streamed_triangles"] = stream_before;
 	info["stand_in_triangles"] = stream_after;
 	info["bake_ms"] = (OS::get_singleton()->get_ticks_usec() - t0) / 1000.0;
@@ -1558,11 +1608,14 @@ Dictionary FellowWorldStreamer3D::get_stats() const {
 	d["frames"] = frames;
 	d["settled"] = is_settled();
 	int full = 0;
+	int middle = 0;
 	for (const StreamedMesh &m : streamed_meshes) {
-		full += m.state == MESH_FULL ? 1 : 0;
+		full += m.level == 2 ? 1 : 0;
+		middle += m.level == 1 ? 1 : 0;
 	}
 	d["streamed_meshes"] = int(streamed_meshes.size());
 	d["streamed_meshes_full"] = full;
+	d["streamed_meshes_middle"] = middle; // decision 0266
 	d["mesh_loads"] = mesh_loads;
 	d["mesh_releases"] = mesh_releases;
 	d["mesh_swap_usec"] = mesh_swap_usec;
@@ -1684,6 +1737,8 @@ void FellowWorldStreamer3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("is_settled"), &FellowWorldStreamer3D::is_settled);
 	ClassDB::bind_method(D_METHOD("load_now"), &FellowWorldStreamer3D::load_now);
 	ClassDB::bind_method(D_METHOD("set_mesh_distance", "distance"), &FellowWorldStreamer3D::set_mesh_distance);
+	ClassDB::bind_method(D_METHOD("set_mesh_middle_distance", "distance"), &FellowWorldStreamer3D::set_mesh_middle_distance);
+	ClassDB::bind_method(D_METHOD("get_mesh_middle_distance"), &FellowWorldStreamer3D::get_mesh_middle_distance);
 	ClassDB::bind_method(D_METHOD("get_mesh_distance"), &FellowWorldStreamer3D::get_mesh_distance);
 	ClassDB::bind_method(D_METHOD("set_max_mesh_loads", "count"), &FellowWorldStreamer3D::set_max_mesh_loads);
 	ClassDB::bind_method(D_METHOD("get_max_mesh_loads"), &FellowWorldStreamer3D::get_max_mesh_loads);
@@ -1699,6 +1754,7 @@ void FellowWorldStreamer3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "load_distance", PROPERTY_HINT_RANGE, "0,10000,0.1,or_greater,suffix:m"), "set_load_distance", "get_load_distance");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "unload_margin", PROPERTY_HINT_RANGE, "0,1000,0.1,or_greater,suffix:m"), "set_unload_margin", "get_unload_margin");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "mesh_distance", PROPERTY_HINT_RANGE, "0,10000,0.1,or_greater,suffix:m"), "set_mesh_distance", "get_mesh_distance");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "mesh_middle_distance", PROPERTY_HINT_RANGE, "0,10000,0.1,or_greater,suffix:m"), "set_mesh_middle_distance", "get_mesh_middle_distance");
 	ADD_GROUP("Budget", "");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "max_loading", PROPERTY_HINT_RANGE, "1,64,1"), "set_max_loading", "get_max_loading");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "max_activations_per_frame", PROPERTY_HINT_RANGE, "1,1024,1"), "set_max_activations_per_frame", "get_max_activations_per_frame");

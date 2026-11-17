@@ -187,20 +187,20 @@ class FellowWorldStreamer3D : public Node3D {
 	// Decision 0174: streamed meshes — stand-ins in the cells' content (bake_proxies() with "stream_meshes"), their
 	// full meshes loaded on the ResourceLoader's threads within mesh_distance and dropped beyond it.
 	real_t mesh_distance = 0.0; // 0: the full meshes whenever their cell is loaded
+	// Decision 0266: a middle level between the stand-in and the full mesh (baked with "mesh_middle_ratio"), loaded
+	// within mesh_middle_distance (0: none).
+	real_t mesh_middle_distance = 0.0;
 	int max_mesh_loads = 2;
-	enum MeshState : uint8_t {
-		MESH_STAND_IN,
-		MESH_LOADING,
-		MESH_FULL,
-		MESH_FAILED,
-	};
 	struct StreamedMesh {
 		ObjectID node;
 		FellowStreamingCell3D *cell = nullptr;
-		String path;
+		String path; // the full mesh's file
+		String middle_path; // the middle level's file (empty: none)
 		Ref<Mesh> stand_in;
-		Ref<Mesh> full;
-		MeshState state = MESH_STAND_IN;
+		Ref<Mesh> loaded; // the middle or full mesh shown (null: the stand-in)
+		int level = 0; // shown: 0 the stand-in, 1 the middle level, 2 the full mesh
+		int loading = -1; // the level being loaded (-1: none)
+		bool failed = false;
 	};
 	LocalVector<StreamedMesh> streamed_meshes;
 	HashSet<String> mesh_pending; // paths requested from the ResourceLoader
@@ -270,6 +270,8 @@ public:
 	real_t get_crossfade() const { return crossfade; }
 	void set_mesh_distance(real_t p_distance) { mesh_distance = MAX(p_distance, real_t(0.0)); }
 	real_t get_mesh_distance() const { return mesh_distance; }
+	void set_mesh_middle_distance(real_t p_distance) { mesh_middle_distance = MAX(p_distance, real_t(0.0)); }
+	real_t get_mesh_middle_distance() const { return mesh_middle_distance; }
 	void set_max_mesh_loads(int p_count) { max_mesh_loads = CLAMP(p_count, 1, 64); }
 	int get_max_mesh_loads() const { return max_mesh_loads; }
 	// Decision 0174: for each cell, a proxy baked from its content (merged, simplified, coloured by its materials) saved in
