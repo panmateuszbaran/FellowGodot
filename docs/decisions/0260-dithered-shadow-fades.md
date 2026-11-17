@@ -61,7 +61,31 @@ both directions (0.997 and 1.002). Sections 1-7 as before; the image regression 
 
 ## Results
 
-(RTX: job f475, below.)
+On the RTX (job f475: 1920 × 1080, the release template, three runs each, interleaved with milestone 134's build):
+section 8 as on lavapipe (the sun's shadow 1.00 → 0.42 → 0.00 and back, the omni light's 0.46, one shadow handing over,
+a streamed mesh's swap 0.997 and 1.001), sections 1-7 as before. The cost, 4 000 balls (8 000 instances, two levels
+each) all mid-fade on a shell 40 m around the camera, the sun's shadows on:
+
+| all mid-fade, the sun's shadows on | GPU | the renderer's CPU | shadow draws |
+|---|---:|---:|---:|
+| switching (no fade) | 5.84-6.71 ms | 1.10-1.23 ms | 16 |
+| blended (stock's fade: whole shadows) | 7.81-8.04 ms | 1.96-2.06 ms | 7 149 draws in all |
+| dithered, whole shadows (milestone 134) | 6.81-6.87 ms | 1.23-1.30 ms | 16 |
+| **dithered, shadows dithered** | **6.79-6.95 ms** | **1.83-2.03 ms** | 16 |
+
+The GPU's time is the same; the renderer's CPU +0.6 ms for 8 000 fading casters (about 75 ns each): they are drawn into
+the cascades every frame of their fade instead of staying in the shadow cache, and marked so (without shadows the
+marking alone +0.35 ms for 8 000 — cut afterwards to the positional lights' part when no directional light casts
+shadows). A frame's few dozen fading instances cost nothing measurable: Frontier Lab streamed with the atmosphere, its
+cells and regions crossing over in 0.5 s (3 runs of 90 s interleaved):
+
+| Frontier Lab, crossing over | frame | GPU | the renderer's CPU | shadow draws | p99 |
+|---|---:|---:|---:|---:|---:|
+| their shadows switching (milestone 134) | 4.24 ms | 3.80 ms | 0.92 ms | 136.6 | 5.62 ms |
+| **their shadows crossing over too** | **4.15 ms** | **3.71 ms** | 0.94 ms | 140.5 | 5.52 ms |
+
+Within the runs' spread (4.15-4.29 ms and 4.08-4.28 ms); four more shadow draws (the cells crossing over drawn with the
+cascades' dynamic casters for half a second).
 
 ## Decision
 

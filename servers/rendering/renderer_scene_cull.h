@@ -1271,7 +1271,7 @@ public:
 	} fellow_cascade_work[RendererSceneRender::MAX_DIRECTIONAL_LIGHTS][RendererSceneRender::MAX_DIRECTIONAL_LIGHT_CASCADES];
 
 	void _fellow_shadow_instance_changed(Instance *p_instance) const;
-	void _fellow_shadow_fading(Instance *p_instance) const; // decision 0260
+	void _fellow_shadow_fading(Instance *p_instance, bool p_directional) const; // decision 0260
 	bool _fellow_shadow_cache_events_hit(const Scenario *p_scenario, const FellowDirShadowCache::Cascade &p_cascade, const Vector3 &p_x, const Vector3 &p_y, const Vector3 &p_z, uint64_t p_frame) const;
 	void _fellow_shadow_cache_decide(int p_shadow_index, uint64_t p_frame, uint32_t p_visible_layers, Scenario *p_scenario);
 	void _fellow_shadow_cache_fill_render_data(int p_shadow_index, int p_cascade, RendererSceneRender::RenderShadowData &r_data, uint64_t p_frame);

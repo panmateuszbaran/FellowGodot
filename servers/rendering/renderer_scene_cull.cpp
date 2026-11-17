@@ -1379,7 +1379,7 @@ void RendererSceneCull::fellow_instance_set_dither_alpha(RID p_instance, float p
 	instance->fellow_dither_alpha = CLAMP(p_alpha, 0.0f, 1.0f);
 	instance->fellow_dither_other = p_other_share;
 	if (was_dithered || instance->fellow_dither_alpha < 1.0f) {
-		_fellow_shadow_fading(instance); // decision 0260: its shadow fades too
+		_fellow_shadow_fading(instance, true); // decision 0260: its shadow fades too
 	}
 	if (((1 << instance->base_type) & RSE::INSTANCE_GEOMETRY_MASK) && instance->base_data) {
 		InstanceGeometryData *geom = static_cast<InstanceGeometryData *>(instance->base_data);
@@ -2676,10 +2676,13 @@ void RendererSceneCull::_fellow_shadow_instance_changed(Instance *p_instance) co
 	p_instance->scenario->fellow_shadow_invalidations.push_back(ev);
 }
 
-void RendererSceneCull::_fellow_shadow_fading(Instance *p_instance) const {
+void RendererSceneCull::_fellow_shadow_fading(Instance *p_instance, bool p_directional) const {
 	// Decision 0260: an instance whose shadow fades (dithered) changes the shadow maps it is in every frame: out of the
-	// directional caches, and its positional lights' shadows drawn again (as for a moving instance).
-	_fellow_shadow_instance_changed(p_instance);
+	// directional caches (p_directional: a directional light casts shadows), and its positional lights' shadows drawn
+	// again (as for a moving instance).
+	if (p_directional) {
+		_fellow_shadow_instance_changed(p_instance);
+	}
 	if (((1 << p_instance->base_type) & RSE::INSTANCE_GEOMETRY_MASK) && p_instance->base_data && p_instance->cast_shadows != RSE::SHADOW_CASTING_SETTING_OFF) {
 		InstanceGeometryData *geom = static_cast<InstanceGeometryData *>(p_instance->base_data);
 		if (geom->can_cast_shadows) {
@@ -4237,6 +4240,12 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 		// meanwhile (drawn with the cascades' dynamic casters), the positional lights' shadows are drawn again.
 		if (Fellow::dithered_fade()) {
 			const Vector3 cam_pos = visibility_cull_data.camera_position;
+			bool directional = false; // (a directional light's shadow cache to keep them out of)
+			if (Fellow::directional_shadow_cache()) {
+				for (const Instance *light : scenario->directional_lights) {
+					directional = directional || (light->visible && RSG::light_storage->light_has_shadow(light->base));
+				}
+			}
 			for (int bin = scenario->instance_visibility.get_bin_count() - 1; bin >= 0; bin--) {
 				const uint64_t from = scenario->instance_visibility.get_bin_start(bin);
 				const uint64_t to = from + scenario->instance_visibility.get_bin_size(bin);
@@ -4257,7 +4266,7 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 						fading = false; // their shadows are per cascade, not faded (decision 0122)
 					}
 					if ((fading || (idata.flags & InstanceData::FLAG_FELLOW_SHADOW_FADED)) && idata.instance) {
-						_fellow_shadow_fading(idata.instance);
+						_fellow_shadow_fading(idata.instance, directional);
 					}
 					if (fading) {
 						idata.flags |= InstanceData::FLAG_FELLOW_SHADOW_FADED;

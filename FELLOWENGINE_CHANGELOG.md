@@ -16,7 +16,8 @@ Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.m
   fades with it and two handing over cast one shadow (directional cascades, spot lights, omni lights' dual paraboloids;
   an omni light's cube map whole while fading). Fading casters leave the directional caches meanwhile and redraw their
   positional lights' shadows; a caster faded out entirely is not drawn. A streamed mesh's swap keeps one shadow. The
-  image regression suite exact. `bench/dithered_fade_check.gd` section 8 (`--only=shadows`).
+  image regression suite exact. On the RTX: 8 000 casters mid-fade the same GPU time (+0.6 ms of the renderer's CPU);
+  Frontier Lab crossing over 4.15 ms against 4.24 ms. `bench/dithered_fade_check.gd` section 8 (`--only=shadows`).
 
 ## Milestone 134 — streamed cells and meshes cross over (2026-11-17)
 
