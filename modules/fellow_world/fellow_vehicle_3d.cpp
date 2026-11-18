@@ -39,6 +39,9 @@ namespace {
 
 const float AIR_DENSITY = 1.225f;
 const float ASSIST_SLIP = 0.15f; // the slip ratio the traction control and the anti-lock brakes keep under
+const float SKID_TURN_GRIP = 0.7f; // decision 0274: the share of the grip a skid-steered turn asks for sideways (the
+// tracks' push and drag take the rest)
+const float SKID_DRIVE_FADE = 4.0f; // decision 0274: m/s by which the skid steering's own drive is gone
 const float REVERSE_DELAY = 0.5f; // seconds stopped with the brake held before the gearbox takes reverse
 const float ANCHOR_SPEED = 0.3f; // m/s: under this at its contact (along and across) a tyre holds where it stands
 const float ANCHOR_SLACK = 0.03f; // m: the anchor's spring gives the tyre's whole grip this far from it
@@ -484,8 +487,10 @@ void FellowVehicle3D::_body_state_changed(PhysicsDirectBodyState3D *p_state) {
 	// The steering, eased, less at speed.
 	speed = p_state->get_linear_velocity().dot(body_fwd);
 	const float steer_scale = Math::lerp(1.0f, steer_at_speed, CLAMP(Math::abs(speed) / 27.8f, 0.0f, 1.0f));
-	const float steer_target = steering_input * Math::deg_to_rad(max_steer) * steer_scale;
+	const float steer_target = steering_mode == STEERING_SKID ? 0.0f : steering_input * Math::deg_to_rad(max_steer) * steer_scale;
 	steer_now = Math::move_toward(steer_now, steer_target, steer_speed * dt);
+	// Milestone 147 (decision 0274): skid steering eased as the wheels would be turned (the same time to full lock).
+	skid_now = Math::move_toward(skid_now, steering_mode == STEERING_SKID ? CLAMP(steering_input, -1.0f, 1.0f) : 0.0f, steer_speed / MAX(Math::deg_to_rad(max_steer), 0.05f) * dt);
 
 	// The gearbox (automatic): up past shift_up_rpm, down under shift_down_rpm; reverse when stopped with the brake held
 	// (REVERSE_DELAY, not with the handbrake on) and no throttle (the brake then drives it backwards), forward again with
@@ -553,6 +558,55 @@ void FellowVehicle3D::_body_state_changed(PhysicsDirectBodyState3D *p_state) {
 			}
 		}
 	}
+	// Decision 0274: skid steering's gear holds the two sides' speeds in a ratio — the outer side at q, the inner at k·q,
+	// k from 1 (straight: the sides held together) through 0 (the inner side held still) to -1 (turning on the spot) —
+	// the engine driving q. Full steering with the throttle held turns about the inner side (k 0), without it on the
+	// spot (k -1): k = 1 - |steering|·(2 - throttle). At speed the turn is at most the steering's share of what half the
+	// tyres' grip holds (a radius of at least v²/(SKID_TURN_GRIP·μ·g·|steering|)); slowly the steering drives the sides
+	// on its own (a turn on the spot without throttle).
+	const bool skid = steering_mode == STEERING_SKID;
+	const bool left_inner = skid_now >= 0.0f; // the steering positive to the left: the left side (-X) inside
+	float skid_k = 1.0f;
+	float skid_out_count = 0.0f;
+	float skid_in_count = 0.0f;
+	if (skid) {
+		float x_left = 0.0f;
+		float x_right = 0.0f;
+		int n_left = 0;
+		int n_right = 0;
+		float grip_sum = 0.0f;
+		for (const FellowWheel3D *w : wheels) {
+			if (w->mount.origin.x < 0.0f) {
+				x_left += w->mount.origin.x;
+				n_left++;
+			} else {
+				x_right += w->mount.origin.x;
+				n_right++;
+			}
+			if (w->driven) {
+				((w->mount.origin.x < 0.0f) == left_inner ? skid_in_count : skid_out_count) += 1.0f;
+			}
+			grip_sum += w->grip * (w->contact ? w->ground_friction : 1.0f);
+		}
+		const float half_track = n_left > 0 && n_right > 0 ? 0.5f * (x_right / float(n_right) - x_left / float(n_left)) : 1.0f;
+		skid_k = 1.0f - Math::abs(skid_now) * (2.0f - CLAMP(drive_input, 0.0f, 1.0f));
+		const float v2 = p_state->get_linear_velocity().length_squared();
+		if (skid_k < 1.0f && v2 > 0.01f) {
+			// At speed the steering is a share of the tightest turn the grip holds (full steering that turn, half
+			// steering a radius twice it).
+			const float grip_radius = v2 / MAX(SKID_TURN_GRIP * grip_sum / float(nw) * p_state->get_total_gravity().length(), 0.1f);
+			const float min_radius = grip_radius / MAX(Math::abs(skid_now), 1e-3f);
+			const float radius = half_track * (1.0f + skid_k) / MAX(1.0f - skid_k, 1e-4f);
+			if (radius < min_radius) {
+				skid_k = (min_radius - half_track) / (min_radius + half_track);
+			}
+		}
+		if (gear >= 0) {
+			// The steering's own drive fades out by SKID_DRIVE_FADE m/s (rolling on, a turn needs no more push).
+			drive_input = MAX(drive_input, Math::abs(skid_now) * skid_turn_drive * CLAMP(1.0f - Math::abs(speed) / SKID_DRIVE_FADE, 0.0f, 1.0f));
+		}
+	}
+	skid_k_last = skid_k;
 	const float ratio = _gear_ratio() * final_drive;
 	const bool clutch = shift_timer <= 0.0f || !automatic; // no drive while shifting
 
@@ -653,6 +707,17 @@ void FellowVehicle3D::_body_state_changed(PhysicsDirectBodyState3D *p_state) {
 			wheel_omega += w->driven ? w->omega : 0.0f;
 		}
 		wheel_omega = driven > 0 ? wheel_omega / float(driven) : 0.0f;
+		if (skid && skid_in_count > 0.0f && skid_out_count > 0.0f) {
+			// Decision 0274: the engine turns with q (the sides' speeds' best fit to q and k·q).
+			float out_sum = 0.0f;
+			float in_sum = 0.0f;
+			for (FellowWheel3D *w : wheels) {
+				if (w->driven) {
+					((w->mount.origin.x < 0.0f) == left_inner ? in_sum : out_sum) += w->omega;
+				}
+			}
+			wheel_omega = (out_sum / skid_out_count + skid_k * in_sum / skid_in_count) / (1.0f + skid_k * skid_k);
+		}
 		engine_rpm = MAX(idle_rpm, Math::abs(wheel_omega * ratio) * 60.0f / Math::TAU);
 		float engine = clutch && ratio != 0.0f ? drive_input * _engine_torque(engine_rpm) : 0.0f;
 		if (clutch && ratio != 0.0f && engine_rpm > idle_rpm * 1.1f) {
@@ -662,13 +727,20 @@ void FellowVehicle3D::_body_state_changed(PhysicsDirectBodyState3D *p_state) {
 		if (gear < 0) {
 			engine *= CLAMP((max_reverse_speed + speed) / MAX(max_reverse_speed * 0.2f, 0.1f), 0.0f, 1.0f);
 		}
-		const float drive_each = driven > 0 ? engine * ratio * drivetrain_efficiency / float(driven) : 0.0f;
+		float drive_each = driven > 0 ? engine * ratio * drivetrain_efficiency / float(driven) : 0.0f;
+		if (skid && skid_in_count > 0.0f && skid_out_count > 0.0f) {
+			// Decision 0274: the outer side's wheels' share, the inner's k times it (the engine's power through the gear).
+			drive_each = engine * ratio * drivetrain_efficiency / (skid_out_count + skid_k * skid_k * skid_in_count);
+		}
 
 		for (uint32_t i = 0; i < nw; i++) {
 			FellowWheel3D *w = wheels[i];
 			const WheelFrame &fr = frames[i];
 			impulse[i] = Vector3();
 			float drive = w->driven ? drive_each : 0.0f;
+			if (skid && (w->mount.origin.x < 0.0f) == left_inner) {
+				drive *= skid_k;
+			}
 			const float foot = w->braked ? brake_torque * brake_input : 0.0f;
 			// The engine turns with the driven wheels: its inertia through the gears, shared.
 			const float spin_inertia = w->inertia + (w->driven && clutch && ratio != 0.0f ? engine_inertia * ratio * ratio / float(driven) : 0.0f);
@@ -799,14 +871,58 @@ void FellowVehicle3D::_body_state_changed(PhysicsDirectBodyState3D *p_state) {
 				}
 			}
 		}
-		if (differential == DIFFERENTIAL_LOCKED) {
-			// The driven wheels of each axle turn together.
+		if (differential == DIFFERENTIAL_LOCKED && !skid) {
+			// The driven wheels of each axle turn together (not with skid steering: its sides are driven apart).
 			for (uint32_t i = 0; i < nw; i++) {
 				const int j = pair[i];
 				if (j > int(i) && wheels[i]->driven && wheels[j]->driven) {
 					const float m = (wheels[i]->omega * wheels[i]->inertia + wheels[j]->omega * wheels[j]->inertia) / (wheels[i]->inertia + wheels[j]->inertia);
 					wheels[i]->omega = m;
 					wheels[j]->omega = m;
+				}
+			}
+		}
+		if (tracks) {
+			// Decision 0274: each side's wheels turn together, as a track links them (their spins' momentum shared).
+			for (int side = -1; side <= 1; side += 2) {
+				float momentum = 0.0f;
+				float inertia_sum = 0.0f;
+				for (FellowWheel3D *w : wheels) {
+					if ((w->mount.origin.x < 0.0f) == (side < 0)) {
+						momentum += w->omega * w->inertia;
+						inertia_sum += w->inertia;
+					}
+				}
+				if (inertia_sum > 0.0f) {
+					for (FellowWheel3D *w : wheels) {
+						if ((w->mount.origin.x < 0.0f) == (side < 0)) {
+							w->omega = momentum / inertia_sum;
+						}
+					}
+				}
+			}
+		}
+		if (skid && skid_in_count > 0.0f && skid_out_count > 0.0f) {
+			// Decision 0274: the steering's gear — the inner side's speed held at k times the outer's by equal and
+			// opposite turning impulses through it (its power conserved). Its wheels: the driven ones, or with tracks every
+			// one of the side.
+			float in_momentum = 0.0f;
+			float in_inertia = 0.0f;
+			float out_momentum = 0.0f;
+			float out_inertia = 0.0f;
+			for (FellowWheel3D *w : wheels) {
+				if (w->driven || tracks) {
+					const bool inner = (w->mount.origin.x < 0.0f) == left_inner;
+					(inner ? in_momentum : out_momentum) += w->omega * w->inertia;
+					(inner ? in_inertia : out_inertia) += w->inertia;
+				}
+			}
+			if (in_inertia > 0.0f && out_inertia > 0.0f) {
+				const float lambda = (skid_k * out_momentum / out_inertia - in_momentum / in_inertia) / (1.0f / in_inertia + skid_k * skid_k / out_inertia);
+				for (FellowWheel3D *w : wheels) {
+					if (w->driven || tracks) {
+						w->omega += (w->mount.origin.x < 0.0f) == left_inner ? lambda / in_inertia : -skid_k * lambda / out_inertia;
+					}
 				}
 			}
 		}
@@ -847,6 +963,8 @@ Dictionary FellowVehicle3D::get_stats() const {
 	d["rpm"] = engine_rpm;
 	d["gear"] = gear;
 	d["steer_deg"] = Math::rad_to_deg(steer_now);
+	d["skid"] = skid_now;
+	d["skid_ratio"] = skid_k_last;
 	d["step_usec"] = int64_t(last_step_usec);
 	Array ws;
 	for (const FellowWheel3D *w : wheels) {
@@ -891,6 +1009,17 @@ PackedStringArray FellowVehicle3D::get_configuration_warnings() const {
 	}
 	if (!wheels.is_empty() && !any_driven) {
 		warnings.push_back(RTR("No FellowWheel3D is driven: the engine moves nothing."));
+	}
+	if (steering_mode == STEERING_SKID && any_driven) {
+		bool left = false;
+		bool right = false;
+		for (const FellowWheel3D *w : wheels) {
+			left = left || (w->driven && w->get_position().x < 0.0f);
+			right = right || (w->driven && w->get_position().x >= 0.0f);
+		}
+		if (!left || !right) {
+			warnings.push_back(RTR("Skid steering turns by driving the two sides apart: drive a FellowWheel3D on each side (X below and above zero)."));
+		}
 	}
 	return warnings;
 }
@@ -951,6 +1080,12 @@ void FellowVehicle3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_shift_time"), &FellowVehicle3D::get_shift_time);
 	ClassDB::bind_method(D_METHOD("set_differential", "differential"), &FellowVehicle3D::set_differential);
 	ClassDB::bind_method(D_METHOD("get_differential"), &FellowVehicle3D::get_differential);
+	ClassDB::bind_method(D_METHOD("set_steering_mode", "mode"), &FellowVehicle3D::set_steering_mode);
+	ClassDB::bind_method(D_METHOD("get_steering_mode"), &FellowVehicle3D::get_steering_mode);
+	ClassDB::bind_method(D_METHOD("set_skid_turn_drive", "drive"), &FellowVehicle3D::set_skid_turn_drive);
+	ClassDB::bind_method(D_METHOD("get_skid_turn_drive"), &FellowVehicle3D::get_skid_turn_drive);
+	ClassDB::bind_method(D_METHOD("set_tracks", "enable"), &FellowVehicle3D::set_tracks);
+	ClassDB::bind_method(D_METHOD("has_tracks"), &FellowVehicle3D::has_tracks);
 	ClassDB::bind_method(D_METHOD("set_brake_torque", "torque"), &FellowVehicle3D::set_brake_torque);
 	ClassDB::bind_method(D_METHOD("get_brake_torque"), &FellowVehicle3D::get_brake_torque);
 	ClassDB::bind_method(D_METHOD("set_handbrake_torque", "torque"), &FellowVehicle3D::set_handbrake_torque);
@@ -1002,6 +1137,9 @@ void FellowVehicle3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "max_steer", PROPERTY_HINT_RANGE, "0,80,0.1,suffix:°"), "set_max_steer", "get_max_steer");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "steer_at_speed", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_steer_at_speed", "get_steer_at_speed");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "steer_speed", PROPERTY_HINT_RANGE, "0.1,20,0.1,suffix:rad/s"), "set_steer_speed", "get_steer_speed");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "steering_mode", PROPERTY_HINT_ENUM, "Wheels,Skid"), "set_steering_mode", "get_steering_mode");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "skid_turn_drive", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_skid_turn_drive", "get_skid_turn_drive");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "tracks"), "set_tracks", "has_tracks");
 	ADD_GROUP("Body", "");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "anti_roll", PROPERTY_HINT_RANGE, "0,100000,1,or_greater,suffix:N/m"), "set_anti_roll", "get_anti_roll");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "drag_area", PROPERTY_HINT_RANGE, "0,5,0.01,or_greater,suffix:m²"), "set_drag_area", "get_drag_area");
@@ -1012,4 +1150,6 @@ void FellowVehicle3D::_bind_methods() {
 
 	BIND_ENUM_CONSTANT(DIFFERENTIAL_OPEN);
 	BIND_ENUM_CONSTANT(DIFFERENTIAL_LOCKED);
+	BIND_ENUM_CONSTANT(STEERING_WHEELS);
+	BIND_ENUM_CONSTANT(STEERING_SKID);
 }

@@ -1151,6 +1151,62 @@ Node3D *FellowEditorPlugin::make_preset(int p_preset, const Node *p_root) {
 			detachable.push_back(NodePath("../DoorRight"));
 			_fellow_make("FellowVehicleDamage3D", "Damage", top, Dictionary{ { "wheel_bend", 4.0 }, { "engine_power_loss", 0.4 }, { "detachable_paths", detachable }, { "hang_depth", 0.06 }, { "detach_depth", 0.16 } });
 		} break;
+		case PRESET_TRACKED_VEHICLE: {
+			// Milestone 147 (decision 0274): a 2 000 kg vehicle on tracks — skid steering (turning on the spot with the
+			// steering alone), each side's three wheels linked as a track, geared down (final drive 14: about 85 km/h),
+			// a box for its hull, its effects; it faces -Z. A controller sets its throttle, brake and steering.
+			Node *made = _fellow_make("FellowVehicle3D", "TrackedVehicle", nullptr, Dictionary{ { "mass", 2000.0 }, { "center_of_mass_mode", 1 }, { "center_of_mass", Vector3(0, 0.45, 0) }, { "steering_mode", 1 }, { "tracks", true }, { "final_drive", 14.0 } });
+			top = Object::cast_to<Node3D>(made);
+			if (!top) {
+				break;
+			}
+			Ref<StandardMaterial3D> paint;
+			paint.instantiate();
+			paint->set_albedo(Color(0.33, 0.38, 0.26));
+			paint->set_roughness(0.7);
+			Ref<StandardMaterial3D> rubber;
+			rubber.instantiate();
+			rubber->set_albedo(Color(0.08, 0.08, 0.08));
+			rubber->set_roughness(0.9);
+			CollisionShape3D *shape = memnew(CollisionShape3D);
+			shape->set_name("CollisionShape3D");
+			Ref<BoxShape3D> box_shape;
+			box_shape.instantiate();
+			box_shape->set_size(Vector3(2.0, 0.6, 3.6));
+			shape->set_shape(box_shape);
+			shape->set_position(Vector3(0, 0.7, 0));
+			top->add_child(shape);
+			MeshInstance3D *hull = memnew(MeshInstance3D);
+			hull->set_name("Hull");
+			Ref<BoxMesh> hull_box;
+			hull_box.instantiate();
+			hull_box->set_size(Vector3(2.0, 0.6, 3.6));
+			hull_box->set_material(paint);
+			hull->set_mesh(hull_box);
+			hull->set_position(Vector3(0, 0.7, 0));
+			top->add_child(hull);
+			Ref<CylinderMesh> tyre;
+			tyre.instantiate();
+			tyre->set_top_radius(0.34);
+			tyre->set_bottom_radius(0.34);
+			tyre->set_height(0.3);
+			tyre->set_material(rubber);
+			for (int i = 0; i < 6; i++) {
+				const bool left = i < 3;
+				const real_t z = real_t(i % 3 - 1) * 1.2;
+				const String name = String(left ? "Left" : "Right") + itos(i % 3 + 1);
+				Node *wheel = _fellow_make("FellowWheel3D", name, top, Dictionary{ { "position", Vector3(left ? -1.15 : 1.15, 0.34, z) }, { "steering", false }, { "driven", true }, { "handbrake", true } });
+				if (!wheel) {
+					continue;
+				}
+				MeshInstance3D *mi = memnew(MeshInstance3D);
+				mi->set_name("Tyre");
+				mi->set_mesh(tyre);
+				mi->set_rotation_degrees(Vector3(0, 0, 90));
+				wheel->add_child(mi);
+			}
+			_fellow_make("FellowVehicleEffects3D", "Effects", top);
+		} break;
 		case PRESET_ACOUSTICS: {
 			// Milestone 78: the scene's 3D sounds heard through its geometry (occlusion, the listener's room's reverb);
 			// milestone 111: two reverbs more for the rooms the sources are in.
@@ -1414,6 +1470,7 @@ FellowEditorPlugin::FellowEditorPlugin() {
 	popup->add_item(TTR("Add Ladder (3 m, climbable)"), PRESET_LADDER);
 	popup->add_item(TTR("Add Destructible Wall (breaks where hit, stands while supported)"), PRESET_DESTRUCTIBLE_WALL);
 	popup->add_item(TTR("Add Car (driven by its throttle, brake and steering)"), PRESET_CAR);
+	popup->add_item(TTR("Add Tracked Vehicle (skid-steered: turns on the spot)"), PRESET_TRACKED_VEHICLE);
 	popup->add_separator();
 	popup->add_item(TTR("Add Acoustics (sound occluded by walls, rooms' reverb)"), PRESET_ACOUSTICS);
 	popup->add_item(TTR("Add Acoustic Portal (a doorway sound passes through)"), PRESET_ACOUSTIC_PORTAL);

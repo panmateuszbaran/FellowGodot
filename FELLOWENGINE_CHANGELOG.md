@@ -9,7 +9,7 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
-## Milestone 147 — the far shadow cascades without instances out of range; a garment's backstop (2026-11-18, in progress)
+## Milestone 147 — the far shadow cascades without instances out of range; a garment's backstop; tracked vehicles (2026-11-18, in progress)
 
 - Decision 0272: a directional cascade that begins beyond an instance range's end (the terrain's foliage, HLOD's
   instanced proxies and impostors) leaves those instances out — none of them is drawn that far (Frontier's and Slice's
@@ -19,6 +19,11 @@ Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.m
 - Decision 0273: `FellowCloth3D.skin_backstop` / `skin_backstop_distance` — a skinned garment's free particles kept
   from going more than a distance behind their skinned places along the skinned normals: `cloth_check.gd`'s skirt
   without the hips' collider 5.9 cm into the hips, with the backstop (5 mm) none, at no measurable cost.
+- Decision 0274: `FellowVehicle3D.steering_mode` `STEERING_SKID` (a steering gear holding the inner side's speed at a
+  ratio of the outer's: straight, about the inner side, on the spot; at speed a share of the tightest turn the grip
+  holds), `tracks` (each side's wheels turning together), `skid_turn_drive`; the FellowEngine menu's "Add Tracked
+  Vehicle". `vehicle_check.gd`'s tracked vehicle: straight to 0.000°, 26°/s on the spot, 0.43 g at 30 km/h with full
+  steering; the car's lanes as before.
 - Decision 0270 continued: GPU checkpoints (`debug/gpu_checkpoints`) and the render graph's reordering and full
   barriers as settings (`debug/graph_reorder`, `debug/graph_full_barriers`); the hang caught again with the reordering
   off and with checkpoints — the GPU stopped inside one draw list (command 69 of its frame); a draw list's checkpoint

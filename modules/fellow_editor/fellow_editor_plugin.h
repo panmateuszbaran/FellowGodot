@@ -165,6 +165,7 @@ public:
 		PRESET_DESTRUCTIBLE_WALL, // milestone 80: a wall broken where it is struck, standing while supported
 		PRESET_ACOUSTIC_PORTAL, // milestone 99: a doorway sound passes through
 		PRESET_HAIR, // milestone 124: strands on a scalp, for a head's BoneAttachment3D
+		PRESET_TRACKED_VEHICLE, // milestone 147: a skid-steered vehicle on tracks (FellowVehicle3D, six wheels)
 	};
 	// The setup's nodes, not in the tree yet (nullptr for an unknown preset); p_root is the edited scene, where it looks
 	// for what the setup can share (the rain, wind and lightning: one of each works at a time).

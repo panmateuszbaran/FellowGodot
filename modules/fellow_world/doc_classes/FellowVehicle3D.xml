@@ -6,6 +6,7 @@
 	<description>
 		A [RigidBody3D] driven on its [FellowWheel3D] children (three or more), after each physics step: a ray down each wheel's suspension finds the ground; over [member substeps] the suspension's spring, damper, anti-roll bar and bump stop push the body up, and each tyre pulls it with a force from its slips along and across the wheel (a magic-formula curve, times the tyre's [member FellowWheel3D.grip], the ground's friction and the wheel's load). The wheels' spin is integrated implicitly against the tyres' pull; at a standstill a tyre holds where it stands (on a slope, on a moving platform) up to its grip. The ground's velocity is taken out of the slips (moving platforms, turntables, conveyors) and a rigid ground is pushed back.
 		The engine's torque follows a curve over its revolutions (taken from the driven wheels), with a limiter at [member max_rpm], engine braking and its inertia through the gears; the automatic gearbox shifts on the road speed, takes reverse after the car has stood half a second with the brake held (the brake then drives it backwards) and returns to first with the throttle. The differential is open or locked; traction control and anti-lock brakes keep the wheels' slip near the tyre's peak. Set [member throttle], [member brake], [member steering] and [member handbrake] from a controller.
+		A tracked or skid-steered vehicle (a tank, a skid-steer loader, a six-wheeled carrier) sets [member steering_mode] to [constant STEERING_SKID]: its wheels do not turn, the steering drives the two sides apart (turning on the spot with the steering alone), and [member tracks] links each side's wheels as a track does. See decision 0274.
 		The body's linear and angular damping are replaced by none (the node's own drag stands for the air). Works with GodotPhysics3D and Jolt. See decision 0185 in FellowEngine's [code]docs/decisions[/code].
 	</description>
 	<tutorials>
@@ -44,7 +45,7 @@
 		<method name="get_stats" qualifiers="const">
 			<return type="Dictionary" />
 			<description>
-				Returns this vehicle's state: [code]speed_kmh[/code], [code]rpm[/code], [code]gear[/code], [code]steer_deg[/code], [code]step_usec[/code] (its last step's time) and [code]wheels[/code], an array with each wheel's [code]name[/code], [code]contact[/code], [code]compression[/code], [code]load[/code] (N), [code]rpm[/code], [code]slip_ratio[/code], [code]slip_angle_deg[/code], [code]force[/code] (the tyre's, global), [code]holding[/code] (held where it stands), [code]bottomed[/code] (on the bump stop) and [code]surface_friction[/code].
+				Returns this vehicle's state: [code]speed_kmh[/code], [code]rpm[/code], [code]gear[/code], [code]steer_deg[/code], [code]skid[/code] (the steering eased, with [constant STEERING_SKID]), [code]skid_ratio[/code] (the inner side's speed over the outer's the steering asked for last step: [code]1[/code] straight, [code]0[/code] the inner side held still, [code]-1[/code] turning on the spot), [code]step_usec[/code] (its last step's time) and [code]wheels[/code], an array with each wheel's [code]name[/code], [code]contact[/code], [code]compression[/code], [code]load[/code] (N), [code]rpm[/code], [code]slip_ratio[/code], [code]slip_angle_deg[/code], [code]force[/code] (the tyre's, global), [code]holding[/code] (held where it stands), [code]bottomed[/code] (on the bump stop) and [code]surface_friction[/code].
 			</description>
 		</method>
 		<method name="reset_global_stats" qualifiers="static">
@@ -79,7 +80,7 @@
 			The brakes' torque on each braked wheel at a full [member brake] (N·m).
 		</member>
 		<member name="differential" type="int" setter="set_differential" getter="get_differential" enum="FellowVehicle3D.Differential" default="0">
-			How the driven wheels share the engine's torque.
+			How the driven wheels share the engine's torque. With [constant STEERING_SKID] the sides are driven apart: [constant DIFFERENTIAL_LOCKED] does not apply.
 		</member>
 		<member name="downforce_area" type="float" setter="set_downforce_area" getter="get_downforce_area" default="0.3">
 			The body's lift coefficient times its area (m²): a downward force growing with the square of the speed.
@@ -140,6 +141,9 @@
 		<member name="shift_up_rpm" type="float" setter="set_shift_up_rpm" getter="get_shift_up_rpm" default="6300.0">
 			With [member automatic]: the revolutions (of the road speed in the gear) past which it shifts up at full throttle (earlier with less).
 		</member>
+		<member name="skid_turn_drive" type="float" setter="set_skid_turn_drive" getter="get_skid_turn_drive" default="0.6">
+			With [constant STEERING_SKID]: the throttle a full [member steering] gives on its own near a standstill (fading out by 4 m/s), so that the steering alone turns the vehicle on the spot.
+		</member>
 		<member name="steer_at_speed" type="float" setter="set_steer_at_speed" getter="get_steer_at_speed" default="0.35">
 			The share of [member max_steer] left at 100 km/h (less steering at speed, linearly from a standstill).
 		</member>
@@ -149,6 +153,9 @@
 		<member name="steering" type="float" setter="set_steering" getter="get_steering" default="0.0">
 			The steering, from [code]-1[/code] to [code]1[/code]; positive steers left (as [VehicleBody3D]'s).
 		</member>
+		<member name="steering_mode" type="int" setter="set_steering_mode" getter="get_steering_mode" enum="FellowVehicle3D.SteeringMode" default="0">
+			How the vehicle turns: its steering wheels turned (a car), or its two sides driven at different speeds (a tracked or skid-steered vehicle).
+		</member>
 		<member name="substeps" type="int" setter="set_substeps" getter="get_substeps" default="4">
 			The substeps of each physics step in which the suspension, the tyres and the wheels' spin are worked out.
 		</member>
@@ -157,6 +164,9 @@
 		</member>
 		<member name="torque_curve" type="Curve" setter="set_torque_curve" getter="get_torque_curve">
 			The engine's torque over its revolutions divided by [member max_rpm], as a share of [member max_torque]; empty: a built-in curve (55% at idle rising to all of it at [member peak_rpm], 80% at [member max_rpm]).
+		</member>
+		<member name="tracks" type="bool" setter="set_tracks" getter="has_tracks" default="false">
+			If [code]true[/code], each side's wheels (left: [code]X[/code] below zero) turn together, as a track links them: their spins share their momentum after every substep. Use it with [constant STEERING_SKID] for a vehicle on tracks; the wheels' tyres stand for the track's contact with the ground.
 		</member>
 		<member name="traction_control" type="bool" setter="set_traction_control" getter="has_traction_control" default="true">
 			If [code]true[/code], a driven wheel is kept from spinning: the drive is cut (and the wheel braked) when it turns more than 15% faster than the ground passes under it.
@@ -176,6 +186,12 @@
 		</constant>
 		<constant name="DIFFERENTIAL_LOCKED" value="1" enum="Differential">
 			Each axle's driven wheels turn together.
+		</constant>
+		<constant name="STEERING_WHEELS" value="0" enum="SteeringMode">
+			The wheels with [member FellowWheel3D.steering] turn, by up to [member max_steer].
+		</constant>
+		<constant name="STEERING_SKID" value="1" enum="SteeringMode">
+			No wheel turns. A steering gear holds the inner side's speed at a ratio of the outer's — from the same (straight: the sides held together) through still to the opposite (turning on the spot) — the engine driving both through it: a full [member steering] with the throttle held turns about the inner side, without the throttle on the spot ([member skid_turn_drive] driving it). At speed the steering asks for a share of the tightest turn half the tyres' grip holds (full steering that turn, half steering a radius twice it). Drive a [FellowWheel3D] on each side.
 		</constant>
 	</constants>
 </class>

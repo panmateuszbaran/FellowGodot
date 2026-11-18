@@ -174,6 +174,11 @@ public:
 		DIFFERENTIAL_OPEN, // equal torque to each driven wheel
 		DIFFERENTIAL_LOCKED, // the driven wheels of an axle turn together
 	};
+	// Milestone 147 (decision 0274): how the vehicle turns.
+	enum SteeringMode {
+		STEERING_WHEELS, // the steering wheels turn (a car)
+		STEERING_SKID, // the two sides driven apart: the inner one less, then backwards (a tank, a skid-steer loader)
+	};
 
 	struct GlobalStats {
 		SafeNumeric<uint64_t> steps;
@@ -213,6 +218,12 @@ private:
 	float max_steer = 35.0f; // degrees
 	float steer_at_speed = 0.35f; // the share of max_steer at 100 km/h
 	float steer_speed = 4.0f; // radians a second the wheels turn
+	// Milestone 147 (decision 0274): skid steering and tracks.
+	SteeringMode steering_mode = STEERING_WHEELS;
+	float skid_turn_drive = 0.6f; // with STEERING_SKID, the throttle the steering gives on its own (a turn on the spot)
+	bool tracks = false; // each side's wheels turn together (a track links them)
+	float skid_now = 0.0f; // the steering eased (STEERING_SKID)
+	float skid_k_last = 1.0f; // the inner side's speed over the outer's last step (STEERING_SKID)
 	// Body.
 	float anti_roll = 8000.0f; // N/m between the wheels of an axle
 	float drag_area = 0.7f; // Cd·A, m²
@@ -304,6 +315,15 @@ public:
 	float get_shift_time() const { return shift_time; }
 	void set_differential(Differential p_differential) { differential = p_differential; }
 	Differential get_differential() const { return differential; }
+	void set_steering_mode(SteeringMode p_mode) {
+		steering_mode = p_mode;
+		update_configuration_warnings();
+	}
+	SteeringMode get_steering_mode() const { return steering_mode; }
+	void set_skid_turn_drive(float p_drive) { skid_turn_drive = CLAMP(p_drive, 0.0f, 1.0f); }
+	float get_skid_turn_drive() const { return skid_turn_drive; }
+	void set_tracks(bool p_enable) { tracks = p_enable; }
+	bool has_tracks() const { return tracks; }
 	void set_brake_torque(float p_torque) { brake_torque = MAX(0.0f, p_torque); }
 	float get_brake_torque() const { return brake_torque; }
 	void set_handbrake_torque(float p_torque) { handbrake_torque = MAX(0.0f, p_torque); }
@@ -327,3 +347,4 @@ public:
 };
 
 VARIANT_ENUM_CAST(FellowVehicle3D::Differential);
+VARIANT_ENUM_CAST(FellowVehicle3D::SteeringMode);

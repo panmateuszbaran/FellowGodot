@@ -669,6 +669,14 @@ physics material's friction), `rolling_resistance` (0.012 of the load), `inertia
 FellowEngine menu's "Add Car"; the wheel's gizmo (its circle and its suspension's travel). Bench `bench/vehicle_check.gd`
 (`--many=N`, `--pictures=1`); the regression scene `vehicle`.
 
+Milestone 147 (decision 0274), on `FellowVehicle3D`: `steering_mode` (`STEERING_WHEELS`; `STEERING_SKID`: no wheel
+turns, a steering gear holds the inner side's speed at k times the outer's — k = 1 - |steering|·(2 - throttle): 1
+straight, 0 about the inner side with the throttle held, -1 on the spot without it; at speed a radius of at least
+v² / (0.7·μ·g·|steering|); a locked differential does not apply), `skid_turn_drive` (0.6: the throttle a full steering
+gives on its own near a standstill, gone by 4 m/s), `tracks` (off: each side's wheels turning together, as a track links
+them); `get_stats()`'s `skid` and `skid_ratio`. The FellowEngine menu's "Add Tracked Vehicle"; `vehicle_check.gd
+--many=N --tank=1`.
+
 Contacts (milestone 101, decision 0209): on `FellowWheel3D`, `contact_shape` (`CONTACT_RAY`, the default;
 `CONTACT_SPHERE`; `CONTACT_CYLINDER` of `radius` and `width`, 0.22 m, along the steered axle): the tyre's shape swept down
 the suspension — curbs met by the tyre's front, gaps narrower than it bridged; two queries a wheel a step on an edge,

@@ -24,11 +24,16 @@ extends SceneTree
 ## rest whose bumper, hit at its right end, hangs from its left end, then comes off at a second hit; milestone 110: the
 ## engine lane's car smoking (the strip's last row), the others not; a car at rest hit by its front-left wheel with
 ## suspension_damage (that corner lower, the others about where they were; back after repair()); a car whose left door,
-## hit at its rear end, hangs on a vertical hinge at its front edge and swings open as the car turns right. One JSON
+## hit at its rear end, hangs on a vertical hinge at its front edge and swings open as the car turns right; milestone
+## 147 (decision 0274): a 2 000 kg vehicle on three wheels a side with skid steering and tracks — straight under
+## throttle (no yaw, each side's wheels at one speed), a turn on the spot each way with the steering alone (turning,
+## not moving off, the two the same), half and full steering at 30 km/h and full steering at 60 km/h (turning as the
+## grip allows: the full steering the tighter, under 0.7 g, not sliding sideways). One JSON
 ## line:
 ## VEHICLE_CHECK {...}; exit
 ## code 1 when a lane did otherwise than expected. --many=N: N cars driving circles, the vehicles' step a frame and the
-## frame's (headless; --damage=1: each with a FellowVehicleDamage3D, every feature on). One JSON line: VEHICLE_MANY {...}.
+## frame's (headless; --damage=1: each with a FellowVehicleDamage3D, every feature on; --tank=1: the tracked vehicles of
+## milestone 147 instead). One JSON line: VEHICLE_MANY {...}.
 
 const RUN_SECONDS := 26.0
 
@@ -162,6 +167,68 @@ func _car(pos: Vector3, color: Color) -> FellowVehicle3D:
 	return car
 
 
+# Milestone 147 (decision 0274): a tracked vehicle — 2 000 kg, three driven and braked wheels a side (2.4 m long, 2.3 m
+# apart) linked as tracks, skid steering, geared down (final drive 14: about 85 km/h at the limiter).
+func _tank(pos: Vector3, color: Color) -> FellowVehicle3D:
+	var car := FellowVehicle3D.new()
+	car.mass = 2000.0
+	car.center_of_mass_mode = RigidBody3D.CENTER_OF_MASS_MODE_CUSTOM
+	car.center_of_mass = Vector3(0, 0.45, 0)
+	car.position = pos
+	car.steering_mode = FellowVehicle3D.STEERING_SKID
+	car.tracks = true
+	car.final_drive = 14.0
+	var cs := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(2.0, 0.6, 3.6)
+	cs.shape = shape
+	cs.position = Vector3(0, 0.7, 0)
+	car.add_child(cs)
+	var body_mesh := MeshInstance3D.new()
+	var bm := BoxMesh.new()
+	bm.size = shape.size
+	body_mesh.mesh = bm
+	body_mesh.material_override = _material(color)
+	body_mesh.position = cs.position
+	car.add_child(body_mesh)
+	var tyre := _material(Color(0.1, 0.1, 0.1))
+	for x in [-1.15, 1.15]:
+		for z in [-1.2, 0.0, 1.2]:
+			var w := FellowWheel3D.new()
+			w.name = ("L" if x < 0.0 else "R") + str(int(z / 1.2) + 1)
+			w.position = Vector3(x, 0.34, z)
+			w.steering = false
+			w.driven = true
+			w.handbrake = true
+			var wm := MeshInstance3D.new()
+			var cyl := CylinderMesh.new()
+			cyl.top_radius = 0.34
+			cyl.bottom_radius = 0.34
+			cyl.height = 0.3
+			cyl.radial_segments = 20
+			wm.mesh = cyl
+			wm.material_override = tyre
+			wm.rotation_degrees = Vector3(0, 0, 90)
+			w.add_child(wm)
+			car.add_child(w)
+	root3d.add_child(car)
+	return car
+
+
+# Milestone 147: the largest difference of the wheels' speeds within each side, and between the sides' means (rpm).
+func _side_rpm(car: FellowVehicle3D) -> Dictionary:
+	var sides := {"L": [], "R": []}
+	for e in car.get_stats().wheels:
+		sides[String(e.name).left(1)].append(float(e.rpm))
+	var spread := 0.0
+	var mean := {}
+	for k in sides:
+		var a: Array = sides[k]
+		spread = maxf(spread, a.max() - a.min())
+		mean[k] = a.reduce(func(acc, v): return acc + v, 0.0) / a.size()
+	return {"spread": spread, "left": mean.L, "right": mean.R}
+
+
 # Milestone 105: the car's body a subdivided box (its vertices to dent), a FellowVehicleDamage3D under it.
 func _damage_car(car: FellowVehicle3D) -> FellowVehicle3D:
 	for c in car.get_children():
@@ -251,7 +318,8 @@ func _build() -> void:
 	if many > 0:
 		var cols := int(ceil(sqrt(float(many))))
 		for i in many:
-			var c := _car(Vector3(float(i % cols) * 60.0, 0.1, -float(i / cols) * 60.0), Color.from_hsv(float(i) / many, 0.6, 0.8))
+			var at := Vector3(float(i % cols) * 60.0, 0.1, -float(i / cols) * 60.0)
+			var c := _tank(at, Color.from_hsv(float(i) / many, 0.6, 0.8)) if _arg("tank", "0") == "1" else _car(at, Color.from_hsv(float(i) / many, 0.6, 0.8))
 			c.throttle = 0.35
 			c.steering = 0.35
 			c.substeps = int(_arg("substeps", "4"))
@@ -468,6 +536,10 @@ func _build() -> void:
 		gd.wheel_bend = 0.0 if gear_lanes[k] == "bent_off" else 5.0
 		gd.engine_power_loss = 0.5
 		_lane(gear_lanes[k], gc)
+	# Milestone 147 (decision 0274): the tracked vehicle's lanes.
+	var tank_lanes := ["tank_straight", "tank_pivot_left", "tank_pivot_right", "tank_arc", "tank_arc_full", "tank_arc_fast"]
+	for k in tank_lanes.size():
+		_lane(tank_lanes[k], _tank(Vector3(-300.0 - k * 30.0, 0.1, 0), Color.from_hsv(0.3 + k * 0.05, 0.4, 0.5)))
 
 	var cam := Camera3D.new()
 	root3d.add_child(cam)
@@ -704,6 +776,63 @@ func _drive(lane: Dictionary, dt: float) -> void:
 				d["rolled_m"] = snappedf(car.global_position.distance_to(d.p0), 0.01)
 			if t > 7.0:
 				car.handbrake = true
+		"tank_straight", "tank_pivot_left", "tank_pivot_right", "tank_arc", "tank_arc_full", "tank_arc_fast":
+			# Milestone 147 (decision 0274): from 1 s — straight at 0.7 throttle for 9 s; the steering alone at full
+			# lock (left, right) for 6 s, then released and braked; at 30 km/h (the cruise held), then 0.5 or full
+			# steering left for 6 s; at 60 km/h, then full steering left for 6 s.
+			# The yaw integrated (degrees, left positive), the wheels' speeds per side.
+			var yaw_rate := rad_to_deg(car.angular_velocity.dot(car.global_basis.y))
+			if t >= 1.0:
+				var sr := _side_rpm(car)
+				d["side_spread_max_rpm"] = snappedf(maxf(d.get("side_spread_max_rpm", 0.0), sr.spread), 0.01)
+				d["yaw_deg"] = d.get("yaw_deg", 0.0) + yaw_rate * dt
+				if not d.has("p0"):
+					d["p0"] = car.global_position
+			match lane.name:
+				"tank_straight":
+					car.throttle = 0.7 if t >= 1.0 else 0.0
+					if t >= 10.0 and not d.has("kmh_10s"):
+						d["kmh_10s"] = snappedf(kmh, 0.1)
+						d["heading_change"] = snappedf(d.yaw_deg, 0.01)
+						d["drift_x"] = snappedf(car.global_position.x - lane.start.x, 0.01)
+						var sr := _side_rpm(car)
+						d["rpm_left_right"] = [snappedf(sr.left, 0.1), snappedf(sr.right, 0.1)]
+				"tank_pivot_left", "tank_pivot_right":
+					var s := 1.0 if lane.name == "tank_pivot_left" else -1.0
+					car.throttle = 0.0
+					if t >= 1.0 and t < 7.0:
+						car.steering = s
+						if t >= 3.0:
+							d["yaw_rate_min"] = snappedf(minf(d.get("yaw_rate_min", 999.0), yaw_rate * s), 0.01)
+							d["yaw_rate_max"] = snappedf(maxf(d.get("yaw_rate_max", 0.0), yaw_rate * s), 0.01)
+						d["moved_max_m"] = snappedf(maxf(d.get("moved_max_m", 0.0), Vector2(car.global_position.x - d.p0.x, car.global_position.z - d.p0.z).length()), 0.001)
+						var sr := _side_rpm(car)
+						d["rpm_left_right"] = [snappedf(sr.left, 0.1), snappedf(sr.right, 0.1)]
+					elif t >= 7.0:
+						car.steering = 0.0
+						car.brake = 1.0
+						if not d.has("yaw_6s"):
+							d["yaw_6s"] = snappedf(d.yaw_deg, 0.1)
+						if t >= 10.0 and not d.has("yaw_rate_after"):
+							d["yaw_rate_after"] = snappedf(yaw_rate, 0.001)
+				"tank_arc", "tank_arc_full", "tank_arc_fast":
+					var fast: bool = lane.name == "tank_arc_fast"
+					if t >= 1.0:
+						_cruise(car, 60.0 if fast else 30.0)
+					car.steering = (0.5 if lane.name == "tank_arc" else 1.0) if t >= 6.0 and t < 12.0 else 0.0
+					if t >= 9.0 and t < 12.0:
+						var v := car.linear_velocity
+						var fwd := -car.global_basis.z
+						d["arc_yaw_rate"] = snappedf(yaw_rate, 0.01)
+						d["arc_kmh"] = snappedf(kmh, 0.1)
+						d["arc_radius_m"] = snappedf(v.length() / maxf(absf(deg_to_rad(yaw_rate)), 0.001), 0.1)
+						d["a_lat_max_g"] = snappedf(maxf(d.get("a_lat_max_g", 0.0), v.length() * absf(deg_to_rad(yaw_rate)) / 9.8), 0.001)
+						# The sideslip above 15 km/h (turning slowly about a side the centre's velocity is small and turns with it).
+						d["sideslip_max_deg"] = snappedf(maxf(d.get("sideslip_max_deg", 0.0), absf(rad_to_deg(Vector2(fwd.x, fwd.z).angle_to(Vector2(v.x, v.z)))) if v.length() > 15.0 / 3.6 else 0.0), 0.01)
+						d["throttle_mean"] = d.get("throttle_mean", 0.0) + car.throttle * dt / 3.0
+						d["skid_ratio"] = snappedf(car.get_stats().skid_ratio, 0.001)
+						# The radius the steering asks for at this speed (grip 1, friction 1: SKID_TURN_GRIP 0.7 of g).
+						d["radius_asked_m"] = snappedf(v.length_squared() / (0.7 * 9.8 * car.steering), 0.1)
 		"straight", "bent", "bent_off", "engine", "repaired":
 			# Milestone 107: at rest, hit at 0.5 s — by the left ahead of the front-left wheel (bent, bent_off, repaired),
 			# at the front's middle (engine, repaired) — repaired at 0.6 s; from 1 s at 40 km/h with the steering at 0 for
@@ -1074,6 +1203,23 @@ func _finish() -> void:
 				e.erase("h0")
 				ok = ok and d.get("sag_fl", 0.0) > 0.02 and d.get("sag_fl", 1.0) <= 0.06 and d.get("sag_fr", 1.0) == 0.0 and dr[0] > 0.01 and dr[0] > dr[1] and dr[0] > dr[2] and dr[0] > dr[3]
 				ok = ok and rr.all(func(v): return absf(v) < 0.003) and d.get("length_repaired", 0.0) == 0.3
+			"tank_straight":
+				# Milestone 147 (decision 0274): straight within a degree over 9 s, moving (above 10 km/h), each side's
+				# wheels at one speed (tracks; within 0.5 rpm).
+				ok = ok and absf(d.get("heading_change", 99.0)) < 1.0 and d.get("kmh_10s", 0.0) > 10.0 and d.get("side_spread_max_rpm", 99.0) < 0.5
+			"tank_pivot_left", "tank_pivot_right":
+				# Turning on the spot the way steered — 15-90 degrees a second after 2 s, within 1.5 m of where it
+				# began — the sides' wheels turning opposite ways; still after the brake.
+				var rr: Array = d.get("rpm_left_right", [0.0, 0.0])
+				var s := 1.0 if lane.name == "tank_pivot_left" else -1.0
+				ok = ok and d.get("yaw_rate_min", 0.0) > 15.0 and d.get("yaw_rate_max", 999.0) < 90.0 and d.get("moved_max_m", 99.0) < 1.5 and rr[0] * rr[1] < 0.0 and rr[1] * s > 0.0 and absf(d.get("yaw_rate_after", 9.0)) < 0.5 and d.get("side_spread_max_rpm", 99.0) < 0.5
+			"tank_arc", "tank_arc_full", "tank_arc_fast":
+				# Turning left while moving, held by the grip: under 0.7 g, at most 5 degrees of sideslip, a radius no
+				# tighter than the one asked for and at most 2.5 times it (the tracks slip under the turning moment); the
+				# full steering's tighter than the half's (tank_symmetry).
+				var r: float = d.get("arc_radius_m", 0.0)
+				var asked: float = d.get("radius_asked_m", 0.0)
+				ok = ok and d.get("arc_yaw_rate", 0.0) > 0.0 and r >= asked and r < 2.5 * asked and d.get("a_lat_max_g", 9.0) < 0.7 and absf(d.get("sideslip_max_deg", 99.0)) < 5.0
 			"straight":
 				# Milestone 107: unhit, straight within half a degree.
 				ok = ok and absf(d.get("heading_change", 99.0)) < 0.5 and d.toe_after_hit.FrontLeft == 0.0 and d.engine_power == 1.0 and not d.get("engine_smoking", true)
@@ -1108,6 +1254,17 @@ func _finish() -> void:
 		out["running_gear"] = g
 		if not g.ok:
 			failures.append("running_gear")
+	# Milestone 147: the two turns on the spot the same within 10 %.
+	if out.has("tank_pivot_left"):
+		var yl: float = out.tank_pivot_left.get("yaw_6s", 0.0)
+		var yr: float = out.tank_pivot_right.get("yaw_6s", 0.0)
+		var ts := {"yaw_left": yl, "yaw_right": yr, "ok": yl > 0.0 and yr < 0.0 and absf(yl + yr) < 0.1 * absf(yl)}
+		ts["arc_half_m"] = out.tank_arc.get("arc_radius_m", 0.0)
+		ts["arc_full_m"] = out.tank_arc_full.get("arc_radius_m", 0.0)
+		ts["ok"] = ts.ok and ts.arc_full_m < ts.arc_half_m
+		out["tank_symmetry"] = ts
+		if not ts.ok:
+			failures.append("tank_symmetry")
 	# Milestone 101: the cylinders meet the curb over several steps (the rays all at once, in one step), and bridge the
 	# trench (the rays drop into it).
 	if out.has("curb_cylinder"):
