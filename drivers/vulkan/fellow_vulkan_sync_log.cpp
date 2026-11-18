@@ -88,6 +88,18 @@ String FellowVulkanSyncLog::_describe(const Op &p_op, VkDevice p_device) const {
 	if (p_op.kind == KIND_SUBMIT) {
 		s += vformat(", %d command buffers", p_op.command_buffers);
 	}
+	if (p_op.image >= 0) {
+		s += vformat(", image %d", p_op.image);
+	}
+	if (p_op.acquire_fence != VK_NULL_HANDLE) {
+		// Whether the presentation engine has released the image (its fence signalled with the semaphore); a fence
+		// reused by a later acquisition was.
+		const uint64_t *a = acquire_fences.getptr(p_op.acquire_fence);
+		s += vformat(" (released: %s)", (a != nullptr && *a == p_op.serial) ? _fellow_fence_status(p_device, p_op.acquire_fence) : "signalled");
+	}
+	if (p_op.has_result && p_op.result != VK_SUCCESS) {
+		s += vformat(", returned %d", p_op.result);
+	}
 	if (p_op.wait_count > 0) {
 		s += ", waits";
 		for (uint32_t i = 0; i < MIN(p_op.wait_count, MAX_SEMAPHORES); i++) {
@@ -123,7 +135,7 @@ void FellowVulkanSyncLog::_anomaly(const String &p_what) {
 	}
 }
 
-void FellowVulkanSyncLog::record(Kind p_kind, const char *p_queue, const VkSemaphore *p_waits, uint32_t p_wait_count, const VkSemaphore *p_signals, uint32_t p_signal_count, VkFence p_fence, uint32_t p_command_buffers) {
+FellowVulkanSyncLog::Op &FellowVulkanSyncLog::record(Kind p_kind, const char *p_queue, const VkSemaphore *p_waits, uint32_t p_wait_count, const VkSemaphore *p_signals, uint32_t p_signal_count, VkFence p_fence, uint32_t p_command_buffers) {
 	serial++;
 	Op &op = ops[serial % OPS];
 	op = Op();
@@ -171,6 +183,34 @@ void FellowVulkanSyncLog::record(Kind p_kind, const char *p_queue, const VkSemap
 			_anomaly(vformat("%s signals fence %x, already signalled by #%d and not waited for since.", what, _fellow_handle(p_fence), f));
 		}
 		f = serial;
+	}
+	return op;
+}
+
+void FellowVulkanSyncLog::set_acquire(Op &r_op, int32_t p_image, VkFence p_fence) {
+	r_op.image = p_image;
+	r_op.acquire_fence = p_fence;
+	if (p_fence != VK_NULL_HANDLE) {
+		acquire_fences[p_fence] = r_op.serial;
+	}
+}
+
+void FellowVulkanSyncLog::forget_acquire_fence(VkFence p_fence) {
+	MutexLock lock(mutex);
+	acquire_fences.erase(p_fence);
+	for (Op &op : ops) {
+		if (op.acquire_fence == p_fence) {
+			op.acquire_fence = VK_NULL_HANDLE;
+		}
+	}
+}
+
+void FellowVulkanSyncLog::set_result(uint64_t p_serial, int32_t p_result) {
+	MutexLock lock(mutex);
+	Op &op = ops[p_serial % OPS];
+	if (op.serial == p_serial) {
+		op.has_result = true;
+		op.result = p_result;
 	}
 }
 

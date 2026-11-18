@@ -69,6 +69,10 @@ public:
 		uint64_t waits_signalled_by[MAX_SEMAPHORES] = {}; // the serial of the signal each wait consumed
 		VkSemaphore signals[MAX_SEMAPHORES] = {};
 		VkFence fence = VK_NULL_HANDLE;
+		int32_t image = -1; // acquisitions and presentations: the swap chain image (the first swap chain's)
+		VkFence acquire_fence = VK_NULL_HANDLE; // acquisitions: signalled with the semaphore (the image released)
+		bool has_result = false; // presentations: what vkQueuePresentKHR() returned
+		int32_t result = 0;
 	};
 
 private:
@@ -87,6 +91,7 @@ private:
 	Op ops[OPS];
 	HashMap<VkSemaphore, SemaphoreState> semaphores;
 	HashMap<VkFence, uint64_t> fences; // the serial of the submission that signals it, until it is waited for
+	HashMap<VkFence, uint64_t> acquire_fences; // the serial of the acquisition that signals it last
 	uint32_t anomalies = 0;
 
 	const Op *_op(uint64_t p_serial) const;
@@ -100,14 +105,18 @@ public:
 
 	// Taken around the queue operation and its record(), so that the record's order is the queue operations' order.
 	BinaryMutex &get_mutex() { return mutex; }
-	// With the mutex held.
-	void record(Kind p_kind, const char *p_queue, const VkSemaphore *p_waits, uint32_t p_wait_count, const VkSemaphore *p_signals, uint32_t p_signal_count, VkFence p_fence, uint32_t p_command_buffers);
+	// With the mutex held; the operation recorded, for the caller to add to (image, acquire_fence) before unlocking.
+	Op &record(Kind p_kind, const char *p_queue, const VkSemaphore *p_waits, uint32_t p_wait_count, const VkSemaphore *p_signals, uint32_t p_signal_count, VkFence p_fence, uint32_t p_command_buffers);
 
 	// These take the mutex themselves.
 	void forget_semaphore(VkSemaphore p_semaphore); // destroyed (its handle may come back as another)
 	void forget_fence(VkFence p_fence);
 	void fence_waiting(VkFence p_fence, bool p_signalled); // a wait for the fence begins (p_signalled: it already is)
 	void fence_waited(VkFence p_fence); // the fence was waited for and reset
+	void set_result(uint64_t p_serial, int32_t p_result); // a presentation's result, once it returns
+	// With the mutex held: an acquisition's image and the fence it signals with its semaphore.
+	void set_acquire(Op &r_op, int32_t p_image, VkFence p_fence);
+	void forget_acquire_fence(VkFence p_fence); // destroyed (takes the mutex)
 
 	// A late fence: the submission that signals it, its waits and their signals, the operations recorded last. One line
 	// each.

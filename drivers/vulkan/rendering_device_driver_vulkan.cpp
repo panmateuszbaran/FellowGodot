@@ -3701,10 +3701,13 @@ Error RenderingDeviceDriverVulkan::command_queue_execute_and_present(CommandQueu
 		present_info.pResults = results.ptr();
 
 		const uint64_t fellow_present_from = OS::get_singleton()->get_ticks_usec();
+		uint64_t fellow_present_serial = 0;
 		if (fellow_sync.is_enabled()) {
 			// Decision 0270: recorded before (a presentation may block); its waits were signalled by submissions recorded.
 			MutexLock fellow_lock(fellow_sync.get_mutex());
-			fellow_sync.record(FellowVulkanSyncLog::KIND_PRESENT, command_queue->fellow_label, wait_semaphores.ptr(), wait_semaphores.size(), nullptr, 0, VK_NULL_HANDLE, 0);
+			FellowVulkanSyncLog::Op &op = fellow_sync.record(FellowVulkanSyncLog::KIND_PRESENT, command_queue->fellow_label, wait_semaphores.ptr(), wait_semaphores.size(), nullptr, 0, VK_NULL_HANDLE, 0);
+			fellow_sync.set_acquire(op, int32_t(image_indices[0]), VK_NULL_HANDLE);
+			fellow_present_serial = op.serial;
 		}
 		device_queue.submit_mutex.lock();
 #if defined(SWAPPY_FRAME_PACING_ENABLED)
@@ -3718,6 +3721,9 @@ Error RenderingDeviceDriverVulkan::command_queue_execute_and_present(CommandQueu
 #endif
 
 		device_queue.submit_mutex.unlock();
+		if (fellow_present_serial != 0) {
+			fellow_sync.set_result(fellow_present_serial, err);
+		}
 		Fellow::stats().rd_vk_present_usec.add(OS::get_singleton()->get_ticks_usec() - fellow_present_from);
 		Fellow::stats().rd_vk_presents.increment();
 
@@ -3794,13 +3800,19 @@ Error RenderingDeviceDriverVulkan::fellow_command_queue_present(CommandQueueID p
 	present_info.pResults = results.ptr();
 
 	const uint64_t fellow_present_from = OS::get_singleton()->get_ticks_usec();
+	uint64_t fellow_present_serial = 0;
 	if (fellow_sync.is_enabled()) {
 		MutexLock fellow_lock(fellow_sync.get_mutex()); // decision 0270
-		fellow_sync.record(FellowVulkanSyncLog::KIND_PRESENT, command_queue->fellow_label, wait_semaphores.ptr(), wait_semaphores.size(), nullptr, 0, VK_NULL_HANDLE, 0);
+		FellowVulkanSyncLog::Op &op = fellow_sync.record(FellowVulkanSyncLog::KIND_PRESENT, command_queue->fellow_label, wait_semaphores.ptr(), wait_semaphores.size(), nullptr, 0, VK_NULL_HANDLE, 0);
+		fellow_sync.set_acquire(op, int32_t(image_indices[0]), VK_NULL_HANDLE);
+		fellow_present_serial = op.serial;
 	}
 	device_queue.submit_mutex.lock();
 	VkResult err = device_functions.QueuePresentKHR(device_queue.queue, &present_info);
 	device_queue.submit_mutex.unlock();
+	if (fellow_present_serial != 0) {
+		fellow_sync.set_result(fellow_present_serial, err);
+	}
 	Fellow::stats().rd_vk_present_usec.add(OS::get_singleton()->get_ticks_usec() - fellow_present_from);
 	Fellow::stats().rd_vk_presents.increment();
 
@@ -3825,6 +3837,16 @@ void RenderingDeviceDriverVulkan::command_queue_free(CommandQueueID p_cmd_queue)
 
 	CommandQueue *command_queue = (CommandQueue *)(p_cmd_queue.id);
 	fellow_command_queues.erase(command_queue); // FellowEngine (decision 0270)
+	for (VkFence fence : command_queue->fellow_retired_fences) {
+		command_queue->fellow_image_fences.push_back(fence);
+	}
+	for (VkFence fence : command_queue->fellow_image_fences) {
+		if (fence != VK_NULL_HANDLE) {
+			fellow_sync.forget_acquire_fence(fence);
+			vkWaitForFences(vk_device, 1, &fence, VK_TRUE, 0); // observed (signalled by now, or never)
+			vkDestroyFence(vk_device, fence, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_FENCE));
+		}
+	}
 
 	// Erase all the semaphores used for image acquisition.
 	for (VkSemaphore semaphore : command_queue->image_semaphores) {
@@ -4359,6 +4381,9 @@ Error RenderingDeviceDriverVulkan::swap_chain_resize(CommandQueueID p_cmd_queue,
 	swap_chain->images.resize(image_count);
 	err = device_functions.GetSwapchainImagesKHR(vk_device, swap_chain->vk_swapchain, &image_count, swap_chain->images.ptr());
 	ERR_FAIL_COND_V_MSG(err != VK_SUCCESS, ERR_CANT_CREATE, vformat("Couldn't get Vulkan swapchain images (VkResult error %d).", err));
+	if (fellow_sync.is_enabled()) {
+		print_line(vformat("FellowEngine sync log: swap chain %x: %d images (%d asked for, at least %d), present mode %d, %dx%d.", uint64_t(uintptr_t(swap_chain)), image_count, desired_swapchain_images, surface_capabilities.minImageCount, int(present_mode), swap_create_info.imageExtent.width, swap_create_info.imageExtent.height));
+	}
 
 	VkImageViewCreateInfo view_create_info = {};
 	view_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -4500,7 +4525,30 @@ RDD::FramebufferID RenderingDeviceDriverVulkan::swap_chain_acquire_framebuffer(C
 	swap_chain->command_queues_acquired.push_back(command_queue);
 	swap_chain->command_queues_acquired_semaphores.push_back(semaphore_index);
 
-	err = device_functions.AcquireNextImageKHR(vk_device, swap_chain->vk_swapchain, UINT64_MAX, semaphore, VK_NULL_HANDLE, &swap_chain->image_index);
+	// FellowEngine (decision 0270): with the sync log, a fence per acquisition semaphore, signalled with it when the
+	// presentation engine releases the image (reset when the semaphore is used again: its last acquisition has signalled).
+	VkFence fellow_acquire_fence = VK_NULL_HANDLE;
+	if (fellow_sync.is_enabled()) {
+		while (command_queue->fellow_image_fences.size() <= semaphore_index) {
+			command_queue->fellow_image_fences.push_back(VK_NULL_HANDLE);
+		}
+		VkFence &fence = command_queue->fellow_image_fences[semaphore_index];
+		if (fence != VK_NULL_HANDLE && vkGetFenceStatus(vk_device, fence) == VK_SUCCESS) {
+			vkResetFences(vk_device, 1, &fence);
+		} else {
+			// None yet, or its acquisition failed (never signalled): a new one (the old one left to the queue's end).
+			if (fence != VK_NULL_HANDLE) {
+				command_queue->fellow_retired_fences.push_back(fence);
+			}
+			VkFenceCreateInfo fence_info = {};
+			fence_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+			VkFence created = VK_NULL_HANDLE;
+			vkCreateFence(vk_device, &fence_info, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_FENCE), &created);
+			command_queue->fellow_image_fences[semaphore_index] = created;
+		}
+		fellow_acquire_fence = command_queue->fellow_image_fences[semaphore_index];
+	}
+	err = device_functions.AcquireNextImageKHR(vk_device, swap_chain->vk_swapchain, UINT64_MAX, semaphore, fellow_acquire_fence, &swap_chain->image_index);
 	if (err == VK_ERROR_OUT_OF_DATE_KHR) {
 		// Out of date leaves the semaphore in a signaled state that will never finish, so it's necessary to recreate it.
 		bool semaphore_recreated = _recreate_image_semaphore(command_queue, semaphore_index, true);
@@ -4517,7 +4565,8 @@ RDD::FramebufferID RenderingDeviceDriverVulkan::swap_chain_acquire_framebuffer(C
 
 	if (fellow_sync.is_enabled()) {
 		MutexLock fellow_lock(fellow_sync.get_mutex()); // FellowEngine (decision 0270)
-		fellow_sync.record(FellowVulkanSyncLog::KIND_ACQUIRE, command_queue->fellow_label, nullptr, 0, &semaphore, 1, VK_NULL_HANDLE, 0);
+		FellowVulkanSyncLog::Op &op = fellow_sync.record(FellowVulkanSyncLog::KIND_ACQUIRE, command_queue->fellow_label, nullptr, 0, &semaphore, 1, VK_NULL_HANDLE, 0);
+		fellow_sync.set_acquire(op, int32_t(swap_chain->image_index), fellow_acquire_fence);
 	}
 
 	// Indicate the command queue should wait on these semaphores on the next submission and that it should

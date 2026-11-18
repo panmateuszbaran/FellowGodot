@@ -414,6 +414,8 @@ private:
 		// fence waits and acquisitions (the render thread), which may now overlap.
 		BinaryMutex fellow_mutex;
 		const char *fellow_label = "queue"; // decision 0270: its name in the reports
+		LocalVector<VkFence> fellow_image_fences; // decision 0270, sync log: per image semaphore, its acquisitions' fence
+		LocalVector<VkFence> fellow_retired_fences; // replaced (their acquisition never signalled them): freed at the end
 	};
 	// FellowEngine (decision 0270): the queues made (for the late fence report) and the record of their operations.
 	LocalVector<CommandQueue *> fellow_command_queues;
