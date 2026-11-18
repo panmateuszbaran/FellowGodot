@@ -1,8 +1,8 @@
 # 0270 — A late frame fence reported, and the Vulkan driver's record of its queue operations
 
-Status: **DRAFT** · Branch `fellow/geometry` · Code: `servers/rendering/rendering_device.cpp`
-(`_fellow_late_fence_report()`), `servers/rendering/rendering_device_driver.h` (`fellow_fence_wait_timeout()`,
-`fellow_fence_report()`, `fellow_sync_log_enable()`, `fellow_command_queue_label()`),
+Status: **KEEP** (diagnostics; the hang's cause under measurement) · Branch `fellow/geometry` · Code:
+`servers/rendering/rendering_device.cpp` (`_fellow_late_fence_report()`), `servers/rendering/rendering_device_driver.h`
+(`fellow_fence_wait_timeout()`, `fellow_fence_report()`, `fellow_sync_log_enable()`, `fellow_command_queue_label()`),
 `drivers/vulkan/fellow_vulkan_sync_log.{h,cpp}` (new) and `drivers/vulkan/rendering_device_driver_vulkan.cpp`;
 settings `rendering/fellow/debug/late_fence_report_s` (2 s) and `rendering/fellow/debug/sync_log` (off, start-up);
 FellowEngine's statistics `late_fences`, `sync_log_anomalies`.
@@ -29,11 +29,43 @@ showed where the CPU waited, not what the GPU's queue waited for.
   when they happen. A late fence is traced to its submission, each of its waits to the operation that signalled it (and
   that operation's fence's state), with the last 32 operations; and every queue's swap chain semaphores (waited on by
   its next submission, released by its next fence, held by fences).
+* **What a lost device says** (since `a384d21365`): a fence wait that finds the device lost prints
+  `VK_EXT_device_fault`'s report, as a lost submission does — milestone 145's longest hang ended in a lost device after
+  five minutes, with no word of why.
+* **The acquisitions' images and fences** (since `c0fffa27e0`, with the record on): each acquisition's image and a fence
+  passed to `vkAcquireNextImageKHR()`, signalled with its semaphore when the presentation engine releases the image
+  (reset only once seen signalled); each presentation's image and result; the swap chain's images and present mode
+  printed when it is made.
 
 ## Checks
 
-(pending)
+* Lavapipe: Streaming Lab with the record on and a fence counted late after 0.5 ms (reports at frames 3 and 41: the
+  slots, the present thread, the transfer workers, the fence's submission, its wait traced to the transfer worker's
+  submission and its signalled fence), Slice Lab and World Lab (no anomaly in any); Streaming Lab under Vulkan's core
+  and synchronization validation with the record on (no message, once the acquisitions' fences were reset only when
+  seen signalled).
+* The RTX, Bistro exterior streamed with releases held 10 s (`m146_f502`, 12 runs each): the record costs nothing
+  measurable (frame 4.28 ms with it, 4.32 ms without; p99 5.89 and 5.86 ms); no anomaly in any run (59 407 operations
+  in the hung one, 18 085 frames' jobs in each whole run).
+
+## What the hang is
+
+One of the 12 runs with the record on hung (the others' 23 runs none), 14 548 frames in. Its report:
+
+* the main thread waiting for frame slot 0's fence (signalled by the frame's second submission, `#59402`), the present
+  thread with every job issued, the four transfer workers idle with all they were given submitted;
+* `#59402` waits only on the frame's first submission (`#59401`), which waits on the frame's swap chain acquisition
+  (`#59398`) and on two transfer submissions — whose fences are signalled, so their semaphores were;
+* the queue's two acquisition semaphores both held by fences not yet waited for; the next frame (`#59404`-`#59407`)
+  acquired, submitted and presented behind it.
+
+The main queue is waiting on the acquisition's semaphore: the presentation engine has not released the image it gave
+the frame (IMMEDIATE present mode, `--disable-vsync`; two frames in flight). Every operation before it was
+well-formed by the record's checks. Next: whether the acquisition's fence is signalled in such a hang, and whether
+stock Godot (FellowEngine off) and FellowEngine without its present and submit threads hang the same way
+(`m146_f504`, 20 runs each).
 
 ## Decision
 
-(pending)
+KEEP: the late fence report on by default (2 s; changes no frame), the record off by default (start-up), the fault
+report of a lost device on fence waits.

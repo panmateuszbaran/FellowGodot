@@ -9,6 +9,22 @@ RTX 5070 Ti Laptop GPU at 1920x1080 against stock Godot 4.7.2. Every change sits
 driver), bit for bit or at the run-to-run floor on the RTX. Percentages against stock are frame time unless noted.
 Godot's own changelog (the upstream 4.7.2 changes) is [CHANGELOG.md](CHANGELOG.md).
 
+## Milestone 146 — a late fence reported; the terrain holes on Intel fixed (2026-11-18, in progress)
+
+- Decision 0270: a frame's fence not signalled within `debug/late_fence_report_s` (2 s) is reported — the frame slots,
+  the present and submit thread's jobs, the transfer workers, the Vulkan driver's swap chain semaphores — then waited
+  for as before. `debug/sync_log` (off): the Vulkan driver records every submission, presentation and acquisition in
+  order and checks each semaphore wait against the signals before it and each fence wait against the submissions; a
+  late fence is traced to its submission and each wait's origin; acquisitions get a fence that says whether the
+  presentation engine released the image. A fence wait that finds the device lost prints `VK_EXT_device_fault`'s
+  report. FellowEngine's statistics count `late_fences`, `sync_log_anomalies`. Milestone 145's hang caught on the RTX
+  with it: the main queue waiting on a swap chain acquisition's semaphore, every other operation well-formed.
+- Decision 0271: the terrain's holes' material discards at the end of its fragment, after its texture fetches and
+  derivatives (undefined in a quad with a discarded fragment) — the holes' rims on the Intel GPU differed by 3-5
+  levels from frame to frame and run to run; now every frame is the same. `terrain_holes`' golden blessed again (the
+  rims, 0.08 % of the picture).
+- FellowBench: the stats' differences no longer fail on a boolean statistic (`memory_budget_from_driver`).
+
 ## Milestone 145 — Bistro streamed: the longer rare frames, and a hang (2026-11-18)
 
 - Decision 0269: Bistro exterior's streamed textures' churn (4 800 loads and 2 200 releases in a 30-second flight,
