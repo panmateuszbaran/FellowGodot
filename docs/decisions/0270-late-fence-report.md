@@ -96,6 +96,9 @@ constraining the order) and the render graph's reordering off (`debug/graph_reor
 
 The GPU stops in one draw list, nearly idle. Next (`m147_f509`): which draw list (its region, its commands' size,
 whether worker threads recorded it in secondary command buffers — now in its checkpoint — and the commands around it).
+`m147_f509` (stopped after 30 of its 40 runs: the GPU paused for the owner): no hang in 15 runs as in `f504` nor in 15
+with the checkpoints — the hang about one run in 15 by now (5 in 76 runs without the pass timestamps since milestone
+146). Open; next on the GPU: `f510` (40 runs with the checkpoints, prepared in `.tools/wip`).
 
 ## Decision
 
